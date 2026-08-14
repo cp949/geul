@@ -4,20 +4,9 @@
 
 ## 현재 상태
 
-R0 프로젝트 기반 구현과 검증을 완료했다.
+현재 단계와 바로 다음 작업은 [현재 프로젝트 상태](./docs/product/current-status.md)를 기준으로 한다.
 
-- pnpm workspace와 Turborepo
-- 안정 ID와 revision을 가진 독자 문서 모델
-- 문단, H1-H3, link/bold/italic/underline/strike/code mark 편집
-- HTML import/export와 허용 목록 기반 sanitize
-- GFM Markdown import와 strict/lossy export
-- 프레임워크 독립 core와 얇은 React 어댑터
-- 배포 산출물을 사용하는 consumer fixture
-- unit, package boundary, license, Chromium E2E 검증
-
-테이블은 R0 모델과 HTML/GFM 입출력에서 지원한다. R0 편집기는 테이블 문서를 변경하지 않고 `EDITOR_FEATURE_UNAVAILABLE`로 거절한다. 검색 가능한 슬래시 메뉴, 블록 추가·drag·메뉴, 전체 테이블 편집 UI와 상호작용은 R1 범위다.
-
-상세 기능 상태는 [무료 기능 인벤토리](./docs/product/blocknote-free-feature-inventory.md), 구현 순서는 [제품 로드맵](./docs/product/roadmap.md)을 기준으로 한다.
+기능별 목표와 검증 상태는 [무료 기능 인벤토리](./docs/product/blocknote-free-feature-inventory.md), 릴리스별 구현 순서는 [제품 로드맵](./docs/product/roadmap.md)을 참고한다.
 
 ## 아키텍처
 
