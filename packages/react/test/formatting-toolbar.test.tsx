@@ -11,7 +11,21 @@ import {
   FormattingToolbar,
 } from "../src/index.js";
 
-const fakeController = (getSelectionMarks = vi.fn(() => [] as string[])) => ({
+type SelectionBlockType = {
+  blockId: string;
+  blockType: { type: "paragraph" } | { type: "heading"; level: 1 | 2 | 3 };
+} | null;
+
+const fakeController = (
+  getSelectionMarks = vi.fn(() => [] as string[]),
+  getSelectionBlockType = vi.fn(
+    (): SelectionBlockType => ({
+      blockId: "block-1",
+      blockType: { type: "paragraph" },
+    }),
+  ),
+  setBlockType = vi.fn(() => ({ ok: true, value: undefined })),
+) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
     editable.contentEditable = "true";
@@ -22,9 +36,11 @@ const fakeController = (getSelectionMarks = vi.fn(() => [] as string[])) => ({
   destroy: vi.fn(),
   getDocument: vi.fn(),
   getSelectionMarks,
+  getSelectionBlockType,
   replaceDocument: vi.fn(),
   commands: {
     setText: vi.fn(),
+    setBlockType,
     toggleBold: vi.fn(() => ({ ok: true, value: undefined })),
     toggleItalic: vi.fn(() => ({ ok: true, value: undefined })),
     toggleUnderline: vi.fn(() => ({ ok: true, value: undefined })),
@@ -146,6 +162,91 @@ describe("FormattingToolbar", () => {
     collapseSelection();
 
     expect(screen.queryByRole("toolbar")).toBeNull();
+    view.unmount();
+  });
+
+  it("shows a block type select reflecting the current block type", () => {
+    const controller = fakeController();
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (textNode === null) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Block type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("paragraph");
+    view.unmount();
+  });
+
+  it("shows the heading level in the block type select", () => {
+    const controller = fakeController(
+      vi.fn(() => []),
+      vi.fn(() => ({
+        blockId: "block-1",
+        blockType: { type: "heading", level: 2 },
+      })),
+    );
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (textNode === null) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Block type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("heading-2");
+    view.unmount();
+  });
+
+  it("calls setBlockType when the block type select changes", () => {
+    const controller = fakeController();
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (textNode === null) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Block type" }), {
+      target: { value: "heading-1" },
+    });
+
+    expect(controller.commands.setBlockType).toHaveBeenCalledWith("block-1", {
+      type: "heading",
+      level: 1,
+    });
     view.unmount();
   });
 

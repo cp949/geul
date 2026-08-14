@@ -117,11 +117,11 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 
 | ID | 기능 | 목표 | 단계 | 상태 | BlockNote 근거 |
 | --- | --- | --- | --- | --- | --- |
-| `UI-001` | 검색 가능한 슬래시 메뉴 | `PARITY` | R1 | `NOT_STARTED` | `SuggestionMenu`, default slash items |
-| `UI-002` | 블록 추가 버튼 | `PARITY` | R1 | `NOT_STARTED` | `SideMenu/AddBlockButton` |
+| `UI-001` | 검색 가능한 슬래시 메뉴 | `PARITY` | R1 | `VERIFIED` | `SuggestionMenu`, default slash items |
+| `UI-002` | 블록 추가 버튼 | `PARITY` | R1 | `VERIFIED` | `SideMenu/AddBlockButton` |
 | `UI-003` | 블록 drag handle과 재정렬 | `PARITY` | R1 | `NOT_STARTED` | `SideMenu`, drag extension |
 | `UI-004` | 여러 블록 선택·이동·삭제 | `PARITY` | R2 | `NOT_STARTED` | `SideMenu/MultipleNodeSelection` |
-| `UI-005` | 블록 종류 변경 메뉴 | `PARITY` | R1 | `NOT_STARTED` | formatting toolbar block type select |
+| `UI-005` | 블록 종류 변경 메뉴 | `PARITY` | R1 | `VERIFIED` | formatting toolbar block type select |
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `NOT_STARTED` | formatting toolbar nest buttons |
 | `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |
 | `UI-008` | 링크 열기·수정·삭제 toolbar | `PARITY` | R1 | `VERIFIED` | `LinkToolbar` |

@@ -1,6 +1,6 @@
 import type { Document, InlineContent } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import { AllSelection, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 import {
   createEditor,
@@ -1264,5 +1264,361 @@ describe("editor controller", () => {
         reason: "local",
       },
     ]);
+  });
+
+  it("inserts an empty paragraph after the given block and returns its id", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: () => "block-2",
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.commands.insertParagraphAfter("block-1")).toEqual({
+      ok: true,
+      value: { blockId: "block-2" },
+    });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 1,
+      blocks: [
+        { id: "block-1", type: "paragraph", content: [{ text: "content" }] },
+        { id: "block-2", type: "paragraph", content: [] },
+      ],
+    });
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["block-2"], reason: "local" },
+    ]);
+  });
+
+  it("moves the selection into the newly inserted paragraph", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: () => "block-2",
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+
+    editor.commands.insertParagraphAfter("block-1");
+
+    let newBlockPosition: number | null = null;
+    tiptap.state.doc.forEach((node, offset) => {
+      if (node.attrs.blockId === "block-2") newBlockPosition = offset;
+    });
+    expect(newBlockPosition).not.toBeNull();
+    expect(tiptap.state.selection.from).toBe((newBlockPosition ?? 0) + 1);
+  });
+
+  it("undoes insertParagraphAfter as one unit", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    editor.commands.insertParagraphAfter("block-1");
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 2,
+      blocks: [{ id: "block-1", content: [{ text: "content" }] }],
+    });
+  });
+
+  it("returns BLOCK_NOT_FOUND for insertParagraphAfter with an unknown block id", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.commands.insertParagraphAfter("missing")).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it("changes a paragraph to a heading while preserving content and block id", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(
+      editor.commands.setBlockType("block-1", { type: "heading", level: 2 }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 1,
+      blocks: [
+        {
+          id: "block-1",
+          type: "heading",
+          level: 2,
+          content: [{ text: "content" }],
+        },
+      ],
+    });
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["block-1"], reason: "local" },
+    ]);
+  });
+
+  it("changes a heading back to a paragraph while preserving content", () => {
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "block-1",
+            type: "heading",
+            level: 1,
+            content: [{ text: "title" }],
+          },
+        ],
+      },
+    });
+
+    expect(
+      editor.commands.setBlockType("block-1", { type: "paragraph" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [
+        { id: "block-1", type: "paragraph", content: [{ text: "title" }] },
+      ],
+    });
+  });
+
+  it("undoes setBlockType as one unit", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    editor.commands.setBlockType("block-1", { type: "heading", level: 1 });
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 2,
+      blocks: [
+        { id: "block-1", type: "paragraph", content: [{ text: "content" }] },
+      ],
+    });
+  });
+
+  it("clears content while changing type when clearContent is set", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("/heading"),
+    });
+
+    expect(
+      editor.commands.setBlockType(
+        "block-1",
+        { type: "heading", level: 1 },
+        { clearContent: true },
+      ),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [{ id: "block-1", type: "heading", level: 1, content: [] }],
+    });
+  });
+
+  it("clears and converts as one undo unit when clearContent is set", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("/heading"),
+    });
+    editor.commands.setBlockType(
+      "block-1",
+      { type: "heading", level: 1 },
+      { clearContent: true },
+    );
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [
+        { id: "block-1", type: "paragraph", content: [{ text: "/heading" }] },
+      ],
+    });
+  });
+
+  it("returns COMMAND_NOT_APPLICABLE for setBlockType with the same type", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(
+      editor.commands.setBlockType("block-1", { type: "paragraph" }),
+    ).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setBlockType" },
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it("returns BLOCK_NOT_FOUND for setBlockType with an unknown block id", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+
+    expect(
+      editor.commands.setBlockType("missing", { type: "paragraph" }),
+    ).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+  });
+
+  it("reports the block, type and text at a collapsed cursor", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.getCaretBlockContext()).toEqual({
+      blockId: "block-1",
+      blockType: { type: "paragraph" },
+      text: "content",
+    });
+  });
+
+  it("reports the heading level at a collapsed cursor inside a heading", () => {
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "block-1",
+            type: "heading",
+            level: 2,
+            content: [{ text: "title" }],
+          },
+        ],
+      },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(2);
+
+    expect(editor.getCaretBlockContext()).toEqual({
+      blockId: "block-1",
+      blockType: { type: "heading", level: 2 },
+      text: "title",
+    });
+  });
+
+  it("returns null caret block context for a range selection", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 4 });
+
+    expect(editor.getCaretBlockContext()).toBeNull();
+  });
+
+  it("returns null caret block context after destroy", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    editor.destroy();
+
+    expect(editor.getCaretBlockContext()).toBeNull();
+  });
+
+  it("reports the block id and type for a range selection", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 4 });
+
+    expect(editor.getSelectionBlockType()).toEqual({
+      blockId: "block-1",
+      blockType: { type: "paragraph" },
+    });
+  });
+
+  it("reports the heading level for a range selection inside a heading", () => {
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "block-1",
+            type: "heading",
+            level: 3,
+            content: [{ text: "title" }],
+          },
+        ],
+      },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 4 });
+
+    expect(editor.getSelectionBlockType()).toEqual({
+      blockId: "block-1",
+      blockType: { type: "heading", level: 3 },
+    });
+  });
+
+  it("reports the block id and type for a collapsed selection", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.getSelectionBlockType()).toEqual({
+      blockId: "block-1",
+      blockType: { type: "paragraph" },
+    });
+  });
+
+  it("returns null selection block type after destroy", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 4 });
+
+    editor.destroy();
+
+    expect(editor.getSelectionBlockType()).toBeNull();
+  });
+
+  it("reports the block type for a select-all selection in a single-block document", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(new AllSelection(tiptap.state.doc)),
+    );
+
+    expect(editor.getSelectionBlockType()).toEqual({
+      blockId: "block-1",
+      blockType: { type: "paragraph" },
+    });
+  });
+
+  it("returns null selection block type when select-all spans multiple blocks", () => {
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "block-1", type: "paragraph", content: [{ text: "one" }] },
+          { id: "block-2", type: "paragraph", content: [{ text: "two" }] },
+        ],
+      },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(new AllSelection(tiptap.state.doc)),
+    );
+
+    expect(editor.getSelectionBlockType()).toBeNull();
   });
 });

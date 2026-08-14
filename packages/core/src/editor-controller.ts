@@ -8,6 +8,7 @@ import {
 } from "@cp949/geul-model";
 import { Editor, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
+import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 
 import { BlockIdExtension } from "./block-id-extension.js";
@@ -30,9 +31,26 @@ export interface EditorController {
   getDocument(): BlockDocument;
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
+  getCaretBlockContext(): {
+    blockId: string;
+    blockType: BlockTypeDescriptor;
+    text: string;
+  } | null;
+  getSelectionBlockType(): {
+    blockId: string;
+    blockType: BlockTypeDescriptor;
+  } | null;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
+    insertParagraphAfter(
+      blockId: string,
+    ): Result<{ blockId: string }, EditorError>;
+    setBlockType(
+      blockId: string,
+      blockType: BlockTypeDescriptor,
+      options?: { clearContent?: boolean },
+    ): Result<void, EditorError>;
     toggleBold(): Result<void, EditorError>;
     toggleItalic(): Result<void, EditorError>;
     toggleUnderline(): Result<void, EditorError>;
@@ -44,6 +62,10 @@ export interface EditorController {
     redo(): Result<void, EditorError>;
   };
 }
+
+export type BlockTypeDescriptor =
+  | { type: "paragraph" }
+  | { type: "heading"; level: 1 | 2 | 3 };
 
 export type CreateEditorOptions = {
   initialDocument: BlockDocument;
@@ -290,6 +312,112 @@ export const createEditor = (
     });
   };
 
+  const insertParagraphAfter = (
+    blockId: string,
+  ): Result<{ blockId: string }, EditorError> => {
+    if (destroyed) return commandNotApplicable("insertParagraphAfter");
+
+    const blockIndex = currentDocument.blocks.findIndex(
+      (block) => block.id === blockId,
+    );
+    if (blockIndex === -1) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    let insertPosition: number | null = null;
+    tiptapEditor.state.doc.forEach((node, offset) => {
+      if (node.attrs.blockId !== blockId) return;
+      insertPosition = offset + node.nodeSize;
+    });
+    if (insertPosition === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    const result = runDocumentCommand("insertParagraphAfter", "local", () => {
+      if (insertPosition === null) return false;
+      const paragraphType = tiptapEditor.schema.nodes.paragraph;
+      if (paragraphType === undefined) return false;
+      const paragraph = paragraphType.create();
+      const transaction = tiptapEditor.state.tr.insert(
+        insertPosition,
+        paragraph,
+      );
+      transaction.setSelection(
+        TextSelection.create(transaction.doc, insertPosition + 1),
+      );
+      tiptapEditor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+    if (!result.ok) return result;
+
+    const createdBlock = currentDocument.blocks[blockIndex + 1];
+    if (createdBlock === undefined) {
+      return commandNotApplicable("insertParagraphAfter");
+    }
+    return { ok: true, value: { blockId: createdBlock.id } };
+  };
+
+  const setBlockType = (
+    blockId: string,
+    blockType: BlockTypeDescriptor,
+    options?: { clearContent?: boolean },
+  ): Result<void, EditorError> => {
+    if (destroyed) return commandNotApplicable("setBlockType");
+
+    let targetPosition: number | null = null;
+    let currentTypeName: string | null = null;
+    let currentLevel: number | null = null;
+    let currentContentSize = 0;
+    tiptapEditor.state.doc.forEach((node, offset) => {
+      if (node.attrs.blockId !== blockId) return;
+      targetPosition = offset;
+      currentTypeName = node.type.name;
+      currentLevel =
+        typeof node.attrs.level === "number" ? node.attrs.level : null;
+      currentContentSize = node.content.size;
+    });
+
+    if (targetPosition === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    const clearContent = options?.clearContent ?? false;
+    const isSameType =
+      blockType.type === "paragraph"
+        ? currentTypeName === "paragraph"
+        : currentTypeName === "heading" && currentLevel === blockType.level;
+    if (isSameType && (!clearContent || currentContentSize === 0)) {
+      return commandNotApplicable("setBlockType");
+    }
+
+    return runDocumentCommand("setBlockType", "local", () => {
+      if (targetPosition === null) return false;
+      const nodeType =
+        blockType.type === "paragraph"
+          ? tiptapEditor.schema.nodes.paragraph
+          : tiptapEditor.schema.nodes.heading;
+      if (nodeType === undefined) return false;
+      const attrs =
+        blockType.type === "paragraph"
+          ? { blockId }
+          : { blockId, level: blockType.level };
+
+      let transaction = tiptapEditor.state.tr;
+      if (clearContent && currentContentSize > 0) {
+        transaction = transaction.delete(
+          targetPosition + 1,
+          targetPosition + 1 + currentContentSize,
+        );
+      }
+      transaction = transaction.setNodeMarkup(targetPosition, nodeType, attrs);
+      transaction.setSelection(
+        TextSelection.create(transaction.doc, targetPosition + 1),
+      );
+      tiptapEditor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   const runSelectionCommand = (
     command: string,
     run: () => boolean,
@@ -342,6 +470,48 @@ export const createEditor = (
       const href = tiptapEditor.getAttributes("link").href;
       return typeof href === "string" ? { href } : null;
     },
+    getCaretBlockContext() {
+      if (destroyed) return null;
+      const { selection } = tiptapEditor.state;
+      if (!selection.empty) return null;
+
+      const node = selection.$from.parent;
+      if (node.type.name !== "paragraph" && node.type.name !== "heading") {
+        return null;
+      }
+      const blockId = node.attrs.blockId;
+      if (typeof blockId !== "string" || blockId.length === 0) return null;
+
+      const blockType: BlockTypeDescriptor =
+        node.type.name === "heading"
+          ? { type: "heading", level: node.attrs.level as 1 | 2 | 3 }
+          : { type: "paragraph" };
+      return { blockId, blockType, text: node.textContent };
+    },
+    getSelectionBlockType() {
+      if (destroyed) return null;
+      const { selection, doc } = tiptapEditor.state;
+      const { from, to } = selection;
+
+      let result: { blockId: string; blockType: BlockTypeDescriptor } | null =
+        null;
+      doc.forEach((node, offset) => {
+        if (result !== null) return;
+        if (from < offset || to > offset + node.nodeSize) return;
+        if (node.type.name !== "paragraph" && node.type.name !== "heading") {
+          return;
+        }
+        const blockId = node.attrs.blockId;
+        if (typeof blockId !== "string" || blockId.length === 0) return;
+
+        const blockType: BlockTypeDescriptor =
+          node.type.name === "heading"
+            ? { type: "heading", level: node.attrs.level as 1 | 2 | 3 }
+            : { type: "paragraph" };
+        result = { blockId, blockType };
+      });
+      return result;
+    },
     replaceDocument(next) {
       if (destroyed) return commandNotApplicable("replaceDocument");
 
@@ -364,6 +534,8 @@ export const createEditor = (
     },
     commands: {
       setText,
+      insertParagraphAfter,
+      setBlockType,
       toggleBold: () =>
         runSelectionCommand("toggleBold", () =>
           tiptapEditor.commands.toggleBold(),

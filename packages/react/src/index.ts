@@ -11,4 +11,5 @@ export {
 } from "./editor-provider.js";
 export { FormattingToolbar } from "./formatting-toolbar.js";
 export { LinkToolbar } from "./link-toolbar.js";
+export { SlashMenu } from "./slash-menu.js";
 export { useEditor } from "./use-editor.js";

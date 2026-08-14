@@ -8,6 +8,7 @@ import {
   type EditorError,
   EditorProvider,
   LinkToolbar,
+  SlashMenu,
 } from "@cp949/geul-react";
 
 const document: Document = createEmptyDocument(() => "fixture-block");
@@ -16,6 +17,7 @@ void importHtml("<p>Hello</p>");
 void EditorProvider;
 void EditorContent;
 void LinkToolbar;
+void SlashMenu;
 void editor;
 const event: DocumentChangeEvent = {
   revision: 0,

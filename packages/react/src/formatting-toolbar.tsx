@@ -1,9 +1,35 @@
-import type { EditorController } from "@cp949/geul-core";
+import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 import { useEffect, useState } from "react";
 
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
+
+const BLOCK_TYPE_OPTIONS: ReadonlyArray<{
+  value: string;
+  label: string;
+  blockType: BlockTypeDescriptor;
+}> = [
+  { value: "paragraph", label: "Text", blockType: { type: "paragraph" } },
+  {
+    value: "heading-1",
+    label: "Heading 1",
+    blockType: { type: "heading", level: 1 },
+  },
+  {
+    value: "heading-2",
+    label: "Heading 2",
+    blockType: { type: "heading", level: 2 },
+  },
+  {
+    value: "heading-3",
+    label: "Heading 3",
+    blockType: { type: "heading", level: 3 },
+  },
+];
+
+const blockTypeToValue = (blockType: BlockTypeDescriptor): string =>
+  blockType.type === "paragraph" ? "paragraph" : `heading-${blockType.level}`;
 
 const toolbarButtons: ReadonlyArray<{
   mark: SelectionMark;
@@ -45,6 +71,7 @@ const toolbarButtons: ReadonlyArray<{
 
 type ToolbarState = {
   activeMarks: SelectionMark[];
+  blockSelection: { blockId: string; blockType: BlockTypeDescriptor } | null;
   left: number;
   top: number;
 };
@@ -85,6 +112,7 @@ export const FormattingToolbar = () => {
       );
       setToolbarState({
         activeMarks: editor.getSelectionMarks(),
+        blockSelection: editor.getSelectionBlockType(),
         left,
         top: Math.max(bounds.top, 48),
       });
@@ -119,6 +147,40 @@ export const FormattingToolbar = () => {
       role="toolbar"
       style={{ left: toolbarState.left, top: toolbarState.top }}
     >
+      {toolbarState.blockSelection !== null && (
+        <select
+          aria-label="Block type"
+          className="be-formatting-toolbar-block-type"
+          onChange={(event) => {
+            const blockSelection = toolbarState.blockSelection;
+            if (blockSelection === null) return;
+            const option = BLOCK_TYPE_OPTIONS.find(
+              (candidate) => candidate.value === event.currentTarget.value,
+            );
+            if (option === undefined) return;
+            editor.commands.setBlockType(
+              blockSelection.blockId,
+              option.blockType,
+            );
+            setToolbarState((current) =>
+              current === null
+                ? null
+                : {
+                    ...current,
+                    blockSelection: editor.getSelectionBlockType(),
+                  },
+            );
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+          value={blockTypeToValue(toolbarState.blockSelection.blockType)}
+        >
+          {BLOCK_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
       {toolbarButtons.map(({ mark, label, glyph, toggle }) => (
         <button
           aria-label={label}

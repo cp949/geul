@@ -19,6 +19,7 @@ import {
   EditorProvider,
   FormattingToolbar,
   LinkToolbar,
+  SlashMenu,
   useEditor,
 } from "@cp949/geul-react";
 import { useCallback, useState } from "react";
@@ -226,6 +227,7 @@ const EditorWorkspace = ({
         </div>
         <FormattingToolbar />
         <LinkToolbar />
+        <SlashMenu />
         <EditorContent />
       </section>
 
