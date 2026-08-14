@@ -1,0 +1,221 @@
+:root {
+  color: #18201c;
+  background: #eef1eb;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #a8b0aa;
+  border-radius: 0.45rem;
+  padding: 0.65rem 0.85rem;
+  color: #18201c;
+  background: #f9faf7;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #35785a;
+  background: #eff8f1;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+.be-editor:focus-within {
+  outline: 3px solid #7cb995;
+  outline-offset: 2px;
+}
+
+.demo-shell {
+  width: min(76rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2.5rem 0 4rem;
+}
+
+.demo-header,
+.panel-heading,
+.exchange-panel {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.demo-header {
+  grid-template-columns: minmax(16rem, 0.65fr) minmax(24rem, 1.35fr);
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.demo-header h1,
+.panel-heading h2,
+.exchange-panel h2 {
+  margin: 0;
+}
+
+.demo-header h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.5rem, 7vw, 5.5rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.92;
+}
+
+.demo-header p {
+  max-width: 32rem;
+  margin-bottom: 0;
+  color: #56615a;
+}
+
+.demo-header .eyebrow {
+  margin: 0 0 0.75rem;
+  color: #276b4b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.editor-panel,
+.exchange-panel {
+  border: 1px solid #cbd1cb;
+  background: #fcfdf9;
+  box-shadow: 0 1rem 3rem rgb(47 61 52 / 9%);
+}
+
+.editor-panel {
+  margin-bottom: 1rem;
+}
+
+.panel-heading {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  border-bottom: 1px solid #dfe3de;
+  padding: 1rem 1.25rem;
+}
+
+.revision-summary {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0;
+  text-align: right;
+}
+
+.revision-summary dt {
+  color: #6a756d;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.revision-summary dd {
+  max-width: 24rem;
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.be-editor {
+  padding: 1.5rem;
+  background: white;
+  --be-color-text: #1c241f;
+}
+
+.be-editor .ProseMirror {
+  white-space: pre-wrap;
+}
+
+.exchange-panel {
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.6fr);
+  padding: 1.25rem;
+}
+
+.exchange-panel textarea {
+  width: 100%;
+  min-height: 20rem;
+  margin-top: 0.75rem;
+  resize: vertical;
+  border: 1px solid #bac2bb;
+  border-radius: 0.3rem;
+  padding: 1rem;
+  color: #243129;
+  background: #f7f8f4;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.5;
+}
+
+.feedback-panel {
+  min-width: 0;
+  border-left: 1px solid #dfe3de;
+  padding-left: 1.25rem;
+}
+
+.feedback-panel h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feedback-panel pre {
+  min-height: 3rem;
+  margin: 0;
+  overflow: auto;
+  color: #713b32;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.conversion-status {
+  margin: 0;
+  border-radius: 0.35rem;
+  padding: 0.75rem;
+  color: #1e5b40;
+  background: #edf7ef;
+}
+
+@media (max-width: 52rem) {
+  .demo-header,
+  .exchange-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    justify-content: flex-start;
+  }
+
+  .panel-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .revision-summary {
+    text-align: left;
+  }
+
+  .feedback-panel {
+    border-top: 1px solid #dfe3de;
+    border-left: 0;
+    padding-top: 1.25rem;
+    padding-left: 0;
+  }
+}

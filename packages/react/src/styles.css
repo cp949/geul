@@ -1,0 +1,21 @@
+.be-editor {
+  color: var(--be-color-text, #202124);
+  line-height: 1.6;
+}
+
+.be-editor [contenteditable="true"] {
+  min-height: 12rem;
+  outline: none;
+}
+
+.be-editor h1 {
+  font-size: 2rem;
+}
+
+.be-editor h2 {
+  font-size: 1.5rem;
+}
+
+.be-editor h3 {
+  font-size: 1.25rem;
+}
