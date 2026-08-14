@@ -9,4 +9,5 @@ export {
   EditorProvider,
   type EditorProviderProps,
 } from "./editor-provider.js";
+export { FormattingToolbar } from "./formatting-toolbar.js";
 export { useEditor } from "./use-editor.js";

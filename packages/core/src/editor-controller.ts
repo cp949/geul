@@ -4,6 +4,7 @@ import {
   isSupportedLinkHref,
   parseDocument,
   type Result,
+  type TextMark,
 } from "@cp949/geul-model";
 import { Editor, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
@@ -27,9 +28,15 @@ export interface EditorController {
   unmount(): void;
   destroy(): void;
   getDocument(): BlockDocument;
+  getSelectionMarks(): TextMark["type"][];
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
+    toggleBold(): Result<void, EditorError>;
+    toggleItalic(): Result<void, EditorError>;
+    toggleUnderline(): Result<void, EditorError>;
+    toggleStrike(): Result<void, EditorError>;
+    toggleCode(): Result<void, EditorError>;
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
   };
@@ -44,6 +51,14 @@ export type CreateEditorOptions = {
 type ChangeReason = DocumentChangeEvent["reason"];
 
 const defaultIdFactory: IdFactory = () => globalThis.crypto.randomUUID();
+
+const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+  "code",
+];
 
 const commandNotApplicable = (command: string): Result<never, EditorError> => ({
   ok: false,
@@ -272,6 +287,16 @@ export const createEditor = (
     });
   };
 
+  const runSelectionCommand = (
+    command: string,
+    run: () => boolean,
+  ): Result<void, EditorError> => {
+    if (tiptapEditor.state.selection.empty) {
+      return commandNotApplicable(command);
+    }
+    return runDocumentCommand(command, "local", run);
+  };
+
   return {
     mount(element) {
       if (destroyed) return;
@@ -295,6 +320,10 @@ export const createEditor = (
     getDocument() {
       return structuredClone(currentDocument);
     },
+    getSelectionMarks() {
+      if (destroyed) return [];
+      return toggleableMarkTypes.filter((type) => tiptapEditor.isActive(type));
+    },
     replaceDocument(next) {
       if (destroyed) return commandNotApplicable("replaceDocument");
 
@@ -317,6 +346,26 @@ export const createEditor = (
     },
     commands: {
       setText,
+      toggleBold: () =>
+        runSelectionCommand("toggleBold", () =>
+          tiptapEditor.commands.toggleBold(),
+        ),
+      toggleItalic: () =>
+        runSelectionCommand("toggleItalic", () =>
+          tiptapEditor.commands.toggleItalic(),
+        ),
+      toggleUnderline: () =>
+        runSelectionCommand("toggleUnderline", () =>
+          tiptapEditor.commands.toggleUnderline(),
+        ),
+      toggleStrike: () =>
+        runSelectionCommand("toggleStrike", () =>
+          tiptapEditor.commands.toggleStrike(),
+        ),
+      toggleCode: () =>
+        runSelectionCommand("toggleCode", () =>
+          tiptapEditor.commands.toggleCode(),
+        ),
       undo: () =>
         runDocumentCommand("undo", "undo", () => tiptapEditor.commands.undo()),
       redo: () =>

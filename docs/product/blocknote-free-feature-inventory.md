@@ -102,11 +102,11 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | --- | --- | --- | --- | --- | --- |
 | `INL-001` | 일반 텍스트 | `PARITY` | R1 | `NOT_STARTED` | `features/blocks/inline-content.mdx` |
 | `INL-002` | 링크와 링크 click 정책 | `PARITY` | R1 | `NOT_STARTED` | `features/blocks/inline-content.mdx` |
-| `INL-003` | 굵게 | `PARITY` | R1 | `NOT_STARTED` | `defaultStyleSpecs` |
-| `INL-004` | 기울임 | `PARITY` | R1 | `NOT_STARTED` | `defaultStyleSpecs` |
-| `INL-005` | 밑줄 | `PARITY` | R1 | `NOT_STARTED` | `defaultStyleSpecs` |
-| `INL-006` | 취소선 | `PARITY` | R1 | `NOT_STARTED` | `defaultStyleSpecs` |
-| `INL-007` | 인라인 코드 | `PARITY` | R1 | `NOT_STARTED` | `defaultStyleSpecs` |
+| `INL-003` | 굵게 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
+| `INL-004` | 기울임 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
+| `INL-005` | 밑줄 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
+| `INL-006` | 취소선 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
+| `INL-007` | 인라인 코드 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
 | `INL-008` | 글자색 | `PARITY` | R2 | `NOT_STARTED` | `defaultStyleSpecs` |
 | `INL-009` | 텍스트 배경색 | `PARITY` | R2 | `NOT_STARTED` | `defaultStyleSpecs` |
 | `INL-010` | 블록 글자색·배경색 | `PARITY` | R2 | `NOT_STARTED` | default block props, drag handle color menu |
@@ -123,7 +123,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-004` | 여러 블록 선택·이동·삭제 | `PARITY` | R2 | `NOT_STARTED` | `SideMenu/MultipleNodeSelection` |
 | `UI-005` | 블록 종류 변경 메뉴 | `PARITY` | R1 | `NOT_STARTED` | formatting toolbar block type select |
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `NOT_STARTED` | formatting toolbar nest buttons |
-| `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `NOT_STARTED` | `FormattingToolbar` |
+| `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |
 | `UI-008` | 링크 열기·수정·삭제 toolbar | `PARITY` | R1 | `NOT_STARTED` | `LinkToolbar` |
 | `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `NOT_STARTED` | `Placeholder` extension |
 | `UI-010` | 마지막 editable trailing block | `PARITY` | R2 | `NOT_STARTED` | `TrailingNode` extension |

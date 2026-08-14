@@ -2,7 +2,7 @@ import type { CreateEditorOptions, EditorController } from "@cp949/geul-core";
 import { createEditor } from "@cp949/geul-core";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { EditorContext } from "./use-editor.js";
+import { EditorContext, EditorMountContext } from "./use-editor.js";
 
 export type EditorProviderProps =
   | {
@@ -34,6 +34,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
   const [internalEditor, setInternalEditor] = useState<EditorController | null>(
     null,
   );
+  const [mountElement, setMountElement] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     if (configuration.ownership === "external") return;
@@ -54,7 +55,11 @@ export const EditorProvider = (props: EditorProviderProps) => {
 
   return (
     <EditorContext.Provider value={controller}>
-      {props.children}
+      <EditorMountContext.Provider
+        value={{ element: mountElement, setElement: setMountElement }}
+      >
+        {props.children}
+      </EditorMountContext.Provider>
     </EditorContext.Provider>
   );
 };
