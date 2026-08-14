@@ -1,35 +1,13 @@
 import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 import { useEffect, useState } from "react";
 
+import {
+  BLOCK_TYPE_OPTIONS,
+  blockTypeToOptionId,
+} from "./block-type-options.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
-
-const BLOCK_TYPE_OPTIONS: ReadonlyArray<{
-  value: string;
-  label: string;
-  blockType: BlockTypeDescriptor;
-}> = [
-  { value: "paragraph", label: "Text", blockType: { type: "paragraph" } },
-  {
-    value: "heading-1",
-    label: "Heading 1",
-    blockType: { type: "heading", level: 1 },
-  },
-  {
-    value: "heading-2",
-    label: "Heading 2",
-    blockType: { type: "heading", level: 2 },
-  },
-  {
-    value: "heading-3",
-    label: "Heading 3",
-    blockType: { type: "heading", level: 3 },
-  },
-];
-
-const blockTypeToValue = (blockType: BlockTypeDescriptor): string =>
-  blockType.type === "paragraph" ? "paragraph" : `heading-${blockType.level}`;
 
 const toolbarButtons: ReadonlyArray<{
   mark: SelectionMark;
@@ -155,7 +133,7 @@ export const FormattingToolbar = () => {
             const blockSelection = toolbarState.blockSelection;
             if (blockSelection === null) return;
             const option = BLOCK_TYPE_OPTIONS.find(
-              (candidate) => candidate.value === event.currentTarget.value,
+              (candidate) => candidate.id === event.currentTarget.value,
             );
             if (option === undefined) return;
             editor.commands.setBlockType(
@@ -172,10 +150,10 @@ export const FormattingToolbar = () => {
             );
           }}
           onMouseDown={(event) => event.preventDefault()}
-          value={blockTypeToValue(toolbarState.blockSelection.blockType)}
+          value={blockTypeToOptionId(toolbarState.blockSelection.blockType)}
         >
           {BLOCK_TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option key={option.id} value={option.id}>
               {option.label}
             </option>
           ))}

@@ -76,8 +76,8 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 
 | ID | 기능 | 목표 | 단계 | 상태 | BlockNote 근거 |
 | --- | --- | --- | --- | --- | --- |
-| `BLK-001` | 문단 | `PARITY` | R1 | `PARTIAL` | R0 기본 문단 편집 완료. R1 Notion형 block UI·메뉴·drag interaction 통합 전 |
-| `BLK-002` | 제목 H1-H3 | `PARITY` | R1 | `PARTIAL` | R0 기본 H1-H3 편집 완료. R1 Notion형 block UI·메뉴·drag interaction 통합 전 |
+| `BLK-001` | 문단 | `PARITY` | R1 | `VERIFIED` | R0 기본 편집 + R1 slash 메뉴·drag·복제·삭제 메뉴(슬라이스 3-4) 통합 완료 |
+| `BLK-002` | 제목 H1-H3 | `PARITY` | R1 | `VERIFIED` | R0 기본 편집 + R1 slash 메뉴·drag·복제·삭제 메뉴(슬라이스 3-4) 통합 완료 |
 | `BLK-003` | 제목 H4-H6 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
 | `BLK-004` | 자식을 접는 토글 제목 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
 | `BLK-005` | 인용문 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
@@ -119,7 +119,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | --- | --- | --- | --- | --- | --- |
 | `UI-001` | 검색 가능한 슬래시 메뉴 | `PARITY` | R1 | `VERIFIED` | `SuggestionMenu`, default slash items |
 | `UI-002` | 블록 추가 버튼 | `PARITY` | R1 | `VERIFIED` | `SideMenu/AddBlockButton` |
-| `UI-003` | 블록 drag handle과 재정렬 | `PARITY` | R1 | `NOT_STARTED` | `SideMenu`, drag extension |
+| `UI-003` | 블록 drag handle과 재정렬 | `PARITY` | R1 | `VERIFIED` | `SideMenu`, drag extension(구현은 Pointer Event 사용) |
 | `UI-004` | 여러 블록 선택·이동·삭제 | `PARITY` | R2 | `NOT_STARTED` | `SideMenu/MultipleNodeSelection` |
 | `UI-005` | 블록 종류 변경 메뉴 | `PARITY` | R1 | `VERIFIED` | formatting toolbar block type select |
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `NOT_STARTED` | formatting toolbar nest buttons |
@@ -130,7 +130,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-011` | 기본 키보드 단축키와 입력 규칙 | `PARITY` | R2 | `NOT_STARTED` | keyboard shortcuts, block input rules |
 | `UI-012` | emoji picker | `PARITY` | R4 | `NOT_STARTED` | grid suggestion menu, emoji items |
 | `UI-013` | 메뉴·popover portal target 제어 | `PARITY` | R4 | `NOT_STARTED` | React component portal API |
-| `UI-014` | 블록 복제·삭제 menu | `ENHANCED` | R1 | `NOT_STARTED` | 삭제 parity + 승인된 복제 계약 |
+| `UI-014` | 블록 복제·삭제 menu | `ENHANCED` | R1 | `VERIFIED` | 삭제 parity + 승인된 복제 계약(복제본 바로 다음 삽입, 포커스 이동) |
 | `UI-015` | BlockNote 지원 범위의 mobile·touch UI | `PARITY` | R4 | `NOT_STARTED` | mobile formatting toolbar, touch resize handlers |
 | `UI-016` | 키보드 focus와 ARIA 접근성 계약 | `PARITY` | R4 | `NOT_STARTED` | suggestion menu ARIA, keyboard navigation |
 

@@ -51,6 +51,12 @@ export interface EditorController {
       blockType: BlockTypeDescriptor,
       options?: { clearContent?: boolean },
     ): Result<void, EditorError>;
+    moveBlockBefore(
+      blockId: string,
+      beforeBlockId: string | null,
+    ): Result<void, EditorError>;
+    duplicateBlock(blockId: string): Result<{ blockId: string }, EditorError>;
+    deleteBlock(blockId: string): Result<void, EditorError>;
     toggleBold(): Result<void, EditorError>;
     toggleItalic(): Result<void, EditorError>;
     toggleUnderline(): Result<void, EditorError>;
@@ -418,6 +424,144 @@ export const createEditor = (
     });
   };
 
+  const moveBlockBefore = (
+    blockId: string,
+    beforeBlockId: string | null,
+  ): Result<void, EditorError> => {
+    if (destroyed) return commandNotApplicable("moveBlockBefore");
+
+    const blocks = currentDocument.blocks;
+    const sourceIndex = blocks.findIndex((block) => block.id === blockId);
+    if (sourceIndex === -1) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    let targetIndex = blocks.length;
+    if (beforeBlockId !== null) {
+      targetIndex = blocks.findIndex((block) => block.id === beforeBlockId);
+      if (targetIndex === -1) {
+        return {
+          ok: false,
+          error: { code: "BLOCK_NOT_FOUND", blockId: beforeBlockId },
+        };
+      }
+    }
+    if (targetIndex === sourceIndex || targetIndex === sourceIndex + 1) {
+      return commandNotApplicable("moveBlockBefore");
+    }
+
+    return runDocumentCommand("moveBlockBefore", "local", () => {
+      let sourcePosition: number | null = null;
+      tiptapEditor.state.doc.forEach((node, offset) => {
+        if (node.attrs.blockId !== blockId) return;
+        sourcePosition = offset;
+      });
+      if (sourcePosition === null) return false;
+      const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
+      if (sourceNode === null) return false;
+
+      let transaction = tiptapEditor.state.tr.delete(
+        sourcePosition,
+        sourcePosition + sourceNode.nodeSize,
+      );
+      let insertPosition = transaction.doc.content.size;
+      if (beforeBlockId !== null) {
+        let mappedTargetPosition: number | null = null;
+        transaction.doc.forEach((node, offset) => {
+          if (node.attrs.blockId === beforeBlockId)
+            mappedTargetPosition = offset;
+        });
+        if (mappedTargetPosition === null) return false;
+        insertPosition = mappedTargetPosition;
+      }
+      transaction = transaction.insert(insertPosition, sourceNode);
+      tiptapEditor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
+  const duplicateBlock = (
+    blockId: string,
+  ): Result<{ blockId: string }, EditorError> => {
+    if (destroyed) return commandNotApplicable("duplicateBlock");
+
+    const blockIndex = currentDocument.blocks.findIndex(
+      (block) => block.id === blockId,
+    );
+    if (blockIndex === -1) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    const result = runDocumentCommand("duplicateBlock", "local", () => {
+      let sourcePosition: number | null = null;
+      tiptapEditor.state.doc.forEach((node, offset) => {
+        if (node.attrs.blockId !== blockId) return;
+        sourcePosition = offset;
+      });
+      if (sourcePosition === null) return false;
+      const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
+      if (sourceNode === null) return false;
+
+      const insertPosition = sourcePosition + sourceNode.nodeSize;
+      const duplicateNode = sourceNode.type.create(
+        { ...sourceNode.attrs, blockId: createId() },
+        sourceNode.content,
+        sourceNode.marks,
+      );
+      const transaction = tiptapEditor.state.tr.insert(
+        insertPosition,
+        duplicateNode,
+      );
+      transaction.setSelection(
+        TextSelection.create(
+          transaction.doc,
+          insertPosition + duplicateNode.nodeSize - 1,
+        ),
+      );
+      tiptapEditor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+    if (!result.ok) return result;
+
+    const createdBlock = currentDocument.blocks[blockIndex + 1];
+    if (createdBlock === undefined) {
+      return commandNotApplicable("duplicateBlock");
+    }
+    return { ok: true, value: { blockId: createdBlock.id } };
+  };
+
+  const deleteBlock = (blockId: string): Result<void, EditorError> => {
+    if (destroyed) return commandNotApplicable("deleteBlock");
+    if (currentDocument.blocks.length <= 1) {
+      return commandNotApplicable("deleteBlock");
+    }
+
+    const blockIndex = currentDocument.blocks.findIndex(
+      (block) => block.id === blockId,
+    );
+    if (blockIndex === -1) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    return runDocumentCommand("deleteBlock", "local", () => {
+      let sourcePosition: number | null = null;
+      tiptapEditor.state.doc.forEach((node, offset) => {
+        if (node.attrs.blockId !== blockId) return;
+        sourcePosition = offset;
+      });
+      if (sourcePosition === null) return false;
+      const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
+      if (sourceNode === null) return false;
+
+      const transaction = tiptapEditor.state.tr.delete(
+        sourcePosition,
+        sourcePosition + sourceNode.nodeSize,
+      );
+      tiptapEditor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   const runSelectionCommand = (
     command: string,
     run: () => boolean,
@@ -536,6 +680,9 @@ export const createEditor = (
       setText,
       insertParagraphAfter,
       setBlockType,
+      moveBlockBefore,
+      duplicateBlock,
+      deleteBlock,
       toggleBold: () =>
         runSelectionCommand("toggleBold", () =>
           tiptapEditor.commands.toggleBold(),

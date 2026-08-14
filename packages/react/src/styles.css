@@ -94,7 +94,16 @@
   font-size: 0.75rem;
 }
 
-.be-add-block-button {
+.be-block-gutter {
+  display: flex;
+  gap: 0.125rem;
+  position: fixed;
+  transform: translate(-3.5rem, 0);
+  z-index: 10;
+}
+
+.be-add-block-button,
+.be-block-handle {
   align-items: center;
   background: var(--be-color-surface, #fff);
   border: 1px solid var(--be-color-border, #dadce0);
@@ -105,10 +114,68 @@
   height: 1.5rem;
   justify-content: center;
   padding: 0;
-  position: fixed;
-  transform: translate(-1.75rem, 0);
   width: 1.5rem;
+}
+
+.be-block-handle {
+  cursor: grab;
+}
+
+.be-block-handle:active {
+  cursor: grabbing;
+}
+
+.be-block-insertion-guide {
+  background: var(--be-color-accent, #1a73e8);
+  height: 0.125rem;
+  pointer-events: none;
+  position: fixed;
+  transform: translateY(-0.0625rem);
   z-index: 10;
+}
+
+.be-block-menu {
+  background: var(--be-color-surface, #fff);
+  border: 1px solid var(--be-color-border, #dadce0);
+  border-radius: 0.375rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  position: fixed;
+  width: 10rem;
+  z-index: 10;
+}
+
+.be-block-menu-section-label {
+  color: var(--be-color-text-muted, #5f6368);
+  font-size: 0.75rem;
+  margin: 0.25rem 0.5rem;
+}
+
+.be-block-menu-item {
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--be-color-text, #202124);
+  cursor: pointer;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+
+.be-block-menu-item:hover {
+  background: var(--be-color-accent-muted, #e8f0fe);
+}
+
+.be-block-menu-item-danger {
+  color: var(--be-color-danger, #d93025);
+}
+
+.be-block-menu-separator {
+  border: none;
+  border-top: 1px solid var(--be-color-border, #dadce0);
+  margin: 0.25rem 0;
 }
 
 .be-slash-menu {
