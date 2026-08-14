@@ -1,0 +1,12 @@
+{
+  "extends": "../../packages/model/tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["dom-lib-forbidden.ts"]
+}

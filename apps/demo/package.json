@@ -1,0 +1,19 @@
+{
+  "name": "@cp949/geul-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. --passWithNoTests apps/demo/test"
+  },
+  "dependencies": {
+    "@cp949/geul-io": "workspace:*",
+    "@cp949/geul-model": "workspace:*",
+    "@cp949/geul-react": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}
