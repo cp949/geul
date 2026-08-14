@@ -29,6 +29,7 @@ export interface EditorController {
   destroy(): void;
   getDocument(): BlockDocument;
   getSelectionMarks(): TextMark["type"][];
+  getSelectionLink(): { href: string } | null;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
@@ -37,6 +38,8 @@ export interface EditorController {
     toggleUnderline(): Result<void, EditorError>;
     toggleStrike(): Result<void, EditorError>;
     toggleCode(): Result<void, EditorError>;
+    setLink(href: string): Result<void, EditorError>;
+    unsetLink(): Result<void, EditorError>;
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
   };
@@ -297,6 +300,16 @@ export const createEditor = (
     return runDocumentCommand(command, "local", run);
   };
 
+  const runLinkCommand = (
+    command: string,
+    run: () => boolean,
+  ): Result<void, EditorError> => {
+    if (tiptapEditor.state.selection.empty && !tiptapEditor.isActive("link")) {
+      return commandNotApplicable(command);
+    }
+    return runDocumentCommand(command, "local", run);
+  };
+
   return {
     mount(element) {
       if (destroyed) return;
@@ -323,6 +336,11 @@ export const createEditor = (
     getSelectionMarks() {
       if (destroyed) return [];
       return toggleableMarkTypes.filter((type) => tiptapEditor.isActive(type));
+    },
+    getSelectionLink() {
+      if (destroyed) return null;
+      const href = tiptapEditor.getAttributes("link").href;
+      return typeof href === "string" ? { href } : null;
     },
     replaceDocument(next) {
       if (destroyed) return commandNotApplicable("replaceDocument");
@@ -366,6 +384,29 @@ export const createEditor = (
         runSelectionCommand("toggleCode", () =>
           tiptapEditor.commands.toggleCode(),
         ),
+      setLink: (href) => {
+        if (!isSupportedLinkHref(href)) {
+          return { ok: false, error: { code: "LINK_HREF_REJECTED", href } };
+        }
+        if (tiptapEditor.isActive("link", { href })) {
+          return commandNotApplicable("setLink");
+        }
+        return runLinkCommand("setLink", () => {
+          const chain = tiptapEditor.chain();
+          if (tiptapEditor.state.selection.empty) {
+            chain.extendMarkRange("link");
+          }
+          return chain.setLink({ href }).run();
+        });
+      },
+      unsetLink: () =>
+        runLinkCommand("unsetLink", () => {
+          const chain = tiptapEditor.chain();
+          if (tiptapEditor.state.selection.empty) {
+            chain.extendMarkRange("link");
+          }
+          return chain.unsetLink().run();
+        }),
       undo: () =>
         runDocumentCommand("undo", "undo", () => tiptapEditor.commands.undo()),
       redo: () =>

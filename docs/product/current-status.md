@@ -4,7 +4,7 @@
 
 - 마지막 완료 단계: R0 — 프로젝트 기반
 - 다음 진행 단계: R1 — 강화 테이블 중심 MVP
-- R1 실행 상태: 구현 계획 [Issue #3](https://github.com/cp949/geul/issues/3) 승인 완료, 슬라이스 1(Mark 토글과 서식 툴바) 완료, 슬라이스 2(링크 툴바) 착수 전
+- R1 실행 상태: 구현 계획 [Issue #3](https://github.com/cp949/geul/issues/3) 승인 완료, 슬라이스 1(Mark 토글과 서식 툴바)·슬라이스 2(링크 툴바) 완료, 슬라이스 3(슬래시 메뉴·블록 추가·블록 종류 변경) 착수 전
 
 R0에서 문단, H1-H3와 지원 인라인 mark의 기본 편집은 구현됐다. 따라서 `BLK-001`, `BLK-002`는 `PARTIAL`이다. R1의 Notion형 block UI, 메뉴, drag interaction과 전체 table 편집 계약은 아직 완료되지 않았다.
 
@@ -12,9 +12,9 @@ R0에서 문단, H1-H3와 지원 인라인 mark의 기본 편집은 구현됐다
 
 ## 바로 다음 작업
 
-[Issue #3](https://github.com/cp949/geul/issues/3)의 슬라이스 2(링크 툴바, `UI-008`)부터 순서대로 구현한다.
+[Issue #3](https://github.com/cp949/geul/issues/3)의 슬라이스 3(슬래시 메뉴, 블록 추가, 블록 종류 변경 — `UI-001`, `UI-002`, `UI-005`)부터 순서대로 구현한다.
 
-슬라이스 1(Mark 토글 명령과 서식 툴바)은 완료했다. `INL-003`~`INL-007`, `UI-007`을 `VERIFIED`로 갱신했다. `@tiptap/extension-underline`은 `@tiptap/starter-kit`가 기본 포함하는 확장이라 신규 의존성 추가가 필요하지 않았다 — Issue #3 작성 시점의 판단은 틀렸었다.
+슬라이스 1(Mark 토글 명령과 서식 툴바), 슬라이스 2(링크 툴바)를 완료했다. `INL-002`~`INL-007`, `UI-007`, `UI-008`을 `VERIFIED`로 갱신했다. `@tiptap/extension-underline`은 `@tiptap/starter-kit`가 기본 포함하는 확장이라 신규 의존성 추가가 필요하지 않았다 — Issue #3 작성 시점의 판단은 틀렸었다.
 
 각 슬라이스는 회귀 테스트를 먼저 추가해 RED를 확인한 뒤 최소 구현으로 GREEN을 만들고, 슬라이스별 완료 기준과 검증 명령을 충족한 뒤 다음 슬라이스로 넘어간다.
 

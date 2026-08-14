@@ -10,4 +10,5 @@ export {
   type EditorProviderProps,
 } from "./editor-provider.js";
 export { FormattingToolbar } from "./formatting-toolbar.js";
+export { LinkToolbar } from "./link-toolbar.js";
 export { useEditor } from "./use-editor.js";

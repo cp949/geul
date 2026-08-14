@@ -18,6 +18,7 @@ import {
   type EditorError,
   EditorProvider,
   FormattingToolbar,
+  LinkToolbar,
   useEditor,
 } from "@cp949/geul-react";
 import { useCallback, useState } from "react";
@@ -224,6 +225,7 @@ const EditorWorkspace = ({
           </dl>
         </div>
         <FormattingToolbar />
+        <LinkToolbar />
         <EditorContent />
       </section>
 

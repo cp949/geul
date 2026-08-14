@@ -7,6 +7,7 @@ import {
   type EditorController,
   type EditorError,
   EditorProvider,
+  LinkToolbar,
 } from "@cp949/geul-react";
 
 const document: Document = createEmptyDocument(() => "fixture-block");
@@ -14,6 +15,7 @@ const editor: EditorController = createEditor({ initialDocument: document });
 void importHtml("<p>Hello</p>");
 void EditorProvider;
 void EditorContent;
+void LinkToolbar;
 void editor;
 const event: DocumentChangeEvent = {
   revision: 0,

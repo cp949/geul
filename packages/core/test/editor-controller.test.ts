@@ -40,6 +40,13 @@ const mountTiptapEditor = (
   return { editable, tiptap: editable.editor };
 };
 
+const editorState = (editor: EditorController, tiptap: TiptapEditor) => ({
+  document: editor.getDocument(),
+  selection: tiptap.state.selection.toJSON(),
+  storedMarks: tiptap.state.storedMarks?.map((mark) => mark.toJSON()) ?? null,
+  tiptapDocument: tiptap.state.doc.toJSON(),
+});
+
 const documentWithTable: Document = {
   formatVersion: 1,
   revision: 9,
@@ -952,6 +959,280 @@ describe("editor controller", () => {
     editor.destroy();
 
     expect(editor.getSelectionMarks()).toEqual([]);
+  });
+
+  it("creates a link on the current selection and undoes as one unit", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+
+    expect(editor.commands.setLink("https://example.com")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 1,
+      blocks: [
+        {
+          content: [
+            {
+              text: "content",
+              marks: [{ type: "link", href: "https://example.com" }],
+            },
+          ],
+        },
+      ],
+    });
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["block-1"], reason: "local" },
+    ]);
+
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 2,
+      blocks: [{ content: [{ text: "content" }] }],
+    });
+  });
+
+  it("rejects an unsupported link URL without mutating the document", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+    const stateBefore = editorState(editor, tiptap);
+
+    expect(editor.commands.setLink("javascript:alert(1)")).toEqual({
+      ok: false,
+      error: { code: "LINK_HREF_REJECTED", href: "javascript:alert(1)" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(stateBefore);
+    expect(changes).toEqual([]);
+  });
+
+  it("returns COMMAND_NOT_APPLICABLE for setLink with a collapsed selection outside a link", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+    const stateBefore = editorState(editor, tiptap);
+
+    expect(editor.commands.setLink("https://example.com")).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setLink" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(stateBefore);
+    expect(changes).toEqual([]);
+  });
+
+  it("updates the href at a collapsed cursor inside an existing link and undoes as one unit", () => {
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.commands.setLink("https://updated.example.com")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [
+        {
+          content: [
+            {
+              text: "content",
+              marks: [{ type: "link", href: "https://updated.example.com" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [
+        {
+          content: [
+            {
+              text: "content",
+              marks: [{ type: "link", href: "https://example.com" }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("preserves editor state when setting the existing href is not applicable", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 2, to: 4 });
+    const stateBefore = editorState(editor, tiptap);
+
+    expect(editor.commands.setLink("https://example.com")).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setLink" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(stateBefore);
+    expect(changes).toEqual([]);
+  });
+
+  it("preserves a collapsed selection when setting its existing href", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+    const stateBefore = editorState(editor, tiptap);
+
+    expect(editor.commands.setLink("https://example.com")).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setLink" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(stateBefore);
+    expect(changes).toEqual([]);
+  });
+
+  it("removes the link at the current selection and undoes as one unit", () => {
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+
+    expect(editor.commands.unsetLink()).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [{ content: [{ text: "content" }] }],
+    });
+
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [
+        {
+          content: [
+            {
+              text: "content",
+              marks: [{ type: "link", href: "https://example.com" }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("removes the link at a collapsed cursor inside it", () => {
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.commands.unsetLink()).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument()).toMatchObject({
+      blocks: [{ content: [{ text: "content" }] }],
+    });
+  });
+
+  it("returns COMMAND_NOT_APPLICABLE for unsetLink outside a link", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+
+    expect(editor.commands.unsetLink()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "unsetLink" },
+    });
+  });
+
+  it("reports the href at a collapsed cursor inside a link", () => {
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.getSelectionLink()).toEqual({ href: "https://example.com" });
+  });
+
+  it("reports no active link for a collapsed cursor outside a link", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.getSelectionLink()).toBeNull();
+  });
+
+  it("reports no active link after destroy", () => {
+    const editor = createEditor({
+      initialDocument: documentWithContent([
+        {
+          text: "content",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    editor.destroy();
+
+    expect(editor.getSelectionLink()).toBeNull();
   });
 
   it("assigns an injected id to a block created through the mounted editor", () => {
