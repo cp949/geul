@@ -1,0 +1,20 @@
+<script>alert("script")</script>
+<svg onload="alert('svg')"><title>Dangerous SVG</title><script>alert("nested")</script></svg>
+<style>body { background-image: url("javascript:alert('stylesheet')") }</style>
+<iframe title="Dangerous frame" srcdoc="&lt;script&gt;alert('frame')&lt;/script&gt;"></iframe>
+<p
+  id="unsafe-id"
+  class="unsafe-class"
+  onclick="alert('click')"
+  style="background-image: url(javascript:alert('style'))"
+  data-arbitrary="unsafe-data"
+  data-__proto__="polluted"
+  __proto__="polluted"
+  constructor="polluted"
+  prototype="polluted"
+>
+  Safe text
+  <img alt="Dangerous payload" src="x" onerror="alert('image')">
+  <a href="javascript:alert('link')">unsafe protocol</a>
+  <a href="data:text/html,&lt;script&gt;alert('data')&lt;/script&gt;">unsafe data</a>
+</p>
