@@ -4,7 +4,7 @@
 
 - 마지막 완료 단계: R0 — 프로젝트 기반
 - 다음 진행 단계: R1 — 강화 테이블 중심 MVP
-- R1 실행 상태: 구현 계획 Issue 미작성, phase 구현 미시작
+- R1 실행 상태: 구현 계획 [Issue #3](https://github.com/cp949/geul/issues/3) 승인 완료, 슬라이스 1(Mark 토글과 서식 툴바) 착수 전
 
 R0에서 문단, H1-H3와 지원 인라인 mark의 기본 편집은 구현됐다. 따라서 `BLK-001`, `BLK-002`는 `PARTIAL`이다. R1의 Notion형 block UI, 메뉴, drag interaction과 전체 table 편집 계약은 아직 완료되지 않았다.
 
@@ -12,26 +12,11 @@ R0에서 문단, H1-H3와 지원 인라인 mark의 기본 편집은 구현됐다
 
 ## 바로 다음 작업
 
-R1 코드를 바로 구현하지 않는다.
+[Issue #3](https://github.com/cp949/geul/issues/3)의 슬라이스 1(Mark 토글 명령과 서식 툴바, `INL-001`~`INL-007`, `UI-007`)부터 순서대로 구현한다.
 
-다음 문서를 입력으로 R1을 실행 가능한 vertical slice와 의존 순서로 분해한 구현 계획을 GitHub Issue에 작성하고 사용자 승인을 받는다.
+각 슬라이스는 회귀 테스트를 먼저 추가해 RED를 확인한 뒤 최소 구현으로 GREEN을 만들고, 슬라이스별 완료 기준과 검증 명령을 충족한 뒤 다음 슬라이스로 넘어간다. 슬라이스 1은 `@tiptap/extension-underline`을 새 런타임 의존성으로 추가해야 하므로 착수 전 필요성과 라이선스 영향을 사용자에게 알린다.
 
-1. `docs/specs/2026-08-14-tiptap-block-editor-mvp-design.md`
-2. `docs/product/roadmap.md`의 R1 범위와 완료 조건
-3. `docs/product/blocknote-free-feature-inventory.md`의 R1 기능 ID와 상태
-4. 현재 `model`, `io`, `core`, `react`, `demo` 코드와 테스트
-
-Issue에는 목표, 포함·제외 범위, vertical slice별 구현 순서, 완료 기준과 검증 명령을 기록한다. 계획 승인 전에는 R1 구현 파일을 변경하지 않는다.
-
-## R1 계획에서 확정할 사항
-
-1. 사용자 여정 기준 vertical slice와 구현 순서
-2. table model, core command와 React UI의 책임 경계
-3. R0의 `EDITOR_FEATURE_UNAVAILABLE` table 거절을 해제하는 정확한 시점
-4. slash menu, block 추가·drag·메뉴 interaction의 선행 조건
-5. table 조작별 undo, 저장 round-trip과 pointer/keyboard browser 검증
-6. Excel/Google Sheets HTML·TSV paste와 10,000-cell 성능 검증 순서
-7. Chromium, Firefox, WebKit 검증을 도입하는 시점
+R1 vertical slice 순서, 책임 경계와 확정 사항은 Issue #3이 원본이며 이 문서에 복제하지 않는다.
 
 ## 운영 경계
 
