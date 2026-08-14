@@ -1,0 +1,5 @@
+export type EditorError =
+  | { code: "DOCUMENT_INVALID"; message: string }
+  | { code: "EDITOR_FEATURE_UNAVAILABLE"; feature: "table" }
+  | { code: "BLOCK_NOT_FOUND"; blockId: string }
+  | { code: "COMMAND_NOT_APPLICABLE"; command: string };

@@ -1,0 +1,866 @@
+import type { Document, InlineContent } from "@cp949/geul-model";
+import type { Editor as TiptapEditor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
+import { describe, expect, it } from "vitest";
+import {
+  createEditor,
+  type DocumentChangeEvent,
+  type EditorController,
+} from "../src/index.js";
+
+const paragraphDocument = (text: string, revision = 0): Document => ({
+  formatVersion: 1,
+  revision,
+  blocks: [
+    {
+      id: "block-1",
+      type: "paragraph",
+      content: [{ text }],
+    },
+  ],
+});
+
+const documentWithContent = (content: InlineContent): Document => ({
+  formatVersion: 1,
+  revision: 0,
+  blocks: [{ id: "block-1", type: "paragraph", content }],
+});
+
+const mountTiptapEditor = (
+  editor: EditorController,
+): { editable: HTMLElement; tiptap: TiptapEditor } => {
+  const container = document.createElement("div");
+  editor.mount(container);
+  const editable = container.querySelector<
+    HTMLElement & { editor?: TiptapEditor }
+  >("[contenteditable='true']");
+  if (editable?.editor === undefined) {
+    throw new Error("Mounted Tiptap editor was not available");
+  }
+  return { editable, tiptap: editable.editor };
+};
+
+const documentWithTable: Document = {
+  formatVersion: 1,
+  revision: 9,
+  blocks: [
+    {
+      id: "table-1",
+      type: "table",
+      columns: [{ id: "column-1", width: 160 }],
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "column-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "unsupported" }],
+            },
+          ],
+        },
+      ],
+      headerRows: 0,
+      headerColumns: 0,
+    },
+  ],
+};
+
+describe("editor controller", () => {
+  it("increments revision and reports changed block ids", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.commands.setText("block-1", "after")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument().revision).toBe(1);
+    expect(changes).toEqual([
+      {
+        revision: 1,
+        changedBlockIds: ["block-1"],
+        reason: "local",
+      },
+    ]);
+  });
+
+  it("undoes one public command as one change", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+    });
+    editor.commands.setText("block-1", "after");
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 2,
+      blocks: [{ content: [{ text: "before" }] }],
+    });
+  });
+
+  it("atomically rejects table documents in R0", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept"),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.replaceDocument(documentWithTable)).toMatchObject({
+      ok: false,
+      error: { code: "EDITOR_FEATURE_UNAVAILABLE", feature: "table" },
+    });
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      type: "paragraph",
+    });
+    expect(editor.getDocument().revision).toBe(0);
+    expect(changes).toEqual([]);
+  });
+
+  it("starts local revisions from the imported initial revision", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before", 7),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.commands.setText("block-1", "after")).toMatchObject({
+      ok: true,
+    });
+    expect(editor.getDocument().revision).toBe(8);
+    expect(changes).toEqual([
+      {
+        revision: 8,
+        changedBlockIds: ["block-1"],
+        reason: "local",
+      },
+    ]);
+  });
+
+  it("keeps rapid public commands in separate undo units", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+    });
+
+    editor.commands.setText("block-1", "middle");
+    editor.commands.setText("block-1", "after");
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+
+    expect(editor.getDocument()).toMatchObject({
+      revision: 3,
+      blocks: [{ content: [{ text: "middle" }] }],
+    });
+  });
+
+  it("emits one revision for each undo and redo", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+      onChange: (event) => changes.push(event),
+    });
+
+    editor.commands.setText("block-1", "after");
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+    expect(editor.commands.redo()).toMatchObject({ ok: true });
+
+    expect(editor.getDocument()).toMatchObject({
+      revision: 3,
+      blocks: [{ content: [{ text: "after" }] }],
+    });
+    expect(changes).toEqual([
+      {
+        revision: 1,
+        changedBlockIds: ["block-1"],
+        reason: "local",
+      },
+      {
+        revision: 2,
+        changedBlockIds: ["block-1"],
+        reason: "undo",
+      },
+      {
+        revision: 3,
+        changedBlockIds: ["block-1"],
+        reason: "redo",
+      },
+    ]);
+  });
+
+  it("ignores imported revision and clears history on replace", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before", 4),
+      onChange: (event) => changes.push(event),
+    });
+    editor.commands.setText("block-1", "edited");
+
+    expect(
+      editor.replaceDocument(paragraphDocument("replacement", 99)),
+    ).toEqual({ ok: true, value: undefined });
+
+    expect(editor.getDocument()).toMatchObject({
+      revision: 6,
+      blocks: [{ content: [{ text: "replacement" }] }],
+    });
+    expect(editor.commands.undo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "undo" },
+    });
+    expect(changes.at(-1)).toEqual({
+      revision: 6,
+      changedBlockIds: ["block-1"],
+      reason: "replace",
+    });
+  });
+
+  it("reports reordered blocks as changed on replace", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const initial: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "block-1", type: "paragraph", content: [{ text: "one" }] },
+        { id: "block-2", type: "paragraph", content: [{ text: "two" }] },
+      ],
+    };
+    const editor = createEditor({
+      initialDocument: initial,
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(
+      editor.replaceDocument({
+        ...initial,
+        blocks: [initial.blocks[1], initial.blocks[0]],
+      }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "block-2",
+      "block-1",
+    ]);
+    expect(changes).toEqual([
+      {
+        revision: 1,
+        changedBlockIds: ["block-1", "block-2"],
+        reason: "replace",
+      },
+    ]);
+  });
+
+  it("does not emit or increment for failed and no-op commands", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("same"),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.commands.setText("block-1", "same")).toMatchObject({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setText" },
+    });
+    expect(editor.commands.undo()).toMatchObject({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "undo" },
+    });
+    expect(editor.commands.setText("missing", "changed")).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(
+      editor.replaceDocument(paragraphDocument("same", 100)),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "COMMAND_NOT_APPLICABLE",
+        command: "replaceDocument",
+      },
+    });
+    expect(editor.getDocument().revision).toBe(0);
+    expect(changes).toEqual([]);
+  });
+
+  it("atomically rejects malformed replacement documents", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept", 3),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.replaceDocument({ formatVersion: 1 })).toMatchObject({
+      ok: false,
+      error: { code: "DOCUMENT_INVALID" },
+    });
+    expect(editor.getDocument()).toEqual(paragraphDocument("kept", 3));
+    expect(changes).toEqual([]);
+  });
+
+  it("rejects an empty text run before creating an editor", () => {
+    expect(() =>
+      createEditor({
+        initialDocument: documentWithContent([{ text: "" }]),
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("rejects an empty mark set before creating an editor", () => {
+    expect(() =>
+      createEditor({
+        initialDocument: documentWithContent([
+          { text: "noncanonical", marks: [] },
+        ]),
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("rejects a blockless document before creating an editor", () => {
+    expect(() =>
+      createEditor({
+        initialDocument: { formatVersion: 1, revision: 0, blocks: [] },
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("rejects adjacent inline runs with identical marks before creating an editor", () => {
+    expect(() =>
+      createEditor({
+        initialDocument: documentWithContent([
+          { text: "left", marks: [{ type: "bold" }] },
+          { text: "right", marks: [{ type: "bold" }] },
+        ]),
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("rejects noncanonical mark ordering before creating an editor", () => {
+    expect(() =>
+      createEditor({
+        initialDocument: documentWithContent([
+          {
+            text: "ordered",
+            marks: [
+              { type: "link", href: "https://example.com" },
+              { type: "bold" },
+              { type: "italic" },
+              { type: "underline" },
+              { type: "strike" },
+              { type: "code" },
+            ],
+          },
+        ]),
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it.each([
+    {
+      name: "a blockless document",
+      document: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [],
+      } satisfies Document,
+    },
+    {
+      name: "an empty text run",
+      document: documentWithContent([{ text: "" }]),
+    },
+    {
+      name: "an empty mark set",
+      document: documentWithContent([{ text: "noncanonical", marks: [] }]),
+    },
+    {
+      name: "adjacent identical inline runs",
+      document: documentWithContent([
+        { text: "left", marks: [{ type: "italic" }] },
+        { text: "right", marks: [{ type: "italic" }] },
+      ]),
+    },
+    {
+      name: "noncanonical mark ordering",
+      document: documentWithContent([
+        {
+          text: "ordered",
+          marks: [{ type: "italic" }, { type: "bold" }],
+        },
+      ]),
+    },
+  ])("atomically rejects $name on replace", ({ document: replacement }) => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept", 3),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.replaceDocument(replacement)).toMatchObject({
+      ok: false,
+      error: { code: "DOCUMENT_INVALID" },
+    });
+    expect(editor.getDocument()).toEqual(paragraphDocument("kept", 3));
+    expect(changes).toEqual([]);
+  });
+
+  it("does not report a canonical marked block changed by another block edit", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const canonicalMarks: InlineContent = [
+      {
+        text: "marked",
+        marks: [
+          { type: "link", href: "https://example.com" },
+          { type: "bold" },
+          { type: "code" },
+          { type: "italic" },
+          { type: "strike" },
+          { type: "underline" },
+        ],
+      },
+    ];
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "marked", type: "paragraph", content: canonicalMarks },
+          {
+            id: "target",
+            type: "paragraph",
+            content: [{ text: "before" }],
+          },
+        ],
+      },
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.commands.setText("target", "after")).toMatchObject({
+      ok: true,
+    });
+    expect(changes).toEqual([
+      {
+        revision: 1,
+        changedBlockIds: ["target"],
+        reason: "local",
+      },
+    ]);
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "marked",
+      type: "paragraph",
+      content: canonicalMarks,
+    });
+  });
+
+  it.each([
+    "http://example.com",
+    "https://example.com",
+    "mailto:a@example.com",
+    "tel:+821012345678",
+    "/relative",
+    "#fragment",
+    "https://example.com/a–b",
+  ])("allows the model link URL %s in mounted editor input", (href) => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+
+    expect(tiptap.commands.setLink({ href })).toBe(true);
+    expect(editor.getDocument()).toMatchObject({
+      revision: 1,
+      blocks: [
+        {
+          content: [{ text: "content", marks: [{ type: "link", href }] }],
+        },
+      ],
+    });
+  });
+
+  it.each([
+    "ftp://example.com",
+    "ftps://example.com",
+    "sms:+821012345678",
+    "xmpp:user@example.com",
+    "callto:+821012345678",
+    "cid:content-id",
+    " javascript:alert(1)",
+    "java\nscript:alert(1)",
+    "java﻿script:alert(1)",
+  ])("rejects the non-model link URL %s in mounted editor input", (href) => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+
+    expect(tiptap.commands.setLink({ href })).toBe(false);
+    expect(editor.getDocument()).toEqual(paragraphDocument("content"));
+    expect(changes).toEqual([]);
+  });
+
+  it("rejects a whitespace-obfuscated link before creating an editor", () => {
+    expect(() =>
+      createEditor({
+        initialDocument: documentWithContent([
+          {
+            text: "unsafe",
+            marks: [{ type: "link", href: " java\nscript:alert(1)" }],
+          },
+        ]),
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("atomically rejects a control-obfuscated link on replace", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept", 2),
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(
+      editor.replaceDocument(
+        documentWithContent([
+          {
+            text: "unsafe",
+            marks: [{ type: "link", href: "java\tscript:alert(1)" }],
+          },
+        ]),
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "DOCUMENT_INVALID" },
+    });
+    expect(editor.getDocument()).toEqual(paragraphDocument("kept", 2));
+    expect(changes).toEqual([]);
+  });
+
+  it("filters an invalid browser link transaction without mutating or throwing", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const link = tiptap.schema.marks.link;
+    if (link === undefined) throw new Error("Link mark is not registered");
+    const transaction = tiptap.state.tr.addMark(
+      1,
+      8,
+      link.create({ href: "ftp://example.com" }),
+    );
+
+    expect(() => tiptap.view.dispatch(transaction)).not.toThrow();
+    expect(editor.getDocument()).toEqual(paragraphDocument("content"));
+    expect(changes).toEqual([]);
+    expect(() => editor.destroy()).not.toThrow();
+  });
+
+  it("filters an invalid stored link mark without affecting later plain typing", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const link = tiptap.schema.marks.link;
+    if (link === undefined) throw new Error("Link mark is not registered");
+    tiptap.commands.setTextSelection(8);
+    const documentBefore = tiptap.state.doc.toJSON();
+    const selectionBefore = tiptap.state.selection.toJSON();
+    const storedMarksBefore = tiptap.state.storedMarks;
+
+    const invalidStoredMark = tiptap.state.tr.setStoredMarks([
+      link.create({ href: "ftp://example.com" }),
+    ]);
+    expect(invalidStoredMark.docChanged).toBe(false);
+    tiptap.view.dispatch(invalidStoredMark);
+
+    expect(tiptap.state.storedMarks).toEqual(storedMarksBefore);
+    expect(tiptap.state.doc.toJSON()).toEqual(documentBefore);
+    expect(tiptap.state.selection.toJSON()).toEqual(selectionBefore);
+    expect(editor.getDocument()).toEqual(paragraphDocument("content"));
+    expect(changes).toEqual([]);
+
+    expect(tiptap.commands.insertContent("!")).toBe(true);
+    expect(editor.getDocument()).toEqual(paragraphDocument("content!", 1));
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["block-1"], reason: "local" },
+    ]);
+  });
+
+  it("allows a valid stored link mark to affect later typing", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const link = tiptap.schema.marks.link;
+    if (link === undefined) throw new Error("Link mark is not registered");
+    tiptap.commands.setTextSelection(8);
+
+    tiptap.view.dispatch(
+      tiptap.state.tr.setStoredMarks([
+        link.create({ href: "https://example.com" }),
+      ]),
+    );
+
+    expect(tiptap.state.storedMarks?.map((mark) => mark.toJSON())).toEqual([
+      {
+        type: "link",
+        attrs: {
+          href: "https://example.com",
+          target: "_blank",
+          rel: "noopener noreferrer nofollow",
+          class: null,
+          title: null,
+        },
+      },
+    ]);
+    expect(tiptap.commands.insertContent("!")).toBe(true);
+    expect(editor.getDocument()).toEqual({
+      ...documentWithContent([
+        { text: "content" },
+        {
+          text: "!",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ]),
+      revision: 1,
+    });
+  });
+
+  it("rejects setText before mutating at the maximum revision", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const initial = paragraphDocument("before", Number.MAX_SAFE_INTEGER);
+    const editor = createEditor({
+      initialDocument: initial,
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+    const selectionBefore = tiptap.state.selection.toJSON();
+
+    expect(editor.commands.setText("block-1", "after")).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setText" },
+    });
+    expect(editor.getDocument()).toEqual(initial);
+    expect(tiptap.state.doc.textContent).toBe("before");
+    expect(tiptap.state.selection.toJSON()).toEqual(selectionBefore);
+    expect(changes).toEqual([]);
+  });
+
+  it("filters a DOM transaction before document and selection mutation at maximum revision", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const initial = paragraphDocument("before", Number.MAX_SAFE_INTEGER);
+    const editor = createEditor({
+      initialDocument: initial,
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(2);
+    const selectionBefore = tiptap.state.selection.toJSON();
+    const transaction = tiptap.state.tr.insertText("X", 2);
+    transaction.setSelection(TextSelection.create(transaction.doc, 3));
+
+    expect(() => tiptap.view.dispatch(transaction)).not.toThrow();
+    expect(editor.getDocument()).toEqual(initial);
+    expect(tiptap.state.doc.textContent).toBe("before");
+    expect(tiptap.state.selection.toJSON()).toEqual(selectionBefore);
+    expect(changes).toEqual([]);
+  });
+
+  it("rejects replace before mutation at the maximum revision", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const initial = paragraphDocument("before", Number.MAX_SAFE_INTEGER);
+    const editor = createEditor({
+      initialDocument: initial,
+      onChange: (event) => changes.push(event),
+    });
+
+    expect(editor.replaceDocument(paragraphDocument("replacement"))).toEqual({
+      ok: false,
+      error: {
+        code: "COMMAND_NOT_APPLICABLE",
+        command: "replaceDocument",
+      },
+    });
+    expect(editor.getDocument()).toEqual(initial);
+    expect(changes).toEqual([]);
+  });
+
+  it("rejects undo when the previous command reached the maximum revision", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before", Number.MAX_SAFE_INTEGER - 1),
+      onChange: (event) => changes.push(event),
+    });
+    expect(editor.commands.setText("block-1", "after")).toMatchObject({
+      ok: true,
+    });
+
+    expect(editor.commands.undo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "undo" },
+    });
+    expect(editor.getDocument()).toEqual(
+      paragraphDocument("after", Number.MAX_SAFE_INTEGER),
+    );
+    expect(changes).toHaveLength(1);
+  });
+
+  it("rejects redo when undo reached the maximum revision", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before", Number.MAX_SAFE_INTEGER - 2),
+      onChange: (event) => changes.push(event),
+    });
+    editor.commands.setText("block-1", "after");
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+
+    expect(editor.commands.redo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "redo" },
+    });
+    expect(editor.getDocument()).toEqual(
+      paragraphDocument("before", Number.MAX_SAFE_INTEGER),
+    );
+    expect(changes).toHaveLength(2);
+  });
+
+  it("returns defensive document copies", () => {
+    const initial = paragraphDocument("original");
+    const editor = createEditor({ initialDocument: initial });
+
+    const inputBlock = initial.blocks[0];
+    const inputItem =
+      inputBlock?.type === "paragraph" ? inputBlock.content[0] : undefined;
+    if (inputItem !== undefined) inputItem.text = "input";
+    const returned = editor.getDocument();
+    const returnedBlock = returned.blocks[0];
+    const returnedItem =
+      returnedBlock?.type === "paragraph"
+        ? returnedBlock.content[0]
+        : undefined;
+    if (returnedItem !== undefined) returnedItem.text = "returned";
+
+    expect(editor.getDocument()).toEqual(paragraphDocument("original"));
+  });
+
+  it("fails mutating commands structurally after destroy", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept"),
+      onChange: (event) => changes.push(event),
+    });
+    editor.destroy();
+
+    expect(editor.commands.setText("block-1", "changed")).toMatchObject({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "setText" },
+    });
+    expect(editor.commands.undo()).toMatchObject({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "undo" },
+    });
+    expect(editor.commands.redo()).toMatchObject({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "redo" },
+    });
+    expect(
+      editor.replaceDocument(paragraphDocument("replacement")),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "COMMAND_NOT_APPLICABLE",
+        command: "replaceDocument",
+      },
+    });
+    expect(editor.getDocument()).toEqual(paragraphDocument("kept"));
+    expect(changes).toEqual([]);
+  });
+
+  it("restores supported marks and heading metadata on undo", () => {
+    const markedHeading: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "heading-1",
+          type: "heading",
+          level: 3,
+          content: [
+            { text: "b", marks: [{ type: "bold" }] },
+            { text: "i", marks: [{ type: "italic" }] },
+            { text: "u", marks: [{ type: "underline" }] },
+            { text: "s", marks: [{ type: "strike" }] },
+            { text: "c", marks: [{ type: "code" }] },
+            {
+              text: "l",
+              marks: [{ type: "link", href: "https://example.com" }],
+            },
+          ],
+        },
+      ],
+    };
+    const editor = createEditor({ initialDocument: markedHeading });
+    editor.commands.setText("heading-1", "plain");
+
+    expect(editor.commands.undo()).toMatchObject({ ok: true });
+    expect(editor.getDocument()).toEqual({ ...markedHeading, revision: 2 });
+  });
+
+  it("renders block ids and keeps them stable across mount cycles", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const firstContainer = document.createElement("div");
+    const secondContainer = document.createElement("div");
+
+    editor.mount(firstContainer);
+    expect(
+      firstContainer.querySelector("p")?.getAttribute("data-be-block-id"),
+    ).toBe("block-1");
+    editor.unmount();
+    editor.mount(secondContainer);
+
+    expect(
+      secondContainer.querySelector("p")?.getAttribute("data-be-block-id"),
+    ).toBe("block-1");
+    expect(editor.getDocument().blocks[0]?.id).toBe("block-1");
+  });
+
+  it("assigns an injected id to a block created through the mounted editor", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: () => "block-2",
+      onChange: (event) => changes.push(event),
+    });
+    const container = document.createElement("div");
+    editor.mount(container);
+    const editable = container.querySelector<HTMLElement>(
+      "[contenteditable='true']",
+    );
+
+    expect(editable).not.toBeNull();
+    editable?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "block-1",
+      "block-2",
+    ]);
+    expect(changes).toEqual([
+      {
+        revision: 1,
+        changedBlockIds: ["block-1", "block-2"],
+        reason: "local",
+      },
+    ]);
+  });
+});
