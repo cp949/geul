@@ -47,6 +47,7 @@ test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복�
 
   await expect(editable.locator("p").first()).toHaveText("second block");
   await expect(editable.locator("p").last()).toHaveText("first block");
+  await expect(page.getByRole("menu", { name: "Block menu" })).toHaveCount(0);
 
   await page.keyboard.press("Control+z");
 
@@ -120,4 +121,40 @@ test("블록 메뉴에서 삭제하면 블록이 사라지고 undo 1회로 복�
   await expect(editable.locator("p")).toHaveCount(2);
   await expect(editable.locator("p").first()).toHaveText("first block");
   await expect(editable.locator("p").last()).toHaveText("second block");
+});
+
+test("Escape로 블록 메뉴를 닫으면 편집기로 초점을 복구한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("focus target");
+
+  await editable.locator("p").first().hover();
+  const handle = page.getByRole("button", { name: "Drag to reorder" });
+  await handle.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu", { name: "Block menu" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByRole("menu", { name: "Block menu" })).toHaveCount(0);
+  await expect(editable).toBeFocused();
+});
+
+test("블록 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+  await expect(page.getByRole("menu", { name: "Block menu" })).toBeVisible();
+
+  const saveButton = page.getByRole("button", { name: "Save JSON" });
+  await saveButton.click();
+
+  await expect(page.getByRole("menu", { name: "Block menu" })).toHaveCount(0);
+  await expect(saveButton).toBeFocused();
 });

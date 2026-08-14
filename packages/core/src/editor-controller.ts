@@ -8,6 +8,7 @@ import {
 } from "@cp949/geul-model";
 import { Editor, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 
@@ -150,6 +151,17 @@ const sameDocumentContent = (
   previous: BlockDocument,
   next: BlockDocument,
 ): boolean => blockChanges(previous, next).length === 0;
+
+const findTopLevelBlockPosition = (
+  document: ProseMirrorNode,
+  blockId: string,
+): number | null => {
+  let blockPosition: number | null = null;
+  document.forEach((node, offset) => {
+    if (node.attrs.blockId === blockId) blockPosition = offset;
+  });
+  return blockPosition;
+};
 
 export const createEditor = (
   options: CreateEditorOptions,
@@ -451,11 +463,10 @@ export const createEditor = (
     }
 
     return runDocumentCommand("moveBlockBefore", "local", () => {
-      let sourcePosition: number | null = null;
-      tiptapEditor.state.doc.forEach((node, offset) => {
-        if (node.attrs.blockId !== blockId) return;
-        sourcePosition = offset;
-      });
+      const sourcePosition = findTopLevelBlockPosition(
+        tiptapEditor.state.doc,
+        blockId,
+      );
       if (sourcePosition === null) return false;
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
@@ -466,11 +477,10 @@ export const createEditor = (
       );
       let insertPosition = transaction.doc.content.size;
       if (beforeBlockId !== null) {
-        let mappedTargetPosition: number | null = null;
-        transaction.doc.forEach((node, offset) => {
-          if (node.attrs.blockId === beforeBlockId)
-            mappedTargetPosition = offset;
-        });
+        const mappedTargetPosition = findTopLevelBlockPosition(
+          transaction.doc,
+          beforeBlockId,
+        );
         if (mappedTargetPosition === null) return false;
         insertPosition = mappedTargetPosition;
       }
@@ -493,11 +503,10 @@ export const createEditor = (
     }
 
     const result = runDocumentCommand("duplicateBlock", "local", () => {
-      let sourcePosition: number | null = null;
-      tiptapEditor.state.doc.forEach((node, offset) => {
-        if (node.attrs.blockId !== blockId) return;
-        sourcePosition = offset;
-      });
+      const sourcePosition = findTopLevelBlockPosition(
+        tiptapEditor.state.doc,
+        blockId,
+      );
       if (sourcePosition === null) return false;
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
@@ -544,11 +553,10 @@ export const createEditor = (
     }
 
     return runDocumentCommand("deleteBlock", "local", () => {
-      let sourcePosition: number | null = null;
-      tiptapEditor.state.doc.forEach((node, offset) => {
-        if (node.attrs.blockId !== blockId) return;
-        sourcePosition = offset;
-      });
+      const sourcePosition = findTopLevelBlockPosition(
+        tiptapEditor.state.doc,
+        blockId,
+      );
       if (sourcePosition === null) return false;
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;

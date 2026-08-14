@@ -2,7 +2,7 @@
 
 - 상태: `ACTIVE`
 - 적용 영역: core, ProseMirror position/node 탐색
-- 최초 근거: R1 슬라이스 4 commit (`moveBlockBefore`/`duplicateBlock`/`deleteBlock` 구현)
+- 최초 근거: R1 슬라이스 4 작업공간 변경 (`moveBlockBefore`/`duplicateBlock`/`deleteBlock` 구현)
 
 ## 상황과 징후
 
@@ -26,7 +26,7 @@ pnpm --filter @cp949/geul-core typecheck
 
 ## 실제 근거
 
-- `packages/core/src/editor-controller.ts`의 `moveBlockBefore`/`duplicateBlock`/`deleteBlock` — `doc.nodeAt(position)` 패턴으로 구현.
+- `packages/core/src/editor-controller.ts`의 `findTopLevelBlockPosition`과 이를 사용하는 `moveBlockBefore`/`duplicateBlock`/`deleteBlock` — 위치를 원시 타입으로 찾은 뒤 `doc.nodeAt(position)`으로 재조회.
 - R1 슬라이스 4 Issue [#3](https://github.com/cp949/geul/issues/3) 댓글에 재현·우회 과정을 기록함.
 
 ## 관련 문서

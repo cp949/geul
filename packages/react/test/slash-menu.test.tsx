@@ -483,12 +483,14 @@ describe("SlashMenu drag handle", () => {
     fireEvent.pointerDown(handle, { pointerId: 1 });
     fireEvent.pointerMove(editable, { pointerId: 1, clientY: 5 });
     fireEvent.pointerUp(editable, { pointerId: 1 });
+    fireEvent.click(handle, { detail: 1 });
 
     expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
     view.unmount();
   });
 
-  it("Escape로 드롭 없이 드래그를 취소하면 아무 명령도 호출하지 않는다", () => {
+  it("Escape로 드롭 없이 드래그를 취소하면 아무 명령도 호출하지 않는다", async () => {
     const controller = fakeController({ blockIds: ["block-1", "block-2"] });
     const view = render(
       withProvider(
@@ -511,16 +513,100 @@ describe("SlashMenu drag handle", () => {
     fireEvent.pointerMove(block2);
     const handle = screen.getByRole("button", { name: "Drag to reorder" });
     fireEvent.pointerDown(handle, { pointerId: 1 });
-    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 5 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 5 });
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(
       view.container.querySelector(".be-block-insertion-guide"),
     ).toBeNull();
 
-    fireEvent.pointerUp(editable, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    fireEvent.click(handle, { detail: 1 });
 
     expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
+    view.unmount();
+  });
+
+  it("pointercancel 뒤 후속 click이 블록 메뉴를 열지 않는다", async () => {
+    const controller = fakeController({ blockIds: ["block-1", "block-2"] });
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <SlashMenu />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editable = screen.getByRole("textbox", { name: "Editor" });
+    const blocks = Array.from(editable.querySelectorAll("[data-be-block-id]"));
+    const [block1, block2] = blocks;
+    if (block1 === undefined || block2 === undefined) {
+      throw new Error("Block elements were not rendered");
+    }
+    stubBlockRect(block1, { top: 0, height: 20 });
+    stubBlockRect(block2, { top: 20, height: 20 });
+
+    fireEvent.pointerMove(block2);
+    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 5 });
+    fireEvent.pointerCancel(handle, { pointerId: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    fireEvent.click(handle, { detail: 1 });
+
+    expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
+    view.unmount();
+  });
+
+  it("드래그를 시작한 pointer와 다른 pointer 이벤트는 무시한다", () => {
+    const controller = fakeController({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <SlashMenu />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editable = screen.getByRole("textbox", { name: "Editor" });
+    const blocks = Array.from(editable.querySelectorAll("[data-be-block-id]"));
+    const [block1, block2, block3] = blocks;
+    if (block1 === undefined || block2 === undefined || block3 === undefined) {
+      throw new Error("Block elements were not rendered");
+    }
+    stubBlockRect(block1, { top: 0, height: 20 });
+    stubBlockRect(block2, { top: 20, height: 20 });
+    stubBlockRect(block3, { top: 40, height: 20 });
+
+    fireEvent.pointerMove(block3);
+    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    fireEvent.pointerDown(handle, {
+      pointerId: 1,
+      clientX: 0,
+      clientY: 50,
+    });
+    fireEvent.pointerMove(editable, { pointerId: 2, clientX: 0, clientY: 5 });
+    fireEvent.pointerUp(editable, { pointerId: 2 });
+
+    expect(
+      view.container.querySelector(".be-block-insertion-guide"),
+    ).toBeNull();
+    expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 0, clientY: 5 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(controller.commands.moveBlockBefore).toHaveBeenCalledWith(
+      "block-3",
+      "block-1",
+    );
     view.unmount();
   });
 });
