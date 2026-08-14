@@ -12,3 +12,4 @@
 | `PIT-0006` | 배포 산출물 검증 전 build 수행 | `ACTIVE` | build·fixture | R0 | [상세](./PIT-0006-build-before-distribution-verification.md) |
 | `PIT-0007` | HTML 경고 수집과 의미 변환 분리 | `ACTIVE` | io·security | R0 | [상세](./PIT-0007-separate-html-warnings-from-semantics.md) |
 | `PIT-0008` | 클로저 경계를 넘는 객체 타입 좁히기 회피 | `ACTIVE` | core | R1 | [상세](./PIT-0008-avoid-object-narrowing-across-closures.md) |
+| `PIT-0009` | UI를 닫는 키보드 핸들러는 병렬 e2e로 검증 | `ACTIVE` | react·e2e | R1 | [상세](./PIT-0009-verify-keyboard-close-with-parallel-e2e.md) |
