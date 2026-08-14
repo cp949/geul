@@ -11,7 +11,11 @@ export type {
   TableGridInvalidReason,
   TableGridValidationError,
 } from "./table-grid-validation.js";
-export { validateTableGrid } from "./table-grid-validation.js";
+export {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  validateTableGrid,
+} from "./table-grid-validation.js";
 export type {
   Block,
   Document,

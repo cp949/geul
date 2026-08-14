@@ -5,7 +5,11 @@ import { isSupportedLinkHref } from "./link-policy.js";
 import { firstNonCanonicalTextMarkIndex } from "./mark-canonicalization.js";
 import type { Result } from "./result.js";
 import { isValidDocumentId, isValidInlineText } from "./string-invariants.js";
-import { validateTableGrid } from "./table-grid-validation.js";
+import {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  validateTableGrid,
+} from "./table-grid-validation.js";
 import type { Block, Document, InlineContent } from "./types.js";
 
 type DocumentPath = Array<string | number>;
@@ -360,12 +364,12 @@ const validateColumnWidths = (
       if (
         !Number.isFinite(column.width) ||
         !Number.isInteger(column.width) ||
-        column.width < 48 ||
-        column.width > 1200
+        column.width < MIN_COLUMN_WIDTH ||
+        column.width > MAX_COLUMN_WIDTH
       ) {
         return invalid(
           ["blocks", blockIndex, "columns", columnIndex, "width"],
-          "Column width must be an integer between 48 and 1200",
+          `Column width must be an integer between ${MIN_COLUMN_WIDTH} and ${MAX_COLUMN_WIDTH}`,
         );
       }
     }

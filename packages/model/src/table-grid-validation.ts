@@ -1,6 +1,9 @@
 import type { Result } from "./result.js";
 import type { TableBlock } from "./types.js";
 
+export const MIN_COLUMN_WIDTH = 48;
+export const MAX_COLUMN_WIDTH = 1200;
+
 export type TableGridInvalidReason =
   | "UNKNOWN_COLUMN"
   | "SPAN_OUT_OF_BOUNDS"

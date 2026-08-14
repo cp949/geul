@@ -1,0 +1,920 @@
+import type { TableBlock } from "@cp949/geul-model";
+import { describe, expect, it } from "vitest";
+import {
+  deleteColumn,
+  deleteRow,
+  insertColumn,
+  insertRow,
+  isRectangular,
+  mergeCells,
+  moveColumn,
+  moveRow,
+  projectTableGrid,
+  splitCell,
+  type TableGrid,
+  validateColumnWidth,
+} from "../src/table-grid.js";
+
+type Cell = TableBlock["rows"][number]["cells"][number];
+
+const cell = (
+  id: string,
+  columnId: string,
+  overrides: Partial<
+    Pick<
+      Cell,
+      "rowSpan" | "columnSpan" | "content" | "textColor" | "backgroundColor"
+    >
+  > = {},
+): Cell => ({
+  id,
+  columnId,
+  rowSpan: 1,
+  columnSpan: 1,
+  content: [],
+  ...overrides,
+});
+
+const table = (columnIds: string[], rows: Cell[][]): TableBlock => ({
+  id: "table",
+  type: "table",
+  columns: columnIds.map((id) => ({ id, width: 160 })),
+  rows: rows.map((cells, index) => ({ id: `row-${index}`, cells })),
+  headerRows: 0,
+  headerColumns: 0,
+});
+
+const buildGrid = (t: TableBlock): TableGrid => {
+  const result = projectTableGrid(t);
+  if (!result.ok) throw new Error("fixture table must be valid");
+  return result.value;
+};
+
+const sequentialIds = (prefix: string) => {
+  let counter = 0;
+  return () => {
+    counter += 1;
+    return `${prefix}-${counter}`;
+  };
+};
+
+describe("논리 격자를 투영한다", () => {
+  it("2x2 표에서 모든 좌표가 자기 자신을 기준 셀로 조회된다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = projectTableGrid(t);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rowCount).toBe(2);
+    expect(result.value.columnCount).toBe(2);
+    expect(result.value.cellAt(0, 0)).toEqual({
+      cellId: "a",
+      anchorRow: 0,
+      anchorColumn: 0,
+    });
+    expect(result.value.cellAt(1, 1)).toEqual({
+      cellId: "d",
+      anchorRow: 1,
+      anchorColumn: 1,
+    });
+  });
+
+  it("병합된 셀이 덮는 모든 좌표가 같은 기준 셀을 가리킨다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1", { columnSpan: 2 })],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const grid = buildGrid(t);
+
+    expect(grid.cellAt(0, 0)).toEqual({
+      cellId: "a",
+      anchorRow: 0,
+      anchorColumn: 0,
+    });
+    expect(grid.cellAt(0, 1)).toEqual({
+      cellId: "a",
+      anchorRow: 0,
+      anchorColumn: 0,
+    });
+  });
+
+  it("범위 밖 좌표는 undefined를 반환한다", () => {
+    const grid = buildGrid(table(["c1"], [[cell("a", "c1")]]));
+
+    expect(grid.cellAt(1, 0)).toBeUndefined();
+    expect(grid.cellAt(0, 1)).toBeUndefined();
+    expect(grid.cellAt(-1, 0)).toBeUndefined();
+  });
+
+  it("불변식이 깨진 표는 model의 TABLE_GRID_INVALID로 거절한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1")], [cell("c", "c1"), cell("d", "c2")]],
+    );
+
+    expect(projectTableGrid(t)).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "UNCOVERED_COORDINATE" },
+    });
+  });
+
+  it("역순 셀 배열과 header 경계를 가로지르는 병합에서도 columnId 순서를 따른다", () => {
+    const t: TableBlock = {
+      ...table(
+        ["c1", "c2", "c3"],
+        [
+          [cell("b", "c3"), cell("a", "c1", { rowSpan: 2, columnSpan: 2 })],
+          [cell("d", "c3")],
+        ],
+      ),
+      headerRows: 1,
+      headerColumns: 1,
+    };
+
+    const grid = buildGrid(t);
+
+    expect(grid.cellAt(0, 0)).toMatchObject({ cellId: "a" });
+    expect(grid.cellAt(1, 1)).toMatchObject({ cellId: "a" });
+    expect(grid.cellAt(0, 2)).toMatchObject({ cellId: "b" });
+    expect(grid.cellAt(1, 2)).toMatchObject({ cellId: "d" });
+  });
+});
+
+describe("직사각형 셀 범위를 판정한다", () => {
+  it("단일 셀로 이루어진 영역은 직사각형이다", () => {
+    const grid = buildGrid(
+      table(
+        ["c1", "c2"],
+        [
+          [cell("a", "c1"), cell("b", "c2")],
+          [cell("c", "c1"), cell("d", "c2")],
+        ],
+      ),
+    );
+
+    expect(
+      isRectangular(grid, { row: 0, column: 0 }, { row: 0, column: 0 }),
+    ).toBe(true);
+  });
+
+  it("병합되지 않은 여러 셀을 감싸는 사각 영역은 직사각형이다", () => {
+    const grid = buildGrid(
+      table(
+        ["c1", "c2"],
+        [
+          [cell("a", "c1"), cell("b", "c2")],
+          [cell("c", "c1"), cell("d", "c2")],
+        ],
+      ),
+    );
+
+    expect(
+      isRectangular(grid, { row: 0, column: 0 }, { row: 1, column: 1 }),
+    ).toBe(true);
+  });
+
+  it("정확히 감싼 병합 셀 하나만 선택하면 직사각형이다", () => {
+    const grid = buildGrid(
+      table(
+        ["c1", "c2"],
+        [[cell("a", "c1", { rowSpan: 2, columnSpan: 2 })], []],
+      ),
+    );
+
+    expect(
+      isRectangular(grid, { row: 0, column: 0 }, { row: 1, column: 1 }),
+    ).toBe(true);
+  });
+
+  it("선택 영역 밖으로 뻗은 병합 셀이 선택 안에 걸치면 직사각형이 아니다", () => {
+    const grid = buildGrid(
+      table(
+        ["c1", "c2", "c3"],
+        [
+          [cell("a", "c1", { columnSpan: 2 }), cell("b", "c3")],
+          [cell("c", "c1"), cell("d", "c2"), cell("e", "c3")],
+        ],
+      ),
+    );
+
+    expect(
+      isRectangular(grid, { row: 0, column: 0 }, { row: 0, column: 0 }),
+    ).toBe(false);
+  });
+
+  it("선택 영역 밖에서 안으로 뻗어 들어오는 병합 셀이 있으면 직사각형이 아니다", () => {
+    const grid = buildGrid(
+      table(
+        ["c1", "c2"],
+        [[cell("a", "c1", { rowSpan: 2 }), cell("b", "c2")], [cell("d", "c2")]],
+      ),
+    );
+
+    expect(
+      isRectangular(grid, { row: 1, column: 0 }, { row: 1, column: 0 }),
+    ).toBe(false);
+  });
+
+  it("from/to 순서가 뒤바뀌어도 동일하게 판정한다", () => {
+    const grid = buildGrid(
+      table(
+        ["c1", "c2"],
+        [
+          [cell("a", "c1"), cell("b", "c2")],
+          [cell("c", "c1"), cell("d", "c2")],
+        ],
+      ),
+    );
+
+    expect(
+      isRectangular(grid, { row: 1, column: 1 }, { row: 0, column: 0 }),
+    ).toBe(true);
+  });
+});
+
+describe("행을 삽입한다", () => {
+  it("맨 앞에 삽입하면 기존 행이 내용을 유지한 채 뒤로 밀린다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = insertRow(t, 0, sequentialIds("row"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows).toHaveLength(3);
+    expect(result.value.rows[0]?.cells.map((c) => c.id).sort()).toEqual([
+      "row-2",
+      "row-3",
+    ]);
+    expect(result.value.rows[1]?.cells.map((c) => c.id)).toEqual(["a", "b"]);
+    expect(result.value.rows[2]?.cells.map((c) => c.id)).toEqual(["c", "d"]);
+  });
+
+  it("끝에 삽입(append)할 수 있다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    const result = insertRow(t, 1, sequentialIds("row"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows).toHaveLength(2);
+    expect(result.value.rows[1]?.cells.map((c) => c.id)).toEqual(["row-2"]);
+  });
+
+  it("범위 밖 인덱스는 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    expect(insertRow(t, -1, sequentialIds("row"))).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(insertRow(t, 2, sequentialIds("row"))).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(t.rows).toHaveLength(1);
+  });
+
+  it("삽입 지점이 세로 병합 내부면 병합이 확장되고 새 행은 그 열에 자기 셀을 갖지 않는다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1", { rowSpan: 3 }), cell("b", "c2")],
+        [cell("d", "c2")],
+        [cell("e", "c2")],
+      ],
+    );
+
+    const result = insertRow(t, 1, sequentialIds("row"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows).toHaveLength(4);
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor?.rowSpan).toBe(4);
+    expect(result.value.rows[1]?.cells.map((c) => c.id)).toEqual(["row-2"]);
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(1, 0)).toMatchObject({ cellId: "a" });
+  });
+
+  it("삽입 지점이 병합의 anchor 행과 같으면 병합에 영향을 주지 않고 그대로 밀어낸다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1", { rowSpan: 2 }), cell("b", "c2")], [cell("d", "c2")]],
+    );
+
+    const result = insertRow(t, 0, sequentialIds("row"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const anchor = result.value.rows[1]?.cells.find((c) => c.id === "a");
+    expect(anchor?.rowSpan).toBe(2);
+  });
+});
+
+describe("열을 삽입한다", () => {
+  it("맨 앞에 삽입하면 기존 열이 내용을 유지한 채 뒤로 밀린다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = insertColumn(t, 0, sequentialIds("col"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns).toHaveLength(3);
+    expect(result.value.columns[0]?.id).toBe("col-1");
+    expect(result.value.rows[0]?.cells.map((c) => c.id).sort()).toEqual(
+      ["a", "b", "col-2"].sort(),
+    );
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(0, 0)).toMatchObject({ cellId: "col-2" });
+    expect(grid.cellAt(0, 1)).toMatchObject({ cellId: "a" });
+    expect(grid.cellAt(0, 2)).toMatchObject({ cellId: "b" });
+  });
+
+  it("범위 밖 인덱스는 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    expect(insertColumn(t, 5, sequentialIds("col"))).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(t.columns).toHaveLength(1);
+  });
+
+  it("삽입 지점이 가로 병합 내부면 병합이 확장되고 새 열은 그 행에 자기 셀을 갖지 않는다", () => {
+    const t = table(
+      ["c1", "c2", "c3"],
+      [
+        [cell("a", "c1", { columnSpan: 3 })],
+        [cell("d", "c1"), cell("e", "c2"), cell("f", "c3")],
+      ],
+    );
+
+    const result = insertColumn(t, 1, sequentialIds("col"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns).toHaveLength(4);
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor?.columnSpan).toBe(4);
+    expect(result.value.rows[1]?.cells.map((c) => c.id).sort()).toEqual(
+      ["d", "e", "f", "col-2"].sort(),
+    );
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(1, 1)).toMatchObject({ cellId: "col-2" });
+  });
+});
+
+describe("행을 삭제한다", () => {
+  it("병합 없는 행을 삭제하면 나머지 행이 유지된다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+        [cell("e", "c1"), cell("f", "c2")],
+      ],
+    );
+
+    const result = deleteRow(t, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows).toHaveLength(2);
+    expect(result.value.rows[0]?.cells.map((c) => c.id)).toEqual(["a", "b"]);
+    expect(result.value.rows[1]?.cells.map((c) => c.id)).toEqual(["e", "f"]);
+  });
+
+  it("행이 1개만 남으면 거절한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    expect(deleteRow(t, 0)).toEqual({ ok: false, error: { code: "LAST_ROW" } });
+  });
+
+  it("범위 밖 인덱스는 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1"], [[cell("a", "c1")], [cell("b", "c1")]]);
+
+    expect(deleteRow(t, 2)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(deleteRow(t, -1)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(t.rows).toHaveLength(2);
+  });
+
+  it("병합 anchor 행이 삭제되면 다음 행이 내용을 유지한 채 anchor를 승계한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [
+          cell("a", "c1", {
+            rowSpan: 2,
+            content: [{ text: "merged" }],
+            textColor: "#111111",
+          }),
+          cell("b", "c2"),
+        ],
+        [cell("d", "c2")],
+      ],
+    );
+
+    const result = deleteRow(t, 0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows).toHaveLength(1);
+    const succeeded = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(succeeded).toMatchObject({
+      columnId: "c1",
+      rowSpan: 1,
+      content: [{ text: "merged" }],
+      textColor: "#111111",
+    });
+  });
+
+  it("병합이 삭제된 행을 관통하면 anchor는 유지된 채 span만 줄어든다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1", { rowSpan: 3 }), cell("b", "c2")],
+        [cell("d", "c2")],
+        [cell("e", "c2")],
+      ],
+    );
+
+    const result = deleteRow(t, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows).toHaveLength(2);
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor?.rowSpan).toBe(2);
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(1, 0)).toMatchObject({ cellId: "a" });
+  });
+});
+
+describe("열을 삭제한다", () => {
+  it("병합 없는 열을 삭제하면 나머지 열이 유지된다", () => {
+    const t = table(
+      ["c1", "c2", "c3"],
+      [[cell("a", "c1"), cell("b", "c2"), cell("c", "c3")]],
+    );
+
+    const result = deleteColumn(t, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns.map((c) => c.id)).toEqual(["c1", "c3"]);
+    expect(result.value.rows[0]?.cells.map((c) => c.id)).toEqual(["a", "c"]);
+  });
+
+  it("열이 1개만 남으면 거절한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    expect(deleteColumn(t, 0)).toEqual({
+      ok: false,
+      error: { code: "LAST_COLUMN" },
+    });
+  });
+
+  it("범위 밖 인덱스는 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1", "c2"], [[cell("a", "c1"), cell("b", "c2")]]);
+
+    expect(deleteColumn(t, 5)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(t.columns).toHaveLength(2);
+  });
+
+  it("병합 anchor 열이 삭제되면 다음 열이 내용을 유지한 채 anchor를 승계한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [
+          cell("a", "c1", {
+            columnSpan: 2,
+            content: [{ text: "merged" }],
+            backgroundColor: "#eeeeee",
+          }),
+        ],
+      ],
+    );
+
+    const result = deleteColumn(t, 0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns).toHaveLength(1);
+    const succeeded = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(succeeded).toMatchObject({
+      columnId: "c2",
+      columnSpan: 1,
+      content: [{ text: "merged" }],
+      backgroundColor: "#eeeeee",
+    });
+  });
+
+  it("병합이 삭제된 열을 관통하면 anchor는 유지된 채 span만 줄어든다", () => {
+    const t = table(
+      ["c1", "c2", "c3"],
+      [
+        [cell("a", "c1", { columnSpan: 3 })],
+        [cell("d", "c1"), cell("e", "c2"), cell("f", "c3")],
+      ],
+    );
+
+    const result = deleteColumn(t, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns).toHaveLength(2);
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor?.columnSpan).toBe(2);
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(1, 1)).toMatchObject({ cellId: "f" });
+  });
+});
+
+describe("행을 이동한다", () => {
+  it("병합 없는 표에서 행 순서를 바꾼다", () => {
+    const t = table(
+      ["c1"],
+      [[cell("a", "c1")], [cell("b", "c1")], [cell("c", "c1")]],
+    );
+
+    const result = moveRow(t, 0, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.rows.map((r) => r.cells[0]?.id)).toEqual([
+      "b",
+      "c",
+      "a",
+    ]);
+  });
+
+  it("fromIndex와 toIndex가 같으면 변경 없이 성공한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")], [cell("b", "c1")]]);
+
+    expect(moveRow(t, 1, 1)).toEqual({ ok: true, value: t });
+  });
+
+  it("범위 밖 인덱스는 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1"], [[cell("a", "c1")], [cell("b", "c1")]]);
+
+    expect(moveRow(t, 0, 5)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(moveRow(t, -1, 0)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(t.rows).toHaveLength(2);
+  });
+
+  it("병합 셀의 경계를 가로지르는 이동은 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1", { rowSpan: 2 }), cell("d", "c2")],
+        [cell("e", "c2")],
+        [cell("f", "c1"), cell("g", "c2")],
+      ],
+    );
+
+    const result = moveRow(t, 2, 0);
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "MERGE_BOUNDARY_CROSSED" },
+    });
+    expect(t.rows).toHaveLength(4);
+  });
+
+  it("병합 셀 전체가 이동 범위 안에 통째로 포함되면 병합을 유지한 채 이동한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1", { rowSpan: 2 }), cell("d", "c2")],
+        [cell("e", "c2")],
+        [cell("f", "c1"), cell("g", "c2")],
+      ],
+    );
+
+    const result = moveRow(t, 0, 3);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "c");
+    expect(anchor?.rowSpan).toBe(2);
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(0, 0)).toMatchObject({ cellId: "c" });
+    expect(grid.cellAt(1, 0)).toMatchObject({ cellId: "c" });
+  });
+
+  it("이동 구간 밖의 병합 셀은 유지한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1", { rowSpan: 2 }), cell("b", "c2")],
+        [cell("c", "c2")],
+        [cell("d", "c1"), cell("e", "c2")],
+        [cell("f", "c1"), cell("g", "c2")],
+      ],
+    );
+
+    const result = moveRow(t, 3, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(0, 0)).toMatchObject({ cellId: "a" });
+    expect(grid.cellAt(1, 0)).toMatchObject({ cellId: "a" });
+    expect(result.value.rows.map((row) => row.id)).toEqual([
+      "row-0",
+      "row-1",
+      "row-3",
+      "row-2",
+    ]);
+  });
+});
+
+describe("열을 이동한다", () => {
+  it("병합 없는 표에서 열 순서를 바꾼다", () => {
+    const t = table(
+      ["c1", "c2", "c3"],
+      [[cell("a", "c1"), cell("b", "c2"), cell("c", "c3")]],
+    );
+
+    const result = moveColumn(t, 2, 0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns.map((c) => c.id)).toEqual(["c3", "c1", "c2"]);
+  });
+
+  it("범위 밖 인덱스는 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1", "c2"], [[cell("a", "c1"), cell("b", "c2")]]);
+
+    expect(moveColumn(t, 0, 9)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(t.columns).toHaveLength(2);
+  });
+
+  it("병합 셀의 경계를 가로지르는 이동은 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(
+      ["c1", "c2", "c3", "c4"],
+      [[cell("a", "c1"), cell("b", "c2", { columnSpan: 2 }), cell("c", "c4")]],
+    );
+
+    const result = moveColumn(t, 2, 0);
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "MERGE_BOUNDARY_CROSSED" },
+    });
+    expect(t.columns).toHaveLength(4);
+  });
+
+  it("이동 구간 밖의 병합 셀은 유지한다", () => {
+    const t = table(
+      ["c1", "c2", "c3", "c4"],
+      [[cell("a", "c1", { columnSpan: 2 }), cell("b", "c3"), cell("c", "c4")]],
+    );
+
+    const result = moveColumn(t, 3, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columns.map((column) => column.id)).toEqual([
+      "c1",
+      "c2",
+      "c4",
+      "c3",
+    ]);
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(0, 0)).toMatchObject({ cellId: "a" });
+    expect(grid.cellAt(0, 1)).toMatchObject({ cellId: "a" });
+  });
+});
+
+describe("셀을 병합한다", () => {
+  it("병합되지 않은 사각 영역을 병합하면 좌상단 셀이 기준 셀이 되고 나머지는 제거된다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [
+          cell("a", "c1", {
+            content: [{ text: "keep" }],
+            textColor: "#123456",
+          }),
+          cell("b", "c2"),
+        ],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = mergeCells(t, { row: 0, column: 0 }, { row: 1, column: 1 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const allIds = result.value.rows.flatMap((row) =>
+      row.cells.map((c) => c.id),
+    );
+    expect(allIds).toEqual(["a"]);
+
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor).toMatchObject({
+      rowSpan: 2,
+      columnSpan: 2,
+      content: [{ text: "keep" }],
+      textColor: "#123456",
+    });
+
+    const grid = buildGrid(result.value);
+    expect(grid.cellAt(1, 1)).toMatchObject({ cellId: "a" });
+  });
+
+  it("from/to 순서가 뒤바뀌어도 동일하게 병합한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = mergeCells(t, { row: 1, column: 1 }, { row: 0, column: 0 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor).toMatchObject({ rowSpan: 2, columnSpan: 2 });
+  });
+
+  it("직사각형이 아닌 선택은 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(
+      ["c1", "c2", "c3"],
+      [
+        [cell("a", "c1", { columnSpan: 2 }), cell("b", "c3")],
+        [cell("c", "c1"), cell("d", "c2"), cell("e", "c3")],
+      ],
+    );
+
+    const result = mergeCells(t, { row: 0, column: 0 }, { row: 0, column: 0 });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "NOT_RECTANGULAR" },
+    });
+    expect(t.rows[0]?.cells).toHaveLength(2);
+  });
+
+  it("기존 부분 병합을 포함한 직사각형 전체를 다시 병합한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1", { columnSpan: 2 })],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = mergeCells(t, { row: 0, column: 0 }, { row: 1, column: 1 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(
+      result.value.rows.flatMap((row) => row.cells.map((c) => c.id)),
+    ).toEqual(["a"]);
+    expect(result.value.rows[0]?.cells[0]).toMatchObject({
+      id: "a",
+      rowSpan: 2,
+      columnSpan: 2,
+    });
+  });
+});
+
+describe("셀을 분할한다", () => {
+  it("세로+가로로 병합된 셀을 분할하면 새 셀은 빈 콘텐츠이고 anchor만 원 콘텐츠를 유지한다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [
+          cell("a", "c1", {
+            rowSpan: 2,
+            columnSpan: 2,
+            content: [{ text: "keep" }],
+            backgroundColor: "#abcabc",
+          }),
+        ],
+        [],
+      ],
+    );
+
+    const result = splitCell(t, "a", sequentialIds("split"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const anchor = result.value.rows[0]?.cells.find((c) => c.id === "a");
+    expect(anchor).toMatchObject({
+      rowSpan: 1,
+      columnSpan: 1,
+      content: [{ text: "keep" }],
+      backgroundColor: "#abcabc",
+    });
+
+    const allCells = result.value.rows.flatMap((row) => row.cells);
+    const newCells = allCells.filter((c) => c.id !== "a");
+    expect(newCells).toHaveLength(3);
+    for (const newCell of newCells) {
+      expect(newCell.content).toEqual([]);
+      expect(newCell.rowSpan).toBe(1);
+      expect(newCell.columnSpan).toBe(1);
+      expect(newCell.backgroundColor).toBeUndefined();
+    }
+
+    expect(projectTableGrid(result.value).ok).toBe(true);
+  });
+
+  it("존재하지 않는 cellId는 거절한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    expect(splitCell(t, "missing", sequentialIds("split"))).toEqual({
+      ok: false,
+      error: { code: "CELL_NOT_FOUND", cellId: "missing" },
+    });
+  });
+
+  it("이미 병합되지 않은 셀은 변경 없이 성공한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    expect(splitCell(t, "a", sequentialIds("split"))).toEqual({
+      ok: true,
+      value: t,
+    });
+  });
+});
+
+describe("열 너비를 검증한다", () => {
+  it("최소·최대 경계값을 허용한다", () => {
+    expect(validateColumnWidth(48)).toEqual({ ok: true, value: undefined });
+    expect(validateColumnWidth(1200)).toEqual({ ok: true, value: undefined });
+  });
+
+  it("경계값 밖의 너비를 거절한다", () => {
+    expect(validateColumnWidth(47)).toEqual({
+      ok: false,
+      error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
+    });
+    expect(validateColumnWidth(1201)).toEqual({
+      ok: false,
+      error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 1201 },
+    });
+  });
+
+  it("정수가 아닌 너비를 거절한다", () => {
+    expect(validateColumnWidth(100.5)).toEqual({
+      ok: false,
+      error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 100.5 },
+    });
+    expect(validateColumnWidth(Number.NaN)).toEqual({
+      ok: false,
+      error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: Number.NaN },
+    });
+  });
+});
