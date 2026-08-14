@@ -1,0 +1,397 @@
+import type { Document } from "@cp949/geul-model";
+import { describe, expect, it } from "vitest";
+
+import { exportMarkdown, importMarkdown } from "../src/index.js";
+
+const richTableDocument: Document = {
+  formatVersion: 1,
+  revision: 0,
+  blocks: [
+    {
+      id: "table-1",
+      type: "table",
+      columns: [
+        { id: "column-1", width: 160 },
+        { id: "column-2", width: 240 },
+      ],
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "column-1",
+              rowSpan: 1,
+              columnSpan: 2,
+              content: [
+                {
+                  text: "Header",
+                  marks: [{ type: "bold" }, { type: "underline" }],
+                },
+              ],
+              textColor: "#112233",
+              backgroundColor: "#AABBCC",
+            },
+          ],
+        },
+        {
+          id: "row-2",
+          cells: [
+            {
+              id: "cell-2",
+              columnId: "column-1",
+              rowSpan: 2,
+              columnSpan: 1,
+              content: [{ text: "Left" }],
+            },
+            {
+              id: "cell-3",
+              columnId: "column-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "Right" }],
+            },
+          ],
+        },
+        {
+          id: "row-3",
+          cells: [
+            {
+              id: "cell-4",
+              columnId: "column-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "Bottom" }],
+            },
+          ],
+        },
+      ],
+      headerRows: 1,
+      headerColumns: 0,
+    },
+  ],
+};
+
+describe("Markdown loss handling", () => {
+  it("strict export reports every unsupported table feature without markdown", () => {
+    expect(exportMarkdown(richTableDocument, { mode: "strict" })).toEqual({
+      ok: false,
+      error: {
+        code: "MARKDOWN_LOSS_NOT_ALLOWED",
+        losses: [
+          {
+            kind: "COLUMN_WIDTH",
+            blockId: "table-1",
+            message: "Column column-2 has non-default width 240",
+          },
+          {
+            kind: "MERGED_CELL",
+            blockId: "table-1",
+            rowId: "row-1",
+            cellId: "cell-1",
+            message: "Cell cell-1 spans 1 rows and 2 columns",
+          },
+          {
+            kind: "CELL_COLOR",
+            blockId: "table-1",
+            rowId: "row-1",
+            cellId: "cell-1",
+            message: "Cell cell-1 has text or background color",
+          },
+          {
+            kind: "UNDERLINE",
+            blockId: "table-1",
+            rowId: "row-1",
+            cellId: "cell-1",
+            message: "Cell cell-1 contains underline formatting",
+          },
+          {
+            kind: "MERGED_CELL",
+            blockId: "table-1",
+            rowId: "row-2",
+            cellId: "cell-2",
+            message: "Cell cell-2 spans 2 rows and 1 columns",
+          },
+        ],
+      },
+    });
+  });
+
+  it("lossy export expands merged cells and removes only lossy features", () => {
+    const exported = exportMarkdown(richTableDocument, { mode: "lossy" });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    expect(exported.value.warnings).toEqual([
+      {
+        kind: "COLUMN_WIDTH",
+        blockId: "table-1",
+        message: "Column column-2 has non-default width 240",
+      },
+      {
+        kind: "MERGED_CELL",
+        blockId: "table-1",
+        rowId: "row-1",
+        cellId: "cell-1",
+        message: "Cell cell-1 spans 1 rows and 2 columns",
+      },
+      {
+        kind: "CELL_COLOR",
+        blockId: "table-1",
+        rowId: "row-1",
+        cellId: "cell-1",
+        message: "Cell cell-1 has text or background color",
+      },
+      {
+        kind: "UNDERLINE",
+        blockId: "table-1",
+        rowId: "row-1",
+        cellId: "cell-1",
+        message: "Cell cell-1 contains underline formatting",
+      },
+      {
+        kind: "MERGED_CELL",
+        blockId: "table-1",
+        rowId: "row-2",
+        cellId: "cell-2",
+        message: "Cell cell-2 spans 2 rows and 1 columns",
+      },
+    ]);
+
+    expect(importMarkdown(exported.value.markdown)).toMatchObject({
+      ok: true,
+      value: {
+        document: {
+          blocks: [
+            {
+              type: "table",
+              columns: [{ width: 160 }, { width: 160 }],
+              rows: [
+                {
+                  cells: [
+                    {
+                      content: [{ text: "Header", marks: [{ type: "bold" }] }],
+                    },
+                    { content: [] },
+                  ],
+                },
+                {
+                  cells: [
+                    { content: [{ text: "Left" }] },
+                    { content: [{ text: "Right" }] },
+                  ],
+                },
+                {
+                  cells: [{ content: [] }, { content: [{ text: "Bottom" }] }],
+                },
+              ],
+            },
+          ],
+        },
+        warnings: [],
+      },
+    });
+  });
+
+  it("reports underline locations outside tables", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "paragraph-underline",
+          type: "paragraph",
+          content: [{ text: "underlined", marks: [{ type: "underline" }] }],
+        },
+      ],
+    };
+
+    expect(exportMarkdown(document, { mode: "strict" })).toEqual({
+      ok: false,
+      error: {
+        code: "MARKDOWN_LOSS_NOT_ALLOWED",
+        losses: [
+          {
+            kind: "UNDERLINE",
+            blockId: "paragraph-underline",
+            message: "Block paragraph-underline contains underline formatting",
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects invalid documents before loss analysis in both modes", () => {
+    const invalidDocument = {
+      ...richTableDocument,
+      blocks: richTableDocument.blocks.map((block) =>
+        block.type === "table"
+          ? {
+              ...block,
+              columns: block.columns.map((column) => ({
+                ...column,
+                width: 47,
+              })),
+            }
+          : block,
+      ),
+    } as Document;
+
+    expect(exportMarkdown(invalidDocument, { mode: "strict" })).toMatchObject({
+      ok: false,
+      error: { code: "MARKDOWN_DOCUMENT_INVALID" },
+    });
+    expect(exportMarkdown(invalidDocument, { mode: "lossy" })).toMatchObject({
+      ok: false,
+      error: { code: "MARKDOWN_DOCUMENT_INVALID" },
+    });
+  });
+
+  it("reports inline-code newlines and lossy export preserves the cell text", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-table",
+          type: "table",
+          columns: [{ id: "code-column", width: 160 }],
+          rows: [
+            {
+              id: "code-header-row",
+              cells: [
+                {
+                  id: "code-header-cell",
+                  columnId: "code-column",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [{ text: "Header" }],
+                },
+              ],
+            },
+            {
+              id: "code-body-row",
+              cells: [
+                {
+                  id: "code-body-cell",
+                  columnId: "code-column",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [
+                    {
+                      text: "line 1\nline 2",
+                      marks: [{ type: "bold" }, { type: "code" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          headerRows: 1,
+          headerColumns: 0,
+        },
+      ],
+    };
+
+    const loss = {
+      kind: "INLINE_CODE_NEWLINE",
+      blockId: "code-table",
+      rowId: "code-body-row",
+      cellId: "code-body-cell",
+      message: "Cell code-body-cell contains inline code with a newline",
+    } as const;
+    expect(exportMarkdown(document, { mode: "strict" })).toEqual({
+      ok: false,
+      error: { code: "MARKDOWN_LOSS_NOT_ALLOWED", losses: [loss] },
+    });
+
+    const lossy = exportMarkdown(document, { mode: "lossy" });
+    expect(lossy.ok).toBe(true);
+    if (!lossy.ok) throw new Error(lossy.error.message);
+    expect(lossy.value.warnings).toEqual([loss]);
+    expect(importMarkdown(lossy.value.markdown)).toMatchObject({
+      ok: true,
+      value: {
+        document: {
+          blocks: [
+            {
+              type: "table",
+              rows: [
+                { cells: [{ content: [{ text: "Header" }] }] },
+                {
+                  cells: [
+                    {
+                      content: [
+                        { text: "line 1\nline 2", marks: [{ type: "bold" }] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        warnings: [],
+      },
+    });
+  });
+
+  it("reports header semantics and lossy export normalizes them to GFM", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "header-table",
+          type: "table",
+          columns: [{ id: "header-column", width: 160 }],
+          rows: [
+            {
+              id: "header-row",
+              cells: [
+                {
+                  id: "header-cell",
+                  columnId: "header-column",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [{ text: "Value" }],
+                },
+              ],
+            },
+          ],
+          headerRows: 0,
+          headerColumns: 1,
+        },
+      ],
+    };
+    const losses = [
+      {
+        kind: "HEADER_ROW",
+        blockId: "header-table",
+        message: "Table header-table has 0 header rows; GFM export uses 1",
+      },
+      {
+        kind: "HEADER_COLUMN",
+        blockId: "header-table",
+        message: "Table header-table has 1 header columns; GFM export uses 0",
+      },
+    ] as const;
+
+    expect(exportMarkdown(document, { mode: "strict" })).toEqual({
+      ok: false,
+      error: { code: "MARKDOWN_LOSS_NOT_ALLOWED", losses },
+    });
+    const lossy = exportMarkdown(document, { mode: "lossy" });
+    expect(lossy.ok).toBe(true);
+    if (!lossy.ok) throw new Error(lossy.error.message);
+    expect(lossy.value.warnings).toEqual(losses);
+    expect(importMarkdown(lossy.value.markdown)).toMatchObject({
+      ok: true,
+      value: {
+        document: {
+          blocks: [{ type: "table", headerRows: 1, headerColumns: 0 }],
+        },
+      },
+    });
+  });
+});
