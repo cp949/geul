@@ -1,0 +1,360 @@
+import type { TableBlock } from "@cp949/geul-model";
+import { describe, expect, it } from "vitest";
+
+import {
+  tableBlockToTiptapNode,
+  tiptapNodeToTableBlock,
+} from "../src/table-model-codec.js";
+import { createTableFixtureEditor } from "./table-test-support.js";
+
+const emptyDocSchema = () =>
+  createTableFixtureEditor({
+    type: "doc",
+    content: [{ type: "paragraph" }],
+  }).schema;
+
+const sampleTable: TableBlock = {
+  id: "table-1",
+  type: "table",
+  columns: [
+    { id: "col-1", width: 160 },
+    { id: "col-2", width: 200 },
+  ],
+  rows: [
+    {
+      id: "row-1",
+      cells: [
+        {
+          id: "cell-1",
+          columnId: "col-1",
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: "a" }],
+        },
+        {
+          id: "cell-2",
+          columnId: "col-2",
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: "b" }],
+          textColor: "#FF0000",
+        },
+      ],
+    },
+  ],
+  headerRows: 0,
+  headerColumns: 0,
+};
+
+describe("TableBlock을 Tiptap 표 노드로 인코드한다", () => {
+  it("열/행/셀 구조와 속성을 그대로 옮긴다", () => {
+    const schema = emptyDocSchema();
+    const node = tableBlockToTiptapNode(schema, sampleTable);
+
+    expect(node.toJSON()).toEqual({
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [
+          { id: "col-1", width: 160 },
+          { id: "col-2", width: 200 },
+        ],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                cellId: "cell-1",
+                columnId: "col-1",
+                colspan: 1,
+                rowspan: 1,
+                colwidth: null,
+                textColor: null,
+                backgroundColor: null,
+              },
+              content: [{ type: "text", text: "a" }],
+            },
+            {
+              type: "tableCell",
+              attrs: {
+                cellId: "cell-2",
+                columnId: "col-2",
+                colspan: 1,
+                rowspan: 1,
+                colwidth: null,
+                textColor: "#FF0000",
+                backgroundColor: null,
+              },
+              content: [{ type: "text", text: "b" }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("행의 셀 배열 순서가 columnId 순서와 어긋나도 columns 순서대로 물리 배치한다", () => {
+    const schema = emptyDocSchema();
+    const table: TableBlock = {
+      id: "table-1",
+      type: "table",
+      columns: [
+        { id: "col-1", width: 160 },
+        { id: "col-2", width: 160 },
+      ],
+      rows: [
+        {
+          id: "row-1",
+          // 저장 배열 순서를 columnId 순서와 반대로 둔다 (PIT-0004: 배열 순서는 권위가 아니다).
+          cells: [
+            {
+              id: "cell-2",
+              columnId: "col-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "b" }],
+            },
+            {
+              id: "cell-1",
+              columnId: "col-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "a" }],
+            },
+          ],
+        },
+      ],
+      headerRows: 0,
+      headerColumns: 0,
+    };
+
+    const node = tableBlockToTiptapNode(schema, table);
+    const cellIds: unknown[] = [];
+    node.firstChild?.forEach((cell) => {
+      cellIds.push(cell.attrs.cellId);
+    });
+
+    // 물리 문서 순서는 table.columns가 정의하는 논리 열 순서(col-1, col-2)를 따라야 한다.
+    expect(cellIds).toEqual(["cell-1", "cell-2"]);
+  });
+
+  it("빈 셀 콘텐츠는 내용 없는 셀 노드가 된다", () => {
+    const schema = emptyDocSchema();
+    const table: TableBlock = {
+      ...sampleTable,
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "col-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [],
+            },
+            {
+              id: "cell-2",
+              columnId: "col-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const node = tableBlockToTiptapNode(schema, table);
+    const firstCell = node.firstChild?.firstChild;
+    expect(firstCell?.content.size).toBe(0);
+  });
+});
+
+describe("Tiptap 표 노드를 TableBlock으로 디코드한다", () => {
+  it("인코드한 표를 다시 디코드하면 원본 TableBlock과 같다", () => {
+    const schema = emptyDocSchema();
+    const node = tableBlockToTiptapNode(schema, sampleTable);
+
+    const result = tiptapNodeToTableBlock(node);
+    expect(result).toEqual({ ok: true, value: sampleTable });
+  });
+
+  it("병합된 셀은 TableMap 기준 기준 좌표에서만 한 번 나타난다", () => {
+    const schema = emptyDocSchema();
+    const merged: TableBlock = {
+      id: "table-1",
+      type: "table",
+      columns: [
+        { id: "col-1", width: 160 },
+        { id: "col-2", width: 160 },
+      ],
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "col-1",
+              rowSpan: 2,
+              columnSpan: 2,
+              content: [{ text: "merged" }],
+            },
+          ],
+        },
+        { id: "row-2", cells: [] },
+      ],
+      headerRows: 0,
+      headerColumns: 0,
+    };
+
+    const node = tableBlockToTiptapNode(schema, merged);
+    expect(() => node.check()).not.toThrow();
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result).toEqual({ ok: true, value: merged });
+  });
+
+  it("셀의 정규형 mark를 양방향 변환해도 순서와 값을 보존한다", () => {
+    const schema = emptyDocSchema();
+    const table: TableBlock = {
+      ...sampleTable,
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "col-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [
+                {
+                  text: "link",
+                  marks: [
+                    { type: "link", href: "https://example.com" },
+                    { type: "bold" },
+                    { type: "code" },
+                    { type: "italic" },
+                    { type: "strike" },
+                    { type: "underline" },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "cell-2",
+              columnId: "col-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const node = tableBlockToTiptapNode(schema, table);
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result).toEqual({ ok: true, value: table });
+  });
+
+  it("존재하지 않는 열을 가리키는 셀이 있으면 디코드를 거절한다", () => {
+    const schema = emptyDocSchema();
+    const node = schema.nodeFromJSON({
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [{ id: "col-1", width: 160 }],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                cellId: "cell-1",
+                columnId: "missing-column",
+                colspan: 1,
+                rowspan: 1,
+                colwidth: null,
+                textColor: null,
+                backgroundColor: null,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "TABLE_NODE_INVALID",
+        message: "Table grid UNKNOWN_COLUMN at row 0, column unknown",
+      },
+    });
+  });
+
+  it("PM 셀의 중복 mark는 독자 모델 정규형으로 디코드한다", () => {
+    const schema = emptyDocSchema();
+    const node = schema.nodeFromJSON({
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [{ id: "col-1", width: 160 }],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                cellId: "cell-1",
+                columnId: "col-1",
+                colspan: 1,
+                rowspan: 1,
+                colwidth: null,
+                textColor: null,
+                backgroundColor: null,
+              },
+              content: [
+                {
+                  type: "text",
+                  text: "bold",
+                  marks: [{ type: "bold" }, { type: "bold" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.rows[0]?.cells[0]?.content).toEqual([
+        { text: "bold", marks: [{ type: "bold" }] },
+      ]);
+    }
+  });
+});

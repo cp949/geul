@@ -12,7 +12,7 @@ import {
 
 type TableCell = TableBlock["rows"][number]["cells"][number];
 
-const DEFAULT_COLUMN_WIDTH = 160;
+export const DEFAULT_COLUMN_WIDTH = 160;
 
 const indexOutOfRange: Result<never, TableGridError> = {
   ok: false,
