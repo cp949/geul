@@ -133,8 +133,8 @@ const fireCaretUpdate = () => {
   });
 };
 
-describe("SlashMenu query popup", () => {
-  it("does not render when the caret is not in a block", () => {
+describe("SlashMenu 질의 팝업", () => {
+  it("캐럿이 블록 안에 없으면 렌더링하지 않는다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -150,7 +150,7 @@ describe("SlashMenu query popup", () => {
     view.unmount();
   });
 
-  it("does not render when the block text is not a slash query", () => {
+  it("블록 텍스트가 슬래시 질의가 아니면 렌더링하지 않는다", () => {
     const controller = fakeController({
       getCaretBlockContext: () => ({
         blockId: "block-1",
@@ -173,7 +173,7 @@ describe("SlashMenu query popup", () => {
     view.unmount();
   });
 
-  it("opens with every item when the block text is a bare slash", () => {
+  it("블록 텍스트가 슬래시 하나뿐이면 모든 항목을 열어 표시한다", () => {
     const controller = fakeController({
       getCaretBlockContext: () => ({
         blockId: "block-1",
@@ -199,7 +199,7 @@ describe("SlashMenu query popup", () => {
     view.unmount();
   });
 
-  it("filters items to match the typed query", () => {
+  it("입력한 질의에 맞춰 항목을 걸러낸다", () => {
     const controller = fakeController({
       getCaretBlockContext: () => ({
         blockId: "block-1",
@@ -223,7 +223,7 @@ describe("SlashMenu query popup", () => {
     view.unmount();
   });
 
-  it("calls setBlockType with clearContent when an item is clicked", () => {
+  it("항목을 클릭하면 clearContent와 함께 setBlockType을 호출한다", () => {
     const controller = fakeController({
       getCaretBlockContext: () => ({
         blockId: "block-1",
@@ -282,7 +282,7 @@ describe("SlashMenu query popup", () => {
     view.unmount();
   });
 
-  it("closes on Escape", () => {
+  it("Escape를 누르면 닫는다", () => {
     const controller = fakeController({
       getCaretBlockContext: () => ({
         blockId: "block-1",
@@ -311,8 +311,8 @@ describe("SlashMenu query popup", () => {
   });
 });
 
-describe("SlashMenu add-block button", () => {
-  it("does not render the add-block button without hover", () => {
+describe("SlashMenu 블록 추가 버튼", () => {
+  it("hover하지 않으면 블록 추가 버튼을 렌더링하지 않는다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -328,7 +328,7 @@ describe("SlashMenu add-block button", () => {
     view.unmount();
   });
 
-  it("shows the add-block button when hovering a block", () => {
+  it("블록에 hover하면 블록 추가 버튼을 표시한다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -350,7 +350,7 @@ describe("SlashMenu add-block button", () => {
     view.unmount();
   });
 
-  it("keeps the add-block button visible while the pointer moves onto it", () => {
+  it("포인터가 버튼 위로 이동하는 동안에도 블록 추가 버튼을 계속 표시한다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -374,7 +374,7 @@ describe("SlashMenu add-block button", () => {
     view.unmount();
   });
 
-  it("inserts a paragraph after the hovered block and opens the menu for it", () => {
+  it("hover한 블록 뒤에 문단을 삽입하고 그 블록의 메뉴를 연다", () => {
     const controller = fakeController({
       insertParagraphAfter: () => ({
         ok: true,
@@ -406,7 +406,7 @@ describe("SlashMenu add-block button", () => {
     view.unmount();
   });
 
-  it("does not open the menu again once the user types a non-slash character", () => {
+  it("슬래시가 아닌 문자를 입력한 뒤에는 메뉴를 다시 열지 않는다", () => {
     let text = "";
     const controller = fakeController({
       getCaretBlockContext: () => ({
@@ -444,7 +444,7 @@ describe("SlashMenu add-block button", () => {
   });
 });
 
-describe("SlashMenu drag handle", () => {
+describe("SlashMenu 드래그 핸들", () => {
   it("hover 시 add-block 버튼과 함께 드래그 핸들을 표시한다", () => {
     const controller = fakeController();
     const view = render(
@@ -750,7 +750,7 @@ describe("SlashMenu drag handle", () => {
   });
 });
 
-describe("SlashMenu block menu", () => {
+describe("SlashMenu 블록 메뉴", () => {
   const openBlockMenu = () => {
     const controller = fakeController();
     const view = render(

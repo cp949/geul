@@ -43,8 +43,8 @@ const externalProvider = (
   </EditorProvider>
 );
 
-describe("React editor adapter", () => {
-  it("mounts and unmounts an external controller without destroying it", () => {
+describe("React 에디터 어댑터", () => {
+  it("외부 컨트롤러는 마운트·언마운트만 하고 destroy하지 않는다", () => {
     const controller = fakeController();
     const view = render(externalProvider(controller, <EditorContent />));
 
@@ -60,7 +60,7 @@ describe("React editor adapter", () => {
     expect(controller.destroy).not.toHaveBeenCalled();
   });
 
-  it("moves the mounted content from external controller A to B", () => {
+  it("마운트된 내용을 외부 컨트롤러 A에서 B로 옮긴다", () => {
     const controllerA = fakeController();
     const controllerB = fakeController();
     const view = render(externalProvider(controllerA, <EditorContent />));
@@ -78,7 +78,7 @@ describe("React editor adapter", () => {
     expect(controllerB.destroy).not.toHaveBeenCalled();
   });
 
-  it("owns an internal controller without replacing its document from props", () => {
+  it("내부 컨트롤러를 소유하되 props 변경으로 문서를 교체하지 않는다", () => {
     let controller: EditorController | undefined;
     const CaptureEditor = () => {
       controller = useEditor();
@@ -111,7 +111,7 @@ describe("React editor adapter", () => {
     });
   });
 
-  it("keeps initialDocument fixed while delivering changes to the latest callback", () => {
+  it("initialDocument는 고정한 채 변경 알림은 최신 콜백으로 전달한다", () => {
     let controller: EditorController | undefined;
     const firstCallback = vi.fn();
     const latestCallback = vi.fn();
@@ -152,7 +152,7 @@ describe("React editor adapter", () => {
     });
   });
 
-  it("throws a stable error outside EditorProvider", () => {
+  it("EditorProvider 바깥에서 사용하면 항상 같은 오류를 던진다", () => {
     const message = "Editor components must be used within an EditorProvider.";
     const HookConsumer = () => {
       useEditor();
@@ -163,7 +163,7 @@ describe("React editor adapter", () => {
     expect(() => render(<EditorContent />)).toThrow(message);
   });
 
-  it("keeps the active internal controller alive through StrictMode probes", () => {
+  it("StrictMode의 이중 마운트에도 활성 내부 컨트롤러를 살려 둔다", () => {
     let controller: EditorController | undefined;
     const CaptureEditor = () => {
       controller = useEditor();

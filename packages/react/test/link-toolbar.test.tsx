@@ -91,8 +91,8 @@ const renderWithSelectedText = (
   return view;
 };
 
-describe("LinkToolbar", () => {
-  it("does not render without a selection or an active link", () => {
+describe("LinkToolbar 링크 툴바", () => {
+  it("선택도 활성 링크도 없으면 렌더링하지 않는다", () => {
     const controller = fakeController();
     const view = render(withProvider(controller, <LinkToolbar />));
 
@@ -100,7 +100,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("shows an add-link control when text is selected without an existing link", () => {
+  it("링크 없는 텍스트를 선택하면 링크 추가 컨트롤을 표시한다", () => {
     const controller = fakeController();
     const view = renderWithSelectedText(controller);
 
@@ -110,7 +110,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("shows open, edit and remove controls when the cursor is inside an existing link", () => {
+  it("커서가 기존 링크 안에 있으면 열기·편집·제거 컨트롤을 표시한다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -134,7 +134,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("creates a link from the add-link control", () => {
+  it("링크 추가 컨트롤로 링크를 만든다", () => {
     const controller = fakeController();
     const view = renderWithSelectedText(controller);
 
@@ -150,7 +150,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("shows a rejection message when the link URL is not allowed", () => {
+  it("허용되지 않는 링크 URL이면 거부 메시지를 표시한다", () => {
     const controller = fakeController({
       setLink: () => ({
         ok: false,
@@ -170,7 +170,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("removes the link from the remove control", () => {
+  it("제거 컨트롤로 링크를 제거한다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -191,7 +191,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("edits an existing link's href", () => {
+  it("기존 링크의 href를 편집한다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -223,7 +223,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("closes without applying when an existing href is unchanged", () => {
+  it("기존 href가 그대로면 적용하지 않고 닫는다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -246,7 +246,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("hides when the selection collapses and there is no active link", () => {
+  it("선택이 collapsed가 되고 활성 링크도 없으면 숨긴다", () => {
     const controller = fakeController();
     const view = renderWithSelectedText(controller);
     expect(screen.queryByRole("toolbar")).not.toBeNull();
@@ -257,7 +257,7 @@ describe("LinkToolbar", () => {
     view.unmount();
   });
 
-  it("keeps the URL input open while a selectionchange fires during editing", () => {
+  it("편집 중 selectionchange가 발생해도 URL 입력을 열어 둔다", () => {
     const controller = fakeController();
     const view = renderWithSelectedText(controller);
 

@@ -81,8 +81,8 @@ const collapseSelection = () => {
   });
 };
 
-describe("FormattingToolbar", () => {
-  it("does not render without an active text selection", () => {
+describe("FormattingToolbar 서식 툴바", () => {
+  it("텍스트 선택이 없으면 렌더링하지 않는다", () => {
     const controller = fakeController();
     const view = render(withProvider(controller, <FormattingToolbar />));
 
@@ -90,7 +90,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("shows toggle buttons reflecting active marks when text is selected", () => {
+  it("텍스트를 선택하면 활성 mark 상태를 반영한 토글 버튼을 표시한다", () => {
     const controller = fakeController(vi.fn(() => ["bold"]));
     const view = render(
       withProvider(
@@ -120,7 +120,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("calls the matching core command when a toggle button is clicked", () => {
+  it("토글 버튼을 클릭하면 대응하는 core 명령을 호출한다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -144,7 +144,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("hides when the selection collapses", () => {
+  it("선택이 collapsed 상태가 되면 숨긴다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -167,7 +167,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("shows a block type select reflecting the current block type", () => {
+  it("현재 블록 종류를 반영한 블록 종류 select를 표시한다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -193,7 +193,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("shows the heading level in the block type select", () => {
+  it("블록 종류 select에 제목 레벨을 표시한다", () => {
     const controller = fakeController(
       vi.fn(() => []),
       vi.fn(() => ({
@@ -225,7 +225,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("calls setBlockType when the block type select changes", () => {
+  it("블록 종류 select를 바꾸면 setBlockType을 호출한다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
@@ -252,7 +252,7 @@ describe("FormattingToolbar", () => {
     view.unmount();
   });
 
-  it("stays hidden when text outside its editor is selected", () => {
+  it("자기 에디터 바깥의 텍스트를 선택하면 계속 숨긴 상태를 유지한다", () => {
     const controller = fakeController();
     const view = render(
       withProvider(
