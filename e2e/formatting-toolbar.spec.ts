@@ -72,6 +72,52 @@ test("toggles strikethrough and inline code on the selected text", async ({
   ).toHaveAttribute("aria-pressed", "true");
 });
 
+test("키보드만으로 굵게 버튼에 도달해 토글한다", async ({ page }) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+
+  const bold = page.getByRole("button", { name: "Bold" });
+  await expect(bold).toBeVisible();
+
+  // programmatic .focus()는 버튼이 tabindex=-1이어도 통과하므로 실제 Shift+Tab
+  // 입력으로 도달성을 gate한다. 데모 DOM에서 툴바가 에디터보다 앞에 있어
+  // 역방향 Tab으로 도달한다.
+  for (let i = 0; i < 10; i += 1) {
+    await page.keyboard.press("Shift+Tab");
+    const focused = await bold.evaluate(
+      (element) => element === element.ownerDocument.activeElement,
+    );
+    if (focused) break;
+  }
+  await expect(bold).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  await expect(editable.locator("strong")).toHaveText("Hello R1");
+  await expect(bold).toHaveAttribute("aria-pressed", "true");
+});
+
+test("소비자 전역 CSS가 lucide 클래스를 겨냥해도 아이콘 크기가 16px로 유지된다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  // 소비자 앱이 자기 lucide 아이콘을 전역 CSS로 스타일링하는 상황을 재현한다.
+  // geul 내부 아이콘은 inline style 방어로 영향을 받지 않아야 한다.
+  await page.addStyleTag({
+    content: ".lucide { width: 3rem; height: 3rem; } svg { width: 2rem; }",
+  });
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+
+  const icon = page.getByRole("button", { name: "Bold" }).locator("svg");
+  await expect(icon).toBeVisible();
+  const box = await icon.boundingBox();
+  expect(box?.width).toBe(16);
+  expect(box?.height).toBe(16);
+});
+
 test("undoes a mark toggle as one unit", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();

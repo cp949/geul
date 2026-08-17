@@ -2,6 +2,7 @@
 
 import type { EditorController } from "@cp949/geul-core";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { LucideProvider } from "lucide-react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -10,6 +11,7 @@ import {
   EditorProvider,
   FormattingToolbar,
 } from "../src/index.js";
+import { expectIconOnlyButton } from "./expect-icon-button.js";
 
 type SelectionBlockType = {
   blockId: string;
@@ -268,6 +270,74 @@ describe("FormattingToolbar", () => {
     selectText(textNode, 0, 7);
 
     expect(screen.queryByRole("toolbar")).toBeNull();
+    view.unmount();
+  });
+
+  it("각 토글 버튼에 16px aria-hidden 아이콘 svg와 동일 title을 렌더링한다", () => {
+    const controller = fakeController();
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (textNode == null) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    const expectedButtons = [
+      { label: "Bold", iconClass: "lucide-bold" },
+      { label: "Italic", iconClass: "lucide-italic" },
+      { label: "Underline", iconClass: "lucide-underline" },
+      { label: "Strikethrough", iconClass: "lucide-strikethrough" },
+      { label: "Inline code", iconClass: "lucide-code" },
+    ];
+    for (const { label, iconClass } of expectedButtons) {
+      expectIconOnlyButton(
+        screen.getByRole("button", { name: label }),
+        label,
+        iconClass,
+      );
+    }
+    view.unmount();
+  });
+
+  it("소비자 앱의 LucideProvider 설정이 geul 내부 아이콘에 전파되지 않는다", () => {
+    const controller = fakeController();
+    const view = render(
+      <LucideProvider
+        absoluteStrokeWidth
+        className="app-icon"
+        color="#e00"
+        size={32}
+      >
+        {withProvider(
+          controller,
+          <>
+            <FormattingToolbar />
+            <EditorContent />
+          </>,
+        )}
+      </LucideProvider>,
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (textNode == null) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    const icon = screen
+      .getByRole("button", { name: "Bold" })
+      .querySelector("svg");
+    if (icon == null) throw new Error("Bold 버튼에 svg 아이콘이 없다");
+    expect(icon.classList.contains("app-icon")).toBe(false);
+    expect(icon.getAttribute("stroke")).toBe("currentColor");
+    expect(icon.getAttribute("stroke-width")).toBe("2");
+    expect(icon.getAttribute("width")).toBe("16");
+    expect(icon.getAttribute("height")).toBe("16");
     view.unmount();
   });
 });

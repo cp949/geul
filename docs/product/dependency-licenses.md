@@ -15,6 +15,7 @@ The table records every direct external production dependency in the R0 workspac
 | `remark-stringify` | `11.0.0` | MIT | io | MDAST-to-Markdown serialization |
 | `unified` | `11.0.5` | MIT | io | HTML and Markdown transformation pipelines |
 | `zod` | `4.4.3` | MIT | model | Runtime document schema decoding and validation |
+| `lucide-react` | `1.31.0` | ISC | react | Icon-only control SVG icons. Source uses per-file named imports from the package barrel; unused icons are dropped only by bundlers honoring `sideEffects: false` (no `exports` map — the CJS `main` is a single ~1 MB file that non-bundled consumers load whole) |
 | `react` | `19.2.8` | MIT | react, demo | React bindings and demo UI |
 | `react-dom` | `19.2.8` | MIT | react, demo | Browser rendering for React bindings and demo UI |
 

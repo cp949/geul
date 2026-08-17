@@ -1,48 +1,54 @@
 import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
-import { useEffect, useState } from "react";
+import { Bold, Code, Italic, Strikethrough, Underline } from "lucide-react";
+import { type ReactElement, useEffect, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
   blockTypeToOptionId,
 } from "./block-type-options.js";
+import { IconButton } from "./icon-button.js";
+import { iconProps } from "./icon-props.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
 
+// 아이콘 element를 모듈 레벨 상수로 만들어 두면 매 렌더에서 같은 참조가
+// 재사용되어 React가 아이콘 subtree 재렌더를 통째로 건너뛴다. 툴바는 표시 중
+// scroll·selectionchange·keyup마다 재렌더되므로 렌더당 아이콘 비용을 없앤다.
 const toolbarButtons: ReadonlyArray<{
   mark: SelectionMark;
   label: string;
-  glyph: string;
+  icon: ReactElement;
   toggle: (editor: EditorController) => void;
 }> = [
   {
     mark: "bold",
     label: "Bold",
-    glyph: "B",
+    icon: <Bold {...iconProps} />,
     toggle: (editor) => void editor.commands.toggleBold(),
   },
   {
     mark: "italic",
     label: "Italic",
-    glyph: "I",
+    icon: <Italic {...iconProps} />,
     toggle: (editor) => void editor.commands.toggleItalic(),
   },
   {
     mark: "underline",
     label: "Underline",
-    glyph: "U",
+    icon: <Underline {...iconProps} />,
     toggle: (editor) => void editor.commands.toggleUnderline(),
   },
   {
     mark: "strike",
     label: "Strikethrough",
-    glyph: "S",
+    icon: <Strikethrough {...iconProps} />,
     toggle: (editor) => void editor.commands.toggleStrike(),
   },
   {
     mark: "code",
     label: "Inline code",
-    glyph: "</>",
+    icon: <Code {...iconProps} />,
     toggle: (editor) => void editor.commands.toggleCode(),
   },
 ];
@@ -159,12 +165,13 @@ export const FormattingToolbar = () => {
           ))}
         </select>
       )}
-      {toolbarButtons.map(({ mark, label, glyph, toggle }) => (
-        <button
-          aria-label={label}
+      {toolbarButtons.map(({ mark, label, icon, toggle }) => (
+        <IconButton
           aria-pressed={toolbarState.activeMarks.includes(mark)}
           className="geul:min-w-7 geul:rounded geul:border-0 geul:bg-transparent geul:px-1.5 geul:py-1 geul:text-[color:var(--be-color-text,#202124)] geul:cursor-pointer geul:aria-pressed:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:aria-pressed:text-[color:var(--be-color-accent,#1a73e8)]"
+          icon={icon}
           key={mark}
+          label={label}
           onClick={() => {
             toggle(editor);
             setToolbarState((current) =>
@@ -174,10 +181,7 @@ export const FormattingToolbar = () => {
             );
           }}
           onMouseDown={(event) => event.preventDefault()}
-          type="button"
-        >
-          {glyph}
-        </button>
+        />
       ))}
     </div>
   );

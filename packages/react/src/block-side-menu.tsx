@@ -1,10 +1,21 @@
+import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
   type BlockTypeOption,
 } from "./block-type-options.js";
+import { IconButton } from "./icon-button.js";
+import { iconProps } from "./icon-props.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+
+// 핸들은 드래그(재정렬)와 클릭(블록 메뉴) 두 동작을 모두 갖는다 — tooltip이
+// 한쪽만 안내하면 나머지 동작의 발견성을 가리므로 라벨이 둘 다 기술한다.
+const dragHandleLabel = "Drag to reorder, click for options";
+const addBlockLabel = "Add block";
+
+const dragHandleIcon = <GripVertical {...iconProps} />;
+const addBlockIcon = <Plus {...iconProps} />;
 
 type InsertionGuide = {
   beforeBlockId: string | null;
@@ -33,8 +44,9 @@ type BlockSideMenuProps = {
   onBlockAdded: (blockId: string) => void;
 };
 
+// flex 센터링은 IconButton이 공통으로 제공한다.
 const blockGutterButtonClassName =
-  "geul:flex geul:h-6 geul:w-6 geul:items-center geul:justify-center geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-0 geul:text-[color:var(--be-color-text,#202124)]";
+  "geul:h-6 geul:w-6 geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-0 geul:text-[color:var(--be-color-text,#202124)]";
 
 const blockMenuItemClassName =
   "geul:cursor-pointer geul:rounded geul:border-0 geul:bg-transparent geul:px-2 geul:py-1.5 geul:text-left geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)]";
@@ -222,9 +234,16 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
 
   const hoverBounds = (() => {
     if (hoverBlockId === null || element === null) return null;
-    const blockElement = element.querySelector<HTMLElement>(
-      `[data-be-block-id="${hoverBlockId}"]`,
-    );
+    // 블록 id는 임의 문자열이라 attribute selector에 보간하면 따옴표·백슬래시에서
+    // SyntaxError가 난다. computeGuide와 같은 속성값 비교로 찾는다.
+    // (CSS.escape는 jsdom 테스트 환경에 없다.)
+    const blockElement =
+      Array.from(
+        element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+      ).find(
+        (candidate) =>
+          candidate.getAttribute("data-be-block-id") === hoverBlockId,
+      ) ?? null;
     if (blockElement === null) return null;
     const rect = blockElement.getBoundingClientRect();
     return { left: rect.left, top: rect.top };
@@ -301,29 +320,25 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:[transform:translate(-3.5rem,0)]"
           style={{ left: hoverBounds.left, top: hoverBounds.top }}
         >
-          <button
-            aria-label="Drag to reorder"
+          <IconButton
             className={`${blockGutterButtonClassName} geul:cursor-grab geul:active:cursor-grabbing`}
             data-be-block-handle=""
+            icon={dragHandleIcon}
+            label={dragHandleLabel}
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
             onMouseDown={(event) => event.preventDefault()}
             onPointerDown={(event) =>
               handlePointerDownOnHandle(event, hoverBlockId)
             }
-            type="button"
-          >
-            ⠿
-          </button>
-          <button
-            aria-label="Add block"
+          />
+          <IconButton
             className={`${blockGutterButtonClassName} geul:cursor-pointer`}
             data-be-add-block-button=""
+            icon={addBlockIcon}
+            label={addBlockLabel}
             onClick={handleAddBlockClick}
             onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            +
-          </button>
+          />
         </div>
       )}
       {dragState?.guide !== null && dragState?.guide !== undefined && (

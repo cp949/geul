@@ -60,6 +60,7 @@ const allowedDependencies = {
   "packages/react": {
     dependencies: {
       "@cp949/geul-core": "workspace:*",
+      "lucide-react": "1.31.0",
       react: "19.2.8",
       "react-dom": "19.2.8",
     },

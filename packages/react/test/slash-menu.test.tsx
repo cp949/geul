@@ -6,6 +6,10 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider, SlashMenu } from "../src/index.js";
+import { expectIconOnlyButton } from "./expect-icon-button.js";
+
+// 드래그 핸들 accessible name — 드래그와 클릭(블록 메뉴) 두 동작을 모두 기술한다.
+const dragHandleLabel = "Drag to reorder, click for options";
 
 type CaretContext = ReturnType<EditorController["getCaretBlockContext"]>;
 
@@ -410,9 +414,64 @@ describe("SlashMenu drag handle", () => {
     fireEvent.pointerMove(block);
 
     expect(
-      screen.getByRole("button", { name: "Drag to reorder" }),
+      screen.getByRole("button", { name: dragHandleLabel }),
     ).not.toBeNull();
     expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
+    view.unmount();
+  });
+
+  it("따옴표·백슬래시가 든 블록 id에서도 hover 거터가 크래시 없이 표시된다", () => {
+    // 블록 id는 z.string() 임의 문자열이라 attribute selector에 보간하면
+    // 따옴표·백슬래시에서 querySelector가 SyntaxError를 던진다.
+    const controller = fakeController({ blockIds: ['a"b\\c'] });
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <SlashMenu />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const block = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelector("[data-be-block-id]");
+    if (block === null) throw new Error("Block element was not rendered");
+
+    fireEvent.pointerMove(block);
+
+    expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
+    view.unmount();
+  });
+
+  it("드래그 핸들과 블록 추가 버튼에 aria-hidden 아이콘과 title을 부여한다", () => {
+    const controller = fakeController();
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <SlashMenu />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const block = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelector("[data-be-block-id]");
+    if (block === null) throw new Error("Block element was not rendered");
+    fireEvent.pointerMove(block);
+
+    const expectedButtons = [
+      { label: dragHandleLabel, iconClass: "lucide-grip-vertical" },
+      { label: "Add block", iconClass: "lucide-plus" },
+    ];
+    for (const { label, iconClass } of expectedButtons) {
+      expectIconOnlyButton(
+        screen.getByRole("button", { name: label }),
+        label,
+        iconClass,
+      );
+    }
     view.unmount();
   });
 
@@ -441,7 +500,7 @@ describe("SlashMenu drag handle", () => {
     stubBlockRect(block3, { top: 40, height: 20 });
 
     fireEvent.pointerMove(block3);
-    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
     fireEvent.pointerDown(handle, { pointerId: 1 });
     fireEvent.pointerMove(editable, { pointerId: 1, clientY: 5 });
 
@@ -479,7 +538,7 @@ describe("SlashMenu drag handle", () => {
     stubBlockRect(block2, { top: 20, height: 20 });
 
     fireEvent.pointerMove(block1);
-    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
     fireEvent.pointerDown(handle, { pointerId: 1 });
     fireEvent.pointerMove(editable, { pointerId: 1, clientY: 5 });
     fireEvent.pointerUp(editable, { pointerId: 1 });
@@ -511,7 +570,7 @@ describe("SlashMenu drag handle", () => {
     stubBlockRect(block2, { top: 20, height: 20 });
 
     fireEvent.pointerMove(block2);
-    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
     fireEvent.pointerDown(handle, { pointerId: 1 });
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: 5 });
     fireEvent.keyDown(document, { key: "Escape" });
@@ -550,7 +609,7 @@ describe("SlashMenu drag handle", () => {
     stubBlockRect(block2, { top: 20, height: 20 });
 
     fireEvent.pointerMove(block2);
-    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
     fireEvent.pointerDown(handle, { pointerId: 1 });
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: 5 });
     fireEvent.pointerCancel(handle, { pointerId: 1 });
@@ -586,7 +645,7 @@ describe("SlashMenu drag handle", () => {
     stubBlockRect(block3, { top: 40, height: 20 });
 
     fireEvent.pointerMove(block3);
-    const handle = screen.getByRole("button", { name: "Drag to reorder" });
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
     fireEvent.pointerDown(handle, {
       pointerId: 1,
       clientX: 0,
@@ -628,7 +687,7 @@ describe("SlashMenu block menu", () => {
       .querySelector("[data-be-block-id]");
     if (block === null) throw new Error("Block element was not rendered");
     fireEvent.pointerMove(block);
-    fireEvent.click(screen.getByRole("button", { name: "Drag to reorder" }));
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
     return { controller, view };
   };
 
@@ -645,7 +704,7 @@ describe("SlashMenu block menu", () => {
   it("같은 핸들을 다시 클릭하면 메뉴를 닫는다", () => {
     const { view } = openBlockMenu();
 
-    fireEvent.click(screen.getByRole("button", { name: "Drag to reorder" }));
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
 
     expect(screen.queryByRole("menu")).toBeNull();
     view.unmount();
