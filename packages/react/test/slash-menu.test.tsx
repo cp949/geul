@@ -446,7 +446,7 @@ describe("SlashMenu drag handle", () => {
     fireEvent.pointerMove(editable, { pointerId: 1, clientY: 5 });
 
     expect(
-      view.container.querySelector(".be-block-insertion-guide"),
+      view.container.querySelector("[data-be-block-insertion-guide]"),
     ).not.toBeNull();
 
     fireEvent.pointerUp(editable, { pointerId: 1 });
@@ -517,7 +517,7 @@ describe("SlashMenu drag handle", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(
-      view.container.querySelector(".be-block-insertion-guide"),
+      view.container.querySelector("[data-be-block-insertion-guide]"),
     ).toBeNull();
 
     fireEvent.pointerUp(handle, { pointerId: 1 });
@@ -596,7 +596,7 @@ describe("SlashMenu drag handle", () => {
     fireEvent.pointerUp(editable, { pointerId: 2 });
 
     expect(
-      view.container.querySelector(".be-block-insertion-guide"),
+      view.container.querySelector("[data-be-block-insertion-guide]"),
     ).toBeNull();
     expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
 

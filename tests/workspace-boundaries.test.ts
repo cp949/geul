@@ -63,7 +63,11 @@ const allowedDependencies = {
       react: "19.2.8",
       "react-dom": "19.2.8",
     },
-    devDependencies: { "@testing-library/react": "16.3.0" },
+    devDependencies: {
+      "@tailwindcss/cli": "4.3.3",
+      "@testing-library/react": "16.3.0",
+      tailwindcss: "4.3.3",
+    },
     peerDependencies: {},
     optionalDependencies: {},
   },

@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { useEditor, useEditorMount } from "./use-editor.js";
 
+const linkToolbarButtonClassName =
+  "geul:cursor-pointer geul:rounded geul:border-0 geul:bg-transparent geul:whitespace-nowrap geul:px-1.5 geul:py-1 geul:text-[color:var(--be-color-text,#202124)]";
+
 type ToolbarPosition = { left: number; top: number };
 
 type ToolbarState =
@@ -156,13 +159,14 @@ export const LinkToolbar = () => {
   return (
     <div
       aria-label="Link"
-      className="be-link-toolbar"
+      className="geul:fixed geul:z-10 geul:flex geul:items-center geul:gap-1.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:px-1.5 geul:py-1 geul:shadow-[0_1px_4px_rgba(0,0,0,0.15)] geul:[transform:translate(-50%,0.5rem)]"
       role="toolbar"
       style={{ left: toolbarState.left, top: toolbarState.top }}
     >
       {toolbarState.mode === "view" && toolbarState.href === null && (
         <button
           aria-label="Add link"
+          className={linkToolbarButtonClassName}
           onClick={startEditing}
           onMouseDown={(event) => event.preventDefault()}
           type="button"
@@ -174,6 +178,7 @@ export const LinkToolbar = () => {
         <>
           <a
             aria-label="Open link"
+            className={linkToolbarButtonClassName}
             href={toolbarState.href}
             onMouseDown={(event) => event.preventDefault()}
             rel="noreferrer"
@@ -183,6 +188,7 @@ export const LinkToolbar = () => {
           </a>
           <button
             aria-label="Edit link"
+            className={linkToolbarButtonClassName}
             onClick={startEditing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
@@ -191,6 +197,7 @@ export const LinkToolbar = () => {
           </button>
           <button
             aria-label="Remove link"
+            className={linkToolbarButtonClassName}
             onClick={removeLink}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
@@ -203,6 +210,7 @@ export const LinkToolbar = () => {
         <>
           <input
             aria-label="Link URL"
+            className="geul:min-w-56 geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:px-1.5 geul:py-1"
             onChange={(event) => {
               if (toolbarState.mode !== "editing") return;
               setToolbarState({
@@ -227,6 +235,7 @@ export const LinkToolbar = () => {
           />
           <button
             aria-label="Save link"
+            className={linkToolbarButtonClassName}
             onClick={applyLink}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
@@ -235,6 +244,7 @@ export const LinkToolbar = () => {
           </button>
           <button
             aria-label="Cancel link edit"
+            className={linkToolbarButtonClassName}
             onClick={cancelEditing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
@@ -242,7 +252,12 @@ export const LinkToolbar = () => {
             Cancel
           </button>
           {toolbarState.rejected && (
-            <span role="alert">Unsupported link URL</span>
+            <span
+              className="geul:text-xs geul:text-[color:var(--be-color-danger,#d93025)]"
+              role="alert"
+            >
+              Unsupported link URL
+            </span>
           )}
         </>
       )}

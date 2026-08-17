@@ -33,6 +33,12 @@ type BlockSideMenuProps = {
   onBlockAdded: (blockId: string) => void;
 };
 
+const blockGutterButtonClassName =
+  "geul:flex geul:h-6 geul:w-6 geul:items-center geul:justify-center geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-0 geul:text-[color:var(--be-color-text,#202124)]";
+
+const blockMenuItemClassName =
+  "geul:cursor-pointer geul:rounded geul:border-0 geul:bg-transparent geul:px-2 geul:py-1.5 geul:text-left geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)]";
+
 export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
   const { element } = useEditorMount();
@@ -62,9 +68,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (
-        target.closest(".be-add-block-button") !== null ||
-        target.closest(".be-block-handle") !== null ||
-        target.closest(".be-block-menu") !== null
+        target.closest("[data-be-add-block-button]") !== null ||
+        target.closest("[data-be-block-handle]") !== null ||
+        target.closest("[data-be-block-menu]") !== null
       ) {
         return;
       }
@@ -194,8 +200,8 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest(".be-block-menu") !== null) return;
-      if (target.closest(".be-block-handle") !== null) return;
+      if (target.closest("[data-be-block-menu]") !== null) return;
+      if (target.closest("[data-be-block-handle]") !== null) return;
       setBlockMenuState(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -292,12 +298,13 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     <>
       {hoverBounds !== null && hoverBlockId !== null && (
         <div
-          className="be-block-gutter"
+          className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:[transform:translate(-3.5rem,0)]"
           style={{ left: hoverBounds.left, top: hoverBounds.top }}
         >
           <button
             aria-label="Drag to reorder"
-            className="be-block-handle"
+            className={`${blockGutterButtonClassName} geul:cursor-grab geul:active:cursor-grabbing`}
+            data-be-block-handle=""
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
             onMouseDown={(event) => event.preventDefault()}
             onPointerDown={(event) =>
@@ -309,7 +316,8 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           </button>
           <button
             aria-label="Add block"
-            className="be-add-block-button"
+            className={`${blockGutterButtonClassName} geul:cursor-pointer`}
+            data-be-add-block-button=""
             onClick={handleAddBlockClick}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
@@ -320,7 +328,8 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       )}
       {dragState?.guide !== null && dragState?.guide !== undefined && (
         <div
-          className="be-block-insertion-guide"
+          className="geul:fixed geul:z-10 geul:h-0.5 geul:bg-[var(--be-color-accent,#1a73e8)] geul:pointer-events-none geul:[transform:translateY(-0.0625rem)]"
+          data-be-block-insertion-guide=""
           style={{
             left: dragState.guide.left,
             top: dragState.guide.top,
@@ -331,14 +340,17 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {blockMenuState !== null && (
         <div
           aria-label="Block menu"
-          className="be-block-menu"
+          className="geul:fixed geul:z-10 geul:flex geul:w-40 geul:flex-col geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+          data-be-block-menu=""
           role="menu"
           style={{ left: blockMenuState.left, top: blockMenuState.top }}
         >
-          <p className="be-block-menu-section-label">Turn into</p>
+          <p className="geul:my-1 geul:mx-2 geul:text-xs geul:text-[color:var(--be-color-text-muted,#5f6368)]">
+            Turn into
+          </p>
           {BLOCK_TYPE_OPTIONS.map((option) => (
             <button
-              className="be-block-menu-item"
+              className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-text,#202124)]`}
               key={option.id}
               onClick={() => handleTurnInto(option)}
               onMouseDown={(event) => event.preventDefault()}
@@ -348,9 +360,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
               {option.label}
             </button>
           ))}
-          <hr className="be-block-menu-separator" />
+          <hr className="geul:my-1 geul:[border-style:none] geul:[border-top:1px_solid_var(--be-color-border,#dadce0)]" />
           <button
-            className="be-block-menu-item"
+            className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-text,#202124)]`}
             onClick={handleDuplicate}
             onMouseDown={(event) => event.preventDefault()}
             role="menuitem"
@@ -359,7 +371,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             Duplicate
           </button>
           <button
-            className="be-block-menu-item be-block-menu-item-danger"
+            className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-danger,#d93025)]`}
             onClick={handleDeleteBlock}
             onMouseDown={(event) => event.preventDefault()}
             role="menuitem"

@@ -41,7 +41,7 @@ test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복�
     { steps: 5 },
   );
 
-  await expect(page.locator(".be-block-insertion-guide")).toBeVisible();
+  await expect(page.locator("[data-be-block-insertion-guide]")).toBeVisible();
 
   await page.mouse.up();
 
