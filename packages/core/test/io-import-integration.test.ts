@@ -4,8 +4,8 @@ import { importHtml, importMarkdown } from "../../io/src/index.js";
 import { canonicalizeTextMarks } from "../../model/src/index.js";
 import { createEditor } from "../src/index.js";
 
-describe("IO to core integration", () => {
-  it("accepts nested duplicate HTML marks after shared canonicalization", () => {
+describe("IO와 core 연동", () => {
+  it("중첩된 중복 HTML mark도 공용 정규화를 거치면 허용한다", () => {
     const imported = importHtml(
       '<p data-be-block-id="html-duplicate"><strong><strong>x</strong></strong></p>',
     );
@@ -19,7 +19,7 @@ describe("IO to core integration", () => {
     });
   });
 
-  it("accepts a document built from canonicalized duplicate marks", () => {
+  it("정규화된 중복 mark로 만든 문서를 허용한다", () => {
     const marks = canonicalizeTextMarks([
       { type: "bold" },
       { type: "link", href: "https://example.com" },
@@ -53,7 +53,7 @@ describe("IO to core integration", () => {
     });
   });
 
-  it("accepts HTML-imported combined marks without another canonicalization step", () => {
+  it("HTML에서 가져온 결합 mark를 추가 정규화 없이 허용한다", () => {
     const imported = importHtml(
       '<p data-be-block-id="html-combined"><em><code><strong><a href="https://example.com"><u><s>combined</s></u></a></strong></code></em></p>',
     );
@@ -79,7 +79,7 @@ describe("IO to core integration", () => {
     });
   });
 
-  it("accepts GFM-imported combined marks without another canonicalization step", () => {
+  it("GFM에서 가져온 결합 mark를 추가 정규화 없이 허용한다", () => {
     const imported = importMarkdown(
       "~~[***`combined`***](https://example.com)~~",
       { createId: () => "gfm-combined" },

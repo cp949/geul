@@ -122,10 +122,10 @@ const compileFixture = async (fixture: string) => {
   }
 };
 
-describe("workspace dependency boundaries", () => {
+describe("워크스페이스 의존성 경계", () => {
   it.each(
     Object.entries(allowedDependencies),
-  )("%s declares only the allowed dependency map", async (name, expectedSections) => {
+  )("허용된 의존성 목록만 선언한다 — %s", async (name, expectedSections) => {
     const pkg = await readPackage(name);
 
     for (const section of dependencySections) {
@@ -135,7 +135,7 @@ describe("workspace dependency boundaries", () => {
 
   it.each(
     Object.entries(forbiddenDependencies),
-  )("%s has no forbidden editor or UI dependency in any section", async (name, forbidden) => {
+  )("어떤 섹션에도 금지된 에디터·UI 의존성을 두지 않는다 — %s", async (name, forbidden) => {
     const pkg = await readPackage(name);
     const dependencies = dependencySections.flatMap((section) =>
       Object.keys(pkg[section] ?? {}),
@@ -151,7 +151,7 @@ describe("workspace dependency boundaries", () => {
   it.each([
     "packages/model",
     "packages/io",
-  ])("%s cannot compile a DOM global", async (name) => {
+  ])("DOM 전역을 사용하면 컴파일되지 않는다 — %s", async (name) => {
     const tsconfig = await readTsconfig(name);
     const fixture = `${name.replace("packages/", "")}-dom-forbidden.tsconfig.json`;
     const result = await compileFixture(fixture);

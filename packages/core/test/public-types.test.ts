@@ -60,14 +60,14 @@ const readReachableDeclarations = async (entrypoint: string) => {
   return declarations;
 };
 
-describe("public core declarations", () => {
+describe("core 공개 선언", () => {
   beforeAll(async () => {
     const tscPath = resolve(workspaceRoot, "node_modules/typescript/bin/tsc");
     const projectPath = resolve(workspaceRoot, "packages/core/tsconfig.json");
     await execFileAsync(process.execPath, [tscPath, "-b", projectPath]);
   });
 
-  it("does not expose Tiptap or ProseMirror types from any reachable declaration", async () => {
+  it("도달 가능한 어떤 선언에서도 Tiptap이나 ProseMirror 타입을 노출하지 않는다", async () => {
     const distRoot = resolve(workspaceRoot, "packages/core/dist");
     const declarations = await readReachableDeclarations(
       resolve(distRoot, "index.d.ts"),
