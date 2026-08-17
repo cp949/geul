@@ -567,3 +567,27 @@ export const validateColumnWidth = (
   }
   return { ok: true, value: undefined };
 };
+
+export const resizeColumn = (
+  table: TableBlock,
+  index: number,
+  width: number,
+): Result<TableBlock, TableGridError> => {
+  if (!Number.isInteger(index) || index < 0 || index >= table.columns.length) {
+    return indexOutOfRange;
+  }
+
+  const validated = validateColumnWidth(width);
+  if (!validated.ok) return validated;
+
+  // no-op이면 입력 표를 그대로 반환한다 — 호출자는 참조 동일성으로
+  // 트랜잭션 생략 여부를 판단한다(moveRow/moveColumn과 같은 계약).
+  if (table.columns[index]?.width === width) {
+    return { ok: true, value: table };
+  }
+
+  const columns = table.columns.map((column, columnIndex) =>
+    columnIndex === index ? { ...column, width } : column,
+  );
+  return { ok: true, value: { ...table, columns } };
+};

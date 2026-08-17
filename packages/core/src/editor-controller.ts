@@ -17,6 +17,20 @@ import type { EditorError } from "./errors.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
+import {
+  insertTableColumn as insertTableColumnCommand,
+  insertTable as insertTableCommand,
+  insertTableRow as insertTableRowCommand,
+  moveTableColumn as moveTableColumnCommand,
+  moveTableRow as moveTableRowCommand,
+  resizeTableColumn as resizeTableColumnCommand,
+  type TableCommandError,
+} from "./table-commands.js";
+import {
+  TableCellExtension,
+  TableExtension,
+  TableRowExtension,
+} from "./table-extension.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 
 export type DocumentChangeEvent = {
@@ -65,6 +79,34 @@ export interface EditorController {
     toggleCode(): Result<void, EditorError>;
     setLink(href: string): Result<void, EditorError>;
     unsetLink(): Result<void, EditorError>;
+    insertTable(
+      afterBlockId: string,
+      size: { rows: number; columns: number },
+      options?: { clearAfterBlockText?: boolean },
+    ): Result<{ blockId: string }, EditorError>;
+    insertTableRow(
+      tableBlockId: string,
+      atIndex: number,
+    ): Result<void, EditorError>;
+    insertTableColumn(
+      tableBlockId: string,
+      atIndex: number,
+    ): Result<void, EditorError>;
+    moveTableRow(
+      tableBlockId: string,
+      fromIndex: number,
+      toIndex: number,
+    ): Result<void, EditorError>;
+    moveTableColumn(
+      tableBlockId: string,
+      fromIndex: number,
+      toIndex: number,
+    ): Result<void, EditorError>;
+    resizeTableColumn(
+      tableBlockId: string,
+      index: number,
+      width: number,
+    ): Result<void, EditorError>;
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
   };
@@ -251,6 +293,9 @@ export const createEditor = (
           trailingNode: false,
         }),
         BlockIdExtension.configure({ createId }),
+        TableExtension,
+        TableRowExtension,
+        TableCellExtension,
         LinkPolicyExtension,
         RevisionGuardExtension.configure({
           canApplyDocumentChange: () =>
@@ -300,11 +345,13 @@ export const createEditor = (
     if (destroyed) return commandNotApplicable("setText");
 
     let targetPosition: number | null = null;
+    let targetIsTextblock = false;
     let targetSize = 0;
     let currentText = "";
     tiptapEditor.state.doc.forEach((node, offset) => {
       if (node.attrs.blockId !== blockId) return;
       targetPosition = offset;
+      targetIsTextblock = node.isTextblock;
       targetSize = node.content.size;
       currentText = node.textContent;
     });
@@ -312,6 +359,9 @@ export const createEditor = (
     if (targetPosition === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
+    // 표처럼 textblock이 아닌 블록의 content를 텍스트로 교체하면 스키마가
+    // 깨진 노드가 남아 이후 모든 트랜잭션이 실패한다.
+    if (!targetIsTextblock) return commandNotApplicable("setText");
     if (currentText === text) return commandNotApplicable("setText");
 
     return runDocumentCommand("setText", "local", () => {
@@ -397,6 +447,11 @@ export const createEditor = (
 
     if (targetPosition === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    // 표 블록은 paragraph/heading으로 변환할 수 없다 — 셀 콘텐츠가
+    // 인라인 스키마에 맞지 않아 변환 시도 자체가 예외를 던진다.
+    if (currentTypeName !== "paragraph" && currentTypeName !== "heading") {
+      return commandNotApplicable("setBlockType");
     }
 
     const clearContent = options?.clearContent ?? false;
@@ -501,6 +556,12 @@ export const createEditor = (
     if (blockIndex === -1) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
+    // blockId만 재발급하는 복제는 표의 row/cell/column id를 그대로 복사해
+    // 문서 전체 id 유일성 불변식을 깨뜨린다. 표 복제는 전용 명령이 생길
+    // 때까지 거부한다.
+    if (currentDocument.blocks[blockIndex]?.type === "table") {
+      return commandNotApplicable("duplicateBlock");
+    }
 
     const result = runDocumentCommand("duplicateBlock", "local", () => {
       const sourcePosition = findTopLevelBlockPosition(
@@ -588,6 +649,74 @@ export const createEditor = (
       return commandNotApplicable(command);
     }
     return runDocumentCommand(command, "local", run);
+  };
+
+  // PIT-0008 회피: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
+  // `!== null`로 좁히면 이 저장소의 TS7 컴파일러가 never로 잘못 좁힌다.
+  // 클로저를 넘나드는 값은 원시 타입(code 문자열, blockId, width, message)만 쓴다.
+  const tableErrorFromCode = (
+    code: TableCommandError["code"],
+    detail: { blockId: string; message: string; width: number },
+  ): EditorError => {
+    switch (code) {
+      case "BLOCK_NOT_FOUND":
+        return { code: "BLOCK_NOT_FOUND", blockId: detail.blockId };
+      case "TABLE_NOT_FOUND":
+        return { code: "TABLE_NOT_FOUND", blockId: detail.blockId };
+      case "TABLE_NODE_INVALID":
+        return { code: "TABLE_NODE_INVALID", message: detail.message };
+      case "INVALID_TABLE_SIZE":
+        return { code: "INVALID_TABLE_SIZE" };
+      case "INDEX_OUT_OF_RANGE":
+        return { code: "INDEX_OUT_OF_RANGE" };
+      case "MERGE_BOUNDARY_CROSSED":
+        return { code: "MERGE_BOUNDARY_CROSSED" };
+      case "COLUMN_WIDTH_OUT_OF_RANGE":
+        return { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: detail.width };
+      default:
+        return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
+    }
+  };
+
+  const runVoidTableCommand = (
+    command: string,
+    invoke: () => Result<void, TableCommandError>,
+  ): Result<void, EditorError> => {
+    let errorCode: TableCommandError["code"] | null = null;
+    let errorBlockId = "";
+    let errorMessage = "";
+    let errorWidth = 0;
+
+    const result = runDocumentCommand(command, "local", () => {
+      const outcome = invoke();
+      if (outcome.ok) return true;
+      errorCode = outcome.error.code;
+      if (
+        outcome.error.code === "BLOCK_NOT_FOUND" ||
+        outcome.error.code === "TABLE_NOT_FOUND"
+      ) {
+        errorBlockId = outcome.error.blockId;
+      }
+      if (outcome.error.code === "TABLE_NODE_INVALID") {
+        errorMessage = outcome.error.message;
+      }
+      if (outcome.error.code === "COLUMN_WIDTH_OUT_OF_RANGE") {
+        errorWidth = outcome.error.width;
+      }
+      return false;
+    });
+
+    if (errorCode !== null) {
+      return {
+        ok: false,
+        error: tableErrorFromCode(errorCode, {
+          blockId: errorBlockId,
+          message: errorMessage,
+          width: errorWidth,
+        }),
+      };
+    }
+    return result;
   };
 
   return {
@@ -734,6 +863,75 @@ export const createEditor = (
           }
           return chain.unsetLink().run();
         }),
+      insertTable: (afterBlockId, size, options) => {
+        if (destroyed) return commandNotApplicable("insertTable");
+
+        let errorCode: TableCommandError["code"] | null = null;
+        let errorBlockId = "";
+        let insertedBlockId = "";
+
+        const result = runDocumentCommand("insertTable", "local", () => {
+          const outcome = insertTableCommand(
+            tiptapEditor,
+            afterBlockId,
+            size,
+            createId,
+            options,
+          );
+          if (!outcome.ok) {
+            errorCode = outcome.error.code;
+            if (outcome.error.code === "BLOCK_NOT_FOUND") {
+              errorBlockId = outcome.error.blockId;
+            }
+            return false;
+          }
+          insertedBlockId = outcome.value.blockId;
+          return true;
+        });
+
+        if (errorCode !== null) {
+          return {
+            ok: false,
+            error: tableErrorFromCode(errorCode, {
+              blockId: errorBlockId,
+              message: "",
+              width: 0,
+            }),
+          };
+        }
+        if (!result.ok) return result;
+        return { ok: true, value: { blockId: insertedBlockId } };
+      },
+      insertTableRow: (tableBlockId, atIndex) =>
+        runVoidTableCommand("insertTableRow", () =>
+          insertTableRowCommand(tiptapEditor, tableBlockId, atIndex, createId),
+        ),
+      insertTableColumn: (tableBlockId, atIndex) =>
+        runVoidTableCommand("insertTableColumn", () =>
+          insertTableColumnCommand(
+            tiptapEditor,
+            tableBlockId,
+            atIndex,
+            createId,
+          ),
+        ),
+      moveTableRow: (tableBlockId, fromIndex, toIndex) =>
+        runVoidTableCommand("moveTableRow", () =>
+          moveTableRowCommand(tiptapEditor, tableBlockId, fromIndex, toIndex),
+        ),
+      moveTableColumn: (tableBlockId, fromIndex, toIndex) =>
+        runVoidTableCommand("moveTableColumn", () =>
+          moveTableColumnCommand(
+            tiptapEditor,
+            tableBlockId,
+            fromIndex,
+            toIndex,
+          ),
+        ),
+      resizeTableColumn: (tableBlockId, index, width) =>
+        runVoidTableCommand("resizeTableColumn", () =>
+          resizeTableColumnCommand(tiptapEditor, tableBlockId, index, width),
+        ),
       undo: () =>
         runDocumentCommand("undo", "undo", () => tiptapEditor.commands.undo()),
       redo: () =>

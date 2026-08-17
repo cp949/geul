@@ -1,0 +1,401 @@
+// @vitest-environment jsdom
+
+import type { EditorController } from "@cp949/geul-core";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { EditorContent, EditorProvider } from "../src/index.js";
+import { TableHandles } from "../src/table-handles.js";
+
+const rowHandleLabel = "Drag to reorder row";
+const columnHandleLabel = "Drag to reorder column";
+const addRowLabel = "Add row";
+const addColumnLabel = "Add column";
+
+if (typeof Element.prototype.setPointerCapture !== "function") {
+  Element.prototype.setPointerCapture = () => {};
+}
+if (typeof Element.prototype.releasePointerCapture !== "function") {
+  Element.prototype.releasePointerCapture = () => {};
+}
+
+type FakeControllerOptions = {
+  moveTableRow?: EditorController["commands"]["moveTableRow"];
+  moveTableColumn?: EditorController["commands"]["moveTableColumn"];
+  resizeTableColumn?: EditorController["commands"]["resizeTableColumn"];
+  insertTableRow?: EditorController["commands"]["insertTableRow"];
+  insertTableColumn?: EditorController["commands"]["insertTableColumn"];
+};
+
+const fakeController = ({
+  moveTableRow = () => ({ ok: true, value: undefined }),
+  moveTableColumn = () => ({ ok: true, value: undefined }),
+  resizeTableColumn = () => ({ ok: true, value: undefined }),
+  insertTableRow = () => ({ ok: true, value: undefined }),
+  insertTableColumn = () => ({ ok: true, value: undefined }),
+}: FakeControllerOptions = {}) => ({
+  mount: vi.fn((element: HTMLElement) => {
+    const editable = document.createElement("div");
+    editable.contentEditable = "true";
+    const table = document.createElement("table");
+    table.setAttribute("data-be-block-id", "table-1");
+    // 실제 에디터의 renderHTML과 동일하게 모델 열 너비를 colgroup/col로 노출한다.
+    const colgroup = document.createElement("colgroup");
+    for (const width of [120, 100]) {
+      const col = document.createElement("col");
+      col.style.width = `${width}px`;
+      colgroup.append(col);
+    }
+    table.append(colgroup);
+    const row1 = document.createElement("tr");
+    row1.setAttribute("data-be-row-id", "row-1");
+    const cell1 = document.createElement("td");
+    cell1.setAttribute("data-be-column-id", "col-1");
+    const cell2 = document.createElement("td");
+    cell2.setAttribute("data-be-column-id", "col-2");
+    row1.append(cell1, cell2);
+    const row2 = document.createElement("tr");
+    row2.setAttribute("data-be-row-id", "row-2");
+    const cell3 = document.createElement("td");
+    cell3.setAttribute("data-be-column-id", "col-1");
+    const cell4 = document.createElement("td");
+    cell4.setAttribute("data-be-column-id", "col-2");
+    row2.append(cell3, cell4);
+    table.append(row1, row2);
+    editable.append(table);
+    element.append(editable);
+  }),
+  unmount: vi.fn(),
+  destroy: vi.fn(),
+  getDocument: vi.fn(),
+  getSelectionMarks: vi.fn(() => [] as string[]),
+  getSelectionLink: vi.fn(() => null),
+  getCaretBlockContext: vi.fn(() => null),
+  getSelectionBlockType: vi.fn(() => null),
+  replaceDocument: vi.fn(),
+  commands: {
+    setText: vi.fn(),
+    insertParagraphAfter: vi.fn(() => ({ ok: true, value: { blockId: "x" } })),
+    setBlockType: vi.fn(() => ({ ok: true, value: undefined })),
+    moveBlockBefore: vi.fn(() => ({ ok: true, value: undefined })),
+    duplicateBlock: vi.fn(() => ({ ok: true, value: { blockId: "x" } })),
+    deleteBlock: vi.fn(() => ({ ok: true, value: undefined })),
+    toggleBold: vi.fn(() => ({ ok: true, value: undefined })),
+    toggleItalic: vi.fn(() => ({ ok: true, value: undefined })),
+    toggleUnderline: vi.fn(() => ({ ok: true, value: undefined })),
+    toggleStrike: vi.fn(() => ({ ok: true, value: undefined })),
+    toggleCode: vi.fn(() => ({ ok: true, value: undefined })),
+    setLink: vi.fn(),
+    unsetLink: vi.fn(),
+    insertTable: vi.fn(() => ({ ok: true, value: { blockId: "table-1" } })),
+    insertTableRow: vi.fn(insertTableRow),
+    insertTableColumn: vi.fn(insertTableColumn),
+    moveTableRow: vi.fn(moveTableRow),
+    moveTableColumn: vi.fn(moveTableColumn),
+    resizeTableColumn: vi.fn(resizeTableColumn),
+    undo: vi.fn(),
+    redo: vi.fn(),
+  },
+});
+
+const stubRect = (
+  element: Element,
+  rect: { left: number; top: number; width: number; height: number },
+) => {
+  element.getBoundingClientRect = () =>
+    ({
+      ...rect,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+      x: rect.left,
+      y: rect.top,
+      toJSON: () => ({}),
+    }) as DOMRect;
+};
+
+const withProvider = (
+  controller: ReturnType<typeof fakeController>,
+  children: React.ReactNode,
+) => (
+  <EditorProvider editor={controller as unknown as EditorController}>
+    {children}
+  </EditorProvider>
+);
+
+const renderTable = (controller: ReturnType<typeof fakeController>) => {
+  const view = render(
+    withProvider(
+      controller,
+      <>
+        <TableHandles />
+        <EditorContent />
+      </>,
+    ),
+  );
+  const editable = screen.getByRole("textbox", { name: "Editor" });
+  const table = editable.querySelector("table");
+  if (table === null) throw new Error("Table was not rendered");
+  stubRect(table, { left: 100, top: 100, width: 200, height: 60 });
+  const rows = Array.from(table.querySelectorAll("[data-be-row-id]"));
+  const [row1, row2] = rows;
+  if (row1 === undefined || row2 === undefined) {
+    throw new Error("Rows were not rendered");
+  }
+  stubRect(row1, { left: 100, top: 100, width: 200, height: 30 });
+  stubRect(row2, { left: 100, top: 130, width: 200, height: 30 });
+  const firstRowCells = Array.from(
+    row1.querySelectorAll("[data-be-column-id]"),
+  );
+  const [cell1, cell2] = firstRowCells;
+  if (cell1 === undefined || cell2 === undefined) {
+    throw new Error("Cells were not rendered");
+  }
+  stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
+  stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
+  return { view, table, editable };
+};
+
+describe("표 위에 hover하면 핸들을 표시한다", () => {
+  it("행 핸들과 열 핸들, 빠른 확장 버튼을 함께 표시한다", () => {
+    const controller = fakeController();
+    const { view, table } = renderTable(controller);
+
+    fireEvent.pointerMove(table);
+
+    expect(
+      screen.getAllByRole("button", { name: rowHandleLabel }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: columnHandleLabel }),
+    ).toHaveLength(2);
+    expect(screen.getByRole("button", { name: addRowLabel })).not.toBeNull();
+    expect(screen.getByRole("button", { name: addColumnLabel })).not.toBeNull();
+    view.unmount();
+  });
+
+  it("표 밖으로 나가면 핸들을 숨긴다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
+
+    fireEvent.pointerMove(editable);
+
+    expect(screen.queryByRole("button", { name: addRowLabel })).toBeNull();
+    view.unmount();
+  });
+
+  it("표와 핸들 사이 여백으로 이동해도 핸들이 유지된다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
+
+    // 표 왼쪽 경계(100)와 행 핸들(76~96) 사이의 여백 지점.
+    fireEvent.pointerMove(editable, { clientX: 98, clientY: 110 });
+
+    expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
+    view.unmount();
+  });
+});
+
+describe("행/열 핸들을 드래그해 재정렬한다", () => {
+  it("행 핸들을 두 번째 행 아래로 드래그하면 moveTableRow(0, 1)을 호출한다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 150 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(controller.commands.moveTableRow).toHaveBeenCalledWith(
+      "table-1",
+      0,
+      1,
+    );
+    view.unmount();
+  });
+
+  it("열 핸들을 두 번째 열 오른쪽으로 드래그하면 moveTableColumn(0, 1)을 호출한다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstColumnHandle] = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    if (firstColumnHandle === undefined) throw new Error("열 핸들 없음");
+
+    fireEvent.pointerDown(firstColumnHandle, { pointerId: 1, clientX: 100 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 250 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(controller.commands.moveTableColumn).toHaveBeenCalledWith(
+      "table-1",
+      0,
+      1,
+    );
+    view.unmount();
+  });
+
+  it("제자리로 되돌리면 moveTableRow를 호출하지 않는다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 105 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(controller.commands.moveTableRow).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("Escape로 드래그를 취소하면 아무 명령도 호출하지 않는다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 150 });
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(controller.commands.moveTableRow).not.toHaveBeenCalled();
+    view.unmount();
+  });
+});
+
+describe("열 경계를 드래그해 너비를 조절한다", () => {
+  it("드래그 중에는 명령을 호출하지 않고 pointer-up에 한 번만 resizeTableColumn을 호출한다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const resizeHandle = document.querySelector(
+      "[data-be-table-resize-handle]",
+    );
+    if (resizeHandle === null) throw new Error("resize 핸들 없음");
+
+    fireEvent.pointerDown(resizeHandle, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 240 });
+    expect(controller.commands.resizeTableColumn).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 260 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    // 시작 너비는 셀 rect(100px)가 아닌 colgroup col의 모델 너비(120px)에서
+    // 시드된다 — 콘텐츠가 렌더 너비를 강제로 벌려도 저장 너비가 튀지 않는다.
+    expect(controller.commands.resizeTableColumn).toHaveBeenCalledTimes(1);
+    expect(controller.commands.resizeTableColumn).toHaveBeenCalledWith(
+      "table-1",
+      0,
+      180,
+    );
+    view.unmount();
+  });
+
+  it("드래그 중에는 col 요소의 너비를 프레임 단위로 시각 갱신한다", async () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const resizeHandle = document.querySelector(
+      "[data-be-table-resize-handle]",
+    );
+    if (resizeHandle === null) throw new Error("resize 핸들 없음");
+
+    fireEvent.pointerDown(resizeHandle, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 260 });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const col = table.querySelector<HTMLElement>("colgroup col");
+    expect(col?.style.width).toBe("180px");
+    expect(controller.commands.resizeTableColumn).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+    view.unmount();
+  });
+
+  it("Escape로 리사이즈를 취소하면 명령을 호출하지 않고 원래 너비로 복원한다", async () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const resizeHandle = document.querySelector(
+      "[data-be-table-resize-handle]",
+    );
+    if (resizeHandle === null) throw new Error("resize 핸들 없음");
+
+    fireEvent.pointerDown(resizeHandle, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 260 });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    const col = table.querySelector<HTMLElement>("colgroup col");
+    expect(col?.style.width).toBe("120px");
+    expect(controller.commands.resizeTableColumn).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("최소 너비 아래로는 조절하지 않는다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const resizeHandle = document.querySelector(
+      "[data-be-table-resize-handle]",
+    );
+    if (resizeHandle === null) throw new Error("resize 핸들 없음");
+
+    fireEvent.pointerDown(resizeHandle, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: -1000 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(controller.commands.resizeTableColumn).toHaveBeenCalledWith(
+      "table-1",
+      0,
+      48,
+    );
+    view.unmount();
+  });
+});
+
+describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
+  it("Add row 클릭 시 마지막 행 뒤에 행을 추가한다", () => {
+    const controller = fakeController();
+    const { view, table } = renderTable(controller);
+    fireEvent.pointerMove(table);
+
+    fireEvent.click(screen.getByRole("button", { name: addRowLabel }));
+
+    expect(controller.commands.insertTableRow).toHaveBeenCalledWith(
+      "table-1",
+      2,
+    );
+    view.unmount();
+  });
+
+  it("Add column 클릭 시 마지막 열 뒤에 열을 추가한다", () => {
+    const controller = fakeController();
+    const { view, table } = renderTable(controller);
+    fireEvent.pointerMove(table);
+
+    fireEvent.click(screen.getByRole("button", { name: addColumnLabel }));
+
+    expect(controller.commands.insertTableColumn).toHaveBeenCalledWith(
+      "table-1",
+      2,
+    );
+    view.unmount();
+  });
+});

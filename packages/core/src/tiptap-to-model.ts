@@ -5,6 +5,7 @@ import {
   type InlineContent,
   parseDocument,
   type Result,
+  type TableBlock,
   type TextMark,
 } from "@cp949/geul-model";
 
@@ -68,6 +69,62 @@ const inlineContentFromTiptap = (
   return { ok: true, value: content };
 };
 
+// 슬라이스 7부터 라이브 에디터에서 직접 만든 표만 이 경로를 지난다(model-to-tiptap.ts의
+// 문서 로드 차단은 그대로 유지). editor.getJSON()은 순수 JSON이라 table-model-codec.ts의
+// TableMap 기반 디코더(라이브 PM 노드 전용)를 재사용할 수 없어, 저장된 colspan/rowspan을
+// 그대로 신뢰하는 JSON 전용 디코더를 둔다.
+const tableBlockFromTiptapJson = (
+  node: TiptapJsonNode,
+  id: string,
+): Result<TableBlock, EditorError> => {
+  const attrs = node.attrs ?? {};
+
+  const rows: TableBlock["rows"] = [];
+  for (const rowNode of node.content ?? []) {
+    const cells: TableBlock["rows"][number]["cells"] = [];
+    for (const cellNode of rowNode.content ?? []) {
+      const content = inlineContentFromTiptap(cellNode.content);
+      if (!content.ok) return content;
+
+      const cellAttrs = cellNode.attrs ?? {};
+      cells.push({
+        id: typeof cellAttrs.cellId === "string" ? cellAttrs.cellId : "",
+        columnId:
+          typeof cellAttrs.columnId === "string" ? cellAttrs.columnId : "",
+        rowSpan: typeof cellAttrs.rowspan === "number" ? cellAttrs.rowspan : 1,
+        columnSpan:
+          typeof cellAttrs.colspan === "number" ? cellAttrs.colspan : 1,
+        content: content.value,
+        ...(typeof cellAttrs.textColor === "string"
+          ? { textColor: cellAttrs.textColor }
+          : {}),
+        ...(typeof cellAttrs.backgroundColor === "string"
+          ? { backgroundColor: cellAttrs.backgroundColor }
+          : {}),
+      });
+    }
+
+    const rowAttrs = rowNode.attrs ?? {};
+    rows.push({
+      id: typeof rowAttrs.rowId === "string" ? rowAttrs.rowId : "",
+      cells,
+    });
+  }
+
+  // 스키마 검증은 여기서 하지 않는다 — tiptapToModel 끝의 전체 parseDocument가
+  // 표 블록을 포함한 문서 전체를 한 번에 검증한다(표마다 중복 검증하면
+  // 키 입력당 O(셀 수) 검증 비용이 두 배가 된다).
+  const table: TableBlock = {
+    id,
+    type: "table",
+    columns: (attrs.columns ?? []) as TableBlock["columns"],
+    rows,
+    headerRows: (attrs.headerRows ?? 0) as 0 | 1,
+    headerColumns: (attrs.headerColumns ?? 0) as 0 | 1,
+  };
+  return { ok: true, value: table };
+};
+
 export const tiptapToModel = (
   json: TiptapJsonNode,
   revision: number,
@@ -77,12 +134,19 @@ export const tiptapToModel = (
 
   const blocks: Document["blocks"] = [];
   for (const node of json.content ?? []) {
-    const content = inlineContentFromTiptap(node.content);
-    if (!content.ok) return content;
-
     const savedId = node.attrs?.blockId;
     const id =
       typeof savedId === "string" && savedId.length > 0 ? savedId : createId();
+
+    if (node.type === "table") {
+      const table = tableBlockFromTiptapJson(node, id);
+      if (!table.ok) return table;
+      blocks.push(table.value);
+      continue;
+    }
+
+    const content = inlineContentFromTiptap(node.content);
+    if (!content.ok) return content;
 
     if (node.type === "paragraph") {
       blocks.push({ id, type: "paragraph", content: content.value });

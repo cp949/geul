@@ -2,6 +2,70 @@ import { describe, expect, it } from "vitest";
 
 import { createTableFixtureEditor } from "./table-test-support.js";
 
+describe("표를 렌더링한다", () => {
+  it("table.attrs.columns의 너비를 colgroup/col로 반영한다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          attrs: {
+            blockId: "table-1",
+            columns: [
+              { id: "col-1", width: 160 },
+              { id: "col-2", width: 240 },
+            ],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+          content: [
+            {
+              type: "tableRow",
+              attrs: { rowId: "row-1" },
+              content: [
+                {
+                  type: "tableCell",
+                  attrs: {
+                    cellId: "cell-1",
+                    columnId: "col-1",
+                    colspan: 1,
+                    rowspan: 1,
+                    colwidth: null,
+                    textColor: null,
+                    backgroundColor: null,
+                  },
+                  content: [],
+                },
+                {
+                  type: "tableCell",
+                  attrs: {
+                    cellId: "cell-2",
+                    columnId: "col-2",
+                    colspan: 1,
+                    rowspan: 1,
+                    colwidth: null,
+                    textColor: null,
+                    backgroundColor: null,
+                  },
+                  content: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const table = editor.view.dom.querySelector("table");
+    expect(table).not.toBeNull();
+    const cols = table?.querySelectorAll("colgroup col") ?? [];
+    expect(cols).toHaveLength(2);
+    expect((cols[0] as HTMLElement).style.width).toBe("160px");
+    expect((cols[1] as HTMLElement).style.width).toBe("240px");
+    editor.destroy();
+  });
+});
+
 describe("Table/Row/Cell 노드 스키마", () => {
   it("표 JSON을 로드하면 셀 속성과 표 속성을 그대로 보존한다", () => {
     const editor = createTableFixtureEditor({

@@ -10,6 +10,7 @@ import {
   moveColumn,
   moveRow,
   projectTableGrid,
+  resizeColumn,
   splitCell,
   type TableGrid,
   validateColumnWidth,
@@ -916,5 +917,50 @@ describe("열 너비를 검증한다", () => {
       ok: false,
       error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: Number.NaN },
     });
+  });
+});
+
+describe("열 너비를 조절한다", () => {
+  it("지정 인덱스 열의 너비만 바꾼다", () => {
+    const t = table(["a", "b"], [[cell("c1", "a"), cell("c2", "b")]]);
+
+    const result = resizeColumn(t, 1, 240);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.columns).toEqual([
+      { id: "a", width: 160 },
+      { id: "b", width: 240 },
+    ]);
+  });
+
+  it("범위를 벗어난 인덱스는 거절한다", () => {
+    const t = table(["a"], [[cell("c1", "a")]]);
+
+    expect(resizeColumn(t, 1, 240)).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+  });
+
+  it("허용 범위 밖 너비는 거절하고 표를 바꾸지 않는다", () => {
+    const t = table(["a"], [[cell("c1", "a")]]);
+
+    expect(resizeColumn(t, 0, 47)).toEqual({
+      ok: false,
+      error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
+    });
+  });
+
+  it("현재 값과 같은 너비면 입력 표를 그대로 반환한다", () => {
+    const t = table(["a"], [[cell("c1", "a")]]);
+
+    const result = resizeColumn(t, 0, 160);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // no-op 판별은 참조 동일성 계약이다 — table-commands가 이 참조로
+    // 트랜잭션 생략 여부를 결정한다.
+    expect(result.value).toBe(t);
   });
 });

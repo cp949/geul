@@ -20,7 +20,9 @@ type FakeControllerOptions = {
   moveBlockBefore?: EditorController["commands"]["moveBlockBefore"];
   duplicateBlock?: EditorController["commands"]["duplicateBlock"];
   deleteBlock?: EditorController["commands"]["deleteBlock"];
+  insertTable?: EditorController["commands"]["insertTable"];
   blockIds?: readonly string[];
+  tableBlockIds?: readonly string[];
 };
 
 const fakeController = ({
@@ -33,7 +35,9 @@ const fakeController = ({
   moveBlockBefore = () => ({ ok: true, value: undefined }),
   duplicateBlock = () => ({ ok: true, value: { blockId: "new-block" } }),
   deleteBlock = () => ({ ok: true, value: undefined }),
+  insertTable = () => ({ ok: true, value: { blockId: "table-1" } }),
   blockIds = ["block-1"],
+  tableBlockIds = [],
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -43,6 +47,16 @@ const fakeController = ({
       block.setAttribute("data-be-block-id", blockId);
       block.textContent = "editor text";
       editable.append(block);
+    }
+    for (const blockId of tableBlockIds) {
+      const table = document.createElement("table");
+      table.setAttribute("data-be-block-id", blockId);
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.textContent = "cell text";
+      row.append(cell);
+      table.append(row);
+      editable.append(table);
     }
     element.append(editable);
   }),
@@ -67,6 +81,12 @@ const fakeController = ({
     toggleCode: vi.fn(() => ({ ok: true, value: undefined })),
     setLink: vi.fn(),
     unsetLink: vi.fn(),
+    insertTable: vi.fn(insertTable),
+    insertTableRow: vi.fn(() => ({ ok: true, value: undefined })),
+    insertTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
+    moveTableRow: vi.fn(() => ({ ok: true, value: undefined })),
+    moveTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
+    resizeTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
     undo: vi.fn(),
     redo: vi.fn(),
   },
@@ -173,7 +193,7 @@ describe("SlashMenu query popup", () => {
     fireCaretUpdate();
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(4);
+    expect(screen.getAllByRole("option")).toHaveLength(5);
     expect(screen.getByRole("option", { name: /Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /Heading 1/ })).not.toBeNull();
     view.unmount();
@@ -229,6 +249,36 @@ describe("SlashMenu query popup", () => {
       { type: "heading", level: 1 },
       { clearContent: true },
     );
+    view.unmount();
+  });
+
+  it("표 항목을 클릭하면 트리거 블록 텍스트를 지우며 3x3 표를 삽입한다", () => {
+    const controller = fakeController({
+      getCaretBlockContext: () => ({
+        blockId: "block-1",
+        blockType: { type: "paragraph" },
+        text: "/table",
+      }),
+    });
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <SlashMenu />
+          <EditorContent />
+        </>,
+      ),
+    );
+    fireCaretUpdate();
+
+    fireEvent.click(screen.getByRole("option", { name: /Table/ }));
+
+    expect(controller.commands.insertTable).toHaveBeenCalledWith(
+      "block-1",
+      { rows: 3, columns: 3 },
+      { clearAfterBlockText: true },
+    );
+    expect(screen.queryByRole("listbox")).toBeNull();
     view.unmount();
   });
 
@@ -352,7 +402,7 @@ describe("SlashMenu add-block button", () => {
       "block-1",
     );
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(4);
+    expect(screen.getAllByRole("option")).toHaveLength(5);
     view.unmount();
   });
 
@@ -417,6 +467,36 @@ describe("SlashMenu drag handle", () => {
       screen.getByRole("button", { name: dragHandleLabel }),
     ).not.toBeNull();
     expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
+    view.unmount();
+  });
+
+  it("표 위에 hover해도 블록 거터(드래그 핸들·add-block 버튼)를 표시하지 않는다", () => {
+    // 표는 table-handles.tsx가 자체 행/열 핸들을 갖는다. BlockSideMenu가
+    // 표에도 반응하면 두 오버레이의 gutter가 같은 좌표 부근에 겹쳐 렌더돼
+    // 실 브라우저에서 표 행 핸들 클릭이 block-side-menu의 "Add block"
+    // 버튼으로 새는 결함이 있었다(e2e에서만 재현, jsdom hit-test로는 못 잡음).
+    const controller = fakeController({
+      blockIds: [],
+      tableBlockIds: ["table-1"],
+    });
+    const view = render(
+      withProvider(
+        controller,
+        <>
+          <SlashMenu />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const table = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelector("table[data-be-block-id]");
+    if (table === null) throw new Error("Table element was not rendered");
+
+    fireEvent.pointerMove(table);
+
+    expect(screen.queryByRole("button", { name: dragHandleLabel })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add block" })).toBeNull();
     view.unmount();
   });
 

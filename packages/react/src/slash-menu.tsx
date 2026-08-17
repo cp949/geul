@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BlockSideMenu } from "./block-side-menu.js";
-import {
-  BLOCK_TYPE_OPTIONS,
-  type BlockTypeOption,
-} from "./block-type-options.js";
+import { BLOCK_TYPE_OPTIONS } from "./block-type-options.js";
+import { TableHandles } from "./table-handles.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 const parseSlashQuery = (text: string): string | null => {
@@ -12,7 +10,37 @@ const parseSlashQuery = (text: string): string | null => {
   return match === null ? null : (match[1] ?? "");
 };
 
-const matchesQuery = (item: BlockTypeOption, query: string): boolean => {
+// 표 삽입은 setBlockType로 표현할 수 없는 별도 동작(현재 블록을 표로 바꾸는 게
+// 아니라 뒤에 표를 새로 삽입)이라, block-type-options.ts의 BLOCK_TYPE_OPTIONS와는
+// 분리된 kind로 다룬다. BlockSideMenu의 "Turn into" 목록은 BLOCK_TYPE_OPTIONS만
+// 그대로 쓰므로 표 항목이 섞여 들어가지 않는다.
+type SlashMenuItem =
+  | ({ kind: "blockType" } & (typeof BLOCK_TYPE_OPTIONS)[number])
+  | {
+      kind: "insertTable";
+      id: string;
+      label: string;
+      description: string;
+      keywords: readonly string[];
+    };
+
+const TABLE_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertTable",
+  id: "table",
+  label: "Table",
+  description: "Insert a table",
+  keywords: ["table", "grid"],
+};
+
+const SLASH_MENU_ITEMS: readonly SlashMenuItem[] = [
+  ...BLOCK_TYPE_OPTIONS.map((option) => ({
+    kind: "blockType" as const,
+    ...option,
+  })),
+  TABLE_SLASH_ITEM,
+];
+
+const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
   if (query.length === 0) return true;
   const needle = query.toLowerCase();
   return (
@@ -21,8 +49,8 @@ const matchesQuery = (item: BlockTypeOption, query: string): boolean => {
   );
 };
 
-const filterItems = (query: string): BlockTypeOption[] =>
-  BLOCK_TYPE_OPTIONS.filter((item) => matchesQuery(item, query));
+const filterItems = (query: string): SlashMenuItem[] =>
+  SLASH_MENU_ITEMS.filter((item) => matchesQuery(item, query));
 
 type MenuPosition = { left: number; top: number };
 
@@ -153,12 +181,20 @@ export const SlashMenu = () => {
   const items = menuState === null ? [] : filterItems(menuState.query);
 
   const selectItem = useCallback(
-    (item: BlockTypeOption) => {
+    (item: SlashMenuItem) => {
       const current = menuStateRef.current;
       if (current === null) return;
-      editor.commands.setBlockType(current.blockId, item.blockType, {
-        clearContent: true,
-      });
+      if (item.kind === "blockType") {
+        editor.commands.setBlockType(current.blockId, item.blockType, {
+          clearContent: true,
+        });
+      } else {
+        editor.commands.insertTable(
+          current.blockId,
+          { rows: 3, columns: 3 },
+          { clearAfterBlockText: true },
+        );
+      }
       explicitOpenBlockIdRef.current = null;
       dismissedQueryRef.current = null;
       setMenuState(null);
@@ -227,6 +263,7 @@ export const SlashMenu = () => {
   return (
     <>
       <BlockSideMenu onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
+      <TableHandles />
       {menuState !== null && (
         <div
           aria-label="Slash menu"

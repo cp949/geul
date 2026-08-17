@@ -87,7 +87,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         return;
       }
 
-      const blockElement = target.closest<HTMLElement>("[data-be-block-id]");
+      // table은 자체 행/열 핸들(table-handles.tsx)을 가지므로 이 거터
+      // 대상에서 제외한다 — 제외하지 않으면 두 오버레이의 gutter가 표의
+      // 왼쪽 부근에서 겹쳐 렌더된다.
+      const blockElement = target.closest<HTMLElement>(
+        "[data-be-block-id]:not(table)",
+      );
       setHoverBlockId(
         blockElement !== null && element.contains(blockElement)
           ? blockElement.getAttribute("data-be-block-id")

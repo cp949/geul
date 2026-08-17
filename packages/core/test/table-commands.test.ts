@@ -6,6 +6,9 @@ import {
   insertTable,
   insertTableColumn,
   insertTableRow,
+  moveTableColumn,
+  moveTableRow,
+  resizeTableColumn,
 } from "../src/table-commands.js";
 import { createTableFixtureEditor } from "./table-test-support.js";
 
@@ -346,6 +349,252 @@ describe("표에서 열을 삭제한다", () => {
 
     expect(result).toEqual({ ok: false, error: { code: "LAST_COLUMN" } });
     expect(editor.getJSON()).toEqual(beforeLastDelete);
+    editor.destroy();
+  });
+});
+
+describe("표의 행을 이동한다", () => {
+  it("지정 인덱스로 행을 이동한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    const result = moveTableRow(editor, "table-1", 0, 1);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = editor.getJSON().content?.[0];
+    expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
+    expect(table?.content?.[1]?.attrs?.rowId).toBe("row-1");
+    editor.destroy();
+  });
+
+  it("이동 직후 undo 1회로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const before = editor.getJSON();
+
+    moveTableRow(editor, "table-1", 0, 1);
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const before = editor.getJSON();
+
+    const result = moveTableRow(editor, "missing", 0, 1);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const before = editor.getJSON();
+
+    const result = moveTableRow(editor, "table-1", 0, 99);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("표의 열을 이동한다", () => {
+  it("지정 인덱스로 열을 이동한다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+
+    const result = moveTableColumn(editor, "table-1", 0, 1);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = editor.getJSON().content?.[0];
+    const columns = table?.attrs?.columns as { id: string }[];
+    expect(columns.map((column) => column.id)).toEqual(["col-2", "col-1"]);
+    const firstRowCells = table?.content?.[0]?.content ?? [];
+    expect(firstRowCells[0]?.attrs?.columnId).toBe("col-2");
+    expect(firstRowCells[1]?.attrs?.columnId).toBe("col-1");
+    editor.destroy();
+  });
+
+  it("이동 직후 undo 1회로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON();
+
+    moveTableColumn(editor, "table-1", 0, 1);
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON();
+
+    const result = moveTableColumn(editor, "table-1", 0, 99);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("표의 열 너비를 조절한다", () => {
+  it("지정 인덱스 열의 너비를 바꾼다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+
+    const result = resizeTableColumn(editor, "table-1", 1, 240);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = editor.getJSON().content?.[0];
+    expect(table?.attrs?.columns).toEqual([
+      { id: "col-1", width: 160 },
+      { id: "col-2", width: 240 },
+    ]);
+    editor.destroy();
+  });
+
+  it("조절 직후 undo 1회로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON();
+
+    resizeTableColumn(editor, "table-1", 1, 240);
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("허용 범위 밖 너비는 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON();
+
+    const result = resizeTableColumn(editor, "table-1", 0, 47);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("표 삽입 시 트리거 블록 텍스트를 함께 지운다", () => {
+  const docWithSlashText = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { blockId: "para-1" },
+        content: [{ type: "text", text: "/table" }],
+      },
+    ],
+  };
+
+  it("clearAfterBlockText가 true면 트리거 블록을 비우고 그 뒤에 표를 단일 트랜잭션으로 삽입한다", () => {
+    const editor = createTableFixtureEditor(docWithSlashText);
+    const createId = sequentialIds("id");
+
+    const result = insertTable(
+      editor,
+      "para-1",
+      { rows: 1, columns: 1 },
+      createId,
+      { clearAfterBlockText: true },
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content?.[0]?.type).toBe("paragraph");
+    expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
+    expect(doc.content?.[1]?.type).toBe("table");
+    editor.destroy();
+  });
+
+  it("삽입 직후 undo 1회로 트리거 텍스트와 표 삽입 이전 상태로 함께 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithSlashText);
+    const createId = sequentialIds("id");
+    const before = editor.getJSON();
+
+    insertTable(editor, "para-1", { rows: 1, columns: 1 }, createId, {
+      clearAfterBlockText: true,
+    });
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("표 명령 방어 동작", () => {
+  it("clearAfterBlockText로 표 블록을 지정하면 표 내용을 삭제하지 않고 삽입만 한다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const createId = sequentialIds("id");
+
+    const result = insertTable(
+      editor,
+      "table-1",
+      { rows: 1, columns: 1 },
+      createId,
+      { clearAfterBlockText: true },
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.type).toBe("table");
+    expect(doc.content?.[0]?.content).toHaveLength(1);
+    expect(doc.content?.[0]?.content?.[0]?.content).toHaveLength(2);
+    expect(doc.content?.[1]?.type).toBe("table");
+    editor.destroy();
+  });
+
+  it("동일 인덱스 행 이동은 성공하되 undo 단계를 만들지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const before = editor.getJSON();
+
+    expect(moveTableRow(editor, "table-1", 1, 1)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getJSON()).toEqual(before);
+    expect(editor.can().undo()).toBe(false);
+    editor.destroy();
+  });
+
+  it("동일 인덱스 열 이동은 성공하되 undo 단계를 만들지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON();
+
+    expect(moveTableColumn(editor, "table-1", 0, 0)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getJSON()).toEqual(before);
+    expect(editor.can().undo()).toBe(false);
+    editor.destroy();
+  });
+
+  it("현재 값과 같은 너비로 리사이즈하면 성공하되 undo 단계를 만들지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON();
+
+    expect(resizeTableColumn(editor, "table-1", 0, 160)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getJSON()).toEqual(before);
+    expect(editor.can().undo()).toBe(false);
     editor.destroy();
   });
 });
