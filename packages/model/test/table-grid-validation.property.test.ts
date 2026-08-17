@@ -32,8 +32,8 @@ const rectangularTableArbitrary = fc
       ),
   );
 
-describe("table logical grid properties", () => {
-  it("accepts every complete unmerged rectangular grid", () => {
+describe("표 논리 그리드 속성", () => {
+  it("병합 없는 완전한 직사각형 그리드는 모두 허용한다", () => {
     fc.assert(
       fc.property(rectangularTableArbitrary, (table) => {
         expect(validateTableGrid(table)).toEqual({
@@ -45,7 +45,7 @@ describe("table logical grid properties", () => {
     );
   });
 
-  it("rejects an uncovered coordinate when any unmerged anchor is removed", () => {
+  it("병합 없는 앵커를 하나라도 제거하면 비어 있는 좌표로 거부한다", () => {
     fc.assert(
       fc.property(rectangularTableArbitrary, fc.nat(), (table, seed) => {
         const rowIndex = seed % table.rows.length;

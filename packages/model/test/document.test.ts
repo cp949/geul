@@ -31,8 +31,8 @@ const documentWithText = (text: string) => ({
   ],
 });
 
-describe("independent document", () => {
-  it("creates a stable versioned paragraph document", () => {
+describe("독립 문서 모델", () => {
+  it("빈 문서를 만들면 버전과 리비전이 고정된 문단 문서가 나온다", () => {
     const document = createEmptyDocument(() => "block-1");
 
     expect(document).toEqual({
@@ -42,7 +42,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects duplicated ids without throwing", () => {
+  it("중복된 id는 예외를 던지지 않고 검증 실패로 보고한다", () => {
     const result = parseDocument({
       formatVersion: 1,
       revision: 0,
@@ -62,7 +62,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects unknown format versions", () => {
+  it("지원하지 않는 formatVersion은 거부한다", () => {
     expect(
       parseDocument({ formatVersion: 2, revision: 0, blocks: [] }),
     ).toMatchObject({
@@ -71,7 +71,7 @@ describe("independent document", () => {
     });
   });
 
-  it("returns a structural copy of a valid document", () => {
+  it("유효한 문서는 구조를 복사해 반환한다", () => {
     const input = {
       formatVersion: 1,
       revision: 3,
@@ -88,7 +88,7 @@ describe("independent document", () => {
     }
   });
 
-  it("defines one canonical stored-mark order for every package", () => {
+  it("저장용 mark를 모든 패키지가 공유하는 하나의 정규 순서로 정렬한다", () => {
     expect(
       canonicalizeTextMarks([
         { type: "underline" },
@@ -108,7 +108,7 @@ describe("independent document", () => {
     ]);
   });
 
-  it("deduplicates equal marks into an idempotent canonical array", () => {
+  it("동일한 mark는 중복을 제거해 멱등한 정규 배열로 만든다", () => {
     const once = canonicalizeTextMarks([
       { type: "underline" },
       { type: "bold" },
@@ -127,7 +127,7 @@ describe("independent document", () => {
     expect(canonicalizeTextMarks(once)).toEqual(once);
   });
 
-  it("preserves conflicting links for structured document validation", () => {
+  it("충돌하는 link mark는 문서 검증이 판정하도록 그대로 남긴다", () => {
     const marks = canonicalizeTextMarks([
       { type: "link", href: "https://first.example" },
       { type: "link", href: "https://second.example" },
@@ -155,7 +155,7 @@ describe("independent document", () => {
     });
   });
 
-  it("accepts only canonical stored-mark arrays", () => {
+  it("정규 순서를 따르는 저장용 mark 배열만 허용한다", () => {
     const canonical = {
       formatVersion: 1,
       revision: 0,
@@ -212,7 +212,7 @@ describe("independent document", () => {
     });
   });
 
-  it("allows LF text but requires callers to normalize CRLF before storage", () => {
+  it("LF 텍스트는 허용하고 CRLF는 저장 전에 호출자가 정규화하도록 거부한다", () => {
     expect(parseDocument(documentWithText("line 1\nline 2"))).toMatchObject({
       ok: true,
     });
@@ -230,7 +230,7 @@ describe("independent document", () => {
     ["tab", "text\tvalue"],
     ["DEL", "text\u007fvalue"],
     ["lone surrogate", `text${String.fromCharCode(0xd800)}value`],
-  ])("rejects %s in inline text", (_name, text) => {
+  ])("인라인 텍스트에 %s 문자가 있으면 거부한다", (_name, text) => {
     expect(parseDocument(documentWithText(text))).toMatchObject({
       ok: false,
       error: {
@@ -246,7 +246,7 @@ describe("independent document", () => {
     ["NUL", "block\u0000id"],
     ["DEL", "block\u007fid"],
     ["lone surrogate", `block${String.fromCharCode(0xdfff)}id`],
-  ])("rejects %s in stable IDs", (_name, id) => {
+  ])("안정 ID에 %s 문자가 있으면 거부한다", (_name, id) => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -259,7 +259,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects non-safe or negative revisions", () => {
+  it("음수이거나 안전 정수 범위를 벗어난 revision은 거부한다", () => {
     expect(
       parseDocument({ formatVersion: 1, revision: -1, blocks: [] }),
     ).toMatchObject({
@@ -278,7 +278,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects duplicate ids across table entities", () => {
+  it("표 구성 요소끼리 id가 중복되면 거부한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -316,7 +316,7 @@ describe("independent document", () => {
     });
   });
 
-  it("allows supported link protocols and rejects unsupported ones", () => {
+  it("지원하는 링크 프로토콜만 허용하고 나머지는 거부한다", () => {
     for (const href of [
       "https://example.com",
       "http://example.com",
@@ -366,7 +366,7 @@ describe("independent document", () => {
     });
   });
 
-  it("exports the document link policy as a reusable predicate", () => {
+  it("문서의 링크 정책을 재사용 가능한 술어 함수로 공개한다", () => {
     expect(isSupportedLinkHref("https://example.com/encoded%20space")).toBe(
       true,
     );
@@ -383,7 +383,7 @@ describe("independent document", () => {
     "\\evil.example",
     "/\\evil.example",
     "\\/evil.example",
-  ])("rejects the raw-space, control, or protocol-relative link %s", (href) => {
+  ])("공백·제어문자·프로토콜 상대 경로가 든 링크를 거부한다 — %s", (href) => {
     expect(parseDocument(documentWithLink(href))).toMatchObject({
       ok: false,
       error: {
@@ -397,11 +397,11 @@ describe("independent document", () => {
     "https://example.com/encoded%20space",
     "/relative%09tab",
     "#encoded%7Fcontrol",
-  ])("allows the percent-encoded link %s", (href) => {
+  ])("퍼센트 인코딩된 링크는 허용한다 — %s", (href) => {
     expect(parseDocument(documentWithLink(href))).toMatchObject({ ok: true });
   });
 
-  it("rejects a second link mark on the same paragraph inline item", () => {
+  it("같은 문단 인라인 항목에 두 번째 link mark가 오면 거부한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -432,7 +432,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects a second link mark in table cell inline content", () => {
+  it("표 셀 인라인 내용에 두 번째 link mark가 오면 거부한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -479,7 +479,7 @@ describe("independent document", () => {
     });
   });
 
-  it("keeps unsupported link URL validation ahead of link multiplicity", () => {
+  it("지원하지 않는 링크 URL 검사를 link 중복 검사보다 먼저 수행한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -510,7 +510,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects invalid table dimensions and colors", () => {
+  it("표의 잘못된 크기 값과 색상 값을 거부한다", () => {
     const table = {
       id: "table-1",
       type: "table" as const,
@@ -584,7 +584,7 @@ describe("independent document", () => {
     });
   });
 
-  it("prioritizes width errors across tables before earlier color errors", () => {
+  it("여러 표가 있으면 뒤쪽 표의 width 오류를 앞쪽 표의 색상 오류보다 먼저 보고한다", () => {
     const result = parseDocument({
       formatVersion: 1,
       revision: 0,
@@ -631,7 +631,7 @@ describe("independent document", () => {
     });
   });
 
-  it("rejects tables whose logical cell count exceeds the document limit", () => {
+  it("논리 셀 수가 문서 한도를 넘는 표는 거부한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,

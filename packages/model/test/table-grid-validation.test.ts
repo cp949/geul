@@ -38,8 +38,8 @@ const tableFixture = ({
   headerColumns: 0,
 });
 
-describe("table logical grid validation", () => {
-  it("rejects overlapping anchors", () => {
+describe("표 논리 그리드 검증", () => {
+  it("앵커 셀이 겹치면 거부한다", () => {
     const table = tableFixture({
       cells: [cell("a", "c1", { rowSpan: 1, columnSpan: 2 }), cell("b", "c2")],
     });
@@ -55,7 +55,7 @@ describe("table logical grid validation", () => {
     });
   });
 
-  it("rejects uncovered logical coordinates", () => {
+  it("논리 좌표가 비어 있으면 거부한다", () => {
     expect(
       validateTableGrid(tableFixture({ cells: [cell("a", "c1")] })),
     ).toMatchObject({
@@ -69,7 +69,7 @@ describe("table logical grid validation", () => {
     });
   });
 
-  it("rejects a cell anchored to an unknown column", () => {
+  it("존재하지 않는 열에 앵커된 셀은 거부한다", () => {
     expect(
       validateTableGrid(
         tableFixture({ cells: [cell("a", "missing"), cell("b", "c2")] }),
@@ -80,7 +80,7 @@ describe("table logical grid validation", () => {
     });
   });
 
-  it("rejects spans outside the rectangular table bounds", () => {
+  it("직사각형 표 경계를 벗어나는 span은 거부한다", () => {
     expect(
       validateTableGrid(
         tableFixture({
@@ -101,14 +101,14 @@ describe("table logical grid validation", () => {
     });
   });
 
-  it("accepts a complete unmerged rectangular grid", () => {
+  it("병합 없는 완전한 직사각형 그리드는 허용한다", () => {
     expect(validateTableGrid(tableFixture())).toEqual({
       ok: true,
       value: undefined,
     });
   });
 
-  it("makes parseDocument reject an invalid table grid after earlier semantic passes", () => {
+  it("parseDocument는 선행 의미 검증을 통과한 뒤 잘못된 표 그리드를 거부한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -121,7 +121,7 @@ describe("table logical grid validation", () => {
     });
   });
 
-  it("keeps table-grid validation after document-wide color validation", () => {
+  it("표 그리드 검증을 문서 전체 색상 검증보다 나중에 수행한다", () => {
     const invalidGrid = tableFixture({ cells: [cell("grid-a", "c1")] });
     const invalidColor: TableBlock = {
       id: "table-2",
