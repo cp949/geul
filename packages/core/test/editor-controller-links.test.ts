@@ -16,7 +16,7 @@ describe("에디터 컨트롤러 링크", () => {
     "/relative",
     "#fragment",
     "https://example.com/a–b",
-  ])("allows the model link URL %s in mounted editor input", (href) => {
+  ])("마운트된 에디터 입력에서 모델이 허용하는 링크 URL %s를 허용한다", (href) => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -44,7 +44,7 @@ describe("에디터 컨트롤러 링크", () => {
     " javascript:alert(1)",
     "java\nscript:alert(1)",
     "java﻿script:alert(1)",
-  ])("rejects the non-model link URL %s in mounted editor input", (href) => {
+  ])("마운트된 에디터 입력에서 모델이 허용하지 않는 링크 URL %s를 거부한다", (href) => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -58,7 +58,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(changes).toEqual([]);
   });
 
-  it("rejects a whitespace-obfuscated link before creating an editor", () => {
+  it("에디터 생성 전에 공백으로 난독화한 링크를 거부한다", () => {
     expect(() =>
       createEditor({
         initialDocument: documentWithContent([
@@ -71,7 +71,7 @@ describe("에디터 컨트롤러 링크", () => {
     ).toThrow(TypeError);
   });
 
-  it("atomically rejects a control-obfuscated link on replace", () => {
+  it("문서 교체 시 제어 문자로 난독화한 링크를 원자적으로 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("kept", 2),
@@ -95,7 +95,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(changes).toEqual([]);
   });
 
-  it("filters an invalid browser link transaction without mutating or throwing", () => {
+  it("잘못된 브라우저 링크 트랜잭션을 예외 없이 문서 변경 없이 걸러낸다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -116,7 +116,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(() => editor.destroy()).not.toThrow();
   });
 
-  it("filters an invalid stored link mark without affecting later plain typing", () => {
+  it("잘못된 stored 링크 mark를 걸러내고 이후 일반 입력에 영향을 주지 않는다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -149,7 +149,7 @@ describe("에디터 컨트롤러 링크", () => {
     ]);
   });
 
-  it("allows a valid stored link mark to affect later typing", () => {
+  it("유효한 stored 링크 mark가 이후 입력에 적용된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -189,7 +189,7 @@ describe("에디터 컨트롤러 링크", () => {
     });
   });
 
-  it("creates a link on the current selection and undoes as one unit", () => {
+  it("현재 선택 영역에 링크를 만들고 한 번의 undo로 복원한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -226,7 +226,7 @@ describe("에디터 컨트롤러 링크", () => {
     });
   });
 
-  it("rejects an unsupported link URL without mutating the document", () => {
+  it("지원하지 않는 링크 URL을 문서 변경 없이 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -244,7 +244,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(changes).toEqual([]);
   });
 
-  it("returns COMMAND_NOT_APPLICABLE for setLink with a collapsed selection outside a link", () => {
+  it("링크 밖 collapsed 선택 영역에서 setLink가 COMMAND_NOT_APPLICABLE을 반환한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -262,7 +262,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(changes).toEqual([]);
   });
 
-  it("updates the href at a collapsed cursor inside an existing link and undoes as one unit", () => {
+  it("기존 링크 안 collapsed 커서에서 href를 갱신하고 한 번의 undo로 복원한다", () => {
     const editor = createEditor({
       initialDocument: documentWithContent([
         {
@@ -306,7 +306,7 @@ describe("에디터 컨트롤러 링크", () => {
     });
   });
 
-  it("preserves editor state when setting the existing href is not applicable", () => {
+  it("기존과 같은 href를 설정하면 에디터 상태를 유지한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: documentWithContent([
@@ -329,7 +329,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(changes).toEqual([]);
   });
 
-  it("preserves a collapsed selection when setting its existing href", () => {
+  it("기존과 같은 href를 설정하면 collapsed 선택 영역을 유지한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: documentWithContent([
@@ -352,7 +352,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(changes).toEqual([]);
   });
 
-  it("removes the link at the current selection and undoes as one unit", () => {
+  it("현재 선택 영역의 링크를 제거하고 한 번의 undo로 복원한다", () => {
     const editor = createEditor({
       initialDocument: documentWithContent([
         {
@@ -387,7 +387,7 @@ describe("에디터 컨트롤러 링크", () => {
     });
   });
 
-  it("removes the link at a collapsed cursor inside it", () => {
+  it("링크 안 collapsed 커서에서 링크를 제거한다", () => {
     const editor = createEditor({
       initialDocument: documentWithContent([
         {
@@ -408,7 +408,7 @@ describe("에디터 컨트롤러 링크", () => {
     });
   });
 
-  it("returns COMMAND_NOT_APPLICABLE for unsetLink outside a link", () => {
+  it("링크 밖에서 unsetLink가 COMMAND_NOT_APPLICABLE을 반환한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -421,7 +421,7 @@ describe("에디터 컨트롤러 링크", () => {
     });
   });
 
-  it("reports the href at a collapsed cursor inside a link", () => {
+  it("링크 안 collapsed 커서에서 href를 보고한다", () => {
     const editor = createEditor({
       initialDocument: documentWithContent([
         {
@@ -436,7 +436,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(editor.getSelectionLink()).toEqual({ href: "https://example.com" });
   });
 
-  it("reports no active link for a collapsed cursor outside a link", () => {
+  it("링크 밖 collapsed 커서에서는 활성 링크가 없다고 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -446,7 +446,7 @@ describe("에디터 컨트롤러 링크", () => {
     expect(editor.getSelectionLink()).toBeNull();
   });
 
-  it("reports no active link after destroy", () => {
+  it("destroy 이후에는 활성 링크가 없다고 보고한다", () => {
     const editor = createEditor({
       initialDocument: documentWithContent([
         {

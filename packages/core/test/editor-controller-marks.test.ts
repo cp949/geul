@@ -7,7 +7,7 @@ import {
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 mark", () => {
-  it("restores supported marks and heading metadata on undo", () => {
+  it("undo 시 지원하는 mark와 heading 메타데이터를 복원한다", () => {
     const markedHeading: Document = {
       formatVersion: 1,
       revision: 0,
@@ -43,7 +43,7 @@ describe("에디터 컨트롤러 mark", () => {
     { command: "toggleUnderline", mark: { type: "underline" } },
     { command: "toggleStrike", mark: { type: "strike" } },
     { command: "toggleCode", mark: { type: "code" } },
-  ] as const)("toggles $mark.type on the current selection and undoes as one unit", ({
+  ] as const)("현재 선택 영역에 $mark.type을 토글하고 한 번의 undo로 복원한다", ({
     command,
     mark,
   }) => {
@@ -74,7 +74,7 @@ describe("에디터 컨트롤러 mark", () => {
     });
   });
 
-  it("returns COMMAND_NOT_APPLICABLE and does not emit for a mark toggle with a collapsed selection", () => {
+  it("collapsed 선택 영역의 mark 토글은 COMMAND_NOT_APPLICABLE을 반환하고 이벤트를 발행하지 않는다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
@@ -92,7 +92,7 @@ describe("에디터 컨트롤러 mark", () => {
     expect(changes).toEqual([]);
   });
 
-  it("undoes only the latest mark toggle when toggles run consecutively", () => {
+  it("mark 토글이 연속되면 마지막 토글만 되돌린다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -109,7 +109,7 @@ describe("에디터 컨트롤러 mark", () => {
     });
   });
 
-  it("reports active marks for the current selection", () => {
+  it("현재 선택 영역의 활성 mark를 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -123,7 +123,7 @@ describe("에디터 컨트롤러 mark", () => {
     expect(editor.getSelectionMarks().sort()).toEqual(["bold", "italic"]);
   });
 
-  it("reports the mark at a collapsed cursor inside marked text", () => {
+  it("mark가 적용된 텍스트 안 collapsed 커서에서 mark를 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -135,7 +135,7 @@ describe("에디터 컨트롤러 mark", () => {
     expect(editor.getSelectionMarks()).toEqual(["bold"]);
   });
 
-  it("reports no active marks for a collapsed cursor in unmarked text", () => {
+  it("mark가 없는 텍스트의 collapsed 커서에서는 활성 mark가 없다고 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -145,7 +145,7 @@ describe("에디터 컨트롤러 mark", () => {
     expect(editor.getSelectionMarks()).toEqual([]);
   });
 
-  it("reports no active marks after destroy", () => {
+  it("destroy 이후에는 활성 mark가 없다고 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });

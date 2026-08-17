@@ -8,7 +8,7 @@ import {
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
-  it("increments revision and reports changed block ids", () => {
+  it("revision을 증가시키고 변경된 블록 id를 보고한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("before"),
@@ -29,7 +29,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     ]);
   });
 
-  it("undoes one public command as one change", () => {
+  it("공개 명령 하나를 한 번의 변경으로 되돌린다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("before"),
     });
@@ -42,7 +42,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     });
   });
 
-  it("starts local revisions from the imported initial revision", () => {
+  it("가져온 초기 revision에서 로컬 revision을 시작한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("before", 7),
@@ -62,7 +62,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     ]);
   });
 
-  it("keeps rapid public commands in separate undo units", () => {
+  it("연속된 공개 명령을 별도의 undo 단위로 유지한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("before"),
     });
@@ -77,7 +77,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     });
   });
 
-  it("emits one revision for each undo and redo", () => {
+  it("undo와 redo마다 revision을 하나씩 발행한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("before"),
@@ -111,7 +111,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     ]);
   });
 
-  it("ignores imported revision and clears history on replace", () => {
+  it("문서 교체 시 가져온 revision을 무시하고 히스토리를 비운다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("before", 4),
@@ -138,7 +138,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     });
   });
 
-  it("reports reordered blocks as changed on replace", () => {
+  it("문서 교체 시 순서가 바뀐 블록을 변경으로 보고한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const initial: Document = {
       formatVersion: 1,
@@ -172,7 +172,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     ]);
   });
 
-  it("does not emit or increment for failed and no-op commands", () => {
+  it("실패한 명령과 no-op 명령에는 이벤트를 발행하지 않고 revision도 올리지 않는다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("same"),
@@ -204,7 +204,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toEqual([]);
   });
 
-  it("does not report a canonical marked block changed by another block edit", () => {
+  it("다른 블록을 편집해도 정규 mark 블록이 변경되었다고 보고하지 않는다", () => {
     const changes: DocumentChangeEvent[] = [];
     const canonicalMarks: InlineContent = [
       {
@@ -252,7 +252,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     });
   });
 
-  it("rejects setText before mutating at the maximum revision", () => {
+  it("최대 revision에서 setText를 변경 전에 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const initial = paragraphDocument("before", Number.MAX_SAFE_INTEGER);
     const editor = createEditor({
@@ -273,7 +273,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toEqual([]);
   });
 
-  it("filters a DOM transaction before document and selection mutation at maximum revision", () => {
+  it("최대 revision에서 DOM 트랜잭션을 문서와 선택 영역 변경 전에 걸러낸다", () => {
     const changes: DocumentChangeEvent[] = [];
     const initial = paragraphDocument("before", Number.MAX_SAFE_INTEGER);
     const editor = createEditor({
@@ -293,7 +293,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toEqual([]);
   });
 
-  it("rejects replace before mutation at the maximum revision", () => {
+  it("최대 revision에서 문서 교체를 변경 전에 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const initial = paragraphDocument("before", Number.MAX_SAFE_INTEGER);
     const editor = createEditor({
@@ -312,7 +312,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toEqual([]);
   });
 
-  it("rejects undo when the previous command reached the maximum revision", () => {
+  it("직전 명령이 최대 revision에 도달하면 undo를 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("before", Number.MAX_SAFE_INTEGER - 1),
@@ -332,7 +332,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toHaveLength(1);
   });
 
-  it("rejects redo when undo reached the maximum revision", () => {
+  it("undo가 최대 revision에 도달하면 redo를 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("before", Number.MAX_SAFE_INTEGER - 2),
@@ -351,7 +351,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toHaveLength(2);
   });
 
-  it("returns defensive document copies", () => {
+  it("방어적으로 복사한 문서를 반환한다", () => {
     const initial = paragraphDocument("original");
     const editor = createEditor({ initialDocument: initial });
 
@@ -370,7 +370,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(editor.getDocument()).toEqual(paragraphDocument("original"));
   });
 
-  it("fails mutating commands structurally after destroy", () => {
+  it("destroy 이후 변경 명령이 구조적으로 실패한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("kept"),
@@ -403,7 +403,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(changes).toEqual([]);
   });
 
-  it("renders block ids and keeps them stable across mount cycles", () => {
+  it("블록 id를 렌더하고 마운트 사이클 사이에서 유지한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });

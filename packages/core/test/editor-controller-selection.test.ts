@@ -7,7 +7,7 @@ import {
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 선택 영역 조회", () => {
-  it("reports the block, type and text at a collapsed cursor", () => {
+  it("collapsed 커서 위치의 블록, 타입과 텍스트를 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -21,7 +21,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     });
   });
 
-  it("reports the heading level at a collapsed cursor inside a heading", () => {
+  it("제목 안 collapsed 커서에서 heading level을 보고한다", () => {
     const editor = createEditor({
       initialDocument: {
         formatVersion: 1,
@@ -46,7 +46,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     });
   });
 
-  it("returns null caret block context for a range selection", () => {
+  it("범위 선택에서는 caret 블록 컨텍스트가 null이다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -56,7 +56,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     expect(editor.getCaretBlockContext()).toBeNull();
   });
 
-  it("returns null caret block context after destroy", () => {
+  it("destroy 이후에는 caret 블록 컨텍스트가 null이다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -68,7 +68,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     expect(editor.getCaretBlockContext()).toBeNull();
   });
 
-  it("reports the block id and type for a range selection", () => {
+  it("범위 선택의 블록 id와 타입을 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -81,7 +81,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     });
   });
 
-  it("reports the heading level for a range selection inside a heading", () => {
+  it("제목 안 범위 선택에서 heading level을 보고한다", () => {
     const editor = createEditor({
       initialDocument: {
         formatVersion: 1,
@@ -105,7 +105,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     });
   });
 
-  it("reports the block id and type for a collapsed selection", () => {
+  it("collapsed 선택 영역의 블록 id와 타입을 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -118,7 +118,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     });
   });
 
-  it("returns null selection block type after destroy", () => {
+  it("destroy 이후에는 선택 영역 블록 타입이 null이다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -130,7 +130,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     expect(editor.getSelectionBlockType()).toBeNull();
   });
 
-  it("reports the block type for a select-all selection in a single-block document", () => {
+  it("블록이 하나인 문서의 전체 선택에서 블록 타입을 보고한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
     });
@@ -145,7 +145,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     });
   });
 
-  it("returns null selection block type when select-all spans multiple blocks", () => {
+  it("전체 선택이 여러 블록에 걸치면 선택 영역 블록 타입이 null이다", () => {
     const editor = createEditor({
       initialDocument: {
         formatVersion: 1,

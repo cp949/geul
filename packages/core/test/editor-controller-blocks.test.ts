@@ -8,7 +8,7 @@ import {
 
 describe("에디터 컨트롤러 블록 명령", () => {
   describe("블록 삽입", () => {
-    it("assigns an injected id to a block created through the mounted editor", () => {
+    it("마운트된 에디터로 만든 블록에 주입한 id를 부여한다", () => {
       const changes: DocumentChangeEvent[] = [];
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
@@ -39,7 +39,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       ]);
     });
 
-    it("inserts an empty paragraph after the given block and returns its id", () => {
+    it("지정한 블록 뒤에 빈 문단을 삽입하고 그 id를 반환한다", () => {
       const changes: DocumentChangeEvent[] = [];
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
@@ -63,7 +63,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       ]);
     });
 
-    it("moves the selection into the newly inserted paragraph", () => {
+    it("새로 삽입한 문단으로 선택 영역을 이동한다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
         createId: () => "block-2",
@@ -80,7 +80,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       expect(tiptap.state.selection.from).toBe((newBlockPosition ?? 0) + 1);
     });
 
-    it("undoes insertParagraphAfter as one unit", () => {
+    it("insertParagraphAfter를 한 번의 undo로 복원한다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
       });
@@ -93,7 +93,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
     });
 
-    it("returns BLOCK_NOT_FOUND for insertParagraphAfter with an unknown block id", () => {
+    it("알 수 없는 블록 id에 대해 insertParagraphAfter가 BLOCK_NOT_FOUND를 반환한다", () => {
       const changes: DocumentChangeEvent[] = [];
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
@@ -109,7 +109,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
   });
 
   describe("블록 타입 변경", () => {
-    it("changes a paragraph to a heading while preserving content and block id", () => {
+    it("문단을 제목으로 바꾸면서 내용과 블록 id를 보존한다", () => {
       const changes: DocumentChangeEvent[] = [];
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
@@ -135,7 +135,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       ]);
     });
 
-    it("changes a heading back to a paragraph while preserving content", () => {
+    it("제목을 문단으로 되돌리면서 내용을 보존한다", () => {
       const editor = createEditor({
         initialDocument: {
           formatVersion: 1,
@@ -161,7 +161,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
     });
 
-    it("undoes setBlockType as one unit", () => {
+    it("setBlockType을 한 번의 undo로 복원한다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
       });
@@ -176,7 +176,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
     });
 
-    it("clears content while changing type when clearContent is set", () => {
+    it("clearContent를 지정하면 타입을 바꾸면서 내용을 비운다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("/heading"),
       });
@@ -193,7 +193,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
     });
 
-    it("clears and converts as one undo unit when clearContent is set", () => {
+    it("clearContent를 지정하면 내용 비우기와 타입 변환이 한 번의 undo 단위가 된다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("/heading"),
       });
@@ -211,7 +211,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
     });
 
-    it("returns COMMAND_NOT_APPLICABLE for setBlockType with the same type", () => {
+    it("같은 타입으로 setBlockType하면 COMMAND_NOT_APPLICABLE을 반환한다", () => {
       const changes: DocumentChangeEvent[] = [];
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
@@ -227,7 +227,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       expect(changes).toEqual([]);
     });
 
-    it("returns BLOCK_NOT_FOUND for setBlockType with an unknown block id", () => {
+    it("알 수 없는 블록 id에 대해 setBlockType이 BLOCK_NOT_FOUND를 반환한다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
       });

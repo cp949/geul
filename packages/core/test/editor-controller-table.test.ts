@@ -8,7 +8,7 @@ import {
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 표", () => {
-  it("atomically rejects table documents in R0", () => {
+  it("R0에서 표 문서를 원자적으로 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("kept"),

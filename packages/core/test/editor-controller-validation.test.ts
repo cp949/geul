@@ -7,7 +7,7 @@ import {
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 문서 검증", () => {
-  it("atomically rejects malformed replacement documents", () => {
+  it("잘못된 형식의 교체 문서를 원자적으로 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("kept", 3),
@@ -22,7 +22,7 @@ describe("에디터 컨트롤러 문서 검증", () => {
     expect(changes).toEqual([]);
   });
 
-  it("rejects an empty text run before creating an editor", () => {
+  it("에디터 생성 전에 빈 텍스트 run을 거부한다", () => {
     expect(() =>
       createEditor({
         initialDocument: documentWithContent([{ text: "" }]),
@@ -30,7 +30,7 @@ describe("에디터 컨트롤러 문서 검증", () => {
     ).toThrow(TypeError);
   });
 
-  it("rejects an empty mark set before creating an editor", () => {
+  it("에디터 생성 전에 빈 mark 배열을 거부한다", () => {
     expect(() =>
       createEditor({
         initialDocument: documentWithContent([
@@ -40,7 +40,7 @@ describe("에디터 컨트롤러 문서 검증", () => {
     ).toThrow(TypeError);
   });
 
-  it("rejects a blockless document before creating an editor", () => {
+  it("에디터 생성 전에 블록 없는 문서를 거부한다", () => {
     expect(() =>
       createEditor({
         initialDocument: { formatVersion: 1, revision: 0, blocks: [] },
@@ -48,7 +48,7 @@ describe("에디터 컨트롤러 문서 검증", () => {
     ).toThrow(TypeError);
   });
 
-  it("rejects adjacent inline runs with identical marks before creating an editor", () => {
+  it("에디터 생성 전에 mark가 같은 인접 인라인 run을 거부한다", () => {
     expect(() =>
       createEditor({
         initialDocument: documentWithContent([
@@ -59,7 +59,7 @@ describe("에디터 컨트롤러 문서 검증", () => {
     ).toThrow(TypeError);
   });
 
-  it("rejects noncanonical mark ordering before creating an editor", () => {
+  it("에디터 생성 전에 정규 순서가 아닌 mark 배열을 거부한다", () => {
     expect(() =>
       createEditor({
         initialDocument: documentWithContent([
@@ -81,7 +81,7 @@ describe("에디터 컨트롤러 문서 검증", () => {
 
   it.each([
     {
-      name: "a blockless document",
+      name: "블록 없는 문서",
       document: {
         formatVersion: 1,
         revision: 0,
@@ -89,22 +89,22 @@ describe("에디터 컨트롤러 문서 검증", () => {
       } satisfies Document,
     },
     {
-      name: "an empty text run",
+      name: "빈 텍스트 run",
       document: documentWithContent([{ text: "" }]),
     },
     {
-      name: "an empty mark set",
+      name: "빈 mark 배열",
       document: documentWithContent([{ text: "noncanonical", marks: [] }]),
     },
     {
-      name: "adjacent identical inline runs",
+      name: "동일한 인접 인라인 run",
       document: documentWithContent([
         { text: "left", marks: [{ type: "italic" }] },
         { text: "right", marks: [{ type: "italic" }] },
       ]),
     },
     {
-      name: "noncanonical mark ordering",
+      name: "정규 순서가 아닌 mark 배열",
       document: documentWithContent([
         {
           text: "ordered",
@@ -112,7 +112,9 @@ describe("에디터 컨트롤러 문서 검증", () => {
         },
       ]),
     },
-  ])("atomically rejects $name on replace", ({ document: replacement }) => {
+  ])("문서 교체 시 $name을 원자적으로 거부한다", ({
+    document: replacement,
+  }) => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("kept", 3),
