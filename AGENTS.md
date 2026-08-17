@@ -47,6 +47,8 @@ demo  -> react, io, model
 
 - 기능 또는 버그 수정은 회귀 테스트를 먼저 추가하고 RED를 확인한 뒤 GREEN 구현을 한다.
 - 기존 테스트를 삭제하거나 assertion을 약화해 통과시키지 않는다.
+- 테스트 제목(`describe`/`it`/`test`)은 한글로 쓴다. API 식별자, 오류 코드와 `it.each` 플레이스홀더는 원문을 유지한다.
+- `describe` 직속 `it`이 20개 이상이면 관심사 단위 파일로 나눈다. 분할은 순수 이동으로 하고, 테스트 제목 집합과 총 개수가 변하지 않음을 `vitest run --reporter=json`으로 확인한다.
 - 공개 계약을 바꾸면 model, io, core, React adapter와 consumer fixture에 미치는 영향을 확인한다.
 - BlockNote의 소스 코드, 컴포넌트, 스타일과 아이콘을 복사하지 않는다.
 - `xl-*`, `@blocknote/*`, `@tiptap-pro/*`, GPL/AGPL 또는 상용 라이선스 패키지를 추가하지 않는다.
