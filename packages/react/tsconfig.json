@@ -9,5 +9,6 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/__tailwind-canary.ts"],
   "references": [{ "path": "../core" }]
 }

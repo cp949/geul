@@ -253,7 +253,7 @@ export const LinkToolbar = () => {
           </button>
           {toolbarState.rejected && (
             <span
-              className="geul:text-xs geul:text-[color:var(--be-color-danger,#d93025)]"
+              className="geul:text-[0.75rem] geul:text-[color:var(--be-color-danger,#d93025)]"
               role="alert"
             >
               Unsupported link URL

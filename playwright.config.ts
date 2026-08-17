@@ -17,7 +17,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm --filter @cp949/geul-demo dev --host 127.0.0.1",
+    // dist/styles.css가 src/*.tsx의 클래스 문자열에서 생성되므로, 단독
+    // test:e2e가 스테일 CSS로 돌지 않도록 react 패키지를 먼저 빌드한다
+    // (reuseExistingServer로 서버를 재사용하는 경우는 제외).
+    command:
+      "pnpm --filter @cp949/geul-react build && pnpm --filter @cp949/geul-demo dev --host 127.0.0.1",
     url: "http://127.0.0.1:5173",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

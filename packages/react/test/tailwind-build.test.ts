@@ -1,23 +1,36 @@
 import { execFile } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 
+const require = createRequire(import.meta.url);
+
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
-const tailwindBin = fileURLToPath(
-  new URL("../node_modules/.bin/tailwindcss", import.meta.url),
+// .bin의 셸 심(node_modules/.bin/tailwindcss)은 pnpm 링커 설정과 플랫폼에
+// 의존하므로, CLI 패키지의 bin 필드가 가리키는 JS 엔트리를 node로 직접
+// 실행한다(레포 관례: core의 public-types.test.ts와 동일 방식).
+const cliManifestPath = require.resolve("@tailwindcss/cli/package.json");
+const cliEntry = join(
+  dirname(cliManifestPath),
+  require(cliManifestPath).bin.tailwindcss,
 );
+// 주의: 캔러리 파일명을 .gitignore에 등록하면 안 된다 — Tailwind v4의 소스
+// 스캔은 명시적 @source 아래에서도 gitignore를 존중하므로 캔러리가 스캔에서
+// 빠져 이 테스트가 깨진다(실측 확인). 대신 dist 유출은 packages/react의
+// tsconfig exclude가 막고, 각 테스트가 afterEach/finally로 파일을 정리한다.
 const canaryPath = fileURLToPath(
   new URL("../src/__tailwind-canary.ts", import.meta.url),
 );
 
 const buildTailwindCss = async () => {
   const { stdout } = await execFileAsync(
-    tailwindBin,
-    ["-i", "src/tailwind.css", "-o", "-"],
+    process.execPath,
+    [cliEntry, "-i", "src/tailwind.css", "-o", "-"],
     { cwd: packageRoot },
   );
   return stdout;
@@ -51,6 +64,20 @@ describe("Tailwind CSS 빌드 파이프라인", () => {
     } finally {
       await rm(outsidePath, { force: true });
     }
+  });
+
+  it("CLI가 컴파일하는 엔진 버전이 devDependency tailwindcss 버전과 일치한다", async () => {
+    // tailwindcss(theme.css 제공)와 @tailwindcss/cli(컴파일 엔진)는 서로
+    // 독립적으로 고정된 exact devDep이라, 한쪽만 범프되면 한 버전의
+    // theme.css를 다른 버전 엔진으로 컴파일하는 스큐가 에러 없이 지나간다.
+    // 출력 헤더의 엔진 버전을 devDep 선언과 대조해 스큐를 고정한다.
+    const manifest = require(join(packageRoot, "package.json"));
+
+    const css = await buildTailwindCss();
+
+    expect(css).toContain(
+      `/*! tailwindcss v${manifest.devDependencies.tailwindcss} `,
+    );
   });
 
   it("생성 CSS에 @tailwind나 미해결 @import를 남기지 않는다", async () => {

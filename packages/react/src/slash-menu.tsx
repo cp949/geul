@@ -235,7 +235,7 @@ export const SlashMenu = () => {
           style={{ left: menuState.left, top: menuState.top }}
         >
           {items.length === 0 && (
-            <p className="geul:m-0 geul:px-2 geul:py-1.5 geul:text-xs geul:text-[color:var(--be-color-text-muted,#5f6368)]">
+            <p className="geul:m-0 geul:px-2 geul:py-1.5 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">
               No matches
             </p>
           )}
@@ -252,7 +252,7 @@ export const SlashMenu = () => {
               <span className="geul:font-semibold geul:text-[color:var(--be-color-text,#202124)]">
                 {item.label}
               </span>
-              <span className="geul:text-xs geul:text-[color:var(--be-color-text-muted,#5f6368)]">
+              <span className="geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">
                 {item.description}
               </span>
             </button>

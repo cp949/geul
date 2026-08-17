@@ -2,8 +2,12 @@ packages:
   - apps/*
   - fixtures/*
   - packages/*
+# '@parcel/watcher'(@tailwindcss/cli 전이 의존성)의 install script는
+# npm_config_build_from_source 없이는 no-op이고, 프리빌트 바이너리는
+# optionalDependencies로 설치되며, watcher 자체가 CLI --watch 경로에서만
+# lazy import된다(레포에 watch 사용처 없음) — 실행 허가가 불필요해 거부한다.
 allowBuilds:
-  '@parcel/watcher': true
+  '@parcel/watcher': false
 minimumReleaseAgeExclude:
   - '@tiptap/core@3.30.1'
   - '@tiptap/extension-blockquote@3.30.1'

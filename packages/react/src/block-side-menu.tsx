@@ -345,7 +345,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           role="menu"
           style={{ left: blockMenuState.left, top: blockMenuState.top }}
         >
-          <p className="geul:my-1 geul:mx-2 geul:text-xs geul:text-[color:var(--be-color-text-muted,#5f6368)]">
+          {/* text-[0.75rem]: text-xs는 line-height까지 방출해 구 CSS(font-size만
+              지정, line-height 상속)와 달라진다 — font-size만 지정한다 */}
+          <p className="geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">
             Turn into
           </p>
           {BLOCK_TYPE_OPTIONS.map((option) => (
@@ -360,7 +362,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
               {option.label}
             </button>
           ))}
-          <hr className="geul:my-1 geul:[border-style:none] geul:[border-top:1px_solid_var(--be-color-border,#dadce0)]" />
+          {/* mx-0: preflight 미포함이라 UA의 margin-inline auto가 남으면
+              flex column에서 hr이 0폭으로 붕괴한다 */}
+          <hr className="geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]" />
           <button
             className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-text,#202124)]`}
             onClick={handleDuplicate}

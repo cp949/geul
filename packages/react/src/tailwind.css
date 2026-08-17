@@ -16,3 +16,8 @@
 @import "tailwindcss/theme.css" prefix(geul);
 @import "tailwindcss/utilities.css" prefix(geul) source(none);
 @source "./";
+
+/* v4 기본 hover variant는 @media (hover: hover)로 게이트되어 터치 기기에서
+ * hover 규칙이 사라진다. 마이그레이션 전 CSS(:hover 무조건 적용)와 동작을
+ * 일치시키기 위해 무조건 적용으로 재정의한다. */
+@custom-variant hover (&:hover);
