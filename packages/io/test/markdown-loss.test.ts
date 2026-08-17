@@ -72,8 +72,8 @@ const richTableDocument: Document = {
   ],
 };
 
-describe("Markdown loss handling", () => {
-  it("strict export reports every unsupported table feature without markdown", () => {
+describe("Markdown 손실 처리", () => {
+  it("strict 내보내기는 markdown을 생성하지 않고 지원하지 않는 표 기능을 모두 보고한다", () => {
     expect(exportMarkdown(richTableDocument, { mode: "strict" })).toEqual({
       ok: false,
       error: {
@@ -117,7 +117,7 @@ describe("Markdown loss handling", () => {
     });
   });
 
-  it("lossy export expands merged cells and removes only lossy features", () => {
+  it("lossy 내보내기는 병합 셀을 펼치고 손실이 발생하는 기능만 제거한다", () => {
     const exported = exportMarkdown(richTableDocument, { mode: "lossy" });
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
@@ -193,7 +193,7 @@ describe("Markdown loss handling", () => {
     });
   });
 
-  it("reports underline locations outside tables", () => {
+  it("표 바깥의 밑줄 위치도 보고한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -221,7 +221,7 @@ describe("Markdown loss handling", () => {
     });
   });
 
-  it("rejects invalid documents before loss analysis in both modes", () => {
+  it("두 모드 모두 손실 분석 전에 잘못된 문서를 거부한다", () => {
     const invalidDocument = {
       ...richTableDocument,
       blocks: richTableDocument.blocks.map((block) =>
@@ -247,7 +247,7 @@ describe("Markdown loss handling", () => {
     });
   });
 
-  it("reports inline-code newlines and lossy export preserves the cell text", () => {
+  it("인라인 코드의 줄바꿈을 보고하고 lossy 내보내기는 셀 텍스트를 보존한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -336,7 +336,7 @@ describe("Markdown loss handling", () => {
     });
   });
 
-  it("reports header semantics and lossy export normalizes them to GFM", () => {
+  it("헤더 의미를 보고하고 lossy 내보내기는 GFM 형태로 정규화한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,

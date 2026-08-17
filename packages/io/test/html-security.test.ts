@@ -10,8 +10,8 @@ const dangerousFixture = readFileSync(
   "utf8",
 );
 
-describe("HTML security", () => {
-  it("ignores a comment before semantic paragraph content", () => {
+describe("HTML 보안", () => {
+  it("문단 앞의 주석은 무시하고 본문만 가져온다", () => {
     expect(importHtml("<!--note--><p>ok</p>")).toEqual({
       ok: true,
       value: {
@@ -31,7 +31,7 @@ describe("HTML security", () => {
     });
   });
 
-  it("returns an empty document for comment-only HTML", () => {
+  it("주석만 있는 HTML은 빈 문서로 가져온다", () => {
     expect(importHtml("<!--note-->")).toEqual({
       ok: true,
       value: {
@@ -41,7 +41,7 @@ describe("HTML security", () => {
     });
   });
 
-  it("does not treat script text inside a comment as unsafe HTML", () => {
+  it("주석 안의 script 텍스트는 위험한 HTML로 취급하지 않는다", () => {
     const result = importHtml("<!--<script>alert(1)</script>--><p>safe</p>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -56,7 +56,7 @@ describe("HTML security", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
-  it("removes executable HTML", () => {
+  it("실행 가능한 HTML을 제거한다", () => {
     const result = importHtml(dangerousFixture);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -97,7 +97,7 @@ describe("HTML security", () => {
     expect(exported.value).not.toMatch(/<\/?(?:svg|style|img|iframe|object)/i);
   });
 
-  it("drops unsafe links while preserving supported and relative links", () => {
+  it("지원하는 링크와 상대 경로는 남기고 위험한 링크만 제거한다", () => {
     const result = importHtml(
       '<p data-be-block-id="links"><a href="//evil.example">scheme-relative</a><a href="tel:+821012345678">phone</a><a href="/safe">relative</a></p>',
     );
@@ -141,7 +141,7 @@ describe("HTML security", () => {
     "\\evil.example",
     "/\\evil.example",
     "\\/evil.example",
-  ])("drops the browser authority variant %s with a warning", (href) => {
+  ])("브라우저가 authority로 해석하는 변형 링크를 경고와 함께 제거한다 — %s", (href) => {
     const result = importHtml(`<p><a href="${href}">unsafe</a></p>`);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -158,7 +158,7 @@ describe("HTML security", () => {
     ]);
   });
 
-  it("warns when a safe unsupported block is downgraded after sanitization", () => {
+  it("안전하지만 지원하지 않는 블록을 정화 후 강등하면 경고한다", () => {
     const result = importHtml("<aside>Loose <strong>text</strong></aside>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -181,7 +181,7 @@ describe("HTML security", () => {
     ]);
   });
 
-  it("does not export a whitespace-obfuscated executable URL", () => {
+  it("공백으로 위장한 실행 가능 URL은 내보내지 않는다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -205,7 +205,7 @@ describe("HTML security", () => {
     expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
   });
 
-  it("does not export an executable URL obfuscated with control characters", () => {
+  it("제어문자로 위장한 실행 가능 URL은 내보내지 않는다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -229,7 +229,7 @@ describe("HTML security", () => {
     });
   });
 
-  it("rejects oversized spans without expanding them into generated columns", () => {
+  it("과도한 span은 열 생성으로 확장하지 않고 거부한다", () => {
     let idCalls = 0;
     const result = importHtml(
       '<table><tbody><tr><td colspan="100001">oversized</td></tr></tbody></table>',
@@ -248,7 +248,7 @@ describe("HTML security", () => {
     expect(idCalls).toBeLessThan(20);
   });
 
-  it("accepts 10000 inferred columns and rejects 10001 before model allocation", () => {
+  it("추론 열 10000개는 허용하고 10001개는 모델 할당 전에 거부한다", () => {
     const atLimit = importHtml(
       `<table><tbody><tr>${"<td>x</td>".repeat(10_000)}</tr></tbody></table>`,
     );
@@ -277,7 +277,7 @@ describe("HTML security", () => {
     expect(idCalls).toBeLessThan(20);
   });
 
-  it("rejects an excessive explicit colgroup before generating columns", () => {
+  it("과도한 colgroup은 열 생성 전에 거부한다", () => {
     let idCalls = 0;
     const result = importHtml(
       `<table><colgroup>${"<col>".repeat(10_001)}</colgroup></table>`,

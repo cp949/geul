@@ -67,8 +67,8 @@ const documentWithMergedTable: Document = {
   ],
 };
 
-describe("HTML round trip", () => {
-  it("round-trips ids, merged cells, widths, headers and colors", () => {
+describe("HTML 왕복 변환", () => {
+  it("id·병합 셀·너비·헤더·색상을 왕복 변환에서 보존한다", () => {
     const exported = exportHtml(documentWithMergedTable);
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
@@ -82,7 +82,7 @@ describe("HTML round trip", () => {
     );
   });
 
-  it("serializes reversed storage arrays in logical browser column order", () => {
+  it("저장 배열의 순서가 뒤집혀 있어도 브라우저 논리 열 순서로 직렬화한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -144,7 +144,7 @@ describe("HTML round trip", () => {
     ]);
   });
 
-  it("keeps header metadata without thead when a header cell spans into body rows", () => {
+  it("헤더 셀이 본문 행까지 걸치면 thead 없이 헤더 메타데이터를 유지한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -211,7 +211,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("normalizes mark nesting and merges adjacent equal inline marks", () => {
+  it("mark 중첩 순서를 정규화하고 인접한 동일 인라인 mark를 병합한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -266,7 +266,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("round-trips safe LF and rejects model text that was not normalized", () => {
+  it("안전한 LF는 왕복 변환하고 정규화되지 않은 모델 텍스트는 거부한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -306,7 +306,7 @@ describe("HTML round trip", () => {
     }
   });
 
-  it("rejects control characters in IDs before HTML serialization", () => {
+  it("ID의 제어문자를 HTML 직렬화 전에 거부한다", () => {
     expect(
       exportHtml({
         formatVersion: 1,
@@ -319,7 +319,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("rejects documents with multiple link marks instead of emitting nested anchors", () => {
+  it("link mark가 여러 개인 문서는 중첩 anchor를 만들지 않고 거부한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -346,7 +346,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("imports ordinary HTML tables using injected ids and col widths", () => {
+  it("평범한 HTML 표는 주입된 id와 col 너비로 가져온다", () => {
     const ids = Array.from(
       { length: 10 },
       (_, index) => `generated-${index + 1}`,
@@ -425,7 +425,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("lowers unknown top-level text to a paragraph and resets revision", () => {
+  it("알 수 없는 최상위 텍스트는 문단으로 강등하고 revision을 초기화한다", () => {
     const ids = ["paragraph-generated", "heading-generated"];
     expect(
       importHtml("<aside>Loose <strong>text</strong></aside><h2>Title</h2>", {
@@ -481,7 +481,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("keeps default generated ids unique beside preserved canonical ids", () => {
+  it("보존된 정규 id 옆에서도 기본 생성 id가 겹치지 않는다", () => {
     expect(
       importHtml('<p data-be-block-id="html-1">Preserved</p><p>Generated</p>'),
     ).toEqual({
@@ -508,7 +508,7 @@ describe("HTML round trip", () => {
     });
   });
 
-  it("wraps invalid imported table grids as HTML_DOCUMENT_INVALID", () => {
+  it("가져온 표 그리드가 잘못되면 HTML_DOCUMENT_INVALID로 감싼다", () => {
     expect(
       importHtml(
         '<table><colgroup><col width="160"></colgroup><tbody><tr><td colspan="2">Too wide</td></tr></tbody></table>',

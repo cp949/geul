@@ -78,8 +78,8 @@ const escapedDocument: Document = {
   ],
 };
 
-describe("Markdown round trip", () => {
-  it("imports GFM headings, marks, links and tables", () => {
+describe("Markdown 왕복 변환", () => {
+  it("GFM의 제목·mark·링크·표를 가져온다", () => {
     const ids = Array.from(
       { length: 10 },
       (_, index) => `markdown-${index + 1}`,
@@ -177,7 +177,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("canonicalizes combined GFM marks into the shared stored order", () => {
+  it("겹쳐 쓴 GFM mark를 공용 저장 순서로 정규화한다", () => {
     const result = importMarkdown(
       "~~[***`combined`***](https://example.com)~~",
       { createId: () => "combined-marks" },
@@ -213,7 +213,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("round-trips LF text but strict export rejects unnormalized or invalid documents", () => {
+  it("LF 텍스트는 왕복 변환하고 strict 내보내기는 정규화되지 않았거나 잘못된 문서를 거부한다", () => {
     const safe: Document = {
       formatVersion: 1,
       revision: 0,
@@ -274,7 +274,7 @@ describe("Markdown round trip", () => {
     }
   });
 
-  it("strictly round-trips escaping and cell newlines through GFM", () => {
+  it("이스케이프와 셀 줄바꿈을 GFM으로 엄격하게 왕복 변환한다", () => {
     const exported = exportMarkdown(escapedDocument, { mode: "strict" });
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.code);
@@ -305,7 +305,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("downgrades deep headings and keeps raw HTML inert except table breaks", () => {
+  it("허용 깊이를 넘는 제목은 강등하고 원시 HTML은 표 줄바꿈을 제외하면 비활성으로 유지한다", () => {
     const result = importMarkdown(
       '#### Deep\n\n<div onclick="alert(1)">raw</div>\n\n| A |\n| - |\n| line<br />next |\n| literal<span>x</span> |',
     );
@@ -359,7 +359,7 @@ describe("Markdown round trip", () => {
     ).toEqual([]);
   });
 
-  it("validates generated ids at the import boundary", () => {
+  it("가져오기 경계에서 생성된 id를 검증한다", () => {
     expect(
       importMarkdown("Paragraph\n\nAnother", { createId: () => "duplicate" }),
     ).toMatchObject({
@@ -368,7 +368,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("accepts 10000 logical table cells and rejects larger tables early", () => {
+  it("논리 셀 10000개까지 허용하고 그보다 큰 표는 일찍 거부한다", () => {
     const tableSource = (rowCount: number, columnCount: number): string => {
       const row = `| ${Array.from({ length: columnCount }, () => "x").join(" | ")} |`;
       const delimiter = `| ${Array.from({ length: columnCount }, () => "-").join(" | ")} |`;
@@ -396,7 +396,7 @@ describe("Markdown round trip", () => {
     expect(idCalls).toBeLessThan(20);
   });
 
-  it("preserves list item and nested item boundaries as warned paragraphs", () => {
+  it("목록 항목과 중첩 항목의 경계를 경고와 함께 문단으로 보존한다", () => {
     const result = importMarkdown(
       "- First item\n- Second item\n  - Nested item",
     );
@@ -436,7 +436,7 @@ describe("Markdown round trip", () => {
     ]);
   });
 
-  it("preserves image alt and destination as visible text with a warning", () => {
+  it("이미지의 alt와 대상 주소를 경고와 함께 보이는 텍스트로 보존한다", () => {
     const result = importMarkdown(
       "Before ![Diagram](https://example.com/image.png) after",
     );
@@ -469,7 +469,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("preserves unsupported container block boundaries with a warning", () => {
+  it("지원하지 않는 컨테이너 블록의 경계를 경고와 함께 보존한다", () => {
     const result = importMarkdown("> Quote one\n>\n> Quote two");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -495,7 +495,7 @@ describe("Markdown round trip", () => {
     ]);
   });
 
-  it("preserves unsupported leaf blocks without duplicate inline warnings", () => {
+  it("지원하지 않는 leaf 블록을 인라인 경고 중복 없이 보존한다", () => {
     expect(importMarkdown("```ts\nconst x = 1;\nconst y = 2;\n```")).toEqual({
       ok: true,
       value: {
@@ -521,7 +521,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("warns when aligned GFM table metadata is discarded", () => {
+  it("GFM 표의 정렬 메타데이터를 버릴 때 경고한다", () => {
     const result = importMarkdown(
       "| Left | Right |\n| :--- | ---: |\n| 1 | 2 |",
     );
@@ -543,7 +543,7 @@ describe("Markdown round trip", () => {
     ]);
   });
 
-  it("resolves image references before conversion without exposing definitions", () => {
+  it("이미지 참조를 변환 전에 해석하고 정의는 문서에 남기지 않는다", () => {
     expect(
       importMarkdown(
         "Before ![Diagram][Diagram Ref] after\n\n[diagram ref]: https://example.com/image.png",
@@ -577,7 +577,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("preserves a missing image reference as alt plus normalized identifier", () => {
+  it("정의가 없는 이미지 참조는 alt와 정규화된 식별자로 보존한다", () => {
     expect(importMarkdown("Before ![Diagram][Missing Ref] after")).toEqual({
       ok: true,
       value: {
@@ -603,7 +603,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("recovers a missing collapsed image reference from source text", () => {
+  it("정의가 없는 collapsed 이미지 참조를 원본 텍스트에서 복원한다", () => {
     expect(importMarkdown("Before ![Diagram][] after")).toEqual({
       ok: true,
       value: {
@@ -629,7 +629,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("recovers a missing shortcut image reference from source text", () => {
+  it("정의가 없는 shortcut 이미지 참조를 원본 텍스트에서 복원한다", () => {
     expect(importMarkdown("Before ![Diagram] after")).toEqual({
       ok: true,
       value: {
@@ -655,7 +655,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("resolves collapsed and shortcut image references at their inline positions", () => {
+  it("collapsed와 shortcut 이미지 참조를 각자의 인라인 위치에서 해석한다", () => {
     expect(
       importMarkdown(
         "Collapsed ![Diagram][]\n\nShortcut ![Diagram]\n\n[diagram]: https://example.com/image.png",
@@ -703,7 +703,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("does not recover escaped image reference syntax", () => {
+  it("이스케이프된 이미지 참조 문법은 복원하지 않는다", () => {
     expect(
       importMarkdown("Before \\![Diagram][] and \\![Diagram] after"),
     ).toEqual({
@@ -728,7 +728,7 @@ describe("Markdown round trip", () => {
   it.each([
     "![Diagram][",
     "![Diagram][missing",
-  ])("preserves malformed image reference literal %s without warning", (source) => {
+  ])("깨진 이미지 참조 문자열은 경고 없이 그대로 보존한다 — %s", (source) => {
     expect(importMarkdown(source)).toEqual({
       ok: true,
       value: {
@@ -748,7 +748,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("preserves a malformed image reference before adjacent punctuation", () => {
+  it("구두점이 뒤따르는 깨진 이미지 참조를 그대로 보존한다", () => {
     expect(importMarkdown("Before ![Diagram][missing.")).toEqual({
       ok: true,
       value: {
@@ -768,7 +768,7 @@ describe("Markdown round trip", () => {
     });
   });
 
-  it("resolves link references through the same definition lookup", () => {
+  it("링크 참조도 같은 정의 조회 경로로 해석한다", () => {
     expect(
       importMarkdown(
         "Before [Guide][Project Docs] after\n\n[project docs]: https://example.com/docs",
