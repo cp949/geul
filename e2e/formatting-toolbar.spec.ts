@@ -8,9 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("shows the formatting toolbar only while text is selected", async ({
-  page,
-}) => {
+test("텍스트가 선택된 동안에만 서식 툴바를 표시한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
 
@@ -25,7 +23,7 @@ test("shows the formatting toolbar only while text is selected", async ({
   await expect(toolbar).not.toBeVisible();
 });
 
-test("toggles bold and underline on the selected text without losing the selection", async ({
+test("선택을 잃지 않고 선택 텍스트의 굵게와 밑줄을 토글한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -48,9 +46,7 @@ test("toggles bold and underline on the selected text without losing the selecti
   await expect(editable.locator("u")).toHaveText("Hello R1");
 });
 
-test("toggles strikethrough and inline code on the selected text", async ({
-  page,
-}) => {
+test("선택 텍스트의 취소선과 인라인 코드를 토글한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("Hello R1");
@@ -118,7 +114,7 @@ test("소비자 전역 CSS가 lucide 클래스를 겨냥해도 아이콘 크기�
   expect(box?.height).toBe(16);
 });
 
-test("undoes a mark toggle as one unit", async ({ page }) => {
+test("mark 토글을 undo 1회로 복원한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("Hello R1");
@@ -132,7 +128,7 @@ test("undoes a mark toggle as one unit", async ({ page }) => {
   await expect(editable).toHaveText("Hello R1");
 });
 
-test("positions the toolbar next to the selected text", async ({ page }) => {
+test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("first");

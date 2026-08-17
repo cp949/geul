@@ -8,7 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("opens a searchable menu on '/' and converts the block on selection", async ({
+test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -27,7 +27,7 @@ test("opens a searchable menu on '/' and converts the block on selection", async
   await expect(editable.locator("p")).toHaveCount(0);
 });
 
-test("undoes a slash menu selection as one unit", async ({ page }) => {
+test("슬래시 메뉴 선택을 undo 1회로 복원한다", async ({ page }) => {
   const { editable } = await openDemo(page);
 
   await editable.click();
@@ -41,9 +41,7 @@ test("undoes a slash menu selection as one unit", async ({ page }) => {
   await expect(editable.locator("p")).toHaveText("/h2");
 });
 
-test("navigates and selects a menu item with the keyboard", async ({
-  page,
-}) => {
+test("키보드만으로 메뉴 항목을 이동하고 선택한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const menu = page.getByRole("listbox", { name: "Slash menu" });
 
@@ -58,9 +56,7 @@ test("navigates and selects a menu item with the keyboard", async ({
   await expect(editable.locator("h1")).toHaveCount(1);
 });
 
-test("closes the menu on Escape without changing the block", async ({
-  page,
-}) => {
+test("Escape로 메뉴를 닫으면 블록은 그대로 둔다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const menu = page.getByRole("listbox", { name: "Slash menu" });
 
@@ -74,7 +70,7 @@ test("closes the menu on Escape without changing the block", async ({
   await expect(editable.locator("p")).toHaveText("/head");
 });
 
-test("adds a block from the hover add-block button and opens the menu for it", async ({
+test("hover 시 나타나는 블록 추가 버튼으로 블록을 넣고 그 블록의 메뉴를 연다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -98,7 +94,7 @@ test("adds a block from the hover add-block button and opens the menu for it", a
   await expect(editable.locator("p").last()).toHaveText("second block");
 });
 
-test("changes block type from the formatting toolbar select and preserves content", async ({
+test("서식 툴바의 select로 블록 종류를 바꿔도 내용을 보존한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

@@ -8,9 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("creates a link on the selected text and undoes it as one unit", async ({
-  page,
-}) => {
+test("선택 텍스트에 링크를 만들고 undo 1회로 복원한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("Hello R1");
@@ -34,9 +32,7 @@ test("creates a link on the selected text and undoes it as one unit", async ({
   await expect(editable).toHaveText("Hello R1");
 });
 
-test("edits and removes an existing link from a collapsed cursor", async ({
-  page,
-}) => {
+test("collapsed 커서에서 기존 링크를 편집하고 제거한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("Hello R1");
@@ -73,7 +69,7 @@ test("edits and removes an existing link from a collapsed cursor", async ({
   await expect(editable).toHaveText("Hello R1");
 });
 
-test("rejects a disallowed link URL and keeps the document unchanged", async ({
+test("허용되지 않는 링크 URL을 거부하고 문서를 그대로 둔다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

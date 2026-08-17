@@ -8,7 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("edits and restores JSON, HTML and markdown", async ({ page }) => {
+test("JSON·HTML·markdown을 편집하고 복원한다", async ({ page }) => {
   const { editor, editable } = await openDemo(page);
   const source = page.getByLabel("Document source");
 
@@ -44,7 +44,7 @@ test("edits and restores JSON, HTML and markdown", async ({ page }) => {
   await expect(editor).not.toContainText("Temporary GFM text");
 });
 
-test("sanitizes dangerous HTML through the visible import and export controls", async ({
+test("화면의 가져오기·내보내기 컨트롤을 거쳐 위험한 HTML을 정화한다", async ({
   page,
 }) => {
   const { editor } = await openDemo(page);
@@ -73,7 +73,7 @@ test("sanitizes dangerous HTML through the visible import and export controls", 
   );
 });
 
-test("rejects merged tables in the editor while exposing strict and lossy GFM results", async ({
+test("에디터는 병합된 표를 거부하고 strict와 lossy GFM 결과를 함께 보여준다", async ({
   page,
 }) => {
   const { editor, editable } = await openDemo(page);
@@ -105,7 +105,7 @@ test("rejects merged tables in the editor while exposing strict and lossy GFM re
   await expect(source).toHaveValue(/\| Header\s+\|/);
 });
 
-test("exports reversed anchors in browser grid order and preserves crossing header metadata", async ({
+test("순서가 뒤집힌 앵커도 브라우저 그리드 순서로 내보내고 걸친 헤더 메타데이터를 보존한다", async ({
   page,
 }) => {
   await openDemo(page);
