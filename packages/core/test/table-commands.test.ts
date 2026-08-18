@@ -959,4 +959,28 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });
+
+  it("표 밖에서 빈 TabularData로 호출하면 INVALID_TABLE_SIZE로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON();
+
+    const emptyRows: TabularData = { columnCount: 1, rows: [] };
+    const emptyColumns: TabularData = {
+      columnCount: 0,
+      rows: [{ cells: [] }],
+    };
+
+    expect(pasteTabularData(editor, emptyRows, createId)).toEqual({
+      ok: false,
+      error: { code: "INVALID_TABLE_SIZE" },
+    });
+    expect(pasteTabularData(editor, emptyColumns, createId)).toEqual({
+      ok: false,
+      error: { code: "INVALID_TABLE_SIZE" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
 });

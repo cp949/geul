@@ -503,6 +503,14 @@ export const pasteTabularData = (
     return result.ok ? { ok: true, value: { blockId: tableBlockId } } : result;
   }
 
+  // 표 밖 분기는 buildInitialTable로 새 표를 만든다 — insertTable과 같은
+  // 이유로 행/열이 1보다 작은 요청을 사전에 거절해야 한다. 여기서 막지
+  // 않으면 0행/0열 TableBlock이 그대로 tableBlockToTiptapNode(스키마
+  // 비검증 NodeType.create)를 거쳐 실제 트랜잭션으로 문서에 삽입된다.
+  if (data.rows.length < 1 || data.columnCount < 1) {
+    return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
+  }
+
   const { from, to } = state.selection;
   const afterBlockId = currentTopLevelBlockId(state.doc, from, to);
   if (afterBlockId === null) {
