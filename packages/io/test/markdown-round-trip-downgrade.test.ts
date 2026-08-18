@@ -128,25 +128,30 @@ describe("Markdown 강등 경고", () => {
     });
   });
 
-  it("GFM 표의 정렬 메타데이터를 버릴 때 경고한다", () => {
+  it("GFM 표의 열 정렬을 그 열의 모든 셀에 매핑한다", () => {
     const result = importMarkdown(
       "| Left | Right |\n| :--- | ---: |\n| 1 | 2 |",
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
-    expect(result.value.document.blocks[0]).toMatchObject({
-      id: "markdown-1",
-      type: "table",
-      headerRows: 1,
-      headerColumns: 0,
-    });
-    expect(result.value.warnings).toEqual([
-      {
-        kind: "TABLE_ALIGNMENT_DISCARDED",
-        blockId: "markdown-1",
-        message: "Table alignment was discarded during import",
-      },
+    expect(result.value.warnings).toEqual([]);
+    const table = result.value.document.blocks[0];
+    if (table?.type !== "table") throw new Error("Expected a table");
+    expect(table.rows[0]?.cells.map((c) => c.align)).toEqual(["left", "right"]);
+    expect(table.rows[1]?.cells.map((c) => c.align)).toEqual(["left", "right"]);
+  });
+
+  it("정렬 구문이 없는 열은 align을 지정하지 않는다", () => {
+    const result = importMarkdown("| A | B |\n| - | - |\n| 1 | 2 |");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const table = result.value.document.blocks[0];
+    if (table?.type !== "table") throw new Error("Expected a table");
+    expect(table.rows[0]?.cells.map((c) => c.align)).toEqual([
+      undefined,
+      undefined,
     ]);
   });
 });

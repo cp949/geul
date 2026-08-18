@@ -43,6 +43,9 @@ const cellNode = (
   if (cell.backgroundColor !== undefined) {
     properties.dataBeBackgroundColor = cell.backgroundColor;
   }
+  if (cell.align !== undefined) {
+    properties.dataBeAlign = cell.align;
+  }
 
   return htmlElement(
     isColumnHeader || isRowHeader ? "th" : "td",

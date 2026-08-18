@@ -358,4 +358,25 @@ describe("Markdown 왕복 변환", () => {
       ),
     ).toEqual([]);
   });
+
+  it("정렬이 있는 GFM 표를 가져와 lossy로 다시 내보내면 같은 정렬이 남는다", () => {
+    const imported = importMarkdown(
+      "| Left | Center | Right |\n| :--- | :---: | ---: |\n| a | b | c |",
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) throw new Error(imported.error.message);
+
+    const exported = exportMarkdown(imported.value.document, {
+      mode: "lossy",
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(exported.value.warnings).toEqual([]);
+    expect(exported.value.markdown).toContain(":---");
+    // remark-stringify는 열 폭(헤더 텍스트 길이)에 맞춰 구분선 대시 개수를
+    // 늘려 정렬한다("Center"는 6자이므로 ":----:") — 정확한 대시 개수가 아니라
+    // 콜론-대시-콜론 형태(가운데 정렬 구문)의 존재만 확인한다.
+    expect(exported.value.markdown).toMatch(/:-+:/);
+    expect(exported.value.markdown).toContain("---:");
+  });
 });

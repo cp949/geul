@@ -351,6 +351,9 @@ const parseTable = (
         layout.element,
         "dataBeBackgroundColor",
       );
+      const align = propertyString(layout.element, "dataBeAlign") as
+        | TableBlock["rows"][number]["cells"][number]["align"]
+        | undefined;
 
       return {
         id: propertyString(layout.element, "dataBeCellId") ?? createId(),
@@ -360,6 +363,7 @@ const parseTable = (
         content: inlineContentFromNodes(layout.element.children),
         ...(textColor === undefined ? {} : { textColor }),
         ...(backgroundColor === undefined ? {} : { backgroundColor }),
+        ...(align === undefined ? {} : { align }),
       };
     }),
   }));

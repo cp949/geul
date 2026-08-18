@@ -1,4 +1,4 @@
-import type { Document, InlineContent } from "@cp949/geul-model";
+import type { Document, InlineContent, TableBlock } from "@cp949/geul-model";
 
 const DEFAULT_COLUMN_WIDTH = 160;
 
@@ -6,6 +6,7 @@ export type MarkdownLoss = {
   kind:
     | "MERGED_CELL"
     | "COLUMN_WIDTH"
+    | "COLUMN_ALIGN"
     | "CELL_COLOR"
     | "UNDERLINE"
     | "HEADER_ROW"
@@ -28,6 +29,22 @@ const hasInlineCodeNewline = (content: InlineContent): boolean =>
       item.text.includes("\n") &&
       (item.marks ?? []).some((mark) => mark.type === "code"),
   );
+
+const columnAlignAgrees = (block: TableBlock, columnId: string): boolean => {
+  let seen: "left" | "center" | "right" | null | undefined;
+  for (const row of block.rows) {
+    for (const cell of row.cells) {
+      if (cell.columnId !== columnId) continue;
+      const align = cell.align ?? null;
+      if (seen === undefined) {
+        seen = align;
+        continue;
+      }
+      if (seen !== align) return false;
+    }
+  }
+  return true;
+};
 
 export const analyzeMarkdownLoss = (document: Document): MarkdownLoss[] => {
   const losses: MarkdownLoss[] = [];
@@ -72,6 +89,13 @@ export const analyzeMarkdownLoss = (document: Document): MarkdownLoss[] => {
           kind: "COLUMN_WIDTH",
           blockId: block.id,
           message: `Column ${column.id} has non-default width ${column.width}`,
+        });
+      }
+      if (!columnAlignAgrees(block, column.id)) {
+        losses.push({
+          kind: "COLUMN_ALIGN",
+          blockId: block.id,
+          message: `Column ${column.id} has cells with different align values`,
         });
       }
     }

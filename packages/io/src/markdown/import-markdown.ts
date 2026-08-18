@@ -167,7 +167,6 @@ export type ImportWarning = {
     | "RAW_HTML_DOWNGRADED"
     | "LIST_DOWNGRADED"
     | "IMAGE_DOWNGRADED"
-    | "TABLE_ALIGNMENT_DISCARDED"
     | "UNSUPPORTED_BLOCK_DOWNGRADED"
     | "UNSUPPORTED_INLINE_DOWNGRADED";
   blockId: string;
@@ -403,13 +402,6 @@ const tableFromNode = (
   warnings: ImportWarning[],
 ): Document["blocks"][number] => {
   const tableId = createId();
-  if (node.align?.some((alignment) => alignment !== null) === true) {
-    warnings.push({
-      kind: "TABLE_ALIGNMENT_DISCARDED",
-      blockId: tableId,
-      message: "Table alignment was discarded during import",
-    });
-  }
   const sourceRows = node.children ?? [];
   const columnCount = sourceRows.reduce(
     (maximum, row) => Math.max(maximum, row.children?.length ?? 0),
@@ -435,6 +427,7 @@ const tableFromNode = (
       cells: columns.map((column, columnIndex) => {
         const cellId = createId();
         const sourceCell = sourceRow.children?.[columnIndex];
+        const align = node.align?.[columnIndex] ?? null;
         return {
           id: cellId,
           columnId: column.id,
@@ -450,6 +443,7 @@ const tableFromNode = (
               inTableCell: true,
             },
           ),
+          ...(align === null ? {} : { align }),
         };
       }),
     };

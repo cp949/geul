@@ -394,4 +394,75 @@ describe("Markdown 손실 처리", () => {
       },
     });
   });
+
+  it("열 안에서 정렬이 갈리면 strict는 실패하고 lossy는 열 정렬을 비운 채 경고한다", () => {
+    const mismatchedAlignDocument: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "table-1",
+          type: "table",
+          columns: [{ id: "column-1", width: 160 }],
+          rows: [
+            {
+              id: "row-1",
+              cells: [
+                {
+                  id: "cell-1",
+                  columnId: "column-1",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [{ text: "a" }],
+                  align: "left",
+                },
+              ],
+            },
+            {
+              id: "row-2",
+              cells: [
+                {
+                  id: "cell-2",
+                  columnId: "column-1",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [{ text: "b" }],
+                  align: "right",
+                },
+              ],
+            },
+          ],
+          headerRows: 1,
+          headerColumns: 0,
+        },
+      ],
+    };
+
+    expect(exportMarkdown(mismatchedAlignDocument, { mode: "strict" })).toEqual(
+      {
+        ok: false,
+        error: {
+          code: "MARKDOWN_LOSS_NOT_ALLOWED",
+          losses: [
+            {
+              kind: "COLUMN_ALIGN",
+              blockId: "table-1",
+              message: "Column column-1 has cells with different align values",
+            },
+          ],
+        },
+      },
+    );
+
+    const lossy = exportMarkdown(mismatchedAlignDocument, { mode: "lossy" });
+    expect(lossy.ok).toBe(true);
+    if (!lossy.ok) throw new Error(lossy.error.message);
+    expect(lossy.value.warnings).toEqual([
+      {
+        kind: "COLUMN_ALIGN",
+        blockId: "table-1",
+        message: "Column column-1 has cells with different align values",
+      },
+    ]);
+  });
 });

@@ -17,6 +17,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
     "dataBeColumnId",
     "dataBeTextColor",
     "dataBeBackgroundColor",
+    "dataBeAlign",
   ],
   th: [
     "rowSpan",
@@ -26,6 +27,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
     "dataBeColumnId",
     "dataBeTextColor",
     "dataBeBackgroundColor",
+    "dataBeAlign",
   ],
   tr: ["dataBeRowId"],
 };

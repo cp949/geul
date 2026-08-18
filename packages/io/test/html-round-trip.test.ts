@@ -518,4 +518,56 @@ describe("HTML 왕복 변환", () => {
       error: { code: "HTML_DOCUMENT_INVALID" },
     });
   });
+
+  it("셀 align을 왕복 변환에서 보존한다", () => {
+    const documentWithAlign: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "table-1",
+          type: "table",
+          columns: [{ id: "column-1", width: 160 }],
+          rows: [
+            {
+              id: "row-1",
+              cells: [
+                {
+                  id: "cell-1",
+                  columnId: "column-1",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [{ text: "Centered" }],
+                  align: "center",
+                },
+              ],
+            },
+          ],
+          headerRows: 0,
+          headerColumns: 0,
+        },
+      ],
+    };
+
+    const exported = exportHtml(documentWithAlign);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(exported.value).toContain('data-be-align="center"');
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: { document: documentWithAlign, warnings: [] },
+    });
+  });
+
+  it("허용 목록 밖 data-be-align 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
+    const html =
+      '<table data-be-block-id="table-1"><colgroup><col data-be-column-id="column-1" data-be-width="160"></colgroup><tbody><tr data-be-row-id="row-1"><td data-be-cell-id="cell-1" data-be-column-id="column-1" rowspan="1" colspan="1" data-be-align="justify"></td></tr></tbody></table>';
+
+    const result = importHtml(html);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
+  });
 });
