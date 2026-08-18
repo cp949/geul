@@ -27,7 +27,7 @@
 
 ```text
 io    -> model
-core  -> model
+core  -> model, io
 react -> core
 demo  -> react, io, model
 ```
