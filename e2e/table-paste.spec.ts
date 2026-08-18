@@ -1,6 +1,6 @@
 /**
  * 클립보드 붙여넣기로 표가 만들어지는 실제 브라우저 동작을 검증한다.
- * Google Sheets HTML(서식 포함), TSV, 탭 없는 일반 텍스트를 함께 다룬다.
+ * Google Sheets/Excel HTML(서식 포함), TSV, 탭 없는 일반 텍스트를 함께 다룬다.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -62,6 +62,47 @@ test("Google Sheets 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 
   await expect(cells.nth(2)).toContainText("Alice");
   await expect(cells.nth(3)).toContainText("90");
   await expect(cells.nth(3)).toHaveCSS("text-align", "right");
+});
+
+test("Excel 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 생긴다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+
+  // Excel은 background-color 대신 background 축약형을 쓰고 mso-* 선언과
+  // 조건부 주석을 함께 심는다. 마크업 들여쓰기가 셀 텍스트 노드에 그대로
+  // 실리는 것도 Excel 클립보드 HTML의 실제 특징이다.
+  const excelHtml =
+    '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+    'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+    "<head><meta name=ProgId content=Excel.Sheet>" +
+    "<style>.xl65 {background:#FFFF00;}</style></head><body>" +
+    "<table border=0 cellpadding=0 cellspacing=0 width=128 " +
+    "style='border-collapse:collapse;width:96pt'>" +
+    "<!--StartFragment-->" +
+    "<col width=64 style='width:48pt'><col width=64 style='width:48pt'>" +
+    "<tr height=20 style='height:15.0pt'>" +
+    "<td height=20 style='height:15.0pt;background:#FFFF00;color:#FF0000;" +
+    "mso-number-format:General'>\n\tName\t</td>" +
+    "<td style='text-align:right;mso-number-format:General'>Score</td></tr>" +
+    "<tr height=20 style='height:15.0pt'>" +
+    "<td height=20 style='height:15.0pt'>Alice</td>" +
+    "<td style='text-align:right'>90</td></tr>" +
+    "<!--EndFragment--></table></body></html>";
+
+  await editable.evaluate(dispatchPaste, { html: excelHtml });
+
+  const table = editable.locator("table");
+  await expect(table).toHaveCount(1);
+  const cells = table.locator("td");
+  await expect(cells).toHaveCount(4);
+  await expect(cells.nth(0)).toHaveText("Name");
+  await expect(cells.nth(0)).toHaveCSS("background-color", "rgb(255, 255, 0)");
+  await expect(cells.nth(0)).toHaveCSS("color", "rgb(255, 0, 0)");
+  await expect(cells.nth(1)).toHaveCSS("text-align", "right");
+  await expect(cells.nth(2)).toContainText("Alice");
+  await expect(cells.nth(3)).toContainText("90");
 });
 
 test("TSV를 표 밖에 붙이면 서식 없는 표가 생긴다", async ({ page }) => {

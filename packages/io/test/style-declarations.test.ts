@@ -20,6 +20,31 @@ describe("parseStyleDeclarations", () => {
     });
   });
 
+  it("background 축약형이 순수 색상 리터럴이면 배경색으로 읽는다", () => {
+    // Excel 클립보드 HTML은 background-color 대신 background 축약형을 쓴다.
+    expect(parseStyleDeclarations("background:#FFFF00")).toEqual({
+      backgroundColor: "#FFFF00",
+    });
+    expect(parseStyleDeclarations("background: rgb(255, 255, 0)")).toEqual({
+      backgroundColor: "#FFFF00",
+    });
+  });
+
+  it("색상 외 값이 섞인 background 축약형은 버린다", () => {
+    expect(
+      parseStyleDeclarations("background: url(http://x/a.png) no-repeat #fff"),
+    ).toEqual({});
+  });
+
+  it("나중에 선언된 background/background-color가 앞선 값을 덮는다", () => {
+    expect(
+      parseStyleDeclarations("background:#FFFF00;background-color:#00FF00"),
+    ).toEqual({ backgroundColor: "#00FF00" });
+    expect(
+      parseStyleDeclarations("background-color:#00FF00;background:#FFFF00"),
+    ).toEqual({ backgroundColor: "#FFFF00" });
+  });
+
   it("알 수 없는 선언은 조용히 버린다", () => {
     expect(
       parseStyleDeclarations("font-family: Arial; mso-number-format:'0';"),

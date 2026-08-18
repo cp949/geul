@@ -31,7 +31,9 @@ export const sanitizeCellText = (text: string): string => {
 export const collapseHtmlWhitespace = (nodes: HtmlNode[]): void => {
   for (const node of nodes) {
     if (node.type === "text") {
-      node.value = sanitizeCellText(node.value.replace(HTML_WHITESPACE_RUN, " "));
+      node.value = sanitizeCellText(
+        node.value.replace(HTML_WHITESPACE_RUN, " "),
+      );
       continue;
     }
     if (node.type === "element") collapseHtmlWhitespace(node.children);
@@ -90,7 +92,10 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
     // 빈 세그먼트가 사라지면서 같은 mark 조합이 이웃하게 될 수 있다 —
     // inlineContentFromNodes와 같은 병합 형태를 유지한다.
     const previous = normalized.at(-1);
-    if (previous !== undefined && marksKey(previous.marks) === marksKey(item.marks)) {
+    if (
+      previous !== undefined &&
+      marksKey(previous.marks) === marksKey(item.marks)
+    ) {
       previous.text += text;
       continue;
     }

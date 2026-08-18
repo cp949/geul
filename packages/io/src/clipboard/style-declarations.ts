@@ -36,9 +36,13 @@ const normalizeColor = (rawValue: string): string | undefined => {
   return undefined;
 };
 
-// style 속성 문자열에서 color/background-color/text-align 세 선언만 읽는다.
-// 나머지 CSS 선언과, 이 세 선언이라도 우리 canonical 형식을 통과하지
-// 못하는 값은 조용히 버린다 — 파싱 실패로 전체 붙여넣기를 거절하지 않는다.
+// style 속성 문자열에서 color/background-color/background/text-align 네
+// 선언만 읽는다. 나머지 CSS 선언과, 이 네 선언이라도 우리 canonical 형식을
+// 통과하지 못하는 값은 조용히 버린다 — 파싱 실패로 전체 붙여넣기를 거절하지
+// 않는다. background 축약형은 Excel 클립보드 HTML이 실제로 쓰는 표기라
+// 읽되, 값 전체가 순수 색상 리터럴일 때만 반영한다(normalizeColor가 hex와
+// rgb()/rgba()만 통째로 매칭하므로 `url(...) #fff` 같은 복합 축약형은
+// 자동으로 undefined가 된다).
 export const parseStyleDeclarations = (style: string): StyleDeclarations => {
   const result: StyleDeclarations = {};
 
@@ -50,7 +54,7 @@ export const parseStyleDeclarations = (style: string): StyleDeclarations => {
     if (property === "color") {
       const normalized = normalizeColor(rawValue);
       if (normalized !== undefined) result.color = normalized;
-    } else if (property === "background-color") {
+    } else if (property === "background-color" || property === "background") {
       const normalized = normalizeColor(rawValue);
       if (normalized !== undefined) result.backgroundColor = normalized;
     } else if (property === "text-align") {

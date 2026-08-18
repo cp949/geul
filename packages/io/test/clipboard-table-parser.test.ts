@@ -1,6 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 
+// Excel이 클립보드에 심는 대표 구조: office 네임스페이스, mso-* 선언, style
+// 블록, StartFragment 주석, colgroup 없는 col, background 축약형 배경색,
+// 그리고 셀 텍스트에 그대로 실리는 마크업 들여쓰기.
+const excelClipboardHtml = [
+  '<html xmlns:o="urn:schemas-microsoft-com:office:office"',
+  ' xmlns:x="urn:schemas-microsoft-com:office:excel">',
+  "<head><meta name=ProgId content=Excel.Sheet>",
+  "<style><!--table {mso-displayed-decimal-separator:\\.;}",
+  ".xl65 {background:#FFFF00;}--></style></head>",
+  '<body link="#0563C1" vlink="#954F72">',
+  "<table border=0 cellpadding=0 cellspacing=0 width=128",
+  " style='border-collapse:collapse;width:96pt'>",
+  "<!--StartFragment-->",
+  "<col width=64 style='width:48pt'><col width=64 style='width:48pt'>",
+  "<tr height=20 style='height:15.0pt'>",
+  "<td height=20 width=64 style='height:15.0pt;width:48pt;",
+  "background:#FFFF00;color:#FF0000;mso-number-format:General'>",
+  "\n\tName\n\t</td>",
+  "<td width=64 style='width:48pt;text-align:right;",
+  "mso-number-format:General'>Score</td></tr>",
+  "<tr height=20 style='height:15.0pt'>",
+  "<td height=20 style='height:15.0pt'>Alice</td>",
+  "<td style='text-align:right'>90</td></tr>",
+  "<!--EndFragment--></table></body></html>",
+].join("");
+
 describe("parseClipboardTable", () => {
   it("HTML 표를 TabularData로 파싱한다", () => {
     const html =
@@ -35,6 +61,32 @@ describe("parseClipboardTable", () => {
     if (!result.ok) return;
     expect(result.value.rows[0]?.cells[0]).toMatchObject({
       backgroundColor: "#FF0000",
+      align: "right",
+    });
+  });
+
+  it("Excel 대표 클립보드 HTML의 표·색상·정렬을 읽는다", () => {
+    const result = parseClipboardTable({ html: excelClipboardHtml });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.columnCount).toBe(2);
+    expect(result.value.rows).toHaveLength(2);
+    // background 축약형과 mso-* 선언이 섞여 있어도 색상만 정확히 읽는다.
+    expect(result.value.rows[0]?.cells[0]).toMatchObject({
+      content: [{ text: "Name" }],
+      backgroundColor: "#FFFF00",
+      textColor: "#FF0000",
+    });
+    expect(result.value.rows[0]?.cells[1]).toMatchObject({
+      content: [{ text: "Score" }],
+      align: "right",
+    });
+    expect(result.value.rows[1]?.cells[0]?.content).toEqual([
+      { text: "Alice" },
+    ]);
+    expect(result.value.rows[1]?.cells[1]).toMatchObject({
+      content: [{ text: "90" }],
       align: "right",
     });
   });
