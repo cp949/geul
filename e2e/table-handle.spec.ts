@@ -186,9 +186,7 @@ test("Escape로 리사이즈를 취소하면 너비가 원래대로 복원된다
   await expect(editable).toBeVisible();
 });
 
-test("열 너비가 저장 JSON에 보존되고, 표 문서 로드는 차단 오류를 보고한다", async ({
-  page,
-}) => {
+test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
 
@@ -212,14 +210,23 @@ test("열 너비가 저장 JSON에 보존되고, 표 문서 로드는 차단 오
   const json = await source.inputValue();
   expect(json).toContain('"width": 220');
 
-  // 표 문서 로드는 슬라이스 12 전까지 EDITOR_FEATURE_UNAVAILABLE로 차단된다.
-  // 로드는 실패를 보고해야 하고, 에디터의 기존 표는 그대로 남아야 한다.
+  // 슬라이스 12: 저장한 JSON을 다시 로드하면 열 너비가 복원돼야 한다.
+  // 로드 전에 셀 내용을 바꿔 두어, 로드가 저장 시점 상태로 실제로
+  // 되돌리는지(동일 문서 재적용 최적화에 걸리지 않는지) 확인한다.
+  await table.locator("td").first().click();
+  await page.keyboard.type("temp");
+  await expect(table).toContainText("temp");
+
   await source.fill(json);
   await page.getByRole("button", { name: "Load JSON" }).click();
 
-  await expect(page.getByText("EDITOR_FEATURE_UNAVAILABLE")).toBeVisible();
+  await expect(page.getByText("JSON parsing succeeded.")).toBeVisible();
   await expect(editable.locator("table")).toHaveCount(1);
-  await expect(firstColumn).toHaveAttribute("style", /width:\s*220px/);
+  await expect(editable.locator("table")).not.toContainText("temp");
+  await expect(editable.locator("table colgroup col").first()).toHaveAttribute(
+    "style",
+    /width:\s*220px/,
+  );
 });
 
 test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다", async ({

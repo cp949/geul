@@ -73,10 +73,10 @@ test("화면의 가져오기·내보내기 컨트롤을 거쳐 위험한 HTML을
   );
 });
 
-test("에디터는 병합된 표를 거부하고 strict와 lossy GFM 결과를 함께 보여준다", async ({
+test("병합된 표를 에디터에 로드하고 strict GFM은 거절, lossy GFM은 성공한다", async ({
   page,
 }) => {
-  const { editor, editable } = await openDemo(page);
+  const { editable } = await openDemo(page);
   const source = page.getByLabel("Document source");
   const feedback = page.getByLabel("Conversion feedback");
   const tableHtml =
@@ -86,9 +86,15 @@ test("에디터는 병합된 표를 거부하고 strict와 lossy GFM 결과를 �
   await source.fill(tableHtml);
   await page.getByRole("button", { name: "Import HTML" }).click();
 
-  await expect(editor).toContainText("Editor stays intact");
-  await expect(feedback).toContainText("EDITOR_FEATURE_UNAVAILABLE");
-  await expect(feedback).toContainText('"feature": "table"');
+  // 슬라이스 12: 표 문서 로드 차단이 풀려 병합 표가 에디터에 직접 로드된다.
+  await expect(feedback).toContainText("HTML conversion succeeded.");
+  const importedTable = editable.locator("table");
+  await expect(importedTable).toHaveCount(1);
+  await expect(importedTable).toContainText("Header");
+  await expect(importedTable).toContainText("Left");
+  await expect(
+    importedTable.locator('td[colspan="2"], th[colspan="2"]'),
+  ).toHaveCount(1);
 
   await page.getByRole("button", { name: "Export GFM strict" }).click();
   await expect(feedback).toContainText("Strict GFM export failed.");

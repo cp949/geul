@@ -1,11 +1,10 @@
 import {
   type Document,
-  type HeadingBlock,
   type InlineContent,
   isCanonicalTextMarks,
   isSupportedLinkHref,
-  type ParagraphBlock,
   type Result,
+  type TableBlock,
   type TextMark,
 } from "@cp949/geul-model";
 
@@ -69,9 +68,21 @@ export const inlineContentViolation = (
 };
 
 const validateEditableContent = (
-  blocks: Array<ParagraphBlock | HeadingBlock>,
+  blocks: Document["blocks"],
 ): Result<void, EditorError> => {
   for (const block of blocks) {
+    if (block.type === "table") {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          const violation = inlineContentViolation(cell.content);
+          if (violation !== null) {
+            return invalid(`Block ${block.id} cell ${cell.id} ${violation}`);
+          }
+        }
+      }
+      continue;
+    }
+
     const violation = inlineContentViolation(block.content);
     if (violation !== null) {
       return invalid(`Block ${block.id} ${violation}`);
@@ -98,42 +109,83 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
   }
 };
 
+const inlineContentToTiptap = (content: InlineContent): TiptapJsonNode[] =>
+  content.map((item) => ({
+    type: "text",
+    text: item.text,
+    ...(item.marks === undefined
+      ? {}
+      : { marks: item.marks.map(markToTiptap) }),
+  }));
+
+// PIT-0004: 저장 배열 순서는 논리 열 순서의 권위가 아니다. ProseMirror 표는
+// 셀의 물리 문서 순서(형제 노드 순서)로 열 위치를 결정하므로, tiptap JSON을
+// 만들 때는 반드시 columnId가 가리키는 table.columns 인덱스로 재정렬한다.
+export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {
+  const columnIndexById = new Map(
+    table.columns.map((column, index) => [column.id, index] as const),
+  );
+
+  return {
+    type: "table",
+    attrs: {
+      blockId: table.id,
+      columns: table.columns,
+      headerRows: table.headerRows,
+      headerColumns: table.headerColumns,
+    },
+    content: table.rows.map((row) => ({
+      type: "tableRow",
+      attrs: { rowId: row.id },
+      content: [...row.cells]
+        .sort(
+          (a, b) =>
+            (columnIndexById.get(a.columnId) ?? 0) -
+            (columnIndexById.get(b.columnId) ?? 0),
+        )
+        .map((cell) => ({
+          type: "tableCell",
+          attrs: {
+            cellId: cell.id,
+            columnId: cell.columnId,
+            colspan: cell.columnSpan,
+            rowspan: cell.rowSpan,
+            colwidth: null,
+            textColor: cell.textColor ?? null,
+            backgroundColor: cell.backgroundColor ?? null,
+            align: cell.align ?? null,
+          },
+          content: inlineContentToTiptap(cell.content),
+        })),
+    })),
+  };
+};
+
 export const modelToTiptap = (
   document: Document,
 ): Result<TiptapJsonNode, EditorError> => {
-  if (document.blocks.some((block) => block.type === "table")) {
-    return {
-      ok: false,
-      error: { code: "EDITOR_FEATURE_UNAVAILABLE", feature: "table" },
-    };
-  }
   if (document.blocks.length === 0) {
     return invalid("R0 editor documents require at least one block");
   }
-  const editableBlocks = document.blocks.filter(
-    (block): block is ParagraphBlock | HeadingBlock => block.type !== "table",
-  );
-  const representable = validateEditableContent(editableBlocks);
+  const representable = validateEditableContent(document.blocks);
   if (!representable.ok) return representable;
 
   return {
     ok: true,
     value: {
       type: "doc",
-      content: editableBlocks.map((block) => ({
-        type: block.type,
-        attrs:
-          block.type === "heading"
-            ? { blockId: block.id, level: block.level }
-            : { blockId: block.id },
-        content: block.content.map((item) => ({
-          type: "text",
-          text: item.text,
-          ...(item.marks === undefined
-            ? {}
-            : { marks: item.marks.map(markToTiptap) }),
-        })),
-      })),
+      content: document.blocks.map((block) =>
+        block.type === "table"
+          ? tableBlockToTiptapJson(block)
+          : {
+              type: block.type,
+              attrs:
+                block.type === "heading"
+                  ? { blockId: block.id, level: block.level }
+                  : { blockId: block.id },
+              content: inlineContentToTiptap(block.content),
+            },
+      ),
     },
   };
 };

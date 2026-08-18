@@ -66,31 +66,3 @@ export const editorState = (
   storedMarks: tiptap.state.storedMarks?.map((mark) => mark.toJSON()) ?? null,
   tiptapDocument: tiptap.state.doc.toJSON(),
 });
-
-export const documentWithTable: Document = {
-  formatVersion: 1,
-  revision: 9,
-  blocks: [
-    {
-      id: "table-1",
-      type: "table",
-      columns: [{ id: "column-1", width: 160 }],
-      rows: [
-        {
-          id: "row-1",
-          cells: [
-            {
-              id: "cell-1",
-              columnId: "column-1",
-              rowSpan: 1,
-              columnSpan: 1,
-              content: [{ text: "unsupported" }],
-            },
-          ],
-        },
-      ],
-      headerRows: 0,
-      headerColumns: 0,
-    },
-  ],
-};

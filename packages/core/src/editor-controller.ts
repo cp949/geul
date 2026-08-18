@@ -306,7 +306,7 @@ export const createEditor = (
     throw new TypeError(
       parsedInitialDocument.error.code === "DOCUMENT_INVALID"
         ? parsedInitialDocument.error.message
-        : "Tables are not available in the R0 editor",
+        : parsedInitialDocument.error.code,
     );
   }
 
@@ -328,7 +328,7 @@ export const createEditor = (
       throw new TypeError(
         converted.error.code === "DOCUMENT_INVALID"
           ? converted.error.message
-          : "Tables are not available in the R0 editor",
+          : converted.error.code,
       );
     }
     return converted.value;
@@ -361,8 +361,16 @@ export const createEditor = (
   };
 
   const createTiptapEditor = (document: BlockDocument): Editor => {
+    // 호출자(createEditor/replaceDocument)가 parseSupportedDocument로 이미
+    // 변환 가능성을 확정한 뒤라 이 실패는 도달 불가 방어선이다.
     const converted = modelToTiptap(document);
-    if (!converted.ok) throw new TypeError("Tables are not available in R0");
+    if (!converted.ok) {
+      throw new TypeError(
+        converted.error.code === "DOCUMENT_INVALID"
+          ? converted.error.message
+          : converted.error.code,
+      );
+    }
 
     const editor = new Editor({
       element: null,

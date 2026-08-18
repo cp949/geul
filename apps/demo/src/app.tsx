@@ -7,11 +7,7 @@ import {
   importMarkdown,
   type MarkdownLoss,
 } from "@cp949/geul-io";
-import {
-  createEmptyDocument,
-  type Document,
-  parseDocument,
-} from "@cp949/geul-model";
+import { createEmptyDocument } from "@cp949/geul-model";
 import {
   type DocumentChangeEvent,
   EditorContent,
@@ -49,10 +45,6 @@ const EditorWorkspace = ({
   const [errors, setErrors] = useState<DemoError[]>([]);
   const [warnings, setWarnings] = useState<DemoWarning[]>([]);
   const [conversionStatus, setConversionStatus] = useState("Ready.");
-  const [detachedDocument, setDetachedDocument] = useState<{
-    document: Document;
-    revision: number;
-  } | null>(null);
 
   const clearFeedback = (status: string) => {
     setErrors([]);
@@ -62,23 +54,11 @@ const EditorWorkspace = ({
 
   const applyDocument = (document: unknown) => {
     const result = editor.replaceDocument(document);
-    setDetachedDocument(null);
-    if (!result.ok) {
-      setErrors([result.error]);
-      if (result.error.code === "EDITOR_FEATURE_UNAVAILABLE") {
-        const parsed = parseDocument(document);
-        if (parsed.ok) {
-          setDetachedDocument({ document: parsed.value, revision });
-        }
-      }
-    }
+    if (!result.ok) setErrors([result.error]);
     return result.ok;
   };
 
-  const documentForExport = () =>
-    detachedDocument?.revision === revision
-      ? detachedDocument.document
-      : editor.getDocument();
+  const documentForExport = () => editor.getDocument();
 
   const saveJson = () => {
     setSource(JSON.stringify(documentForExport(), null, 2));
@@ -236,10 +216,7 @@ const EditorWorkspace = ({
           <h2 id="source-heading">Source</h2>
           <textarea
             aria-label="Document source"
-            onChange={(event) => {
-              setSource(event.currentTarget.value);
-              setDetachedDocument(null);
-            }}
+            onChange={(event) => setSource(event.currentTarget.value)}
             placeholder="Paste JSON, HTML, or GFM here."
             spellCheck={false}
             value={source}
