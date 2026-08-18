@@ -49,28 +49,40 @@ const marksKey = (marks: TextMark[] | undefined): string =>
 const keptCodeUnits = (flat: string): boolean[] => {
   const kept = new Array<boolean>(flat.length).fill(true);
   let lastKept = "";
+  let index = 0;
 
-  for (let index = 0; index < flat.length; index += 1) {
+  while (index < flat.length) {
     const character = flat[index];
     if (character !== " ") {
       lastKept = character ?? "";
+      index += 1;
       continue;
     }
 
-    let next = index;
-    while (flat[next] === " ") next += 1;
-    const follower = flat[next];
-    if (
+    // 공백 run의 끝을 run마다 한 번만 찾는다. run 안의 인덱스마다 다시
+    // 훑으면 긴 공백 run에서 O(n^2)가 된다.
+    let runEnd = index;
+    while (flat[runEnd] === " ") runEnd += 1;
+    const follower = flat[runEnd];
+
+    // 셀 앞머리, LF 뒤, 셀 끝, LF 앞의 공백 run은 통째로 버리고, 그 밖의
+    // run은 첫 칸만 남겨 공백 하나로 접는다.
+    const dropWholeRun =
       lastKept === "" ||
-      lastKept === " " ||
       lastKept === "\n" ||
       follower === undefined ||
-      follower === "\n"
+      follower === "\n";
+    for (
+      let drop = dropWholeRun ? index : index + 1;
+      drop < runEnd;
+      drop += 1
     ) {
-      kept[index] = false;
-      continue;
+      kept[drop] = false;
     }
-    lastKept = " ";
+    if (dropWholeRun) kept[index] = false;
+    else lastKept = " ";
+
+    index = runEnd;
   }
 
   return kept;

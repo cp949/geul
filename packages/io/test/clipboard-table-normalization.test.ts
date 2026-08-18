@@ -120,4 +120,31 @@ describe("들쭉날쭉한 HTML 표 패딩", () => {
       error: { code: "CLIPBOARD_TABLE_INVALID" },
     });
   });
+
+  it("긴 공백 run도 공백 한 칸으로 접는다", () => {
+    const spaces = " ".repeat(5_000);
+    const html = `<table><tbody><tr><td>a${spaces}b</td></tr></tbody></table>`;
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "a b" }]);
+  });
+
+  it("셀 앞뒤의 긴 공백 run은 통째로 버린다", () => {
+    const spaces = " ".repeat(5_000);
+    const html = `<table><tbody><tr><td>${spaces}a${spaces}</td></tr></tbody></table>`;
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
+  });
+
+  it("표가 없는 HTML은 파싱하지 않고 NOT_TABULAR로 흘려보낸다", () => {
+    const result = parseClipboardTable({
+      html: "<p>표 없는 긴 문서</p>".repeat(100),
+    });
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+  });
 });
