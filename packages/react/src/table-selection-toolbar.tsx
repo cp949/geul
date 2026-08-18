@@ -1,5 +1,5 @@
 import { Palette, TableCellsMerge, TableCellsSplit } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
@@ -88,6 +88,13 @@ export const TableSelectionToolbar = () => {
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const selectionKeyRef = useRef<string | null>(null);
+  const focusEditor = useCallback(() => {
+    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+  }, [element]);
+  const closeFormatMenu = useCallback(() => {
+    setFormatMenuOpen(false);
+    focusEditor();
+  }, [focusEditor]);
 
   useEffect(() => {
     const updateFromSelection = () => {
@@ -160,7 +167,7 @@ export const TableSelectionToolbar = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      setFormatMenuOpen(false);
+      closeFormatMenu();
     };
 
     ownerDocument.addEventListener("pointerdown", handlePointerDown);
@@ -169,7 +176,7 @@ export const TableSelectionToolbar = () => {
       ownerDocument.removeEventListener("pointerdown", handlePointerDown);
       ownerDocument.removeEventListener("keydown", handleKeyDown);
     };
-  }, [formatMenuOpen, element]);
+  }, [formatMenuOpen, element, closeFormatMenu]);
 
   if (toolbarState === null) return null;
 
@@ -210,7 +217,10 @@ export const TableSelectionToolbar = () => {
           data-be-cell-format-trigger=""
           icon={formatIcon}
           label={formatLabel}
-          onClick={() => setFormatMenuOpen((open) => !open)}
+          onClick={() => {
+            if (formatMenuOpen) closeFormatMenu();
+            else setFormatMenuOpen(true);
+          }}
           onMouseDown={(event) => event.preventDefault()}
         />
       </div>
@@ -218,7 +228,7 @@ export const TableSelectionToolbar = () => {
         <TableCellFormatMenu
           cellIds={toolbarState.cellIds}
           left={toolbarState.left}
-          onClose={() => setFormatMenuOpen(false)}
+          onClose={closeFormatMenu}
           tableBlockId={toolbarState.tableBlockId}
           top={toolbarState.top + CELL_FORMAT_MENU_OFFSET}
         />

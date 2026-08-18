@@ -2,6 +2,9 @@
  * 표의 서식 계약: 헤더 행/열 토글, 행/열 단위 셀 색상, 행/열 삭제.
  * 구조 연산(삽입·이동·병합·분할)은 editor-controller-table.test.ts가 소유한다.
  */
+
+import { TextSelection } from "@tiptap/pm/state";
+import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
@@ -18,7 +21,13 @@ const editorWithTable = (rows: number, columns: number) => {
   });
   const inserted = editor.commands.insertTable("block-1", { rows, columns });
   if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
-  return { editor, tableBlockId: inserted.value.blockId };
+  const table = editor.getDocument().blocks[1];
+  if (table?.type !== "table") throw new Error("Expected a table block");
+  return {
+    editor,
+    tableBlockId: inserted.value.blockId,
+    cellIds: table.rows.flatMap((row) => row.cells.map((cell) => cell.id)),
+  };
 };
 
 /** 저장 문서에서 표 블록을 꺼낸다. */
@@ -26,6 +35,35 @@ const tableOf = (editor: ReturnType<typeof editorWithTable>["editor"]) => {
   const block = editor.getDocument().blocks[1];
   if (block?.type !== "table") throw new Error("Expected a table block");
   return block;
+};
+
+/** 첫 행의 첫 셀과 끝 셀을 CellSelection으로 선택한다. */
+const selectFirstRow = (
+  tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+  cellIds: string[],
+) => {
+  const anchorCellId = cellIds[0];
+  const headCellId = cellIds[1];
+  if (anchorCellId === undefined || headCellId === undefined) {
+    throw new Error("셀 fixture 준비 실패");
+  }
+  const positions = new Map<string, number>();
+  tiptap.state.doc.descendants((node, pos) => {
+    const cellId = node.attrs.cellId;
+    if (node.type.name === "tableCell" && typeof cellId === "string") {
+      positions.set(cellId, pos);
+    }
+  });
+  const anchor = positions.get(anchorCellId);
+  const head = positions.get(headCellId);
+  if (anchor === undefined || head === undefined) {
+    throw new Error("셀 fixture 준비 실패");
+  }
+  tiptap.view.dispatch(
+    tiptap.state.tr.setSelection(
+      CellSelection.create(tiptap.state.doc, anchor, head),
+    ),
+  );
 };
 
 describe("표 헤더 행과 헤더 열", () => {
@@ -153,6 +191,48 @@ describe("표 행/열 단위 셀 색상", () => {
 });
 
 describe("표 셀 정렬", () => {
+  it("셀 범위에 정렬을 적용해도 같은 CellSelection을 유지한다", () => {
+    const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
+    const { tiptap } = mountTiptapEditor(editor);
+    selectFirstRow(tiptap, cellIds);
+    const before = editor.getTableCellSelection();
+
+    expect(
+      editor.commands.setTableCellAlign(
+        tableBlockId,
+        { kind: "cells", cellIds: cellIds.slice(0, 2) },
+        "center",
+      ),
+    ).toEqual({ ok: true, value: undefined });
+
+    expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
+    expect(editor.getTableCellSelection()).toEqual(before);
+  });
+
+  it("병합 셀 안 커서에 정렬을 적용해도 같은 TextSelection을 유지한다", () => {
+    const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
+    const { tiptap } = mountTiptapEditor(editor);
+    const anchorCellId = cellIds[0];
+    if (anchorCellId === undefined) throw new Error("셀 fixture 준비 실패");
+    selectFirstRow(tiptap, cellIds);
+    expect(editor.commands.mergeTableCells(tableBlockId)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const before = editor.getTableCellSelection();
+
+    expect(
+      editor.commands.setTableCellAlign(
+        tableBlockId,
+        { kind: "cells", cellIds: [anchorCellId] },
+        "center",
+      ),
+    ).toEqual({ ok: true, value: undefined });
+
+    expect(tiptap.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.getTableCellSelection()).toEqual(before);
+  });
+
   it("setTableCellAlign이 대상 행의 셀에 정렬을 저장하고 null로 지운다", () => {
     const { editor, tableBlockId } = editorWithTable(2, 2);
     mountTiptapEditor(editor);

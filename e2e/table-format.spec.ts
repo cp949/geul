@@ -1,5 +1,10 @@
+/**
+ * 표 핸들 메뉴와 셀 선택 서식의 실제 브라우저 동작을 검증한다.
+ * pointer 선택, undo, 메뉴 종료와 viewport 클램프를 함께 다룬다.
+ */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+/** demo를 열고 편집 가능한 영역이 준비될 때까지 기다린다. */
 const openDemo = async (page: Page) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Editor" });
@@ -8,6 +13,7 @@ const openDemo = async (page: Page) => {
   return { editor, editable };
 };
 
+/** 슬래시 메뉴로 기본 3×3 표를 만들어 브라우저 조작 fixture를 준비한다. */
 const insertTable = async (page: Page) => {
   const { editable } = await openDemo(page);
   await editable.click();
@@ -248,6 +254,66 @@ test("여러 셀을 드래그 선택해 글자색을 함께 적용한다", async
   await expect(cell(0, 1)).toHaveCSS("color", "rgb(217, 48, 37)");
 });
 
+test("셀 범위를 다시 선택하지 않고 색상과 정렬을 연속 적용한다", async ({
+  page,
+}) => {
+  const { table } = await insertTable(page);
+  /** 행·열 좌표로 실제 표 셀을 조회한다. */
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+  const selectedCells = table.locator(".selectedCell");
+  const formatTrigger = page.getByRole("button", { name: "Cell formatting" });
+
+  await cell(0, 0).click();
+  await dragSelectCells(page, cell(0, 0), cell(0, 1));
+  await expect(selectedCells).toHaveCount(2);
+
+  await formatTrigger.click();
+  await page.getByRole("menuitem", { name: "Text color Red" }).click();
+  await expect(selectedCells).toHaveCount(2);
+  await expect(formatTrigger).toBeVisible();
+
+  await formatTrigger.click();
+  await page.getByRole("menuitem", { name: "Background color Yellow" }).click();
+  await expect(selectedCells).toHaveCount(2);
+
+  await formatTrigger.click();
+  await page.getByRole("menuitem", { name: "Align center" }).click();
+  await expect(selectedCells).toHaveCount(2);
+  await expect(cell(0, 0)).toHaveCSS("color", "rgb(217, 48, 37)");
+  await expect(cell(0, 1)).toHaveCSS("background-color", "rgb(254, 247, 224)");
+  await expect(cell(0, 0)).toHaveCSS("text-align", "center");
+});
+
+test("병합 셀 커서를 유지하며 색상과 정렬을 연속 적용한다", async ({
+  page,
+}) => {
+  const { table } = await insertTable(page);
+  /** 첫 행의 열 인덱스로 병합 대상 셀을 조회한다. */
+  const cell = (column: number) =>
+    table.locator("tr").first().locator("td").nth(column);
+  await cell(0).click();
+  await dragSelectCells(page, cell(0), cell(1));
+  await page.getByRole("button", { name: "Merge cells" }).click();
+
+  const formatTrigger = page.getByRole("button", { name: "Cell formatting" });
+  const splitTrigger = page.getByRole("button", { name: "Split cell" });
+  await expect(formatTrigger).toBeVisible();
+  await expect(splitTrigger).toBeVisible();
+
+  await formatTrigger.click();
+  await page.getByRole("menuitem", { name: "Text color Red" }).click();
+  await expect(formatTrigger).toBeVisible();
+  await expect(splitTrigger).toBeVisible();
+
+  await formatTrigger.click();
+  await page.getByRole("menuitem", { name: "Align center" }).click();
+  await expect(formatTrigger).toBeVisible();
+  await expect(splitTrigger).toBeVisible();
+  await expect(cell(0)).toHaveCSS("color", "rgb(217, 48, 37)");
+  await expect(cell(0)).toHaveCSS("text-align", "center");
+});
+
 test("셀 정렬을 적용하고 undo로 되돌린다", async ({ page }) => {
   const { table } = await insertTable(page);
   const cell = table.locator("td").first();
@@ -260,4 +326,86 @@ test("셀 정렬을 적용하고 undo로 되돌린다", async ({ page }) => {
 
   await page.keyboard.press("Control+z");
   await expect(cell).not.toHaveCSS("text-align", "center");
+});
+
+test("Escape로 셀 서식 메뉴를 닫는다 (PIT-0009)", async ({ page }) => {
+  const { editable, table } = await insertTable(page);
+  const cell = table.locator("td").first();
+  await cell.click({ clickCount: 3 });
+
+  const trigger = page.getByRole("button", { name: "Cell formatting" });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const menu = page.getByRole("menu", { name: "Cell formatting" });
+  await expect(menu).toBeVisible();
+
+  await page.keyboard.press("Escape");
+
+  await expect(menu).toHaveCount(0);
+  await expect(editable).toBeFocused();
+});
+
+test("키보드로 셀 서식을 적용한 뒤 편집 초점과 셀 선택을 복구한다", async ({
+  page,
+}) => {
+  const { editable, table } = await insertTable(page);
+  /** 첫 행의 열 인덱스로 키보드 선택 대상을 조회한다. */
+  const cell = (column: number) =>
+    table.locator("tr").first().locator("td").nth(column);
+  await cell(0).click();
+  await dragSelectCells(page, cell(0), cell(1));
+
+  const trigger = page.getByRole("button", { name: "Cell formatting" });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const alignCenter = page.getByRole("menuitem", { name: "Align center" });
+  await alignCenter.focus();
+  await page.keyboard.press("Enter");
+
+  await expect(editable).toBeFocused();
+  await expect(table.locator(".selectedCell")).toHaveCount(2);
+  await expect(cell(0)).toHaveCSS("text-align", "center");
+  await expect(cell(1)).toHaveCSS("text-align", "center");
+});
+
+test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { table } = await insertTable(page);
+  // 확장 버튼은 표 hover 중에만 렌더된다.
+  await table.locator("td").first().hover();
+  const addRow = page.getByRole("button", { name: "Add row" });
+  for (let index = 0; index < 8; index += 1) {
+    await addRow.click();
+  }
+  await expect(table.locator("tr")).toHaveCount(11);
+
+  const lastCell = table.locator("tr").last().locator("td").first();
+  await lastCell.click({ clickCount: 3 });
+  await page.getByRole("button", { name: "Cell formatting" }).click();
+
+  const firstOpenMenu = page.getByRole("menu", { name: "Cell formatting" });
+  await expect(firstOpenMenu).toBeVisible();
+  await firstOpenMenu.getByRole("menuitem", { name: "Align center" }).click();
+  await expect(lastCell).toHaveCSS("text-align", "center");
+
+  // 메뉴를 다시 열어 팔레트 맨 마지막 항목(Align none)까지 클램프가
+  // 뷰포트 안으로 접어 넣었는지 확인한다 — 클램프가 없으면 이 항목이
+  // 뷰포트 밖으로 나가 클릭이 "element is outside of the viewport"로
+  // 타임아웃한다(PIT-0011 실측 시나리오).
+  await lastCell.click({ clickCount: 3 });
+  await page.getByRole("button", { name: "Cell formatting" }).click();
+  const menu = page.getByRole("menu", { name: "Cell formatting" });
+  await expect(menu).toBeVisible();
+
+  const menuBox = await menu.boundingBox();
+  const viewportSize = page.viewportSize();
+  expect(menuBox).not.toBeNull();
+  expect(viewportSize).not.toBeNull();
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
+    (viewportSize?.height ?? 0) - 4,
+  );
+
+  await menu.getByRole("menuitem", { name: "Align none" }).click();
+  await expect(lastCell).not.toHaveCSS("text-align", "center");
 });

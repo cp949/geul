@@ -613,6 +613,10 @@ export type TableCellTarget =
   | { kind: "cells"; cellIds: readonly string[] };
 
 type CellColorProperty = "textColor" | "backgroundColor";
+type CellAlign = "left" | "center" | "right";
+type CellFormatUpdate =
+  | { property: CellColorProperty; value: string | null }
+  | { property: "align"; value: CellAlign | null };
 
 // 행/열/셀 id 목록 3가지 대상 전부를 "칠할 기준 셀 id 집합"으로 좁힌다.
 // 행/열은 논리 격자 투영으로(PIT-0004 — 병합 셀이 대상 행/열을 덮으면
@@ -661,27 +665,20 @@ const resolveTargetCellIds = (
   return { ok: true, value: targetCellIds };
 };
 
-// 색 속성은 값이 없을 때 키 자체를 두지 않는다(저장 포맷의 optional 필드).
-const withCellColor = (
+// 셀 서식 하나만 바꾸고 나머지 필드는 그대로 보존한다. null은
+// optional 저장 필드의 키 자체를 제거한다.
+const withCellFormat = (
   cellEntry: TableCell,
-  property: CellColorProperty,
-  color: string | null,
+  update: CellFormatUpdate,
 ): TableCell => {
-  const textColor =
-    property === "textColor" ? color : (cellEntry.textColor ?? null);
-  const backgroundColor =
-    property === "backgroundColor"
-      ? color
-      : (cellEntry.backgroundColor ?? null);
-  return {
-    id: cellEntry.id,
-    columnId: cellEntry.columnId,
-    rowSpan: cellEntry.rowSpan,
-    columnSpan: cellEntry.columnSpan,
-    content: cellEntry.content,
-    ...(textColor === null ? {} : { textColor }),
-    ...(backgroundColor === null ? {} : { backgroundColor }),
-  };
+  const next = { ...cellEntry };
+  if (update.value === null) {
+    delete next[update.property];
+    return next;
+  }
+  if (update.property === "align") next.align = update.value;
+  else next[update.property] = update.value;
+  return next;
 };
 
 export const setCellColor = (
@@ -705,35 +702,13 @@ export const setCellColor = (
       if (!targetCellIds.has(cellEntry.id)) return cellEntry;
       if ((cellEntry[property] ?? null) === color) return cellEntry;
       changed = true;
-      return withCellColor(cellEntry, property, color);
+      return withCellFormat(cellEntry, { property, value: color });
     }),
   }));
 
   if (!changed) return { ok: true, value: table };
   return { ok: true, value: { ...table, rows } };
 };
-
-type CellAlign = "left" | "center" | "right";
-
-// align 속성도 색 속성과 같은 optional 저장 규약을 따른다(값이 없으면
-// 키 자체를 두지 않는다).
-const withCellAlign = (
-  cellEntry: TableCell,
-  align: CellAlign | null,
-): TableCell => ({
-  id: cellEntry.id,
-  columnId: cellEntry.columnId,
-  rowSpan: cellEntry.rowSpan,
-  columnSpan: cellEntry.columnSpan,
-  content: cellEntry.content,
-  ...(cellEntry.textColor === undefined
-    ? {}
-    : { textColor: cellEntry.textColor }),
-  ...(cellEntry.backgroundColor === undefined
-    ? {}
-    : { backgroundColor: cellEntry.backgroundColor }),
-  ...(align === null ? {} : { align }),
-});
 
 export const setCellAlign = (
   table: TableBlock,
@@ -755,7 +730,7 @@ export const setCellAlign = (
       if (!targetCellIds.has(cellEntry.id)) return cellEntry;
       if ((cellEntry.align ?? null) === align) return cellEntry;
       changed = true;
-      return withCellAlign(cellEntry, align);
+      return withCellFormat(cellEntry, { property: "align", value: align });
     }),
   }));
 

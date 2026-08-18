@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
+import { CellSelection } from "@tiptap/pm/tables";
 
 import {
   DEFAULT_COLUMN_WIDTH,
@@ -116,11 +117,31 @@ const findCellContentOffset = (
   return offset;
 };
 
+// nextNode 안에서 cellId가 가리키는 셀 경계의 상대 좌표를 찾는다.
+const findCellBoundaryOffset = (
+  nextNode: ProseMirrorNode,
+  cellId: string,
+): number | null => {
+  let offset: number | null = null;
+  nextNode.descendants((child, pos) => {
+    if (offset !== null) return false;
+    if (child.type.name === "tableCell" && child.attrs.cellId === cellId) {
+      offset = pos;
+      return false;
+    }
+    return true;
+  });
+  return offset;
+};
+
 const applyTableGridOperation = (
   editor: Editor,
   tableBlockId: string,
   operate: (table: TableBlock) => Result<TableBlock, TableGridError>,
-  options?: { selectCellId?: (table: TableBlock) => string | null },
+  options?: {
+    selectCellId?: (table: TableBlock) => string | null;
+    preserveSelection?: boolean;
+  },
 ): Result<void, TableCommandError> => {
   const found = findTable(editor, tableBlockId);
   if (!found.ok) return found;
@@ -138,6 +159,26 @@ const applyTableGridOperation = (
     return { ok: true, value: undefined };
   }
 
+  // 표 서식은 선택된 셀의 id를 바꾸지 않는다. 교체 전
+  // CellSelection의 양 끝을 id로 저장해 새 표에서 다시 만든다.
+  const currentSelection = editor.state.selection;
+  const preservedSelection =
+    options?.preserveSelection !== true
+      ? null
+      : currentSelection instanceof CellSelection
+        ? {
+            kind: "cells" as const,
+            anchorCellId: currentSelection.$anchorCell.nodeAfter?.attrs.cellId,
+            headCellId: currentSelection.$headCell.nodeAfter?.attrs.cellId,
+          }
+        : currentSelection instanceof TextSelection
+          ? {
+              kind: "text" as const,
+              from: currentSelection.from,
+              to: currentSelection.to,
+            }
+          : null;
+
   const nextNode = tableBlockToTiptapNode(editor.schema, operated.value);
   let transaction = editor.state.tr.replaceWith(
     position,
@@ -149,7 +190,37 @@ const applyTableGridOperation = (
   // 표 서브트리 전체를 바꾸는 탓에 옛 selection을 그대로 매핑하면 예측할 수
   // 없는 위치(흔히 표의 마지막 셀)로 떨어진다 — duplicateBlock과 같은 원칙.
   const targetCellId = options?.selectCellId?.(operated.value) ?? null;
-  if (targetCellId !== null) {
+  if (
+    preservedSelection?.kind === "cells" &&
+    typeof preservedSelection.anchorCellId === "string" &&
+    typeof preservedSelection.headCellId === "string"
+  ) {
+    const anchorOffset = findCellBoundaryOffset(
+      nextNode,
+      preservedSelection.anchorCellId,
+    );
+    const headOffset = findCellBoundaryOffset(
+      nextNode,
+      preservedSelection.headCellId,
+    );
+    if (anchorOffset !== null && headOffset !== null) {
+      transaction = transaction.setSelection(
+        CellSelection.create(
+          transaction.doc,
+          position + 1 + anchorOffset,
+          position + 1 + headOffset,
+        ),
+      );
+    }
+  } else if (preservedSelection?.kind === "text") {
+    transaction = transaction.setSelection(
+      TextSelection.create(
+        transaction.doc,
+        preservedSelection.from,
+        preservedSelection.to,
+      ),
+    );
+  } else if (targetCellId !== null) {
     const relativeOffset = findCellContentOffset(nextNode, targetCellId);
     if (relativeOffset !== null) {
       const absolutePosition = Math.min(
@@ -298,8 +369,11 @@ export const setTableCellColor = (
   property: "textColor" | "backgroundColor",
   color: string | null,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    setGridCellColor(table, target, property, color),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => setGridCellColor(table, target, property, color),
+    { preserveSelection: true },
   );
 
 export const setTableCellAlign = (
@@ -308,8 +382,11 @@ export const setTableCellAlign = (
   target: TableCellTarget,
   align: "left" | "center" | "right" | null,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    setGridCellAlign(table, target, align),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => setGridCellAlign(table, target, align),
+    { preserveSelection: true },
   );
 
 export const insertTable = (

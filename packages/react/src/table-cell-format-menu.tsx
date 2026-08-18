@@ -30,7 +30,7 @@ export type TableCellFormatMenuProps = {
 
 /**
  * TableSelectionToolbar의 "Cell formatting" 버튼으로 여는 메뉴 — 선택된
- * 셀 목록(cellIds)에 글자색·배경색을 적용한다. 좌표 클램프는
+ * 셀 목록(cellIds)에 글자색·배경색·정렬을 적용한다. 좌표 클램프는
  * TableHandleMenu와 같은 이유로 같은 방식을 쓴다(PIT-0011) — 서로 다른
  * 진입점(핸들 vs 셀 선택)이라 로직은 각자 갖는다.
  */

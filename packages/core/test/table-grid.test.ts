@@ -1066,6 +1066,23 @@ describe("행 또는 열 단위로 셀 색상을 설정한다", () => {
     if (!result.ok) return;
     expect(result.value).toBe(t);
   });
+
+  it("색상을 적용해도 기존 정렬이 유지된다", () => {
+    const t = table(["c1"], [[cell("a", "c1", { align: "center" })]]);
+
+    const result = setCellColor(
+      t,
+      { kind: "row", index: 0 },
+      "backgroundColor",
+      "#AABBCC",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const target = result.value.rows[0]?.cells[0];
+    expect(target?.align).toBe("center");
+    expect(target?.backgroundColor).toBe("#AABBCC");
+  });
 });
 
 describe("셀 id 목록 단위로 색상을 설정한다", () => {
