@@ -8,71 +8,24 @@ import { canonicalizeTextMarks, parseDocument } from "@cp949/geul-model";
 import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 
+import { tableBlockToTiptapJson } from "./model-to-tiptap.js";
+
+// TableBlock → tiptap 매핑(PIT-0004 열 재정렬 포함)의 권위는 문서 로드 경로와
+// 공유하는 tableBlockToTiptapJson 하나다 — 붙여넣기(PM 노드)와 로드(JSON)가
+// 서로 다른 매핑으로 갈라지지 않게 한다.
 export const tableBlockToTiptapNode = (
   schema: Schema,
   table: TableBlock,
 ): ProseMirrorNode => {
-  const tableCellType = schema.nodes.tableCell;
-  const tableRowType = schema.nodes.tableRow;
-  const tableType = schema.nodes.table;
   if (
-    tableCellType === undefined ||
-    tableRowType === undefined ||
-    tableType === undefined
+    schema.nodes.tableCell === undefined ||
+    schema.nodes.tableRow === undefined ||
+    schema.nodes.table === undefined
   ) {
     throw new TypeError("Schema is missing table/tableRow/tableCell nodes");
   }
 
-  // PIT-0004: 저장 배열 순서는 논리 열 순서의 권위가 아니다. ProseMirror 표는
-  // 셀의 물리 문서 순서(형제 노드 순서)로 열 위치를 결정하므로, PM 트리를 만들
-  // 때는 반드시 columnId가 가리키는 table.columns 인덱스로 재정렬해야 한다.
-  const columnIndexById = new Map(
-    table.columns.map((column, index) => [column.id, index] as const),
-  );
-
-  const rows = table.rows.map((row) => {
-    const orderedCells = [...row.cells].sort(
-      (a, b) =>
-        (columnIndexById.get(a.columnId) ?? 0) -
-        (columnIndexById.get(b.columnId) ?? 0),
-    );
-    const cells = orderedCells.map((cellEntry) => {
-      const content = cellEntry.content.map((item) => {
-        const marks = (item.marks ?? [])
-          .map((mark) =>
-            mark.type === "link"
-              ? schema.marks.link?.create({ href: mark.href })
-              : schema.marks[mark.type]?.create(),
-          )
-          .filter((mark) => mark !== undefined);
-        return schema.text(item.text, marks);
-      });
-      return tableCellType.create(
-        {
-          cellId: cellEntry.id,
-          columnId: cellEntry.columnId,
-          colspan: cellEntry.columnSpan,
-          rowspan: cellEntry.rowSpan,
-          colwidth: null,
-          textColor: cellEntry.textColor ?? null,
-          backgroundColor: cellEntry.backgroundColor ?? null,
-          align: cellEntry.align ?? null,
-        },
-        content,
-      );
-    });
-    return tableRowType.create({ rowId: row.id }, cells);
-  });
-
-  return tableType.create(
-    {
-      blockId: table.id,
-      columns: table.columns,
-      headerRows: table.headerRows,
-      headerColumns: table.headerColumns,
-    },
-    rows,
-  );
+  return schema.nodeFromJSON(tableBlockToTiptapJson(table));
 };
 
 export type TableCodecError = { code: "TABLE_NODE_INVALID"; message: string };
