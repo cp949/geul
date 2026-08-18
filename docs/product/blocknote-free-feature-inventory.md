@@ -144,8 +144,8 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `TBL-004` | 직사각형 셀 범위 선택 | `PARITY` | R1 | `VERIFIED` | table cell selection |
 | `TBL-005` | 셀 병합과 분할 | `PARITY` | R1 | `VERIFIED` | `features/blocks/tables.mdx` |
 | `TBL-006` | 첫 헤더 행과 첫 헤더 열 | `PARITY` | R1 | `VERIFIED` | `features/blocks/tables.mdx` |
-| `TBL-007` | 셀 글자색·배경색 | `PARITY` | R1 | `PARTIAL` | 행/열 단위만 노출, 셀 단위는 슬라이스 9b |
-| `TBL-008` | 셀 텍스트 정렬 | `PARITY` | R1 | `NOT_STARTED` | table cell schema, formatting toolbar |
+| `TBL-007` | 셀 글자색·배경색 | `PARITY` | R1 | `VERIFIED` | 행/열/셀 단위 모두 지원(슬라이스 9b, table cell format menu) |
+| `TBL-008` | 셀 텍스트 정렬 | `PARITY` | R1 | `VERIFIED` | 셀 단위 정렬 지원(슬라이스 9b, table cell format menu) |
 | `TBL-009` | 빠른 행·열 확장 control | `PARITY` | R1 | `VERIFIED` | table extend buttons |
 | `TBL-010` | Tab/Shift+Tab 셀 탐색 | `PARITY` | R1 | `NOT_STARTED` | table keyboard behavior |
 | `TBL-011` | 마지막 셀 Tab의 새 행 생성 | `PARITY` | R1 | `NOT_STARTED` | table keyboard behavior |

@@ -1164,16 +1164,9 @@ describe("행·열·셀 id 목록 단위로 정렬을 설정한다", () => {
   });
 
   it("셀 id 목록을 대상으로 정렬을 넣는다", () => {
-    const t = table(
-      ["c1", "c2"],
-      [[cell("a", "c1"), cell("b", "c2")]],
-    );
+    const t = table(["c1", "c2"], [[cell("a", "c1"), cell("b", "c2")]]);
 
-    const result = setCellAlign(
-      t,
-      { kind: "cells", cellIds: ["b"] },
-      "right",
-    );
+    const result = setCellAlign(t, { kind: "cells", cellIds: ["b"] }, "right");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

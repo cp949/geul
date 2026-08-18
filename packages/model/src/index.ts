@@ -1,5 +1,5 @@
-export { isCanonicalCellColor } from "./cell-color.js";
 export { isCanonicalCellAlign } from "./cell-align.js";
+export { isCanonicalCellColor } from "./cell-color.js";
 export { createEmptyDocument } from "./create-document.js";
 export type { DocumentError, DocumentErrorCode } from "./errors.js";
 export { isSupportedLinkHref } from "./link-policy.js";

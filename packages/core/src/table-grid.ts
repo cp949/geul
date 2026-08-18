@@ -5,8 +5,8 @@ import type {
   TableGridValidationError,
 } from "@cp949/geul-model";
 import {
-  isCanonicalCellColor,
   isCanonicalCellAlign,
+  isCanonicalCellColor,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
   validateTableGrid,
@@ -726,7 +726,9 @@ const withCellAlign = (
   rowSpan: cellEntry.rowSpan,
   columnSpan: cellEntry.columnSpan,
   content: cellEntry.content,
-  ...(cellEntry.textColor === undefined ? {} : { textColor: cellEntry.textColor }),
+  ...(cellEntry.textColor === undefined
+    ? {}
+    : { textColor: cellEntry.textColor }),
   ...(cellEntry.backgroundColor === undefined
     ? {}
     : { backgroundColor: cellEntry.backgroundColor }),

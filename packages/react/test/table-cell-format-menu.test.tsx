@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
+import type { EditorController } from "@cp949/geul-core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
-import type { EditorController } from "@cp949/geul-core";
 import { EditorProvider } from "../src/index.js";
 import { TableCellFormatMenu } from "../src/table-cell-format-menu.js";
 
@@ -75,14 +74,18 @@ describe("셀 서식 메뉴", () => {
 
     expect(
       controller.commands.setTableCellBackgroundColor,
-    ).toHaveBeenCalledWith("table-1", { kind: "cells", cellIds: ["cell-1"] }, null);
+    ).toHaveBeenCalledWith(
+      "table-1",
+      { kind: "cells", cellIds: ["cell-1"] },
+      null,
+    );
     expect(onClose).toHaveBeenCalledTimes(1);
     view.unmount();
   });
 });
 
 describe("정렬 버튼", () => {
-  it("Align center 클릭 시 setTableCellAlign(tableBlockId, target, \"center\")를 호출하고 닫는다", () => {
+  it('Align center 클릭 시 setTableCellAlign(tableBlockId, target, "center")를 호출하고 닫는다', () => {
     const controller = fakeController();
     const onClose = vi.fn();
 

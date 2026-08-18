@@ -9,8 +9,6 @@ import {
 } from "./table-cell-colors.js";
 import { useEditor } from "./use-editor.js";
 
-const menuItemClassName =
-  "geul:cursor-pointer geul:rounded geul:border-0 geul:bg-transparent geul:px-2 geul:py-1.5 geul:text-left geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:text-[color:var(--be-color-text,#202124)]";
 const swatchClassName =
   "geul:h-5 geul:w-5 geul:cursor-pointer geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:p-0";
 const sectionLabelClassName =
@@ -72,10 +70,7 @@ export const TableCellFormatMenu = ({
     onClose();
   };
 
-  const applyColor = (
-    property: "text" | "background",
-    color: string | null,
-  ) =>
+  const applyColor = (property: "text" | "background", color: string | null) =>
     runAndClose(() => {
       if (property === "text") {
         editor.commands.setTableCellTextColor(tableBlockId, target, color);

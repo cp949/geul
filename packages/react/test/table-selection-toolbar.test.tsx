@@ -294,7 +294,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     view.unmount();
   });
 
-  it("색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:\"cells\",cellIds}, color)를 호출하고 메뉴를 닫는다", () => {
+  it('색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:"cells",cellIds}, color)를 호출하고 메뉴를 닫는다', () => {
     const controller = fakeController({
       getTableCellSelection: () => ({
         tableBlockId: "table-1",
