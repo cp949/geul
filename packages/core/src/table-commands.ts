@@ -265,7 +265,9 @@ const applyTableGridOperation = (
     }
   }
 
-  editor.view.dispatch(closeHistory(transaction));
+  // 네이티브 명령들처럼 결과 selection이 화면 안에 오도록 표시한다 —
+  // 뷰포트 밖으로 커진 표에서 캐럿만 옮기면 no-op처럼 보인다.
+  editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
 
   return { ok: true, value: undefined };
 };
@@ -653,7 +655,9 @@ export const pasteTabularData = (
     }
   }
 
-  editor.view.dispatch(closeHistory(transaction));
+  // 네이티브 doPaste가 보장하는 scrollIntoView와 동일 — 캐럿이 옮겨간 새
+  // 표가 뷰포트 밖이면 화면이 따라가야 한다.
+  editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
 
   return { ok: true, value: { blockId: filled.value.id } };
 };

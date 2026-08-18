@@ -1039,6 +1039,40 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.destroy();
   });
 
+  it("붙여넣기 트랜잭션이 캐럿을 화면 안으로 스크롤하도록 표시한다", () => {
+    // 네이티브 doPaste는 tr.scrollIntoView()를 보장한다 — 가로챈 붙여넣기가
+    // 이를 생략하면 긴 문서에서 뷰포트 밖으로 커지는 표를 붙여넣었을 때
+    // 캐럿은 옮겨졌는데 화면이 따라가지 않아 no-op처럼 보인다. 표 밖·표 안
+    // 두 dispatch 경로 모두 검사한다.
+    const outside = createTableFixtureEditor(docWithParagraph);
+    outside.commands.setTextSelection(1);
+    let dispatched: (typeof outside.state.tr)[] = [];
+    const outsideDispatch = outside.view.dispatch.bind(outside.view);
+    outside.view.dispatch = (transaction) => {
+      dispatched.push(transaction);
+      outsideDispatch(transaction);
+    };
+    expect(
+      pasteTabularData(outside, oneByOneData("A"), sequentialIds("paste")).ok,
+    ).toBe(true);
+    expect(dispatched.at(-1)?.scrolledIntoView).toBe(true);
+    outside.destroy();
+
+    const inside = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(inside, "cell-1");
+    dispatched = [];
+    const insideDispatch = inside.view.dispatch.bind(inside.view);
+    inside.view.dispatch = (transaction) => {
+      dispatched.push(transaction);
+      insideDispatch(transaction);
+    };
+    expect(
+      pasteTabularData(inside, oneByOneData("x"), sequentialIds("paste")).ok,
+    ).toBe(true);
+    expect(dispatched.at(-1)?.scrolledIntoView).toBe(true);
+    inside.destroy();
+  });
+
   it("표 밖에서 호출하면 현재 블록 뒤에 새 표를 만든다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1); // "para-1" 문단 안(텍스트 "hello" 앞)
