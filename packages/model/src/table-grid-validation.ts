@@ -4,6 +4,11 @@ import type { TableBlock } from "./types.js";
 export const MIN_COLUMN_WIDTH = 48;
 export const MAX_COLUMN_WIDTH = 1200;
 
+// 표 하나가 가질 수 있는 논리 셀 수의 상한. import(html/markdown), 클립보드
+// 붙여넣기, TableGrid 확장이 모두 같은 예산을 써야 한 경로로 들어온 표가
+// 다른 경로에서 거절되지 않는다 — 이 판정의 권위는 model에 있다.
+export const MAX_TABLE_LOGICAL_CELLS = 10_000;
+
 export type TableGridInvalidReason =
   | "UNKNOWN_COLUMN"
   | "INVALID_COORDINATE"

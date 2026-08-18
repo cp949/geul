@@ -9,6 +9,7 @@ import {
   isCanonicalCellAlign,
   isCanonicalCellColor,
   MAX_COLUMN_WIDTH,
+  MAX_TABLE_LOGICAL_CELLS,
   MIN_COLUMN_WIDTH,
   validateTableGrid,
 } from "@cp949/geul-model";
@@ -778,8 +779,6 @@ export const resizeColumn = (
   return { ok: true, value: { ...table, columns } };
 };
 
-const MAX_LOGICAL_CELLS = 10_000;
-
 // 표 밖 붙여넣기(새 표 생성)와 표 안 덮어쓰기가 공유하는 유일한 격자 연산.
 // 확장은 기존 insertRow/insertColumn을 끝에 반복 호출해 처리하고(끝 삽입은
 // 기존 span과 절대 교차하지 않는다 — PIT-0004, 새 격자 계산 코드 없음),
@@ -815,7 +814,7 @@ export const pasteInto = (
     table.columns.length,
     anchor.column + data.columnCount,
   );
-  if (requiredRows * requiredColumns > MAX_LOGICAL_CELLS) {
+  if (requiredRows * requiredColumns > MAX_TABLE_LOGICAL_CELLS) {
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 

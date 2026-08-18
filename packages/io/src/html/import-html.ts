@@ -1,12 +1,11 @@
 import {
   type Document,
   type IdFactory,
+  MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
   type TableBlock,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
-import rehypeParse from "rehype-parse";
-import { unified } from "unified";
 
 import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
@@ -25,6 +24,7 @@ import {
   type HtmlRoot,
   inlineContentFromNodes,
 } from "./inline-content.js";
+import { asRoot, parseHtmlFragment } from "./parse-html.js";
 import { htmlSanitizeSchema } from "./sanitize-schema.js";
 import {
   type CellLayout,
@@ -37,24 +37,8 @@ import {
 } from "./table-layout.js";
 
 const DEFAULT_COLUMN_WIDTH = 160;
-const MAX_TABLE_LOGICAL_CELLS = 10_000;
-const parseProcessor = unified().use(rehypeParse, { fragment: true });
 
 class HtmlDocumentInvalidError extends Error {}
-
-const asRoot = (node: unknown): HtmlRoot | undefined => {
-  if (
-    typeof node !== "object" ||
-    node === null ||
-    !("type" in node) ||
-    node.type !== "root" ||
-    !("children" in node) ||
-    !Array.isArray(node.children)
-  ) {
-    return undefined;
-  }
-  return node as HtmlRoot;
-};
 
 const propertyHeaderFlag = (
   element: HtmlElementNode,
@@ -313,7 +297,7 @@ export const importHtml = (
   ImportError
 > => {
   try {
-    const unsafeRoot = asRoot(parseProcessor.parse(source));
+    const unsafeRoot = parseHtmlFragment(source);
     if (unsafeRoot === undefined) {
       return {
         ok: false,

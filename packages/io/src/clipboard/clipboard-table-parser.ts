@@ -1,7 +1,9 @@
-import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
+import {
+  isCanonicalCellAlign,
+  isCanonicalCellColor,
+  MAX_TABLE_LOGICAL_CELLS,
+} from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
-import rehypeParse from "rehype-parse";
-import { unified } from "unified";
 
 import type { ClipboardParseError } from "../errors.js";
 import { propertyString, sanitizeLinks } from "../html/hast-properties.js";
@@ -10,6 +12,7 @@ import {
   type HtmlRoot,
   inlineContentFromNodes,
 } from "../html/inline-content.js";
+import { asRoot, parseHtmlFragment } from "../html/parse-html.js";
 import { clipboardSanitizeSchema } from "../html/sanitize-schema.js";
 import {
   type CellLayout,
@@ -33,23 +36,6 @@ import {
   type TabularData,
   validateTabularData,
 } from "./tabular-data.js";
-
-const MAX_TABLE_LOGICAL_CELLS = 10_000;
-const parseProcessor = unified().use(rehypeParse, { fragment: true });
-
-const asRoot = (node: unknown): HtmlRoot | undefined => {
-  if (
-    typeof node !== "object" ||
-    node === null ||
-    !("type" in node) ||
-    node.type !== "root" ||
-    !("children" in node) ||
-    !Array.isArray(node.children)
-  ) {
-    return undefined;
-  }
-  return node as HtmlRoot;
-};
 
 // role=presentation/none은 "이건 데이터 표가 아니다"라는 저자의 명시적
 // 선언이고, 표를 품은 표는 우리 모델이 중첩 표를 표현하지 못하므로 바깥이
@@ -212,7 +198,7 @@ const tabularDataFromTable = (
 const parseHtmlTable = (
   html: string,
 ): Result<TabularData, ClipboardParseError> => {
-  const unsafeRoot = asRoot(parseProcessor.parse(html));
+  const unsafeRoot = parseHtmlFragment(html);
   if (unsafeRoot === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" } };
 
@@ -280,11 +266,20 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
   return validated.ok ? { ok: true, value: data } : validated;
 };
 
+const TABLE_TAG_PATTERN = /<table[\s>]/i;
+
 export const parseClipboardTable = (input: {
   html?: string;
   text?: string;
 }): Result<TabularData, ClipboardParseError> => {
-  if (input.html !== undefined && input.html.length > 0) {
+  // <table>이 없는 HTML은 파싱조차 하지 않는다. 표 없는 붙여넣기도 rehype
+  // 파싱 + sanitize를 전부 돌린 뒤 NOT_TABULAR를 내고, 그다음 ProseMirror가
+  // 같은 HTML을 다시 파싱했다 — 긴 웹 문서 붙여넣기가 파싱 비용을 두 번 낸다.
+  if (
+    input.html !== undefined &&
+    input.html.length > 0 &&
+    TABLE_TAG_PATTERN.test(input.html)
+  ) {
     const htmlResult = parseHtmlTable(input.html);
     if (htmlResult.ok || htmlResult.error.code === "CLIPBOARD_TABLE_INVALID") {
       return htmlResult;

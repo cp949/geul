@@ -17,6 +17,7 @@ export type {
 } from "./table-grid-validation.js";
 export {
   MAX_COLUMN_WIDTH,
+  MAX_TABLE_LOGICAL_CELLS,
   MIN_COLUMN_WIDTH,
   validateGridCoverage,
   validateTableGrid,

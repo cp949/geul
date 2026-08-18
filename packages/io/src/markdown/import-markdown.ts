@@ -3,6 +3,7 @@ import {
   type Document,
   type IdFactory,
   type InlineContent,
+  MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
   type TextMark,
 } from "@cp949/geul-model";
@@ -14,7 +15,6 @@ import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
 
 const DEFAULT_COLUMN_WIDTH = 160;
-const MAX_TABLE_LOGICAL_CELLS = 10_000;
 const parseProcessor = unified().use(remarkParse).use(remarkGfm);
 
 type MarkdownNode = {
