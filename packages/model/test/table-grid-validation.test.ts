@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TableBlock } from "../src/index.js";
-import { parseDocument, validateTableGrid } from "../src/index.js";
+import { parseDocument, validateGridCoverage, validateTableGrid } from "../src/index.js";
 
 const cell = (
   id: string,
@@ -158,6 +158,58 @@ describe("표 논리 그리드 검증", () => {
         code: "DOCUMENT_INVALID",
         path: ["blocks", 1, "rows", 0, "cells", 0, "textColor"],
       },
+    });
+  });
+});
+
+describe("validateGridCoverage(제네릭 그리드 커버리지)", () => {
+  it("겹치지 않는 직사각형 커버리지는 허용한다", () => {
+    expect(
+      validateGridCoverage(2, 2, [
+        { row: 0, column: 0, rowSpan: 1, columnSpan: 1 },
+        { row: 0, column: 1, rowSpan: 1, columnSpan: 1 },
+        { row: 1, column: 0, rowSpan: 1, columnSpan: 1 },
+        { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+      ]),
+    ).toEqual({ ok: true, value: undefined });
+  });
+
+  it("겹치는 셀은 OVERLAPPING_CELL로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 2, [
+        { row: 0, column: 0, rowSpan: 1, columnSpan: 2 },
+        { row: 0, column: 1, rowSpan: 1, columnSpan: 1 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "OVERLAPPING_CELL" },
+    });
+  });
+
+  it("비어 있는 좌표는 UNCOVERED_COORDINATE로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 2, [
+        { row: 0, column: 0, rowSpan: 1, columnSpan: 1 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "TABLE_GRID_INVALID",
+        reason: "UNCOVERED_COORDINATE",
+        row: 0,
+        column: 1,
+      },
+    });
+  });
+
+  it("범위를 벗어나는 span은 SPAN_OUT_OF_BOUNDS로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 2, [
+        { row: 0, column: 0, rowSpan: 1, columnSpan: 3 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "SPAN_OUT_OF_BOUNDS" },
     });
   });
 });

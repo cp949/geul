@@ -10,12 +10,14 @@ export {
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";
 export type {
+  GridCell,
   TableGridInvalidReason,
   TableGridValidationError,
 } from "./table-grid-validation.js";
 export {
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
+  validateGridCoverage,
   validateTableGrid,
 } from "./table-grid-validation.js";
 export type {
