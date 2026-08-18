@@ -11,4 +11,7 @@ export type EditorError =
   | { code: "MERGE_BOUNDARY_CROSSED" }
   | { code: "COLUMN_WIDTH_OUT_OF_RANGE"; width: number }
   | { code: "NOT_RECTANGULAR" }
-  | { code: "CELL_NOT_FOUND"; cellId: string };
+  | { code: "CELL_NOT_FOUND"; cellId: string }
+  | { code: "LAST_ROW" }
+  | { code: "LAST_COLUMN" }
+  | { code: "INVALID_COLOR"; color: string };

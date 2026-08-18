@@ -28,3 +28,15 @@
   outline: 1px solid var(--be-color-accent, #1a73e8);
   outline-offset: -1px;
 }
+
+/* 헤더는 셀 종류가 아니라 표 단위 플래그다(모델 headerRows/headerColumns:
+   0|1). 편집기는 td를 유지하고 이 속성으로 첫 행/첫 열만 시각 구분한다 —
+   tr은 table의 직속 자식이 아니라 tbody 안에 있어(table-extension.ts
+   renderHTML의 ["tbody", {}, 0]) tbody의 자식은 tr뿐이고, :first-child와
+   :first-of-type이 같은 tr을 가리킨다. 셀 색상 명령이 넣는 인라인 style은
+   우선순위가 높아 이 배경을 덮는다. */
+.be-editor table[data-be-header-rows="1"] tr:first-child > td,
+.be-editor table[data-be-header-columns="1"] tr > td:first-child {
+  background-color: var(--be-color-surface-muted, #f1f3f4);
+  font-weight: 600;
+}

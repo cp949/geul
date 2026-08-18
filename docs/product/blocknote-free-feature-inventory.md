@@ -138,13 +138,13 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 
 | ID | 기능 | 목표 | 단계 | 상태 | BlockNote 근거 또는 독자 계약 |
 | --- | --- | --- | --- | --- | --- |
-| `TBL-001` | 행·열 추가와 삭제 | `PARITY` | R1 | `NOT_STARTED` | table handle menus |
+| `TBL-001` | 행·열 추가와 삭제 | `PARITY` | R1 | `VERIFIED` | table handle menus |
 | `TBL-002` | 행·열 drag 재정렬 | `PARITY` | R1 | `VERIFIED` | table handles extension |
 | `TBL-003` | 열 경계 drag 너비 조절 | `ENHANCED` | R1 | `VERIFIED` | table column widths + 독자 안정성 계약 |
 | `TBL-004` | 직사각형 셀 범위 선택 | `PARITY` | R1 | `VERIFIED` | table cell selection |
 | `TBL-005` | 셀 병합과 분할 | `PARITY` | R1 | `VERIFIED` | `features/blocks/tables.mdx` |
-| `TBL-006` | 첫 헤더 행과 첫 헤더 열 | `PARITY` | R1 | `NOT_STARTED` | `features/blocks/tables.mdx` |
-| `TBL-007` | 셀 글자색·배경색 | `PARITY` | R1 | `NOT_STARTED` | `features/blocks/tables.mdx` |
+| `TBL-006` | 첫 헤더 행과 첫 헤더 열 | `PARITY` | R1 | `VERIFIED` | `features/blocks/tables.mdx` |
+| `TBL-007` | 셀 글자색·배경색 | `PARITY` | R1 | `PARTIAL` | 행/열 단위만 노출, 셀 단위는 슬라이스 9b |
 | `TBL-008` | 셀 텍스트 정렬 | `PARITY` | R1 | `NOT_STARTED` | table cell schema, formatting toolbar |
 | `TBL-009` | 빠른 행·열 확장 control | `PARITY` | R1 | `VERIFIED` | table extend buttons |
 | `TBL-010` | Tab/Shift+Tab 셀 탐색 | `PARITY` | R1 | `NOT_STARTED` | table keyboard behavior |

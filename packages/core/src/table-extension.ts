@@ -272,8 +272,26 @@ export const TableCellExtension = Node.create({
     };
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ["td", mergeAttributes(HTMLAttributes), 0];
+  renderHTML({ HTMLAttributes, node }) {
+    // 색상은 data-be-* 속성이 저장 계약이고, 화면에는 인라인 스타일로 그린다
+    // — 임의 hex라 CSS 클래스로는 표현할 수 없다.
+    const declarations = [
+      typeof node.attrs.textColor === "string"
+        ? `color: ${node.attrs.textColor}`
+        : null,
+      typeof node.attrs.backgroundColor === "string"
+        ? `background-color: ${node.attrs.backgroundColor}`
+        : null,
+    ].filter((declaration) => declaration !== null);
+
+    return [
+      "td",
+      mergeAttributes(
+        HTMLAttributes,
+        declarations.length === 0 ? {} : { style: declarations.join("; ") },
+      ),
+      0,
+    ];
   },
 
   extendNodeSchema(extension) {

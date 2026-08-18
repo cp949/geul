@@ -15,8 +15,12 @@ import {
   moveRow as moveGridRow,
   projectTableGrid,
   resizeColumn as resizeGridColumn,
+  setCellColor as setGridCellColor,
   splitCell as splitGridCell,
+  type TableCellTarget,
   type TableGridError,
+  toggleHeaderColumn as toggleGridHeaderColumn,
+  toggleHeaderRow as toggleGridHeaderRow,
 } from "./table-grid.js";
 import {
   type TableCodecError,
@@ -268,6 +272,33 @@ export const splitTableCell = (
     tableBlockId,
     (table) => splitGridCell(table, cellId, createId),
     { selectCellId: () => cellId },
+  );
+
+export const toggleTableHeaderRow = (
+  editor: Editor,
+  tableBlockId: string,
+): Result<void, TableCommandError> =>
+  applyTableGridOperation(editor, tableBlockId, (table) =>
+    toggleGridHeaderRow(table),
+  );
+
+export const toggleTableHeaderColumn = (
+  editor: Editor,
+  tableBlockId: string,
+): Result<void, TableCommandError> =>
+  applyTableGridOperation(editor, tableBlockId, (table) =>
+    toggleGridHeaderColumn(table),
+  );
+
+export const setTableCellColor = (
+  editor: Editor,
+  tableBlockId: string,
+  target: TableCellTarget,
+  property: "textColor" | "backgroundColor",
+  color: string | null,
+): Result<void, TableCommandError> =>
+  applyTableGridOperation(editor, tableBlockId, (table) =>
+    setGridCellColor(table, target, property, color),
   );
 
 export const insertTable = (

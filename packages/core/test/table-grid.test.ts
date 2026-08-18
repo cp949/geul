@@ -11,8 +11,11 @@ import {
   moveRow,
   projectTableGrid,
   resizeColumn,
+  setCellColor,
   splitCell,
   type TableGrid,
+  toggleHeaderColumn,
+  toggleHeaderRow,
   validateColumnWidth,
 } from "../src/table-grid.js";
 
@@ -901,6 +904,161 @@ describe("셀을 병합한다", () => {
       rowSpan: 2,
       columnSpan: 2,
     });
+  });
+});
+
+describe("헤더 행과 헤더 열을 토글한다", () => {
+  it("headerRows 0을 1로 바꾼다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    const result = toggleHeaderRow(t);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.headerRows).toBe(1);
+    expect(t.headerRows).toBe(0);
+  });
+
+  it("headerRows 1을 0으로 되돌린다", () => {
+    const t = { ...table(["c1"], [[cell("a", "c1")]]), headerRows: 1 as const };
+
+    const result = toggleHeaderRow(t);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.headerRows).toBe(0);
+  });
+
+  it("headerColumns를 같은 방식으로 토글한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    const first = toggleHeaderColumn(t);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value.headerColumns).toBe(1);
+
+    const second = toggleHeaderColumn(first.value);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.headerColumns).toBe(0);
+  });
+});
+
+describe("행 또는 열 단위로 셀 색상을 설정한다", () => {
+  const colored = () =>
+    table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+  it("대상 행을 덮는 모든 셀에 배경색을 넣는다", () => {
+    const result = setCellColor(
+      colored(),
+      { kind: "row", index: 0 },
+      "backgroundColor",
+      "#AABBCC",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells.map((c) => c.backgroundColor)).toEqual([
+      "#AABBCC",
+      "#AABBCC",
+    ]);
+    expect(result.value.rows[1]?.cells.map((c) => c.backgroundColor)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("병합 셀이 대상 행을 덮으면 그 셀도 대상이다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1", { rowSpan: 2 }), cell("b", "c2")], [cell("d", "c2")]],
+    );
+
+    const result = setCellColor(
+      t,
+      { kind: "row", index: 1 },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 기준 셀은 0행에 있지만 1행을 덮으므로 같이 칠해진다.
+    expect(result.value.rows[0]?.cells[0]?.textColor).toBe("#112233");
+    expect(result.value.rows[0]?.cells[1]?.textColor).toBeUndefined();
+    expect(result.value.rows[1]?.cells[0]?.textColor).toBe("#112233");
+  });
+
+  it("색이 null이면 해당 색 속성을 지운다", () => {
+    const t = table(
+      ["c1"],
+      [[cell("a", "c1", { textColor: "#112233", backgroundColor: "#AABBCC" })]],
+    );
+
+    const result = setCellColor(
+      t,
+      { kind: "column", index: 0 },
+      "textColor",
+      null,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const target = result.value.rows[0]?.cells[0];
+    expect(target).not.toHaveProperty("textColor");
+    expect(target?.backgroundColor).toBe("#AABBCC");
+  });
+
+  it("정규 형식이 아닌 색은 INVALID_COLOR로 거절하고 원본을 바꾸지 않는다", () => {
+    const t = colored();
+
+    const result = setCellColor(
+      t,
+      { kind: "row", index: 0 },
+      "textColor",
+      "#aabbcc",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "INVALID_COLOR", color: "#aabbcc" },
+    });
+    expect(t.rows[0]?.cells[0]?.textColor).toBeUndefined();
+  });
+
+  it("범위 밖 인덱스는 INDEX_OUT_OF_RANGE로 거절한다", () => {
+    const result = setCellColor(
+      colored(),
+      { kind: "column", index: 5 },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+  });
+
+  it("이미 같은 색이면 입력 표를 참조 그대로 반환한다", () => {
+    const t = table(["c1"], [[cell("a", "c1", { textColor: "#112233" })]]);
+
+    const result = setCellColor(
+      t,
+      { kind: "row", index: 0 },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBe(t);
   });
 });
 

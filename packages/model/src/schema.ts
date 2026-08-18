@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isCanonicalCellColor } from "./cell-color.js";
 import type { DocumentError } from "./errors.js";
 import { isSupportedLinkHref } from "./link-policy.js";
 import { firstNonCanonicalTextMarkIndex } from "./mark-canonicalization.js";
@@ -74,8 +75,6 @@ const documentSchema = z.object({
     ]),
   ),
 });
-
-const colorPattern = /^#[0-9A-F]{6}$/;
 
 const invalid = (
   path: DocumentPath,
@@ -423,7 +422,7 @@ const validateColors = (blocks: Block[]): Result<undefined, DocumentError> => {
         ] as const;
         if (
           cell.textColor !== undefined &&
-          !colorPattern.test(cell.textColor)
+          !isCanonicalCellColor(cell.textColor)
         ) {
           return invalid(
             [...cellPath, "textColor"],
@@ -432,7 +431,7 @@ const validateColors = (blocks: Block[]): Result<undefined, DocumentError> => {
         }
         if (
           cell.backgroundColor !== undefined &&
-          !colorPattern.test(cell.backgroundColor)
+          !isCanonicalCellColor(cell.backgroundColor)
         ) {
           return invalid(
             [...cellPath, "backgroundColor"],

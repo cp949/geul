@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { TableHandleMenu } from "./table-handle-menu.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
-const rowHandleLabel = "Drag to reorder row";
-const columnHandleLabel = "Drag to reorder column";
+// 핸들은 드래그(재정렬)와 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이
+// 한쪽만 안내하면 나머지 동작의 발견성을 가린다(block-side-menu와 같은 규칙).
+const rowHandleLabel = "Drag to reorder row, click for options";
+const columnHandleLabel = "Drag to reorder column, click for options";
 const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
 
@@ -64,6 +67,10 @@ type ColumnGeometry = {
 
 type TableGeometry = {
   tableBlockId: string;
+  // 헤더는 표 단위 플래그다(모델 headerRows/headerColumns: 0|1) — 메뉴의
+  // 체크 상태를 렌더 DOM에서 그대로 읽는다.
+  headerRows: number;
+  headerColumns: number;
   left: number;
   top: number;
   right: number;
@@ -218,6 +225,8 @@ const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
 
   return {
     tableBlockId,
+    headerRows: Number(table.getAttribute("data-be-header-rows") ?? "0"),
+    headerColumns: Number(table.getAttribute("data-be-header-columns") ?? "0"),
     left: tableRect.left,
     top: tableRect.top,
     right: tableRect.right,
@@ -271,6 +280,12 @@ type ReorderState = {
   targetIndex: number | null;
 };
 
+type HandleMenuState = {
+  kind: ReorderKind;
+  tableBlockId: string;
+  index: number;
+};
+
 type ResizeState = {
   pointerId: number;
   tableBlockId: string;
@@ -289,6 +304,10 @@ export const TableHandles = () => {
   const [hoverTableId, setHoverTableId] = useState<string | null>(null);
   const [reorderState, setReorderState] = useState<ReorderState | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [menuState, setMenuState] = useState<HandleMenuState | null>(null);
+  // 드래그로 끝난 제스처가 합성하는 click은 메뉴 열기로 해석하지 않는다
+  // (block-side-menu와 같은 규칙).
+  const suppressedHandleClickRef = useRef<string | null>(null);
   // 스크롤/리사이즈 시 geometry 재계산을 강제하기 위한 카운터.
   const [, setGeometryVersion] = useState(0);
   const hoverTableIdRef = useRef<string | null>(null);
@@ -308,6 +327,47 @@ export const TableHandles = () => {
     setResizeState(next);
   }, []);
 
+  const focusEditor = useCallback(() => {
+    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+  }, [element]);
+
+  const closeMenu = useCallback(() => {
+    setMenuState(null);
+    focusEditor();
+  }, [focusEditor]);
+
+  // 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로 닫는 UI는
+  // 병렬 e2e로 검증한다).
+  useEffect(() => {
+    if (menuState === null || element === null) return;
+    const ownerDocument = element.ownerDocument;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest("[data-be-table-menu]") !== null ||
+        target.closest("[data-be-table-row-handle]") !== null ||
+        target.closest("[data-be-table-column-handle]") !== null
+      ) {
+        return;
+      }
+      setMenuState(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeMenu();
+    };
+
+    ownerDocument.addEventListener("pointerdown", handlePointerDown);
+    ownerDocument.addEventListener("keydown", handleKeyDown);
+    return () => {
+      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
+      ownerDocument.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuState, element, closeMenu]);
+
   // gutter가 표 바깥 오버레이라서, hover 추적을 element 안쪽에만 걸면
   // 포인터가 핸들로 이동하는 순간 표 hover가 풀린다(block-side-menu와 동일한 이유).
   useEffect(() => {
@@ -322,7 +382,8 @@ export const TableHandles = () => {
         target.closest("[data-be-table-column-handle]") !== null ||
         target.closest("[data-be-table-resize-handle]") !== null ||
         target.closest("[data-be-table-expand-row]") !== null ||
-        target.closest("[data-be-table-expand-column]") !== null
+        target.closest("[data-be-table-expand-column]") !== null ||
+        target.closest("[data-be-table-menu]") !== null
       ) {
         return;
       }
@@ -363,7 +424,10 @@ export const TableHandles = () => {
   }, [element, updateHoverTableId]);
 
   const activeTableId =
-    reorderState?.tableBlockId ?? resizeState?.tableBlockId ?? hoverTableId;
+    reorderState?.tableBlockId ??
+    resizeState?.tableBlockId ??
+    menuState?.tableBlockId ??
+    hoverTableId;
   const geometry =
     activeTableId === null || element === null
       ? null
@@ -431,6 +495,14 @@ export const TableHandles = () => {
     const handlePointerUp = (event: PointerEvent) => {
       const current = reorderStateRef.current;
       if (current === null || event.pointerId !== current.pointerId) return;
+      if (current.hasDragged) {
+        // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
+        // (동시에 두 드래그가 진행될 수 없다), setPointerCapture로 pointerup
+        // 이후의 합성 click은 항상 드래그를 시작한 바로 그 버튼(=같은 표)으로
+        // 되돌아온다. 그래서 kind+sourceIndex만으로 다른 표의 같은 인덱스
+        // 핸들과 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
+        suppressedHandleClickRef.current = `${current.kind}-${current.sourceIndex}`;
+      }
       if (!current.cancelled && current.targetIndex !== null) {
         const toIndex =
           current.targetIndex > current.sourceIndex
@@ -564,6 +636,23 @@ export const TableHandles = () => {
     };
   }, [resizeActive, element, editor, updateResizeState]);
 
+  const handleReorderHandleClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    kind: ReorderKind,
+    tableBlockId: string,
+    index: number,
+  ) => {
+    const suppressed = suppressedHandleClickRef.current;
+    suppressedHandleClickRef.current = null;
+    // detail 0은 키보드 활성화다 — 드래그 억제는 포인터 click에만 적용한다.
+    if (event.detail !== 0 && suppressed === `${kind}-${index}`) return;
+    setMenuState((current) =>
+      current !== null && current.kind === kind && current.index === index
+        ? null
+        : { kind, tableBlockId, index },
+    );
+  };
+
   const handlePointerDownOnReorderHandle = (
     event: React.PointerEvent<HTMLButtonElement>,
     kind: ReorderKind,
@@ -572,6 +661,7 @@ export const TableHandles = () => {
   ) => {
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    setMenuState(null);
     updateReorderState({
       kind,
       pointerId: event.pointerId,
@@ -670,6 +760,27 @@ export const TableHandles = () => {
     };
   })();
 
+  // 메뉴 좌표를 click 시점에 고정하면 연 채로 스크롤/창 크기 변경 시
+  // 앵커(핸들)와 어긋난다 — 핸들 자신처럼 매 렌더마다 geometry에서 다시
+  // 계산한다(geometry는 scroll/resize 시 geometryVersion을 통해 갱신된다).
+  const menuPosition = (() => {
+    if (menuState === null || geometry === null) return null;
+    if (menuState.kind === "row") {
+      const row = geometry.rows.find(
+        (entry) => entry.index === menuState.index,
+      );
+      return row === undefined
+        ? null
+        : { left: geometry.left, top: row.top + row.height };
+    }
+    const column = geometry.columns.find(
+      (entry) => entry.index === menuState.index,
+    );
+    return column === undefined
+      ? null
+      : { left: column.left, top: geometry.top };
+  })();
+
   return (
     <>
       {geometry !== null && (
@@ -681,6 +792,14 @@ export const TableHandles = () => {
               icon={rowHandleIcon}
               key={`row-${row.rowId}`}
               label={rowHandleLabel}
+              onClick={(event) =>
+                handleReorderHandleClick(
+                  event,
+                  "row",
+                  geometry.tableBlockId,
+                  row.index,
+                )
+              }
               onMouseDown={(event) => event.preventDefault()}
               onPointerDown={(event) =>
                 handlePointerDownOnReorderHandle(
@@ -704,6 +823,14 @@ export const TableHandles = () => {
               icon={columnHandleIcon}
               key={`column-${column.columnId}`}
               label={columnHandleLabel}
+              onClick={(event) =>
+                handleReorderHandleClick(
+                  event,
+                  "column",
+                  geometry.tableBlockId,
+                  column.index,
+                )
+              }
               onMouseDown={(event) => event.preventDefault()}
               onPointerDown={(event) =>
                 handlePointerDownOnReorderHandle(
@@ -775,6 +902,22 @@ export const TableHandles = () => {
           className="geul:fixed geul:z-10 geul:bg-[var(--be-color-accent,#1a73e8)] geul:pointer-events-none"
           data-be-table-reorder-guide=""
           style={reorderGuideRect}
+        />
+      )}
+      {menuState !== null && geometry !== null && menuPosition !== null && (
+        <TableHandleMenu
+          headerEnabled={
+            menuState.kind === "row"
+              ? geometry.headerRows === 1
+              : geometry.headerColumns === 1
+          }
+          headerToggleAvailable={menuState.index === 0}
+          index={menuState.index}
+          kind={menuState.kind}
+          left={menuPosition.left}
+          onClose={closeMenu}
+          tableBlockId={menuState.tableBlockId}
+          top={menuPosition.top}
         />
       )}
     </>

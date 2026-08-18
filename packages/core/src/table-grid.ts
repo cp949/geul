@@ -5,6 +5,7 @@ import type {
   TableGridValidationError,
 } from "@cp949/geul-model";
 import {
+  isCanonicalCellColor,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
   validateTableGrid,
@@ -36,7 +37,8 @@ export type TableGridError =
   | { code: "LAST_COLUMN" }
   | { code: "COLUMN_WIDTH_OUT_OF_RANGE"; width: number }
   | { code: "INDEX_OUT_OF_RANGE" }
-  | { code: "CELL_NOT_FOUND"; cellId: string };
+  | { code: "CELL_NOT_FOUND"; cellId: string }
+  | { code: "INVALID_COLOR"; color: string };
 
 export const projectTableGrid = (
   table: TableBlock,
@@ -584,6 +586,103 @@ export const splitCell = (
     return { ...row, cells: [...row.cells, ...newCells] };
   });
 
+  return { ok: true, value: { ...table, rows } };
+};
+
+// 헤더는 셀이 아니라 표 단위 플래그다(모델 headerRows/headerColumns: 0|1).
+// 편집기는 이 값을 data-be-header-* 속성으로 내보내고 CSS로 시각 구분한다.
+export const toggleHeaderRow = (
+  table: TableBlock,
+): Result<TableBlock, TableGridError> => ({
+  ok: true,
+  value: { ...table, headerRows: table.headerRows === 1 ? 0 : 1 },
+});
+
+export const toggleHeaderColumn = (
+  table: TableBlock,
+): Result<TableBlock, TableGridError> => ({
+  ok: true,
+  value: { ...table, headerColumns: table.headerColumns === 1 ? 0 : 1 },
+});
+
+export type TableCellTarget =
+  | { kind: "row"; index: number }
+  | { kind: "column"; index: number };
+
+type CellColorProperty = "textColor" | "backgroundColor";
+
+// 색 속성은 값이 없을 때 키 자체를 두지 않는다(저장 포맷의 optional 필드).
+const withCellColor = (
+  cellEntry: TableCell,
+  property: CellColorProperty,
+  color: string | null,
+): TableCell => {
+  const textColor =
+    property === "textColor" ? color : (cellEntry.textColor ?? null);
+  const backgroundColor =
+    property === "backgroundColor"
+      ? color
+      : (cellEntry.backgroundColor ?? null);
+  return {
+    id: cellEntry.id,
+    columnId: cellEntry.columnId,
+    rowSpan: cellEntry.rowSpan,
+    columnSpan: cellEntry.columnSpan,
+    content: cellEntry.content,
+    ...(textColor === null ? {} : { textColor }),
+    ...(backgroundColor === null ? {} : { backgroundColor }),
+  };
+};
+
+// 대상 행/열을 덮는 기준 셀 전부가 대상이다 — 병합 셀은 기준 좌표가 다른
+// 행에 있어도 대상 행을 덮으면 함께 칠한다(PIT-0004: 저장 배열이 아니라
+// 논리 좌표로 판단한다).
+export const setCellColor = (
+  table: TableBlock,
+  target: TableCellTarget,
+  property: CellColorProperty,
+  color: string | null,
+): Result<TableBlock, TableGridError> => {
+  if (color !== null && !isCanonicalCellColor(color)) {
+    return { ok: false, error: { code: "INVALID_COLOR", color } };
+  }
+
+  const limit =
+    target.kind === "row" ? table.rows.length : table.columns.length;
+  if (
+    !Number.isInteger(target.index) ||
+    target.index < 0 ||
+    target.index >= limit
+  ) {
+    return indexOutOfRange;
+  }
+
+  const projected = projectTableGrid(table);
+  if (!projected.ok) return projected;
+  const grid = projected.value;
+
+  const targetCellIds = new Set<string>();
+  const span = target.kind === "row" ? grid.columnCount : grid.rowCount;
+  for (let index = 0; index < span; index += 1) {
+    const occupant =
+      target.kind === "row"
+        ? grid.cellAt(target.index, index)
+        : grid.cellAt(index, target.index);
+    if (occupant !== undefined) targetCellIds.add(occupant.cellId);
+  }
+
+  let changed = false;
+  const rows = table.rows.map((row) => ({
+    ...row,
+    cells: row.cells.map((cellEntry) => {
+      if (!targetCellIds.has(cellEntry.id)) return cellEntry;
+      if ((cellEntry[property] ?? null) === color) return cellEntry;
+      changed = true;
+      return withCellColor(cellEntry, property, color);
+    }),
+  }));
+
+  if (!changed) return { ok: true, value: table };
   return { ok: true, value: { ...table, rows } };
 };
 

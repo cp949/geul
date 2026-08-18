@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import { EditorContent, EditorProvider } from "../src/index.js";
 import { TableHandles } from "../src/table-handles.js";
 
-const rowHandleLabel = "Drag to reorder row";
-const columnHandleLabel = "Drag to reorder column";
+const rowHandleLabel = "Drag to reorder row, click for options";
+const columnHandleLabel = "Drag to reorder column, click for options";
 const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
 
@@ -26,6 +26,8 @@ type FakeControllerOptions = {
   insertTableRow?: EditorController["commands"]["insertTableRow"];
   insertTableColumn?: EditorController["commands"]["insertTableColumn"];
 };
+
+const ok = () => ({ ok: true, value: undefined }) as const;
 
 const fakeController = ({
   moveTableRow = () => ({ ok: true, value: undefined }),
@@ -102,6 +104,12 @@ const fakeController = ({
     moveTableRow: vi.fn(moveTableRow),
     moveTableColumn: vi.fn(moveTableColumn),
     resizeTableColumn: vi.fn(resizeTableColumn),
+    deleteTableRow: vi.fn(ok),
+    deleteTableColumn: vi.fn(ok),
+    toggleTableHeaderRow: vi.fn(ok),
+    toggleTableHeaderColumn: vi.fn(ok),
+    setTableCellTextColor: vi.fn(ok),
+    setTableCellBackgroundColor: vi.fn(ok),
     undo: vi.fn(),
     redo: vi.fn(),
   },
@@ -563,6 +571,187 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     expect(
       handles.filter((handle) => handle.style.left === "298px"),
     ).toHaveLength(2);
+    view.unmount();
+  });
+});
+
+describe("행/열 핸들 클릭 메뉴", () => {
+  const openRowMenu = (controller: ReturnType<typeof fakeController>) => {
+    const rendered = renderTable(controller);
+    fireEvent.pointerMove(rendered.table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(firstRowHandle, { pointerId: 1 });
+    fireEvent.click(firstRowHandle);
+    return rendered;
+  };
+
+  it("행 핸들을 클릭하면 표 메뉴가 열린다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+    view.unmount();
+  });
+
+  it("메뉴의 삭제 항목이 deleteTableRow를 행 인덱스로 호출한다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
+
+    expect(controller.commands.deleteTableRow).toHaveBeenCalledWith(
+      "table-1",
+      0,
+    );
+    expect(screen.queryByRole("menu")).toBeNull();
+    view.unmount();
+  });
+
+  it("메뉴의 삽입 항목이 위/아래 인덱스로 insertTableRow를 호출한다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Insert row below" }));
+
+    expect(controller.commands.insertTableRow).toHaveBeenCalledWith(
+      "table-1",
+      1,
+    );
+    view.unmount();
+  });
+
+  it("첫 행 메뉴에서 헤더 행을 토글한다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    const headerItem = screen.getByRole("menuitemcheckbox", {
+      name: "Header row",
+    });
+    expect(headerItem.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(headerItem);
+
+    expect(controller.commands.toggleTableHeaderRow).toHaveBeenCalledWith(
+      "table-1",
+    );
+    view.unmount();
+  });
+
+  it("둘째 행 메뉴에는 헤더 토글 항목이 없다", () => {
+    const controller = fakeController();
+    const { view, table } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const secondRowHandle = rowHandles[1];
+    if (secondRowHandle === undefined) throw new Error("둘째 행 핸들 없음");
+
+    fireEvent.pointerDown(secondRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(secondRowHandle, { pointerId: 1 });
+    fireEvent.click(secondRowHandle);
+
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+    expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
+    view.unmount();
+  });
+
+  it("배경색 팔레트가 대상 행 인덱스로 setTableCellBackgroundColor를 호출한다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Background color Yellow" }),
+    );
+
+    expect(
+      controller.commands.setTableCellBackgroundColor,
+    ).toHaveBeenCalledWith("table-1", { kind: "row", index: 0 }, "#FEF7E0");
+    view.unmount();
+  });
+
+  it("글자색 없음 항목은 색을 null로 지운다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
+
+    expect(controller.commands.setTableCellTextColor).toHaveBeenCalledWith(
+      "table-1",
+      { kind: "row", index: 0 },
+      null,
+    );
+    view.unmount();
+  });
+
+  it("스크롤하면 메뉴 위치가 갱신된 핸들 geometry를 따라간다", () => {
+    const controller = fakeController();
+    const { view, table } = openRowMenu(controller);
+
+    const menu = screen.getByRole("menu", { name: "Table row menu" });
+    const topBeforeScroll = menu.style.top;
+
+    const row1 = table.querySelector('[data-be-row-id="row-1"]');
+    if (row1 === null) throw new Error("첫 행 없음");
+    // 스크롤로 페이지가 위로 밀린 상황을 흉내낸다 — 행 rect의 top이 줄어든다.
+    stubRect(row1, { left: 100, top: 0, width: 200, height: 30 });
+    fireEvent.scroll(document);
+
+    expect(menu.style.top).not.toBe(topBeforeScroll);
+    view.unmount();
+  });
+
+  it("Escape로 메뉴를 닫는다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    view.unmount();
+  });
+
+  it("드래그로 재정렬한 뒤 이어지는 click은 메뉴를 열지 않는다", () => {
+    const controller = fakeController();
+    const { view, table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 150 });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+    fireEvent.click(firstRowHandle, { detail: 1 });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    view.unmount();
+  });
+
+  it("열 핸들 클릭은 열 메뉴를 열고 헤더 열을 토글한다", () => {
+    const controller = fakeController();
+    const { view, table } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstColumnHandle] = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    if (firstColumnHandle === undefined) throw new Error("열 핸들 없음");
+
+    fireEvent.pointerDown(firstColumnHandle, { pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(firstColumnHandle, { pointerId: 1 });
+    fireEvent.click(firstColumnHandle);
+
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Header column" }),
+    );
+    expect(controller.commands.toggleTableHeaderColumn).toHaveBeenCalledWith(
+      "table-1",
+    );
     view.unmount();
   });
 });

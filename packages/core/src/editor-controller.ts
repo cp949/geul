@@ -19,6 +19,8 @@ import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
 import {
+  deleteTableColumn as deleteTableColumnCommand,
+  deleteTableRow as deleteTableRowCommand,
   insertTableColumn as insertTableColumnCommand,
   insertTable as insertTableCommand,
   insertTableRow as insertTableRowCommand,
@@ -26,14 +28,18 @@ import {
   moveTableColumn as moveTableColumnCommand,
   moveTableRow as moveTableRowCommand,
   resizeTableColumn as resizeTableColumnCommand,
+  setTableCellColor as setTableCellColorCommand,
   splitTableCell as splitTableCellCommand,
   type TableCommandError,
+  toggleTableHeaderColumn as toggleTableHeaderColumnCommand,
+  toggleTableHeaderRow as toggleTableHeaderRowCommand,
 } from "./table-commands.js";
 import {
   TableCellExtension,
   TableExtension,
   TableRowExtension,
 } from "./table-extension.js";
+import type { TableCellTarget } from "./table-grid.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 
 export type DocumentChangeEvent = {
@@ -115,6 +121,26 @@ export interface EditorController {
     splitTableCell(
       tableBlockId: string,
       cellId: string,
+    ): Result<void, EditorError>;
+    deleteTableRow(
+      tableBlockId: string,
+      index: number,
+    ): Result<void, EditorError>;
+    deleteTableColumn(
+      tableBlockId: string,
+      index: number,
+    ): Result<void, EditorError>;
+    toggleTableHeaderRow(tableBlockId: string): Result<void, EditorError>;
+    toggleTableHeaderColumn(tableBlockId: string): Result<void, EditorError>;
+    setTableCellTextColor(
+      tableBlockId: string,
+      target: TableCellTarget,
+      color: string | null,
+    ): Result<void, EditorError>;
+    setTableCellBackgroundColor(
+      tableBlockId: string,
+      target: TableCellTarget,
+      color: string | null,
     ): Result<void, EditorError>;
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
@@ -697,7 +723,13 @@ export const createEditor = (
   // 클로저를 넘나드는 값은 원시 타입(code 문자열, blockId, width, message)만 쓴다.
   const tableErrorFromCode = (
     code: TableCommandError["code"],
-    detail: { blockId: string; message: string; width: number; cellId: string },
+    detail: {
+      blockId: string;
+      message: string;
+      width: number;
+      cellId: string;
+      color: string;
+    },
   ): EditorError => {
     switch (code) {
       case "BLOCK_NOT_FOUND":
@@ -718,6 +750,12 @@ export const createEditor = (
         return { code: "NOT_RECTANGULAR" };
       case "CELL_NOT_FOUND":
         return { code: "CELL_NOT_FOUND", cellId: detail.cellId };
+      case "LAST_ROW":
+        return { code: "LAST_ROW" };
+      case "LAST_COLUMN":
+        return { code: "LAST_COLUMN" };
+      case "INVALID_COLOR":
+        return { code: "INVALID_COLOR", color: detail.color };
       default:
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
     }
@@ -732,6 +770,7 @@ export const createEditor = (
     let errorMessage = "";
     let errorWidth = 0;
     let errorCellId = "";
+    let errorColor = "";
 
     const result = runDocumentCommand(command, "local", () => {
       const outcome = invoke();
@@ -752,6 +791,9 @@ export const createEditor = (
       if (outcome.error.code === "CELL_NOT_FOUND") {
         errorCellId = outcome.error.cellId;
       }
+      if (outcome.error.code === "INVALID_COLOR") {
+        errorColor = outcome.error.color;
+      }
       return false;
     });
 
@@ -763,6 +805,7 @@ export const createEditor = (
           message: errorMessage,
           width: errorWidth,
           cellId: errorCellId,
+          color: errorColor,
         }),
       };
     }
@@ -985,6 +1028,7 @@ export const createEditor = (
               message: "",
               width: 0,
               cellId: "",
+              color: "",
             }),
           };
         }
@@ -1045,6 +1089,42 @@ export const createEditor = (
       splitTableCell: (tableBlockId, cellId) =>
         runVoidTableCommand("splitTableCell", () =>
           splitTableCellCommand(tiptapEditor, tableBlockId, cellId, createId),
+        ),
+      deleteTableRow: (tableBlockId, index) =>
+        runVoidTableCommand("deleteTableRow", () =>
+          deleteTableRowCommand(tiptapEditor, tableBlockId, index),
+        ),
+      deleteTableColumn: (tableBlockId, index) =>
+        runVoidTableCommand("deleteTableColumn", () =>
+          deleteTableColumnCommand(tiptapEditor, tableBlockId, index),
+        ),
+      toggleTableHeaderRow: (tableBlockId) =>
+        runVoidTableCommand("toggleTableHeaderRow", () =>
+          toggleTableHeaderRowCommand(tiptapEditor, tableBlockId),
+        ),
+      toggleTableHeaderColumn: (tableBlockId) =>
+        runVoidTableCommand("toggleTableHeaderColumn", () =>
+          toggleTableHeaderColumnCommand(tiptapEditor, tableBlockId),
+        ),
+      setTableCellTextColor: (tableBlockId, target, color) =>
+        runVoidTableCommand("setTableCellTextColor", () =>
+          setTableCellColorCommand(
+            tiptapEditor,
+            tableBlockId,
+            target,
+            "textColor",
+            color,
+          ),
+        ),
+      setTableCellBackgroundColor: (tableBlockId, target, color) =>
+        runVoidTableCommand("setTableCellBackgroundColor", () =>
+          setTableCellColorCommand(
+            tiptapEditor,
+            tableBlockId,
+            target,
+            "backgroundColor",
+            color,
+          ),
         ),
       undo: () =>
         runDocumentCommand("undo", "undo", () => tiptapEditor.commands.undo()),
