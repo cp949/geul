@@ -1522,6 +1522,100 @@ describe("pasteInto", () => {
     });
   });
 
+  it("확장이 덮어쓰기 사각형 안의 셀을 만들었다 버리지 않는다", () => {
+    // 1x1 표의 (0,0)에 3x3을 붙이면 필요한 새 id는 열 2 + 행 2 + 붙여넣는
+    // 셀 9 = 13개다. 덮어쓰기 사각형 안에 빈 셀을 만들면 곧바로 전량
+    // 폐기된다 — 표 밖 경로의 골격 낭비(buildPasteTableSkeleton)와 같은
+    // 클래스라 확장 시점에 사각형을 제외해야 한다.
+    let idCalls = 0;
+    const countingId = () => {
+      idCalls += 1;
+      return `id-${idCalls}`;
+    };
+    const oneByOneTable: TableBlock = {
+      id: "table",
+      type: "table",
+      columns: [{ id: "c0", width: 160 }],
+      rows: [
+        {
+          id: "r0",
+          cells: [
+            { id: "a", columnId: "c0", rowSpan: 1, columnSpan: 1, content: [] },
+          ],
+        },
+      ],
+      headerRows: 0,
+      headerColumns: 0,
+    };
+    const threeByThree: TabularData = {
+      columnCount: 3,
+      rows: Array.from({ length: 3 }, (_, rowIndex) => ({
+        cells: Array.from({ length: 3 }, (_, columnIndex) => ({
+          columnIndex,
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: `${rowIndex},${columnIndex}` }],
+        })),
+      })),
+    };
+
+    const result = pasteInto(
+      oneByOneTable,
+      { row: 0, column: 0 },
+      threeByThree,
+      countingId,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(idCalls).toBe(13);
+    if (result.ok) {
+      expect(validateTableGrid(result.value)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+    }
+  });
+
+  it("확장 셀 중 덮어쓰기 사각형 밖의 것만 만들어 커버리지를 유지한다", () => {
+    // 2x2 표의 (1,1)에 2x2를 붙이면 3x3이 된다. 새로 만들 셀은 덮어쓰기
+    // 사각형([1,3)x[1,3)) 밖인 (0,2)와 (2,0)뿐이다: 열 1 + 행 1 + 생존
+    // 확장 셀 2 + 붙여넣는 셀 4 = id 8개.
+    let idCalls = 0;
+    const countingId = () => {
+      idCalls += 1;
+      return `id-${idCalls}`;
+    };
+    const twoByTwo: TabularData = {
+      columnCount: 2,
+      rows: Array.from({ length: 2 }, (_, rowIndex) => ({
+        cells: Array.from({ length: 2 }, (_, columnIndex) => ({
+          columnIndex,
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: `${rowIndex},${columnIndex}` }],
+        })),
+      })),
+    };
+
+    const result = pasteInto(
+      twoByTwoTable(),
+      { row: 1, column: 1 },
+      twoByTwo,
+      countingId,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(idCalls).toBe(8);
+    if (result.ok) {
+      expect(result.value.rows.length).toBe(3);
+      expect(result.value.columns.length).toBe(3);
+      expect(validateTableGrid(result.value)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+    }
+  });
+
   it("기존 병합 셀이 덮어쓰기 경계를 걸치면 문서를 바꾸지 않고 거절한다", () => {
     const merged = twoByTwoTable();
     const withMergedCell: TableBlock = {

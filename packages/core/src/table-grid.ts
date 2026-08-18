@@ -818,10 +818,21 @@ export const pasteInto = (
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 
+  const overwriteColumnEnd = anchor.column + data.columnCount;
+  const overwriteRowEnd = anchor.row + data.rows.length;
+
   // 끝 삽입은 기존 span과 절대 교차하지 않는다(스팬은 표 경계를 넘지
   // 못한다) — insertRow/insertColumn을 행/열마다 반복 호출하면 호출마다 표
   // 전체를 재구성해 셀 복사량이 목표 크기의 제곱에 비례한다. 추가 열과
-  // 행을 한 번에 만들어 붙인다(Issue #31).
+  // 행을 한 번에 만들어 붙이되, 덮어쓰기 사각형 안의 좌표는 어차피 아래
+  // 덮어쓰기 패스가 전량 폐기하고 붙여넣은 셀로 채우므로 만들지 않는다
+  // (표 밖 경로의 buildPasteTableSkeleton과 같은 원칙, Issue #31).
+  const insideOverwrite = (rowIndex: number, columnIndex: number): boolean =>
+    rowIndex >= anchor.row &&
+    rowIndex < overwriteRowEnd &&
+    columnIndex >= anchor.column &&
+    columnIndex < overwriteColumnEnd;
+
   let expanded = table;
   if (
     requiredRows > table.rows.length ||
@@ -835,27 +846,35 @@ export const pasteInto = (
     const widenedRows =
       appendedColumns.length === 0
         ? table.rows
-        : table.rows.map((row) => ({
+        : table.rows.map((row, rowIndex) => ({
             ...row,
             cells: [
               ...row.cells,
-              ...appendedColumns.map((column) =>
-                emptyCell(createId(), column.id),
-              ),
+              ...appendedColumns
+                .filter(
+                  (_, appendedIndex) =>
+                    !insideOverwrite(
+                      rowIndex,
+                      table.columns.length + appendedIndex,
+                    ),
+                )
+                .map((column) => emptyCell(createId(), column.id)),
             ],
           }));
     const appendedRows = Array.from(
       { length: requiredRows - table.rows.length },
-      () => ({
+      (_, appendedIndex) => ({
         id: createId(),
-        cells: columns.map((column) => emptyCell(createId(), column.id)),
+        cells: columns
+          .filter(
+            (_, columnIndex) =>
+              !insideOverwrite(table.rows.length + appendedIndex, columnIndex),
+          )
+          .map((column) => emptyCell(createId(), column.id)),
       }),
     );
     expanded = { ...table, columns, rows: [...widenedRows, ...appendedRows] };
   }
-
-  const overwriteColumnEnd = anchor.column + data.columnCount;
-  const overwriteRowEnd = anchor.row + data.rows.length;
   const columnIndexById = new Map(
     expanded.columns.map((column, index) => [column.id, index] as const),
   );
