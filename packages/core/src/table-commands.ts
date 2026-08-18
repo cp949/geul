@@ -582,7 +582,10 @@ export const pasteTabularData = (
     return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
   }
 
-  const afterPosition = findTopLevelBlockPosition(transaction.doc, afterBlockId);
+  const afterPosition = findTopLevelBlockPosition(
+    transaction.doc,
+    afterBlockId,
+  );
   if (afterPosition === null) return blockNotFound(afterBlockId);
   const afterNode = transaction.doc.nodeAt(afterPosition);
   if (afterNode === null) return blockNotFound(afterBlockId);
