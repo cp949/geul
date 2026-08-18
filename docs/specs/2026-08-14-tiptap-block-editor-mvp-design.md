@@ -152,6 +152,7 @@ type TableBlock = {
       content: InlineContent;
       textColor?: string;
       backgroundColor?: string;
+      align?: "left" | "center" | "right";
     }>;
   }>;
   headerRows: 0 | 1;
@@ -164,6 +165,7 @@ type TableBlock = {
 - `columnId`는 기준 셀이 시작되는 열을 가리킨다.
 - 열 너비는 셀이 아닌 열에 저장한다.
 - 색상 값은 허용된 정규화 형식만 저장한다.
+- `align`은 셀 단위로 저장하며 `left`/`center`/`right`만 허용한다. 미지정 셀은 키 자체를 두지 않는다(기본 정렬을 강제하지 않는다) — `textColor`/`backgroundColor`와 같은 optional 패턴.
 - decoder는 겹친 셀, 빈 좌표, 존재하지 않는 열, 중복 ID, 10,000셀 초과를 거부한다.
 
 `model -> Tiptap` decoder와 `Tiptap -> model` encoder는 `core`의 입출력 경계에 둔다. ProseMirror 위치값과 Tiptap 노드는 저장 포맷에 포함하지 않는다.
@@ -200,8 +202,10 @@ React 컴포넌트와 클립보드 파서는 별도 격자 계산을 구현하�
 - `deleteRow`, `deleteColumn`
 - `mergeCells`, `splitCell`
 - `toggleHeaderRow`, `toggleHeaderColumn`
-- `setCellTextColor`, `setCellBackgroundColor`
+- `setCellTextColor`, `setCellBackgroundColor`, `setCellAlign`
 - `pasteTabularData`
+
+`setCellTextColor`/`setCellBackgroundColor`/`setCellAlign`은 행, 열 또는 명시적 셀 id 목록을 대상으로 받는다. 셀 id 목록 대상은 셀 범위 선택(7.2)에서 온다.
 
 블록 명령은 생성, 종류 변경, 이동, 복제, 삭제, 분할과 병합을 포함한다.
 
@@ -232,8 +236,8 @@ MVP에는 CRDT를 구현하지 않는다. 명령은 결정적인 입력과 결�
 - 핸들 drag 시 삽입 위치 가이드와 함께 행 또는 열을 이동한다.
 - 핸들 click 시 추가, 삭제, 헤더와 색상 메뉴를 연다.
 - 표 오른쪽과 아래쪽에 빠른 열/행 추가 컨트롤을 표시한다.
-- 셀 drag 선택은 직사각형 범위를 만들고, 선택 툴바에 병합을 노출한다.
-- 병합 셀의 셀 메뉴에 분할을 노출한다.
+- 셀 drag 선택(트리플클릭으로 만든 단일 셀 선택 포함)은 셀 선택 툴바를 연다. 선택이 서로 다른 기준 셀 2개 이상을 덮으면 병합을, 이미 병합된 셀 하나를 덮으면 분할을 노출한다. 선택 범위와 무관하게 글자색·배경색·정렬 컨트롤을 함께 노출한다.
+- 셀 선택이 없어도 캐럿이 이미 병합된 셀 안에 있으면 같은 툴바에 분할과 글자색·배경색·정렬 컨트롤을 노출한다. 캐럿이 병합되지 않은 셀 안에 있을 때(일반 입력 중)는 툴바를 노출하지 않는다.
 - `Tab`과 `Shift+Tab`은 다음/이전 셀로 이동한다.
 - 마지막 셀의 `Tab`은 새 행을 추가한다.
 - 셀 선택과 테이블 핸들 조작 중에는 블록 drag를 시작하지 않는다.
@@ -277,7 +281,7 @@ import 결과는 문서와 경고 목록을 반환한다. export 결과는 문�
 ### 8.3 HTML 계약
 
 - 문단, H1-H3, 지원하는 인라인 마크, 링크와 테이블을 읽고 쓴다.
-- 테이블의 `rowspan`, `colspan`, `th`, 허용 색상과 열 너비를 독자 모델에 매핑한다.
+- 테이블의 `rowspan`, `colspan`, `th`, 허용 색상, 허용 정렬 값과 열 너비를 독자 모델에 매핑한다.
 - export는 표준 HTML 요소와 제한된 style/property만 사용한다.
 - import는 script, event handler, 실행 가능한 URL, 임의 element/attribute/style을 제거한다.
 - 링크 URL은 허용된 scheme 정책을 통과해야 한다.
@@ -290,10 +294,12 @@ Markdown dialect는 GitHub Flavored Markdown으로 고정한다.
 
 - 문단, H1-H3, 굵게, 기울임, 취소선, 인라인 코드, 링크와 GFM 표를 읽고 쓴다.
 - GFM에서 직접 표현할 수 없는 밑줄은 import/export 무손실 범위에서 제외한다.
-- 단순 표는 셀 병합이 없고, 셀 색상과 비기본 열 너비가 없으며, 모든 셀이 GFM 인라인으로 표현 가능한 표다.
+- GFM 표 정렬 구문(`:---`, `:---:`, `---:`)은 열 단위다. import는 각 열의 정렬 값을 그 열의 모든 셀 `align`에 동일하게 매핑한다. 정렬 구문이 없는 열은 `align`을 지정하지 않는다.
+- 단순 표는 셀 병합이 없고, 셀 색상과 비기본 열 너비가 없고, 열 안의 모든 셀 정렬 값이 같으며(모두 미지정도 포함), 모든 셀이 GFM 인라인으로 표현 가능한 표다.
 - `strict` export는 표현 불가능한 요소가 하나라도 있으면 실패한다. 실패에는 블록/셀 ID, 기능 종류와 오류 코드를 포함한다.
 - `lossy` export는 셀 병합을 논리 격자로 펼친다. 기준 셀의 텍스트는 좌상단에 두고 병합으로 덮인 좌표는 빈 셀로 내보낸다.
 - `lossy` export는 셀 색상과 열 너비를 버리고 각 손실을 경고 목록에 기록한다.
+- `lossy` export는 열 안에서 셀 정렬 값이 일치하지 않으면 그 열의 GFM 정렬을 비우고 손실을 경고 목록에 기록한다. 열 안의 모든 셀 정렬 값이 같으면(모두 미지정 포함) 그 값으로 GFM 열 정렬을 쓴다.
 - `lossy` export에서도 내용 의미를 안전하게 결정할 수 없는 구조는 실패한다.
 - Markdown 안에 raw HTML을 삽입해 비표준 정보를 보존하지 않는다.
 - Markdown import의 raw HTML은 실행하거나 고충실도 HTML 경로로 승격하지 않는다. 텍스트로 낮추거나 제거하고 경고한다.
@@ -386,6 +392,8 @@ React 언마운트는 코어 문서와 명령의 의미를 변경하지 않는�
 - `EXPORT_FORMAT_LOSS`
 - `EXPORT_FORMAT_UNSUPPORTED`
 
+셀 정렬 값 검증 실패는 셀 색상과 동일하게 `DOCUMENT_INVALID`를 재사용한다(전용 코드를 추가하지 않는다).
+
 사용자 입력으로 예상 가능한 거부는 `Result` 실패로 반환한다. 프로그래밍 오류나 깨진 내부 불변식은 개발 환경에서 명시적으로 실패시키고, 소비자 콜백으로 진단 정보를 전달한다. 실패한 명령은 revision, selection과 문서를 변경하지 않는다.
 
 ## 12. 검증 전략
@@ -401,10 +409,11 @@ React 언마운트는 코어 문서와 명령의 의미를 변경하지 않는�
 
 - 독자 JSON -> HTML -> 독자 JSON round-trip
 - 단순 문서의 독자 JSON -> GFM -> 독자 JSON round-trip
-- HTML의 `rowspan`, `colspan`, `th`, 색상과 열 너비 보존
+- HTML의 `rowspan`, `colspan`, `th`, 색상, 정렬과 열 너비 보존
 - HTML sanitizer의 script, event handler와 위험 URL 제거
 - GFM `strict`의 손실 위치 및 오류 코드
-- GFM `lossy`의 병합 펼침과 색상/너비 경고
+- GFM `lossy`의 병합 펼침과 색상/너비/정렬 불일치 경고
+- GFM `strict`/`lossy`의 열 정렬 구문 import 매핑(열 전체 셀에 동일 적용)
 - raw HTML이 포함된 Markdown의 안전한 처리
 - Markdown parser/serializer fixture의 dialect 고정
 
