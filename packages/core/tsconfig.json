@@ -8,5 +8,5 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../model" }]
+  "references": [{ "path": "../io" }, { "path": "../model" }]
 }

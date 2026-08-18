@@ -1,4 +1,6 @@
+import type { TabularData } from "@cp949/geul-io";
 import type { TableBlock } from "@cp949/geul-model";
+import { validateTableGrid } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import {
   deleteColumn,
@@ -9,6 +11,7 @@ import {
   mergeCells,
   moveColumn,
   moveRow,
+  pasteInto,
   projectTableGrid,
   resizeColumn,
   setCellAlign,
@@ -1374,5 +1377,208 @@ describe("열 너비를 조절한다", () => {
     // no-op 판별은 참조 동일성 계약이다 — table-commands가 이 참조로
     // 트랜잭션 생략 여부를 결정한다.
     expect(result.value).toBe(t);
+  });
+});
+
+describe("pasteInto", () => {
+  const twoByTwoTable = (): TableBlock => ({
+    id: "table",
+    type: "table",
+    columns: [
+      { id: "c0", width: 160 },
+      { id: "c1", width: 160 },
+    ],
+    rows: [
+      {
+        id: "r0",
+        cells: [
+          { id: "a", columnId: "c0", rowSpan: 1, columnSpan: 1, content: [] },
+          { id: "b", columnId: "c1", rowSpan: 1, columnSpan: 1, content: [] },
+        ],
+      },
+      {
+        id: "r1",
+        cells: [
+          { id: "c", columnId: "c0", rowSpan: 1, columnSpan: 1, content: [] },
+          { id: "d", columnId: "c1", rowSpan: 1, columnSpan: 1, content: [] },
+        ],
+      },
+    ],
+    headerRows: 0,
+    headerColumns: 0,
+  });
+
+  const oneByOneData = (text: string): TabularData => ({
+    columnCount: 1,
+    rows: [
+      {
+        cells: [
+          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text }] },
+        ],
+      },
+    ],
+  });
+
+  it("표 안 좌상단 셀부터 덮어쓴다", () => {
+    const result = pasteInto(
+      twoByTwoTable(),
+      { row: 0, column: 0 },
+      oneByOneData("x"),
+      sequentialIds("id"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "x" }]);
+    expect(result.value.rows.length).toBe(2);
+    expect(result.value.columns.length).toBe(2);
+  });
+
+  it("대상 표보다 크면 행·열을 자동 확장한다", () => {
+    const bigData: TabularData = {
+      columnCount: 3,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "1" }],
+            },
+            {
+              columnIndex: 1,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "2" }],
+            },
+            {
+              columnIndex: 2,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "3" }],
+            },
+          ],
+        },
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "4" }],
+            },
+            {
+              columnIndex: 1,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "5" }],
+            },
+            {
+              columnIndex: 2,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "6" }],
+            },
+          ],
+        },
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "7" }],
+            },
+            {
+              columnIndex: 1,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "8" }],
+            },
+            {
+              columnIndex: 2,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "9" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = pasteInto(
+      twoByTwoTable(),
+      { row: 0, column: 0 },
+      bigData,
+      sequentialIds("id"),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows.length).toBe(3);
+    expect(result.value.columns.length).toBe(3);
+    expect(validateTableGrid(result.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+  });
+
+  it("기존 병합 셀이 덮어쓰기 경계를 걸치면 문서를 바꾸지 않고 거절한다", () => {
+    const merged = twoByTwoTable();
+    const withMergedCell: TableBlock = {
+      ...merged,
+      rows: [
+        {
+          id: "r0",
+          cells: [
+            { id: "a", columnId: "c0", rowSpan: 2, columnSpan: 1, content: [] },
+            { id: "b", columnId: "c1", rowSpan: 1, columnSpan: 1, content: [] },
+          ],
+        },
+        {
+          id: "r1",
+          cells: [
+            { id: "d", columnId: "c1", rowSpan: 1, columnSpan: 1, content: [] },
+          ],
+        },
+      ],
+    };
+
+    // (0,0) 한 칸만 덮어쓰면 rowSpan=2인 기존 셀의 절반만 지워져 충돌한다.
+    const result = pasteInto(
+      withMergedCell,
+      { row: 0, column: 0 },
+      oneByOneData("x"),
+      sequentialIds("id"),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "PASTE_MERGE_CONFLICT" },
+    });
+  });
+
+  it("확장 후 논리 셀이 10,000을 넘으면 거절한다", () => {
+    const bigData: TabularData = {
+      columnCount: 1,
+      rows: Array.from({ length: 10_000 }, (_, index) => ({
+        cells: [
+          {
+            columnIndex: 0,
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [{ text: String(index) }],
+          },
+        ],
+      })),
+    };
+    const result = pasteInto(
+      twoByTwoTable(),
+      { row: 0, column: 0 },
+      bigData,
+      sequentialIds("id"),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "CELL_LIMIT_EXCEEDED" },
+    });
   });
 });

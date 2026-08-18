@@ -1,4 +1,5 @@
 import type { IdFactory, TableBlock } from "@cp949/geul-model";
+import { validateTableGrid } from "@cp949/geul-model";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,6 +10,7 @@ import {
   mergeCells,
   moveColumn,
   moveRow,
+  pasteInto,
   projectTableGrid,
   splitCell,
 } from "../src/table-grid.js";
@@ -149,6 +151,56 @@ describe("테이블 격자 불변식", () => {
               }
             }
           }
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+});
+
+describe("pasteInto 속성", () => {
+  const smallDataArbitrary = fc.integer({ min: 1, max: 3 }).chain((rowCount) =>
+    fc.integer({ min: 1, max: 3 }).map((columnCount) => ({
+      columnCount,
+      rows: Array.from({ length: rowCount }, (_, rowIndex) => ({
+        cells: Array.from({ length: columnCount }, (_, columnIndex) => ({
+          columnIndex,
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: `${rowIndex}-${columnIndex}` }],
+        })),
+      })),
+    })),
+  );
+
+  it("병합 없는 표에 병합 없는 데이터를 붙이면 항상 유효한 격자가 된다", () => {
+    fc.assert(
+      fc.property(
+        initialTableArbitrary,
+        smallDataArbitrary,
+        fc.nat(),
+        fc.nat(),
+        (table, data, rowSeed, columnSeed) => {
+          const anchor = {
+            row: rowSeed % table.rows.length,
+            column: columnSeed % table.columns.length,
+          };
+          let sequence = 0;
+          const createId: IdFactory = () => `paste-${sequence++}`;
+
+          const result = pasteInto(table, anchor, data, createId);
+          expect(result.ok).toBe(true);
+          if (!result.ok) return;
+          expect(validateTableGrid(result.value)).toEqual({
+            ok: true,
+            value: undefined,
+          });
+          expect(result.value.rows.length).toBeGreaterThanOrEqual(
+            anchor.row + data.rows.length,
+          );
+          expect(result.value.columns.length).toBeGreaterThanOrEqual(
+            anchor.column + data.columnCount,
+          );
         },
       ),
       { numRuns: 200 },
