@@ -762,6 +762,43 @@ describe("에디터 컨트롤러 표", () => {
     editor.destroy();
   });
 
+  it("탭이 섞인 HTML 표를 붙여넣어도 모델과 에디터가 어긋나지 않는다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+    });
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
+
+    const data = new DataTransfer();
+    data.setData(
+      "text/html",
+      "<table>\n\t<tbody>\n\t\t<tr>\n\t\t\t<td>Alice\tSmith</td>\n\t\t</tr>\n\t</tbody>\n</table>",
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    const document = editor.getDocument();
+    const table = document.blocks.find((block) => block.type === "table");
+    expect(table).toBeDefined();
+    if (table?.type !== "table") throw new Error("표 블록이 없다");
+    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "Alice Smith" }]);
+
+    // 붙여넣기 이후에도 다른 명령이 정상 동작해야 한다 — 모델↔에디터가
+    // 어긋나면 readEditorDocument()가 TypeError로 터진다.
+    expect(editor.commands.setText("block-1", "next")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    editor.destroy();
+  });
+
   it("pasteTabularData가 표 밖에서 새 표를 만들고 undo 1회로 복원된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),

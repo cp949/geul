@@ -1,0 +1,103 @@
+import type { InlineContent, TextMark } from "@cp949/geul-model";
+
+import type { HtmlNode } from "../html/inline-content.js";
+
+// HTML whitespace(TAB/LF/FF/CR/SPACE) run. ProseMirror DOM 파서가
+// preserveWhitespace:false에서 접는 집합과 같다(NBSP는 포함하지 않는다).
+const HTML_WHITESPACE_RUN = /[\t\n\f\r ]+/g;
+
+// model의 인라인 텍스트 계약(isValidInlineText)이 금지하는 코드 포인트:
+// LF를 제외한 C0 제어문자, DEL, 짝 없는 surrogate.
+const isDisallowedCodePoint = (codePoint: number): boolean =>
+  (codePoint <= 0x1f && codePoint !== 0x0a) ||
+  codePoint === 0x7f ||
+  (codePoint >= 0xd800 && codePoint <= 0xdfff);
+
+// 클립보드 셀 텍스트에서 model이 거절하는 코드 유닛을 제거한다. for...of는
+// 코드 포인트 단위로 순회하므로 정상 surrogate pair는 그대로 통과하고 짝
+// 없는 surrogate만 버려진다.
+export const sanitizeCellText = (text: string): string => {
+  let result = "";
+  for (const character of text) {
+    if (isDisallowedCodePoint(character.codePointAt(0) ?? 0)) continue;
+    result += character;
+  }
+  return result;
+};
+
+// hast 텍스트 노드 단계에서 whitespace를 접는다. inlineContentFromNodes가
+// br을 LF로 바꾸기 전에 접어야 "원본 마크업 들여쓰기가 만든 개행"과
+// "br이 만든 줄바꿈"을 구분할 수 있다.
+export const collapseHtmlWhitespace = (nodes: HtmlNode[]): void => {
+  for (const node of nodes) {
+    if (node.type === "text") {
+      node.value = sanitizeCellText(node.value.replace(HTML_WHITESPACE_RUN, " "));
+      continue;
+    }
+    if (node.type === "element") collapseHtmlWhitespace(node.children);
+  }
+};
+
+const marksKey = (marks: TextMark[] | undefined): string =>
+  JSON.stringify(marks ?? []);
+
+// 남은 공백 run을 하나로 줄이고 셀 앞뒤 공백과 LF에 붙은 공백을 버린다.
+// 세그먼트 경계를 넘어 이어진 공백까지 접어야 하므로 전체 텍스트를 한 번
+// 이어붙인 뒤 유지할 코드 유닛을 정한다.
+const keptCodeUnits = (flat: string): boolean[] => {
+  const kept = new Array<boolean>(flat.length).fill(true);
+  let lastKept = "";
+
+  for (let index = 0; index < flat.length; index += 1) {
+    const character = flat[index];
+    if (character !== " ") {
+      lastKept = character ?? "";
+      continue;
+    }
+
+    let next = index;
+    while (flat[next] === " ") next += 1;
+    const follower = flat[next];
+    if (
+      lastKept === "" ||
+      lastKept === " " ||
+      lastKept === "\n" ||
+      follower === undefined ||
+      follower === "\n"
+    ) {
+      kept[index] = false;
+      continue;
+    }
+    lastKept = " ";
+  }
+
+  return kept;
+};
+
+export const normalizeCellContent = (content: InlineContent): InlineContent => {
+  const kept = keptCodeUnits(content.map((item) => item.text).join(""));
+  const normalized: InlineContent = [];
+  let offset = 0;
+
+  for (const item of content) {
+    let text = "";
+    for (let index = 0; index < item.text.length; index += 1) {
+      if (kept[offset + index] === true) text += item.text[index];
+    }
+    offset += item.text.length;
+    if (text.length === 0) continue;
+
+    // 빈 세그먼트가 사라지면서 같은 mark 조합이 이웃하게 될 수 있다 —
+    // inlineContentFromNodes와 같은 병합 형태를 유지한다.
+    const previous = normalized.at(-1);
+    if (previous !== undefined && marksKey(previous.marks) === marksKey(item.marks)) {
+      previous.text += text;
+      continue;
+    }
+    normalized.push(
+      item.marks === undefined ? { text } : { text, marks: item.marks },
+    );
+  }
+
+  return normalized;
+};

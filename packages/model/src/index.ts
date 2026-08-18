@@ -9,6 +9,7 @@ export {
 } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";
+export { isValidInlineText } from "./string-invariants.js";
 export type {
   GridCell,
   TableGridInvalidReason,

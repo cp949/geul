@@ -11,13 +11,20 @@ import {
 } from "../html/inline-content.js";
 import { htmlSanitizeSchema } from "../html/sanitize-schema.js";
 import {
+  type CellLayout,
   columnElements,
   inferredColumnCount,
+  layoutColumnSpan,
   layoutRows,
   MAX_TABLE_COLUMNS,
   tableRows,
 } from "../html/table-layout.js";
 import type { Result } from "../result.js";
+import {
+  collapseHtmlWhitespace,
+  normalizeCellContent,
+  sanitizeCellText,
+} from "./cell-text.js";
 import { parseStyleDeclarations } from "./style-declarations.js";
 import {
   type TabularCell,
@@ -80,14 +87,53 @@ const cellStyleFields = (
   };
 };
 
+// 각 행에서 어떤 셀도 덮지 않는 논리 좌표를 표시한다. 겹치는 좌표는 한 번만
+// 표시되므로 패딩이 겹침을 감추지 않는다 — OVERLAPPING_CELL은 그대로
+// validateTabularData가 잡는다.
+const coveredCoordinates = (
+  layouts: CellLayout[][],
+  columnCount: number,
+): boolean[][] => {
+  const covered = layouts.map(() =>
+    new Array<boolean>(columnCount).fill(false),
+  );
+
+  for (const [rowIndex, row] of layouts.entries()) {
+    for (const layout of row) {
+      const rowSpan =
+        Number.isInteger(layout.rowSpan) && layout.rowSpan >= 1
+          ? layout.rowSpan
+          : 1;
+      const columnSpan = layoutColumnSpan(layout.columnSpan);
+      const rowEnd = Math.min(rowIndex + rowSpan, layouts.length);
+      const columnEnd = Math.min(layout.columnIndex + columnSpan, columnCount);
+
+      for (let row = rowIndex; row < rowEnd; row += 1) {
+        const rowCover = covered[row];
+        if (rowCover === undefined) continue;
+        for (let column = layout.columnIndex; column < columnEnd; column += 1) {
+          rowCover[column] = true;
+        }
+      }
+    }
+  }
+
+  return covered;
+};
+
 const tabularDataFromTable = (
   table: HtmlElementNode,
 ): Result<TabularData, ClipboardParseError> => {
+  // 셀 콘텐츠를 만들기 전에 접어야 br이 만든 LF와 원본 마크업 들여쓰기가
+  // 만든 개행이 구분된다.
+  collapseHtmlWhitespace(table.children);
+
   const cols = columnElements(table);
   const rows = tableRows(table);
   const layouts = layoutRows(rows);
-  const columnCount =
-    cols.length > 0 ? cols.length : inferredColumnCount(layouts);
+  // 짧은 행을 빈 셀로 채워 직사각형을 만들려면 colgroup과 실제 셀 중 넓은
+  // 쪽을 열 수로 잡아야 한다(TSV 경로의 패딩과 같은 계약, spec §4.3).
+  const columnCount = Math.max(cols.length, inferredColumnCount(layouts));
 
   if (columnCount === 0) {
     return { ok: false, error: { code: "NOT_TABULAR" } };
@@ -111,17 +157,33 @@ const tabularDataFromTable = (
     };
   }
 
+  const covered = coveredCoordinates(layouts, columnCount);
   const data: TabularData = {
     columnCount,
-    rows: layouts.map((row) => ({
-      cells: row.map((layout) => ({
+    rows: layouts.map((row, rowIndex) => {
+      const cells: TabularCell[] = row.map((layout) => ({
         columnIndex: layout.columnIndex,
         rowSpan: layout.rowSpan,
         columnSpan: layout.columnSpan,
-        content: inlineContentFromNodes(layout.element.children),
+        content: normalizeCellContent(
+          inlineContentFromNodes(layout.element.children),
+        ),
         ...cellStyleFields(layout.element),
-      })),
-    })),
+      }));
+
+      for (let column = 0; column < columnCount; column += 1) {
+        if (covered[rowIndex]?.[column] === true) continue;
+        cells.push({
+          columnIndex: column,
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [],
+        });
+      }
+      cells.sort((left, right) => left.columnIndex - right.columnIndex);
+
+      return { cells };
+    }),
   };
 
   const validated = validateTabularData(data);
@@ -176,7 +238,9 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
     columnCount,
     rows: rows.map((cells) => ({
       cells: Array.from({ length: columnCount }, (_, columnIndex) => {
-        const text = cells[columnIndex] ?? "";
+        // TSV 셀에 LF는 있을 수 없다(개행이 행 구분자다) — 단독 CR과 나머지
+        // C0 제어문자, DEL만 제거하면 model 인라인 텍스트 계약을 만족한다.
+        const text = sanitizeCellText(cells[columnIndex] ?? "");
         return {
           columnIndex,
           rowSpan: 1,

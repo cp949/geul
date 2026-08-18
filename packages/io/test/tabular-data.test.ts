@@ -31,6 +31,28 @@ describe("validateTabularData", () => {
     });
   });
 
+  it("model 인라인 텍스트 계약을 어기는 셀은 CLIPBOARD_TABLE_INVALID로 거부한다", () => {
+    const data: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "a\tb" }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(validateTabularData(data)).toMatchObject({
+      ok: false,
+      error: { code: "CLIPBOARD_TABLE_INVALID" },
+    });
+  });
+
   it("겹치는 셀은 CLIPBOARD_TABLE_INVALID로 거부한다", () => {
     const data: TabularData = {
       columnCount: 2,

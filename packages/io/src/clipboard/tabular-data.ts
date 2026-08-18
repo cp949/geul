@@ -1,4 +1,8 @@
-import { type InlineContent, validateGridCoverage } from "@cp949/geul-model";
+import {
+  type InlineContent,
+  isValidInlineText,
+  validateGridCoverage,
+} from "@cp949/geul-model";
 
 import type { ClipboardParseError } from "../errors.js";
 import type { Result } from "../result.js";
@@ -28,6 +32,23 @@ export const validateTabularData = (
       ok: false,
       error: { code: "CLIPBOARD_TABLE_INVALID", message: "Table is empty" },
     };
+  }
+
+  // 셀 텍스트가 model의 인라인 텍스트 계약을 어기면 붙여넣기 결과가 문서로
+  // 커밋될 때 parseDocument가 터진다 — 뮤테이션 전에 여기서 거절한다.
+  for (const [rowIndex, row] of data.rows.entries()) {
+    for (const [cellIndex, cellEntry] of row.cells.entries()) {
+      for (const item of cellEntry.content) {
+        if (isValidInlineText(item.text)) continue;
+        return {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_TABLE_INVALID",
+            message: `Cell text at row ${rowIndex}, cell ${cellIndex} is not valid inline text`,
+          },
+        };
+      }
+    }
   }
 
   const cells = data.rows.flatMap((row, rowIndex) =>
