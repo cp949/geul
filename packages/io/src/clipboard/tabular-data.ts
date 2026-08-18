@@ -1,4 +1,4 @@
-import { validateGridCoverage, type InlineContent } from "@cp949/geul-model";
+import { type InlineContent, validateGridCoverage } from "@cp949/geul-model";
 
 import type { ClipboardParseError } from "../errors.js";
 import type { Result } from "../result.js";

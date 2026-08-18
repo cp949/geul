@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { validateTabularData, type TabularData } from "../src/clipboard/tabular-data.js";
+import {
+  type TabularData,
+  validateTabularData,
+} from "../src/clipboard/tabular-data.js";
 
 const gridData = (): TabularData => ({
   columnCount: 2,
