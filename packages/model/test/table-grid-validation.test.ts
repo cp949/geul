@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { TableBlock } from "../src/index.js";
-import { parseDocument, validateGridCoverage, validateTableGrid } from "../src/index.js";
+import {
+  parseDocument,
+  validateGridCoverage,
+  validateTableGrid,
+} from "../src/index.js";
 
 const cell = (
   id: string,
