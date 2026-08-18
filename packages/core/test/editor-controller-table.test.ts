@@ -9,6 +9,41 @@ import {
   sequentialIds,
 } from "./editor-controller-support.js";
 
+// jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
+// (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
+// 검증하려면 TablePasteExtension이 실제로 사용하는 표면(getData)만 최소로
+// 폴리필한다. 이후 jsdom이 네이티브로 지원하게 되면 이 블록은 자동으로
+// 건너뛴다.
+if (typeof globalThis.DataTransfer === "undefined") {
+  class JsdomDataTransfer {
+    private readonly store = new Map<string, string>();
+
+    setData(format: string, data: string): void {
+      this.store.set(format, data);
+    }
+
+    getData(format: string): string {
+      return this.store.get(format) ?? "";
+    }
+  }
+
+  globalThis.DataTransfer = JsdomDataTransfer as unknown as typeof DataTransfer;
+}
+
+if (typeof globalThis.ClipboardEvent === "undefined") {
+  class JsdomClipboardEvent extends Event {
+    readonly clipboardData: DataTransfer | null;
+
+    constructor(type: string, eventInit?: ClipboardEventInit) {
+      super(type, eventInit);
+      this.clipboardData = eventInit?.clipboardData ?? null;
+    }
+  }
+
+  globalThis.ClipboardEvent =
+    JsdomClipboardEvent as unknown as typeof ClipboardEvent;
+}
+
 describe("에디터 컨트롤러 표", () => {
   it("R0에서 표 문서를 원자적으로 거부한다", () => {
     const changes: DocumentChangeEvent[] = [];
@@ -694,25 +729,36 @@ describe("에디터 컨트롤러 표", () => {
     editor.destroy();
   });
 
-  it("외부 HTML 표 붙여넣기는 표 노드로 파싱되지 않고 문서를 깨뜨리지 않는다", () => {
+  it("외부 HTML 표 붙여넣기가 표 노드로 파싱되고 undo 1회로 복원된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
       createId: sequentialIds("paste"),
     });
-    const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection(8);
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
 
-    expect(() =>
-      tiptap.commands.insertContent(
-        "<table><tbody><tr><td>ext</td></tr></tbody></table>",
-      ),
-    ).not.toThrow();
+    const data = new DataTransfer();
+    data.setData(
+      "text/html",
+      "<table><tbody><tr><td>ext</td></tr></tbody></table>",
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
 
     const document = editor.getDocument();
-    expect(document.blocks.some((block) => block.type === "table")).toBe(false);
-    expect(editor.commands.setText("block-1", "recovered")).toMatchObject({
-      ok: true,
-    });
+    expect(document.blocks.some((block) => block.type === "table")).toBe(true);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    const afterUndo = editor.getDocument();
+    expect(afterUndo.blocks.some((block) => block.type === "table")).toBe(
+      false,
+    );
+
     editor.destroy();
   });
 
