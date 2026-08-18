@@ -34,6 +34,12 @@ const invalidTable = (message: string): Result<never, ClipboardParseError> => ({
 export const validateTabularData = (
   data: TabularData,
 ): Result<undefined, ClipboardParseError> => {
+  // NaN은 `=== 0`도 `< 1`도 false라 아래 빈 데이터 가드를 통과하고,
+  // validateGridCoverage의 new Array(rowCount * columnCount)가 RangeError를
+  // 던져 Result 계약 밖으로 예외가 새어나간다 — 산술에 쓰기 전에 막는다.
+  if (!Number.isInteger(data.columnCount) || data.columnCount < 0) {
+    return invalidTable("columnCount must be a positive integer");
+  }
   if (data.rows.length === 0 || data.columnCount === 0) {
     return {
       ok: false,

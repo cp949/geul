@@ -1196,4 +1196,27 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });
+
+  it("NaN·비정수 columnCount는 예외 없이 INVALID_TABLE_SIZE로 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON();
+
+    // NaN < 1은 false라 기존 크기 가드를 통과하고, 하류의
+    // new Array(rowCount * columnCount)가 RangeError를 던져 공개 명령
+    // 밖으로 예외가 새어나갔다.
+    for (const columnCount of [Number.NaN, 2.5]) {
+      const data: TabularData = {
+        ...oneByOneData("x"),
+        columnCount,
+      };
+      expect(pasteTabularData(editor, data, createId)).toEqual({
+        ok: false,
+        error: { code: "INVALID_TABLE_SIZE" },
+      });
+    }
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
 });

@@ -512,7 +512,13 @@ export const pasteTabularData = (
   // pasteTabularData는 공개 API다 — 클립보드 파서를 거치지 않은 TabularData도
   // 들어온다. 뮤테이션 전에 구조(직사각형 커버리지)와 셀 인라인 텍스트를
   // 모두 검증해야 잘못된 데이터가 문서를 깨뜨리지 않는다.
-  if (data.rows.length < 1 || data.columnCount < 1) {
+  // NaN·비정수 columnCount는 `< 1` 비교를 통과해 하류 산술(new Array 등)에서
+  // RangeError로 터진다 — 크기 가드가 정수성까지 함께 판정한다.
+  if (
+    !Number.isInteger(data.columnCount) ||
+    data.rows.length < 1 ||
+    data.columnCount < 1
+  ) {
     return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
   }
   const validated = validateTabularData(data);
