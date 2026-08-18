@@ -818,16 +818,40 @@ export const pasteInto = (
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 
+  // 끝 삽입은 기존 span과 절대 교차하지 않는다(스팬은 표 경계를 넘지
+  // 못한다) — insertRow/insertColumn을 행/열마다 반복 호출하면 호출마다 표
+  // 전체를 재구성해 셀 복사량이 목표 크기의 제곱에 비례한다. 추가 열과
+  // 행을 한 번에 만들어 붙인다(Issue #31).
   let expanded = table;
-  while (expanded.rows.length < requiredRows) {
-    const inserted = insertRow(expanded, expanded.rows.length, createId);
-    if (!inserted.ok) return inserted;
-    expanded = inserted.value;
-  }
-  while (expanded.columns.length < requiredColumns) {
-    const inserted = insertColumn(expanded, expanded.columns.length, createId);
-    if (!inserted.ok) return inserted;
-    expanded = inserted.value;
+  if (
+    requiredRows > table.rows.length ||
+    requiredColumns > table.columns.length
+  ) {
+    const appendedColumns = Array.from(
+      { length: requiredColumns - table.columns.length },
+      () => ({ id: createId(), width: DEFAULT_COLUMN_WIDTH }),
+    );
+    const columns = [...table.columns, ...appendedColumns];
+    const widenedRows =
+      appendedColumns.length === 0
+        ? table.rows
+        : table.rows.map((row) => ({
+            ...row,
+            cells: [
+              ...row.cells,
+              ...appendedColumns.map((column) =>
+                emptyCell(createId(), column.id),
+              ),
+            ],
+          }));
+    const appendedRows = Array.from(
+      { length: requiredRows - table.rows.length },
+      () => ({
+        id: createId(),
+        cells: columns.map((column) => emptyCell(createId(), column.id)),
+      }),
+    );
+    expanded = { ...table, columns, rows: [...widenedRows, ...appendedRows] };
   }
 
   const overwriteColumnEnd = anchor.column + data.columnCount;
