@@ -18,6 +18,8 @@ void EditorProvider;
 void EditorContent;
 void LinkToolbar;
 void SlashMenu;
+const pasted = editor.commands.pasteTabularData({ columnCount: 1, rows: [] });
+void pasted;
 void editor;
 const event: DocumentChangeEvent = {
   revision: 0,
