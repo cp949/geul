@@ -89,6 +89,29 @@ const buildInitialTable = (
   };
 };
 
+// 표 밖 붙여넣기 전용 골격: 열과 행만 만들고 셀은 만들지 않는다.
+// pasteInto가 anchor (0,0)에서 모든 행·열을 덮어쓰므로 여기서 만든 셀은
+// 하나도 살아남지 못한다 — buildInitialTable을 쓰면 100x100 붙여넣기에서
+// 버려질 셀 10,000개를 만들고 id도 그만큼 더 뽑는다. 셀 없는 중간 상태는
+// pasteInto가 결과를 validateTableGrid로 검증하므로 밖으로 새지 않는다.
+const buildPasteTableSkeleton = (
+  size: { rows: number; columns: number },
+  createId: IdFactory,
+): TableBlock => ({
+  id: createId(),
+  type: "table",
+  columns: Array.from({ length: size.columns }, () => ({
+    id: createId(),
+    width: DEFAULT_COLUMN_WIDTH,
+  })),
+  rows: Array.from({ length: size.rows }, () => ({
+    id: createId(),
+    cells: [],
+  })),
+  headerRows: 0,
+  headerColumns: 0,
+});
+
 const findTable = (
   editor: Editor,
   blockId: string,
@@ -517,7 +540,7 @@ export const pasteTabularData = (
     return result.ok ? { ok: true, value: { blockId: tableBlockId } } : result;
   }
 
-  // 표 밖 분기는 buildInitialTable로 새 표를 만든다 — 0행/0열 TableBlock이
+  // 표 밖 분기는 buildPasteTableSkeleton으로 새 표를 만든다 — 0행/0열 TableBlock이
   // tableBlockToTiptapNode(스키마 비검증 NodeType.create)를 거쳐 문서에
   // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다.
   const afterBlockId = currentTopLevelBlockId(state.doc, state.selection.to);
@@ -530,7 +553,7 @@ export const pasteTabularData = (
   const afterNode = state.doc.nodeAt(afterPosition);
   if (afterNode === null) return blockNotFound(afterBlockId);
 
-  const emptyTable = buildInitialTable(
+  const emptyTable = buildPasteTableSkeleton(
     { rows: data.rows.length, columns: data.columnCount },
     createId,
   );
