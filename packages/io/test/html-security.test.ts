@@ -1,3 +1,7 @@
+/**
+ * HTML import/export의 보안 경계를 확인하는 테스트.
+ * 위험한 요소·속성·URL 제거와, 제거 사실이 경고로 보고되는지를 다룬다.
+ */
 import { readFileSync } from "node:fs";
 
 import type { Document } from "@cp949/geul-model";
@@ -294,5 +298,21 @@ describe("HTML 보안", () => {
       error: { code: "HTML_DOCUMENT_INVALID" },
     });
     expect(idCalls).toBeLessThan(20);
+  });
+
+  it("셀의 style 속성은 import에서 제거되고 경고로 보고된다", () => {
+    const result = importHtml(
+      '<table><tbody><tr><td style="color:#FF0000">a</td></tr></tbody></table>',
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.warnings).toContainEqual(
+      expect.objectContaining({
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "td",
+        attribute: "style",
+      }),
+    );
   });
 });
