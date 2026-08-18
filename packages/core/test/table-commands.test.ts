@@ -1,3 +1,4 @@
+import type { TabularData } from "@cp949/geul-io";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,6 +10,7 @@ import {
   mergeTableCells,
   moveTableColumn,
   moveTableRow,
+  pasteTabularData,
   resizeTableColumn,
   splitTableCell,
 } from "../src/table-commands.js";
@@ -790,6 +792,171 @@ describe("표 명령 방어 동작", () => {
     });
     expect(editor.getJSON()).toEqual(before);
     expect(editor.can().undo()).toBe(false);
+    editor.destroy();
+  });
+});
+
+// table-keyboard-extension.test.ts와 동일한 관례: descendants로 cellId를
+// 찾아 그 셀의 시작 경계(boundary) 위치를 구하고, setTextSelection처럼
+// 셀 내부에 캐럿을 두려면 boundary + 1을 쓴다.
+const findCellBoundaryPosition = (
+  editor: ReturnType<typeof createTableFixtureEditor>,
+  cellId: string,
+): number | null => {
+  let found: number | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
+      found = pos;
+      return false;
+    }
+    return true;
+  });
+  return found;
+};
+
+const placeCaretInCell = (
+  editor: ReturnType<typeof createTableFixtureEditor>,
+  cellId: string,
+) => {
+  const boundary = findCellBoundaryPosition(editor, cellId);
+  if (boundary === null) throw new Error("셀 fixture 준비 실패");
+  editor.commands.setTextSelection(boundary + 1);
+};
+
+describe("표에 표 형태 데이터를 붙여넣는다", () => {
+  const oneByOneData = (text: string): TabularData => ({
+    columnCount: 1,
+    rows: [
+      {
+        cells: [
+          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text }] },
+        ],
+      },
+    ],
+  });
+
+  it("표 밖에서 호출하면 현재 블록 뒤에 새 표를 만든다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1); // "para-1" 문단 안(텍스트 "hello" 앞)
+    const createId = sequentialIds("paste");
+
+    const twoByOne: TabularData = {
+      columnCount: 2,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "A" }],
+            },
+            {
+              columnIndex: 1,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "B" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = pasteTabularData(editor, twoByOne, createId);
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.type).toBe("paragraph");
+    const tableJson = doc.content?.[1];
+    expect(tableJson?.type).toBe("table");
+    expect(tableJson?.content).toHaveLength(1);
+    expect(tableJson?.content?.[0]?.content).toHaveLength(2);
+    expect(tableJson?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("A");
+    expect(tableJson?.content?.[0]?.content?.[1]?.content?.[0]?.text).toBe("B");
+    if (result.ok) {
+      expect(result.value.blockId).toBe(tableJson?.attrs?.blockId);
+    }
+    editor.destroy();
+  });
+
+  it("표 안에서 호출하면 현재 셀을 좌상단으로 덮어쓴다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const createId = sequentialIds("paste");
+
+    const result = pasteTabularData(editor, oneByOneData("x"), createId);
+
+    expect(result.ok).toBe(true);
+    // 표 크기는 그대로 2x2다 — 새 표를 만들지 않고 기존 표를 덮어썼다.
+    const table = editor.getJSON().content?.[0];
+    expect(table?.attrs?.blockId).toBe("table-1");
+    expect(table?.content).toHaveLength(2);
+    expect(table?.content?.[0]?.content).toHaveLength(2);
+    expect(table?.content?.[1]?.content).toHaveLength(2);
+    // 좌상단 셀(cell-1 자리)만 붙여넣은 텍스트로 바뀌고 나머지는 빈 채로 남는다.
+    expect(table?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("x");
+    expect(table?.content?.[0]?.content?.[1]?.content ?? []).toHaveLength(0);
+    expect(table?.content?.[1]?.content?.[0]?.content ?? []).toHaveLength(0);
+    expect(table?.content?.[1]?.content?.[1]?.content ?? []).toHaveLength(0);
+    if (result.ok) expect(result.value.blockId).toBe("table-1");
+
+    // 붙여넣은 좌상단 셀 안으로 캐럿이 옮겨간다(applyTableGridOperation의
+    // selectCellId 계약 — mergeTableCells/splitTableCell과 동일한 원칙).
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("x");
+    editor.destroy();
+  });
+
+  it("병합 충돌이면 문서를 바꾸지 않고 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    // 좌측 열(cell-1, cell-3)을 세로로 병합해 rowSpan=2 셀을 만든다 —
+    // "비직사각형 범위는 NOT_RECTANGULAR..." 테스트와 같은 준비 단계다.
+    const merged = mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 0 },
+    );
+    expect(merged.ok).toBe(true);
+
+    // 병합된 셀(cell-1) 안으로 캐럿을 옮긴다. selectedRect는 이 셀의 기준
+    // 좌표(0,0)를 anchor로 잡지만 실제로는 rowSpan=2라서 row 1도 덮는다.
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON();
+
+    // 1행짜리 데이터를 anchor(0,0)에 붙여넣으면 rowSpan=2 셀의 아래쪽 절반
+    // (row 1, column 0)이 어느 셀에도 속하지 않게 된다 — 병합 경계를 걸치는
+    // 붙여넣기는 PASTE_MERGE_CONFLICT로 거절되어야 한다.
+    const result = pasteTabularData(
+      editor,
+      oneByOneData("x"),
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "PASTE_MERGE_CONFLICT" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("붙여넣기 직후 undo 1회로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON();
+
+    const result = pasteTabularData(editor, oneByOneData("x"), createId);
+    expect(result.ok).toBe(true);
+
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });
 });

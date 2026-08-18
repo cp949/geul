@@ -1,9 +1,10 @@
+import type { TabularData } from "@cp949/geul-io";
 import type { IdFactory, Result, TableBlock } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
-import { CellSelection } from "@tiptap/pm/tables";
+import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
 import {
   DEFAULT_COLUMN_WIDTH,
@@ -14,6 +15,7 @@ import {
   mergeCells as mergeGridCells,
   moveColumn as moveGridColumn,
   moveRow as moveGridRow,
+  pasteInto as pasteGridInto,
   projectTableGrid,
   resizeColumn as resizeGridColumn,
   setCellAlign as setGridCellAlign,
@@ -35,7 +37,8 @@ export type TableCommandError =
   | TableCodecError
   | { code: "BLOCK_NOT_FOUND"; blockId: string }
   | { code: "TABLE_NOT_FOUND"; blockId: string }
-  | { code: "INVALID_TABLE_SIZE" };
+  | { code: "INVALID_TABLE_SIZE" }
+  | { code: "PASTE_TARGET_NOT_FOUND" };
 
 const blockNotFound = (blockId: string): Result<never, TableCommandError> => ({
   ok: false,
@@ -441,4 +444,94 @@ export const insertTable = (
   editor.view.dispatch(closeHistory(transaction));
 
   return { ok: true, value: { blockId: table.id } };
+};
+
+// 현재 selection이 속한 최상위 블록 id를 찾는다(findTopLevelBlockPosition과
+// 같은 스캔 방식) — 표 밖 붙여넣기의 삽입 위치를 정하는 데 쓴다. 이 함수는
+// isInTable(state)가 false일 때만 호출되므로 결과가 table 노드일 일은 없다.
+const currentTopLevelBlockId = (
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+): string | null => {
+  let blockId: string | null = null;
+  doc.forEach((node, offset) => {
+    if (blockId !== null) return;
+    if (from < offset || to > offset + node.nodeSize) return;
+    const id = node.attrs.blockId;
+    if (typeof id === "string" && id.length > 0) blockId = id;
+  });
+  return blockId;
+};
+
+// pasteInto가 만든 결과 표에서 anchor 좌표를 덮는 셀의 id. selectCellId
+// 콜백이 operate 결과(붙여넣기 후 표)를 넘겨받으므로, 여기서 찾는 id는
+// 항상 방금 붙여넣은 셀의 새 id다(원래 셀 id가 아니다).
+const cellIdAtAnchor = (
+  table: TableBlock,
+  anchor: { row: number; column: number },
+): string | null => {
+  const projected = projectTableGrid(table);
+  if (!projected.ok) return null;
+  return projected.value.cellAt(anchor.row, anchor.column)?.cellId ?? null;
+};
+
+// 표 안이면 selectedRect의 좌상단을 anchor로 삼아 pasteInto로 덮어쓰고,
+// 표 밖이면 현재 최상위 블록 뒤에 pasteInto로 채운 새 표를 끼운다. 두
+// 경로 모두 격자 레벨 연산(TableGrid.pasteInto)을 공유한다.
+export const pasteTabularData = (
+  editor: Editor,
+  data: TabularData,
+  createId: IdFactory,
+): Result<{ blockId: string }, TableCommandError> => {
+  const state = editor.state;
+
+  if (isInTable(state)) {
+    const rect = selectedRect(state);
+    const tableBlockId = rect.table.attrs.blockId;
+    if (typeof tableBlockId !== "string" || tableBlockId.length === 0) {
+      return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+    }
+    const anchor = { row: rect.top, column: rect.left };
+
+    const result = applyTableGridOperation(
+      editor,
+      tableBlockId,
+      (table) => pasteGridInto(table, anchor, data, createId),
+      { selectCellId: (table) => cellIdAtAnchor(table, anchor) },
+    );
+    return result.ok ? { ok: true, value: { blockId: tableBlockId } } : result;
+  }
+
+  const { from, to } = state.selection;
+  const afterBlockId = currentTopLevelBlockId(state.doc, from, to);
+  if (afterBlockId === null) {
+    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+  }
+
+  const afterPosition = findTopLevelBlockPosition(state.doc, afterBlockId);
+  if (afterPosition === null) return blockNotFound(afterBlockId);
+  const afterNode = state.doc.nodeAt(afterPosition);
+  if (afterNode === null) return blockNotFound(afterBlockId);
+
+  const emptyTable = buildInitialTable(
+    { rows: data.rows.length, columns: data.columnCount },
+    createId,
+  );
+  const filled = pasteGridInto(
+    emptyTable,
+    { row: 0, column: 0 },
+    data,
+    createId,
+  );
+  if (!filled.ok) return filled;
+
+  const tableNode = tableBlockToTiptapNode(editor.schema, filled.value);
+  const transaction = editor.state.tr.insert(
+    afterPosition + afterNode.nodeSize,
+    tableNode,
+  );
+  editor.view.dispatch(closeHistory(transaction));
+
+  return { ok: true, value: { blockId: filled.value.id } };
 };
