@@ -59,6 +59,28 @@ describe("parseClipboardTable", () => {
     expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "safe" }]);
   });
 
+  it("지원하지 않는 href는 링크 mark 없이 텍스트만 남긴다", () => {
+    const html =
+      '<table><tbody><tr><td><a href="//evil.com">x</a></td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "x" }]);
+  });
+
+  it("지원하는 href는 링크 mark로 보존한다", () => {
+    const html =
+      '<table><tbody><tr><td><a href="https://example.com/">x</a></td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([
+      { text: "x", marks: [{ type: "link", href: "https://example.com/" }] },
+    ]);
+  });
+
   it("HTML에 표가 없으면 탭이 있는 text/plain을 TSV로 파싱한다", () => {
     const result = parseClipboardTable({
       html: "<p>no table</p>",

@@ -1,7 +1,6 @@
 import {
   type Document,
   type IdFactory,
-  isSupportedLinkHref,
   parseDocument,
   type TableBlock,
 } from "@cp949/geul-model";
@@ -11,7 +10,11 @@ import { unified } from "unified";
 
 import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
-import { propertyInteger, propertyString } from "./hast-properties.js";
+import {
+  propertyInteger,
+  propertyString,
+  sanitizeLinks,
+} from "./hast-properties.js";
 import {
   collectHtmlImportWarnings,
   type HtmlImportWarning,
@@ -38,20 +41,6 @@ const MAX_TABLE_LOGICAL_CELLS = 10_000;
 const parseProcessor = unified().use(rehypeParse, { fragment: true });
 
 class HtmlDocumentInvalidError extends Error {}
-
-const sanitizeLinks = (nodes: HtmlNode[]): void => {
-  for (const node of nodes) {
-    if (node.type !== "element") continue;
-
-    if (node.tagName === "a") {
-      const href = node.properties.href;
-      if (typeof href !== "string" || !isSupportedLinkHref(href)) {
-        delete node.properties.href;
-      }
-    }
-    sanitizeLinks(node.children);
-  }
-};
 
 const asRoot = (node: unknown): HtmlRoot | undefined => {
   if (

@@ -3,7 +3,7 @@ import rehypeParse from "rehype-parse";
 import { unified } from "unified";
 
 import type { ClipboardParseError } from "../errors.js";
-import { propertyString } from "../html/hast-properties.js";
+import { propertyString, sanitizeLinks } from "../html/hast-properties.js";
 import {
   type HtmlElementNode,
   type HtmlRoot,
@@ -138,6 +138,10 @@ const parseHtmlTable = (
   const safeRoot = asRoot(sanitize(unsafeRoot, htmlSanitizeSchema));
   if (safeRoot === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" } };
+
+  // importHtml과 같은 링크 정책을 적용한다 — 살려두면 core의
+  // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
+  sanitizeLinks(safeRoot.children);
 
   const table = findFirstTable(safeRoot);
   if (table === undefined) return { ok: false, error: { code: "NOT_TABULAR" } };
