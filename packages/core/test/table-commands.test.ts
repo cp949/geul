@@ -960,6 +960,65 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.destroy();
   });
 
+  it("구조적으로 invalid한 TabularData는 NOT_RECTANGULAR로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON();
+
+    // columnIndex가 columnCount 밖이라 (0,0)이 어느 셀에도 덮이지 않는다.
+    const outOfRange: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 3,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "x" }],
+            },
+          ],
+        },
+      ],
+    };
+    // 같은 좌표를 두 셀이 덮는다.
+    const overlapping: TabularData = {
+      columnCount: 2,
+      rows: [
+        {
+          cells: [
+            { columnIndex: 0, rowSpan: 1, columnSpan: 2, content: [] },
+            { columnIndex: 1, rowSpan: 1, columnSpan: 1, content: [] },
+          ],
+        },
+      ],
+    };
+
+    expect(pasteTabularData(editor, outOfRange, createId)).toEqual({
+      ok: false,
+      error: { code: "NOT_RECTANGULAR" },
+    });
+    expect(pasteTabularData(editor, overlapping, createId)).toEqual({
+      ok: false,
+      error: { code: "NOT_RECTANGULAR" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("model 인라인 텍스트 계약을 어기는 TabularData는 표 안에서도 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON();
+
+    expect(
+      pasteTabularData(editor, oneByOneData("a\tb"), sequentialIds("paste")),
+    ).toEqual({ ok: false, error: { code: "NOT_RECTANGULAR" } });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
   it("표 밖에서 빈 TabularData로 호출하면 INVALID_TABLE_SIZE로 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);

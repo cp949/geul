@@ -1,4 +1,4 @@
-import type { TabularData } from "@cp949/geul-io";
+import { type TabularData, validateTabularData } from "@cp949/geul-io";
 import type { IdFactory, Result, TableBlock } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
@@ -486,6 +486,16 @@ export const pasteTabularData = (
 ): Result<{ blockId: string }, TableCommandError> => {
   const state = editor.state;
 
+  // pasteTabularData는 공개 API다 — 클립보드 파서를 거치지 않은 TabularData도
+  // 들어온다. 뮤테이션 전에 구조(직사각형 커버리지)와 셀 인라인 텍스트를
+  // 모두 검증해야 잘못된 데이터가 문서를 깨뜨리지 않는다.
+  if (data.rows.length < 1 || data.columnCount < 1) {
+    return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
+  }
+  if (!validateTabularData(data).ok) {
+    return { ok: false, error: { code: "NOT_RECTANGULAR" } };
+  }
+
   if (isInTable(state)) {
     const rect = selectedRect(state);
     const tableBlockId = rect.table.attrs.blockId;
@@ -503,14 +513,9 @@ export const pasteTabularData = (
     return result.ok ? { ok: true, value: { blockId: tableBlockId } } : result;
   }
 
-  // 표 밖 분기는 buildInitialTable로 새 표를 만든다 — insertTable과 같은
-  // 이유로 행/열이 1보다 작은 요청을 사전에 거절해야 한다. 여기서 막지
-  // 않으면 0행/0열 TableBlock이 그대로 tableBlockToTiptapNode(스키마
-  // 비검증 NodeType.create)를 거쳐 실제 트랜잭션으로 문서에 삽입된다.
-  if (data.rows.length < 1 || data.columnCount < 1) {
-    return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
-  }
-
+  // 표 밖 분기는 buildInitialTable로 새 표를 만든다 — 0행/0열 TableBlock이
+  // tableBlockToTiptapNode(스키마 비검증 NodeType.create)를 거쳐 문서에
+  // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다.
   const { from, to } = state.selection;
   const afterBlockId = currentTopLevelBlockId(state.doc, from, to);
   if (afterBlockId === null) {
