@@ -249,9 +249,12 @@ test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다
   await expect(editable.locator("table")).toHaveCount(1);
   await expect(editable.locator("table td").first()).toContainText("ext");
 
-  // 붙여넣기 이후에도 편집이 계속 동작한다(영구 desync 없음).
+  // 캐럿이 붙여넣은 표의 좌상단 셀로 이동한다(Issue #29) — 이어서 입력하면
+  // 셀 안에 들어가고 원래 문단은 그대로 남는다. 입력이 반영된다는 것
+  // 자체가 붙여넣기 이후에도 편집이 계속 동작한다는 증거다(영구 desync 없음).
   await page.keyboard.type("-after");
-  await expect(editable.locator("p").first()).toContainText("after");
+  await expect(editable.locator("p").first()).toContainText("before");
+  await expect(editable.locator("table td").first()).toContainText("after");
 });
 
 test("빠른 확장 버튼으로 행과 열을 추가하고 undo 1회로 복원한다", async ({
