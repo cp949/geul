@@ -799,6 +799,50 @@ describe("에디터 컨트롤러 표", () => {
     editor.destroy();
   });
 
+  it("10,000셀을 넘는 클립보드 표는 이벤트만 소비하고 문서를 바꾸지 않는다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+    });
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
+    const before = editor.getDocument();
+
+    const cells = Array.from({ length: 101 }, () => "<td>x</td>").join("");
+    const rows = Array.from({ length: 101 }, () => `<tr>${cells}</tr>`).join(
+      "",
+    );
+    const htmlData = new DataTransfer();
+    htmlData.setData("text/html", `<table><tbody>${rows}</tbody></table>`);
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: htmlData,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(editor.getDocument().blocks).toEqual(before.blocks);
+
+    const tsvLine = Array.from({ length: 101 }, () => "x").join("\t");
+    const tsvData = new DataTransfer();
+    tsvData.setData(
+      "text/plain",
+      Array.from({ length: 101 }, () => tsvLine).join("\n"),
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: tsvData,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(editor.getDocument().blocks).toEqual(before.blocks);
+
+    editor.destroy();
+  });
+
   it("pasteTabularData가 표 밖에서 새 표를 만들고 undo 1회로 복원된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
