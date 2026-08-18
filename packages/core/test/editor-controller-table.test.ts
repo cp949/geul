@@ -1003,4 +1003,41 @@ describe("에디터 컨트롤러 표", () => {
 
     editor.destroy();
   });
+
+  it("pasteTabularData가 invalid한 데이터의 거절 원인 message를 공개 에러로 전달한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("id"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(1);
+
+    // 인라인 텍스트 계약 위반(탭 포함) — io validateTabularData가 만든 원인
+    // message가 controller 경계에서 소실되지 않아야 한다(Issue #30).
+    const invalid: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "a\tb" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(editor.commands.pasteTabularData(invalid)).toEqual({
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message: "Cell text at row 0, cell 0 is not valid inline text",
+      },
+    });
+
+    editor.destroy();
+  });
 });

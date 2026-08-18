@@ -777,6 +777,8 @@ export const createEditor = (
         return { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: detail.width };
       case "NOT_RECTANGULAR":
         return { code: "NOT_RECTANGULAR" };
+      case "TABULAR_DATA_INVALID":
+        return { code: "TABULAR_DATA_INVALID", message: detail.message };
       case "CELL_NOT_FOUND":
         return { code: "CELL_NOT_FOUND", cellId: detail.cellId };
       case "LAST_ROW":
@@ -820,7 +822,10 @@ export const createEditor = (
       ) {
         errorBlockId = outcome.error.blockId;
       }
-      if (outcome.error.code === "TABLE_NODE_INVALID") {
+      if (
+        outcome.error.code === "TABLE_NODE_INVALID" ||
+        outcome.error.code === "TABULAR_DATA_INVALID"
+      ) {
         errorMessage = outcome.error.message;
       }
       if (outcome.error.code === "COLUMN_WIDTH_OUT_OF_RANGE") {
@@ -1049,6 +1054,7 @@ export const createEditor = (
 
         let errorCode: TableCommandError["code"] | null = null;
         let errorBlockId = "";
+        let errorMessage = "";
         let insertedBlockId = "";
 
         const result = runDocumentCommand("pasteTabularData", "local", () => {
@@ -1057,6 +1063,9 @@ export const createEditor = (
             errorCode = outcome.error.code;
             if (outcome.error.code === "BLOCK_NOT_FOUND") {
               errorBlockId = outcome.error.blockId;
+            }
+            if (outcome.error.code === "TABULAR_DATA_INVALID") {
+              errorMessage = outcome.error.message;
             }
             return false;
           }
@@ -1069,7 +1078,7 @@ export const createEditor = (
             ok: false,
             error: tableErrorFromCode(errorCode, {
               blockId: errorBlockId,
-              message: "",
+              message: errorMessage,
               width: 0,
               cellId: "",
               color: "",

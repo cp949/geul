@@ -992,7 +992,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.destroy();
   });
 
-  it("구조적으로 invalid한 TabularData는 NOT_RECTANGULAR로 거절하고 문서를 바꾸지 않는다", () => {
+  it("구조적으로 invalid한 TabularData는 TABULAR_DATA_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const createId = sequentialIds("paste");
@@ -1027,26 +1027,96 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       ],
     };
 
-    expect(pasteTabularData(editor, outOfRange, createId)).toEqual({
-      ok: false,
-      error: { code: "NOT_RECTANGULAR" },
-    });
-    expect(pasteTabularData(editor, overlapping, createId)).toEqual({
-      ok: false,
-      error: { code: "NOT_RECTANGULAR" },
-    });
+    // 구조(커버리지) 위반은 병합 명령의 NOT_RECTANGULAR가 아니라 원인
+    // message가 담긴 전용 코드로 보고된다 — 호출자가 실패 원인을 구분할 수
+    // 있어야 한다(Issue #30).
+    const outOfRangeResult = pasteTabularData(editor, outOfRange, createId);
+    expect(outOfRangeResult.ok).toBe(false);
+    if (!outOfRangeResult.ok) {
+      expect(outOfRangeResult.error.code).toBe("TABULAR_DATA_INVALID");
+      if (outOfRangeResult.error.code === "TABULAR_DATA_INVALID") {
+        expect(outOfRangeResult.error.message).toContain(
+          "Table layout is invalid",
+        );
+      }
+    }
+    const overlappingResult = pasteTabularData(editor, overlapping, createId);
+    expect(overlappingResult.ok).toBe(false);
+    if (!overlappingResult.ok) {
+      expect(overlappingResult.error.code).toBe("TABULAR_DATA_INVALID");
+    }
     expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });
 
-  it("model 인라인 텍스트 계약을 어기는 TabularData는 표 안에서도 거절한다", () => {
+  it("model 인라인 텍스트 계약을 어기는 TabularData는 표 안에서도 TABULAR_DATA_INVALID로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
     const before = editor.getJSON();
 
     expect(
       pasteTabularData(editor, oneByOneData("a\tb"), sequentialIds("paste")),
-    ).toEqual({ ok: false, error: { code: "NOT_RECTANGULAR" } });
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message: "Cell text at row 0, cell 0 is not valid inline text",
+      },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("서식 값 위반과 열 정렬 위반은 원인이 담긴 TABULAR_DATA_INVALID로 보고한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON();
+
+    // 소문자 hex — model 정규 형식(대문자 #RRGGBB) 위반.
+    const badColor: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "x" }],
+              textColor: "#ff0000",
+            },
+          ],
+        },
+      ],
+    };
+    // columnIndex 내림차순 — pasteInto가 요구하는 오름차순 계약 위반.
+    const unsorted: TabularData = {
+      columnCount: 2,
+      rows: [
+        {
+          cells: [
+            { columnIndex: 1, rowSpan: 1, columnSpan: 1, content: [] },
+            { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [] },
+          ],
+        },
+      ],
+    };
+
+    expect(pasteTabularData(editor, badColor, createId)).toEqual({
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message: "Cell textColor at row 0, cell 0 is not a canonical color",
+      },
+    });
+    expect(pasteTabularData(editor, unsorted, createId)).toEqual({
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message: "Cells in row 0 are not sorted by ascending columnIndex",
+      },
+    });
     expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });

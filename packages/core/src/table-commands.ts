@@ -38,6 +38,7 @@ export type TableCommandError =
   | { code: "BLOCK_NOT_FOUND"; blockId: string }
   | { code: "TABLE_NOT_FOUND"; blockId: string }
   | { code: "INVALID_TABLE_SIZE" }
+  | { code: "TABULAR_DATA_INVALID"; message: string }
   | { code: "PASTE_TARGET_NOT_FOUND" };
 
 const blockNotFound = (blockId: string): Result<never, TableCommandError> => ({
@@ -519,8 +520,21 @@ export const pasteTabularData = (
   if (data.rows.length < 1 || data.columnCount < 1) {
     return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
   }
-  if (!validateTabularData(data).ok) {
-    return { ok: false, error: { code: "NOT_RECTANGULAR" } };
+  const validated = validateTabularData(data);
+  if (!validated.ok) {
+    // NOT_RECTANGULAR는 병합 명령(비직사각형 선택) 전용이다 — 여기서 쓰면
+    // 텍스트 계약·서식·정렬 위반까지 "직사각형 아님"으로 오도된다. io가
+    // 만든 원인 message를 그대로 전달한다.
+    return {
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message:
+          validated.error.code === "CLIPBOARD_TABLE_INVALID"
+            ? validated.error.message
+            : "Tabular data is not tabular",
+      },
+    };
   }
 
   if (isInTable(state)) {
