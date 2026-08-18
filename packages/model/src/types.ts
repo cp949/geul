@@ -29,6 +29,7 @@ export type TableBlock = {
       content: InlineContent;
       textColor?: string;
       backgroundColor?: string;
+      align?: "left" | "center" | "right";
     }>;
   }>;
   headerRows: 0 | 1;

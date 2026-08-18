@@ -28,6 +28,7 @@ import {
   moveTableColumn as moveTableColumnCommand,
   moveTableRow as moveTableRowCommand,
   resizeTableColumn as resizeTableColumnCommand,
+  setTableCellAlign as setTableCellAlignCommand,
   setTableCellColor as setTableCellColorCommand,
   splitTableCell as splitTableCellCommand,
   type TableCommandError,
@@ -141,6 +142,11 @@ export interface EditorController {
       tableBlockId: string,
       target: TableCellTarget,
       color: string | null,
+    ): Result<void, EditorError>;
+    setTableCellAlign(
+      tableBlockId: string,
+      target: TableCellTarget,
+      align: "left" | "center" | "right" | null,
     ): Result<void, EditorError>;
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
@@ -742,6 +748,7 @@ export const createEditor = (
       width: number;
       cellId: string;
       color: string;
+      align: string;
     },
   ): EditorError => {
     switch (code) {
@@ -769,6 +776,8 @@ export const createEditor = (
         return { code: "LAST_COLUMN" };
       case "INVALID_COLOR":
         return { code: "INVALID_COLOR", color: detail.color };
+      case "INVALID_ALIGN":
+        return { code: "INVALID_ALIGN", align: detail.align };
       default:
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
     }
@@ -784,6 +793,7 @@ export const createEditor = (
     let errorWidth = 0;
     let errorCellId = "";
     let errorColor = "";
+    let errorAlign = "";
 
     const result = runDocumentCommand(command, "local", () => {
       const outcome = invoke();
@@ -807,6 +817,9 @@ export const createEditor = (
       if (outcome.error.code === "INVALID_COLOR") {
         errorColor = outcome.error.color;
       }
+      if (outcome.error.code === "INVALID_ALIGN") {
+        errorAlign = outcome.error.align;
+      }
       return false;
     });
 
@@ -819,6 +832,7 @@ export const createEditor = (
           width: errorWidth,
           cellId: errorCellId,
           color: errorColor,
+          align: errorAlign,
         }),
       };
     }
@@ -1050,6 +1064,7 @@ export const createEditor = (
               width: 0,
               cellId: "",
               color: "",
+              align: "",
             }),
           };
         }
@@ -1146,6 +1161,10 @@ export const createEditor = (
             "backgroundColor",
             color,
           ),
+        ),
+      setTableCellAlign: (tableBlockId, target, align) =>
+        runVoidTableCommand("setTableCellAlign", () =>
+          setTableCellAlignCommand(tiptapEditor, tableBlockId, target, align),
         ),
       undo: () =>
         runDocumentCommand("undo", "undo", () => tiptapEditor.commands.undo()),

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isCanonicalCellAlign } from "./cell-align.js";
 import { isCanonicalCellColor } from "./cell-color.js";
 import type { DocumentError } from "./errors.js";
 import { isSupportedLinkHref } from "./link-policy.js";
@@ -56,6 +57,7 @@ const tableBlockSchema = z.object({
           content: inlineContentSchema,
           textColor: z.string().optional(),
           backgroundColor: z.string().optional(),
+          align: z.string().optional(),
         }),
       ),
     }),
@@ -444,6 +446,32 @@ const validateColors = (blocks: Block[]): Result<undefined, DocumentError> => {
   return { ok: true, value: undefined };
 };
 
+const validateAlign = (blocks: Block[]): Result<undefined, DocumentError> => {
+  for (const [blockIndex, block] of blocks.entries()) {
+    if (block.type !== "table") continue;
+    for (const [rowIndex, row] of block.rows.entries()) {
+      for (const [cellIndex, cell] of row.cells.entries()) {
+        if (cell.align === undefined) continue;
+        if (!isCanonicalCellAlign(cell.align)) {
+          return invalid(
+            [
+              "blocks",
+              blockIndex,
+              "rows",
+              rowIndex,
+              "cells",
+              cellIndex,
+              "align",
+            ],
+            "align must be one of left, center, right",
+          );
+        }
+      }
+    }
+  }
+  return { ok: true, value: undefined };
+};
+
 const validateTableLimits = (
   blocks: Block[],
 ): Result<undefined, DocumentError> => {
@@ -536,6 +564,8 @@ export const parseDocument = (
   if (!spans.ok) return spans;
   const colors = validateColors(document.blocks);
   if (!colors.ok) return colors;
+  const align = validateAlign(document.blocks);
+  if (!align.ok) return align;
   const limits = validateTableLimits(document.blocks);
   if (!limits.ok) return limits;
   const grids = validateTableGrids(document.blocks);

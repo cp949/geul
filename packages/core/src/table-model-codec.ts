@@ -56,6 +56,7 @@ export const tableBlockToTiptapNode = (
           colwidth: null,
           textColor: cellEntry.textColor ?? null,
           backgroundColor: cellEntry.backgroundColor ?? null,
+          align: cellEntry.align ?? null,
         },
         content,
       );
@@ -150,6 +151,9 @@ export const tiptapNodeToTableBlock = (
           : {}),
         ...(typeof cellNode.attrs.backgroundColor === "string"
           ? { backgroundColor: cellNode.attrs.backgroundColor as string }
+          : {}),
+        ...(typeof cellNode.attrs.align === "string"
+          ? { align: cellNode.attrs.align as "left" | "center" | "right" }
           : {}),
       });
     }

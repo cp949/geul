@@ -247,3 +247,17 @@ test("여러 셀을 드래그 선택해 글자색을 함께 적용한다", async
   await expect(cell(0, 0)).toHaveCSS("color", "rgb(217, 48, 37)");
   await expect(cell(0, 1)).toHaveCSS("color", "rgb(217, 48, 37)");
 });
+
+test("셀 정렬을 적용하고 undo로 되돌린다", async ({ page }) => {
+  const { table } = await insertTable(page);
+  const cell = table.locator("td").first();
+  await cell.click({ clickCount: 3 });
+
+  await page.getByRole("button", { name: "Cell formatting" }).click();
+  await page.getByRole("menuitem", { name: "Align center" }).click();
+
+  await expect(cell).toHaveCSS("text-align", "center");
+
+  await page.keyboard.press("Control+z");
+  await expect(cell).not.toHaveCSS("text-align", "center");
+});

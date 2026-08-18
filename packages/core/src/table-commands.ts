@@ -15,6 +15,7 @@ import {
   moveRow as moveGridRow,
   projectTableGrid,
   resizeColumn as resizeGridColumn,
+  setCellAlign as setGridCellAlign,
   setCellColor as setGridCellColor,
   splitCell as splitGridCell,
   type TableCellTarget,
@@ -299,6 +300,16 @@ export const setTableCellColor = (
 ): Result<void, TableCommandError> =>
   applyTableGridOperation(editor, tableBlockId, (table) =>
     setGridCellColor(table, target, property, color),
+  );
+
+export const setTableCellAlign = (
+  editor: Editor,
+  tableBlockId: string,
+  target: TableCellTarget,
+  align: "left" | "center" | "right" | null,
+): Result<void, TableCommandError> =>
+  applyTableGridOperation(editor, tableBlockId, (table) =>
+    setGridCellAlign(table, target, align),
   );
 
 export const insertTable = (

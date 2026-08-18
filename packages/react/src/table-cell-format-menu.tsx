@@ -1,5 +1,7 @@
+import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
+import { iconProps } from "./icon-props.js";
 import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
@@ -13,6 +15,10 @@ const swatchClassName =
   "geul:h-5 geul:w-5 geul:cursor-pointer geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:p-0";
 const sectionLabelClassName =
   "geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]";
+const dividerClassName =
+  "geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]";
+const alignButtonClassName =
+  "geul:flex geul:h-7 geul:min-w-7 geul:cursor-pointer geul:items-center geul:justify-center geul:rounded geul:border-0 geul:bg-transparent geul:p-1 geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:text-[color:var(--be-color-text,#202124)]";
 
 const MENU_VIEWPORT_MARGIN = 8;
 
@@ -78,6 +84,11 @@ export const TableCellFormatMenu = ({
       editor.commands.setTableCellBackgroundColor(tableBlockId, target, color);
     });
 
+  const applyAlign = (align: "left" | "center" | "right" | null) =>
+    runAndClose(() => {
+      editor.commands.setTableCellAlign(tableBlockId, target, align);
+    });
+
   const renderPalette = (
     property: "text" | "background",
     label: string,
@@ -129,6 +140,50 @@ export const TableCellFormatMenu = ({
     >
       {renderPalette("text", "Text color", TABLE_TEXT_COLORS)}
       {renderPalette("background", "Background color", TABLE_BACKGROUND_COLORS)}
+      <hr className={dividerClassName} />
+      <p className={sectionLabelClassName}>Align</p>
+      <div className="geul:flex geul:gap-1 geul:px-2 geul:pb-1">
+        <button
+          aria-label="Align left"
+          className={alignButtonClassName}
+          onClick={() => applyAlign("left")}
+          onMouseDown={(event) => event.preventDefault()}
+          role="menuitem"
+          type="button"
+        >
+          <AlignLeft {...iconProps} />
+        </button>
+        <button
+          aria-label="Align center"
+          className={alignButtonClassName}
+          onClick={() => applyAlign("center")}
+          onMouseDown={(event) => event.preventDefault()}
+          role="menuitem"
+          type="button"
+        >
+          <AlignCenter {...iconProps} />
+        </button>
+        <button
+          aria-label="Align right"
+          className={alignButtonClassName}
+          onClick={() => applyAlign("right")}
+          onMouseDown={(event) => event.preventDefault()}
+          role="menuitem"
+          type="button"
+        >
+          <AlignRight {...iconProps} />
+        </button>
+        <button
+          aria-label="Align none"
+          className={alignButtonClassName}
+          onClick={() => applyAlign(null)}
+          onMouseDown={(event) => event.preventDefault()}
+          role="menuitem"
+          type="button"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 };

@@ -584,6 +584,77 @@ describe("독립 문서 모델", () => {
     });
   });
 
+  it("정렬 값이 허용 목록 밖이면 거부한다", () => {
+    const table = {
+      id: "table-1",
+      type: "table" as const,
+      columns: [{ id: "column-1", width: 160 }],
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "column-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [],
+              align: "justify",
+            },
+          ],
+        },
+      ],
+      headerRows: 0 as const,
+      headerColumns: 0 as const,
+    };
+
+    expect(
+      parseDocument({ formatVersion: 1, revision: 0, blocks: [table] }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "rows", 0, "cells", 0, "align"],
+      },
+    });
+  });
+
+  it("정렬 값을 지정하지 않은 셀은 그대로 통과한다", () => {
+    const table = {
+      id: "table-1",
+      type: "table" as const,
+      columns: [{ id: "column-1", width: 160 }],
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "column-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [],
+              align: "center" as const,
+            },
+          ],
+        },
+      ],
+      headerRows: 0 as const,
+      headerColumns: 0 as const,
+    };
+
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [table],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const parsedTable = result.value.blocks[0];
+    if (parsedTable?.type !== "table") throw new Error("Expected a table");
+    expect(parsedTable.rows[0]?.cells[0]?.align).toBe("center");
+  });
+
   it("여러 표가 있으면 뒤쪽 표의 width 오류를 앞쪽 표의 색상 오류보다 먼저 보고한다", () => {
     const result = parseDocument({
       formatVersion: 1,

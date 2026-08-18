@@ -152,6 +152,72 @@ describe("표 행/열 단위 셀 색상", () => {
   });
 });
 
+describe("표 셀 정렬", () => {
+  it("setTableCellAlign이 대상 행의 셀에 정렬을 저장하고 null로 지운다", () => {
+    const { editor, tableBlockId } = editorWithTable(2, 2);
+    mountTiptapEditor(editor);
+    const target = { kind: "row", index: 0 } as const;
+
+    editor.commands.setTableCellAlign(tableBlockId, target, "center");
+    expect(tableOf(editor).rows[0]?.cells[0]?.align).toBe("center");
+
+    expect(
+      editor.commands.setTableCellAlign(tableBlockId, target, null),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tableOf(editor).rows[0]?.cells[0]).not.toHaveProperty("align");
+  });
+
+  it("정렬 적용은 undo 1회로 복원된다", () => {
+    const { editor, tableBlockId } = editorWithTable(2, 2);
+    mountTiptapEditor(editor);
+    const before = editor.getDocument();
+
+    editor.commands.setTableCellAlign(
+      tableBlockId,
+      { kind: "row", index: 1 },
+      "right",
+    );
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks).toEqual(before.blocks);
+  });
+
+  it("허용 목록 밖 정렬 값은 INVALID_ALIGN을 반환하고 문서를 바꾸지 않는다", () => {
+    const { editor, tableBlockId } = editorWithTable(2, 2);
+    mountTiptapEditor(editor);
+    const before = editor.getDocument();
+
+    expect(
+      editor.commands.setTableCellAlign(
+        tableBlockId,
+        { kind: "row", index: 0 },
+        "justify" as never,
+      ),
+    ).toEqual({
+      ok: false,
+      error: { code: "INVALID_ALIGN", align: "justify" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+});
+
+describe("표 셀 정렬 렌더링", () => {
+  it("셀 정렬을 인라인 text-align 스타일로 렌더한다", () => {
+    const { editor, tableBlockId } = editorWithTable(2, 2);
+    const { editable } = mountTiptapEditor(editor);
+
+    editor.commands.setTableCellAlign(
+      tableBlockId,
+      { kind: "row", index: 0 },
+      "center",
+    );
+
+    const cell = editable.querySelector<HTMLElement>("table td");
+    expect(cell?.style.textAlign).toBe("center");
+    editor.destroy();
+  });
+});
+
 describe("표 셀 색상 렌더링", () => {
   it("셀 색상을 인라인 스타일로 렌더한다", () => {
     const { editor, tableBlockId } = editorWithTable(2, 2);

@@ -6,6 +6,7 @@ import type {
 } from "@cp949/geul-model";
 import {
   isCanonicalCellColor,
+  isCanonicalCellAlign,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
   validateTableGrid,
@@ -38,7 +39,8 @@ export type TableGridError =
   | { code: "COLUMN_WIDTH_OUT_OF_RANGE"; width: number }
   | { code: "INDEX_OUT_OF_RANGE" }
   | { code: "CELL_NOT_FOUND"; cellId: string }
-  | { code: "INVALID_COLOR"; color: string };
+  | { code: "INVALID_COLOR"; color: string }
+  | { code: "INVALID_ALIGN"; align: string };
 
 export const projectTableGrid = (
   table: TableBlock,
@@ -704,6 +706,54 @@ export const setCellColor = (
       if ((cellEntry[property] ?? null) === color) return cellEntry;
       changed = true;
       return withCellColor(cellEntry, property, color);
+    }),
+  }));
+
+  if (!changed) return { ok: true, value: table };
+  return { ok: true, value: { ...table, rows } };
+};
+
+type CellAlign = "left" | "center" | "right";
+
+// align 속성도 색 속성과 같은 optional 저장 규약을 따른다(값이 없으면
+// 키 자체를 두지 않는다).
+const withCellAlign = (
+  cellEntry: TableCell,
+  align: CellAlign | null,
+): TableCell => ({
+  id: cellEntry.id,
+  columnId: cellEntry.columnId,
+  rowSpan: cellEntry.rowSpan,
+  columnSpan: cellEntry.columnSpan,
+  content: cellEntry.content,
+  ...(cellEntry.textColor === undefined ? {} : { textColor: cellEntry.textColor }),
+  ...(cellEntry.backgroundColor === undefined
+    ? {}
+    : { backgroundColor: cellEntry.backgroundColor }),
+  ...(align === null ? {} : { align }),
+});
+
+export const setCellAlign = (
+  table: TableBlock,
+  target: TableCellTarget,
+  align: CellAlign | null,
+): Result<TableBlock, TableGridError> => {
+  if (align !== null && !isCanonicalCellAlign(align)) {
+    return { ok: false, error: { code: "INVALID_ALIGN", align } };
+  }
+
+  const resolved = resolveTargetCellIds(table, target);
+  if (!resolved.ok) return resolved;
+  const targetCellIds = resolved.value;
+
+  let changed = false;
+  const rows = table.rows.map((row) => ({
+    ...row,
+    cells: row.cells.map((cellEntry) => {
+      if (!targetCellIds.has(cellEntry.id)) return cellEntry;
+      if ((cellEntry.align ?? null) === align) return cellEntry;
+      changed = true;
+      return withCellAlign(cellEntry, align);
     }),
   }));
 

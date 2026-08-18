@@ -101,6 +101,9 @@ const tableBlockFromTiptapJson = (
         ...(typeof cellAttrs.backgroundColor === "string"
           ? { backgroundColor: cellAttrs.backgroundColor }
           : {}),
+        ...(typeof cellAttrs.align === "string"
+          ? { align: cellAttrs.align as "left" | "center" | "right" }
+          : {}),
       });
     }
 

@@ -21,6 +21,7 @@ const fakeController = () => ({
   commands: {
     setTableCellTextColor: vi.fn(() => ({ ok: true, value: undefined })),
     setTableCellBackgroundColor: vi.fn(() => ({ ok: true, value: undefined })),
+    setTableCellAlign: vi.fn(() => ({ ok: true, value: undefined })),
   } as unknown as EditorController["commands"],
 });
 
@@ -76,6 +77,60 @@ describe("셀 서식 메뉴", () => {
       controller.commands.setTableCellBackgroundColor,
     ).toHaveBeenCalledWith("table-1", { kind: "cells", cellIds: ["cell-1"] }, null);
     expect(onClose).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+});
+
+describe("정렬 버튼", () => {
+  it("Align center 클릭 시 setTableCellAlign(tableBlockId, target, \"center\")를 호출하고 닫는다", () => {
+    const controller = fakeController();
+    const onClose = vi.fn();
+
+    const view = render(
+      <EditorProvider editor={controller as unknown as EditorController}>
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={onClose}
+          tableBlockId="table-1"
+          top={100}
+        />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Align center" }));
+
+    expect(controller.commands.setTableCellAlign).toHaveBeenCalledWith(
+      "table-1",
+      { kind: "cells", cellIds: ["cell-1"] },
+      "center",
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it("Align none 클릭 시 null을 넘긴다", () => {
+    const controller = fakeController();
+
+    const view = render(
+      <EditorProvider editor={controller as unknown as EditorController}>
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={vi.fn()}
+          tableBlockId="table-1"
+          top={100}
+        />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Align none" }));
+
+    expect(controller.commands.setTableCellAlign).toHaveBeenCalledWith(
+      "table-1",
+      { kind: "cells", cellIds: ["cell-1"] },
+      null,
+    );
     view.unmount();
   });
 });

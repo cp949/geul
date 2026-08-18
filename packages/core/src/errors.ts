@@ -14,4 +14,5 @@ export type EditorError =
   | { code: "CELL_NOT_FOUND"; cellId: string }
   | { code: "LAST_ROW" }
   | { code: "LAST_COLUMN" }
-  | { code: "INVALID_COLOR"; color: string };
+  | { code: "INVALID_COLOR"; color: string }
+  | { code: "INVALID_ALIGN"; align: string };

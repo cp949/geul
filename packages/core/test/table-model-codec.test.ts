@@ -77,6 +77,7 @@ describe("TableBlock을 Tiptap 표 노드로 인코드한다", () => {
                 colwidth: null,
                 textColor: null,
                 backgroundColor: null,
+                align: null,
               },
               content: [{ type: "text", text: "a" }],
             },
@@ -90,6 +91,7 @@ describe("TableBlock을 Tiptap 표 노드로 인코드한다", () => {
                 colwidth: null,
                 textColor: "#FF0000",
                 backgroundColor: null,
+                align: null,
               },
               content: [{ type: "text", text: "b" }],
             },
@@ -184,6 +186,37 @@ describe("Tiptap 표 노드를 TableBlock으로 디코드한다", () => {
 
     const result = tiptapNodeToTableBlock(node);
     expect(result).toEqual({ ok: true, value: sampleTable });
+  });
+
+  it("셀 align이 PM 노드 attrs를 거쳐 그대로 왕복한다", () => {
+    const schema = emptyDocSchema();
+    const table: TableBlock = {
+      id: "table-1",
+      type: "table",
+      columns: [{ id: "column-1", width: 160 }],
+      rows: [
+        {
+          id: "row-1",
+          cells: [
+            {
+              id: "cell-1",
+              columnId: "column-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [],
+              align: "center",
+            },
+          ],
+        },
+      ],
+      headerRows: 0,
+      headerColumns: 0,
+    };
+
+    const node = tableBlockToTiptapNode(schema, table);
+    const decoded = tiptapNodeToTableBlock(node);
+
+    expect(decoded).toEqual({ ok: true, value: table });
   });
 
   it("병합된 셀은 TableMap 기준 기준 좌표에서만 한 번 나타난다", () => {

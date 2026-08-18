@@ -1,6 +1,13 @@
+import { DOMSerializer } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
 
 import { createTableFixtureEditor } from "./table-test-support.js";
+
+const emptyDocSchema = () =>
+  createTableFixtureEditor({
+    type: "doc",
+    content: [{ type: "paragraph" }],
+  }).schema;
 
 describe("표를 렌더링한다", () => {
   it("table.attrs.columns의 너비를 colgroup/col로 반영한다", () => {
@@ -152,6 +159,7 @@ describe("Table/Row/Cell 노드 스키마", () => {
                     colwidth: null,
                     textColor: null,
                     backgroundColor: null,
+                    align: null,
                   },
                   content: [{ type: "text", text: "a" }],
                 },
@@ -165,6 +173,7 @@ describe("Table/Row/Cell 노드 스키마", () => {
                     colwidth: null,
                     textColor: "#FF0000",
                     backgroundColor: null,
+                    align: null,
                   },
                   content: [{ type: "text", text: "b" }],
                 },
@@ -174,5 +183,21 @@ describe("Table/Row/Cell 노드 스키마", () => {
         },
       ],
     });
+  });
+});
+
+describe("표 셀 정렬 렌더링", () => {
+  it("align attr을 data-be-align과 인라인 text-align style로 렌더한다", () => {
+    const schema = emptyDocSchema();
+    const cellType = schema.nodes.tableCell;
+    if (cellType === undefined) throw new Error("tableCell node missing");
+    const node = cellType.create({ cellId: "cell-1", align: "right" });
+
+    const dom = DOMSerializer.fromSchema(schema).serializeNode(
+      node,
+    ) as HTMLElement;
+
+    expect(dom.getAttribute("data-be-align")).toBe("right");
+    expect(dom.style.textAlign).toBe("right");
   });
 });

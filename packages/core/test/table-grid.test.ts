@@ -11,6 +11,7 @@ import {
   moveRow,
   projectTableGrid,
   resizeColumn,
+  setCellAlign,
   setCellColor,
   splitCell,
   type TableGrid,
@@ -27,7 +28,12 @@ const cell = (
   overrides: Partial<
     Pick<
       Cell,
-      "rowSpan" | "columnSpan" | "content" | "textColor" | "backgroundColor"
+      | "rowSpan"
+      | "columnSpan"
+      | "content"
+      | "textColor"
+      | "backgroundColor"
+      | "align"
     >
   > = {},
 ): Cell => ({
@@ -1130,6 +1136,99 @@ describe("셀 id 목록 단위로 색상을 설정한다", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toBe(t);
+  });
+});
+
+describe("행·열·셀 id 목록 단위로 정렬을 설정한다", () => {
+  it("대상 행을 덮는 모든 셀에 정렬을 넣는다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = setCellAlign(t, { kind: "row", index: 0 }, "center");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells.map((c) => c.align)).toEqual([
+      "center",
+      "center",
+    ]);
+    expect(result.value.rows[1]?.cells.map((c) => c.align)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("셀 id 목록을 대상으로 정렬을 넣는다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1"), cell("b", "c2")]],
+    );
+
+    const result = setCellAlign(
+      t,
+      { kind: "cells", cellIds: ["b"] },
+      "right",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.align).toBeUndefined();
+    expect(result.value.rows[0]?.cells[1]?.align).toBe("right");
+  });
+
+  it("정렬이 null이면 속성을 지운다", () => {
+    const t = table(["c1"], [[cell("a", "c1", { align: "left" })]]);
+
+    const result = setCellAlign(t, { kind: "column", index: 0 }, null);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]).not.toHaveProperty("align");
+  });
+
+  it("허용 목록 밖 정렬 값은 INVALID_ALIGN으로 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    const result = setCellAlign(
+      t,
+      { kind: "row", index: 0 },
+      "justify" as never,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "INVALID_ALIGN", align: "justify" },
+    });
+    expect(t.rows[0]?.cells[0]?.align).toBeUndefined();
+  });
+
+  it("이미 같은 정렬이면 입력 표를 참조 그대로 반환한다", () => {
+    const t = table(["c1"], [[cell("a", "c1", { align: "center" })]]);
+
+    const result = setCellAlign(t, { kind: "row", index: 0 }, "center");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBe(t);
+  });
+
+  it("병합 셀이 대상 행을 덮으면 그 셀도 대상이다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1", { rowSpan: 2 }), cell("b", "c2")], [cell("d", "c2")]],
+    );
+
+    const result = setCellAlign(t, { kind: "row", index: 1 }, "right");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.align).toBe("right");
+    expect(result.value.rows[0]?.cells[1]?.align).toBeUndefined();
   });
 });
 
