@@ -1,3 +1,4 @@
+import type { TabularData } from "@cp949/geul-io";
 import {
   type Document as BlockDocument,
   type IdFactory,
@@ -27,6 +28,7 @@ import {
   mergeTableCells as mergeTableCellsCommand,
   moveTableColumn as moveTableColumnCommand,
   moveTableRow as moveTableRowCommand,
+  pasteTabularData as pasteTabularDataCommand,
   resizeTableColumn as resizeTableColumnCommand,
   setTableCellAlign as setTableCellAlignCommand,
   setTableCellColor as setTableCellColorCommand,
@@ -91,6 +93,9 @@ export interface EditorController {
     toggleCode(): Result<void, EditorError>;
     setLink(href: string): Result<void, EditorError>;
     unsetLink(): Result<void, EditorError>;
+    pasteTabularData(
+      data: TabularData,
+    ): Result<{ blockId: string }, EditorError>;
     insertTable(
       afterBlockId: string,
       size: { rows: number; columns: number },
@@ -780,6 +785,12 @@ export const createEditor = (
         return { code: "INVALID_COLOR", color: detail.color };
       case "INVALID_ALIGN":
         return { code: "INVALID_ALIGN", align: detail.align };
+      case "CELL_LIMIT_EXCEEDED":
+        return { code: "CELL_LIMIT_EXCEEDED" };
+      case "PASTE_MERGE_CONFLICT":
+        return { code: "PASTE_MERGE_CONFLICT" };
+      case "PASTE_TARGET_NOT_FOUND":
+        return { code: "PASTE_TARGET_NOT_FOUND" };
       default:
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
     }
@@ -1031,6 +1042,42 @@ export const createEditor = (
           }
           return chain.unsetLink().run();
         }),
+      pasteTabularData: (data) => {
+        if (destroyed) return commandNotApplicable("pasteTabularData");
+
+        let errorCode: TableCommandError["code"] | null = null;
+        let errorBlockId = "";
+        let insertedBlockId = "";
+
+        const result = runDocumentCommand("pasteTabularData", "local", () => {
+          const outcome = pasteTabularDataCommand(tiptapEditor, data, createId);
+          if (!outcome.ok) {
+            errorCode = outcome.error.code;
+            if (outcome.error.code === "BLOCK_NOT_FOUND") {
+              errorBlockId = outcome.error.blockId;
+            }
+            return false;
+          }
+          insertedBlockId = outcome.value.blockId;
+          return true;
+        });
+
+        if (errorCode !== null) {
+          return {
+            ok: false,
+            error: tableErrorFromCode(errorCode, {
+              blockId: errorBlockId,
+              message: "",
+              width: 0,
+              cellId: "",
+              color: "",
+              align: "",
+            }),
+          };
+        }
+        if (!result.ok) return result;
+        return { ok: true, value: { blockId: insertedBlockId } };
+      },
       insertTable: (afterBlockId, size, options) => {
         if (destroyed) return commandNotApplicable("insertTable");
 

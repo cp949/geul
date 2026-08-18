@@ -1,3 +1,4 @@
+import type { TabularData } from "@cp949/geul-io";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
@@ -712,6 +713,51 @@ describe("에디터 컨트롤러 표", () => {
     expect(editor.commands.setText("block-1", "recovered")).toMatchObject({
       ok: true,
     });
+    editor.destroy();
+  });
+
+  it("pasteTabularData가 표 밖에서 새 표를 만들고 undo 1회로 복원된다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("id"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(1);
+
+    const data: TabularData = {
+      columnCount: 2,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "A" }],
+            },
+            {
+              columnIndex: 1,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "B" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = editor.commands.pasteTabularData(data);
+    expect(result.ok).toBe(true);
+
+    const document = editor.getDocument();
+    expect(document.blocks.some((block) => block.type === "table")).toBe(true);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    const afterUndo = editor.getDocument();
+    expect(afterUndo.blocks.some((block) => block.type === "table")).toBe(
+      false,
+    );
+
     editor.destroy();
   });
 });

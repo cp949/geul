@@ -15,4 +15,7 @@ export type EditorError =
   | { code: "LAST_ROW" }
   | { code: "LAST_COLUMN" }
   | { code: "INVALID_COLOR"; color: string }
-  | { code: "INVALID_ALIGN"; align: string };
+  | { code: "INVALID_ALIGN"; align: string }
+  | { code: "CELL_LIMIT_EXCEEDED" }
+  | { code: "PASTE_MERGE_CONFLICT" }
+  | { code: "PASTE_TARGET_NOT_FOUND" };
