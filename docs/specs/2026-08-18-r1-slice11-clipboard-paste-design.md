@@ -183,6 +183,8 @@ addProseMirrorPlugins() {
 
 `editor-controller.ts`의 extension 목록에 `TableKeyboardNavigationExtension`과 같은 자리에 등록한다.
 
+구현 반영(설계 시 pseudocode 수정): 기본 붙여넣기로 폴백하는 경우는 `NOT_TABULAR` 하나뿐이다. 클립보드가 표로 인식된 뒤에는 파서 거절(`CLIPBOARD_TABLE_INVALID`)이든 명령 거절(`PASTE_MERGE_CONFLICT`, `CELL_LIMIT_EXCEEDED`, `PASTE_TARGET_NOT_FOUND` 등)이든 항상 `true`를 반환해 이벤트만 소비한다. 폴백하면 TSV는 ProseMirror가 `preserveWhitespace`로 파싱해 탭이 그대로 문서에 들어가고(모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다 — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지 않으므로 문서·selection·stored mark는 그대로 보존된다(PIT-0003).
+
 ## 8. 오류 계약 확장
 
 - `TableGridError`(core, `table-grid.ts`)에 `CELL_LIMIT_EXCEEDED`, `PASTE_MERGE_CONFLICT` 추가.

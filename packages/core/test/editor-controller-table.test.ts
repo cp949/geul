@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
   documentWithTable,
+  editorState,
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
@@ -839,6 +840,121 @@ describe("에디터 컨트롤러 표", () => {
     );
 
     expect(editor.getDocument().blocks).toEqual(before.blocks);
+
+    editor.destroy();
+  });
+
+  /**
+   * 세로 병합(rowSpan=2) 셀 안에 캐럿을 둔 2x2 표 에디터를 만든다. 이
+   * 상태에서 1행짜리 클립보드 표를 붙여넣으면 병합 셀의 아래쪽 절반이 어느
+   * 셀에도 속하지 않게 되어 pasteTabularData가 PASTE_MERGE_CONFLICT로
+   * 거절한다 — 명령 레벨 거절 경로를 실제 ClipboardEvent로 재현하는 fixture다.
+   */
+  const editorWithMergedCellCaret = () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    const inserted = editor.commands.insertTable("block-1", {
+      rows: 2,
+      columns: 2,
+    });
+    if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+    const table = editor.getDocument().blocks[1];
+    if (table?.type !== "table") throw new Error("Expected a table block");
+    const [topLeft, bottomLeft] = [
+      table.rows[0]?.cells[0]?.id,
+      table.rows[1]?.cells[0]?.id,
+    ];
+    if (topLeft === undefined || bottomLeft === undefined) {
+      throw new Error("셀 fixture 준비 실패");
+    }
+
+    const cellBoundaryPosition = (cellId: string): number => {
+      let found: number | null = null;
+      tiptap.state.doc.descendants((node, pos) => {
+        if (found !== null) return false;
+        if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
+          found = pos;
+          return false;
+        }
+        return true;
+      });
+      if (found === null) throw new Error("셀 fixture 준비 실패");
+      return found;
+    };
+
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        CellSelection.create(
+          tiptap.state.doc,
+          cellBoundaryPosition(topLeft),
+          cellBoundaryPosition(bottomLeft),
+        ),
+      ),
+    );
+    const merged = editor.commands.mergeTableCells(inserted.value.blockId);
+    if (!merged.ok) throw new Error("셀 병합 fixture 준비 실패");
+
+    // 병합 셀 안으로 캐럿을 옮긴다 — selectedRect의 anchor가 (0,0)이 된다.
+    tiptap.commands.setTextSelection(cellBoundaryPosition(topLeft) + 1);
+    editable.focus();
+
+    return { editor, editable, tiptap };
+  };
+
+  it("병합 충돌로 거절된 TSV 붙여넣기는 이벤트를 소비하고 문서를 보존한다", () => {
+    const { editor, editable, tiptap } = editorWithMergedCellCaret();
+    const before = editorState(editor, tiptap);
+
+    const data = new DataTransfer();
+    data.setData("text/plain", "x\ty");
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    // 파싱은 성공했으므로 명령이 PASTE_MERGE_CONFLICT로 거절해도 이벤트는
+    // 소비된다. 기본 붙여넣기로 폴백하면 preserveWhitespace 파싱이 탭을 그대로
+    // 문서에 넣어 readEditorDocument()가 TypeError로 터지고 모델↔에디터가
+    // 영구히 어긋난다. 거절된 명령은 문서·selection·stored mark를 모두
+    // 보존한다(PIT-0003).
+    expect(editorState(editor, tiptap)).toEqual(before);
+
+    // 붙여넣기 이후에도 다른 명령이 정상 동작해야 한다 — 어긋났다면
+    // readEditorDocument()가 TypeError를 던진다.
+    expect(editor.commands.setText("block-1", "next")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    editor.destroy();
+  });
+
+  it("병합 충돌로 거절된 HTML 붙여넣기는 이벤트를 소비하고 문서를 보존한다", () => {
+    const { editor, editable, tiptap } = editorWithMergedCellCaret();
+    const before = editorState(editor, tiptap);
+
+    const data = new DataTransfer();
+    data.setData(
+      "text/html",
+      "<table><tbody><tr><td>x</td><td>y</td></tr></tbody></table>",
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    // HTML 경로는 desync까지 가지는 않지만 기본 붙여넣기로 폴백하면 표
+    // 구조가 소실된 채 텍스트만 들어간다 — 역시 "전체 거부" 계약 위반이다.
+    expect(editorState(editor, tiptap)).toEqual(before);
 
     editor.destroy();
   });

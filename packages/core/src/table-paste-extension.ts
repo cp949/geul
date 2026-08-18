@@ -11,10 +11,16 @@ export type TablePasteOptions = {
 
 // 실제 ClipboardEvent를 가로채 표/TSV로 파싱되면 pasteTabularData로
 // 처리하고 이벤트를 소비한다. 파싱 대상이 아니면(NOT_TABULAR) false를
-// 반환해 Tiptap 기본 붙여넣기로 넘긴다(spec 9.3). 표로는 인식됐지만
-// 거절된 경우(CLIPBOARD_TABLE_INVALID)는 이벤트만 소비하고 문서를 바꾸지
-// 않는다 — 기본 붙여넣기로 넘기면 10,000셀 제한을 넘긴 격자가 문단
-// 텍스트로 쏟아져 "전체 거부" 계약이 깨진다.
+// 반환해 Tiptap 기본 붙여넣기로 넘긴다(spec 9.3).
+//
+// 클립보드가 표로 인식된 뒤에는 어떤 경로로 거절되든 이벤트를 소비한다 —
+// 파서 거절(CLIPBOARD_TABLE_INVALID)이든 명령 거절(PASTE_MERGE_CONFLICT,
+// CELL_LIMIT_EXCEEDED, PASTE_TARGET_NOT_FOUND 등)이든 마찬가지다. 기본
+// 붙여넣기로 넘기면 TSV는 preserveWhitespace 파싱을 타서 탭이 그대로 문서에
+// 들어가고(readEditorDocument가 TypeError로 터져 모델↔에디터 영구 desync),
+// HTML은 표 구조가 소실된 텍스트로 뭉개진다 — 둘 다 "전체 거부" 계약 위반이다.
+// 거절된 명령은 아무것도 dispatch하지 않으므로 문서·selection·stored mark가
+// 그대로 보존된다(PIT-0003).
 export const TablePasteExtension = Extension.create<TablePasteOptions>({
   name: "tablePaste",
 
@@ -45,8 +51,8 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
             const parsed = parseClipboardTable(clipboardInput);
             if (!parsed.ok) return parsed.error.code !== "NOT_TABULAR";
 
-            const result = pasteTabularData(editor, parsed.value, createId);
-            return result.ok;
+            pasteTabularData(editor, parsed.value, createId);
+            return true;
           },
         },
       }),
