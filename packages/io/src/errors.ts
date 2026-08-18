@@ -19,3 +19,9 @@ export type ExportError = {
   code: ExportErrorCode;
   message: string;
 };
+
+export type ClipboardParseErrorCode = "NOT_TABULAR" | "CLIPBOARD_TABLE_INVALID";
+
+export type ClipboardParseError =
+  | { code: "NOT_TABULAR" }
+  | { code: "CLIPBOARD_TABLE_INVALID"; message: string };
