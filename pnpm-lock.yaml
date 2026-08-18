@@ -80,6 +80,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@cp949/geul-io':
+        specifier: workspace:*
+        version: link:../io
       '@cp949/geul-model':
         specifier: workspace:*
         version: link:../model
