@@ -548,6 +548,123 @@ describe("에디터 컨트롤러 표", () => {
     });
   });
 
+  describe("표 키보드 셀 탐색", () => {
+    const findCellBoundaryPosition = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+      cellId: string,
+    ): number | null => {
+      let found: number | null = null;
+      tiptap.state.doc.descendants((node, pos) => {
+        if (found !== null) return false;
+        if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
+          found = pos;
+          return false;
+        }
+        return true;
+      });
+      return found;
+    };
+
+    const placeCaretInCell = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+      cellId: string,
+    ) => {
+      const boundary = findCellBoundaryPosition(tiptap, cellId);
+      if (boundary === null) throw new Error("셀 fixture 준비 실패");
+      tiptap.commands.setTextSelection(boundary + 1);
+    };
+
+    const activeCellId = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+    ): string | null => {
+      const { $from } = tiptap.state.selection;
+      for (let depth = $from.depth; depth > 0; depth -= 1) {
+        const node = $from.node(depth);
+        if (node.type.name === "tableCell") {
+          const cellId = node.attrs.cellId;
+          return typeof cellId === "string" ? cellId : null;
+        }
+      }
+      return null;
+    };
+
+    const pressTab = (editable: HTMLElement, shiftKey = false) => {
+      editable.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Tab",
+          shiftKey,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+
+    const editorWithTable = (rows: number, columns: number) => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("id"),
+      });
+      const inserted = editor.commands.insertTable("block-1", {
+        rows,
+        columns,
+      });
+      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+      const table = editor.getDocument().blocks[1];
+      if (table?.type !== "table") throw new Error("Expected a table block");
+      const cellIds = table.rows.flatMap((row) =>
+        row.cells.map((cell) => cell.id),
+      );
+      return { editor, tableBlockId: inserted.value.blockId, cellIds };
+    };
+
+    it("Tab 키 입력은 같은 행의 다음 셀로 캐럿을 옮긴다", () => {
+      const { editor, cellIds } = editorWithTable(2, 2);
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      const [topLeft, topRight] = cellIds;
+      if (topLeft === undefined || topRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      placeCaretInCell(tiptap, topLeft);
+
+      pressTab(editable);
+
+      expect(activeCellId(tiptap)).toBe(topRight);
+    });
+
+    it("Shift+Tab 키 입력은 이전 셀로 캐럿을 옮긴다", () => {
+      const { editor, cellIds } = editorWithTable(2, 2);
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      const [topLeft, topRight] = cellIds;
+      if (topLeft === undefined || topRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      placeCaretInCell(tiptap, topRight);
+
+      pressTab(editable, true);
+
+      expect(activeCellId(tiptap)).toBe(topLeft);
+    });
+
+    it("표의 마지막 셀에서 Tab 키 입력은 새 행을 추가하고 undo 1회로 복원된다", () => {
+      const { editor, cellIds } = editorWithTable(2, 2);
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      const lastCellId = cellIds[cellIds.length - 1];
+      if (lastCellId === undefined) throw new Error("셀 fixture 준비 실패");
+      placeCaretInCell(tiptap, lastCellId);
+      const before = editor.getDocument();
+
+      pressTab(editable);
+
+      const table = editor.getDocument().blocks[1];
+      if (table?.type !== "table") throw new Error("Expected a table block");
+      expect(table.rows).toHaveLength(3);
+      expect(activeCellId(tiptap)).toBe(table.rows[2]?.cells[0]?.id);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editor.getDocument().blocks).toEqual(before.blocks);
+    });
+  });
+
   it("마운트된 표는 colgroup col로 모델 열 너비를 렌더하고 리사이즈를 반영한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),

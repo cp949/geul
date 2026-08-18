@@ -41,6 +41,7 @@ import {
   TableRowExtension,
 } from "./table-extension.js";
 import type { TableCellTarget } from "./table-grid.js";
+import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 
 export type DocumentChangeEvent = {
@@ -382,6 +383,7 @@ export const createEditor = (
         TableExtension,
         TableRowExtension,
         TableCellExtension,
+        TableKeyboardNavigationExtension.configure({ createId }),
         LinkPolicyExtension,
         RevisionGuardExtension.configure({
           canApplyDocumentChange: () =>

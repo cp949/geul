@@ -147,8 +147,8 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `TBL-007` | 셀 글자색·배경색 | `PARITY` | R1 | `VERIFIED` | 행/열/셀 단위 모두 지원(슬라이스 9b, table cell format menu) |
 | `TBL-008` | 셀 텍스트 정렬 | `PARITY` | R1 | `VERIFIED` | 셀 단위 정렬 지원(슬라이스 9b, table cell format menu) |
 | `TBL-009` | 빠른 행·열 확장 control | `PARITY` | R1 | `VERIFIED` | table extend buttons |
-| `TBL-010` | Tab/Shift+Tab 셀 탐색 | `PARITY` | R1 | `NOT_STARTED` | table keyboard behavior |
-| `TBL-011` | 마지막 셀 Tab의 새 행 생성 | `PARITY` | R1 | `NOT_STARTED` | table keyboard behavior |
+| `TBL-010` | Tab/Shift+Tab 셀 탐색 | `PARITY` | R1 | `VERIFIED` | table keyboard behavior(슬라이스 10) |
+| `TBL-011` | 마지막 셀 Tab의 새 행 생성 | `PARITY` | R1 | `VERIFIED` | table keyboard behavior(슬라이스 10) |
 | `TBL-012` | 단일 표 10,000 논리 셀 보장 | `CUSTOM` | R1 | `NOT_STARTED` | 승인된 성능 계약 |
 | `TBL-013` | Excel/Google Sheets HTML·TSV 붙여넣기 | `CUSTOM` | R1 | `NOT_STARTED` | 승인된 클립보드 계약 |
 | `TBL-014` | 기존 표 덮어쓰기와 자동 확장 | `CUSTOM` | R1 | `NOT_STARTED` | 승인된 클립보드 계약 |
