@@ -475,21 +475,18 @@ export const insertTable = (
   return { ok: true, value: { blockId: table.id } };
 };
 
-// 캐럿(to)이 닿는 최상위 블록의 id를 찾는다(findTopLevelBlockPosition과
-// 같은 스캔 방식) — 표 밖 붙여넣기의 삽입 위치를 정하는 데 쓴다. 이 함수는
-// isInTable(state)가 false일 때만 호출되므로 결과가 table 노드일 일은 없다.
-// 선택 삭제 후의 doc을 받으므로 to는 항상 접힌 캐럿 위치다.
-const currentTopLevelBlockId = (
-  doc: ProseMirrorNode,
-  to: number,
-): string | null => {
-  let blockId: string | null = null;
+// 선택 삭제 후 캐럿(to)이 새 표를 끼울 최상위 위치: 캐럿이 안쪽에 닿은
+// (offset < to) 마지막 최상위 블록 바로 뒤. 첫 블록 앞 GapCursor(to === 0)는
+// 어떤 블록도 조건을 만족하지 않아 문서 맨 앞이 된다 — 커서가 '가리키기
+// 직전인' 블록 뒤에 붙이면 표가 한 블록 아래로 밀린다. blockId에 의존하지
+// 않으므로 AllSelection 삭제가 남긴 필러 문단(BlockIdExtension은
+// appendTransaction에서야 id를 부여한다) 뒤에도 정상 삽입된다.
+const tableInsertPosition = (doc: ProseMirrorNode, to: number): number => {
+  let position = 0;
   doc.forEach((node, offset) => {
-    if (to < offset) return;
-    const id = node.attrs.blockId;
-    if (typeof id === "string" && id.length > 0) blockId = id;
+    if (offset < to) position = offset + node.nodeSize;
   });
-  return blockId;
+  return position;
 };
 
 // pasteInto가 만든 결과 표에서 anchor 좌표를 덮는 셀의 id. selectCellId
@@ -614,24 +611,11 @@ export const pasteTabularData = (
     transaction = transaction.deleteSelection();
   }
 
-  const afterBlockId = currentTopLevelBlockId(
+  const tableNode = tableBlockToTiptapNode(editor.schema, filled.value);
+  const insertPosition = tableInsertPosition(
     transaction.doc,
     transaction.selection.to,
   );
-  if (afterBlockId === null) {
-    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
-  }
-
-  const afterPosition = findTopLevelBlockPosition(
-    transaction.doc,
-    afterBlockId,
-  );
-  if (afterPosition === null) return blockNotFound(afterBlockId);
-  const afterNode = transaction.doc.nodeAt(afterPosition);
-  if (afterNode === null) return blockNotFound(afterBlockId);
-
-  const tableNode = tableBlockToTiptapNode(editor.schema, filled.value);
-  const insertPosition = afterPosition + afterNode.nodeSize;
   transaction = transaction.insert(insertPosition, tableNode);
 
   // 표 안 분기의 selectCellId와 대칭 — 캐럿을 붙여넣은 표의 좌상단 셀

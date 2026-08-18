@@ -1,4 +1,5 @@
 import type { TabularData } from "@cp949/geul-io";
+import { GapCursor } from "@tiptap/pm/gapcursor";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -893,6 +894,57 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
+    editor.destroy();
+  });
+
+  it("전체 선택(Ctrl+A) 붙여넣기가 선택을 대체하고 표를 만든다", () => {
+    const editor = createTableFixtureEditor(docWithTwoParagraphs);
+    editor.commands.selectAll();
+
+    const result = pasteTabularData(
+      editor,
+      oneByOneData("A"),
+      sequentialIds("paste"),
+    );
+
+    // AllSelection 삭제가 남기는 스키마 필러 문단은 BlockIdExtension의
+    // appendTransaction이 돌기 전이라 blockId가 없다 — 삽입 위치가 blockId
+    // 조회에 의존하면 여기서 PASTE_TARGET_NOT_FOUND로 무너진다(3차 리뷰
+    // 재현). 필러 문단 뒤에 표가 생겨야 한다.
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.type).toBe("paragraph");
+    expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
+    expect(doc.content?.[1]?.type).toBe("table");
+    const { selection } = editor.state;
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("A");
+    editor.destroy();
+  });
+
+  it("첫 블록 앞 GapCursor에서 붙여넣으면 표가 그 블록 앞에 생긴다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    editor.view.dispatch(
+      editor.state.tr.setSelection(new GapCursor(editor.state.doc.resolve(0))),
+    );
+
+    const result = pasteTabularData(
+      editor,
+      oneByOneData("A"),
+      sequentialIds("paste"),
+    );
+
+    // 커서가 기존 표 '앞'을 가리켰으므로 새 표는 기존 표 앞에 와야 한다 —
+    // 커서가 가리키기 직전인 블록 '뒤'에 붙으면 표가 한 블록 아래로 밀린다.
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.type).toBe("table");
+    expect(
+      doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
+    ).toBe("A");
+    expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
     editor.destroy();
   });
 
