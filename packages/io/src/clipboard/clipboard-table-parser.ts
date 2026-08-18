@@ -108,8 +108,8 @@ const coveredCoordinates = (
       const rowEnd = Math.min(rowIndex + rowSpan, layouts.length);
       const columnEnd = Math.min(layout.columnIndex + columnSpan, columnCount);
 
-      for (let row = rowIndex; row < rowEnd; row += 1) {
-        const rowCover = covered[row];
+      for (let covering = rowIndex; covering < rowEnd; covering += 1) {
+        const rowCover = covered[covering];
         if (rowCover === undefined) continue;
         for (let column = layout.columnIndex; column < columnEnd; column += 1) {
           rowCover[column] = true;
