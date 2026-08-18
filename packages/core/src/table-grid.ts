@@ -459,6 +459,37 @@ export const mergeCells = (
     }
   }
 
+  // 범위를 이미 그 셀 하나가 정확히 덮고 있으면 바꿀 것이 없다. 입력 표를
+  // 참조 그대로 돌려줘야 호출자가 no-op을 알아보고 트랜잭션을 만들지 않는다
+  // (moveRow/resizeColumn/splitCell과 같은 규약).
+  const anchorEntry = table.rows[rowFrom]?.cells.find(
+    (cellEntry) => cellEntry.id === anchorCellId,
+  );
+  if (
+    removedCellIds.size === 0 &&
+    anchorEntry !== undefined &&
+    anchorEntry.rowSpan === rowTo - rowFrom + 1 &&
+    anchorEntry.columnSpan === columnTo - columnFrom + 1
+  ) {
+    return { ok: true, value: table };
+  }
+
+  // 사라지는 셀의 내용은 기준 셀 뒤에 논리 좌표 순서(행 우선)로 이어붙인다.
+  // 병합이 사용자 텍스트를 조용히 지우면 안 된다 — 비어 있지 않은 조각
+  // 사이에만 공백 run을 넣는다(빈 셀은 공백을 만들지 않는다).
+  const contentById = new Map<string, TableCell["content"]>(
+    table.rows.flatMap((row) =>
+      row.cells.map((cellEntry) => [cellEntry.id, cellEntry.content] as const),
+    ),
+  );
+  const mergedContent: TableCell["content"] = [];
+  for (const cellId of [anchorCellId, ...removedCellIds]) {
+    const part = contentById.get(cellId) ?? [];
+    if (part.length === 0) continue;
+    if (mergedContent.length > 0) mergedContent.push({ text: " " });
+    mergedContent.push(...part);
+  }
+
   const rows = table.rows.map((row, rowIndex) => {
     if (rowIndex < rowFrom || rowIndex > rowTo) return row;
     return {
@@ -471,6 +502,7 @@ export const mergeCells = (
                 ...cellEntry,
                 rowSpan: rowTo - rowFrom + 1,
                 columnSpan: columnTo - columnFrom + 1,
+                content: mergedContent,
               }
             : cellEntry,
         ),

@@ -39,6 +39,15 @@ const fakeController = ({
     editable.contentEditable = "true";
     const table = document.createElement("table");
     table.setAttribute("data-be-block-id", "table-1");
+    // 실제 에디터의 renderHTML(applyTableDomAttributes)과 동일하게 열
+    // 순서·개수의 권위를 data-be-columns로 노출한다(PIT-0004).
+    table.setAttribute(
+      "data-be-columns",
+      JSON.stringify([
+        { id: "col-1", width: 120 },
+        { id: "col-2", width: 100 },
+      ]),
+    );
     // 실제 에디터의 renderHTML과 동일하게 모델 열 너비를 colgroup/col로 노출한다.
     const colgroup = document.createElement("colgroup");
     for (const width of [120, 100]) {
@@ -396,6 +405,164 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
       "table-1",
       2,
     );
+    view.unmount();
+  });
+});
+
+describe("첫 행이 병합된 표의 열 geometry", () => {
+  // 첫 행이 colspan=2로 병합되면 그 행에는 열마다 하나씩인 [data-be-column-id]
+  // 셀이 없다 — 첫 행만 보고 열 경계를 읽으면 두 번째 열 핸들이 사라진다.
+  // 병합되지 않은 둘째 행의 셀 rect로 geometry를 복구해야 한다(PIT-0004).
+  const fakeControllerWithMergedFirstRow = () => ({
+    ...fakeController(),
+    mount: vi.fn((element: HTMLElement) => {
+      const editable = document.createElement("div");
+      editable.contentEditable = "true";
+      const table = document.createElement("table");
+      table.setAttribute("data-be-block-id", "table-1");
+      table.setAttribute(
+        "data-be-columns",
+        JSON.stringify([
+          { id: "col-1", width: 120 },
+          { id: "col-2", width: 100 },
+        ]),
+      );
+      const colgroup = document.createElement("colgroup");
+      for (const width of [120, 100]) {
+        const col = document.createElement("col");
+        col.style.width = `${width}px`;
+        colgroup.append(col);
+      }
+      table.append(colgroup);
+
+      const row1 = document.createElement("tr");
+      row1.setAttribute("data-be-row-id", "row-1");
+      const mergedCell = document.createElement("td");
+      mergedCell.setAttribute("data-be-column-id", "col-1");
+      mergedCell.setAttribute("colspan", "2");
+      row1.append(mergedCell);
+
+      const row2 = document.createElement("tr");
+      row2.setAttribute("data-be-row-id", "row-2");
+      const cell3 = document.createElement("td");
+      cell3.setAttribute("data-be-column-id", "col-1");
+      const cell4 = document.createElement("td");
+      cell4.setAttribute("data-be-column-id", "col-2");
+      row2.append(cell3, cell4);
+
+      table.append(row1, row2);
+      editable.append(table);
+      element.append(editable);
+    }),
+  });
+
+  it("둘째 열 핸들이 둘째 행의 비병합 셀 경계에 위치한다", () => {
+    const controller = fakeControllerWithMergedFirstRow();
+    const view = render(
+      withProvider(
+        controller as unknown as ReturnType<typeof fakeController>,
+        <>
+          <TableHandles />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editable = screen.getByRole("textbox", { name: "Editor" });
+    const table = editable.querySelector("table");
+    if (table === null) throw new Error("Table was not rendered");
+    stubRect(table, { left: 100, top: 100, width: 200, height: 60 });
+    const [row1, row2] = Array.from(table.querySelectorAll("[data-be-row-id]"));
+    if (row1 === undefined || row2 === undefined) {
+      throw new Error("Rows were not rendered");
+    }
+    stubRect(row1, { left: 100, top: 100, width: 200, height: 30 });
+    stubRect(row2, { left: 100, top: 130, width: 200, height: 30 });
+    const [mergedCell] = Array.from(
+      row1.querySelectorAll("[data-be-column-id]"),
+    );
+    const [cell3, cell4] = Array.from(
+      row2.querySelectorAll("[data-be-column-id]"),
+    );
+    if (
+      mergedCell === undefined ||
+      cell3 === undefined ||
+      cell4 === undefined
+    ) {
+      throw new Error("Cells were not rendered");
+    }
+    stubRect(mergedCell, { left: 100, top: 100, width: 200, height: 30 });
+    stubRect(cell3, { left: 100, top: 130, width: 100, height: 30 });
+    stubRect(cell4, { left: 200, top: 130, width: 100, height: 30 });
+
+    fireEvent.pointerMove(table);
+
+    const columnHandles = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    expect(columnHandles).toHaveLength(2);
+    // 열 핸들은 열 중앙(left + width/2 - 10)에 놓인다 — 둘째 열(cell4:
+    // left 200, width 100)이면 240이어야 한다. 첫 행만 봤다면 둘째 열
+    // 핸들 자체가 없어 이 값이 나올 수 없었다.
+    expect((columnHandles[1] as HTMLElement).style.left).toBe("240px");
+    view.unmount();
+  });
+
+  it("병합 셀이 가로지르는 행에는 리사이즈 strip을 그리지 않는다", () => {
+    const controller = fakeControllerWithMergedFirstRow();
+    const view = render(
+      withProvider(
+        controller as unknown as ReturnType<typeof fakeController>,
+        <>
+          <TableHandles />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editable = screen.getByRole("textbox", { name: "Editor" });
+    const table = editable.querySelector("table");
+    if (table === null) throw new Error("Table was not rendered");
+    stubRect(table, { left: 100, top: 100, width: 200, height: 60 });
+    const [row1, row2] = Array.from(table.querySelectorAll("[data-be-row-id]"));
+    if (row1 === undefined || row2 === undefined) {
+      throw new Error("Rows were not rendered");
+    }
+    stubRect(row1, { left: 100, top: 100, width: 200, height: 30 });
+    stubRect(row2, { left: 100, top: 130, width: 200, height: 30 });
+    const [mergedCell] = Array.from(
+      row1.querySelectorAll("[data-be-column-id]"),
+    );
+    const [cell3, cell4] = Array.from(
+      row2.querySelectorAll("[data-be-column-id]"),
+    );
+    if (
+      mergedCell === undefined ||
+      cell3 === undefined ||
+      cell4 === undefined
+    ) {
+      throw new Error("Cells were not rendered");
+    }
+    stubRect(mergedCell, { left: 100, top: 100, width: 200, height: 30 });
+    stubRect(cell3, { left: 100, top: 130, width: 100, height: 30 });
+    stubRect(cell4, { left: 200, top: 130, width: 100, height: 30 });
+
+    fireEvent.pointerMove(table);
+
+    // 첫 열 경계(x=200)는 병합된 첫 행에서는 셀 경계가 아니다 — 그 행에
+    // strip을 그리면 병합 셀 한가운데 클릭이 리사이즈 드래그로 가로채인다
+    // (PIT-0010). 둘째 행 구간만 남아야 한다.
+    const handles = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-be-table-resize-handle]"),
+    );
+    const firstBoundary = handles.filter(
+      (handle) => handle.style.left === "198px",
+    );
+    expect(firstBoundary).toHaveLength(1);
+    expect(firstBoundary[0]?.style.top).toBe("130px");
+    expect(firstBoundary[0]?.style.height).toBe("30px");
+    // 마지막 열 경계(x=300)는 두 행 모두에서 셀 경계다.
+    expect(
+      handles.filter((handle) => handle.style.left === "298px"),
+    ).toHaveLength(2);
     view.unmount();
   });
 });

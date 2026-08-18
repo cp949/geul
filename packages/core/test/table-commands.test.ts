@@ -6,9 +6,11 @@ import {
   insertTable,
   insertTableColumn,
   insertTableRow,
+  mergeTableCells,
   moveTableColumn,
   moveTableRow,
   resizeTableColumn,
+  splitTableCell,
 } from "../src/table-commands.js";
 import { createTableFixtureEditor } from "./table-test-support.js";
 
@@ -531,6 +533,199 @@ describe("표 삽입 시 트리거 블록 텍스트를 함께 지운다", () => 
     });
     editor.commands.undo();
 
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("표의 셀을 병합한다", () => {
+  it("직사각형 범위의 셀을 하나로 병합한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    const result = mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = editor.getJSON().content?.[0];
+    expect(table?.content).toHaveLength(2);
+    expect(table?.content?.[0]?.content).toHaveLength(1);
+    expect(table?.content?.[0]?.content?.[0]?.attrs).toMatchObject({
+      cellId: "cell-1",
+      rowspan: 2,
+      colspan: 2,
+    });
+    expect(table?.content?.[1]?.content ?? []).toHaveLength(0);
+    editor.destroy();
+  });
+
+  it("병합 직후 캐럿을 병합된 셀 안으로 옮긴다", () => {
+    // replaceWith는 표 서브트리 전체를 바꾼다 — 옛 selection을 그대로
+    // 매핑하면 표의 마지막 셀 같은 예측 불가능한 위치로 떨어진다
+    // (duplicateBlock과 같은 원칙으로 명시 이동한다).
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.attrs.cellId).toBe("cell-1");
+    editor.destroy();
+  });
+
+  it("병합 직후 undo 1회로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const before = editor.getJSON();
+
+    mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const before = editor.getJSON();
+
+    const result = mergeTableCells(
+      editor,
+      "missing",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("비직사각형 범위는 NOT_RECTANGULAR를 반환하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    // 먼저 좌상단 2x1을 병합해 L자 모양(비직사각형) 선택을 만든다.
+    mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 0 },
+    );
+    const before = editor.getJSON();
+
+    const result = mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 0, column: 1 },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "NOT_RECTANGULAR" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("표의 병합된 셀을 분할한다", () => {
+  it("병합된 셀을 원래 셀 개수로 되돌린다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const createId = sequentialIds("split");
+    mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+
+    const result = splitTableCell(editor, "table-1", "cell-1", createId);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = editor.getJSON().content?.[0];
+    expect(table?.content?.[0]?.content).toHaveLength(2);
+    expect(table?.content?.[1]?.content).toHaveLength(2);
+    editor.destroy();
+  });
+
+  it("분할 직후 캐럿을 분할 대상이었던 셀 안에 유지한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const createId = sequentialIds("split");
+    mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+
+    splitTableCell(editor, "table-1", "cell-1", createId);
+
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.attrs.cellId).toBe("cell-1");
+    editor.destroy();
+  });
+
+  it("분할 직후 undo 1회로 병합 상태로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const createId = sequentialIds("split");
+    mergeTableCells(
+      editor,
+      "table-1",
+      { row: 0, column: 0 },
+      { row: 1, column: 1 },
+    );
+    const merged = editor.getJSON();
+
+    splitTableCell(editor, "table-1", "cell-1", createId);
+    editor.commands.undo();
+
+    expect(editor.getJSON()).toEqual(merged);
+    editor.destroy();
+  });
+
+  it("병합되지 않은 셀은 분할해도 성공하되 undo 단계를 만들지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const createId = sequentialIds("split");
+    const before = editor.getJSON();
+
+    expect(splitTableCell(editor, "table-1", "cell-1", createId)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getJSON()).toEqual(before);
+    expect(editor.can().undo()).toBe(false);
+    editor.destroy();
+  });
+
+  it("존재하지 않는 cellId는 CELL_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    const createId = sequentialIds("split");
+    const before = editor.getJSON();
+
+    const result = splitTableCell(editor, "table-1", "missing", createId);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "CELL_NOT_FOUND", cellId: "missing" },
+    });
     expect(editor.getJSON()).toEqual(before);
     editor.destroy();
   });

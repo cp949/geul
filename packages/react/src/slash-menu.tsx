@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BlockSideMenu } from "./block-side-menu.js";
 import { BLOCK_TYPE_OPTIONS } from "./block-type-options.js";
 import { TableHandles } from "./table-handles.js";
+import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 const parseSlashQuery = (text: string): string | null => {
@@ -264,6 +265,7 @@ export const SlashMenu = () => {
     <>
       <BlockSideMenu onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
       <TableHandles />
+      <TableSelectionToolbar />
       {menuState !== null && (
         <div
           aria-label="Slash menu"

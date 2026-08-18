@@ -13,3 +13,4 @@
 | `PIT-0007` | HTML 경고 수집과 의미 변환 분리 | `ACTIVE` | io·security | R0 | [상세](./PIT-0007-separate-html-warnings-from-semantics.md) |
 | `PIT-0008` | 클로저 경계를 넘는 객체 타입 좁히기 회피 | `ACTIVE` | core | R1 | [상세](./PIT-0008-avoid-object-narrowing-across-closures.md) |
 | `PIT-0009` | UI를 닫는 키보드 핸들러는 병렬 e2e로 검증 | `ACTIVE` | react·e2e | R1 | [상세](./PIT-0009-verify-keyboard-close-with-parallel-e2e.md) |
+| `PIT-0010` | 병합 셀에서는 오버레이 hit-test와 selection 이동을 명시적으로 다룸 | `ACTIVE` | react·core | R1 | [상세](./PIT-0010-position-overlays-and-selection-for-merged-cells.md) |

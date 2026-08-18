@@ -1,3 +1,4 @@
+import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
@@ -251,6 +252,290 @@ describe("에디터 컨트롤러 표", () => {
       expect(
         editor.getDocument().blocks.some((block) => block.type === "table"),
       ).toBe(false);
+    });
+  });
+
+  describe("표 셀 병합·분할", () => {
+    // CellSelection.create는 $anchorCell.node(-1)이 table이길 기대한다 —
+    // 셀 노드 바로 앞(= row content 안) 위치가 그 depth다. 셀 내부로 한 칸
+    // 더 들어가면 node(-1)이 row가 되어 RangeError를 던진다.
+    const findCellBoundaryPosition = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+      cellId: string,
+    ): number | null => {
+      let found: number | null = null;
+      tiptap.state.doc.descendants((node, pos) => {
+        if (found !== null) return false;
+        if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
+          found = pos;
+          return false;
+        }
+        return true;
+      });
+      return found;
+    };
+
+    // setTextSelection처럼 셀 내부에 캐럿을 두는 용도는 경계 위치 + 1이다.
+    const findCellContentPosition = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+      cellId: string,
+    ): number | null => {
+      const boundary = findCellBoundaryPosition(tiptap, cellId);
+      return boundary === null ? null : boundary + 1;
+    };
+
+    const selectCellRange = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+      anchorCellId: string,
+      headCellId: string,
+    ) => {
+      const anchorPos = findCellBoundaryPosition(tiptap, anchorCellId);
+      const headPos = findCellBoundaryPosition(tiptap, headCellId);
+      if (anchorPos === null || headPos === null) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      const selection = CellSelection.create(
+        tiptap.state.doc,
+        anchorPos,
+        headPos,
+      );
+      tiptap.view.dispatch(tiptap.state.tr.setSelection(selection));
+    };
+
+    const editorWithTable = (rows: number, columns: number) => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("id"),
+      });
+      const inserted = editor.commands.insertTable("block-1", {
+        rows,
+        columns,
+      });
+      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+      const table = editor.getDocument().blocks[1];
+      if (table?.type !== "table") throw new Error("Expected a table block");
+      const cellIds = table.rows.flatMap((row) =>
+        row.cells.map((cell) => cell.id),
+      );
+      return {
+        editor,
+        tableBlockId: inserted.value.blockId,
+        cellIds,
+      };
+    };
+
+    const editorWithTwoByTwoTable = () => editorWithTable(2, 2);
+
+    it("셀 범위를 드래그 선택하면 getTableCellSelection이 merge를 반환한다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+
+      expect(editor.getTableCellSelection()).toEqual({
+        kind: "merge",
+        tableBlockId,
+      });
+    });
+
+    it("mergeTableCells로 선택한 직사각형 범위를 병합한다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+
+      expect(editor.commands.mergeTableCells(tableBlockId)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+      const table = editor.getDocument().blocks[1];
+      if (table?.type !== "table") throw new Error("Expected a table block");
+      expect(table.rows[0]?.cells).toHaveLength(1);
+      expect(table.rows[0]?.cells[0]).toMatchObject({
+        id: topLeft,
+        rowSpan: 2,
+        columnSpan: 2,
+      });
+    });
+
+    it("병합 직후 undo 1회로 복원된다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+      const before = editor.getDocument();
+
+      editor.commands.mergeTableCells(tableBlockId);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editor.getDocument().blocks).toEqual(before.blocks);
+    });
+
+    it("셀 선택이 없으면 mergeTableCells를 거절하고 문서를 바꾸지 않는다", () => {
+      const { editor, tableBlockId } = editorWithTwoByTwoTable();
+      mountTiptapEditor(editor);
+      const before = editor.getDocument();
+
+      expect(editor.commands.mergeTableCells(tableBlockId)).toEqual({
+        ok: false,
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "mergeTableCells" },
+      });
+      expect(editor.getDocument()).toEqual(before);
+    });
+
+    it("병합된 셀에 캐럿을 두면 getTableCellSelection이 split을 반환한다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+      editor.commands.mergeTableCells(tableBlockId);
+
+      const cellPos = findCellContentPosition(tiptap, topLeft);
+      if (cellPos === null) throw new Error("병합된 셀 fixture 준비 실패");
+      tiptap.commands.setTextSelection(cellPos);
+
+      expect(editor.getTableCellSelection()).toEqual({
+        kind: "split",
+        tableBlockId,
+        cellId: topLeft,
+      });
+    });
+
+    it("splitTableCell로 병합된 셀을 원래 셀 개수로 되돌린다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+      editor.commands.mergeTableCells(tableBlockId);
+
+      expect(editor.commands.splitTableCell(tableBlockId, topLeft)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+      const table = editor.getDocument().blocks[1];
+      if (table?.type !== "table") throw new Error("Expected a table block");
+      expect(table.rows[0]?.cells).toHaveLength(2);
+      expect(table.rows[1]?.cells).toHaveLength(2);
+    });
+
+    it("분할 직후 undo 1회로 병합 상태로 복원된다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+      editor.commands.mergeTableCells(tableBlockId);
+      const merged = editor.getDocument();
+
+      editor.commands.splitTableCell(tableBlockId, topLeft);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editor.getDocument().blocks).toEqual(merged.blocks);
+    });
+
+    it("존재하지 않는 cellId는 CELL_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
+      const { editor, tableBlockId } = editorWithTwoByTwoTable();
+      mountTiptapEditor(editor);
+      const before = editor.getDocument();
+
+      expect(editor.commands.splitTableCell(tableBlockId, "missing")).toEqual({
+        ok: false,
+        error: { code: "CELL_NOT_FOUND", cellId: "missing" },
+      });
+      expect(editor.getDocument()).toEqual(before);
+    });
+
+    // tableEditing 플러그인의 handleTripleClick과 normalizeSelection은 셀
+    // 하나만 감싸는 CellSelection을 만든다(@tiptap/pm/tables) — 삼중 클릭
+    // 한 번으로 재현된다. prosemirror-tables의 mergeCells도 이 경우를
+    // ($anchorCell.pos == $headCell.pos) 거절한다.
+    const selectSingleCell = (
+      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+      cellId: string,
+    ) => {
+      const cellPos = findCellBoundaryPosition(tiptap, cellId);
+      if (cellPos === null) throw new Error("셀 fixture 준비 실패");
+      tiptap.view.dispatch(
+        tiptap.state.tr.setSelection(
+          CellSelection.create(tiptap.state.doc, cellPos),
+        ),
+      );
+    };
+
+    it("병합되지 않은 셀 하나만 감싸는 CellSelection은 merge 후보가 아니다", () => {
+      const { editor, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft] = cellIds;
+      if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
+
+      selectSingleCell(tiptap, topLeft);
+
+      expect(editor.getTableCellSelection()).toBeNull();
+    });
+
+    it("병합된 셀 하나만 감싸는 CellSelection은 split 후보로 판정한다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+      editor.commands.mergeTableCells(tableBlockId);
+
+      selectSingleCell(tiptap, topLeft);
+
+      expect(editor.getTableCellSelection()).toEqual({
+        kind: "split",
+        tableBlockId,
+        cellId: topLeft,
+      });
+    });
+
+    it("병합 셀을 가로지르는 CellSelection의 병합은 NOT_RECTANGULAR로 거절한다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 3);
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, topMiddle, topRight, , middleBottom] = cellIds;
+      if (
+        topLeft === undefined ||
+        topMiddle === undefined ||
+        topRight === undefined ||
+        middleBottom === undefined
+      ) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      // 첫 행의 왼쪽 두 셀을 병합해 (0,0)-(0,1)을 덮는 셀을 만든다.
+      selectCellRange(tiptap, topLeft, topMiddle);
+      editor.commands.mergeTableCells(tableBlockId);
+      const before = editor.getDocument();
+
+      // 둘째 행 가운데 셀 ~ 첫 행 오른쪽 셀은 열 1-2, 행 0-1의 직사각형이지만
+      // 병합 셀이 열 0에서 이 범위 안으로 걸쳐 들어온다.
+      selectCellRange(tiptap, middleBottom, topRight);
+
+      expect(editor.commands.mergeTableCells(tableBlockId)).toEqual({
+        ok: false,
+        error: { code: "NOT_RECTANGULAR" },
+      });
+      expect(editor.getDocument()).toEqual(before);
     });
   });
 

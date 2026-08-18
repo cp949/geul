@@ -9,4 +9,6 @@ export type EditorError =
   | { code: "INVALID_TABLE_SIZE" }
   | { code: "INDEX_OUT_OF_RANGE" }
   | { code: "MERGE_BOUNDARY_CROSSED" }
-  | { code: "COLUMN_WIDTH_OUT_OF_RANGE"; width: number };
+  | { code: "COLUMN_WIDTH_OUT_OF_RANGE"; width: number }
+  | { code: "NOT_RECTANGULAR" }
+  | { code: "CELL_NOT_FOUND"; cellId: string };

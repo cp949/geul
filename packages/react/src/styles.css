@@ -19,3 +19,12 @@
 .be-editor h3 {
   font-size: 1.25rem;
 }
+
+/* tableEditing 플러그인(@tiptap/pm/tables)이 CellSelection에 속한 기준
+   셀마다 이 클래스를 데코레이션으로 붙인다 — 드래그로 선택 중인 직사각형
+   범위를 시각으로 드러낸다(spec 7.2). */
+.be-editor .selectedCell {
+  background-color: var(--be-color-accent-muted, #e8f0fe);
+  outline: 1px solid var(--be-color-accent, #1a73e8);
+  outline-offset: -1px;
+}

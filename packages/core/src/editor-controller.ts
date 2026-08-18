@@ -10,6 +10,7 @@ import { Editor, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
+import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 
 import { BlockIdExtension } from "./block-id-extension.js";
@@ -21,9 +22,11 @@ import {
   insertTableColumn as insertTableColumnCommand,
   insertTable as insertTableCommand,
   insertTableRow as insertTableRowCommand,
+  mergeTableCells as mergeTableCellsCommand,
   moveTableColumn as moveTableColumnCommand,
   moveTableRow as moveTableRowCommand,
   resizeTableColumn as resizeTableColumnCommand,
+  splitTableCell as splitTableCellCommand,
   type TableCommandError,
 } from "./table-commands.js";
 import {
@@ -55,6 +58,7 @@ export interface EditorController {
     blockId: string;
     blockType: BlockTypeDescriptor;
   } | null;
+  getTableCellSelection(): TableCellSelection | null;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
@@ -107,6 +111,11 @@ export interface EditorController {
       index: number,
       width: number,
     ): Result<void, EditorError>;
+    mergeTableCells(tableBlockId: string): Result<void, EditorError>;
+    splitTableCell(
+      tableBlockId: string,
+      cellId: string,
+    ): Result<void, EditorError>;
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
   };
@@ -115,6 +124,38 @@ export interface EditorController {
 export type BlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: 1 | 2 | 3 };
+
+// "merge"는 서로 다른 기준 셀 2개 이상을 덮는 CellSelection이고, "split"은
+// 이미 병합된 셀 하나에 선택이 머무는 상태다. React는 이 판정을 다시
+// 계산하지 않는다(spec 6.2).
+//
+// CellSelection의 좌표 범위는 TableMap.rectBetween이라 항상 직사각형이지만,
+// 그 범위에 걸친 병합 셀이 범위 밖으로 뻗어 있을 수 있다 —
+// prosemirror-tables가 cellsOverlapRectangle로 거르는 경우다. 그래서
+// "merge"로 판정한 선택도 mergeTableCells에서 NOT_RECTANGULAR로 거절될 수
+// 있다(격자 판정의 권위는 TableGrid다, spec 6.2).
+export type TableCellSelection =
+  | { kind: "merge"; tableBlockId: string }
+  | { kind: "split"; tableBlockId: string; cellId: string };
+
+// selectedRect가 덮는 좌표들이 서로 다른 기준 셀 2개 이상을 가리키는지 본다.
+// TableMap.map은 좌표마다 그 좌표를 채우는 셀의 시작 위치를 담으므로, 병합
+// 셀은 자신이 덮는 모든 좌표에서 같은 값이 반복된다. PM 노드 참조가 아닌
+// 위치 숫자만 읽는다(PIT-0008).
+const coversMultipleCells = (
+  rect: ReturnType<typeof selectedRect>,
+): boolean => {
+  let firstOffset: number | null = null;
+  for (let row = rect.top; row < rect.bottom; row += 1) {
+    for (let column = rect.left; column < rect.right; column += 1) {
+      const offset = rect.map.map[row * rect.map.width + column];
+      if (offset === undefined) continue;
+      if (firstOffset === null) firstOffset = offset;
+      else if (offset !== firstOffset) return true;
+    }
+  }
+  return false;
+};
 
 export type CreateEditorOptions = {
   initialDocument: BlockDocument;
@@ -656,7 +697,7 @@ export const createEditor = (
   // 클로저를 넘나드는 값은 원시 타입(code 문자열, blockId, width, message)만 쓴다.
   const tableErrorFromCode = (
     code: TableCommandError["code"],
-    detail: { blockId: string; message: string; width: number },
+    detail: { blockId: string; message: string; width: number; cellId: string },
   ): EditorError => {
     switch (code) {
       case "BLOCK_NOT_FOUND":
@@ -673,6 +714,10 @@ export const createEditor = (
         return { code: "MERGE_BOUNDARY_CROSSED" };
       case "COLUMN_WIDTH_OUT_OF_RANGE":
         return { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: detail.width };
+      case "NOT_RECTANGULAR":
+        return { code: "NOT_RECTANGULAR" };
+      case "CELL_NOT_FOUND":
+        return { code: "CELL_NOT_FOUND", cellId: detail.cellId };
       default:
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
     }
@@ -686,6 +731,7 @@ export const createEditor = (
     let errorBlockId = "";
     let errorMessage = "";
     let errorWidth = 0;
+    let errorCellId = "";
 
     const result = runDocumentCommand(command, "local", () => {
       const outcome = invoke();
@@ -703,6 +749,9 @@ export const createEditor = (
       if (outcome.error.code === "COLUMN_WIDTH_OUT_OF_RANGE") {
         errorWidth = outcome.error.width;
       }
+      if (outcome.error.code === "CELL_NOT_FOUND") {
+        errorCellId = outcome.error.cellId;
+      }
       return false;
     });
 
@@ -713,6 +762,7 @@ export const createEditor = (
           blockId: errorBlockId,
           message: errorMessage,
           width: errorWidth,
+          cellId: errorCellId,
         }),
       };
     }
@@ -792,6 +842,44 @@ export const createEditor = (
         result = { blockId, blockType };
       });
       return result;
+    },
+    getTableCellSelection() {
+      if (destroyed) return null;
+      const state = tiptapEditor.state;
+      if (!isInTable(state)) return null;
+
+      const rect = selectedRect(state);
+      const tableBlockId = rect.table.attrs.blockId;
+      if (typeof tableBlockId !== "string" || tableBlockId.length === 0) {
+        return null;
+      }
+
+      // CellSelection이어도 기준 셀 하나만 덮으면 병합할 대상이 없다 —
+      // tableEditing의 handleTripleClick(셀 삼중 클릭)이 이런 선택을 만든다.
+      // prosemirror-tables의 mergeCells도 같은 이유로 $anchorCell ===
+      // $headCell을 거절한다. 이 경우는 아래 분할 판정으로 넘긴다.
+      if (
+        state.selection instanceof CellSelection &&
+        coversMultipleCells(rect)
+      ) {
+        return { kind: "merge", tableBlockId };
+      }
+
+      // 선택이 단일 셀이고 그 셀이 이미 병합돼 있으면(rowspan/colspan > 1)
+      // 분할 후보다. TableMap 좌표를 넘나드는 PM Node 참조는 클로저 밖으로
+      // 내보내지 않는다(PIT-0008) — 원시 값만 읽어 즉시 반환한다.
+      const cellPosition =
+        rect.tableStart +
+        (rect.map.map[rect.top * rect.map.width + rect.left] ?? -1);
+      const cellNode =
+        cellPosition < rect.tableStart ? null : state.doc.nodeAt(cellPosition);
+      if (cellNode === null || cellNode === undefined) return null;
+      const rowSpan = cellNode.attrs.rowspan as number;
+      const colSpan = cellNode.attrs.colspan as number;
+      if (rowSpan <= 1 && colSpan <= 1) return null;
+      const cellId = cellNode.attrs.cellId;
+      if (typeof cellId !== "string" || cellId.length === 0) return null;
+      return { kind: "split", tableBlockId, cellId };
     },
     replaceDocument(next) {
       if (destroyed) return commandNotApplicable("replaceDocument");
@@ -896,6 +984,7 @@ export const createEditor = (
               blockId: errorBlockId,
               message: "",
               width: 0,
+              cellId: "",
             }),
           };
         }
@@ -931,6 +1020,31 @@ export const createEditor = (
       resizeTableColumn: (tableBlockId, index, width) =>
         runVoidTableCommand("resizeTableColumn", () =>
           resizeTableColumnCommand(tiptapEditor, tableBlockId, index, width),
+        ),
+      mergeTableCells: (tableBlockId) => {
+        if (destroyed) return commandNotApplicable("mergeTableCells");
+        // 병합 범위의 유일한 권위는 현재 CellSelection이다(spec 6.2) — React는
+        // 좌표를 다시 계산해 넘기지 않는다. 클릭 시점에 선택이 이미 바뀌었거나
+        // 다른 표를 가리키면 조작 불가로 거절한다.
+        if (!(tiptapEditor.state.selection instanceof CellSelection)) {
+          return commandNotApplicable("mergeTableCells");
+        }
+        const rect = selectedRect(tiptapEditor.state);
+        if (rect.table.attrs.blockId !== tableBlockId) {
+          return commandNotApplicable("mergeTableCells");
+        }
+        return runVoidTableCommand("mergeTableCells", () =>
+          mergeTableCellsCommand(
+            tiptapEditor,
+            tableBlockId,
+            { row: rect.top, column: rect.left },
+            { row: rect.bottom - 1, column: rect.right - 1 },
+          ),
+        );
+      },
+      splitTableCell: (tableBlockId, cellId) =>
+        runVoidTableCommand("splitTableCell", () =>
+          splitTableCellCommand(tiptapEditor, tableBlockId, cellId, createId),
         ),
       undo: () =>
         runDocumentCommand("undo", "undo", () => tiptapEditor.commands.undo()),

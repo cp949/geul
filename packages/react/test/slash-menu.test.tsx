@@ -66,6 +66,7 @@ const fakeController = ({
   getSelectionMarks: vi.fn(() => [] as string[]),
   getSelectionLink: vi.fn(() => null),
   getCaretBlockContext: vi.fn(getCaretBlockContext),
+  getTableCellSelection: vi.fn(() => null),
   replaceDocument: vi.fn(),
   commands: {
     setText: vi.fn(),
@@ -87,6 +88,8 @@ const fakeController = ({
     moveTableRow: vi.fn(() => ({ ok: true, value: undefined })),
     moveTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
     resizeTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
+    mergeTableCells: vi.fn(() => ({ ok: true, value: undefined })),
+    splitTableCell: vi.fn(() => ({ ok: true, value: undefined })),
     undo: vi.fn(),
     redo: vi.fn(),
   },
