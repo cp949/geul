@@ -22,6 +22,12 @@ export const layoutColumnSpan = (columnSpan: number): number =>
     ? columnSpan
     : 1;
 
+// rowSpan도 columnSpan과 같은 규칙으로 보정한다. rowspan="0"(HTML에서
+// "섹션 끝까지"), 음수, 소수는 우리 격자 모델에 대응이 없으므로 1로 본다.
+// 커버리지 계산과 방출되는 셀이 같은 값을 써야 검증기가 어긋나지 않는다.
+export const layoutRowSpan = (rowSpan: number): number =>
+  Number.isInteger(rowSpan) && rowSpan >= 1 ? rowSpan : 1;
+
 export const tableRows = (table: HtmlElementNode): TableRowSource[] => {
   const rows: TableRowSource[] = [];
 

@@ -1,3 +1,4 @@
+import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
 import rehypeParse from "rehype-parse";
 import { unified } from "unified";
@@ -9,12 +10,13 @@ import {
   type HtmlRoot,
   inlineContentFromNodes,
 } from "../html/inline-content.js";
-import { htmlSanitizeSchema } from "../html/sanitize-schema.js";
+import { clipboardSanitizeSchema } from "../html/sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
   inferredColumnCount,
   layoutColumnSpan,
+  layoutRowSpan,
   layoutRows,
   MAX_TABLE_COLUMNS,
   tableRows,
@@ -49,15 +51,32 @@ const asRoot = (node: unknown): HtmlRoot | undefined => {
   return node as HtmlRoot;
 };
 
-const findFirstTable = (root: HtmlRoot): HtmlElementNode | undefined => {
+// role=presentation/none은 "이건 데이터 표가 아니다"라는 저자의 명시적
+// 선언이고, 표를 품은 표는 우리 모델이 중첩 표를 표현하지 못하므로 바깥이
+// 래퍼다 — 둘 다 안쪽으로 내려가 실제 데이터 표를 찾는다. 이 판정이 없으면
+// Gmail 서명 같은 레이아웃 표가 통째로 표로 붙는다.
+const isLayoutTable = (table: HtmlElementNode): boolean => {
+  const role = propertyString(table, "role")?.trim().toLowerCase();
+  return role === "presentation" || role === "none";
+};
+
+const findDataTable = (root: HtmlRoot): HtmlElementNode | undefined => {
   for (const node of root.children) {
     if (node.type !== "element") continue;
-    if (node.tagName === "table") return node;
-    const nested = findFirstTable({ type: "root", children: node.children });
+    const nested = findDataTable({ type: "root", children: node.children });
     if (nested !== undefined) return nested;
+    if (node.tagName === "table" && !isLayoutTable(node)) return node;
   }
   return undefined;
 };
+
+const canonicalColor = (value: string | undefined): string | undefined =>
+  value !== undefined && isCanonicalCellColor(value) ? value : undefined;
+
+const canonicalAlign = (
+  value: string | undefined,
+): "left" | "center" | "right" | undefined =>
+  value !== undefined && isCanonicalCellAlign(value) ? value : undefined;
 
 // data-be-*(자기 복사)가 있으면 우선하고, 없으면 style에서 뽑는다(외부
 // Excel/Google Sheets는 data-be-*가 없으므로 항상 style로 떨어진다).
@@ -68,17 +87,17 @@ const cellStyleFields = (
   const parsedStyle =
     styleAttribute === undefined ? {} : parseStyleDeclarations(styleAttribute);
 
+  // data-be-*도 style과 똑같이 model의 정규 형식을 통과해야 한다. 그냥
+  // 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 parseDocument가
+  // 커밋 시점에 터진다(모델↔에디터 영구 desync).
   const textColor =
-    propertyString(element, "dataBeTextColor") ?? parsedStyle.color;
+    canonicalColor(propertyString(element, "dataBeTextColor")) ??
+    parsedStyle.color;
   const backgroundColor =
-    propertyString(element, "dataBeBackgroundColor") ??
+    canonicalColor(propertyString(element, "dataBeBackgroundColor")) ??
     parsedStyle.backgroundColor;
-  const dataAlign = propertyString(element, "dataBeAlign") as
-    | "left"
-    | "center"
-    | "right"
-    | undefined;
-  const align = dataAlign ?? parsedStyle.align;
+  const align =
+    canonicalAlign(propertyString(element, "dataBeAlign")) ?? parsedStyle.align;
 
   return {
     ...(textColor === undefined ? {} : { textColor }),
@@ -100,10 +119,7 @@ const coveredCoordinates = (
 
   for (const [rowIndex, row] of layouts.entries()) {
     for (const layout of row) {
-      const rowSpan =
-        Number.isInteger(layout.rowSpan) && layout.rowSpan >= 1
-          ? layout.rowSpan
-          : 1;
+      const rowSpan = layoutRowSpan(layout.rowSpan);
       const columnSpan = layoutColumnSpan(layout.columnSpan);
       const rowEnd = Math.min(rowIndex + rowSpan, layouts.length);
       const columnEnd = Math.min(layout.columnIndex + columnSpan, columnCount);
@@ -163,8 +179,11 @@ const tabularDataFromTable = (
     rows: layouts.map((row, rowIndex) => {
       const cells: TabularCell[] = row.map((layout) => ({
         columnIndex: layout.columnIndex,
-        rowSpan: layout.rowSpan,
-        columnSpan: layout.columnSpan,
+        // coveredCoordinates가 쓰는 보정값과 반드시 같아야 한다 — 어긋나면
+        // 커버리지는 채워졌는데 검증기는 UNCOVERED_COORDINATE를 내서
+        // 멀쩡한 표 붙여넣기가 통째로 거절된다.
+        rowSpan: layoutRowSpan(layout.rowSpan),
+        columnSpan: layoutColumnSpan(layout.columnSpan),
         content: normalizeCellContent(
           inlineContentFromNodes(layout.element.children),
         ),
@@ -197,7 +216,7 @@ const parseHtmlTable = (
   if (unsafeRoot === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" } };
 
-  const safeRoot = asRoot(sanitize(unsafeRoot, htmlSanitizeSchema));
+  const safeRoot = asRoot(sanitize(unsafeRoot, clipboardSanitizeSchema));
   if (safeRoot === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" } };
 
@@ -205,25 +224,31 @@ const parseHtmlTable = (
   // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
   sanitizeLinks(safeRoot.children);
 
-  const table = findFirstTable(safeRoot);
+  const table = findDataTable(safeRoot);
   if (table === undefined) return { ok: false, error: { code: "NOT_TABULAR" } };
 
   return tabularDataFromTable(table);
 };
 
 const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
-  if (!text.includes("\t"))
-    return { ok: false, error: { code: "NOT_TABULAR" } };
-
-  const lines = text
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .filter((line) => line.length > 0);
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  // 끝 개행 하나가 만든 빈 줄만 버린다. 중간 빈 줄까지 걸러내면 행 인덱스가
+  // 조용히 밀려 원본과 다른 표가 붙는다 — 중간 빈 줄은 아래 직사각형 검사가
+  // 걸러 기본 붙여넣기로 흘려보낸다.
+  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
   if (lines.length === 0) return { ok: false, error: { code: "NOT_TABULAR" } };
 
+  // 탭이 하나라도 있으면 표로 보던 판정은 너무 넓다 — 탭 들여쓰기 코드나
+  // 탭이 섞인 로그가 전부 표가 됐고, 확장이 이벤트를 소비하므로 사용자는
+  // 기본 붙여넣기를 되찾을 수 없었다. 스프레드시트 클립보드는 항상 모든
+  // 줄의 탭 개수가 같은 직사각형이므로 그 조건만 표로 인정한다.
   const rows = lines.map((line) => line.split("\t"));
-  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
-  if (columnCount === 0) return { ok: false, error: { code: "NOT_TABULAR" } };
+  const columnCount = rows[0]?.length ?? 0;
+  if (columnCount < 2) return { ok: false, error: { code: "NOT_TABULAR" } };
+  if (rows.some((row) => row.length !== columnCount)) {
+    return { ok: false, error: { code: "NOT_TABULAR" } };
+  }
   if (rows.length * columnCount > MAX_TABLE_LOGICAL_CELLS) {
     return {
       ok: false,

@@ -1,3 +1,8 @@
+/**
+ * `parseClipboardTable`가 클립보드 HTML/TSV를 TabularData로 옮기는지 검증한다.
+ * Excel·Google Sheets 대표 구조, 서식 속성의 정규 형식 처리, 불량 span 보정,
+ * 표가 아닌 입력을 NOT_TABULAR로 흘려보내는 판정을 함께 다룬다.
+ */
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 
@@ -145,13 +150,14 @@ describe("parseClipboardTable", () => {
     expect(result.value.rows[1]?.cells[1]?.content).toEqual([{ text: "d" }]);
   });
 
-  it("짧은 TSV 행은 빈 셀로 패딩해 직사각형을 유지한다", () => {
+  // 교체된 계약: 예전에는 짧은 TSV 행을 빈 셀로 패딩했다. 들쭉날쭉한 탭
+  // 텍스트는 스프레드시트 클립보드가 아니라 탭 들여쓰기 코드일 가능성이
+  // 훨씬 크고, 패딩해서 표로 만들면 확장이 이벤트를 소비해 사용자가 기본
+  // 붙여넣기를 되찾을 수 없다. HTML 표의 짧은 행 패딩은 그대로다(진짜 표
+  // 마크업은 정상적으로 들쭉날쭉하다).
+  it("들쭉날쭉한 TSV는 NOT_TABULAR로 흘려보낸다", () => {
     const result = parseClipboardTable({ text: "a\tb\tc\nd" });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.columnCount).toBe(3);
-    expect(result.value.rows[1]?.cells[1]?.content).toEqual([]);
-    expect(result.value.rows[1]?.cells[2]?.content).toEqual([]);
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
   });
 
   it("탭 없는 일반 텍스트는 NOT_TABULAR다", () => {
@@ -178,5 +184,111 @@ describe("parseClipboardTable", () => {
       ok: false,
       error: { code: "CLIPBOARD_TABLE_INVALID" },
     });
+  });
+
+  it("정규 형식이 아닌 data-be-text-color는 무시한다", () => {
+    const html =
+      '<table><tbody><tr><td data-be-text-color="red">1</td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.textColor).toBeUndefined();
+  });
+
+  it("정규 형식이 아닌 data-be-background-color는 무시한다", () => {
+    const html =
+      '<table><tbody><tr><td data-be-background-color="#ff0000">1</td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.backgroundColor).toBeUndefined();
+  });
+
+  it("정규 형식이 아닌 data-be-align은 무시한다", () => {
+    const html =
+      '<table><tbody><tr><td data-be-align="justify">1</td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.align).toBeUndefined();
+  });
+
+  it("rowspan=0은 1로 보정해 표를 살린다", () => {
+    const html =
+      '<table><tbody><tr><td rowspan="0">a</td><td>b</td></tr>' +
+      "<tr><td>c</td><td>d</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows).toHaveLength(2);
+    expect(result.value.rows[0]?.cells[0]?.rowSpan).toBe(1);
+  });
+
+  it("colspan=0은 1로 보정해 표를 살린다", () => {
+    const html =
+      '<table><tbody><tr><td colspan="0">a</td><td>b</td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.columnSpan).toBe(1);
+  });
+
+  it("정수가 아닌 rowspan은 1로 보정해 표를 살린다", () => {
+    const html =
+      '<table><tbody><tr><td rowspan="2.5">a</td><td>b</td></tr>' +
+      "<tr><td>c</td><td>d</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.rowSpan).toBe(1);
+  });
+
+  it("role=presentation 표는 건너뛰고 안쪽 데이터 표를 고른다", () => {
+    const html =
+      '<table role="presentation"><tbody><tr><td>' +
+      "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+      "</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.columnCount).toBe(2);
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
+  });
+
+  it("표를 품은 바깥 표 대신 안쪽 표를 고른다", () => {
+    const html =
+      "<table><tbody><tr><td>" +
+      "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+      "</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.columnCount).toBe(2);
+    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
+  });
+
+  it("줄마다 탭 개수가 다른 텍스트는 NOT_TABULAR로 흘려보낸다", () => {
+    const result = parseClipboardTable({ text: "\tif (x) {\n\t\tfoo();" });
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+  });
+
+  it("중간에 빈 줄이 있는 텍스트는 NOT_TABULAR로 흘려보낸다", () => {
+    const result = parseClipboardTable({ text: "a\tb\n\nc\td" });
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+  });
+
+  it("끝 개행 하나는 행으로 세지 않는다", () => {
+    const result = parseClipboardTable({ text: "a\tb\nc\td\r\n" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows).toHaveLength(2);
   });
 });

@@ -85,11 +85,15 @@ export const parseClipboardTable = (input: {
 
 sanitizer는 `htmlSanitizeSchema`를 그대로 쓰되 `htmlAllowedAttributes.td`/`.th`에 `style`을 추가한다. 이 allowlist 확장은 공유 스키마라 `importHtml` 경로도 `style` 속성이 sanitize에서 살아남게 되지만, `import-html.ts`의 `parseTable`은 여전히 `style`을 읽지 않으므로(`data-be-*`만 읽음) `importHtml`의 관찰 가능한 동작은 바뀌지 않는다.
 
-**style 파싱(클립보드 경로 전용, 신규 코드)**: `style` 속성 문자열에서 `color`/`background-color`/`text-align` 세 선언만 최소 정규식으로 추출한다. `color`/`background-color` 값은 `isCanonicalCellColor`(model)를 통과할 때만(대문자 `#RRGGBB`로 정규화 후) 반영하고, `text-align` 값은 `isCanonicalCellAlign`을 통과할 때만 반영한다. 나머지 CSS 선언, 통과하지 못한 값은 조용히 버린다(파싱 실패로 전체를 거절하지 않는다). `data-be-text-color`/`data-be-background-color`/`data-be-align`(자기 복사)가 있으면 그걸 `style`보다 우선한다.
+**style 파싱(클립보드 경로 전용, 신규 코드)**: `style` 속성 문자열에서 `color`/`background-color`/`text-align` 세 선언만 최소 정규식으로 추출한다. `color`/`background-color` 값은 `isCanonicalCellColor`(model)를 통과할 때만(대문자 `#RRGGBB`로 정규화 후) 반영하고, `text-align` 값은 `isCanonicalCellAlign`을 통과할 때만 반영한다. 나머지 CSS 선언, 통과하지 못한 값은 조용히 버린다(파싱 실패로 전체를 거절하지 않는다). `data-be-text-color`/`data-be-background-color`/`data-be-align`(자기 복사)가 있으면 그걸 `style`보다 우선한다. **`data-be-*` 값도 `style` 값과 똑같이 `isCanonicalCellColor`/`isCanonicalCellAlign`을 통과해야 하고, 통과하지 못하면 조용히 버린다** — 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 `parseDocument`가 커밋 시점에 거절하고 모델과 에디터가 영구 desync된다. 클립보드 sanitize 스키마는 `importHtml` 스키마와 분리해서 쓴다(`clipboardSanitizeSchema`) — 공유하면 `style`/`role` 허용이 `importHtml`의 속성 제거 경고까지 없애버린다.
 
 ### 4.3 TSV 경로
 
 탭으로 셀, 개행으로 행을 나눈다. rowSpan/colSpan/색상/정렬 없음(전부 기본값: `rowSpan: 1, columnSpan: 1`, 색상/정렬 없음). 가장 긴 행 기준으로 `columnCount`를 정하고, 짧은 행은 빈 문자열 셀로 패딩해 항상 직사각형을 만든다(뒤 단계 검증기가 항상 통과하도록).
+
+구현 반영(2차 리뷰 후 계약 변경): 짧은 행 패딩을 하지 않는다. TSV 경로는 **모든 줄의 탭 개수가 같고 열이 2개 이상일 때만** 표로 인정하고, 들쭉날쭉하면 `NOT_TABULAR`로 기본 붙여넣기에 넘긴다. 끝 개행 하나가 만든 빈 줄만 버리고 중간 빈 줄은 버리지 않는다(버리면 행 인덱스가 조용히 밀린다 — 중간 빈 줄은 탭 개수 검사가 걸러낸다).
+
+이유: `text.includes("\t")` 하나로 판정하면 탭 들여쓰기 코드나 탭이 섞인 로그가 전부 표가 되고, §7.2 계약대로 확장이 이벤트를 소비하므로 사용자가 기본 붙여넣기를 되찾을 방법이 없다. 스프레드시트 클립보드는 항상 직사각형이므로 이 조건이 실제 대상 입력을 잃지 않는다. HTML 표의 짧은 행 패딩은 그대로 유지한다 — 진짜 표 마크업은 정상적으로 들쭉날쭉하다.
 
 ## 5. 검증기 — model의 그리드 커버리지 재사용
 
