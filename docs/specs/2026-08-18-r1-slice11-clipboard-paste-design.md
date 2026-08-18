@@ -164,6 +164,10 @@ export const pasteTabularData = (
 - 성공한 생성/확장/값 입력/서식 적용은 `applyTableGridOperation`의 기존 단일 `replaceWith` + `closeHistory` 트랜잭션 경로를 그대로 타므로 원자성(PIT-0003)이 자동으로 유지된다.
 - `EditorController.commands.pasteTabularData(data)`로 공개 API에도 노출한다 — 유닛 테스트가 실제 `ClipboardEvent` 없이 직접 호출해 검증할 수 있게 한다(다른 표 명령과 같은 테스트 패턴).
 
+구현 반영(표 밖 분기 계약 개정, Issue #29): 표 밖 붙여넣기는 다른 에디터와 같이 **선택을 대체한다**. selection이 비어있지 않으면 먼저 지우고, 삭제 후 캐럿이 놓인 최상위 블록 뒤에 표를 끼운 다음, 캐럿을 붙여넣은 표의 좌상단 셀 안으로 옮긴다(표 안 분기의 `selectCellId`와 대칭). 선택 삭제·표 삽입·캐럿 이동은 한 트랜잭션이라 undo 1회로 함께 복원된다. 블록 전체 내용을 선택해 지운 경우 남는 빈 문단은 그대로 둔다(블록 자체를 표로 교체하지 않는다 — 최소 변경, undo 예측 가능). 거절 경로(셀 한도 등)는 아무것도 dispatch하지 않으므로 선택도 보존된다(PIT-0003).
+
+구현 반영(오류 보고, Issue #30): `validateTabularData` 실패는 `NOT_RECTANGULAR`가 아니라 `{ code: "TABULAR_DATA_INVALID"; message }`로 보고한다 — io가 만든 원인 message(빈 표/인라인 텍스트/서식 값/열 정렬/격자 커버리지)를 그대로 전달한다. `NOT_RECTANGULAR`는 병합 명령(비직사각형 선택) 전용이다.
+
 ### 7.2 붙여넣기 가로채기
 
 `packages/core/src/table-paste-extension.ts`(신규), `table-keyboard-extension.ts`와 동일한 패턴(`Extension.create` + `.configure({ createId })` + `addProseMirrorPlugins`):

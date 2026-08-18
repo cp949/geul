@@ -470,15 +470,10 @@ export const insertTable = (
   return { ok: true, value: { blockId: table.id } };
 };
 
-// selection이 걸친 마지막 최상위 블록의 id를 찾는다
-// (findTopLevelBlockPosition과 같은 스캔 방식) — 표 밖 붙여넣기의 삽입
-// 위치를 정하는 데 쓴다. 이 함수는 isInTable(state)가 false일 때만
-// 호출되므로 결과가 table 노드일 일은 없다.
-//
-// selection 전체가 한 블록 안에 들어갈 것을 요구하면 두 문단에 걸친 선택이
-// 전부 PASTE_TARGET_NOT_FOUND가 되고, 붙여넣기 확장은 그래도 이벤트를
-// 소비하므로 사용자에게는 아무 일도 일어나지 않는다. 선택 끝(to)이 닿는
-// 블록을 기준으로 잡아 "선택 영역 뒤에 표를 놓는다"는 계약을 유지한다.
+// 캐럿(to)이 닿는 최상위 블록의 id를 찾는다(findTopLevelBlockPosition과
+// 같은 스캔 방식) — 표 밖 붙여넣기의 삽입 위치를 정하는 데 쓴다. 이 함수는
+// isInTable(state)가 false일 때만 호출되므로 결과가 table 노드일 일은 없다.
+// 선택 삭제 후의 doc을 받으므로 to는 항상 접힌 캐럿 위치다.
 const currentTopLevelBlockId = (
   doc: ProseMirrorNode,
   to: number,
@@ -556,17 +551,9 @@ export const pasteTabularData = (
 
   // 표 밖 분기는 buildPasteTableSkeleton으로 새 표를 만든다 — 0행/0열 TableBlock이
   // tableBlockToTiptapNode(스키마 비검증 NodeType.create)를 거쳐 문서에
-  // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다.
-  const afterBlockId = currentTopLevelBlockId(state.doc, state.selection.to);
-  if (afterBlockId === null) {
-    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
-  }
-
-  const afterPosition = findTopLevelBlockPosition(state.doc, afterBlockId);
-  if (afterPosition === null) return blockNotFound(afterBlockId);
-  const afterNode = state.doc.nodeAt(afterPosition);
-  if (afterNode === null) return blockNotFound(afterBlockId);
-
+  // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다. 표를 먼저 만들어 실패
+  // (셀 한도 등)를 트랜잭션 구성 전에 확정한다 — 거절 경로는 아무것도
+  // dispatch하지 않아야 한다(PIT-0003).
   const emptyTable = buildPasteTableSkeleton(
     { rows: data.rows.length, columns: data.columnCount },
     createId,
@@ -579,11 +566,47 @@ export const pasteTabularData = (
   );
   if (!filled.ok) return filled;
 
-  const tableNode = tableBlockToTiptapNode(editor.schema, filled.value);
-  const transaction = editor.state.tr.insert(
-    afterPosition + afterNode.nodeSize,
-    tableNode,
+  // 붙여넣기는 선택을 대체한다 — 선택 삭제와 표 삽입, 캐럿 이동을 한
+  // 트랜잭션에 담아 undo 1회로 함께 복원되게 한다. 삭제로 두 문단이
+  // 병합되면 병합된 블록(캐럿 위치)이 삽입 기준이 된다.
+  let transaction = state.tr;
+  if (!state.selection.empty) {
+    transaction = transaction.deleteSelection();
+  }
+
+  const afterBlockId = currentTopLevelBlockId(
+    transaction.doc,
+    transaction.selection.to,
   );
+  if (afterBlockId === null) {
+    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+  }
+
+  const afterPosition = findTopLevelBlockPosition(transaction.doc, afterBlockId);
+  if (afterPosition === null) return blockNotFound(afterBlockId);
+  const afterNode = transaction.doc.nodeAt(afterPosition);
+  if (afterNode === null) return blockNotFound(afterBlockId);
+
+  const tableNode = tableBlockToTiptapNode(editor.schema, filled.value);
+  const insertPosition = afterPosition + afterNode.nodeSize;
+  transaction = transaction.insert(insertPosition, tableNode);
+
+  // 표 안 분기의 selectCellId와 대칭 — 캐럿을 붙여넣은 표의 좌상단 셀
+  // 안으로 옮긴다.
+  const firstCellId = cellIdAtAnchor(filled.value, { row: 0, column: 0 });
+  if (firstCellId !== null) {
+    const relativeOffset = findCellContentOffset(tableNode, firstCellId);
+    if (relativeOffset !== null) {
+      const absolutePosition = Math.min(
+        insertPosition + 1 + relativeOffset,
+        transaction.doc.content.size,
+      );
+      transaction = transaction.setSelection(
+        TextSelection.near(transaction.doc.resolve(absolutePosition)),
+      );
+    }
+  }
+
   editor.view.dispatch(closeHistory(transaction));
 
   return { ok: true, value: { blockId: filled.value.id } };

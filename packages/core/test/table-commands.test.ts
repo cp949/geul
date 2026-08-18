@@ -852,20 +852,64 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     ],
   });
 
-  it("두 문단에 걸친 선택에서 호출하면 마지막 블록 뒤에 새 표를 만든다", () => {
+  it("두 문단에 걸친 선택에서 호출하면 선택을 지우고 캐럿을 새 표로 옮긴다", () => {
     const editor = createTableFixtureEditor(docWithTwoParagraphs);
-    // "hello"의 "e"부터 "world"의 "o"까지 — 두 최상위 블록에 걸친 선택.
+    // "hello"의 "e"부터 "world"의 "w" 뒤까지 — 두 최상위 블록에 걸친 선택.
     editor.commands.setTextSelection({ from: 2, to: 9 });
     const createId = sequentialIds("paste");
 
     const result = pasteTabularData(editor, oneByOneData("A"), createId);
 
     expect(result.ok).toBe(true);
+    // 선택 삭제로 두 문단이 "h" + "orld"로 병합되고 그 뒤에 표가 생긴다 —
+    // 다른 에디터와 같은 "붙여넣기는 선택을 대체한다" 계약(Issue #29).
     const doc = editor.getJSON();
-    expect(doc.content).toHaveLength(3);
+    expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
-    expect(doc.content?.[1]?.attrs?.blockId).toBe("para-2");
-    expect(doc.content?.[2]?.type).toBe("table");
+    expect(doc.content?.[0]?.content?.[0]?.text).toBe("horld");
+    expect(doc.content?.[1]?.type).toBe("table");
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("A");
+    editor.destroy();
+  });
+
+  it("블록 전체를 선택하고 호출하면 내용을 지우고 빈 문단 뒤에 표를 만든다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    // "hello" 전체 선택 — 삭제 후 빈 문단은 그대로 남긴다(블록 교체 안 함).
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    const createId = sequentialIds("paste");
+
+    const result = pasteTabularData(editor, oneByOneData("A"), createId);
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
+    expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
+    expect(doc.content?.[1]?.type).toBe("table");
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("A");
+    editor.destroy();
+  });
+
+  it("표 밖 붙여넣기와 선택 삭제가 undo 1회로 함께 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON();
+
+    const result = pasteTabularData(editor, oneByOneData("A"), createId);
+    expect(result.ok).toBe(true);
+
+    editor.commands.undo();
+
+    // 선택 삭제와 표 삽입이 한 트랜잭션이어야 undo 1회로 원문이 돌아온다.
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
   });
 
   it("표 밖에서 호출하면 현재 블록 뒤에 새 표를 만든다", () => {
@@ -901,6 +945,8 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const doc = editor.getJSON();
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("paragraph");
+    // 캐럿 선택(빈 selection)은 지울 것이 없다 — 문단 텍스트가 남는다.
+    expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
     const tableJson = doc.content?.[1];
     expect(tableJson?.type).toBe("table");
     expect(tableJson?.content).toHaveLength(1);
@@ -910,6 +956,12 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     if (result.ok) {
       expect(result.value.blockId).toBe(tableJson?.attrs?.blockId);
     }
+    // 표 안 분기의 selectCellId와 대칭 — 캐럿이 붙여넣은 표의 좌상단 셀로
+    // 이동한다(Issue #29).
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("A");
     editor.destroy();
   });
 
