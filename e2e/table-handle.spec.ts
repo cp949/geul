@@ -222,13 +222,13 @@ test("열 너비가 저장 JSON에 보존되고, 표 문서 로드는 차단 오
   await expect(firstColumn).toHaveAttribute("style", /width:\s*220px/);
 });
 
-test("외부 HTML 표를 붙여넣어도 에디터가 깨지지 않는다", async ({ page }) => {
+test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다", async ({
+  page,
+}) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("before");
 
-  // 외부 HTML 표 붙여넣기는 paste 슬라이스 전까지 표 노드로 파싱하지 않는다 —
-  // 파싱을 허용하면 id 없는 표가 만들어져 문서 검증이 영구 실패한다.
   await page.evaluate(() => {
     const target = document.querySelector('[contenteditable="true"]');
     if (target === null) throw new Error("Editable not found");
@@ -246,7 +246,8 @@ test("외부 HTML 표를 붙여넣어도 에디터가 깨지지 않는다", asyn
     );
   });
 
-  await expect(editable.locator("table")).toHaveCount(0);
+  await expect(editable.locator("table")).toHaveCount(1);
+  await expect(editable.locator("table td").first()).toContainText("ext");
 
   // 붙여넣기 이후에도 편집이 계속 동작한다(영구 desync 없음).
   await page.keyboard.type("-after");
