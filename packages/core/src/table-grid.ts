@@ -780,8 +780,8 @@ export const resizeColumn = (
 };
 
 // 표 밖 붙여넣기(새 표 생성)와 표 안 덮어쓰기가 공유하는 유일한 격자 연산.
-// 확장은 기존 insertRow/insertColumn을 끝에 반복 호출해 처리하고(끝 삽입은
-// 기존 span과 절대 교차하지 않는다 — PIT-0004, 새 격자 계산 코드 없음),
+// 확장은 덮어쓰기 사각형 밖의 좌표에만 빈 셀을 채우는 단일 패스 벌크
+// 생성이고(끝 삽입 상당이라 기존 span과 절대 교차하지 않는다 — PIT-0004),
 // 덮어쓰기 결과가 유효한지는 기존 validateTableGrid로 검증한다(겹침 탐지
 // 로직을 새로 안 쓴다).
 export const pasteInto = (
