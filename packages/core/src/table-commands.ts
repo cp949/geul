@@ -7,7 +7,7 @@ import {
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import { inlineContentViolation } from "./model-to-tiptap.js";
@@ -475,6 +475,15 @@ export const insertTable = (
   return { ok: true, value: { blockId: table.id } };
 };
 
+// $pos가 표 노드 안에 있는지 — 조상 depth를 거슬러 올라가며 검사한다.
+// isInTable은 $head만 보므로 선택의 양 끝을 각각 판정하는 데 쓴다.
+const positionInsideTable = (position: ResolvedPos): boolean => {
+  for (let depth = position.depth; depth > 0; depth -= 1) {
+    if (position.node(depth).type.name === "table") return true;
+  }
+  return false;
+};
+
 // 선택 삭제 후 캐럿(to)이 새 표를 끼울 최상위 위치: 캐럿이 안쪽에 닿은
 // (offset < to) 마지막 최상위 블록 바로 뒤. 첫 블록 앞 GapCursor(to === 0)는
 // 어떤 블록도 조건을 만족하지 않아 문서 맨 앞이 된다 — 커서가 '가리키기
@@ -606,8 +615,18 @@ export const pasteTabularData = (
   // 붙여넣기는 선택을 대체한다 — 선택 삭제와 표 삽입, 캐럿 이동을 한
   // 트랜잭션에 담아 undo 1회로 함께 복원되게 한다. 삭제로 두 문단이
   // 병합되면 병합된 블록(캐럿 위치)이 삽입 기준이 된다.
+  //
+  // 단, 끝점이 표 안에 있는 범위(표를 부분적으로 걸친 선택)는 지우지
+  // 않는다: 그런 범위를 deleteSelection으로 지우면 ReplaceStep이 스키마
+  // 필러로 cellId 없는 셀을 만들어 모델과 에디터가 영구 desync된다.
+  // 표를 통째로 포함하는 선택은 노드 단위로 깔끔하게 지워지므로 끝점
+  // 검사만으로 충분하다.
   let transaction = state.tr;
-  if (!state.selection.empty) {
+  if (
+    !state.selection.empty &&
+    !positionInsideTable(state.selection.$from) &&
+    !positionInsideTable(state.selection.$to)
+  ) {
     transaction = transaction.deleteSelection();
   }
 

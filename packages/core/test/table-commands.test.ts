@@ -1,5 +1,6 @@
 import type { TabularData } from "@cp949/geul-io";
 import { GapCursor } from "@tiptap/pm/gapcursor";
+import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -945,6 +946,80 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
     ).toBe("A");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
+    editor.destroy();
+  });
+
+  it("표 안에서 표 밖으로 걸친 선택은 지우지 않고 표를 손상 없이 붙여넣는다", () => {
+    // 문단 뒤에 첫 셀에 "ab"가 든 표 — 셀 안(anchor)에서 문단(head)으로
+    // 드래그한 역방향 선택을 재현한다. isInTable은 $head만 보므로 이 선택은
+    // 표 밖 분기로 들어간다.
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { blockId: "para-1" },
+          content: [{ type: "text", text: "hello" }],
+        },
+        {
+          type: "table",
+          attrs: {
+            blockId: "table-1",
+            columns: [
+              { id: "col-1", width: 160 },
+              { id: "col-2", width: 160 },
+            ],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+          content: [
+            {
+              type: "tableRow",
+              attrs: { rowId: "row-1" },
+              content: [
+                {
+                  ...cellJson("cell-1", "col-1"),
+                  content: [{ type: "text", text: "ab" }],
+                },
+                cellJson("cell-2", "col-2"),
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    // anchor=12(셀 "ab" 뒤), head=3(문단 중간) — prosemirror-tables의
+    // normalizeSelection은 $to.parentOffset이 0이 아니라 개입하지 않는다.
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, 12, 3),
+      ),
+    );
+
+    const result = pasteTabularData(
+      editor,
+      oneByOneData("A"),
+      sequentialIds("paste"),
+    );
+
+    // 표를 부분적으로 걸친 범위를 deleteSelection으로 지우면 ReplaceStep이
+    // 스키마 필러로 cellId 없는 셀을 만들어 모델과 에디터가 영구 desync된다
+    // (3차 리뷰 재현) — 이런 선택은 지우지 않고 붙여넣기만 한다.
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(3);
+    expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
+    expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
+    expect(doc.content?.[1]?.content?.[0]?.content?.[0]?.attrs?.cellId).toBe(
+      "cell-1",
+    );
+    expect(
+      doc.content?.[1]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
+    ).toBe("ab");
+    expect(doc.content?.[2]?.type).toBe("table");
+    const { selection } = editor.state;
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("A");
     editor.destroy();
   });
 
