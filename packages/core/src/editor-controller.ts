@@ -9,7 +9,7 @@ import {
 import { Editor, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
+import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 
@@ -151,36 +151,49 @@ export type BlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: 1 | 2 | 3 };
 
-// "merge"는 서로 다른 기준 셀 2개 이상을 덮는 CellSelection이고, "split"은
-// 이미 병합된 셀 하나에 선택이 머무는 상태다. React는 이 판정을 다시
-// 계산하지 않는다(spec 6.2).
-//
-// CellSelection의 좌표 범위는 TableMap.rectBetween이라 항상 직사각형이지만,
-// 그 범위에 걸친 병합 셀이 범위 밖으로 뻗어 있을 수 있다 —
-// prosemirror-tables가 cellsOverlapRectangle로 거르는 경우다. 그래서
-// "merge"로 판정한 선택도 mergeTableCells에서 NOT_RECTANGULAR로 거절될 수
-// 있다(격자 판정의 권위는 TableGrid다, spec 6.2).
-export type TableCellSelection =
-  | { kind: "merge"; tableBlockId: string }
-  | { kind: "split"; tableBlockId: string; cellId: string };
+// CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
+// 나열한다. mergeable은 기준 셀이 2개 이상일 때, splitCellId는 선택이 이미
+// 병합된 셀 하나만 덮을 때 그 cellId다. 삼중클릭이 만드는 병합되지 않은
+// 단일 셀 CellSelection은 mergeable=false, splitCellId=null이지만
+// cellIds는 채워진다 — 서식(색상·정렬)은 여전히 대상이다(spec 7.2).
+export type TableCellSelection = {
+  tableBlockId: string;
+  cellIds: string[];
+  mergeable: boolean;
+  splitCellId: string | null;
+};
 
-// selectedRect가 덮는 좌표들이 서로 다른 기준 셀 2개 이상을 가리키는지 본다.
-// TableMap.map은 좌표마다 그 좌표를 채우는 셀의 시작 위치를 담으므로, 병합
-// 셀은 자신이 덮는 모든 좌표에서 같은 값이 반복된다. PM 노드 참조가 아닌
-// 위치 숫자만 읽는다(PIT-0008).
-const coversMultipleCells = (
+// selectedRect가 덮는 좌표들을 훑어 서로 다른 기준 셀의 id만 순서대로
+// 모은다. TableMap.map은 좌표마다 그 좌표를 채우는 셀의 시작 위치를 담으므로,
+// 병합 셀은 자신이 덮는 모든 좌표에서 같은 값이 반복된다 — 처음 등장하는
+// 오프셋에서만 push한다. PM 노드 참조가 아닌 원시값만 클로저 밖으로 낸다
+// (PIT-0008).
+const collectCellSelection = (
+  state: EditorState,
   rect: ReturnType<typeof selectedRect>,
-): boolean => {
-  let firstOffset: number | null = null;
+): { cellIds: string[]; singleMergedCellId: string | null } => {
+  const seenOffsets = new Set<number>();
+  const cellIds: string[] = [];
+  let firstCellMerged = false;
   for (let row = rect.top; row < rect.bottom; row += 1) {
     for (let column = rect.left; column < rect.right; column += 1) {
       const offset = rect.map.map[row * rect.map.width + column];
-      if (offset === undefined) continue;
-      if (firstOffset === null) firstOffset = offset;
-      else if (offset !== firstOffset) return true;
+      if (offset === undefined || seenOffsets.has(offset)) continue;
+      seenOffsets.add(offset);
+      const cellNode = state.doc.nodeAt(rect.tableStart + offset);
+      const cellId = cellNode?.attrs.cellId;
+      if (typeof cellId !== "string" || cellId.length === 0) continue;
+      cellIds.push(cellId);
+      if (cellIds.length === 1) {
+        const rowSpan = (cellNode?.attrs.rowspan as number | undefined) ?? 1;
+        const colSpan = (cellNode?.attrs.colspan as number | undefined) ?? 1;
+        firstCellMerged = rowSpan > 1 || colSpan > 1;
+      }
     }
   }
-  return false;
+  const singleMergedCellId =
+    cellIds.length === 1 && firstCellMerged ? (cellIds[0] ?? null) : null;
+  return { cellIds, singleMergedCellId };
 };
 
 export type CreateEditorOptions = {
@@ -897,20 +910,23 @@ export const createEditor = (
         return null;
       }
 
-      // CellSelection이어도 기준 셀 하나만 덮으면 병합할 대상이 없다 —
-      // tableEditing의 handleTripleClick(셀 삼중 클릭)이 이런 선택을 만든다.
-      // prosemirror-tables의 mergeCells도 같은 이유로 $anchorCell ===
-      // $headCell을 거절한다. 이 경우는 아래 분할 판정으로 넘긴다.
-      if (
-        state.selection instanceof CellSelection &&
-        coversMultipleCells(rect)
-      ) {
-        return { kind: "merge", tableBlockId };
+      if (state.selection instanceof CellSelection) {
+        const { cellIds, singleMergedCellId } = collectCellSelection(
+          state,
+          rect,
+        );
+        if (cellIds.length === 0) return null;
+        return {
+          tableBlockId,
+          cellIds,
+          mergeable: cellIds.length > 1,
+          splitCellId: singleMergedCellId,
+        };
       }
 
-      // 선택이 단일 셀이고 그 셀이 이미 병합돼 있으면(rowspan/colspan > 1)
-      // 분할 후보다. TableMap 좌표를 넘나드는 PM Node 참조는 클로저 밖으로
-      // 내보내지 않는다(PIT-0008) — 원시 값만 읽어 즉시 반환한다.
+      // 캐럿이 이미 병합된 셀 안에 있으면(선택 없이도) 분할과 서식(색상·
+      // 정렬) 컨트롤을 노출한다. 병합되지 않은 셀 안의 캐럿(일반 입력 중)은
+      // null — 표에 타이핑하는 내내 툴바가 떠 있지 않게 한다(spec 7.2).
       const cellPosition =
         rect.tableStart +
         (rect.map.map[rect.top * rect.map.width + rect.left] ?? -1);
@@ -922,7 +938,12 @@ export const createEditor = (
       if (rowSpan <= 1 && colSpan <= 1) return null;
       const cellId = cellNode.attrs.cellId;
       if (typeof cellId !== "string" || cellId.length === 0) return null;
-      return { kind: "split", tableBlockId, cellId };
+      return {
+        tableBlockId,
+        cellIds: [cellId],
+        mergeable: false,
+        splitCellId: cellId,
+      };
     },
     replaceDocument(next) {
       if (destroyed) return commandNotApplicable("replaceDocument");

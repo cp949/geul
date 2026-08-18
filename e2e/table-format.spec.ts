@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 const openDemo = async (page: Page) => {
   await page.goto("/");
@@ -188,4 +188,62 @@ test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 
   // 클램프가 없으면 이 항목이 뷰포트 밖으로 나가 클릭이 "element is
   // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
   await menu.getByRole("menuitem", { name: "Background color None" }).click();
+});
+
+/**
+ * 두 셀 좌표를 마우스 드래그로 잇는다. table-cell-selection.spec.ts와 같은
+ * 패턴 — 드래그를 시작하기 전 시작 셀을 먼저 클릭해 포커스를 표 안에 둔다.
+ * mousedown을 첫 포커스 이벤트로 겸하면 tableEditing이 CellSelection
+ * 추적을 시작하지 않는 브라우저 차이가 있다.
+ */
+const dragSelectCells = async (
+  page: Page,
+  fromCell: Locator,
+  toCell: Locator,
+) => {
+  const fromBox = await fromCell.boundingBox();
+  const toBox = await toCell.boundingBox();
+  if (fromBox === null || toBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+  await page.mouse.move(
+    fromBox.x + fromBox.width / 2,
+    fromBox.y + fromBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {
+    steps: 5,
+  });
+  await page.mouse.up();
+};
+
+test("셀 하나를 트리플클릭으로 선택해 배경색을 적용하고 undo로 되돌린다", async ({
+  page,
+}) => {
+  const { table } = await insertTable(page);
+  const cell = table.locator("td").first();
+  await cell.click({ clickCount: 3 });
+
+  await page.getByRole("button", { name: "Cell formatting" }).click();
+  await page.getByRole("menuitem", { name: "Background color Yellow" }).click();
+
+  await expect(cell).toHaveCSS("background-color", "rgb(254, 247, 224)");
+
+  await page.keyboard.press("Control+z");
+  await expect(cell).not.toHaveCSS("background-color", "rgb(254, 247, 224)");
+});
+
+test("여러 셀을 드래그 선택해 글자색을 함께 적용한다", async ({ page }) => {
+  const { table } = await insertTable(page);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+
+  await cell(0, 0).click();
+  await dragSelectCells(page, cell(0, 0), cell(0, 1));
+
+  await page.getByRole("button", { name: "Cell formatting" }).click();
+  await page.getByRole("menuitem", { name: "Text color Red" }).click();
+
+  await expect(cell(0, 0)).toHaveCSS("color", "rgb(217, 48, 37)");
+  await expect(cell(0, 1)).toHaveCSS("color", "rgb(217, 48, 37)");
 });

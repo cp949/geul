@@ -10,17 +10,22 @@ import { TableSelectionToolbar } from "../src/table-selection-toolbar.js";
 
 const mergeLabel = "Merge cells";
 const splitLabel = "Split cell";
+const formatLabel = "Cell formatting";
 
 type FakeControllerOptions = {
   getTableCellSelection?: () => TableCellSelection | null;
   mergeTableCells?: EditorController["commands"]["mergeTableCells"];
   splitTableCell?: EditorController["commands"]["splitTableCell"];
+  setTableCellTextColor?: EditorController["commands"]["setTableCellTextColor"];
+  setTableCellBackgroundColor?: EditorController["commands"]["setTableCellBackgroundColor"];
 };
 
 const fakeController = ({
   getTableCellSelection = () => null,
   mergeTableCells = () => ({ ok: true, value: undefined }),
   splitTableCell = () => ({ ok: true, value: undefined }),
+  setTableCellTextColor = () => ({ ok: true, value: undefined }),
+  setTableCellBackgroundColor = () => ({ ok: true, value: undefined }),
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -71,6 +76,13 @@ const fakeController = ({
     resizeTableColumn: vi.fn(),
     mergeTableCells: vi.fn(mergeTableCells),
     splitTableCell: vi.fn(splitTableCell),
+    toggleTableHeaderRow: vi.fn(() => ({ ok: true, value: undefined })),
+    toggleTableHeaderColumn: vi.fn(() => ({ ok: true, value: undefined })),
+    deleteTableRow: vi.fn(() => ({ ok: true, value: undefined })),
+    deleteTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
+    setTableCellTextColor: vi.fn(setTableCellTextColor),
+    setTableCellBackgroundColor: vi.fn(setTableCellBackgroundColor),
+    setTableCellAlign: vi.fn(() => ({ ok: true, value: undefined })),
     undo: vi.fn(),
     redo: vi.fn(),
   },
@@ -128,10 +140,15 @@ const triggerSelectionChange = () => {
   });
 };
 
-describe("셀 범위를 선택하면 병합 툴바를 표시한다", () => {
-  it("selectedCell 요소가 있으면 Merge cells 버튼을 보여준다", () => {
+describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () => {
+  it("cellIds가 2개 이상(mergeable)이면 Merge cells와 Cell formatting 버튼을 보여준다", () => {
     const controller = fakeController({
-      getTableCellSelection: () => ({ kind: "merge", tableBlockId: "table-1" }),
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1", "cell-2"],
+        mergeable: true,
+        splitCellId: null,
+      }),
     });
     const { view, cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
@@ -140,12 +157,19 @@ describe("셀 범위를 선택하면 병합 툴바를 표시한다", () => {
     triggerSelectionChange();
 
     expect(screen.getByRole("button", { name: mergeLabel })).not.toBeNull();
+    expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
     view.unmount();
   });
 
   it("Merge cells 클릭 시 mergeTableCells(tableBlockId)를 호출한다", () => {
     const controller = fakeController({
-      getTableCellSelection: () => ({ kind: "merge", tableBlockId: "table-1" }),
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1", "cell-2"],
+        mergeable: true,
+        splitCellId: null,
+      }),
     });
     const { view, cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
@@ -158,9 +182,14 @@ describe("셀 범위를 선택하면 병합 툴바를 표시한다", () => {
     view.unmount();
   });
 
-  it("선택된 셀이 없으면 병합 후보라도 표시하지 않는다", () => {
+  it("selectedCell 데코레이션이 없으면(경계 계산 불가) 아무 툴바도 표시하지 않는다", () => {
     const controller = fakeController({
-      getTableCellSelection: () => ({ kind: "merge", tableBlockId: "table-1" }),
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1", "cell-2"],
+        mergeable: true,
+        splitCellId: null,
+      }),
     });
     const { view } = renderTable(controller);
 
@@ -178,17 +207,39 @@ describe("셀 범위를 선택하면 병합 툴바를 표시한다", () => {
 
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
     expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
+    expect(screen.queryByRole("button", { name: formatLabel })).toBeNull();
+    view.unmount();
+  });
+
+  it("트리플클릭한 병합되지 않은 셀 하나(mergeable=false, splitCellId=null)도 Cell formatting 버튼을 보여준다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: null,
+      }),
+    });
+    const { view, cell1 } = renderTable(controller);
+    cell1.classList.add("selectedCell");
+
+    triggerSelectionChange();
+
+    expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
+    expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
     view.unmount();
   });
 });
 
-describe("병합된 셀에 캐럿을 두면 분할 툴바를 표시한다", () => {
-  it("split 후보면 Split cell 버튼을 보여준다", () => {
+describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한다", () => {
+  it("splitCellId가 있으면 Split cell과 Cell formatting 버튼을 보여준다", () => {
     const controller = fakeController({
       getTableCellSelection: () => ({
-        kind: "split",
         tableBlockId: "table-1",
-        cellId: "cell-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
       }),
     });
     const { view } = renderTable(controller);
@@ -196,15 +247,17 @@ describe("병합된 셀에 캐럿을 두면 분할 툴바를 표시한다", () =
     triggerSelectionChange();
 
     expect(screen.getByRole("button", { name: splitLabel })).not.toBeNull();
+    expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
     view.unmount();
   });
 
   it("Split cell 클릭 시 splitTableCell(tableBlockId, cellId)를 호출한다", () => {
     const controller = fakeController({
       getTableCellSelection: () => ({
-        kind: "split",
         tableBlockId: "table-1",
-        cellId: "cell-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
       }),
     });
     const { view } = renderTable(controller);
@@ -216,6 +269,78 @@ describe("병합된 셀에 캐럿을 두면 분할 툴바를 표시한다", () =
       "table-1",
       "cell-1",
     );
+    view.unmount();
+  });
+});
+
+describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
+  it("클릭하면 Text color/Background color 팔레트가 뜬다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { view } = renderTable(controller);
+    triggerSelectionChange();
+
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+
+    expect(
+      screen.getByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+    view.unmount();
+  });
+
+  it("색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:\"cells\",cellIds}, color)를 호출하고 메뉴를 닫는다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { view } = renderTable(controller);
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color Red" }));
+
+    expect(controller.commands.setTableCellTextColor).toHaveBeenCalledWith(
+      "table-1",
+      { kind: "cells", cellIds: ["cell-1"] },
+      "#D93025",
+    );
+    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+    view.unmount();
+  });
+
+  it("Escape로 서식 메뉴를 닫는다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { view } = renderTable(controller);
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+    expect(
+      screen.getByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+
+    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
     view.unmount();
   });
 });

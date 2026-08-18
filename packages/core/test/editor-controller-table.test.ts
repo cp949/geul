@@ -326,7 +326,7 @@ describe("에디터 컨트롤러 표", () => {
 
     const editorWithTwoByTwoTable = () => editorWithTable(2, 2);
 
-    it("셀 범위를 드래그 선택하면 getTableCellSelection이 merge를 반환한다", () => {
+    it("셀 범위를 드래그 선택하면 getTableCellSelection이 선택된 셀 id 전부를 보고한다", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
 
@@ -337,8 +337,10 @@ describe("에디터 컨트롤러 표", () => {
       selectCellRange(tiptap, topLeft, bottomRight);
 
       expect(editor.getTableCellSelection()).toEqual({
-        kind: "merge",
         tableBlockId,
+        cellIds,
+        mergeable: true,
+        splitCellId: null,
       });
     });
 
@@ -393,7 +395,7 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getDocument()).toEqual(before);
     });
 
-    it("병합된 셀에 캐럿을 두면 getTableCellSelection이 split을 반환한다", () => {
+    it("병합된 셀에 캐럿을 두면 getTableCellSelection이 splitCellId를 보고한다", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
@@ -408,9 +410,10 @@ describe("에디터 컨트롤러 표", () => {
       tiptap.commands.setTextSelection(cellPos);
 
       expect(editor.getTableCellSelection()).toEqual({
-        kind: "split",
         tableBlockId,
-        cellId: topLeft,
+        cellIds: [topLeft],
+        mergeable: false,
+        splitCellId: topLeft,
       });
     });
 
@@ -480,18 +483,23 @@ describe("에디터 컨트롤러 표", () => {
       );
     };
 
-    it("병합되지 않은 셀 하나만 감싸는 CellSelection은 merge 후보가 아니다", () => {
-      const { editor, cellIds } = editorWithTwoByTwoTable();
+    it("병합되지 않은 셀 하나만 감싸는 CellSelection도 서식 대상으로 보고한다(병합/분할 후보는 아니다)", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft] = cellIds;
       if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
 
       selectSingleCell(tiptap, topLeft);
 
-      expect(editor.getTableCellSelection()).toBeNull();
+      expect(editor.getTableCellSelection()).toEqual({
+        tableBlockId,
+        cellIds: [topLeft],
+        mergeable: false,
+        splitCellId: null,
+      });
     });
 
-    it("병합된 셀 하나만 감싸는 CellSelection은 split 후보로 판정한다", () => {
+    it("병합된 셀 하나만 감싸는 CellSelection은 splitCellId를 보고한다", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
@@ -504,9 +512,10 @@ describe("에디터 컨트롤러 표", () => {
       selectSingleCell(tiptap, topLeft);
 
       expect(editor.getTableCellSelection()).toEqual({
-        kind: "split",
         tableBlockId,
-        cellId: topLeft,
+        cellIds: [topLeft],
+        mergeable: false,
+        splitCellId: topLeft,
       });
     });
 

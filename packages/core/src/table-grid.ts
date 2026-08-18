@@ -607,44 +607,30 @@ export const toggleHeaderColumn = (
 
 export type TableCellTarget =
   | { kind: "row"; index: number }
-  | { kind: "column"; index: number };
+  | { kind: "column"; index: number }
+  | { kind: "cells"; cellIds: readonly string[] };
 
 type CellColorProperty = "textColor" | "backgroundColor";
 
-// 색 속성은 값이 없을 때 키 자체를 두지 않는다(저장 포맷의 optional 필드).
-const withCellColor = (
-  cellEntry: TableCell,
-  property: CellColorProperty,
-  color: string | null,
-): TableCell => {
-  const textColor =
-    property === "textColor" ? color : (cellEntry.textColor ?? null);
-  const backgroundColor =
-    property === "backgroundColor"
-      ? color
-      : (cellEntry.backgroundColor ?? null);
-  return {
-    id: cellEntry.id,
-    columnId: cellEntry.columnId,
-    rowSpan: cellEntry.rowSpan,
-    columnSpan: cellEntry.columnSpan,
-    content: cellEntry.content,
-    ...(textColor === null ? {} : { textColor }),
-    ...(backgroundColor === null ? {} : { backgroundColor }),
-  };
-};
-
-// 대상 행/열을 덮는 기준 셀 전부가 대상이다 — 병합 셀은 기준 좌표가 다른
-// 행에 있어도 대상 행을 덮으면 함께 칠한다(PIT-0004: 저장 배열이 아니라
-// 논리 좌표로 판단한다).
-export const setCellColor = (
+// 행/열/셀 id 목록 3가지 대상 전부를 "칠할 기준 셀 id 집합"으로 좁힌다.
+// 행/열은 논리 격자 투영으로(PIT-0004 — 병합 셀이 대상 행/열을 덮으면
+// 함께 포함), 셀 id 목록은 실제 존재하는 id인지만 확인한다.
+const resolveTargetCellIds = (
   table: TableBlock,
   target: TableCellTarget,
-  property: CellColorProperty,
-  color: string | null,
-): Result<TableBlock, TableGridError> => {
-  if (color !== null && !isCanonicalCellColor(color)) {
-    return { ok: false, error: { code: "INVALID_COLOR", color } };
+): Result<Set<string>, TableGridError> => {
+  if (target.kind === "cells") {
+    const allCellIds = new Set(
+      table.rows.flatMap((row) => row.cells.map((cellEntry) => cellEntry.id)),
+    );
+    const targetCellIds = new Set<string>();
+    for (const cellId of target.cellIds) {
+      if (!allCellIds.has(cellId)) {
+        return { ok: false, error: { code: "CELL_NOT_FOUND", cellId } };
+      }
+      targetCellIds.add(cellId);
+    }
+    return { ok: true, value: targetCellIds };
   }
 
   const limit =
@@ -670,6 +656,45 @@ export const setCellColor = (
         : grid.cellAt(index, target.index);
     if (occupant !== undefined) targetCellIds.add(occupant.cellId);
   }
+  return { ok: true, value: targetCellIds };
+};
+
+// 색 속성은 값이 없을 때 키 자체를 두지 않는다(저장 포맷의 optional 필드).
+const withCellColor = (
+  cellEntry: TableCell,
+  property: CellColorProperty,
+  color: string | null,
+): TableCell => {
+  const textColor =
+    property === "textColor" ? color : (cellEntry.textColor ?? null);
+  const backgroundColor =
+    property === "backgroundColor"
+      ? color
+      : (cellEntry.backgroundColor ?? null);
+  return {
+    id: cellEntry.id,
+    columnId: cellEntry.columnId,
+    rowSpan: cellEntry.rowSpan,
+    columnSpan: cellEntry.columnSpan,
+    content: cellEntry.content,
+    ...(textColor === null ? {} : { textColor }),
+    ...(backgroundColor === null ? {} : { backgroundColor }),
+  };
+};
+
+export const setCellColor = (
+  table: TableBlock,
+  target: TableCellTarget,
+  property: CellColorProperty,
+  color: string | null,
+): Result<TableBlock, TableGridError> => {
+  if (color !== null && !isCanonicalCellColor(color)) {
+    return { ok: false, error: { code: "INVALID_COLOR", color } };
+  }
+
+  const resolved = resolveTargetCellIds(table, target);
+  if (!resolved.ok) return resolved;
+  const targetCellIds = resolved.value;
 
   let changed = false;
   const rows = table.rows.map((row) => ({

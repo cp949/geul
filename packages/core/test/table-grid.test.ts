@@ -1062,6 +1062,77 @@ describe("행 또는 열 단위로 셀 색상을 설정한다", () => {
   });
 });
 
+describe("셀 id 목록 단위로 색상을 설정한다", () => {
+  it("지정한 셀 id 전부에 배경색을 넣는다", () => {
+    const t = table(
+      ["c1", "c2"],
+      [
+        [cell("a", "c1"), cell("b", "c2")],
+        [cell("c", "c1"), cell("d", "c2")],
+      ],
+    );
+
+    const result = setCellColor(
+      t,
+      { kind: "cells", cellIds: ["a", "d"] },
+      "backgroundColor",
+      "#AABBCC",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows[0]?.cells[0]?.backgroundColor).toBe("#AABBCC");
+    expect(result.value.rows[0]?.cells[1]?.backgroundColor).toBeUndefined();
+    expect(result.value.rows[1]?.cells[0]?.backgroundColor).toBeUndefined();
+    expect(result.value.rows[1]?.cells[1]?.backgroundColor).toBe("#AABBCC");
+  });
+
+  it("존재하지 않는 셀 id는 CELL_NOT_FOUND로 거절하고 원본을 바꾸지 않는다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    const result = setCellColor(
+      t,
+      { kind: "cells", cellIds: ["a", "missing"] },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "CELL_NOT_FOUND", cellId: "missing" },
+    });
+    expect(t.rows[0]?.cells[0]?.textColor).toBeUndefined();
+  });
+
+  it("빈 셀 id 목록은 입력 표를 참조 그대로 반환한다", () => {
+    const t = table(["c1"], [[cell("a", "c1")]]);
+
+    const result = setCellColor(
+      t,
+      { kind: "cells", cellIds: [] },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result).toEqual({ ok: true, value: t });
+  });
+
+  it("셀 id로 지정해도 이미 같은 색이면 입력 표를 참조 그대로 반환한다", () => {
+    const t = table(["c1"], [[cell("a", "c1", { textColor: "#112233" })]]);
+
+    const result = setCellColor(
+      t,
+      { kind: "cells", cellIds: ["a"] },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBe(t);
+  });
+});
+
 describe("셀을 분할한다", () => {
   it("세로+가로로 병합된 셀을 분할하면 새 셀은 빈 콘텐츠이고 anchor만 원 콘텐츠를 유지한다", () => {
     const t = table(
