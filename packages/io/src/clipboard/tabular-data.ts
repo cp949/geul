@@ -1,5 +1,7 @@
 import {
   type InlineContent,
+  isCanonicalCellAlign,
+  isCanonicalCellColor,
   isValidInlineText,
   validateGridCoverage,
 } from "@cp949/geul-model";
@@ -21,6 +23,11 @@ export type TabularData = {
   columnCount: number;
   rows: Array<{ cells: TabularCell[] }>;
 };
+
+const invalidTable = (message: string): Result<never, ClipboardParseError> => ({
+  ok: false,
+  error: { code: "CLIPBOARD_TABLE_INVALID", message },
+});
 
 // TabularData 자체의 구조 검증(직사각형, 0셀 아님) — 대상 표와의 병합
 // 충돌 검사(core의 TableGrid.pasteInto)와는 다른 층위다.
@@ -48,6 +55,50 @@ export const validateTabularData = (
           },
         };
       }
+    }
+  }
+
+  // 서식 값이 model의 정규 형식(대문자 #RRGGBB, left|center|right)을 어기면
+  // 텍스트 계약 위반과 똑같이 parseDocument가 커밋 시점에 거절한다 — 문서를
+  // 건드리기 전에 여기서 막아야 model과 에디터가 영구 desync되지 않는다.
+  for (const [rowIndex, row] of data.rows.entries()) {
+    for (const [cellIndex, cellEntry] of row.cells.entries()) {
+      const at = `row ${rowIndex}, cell ${cellIndex}`;
+      if (
+        cellEntry.textColor !== undefined &&
+        !isCanonicalCellColor(cellEntry.textColor)
+      ) {
+        return invalidTable(`Cell textColor at ${at} is not a canonical color`);
+      }
+      if (
+        cellEntry.backgroundColor !== undefined &&
+        !isCanonicalCellColor(cellEntry.backgroundColor)
+      ) {
+        return invalidTable(
+          `Cell backgroundColor at ${at} is not a canonical color`,
+        );
+      }
+      if (
+        cellEntry.align !== undefined &&
+        !isCanonicalCellAlign(cellEntry.align)
+      ) {
+        return invalidTable(`Cell align at ${at} is not a canonical align`);
+      }
+    }
+  }
+
+  // TableGrid.pasteInto는 각 행의 cells가 columnIndex 오름차순이라고 보고
+  // 배열 순서대로 열에 대응시킨다. 정렬을 조용히 고쳐주면 계약이 흐려지므로
+  // 경계에서 거절한다.
+  for (const [rowIndex, row] of data.rows.entries()) {
+    let previousColumnIndex = -1;
+    for (const cellEntry of row.cells) {
+      if (cellEntry.columnIndex <= previousColumnIndex) {
+        return invalidTable(
+          `Cells in row ${rowIndex} are not sorted by ascending columnIndex`,
+        );
+      }
+      previousColumnIndex = cellEntry.columnIndex;
     }
   }
 
