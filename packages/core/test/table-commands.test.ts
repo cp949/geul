@@ -1279,6 +1279,39 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.destroy();
   });
 
+  it("셀 한도를 넘는 데이터는 검증·골격 생성 비용 없이 선거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON();
+
+    // 데이터 자체 크기(행 x 열)는 확장 후 최종 크기의 하한이다 — 한도를
+    // 넘는 입력이 전체 검증 패스와 골격 생성(행 객체·id 생성)을 다 치른
+    // 뒤에야 pasteInto 안에서 거절되면 거절 비용이 입력 크기에 비례한다.
+    // 거절 경로는 id를 하나도 뽑지 않아야 한다.
+    let idCalls = 0;
+    const countingId = () => {
+      idCalls += 1;
+      return `paste-${idCalls}`;
+    };
+    const bigData: TabularData = {
+      columnCount: 2,
+      rows: Array.from({ length: 5_001 }, () => ({
+        cells: [
+          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [] },
+          { columnIndex: 1, rowSpan: 1, columnSpan: 1, content: [] },
+        ],
+      })),
+    };
+
+    expect(pasteTabularData(editor, bigData, countingId)).toEqual({
+      ok: false,
+      error: { code: "CELL_LIMIT_EXCEEDED" },
+    });
+    expect(idCalls).toBe(0);
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
   it("NaN·비정수 columnCount는 예외 없이 INVALID_TABLE_SIZE로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);

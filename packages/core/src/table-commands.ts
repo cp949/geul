@@ -1,5 +1,10 @@
 import { type TabularData, validateTabularData } from "@cp949/geul-io";
-import type { IdFactory, Result, TableBlock } from "@cp949/geul-model";
+import {
+  type IdFactory,
+  MAX_TABLE_LOGICAL_CELLS,
+  type Result,
+  type TableBlock,
+} from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -521,6 +526,15 @@ export const pasteTabularData = (
   ) {
     return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
   }
+
+  // 확장 후 최종 크기 기준의 한도 검사는 pasteInto가 한다 — 여기서는 데이터
+  // 자체 크기로 O(1) 선거절한다(데이터 크기는 최종 크기의 하한이라 안전).
+  // 선검사가 없으면 한도 초과 입력이 전체 검증 패스와 골격 생성(행 객체와
+  // id 생성)을 다 치른 뒤에야 거절돼 거절 비용이 입력 크기에 비례한다.
+  if (data.rows.length * data.columnCount > MAX_TABLE_LOGICAL_CELLS) {
+    return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
+  }
+
   const validated = validateTabularData(data);
   if (!validated.ok) {
     // NOT_RECTANGULAR는 병합 명령(비직사각형 선택) 전용이다 — 여기서 쓰면
