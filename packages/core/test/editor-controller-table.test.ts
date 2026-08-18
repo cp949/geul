@@ -1004,6 +1004,76 @@ describe("에디터 컨트롤러 표", () => {
     editor.destroy();
   });
 
+  it("손상된 표에 붙여넣으면 TABLE_NODE_INVALID 원인 message를 공개 에러로 전달한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("id"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    expect(
+      editor.commands.insertTable("block-1", { rows: 1, columns: 1 }).ok,
+    ).toBe(true);
+
+    // 셀의 columnId를 존재하지 않는 열로 바꿔 표를 손상시킨다 — 검증 훅이
+    // 던지지만 상태는 이미 손상된 채 남는다.
+    let cellPos = -1;
+    tiptap.state.doc.descendants((node, pos) => {
+      if (node.type.name === "tableCell") {
+        cellPos = pos;
+        return false;
+      }
+      return true;
+    });
+    const attrs = tiptap.state.doc.nodeAt(cellPos)?.attrs;
+    expect(() =>
+      tiptap.view.dispatch(
+        tiptap.state.tr.setNodeMarkup(cellPos, undefined, {
+          ...attrs,
+          columnId: "ghost",
+        }),
+      ),
+    ).toThrow();
+    tiptap.commands.setTextSelection(cellPos + 2);
+
+    const data: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "x" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    // runVoidTableCommand 경로는 TABLE_NODE_INVALID의 message를 캡처하는데
+    // pasteTabularData 클로저만 캡처가 빠져 message가 ""로 나갔다 — 원인
+    // message 보존 계약(Issue #30)이 이 경로에서만 깨진다.
+    const result = editor.commands.pasteTabularData(data);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("TABLE_NODE_INVALID");
+      if (result.error.code === "TABLE_NODE_INVALID") {
+        expect(result.error.message).not.toBe("");
+      }
+    }
+
+    // 손상 상태로 두면 mount 헬퍼의 cleanup destroy()가 readEditorDocument에서
+    // 던진다 — columnId를 원복해 표를 유효하게 되돌린 뒤 destroy한다.
+    tiptap.view.dispatch(
+      tiptap.state.tr.setNodeMarkup(cellPos, undefined, {
+        ...tiptap.state.doc.nodeAt(cellPos)?.attrs,
+        columnId: attrs?.columnId,
+      }),
+    );
+    editor.destroy();
+  });
+
   it("pasteTabularData가 invalid한 데이터의 거절 원인 message를 공개 에러로 전달한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),

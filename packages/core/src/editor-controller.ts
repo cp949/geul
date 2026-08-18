@@ -800,60 +800,49 @@ export const createEditor = (
     }
   };
 
+  // 표 명령 실패의 detail 추출은 runVoidTableCommand·pasteTabularData·
+  // insertTable 세 클로저가 각자 복제하다 캡처 누락 drift가 생겼다
+  // (pasteTabularData만 TABLE_NODE_INVALID의 message가 ""로 나갔다) —
+  // 판별과 추출을 한 곳으로 모은다.
+  const tableErrorDetail = (
+    error: TableCommandError,
+  ): Parameters<typeof tableErrorFromCode>[1] => ({
+    blockId:
+      error.code === "BLOCK_NOT_FOUND" || error.code === "TABLE_NOT_FOUND"
+        ? error.blockId
+        : "",
+    message:
+      error.code === "TABLE_NODE_INVALID" ||
+      error.code === "TABULAR_DATA_INVALID"
+        ? error.message
+        : "",
+    width: error.code === "COLUMN_WIDTH_OUT_OF_RANGE" ? error.width : 0,
+    cellId: error.code === "CELL_NOT_FOUND" ? error.cellId : "",
+    color: error.code === "INVALID_COLOR" ? error.color : "",
+    align: error.code === "INVALID_ALIGN" ? error.align : "",
+  });
+
   const runVoidTableCommand = (
     command: string,
     invoke: () => Result<void, TableCommandError>,
   ): Result<void, EditorError> => {
     let errorCode: TableCommandError["code"] | null = null;
-    let errorBlockId = "";
-    let errorMessage = "";
-    let errorWidth = 0;
-    let errorCellId = "";
-    let errorColor = "";
-    let errorAlign = "";
+    // PIT-0008 회피: 클로저를 넘나드는 좁히기 대상은 원시 값(errorCode)만
+    // 쓰고, detail은 null 좁히기 없이 mutate만 하는 const 객체에 담는다.
+    const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
 
     const result = runDocumentCommand(command, "local", () => {
       const outcome = invoke();
       if (outcome.ok) return true;
       errorCode = outcome.error.code;
-      if (
-        outcome.error.code === "BLOCK_NOT_FOUND" ||
-        outcome.error.code === "TABLE_NOT_FOUND"
-      ) {
-        errorBlockId = outcome.error.blockId;
-      }
-      if (
-        outcome.error.code === "TABLE_NODE_INVALID" ||
-        outcome.error.code === "TABULAR_DATA_INVALID"
-      ) {
-        errorMessage = outcome.error.message;
-      }
-      if (outcome.error.code === "COLUMN_WIDTH_OUT_OF_RANGE") {
-        errorWidth = outcome.error.width;
-      }
-      if (outcome.error.code === "CELL_NOT_FOUND") {
-        errorCellId = outcome.error.cellId;
-      }
-      if (outcome.error.code === "INVALID_COLOR") {
-        errorColor = outcome.error.color;
-      }
-      if (outcome.error.code === "INVALID_ALIGN") {
-        errorAlign = outcome.error.align;
-      }
+      Object.assign(errorDetail, tableErrorDetail(outcome.error));
       return false;
     });
 
     if (errorCode !== null) {
       return {
         ok: false,
-        error: tableErrorFromCode(errorCode, {
-          blockId: errorBlockId,
-          message: errorMessage,
-          width: errorWidth,
-          cellId: errorCellId,
-          color: errorColor,
-          align: errorAlign,
-        }),
+        error: tableErrorFromCode(errorCode, errorDetail),
       };
     }
     return result;
@@ -1053,20 +1042,14 @@ export const createEditor = (
         if (destroyed) return commandNotApplicable("pasteTabularData");
 
         let errorCode: TableCommandError["code"] | null = null;
-        let errorBlockId = "";
-        let errorMessage = "";
+        const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
         let insertedBlockId = "";
 
         const result = runDocumentCommand("pasteTabularData", "local", () => {
           const outcome = pasteTabularDataCommand(tiptapEditor, data, createId);
           if (!outcome.ok) {
             errorCode = outcome.error.code;
-            if (outcome.error.code === "BLOCK_NOT_FOUND") {
-              errorBlockId = outcome.error.blockId;
-            }
-            if (outcome.error.code === "TABULAR_DATA_INVALID") {
-              errorMessage = outcome.error.message;
-            }
+            Object.assign(errorDetail, tableErrorDetail(outcome.error));
             return false;
           }
           insertedBlockId = outcome.value.blockId;
@@ -1076,14 +1059,7 @@ export const createEditor = (
         if (errorCode !== null) {
           return {
             ok: false,
-            error: tableErrorFromCode(errorCode, {
-              blockId: errorBlockId,
-              message: errorMessage,
-              width: 0,
-              cellId: "",
-              color: "",
-              align: "",
-            }),
+            error: tableErrorFromCode(errorCode, errorDetail),
           };
         }
         if (!result.ok) return result;
@@ -1093,7 +1069,7 @@ export const createEditor = (
         if (destroyed) return commandNotApplicable("insertTable");
 
         let errorCode: TableCommandError["code"] | null = null;
-        let errorBlockId = "";
+        const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
         let insertedBlockId = "";
 
         const result = runDocumentCommand("insertTable", "local", () => {
@@ -1106,9 +1082,7 @@ export const createEditor = (
           );
           if (!outcome.ok) {
             errorCode = outcome.error.code;
-            if (outcome.error.code === "BLOCK_NOT_FOUND") {
-              errorBlockId = outcome.error.blockId;
-            }
+            Object.assign(errorDetail, tableErrorDetail(outcome.error));
             return false;
           }
           insertedBlockId = outcome.value.blockId;
@@ -1118,14 +1092,7 @@ export const createEditor = (
         if (errorCode !== null) {
           return {
             ok: false,
-            error: tableErrorFromCode(errorCode, {
-              blockId: errorBlockId,
-              message: "",
-              width: 0,
-              cellId: "",
-              color: "",
-              align: "",
-            }),
+            error: tableErrorFromCode(errorCode, errorDetail),
           };
         }
         if (!result.ok) return result;
