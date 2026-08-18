@@ -1,3 +1,8 @@
+/**
+ * 표 격자 커버리지 검증기를 확인하는 테스트.
+ * TableBlock 기반 `validateTableGrid`와, columnIndex 기반 좌표를 직접 받는
+ * 공개 `validateGridCoverage`의 경계·불량 좌표 처리를 함께 다룬다.
+ */
 import { describe, expect, it } from "vitest";
 import type { TableBlock } from "../src/index.js";
 import {
@@ -214,6 +219,50 @@ describe("validateGridCoverage(제네릭 그리드 커버리지)", () => {
     ).toMatchObject({
       ok: false,
       error: { code: "TABLE_GRID_INVALID", reason: "SPAN_OUT_OF_BOUNDS" },
+    });
+  });
+
+  it("음수 column은 INVALID_COORDINATE로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 1, [
+        { row: 0, column: -1, rowSpan: 1, columnSpan: 2 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_COORDINATE" },
+    });
+  });
+
+  it("음수 row는 INVALID_COORDINATE로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 1, [
+        { row: -1, column: 0, rowSpan: 2, columnSpan: 1 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_COORDINATE" },
+    });
+  });
+
+  it("1 미만인 span은 INVALID_COORDINATE로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 1, [
+        { row: 0, column: 0, rowSpan: 0, columnSpan: 1 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_COORDINATE" },
+    });
+  });
+
+  it("정수가 아닌 span은 INVALID_COORDINATE로 거부한다", () => {
+    expect(
+      validateGridCoverage(1, 1, [
+        { row: 0, column: 0, rowSpan: Number.NaN, columnSpan: 1 },
+      ]),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_COORDINATE" },
     });
   });
 });

@@ -6,6 +6,7 @@ export const MAX_COLUMN_WIDTH = 1200;
 
 export type TableGridInvalidReason =
   | "UNKNOWN_COLUMN"
+  | "INVALID_COORDINATE"
   | "SPAN_OUT_OF_BOUNDS"
   | "OVERLAPPING_CELL"
   | "UNCOVERED_COORDINATE";
@@ -47,6 +48,27 @@ export const validateGridCoverage = (
   const occupied = new Array<boolean>(rowCount * columnCount).fill(false);
 
   for (const cellEntry of cells) {
+    // TableBlock 경로는 columnId 조회가 좌표를 0 이상 정수로 보장하지만,
+    // 공개 API로 들어오는 좌표(io의 TabularData 등)에는 그런 보장이 없다.
+    // 음수 좌표는 occupied의 인덱스 밖 속성에 써서 상한 검사와 커버리지
+    // 검사를 모두 통과해버리므로 여기서 먼저 막는다.
+    if (
+      !Number.isInteger(cellEntry.row) ||
+      !Number.isInteger(cellEntry.column) ||
+      cellEntry.row < 0 ||
+      cellEntry.column < 0
+    ) {
+      return invalid("INVALID_COORDINATE", cellEntry.row, cellEntry.column);
+    }
+    if (
+      !Number.isInteger(cellEntry.rowSpan) ||
+      !Number.isInteger(cellEntry.columnSpan) ||
+      cellEntry.rowSpan < 1 ||
+      cellEntry.columnSpan < 1
+    ) {
+      return invalid("INVALID_COORDINATE", cellEntry.row, cellEntry.column);
+    }
+
     const rowEnd = cellEntry.row + cellEntry.rowSpan;
     const columnEnd = cellEntry.column + cellEntry.columnSpan;
     if (columnEnd > columnCount) {
