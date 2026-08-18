@@ -1,4 +1,10 @@
+export { parseClipboardTable } from "./clipboard/clipboard-table-parser.js";
 export type {
+  TabularCell,
+  TabularData,
+} from "./clipboard/tabular-data.js";
+export type {
+  ClipboardParseError,
   ExportError,
   ExportErrorCode,
   ImportError,
