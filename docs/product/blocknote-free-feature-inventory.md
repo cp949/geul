@@ -87,7 +87,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `BLK-009` | 체크 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-010` | 자식을 접는 토글 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-011` | 코드 블록과 언어 속성 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/code-blocks.mdx` |
-| `BLK-012` | 문서형 테이블 | `ENHANCED` | R1 | `NOT_STARTED` | `features/blocks/tables.mdx` |
+| `BLK-012` | 문서형 테이블 | `ENHANCED` | R1 | `VERIFIED` | R1 슬라이스 6-12: 표 편집·조작(`TBL-*`)에 더해 슬라이스 12가 표 문서 로드 차단을 해제해 저장 round-trip(열 너비·병합·헤더·색상) 완료 |
 | `BLK-013` | 일반 파일 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
 | `BLK-014` | 이미지 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
 | `BLK-015` | 비디오 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |

@@ -17,7 +17,7 @@ spec 13(`docs/specs/2026-08-14-tiptap-block-editor-mvp-design.md`) "10,000셀 fi
 | 선택(전체 범위 shift-click) | 5312 |
 | undo | 184 |
 
-로드 성능은 이 슬라이스에서 측정하지 않는다 — `model-to-tiptap.ts`의 표 문서 로드 차단(`EDITOR_FEATURE_UNAVAILABLE`)이 슬라이스 12까지 유지되므로 표가 든 문서를 로드하는 경로 자체가 없다. 슬라이스 12에서 로드 차단이 풀리면 로드 기준선을 추가한다.
+로드 성능 기준선은 아직 없다. 슬라이스 12가 표 문서 로드 차단을 해제해 측정 경로는 열렸지만, 현재 측정 방식 자체가 [Issue #33](https://github.com/cp949/geul/issues/33)(e2e 측정을 `performance.now()`로) 대상이므로 로드 기준선은 그 방법론 정비와 함께 추가한다.
 
 ## 회귀 게이트
 
