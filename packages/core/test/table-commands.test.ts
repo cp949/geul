@@ -1197,6 +1197,88 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.destroy();
   });
 
+  it("빈 텍스트 런이 든 셀은 예외 없이 TABULAR_DATA_INVALID로 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON();
+
+    // isValidInlineText("")는 true라 io 검증을 통과하지만 ProseMirror는
+    // 빈 텍스트 노드를 만들 수 없어 코덱의 schema.text("")가 RangeError를
+    // 던졌다 — 편집 가능 콘텐츠 계약(validateEditableContent와 동일)을
+    // 명령 경계에서 적용한다.
+    expect(
+      pasteTabularData(editor, oneByOneData(""), sequentialIds("paste")),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message: "Cell content at row 0, cell 0 contains an empty text run",
+      },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("빈 텍스트 런이 든 셀은 표 안 분기에서도 예외 없이 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON();
+
+    const result = pasteTabularData(
+      editor,
+      oneByOneData(""),
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("TABULAR_DATA_INVALID");
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
+  it("미지원 링크 마크가 든 셀은 삽입된 척하지 않고 TABULAR_DATA_INVALID로 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON();
+
+    // 미지원 href를 통과시키면 LinkPolicyExtension.filterTransaction이
+    // 트랜잭션을 통째로 버리는데도 명령은 존재하지 않는 blockId로 ok:true를
+    // 반환했다 — 경계에서 거절해야 결과와 문서 상태가 일치한다.
+    const withBadLink: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [
+                {
+                  text: "x",
+                  marks: [{ type: "link", href: "javascript:alert(1)" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(
+      pasteTabularData(editor, withBadLink, sequentialIds("paste")),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "TABULAR_DATA_INVALID",
+        message:
+          "Cell content at row 0, cell 0 contains an unsupported link URL",
+      },
+    });
+    expect(editor.getJSON()).toEqual(before);
+    editor.destroy();
+  });
+
   it("NaN·비정수 columnCount는 예외 없이 INVALID_TABLE_SIZE로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);

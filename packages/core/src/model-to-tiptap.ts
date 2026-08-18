@@ -1,6 +1,7 @@
 import {
   type Document,
   type HeadingBlock,
+  type InlineContent,
   isCanonicalTextMarks,
   isSupportedLinkHref,
   type ParagraphBlock,
@@ -31,35 +32,49 @@ const invalid = (message: string): Result<never, EditorError> => ({
 const markKey = (mark: TextMark): string =>
   mark.type === "link" ? `link:${mark.href}` : mark.type;
 
+// 편집기에 커밋되는 인라인 콘텐츠의 항목 계약: 빈 텍스트 런 금지
+// (ProseMirror는 빈 텍스트 노드를 만들 수 없다), 빈 마크 배열 금지,
+// 미지원 링크 금지(LinkPolicyExtension이 트랜잭션째 버리기 전에 경계에서
+// 거절), 정규 마크 순서, 인접 동일 마크 런 금지. 위반이 없으면 null,
+// 있으면 위반을 설명하는 서술어를 반환한다 — 호출자가 위치(블록 id, 셀
+// 좌표)를 앞에 붙여 message를 만든다.
+export const inlineContentViolation = (
+  content: InlineContent,
+): string | null => {
+  let previousMarks: string | undefined;
+
+  for (const item of content) {
+    if (item.text.length === 0) {
+      return "contains an empty text run";
+    }
+    if (item.marks?.length === 0) {
+      return "contains an empty mark set";
+    }
+    for (const mark of item.marks ?? []) {
+      if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
+        return "contains an unsupported link URL";
+      }
+    }
+    if (!isCanonicalTextMarks(item.marks ?? [])) {
+      return "contains noncanonical mark ordering";
+    }
+
+    const currentMarks = JSON.stringify((item.marks ?? []).map(markKey));
+    if (currentMarks === previousMarks) {
+      return "contains adjacent inline runs with identical marks";
+    }
+    previousMarks = currentMarks;
+  }
+  return null;
+};
+
 const validateEditableContent = (
   blocks: Array<ParagraphBlock | HeadingBlock>,
 ): Result<void, EditorError> => {
   for (const block of blocks) {
-    let previousMarks: string | undefined;
-
-    for (const item of block.content) {
-      if (item.text.length === 0) {
-        return invalid(`Block ${block.id} contains an empty text run`);
-      }
-      if (item.marks?.length === 0) {
-        return invalid(`Block ${block.id} contains an empty mark set`);
-      }
-      for (const mark of item.marks ?? []) {
-        if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
-          return invalid(`Block ${block.id} contains an unsupported link URL`);
-        }
-      }
-      if (!isCanonicalTextMarks(item.marks ?? [])) {
-        return invalid(`Block ${block.id} contains noncanonical mark ordering`);
-      }
-
-      const currentMarks = JSON.stringify((item.marks ?? []).map(markKey));
-      if (currentMarks === previousMarks) {
-        return invalid(
-          `Block ${block.id} contains adjacent inline runs with identical marks`,
-        );
-      }
-      previousMarks = currentMarks;
+    const violation = inlineContentViolation(block.content);
+    if (violation !== null) {
+      return invalid(`Block ${block.id} ${violation}`);
     }
   }
 

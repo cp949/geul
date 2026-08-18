@@ -61,15 +61,15 @@ describe("validateTabularData", () => {
     // validateGridCoverage의 new Array(rowCount * columnCount)가
     // RangeError를 던져 Result 계약 밖으로 예외가 새어나갔다.
     for (const columnCount of [Number.NaN, 2.5, -1]) {
-      expect(
-        validateTabularData({ ...gridData(), columnCount }),
-      ).toMatchObject({
-        ok: false,
-        error: {
-          code: "CLIPBOARD_TABLE_INVALID",
-          message: "columnCount must be a positive integer",
+      expect(validateTabularData({ ...gridData(), columnCount })).toMatchObject(
+        {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_TABLE_INVALID",
+            message: "columnCount must be a positive integer",
+          },
         },
-      });
+      );
     }
   });
 

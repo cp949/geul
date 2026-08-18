@@ -5,7 +5,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
-
+import { inlineContentViolation } from "./model-to-tiptap.js";
 import {
   DEFAULT_COLUMN_WIDTH,
   deleteColumn as deleteGridColumn,
@@ -536,6 +536,26 @@ export const pasteTabularData = (
             : "Tabular data is not tabular",
       },
     };
+  }
+
+  // io 검증(validateTabularData)은 model 계약만 본다 — 편집기에 커밋되는
+  // 콘텐츠는 추가로 편집 가능 콘텐츠 계약(validateEditableContent와 같은
+  // 규칙)을 지켜야 한다. 빈 텍스트 런은 코덱의 schema.text("")를 터뜨리고,
+  // 미지원 링크는 LinkPolicyExtension이 트랜잭션째 버리는데도 ok:true가
+  // 반환되는 원인이었다.
+  for (const [rowIndex, row] of data.rows.entries()) {
+    for (const [cellIndex, cellEntry] of row.cells.entries()) {
+      const violation = inlineContentViolation(cellEntry.content);
+      if (violation !== null) {
+        return {
+          ok: false,
+          error: {
+            code: "TABULAR_DATA_INVALID",
+            message: `Cell content at row ${rowIndex}, cell ${cellIndex} ${violation}`,
+          },
+        };
+      }
+    }
   }
 
   if (isInTable(state)) {
