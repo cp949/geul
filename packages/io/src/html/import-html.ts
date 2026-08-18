@@ -11,6 +11,7 @@ import { unified } from "unified";
 
 import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
+import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   collectHtmlImportWarnings,
   type HtmlImportWarning,
@@ -22,25 +23,21 @@ import {
   inlineContentFromNodes,
 } from "./inline-content.js";
 import { htmlSanitizeSchema } from "./sanitize-schema.js";
+import {
+  type CellLayout,
+  columnElements,
+  inferredColumnCount,
+  layoutRows,
+  MAX_TABLE_COLUMNS,
+  type TableRowSource,
+  tableRows,
+} from "./table-layout.js";
 
 const DEFAULT_COLUMN_WIDTH = 160;
-const MAX_TABLE_COLUMNS = 10_000;
 const MAX_TABLE_LOGICAL_CELLS = 10_000;
 const parseProcessor = unified().use(rehypeParse, { fragment: true });
 
 class HtmlDocumentInvalidError extends Error {}
-
-type TableRowSource = {
-  element: HtmlElementNode;
-  section: "head" | "body";
-};
-
-type CellLayout = {
-  element: HtmlElementNode;
-  columnIndex: number;
-  rowSpan: number;
-  columnSpan: number;
-};
 
 const sanitizeLinks = (nodes: HtmlNode[]): void => {
   for (const node of nodes) {
@@ -68,35 +65,6 @@ const asRoot = (node: unknown): HtmlRoot | undefined => {
     return undefined;
   }
   return node as HtmlRoot;
-};
-
-const childElements = (
-  element: HtmlElementNode,
-  tagName?: string,
-): HtmlElementNode[] =>
-  element.children.filter(
-    (child): child is HtmlElementNode =>
-      child.type === "element" &&
-      (tagName === undefined || child.tagName === tagName),
-  );
-
-const propertyString = (
-  element: HtmlElementNode,
-  name: string,
-): string | undefined => {
-  const value = element.properties[name];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-};
-
-const propertyInteger = (
-  element: HtmlElementNode,
-  name: string,
-  fallback: number,
-): number => {
-  const value = element.properties[name];
-  if (value === undefined || value === null || value === "") return fallback;
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isInteger(parsed) ? parsed : Number.NaN;
 };
 
 const propertyHeaderFlag = (
@@ -153,88 +121,6 @@ const textValue = (nodes: HtmlNode[]): string =>
           : "",
     )
     .join("");
-
-const tableRows = (table: HtmlElementNode): TableRowSource[] => {
-  const rows: TableRowSource[] = [];
-
-  for (const child of childElements(table)) {
-    if (child.tagName === "thead" || child.tagName === "tbody") {
-      for (const row of childElements(child, "tr")) {
-        rows.push({
-          element: row,
-          section: child.tagName === "thead" ? "head" : "body",
-        });
-      }
-      continue;
-    }
-    if (child.tagName === "tr") {
-      rows.push({ element: child, section: "body" });
-    }
-  }
-
-  return rows;
-};
-
-const layoutColumnSpan = (columnSpan: number): number =>
-  Number.isInteger(columnSpan) &&
-  columnSpan >= 1 &&
-  columnSpan <= MAX_TABLE_COLUMNS
-    ? columnSpan
-    : 1;
-
-const layoutRows = (rows: TableRowSource[]): CellLayout[][] => {
-  const occupiedUntilRow: number[] = [];
-
-  return rows.map((row, rowIndex) => {
-    const layouts: CellLayout[] = [];
-    let columnIndex = 0;
-
-    for (const cell of childElements(row.element).filter(
-      (element) => element.tagName === "td" || element.tagName === "th",
-    )) {
-      while ((occupiedUntilRow[columnIndex] ?? 0) > rowIndex) {
-        columnIndex += 1;
-      }
-
-      const rowSpan = propertyInteger(cell, "rowSpan", 1);
-      const columnSpan = propertyInteger(cell, "colSpan", 1);
-      layouts.push({ element: cell, columnIndex, rowSpan, columnSpan });
-
-      const boundedColumnSpan = layoutColumnSpan(columnSpan);
-      if (Number.isInteger(rowSpan) && rowSpan >= 1) {
-        for (
-          let coveredColumn = columnIndex;
-          coveredColumn < columnIndex + boundedColumnSpan;
-          coveredColumn += 1
-        ) {
-          occupiedUntilRow[coveredColumn] = rowIndex + rowSpan;
-        }
-      }
-      columnIndex += boundedColumnSpan;
-    }
-
-    return layouts;
-  });
-};
-
-const columnElements = (table: HtmlElementNode): HtmlElementNode[] => {
-  const colgroup = childElements(table, "colgroup")[0];
-  return colgroup === undefined ? [] : childElements(colgroup, "col");
-};
-
-const inferredColumnCount = (layouts: CellLayout[][]): number =>
-  layouts.reduce(
-    (maximum, row) =>
-      row.reduce(
-        (rowMaximum, cell) =>
-          Math.max(
-            rowMaximum,
-            cell.columnIndex + layoutColumnSpan(cell.columnSpan),
-          ),
-        maximum,
-      ),
-    0,
-  );
 
 const inferHeaderRows = (
   rows: TableRowSource[],
