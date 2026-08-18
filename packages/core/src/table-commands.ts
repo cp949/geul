@@ -446,18 +446,22 @@ export const insertTable = (
   return { ok: true, value: { blockId: table.id } };
 };
 
-// 현재 selection이 속한 최상위 블록 id를 찾는다(findTopLevelBlockPosition과
-// 같은 스캔 방식) — 표 밖 붙여넣기의 삽입 위치를 정하는 데 쓴다. 이 함수는
-// isInTable(state)가 false일 때만 호출되므로 결과가 table 노드일 일은 없다.
+// selection이 걸친 마지막 최상위 블록의 id를 찾는다
+// (findTopLevelBlockPosition과 같은 스캔 방식) — 표 밖 붙여넣기의 삽입
+// 위치를 정하는 데 쓴다. 이 함수는 isInTable(state)가 false일 때만
+// 호출되므로 결과가 table 노드일 일은 없다.
+//
+// selection 전체가 한 블록 안에 들어갈 것을 요구하면 두 문단에 걸친 선택이
+// 전부 PASTE_TARGET_NOT_FOUND가 되고, 붙여넣기 확장은 그래도 이벤트를
+// 소비하므로 사용자에게는 아무 일도 일어나지 않는다. 선택 끝(to)이 닿는
+// 블록을 기준으로 잡아 "선택 영역 뒤에 표를 놓는다"는 계약을 유지한다.
 const currentTopLevelBlockId = (
   doc: ProseMirrorNode,
-  from: number,
   to: number,
 ): string | null => {
   let blockId: string | null = null;
   doc.forEach((node, offset) => {
-    if (blockId !== null) return;
-    if (from < offset || to > offset + node.nodeSize) return;
+    if (to < offset) return;
     const id = node.attrs.blockId;
     if (typeof id === "string" && id.length > 0) blockId = id;
   });
@@ -516,8 +520,7 @@ export const pasteTabularData = (
   // 표 밖 분기는 buildInitialTable로 새 표를 만든다 — 0행/0열 TableBlock이
   // tableBlockToTiptapNode(스키마 비검증 NodeType.create)를 거쳐 문서에
   // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다.
-  const { from, to } = state.selection;
-  const afterBlockId = currentTopLevelBlockId(state.doc, from, to);
+  const afterBlockId = currentTopLevelBlockId(state.doc, state.selection.to);
   if (afterBlockId === null) {
     return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
   }

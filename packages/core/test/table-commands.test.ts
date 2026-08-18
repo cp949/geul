@@ -35,6 +35,22 @@ const docWithParagraph = {
   ],
 };
 
+const docWithTwoParagraphs = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      attrs: { blockId: "para-1" },
+      content: [{ type: "text", text: "hello" }],
+    },
+    {
+      type: "paragraph",
+      attrs: { blockId: "para-2" },
+      content: [{ type: "text", text: "world" }],
+    },
+  ],
+};
+
 const cellJson = (cellId: string, columnId: string) => ({
   type: "tableCell",
   attrs: {
@@ -834,6 +850,22 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         ],
       },
     ],
+  });
+
+  it("두 문단에 걸친 선택에서 호출하면 마지막 블록 뒤에 새 표를 만든다", () => {
+    const editor = createTableFixtureEditor(docWithTwoParagraphs);
+    // "hello"의 "e"부터 "world"의 "o"까지 — 두 최상위 블록에 걸친 선택.
+    editor.commands.setTextSelection({ from: 2, to: 9 });
+    const createId = sequentialIds("paste");
+
+    const result = pasteTabularData(editor, oneByOneData("A"), createId);
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON();
+    expect(doc.content).toHaveLength(3);
+    expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
+    expect(doc.content?.[1]?.attrs?.blockId).toBe("para-2");
+    expect(doc.content?.[2]?.type).toBe("table");
   });
 
   it("표 밖에서 호출하면 현재 블록 뒤에 새 표를 만든다", () => {
