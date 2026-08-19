@@ -164,7 +164,15 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
       </>,
     ),
   );
+  // editable(role="textbox")은 마운트 host이고, 컨트롤러가 그 안에 실제
+  // contenteditable 자식을 넣는다(block-side-menu.test.tsx:57-59와 같은 구조).
+  // pointer 이벤트는 host에 쏘지만 focusEditor가 초점을 주는 대상은
+  // contentEditable이므로 초점 단언 대상은 후자다.
   const editable = screen.getByRole("textbox", { name: "Editor" });
+  const contentEditable = editable.querySelector<HTMLElement>(
+    '[contenteditable="true"]',
+  );
+  if (contentEditable === null) throw new Error("Editable was not mounted");
   const table = editable.querySelector("table");
   if (table === null) throw new Error("Table was not rendered");
   stubRect(table, { left: 100, top: 100, width: 200, height: 60 });
@@ -184,7 +192,7 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
   }
   stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
   stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
-  return { table, editable };
+  return { table, editable, contentEditable };
 };
 
 describe("표 위에 hover하면 핸들을 표시한다", () => {
@@ -600,24 +608,16 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
   it("메뉴의 삭제 항목이 deleteTableRow를 행 인덱스로 호출하고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    const { editable } = openRowMenu(controller);
-    // openRowMenu가 반환하는 editable은 renderTable의 반환값과 같은 마운트
-    // host(role="textbox")다 — 컨트롤러가 그 안에 실제 contenteditable
-    // 자식을 넣는다("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다" 테스트와 같은
-    // 구조). closeMenu가 초점을 주는 대상은 후자다.
-    const contentEditable = editable.querySelector<HTMLElement>(
-      '[contenteditable="true"]',
-    );
-    if (contentEditable === null) throw new Error("Editable was not mounted");
+    const { contentEditable } = openRowMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
 
-    expect(document.activeElement).toBe(contentEditable);
     expect(controller.commands.deleteTableRow).toHaveBeenCalledWith(
       "table-1",
       0,
     );
     expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(contentEditable);
   });
 
   it("메뉴의 삽입 항목이 위/아래 인덱스로 insertTableRow를 호출한다", () => {
@@ -707,14 +707,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
   it("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    const { editable } = openRowMenu(controller);
-    // renderTable의 editable은 마운트 host(role="textbox")이고, 컨트롤러가
-    // 그 안에 실제 contenteditable 자식을 넣는다(block-side-menu.test.tsx:
-    // 57-59와 같은 구조). 초점을 받는 것은 후자이므로 단언 대상도 후자다.
-    const contentEditable = editable.querySelector<HTMLElement>(
-      '[contenteditable="true"]',
-    );
-    if (contentEditable === null) throw new Error("Editable was not mounted");
+    const { contentEditable } = openRowMenu(controller);
 
     fireEvent.keyDown(document, { key: "Escape" });
 

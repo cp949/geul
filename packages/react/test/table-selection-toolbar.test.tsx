@@ -322,13 +322,13 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color Red" }));
 
-    expect(document.activeElement).toBe(editable);
     expect(controller.commands.setTableCellTextColor).toHaveBeenCalledWith(
       "table-1",
       { kind: "cells", cellIds: ["cell-1"] },
       "#D93025",
     );
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+    expect(document.activeElement).toBe(editable);
   });
 
   it("Escape로 서식 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
@@ -436,7 +436,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     fireEvent.pointerDown(trigger);
     fireEvent.click(trigger);
 
-    expect(document.activeElement).toBe(editable);
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+    expect(document.activeElement).toBe(editable);
   });
 });
