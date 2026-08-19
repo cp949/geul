@@ -11,9 +11,9 @@ type UseDismissOnOutsideOrEscapeOptions = {
    */
   allowSelectors: readonly string[];
   /** 바깥 pointerdown. 클릭 대상이 자연히 초점을 받으므로 여기서 초점을 옮기지 않는다. */
-  onDismiss: () => void;
+  onOutsideDismiss: () => void;
   /** Escape. 돌아갈 클릭 대상이 없으므로 보통 편집기로 초점을 되돌린다(호출부 책임). */
-  onEscape: () => void;
+  onEscapeDismiss: () => void;
 };
 
 /**
@@ -27,8 +27,8 @@ export const useDismissOnOutsideOrEscape = ({
   active,
   element,
   allowSelectors,
-  onDismiss,
-  onEscape,
+  onOutsideDismiss,
+  onEscapeDismiss,
 }: UseDismissOnOutsideOrEscapeOptions): void => {
   useEffect(() => {
     if (!active || element === null) return;
@@ -42,12 +42,12 @@ export const useDismissOnOutsideOrEscape = ({
       ) {
         return;
       }
-      onDismiss();
+      onOutsideDismiss();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      onEscape();
+      onEscapeDismiss();
     };
 
     ownerDocument.addEventListener("pointerdown", handlePointerDown);
@@ -56,5 +56,5 @@ export const useDismissOnOutsideOrEscape = ({
       ownerDocument.removeEventListener("pointerdown", handlePointerDown);
       ownerDocument.removeEventListener("keydown", handleKeyDown);
     };
-  }, [active, element, allowSelectors, onDismiss, onEscape]);
+  }, [active, element, allowSelectors, onOutsideDismiss, onEscapeDismiss]);
 };

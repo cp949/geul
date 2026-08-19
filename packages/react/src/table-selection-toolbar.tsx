@@ -164,8 +164,8 @@ export const TableSelectionToolbar = () => {
     active: formatMenuOpen,
     element,
     allowSelectors: CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS,
-    onDismiss: dismissFormatMenu,
-    onEscape: closeFormatMenu,
+    onOutsideDismiss: dismissFormatMenu,
+    onEscapeDismiss: closeFormatMenu,
   });
 
   const { menuRef, style } = useClampedMenuPosition(

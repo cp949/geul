@@ -16,7 +16,7 @@
 
 - 바깥 pointerdown 또는 Escape로 오버레이를 닫아야 하면 새로 effect를 쓰지 않고 `packages/react/src/use-dismiss-on-outside-or-escape.ts`의 `useDismissOnOutsideOrEscape`를 쓴다.
 - `allowSelectors`는 호출부 모듈 스코프 상수로 선언한다(매 렌더 새 배열을 넘기면 리스너가 매 렌더 재등록된다).
-- 바깥 클릭(`onDismiss`)과 Escape(`onEscape`)는 보통 다른 초점 처리가 필요하다 — 바깥 클릭은 클릭 대상이 자연히 초점을 받으므로 강제로 옮기지 않고, Escape는 돌아갈 대상이 없으므로 보통 편집기로 초점을 되돌린다. 이 훅은 두 콜백을 분리해두었으니 합치지 않는다.
+- 바깥 클릭(`onOutsideDismiss`)과 Escape(`onEscapeDismiss`)는 보통 다른 초점 처리가 필요하다 — 바깥 클릭은 클릭 대상이 자연히 초점을 받으므로 강제로 옮기지 않고, Escape는 돌아갈 대상이 없으므로 보통 편집기로 초점을 되돌린다. 이 훅은 두 콜백을 분리해두었으니 합치지 않는다.
 - 이 훅으로 만든 Escape 닫기 e2e는 PIT-0009 규칙대로 `--workers` 병렬 반복 실행으로 검증한다.
 
 ## 검증 방법

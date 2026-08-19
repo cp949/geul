@@ -10,17 +10,22 @@ afterEach(cleanup);
 type ProbeProps = {
   active: boolean;
   allowSelectors: readonly string[];
-  onDismiss: () => void;
-  onEscape: () => void;
+  onOutsideDismiss: () => void;
+  onEscapeDismiss: () => void;
 };
 
-const Probe = ({ active, allowSelectors, onDismiss, onEscape }: ProbeProps) => {
+const Probe = ({
+  active,
+  allowSelectors,
+  onOutsideDismiss,
+  onEscapeDismiss,
+}: ProbeProps) => {
   useDismissOnOutsideOrEscape({
     active,
     element: document.body,
     allowSelectors,
-    onDismiss,
-    onEscape,
+    onOutsideDismiss,
+    onEscapeDismiss,
   });
   return (
     <div>
@@ -35,15 +40,15 @@ const Probe = ({ active, allowSelectors, onDismiss, onEscape }: ProbeProps) => {
 };
 
 describe("useDismissOnOutsideOrEscape", () => {
-  it("허용 셀렉터 바깥의 pointerdown이면 onDismiss를 호출한다", () => {
-    const onDismiss = vi.fn();
-    const onEscape = vi.fn();
+  it("허용 셀렉터 바깥의 pointerdown이면 onOutsideDismiss를 호출한다", () => {
+    const onOutsideDismiss = vi.fn();
+    const onEscapeDismiss = vi.fn();
     render(
       <Probe
         active
         allowSelectors={["[data-be-allowed]"]}
-        onDismiss={onDismiss}
-        onEscape={onEscape}
+        onOutsideDismiss={onOutsideDismiss}
+        onEscapeDismiss={onEscapeDismiss}
       />,
     );
 
@@ -51,18 +56,18 @@ describe("useDismissOnOutsideOrEscape", () => {
       .querySelector("[data-be-outside]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-    expect(onEscape).not.toHaveBeenCalled();
+    expect(onOutsideDismiss).toHaveBeenCalledTimes(1);
+    expect(onEscapeDismiss).not.toHaveBeenCalled();
   });
 
-  it("허용 셀렉터 안의 pointerdown이면 onDismiss를 호출하지 않는다", () => {
-    const onDismiss = vi.fn();
+  it("허용 셀렉터 안의 pointerdown이면 onOutsideDismiss를 호출하지 않는다", () => {
+    const onOutsideDismiss = vi.fn();
     render(
       <Probe
         active
         allowSelectors={["[data-be-allowed]"]}
-        onDismiss={onDismiss}
-        onEscape={vi.fn()}
+        onOutsideDismiss={onOutsideDismiss}
+        onEscapeDismiss={vi.fn()}
       />,
     );
 
@@ -70,18 +75,18 @@ describe("useDismissOnOutsideOrEscape", () => {
       .querySelector("[data-be-allowed]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
-    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onOutsideDismiss).not.toHaveBeenCalled();
   });
 
-  it("Escape keydown이면 preventDefault 후 onEscape만 호출한다", () => {
-    const onDismiss = vi.fn();
-    const onEscape = vi.fn();
+  it("Escape keydown이면 preventDefault 후 onEscapeDismiss만 호출한다", () => {
+    const onOutsideDismiss = vi.fn();
+    const onEscapeDismiss = vi.fn();
     render(
       <Probe
         active
         allowSelectors={["[data-be-allowed]"]}
-        onDismiss={onDismiss}
-        onEscape={onEscape}
+        onOutsideDismiss={onOutsideDismiss}
+        onEscapeDismiss={onEscapeDismiss}
       />,
     );
 
@@ -92,19 +97,19 @@ describe("useDismissOnOutsideOrEscape", () => {
     });
     document.dispatchEvent(event);
 
-    expect(onEscape).toHaveBeenCalledTimes(1);
-    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onEscapeDismiss).toHaveBeenCalledTimes(1);
+    expect(onOutsideDismiss).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(true);
   });
 
   it("Escape가 아닌 키는 무시하고 preventDefault하지 않는다", () => {
-    const onEscape = vi.fn();
+    const onEscapeDismiss = vi.fn();
     render(
       <Probe
         active
         allowSelectors={["[data-be-allowed]"]}
-        onDismiss={vi.fn()}
-        onEscape={onEscape}
+        onOutsideDismiss={vi.fn()}
+        onEscapeDismiss={onEscapeDismiss}
       />,
     );
 
@@ -115,18 +120,18 @@ describe("useDismissOnOutsideOrEscape", () => {
     });
     document.dispatchEvent(event);
 
-    expect(onEscape).not.toHaveBeenCalled();
+    expect(onEscapeDismiss).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
   });
 
   it("active가 false면 리스너를 등록하지 않는다", () => {
-    const onDismiss = vi.fn();
+    const onOutsideDismiss = vi.fn();
     render(
       <Probe
         active={false}
         allowSelectors={["[data-be-allowed]"]}
-        onDismiss={onDismiss}
-        onEscape={vi.fn()}
+        onOutsideDismiss={onOutsideDismiss}
+        onEscapeDismiss={vi.fn()}
       />,
     );
 
@@ -135,17 +140,17 @@ describe("useDismissOnOutsideOrEscape", () => {
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 
-    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onOutsideDismiss).not.toHaveBeenCalled();
   });
 
   it("언마운트하면 리스너를 제거한다", () => {
-    const onDismiss = vi.fn();
+    const onOutsideDismiss = vi.fn();
     const { unmount } = render(
       <Probe
         active
         allowSelectors={["[data-be-allowed]"]}
-        onDismiss={onDismiss}
-        onEscape={vi.fn()}
+        onOutsideDismiss={onOutsideDismiss}
+        onEscapeDismiss={vi.fn()}
       />,
     );
 
@@ -154,6 +159,6 @@ describe("useDismissOnOutsideOrEscape", () => {
       .querySelector("[data-be-outside]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
-    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onOutsideDismiss).not.toHaveBeenCalled();
   });
 });

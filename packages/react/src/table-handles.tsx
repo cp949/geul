@@ -353,8 +353,8 @@ export const TableHandles = () => {
     active: menuState !== null,
     element,
     allowSelectors: TABLE_MENU_DISMISS_ALLOW_SELECTORS,
-    onDismiss: dismissMenu,
-    onEscape: closeMenu,
+    onOutsideDismiss: dismissMenu,
+    onEscapeDismiss: closeMenu,
   });
 
   // gutter가 표 바깥 오버레이라서, hover 추적을 element 안쪽에만 걸면
