@@ -18,6 +18,14 @@ type ToolbarState =
       rejected: boolean;
     } & ToolbarPosition);
 
+/**
+ * 선택 영역의 화면 좌표를 읽지 못했을 때 쓰는 임의의 뷰포트 안쪽 좌표다.
+ * 활성 링크는 있는데 DOM selection이 에디터 밖에 있는 드문 경우에만 쓰인다.
+ * 정확한 값에는 의미가 없다 — 최종 위치는 `useClampedMenuPosition`이 어차피
+ * 뷰포트 안으로 접어 넣으므로 화면 왼쪽 위 어딘가면 충분하다.
+ */
+const UNREADABLE_SELECTION_POSITION: ToolbarPosition = { left: 96, top: 48 };
+
 const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
   const selection = element.ownerDocument.getSelection();
   if (
@@ -78,7 +86,8 @@ export const LinkToolbar = () => {
         return;
       }
 
-      const bounds = readSelectionBounds(element) ?? { left: 96, top: 48 };
+      const bounds =
+        readSelectionBounds(element) ?? UNREADABLE_SELECTION_POSITION;
       setToolbarState({
         mode: "view",
         left: bounds.left,

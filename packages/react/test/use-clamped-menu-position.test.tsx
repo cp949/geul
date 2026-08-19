@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClampAnchor } from "../src/use-clamped-menu-position.js";
 import { useClampedMenuPosition } from "../src/use-clamped-menu-position.js";
@@ -13,9 +14,12 @@ type ProbeProps = {
 
 const Probe = ({ left, top, anchor }: ProbeProps) => {
   const { menuRef, position } = useClampedMenuPosition(left, top, anchor);
+  const renders = useRef(0);
+  renders.current += 1;
   return (
     <div
       data-left={position.left}
+      data-renders={renders.current}
       data-testid="probe"
       data-top={position.top}
       ref={menuRef}
@@ -48,6 +52,46 @@ const stubViewport = (width: number, height: number) => {
   });
 };
 
+type ResizeObserverStub = {
+  callbacks: ResizeObserverCallback[];
+  disconnected: number;
+  observed: Element[];
+};
+
+/**
+ * jsdom에는 ResizeObserver가 없다. 훅이 박스 크기 변화에 반응하는지 보려면
+ * 콜백을 직접 붙잡아 수동으로 호출할 수 있는 가짜를 심어야 한다.
+ */
+const stubResizeObserver = (): ResizeObserverStub => {
+  const state: ResizeObserverStub = {
+    callbacks: [],
+    disconnected: 0,
+    observed: [],
+  };
+  class FakeResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      state.callbacks.push(callback);
+    }
+    disconnect() {
+      state.disconnected += 1;
+    }
+    observe(target: Element) {
+      state.observed.push(target);
+    }
+    unobserve() {}
+  }
+  vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+  return state;
+};
+
+const notifyResize = (stub: ResizeObserverStub) => {
+  act(() => {
+    for (const callback of stub.callbacks) {
+      callback([], null as unknown as ResizeObserver);
+    }
+  });
+};
+
 beforeEach(() => {
   stubViewport(1000, 800);
 });
@@ -55,6 +99,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("useClampedMenuPosition", () => {
@@ -162,5 +207,52 @@ describe("useClampedMenuPosition", () => {
 
     expect(probe.dataset.left).toBe("64");
     expect(probe.dataset.top).toBe("100");
+  });
+
+  it("앵커 좌표가 그대로여도 박스가 커지면 다시 클램프한다", () => {
+    const observer = stubResizeObserver();
+    stubMenuRect(80, 40);
+
+    const { getByTestId } = render(
+      <Probe anchor="centerBelow" left={860} top={100} />,
+    );
+    const probe = getByTestId("probe");
+
+    // 박스 80x40 → dx=-40 → maxLeft = 1000-80-8+40 = 952. 860은 그대로.
+    expect(probe.dataset.left).toBe("860");
+    expect(observer.observed).toContain(probe);
+
+    // LinkToolbar의 view -> editing처럼 폭만 커진다.
+    // 박스 350x40 → dx=-175 → maxLeft = 1000-350-8+175 = 817.
+    stubMenuRect(350, 40);
+    notifyResize(observer);
+
+    expect(probe.dataset.left).toBe("817");
+    expect(probe.dataset.top).toBe("100");
+  });
+
+  it("크기가 그대로면 ResizeObserver 알림에도 좌표 객체를 유지한다", () => {
+    const observer = stubResizeObserver();
+    stubMenuRect(200, 100);
+
+    const { getByTestId } = render(<Probe left={100} top={100} />);
+    const probe = getByTestId("probe");
+    const renderCount = Number(probe.dataset.renders);
+
+    notifyResize(observer);
+
+    expect(probe.dataset.left).toBe("100");
+    expect(probe.dataset.top).toBe("100");
+    expect(Number(probe.dataset.renders)).toBe(renderCount);
+  });
+
+  it("언마운트하면 ResizeObserver를 해제한다", () => {
+    const observer = stubResizeObserver();
+    stubMenuRect(200, 100);
+
+    const { unmount } = render(<Probe left={100} top={100} />);
+    unmount();
+
+    expect(observer.disconnected).toBe(1);
   });
 });

@@ -140,3 +140,80 @@ test("선택 영역이 뷰포트 하단에 붙어 있어도 Add link 버튼을 �
   await page.getByRole("button", { name: "Add link" }).click();
   await expect(page.getByRole("textbox", { name: "Link URL" })).toBeVisible();
 });
+
+test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오른쪽을 넘지 않는다 (PIT-0011)", async ({
+  page,
+}) => {
+  // editing 모드 툴바(입력 224px + Save/Cancel, 약 350px)는 들어가되 본문
+  // 오른쪽 끝이 뷰포트 오른쪽 여백에 닿도록 뷰포트를 좁힌다.
+  const viewportWidth = 900;
+  await page.setViewportSize({ height: 720, width: viewportWidth });
+
+  const { editable } = await openDemo(page);
+  await editable.click();
+  // 한 글자 + 공백을 반복해 줄 끝 들쭉날쭉함을 최소화한다 — 오른쪽 끝에
+  // 최대한 가까운 선택 지점을 만들기 위한 것이다.
+  await page.keyboard.type("e ".repeat(160));
+
+  // 줄 오른쪽 끝 글자 하나만 선택한다. LinkToolbar의 앵커(left)는 선택
+  // 영역의 가로 중앙이므로, 이 선택에서만 view 모드 클램프가 실제로 걸린다.
+  await editable
+    .locator("p")
+    .first()
+    .evaluate((block) => {
+      const text = block.firstChild;
+      if (text === null) throw new Error("First block has no text");
+      const range = document.createRange();
+      let bestIndex = 0;
+      let bestCenter = Number.NEGATIVE_INFINITY;
+      const length = text.textContent?.length ?? 0;
+      for (let index = 0; index < length; index += 1) {
+        range.setStart(text, index);
+        range.setEnd(text, index + 1);
+        const rect = range.getBoundingClientRect();
+        const center = rect.left + rect.width / 2;
+        if (center > bestCenter) {
+          bestCenter = center;
+          bestIndex = index;
+        }
+      }
+      range.setStart(text, bestIndex);
+      range.setEnd(text, bestIndex + 1);
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+
+  const toolbar = page.getByRole("toolbar", { name: "Link" });
+  await expect(toolbar).toBeVisible();
+
+  // view 모드에서는 이미 클램프가 걸려 뷰포트 안에 있다.
+  const viewBox = await toolbar.boundingBox();
+  expect(viewBox).not.toBeNull();
+  expect(viewBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((viewBox?.x ?? 0) + (viewBox?.width ?? 0)).toBeLessThanOrEqual(
+    viewportWidth,
+  );
+
+  await page.getByRole("button", { name: "Add link" }).click();
+  const linkInput = page.getByRole("textbox", { name: "Link URL" });
+  await expect(linkInput).toBeVisible();
+
+  // editing 모드로 박스가 약 80px -> 350px로 커진다. centerBelow 앵커라
+  // 증가폭의 절반이 오른쪽으로 밀리므로, 크기 변화를 다시 클램프하지 않으면
+  // 뷰포트 오른쪽으로 넘쳐 나간다(PIT-0011).
+  await expect
+    .poll(async () => {
+      const box = await toolbar.boundingBox();
+      if (box === null) return Number.POSITIVE_INFINITY;
+      return box.x + box.width;
+    })
+    .toBeLessThanOrEqual(viewportWidth);
+  const editingBox = await toolbar.boundingBox();
+  expect(editingBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+
+  // 넘친 상태에서는 입력이 뷰포트 밖에 있어 fill 자체가 실패한다.
+  await linkInput.fill("https://example.com");
+  await expect(linkInput).toHaveValue("https://example.com");
+});

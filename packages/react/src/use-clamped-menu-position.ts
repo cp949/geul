@@ -58,6 +58,12 @@ const ANCHOR_OFFSETS: Record<
  * `anchor`가 `"topLeft"`가 아니면 (left, top)은 박스의 좌상단이 아니므로,
  * 클램프가 실제 렌더된 박스 기준으로 여백을 계산하려면 `ANCHOR_OFFSETS`로
  * 그 오프셋을 상쇄한다(자세한 anchor 정의는 `ClampAnchor` 타입 참고).
+ *
+ * 앵커 좌표가 그대로여도 박스 자체가 커지면 이전 크기로 계산한 클램프는
+ * 낡은 값이 된다. 예: `LinkToolbar`가 view -> editing으로 바뀌면 폭이 약
+ * 80px -> 350px로 늘고, `centerBelow`(dx = -width/2)라 늘어난 폭의 절반이
+ * 오른쪽으로 밀려 뷰포트를 넘는다. `ResizeObserver`로 박스 크기 변화를
+ * 관찰해 다시 클램프한다.
  */
 export const useClampedMenuPosition = (
   left: number,
@@ -75,22 +81,39 @@ export const useClampedMenuPosition = (
     const node = menuRef.current;
     const view = node?.ownerDocument.defaultView ?? null;
     if (node === null || view === null) return;
-    const rect = node.getBoundingClientRect();
-    const { dx, dy } = ANCHOR_OFFSETS[anchor](rect);
-    const minLeft = MENU_VIEWPORT_MARGIN - dx;
-    const maxLeft = Math.max(
-      minLeft,
-      view.innerWidth - rect.width - MENU_VIEWPORT_MARGIN - dx,
-    );
-    const minTop = MENU_VIEWPORT_MARGIN - dy;
-    const maxTop = Math.max(
-      minTop,
-      view.innerHeight - rect.height - MENU_VIEWPORT_MARGIN - dy,
-    );
-    setPosition({
-      left: Math.min(Math.max(left, minLeft), maxLeft),
-      top: Math.min(Math.max(top, minTop), maxTop),
-    });
+
+    const clampToViewport = () => {
+      const rect = node.getBoundingClientRect();
+      const { dx, dy } = ANCHOR_OFFSETS[anchor](rect);
+      const minLeft = MENU_VIEWPORT_MARGIN - dx;
+      const maxLeft = Math.max(
+        minLeft,
+        view.innerWidth - rect.width - MENU_VIEWPORT_MARGIN - dx,
+      );
+      const minTop = MENU_VIEWPORT_MARGIN - dy;
+      const maxTop = Math.max(
+        minTop,
+        view.innerHeight - rect.height - MENU_VIEWPORT_MARGIN - dy,
+      );
+      const nextLeft = Math.min(Math.max(left, minLeft), maxLeft);
+      const nextTop = Math.min(Math.max(top, minTop), maxTop);
+      // 좌표가 같으면 같은 객체를 유지한다 — ResizeObserver가 초기 관찰과
+      // 크기 변화마다 부르므로 매번 새 객체를 넣으면 불필요한 렌더가 난다.
+      setPosition((current) =>
+        current.left === nextLeft && current.top === nextTop
+          ? current
+          : { left: nextLeft, top: nextTop },
+      );
+    };
+
+    clampToViewport();
+
+    // jsdom에는 ResizeObserver가 없다 — 단위 테스트는 마운트 직후 클램프만
+    // 검증하고 여기서 그대로 빠져나간다.
+    if (typeof view.ResizeObserver !== "function") return;
+    const observer = new view.ResizeObserver(clampToViewport);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, [left, top, anchor]);
 
   return {
