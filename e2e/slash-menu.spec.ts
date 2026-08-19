@@ -125,9 +125,13 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Table 항목까지 뷰�
     await page.keyboard.press("Enter");
     await page.keyboard.type(`line ${index}`);
   }
-  // Control+End는 문서 끝(캐럿)이 화면에 보이도록 최소한만 스크롤한다 —
-  // 긴 문서에서는 캐럿이 뷰포트 하단 근처에 붙는다.
-  await page.keyboard.press("Control+End");
+  // 슬래시 질의는 블록 텍스트 전체가 "/..."와 일치해야 인식된다
+  // (parseSlashQuery: /^\/(\S*)$/) — "line 29" 뒤에 그냥 "/"를 이어치면
+  // 블록 텍스트가 "line 29/"가 되어 매치되지 않는다. Enter로 새 빈
+  // 블록을 만든 뒤 그 블록에 "/"를 친다. 긴 문서를 계속 타이핑하는
+  // 동안 브라우저가 캐럿을 뷰포트 안으로 계속 스크롤해 따라오므로,
+  // 이 시점의 캐럿(=새 빈 블록)은 뷰포트 하단 근처에 있다.
+  await page.keyboard.press("Enter");
   await page.keyboard.type("/");
 
   const menu = page.getByRole("listbox", { name: "Slash menu" });
