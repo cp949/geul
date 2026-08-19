@@ -2,8 +2,8 @@
 
 /**
  * LinkToolbar 컴포넌트: 텍스트 선택에 따른 링크 추가/편집/제거 컨트롤 노출,
- * 허용되지 않는 링크 URL의 거부 메시지, selectionchange에 따른 표시·숨김 전환을
- * 검증한다.
+ * 허용되지 않는 링크 URL의 거부 메시지, selectionchange에 따른 표시·숨김 전환,
+ * URL 입력에서 Escape 시 닫힘과 편집기로의 초점 복구를 검증한다.
  */
 
 import type { EditorController } from "@cp949/geul-core";
