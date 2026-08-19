@@ -409,3 +409,47 @@ test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 �
   await menu.getByRole("menuitem", { name: "Align none" }).click();
   await expect(lastCell).not.toHaveCSS("text-align", "center");
 });
+
+test("표 상단 행에서 셀을 선택해도 Table selection 툴바가 화면 안에서 Cell formatting 버튼까지 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  for (let index = 0; index < 20; index += 1) {
+    await page.keyboard.type(`line ${index}`);
+    await page.keyboard.press("Enter");
+  }
+  await page.keyboard.type("/table");
+  await expect(page.getByRole("option", { name: /Table/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+  const table = editable.locator("table");
+  await expect(table).toBeVisible();
+
+  const firstCell = table.locator("td").first();
+  const cellBox = await firstCell.boundingBox();
+  expect(cellBox).not.toBeNull();
+
+  // 첫 셀이 뷰포트 맨 위(y≈2)에 붙도록 정확히 그만큼만 스크롤한다 —
+  // TableSelectionToolbar의 메인 툴바는 선택 위(translateY(-100%-0.5rem))에
+  // 뜨므로, 클램프가 없으면 이 위치에서 뷰포트 밖(음수 y)으로 밀려난다
+  // (PIT-0011).
+  await page.evaluate(
+    (delta) => window.scrollBy(0, delta),
+    (cellBox?.y ?? 0) - 2,
+  );
+
+  await firstCell.click({ clickCount: 3 });
+  const toolbar = page.getByRole("toolbar", { name: "Table selection" });
+  await expect(toolbar).toBeVisible();
+  await expect
+    .poll(async () => (await toolbar.boundingBox())?.y ?? -1)
+    .toBeGreaterThanOrEqual(0);
+
+  // 클램프가 없으면 Cell formatting 버튼이 뷰포트 밖으로 나가 클릭이
+  // "element is outside of the viewport"로 타임아웃한다(PIT-0011 실측
+  // 시나리오).
+  await page.getByRole("button", { name: "Cell formatting" }).click();
+  await expect(
+    page.getByRole("menu", { name: "Cell formatting" }),
+  ).toBeVisible();
+});

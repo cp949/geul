@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 const mergeLabel = "Merge cells";
@@ -178,6 +179,12 @@ export const TableSelectionToolbar = () => {
     };
   }, [formatMenuOpen, element, closeFormatMenu]);
 
+  const { menuRef, style } = useClampedMenuPosition(
+    toolbarState?.left ?? 0,
+    toolbarState?.top ?? 0,
+    "centerAbove",
+  );
+
   if (toolbarState === null) return null;
 
   return (
@@ -185,8 +192,9 @@ export const TableSelectionToolbar = () => {
       <div
         aria-label="Table selection"
         className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_1px_4px_rgba(0,0,0,0.15)] geul:[transform:translate(-50%,calc(-100%-0.5rem))]"
+        ref={menuRef}
         role="toolbar"
-        style={{ left: toolbarState.left, top: toolbarState.top }}
+        style={style}
       >
         {toolbarState.mergeable && (
           <IconButton
