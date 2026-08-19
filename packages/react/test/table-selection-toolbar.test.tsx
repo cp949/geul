@@ -376,11 +376,16 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     document.body.append(outsideButton);
     outsideButton.focus();
 
-    fireEvent.pointerDown(outsideButton);
+    try {
+      fireEvent.pointerDown(outsideButton);
 
-    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
-    expect(document.activeElement).toBe(outsideButton);
-    outsideButton.remove();
+      expect(
+        screen.queryByRole("menu", { name: "Cell formatting" }),
+      ).toBeNull();
+      expect(document.activeElement).toBe(outsideButton);
+    } finally {
+      outsideButton.remove();
+    }
   });
 
   it("서식 메뉴 안(data-be-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
