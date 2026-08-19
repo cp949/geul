@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 const linkToolbarButtonClassName =
@@ -36,14 +37,12 @@ const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
     width: 0,
     height: 0,
   };
-  const viewportWidth = element.ownerDocument.defaultView?.innerWidth ?? 0;
-  const left = Math.min(
-    Math.max(bounds.left + bounds.width / 2, 96),
-    Math.max(viewportWidth - 96, 96),
-  );
   // 서식 툴바(FormattingToolbar)는 선택 영역 위에 뜨므로,
   // 링크 툴바는 아래쪽에 배치해 두 툴바가 겹치지 않게 한다.
-  return { left, top: bounds.top + bounds.height };
+  return {
+    left: bounds.left + bounds.width / 2,
+    top: bounds.top + bounds.height,
+  };
 };
 
 export const LinkToolbar = () => {
@@ -112,6 +111,12 @@ export const LinkToolbar = () => {
     if (toolbarState.mode === "editing") inputRef.current?.focus();
   }, [toolbarState.mode]);
 
+  const { menuRef, style } = useClampedMenuPosition(
+    toolbarState.mode === "closed" ? 0 : toolbarState.left,
+    toolbarState.mode === "closed" ? 0 : toolbarState.top,
+    "centerBelow",
+  );
+
   if (toolbarState.mode === "closed") return null;
 
   const startEditing = () => {
@@ -160,8 +165,9 @@ export const LinkToolbar = () => {
     <div
       aria-label="Link"
       className="geul:fixed geul:z-10 geul:flex geul:items-center geul:gap-1.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:px-1.5 geul:py-1 geul:shadow-[0_1px_4px_rgba(0,0,0,0.15)] geul:[transform:translate(-50%,0.5rem)]"
+      ref={menuRef}
       role="toolbar"
-      style={{ left: toolbarState.left, top: toolbarState.top }}
+      style={style}
     >
       {toolbarState.mode === "view" && toolbarState.href === null && (
         <button
