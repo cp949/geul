@@ -1,11 +1,10 @@
 import type { TableCellTarget } from "@cp949/geul-core";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-
 import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor } from "./use-editor.js";
 
 const menuItemClassName =

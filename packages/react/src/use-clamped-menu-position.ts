@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 const MENU_VIEWPORT_MARGIN = 8;
 
@@ -17,7 +17,10 @@ export type ClampedMenuPosition = {
 export const useClampedMenuPosition = (
   left: number,
   top: number,
-): { menuRef: RefObject<HTMLDivElement | null>; position: ClampedMenuPosition } => {
+): {
+  menuRef: RefObject<HTMLDivElement | null>;
+  position: ClampedMenuPosition;
+} => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<ClampedMenuPosition>({ left, top });
 
