@@ -2,15 +2,17 @@
 
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ClampAnchor } from "../src/use-clamped-menu-position.js";
 import { useClampedMenuPosition } from "../src/use-clamped-menu-position.js";
 
 type ProbeProps = {
   left: number;
   top: number;
+  anchor?: ClampAnchor;
 };
 
-const Probe = ({ left, top }: ProbeProps) => {
-  const { menuRef, position } = useClampedMenuPosition(left, top);
+const Probe = ({ left, top, anchor }: ProbeProps) => {
+  const { menuRef, position } = useClampedMenuPosition(left, top, anchor);
   return (
     <div
       data-left={position.left}
@@ -111,5 +113,54 @@ describe("useClampedMenuPosition", () => {
     // maxLeft = 1000 - 300 - 8 = 692, maxTop = 800 - 400 - 8 = 392
     expect(probe.dataset.left).toBe("692");
     expect(probe.dataset.top).toBe("392");
+  });
+
+  it("centerAbove: 앵커 위에 중앙 정렬된 박스가 뷰포트 위로 넘치면 최소 여백까지 내린다", () => {
+    stubMenuRect(200, 100);
+    // 뷰포트 1000x800, 박스 200x100 → dx=-100, dy=-108(=-height-8).
+    // minLeft = 8+100=108, minTop = 8+108=116.
+    const { getByTestId } = render(
+      <Probe anchor="centerAbove" left={50} top={50} />,
+    );
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("108");
+    expect(probe.dataset.top).toBe("116");
+  });
+
+  it("centerAbove: 뷰포트 여백 안에 들어가면 좌표를 그대로 쓴다", () => {
+    stubMenuRect(200, 100);
+    const { getByTestId } = render(
+      <Probe anchor="centerAbove" left={500} top={400} />,
+    );
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("500");
+    expect(probe.dataset.top).toBe("400");
+  });
+
+  it("centerBelow: 앵커 아래 중앙 정렬된 박스가 뷰포트 아래로 넘치면 최대치까지 올린다", () => {
+    stubMenuRect(200, 100);
+    // 뷰포트 1000x800, 박스 200x100 → dx=-100, dy=8.
+    // maxTop = max(8-8, 800-100-8-8) = 684.
+    const { getByTestId } = render(
+      <Probe anchor="centerBelow" left={500} top={900} />,
+    );
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("500");
+    expect(probe.dataset.top).toBe("684");
+  });
+
+  it("leftGutter: 고정 -56px 이동한 박스가 뷰포트 왼쪽으로 넘치면 최소 여백까지 오른쪽으로 민다", () => {
+    stubMenuRect(60, 24);
+    // dx=-56, dy=0 → minLeft = 8+56=64.
+    const { getByTestId } = render(
+      <Probe anchor="leftGutter" left={20} top={100} />,
+    );
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("64");
+    expect(probe.dataset.top).toBe("100");
   });
 });
