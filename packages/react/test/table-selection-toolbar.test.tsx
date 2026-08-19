@@ -343,4 +343,33 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
     view.unmount();
   });
+
+  it("서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { view } = renderTable(controller);
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+    expect(
+      screen.getByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+
+    const outsideButton = document.createElement("button");
+    outsideButton.textContent = "outside";
+    document.body.append(outsideButton);
+    outsideButton.focus();
+
+    fireEvent.pointerDown(outsideButton);
+
+    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+    expect(document.activeElement).toBe(outsideButton);
+    outsideButton.remove();
+    view.unmount();
+  });
 });
