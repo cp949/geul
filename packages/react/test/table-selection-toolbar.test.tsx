@@ -372,4 +372,26 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     outsideButton.remove();
     view.unmount();
   });
+
+  it("서식 메뉴 안(data-be-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { view } = renderTable(controller);
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+
+    const menu = screen.getByRole("menu", { name: "Cell formatting" });
+    fireEvent.pointerDown(menu);
+
+    expect(
+      screen.queryByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+    view.unmount();
+  });
 });
