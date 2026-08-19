@@ -6,11 +6,17 @@
  */
 
 import type { EditorController } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider } from "../src/index.js";
 import { TableHandles } from "../src/table-handles.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 const rowHandleLabel = "Drag to reorder row, click for options";
 const columnHandleLabel = "Drag to reorder column, click for options";
@@ -149,7 +155,7 @@ const withProvider = (
 );
 
 const renderTable = (controller: ReturnType<typeof fakeController>) => {
-  const view = render(
+  render(
     withProvider(
       controller,
       <>
@@ -178,13 +184,13 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
   }
   stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
   stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
-  return { view, table, editable };
+  return { table, editable };
 };
 
 describe("표 위에 hover하면 핸들을 표시한다", () => {
   it("행 핸들과 열 핸들, 빠른 확장 버튼을 함께 표시한다", () => {
     const controller = fakeController();
-    const { view, table } = renderTable(controller);
+    const { table } = renderTable(controller);
 
     fireEvent.pointerMove(table);
 
@@ -196,24 +202,22 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     ).toHaveLength(2);
     expect(screen.getByRole("button", { name: addRowLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: addColumnLabel })).not.toBeNull();
-    view.unmount();
   });
 
   it("표 밖으로 나가면 핸들을 숨긴다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
 
     fireEvent.pointerMove(editable);
 
     expect(screen.queryByRole("button", { name: addRowLabel })).toBeNull();
-    view.unmount();
   });
 
   it("표와 핸들 사이 여백으로 이동해도 핸들이 유지된다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
 
@@ -221,14 +225,13 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     fireEvent.pointerMove(editable, { clientX: 98, clientY: 110 });
 
     expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
-    view.unmount();
   });
 });
 
 describe("행/열 핸들을 드래그해 재정렬한다", () => {
   it("행 핸들을 두 번째 행 아래로 드래그하면 moveTableRow(0, 1)을 호출한다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const [firstRowHandle] = screen.getAllByRole("button", {
       name: rowHandleLabel,
@@ -244,12 +247,11 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
       0,
       1,
     );
-    view.unmount();
   });
 
   it("열 핸들을 두 번째 열 오른쪽으로 드래그하면 moveTableColumn(0, 1)을 호출한다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const [firstColumnHandle] = screen.getAllByRole("button", {
       name: columnHandleLabel,
@@ -265,12 +267,11 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
       0,
       1,
     );
-    view.unmount();
   });
 
   it("제자리로 되돌리면 moveTableRow를 호출하지 않는다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const [firstRowHandle] = screen.getAllByRole("button", {
       name: rowHandleLabel,
@@ -282,12 +283,11 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
     expect(controller.commands.moveTableRow).not.toHaveBeenCalled();
-    view.unmount();
   });
 
   it("Escape로 드래그를 취소하면 아무 명령도 호출하지 않는다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const [firstRowHandle] = screen.getAllByRole("button", {
       name: rowHandleLabel,
@@ -300,14 +300,13 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
     expect(controller.commands.moveTableRow).not.toHaveBeenCalled();
-    view.unmount();
   });
 });
 
 describe("열 경계를 드래그해 너비를 조절한다", () => {
   it("드래그 중에는 명령을 호출하지 않고 pointer-up에 한 번만 resizeTableColumn을 호출한다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
       "[data-be-table-resize-handle]",
@@ -329,12 +328,11 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
       0,
       180,
     );
-    view.unmount();
   });
 
   it("드래그 중에는 col 요소의 너비를 프레임 단위로 시각 갱신한다", async () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
       "[data-be-table-resize-handle]",
@@ -350,12 +348,11 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
     expect(controller.commands.resizeTableColumn).not.toHaveBeenCalled();
 
     fireEvent.pointerUp(editable, { pointerId: 1 });
-    view.unmount();
   });
 
   it("Escape로 리사이즈를 취소하면 명령을 호출하지 않고 원래 너비로 복원한다", async () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
       "[data-be-table-resize-handle]",
@@ -371,12 +368,11 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
     const col = table.querySelector<HTMLElement>("colgroup col");
     expect(col?.style.width).toBe("120px");
     expect(controller.commands.resizeTableColumn).not.toHaveBeenCalled();
-    view.unmount();
   });
 
   it("최소 너비 아래로는 조절하지 않는다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
       "[data-be-table-resize-handle]",
@@ -392,14 +388,13 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
       0,
       48,
     );
-    view.unmount();
   });
 });
 
 describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
   it("Add row 클릭 시 마지막 행 뒤에 행을 추가한다", () => {
     const controller = fakeController();
-    const { view, table } = renderTable(controller);
+    const { table } = renderTable(controller);
     fireEvent.pointerMove(table);
 
     fireEvent.click(screen.getByRole("button", { name: addRowLabel }));
@@ -408,12 +403,11 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
       "table-1",
       2,
     );
-    view.unmount();
   });
 
   it("Add column 클릭 시 마지막 열 뒤에 열을 추가한다", () => {
     const controller = fakeController();
-    const { view, table } = renderTable(controller);
+    const { table } = renderTable(controller);
     fireEvent.pointerMove(table);
 
     fireEvent.click(screen.getByRole("button", { name: addColumnLabel }));
@@ -422,7 +416,6 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
       "table-1",
       2,
     );
-    view.unmount();
   });
 });
 
@@ -477,7 +470,7 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
 
   it("둘째 열 핸들이 둘째 행의 비병합 셀 경계에 위치한다", () => {
     const controller = fakeControllerWithMergedFirstRow();
-    const view = render(
+    render(
       withProvider(
         controller as unknown as ReturnType<typeof fakeController>,
         <>
@@ -523,12 +516,11 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     // left 200, width 100)이면 240이어야 한다. 첫 행만 봤다면 둘째 열
     // 핸들 자체가 없어 이 값이 나올 수 없었다.
     expect((columnHandles[1] as HTMLElement).style.left).toBe("240px");
-    view.unmount();
   });
 
   it("병합 셀이 가로지르는 행에는 리사이즈 strip을 그리지 않는다", () => {
     const controller = fakeControllerWithMergedFirstRow();
-    const view = render(
+    render(
       withProvider(
         controller as unknown as ReturnType<typeof fakeController>,
         <>
@@ -582,7 +574,6 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     expect(
       handles.filter((handle) => handle.style.left === "298px"),
     ).toHaveLength(2);
-    view.unmount();
   });
 });
 
@@ -602,15 +593,14 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
   it("행 핸들을 클릭하면 표 메뉴가 열린다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
-    view.unmount();
   });
 
   it("메뉴의 삭제 항목이 deleteTableRow를 행 인덱스로 호출한다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
 
@@ -619,12 +609,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
       0,
     );
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("메뉴의 삽입 항목이 위/아래 인덱스로 insertTableRow를 호출한다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Insert row below" }));
 
@@ -632,12 +621,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
       "table-1",
       1,
     );
-    view.unmount();
   });
 
   it("첫 행 메뉴에서 헤더 행을 토글한다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     const headerItem = screen.getByRole("menuitemcheckbox", {
       name: "Header row",
@@ -648,12 +636,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(controller.commands.toggleTableHeaderRow).toHaveBeenCalledWith(
       "table-1",
     );
-    view.unmount();
   });
 
   it("둘째 행 메뉴에는 헤더 토글 항목이 없다", () => {
     const controller = fakeController();
-    const { view, table } = renderTable(controller);
+    const { table } = renderTable(controller);
     fireEvent.pointerMove(table);
     const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
     const secondRowHandle = rowHandles[1];
@@ -665,12 +652,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
     expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
     expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
-    view.unmount();
   });
 
   it("배경색 팔레트가 대상 행 인덱스로 setTableCellBackgroundColor를 호출한다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     fireEvent.click(
       screen.getByRole("menuitem", { name: "Background color Yellow" }),
@@ -679,12 +665,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(
       controller.commands.setTableCellBackgroundColor,
     ).toHaveBeenCalledWith("table-1", { kind: "row", index: 0 }, "#FEF7E0");
-    view.unmount();
   });
 
   it("글자색 없음 항목은 색을 null로 지운다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
 
@@ -693,12 +678,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
       { kind: "row", index: 0 },
       null,
     );
-    view.unmount();
   });
 
   it("스크롤하면 메뉴 위치가 갱신된 핸들 geometry를 따라간다", () => {
     const controller = fakeController();
-    const { view, table } = openRowMenu(controller);
+    const { table } = openRowMenu(controller);
 
     const menu = screen.getByRole("menu", { name: "Table row menu" });
     const topBeforeScroll = menu.style.top;
@@ -710,12 +694,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
     fireEvent.scroll(document);
 
     expect(menu.style.top).not.toBe(topBeforeScroll);
-    view.unmount();
   });
 
   it("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    const { view, editable } = openRowMenu(controller);
+    const { editable } = openRowMenu(controller);
     // renderTable의 editable은 마운트 host(role="textbox")이고, 컨트롤러가
     // 그 안에 실제 contenteditable 자식을 넣는다(block-side-menu.test.tsx:
     // 57-59와 같은 구조). 초점을 받는 것은 후자이므로 단언 대상도 후자다.
@@ -731,12 +714,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
     // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못
     // 연결되면 초점은 그대로 body에 남아 이 단언이 실패한다.
     expect(document.activeElement).toBe(contentEditable);
-    view.unmount();
   });
 
   it("메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     const outsideButton = document.createElement("button");
     outsideButton.textContent = "outside";
@@ -748,23 +730,21 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(outsideButton);
     outsideButton.remove();
-    view.unmount();
   });
 
   it("메뉴 안(data-be-table-menu)을 클릭하면 닫히지 않는다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    openRowMenu(controller);
 
     const menu = screen.getByRole("menu", { name: "Table row menu" });
     fireEvent.pointerDown(menu);
 
     expect(screen.queryByRole("menu")).not.toBeNull();
-    view.unmount();
   });
 
   it("드래그로 재정렬한 뒤 이어지는 click은 메뉴를 열지 않는다", () => {
     const controller = fakeController();
-    const { view, table, editable } = renderTable(controller);
+    const { table, editable } = renderTable(controller);
     fireEvent.pointerMove(table);
     const [firstRowHandle] = screen.getAllByRole("button", {
       name: rowHandleLabel,
@@ -777,12 +757,11 @@ describe("행/열 핸들 클릭 메뉴", () => {
     fireEvent.click(firstRowHandle, { detail: 1 });
 
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("열 핸들 클릭은 열 메뉴를 열고 헤더 열을 토글한다", () => {
     const controller = fakeController();
-    const { view, table } = renderTable(controller);
+    const { table } = renderTable(controller);
     fireEvent.pointerMove(table);
     const [firstColumnHandle] = screen.getAllByRole("button", {
       name: columnHandleLabel,
@@ -802,6 +781,5 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(controller.commands.toggleTableHeaderColumn).toHaveBeenCalledWith(
       "table-1",
     );
-    view.unmount();
   });
 });
