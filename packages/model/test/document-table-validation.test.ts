@@ -64,7 +64,7 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
             rows: [
               {
                 ...table.rows[0],
-                cells: [{ ...table.rows[0].cells[0], rowSpan: 1 }],
+                cells: [{ ...table.rows[0]?.cells[0], rowSpan: 1 }],
               },
             ],
           },
