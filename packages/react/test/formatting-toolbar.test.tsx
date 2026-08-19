@@ -274,7 +274,7 @@ describe("FormattingToolbar 서식 툴바", () => {
       ),
     );
     const textNode = screen.getByTestId("outside").firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
 
     selectText(textNode, 0, 7);
 
@@ -294,7 +294,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode == null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
     const expectedButtons = [
@@ -333,13 +333,13 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode == null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
     const icon = screen
       .getByRole("button", { name: "Bold" })
       .querySelector("svg");
-    if (icon == null) throw new Error("Bold 버튼에 svg 아이콘이 없다");
+    if (!icon) throw new Error("Bold 버튼에 svg 아이콘이 없다");
     expect(icon.classList.contains("app-icon")).toBe(false);
     expect(icon.getAttribute("stroke")).toBe("currentColor");
     expect(icon.getAttribute("stroke-width")).toBe("2");
