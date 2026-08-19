@@ -15,8 +15,11 @@
 ## 예방 규칙
 
 - 콘텐츠에 따라 높이가 달라지는 `position: fixed` 오버레이는 렌더 직후 `useLayoutEffect`에서 자신의 `getBoundingClientRect()`를 재고, `defaultView.innerWidth`/`innerHeight` 안으로 좌표를 클램프한 뒤 그 값으로 다시 그린다. 앵커 좌표만으로 위치를 확정하지 않는다.
+- CSS `transform`으로 앵커에서 벗어나 그려지는 오버레이는 그 오프셋을 클램프에 알려준다(`useClampedMenuPosition`의 `anchor`). 클램프가 `left`/`top`을 렌더된 박스의 좌상단으로 가정하면 한 줄짜리 툴바도 화면 밖으로 밀린다 — #43의 최초 시도가 `FormattingToolbar`를 y=-37로 렌더했다.
+- 앵커 좌표가 그대로여도 오버레이 자신의 크기가 바뀌면 이미 계산한 클램프 값은 낡는다. `ResizeObserver`로 박스를 관찰해 다시 클램프한다 — `LinkToolbar`의 view→editing 전환이 폭을 약 80px에서 350px로 늘려 뷰포트 오른쪽으로 144px 넘쳤다(#43).
 - 오버레이가 뷰포트보다 클 수 있으면 `max-height`와 `overflow-y: auto`를 함께 준다. 클램프만으로는 화면보다 큰 메뉴의 아래쪽 항목에 닿을 수 없다.
 - 이런 오버레이에는 "가장 아래쪽(또는 가장 오른쪽) 항목을 실제로 클릭하는" e2e를 넣는다. jsdom은 rect가 전부 0이라 위치 결함을 잡지 못한다 — 단위 테스트만으로 커버했다고 판단하지 않는다.
+- 클램프 e2e는 어느 축이 실제로 깨지는지 먼저 확인하고 그 축을 assert한다. #43의 `FormattingToolbar` 테스트는 세로만 봤지만 마이그레이션 이전 코드에도 `top`에 48px 바닥값이 있어 그 assertion은 수정 전에도 통과했다 — 실제 결함은 가로였다(pre-fix 박스 좌측 x=-33.5 실측). assertion이 통과하는 축을 골라두면 회귀 테스트가 아무것도 지키지 않는다.
 
 ## 검증 방법
 
@@ -43,6 +46,17 @@ pnpm test:e2e --project=chromium e2e/formatting-toolbar.spec.ts e2e/link-toolbar
 - 각 컴포넌트의 e2e(`e2e/formatting-toolbar.spec.ts`, `link-toolbar.spec.ts`,
   `slash-menu.spec.ts`, `block-handle.spec.ts`, `table-format.spec.ts`)에
   "화면 밖 항목을 실제로 클릭"하는 PIT-0011 테스트를 추가했다.
+- `useClampedMenuPosition`은 클램프를 `ResizeObserver`로도 다시 돌린다(#43
+  리뷰). 앵커 좌표를 그대로 둔 채 박스만 커지는 경로가 실제로 있었다 —
+  `LinkToolbar`가 view에서 editing으로 바뀌면 `min-w-56` 입력이 들어와 폭이
+  약 80px에서 350px가 되고, `centerBelow`(`dx = -width/2`)라 증가분의 절반이
+  오른쪽으로 밀린다. 900px 뷰포트에서 툴바 오른쪽 끝이 1044.13(144px 초과)로
+  측정됐다. jsdom에는 `ResizeObserver`가 없어 훅이 feature-guard로 건너뛴다.
+- `block-side-menu.tsx`의 블록 메뉴에 `max-h-[calc(100vh-1rem)]`·
+  `overflow-y-auto`를 추가했다(#43 리뷰). 마이그레이션 당시 클램프만 적용해
+  예방 규칙의 `max-height` 항목을 빠뜨렸다 — 메뉴 높이 274px, 1280x200 뷰포트
+  에서 클램프 후에도 bottom=282로 82px가 화면 밖이라 맨 아래 Delete 항목이
+  `element is outside of the viewport`로 클릭되지 않았다.
 - R1 슬라이스 9a Issue [#3](https://github.com/cp949/geul/issues/3) 댓글에 실측 좌표(menu y=443, height=336, 뷰포트 720)를 기록함.
 
 ## 관련 문서
