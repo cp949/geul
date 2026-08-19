@@ -260,23 +260,24 @@ HTML이나 Markdown을 내부 저장 원본으로 사용하지 않는다. 모든
 
 ### 8.2 공개 API
 
+`io`는 통합 디스패처가 아니라 포맷별 개별 함수를 공개한다. 포맷은 호출 함수로 결정되므로 런타임 포맷 분기와 "미지원 포맷" 거부 코드가 없다.
+
 ```ts
-const imported = importDocument(source, { format: "html" });
-const markdown = exportDocument(document, {
-  format: "markdown",
-  mode: "strict",
-});
+const imported = importHtml(source);
+const markdown = exportMarkdown(document, { mode: "strict" });
 ```
 
 지원 계약은 다음과 같다.
 
-- `importDocument(source, { format: "html" })`
-- `importDocument(source, { format: "markdown" })`
-- `exportDocument(document, { format: "html" })`
-- `exportDocument(document, { format: "markdown", mode: "strict" })`
-- `exportDocument(document, { format: "markdown", mode: "lossy" })`
+- `importHtml(source, options?)` → `Result<{ document: Document; warnings: HtmlImportWarning[] }, ImportError>`
+- `importMarkdown(source, options?)` → `Result<{ document: Document; warnings: ImportWarning[] }, ImportError>`
+- `exportHtml(document)` → `Result<string, ExportError>`
+- `exportMarkdown(document, { mode: "strict" })` → `Result<string, MarkdownExportError>`
+- `exportMarkdown(document, { mode: "lossy" })` → `Result<{ markdown: string; warnings: MarkdownLoss[] }, ExportError>`
 
-import 결과는 문서와 경고 목록을 반환한다. export 결과는 문자열과 경고 목록을 반환한다. 문서 전체를 만들 수 없는 오류에서는 부분 문서를 반환하지 않는다.
+두 import 함수의 `options`는 `{ createId?: IdFactory }`(`IdFactory`는 `model`이 소유)이며 ID 생성기를 주입해 결정적 ID를 만든다.
+
+import 결과는 문서와 경고 목록을 함께 반환한다. export 결과는 HTML과 `strict` Markdown에서 문자열만 반환하고, 경고 목록은 손실을 허용하는 `lossy` Markdown에서만 반환한다. 문서 전체를 만들 수 없는 오류에서는 부분 문서를 반환하지 않는다.
 
 ### 8.3 HTML 계약
 
