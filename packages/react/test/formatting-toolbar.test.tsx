@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 
+/**
+ * FormattingToolbar 컴포넌트: 텍스트 선택에 따른 서식 툴바 노출과 mark 토글
+ * 버튼 상태, 블록 종류 select 표시·변경, 에디터 바깥 선택 시 숨김 유지,
+ * 아이콘·title 렌더링과 소비자 LucideProvider 설정 격리를 검증한다.
+ */
+
 import type { EditorController } from "@cp949/geul-core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { LucideProvider } from "lucide-react";
@@ -30,7 +36,11 @@ const fakeController = (
 ) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
-    editable.contentEditable = "true";
+    // 실제 브라우저와 달리 jsdom은 contentEditable IDL 프로퍼티를
+    // contenteditable 속성으로 반영하지 않는다. formatting-toolbar.tsx에는
+    // 이 속성을 읽는 초점 복구 경로가 없지만, 실제 브라우저 DOM 동작과 fake를
+    // 맞추기 위해 속성을 직접 세운다.
+    editable.setAttribute("contenteditable", "true");
     editable.textContent = "editor text";
     element.append(editable);
   }),

@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 
+/**
+ * TableHandles 컴포넌트: 표 행/열 핸들의 hover 노출, 드래그 재정렬, 열 너비
+ * 조절, 핸들 클릭 메뉴, 병합 셀 geometry 복구를 검증한다.
+ */
+
 import type { EditorController } from "@cp949/geul-core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -38,7 +43,11 @@ const fakeController = ({
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
-    editable.contentEditable = "true";
+    // 실제 브라우저와 달리 jsdom은 contentEditable IDL 프로퍼티를
+    // contenteditable 속성으로 반영하지 않는다. table-handles.tsx:340의
+    // focusEditor는 '[contenteditable="true"]'로 대상을 찾으므로, 속성을
+    // 직접 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
+    editable.setAttribute("contenteditable", "true");
     const table = document.createElement("table");
     table.setAttribute("data-be-block-id", "table-1");
     // 실제 에디터의 renderHTML(applyTableDomAttributes)과 동일하게 열
@@ -425,7 +434,9 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     ...fakeController(),
     mount: vi.fn((element: HTMLElement) => {
       const editable = document.createElement("div");
-      editable.contentEditable = "true";
+      // 위 fakeController와 같은 이유(jsdom이 contentEditable IDL 프로퍼티를
+      // 속성으로 반영하지 않음)로 속성을 직접 세운다.
+      editable.setAttribute("contenteditable", "true");
       const table = document.createElement("table");
       table.setAttribute("data-be-block-id", "table-1");
       table.setAttribute(

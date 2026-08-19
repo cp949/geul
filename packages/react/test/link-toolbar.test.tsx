@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 
+/**
+ * LinkToolbar 컴포넌트: 텍스트 선택에 따른 링크 추가/편집/제거 컨트롤 노출,
+ * 허용되지 않는 링크 URL의 거부 메시지, selectionchange에 따른 표시·숨김 전환을
+ * 검증한다.
+ */
+
 import type { EditorController } from "@cp949/geul-core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
@@ -18,7 +24,11 @@ const fakeController = ({
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
-    editable.contentEditable = "true";
+    // 실제 브라우저와 달리 jsdom은 contentEditable IDL 프로퍼티를
+    // contenteditable 속성으로 반영하지 않는다. link-toolbar.tsx:145의
+    // closeAndRestoreFocus는 '[contenteditable="true"]'로 대상을 찾으므로,
+    // 속성을 직접 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
+    editable.setAttribute("contenteditable", "true");
     editable.textContent = "editor text";
     element.append(editable);
   }),
