@@ -31,7 +31,7 @@ pnpm --filter @cp949/geul-core typecheck
 
 - 커밋 `ac00583`+`747e295`(Issue #32) — `packages/core/tsconfig.test.json` 신설과 `typecheck` 스크립트 변경. 수정 전 `_pit32TypecheckProbe` 삽입이 조용히 통과(PASS)하고, 수정 후 같은 삽입이 실패(FAIL, `string`을 `number`에 대입 불가 에러)하는 것을 직접 확인했다.
 - 같은 PR에서 config를 켜자마자(별도 유예 기간 없이) `packages/core/test/`에 숨어있던 실제 타입 오류 38건이 드러났다 — `test/public-types.test.ts`의 Node 앰비언트 타입(`node:fs`, `process` 등) 미해결 7건(`tsconfig.test.json`에 `"types": ["node"]` 누락이 원인), `test/table-commands.test.ts`(30건)와 `test/table-keyboard-extension.test.ts`(1건)의 `Editor.getJSON()` 유니온 타입(`@tiptap/core@3.30.1`의 `DocumentType<..., (NodeType|TextType)[]>`) 좁히기 누락 31건. 이론적 위험이 아니라 실제 발생 사례다 — 새로 켜는 test-typecheck config는 이미 존재하던 진짜 버그를 즉시 드러낼 가능성이 높다.
-- `io`/`model`/`react` 3개 패키지도 동일 구조라 같은 결함이 있다 — 적용은 Issue #56으로 분리했다(현재 이슈 범위는 core로 한정).
+- `io`/`model`/`react` 3개 패키지도 동일 구조라 같은 결함이 있었다 — Issue #56에서 적용 완료했다. `io`: 커밋 `e8c534e`+`ab09c3d`, 숨어있던 타입 오류 2건(삼항식에 잘못 적용한 `as const`, `exactOptionalPropertyTypes` 아래 `undefined`가 섞인 캐스트). `model`: 커밋 `4c6ee04`+`58437e0`, 1건(`noUncheckedIndexedAccess` 아래 배열 인덱스 접근 미가드). `react`: 커밋 `bf8a09e`+`b031702`, 6건(옵셔널 체이닝 결과의 `undefined`를 `=== null` 가드가 걸러내지 못함 — 타입 수정이자 잠재 런타임 버그 수정이었다). core의 38건과 달리 tiptap `Editor.getJSON()` 유니온 타입 좁히기 패턴은 이번 3개 패키지에서 재현되지 않았다(해당 API를 쓰는 test 파일이 없었다).
 
 ## 관련 문서
 
