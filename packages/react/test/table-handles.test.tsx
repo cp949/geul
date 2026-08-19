@@ -713,13 +713,24 @@ describe("행/열 핸들 클릭 메뉴", () => {
     view.unmount();
   });
 
-  it("Escape로 메뉴를 닫는다", () => {
+  it("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    const { view } = openRowMenu(controller);
+    const { view, editable } = openRowMenu(controller);
+    // renderTable의 editable은 마운트 host(role="textbox")이고, 컨트롤러가
+    // 그 안에 실제 contenteditable 자식을 넣는다(block-side-menu.test.tsx:
+    // 57-59와 같은 구조). 초점을 받는 것은 후자이므로 단언 대상도 후자다.
+    const contentEditable = editable.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (contentEditable === null) throw new Error("Editable was not mounted");
 
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(screen.queryByRole("menu")).toBeNull();
+    // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
+    // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못
+    // 연결되면 초점은 그대로 body에 남아 이 단언이 실패한다.
+    expect(document.activeElement).toBe(contentEditable);
     view.unmount();
   });
 

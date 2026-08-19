@@ -132,16 +132,21 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
       </>,
     ),
   );
-  const editable = screen.getByRole("textbox", { name: "Editor" });
-  const table = editable.querySelector("table");
-  const cell1 = editable.querySelector('[data-be-cell-id="cell-1"]');
-  const cell2 = editable.querySelector('[data-be-cell-id="cell-2"]');
+  const host = screen.getByRole("textbox", { name: "Editor" });
+  const table = host.querySelector("table");
+  const cell1 = host.querySelector('[data-be-cell-id="cell-1"]');
+  const cell2 = host.querySelector('[data-be-cell-id="cell-2"]');
   if (table === null || cell1 === null || cell2 === null) {
     throw new Error("Table fixture was not rendered");
   }
   stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
   stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
-  return { view, table, cell1, cell2 };
+  // host(role="textbox")는 마운트 host이고, 컨트롤러가 그 안에 실제
+  // contenteditable 자식을 넣는다(block-side-menu.test.tsx:57-59와 같은
+  // 구조) — Escape 초점 복구 단언은 초점을 실제로 받는 후자를 대상으로 한다.
+  const editable = host.querySelector<HTMLElement>('[contenteditable="true"]');
+  if (editable === null) throw new Error("Editable was not mounted");
+  return { view, table, cell1, cell2, editable };
 };
 
 const triggerSelectionChange = () => {
@@ -351,6 +356,32 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     });
 
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+    view.unmount();
+  });
+
+  it("Escape로 서식 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { view, editable } = renderTable(controller);
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+    expect(
+      screen.getByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+    // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
+    // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못
+    // 연결되면 초점은 그대로 body에 남아 이 단언이 실패한다.
+    expect(document.activeElement).toBe(editable);
     view.unmount();
   });
 
