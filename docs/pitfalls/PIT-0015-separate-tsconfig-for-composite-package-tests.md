@@ -18,6 +18,7 @@
 - 패키지의 `typecheck` 스크립트를 `tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit`로 두 config를 순차 실행하게 만든다. `build` 스크립트(`tsc -b`)는 건드리지 않는다 — 빌드 대상은 여전히 `src`만이다.
 - 새 tsconfig를 추가·수정하면 반드시 의도적으로 깬 타입 오류(테스트 파일에 타입이 안 맞는 임시 줄 추가)로 실제로 잡히는지 확인한 뒤 되돌린다. 확인 없이 "include를 넓혔으니 됐다"고 넘어가면 config 문법 오류나 include 패턴 실수로 여전히 아무것도 안 잡힐 수 있다.
 - `tsc -b`(build) 실행 후 해당 패키지의 `dist/`에 `dist/test/` 디렉터리나 `*.test.js`/`*.test.d.ts` 산출물이 새로 생기지 않았는지 확인한다(단순히 테스트 파일과 이름이 겹치는 `dist/table-grid.js` 같은 정상 src 산출물과 혼동하지 않는다) — 생겼다면 `tsconfig.test.json`이 실수로 빌드 파이프라인(`references`나 `tsc -b`)에 섞였다는 신호다.
+- `tsconfig.test.json`은 `references`가 없어 워크스페이스 의존 패키지(`@cp949/geul-model`, `@cp949/geul-core` 등) 타입을 project reference가 아니라 `node_modules` → `package.json`의 `exports.types` → `dist/index.d.ts` 경로로 해석한다. 따라서 `turbo.json`의 `typecheck` 태스크는 `dependsOn`에 `^typecheck`뿐 아니라 `^build`도 넣어야 한다 — 없으면 `dist/`가 없는 clean checkout에서 `pnpm typecheck`(또는 `turbo run typecheck`)만 단독 실행할 때 의존 패키지의 `dist/`가 없어 `Cannot find module` 에러로 실패한다(이 실패는 test tsconfig뿐 아니라 project reference로 선언은 돼 있지만 `tsc -p`(`-b` 아님)라 참조를 자동 빌드하지 않는 메인 `tsconfig.json`에도 똑같이 번진다). `pnpm verify`(lint→build→typecheck 순서) 경로에선 항상 build가 먼저 돌아 드러나지 않는다 — clean checkout에서 `pnpm typecheck`만 단독 실행하는 경로(로컬 최초 클론 직후, 또는 build 캐시가 없는 CI 잡)에서만 드러난다.
 
 ## 검증 방법
 
@@ -26,6 +27,15 @@ pnpm --filter @cp949/geul-core typecheck
 ```
 
 변이 절차: `packages/core/test/table-grid.test.ts` 맨 끝에 `const _pit32TypecheckProbe: number = "intentional-type-error-for-issue-32-verification";`를 추가하고 위 명령을 재실행해 실패하는지 확인한다. 확인 후 즉시 되돌리고 `git diff -- packages/core/test/table-grid.test.ts`가 무출력인지 재확인한다.
+
+`turbo.json`의 `^build` 의존성은 다음으로 재현·확인한다(`--filter=@cp949/geul-io`에서 `pnpm --filter <pkg> typecheck`는 pnpm이 직접 스크립트를 실행해 turbo 태스크 그래프를 타지 않으므로 재현되지 않는다 — 반드시 `turbo run`을 거쳐야 한다):
+
+```bash
+rm -rf packages/model/dist
+pnpm exec turbo run typecheck --filter=@cp949/geul-io --force
+```
+
+`^build`가 빠진 상태에서는 `Cannot find module '@cp949/geul-model'` 에러로 실패한다. `--force`는 이전 실행이 남긴 turbo 캐시를 무시하도록 강제한다 — 캐시가 남아있으면 `model:build`가 실제로 재실행되지 않았는데도 replay된 과거 로그로 통과한 것처럼 보일 수 있다. 확인 후 `pnpm build`로 `dist/`를 복구한다.
 
 ## 실제 근거
 
