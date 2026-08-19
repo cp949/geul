@@ -181,7 +181,7 @@ test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
     .toBeLessThan(24);
 });
 
-test("선택 영역이 뷰포트 상단에 붙어 있어도 Bold 버튼을 클릭할 수 있다 (PIT-0011)", async ({
+test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체가 화면 안에 남는다 (PIT-0011)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -207,18 +207,38 @@ test("선택 영역이 뷰포트 상단에 붙어 있어도 Bold 버튼을 클�
       return range.getBoundingClientRect().toJSON();
     });
 
-  // 첫 줄이 뷰포트 맨 위(y≈2)에 붙도록 정확히 그만큼만 스크롤한다 —
-  // FormattingToolbar는 선택 위(translateY(-100%-0.5rem))에 뜨므로,
-  // 클램프가 없으면 이 위치에서 뷰포트 밖(음수 y)으로 밀려난다(PIT-0011).
+  // 첫 줄이 뷰포트 맨 위(y≈2)로 오도록 정확히 그만큼만 스크롤해 선택을 화면
+  // 좌상단 모서리에 붙인다. 데모 셸(width: min(76rem, 100% - 2rem), 가운데
+  // 정렬) + .editor-panel 테두리 + .be-editor 패딩 1.5rem이라 1280px 뷰포트에서
+  // 첫 줄 텍스트의 좌측은 x≈50, 선택 중심은 x≈82다 — 즉 세로뿐 아니라 가로로도
+  // 이미 뷰포트 가장자리다.
   await page.evaluate((delta) => window.scrollBy(0, delta), selectionBox.y - 2);
 
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+
+  // 가로: 이 시나리오의 실제 RED. 클램프 이전 코드는
+  // left = min(max(중심x, 96), max(innerWidth - 96, 96))로 96px 바닥값만 뒀는데,
+  // 툴바는 translate(-50%)로 그 좌표에 중심이 걸리고 폭이 약 250px(Block type
+  // select + 아이콘 버튼 5개)이라 박스 좌측이 96 - 125 ≈ -31로 뷰포트를 벗어났다
+  // (중심 x≈82도 폭 절반보다 작아 바닥값이 걸리든 말든 음수다). 가장 왼쪽 컨트롤인
+  // Block type select가 화면 밖으로 잘려나가는 PIT-0011 그 결함이다.
+  await expect
+    .poll(async () => (await toolbar.boundingBox())?.x ?? -1)
+    .toBeGreaterThanOrEqual(0);
+
+  // 세로: 클램프 이전 코드는 top = max(bounds.top, 48)로 48px 바닥값을 뒀고, 한 줄
+  // 툴바 높이가 약 37px이라 박스 상단이 48 - 37 - 8 ≈ 3으로 이미 화면 안이었다.
+  // 즉 이 assertion은 PIT-0011의 원래 실패를 재현하지 않고 useClampedMenuPosition의
+  // anchor 계약(centerAbove = translate(-50%, calc(-100% - 0.5rem)) 오프셋 상쇄)을
+  // 지킨다 — anchor 없이 top만 클램프했던 최초 마이그레이션은 여기서 y=-37로 렌더됐다.
+  // MENU_VIEWPORT_MARGIN이 8을 보장하지만(minTop = 8 + height + 8이라 박스 상단이
+  // 정확히 8) 경계값 8은 서브픽셀 반올림에 흔들리므로 0으로 둔다.
   await expect
     .poll(async () => (await toolbar.boundingBox())?.y ?? -1)
     .toBeGreaterThanOrEqual(0);
 
-  // 클램프가 없으면 Bold 버튼이 뷰포트 밖으로 나가 클릭이 "element is
-  // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
+  // Bold는 툴바 오른쪽 끝이라 클램프 없이도 클릭 자체는 됐다. 클램프로 위치를
+  // 옮긴 뒤에도 선택을 잃지 않고 mark가 적용되는지 확인하는 용도다.
   await page.getByRole("button", { name: "Bold" }).click();
   await expect(editable.locator("strong")).toHaveText("first line");
 });
