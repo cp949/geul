@@ -1,6 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
-const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
+const openDemo = async (page: Page) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Editor" });
   const editable = editor.locator('[contenteditable="true"]');
@@ -8,12 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-const insertTable = async (
-  page: Parameters<typeof test>[0]["page"],
-  editable: ReturnType<typeof openDemo> extends Promise<infer T>
-    ? T["editable"]
-    : never,
-) => {
+const insertTable = async (page: Page, editable: Locator) => {
   await editable.click();
   await page.keyboard.type("/table");
   await expect(page.getByRole("option", { name: /Table/ })).toBeVisible();

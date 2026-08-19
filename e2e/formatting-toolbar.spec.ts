@@ -1,9 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
 
-const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
+const openDemo = async (page: Page) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Editor" });
   const editable = editor.locator('[contenteditable="true"]');

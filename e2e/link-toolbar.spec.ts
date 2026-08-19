@@ -1,9 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
 
-const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
+const openDemo = async (page: Page) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Editor" });
   const editable = editor.locator('[contenteditable="true"]');
@@ -155,7 +155,7 @@ test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오�
   await editable
     .locator("p")
     .first()
-    .evaluate((block) => {
+    .evaluate((block: HTMLParagraphElement) => {
       const text = block.firstChild;
       if (text === null) throw new Error("First block has no text");
       const range = document.createRange();
