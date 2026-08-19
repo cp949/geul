@@ -598,12 +598,21 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
   });
 
-  it("메뉴의 삭제 항목이 deleteTableRow를 행 인덱스로 호출한다", () => {
+  it("메뉴의 삭제 항목이 deleteTableRow를 행 인덱스로 호출하고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    openRowMenu(controller);
+    const { editable } = openRowMenu(controller);
+    // openRowMenu가 반환하는 editable은 renderTable의 반환값과 같은 마운트
+    // host(role="textbox")다 — 컨트롤러가 그 안에 실제 contenteditable
+    // 자식을 넣는다("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다" 테스트와 같은
+    // 구조). closeMenu가 초점을 주는 대상은 후자다.
+    const contentEditable = editable.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (contentEditable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
 
+    expect(document.activeElement).toBe(contentEditable);
     expect(controller.commands.deleteTableRow).toHaveBeenCalledWith(
       "table-1",
       0,
