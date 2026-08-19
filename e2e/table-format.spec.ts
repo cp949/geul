@@ -124,13 +124,27 @@ test("열 핸들 메뉴에서 열을 삭제한다", async ({ page }) => {
   await expect(table.locator("tr").first().locator("td")).toHaveCount(2);
 });
 
-test("Escape로 표 메뉴를 닫는다", async ({ page }) => {
-  await insertTable(page);
+test("Escape로 표 메뉴를 닫으면 편집기로 초점을 복구한다", async ({ page }) => {
+  const { editable } = await insertTable(page);
   const menu = await openHandleMenu(page, "row");
 
   await page.keyboard.press("Escape");
 
   await expect(menu).toHaveCount(0);
+  await expect(editable).toBeFocused();
+});
+
+test("표 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다", async ({
+  page,
+}) => {
+  await insertTable(page);
+  const menu = await openHandleMenu(page, "row");
+
+  const saveButton = page.getByRole("button", { name: "Save JSON" });
+  await saveButton.click();
+
+  await expect(menu).toHaveCount(0);
+  await expect(saveButton).toBeFocused();
 });
 
 test("메뉴를 연 채 스크롤해도 메뉴가 핸들 위치를 따라간다", async ({
@@ -345,6 +359,25 @@ test("Escape로 셀 서식 메뉴를 닫는다 (PIT-0009)", async ({ page }) => 
 
   await expect(menu).toHaveCount(0);
   await expect(editable).toBeFocused();
+});
+
+test("셀 서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않는다 (PIT-0009)", async ({
+  page,
+}) => {
+  const { table } = await insertTable(page);
+  const cell = table.locator("td").first();
+  await cell.click({ clickCount: 3 });
+
+  const trigger = page.getByRole("button", { name: "Cell formatting" });
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "Cell formatting" });
+  await expect(menu).toBeVisible();
+
+  const saveButton = page.getByRole("button", { name: "Save JSON" });
+  await saveButton.click();
+
+  await expect(menu).toHaveCount(0);
+  await expect(saveButton).toBeFocused();
 });
 
 test("키보드로 셀 서식을 적용한 뒤 편집 초점과 셀 선택을 복구한다", async ({
