@@ -5,6 +5,7 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 const mergeLabel = "Merge cells";
@@ -21,6 +22,13 @@ const buttonClassName =
 // 서식 메뉴를 토큰 위치에서 약간 아래로 띄운다 — 정확한 도킹 위치는
 // PIT-0011 클램프가 뷰포트 안으로 다시 접어 넣으므로 대략치면 충분하다.
 const CELL_FORMAT_MENU_OFFSET = 32;
+
+// useDismissOnOutsideOrEscape allow-list. table-handles.tsx와 같은 이유로
+// 모듈 스코프 상수로 둔다.
+const CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS = [
+  "[data-be-cell-format-menu]",
+  "[data-be-cell-format-trigger]",
+] as const;
 
 type ToolbarState = {
   tableBlockId: string;
@@ -149,35 +157,16 @@ export const TableSelectionToolbar = () => {
   }, [editor, element]);
 
   // 서식 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로
-  // 닫는 UI는 병렬 e2e로 검증한다 — table-handles.tsx의 closeMenu와 같은 패턴).
-  useEffect(() => {
-    if (!formatMenuOpen || element === null) return;
-    const ownerDocument = element.ownerDocument;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest("[data-be-cell-format-menu]") !== null ||
-        target.closest("[data-be-cell-format-trigger]") !== null
-      ) {
-        return;
-      }
-      setFormatMenuOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      closeFormatMenu();
-    };
-
-    ownerDocument.addEventListener("pointerdown", handlePointerDown);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
-    return () => {
-      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [formatMenuOpen, element, closeFormatMenu]);
+  // 닫는 UI는 병렬 e2e로 검증한다). 리스너는 useDismissOnOutsideOrEscape가
+  // 소유한다 — table-handles.tsx의 closeMenu와 같은 훅(Issue #20).
+  const dismissFormatMenu = useCallback(() => setFormatMenuOpen(false), []);
+  useDismissOnOutsideOrEscape({
+    active: formatMenuOpen,
+    element,
+    allowSelectors: CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS,
+    onDismiss: dismissFormatMenu,
+    onEscape: closeFormatMenu,
+  });
 
   const { menuRef, style } = useClampedMenuPosition(
     toolbarState?.left ?? 0,
