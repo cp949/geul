@@ -39,7 +39,7 @@ export const TableCellFormatMenu = ({
   onClose,
 }: TableCellFormatMenuProps) => {
   const editor = useEditor();
-  const { menuRef, position } = useClampedMenuPosition(left, top);
+  const { menuRef, style } = useClampedMenuPosition(left, top);
   const target = { kind: "cells", cellIds } as const;
 
   const runAndClose = (run: () => void) => {
@@ -108,7 +108,7 @@ export const TableCellFormatMenu = ({
       data-be-cell-format-menu=""
       ref={menuRef}
       role="menu"
-      style={{ left: position.left, top: position.top }}
+      style={style}
     >
       {renderPalette("text", "Text color", TABLE_TEXT_COLORS)}
       {renderPalette("background", "Background color", TABLE_BACKGROUND_COLORS)}

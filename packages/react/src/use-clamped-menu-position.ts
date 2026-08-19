@@ -1,4 +1,10 @@
-import { type RefObject, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type RefObject,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 const MENU_VIEWPORT_MARGIN = 8;
 
@@ -12,7 +18,8 @@ export type ClampedMenuPosition = {
  * 실제 크기를 재서 뷰포트 안으로 접어 넣는다(PIT-0011). 앵커 좌표(left,
  * top)만으로 위치를 정하면 가변 높이 메뉴가 화면 밖으로 밀려 그 항목은
  * 클릭 자체가 불가능해진다. TableHandleMenu와 TableCellFormatMenu가
- * 공용으로 쓴다.
+ * 공용으로 쓴다. `style`은 소비 측이 `{ left: position.left, top:
+ * position.top }`를 매번 다시 조립하지 않도록 완성된 형태로 제공한다.
  */
 export const useClampedMenuPosition = (
   left: number,
@@ -20,6 +27,7 @@ export const useClampedMenuPosition = (
 ): {
   menuRef: RefObject<HTMLDivElement | null>;
   position: ClampedMenuPosition;
+  style: CSSProperties;
 } => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<ClampedMenuPosition>({ left, top });
@@ -43,5 +51,9 @@ export const useClampedMenuPosition = (
     });
   }, [left, top]);
 
-  return { menuRef, position };
+  return {
+    menuRef,
+    position,
+    style: { left: position.left, top: position.top },
+  };
 };

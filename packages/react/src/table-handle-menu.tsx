@@ -44,7 +44,7 @@ export const TableHandleMenu = ({
   onClose,
 }: TableHandleMenuProps) => {
   const editor = useEditor();
-  const { menuRef, position } = useClampedMenuPosition(left, top);
+  const { menuRef, style } = useClampedMenuPosition(left, top);
   const isRow = kind === "row";
   const target: TableCellTarget = isRow
     ? { kind: "row", index }
@@ -135,7 +135,7 @@ export const TableHandleMenu = ({
       data-be-table-menu=""
       ref={menuRef}
       role="menu"
-      style={{ left: position.left, top: position.top }}
+      style={style}
     >
       <button
         className={menuItemClassName}

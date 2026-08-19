@@ -96,4 +96,20 @@ describe("useClampedMenuPosition", () => {
     expect(probe.dataset.left).toBe("8");
     expect(probe.dataset.top).toBe("8");
   });
+
+  it("마운트 후 left/top이 바뀌면 새 좌표 기준으로 다시 클램프한다", () => {
+    stubMenuRect(300, 400);
+
+    const { getByTestId, rerender } = render(<Probe left={100} top={100} />);
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("100");
+    expect(probe.dataset.top).toBe("100");
+
+    rerender(<Probe left={900} top={700} />);
+
+    // maxLeft = 1000 - 300 - 8 = 692, maxTop = 800 - 400 - 8 = 392
+    expect(probe.dataset.left).toBe("692");
+    expect(probe.dataset.top).toBe("392");
+  });
 });
