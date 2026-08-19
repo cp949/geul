@@ -15,3 +15,4 @@
 | `PIT-0009` | UI를 닫는 키보드 핸들러는 병렬 e2e로 검증 | `ACTIVE` | react·e2e | R1 | [상세](./PIT-0009-verify-keyboard-close-with-parallel-e2e.md) |
 | `PIT-0010` | 병합 셀에서는 오버레이 hit-test와 selection 이동을 명시적으로 다룸 | `ACTIVE` | react·core | R1 | [상세](./PIT-0010-position-overlays-and-selection-for-merged-cells.md) |
 | `PIT-0011` | 화면 밖으로 나가는 fixed 오버레이는 렌더 후 크기를 재서 접음 | `ACTIVE` | react | R1 | [상세](./PIT-0011-clamp-fixed-overlays-into-viewport.md) |
+| `PIT-0012` | 합성 paste 이벤트는 ClipboardEventInit이 아니라 defineProperty로 clipboardData를 얹음 | `ACTIVE` | e2e | R1 | [상세](./PIT-0012-synthesize-paste-events-without-clipboardeventinit.md) |

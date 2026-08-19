@@ -8,7 +8,9 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("선택 텍스트에 링크를 만들고 undo 1회로 복원한다", async ({ page }) => {
+test("선택 텍스트에 링크를 만들고 undo 1회로 복원한다 @core", async ({
+  page,
+}) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("Hello R1");

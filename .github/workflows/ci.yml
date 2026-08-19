@@ -12,7 +12,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -30,8 +30,11 @@ jobs:
       - name: Install dependencies from lockfile
         run: pnpm install --frozen-lockfile
 
-      - name: Install pinned Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install pinned Playwright browsers
+        # R1 슬라이스 13(AC-05)부터 playwright.config.ts가 firefox/webkit
+        # 프로젝트를 추가했고 pnpm verify(test:e2e)는 --project 필터 없이
+        # 3-엔진 전부를 돈다 — 셋 다 설치해야 CI가 로컬과 같은 결과를 낸다.
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Verify distribution and browser flows
         run: pnpm verify

@@ -39,7 +39,7 @@ const waitForCaretInCell = async (page: Page, cellId: string) => {
   }, cellId);
 };
 
-test("Tab은 같은 행의 다음 셀로, 마지막 열에서는 다음 행의 첫 셀로 이동한다", async ({
+test("Tab은 같은 행의 다음 셀로, 마지막 열에서는 다음 행의 첫 셀로 이동한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

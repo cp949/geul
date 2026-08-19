@@ -100,7 +100,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 
 | ID | 기능 | 목표 | 단계 | 상태 | BlockNote 근거 |
 | --- | --- | --- | --- | --- | --- |
-| `INL-001` | 일반 텍스트 | `PARITY` | R1 | `NOT_STARTED` | `features/blocks/inline-content.mdx` |
+| `INL-001` | 일반 텍스트 | `PARITY` | R1 | `VERIFIED` | `features/blocks/inline-content.mdx` — R0부터 문단·H1-H3 기본 편집으로 동작, R1 slash 메뉴·formatting toolbar와 통합 완료 |
 | `INL-002` | 링크와 링크 click 정책 | `PARITY` | R1 | `VERIFIED` | `features/blocks/inline-content.mdx` |
 | `INL-003` | 굵게 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
 | `INL-004` | 기울임 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |

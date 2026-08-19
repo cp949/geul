@@ -44,7 +44,7 @@ const dragSelectCells = async (
   await page.mouse.up();
 };
 
-test("셀 범위를 드래그 선택해 병합하고 undo 1회로 복원한다", async ({
+test("셀 범위를 드래그 선택해 병합하고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

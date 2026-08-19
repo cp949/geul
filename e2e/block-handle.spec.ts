@@ -8,7 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복원한다", async ({
+test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

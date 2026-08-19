@@ -8,7 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다", async ({
+test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

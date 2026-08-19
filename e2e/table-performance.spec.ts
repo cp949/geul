@@ -52,7 +52,13 @@ const median = (samples: readonly number[]): number => {
 const formatSamples = (samples: readonly number[]): string =>
   samples.map((sample) => sample.toFixed(1)).join(", ");
 
-/** TSV를 클립보드 붙여넣기로 dispatch하고, 마지막 셀 렌더까지 걸린 ms를 잰다. */
+/**
+ * TSV를 클립보드 붙여넣기로 dispatch하고, 마지막 셀 렌더까지 걸린 ms를 잰다.
+ *
+ * ClipboardEvent 생성자의 clipboardData 옵션 대신 평범한 Event에
+ * defineProperty로 clipboardData를 얹는다 — Firefox는 스크립트가 생성한
+ * ClipboardEvent의 clipboardData 초기값을 반영하지 않는다(PIT-0012).
+ */
 const measurePasteMs = (page: Page, tsv: string): Promise<number> =>
   page.evaluate(async (text) => {
     const target = document.querySelector('[contenteditable="true"]');
@@ -61,13 +67,12 @@ const measurePasteMs = (page: Page, tsv: string): Promise<number> =>
     data.setData("text/plain", text);
 
     const start = performance.now();
-    target.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: data,
+      configurable: true,
+    });
+    target.dispatchEvent(event);
     await new Promise<void>((resolve) => {
       const check = () => {
         const cells = document.querySelectorAll("table td");

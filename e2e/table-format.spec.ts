@@ -43,7 +43,7 @@ const openHandleMenu = async (page: Page, kind: "row" | "column") => {
   return menu;
 };
 
-test("행 핸들 메뉴에서 헤더 행을 켜고 undo 1회로 복원한다", async ({
+test("행 핸들 메뉴에서 헤더 행을 켜고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {
   const { table } = await insertTable(page);
@@ -223,7 +223,7 @@ const dragSelectCells = async (
   await page.mouse.up();
 };
 
-test("셀 하나를 트리플클릭으로 선택해 배경색을 적용하고 undo로 되돌린다", async ({
+test("셀 하나를 트리플클릭으로 선택해 배경색을 적용하고 undo로 되돌린다 @core", async ({
   page,
 }) => {
   const { table } = await insertTable(page);
@@ -314,7 +314,7 @@ test("병합 셀 커서를 유지하며 색상과 정렬을 연속 적용한다"
   await expect(cell(0)).toHaveCSS("text-align", "center");
 });
 
-test("셀 정렬을 적용하고 undo로 되돌린다", async ({ page }) => {
+test("셀 정렬을 적용하고 undo로 되돌린다 @core", async ({ page }) => {
   const { table } = await insertTable(page);
   const cell = table.locator("td").first();
   await cell.click({ clickCount: 3 });

@@ -23,7 +23,9 @@ const insertTable = async (
   return table;
 };
 
-test("슬래시 메뉴에서 표를 삽입하고 undo 1회로 복원한다", async ({ page }) => {
+test("슬래시 메뉴에서 표를 삽입하고 undo 1회로 복원한다 @core", async ({
+  page,
+}) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
 
@@ -128,7 +130,7 @@ test("열 핸들을 드래그해 열 순서를 재정렬하고 undo 1회로 복�
   await expect(cell(0, 1)).toHaveText("col-b");
 });
 
-test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다", async ({
+test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -186,7 +188,9 @@ test("Escape로 리사이즈를 취소하면 너비가 원래대로 복원된다
   await expect(editable).toBeVisible();
 });
 
-test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다", async ({ page }) => {
+test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다 @core", async ({
+  page,
+}) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
 
@@ -229,7 +233,7 @@ test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다", async 
   );
 });
 
-test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다", async ({
+test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -244,13 +248,16 @@ test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다
       "text/html",
       "<table><tbody><tr><td>ext</td></tr></tbody></table>",
     );
-    target.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    // Firefox는 ClipboardEvent 생성자의 clipboardData 초기값을 합성
+    // (untrusted) 이벤트에 반영하지 않는다 — clipboardData 자체는 null이
+    // 아니지만 types가 빈 배열로 나온다. 대신 평범한 Event에 clipboardData를
+    // defineProperty로 얹으면 세 엔진 모두 types가 채워진다.
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: data,
+      configurable: true,
+    });
+    target.dispatchEvent(event);
   });
 
   await expect(editable.locator("table")).toHaveCount(1);

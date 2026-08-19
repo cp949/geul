@@ -8,7 +8,7 @@ const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   return { editor, editable };
 };
 
-test("JSON·HTML·markdown을 편집하고 복원한다", async ({ page }) => {
+test("JSON·HTML·markdown을 편집하고 복원한다 @core", async ({ page }) => {
   const { editor, editable } = await openDemo(page);
   const source = page.getByLabel("Document source");
 

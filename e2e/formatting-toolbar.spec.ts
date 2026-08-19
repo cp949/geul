@@ -23,7 +23,7 @@ test("텍스트가 선택된 동안에만 서식 툴바를 표시한다", async 
   await expect(toolbar).not.toBeVisible();
 });
 
-test("선택을 잃지 않고 선택 텍스트의 굵게와 밑줄을 토글한다", async ({
+test("선택을 잃지 않고 선택 텍스트의 굵게와 밑줄을 토글한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
