@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 
 import type { EditorController } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorProvider } from "../src/index.js";
 import { TableCellFormatMenu } from "../src/table-cell-format-menu.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 const fakeController = () => ({
   mount: vi.fn(),
@@ -29,7 +35,7 @@ describe("셀 서식 메뉴", () => {
     const controller = fakeController();
     const onClose = vi.fn();
 
-    const view = render(
+    render(
       <EditorProvider editor={controller as unknown as EditorController}>
         <TableCellFormatMenu
           cellIds={["cell-1", "cell-2"]}
@@ -49,14 +55,13 @@ describe("셀 서식 메뉴", () => {
       "#1A73E8",
     );
     expect(onClose).toHaveBeenCalledTimes(1);
-    view.unmount();
   });
 
   it("Background color None 클릭 시 null로 지운다", () => {
     const controller = fakeController();
     const onClose = vi.fn();
 
-    const view = render(
+    render(
       <EditorProvider editor={controller as unknown as EditorController}>
         <TableCellFormatMenu
           cellIds={["cell-1"]}
@@ -80,7 +85,6 @@ describe("셀 서식 메뉴", () => {
       null,
     );
     expect(onClose).toHaveBeenCalledTimes(1);
-    view.unmount();
   });
 });
 
@@ -89,7 +93,7 @@ describe("정렬 버튼", () => {
     const controller = fakeController();
     const onClose = vi.fn();
 
-    const view = render(
+    render(
       <EditorProvider editor={controller as unknown as EditorController}>
         <TableCellFormatMenu
           cellIds={["cell-1"]}
@@ -109,13 +113,12 @@ describe("정렬 버튼", () => {
       "center",
     );
     expect(onClose).toHaveBeenCalledTimes(1);
-    view.unmount();
   });
 
   it("Align none 클릭 시 null을 넘긴다", () => {
     const controller = fakeController();
 
-    const view = render(
+    render(
       <EditorProvider editor={controller as unknown as EditorController}>
         <TableCellFormatMenu
           cellIds={["cell-1"]}
@@ -134,6 +137,5 @@ describe("정렬 버튼", () => {
       { kind: "cells", cellIds: ["cell-1"] },
       null,
     );
-    view.unmount();
   });
 });

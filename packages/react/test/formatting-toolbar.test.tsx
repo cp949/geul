@@ -7,10 +7,10 @@
  */
 
 import type { EditorController } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LucideProvider } from "lucide-react";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   EditorContent,
@@ -18,6 +18,12 @@ import {
   FormattingToolbar,
 } from "../src/index.js";
 import { expectIconOnlyButton } from "./expect-icon-button.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 type SelectionBlockType = {
   blockId: string;
@@ -94,15 +100,14 @@ const collapseSelection = () => {
 describe("FormattingToolbar 서식 툴바", () => {
   it("텍스트 선택이 없으면 렌더링하지 않는다", () => {
     const controller = fakeController();
-    const view = render(withProvider(controller, <FormattingToolbar />));
+    render(withProvider(controller, <FormattingToolbar />));
 
     expect(screen.queryByRole("toolbar")).toBeNull();
-    view.unmount();
   });
 
   it("텍스트를 선택하면 활성 mark 상태를 반영한 토글 버튼을 표시한다", () => {
     const controller = fakeController(vi.fn(() => ["bold"]));
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -127,12 +132,11 @@ describe("FormattingToolbar 서식 툴바", () => {
         .getByRole("button", { name: "Italic" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
-    view.unmount();
   });
 
   it("토글 버튼을 클릭하면 대응하는 core 명령을 호출한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -151,12 +155,11 @@ describe("FormattingToolbar 서식 툴바", () => {
 
     expect(controller.commands.toggleBold).toHaveBeenCalledOnce();
     expect(controller.commands.toggleUnderline).toHaveBeenCalledOnce();
-    view.unmount();
   });
 
   it("선택이 collapsed 상태가 되면 숨긴다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -174,12 +177,11 @@ describe("FormattingToolbar 서식 툴바", () => {
     collapseSelection();
 
     expect(screen.queryByRole("toolbar")).toBeNull();
-    view.unmount();
   });
 
   it("현재 블록 종류를 반영한 블록 종류 select를 표시한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -200,7 +202,6 @@ describe("FormattingToolbar 서식 툴바", () => {
         }) as HTMLSelectElement
       ).value,
     ).toBe("paragraph");
-    view.unmount();
   });
 
   it("블록 종류 select에 제목 레벨을 표시한다", () => {
@@ -211,7 +212,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         blockType: { type: "heading", level: 2 },
       })),
     );
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -232,12 +233,11 @@ describe("FormattingToolbar 서식 툴바", () => {
         }) as HTMLSelectElement
       ).value,
     ).toBe("heading-2");
-    view.unmount();
   });
 
   it("블록 종류 select를 바꾸면 setBlockType을 호출한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -259,12 +259,11 @@ describe("FormattingToolbar 서식 툴바", () => {
       type: "heading",
       level: 1,
     });
-    view.unmount();
   });
 
   it("자기 에디터 바깥의 텍스트를 선택하면 계속 숨긴 상태를 유지한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -280,12 +279,11 @@ describe("FormattingToolbar 서식 툴바", () => {
     selectText(textNode, 0, 7);
 
     expect(screen.queryByRole("toolbar")).toBeNull();
-    view.unmount();
   });
 
   it("각 토글 버튼에 16px aria-hidden 아이콘 svg와 동일 title을 렌더링한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -313,12 +311,11 @@ describe("FormattingToolbar 서식 툴바", () => {
         iconClass,
       );
     }
-    view.unmount();
   });
 
   it("소비자 앱의 LucideProvider 설정이 geul 내부 아이콘에 전파되지 않는다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       <LucideProvider
         absoluteStrokeWidth
         className="app-icon"
@@ -348,6 +345,5 @@ describe("FormattingToolbar 서식 툴바", () => {
     expect(icon.getAttribute("stroke-width")).toBe("2");
     expect(icon.getAttribute("width")).toBe("16");
     expect(icon.getAttribute("height")).toBe("16");
-    view.unmount();
   });
 });

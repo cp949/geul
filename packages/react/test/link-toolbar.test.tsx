@@ -7,11 +7,17 @@
  */
 
 import type { EditorController } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider, LinkToolbar } from "../src/index.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 type FakeControllerOptions = {
   getSelectionLink?: () => { href: string } | null;
@@ -83,7 +89,7 @@ const collapseSelection = () => {
 const renderWithSelectedText = (
   controller: ReturnType<typeof fakeController>,
 ) => {
-  const view = render(
+  render(
     withProvider(
       controller,
       <>
@@ -98,33 +104,30 @@ const renderWithSelectedText = (
     throw new Error("Text node was not rendered");
   }
   selectText(textNode, 0, 8);
-  return view;
 };
 
 describe("LinkToolbar 링크 툴바", () => {
   it("선택도 활성 링크도 없으면 렌더링하지 않는다", () => {
     const controller = fakeController();
-    const view = render(withProvider(controller, <LinkToolbar />));
+    render(withProvider(controller, <LinkToolbar />));
 
     expect(screen.queryByRole("toolbar")).toBeNull();
-    view.unmount();
   });
 
   it("링크 없는 텍스트를 선택하면 링크 추가 컨트롤을 표시한다", () => {
     const controller = fakeController();
-    const view = renderWithSelectedText(controller);
+    renderWithSelectedText(controller);
 
     expect(screen.getByRole("toolbar", { name: "Link" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Add link" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Remove link" })).toBeNull();
-    view.unmount();
   });
 
   it("커서가 기존 링크 안에 있으면 열기·편집·제거 컨트롤을 표시한다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -141,12 +144,11 @@ describe("LinkToolbar 링크 툴바", () => {
     ).toBe("https://example.com");
     expect(screen.getByRole("button", { name: "Edit link" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Remove link" })).not.toBeNull();
-    view.unmount();
   });
 
   it("링크 추가 컨트롤로 링크를 만든다", () => {
     const controller = fakeController();
-    const view = renderWithSelectedText(controller);
+    renderWithSelectedText(controller);
 
     fireEvent.click(screen.getByRole("button", { name: "Add link" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), {
@@ -157,7 +159,6 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(controller.commands.setLink).toHaveBeenCalledWith(
       "https://example.com",
     );
-    view.unmount();
   });
 
   it("허용되지 않는 링크 URL이면 거부 메시지를 표시한다", () => {
@@ -167,7 +168,7 @@ describe("LinkToolbar 링크 툴바", () => {
         error: { code: "LINK_HREF_REJECTED" },
       }),
     });
-    const view = renderWithSelectedText(controller);
+    renderWithSelectedText(controller);
 
     fireEvent.click(screen.getByRole("button", { name: "Add link" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), {
@@ -177,14 +178,13 @@ describe("LinkToolbar 링크 툴바", () => {
 
     expect(screen.getByRole("alert")).not.toBeNull();
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
-    view.unmount();
   });
 
   it("제거 컨트롤로 링크를 제거한다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -198,14 +198,13 @@ describe("LinkToolbar 링크 툴바", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
 
     expect(controller.commands.unsetLink).toHaveBeenCalledOnce();
-    view.unmount();
   });
 
   it("기존 링크의 href를 편집한다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -230,14 +229,13 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(controller.commands.setLink).toHaveBeenCalledWith(
       "https://updated.example.com",
     );
-    view.unmount();
   });
 
   it("기존 href가 그대로면 적용하지 않고 닫는다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -253,34 +251,31 @@ describe("LinkToolbar 링크 툴바", () => {
 
     expect(controller.commands.setLink).not.toHaveBeenCalled();
     expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
-    view.unmount();
   });
 
   it("선택이 collapsed가 되고 활성 링크도 없으면 숨긴다", () => {
     const controller = fakeController();
-    const view = renderWithSelectedText(controller);
+    renderWithSelectedText(controller);
     expect(screen.queryByRole("toolbar")).not.toBeNull();
 
     collapseSelection();
 
     expect(screen.queryByRole("toolbar")).toBeNull();
-    view.unmount();
   });
 
   it("편집 중 selectionchange가 발생해도 URL 입력을 열어 둔다", () => {
     const controller = fakeController();
-    const view = renderWithSelectedText(controller);
+    renderWithSelectedText(controller);
 
     fireEvent.click(screen.getByRole("button", { name: "Add link" }));
     collapseSelection();
 
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
-    view.unmount();
   });
 
   it("URL 입력에서 Escape를 누르면 툴바를 닫고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    const view = renderWithSelectedText(controller);
+    renderWithSelectedText(controller);
     // host(role="textbox")는 마운트 host이고, 컨트롤러가 그 안에 실제
     // contenteditable 자식을 넣는다(block-side-menu.test.tsx:70-75와 같은
     // 구조) — closeAndRestoreFocus가 초점을 실제로 주는 대상은 후자다.
@@ -296,6 +291,5 @@ describe("LinkToolbar 링크 툴바", () => {
 
     expect(screen.queryByRole("textbox", { name: "Link URL" })).toBeNull();
     expect(document.activeElement).toBe(editable);
-    view.unmount();
   });
 });
