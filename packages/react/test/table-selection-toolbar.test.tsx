@@ -426,7 +426,15 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
       screen.getByRole("menu", { name: "Cell formatting" }),
     ).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+    // 실제 브라우저의 재클릭은 pointerdown이 먼저 온다. 이 순서를 재현해야
+    // CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS의
+    // "[data-be-cell-format-trigger]" 항목까지 잠긴다 — 그 항목이 빠지면
+    // pointerdown이 onOutsideDismiss(초점 복구 없는 dismissFormatMenu)로 먼저
+    // 닫고, 이어지는 click이 formatMenuOpen === false를 보고 메뉴를 다시 연다.
+    // click만 쏘면 그 회귀가 이 테스트를 통과한다.
+    const trigger = screen.getByRole("button", { name: formatLabel });
+    fireEvent.pointerDown(trigger);
+    fireEvent.click(trigger);
 
     expect(document.activeElement).toBe(editable);
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();

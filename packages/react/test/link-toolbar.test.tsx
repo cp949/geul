@@ -312,6 +312,10 @@ describe("LinkToolbar 링크 툴바", () => {
     fireEvent.keyDown(input, { key: "Escape" });
 
     expect(screen.queryByRole("textbox", { name: "Link URL" })).toBeNull();
+    // URL 입력만 사라졌는지가 아니라 툴바 자체가 닫혔는지를 본다 — 입력만
+    // 보는 단언은 closeAndRestoreFocus가 mode:"closed" 대신 mode:"view"로
+    // 되돌아가도 통과해 제목이 주장하는 "툴바를 닫고"를 잠그지 못한다.
+    expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
     expect(document.activeElement).toBe(editable);
   });
 
@@ -329,5 +333,6 @@ describe("LinkToolbar 링크 툴바", () => {
 
     expect(document.activeElement).toBe(editable);
     expect(screen.queryByRole("textbox", { name: "Link URL" })).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
   });
 });
