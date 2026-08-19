@@ -1,3 +1,4 @@
+import type { JSONContent } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -138,7 +139,7 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
     const moved = goToNextTableCellOrInsertRow(editor, sequentialIds("new"));
 
     expect(moved).toBe(true);
-    const table = editor.getJSON().content?.[0];
+    const table = (editor.getJSON() as JSONContent).content?.[0];
     expect(table?.content).toHaveLength(3);
     const newCellId = table?.content?.[2]?.content?.[0]?.attrs?.cellId;
     expect(typeof newCellId).toBe("string");
@@ -149,12 +150,12 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
   it("새 행 생성은 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-4");
-    const before = editor.getJSON();
+    const before = (editor.getJSON() as JSONContent);
 
     goToNextTableCellOrInsertRow(editor, sequentialIds("new"));
     editor.commands.undo();
 
-    expect(editor.getJSON()).toEqual(before);
+    expect((editor.getJSON() as JSONContent)).toEqual(before);
     editor.destroy();
   });
 
