@@ -28,11 +28,7 @@ npx playwright test e2e/table-format.spec.ts e2e/block-handle.spec.ts -g "Escape
 ## 실제 근거
 
 - Issue #20 — `table-handles.tsx`/`table-selection-toolbar.tsx` 2곳 중복을 최초 보고. 구현 계획 수립 중 `block-side-menu.tsx`에서 3번째 동일 패턴을 추가 발견했다 — Issue #19 → #43 분리 선례를 따라 별도 이슈(#45)로 분리했다.
-- Issue #45 — 세 번째 중복 지점이던 `block-side-menu.tsx`도 공용 훅으로
-  통합했다. 마이그레이션 전 특성화 단위 테스트(`packages/react/test/block-side-menu.test.tsx`)로
-  기존 동작을 먼저 고정한 뒤 치환했다. 이제 `table-handles.tsx`,
-  `table-selection-toolbar.tsx`, `block-side-menu.tsx` 세 곳 모두
-  `useDismissOnOutsideOrEscape` 하나를 공유한다.
+- Issue #45 — 세 번째 중복 지점이던 `block-side-menu.tsx`도 공용 훅으로 통합했다. 마이그레이션 전 특성화 단위 테스트(`packages/react/test/block-side-menu.test.tsx`)로 기존 동작을 먼저 고정한 뒤 치환했다. 이제 `table-handles.tsx`, `table-selection-toolbar.tsx`, `block-side-menu.tsx` 세 곳 모두 `useDismissOnOutsideOrEscape` 하나를 공유한다.
 - `packages/react/src/use-dismiss-on-outside-or-escape.ts`가 공용 구현을 소유한다.
 
 ## 관련 문서

@@ -1,18 +1,28 @@
 // @vitest-environment jsdom
 
 import type { EditorController } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSideMenu } from "../src/block-side-menu.js";
 import { EditorContent, EditorProvider } from "../src/index.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole("menu")가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// use-dismiss-on-outside-or-escape.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 const dragHandleLabel = "Drag to reorder, click for options";
 
 const fakeController = () => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
-    editable.contentEditable = "true";
+    // 실제 브라우저와 달리 jsdom은 contentEditable IDL 프로퍼티를
+    // contenteditable 속성으로 반영하지 않는다. block-side-menu.tsx:80의
+    // focusEditor는 '[contenteditable="true"]'로 대상을 찾으므로, 속성을 직접
+    // 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
+    editable.setAttribute("contenteditable", "true");
     const block = document.createElement("p");
     block.setAttribute("data-be-block-id", "block-1");
     block.textContent = "block text";
@@ -44,21 +54,25 @@ const withProvider = (
   </EditorProvider>
 );
 
+// EditorContent가 그리는 role="textbox" 노드는 마운트 host이고, 컨트롤러가
+// 그 안에 contenteditable 자식을 넣는다. focusEditor가 초점을 주는 대상은
+// 후자이므로 Escape 테스트가 단언할 노드도 후자다.
 const renderBlockMenu = (controller: ReturnType<typeof fakeController>) => {
-  const onBlockAdded = vi.fn();
-  const view = render(
+  render(
     withProvider(
       controller,
       <>
-        <BlockSideMenu onBlockAdded={onBlockAdded} />
+        <BlockSideMenu onBlockAdded={vi.fn()} />
         <EditorContent />
       </>,
     ),
   );
-  const editable = screen.getByRole("textbox", { name: "Editor" });
+  const host = screen.getByRole("textbox", { name: "Editor" });
+  const editable = host.querySelector<HTMLElement>('[contenteditable="true"]');
+  if (editable === null) throw new Error("Editable was not mounted");
   const block = editable.querySelector<HTMLElement>("[data-be-block-id]");
   if (block === null) throw new Error("Block was not rendered");
-  return { view, editable, block, onBlockAdded };
+  return { editable, block };
 };
 
 // 핸들을 hover -> click해 블록 메뉴를 연다. pointerDown/pointerUp 드래그
@@ -78,20 +92,24 @@ const openBlockMenu = (controller: ReturnType<typeof fakeController>) => {
 };
 
 describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
-  it("Escape로 메뉴를 닫는다", () => {
+  it("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController();
-    const { view } = openBlockMenu(controller);
+    const { editable } = openBlockMenu(controller);
     expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
 
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
+    // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
+    // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못 연결되면
+    // 초점은 그대로 body에 남아 이 단언이 실패한다.
+    expect(document.activeElement).toBe(editable);
   });
 
   it("메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
     const controller = fakeController();
-    const { view } = openBlockMenu(controller);
+    openBlockMenu(controller);
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
 
     const outsideButton = document.createElement("button");
     outsideButton.textContent = "outside";
@@ -103,17 +121,15 @@ describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(outsideButton);
     outsideButton.remove();
-    view.unmount();
   });
 
   it("메뉴 안(data-be-block-menu)을 클릭하면 닫히지 않는다", () => {
     const controller = fakeController();
-    const { view } = openBlockMenu(controller);
+    openBlockMenu(controller);
 
     const menu = screen.getByRole("menu", { name: "Block menu" });
     fireEvent.pointerDown(menu);
 
     expect(screen.queryByRole("menu")).not.toBeNull();
-    view.unmount();
   });
 });
