@@ -49,15 +49,15 @@ const ANCHOR_OFFSETS: Record<
  * position: fixed 메뉴는 스크롤로 화면 안에 들어오지 않는다 — 렌더 직후
  * 실제 크기를 재서 뷰포트 안으로 접어 넣는다(PIT-0011). 앵커 좌표(left,
  * top)만으로 위치를 정하면 가변 높이 메뉴가 화면 밖으로 밀려 그 항목은
- * 클릭 자체가 불가능해진다. TableHandleMenu와 TableCellFormatMenu가
- * 공용으로 쓴다. `style`은 소비 측이 `{ left: position.left, top:
- * position.top }`를 매번 다시 조립하지 않도록 완성된 형태로 제공한다 —
- * 반환된 `style`은 여전히 `left`/`top` CSS 프로퍼티일 뿐, `transform`
- * className은 그대로 컴포넌트가 갖는다.
+ * 클릭 자체가 불가능해진다. 여러 오버레이 컴포넌트가 공용으로 쓴다
+ * (각 anchor별 소비자는 `ClampAnchor` 타입 참고). `style`은 소비 측이
+ * `{ left: position.left, top: position.top }`를 매번 다시 조립하지
+ * 않도록 완성된 형태로 제공한다 — 반환된 `style`은 여전히 `left`/`top`
+ * CSS 프로퍼티일 뿐, `transform` className은 그대로 컴포넌트가 갖는다.
  *
  * `anchor`가 `"topLeft"`가 아니면 (left, top)은 박스의 좌상단이 아니므로,
  * 클램프가 실제 렌더된 박스 기준으로 여백을 계산하려면 `ANCHOR_OFFSETS`로
- * 그 오프셋을 상쇄한다(자세한 유도는 `ANCHOR_OFFSETS` 주석 참고).
+ * 그 오프셋을 상쇄한다(자세한 anchor 정의는 `ClampAnchor` 타입 참고).
  */
 export const useClampedMenuPosition = (
   left: number,

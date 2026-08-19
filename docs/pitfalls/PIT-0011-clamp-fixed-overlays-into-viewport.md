@@ -10,7 +10,7 @@
 
 ## 근본 원인
 
-오버레이 위치를 앵커(핸들·셀) 좌표만으로 정하고 오버레이 자신의 크기를 고려하지 않았다. 기존 오버레이(formatting toolbar, link toolbar)는 높이가 한 줄이라 앵커 좌표를 그대로 써도 화면을 벗어나지 않았고, 가변 높이 메뉴가 처음 생긴 슬라이스 9a에서 드러났다.
+오버레이 위치를 앵커(핸들·셀) 좌표만으로 정하고 오버레이 자신의 크기를 고려하지 않았다. 기존 오버레이(formatting toolbar, link toolbar)는 앵커 좌표만으로도 대체로 화면을 벗어나지 않아 가변 높이 메뉴가 처음 생긴 슬라이스 9a에서야 결함이 드러났지만, 이는 안전하다는 보장이 아니었다 — 앵커에서 CSS `transform`으로 크게 벗어나 그려지는 오버레이는 한 줄짜리 콘텐츠라도 화면 경계 근처에서 잘려나갈 수 있다(#43에서 FormattingToolbar가 y=-37로 렌더된 것이 실측 사례).
 
 ## 예방 규칙
 
@@ -21,7 +21,7 @@
 ## 검증 방법
 
 ```bash
-pnpm test:e2e --project=chromium e2e/table-format.spec.ts
+pnpm test:e2e --project=chromium e2e/formatting-toolbar.spec.ts e2e/link-toolbar.spec.ts e2e/slash-menu.spec.ts e2e/block-handle.spec.ts e2e/table-format.spec.ts
 ```
 
 ## 실제 근거
@@ -34,6 +34,12 @@ pnpm test:e2e --project=chromium e2e/table-format.spec.ts
   #19 리뷰에서 발견된 부분/미적용 클램프 잔여분). `block-side-menu.tsx`의 드롭
   가이드 라인은 클릭 대상이 아니고 클램프가 실제 삽입 위치를 왜곡하므로
   마이그레이션에서 제외했다(컴포넌트 내부 주석 참고).
+- `useClampedMenuPosition`은 `anchor` 파라미터(`topLeft`/`centerAbove`/
+  `centerBelow`/`leftGutter`)로 확장됐다. TableHandleMenu/TableCellFormatMenu처럼
+  transform 없이 `left`/`top`이 곧 박스 좌상단인 오버레이는 기본값 `topLeft`라
+  훅 호출부가 그대로지만, `translate(...)`로 앵커에서 벗어나 그려지는 오버레이는
+  그 벗어난 정도를 `anchor`로 알려줘야 클램프가 올바른 여백을 계산한다 — 이
+  전제가 깨졌던 최초 시도가 FormattingToolbar를 뷰포트 위(y<0)로 밀어냈다.
 - 각 컴포넌트의 e2e(`e2e/formatting-toolbar.spec.ts`, `link-toolbar.spec.ts`,
   `slash-menu.spec.ts`, `block-handle.spec.ts`, `table-format.spec.ts`)에
   "화면 밖 항목을 실제로 클릭"하는 PIT-0011 테스트를 추가했다.
