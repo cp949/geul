@@ -1,5 +1,4 @@
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
 
 import { iconProps } from "./icon-props.js";
 import {
@@ -7,6 +6,7 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor } from "./use-editor.js";
 
 const swatchClassName =
@@ -17,8 +17,6 @@ const dividerClassName =
   "geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]";
 const alignButtonClassName =
   "geul:flex geul:h-7 geul:min-w-7 geul:cursor-pointer geul:items-center geul:justify-center geul:rounded geul:border-0 geul:bg-transparent geul:p-1 geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:text-[color:var(--be-color-text,#202124)]";
-
-const MENU_VIEWPORT_MARGIN = 8;
 
 export type TableCellFormatMenuProps = {
   tableBlockId: string;
@@ -31,8 +29,7 @@ export type TableCellFormatMenuProps = {
 /**
  * TableSelectionToolbar의 "Cell formatting" 버튼으로 여는 메뉴 — 선택된
  * 셀 목록(cellIds)에 글자색·배경색·정렬을 적용한다. 좌표 클램프는
- * TableHandleMenu와 같은 이유로 같은 방식을 쓴다(PIT-0011) — 서로 다른
- * 진입점(핸들 vs 셀 선택)이라 로직은 각자 갖는다.
+ * TableHandleMenu와 공용 useClampedMenuPosition 훅을 쓴다(PIT-0011).
  */
 export const TableCellFormatMenu = ({
   tableBlockId,
@@ -42,28 +39,8 @@ export const TableCellFormatMenu = ({
   onClose,
 }: TableCellFormatMenuProps) => {
   const editor = useEditor();
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState({ left, top });
+  const { menuRef, position } = useClampedMenuPosition(left, top);
   const target = { kind: "cells", cellIds } as const;
-
-  useLayoutEffect(() => {
-    const node = menuRef.current;
-    const view = node?.ownerDocument.defaultView ?? null;
-    if (node === null || view === null) return;
-    const rect = node.getBoundingClientRect();
-    const maxLeft = Math.max(
-      MENU_VIEWPORT_MARGIN,
-      view.innerWidth - rect.width - MENU_VIEWPORT_MARGIN,
-    );
-    const maxTop = Math.max(
-      MENU_VIEWPORT_MARGIN,
-      view.innerHeight - rect.height - MENU_VIEWPORT_MARGIN,
-    );
-    setPosition({
-      left: Math.min(Math.max(left, MENU_VIEWPORT_MARGIN), maxLeft),
-      top: Math.min(Math.max(top, MENU_VIEWPORT_MARGIN), maxTop),
-    });
-  }, [left, top]);
 
   const runAndClose = (run: () => void) => {
     run();
