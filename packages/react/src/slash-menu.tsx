@@ -4,6 +4,7 @@ import { BlockSideMenu } from "./block-side-menu.js";
 import { BLOCK_TYPE_OPTIONS } from "./block-type-options.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 const parseSlashQuery = (text: string): string | null => {
@@ -83,6 +84,10 @@ export const SlashMenu = () => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
+  const { menuRef, style } = useClampedMenuPosition(
+    menuState?.left ?? 0,
+    menuState?.top ?? 0,
+  );
   // 메뉴가 열릴 때(menuState: null → non-null)만 keydown 리스너를 붙이면,
   // "/head" 마지막 글자 입력으로 setMenuState가 실행된 뒤 이 effect가
   // 커밋되기 전에 Escape가 도착하는 레이스가 있었다(React 18+의 useEffect는
@@ -270,8 +275,9 @@ export const SlashMenu = () => {
         <div
           aria-label="Slash menu"
           className="geul:fixed geul:z-10 geul:flex geul:w-56 geul:max-h-64 geul:flex-col geul:gap-0.5 geul:overflow-y-auto geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+          ref={menuRef}
           role="listbox"
-          style={{ left: menuState.left, top: menuState.top }}
+          style={style}
         >
           {items.length === 0 && (
             <p className="geul:m-0 geul:px-2 geul:py-1.5 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">

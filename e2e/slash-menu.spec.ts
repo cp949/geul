@@ -114,3 +114,35 @@ test("서식 툴바의 select로 블록 종류를 바꿔도 내용을 보존한�
   await expect(editable.locator("h2")).toHaveCount(0);
   await expect(editable.locator("p")).toHaveText("Hello R1");
 });
+
+test("문서 하단에서 슬래시 메뉴를 열어도 Table 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first");
+  for (let index = 0; index < 30; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  // Control+End는 문서 끝(캐럿)이 화면에 보이도록 최소한만 스크롤한다 —
+  // 긴 문서에서는 캐럿이 뷰포트 하단 근처에 붙는다.
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("/");
+
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  await expect(menu).toBeVisible();
+
+  const menuBox = await menu.boundingBox();
+  const viewportSize = page.viewportSize();
+  expect(menuBox).not.toBeNull();
+  expect(viewportSize).not.toBeNull();
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
+    (viewportSize?.height ?? 0) - 4,
+  );
+
+  // 클램프가 없으면 Table 항목이 뷰포트 밖으로 나가 클릭이 "element is
+  // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
+  await menu.getByRole("option", { name: /Table/ }).click();
+  await expect(editable.locator("table")).toBeVisible();
+});
