@@ -158,3 +158,60 @@ test("블록 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유�
   await expect(page.getByRole("menu", { name: "Block menu" })).toHaveCount(0);
   await expect(saveButton).toBeFocused();
 });
+
+test("좁은 뷰포트에서도 드래그 핸들이 화면 안에서 클릭 가능하다 (PIT-0011)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("first block");
+  await editable.locator("p").first().hover();
+
+  const handle = page.getByRole("button", { name: "Drag to reorder" });
+  await expect(handle).toBeVisible();
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  // 사이드 버튼 오버레이는 translate(-3.5rem, 0)로 왼쪽으로 56px
+  // 이동한다 — 클램프가 없으면 좁은 뷰포트에서 이 값이 음수가 되어
+  // 핸들이 화면 밖으로 나간다(PIT-0011).
+  expect(handleBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+
+  // 클램프가 없으면 클릭이 "element is outside of the viewport"로
+  // 타임아웃한다(PIT-0011 실측 시나리오).
+  await handle.click();
+  await expect(page.getByRole("menu", { name: "Block menu" })).toBeVisible();
+});
+
+test("문서 하단 블록에서 메뉴를 열어도 Delete 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first block");
+  for (let index = 0; index < 25; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+
+  const lastBlock = editable.locator("p").last();
+  await lastBlock.hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+
+  const menuBox = await menu.boundingBox();
+  const viewportSize = page.viewportSize();
+  expect(menuBox).not.toBeNull();
+  expect(viewportSize).not.toBeNull();
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
+    (viewportSize?.height ?? 0) - 4,
+  );
+
+  // 클램프가 없으면 Delete 항목이 뷰포트 밖으로 나가 클릭이 "element is
+  // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
+  await menu.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(editable.locator("p").last()).not.toHaveText("line 24");
+});

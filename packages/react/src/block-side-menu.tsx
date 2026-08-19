@@ -7,6 +7,7 @@ import {
 } from "./block-type-options.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 // 핸들은 드래그(재정렬)와 클릭(블록 메뉴) 두 동작을 모두 갖는다 — tooltip이
@@ -254,6 +255,16 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     return { left: rect.left, top: rect.top };
   })();
 
+  const gutterClamp = useClampedMenuPosition(
+    hoverBounds?.left ?? 0,
+    hoverBounds?.top ?? 0,
+    "leftGutter",
+  );
+  const blockMenuClamp = useClampedMenuPosition(
+    blockMenuState?.left ?? 0,
+    blockMenuState?.top ?? 0,
+  );
+
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
     const result = editor.commands.insertParagraphAfter(hoverBlockId);
@@ -323,7 +334,8 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {hoverBounds !== null && hoverBlockId !== null && (
         <div
           className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:[transform:translate(-3.5rem,0)]"
-          style={{ left: hoverBounds.left, top: hoverBounds.top }}
+          ref={gutterClamp.menuRef}
+          style={gutterClamp.style}
         >
           <IconButton
             className={`${blockGutterButtonClassName} geul:cursor-grab geul:active:cursor-grabbing`}
@@ -346,6 +358,11 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           />
         </div>
       )}
+      {/* 드롭 가이드 라인은 클릭 대상이 아니라 드래그 중인 블록이 놓일
+          위치를 그대로 보여주는 시각 표시다(pointer-events-none).
+          useClampedMenuPosition으로 접어 넣으면 실제 삽입 지점과 라인이
+          어긋나 사용자에게 잘못된 위치를 알려주므로, 이 오버레이는
+          PIT-0011 클램프 마이그레이션 대상에서 제외한다(#43). */}
       {dragState?.guide !== null && dragState?.guide !== undefined && (
         <div
           className="geul:fixed geul:z-10 geul:h-0.5 geul:bg-[var(--be-color-accent,#1a73e8)] geul:pointer-events-none geul:[transform:translateY(-0.0625rem)]"
@@ -362,8 +379,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           aria-label="Block menu"
           className="geul:fixed geul:z-10 geul:flex geul:w-40 geul:flex-col geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
           data-be-block-menu=""
+          ref={blockMenuClamp.menuRef}
           role="menu"
-          style={{ left: blockMenuState.left, top: blockMenuState.top }}
+          style={blockMenuClamp.style}
         >
           {/* text-[0.75rem]: text-xs는 line-height까지 방출해 구 CSS(font-size만
               지정, line-height 상속)와 달라진다 — font-size만 지정한다 */}
