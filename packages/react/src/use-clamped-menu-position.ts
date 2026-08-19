@@ -27,7 +27,11 @@ export type ClampedMenuPosition = {
  * - `centerBelow`: `translate(-50%, 0.5rem)`. `LinkToolbar`가 쓴다.
  * - `leftGutter`: `translate(-3.5rem, 0)`. `BlockSideMenu` 사이드 버튼이 쓴다.
  */
-export type ClampAnchor = "topLeft" | "centerAbove" | "centerBelow" | "leftGutter";
+export type ClampAnchor =
+  | "topLeft"
+  | "centerAbove"
+  | "centerBelow"
+  | "leftGutter";
 
 type BoxOffset = { dx: number; dy: number };
 
