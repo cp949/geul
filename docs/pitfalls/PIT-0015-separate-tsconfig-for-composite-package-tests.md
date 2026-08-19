@@ -46,3 +46,4 @@ pnpm exec turbo run typecheck --filter=@cp949/geul-io --force
 ## 관련 문서
 
 - [PIT-0006 배포 산출물 검증 전 build 수행](./PIT-0006-build-before-distribution-verification.md)
+- [PIT-0016 workspace 밖 TS 디렉터리는 전용 tsconfig로 typecheck 대상에 넣는다](./PIT-0016-give-non-package-ts-directories-their-own-tsconfig.md)
