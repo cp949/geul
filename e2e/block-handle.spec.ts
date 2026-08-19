@@ -145,7 +145,7 @@ test("Escape로 블록 메뉴를 닫으면 편집기로 초점을 복구한다",
   await expect(editable).toBeFocused();
 });
 
-test("블록 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다", async ({
+test("블록 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다 (PIT-0013)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
