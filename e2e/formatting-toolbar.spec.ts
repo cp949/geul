@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_TOLERANCE_PX } from "./support/clamp.js";
+import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
 
 const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
@@ -142,6 +142,7 @@ test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
 
   const selectionBox = await selectBlockTextAndNotify(
     editable.locator("p").last(),
+    "Last block",
   );
   const toolbarBox = await page
     .getByRole("toolbar", { name: "Formatting" })
@@ -186,6 +187,7 @@ test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체�
 
   const selectionBox = await selectBlockTextAndNotify(
     editable.locator("p").first(),
+    "First block",
   );
 
   // 첫 줄이 뷰포트 맨 위(y≈2)로 오도록 정확히 그만큼만 스크롤해 선택을 화면
@@ -205,7 +207,7 @@ test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체�
   // Block type select가 화면 밖으로 잘려나가는 PIT-0011 그 결함이다.
   await expect
     .poll(async () => (await toolbar.boundingBox())?.x ?? -1)
-    .toBeGreaterThanOrEqual(CLAMP_BOUNDARY_TOLERANCE_PX);
+    .toBeGreaterThanOrEqual(CLAMP_BOUNDARY_MIN_MARGIN_PX);
 
   // 세로: 클램프 이전 코드는 top = max(bounds.top, 48)로 48px 바닥값을 뒀고, 한 줄
   // 툴바 높이가 약 37px이라 박스 상단이 48 - 37 - 8 ≈ 3으로 이미 화면 안이었다.
@@ -213,11 +215,11 @@ test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체�
   // anchor 계약(centerAbove = translate(-50%, calc(-100% - 0.5rem)) 오프셋 상쇄)을
   // 지킨다 — anchor 없이 top만 클램프했던 최초 마이그레이션은 여기서 y=-37로 렌더됐다.
   // MENU_VIEWPORT_MARGIN이 8을 보장한다(minTop = 8 + height + 8이라 박스 상단이
-  // 정확히 8) — 경계값 8은 서브픽셀 반올림에 흔들릴 수 있어 CLAMP_BOUNDARY_TOLERANCE_PX
-  // 만큼만 요구한다(e2e/support/clamp.ts).
+  // 정확히 8) — 경계값 8은 서브픽셀 반올림에 흔들릴 수 있어 허용오차를 뺀
+  // CLAMP_BOUNDARY_MIN_MARGIN_PX만 요구한다(e2e/support/clamp.ts).
   await expect
     .poll(async () => (await toolbar.boundingBox())?.y ?? -1)
-    .toBeGreaterThanOrEqual(CLAMP_BOUNDARY_TOLERANCE_PX);
+    .toBeGreaterThanOrEqual(CLAMP_BOUNDARY_MIN_MARGIN_PX);
 
   // Bold는 툴바 오른쪽 끝이라 클램프 없이도 클릭 자체는 됐다. 클램프로 위치를
   // 옮긴 뒤에도 선택을 잃지 않고 mark가 적용되는지 확인하는 용도다.

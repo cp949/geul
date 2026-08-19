@@ -15,21 +15,26 @@ type ClampedMenuPosition = {
 };
 
 /**
- * 앵커 좌표(left, top)에서 렌더된 박스 가장자리까지 CSS `translate`가
- * 이미 벌려놓은 간격(px). `centerAbove`/`centerBelow`의 `0.5rem`에 대응한다
- * — 루트 폰트 크기 16px 가정이며, 소비자가 그 값을 오버라이드하면 이 상수도
- * 같이 바꿔야 한다. `MENU_VIEWPORT_MARGIN`(뷰포트 자체의 여백)과 값은
- * 우연히 같아도 의미가 다르다 — 서로 바꿔 쓰지 않는다.
- */
-const ANCHOR_BOX_GAP_PX = 8;
-
-/**
- * `leftOfAnchor`의 `-3.5rem`을 px로 환산하는 데 쓰는 루트 폰트 크기
- * 가정(16px). 소비자가 루트 폰트 크기를 오버라이드하면 이 값과 아래
- * 파생값을 같이 바꿔야 한다.
+ * 아래 rem -> px 환산이 가정하는 루트 폰트 크기(px). 오버레이 className은
+ * 앵커 간격을 rem으로 적는데 클램프는 px로 계산해야 해서 여기서 환산한다 —
+ * 소비자가 루트 폰트 크기를 오버라이드하면 이 값을 같이 바꿔야 한다.
  */
 const ASSUMED_ROOT_FONT_SIZE_PX = 16;
+
+/** `centerAbove`/`centerBelow` className의 `0.5rem`. */
+const ANCHOR_BOX_GAP_REM = 0.5;
+
+/** `leftOfAnchor` className의 `3.5rem`. */
 const LEFT_OF_ANCHOR_REM = 3.5;
+
+/**
+ * 앵커 좌표(left, top)에서 렌더된 박스 가장자리까지 CSS `translate`가
+ * 이미 벌려놓은 간격(px). `MENU_VIEWPORT_MARGIN`(뷰포트 자체의 여백)과 값은
+ * 우연히 같아도 의미가 다르다 — 서로 바꿔 쓰지 않는다.
+ */
+const ANCHOR_BOX_GAP_PX = ANCHOR_BOX_GAP_REM * ASSUMED_ROOT_FONT_SIZE_PX;
+
+/** 앵커에서 왼쪽으로 벌어진 거리(px). `leftOfAnchor`가 쓴다. */
 const LEFT_OF_ANCHOR_OFFSET_PX = LEFT_OF_ANCHOR_REM * ASSUMED_ROOT_FONT_SIZE_PX;
 
 /**

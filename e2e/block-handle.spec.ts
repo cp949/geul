@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_TOLERANCE_PX } from "./support/clamp.js";
+import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 
 const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   await page.goto("/");
@@ -178,7 +178,9 @@ test("좁은 뷰포트에서도 드래그 핸들이 화면 안에서 클릭 가�
   // 사이드 버튼 오버레이는 translate(-3.5rem, 0)로 왼쪽으로 56px
   // 이동한다 — 클램프가 없으면 좁은 뷰포트에서 이 값이 음수가 되어
   // 핸들이 화면 밖으로 나간다(PIT-0011).
-  expect(handleBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect(handleBox?.x ?? -1).toBeGreaterThanOrEqual(
+    CLAMP_BOUNDARY_MIN_MARGIN_PX,
+  );
 
   // 클램프가 없으면 클릭이 "element is outside of the viewport"로
   // 타임아웃한다(PIT-0011 실측 시나리오).
@@ -209,7 +211,7 @@ test("문서 하단 블록에서 메뉴를 열어도 Delete 항목까지 뷰포�
   expect(menuBox).not.toBeNull();
   expect(viewportSize).not.toBeNull();
   expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
-    (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_TOLERANCE_PX,
+    (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
   );
 
   // 클램프가 없으면 Delete 항목이 뷰포트 밖으로 나가 클릭이 "element is

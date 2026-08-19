@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_TOLERANCE_PX } from "./support/clamp.js";
+import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
 
 const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
@@ -106,6 +106,7 @@ test("선택 영역이 뷰포트 하단에 붙어 있어도 Add link 버튼을 �
 
   const selectionBox = await selectBlockTextAndNotify(
     editable.locator("p").last(),
+    "Last block",
   );
   const viewportSize = page.viewportSize();
   expect(viewportSize).not.toBeNull();
@@ -126,7 +127,7 @@ test("선택 영역이 뷰포트 하단에 붙어 있어도 Add link 버튼을 �
       return box.y + box.height;
     })
     .toBeLessThanOrEqual(
-      (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_TOLERANCE_PX,
+      (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
     );
 
   // 클램프가 없으면 Add link 버튼이 뷰포트 밖으로 나가 클릭이 "element is
@@ -185,9 +186,9 @@ test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오�
   // view 모드에서는 이미 클램프가 걸려 뷰포트 안에 있다.
   const viewBox = await toolbar.boundingBox();
   expect(viewBox).not.toBeNull();
-  expect(viewBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect(viewBox?.x ?? -1).toBeGreaterThanOrEqual(CLAMP_BOUNDARY_MIN_MARGIN_PX);
   expect((viewBox?.x ?? 0) + (viewBox?.width ?? 0)).toBeLessThanOrEqual(
-    viewportWidth,
+    viewportWidth - CLAMP_BOUNDARY_MIN_MARGIN_PX,
   );
 
   await page.getByRole("button", { name: "Add link" }).click();
@@ -203,9 +204,11 @@ test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오�
       if (box === null) return Number.POSITIVE_INFINITY;
       return box.x + box.width;
     })
-    .toBeLessThanOrEqual(viewportWidth);
+    .toBeLessThanOrEqual(viewportWidth - CLAMP_BOUNDARY_MIN_MARGIN_PX);
   const editingBox = await toolbar.boundingBox();
-  expect(editingBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect(editingBox?.x ?? -1).toBeGreaterThanOrEqual(
+    CLAMP_BOUNDARY_MIN_MARGIN_PX,
+  );
 
   // 넘친 상태에서는 입력이 뷰포트 밖에 있어 fill 자체가 실패한다.
   await linkInput.fill("https://example.com");

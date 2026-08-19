@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_TOLERANCE_PX } from "./support/clamp.js";
+import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 
 const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   await page.goto("/");
@@ -144,7 +144,7 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Table 항목까지 뷰�
   expect(menuBox).not.toBeNull();
   expect(viewportSize).not.toBeNull();
   expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
-    (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_TOLERANCE_PX,
+    (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
   );
 
   // 클램프가 없으면 Table 항목이 뷰포트 밖으로 나가 클릭이 "element is
