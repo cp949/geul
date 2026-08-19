@@ -95,6 +95,10 @@ importers:
       '@tiptap/starter-kit':
         specifier: 3.30.1
         version: 3.30.1
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
 
   packages/io:
     dependencies:
@@ -122,6 +126,10 @@ importers:
       unified:
         specifier: 11.0.5
         version: 11.0.5
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
 
   packages/model:
     dependencies:
@@ -150,6 +158,9 @@ importers:
       '@testing-library/react':
         specifier: 16.3.0
         version: 16.3.0(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/node':
+        specifier: 22.20.1
+        version: 22.20.1
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
