@@ -1,4 +1,5 @@
 import type { TableCellTarget } from "@cp949/geul-core";
+
 import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
