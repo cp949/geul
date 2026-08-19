@@ -18,3 +18,4 @@
 | `PIT-0012` | 합성 paste 이벤트는 ClipboardEventInit이 아니라 defineProperty로 clipboardData를 얹음 | `ACTIVE` | e2e | R1 | [상세](./PIT-0012-synthesize-paste-events-without-clipboardeventinit.md) |
 | `PIT-0013` | 오버레이 바깥 클릭·Escape 닫기는 공용 훅으로 구현 | `ACTIVE` | react·e2e | R1 | [상세](./PIT-0013-share-outside-click-escape-dismiss-via-hook.md) |
 | `PIT-0014` | jsdom 테스트 fake는 contentEditable IDL 대신 속성으로 세움 | `ACTIVE` | react·test | Issue #48 | [상세](./PIT-0014-set-contenteditable-attribute-in-jsdom-fakes.md) |
+| `PIT-0015` | composite tsconfig 패키지는 test 전용 tsconfig.test.json을 따로 둠 | `ACTIVE` | workspace·build | Issue #32 | [상세](./PIT-0015-separate-tsconfig-for-composite-package-tests.md) |
