@@ -685,62 +685,66 @@ const withCellFormat = (
   return next;
 };
 
+// 색상/정렬 setter가 공유하는 본체. 값 검증(validate) → 대상 셀 id 해석 →
+// 대상 셀만 순회하며 변경 여부 추적 → 불변 갱신까지 한 번에 처리한다.
+// property별 검증 규칙만 validate 콜백으로 주입해 setCellColor/setCellAlign을
+// 얇은 wrapper로 남긴다.
+const setCellFormat = (
+  table: TableBlock,
+  target: TableCellTarget,
+  update: CellFormatUpdate,
+  validate: (value: string) => TableGridError | undefined,
+): Result<TableBlock, TableGridError> => {
+  if (update.value !== null) {
+    const error = validate(update.value);
+    if (error) return { ok: false, error };
+  }
+
+  const resolved = resolveTargetCellIds(table, target);
+  if (!resolved.ok) return resolved;
+  const targetCellIds = resolved.value;
+
+  let changed = false;
+  const rows = table.rows.map((row) => ({
+    ...row,
+    cells: row.cells.map((cellEntry) => {
+      if (!targetCellIds.has(cellEntry.id)) return cellEntry;
+      const current =
+        update.property === "align"
+          ? (cellEntry.align ?? null)
+          : (cellEntry[update.property] ?? null);
+      if (current === update.value) return cellEntry;
+      changed = true;
+      return withCellFormat(cellEntry, update);
+    }),
+  }));
+
+  if (!changed) return { ok: true, value: table };
+  return { ok: true, value: { ...table, rows } };
+};
+
 export const setCellColor = (
   table: TableBlock,
   target: TableCellTarget,
   property: CellColorProperty,
   color: string | null,
-): Result<TableBlock, TableGridError> => {
-  if (color !== null && !isCanonicalCellColor(color)) {
-    return { ok: false, error: { code: "INVALID_COLOR", color } };
-  }
-
-  const resolved = resolveTargetCellIds(table, target);
-  if (!resolved.ok) return resolved;
-  const targetCellIds = resolved.value;
-
-  let changed = false;
-  const rows = table.rows.map((row) => ({
-    ...row,
-    cells: row.cells.map((cellEntry) => {
-      if (!targetCellIds.has(cellEntry.id)) return cellEntry;
-      if ((cellEntry[property] ?? null) === color) return cellEntry;
-      changed = true;
-      return withCellFormat(cellEntry, { property, value: color });
-    }),
-  }));
-
-  if (!changed) return { ok: true, value: table };
-  return { ok: true, value: { ...table, rows } };
-};
+): Result<TableBlock, TableGridError> =>
+  setCellFormat(table, target, { property, value: color }, (value) =>
+    isCanonicalCellColor(value)
+      ? undefined
+      : { code: "INVALID_COLOR", color: value },
+  );
 
 export const setCellAlign = (
   table: TableBlock,
   target: TableCellTarget,
   align: CellAlign | null,
-): Result<TableBlock, TableGridError> => {
-  if (align !== null && !isCanonicalCellAlign(align)) {
-    return { ok: false, error: { code: "INVALID_ALIGN", align } };
-  }
-
-  const resolved = resolveTargetCellIds(table, target);
-  if (!resolved.ok) return resolved;
-  const targetCellIds = resolved.value;
-
-  let changed = false;
-  const rows = table.rows.map((row) => ({
-    ...row,
-    cells: row.cells.map((cellEntry) => {
-      if (!targetCellIds.has(cellEntry.id)) return cellEntry;
-      if ((cellEntry.align ?? null) === align) return cellEntry;
-      changed = true;
-      return withCellFormat(cellEntry, { property: "align", value: align });
-    }),
-  }));
-
-  if (!changed) return { ok: true, value: table };
-  return { ok: true, value: { ...table, rows } };
-};
+): Result<TableBlock, TableGridError> =>
+  setCellFormat(table, target, { property: "align", value: align }, (value) =>
+    isCanonicalCellAlign(value)
+      ? undefined
+      : { code: "INVALID_ALIGN", align: value },
+  );
 
 export const validateColumnWidth = (
   width: number,
