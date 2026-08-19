@@ -28,6 +28,10 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
       headerRows: 0 as const,
       headerColumns: 0 as const,
     };
+    const [row] = table.rows;
+    if (!row) throw new Error("표 fixture에 row가 없다");
+    const [cell] = row.cells;
+    if (!cell) throw new Error("표 fixture에 cell이 없다");
 
     expect(
       parseDocument({ formatVersion: 1, revision: 0, blocks: [table] }),
@@ -63,8 +67,8 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
             columns: [{ id: "column-1", width: 48 }],
             rows: [
               {
-                ...table.rows[0],
-                cells: [{ ...table.rows[0]?.cells[0], rowSpan: 1 }],
+                ...row,
+                cells: [{ ...cell, rowSpan: 1 }],
               },
             ],
           },
