@@ -7,12 +7,18 @@
  */
 
 import type { EditorController, TableCellSelection } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider } from "../src/index.js";
 import { TableSelectionToolbar } from "../src/table-selection-toolbar.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 const mergeLabel = "Merge cells";
 const splitLabel = "Split cell";
@@ -123,7 +129,7 @@ const withProvider = (
 );
 
 const renderTable = (controller: ReturnType<typeof fakeController>) => {
-  const view = render(
+  render(
     withProvider(
       controller,
       <>
@@ -146,7 +152,7 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
   // 구조) — Escape 초점 복구 단언은 초점을 실제로 받는 후자를 대상으로 한다.
   const editable = host.querySelector<HTMLElement>('[contenteditable="true"]');
   if (editable === null) throw new Error("Editable was not mounted");
-  return { view, table, cell1, cell2, editable };
+  return { table, cell1, cell2, editable };
 };
 
 const triggerSelectionChange = () => {
@@ -165,7 +171,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
         splitCellId: null,
       }),
     });
-    const { view, cell1, cell2 } = renderTable(controller);
+    const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
 
@@ -174,7 +180,6 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     expect(screen.getByRole("button", { name: mergeLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
     expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
-    view.unmount();
   });
 
   it("Merge cells 클릭 시 mergeTableCells(tableBlockId)를 호출한다", () => {
@@ -186,7 +191,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
         splitCellId: null,
       }),
     });
-    const { view, cell1, cell2 } = renderTable(controller);
+    const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
     triggerSelectionChange();
@@ -194,7 +199,6 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
 
     expect(controller.commands.mergeTableCells).toHaveBeenCalledWith("table-1");
-    view.unmount();
   });
 
   it("selectedCell 데코레이션이 없으면(경계 계산 불가) 아무 툴바도 표시하지 않는다", () => {
@@ -206,24 +210,22 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
         splitCellId: null,
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
 
     triggerSelectionChange();
 
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
-    view.unmount();
   });
 
   it("표 셀 선택이 없으면 아무 툴바도 표시하지 않는다", () => {
     const controller = fakeController({ getTableCellSelection: () => null });
-    const { view } = renderTable(controller);
+    renderTable(controller);
 
     triggerSelectionChange();
 
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
     expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
     expect(screen.queryByRole("button", { name: formatLabel })).toBeNull();
-    view.unmount();
   });
 
   it("트리플클릭한 병합되지 않은 셀 하나(mergeable=false, splitCellId=null)도 Cell formatting 버튼을 보여준다", () => {
@@ -235,7 +237,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
         splitCellId: null,
       }),
     });
-    const { view, cell1 } = renderTable(controller);
+    const { cell1 } = renderTable(controller);
     cell1.classList.add("selectedCell");
 
     triggerSelectionChange();
@@ -243,7 +245,6 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
     expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
-    view.unmount();
   });
 });
 
@@ -257,13 +258,12 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
         splitCellId: "cell-1",
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
 
     triggerSelectionChange();
 
     expect(screen.getByRole("button", { name: splitLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
-    view.unmount();
   });
 
   it("Split cell 클릭 시 splitTableCell(tableBlockId, cellId)를 호출한다", () => {
@@ -275,7 +275,7 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
         splitCellId: "cell-1",
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
     triggerSelectionChange();
 
     fireEvent.click(screen.getByRole("button", { name: splitLabel }));
@@ -284,7 +284,6 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
       "table-1",
       "cell-1",
     );
-    view.unmount();
   });
 });
 
@@ -298,7 +297,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
         splitCellId: "cell-1",
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
     triggerSelectionChange();
 
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
@@ -306,7 +305,6 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     expect(
       screen.getByRole("menu", { name: "Cell formatting" }),
     ).not.toBeNull();
-    view.unmount();
   });
 
   it('색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:"cells",cellIds}, color)를 호출하고 메뉴를 닫는다', () => {
@@ -318,7 +316,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
         splitCellId: "cell-1",
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
 
@@ -330,7 +328,6 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
       "#D93025",
     );
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
-    view.unmount();
   });
 
   it("Escape로 서식 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
@@ -342,7 +339,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
         splitCellId: "cell-1",
       }),
     });
-    const { view, editable } = renderTable(controller);
+    const { editable } = renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
     expect(
@@ -356,7 +353,6 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못
     // 연결되면 초점은 그대로 body에 남아 이 단언이 실패한다.
     expect(document.activeElement).toBe(editable);
-    view.unmount();
   });
 
   it("서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
@@ -368,7 +364,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
         splitCellId: "cell-1",
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
     expect(
@@ -385,7 +381,6 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
     expect(document.activeElement).toBe(outsideButton);
     outsideButton.remove();
-    view.unmount();
   });
 
   it("서식 메뉴 안(data-be-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
@@ -397,7 +392,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
         splitCellId: "cell-1",
       }),
     });
-    const { view } = renderTable(controller);
+    renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
 
@@ -407,6 +402,5 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     expect(
       screen.queryByRole("menu", { name: "Cell formatting" }),
     ).not.toBeNull();
-    view.unmount();
   });
 });
