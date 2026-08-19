@@ -11,6 +11,7 @@ import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
 import type { Result } from "../result.js";
+import { computeColumnAlignments } from "./column-align.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 
 const stringifyProcessor = unified().use(remarkStringify).use(remarkGfm);
@@ -99,25 +100,6 @@ const inlineNodes = (
       );
   });
 
-const columnAlign = (
-  table: TableBlock,
-  columnId: string,
-): "left" | "center" | "right" | null => {
-  let align: "left" | "center" | "right" | null | undefined;
-  for (const row of table.rows) {
-    for (const cell of row.cells) {
-      if (cell.columnId !== columnId) continue;
-      const cellAlign = cell.align ?? null;
-      if (align === undefined) {
-        align = cellAlign;
-        continue;
-      }
-      if (align !== cellAlign) return null;
-    }
-  }
-  return align ?? null;
-};
-
 const tableNode = (table: TableBlock): MarkdownOutputNode => {
   const columnIndices = new Map(
     table.columns.map((column, index) => [column.id, index]),
@@ -142,9 +124,14 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
     }
   }
 
+  const columnAlignments = computeColumnAlignments(table);
+
   return {
     type: "table",
-    align: table.columns.map((column) => columnAlign(table, column.id)),
+    align: table.columns.map((column) => {
+      const align = columnAlignments.get(column.id);
+      return align === undefined || align === "mixed" ? null : align;
+    }),
     children: rows.map((cells) => ({ type: "tableRow", children: cells })),
   };
 };
