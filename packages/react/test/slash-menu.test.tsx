@@ -795,11 +795,17 @@ describe("SlashMenu 블록 메뉴", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("종류 변경 항목을 클릭하면 setBlockType을 호출하고 메뉴를 닫는다", () => {
+  it("종류 변경 항목을 클릭하면 setBlockType을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
     const { controller } = openBlockMenu();
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Heading 2" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.setBlockType).toHaveBeenCalledWith("block-1", {
       type: "heading",
       level: 2,
@@ -807,20 +813,32 @@ describe("SlashMenu 블록 메뉴", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("복제 항목을 클릭하면 duplicateBlock을 호출하고 메뉴를 닫는다", () => {
+  it("복제 항목을 클릭하면 duplicateBlock을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
     const { controller } = openBlockMenu();
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.duplicateBlock).toHaveBeenCalledWith("block-1");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("삭제 항목을 클릭하면 deleteBlock을 호출하고 메뉴를 닫는다", () => {
+  it("삭제 항목을 클릭하면 deleteBlock을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
     const { controller } = openBlockMenu();
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.deleteBlock).toHaveBeenCalledWith("block-1");
     expect(screen.queryByRole("menu")).toBeNull();
   });
