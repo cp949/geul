@@ -377,22 +377,55 @@ React 언마운트는 코어 문서와 명령의 의미를 변경하지 않는�
 
 ## 11. 오류 계약
 
-오류는 예외 문자열에 의존하지 않고 안정적인 코드와 문맥을 갖는다.
+오류는 예외 문자열에 의존하지 않고 안정적인 코드와 문맥을 갖는다. 코드는 계층별 union 타입으로 분리되고, 계층을 넘어 전파될 때도 이름을 유지한다 — `core`는 `io`/`model`의 코드를 새 이름으로 감싸지 않고 그대로 흡수하거나(`io`의 `MarkdownLossNotAllowedError`), 자체 `TableGridError`를 최상위 `EditorError`에 flatten하는 방식만 쓴다.
+
+### 11.1 model (`packages/model/src/errors.ts`)
+
+`DocumentErrorCode`:
 
 - `DOCUMENT_FORMAT_UNSUPPORTED`
 - `DOCUMENT_INVALID`
 - `TABLE_GRID_INVALID`
-- `TABLE_SELECTION_NOT_RECTANGULAR`
-- `TABLE_MERGE_CONFLICT`
-- `TABLE_PASTE_CONFLICT`
-- `TABLE_PASTE_LIMIT_EXCEEDED`
-- `TABLE_COMMAND_NOT_APPLICABLE`
-- `IMPORT_PARSE_FAILED`
-- `IMPORT_UNSAFE_CONTENT_REMOVED`
-- `EXPORT_FORMAT_LOSS`
-- `EXPORT_FORMAT_UNSUPPORTED`
+- `DOCUMENT_LIMIT_EXCEEDED`
 
-셀 정렬 값 검증 실패는 셀 색상과 동일하게 `DOCUMENT_INVALID`를 재사용한다(전용 코드를 추가하지 않는다).
+셀 정렬 값과 셀 색상 검증 실패는 로드 경계(`parseDocument`)에서 전용 코드를 두지 않고 `DOCUMENT_INVALID`를 재사용한다.
+
+### 11.2 io (`packages/io/src/errors.ts`, `html/import-warnings.ts`, `markdown/export-markdown.ts`, `markdown/loss-analysis.ts`)
+
+`ImportErrorCode`: `HTML_PARSE_FAILED` | `HTML_DOCUMENT_INVALID` | `MARKDOWN_PARSE_FAILED` | `MARKDOWN_DOCUMENT_INVALID`
+
+`ExportErrorCode`: `HTML_DOCUMENT_INVALID` | `HTML_SERIALIZE_FAILED` | `MARKDOWN_DOCUMENT_INVALID` | `MARKDOWN_SERIALIZE_FAILED`
+
+Markdown `strict` export가 GFM으로 표현 불가능한 요소를 만나면 `ExportError` 대신 `MarkdownLossNotAllowedError`(`{ code: "MARKDOWN_LOSS_NOT_ALLOWED"; losses: MarkdownLoss[] }`)를 반환한다. `MarkdownLoss.kind`는 `MERGED_CELL` | `COLUMN_WIDTH` | `COLUMN_ALIGN` | `CELL_COLOR` | `UNDERLINE` | `HEADER_ROW` | `HEADER_COLUMN` | `INLINE_CODE_NEWLINE`이며 각 항목은 `blockId`, `rowId?`, `cellId?`, `message`를 담는다. `lossy` export는 같은 손실 목록을 오류가 아닌 `warnings`로 반환한다. 이 코드는 Markdown 전용이다 — HTML export는 `data-be-*` 속성으로 병합·색상·정렬·열 너비를 무손실 보존해 대응하는 손실 코드가 없다.
+
+`ClipboardParseErrorCode`: `NOT_TABULAR` | `CLIPBOARD_TABLE_INVALID`
+
+`HtmlImportWarning.kind`(오류가 아닌 경고): `UNSAFE_ELEMENT_REMOVED` | `UNSAFE_ATTRIBUTE_REMOVED` | `UNSAFE_URL_REMOVED` | `SAFE_BLOCK_DOWNGRADED`
+
+### 11.3 core (`packages/core/src/errors.ts`, `table-grid.ts`)
+
+공개 `EditorError`는 `model`/`io`가 위임한 코드에 `core` 자체 코드를 더한 단일 union이다.
+
+- `DOCUMENT_INVALID`
+- `BLOCK_NOT_FOUND`
+- `COMMAND_NOT_APPLICABLE`(표 명령을 포함해 현재 상태에서 적용 불가능한 모든 명령이 공유)
+- `LINK_HREF_REJECTED`
+- `TABLE_NOT_FOUND`
+- `TABLE_NODE_INVALID`
+- `INVALID_TABLE_SIZE`
+- `INDEX_OUT_OF_RANGE`
+- `MERGE_BOUNDARY_CROSSED`
+- `COLUMN_WIDTH_OUT_OF_RANGE`
+- `NOT_RECTANGULAR`(셀 병합 시 선택 영역이 직사각형이 아님. 직사각형이면 병합은 항상 성공하므로 이와 별개인 "병합 충돌" 코드는 없다)
+- `TABULAR_DATA_INVALID`
+- `CELL_NOT_FOUND`
+- `LAST_ROW`
+- `LAST_COLUMN`
+- `INVALID_COLOR`(실행 중 명령이 잘못된 색상 값을 받음. 로드 시점 검증은 11.1의 `DOCUMENT_INVALID`를 쓴다)
+- `INVALID_ALIGN`(실행 중 명령이 잘못된 정렬 값을 받음. 로드 시점 검증은 11.1의 `DOCUMENT_INVALID`를 쓴다)
+- `CELL_LIMIT_EXCEEDED`(붙여넣기·확장 결과가 `MAX_TABLE_LOGICAL_CELLS`(10,000)를 초과)
+- `PASTE_MERGE_CONFLICT`(붙여넣기 결과가 기존 병합 셀과 안전하게 결합되지 않음)
+- `PASTE_TARGET_NOT_FOUND`
 
 사용자 입력으로 예상 가능한 거부는 `Result` 실패로 반환한다. 프로그래밍 오류나 깨진 내부 불변식은 개발 환경에서 명시적으로 실패시키고, 소비자 콜백으로 진단 정보를 전달한다. 실패한 명령은 revision, selection과 문서를 변경하지 않는다.
 
