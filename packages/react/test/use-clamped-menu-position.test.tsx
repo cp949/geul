@@ -13,15 +13,15 @@ type ProbeProps = {
 };
 
 const Probe = ({ left, top, anchor }: ProbeProps) => {
-  const { menuRef, position } = useClampedMenuPosition(left, top, anchor);
+  const { menuRef, style } = useClampedMenuPosition(left, top, anchor);
   const renders = useRef(0);
   renders.current += 1;
   return (
     <div
-      data-left={position.left}
+      data-left={style.left}
       data-renders={renders.current}
       data-testid="probe"
-      data-top={position.top}
+      data-top={style.top}
       ref={menuRef}
     />
   );
@@ -197,11 +197,11 @@ describe("useClampedMenuPosition", () => {
     expect(probe.dataset.top).toBe("684");
   });
 
-  it("leftGutter: 고정 -56px 이동한 박스가 뷰포트 왼쪽으로 넘치면 최소 여백까지 오른쪽으로 민다", () => {
+  it("leftOfAnchor: 고정 -56px 이동한 박스가 뷰포트 왼쪽으로 넘치면 최소 여백까지 오른쪽으로 민다", () => {
     stubMenuRect(60, 24);
     // dx=-56, dy=0 → minLeft = 8+56=64.
     const { getByTestId } = render(
-      <Probe anchor="leftGutter" left={20} top={100} />,
+      <Probe anchor="leftOfAnchor" left={20} top={100} />,
     );
     const probe = getByTestId("probe");
 

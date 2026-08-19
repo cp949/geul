@@ -8,16 +8,35 @@ import {
 
 const MENU_VIEWPORT_MARGIN = 8;
 
-export type ClampedMenuPosition = {
+/** 훅 내부 clamp 상태 표현. 공개 반환값이 아니다 — 소비자는 `style`만 본다. */
+type ClampedMenuPosition = {
   left: number;
   top: number;
 };
 
 /**
+ * 앵커 좌표(left, top)에서 렌더된 박스 가장자리까지 CSS `translate`가
+ * 이미 벌려놓은 간격(px). `centerAbove`/`centerBelow`의 `0.5rem`에 대응한다
+ * — 루트 폰트 크기 16px 가정이며, 소비자가 그 값을 오버라이드하면 이 상수도
+ * 같이 바꿔야 한다. `MENU_VIEWPORT_MARGIN`(뷰포트 자체의 여백)과 값은
+ * 우연히 같아도 의미가 다르다 — 서로 바꿔 쓰지 않는다.
+ */
+const ANCHOR_BOX_GAP_PX = 8;
+
+/**
+ * `leftOfAnchor`의 `-3.5rem`을 px로 환산하는 데 쓰는 루트 폰트 크기
+ * 가정(16px). 소비자가 루트 폰트 크기를 오버라이드하면 이 값과 아래
+ * 파생값을 같이 바꿔야 한다.
+ */
+const ASSUMED_ROOT_FONT_SIZE_PX = 16;
+const LEFT_OF_ANCHOR_REM = 3.5;
+const LEFT_OF_ANCHOR_OFFSET_PX = LEFT_OF_ANCHOR_REM * ASSUMED_ROOT_FONT_SIZE_PX;
+
+/**
  * 오버레이 루트가 CSS `transform`으로 앵커 좌표(left, top)에서 시각적으로
- * 얼마나 벗어나 그려지는지 기술한다. 값이 바뀌면 아래 `ANCHOR_OFFSETS`도
- * 함께 바꿔야 한다 — 각 이름은 실제 컴포넌트의 `transform` 값과 정확히
- * 대응한다.
+ * 얼마나 벗어나 그려지는지, 그 기하 관계로 이름 붙인다. 값이 바뀌면 아래
+ * `ANCHOR_OFFSETS`도 함께 바꿔야 한다 — 각 이름은 실제 컴포넌트의
+ * `transform` 값과 정확히 대응한다.
  *
  * - `topLeft`(기본값): transform 없음 — 렌더된 박스의 좌상단이 곧
  *   (left, top)이다. `TableHandleMenu`, `TableCellFormatMenu`, `SlashMenu`,
@@ -25,13 +44,13 @@ export type ClampedMenuPosition = {
  * - `centerAbove`: `translate(-50%, calc(-100% - 0.5rem))`. `FormattingToolbar`,
  *   `TableSelectionToolbar`가 쓴다.
  * - `centerBelow`: `translate(-50%, 0.5rem)`. `LinkToolbar`가 쓴다.
- * - `leftGutter`: `translate(-3.5rem, 0)`. `BlockSideMenu` 사이드 버튼이 쓴다.
+ * - `leftOfAnchor`: `translate(-3.5rem, 0)`. `BlockSideMenu` 사이드 버튼이 쓴다.
  */
 export type ClampAnchor =
   | "topLeft"
   | "centerAbove"
   | "centerBelow"
-  | "leftGutter";
+  | "leftOfAnchor";
 
 type BoxOffset = { dx: number; dy: number };
 
@@ -40,9 +59,12 @@ const ANCHOR_OFFSETS: Record<
   (rect: { width: number; height: number }) => BoxOffset
 > = {
   topLeft: () => ({ dx: 0, dy: 0 }),
-  centerAbove: (rect) => ({ dx: -rect.width / 2, dy: -rect.height - 8 }),
-  centerBelow: (rect) => ({ dx: -rect.width / 2, dy: 8 }),
-  leftGutter: () => ({ dx: -56, dy: 0 }),
+  centerAbove: (rect) => ({
+    dx: -rect.width / 2,
+    dy: -rect.height - ANCHOR_BOX_GAP_PX,
+  }),
+  centerBelow: (rect) => ({ dx: -rect.width / 2, dy: ANCHOR_BOX_GAP_PX }),
+  leftOfAnchor: () => ({ dx: -LEFT_OF_ANCHOR_OFFSET_PX, dy: 0 }),
 };
 
 /**
@@ -50,10 +72,11 @@ const ANCHOR_OFFSETS: Record<
  * 실제 크기를 재서 뷰포트 안으로 접어 넣는다(PIT-0011). 앵커 좌표(left,
  * top)만으로 위치를 정하면 가변 높이 메뉴가 화면 밖으로 밀려 그 항목은
  * 클릭 자체가 불가능해진다. 여러 오버레이 컴포넌트가 공용으로 쓴다
- * (각 anchor별 소비자는 `ClampAnchor` 타입 참고). `style`은 소비 측이
- * `{ left: position.left, top: position.top }`를 매번 다시 조립하지
- * 않도록 완성된 형태로 제공한다 — 반환된 `style`은 여전히 `left`/`top`
- * CSS 프로퍼티일 뿐, `transform` className은 그대로 컴포넌트가 갖는다.
+ * (각 anchor별 소비자는 `ClampAnchor` 타입 참고). 공개 표면은 `style` 하나뿐이다
+ * — 8개 소비자 전부 `left`/`top`을 그대로 스타일에 꽂아 쓸 뿐 클램프된 좌표를
+ * 숫자로 따로 읽지 않으므로, 내부 clamp 상태(`position`)를 별도로 노출하지
+ * 않는다. 반환된 `style`은 여전히 `left`/`top` CSS 프로퍼티일 뿐, `transform`
+ * className은 그대로 컴포넌트가 갖는다.
  *
  * `anchor`가 `"topLeft"`가 아니면 (left, top)은 박스의 좌상단이 아니므로,
  * 클램프가 실제 렌더된 박스 기준으로 여백을 계산하려면 `ANCHOR_OFFSETS`로
@@ -71,7 +94,6 @@ export const useClampedMenuPosition = (
   anchor: ClampAnchor = "topLeft",
 ): {
   menuRef: RefObject<HTMLDivElement | null>;
-  position: ClampedMenuPosition;
   style: CSSProperties;
 } => {
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -118,7 +140,6 @@ export const useClampedMenuPosition = (
 
   return {
     menuRef,
-    position,
     style: { left: position.left, top: position.top },
   };
 };

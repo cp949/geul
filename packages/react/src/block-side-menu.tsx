@@ -258,7 +258,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const gutterClamp = useClampedMenuPosition(
     hoverBounds?.left ?? 0,
     hoverBounds?.top ?? 0,
-    "leftGutter",
+    "leftOfAnchor",
   );
   const blockMenuClamp = useClampedMenuPosition(
     blockMenuState?.left ?? 0,

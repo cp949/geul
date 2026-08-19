@@ -4,6 +4,8 @@
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { CLAMP_BOUNDARY_TOLERANCE_PX } from "./support/clamp.js";
+
 /** demo를 열고 편집 가능한 영역이 준비될 때까지 기다린다. */
 const openDemo = async (page: Page) => {
   await page.goto("/");
@@ -187,7 +189,7 @@ test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 
   expect(menuBox).not.toBeNull();
   expect(viewportSize).not.toBeNull();
   expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
-    (viewportSize?.height ?? 0) - 4,
+    (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_TOLERANCE_PX,
   );
 
   // 팔레트 맨 마지막 항목이 실제로 클릭 가능해야 클램프가 유효하다 —
@@ -403,7 +405,7 @@ test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 �
   expect(menuBox).not.toBeNull();
   expect(viewportSize).not.toBeNull();
   expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
-    (viewportSize?.height ?? 0) - 4,
+    (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_TOLERANCE_PX,
   );
 
   await menu.getByRole("menuitem", { name: "Align none" }).click();
@@ -443,7 +445,7 @@ test("표 상단 행에서 셀을 선택해도 Table selection 툴바가 화면 
   await expect(toolbar).toBeVisible();
   await expect
     .poll(async () => (await toolbar.boundingBox())?.y ?? -1)
-    .toBeGreaterThanOrEqual(0);
+    .toBeGreaterThanOrEqual(CLAMP_BOUNDARY_TOLERANCE_PX);
 
   // 클램프가 없으면 Cell formatting 버튼이 뷰포트 밖으로 나가 클릭이
   // "element is outside of the viewport"로 타임아웃한다(PIT-0011 실측

@@ -232,6 +232,15 @@ export const TableSelectionToolbar = () => {
           onMouseDown={(event) => event.preventDefault()}
         />
       </div>
+      {/* toolbarState.left/top은 원본(비클램프) 앵커 좌표다 — 위 메인 툴바가
+          useClampedMenuPosition으로 접어 넣은 화면상 위치(menuRef.style)가
+          아니다. 의도적으로 원본을 그대로 넘긴다: TableCellFormatMenu는
+          자신도 topLeft anchor로 독립 클램프하므로 항상 뷰포트 안에서 열리고
+          클릭 가능함이 e2e(table-format.spec.ts PIT-0011 케이스)로 보장된다.
+          부모가 화면 끝에서 접혀 부모·자식 사이 위치가 시각적으로 약간
+          어긋나는 코스메틱 트레이드오프이며, 부모의 클램프된 좌표를 읽어
+          전달하려면 useClampedMenuPosition이 그 좌표를 다시 공개해야 해
+          #44에서 축소한 훅 표면(항목 2)과 상충한다(#44 항목 6). */}
       {formatMenuOpen && (
         <TableCellFormatMenu
           cellIds={toolbarState.cellIds}

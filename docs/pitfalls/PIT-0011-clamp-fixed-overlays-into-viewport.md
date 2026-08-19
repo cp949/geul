@@ -38,7 +38,7 @@ pnpm test:e2e --project=chromium e2e/formatting-toolbar.spec.ts e2e/link-toolbar
   가이드 라인은 클릭 대상이 아니고 클램프가 실제 삽입 위치를 왜곡하므로
   마이그레이션에서 제외했다(컴포넌트 내부 주석 참고).
 - `useClampedMenuPosition`은 `anchor` 파라미터(`topLeft`/`centerAbove`/
-  `centerBelow`/`leftGutter`)로 확장됐다. TableHandleMenu/TableCellFormatMenu처럼
+  `centerBelow`/`leftOfAnchor`)로 확장됐다. TableHandleMenu/TableCellFormatMenu처럼
   transform 없이 `left`/`top`이 곧 박스 좌상단인 오버레이는 기본값 `topLeft`라
   훅 호출부가 그대로지만, `translate(...)`로 앵커에서 벗어나 그려지는 오버레이는
   그 벗어난 정도를 `anchor`로 알려줘야 클램프가 올바른 여백을 계산한다 — 이

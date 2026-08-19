@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+import { CLAMP_BOUNDARY_TOLERANCE_PX } from "./support/clamp.js";
+import { selectBlockTextAndNotify } from "./support/selection.js";
+
 const openDemo = async (page: Parameters<typeof test>[0]["page"]) => {
   await page.goto("/");
   const editor = page.getByRole("textbox", { name: "Editor" });
@@ -101,20 +104,9 @@ test("선택 영역이 뷰포트 하단에 붙어 있어도 Add link 버튼을 �
     await page.keyboard.type(`line ${index}`);
   }
 
-  const selectionBox = await editable
-    .locator("p")
-    .last()
-    .evaluate((block) => {
-      const text = block.firstChild;
-      if (text === null) throw new Error("Last block has no text");
-      const range = document.createRange();
-      range.selectNodeContents(text);
-      const selection = document.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      document.dispatchEvent(new Event("selectionchange"));
-      return range.getBoundingClientRect().toJSON();
-    });
+  const selectionBox = await selectBlockTextAndNotify(
+    editable.locator("p").last(),
+  );
   const viewportSize = page.viewportSize();
   expect(viewportSize).not.toBeNull();
 
@@ -133,7 +125,9 @@ test("선택 영역이 뷰포트 하단에 붙어 있어도 Add link 버튼을 �
       if (box === null) return Number.POSITIVE_INFINITY;
       return box.y + box.height;
     })
-    .toBeLessThanOrEqual((viewportSize?.height ?? 0) - 2);
+    .toBeLessThanOrEqual(
+      (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_TOLERANCE_PX,
+    );
 
   // 클램프가 없으면 Add link 버튼이 뷰포트 밖으로 나가 클릭이 "element is
   // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
