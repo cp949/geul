@@ -277,4 +277,25 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
     view.unmount();
   });
+
+  it("URL 입력에서 Escape를 누르면 툴바를 닫고 편집기로 초점을 되돌린다", () => {
+    const controller = fakeController();
+    const view = renderWithSelectedText(controller);
+    // host(role="textbox")는 마운트 host이고, 컨트롤러가 그 안에 실제
+    // contenteditable 자식을 넣는다(block-side-menu.test.tsx:70-75와 같은
+    // 구조) — closeAndRestoreFocus가 초점을 실제로 주는 대상은 후자다.
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    const input = screen.getByRole("textbox", { name: "Link URL" });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(screen.queryByRole("textbox", { name: "Link URL" })).toBeNull();
+    expect(document.activeElement).toBe(editable);
+    view.unmount();
+  });
 });

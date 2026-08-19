@@ -236,7 +236,7 @@ describe("SlashMenu 질의 팝업", () => {
     view.unmount();
   });
 
-  it("항목을 클릭하면 clearContent와 함께 setBlockType을 호출한다", () => {
+  it("항목을 클릭하면 clearContent와 함께 setBlockType을 호출하고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController({
       getCaretBlockContext: () => ({
         blockId: "block-1",
@@ -254,6 +254,14 @@ describe("SlashMenu 질의 팝업", () => {
       ),
     );
     fireCaretUpdate();
+    // host(role="textbox")는 마운트 host이고, 컨트롤러가 그 안에 실제
+    // contenteditable 자식을 넣는다(block-side-menu.test.tsx:70-75와 같은
+    // 구조) — selectItem 말미의 focusEditor가 초점을 주는 대상은 후자다.
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("option", { name: /Heading 1/ }));
 
@@ -262,6 +270,7 @@ describe("SlashMenu 질의 팝업", () => {
       { type: "heading", level: 1 },
       { clearContent: true },
     );
+    expect(document.activeElement).toBe(editable);
     view.unmount();
   });
 
