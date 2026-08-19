@@ -28,6 +28,15 @@ pnpm test:e2e --project=chromium e2e/table-format.spec.ts
 
 - `packages/react/src/use-clamped-menu-position.ts`의 `useLayoutEffect` 뷰포트 클램프(`TableHandleMenu`·`TableCellFormatMenu`가 공용으로 사용, [#19](https://github.com/cp949/geul/issues/19)에서 추출)와 각 메뉴 컴포넌트의 `max-h-[calc(100vh-1rem)]`/`overflow-y-auto`.
 - `e2e/table-format.spec.ts`의 "표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)" — 표를 11행까지 늘려 마지막 행에서 메뉴를 열고, 메뉴 bounding box가 뷰포트를 벗어나지 않는지 확인한 뒤 팔레트 맨 마지막 항목("Background color None")을 실제로 클릭한다. (슬라이스 9a 리뷰 라운드에서 교체 — 최초 버전은 "행 핸들 메뉴에서 배경색을 고르면..." 테스트를 근거로 들었으나, 그 테스트는 3행 표의 첫 행에서 메뉴를 열고 8개 중 4번째 항목("Yellow")만 클릭해 실제로는 overflow를 재현하지 않았다.)
+- `packages/react/src/formatting-toolbar.tsx`, `link-toolbar.tsx`, `slash-menu.tsx`,
+  `block-side-menu.tsx`(사이드 버튼·블록 메뉴), `table-selection-toolbar.tsx`도
+  같은 훅으로 마이그레이션했다([#43](https://github.com/cp949/geul/issues/43) —
+  #19 리뷰에서 발견된 부분/미적용 클램프 잔여분). `block-side-menu.tsx`의 드롭
+  가이드 라인은 클릭 대상이 아니고 클램프가 실제 삽입 위치를 왜곡하므로
+  마이그레이션에서 제외했다(컴포넌트 내부 주석 참고).
+- 각 컴포넌트의 e2e(`e2e/formatting-toolbar.spec.ts`, `link-toolbar.spec.ts`,
+  `slash-menu.spec.ts`, `block-handle.spec.ts`, `table-format.spec.ts`)에
+  "화면 밖 항목을 실제로 클릭"하는 PIT-0011 테스트를 추가했다.
 - R1 슬라이스 9a Issue [#3](https://github.com/cp949/geul/issues/3) 댓글에 실측 좌표(menu y=443, height=336, 뷰포트 720)를 기록함.
 
 ## 관련 문서
