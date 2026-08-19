@@ -1,5 +1,5 @@
 import type { TableCellTarget } from "@cp949/geul-core";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 
 import {
   TABLE_BACKGROUND_COLORS,
@@ -16,8 +16,6 @@ const sectionLabelClassName =
   "geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]";
 const dividerClassName =
   "geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]";
-
-const MENU_VIEWPORT_MARGIN = 8;
 
 export type TableHandleMenuProps = {
   kind: "row" | "column";
@@ -46,34 +44,11 @@ export const TableHandleMenu = ({
   onClose,
 }: TableHandleMenuProps) => {
   const editor = useEditor();
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState({ left, top });
+  const { menuRef, position } = useClampedMenuPosition(left, top);
   const isRow = kind === "row";
   const target: TableCellTarget = isRow
     ? { kind: "row", index }
     : { kind: "column", index };
-
-  // position: fixed 메뉴는 스크롤로 화면 안에 들어오지 않는다 — 렌더 직후
-  // 실제 크기를 재서 뷰포트 안으로 접어 넣는다. 팔레트가 화면 밖으로
-  // 밀리면 클릭 자체가 불가능해진다(실브라우저에서 확인).
-  useLayoutEffect(() => {
-    const node = menuRef.current;
-    const view = node?.ownerDocument.defaultView ?? null;
-    if (node === null || view === null) return;
-    const rect = node.getBoundingClientRect();
-    const maxLeft = Math.max(
-      MENU_VIEWPORT_MARGIN,
-      view.innerWidth - rect.width - MENU_VIEWPORT_MARGIN,
-    );
-    const maxTop = Math.max(
-      MENU_VIEWPORT_MARGIN,
-      view.innerHeight - rect.height - MENU_VIEWPORT_MARGIN,
-    );
-    setPosition({
-      left: Math.min(Math.max(left, MENU_VIEWPORT_MARGIN), maxLeft),
-      top: Math.min(Math.max(top, MENU_VIEWPORT_MARGIN), maxTop),
-    });
-  }, [left, top]);
 
   const runAndClose = (run: () => void) => {
     run();
