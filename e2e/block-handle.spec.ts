@@ -215,3 +215,39 @@ test("문서 하단 블록에서 메뉴를 열어도 Delete 항목까지 뷰포�
   await menu.getByRole("menuitem", { name: "Delete" }).click();
   await expect(editable.locator("p").last()).not.toHaveText("line 24");
 });
+
+test("메뉴보다 짧은 뷰포트에서도 블록 메뉴 맨 아래 Delete 항목을 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  // 블록 메뉴는 "Turn into" 헤더 + 블록 타입 4개 + 구분선 + Duplicate +
+  // Delete로 약 230px다. 높이 200px 뷰포트는 클램프 여백(위아래 8px씩)을
+  // 빼면 184px만 남아 메뉴가 확실히 넘친다. 클램프는 좌표만 접을 뿐이라
+  // 뷰포트보다 큰 메뉴의 아래쪽 항목에는 닿지 못한다 — max-height와
+  // overflow-y가 함께 있어야 한다(PIT-0011 예방 규칙).
+  await page.setViewportSize({ width: 1280, height: 200 });
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("first block");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("second block");
+
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+
+  const menuBox = await menu.boundingBox();
+  expect(menuBox).not.toBeNull();
+  // max-height가 없으면 메뉴 박스 자체가 뷰포트 아래로 넘친다.
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(200);
+
+  // overflow-y가 없으면 메뉴 내부 스크롤이 불가능해 이 클릭이 "element is
+  // outside of the viewport"로 타임아웃한다(PIT-0011 "가장 아래쪽 항목을
+  // 실제로 클릭").
+  await menu.getByRole("menuitem", { name: "Delete" }).click();
+
+  await expect(editable.locator("p")).toHaveCount(1);
+  await expect(editable.locator("p").first()).toHaveText("second block");
+});

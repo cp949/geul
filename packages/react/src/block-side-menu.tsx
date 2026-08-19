@@ -374,10 +374,15 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           }}
         />
       )}
+      {/* max-h-[calc(100vh-1rem)] + overflow-y-auto: 클램프는 좌표만 접으므로
+          뷰포트보다 큰 메뉴는 아래쪽 항목에 닿을 수 없다(PIT-0011 예방 규칙).
+          1rem은 useClampedMenuPosition의 MENU_VIEWPORT_MARGIN 8px가 위·아래로
+          두 번 들어간 값이라 클램프 결과와 정확히 맞물린다. R2에서 블록 타입
+          목록이 늘면 일반 뷰포트에서도 넘친다. */}
       {blockMenuState !== null && (
         <div
           aria-label="Block menu"
-          className="geul:fixed geul:z-10 geul:flex geul:w-40 geul:flex-col geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+          className="geul:fixed geul:z-10 geul:flex geul:max-h-[calc(100vh-1rem)] geul:w-40 geul:flex-col geul:gap-0.5 geul:overflow-y-auto geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
           data-be-block-menu=""
           ref={blockMenuClamp.menuRef}
           role="menu"
