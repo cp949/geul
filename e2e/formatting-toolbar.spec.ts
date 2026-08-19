@@ -180,3 +180,45 @@ test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
     })
     .toBeLessThan(24);
 });
+
+test("선택 영역이 뷰포트 상단에 붙어 있어도 Bold 버튼을 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first line");
+  for (let index = 0; index < 20; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+
+  const selectionBox = await editable
+    .locator("p")
+    .first()
+    .evaluate((block) => {
+      const text = block.firstChild;
+      if (text === null) throw new Error("First block has no text");
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+      return range.getBoundingClientRect().toJSON();
+    });
+
+  // 첫 줄이 뷰포트 맨 위(y≈2)에 붙도록 정확히 그만큼만 스크롤한다 —
+  // FormattingToolbar는 선택 위(translateY(-100%-0.5rem))에 뜨므로,
+  // 클램프가 없으면 이 위치에서 뷰포트 밖(음수 y)으로 밀려난다(PIT-0011).
+  await page.evaluate((delta) => window.scrollBy(0, delta), selectionBox.y - 2);
+
+  const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  await expect
+    .poll(async () => (await toolbar.boundingBox())?.y ?? -1)
+    .toBeGreaterThanOrEqual(0);
+
+  // 클램프가 없으면 Bold 버튼이 뷰포트 밖으로 나가 클릭이 "element is
+  // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
+  await page.getByRole("button", { name: "Bold" }).click();
+  await expect(editable.locator("strong")).toHaveText("first line");
+});

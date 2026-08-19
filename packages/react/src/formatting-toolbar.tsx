@@ -8,6 +8,7 @@ import {
 } from "./block-type-options.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
@@ -89,16 +90,11 @@ export const FormattingToolbar = () => {
         top: 0,
         width: 0,
       };
-      const viewportWidth = element.ownerDocument.defaultView?.innerWidth ?? 0;
-      const left = Math.min(
-        Math.max(bounds.left + bounds.width / 2, 96),
-        Math.max(viewportWidth - 96, 96),
-      );
       setToolbarState({
         activeMarks: editor.getSelectionMarks(),
         blockSelection: editor.getSelectionBlockType(),
-        left,
-        top: Math.max(bounds.top, 48),
+        left: bounds.left + bounds.width / 2,
+        top: bounds.top,
       });
     };
 
@@ -122,14 +118,20 @@ export const FormattingToolbar = () => {
     };
   }, [editor, element]);
 
+  const { menuRef, style } = useClampedMenuPosition(
+    toolbarState?.left ?? 0,
+    toolbarState?.top ?? 0,
+  );
+
   if (toolbarState === null) return null;
 
   return (
     <div
       aria-label="Formatting"
       className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_1px_4px_rgba(0,0,0,0.15)] geul:[transform:translate(-50%,calc(-100%-0.5rem))]"
+      ref={menuRef}
       role="toolbar"
-      style={{ left: toolbarState.left, top: toolbarState.top }}
+      style={style}
     >
       {toolbarState.blockSelection !== null && (
         <select
