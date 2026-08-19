@@ -8,6 +8,7 @@ import {
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 // 핸들은 드래그(재정렬)와 클릭(블록 메뉴) 두 동작을 모두 갖는다 — tooltip이
@@ -51,6 +52,15 @@ const blockGutterButtonClassName =
 
 const blockMenuItemClassName =
   "geul:cursor-pointer geul:rounded geul:border-0 geul:bg-transparent geul:px-2 geul:py-1.5 geul:text-left geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)]";
+
+// useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
+// table-selection-toolbar.tsx와 같은 이유로 모듈 스코프 상수로 둔다 —
+// 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다
+// 다시 붙인다.
+const BLOCK_MENU_DISMISS_ALLOW_SELECTORS = [
+  "[data-be-block-menu]",
+  "[data-be-block-handle]",
+] as const;
 
 export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
@@ -211,32 +221,22 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     };
   }, [isDragging, element, editor, updateDragState]);
 
-  useEffect(() => {
-    if (blockMenuState === null || element === null) return;
-    const ownerDocument = element.ownerDocument;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest("[data-be-block-menu]") !== null) return;
-      if (target.closest("[data-be-block-handle]") !== null) return;
-      setBlockMenuState(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setBlockMenuState(null);
-        focusEditor();
-      }
-    };
-
-    ownerDocument.addEventListener("pointerdown", handlePointerDown);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
-    return () => {
-      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [blockMenuState, element, focusEditor]);
+  // 블록 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로
+  // 닫는 UI는 병렬 e2e로 검증한다). 리스너 등록/해제는
+  // useDismissOnOutsideOrEscape가 소유한다 — table-handles.tsx,
+  // table-selection-toolbar.tsx와 같은 훅이다(Issue #20, #45).
+  const dismissBlockMenu = useCallback(() => setBlockMenuState(null), []);
+  const closeBlockMenu = useCallback(() => {
+    setBlockMenuState(null);
+    focusEditor();
+  }, [focusEditor]);
+  useDismissOnOutsideOrEscape({
+    active: blockMenuState !== null,
+    element,
+    allowSelectors: BLOCK_MENU_DISMISS_ALLOW_SELECTORS,
+    onOutsideDismiss: dismissBlockMenu,
+    onEscapeDismiss: closeBlockMenu,
+  });
 
   const hoverBounds = (() => {
     if (hoverBlockId === null || element === null) return null;
