@@ -41,11 +41,8 @@ const buildWideMixedAlignTable = (columnCount: number): TableBlock => {
     id: `row-${rowIndex}`,
     cells: columns.map((column, index) => {
       const isMixedColumn = index % 3 === 0;
-      const align: "left" | "right" = isMixedColumn
-        ? rowIndex === 0
-          ? "left"
-          : "right"
-        : "left";
+      const align: "left" | "right" =
+        !isMixedColumn || rowIndex === 0 ? "left" : "right";
       return {
         id: `${column.id}-cell-${rowIndex}`,
         columnId: column.id,
