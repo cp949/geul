@@ -307,7 +307,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     ).not.toBeNull();
   });
 
-  it('색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:"cells",cellIds}, color)를 호출하고 메뉴를 닫는다', () => {
+  it('색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:"cells",cellIds}, color)를 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다', () => {
     const controller = fakeController({
       getTableCellSelection: () => ({
         tableBlockId: "table-1",
@@ -316,12 +316,13 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
         splitCellId: "cell-1",
       }),
     });
-    renderTable(controller);
+    const { editable } = renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color Red" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.setTableCellTextColor).toHaveBeenCalledWith(
       "table-1",
       { kind: "cells", cellIds: ["cell-1"] },
@@ -407,5 +408,27 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     expect(
       screen.queryByRole("menu", { name: "Cell formatting" }),
     ).not.toBeNull();
+  });
+
+  it("열린 서식 메뉴를 툴바 버튼으로 다시 누르면 닫고 편집기로 초점을 되돌린다", () => {
+    const controller = fakeController({
+      getTableCellSelection: () => ({
+        tableBlockId: "table-1",
+        cellIds: ["cell-1"],
+        mergeable: false,
+        splitCellId: "cell-1",
+      }),
+    });
+    const { editable } = renderTable(controller);
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+    expect(
+      screen.getByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+
+    expect(document.activeElement).toBe(editable);
+    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
   });
 });
