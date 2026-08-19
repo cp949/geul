@@ -1,9 +1,9 @@
-import type { JSONContent } from "@tiptap/core";
 import type { TabularData } from "@cp949/geul-io";
 import { GapCursor } from "@tiptap/pm/gapcursor";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
+import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import {
   deleteTableColumn,
   deleteTableRow,
@@ -136,7 +136,7 @@ describe("표를 삽입한다", () => {
     );
 
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[1]?.type).toBe("table");
     expect(doc.content?.[1]?.content).toHaveLength(2);
@@ -148,19 +148,19 @@ describe("표를 삽입한다", () => {
   it("삽입 직후 undo 1회로 표 삽입 이전 상태로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     insertTable(editor, "para-1", { rows: 2, columns: 2 }, createId);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("존재하지 않는 blockId 뒤에는 삽입할 수 없고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = insertTable(
       editor,
@@ -173,14 +173,14 @@ describe("표를 삽입한다", () => {
       ok: false,
       error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("행 또는 열이 1보다 작으면 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = insertTable(
       editor,
@@ -193,7 +193,7 @@ describe("표를 삽입한다", () => {
       ok: false,
       error: { code: "INVALID_TABLE_SIZE" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -206,7 +206,7 @@ describe("표에 행을 삽입한다", () => {
     const result = insertTableRow(editor, "table-1", 1, createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content).toHaveLength(2);
     expect(table?.content?.[1]?.content).toHaveLength(2);
     editor.destroy();
@@ -215,19 +215,19 @@ describe("표에 행을 삽입한다", () => {
   it("삽입 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTable);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     insertTableRow(editor, "table-1", 1, createId);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = insertTableRow(editor, "missing", 1, createId);
 
@@ -235,14 +235,14 @@ describe("표에 행을 삽입한다", () => {
       ok: false,
       error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = insertTableRow(editor, "table-1", 99, createId);
 
@@ -250,7 +250,7 @@ describe("표에 행을 삽입한다", () => {
       ok: false,
       error: { code: "INDEX_OUT_OF_RANGE" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -263,7 +263,7 @@ describe("표에 열을 삽입한다", () => {
     const result = insertTableColumn(editor, "table-1", 2, createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toHaveLength(3);
     expect(table?.content?.[0]?.content).toHaveLength(3);
     editor.destroy();
@@ -272,12 +272,12 @@ describe("표에 열을 삽입한다", () => {
   it("삽입 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTable);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     insertTableColumn(editor, "table-1", 2, createId);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -288,7 +288,7 @@ describe("표에 열을 삽입한다", () => {
     const result = insertTableColumn(editor, "table-1", 0, createId);
 
     expect(result.ok).toBe(true);
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toHaveLength(3);
     // PIT-0004: table.columns가 새 열을 맨 앞에 둔다면, PM 문서의 물리 셀
     // 순서도 그 열을 첫 번째 형제 노드로 배치해야 한다(저장 배열 append 순서가 아니라).
@@ -310,7 +310,7 @@ describe("표에서 행을 삭제한다", () => {
     const result = deleteTableRow(editor, "table-1", 0);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content).toHaveLength(1);
     expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
     editor.destroy();
@@ -318,23 +318,23 @@ describe("표에서 행을 삭제한다", () => {
 
   it("삭제 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     deleteTableRow(editor, "table-1", 0);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("마지막 남은 행은 삭제를 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = deleteTableRow(editor, "table-1", 0);
 
     expect(result).toEqual({ ok: false, error: { code: "LAST_ROW" } });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -346,7 +346,7 @@ describe("표에서 열을 삭제한다", () => {
     const result = deleteTableColumn(editor, "table-1", 0);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toHaveLength(1);
     expect(table?.content?.[0]?.content).toHaveLength(1);
     editor.destroy();
@@ -354,24 +354,24 @@ describe("표에서 열을 삭제한다", () => {
 
   it("삭제 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     deleteTableColumn(editor, "table-1", 0);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("마지막 남은 열은 삭제를 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
     deleteTableColumn(editor, "table-1", 0);
-    const beforeLastDelete = (editor.getJSON() as JSONContent);
+    const beforeLastDelete = editor.getJSON() as TiptapJsonNode;
 
     const result = deleteTableColumn(editor, "table-1", 0);
 
     expect(result).toEqual({ ok: false, error: { code: "LAST_COLUMN" } });
-    expect((editor.getJSON() as JSONContent)).toEqual(beforeLastDelete);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(beforeLastDelete);
     editor.destroy();
   });
 });
@@ -383,7 +383,7 @@ describe("표의 행을 이동한다", () => {
     const result = moveTableRow(editor, "table-1", 0, 1);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
     expect(table?.content?.[1]?.attrs?.rowId).toBe("row-1");
     editor.destroy();
@@ -391,18 +391,18 @@ describe("표의 행을 이동한다", () => {
 
   it("이동 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     moveTableRow(editor, "table-1", 0, 1);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = moveTableRow(editor, "missing", 0, 1);
 
@@ -410,13 +410,13 @@ describe("표의 행을 이동한다", () => {
       ok: false,
       error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = moveTableRow(editor, "table-1", 0, 99);
 
@@ -424,7 +424,7 @@ describe("표의 행을 이동한다", () => {
       ok: false,
       error: { code: "INDEX_OUT_OF_RANGE" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -436,7 +436,7 @@ describe("표의 열을 이동한다", () => {
     const result = moveTableColumn(editor, "table-1", 0, 1);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     const columns = table?.attrs?.columns as { id: string }[];
     expect(columns.map((column) => column.id)).toEqual(["col-2", "col-1"]);
     const firstRowCells = table?.content?.[0]?.content ?? [];
@@ -447,18 +447,18 @@ describe("표의 열을 이동한다", () => {
 
   it("이동 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     moveTableColumn(editor, "table-1", 0, 1);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = moveTableColumn(editor, "table-1", 0, 99);
 
@@ -466,7 +466,7 @@ describe("표의 열을 이동한다", () => {
       ok: false,
       error: { code: "INDEX_OUT_OF_RANGE" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -478,7 +478,7 @@ describe("표의 열 너비를 조절한다", () => {
     const result = resizeTableColumn(editor, "table-1", 1, 240);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toEqual([
       { id: "col-1", width: 160 },
       { id: "col-2", width: 240 },
@@ -488,18 +488,18 @@ describe("표의 열 너비를 조절한다", () => {
 
   it("조절 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     resizeTableColumn(editor, "table-1", 1, 240);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("허용 범위 밖 너비는 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = resizeTableColumn(editor, "table-1", 0, 47);
 
@@ -507,7 +507,7 @@ describe("표의 열 너비를 조절한다", () => {
       ok: false,
       error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -537,7 +537,7 @@ describe("표 삽입 시 트리거 블록 텍스트를 함께 지운다", () => 
     );
 
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content?.[0]?.type).toBe("paragraph");
     expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
     expect(doc.content?.[1]?.type).toBe("table");
@@ -547,14 +547,14 @@ describe("표 삽입 시 트리거 블록 텍스트를 함께 지운다", () => 
   it("삽입 직후 undo 1회로 트리거 텍스트와 표 삽입 이전 상태로 함께 복원된다", () => {
     const editor = createTableFixtureEditor(docWithSlashText);
     const createId = sequentialIds("id");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     insertTable(editor, "para-1", { rows: 1, columns: 1 }, createId, {
       clearAfterBlockText: true,
     });
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -571,7 +571,7 @@ describe("표의 셀을 병합한다", () => {
     );
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content).toHaveLength(2);
     expect(table?.content?.[0]?.content).toHaveLength(1);
     expect(table?.content?.[0]?.content?.[0]?.attrs).toMatchObject({
@@ -605,7 +605,7 @@ describe("표의 셀을 병합한다", () => {
 
   it("병합 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     mergeTableCells(
       editor,
@@ -615,13 +615,13 @@ describe("표의 셀을 병합한다", () => {
     );
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = mergeTableCells(
       editor,
@@ -634,7 +634,7 @@ describe("표의 셀을 병합한다", () => {
       ok: false,
       error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -647,7 +647,7 @@ describe("표의 셀을 병합한다", () => {
       { row: 0, column: 0 },
       { row: 1, column: 0 },
     );
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = mergeTableCells(
       editor,
@@ -660,7 +660,7 @@ describe("표의 셀을 병합한다", () => {
       ok: false,
       error: { code: "NOT_RECTANGULAR" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -679,7 +679,7 @@ describe("표의 병합된 셀을 분할한다", () => {
     const result = splitTableCell(editor, "table-1", "cell-1", createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content?.[0]?.content).toHaveLength(2);
     expect(table?.content?.[1]?.content).toHaveLength(2);
     editor.destroy();
@@ -713,25 +713,25 @@ describe("표의 병합된 셀을 분할한다", () => {
       { row: 0, column: 0 },
       { row: 1, column: 1 },
     );
-    const merged = (editor.getJSON() as JSONContent);
+    const merged = editor.getJSON() as TiptapJsonNode;
 
     splitTableCell(editor, "table-1", "cell-1", createId);
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(merged);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(merged);
     editor.destroy();
   });
 
   it("병합되지 않은 셀은 분할해도 성공하되 undo 단계를 만들지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     const createId = sequentialIds("split");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     expect(splitTableCell(editor, "table-1", "cell-1", createId)).toEqual({
       ok: true,
       value: undefined,
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
     editor.destroy();
   });
@@ -739,7 +739,7 @@ describe("표의 병합된 셀을 분할한다", () => {
   it("존재하지 않는 cellId는 CELL_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     const createId = sequentialIds("split");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = splitTableCell(editor, "table-1", "missing", createId);
 
@@ -747,7 +747,7 @@ describe("표의 병합된 셀을 분할한다", () => {
       ok: false,
       error: { code: "CELL_NOT_FOUND", cellId: "missing" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });
@@ -766,7 +766,7 @@ describe("표 명령 방어 동작", () => {
     );
 
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("table");
     expect(doc.content?.[0]?.content).toHaveLength(1);
@@ -777,39 +777,39 @@ describe("표 명령 방어 동작", () => {
 
   it("동일 인덱스 행 이동은 성공하되 undo 단계를 만들지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     expect(moveTableRow(editor, "table-1", 1, 1)).toEqual({
       ok: true,
       value: undefined,
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
     editor.destroy();
   });
 
   it("동일 인덱스 열 이동은 성공하되 undo 단계를 만들지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     expect(moveTableColumn(editor, "table-1", 0, 0)).toEqual({
       ok: true,
       value: undefined,
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
     editor.destroy();
   });
 
   it("현재 값과 같은 너비로 리사이즈하면 성공하되 undo 단계를 만들지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTable);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     expect(resizeTableColumn(editor, "table-1", 0, 160)).toEqual({
       ok: true,
       value: undefined,
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
     editor.destroy();
   });
@@ -866,7 +866,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     // 선택 삭제로 두 문단이 "h" + "orld"로 병합되고 그 뒤에 표가 생긴다 —
     // 다른 에디터와 같은 "붙여넣기는 선택을 대체한다" 계약(Issue #29).
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
     expect(doc.content?.[0]?.content?.[0]?.text).toBe("horld");
@@ -887,7 +887,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const result = pasteTabularData(editor, oneByOneData("A"), createId);
 
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
     expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
@@ -914,7 +914,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     // 조회에 의존하면 여기서 PASTE_TARGET_NOT_FOUND로 무너진다(3차 리뷰
     // 재현). 필러 문단 뒤에 표가 생겨야 한다.
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("paragraph");
     expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
@@ -940,7 +940,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     // 커서가 기존 표 '앞'을 가리켰으므로 새 표는 기존 표 앞에 와야 한다 —
     // 커서가 가리키기 직전인 블록 '뒤'에 붙으면 표가 한 블록 아래로 밀린다.
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("table");
     expect(
@@ -1007,7 +1007,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     // 스키마 필러로 cellId 없는 셀을 만들어 모델과 에디터가 영구 desync된다
     // (3차 리뷰 재현) — 이런 선택은 지우지 않고 붙여넣기만 한다.
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(3);
     expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
@@ -1028,7 +1028,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection({ from: 1, to: 6 });
     const createId = sequentialIds("paste");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = pasteTabularData(editor, oneByOneData("A"), createId);
     expect(result.ok).toBe(true);
@@ -1036,7 +1036,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.commands.undo();
 
     // 선택 삭제와 표 삽입이 한 트랜잭션이어야 undo 1회로 원문이 돌아온다.
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -1104,7 +1104,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const result = pasteTabularData(editor, twoByOne, createId);
 
     expect(result.ok).toBe(true);
-    const doc = (editor.getJSON() as JSONContent);
+    const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("paragraph");
     // 캐럿 선택(빈 selection)은 지울 것이 없다 — 문단 텍스트가 남는다.
@@ -1136,7 +1136,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
 
     expect(result.ok).toBe(true);
     // 표 크기는 그대로 2x2다 — 새 표를 만들지 않고 기존 표를 덮어썼다.
-    const table = (editor.getJSON() as JSONContent).content?.[0];
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.blockId).toBe("table-1");
     expect(table?.content).toHaveLength(2);
     expect(table?.content?.[0]?.content).toHaveLength(2);
@@ -1172,7 +1172,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     // 병합된 셀(cell-1) 안으로 캐럿을 옮긴다. selectedRect는 이 셀의 기준
     // 좌표(0,0)를 anchor로 잡지만 실제로는 rowSpan=2라서 row 1도 덮는다.
     placeCaretInCell(editor, "cell-1");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // 1행짜리 데이터를 anchor(0,0)에 붙여넣으면 rowSpan=2 셀의 아래쪽 절반
     // (row 1, column 0)이 어느 셀에도 속하지 않게 된다 — 병합 경계를 걸치는
@@ -1187,7 +1187,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       ok: false,
       error: { code: "PASTE_MERGE_CONFLICT" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -1195,14 +1195,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
     const createId = sequentialIds("paste");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = pasteTabularData(editor, oneByOneData("x"), createId);
     expect(result.ok).toBe(true);
 
     editor.commands.undo();
 
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -1210,7 +1210,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const createId = sequentialIds("paste");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // columnIndex가 columnCount 밖이라 (0,0)이 어느 셀에도 덮이지 않는다.
     const outOfRange: TabularData = {
@@ -1259,14 +1259,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     if (!overlappingResult.ok) {
       expect(overlappingResult.error.code).toBe("TABULAR_DATA_INVALID");
     }
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("model 인라인 텍스트 계약을 어기는 TabularData는 표 안에서도 TABULAR_DATA_INVALID로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     expect(
       pasteTabularData(editor, oneByOneData("a\tb"), sequentialIds("paste")),
@@ -1277,7 +1277,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         message: "Cell text at row 0, cell 0 is not valid inline text",
       },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -1285,7 +1285,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const createId = sequentialIds("paste");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // 소문자 hex — model 정규 형식(대문자 #RRGGBB) 위반.
     const badColor: TabularData = {
@@ -1331,7 +1331,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         message: "Cells in row 0 are not sorted by ascending columnIndex",
       },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -1339,7 +1339,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const createId = sequentialIds("paste");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const emptyRows: TabularData = { columnCount: 1, rows: [] };
     const emptyColumns: TabularData = {
@@ -1355,14 +1355,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       ok: false,
       error: { code: "INVALID_TABLE_SIZE" },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("빈 텍스트 런이 든 셀은 예외 없이 TABULAR_DATA_INVALID로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // isValidInlineText("")는 true라 io 검증을 통과하지만 ProseMirror는
     // 빈 텍스트 노드를 만들 수 없어 코덱의 schema.text("")가 RangeError를
@@ -1377,14 +1377,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         message: "Cell content at row 0, cell 0 contains an empty text run",
       },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("빈 텍스트 런이 든 셀은 표 안 분기에서도 예외 없이 거절한다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     const result = pasteTabularData(
       editor,
@@ -1394,14 +1394,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("TABULAR_DATA_INVALID");
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("미지원 링크 마크가 든 셀은 삽입된 척하지 않고 TABULAR_DATA_INVALID로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // 미지원 href를 통과시키면 LinkPolicyExtension.filterTransaction이
     // 트랜잭션을 통째로 버리는데도 명령은 존재하지 않는 blockId로 ok:true를
@@ -1437,14 +1437,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
           "Cell content at row 0, cell 0 contains an unsupported link URL",
       },
     });
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
   it("셀 한도를 넘는 데이터는 검증·골격 생성 비용 없이 선거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // 데이터 자체 크기(행 x 열)는 확장 후 최종 크기의 하한이다 — 한도를
     // 넘는 입력이 전체 검증 패스와 골격 생성(행 객체·id 생성)을 다 치른
@@ -1470,7 +1470,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       error: { code: "CELL_LIMIT_EXCEEDED" },
     });
     expect(idCalls).toBe(0);
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 
@@ -1478,7 +1478,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const createId = sequentialIds("paste");
-    const before = (editor.getJSON() as JSONContent);
+    const before = editor.getJSON() as TiptapJsonNode;
 
     // NaN < 1은 false라 기존 크기 가드를 통과하고, 하류의
     // new Array(rowCount * columnCount)가 RangeError를 던져 공개 명령
@@ -1493,7 +1493,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         error: { code: "INVALID_TABLE_SIZE" },
       });
     }
-    expect((editor.getJSON() as JSONContent)).toEqual(before);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
 });

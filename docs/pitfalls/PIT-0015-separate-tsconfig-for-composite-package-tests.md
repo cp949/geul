@@ -17,7 +17,7 @@
 - `packages/*` 아래 새 패키지를 만들 때, 또는 기존 패키지에 `test/` 디렉터리를 처음 추가할 때 — 메인 `tsconfig.json`의 `include`에 `test/`를 끼워 넣지 않는다. 대신 그 패키지 전용 `tsconfig.test.json`을 만든다: `tsconfig.base.json`을 직접 extends(메인 `tsconfig.json`을 extends하지 않는다 — `composite`/`rootDir`/`references`가 같이 딸려온다), `noEmit: true`, `include: ["test/**/*.ts"]`(해당 패키지가 `.tsx` 테스트를 쓰면 `test/**/*.tsx`도 추가하고 `jsx: "react-jsx"`를 넣는다), `lib`은 메인 tsconfig와 동일하게 맞춘다. `composite`, `rootDir`, `outDir`, `references`, `tsBuildInfoFile`은 넣지 않는다 — `tsc -b` 빌드 파이프라인에 절대 연결하지 않는다.
 - 패키지의 `typecheck` 스크립트를 `tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit`로 두 config를 순차 실행하게 만든다. `build` 스크립트(`tsc -b`)는 건드리지 않는다 — 빌드 대상은 여전히 `src`만이다.
 - 새 tsconfig를 추가·수정하면 반드시 의도적으로 깬 타입 오류(테스트 파일에 타입이 안 맞는 임시 줄 추가)로 실제로 잡히는지 확인한 뒤 되돌린다. 확인 없이 "include를 넓혔으니 됐다"고 넘어가면 config 문법 오류나 include 패턴 실수로 여전히 아무것도 안 잡힐 수 있다.
-- `tsc -b`(build) 실행 후 해당 패키지의 `dist/`에 `test/`나 테스트 파일 이름을 딴 산출물이 새로 생기지 않았는지 확인한다 — 생겼다면 `tsconfig.test.json`이 실수로 빌드 파이프라인(`references`나 `tsc -b`)에 섞였다는 신호다.
+- `tsc -b`(build) 실행 후 해당 패키지의 `dist/`에 `dist/test/` 디렉터리나 `*.test.js`/`*.test.d.ts` 산출물이 새로 생기지 않았는지 확인한다(단순히 테스트 파일과 이름이 겹치는 `dist/table-grid.js` 같은 정상 src 산출물과 혼동하지 않는다) — 생겼다면 `tsconfig.test.json`이 실수로 빌드 파이프라인(`references`나 `tsc -b`)에 섞였다는 신호다.
 
 ## 검증 방법
 
@@ -31,7 +31,7 @@ pnpm --filter @cp949/geul-core typecheck
 
 - 커밋 `ac00583`+`747e295`(Issue #32) — `packages/core/tsconfig.test.json` 신설과 `typecheck` 스크립트 변경. 수정 전 `_pit32TypecheckProbe` 삽입이 조용히 통과(PASS)하고, 수정 후 같은 삽입이 실패(FAIL, `string`을 `number`에 대입 불가 에러)하는 것을 직접 확인했다.
 - 같은 PR에서 config를 켜자마자(별도 유예 기간 없이) `packages/core/test/`에 숨어있던 실제 타입 오류 38건이 드러났다 — `test/public-types.test.ts`의 Node 앰비언트 타입(`node:fs`, `process` 등) 미해결 7건(`tsconfig.test.json`에 `"types": ["node"]` 누락이 원인), `test/table-commands.test.ts`(30건)와 `test/table-keyboard-extension.test.ts`(1건)의 `Editor.getJSON()` 유니온 타입(`@tiptap/core@3.30.1`의 `DocumentType<..., (NodeType|TextType)[]>`) 좁히기 누락 31건. 이론적 위험이 아니라 실제 발생 사례다 — 새로 켜는 test-typecheck config는 이미 존재하던 진짜 버그를 즉시 드러낼 가능성이 높다.
-- `io`/`model`/`react` 3개 패키지도 동일 구조라 같은 결함이 있다 — 적용은 Issue #56로 분리했다(현재 이슈 범위는 core로 한정).
+- `io`/`model`/`react` 3개 패키지도 동일 구조라 같은 결함이 있다 — 적용은 Issue #56으로 분리했다(현재 이슈 범위는 core로 한정).
 
 ## 관련 문서
 
