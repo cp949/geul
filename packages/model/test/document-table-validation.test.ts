@@ -150,6 +150,46 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
     expect(parsedTable.rows[0]?.cells[0]?.align).toBe("center");
   });
 
+  it("같은 셀에서 색상과 정렬이 모두 잘못되면 색상 오류를 먼저 보고한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "table-1",
+          type: "table",
+          columns: [{ id: "column-1", width: 160 }],
+          rows: [
+            {
+              id: "row-1",
+              cells: [
+                {
+                  id: "cell-1",
+                  columnId: "column-1",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [],
+                  textColor: "#abcdef",
+                  align: "justify",
+                },
+              ],
+            },
+          ],
+          headerRows: 0,
+          headerColumns: 0,
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "rows", 0, "cells", 0, "textColor"],
+      },
+    });
+  });
+
   it("여러 표가 있으면 뒤쪽 표의 width 오류를 앞쪽 표의 색상 오류보다 먼저 보고한다", () => {
     const result = parseDocument({
       formatVersion: 1,

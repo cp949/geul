@@ -409,7 +409,9 @@ const validateSpans = (blocks: Block[]): Result<undefined, DocumentError> => {
   return { ok: true, value: undefined };
 };
 
-const validateColors = (blocks: Block[]): Result<undefined, DocumentError> => {
+const validateCellFormat = (
+  blocks: Block[],
+): Result<undefined, DocumentError> => {
   for (const [blockIndex, block] of blocks.entries()) {
     if (block.type !== "table") continue;
     for (const [rowIndex, row] of block.rows.entries()) {
@@ -440,29 +442,9 @@ const validateColors = (blocks: Block[]): Result<undefined, DocumentError> => {
             "backgroundColor must be an uppercase #RRGGBB color",
           );
         }
-      }
-    }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateAlign = (blocks: Block[]): Result<undefined, DocumentError> => {
-  for (const [blockIndex, block] of blocks.entries()) {
-    if (block.type !== "table") continue;
-    for (const [rowIndex, row] of block.rows.entries()) {
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        if (cell.align === undefined) continue;
-        if (!isCanonicalCellAlign(cell.align)) {
+        if (cell.align !== undefined && !isCanonicalCellAlign(cell.align)) {
           return invalid(
-            [
-              "blocks",
-              blockIndex,
-              "rows",
-              rowIndex,
-              "cells",
-              cellIndex,
-              "align",
-            ],
+            [...cellPath, "align"],
             "align must be one of left, center, right",
           );
         }
@@ -562,10 +544,8 @@ export const parseDocument = (
   if (!widths.ok) return widths;
   const spans = validateSpans(document.blocks);
   if (!spans.ok) return spans;
-  const colors = validateColors(document.blocks);
-  if (!colors.ok) return colors;
-  const align = validateAlign(document.blocks);
-  if (!align.ok) return align;
+  const cellFormat = validateCellFormat(document.blocks);
+  if (!cellFormat.ok) return cellFormat;
   const limits = validateTableLimits(document.blocks);
   if (!limits.ok) return limits;
   const grids = validateTableGrids(document.blocks);
