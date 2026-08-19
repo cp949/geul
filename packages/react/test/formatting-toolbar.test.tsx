@@ -118,7 +118,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
 
     selectText(textNode, 0, 8);
 
@@ -147,7 +147,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
     fireEvent.click(screen.getByRole("button", { name: "Bold" }));
@@ -170,7 +170,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
     expect(screen.queryByRole("toolbar")).not.toBeNull();
 
@@ -192,7 +192,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
     expect(
@@ -223,7 +223,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
     expect(
@@ -248,7 +248,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     );
     const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
       ?.firstChild;
-    if (textNode === null) throw new Error("Text node was not rendered");
+    if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
     fireEvent.change(screen.getByRole("combobox", { name: "Block type" }), {
