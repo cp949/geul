@@ -143,7 +143,7 @@ describe("validateTabularData", () => {
   it("정규 형식이 아닌 align은 CLIPBOARD_TABLE_INVALID로 거부한다", () => {
     expect(
       validateTabularData(
-        styledCell({ align: "justify" as TabularCell["align"] }),
+        styledCell({ align: "justify" as NonNullable<TabularCell["align"]> }),
       ),
     ).toMatchObject({
       ok: false,
