@@ -712,6 +712,34 @@ describe("행/열 핸들 클릭 메뉴", () => {
     view.unmount();
   });
 
+  it("메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    const outsideButton = document.createElement("button");
+    outsideButton.textContent = "outside";
+    document.body.append(outsideButton);
+    outsideButton.focus();
+
+    fireEvent.pointerDown(outsideButton);
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(outsideButton);
+    outsideButton.remove();
+    view.unmount();
+  });
+
+  it("메뉴 안(data-be-table-menu)을 클릭하면 닫히지 않는다", () => {
+    const controller = fakeController();
+    const { view } = openRowMenu(controller);
+
+    const menu = screen.getByRole("menu", { name: "Table row menu" });
+    fireEvent.pointerDown(menu);
+
+    expect(screen.queryByRole("menu")).not.toBeNull();
+    view.unmount();
+  });
+
   it("드래그로 재정렬한 뒤 이어지는 click은 메뉴를 열지 않는다", () => {
     const controller = fakeController();
     const { view, table, editable } = renderTable(controller);
