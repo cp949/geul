@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
+import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 
 // 핸들은 드래그(재정렬)와 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이
@@ -29,6 +30,14 @@ const expandButtonClassName =
 // hover 유지 여백. 이 여백 없이 hover를 즉시 해제하면 포인터가 표에서
 // 핸들로 이동하는 도중 핸들이 언마운트된다.
 const HANDLE_HOVER_MARGIN = 28;
+
+// useDismissOnOutsideOrEscape에 넘기는 allow-list. 모듈 스코프 상수로 둔다 —
+// 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
+const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
+  "[data-be-table-menu]",
+  "[data-be-table-row-handle]",
+  "[data-be-table-column-handle]",
+] as const;
 
 type RowGeometry = {
   rowId: string;
@@ -337,36 +346,16 @@ export const TableHandles = () => {
   }, [focusEditor]);
 
   // 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로 닫는 UI는
-  // 병렬 e2e로 검증한다).
-  useEffect(() => {
-    if (menuState === null || element === null) return;
-    const ownerDocument = element.ownerDocument;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest("[data-be-table-menu]") !== null ||
-        target.closest("[data-be-table-row-handle]") !== null ||
-        target.closest("[data-be-table-column-handle]") !== null
-      ) {
-        return;
-      }
-      setMenuState(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      closeMenu();
-    };
-
-    ownerDocument.addEventListener("pointerdown", handlePointerDown);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
-    return () => {
-      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [menuState, element, closeMenu]);
+  // 병렬 e2e로 검증한다). 실제 리스너 등록/해제는 useDismissOnOutsideOrEscape가
+  // 소유한다 — table-selection-toolbar.tsx도 같은 훅을 쓴다(Issue #20).
+  const dismissMenu = useCallback(() => setMenuState(null), []);
+  useDismissOnOutsideOrEscape({
+    active: menuState !== null,
+    element,
+    allowSelectors: TABLE_MENU_DISMISS_ALLOW_SELECTORS,
+    onDismiss: dismissMenu,
+    onEscape: closeMenu,
+  });
 
   // gutter가 표 바깥 오버레이라서, hover 추적을 element 안쪽에만 걸면
   // 포인터가 핸들로 이동하는 순간 표 hover가 풀린다(block-side-menu와 동일한 이유).
