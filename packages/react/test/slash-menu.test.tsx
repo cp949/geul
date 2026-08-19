@@ -7,12 +7,18 @@
  */
 
 import type { EditorController } from "@cp949/geul-core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider, SlashMenu } from "../src/index.js";
 import { expectIconOnlyButton } from "./expect-icon-button.js";
+
+// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
+// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
+// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
+// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+afterEach(cleanup);
 
 // 드래그 핸들 accessible name — 드래그와 클릭(블록 메뉴) 두 동작을 모두 기술한다.
 const dragHandleLabel = "Drag to reorder, click for options";
@@ -149,7 +155,7 @@ const fireCaretUpdate = () => {
 describe("SlashMenu 질의 팝업", () => {
   it("캐럿이 블록 안에 없으면 렌더링하지 않는다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -160,7 +166,6 @@ describe("SlashMenu 질의 팝업", () => {
     );
 
     expect(screen.queryByRole("listbox")).toBeNull();
-    view.unmount();
   });
 
   it("블록 텍스트가 슬래시 질의가 아니면 렌더링하지 않는다", () => {
@@ -171,7 +176,7 @@ describe("SlashMenu 질의 팝업", () => {
         text: "hello",
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -183,7 +188,6 @@ describe("SlashMenu 질의 팝업", () => {
     fireCaretUpdate();
 
     expect(screen.queryByRole("listbox")).toBeNull();
-    view.unmount();
   });
 
   it("블록 텍스트가 슬래시 하나뿐이면 모든 항목을 열어 표시한다", () => {
@@ -194,7 +198,7 @@ describe("SlashMenu 질의 팝업", () => {
         text: "/",
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -209,7 +213,6 @@ describe("SlashMenu 질의 팝업", () => {
     expect(screen.getAllByRole("option")).toHaveLength(5);
     expect(screen.getByRole("option", { name: /Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /Heading 1/ })).not.toBeNull();
-    view.unmount();
   });
 
   it("입력한 질의에 맞춰 항목을 걸러낸다", () => {
@@ -220,7 +223,7 @@ describe("SlashMenu 질의 팝업", () => {
         text: "/head",
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -233,7 +236,6 @@ describe("SlashMenu 질의 팝업", () => {
 
     expect(screen.getAllByRole("option")).toHaveLength(3);
     expect(screen.queryByRole("option", { name: /^Text/ })).toBeNull();
-    view.unmount();
   });
 
   it("항목을 클릭하면 clearContent와 함께 setBlockType을 호출하고 편집기로 초점을 되돌린다", () => {
@@ -244,7 +246,7 @@ describe("SlashMenu 질의 팝업", () => {
         text: "/h1",
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -271,7 +273,6 @@ describe("SlashMenu 질의 팝업", () => {
       { clearContent: true },
     );
     expect(document.activeElement).toBe(editable);
-    view.unmount();
   });
 
   it("표 항목을 클릭하면 트리거 블록 텍스트를 지우며 3x3 표를 삽입한다", () => {
@@ -282,7 +283,7 @@ describe("SlashMenu 질의 팝업", () => {
         text: "/table",
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -301,7 +302,6 @@ describe("SlashMenu 질의 팝업", () => {
       { clearAfterBlockText: true },
     );
     expect(screen.queryByRole("listbox")).toBeNull();
-    view.unmount();
   });
 
   it("Escape를 누르면 닫는다", () => {
@@ -312,7 +312,7 @@ describe("SlashMenu 질의 팝업", () => {
         text: "/",
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -329,14 +329,13 @@ describe("SlashMenu 질의 팝업", () => {
     });
 
     expect(screen.queryByRole("listbox")).toBeNull();
-    view.unmount();
   });
 });
 
 describe("SlashMenu 블록 추가 버튼", () => {
   it("hover하지 않으면 블록 추가 버튼을 렌더링하지 않는다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -347,12 +346,11 @@ describe("SlashMenu 블록 추가 버튼", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Add block" })).toBeNull();
-    view.unmount();
   });
 
   it("블록에 hover하면 블록 추가 버튼을 표시한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -369,12 +367,11 @@ describe("SlashMenu 블록 추가 버튼", () => {
     fireEvent.pointerMove(block);
 
     expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
-    view.unmount();
   });
 
   it("포인터가 버튼 위로 이동하는 동안에도 블록 추가 버튼을 계속 표시한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -393,7 +390,6 @@ describe("SlashMenu 블록 추가 버튼", () => {
     fireEvent.pointerMove(addBlockButton);
 
     expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
-    view.unmount();
   });
 
   it("hover한 블록 뒤에 문단을 삽입하고 그 블록의 메뉴를 연다", () => {
@@ -403,7 +399,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
         value: { blockId: "block-2" },
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -425,7 +421,6 @@ describe("SlashMenu 블록 추가 버튼", () => {
     );
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
     expect(screen.getAllByRole("option")).toHaveLength(5);
-    view.unmount();
   });
 
   it("슬래시가 아닌 문자를 입력한 뒤에는 메뉴를 다시 열지 않는다", () => {
@@ -441,7 +436,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
         value: { blockId: "block-2" },
       }),
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -462,14 +457,13 @@ describe("SlashMenu 블록 추가 버튼", () => {
     fireCaretUpdate();
 
     expect(screen.queryByRole("listbox")).toBeNull();
-    view.unmount();
   });
 });
 
 describe("SlashMenu 드래그 핸들", () => {
   it("hover 시 add-block 버튼과 함께 드래그 핸들을 표시한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -489,7 +483,6 @@ describe("SlashMenu 드래그 핸들", () => {
       screen.getByRole("button", { name: dragHandleLabel }),
     ).not.toBeNull();
     expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
-    view.unmount();
   });
 
   it("표 위에 hover해도 블록 거터(드래그 핸들·add-block 버튼)를 표시하지 않는다", () => {
@@ -501,7 +494,7 @@ describe("SlashMenu 드래그 핸들", () => {
       blockIds: [],
       tableBlockIds: ["table-1"],
     });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -519,14 +512,13 @@ describe("SlashMenu 드래그 핸들", () => {
 
     expect(screen.queryByRole("button", { name: dragHandleLabel })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add block" })).toBeNull();
-    view.unmount();
   });
 
   it("따옴표·백슬래시가 든 블록 id에서도 hover 거터가 크래시 없이 표시된다", () => {
     // 블록 id는 z.string() 임의 문자열이라 attribute selector에 보간하면
     // 따옴표·백슬래시에서 querySelector가 SyntaxError를 던진다.
     const controller = fakeController({ blockIds: ['a"b\\c'] });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -543,12 +535,11 @@ describe("SlashMenu 드래그 핸들", () => {
     fireEvent.pointerMove(block);
 
     expect(screen.getByRole("button", { name: "Add block" })).not.toBeNull();
-    view.unmount();
   });
 
   it("드래그 핸들과 블록 추가 버튼에 aria-hidden 아이콘과 title을 부여한다", () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -574,7 +565,6 @@ describe("SlashMenu 드래그 핸들", () => {
         iconClass,
       );
     }
-    view.unmount();
   });
 
   it("핸들을 드래그해 다른 블록 앞에 놓으면 삽입 가이드를 표시하고 moveBlockBefore를 호출한다", () => {
@@ -616,12 +606,11 @@ describe("SlashMenu 드래그 핸들", () => {
       "block-3",
       "block-1",
     );
-    view.unmount();
   });
 
   it("자기 자신의 현재 위치로 드래그하면 moveBlockBefore를 호출하지 않는다", () => {
     const controller = fakeController({ blockIds: ["block-1", "block-2"] });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -648,7 +637,6 @@ describe("SlashMenu 드래그 핸들", () => {
 
     expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
-    view.unmount();
   });
 
   it("Escape로 드롭 없이 드래그를 취소하면 아무 명령도 호출하지 않는다", async () => {
@@ -687,12 +675,11 @@ describe("SlashMenu 드래그 핸들", () => {
 
     expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
-    view.unmount();
   });
 
   it("pointercancel 뒤 후속 click이 블록 메뉴를 열지 않는다", async () => {
     const controller = fakeController({ blockIds: ["block-1", "block-2"] });
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -720,7 +707,6 @@ describe("SlashMenu 드래그 핸들", () => {
 
     expect(controller.commands.moveBlockBefore).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
-    view.unmount();
   });
 
   it("드래그를 시작한 pointer와 다른 pointer 이벤트는 무시한다", () => {
@@ -768,14 +754,13 @@ describe("SlashMenu 드래그 핸들", () => {
       "block-3",
       "block-1",
     );
-    view.unmount();
   });
 });
 
 describe("SlashMenu 블록 메뉴", () => {
   const openBlockMenu = () => {
     const controller = fakeController();
-    const view = render(
+    render(
       withProvider(
         controller,
         <>
@@ -790,30 +775,28 @@ describe("SlashMenu 블록 메뉴", () => {
     if (block === null) throw new Error("Block element was not rendered");
     fireEvent.pointerMove(block);
     fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
-    return { controller, view };
+    return { controller };
   };
 
   it("핸들 클릭 시 종류 변경/복제/삭제 메뉴를 연다", () => {
-    const { view } = openBlockMenu();
+    openBlockMenu();
 
     expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "Heading 1" })).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "Duplicate" })).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "Delete" })).not.toBeNull();
-    view.unmount();
   });
 
   it("같은 핸들을 다시 클릭하면 메뉴를 닫는다", () => {
-    const { view } = openBlockMenu();
+    openBlockMenu();
 
     fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
 
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("종류 변경 항목을 클릭하면 setBlockType을 호출하고 메뉴를 닫는다", () => {
-    const { controller, view } = openBlockMenu();
+    const { controller } = openBlockMenu();
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Heading 2" }));
 
@@ -822,44 +805,39 @@ describe("SlashMenu 블록 메뉴", () => {
       level: 2,
     });
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("복제 항목을 클릭하면 duplicateBlock을 호출하고 메뉴를 닫는다", () => {
-    const { controller, view } = openBlockMenu();
+    const { controller } = openBlockMenu();
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
     expect(controller.commands.duplicateBlock).toHaveBeenCalledWith("block-1");
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("삭제 항목을 클릭하면 deleteBlock을 호출하고 메뉴를 닫는다", () => {
-    const { controller, view } = openBlockMenu();
+    const { controller } = openBlockMenu();
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     expect(controller.commands.deleteBlock).toHaveBeenCalledWith("block-1");
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("Escape를 누르면 메뉴를 닫는다", () => {
-    const { view } = openBlockMenu();
+    openBlockMenu();
 
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 
   it("메뉴 바깥을 클릭하면 메뉴를 닫는다", () => {
-    const { view } = openBlockMenu();
+    openBlockMenu();
 
     fireEvent.pointerDown(document.body);
 
     expect(screen.queryByRole("menu")).toBeNull();
-    view.unmount();
   });
 });
