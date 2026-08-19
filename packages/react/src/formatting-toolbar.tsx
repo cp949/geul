@@ -121,6 +121,7 @@ export const FormattingToolbar = () => {
   const { menuRef, style } = useClampedMenuPosition(
     toolbarState?.left ?? 0,
     toolbarState?.top ?? 0,
+    "centerAbove",
   );
 
   if (toolbarState === null) return null;
