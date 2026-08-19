@@ -180,7 +180,7 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
   });
 
-  it("제거 컨트롤로 링크를 제거한다", () => {
+  it("제거 컨트롤로 링크를 제거하고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -194,13 +194,23 @@ describe("LinkToolbar 링크 툴바", () => {
       ),
     );
     collapseSelection();
+    // host(role="textbox")는 마운트 host이고, 컨트롤러가 그 안에 실제
+    // contenteditable 자식을 넣는다("URL 입력에서 Escape를 누르면 툴바를 닫고
+    // 편집기로 초점을 되돌린다" 테스트와 같은 구조) — closeAndRestoreFocus가
+    // 초점을 실제로 주는 대상은 후자다.
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.unsetLink).toHaveBeenCalledOnce();
   });
 
-  it("기존 링크의 href를 편집한다", () => {
+  it("기존 링크의 href를 편집하고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -214,6 +224,11 @@ describe("LinkToolbar 링크 툴바", () => {
       ),
     );
     collapseSelection();
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
     const input = screen.getByRole("textbox", {
@@ -226,12 +241,13 @@ describe("LinkToolbar 링크 툴바", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save link" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.setLink).toHaveBeenCalledWith(
       "https://updated.example.com",
     );
   });
 
-  it("기존 href가 그대로면 적용하지 않고 닫는다", () => {
+  it("기존 href가 그대로면 적용하지 않고 닫으며 편집기로 초점을 되돌린다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
     });
@@ -245,10 +261,16 @@ describe("LinkToolbar 링크 툴바", () => {
       ),
     );
     collapseSelection();
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
 
     fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
     fireEvent.click(screen.getByRole("button", { name: "Save link" }));
 
+    expect(document.activeElement).toBe(editable);
     expect(controller.commands.setLink).not.toHaveBeenCalled();
     expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
   });
@@ -291,5 +313,21 @@ describe("LinkToolbar 링크 툴바", () => {
 
     expect(screen.queryByRole("textbox", { name: "Link URL" })).toBeNull();
     expect(document.activeElement).toBe(editable);
+  });
+
+  it("Cancel 버튼을 클릭하면 툴바를 닫고 편집기로 초점을 되돌린다", () => {
+    const controller = fakeController();
+    renderWithSelectedText(controller);
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (editable === null) throw new Error("Editable was not mounted");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel link edit" }));
+
+    expect(document.activeElement).toBe(editable);
+    expect(screen.queryByRole("textbox", { name: "Link URL" })).toBeNull();
   });
 });
