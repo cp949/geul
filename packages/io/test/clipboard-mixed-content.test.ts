@@ -191,4 +191,50 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
       content: [{ text: "bold", marks: [{ type: "bold" }] }],
     });
   });
+
+  // 위 케이스의 나머지 절반: 서식 요소가 표를 *담고* 있으면 walk가 그
+  // 요소를 통과해 자식으로 내려가므로, 그 요소가 주던 마크가 표 앞뒤
+  // 텍스트에서 사라졌다. 마크 계산은 조상 체인을 봐야 한다 —
+  // inlineContentFromNodes에 넘기는 노드가 조상 서식을 그대로 달고 가야
+  // 형제 케이스와 같은 결과가 나온다.
+  it("표를 감싼 인라인 서식도 표 앞뒤 텍스트의 마크를 보존한다", () => {
+    const html =
+      "<strong>bold" +
+      "<table><tbody><tr><td>a</td></tr></tbody></table>" +
+      "tail</strong>";
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(3);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "bold", marks: [{ type: "bold" }] }],
+    });
+    expect(result.value[1]?.type).toBe("table");
+    expect(result.value[2]).toEqual({
+      type: "paragraph",
+      content: [{ text: "tail", marks: [{ type: "bold" }] }],
+    });
+  });
+
+  // 링크는 href까지 조상 체인을 타고 내려와야 한다 — 마크 종류만 맞고
+  // href가 빠지면 sanitizeLinks가 이미 검증한 링크가 조용히 평문이 된다.
+  it("표를 감싼 링크도 표 앞 텍스트의 href를 보존한다", () => {
+    const html =
+      '<a href="https://example.com">link' +
+      "<table><tbody><tr><td>a</td></tr></tbody></table>" +
+      "</a>";
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [
+        {
+          text: "link",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ],
+    });
+  });
 });

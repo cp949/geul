@@ -12,9 +12,11 @@ import {
   sanitizeLinks,
 } from "../html/hast-properties.js";
 import {
+  type HtmlElementContent,
   type HtmlElementNode,
   type HtmlNode,
   type HtmlRoot,
+  htmlElement,
   inlineContentFromNodes,
 } from "../html/inline-content.js";
 import { asRoot, parseHtmlFragment } from "../html/parse-html.js";
@@ -113,6 +115,24 @@ const containsTable = (
   return false;
 };
 
+// 조상 서식 체인을 노드에 얕은 클론으로 다시 씌운다. `<strong>`이나 `<a>`가
+// 표를 감싸고 있으면 walk가 그 요소를 통과해 자식으로 내려가므로, 이 복원이
+// 없으면 표 앞뒤 텍스트가 마크(link의 href 포함)를 잃는다 — 같은 서식이 표를
+// 감싸지 않고 형제로 있을 때와 결과가 달라지면 안 된다. 클론은 원본 자식을
+// 참조로 담으므로 collapseHtmlWhitespace의 제자리 수정이 그대로 원본 텍스트
+// 노드에 닿는다. 마크가 없는 조상(레이아웃 표의 table/tbody/tr 등)까지 함께
+// 씌우지만 inlineContentFromNodes가 마크 없는 태그를 그냥 재귀 통과하므로
+// 결과는 달라지지 않는다.
+const wrapInAncestors = (
+  node: HtmlElementContent,
+  ancestors: readonly HtmlElementNode[],
+): HtmlElementContent =>
+  ancestors.reduceRight<HtmlElementContent>(
+    (child, ancestor) =>
+      htmlElement(ancestor.tagName, ancestor.properties, [child]),
+    node,
+  );
+
 // 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고 문단 블록으로 옮겨 담는다
 // — 표 앞뒤 문단은 문단으로, 표는 표 노드로, 문서 순서를 지켜 한 시퀀스로
 // 만든다(spec §4.1, Issue #71). 이 판정은 sanitize를 이미 거친 트리를
@@ -135,6 +155,9 @@ const containsTable = (
 // collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
 // 제어문자/DEL/짝 없는 surrogate 정제) 없으면 model의 isValidInlineText
 // 검사가 거절해 readEditorDocument에서 throw된다(editor 영구 desync).
+//
+// 표를 담은 조상 요소는 walk가 통과해 내려가므로 pending에 남지 않는다 —
+// 그 요소가 주던 마크는 wrapInAncestors가 노드마다 다시 씌워 살린다.
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
   table: HtmlElementNode,
@@ -154,7 +177,10 @@ const blockSequenceFromNodes = (
     pending = [];
   };
 
-  const walk = (list: readonly HtmlNode[]): void => {
+  const walk = (
+    list: readonly HtmlNode[],
+    ancestors: readonly HtmlElementNode[],
+  ): void => {
     for (const node of list) {
       if (failure !== undefined) return;
       if (node === table) {
@@ -168,25 +194,27 @@ const blockSequenceFromNodes = (
         continue;
       }
       if (node.type === "text") {
-        pending.push(node);
+        pending.push(wrapInAncestors(node, ancestors));
         continue;
       }
       if (node.type !== "element") continue;
       if (node.tagName === "p") {
         flush();
-        pending = [...node.children];
+        pending = node.children.map((child) =>
+          wrapInAncestors(child, ancestors),
+        );
         flush();
         continue;
       }
       if (containsTable(node.children, table)) {
-        walk(node.children);
+        walk(node.children, [...ancestors, node]);
         continue;
       }
-      pending.push(node);
+      pending.push(wrapInAncestors(node, ancestors));
     }
   };
 
-  walk(nodes);
+  walk(nodes, []);
   flush();
   if (failure !== undefined) return { ok: false, error: failure };
   return { ok: true, value: blocks };
