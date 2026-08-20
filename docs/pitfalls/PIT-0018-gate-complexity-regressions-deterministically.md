@@ -35,7 +35,9 @@ Issue #58 2026-08-20 실측(12코어, burn 프로세스로 CPU 포화, 10회 반
 - 단언을 작성한 뒤 반드시 mutation으로 RED를 실증한다. 회귀 형태를 하나만 가정하지 않는다 — 최소한 "헬퍼가 재순회한다", "호출부가 헬퍼를 버리고 인라인한다", "배열 참조만 hoist하고 내부는 그대로 재순회한다" 세 형태를 각각 시도한다.
 - 시간 상한을 완전히 없애지 않는다. 역할을 "심각한 성능 붕괴" 검출로 한정하고, 상수 옆에 실측 근거(무부하/과포화 median·max)와 그 역할을 주석으로 남긴다.
 - 상한 값을 잡을 때 `pnpm test` 동시 실행에서 wall clock이 최대 5배까지 부풀 수 있다고 전제한다(Issue #58 실측 median 증가율 5.0배).
-- 모든 시간 상한이 나쁜 것은 아니다. 입력 크기가 다른 상한(`MAX_TABLE_LOGICAL_CELLS` 같은 구조적 제약)으로 이미 고정되어 있고 병목이 자체 코드가 아니라 최적화 불가능한 서드파티 내부에 있다면, 실측 최악값에 안전 여유를 더한 타임아웃 상향은 타당하다(아래 Issue #12 선례). 문제는 시간 상한 자체가 아니라 **그것으로 복잡도 회귀를 게이트하는 용도**다.
+- 모든 시간 상한이 나쁜 것은 아니다. 입력 크기가 다른 상한(`MAX_TABLE_LOGICAL_CELLS` 같은 구조적 제약)으로 이미 고정되어 있고 병목을 실제로 제거할 수 없다면, 실측 최악값에 안전 여유를 더한 타임아웃은 타당하다. 문제는 시간 상한 자체가 아니라 **그것으로 복잡도 회귀를 게이트하는 용도**다.
+- "병목이 서드파티 내부라 최적화할 수 없다"를 타임아웃 상향의 근거로 쓰기 전에 `pnpm patch`를 먼저 검토한다. Issue #12가 그 판단으로 상한을 20,000ms까지 올렸지만, Issue #26이 같은 병목을 서드파티 코드 자체를 패치해 35배 줄이고 상한을 5,000ms로 되돌렸다(아래 실제 근거). 서드파티라는 사실은 "최적화 불가능"이 아니라 "우리 저장소 밖"이라는 뜻일 뿐이다.
+- 서드파티를 패치했다면 패치 적용 여부를 시간이 아니라 결정적 단언으로 고정한다. 패키지 `exports`가 조건별로 서로 다른 사본을 가리키면(vitest는 `development`, 빌드 산출물은 `default`) 일부 사본만 패치된 상태가 테스트를 전부 통과하면서 소비자만 느리게 만든다. 조건 목록을 하드코딩하지 말고 `exports`에서 읽어 사본 전부를 검사한다(`packages/io/test/micromark-table-patch-integrity.test.ts`).
 - 입력 객체 계측은 사본 위에서 벌어지는 작업을 보지 못한다. 계측 getter는 원본 입력에 대한 접근만 재므로, 구현이 셀 데이터를 사본으로 옮긴 뒤 그 사본을 재순회하면 어떤 계측 축도 그 재순회를 관측할 수 없다. 계측 축을 설계할 때 이 한계를 전제하고, 관측 불가능한 회귀 형태가 무엇인지 문서에 남긴다.
 
 ## 검증 방법
@@ -78,9 +80,23 @@ grep -rnE "toBeLessThan\(.*(TIME_LIMIT|LIMIT_MS)|performance\.now\(\)|[Tt]imeout
 - 설계 중 실제로 겪은 두 자기 함정:
   - `exportMarkdown` 경로의 `computeColumnAlignments` 호출 횟수 하한을 처음엔 1로 뒀는데, "헬퍼를 버리고 자체 quadratic 루프를 인라인"하는 mutation에서 호출 횟수가 2 → 1로 줄어도 하한 1을 통과해 회귀를 놓쳤다. 하한을 2(warnings용 `analyzeMarkdownLoss` 1회 + `tableNode` 직렬화 1회)로 강화하고 나서야 RED가 됐다.
   - 첫 설계는 `row.cells` 참조 획득 횟수 축 하나만 있었는데, "배열 참조만 열 루프 바깥으로 hoist하고 내부는 여전히 열마다 재순회"하는 mutation이 그 축을 포함한 4개 단언을 전부 통과했다 — hoist된 배열은 참조 획득 횟수를 행 수로 고정시키면서 실제 비용은 그대로 quadratic으로 남기기 때문이다. 셀 필드(`columnId`) 읽기 횟수 축을 추가하고 나서야 이 형태가 잡혔다.
-- Issue #12 / `packages/io/test/markdown-round-trip-limits.test.ts:20`(`oversizedTableTimeoutMs`) — 같은 함정을 먼저 만난 선례이지만 결론이 갈렸다가 나중에 합류했다. 발견 당시(Issue #12)에는 병목이 서드파티 `remark-gfm`(`micromark-extension-gfm-table`)의 `EditMap.addImplementation` 선형 스캔 내부라 자체 코드로는 최적화할 수 없다고 판단해 `MAX_TABLE_LOGICAL_CELLS`(`packages/model/src/table-grid-validation.ts:10`)로 입력 크기 상한을 고정하고, 실측 최악값(병렬 7.0~7.9초)에 여유를 더한 타임아웃 상향(20,000ms)으로만 대응했다 — Issue #58과 달리 게이트 대상이 복잡도 회귀가 아니라 고정 비용의 절대 상한이라 여겼기 때문이다. Issue #26이 이 판단을 뒤집었다: `pnpm patch`로 `EditMap`이 `at -> index` `Map` 기반 O(1) 조회를 쓰도록 서드파티 코드 자체를 고쳐(`patches/micromark-extension-gfm-table@2.1.1.patch`) 20,000셀 표 파싱이 15.3s→0.43s(약 35배)로 개선됐고, 타임아웃은 5,000ms로 되돌렸다 — "서드파티 병목은 자체 코드로 손댈 수 없다"는 전제 자체가 항상 참은 아니다.
+- Issue #12 / `packages/io/test/markdown-round-trip-limits.test.ts:20`(`oversizedTableTimeoutMs`) — 같은 함정을 먼저 만난 선례이지만 결론이 갈렸다가 나중에 합류했다. 발견 당시(Issue #12)에는 병목이 서드파티 `remark-gfm`(`micromark-extension-gfm-table`)의 `EditMap.addImplementation` 선형 스캔 내부라 자체 코드로는 최적화할 수 없다고 판단해 `MAX_TABLE_LOGICAL_CELLS`(`packages/model/src/table-grid-validation.ts:10`)로 입력 크기 상한을 고정하고, 실측 최악값(병렬 7.0~7.9초)에 여유를 더한 타임아웃 상향(20,000ms)으로만 대응했다 — Issue #58과 달리 게이트 대상이 복잡도 회귀가 아니라 고정 비용의 절대 상한이라 여겼기 때문이다. Issue #26이 이 판단을 뒤집었다: `pnpm patch`로 `EditMap`이 `at -> index` `Map` 기반 O(1) 조회를 쓰도록 서드파티 코드 자체를 고쳐(`patches/micromark-extension-gfm-table@2.1.1.patch`) 타임아웃을 5,000ms로 되돌렸다 — "서드파티 병목은 자체 코드로 손댈 수 없다"는 전제 자체가 항상 참은 아니다.
+
+  `parseProcessor.parse(source)` 단계만 격리한 2026-08-21 실측(12코어, 같은 세션에서 패치 전후를 번갈아 측정).
+
+  | 셀 수 (rows×cols) | 패치 전 | 패치 후 | 배율 |
+  | --- | --- | --- | --- |
+  | 2,500 (50×50) | 239.8ms | 92.5ms | 2.6배 |
+  | 5,000 (100×50) | 729.9ms | 128.6ms | 5.7배 |
+  | 10,000 (100×100) | 2,117.1ms | 248.3ms | 8.5배 |
+  | 15,000 (150×100) | 5,113.0ms | 291.9ms | 17.5배 |
+  | 20,000 (200×100) | 15,633.3ms | 429.6ms | 36.4배 |
+
+  셀 수를 8배(2,500→20,000) 늘렸을 때 패치 전은 65.2배, 패치 후는 4.6배 — 초선형이 준선형으로 바뀌었다.
+
+- Issue #26의 반쪽 패치 위험 — `micromark-extension-gfm-table`의 `exports`는 `development`(`dev/lib/edit-map.js`)와 `default`(`lib/edit-map.js`) 두 사본으로 갈린다. 최초 구현이 `lib/`만 패치했고 리뷰가 `dev/lib/` 누락을 잡았다. 그 반대 방향(= `lib/`만 누락)은 어떤 테스트도 잡지 못한다는 것을 2026-08-21에 실측으로 확인했다: `dev/lib/`만 되돌리면 `markdown-round-trip-limits`의 대형 표 케이스가 603ms → 4,211ms로 느려지지만, `lib/`만 되돌리면 612ms로 패치 상태와 구분되지 않는다(vitest가 `development` 조건을 타기 때문). 그 4,211ms조차 5,000ms 상한을 단독 실행에서 통과했다 — 시간 상한은 패치 유실의 게이트가 아니다. 결정적 게이트는 `packages/io/test/micromark-table-patch-integrity.test.ts`가 진다(양방향 mutation으로 RED 실증).
 
 ## 관련 문서
 
 - Issue #12(선례) — `packages/io/test/markdown-round-trip-limits.test.ts`
-- Issue #26(선례를 뒤집은 후속) — `patches/micromark-extension-gfm-table@2.1.1.patch`, `packages/io/test/markdown-round-trip-limits.test.ts`
+- Issue #26(선례를 뒤집은 후속) — `docs/adr/0006-patch-third-party-bottlenecks-with-pnpm-patch.md`, `patches/micromark-extension-gfm-table@2.1.1.patch`, `packages/io/test/micromark-table-patch-integrity.test.ts`, `packages/io/test/markdown-round-trip-limits.test.ts`
