@@ -29,6 +29,7 @@ npx playwright test e2e/table-format.spec.ts e2e/block-handle.spec.ts -g "Escape
 
 - Issue #20 — `table-handles.tsx`/`table-selection-toolbar.tsx` 2곳 중복을 최초 보고. 구현 계획 수립 중 `block-side-menu.tsx`에서 3번째 동일 패턴을 추가 발견했다 — Issue #19 → #43 분리 선례를 따라 별도 이슈(#45)로 분리했다.
 - Issue #45 — 세 번째 중복 지점이던 `block-side-menu.tsx`도 공용 훅으로 통합했다. 마이그레이션 전 특성화 단위 테스트(`packages/react/test/block-side-menu.test.tsx`)로 기존 동작을 먼저 고정한 뒤 치환했다. 이제 `table-handles.tsx`, `table-selection-toolbar.tsx`, `block-side-menu.tsx` 세 곳 모두 `useDismissOnOutsideOrEscape` 하나를 공유한다.
+- Issue #47 — 같은 파일의 메뉴 액션 핸들러 3개(`handleTurnInto`/`handleDuplicate`/`handleDeleteBlock`)도 `closeBlockMenu()`를 재사용하게 해 `block-side-menu.tsx` 안의 닫기 경로를 하나로 모았다(커밋 `b8e6e97`). 훅 배선이 아니라 닫기 *호출*의 중복이라 규모는 작지만, 닫기 절차가 바뀔 때 네 곳 중 일부만 고쳐지는 실패 양상은 같다.
 - `packages/react/src/use-dismiss-on-outside-or-escape.ts`가 공용 구현을 소유한다.
 - Issue #48 — `onOutsideDismiss`/`onEscapeDismiss` 분리가 이제 `table-handles.tsx`, `table-selection-toolbar.tsx`, `block-side-menu.tsx` 세 곳 모두 단위 테스트(`document.activeElement` 단언)로 고정됐다. `table-handles`/`table-selection-toolbar`는 두 콜백을 서로 바꿔치기하는 변이 검증 4건(전부 실패 확인 후 되돌림, 커밋 `a211c5b`+`3c32099`)을 거쳤고, `block-side-menu`는 같은 배선 교환이 기존 단언을 무력화한다는 사실(커밋 `954d755`)을 근거로 초점 단언을 추가했다.
 
