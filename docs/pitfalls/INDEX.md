@@ -20,3 +20,4 @@
 | `PIT-0014` | jsdom 테스트 fake는 contentEditable IDL 대신 속성으로 세움 | `ACTIVE` | react·test | Issue #48 | [상세](./PIT-0014-set-contenteditable-attribute-in-jsdom-fakes.md) |
 | `PIT-0015` | composite tsconfig 패키지는 test 전용 tsconfig.test.json을 따로 둠 | `ACTIVE` | workspace·build | Issue #32 | [상세](./PIT-0015-separate-tsconfig-for-composite-package-tests.md) |
 | `PIT-0016` | workspace 밖 TS 디렉터리는 전용 tsconfig로 typecheck 대상에 넣음 | `ACTIVE` | workspace·build | Issue #57 | [상세](./PIT-0016-give-non-package-ts-directories-their-own-tsconfig.md) |
+| `PIT-0017` | document.body에 직접 붙인 테스트 노드는 finally에서 정리함 | `ACTIVE` | react·test | Issue #51 | [상세](./PIT-0017-clean-up-body-appended-test-nodes-in-finally.md) |
