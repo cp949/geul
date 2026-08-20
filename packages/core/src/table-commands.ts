@@ -1,14 +1,17 @@
 import {
   type ClipboardContent,
   type ClipboardContentBlock,
+  type TabularCell,
   type TabularData,
   validateTabularData,
 } from "@cp949/geul-io";
 import {
   type IdFactory,
+  type InlineContent,
   MAX_TABLE_LOGICAL_CELLS,
   type Result,
   type TableBlock,
+  type TextMark,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
@@ -713,6 +716,115 @@ const buildSequenceNode = (
   };
 };
 
+const markRunKey = (marks: TextMark[] | undefined): string =>
+  JSON.stringify(
+    (marks ?? []).map((mark) =>
+      mark.type === "link" ? `link:${mark.href}` : mark.type,
+    ),
+  );
+
+// 인라인 런을 이어 붙이되 이웃한 같은 마크 런은 하나로 합치고 빈 런은
+// 버린다 — inlineContentViolation이 인접 동일 마크 런과 빈 텍스트 런을 모두
+// 거절하므로, 구분자를 끼워 넣는 쪽이 io의 normalizeCellContent와 같은 병합
+// 형태를 유지해야 한다. 원본 런 객체는 수정하지 않고 교체한다(호출자가 넘긴
+// ClipboardContent를 건드리지 않는다).
+const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
+  for (const run of runs) {
+    if (run.text.length === 0) continue;
+    const previous = target.at(-1);
+    if (
+      previous !== undefined &&
+      markRunKey(previous.marks) === markRunKey(run.marks)
+    ) {
+      target[target.length - 1] = {
+        ...previous,
+        text: previous.text + run.text,
+      };
+      continue;
+    }
+    target.push(run);
+  }
+};
+
+// 세그먼트들을 LF 하나로 이어 붙인다. 빈 세그먼트는 건너뛰므로 빈 셀 앞뒤에
+// 구분자만 남는 일이 없다. 셀 안 줄바꿈을 LF로 표현하는 것은 기존 셀 텍스트
+// 계약과 같다(inlineContentFromNodes가 `<br>`을 LF로 바꾼다).
+const joinInlineSegments = (segments: InlineContent[]): InlineContent => {
+  const joined: InlineContent = [];
+  for (const segment of segments) {
+    if (segment.every((run) => run.text.length === 0)) continue;
+    if (joined.length > 0) appendInlineRuns(joined, [{ text: "\n" }]);
+    appendInlineRuns(joined, segment);
+  }
+  return joined;
+};
+
+// 논리 열 좌표가 가장 작은/큰 셀의 배열 인덱스. TabularData.rows[].cells의
+// 배열 순서는 열 순서의 권위가 아니므로(공개 API로 직접 들어온 데이터는
+// 정렬돼 있지 않을 수 있다) columnIndex로 판정한다.
+const extremeCellIndex = (
+  cells: TabularCell[],
+  pick: "min" | "max",
+): number | null => {
+  let found: number | null = null;
+  for (const [index, cell] of cells.entries()) {
+    const current = cells[found ?? -1];
+    if (
+      current === undefined ||
+      (pick === "min"
+        ? cell.columnIndex < current.columnIndex
+        : cell.columnIndex > current.columnIndex)
+    ) {
+      found = index;
+    }
+  }
+  return found;
+};
+
+// 표 셀은 블록 자식을 가질 수 없다(model `TableCell.content: InlineContent`).
+// 커서가 이미 표 안이면 문단을 별도 블록으로 끼울 자리가 없는데, 그렇다고
+// 버리면 조용한 텍스트 손실이다(변경 전에는 같은 클립보드가 NOT_TABULAR로
+// Tiptap 기본 붙여넣기에 넘어가 텍스트가 셀에 남았다). 읽기 순서를 지켜
+// 셀 인라인 콘텐츠에 합친다 — 표 앞 문단은 좌상단 셀 앞에, 표 뒤 문단은
+// 마지막 셀 뒤에 붙는다. 1×1 표에서는 두 셀이 같으므로 앞뒤가 한 셀에
+// 순서대로 쌓인다.
+const withParagraphsMergedIntoCells = (
+  data: TabularData,
+  leading: InlineContent[],
+  trailing: InlineContent[],
+): TabularData => {
+  if (leading.length === 0 && trailing.length === 0) return data;
+
+  const rows = data.rows.map((row) => ({ cells: [...row.cells] }));
+  const firstRow = rows[0];
+  const lastRow = rows[rows.length - 1];
+  if (firstRow === undefined || lastRow === undefined) return data;
+
+  if (leading.length > 0) {
+    const index = extremeCellIndex(firstRow.cells, "min");
+    const cell = index === null ? undefined : firstRow.cells[index];
+    if (index !== null && cell !== undefined) {
+      firstRow.cells[index] = {
+        ...cell,
+        content: joinInlineSegments([...leading, cell.content]),
+      };
+    }
+  }
+
+  if (trailing.length > 0) {
+    const index = extremeCellIndex(lastRow.cells, "max");
+    const cell = index === null ? undefined : lastRow.cells[index];
+    if (index !== null && cell !== undefined) {
+      lastRow.cells[index] = {
+        ...cell,
+        content: joinInlineSegments([cell.content, ...trailing]),
+      };
+    }
+  }
+
+  return { columnCount: data.columnCount, rows };
+};
+
 // 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
 // 표가 fragment의 유일한 실질 콘텐츠일 때 반환하는 단일 표 시퀀스는
 // pasteTabularData에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을
@@ -754,19 +866,38 @@ export const pasteClipboardContent = (
   const state = editor.state;
 
   if (isInTable(state)) {
-    // 표 셀은 블록 자식을 가질 수 없다(model TableCell.content:
-    // InlineContent) — 문단을 끼울 자리가 없으므로 시퀀스의 표 부분만
-    // 기존 grid-paste 경로로 붙이고 문단은 버린다. 이 진입점(커서가 이미
-    // 표 안)에 한정된, 정의된 한계다 — 완료 기준은 표 밖 붙여넣기만
-    // 요구한다(Issue #71).
-    const tableBlock = content.find(
-      (entry): entry is Extract<ClipboardContentBlock, { type: "table" }> =>
-        entry.type === "table",
-    );
-    if (tableBlock === undefined) {
+    // 시퀀스의 표 부분은 기존 grid-paste 경로로 붙이고, 문단은 블록으로
+    // 끼울 자리가 없으므로 withParagraphsMergedIntoCells가 셀 텍스트에
+    // 합친다. 표 블록이 둘 이상인 시퀀스는 parseClipboardTable이 만들지
+    // 않는다(findDataTable이 표 하나만 고른다, TBL-012) — 공개 API로 직접
+    // 들어온 경우에만 가능하고, 그때는 첫 표만 붙인다.
+    const tableIndex = content.findIndex((entry) => entry.type === "table");
+    const tableBlock = content[tableIndex];
+    if (tableIndex === -1 || tableBlock?.type !== "table") {
       return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
     }
-    return pasteTabularData(editor, tableBlock.data, createId);
+
+    const paragraphContent = (
+      blocks: readonly ClipboardContentBlock[],
+    ): InlineContent[] =>
+      blocks
+        .filter(
+          (
+            entry,
+          ): entry is Extract<ClipboardContentBlock, { type: "paragraph" }> =>
+            entry.type === "paragraph",
+        )
+        .map((entry) => [...entry.content]);
+
+    return pasteTabularData(
+      editor,
+      withParagraphsMergedIntoCells(
+        tableBlock.data,
+        paragraphContent(content.slice(0, tableIndex)),
+        paragraphContent(content.slice(tableIndex + 1)),
+      ),
+      createId,
+    );
   }
 
   // 표 밖: 시퀀스를 순서대로 노드로 조립한다. 실패 가능한 계산

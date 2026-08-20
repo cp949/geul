@@ -1030,6 +1030,68 @@ describe("에디터 컨트롤러 표", () => {
     editor.destroy();
   });
 
+  // 커서가 이미 표 안이면 문단을 블록으로 끼울 자리가 없다(표 셀은
+  // InlineContent만 담는다). 버리면 조용한 텍스트 손실이므로 읽기 순서대로
+  // 셀 텍스트에 합친다 — 표 앞 문단은 좌상단 셀 앞에, 표 뒤 문단은 마지막
+  // 셀 뒤에 붙는다.
+  it("표 안에 혼합 클립보드를 붙이면 표 밖 문단 텍스트가 셀에 합쳐진다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+    });
+    const inserted = editor.commands.insertTable("block-1", {
+      rows: 1,
+      columns: 2,
+    });
+    if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+
+    // 좌상단 셀 안(셀 경계 + 1)에 캐럿을 둔다.
+    let cellPosition: number | null = null;
+    tiptap.state.doc.descendants((node, pos) => {
+      if (cellPosition !== null) return false;
+      if (node.type.name === "tableCell") {
+        cellPosition = pos + 1;
+        return false;
+      }
+      return true;
+    });
+    if (cellPosition === null) throw new Error("셀 fixture 준비 실패");
+    tiptap.commands.setTextSelection(cellPosition);
+
+    const data = new DataTransfer();
+    data.setData(
+      "text/html",
+      "<p>intro</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table><p>outro</p>",
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    const document = editor.getDocument();
+    const table = document.blocks.find((block) => block.type === "table");
+    if (table?.type !== "table") throw new Error("표 블록이 없다");
+    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "intro\na" }]);
+    expect(table.rows[0]?.cells[1]?.content).toEqual([{ text: "b\noutro" }]);
+    // 표 밖에 새 문단이 생기지 않는다.
+    expect(
+      document.blocks.filter((block) => block.type === "paragraph"),
+    ).toHaveLength(1);
+
+    // 모델↔에디터가 어긋나면 readEditorDocument()가 TypeError로 터진다.
+    expect(editor.commands.setText("block-1", "next")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    editor.destroy();
+  });
+
   it("탭이 섞인 HTML 표를 붙여넣어도 모델과 에디터가 어긋나지 않는다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),

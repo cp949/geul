@@ -1571,25 +1571,106 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     editor.destroy();
   });
 
-  it("표 안에서 문단이 섞인 시퀀스는 표 부분만 붙이고 문단은 버린다", () => {
+  // 표 셀은 블록 자식을 가질 수 없으므로(model TableCell.content:
+  // InlineContent) 문단을 별도 블록으로 끼울 자리가 없다. 그렇다고 버리면
+  // 조용한 텍스트 손실이므로 읽기 순서 그대로 셀 인라인 콘텐츠에 합친다 —
+  // 표 앞 문단은 좌상단 셀 앞에, 표 뒤 문단은 마지막 셀 뒤에 LF로 구분해
+  // 붙인다.
+  it("표 안에서 문단이 섞인 시퀀스는 문단 텍스트를 셀에 합쳐 보존한다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
     const before = editor.getJSON() as TiptapJsonNode;
 
     const result = pasteClipboardContent(
       editor,
-      [paragraphBlock("dropped"), tableBlock("x")],
+      [paragraphBlock("intro"), tableBlock("x"), paragraphBlock("outro")],
       sequentialIds("paste"),
     );
 
     expect(result.ok).toBe(true);
     const doc = editor.getJSON() as TiptapJsonNode;
-    // 표 밖에 새 문단이 생기지 않는다 — 최상위 블록 수는 그대로다(표 셀은
-    // 블록 자식을 가질 수 없어 문단을 끼울 자리가 없다, Issue #71).
+    // 표 밖에 새 문단이 생기지 않는다 — 최상위 블록 수는 그대로다.
     expect(doc.content).toHaveLength(before.content?.length ?? 0);
+    // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
+    // 문서 순서대로 한 셀에 들어간다.
     expect(
       doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("x");
+    ).toBe("intro\nx\noutro");
+    editor.destroy();
+  });
+
+  it("표 안에서 앞뒤 문단은 붙여넣은 표의 좌상단·마지막 셀에 각각 합친다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        paragraphBlock("intro"),
+        {
+          type: "table",
+          data: {
+            columnCount: 2,
+            rows: [
+              {
+                cells: [
+                  {
+                    columnIndex: 0,
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    content: [{ text: "a" }],
+                  },
+                  {
+                    columnIndex: 1,
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    content: [{ text: "b" }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        paragraphBlock("outro"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+    const row = editor.getJSON() as TiptapJsonNode;
+    const cells = row.content?.[0]?.content?.[0]?.content ?? [];
+    expect(cells[0]?.content?.[0]?.text).toBe("intro\na");
+    expect(cells[1]?.content?.[0]?.text).toBe("b\noutro");
+    editor.destroy();
+  });
+
+  // 마크는 그대로 살아야 하고, 이웃한 같은 마크 런은 합쳐져야 한다 —
+  // inlineContentViolation이 "adjacent inline runs with identical marks"를
+  // 거절하므로 구분자를 끼워 넣는 쪽에서 병합 형태를 지켜야 한다.
+  it("셀에 합칠 때 문단 마크를 보존하고 같은 마크 런은 합친다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        {
+          type: "paragraph",
+          content: [{ text: "bold", marks: [{ type: "bold" }] }],
+        },
+        tableBlock("x"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    const cellContent =
+      doc.content?.[0]?.content?.[0]?.content?.[0]?.content ?? [];
+    expect(cellContent[0]?.text).toBe("bold");
+    expect(cellContent[0]?.marks).toEqual([{ type: "bold" }]);
+    expect(cellContent[1]?.text).toBe("\nx");
+    expect(cellContent[1]?.marks).toBeUndefined();
     editor.destroy();
   });
 
