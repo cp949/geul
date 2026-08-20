@@ -16,7 +16,20 @@ describe("Markdown 가져오기 경계와 한도", () => {
   // EditMap.addImplementation이 map.add() 호출마다 선형 스캔하던 것이
   // 병목이었다(Issue #12). Issue #26에서 pnpm patch로 EditMap이
   // `at -> index` Map을 통해 O(1) 조회를 하도록 고쳐 초선형 비용이
-  // 사라졌다 — 패치 전후 실측치는 Issue #26 코멘트에 기록했다.
+  // 사라졌다(10,000셀 파싱 2,117ms -> 248ms. 전 구간 실측표는
+  // docs/pitfalls/PIT-0018-gate-complexity-regressions-deterministically.md
+  // `## 실제 근거`).
+  //
+  // 이 상한의 역할은 "심각한 성능 붕괴" 검출 하나로 한정한다(PIT-0018).
+  // 패치 유실은 여기서 잡히지 않는다 — dev/lib/edit-map.js만 미패치로
+  // 되돌린 상태(= Issue #26 이전)도 단독 실행 4,211ms로 이 상한을
+  // 통과했다. 패치 적용 여부는 시간에 의존하지 않는
+  // micromark-table-patch-integrity.test.ts가 결정적으로 진다.
+  //
+  // 실측 근거(2026-08-21, 12코어): 패치 후 이 케이스는 단독 603ms,
+  // 2코어로 묶은 `pnpm test` 병렬에서 최악 702ms. 5,000ms는 그 병렬
+  // 최악값의 약 7배이므로 PIT-0018이 전제하는 동시 실행 5배 부풀림
+  // (702ms x 5 = 3,510ms) 안에 들어간다.
   const oversizedTableTimeoutMs = 5_000;
 
   it(
