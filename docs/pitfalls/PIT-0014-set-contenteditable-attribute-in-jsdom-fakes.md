@@ -39,7 +39,8 @@ pnpm --filter @cp949/geul-react exec vitest run packages/react/test/link-toolbar
 - 커밋 `60058c3` — 위 단언들의 편집 영역 조회를 파일별 헬퍼(`getEditable`, `openBlockMenu`, `renderTable`)로 모으고 초점 단언을 주 동작 단언 뒤로 옮겼다. 변이 10건 재실행으로 커버리지가 유지됨을 확인했다.
 - `formatting-toolbar.tsx`는 `contenteditable` 셀렉터도 초점 복구 경로도 없어 그 테스트 파일은 fake만 고치고 초점 단언은 추가하지 않았다.
 - `slash-menu.tsx`의 Escape 핸들러는 초점을 복구하지 않는다(`focusEditor`는 `selectItem` 말미에서만 호출) — 그래서 slash-menu의 초점 단언은 Escape가 아니라 항목 선택 경로를 검증한다.
-- Issue #53 — 위 `block-side-menu` 3곳(turn into·duplicate·delete) 커버 테스트가 있던 `describe("SlashMenu 블록 메뉴", ...)`를 `slash-menu.test.tsx`에서 `block-side-menu.test.tsx`로 순수 이동했다. 즉 위 커밋 `cbd3776` 항목의 "커버 테스트는 `slash-menu.test.tsx`에 있다"는 서술은 그 시점 기준이고, 현재는 `block-side-menu.test.tsx`가 이 3곳을 커버한다(단, 여전히 `<SlashMenu />`를 합성 마운트하는 방식 — 직접 마운트 전환은 Issue #59에서 검토 중).
+- Issue #53 — 위 `block-side-menu` 3곳(turn into·duplicate·delete) 커버 테스트가 있던 `describe("SlashMenu 블록 메뉴", ...)`를 `slash-menu.test.tsx`에서 `block-side-menu.test.tsx`로 순수 이동했다. 즉 위 커밋 `cbd3776` 항목의 "커버 테스트는 `slash-menu.test.tsx`에 있다"는 서술은 그 시점 기준이고, 현재는 `block-side-menu.test.tsx`가 이 3곳을 커버한다.
+- Issue #59 — 위 3곳 커버 테스트가 여전히 `<SlashMenu />`를 합성 마운트하던 것을(Feature Envy·Divergent Change smell로 지적됨) `block-side-menu.test.tsx` 최상위 `fakeController`/`openBlockMenu`로 `<BlockSideMenu />`를 직접 마운트하도록 바꿨다 — `SlashMenu` import가 완전히 사라졌고, 커버 테스트는 이제 `describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭제)", ...)`에 있다. 3개 focusEditor 회귀 mutation을 이 마운트 경로로 다시 확인했다(전부 재현 후 원복).
 
 ## 관련 문서
 

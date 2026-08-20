@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSideMenu } from "../src/block-side-menu.js";
-import { EditorContent, EditorProvider, SlashMenu } from "../src/index.js";
+import { EditorContent, EditorProvider } from "../src/index.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -56,7 +56,7 @@ const withProvider = (
 
 // EditorContent가 그리는 role="textbox" 노드는 마운트 host이고, 컨트롤러가
 // 그 안에 contenteditable 자식을 넣는다. focusEditor가 초점을 주는 대상은
-// 후자이므로 Escape 테스트가 단언할 노드도 후자다.
+// 후자이므로 초점을 단언하는 테스트가 단언할 노드도 후자다.
 const renderBlockMenu = (controller: ReturnType<typeof fakeController>) => {
   render(
     withProvider(
@@ -137,148 +137,9 @@ describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
   });
 });
 
-describe("SlashMenu 블록 메뉴", () => {
-  // 이 describe는 slash-menu.test.tsx의 "SlashMenu 블록 메뉴"를 그대로 옮긴
-  // 것이다(Issue #53) — block-side-menu.test.tsx만 돌려도 종류 변경·복제·삭제
-  // 3개 액션 핸들러의 focusEditor 회귀를 잡기 위함이다. 메뉴 항목은 SlashMenu가
-  // 합성 마운트하는 BlockSideMenu가 그리므로 여기서도 <SlashMenu />를 합성
-  // 마운트한다. SlashMenu는 마운트 시 editor.getCaretBlockContext()를 동기
-  // 호출하고 TableHandles/TableSelectionToolbar도 함께 렌더하므로, 이 파일
-  // 상단의 얕은 fakeController(5개 command만 존재)로는 크래시한다 — 이 describe
-  // 전용으로 slash-menu.test.tsx의 전체 표면을 가진 fakeController를 로컬로
-  // 가져온다.
-  type CaretContext = ReturnType<EditorController["getCaretBlockContext"]>;
-
-  type FakeControllerOptions = {
-    getCaretBlockContext?: () => CaretContext;
-    insertParagraphAfter?: EditorController["commands"]["insertParagraphAfter"];
-    setBlockType?: EditorController["commands"]["setBlockType"];
-    moveBlockBefore?: EditorController["commands"]["moveBlockBefore"];
-    duplicateBlock?: EditorController["commands"]["duplicateBlock"];
-    deleteBlock?: EditorController["commands"]["deleteBlock"];
-    insertTable?: EditorController["commands"]["insertTable"];
-    blockIds?: readonly string[];
-    tableBlockIds?: readonly string[];
-  };
-
-  const fakeController = ({
-    getCaretBlockContext = () => null,
-    insertParagraphAfter = () => ({
-      ok: true,
-      value: { blockId: "new-block" },
-    }),
-    setBlockType = () => ({ ok: true, value: undefined }),
-    moveBlockBefore = () => ({ ok: true, value: undefined }),
-    duplicateBlock = () => ({ ok: true, value: { blockId: "new-block" } }),
-    deleteBlock = () => ({ ok: true, value: undefined }),
-    insertTable = () => ({ ok: true, value: { blockId: "table-1" } }),
-    blockIds = ["block-1"],
-    tableBlockIds = [],
-  }: FakeControllerOptions = {}) => ({
-    mount: vi.fn((element: HTMLElement) => {
-      const editable = document.createElement("div");
-      // 실제 브라우저와 달리 jsdom은 contentEditable IDL 프로퍼티를
-      // contenteditable 속성으로 반영하지 않는다. slash-menu.tsx:100과
-      // block-side-menu.tsx:80(이 파일의 "SlashMenu 블록 메뉴" describe가
-      // 구동한다)의 focusEditor는 '[contenteditable="true"]'로 대상을 찾으므로,
-      // 속성을 직접 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
-      editable.setAttribute("contenteditable", "true");
-      for (const blockId of blockIds) {
-        const block = document.createElement("p");
-        block.setAttribute("data-be-block-id", blockId);
-        block.textContent = "editor text";
-        editable.append(block);
-      }
-      for (const blockId of tableBlockIds) {
-        const table = document.createElement("table");
-        table.setAttribute("data-be-block-id", blockId);
-        const row = document.createElement("tr");
-        const cell = document.createElement("td");
-        cell.textContent = "cell text";
-        row.append(cell);
-        table.append(row);
-        editable.append(table);
-      }
-      element.append(editable);
-    }),
-    unmount: vi.fn(),
-    destroy: vi.fn(),
-    getDocument: vi.fn(),
-    getSelectionMarks: vi.fn(() => [] as string[]),
-    getSelectionLink: vi.fn(() => null),
-    getCaretBlockContext: vi.fn(getCaretBlockContext),
-    getTableCellSelection: vi.fn(() => null),
-    replaceDocument: vi.fn(),
-    commands: {
-      setText: vi.fn(),
-      insertParagraphAfter: vi.fn(insertParagraphAfter),
-      setBlockType: vi.fn(setBlockType),
-      moveBlockBefore: vi.fn(moveBlockBefore),
-      duplicateBlock: vi.fn(duplicateBlock),
-      deleteBlock: vi.fn(deleteBlock),
-      toggleBold: vi.fn(() => ({ ok: true, value: undefined })),
-      toggleItalic: vi.fn(() => ({ ok: true, value: undefined })),
-      toggleUnderline: vi.fn(() => ({ ok: true, value: undefined })),
-      toggleStrike: vi.fn(() => ({ ok: true, value: undefined })),
-      toggleCode: vi.fn(() => ({ ok: true, value: undefined })),
-      setLink: vi.fn(),
-      unsetLink: vi.fn(),
-      insertTable: vi.fn(insertTable),
-      insertTableRow: vi.fn(() => ({ ok: true, value: undefined })),
-      insertTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
-      moveTableRow: vi.fn(() => ({ ok: true, value: undefined })),
-      moveTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
-      resizeTableColumn: vi.fn(() => ({ ok: true, value: undefined })),
-      mergeTableCells: vi.fn(() => ({ ok: true, value: undefined })),
-      splitTableCell: vi.fn(() => ({ ok: true, value: undefined })),
-      undo: vi.fn(),
-      redo: vi.fn(),
-    },
-  });
-
-  // 모듈 최상위 withProvider는 파라미터가 얕은 fakeController의 반환 타입에
-  // 묶여 있어(commands.*가 0-arg mock) 이 describe의 controller를 받을 수 없다 —
-  // commands.*가 EditorController 실제 시그니처(blockId: string 등)를 갖는
-  // arity 불일치라 tsc가 TS2345로 거부한다. Issue #50에서 공유 헬퍼로 합친다.
-  const localWithProvider = (
-    controller: ReturnType<typeof fakeController>,
-    children: React.ReactNode,
-  ) => (
-    <EditorProvider editor={controller as unknown as EditorController}>
-      {children}
-    </EditorProvider>
-  );
-
-  // 이 describe의 메뉴 항목은 SlashMenu가 합성 마운트하는 BlockSideMenu가
-  // 그린다 — 초점을 되돌리는 것도 block-side-menu.tsx:80의 focusEditor다.
-  // host(role="textbox")는 마운트 host이고 컨트롤러가 그 안에 실제
-  // contenteditable 자식을 넣으므로(block-side-menu.test.tsx:57-59와 같은
-  // 구조) 초점 단언 대상은 후자다.
-  const openBlockMenu = () => {
-    const controller = fakeController();
-    render(
-      localWithProvider(
-        controller,
-        <>
-          <SlashMenu />
-          <EditorContent />
-        </>,
-      ),
-    );
-    const host = screen.getByRole("textbox", { name: "Editor" });
-    const editable = host.querySelector<HTMLElement>(
-      '[contenteditable="true"]',
-    );
-    if (editable === null) throw new Error("Editable was not mounted");
-    const block = host.querySelector("[data-be-block-id]");
-    if (block === null) throw new Error("Block element was not rendered");
-    fireEvent.pointerMove(block);
-    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
-    return { controller, editable };
-  };
-
+describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭제)", () => {
   it("핸들 클릭 시 종류 변경/복제/삭제 메뉴를 연다", () => {
-    openBlockMenu();
+    openBlockMenu(fakeController());
 
     expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
     expect(screen.getByRole("menuitem", { name: "Heading 1" })).not.toBeNull();
@@ -287,7 +148,7 @@ describe("SlashMenu 블록 메뉴", () => {
   });
 
   it("같은 핸들을 다시 클릭하면 메뉴를 닫는다", () => {
-    openBlockMenu();
+    openBlockMenu(fakeController());
 
     fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
 
@@ -295,7 +156,8 @@ describe("SlashMenu 블록 메뉴", () => {
   });
 
   it("종류 변경 항목을 클릭하면 setBlockType을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
-    const { controller, editable } = openBlockMenu();
+    const controller = fakeController();
+    const { editable } = openBlockMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Heading 2" }));
 
@@ -308,7 +170,8 @@ describe("SlashMenu 블록 메뉴", () => {
   });
 
   it("복제 항목을 클릭하면 duplicateBlock을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
-    const { controller, editable } = openBlockMenu();
+    const controller = fakeController();
+    const { editable } = openBlockMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
@@ -318,28 +181,13 @@ describe("SlashMenu 블록 메뉴", () => {
   });
 
   it("삭제 항목을 클릭하면 deleteBlock을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
-    const { controller, editable } = openBlockMenu();
+    const controller = fakeController();
+    const { editable } = openBlockMenu(controller);
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     expect(controller.commands.deleteBlock).toHaveBeenCalledWith("block-1");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(editable);
-  });
-
-  it("Escape를 누르면 메뉴를 닫는다", () => {
-    openBlockMenu();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
-
-  it("메뉴 바깥을 클릭하면 메뉴를 닫는다", () => {
-    openBlockMenu();
-
-    fireEvent.pointerDown(document.body);
-
-    expect(screen.queryByRole("menu")).toBeNull();
   });
 });
