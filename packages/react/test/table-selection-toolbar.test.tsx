@@ -104,6 +104,44 @@ const fakeController = ({
   },
 });
 
+/**
+ * 병합 가능한 2셀 선택 상태의 fakeController를 만든다. cellIds가 2개 이상이고
+ * mergeable이 true, splitCellId가 null인 TableCellSelection을 반환한다.
+ * getTableCellSelection 외 FakeControllerOptions는 overrides로 그대로
+ * fakeController에 전달한다.
+ */
+const mergeableSelectionController = (
+  overrides: Omit<FakeControllerOptions, "getTableCellSelection"> = {},
+) =>
+  fakeController({
+    ...overrides,
+    getTableCellSelection: () => ({
+      tableBlockId: "table-1",
+      cellIds: ["cell-1", "cell-2"],
+      mergeable: true,
+      splitCellId: null,
+    }),
+  });
+
+/**
+ * 분할 가능한 병합 셀 1개 상태의 fakeController를 만든다. cellIds가 1개이고
+ * mergeable이 false, splitCellId가 "cell-1"인 TableCellSelection을 반환한다.
+ * getTableCellSelection 외 FakeControllerOptions는 overrides로 그대로
+ * fakeController에 전달한다.
+ */
+const splittableSelectionController = (
+  overrides: Omit<FakeControllerOptions, "getTableCellSelection"> = {},
+) =>
+  fakeController({
+    ...overrides,
+    getTableCellSelection: () => ({
+      tableBlockId: "table-1",
+      cellIds: ["cell-1"],
+      mergeable: false,
+      splitCellId: "cell-1",
+    }),
+  });
+
 const stubRect = (
   element: Element,
   rect: { left: number; top: number; width: number; height: number },
@@ -163,14 +201,7 @@ const triggerSelectionChange = () => {
 
 describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () => {
   it("cellIds가 2개 이상(mergeable)이면 Merge cells와 Cell formatting 버튼을 보여준다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1", "cell-2"],
-        mergeable: true,
-        splitCellId: null,
-      }),
-    });
+    const controller = mergeableSelectionController();
     const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
@@ -183,14 +214,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
   });
 
   it("Merge cells 클릭 시 mergeTableCells(tableBlockId)를 호출한다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1", "cell-2"],
-        mergeable: true,
-        splitCellId: null,
-      }),
-    });
+    const controller = mergeableSelectionController();
     const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
@@ -202,14 +226,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
   });
 
   it("selectedCell 데코레이션이 없으면(경계 계산 불가) 아무 툴바도 표시하지 않는다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1", "cell-2"],
-        mergeable: true,
-        splitCellId: null,
-      }),
-    });
+    const controller = mergeableSelectionController();
     renderTable(controller);
 
     triggerSelectionChange();
@@ -250,14 +267,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
 
 describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한다", () => {
   it("splitCellId가 있으면 Split cell과 Cell formatting 버튼을 보여준다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     renderTable(controller);
 
     triggerSelectionChange();
@@ -267,14 +277,7 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
   });
 
   it("Split cell 클릭 시 splitTableCell(tableBlockId, cellId)를 호출한다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     renderTable(controller);
     triggerSelectionChange();
 
@@ -289,14 +292,7 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
 
 describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   it("클릭하면 Text color/Background color 팔레트가 뜬다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     renderTable(controller);
     triggerSelectionChange();
 
@@ -308,14 +304,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   });
 
   it('색상 스와치 클릭 시 setTableCellTextColor(tableBlockId, {kind:"cells",cellIds}, color)를 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다', () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     const { editable } = renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
@@ -332,14 +321,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   });
 
   it("Escape로 서식 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     const { editable } = renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
@@ -357,14 +339,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   });
 
   it("서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
@@ -390,14 +365,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   });
 
   it("서식 메뉴 안(data-be-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
@@ -411,14 +379,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   });
 
   it("열린 서식 메뉴를 툴바 버튼으로 다시 누르면 닫고 편집기로 초점을 되돌린다", () => {
-    const controller = fakeController({
-      getTableCellSelection: () => ({
-        tableBlockId: "table-1",
-        cellIds: ["cell-1"],
-        mergeable: false,
-        splitCellId: "cell-1",
-      }),
-    });
+    const controller = splittableSelectionController();
     const { editable } = renderTable(controller);
     triggerSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
