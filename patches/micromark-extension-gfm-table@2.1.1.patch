@@ -1,5 +1,5 @@
 diff --git a/dev/lib/edit-map.js b/dev/lib/edit-map.js
-index 983d0556e2713dc92982faa6a09b1093ef4d02db..6c3c9f5ec0d3ddc5b0ace71da150cfcc09fa7741 100644
+index 983d0556e2713dc92982faa6a09b1093ef4d02db..7fa565f487c48d65cb2d30729c2aa8b7281cb88d 100644
 --- a/dev/lib/edit-map.js
 +++ b/dev/lib/edit-map.js
 @@ -34,6 +34,14 @@ export class EditMap {
@@ -25,7 +25,7 @@ index 983d0556e2713dc92982faa6a09b1093ef4d02db..6c3c9f5ec0d3ddc5b0ace71da150cfcc
    }
  }
  
-@@ -137,31 +146,21 @@ export class EditMap {
+@@ -137,31 +146,29 @@ export class EditMap {
   * @returns {undefined}
   */
  function addImplementation(editMap, at, remove, add) {
@@ -48,15 +48,21 @@ index 983d0556e2713dc92982faa6a09b1093ef4d02db..6c3c9f5ec0d3ddc5b0ace71da150cfcc
 -      // } else {
 -      editMap.map[index][2].push(...add)
 -      // }
--
--      return
--    }
--
--    index += 1
 +  if (existingIndex !== undefined) {
 +    const entry = editMap.map[existingIndex]
 +    entry[1] += remove
+ 
+-      return
+-    }
++    // To do: before not used by tables, use when moving to micromark.
++    // if (before) {
++    //   add.push(...entry[2])
++    //   entry[2] = add
++    // } else {
 +    entry[2].push(...add)
++    // }
+ 
+-    index += 1
 +    return
    }
  
@@ -65,7 +71,7 @@ index 983d0556e2713dc92982faa6a09b1093ef4d02db..6c3c9f5ec0d3ddc5b0ace71da150cfcc
  }
  
 diff --git a/lib/edit-map.js b/lib/edit-map.js
-index ecc8bce784d29a48e0869be1c4a2dd5ccf1d3d01..313eaac1735137fa3821b82505c94fe987754003 100644
+index ecc8bce784d29a48e0869be1c4a2dd5ccf1d3d01..d574e8cf2a3da5c2a51ca77889943578c223679f 100644
 --- a/lib/edit-map.js
 +++ b/lib/edit-map.js
 @@ -34,6 +34,14 @@ export class EditMap {
@@ -91,7 +97,7 @@ index ecc8bce784d29a48e0869be1c4a2dd5ccf1d3d01..313eaac1735137fa3821b82505c94fe9
    }
  }
  
-@@ -130,28 +139,21 @@ export class EditMap {
+@@ -130,28 +139,29 @@ export class EditMap {
   * @returns {undefined}
   */
  function addImplementation(editMap, at, remove, add) {
@@ -121,7 +127,15 @@ index ecc8bce784d29a48e0869be1c4a2dd5ccf1d3d01..313eaac1735137fa3821b82505c94fe9
 +  if (existingIndex !== undefined) {
 +    const entry = editMap.map[existingIndex];
 +    entry[1] += remove;
++
++    // To do: before not used by tables, use when moving to micromark.
++    // if (before) {
++    //   add.push(...entry[2])
++    //   entry[2] = add
++    // } else {
 +    entry[2].push(...add);
++    // }
++
 +    return;
    }
 +

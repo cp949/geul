@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  micromark-extension-gfm-table@2.1.1: aa3ee78f739b6c0d5efd17dc19ca329e42042766dd25cebe46a399631d1a1e0f
+  micromark-extension-gfm-table@2.1.1: 391cb287cb6e73782017cee53739b5533adc04c1d1852687d2a9f7190cd6c8d1
 
 importers:
 
@@ -3050,7 +3050,7 @@ snapshots:
       micromark-util-symbol: 2.0.1
       micromark-util-types: 2.0.2
 
-  micromark-extension-gfm-table@2.1.1(patch_hash=aa3ee78f739b6c0d5efd17dc19ca329e42042766dd25cebe46a399631d1a1e0f):
+  micromark-extension-gfm-table@2.1.1(patch_hash=391cb287cb6e73782017cee53739b5533adc04c1d1852687d2a9f7190cd6c8d1):
     dependencies:
       devlop: 1.1.0
       micromark-factory-space: 2.0.1
@@ -3075,7 +3075,7 @@ snapshots:
       micromark-extension-gfm-autolink-literal: 2.1.0
       micromark-extension-gfm-footnote: 2.1.0
       micromark-extension-gfm-strikethrough: 2.1.0
-      micromark-extension-gfm-table: 2.1.1(patch_hash=aa3ee78f739b6c0d5efd17dc19ca329e42042766dd25cebe46a399631d1a1e0f)
+      micromark-extension-gfm-table: 2.1.1(patch_hash=391cb287cb6e73782017cee53739b5533adc04c1d1852687d2a9f7190cd6c8d1)
       micromark-extension-gfm-tagfilter: 2.0.0
       micromark-extension-gfm-task-list-item: 2.1.0
       micromark-util-combine-extensions: 2.0.1
