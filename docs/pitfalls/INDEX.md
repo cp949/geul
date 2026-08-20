@@ -22,3 +22,4 @@
 | `PIT-0016` | workspace 밖 TS 디렉터리는 전용 tsconfig로 typecheck 대상에 넣음 | `ACTIVE` | workspace·build | Issue #57 | [상세](./PIT-0016-give-non-package-ts-directories-their-own-tsconfig.md) |
 | `PIT-0017` | document.body에 직접 붙인 테스트 노드는 finally에서 정리함 | `ACTIVE` | react·test | Issue #51 | [상세](./PIT-0017-clean-up-body-appended-test-nodes-in-finally.md) |
 | `PIT-0018` | 복잡도 회귀는 wall-clock 상한이 아니라 결정적 단언으로 잡음 | `ACTIVE` | io·test | Issue #58 | [상세](./PIT-0018-gate-complexity-regressions-deterministically.md) |
+| `PIT-0019` | 안정 key로 재사용되는 DOM의 억제 키는 이동 후 상태로 맞춤 | `ACTIVE` | react | Issue #17 | [상세](./PIT-0019-anchor-suppression-keys-to-post-move-state.md) |

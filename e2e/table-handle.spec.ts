@@ -125,6 +125,125 @@ test("열 핸들을 드래그해 열 순서를 재정렬하고 undo 1회로 복�
   await expect(cell(0, 1)).toHaveText("col-b");
 });
 
+test("행 핸들 드래그 재정렬 직후 합성 click이 행 메뉴를 열지 않는다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+
+  await cell(0, 0).click();
+  await page.keyboard.type("row-a");
+  await cell(1, 0).click();
+  await page.keyboard.type("row-b");
+
+  await cell(0, 0).hover();
+  const rowHandle = page
+    .getByRole("button", { name: "Drag to reorder row" })
+    .first();
+  await expect(rowHandle).toBeVisible();
+  // Playwright locator는 동작마다 셀렉터를 다시 매칭한다 — 재정렬로 DOM
+  // 순서가 바뀌면 .first()가 다른 행의 핸들을 가리키게 된다.
+  // setPointerCapture가 실제로 고정하는 대상은 이 시점의 구체적인 DOM
+  // 노드이므로, elementHandle로 그 노드 자체를 붙잡아 계속 재사용한다.
+  const rowHandleElement = await rowHandle.elementHandle();
+  if (rowHandleElement === null) throw new Error("행 핸들 없음");
+
+  const handleBox = await rowHandleElement.boundingBox();
+  const secondRowBox = await cell(1, 0).boundingBox();
+  if (handleBox === null || secondRowBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    secondRowBox.x + secondRowBox.width / 2,
+    secondRowBox.y + secondRowBox.height - 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  await expect(cell(0, 0)).toHaveText("row-b");
+  await expect(cell(1, 0)).toHaveText("row-a");
+
+  // 실제 브라우저는 setPointerCapture로 고정된 바로 그 버튼에 pointerup
+  // 뒤 합성 click을 보낸다(Issue #17) — 다만 이 환경(Playwright/CDP)은
+  // 이동거리가 임계값을 넘으면 그 click 자체를 합성하지 않는다(PIT-0019).
+  // 표를 눈에 띄게 재정렬하려면 임계값보다 큰 이동이 필요하므로, 브라우저가
+  // 보냈어야 할 click을 여기서 명시적으로 재현한다 — 대상은 여전히
+  // setPointerCapture가 실제로 고정했던 바로 그 노드(rowHandleElement)이고,
+  // moveTableRow는 실제 커맨드로 이미 위에서 DOM을 갱신했다.
+  await rowHandleElement.dispatchEvent("click", {
+    detail: 1,
+    bubbles: true,
+    cancelable: true,
+  });
+
+  await expect(
+    page.getByRole("menu", { name: "Table row menu" }),
+  ).not.toBeVisible();
+});
+
+test("열 핸들 드래그 재정렬 직후 합성 click이 열 메뉴를 열지 않는다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+
+  await cell(0, 0).click();
+  await page.keyboard.type("col-a");
+  await cell(0, 1).click();
+  await page.keyboard.type("col-b");
+
+  await cell(0, 0).hover();
+  const columnHandle = page
+    .getByRole("button", { name: "Drag to reorder column" })
+    .first();
+  await expect(columnHandle).toBeVisible();
+  // 행 테스트와 같은 이유(위 주석 참고)로 elementHandle을 붙잡아 재사용한다.
+  const columnHandleElement = await columnHandle.elementHandle();
+  if (columnHandleElement === null) throw new Error("열 핸들 없음");
+
+  const handleBox = await columnHandleElement.boundingBox();
+  const secondColumnBox = await cell(0, 1).boundingBox();
+  if (handleBox === null || secondColumnBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    secondColumnBox.x + secondColumnBox.width - 2,
+    secondColumnBox.y + secondColumnBox.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  await expect(cell(0, 0)).toHaveText("col-b");
+  await expect(cell(0, 1)).toHaveText("col-a");
+
+  // 행 테스트와 같은 이유로(PIT-0019) 합성 click을 명시적으로 재현한다.
+  await columnHandleElement.dispatchEvent("click", {
+    detail: 1,
+    bubbles: true,
+    cancelable: true,
+  });
+
+  await expect(
+    page.getByRole("menu", { name: "Table column menu" }),
+  ).not.toBeVisible();
+});
+
 test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {

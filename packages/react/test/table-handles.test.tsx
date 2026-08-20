@@ -764,6 +764,109 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("실제 moveTableRow로 표 DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지 않는다", () => {
+    // 핸들 버튼의 React key는 rowId라 재정렬 뒤에도 같은 DOM 노드가
+    // 재사용된다 — moveTableRow를 no-op mock이 아니라 실제 tr 재배치로
+    // 구현해, click 시점에 onClick 클로저가 받는 index가 sourceIndex가
+    // 아니라 이동 후 index임을 재현한다(Issue #17).
+    const controller = fakeController({
+      moveTableRow: (tableBlockId, sourceIndex, toIndex) => {
+        const table = document.querySelector<HTMLTableElement>(
+          `table[data-be-block-id="${tableBlockId}"]`,
+        );
+        const rows =
+          table === null
+            ? []
+            : Array.from(
+                table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+              );
+        const moved = rows[sourceIndex];
+        if (table !== null && moved !== undefined) {
+          moved.remove();
+          const remaining = Array.from(
+            table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+          );
+          const reference = remaining[toIndex] ?? null;
+          if (reference === null) table.append(moved);
+          else table.insertBefore(moved, reference);
+        }
+        return { ok: true, value: undefined };
+      },
+    });
+    const { table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    // clientX를 표 가로 범위 안(예: 150)으로 줘야 한다 — 생략하면 jsdom
+    // PointerEvent의 clientX 기본값 0이 표 hover 여백(HANDLE_HOVER_MARGIN)
+    // 밖이라, 별도의 hover 추적 리스너(handlePointerMove,
+    // table-handles.tsx:366-413)가 이 이벤트만으로 hoverTableId를 지운다.
+    // 드래그 중에는 reorderState.tableBlockId가 activeTableId를 우선하므로
+    // 안 드러나지만, pointerUp이 reorderState를 지우고 나면 activeTableId가
+    // hoverTableId로 폴백해 geometry가 null이 되고 핸들 버튼 전부가
+    // 언마운트된다 — 뒤이은 click이 사라진 노드를 때려 억제 로직과
+    // 무관하게 항상 통과해버린다(RED가 안 걸린다).
+    fireEvent.pointerMove(editable, {
+      pointerId: 1,
+      clientX: 150,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+    // 실제 브라우저는 pointerup 직후 같은 버튼(setPointerCapture로 고정된
+    // 대상)에 합성 click을 보낸다 — 여기서는 그 타이밍을 수동으로 재현한다.
+    fireEvent.click(firstRowHandle, { detail: 1 });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("실제 moveTableColumn으로 표 DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지 않는다", () => {
+    // PIT-0004: 열 순서·개수의 권위는 data-be-columns다. moveTableColumn을
+    // 그 속성을 실제로 갱신하는 구현으로 대체해 Issue #17과 같은 재현
+    // 조건을 만든다.
+    const controller = fakeController({
+      moveTableColumn: (tableBlockId, sourceIndex, toIndex) => {
+        const table = document.querySelector<HTMLTableElement>(
+          `table[data-be-block-id="${tableBlockId}"]`,
+        );
+        if (table === null) return { ok: true, value: undefined };
+        const raw = table.getAttribute("data-be-columns");
+        const columns: { id: string; width: number }[] =
+          raw === null ? [] : JSON.parse(raw);
+        const moved = columns[sourceIndex];
+        if (moved === undefined) return { ok: true, value: undefined };
+        columns.splice(sourceIndex, 1);
+        columns.splice(toIndex, 0, moved);
+        table.setAttribute("data-be-columns", JSON.stringify(columns));
+        return { ok: true, value: undefined };
+      },
+    });
+    const { table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstColumnHandle] = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    if (firstColumnHandle === undefined) throw new Error("열 핸들 없음");
+
+    fireEvent.pointerDown(firstColumnHandle, { pointerId: 1, clientX: 100 });
+    // clientY도 표 세로 범위 안(예: 110)으로 줘야 한다 — 위 row 테스트의
+    // clientX와 같은 이유(hover 추적 리스너가 hoverTableId를 지워 pointerUp
+    // 뒤 핸들이 통째로 언마운트되고, 뒤이은 click이 사라진 노드를 때려
+    // 억제 로직과 무관하게 항상 통과한다).
+    fireEvent.pointerMove(editable, {
+      pointerId: 1,
+      clientX: 250,
+      clientY: 110,
+    });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+    fireEvent.click(firstColumnHandle, { detail: 1 });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("열 핸들 클릭은 열 메뉴를 열고 헤더 열을 토글한다", () => {
     const controller = fakeController();
     const { table } = renderTable(controller);

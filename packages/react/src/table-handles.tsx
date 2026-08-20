@@ -484,20 +484,20 @@ export const TableHandles = () => {
     const handlePointerUp = (event: PointerEvent) => {
       const current = reorderStateRef.current;
       if (current === null || event.pointerId !== current.pointerId) return;
-      if (current.hasDragged) {
-        // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
-        // (동시에 두 드래그가 진행될 수 없다), setPointerCapture로 pointerup
-        // 이후의 합성 click은 항상 드래그를 시작한 바로 그 버튼(=같은 표)으로
-        // 되돌아온다. 그래서 kind+sourceIndex만으로 다른 표의 같은 인덱스
-        // 핸들과 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
-        suppressedHandleClickRef.current = `${current.kind}-${current.sourceIndex}`;
-      }
+
+      // 실제 이동이 있으면 핸들 버튼의 React key(rowId/columnId)가 그대로라
+      // 같은 DOM 노드가 재사용되고, onClick 클로저는 리렌더된 이동 후
+      // index를 받는다(Issue #17). 억제 키를 sourceIndex로 고정하면 그
+      // 비교가 항상 어긋나므로, 실제 이동이 일어났을 때는 이동 후 위치인
+      // toIndex를 억제 키에도 함께 쓴다.
+      let finalIndex = current.sourceIndex;
       if (!current.cancelled && current.targetIndex !== null) {
         const toIndex =
           current.targetIndex > current.sourceIndex
             ? current.targetIndex - 1
             : current.targetIndex;
         if (toIndex !== current.sourceIndex) {
+          finalIndex = toIndex;
           if (current.kind === "row") {
             editor.commands.moveTableRow(
               current.tableBlockId,
@@ -512,6 +512,14 @@ export const TableHandles = () => {
             );
           }
         }
+      }
+      if (current.hasDragged) {
+        // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
+        // (동시에 두 드래그가 진행될 수 없다), setPointerCapture로 pointerup
+        // 이후의 합성 click은 항상 드래그를 시작한 바로 그 버튼(=같은 표)으로
+        // 되돌아온다. 그래서 kind+finalIndex만으로 다른 표의 같은 인덱스
+        // 핸들과 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
+        suppressedHandleClickRef.current = `${current.kind}-${finalIndex}`;
       }
       updateReorderState(null);
     };
