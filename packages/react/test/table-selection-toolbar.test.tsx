@@ -434,9 +434,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
 
     fireEvent.click(screen.getByRole("button", { name: splitLabel }));
 
-    expect(screen.getByRole("alert").textContent).toBe(
-      "Cell no longer exists",
-    );
+    expect(screen.getByRole("alert").textContent).toBe("Cell no longer exists");
   });
 
   it("실패 메시지가 뜬 채로 선택 대상이 바뀌면 메시지가 사라진다", () => {

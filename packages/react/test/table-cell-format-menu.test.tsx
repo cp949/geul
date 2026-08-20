@@ -175,9 +175,7 @@ describe("명령 실패 시 피드백", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
 
     expect(screen.getByRole("menu", { name: "Cell formatting" })).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toBe(
-      "Cell no longer exists",
-    );
+    expect(screen.getByRole("alert").textContent).toBe("Cell no longer exists");
     expect(onClose).not.toHaveBeenCalled();
   });
 

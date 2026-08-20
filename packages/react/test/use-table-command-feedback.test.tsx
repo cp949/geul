@@ -62,9 +62,7 @@ describe("useTableCommandFeedback", () => {
 
     fireEvent.click(screen.getByText("run"));
 
-    expect(screen.getByTestId("error-code").textContent).toBe(
-      "CELL_NOT_FOUND",
-    );
+    expect(screen.getByTestId("error-code").textContent).toBe("CELL_NOT_FOUND");
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
@@ -78,9 +76,7 @@ describe("useTableCommandFeedback", () => {
       />,
     );
     fireEvent.click(screen.getByText("run"));
-    expect(screen.getByTestId("error-code").textContent).toBe(
-      "CELL_NOT_FOUND",
-    );
+    expect(screen.getByTestId("error-code").textContent).toBe("CELL_NOT_FOUND");
 
     fireEvent.click(screen.getByText("clear"));
 

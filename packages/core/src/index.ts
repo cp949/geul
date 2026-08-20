@@ -1,6 +1,6 @@
 export type { TabularCell, TabularData } from "@cp949/geul-io";
-export { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-model";
 export type { Result } from "@cp949/geul-model";
+export { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-model";
 export type {
   BlockTypeDescriptor,
   CreateEditorOptions,
