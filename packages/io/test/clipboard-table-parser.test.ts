@@ -285,6 +285,34 @@ describe("parseClipboardTable", () => {
     expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
   });
 
+  // html 경로가 혼합 콘텐츠를 이유로 NOT_TABULAR를 반환해도, 함께 온
+  // text/plain 짝이 우연히 표와 같은 탭 구조(직사각형 + 같은 열 수)를 가지면
+  // 예전 구현은 TSV 경로로 다시 새서 이 판정 전체를 무력화했다 — 문단
+  // 텍스트 자체에 탭이 섞여 있는 실제 케이스(문단에 표를 붙여넣은 결과를
+  // 복사한 경우 등)에서 재현된다. html에서 표를 찾았다면(sawTable) 그
+  // 판정이 성공이든 실패든 TSV 폴백을 절대 시도하지 않아야 한다.
+  it("문단 텍스트가 표와 같은 탭 구조를 가져도 TSV 폴백으로 새지 않는다", () => {
+    const result = parseClipboardTable({
+      html: "<p>in\tx</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>",
+      text: "in\tx\na\tb",
+    });
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+  });
+
+  // 실제 붙여넣기 이벤트는 항상 text/html과 text/plain을 함께 담는다 —
+  // html만 있는 위 테스트는 판정 로직은 맞게 검증하지만 브라우저가 실제로
+  // 보내는 clipboardData 모양을 대표하지 않는다.
+  it("html과 text가 함께 오는 실제 붙여넣기 모양에서도 혼합 콘텐츠를 NOT_TABULAR로 흘려보낸다", () => {
+    const result = parseClipboardTable({
+      html:
+        "<p>intro</p>" +
+        "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+        "<p>outro</p>",
+      text: "intro\na\tb\noutro",
+    });
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+  });
+
   it("표를 감싼 구조적 래퍼(html/head/body/style)만 있으면 표로 판정한다", () => {
     const html =
       "<html><head><style>.x{color:red}</style></head><body>" +

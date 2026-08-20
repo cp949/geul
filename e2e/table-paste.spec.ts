@@ -1,6 +1,7 @@
 /**
  * 클립보드 붙여넣기로 표가 만들어지는 실제 브라우저 동작을 검증한다.
- * Google Sheets/Excel HTML(서식 포함), TSV, 탭 없는 일반 텍스트를 함께 다룬다.
+ * Google Sheets/Excel HTML(서식 포함), TSV, 탭 없는 일반 텍스트, 표와
+ * 문단이 섞인 혼합 HTML(Issue #37)을 함께 다룬다.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -208,7 +209,7 @@ test("표 앞뒤에 문단이 섞인 HTML은 표를 만들지 않고 문단을 �
 
   const mixedHtml =
     "<p>intro</p>" +
-    "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+    "<table><tbody><tr><td>cellA</td><td>cellB</td></tr></tbody></table>" +
     "<p>outro</p>";
 
   await editable.evaluate(dispatchPaste, { html: mixedHtml });
@@ -216,8 +217,12 @@ test("표 앞뒤에 문단이 섞인 HTML은 표를 만들지 않고 문단을 �
   // 표가 fragment의 유일한 실질 콘텐츠가 아니므로 가로채지 않는다(spec
   // §4.1, Issue #37) — NOT_TABULAR로 Tiptap 기본 붙여넣기에 넘겨 표 노드를
   // 만들지 않고(표 세 노드는 parseHTML을 정의하지 않는다) intro/outro
-  // 문단을 보존한다.
+  // 문단을 보존한다. 셀 텍스트(cellA/cellB)도 사라지지 않고 평문으로
+  // 흘러든다 — 표 구조(행/열 경계)만 뭉개질 뿐 콘텐츠 자체는 유실되지
+  // 않는다.
   await expect(editable.locator("table")).toHaveCount(0);
   await expect(editable).toContainText("intro");
   await expect(editable).toContainText("outro");
+  await expect(editable).toContainText("cellA");
+  await expect(editable).toContainText("cellB");
 });

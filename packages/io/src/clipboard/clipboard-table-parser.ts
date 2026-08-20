@@ -61,9 +61,14 @@ const findDataTable = (root: HtmlRoot): HtmlElementNode | undefined => {
 // 골라 붙이지 않는다 — 표를 제외한 트리에 공백이 아닌 텍스트가 하나라도
 // 남아 있으면 표가 fragment의 유일한 실질 콘텐츠가 아니라는 뜻이므로
 // NOT_TABULAR로 판정해 Tiptap 기본 붙여넣기에 전체를 맡긴다(spec §4.1,
-// Issue #37). <html>/<head>/<body> 같은 구조적 래퍼와 <style>(스키마가
-// strip으로 통째로 제거)·주석(allowComments: false로 제거)은 판정에
-// 영향을 주지 않는다 — sanitize를 이미 거친 트리를 검사하기 때문이다.
+// Issue #37). 이 판정은 sanitize를 이미 거친 트리를 검사한다: hast-util-
+// sanitize는 스키마 tagNames 허용 목록에 없고 strip 목록에도 없는 태그를
+// 벗겨내고(unwrap) 그 자식(텍스트 포함)을 트리 위로 그대로 끌어올린다 —
+// 그래서 <html>/<head>/<body>/<title> 등 어떤 래퍼에 텍스트가 들어있었든,
+// 살아남기만 하면 이 판정에 걸린다(구조적 래퍼가 통째로 면제되는 허용
+// 목록이 따로 있는 게 아니다). strip 목록에 있는 태그(<style>/<script>
+// 등)만 태그와 텍스트가 함께 통째로 제거되고, 주석은 allowComments: false로
+// 별도 제거된다.
 const hasContentOutsideTable = (
   nodes: readonly HtmlNode[],
   table: HtmlElementNode,
@@ -220,28 +225,41 @@ const tabularDataFromTable = (
   return validated.ok ? { ok: true, value: data } : validated;
 };
 
-const parseHtmlTable = (
-  html: string,
-): Result<TabularData, ClipboardParseError> => {
+// parseHtmlTable의 실패는 두 가지로 갈린다 — html에 데이터 표 후보 자체가
+// 없었는지(sawTable: false, TSV 폴백을 시도해도 안전하다), 표는 찾았지만
+// 거절했는지(sawTable: true, 혼합 콘텐츠거나 CLIPBOARD_TABLE_INVALID —
+// TSV로 새면 이미 내린 거절 판정이 무력화된다). 공개 ClipboardParseError는
+// 이 구분을 담지 않으므로(항상 NOT_TABULAR | CLIPBOARD_TABLE_INVALID) 모듈
+// 내부 전용 타입으로만 구분하고, parseClipboardTable이 반환하기 직전에
+// sawTable을 벗겨낸다.
+type HtmlTableOutcome =
+  | { ok: true; value: TabularData }
+  | { ok: false; error: ClipboardParseError; sawTable: boolean };
+
+const parseHtmlTable = (html: string): HtmlTableOutcome => {
   const unsafeRoot = parseHtmlFragment(html);
   if (unsafeRoot === undefined)
-    return { ok: false, error: { code: "NOT_TABULAR" } };
+    return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 
   const safeRoot = asRoot(sanitize(unsafeRoot, clipboardSanitizeSchema));
   if (safeRoot === undefined)
-    return { ok: false, error: { code: "NOT_TABULAR" } };
+    return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 
   // importHtml과 같은 링크 정책을 적용한다 — 살려두면 core의
   // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
   sanitizeLinks(safeRoot.children);
 
   const table = findDataTable(safeRoot);
-  if (table === undefined) return { ok: false, error: { code: "NOT_TABULAR" } };
+  if (table === undefined)
+    return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
   if (hasContentOutsideTable(safeRoot.children, table)) {
-    return { ok: false, error: { code: "NOT_TABULAR" } };
+    return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: true };
   }
 
-  return tabularDataFromTable(table);
+  const result = tabularDataFromTable(table);
+  return result.ok
+    ? result
+    : { ok: false, error: result.error, sawTable: true };
 };
 
 const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
@@ -309,10 +327,14 @@ export const parseClipboardTable = (input: {
     TABLE_TAG_PATTERN.test(input.html)
   ) {
     const htmlResult = parseHtmlTable(input.html);
-    if (htmlResult.ok || htmlResult.error.code === "CLIPBOARD_TABLE_INVALID") {
-      return htmlResult;
+    if (htmlResult.ok) return htmlResult;
+    if (htmlResult.sawTable) {
+      // 표를 찾았지만 거절했다(혼합 콘텐츠 또는 CLIPBOARD_TABLE_INVALID) —
+      // text/plain 짝이 우연히 표와 같은 탭 구조를 가져도 TSV로 다시
+      // 새서 이 거절을 무력화하면 안 된다.
+      return { ok: false, error: htmlResult.error };
     }
-    // NOT_TABULAR(html에 표 없음) -> TSV로 폴백.
+    // sawTable: false(html에 표 후보 자체가 없음) -> TSV로 폴백.
   }
   if (input.text !== undefined && input.text.length > 0) {
     return parseTsv(input.text);
