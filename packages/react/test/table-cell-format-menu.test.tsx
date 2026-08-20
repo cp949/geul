@@ -139,3 +139,81 @@ describe("정렬 버튼", () => {
     );
   });
 });
+
+describe("명령 실패 시 피드백", () => {
+  it("텍스트 색상 적용이 CELL_NOT_FOUND로 거절되면 메뉴를 닫지 않고 실패 메시지를 보여준다", () => {
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        setTableCellTextColor: vi.fn(
+          () =>
+            ({
+              ok: false,
+              error: { code: "CELL_NOT_FOUND", cellId: "cell-1" },
+            }) as ReturnType<
+              EditorController["commands"]["setTableCellTextColor"]
+            >,
+        ),
+      },
+    };
+    const onClose = vi.fn();
+
+    render(
+      <EditorProvider editor={controller as unknown as EditorController}>
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={onClose}
+          tableBlockId="table-1"
+          top={100}
+        />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
+
+    expect(screen.getByRole("menu", { name: "Cell formatting" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Cell no longer exists",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("정렬 적용이 실패하면 메뉴를 닫지 않고 일반 실패 메시지를 보여준다", () => {
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        setTableCellAlign: vi.fn(
+          () =>
+            ({
+              ok: false,
+              error: { code: "INDEX_OUT_OF_RANGE" },
+            }) as ReturnType<EditorController["commands"]["setTableCellAlign"]>,
+        ),
+      },
+    };
+    const onClose = vi.fn();
+
+    render(
+      <EditorProvider editor={controller as unknown as EditorController}>
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={onClose}
+          tableBlockId="table-1"
+          top={100}
+        />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Align center" }));
+
+    expect(screen.getByRole("menu", { name: "Cell formatting" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe("Action failed");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

@@ -6,8 +6,13 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
+import {
+  FALLBACK_TABLE_COMMAND_ERROR_MESSAGE,
+  TABLE_COMMAND_ERROR_MESSAGES,
+} from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor } from "./use-editor.js";
+import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const swatchClassName =
   "geul:h-5 geul:w-5 geul:cursor-pointer geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:p-0";
@@ -15,6 +20,8 @@ const sectionLabelClassName =
   "geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]";
 const dividerClassName =
   "geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]";
+const actionErrorClassName =
+  "geul:mx-2 geul:my-1 geul:text-[0.75rem] geul:text-[color:var(--be-color-danger,#d93025)]";
 const alignButtonClassName =
   "geul:flex geul:h-7 geul:min-w-7 geul:cursor-pointer geul:items-center geul:justify-center geul:rounded geul:border-0 geul:bg-transparent geul:p-1 geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:text-[color:var(--be-color-text,#202124)]";
 
@@ -40,26 +47,30 @@ export const TableCellFormatMenu = ({
 }: TableCellFormatMenuProps) => {
   const editor = useEditor();
   const { menuRef, style } = useClampedMenuPosition(left, top);
+  // 완료 조건 1(Issue #66): 실패한 명령의 Result를 버리지 않는다 —
+  // table-handle-menu.tsx와 같은 useTableCommandFeedback을 써서 실패하면
+  // 메뉴를 닫지 않고 인라인 메시지로 남긴다.
+  const { actionError, runCommand } = useTableCommandFeedback();
   const target = { kind: "cells", cellIds } as const;
 
-  const runAndClose = (run: () => void) => {
-    run();
-    onClose();
-  };
-
   const applyColor = (property: "text" | "background", color: string | null) =>
-    runAndClose(() => {
-      if (property === "text") {
-        editor.commands.setTableCellTextColor(tableBlockId, target, color);
-        return;
-      }
-      editor.commands.setTableCellBackgroundColor(tableBlockId, target, color);
-    });
+    runCommand(
+      () =>
+        property === "text"
+          ? editor.commands.setTableCellTextColor(tableBlockId, target, color)
+          : editor.commands.setTableCellBackgroundColor(
+              tableBlockId,
+              target,
+              color,
+            ),
+      onClose,
+    );
 
   const applyAlign = (align: "left" | "center" | "right" | null) =>
-    runAndClose(() => {
-      editor.commands.setTableCellAlign(tableBlockId, target, align);
-    });
+    runCommand(
+      () => editor.commands.setTableCellAlign(tableBlockId, target, align),
+      onClose,
+    );
 
   const renderPalette = (
     property: "text" | "background",
@@ -110,6 +121,12 @@ export const TableCellFormatMenu = ({
       role="menu"
       style={style}
     >
+      {actionError !== null && (
+        <p className={actionErrorClassName} role="alert">
+          {TABLE_COMMAND_ERROR_MESSAGES[actionError.code] ??
+            FALLBACK_TABLE_COMMAND_ERROR_MESSAGE}
+        </p>
+      )}
       {renderPalette("text", "Text color", TABLE_TEXT_COLORS)}
       {renderPalette("background", "Background color", TABLE_BACKGROUND_COLORS)}
       <hr className={dividerClassName} />
