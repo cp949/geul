@@ -518,10 +518,14 @@ export const TableHandles = () => {
       }
       if (current.hasDragged) {
         // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
-        // (동시에 두 드래그가 진행될 수 없다), setPointerCapture로 pointerup
-        // 이후의 합성 click은 항상 드래그를 시작한 바로 그 버튼(=같은 표)으로
+        // (동시에 두 드래그가 진행될 수 없다), pointerup 이후의 합성 click은
+        // 오는 경우 setPointerCapture로 고정된 바로 그 버튼(=같은 표)으로
         // 되돌아온다. 그래서 kind+finalIndex만으로 다른 표의 같은 인덱스
         // 핸들과 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
+        // 이 click이 항상 오지는 않는다 — 이 저장소가 관측한 Chromium은
+        // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(PIT-0019).
+        // 그래서 여기 저장한 키는 handlePointerDownOnReorderHandle이
+        // 다음 제스처 시작 시점에도 비운다.
         suppressedHandleClickRef.current = `${current.kind}-${finalIndex}`;
       }
       updateReorderState(null);
@@ -660,6 +664,11 @@ export const TableHandles = () => {
     sourceIndex: number,
   ) => {
     if (event.button !== 0) return;
+    // 억제 키는 뒤이은 click이 소비할 때만 비워진다 — 브라우저가 그 click을
+    // 아예 합성하지 않으면(PIT-0019) 키가 남아, 나중에 같은 핸들을 진짜로
+    // 클릭할 때 한 번 삼켜진다. 새 제스처를 시작하는 시점에 비운다
+    // (block-side-menu.tsx의 handlePointerDownOnHandle과 같은 규칙).
+    suppressedHandleClickRef.current = null;
     event.currentTarget.setPointerCapture(event.pointerId);
     setMenuState(null);
     updateReorderState({

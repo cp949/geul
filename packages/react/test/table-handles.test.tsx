@@ -899,6 +899,60 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("재정렬 뒤 합성 click이 오지 않아도 다음 진짜 click은 억제되지 않는다", () => {
+    // 억제 키는 뒤이은 click이 소비할 때만 비워진다. 브라우저가 그 합성
+    // click을 아예 보내지 않으면(PIT-0019: Chromium은 임계값을 넘는 드래그
+    // 뒤 click을 합성하지 않는다) 키가 남아, 사용자가 나중에 그 핸들을
+    // 진짜로 클릭할 때 한 번 삼켜진다. block-side-menu는 같은 결함을
+    // pointerdown에서 키를 비워 막는다(block-side-menu.tsx:280).
+    const controller = fakeController({
+      moveTableRow: (tableBlockId, sourceIndex, toIndex) => {
+        const table = document.querySelector<HTMLTableElement>(
+          `table[data-be-block-id="${tableBlockId}"]`,
+        );
+        const rows =
+          table === null
+            ? []
+            : Array.from(
+                table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+              );
+        const moved = rows[sourceIndex];
+        if (table !== null && moved !== undefined) {
+          moved.remove();
+          const remaining = Array.from(
+            table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+          );
+          const reference = remaining[toIndex] ?? null;
+          if (reference === null) table.append(moved);
+          else table.insertBefore(moved, reference);
+        }
+        return { ok: true, value: undefined };
+      },
+    });
+    const { table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, {
+      pointerId: 1,
+      clientX: 150,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+    // 합성 click은 오지 않는다 — 여기서 fireEvent.click을 하지 않는다.
+
+    // 이어지는 별개의 제스처: 드래그 없이 방금 옮긴 행의 핸들을 클릭한다.
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 2, clientY: 140 });
+    fireEvent.pointerUp(editable, { pointerId: 2 });
+    fireEvent.click(firstRowHandle, { detail: 1 });
+
+    expect(screen.queryByRole("menu")).not.toBeNull();
+  });
+
   it("열 핸들 클릭은 열 메뉴를 열고 헤더 열을 토글한다", () => {
     const controller = fakeController();
     const { table } = renderTable(controller);

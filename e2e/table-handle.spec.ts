@@ -252,6 +252,64 @@ test("열 핸들 드래그 재정렬 직후 합성 click이 열 메뉴를 열지
   ).not.toBeVisible();
 });
 
+test("재정렬 뒤 브라우저가 click을 합성하지 않아도 다음 진짜 click은 행 메뉴를 연다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+
+  await cell(0, 0).click();
+  await page.keyboard.type("row-a");
+  await cell(1, 0).click();
+  await page.keyboard.type("row-b");
+
+  await cell(0, 0).hover();
+  const rowHandle = page
+    .getByRole("button", { name: "Drag to reorder row" })
+    .first();
+  await expect(rowHandle).toBeVisible();
+  const rowHandleElement = await rowHandle.elementHandle();
+  if (rowHandleElement === null) throw new Error("행 핸들 없음");
+
+  const handleBox = await rowHandleElement.boundingBox();
+  const secondRowBox = await cell(1, 0).boundingBox();
+  if (handleBox === null || secondRowBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    secondRowBox.x + secondRowBox.width / 2,
+    secondRowBox.y + secondRowBox.height - 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  await expect(cell(0, 0)).toHaveText("row-b");
+  await expect(cell(1, 0)).toHaveText("row-a");
+
+  // 위 두 테스트와 달리 합성 click을 재현하지 않는다 — 이 환경의 Chromium은
+  // 임계값을 넘는 드래그 뒤 click을 실제로 보내지 않는다(PIT-0019). 그러면
+  // 억제 키를 소비할 click이 없어 키가 그대로 남는다. 사용자가 방금 옮긴
+  // 행의 핸들을 다시 진짜로 클릭하는 이 동작이 한 번 삼켜지면 안 된다.
+  const movedHandleBox = await rowHandleElement.boundingBox();
+  if (movedHandleBox === null) throw new Error("이동 후 행 핸들 없음");
+  await page.mouse.click(
+    movedHandleBox.x + movedHandleBox.width / 2,
+    movedHandleBox.y + movedHandleBox.height / 2,
+  );
+
+  await expect(
+    page.getByRole("menu", { name: "Table row menu" }),
+  ).toBeVisible();
+});
+
 test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {

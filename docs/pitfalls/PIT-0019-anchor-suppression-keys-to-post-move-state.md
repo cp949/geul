@@ -37,6 +37,13 @@ rowId/columnId를 가진 버튼은 React가 같은 DOM 노드를 재사용한다
   위치(source)를 그대로 저장해도 마찬가지로, 안정 key로 재사용되는 DOM
   노드의 다음 이벤트 핸들러는 이미 갱신된 위치를 보고 있어 비교가
   어긋난다.
+- **억제 키를 "뒤이은 이벤트가 소비하며 비운다"로만 설계하지 않는다.** 그
+  이벤트가 오지 않으면(아래 Chromium 관측처럼) 키가 남아, 사용자가 나중에
+  같은 대상을 진짜로 조작할 때 한 번 삼켜진다. 억제 키는 **새 제스처를
+  시작하는 시점**(pointerdown)에도 비운다 — 같은 제스처의 pointerdown은
+  키를 저장하는 pointerup보다 항상 먼저 오므로 의도한 억제는 깨지지 않는다.
+  `block-side-menu.tsx`의 `handlePointerDownOnHandle`이 이 규칙을 따른다.
+
 - "직전 조작 뒤 이어지는 합성 이벤트 억제"를 검증하는 회귀 테스트는
   대상 커맨드를 no-op mock으로 대체하면 DOM이 실제로 안 바뀌어 이 결함을
   잡지 못한다. mock을 실제로 DOM/속성을 갱신하는 구현으로 바꾸거나
@@ -56,8 +63,7 @@ rowId/columnId를 가진 버튼은 React가 같은 DOM 노드를 재사용한다
   pointer 이벤트만 재타겟하고 호환 mouse/click 이벤트의 판정에는 영향을
   주지 않는 경로를 후속 조사(Issue #63)로 남긴다. 실제 물리 마우스에도
   같은 임계값이 적용되는지도 확인하지 못했다(Issue #63). 표 재정렬처럼
-  "눈에 띄는
-  이동"이 곧 큰 이동거리를 뜻하는 e2e 시나리오에서 "드래그 뒤 합성
+  "눈에 띄는 이동"이 곧 큰 이동거리를 뜻하는 e2e 시나리오에서 "드래그 뒤 합성
   click" 자체를 검증해야 한다면, 브라우저가 click을 자동으로 보내주길
   기다리지 말고 `ElementHandle.dispatchEvent("click", { detail: 1,
   bubbles: true, cancelable: true })`로 명시적으로 재현한다 — 대상은
@@ -77,6 +83,8 @@ pnpm exec playwright test e2e/table-handle.spec.ts --project=chromium
 
 - `packages/react/src/table-handles.tsx`의 `handlePointerUp`(행/열 재정렬
   useEffect 내부) — 억제 키를 이동 후 `finalIndex`로 저장.
+- `packages/react/src/table-handles.tsx`의
+  `handlePointerDownOnReorderHandle` — 새 제스처 시작 시 억제 키를 비운다.
 - `packages/react/test/table-handles.test.tsx`의 "실제 moveTableRow로 표
   DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지 않는다"/"실제
   moveTableColumn으로 표 DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지
@@ -84,6 +92,11 @@ pnpm exec playwright test e2e/table-handle.spec.ts --project=chromium
 - `e2e/table-handle.spec.ts`의 "행 핸들 드래그 재정렬 직후 합성 click이
   행 메뉴를 열지 않는다"/"열 핸들 드래그 재정렬 직후 합성 click이 열
   메뉴를 열지 않는다".
+- `packages/react/test/table-handles.test.tsx`의 "재정렬 뒤 합성 click이
+  오지 않아도 다음 진짜 click은 억제되지 않는다"와
+  `e2e/table-handle.spec.ts`의 "재정렬 뒤 브라우저가 click을 합성하지
+  않아도 다음 진짜 click은 행 메뉴를 연다" — 억제 키 수명 규칙의 회귀
+  테스트(후자는 실제 Chromium에서 RED를 확인).
 - Issue #17.
 - Issue #63 (완료 조건 1의 잔여 가정 확인 및 Option A 전환 검토, 최종
   전체 브랜치 리뷰에서 후속으로 분리).
