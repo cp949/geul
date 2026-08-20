@@ -6,7 +6,11 @@ import {
 import { sanitize } from "hast-util-sanitize";
 
 import type { ClipboardParseError } from "../errors.js";
-import { propertyString, sanitizeLinks } from "../html/hast-properties.js";
+import {
+  childElements,
+  propertyString,
+  sanitizeLinks,
+} from "../html/hast-properties.js";
 import {
   type HtmlElementNode,
   type HtmlNode,
@@ -47,35 +51,66 @@ const isLayoutTable = (table: HtmlElementNode): boolean => {
   return role === "presentation" || role === "none";
 };
 
+// 셀이 하나도 없는 표는 데이터 표가 아니다. Outlook/Gmail HTML 메일은 여백용
+// 빈 <table>을 중첩해 심는데, findDataTable이 가장 안쪽 표를 고르므로 이걸
+// 데이터 표로 집으면 같은 행에 있는 진짜 셀들이 "표 밖 텍스트"가 돼
+// hasContentOutsideTable이 클립보드 전체를 거절한다.
+const hasDataCells = (table: HtmlElementNode): boolean =>
+  tableRows(table).some((row) =>
+    childElements(row.element).some(
+      (cell) => cell.tagName === "td" || cell.tagName === "th",
+    ),
+  );
+
 const findDataTable = (root: HtmlRoot): HtmlElementNode | undefined => {
   for (const node of root.children) {
     if (node.type !== "element") continue;
     const nested = findDataTable({ type: "root", children: node.children });
     if (nested !== undefined) return nested;
-    if (node.tagName === "table" && !isLayoutTable(node)) return node;
+    if (
+      node.tagName === "table" &&
+      !isLayoutTable(node) &&
+      hasDataCells(node)
+    ) {
+      return node;
+    }
   }
   return undefined;
 };
 
+// 이 판정이 묻는 것은 "사용자가 표 말고 다른 것도 골랐나"다 — 그래서 눈에
+// 보이지 않는 문자는 실질 텍스트가 아니다. \s가 이미 지우는 공백류(NBSP
+// U+00A0 포함)에 더해 제로폭 문자와 soft hyphen도 지운다: Slack/Notion/Docs가
+// 블록 경계에 심는 U+200B 한 글자 때문에 표 붙여넣기가 막히면 사용자는
+// 원인도 모르고 되돌릴 방법도 없다(sawTable 때문에 TSV 짝으로도 폴백하지
+// 못한다). cell-text.ts의 HTML_WHITESPACE_RUN이 NBSP를 공백에서 제외하는
+// 것과 어긋나 보이지만 질문이 다르다 — 거기서는 "셀 안 이 문자를 접을까"를
+// 묻고(접으면 서식이 뭉개진다), 여기서는 "이게 사용자가 고른 콘텐츠인가"를
+// 묻는다(빈칸용 &nbsp; 문단은 아니다).
+const INSUBSTANTIAL_TEXT = /[\s\u00AD\u200B-\u200D\u2060\uFEFF]/gu;
+
+const hasSubstantialText = (value: string): boolean =>
+  value.replace(INSUBSTANTIAL_TEXT, "").length > 0;
+
 // 클립보드 HTML이 표와 다른 실질 콘텐츠(문단 등)를 함께 담고 있으면 표만
-// 골라 붙이지 않는다 — 표를 제외한 트리에 공백이 아닌 텍스트가 하나라도
-// 남아 있으면 표가 fragment의 유일한 실질 콘텐츠가 아니라는 뜻이므로
+// 골라 붙이지 않는다 — 표를 제외한 트리에 실질 텍스트가 하나라도 남아
+// 있으면 표가 fragment의 유일한 실질 콘텐츠가 아니라는 뜻이므로
 // NOT_TABULAR로 판정해 Tiptap 기본 붙여넣기에 전체를 맡긴다(spec §4.1,
 // Issue #37). 이 판정은 sanitize를 이미 거친 트리를 검사한다: hast-util-
 // sanitize는 스키마 tagNames 허용 목록에 없고 strip 목록에도 없는 태그를
 // 벗겨내고(unwrap) 그 자식(텍스트 포함)을 트리 위로 그대로 끌어올린다 —
-// 그래서 <html>/<head>/<body>/<title> 등 어떤 래퍼에 텍스트가 들어있었든,
-// 살아남기만 하면 이 판정에 걸린다(구조적 래퍼가 통째로 면제되는 허용
-// 목록이 따로 있는 게 아니다). strip 목록에 있는 태그(<style>/<script>
-// 등)만 태그와 텍스트가 함께 통째로 제거되고, 주석은 allowComments: false로
-// 별도 제거된다.
+// 그래서 <html>/<head>/<body> 등 어떤 래퍼에 텍스트가 들어있었든, 살아남기만
+// 하면 이 판정에 걸린다(구조적 래퍼가 통째로 면제되는 허용 목록이 따로 있는
+// 게 아니다). strip 목록에 있는 태그(<style>/<script>, 그리고 클립보드
+// 전용으로 얹은 <title>)만 태그와 텍스트가 함께 통째로 제거되고, 주석은
+// allowComments: false로 별도 제거된다.
 const hasContentOutsideTable = (
   nodes: readonly HtmlNode[],
   table: HtmlElementNode,
 ): boolean => {
   for (const node of nodes) {
     if (node === table) continue;
-    if (node.type === "text" && node.value.trim().length > 0) return true;
+    if (node.type === "text" && hasSubstantialText(node.value)) return true;
     if (
       node.type === "element" &&
       hasContentOutsideTable(node.children, table)
@@ -167,9 +202,6 @@ const tabularDataFromTable = (
   // 쪽을 열 수로 잡아야 한다(TSV 경로의 패딩과 같은 계약, spec §4.3).
   const columnCount = Math.max(cols.length, inferredColumnCount(layouts));
 
-  if (columnCount === 0) {
-    return { ok: false, error: { code: "NOT_TABULAR" } };
-  }
   if (columnCount > MAX_TABLE_COLUMNS) {
     return {
       ok: false,
@@ -225,13 +257,13 @@ const tabularDataFromTable = (
   return validated.ok ? { ok: true, value: data } : validated;
 };
 
-// parseHtmlTable의 실패는 두 가지로 갈린다 — html에 데이터 표 후보 자체가
-// 없었는지(sawTable: false, TSV 폴백을 시도해도 안전하다), 표는 찾았지만
-// 거절했는지(sawTable: true, 혼합 콘텐츠거나 CLIPBOARD_TABLE_INVALID —
-// TSV로 새면 이미 내린 거절 판정이 무력화된다). 공개 ClipboardParseError는
-// 이 구분을 담지 않으므로(항상 NOT_TABULAR | CLIPBOARD_TABLE_INVALID) 모듈
-// 내부 전용 타입으로만 구분하고, parseClipboardTable이 반환하기 직전에
-// sawTable을 벗겨낸다.
+// parseHtmlTable의 실패는 두 가지로 갈린다 — 거절할 데이터 표를 애초에 찾지
+// 못했는지(sawTable: false, TSV 폴백을 시도해도 안전하다), 표는 찾았고 그
+// 내용을 보고 거절했는지(sawTable: true, 혼합 콘텐츠거나
+// CLIPBOARD_TABLE_INVALID — TSV로 새면 이미 내린 거절 판정이 무력화된다). 공개
+// ClipboardParseError는 이 구분을 담지 않으므로(항상 NOT_TABULAR |
+// CLIPBOARD_TABLE_INVALID) 모듈 내부 전용 타입으로만 구분하고,
+// parseClipboardTable이 반환하기 직전에 sawTable을 벗겨낸다.
 type HtmlTableOutcome =
   | { ok: true; value: TabularData }
   | { ok: false; error: ClipboardParseError; sawTable: boolean };
@@ -256,6 +288,8 @@ const parseHtmlTable = (html: string): HtmlTableOutcome => {
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: true };
   }
 
+  // 여기까지 왔으면 findDataTable이 셀 있는 데이터 표를 골랐고 그 내용을
+  // 실제로 들여다본 뒤 거절한 것이다 — 오류 코드와 무관하게 sawTable이다.
   const result = tabularDataFromTable(table);
   return result.ok
     ? result

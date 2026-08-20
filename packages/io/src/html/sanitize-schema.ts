@@ -101,7 +101,16 @@ export const clipboardAllowedAttributes: Record<string, string[]> = {
   th: clipboardCellAttributes,
 };
 
+// <title>은 소스 문서 head의 메타데이터지 사용자가 선택한 본문이 아니다.
+// tagNames에도 strip에도 없으면 sanitize가 태그만 벗기고(unwrap) 그 텍스트를
+// fragment 최상위로 끌어올리는데, 그러면 clipboard-table-parser의 혼합 콘텐츠
+// 판정(spec §4.1)이 이를 "표 밖 실질 텍스트"로 보고 스프레드시트 표
+// 붙여넣기를 통째로 막는다 — sawTable 때문에 TSV 짝으로도 폴백하지 못한다.
+// 문서 import 경로는 import-warnings 계약이 걸려 있어 목록을 공유하지 않는다.
+export const clipboardStrippedTagNames = [...htmlStrippedTagNames, "title"];
+
 export const clipboardSanitizeSchema: Schema = {
   ...htmlSanitizeSchema,
   attributes: clipboardAllowedAttributes,
+  strip: clipboardStrippedTagNames,
 };
