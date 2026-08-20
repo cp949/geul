@@ -244,6 +244,16 @@ test("표 앞뒤에 문단이 섞인 HTML은 문단과 표 구조를 모두 보�
   await expect(editable.locator("p").last()).toHaveText("outro");
 
   // 붙여넣기 전체가 undo 1회로 복원된다(문단+표 삽입이 한 트랜잭션).
+  // 표만 사라졌는지 보면 문단 삽입이 별도 history 이벤트로 갈라져 intro/outro가
+  // 남는 경우를 놓친다 — 삽입 전 블록 구성으로 완전히 되돌아왔는지 확인한다.
   await page.keyboard.press("Control+z");
   await expect(editable.locator("table")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      editable.evaluate((node) =>
+        Array.from(node.children).map((child) => child.tagName.toLowerCase()),
+      ),
+    )
+    .toEqual(["p"]);
+  await expect(editable.locator("p")).toHaveText("");
 });
