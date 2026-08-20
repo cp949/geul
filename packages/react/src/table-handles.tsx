@@ -638,6 +638,54 @@ export const TableHandles = () => {
     };
   }, [resizeActive, element, editor, updateResizeState]);
 
+  // 완료 조건 3(Issue #18): 메뉴가 열린 동안 대상 행/열이 undo 등으로
+  // 사라지면(인덱스가 더 이상 유효하지 않거나 표 블록 자체가 사라지면)
+  // 메뉴를 자동으로 닫는다. geometry는 render마다 다시 읽지만, 이
+  // 컴포넌트를 재렌더시키는 주체가 항상 있다는 보장이 없다(위
+  // readFreshGeometry 주석 참고) — 재렌더에 기대지 않고 DOM을 직접
+  // 관찰한다. 인덱스가 범위 안인지만 본다 — 범위 안에서 가리키는 행/열의
+  // 정체성이 바뀌는 경우는 다루지 않는다(범위 밖, Issue #65).
+  useEffect(() => {
+    if (menuState === null || element === null) return;
+
+    const isMenuTargetValid = () => {
+      // 대상 표를 매번 다시 찾는다. 표 노드가 재생성되면 effect 시점에
+      // 해석한 엘리먼트는 문서에서 떨어져 나가 낡은 개수를 계속 돌려준다.
+      const table = findTable(element, menuState.tableBlockId);
+      if (table === null) return false;
+      // 유효성 판정에는 행/열 개수만 필요하다. readTableGeometry는 모든
+      // 행·셀의 getBoundingClientRect를 도는데, NodeView가 갱신마다
+      // data-be-columns를 다시 써서 mutation이 자주 오므로 그때마다 강제
+      // 레이아웃을 유발한다.
+      const count =
+        menuState.kind === "row"
+          ? table.querySelectorAll("[data-be-row-id]").length
+          : parseTableColumnIds(table).length;
+      return menuState.index < count;
+    };
+
+    // 이 effect가 붙기 전에 이미 무효화됐을 수도 있다 — 최초 1회도 검사한다.
+    if (!isMenuTargetValid()) {
+      closeMenu();
+      return;
+    }
+
+    // 표 엘리먼트가 아니라 편집기 루트를 관찰한다. <table>에 직접 걸면
+    // 그 노드가 통째로 제거될 때(제거는 부모의 childList mutation이라
+    // 제거되는 노드 자신의 observer에는 오지 않는다) 콜백이 오지 않아
+    // 메뉴가 죽은 표를 가리킨 채 남는다.
+    const observer = new MutationObserver(() => {
+      if (!isMenuTargetValid()) closeMenu();
+    });
+    observer.observe(element, {
+      attributeFilter: ["data-be-columns"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [menuState, element, closeMenu]);
+
   const handleReorderHandleClick = (
     event: React.MouseEvent<HTMLButtonElement>,
     kind: ReorderKind,

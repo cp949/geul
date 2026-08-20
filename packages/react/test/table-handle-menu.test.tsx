@@ -8,6 +8,7 @@
 
 import type { EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider } from "../src/index.js";
@@ -903,5 +904,107 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     fireEvent.click(deleteItem);
 
     expect(controller.commands.deleteTableColumn).not.toHaveBeenCalled();
+  });
+});
+
+describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", () => {
+  it("메뉴가 가리키는 마지막 행이 사라지면 메뉴가 자동으로 닫힌다", async () => {
+    const controller = fakeController();
+    const { table } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const secondRowHandle = rowHandles[1];
+    if (secondRowHandle === undefined) throw new Error("둘째 행 핸들 없음");
+    fireEvent.pointerDown(secondRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(secondRowHandle, { pointerId: 1 });
+    fireEvent.click(secondRowHandle);
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+
+    const row2 = table.querySelector('[data-be-row-id="row-2"]');
+    if (row2 === null) throw new Error("둘째 행 없음");
+
+    await act(async () => {
+      row2.remove();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("메뉴가 가리키는 행이 그대로 있으면 다른 행이 사라져도 메뉴는 열린 채로 남는다", async () => {
+    const controller = fakeController();
+    const { table } = openRowMenu(controller);
+
+    const row2 = table.querySelector('[data-be-row-id="row-2"]');
+    if (row2 === null) throw new Error("둘째 행 없음");
+
+    await act(async () => {
+      row2.remove();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("menu")).not.toBeNull();
+  });
+
+  it("메뉴가 가리키는 마지막 열이 data-be-columns에서 사라지면 메뉴가 자동으로 닫힌다", async () => {
+    const controller = fakeController();
+    const { table } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const columnHandles = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    const secondColumnHandle = columnHandles[1];
+    if (secondColumnHandle === undefined) throw new Error("둘째 열 핸들 없음");
+    fireEvent.pointerDown(secondColumnHandle, { pointerId: 1, clientX: 250 });
+    fireEvent.pointerUp(secondColumnHandle, { pointerId: 1 });
+    fireEvent.click(secondColumnHandle);
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      table.setAttribute(
+        "data-be-columns",
+        JSON.stringify([{ id: "col-1", width: 120 }]),
+      );
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("메뉴가 열린 동안 표 블록이 통째로 사라지면 메뉴 상태도 함께 비워진다", async () => {
+    const controller = fakeController();
+    const { table, contentEditable } = openRowMenu(controller);
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+
+    // 사라진 표의 menuState가 남으면 activeTableId가 죽은 blockId에 고정돼
+    // (table-handles.tsx의 activeTableId 우선순위) 다른 표를 hover해도
+    // geometry가 null이라 편집기 전체에서 핸들이 하나도 렌더되지 않는다.
+    // 메뉴 자체는 geometry 게이트 때문에 이미 안 보이므로, 메뉴 상태가
+    // 실제로 비워졌는지는 남은 표의 핸들 복구로 관찰한다.
+    const secondTable = table.cloneNode(true) as HTMLElement;
+    secondTable.setAttribute("data-be-block-id", "table-2");
+    contentEditable.append(secondTable);
+    stubRect(secondTable, { left: 100, top: 300, width: 200, height: 60 });
+    const [secondRow1, secondRow2] = Array.from(
+      secondTable.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+    );
+    if (secondRow1 === undefined || secondRow2 === undefined) {
+      throw new Error("둘째 표의 행이 없음");
+    }
+    stubRect(secondRow1, { left: 100, top: 300, width: 200, height: 30 });
+    stubRect(secondRow2, { left: 100, top: 330, width: 200, height: 30 });
+
+    await act(async () => {
+      table.remove();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.pointerMove(secondTable);
+    expect(
+      screen.getAllByRole("button", { name: rowHandleLabel }),
+    ).toHaveLength(2);
   });
 });
