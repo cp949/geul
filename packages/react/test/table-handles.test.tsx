@@ -816,8 +816,10 @@ describe("행/열 핸들 클릭 메뉴", () => {
       clientY: 150,
     });
     fireEvent.pointerUp(editable, { pointerId: 1 });
-    // 실제 브라우저는 pointerup 직후 같은 버튼(setPointerCapture로 고정된
-    // 대상)에 합성 click을 보낸다 — 여기서는 그 타이밍을 수동으로 재현한다.
+    // Issue #17의 전제 — 실제 브라우저는 pointerup 직후 같은 버튼
+    // (setPointerCapture로 고정된 대상)에 합성 click을 보낸다 — 를 이
+    // 테스트에서는 fireEvent.click으로 직접 재현한다. 이 전제 자체가
+    // 실제 브라우저에서 성립하는지는 e2e의 몫이다(PIT-0019, Issue #63).
     fireEvent.click(firstRowHandle, { detail: 1 });
 
     expect(screen.queryByRole("menu")).toBeNull();
@@ -863,6 +865,36 @@ describe("행/열 핸들 클릭 메뉴", () => {
     });
     fireEvent.pointerUp(editable, { pointerId: 1 });
     fireEvent.click(firstColumnHandle, { detail: 1 });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("moveTableRow가 실패하면(예: 병합 셀 경계) 억제 키를 갱신하지 않는다", () => {
+    // 최종 전체 브랜치 리뷰에서 발견: moveTableRow/moveTableColumn의
+    // Result를 버리면, 커맨드가 실패해 DOM이 안 바뀌어도 finalIndex가
+    // toIndex로 갱신돼 억제 키가 실제 index와 어긋난다 — Issue #17의
+    // 증상이 병합 셀 경계를 가로지르는 이동 등 실패 경로에서 재발한다.
+    const controller = fakeController({
+      moveTableRow: () => ({
+        ok: false,
+        error: { code: "MERGE_BOUNDARY_CROSSED" },
+      }),
+    });
+    const { table, editable } = renderTable(controller);
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, {
+      pointerId: 1,
+      clientX: 150,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+    fireEvent.click(firstRowHandle, { detail: 1 });
 
     expect(screen.queryByRole("menu")).toBeNull();
   });

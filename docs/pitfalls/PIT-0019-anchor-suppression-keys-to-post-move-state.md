@@ -1,7 +1,7 @@
 # PIT-0019 안정 key로 재사용되는 DOM의 억제 키는 이동 후 상태로 맞춘다
 
 - 상태: `ACTIVE`
-- 적용 영역: react (table overlay)
+- 적용 영역: react, e2e (table overlay, playwright)
 - 최초 근거: Issue #17
 
 ## 상황과 징후
@@ -29,10 +29,14 @@ rowId/columnId를 가진 버튼은 React가 같은 DOM 노드를 재사용한다
 - React key가 항목의 안정 식별자(rowId, columnId 등)이고 그 항목의
   **위치**(index)가 dispatch로 바뀔 수 있는 컴포넌트에서는, "직전 조작이
   가리킨 대상"을 기억할 때 위치가 아니라 그 안정 식별자로 저장하거나,
-  위치를 저장해야 한다면 dispatch **이후** 실제로 반영될 최종 위치로
-  저장한다. dispatch 이전 위치(source)를 그대로 저장하면, 안정 key로
-  재사용되는 DOM 노드의 다음 이벤트 핸들러는 이미 갱신된 위치를 보고
-  있어 비교가 어긋난다.
+  위치를 저장해야 한다면 dispatch **이후 실제로 반영된** 최종 위치로
+  저장한다 — dispatch가 실패해 반영되지 않았다면(예: 병합 셀 경계를
+  가로지르는 이동 거부) 위치를 갱신하지 않는다. 커맨드의 성공 여부를
+  확인하지 않고 "요청한" 위치를 그대로 저장하면, 요청이 거부돼 DOM이
+  안 바뀐 경우에도 억제 키가 실제 index와 어긋난다. dispatch 이전
+  위치(source)를 그대로 저장해도 마찬가지로, 안정 key로 재사용되는 DOM
+  노드의 다음 이벤트 핸들러는 이미 갱신된 위치를 보고 있어 비교가
+  어긋난다.
 - "직전 조작 뒤 이어지는 합성 이벤트 억제"를 검증하는 회귀 테스트는
   대상 커맨드를 no-op mock으로 대체하면 DOM이 실제로 안 바뀌어 이 결함을
   잡지 못한다. mock을 실제로 DOM/속성을 갱신하는 구현으로 바꾸거나
@@ -44,9 +48,15 @@ rowId/columnId를 가진 버튼은 React가 같은 DOM 노드를 재사용한다
   무관)을 넘으면 `setPointerCapture`로 정확히 재타겟됨에도 `click`
   이벤트 자체를 합성하지 않는다.** 순수 vanilla HTML(React/앱 코드 배제)
   대조군은 200px 이동에도 정상 발생했으므로 "pointer capture + 원거리
-  드래그" 일반의 문제가 아니라 이 앱의 렌더/상태 갱신 경로에 특유한
-  현상으로 보이며, 정확한 원인은 규명하지 못했다 — 실제 물리 마우스에도
-  같은 임계값이 적용되는지도 확인하지 못했다. 표 재정렬처럼 "눈에 띄는
+  드래그" 일반의 문제는 아니다. 다만 대조군은 React뿐 아니라
+  contenteditable, ProseMirror, pointermove마다 재렌더되는 고정
+  오버레이도 함께 배제했으므로 정확한 원인은 규명하지 못했다 — 유력한
+  후보로 (a) contenteditable에 인접한 콘텐츠에서 브라우저가 네이티브
+  드래그 제스처로 판단해 click을 억제하는 경로, (b) pointer capture가
+  pointer 이벤트만 재타겟하고 호환 mouse/click 이벤트의 판정에는 영향을
+  주지 않는 경로를 후속 조사(Issue #63)로 남긴다. 실제 물리 마우스에도
+  같은 임계값이 적용되는지도 확인하지 못했다(Issue #63). 표 재정렬처럼
+  "눈에 띄는
   이동"이 곧 큰 이동거리를 뜻하는 e2e 시나리오에서 "드래그 뒤 합성
   click" 자체를 검증해야 한다면, 브라우저가 click을 자동으로 보내주길
   기다리지 말고 `ElementHandle.dispatchEvent("click", { detail: 1,
@@ -75,6 +85,8 @@ pnpm exec playwright test e2e/table-handle.spec.ts --project=chromium
   행 메뉴를 열지 않는다"/"열 핸들 드래그 재정렬 직후 합성 click이 열
   메뉴를 열지 않는다".
 - Issue #17.
+- Issue #63 (완료 조건 1의 잔여 가정 확인 및 Option A 전환 검토, 최종
+  전체 브랜치 리뷰에서 후속으로 분리).
 
 ## 관련 문서
 

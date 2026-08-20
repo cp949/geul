@@ -497,20 +497,23 @@ export const TableHandles = () => {
             ? current.targetIndex - 1
             : current.targetIndex;
         if (toIndex !== current.sourceIndex) {
-          finalIndex = toIndex;
-          if (current.kind === "row") {
-            editor.commands.moveTableRow(
-              current.tableBlockId,
-              current.sourceIndex,
-              toIndex,
-            );
-          } else {
-            editor.commands.moveTableColumn(
-              current.tableBlockId,
-              current.sourceIndex,
-              toIndex,
-            );
-          }
+          const result =
+            current.kind === "row"
+              ? editor.commands.moveTableRow(
+                  current.tableBlockId,
+                  current.sourceIndex,
+                  toIndex,
+                )
+              : editor.commands.moveTableColumn(
+                  current.tableBlockId,
+                  current.sourceIndex,
+                  toIndex,
+                );
+          // 커맨드가 실패하면(예: 병합 셀 경계를 가로지르는 이동) DOM이
+          // 바뀌지 않는다 — 그런데도 finalIndex를 toIndex로 갱신하면
+          // 억제 키가 실제(안 바뀐) DOM의 index와 어긋나 Issue #17의
+          // 증상이 다른 경로로 재발한다(최종 리뷰에서 확인).
+          if (result.ok) finalIndex = toIndex;
         }
       }
       if (current.hasDragged) {

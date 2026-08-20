@@ -171,13 +171,20 @@ test("행 핸들 드래그 재정렬 직후 합성 click이 행 메뉴를 열지
   await expect(cell(0, 0)).toHaveText("row-b");
   await expect(cell(1, 0)).toHaveText("row-a");
 
-  // 실제 브라우저는 setPointerCapture로 고정된 바로 그 버튼에 pointerup
-  // 뒤 합성 click을 보낸다(Issue #17) — 다만 이 환경(Playwright/CDP)은
-  // 이동거리가 임계값을 넘으면 그 click 자체를 합성하지 않는다(PIT-0019).
-  // 표를 눈에 띄게 재정렬하려면 임계값보다 큰 이동이 필요하므로, 브라우저가
-  // 보냈어야 할 click을 여기서 명시적으로 재현한다 — 대상은 여전히
-  // setPointerCapture가 실제로 고정했던 바로 그 노드(rowHandleElement)이고,
-  // moveTableRow는 실제 커맨드로 이미 위에서 DOM을 갱신했다.
+  // 이 코드는 Issue #17의 전제 — 실제 브라우저는 pointerup 뒤
+  // setPointerCapture로 고정된 바로 그 버튼에 합성 click을 보낸다 — 가
+  // 성립한다고 가정한다. 이 환경(Playwright/CDP)에서는 그 전제 자체를
+  // 관측할 수 없다 — 이동거리가 임계값을 넘으면 브라우저가 click을 아예
+  // 합성하지 않기 때문이다(PIT-0019). 그래서 브라우저가 보냈어야 할 click을
+  // 여기서 명시적으로 재현한다 — 대상은 여전히 setPointerCapture가 실제로
+  // 고정했던 바로 그 노드(rowHandleElement)이고, moveTableRow는 실제
+  // 커맨드로 이미 위에서 DOM을 갱신했다. 이 전제가 실제 물리 마우스에도
+  // 성립하는지는 별도 확인이 필요하다(Issue #63).
+  // 대상 노드가 재렌더로 언마운트됐다면 dispatchEvent는 조용히 아무
+  // 효과도 없이 "성공"한다 — React 루트 리스너가 이벤트를 못 받아 click이
+  // 무의미해진다(Issue #62와 같은 vacuous-pass 클래스). 실제로 여전히
+  // 문서에 붙어 있는지 먼저 확인한다.
+  expect(await rowHandleElement.evaluate((el) => el.isConnected)).toBe(true);
   await rowHandleElement.dispatchEvent("click", {
     detail: 1,
     bubbles: true,
@@ -233,6 +240,7 @@ test("열 핸들 드래그 재정렬 직후 합성 click이 열 메뉴를 열지
   await expect(cell(0, 1)).toHaveText("col-a");
 
   // 행 테스트와 같은 이유로(PIT-0019) 합성 click을 명시적으로 재현한다.
+  expect(await columnHandleElement.evaluate((el) => el.isConnected)).toBe(true);
   await columnHandleElement.dispatchEvent("click", {
     detail: 1,
     bubbles: true,
