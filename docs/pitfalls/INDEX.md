@@ -23,3 +23,4 @@
 | `PIT-0017` | document.body에 직접 붙인 테스트 노드는 finally에서 정리함 | `ACTIVE` | react·test | Issue #51 | [상세](./PIT-0017-clean-up-body-appended-test-nodes-in-finally.md) |
 | `PIT-0018` | 복잡도 회귀는 wall-clock 상한이 아니라 결정적 단언으로 잡음 | `ACTIVE` | io·test | Issue #58 | [상세](./PIT-0018-gate-complexity-regressions-deterministically.md) |
 | `PIT-0019` | 안정 key로 재사용되는 DOM의 억제 키는 안정 식별자로 고정 | `ACTIVE` | react·e2e | Issue #17 | [상세](./PIT-0019-anchor-suppression-keys-to-stable-ids.md) |
+| `PIT-0020` | lint 경고의 자동수정은 실제 타입 계약과 대조해 검증 | `ACTIVE` | react·전 패키지 | Issue #18 | [상세](./PIT-0020-verify-lint-autofix-against-the-real-contract.md) |
