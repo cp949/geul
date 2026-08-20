@@ -311,22 +311,19 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const handleTurnInto = (item: BlockTypeOption) => {
     if (blockMenuState === null) return;
     editor.commands.setBlockType(blockMenuState.blockId, item.blockType);
-    setBlockMenuState(null);
-    focusEditor();
+    closeBlockMenu();
   };
 
   const handleDuplicate = () => {
     if (blockMenuState === null) return;
     editor.commands.duplicateBlock(blockMenuState.blockId);
-    setBlockMenuState(null);
-    focusEditor();
+    closeBlockMenu();
   };
 
   const handleDeleteBlock = () => {
     if (blockMenuState === null) return;
     editor.commands.deleteBlock(blockMenuState.blockId);
-    setBlockMenuState(null);
-    focusEditor();
+    closeBlockMenu();
   };
 
   return (
