@@ -401,3 +401,68 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     expect(document.activeElement).toBe(editable);
   });
 });
+
+describe("병합·분할 명령 실패 시 피드백", () => {
+  it("병합이 NOT_RECTANGULAR로 거절되면 실패 메시지를 보여준다", () => {
+    const controller = mergeableSelectionController({
+      mergeTableCells: () => ({
+        ok: false,
+        error: { code: "NOT_RECTANGULAR" },
+      }),
+    });
+    const { cell1, cell2 } = renderTable(controller);
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+    triggerSelectionChange();
+
+    fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Selection isn't rectangular",
+    );
+  });
+
+  it("분할이 CELL_NOT_FOUND로 거절되면 실패 메시지를 보여준다", () => {
+    const controller = splittableSelectionController({
+      splitTableCell: () => ({
+        ok: false,
+        error: { code: "CELL_NOT_FOUND", cellId: "cell-1" },
+      }),
+    });
+    renderTable(controller);
+    triggerSelectionChange();
+
+    fireEvent.click(screen.getByRole("button", { name: splitLabel }));
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Cell no longer exists",
+    );
+  });
+
+  it("실패 메시지가 뜬 채로 선택 대상이 바뀌면 메시지가 사라진다", () => {
+    const controller = mergeableSelectionController({
+      mergeTableCells: () => ({
+        ok: false,
+        error: { code: "NOT_RECTANGULAR" },
+      }),
+    });
+    const { cell1, cell2 } = renderTable(controller);
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Selection isn't rectangular",
+    );
+
+    controller.getTableCellSelection.mockImplementation(() => ({
+      tableBlockId: "table-1",
+      cellIds: ["cell-2"],
+      mergeable: false,
+      splitCellId: null,
+    }));
+    triggerSelectionChange();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

@@ -4,9 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
+import {
+  FALLBACK_TABLE_COMMAND_ERROR_MESSAGE,
+  TABLE_COMMAND_ERROR_MESSAGES,
+} from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const mergeLabel = "Merge cells";
 const splitLabel = "Split cell";
@@ -18,6 +23,9 @@ const formatIcon = <Palette {...iconProps} />;
 
 const buttonClassName =
   "geul:h-7 geul:min-w-7 geul:rounded geul:border-0 geul:bg-transparent geul:px-1.5 geul:py-1 geul:text-[color:var(--be-color-text,#202124)] geul:cursor-pointer";
+
+const actionErrorClassName =
+  "geul:text-[0.75rem] geul:text-[color:var(--be-color-danger,#d93025)]";
 
 // 서식 메뉴를 토큰 위치에서 약간 아래로 띄운다 — 정확한 도킹 위치는
 // PIT-0011 클램프가 뷰포트 안으로 다시 접어 넣으므로 대략치면 충분하다.
@@ -105,6 +113,9 @@ export const TableSelectionToolbar = () => {
     focusEditor();
   }, [focusEditor]);
 
+  const { actionError, runCommand, clearActionError } =
+    useTableCommandFeedback();
+
   useEffect(() => {
     const updateFromSelection = () => {
       const closeAll = () => {
@@ -125,6 +136,7 @@ export const TableSelectionToolbar = () => {
       if (selectionKeyRef.current !== selectionKey) {
         selectionKeyRef.current = selectionKey;
         setFormatMenuOpen(false);
+        clearActionError();
       }
       setToolbarState({
         tableBlockId: selection.tableBlockId,
@@ -154,7 +166,7 @@ export const TableSelectionToolbar = () => {
       ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
       ownerWindow?.removeEventListener("resize", updateFromSelection);
     };
-  }, [editor, element]);
+  }, [editor, element, clearActionError]);
 
   // 서식 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로
   // 닫는 UI는 병렬 e2e로 검증한다). 리스너는 useDismissOnOutsideOrEscape가
@@ -191,7 +203,9 @@ export const TableSelectionToolbar = () => {
             icon={mergeIcon}
             label={mergeLabel}
             onClick={() => {
-              editor.commands.mergeTableCells(toolbarState.tableBlockId);
+              runCommand(() =>
+                editor.commands.mergeTableCells(toolbarState.tableBlockId),
+              );
             }}
             onMouseDown={(event) => event.preventDefault()}
           />
@@ -204,7 +218,9 @@ export const TableSelectionToolbar = () => {
             onClick={() => {
               const { tableBlockId, splitCellId } = toolbarState;
               if (splitCellId === null) return;
-              editor.commands.splitTableCell(tableBlockId, splitCellId);
+              runCommand(() =>
+                editor.commands.splitTableCell(tableBlockId, splitCellId),
+              );
             }}
             onMouseDown={(event) => event.preventDefault()}
           />
@@ -220,6 +236,12 @@ export const TableSelectionToolbar = () => {
           }}
           onMouseDown={(event) => event.preventDefault()}
         />
+        {actionError !== null && (
+          <span className={actionErrorClassName} role="alert">
+            {TABLE_COMMAND_ERROR_MESSAGES[actionError.code] ??
+              FALLBACK_TABLE_COMMAND_ERROR_MESSAGE}
+          </span>
+        )}
       </div>
       {/* toolbarState.left/top은 원본(비클램프) 앵커 좌표다 — 위 메인 툴바가
           useClampedMenuPosition으로 접어 넣은 화면상 위치(menuRef.style)가
