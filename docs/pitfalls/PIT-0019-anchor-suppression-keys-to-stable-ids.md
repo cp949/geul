@@ -68,8 +68,8 @@ index)를 저장했다. 뒤이은 합성 click은 이동 후 index를 넘기므�
   후보로 (a) contenteditable에 인접한 콘텐츠에서 브라우저가 네이티브
   드래그 제스처로 판단해 click을 억제하는 경로, (b) pointer capture가
   pointer 이벤트만 재타겟하고 호환 mouse/click 이벤트의 판정에는 영향을
-  주지 않는 경로를 후속 조사(Issue #63)로 남긴다. 실제 물리 마우스에도
-  같은 임계값이 적용되는지도 확인하지 못했다(Issue #63). 표 재정렬처럼
+  주지 않는 경로를 후속 조사(Issue #64)로 남긴다. 실제 물리 마우스에도
+  같은 임계값이 적용되는지도 확인하지 못했다(Issue #64). 표 재정렬처럼
   "눈에 띄는 이동"이 곧 큰 이동거리를 뜻하는 e2e 시나리오에서 "드래그 뒤 합성
   click" 자체를 검증해야 한다면, 브라우저가 click을 자동으로 보내주길
   기다리지 말고 `ElementHandle.dispatchEvent("click", { detail: 1,
@@ -114,9 +114,12 @@ pnpm exec playwright test e2e/table-handle.spec.ts --project=chromium
   않아도 다음 진짜 click은 행 메뉴를 연다" — 억제 키 수명 규칙의 회귀
   테스트(후자는 실제 Chromium에서 RED를 확인).
 - Issue #17.
-- Issue #63 (Option A 전환 검토·구현. 완료 조건 1의 잔여 가정 확인은
-  아직 남아 있다 — 실제 물리 마우스로 합성 click 임계값을 확인하는
-  절반).
+- Issue #63 (Option A 전환 검토·구현, 종료).
+- Issue #64 (Chromium이 임계값 초과 드래그 뒤 click을 합성하지 않는
+  원인 규명과 실 물리 마우스 확인). 이 관측은 현재 구현의 정확성에
+  영향을 주지 않는다 — 억제 키가 안정 식별자라 click 도착 순서와
+  무관하고, 새 제스처 pointerdown이 키를 비워 click 미도착에도
+  대비한다. 남은 것은 위 e2e 작성 기법 규칙의 적용 범위 확정이다.
 
 ## 관련 문서
 
