@@ -744,6 +744,41 @@ describe("메뉴 명령 실패 시 피드백", () => {
     expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toBe("Action failed");
   });
+
+  it("다른 행으로 메뉴 대상을 바로 전환하면 이전 실패 메시지가 남지 않는다", () => {
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        deleteTableRow: vi.fn(
+          () =>
+            ({ ok: false, error: { code: "LAST_ROW" } }) as ReturnType<
+              EditorController["commands"]["deleteTableRow"]
+            >,
+        ),
+      },
+    };
+    const { table } = renderTable(
+      controller as unknown as ReturnType<typeof fakeController>,
+    );
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const [firstRowHandle, secondRowHandle] = rowHandles;
+    if (firstRowHandle === undefined || secondRowHandle === undefined) {
+      throw new Error("행 핸들 없음");
+    }
+
+    fireEvent.click(firstRowHandle);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Can't delete the last row",
+    );
+
+    fireEvent.click(secondRowHandle);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("마지막 행/열에서 삭제 비활성화", () => {

@@ -970,6 +970,7 @@ export const TableHandles = () => {
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (
         <TableHandleMenu
+          key={`${menuState.tableBlockId}-${menuState.kind}-${menuState.index}`}
           canDelete={
             menuState.kind === "row"
               ? geometry.rows.length > 1
