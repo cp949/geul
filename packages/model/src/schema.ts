@@ -378,7 +378,7 @@ const validateColumnWidths = (
   return { ok: true, value: undefined };
 };
 
-const validateSpans = (blocks: Block[]): Result<undefined, DocumentError> => {
+const validateCells = (blocks: Block[]): Result<undefined, DocumentError> => {
   for (const [blockIndex, block] of blocks.entries()) {
     if (block.type !== "table") continue;
     for (const [rowIndex, row] of block.rows.entries()) {
@@ -403,27 +403,6 @@ const validateSpans = (blocks: Block[]): Result<undefined, DocumentError> => {
             "columnSpan must be a positive integer",
           );
         }
-      }
-    }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateCellFormat = (
-  blocks: Block[],
-): Result<undefined, DocumentError> => {
-  for (const [blockIndex, block] of blocks.entries()) {
-    if (block.type !== "table") continue;
-    for (const [rowIndex, row] of block.rows.entries()) {
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        const cellPath = [
-          "blocks",
-          blockIndex,
-          "rows",
-          rowIndex,
-          "cells",
-          cellIndex,
-        ] as const;
         if (
           cell.textColor !== undefined &&
           !isCanonicalCellColor(cell.textColor)
@@ -542,10 +521,8 @@ export const parseDocument = (
 
   const widths = validateColumnWidths(document.blocks);
   if (!widths.ok) return widths;
-  const spans = validateSpans(document.blocks);
-  if (!spans.ok) return spans;
-  const cellFormat = validateCellFormat(document.blocks);
-  if (!cellFormat.ok) return cellFormat;
+  const cells = validateCells(document.blocks);
+  if (!cells.ok) return cells;
   const limits = validateTableLimits(document.blocks);
   if (!limits.ok) return limits;
   const grids = validateTableGrids(document.blocks);

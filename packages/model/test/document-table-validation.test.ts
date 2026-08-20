@@ -241,6 +241,57 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
     });
   });
 
+  it("서로 다른 셀에 걸쳐 색상 위반과 span 위반이 있으면 순회 순서(앞쪽 셀부터)로 보고한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "table-1",
+          type: "table",
+          columns: [{ id: "column-1", width: 160 }],
+          rows: [
+            {
+              id: "row-1",
+              cells: [
+                {
+                  id: "cell-1",
+                  columnId: "column-1",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [],
+                  textColor: "#abcdef",
+                },
+              ],
+            },
+            {
+              id: "row-2",
+              cells: [
+                {
+                  id: "cell-2",
+                  columnId: "column-1",
+                  rowSpan: 0,
+                  columnSpan: 1,
+                  content: [],
+                },
+              ],
+            },
+          ],
+          headerRows: 0,
+          headerColumns: 0,
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "rows", 0, "cells", 0, "textColor"],
+      },
+    });
+  });
+
   it("논리 셀 수가 문서 한도를 넘는 표는 거부한다", () => {
     expect(
       parseDocument({
