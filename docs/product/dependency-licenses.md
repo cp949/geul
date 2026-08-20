@@ -19,4 +19,14 @@ The table records every direct external production dependency in the R0 workspac
 | `react` | `19.2.8` | MIT | react, demo | React bindings and demo UI |
 | `react-dom` | `19.2.8` | MIT | react, demo | Browser rendering for React bindings and demo UI |
 
+## Patched dependencies
+
+The workspace ships one modified third-party package. Patching redistributes modified source, so each entry records the upstream license that permits it and the issue that owns removal (ADR 0006).
+
+| Dependency | Version | License | Reached through | Patch | Owner |
+| --- | --- | --- | --- | --- | --- |
+| `micromark-extension-gfm-table` | `2.1.1` | MIT | `remark-gfm` → `micromark-extension-gfm` | `patches/micromark-extension-gfm-table@2.1.1.patch` — replaces the `EditMap.addImplementation` linear scan with an `at -> index` `Map` lookup; output is unchanged, only cost | Issue #26. Drop the patch once the fix lands upstream |
+
+Transitive dependencies do not appear in the direct dependency table above, so `pnpm check:licenses` audits their licenses but does not record the patch — this section is the record.
+
 This inventory and automated allowlist are engineering controls only. They do not replace legal review, license-text distribution checks, or approval for a production release.
