@@ -78,8 +78,9 @@ grep -rnE "toBeLessThan\(.*(TIME_LIMIT|LIMIT_MS)|performance\.now\(\)|[Tt]imeout
 - 설계 중 실제로 겪은 두 자기 함정:
   - `exportMarkdown` 경로의 `computeColumnAlignments` 호출 횟수 하한을 처음엔 1로 뒀는데, "헬퍼를 버리고 자체 quadratic 루프를 인라인"하는 mutation에서 호출 횟수가 2 → 1로 줄어도 하한 1을 통과해 회귀를 놓쳤다. 하한을 2(warnings용 `analyzeMarkdownLoss` 1회 + `tableNode` 직렬화 1회)로 강화하고 나서야 RED가 됐다.
   - 첫 설계는 `row.cells` 참조 획득 횟수 축 하나만 있었는데, "배열 참조만 열 루프 바깥으로 hoist하고 내부는 여전히 열마다 재순회"하는 mutation이 그 축을 포함한 4개 단언을 전부 통과했다 — hoist된 배열은 참조 획득 횟수를 행 수로 고정시키면서 실제 비용은 그대로 quadratic으로 남기기 때문이다. 셀 필드(`columnId`) 읽기 횟수 축을 추가하고 나서야 이 형태가 잡혔다.
-- Issue #12 / `packages/io/test/markdown-round-trip-limits.test.ts:24`(`oversizedTableTimeoutMs = 20_000`) — 같은 함정을 먼저 만난 선례이지만 결론이 다르다. 병목이 서드파티 `remark-gfm`(`micromark-extension-gfm-table`) 내부라 자체 코드로 최적화할 수 없고, `MAX_TABLE_LOGICAL_CELLS`(`packages/model/src/table-grid-validation.ts:10`)로 입력 크기 상한이 이미 고정돼 있었다. 이 조건에서는 실측 최악값(병렬 7.0~7.9초)에 여유를 더한 타임아웃 상향이 타당했다 — Issue #58과 달리 게이트 대상이 복잡도 회귀가 아니라 고정 비용의 절대 상한이었기 때문이다.
+- Issue #12 / `packages/io/test/markdown-round-trip-limits.test.ts:20`(`oversizedTableTimeoutMs`) — 같은 함정을 먼저 만난 선례이지만 결론이 갈렸다가 나중에 합류했다. 발견 당시(Issue #12)에는 병목이 서드파티 `remark-gfm`(`micromark-extension-gfm-table`)의 `EditMap.addImplementation` 선형 스캔 내부라 자체 코드로는 최적화할 수 없다고 판단해 `MAX_TABLE_LOGICAL_CELLS`(`packages/model/src/table-grid-validation.ts:10`)로 입력 크기 상한을 고정하고, 실측 최악값(병렬 7.0~7.9초)에 여유를 더한 타임아웃 상향(20,000ms)으로만 대응했다 — Issue #58과 달리 게이트 대상이 복잡도 회귀가 아니라 고정 비용의 절대 상한이라 여겼기 때문이다. Issue #26이 이 판단을 뒤집었다: `pnpm patch`로 `EditMap`이 `at -> index` `Map` 기반 O(1) 조회를 쓰도록 서드파티 코드 자체를 고쳐(`patches/micromark-extension-gfm-table@2.1.1.patch`) 20,000셀 표 파싱이 15.3s→0.43s(약 35배)로 개선됐고, 타임아웃은 5,000ms로 되돌렸다 — "서드파티 병목은 자체 코드로 손댈 수 없다"는 전제 자체가 항상 참은 아니다.
 
 ## 관련 문서
 
 - Issue #12(선례) — `packages/io/test/markdown-round-trip-limits.test.ts`
+- Issue #26(선례를 뒤집은 후속) — `patches/micromark-extension-gfm-table@2.1.1.patch`, `packages/io/test/markdown-round-trip-limits.test.ts`
