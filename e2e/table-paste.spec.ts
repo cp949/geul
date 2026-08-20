@@ -201,7 +201,7 @@ test("탭 없는 일반 텍스트 붙여넣기는 표를 만들지 않는다", a
   await expect(editable.locator("p").first()).toContainText("hello world");
 });
 
-test("표 앞뒤에 문단이 섞인 HTML은 표를 만들지 않고 문단을 보존한다", async ({
+test("표 앞뒤에 문단이 섞인 HTML은 문단을 보존하고 셀 경계를 잃는다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -209,20 +209,29 @@ test("표 앞뒤에 문단이 섞인 HTML은 표를 만들지 않고 문단을 �
 
   const mixedHtml =
     "<p>intro</p>" +
-    "<table><tbody><tr><td>cellA</td><td>cellB</td></tr></tbody></table>" +
+    "<table><tbody><tr><td>cellA</td><td>cellB</td></tr>" +
+    "<tr><td>cellC</td><td>cellD</td></tr></tbody></table>" +
     "<p>outro</p>";
 
-  await editable.evaluate(dispatchPaste, { html: mixedHtml });
+  // 실제 붙여넣기 이벤트는 항상 text/html과 text/plain을 함께 담는다 — 이
+  // 짝이 있어야 "html에서 표를 찾아 거절했으면 TSV로 폴백하지 않는다"까지
+  // 실제 브라우저에서 확인된다(Issue #37).
+  await editable.evaluate(dispatchPaste, {
+    html: mixedHtml,
+    text: "intro\ncellA\tcellB\ncellC\tcellD\noutro",
+  });
 
   // 표가 fragment의 유일한 실질 콘텐츠가 아니므로 가로채지 않는다(spec
-  // §4.1, Issue #37) — NOT_TABULAR로 Tiptap 기본 붙여넣기에 넘겨 표 노드를
-  // 만들지 않고(표 세 노드는 parseHTML을 정의하지 않는다) intro/outro
-  // 문단을 보존한다. 셀 텍스트(cellA/cellB)도 사라지지 않고 평문으로
-  // 흘러든다 — 표 구조(행/열 경계)만 뭉개질 뿐 콘텐츠 자체는 유실되지
-  // 않는다.
+  // §4.1, Issue #37) — NOT_TABULAR로 Tiptap 기본 붙여넣기에 넘긴다.
+  //
+  // 폴백 결과를 정확한 문자열로 고정한다: ProseMirror의 blockTags에는
+  // table은 있지만 tr/td는 없어서, 표 세 노드가 parseHTML을 정의하지 않는
+  // 지금 모든 셀이 구분자 없이 한 문단으로 이어 붙는다(cellAcellBcellCcellD).
+  // toContainText("cellA")만 걸면 이 병합이 그대로 통과하므로 셀·행 경계
+  // 소실이 테스트에 잡히지 않는다. 이 붙여넣기는 무손실이 아니다.
   await expect(editable.locator("table")).toHaveCount(0);
-  await expect(editable).toContainText("intro");
-  await expect(editable).toContainText("outro");
-  await expect(editable).toContainText("cellA");
-  await expect(editable).toContainText("cellB");
+  const blocks = await editable.evaluate((node) =>
+    Array.from(node.children).map((child) => child.textContent),
+  );
+  expect(blocks).toEqual(["intro", "cellAcellBcellCcellD", "outro"]);
 });
