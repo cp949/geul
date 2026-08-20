@@ -199,3 +199,25 @@ test("탭 없는 일반 텍스트 붙여넣기는 표를 만들지 않는다", a
   await expect(editable.locator("table")).toHaveCount(0);
   await expect(editable.locator("p").first()).toContainText("hello world");
 });
+
+test("표 앞뒤에 문단이 섞인 HTML은 표를 만들지 않고 문단을 보존한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+
+  const mixedHtml =
+    "<p>intro</p>" +
+    "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+    "<p>outro</p>";
+
+  await editable.evaluate(dispatchPaste, { html: mixedHtml });
+
+  // 표가 fragment의 유일한 실질 콘텐츠가 아니므로 가로채지 않는다(spec
+  // §4.1, Issue #37) — NOT_TABULAR로 Tiptap 기본 붙여넣기에 넘겨 표 노드를
+  // 만들지 않고(표 세 노드는 parseHTML을 정의하지 않는다) intro/outro
+  // 문단을 보존한다.
+  await expect(editable.locator("table")).toHaveCount(0);
+  await expect(editable).toContainText("intro");
+  await expect(editable).toContainText("outro");
+});

@@ -275,6 +275,25 @@ describe("parseClipboardTable", () => {
     expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
   });
 
+  it("표 앞뒤에 문단이 있으면 NOT_TABULAR로 흘려보낸다", () => {
+    const html =
+      "<p>intro</p>" +
+      "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+      "<p>outro</p>";
+
+    const result = parseClipboardTable({ html });
+    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+  });
+
+  it("표를 감싼 구조적 래퍼(html/head/body/style)만 있으면 표로 판정한다", () => {
+    const html =
+      "<html><head><style>.x{color:red}</style></head><body>" +
+      "<table><tbody><tr><td>a</td></tr></tbody></table></body></html>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+  });
+
   it("줄마다 탭 개수가 다른 텍스트는 NOT_TABULAR로 흘려보낸다", () => {
     const result = parseClipboardTable({ text: "\tif (x) {\n\t\tfoo();" });
     expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });

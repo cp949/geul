@@ -9,6 +9,7 @@ import type { ClipboardParseError } from "../errors.js";
 import { propertyString, sanitizeLinks } from "../html/hast-properties.js";
 import {
   type HtmlElementNode,
+  type HtmlNode,
   type HtmlRoot,
   inlineContentFromNodes,
 } from "../html/inline-content.js";
@@ -54,6 +55,30 @@ const findDataTable = (root: HtmlRoot): HtmlElementNode | undefined => {
     if (node.tagName === "table" && !isLayoutTable(node)) return node;
   }
   return undefined;
+};
+
+// 클립보드 HTML이 표와 다른 실질 콘텐츠(문단 등)를 함께 담고 있으면 표만
+// 골라 붙이지 않는다 — 표를 제외한 트리에 공백이 아닌 텍스트가 하나라도
+// 남아 있으면 표가 fragment의 유일한 실질 콘텐츠가 아니라는 뜻이므로
+// NOT_TABULAR로 판정해 Tiptap 기본 붙여넣기에 전체를 맡긴다(spec §4.1,
+// Issue #37). <html>/<head>/<body> 같은 구조적 래퍼와 <style>(스키마가
+// strip으로 통째로 제거)·주석(allowComments: false로 제거)은 판정에
+// 영향을 주지 않는다 — sanitize를 이미 거친 트리를 검사하기 때문이다.
+const hasContentOutsideTable = (
+  nodes: readonly HtmlNode[],
+  table: HtmlElementNode,
+): boolean => {
+  for (const node of nodes) {
+    if (node === table) continue;
+    if (node.type === "text" && node.value.trim().length > 0) return true;
+    if (
+      node.type === "element" &&
+      hasContentOutsideTable(node.children, table)
+    ) {
+      return true;
+    }
+  }
+  return false;
 };
 
 const canonicalColor = (value: string | undefined): string | undefined =>
@@ -212,6 +237,9 @@ const parseHtmlTable = (
 
   const table = findDataTable(safeRoot);
   if (table === undefined) return { ok: false, error: { code: "NOT_TABULAR" } };
+  if (hasContentOutsideTable(safeRoot.children, table)) {
+    return { ok: false, error: { code: "NOT_TABULAR" } };
+  }
 
   return tabularDataFromTable(table);
 };

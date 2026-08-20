@@ -74,6 +74,10 @@ export const parseClipboardTable = (input: {
 
 `NOT_TABULAR`는 core의 붙여넣기 가로채기가 이벤트를 소비하지 않고 Tiptap 기본 붙여넣기로 넘기는 신호다. 탭 없는 일반 여러 줄 텍스트를 1열 표로 오인하지 않도록, TSV 경로는 탭 존재를 필수 조건으로 둔다.
 
+구현 반영(혼합 클립보드 정책 결정, Issue #37): HTML 경로는 찾아낸 데이터 표가 fragment의 유일한 실질 콘텐츠일 때만 표로 판정한다. `findDataTable`이 고른 표 요소를 제외한 나머지 트리(형제 노드, 감싸는 래퍼)에 공백이 아닌 텍스트가 하나라도 남아 있으면(`<p>intro</p><table>…</table><p>outro</p>` 등) `NOT_TABULAR`로 기본 붙여넣기에 전체를 넘긴다. "지배적" 같은 비율 기반 판정 대신 "표 이외 실질 텍스트 없음"이라는 이진 조건을 쓴다 — 비율 임계값은 근거 없는 매직 넘버가 되고 결정적으로 테스트할 수 없다. `<html>`/`<head>`/`<body>`/`<meta>` 같은 구조적 래퍼와 `<style>`(스키마가 `strip`으로 통째로 제거), 주석(`allowComments: false`)은 판정에 영향을 주지 않는다 — sanitize가 이미 텍스트로 승격시키지 않거나 통째로 제거해 둔다.
+
+기본 붙여넣기로 폴백해도 안전하다: `table`/`tableRow`/`tableCell` 세 노드는 의도적으로 노드 레벨 `parseHTML`을 정의하지 않으므로(`table-extension.ts` L54-59 주석) ProseMirror 기본 `DOMParser`가 `<table>`을 커스텀 표 노드로 만드는 경로 자체가 없다. `<table>`은 `blockTags` 취급으로 건너뛰고 셀 텍스트만 평문으로 주변 블록에 흘러든다 — blockId/cellId 없는 표 노드가 만들어질 위험이 없다(이슈 #37이 옵션 (a)의 전제로 제기한 위험).
+
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
 `io/html/import-html.ts`의 `parseTable`이 쓰는 hast 트리 순회 로직 중 id 배정과 무관한 부분(`layoutRows`, `inferredColumnCount`, `columnElements`, `tableRows`, `layoutColumnSpan`, `childElements`)을 `packages/io/src/html/table-layout.ts`(신규)로 뽑아 두 소비자가 공유한다:
@@ -194,6 +198,8 @@ addProseMirrorPlugins() {
 `editor-controller.ts`의 extension 목록에 `TableKeyboardNavigationExtension`과 같은 자리에 등록한다.
 
 구현 반영(설계 시 pseudocode 수정): 기본 붙여넣기로 폴백하는 경우는 `NOT_TABULAR` 하나뿐이다. 클립보드가 표로 인식된 뒤에는 파서 거절(`CLIPBOARD_TABLE_INVALID`)이든 명령 거절(`PASTE_MERGE_CONFLICT`, `CELL_LIMIT_EXCEEDED`, `PASTE_TARGET_NOT_FOUND` 등)이든 항상 `true`를 반환해 이벤트만 소비한다. 폴백하면 TSV는 ProseMirror가 `preserveWhitespace`로 파싱해 탭이 그대로 문서에 들어가고(모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다 — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지 않으므로 문서·selection·stored mark는 그대로 보존된다(PIT-0003).
+
+구현 반영(혼합 클립보드 폴백, Issue #37): §4.1의 판정이 `NOT_TABULAR`를 반환하는 경우에는 표 앞뒤에 문단 등 실질 콘텐츠가 섞인 클립보드도 포함된다. 표 세 노드가 노드 레벨 `parseHTML`을 정의하지 않으므로(§4.1 구현 반영, `table-extension.ts`) Tiptap 기본 붙여넣기는 표 구조를 표 노드로 만들지 않고 셀 텍스트만 평문으로 흘려보낸다 — 문단은 보존되고 표 구조(행/열 경계)만 뭉개진다. 슬라이스 11 이전 기본 붙여넣기와 동일한 폴백 동작이다.
 
 ## 8. 오류 계약 확장
 
