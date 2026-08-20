@@ -23,7 +23,8 @@
     "typecheck": "turbo run typecheck && pnpm typecheck:e2e",
     "typecheck:e2e": "tsc -p e2e/tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --project=chromium --project=firefox --project=webkit",
+    "test:e2e:perf": "playwright test --project=perf",
     "verify:packages": "pnpm lint && pnpm build && pnpm typecheck && pnpm test && pnpm check:boundaries && pnpm check:licenses",
     "verify": "pnpm verify:packages && pnpm test:e2e"
   },

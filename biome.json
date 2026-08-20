@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!.worktrees",
+      "!_tmp",
       "!**/.turbo",
       "!**/.vite",
       "!**/dist",
