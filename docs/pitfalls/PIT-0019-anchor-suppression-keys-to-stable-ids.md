@@ -1,8 +1,8 @@
-# PIT-0019 안정 key로 재사용되는 DOM의 억제 키는 이동 후 상태로 맞춘다
+# PIT-0019 안정 key로 재사용되는 DOM의 억제 키는 안정 식별자로 고정한다
 
 - 상태: `ACTIVE`
 - 적용 영역: react, e2e (table overlay, playwright)
-- 최초 근거: Issue #17
+- 최초 근거: Issue #17 (Option A 전환: Issue #63)
 
 ## 상황과 징후
 
@@ -19,24 +19,31 @@ rowId/columnId를 가진 버튼은 React가 같은 DOM 노드를 재사용한다
 노드의 `onClick`은 리렌더 시점의 최신 클로저로 갱신되고, 그 클로저는
 이동 전이 아니라 **이동 후 index**를 캡처한다.
 
-`handlePointerUp`은 드래그 종료 시 `suppressedHandleClickRef.current`에
-`${kind}-${sourceIndex}`(이동 전 index)를 저장했다. 뒤이은 합성 click은
-이동 후 index를 넘기므로 억제 비교(`suppressed === \`${kind}-${index}\``)가
-항상 실패해, 억제가 사실상 무력화됐다.
+최초 구현(Issue #17)은 `handlePointerUp`에서 드래그 종료 시
+`suppressedHandleClickRef.current`에 `${kind}-${sourceIndex}`(이동 전
+index)를 저장했다. 뒤이은 합성 click은 이동 후 index를 넘기므로 억제
+비교(`suppressed === \`${kind}-${index}\``)가 항상 실패해, 억제가 사실상
+무력화됐다.
 
 ## 예방 규칙
 
 - React key가 항목의 안정 식별자(rowId, columnId 등)이고 그 항목의
   **위치**(index)가 dispatch로 바뀔 수 있는 컴포넌트에서는, "직전 조작이
-  가리킨 대상"을 기억할 때 위치가 아니라 그 안정 식별자로 저장하거나,
-  위치를 저장해야 한다면 dispatch **이후 실제로 반영된** 최종 위치로
-  저장한다 — dispatch가 실패해 반영되지 않았다면(예: 병합 셀 경계를
-  가로지르는 이동 거부) 위치를 갱신하지 않는다. 커맨드의 성공 여부를
-  확인하지 않고 "요청한" 위치를 그대로 저장하면, 요청이 거부돼 DOM이
-  안 바뀐 경우에도 억제 키가 실제 index와 어긋난다. dispatch 이전
-  위치(source)를 그대로 저장해도 마찬가지로, 안정 key로 재사용되는 DOM
+  가리킨 대상"을 **위치가 아니라 그 안정 식별자로 저장한다**(Option A,
+  Issue #63) — 위치는 성공/실패와 무관하게 애초에 저장 대상에서 뺀다.
+  위치를 저장하는 대안(Option B, Issue #17의 최초 구현)도 시도했으나
+  버렸다: dispatch가 실패해 반영되지 않았을 때(예: 병합 셀 경계를
+  가로지르는 이동 거부) 위치를 갱신하지 않는 분기가 매번 따라붙고,
+  dispatch 이전 위치(source)를 그대로 저장해도 안정 key로 재사용되는 DOM
   노드의 다음 이벤트 핸들러는 이미 갱신된 위치를 보고 있어 비교가
-  어긋난다.
+  어긋난다. 안정 식별자는 커맨드 성공/실패와 무관하게 안 바뀌므로 이
+  분기 자체가 없어진다. 렌더 시점에 그 안정 식별자가 이미 스코프에
+  있다면(핸들 props로 넘기는 등) 전환 비용은 작다.
+- **안정 식별자가 빈 문자열일 수 있는 컴포넌트**(`getAttribute(...) ??
+  ""` 폴백 등)에서는 빈 id를 그대로 억제 키에 쓰지 않는다 — 서로 다른
+  항목이 같은 빈 키로 충돌해 엉뚱한 항목을 억제하거나 억제를 풀어준다.
+  빈 id면 **억제를 아예 걸지 않는다**(fail-open) — index 폴백은 이 절의
+  첫 규칙이 없애려는 위치 기반 분기를 되살린다.
 - **억제 키를 "뒤이은 이벤트가 소비하며 비운다"로만 설계하지 않는다.** 그
   이벤트가 오지 않으면(아래 Chromium 관측처럼) 키가 남아, 사용자가 나중에
   같은 대상을 진짜로 조작할 때 한 번 삼켜진다. 억제 키는 **새 제스처를
@@ -81,14 +88,23 @@ pnpm exec playwright test e2e/table-handle.spec.ts --project=chromium
 
 ## 실제 근거
 
+- `packages/react/src/table-handles.tsx`의 `ReorderState.sourceId` —
+  pointerdown 시점의 rowId/columnId를 그대로 보관한다.
 - `packages/react/src/table-handles.tsx`의 `handlePointerUp`(행/열 재정렬
-  useEffect 내부) — 억제 키를 이동 후 `finalIndex`로 저장.
+  useEffect 내부) — 억제 키를 `${kind}-${current.sourceId}`로 저장한다.
+  커맨드의 `Result`는 이동 자체(성공 시 dispatch)에만 쓰고, 억제 키
+  저장 여부와는 무관하다. `sourceId`가 빈 문자열이면 저장을 건너뛴다.
 - `packages/react/src/table-handles.tsx`의
   `handlePointerDownOnReorderHandle` — 새 제스처 시작 시 억제 키를 비운다.
 - `packages/react/test/table-handles.test.tsx`의 "실제 moveTableRow로 표
   DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지 않는다"/"실제
   moveTableColumn으로 표 DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지
   않는다".
+- `packages/react/test/table-handles.test.tsx`의 "moveTableRow가
+  실패해도(예: 병합 셀 경계) 뒤이은 click은 여전히 억제된다" — 안정
+  식별자 기준 억제가 커맨드 성공/실패와 무관함을 검증한다(Option A).
+- `packages/react/test/table-handles.test.tsx`의 "rowId가 빈 문자열이면
+  억제를 걸지 않는다" — 빈 id의 fail-open을 검증한다(Option A).
 - `e2e/table-handle.spec.ts`의 "행 핸들 드래그 재정렬 직후 합성 click이
   행 메뉴를 열지 않는다"/"열 핸들 드래그 재정렬 직후 합성 click이 열
   메뉴를 열지 않는다".
@@ -98,8 +114,9 @@ pnpm exec playwright test e2e/table-handle.spec.ts --project=chromium
   않아도 다음 진짜 click은 행 메뉴를 연다" — 억제 키 수명 규칙의 회귀
   테스트(후자는 실제 Chromium에서 RED를 확인).
 - Issue #17.
-- Issue #63 (완료 조건 1의 잔여 가정 확인 및 Option A 전환 검토, 최종
-  전체 브랜치 리뷰에서 후속으로 분리).
+- Issue #63 (Option A 전환 검토·구현. 완료 조건 1의 잔여 가정 확인은
+  아직 남아 있다 — 실제 물리 마우스로 합성 click 임계값을 확인하는
+  절반).
 
 ## 관련 문서
 

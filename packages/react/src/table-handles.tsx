@@ -283,6 +283,9 @@ type ReorderState = {
   kind: ReorderKind;
   pointerId: number;
   tableBlockId: string;
+  // 억제 키의 기준(Option A, Issue #63). sourceIndex는 moveTableRow/
+  // moveTableColumn 커맨드가 index를 받으므로 이동 계산에만 쓴다.
+  sourceId: string;
   sourceIndex: number;
   hasDragged: boolean;
   cancelled: boolean;
@@ -485,48 +488,43 @@ export const TableHandles = () => {
       const current = reorderStateRef.current;
       if (current === null || event.pointerId !== current.pointerId) return;
 
-      // 실제 이동이 있으면 핸들 버튼의 React key(rowId/columnId)가 그대로라
-      // 같은 DOM 노드가 재사용되고, onClick 클로저는 리렌더된 이동 후
-      // index를 받는다(Issue #17). 억제 키를 sourceIndex로 고정하면 그
-      // 비교가 항상 어긋나므로, 실제 이동이 일어났을 때는 이동 후 위치인
-      // toIndex를 억제 키에도 함께 쓴다.
-      let finalIndex = current.sourceIndex;
       if (!current.cancelled && current.targetIndex !== null) {
         const toIndex =
           current.targetIndex > current.sourceIndex
             ? current.targetIndex - 1
             : current.targetIndex;
         if (toIndex !== current.sourceIndex) {
-          const result =
-            current.kind === "row"
-              ? editor.commands.moveTableRow(
-                  current.tableBlockId,
-                  current.sourceIndex,
-                  toIndex,
-                )
-              : editor.commands.moveTableColumn(
-                  current.tableBlockId,
-                  current.sourceIndex,
-                  toIndex,
-                );
-          // 커맨드가 실패하면(예: 병합 셀 경계를 가로지르는 이동) DOM이
-          // 바뀌지 않는다 — 그런데도 finalIndex를 toIndex로 갱신하면
-          // 억제 키가 실제(안 바뀐) DOM의 index와 어긋나 Issue #17의
-          // 증상이 다른 경로로 재발한다(최종 리뷰에서 확인).
-          if (result.ok) finalIndex = toIndex;
+          if (current.kind === "row") {
+            editor.commands.moveTableRow(
+              current.tableBlockId,
+              current.sourceIndex,
+              toIndex,
+            );
+          } else {
+            editor.commands.moveTableColumn(
+              current.tableBlockId,
+              current.sourceIndex,
+              toIndex,
+            );
+          }
         }
       }
-      if (current.hasDragged) {
+      // 억제 키는 안정 식별자(rowId/columnId, Option A)라 커맨드 성공
+      // 여부와 무관하다 — 핸들 버튼의 React key가 그 id라, 이동이 성공해
+      // DOM이 재정렬되든 실패해(예: 병합 셀 경계) 그대로 남든 대상 핸들의
+      // id는 안 바뀐다(PIT-0019 갱신, Issue #63). 빈 id(getAttribute(...)
+      // ?? "" 폴백)는 서로 다른 행이 같은 키로 충돌하므로 억제를 걸지 않는다.
+      if (current.hasDragged && current.sourceId !== "") {
         // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
         // (동시에 두 드래그가 진행될 수 없다), pointerup 이후의 합성 click은
         // 오는 경우 setPointerCapture로 고정된 바로 그 버튼(=같은 표)으로
-        // 되돌아온다. 그래서 kind+finalIndex만으로 다른 표의 같은 인덱스
-        // 핸들과 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
+        // 되돌아온다. 그래서 kind+id만으로 다른 표의 같은 id를 가진 핸들과
+        // 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
         // 이 click이 항상 오지는 않는다 — 이 저장소가 관측한 Chromium은
         // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(PIT-0019).
         // 그래서 여기 저장한 키는 handlePointerDownOnReorderHandle이
         // 다음 제스처 시작 시점에도 비운다.
-        suppressedHandleClickRef.current = `${current.kind}-${finalIndex}`;
+        suppressedHandleClickRef.current = `${current.kind}-${current.sourceId}`;
       }
       updateReorderState(null);
     };
@@ -644,12 +642,15 @@ export const TableHandles = () => {
     event: React.MouseEvent<HTMLButtonElement>,
     kind: ReorderKind,
     tableBlockId: string,
+    id: string,
     index: number,
   ) => {
     const suppressed = suppressedHandleClickRef.current;
     suppressedHandleClickRef.current = null;
     // detail 0은 키보드 활성화다 — 드래그 억제는 포인터 click에만 적용한다.
-    if (event.detail !== 0 && suppressed === `${kind}-${index}`) return;
+    // 빈 id에 대한 별도 가드는 필요 없다 — pointerUp이 빈 id로는 애초에
+    // 키를 세우지 않으므로(위 handlePointerUp) 이 비교는 자연히 거짓이다.
+    if (event.detail !== 0 && suppressed === `${kind}-${id}`) return;
     setMenuState((current) =>
       current !== null && current.kind === kind && current.index === index
         ? null
@@ -661,6 +662,7 @@ export const TableHandles = () => {
     event: React.PointerEvent<HTMLButtonElement>,
     kind: ReorderKind,
     tableBlockId: string,
+    sourceId: string,
     sourceIndex: number,
   ) => {
     if (event.button !== 0) return;
@@ -675,6 +677,7 @@ export const TableHandles = () => {
       kind,
       pointerId: event.pointerId,
       tableBlockId,
+      sourceId,
       sourceIndex,
       hasDragged: false,
       cancelled: false,
@@ -806,6 +809,7 @@ export const TableHandles = () => {
                   event,
                   "row",
                   geometry.tableBlockId,
+                  row.rowId,
                   row.index,
                 )
               }
@@ -815,6 +819,7 @@ export const TableHandles = () => {
                   event,
                   "row",
                   geometry.tableBlockId,
+                  row.rowId,
                   row.index,
                 )
               }
@@ -837,6 +842,7 @@ export const TableHandles = () => {
                   event,
                   "column",
                   geometry.tableBlockId,
+                  column.columnId,
                   column.index,
                 )
               }
@@ -846,6 +852,7 @@ export const TableHandles = () => {
                   event,
                   "column",
                   geometry.tableBlockId,
+                  column.columnId,
                   column.index,
                 )
               }

@@ -869,11 +869,14 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("moveTableRow가 실패하면(예: 병합 셀 경계) 억제 키를 갱신하지 않는다", () => {
-    // 최종 전체 브랜치 리뷰에서 발견: moveTableRow/moveTableColumn의
-    // Result를 버리면, 커맨드가 실패해 DOM이 안 바뀌어도 finalIndex가
-    // toIndex로 갱신돼 억제 키가 실제 index와 어긋난다 — Issue #17의
-    // 증상이 병합 셀 경계를 가로지르는 이동 등 실패 경로에서 재발한다.
+  it("moveTableRow가 실패해도(예: 병합 셀 경계) 뒤이은 click은 여전히 억제된다", () => {
+    // 이 테스트는 원래(Option B, Issue #17) moveTableRow/moveTableColumn의
+    // Result를 버리면 실패 경로에서 억제 키가 어긋나던 결함을 잡았다.
+    // Option A(Issue #63)로 억제 키가 안정 식별자(rowId)가 되면서 그
+    // 결함 자체가 구조적으로 사라졌다 — id는 커맨드 성공/실패와 무관하게
+    // 안 바뀌므로 갱신할 대상도, result.ok 분기도 없다. 테스트는 지우지
+    // 않고 그 불변조건(실패해도 억제는 깨지지 않는다)을 계속 지키는지로
+    // 다시 쓴다 — 나중에 누군가 result.ok 분기를 되살리는 회귀를 잡는다.
     const controller = fakeController({
       moveTableRow: () => ({
         ok: false,
@@ -948,6 +951,65 @@ describe("행/열 핸들 클릭 메뉴", () => {
     // 이어지는 별개의 제스처: 드래그 없이 방금 옮긴 행의 핸들을 클릭한다.
     fireEvent.pointerDown(firstRowHandle, { pointerId: 2, clientY: 140 });
     fireEvent.pointerUp(editable, { pointerId: 2 });
+    fireEvent.click(firstRowHandle, { detail: 1 });
+
+    expect(screen.queryByRole("menu")).not.toBeNull();
+  });
+
+  it("rowId가 빈 문자열이면 억제를 걸지 않는다", () => {
+    // rowId는 table-handles.tsx의 getAttribute("data-be-row-id") ?? ""
+    // 폴백으로 빈 문자열이 될 수 있다(Option A, Issue #63). 억제 키를
+    // 안정 식별자(rowId)로 쓰므로, 빈 id를 그대로 키에 쓰면 빈 id를 가진
+    // 서로 다른 행이 같은 "row-" 키로 충돌한다. 이 저장소는 그 경우
+    // 억제를 아예 걸지 않는 fail-open을 택한다(index 폴백은 Option A로
+    // 지우려는 finalIndex 산술을 되살린다) — 드래그 뒤 첫 click이 (드물게)
+    // 억제되지 않고 메뉴가 열리는 쪽을, 엉뚱한 행을 잘못 억제하는 쪽보다
+    // 우선한다.
+    const controller = fakeController({
+      moveTableRow: (tableBlockId, sourceIndex, toIndex) => {
+        const table = document.querySelector<HTMLTableElement>(
+          `table[data-be-block-id="${tableBlockId}"]`,
+        );
+        const rows =
+          table === null
+            ? []
+            : Array.from(
+                table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+              );
+        const moved = rows[sourceIndex];
+        if (table !== null && moved !== undefined) {
+          moved.remove();
+          const remaining = Array.from(
+            table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+          );
+          const reference = remaining[toIndex] ?? null;
+          if (reference === null) table.append(moved);
+          else table.insertBefore(moved, reference);
+        }
+        return { ok: true, value: undefined };
+      },
+    });
+    const { table, editable } = renderTable(controller);
+    const [row1] = Array.from(
+      table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+    );
+    if (row1 === undefined) throw new Error("행 없음");
+    // hover 추적(pointerMove(table))이 geometry를 처음 읽기 전에 rowId를
+    // 비운다 — 이후 렌더는 전부 빈 rowId를 기준으로 handle을 만든다.
+    row1.setAttribute("data-be-row-id", "");
+    fireEvent.pointerMove(table);
+    const [firstRowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (firstRowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(editable, {
+      pointerId: 1,
+      clientX: 150,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
     fireEvent.click(firstRowHandle, { detail: 1 });
 
     expect(screen.queryByRole("menu")).not.toBeNull();
