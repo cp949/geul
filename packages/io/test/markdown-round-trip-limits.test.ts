@@ -12,16 +12,12 @@ describe("Markdown 가져오기 경계와 한도", () => {
     });
   });
 
-  // 10,000셀 표 파싱 자체가 remark-gfm(micromark-extension-gfm-table)의
-  // EditMap.addImplementation 선형 스캔 때문에 셀 수에 대해 초선형으로
-  // 느려진다(단독 실행에서도 100x100 표 하나당 파싱만 ~2.4~2.7s, 두 표
-  // 합산 ~4.9~5.5s로 기본 5000ms 타임아웃 경계에 걸쳐 있고, `pnpm test`
-  // 병렬 실행에서는 7.0~7.9s까지 늘어난다 — 2026-08-19 로컬 3회 반복 측정).
-  // 병목이 우리 코드(import-markdown.ts)가 아니라 서드파티 파서 내부에
-  // 있어 이 테스트 범위에서 최적화할 수 없다 — MAX_TABLE_LOGICAL_CELLS로
-  // 이미 상한이 고정돼 있으므로 실측 최악값에 안전 여유를 더한 타임아웃을
-  // 명시한다(Issue #12).
-  const oversizedTableTimeoutMs = 20_000;
+  // 10,000셀 표 파싱은 remark-gfm(micromark-extension-gfm-table)의
+  // EditMap.addImplementation이 map.add() 호출마다 선형 스캔하던 것이
+  // 병목이었다(Issue #12). Issue #26에서 pnpm patch로 EditMap이
+  // `at -> index` Map을 통해 O(1) 조회를 하도록 고쳐 초선형 비용이
+  // 사라졌다 — 패치 전후 실측치는 Issue #26 코멘트에 기록했다.
+  const oversizedTableTimeoutMs = 5_000;
 
   it(
     "논리 셀 10000개까지 허용하고 그보다 큰 표는 일찍 거부한다",
