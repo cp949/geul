@@ -116,11 +116,14 @@ describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
     document.body.append(outsideButton);
     outsideButton.focus();
 
-    fireEvent.pointerDown(outsideButton);
+    try {
+      fireEvent.pointerDown(outsideButton);
 
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(document.activeElement).toBe(outsideButton);
-    outsideButton.remove();
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(outsideButton);
+    } finally {
+      outsideButton.remove();
+    }
   });
 
   it("메뉴 안(data-be-block-menu)을 클릭하면 닫히지 않는다", () => {
