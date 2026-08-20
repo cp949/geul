@@ -744,3 +744,164 @@ describe("메뉴 명령 실패 시 피드백", () => {
     expect(screen.getByRole("alert").textContent).toBe("Action failed");
   });
 });
+
+describe("마지막 행/열에서 삭제 비활성화", () => {
+  const fakeControllerWithSingleRow = () => ({
+    ...fakeController(),
+    mount: vi.fn((element: HTMLElement) => {
+      const editable = document.createElement("div");
+      editable.setAttribute("contenteditable", "true");
+      const table = document.createElement("table");
+      table.setAttribute("data-be-block-id", "table-1");
+      table.setAttribute(
+        "data-be-columns",
+        JSON.stringify([
+          { id: "col-1", width: 120 },
+          { id: "col-2", width: 100 },
+        ]),
+      );
+      const colgroup = document.createElement("colgroup");
+      for (const width of [120, 100]) {
+        const col = document.createElement("col");
+        col.style.width = `${width}px`;
+        colgroup.append(col);
+      }
+      table.append(colgroup);
+      const row1 = document.createElement("tr");
+      row1.setAttribute("data-be-row-id", "row-1");
+      const cell1 = document.createElement("td");
+      cell1.setAttribute("data-be-column-id", "col-1");
+      const cell2 = document.createElement("td");
+      cell2.setAttribute("data-be-column-id", "col-2");
+      row1.append(cell1, cell2);
+      table.append(row1);
+      editable.append(table);
+      element.append(editable);
+    }),
+  });
+
+  const fakeControllerWithSingleColumn = () => ({
+    ...fakeController(),
+    mount: vi.fn((element: HTMLElement) => {
+      const editable = document.createElement("div");
+      editable.setAttribute("contenteditable", "true");
+      const table = document.createElement("table");
+      table.setAttribute("data-be-block-id", "table-1");
+      table.setAttribute(
+        "data-be-columns",
+        JSON.stringify([{ id: "col-1", width: 120 }]),
+      );
+      const colgroup = document.createElement("colgroup");
+      const col = document.createElement("col");
+      col.style.width = "120px";
+      colgroup.append(col);
+      table.append(colgroup);
+      const row1 = document.createElement("tr");
+      row1.setAttribute("data-be-row-id", "row-1");
+      const cell1 = document.createElement("td");
+      cell1.setAttribute("data-be-column-id", "col-1");
+      row1.append(cell1);
+      const row2 = document.createElement("tr");
+      row2.setAttribute("data-be-row-id", "row-2");
+      const cell2 = document.createElement("td");
+      cell2.setAttribute("data-be-column-id", "col-1");
+      row2.append(cell2);
+      table.append(row1, row2);
+      editable.append(table);
+      element.append(editable);
+    }),
+  });
+
+  const renderSingleRowTable = (
+    controller: ReturnType<typeof fakeControllerWithSingleRow>,
+  ) => {
+    render(
+      withProvider(
+        controller as unknown as ReturnType<typeof fakeController>,
+        <>
+          <TableHandles />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editable = screen.getByRole("textbox", { name: "Editor" });
+    const table = editable.querySelector("table");
+    if (table === null) throw new Error("Table was not rendered");
+    stubRect(table, { left: 100, top: 100, width: 200, height: 30 });
+    const row1 = table.querySelector<HTMLElement>("[data-be-row-id]");
+    if (row1 === null) throw new Error("Row was not rendered");
+    stubRect(row1, { left: 100, top: 100, width: 200, height: 30 });
+    return { table };
+  };
+
+  const renderSingleColumnTable = (
+    controller: ReturnType<typeof fakeControllerWithSingleColumn>,
+  ) => {
+    render(
+      withProvider(
+        controller as unknown as ReturnType<typeof fakeController>,
+        <>
+          <TableHandles />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editable = screen.getByRole("textbox", { name: "Editor" });
+    const table = editable.querySelector("table");
+    if (table === null) throw new Error("Table was not rendered");
+    stubRect(table, { left: 100, top: 100, width: 100, height: 60 });
+    const [row1, row2] = Array.from(
+      table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+    );
+    if (row1 === undefined || row2 === undefined) {
+      throw new Error("Rows were not rendered");
+    }
+    stubRect(row1, { left: 100, top: 100, width: 100, height: 30 });
+    stubRect(row2, { left: 100, top: 130, width: 100, height: 30 });
+    return { table };
+  };
+
+  it("행이 1개뿐이면 Delete row가 비활성화되고 클릭해도 명령을 호출하지 않는다", () => {
+    const controller = fakeControllerWithSingleRow();
+    const { table } = renderSingleRowTable(controller);
+    fireEvent.pointerMove(table);
+    const [rowHandle] = screen.getAllByRole("button", {
+      name: rowHandleLabel,
+    });
+    if (rowHandle === undefined) throw new Error("행 핸들 없음");
+
+    fireEvent.pointerDown(rowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(rowHandle, { pointerId: 1 });
+    fireEvent.click(rowHandle);
+
+    const deleteItem = screen.getByRole("menuitem", { name: "Delete row" });
+    expect((deleteItem as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(deleteItem);
+
+    expect(controller.commands.deleteTableRow).not.toHaveBeenCalled();
+  });
+
+  it("열이 1개뿐이면 Delete column이 비활성화되고 클릭해도 명령을 호출하지 않는다", () => {
+    const controller = fakeControllerWithSingleColumn();
+    const { table } = renderSingleColumnTable(controller);
+    fireEvent.pointerMove(table);
+    const [columnHandle] = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    if (columnHandle === undefined) throw new Error("열 핸들 없음");
+
+    fireEvent.pointerDown(columnHandle, { pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(columnHandle, { pointerId: 1 });
+    fireEvent.click(columnHandle);
+
+    const deleteItem = screen.getByRole("menuitem", {
+      name: "Delete column",
+    });
+    expect((deleteItem as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(deleteItem);
+
+    expect(controller.commands.deleteTableColumn).not.toHaveBeenCalled();
+  });
+});

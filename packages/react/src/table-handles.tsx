@@ -922,6 +922,11 @@ export const TableHandles = () => {
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (
         <TableHandleMenu
+          canDelete={
+            menuState.kind === "row"
+              ? geometry.rows.length > 1
+              : geometry.columns.length > 1
+          }
           headerEnabled={
             menuState.kind === "row"
               ? geometry.headerRows === 1

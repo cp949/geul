@@ -35,6 +35,8 @@ export type TableHandleMenuProps = {
   kind: "row" | "column";
   tableBlockId: string;
   index: number;
+  /** 마지막 남은 행/열이면 삭제를 막는다(완료 조건 2, Issue #18). */
+  canDelete: boolean;
   /** 헤더는 첫 행/첫 열에만 있을 수 있다(모델 headerRows/headerColumns: 0|1). */
   headerToggleAvailable: boolean;
   headerEnabled: boolean;
@@ -51,6 +53,7 @@ export const TableHandleMenu = ({
   kind,
   tableBlockId,
   index,
+  canDelete,
   headerToggleAvailable,
   headerEnabled,
   left,
@@ -191,7 +194,8 @@ export const TableHandleMenu = ({
         {isRow ? "Insert row below" : "Insert column right"}
       </button>
       <button
-        className={`${menuItemClassName} geul:text-[color:var(--be-color-danger,#d93025)]`}
+        className={`${menuItemClassName} geul:text-[color:var(--be-color-danger,#d93025)] geul:disabled:pointer-events-none geul:disabled:cursor-not-allowed geul:disabled:opacity-40`}
+        disabled={!canDelete}
         onClick={remove}
         onMouseDown={(event) => event.preventDefault()}
         role="menuitem"
