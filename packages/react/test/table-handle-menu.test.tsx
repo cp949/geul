@@ -207,6 +207,19 @@ const openRowMenu = (controller: ReturnType<typeof fakeController>) => {
   return rendered;
 };
 
+const openColumnMenu = (controller: ReturnType<typeof fakeController>) => {
+  const rendered = renderTable(controller);
+  fireEvent.pointerMove(rendered.table);
+  const [firstColumnHandle] = screen.getAllByRole("button", {
+    name: columnHandleLabel,
+  });
+  if (firstColumnHandle === undefined) throw new Error("열 핸들 없음");
+  fireEvent.pointerDown(firstColumnHandle, { pointerId: 1, clientX: 150 });
+  fireEvent.pointerUp(firstColumnHandle, { pointerId: 1 });
+  fireEvent.click(firstColumnHandle);
+  return rendered;
+};
+
 describe("행/열 핸들 클릭 메뉴", () => {
   it("행 핸들을 클릭하면 표 메뉴가 열린다", () => {
     const controller = fakeController();
@@ -646,5 +659,88 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(controller.commands.toggleTableHeaderColumn).toHaveBeenCalledWith(
       "table-1",
     );
+  });
+});
+
+describe("메뉴 명령 실패 시 피드백", () => {
+  it("삭제가 LAST_ROW로 거절되면 메뉴를 닫지 않고 실패 메시지를 보여준다", () => {
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        deleteTableRow: vi.fn(
+          () =>
+            ({ ok: false, error: { code: "LAST_ROW" } }) as ReturnType<
+              EditorController["commands"]["deleteTableRow"]
+            >,
+        ),
+      },
+    };
+    openRowMenu(controller as unknown as ReturnType<typeof fakeController>);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
+
+    expect(controller.commands.deleteTableRow).toHaveBeenCalledWith(
+      "table-1",
+      0,
+    );
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Can't delete the last row",
+    );
+  });
+
+  it("삭제가 LAST_COLUMN으로 거절되면 메뉴를 닫지 않고 실패 메시지를 보여준다", () => {
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        deleteTableColumn: vi.fn(
+          () =>
+            ({ ok: false, error: { code: "LAST_COLUMN" } }) as ReturnType<
+              EditorController["commands"]["deleteTableColumn"]
+            >,
+        ),
+      },
+    };
+    openColumnMenu(controller as unknown as ReturnType<typeof fakeController>);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete column" }));
+
+    expect(controller.commands.deleteTableColumn).toHaveBeenCalledWith(
+      "table-1",
+      0,
+    );
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Can't delete the last column",
+    );
+  });
+
+  it("그 외 실패는 메뉴를 닫지 않고 일반 실패 메시지를 보여준다", () => {
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        insertTableRow: vi.fn(
+          () =>
+            ({
+              ok: false,
+              error: { code: "INDEX_OUT_OF_RANGE" },
+            }) as ReturnType<EditorController["commands"]["insertTableRow"]>,
+        ),
+      },
+    };
+    openRowMenu(controller as unknown as ReturnType<typeof fakeController>);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Insert row below" }));
+
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe("Action failed");
   });
 });

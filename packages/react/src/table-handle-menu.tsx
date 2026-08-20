@@ -1,4 +1,5 @@
-import type { TableCellTarget } from "@cp949/geul-core";
+import type { EditorError, TableCellTarget } from "@cp949/geul-core";
+import { useState } from "react";
 
 import {
   TABLE_BACKGROUND_COLORS,
@@ -16,6 +17,19 @@ const sectionLabelClassName =
   "geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]";
 const dividerClassName =
   "geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]";
+
+const actionErrorClassName =
+  "geul:mx-2 geul:my-1 geul:text-[0.75rem] geul:text-[color:var(--be-color-danger,#d93025)]";
+
+// 완료 조건 1(Issue #18): editor.commands.*가 돌려주는 EditorError 중
+// 이 메뉴의 액션에서 실제로 발생하는 코드만 구체적 메시지로 옮긴다. 나머지는
+// FALLBACK_ERROR_MESSAGE로 묶는다 — 발생 가능한 모든 EditorError 코드를
+// 나열할 필요는 없다(그중 상당수는 이 메뉴가 절대 만들지 않는 실패다).
+const ERROR_MESSAGES: Partial<Record<EditorError["code"], string>> = {
+  LAST_ROW: "Can't delete the last row",
+  LAST_COLUMN: "Can't delete the last column",
+};
+const FALLBACK_ERROR_MESSAGE = "Action failed";
 
 export type TableHandleMenuProps = {
   kind: "row" | "column";
@@ -45,48 +59,64 @@ export const TableHandleMenu = ({
 }: TableHandleMenuProps) => {
   const editor = useEditor();
   const { menuRef, style } = useClampedMenuPosition(left, top);
+  const [actionError, setActionError] = useState<EditorError | null>(null);
   const isRow = kind === "row";
   const target: TableCellTarget = isRow
     ? { kind: "row", index }
     : { kind: "column", index };
 
-  const runAndClose = (run: () => void) => {
-    run();
-    onClose();
+  // 완료 조건 1(Issue #18): 실패한 명령의 Result를 버리지 않는다 — 실패하면
+  // 메뉴를 닫지 않고 사용자가 이유를 볼 수 있게 인라인 메시지로 남긴다.
+  type CommandResult =
+    | { ok: true; value: void }
+    | { ok: false; error: EditorError };
+  const runAndClose = (run: () => CommandResult) => {
+    const result = run();
+    if (result.ok) {
+      onClose();
+      return;
+    }
+    setActionError(result.error);
   };
 
   const insertBefore = () =>
-    runAndClose(() => {
-      if (isRow) editor.commands.insertTableRow(tableBlockId, index);
-      else editor.commands.insertTableColumn(tableBlockId, index);
-    });
+    runAndClose(() =>
+      isRow
+        ? editor.commands.insertTableRow(tableBlockId, index)
+        : editor.commands.insertTableColumn(tableBlockId, index),
+    );
 
   const insertAfter = () =>
-    runAndClose(() => {
-      if (isRow) editor.commands.insertTableRow(tableBlockId, index + 1);
-      else editor.commands.insertTableColumn(tableBlockId, index + 1);
-    });
+    runAndClose(() =>
+      isRow
+        ? editor.commands.insertTableRow(tableBlockId, index + 1)
+        : editor.commands.insertTableColumn(tableBlockId, index + 1),
+    );
 
   const remove = () =>
-    runAndClose(() => {
-      if (isRow) editor.commands.deleteTableRow(tableBlockId, index);
-      else editor.commands.deleteTableColumn(tableBlockId, index);
-    });
+    runAndClose(() =>
+      isRow
+        ? editor.commands.deleteTableRow(tableBlockId, index)
+        : editor.commands.deleteTableColumn(tableBlockId, index),
+    );
 
   const toggleHeader = () =>
-    runAndClose(() => {
-      if (isRow) editor.commands.toggleTableHeaderRow(tableBlockId);
-      else editor.commands.toggleTableHeaderColumn(tableBlockId);
-    });
+    runAndClose(() =>
+      isRow
+        ? editor.commands.toggleTableHeaderRow(tableBlockId)
+        : editor.commands.toggleTableHeaderColumn(tableBlockId),
+    );
 
   const applyColor = (property: "text" | "background", color: string | null) =>
-    runAndClose(() => {
-      if (property === "text") {
-        editor.commands.setTableCellTextColor(tableBlockId, target, color);
-        return;
-      }
-      editor.commands.setTableCellBackgroundColor(tableBlockId, target, color);
-    });
+    runAndClose(() =>
+      property === "text"
+        ? editor.commands.setTableCellTextColor(tableBlockId, target, color)
+        : editor.commands.setTableCellBackgroundColor(
+            tableBlockId,
+            target,
+            color,
+          ),
+    );
 
   const renderPalette = (
     property: "text" | "background",
@@ -137,6 +167,11 @@ export const TableHandleMenu = ({
       role="menu"
       style={style}
     >
+      {actionError !== null && (
+        <p className={actionErrorClassName} role="alert">
+          {ERROR_MESSAGES[actionError.code] ?? FALLBACK_ERROR_MESSAGE}
+        </p>
+      )}
       <button
         className={menuItemClassName}
         onClick={insertBefore}
