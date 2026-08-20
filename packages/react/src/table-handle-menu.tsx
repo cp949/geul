@@ -5,10 +5,7 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
-import {
-  FALLBACK_TABLE_COMMAND_ERROR_MESSAGE,
-  TABLE_COMMAND_ERROR_MESSAGES,
-} from "./table-command-error-messages.js";
+import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor } from "./use-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
@@ -166,8 +163,7 @@ export const TableHandleMenu = ({
     >
       {actionError !== null && (
         <p className={actionErrorClassName} role="alert">
-          {TABLE_COMMAND_ERROR_MESSAGES[actionError.code] ??
-            FALLBACK_TABLE_COMMAND_ERROR_MESSAGE}
+          {tableCommandErrorMessage(actionError)}
         </p>
       )}
       <button
