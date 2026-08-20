@@ -54,10 +54,9 @@ const fakeController = ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
     // 실제 브라우저와 달리 jsdom은 contentEditable IDL 프로퍼티를
-    // contenteditable 속성으로 반영하지 않는다. slash-menu.tsx:100과
-    // block-side-menu.tsx:80(이 파일의 "SlashMenu 블록 메뉴" describe가
-    // 구동한다)의 focusEditor는 '[contenteditable="true"]'로 대상을 찾으므로,
-    // 속성을 직접 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
+    // contenteditable 속성으로 반영하지 않는다. slash-menu.tsx:100의
+    // focusEditor는 '[contenteditable="true"]'로 대상을 찾으므로, 속성을
+    // 직접 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
     editable.setAttribute("contenteditable", "true");
     for (const blockId of blockIds) {
       const block = document.createElement("p");
@@ -755,101 +754,5 @@ describe("SlashMenu 드래그 핸들", () => {
       "block-3",
       "block-1",
     );
-  });
-});
-
-describe("SlashMenu 블록 메뉴", () => {
-  // 이 describe의 메뉴 항목은 SlashMenu가 합성 마운트하는 BlockSideMenu가
-  // 그린다 — 초점을 되돌리는 것도 block-side-menu.tsx:80의 focusEditor다.
-  // host(role="textbox")는 마운트 host이고 컨트롤러가 그 안에 실제
-  // contenteditable 자식을 넣으므로(block-side-menu.test.tsx:57-59와 같은
-  // 구조) 초점 단언 대상은 후자다.
-  const openBlockMenu = () => {
-    const controller = fakeController();
-    render(
-      withProvider(
-        controller,
-        <>
-          <SlashMenu />
-          <EditorContent />
-        </>,
-      ),
-    );
-    const host = screen.getByRole("textbox", { name: "Editor" });
-    const editable = host.querySelector<HTMLElement>(
-      '[contenteditable="true"]',
-    );
-    if (editable === null) throw new Error("Editable was not mounted");
-    const block = host.querySelector("[data-be-block-id]");
-    if (block === null) throw new Error("Block element was not rendered");
-    fireEvent.pointerMove(block);
-    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
-    return { controller, editable };
-  };
-
-  it("핸들 클릭 시 종류 변경/복제/삭제 메뉴를 연다", () => {
-    openBlockMenu();
-
-    expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Heading 1" })).not.toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Duplicate" })).not.toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Delete" })).not.toBeNull();
-  });
-
-  it("같은 핸들을 다시 클릭하면 메뉴를 닫는다", () => {
-    openBlockMenu();
-
-    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
-
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
-
-  it("종류 변경 항목을 클릭하면 setBlockType을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
-    const { controller, editable } = openBlockMenu();
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "Heading 2" }));
-
-    expect(controller.commands.setBlockType).toHaveBeenCalledWith("block-1", {
-      type: "heading",
-      level: 2,
-    });
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(document.activeElement).toBe(editable);
-  });
-
-  it("복제 항목을 클릭하면 duplicateBlock을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
-    const { controller, editable } = openBlockMenu();
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
-
-    expect(controller.commands.duplicateBlock).toHaveBeenCalledWith("block-1");
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(document.activeElement).toBe(editable);
-  });
-
-  it("삭제 항목을 클릭하면 deleteBlock을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {
-    const { controller, editable } = openBlockMenu();
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-
-    expect(controller.commands.deleteBlock).toHaveBeenCalledWith("block-1");
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(document.activeElement).toBe(editable);
-  });
-
-  it("Escape를 누르면 메뉴를 닫는다", () => {
-    openBlockMenu();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
-
-  it("메뉴 바깥을 클릭하면 메뉴를 닫는다", () => {
-    openBlockMenu();
-
-    fireEvent.pointerDown(document.body);
-
-    expect(screen.queryByRole("menu")).toBeNull();
   });
 });
