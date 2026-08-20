@@ -185,6 +185,26 @@ describe("parseClipboardTable", () => {
     });
   });
 
+  // 표를 찾아 그 내용을 보고 거절했다면(CLIPBOARD_TABLE_INVALID) 함께 온
+  // text/plain 짝이 우연히 표와 같은 탭 구조를 가져도 TSV로 다시 새서 이
+  // 거절을 무력화하면 안 된다 — 혼합 콘텐츠 자체는 더 이상 거절 사유가
+  // 아니므로(Issue #71), 여전히 유효한 거절 사유(셀 한도 초과)로 이 보호를
+  // 검증한다.
+  it("표 파싱이 실패하면 표와 같은 탭 구조의 text/plain으로도 TSV 폴백하지 않는다", () => {
+    const cells = Array.from({ length: 101 }, () => "<td>x</td>").join("");
+    const rows = Array.from({ length: 101 }, () => `<tr>${cells}</tr>`).join(
+      "",
+    );
+    const result = parseClipboardTable({
+      html: `<table><tbody>${rows}</tbody></table>`,
+      text: "a\tb\nc\td",
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "CLIPBOARD_TABLE_INVALID" },
+    });
+  });
+
   it("정규 형식이 아닌 data-be-text-color는 무시한다", () => {
     const html =
       '<table><tbody><tr><td data-be-text-color="red">1</td></tr></tbody></table>';
