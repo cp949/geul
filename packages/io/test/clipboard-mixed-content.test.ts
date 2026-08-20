@@ -1,7 +1,8 @@
 /**
- * 클립보드 HTML이 표와 다른 콘텐츠를 함께 담았을 때의 판정을 검증한다
- * (spec §4.1, Issue #37). 표가 fragment의 유일한 실질 콘텐츠일 때만 표로
- * 붙이고, 그 판정이 걸리면 TSV 폴백으로 새지 않는다는 계약을 다룬다.
+ * 클립보드 HTML이 표와 다른 콘텐츠를 함께 담았을 때 `parseClipboardTable`이
+ * 문단과 표를 순서대로 블록 시퀀스에 담는지 검증한다(spec §4.1, Issue #71).
+ * 표를 못 찾으면 여전히 TSV/NOT_TABULAR로 흘려보낸다는 계약과, 레이아웃 표
+ * 래퍼·자기 복사가 만드는 HTML 모양도 함께 다룬다.
  * `parseClipboardTable`의 나머지 케이스는 `clipboard-table-parser.test.ts`가
  * 다룬다(파일 분할은 Issue #68).
  */
@@ -10,12 +11,11 @@ import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js"
 
 const TABLE = "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>";
 
-describe("parseClipboardTable 혼합 콘텐츠 판정", () => {
-  // <title>은 소스 문서의 head 메타데이터지 사용자가 선택한 본문이 아니다.
-  // sanitize가 <title>을 unwrap하면 그 텍스트가 fragment 최상위로 끌려
-  // 올라와 "표 밖 실질 텍스트"로 오인되고, 그러면 표 붙여넣기가 통째로
-  // 막힌다 — sawTable 때문에 TSV 짝으로도 폴백하지 못한다.
-  it("head의 title 텍스트는 표 밖 실질 콘텐츠로 치지 않는다", () => {
+describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
+  // <title>은 소스 문서의 head 메타데이터지 사용자가 선택한 본문이 아니다 —
+  // clipboardStrippedTagNames가 태그와 텍스트를 통째로 제거하므로 title
+  // 텍스트는 문단으로도 나타나지 않는다.
+  it("head의 title 텍스트는 문단으로 옮기지 않는다", () => {
     const result = parseClipboardTable({
       html: `<html><head><title>Sheet1</title></head><body>${TABLE}</body></html>`,
       text: "a\tb",
@@ -23,29 +23,36 @@ describe("parseClipboardTable 혼합 콘텐츠 판정", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.columnCount).toBe(2);
-    expect(result.value.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0]?.type).toBe("table");
   });
 
-  it("title이 있어도 표 밖 문단이 있으면 NOT_TABULAR로 흘려보낸다", () => {
+  it("title이 있어도 표 밖 문단은 문단 블록으로 보존한다", () => {
     const result = parseClipboardTable({
       html: `<html><head><title>Sheet1</title></head><body><p>intro</p>${TABLE}</body></html>`,
       text: "intro\na\tb",
     });
 
-    expect(result).toEqual({ ok: false, error: { code: "NOT_TABULAR" } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "intro" }],
+    });
+    expect(result.value[1]?.type).toBe("table");
   });
 
-  // Slack/Notion/Docs는 블록 경계에 제로폭 문자를 흔히 심는다. 눈에 보이지
-  // 않는 한 글자 때문에 표 붙여넣기가 막히면 사용자는 원인도 모르고
-  // 되돌릴 방법도 없다 — sawTable 때문에 TSV 짝으로도 폴백하지 못한다.
-  it("표 밖 제로폭 문자는 실질 콘텐츠로 치지 않는다", () => {
+  // Slack/Notion/Docs는 블록 경계에 제로폭 문자를 흔히 심는다 — 실질
+  // 콘텐츠가 아니므로 빈 문단 블록을 만들지 않는다(눈에 보이지 않는 빈
+  // 문단이 편집기에 남으면 사용자가 원인도 모르고 지울 수도 없다).
+  it("표 밖 제로폭 문자는 문단 블록을 만들지 않는다", () => {
     for (const invisible of [
-      "\u200B",
-      "\u200D",
-      "\u2060",
-      "\u00AD",
-      "\uFEFF",
+      "​",
+      "‍",
+      "⁠",
+      "­",
+      "﻿",
     ]) {
       const result = parseClipboardTable({
         html: `<p>${invisible}</p>${TABLE}`,
@@ -53,12 +60,15 @@ describe("parseClipboardTable 혼합 콘텐츠 판정", () => {
       });
 
       expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.type).toBe("table");
     }
   });
 
   // Outlook/Gmail HTML 메일은 여백용 빈 <table>을 중첩해 심는다. findDataTable이
   // 가장 안쪽 표를 고르므로, 빈 표를 데이터 표로 집으면 같은 행에 있는 진짜
-  // 셀들이 "표 밖 텍스트"가 돼 클립보드 전체가 거절된다.
+  // 셀들이 문단으로 흩어져 표 구조 자체가 사라진다.
   it("셀 없는 중첩 표는 건너뛰고 바깥 데이터 표를 고른다", () => {
     const result = parseClipboardTable({
       html:
@@ -69,8 +79,12 @@ describe("parseClipboardTable 혼합 콘텐츠 판정", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.columnCount).toBe(3);
-    expect(result.value.rows[0]?.cells[1]?.content).toEqual([{ text: "a" }]);
+    expect(result.value).toHaveLength(1);
+    const [block] = result.value;
+    expect(block?.type).toBe("table");
+    if (block?.type !== "table") return;
+    expect(block.data.columnCount).toBe(3);
+    expect(block.data.rows[0]?.cells[1]?.content).toEqual([{ text: "a" }]);
   });
 
   // 셀도 <col>도 없는 빈 표는 데이터 표가 아니다 — 표 후보로 쳐서 TSV 짝을
@@ -83,7 +97,65 @@ describe("parseClipboardTable 혼합 콘텐츠 판정", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.columnCount).toBe(2);
-    expect(result.value.rows).toHaveLength(2);
+    expect(result.value).toHaveLength(1);
+    const [block] = result.value;
+    expect(block?.type).toBe("table");
+    if (block?.type !== "table") return;
+    expect(block.data.columnCount).toBe(2);
+    expect(block.data.rows).toHaveLength(2);
+  });
+
+  // 완료 기준(Issue #71): 레이아웃 표 래퍼 안 데이터 표가 형제 셀 텍스트와
+  // 함께 보존된다. Gmail 서명이 전형적으로 이 모양이다 — role=presentation
+  // 래퍼의 한 셀에 데이터 표, 다른 셀에 서명 문구.
+  it("레이아웃 표 래퍼 안 데이터 표가 형제 셀 텍스트와 함께 보존된다", () => {
+    const html =
+      '<table role="presentation"><tbody><tr>' +
+      `<td>${TABLE}</td>` +
+      "<td>signature text</td>" +
+      "</tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value[0]?.type).toBe("table");
+    if (result.value[0]?.type !== "table") return;
+    expect(result.value[0].data.rows[0]?.cells[0]?.content).toEqual([
+      { text: "a" },
+    ]);
+    expect(result.value[1]).toEqual({
+      type: "paragraph",
+      content: [{ text: "signature text" }],
+    });
+  });
+
+  // 완료 기준(Issue #71): 자기 복사 왕복. 우리 에디터에서 문단+표+문단을
+  // 선택해 복사하면 ProseMirror 직렬화가 <div data-pm-slice="1 1 []">로
+  // 감싼다(#37 조사로 확인된 실제 모양) — div는 clipboardSanitizeSchema의
+  // 허용 태그가 아니므로 sanitize가 unwrap해 자식을 트리 위로 끌어올린다.
+  // id 동일성은 이 붙여넣기 파이프라인의 계약이 아니므로(새 대상에 항상 새
+  // id를 배정) 구조 보존만 검증한다.
+  it("자기 복사가 만드는 div data-pm-slice 래퍼 안에서도 문단과 표를 순서대로 보존한다", () => {
+    const html =
+      '<div data-pm-slice="1 1 []">' +
+      "<p>intro</p>" +
+      TABLE +
+      "<p>outro</p>" +
+      "</div>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(3);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "intro" }],
+    });
+    expect(result.value[1]?.type).toBe("table");
+    expect(result.value[2]).toEqual({
+      type: "paragraph",
+      content: [{ text: "outro" }],
+    });
   });
 });
