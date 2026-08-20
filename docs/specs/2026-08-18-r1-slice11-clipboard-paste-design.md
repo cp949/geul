@@ -84,6 +84,8 @@ export const parseClipboardTable = (input: {
 
 정정(2026-08-21 리뷰): 그렇다고 폴백이 **무손실은 아니다**. ProseMirror의 `blockTags`에는 `table`은 있지만 `tr`/`td`/`th`/`tbody`는 없어서, 표의 모든 셀이 구분자 없이 하나의 인라인 런으로 이어 붙는다. 실제 브라우저에서 확인: `<p>intro</p><table>12|34 / 56|78</table><p>outro</p>`를 붙이면 문서에 `intro` / `12345678` / `outro` 세 문단이 생긴다 — 셀 경계뿐 아니라 행 경계도 사라지고, 숫자 셀에서는 조용한 값 손상이 된다. 즉 이 정책은 "표 밖 문단 유실"과 "표 구조·셀 경계 유실"을 맞바꾼 것이지 손실을 없앤 것이 아니다. e2e(`e2e/table-paste.spec.ts`)는 `toContainText`가 아니라 병합된 정확한 문자열을 assert해 이 동작을 고정한다 — `toContainText("cellA")`는 `cellAcellB`에도 통과해 병합을 감춘다.
 
+구현 반영(무손실 시퀀스 계약, Issue #71): 위 정정이 지적한 손실은 `parseClipboardTable`의 반환 타입을 바꿔 해소한다. 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고, 표 앞뒤 문단을 문단 블록으로 옮겨 담아 `ClipboardContent`(`ClipboardContentBlock[]`, `packages/io/src/clipboard/clipboard-content.ts`) 시퀀스로 반환한다 — `{type:"paragraph"; content: InlineContent} | {type:"table"; data: TabularData}`. 표를 찾지 못한 HTML과 TSV 경로는 `[{type:"table", data}]`(1개짜리 시퀀스)로 반환해 계약을 하나로 통일한다. `core`의 `pasteClipboardContent`(`table-commands.ts`)가 이 시퀀스를 순서대로 조립해 한 트랜잭션으로 삽입한다 — 표는 `buildPasteTableSkeleton`+`pasteInto`로 안정 id를 배정하고, 문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다(ADR-0001, PIT-0003). 단일 표 시퀀스는 `pasteTabularData`에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을 바꾸지 않는다 — 새 경로는 문단이 섞인 시퀀스에서만 탄다. 표 안(커서가 이미 표 셀)에서 문단이 섞인 시퀀스를 받으면 표 부분만 붙이고 문단은 버린다 — 표 셀은 블록 자식을 가질 수 없어(model `TableCell.content: InlineContent`) 문단을 끼울 자리가 없다는 이 진입점 특유의 한계다(완료 기준은 표 밖 붙여넣기만 요구한다). 여러 개의 독립된 데이터 표가 한 클립보드에 섞인 경우는 범위 밖으로 남는다 — `findDataTable`은 여전히 표 하나만 고르고, 고르지 않은 다른 `<table>`은 레이아웃 래퍼와 동일하게 취급돼 그 안 텍스트가 셀 경계 없이 인라인 콘텐츠로 흡수된다.
+
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
 `io/html/import-html.ts`의 `parseTable`이 쓰는 hast 트리 순회 로직 중 id 배정과 무관한 부분(`layoutRows`, `inferredColumnCount`, `columnElements`, `tableRows`, `layoutColumnSpan`, `childElements`)을 `packages/io/src/html/table-layout.ts`(신규)로 뽑아 두 소비자가 공유한다:
@@ -206,6 +208,8 @@ addProseMirrorPlugins() {
 구현 반영(설계 시 pseudocode 수정): 기본 붙여넣기로 폴백하는 경우는 `NOT_TABULAR` 하나뿐이다. 클립보드가 표로 인식된 뒤에는 파서 거절(`CLIPBOARD_TABLE_INVALID`)이든 명령 거절(`PASTE_MERGE_CONFLICT`, `CELL_LIMIT_EXCEEDED`, `PASTE_TARGET_NOT_FOUND` 등)이든 항상 `true`를 반환해 이벤트만 소비한다. 폴백하면 TSV는 ProseMirror가 `preserveWhitespace`로 파싱해 탭이 그대로 문서에 들어가고(모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다 — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지 않으므로 문서·selection·stored mark는 그대로 보존된다(PIT-0003).
 
 구현 반영(혼합 클립보드 폴백, Issue #37): §4.1의 판정이 `NOT_TABULAR`를 반환하는 경우에는 표 앞뒤에 문단 등 실질 콘텐츠가 섞인 클립보드도 포함된다. 표 세 노드가 노드 레벨 `parseHTML`을 정의하지 않으므로(§4.1 구현 반영, `table-extension.ts`) Tiptap 기본 붙여넣기는 표 구조를 표 노드로 만들지 않고 셀 텍스트만 평문으로 흘려보낸다 — 문단은 보존되고 표 구조(행/열 경계)만 뭉개진다. 슬라이스 11 이전 기본 붙여넣기와 동일한 폴백 동작이다.
+
+구현 반영(무손실 붙여넣기로 대체, Issue #71): 위 폴백 경로(문단은 보존하고 표 구조는 뭉개짐)는 표를 포함한 혼합 클립보드에는 더 이상 적용되지 않는다 — §4.1 구현 반영대로 `parseClipboardTable`이 표를 찾으면 항상 `ClipboardContent` 시퀀스로 성공을 반환하므로 `handlePaste`는 이벤트를 소비하고 `pasteClipboardContent`로 문단과 표를 모두 삽입한다. `NOT_TABULAR` 폴백은 표 후보 자체가 없는 클립보드(탭 없는 일반 텍스트 등)에만 남는다 — 그 경우 Tiptap 기본 붙여넣기는 원래도 무손실이었다(표 세 노드가 관련되지 않는다).
 
 ## 8. 오류 계약 확장
 

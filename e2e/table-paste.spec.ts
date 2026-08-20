@@ -1,7 +1,8 @@
 /**
  * 클립보드 붙여넣기로 표가 만들어지는 실제 브라우저 동작을 검증한다.
  * Google Sheets/Excel HTML(서식 포함), TSV, 탭 없는 일반 텍스트, 표와
- * 문단이 섞인 혼합 HTML(Issue #37)을 함께 다룬다.
+ * 문단이 섞인 혼합 HTML(Issue #71, 문단·표 구조 모두 무손실 보존)을
+ * 함께 다룬다.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -201,7 +202,7 @@ test("탭 없는 일반 텍스트 붙여넣기는 표를 만들지 않는다", a
   await expect(editable.locator("p").first()).toContainText("hello world");
 });
 
-test("표 앞뒤에 문단이 섞인 HTML은 문단을 보존하고 셀 경계를 잃는다", async ({
+test("표 앞뒤에 문단이 섞인 HTML은 문단과 표 구조를 모두 보존한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -213,25 +214,36 @@ test("표 앞뒤에 문단이 섞인 HTML은 문단을 보존하고 셀 경계�
     "<tr><td>cellC</td><td>cellD</td></tr></tbody></table>" +
     "<p>outro</p>";
 
-  // 실제 붙여넣기 이벤트는 항상 text/html과 text/plain을 함께 담는다 — 이
-  // 짝이 있어야 "html에서 표를 찾아 거절했으면 TSV로 폴백하지 않는다"까지
-  // 실제 브라우저에서 확인된다(Issue #37).
+  // 실제 붙여넣기 이벤트는 항상 text/html과 text/plain을 함께 담는다.
   await editable.evaluate(dispatchPaste, {
     html: mixedHtml,
     text: "intro\ncellA\tcellB\ncellC\tcellD\noutro",
   });
 
-  // 표가 fragment의 유일한 실질 콘텐츠가 아니므로 가로채지 않는다(spec
-  // §4.1, Issue #37) — NOT_TABULAR로 Tiptap 기본 붙여넣기에 넘긴다.
-  //
-  // 폴백 결과를 정확한 문자열로 고정한다: ProseMirror의 blockTags에는
-  // table은 있지만 tr/td는 없어서, 표 세 노드가 parseHTML을 정의하지 않는
-  // 지금 모든 셀이 구분자 없이 한 문단으로 이어 붙는다(cellAcellBcellCcellD).
-  // toContainText("cellA")만 걸면 이 병합이 그대로 통과하므로 셀·행 경계
-  // 소실이 테스트에 잡히지 않는다. 이 붙여넣기는 무손실이 아니다.
-  await expect(editable.locator("table")).toHaveCount(0);
-  const blocks = await editable.evaluate((node) =>
-    Array.from(node.children).map((child) => child.textContent),
+  // 표가 실제 <table> 노드로 살아남는다 — 셀·행 경계가 더 이상 하나의
+  // 인라인 런으로 뭉개지지 않는다(Issue #71, spec §4.1 구현 반영).
+  const table = editable.locator("table");
+  await expect(table).toHaveCount(1);
+  const cells = table.locator("td");
+  await expect(cells).toHaveCount(4);
+  await expect(cells.nth(0)).toHaveText("cellA");
+  await expect(cells.nth(1)).toHaveText("cellB");
+  await expect(cells.nth(2)).toHaveText("cellC");
+  await expect(cells.nth(3)).toHaveText("cellD");
+
+  // 표 앞뒤 문단도 그대로 보존된다. 표 밖 붙여넣기는 커서가 있던 블록을
+  // 지우지 않고 그 뒤에 새 블록을 잇는 기존 계약이다(table-commands.test.ts
+  // "블록 전체를 선택하고 호출하면 내용을 지우고 빈 문단 뒤에 표를
+  // 만든다"와 동일) — 그래서 데모가 기본으로 갖는 빈 문단이 맨 앞에 그대로
+  // 남고, 그 뒤로 문단·표·문단이 이어진다.
+  const blockTags = await editable.evaluate((node) =>
+    Array.from(node.children).map((child) => child.tagName.toLowerCase()),
   );
-  expect(blocks).toEqual(["intro", "cellAcellBcellCcellD", "outro"]);
+  expect(blockTags).toEqual(["p", "p", "table", "p"]);
+  await expect(editable.locator("p").nth(1)).toHaveText("intro");
+  await expect(editable.locator("p").last()).toHaveText("outro");
+
+  // 붙여넣기 전체가 undo 1회로 복원된다(문단+표 삽입이 한 트랜잭션).
+  await page.keyboard.press("Control+z");
+  await expect(editable.locator("table")).toHaveCount(0);
 });
