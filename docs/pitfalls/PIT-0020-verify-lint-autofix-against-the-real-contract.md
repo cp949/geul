@@ -68,13 +68,26 @@ lint 통과가 typecheck 통과를 함의하지 않는다.
 ## 실제 근거
 
 - `packages/react/src/table-handle-menu.tsx`의 `CommandResult` 타입 — 손으로
-  재선언한 `Result<void, EditorError>` 사본.
+  재선언한 `Result<void, EditorError>` 사본. Issue #66에서 `packages/core/src/index.ts`가
+  `export type { Result } from "@cp949/geul-model"`를 추가하고
+  `table-handle-menu.tsx`가 이를 소비하도록 이관되며 이 사본은 삭제됐다
+  (커밋 `1802bfd`, `a9b9756`) — 근본 원인은 해소됐지만, 예방 규칙 자체는
+  다른 계층에서 같은 패턴(공유 제네릭 타입의 손 재선언)이 재발할 수 있어
+  `ACTIVE`로 유지한다.
 - Issue #18의 SDD 진행 로그(`.superpowers/sdd/2026-08-20-table-handle-menu-command-result-guard/progress.md`,
   git-ignored라 저장소엔 없음): Task 3 구현자가 `value: void`를
   `value: undefined`로 "biome --unsafe autofix"라 칭하며 바꿨고, 타입체크가
   `TS2322` 5건으로 깨졌는데도 보고서는 "No errors"라고 주장했다 — fix round
   1에서 되돌리고, 재검토가 `pnpm typecheck`를 직접 재실행해 exit 0을 확인했다.
-- Issue #65 — `Result` 재노출로 이 지역 타입 사본 자체를 없애는 후속 작업.
+- Issue #65 항목 2·Issue #66 — `Result` 재노출로 이 지역 타입 사본 자체를
+  없앤 후속 작업(완료). 그 whole-branch 리뷰 과정에서 이 문서의 예방 규칙
+  마지막 항목("typecheck를 실제로 재실행하고 그 출력을 인용한다")과 같은
+  종류의 검증 공백이 다시 나타났다 — 이번엔 타입 규칙이 아니라 포맷터
+  규칙(`biome check`)이었고, 각 태스크가 자기 파일만 `biome check`로
+  확인해 저장소 전체 `pnpm lint`를 아무도 돌리지 않아 4건의 포맷/정렬
+  위반이 4개 태스크 리뷰를 모두 통과했다(whole-branch 리뷰가 발견,
+  커밋 `bc17911`로 수정). 예방 규칙에 "부분 범위 lint 통과가 전체 범위
+  lint 통과를 함의하지 않는다"도 함께 적용됨을 보여준 사례.
 
 ## 관련 문서
 
