@@ -1,0 +1,131 @@
+diff --git a/dev/lib/edit-map.js b/dev/lib/edit-map.js
+index 983d0556e2713dc92982faa6a09b1093ef4d02db..6c3c9f5ec0d3ddc5b0ace71da150cfcc09fa7741 100644
+--- a/dev/lib/edit-map.js
++++ b/dev/lib/edit-map.js
+@@ -34,6 +34,14 @@ export class EditMap {
+      * @type {Array<Change>}
+      */
+     this.map = []
++
++    /**
++     * `at` -> index in `this.map`. O(1) lookup for `addImplementation`
++     * instead of a linear scan (cp949/geul#26).
++     *
++     * @type {Map<number, number>}
++     */
++    this.indexByAt = new Map()
+   }
+ 
+   /**
+@@ -124,6 +132,7 @@ export class EditMap {
+ 
+     // Truncate everything.
+     this.map.length = 0
++    this.indexByAt.clear()
+   }
+ }
+ 
+@@ -137,31 +146,21 @@ export class EditMap {
+  * @returns {undefined}
+  */
+ function addImplementation(editMap, at, remove, add) {
+-  let index = 0
+-
+   /* c8 ignore next 3 -- `resolve` is never called without tables, so without edits. */
+   if (remove === 0 && add.length === 0) {
+     return
+   }
+ 
+-  while (index < editMap.map.length) {
+-    if (editMap.map[index][0] === at) {
+-      editMap.map[index][1] += remove
++  const existingIndex = editMap.indexByAt.get(at)
+ 
+-      // To do: before not used by tables, use when moving to micromark.
+-      // if (before) {
+-      //   add.push(...editMap.map[index][2])
+-      //   editMap.map[index][2] = add
+-      // } else {
+-      editMap.map[index][2].push(...add)
+-      // }
+-
+-      return
+-    }
+-
+-    index += 1
++  if (existingIndex !== undefined) {
++    const entry = editMap.map[existingIndex]
++    entry[1] += remove
++    entry[2].push(...add)
++    return
+   }
+ 
++  editMap.indexByAt.set(at, editMap.map.length)
+   editMap.map.push([at, remove, add])
+ }
+ 
+diff --git a/lib/edit-map.js b/lib/edit-map.js
+index ecc8bce784d29a48e0869be1c4a2dd5ccf1d3d01..313eaac1735137fa3821b82505c94fe987754003 100644
+--- a/lib/edit-map.js
++++ b/lib/edit-map.js
+@@ -34,6 +34,14 @@ export class EditMap {
+      * @type {Array<Change>}
+      */
+     this.map = [];
++
++    /**
++     * `at` -> index in `this.map`. O(1) lookup for `addImplementation`
++     * instead of a linear scan (cp949/geul#26).
++     *
++     * @type {Map<number, number>}
++     */
++    this.indexByAt = new Map();
+   }
+ 
+   /**
+@@ -117,6 +125,7 @@ export class EditMap {
+ 
+     // Truncate everything.
+     this.map.length = 0;
++    this.indexByAt.clear();
+   }
+ }
+ 
+@@ -130,28 +139,21 @@ export class EditMap {
+  * @returns {undefined}
+  */
+ function addImplementation(editMap, at, remove, add) {
+-  let index = 0;
+-
+   /* c8 ignore next 3 -- `resolve` is never called without tables, so without edits. */
+   if (remove === 0 && add.length === 0) {
+     return;
+   }
+-  while (index < editMap.map.length) {
+-    if (editMap.map[index][0] === at) {
+-      editMap.map[index][1] += remove;
+-
+-      // To do: before not used by tables, use when moving to micromark.
+-      // if (before) {
+-      //   add.push(...editMap.map[index][2])
+-      //   editMap.map[index][2] = add
+-      // } else {
+-      editMap.map[index][2].push(...add);
+-      // }
+ 
+-      return;
+-    }
+-    index += 1;
++  const existingIndex = editMap.indexByAt.get(at);
++
++  if (existingIndex !== undefined) {
++    const entry = editMap.map[existingIndex];
++    entry[1] += remove;
++    entry[2].push(...add);
++    return;
+   }
++
++  editMap.indexByAt.set(at, editMap.map.length);
+   editMap.map.push([at, remove, add]);
+ }
+ 
