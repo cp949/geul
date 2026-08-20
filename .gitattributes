@@ -1,0 +1,7 @@
+# pnpm patch 산출물은 unified diff다. 빈 줄의 context 라인은 공백 한 칸으로
+# 끝나야 하므로 git의 trailing-whitespace 검사에서 제외한다 - 그 공백을 지우면
+# 패치가 적용되지 않는다(AGENTS.md의 `git diff --check` 게이트).
+#
+# CRLF로 체크아웃되면 pnpm이 계산한 patch_hash와 어긋나 install이
+# ERR_PNPM_PATCH_FAILED로 깨지므로 LF로 고정한다(ADR 0006).
+patches/*.patch -whitespace eol=lf
