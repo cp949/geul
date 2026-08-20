@@ -4,10 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
-import {
-  FALLBACK_TABLE_COMMAND_ERROR_MESSAGE,
-  TABLE_COMMAND_ERROR_MESSAGES,
-} from "./table-command-error-messages.js";
+import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -133,6 +130,12 @@ export const TableSelectionToolbar = () => {
       if (bounds === null) return closeAll();
 
       const selectionKey = `${selection.tableBlockId} ${selection.cellIds.join(" ")}`;
+      // 실패 메시지는 그때 선택돼 있던 셀에 대한 것이다 — 대상이 바뀌면
+      // 다른 셀을 가리키는 낡은 메시지가 되므로 지운다(TableHandleMenu가
+      // table-handles.tsx의 key로 리마운트해 얻는 초기화와 같은 효과다).
+      // 실패한 명령은 트랜잭션을 dispatch하지 않아 selection이 그대로이므로
+      // (editor-controller.ts의 runDocumentCommand) 방금 띄운 메시지가 이
+      // 분기에 걸려 곧바로 사라지지는 않는다.
       if (selectionKeyRef.current !== selectionKey) {
         selectionKeyRef.current = selectionKey;
         setFormatMenuOpen(false);
@@ -231,15 +234,22 @@ export const TableSelectionToolbar = () => {
           icon={formatIcon}
           label={formatLabel}
           onClick={() => {
-            if (formatMenuOpen) closeFormatMenu();
-            else setFormatMenuOpen(true);
+            if (formatMenuOpen) {
+              closeFormatMenu();
+              return;
+            }
+            // 서식 메뉴도 자기 role="alert"를 갖는다 — 툴바의 병합·분할
+            // 실패 메시지를 남긴 채로 열면 live region 두 개가 동시에
+            // 존재해 스크린리더가 둘 다 읽는다. 다른 액션으로 옮겼다는
+            // 뜻이므로 툴바 메시지를 지우고 연다.
+            clearActionError();
+            setFormatMenuOpen(true);
           }}
           onMouseDown={(event) => event.preventDefault()}
         />
         {actionError !== null && (
           <span className={actionErrorClassName} role="alert">
-            {TABLE_COMMAND_ERROR_MESSAGES[actionError.code] ??
-              FALLBACK_TABLE_COMMAND_ERROR_MESSAGE}
+            {tableCommandErrorMessage(actionError)}
           </span>
         )}
       </div>

@@ -464,3 +464,54 @@ describe("병합·분할 명령 실패 시 피드백", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
+  it("병합 실패 메시지가 뜬 채로 Cell formatting 메뉴를 열면 툴바 메시지를 지운다", () => {
+    const controller = mergeableSelectionController({
+      mergeTableCells: () => ({
+        ok: false,
+        error: { code: "NOT_RECTANGULAR" },
+      }),
+    });
+    const { cell1, cell2 } = renderTable(controller);
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Selection isn't rectangular",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+
+    expect(screen.getByRole("menu", { name: formatLabel })).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("서식 메뉴 실패 메시지가 뜬 채로 선택 대상이 바뀌면 메뉴와 메시지가 사라진다", () => {
+    const controller = mergeableSelectionController({
+      setTableCellTextColor: () => ({
+        ok: false,
+        error: { code: "CELL_NOT_FOUND", cellId: "cell-1" },
+      }),
+    });
+    const { cell1, cell2 } = renderTable(controller);
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+    triggerSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: formatLabel }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
+    expect(screen.getByRole("alert").textContent).toBe("Cell no longer exists");
+
+    controller.getTableCellSelection.mockImplementation(() => ({
+      tableBlockId: "table-1",
+      cellIds: ["cell-2"],
+      mergeable: false,
+      splitCellId: null,
+    }));
+    triggerSelectionChange();
+
+    expect(screen.queryByRole("menu", { name: formatLabel })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
