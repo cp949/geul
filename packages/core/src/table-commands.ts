@@ -525,9 +525,6 @@ const cellIdAtAnchor = (
   return projected.value.cellAt(anchor.row, anchor.column)?.cellId ?? null;
 };
 
-// 표 안이면 selectedRect의 좌상단을 anchor로 삼아 pasteInto로 덮어쓰고,
-// 표 밖이면 현재 최상위 블록 뒤에 pasteInto로 채운 새 표를 끼운다. 두
-// 경로 모두 격자 레벨 연산(TableGrid.pasteInto)을 공유한다.
 // pasteTabularData/pasteClipboardContent 공용 검증이다 — 둘 다 공개 API라
 // 클립보드 파서를 거치지 않은 TabularData도 직접 들어온다. 뮤테이션 전에
 // 구조(직사각형 커버리지)와 셀 인라인 텍스트를 모두 검증해야 잘못된
@@ -591,6 +588,9 @@ export const pasteTabularData = (
   const validated = validateTabularDataForPaste(data);
   if (!validated.ok) return validated;
 
+  // 표 안이면 selectedRect의 좌상단을 anchor로 삼아 pasteInto로 덮어쓰고,
+  // 표 밖이면 현재 최상위 블록 뒤에 pasteInto로 채운 새 표를 끼운다. 두
+  // 경로 모두 격자 레벨 연산(TableGrid.pasteInto)을 공유한다.
   if (isInTable(state)) {
     const rect = selectedRect(state);
     const tableBlockId = rect.table.attrs.blockId;

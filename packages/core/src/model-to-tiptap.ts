@@ -3,6 +3,7 @@ import {
   type InlineContent,
   isCanonicalTextMarks,
   isSupportedLinkHref,
+  isValidInlineText,
   type Result,
   type TableBlock,
   type TextMark,
@@ -45,6 +46,9 @@ export const inlineContentViolation = (
   for (const item of content) {
     if (item.text.length === 0) {
       return "contains an empty text run";
+    }
+    if (!isValidInlineText(item.text)) {
+      return "contains invalid inline text (control characters, DEL, or an unpaired surrogate)";
     }
     if (item.marks?.length === 0) {
       return "contains an empty mark set";

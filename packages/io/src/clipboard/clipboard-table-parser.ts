@@ -57,8 +57,8 @@ const isLayoutTable = (table: HtmlElementNode): boolean => {
 
 // 셀이 하나도 없는 표는 데이터 표가 아니다. Outlook/Gmail HTML 메일은 여백용
 // 빈 <table>을 중첩해 심는데, findDataTable이 가장 안쪽 표를 고르므로 이걸
-// 데이터 표로 집으면 같은 행에 있는 진짜 셀들이 "표 밖 텍스트"가 돼
-// hasContentOutsideTable이 클립보드 전체를 거절한다.
+// 데이터 표로 집으면 같은 행에 있는 진짜 셀들이 blockSequenceFromNodes에서
+// 표 없는 순수 인라인 콘텐츠로 문단 블록이 된다 — 표 구조 자체가 사라진다.
 const hasDataCells = (table: HtmlElementNode): boolean =>
   tableRows(table).some((row) =>
     childElements(row.element).some(
@@ -96,6 +96,23 @@ const INSUBSTANTIAL_TEXT = /[\s\u00AD\u200B-\u200D\u2060\uFEFF]/gu;
 const hasSubstantialText = (value: string): boolean =>
   value.replace(INSUBSTANTIAL_TEXT, "").length > 0;
 
+// 대상 표가 이 노드들 안 어딘가에 있는지 재귀로 확인한다. walk()가 표를
+// 찾기 위해 더 파고들어야 하는지(descend), 아니면 표 없는 순수 인라인/
+// 구조 콘텐츠라 통째로 pending에 밀어 넣어도 되는지(inlineContentFromNodes가
+// 알아서 재귀하며 마크를 계산한다) 판단하는 데 쓴다.
+const containsTable = (
+  nodes: readonly HtmlNode[],
+  table: HtmlElementNode,
+): boolean => {
+  for (const node of nodes) {
+    if (node === table) return true;
+    if (node.type === "element" && containsTable(node.children, table)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 // 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고 문단 블록으로 옮겨 담는다
 // — 표 앞뒤 문단은 문단으로, 표는 표 노드로, 문서 순서를 지켜 한 시퀀스로
 // 만든다(spec §4.1, Issue #71). 이 판정은 sanitize를 이미 거친 트리를
@@ -113,6 +130,11 @@ const hasSubstantialText = (value: string): boolean =>
 // 표가 아닌 다른 <table>(두 번째 데이터 표 등)도 같은 방식으로 재귀해
 // 텍스트만 흡수한다 — 여러 데이터 표를 한 시퀀스에 각각 표로 담는 것은
 // 범위 밖이다(findDataTable도 표 하나만 고른다, TBL-012).
+//
+// 문단 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
+// collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
+// 제어문자/DEL/짝 없는 surrogate 정제) 없으면 model의 isValidInlineText
+// 검사가 거절해 readEditorDocument에서 throw된다(editor 영구 desync).
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
   table: HtmlElementNode,
@@ -123,7 +145,8 @@ const blockSequenceFromNodes = (
 
   const flush = (): void => {
     if (pending.length === 0) return;
-    const content = inlineContentFromNodes(pending);
+    collapseHtmlWhitespace(pending);
+    const content = normalizeCellContent(inlineContentFromNodes(pending));
     const text = content.map((item) => item.text).join("");
     if (hasSubstantialText(text)) {
       blocks.push({ type: "paragraph", content });
@@ -155,7 +178,11 @@ const blockSequenceFromNodes = (
         flush();
         continue;
       }
-      walk(node.children);
+      if (containsTable(node.children, table)) {
+        walk(node.children);
+        continue;
+      }
+      pending.push(node);
     }
   };
 

@@ -47,7 +47,13 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // 콘텐츠가 아니므로 빈 문단 블록을 만들지 않는다(눈에 보이지 않는 빈
   // 문단이 편집기에 남으면 사용자가 원인도 모르고 지울 수도 없다).
   it("표 밖 제로폭 문자는 문단 블록을 만들지 않는다", () => {
-    for (const invisible of ["​", "‍", "⁠", "­", "﻿"]) {
+    for (const invisible of [
+      "\u200B",
+      "\u200D",
+      "\u2060",
+      "\u00AD",
+      "\uFEFF",
+    ]) {
       const result = parseClipboardTable({
         html: `<p>${invisible}</p>${TABLE}`,
         text: "a\tb",
@@ -150,6 +156,39 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.value[2]).toEqual({
       type: "paragraph",
       content: [{ text: "outro" }],
+    });
+  });
+
+  // Finding 1 회귀: 표 밖 문단의 텍스트도 셀과 같은 정규화를 거쳐야 한다.
+  // collapseHtmlWhitespace와 normalizeCellContent가 없으면 TAB 등 C0 제어문자가
+  // model을 통과해 readEditorDocument에서 throw(editor 영구 desync).
+  it("표 밖 문단도 셀과 같은 공백·제어문자 정규화를 거친다", () => {
+    const html =
+      "<p>\n\tintro\n\t</p>" +
+      "<table><tbody><tr><td>a</td></tr></tbody></table>";
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "intro" }],
+    });
+  });
+
+  // Finding 1b 회귀: 표 밖 인라인 서식(<p> 없이)도 마크를 보존해야 한다.
+  // 이전에는 containsTable 판정이 없어서 <strong> 등이 recursed-into되고
+  // 마크가 손실됐다. 이제는 <strong>이 표를 담지 않으면 whole node가 pending으로
+  // 가고 inlineContentFromNodes가 마크를 계산한다.
+  it("표 앞 인라인 서식(문단 태그 밖)도 마크를 보존한다", () => {
+    const html =
+      "<strong>bold</strong>" +
+      "<table><tbody><tr><td>a</td></tr></tbody></table>";
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "bold", marks: [{ type: "bold" }] }],
     });
   });
 });
