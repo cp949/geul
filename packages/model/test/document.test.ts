@@ -178,4 +178,92 @@ describe("독립 문서 모델", () => {
       },
     });
   });
+
+  it("서로 다른 블록에 걸쳐 id 중복과 링크 위반이 있으면 순회 순서(앞쪽 블록부터)로 보고한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "duplicate",
+          type: "paragraph",
+          content: [
+            {
+              text: "link",
+              marks: [{ type: "link", href: "javascript:alert(1)" }],
+            },
+          ],
+        },
+        { id: "duplicate", type: "paragraph", content: [] },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "content", 0, "marks", 0, "href"],
+      },
+    });
+  });
+
+  it("서로 다른 블록에 걸쳐 링크 위반과 텍스트 위반이 있으면 순회 순서(앞쪽 블록부터)로 보고한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "block-with-bad-link",
+          type: "paragraph",
+          content: [
+            {
+              text: "link",
+              marks: [{ type: "link", href: "javascript:alert(1)" }],
+            },
+          ],
+        },
+        {
+          id: "block-with-bad-text",
+          type: "paragraph",
+          content: [{ text: "bad\u0000text" }],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "content", 0, "marks", 0, "href"],
+      },
+    });
+  });
+
+  it("같은 블록의 content 배열 안에서 앞 아이템의 링크 위반과 뒤 아이템의 텍스트 위반이 있으면 순회 순서(앞쪽 아이템부터)로 보고한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "block-with-mixed-items",
+          type: "paragraph",
+          content: [
+            {
+              text: "link",
+              marks: [{ type: "link", href: "javascript:alert(1)" }],
+            },
+            { text: "bad\u0000text" },
+          ],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "content", 0, "marks", 0, "href"],
+      },
+    });
+  });
 });

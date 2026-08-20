@@ -80,8 +80,8 @@ export type Block =
 
 - `children?: Block[]`를 중첩 가능한 모든 블록 타입 공통 필드로 둔다. 값이 없거나 빈 배열이면 자식이 없다는 뜻이다(둘을 구분하지 않는다 — `undefined`와 `[]`를 같은 상태로 취급).
 - 순환 참조는 구조적으로 불가능하다 — `children`은 부모가 자식 값을 직접 포함하는 트리이며 참조나 포인터가 아니다.
-- **전역 ID 유일성**: `id`는 트리 전체(모든 깊이, 모든 블록 타입)에서 유일해야 한다. `model/src/schema.ts`의 `validateIds`를 재귀로 바꾼다.
-- **재귀 검증**: `validateText`, `validateLinks`, `validateLinkMultiplicity`, `validateMarkOrder`를 트리 전체에 재귀 적용한다(현재는 최상위 배열 1단만 순회).
+- **전역 ID 유일성**: `id`는 트리 전체(모든 깊이, 모든 블록 타입)에서 유일해야 한다. `model/src/schema.ts`의 `validateBlocks`(id 검사 부분)를 재귀로 바꾼다.
+- **재귀 검증**: `validateBlocks`가 각 노드에서 호출하는 `validateContent`(text/link href/link 중복/mark 순서 검사)를 트리 전체에 재귀 적용한다(현재는 최상위 배열 1단만 순회).
 - **중첩 깊이 상한**: `MAX_NESTING_DEPTH = 64`. 초과 문서는 `DOCUMENT_LIMIT_EXCEEDED`로 거절한다(테이블 10,000셀 상한과 같은 방어적 목적 — 실사용 들여쓰기로는 도달하지 않지만 조작된 JSON의 재귀 검증 스택 사용을 방어한다).
 - 표 셀 콘텐츠는 여전히 `InlineContent`만 담는다 — 표 셀 안에 블록을 중첩하지 않는다(3.1, roadmap 범위 밖).
 

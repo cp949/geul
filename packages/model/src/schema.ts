@@ -109,24 +109,7 @@ const validateId = (
   return { ok: true, value: undefined };
 };
 
-const validateInlineContent = (
-  content: InlineContent,
-  contentPath: DocumentPath,
-): Result<undefined, DocumentError> => {
-  for (const [contentIndex, item] of content.entries()) {
-    for (const [markIndex, mark] of (item.marks ?? []).entries()) {
-      if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
-        return invalid(
-          [...contentPath, contentIndex, "marks", markIndex, "href"],
-          "Unsupported link URL",
-        );
-      }
-    }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateInlineText = (
+const validateContent = (
   content: InlineContent,
   contentPath: DocumentPath,
 ): Result<undefined, DocumentError> => {
@@ -137,132 +120,14 @@ const validateInlineText = (
         "Inline text must use LF line breaks and contain no other C0 controls, DEL, or invalid surrogate code units",
       );
     }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateText = (blocks: Block[]): Result<undefined, DocumentError> => {
-  for (const [blockIndex, block] of blocks.entries()) {
-    if (block.type === "paragraph" || block.type === "heading") {
-      const result = validateInlineText(block.content, [
-        "blocks",
-        blockIndex,
-        "content",
-      ]);
-      if (!result.ok) return result;
-      continue;
-    }
-    for (const [rowIndex, row] of block.rows.entries()) {
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        const result = validateInlineText(cell.content, [
-          "blocks",
-          blockIndex,
-          "rows",
-          rowIndex,
-          "cells",
-          cellIndex,
-          "content",
-        ]);
-        if (!result.ok) return result;
+    for (const [markIndex, mark] of (item.marks ?? []).entries()) {
+      if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
+        return invalid(
+          [...contentPath, contentIndex, "marks", markIndex, "href"],
+          "Unsupported link URL",
+        );
       }
     }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateIds = (blocks: Block[]): Result<undefined, DocumentError> => {
-  const ids = new Set<string>();
-
-  for (const [blockIndex, block] of blocks.entries()) {
-    const blockId = validateId(ids, block.id, ["blocks", blockIndex, "id"]);
-    if (!blockId.ok) return blockId;
-
-    if (block.type !== "table") continue;
-
-    for (const [columnIndex, column] of block.columns.entries()) {
-      const columnId = validateId(ids, column.id, [
-        "blocks",
-        blockIndex,
-        "columns",
-        columnIndex,
-        "id",
-      ]);
-      if (!columnId.ok) return columnId;
-    }
-    for (const [rowIndex, row] of block.rows.entries()) {
-      const rowId = validateId(ids, row.id, [
-        "blocks",
-        blockIndex,
-        "rows",
-        rowIndex,
-        "id",
-      ]);
-      if (!rowId.ok) return rowId;
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        const cellId = validateId(ids, cell.id, [
-          "blocks",
-          blockIndex,
-          "rows",
-          rowIndex,
-          "cells",
-          cellIndex,
-          "id",
-        ]);
-        if (!cellId.ok) return cellId;
-        if (!isValidDocumentId(cell.columnId)) {
-          return invalid(
-            [
-              "blocks",
-              blockIndex,
-              "rows",
-              rowIndex,
-              "cells",
-              cellIndex,
-              "columnId",
-            ],
-            "Column reference must contain no control characters or invalid surrogate code units",
-          );
-        }
-      }
-    }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateLinks = (blocks: Block[]): Result<undefined, DocumentError> => {
-  for (const [blockIndex, block] of blocks.entries()) {
-    if (block.type === "paragraph" || block.type === "heading") {
-      const result = validateInlineContent(block.content, [
-        "blocks",
-        blockIndex,
-        "content",
-      ]);
-      if (!result.ok) return result;
-      continue;
-    }
-    for (const [rowIndex, row] of block.rows.entries()) {
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        const result = validateInlineContent(cell.content, [
-          "blocks",
-          blockIndex,
-          "rows",
-          rowIndex,
-          "cells",
-          cellIndex,
-          "content",
-        ]);
-        if (!result.ok) return result;
-      }
-    }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateInlineLinkMultiplicity = (
-  content: InlineContent,
-  contentPath: DocumentPath,
-): Result<undefined, DocumentError> => {
-  for (const [contentIndex, item] of content.entries()) {
     let hasLink = false;
     for (const [markIndex, mark] of (item.marks ?? []).entries()) {
       if (mark.type !== "link") continue;
@@ -274,50 +139,10 @@ const validateInlineLinkMultiplicity = (
       }
       hasLink = true;
     }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateLinkMultiplicity = (
-  blocks: Block[],
-): Result<undefined, DocumentError> => {
-  for (const [blockIndex, block] of blocks.entries()) {
-    if (block.type === "paragraph" || block.type === "heading") {
-      const result = validateInlineLinkMultiplicity(block.content, [
-        "blocks",
-        blockIndex,
-        "content",
-      ]);
-      if (!result.ok) return result;
-      continue;
-    }
-    for (const [rowIndex, row] of block.rows.entries()) {
-      for (const [cellIndex, cell] of row.cells.entries()) {
-        const result = validateInlineLinkMultiplicity(cell.content, [
-          "blocks",
-          blockIndex,
-          "rows",
-          rowIndex,
-          "cells",
-          cellIndex,
-          "content",
-        ]);
-        if (!result.ok) return result;
-      }
-    }
-  }
-  return { ok: true, value: undefined };
-};
-
-const validateInlineMarkOrder = (
-  content: InlineContent,
-  contentPath: DocumentPath,
-): Result<undefined, DocumentError> => {
-  for (const [contentIndex, item] of content.entries()) {
-    const invalidIndex = firstNonCanonicalTextMarkIndex(item.marks ?? []);
-    if (invalidIndex !== undefined) {
+    const invalidMarkIndex = firstNonCanonicalTextMarkIndex(item.marks ?? []);
+    if (invalidMarkIndex !== undefined) {
       return invalid(
-        [...contentPath, contentIndex, "marks", invalidIndex],
+        [...contentPath, contentIndex, "marks", invalidMarkIndex],
         "Inline marks must use the canonical stored order without duplicate mark types",
       );
     }
@@ -325,31 +150,63 @@ const validateInlineMarkOrder = (
   return { ok: true, value: undefined };
 };
 
-const validateMarkOrder = (
-  blocks: Block[],
-): Result<undefined, DocumentError> => {
+const validateBlocks = (blocks: Block[]): Result<undefined, DocumentError> => {
+  const ids = new Set<string>();
+
   for (const [blockIndex, block] of blocks.entries()) {
+    const blockId = validateId(ids, block.id, ["blocks", blockIndex, "id"]);
+    if (!blockId.ok) return blockId;
+
     if (block.type === "paragraph" || block.type === "heading") {
-      const result = validateInlineMarkOrder(block.content, [
+      const content = validateContent(block.content, [
         "blocks",
         blockIndex,
         "content",
       ]);
-      if (!result.ok) return result;
+      if (!content.ok) return content;
       continue;
     }
+
+    for (const [columnIndex, column] of block.columns.entries()) {
+      const columnId = validateId(ids, column.id, [
+        "blocks",
+        blockIndex,
+        "columns",
+        columnIndex,
+        "id",
+      ]);
+      if (!columnId.ok) return columnId;
+    }
+
     for (const [rowIndex, row] of block.rows.entries()) {
+      const rowId = validateId(ids, row.id, [
+        "blocks",
+        blockIndex,
+        "rows",
+        rowIndex,
+        "id",
+      ]);
+      if (!rowId.ok) return rowId;
+
       for (const [cellIndex, cell] of row.cells.entries()) {
-        const result = validateInlineMarkOrder(cell.content, [
+        const cellPath = [
           "blocks",
           blockIndex,
           "rows",
           rowIndex,
           "cells",
           cellIndex,
-          "content",
-        ]);
-        if (!result.ok) return result;
+        ] as const;
+        const cellId = validateId(ids, cell.id, [...cellPath, "id"]);
+        if (!cellId.ok) return cellId;
+        if (!isValidDocumentId(cell.columnId)) {
+          return invalid(
+            [...cellPath, "columnId"],
+            "Column reference must contain no control characters or invalid surrogate code units",
+          );
+        }
+        const content = validateContent(cell.content, [...cellPath, "content"]);
+        if (!content.ok) return content;
       }
     }
   }
@@ -508,16 +365,8 @@ export const parseDocument = (
     );
   }
 
-  const ids = validateIds(document.blocks);
-  if (!ids.ok) return ids;
-  const text = validateText(document.blocks);
-  if (!text.ok) return text;
-  const links = validateLinks(document.blocks);
-  if (!links.ok) return links;
-  const linkMultiplicity = validateLinkMultiplicity(document.blocks);
-  if (!linkMultiplicity.ok) return linkMultiplicity;
-  const markOrder = validateMarkOrder(document.blocks);
-  if (!markOrder.ok) return markOrder;
+  const structure = validateBlocks(document.blocks);
+  if (!structure.ok) return structure;
 
   const widths = validateColumnWidths(document.blocks);
   if (!widths.ok) return widths;
