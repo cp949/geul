@@ -8,9 +8,10 @@ import { useCallback, useState } from "react";
  * 시에만 메뉴를 닫는다. TableSelectionToolbar의 merge/split은 닫을 메뉴가
  * 없어 onSuccess를 생략한다(Issue #66).
  *
- * runCommand/clearActionError를 useCallback으로 안정화한다 — Task 4가
- * clearActionError를 다른 useEffect의 의존성 배열에 넣어야 하므로, 매
- * 렌더마다 새로 생기는 함수면 그 effect가 매 렌더 재실행된다.
+ * runCommand/clearActionError를 useCallback으로 안정화한다 —
+ * TableSelectionToolbar가 clearActionError를 selection 리스너를 등록하는
+ * useEffect의 의존성 배열에 넣는다. 매 렌더 새로 생기는 함수면 그 effect가
+ * 매 렌더 리스너를 떼었다 다시 붙인다.
  */
 export const useTableCommandFeedback = () => {
   const [actionError, setActionError] = useState<EditorError | null>(null);
