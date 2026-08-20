@@ -1,8 +1,8 @@
-export { parseClipboardTable } from "./clipboard/clipboard-table-parser.js";
 export type {
   ClipboardContent,
   ClipboardContentBlock,
 } from "./clipboard/clipboard-content.js";
+export { parseClipboardTable } from "./clipboard/clipboard-table-parser.js";
 export type {
   TabularCell,
   TabularData,

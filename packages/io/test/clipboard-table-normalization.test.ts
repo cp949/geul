@@ -3,10 +3,10 @@
  * 그리고 들쭉날쭉한 HTML 표를 빈 셀로 패딩해 직사각형으로 만드는지 검증한다.
  */
 import { describe, expect, it } from "vitest";
-import type { ClipboardParseError } from "../src/errors.js";
-import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 import type { ClipboardContent } from "../src/clipboard/clipboard-content.js";
+import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 import type { TabularData } from "../src/clipboard/tabular-data.js";
+import type { ClipboardParseError } from "../src/errors.js";
 import type { Result } from "../src/result.js";
 
 // 테이블만 있는 경우 결과에서 TabularData만 추출한다.
@@ -31,9 +31,7 @@ describe("클립보드 표 셀 텍스트 정규화", () => {
     const table = getTableFromResult(result);
     expect(table).not.toBeNull();
     if (!table) return;
-    expect(table.rows[0]?.cells[0]?.content).toEqual([
-      { text: "Alice Smith" },
-    ]);
+    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "Alice Smith" }]);
     expect(table.rows[0]?.cells[1]?.content).toEqual([]);
   });
 

@@ -5,10 +5,10 @@
  * 표 앞뒤 문단을 문단 블록으로 보존하는 시퀀스 변환을 함께 다룬다.
  */
 import { describe, expect, it } from "vitest";
-import type { ClipboardParseError } from "../src/errors.js";
-import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 import type { ClipboardContent } from "../src/clipboard/clipboard-content.js";
+import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 import type { TabularData } from "../src/clipboard/tabular-data.js";
+import type { ClipboardParseError } from "../src/errors.js";
 import type { Result } from "../src/result.js";
 
 // 시퀀스가 표 하나뿐인 성공 결과에서 그 TabularData만 꺼낸다. 표만 있는

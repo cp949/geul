@@ -47,13 +47,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // 콘텐츠가 아니므로 빈 문단 블록을 만들지 않는다(눈에 보이지 않는 빈
   // 문단이 편집기에 남으면 사용자가 원인도 모르고 지울 수도 없다).
   it("표 밖 제로폭 문자는 문단 블록을 만들지 않는다", () => {
-    for (const invisible of [
-      "​",
-      "‍",
-      "⁠",
-      "­",
-      "﻿",
-    ]) {
+    for (const invisible of ["​", "‍", "⁠", "­", "﻿"]) {
       const result = parseClipboardTable({
         html: `<p>${invisible}</p>${TABLE}`,
         text: "a\tb",

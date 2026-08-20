@@ -35,7 +35,10 @@ import {
   normalizeCellContent,
   sanitizeCellText,
 } from "./cell-text.js";
-import type { ClipboardContent, ClipboardContentBlock } from "./clipboard-content.js";
+import type {
+  ClipboardContent,
+  ClipboardContentBlock,
+} from "./clipboard-content.js";
 import { parseStyleDeclarations } from "./style-declarations.js";
 import {
   type TabularCell,
