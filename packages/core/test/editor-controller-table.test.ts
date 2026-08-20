@@ -939,6 +939,97 @@ describe("에디터 컨트롤러 표", () => {
     editor.destroy();
   });
 
+  it("표 앞뒤에 문단이 섞인 클립보드 붙여넣기가 문단과 표를 모두 보존한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+    });
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
+
+    const data = new DataTransfer();
+    data.setData(
+      "text/html",
+      "<p>intro</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table><p>outro</p>",
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    const document = editor.getDocument();
+    const introIndex = document.blocks.findIndex(
+      (block) =>
+        block.type === "paragraph" && block.content[0]?.text === "intro",
+    );
+    const tableIndex = document.blocks.findIndex(
+      (block) => block.type === "table",
+    );
+    const outroIndex = document.blocks.findIndex(
+      (block) =>
+        block.type === "paragraph" && block.content[0]?.text === "outro",
+    );
+    expect(introIndex).toBeGreaterThanOrEqual(0);
+    expect(introIndex).toBeLessThan(tableIndex);
+    expect(tableIndex).toBeLessThan(outroIndex);
+    const table = document.blocks[tableIndex];
+    if (table?.type === "table") {
+      expect(table.rows[0]?.cells[0]?.content[0]?.text).toBe("a");
+      expect(table.rows[0]?.cells[1]?.content[0]?.text).toBe("b");
+    }
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(
+      editor.getDocument().blocks.some((block) => block.type === "table"),
+    ).toBe(false);
+
+    editor.destroy();
+  });
+
+  it("자기 복사가 만드는 div data-pm-slice 래퍼 붙여넣기도 문단과 표를 보존한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+    });
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
+
+    const data = new DataTransfer();
+    data.setData(
+      "text/html",
+      '<div data-pm-slice="1 1 []"><p>intro</p>' +
+        "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+        "<p>outro</p></div>",
+    );
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    const document = editor.getDocument();
+    expect(document.blocks.some((block) => block.type === "table")).toBe(true);
+    expect(
+      document.blocks.some(
+        (block) =>
+          block.type === "paragraph" && block.content[0]?.text === "intro",
+      ),
+    ).toBe(true);
+    expect(
+      document.blocks.some(
+        (block) =>
+          block.type === "paragraph" && block.content[0]?.text === "outro",
+      ),
+    ).toBe(true);
+
+    editor.destroy();
+  });
+
   it("탭이 섞인 HTML 표를 붙여넣어도 모델과 에디터가 어긋나지 않는다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),

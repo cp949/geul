@@ -1,4 +1,9 @@
-import { type TabularData, validateTabularData } from "@cp949/geul-io";
+import {
+  type ClipboardContent,
+  type ClipboardContentBlock,
+  type TabularData,
+  validateTabularData,
+} from "@cp949/geul-io";
 import {
   type IdFactory,
   MAX_TABLE_LOGICAL_CELLS,
@@ -7,10 +12,17 @@ import {
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
+import type {
+  Node as ProseMirrorNode,
+  ResolvedPos,
+  Schema,
+} from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
-import { inlineContentViolation } from "./model-to-tiptap.js";
+import {
+  inlineContentToTiptap,
+  inlineContentViolation,
+} from "./model-to-tiptap.js";
 import {
   DEFAULT_COLUMN_WIDTH,
   deleteColumn as deleteGridColumn,
@@ -44,6 +56,7 @@ export type TableCommandError =
   | { code: "TABLE_NOT_FOUND"; blockId: string }
   | { code: "INVALID_TABLE_SIZE" }
   | { code: "TABULAR_DATA_INVALID"; message: string }
+  | { code: "CLIPBOARD_CONTENT_INVALID"; message: string }
   | { code: "PASTE_TARGET_NOT_FOUND" };
 
 const blockNotFound = (blockId: string): Result<never, TableCommandError> => ({
@@ -515,18 +528,15 @@ const cellIdAtAnchor = (
 // 표 안이면 selectedRect의 좌상단을 anchor로 삼아 pasteInto로 덮어쓰고,
 // 표 밖이면 현재 최상위 블록 뒤에 pasteInto로 채운 새 표를 끼운다. 두
 // 경로 모두 격자 레벨 연산(TableGrid.pasteInto)을 공유한다.
-export const pasteTabularData = (
-  editor: Editor,
+// pasteTabularData/pasteClipboardContent 공용 검증이다 — 둘 다 공개 API라
+// 클립보드 파서를 거치지 않은 TabularData도 직접 들어온다. 뮤테이션 전에
+// 구조(직사각형 커버리지)와 셀 인라인 텍스트를 모두 검증해야 잘못된
+// 데이터가 문서를 깨뜨리지 않는다(PIT-0003).
+// NaN·비정수 columnCount는 `< 1` 비교를 통과해 하류 산술(new Array 등)에서
+// RangeError로 터진다 — 크기 가드가 정수성까지 함께 판정한다.
+const validateTabularDataForPaste = (
   data: TabularData,
-  createId: IdFactory,
-): Result<{ blockId: string }, TableCommandError> => {
-  const state = editor.state;
-
-  // pasteTabularData는 공개 API다 — 클립보드 파서를 거치지 않은 TabularData도
-  // 들어온다. 뮤테이션 전에 구조(직사각형 커버리지)와 셀 인라인 텍스트를
-  // 모두 검증해야 잘못된 데이터가 문서를 깨뜨리지 않는다.
-  // NaN·비정수 columnCount는 `< 1` 비교를 통과해 하류 산술(new Array 등)에서
-  // RangeError로 터진다 — 크기 가드가 정수성까지 함께 판정한다.
+): Result<undefined, TableCommandError> => {
   if (
     !Number.isInteger(data.columnCount) ||
     data.rows.length < 1 ||
@@ -535,19 +545,12 @@ export const pasteTabularData = (
     return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
   }
 
-  // 확장 후 최종 크기 기준의 한도 검사는 pasteInto가 한다 — 여기서는 데이터
-  // 자체 크기로 O(1) 선거절한다(데이터 크기는 최종 크기의 하한이라 안전).
-  // 선검사가 없으면 한도 초과 입력이 전체 검증 패스와 골격 생성(행 객체와
-  // id 생성)을 다 치른 뒤에야 거절돼 거절 비용이 입력 크기에 비례한다.
   if (data.rows.length * data.columnCount > MAX_TABLE_LOGICAL_CELLS) {
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 
   const validated = validateTabularData(data);
   if (!validated.ok) {
-    // NOT_RECTANGULAR는 병합 명령(비직사각형 선택) 전용이다 — 여기서 쓰면
-    // 텍스트 계약·서식·정렬 위반까지 "직사각형 아님"으로 오도된다. io가
-    // 만든 원인 message를 그대로 전달한다.
     return {
       ok: false,
       error: {
@@ -560,11 +563,6 @@ export const pasteTabularData = (
     };
   }
 
-  // io 검증(validateTabularData)은 model 계약만 본다 — 편집기에 커밋되는
-  // 콘텐츠는 추가로 편집 가능 콘텐츠 계약(validateEditableContent와 같은
-  // 규칙)을 지켜야 한다. 빈 텍스트 런은 코덱의 schema.text("")를 터뜨리고,
-  // 미지원 링크는 LinkPolicyExtension이 트랜잭션째 버리는데도 ok:true가
-  // 반환되는 원인이었다.
   for (const [rowIndex, row] of data.rows.entries()) {
     for (const [cellIndex, cellEntry] of row.cells.entries()) {
       const violation = inlineContentViolation(cellEntry.content);
@@ -579,6 +577,19 @@ export const pasteTabularData = (
       }
     }
   }
+
+  return { ok: true, value: undefined };
+};
+
+export const pasteTabularData = (
+  editor: Editor,
+  data: TabularData,
+  createId: IdFactory,
+): Result<{ blockId: string }, TableCommandError> => {
+  const state = editor.state;
+
+  const validated = validateTabularDataForPaste(data);
+  if (!validated.ok) return validated;
 
   if (isInTable(state)) {
     const rect = selectedRect(state);
@@ -660,4 +671,170 @@ export const pasteTabularData = (
   editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
 
   return { ok: true, value: { blockId: filled.value.id } };
+};
+
+const buildSequenceNode = (
+  schema: Schema,
+  block: ClipboardContentBlock,
+  createId: IdFactory,
+): Result<
+  { node: ProseMirrorNode; table: TableBlock | null },
+  TableCommandError
+> => {
+  if (block.type === "paragraph") {
+    // blockId 없이 만든다 — BlockIdExtension.appendTransaction이 같은
+    // dispatch 안에서 사후 배정한다(tableInsertPosition 근처 주석의 필러
+    // 문단 처리와 같은 확립된 패턴).
+    const node = schema.nodeFromJSON({
+      type: "paragraph",
+      content: inlineContentToTiptap(block.content),
+    });
+    return { ok: true, value: { node, table: null } };
+  }
+
+  const emptyTable = buildPasteTableSkeleton(
+    { rows: block.data.rows.length, columns: block.data.columnCount },
+    createId,
+  );
+  const filled = pasteGridInto(
+    emptyTable,
+    { row: 0, column: 0 },
+    block.data,
+    createId,
+  );
+  if (!filled.ok) return filled;
+
+  return {
+    ok: true,
+    value: {
+      node: tableBlockToTiptapNode(schema, filled.value),
+      table: filled.value,
+    },
+  };
+};
+
+// 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
+// 표가 fragment의 유일한 실질 콘텐츠일 때 반환하는 단일 표 시퀀스는
+// pasteTabularData에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을
+// 한 글자도 바꾸지 않는다 — 새 경로는 문단이 섞인 시퀀스에서만 탄다.
+export const pasteClipboardContent = (
+  editor: Editor,
+  content: ClipboardContent,
+  createId: IdFactory,
+): Result<{ blockId: string }, TableCommandError> => {
+  const onlyBlock = content.length === 1 ? content[0] : undefined;
+  if (onlyBlock?.type === "table") {
+    return pasteTabularData(editor, onlyBlock.data, createId);
+  }
+  if (content.length === 0) {
+    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+  }
+
+  // 뮤테이션 전에 시퀀스 전체를 검증한다(PIT-0003) — 표 부분은
+  // pasteTabularData와 같은 구조·서식·셀 한도 검증, 문단은 편집 가능
+  // 콘텐츠 계약만 적용한다.
+  for (const block of content) {
+    if (block.type === "paragraph") {
+      const violation = inlineContentViolation(block.content);
+      if (violation !== null) {
+        return {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_CONTENT_INVALID",
+            message: `Paragraph content ${violation}`,
+          },
+        };
+      }
+      continue;
+    }
+    const validated = validateTabularDataForPaste(block.data);
+    if (!validated.ok) return validated;
+  }
+
+  const state = editor.state;
+
+  if (isInTable(state)) {
+    // 표 셀은 블록 자식을 가질 수 없다(model TableCell.content:
+    // InlineContent) — 문단을 끼울 자리가 없으므로 시퀀스의 표 부분만
+    // 기존 grid-paste 경로로 붙이고 문단은 버린다. 이 진입점(커서가 이미
+    // 표 안)에 한정된, 정의된 한계다 — 완료 기준은 표 밖 붙여넣기만
+    // 요구한다(Issue #71).
+    const tableBlock = content.find(
+      (entry): entry is Extract<ClipboardContentBlock, { type: "table" }> =>
+        entry.type === "table",
+    );
+    if (tableBlock === undefined) {
+      return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+    }
+    return pasteTabularData(editor, tableBlock.data, createId);
+  }
+
+  // 표 밖: 시퀀스를 순서대로 노드로 조립한다. 실패 가능한 계산
+  // (pasteGridInto)을 전부 먼저 끝내고 dispatch는 마지막에 한 번만 한다 —
+  // pasteTabularData의 표 밖 분기와 같은 원자성 패턴(PIT-0003).
+  let firstTable: {
+    data: TableBlock;
+    node: ProseMirrorNode;
+    offset: number;
+  } | null = null;
+  let runningOffset = 0;
+  const nodes: ProseMirrorNode[] = [];
+
+  for (const block of content) {
+    const built = buildSequenceNode(editor.schema, block, createId);
+    if (!built.ok) return built;
+    if (firstTable === null && built.value.table !== null) {
+      firstTable = {
+        data: built.value.table,
+        node: built.value.node,
+        offset: runningOffset,
+      };
+    }
+    nodes.push(built.value.node);
+    runningOffset += built.value.node.nodeSize;
+  }
+
+  if (firstTable === null) {
+    // parseClipboardTable은 표를 하나도 못 찾으면 이 시퀀스를 만들지
+    // 않는다 — 여기 도달하는 유일한 길은 파서를 거치지 않고 직접 구성한
+    // 순수 문단 ClipboardContent다. 반환할 blockId가 없으므로 거절한다.
+    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+  }
+
+  let transaction = state.tr;
+  if (
+    !state.selection.empty &&
+    !positionInsideTable(state.selection.$from) &&
+    !positionInsideTable(state.selection.$to)
+  ) {
+    transaction = transaction.deleteSelection();
+  }
+
+  const insertPosition = tableInsertPosition(
+    transaction.doc,
+    transaction.selection.to,
+  );
+  transaction = transaction.insert(insertPosition, nodes);
+
+  // 표 안 분기의 selectCellId, pasteTabularData 표 밖 분기의 캐럿 이동과
+  // 대칭 — 시퀀스의 첫 표 좌상단 셀 안으로 캐럿을 옮긴다. firstTable.offset은
+  // 그 표 앞에 삽입된 문단들의 누적 크기다(표가 시퀀스 첫 원소면 0이라
+  // pasteTabularData의 기존 공식과 동일해진다).
+  const firstCellId = cellIdAtAnchor(firstTable.data, { row: 0, column: 0 });
+  if (firstCellId !== null) {
+    const relativeOffset = findCellContentOffset(firstTable.node, firstCellId);
+    if (relativeOffset !== null) {
+      const absolutePosition = Math.min(
+        insertPosition + firstTable.offset + 1 + relativeOffset,
+        transaction.doc.content.size,
+      );
+      transaction = transaction.setSelection(
+        TextSelection.near(transaction.doc.resolve(absolutePosition)),
+      );
+    }
+  }
+
+  editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
+
+  return { ok: true, value: { blockId: firstTable.data.id } };
 };

@@ -109,7 +109,9 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
   }
 };
 
-const inlineContentToTiptap = (content: InlineContent): TiptapJsonNode[] =>
+export const inlineContentToTiptap = (
+  content: InlineContent,
+): TiptapJsonNode[] =>
   content.map((item) => ({
     type: "text",
     text: item.text,

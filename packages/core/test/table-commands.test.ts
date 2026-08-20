@@ -1,4 +1,4 @@
-import type { TabularData } from "@cp949/geul-io";
+import type { ClipboardContentBlock, TabularData } from "@cp949/geul-io";
 import { GapCursor } from "@tiptap/pm/gapcursor";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import {
   mergeTableCells,
   moveTableColumn,
   moveTableRow,
+  pasteClipboardContent,
   pasteTabularData,
   resizeTableColumn,
   splitTableCell,
@@ -1493,6 +1494,138 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         error: { code: "INVALID_TABLE_SIZE" },
       });
     }
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    editor.destroy();
+  });
+});
+
+describe("클립보드 시퀀스를 붙여넣는다", () => {
+  const paragraphBlock = (text: string): ClipboardContentBlock => ({
+    type: "paragraph",
+    content: [{ text }],
+  });
+  const tableBlock = (text: string): ClipboardContentBlock => ({
+    type: "table",
+    data: {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text }] },
+          ],
+        },
+      ],
+    },
+  });
+
+  it("표 밖에서 문단+표+문단 시퀀스를 한 트랜잭션으로 삽입한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+
+    const result = pasteClipboardContent(
+      editor,
+      [paragraphBlock("intro"), tableBlock("A"), paragraphBlock("outro")],
+      createId,
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content).toHaveLength(4);
+    expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
+    expect(doc.content?.[1]?.type).toBe("paragraph");
+    expect(doc.content?.[1]?.content?.[0]?.text).toBe("intro");
+    expect(doc.content?.[2]?.type).toBe("table");
+    expect(
+      doc.content?.[2]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
+    ).toBe("A");
+    expect(doc.content?.[3]?.type).toBe("paragraph");
+    expect(doc.content?.[3]?.content?.[0]?.text).toBe("outro");
+    // 새 문단도 안정 id를 받는다 — BlockIdExtension의 appendTransaction이
+    // 같은 dispatch 안에서 사후 배정한다.
+    const introBlockId = doc.content?.[1]?.attrs?.blockId;
+    expect(typeof introBlockId).toBe("string");
+    expect((introBlockId as string).length).toBeGreaterThan(0);
+    // 캐럿은 삽입된 표의 좌상단 셀로 이동한다.
+    const { selection } = editor.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe("tableCell");
+    expect(selection.$from.parent.textContent).toBe("A");
+    editor.destroy();
+  });
+
+  it("undo 1회로 삽입 전 상태로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [paragraphBlock("intro"), tableBlock("A")],
+      sequentialIds("paste"),
+    );
+    expect(result.ok).toBe(true);
+
+    editor.commands.undo();
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    editor.destroy();
+  });
+
+  it("표 안에서 문단이 섞인 시퀀스는 표 부분만 붙이고 문단은 버린다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [paragraphBlock("dropped"), tableBlock("x")],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    // 표 밖에 새 문단이 생기지 않는다 — 최상위 블록 수는 그대로다(표 셀은
+    // 블록 자식을 가질 수 없어 문단을 끼울 자리가 없다, Issue #71).
+    expect(doc.content).toHaveLength(before.content?.length ?? 0);
+    expect(
+      doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
+    ).toBe("x");
+    editor.destroy();
+  });
+
+  it("빈 시퀀스는 PASTE_TARGET_NOT_FOUND로 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(editor, [], sequentialIds("paste"));
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "PASTE_TARGET_NOT_FOUND" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    editor.destroy();
+  });
+
+  it("문단 콘텐츠가 편집 가능 계약을 어기면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [{ type: "paragraph", content: [{ text: "" }] }, tableBlock("A")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: "Paragraph content contains an empty text run",
+      },
+    });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     editor.destroy();
   });
