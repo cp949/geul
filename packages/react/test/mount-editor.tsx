@@ -4,7 +4,9 @@
  * 손으로 조립한 편집기 DOM은 프로덕션 renderHTML과 갈라져도 컴파일러가 잡지
  * 못한다(PIT-0014, Issue #62). 여기서는 진짜 createEditor()를 마운트해 편집기
  * DOM을 편집기가 직접 만들게 한다. 표가 필요한 오버레이는 mountTableEditor,
- * 문단만 필요한 오버레이는 mountBlockEditor를 쓴다.
+ * 문단만 필요한 오버레이는 mountBlockEditor를 쓴다. 마운트 외에 표 블록 조회
+ * (tableBlockOf), DOM 캐럿 배치(placeCaret), 초점 단언(focusOutsideEditor)도
+ * 이 모듈이 단독 소유한다(PIT-0022).
  *
  * 다만 jsdom은 레이아웃을 계산하지 않아 getBoundingClientRect()가 전부 0이다.
  * 오버레이 geometry는 rect에 전적으로 의존하므로 rect만 스텁한다 — 이것이
@@ -133,10 +135,20 @@ export const tableBlockOf = (editor: EditorController) => {
  * 경로다 — ProseMirror의 DOMObserver가 selectionchange를 받아 자기
  * state.selection을 DOM에서 다시 읽는다(실측 확인).
  *
- * 여기서 발행하는 selectionchange는 편집기 내부 상태 동기화용이다. 오버레이가
- * 그 캐럿을 읽게 하려면 테스트가 두 번째 selectionchange를 따로 쏴야 한다 —
- * 오버레이의 리스너가 편집기 리스너보다 먼저 등록될 수 있어 첫 발행 때는 아직
- * 갱신 전 선택을 본다.
+ * mountBlockEditor와 mountTableEditor 둘 다 children을 <EditorContent />보다
+ * 먼저 렌더한다 — 그래서 오버레이의 selectionchange 리스너가 편집기(ProseMirror)
+ * 리스너보다 먼저 등록될 수 있다. 이 순서 때문에 현재 호출부는 모두 이 함수가
+ * 쏘는 selectionchange 뒤에 테스트가 두 번째 selectionchange를 따로 쏜다.
+ *
+ * 다만 두 번째 이벤트가 항상 필요한지는 실측상 시나리오에 따라 갈린다 — 예를
+ * 들어 setText 직후 같은 블록에 caret을 놓는 구성에서는 그 트랜잭션이 이미
+ * state.selection을 그 블록으로 옮겨 둔 상태라 첫 이벤트만으로도 오버레이가
+ * 갱신된 캐럿을 본다. 몇 번의 이벤트가 정확히 언제 필요한지는 아직 정리되지
+ * 않았다 — Issue #85가 이 질문을 소유한다.
+ *
+ * 그때까지 새 호출부는 두 번째 selectionchange를 쏘는 쪽에서 시작한다 — 조건이
+ * 확정되기 전에는 그쪽이 안전한 기본값이다. 두 번째 이벤트 없이도 통과한다면
+ * 그 구성을 Issue #85에 남긴다.
  */
 export const placeCaret = (node: HTMLElement) => {
   act(() => {
