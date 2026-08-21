@@ -1,114 +1,36 @@
-import { expect, type Page, test } from "@playwright/test";
+/**
+ * 표 안에서 Tab/Shift+Tab이 브라우저의 순차 포커스 이동을 실제로 소비하는지
+ * 검증한다. 셀 탐색 자체(캐럿이 어느 셀로 가는가, 마지막 셀에서 행이
+ * 늘어나는가, undo 단계가 몇인가)는 브라우저가 기여하는 것이 없어
+ * `packages/core/test/`가 단독으로 소유한다 — ADR 0007, Issue #90.
+ *
+ * 남은 한 건이 브라우저를 필요로 하는 이유: jsdom은 Tab 순차 포커스 이동을
+ * 구현하지 않아, `preventDefault`를 아무도 부르지 않아도 `activeElement`가
+ * 그대로다(jsdom@27.0.1 실측). 그래서 jsdom에서 "포커스가 셀 밖으로 나가지
+ * 않았다"는 단언은 무조건 통과하는 공허한 단언이 된다.
+ * `table-keyboard-extension.test.ts:173`이 증명하는 것은 첫 셀에서도
+ * `goToPreviousTableCell`이 `true`를 돌려준다는 *계약*이고, 브라우저가 그
+ * `true`를 지켜 포커스를 표 안에 붙잡아 두는 *효과*는 여기서만 보인다.
+ *
+ * 3엔진(firefox·webkit) 태그가 여기 붙는 이유: contenteditable에서 Tab이
+ * 순차 포커스 이동을 하는지와 `preventDefault`가 그것을 막는지는 엔진마다
+ * 갈리는 영역이다.
+ */
+import { expect, test } from "@playwright/test";
 
 import { insertTable, openDemo } from "./support/demo.js";
 
-// Tab/Shift+Tab은 ProseMirror selection만 옮기고 새 DOM 요소를 만들지 않는다
-// — 타이핑을 곧바로 이어붙이면 headless 병렬 실행(예: --workers=5)에서
-// 이동 반영 전에 키 입력이 도착하는 레이스가 관측된다(PIT-0009와 같은 종류의
-// 헤드리스 타이밍 이슈). 다음 셀로 캐럿이 실제로 옮겨갔음을 selection에서
-// 직접 폴링해 확인한 뒤에만 타이핑한다.
-const waitForCaretInCell = async (page: Page, cellId: string) => {
-  await page.waitForFunction((expectedCellId) => {
-    const selection = window.getSelection();
-    const anchorNode = selection?.anchorNode;
-    const element =
-      anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement;
-    const cell = element?.closest("td");
-    return cell?.getAttribute("data-be-cell-id") === expectedCellId;
-  }, cellId);
-};
-
-test("Tab은 같은 행의 다음 셀로, 마지막 열에서는 다음 행의 첫 셀로 이동한다 @core", async ({
+test("표의 첫 셀에서 Shift+Tab은 표 밖으로 포커스를 넘기지 않는다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
-  const cell = (row: number, column: number) =>
-    table.locator("tr").nth(row).locator("td").nth(column);
+  const firstCell = table.locator("tr").nth(0).locator("td").nth(0);
 
-  // 표 오른쪽에는 열 추가 핸들이, 각 열 경계에는 리사이즈 strip이 fixed로
-  // 떠 있다(spec 7.2). 중간에 다시 클릭해 셀로 들어가면 그 오버레이를 맞힐
-  // 수 있으므로, 첫 셀만 클릭하고 이후로는 Tab만으로 셀을 옮겨 다닌다.
-  const secondCellId = await cell(0, 1).getAttribute("data-be-cell-id");
-  const thirdCellId = await cell(0, 2).getAttribute("data-be-cell-id");
-  const nextRowFirstCellId = await cell(1, 0).getAttribute("data-be-cell-id");
-  if (
-    secondCellId === null ||
-    thirdCellId === null ||
-    nextRowFirstCellId === null
-  ) {
-    throw new Error("셀 fixture 준비 실패");
-  }
-
-  await cell(0, 0).click();
-  await page.keyboard.press("Tab");
-  await waitForCaretInCell(page, secondCellId);
-  await page.keyboard.type("B");
-  await expect(cell(0, 1)).toHaveText("B");
-
-  await page.keyboard.press("Tab");
-  await waitForCaretInCell(page, thirdCellId);
-  await page.keyboard.type("C");
-  await expect(cell(0, 2)).toHaveText("C");
-
-  // 슬래시 메뉴 기본 표는 3열이다 — 마지막 열(0,2)에서 Tab을 누르면
-  // 다음 행 첫 셀(1,0)로 넘어간다.
-  await page.keyboard.press("Tab");
-  await waitForCaretInCell(page, nextRowFirstCellId);
-  await page.keyboard.type("D");
-  await expect(cell(1, 0)).toHaveText("D");
-});
-
-test("Shift+Tab은 이전 셀로 캐럿을 옮긴다", async ({ page }) => {
-  const { editable } = await openDemo(page);
-  const table = await insertTable(page, editable);
-  const cell = (row: number, column: number) =>
-    table.locator("tr").nth(row).locator("td").nth(column);
-
-  const firstCellId = await cell(0, 0).getAttribute("data-be-cell-id");
-  if (firstCellId === null) throw new Error("셀 fixture 준비 실패");
-
-  await cell(0, 1).click();
-  await page.keyboard.type("B");
+  await firstCell.click();
   await page.keyboard.press("Shift+Tab");
-  await waitForCaretInCell(page, firstCellId);
+  // 포커스가 표 밖으로 나갔다면 이 타이핑은 셀에 닿지 않는다.
   await page.keyboard.type("A");
 
-  await expect(cell(0, 0)).toHaveText("A");
-  await expect(cell(0, 1)).toHaveText("B");
-});
-
-test("표의 첫 셀에서 Shift+Tab은 표 밖으로 포커스를 넘기지 않는다", async ({
-  page,
-}) => {
-  const { editable } = await openDemo(page);
-  const table = await insertTable(page, editable);
-  const cell = (row: number, column: number) =>
-    table.locator("tr").nth(row).locator("td").nth(column);
-
-  await cell(0, 0).click();
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.type("A");
-
-  await expect(cell(0, 0)).toHaveText("A");
-});
-
-test("표의 마지막 셀에서 Tab은 새 행을 추가하고 undo 1회로 복원한다", async ({
-  page,
-}) => {
-  const { editable } = await openDemo(page);
-  const table = await insertTable(page, editable);
-  const cell = (row: number, column: number) =>
-    table.locator("tr").nth(row).locator("td").nth(column);
-
-  await expect(table.locator("tr")).toHaveCount(3);
-  await cell(2, 2).click();
-
-  await page.keyboard.press("Tab");
-  await expect(table.locator("tr")).toHaveCount(4);
-  await page.keyboard.type("새 행");
-  await expect(cell(3, 0)).toHaveText("새 행");
-
-  await page.keyboard.press("Control+z");
-  await expect(table.locator("tr")).toHaveCount(3);
+  await expect(firstCell).toHaveText("A");
 });
