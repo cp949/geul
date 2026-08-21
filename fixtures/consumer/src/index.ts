@@ -1,4 +1,10 @@
-import { createEditor } from "@cp949/geul-core";
+import {
+  createEditor,
+  parseTableColumns,
+  serializeTableColumns,
+  type TableColumn,
+  type TableColumnsAttributeError,
+} from "@cp949/geul-core";
 import { importHtml } from "@cp949/geul-io";
 import { createEmptyDocument, type Document } from "@cp949/geul-model";
 import {
@@ -29,3 +35,11 @@ const event: DocumentChangeEvent = {
 const error: EditorError = { code: "COMMAND_NOT_APPLICABLE", command: "undo" };
 void event;
 void error;
+const column: TableColumn = { id: "fixture-column", width: 120 };
+const columns = parseTableColumns(serializeTableColumns([column]));
+const columnsError: TableColumnsAttributeError = {
+  code: "TABLE_COLUMNS_ATTRIBUTE_INVALID",
+  message: "fixture",
+};
+void columns;
+void columnsError;

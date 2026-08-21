@@ -10,6 +10,11 @@ export {
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";
 export { isValidInlineText } from "./string-invariants.js";
+export type { TableColumnsAttributeError } from "./table-columns-attribute.js";
+export {
+  parseTableColumns,
+  serializeTableColumns,
+} from "./table-columns-attribute.js";
 export type {
   GridCell,
   TableGridInvalidReason,
@@ -30,5 +35,6 @@ export type {
   InlineContent,
   ParagraphBlock,
   TableBlock,
+  TableColumn,
   TextMark,
 } from "./types.js";

@@ -1,4 +1,8 @@
-import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-core";
+import {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  parseTableColumns,
+} from "@cp949/geul-core";
 import { GripHorizontal, GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -90,23 +94,12 @@ type TableGeometry = {
 
 // PIT-0004: 열 순서·개수의 권위는 표에 렌더된 data-be-columns(모델
 // table.columns와 같은 순서)다. columnId 문자열만 뽑아 쓴다.
-const parseTableColumnIds = (table: HTMLElement): string[] => {
-  const raw = table.getAttribute("data-be-columns");
-  if (raw === null) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  return parsed.flatMap((entry) =>
-    typeof entry === "object" &&
-    entry !== null &&
-    typeof (entry as { id?: unknown }).id === "string"
-      ? [(entry as { id: string }).id]
-      : [],
-  );
+// 속성 문자열의 해석은 model이 소유하고(Issue #75) DOM 접근만 여기 남는다.
+// 해석 불가는 열 없음으로 접는다 — 핸들을 그리지 않으면 그만이고, 이
+// 오버레이가 사용자에게 보고할 표면을 갖고 있지 않다.
+const readTableColumnIds = (table: HTMLElement): string[] => {
+  const parsed = parseTableColumns(table.getAttribute("data-be-columns"));
+  return parsed.ok ? parsed.value.map((column) => column.id) : [];
 };
 
 type ColumnBound = { left: number; width: number };
@@ -219,7 +212,7 @@ const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
     height: rowBox.height,
   }));
 
-  const columnIds = parseTableColumnIds(table);
+  const columnIds = readTableColumnIds(table);
   const bounds = readColumnBounds(columnIds, rowBoxes, tableRect);
   const columns: ColumnGeometry[] = columnIds.map((columnId, index) => {
     const bound = bounds[index] ?? { left: tableRect.left, width: 0 };
@@ -660,7 +653,7 @@ export const TableHandles = () => {
       const count =
         menuState.kind === "row"
           ? table.querySelectorAll("[data-be-row-id]").length
-          : parseTableColumnIds(table).length;
+          : readTableColumnIds(table).length;
       return menuState.index < count;
     };
 

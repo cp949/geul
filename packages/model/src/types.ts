@@ -15,10 +15,11 @@ export type HeadingBlock = {
   level: 1 | 2 | 3;
   content: InlineContent;
 };
+export type TableColumn = { id: string; width: number };
 export type TableBlock = {
   id: string;
   type: "table";
-  columns: Array<{ id: string; width: number }>;
+  columns: TableColumn[];
   rows: Array<{
     id: string;
     cells: Array<{

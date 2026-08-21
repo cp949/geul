@@ -1,13 +1,13 @@
+import {
+  parseTableColumns,
+  serializeTableColumns,
+  type TableColumn,
+} from "@cp949/geul-model";
 import { mergeAttributes, Node } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { tableEditing } from "@tiptap/pm/tables";
 
-type TableColumnAttrs = { id: string; width: number };
-
-const syncColgroup = (
-  colgroup: HTMLElement,
-  columns: TableColumnAttrs[],
-): void => {
+const syncColgroup = (colgroup: HTMLElement, columns: TableColumn[]): void => {
   while (colgroup.children.length > columns.length) {
     colgroup.lastElementChild?.remove();
   }
@@ -32,7 +32,10 @@ const applyTableDomAttributes = (
   } else {
     dom.removeAttribute("data-be-block-id");
   }
-  dom.setAttribute("data-be-columns", JSON.stringify(node.attrs.columns ?? []));
+  dom.setAttribute(
+    "data-be-columns",
+    serializeTableColumns((node.attrs.columns ?? []) as TableColumn[]),
+  );
   dom.setAttribute("data-be-header-rows", String(node.attrs.headerRows ?? 0));
   dom.setAttribute(
     "data-be-header-columns",
@@ -76,15 +79,19 @@ export const TableExtension = Node.create({
             : {},
       },
       columns: {
-        default: [] as TableColumnAttrs[],
+        default: [] as TableColumn[],
         parseHTML: (element) => {
-          const parsed = parseJsonAttribute(
+          // Tiptap 속성 parseHTML은 값을 요구해 실패를 위로 전달할 수
+          // 없다 — 해석 불가는 열 없음으로 접는다.
+          const parsed = parseTableColumns(
             element.getAttribute("data-be-columns"),
           );
-          return Array.isArray(parsed) ? (parsed as TableColumnAttrs[]) : [];
+          return parsed.ok ? parsed.value : [];
         },
         renderHTML: (attributes) => ({
-          "data-be-columns": JSON.stringify(attributes.columns ?? []),
+          "data-be-columns": serializeTableColumns(
+            (attributes.columns ?? []) as TableColumn[],
+          ),
         }),
       },
       headerRows: {
@@ -107,7 +114,7 @@ export const TableExtension = Node.create({
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    const columns = (node.attrs.columns ?? []) as TableColumnAttrs[];
+    const columns = (node.attrs.columns ?? []) as TableColumn[];
     const colgroup = [
       "colgroup",
       {},
@@ -147,7 +154,7 @@ export const TableExtension = Node.create({
       const tbody = ownerDocument.createElement("tbody");
       dom.append(colgroup, tbody);
       applyTableDomAttributes(dom, node);
-      syncColgroup(colgroup, (node.attrs.columns ?? []) as TableColumnAttrs[]);
+      syncColgroup(colgroup, (node.attrs.columns ?? []) as TableColumn[]);
 
       let currentNode = node;
       return {
@@ -157,10 +164,7 @@ export const TableExtension = Node.create({
           if (next.type !== currentNode.type) return false;
           currentNode = next;
           applyTableDomAttributes(dom, next);
-          syncColgroup(
-            colgroup,
-            (next.attrs.columns ?? []) as TableColumnAttrs[],
-          );
+          syncColgroup(colgroup, (next.attrs.columns ?? []) as TableColumn[]);
           return true;
         },
         ignoreMutation(mutation: { type: string; target: globalThis.Node }) {

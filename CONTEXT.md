@@ -12,6 +12,10 @@ _Avoid_: Tiptap 문서, ProseMirror 문서, BlockNote 문서
 저장과 복원의 권위가 되는 독자 문서 JSON이다. HTML, GFM Markdown과 편집 엔진 상태는 저장 원본에서 만들거나 저장 원본으로 변환되는 표현이다.
 _Avoid_: Tiptap JSON, HTML 원본, 에디터 상태
 
+**DOM 투영**:
+저장 원본의 구조를 편집기 DOM 속성으로 실어 나르는 표현이다. 일부 항목(열 목록)의 권위를 갖지만 저장 원본 자체는 아니다.
+_Avoid_: 저장 원본, 렌더링 결과, 캐시
+
 **안정 ID**:
 문서가 저장·복원되거나 지원 포맷을 왕복해도 같은 논리 대상을 식별하는 ID다. 배열 위치나 편집 엔진 위치값은 안정 ID가 아니다.
 _Avoid_: 인덱스, ProseMirror position

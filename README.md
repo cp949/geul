@@ -20,7 +20,7 @@ demo  -> react, io, model
 - `packages/model` (`@cp949/geul-model`): 독자 문서 타입, shape·의미 검증, 표 논리 격자 검증
 - `packages/io` (`@cp949/geul-io`): model과 HTML/GFM 사이의 변환 및 HTML sanitize
 - `packages/core` (`@cp949/geul-core`): Tiptap을 비공개 구현으로 감싼 headless editor controller
-- `packages/react` (`@cp949/geul-react`): core의 공개 mount/command API만 사용하는 React 어댑터
+- `packages/react` (`@cp949/geul-react`): core의 공개 mount/command API와 저장 표현 직렬화 계약만 사용하는 React 어댑터
 - `apps/demo`: 배포된 패키지 공개 API를 사용하는 통합 데모
 - `fixtures/consumer`: `dist`와 package exports만 사용하는 소비자 검증 fixture
 
