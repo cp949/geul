@@ -13,10 +13,10 @@ argument-hint: <작업폴더>
 에러: meta.md가 없다 — <경로>
 
 에러: 핸드오프가 없다 — <경로>/handoff/
-      /handoff-write를 먼저 실행해야 한다.
+      /a-handoff-write를 먼저 실행해야 한다.
 
 에러: 최신 핸드오프가 이미 처리됐다 — handoff/NN.md (상태: 리뷰 완료)
-      새 리뷰가 필요하면 /handoff-write로 다음 핸드오프를 만들어야 한다.
+      새 리뷰가 필요하면 /a-handoff-write로 다음 핸드오프를 만들어야 한다.
 
 에러: 작업 브랜치가 없다 — <브랜치명>
       meta.md가 가리키는 브랜치가 삭제됐거나 이름이 다르다.

@@ -11,10 +11,10 @@ argument-hint: <작업폴더> [리뷰 초점]
 
 ```
 에러: meta.md가 없다 — <경로>
-      /issue-work을 먼저 실행해야 한다.
+      /a-issue-work을 먼저 실행해야 한다.
 
 에러: implementation-report.md가 없다 — <경로>
-      /issue-work을 먼저 완료해야 한다.
+      /a-issue-work을 먼저 완료해야 한다.
 ```
 
 ## 절차
