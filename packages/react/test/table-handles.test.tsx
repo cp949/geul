@@ -15,7 +15,7 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
-import { mountTableEditor, stubRect } from "./mount-editor.js";
+import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -43,16 +43,6 @@ if (typeof Element.prototype.releasePointerCapture !== "function") {
  */
 const renderRealTable = (options?: { rows?: number; columns?: number }) =>
   mountTableEditor({ ...options, children: <TableHandles /> });
-
-/**
- * 실제 문서에서 표 블록을 읽는다. 명령이 진짜라 호출 스파이 대신 결과를 본다
- * — 스파이는 명령이 아무것도 하지 않아도 통과한다.
- */
-const tableBlockOf = (editor: EditorController) => {
-  const block = editor.getDocument().blocks[1];
-  if (block?.type !== "table") throw new Error("표 블록을 찾지 못했다");
-  return block;
-};
 
 /**
  * 표 블록의 행 id 목록. 개수만 세면 어느 행이 움직였는지 구분하지 못하므로

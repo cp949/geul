@@ -12,8 +12,8 @@
  */
 import { createEditor, type EditorController } from "@cp949/geul-core";
 import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { afterEach } from "vitest";
+import { act, type ReactNode } from "react";
+import { afterEach, expect } from "vitest";
 
 import { EditorContent, EditorProvider } from "../src/index.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
@@ -115,6 +115,50 @@ const sequentialIds = (prefix: string) => {
     counter += 1;
     return `${prefix}-${counter}`;
   };
+};
+
+/**
+ * 실제 문서에서 표 블록을 읽는다. 명령이 진짜라 호출 스파이 대신 이 결과를
+ * 단언한다 — 스파이는 명령이 아무것도 하지 않아도 통과한다.
+ */
+export const tableBlockOf = (editor: EditorController) => {
+  const block = editor.getDocument().blocks[1];
+  if (block?.type !== "table") throw new Error("표 블록을 찾지 못했다");
+  return block;
+};
+
+/**
+ * 편집기 안의 노드(문단, 표 셀 등)에 실제 DOM 캐럿을 놓는다. EditorController에는
+ * 선택을 세우는 공개 API가 없으므로 실제 편집기의 캐럿을 움직이는 유일한 허용
+ * 경로다 — ProseMirror의 DOMObserver가 selectionchange를 받아 자기
+ * state.selection을 DOM에서 다시 읽는다(실측 확인).
+ *
+ * 여기서 발행하는 selectionchange는 편집기 내부 상태 동기화용이다. 오버레이가
+ * 그 캐럿을 읽게 하려면 테스트가 두 번째 selectionchange를 따로 쏴야 한다 —
+ * 오버레이의 리스너가 편집기 리스너보다 먼저 등록될 수 있어 첫 발행 때는 아직
+ * 갱신 전 선택을 본다.
+ */
+export const placeCaret = (node: HTMLElement) => {
+  act(() => {
+    const selection = node.ownerDocument.getSelection();
+    if (selection === null) throw new Error("DOM 선택을 얻지 못했다");
+    const range = node.ownerDocument.createRange();
+    range.setStart(node, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    node.ownerDocument.dispatchEvent(new Event("selectionchange"));
+  });
+};
+
+/**
+ * 초점을 편집 영역 밖(방금 누른 오버레이 컨트롤)으로 옮긴다. fixture가
+ * 캐럿을 놓느라 편집 영역에 초점을 준 채로 두면 "초점을 편집기로 되돌린다"
+ * 단언이 처음부터 편집기에 있던 초점을 다시 보는 공허한 단언이 된다.
+ */
+export const focusOutsideEditor = (element: HTMLElement) => {
+  element.focus();
+  expect(document.activeElement).toBe(element);
 };
 
 export type BlockLayout = {
@@ -385,8 +429,7 @@ export const mountTableEditor = ({
   };
   restubGeometry();
 
-  const block = editor.getDocument().blocks[1];
-  if (block?.type !== "table") throw new Error("표 블록을 찾지 못했다");
+  const block = tableBlockOf(editor);
 
   return {
     editor,

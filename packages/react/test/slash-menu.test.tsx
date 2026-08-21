@@ -22,9 +22,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SlashMenu } from "../src/index.js";
 import { expectIconOnlyButton } from "./expect-icon-button.js";
 import {
+  focusOutsideEditor,
   type MountedBlockEditor,
   mountBlockEditor,
   mountTableEditor,
+  placeCaret,
 } from "./mount-editor.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
@@ -69,31 +71,6 @@ const renderCaretBlocks = (options?: { blockIds?: readonly string[] }) => {
   return rendered;
 };
 
-/**
- * 편집기 안의 노드(문단, 표 셀)에 실제 DOM 캐럿을 놓는다. EditorController에는
- * 선택을 세우는 공개 API가 없으므로 실제 편집기의 캐럿을 움직이는 유일한 허용
- * 경로다 — ProseMirror의 DOMObserver가 selectionchange를 받아 자기
- * state.selection을 DOM에서 다시 읽는다(실측 확인).
- * table-selection-toolbar.test.tsx의 placeCaret과 같은 기법이다.
- *
- * 여기서 발행하는 selectionchange는 편집기 동기화용이다. SlashMenu가 그 캐럿을
- * 읽게 하려면 fireCaretUpdate를 따로 불러야 한다 — SlashMenu의 리스너가
- * ProseMirror의 리스너보다 먼저 등록될 수 있어 첫 발행 때는 아직 갱신 전
- * 선택을 본다.
- */
-const placeCaret = (node: HTMLElement) => {
-  act(() => {
-    const selection = node.ownerDocument.getSelection();
-    if (selection === null) throw new Error("DOM 선택을 얻지 못했다");
-    const range = node.ownerDocument.createRange();
-    range.setStart(node, 0);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    node.ownerDocument.dispatchEvent(new Event("selectionchange"));
-  });
-};
-
 /** SlashMenu에 캐럿이 바뀌었음을 알린다(selectionchange 폴링 경로). */
 const fireCaretUpdate = () => {
   act(() => {
@@ -131,16 +108,6 @@ const typeIntoBlock = (
   });
   fireCaretUpdate();
   return blockId;
-};
-
-/**
- * 초점을 편집 영역 밖(방금 누른 메뉴 항목)으로 옮긴다. fixture가 캐럿을
- * 놓느라 편집 영역에 초점을 준 채로 두면 "초점을 편집기로 되돌린다" 단언이
- * 처음부터 편집기에 있던 초점을 다시 보는 공허한 단언이 된다.
- */
-const focusOutsideEditor = (element: HTMLElement) => {
-  element.focus();
-  expect(document.activeElement).toBe(element);
 };
 
 /** 현재 문서의 블록 id 목록. 재정렬·삽입 결과를 순서까지 이 목록으로 본다. */

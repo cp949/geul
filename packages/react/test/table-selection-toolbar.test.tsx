@@ -18,7 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider } from "../src/index.js";
 import { TableSelectionToolbar } from "../src/table-selection-toolbar.js";
-import { mountTableEditor, stubRect } from "./mount-editor.js";
+import {
+  focusOutsideEditor,
+  mountTableEditor,
+  placeCaret,
+  stubRect,
+  tableBlockOf,
+} from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
@@ -249,13 +255,6 @@ const stubMergedGeometry = (host: HTMLElement, tableBlockId: string) => {
   return { cells, table };
 };
 
-/** 실제 문서에서 표 블록을 읽는다. 호출 스파이 대신 이 결과를 단언한다. */
-const tableBlockOf = (editor: EditorController) => {
-  const block = editor.getDocument().blocks[1];
-  if (block?.type !== "table") throw new Error("표 블록을 찾지 못했다");
-  return block;
-};
-
 /**
  * 표 블록에서 cellId로 셀을 찾는다. 색상 명령이 어느 셀에 적용됐는지
  * 문서에서 확인할 때 쓴다 — 대상을 틀려도 "무언가 칠해졌다"로는 안 걸린다.
@@ -339,41 +338,6 @@ const renderMergedCellTable = () => {
     secondMergedCellId: secondRowCell.id,
     table,
   };
-};
-
-/**
- * 편집기 안의 노드(병합 셀, 본문 문단)에 실제 DOM 캐럿을 놓는다.
- * EditorController에는 선택을 세우는 공개 API가 없으므로
- * (getTableCellSelection은 읽기 전용) 실제 편집기의 선택을 움직이는 유일한
- * 허용 경로다 — ProseMirror의 DOMObserver가 selectionchange를 받아 자기
- * state.selection을 DOM에서 다시 읽는다(실측 확인).
- *
- * 여기서 발행하는 selectionchange는 편집기 동기화용이다. 툴바가 그 선택을
- * 읽게 하려면 테스트가 triggerSelectionChange를 따로 불러야 한다 — 툴바의
- * 리스너가 편집기 리스너보다 먼저 등록돼(children이 EditorContent보다 앞)
- * 첫 발행 때는 아직 갱신 전 선택을 본다.
- */
-const placeCaret = (node: HTMLElement) => {
-  act(() => {
-    const selection = node.ownerDocument.getSelection();
-    if (selection === null) throw new Error("DOM 선택을 얻지 못했다");
-    const range = node.ownerDocument.createRange();
-    range.setStart(node, 0);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    node.ownerDocument.dispatchEvent(new Event("selectionchange"));
-  });
-};
-
-/**
- * 초점을 편집 영역 밖(방금 누른 툴바 버튼)으로 옮긴다. fixture가 캐럿을
- * 놓느라 편집 영역에 초점을 준 채로 두면 "초점을 편집기로 되돌린다" 단언이
- * 처음부터 편집기에 있던 초점을 다시 보는 공허한 단언이 된다.
- */
-const focusOutsideEditor = (element: HTMLElement) => {
-  element.focus();
-  expect(document.activeElement).toBe(element);
 };
 
 describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () => {
