@@ -1,3 +1,6 @@
+_works/
+.claude/settings.local.json
+.claude/*.lock
 _tmp/
 .superpowers/
 .worktrees/

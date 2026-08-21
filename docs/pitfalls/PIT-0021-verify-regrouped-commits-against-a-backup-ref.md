@@ -6,7 +6,7 @@
 
 ## 상황과 징후
 
-이 저장소는 `dev`에 세분화된 커밋을 누적하고 push 직전에 의미 단위로 재그룹화한다(`AGENTS.md`의 "Git과 작업공간"). `git switch --detach <base>` 후 `git cherry-pick -n`으로 순서를 바꿔 재조립할 때, revert 성격의 커밋을 그 원인 커밋보다 **앞** 그룹에 배치하면 cherry-pick이 충돌도 경고도 없이 `자동 병합`(`Auto-merging`) 한 줄만 출력하고 그 커밋을 no-op으로 흡수한다. 이후 원인 커밋이 적용되면서 되돌렸던 변경이 최종 트리에 되살아난다. 재조립 로그만 보면 모든 커밋이 정상 적용된 것처럼 보이고, typecheck를 다시 실행하기 전까지 회귀가 드러나지 않는다.
+이 저장소는 작업 브랜치에 세분화된 커밋을 누적하고 `dev`로 이전하기 직전에 의미 단위로 squash한다(`AGENTS.md`의 "작업 브랜치 수명"). `git rebase -i dev` 또는 `git switch --detach <base>` 후 `git cherry-pick -n`으로 순서를 바꿔 재조립할 때, revert 성격의 커밋을 그 원인 커밋보다 **앞** 그룹에 배치하면 cherry-pick이 충돌도 경고도 없이 `자동 병합`(`Auto-merging`) 한 줄만 출력하고 그 커밋을 no-op으로 흡수한다. 이후 원인 커밋이 적용되면서 되돌렸던 변경이 최종 트리에 되살아난다. 재조립 로그만 보면 모든 커밋이 정상 적용된 것처럼 보이고, typecheck를 다시 실행하기 전까지 회귀가 드러나지 않는다.
 
 ## 근본 원인
 
@@ -25,15 +25,14 @@
 ## 검증 방법
 
 ```bash
-git update-ref refs/backup/dev-pre-regroup HEAD    # 재조립 전
-git switch --detach <base>
-# ... git cherry-pick -n 으로 그룹별 재조립 ...
-git diff refs/backup/dev-pre-regroup HEAD --stat   # 재조립 후: 반드시 빈 출력
+git update-ref refs/backup/<작업 브랜치>-pre-squash HEAD    # 정리 전
+git rebase -i dev                                          # 또는 detach 후 cherry-pick -n
+git diff refs/backup/<작업 브랜치>-pre-squash HEAD --stat   # 정리 후: 반드시 빈 출력
 ```
 
 의도적으로 커밋을 버린 경우가 아니면 이 diff는 비어 있어야 한다. 비어 있지 않으면 그룹 순서가 잘못된 것이고, 출력된 파일이 상쇄 쌍이 갈라진 지점이다.
 
-그룹별 검증은 각 그룹의 커밋을 `git switch --detach <commit>`으로 체크아웃해 해당 범위의 focused 검증을 실행한다. 백업 ref는 push 후 `git update-ref -d refs/backup/<name>`으로 정리한다.
+그룹별 검증은 각 그룹의 커밋을 `git switch --detach <commit>`으로 체크아웃해 해당 범위의 focused 검증을 실행한다. 백업 ref는 `dev` 이전을 확인한 뒤 `git update-ref -d refs/backup/<name>`으로 정리한다.
 
 ## 실제 근거
 
@@ -42,4 +41,5 @@ git diff refs/backup/dev-pre-regroup HEAD --stat   # 재조립 후: 반드시 �
 
 ## 관련 문서
 
-- 작업 브랜치, 커밋 누적과 재그룹화·push 시점: `AGENTS.md`의 "Git과 작업공간"
+- 작업 브랜치 수명, 커밋 누적과 squash·이전 시점: `AGENTS.md`의 "Git과 작업공간"
+- 이 절차를 실행하는 커맨드: `.claude/commands/merge-dev.md`
