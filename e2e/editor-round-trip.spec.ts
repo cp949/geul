@@ -1,12 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
+import { openDemo } from "./support/demo.js";
 
 test("JSON·HTML·markdown을 편집하고 복원한다 @core", async ({ page }) => {
   const { editor, editable } = await openDemo(page);

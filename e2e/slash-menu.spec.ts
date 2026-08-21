@@ -1,14 +1,7 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
-
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
+import { openDemo } from "./support/demo.js";
 
 test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다 @core", async ({
   page,

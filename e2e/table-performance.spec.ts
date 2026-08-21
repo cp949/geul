@@ -21,16 +21,9 @@
  */
 import { expect, type Page, test } from "@playwright/test";
 
-const SAMPLE_COUNT = 5;
+import { openDemo } from "./support/demo.js";
 
-/** demo를 열고 편집 가능한 영역이 준비될 때까지 기다린다. */
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
+const SAMPLE_COUNT = 5;
 
 /** rows×columns 크기의 TSV 텍스트를 만든다. 셀 값은 "row-column" 형태다. */
 const buildTsv = (rows: number, columns: number): string =>

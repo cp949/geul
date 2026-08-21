@@ -5,25 +5,19 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
+import { insertTable, openDemo } from "./support/demo.js";
 
-/** demo를 열고 편집 가능한 영역이 준비될 때까지 기다린다. */
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
-
-/** 슬래시 메뉴로 기본 3×3 표를 만들어 브라우저 조작 fixture를 준비한다. */
-const insertTable = async (page: Page) => {
+/**
+ * 데모를 열고 슬래시 메뉴로 기본 3×3 표를 만들어 브라우저 조작 fixture를
+ * 준비한다. 이 파일의 테스트는 대부분 빈 데모에 표 하나만 있으면 된다.
+ *
+ * 공용 `insertTable`과 달리 `openDemo`를 안에서 부르므로 — 시그니처가
+ * 다르다 — 이름을 재사용하지 않고 지역 wrapper로 둔다. 반환의 `editable`은
+ * 메뉴를 닫은 뒤 편집기로 초점이 돌아왔는지 보는 일부 테스트가 쓴다.
+ */
+const openDemoWithTable = async (page: Page) => {
   const { editable } = await openDemo(page);
-  await editable.click();
-  await page.keyboard.type("/table");
-  await expect(page.getByRole("option", { name: /Table/ })).toBeVisible();
-  await page.keyboard.press("Enter");
-  const table = editable.locator("table");
-  await expect(table).toBeVisible();
+  const table = await insertTable(page, editable);
   return { editable, table };
 };
 
@@ -48,7 +42,7 @@ const openHandleMenu = async (page: Page, kind: "row" | "column") => {
 test("행 핸들 메뉴에서 헤더 행을 켜고 undo 1회로 복원한다 @core", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   await openHandleMenu(page, "row");
 
   await page.getByRole("menuitemcheckbox", { name: "Header row" }).click();
@@ -69,7 +63,7 @@ test("행 핸들 메뉴에서 헤더 행을 켜고 undo 1회로 복원한다 @co
 });
 
 test("열 핸들 메뉴에서 헤더 열을 켠다", async ({ page }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   await openHandleMenu(page, "column");
 
   await page.getByRole("menuitemcheckbox", { name: "Header column" }).click();
@@ -80,7 +74,7 @@ test("열 핸들 메뉴에서 헤더 열을 켠다", async ({ page }) => {
 test("행 핸들 메뉴에서 배경색을 고르면 그 행에만 색이 적용되고 undo 1회로 복원한다", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   await openHandleMenu(page, "row");
 
   await page.getByRole("menuitem", { name: "Background color Yellow" }).click();
@@ -102,7 +96,7 @@ test("행 핸들 메뉴에서 배경색을 고르면 그 행에만 색이 적용
 });
 
 test("행 핸들 메뉴에서 행을 삭제하고 undo 1회로 복원한다", async ({ page }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   await expect(table.locator("tr")).toHaveCount(3);
   await openHandleMenu(page, "row");
 
@@ -115,7 +109,7 @@ test("행 핸들 메뉴에서 행을 삭제하고 undo 1회로 복원한다", as
 });
 
 test("열 핸들 메뉴에서 열을 삭제한다", async ({ page }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   await expect(table.locator("tr").first().locator("td")).toHaveCount(3);
   await openHandleMenu(page, "column");
 
@@ -125,7 +119,7 @@ test("열 핸들 메뉴에서 열을 삭제한다", async ({ page }) => {
 });
 
 test("Escape로 표 메뉴를 닫으면 편집기로 초점을 복구한다", async ({ page }) => {
-  const { editable } = await insertTable(page);
+  const { editable } = await openDemoWithTable(page);
   const menu = await openHandleMenu(page, "row");
 
   await page.keyboard.press("Escape");
@@ -137,7 +131,7 @@ test("Escape로 표 메뉴를 닫으면 편집기로 초점을 복구한다", as
 test("표 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다 (PIT-0013)", async ({
   page,
 }) => {
-  await insertTable(page);
+  await openDemoWithTable(page);
   const menu = await openHandleMenu(page, "row");
 
   const saveButton = page.getByRole("button", { name: "Save JSON" });
@@ -178,7 +172,7 @@ test("메뉴를 연 채 스크롤해도 메뉴가 핸들 위치를 따라간다"
 test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   // 확장 버튼은 표 hover 중에만 렌더된다.
   await table.locator("td").first().hover();
   const addRow = page.getByRole("button", { name: "Add row" });
@@ -242,7 +236,7 @@ const dragSelectCells = async (
 test("셀 하나를 트리플클릭으로 선택해 배경색을 적용하고 undo로 되돌린다 @core", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   const cell = table.locator("td").first();
   await cell.click({ clickCount: 3 });
 
@@ -256,7 +250,7 @@ test("셀 하나를 트리플클릭으로 선택해 배경색을 적용하고 un
 });
 
 test("여러 셀을 드래그 선택해 글자색을 함께 적용한다", async ({ page }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   const cell = (row: number, column: number) =>
     table.locator("tr").nth(row).locator("td").nth(column);
 
@@ -273,7 +267,7 @@ test("여러 셀을 드래그 선택해 글자색을 함께 적용한다", async
 test("셀 범위를 다시 선택하지 않고 색상과 정렬을 연속 적용한다", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   /** 행·열 좌표로 실제 표 셀을 조회한다. */
   const cell = (row: number, column: number) =>
     table.locator("tr").nth(row).locator("td").nth(column);
@@ -304,7 +298,7 @@ test("셀 범위를 다시 선택하지 않고 색상과 정렬을 연속 적용
 test("병합 셀 커서를 유지하며 색상과 정렬을 연속 적용한다", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   /** 첫 행의 열 인덱스로 병합 대상 셀을 조회한다. */
   const cell = (column: number) =>
     table.locator("tr").first().locator("td").nth(column);
@@ -331,7 +325,7 @@ test("병합 셀 커서를 유지하며 색상과 정렬을 연속 적용한다"
 });
 
 test("셀 정렬을 적용하고 undo로 되돌린다 @core", async ({ page }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   const cell = table.locator("td").first();
   await cell.click({ clickCount: 3 });
 
@@ -345,7 +339,7 @@ test("셀 정렬을 적용하고 undo로 되돌린다 @core", async ({ page }) =
 });
 
 test("Escape로 셀 서식 메뉴를 닫는다 (PIT-0009)", async ({ page }) => {
-  const { editable, table } = await insertTable(page);
+  const { editable, table } = await openDemoWithTable(page);
   const cell = table.locator("td").first();
   await cell.click({ clickCount: 3 });
 
@@ -364,7 +358,7 @@ test("Escape로 셀 서식 메뉴를 닫는다 (PIT-0009)", async ({ page }) => 
 test("셀 서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않는다 (PIT-0013)", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   const cell = table.locator("td").first();
   await cell.click({ clickCount: 3 });
 
@@ -383,7 +377,7 @@ test("셀 서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않
 test("키보드로 셀 서식을 적용한 뒤 편집 초점과 셀 선택을 복구한다", async ({
   page,
 }) => {
-  const { editable, table } = await insertTable(page);
+  const { editable, table } = await openDemoWithTable(page);
   /** 첫 행의 열 인덱스로 키보드 선택 대상을 조회한다. */
   const cell = (column: number) =>
     table.locator("tr").first().locator("td").nth(column);
@@ -406,7 +400,7 @@ test("키보드로 셀 서식을 적용한 뒤 편집 초점과 셀 선택을 �
 test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
-  const { table } = await insertTable(page);
+  const { table } = await openDemoWithTable(page);
   // 확장 버튼은 표 hover 중에만 렌더된다.
   await table.locator("td").first().hover();
   const addRow = page.getByRole("button", { name: "Add row" });

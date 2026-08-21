@@ -1,15 +1,8 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
+import { openDemo } from "./support/demo.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
-
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
 
 test("텍스트가 선택된 동안에만 서식 툴바를 표시한다", async ({ page }) => {
   const { editable } = await openDemo(page);

@@ -1,22 +1,6 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
-
-const insertTable = async (page: Page, editable: Locator) => {
-  await editable.click();
-  await page.keyboard.type("/table");
-  await expect(page.getByRole("option", { name: /Table/ })).toBeVisible();
-  await page.keyboard.press("Enter");
-  const table = editable.locator("table");
-  await expect(table).toBeVisible();
-  return table;
-};
+import { insertTable, openDemo } from "./support/demo.js";
 
 test("슬래시 메뉴에서 표를 삽입하고 undo 1회로 복원한다 @core", async ({
   page,

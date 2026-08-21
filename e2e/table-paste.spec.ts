@@ -4,16 +4,9 @@
  * 문단이 섞인 혼합 HTML(Issue #71, 문단·표 구조 모두 무손실 보존)을
  * 함께 다룬다.
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-/** demo를 열고 편집 가능한 영역이 준비될 때까지 기다린다. */
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
+import { openDemo } from "./support/demo.js";
 
 /**
  * 대상 엘리먼트에 ClipboardEvent("paste")를 직접 디스패치한다.

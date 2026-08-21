@@ -1,12 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
+import { openDemo } from "./support/demo.js";
 
 test("서식 툴바 버튼이 데모 앱의 전역 button 리셋을 이기고 의도한 크기로 렌더링된다", async ({
   page,

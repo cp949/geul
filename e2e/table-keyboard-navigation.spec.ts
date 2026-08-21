@@ -1,22 +1,6 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
-const openDemo = async (page: Page) => {
-  await page.goto("/");
-  const editor = page.getByRole("textbox", { name: "Editor" });
-  const editable = editor.locator('[contenteditable="true"]');
-  await expect(editable).toBeVisible();
-  return { editor, editable };
-};
-
-const insertTable = async (page: Page, editable: Locator) => {
-  await editable.click();
-  await page.keyboard.type("/table");
-  await expect(page.getByRole("option", { name: /Table/ })).toBeVisible();
-  await page.keyboard.press("Enter");
-  const table = editable.locator("table");
-  await expect(table).toBeVisible();
-  return table;
-};
+import { insertTable, openDemo } from "./support/demo.js";
 
 // Tab/Shift+Tab은 ProseMirror selection만 옮기고 새 DOM 요소를 만들지 않는다
 // — 타이핑을 곧바로 이어붙이면 headless 병렬 실행(예: --workers=5)에서
