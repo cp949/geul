@@ -25,3 +25,4 @@
 | `PIT-0019` | 안정 key로 재사용되는 DOM의 억제 키는 안정 식별자로 고정 | `ACTIVE` | react·e2e | Issue #17 | [상세](./PIT-0019-anchor-suppression-keys-to-stable-ids.md) |
 | `PIT-0020` | lint 경고의 자동수정은 실제 타입 계약과 대조해 검증 | `ACTIVE` | react·전 패키지 | Issue #18 | [상세](./PIT-0020-verify-lint-autofix-against-the-real-contract.md) |
 | `PIT-0021` | 재그룹화한 커밋은 백업 ref와 트리 diff로 대조 | `ACTIVE` | git·process | `dev` 재그룹화 | [상세](./PIT-0021-verify-regrouped-commits-against-a-backup-ref.md) |
+| `PIT-0022` | 테스트 헬퍼는 두 번째 파일에서 복제하지 말고 공용 모듈이 단독 소유 | `ACTIVE` | react·test | Issue #50 | [상세](./PIT-0022-own-test-helpers-in-a-shared-module.md) |
