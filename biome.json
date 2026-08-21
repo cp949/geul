@@ -5,6 +5,7 @@
       "**",
       "!.worktrees",
       "!_tmp",
+      "!_works",
       "!**/.turbo",
       "!**/.vite",
       "!**/dist",
