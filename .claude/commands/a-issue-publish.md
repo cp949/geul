@@ -43,7 +43,7 @@ argument-hint: [작업폴더]
 
 ## 금지
 
-- 초안에 없는 내용을 새로 만들어 올리지 않는다. 내용 생성은 `/issue-work`, `/handoff-run`, `/final-report`가 한다. 이 커맨드는 게시만 한다.
+- 초안에 없는 내용을 새로 만들어 올리지 않는다. 내용 생성은 `/a-issue-work`, `/a-handoff-run`, `/a-final-report`가 한다. 이 커맨드는 게시만 한다.
 - 이슈를 종료하지 않는다. `gh issue close`는 사용자가 별도로 지시할 때만 실행한다.
 - 라벨, assignee, sub-issue와 dependency를 초안이 명시하지 않은 범위에서 바꾸지 않는다.
 - push하지 않는다.

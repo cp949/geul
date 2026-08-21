@@ -105,7 +105,7 @@ git status --short
 2. 구현 세션은 세분화된 커밋을 작업 브랜치에 그대로 누적하고 정지한다. squash도 병합도 하지 않는다.
 3. 리뷰 세션은 핸드오프를 받아 같은 작업 브랜치에서 수정 커밋을 이어 쌓는다.
 4. 리뷰가 끝나면 `pnpm verify` 전량을 통과시킨 뒤 작업 브랜치에서 커밋을 의미 단위로 squash한다.
-5. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`로 이전한다. ff가 거절되면 현재 `dev` 기준으로 4단계를 다시 실행한다. 실행 명령은 `.claude/commands/merge-dev.md`가 소유한다.
+5. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`로 이전한다. ff가 거절되면 현재 `dev` 기준으로 4단계를 다시 실행한다. 실행 명령은 `.claude/commands/a-merge-dev.md`가 소유한다.
 6. 이전이 끝나면 `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
 7. 작업 브랜치는 push하지 않는다. push 대상은 `dev`뿐이고 명시적 지시를 기다린다.
 

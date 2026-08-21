@@ -8,15 +8,15 @@
 
 | 순서 | 커맨드 | 인자 | 결과 |
 | --- | --- | --- | --- |
-| 1 | `/issue-work` | `<이슈번호>` | 작업 폴더·브랜치 생성, 구현과 자체 리뷰, `implementation-report.md` |
-| 2 | `/handoff-write` | `<작업폴더> [초점]` | `handoff/NN.md` |
-| 3 | `/handoff-run` | `<작업폴더>` | 리뷰-수정 커밋, 핸드오프에 리뷰 결과 |
-| 4 | `/merge-dev` | `[작업폴더]` | `pnpm verify` → squash → `dev` ff-only 이전 → 브랜치 삭제 |
-| 5 | `/final-report` | `<작업폴더>` | `final-report.md`와 완료 댓글 초안 |
-| 6 | `/issue-publish` | `[작업폴더]` | 초안을 GitHub에 등록 |
-| — | `/wip` | `[작업폴더]` | 현황 조회(읽기 전용) |
+| 1 | `/a-issue-work` | `<이슈번호>` | 작업 폴더·브랜치 생성, 구현과 자체 리뷰, `implementation-report.md` |
+| 2 | `/a-handoff-write` | `<작업폴더> [초점]` | `handoff/NN.md` |
+| 3 | `/a-handoff-run` | `<작업폴더>` | 리뷰-수정 커밋, 핸드오프에 리뷰 결과 |
+| 4 | `/a-merge-dev` | `[작업폴더]` | `pnpm verify` → squash → `dev` ff-only 이전 → 브랜치 삭제 |
+| 5 | `/a-final-report` | `<작업폴더>` | `final-report.md`와 완료 댓글 초안 |
+| 6 | `/a-issue-publish` | `[작업폴더]` | 초안을 GitHub에 등록 |
+| — | `/a-wip` | `[작업폴더]` | 현황 조회(읽기 전용) |
 
-`/merge-dev`는 인자가 없으면 현재 브랜치로 작업 폴더를 역추적한다. `/issue-publish`는 인자가 없으면 전체 초안을 대상으로 한다. 작업 폴더 이름을 모르면 인자 없는 `/wip`으로 목록을 얻는다.
+`/a-merge-dev`는 인자가 없으면 현재 브랜치로 작업 폴더를 역추적한다. `/a-issue-publish`는 인자가 없으면 전체 초안을 대상으로 한다. 작업 폴더 이름을 모르면 인자 없는 `/a-wip`으로 목록을 얻는다.
 
 `dev` push와 `dev` → `main` 병합은 커맨드가 하지 않는다. 사용자가 직접 지시하거나 수행한다.
 

@@ -23,7 +23,7 @@ argument-hint: [작업폴더]
 
 다음이 어긋나면 아무것도 바꾸지 않고 정지한다.
 
-- `meta.md` 상태가 `리뷰 완료`여야 한다. `리뷰 대기`면 `/handoff-run`이 남았다.
+- `meta.md` 상태가 `리뷰 완료`여야 한다. `리뷰 대기`면 `/a-handoff-run`이 남았다.
 - `git status --short`가 비어 있어야 한다.
 - 작업 브랜치가 존재하고 `git log --oneline dev..<브랜치>`가 비어 있지 않아야 한다.
 
