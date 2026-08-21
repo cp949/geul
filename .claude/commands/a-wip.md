@@ -28,7 +28,7 @@ argument-hint: [작업폴더]
 
 ## 인자가 있을 때: 작업 상세
 
-`AGENTS.md`의 "로컬 작업공간" 규칙으로 폴더를 해석하고 다음을 보여준다.
+`docs/agents/a-workflow.md`의 "로컬 작업공간" 규칙으로 폴더를 해석하고 다음을 보여준다.
 
 - `meta.md`의 작업 브랜치, 대상 이슈, 상태와 진행 로그
 - 산출물 존재 여부: `implementation-report.md`, `final-report.md`

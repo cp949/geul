@@ -5,6 +5,8 @@ argument-hint: <이슈번호>
 
 이슈 `#$1`을 구현한다. 이 세션에 앞선 맥락이 없다고 가정하고 필요한 문서를 직접 읽는다.
 
+이 커맨드를 호출한 것이 a-workflow 진입 지시다. 흐름 전체는 [`docs/agents/a-workflow.md`](../../docs/agents/a-workflow.md)가 소유한다.
+
 ## 전제
 
 인자가 없으면 정지한다.
