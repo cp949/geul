@@ -1,8 +1,9 @@
 /**
  * `parseClipboardTable`가 들어온 클립보드를 표로 볼지 말지 판정하는 경계를
- * 검증한다. HTML에 표가 없을 때의 text/plain TSV 폴백, 표로 보기 어려운
- * 텍스트를 NOT_TABULAR로 흘려보내는 조건, 셀 한도 초과 거절, 그리고 표를
- * 찾아 거절한 뒤에는 TSV로 다시 새지 않는다는 보호를 함께 다룬다.
+ * 검증한다. HTML에 표가 없을 때의 text/plain TSV 폴백, 구조적 래퍼에 싸인
+ * 표의 판정, 표로 보기 어려운 텍스트를 NOT_TABULAR로 흘려보내는 조건, 셀
+ * 한도 초과 거절, 그리고 표를 찾아 거절한 뒤에는 TSV로 다시 새지 않는다는
+ * 보호를 함께 다룬다.
  */
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";

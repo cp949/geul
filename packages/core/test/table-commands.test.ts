@@ -1,7 +1,7 @@
 /**
  * 표 명령의 구조 조작 경로를 검증한다. 표 삽입, 행·열의 삽입·삭제·이동,
  * 열 너비 조절, 셀 병합·분할, 그리고 undo 단계를 만들지 않아야 하는 no-op
- * 방어 동작을 다룬다. 붙여넣기 경로는 table-paste-commands.test.ts가 맡는다.
+ * 방어 동작을 다룬다. 붙여넣기 경로는 table-paste-*.test.ts가 맡는다.
  */
 import { describe, expect, it } from "vitest";
 

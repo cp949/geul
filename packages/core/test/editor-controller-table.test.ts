@@ -1,9 +1,9 @@
 /**
  * 에디터 컨트롤러의 표 조작 명령을 검증한다. 행·열 삽입과 이동, 열 너비
  * 조절, 표 블록을 거부해야 하는 일반 블록 명령, 셀 병합·분할과 선택 보고,
- * Tab/Shift+Tab 셀 탐색을 다룬다. 문서 로드와 insertTable은
- * editor-controller-table-load.test.ts, 붙여넣기는
- * editor-controller-table-paste.test.ts가 맡는다.
+ * Tab/Shift+Tab 셀 탐색과 undo 단계를 만들지 않아야 하는 no-op 방어 동작을
+ * 다룬다. 문서 로드와 표 삽입은 editor-controller-table-load.test.ts,
+ * 붙여넣기는 editor-controller-table-paste.test.ts가 맡는다.
  */
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";

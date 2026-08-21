@@ -2,8 +2,8 @@
  * TabularData 붙여넣기가 문서 어디에 표를 만드는지 검증한다. 문단 걸침
  * 선택, 전체 선택, GapCursor, 표 안팎 등 호출 시점의 선택 상태별로 표가
  * 놓이는 위치와 캐럿 이동, undo 단계를 다루고, 문단이 섞인 클립보드
- * 시퀀스의 삽입도 함께 본다. 거절 경로는 table-paste-validation.test.ts가
- * 맡는다.
+ * 시퀀스의 삽입과 그 시퀀스 계약 위반 거절도 함께 본다. TabularData 거절
+ * 경로는 table-paste-validation.test.ts가 맡는다.
  */
 import type { ClipboardContentBlock, TabularData } from "@cp949/geul-io";
 import { GapCursor } from "@tiptap/pm/gapcursor";

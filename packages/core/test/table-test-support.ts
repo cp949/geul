@@ -1,7 +1,7 @@
 /**
- * 표 관련 core 테스트가 공유하는 격리 에디터, 문서 fixture와 캐럿 배치
- * 헬퍼를 소유한다. 여러 테스트 파일이 같은 fixture를 쓰므로 사본을 만들지
- * 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ * 표 관련 core 테스트가 공유하는 격리 에디터, 문서·데이터 fixture와 캐럿
+ * 배치 헬퍼를 소유한다. 여러 테스트 파일이 같은 fixture를 쓰므로 사본을
+ * 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
  */
 import type { TabularData } from "@cp949/geul-io";
 import type { JSONContent } from "@tiptap/core";
@@ -48,7 +48,7 @@ export const createTableFixtureEditor = (content: JSONContent): Editor => {
 
 /**
  * 표 셀 하나의 tiptap JSON을 만든다. 아래 표 fixture들이 행을 구성할 때
- * 쓰고, 붙여넣기 테스트가 기대 문서를 직접 조립할 때도 쓴다.
+ * 쓰고, 공유 fixture로 표현되지 않는 문서를 테스트가 직접 조립할 때도 쓴다.
  */
 export const cellJson = (cellId: string, columnId: string) => ({
   type: "tableCell",
@@ -102,7 +102,10 @@ export const docWithTable = {
   ],
 };
 
-/** 2행 2열 표 하나짜리 문서 — 행 삭제·이동과 셀 병합이 필요한 경우에 쓴다. */
+/**
+ * 2행 2열 표 하나짜리 문서 — 행이 둘 이상이어야 하는 시나리오에 쓴다. 행
+ * 삭제·이동, 셀 병합, 표 안 붙여넣기가 여기 해당한다.
+ */
 export const docWithTwoRowTable = {
   type: "doc",
   content: [
@@ -134,8 +137,9 @@ export const docWithTwoRowTable = {
 };
 
 /**
- * cellId로 셀을 찾아 그 셀의 시작 경계 위치를 구한다. tiptap 문서에서 셀
- * 위치를 얻는 유일한 경로가 descendants 순회다.
+ * cellId로 셀을 찾아 그 셀의 시작 경계 위치를 구한다. TableMap은 격자
+ * 좌표(positionAt)나 문서 위치(findCell)로만 셀을 찾으므로 cellId로 찾으려면
+ * 문서를 순회해야 한다.
  */
 const findCellBoundaryPosition = (
   editor: ReturnType<typeof createTableFixtureEditor>,
@@ -167,8 +171,8 @@ export const placeCaretInCell = (
 };
 
 /**
- * 셀 하나짜리 TabularData를 만든다. 붙여넣기 테스트 대부분은 데이터의
- * 모양이 아니라 삽입 위치와 거절 여부를 보므로 최소 크기 입력을 쓴다.
+ * 셀 하나짜리 TabularData를 만든다. 삽입 위치나 거절 여부만 보는 테스트가
+ * 데이터 모양에 신경 쓰지 않도록 최소 크기 입력을 제공한다.
  */
 export const oneByOneData = (text: string): TabularData => ({
   columnCount: 1,
