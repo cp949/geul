@@ -5,13 +5,7 @@ import {
   tableBlockToTiptapNode,
   tiptapNodeToTableBlock,
 } from "../src/table-model-codec.js";
-import { createTableFixtureEditor } from "./table-test-support.js";
-
-const emptyDocSchema = () =>
-  createTableFixtureEditor({
-    type: "doc",
-    content: [{ type: "paragraph" }],
-  }).schema;
+import { emptyDocSchema } from "./table-test-support.js";
 
 const sampleTable: TableBlock = {
   id: "table-1",

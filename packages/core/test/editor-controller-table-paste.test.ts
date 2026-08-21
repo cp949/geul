@@ -14,6 +14,10 @@ import {
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
+import {
+  findCellBoundaryPosition,
+  placeCaretInCell,
+} from "./table-test-support.js";
 
 // jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
 // (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
@@ -220,18 +224,13 @@ describe("에디터 컨트롤러 표", () => {
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
 
-    // 좌상단 셀 안(셀 경계 + 1)에 캐럿을 둔다.
-    let cellPosition: number | null = null;
-    tiptap.state.doc.descendants((node, pos) => {
-      if (cellPosition !== null) return false;
-      if (node.type.name === "tableCell") {
-        cellPosition = pos + 1;
-        return false;
-      }
-      return true;
-    });
-    if (cellPosition === null) throw new Error("셀 fixture 준비 실패");
-    tiptap.commands.setTextSelection(cellPosition);
+    const insertedTable = editor.getDocument().blocks[1];
+    if (insertedTable?.type !== "table") {
+      throw new Error("Expected a table block");
+    }
+    const topLeft = insertedTable.rows[0]?.cells[0]?.id;
+    if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
+    placeCaretInCell(tiptap, topLeft);
 
     const data = new DataTransfer();
     data.setData(
@@ -373,34 +372,22 @@ describe("에디터 컨트롤러 표", () => {
       throw new Error("셀 fixture 준비 실패");
     }
 
-    const cellBoundaryPosition = (cellId: string): number => {
-      let found: number | null = null;
-      tiptap.state.doc.descendants((node, pos) => {
-        if (found !== null) return false;
-        if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
-          found = pos;
-          return false;
-        }
-        return true;
-      });
-      if (found === null) throw new Error("셀 fixture 준비 실패");
-      return found;
-    };
+    const topLeftPos = findCellBoundaryPosition(tiptap, topLeft);
+    const bottomLeftPos = findCellBoundaryPosition(tiptap, bottomLeft);
+    if (topLeftPos === null || bottomLeftPos === null) {
+      throw new Error("셀 fixture 준비 실패");
+    }
 
     tiptap.view.dispatch(
       tiptap.state.tr.setSelection(
-        CellSelection.create(
-          tiptap.state.doc,
-          cellBoundaryPosition(topLeft),
-          cellBoundaryPosition(bottomLeft),
-        ),
+        CellSelection.create(tiptap.state.doc, topLeftPos, bottomLeftPos),
       ),
     );
     const merged = editor.commands.mergeTableCells(inserted.value.blockId);
     if (!merged.ok) throw new Error("셀 병합 fixture 준비 실패");
 
     // 병합 셀 안으로 캐럿을 옮긴다 — selectedRect의 anchor가 (0,0)이 된다.
-    tiptap.commands.setTextSelection(cellBoundaryPosition(topLeft) + 1);
+    placeCaretInCell(tiptap, topLeft);
     editable.focus();
 
     return { editor, editable, tiptap };

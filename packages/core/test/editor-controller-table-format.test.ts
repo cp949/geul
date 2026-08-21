@@ -12,6 +12,7 @@ import {
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
+import { findCellBoundaryPosition } from "./table-test-support.js";
 
 /** 문단 1개 뒤에 rows x columns 표를 넣은 편집기와 표 blockId를 만든다. */
 const editorWithTable = (rows: number, columns: number) => {
@@ -47,16 +48,9 @@ const selectFirstRow = (
   if (anchorCellId === undefined || headCellId === undefined) {
     throw new Error("셀 fixture 준비 실패");
   }
-  const positions = new Map<string, number>();
-  tiptap.state.doc.descendants((node, pos) => {
-    const cellId = node.attrs.cellId;
-    if (node.type.name === "tableCell" && typeof cellId === "string") {
-      positions.set(cellId, pos);
-    }
-  });
-  const anchor = positions.get(anchorCellId);
-  const head = positions.get(headCellId);
-  if (anchor === undefined || head === undefined) {
+  const anchor = findCellBoundaryPosition(tiptap, anchorCellId);
+  const head = findCellBoundaryPosition(tiptap, headCellId);
+  if (anchor === null || head === null) {
     throw new Error("셀 fixture 준비 실패");
   }
   tiptap.view.dispatch(

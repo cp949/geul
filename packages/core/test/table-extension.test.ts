@@ -1,13 +1,10 @@
 import { DOMSerializer } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
 
-import { createTableFixtureEditor } from "./table-test-support.js";
-
-const emptyDocSchema = () =>
-  createTableFixtureEditor({
-    type: "doc",
-    content: [{ type: "paragraph" }],
-  }).schema;
+import {
+  createTableFixtureEditor,
+  emptyDocSchema,
+} from "./table-test-support.js";
 
 describe("표를 렌더링한다", () => {
   it("table.attrs.columns의 너비를 colgroup/col로 반영한다", () => {

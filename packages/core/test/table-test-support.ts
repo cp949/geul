@@ -1,7 +1,11 @@
 /**
- * 표 관련 core 테스트가 공유하는 격리 에디터, 문서·데이터 fixture와 캐럿
- * 배치 헬퍼를 소유한다. 여러 테스트 파일이 같은 fixture를 쓰므로 사본을
- * 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ * 표 관련 core 테스트가 공유하는 격리 에디터와 그 스키마, 문서·데이터
+ * fixture와 셀 위치·캐럿 헬퍼를 소유한다. 여러 테스트 파일이 같은 fixture를
+ * 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ *
+ * 셀 헬퍼는 Editor를 받는다. createTableFixtureEditor가 만든 격리 에디터와
+ * EditorController가 마운트한 에디터 모두가 호출부이므로 어느 한쪽의 생성
+ * 함수에 시그니처를 매지 않는다.
  */
 import type { TabularData } from "@cp949/geul-io";
 import type { JSONContent } from "@tiptap/core";
@@ -45,6 +49,17 @@ export const createTableFixtureEditor = (content: JSONContent): Editor => {
   });
   return editor;
 };
+
+/**
+ * 표 fixture 확장이 등록된 스키마. 문서 내용이 아니라 노드 정의만 필요한
+ * 테스트가 최소 문서로 에디터를 하나 만들어 그 스키마를 꺼내는 경로다.
+ * 문서가 비어 있을 뿐 스키마에는 table/tableRow/tableCell이 모두 있다.
+ */
+export const emptyDocSchema = () =>
+  createTableFixtureEditor({
+    type: "doc",
+    content: [{ type: "paragraph" }],
+  }).schema;
 
 /**
  * 표 셀 하나의 tiptap JSON을 만든다. 아래 표 fixture들이 행을 구성할 때
@@ -141,8 +156,8 @@ export const docWithTwoRowTable = {
  * 좌표(positionAt)나 문서 위치(findCell)로만 셀을 찾으므로 cellId로 찾으려면
  * 문서를 순회해야 한다.
  */
-const findCellBoundaryPosition = (
-  editor: ReturnType<typeof createTableFixtureEditor>,
+export const findCellBoundaryPosition = (
+  editor: Editor,
   cellId: string,
 ): number | null => {
   let found: number | null = null;
@@ -161,13 +176,30 @@ const findCellBoundaryPosition = (
  * 지정한 셀 안에 캐럿을 둔다. setTextSelection에는 셀 경계가 아니라 경계
  * 다음 위치(boundary + 1)를 줘야 캐럿이 셀 내부에 들어간다.
  */
-export const placeCaretInCell = (
-  editor: ReturnType<typeof createTableFixtureEditor>,
-  cellId: string,
-) => {
+export const placeCaretInCell = (editor: Editor, cellId: string) => {
   const boundary = findCellBoundaryPosition(editor, cellId);
   if (boundary === null) throw new Error("셀 fixture 준비 실패");
   editor.commands.setTextSelection(boundary + 1);
+};
+
+/**
+ * 현재 캐럿이 들어 있는 셀의 cellId. 캐럿이 표 밖에 있거나 셀에 cellId가
+ * 없으면 null이다. 탐색은 $from.depth 자신부터 포함한다 — tableCell의
+ * content가 inline*이라 셀은 문단을 끼지 않는 textblock이고, 셀 안 캐럿의
+ * $from.depth 노드가 곧 tableCell이다. depth - 1부터 보면 셀을 놓친다.
+ * 격리 fixture와 EditorController가 마운트한 에디터 양쪽에서,
+ * placeCaretInCell 직후와 Tab 이동 후 모두 그렇다는 것을 실측했다.
+ */
+export const activeCellId = (editor: Editor): string | null => {
+  const { $from } = editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth);
+    if (node.type.name === "tableCell") {
+      const cellId = node.attrs.cellId;
+      return typeof cellId === "string" ? cellId : null;
+    }
+  }
+  return null;
 };
 
 /**

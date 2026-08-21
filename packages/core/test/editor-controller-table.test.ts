@@ -13,6 +13,11 @@ import {
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
+import {
+  activeCellId,
+  findCellBoundaryPosition,
+  placeCaretInCell,
+} from "./table-test-support.js";
 
 describe("에디터 컨트롤러 표", () => {
   describe("표 조작 명령", () => {
@@ -185,33 +190,9 @@ describe("에디터 컨트롤러 표", () => {
 
   describe("표 셀 병합·분할", () => {
     // CellSelection.create는 $anchorCell.node(-1)이 table이길 기대한다 —
-    // 셀 노드 바로 앞(= row content 안) 위치가 그 depth다. 셀 내부로 한 칸
-    // 더 들어가면 node(-1)이 row가 되어 RangeError를 던진다.
-    const findCellBoundaryPosition = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-      cellId: string,
-    ): number | null => {
-      let found: number | null = null;
-      tiptap.state.doc.descendants((node, pos) => {
-        if (found !== null) return false;
-        if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
-          found = pos;
-          return false;
-        }
-        return true;
-      });
-      return found;
-    };
-
-    // setTextSelection처럼 셀 내부에 캐럿을 두는 용도는 경계 위치 + 1이다.
-    const findCellContentPosition = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-      cellId: string,
-    ): number | null => {
-      const boundary = findCellBoundaryPosition(tiptap, cellId);
-      return boundary === null ? null : boundary + 1;
-    };
-
+    // findCellBoundaryPosition이 주는 셀 경계(= row content 안) 위치가 그
+    // depth다. 셀 내부로 한 칸 더 들어가면 node(-1)이 row가 되어
+    // "RangeError: Not a table node: tableRow"를 던진다.
     const selectCellRange = (
       tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
       anchorCellId: string,
@@ -333,9 +314,7 @@ describe("에디터 컨트롤러 표", () => {
       selectCellRange(tiptap, topLeft, bottomRight);
       editor.commands.mergeTableCells(tableBlockId);
 
-      const cellPos = findCellContentPosition(tiptap, topLeft);
-      if (cellPos === null) throw new Error("병합된 셀 fixture 준비 실패");
-      tiptap.commands.setTextSelection(cellPos);
+      placeCaretInCell(tiptap, topLeft);
 
       expect(editor.getTableCellSelection()).toEqual({
         tableBlockId,
@@ -477,45 +456,6 @@ describe("에디터 컨트롤러 표", () => {
   });
 
   describe("표 키보드 셀 탐색", () => {
-    const findCellBoundaryPosition = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-      cellId: string,
-    ): number | null => {
-      let found: number | null = null;
-      tiptap.state.doc.descendants((node, pos) => {
-        if (found !== null) return false;
-        if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
-          found = pos;
-          return false;
-        }
-        return true;
-      });
-      return found;
-    };
-
-    const placeCaretInCell = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-      cellId: string,
-    ) => {
-      const boundary = findCellBoundaryPosition(tiptap, cellId);
-      if (boundary === null) throw new Error("셀 fixture 준비 실패");
-      tiptap.commands.setTextSelection(boundary + 1);
-    };
-
-    const activeCellId = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-    ): string | null => {
-      const { $from } = tiptap.state.selection;
-      for (let depth = $from.depth; depth > 0; depth -= 1) {
-        const node = $from.node(depth);
-        if (node.type.name === "tableCell") {
-          const cellId = node.attrs.cellId;
-          return typeof cellId === "string" ? cellId : null;
-        }
-      }
-      return null;
-    };
-
     const pressTab = (editable: HTMLElement, shiftKey = false) => {
       editable.dispatchEvent(
         new KeyboardEvent("keydown", {

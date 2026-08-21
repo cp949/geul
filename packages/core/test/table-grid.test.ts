@@ -22,6 +22,8 @@ import {
   toggleHeaderRow,
   validateColumnWidth,
 } from "../src/table-grid.js";
+import { sequentialIds } from "./editor-controller-support.js";
+import { oneByOneData } from "./table-test-support.js";
 
 type Cell = TableBlock["rows"][number]["cells"][number];
 
@@ -61,14 +63,6 @@ const buildGrid = (t: TableBlock): TableGrid => {
   const result = projectTableGrid(t);
   if (!result.ok) throw new Error("fixture table must be valid");
   return result.value;
-};
-
-const sequentialIds = (prefix: string) => {
-  let counter = 0;
-  return () => {
-    counter += 1;
-    return `${prefix}-${counter}`;
-  };
 };
 
 describe("논리 격자를 투영한다", () => {
@@ -1406,17 +1400,6 @@ describe("pasteInto", () => {
     ],
     headerRows: 0,
     headerColumns: 0,
-  });
-
-  const oneByOneData = (text: string): TabularData => ({
-    columnCount: 1,
-    rows: [
-      {
-        cells: [
-          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text }] },
-        ],
-      },
-    ],
   });
 
   it("표 안 좌상단 셀부터 덮어쓴다", () => {

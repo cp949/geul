@@ -5,109 +5,14 @@ import {
   goToNextTableCellOrInsertRow,
   goToPreviousTableCell,
 } from "../src/table-keyboard-extension.js";
-import { createTableFixtureEditor } from "./table-test-support.js";
-
-const sequentialIds = (prefix: string) => {
-  let counter = 0;
-  return () => {
-    counter += 1;
-    return `${prefix}-${counter}`;
-  };
-};
-
-const cellJson = (cellId: string, columnId: string) => ({
-  type: "tableCell",
-  attrs: {
-    cellId,
-    columnId,
-    colspan: 1,
-    rowspan: 1,
-    colwidth: null,
-    textColor: null,
-    backgroundColor: null,
-  },
-  content: [],
-});
-
-const docWithTwoRowTable = {
-  type: "doc",
-  content: [
-    {
-      type: "table",
-      attrs: {
-        blockId: "table-1",
-        columns: [
-          { id: "col-1", width: 160 },
-          { id: "col-2", width: 160 },
-        ],
-        headerRows: 0,
-        headerColumns: 0,
-      },
-      content: [
-        {
-          type: "tableRow",
-          attrs: { rowId: "row-1" },
-          content: [cellJson("cell-1", "col-1"), cellJson("cell-2", "col-2")],
-        },
-        {
-          type: "tableRow",
-          attrs: { rowId: "row-2" },
-          content: [cellJson("cell-3", "col-1"), cellJson("cell-4", "col-2")],
-        },
-      ],
-    },
-  ],
-};
-
-const docWithParagraph = {
-  type: "doc",
-  content: [
-    {
-      type: "paragraph",
-      attrs: { blockId: "para-1" },
-      content: [{ type: "text", text: "hello" }],
-    },
-  ],
-};
-
-const findCellBoundaryPosition = (
-  editor: ReturnType<typeof createTableFixtureEditor>,
-  cellId: string,
-): number | null => {
-  let found: number | null = null;
-  editor.state.doc.descendants((node, pos) => {
-    if (found !== null) return false;
-    if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
-      found = pos;
-      return false;
-    }
-    return true;
-  });
-  return found;
-};
-
-const placeCaretInCell = (
-  editor: ReturnType<typeof createTableFixtureEditor>,
-  cellId: string,
-) => {
-  const boundary = findCellBoundaryPosition(editor, cellId);
-  if (boundary === null) throw new Error("셀 fixture 준비 실패");
-  editor.commands.setTextSelection(boundary + 1);
-};
-
-const activeCellId = (
-  editor: ReturnType<typeof createTableFixtureEditor>,
-): string | null => {
-  const { $from } = editor.state.selection;
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    const node = $from.node(depth);
-    if (node.type.name === "tableCell") {
-      const cellId = node.attrs.cellId;
-      return typeof cellId === "string" ? cellId : null;
-    }
-  }
-  return null;
-};
+import { sequentialIds } from "./editor-controller-support.js";
+import {
+  activeCellId,
+  createTableFixtureEditor,
+  docWithParagraph,
+  docWithTwoRowTable,
+  placeCaretInCell,
+} from "./table-test-support.js";
 
 describe("Tab/Shift+Tab 셀 탐색", () => {
   it("Tab은 같은 행의 다음 셀로 캐럿을 옮긴다", () => {
