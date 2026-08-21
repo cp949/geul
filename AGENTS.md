@@ -96,11 +96,15 @@ git status --short
 
 ## Git과 작업공간
 
+기본 작업 브랜치는 `dev`다. 브레인스토밍, 구현과 커밋을 모두 `dev`에서 한다. 작업 중에는 세분화된 커밋을 그대로 누적하고, 작업이 끝나면 미푸시 커밋을 의미 단위로 재그룹화한 뒤 push 지시를 기다린다.
+
 - 작업 시작과 종료 시 현재 branch, worktree와 `git status --short`를 확인한다.
 - 기존 modified, untracked와 ignored 파일은 사용자 작업으로 간주하고 보존한다.
 - 요청받지 않은 파일을 되돌리거나 광범위하게 정리하지 않는다.
-- 새 branch 또는 worktree는 사용자 요청이나 승인된 Issue 계획에 포함된 경우에만 만든다.
+- 새 branch 또는 worktree는 사용자가 그 세션에서 명시적으로 요청한 경우에만 만든다. 병렬 에이전트에도 worktree 격리를 기본으로 주지 않는다.
 - `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다.
+- push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다. "작업 후 한번에" 같은 유예 답변은 완료 판단 시 자동 실행해도 된다는 허가가 아니다.
+- 미푸시 커밋 재그룹화 절차와 무결성 검증은 [`PIT-0021`](./docs/pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md)을 따른다. 백업 ref 없이 재조립하지 않는다.
 - merge conflict는 양쪽 변경 의도를 확인해 해결하고 전체 병합 결과를 다시 검증한다.
 - `git reset --hard`, 강제 push와 광범위한 `git clean`을 사용하지 않는다.
 - generated dist를 제거해야 하면 정확한 package 경로와 상태를 먼저 확인하고 해당 경로만 처리한다.

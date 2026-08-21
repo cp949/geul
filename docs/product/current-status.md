@@ -25,6 +25,6 @@ R1 vertical slice 순서, 책임 경계와 확정 사항은 Issue #3이 원본�
 ## 운영 경계
 
 - 현재 문서는 다음 제품 작업의 진입점을 지정하며 구현 계획을 대신하지 않는다.
-- 새 branch 또는 worktree 생성은 승인된 계획이나 사용자 요청이 있을 때만 수행한다.
+- 작업 브랜치는 `dev`이며 branch·worktree 생성, 커밋 누적, 재그룹화와 push 규칙은 `AGENTS.md`의 "Git과 작업공간"이 원본이다.
 - commit, merge, push, publish와 PR 생성은 각각 별도 요청이 필요하다.
 - 프로젝트 자체 배포 라이선스 결정은 공개 배포 전 [GitHub Issue #2](https://github.com/cp949/geul/issues/2)에서 수행한다.
