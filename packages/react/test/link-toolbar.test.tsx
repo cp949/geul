@@ -12,6 +12,7 @@ import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider, LinkToolbar } from "../src/index.js";
+import { queryMountedEditable } from "./query-mounted-editable.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -106,15 +107,16 @@ const renderWithSelectedText = (
   selectText(textNode, 0, 8);
 };
 
-// EditorContent가 그리는 role="textbox" 노드는 마운트 host이고, 컨트롤러가 그
-// 안에 실제 contenteditable 자식을 넣는다(block-side-menu.test.tsx:57-59와 같은
-// 구조). closeAndRestoreFocus가 초점을 주는 대상은 후자이므로 초점 단언 대상도
-// 후자다.
+/**
+ * 초점 복구 단언 대상을 얻는다. `role="textbox"` host 자체가 아니라 그 안의
+ * 편집 가능 영역을 돌려준다 — LinkToolbar의 초점 복구는
+ * `'[contenteditable="true"]'`로 찾은 자식에 `focus()`를 거는데, host는 이
+ * 셀렉터에 매치되지 않는다(PIT-0014). 그래서 초점 단언은 host가 아니라 이
+ * 헬퍼가 돌려주는 편집 영역을 대상으로 해야 공허해지지 않는다.
+ */
 const getEditable = () => {
   const host = screen.getByRole("textbox", { name: "Editor" });
-  const editable = host.querySelector<HTMLElement>('[contenteditable="true"]');
-  if (editable === null) throw new Error("Editable was not mounted");
-  return editable;
+  return queryMountedEditable(host);
 };
 
 describe("LinkToolbar 링크 툴바", () => {
