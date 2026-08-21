@@ -8,13 +8,21 @@ argument-hint: [작업폴더]
 ## 절차
 
 1. 대상 초안을 모은다. `상태: 미등록`인 것만 대상이다. 하나도 없으면 그 사실을 보고하고 정지한다.
-2. 미푸시 커밋을 확인한다.
+2. 미푸시 커밋을 확인한다. `origin/dev`가 없으면 `git log origin/dev..dev`는 `fatal: 애매한 인자`로 exit `128`을 낸다. 존재를 먼저 확인한다.
 
    ```bash
-   git log --oneline origin/dev..dev
+   git rev-parse --verify --quiet origin/dev && git log --oneline origin/dev..dev
    ```
 
-   비어 있지 않으면 등록하지 않고 정지한다. 초안이 참조하는 커밋 해시가 origin에 없으면 GitHub에서 링크가 깨진다.
+   `git rev-parse`가 실패하면(exit `1`) `dev`가 한 번도 push되지 않은 것이다. 등록하지 않고 정지한다.
+
+   ```
+   정지: origin/dev가 없다. dev를 한 번도 push하지 않았다.
+         초안이 참조하는 커밋 해시에 GitHub에서 도달할 수 없다.
+         push 후 다시 실행해야 한다. push는 지시가 필요하다.
+   ```
+
+   `git log` 출력이 비어 있지 않으면 등록하지 않고 정지한다. 초안이 참조하는 커밋 해시가 origin에 없으면 GitHub에서 링크가 깨진다.
 
    ```
    정지: dev에 미푸시 커밋 <N>개가 있다.
