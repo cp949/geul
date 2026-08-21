@@ -256,6 +256,32 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
   });
 
+  // openColumnMenu(:95)는 clickFirstColumnHandle(:78)에 위임하고, 그쪽이
+  // getAllByRole(...)[0]으로 첫 열만 잡는다 — 둘째 열을 보려면 이 헬퍼를
+  // 쓸 수 없고 핸들을 [1]로 직접 잡아야 한다.
+  it("둘째 열 메뉴에는 헤더 토글 항목이 없다", () => {
+    const { table } = renderRealTable();
+    fireEvent.pointerMove(table);
+    const columnHandles = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    const secondColumnHandle = columnHandles[1];
+    if (secondColumnHandle === undefined) throw new Error("둘째 열 핸들 없음");
+
+    // 메뉴 대상은 클릭된 버튼의 closure(column.index)가 정한다 — clientX는
+    // handlePointerDownOnReorderHandle이 읽지 않아 이 흐름에서는 무관하다. 그래도
+    // clientX: 200을 주는 건 행 쪽 템플릿(:244, clientY: 130)과 대칭 때문이다:
+    // DEFAULT_LAYOUT(left:100, columnWidth:100)에서 둘째 열은 x 200~300 구간이라 사실이다.
+    fireEvent.pointerDown(secondColumnHandle, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerUp(secondColumnHandle, { pointerId: 1 });
+    fireEvent.click(secondColumnHandle);
+
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
+  });
+
   it("배경색 팔레트가 대상 행 인덱스로 setTableCellBackgroundColor를 호출한다", () => {
     const { editor } = openRowMenu();
 
@@ -334,6 +360,9 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
   it("메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
     openRowMenu();
+    // 메뉴가 실제로 열렸다는 전제가 없으면 메뉴 열기 자체가 죽어도 아래
+    // queryByRole(...).toBeNull()이 그대로 통과한다 — 먼저 고정한다.
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
 
     // 편집기 바깥 요소는 편집기가 만들지 않는다 — 실제 마운트로도 대신할
     // 수 없는 유일한 조립이라 여기서 직접 만든다.
