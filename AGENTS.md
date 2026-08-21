@@ -105,7 +105,7 @@ git status --short
 2. 구현 세션은 세분화된 커밋을 작업 브랜치에 그대로 누적하고 정지한다. squash도 병합도 하지 않는다.
 3. 리뷰 세션은 핸드오프를 받아 같은 작업 브랜치에서 수정 커밋을 이어 쌓는다.
 4. 리뷰가 끝나면 `pnpm verify` 전량을 통과시킨 뒤 작업 브랜치에서 커밋을 의미 단위로 squash한다.
-5. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`로 이전한다. ff가 거절되면 작업 브랜치에서 `git rebase dev`를 먼저 한다.
+5. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`로 이전한다. ff가 거절되면 현재 `dev` 기준으로 4단계를 다시 실행한다. 실행 명령은 `.claude/commands/merge-dev.md`가 소유한다.
 6. 이전이 끝나면 `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
 7. 작업 브랜치는 push하지 않는다. push 대상은 `dev`뿐이고 명시적 지시를 기다린다.
 
@@ -142,6 +142,7 @@ git status --short
 - `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. 작업 브랜치를 `dev`로 ff-only 이전하는 merge는 완료 절차의 일부다. 그 외 merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다.
 - push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다. "작업 후 한번에" 같은 유예 답변은 완료 판단 시 자동 실행해도 된다는 허가가 아니다.
 - 커밋 squash 절차와 무결성 검증은 [`PIT-0021`](./docs/pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md)을 따른다. 백업 ref 없이 재조립하지 않는다.
+- 편집기를 여는 git 명령(`git rebase -i`, `-m` 없는 `git commit`·`git commit --amend`·`git tag -a`, `--no-edit` 없는 `git merge`)을 쓰지 않는다. 에이전트 세션은 `GIT_EDITOR=true`라 입력 없이 기본값으로 조용히 성공한다 — [`PIT-0023`](./docs/pitfalls/PIT-0023-editor-opening-git-commands-succeed-silently.md).
 - merge conflict는 양쪽 변경 의도를 확인해 해결하고 전체 병합 결과를 다시 검증한다.
 - `git reset --hard`, 강제 push와 광범위한 `git clean`을 사용하지 않는다.
 - generated dist를 제거해야 하면 정확한 package 경로와 상태를 먼저 확인하고 해당 경로만 처리한다.
@@ -154,5 +155,5 @@ git status --short
 - 변경한 계약과 파일
 - RED/GREEN 또는 재현/해결 증거
 - 실행한 검증과 결과
-- 남은 제한, 위험과 후속 Issue
+- 남은 제한, 위험과 후속 이슈 초안
 - commit, merge, push와 PR의 실제 수행 여부

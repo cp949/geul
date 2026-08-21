@@ -6,7 +6,9 @@
 
 ## 상황과 징후
 
-이 저장소는 작업 브랜치에 세분화된 커밋을 누적하고 `dev`로 이전하기 직전에 의미 단위로 squash한다(`AGENTS.md`의 "작업 브랜치 수명"). `git rebase -i dev` 또는 `git switch --detach <base>` 후 `git cherry-pick -n`으로 순서를 바꿔 재조립할 때, revert 성격의 커밋을 그 원인 커밋보다 **앞** 그룹에 배치하면 cherry-pick이 충돌도 경고도 없이 `자동 병합`(`Auto-merging`) 한 줄만 출력하고 그 커밋을 no-op으로 흡수한다. 이후 원인 커밋이 적용되면서 되돌렸던 변경이 최종 트리에 되살아난다. 재조립 로그만 보면 모든 커밋이 정상 적용된 것처럼 보이고, typecheck를 다시 실행하기 전까지 회귀가 드러나지 않는다.
+이 저장소는 작업 브랜치에 세분화된 커밋을 누적하고 `dev`로 이전하기 직전에 의미 단위로 squash한다(`AGENTS.md`의 "작업 브랜치 수명"). 이 저장소에서 "squash"는 커밋을 의미 단위로 **재그룹화**한 뒤 각 그룹을 하나로 합치는 절차 전체를 가리킨다. 이 문서가 다루는 실패는 합치는 단계가 아니라 그룹을 나누고 순서를 정하는 단계에서 일어난다.
+
+`git switch --detach <base>` 후 `git cherry-pick -n`으로 순서를 바꿔 재조립할 때, revert 성격의 커밋을 그 원인 커밋보다 **앞** 그룹에 배치하면 cherry-pick이 충돌도 경고도 없이 `자동 병합`(`Auto-merging`) 한 줄만 출력하고 그 커밋을 no-op으로 흡수한다. 이후 원인 커밋이 적용되면서 되돌렸던 변경이 최종 트리에 되살아난다. 재조립 로그만 보면 모든 커밋이 정상 적용된 것처럼 보이고, typecheck를 다시 실행하기 전까지 회귀가 드러나지 않는다.
 
 ## 근본 원인
 
@@ -17,6 +19,7 @@
 ## 예방 규칙
 
 - 재조립 전에 백업 ref를 남긴다: `git update-ref refs/backup/<name> HEAD`. 시작은 `git reset --hard`가 아니라 `git switch --detach <base>`로 한다(`AGENTS.md`가 `git reset --hard`를 금지한다).
+- `git rebase -i`로 재조립하지 않는다. 에이전트 세션은 `GIT_EDITOR=true`라 todo 목록이 편집 없이 그대로 수락되고, 아무것도 합치지 않은 채 `Successfully rebased`와 exit code `0`을 낸다. 근거와 실측은 [`PIT-0023`](./PIT-0023-editor-opening-git-commands-succeed-silently.md).
 - revert·fix·되돌림 성격의 커밋은 항상 원인 커밋과 **같은 그룹**에, 원인 커밋 **뒤에** 둔다.
 - 그룹을 나눌 때 커밋 제목만 보지 않는다. 같은 파일·같은 줄을 건드리는 상쇄 쌍을 먼저 찾는다: `git log --oneline --name-only <base>..HEAD`. 제목이 서로 다른 관심사를 가리켜도(예: "메뉴 Delete 비활성화" vs "CommandResult 타입 되돌림") 같은 줄을 왕복하면 같은 그룹이다.
 - 재조립 로그의 `자동 병합` 한 줄을 성공 신호로 읽지 않는다. 무결성 판정은 아래 트리 diff로만 한다.
@@ -26,9 +29,12 @@
 
 ```bash
 git update-ref refs/backup/<작업 브랜치>-pre-squash HEAD    # 정리 전
-git rebase -i dev                                          # 또는 detach 후 cherry-pick -n
+git switch --detach dev
+# 그룹마다 git cherry-pick -n <커밋...> 후 git commit -m "<메시지>"
 git diff refs/backup/<작업 브랜치>-pre-squash HEAD --stat   # 정리 후: 반드시 빈 출력
 ```
+
+실행 가능한 단계별 절차는 `.claude/commands/merge-dev.md`가 소유한다. 이 문서는 그 절차가 지켜야 할 순서 규칙과 무결성 판정만 소유한다.
 
 의도적으로 커밋을 버린 경우가 아니면 이 diff는 비어 있어야 한다. 비어 있지 않으면 그룹 순서가 잘못된 것이고, 출력된 파일이 상쇄 쌍이 갈라진 지점이다.
 
