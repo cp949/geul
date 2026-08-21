@@ -7,6 +7,8 @@ argument-hint: <이슈번호>
 
 이 커맨드를 호출한 것이 a-workflow 진입 지시다. 흐름 전체는 [`docs/agents/a-workflow.md`](../../docs/agents/a-workflow.md)가 소유한다.
 
+이 커맨드는 **subagent 협업 모드**로 실행한다. 메인 세션은 조율·판단·커밋만 하고 조사, 구현과 리뷰는 subagent에 위임한다. 모드 규칙은 `docs/agents/a-workflow.md`의 "subagent 협업 모드"가 소유한다.
+
 ## 전제
 
 인자가 없으면 정지한다.
@@ -19,9 +21,9 @@ argument-hint: <이슈번호>
 
 1. `git branch --show-current`와 `git status --short`로 현재 위치를 확인한다. `AGENTS.md`의 "작업 시작 순서" 1~8을 실행하고 `gh issue view $1 --comments`로 본문과 댓글을 읽는다.
 2. 작업 폴더를 정한다. `_works/`에 이 이슈의 미완료 폴더(`meta.md` 상태가 `등록 완료`가 아닌 것)가 있으면 새로 만들지 않고 이어받는다. 없으면 `_works/<오늘 yyyyMMdd>-<NN>-issue$1-<slug>/`를 만들고 `handoff/`, `pending-issues/`와 `meta.md`를 함께 만든다. `NN`은 그날 순번이다.
-3. superpowers `brainstorming` → `writing-plans` → `subagent-driven-development` 순으로 진행한다. 의사결정이 필요한 지점은 추측하지 말고 사용자에게 묻는다.
-4. 첫 커밋이 필요한 시점에 `git switch -c <type>/$1-<slug> dev`로 브랜치를 만들고 `meta.md`에 기록한다. 분기 기준을 `dev`로 명시한다 — 현재 브랜치가 `dev`라고 가정하면 다른 작업 브랜치 위에 쌓여 `/a-merge-dev`의 ff-only가 남의 커밋을 함께 끌고 간다. 앞 작업의 산출물이 필요한 의존 작업일 때만 그 브랜치에서 분기하고 의존을 `meta.md`에 적는다. worktree를 만들지 않고 subagent에도 worktree 격리를 주지 않는다.
-5. 구현 후 자체 리뷰와 수정을 한다.
+3. superpowers `brainstorming` → `writing-plans` → `subagent-driven-development` 순으로 진행한다. 브레인스토밍과 계획은 메인 세션이 사용자와 직접 한다 — 의사결정이 필요한 지점은 추측하지 말고 사용자에게 묻는다. 사전 조사가 여러 갈래로 갈리면 읽기 전용 조사 subagent를 갈래마다 하나씩 병렬로 띄우고 결과를 메인 세션이 합친다. 계획이 확정되면 각 작업을 구현 subagent에 하나씩 순차 위임한다.
+4. 첫 커밋이 필요한 시점에 `git switch -c <type>/$1-<slug> dev`로 브랜치를 만들고 `meta.md`에 기록한다. 분기 기준을 `dev`로 명시한다 — 현재 브랜치가 `dev`라고 가정하면 다른 작업 브랜치 위에 쌓여 `/a-merge-dev`의 ff-only가 남의 커밋을 함께 끌고 간다. 앞 작업의 산출물이 필요한 의존 작업일 때만 그 브랜치에서 분기하고 의존을 `meta.md`에 적는다. worktree를 만들지 않는다.
+5. 구현이 끝나면 자체 리뷰를 리뷰 subagent에 위임한다. 초점을 나눠(이슈 명세 준수, 코드 품질과 회귀 위험, 테스트 충분성) 읽기 전용으로 병렬 dispatch하고 메인 세션이 발견 항목을 합쳐 중복을 제거한다. 수정은 구현 subagent에 하나씩 순차 위임하고 메인 세션이 diff를 확인해 커밋한다.
 6. 변경 범위 focused 검증을 실행한다. `pnpm verify` 전량은 이 단계에서 실행하지 않는다 — 리뷰 세션의 수정이 뒤따르므로 `/a-merge-dev`가 실행한다.
 7. `implementation-report.md`를 쓴다.
 8. `meta.md` 상태를 `리뷰 대기`로 바꾸고 진행 로그에 한 줄 덧붙인다.
