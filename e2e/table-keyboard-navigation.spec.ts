@@ -8,7 +8,7 @@
  * 구현하지 않아, `preventDefault`를 아무도 부르지 않아도 `activeElement`가
  * 그대로다(jsdom@27.0.1 실측). 그래서 jsdom에서 "포커스가 셀 밖으로 나가지
  * 않았다"는 단언은 무조건 통과하는 공허한 단언이 된다.
- * `table-keyboard-extension.test.ts:173`이 증명하는 것은 첫 셀에서도
+ * `table-keyboard-extension.test.ts`가 증명하는 것은 첫 셀에서도
  * `goToPreviousTableCell`이 `true`를 돌려준다는 *계약*이고, 브라우저가 그
  * `true`를 지켜 포커스를 표 안에 붙잡아 두는 *효과*는 여기서만 보인다.
  *

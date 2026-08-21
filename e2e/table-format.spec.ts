@@ -207,10 +207,11 @@ test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 
 });
 
 /**
- * 두 셀 좌표를 마우스 드래그로 잇는다. table-cell-selection.spec.ts와 같은
- * 패턴 — 드래그를 시작하기 전 시작 셀을 먼저 클릭해 포커스를 표 안에 둔다.
- * mousedown을 첫 포커스 이벤트로 겸하면 tableEditing이 CellSelection
- * 추적을 시작하지 않는 브라우저 차이가 있다.
+ * 두 셀 좌표를 마우스 드래그로 잇는다. 포커스를 표 안에 두는 것은 호출부의
+ * 몫이다 — 이 헬퍼는 클릭하지 않고, 아래 호출부 넷이 모두 드래그 직전에
+ * 시작 셀을 클릭한다. 포커스 전환과 드래그 시작 mousedown을 같은 제스처로
+ * 묶으면 tableEditing이 CellSelection 추적을 시작하지 않는 브라우저 동작
+ * 차이가 있기 때문이다.
  */
 const dragSelectCells = async (
   page: Page,
