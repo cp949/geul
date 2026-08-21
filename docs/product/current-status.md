@@ -26,5 +26,5 @@ R1 vertical slice 순서, 책임 경계와 확정 사항은 Issue #3이 원본�
 
 - 현재 문서는 다음 제품 작업의 진입점을 지정하며 구현 계획을 대신하지 않는다.
 - 통합 브랜치는 `dev`이며 구현은 `dev`에서 분기한 작업 브랜치에서 한다. 작업 브랜치 수명, 커밋 해시 참조, 로컬 작업공간(`_works/`)과 push 규칙은 `AGENTS.md`의 "Git과 작업공간"이 원본이다.
-- commit, merge, push, publish와 PR 생성은 각각 별도 요청이 필요하다. GitHub 이슈·댓글 등록도 사용자 지시를 기다린다.
+- commit, merge, push, publish와 PR 생성의 승인 경계는 `AGENTS.md`의 "공통 규칙"이 소유한다. GitHub 이슈·댓글 등록은 `docs/agents/issue-tracker.md`의 "게시 승인"을 따른다.
 - 프로젝트 자체 배포 라이선스 결정은 공개 배포 전 [GitHub Issue #2](https://github.com/cp949/geul/issues/2)에서 수행한다.

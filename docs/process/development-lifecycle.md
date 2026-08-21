@@ -142,7 +142,7 @@ spec은 제공할 계약을, ADR은 장기 선택과 이유를 소유한다. 실
 3. 단계 또는 릴리스 검증이면 관련 completion 문서를 갱신한다.
 4. 별도 Issue와 pitfall의 생성·상태 변경 여부를 확인한다.
 5. 제품 문서와 실제 상태가 일치하는지 확인한다.
-6. Issue에 검증 결과, 남은 제한과 다음 행동을 기록한다.
-7. 완료 기준을 충족한 Issue만 종료한다.
+6. 검증 결과, 남은 제한과 다음 행동을 이슈 댓글 초안으로 `_works/<작업 폴더>/pending-issues/`에 기록한다.
+7. 완료 기준을 충족한 Issue만 종료 대상으로 삼는다. 등록과 종료는 사용자 지시를 받아 실행한다 — `docs/agents/issue-tracker.md`의 "게시 승인".
 
-commit, merge, push, tag와 PR은 각각 별도 요청이 필요하다.
+commit, merge, push, tag와 PR의 승인 경계는 `AGENTS.md`의 "공통 규칙"이 소유한다.

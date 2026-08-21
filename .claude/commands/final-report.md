@@ -21,14 +21,9 @@ argument-hint: <작업폴더>
 1. `meta.md`(확정 커밋 해시 포함), `implementation-report.md`, `handoff/*.md`의 `## 리뷰 결과` 섹션을 모두 읽는다.
 2. `gh issue view <번호> --comments`로 이슈의 완료 기준과 체크리스트를 읽는다.
 3. `git show --stat <확정 해시>`로 실제 변경을 대조한다. 문서가 주장하는 범위와 다르면 실측을 따르고 차이를 적는다.
-4. `final-report.md`를 쓴다. 형식은 `AGENTS.md`의 "완료 보고"를 따른다.
-   - 확인된 사실과 아직 검증하지 않은 가정
-   - 변경한 계약과 파일
-   - RED/GREEN 또는 재현/해결 증거
-   - 실행한 검증과 결과
-   - 남은 제한, 위험과 후속 이슈 초안
-   - commit, merge, push와 PR의 실제 수행 여부
-   - 확정 커밋 해시와 제목 목록
+4. `final-report.md`를 쓴다. 포함할 항목은 `AGENTS.md`의 "완료 보고"가 소유한다. 여기서 더하는 것은 두 가지다.
+   - `meta.md`가 기록한 확정 커밋 해시와 제목 목록
+   - 후속 작업은 GitHub 이슈가 아니라 `pending-issues/` 초안 경로로 가리킨다
 5. 그 내용으로 대상 이슈의 완료 댓글 초안을 `pending-issues/NN-issue<번호>-완료.md`에 만든다. 형식은 `docs/agents/issue-tracker.md`의 "게시 승인"을 따른다(`종류: 댓글`, `대상: #<번호>`, `상태: 미등록`).
 6. `meta.md` 상태를 `보고 완료`로 바꾸고 진행 로그에 한 줄 덧붙인다.
 
