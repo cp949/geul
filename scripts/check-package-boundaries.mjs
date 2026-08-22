@@ -26,12 +26,17 @@ const forbiddenProductDependencies = [
 ];
 
 /**
- * @typedef {Record<string, Record<string, string>>} PackageManifest
+ * `package.json`에서 이 스크립트가 실제로 읽는 부분만의 모양이다 — 의존성
+ * 섹션(dependencies/devDependencies/peerDependencies/optionalDependencies)의
+ * 투영이다. `name`·`private` 같은 나머지 매니페스트 필드는 다루지 않으므로
+ * 매니페스트 전체 모양을 주장하지 않는다.
+ *
+ * @typedef {Record<string, Record<string, string>>} PackageManifestDependencySections
  */
 
 /**
  * @param {string} path
- * @returns {PackageManifest}
+ * @returns {PackageManifestDependencySections}
  */
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
