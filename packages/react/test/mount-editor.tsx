@@ -329,7 +329,8 @@ export type MountedTableEditor = {
  * `editable`의 rect는 replaceDocument **전에도** 0이다 — jsdom에 레이아웃이
  * 없어 스텁을 씌우지 않은 노드는 붙어 있든 떨어졌든 항상 0이다. detach가 0을
  * 만드는 것이 아니다. `restubGeometry`는 이 경우에도 동작한다 — 캡처한
- * 참조가 아니라 tableBlockId로 매번 다시 찾아 스텁한다.
+ * 참조가 아니라 tableBlockId로 매번 다시 찾아 스텁한다. 단 병합 셀이 없는
+ * 표에 한한다(아래 `restubGeometry`의 격자 전제).
  */
 export const mountTableEditor = ({
   rows = 2,
@@ -399,6 +400,14 @@ export const mountTableEditor = ({
    * table·editable 참조를 문서에서 떼어내는데(실측 확인), 그 참조에 스텁을
    * 씌우면 아무 데도 붙지 않은 노드를 칠하고 테스트는 rect가 0인 채로
    * 굴러간다.
+   *
+   * 격자는 **모든 행이 열 개수만큼 셀을 갖는 표**만 전제한다 — 셀을 행 안
+   * 순번대로 좌우로 늘어놓고 폭은 항상 columnWidth 하나다. rowSpan/columnSpan이
+   * 있는 표에는 쓰지 마라. 던지지 않고 조용히 틀린 rect를 씌운다(실측, 2x2
+   * 기본 격자 기준: columnSpan 2 셀에 200이 아니라 폭 100px, rowSpan 2 셀에
+   * 60이 아니라 높이 30px, 위 행이 덮은 자리가 빠진 둘째 행의 유일한 셀에
+   * left 200이 아니라 100). 병합 표는 좌표를 직접 씌우거나, 이걸 부른 뒤
+   * 어긋난 칸만 덮어써라.
    */
   const restubGeometry = () => {
     const currentTable = host.querySelector<HTMLElement>(

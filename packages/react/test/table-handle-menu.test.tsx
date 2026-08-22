@@ -18,11 +18,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TableHandles } from "../src/table-handles.js";
 import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
 
-// @testing-library/react는 전역 afterEach가 함수일 때만 자동 cleanup을
-// 등록한다(dist/index.js의 typeof afterEach === "function" 분기). vitest는
-// globals: true일 때만 그 전역을 노출하는데 저장소 루트 vitest.config.ts에는
-// globals도 setupFiles도 없어 자동 cleanup이 없다(실측: 이 설정에서
-// typeof globalThis.afterEach === "undefined"). 각 it 말미의 unmount로는
+// @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
+// cleanup을 등록한다(dist/index.js의 typeof afterEach === "function" 분기와
+// 그 else의 teardown fallback). vitest는 globals: true일 때만 그 전역을
+// 노출하는데 저장소 루트 vitest.config.ts에는 globals도 setupFiles도 없어 자동
+// cleanup이 없다(실측: 이 설정에서 둘 다 undefined). 각 it 말미의 unmount로는
 // assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
 // "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
@@ -110,9 +110,13 @@ const rowsOf = (editor: EditorController) => tableBlockOf(editor).rows;
  * 거절되는 상태(MERGE_BOUNDARY_CROSSED)를 만들 때 쓴다.
  *
  * 병합 명령을 쓰지 않는 이유: mergeTableCells는 현재 CellSelection만을 병합
- * 범위의 권위로 삼는데(editor-controller.ts), CellSelection은 좌표로 셀을
- * 짚어야 만들어지고 jsdom에는 레이아웃이 없어 그 좌표가 없다. 그래서 모델을
- * 직접 만들어 replaceDocument로 심는다 — 컨트롤러도 명령도 진짜다.
+ * 범위의 권위로 삼는데(editor-controller.ts), CellSelection을 직접 세우려면
+ * @tiptap/pm/tables가 필요하고 packages/react는 Tiptap에 의존할 수
+ * 없다(ADR-0002) — package.json dependencies에 없어 여기서는 해석조차 되지
+ * 않는다(실측: MODULE_NOT_FOUND). EditorController의 공개 표면에도 선택을
+ * 세우는 API가 없다 — getTableCellSelection은 읽기 전용이고 commands 31개는
+ * 전부 문서 명령이다(실측). rowSpan은 문서 필드이므로 모델을 직접 만들어
+ * replaceDocument로 심는다 — 컨트롤러도 명령도 진짜다.
  *
  * replaceDocument는 tiptap 편집기를 통째로 다시 만들어 마운트 시점의 table·
  * editable 참조를 문서에서 떼어낸다(실측 확인) — 그래서 표를 다시 찾아

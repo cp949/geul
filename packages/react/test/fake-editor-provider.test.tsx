@@ -11,9 +11,11 @@
  * `TS2578: Unused '@ts-expect-error' directive`로 typecheck를 무너뜨린다.
  *
  * 반대 방향(타입을 좁히는 변경)은 아래 "통과" 테스트가 잡는다. 헤더는 이전
- * 형태(`ReturnType<typeof fakeController>`)가 거절하던 두 가지를 이제 의도적으로
+ * 형태(`ReturnType<typeof fakeController>`)가 거절하던 세 가지를 이제 의도적으로
  * 통과시킨다고 적는데, 그 주장을 아무것도 지지 않으면 나중에 조용히 좁혀진다.
  * 여기서 통과한다는 사실 자체를 고정해 좁히는 변경이 의도적임을 드러나게 한다.
+ * 셋째(`getDocument`/`replaceDocument` 누락)에는 전용 케이스를 두지 않는다 —
+ * 타입에 그 둘을 더하면 아래 "통과" 테스트 2건이 `TS2739`로 먼저 진다(실측).
  *
  * 런타임 동작(외부 컨트롤러를 mount/unmount만 하고 destroy하지 않는다 등)은
  * `editor-content.test.tsx`가 덮으므로 여기서 되풀이하지 않는다. 이 파일이 보는

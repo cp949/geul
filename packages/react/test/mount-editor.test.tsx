@@ -5,6 +5,7 @@
  * 이 파일을 쓰는 모든 오버레이 테스트가 이유를 알 수 없게 무너지므로 계약을
  * 여기서 직접 잡는다.
  */
+import type { EditorController } from "@cp949/geul-core";
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -199,5 +200,115 @@ describe("문단 전용 실제 편집기 마운트 헬퍼", () => {
     mountBlockEditor({ children: <div data-testid="probe" /> });
 
     expect(screen.getByTestId("probe")).toBeTruthy();
+  });
+});
+
+/**
+ * 표 블록은 그대로 둔 채 문단 텍스트만 바꾼 문서로 갈아끼운다.
+ *
+ * 내용이 같은 문서는 COMMAND_NOT_APPLICABLE로 되돌아오므로 실제로 달라지는
+ * 지점이 하나 필요하고, 표 블록 id는 유지해야 갈아끼운 뒤에도 같은 표를
+ * host에서 다시 찾을 수 있다. 표 자체를 바꾸지 않는 것이 핵심이다 — 그래야
+ * 마운트 시점 참조가 떨어지는 이유가 표 내용 변경이 아니라 편집기 재생성임이
+ * 드러난다.
+ */
+const replaceDocumentKeepingTable = (editor: EditorController): void => {
+  const current = editor.getDocument();
+  const replaced = editor.replaceDocument({
+    ...current,
+    blocks: current.blocks.map((block) =>
+      block.type === "paragraph"
+        ? { ...block, content: [{ text: "갈아끼운 본문" }] }
+        : block,
+    ),
+  });
+  if (!replaced.ok) throw new Error("문서 교체 fixture 준비 실패");
+};
+
+/**
+ * rect에서 격자 계약에 해당하는 네 항만 뽑는다. 아래 테스트들은 같은 노드의
+ * rect를 문서 교체 앞뒤로 여러 번 비교하므로 비교 단위를 하나로 고정한다.
+ */
+const gridBoxOf = (element: Element) => {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+};
+
+/**
+ * 문서에 실제로 붙어 있는 현재 표를 host에서 다시 찾는다. 문서를 갈아끼우면
+ * 마운트 시점 `table`은 더 이상 문서의 표가 아니므로, 갈아끼운 뒤의 단언은
+ * 전부 이 결과를 대상으로 해야 한다.
+ */
+const currentTableOf = (host: HTMLElement, tableBlockId: string) => {
+  const table = host.querySelector<HTMLElement>(
+    `table[data-be-block-id="${tableBlockId}"]`,
+  );
+  if (table === null) throw new Error("갈아끼운 문서의 표를 찾지 못했다");
+  return table;
+};
+
+const ZERO_BOX = { left: 0, top: 0, width: 0, height: 0 };
+const STUBBED_TABLE_BOX = { left: 100, top: 100, width: 200, height: 60 };
+
+/**
+ * mountTableEditor의 docblock은 replaceDocument 뒤 반환값을 어떻게 다뤄야
+ * 하는지를 단독으로 소유한다. 그 주장이 지금 실제로 참인지 여기서 고정한다 —
+ * 지지 않는 주장은 조용히 거짓이 된다(PIT-0022).
+ */
+describe("문서를 갈아끼운 뒤의 마운트 헬퍼 반환값", () => {
+  it("table과 editable은 문서에서 떨어지고 host만 남는다", () => {
+    const { editor, host, editable, table } = mountTableEditor();
+
+    expect({
+      table: table.isConnected,
+      editable: editable.isConnected,
+      host: host.isConnected,
+    }).toEqual({ table: true, editable: true, host: true });
+
+    replaceDocumentKeepingTable(editor);
+
+    expect({
+      table: table.isConnected,
+      editable: editable.isConnected,
+      host: host.isConnected,
+    }).toEqual({ table: false, editable: false, host: true });
+  });
+
+  it("떨어진 table의 rect는 0이 아니라 낡은 값이고 문서의 새 표가 0이다", () => {
+    const { editor, host, editable, table, tableBlockId } = mountTableEditor();
+    const tableBoxBefore = gridBoxOf(table);
+    const editableBoxBefore = gridBoxOf(editable);
+
+    replaceDocumentKeepingTable(editor);
+
+    // 떨어진 노드는 씌울 때의 값을 그대로 돌려준다 — 앞뒤가 같다.
+    expect(tableBoxBefore).toEqual(STUBBED_TABLE_BOX);
+    expect(gridBoxOf(table)).toEqual(tableBoxBefore);
+    // 정작 문서에 있는 새 표는 스텁이 없어 0이다. 떨어진 table을 그대로 쓰면
+    // 0이 아니라 그럴듯한 좌표가 나오므로 어긋남이 단언으로 드러나지 않는다.
+    expect(gridBoxOf(currentTableOf(host, tableBlockId))).toEqual(ZERO_BOX);
+    // editable은 갈아끼우기 전에도 0이다 — detach가 0을 만드는 것이 아니라
+    // 스텁을 씌우지 않은 노드가 jsdom에서 항상 0이다.
+    expect(editableBoxBefore).toEqual(ZERO_BOX);
+    expect(gridBoxOf(editable)).toEqual(editableBoxBefore);
+  });
+
+  it("restubGeometry가 새 표를 다시 찾아 격자를 씌운다", () => {
+    const { editor, host, tableBlockId, restubGeometry } = mountTableEditor();
+
+    replaceDocumentKeepingTable(editor);
+    const currentTable = currentTableOf(host, tableBlockId);
+    expect(gridBoxOf(currentTable)).toEqual(ZERO_BOX);
+
+    restubGeometry();
+
+    // 캡처한 참조가 아니라 tableBlockId로 매번 다시 찾으므로, 문서를 갈아끼운
+    // 뒤에 불러도 스텁이 문서에 붙어 있는 표에 씌워진다.
+    expect(gridBoxOf(currentTable)).toEqual(STUBBED_TABLE_BOX);
   });
 });

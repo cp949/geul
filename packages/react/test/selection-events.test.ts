@@ -15,8 +15,9 @@
  *
  * 리스너를 달기 전에 매크로태스크 하나를 흘려보내는 것이 이 파일의 전제다.
  * 큐잉된 지연분은 테스트 경계를 넘어 살아남으므로, 흘려보내지 않으면 앞 테스트가
- * 남긴 지연분이 뒤 테스트의 횟수로 들어온다(실측: 흘려보내지 않으면 "이미 빈
- * 선택에서 0회"가 1회로 보인다).
+ * 남긴 지연분이 뒤 테스트의 횟수로 들어온다(실측: 드레인을 뺀 사본에서 "빈
+ * 선택에서 selectText 1회는 다음 매크로태스크까지 누적 2회다"가
+ * `expected 3 to be 2`로 지고, 같은 사본에서 그 하나만 따로 돌리면 통과한다).
  */
 import { cleanup, render } from "@testing-library/react";
 import { act, createElement, useEffect, useState } from "react";

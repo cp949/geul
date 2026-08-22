@@ -17,11 +17,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TableHandles } from "../src/table-handles.js";
 import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
 
-// @testing-library/react는 전역 afterEach가 함수일 때만 자동 cleanup을
-// 등록한다(dist/index.js의 typeof afterEach === "function" 분기). vitest는
-// globals: true일 때만 그 전역을 노출하는데 저장소 루트 vitest.config.ts에는
-// globals도 setupFiles도 없어 자동 cleanup이 없다(실측: 이 설정에서
-// typeof globalThis.afterEach === "undefined"). 각 it 말미의 unmount로는
+// @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
+// cleanup을 등록한다(dist/index.js의 typeof afterEach === "function" 분기와
+// 그 else의 teardown fallback). vitest는 globals: true일 때만 그 전역을
+// 노출하는데 저장소 루트 vitest.config.ts에는 globals도 setupFiles도 없어 자동
+// cleanup이 없다(실측: 이 설정에서 둘 다 undefined). 각 it 말미의 unmount로는
 // assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
 // "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
@@ -100,10 +100,9 @@ const renderResizableTable = () => {
  *
  * 병합 명령을 쓰지 않는 이유: mergeTableCells는 tableBlockId 하나만 받고 병합
  * 범위를 넘길 파라미터가 아예 없다 — 범위의 유일한 권위가 현재
- * CellSelection인데(editor-controller.ts), CellSelection은 좌표로 셀을 짚어야
- * 만들어지고 jsdom에는 레이아웃이 없어 그 좌표가 없다. 게다가 CellSelection을
- * 직접 세우려면 @tiptap/pm/tables가 필요한데 packages/react는 Tiptap에 의존할
- * 수 없다(ADR-0002) — package.json dependencies에 없어 여기서는 해석조차 되지
+ * CellSelection인데(editor-controller.ts), CellSelection을 직접 세우려면
+ * @tiptap/pm/tables가 필요하고 packages/react는 Tiptap에 의존할 수
+ * 없다(ADR-0002) — package.json dependencies에 없어 여기서는 해석조차 되지
  * 않는다(실측: MODULE_NOT_FOUND). columnSpan은 문서 필드라 모델을 직접 만들어
  * replaceDocument로 심을 수 있다 — 컨트롤러도 명령도 진짜다.
  *
