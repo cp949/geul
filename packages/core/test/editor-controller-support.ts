@@ -1,3 +1,17 @@
+/**
+ * EditorController 계층의 core 테스트가 공유하는 문서 fixture와 마운트, 저장
+ * 문서에서 표 블록을 꺼내는 조회를 소유한다. 여러 테스트 파일이 같은 fixture를
+ * 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ *
+ * table-test-support.ts와의 경계는 다루는 대상이다 — EditorController와 저장
+ * Document를 다루면 이 모듈, tiptap Editor를 직접 다루는 격리 fixture와 셀
+ * 위치·선택·캐럿 헬퍼면 저 모듈이다. 표 fixture가 양쪽에 나뉘어 있는 것은 그
+ * 때문이고, 이름이 아니라 이 기준으로 찾는다.
+ *
+ * 이 모듈은 아래 afterEach 훅을 module scope에 등록하므로 import하는 것만으로
+ * 훅이 붙는다. editorWithTable을 table-test-support.ts로 옮기면 tiptap 노드만
+ * 검증하는 파일까지 그 훅을 얻는다.
+ */
 import type { Document, InlineContent } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { afterEach } from "vitest";
