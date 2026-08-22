@@ -18,6 +18,7 @@ turbo의 workspace 인식은 `pnpm-workspace.yaml`의 `packages` glob과 각 패
 - 루트 `package.json`의 `typecheck` 스크립트가 그 디렉터리를 거치도록 직접 연결한다(`turbo run typecheck`는 workspace 패키지만 돌기 때문에 별도로 이어 붙여야 한다) — `"typecheck": "turbo run typecheck && pnpm typecheck:e2e"`처럼 `&&`로 순차 실행하고, `pnpm verify`가 그 스크립트를 거치는지 확인한다.
 - 새 최상위 디렉터리를 workspace에 편입할지, 아니면 이 패턴처럼 독립 tsconfig+스크립트로만 typecheck에 편입할지는 그 디렉터리가 다른 패키지에 의존하는지로 가른다. workspace 패키지를 import한다면(예: `@cp949/geul-model`) PIT-0015의 `references`/`dist` 해석 문제가 그대로 적용된다. `e2e/`는 소스를 직접 import하지 않고 브라우저에서 구동 중인 앱을 playwright로 조작할 뿐이라 이 문제가 없다.
 - 새 tsconfig를 추가·수정하면 반드시 의도적으로 깬 타입 오류로 실제로 잡히는지 확인한 뒤 되돌린다(PIT-0015와 동일 절차).
+- **`turbo run typecheck`가 workspace 안을 덮는다는 전제도 검증 대상이다.** turbo는 그 태스크를 **정의한 패키지에서만** 돈다. 패키지가 `scripts.typecheck`를 잃으면 turbo는 그 패키지를 조용히 빼고 남은 태스크만 실행해 `exit 0`으로 통과한다 — 게이트 출력에 남는 차이는 태스크 수 하나뿐이다. workspace **밖** 디렉터리를 다루는 규칙은 이 전제 위에 서 있으므로, 전제 자체를 계약 테스트로 고정한다(`tests/workspace-boundaries.test.ts`의 `describe("workspace 패키지의 typecheck 편입")`).
 
 ## 검증 방법
 
@@ -55,8 +56,13 @@ pnpm typecheck:e2e
   2. `it("각 디렉터리의 추적 소스 파일을 tsconfig의 실제 컴파일 대상에 전부 포함한다")` — tsconfig가 체인에서 참조만 되고 아무것도 검사하지 않는 상태를 막는다. `include`/`exclude` glob을 흉내 내지 않고 `tsc --listFilesOnly`에게 그대로 묻는다. **검사 대상 tsconfig 자신의 `exclude`를 기대값에서 깎지 않는다** — 그러면 `exclude` 한 줄로 파일을 게이트 밖에 두어도 기대값이 같이 줄어 단언이 구현을 되뇔 뿐이다. 빠진 파일은 같은 디렉터리의 다른 tsconfig가 실제로 컴파일할 때만 정당한 예외로 본다(`tests/fixtures/dom-lib-forbidden.ts`가 그 경우다).
   3. `it("JS 소스를 가진 디렉터리의 tsconfig는 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다")` — 2번은 그 확장자의 파일이 실제로 생겨야 발화하므로, `include`가 좁아지는 순간 자체는 이 단언이 더 먼저 잡는다. 리터럴 동등이 아니라 "확장자로 거르지 않고 하위 디렉터리까지 덮는 패턴이 있는가"라는 속성을 본다 — `["./**/*"]`와 `include` 생략은 `["**/*"]`와 컴파일 대상이 같으므로 거짓 실패로 만들지 않는다.
 
-  workspace 루트 목록은 `scripts/find-duplicate-test-helpers.mjs`의 `WORKSPACE_ROOTS`를 재사용해 사본을 늘리지 않는다.
+  workspace 루트 목록은 `scripts/workspace-roots.mjs`의 `WORKSPACE_ROOTS`를 재사용해 사본을 늘리지 않는다.
 - 남은 사각지대: 루트의 `playwright.config.ts`와 `vitest.config.ts`는 여전히 어떤 tsconfig의 `include`에도 잡히지 않는다. 이 pitfall과 회귀 테스트가 다루는 단위가 디렉터리라 별도 후속으로 분리했다.
+- Issue #106 — **같은 증상이 디렉터리가 아니라 "게이트가 스스로 정하는 범위"에서 재발했다.** 두 갈래였다.
+  1. workspace 루트 목록이 3벌이고 2벌(`check-package-boundaries.mjs`·`check-licenses.mjs`의 익명 인라인 리터럴)은 어떤 테스트도 참조하지 않았다. `scripts/workspace-roots.mjs`가 목록과 패키지 열거를 단독 소유하고 `tests/workspace-roots.test.ts`가 `pnpm-workspace.yaml`과 대조한다. 구현이 yaml을 파싱하지 않는 것은 의도다 — 파싱하면 계약 테스트가 파서를 자기 자신과 대조하는 동어반복이 된다(`PIT-0022`).
+  2. 위 "예방 규칙"의 turbo 전제. `apps/demo`의 `scripts.typecheck`를 지우면 `turbo run typecheck`가 `Tasks: 9 successful, 9 total`로 exit 0이고(기준선 10) 당시 `tests/` 51건은 전량 통과했다. `--dry=json`의 총 태스크 수는 **줄지 않는다** — turbo가 그 태스크를 계속 나열하고 `command`만 `<NONEXISTENT>`로 바꾼다. 수가 주는 것은 실행이다.
+- Issue #106 — **감시 장치 자신이 cwd에 걸려 눈감았다.** `findUnlistedTestDirectories()`가 존재 판정을 cwd 상대로 해, 잘못된 cwd에서는 워크스페이스 루트가 전부 없는 것으로 보여 후보가 0건이 되고 `expect(...).toEqual([])`이 공허하게 참이 됐다. 차집합의 빈 배열은 "전부 목록에 있다"와 "후보를 못 모았다" 둘 다에서 나오므로, 수집 결과를 `collectTestDirectoryCandidates()`로 따로 내보내야 계약 테스트가 그 둘을 가른다. 검증은 `process.chdir` 대신 cwd만 다른 자식 프로세스 두 벌을 대조한다 — `chdir`는 프로세스 전역이라 같은 워커의 다른 테스트를 오염시킨다.
+- 무변화 증거의 함정: `pnpm scan:test-helpers` 출력 sha1을 그대로 대조하면 안 된다. 탐지기의 기본 대상에 `tests/`가 들어 있어, 회귀 테스트를 추가하는 것만으로 헬퍼 선언 수가 움직인다. 탐지기 동작 무변화를 보이려면 **코퍼스를 고정한 채**(테스트 파일을 이전 판으로 되돌려) 스크립트만 바꿔 비교한다.
 
 ## 관련 문서
 
