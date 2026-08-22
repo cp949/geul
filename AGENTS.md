@@ -70,7 +70,7 @@ demo  -> react, io, model
 - 반복 실패 예방 규칙: `docs/pitfalls/`
 - 단계별 완료 판정과 증거: `docs/reviews/`
 - 프로젝트 공통 언어: `CONTEXT.md`
-- a-workflow 절차와 `_works/` 작업공간: `docs/agents/a-workflow.md`
+- ff-workflow 절차와 `_works/` 작업공간: `docs/agents/ff-workflow.md`
 
 같은 사실을 여러 문서에 원본처럼 복제하지 않는다. 문서 생성, 갱신과 종료 조건은 `docs/process/development-lifecycle.md`를 따른다.
 
@@ -101,15 +101,15 @@ git status --short
 
 ### 두 가지 작업 레인
 
-| | 기본 | a-workflow |
+| | 기본 | ff-workflow |
 | --- | --- | --- |
 | 진입 | **기본값** | 사용자가 명시적으로 지시할 때만 |
 | 커밋 | `dev` 직접 | `dev`에서 분기한 작업 브랜치 |
-| 리뷰 | 없음 | 별도 세션 |
+| 리뷰 | 없음 | 트랙-2, 트랙-5, 트랙-6 |
 | 산출물 | 없음 | `_works/<작업 폴더>/` |
-| 절차 원본 | 아래 "기본 레인" | [`docs/agents/a-workflow.md`](./docs/agents/a-workflow.md) |
+| 절차 원본 | 아래 "기본 레인" | [`docs/agents/ff-workflow.md`](./docs/agents/ff-workflow.md) |
 
-**에이전트는 지시 없이 a-workflow로 들어가지 않는다.** 레인은 작업을 시작할 때 사용자가 정하고 중간에 바뀌지 않는다. 기본 레인으로 시작한 작업이 예상보다 커져도 에이전트가 승격하지 않는다 — 커진 사실은 "완료 보고"의 남은 제한과 위험에 적고 판단은 사용자에게 남긴다.
+**에이전트는 지시 없이 ff-workflow로 들어가지 않는다.** 레인은 작업을 시작할 때 사용자가 정하고 중간에 바뀌지 않는다. 기본 레인으로 시작한 작업이 예상보다 커져도 에이전트가 승격하지 않는다 — 커진 사실은 "완료 보고"의 남은 제한과 위험에 적고 판단은 사용자에게 남긴다.
 
 ### 기본 레인
 
@@ -119,9 +119,9 @@ git status --short
 4. 현재 범위 밖에서 발견한 결함은 사용자에게 보고하고 지시를 기다린다. `_works/` 초안을 만들지 않는다.
 5. push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다.
 
-### a-workflow
+### ff-workflow
 
-작업 브랜치 수명, `_works/` 작업공간과 상태 전이, 커밋 해시 참조, squash 절차와 커맨드 목록은 [`docs/agents/a-workflow.md`](./docs/agents/a-workflow.md)가 소유한다. 이 문서에 복제하지 않는다.
+트랙 0~8의 절차, 작업 브랜치 수명, `_works/` 작업공간, 커밋 해시 참조와 재그룹화 실행 명령은 [`docs/agents/ff-workflow.md`](./docs/agents/ff-workflow.md)가 소유한다. 이 문서에 복제하지 않는다.
 
 ### 공통 규칙
 
