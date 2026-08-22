@@ -13,9 +13,9 @@
  * 두 벌을 대조한다.
  *
  * `describe("collectTestDirectoryCandidates()가 workspaceChildDirectories()에
- * 위임한다")`는 DELTA-03이 합친 세 번째 술어 사본을 다시 진다 — 심링크 패키지
- * 아래의 `test`가 후보에 들고, 정렬 계약이 유지되고, 그 위임이 소스 수준에서
- * 실제로 지켜지는지를 fixture와 소스 스캔으로 확인한다.
+ * 위임한다")`는 이 위임으로 합치기 전의 세 번째 술어 사본을 다시 진다 — 심링크
+ * 패키지 아래의 `test`가 후보에 들고, 정렬 계약이 유지되고, 그 위임이 소스
+ * 수준에서 실제로 지켜지는지를 fixture와 소스 스캔으로 확인한다.
  */
 import { execFile } from "node:child_process";
 import {
@@ -598,6 +598,20 @@ describe("기본 대상 디렉터리", () => {
   });
 
   it("저장소의 모든 테스트 디렉터리가 기본 대상에 들어 있다", () => {
+    // 가드 먼저. `findUnlistedTestDirectories()`는 후보 − 기본 대상의
+    // 차집합이라, 후보 수집 범위가 좁아지면 결과가 `[]`로 수렴해 이 단언이
+    // 공허하게 참이 된다(실측 — 열거 glob을 좁힌 변이와 목록 파싱이 잘린
+    // 변이 양쪽에서 이 `it`이 통과했다). 손으로 적은 기본 대상 전부가 실제
+    // 후보에 들어 있는지를 먼저 봐, 범위가 줄어드는 방향을 그 자리에서
+    // 잡는다 — 기본 대상의 `packages/*/test` 4개는 전부 열거를 거쳐 들어오는
+    // 항목이다.
+    const candidates = collectTestDirectoryCandidates();
+
+    expect(
+      DEFAULT_TARGET_DIRECTORIES.filter(
+        (target) => !candidates.includes(target),
+      ),
+    ).toEqual([]);
     expect(findUnlistedTestDirectories()).toEqual([]);
   });
 
@@ -645,8 +659,8 @@ describe("기본 대상 디렉터리", () => {
 });
 
 /**
- * DELTA-03: `collectTestDirectoryCandidates()`가 자식 열거를 자기 루프로 다시
- * 구현하지 않고 `workspaceChildDirectories()`(`scripts/workspace-roots.mjs`)에
+ * `collectTestDirectoryCandidates()`가 자식 열거를 자기 루프로 다시 구현하지
+ * 않고 `workspaceChildDirectories()`(`scripts/workspace-roots.mjs`)에
  * 위임하는지를 진다. 옛 술어(`entry.isDirectory()` 단독 판정)로는 심링크
  * 패키지 아래의 `test`가 후보에서 조용히 빠지고, `findUnlistedTestDirectories()`가
  * "목록 밖 없음"을 잘못 보고한다(`PIT-0022`).
@@ -733,21 +747,35 @@ describe("collectTestDirectoryCandidates()가 workspaceChildDirectories()에 위
  *
  * 판정 범위를 이 함수 하나로 좁히는 이유는 오탐이다. 같은 파일의
  * `collectSourcePaths()`가 `.tsx?` 소스 파일을 재귀로 훑으려고 `readdirSync`와
- * `entry.isDirectory()`를 **합법적으로** 쓴다 — 그 자리는 이 DELTA의 범위
+ * `entry.isDirectory()`를 **합법적으로** 쓴다 — 그 자리는 이 위임 계약의 범위
  * 밖이다(중복 탐지 알고리즘 자체). 파일 전체에서 그 토큰을 찾으면 이 합법적인
  * 자리가 오탐으로 걸린다. `tests/workspace-roots.test.ts`가 배열 리터럴
  * 범위로 판정 범위를 좁힌 것(`arrayLiteralSpan`)과 같은 이유의 같은 형태다.
  */
 const extractArrowFunctionBody = (source: string, functionName: string) => {
-  const declaration = new RegExp(
-    `export const ${functionName} = \\([^)]*\\) => \\{`,
-  );
+  // 파라미터 목록은 괄호 깊이로 가른다. `\\([^)]*\\)`로 잡으면 기본값에 괄호가
+  // 들어가는 정당한 시그니처(`(repoRoot = resolve(REPOSITORY_ROOT))`)에서 첫
+  // `)`에 걸려 매치가 통째로 실패한다 — 위임은 그대로인데 테스트만 지는
+  // 거짓 실패다(실측).
+  const declaration = new RegExp(`export const ${functionName} = \\(`);
   const match = declaration.exec(source);
 
   expect(match).not.toBeNull();
   if (match === null) throw new Error("unreachable");
 
-  const bodyStart = match.index + match[0].length;
+  let parameterDepth = 1;
+  let scan = match.index + match[0].length;
+  while (scan < source.length && parameterDepth > 0) {
+    if (source[scan] === "(") parameterDepth += 1;
+    else if (source[scan] === ")") parameterDepth -= 1;
+    scan += 1;
+  }
+
+  const arrow = /^\s*=>\s*\{/.exec(source.slice(scan));
+  expect(arrow).not.toBeNull();
+  if (arrow === null) throw new Error("unreachable");
+
+  const bodyStart = scan + arrow[0].length;
   let depth = 1;
   let cursor = bodyStart;
 
@@ -761,11 +789,12 @@ const extractArrowFunctionBody = (source: string, functionName: string) => {
 };
 
 /**
- * 완료 조건 3의 트랙-2 변이를 진다 — 옛 술어(`entry.isDirectory()` 단독
+ * 계획 리뷰에서 추가로 드러난 변이를 진다 — 옛 술어(`entry.isDirectory()` 단독
  * 판정)가 아니라 심링크까지 추종하는 **새로 올바르게 구현한** 로컬 열거
- * 루프를 `collectTestDirectoryCandidates()` 안에 심어도, 행위 기반 완료
- * 조건(1·2·4·5)은 전부 통과한다 — 그 루프가 기능적으로 `workspaceChildDirectories()`와
- * 동등하기 때문이다. 소스 스캔만 그 변이를 잡는다.
+ * 루프를 `collectTestDirectoryCandidates()` 안에 심어도, 행위 기반 단언(위
+ * fixture 두 개를 포함해)은 전부 통과한다 — 그 루프가 기능적으로
+ * `workspaceChildDirectories()`와 동등하기 때문이다. 소스 스캔만 그 변이를
+ * 잡는다.
  */
 describe("collectTestDirectoryCandidates()가 자체 열거 루프를 갖지 않는다", () => {
   it("함수 본문에 readdirSync·isDirectory 패턴이 없고 workspaceChildDirectories()를 부른다", () => {
@@ -784,9 +813,37 @@ describe("collectTestDirectoryCandidates()가 자체 열거 루프를 갖지 않
 
     // 위 두 부정 단언은 함수 본문의 텍스트만 본다 — import를 지우고 같은
     // 이름의 지역 함수를 새로 선언해도 속아 넘어간다. import 구문 자체도
-    // 확인한다.
+    // 확인한다. specifier가 정확히 하나일 것을 요구하지 않는다 — 같은
+    // 모듈에서 이름을 하나 더 가져오는 정당한 변경에 거짓 실패했다(실측).
     expect(source).toMatch(
-      /^\s*import\s*\{\s*workspaceChildDirectories\s*\}\s*from\s*["']\.\/workspace-roots\.mjs["']/m,
+      /^import\s*\{[^}]*\bworkspaceChildDirectories\b[^}]*\}\s*from\s*["']\.\/workspace-roots\.mjs["']/m,
     );
+  });
+
+  /**
+   * 위 `it`은 판정 범위가 `collectTestDirectoryCandidates()`의 중괄호 안쪽
+   * 하나뿐이라, 열거 루프를 **형제 함수로 옮기고** 거기서 부르면 전부
+   * 통과한다(실측 — 심링크까지 추종하는 올바른 사본을 형제 함수로 심었더니
+   * `tests/` 전량이 통과했다). 없앤 세 번째 사본이 그 형태로 되살아나는 것을
+   * 막으려면 모듈 전체를 봐야 한다.
+   *
+   * 모듈 안에서 자식 디렉터리를 직접 훑는 자리는 하나여야 한다 —
+   * `collectSourcePaths()`가 `.tsx?` 소스를 재귀로 모으는 자리다. 그건 중복
+   * 탐지 알고리즘 자신이고 workspace 열거와 무관하다. 그 밖에
+   * `readdirSync`가 하나라도 더 생기면 자식 열거 술어의 사본일 가능성이
+   * 높으니, 그 자리에서 이 계약을 다시 판단하게 한다(`PIT-0022`).
+   */
+  it("모듈 안에서 readdirSync를 부르는 자리가 collectSourcePaths() 하나뿐이다", () => {
+    const source = readFileSync(
+      new URL("../scripts/find-duplicate-test-helpers.mjs", import.meta.url),
+      "utf8",
+    );
+    const callSites = [...source.matchAll(/\breaddirSync\s*\(/g)];
+
+    expect(callSites).toHaveLength(1);
+
+    const body = extractArrowFunctionBody(source, "collectSourcePaths");
+
+    expect(body).toMatch(/\breaddirSync\s*\(/);
   });
 });

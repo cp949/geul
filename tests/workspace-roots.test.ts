@@ -22,7 +22,7 @@
  * 현재 트리의 `apps`와 `fixtures` 아래에는 `test` 디렉터리가 없어 그 두 루트가 그
  * 스크립트의 후보 수집 결과에 아무 기여도 하지 않기 때문이다. 아래 describe가
  * 그 구멍을 세 축으로 막는다 — 소비처가 import하는지, glob 목록 리터럴이나
- * 루트 이름 목록 리터럴이 저장소에 한 벌뿐인지, 그리고(DELTA-06)
+ * 루트 이름 목록 리터럴이 저장소에 한 벌뿐인지, 그리고
  * `scripts/headless-packages.mjs`가 단독 소유하는 headless 판정 목록
  * (`HEADLESS_PACKAGES`)의 배열 리터럴 사본이 없는지. headless 목록은 이 파일이
  * 소유하는 모듈의 것이 아니지만, 사본 탐지 술어(`tokensInOneArrayLiteral` 등)를
@@ -60,7 +60,8 @@ const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 
 /**
  * 매니페스트 텍스트에서 `packages:` 항목의 glob 문자열을 순서대로 뽑는 순수
- * 함수(DELTA-04). 파일 읽기와 분리해 문자열 입력만으로 단위 테스트한다.
+ * 함수다. 파일 읽기와 분리해 문자열 입력만으로 단위 테스트한다.
+ *
  * `scripts/workspace-roots.mjs`는 이 목록을 리터럴로 들고 있어, 새 루트가
  * workspace에 추가되거나 기존 glob이 넓어져도 스스로는 알지 못한다. 여기서
  * 어긋남을 잡는다.
@@ -200,9 +201,8 @@ const rootNamesFromGlobs = (globs: readonly string[]) =>
 const workspaceRootsModulePath = "scripts/workspace-roots.mjs";
 
 // headless 판정 목록(`HEADLESS_PACKAGES`)을 단독 소유하는 모듈의 저장소 상대
-// 경로(DELTA-06). 위와 같은 이유로 한 곳에서만 적는다 — 이 모듈은
-// `workspace-roots.mjs`가 아니지만, 사본 탐지 단언은 이 파일이 이미 소유한
-// 술어를 그대로 재사용한다.
+// 경로. 위와 같은 이유로 한 곳에서만 적는다 — 이 모듈은 `workspace-roots.mjs`가
+// 아니지만, 사본 탐지 단언은 이 파일이 이미 소유한 술어를 그대로 재사용한다.
 const headlessPackagesModulePath = "scripts/headless-packages.mjs";
 
 // 사본을 찾을 대상 확장자 — 실행되는 코드만이다(js·cjs·mjs·ts·cts·mts·jsx·tsx).
@@ -245,20 +245,20 @@ const arrayLiteralSpan = /\[[^[\]]*\]/g;
 // 형태다). 2는 실증된 두 변이 — 온전한 3종 사본과 루트 하나가 빠진 2종 갈린
 // 사본 — 을 모두 잡으면서 그 소음을 받지 않는다.
 //
-// glob 축도 같은 임계값을 쓴다. DELTA-01 실측(2026-08-23, `dev` `a7de978`):
-// 배열 리터럴 범위 안에서 glob 토큰 2종 이상은 이 DELTA 이전 0건, 이후
-// `scripts/workspace-roots.mjs` 1건(3종)이다. 두 축을 동시에 걸어도 오탐이
-// 없다.
+// glob 축도 같은 임계값을 쓴다. 실측(2026-08-23, `dev` `a7de978`): 배열
+// 리터럴 범위 안에서 glob 토큰 2종 이상은 `WORKSPACE_PACKAGE_GLOBS` 리터럴이
+// 생기기 전 0건, 생긴 뒤 `scripts/workspace-roots.mjs` 1건(3종)이다. 두 축을
+// 동시에 걸어도 오탐이 없다.
 //
 // headless 축(`HEADLESS_PACKAGES`: `packages/io`·`packages/model`)도 같은
-// 임계값을 쓴다. DELTA-06 실측(2026-08-23): 이 축을 이 describe에 더하기
+// 임계값을 쓴다. 실측(2026-08-23): 이 축을 이 describe에 더하기
 // 전, 배열 리터럴 범위 안에서 두 토큰이 함께 2종 모이는 추적 소스는 3건이었다
 // — `scripts/check-package-boundaries.mjs`(원본 리터럴 자신),
 // `tests/workspace-boundaries.test.ts`(그 파일의 `it.each`가 두 문자열을
 // 배열 리터럴로 나열한 사본), 그리고 이 파일 자신(바로 위 "매니페스트에서
 // 파생한 열거와 리터럴에서 파생한 열거가 같고, 결과가 오늘의 6개다" 테스트의
-// 6개 이름 배열이 두 토큰을 우연히 함께 담고 있었다). 앞 둘은 이 DELTA가
-// 추출·스프레드 교체로 없앴고, 이 파일 자신의 충돌은 `describe("workspace
+// 6개 이름 배열이 두 토큰을 우연히 함께 담고 있었다). 앞 둘은 목록 추출과
+// 스프레드 교체로 없앴고, 이 파일 자신의 충돌은 `describe("workspace
 // 패키지 glob 목록")`의 `WORKSPACE_ROOTS` 테스트가 이미 쓰던 기존 관례
 // (길이 가드 + `toContain()` 반복)를 그대로 따라 없앴다 — 배열 리터럴을
 // 물리적으로 쪼개는 방식(`.concat()` 등)은 쓰지 않는다. 리뷰 실측:
@@ -344,15 +344,15 @@ const tokensInOneArrayLiteral = (source: string, tokens: readonly string[]) => {
 };
 
 // 아래 픽스처는 항목이 2개 이상인 자리마다 가상 이름(alpha·beta·gamma)을
-// 쓴다(Ruling 1, DELTA-04). `apps`·`fixtures`·`packages`를 한 배열 리터럴에
-// 2종 이상 나란히 적으면 "단독 소유" describe의 사본 판정(아래
+// 쓴다. `apps`·`fixtures`·`packages`를 한 배열 리터럴에 2종 이상 나란히
+// 적으면 "단독 소유" describe의 사본 판정(아래
 // `arrayLiteralCopyThreshold`)에 이 파일 자신이 걸린다 — 파싱 규칙은 이름과
 // 무관하고, 실제 매니페스트 대조는 "pnpm-workspace.yaml의 packages: 항목과
 // 문자열 그대로 같다"가 따로 진다. 단일 항목 픽스처(`apps/*`·`apps/**` 하나
 // 뿐인 자리)는 1종이라 실제 이름을 그대로 쓴다.
-describe("parseWorkspacePackageGlobs()", () => {
+describe("parseWorkspacePackageGlobs()(매니페스트 glob 파싱)", () => {
   it("인라인 주석이 든 항목은 값만 낸다", () => {
-    // 변이 확인(보고서 기록): 인라인 주석 제거를 빼면 `"제외"`가 섞여 이
+    // 변이 확인(실측): 인라인 주석 제거를 빼면 `"제외"`가 섞여 이
     // 단언이 진다.
     expect(
       parseWorkspacePackageGlobs("packages:\n  - apps/* # legacy - 제외\n"),
@@ -360,7 +360,7 @@ describe("parseWorkspacePackageGlobs()", () => {
   });
 
   it("flow 형식을 파싱한다", () => {
-    // 변이 확인(보고서 기록): block 형식만 처리하면 빈 목록이 나와 이 단언이
+    // 변이 확인(실측): block 형식만 처리하면 빈 목록이 나와 이 단언이
     // 진다.
     expect(
       parseWorkspacePackageGlobs(
@@ -370,7 +370,7 @@ describe("parseWorkspacePackageGlobs()", () => {
   });
 
   it("CRLF 매니페스트를 LF와 같게 파싱한다", () => {
-    // 변이 확인(보고서 기록): `\r` 제거를 빼면 값에 `\r`이 남아 이 단언이
+    // 변이 확인(실측): `\r` 제거를 빼면 값에 `\r`이 남아 이 단언이
     // 진다.
     expect(
       parseWorkspacePackageGlobs("packages:\r\n  - alpha/*\r\n  - beta/*\r\n"),
@@ -378,7 +378,7 @@ describe("parseWorkspacePackageGlobs()", () => {
   });
 
   it("목록 중간 빈 줄과 EOF 개행 없음을 견딘다", () => {
-    // 변이 확인(보고서 기록): 항목 사이 빈 줄에서 멈추면 뒤 항목이, EOF에
+    // 변이 확인(실측): 항목 사이 빈 줄에서 멈추면 뒤 항목이, EOF에
     // 개행이 없으면 마지막 항목이 빠져 이 단언이 진다.
     expect(
       parseWorkspacePackageGlobs("packages:\n  - alpha/*\n\n  - beta/*\n"),
@@ -389,7 +389,7 @@ describe("parseWorkspacePackageGlobs()", () => {
   });
 
   it("./ 접두를 apps/*로 정규화한다", () => {
-    // 변이 확인(보고서 기록): 접두 제거를 빼면 `"./apps/*"`가 남아 리터럴
+    // 변이 확인(실측): 접두 제거를 빼면 `"./apps/*"`가 남아 리터럴
     // 대조(`["apps/*"]`)가 진다.
     expect(parseWorkspacePackageGlobs("packages:\n  - './apps/*'\n")).toEqual([
       "apps/*",
@@ -397,9 +397,10 @@ describe("parseWorkspacePackageGlobs()", () => {
   });
 
   it("접미 glob은 정규화하지 않고 그대로 낸다", () => {
-    // 오늘도 GREEN이다 — DELTA-01이 이미 닫은 구멍이라 여기서 RED로 만들 수
-    // 없다. 회귀 방어용: `parseGlobToken`에 `.replace(/\/\*+$/, "")`를
-    // 되살렸을 때 이 단언이 지는 것을 직접 확인하고 원복했다(보고서 기록).
+    // 오늘도 GREEN이다 — 접미 glob 정규화를 없앨 때 이미 닫은 구멍이라
+    // 여기서 RED로 만들 수 없다. 회귀 방어용: `parseGlobToken`에
+    // `.replace(/\/\*+$/, "")`를 되살렸을 때 이 단언이 지는 것을 직접 확인하고
+    // 원복했다(실측 확인함).
     expect(parseWorkspacePackageGlobs("packages:\n  - 'apps/**'\n")).toEqual([
       "apps/**",
     ]);
@@ -438,7 +439,7 @@ describe("parseWorkspacePackageGlobs()", () => {
 
   it("부정 glob을 항목으로 그대로 낸다", () => {
     // 오늘도 GREEN이다 — 회귀 방어용: `!`로 시작하는 항목을 버리는 필터를
-    // 넣었을 때 이 단언이 지는 것을 직접 확인하고 원복했다(보고서 기록).
+    // 넣었을 때 이 단언이 지는 것을 직접 확인하고 원복했다(실측 확인함).
     expect(
       parseWorkspacePackageGlobs(
         "packages:\n  - '!packages/legacy'\n  - alpha/*\n",
@@ -453,8 +454,8 @@ describe("workspace 패키지 glob 목록", () => {
       manifestPackageGlobs().sort(),
     );
 
-    // 완료 조건 1의 RED 시나리오: `- apps/*`를 `- apps/**`로 바꾼 매니페스트
-    // 사본을 주입해, 다단 glob이 정규화 없이 그대로 남는지를 진다. 옛
+    // RED 시나리오: `- apps/*`를 `- apps/**`로 바꾼 매니페스트 사본을 주입해,
+    // 다단 glob이 정규화 없이 그대로 남는지를 진다. 옛
     // `.replace(/\/\*+$/, "")`가 있었다면 `apps/**`가 `apps/*`와 같은 값으로
     // 보였을 자리다. 실제 `pnpm-workspace.yaml`은 건드리지 않고 텍스트 사본만
     // 임시로 만든다.
@@ -471,8 +472,8 @@ describe("workspace 패키지 glob 목록", () => {
   });
 
   it("WORKSPACE_ROOTS가 glob 목록에서 파생되고 값이 오늘과 같다", () => {
-    // 완료 조건 2의 RED 시나리오: 임의의 glob 목록을 주입해 파생 규칙 자체를
-    // 진다. 첫 세그먼트 대신 마지막 세그먼트를 뽑는 식으로 갈리면 여기서
+    // RED 시나리오: 임의의 glob 목록을 주입해 파생 규칙 자체를 진다. 첫
+    // 세그먼트 대신 마지막 세그먼트를 뽑는 식으로 갈리면 여기서
     // 잡힌다. 오늘의 루트 이름·glob을 그대로 쓰지 않는다 — 그 문자열 그대로를
     // 한 배열 리터럴에 두 종 이상 모으면 아래 "단독 소유" describe의 사본
     // 판정에 이 파일 자신이 걸린다. 그래서 실존하지 않는 이름으로 규칙만
@@ -510,18 +511,22 @@ describe("workspace 패키지 glob 목록", () => {
 });
 
 /**
- * DELTA-02 "fixture 구성" 절의 임시 트리를 만든다. workspace 루트를 `tmpRoot`
- * 바로 아래가 아니라 `tmpRoot/repo`에 둔다 — fixture 표가 명시한 심링크 대상
+ * 심링크 열거 계약을 지는 임시 트리를 만든다. workspace 루트를 `tmpRoot`
+ * 바로 아래가 아니라 `tmpRoot/repo`에 둔다 — 이 트리가 쓰는 심링크 대상
  * `../../external/pkg`(`packages/linked`에서 두 단계 위)가 `tmpRoot/external/pkg`에
  * 닿으려면 `packages/`가 `repo/` 한 단계를 더 거쳐야 한다. `tmpRoot` 바로
  * 아래에 `packages/`를 두면 같은 상대 경로가 `tmpdir()` 바깥, 다른 프로세스의
  * 임시 디렉터리와 같은 위치를 가리켜 병렬 실행 시 충돌할 수 있다.
  *
- * 반환하는 `tmpRoot`는 호출자가 `afterEach`에서 통째로 지운다 — 이 함수
- * 자신은 정리하지 않는다.
+ * 만든 `tmpRoot`를 **트리를 채우기 전에** `register`로 넘긴다. 호출자가
+ * 반환값을 받아 정리 대상에 담는 형태였다면, 아래 `mkdirSync`·`symlinkSync`
+ * 여섯 번 중 하나가 던졌을 때 반환이 일어나지 않아 `afterEach`가 그 트리를
+ * 지나친다 — 임시 디렉터리가 남는다(`PIT-0017`과 같은 형태다). 정리 자체는
+ * 호출자의 `afterEach`가 한다.
  */
-const createSymlinkFixtureRoot = () => {
+const createSymlinkFixtureRoot = (register: (tmpRoot: string) => void) => {
   const tmpRoot = mkdtempSync(join(tmpdir(), "geul-workspace-roots-"));
+  register(tmpRoot);
   const repoRoot = join(tmpRoot, "repo");
   const packagesDir = join(repoRoot, "packages");
   const externalDir = join(tmpRoot, "external");
@@ -538,7 +543,7 @@ const createSymlinkFixtureRoot = () => {
 
   // packages/linked — 디렉터리를 가리키는 심링크, 대상에 package.json 있음.
   // entry.isDirectory()는 심링크에 false를 돌려주므로, 심링크를 따라가지 않는
-  // 술어에서는 이 항목이 조용히 빠진다(완료 조건 1의 RED 지점).
+  // 술어에서는 이 항목이 조용히 빠진다(구현 전 RED 지점).
   symlinkSync("../../external/pkg", join(packagesDir, "linked"), "dir");
   // packages/filelink — 파일을 가리키는 심링크. 세지 않는다.
   symlinkSync(
@@ -558,7 +563,7 @@ const createSymlinkFixtureRoot = () => {
   return { tmpRoot, repoRoot };
 };
 
-describe("workspacePackageDirectories()", () => {
+describe("workspacePackageDirectories()(패키지 디렉터리 열거)", () => {
   // `<이름>/*`가 아닌 패턴이 각각 throw하는지 `it.each`로 진다. 뒤쪽 네 개는
   // 이름 세그먼트 자리에 glob 메타문자가 오는 형태다 — 그 자리를 "슬래시가
   // 없는 임의의 문자열"로 열어 두면 `resolve()`가 메타문자를 디렉터리 이름
@@ -586,7 +591,7 @@ describe("workspacePackageDirectories()", () => {
     expect([...workspacePackageDirectories(repositoryRoot)].sort()).toEqual(
       expected,
     );
-    // `HEADLESS_PACKAGES`(headless 축, DELTA-06)의 두 토큰 `packages/io`·
+    // `HEADLESS_PACKAGES`(headless 축)의 두 토큰 `packages/io`·
     // `packages/model`을 한 배열 리터럴에 나란히 두면 아래 "단독 소유"
     // describe의 headless 축 판정에 이 테스트 자신이 걸린다(실측). 이 파일이
     // 이미 같은 문제를 한 번 겪었다 — 바로 위 "WORKSPACE_ROOTS가 glob
@@ -620,27 +625,28 @@ describe("workspacePackageDirectories()", () => {
     });
 
     it("디렉터리 심링크는 세고, 파일 심링크·끊어진 심링크·package.json 없는 디렉터리·일반 파일은 세지 않는다", () => {
-      const fixture = createSymlinkFixtureRoot();
-      tmpRoot = fixture.tmpRoot;
+      const fixture = createSymlinkFixtureRoot((root) => {
+        tmpRoot = root;
+      });
 
       const result = workspacePackageDirectories(fixture.repoRoot, [
         "packages/*",
       ]).map((directory) => relative(fixture.repoRoot, directory));
 
-      // 완료 조건 1: 디렉터리를 가리키는 심링크(대상에 package.json 있음)가
-      // 열거에 들어온다. 오늘의 `entry.isDirectory()` 단독 술어는 심링크에
-      // false를 돌려주므로, 이 단언이 구현 전 RED다.
+      // 디렉터리를 가리키는 심링크(대상에 package.json 있음)가 열거에
+      // 들어온다. 오늘의 `entry.isDirectory()` 단독 술어는 심링크에 false를
+      // 돌려주므로, 이 단언이 구현 전 RED다.
       expect(result).toContain("packages/linked");
       // 일반 디렉터리도 그대로 들어온다 — 위 조건과 짝을 이루는 대조군.
       expect(result).toContain("packages/plain");
-      // 완료 조건 2: 파일을 가리키는 심링크는 세지 않는다.
+      // 파일을 가리키는 심링크는 세지 않는다.
       expect(result).not.toContain("packages/filelink");
-      // 완료 조건 2: 끊어진 심링크는 세지 않는다 — 여기 도달했다는 것 자체가
+      // 끊어진 심링크는 세지 않는다 — 여기 도달했다는 것 자체가
       // statSync가 ENOENT로 죽지 않았다는 증거다.
       expect(result).not.toContain("packages/broken");
-      // 완료 조건 3: package.json 없는 디렉터리는 세지 않는다.
+      // package.json 없는 디렉터리는 세지 않는다.
       expect(result).not.toContain("packages/nofile");
-      // 완료 조건 4: 일반 파일은 세지 않는다.
+      // 일반 파일은 세지 않는다.
       expect(result).not.toContain("packages/loose.txt");
 
       // 위 낱개 단언이 전부 통과해도 우연일 수 있다 — 결과 집합 전체를
@@ -650,7 +656,7 @@ describe("workspacePackageDirectories()", () => {
   });
 });
 
-describe("workspaceChildDirectories()", () => {
+describe("workspaceChildDirectories()(자식 디렉터리 열거)", () => {
   // glob 형태 검증은 이 함수가 단독 소유한다 — `workspacePackageDirectories()`는
   // 이 함수에 위임할 뿐이다. 위임이 깨져도(예: 검증을 지역에 다시 심으면) 여기가
   // 직접 잡는다. 이름 세그먼트에 glob 메타문자가 오는 형태도 함께 진다 — 위
@@ -680,8 +686,9 @@ describe("workspaceChildDirectories()", () => {
     });
 
     it("package.json 없는 디렉터리도 포함하고, 디렉터리 심링크도 세고, 파일 심링크·끊어진 심링크·일반 파일은 세지 않는다", () => {
-      const fixture = createSymlinkFixtureRoot();
-      tmpRoot = fixture.tmpRoot;
+      const fixture = createSymlinkFixtureRoot((root) => {
+        tmpRoot = root;
+      });
 
       const result = workspaceChildDirectories(fixture.repoRoot, [
         "packages/*",
@@ -692,8 +699,9 @@ describe("workspaceChildDirectories()", () => {
       // `workspacePackageDirectories()`로 바꿔 부르면 이 단언이 진다 — 탐지
       // 범위가 좁아지는 변이를 여기서 잡는다.
       expect(result).toContain("packages/nofile");
-      // 심링크 추종 술어는 DELTA-02가 확정한 것을 그대로 물려받는다 —
-      // `workspacePackageDirectories()`의 같은 이름 테스트와 짝이다.
+      // 심링크 추종 술어는 두 함수가 공유하므로 위에서 고정한 것을 그대로
+      // 물려받는다 — `workspacePackageDirectories()`의 같은 이름 테스트와
+      // 짝이다.
       expect(result).toContain("packages/linked");
       expect(result).toContain("packages/plain");
       expect(result).not.toContain("packages/filelink");
@@ -709,8 +717,9 @@ describe("workspaceChildDirectories()", () => {
     });
 
     it("workspacePackageDirectories()가 이 함수의 결과에 package.json 필터를 얹은 것과 같다", () => {
-      const fixture = createSymlinkFixtureRoot();
-      tmpRoot = fixture.tmpRoot;
+      const fixture = createSymlinkFixtureRoot((root) => {
+        tmpRoot = root;
+      });
 
       const children = workspaceChildDirectories(fixture.repoRoot, [
         "packages/*",
@@ -757,7 +766,7 @@ describe("workspaceChildDirectories()", () => {
  * 다시 하지 않는다. 이 파일이 소유하는 것은 목록의 단독 소유이고, 게이트가 그
  * 목록을 실제로 훑는지는 저쪽의 계약이다.
  *
- * 사본 축은 셋이다(완료 조건 5, DELTA-06이 headless 축을 더했다) — glob 축은
+ * 사본 축은 셋이다(headless 축이 나중에 더해졌다) — glob 축은
  * `WORKSPACE_PACKAGE_GLOBS`의 원소를, 루트 이름 축은 `WORKSPACE_ROOTS`의
  * 원소를, headless 축은 `scripts/headless-packages.mjs`가 단독 소유하는
  * `HEADLESS_PACKAGES`의 원소를 판정 토큰으로 쓴다. glob 축과 headless 축은

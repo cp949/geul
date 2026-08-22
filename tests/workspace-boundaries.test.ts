@@ -14,8 +14,8 @@
  * 라이선스 게이트가 각각 그 열거를 실제로 훑는지 — 게이트를 실행해 출력이
  * 보고하는 매니페스트 수를 열거에서 파생한 기대값과 대조한다.
  *
- * 여섯째(DELTA-06)는 `scripts/headless-packages.mjs`의 `HEADLESS_PACKAGES`가
- * tsconfig `lib`에 `DOM`이 없는 workspace 패키지 집합과 같은 값인지를 그
+ * 여섯째는 `scripts/headless-packages.mjs`의 `HEADLESS_PACKAGES`가 tsconfig
+ * `lib`에 `DOM`이 없는 workspace 패키지 집합과 같은 값인지를 그
  * 열거·tsconfig에서 파생한 기대값과 대조하고, `headlessPackageDirectories()`가
  * workspace 열거에 없는 항목을 받으면 throw하는지를 리터럴 fixture로 진다.
  * 이 목록의 **단독 소유**(사본이 없는지)는 이 파일이 아니라
@@ -170,7 +170,7 @@ const forbiddenDependencies = {
  * 판정한다 — `forbiddenDependencies`에만 있는 패키지도 이미 등재된 것으로 센다.
  *
  * 순수 함수로 뽑아 리터럴 배열을 직접 넣어 단위 테스트한다(아래
- * `describe("unregisteredWorkspacePackages", ...)`). 오늘 실제
+ * `describe("unregisteredWorkspacePackages()(판정 목록 미등재 패키지)", ...)`). 오늘 실제
  * `forbiddenDependencies`의 키 4개가 전부 `allowedDependencies`에도 있어,
  * "`forbiddenDependencies`에만 등재된 이름도 등재로 센다"는 갈래를 실제
  * `allowedDependencies`/`forbiddenDependencies` 데이터로는 관측할 수 없다 —
@@ -192,11 +192,10 @@ const hasForbiddenDependency = (dependency: string, forbidden: string) =>
     : dependency === forbidden;
 
 /**
- * tsconfig `compilerOptions.lib` 목록에 DOM 전역이 하나라도 있는지 판정한다
- * (결정 3, DELTA-06). 정확히 `"DOM"`이거나 `"DOM."`으로 시작하는 항목
- * (`"DOM.Iterable"` 등)이 하나라도 있으면 참이다 — `"DOM"`을 접두로만
- * 판정하면 `"DOMless"` 같은 가상의 이름도 걸릴 수 있어, 오늘 트리에 없는
- * 오탐 가능성을 애초에 닫는다.
+ * tsconfig `compilerOptions.lib` 목록에 DOM 전역이 하나라도 있는지 판정한다.
+ * 정확히 `"DOM"`이거나 `"DOM."`으로 시작하는 항목(`"DOM.Iterable"` 등)이
+ * 하나라도 있으면 참이다 — `"DOM"`을 접두로만 판정하면 `"DOMless"` 같은
+ * 가상의 이름도 걸릴 수 있어, 오늘 트리에 없는 오탐 가능성을 애초에 닫는다.
  */
 const hasDomLib = (lib: readonly string[]) =>
   lib.some((entry) => entry === "DOM" || entry.startsWith("DOM."));
@@ -366,7 +365,7 @@ describe("워크스페이스 의존성 경계", () => {
    * 패키지도 같다: 열거는 새 패키지를 보지만(#106이 그것까지 닫았다) 판정
    * 목록에는 손으로 넣지 않으면 조용히 계약 밖이다.
    *
-   * `:441-462`(workspace 패키지의 typecheck 편입)와 같은 형태로 단언한다 —
+   * `describe("workspace 패키지의 typecheck 편입")`과 같은 형태로 단언한다 —
    * 빠진 이름이 실패 메시지에 남도록 불리언이 아니라 목록으로 단언하고, 열거가
    * 통째로 죽어 빈 목록이 되는 경우를 개수 가드로 먼저 막아 단언이 공허하게
    * 통과하지 않게 한다.
@@ -414,9 +413,8 @@ describe("워크스페이스 의존성 경계", () => {
 
   // `packages/model`·`packages/io` 두 문자열을 배열 리터럴로 나열하지 않는다
   // — 그렇게 적으면 `HEADLESS_PACKAGES`(`scripts/headless-packages.mjs`)의
-  // 두 번째 사본이 된다(결정 2, DELTA-06). 스프레드는 배열 리터럴 안에 인용
-  // 토큰을 남기지 않아 `tests/workspace-roots.test.ts`의 headless 축 사본
-  // 탐지에 걸리지 않는다.
+  // 두 번째 사본이 된다. 스프레드는 배열 리터럴 안에 인용 토큰을 남기지 않아
+  // `tests/workspace-roots.test.ts`의 headless 축 사본 탐지에 걸리지 않는다.
   it.each([
     ...HEADLESS_PACKAGES,
   ])("DOM 전역을 사용하면 컴파일되지 않는다 — %s", async (name) => {
@@ -432,13 +430,13 @@ describe("워크스페이스 의존성 경계", () => {
 
   /**
    * `HEADLESS_PACKAGES` 집합이 tsconfig `lib`에 `DOM`이 없는 workspace 패키지
-   * 집합과 같은지를 진다(완료 조건 2, DELTA-06). 기대값은 이 파일이
-   * `HEADLESS_PACKAGES`를 다시 베끼지 않고, 열거(`workspacePackageDirectories()`)와
-   * 각 패키지의 실제 tsconfig에서 파생한다 — 리터럴과 독립된 출발점이어야
-   * 어긋남이 드러난다. `lib`가 패키지 자신의 tsconfig에 없으면
-   * `tsconfig.base.json`의 `lib`로 대체한다(결정 3) — 오늘 6개 패키지 전부
-   * 자신의 tsconfig에 `lib`를 직접 선언하므로 이 대체는 오늘은 죽은 경로이지만,
-   * 상속 규칙 자체를 계약으로 고정해 둔다.
+   * 집합과 같은지를 진다. 기대값은 이 파일이 `HEADLESS_PACKAGES`를 다시
+   * 베끼지 않고, 열거(`workspacePackageDirectories()`)와 각 패키지의 실제
+   * tsconfig에서 파생한다 — 리터럴과 독립된 출발점이어야 어긋남이 드러난다.
+   * `lib`가 패키지 자신의 tsconfig에 없으면 `tsconfig.base.json`의 `lib`로
+   * 대체한다 — 오늘 6개 패키지 전부 자신의 tsconfig에 `lib`를 직접
+   * 선언하므로 이 대체는 오늘은 죽은 경로이지만, 상속 규칙 자체를 계약으로
+   * 고정해 둔다.
    */
   it("HEADLESS_PACKAGES 집합이 tsconfig lib에 DOM이 없는 workspace 패키지 집합과 같다", async () => {
     const directories = workspacePackageDirectories(repositoryRoot);
@@ -464,14 +462,14 @@ describe("워크스페이스 의존성 경계", () => {
 });
 
 /**
- * `headlessPackageDirectories()`의 throw 경로를 리터럴 fixture로 진다(완료
- * 조건 3, DELTA-06). 실제 `HEADLESS_PACKAGES`나 `pnpm-workspace.yaml`을
- * 건드리지 않는다 — `packagePaths`와 `enumeratedDirectories`를 둘 다 합성값으로
- * 주입한다. `repoRoot`는 실제로 존재하는 경로일 필요가 없다 — 이 함수는
+ * `headlessPackageDirectories()`의 throw 경로를 리터럴 fixture로 진다. 실제
+ * `HEADLESS_PACKAGES`나 `pnpm-workspace.yaml`을 건드리지 않는다 —
+ * `packagePaths`와 `enumeratedDirectories`를 둘 다 합성값으로 주입한다.
+ * `repoRoot`는 실제로 존재하는 경로일 필요가 없다 — 이 함수는
  * 파일시스템을 건드리지 않고 `packagePaths`를 절대 경로로 바꾼 뒤
  * `enumeratedDirectories`(문자열 집합)에 대한 멤버십만 본다.
  */
-describe("headlessPackageDirectories()", () => {
+describe("headlessPackageDirectories()(headless 목록과 열거의 교차 검증)", () => {
   const repoRoot = "/repo";
 
   it("열거에 없는 항목이면 그 이름을 담아 throw한다", () => {
@@ -613,7 +611,7 @@ describe("headless 패키지의 금지 production 의존성 판정", () => {
  * 않는다. 그 갈래(forbiddenDependencies에만 등재된 이름)를 실제 객체에 테스트용
  * 항목을 섞지 않고 짚기 위해 순수 함수를 리터럴 배열 fixture로 직접 부른다.
  */
-describe("unregisteredWorkspacePackages()", () => {
+describe("unregisteredWorkspacePackages()(판정 목록 미등재 패키지)", () => {
   it("두 목록 어디에도 없는 이름만 남긴다", () => {
     expect(
       unregisteredWorkspacePackages(["a", "b", "c"], ["a"], ["b"]),
@@ -876,11 +874,11 @@ describe("경계 게이트의 검사 범위", () => {
  * import 구문만, 축 2는 배열 리터럴만 본다.
  *
  * `fixtures/consumer`를 그 실험의 대상으로 삼았던 것은 그때 이 파일의
- * `allowedDependencies`가 5개 패키지만 덮고 거기에 없었기 때문이다(DELTA-05
- * 이전). DELTA-05가 `fixtures/consumer`도 등재해 그 문장은 더 이상 사실이
- * 아니다 — 이제 다른 패키지와 마찬가지로 여기에 미승인 의존성을 주입하면 위
- * "워크스페이스 의존성 경계" describe의 `allowedDependencies` 단언이 그
- * 자체로 먼저 진다.
+ * `allowedDependencies`가 5개 패키지만 덮고 거기에 없었기 때문이다. 그 뒤
+ * `fixtures/consumer`도 `allowedDependencies`에 등재해 그 문장은 더 이상
+ * 사실이 아니다 — 이제 다른 패키지와 마찬가지로 여기에 미승인 의존성을
+ * 주입하면 위 "워크스페이스 의존성 경계" describe의 `allowedDependencies`
+ * 단언이 그 자체로 먼저 진다.
  *
  * 그래도 이 describe가 겨누는 무력화(공유 열거는 그대로 두고 로컬 필터로 호출
  * 결과만 줄이는 것)를 재현하려면 여전히 `fixtures/consumer`를 대상으로 삼는다

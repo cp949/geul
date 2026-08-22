@@ -1,7 +1,15 @@
 /**
  * headless 판정 대상 workspace 패키지 목록(`HEADLESS_PACKAGES`)과, 그 패키지의
  * production 의존성에 있으면 안 되는 에디터·UI 의존성 판정 술어
- * (`HEADLESS_FORBIDDEN`)를 단독 소유한다.
+ * (`HEADLESS_FORBIDDEN`)를 게이트 스크립트 쪽에서 단독 소유한다.
+ *
+ * "게이트 쪽에서"라는 한정이 필요하다(실측). 같은 규칙의 두 번째 표현이
+ * `tests/workspace-boundaries.test.ts`의 `forbiddenDependencies`에 있고 —
+ * `packages/io`·`packages/model`이 `react`·`@tiptap/`·`prosemirror-`를 막는다 —
+ * 그쪽은 `react-dom`이 빠진 채로 이미 갈려 있다. 그 표는 이 모듈보다 먼저
+ * 있었고 패키지별 허용·금지 표의 일부라 여기로 합치지 않았다. 두 자리가 같은
+ * 판단을 표현한다는 사실을 여기 적어 둔다 — headless 금지 목록을 바꾸면 그
+ * 표도 함께 본다.
  *
  * `HEADLESS_PACKAGES`는 `scripts/check-package-boundaries.mjs`가 headless
  * 경계를 검사할 패키지의 저장소 상대 경로 리터럴이다. 어떤 패키지가
@@ -30,14 +38,15 @@
  * ## 이 파일을 감시하는 계약
  *
  * `HEADLESS_PACKAGES`가 소비처(`scripts/check-package-boundaries.mjs`)로
- * 되돌아가 복제되지 않는지, 저장소 어디에도 사본이 없는지는
+ * 되돌아가 배열 리터럴 사본으로 복제되지 않는지는
  * `tests/workspace-roots.test.ts`의
  * `describe("workspace 패키지 glob·루트 이름 목록·headless 목록의 단독 소유", ...)`가
  * 진다 — 그 파일이 이미 소유한 배열 리터럴 사본 탐지 술어를 그대로 재사용하는
  * 세 번째 토큰 축이다. `HEADLESS_PACKAGES` 값이 tsconfig `lib`의 DOM 유무와
- * 계속 같은 집합인지는 `tests/workspace-boundaries.test.ts`가 진다. 두 계약
- * 모두 줄 번호를 인용하지 않는다 — 인용 대상이 움직여도 아무것도 실패하지
- * 않는다.
+ * 계속 같은 집합인지, `HEADLESS_FORBIDDEN`이 무엇을 막고 무엇을 막지 않는지,
+ * 그리고 게이트 호출부가 `packagePaths`로 검사 범위를 좁히지 않는지는
+ * `tests/workspace-boundaries.test.ts`가 진다. 어느 계약도 줄 번호를
+ * 인용하지 않는다 — 인용 대상이 움직여도 아무것도 실패하지 않는다.
  */
 import { resolve } from "node:path";
 

@@ -47,9 +47,15 @@
  * 소비 **파일**은 여기에 열거하지 않는다. 손으로 적은 목록이 트리와 갈리는 것이
  * 이 모듈이 없애려는 결함 자체이고, 열거해 봐야 이미 트리에서 직접 발견해 지는
  * 축들을 되뇌면서 갈릴 수만 있다 — `scripts/`의 `.mjs`가 빠짐없이 이 모듈에서
- * 목록을 import하는지, 그리고 추적 소스 전체에서 이 모듈의 glob 목록이나 루트
- * 이름 목록을 배열 리터럴로 복제한 파일이 이 파일 하나뿐인지. 전부
+ * 목록을 import하는지, 추적 소스 전체에서 glob 목록을 배열 리터럴로 가진 파일이
+ * 이 파일 하나뿐인지, 그리고 루트 이름 목록을 배열 리터럴로 가진 파일이 하나도
+ * 없는지(`WORKSPACE_ROOTS`는 파생값이라 이 파일에도 그 리터럴이 없다). 전부
  * `tests/workspace-roots.test.ts`가 진다.
+ *
+ * 그 사본 판정은 **배열 리터럴 안의 따옴표 친 토큰**만 센다. 목록을 객체
+ * 값이나 중첩 배열로 흩어 놓은 사본은 점수가 임계값 아래로 내려가 잡히지
+ * 않는다(실측). 사본이 늘어나는 흔한 방향을 막는 장치이지, 저장소에 사본이
+ * 없음을 증명하는 장치가 아니다.
  *
  * 그 계약 테스트를 이름으로 가리키는 것은 `PIT-0022`의 예외 2다 — 공용 모듈이
  * 자기 전제를 지는 쪽을 가리키는 방향이다. 줄 번호는 인용하지 않는다 — 인용
@@ -80,6 +86,26 @@ import { resolve } from "node:path";
 const singleSegmentGlobPattern = /^([^/*?[\]{}!()+@]+)\/\*$/;
 
 /**
+ * `<이름>/*` glob 하나에서 이름 세그먼트를 뽑는다. 형태가 아니면 throw한다.
+ *
+ * `WORKSPACE_ROOTS` 파생과 `workspaceChildDirectories()`의 열거가 이 함수
+ * 하나를 공유한다. 파생 쪽이 `glob.split("/")[0]`처럼 따로 가르면 두 자리가
+ * 서로 다른 형태를 받아들이게 되고, 형태 검증이 한쪽에만 걸린다.
+ *
+ * @param {string} glob
+ * @returns {string} 이름 세그먼트
+ */
+const globRootName = (glob) => {
+  const root = singleSegmentGlobPattern.exec(glob)?.[1];
+  if (root === undefined) {
+    throw new Error(
+      `workspace glob이 <이름>/* 형태가 아니다: ${JSON.stringify(glob)}`,
+    );
+  }
+  return root;
+};
+
+/**
  * workspace 패키지 glob 목록. `pnpm-workspace.yaml`의 `packages:` 항목과
  * 문자열 그대로 같다 — 계약 테스트가 정규화 없이 그대로 대조한다.
  *
@@ -97,10 +123,12 @@ export const WORKSPACE_PACKAGE_GLOBS = ["apps/*", "fixtures/*", "packages/*"];
  * 세그먼트(첫 번째 `/` 앞부분)만 뽑아 유니크 집합으로 만들고 정렬한다 — 파생값이지
  * 별도 리터럴이 아니다. 리터럴을 두 벌 두면 두 출발점이 갈릴 자리가 다시 생긴다.
  *
- * 정렬은 읽는 사람을 위한 정규화다. 계약 테스트가 양쪽을 `.sort()`해 대조하고,
- * 소비처도 이 순서를 읽지 않는다(실측) — 루트 아래를 훑어 목록을 만드는 쪽은
- * 결과를 정렬해 돌려주고, 그 밖의 자리는 소속 판정(`includes()`)이나 개수
- * 세기처럼 순서가 결과에 닿지 않는 형태다.
+ * 정렬은 읽는 사람을 위한 정규화다. 파생 규칙이 이미 유니크 집합을 정렬해
+ * 내므로 계약 테스트는 순서를 그대로 비교한다 — 양쪽을 `.sort()`해 대조하는
+ * 것은 `WORKSPACE_PACKAGE_GLOBS` 축이다. 소비처도 이 순서를 읽지 않는다
+ * (실측) — 소속 판정(`includes()`)이나 개수 세기처럼 순서가 결과에 닿지 않는
+ * 형태이고, 루트 아래를 훑어 목록을 만드는 쪽은 이 상수가 아니라
+ * `WORKSPACE_PACKAGE_GLOBS`를 읽는다.
  *
  * `readonly`는 위와 마찬가지로 **타입 층위**의 제약이다. 파생 배열도 런타임에는
  * 얼리지 않는다 — `WORKSPACE_ROOTS.push("zzz")`가 그대로 통한다.
@@ -108,7 +136,7 @@ export const WORKSPACE_PACKAGE_GLOBS = ["apps/*", "fixtures/*", "packages/*"];
  * @type {readonly string[]}
  */
 export const WORKSPACE_ROOTS = [
-  ...new Set(WORKSPACE_PACKAGE_GLOBS.map((glob) => glob.split("/")[0] ?? glob)),
+  ...new Set(WORKSPACE_PACKAGE_GLOBS.map((glob) => globRootName(glob))),
 ].sort();
 
 /**
@@ -138,8 +166,8 @@ export const WORKSPACE_ROOTS = [
  * `workspacePackageDirectories()`를 포함해 자식 디렉터리를 세는 모든 소비처가
  * 이 함수를 거쳐야 한다 — 로컬에서 다시 구현하면 술어가 갈릴 자리가
  * 되살아난다. `scripts/find-duplicate-test-helpers.mjs`의
- * `collectTestDirectoryCandidates()`가 DELTA-03 이전에는 `package.json` 필터
- * 없는 이 열거를 자기 루프로 다시 구현한 세 번째 사본이었다(`PIT-0022`).
+ * `collectTestDirectoryCandidates()`가 이 함수로 합치기 전에는 `package.json`
+ * 필터 없는 이 열거를 자기 루프로 다시 구현한 세 번째 사본이었다(`PIT-0022`).
  *
  * `package.json` 필터 없이 전량을 내는 이유는 소비처마다 다르다.
  * `workspacePackageDirectories()`는 패키지만 보지만,
@@ -158,13 +186,7 @@ export const workspaceChildDirectories = (
 ) => {
   const directories = [];
   for (const glob of globs) {
-    const root = singleSegmentGlobPattern.exec(glob)?.[1];
-    if (root === undefined) {
-      throw new Error(
-        `workspaceChildDirectories: <이름>/* 형태가 아닌 glob이다: ${JSON.stringify(glob)}`,
-      );
-    }
-    const rootPath = resolve(repoRoot, root);
+    const rootPath = resolve(repoRoot, globRootName(glob));
     if (!existsSync(rootPath)) continue;
     for (const entry of readdirSync(rootPath, { withFileTypes: true })) {
       const directory = resolve(rootPath, entry.name);
