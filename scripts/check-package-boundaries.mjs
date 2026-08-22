@@ -3,12 +3,38 @@ import { dirname, relative, resolve } from "node:path";
 import process from "node:process";
 
 const workspaceRoot = resolve(import.meta.dirname, "..");
+
+/**
+ * 이 스크립트가 검사하는 `package.json` 의존성 섹션 이름의 유니온이다.
+ * 아래 두 배열과 `PackageManifestDependencySections`의 키가 이 유니온을
+ * 공유해야 `manifest[section]` 인덱싱이 타입으로 성립한다.
+ *
+ * @typedef {"dependencies" | "devDependencies" | "peerDependencies" | "optionalDependencies"} DependencySection
+ */
+
+/**
+ * 모든 섹션. `@type` 주석이 필수다 — 없으면 배열이 `string[]`으로 넓어지고
+ * `manifest[section]`이 TS7053(`string` 타입 식으로 리터럴 키 타입을 인덱싱할 수
+ * 없음)으로 깨진다. JSDoc에는 `as const`가 없고 `@type {const}`는 TypeScript
+ * 7.0.2에서 TS2304(`Cannot find name 'const'`)로 거부되므로, 유니온 배열 주석이
+ * 그 대체물이다. `readonly`는 typecheck 통과에 필수는 아니지만
+ * (`DependencySection[]`로도 통과한다) 이 상수의 변형을 함께 막는다.
+ *
+ * @type {readonly DependencySection[]}
+ */
 const dependencySections = [
   "dependencies",
   "devDependencies",
   "peerDependencies",
   "optionalDependencies",
 ];
+
+/**
+ * production 런타임에 실리는 섹션만 추린 부분집합이다 — `devDependencies`가
+ * 빠진다. `@type` 주석이 필요한 이유는 위와 같다.
+ *
+ * @type {readonly DependencySection[]}
+ */
 const productionDependencySections = [
   "dependencies",
   "peerDependencies",
@@ -27,11 +53,18 @@ const forbiddenProductDependencies = [
 
 /**
  * `package.json`에서 이 스크립트가 실제로 읽는 부분만의 모양이다 — 의존성
- * 섹션(dependencies/devDependencies/peerDependencies/optionalDependencies)의
- * 투영이다. `name`·`private` 같은 나머지 매니페스트 필드는 다루지 않으므로
- * 매니페스트 전체 모양을 주장하지 않는다.
+ * 섹션의 투영이고, 그 투영이 이름과 주석뿐 아니라 **타입으로도** 표현된다.
+ * `name`·`private`·`exports`·`scripts` 같은 나머지 매니페스트 필드는 이 타입에
+ * 없으므로 접근하면 TS2339로 잡힌다. 인덱스 시그니처
+ * (`Record<string, Record<string, string>>`)였을 때는 존재하지 않는 필드도,
+ * 값 모양이 다른 필드도 조용히 통과했다.
  *
- * @typedef {Record<string, Record<string, string>>} PackageManifestDependencySections
+ * `Partial<>`은 런타임 사실을 반영한다 — 네 섹션을 모두 가진 매니페스트는 없다.
+ * 값 타입이 `Record<string, string> | undefined`가 되고, 호출부의 `?? {}`가
+ * 그것을 받는다. `Partial<>` 없이도 typecheck는 통과하지만, 그 타입은 모든 섹션이
+ * 항상 있다고 주장해 `?? {}` 가드를 불필요해 보이게 만든다.
+ *
+ * @typedef {Partial<Record<DependencySection, Record<string, string>>>} PackageManifestDependencySections
  */
 
 /**

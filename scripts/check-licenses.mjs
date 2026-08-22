@@ -12,7 +12,14 @@ const allowed = new Set([
   "Apache-2.0",
 ]);
 
-/** @type {Record<string, { name: string; versions: string[] }[]>} */
+/**
+ * `pnpm licenses list --prod --json` 출력에서 이 스크립트가 실제로 읽는
+ * `name`·`versions`만의 투영이다. 실제 항목에는 `paths`·`license`·`homepage`·
+ * `description`·`author`도 있으므로, 이 타입은 출력 전체 모양을 주장하지 않는다
+ * — 나머지 필드를 읽으려면 여기에 먼저 추가해야 한다.
+ *
+ * @type {Record<string, { name: string; versions: string[] }[]>}
+ */
 const licenseReport = JSON.parse(
   execFileSync("pnpm", ["licenses", "list", "--prod", "--json"], {
     cwd: workspaceRoot,
