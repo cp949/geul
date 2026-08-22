@@ -27,3 +27,7 @@
 | `PIT-0021` | 재그룹화한 커밋은 백업 ref와 트리 diff로 대조 | `ACTIVE` | git·process | `dev` 재그룹화 | [상세](./PIT-0021-verify-regrouped-commits-against-a-backup-ref.md) |
 | `PIT-0022` | 테스트 헬퍼는 두 번째 파일에서 복제하지 말고 공용 모듈이 단독 소유 | `ACTIVE` | 전 패키지·e2e·test | Issue #50 | [상세](./PIT-0022-own-test-helpers-in-a-shared-module.md) |
 | `PIT-0023` | 에디터를 여는 git 명령은 에이전트 세션에서 조용히 성공 | `ACTIVE` | git·process | 작업 브랜치 워크플로 리뷰 | [상세](./PIT-0023-editor-opening-git-commands-succeed-silently.md) |
+| `PIT-0024` | 에이전트 스크래치 스크립트를 저장소 트리에 두지 않음 | `ACTIVE` | 에이전트 작업공간·lint·test | Issue #107 | [상세](./PIT-0024-keep-scratch-scripts-out-of-the-repo-tree.md) |
+| `PIT-0025` | 사본 탐지에 축을 더하기 전 추적 소스 전량을 새 토큰으로 재스캔 | `ACTIVE` | test·계약 | Issue #108 | [상세](./PIT-0025-rescan-all-sources-before-adding-a-copy-detection-axis.md) |
+| `PIT-0026` | 이전 전 산출물에 작업 브랜치 커밋 해시를 적지 않음 | `ACTIVE` | git·process | Issue #107 | [상세](./PIT-0026-omit-work-branch-hashes-from-pre-transfer-artifacts.md) |
+| `PIT-0027` | fail-loud 검증기는 거절할 것이 아니라 통과시킬 것을 정의 | `ACTIVE` | scripts·gate·test | Issue #107 | [상세](./PIT-0027-define-what-a-validator-accepts-not-what-it-rejects.md) |
