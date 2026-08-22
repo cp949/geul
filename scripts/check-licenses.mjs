@@ -12,6 +12,7 @@ const allowed = new Set([
   "Apache-2.0",
 ]);
 
+/** @type {Record<string, { name: string; versions: string[] }[]>} */
 const licenseReport = JSON.parse(
   execFileSync("pnpm", ["licenses", "list", "--prod", "--json"], {
     cwd: workspaceRoot,

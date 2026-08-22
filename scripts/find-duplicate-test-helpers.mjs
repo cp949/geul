@@ -151,6 +151,9 @@ const REGULAR_EXPRESSION_KEYWORDS = new Set([
  * `index`의 `/`가 나눗셈이 아니라 정규식 리터럴을 여는지 앞 토큰으로 가른다.
  * 완전한 판정은 파서가 필요하지만, 테스트 코드에서 나오는 형태
  * (`(`, `,`, `=`와 위 키워드 뒤의 정규식)는 이것으로 충분하다.
+ *
+ * @param {string} source
+ * @param {number} index
  */
 const opensRegularExpression = (source, index) => {
   let cursor = index - 1;
@@ -169,6 +172,10 @@ const opensRegularExpression = (source, index) => {
 /**
  * `index`가 문자열·템플릿·정규식·주석을 연다면 그 리터럴이 끝난 다음
  * 위치와 종류를 돌려준다. 여는 자리가 아니면 `undefined`다.
+ *
+ * @param {string} source
+ * @param {number} index
+ * @returns {{ end: number; comment: boolean } | undefined}
  */
 const readLiteral = (source, index) => {
   const character = source[index];
@@ -227,6 +234,8 @@ const readLiteral = (source, index) => {
  *   깊이 계산이 주석·문자열 안의 코드 모양 텍스트에 걸리지 않게 한다.
  * - `withoutComments`: 주석만 덮는다. 문자열 내용은 헬퍼를 구별하는 신호라
  *   해시 대상에 남긴다.
+ *
+ * @param {string} source
  */
 const maskLiterals = (source) => {
   // 코드 포인트가 아니라 UTF-16 코드 단위로 쪼갠다. `[...source]`는 BMP 밖
@@ -261,6 +270,9 @@ const maskLiterals = (source) => {
  * 개행에서 끊으면 파라미터 목록만 남아 서로 다른 헬퍼가 같은 본문으로
  * 보인다 — Issue #92에서 `renderBlockMenu`·`renderRealBlocks`·
  * `renderRealTable` 오탐 3건이 이 형태였다.
+ *
+ * @param {string} masked
+ * @param {number} start
  */
 const findEnd = (masked, start) => {
   let index = start;
@@ -283,6 +295,9 @@ const findEnd = (masked, start) => {
  * `start`의 여는 괄호에 짝이 맞는 닫는 괄호 위치를 찾는다. `findEnd`와 달리
  * depth 0의 `;`로 끊지 않는다 — 블록 본문 안의 문장 세미콜론이 블록의 끝이
  * 아니기 때문이다.
+ *
+ * @param {string} masked
+ * @param {number} start
  */
 const findBlockEnd = (masked, start) => {
   let depth = 0;
@@ -303,6 +318,10 @@ const findBlockEnd = (masked, start) => {
  * `start` 뒤에서 블록을 여는 `{`를 찾는다. 파라미터 목록이나 타입 인자 안의
  * `{`(`function f(a = { x: 1 }) {`)를 블록으로 오인하지 않도록 괄호 깊이가
  * 0인 자리만 받는다. 본문 없이 `;`로 끝나면 `undefined`다.
+ *
+ * @param {string} masked
+ * @param {number} start
+ * @returns {number | undefined}
  */
 const findBlockStart = (masked, start) => {
   let depth = 0;
@@ -327,6 +346,9 @@ const findBlockStart = (masked, start) => {
  *
  * 선언 자리에서 뒤에 올 수 있는 것은 이름, 익명 클래스·함수의 `{`·`(`,
  * 제너레이터의 `*`뿐이다. `:`나 `,`가 오면 프로퍼티 이름이다.
+ *
+ * @param {string} masked
+ * @param {number} start
  */
 const startsDeclaration = (masked, start) => {
   let cursor = start;
@@ -343,8 +365,11 @@ const HOOK_NAMES = ["beforeEach", "afterEach", "beforeAll", "afterAll"];
  * 제외하지 않으면 파일이 다른 두 지역 변수가 같은 본문이라는 이유로 중복
  * 그룹이 된다 — Issue #92에서 고친 "다른 헬퍼 본문 안의 지역 선언"과 같은
  * 결함이고, 감싸는 것이 `const`가 아닐 때 그대로 남아 있었다.
+ *
+ * @param {string} masked
  */
 const collectNestedScopeRanges = (masked) => {
+  /** @type {[number, number][]} */
   const ranges = [];
   const blockPattern = /\b(?:function|class)\b/g;
   let block = blockPattern.exec(masked);
@@ -375,6 +400,10 @@ const collectNestedScopeRanges = (masked) => {
  * 연산자를 대입으로 오인하지 않는다. `<`와 `>`는 깊이로 세지 않는다 —
  * `=>`의 `>`와 제네릭 닫는 괄호를 구분할 수 없고, 세지 않아도 타입 주석
  * 안의 `=`가 전부 `=>`뿐이라 결과가 같다.
+ *
+ * @param {string} masked
+ * @param {number} start
+ * @returns {number | undefined}
  */
 const findAssignment = (masked, start) => {
   let index = start;
@@ -422,8 +451,11 @@ const TEST_MODIFIERS = [
  * 두 번의 호출로 쪼개지므로 첫 인자 목록을 자른 뒤 이어지는 호출 그룹까지
  * 소비한다 — 소비하지 않으면 콜백 본문이 제외 범위 밖으로 나가 테스트
  * 지역 변수가 헬퍼로 잡힌다(Issue #87에서 실제로 오탐 1건이 나왔다).
+ *
+ * @param {string} masked
  */
 const collectTestCallbackRanges = (masked) => {
+  /** @type {[number, number][]} */
   const ranges = [];
   const pattern = new RegExp(
     `\\b(?:it|test)(?:\\.(?:${TEST_MODIFIERS.join("|")}))*\\s*\\(`,
@@ -444,7 +476,11 @@ const collectTestCallbackRanges = (masked) => {
   return ranges;
 };
 
-/** 식별자를 정규식 리터럴 안에 안전하게 넣는다. */
+/**
+ * 식별자를 정규식 리터럴 안에 안전하게 넣는다.
+ *
+ * @param {string} name
+ */
 const escapeForPattern = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
@@ -455,6 +491,9 @@ const escapeForPattern = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  *
  * 타입 주석도 함께 지운다. `React.ReactNode`와 `ReactNode`처럼 표기만 다른
  * 사본이 갈리지 않게 한다.
+ *
+ * @param {string} body
+ * @param {string} maskedBody
  */
 const normalizeParameters = (body, maskedBody) => {
   const prefix = /^async\s+/.exec(maskedBody)?.[0] ?? "";
@@ -464,11 +503,16 @@ const normalizeParameters = (body, maskedBody) => {
   const listEnd = findEnd(maskedBody, listStart + 1);
   if (maskedBody[listEnd] !== ")") return body;
 
+  /** @type {string[]} */
   const bindings = [];
   let depth = 0;
   let segmentStart = listStart + 1;
 
-  /** 파라미터 한 칸에서 타입 주석과 기본값을 걷어내고 바인딩 이름만 남긴다. */
+  /**
+   * 파라미터 한 칸에서 타입 주석과 기본값을 걷어내고 바인딩 이름만 남긴다.
+   *
+   * @param {string} segment
+   */
   const pushBinding = (segment) => {
     const name = segment.trim().replace(/^\.\.\./, "");
     let cut = name.length;
@@ -521,6 +565,9 @@ const normalizeParameters = (body, maskedBody) => {
 /**
  * 해시 대상 본문을 만든다. 주석을 걷어내고 줄마다 여백을 지운 뒤 빈 줄을
  * 버린다. 같은 헬퍼가 파일마다 다른 들여쓰기로 복제돼도 같은 값이 된다.
+ *
+ * @param {string} maskedBody
+ * @param {string} withoutCommentsBody
  */
 const normalizeBody = (maskedBody, withoutCommentsBody) => {
   const parameterNormalized = normalizeParameters(
@@ -546,6 +593,7 @@ export const collectHelperDeclarations = (source, path) => {
   const { masked, withoutComments } = maskLiterals(source);
   const testRanges = collectTestCallbackRanges(masked);
   const nestedScopeRanges = collectNestedScopeRanges(masked);
+  /** @type {[number, number][]} */
   const declarationRanges = [];
   const declarations = [];
   const pattern = /^[ \t]*(?:export[ \t]+)?const[ \t]+([A-Za-z_$][\w$]*)\b/gm;
@@ -694,6 +742,8 @@ export const findUnlistedTestDirectories = () => {
 /**
  * CLI 진입점. 인자를 주면 그 디렉터리만, 주지 않으면 기본 대상을 훑는다.
  * 중복을 찾아도 실패로 끝내지 않는다 — 게이트가 아니라 진단 도구다.
+ *
+ * @param {string[]} argv
  */
 const main = (argv) => {
   const directories = argv.length > 0 ? argv : DEFAULT_TARGET_DIRECTORIES;

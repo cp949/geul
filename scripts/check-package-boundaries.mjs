@@ -17,13 +17,25 @@ const productionDependencySections = [
 const exactVersion =
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const forbiddenProductDependencies = [
+  /** @param {string} name */
   (name) => name.startsWith("xl-"),
+  /** @param {string} name */
   (name) => name.startsWith("@blocknote/"),
+  /** @param {string} name */
   (name) => name.startsWith("@tiptap-pro/"),
 ];
 
+/**
+ * @typedef {Record<string, Record<string, string>>} PackageManifest
+ */
+
+/**
+ * @param {string} path
+ * @returns {PackageManifest}
+ */
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 
+/** @param {string} source */
 const localDeclarationSpecifiers = (source) =>
   [
     ...source.matchAll(
@@ -32,6 +44,11 @@ const localDeclarationSpecifiers = (source) =>
     ...source.matchAll(/<reference\s+path=["'](\.[^"']+)["']/g),
   ].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
 
+/**
+ * @param {string} sourcePath
+ * @param {string} specifier
+ * @returns {string | undefined}
+ */
 const resolveDeclarationPath = (sourcePath, specifier) => {
   const resolved = resolve(dirname(sourcePath), specifier);
   const emittedDeclaration = /\.js$/.test(resolved)
