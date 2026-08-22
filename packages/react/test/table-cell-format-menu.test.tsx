@@ -3,8 +3,8 @@
 import type { EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditorProvider } from "../src/index.js";
 import { TableCellFormatMenu } from "../src/table-cell-format-menu.js";
+import { withProvider } from "./fake-editor-provider.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -36,15 +36,16 @@ describe("셀 서식 메뉴", () => {
     const onClose = vi.fn();
 
     render(
-      <EditorProvider editor={controller as unknown as EditorController}>
+      withProvider(
+        controller,
         <TableCellFormatMenu
           cellIds={["cell-1", "cell-2"]}
           left={100}
           onClose={onClose}
           tableBlockId="table-1"
           top={100}
-        />
-      </EditorProvider>,
+        />,
+      ),
     );
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
@@ -62,15 +63,16 @@ describe("셀 서식 메뉴", () => {
     const onClose = vi.fn();
 
     render(
-      <EditorProvider editor={controller as unknown as EditorController}>
+      withProvider(
+        controller,
         <TableCellFormatMenu
           cellIds={["cell-1"]}
           left={100}
           onClose={onClose}
           tableBlockId="table-1"
           top={100}
-        />
-      </EditorProvider>,
+        />,
+      ),
     );
 
     fireEvent.click(
@@ -94,15 +96,16 @@ describe("정렬 버튼", () => {
     const onClose = vi.fn();
 
     render(
-      <EditorProvider editor={controller as unknown as EditorController}>
+      withProvider(
+        controller,
         <TableCellFormatMenu
           cellIds={["cell-1"]}
           left={100}
           onClose={onClose}
           tableBlockId="table-1"
           top={100}
-        />
-      </EditorProvider>,
+        />,
+      ),
     );
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Align center" }));
@@ -119,15 +122,16 @@ describe("정렬 버튼", () => {
     const controller = fakeController();
 
     render(
-      <EditorProvider editor={controller as unknown as EditorController}>
+      withProvider(
+        controller,
         <TableCellFormatMenu
           cellIds={["cell-1"]}
           left={100}
           onClose={vi.fn()}
           tableBlockId="table-1"
           top={100}
-        />
-      </EditorProvider>,
+        />,
+      ),
     );
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Align none" }));
@@ -161,15 +165,16 @@ describe("명령 실패 시 피드백", () => {
     const onClose = vi.fn();
 
     render(
-      <EditorProvider editor={controller as unknown as EditorController}>
+      withProvider(
+        controller,
         <TableCellFormatMenu
           cellIds={["cell-1"]}
           left={100}
           onClose={onClose}
           tableBlockId="table-1"
           top={100}
-        />
-      </EditorProvider>,
+        />,
+      ),
     );
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
@@ -197,15 +202,16 @@ describe("명령 실패 시 피드백", () => {
     const onClose = vi.fn();
 
     render(
-      <EditorProvider editor={controller as unknown as EditorController}>
+      withProvider(
+        controller,
         <TableCellFormatMenu
           cellIds={["cell-1"]}
           left={100}
           onClose={onClose}
           tableBlockId="table-1"
           top={100}
-        />
-      </EditorProvider>,
+        />,
+      ),
     );
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Align center" }));

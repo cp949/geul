@@ -13,11 +13,11 @@
 
 import type { EditorController, TableCellSelection } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EditorContent, EditorProvider } from "../src/index.js";
+import { EditorContent } from "../src/index.js";
 import { TableSelectionToolbar } from "../src/table-selection-toolbar.js";
+import { withProvider } from "./fake-editor-provider.js";
 import {
   focusOutsideEditor,
   mountTableEditor,
@@ -26,6 +26,7 @@ import {
   tableBlockOf,
 } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
+import { fireSelectionChange } from "./selection-events.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -160,19 +161,6 @@ const mergeableSelectionController = (
   });
 
 /**
- * fake 컨트롤러를 EditorProvider에 꽂는다. 실제 마운트 레인은
- * mountTableEditor가 같은 일을 하므로 이 헬퍼는 fake 레인 전용이다.
- */
-const withProvider = (
-  controller: ReturnType<typeof fakeController>,
-  children: React.ReactNode,
-) => (
-  <EditorProvider editor={controller as unknown as EditorController}>
-    {children}
-  </EditorProvider>
-);
-
-/**
  * fake 컨트롤러가 조립한 표 DOM을 렌더하고 셀 rect를 씌운다. 실제 격자와
  * 같은 값(100px 폭, 30px 높이)을 써 툴바 앵커 계산이 두 레인에서 갈라지지
  * 않게 한다.
@@ -197,12 +185,6 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
   stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
   stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
   return { table, cell1, cell2 };
-};
-
-const triggerSelectionChange = () => {
-  act(() => {
-    document.dispatchEvent(new Event("selectionchange"));
-  });
 };
 
 // 병합 셀 fixture의 rect 격자. 열이 2개(각 100px)인 표를 colspan 2 셀
@@ -354,7 +336,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
 
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.getByRole("button", { name: mergeLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
@@ -373,7 +355,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
-    triggerSelectionChange();
+    fireSelectionChange();
 
     fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
 
@@ -391,7 +373,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     const controller = mergeableSelectionController();
     renderTable(controller);
 
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
   });
@@ -400,7 +382,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     const { editor, firstMergedCell, firstMergedCellId, tableBlockId } =
       renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     // 전제: 툴바가 실제로 떠 있는 상태에서 시작한다. 이 단언이 없으면 아래
     // 부재는 "캐럿 조작이 편집기에 닿지도 않았다"로도 통과한다(Issue #62).
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
@@ -416,7 +398,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     // 전제: 셀 선택이 정말 사라졌다.
     expect(editor.getTableCellSelection()).toBeNull();
 
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
     expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
@@ -443,7 +425,7 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     const { cell1 } = renderTable(controller);
     cell1.classList.add("selectedCell");
 
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
     expect(screen.queryByRole("button", { name: mergeLabel })).toBeNull();
@@ -466,7 +448,7 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
       splitCellId: firstMergedCellId,
     });
 
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.getByRole("button", { name: splitLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
@@ -476,7 +458,7 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
     const { editor, firstMergedCell, firstMergedCellId } =
       renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     // 전제: 첫 행은 columnSpan 2 셀 하나뿐이다. 이미 나뉘어 있었다면 아래
     // "2개가 됐다"는 분할과 무관하게 통과한다.
     expect(tableBlockOf(editor).rows[0]?.cells.map((cell) => cell.id)).toEqual([
@@ -502,7 +484,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   it("클릭하면 Text color/Background color 팔레트가 뜬다", () => {
     const { firstMergedCell } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
 
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
 
@@ -520,7 +502,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
       secondMergedCellId,
     } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
     focusOutsideEditor(screen.getByRole("button", { name: formatLabel }));
 
@@ -537,7 +519,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   it("Escape로 서식 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
     const { editable, firstMergedCell } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
     expect(
       screen.getByRole("menu", { name: "Cell formatting" }),
@@ -556,7 +538,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   it("서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않고 메뉴만 닫는다", () => {
     const { firstMergedCell } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
     expect(
       screen.getByRole("menu", { name: "Cell formatting" }),
@@ -590,7 +572,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   it("서식 메뉴 안(data-be-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
     const { firstMergedCell } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
 
     const menu = screen.getByRole("menu", { name: "Cell formatting" });
@@ -604,7 +586,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
   it("열린 서식 메뉴를 툴바 버튼으로 다시 누르면 닫고 편집기로 초점을 되돌린다", () => {
     const { editable, firstMergedCell } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: formatLabel }));
     expect(
       screen.getByRole("menu", { name: "Cell formatting" }),
@@ -645,7 +627,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
     const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
-    triggerSelectionChange();
+    fireSelectionChange();
 
     fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
 
@@ -658,7 +640,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
     const { editor, firstMergedCell, firstMergedCellId, tableBlockId } =
       renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     // 툴바가 잡아둔 셀을 문서에서 실제로 없앤다 — 실패 코드를 흉내내지 않고
     // "클릭 시점에는 그 셀이 이미 사라진" 상태를 진짜로 만든다. 툴바는 문서
     // 변경이 아니라 선택 이벤트로만 갱신하므로 낡은 splitCellId를 쥔 채
@@ -683,7 +665,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
       tableBlockId,
     } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     // 분할 실패 테스트와 같은 방식으로 툴바가 잡아둔 셀을 실제로 없앤다.
     const deleted = editor.commands.deleteTableRow(tableBlockId, 0);
     expect(deleted.ok).toBe(true);
@@ -701,7 +683,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
     expect(editor.getTableCellSelection()?.cellIds).toEqual([
       secondMergedCellId,
     ]);
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.queryByRole("alert")).toBeNull();
     // 툴바는 그대로 떠 있다 — 툴바째 사라져도 "alert 없음"은 통과한다
@@ -728,7 +710,7 @@ describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
     const { cell1, cell2 } = renderTable(controller);
     cell1.classList.add("selectedCell");
     cell2.classList.add("selectedCell");
-    triggerSelectionChange();
+    fireSelectionChange();
     fireEvent.click(screen.getByRole("button", { name: mergeLabel }));
     expect(screen.getByRole("alert").textContent).toBe(
       "Selection isn't rectangular",
@@ -750,7 +732,7 @@ describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
       tableBlockId,
     } = renderMergedCellTable();
     placeCaret(firstMergedCell);
-    triggerSelectionChange();
+    fireSelectionChange();
     // 분할 실패 테스트와 같은 방식으로 대상 셀을 실제로 없앤다 — 색상
     // 명령도 존재하지 않는 cellId를 받으면 CELL_NOT_FOUND로 거절한다
     // (table-grid.ts의 resolveTargetCellIds).
@@ -770,7 +752,7 @@ describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
     expect(editor.getTableCellSelection()?.cellIds).toEqual([
       secondMergedCellId,
     ]);
-    triggerSelectionChange();
+    fireSelectionChange();
 
     expect(screen.queryByRole("menu", { name: formatLabel })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();

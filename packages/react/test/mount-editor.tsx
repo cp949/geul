@@ -138,7 +138,8 @@ export const tableBlockOf = (editor: EditorController) => {
  * mountBlockEditor와 mountTableEditor 둘 다 children을 <EditorContent />보다
  * 먼저 렌더한다 — 그래서 오버레이의 selectionchange 리스너가 편집기(ProseMirror)
  * 리스너보다 먼저 등록될 수 있다. 이 순서 때문에 현재 호출부는 모두 이 함수가
- * 쏘는 selectionchange 뒤에 테스트가 두 번째 selectionchange를 따로 쏜다.
+ * 쏘는 selectionchange 뒤에 `fireSelectionChange`(selection-events.ts)로 두 번째
+ * selectionchange를 따로 쏜다.
  *
  * 다만 두 번째 이벤트가 항상 필요한지는 실측상 시나리오에 따라 갈린다 — 예를
  * 들어 setText 직후 같은 블록에 caret을 놓는 구성에서는 그 트랜잭션이 이미

@@ -2,10 +2,11 @@
 
 import type { CreateEditorOptions, EditorController } from "@cp949/geul-core";
 import { cleanup, render, screen } from "@testing-library/react";
-import { type ReactNode, StrictMode } from "react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider, useEditor } from "../src/index.js";
+import { withProvider } from "./fake-editor-provider.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -40,19 +41,10 @@ const fakeController = () => ({
   },
 });
 
-const externalProvider = (
-  controller: ReturnType<typeof fakeController>,
-  children: ReactNode,
-) => (
-  <EditorProvider editor={controller as unknown as EditorController}>
-    {children}
-  </EditorProvider>
-);
-
 describe("React 에디터 어댑터", () => {
   it("외부 컨트롤러는 마운트·언마운트만 하고 destroy하지 않는다", () => {
     const controller = fakeController();
-    const view = render(externalProvider(controller, <EditorContent />));
+    const view = render(withProvider(controller, <EditorContent />));
 
     const mount = screen.getByRole("textbox", { name: "Editor" });
     expect(mount.getAttribute("aria-multiline")).toBe("true");
@@ -69,10 +61,10 @@ describe("React 에디터 어댑터", () => {
   it("마운트된 내용을 외부 컨트롤러 A에서 B로 옮긴다", () => {
     const controllerA = fakeController();
     const controllerB = fakeController();
-    const view = render(externalProvider(controllerA, <EditorContent />));
+    const view = render(withProvider(controllerA, <EditorContent />));
     const mount = screen.getByRole("textbox", { name: "Editor" });
 
-    view.rerender(externalProvider(controllerB, <EditorContent />));
+    view.rerender(withProvider(controllerB, <EditorContent />));
 
     expect(controllerA.unmount).toHaveBeenCalledOnce();
     expect(controllerA.destroy).not.toHaveBeenCalled();

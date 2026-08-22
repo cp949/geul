@@ -16,7 +16,6 @@
  */
 
 import { cleanup, fireEvent, screen } from "@testing-library/react";
-import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SlashMenu } from "../src/index.js";
@@ -28,6 +27,7 @@ import {
   mountTableEditor,
   placeCaret,
 } from "./mount-editor.js";
+import { fireSelectionChange } from "./selection-events.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -71,13 +71,6 @@ const renderCaretBlocks = (options?: { blockIds?: readonly string[] }) => {
   return rendered;
 };
 
-/** SlashMenu에 캐럿이 바뀌었음을 알린다(selectionchange 폴링 경로). */
-const fireCaretUpdate = () => {
-  act(() => {
-    document.dispatchEvent(new Event("selectionchange"));
-  });
-};
-
 /**
  * 블록 텍스트를 실제 명령으로 세우고 그 블록에 캐럿을 놓은 뒤 SlashMenu에
  * 알린다. 키 입력을 그대로 재현하지 않는 이유: jsdom에는 contenteditable의
@@ -106,7 +99,7 @@ const typeIntoBlock = (
     blockType: { type: "paragraph" },
     text,
   });
-  fireCaretUpdate();
+  fireSelectionChange();
   return blockId;
 };
 
@@ -135,7 +128,7 @@ describe("SlashMenu 질의 팝업", () => {
     const typed = editor.commands.setText(paragraphBlock.id, "/");
     if (!typed.ok) throw new Error("슬래시 질의 fixture 준비 실패");
     placeCaret(paragraph);
-    fireCaretUpdate();
+    fireSelectionChange();
     // 전제: 문단 안 캐럿에서는 메뉴가 실제로 뜬다. 이 단언이 없으면 아래
     // 부재는 "SlashMenu가 캐럿을 아예 읽지 못한다"로도 통과한다(Issue #62).
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
@@ -143,7 +136,7 @@ describe("SlashMenu 질의 팝업", () => {
     placeCaret(cell);
     // 전제: 캐럿이 정말 블록 밖으로 나갔다.
     expect(editor.getCaretBlockContext()).toBeNull();
-    fireCaretUpdate();
+    fireSelectionChange();
 
     expect(screen.queryByRole("listbox")).toBeNull();
   });
@@ -295,7 +288,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     // 옛 블록으로 열렸다면 여기서 blockId가 어긋나 곧바로 닫힌다 — 옛 블록의
     // 텍스트("본문")는 슬래시 질의가 아니기 때문이다.
     expect(rendered.editor.getCaretBlockContext()?.blockId).toBe(inserted.id);
-    fireCaretUpdate();
+    fireSelectionChange();
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
   });
 
@@ -314,7 +307,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
 
     const typed = rendered.editor.commands.setText(inserted.id, "a");
     if (!typed.ok) throw new Error("입력 fixture 준비 실패");
-    fireCaretUpdate();
+    fireSelectionChange();
 
     expect(screen.queryByRole("listbox")).toBeNull();
   });

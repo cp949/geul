@@ -6,13 +6,13 @@
  * URL 입력에서 Escape 시 닫힘과 편집기로의 초점 복구를 검증한다.
  */
 
-import type { EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EditorContent, EditorProvider, LinkToolbar } from "../src/index.js";
+import { EditorContent, LinkToolbar } from "../src/index.js";
+import { withProvider } from "./fake-editor-provider.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
+import { collapseSelection, selectText } from "./selection-events.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -58,34 +58,6 @@ const fakeController = ({
     redo: vi.fn(),
   },
 });
-
-const withProvider = (
-  controller: ReturnType<typeof fakeController>,
-  children: React.ReactNode,
-) => (
-  <EditorProvider editor={controller as unknown as EditorController}>
-    {children}
-  </EditorProvider>
-);
-
-const selectText = (node: Node, start: number, end: number) => {
-  const range = document.createRange();
-  range.setStart(node, start);
-  range.setEnd(node, end);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-  act(() => {
-    document.dispatchEvent(new Event("selectionchange"));
-  });
-};
-
-const collapseSelection = () => {
-  window.getSelection()?.removeAllRanges();
-  act(() => {
-    document.dispatchEvent(new Event("selectionchange"));
-  });
-};
 
 const renderWithSelectedText = (
   controller: ReturnType<typeof fakeController>,

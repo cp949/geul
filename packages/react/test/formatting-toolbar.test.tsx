@@ -6,18 +6,14 @@
  * 아이콘·title 렌더링과 소비자 LucideProvider 설정 격리를 검증한다.
  */
 
-import type { EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LucideProvider } from "lucide-react";
-import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  EditorContent,
-  EditorProvider,
-  FormattingToolbar,
-} from "../src/index.js";
+import { EditorContent, FormattingToolbar } from "../src/index.js";
 import { expectIconOnlyButton } from "./expect-icon-button.js";
+import { withProvider } from "./fake-editor-provider.js";
+import { collapseSelection, selectText } from "./selection-events.js";
 
 // vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
 // 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
@@ -68,34 +64,6 @@ const fakeController = (
     redo: vi.fn(),
   },
 });
-
-const withProvider = (
-  controller: ReturnType<typeof fakeController>,
-  children: React.ReactNode,
-) => (
-  <EditorProvider editor={controller as unknown as EditorController}>
-    {children}
-  </EditorProvider>
-);
-
-const selectText = (node: Node, start: number, end: number) => {
-  const range = document.createRange();
-  range.setStart(node, start);
-  range.setEnd(node, end);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-  act(() => {
-    document.dispatchEvent(new Event("selectionchange"));
-  });
-};
-
-const collapseSelection = () => {
-  window.getSelection()?.removeAllRanges();
-  act(() => {
-    document.dispatchEvent(new Event("selectionchange"));
-  });
-};
 
 describe("FormattingToolbar 서식 툴바", () => {
   it("텍스트 선택이 없으면 렌더링하지 않는다", () => {
