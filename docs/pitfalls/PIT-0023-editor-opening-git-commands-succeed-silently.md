@@ -50,11 +50,11 @@ git log --oneline     # 해시가 그대로면 아무 일도 일어나지 않은
 
 ## 실제 근거
 
-- 2026-08-22 — `.claude/commands/a-merge-dev.md` 4단계와 `PIT-0021` 검증 방법이 `git rebase -i dev`를 지시했다. 임시 저장소(커밋 3개)에서 `git rebase -i HEAD~2`를 실행하자 `Successfully rebased and updated refs/heads/main.`, exit code `0`, 커밋 해시 `7dfd0fc ea7a7fb f20872e` 전부 변화 없음이었다. `git var GIT_EDITOR`은 `true`, `core.editor`는 `vim`이었다.
+- 2026-08-22 — `.claude/commands/a-merge-dev.md`(당시 파일, 현재 삭제됨) 4단계와 `PIT-0021` 검증 방법이 `git rebase -i dev`를 지시했다. 임시 저장소(커밋 3개)에서 `git rebase -i HEAD~2`를 실행하자 `Successfully rebased and updated refs/heads/main.`, exit code `0`, 커밋 해시 `7dfd0fc ea7a7fb f20872e` 전부 변화 없음이었다. `git var GIT_EDITOR`은 `true`, `core.editor`는 `vim`이었다.
 - 같은 저장소에서 `git commit --amend`를 `-m` 없이 실행하자 이전 메시지(`원래 메시지`)를 유지한 채 새 스테이지 내용으로 amend되고 exit code `0`을 냈다.
 - 대체 절차는 실측으로 확인했다. 상쇄 쌍(원인 커밋 + 되돌림 커밋)을 포함한 4커밋 브랜치를 `git switch --detach dev` 후 `git cherry-pick -n` 두 그룹으로 재조립했을 때 `git diff <backup-ref> HEAD --stat`이 빈 출력이었고, 되돌림을 원인보다 앞 그룹에 두자 같은 diff가 `f.txt | 2 +-`를 출력해 `PIT-0021`의 실패를 검출했다.
 
 ## 관련 문서
 
 - squash 순서 규칙과 무결성 판정: [`PIT-0021`](./PIT-0021-verify-regrouped-commits-against-a-backup-ref.md)
-- 이 규칙을 적용하는 커맨드: `.claude/commands/a-merge-dev.md`
+- 이 규칙을 적용하는 절차: [`docs/agents/ff-workflow.md`](../agents/ff-workflow.md)의 "재그룹화 실행 명령"

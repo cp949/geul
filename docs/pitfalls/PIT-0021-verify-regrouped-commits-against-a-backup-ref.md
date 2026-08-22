@@ -34,7 +34,7 @@ git switch --detach dev
 git diff refs/backup/<작업 브랜치>-pre-squash HEAD --stat   # 정리 후: 반드시 빈 출력
 ```
 
-실행 가능한 단계별 절차는 `.claude/commands/a-merge-dev.md`가 소유한다. 이 문서는 그 절차가 지켜야 할 순서 규칙과 무결성 판정만 소유한다.
+실행 가능한 단계별 절차는 [`docs/agents/ff-workflow.md`](../agents/ff-workflow.md)의 "재그룹화 실행 명령"이 소유한다. 이 문서는 그 절차가 지켜야 할 순서 규칙과 무결성 판정만 소유한다.
 
 의도적으로 커밋을 버린 경우가 아니면 이 diff는 비어 있어야 한다. 비어 있지 않으면 그룹 순서가 잘못된 것이고, 출력된 파일이 상쇄 쌍이 갈라진 지점이다.
 
@@ -48,4 +48,4 @@ git diff refs/backup/<작업 브랜치>-pre-squash HEAD --stat   # 정리 후: �
 ## 관련 문서
 
 - 작업 브랜치 수명, 커밋 누적과 squash·이전 시점: `AGENTS.md`의 "Git과 작업공간"
-- 이 절차를 실행하는 커맨드: `.claude/commands/a-merge-dev.md`
+- 이 절차의 실행 명령: [`docs/agents/ff-workflow.md`](../agents/ff-workflow.md)의 "재그룹화 실행 명령"

@@ -81,7 +81,7 @@ grep -rhoP '^(export )?const \K\w+' packages/react/test/*.ts packages/react/test
 
 1번이 잡은 그룹은 본문이 같은지, 같은 규칙을 각자 소유하는지 대조한다. 아래는 Issue #84 완료 시점(2026-08-22)에 산출한 값이고, 재산출할 때는 이 값과 대조한다.
 
-**산출 시점을 해시로 적어 두지 않는다.** 작업 브랜치의 해시는 `dev`로 squash 이전될 때 사라지고(`docs/agents/a-workflow.md`의 "커밋 해시 참조"), 이전 후 손으로 채우는 자리는 채우지 않아도 지는 것이 없어 비어 있는 채로 남는다. 산출 시점은 이 절을 갱신한 커밋 자신이므로 필요할 때 직접 얻는다.
+**산출 시점을 해시로 적어 두지 않는다.** 작업 브랜치의 해시는 `dev`로 squash 이전될 때 사라지고(`docs/agents/ff-workflow.md`의 "커밋 해시 참조"), 이전 후 손으로 채우는 자리는 채우지 않아도 지는 것이 없어 비어 있는 채로 남는다. 산출 시점은 이 절을 갱신한 커밋 자신이므로 필요할 때 직접 얻는다.
 
 ```bash
 git log -1 --format=%h -- docs/pitfalls/PIT-0022-own-test-helpers-in-a-shared-module.md
