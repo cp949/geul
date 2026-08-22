@@ -70,8 +70,10 @@
  * "대상 glob이 react 전용이었다"였고, 목록을 손으로 관리하면 같은 방식으로
  * 다시 죽는다.
  *
- * 그 보고가 훑는 범위(`WORKSPACE_ROOTS`)는 `scripts/workspace-roots.mjs`가
- * 소유한다 — 왜 리터럴이고 무엇이 그것을 감시하는지도 그 파일에 있다.
+ * 그 보고가 훑는 범위(`workspaceChildDirectories()`가 훑는 workspace 루트)는
+ * `scripts/workspace-roots.mjs`가 소유한다 — 왜 리터럴이고 무엇이 그것을
+ * 감시하는지도 그 파일에 있다. 자식 디렉터리 열거 술어(심링크 추종 포함)도
+ * 그 함수가 단독 소유한다 — 여기서 다시 구현하지 않는다.
  *
  * ## cwd 의존이 한쪽만 걷힌 이유
  *
@@ -85,11 +87,11 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { WORKSPACE_ROOTS } from "./workspace-roots.mjs";
+import { workspaceChildDirectories } from "./workspace-roots.mjs";
 
 /**
  * @typedef {object} HelperDeclaration
@@ -725,10 +727,17 @@ export const scanDirectories = (directories) =>
   );
 
 /**
- * 대상 목록과 대조할 테스트 디렉터리 후보를 모은다. workspace 디렉터리 아래의
- * `test`와 저장소 루트의 `e2e`·`tests`가 후보다.
+ * 대상 목록과 대조할 테스트 디렉터리 후보를 모은다. workspace 자식 디렉터리
+ * 아래의 `test`와 저장소 루트의 `e2e`·`tests`가 후보다.
  *
- * 존재 판정은 `REPOSITORY_ROOT` 기준 절대 경로로 하되 **반환값은 저장소 상대
+ * 자식 디렉터리 열거는 `workspaceChildDirectories()`에 위임한다. 그 함수는
+ * `package.json` 유무를 보지 않으므로 `package.json` 없는 디렉터리 아래의
+ * `test`도 후보에 낸다 — `workspacePackageDirectories()`로 바꿔 부르면 그
+ * 디렉터리가 조용히 빠져 진단 범위가 좁아진다. 심링크로 둔 패키지 아래의
+ * `test`를 포함하는 것도 그 함수가 단독 소유하는 술어(심링크 추종 포함)
+ * 덕분이다 — 여기서 로컬 루프로 다시 구현하지 않는다.
+ *
+ * 존재 판정은 `repoRoot` 기준 절대 경로로 하되 **반환값은 `repoRoot` 상대
  * 문자열**이다. 그대로 보고 줄에 실리고, 저장소 상대인
  * `DEFAULT_TARGET_DIRECTORIES`와 차집합을 취해야 하기 때문이다.
  *
@@ -737,26 +746,26 @@ export const scanDirectories = (directories) =>
  * "후보를 하나도 못 모았다" 둘 다에서 나오고, 계약 테스트가 그 둘을 가르려면
  * 수집 결과를 직접 봐야 한다.
  *
- * **정렬해 돌려준다.** 정렬이 없으면 반환 순서가 `WORKSPACE_ROOTS`의 나열
- * 순서와 `readdirSync`의 반환 순서를 그대로 드러내고, 그 순서가 차집합을 거쳐
- * `main()`의 보고 줄 순서로 나온다 — 실측: 목록 밖 디렉터리를 두 루트에 하나씩
- * 만들어 두면 루트 목록의 나열 순서를 바꾸는 것만으로 보고 순서가 뒤집힌다.
- * 정렬이 그 관측 경로를 닫아 루트 목록의 순서를 계약에서 빼고, 보고 줄이
- * 파일시스템 순서에도 흔들리지 않게 한다.
+ * **정렬해 돌려준다.** `candidates`는 `e2e`·`tests`를 먼저 담고 workspace
+ * 아래 `test`를 뒤에 이어 붙이므로, 이 함수 자신의 `.sort()`가 없으면 반환
+ * 순서가 그 접합 순서를 그대로 드러내고 `main()`의 보고 줄이 그 순서로
+ * 나온다. `workspaceChildDirectories()`가 내부적으로도 정렬해 돌려주지만,
+ * 그건 그 함수의 구현 세부사항이다 — 이 함수가 기대는 계약이 아니라 여기서
+ * 명시적으로 다시 정렬해 접합 순서 의존을 끊는다.
  *
- * @returns {string[]} 저장소 상대 디렉터리 경로 목록. 정렬해 돌려준다.
+ * `repoRoot`를 인자로 열어 fixture 트리를 주입할 수 있게 한다. 기본값은
+ * `REPOSITORY_ROOT`라 기존 호출부(`findUnlistedTestDirectories()`, CLI)는
+ * 그대로 저장소 루트를 본다.
+ *
+ * @param {string} [repoRoot] 저장소 루트 경로. 기본값은 `REPOSITORY_ROOT`.
+ * @returns {string[]} `repoRoot` 상대 디렉터리 경로 목록. 정렬해 돌려준다.
  */
-export const collectTestDirectoryCandidates = () => {
+export const collectTestDirectoryCandidates = (repoRoot = REPOSITORY_ROOT) => {
   const candidates = ["e2e", "tests"];
-  for (const workspace of WORKSPACE_ROOTS) {
-    const workspacePath = resolve(REPOSITORY_ROOT, workspace);
-    if (!existsSync(workspacePath)) continue;
-    for (const entry of readdirSync(workspacePath, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const candidate = join(workspace, entry.name, "test");
-      if (existsSync(resolve(REPOSITORY_ROOT, candidate))) {
-        candidates.push(candidate);
-      }
+  for (const directory of workspaceChildDirectories(repoRoot)) {
+    const testPath = join(directory, "test");
+    if (existsSync(testPath)) {
+      candidates.push(relative(repoRoot, testPath));
     }
   }
   return candidates.sort();

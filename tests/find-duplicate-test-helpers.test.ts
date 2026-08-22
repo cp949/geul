@@ -11,13 +11,25 @@
  * 후보 수집이 cwd에 걸리면 잘못된 cwd에서 후보가 0건이 되고 "목록 밖 없음"이
  * 공허하게 참이 된다. 그래서 수집 자체를 관측하고, cwd를 바꾼 자식 프로세스
  * 두 벌을 대조한다.
+ *
+ * `describe("collectTestDirectoryCandidates()가 workspaceChildDirectories()에
+ * 위임한다")`는 DELTA-03이 합친 세 번째 술어 사본을 다시 진다 — 심링크 패키지
+ * 아래의 `test`가 후보에 들고, 정렬 계약이 유지되고, 그 위임이 소스 수준에서
+ * 실제로 지켜지는지를 fixture와 소스 스캔으로 확인한다.
  */
 import { execFile } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   collectHelperDeclarations,
@@ -629,5 +641,152 @@ describe("기본 대상 디렉터리", () => {
     ).not.toEqual([]);
     expect(fromOutside.candidates).toEqual(fromRoot.candidates);
     expect(fromOutside.unlisted).toEqual(fromRoot.unlisted);
+  });
+});
+
+/**
+ * DELTA-03: `collectTestDirectoryCandidates()`가 자식 열거를 자기 루프로 다시
+ * 구현하지 않고 `workspaceChildDirectories()`(`scripts/workspace-roots.mjs`)에
+ * 위임하는지를 진다. 옛 술어(`entry.isDirectory()` 단독 판정)로는 심링크
+ * 패키지 아래의 `test`가 후보에서 조용히 빠지고, `findUnlistedTestDirectories()`가
+ * "목록 밖 없음"을 잘못 보고한다(`PIT-0022`).
+ *
+ * fixture의 workspace 루트 이름은 `apps`/`packages` 고정이다 —
+ * `collectTestDirectoryCandidates(repoRoot)`가 `workspaceChildDirectories(repoRoot)`를
+ * 기본 glob(`WORKSPACE_PACKAGE_GLOBS`)으로 호출하므로, glob을 fixture에서
+ * 따로 주입할 방법이 없다.
+ */
+describe("collectTestDirectoryCandidates()가 workspaceChildDirectories()에 위임한다", () => {
+  // 각 `it` 사이의 fixture 누수를 막는다.
+  let tmpRoot: string | undefined;
+
+  afterEach(() => {
+    if (tmpRoot === undefined) return;
+    rmSync(tmpRoot, { recursive: true, force: true });
+    tmpRoot = undefined;
+  });
+
+  it("심링크로 둔 패키지 아래의 test 디렉터리를 후보로 낸다", () => {
+    const localTmpRoot = mkdtempSync(
+      join(tmpdir(), "geul-test-helper-candidates-"),
+    );
+    tmpRoot = localTmpRoot;
+    const repoRoot = join(localTmpRoot, "repo");
+    const externalDir = join(localTmpRoot, "external");
+
+    // packages/real/test — package.json 없는 일반 디렉터리 아래의 test.
+    // `workspacePackageDirectories()`를 썼다면(둘 다 package.json이 없으므로)
+    // 이 항목도 함께 빠진다 — 아래 심링크 항목과 같은 단언으로 그 변이도
+    // 잡는다.
+    mkdirSync(join(repoRoot, "packages", "real", "test"), { recursive: true });
+
+    // 심링크 대상. repoRoot 바깥에 둬 "심링크를 안 따라가면 아예 안 보인다"는
+    // 조건을 실제로 만든다.
+    mkdirSync(join(externalDir, "linked-pkg", "test"), { recursive: true });
+
+    // packages/linked — 디렉터리를 가리키는 심링크. 로컬 readdirSync 루프
+    // (`entry.isDirectory()` 단독 판정)를 되살리면 이 항목이 조용히 빠진다.
+    symlinkSync(
+      "../../external/linked-pkg",
+      join(repoRoot, "packages", "linked"),
+      "dir",
+    );
+
+    const candidates = collectTestDirectoryCandidates(repoRoot);
+
+    expect(candidates).toContain("packages/linked/test");
+    expect(candidates).toContain("packages/real/test");
+    // `e2e`·`tests`는 존재 여부와 무관하게 무조건 포함되는 기존 계약이다 —
+    // fixture에 실제로 없어도 후보에 남는다.
+    expect(candidates).toContain("e2e");
+    expect(candidates).toContain("tests");
+  });
+
+  it("워크스페이스 나열·파일시스템 순서와 무관하게 정렬해 돌려준다", () => {
+    const localTmpRoot = mkdtempSync(join(tmpdir(), "geul-test-helper-sort-"));
+    tmpRoot = localTmpRoot;
+    const repoRoot = join(localTmpRoot, "repo");
+
+    // `apps/zzz/test`는 알파벳 순으로 "e2e"보다 앞서고, `packages/aaa/test`는
+    // "tests"보다 앞선다. 수집은 초기 `["e2e", "tests"]` 뒤에 workspace 결과를
+    // 이어 붙이므로, 정렬 없이 이어 붙이면 최종 순서가
+    // `["e2e", "tests", "apps/zzz/test", "packages/aaa/test"]`가 되어 알파벳
+    // 순이 아니게 된다.
+    mkdirSync(join(repoRoot, "apps", "zzz", "test"), { recursive: true });
+    mkdirSync(join(repoRoot, "packages", "aaa", "test"), { recursive: true });
+
+    // 변이: `collectTestDirectoryCandidates()`의 `.sort()`를 지우면 이 등식이
+    // 어긋난다(위 순서 그대로 나온다).
+    expect(collectTestDirectoryCandidates(repoRoot)).toEqual([
+      "apps/zzz/test",
+      "e2e",
+      "packages/aaa/test",
+      "tests",
+    ]);
+  });
+});
+
+/**
+ * `scripts/find-duplicate-test-helpers.mjs`에서 `export const <name> = (...) =>
+ * { ... };` 형태로 선언된 최상위 화살표 함수 하나의 본문(중괄호 안쪽)을 뽑는다.
+ * 여는 중괄호 다음부터 괄호 깊이를 세어 짝이 맞는 닫는 중괄호를 찾는다.
+ *
+ * 판정 범위를 이 함수 하나로 좁히는 이유는 오탐이다. 같은 파일의
+ * `collectSourcePaths()`가 `.tsx?` 소스 파일을 재귀로 훑으려고 `readdirSync`와
+ * `entry.isDirectory()`를 **합법적으로** 쓴다 — 그 자리는 이 DELTA의 범위
+ * 밖이다(중복 탐지 알고리즘 자체). 파일 전체에서 그 토큰을 찾으면 이 합법적인
+ * 자리가 오탐으로 걸린다. `tests/workspace-roots.test.ts`가 배열 리터럴
+ * 범위로 판정 범위를 좁힌 것(`arrayLiteralSpan`)과 같은 이유의 같은 형태다.
+ */
+const extractArrowFunctionBody = (source: string, functionName: string) => {
+  const declaration = new RegExp(
+    `export const ${functionName} = \\([^)]*\\) => \\{`,
+  );
+  const match = declaration.exec(source);
+
+  expect(match).not.toBeNull();
+  if (match === null) throw new Error("unreachable");
+
+  const bodyStart = match.index + match[0].length;
+  let depth = 1;
+  let cursor = bodyStart;
+
+  while (cursor < source.length && depth > 0) {
+    if (source[cursor] === "{") depth += 1;
+    else if (source[cursor] === "}") depth -= 1;
+    cursor += 1;
+  }
+
+  return source.slice(bodyStart, cursor - 1);
+};
+
+/**
+ * 완료 조건 3의 트랙-2 변이를 진다 — 옛 술어(`entry.isDirectory()` 단독
+ * 판정)가 아니라 심링크까지 추종하는 **새로 올바르게 구현한** 로컬 열거
+ * 루프를 `collectTestDirectoryCandidates()` 안에 심어도, 행위 기반 완료
+ * 조건(1·2·4·5)은 전부 통과한다 — 그 루프가 기능적으로 `workspaceChildDirectories()`와
+ * 동등하기 때문이다. 소스 스캔만 그 변이를 잡는다.
+ */
+describe("collectTestDirectoryCandidates()가 자체 열거 루프를 갖지 않는다", () => {
+  it("함수 본문에 readdirSync·isDirectory 패턴이 없고 workspaceChildDirectories()를 부른다", () => {
+    const source = readFileSync(
+      new URL("../scripts/find-duplicate-test-helpers.mjs", import.meta.url),
+      "utf8",
+    );
+    const body = extractArrowFunctionBody(
+      source,
+      "collectTestDirectoryCandidates",
+    );
+
+    expect(body).not.toMatch(/readdirSync/);
+    expect(body).not.toMatch(/\.isDirectory\(/);
+    expect(body).toMatch(/workspaceChildDirectories\(/);
+
+    // 위 두 부정 단언은 함수 본문의 텍스트만 본다 — import를 지우고 같은
+    // 이름의 지역 함수를 새로 선언해도 속아 넘어간다. import 구문 자체도
+    // 확인한다.
+    expect(source).toMatch(
+      /^\s*import\s*\{\s*workspaceChildDirectories\s*\}\s*from\s*["']\.\/workspace-roots\.mjs["']/m,
+    );
   });
 });
