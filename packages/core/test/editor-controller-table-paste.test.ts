@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
   editorState,
+  editorWithTable,
   firstTableBlockIn,
   mountTiptapEditor,
   paragraphDocument,
@@ -210,15 +211,7 @@ describe("에디터 컨트롤러 표", () => {
   // 셀 텍스트에 합친다 — 표 앞 문단은 좌상단 셀 앞에, 표 뒤 문단은 마지막
   // 셀 뒤에 붙는다.
   it("표 안에 혼합 클립보드를 붙이면 표 밖 문단 텍스트가 셀에 합쳐진다", () => {
-    const editor = createEditor({
-      initialDocument: paragraphDocument("content"),
-      createId: sequentialIds("paste"),
-    });
-    const inserted = editor.commands.insertTable("block-1", {
-      rows: 1,
-      columns: 2,
-    });
-    if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+    const { editor } = editorWithTable(1, 2);
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
 

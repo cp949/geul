@@ -25,12 +25,15 @@ import {
  * Table/Row/Cell 확장만 검증하는 독립 fixture. model-to-tiptap.ts/tiptap-to-model.ts의
  * 표 차단 분기를 거치지 않는다.
  *
- * EditorController와 달리 실제 element에 붙은 EditorView를 즉시 만들고, 이
- * 에디터를 훑는 공용 afterEach 청소기는 없다. 그래서 호출부가 `it`마다
- * `editor.destroy()`로 해제한다 — 마운트된 채 남으면 ProseMirror DOMObserver의
- * 지연 flush가 jsdom 환경 해제 뒤에 실행돼 "ReferenceError: document is not
- * defined" unhandled error가 된다. 간헐적이라 통과하는 실행이 증거가 못 된다:
- * 해제를 빠뜨린 계약 테스트로 같은 명령을 40회 돌려 2회 재현했다.
+ * EditorController와 달리 element에 붙은 EditorView를 그대로 둔다
+ * (EditorController는 생성자에서 mount 직후 unmount한다). 이 에디터를 훑는
+ * 공용 afterEach 청소기는 없으므로 에디터 참조를 받는 호출부가 `it`마다
+ * `editor.destroy()`로 해제한다 — 마운트된 채 남으면 dispatch가 예약한
+ * ProseMirror DOMObserver의 20ms flush가 jsdom 환경 해제 뒤에 실행돼
+ * "ReferenceError: document is not defined" unhandled error가 된다.
+ * `destroy()`가 docView를 비워 그 flush를 조기 반환시키는 것이 해제가 하는
+ * 일이다. 간헐적이라 통과하는 실행이 증거가 못 된다 — 재현율은 환경에 따라
+ * 다르고 0인 기계도 있으므로 실행 횟수는 근거로 적지 않는다.
  */
 export const createTableFixtureEditor = (content: JSONContent): Editor => {
   const editor = new Editor({
@@ -62,12 +65,18 @@ export const createTableFixtureEditor = (content: JSONContent): Editor => {
  * 표 fixture 확장이 등록된 스키마. 문서 내용이 아니라 노드 정의만 필요한
  * 테스트가 최소 문서로 에디터를 하나 만들어 그 스키마를 꺼내는 경로다.
  * 문서가 비어 있을 뿐 스키마에는 table/tableRow/tableCell이 모두 있다.
+ * 스키마는 에디터 해제 뒤에도 유효하므로 여기서 바로 해제해 호출부에 정리
+ * 책임을 넘기지 않는다.
  */
-export const emptyDocSchema = () =>
-  createTableFixtureEditor({
+export const emptyDocSchema = () => {
+  const editor = createTableFixtureEditor({
     type: "doc",
     content: [{ type: "paragraph" }],
-  }).schema;
+  });
+  const { schema } = editor;
+  editor.destroy();
+  return schema;
+};
 
 /**
  * 표 셀 하나의 tiptap JSON을 만든다. 아래 표 fixture들이 행을 구성할 때
@@ -193,8 +202,9 @@ export const findCellBoundaryPosition = (
  * 3(doc/table/tableRow/tableCell)이라 node(-1)이 tableRow가 되고 create가
  * 그 RangeError를 던진다.
  *
- * cellId는 string | undefined를 받는다. 호출부가 cellIds 배열을 구조분해해
- * 넘기므로 undefined 가드를 호출부마다 두는 대신 여기서 던진다.
+ * cellId는 string | undefined를 받는다. `noUncheckedIndexedAccess` 아래에서
+ * 호출부가 cellIds에서 값을 꺼내면 타입이 undefined를 포함하는데, 그 가드를
+ * 호출부마다 사본으로 두는 대신 여기서 같은 메시지로 던진다.
  */
 export const selectCellRange = (
   editor: Editor,

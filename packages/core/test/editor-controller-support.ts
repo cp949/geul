@@ -65,9 +65,8 @@ export const tableBlockOf = (editor: EditorController) =>
  * 위치를 모르는 표 블록을 찾는다. 붙여넣기는 표 앞뒤에 문단을 남길 수 있어
  * 표 인덱스가 고정이 아니다(실측: 문단·표·문단이 섞인 클립보드를 붙여넣은
  * 문서의 블록 타입이 `["paragraph","paragraph","table","paragraph"]`).
- * 현재 호출부 2곳은 결과적으로 둘 다 인덱스 1이지만(실측), 인덱스를
- * 전제하지 않는 것이 이 질의가 tableBlockIn과 갈리는 이유다. 여러 표가 있으면
- * 문서 순서로 첫 번째를 준다.
+ * 인덱스를 전제하지 않는 것이 이 질의가 tableBlockIn과 갈리는 이유다. 여러
+ * 표가 있으면 문서 순서로 첫 번째를 준다.
  */
 export const firstTableBlockIn = (document: Document) => {
   const block = document.blocks.find((b) => b.type === "table");
@@ -88,10 +87,9 @@ export const firstTableBlockIn = (document: Document) => {
  *
  * 이 좌표 공식은 **생성 시점**의 격자에만 맞다. 반환된 배열은 그때의
  * 스냅샷이라 문서가 바뀌어도 갱신되지 않는다 — 2x2 네 셀을 병합하면 문서의
- * 셀은 하나(`["id-4"]`)로 줄지만 cellIds는 그대로 넷
- * (`["id-4","id-5","id-7","id-8"]`)이라 셋이 문서에 없는 id가 된다(실측).
- * 배치를 바꾼 뒤에는 이 목록으로 좌표를 다시 계산하지 않고 문서에서 셀을
- * 다시 읽는다.
+ * 셀은 좌상단 하나로 줄지만 cellIds는 그대로 넷이라 셋이 문서에 없는 id가
+ * 된다. 배치를 바꾼 뒤에는 이 목록으로 좌표를 다시 계산하지 않고 문서에서
+ * 셀을 다시 읽는다.
  */
 export const editorWithTable = (rows = 2, columns = 2) => {
   const editor = createEditor({

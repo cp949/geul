@@ -14,11 +14,12 @@
  * 대조한다. 저장 문서의 `rows.flatMap(...)`과 대조하면 `cellIds`를 만든 식을
  * 그대로 되뇌는 동어반복이라 순서가 바뀌어도 지지 않는다.
  *
- * `tableBlockOf`도 같은 이유로 `tableBlockIn(editor.getDocument())`과
- * 대조하는 것만으로는 부족하다 — 그 단언은 구현식을 그대로 되뇌므로
- * `tableBlockOf`가 인덱스 1 규칙을 버리고 탐색 질의로 바뀌어도 지지 않는다.
+ * `tableBlockOf`는 `tableBlockIn(editor.getDocument())`과 대조하지 않는다 —
+ * 그 단언은 구현식을 그대로 되뇌어 인덱스 1 규칙을 버리고 탐색 질의로 바뀌어도
+ * 지지 않는다(실측: `firstTableBlockIn` 위임으로 바꿔도 그 단언만은 통과했다).
  * 표가 인덱스 0인 컨트롤러에서 `tableBlockOf`가 던지고 `firstTableBlockIn`은
- * 찾는 것으로 그 갈림을 따로 고정한다.
+ * 찾는 것으로 갈림을 고정하고, 정상 경로는 `인자가 없으면 2x2 표를 만든다`가
+ * 함께 부른다.
  *
  * 덮지 않는 것: 같은 모듈의 `paragraphDocument`·`sequentialIds`·
  * `documentWithContent`·`mountTiptapEditor`·`editorState`, 그리고 셀 위치·선택·
@@ -27,7 +28,7 @@
  * 만드는지도 여기 범위가 아니다 — 여기서 보는 것은 fixture가 그 결과를 어떤
  * 모양으로 내놓는가다.
  */
-import type { Document } from "@cp949/geul-model";
+import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -129,7 +130,9 @@ describe("컨트롤러 표 fixture 계약", () => {
       const { editor, tableBlockId } = editorWithTable();
       const document = editor.getDocument();
 
-      const block = tableBlockIn(document);
+      // 반환 타입이 표 블록으로 좁혀지는 것도 이 헬퍼의 계약이다. 좁힘이
+      // 사라지면 이 대입이 TS2322로 진다 — 런타임 단언과 별개 게이트다.
+      const block: TableBlock = tableBlockIn(document);
 
       expect(block).toBe(document.blocks[1]);
       expect(block.type).toBe("table");
@@ -150,12 +153,6 @@ describe("컨트롤러 표 fixture 계약", () => {
   });
 
   describe("tableBlockOf", () => {
-    it("컨트롤러의 저장 문서에서 tableBlockIn과 같은 블록을 준다", () => {
-      const { editor } = editorWithTable();
-
-      expect(tableBlockOf(editor)).toEqual(tableBlockIn(editor.getDocument()));
-    });
-
     it("표가 인덱스 1이 아닌 컨트롤러에서는 던진다 — 같은 문서에서 firstTableBlockIn은 찾는다", () => {
       const { editor } = editorWithTable();
       expect(editor.replaceDocument(tableFirstDocument())).toEqual({
@@ -227,8 +224,10 @@ describe("컨트롤러 표 fixture 계약", () => {
     });
 
     it("cellIds가 마운트된 편집기의 tr별 셀 id를 행 우선으로 평탄화한 것과 같다", () => {
-      // 3x2를 쓴다. 정사각 표는 행 우선과 열 우선이 같은 목록을 내므로 구분이
-      // 안 된다. 셀 id는 tableCell의 cellId 속성이 data-be-cell-id로 렌더된다.
+      // 3x2를 쓴다. 행 우선과 열 우선의 구분 자체는 2x2로도 되지만, 정사각은
+      // rows와 columns 인자가 뒤바뀌어도 같은 모양이라 그 오류를 못 잡는다
+      // (실측: 인자를 맞바꾸면 3x2에서는 지고 2x2에서는 통과한다).
+      // 셀 id는 tableCell의 cellId 속성이 data-be-cell-id로 렌더된다.
       const { editor, cellIds } = editorWithTable(3, 2);
       const { editable } = mountTiptapEditor(editor);
 

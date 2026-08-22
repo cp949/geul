@@ -12,9 +12,10 @@
  * `create`를 직접 호출해 고정한다. 다만 위치는 `findCellBoundaryPosition`으로
  * 얻으므로 그 두 테스트는 "그 헬퍼가 셀 **시작** 경계를 준다"도 함께 진다 —
  * 경계가 한 칸 밀리면 `depth 2` 단언이 먼저 깨진다. 실측: `found = pos`를
- * `found = pos + 1`로 바꾸면 이 파일이 `4 failed | 3 passed (7)`이 되고 depth
- * 두 건이 `expected 3 to be 2`·`expected 2 to be 3`으로 진다. 같은 헬퍼의
- * "못 찾으면 null"은 두 헬퍼의 `셀 fixture 준비 실패` 가드가 진다.
+ * `found = pos + 1`로 바꾸면 depth 두 건이 `expected 3 to be 2`·
+ * `expected 2 to be 3`으로 지고 선택 두 건이 함께 진다. 파일의 통과·실패
+ * 개수는 적지 않는다 — 테스트를 더할 때마다 썩는다. 같은 헬퍼의 "못 찾으면
+ * null"은 두 헬퍼의 `셀 fixture 준비 실패` 가드가 진다.
  *
  * 격리 fixture 에디터는 해제 책임이 호출부에 있다 — 왜 그런지는
  * `createTableFixtureEditor`의 주석이 소유한다. 여기서는 `it`마다
@@ -145,6 +146,8 @@ describe("표 셀 선택 fixture 계약", () => {
 
   describe("CellSelection.create의 depth 규칙", () => {
     it("셀 경계는 depth 2·node(-1)이 table이고 create가 성공한다", () => {
+      // depth 2는 docWithTwoRowTable이 표를 doc 직속에 두기 때문이다. 표가
+      // 다른 블록 안에 들어가는 문서에서는 이 값이 아니다.
       const editor = createTableFixtureEditor(docWithTwoRowTable);
       const boundary = cellBoundaryOf(editor, "cell-1");
 

@@ -172,10 +172,8 @@ describe("에디터 컨트롤러 표", () => {
   });
 
   describe("표 셀 병합·분할", () => {
-    const editorWithTwoByTwoTable = () => editorWithTable(2, 2);
-
     it("셀 범위를 드래그 선택하면 getTableCellSelection이 선택된 셀 id 전부를 보고한다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
 
       const [topLeft, , , bottomRight] = cellIds;
@@ -190,7 +188,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("mergeTableCells로 선택한 직사각형 범위를 병합한다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
       selectCellRange(tiptap, topLeft, bottomRight);
@@ -209,7 +207,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("병합 직후 undo 1회로 복원된다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
       selectCellRange(tiptap, topLeft, bottomRight);
@@ -222,7 +220,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("셀 선택이 없으면 mergeTableCells를 거절하고 문서를 바꾸지 않는다", () => {
-      const { editor, tableBlockId } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId } = editorWithTable(2, 2);
       mountTiptapEditor(editor);
       const before = editor.getDocument();
 
@@ -234,7 +232,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("병합된 셀에 캐럿을 두면 getTableCellSelection이 splitCellId를 보고한다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
       if (topLeft === undefined || bottomRight === undefined) {
@@ -254,7 +252,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("splitTableCell로 병합된 셀을 원래 셀 개수로 되돌린다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
       if (topLeft === undefined || bottomRight === undefined) {
@@ -273,7 +271,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("분할 직후 undo 1회로 병합 상태로 복원된다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
       if (topLeft === undefined || bottomRight === undefined) {
@@ -290,7 +288,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("존재하지 않는 cellId는 CELL_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
-      const { editor, tableBlockId } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId } = editorWithTable(2, 2);
       mountTiptapEditor(editor);
       const before = editor.getDocument();
 
@@ -307,7 +305,7 @@ describe("에디터 컨트롤러 표", () => {
     // ($anchorCell.pos == $headCell.pos) 거절한다. 아래 두 테스트가 그 상태를
     // selectSingleCell로 재현한다.
     it("병합되지 않은 셀 하나만 감싸는 CellSelection도 서식 대상으로 보고한다(병합/분할 후보는 아니다)", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft] = cellIds;
 
@@ -322,7 +320,7 @@ describe("에디터 컨트롤러 표", () => {
     });
 
     it("병합된 셀 하나만 감싸는 CellSelection은 splitCellId를 보고한다", () => {
-      const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
       selectCellRange(tiptap, topLeft, bottomRight);
