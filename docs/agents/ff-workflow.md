@@ -99,14 +99,16 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 
 DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한다. 기존 번호를 다시 매기지 않는다 — 이미 나간 리뷰와 로그의 참조가 깨진다.
 
-## 트랙-2. 계획 리뷰
+## 트랙-2. 계획서 리뷰 및 수정
 
 - 입력: `01-계획.md`, `DELTA-*.md`, 관련 spec·ADR·`ACTIVE` pitfall, 대상 코드
 - 출력: `PLAN-REVIEW-NN.md`, 수정된 `DELTA-*.md`
-- 절차: 읽기 전용 subagent 3개를 병렬로 띄운다. 렌즈는 고정이다.
+- 절차: subagent 협업 모드로 진행한다.
   1. **완료 조건과 범위** — 각 완료 조건이 실제로 검증 가능한가. 이슈·spec이 요구하는데 어느 DELTA에도 없는 것이 있는가.
   2. **분할과 순서** — DELTA 경계가 맞는가. 의존 순서가 성립하는가. 어느 DELTA도 담당하지 않는 틈이 있는가. 크기 상한을 넘는 DELTA가 있는가.
   3. **기존 계약과의 충돌** — 승인된 spec·ADR, `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식과 어긋나는가.
+  4. 각 DELTA 파일별로 참고할 pitfalls 섹션을 추가한다.
+  5. 계획서의 내용이 타당한지 리뷰한다.
 - 메인 세션이 세 보고를 합쳐 중복을 제거하고, 진짜 결함인지 직접 확인한 뒤 DELTA 파일을 수정한다.
 - 정지: 코드를 고치지 않는다. 커밋하지 않는다.
 
@@ -121,7 +123,7 @@ DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한�
 
 - 입력: 지정된 `DELTA-NN.md`, `02-테스트-계획.md`, `01-계획.md`의 의존 관계
 - 출력: 작업 브랜치 커밋
-- 절차: superpowers `subagent-driven-development`로 진행한다. 구현·리뷰 모델 배분은 그 skill에 맡긴다. 커밋은 메인 세션이 한다 — subagent 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
+- 절차: `subagent-driven-development`로 진행한다. 구현·리뷰 모델 배분은 그 skill에 맡긴다. 커밋은 메인 세션이 한다 — subagent 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
 - 게이트: **해당 DELTA의 완료 조건을 전부 충족한 경우에만 다음 DELTA를 시작한다.** 충족하지 못하면 정지하고 무엇이 미충족인지 보고한다.
 - 검증: DELTA의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다.
 - 재실행: 이미 완료한 DELTA를 사용자가 다시 지시하면 리뷰-수정을 한 번 더 한다.
@@ -229,12 +231,15 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 ## 발견
 
 ### F1 <제목> — MAJOR
+
 - 위치: <파일:줄>
 - 재현: <명령 또는 조건>
 - 근거: <실측>
 
 ## 수정 결과
+
 ## 남은 위험
+
 ## 실행한 검증과 결과
 ```
 
@@ -244,11 +249,11 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 검증 게이트
 
-| 시점 | 검증 |
-| --- | --- |
-| 트랙-4 각 DELTA | DELTA의 검증 명령(focused) |
-| 트랙-5 진입 | `pnpm verify` 전량 1회 |
-| 트랙-8 병합 직전 | `pnpm verify` 전량 1회 |
+| 시점             | 검증                       |
+| ---------------- | -------------------------- |
+| 트랙-4 각 DELTA  | DELTA의 검증 명령(focused) |
+| 트랙-5 진입      | `pnpm verify` 전량 1회     |
+| 트랙-8 병합 직전 | `pnpm verify` 전량 1회     |
 
 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
 
@@ -329,6 +334,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
    ```
 
    역순으로 검증하거나 일부만 검증하거나 중간에 멈춰도 tip은 ref에 남는다.
+
 6. 작업 브랜치를 재조립 tip으로 옮기고 `dev`로 이전한다. `HEAD`를 대상으로 쓰지 않는다 — 5단계가 HEAD를 중간 그룹 커밋에 남겨 뒀으면 뒤 그룹이 사라지고, 그래도 `merge --ff-only`는 fast-forward라 성공한다.
 
    ```bash
@@ -342,6 +348,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
    재대조가 4단계와 같은 결과가 아니면 병합하지 않는다. 5단계가 HEAD를 옮긴 뒤 브랜치가 tip이 아닌 커밋을 가리키게 됐다는 뜻이다.
 
    ff가 거절되면 재조립 중 `dev`가 움직인 것이다. 3단계를 현재 `dev` 기준으로 다시 실행한다.
+
 7. `git branch -d <브랜치>`로 삭제하고 ref를 정리한다. 백업 ref는 6단계의 재대조와 병합이 끝난 뒤에만 지운다.
 
    ```bash
@@ -389,14 +396,14 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 같은 사실을 두 곳에 원본처럼 쓰지 않는다. 이 흐름이 쓰는 계약의 소유자는 다음과 같다.
 
-| 질문 | 소유자 |
-| --- | --- |
-| 어느 레인으로 작업하는가 | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간" |
-| 트랙 절차와 산출물 계약 | 이 문서 |
-| DELTA 형식과 크기 규칙 | 이 문서의 "DELTA 계약" |
-| 재그룹화 실행 명령 순서 | 이 문서의 "재그룹화 실행 명령" |
-| 재그룹화 순서 규칙과 무결성 판정 | [`PIT-0021`](../pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md) |
-| 결함 심각도와 완료 판정 상태 | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |
-| 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md) |
-| 저장소 이력 보관 정책과 내용 계약 | [`../history/README.md`](../history/README.md) |
-| 아키텍처 불변식과 구현 규칙 | [`../../AGENTS.md`](../../AGENTS.md) |
+| 질문                                             | 소유자                                                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| 어느 레인으로 작업하는가                         | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간"                             |
+| 트랙 절차와 산출물 계약                          | 이 문서                                                                             |
+| DELTA 형식과 크기 규칙                           | 이 문서의 "DELTA 계약"                                                              |
+| 재그룹화 실행 명령 순서                          | 이 문서의 "재그룹화 실행 명령"                                                      |
+| 재그룹화 순서 규칙과 무결성 판정                 | [`PIT-0021`](../pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md) |
+| 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md)        |
+| 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md)                                          |
+| 저장소 이력 보관 정책과 내용 계약                | [`../history/README.md`](../history/README.md)                                      |
+| 아키텍처 불변식과 구현 규칙                      | [`../../AGENTS.md`](../../AGENTS.md)                                                |
