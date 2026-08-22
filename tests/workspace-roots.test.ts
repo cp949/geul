@@ -21,8 +21,14 @@
  * 되돌려도 `tests/` 전량이 통과하고, 루트 하나가 빠진 갈린 사본이어도 통과한다.
  * 현재 트리의 `apps`와 `fixtures` 아래에는 `test` 디렉터리가 없어 그 두 루트가 그
  * 스크립트의 후보 수집 결과에 아무 기여도 하지 않기 때문이다. 아래 describe가
- * 그 구멍을 두 축으로 막는다 — 소비처가 import하는지와, glob 목록 리터럴이나
- * 루트 이름 목록 리터럴이 저장소에 한 벌뿐인지.
+ * 그 구멍을 세 축으로 막는다 — 소비처가 import하는지, glob 목록 리터럴이나
+ * 루트 이름 목록 리터럴이 저장소에 한 벌뿐인지, 그리고(DELTA-06)
+ * `scripts/headless-packages.mjs`가 단독 소유하는 headless 판정 목록
+ * (`HEADLESS_PACKAGES`)의 배열 리터럴 사본이 없는지. headless 목록은 이 파일이
+ * 소유하는 모듈의 것이 아니지만, 사본 탐지 술어(`tokensInOneArrayLiteral` 등)를
+ * 이 파일이 이미 단독 소유하고 있어 세 번째 토큰 축으로 여기 더한다 —
+ * `tests/workspace-boundaries.test.ts`에 같은 술어를 복제하면 `PIT-0022`
+ * 위반이다.
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -40,6 +46,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { HEADLESS_PACKAGES } from "../scripts/headless-packages.mjs";
 import {
   WORKSPACE_PACKAGE_GLOBS,
   WORKSPACE_ROOTS,
@@ -174,6 +181,12 @@ const rootNamesFromGlobs = (globs: readonly string[]) =>
 // 예외이므로 한 곳에서만 적는다.
 const workspaceRootsModulePath = "scripts/workspace-roots.mjs";
 
+// headless 판정 목록(`HEADLESS_PACKAGES`)을 단독 소유하는 모듈의 저장소 상대
+// 경로(DELTA-06). 위와 같은 이유로 한 곳에서만 적는다 — 이 모듈은
+// `workspace-roots.mjs`가 아니지만, 사본 탐지 단언은 이 파일이 이미 소유한
+// 술어를 그대로 재사용한다.
+const headlessPackagesModulePath = "scripts/headless-packages.mjs";
+
 // 사본을 찾을 대상 확장자 — 실행되는 코드만이다(js·cjs·mjs·ts·cts·mts·jsx·tsx).
 // 루트 목록의 사본이 해를 끼치는 자리는 그 목록으로 실제 열거를 도는 코드이고,
 // `pnpm-workspace.yaml`은 사본이 아니라 대조의 **원본**이다. json·md도 대상 밖에
@@ -218,6 +231,25 @@ const arrayLiteralSpan = /\[[^[\]]*\]/g;
 // 배열 리터럴 범위 안에서 glob 토큰 2종 이상은 이 DELTA 이전 0건, 이후
 // `scripts/workspace-roots.mjs` 1건(3종)이다. 두 축을 동시에 걸어도 오탐이
 // 없다.
+//
+// headless 축(`HEADLESS_PACKAGES`: `packages/io`·`packages/model`)도 같은
+// 임계값을 쓴다. DELTA-06 실측(2026-08-23): 이 축을 이 describe에 더하기
+// 전, 배열 리터럴 범위 안에서 두 토큰이 함께 2종 모이는 추적 소스는 3건이었다
+// — `scripts/check-package-boundaries.mjs`(원본 리터럴 자신),
+// `tests/workspace-boundaries.test.ts`(그 파일의 `it.each`가 두 문자열을
+// 배열 리터럴로 나열한 사본), 그리고 이 파일 자신(바로 위 "매니페스트에서
+// 파생한 열거와 리터럴에서 파생한 열거가 같고, 결과가 오늘의 6개다" 테스트의
+// 6개 이름 배열이 두 토큰을 우연히 함께 담고 있었다). 앞 둘은 이 DELTA가
+// 추출·스프레드 교체로 없앴고, 이 파일 자신의 충돌은 `describe("workspace
+// 패키지 glob 목록")`의 `WORKSPACE_ROOTS` 테스트가 이미 쓰던 기존 관례
+// (길이 가드 + `toContain()` 반복)를 그대로 따라 없앴다 — 배열 리터럴을
+// 물리적으로 쪼개는 방식(`.concat()` 등)은 쓰지 않는다. 리뷰 실측:
+// `["a"].concat(["b"])` 형태는 이 판정의 임계값 2를 그대로 피해(점수 1)
+// 진짜 사본에도 통하는 회피 예시를 남긴다. 축을 더한 뒤에는
+// `scripts/headless-packages.mjs` 1건(2종)만 남는다 — 원본 리터럴이 있는
+// 자리다. 이 주석 자신도 두 토큰을 배열 리터럴 문법(`[`·`,`·`]`)으로
+// 나란히 적지 않는다 — 산문 설명이라도 그 모양이면 판정에 그대로
+// 걸린다(실측).
 const arrayLiteralCopyThreshold = 2;
 
 // 소비처가 이 모듈을 **실제로 import하는지**를 본다. 단순 문자열 포함으로
@@ -499,16 +531,26 @@ describe("workspacePackageDirectories()", () => {
     expect([...workspacePackageDirectories(repositoryRoot)].sort()).toEqual(
       expected,
     );
-    expect(
-      expected.map((directory) => relative(repositoryRoot, directory)).sort(),
-    ).toEqual([
-      "apps/demo",
-      "fixtures/consumer",
-      "packages/core",
-      "packages/io",
-      "packages/model",
-      "packages/react",
-    ]);
+    // `HEADLESS_PACKAGES`(headless 축, DELTA-06)의 두 토큰 `packages/io`·
+    // `packages/model`을 한 배열 리터럴에 나란히 두면 아래 "단독 소유"
+    // describe의 headless 축 판정에 이 테스트 자신이 걸린다(실측). 이 파일이
+    // 이미 같은 문제를 한 번 겪었다 — 바로 위 "WORKSPACE_ROOTS가 glob
+    // 목록에서 파생되고 값이 오늘과 같다" 테스트가 `apps`·`fixtures`·
+    // `packages` 3종을 배열 리터럴로 나란히 적지 않으려고 길이 가드 +
+    // `toContain()`으로 푼 것과 같은 이유다. 그 기존 관례를 그대로 따른다 —
+    // 리터럴을 물리적으로 쪼개는 방식은 쓰지 않는다. 길이 6 + 서로 다른
+    // 이름 6개의 `toContain`이면 집합이 정확히 고정돼 판정 강도는
+    // `toEqual(정렬된 배열)`과 같다.
+    const names = expected.map((directory) =>
+      relative(repositoryRoot, directory),
+    );
+    expect(names.length).toBe(6);
+    expect(names).toContain("apps/demo");
+    expect(names).toContain("fixtures/consumer");
+    expect(names).toContain("packages/core");
+    expect(names).toContain("packages/io");
+    expect(names).toContain("packages/model");
+    expect(names).toContain("packages/react");
   });
 
   describe("열거 술어가 디렉터리 심링크를 pnpm과 같게 센다", () => {
@@ -655,12 +697,18 @@ describe("workspaceChildDirectories()", () => {
  * 다시 하지 않는다. 이 파일이 소유하는 것은 목록의 단독 소유이고, 게이트가 그
  * 목록을 실제로 훑는지는 저쪽의 계약이다.
  *
- * 사본 축은 둘이다(완료 조건 5) — glob 축은 `WORKSPACE_PACKAGE_GLOBS`의 원소를,
- * 루트 이름 축은 `WORKSPACE_ROOTS`의 원소를 판정 토큰으로 쓴다. glob 축은 이
- * 모듈 자신의 리터럴을 잡아 1건을 기대하고, 루트 이름 축은 리터럴이 더는
- * 존재하지 않으므로(`WORKSPACE_ROOTS`는 파생값이다) 0건을 기대한다.
+ * 사본 축은 셋이다(완료 조건 5, DELTA-06이 headless 축을 더했다) — glob 축은
+ * `WORKSPACE_PACKAGE_GLOBS`의 원소를, 루트 이름 축은 `WORKSPACE_ROOTS`의
+ * 원소를, headless 축은 `scripts/headless-packages.mjs`가 단독 소유하는
+ * `HEADLESS_PACKAGES`의 원소를 판정 토큰으로 쓴다. glob 축과 headless 축은
+ * 각각 자기 원본 모듈의 리터럴을 잡아 1건을 기대하고, 루트 이름 축은 리터럴이
+ * 더는 존재하지 않으므로(`WORKSPACE_ROOTS`는 파생값이다) 0건을 기대한다.
+ * headless 목록 자체는 이 파일이 소유하는 모듈(`workspace-roots.mjs`)의
+ * 것이 아니지만, 사본 탐지 술어(`tokensInOneArrayLiteral` 등)를 이 파일이
+ * 이미 단독 소유하므로 그 술어를 다른 파일에 복제하지 않고 여기 세 번째
+ * 토큰 축으로 더한다(`PIT-0022`).
  */
-describe("workspace 패키지 glob·루트 이름 목록의 단독 소유", () => {
+describe("workspace 패키지 glob·루트 이름 목록·headless 목록의 단독 소유", () => {
   it("scripts/의 스크립트가 빠짐없이 이 모듈에서 목록을 import한다", () => {
     const scripts = consumerScriptPaths();
 
@@ -711,5 +759,24 @@ describe("workspace 패키지 glob·루트 이름 목록의 단독 소유", () =
     // `WORKSPACE_ROOTS`는 이제 파생값이라 리터럴로 적힌 곳이 없어야 한다 —
     // 리터럴로 되돌리는 사본이 생기면 여기서 잡는다.
     expect(copies).toEqual([]);
+  });
+
+  it("headless 목록 배열 리터럴을 가진 추적 소스 파일이 이 모듈 하나뿐이다", () => {
+    const sources = trackedSourcePaths();
+
+    expect(sources.length).toBeGreaterThan(0);
+    const copies = sources.filter(
+      (path) =>
+        tokensInOneArrayLiteral(
+          readFileSync(join(repositoryRoot, path), "utf8"),
+          HEADLESS_PACKAGES,
+        ) >= arrayLiteralCopyThreshold,
+    );
+
+    // glob 축과 같은 형태다 — `HEADLESS_PACKAGES`는 (glob 목록과 달리) 파생값이
+    // 아니라 리터럴이므로, 원본이 있는 `scripts/headless-packages.mjs` 하나만
+    // 기대한다. 사본이 늘어나는 방향뿐 아니라 원본이 사라지는 방향도 함께
+    // 잡으려고 부분집합이 아니라 집합 자체를 단언한다.
+    expect(copies).toEqual([headlessPackagesModulePath]);
   });
 });

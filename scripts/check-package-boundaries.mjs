@@ -2,6 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import process from "node:process";
 
+import {
+  HEADLESS_FORBIDDEN,
+  headlessPackageDirectories,
+} from "./headless-packages.mjs";
 import { workspacePackageDirectories } from "./workspace-roots.mjs";
 
 const workspaceRoot = resolve(import.meta.dirname, "..");
@@ -109,11 +113,15 @@ const resolveDeclarationPath = (sourcePath, specifier) => {
   return candidates.find((candidate) => existsSync(candidate));
 };
 
+// packageManifestPaths 구성과 headless 판정 양쪽이 이 열거를 공유한다 —
+// workspacePackageDirectories()를 두 번 돌지 않는다.
+const enumeratedPackageDirectories = workspacePackageDirectories(workspaceRoot);
+
 // 루트 매니페스트는 workspace 패키지가 아니므로 열거에 걸리지 않는다. 여기서
 // 시드로 넣는다. 나머지는 저장소 상대 경로로 바꿔 실패 메시지에 그대로 쓴다.
 const packageManifestPaths = [
   "package.json",
-  ...workspacePackageDirectories(workspaceRoot).map((directory) =>
+  ...enumeratedPackageDirectories.map((directory) =>
     relative(workspaceRoot, resolve(directory, "package.json")),
   ),
 ];
@@ -151,17 +159,17 @@ for (const manifestPath of packageManifestPaths.sort()) {
   }
 }
 
-for (const packagePath of ["packages/model", "packages/io"]) {
-  const manifestPath = `${packagePath}/package.json`;
+for (const directory of headlessPackageDirectories(workspaceRoot, {
+  enumeratedDirectories: enumeratedPackageDirectories,
+})) {
+  const manifestPath = relative(
+    workspaceRoot,
+    resolve(directory, "package.json"),
+  );
   const manifest = readJson(resolve(workspaceRoot, manifestPath));
   for (const section of productionDependencySections) {
     for (const name of Object.keys(manifest[section] ?? {})) {
-      if (
-        name === "react" ||
-        name === "react-dom" ||
-        name.startsWith("@tiptap/") ||
-        name.startsWith("prosemirror-")
-      ) {
+      if (HEADLESS_FORBIDDEN.some((isForbidden) => isForbidden(name))) {
         failures.push(
           `${manifestPath}#${section}.${name} crosses the headless boundary`,
         );
