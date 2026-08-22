@@ -348,8 +348,8 @@ const findBlockStart = (masked, start) => {
 /**
  * `function`·`class` 토큰이 선언 자리인지 뒤 토큰으로 가른다. 이 검사가 없으면
  * `{ class: null }` 같은 **프로퍼티 이름**이 선언으로 읽히고, 뒤에서 아무
- * `{`나 블록 시작으로 잡아 그 안의 헬퍼를 통째로 제외 범위에 넣는다 —
- * `editor-controller-links.test.ts:174`가 실제로 그 형태다.
+ * `{`나 블록 시작으로 잡아 그 안의 헬퍼를 통째로 제외 범위에 넣는다. 이
+ * 저장소의 테스트 코드에 실제로 그 형태가 있다 — 가상의 위험이 아니다.
  *
  * 선언 자리에서 뒤에 올 수 있는 것은 이름, 익명 클래스·함수의 `{`·`(`,
  * 제너레이터의 `*`뿐이다. `:`나 `,`가 오면 프로퍼티 이름이다.
@@ -737,15 +737,21 @@ export const scanDirectories = (directories) =>
  * "후보를 하나도 못 모았다" 둘 다에서 나오고, 계약 테스트가 그 둘을 가르려면
  * 수집 결과를 직접 봐야 한다.
  *
- * @returns {string[]} 저장소 상대 디렉터리 경로 목록
+ * **정렬해 돌려준다.** 정렬이 없으면 반환 순서가 `WORKSPACE_ROOTS`의 나열
+ * 순서와 `readdirSync`의 반환 순서를 그대로 드러내고, 그 순서가 차집합을 거쳐
+ * `main()`의 보고 줄 순서로 나온다 — 실측: 목록 밖 디렉터리를 두 루트에 하나씩
+ * 만들어 두면 루트 목록의 나열 순서를 바꾸는 것만으로 보고 순서가 뒤집힌다.
+ * 정렬이 그 관측 경로를 닫아 루트 목록의 순서를 계약에서 빼고, 보고 줄이
+ * 파일시스템 순서에도 흔들리지 않게 한다.
+ *
+ * @returns {string[]} 저장소 상대 디렉터리 경로 목록. 정렬해 돌려준다.
  */
 export const collectTestDirectoryCandidates = () => {
   const candidates = ["e2e", "tests"];
   for (const workspace of WORKSPACE_ROOTS) {
-    if (!existsSync(resolve(REPOSITORY_ROOT, workspace))) continue;
-    for (const entry of readdirSync(resolve(REPOSITORY_ROOT, workspace), {
-      withFileTypes: true,
-    })) {
+    const workspacePath = resolve(REPOSITORY_ROOT, workspace);
+    if (!existsSync(workspacePath)) continue;
+    for (const entry of readdirSync(workspacePath, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const candidate = join(workspace, entry.name, "test");
       if (existsSync(resolve(REPOSITORY_ROOT, candidate))) {
@@ -753,12 +759,13 @@ export const collectTestDirectoryCandidates = () => {
       }
     }
   }
-  return candidates;
+  return candidates.sort();
 };
 
 /**
  * 목록에 없는 테스트 디렉터리를 찾는다. 빈 배열이 아니면 대상 목록이 실제
- * 트리보다 좁아진 것이다. 반환값은 후보와 같은 저장소 상대 문자열이다.
+ * 트리보다 좁아진 것이다. 반환값은 후보와 같은 저장소 상대 문자열이고, 후보의
+ * 정렬을 그대로 물려받는다.
  *
  * @returns {string[]}
  */

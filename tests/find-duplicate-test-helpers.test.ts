@@ -589,7 +589,7 @@ describe("기본 대상 디렉터리", () => {
     expect(findUnlistedTestDirectories()).toEqual([]);
   });
 
-  it("후보 수집이 e2e·tests와 workspace 아래 test 디렉터리를 저장소 상대 경로로 모은다", () => {
+  it("후보 수집이 e2e·tests와 workspace 아래 test 디렉터리를 저장소 상대 경로로 정렬해 모은다", () => {
     const candidates = collectTestDirectoryCandidates();
 
     expect(candidates).toContain("e2e");
@@ -598,6 +598,18 @@ describe("기본 대상 디렉터리", () => {
       candidates.filter((candidate) => candidate.endsWith("/test")),
     ).not.toEqual([]);
     expect(candidates.filter((candidate) => isAbsolute(candidate))).toEqual([]);
+
+    // 정렬을 계약으로 고정한다. 정렬 단언만 두면 수집 순서가 우연히 정렬돼 있을
+    // 때 공허하게 참이 되므로, 정렬이 없을 때 실제로 갈리는 자리를 먼저 단언한다
+    // — 수집은 `e2e`·`tests`를 먼저 담고 workspace 아래를 뒤에 담으므로, 정렬이
+    // 없으면 `tests`가 `packages/*/test`보다 앞에 온다.
+    const firstPackageCandidate = candidates.findIndex((candidate) =>
+      candidate.startsWith("packages/"),
+    );
+
+    expect(firstPackageCandidate).toBeGreaterThan(-1);
+    expect(candidates.indexOf("tests")).toBeGreaterThan(firstPackageCandidate);
+    expect(candidates).toEqual([...candidates].sort());
   });
 
   it("후보 수집 결과가 기본 대상 디렉터리를 빠짐없이 포함한다", () => {

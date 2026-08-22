@@ -83,7 +83,13 @@ if (failures.length > 0) {
   for (const failure of failures.sort()) console.error(`- ${failure}`);
   process.exitCode = 1;
 } else {
+  // 훑은 매니페스트 수를 함께 싣는다. 이 수가 없으면 게이트가 자기 검사 범위를
+  // 로컬에서 줄여도 — 열거는 그대로 두고 호출 결과만 거르는 식으로 — 성공 출력이
+  // 똑같아 아무도 대조할 수 없다. 문장은 `check-package-boundaries.mjs`의 성공
+  // 줄과 같은 부류로 맞춘다. 두 게이트의 검사 범위 계약
+  // (`tests/workspace-boundaries.test.ts`)이 `across <수> manifests` 하나의
+  // 정규식으로 양쪽을 읽는다.
   console.log(
-    `Verified ${auditedPackages.size} external transitive production packages against the license allowlist.`,
+    `License allowlist verified across ${manifestPaths.length} manifests and ${auditedPackages.size} external transitive production packages.`,
   );
 }

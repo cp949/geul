@@ -10,14 +10,16 @@
  * 컴파일해야 정당하다), JS 소스가 있으면 `allowJs`·`checkJs`를 켜고
  * `include`가 확장자를 거르지 않는지. 셋째는 열거된 workspace 패키지가
  * 빠짐없이 `scripts.typecheck`를 정의하는지 — turbo는 그 정의가 없는 패키지를
- * 대상에서 조용히 빼고 남은 태스크만 실행한다.
+ * 대상에서 조용히 빼고 남은 태스크만 실행한다. 넷째와 다섯째는 경계 게이트와
+ * 라이선스 게이트가 각각 그 열거를 실제로 훑는지 — 게이트를 실행해 출력이
+ * 보고하는 매니페스트 수를 열거에서 파생한 기대값과 대조한다.
  */
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   WORKSPACE_ROOTS,
@@ -457,5 +459,149 @@ describe("workspace 패키지의 typecheck 편입", () => {
       .map(({ name }) => name);
 
     expect(missing).toEqual([]);
+  });
+});
+
+/**
+ * `scripts/` 아래의 게이트 스크립트를 자식 프로세스로 돌려 exit code와 출력을
+ * 값으로 돌려준다. `execFileAsync`는 비정상 종료를 예외로 바꾸므로
+ * `compileFixture`와 같은 형태로 잡는다 — 게이트가 진 이유(stderr에 나오는 위반
+ * 목록)를 단언 실패 메시지에 그대로 싣기 위해서다. 게이트는 저장소 루트를
+ * `import.meta.dirname` 기준으로 잡으므로 cwd를 지정하지 않는다.
+ *
+ * 스크립트 이름을 인자로 받는다. 경계 게이트와 라이선스 게이트가 이 함수 하나를
+ * 공유한다 — 게이트마다 같은 try/catch를 다시 적으면 사본이 갈리고, 한쪽만
+ * 고친 뒤 어느 쪽이 옳은지 판단할 근거가 사라진다(`PIT-0022`).
+ */
+const runGate = async (scriptName: string) => {
+  const scriptPath = fileURLToPath(
+    new URL(`../scripts/${scriptName}`, import.meta.url),
+  );
+
+  try {
+    const { stdout } = await execFileAsync(process.execPath, [scriptPath], {
+      maxBuffer: maxStdoutBuffer,
+    });
+    return { exitCode: 0, output: stdout };
+  } catch (error) {
+    const commandError = error as {
+      code: number;
+      stderr: string;
+      stdout: string;
+    };
+    return {
+      exitCode: commandError.code,
+      output: `${commandError.stdout}${commandError.stderr}`,
+    };
+  }
+};
+
+const reportedManifestCount = /across (\d+) manifests/;
+
+/**
+ * 위 describe들과 축이 다르다. 저쪽은 열거의 **결과**를 대조하고, 여기는 게이트가
+ * 그 열거를 실제로 쓰는지를 게이트 자신의 출력으로 확인한다.
+ *
+ * `scripts/check-package-boundaries.mjs`가 `workspacePackageDirectories()`를
+ * 잃으면 — 그 호출을 빈 목록으로 바꾸는 것으로 충분하다 — 루트 매니페스트 하나만
+ * 훑고 나머지를 전부 건너뛴 채 exit 0으로 통과한다. 실측: 그 상태에서
+ * `packages/react`에 금지 접두이면서 비정확 버전인 `xl-foo@^1.0.0`을 넣으면
+ * 정상 게이트는 위반 2건으로 exit 1인데, 열거를 잃은 게이트는
+ * `Verified across 1 manifests`로 exit 0이다. 출력에 남는 유일한 흔적이 매니페스트
+ * 수 하나인데 그때까지 아무도 그 수를 대조하지 않았다.
+ *
+ * 기대값은 트리에서 파생한다. 현재 값을 상수로 적으면 열거가 죽는 것과 같은
+ * 방향으로 이 단언도 함께 썩는다. `+1`은 루트 `package.json` 시드다 — 루트
+ * 매니페스트는 workspace 패키지가 아니라 열거에 걸리지 않으므로 게이트가 직접
+ * 앞에 붙인다. 그 시드가 사라져도 이 단언이 발화한다.
+ *
+ * 두 스크립트가 같은 `workspacePackageDirectories()`를 쓰므로 **공유 함수 자체의
+ * 무력화는 이 단언 하나로도 잡힌다.** 남는 것은 게이트마다의 로컬 무력화라
+ * `scripts/check-licenses.mjs` 쪽은 아래 describe가 따로 진다.
+ *
+ * 이 단언은 `packages/core/dist`의 공개 선언이 있어야 성립한다 — 게이트가 그것까지
+ * 훑고, 없으면 `packages/core/dist/index.d.ts is missing; build packages before
+ * checking boundaries`를 위반으로 세어 exit 1이다(실측). 그래서 이 describe가
+ * `beforeAll`에서 `tsc -b packages/core/tsconfig.json`으로 dist를 직접 만든다.
+ *
+ * 빌드를 다른 곳에 맡기지 않는 이유는 `vitest.config.ts`가 `core`와 `node`
+ * 프로젝트를 나열만 하고 둘 사이의 의존을 선언하지 않기 때문이다. 어느 프로젝트가
+ * 먼저 도는지 보장이 없고, 프로젝트 필터·파일 필터·샤딩은 이 파일만 남길 수 있다 —
+ * 실측으로 dist 없는 트리에서 `vitest run tests/`가 위 메시지로 졌다.
+ *
+ * `tsc -b`는 증분이라 dist가 최신이면 아무것도 다시 만들지 않는다. 실측 소요는
+ * 이 저장소가 고정한 typescript 7.0.2 기준 core만 cold일 때 0.17초, 참조하는
+ * model·io까지 전부 cold일 때 0.22초라 vitest 훅 기본 타임아웃 안에서 끝난다.
+ */
+describe("경계 게이트의 검사 범위", () => {
+  beforeAll(async () => {
+    const tscPath = fileURLToPath(
+      new URL("../node_modules/typescript/bin/tsc", import.meta.url),
+    );
+    const projectPath = fileURLToPath(
+      new URL("../packages/core/tsconfig.json", import.meta.url),
+    );
+
+    await execFileAsync(process.execPath, [tscPath, "-b", projectPath]);
+  });
+
+  it("열거된 workspace 패키지에 루트 매니페스트를 더한 수만큼 훑고 위반 없이 끝난다", async () => {
+    const directories = workspacePackageDirectories(repositoryRoot);
+    const result = await runGate("check-package-boundaries.mjs");
+
+    // 열거가 통째로 죽으면 기대값도 함께 줄어 단언이 무력화를 되뇐다.
+    expect(directories.length).toBeGreaterThan(0);
+    // 위반이 없는 트리라는 전제부터 확인한다. 실패하면 게이트 출력이 그대로
+    // 메시지에 실린다.
+    expect(result.exitCode, result.output).toBe(0);
+    expect(reportedManifestCount.exec(result.output)?.[1], result.output).toBe(
+      String(directories.length + 1),
+    );
+  });
+});
+
+/**
+ * 바로 위 describe의 짝이다. 축은 같고 대상 게이트만 다르다 — 게이트가 열거를
+ * 실제로 쓰는지를 게이트 자신의 출력으로 확인한다.
+ *
+ * 공유 열거(`workspacePackageDirectories()`)의 무력화는 위 describe만으로도
+ * 잡힌다. 여기가 지는 것은 그 함수를 그대로 둔 채 **호출 결과만 로컬에서
+ * 줄이는** 갈래다. 실측: `scripts/check-licenses.mjs`의 `manifestPaths` 계산에
+ * `.filter((directory) => !directory.includes("/fixtures/"))`를 끼우고
+ * `fixtures/consumer`의 `dependencies`에 미승인 `left-pad@1.3.0`을 넣으면, 정상
+ * 게이트는 `... was not found in the production license graph`로 exit 1인데
+ * 무력화된 게이트는 exit 0으로 통과한다. import 구문이 그대로 남아 있어
+ * `tests/workspace-roots.test.ts`의 두 축도 함께 통과한다 — 그 파일의 축 1은
+ * import 구문만, 축 2는 배열 리터럴만 본다.
+ *
+ * `fixtures/consumer`가 그 실험의 대상인 이유는 이 파일의 `allowedDependencies`가
+ * 5개 패키지만 덮고 거기에 없기 때문이다. 다른 패키지에 주입하면 그 리터럴 계약이
+ * 먼저 져서 실험이 오염된다.
+ *
+ * 기대값에 `+1`이 없다. 경계 게이트와 달리 이 게이트는 루트 `package.json`을
+ * 시드로 넣지 않고 열거 결과만 훑는다(실측: 경계 게이트 7, 라이선스 게이트 6).
+ * 시드가 생기면 이 단언이 발화하고, 그때 어느 쪽이 옳은지 사람이 판단한다.
+ *
+ * 게이트가 `pnpm licenses list --prod --json`을 자식 프로세스로 띄워 위 describe의
+ * 게이트보다 느리다. 실측 소요는 3회 연속 1.01·0.96·0.97초로 vitest 기본
+ * testTimeout(5초) 안에서 끝나므로 timeout을 명시하지 않는다 — 이 파일의 다른
+ * 자식 프로세스 테스트들과 같은 처리다.
+ *
+ * 위 describe의 `beforeAll`(=`packages/core/dist` 빌드)이 필요 없어 describe를
+ * 나눴다. 이 게이트는 공개 선언을 훑지 않는다.
+ */
+describe("라이선스 게이트의 검사 범위", () => {
+  it("열거된 workspace 패키지 수만큼 훑고 위반 없이 끝난다", async () => {
+    const directories = workspacePackageDirectories(repositoryRoot);
+    const result = await runGate("check-licenses.mjs");
+
+    // 열거가 통째로 죽으면 기대값도 함께 줄어 단언이 무력화를 되뇐다.
+    expect(directories.length).toBeGreaterThan(0);
+    // 위반이 없는 트리라는 전제부터 확인한다. 실패하면 게이트 출력이 그대로
+    // 메시지에 실린다.
+    expect(result.exitCode, result.output).toBe(0);
+    expect(reportedManifestCount.exec(result.output)?.[1], result.output).toBe(
+      String(directories.length),
+    );
   });
 });
