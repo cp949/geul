@@ -18,10 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BlockSideMenu } from "../src/block-side-menu.js";
 import { mountBlockEditor } from "./mount-editor.js";
 
-// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
-// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
-// getByRole("menu")가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
-// slash-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+// @testing-library/react는 전역 afterEach가 함수일 때만 자동 cleanup을
+// 등록한다(dist/index.js의 typeof afterEach === "function" 분기). vitest는
+// globals: true일 때만 그 전역을 노출하는데 저장소 루트 vitest.config.ts에는
+// globals도 setupFiles도 없어 자동 cleanup이 없다(실측: 이 설정에서
+// typeof globalThis.afterEach === "undefined"). 각 it 말미의 unmount로는
+// assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
+// "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
 
 const dragHandleLabel = "Drag to reorder, click for options";
@@ -39,14 +42,19 @@ const renderBlockMenu = (options?: { blockIds?: readonly string[] }) =>
   });
 
 /**
- * 핸들을 hover -> click해 첫 번째 블록의 메뉴를 연다. pointerDown/pointerUp
- * 드래그 시퀀스 없이도 동작한다 — handleHandleClick의 가드는
- * `event.detail !== 0 && suppressedHandleClickBlockIdRef.current === blockId`이고,
- * 이 ref의 초기값은 null이라 fireEvent.click(기본 detail: 0)만으로 가드가
- * 항상 거짓이 되어 click이 곧바로 메뉴 열기로 처리된다. (table-handles.test.tsx의
- * openRowMenu가 pointerDown/pointerUp을 먼저 거치는 것은 같은 describe 블록의
- * 드래그 테스트들과 문체를 맞춘 관례일 뿐, table-handles.tsx의 동일한 가드
- * 구조상 필수는 아니다.)
+ * 핸들을 hover -> click해 첫 번째 블록의 메뉴를 연다.
+ *
+ * pointerMove가 먼저인 이유: 핸들 버튼이 든 거터는 hoverBounds !== null일
+ * 때만 렌더되고(block-side-menu.tsx), hoverBounds는 pointermove가 세우는
+ * hoverBlockId에서만 나온다. handleHandleClick도 hoverBounds === null이면
+ * 즉시 return한다 — hover 없이는 버튼을 찾을 수도 열 수도 없다.
+ *
+ * pointerDown/pointerUp 드래그 시퀀스가 필요 없는 이유: handleHandleClick의
+ * 억제 가드는 event.detail !== 0 && suppressedHandleClickBlockIdRef.current
+ * === blockId다. fireEvent.click의 기본 detail은 0이라(실측 확인) 첫 항이
+ * 이미 거짓이고, 억제 ref는 드래그 종료(pointerup/pointercancel) 경로에서만
+ * 세워지는데 초기값이 null이라 둘째 항도 거짓이다. 가드를 지나 click이
+ * 곧바로 메뉴 열기로 처리된다.
  */
 const openBlockMenu = (options?: { blockIds?: readonly string[] }) => {
   const rendered = renderBlockMenu(options);

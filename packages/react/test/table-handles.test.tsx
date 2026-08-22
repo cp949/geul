@@ -17,10 +17,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TableHandles } from "../src/table-handles.js";
 import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
 
-// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
-// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
-// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
-// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+// @testing-library/react는 전역 afterEach가 함수일 때만 자동 cleanup을
+// 등록한다(dist/index.js의 typeof afterEach === "function" 분기). vitest는
+// globals: true일 때만 그 전역을 노출하는데 저장소 루트 vitest.config.ts에는
+// globals도 setupFiles도 없어 자동 cleanup이 없다(실측: 이 설정에서
+// typeof globalThis.afterEach === "undefined"). 각 it 말미의 unmount로는
+// assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
+// "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
 
 const rowHandleLabel = "Drag to reorder row, click for options";
@@ -95,16 +98,17 @@ const renderResizableTable = () => {
  * 표 노드에 스텁 격자를 씌워 돌려준다. 첫 행만 보고 열 경계를 읽으면 둘째
  * 열 핸들이 사라지는 회귀(PIT-0004)를 만드는 상태다.
  *
- * 병합 명령을 쓰지 않는 이유: mergeTableCells는 CellSelection만을 병합
- * 범위의 권위로 삼는데(editor-controller.ts), CellSelection은 좌표로 셀을
- * 짚어야 만들어지고 jsdom에는 레이아웃이 없어 그 좌표가 없다. 게다가
- * CellSelection을 직접 세우려면 @tiptap/pm이 필요한데 packages/react는
- * Tiptap에 의존할 수 없다(ADR-0002). 그래서 모델을 직접 만들어
- * replaceDocument로 심는다 — 컨트롤러도 명령도 진짜다
- * (table-handle-menu.test.tsx의 replaceWithRowSpanMergedTable과 같은 기법).
+ * 병합 명령을 쓰지 않는 이유: mergeTableCells는 인자 좌표가 아니라 현재
+ * CellSelection만을 병합 범위의 권위로 삼는데(editor-controller.ts),
+ * CellSelection은 좌표로 셀을 짚어야 만들어지고 jsdom에는 레이아웃이 없어
+ * 그 좌표가 없다. 게다가 CellSelection을 직접 세우려면 @tiptap/pm/tables가
+ * 필요한데 packages/react는 Tiptap에 의존할 수 없다(ADR-0002) —
+ * package.json dependencies에 없어 여기서는 해석조차 되지 않는다(실측:
+ * MODULE_NOT_FOUND). columnSpan은 문서 필드라 모델을 직접 만들어
+ * replaceDocument로 심을 수 있다 — 컨트롤러도 명령도 진짜다.
  *
- * replaceDocument는 표 노드를 통째로 다시 만들어 mountTableEditor가 잡아둔
- * table 참조를 문서에서 떼어낸다(실측 확인) — 그래서 표를 다시 찾아
+ * replaceDocument는 tiptap 편집기를 통째로 다시 만들어 마운트 시점의 table·
+ * editable 참조를 문서에서 떼어낸다(실측 확인) — 그래서 표를 다시 찾아
  * 돌려준다. 스텁도 restubGeometry가 아니라 여기서 직접 씌운다: 병합된 첫
  * 행은 셀이 하나뿐이라 "모든 행이 열 개수만큼 셀을 갖는다"는 그쪽 격자
  * 전제가 깨진다.

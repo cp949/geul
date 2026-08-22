@@ -316,10 +316,14 @@ export type MountedTableEditor = {
  * 한 테스트에서 두 번 부르지 마라. host를 getByRole로 찾으므로 두 번째
  * 호출은 "multiple elements" 오류가 된다.
  *
- * 반환값의 `table`은 마운트 시점 노드다 — replaceDocument는 표 노드를
- * 통째로 다시 만들어 이 참조를 문서에서 떼어낸다(실측 확인). 그런 테스트는
- * 표를 host에서 다시 찾아 써라. `restubGeometry`는 그 경우에도 동작한다 —
- * 캡처한 참조가 아니라 tableBlockId로 매번 다시 찾아 스텁한다.
+ * 반환값의 `table`과 `editable`은 마운트 시점 노드다 — replaceDocument는
+ * tiptap 편집기를 통째로 다시 만들어 다시 마운트하므로 둘 다 문서에서
+ * 떨어진다(실측 확인: replaceDocument 뒤 table.isConnected === false,
+ * editable.isConnected === false, host.isConnected === true). 살아남는 것은
+ * `host`뿐이니 replaceDocument를 쓰는 테스트는 표도 편집 영역도 host에서
+ * 다시 찾아 써라 — 떨어진 `editable`을 그대로 쓰면 조용히 detached 노드를
+ * 때리고 rect도 0이 된다. `restubGeometry`는 그 경우에도 동작한다 — 캡처한
+ * 참조가 아니라 tableBlockId로 매번 다시 찾아 스텁한다.
  */
 export const mountTableEditor = ({
   rows = 2,
@@ -385,9 +389,10 @@ export const mountTableEditor = ({
    * 포함)에 항상 이 에러로 죽는다.
    *
    * 표는 마운트 시점 참조가 아니라 tableBlockId로 매번 다시 찾는다.
-   * replaceDocument는 표 노드를 통째로 다시 만들어 캡처한 참조를 문서에서
-   * 떼어내는데(실측 확인), 그 참조에 스텁을 씌우면 아무 데도 붙지 않은
-   * 노드를 칠하고 테스트는 rect가 0인 채로 굴러간다.
+   * replaceDocument는 tiptap 편집기를 통째로 다시 만들어 마운트 시점의
+   * table·editable 참조를 문서에서 떼어내는데(실측 확인), 그 참조에 스텁을
+   * 씌우면 아무 데도 붙지 않은 노드를 칠하고 테스트는 rect가 0인 채로
+   * 굴러간다.
    */
   const restubGeometry = () => {
     const currentTable = host.querySelector<HTMLElement>(

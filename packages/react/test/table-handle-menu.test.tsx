@@ -18,10 +18,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TableHandles } from "../src/table-handles.js";
 import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
 
-// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
-// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
-// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
-// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+// @testing-library/react는 전역 afterEach가 함수일 때만 자동 cleanup을
+// 등록한다(dist/index.js의 typeof afterEach === "function" 분기). vitest는
+// globals: true일 때만 그 전역을 노출하는데 저장소 루트 vitest.config.ts에는
+// globals도 setupFiles도 없어 자동 cleanup이 없다(실측: 이 설정에서
+// typeof globalThis.afterEach === "undefined"). 각 it 말미의 unmount로는
+// assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
+// "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
 
 const rowHandleLabel = "Drag to reorder row, click for options";
@@ -111,9 +114,10 @@ const rowsOf = (editor: EditorController) => tableBlockOf(editor).rows;
  * 짚어야 만들어지고 jsdom에는 레이아웃이 없어 그 좌표가 없다. 그래서 모델을
  * 직접 만들어 replaceDocument로 심는다 — 컨트롤러도 명령도 진짜다.
  *
- * replaceDocument는 표 노드를 통째로 다시 만들어 mountTableEditor가 잡아둔
- * table 엘리먼트를 문서에서 떼어낸다 — 그래서 표를 다시 찾아 돌려준다.
- * rect는 restubGeometry가 다시 씌운다(그쪽도 tableBlockId로 다시 찾는다).
+ * replaceDocument는 tiptap 편집기를 통째로 다시 만들어 마운트 시점의 table·
+ * editable 참조를 문서에서 떼어낸다(실측 확인) — 그래서 표를 다시 찾아
+ * 돌려준다. rect는 restubGeometry가 다시 씌운다(그쪽도 tableBlockId로 다시
+ * 찾는다).
  */
 const replaceWithRowSpanMergedTable = (
   rendered: ReturnType<typeof renderRealTable>,
@@ -246,7 +250,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
   });
 
-  // openColumnMenu(:95)는 clickFirstColumnHandle(:78)에 위임하고, 그쪽이
+  // openColumnMenu는 clickFirstColumnHandle에 위임하고, 그쪽이
   // getAllByRole(...)[0]으로 첫 열만 잡는다 — 둘째 열을 보려면 이 헬퍼를
   // 쓸 수 없고 핸들을 [1]로 직접 잡아야 한다.
   it("둘째 열 메뉴에는 헤더 토글 항목이 없다", () => {

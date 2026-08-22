@@ -28,10 +28,13 @@ import {
 import { queryMountedEditable } from "./query-mounted-editable.js";
 import { fireSelectionChange } from "./selection-events.js";
 
-// vitest.config.ts에 globals도 setupFiles도 없어 자동 cleanup이 없다. 각 it
-// 말미의 unmount로는 assertion이 먼저 던질 때 DOM이 남아 다음 테스트의
-// getByRole(...)가 "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
-// block-side-menu.test.tsx와 같은 afterEach(cleanup)을 쓴다.
+// @testing-library/react는 전역 afterEach가 함수일 때만 자동 cleanup을
+// 등록한다(dist/index.js의 typeof afterEach === "function" 분기). vitest는
+// globals: true일 때만 그 전역을 노출하는데 저장소 루트 vitest.config.ts에는
+// globals도 setupFiles도 없어 자동 cleanup이 없다(실측: 이 설정에서
+// typeof globalThis.afterEach === "undefined"). 각 it 말미의 unmount로는
+// assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
+// "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
 
 const mergeLabel = "Merge cells";
@@ -254,8 +257,7 @@ const cellOf = (editor: EditorController, cellId: string) =>
  * 병합 명령을 쓰지 않는 이유: mergeTableCells는 CellSelection만을 병합
  * 범위의 권위로 삼는데(editor-controller.ts) react에서는 CellSelection을
  * 만들 수 없다(위 fakeController 주석). rowSpan/columnSpan은 문서 필드이므로
- * 모델을 직접 만들어 replaceDocument로 심는다 — 컨트롤러도 명령도 진짜다
- * (table-handles.test.tsx의 replaceWithColumnSpanMergedTable과 같은 기법).
+ * 모델을 직접 만들어 replaceDocument로 심는다 — 컨트롤러도 명령도 진짜다.
  *
  * replaceDocument는 tiptap 편집기를 통째로 다시 만들어 마운트 시점의 table·
  * editable 참조를 문서에서 떼어낸다(실측 확인) — 그래서 둘 다 다시 찾아
