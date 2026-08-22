@@ -1,21 +1,33 @@
 /**
  * workspace 패키지 간 의존성 경계와, workspace glob 밖 최상위 소스
- * 디렉터리의 typecheck 편입을 검증하는 계약.
+ * 디렉터리의 typecheck 편입, 그리고 workspace 안 패키지의 typecheck 편입을
+ * 검증하는 계약.
  *
- * 전자는 허용/금지 의존성 목록과 DOM 전역 차단을 대조한다. 후자는
+ * 첫째는 허용/금지 의존성 목록과 DOM 전역 차단을 대조한다. 둘째는
  * `git ls-files`로 발견한 디렉터리마다 셋을 대조한다 — 전용 tsconfig.json과
  * 루트 typecheck 체인 연결, tsc `--listFilesOnly`가 그 디렉터리의 추적 소스를
  * 실제 컴파일 대상에 넣는지(빠진 파일은 같은 디렉터리의 다른 tsconfig가
  * 컴파일해야 정당하다), JS 소스가 있으면 `allowJs`·`checkJs`를 켜고
- * `include`가 확장자를 거르지 않는지.
+ * `include`가 확장자를 거르지 않는지. 셋째는 열거된 workspace 패키지가
+ * 빠짐없이 `scripts.typecheck`를 정의하는지 — turbo는 그 정의가 없는 패키지를
+ * 대상에서 조용히 빼고 남은 태스크만 실행한다.
  */
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
-import { WORKSPACE_ROOTS } from "../scripts/workspace-roots.mjs";
+import {
+  WORKSPACE_ROOTS,
+  workspacePackageDirectories,
+} from "../scripts/workspace-roots.mjs";
+
+// 저장소 루트를 cwd가 아니라 이 파일 위치로 잡는다. 이 파일의 다른 헬퍼가
+// 전부 `import.meta.url` 기준이고, cwd 상대면 잘못된 cwd에서 열거가 빈
+// 집합이 돼 단언이 공허하게 통과한다.
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 
 const readPackage = async (name: string) =>
   JSON.parse(
@@ -396,5 +408,54 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
         `${directory}/tsconfig.json include: ${JSON.stringify(patterns)}`,
       ).toBe(true);
     }
+  });
+});
+
+/**
+ * 바로 위 describe의 짝이다. 저쪽은 workspace **밖** 디렉터리를 다루면서
+ * "workspace **안**은 turbo가 덮는다"를 말없이 전제하는데, 그 전제를 지는
+ * 것이 없었다. 여기가 진다.
+ *
+ * `turbo run typecheck`는 그 태스크를 **정의한 패키지에서만** 돈다. 워크스페이스
+ * 패키지가 `scripts.typecheck`를 잃으면 turbo는 그 패키지를 대상에서 조용히
+ * 빼고 남은 태스크만 실행해 exit 0으로 통과한다 — 실측으로 `apps/demo`의
+ * `scripts.typecheck`를 지우면 `Tasks: 9 successful, 9 total`에 exit 0이고,
+ * `--dry=json`은 그 태스크를 계속 나열하되 `command`만 `<NONEXISTENT>`로
+ * 바뀐다. 게이트 출력에 남는 차이가 태스크 수 하나뿐이라 아무도 보지 않는다.
+ * 그 패키지의 타입 오류는 그때부터 영영 보고되지 않는다.
+ *
+ * 열거 자체의 계약(`pnpm-workspace.yaml`이 선언한 루트와
+ * `workspacePackageDirectories()`가 찾는 디렉터리 집합이 같은지)은
+ * `tests/workspace-roots.test.ts`가 단독으로 진다. 여기서 매니페스트를 다시
+ * 파싱해 같은 대조를 쓰면 계약의 주인이 둘이 된다(`PIT-0022`). 대신 발견
+ * 개수 가드를 둔다 — 열거가 통째로 죽으면 빈 집합 순회가 아무 단언도 실행하지
+ * 않은 채 통과한다.
+ *
+ * 단언 대상은 `typecheck` 하나다. `build`나 `test`로 넓히지 않는다 —
+ * `fixtures/consumer`는 `typecheck` 단일 스크립트만 가진 패키지라 즉시 거짓
+ * 실패한다.
+ */
+describe("workspace 패키지의 typecheck 편입", () => {
+  it("열거된 패키지가 빠짐없이 비어 있지 않은 typecheck 스크립트를 정의한다", async () => {
+    const directories = workspacePackageDirectories(repositoryRoot);
+    const packages = await Promise.all(
+      directories.map(async (directory) => {
+        const name = relative(repositoryRoot, directory);
+        return { name, scripts: (await readPackage(name)).scripts ?? {} };
+      }),
+    );
+
+    expect(packages.length).toBeGreaterThan(0);
+    // 빠진 패키지 이름이 실패 메시지에 그대로 남도록 불리언이 아니라 목록으로
+    // 단언한다.
+    const missing = packages
+      .filter(
+        ({ scripts }) =>
+          typeof scripts.typecheck !== "string" ||
+          scripts.typecheck.length === 0,
+      )
+      .map(({ name }) => name);
+
+    expect(missing).toEqual([]);
   });
 });
