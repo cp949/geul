@@ -26,7 +26,7 @@
 | 3 | `/a-handoff-run` | `<작업폴더>` | 리뷰-수정 커밋, 핸드오프에 리뷰 결과 |
 | 4 | `/a-merge-dev` | `[작업폴더]` | `pnpm verify` → squash → `dev` ff-only 이전 → 브랜치 삭제 |
 | 5 | `/a-final-report` | `<작업폴더>` | `final-report.md`와 완료 댓글 초안 |
-| 6 | `/a-issue-publish` | `[작업폴더]` | 초안을 GitHub에 등록 |
+| 6 | `/a-issue-publish` | `[작업폴더]` | 초안을 GitHub에 등록하고 완료한 이슈를 종료 |
 | — | `/a-wip` | `[작업폴더]` | 현황 조회(읽기 전용) |
 
 `/a-merge-dev`는 인자가 없으면 현재 브랜치로 작업 폴더를 역추적한다. `/a-issue-publish`는 인자가 없으면 전체 초안을 대상으로 한다. 작업 폴더 이름을 모르면 인자 없는 `/a-wip`으로 목록을 얻는다.
