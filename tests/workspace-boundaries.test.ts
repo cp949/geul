@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
-import { WORKSPACE_ROOTS } from "../scripts/find-duplicate-test-helpers.mjs";
+import { WORKSPACE_ROOTS } from "../scripts/workspace-roots.mjs";
 
 const readPackage = async (name: string) =>
   JSON.parse(
@@ -151,12 +151,11 @@ const typecheckedExtension = /\.(?:m|c)?[jt]sx?$/;
  * `git ls-files`로 추적 파일을 훑어 워크스페이스 루트(`WORKSPACE_ROOTS`) 밖에서
  * typecheck 대상 확장자(`.js`/`.mjs`/`.cjs`/`.ts`/`.jsx`/`.tsx`)를 가진 최상위
  * 디렉터리를 찾는다. 워크스페이스 루트를 이 파일에 리터럴로 다시 적지 않고
- * `scripts/find-duplicate-test-helpers.mjs`의 `WORKSPACE_ROOTS`를 재사용한다 —
- * 그 상수는 `tests/find-duplicate-test-helpers.test.ts`가 이미
- * `pnpm-workspace.yaml`과의 어긋남을 잡는 계약 테스트로 감시한다. 여기서
- * 세 번째 사본을 새로 만들면 `pnpm-workspace.yaml`에서 루트가 빠져도 이
- * 테스트만 조용히 옛 목록을 계속 써 그 디렉터리를 영영 제외하는 사각지대가
- * 생긴다 — 이 테스트가 막으려는 것과 같은 형태다.
+ * `scripts/workspace-roots.mjs`의 `WORKSPACE_ROOTS`를 재사용한다 — 그 상수는
+ * `tests/workspace-roots.test.ts`가 `pnpm-workspace.yaml`과의 어긋남을 잡는
+ * 계약 테스트로 감시한다. 여기서 사본을 새로 만들면 `pnpm-workspace.yaml`에서
+ * 루트가 빠져도 이 테스트만 조용히 옛 목록을 계속 써 그 디렉터리를 영영
+ * 제외하는 사각지대가 생긴다 — 이 테스트가 막으려는 것과 같은 형태다.
  */
 const trackedTopLevelSourceDirectories = async () => {
   const { stdout } = await execFileAsync("git", ["ls-files"], {

@@ -70,15 +70,16 @@
  * "대상 glob이 react 전용이었다"였고, 목록을 손으로 관리하면 같은 방식으로
  * 다시 죽는다.
  *
- * 그 보고가 훑는 범위(`WORKSPACE_ROOTS`) 또한 리터럴이므로, `pnpm-workspace.yaml`과
- * 어긋나지 않는지를 회귀 테스트가 대조한다. 감시 장치의 감시 범위가 조용히
- * 좁아지면 감시 장치가 없는 것과 같다.
+ * 그 보고가 훑는 범위(`WORKSPACE_ROOTS`)는 `scripts/workspace-roots.mjs`가
+ * 소유한다 — 왜 리터럴이고 무엇이 그것을 감시하는지도 그 파일에 있다.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+
+import { WORKSPACE_ROOTS } from "./workspace-roots.mjs";
 
 /**
  * @typedef {object} HelperDeclaration
@@ -102,14 +103,6 @@ export const DEFAULT_TARGET_DIRECTORIES = [
   "e2e",
   "tests",
 ];
-
-/**
- * `pnpm-workspace.yaml`의 `packages:` 목록과 같아야 한다. 여기가 어긋나면
- * 새 workspace 루트 아래의 테스트 디렉터리를 "목록에 없음"으로도 보고하지
- * 못해, 대상 목록이 조용히 트리보다 좁아진다.
- * `tests/find-duplicate-test-helpers.test.ts`가 두 목록을 대조한다.
- */
-export const WORKSPACE_ROOTS = ["packages", "apps", "fixtures"];
 
 const MINIMUM_NORMALIZED_LINES = 2;
 // sha1 앞 10자 = 40비트. 선언 수가 수백 규모라 우연 충돌 확률이 1e-8 아래다.

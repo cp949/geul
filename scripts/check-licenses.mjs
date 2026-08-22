@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import process from "node:process";
+
+import { workspacePackageDirectories } from "./workspace-roots.mjs";
 
 const workspaceRoot = resolve(import.meta.dirname, "..");
 const allowed = new Set([
@@ -54,16 +56,9 @@ const productionSections = [
   "peerDependencies",
   "optionalDependencies",
 ];
-const manifestPaths = [];
-for (const directory of ["apps", "fixtures", "packages"]) {
-  const directoryPath = resolve(workspaceRoot, directory);
-  if (!existsSync(directoryPath)) continue;
-  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
-    const manifestPath = resolve(directoryPath, entry.name, "package.json");
-    if (entry.isDirectory() && existsSync(manifestPath))
-      manifestPaths.push(manifestPath);
-  }
-}
+const manifestPaths = workspacePackageDirectories(workspaceRoot).map(
+  (directory) => resolve(directory, "package.json"),
+);
 
 for (const manifestPath of manifestPaths) {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));

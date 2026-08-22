@@ -7,8 +7,6 @@
  * 없다"는 잘못된 증거를 만든다. 여기서는 무엇을 헬퍼로 세는지, 어디까지
  * 정규화하는지, 어떤 것을 상수로 보고 버리는지를 고정한다.
  */
-import { readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -16,7 +14,6 @@ import {
   DEFAULT_TARGET_DIRECTORIES,
   findUnlistedTestDirectories,
   groupDuplicates,
-  WORKSPACE_ROOTS,
 } from "../scripts/find-duplicate-test-helpers.mjs";
 
 /**
@@ -39,22 +36,6 @@ const sameHash = (source: string) => {
   const declarations = collect(source);
   expect(declarations).toHaveLength(2);
   return declarations[0]?.hash === declarations[1]?.hash;
-};
-
-/**
- * `pnpm-workspace.yaml`의 `packages:` 블록에서 workspace 루트 이름을 뽑는다.
- * 탐지기는 이 루트 아래를 훑어 "대상 목록에 없는 테스트 디렉터리"를 보고하는데,
- * 그 루트 목록이 스크립트 안에 리터럴로 박혀 있다. 새 루트가 workspace에
- * 추가되면 탐지기가 조용히 그 아래를 보지 못하므로 여기서 어긋남을 잡는다.
- */
-const manifestWorkspaceRoots = () => {
-  const manifest = readFileSync("pnpm-workspace.yaml", "utf8");
-  const block = /^packages:\n((?:[ \t]+-[ \t]+.*\n)+)/m.exec(manifest)?.[1];
-
-  expect(block).toBeDefined();
-  return [...(block ?? "").matchAll(/-[ \t]+["']?([^"'\s]+)["']?/g)].map(
-    (match) => (match[1] ?? "").replace(/\/\*+$/, ""),
-  );
 };
 
 describe("헬퍼 선언 수집", () => {
@@ -555,11 +536,5 @@ describe("기본 대상 디렉터리", () => {
 
   it("저장소의 모든 테스트 디렉터리가 기본 대상에 들어 있다", () => {
     expect(findUnlistedTestDirectories()).toEqual([]);
-  });
-
-  it("훑는 workspace 루트가 pnpm-workspace.yaml의 목록과 같다", () => {
-    expect([...WORKSPACE_ROOTS].sort()).toEqual(
-      manifestWorkspaceRoots().sort(),
-    );
   });
 });
