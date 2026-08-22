@@ -6,15 +6,49 @@
  * 이 탐지기는 그 자리를 대신하므로, 스스로가 놓치거나 잘못 잡으면 "중복이
  * 없다"는 잘못된 증거를 만든다. 여기서는 무엇을 헬퍼로 세는지, 어디까지
  * 정규화하는지, 어떤 것을 상수로 보고 버리는지를 고정한다.
+ *
+ * 대상 목록 감시(`describe("기본 대상 디렉터리")`)는 한 갈래를 더 진다 —
+ * 후보 수집이 cwd에 걸리면 잘못된 cwd에서 후보가 0건이 되고 "목록 밖 없음"이
+ * 공허하게 참이 된다. 그래서 수집 자체를 관측하고, cwd를 바꾼 자식 프로세스
+ * 두 벌을 대조한다.
  */
+import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
+import { isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 import {
   collectHelperDeclarations,
+  collectTestDirectoryCandidates,
   DEFAULT_TARGET_DIRECTORIES,
   findUnlistedTestDirectories,
   groupDuplicates,
 } from "../scripts/find-duplicate-test-helpers.mjs";
+
+const execFileAsync = promisify(execFile);
+
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+
+// 자식에게는 파일 경로가 아니라 URL을 넘긴다. `import`가 URL을 cwd로 해석하지
+// 않으므로 두 자식 사이에서 달라지는 것이 cwd 하나뿐임이 보장된다.
+const detectorModuleUrl = new URL(
+  "../scripts/find-duplicate-test-helpers.mjs",
+  import.meta.url,
+).href;
+
+// 자식이 실행할 프로그램. 후보 수집과 차집합을 함께 찍는다 — 차집합만 보면
+// "전부 목록에 있다"와 "후보를 하나도 못 모았다"가 똑같이 빈 배열이다.
+const detectorProbeSource = [
+  "const detector = await import(process.env.DETECTOR_MODULE_URL);",
+  "process.stdout.write(",
+  "  JSON.stringify({",
+  "    candidates: detector.collectTestDirectoryCandidates(),",
+  "    unlisted: detector.findUnlistedTestDirectories(),",
+  "  }),",
+  ");",
+].join("\n");
 
 /**
  * 인라인 fixture 소스에서 헬퍼 선언을 수집한다.
@@ -36,6 +70,23 @@ const sameHash = (source: string) => {
   const declarations = collect(source);
   expect(declarations).toHaveLength(2);
   return declarations[0]?.hash === declarations[1]?.hash;
+};
+
+/**
+ * 주어진 cwd에서 탐지기를 자식 프로세스로 import해 후보 수집과 목록 밖 결과를
+ * 받는다. 저장소 루트 실행도 굳이 자식으로 띄운다 — 한쪽만 in-process로 하면
+ * 두 결과가 cwd와 실행 방식 둘 다 다른 값이 되어 cwd 의존을 단독으로 짚지
+ * 못한다. `process.chdir`는 쓰지 않는다: 프로세스 전역이라 같은 워커의 다른
+ * 테스트를 오염시킨다.
+ */
+const detectorReportFrom = async (cwd: string) => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["--input-type=module", "-e", detectorProbeSource],
+    { cwd, env: { ...process.env, DETECTOR_MODULE_URL: detectorModuleUrl } },
+  );
+
+  return JSON.parse(stdout) as { candidates: string[]; unlisted: string[] };
 };
 
 describe("헬퍼 선언 수집", () => {
@@ -536,5 +587,35 @@ describe("기본 대상 디렉터리", () => {
 
   it("저장소의 모든 테스트 디렉터리가 기본 대상에 들어 있다", () => {
     expect(findUnlistedTestDirectories()).toEqual([]);
+  });
+
+  it("후보 수집이 e2e·tests와 workspace 아래 test 디렉터리를 저장소 상대 경로로 모은다", () => {
+    const candidates = collectTestDirectoryCandidates();
+
+    expect(candidates).toContain("e2e");
+    expect(candidates).toContain("tests");
+    expect(
+      candidates.filter((candidate) => candidate.endsWith("/test")),
+    ).not.toEqual([]);
+    expect(candidates.filter((candidate) => isAbsolute(candidate))).toEqual([]);
+  });
+
+  it("후보 수집 결과가 기본 대상 디렉터리를 빠짐없이 포함한다", () => {
+    expect(collectTestDirectoryCandidates()).toEqual(
+      expect.arrayContaining([...DEFAULT_TARGET_DIRECTORIES]),
+    );
+  });
+
+  it("저장소 밖 cwd에서 실행해도 저장소 루트에서 실행한 것과 같은 결과를 낸다", async () => {
+    const [fromRoot, fromOutside] = await Promise.all([
+      detectorReportFrom(repositoryRoot),
+      detectorReportFrom(tmpdir()),
+    ]);
+
+    expect(
+      fromRoot.candidates.filter((candidate) => candidate.endsWith("/test")),
+    ).not.toEqual([]);
+    expect(fromOutside.candidates).toEqual(fromRoot.candidates);
+    expect(fromOutside.unlisted).toEqual(fromRoot.unlisted);
   });
 });

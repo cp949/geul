@@ -72,10 +72,20 @@
  *
  * 그 보고가 훑는 범위(`WORKSPACE_ROOTS`)는 `scripts/workspace-roots.mjs`가
  * 소유한다 — 왜 리터럴이고 무엇이 그것을 감시하는지도 그 파일에 있다.
+ *
+ * ## cwd 의존이 한쪽만 걷힌 이유
+ *
+ * `collectTestDirectoryCandidates()`와 그 위의 `findUnlistedTestDirectories()`만
+ * `REPOSITORY_ROOT` 기준이고, `collectSourcePaths()`와 `main()`은 여전히 cwd
+ * 상대다. 의도한 비대칭이다 — 후자는 CLI 진입점이라 인자로 받은 디렉터리를
+ * 사용자의 cwd 기준으로 해석하는 것이 계약이고, 저장소 루트에서 실행한다.
+ * 전자는 감시 장치라 잘못된 cwd에서 후보가 0건이 되면 "목록 밖 없음"이
+ * 공허하게 참이 되어 감시가 조용히 죽는다 — 감시 장치가 자기 실행 위치에
+ * 따라 아무것도 보지 않으면 없는 것과 같다.
  */
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -103,6 +113,10 @@ export const DEFAULT_TARGET_DIRECTORIES = [
   "e2e",
   "tests",
 ];
+
+// 저장소 루트. 후보 수집의 경로 판정 기준이다. cwd가 아니라 이 파일 위치에서
+// 잡는다 — `check-package-boundaries.mjs`·`check-licenses.mjs`와 같은 형태다.
+const REPOSITORY_ROOT = resolve(import.meta.dirname, "..");
 
 const MINIMUM_NORMALIZED_LINES = 2;
 // sha1 앞 10자 = 40비트. 선언 수가 수백 규모라 우연 충돌 확률이 1e-8 아래다.
@@ -711,26 +725,47 @@ export const scanDirectories = (directories) =>
   );
 
 /**
- * 목록에 없는 테스트 디렉터리를 찾는다. workspace 디렉터리 아래의 `test`와
- * 저장소 루트의 `e2e`·`tests`가 후보다. 빈 배열이 아니면 대상 목록이 실제
- * 트리보다 좁아진 것이다.
+ * 대상 목록과 대조할 테스트 디렉터리 후보를 모은다. workspace 디렉터리 아래의
+ * `test`와 저장소 루트의 `e2e`·`tests`가 후보다.
+ *
+ * 존재 판정은 `REPOSITORY_ROOT` 기준 절대 경로로 하되 **반환값은 저장소 상대
+ * 문자열**이다. 그대로 보고 줄에 실리고, 저장소 상대인
+ * `DEFAULT_TARGET_DIRECTORIES`와 차집합을 취해야 하기 때문이다.
+ *
+ * 차집합이 아니라 수집 결과를 따로 내보내는 이유는 관측 가능성이다.
+ * `findUnlistedTestDirectories()`가 돌려주는 빈 배열은 "전부 목록에 있다"와
+ * "후보를 하나도 못 모았다" 둘 다에서 나오고, 계약 테스트가 그 둘을 가르려면
+ * 수집 결과를 직접 봐야 한다.
+ *
+ * @returns {string[]} 저장소 상대 디렉터리 경로 목록
+ */
+export const collectTestDirectoryCandidates = () => {
+  const candidates = ["e2e", "tests"];
+  for (const workspace of WORKSPACE_ROOTS) {
+    if (!existsSync(resolve(REPOSITORY_ROOT, workspace))) continue;
+    for (const entry of readdirSync(resolve(REPOSITORY_ROOT, workspace), {
+      withFileTypes: true,
+    })) {
+      if (!entry.isDirectory()) continue;
+      const candidate = join(workspace, entry.name, "test");
+      if (existsSync(resolve(REPOSITORY_ROOT, candidate))) {
+        candidates.push(candidate);
+      }
+    }
+  }
+  return candidates;
+};
+
+/**
+ * 목록에 없는 테스트 디렉터리를 찾는다. 빈 배열이 아니면 대상 목록이 실제
+ * 트리보다 좁아진 것이다. 반환값은 후보와 같은 저장소 상대 문자열이다.
  *
  * @returns {string[]}
  */
-export const findUnlistedTestDirectories = () => {
-  const candidates = ["e2e", "tests"];
-  for (const workspace of WORKSPACE_ROOTS) {
-    if (!existsSync(workspace)) continue;
-    for (const entry of readdirSync(workspace, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const candidate = join(workspace, entry.name, "test");
-      if (existsSync(candidate)) candidates.push(candidate);
-    }
-  }
-  return candidates.filter(
+export const findUnlistedTestDirectories = () =>
+  collectTestDirectoryCandidates().filter(
     (candidate) => !DEFAULT_TARGET_DIRECTORIES.includes(candidate),
   );
-};
 
 /**
  * CLI 진입점. 인자를 주면 그 디렉터리만, 주지 않으면 기본 대상을 훑는다.
