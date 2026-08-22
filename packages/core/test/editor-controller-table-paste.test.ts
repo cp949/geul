@@ -281,7 +281,6 @@ describe("에디터 컨트롤러 표", () => {
 
     const document = editor.getDocument();
     const table = firstTableBlockIn(document);
-    expect(table).toBeDefined();
     expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "Alice Smith" }]);
 
     // 붙여넣기 이후에도 다른 명령이 정상 동작해야 한다 — 모델↔에디터가

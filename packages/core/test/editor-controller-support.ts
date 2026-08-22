@@ -48,9 +48,12 @@ export const tableBlockOf = (editor: EditorController) =>
   tableBlockIn(editor.getDocument());
 
 /**
- * 위치를 모르는 표 블록을 찾는다. 붙여넣기처럼 블록 배치가 바뀌는 경로
- * 뒤에서 쓰므로 표의 인덱스를 전제하지 않는다 — 인덱스 고정형인
- * tableBlockIn과 질의가 다른 이유다.
+ * 위치를 모르는 표 블록을 찾는다. 붙여넣기는 표 앞뒤에 문단을 남길 수 있어
+ * 표 인덱스가 고정이 아니다(실측: 문단·표·문단이 섞인 클립보드를 붙여넣은
+ * 문서의 블록 타입이 `["paragraph","paragraph","table","paragraph"]`).
+ * 현재 호출부 2곳은 결과적으로 둘 다 인덱스 1이지만(실측), 인덱스를
+ * 전제하지 않는 것이 이 질의가 tableBlockIn과 갈리는 이유다. 여러 표가 있으면
+ * 문서 순서로 첫 번째를 준다.
  */
 export const firstTableBlockIn = (document: Document) => {
   const block = document.blocks.find((b) => b.type === "table");
@@ -60,13 +63,21 @@ export const firstTableBlockIn = (document: Document) => {
 
 /**
  * 문단 1개 뒤에 rows x columns 표를 넣은 컨트롤러와 그 표의 blockId,
- * 셀 id 목록을 만든다. 기본값 2x2는 이 계열에서 가장 흔한 형태라 크기를
- * 따지지 않는 호출부는 인자 없이 쓴다.
+ * 셀 id 목록을 만든다. 기본값은 2x2다. 크기를 따지지 않는 호출부가 인자를
+ * 생략하기도 하고 `(2, 2)`를 그대로 적기도 한다 — 무엇도 한쪽을 강제하지
+ * 않으므로 둘 중 어느 표기도 규칙이 아니다.
  *
  * cellIds는 행 우선(row-major) 순서다 — 3x2 표에서 이 목록을 마운트된
  * 편집기의 tr별 셀 id 목록과 대조해 확인했다. 즉 인덱스 i는 행
  * `Math.floor(i / columns)`, 열 `i % columns`이고, 2x2에서
  * `[topLeft, topRight, bottomLeft, bottomRight]`가 된다.
+ *
+ * 이 좌표 공식은 **생성 시점**의 격자에만 맞다. 반환된 배열은 그때의
+ * 스냅샷이라 문서가 바뀌어도 갱신되지 않는다 — 2x2 네 셀을 병합하면 문서의
+ * 셀은 하나(`["id-4"]`)로 줄지만 cellIds는 그대로 넷
+ * (`["id-4","id-5","id-7","id-8"]`)이라 셋이 문서에 없는 id가 된다(실측).
+ * 배치를 바꾼 뒤에는 이 목록으로 좌표를 다시 계산하지 않고 문서에서 셀을
+ * 다시 읽는다.
  */
 export const editorWithTable = (rows = 2, columns = 2) => {
   const editor = createEditor({

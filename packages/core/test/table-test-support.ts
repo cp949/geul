@@ -24,6 +24,13 @@ import {
  * 슬라이스 6 전용 격리 에디터: EditorController(createEditor())와 별개로
  * Table/Row/Cell 확장만 검증하는 독립 fixture. model-to-tiptap.ts/tiptap-to-model.ts의
  * 표 차단 분기를 거치지 않는다.
+ *
+ * EditorController와 달리 실제 element에 붙은 EditorView를 즉시 만들고, 이
+ * 에디터를 훑는 공용 afterEach 청소기는 없다. 그래서 호출부가 `it`마다
+ * `editor.destroy()`로 해제한다 — 마운트된 채 남으면 ProseMirror DOMObserver의
+ * 지연 flush가 jsdom 환경 해제 뒤에 실행돼 "ReferenceError: document is not
+ * defined" unhandled error가 된다. 간헐적이라 통과하는 실행이 증거가 못 된다:
+ * 해제를 빠뜨린 계약 테스트로 같은 명령을 40회 돌려 2회 재현했다.
  */
 export const createTableFixtureEditor = (content: JSONContent): Editor => {
   const editor = new Editor({
