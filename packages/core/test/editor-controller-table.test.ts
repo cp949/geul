@@ -5,35 +5,21 @@
  * 다룬다. 문서 로드와 표 삽입은 editor-controller-table-load.test.ts,
  * 붙여넣기는 editor-controller-table-paste.test.ts가 맡는다.
  */
-import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
-import { createEditor } from "../src/index.js";
 import {
+  editorWithTable,
   mountTiptapEditor,
-  paragraphDocument,
-  sequentialIds,
+  tableBlockOf,
 } from "./editor-controller-support.js";
 import {
   activeCellId,
-  findCellBoundaryPosition,
   placeCaretInCell,
+  selectCellRange,
+  selectSingleCell,
 } from "./table-test-support.js";
 
 describe("에디터 컨트롤러 표", () => {
   describe("표 조작 명령", () => {
-    const editorWithTable = () => {
-      const editor = createEditor({
-        initialDocument: paragraphDocument("content"),
-        createId: sequentialIds("id"),
-      });
-      const inserted = editor.commands.insertTable("block-1", {
-        rows: 2,
-        columns: 2,
-      });
-      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
-      return { editor, tableBlockId: inserted.value.blockId };
-    };
-
     it("insertTableRow로 표에 행을 추가한다", () => {
       const { editor, tableBlockId } = editorWithTable();
 
@@ -41,8 +27,7 @@ describe("에디터 컨트롤러 표", () => {
         ok: true,
         value: undefined,
       });
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
+      const table = tableBlockOf(editor);
       expect(table.rows).toHaveLength(3);
     });
 
@@ -63,8 +48,7 @@ describe("에디터 컨트롤러 표", () => {
         ok: true,
         value: undefined,
       });
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
+      const table = tableBlockOf(editor);
       expect(table.columns).toHaveLength(3);
     });
 
@@ -103,8 +87,7 @@ describe("에디터 컨트롤러 표", () => {
         ok: true,
         value: undefined,
       });
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
+      const table = tableBlockOf(editor);
       expect(table.columns[0]?.width).toBe(240);
     });
 
@@ -189,50 +172,6 @@ describe("에디터 컨트롤러 표", () => {
   });
 
   describe("표 셀 병합·분할", () => {
-    // CellSelection.create는 $anchorCell.node(-1)이 table이길 기대한다 —
-    // findCellBoundaryPosition이 주는 셀 경계(= row content 안) 위치가 그
-    // depth다. 셀 내부로 한 칸 더 들어가면 node(-1)이 row가 되어
-    // "RangeError: Not a table node: tableRow"를 던진다.
-    const selectCellRange = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-      anchorCellId: string,
-      headCellId: string,
-    ) => {
-      const anchorPos = findCellBoundaryPosition(tiptap, anchorCellId);
-      const headPos = findCellBoundaryPosition(tiptap, headCellId);
-      if (anchorPos === null || headPos === null) {
-        throw new Error("셀 fixture 준비 실패");
-      }
-      const selection = CellSelection.create(
-        tiptap.state.doc,
-        anchorPos,
-        headPos,
-      );
-      tiptap.view.dispatch(tiptap.state.tr.setSelection(selection));
-    };
-
-    const editorWithTable = (rows: number, columns: number) => {
-      const editor = createEditor({
-        initialDocument: paragraphDocument("content"),
-        createId: sequentialIds("id"),
-      });
-      const inserted = editor.commands.insertTable("block-1", {
-        rows,
-        columns,
-      });
-      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
-      const cellIds = table.rows.flatMap((row) =>
-        row.cells.map((cell) => cell.id),
-      );
-      return {
-        editor,
-        tableBlockId: inserted.value.blockId,
-        cellIds,
-      };
-    };
-
     const editorWithTwoByTwoTable = () => editorWithTable(2, 2);
 
     it("셀 범위를 드래그 선택하면 getTableCellSelection이 선택된 셀 id 전부를 보고한다", () => {
@@ -240,9 +179,6 @@ describe("에디터 컨트롤러 표", () => {
       const { tiptap } = mountTiptapEditor(editor);
 
       const [topLeft, , , bottomRight] = cellIds;
-      if (topLeft === undefined || bottomRight === undefined) {
-        throw new Error("셀 fixture 준비 실패");
-      }
       selectCellRange(tiptap, topLeft, bottomRight);
 
       expect(editor.getTableCellSelection()).toEqual({
@@ -257,17 +193,13 @@ describe("에디터 컨트롤러 표", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
-      if (topLeft === undefined || bottomRight === undefined) {
-        throw new Error("셀 fixture 준비 실패");
-      }
       selectCellRange(tiptap, topLeft, bottomRight);
 
       expect(editor.commands.mergeTableCells(tableBlockId)).toEqual({
         ok: true,
         value: undefined,
       });
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
+      const table = tableBlockOf(editor);
       expect(table.rows[0]?.cells).toHaveLength(1);
       expect(table.rows[0]?.cells[0]).toMatchObject({
         id: topLeft,
@@ -280,9 +212,6 @@ describe("에디터 컨트롤러 표", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
-      if (topLeft === undefined || bottomRight === undefined) {
-        throw new Error("셀 fixture 준비 실패");
-      }
       selectCellRange(tiptap, topLeft, bottomRight);
       const before = editor.getDocument();
 
@@ -338,8 +267,7 @@ describe("에디터 컨트롤러 표", () => {
         ok: true,
         value: undefined,
       });
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
+      const table = tableBlockOf(editor);
       expect(table.rows[0]?.cells).toHaveLength(2);
       expect(table.rows[1]?.cells).toHaveLength(2);
     });
@@ -376,25 +304,12 @@ describe("에디터 컨트롤러 표", () => {
     // tableEditing 플러그인의 handleTripleClick과 normalizeSelection은 셀
     // 하나만 감싸는 CellSelection을 만든다(@tiptap/pm/tables) — 삼중 클릭
     // 한 번으로 재현된다. prosemirror-tables의 mergeCells도 이 경우를
-    // ($anchorCell.pos == $headCell.pos) 거절한다.
-    const selectSingleCell = (
-      tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-      cellId: string,
-    ) => {
-      const cellPos = findCellBoundaryPosition(tiptap, cellId);
-      if (cellPos === null) throw new Error("셀 fixture 준비 실패");
-      tiptap.view.dispatch(
-        tiptap.state.tr.setSelection(
-          CellSelection.create(tiptap.state.doc, cellPos),
-        ),
-      );
-    };
-
+    // ($anchorCell.pos == $headCell.pos) 거절한다. 아래 두 테스트가 그 상태를
+    // selectSingleCell로 재현한다.
     it("병합되지 않은 셀 하나만 감싸는 CellSelection도 서식 대상으로 보고한다(병합/분할 후보는 아니다)", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft] = cellIds;
-      if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
 
       selectSingleCell(tiptap, topLeft);
 
@@ -410,9 +325,6 @@ describe("에디터 컨트롤러 표", () => {
       const { editor, tableBlockId, cellIds } = editorWithTwoByTwoTable();
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, , , bottomRight] = cellIds;
-      if (topLeft === undefined || bottomRight === undefined) {
-        throw new Error("셀 fixture 준비 실패");
-      }
       selectCellRange(tiptap, topLeft, bottomRight);
       editor.commands.mergeTableCells(tableBlockId);
 
@@ -430,14 +342,6 @@ describe("에디터 컨트롤러 표", () => {
       const { editor, tableBlockId, cellIds } = editorWithTable(2, 3);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft, topMiddle, topRight, , middleBottom] = cellIds;
-      if (
-        topLeft === undefined ||
-        topMiddle === undefined ||
-        topRight === undefined ||
-        middleBottom === undefined
-      ) {
-        throw new Error("셀 fixture 준비 실패");
-      }
       // 첫 행의 왼쪽 두 셀을 병합해 (0,0)-(0,1)을 덮는 셀을 만든다.
       selectCellRange(tiptap, topLeft, topMiddle);
       editor.commands.mergeTableCells(tableBlockId);
@@ -465,24 +369,6 @@ describe("에디터 컨트롤러 표", () => {
           cancelable: true,
         }),
       );
-    };
-
-    const editorWithTable = (rows: number, columns: number) => {
-      const editor = createEditor({
-        initialDocument: paragraphDocument("content"),
-        createId: sequentialIds("id"),
-      });
-      const inserted = editor.commands.insertTable("block-1", {
-        rows,
-        columns,
-      });
-      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
-      const cellIds = table.rows.flatMap((row) =>
-        row.cells.map((cell) => cell.id),
-      );
-      return { editor, tableBlockId: inserted.value.blockId, cellIds };
     };
 
     it("Tab 키 입력은 같은 행의 다음 셀로 캐럿을 옮긴다", () => {
@@ -523,8 +409,7 @@ describe("에디터 컨트롤러 표", () => {
 
       pressTab(editable);
 
-      const table = editor.getDocument().blocks[1];
-      if (table?.type !== "table") throw new Error("Expected a table block");
+      const table = tableBlockOf(editor);
       expect(table.rows).toHaveLength(3);
       expect(activeCellId(tiptap)).toBe(table.rows[2]?.cells[0]?.id);
 

@@ -5,19 +5,17 @@
  * 보존하는지, pasteTabularData의 성공·거절 원인 전달을 다룬다.
  */
 import type { TabularData } from "@cp949/geul-io";
-import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
   editorState,
+  firstTableBlockIn,
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
+  tableBlockOf,
 } from "./editor-controller-support.js";
-import {
-  findCellBoundaryPosition,
-  placeCaretInCell,
-} from "./table-test-support.js";
+import { placeCaretInCell, selectCellRange } from "./table-test-support.js";
 
 // jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
 // (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
@@ -224,10 +222,7 @@ describe("에디터 컨트롤러 표", () => {
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
 
-    const insertedTable = editor.getDocument().blocks[1];
-    if (insertedTable?.type !== "table") {
-      throw new Error("Expected a table block");
-    }
+    const insertedTable = tableBlockOf(editor);
     const topLeft = insertedTable.rows[0]?.cells[0]?.id;
     if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
     placeCaretInCell(tiptap, topLeft);
@@ -246,8 +241,7 @@ describe("에디터 컨트롤러 표", () => {
     );
 
     const document = editor.getDocument();
-    const table = document.blocks.find((block) => block.type === "table");
-    if (table?.type !== "table") throw new Error("표 블록이 없다");
+    const table = firstTableBlockIn(document);
     expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "intro\na" }]);
     expect(table.rows[0]?.cells[1]?.content).toEqual([{ text: "b\noutro" }]);
     // 표 밖에 새 문단이 생기지 않는다.
@@ -286,9 +280,8 @@ describe("에디터 컨트롤러 표", () => {
     );
 
     const document = editor.getDocument();
-    const table = document.blocks.find((block) => block.type === "table");
+    const table = firstTableBlockIn(document);
     expect(table).toBeDefined();
-    if (table?.type !== "table") throw new Error("표 블록이 없다");
     expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "Alice Smith" }]);
 
     // 붙여넣기 이후에도 다른 명령이 정상 동작해야 한다 — 모델↔에디터가
@@ -362,8 +355,7 @@ describe("에디터 컨트롤러 표", () => {
       columns: 2,
     });
     if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
-    const table = editor.getDocument().blocks[1];
-    if (table?.type !== "table") throw new Error("Expected a table block");
+    const table = tableBlockOf(editor);
     const [topLeft, bottomLeft] = [
       table.rows[0]?.cells[0]?.id,
       table.rows[1]?.cells[0]?.id,
@@ -372,17 +364,7 @@ describe("에디터 컨트롤러 표", () => {
       throw new Error("셀 fixture 준비 실패");
     }
 
-    const topLeftPos = findCellBoundaryPosition(tiptap, topLeft);
-    const bottomLeftPos = findCellBoundaryPosition(tiptap, bottomLeft);
-    if (topLeftPos === null || bottomLeftPos === null) {
-      throw new Error("셀 fixture 준비 실패");
-    }
-
-    tiptap.view.dispatch(
-      tiptap.state.tr.setSelection(
-        CellSelection.create(tiptap.state.doc, topLeftPos, bottomLeftPos),
-      ),
-    );
+    selectCellRange(tiptap, topLeft, bottomLeft);
     const merged = editor.commands.mergeTableCells(inserted.value.blockId);
     if (!merged.ok) throw new Error("셀 병합 fixture 준비 실패");
 

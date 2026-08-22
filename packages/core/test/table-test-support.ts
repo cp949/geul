@@ -1,7 +1,7 @@
 /**
  * 표 관련 core 테스트가 공유하는 격리 에디터와 그 스키마, 문서·데이터
- * fixture와 셀 위치·캐럿 헬퍼를 소유한다. 여러 테스트 파일이 같은 fixture를
- * 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ * fixture와 셀 위치·선택·캐럿 헬퍼를 소유한다. 여러 테스트 파일이 같은
+ * fixture를 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
  *
  * 셀 헬퍼는 Editor를 받는다. createTableFixtureEditor가 만든 격리 에디터와
  * EditorController가 마운트한 에디터 모두가 호출부이므로 어느 한쪽의 생성
@@ -10,6 +10,7 @@
 import type { TabularData } from "@cp949/geul-io";
 import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
+import { CellSelection } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 
 import { BlockIdExtension } from "../src/block-id-extension.js";
@@ -170,6 +171,61 @@ export const findCellBoundaryPosition = (
     return true;
   });
   return found;
+};
+
+/**
+ * 두 셀을 양 끝으로 하는 CellSelection을 만들어 dispatch한다. 드래그 셀
+ * 선택을 프로그램으로 재현하는 경로다.
+ *
+ * CellSelection.create는 $anchorCell.node(-1)이 table이길 기대한다 —
+ * findCellBoundaryPosition이 주는 셀 경계(= row content 안) 위치가 그
+ * depth다. 셀 내부로 한 칸 더 들어가면 node(-1)이 row가 되어
+ * "RangeError: Not a table node: tableRow"를 던진다. 2x2 표를 마운트해
+ * 실측했다: 경계 위치의 $pos.depth는 2(doc/table/tableRow)라 node(-1)이
+ * table이고 create가 성공하지만, 경계 + 1의 $pos.depth는
+ * 3(doc/table/tableRow/tableCell)이라 node(-1)이 tableRow가 되고 create가
+ * 그 RangeError를 던진다.
+ *
+ * cellId는 string | undefined를 받는다. 호출부가 cellIds 배열을 구조분해해
+ * 넘기므로 undefined 가드를 호출부마다 두는 대신 여기서 던진다.
+ */
+export const selectCellRange = (
+  editor: Editor,
+  anchorCellId: string | undefined,
+  headCellId: string | undefined,
+) => {
+  if (anchorCellId === undefined || headCellId === undefined) {
+    throw new Error("셀 fixture 준비 실패");
+  }
+  const anchorPos = findCellBoundaryPosition(editor, anchorCellId);
+  const headPos = findCellBoundaryPosition(editor, headCellId);
+  if (anchorPos === null || headPos === null) {
+    throw new Error("셀 fixture 준비 실패");
+  }
+  editor.view.dispatch(
+    editor.state.tr.setSelection(
+      CellSelection.create(editor.state.doc, anchorPos, headPos),
+    ),
+  );
+};
+
+/**
+ * 셀 하나만 감싸는 CellSelection을 만든다. CellSelection.create에 pos를
+ * 하나만 주면 anchor와 head가 같은 셀이 된다. depth 규칙은 selectCellRange가
+ * 소유한다.
+ */
+export const selectSingleCell = (
+  editor: Editor,
+  cellId: string | undefined,
+) => {
+  if (cellId === undefined) throw new Error("셀 fixture 준비 실패");
+  const cellPos = findCellBoundaryPosition(editor, cellId);
+  if (cellPos === null) throw new Error("셀 fixture 준비 실패");
+  editor.view.dispatch(
+    editor.state.tr.setSelection(
+      CellSelection.create(editor.state.doc, cellPos),
+    ),
+  );
 };
 
 /**

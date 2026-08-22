@@ -6,59 +6,12 @@
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
-import { createEditor } from "../src/index.js";
 import {
+  editorWithTable,
   mountTiptapEditor,
-  paragraphDocument,
-  sequentialIds,
+  tableBlockOf,
 } from "./editor-controller-support.js";
-import { findCellBoundaryPosition } from "./table-test-support.js";
-
-/** 문단 1개 뒤에 rows x columns 표를 넣은 편집기와 표 blockId를 만든다. */
-const editorWithTable = (rows: number, columns: number) => {
-  const editor = createEditor({
-    initialDocument: paragraphDocument("content"),
-    createId: sequentialIds("id"),
-  });
-  const inserted = editor.commands.insertTable("block-1", { rows, columns });
-  if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
-  const table = editor.getDocument().blocks[1];
-  if (table?.type !== "table") throw new Error("Expected a table block");
-  return {
-    editor,
-    tableBlockId: inserted.value.blockId,
-    cellIds: table.rows.flatMap((row) => row.cells.map((cell) => cell.id)),
-  };
-};
-
-/** 저장 문서에서 표 블록을 꺼낸다. */
-const tableOf = (editor: ReturnType<typeof editorWithTable>["editor"]) => {
-  const block = editor.getDocument().blocks[1];
-  if (block?.type !== "table") throw new Error("Expected a table block");
-  return block;
-};
-
-/** 첫 행의 첫 셀과 끝 셀을 CellSelection으로 선택한다. */
-const selectFirstRow = (
-  tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
-  cellIds: string[],
-) => {
-  const anchorCellId = cellIds[0];
-  const headCellId = cellIds[1];
-  if (anchorCellId === undefined || headCellId === undefined) {
-    throw new Error("셀 fixture 준비 실패");
-  }
-  const anchor = findCellBoundaryPosition(tiptap, anchorCellId);
-  const head = findCellBoundaryPosition(tiptap, headCellId);
-  if (anchor === null || head === null) {
-    throw new Error("셀 fixture 준비 실패");
-  }
-  tiptap.view.dispatch(
-    tiptap.state.tr.setSelection(
-      CellSelection.create(tiptap.state.doc, anchor, head),
-    ),
-  );
-};
+import { selectCellRange } from "./table-test-support.js";
 
 describe("표 헤더 행과 헤더 열", () => {
   it("toggleTableHeaderRow가 headerRows를 켜고 undo 1회로 복원된다", () => {
@@ -70,7 +23,7 @@ describe("표 헤더 행과 헤더 열", () => {
       ok: true,
       value: undefined,
     });
-    expect(tableOf(editor).headerRows).toBe(1);
+    expect(tableBlockOf(editor).headerRows).toBe(1);
 
     expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
     expect(editor.getDocument().blocks).toEqual(before.blocks);
@@ -83,7 +36,7 @@ describe("표 헤더 행과 헤더 열", () => {
     editor.commands.toggleTableHeaderRow(tableBlockId);
     editor.commands.toggleTableHeaderRow(tableBlockId);
 
-    expect(tableOf(editor).headerRows).toBe(0);
+    expect(tableBlockOf(editor).headerRows).toBe(0);
   });
 
   it("toggleTableHeaderColumn이 headerColumns를 켠다", () => {
@@ -95,7 +48,7 @@ describe("표 헤더 행과 헤더 열", () => {
       value: undefined,
     });
 
-    expect(tableOf(editor).headerColumns).toBe(1);
+    expect(tableBlockOf(editor).headerColumns).toBe(1);
   });
 });
 
@@ -112,7 +65,7 @@ describe("표 행/열 단위 셀 색상", () => {
       ),
     ).toEqual({ ok: true, value: undefined });
 
-    const table = tableOf(editor);
+    const table = tableBlockOf(editor);
     expect(table.rows[0]?.cells.map((cell) => cell.backgroundColor)).toEqual([
       "#AABBCC",
       "#AABBCC",
@@ -129,12 +82,14 @@ describe("표 행/열 단위 셀 색상", () => {
     const target = { kind: "column", index: 1 } as const;
 
     editor.commands.setTableCellTextColor(tableBlockId, target, "#112233");
-    expect(tableOf(editor).rows[0]?.cells[1]?.textColor).toBe("#112233");
+    expect(tableBlockOf(editor).rows[0]?.cells[1]?.textColor).toBe("#112233");
 
     expect(
       editor.commands.setTableCellTextColor(tableBlockId, target, null),
     ).toEqual({ ok: true, value: undefined });
-    expect(tableOf(editor).rows[0]?.cells[1]).not.toHaveProperty("textColor");
+    expect(tableBlockOf(editor).rows[0]?.cells[1]).not.toHaveProperty(
+      "textColor",
+    );
   });
 
   it("색상 적용은 undo 1회로 복원된다", () => {
@@ -188,7 +143,7 @@ describe("표 셀 정렬", () => {
   it("셀 범위에 정렬을 적용해도 같은 CellSelection을 유지한다", () => {
     const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
     const { tiptap } = mountTiptapEditor(editor);
-    selectFirstRow(tiptap, cellIds);
+    selectCellRange(tiptap, cellIds[0], cellIds[1]);
     const before = editor.getTableCellSelection();
 
     expect(
@@ -208,7 +163,7 @@ describe("표 셀 정렬", () => {
     const { tiptap } = mountTiptapEditor(editor);
     const anchorCellId = cellIds[0];
     if (anchorCellId === undefined) throw new Error("셀 fixture 준비 실패");
-    selectFirstRow(tiptap, cellIds);
+    selectCellRange(tiptap, cellIds[0], cellIds[1]);
     expect(editor.commands.mergeTableCells(tableBlockId)).toEqual({
       ok: true,
       value: undefined,
@@ -233,12 +188,12 @@ describe("표 셀 정렬", () => {
     const target = { kind: "row", index: 0 } as const;
 
     editor.commands.setTableCellAlign(tableBlockId, target, "center");
-    expect(tableOf(editor).rows[0]?.cells[0]?.align).toBe("center");
+    expect(tableBlockOf(editor).rows[0]?.cells[0]?.align).toBe("center");
 
     expect(
       editor.commands.setTableCellAlign(tableBlockId, target, null),
     ).toEqual({ ok: true, value: undefined });
-    expect(tableOf(editor).rows[0]?.cells[0]).not.toHaveProperty("align");
+    expect(tableBlockOf(editor).rows[0]?.cells[0]).not.toHaveProperty("align");
   });
 
   it("정렬 적용은 undo 1회로 복원된다", () => {
@@ -342,7 +297,7 @@ describe("표 행/열 삭제", () => {
       ok: true,
       value: undefined,
     });
-    expect(tableOf(editor).rows).toHaveLength(2);
+    expect(tableBlockOf(editor).rows).toHaveLength(2);
 
     expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
     expect(editor.getDocument().blocks).toEqual(before.blocks);
@@ -357,7 +312,7 @@ describe("표 행/열 삭제", () => {
       value: undefined,
     });
 
-    const table = tableOf(editor);
+    const table = tableBlockOf(editor);
     expect(table.columns).toHaveLength(2);
     expect(table.rows[0]?.cells).toHaveLength(2);
   });

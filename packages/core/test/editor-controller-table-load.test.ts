@@ -11,6 +11,8 @@ import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
   paragraphDocument,
   sequentialIds,
+  tableBlockIn,
+  tableBlockOf,
 } from "./editor-controller-support.js";
 
 /**
@@ -112,8 +114,7 @@ describe("에디터 컨트롤러 표", () => {
       ok: true,
       value: undefined,
     });
-    const table = editor.getDocument().blocks[1];
-    if (table?.type !== "table") throw new Error("Expected a table block");
+    const table = tableBlockOf(editor);
     expect(table.rows).toHaveLength(3);
     expect(table.columns).toEqual([
       { id: "column-1", width: 220 },
@@ -136,8 +137,7 @@ describe("에디터 컨트롤러 표", () => {
     // PIT-0004: 저장 배열 순서는 논리 열 순서의 권위가 아니다. row-2의 셀을
     // 열 순서와 반대로 나열해도 로드가 columns 인덱스 순으로 배치해야 한다.
     const shuffled = richTableDocument();
-    const table = shuffled.blocks[1];
-    if (table?.type !== "table") throw new Error("Expected a table block");
+    const table = tableBlockIn(shuffled);
     const row = table.rows[1];
     if (row === undefined) throw new Error("Expected a second row");
     row.cells = [...row.cells].reverse();
@@ -151,8 +151,7 @@ describe("에디터 컨트롤러 표", () => {
     // 라이브 에디터를 한 번 왕복해 물리 순서를 관찰한다 — getDocument()의
     // 셀 배열은 readEditorDocument가 물리 문서 순서로 다시 읽은 결과다.
     editor.commands.insertTableRow("table-1", 2);
-    const reloaded = editor.getDocument().blocks[1];
-    if (reloaded?.type !== "table") throw new Error("Expected a table block");
+    const reloaded = tableBlockOf(editor);
     expect(reloaded.rows[1]?.cells.map((cell) => cell.id)).toEqual([
       "cell-left",
       "cell-right",
@@ -166,8 +165,7 @@ describe("에디터 컨트롤러 표", () => {
       onChange: (event) => changes.push(event),
     });
     const broken = richTableDocument();
-    const table = broken.blocks[1];
-    if (table?.type !== "table") throw new Error("Expected a table block");
+    const table = tableBlockIn(broken);
     const cell = table.rows[1]?.cells[0];
     if (cell === undefined) throw new Error("Expected a cell");
     cell.content = [{ text: "" }];
@@ -191,8 +189,7 @@ describe("에디터 컨트롤러 표", () => {
       initialDocument: paragraphDocument("kept"),
     });
     const broken = richTableDocument();
-    const table = broken.blocks[1];
-    if (table?.type !== "table") throw new Error("Expected a table block");
+    const table = tableBlockIn(broken);
     const cell = table.rows[1]?.cells[0];
     if (cell === undefined) throw new Error("Expected a cell");
     cell.content = [
@@ -222,8 +219,7 @@ describe("에디터 컨트롤러 표", () => {
     expect(result.ok).toBe(true);
     const document = editor.getDocument();
     expect(document.blocks).toHaveLength(2);
-    const table = document.blocks[1];
-    if (table?.type !== "table") throw new Error("Expected a table block");
+    const table = tableBlockIn(document);
     expect(table.rows).toHaveLength(2);
     expect(table.columns).toHaveLength(2);
     expect(table.rows[0]?.cells).toHaveLength(2);
