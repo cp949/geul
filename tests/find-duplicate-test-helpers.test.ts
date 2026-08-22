@@ -462,6 +462,85 @@ describe("중복 그룹", () => {
   });
 });
 
+/**
+ * 여기부터는 탐지기가 **지금 보지 못하는 범위**를 기록한다. 이 동작이 옳다는
+ * 뜻이 아니다 — 스크립트 헤더의 "알려진 한계"가 적은 것을 실행 가능한 형태로
+ * 옮겨, 헤더의 주장과 실제가 조용히 어긋나는 것을 막는다.
+ *
+ * 사각지대의 실제 비용은 Issue #84가 실증했다 — 이름 없는 인라인 사본 여섯이
+ * 탐지기와 이름 기반 grep과 본문 해시를 전부 통과했다. 어느 파일에서 무엇이
+ * 그랬는지와 그런 형태를 무엇으로 잡는지는 스크립트 헤더의 "알려진 한계"가
+ * 단독 소유한다.
+ *
+ * 나중에 탐지 범위를 넓히면 아래 테스트가 진다. 그때 고칠 것은 테스트가 아니라
+ * 헤더의 "알려진 한계" 목록이고, 실패 자체가 그 넓힘이 의도적이었음을 드러낸다.
+ */
+describe("알려진 사각지대: const 선언이 아닌 사본", () => {
+  /** 같은 본문을 형태만 바꿔 넣기 위한 공통 본문. 두 줄이라 상수로 버려지지 않는다. */
+  const sharedBody = ["  focusEditor();", "  moveCaret();"];
+
+  /** 같은 소스를 두 파일에 두고 중복 그룹 수를 센다. */
+  const groupsAcrossTwoFiles = (source: string) =>
+    groupDuplicates([
+      ...collect(source, "fixture/a.test.tsx"),
+      ...collect(source, "fixture/b.test.tsx"),
+    ]).length;
+
+  it("이름 없는 인라인 사본은 같은 본문이 두 파일에 있어도 중복 그룹이 0이다", () => {
+    const source = [
+      "render(",
+      "  <EditorProvider editor={controller as unknown as EditorController}>",
+      "    <BlockSideMenu />",
+      "  </EditorProvider>,",
+      ");",
+    ].join("\n");
+
+    expect(namesOf(source)).toEqual([]);
+    expect(groupsAcrossTwoFiles(source)).toBe(0);
+  });
+
+  it("같은 본문을 const로 선언하면 같은 조건에서 중복 그룹이 1이다", () => {
+    const source = ["const openMenu = () => {", ...sharedBody, "};"].join("\n");
+
+    expect(namesOf(source)).toEqual(["openMenu"]);
+    expect(groupsAcrossTwoFiles(source)).toBe(1);
+  });
+
+  it("최상위 function 선언은 헬퍼로 세지 않는다", () => {
+    const source = ["function openMenu() {", ...sharedBody, "}"].join("\n");
+
+    expect(namesOf(source)).toEqual([]);
+    expect(groupsAcrossTwoFiles(source)).toBe(0);
+  });
+
+  it("function 선언은 본문 안의 const까지 함께 잃는다", () => {
+    const source = [
+      "function mountThing() {",
+      "  const view = render({",
+      "    id: 'block-1',",
+      "  });",
+      "  return view;",
+      "}",
+    ].join("\n");
+
+    expect(namesOf(source)).toEqual([]);
+  });
+
+  it("최상위 let 선언은 헬퍼로 세지 않는다", () => {
+    const source = ["let openMenu = () => {", ...sharedBody, "};"].join("\n");
+
+    expect(namesOf(source)).toEqual([]);
+    expect(groupsAcrossTwoFiles(source)).toBe(0);
+  });
+
+  it("최상위 var 선언은 헬퍼로 세지 않는다", () => {
+    const source = ["var openMenu = () => {", ...sharedBody, "};"].join("\n");
+
+    expect(namesOf(source)).toEqual([]);
+    expect(groupsAcrossTwoFiles(source)).toBe(0);
+  });
+});
+
 describe("기본 대상 디렉터리", () => {
   it("react와 core뿐 아니라 model·io·e2e·tests도 대상에 넣는다", () => {
     expect(DEFAULT_TARGET_DIRECTORIES).toEqual([
