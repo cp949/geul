@@ -98,13 +98,13 @@ const renderResizableTable = () => {
  * 표 노드에 스텁 격자를 씌워 돌려준다. 첫 행만 보고 열 경계를 읽으면 둘째
  * 열 핸들이 사라지는 회귀(PIT-0004)를 만드는 상태다.
  *
- * 병합 명령을 쓰지 않는 이유: mergeTableCells는 인자 좌표가 아니라 현재
- * CellSelection만을 병합 범위의 권위로 삼는데(editor-controller.ts),
- * CellSelection은 좌표로 셀을 짚어야 만들어지고 jsdom에는 레이아웃이 없어
- * 그 좌표가 없다. 게다가 CellSelection을 직접 세우려면 @tiptap/pm/tables가
- * 필요한데 packages/react는 Tiptap에 의존할 수 없다(ADR-0002) —
- * package.json dependencies에 없어 여기서는 해석조차 되지 않는다(실측:
- * MODULE_NOT_FOUND). columnSpan은 문서 필드라 모델을 직접 만들어
+ * 병합 명령을 쓰지 않는 이유: mergeTableCells는 tableBlockId 하나만 받고 병합
+ * 범위를 넘길 파라미터가 아예 없다 — 범위의 유일한 권위가 현재
+ * CellSelection인데(editor-controller.ts), CellSelection은 좌표로 셀을 짚어야
+ * 만들어지고 jsdom에는 레이아웃이 없어 그 좌표가 없다. 게다가 CellSelection을
+ * 직접 세우려면 @tiptap/pm/tables가 필요한데 packages/react는 Tiptap에 의존할
+ * 수 없다(ADR-0002) — package.json dependencies에 없어 여기서는 해석조차 되지
+ * 않는다(실측: MODULE_NOT_FOUND). columnSpan은 문서 필드라 모델을 직접 만들어
  * replaceDocument로 심을 수 있다 — 컨트롤러도 명령도 진짜다.
  *
  * replaceDocument는 tiptap 편집기를 통째로 다시 만들어 마운트 시점의 table·

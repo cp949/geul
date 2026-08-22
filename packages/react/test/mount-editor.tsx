@@ -138,8 +138,8 @@ export const tableBlockOf = (editor: EditorController) => {
  * mountBlockEditor와 mountTableEditor 둘 다 children을 <EditorContent />보다
  * 먼저 렌더한다 — 그래서 오버레이의 selectionchange 리스너가 편집기(ProseMirror)
  * 리스너보다 먼저 등록될 수 있다. 이 순서 때문에 현재 호출부는 모두 이 함수가
- * 쏘는 selectionchange 뒤에 `fireSelectionChange`(selection-events.ts)로 두 번째
- * selectionchange를 따로 쏜다.
+ * 쏘는 selectionchange 뒤에 `fireSelectionChange`로 두 번째 selectionchange를
+ * 따로 쏜다.
  *
  * 다만 두 번째 이벤트가 항상 필요한지는 실측상 시나리오에 따라 갈린다 — 예를
  * 들어 setText 직후 같은 블록에 caret을 놓는 구성에서는 그 트랜잭션이 이미
@@ -321,8 +321,14 @@ export type MountedTableEditor = {
  * 떨어진다(실측 확인: replaceDocument 뒤 table.isConnected === false,
  * editable.isConnected === false, host.isConnected === true). 살아남는 것은
  * `host`뿐이니 replaceDocument를 쓰는 테스트는 표도 편집 영역도 host에서
- * 다시 찾아 써라 — 떨어진 `editable`을 그대로 쓰면 조용히 detached 노드를
- * 때리고 rect도 0이 된다. `restubGeometry`는 그 경우에도 동작한다 — 캡처한
+ * 다시 찾아 써라 — 떨어진 노드를 그대로 쓰면 조용히 문서 밖을 때린다.
+ *
+ * 그때 rect는 0이 아니라 **낡은 값**이라 더 나쁘다. 스텁을 씌운 `table`은
+ * 떨어진 뒤에도 씌울 때의 값을 그대로 돌려주고(실측: replaceDocument 앞뒤 모두
+ * left 100·top 100·200x60), 정작 문서에 있는 새 표는 스텁이 없어 0이다. 반대로
+ * `editable`의 rect는 replaceDocument **전에도** 0이다 — jsdom에 레이아웃이
+ * 없어 스텁을 씌우지 않은 노드는 붙어 있든 떨어졌든 항상 0이다. detach가 0을
+ * 만드는 것이 아니다. `restubGeometry`는 이 경우에도 동작한다 — 캡처한
  * 참조가 아니라 tableBlockId로 매번 다시 찾아 스텁한다.
  */
 export const mountTableEditor = ({

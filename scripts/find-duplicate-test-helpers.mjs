@@ -33,6 +33,17 @@
  *   돌려주고 다른 쪽이 throw하면 본문이 달라진다. Issue #87의
  *   `cellBoundaryPosition`이 그 형태였고, 헬퍼가 인코딩한 지식을 직접
  *   grep해야(`grep -rn 'attrs.cellId ===' ...`) 잡혔다.
+ * - **`const` 선언이 아닌 사본은 구조적으로 보이지 않는다.** 셀 대상이 `const`
+ *   선언뿐이라 같은 본문을 네 형태로 넣으면 `const`만 1건이고 (1) 이름 없는
+ *   인라인, (2) 최상위 `function` 선언, (3) 최상위 `let`·`var` 선언은 전부
+ *   0건이다(실측). `function`은 이중으로 사라진다 — 선언 자체를 세지 않는 데다
+ *   본문이 중첩 스코프로 제외돼 그 안의 `const`까지 함께 빠진다.
+ *   `packages/io/test/micromark-table-patch-integrity.test.ts`가 최상위
+ *   `function` 헬퍼 2개를 갖는데 이 파일의 집계는 **0건**이다(실측).
+ *   Issue #84에서는 `table-cell-format-menu.test.tsx`의 provider 조립 6곳이
+ *   이름 없는 인라인이었고, 이름 기반 grep과 본문 해시가 **둘 다** 통과시켰다.
+ *   규칙에 고유한 토큰이 있으면 그 토큰을 직접 grep해야 잡힌다(그 경우
+ *   `grep -rn 'as unknown as EditorController' packages/react/test/`).
  * - **구조분해 선언**(`const [a, b] = ...`)은 수집하지 않는다.
  * - **선언의 끝을 depth 0의 `;`로 판정한다.** biome이 세미콜론을 강제하는
  *   것에 기댄다. `pnpm lint`가 통과하는 트리에서만 결과가 유효하다.
