@@ -30,6 +30,7 @@ import { promisify } from "node:util";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  HEADLESS_FORBIDDEN,
   HEADLESS_PACKAGES,
   headlessPackageDirectories,
 } from "../scripts/headless-packages.mjs";
@@ -506,6 +507,99 @@ describe("headlessPackageDirectories()", () => {
         enumeratedDirectories: [resolve(repoRoot, "packages/alpha")],
       }),
     ).toEqual([]);
+  });
+});
+
+/**
+ * `HEADLESS_FORBIDDEN`이 실제로 무엇을 막는지를 진다.
+ *
+ * 이 술어에는 계약이 하나도 없었다(실측). 통째로 빈 배열로 만들어도
+ * `pnpm vitest run tests/`가 전량 통과했고, 그 상태에서 `packages/io`의
+ * `dependencies`에 `react`를 넣으면 `check-package-boundaries.mjs`가
+ * `crosses the headless boundary`를 한 줄도 내지 않고 headless 검사를 통과했다
+ * — 술어가 사라져도 아무것도 울리지 않는 게이트 구멍이었다.
+ *
+ * 판정 대상을 리터럴 표로 적어 술어 배열과 출발점을 다르게 둔다. 술어를
+ * 순회해 기대값을 만들면 단언이 구현을 되뇌고 술어가 비는 변이를 그대로
+ * 통과시킨다(`PIT-0022`).
+ *
+ * 개수는 고정하지 않는다 — 술어를 **더** 막는 방향으로 늘리는 것은 이
+ * 계약이 겨누는 퇴행이 아니다. 겨누는 것은 막아야 할 이름이 통과하는 방향과
+ * 막으면 안 되는 이름이 걸리는 방향 둘이다.
+ */
+/**
+ * 게이트가 headless 검사를 **`HEADLESS_PACKAGES` 전량에** 돌리는지를 진다.
+ *
+ * `headlessPackageDirectories()`는 `packagePaths`를 주입받을 수 있게 열려
+ * 있다 — 테스트가 실제 리터럴을 건드리지 않고 throw 경로를 지려고 연
+ * 자리다. 그 문이 게이트 호출부에도 그대로 열려 있어서, 호출부가
+ * `packagePaths: ["packages/io"]`처럼 목록을 좁히면 나머지 headless 패키지가
+ * 검사에서 조용히 빠진다. 실측: 그 변이를 넣어도 `tests/` 전량이 통과했고
+ * `packages/model`에 `@tiptap/core`를 넣은 트리에서 게이트가 exit 0을 냈다.
+ *
+ * 사본 탐지 축은 이 갈래를 못 잡는다 — `["packages/io"]`는 판정 토큰이
+ * 1종이라 `tests/workspace-roots.test.ts`의 임계값 2 아래다. 그 임계값의
+ * 근거 주석은 3종 목록을 전제로 "갈린 2종 사본까지 잡는다"고 적었는데,
+ * 2종 목록에 같은 임계값을 쓰면 갈린 사본(1종)이 임계값 밖으로 나간다.
+ *
+ * 그래서 호출부 소스를 직접 본다 — 게이트가 `packagePaths`를 넘기지 않아야
+ * 기본값인 `HEADLESS_PACKAGES` 전량이 대상이 된다.
+ */
+describe("경계 게이트가 headless 검사를 좁히지 않는다", () => {
+  it("check-package-boundaries.mjs가 headlessPackageDirectories()에 packagePaths를 넘기지 않는다", async () => {
+    const source = await readFile(
+      new URL("../scripts/check-package-boundaries.mjs", import.meta.url),
+      "utf8",
+    );
+    const callIndex = source.indexOf("headlessPackageDirectories(");
+
+    // 호출 자체가 사라지는 방향(headless 검사 통째 제거)도 함께 잡는다.
+    expect(callIndex).toBeGreaterThan(-1);
+
+    // 호출 인자 범위만 본다 — 파일 어디든 `packagePaths`가 있으면 걸리는
+    // 형태로 넓히면 주석이나 무관한 코드에 오탐한다.
+    const callArguments = source.slice(
+      callIndex,
+      source.indexOf("))", callIndex),
+    );
+
+    expect(callArguments).not.toMatch(/packagePaths/);
+  });
+});
+
+describe("headless 패키지의 금지 production 의존성 판정", () => {
+  const isForbidden = (name: string) =>
+    HEADLESS_FORBIDDEN.some((predicate) => predicate(name));
+
+  it.each([
+    "react",
+    "react-dom",
+    "@tiptap/core",
+    "@tiptap/extension-table",
+    "prosemirror-model",
+    "prosemirror-view",
+  ])("headless 패키지에서 막는다 — %s", (name) => {
+    expect(isForbidden(name)).toBe(true);
+  });
+
+  // 음성 fixture는 각 술어의 **경계 바로 바깥**을 겨눈다. 그래야 접두 판정이
+  // 슬래시·하이픈 경계를 잃고 넓어지는 변이가 잡힌다 — 실측: `@tiptap/`에서
+  // 슬래시를 빼면 `@tiptap-pro/table`·`@tiptapx/core`가, `prosemirror-`에서
+  // 하이픈을 빼면 `prosemirror`가, 정확 판정을 접두로 바꾸면 `reactive-store`가
+  // 걸린다. 경계 안쪽 이름만 늘어놓으면 그 변이가 전부 통과한다.
+  it.each([
+    "zod",
+    "unified",
+    "hast-util-sanitize",
+    "@cp949/geul-model",
+    "reactive-store",
+    "prosemirror",
+    "prosemirrorx",
+    "my-react",
+    "@tiptap-pro/table",
+    "@tiptapx/core",
+  ])("headless 패키지에서 막지 않는다 — %s", (name) => {
+    expect(isForbidden(name)).toBe(false);
   });
 });
 

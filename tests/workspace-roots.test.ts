@@ -65,12 +65,13 @@ const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
  * workspace에 추가되거나 기존 glob이 넓어져도 스스로는 알지 못한다. 여기서
  * 어긋남을 잡는다.
  *
- * block 형식(`packages:\n  - ...`)과 flow 형식(`packages: [...]`)을 모두
- * 받는다. block 형식의 목록 끝은 **들여쓰기 없는 다음 줄**로 판정한다 — 빈
- * 줄은 건너뛰고 계속 모은다. 실측: `pnpm-workspace.yaml`은 `packages:` 아래
- * 3항목 말고도 `minimumReleaseAgeExclude:` 아래에 `- ` 목록을 40여 개 더
- * 가진다. "파일 어디서든 `- ` 줄을 긁는" 형태로 느슨해지면 그 40여 항목까지
- * 삼킨다.
+ * block 형식(`packages:\n  - ...`)과 flow 형식(`packages: [...]`, 여러 줄에
+ * 걸친 것 포함)을 모두 받는다. block 형식의 목록 끝은 **항목이 아닌 다음
+ * 줄**로 판정한다 — 빈 줄과 주석 줄은 건너뛰고 계속 모은다. 실측:
+ * `pnpm-workspace.yaml`은 `packages:` 아래 3항목 말고도
+ * `minimumReleaseAgeExclude:` 아래에 `- ` 목록을 40여 개 더 가진다. "파일
+ * 어디서든 `- ` 줄을 긁는" 형태로 느슨해지면 그 40여 항목까지 삼킨다 — 다음
+ * 키 줄에서 멈추는 것이 그 경계다.
  *
  * `packages:` 키를 못 찾거나 항목이 없으면 빈 배열을 낸다 — `expect`로
  * 여기서 직접 잡지 않는다. 호출부가 `WORKSPACE_PACKAGE_GLOBS`나 리터럴
@@ -91,26 +92,43 @@ const parseWorkspacePackageGlobs = (manifestSource: string): string[] => {
     const keyMatch = /^packages:(.*)$/.exec(line);
     if (!keyMatch) continue;
 
-    // flow 형식: `packages: [...]`가 한 줄에 다 있다. 캡처 그룹은
-    // `noUncheckedIndexedAccess` 아래서 `string | undefined`라 `?? ""`로
-    // 받는다 — 매치가 성공했으면 그룹은 항상 있다(빈 문자열일 수는 있다).
+    // flow 형식: `packages: [...]`. 캡처 그룹은 `noUncheckedIndexedAccess`
+    // 아래서 `string | undefined`라 `?? ""`로 받는다 — 매치가 성공했으면
+    // 그룹은 항상 있다(빈 문자열일 수는 있다).
     const inline = (keyMatch[1] ?? "").trim();
-    const flowMatch = /^\[([^\]]*)\]/.exec(inline);
-    if (flowMatch) {
-      return (flowMatch[1] ?? "")
+    if (inline.startsWith("[")) {
+      // 한 줄로 닫히지 않는 flow 목록은 `]`가 나올 때까지 이어 붙인다 —
+      // 여러 줄 flow도 pnpm이 정상 파싱하는 형태다.
+      let flow = inline;
+      for (const nextLine of lines.slice(index + 1)) {
+        if (flow.includes("]")) break;
+        flow += ` ${nextLine.trim()}`;
+      }
+      return (/^\[([^\]]*)\]/.exec(flow)?.[1] ?? "")
         .split(",")
         .map((token) => token.trim())
         .filter((token) => token.length > 0)
         .map(parseGlobToken);
     }
 
-    // block 형식: 다음 줄부터 들여쓴 `- ` 항목을 모은다. 빈 줄은 건너뛰고,
-    // 들여쓰기 없는 줄(다음 키 또는 그 앞 주석)을 만나면 멈춘다 — 그래야
+    // block 형식: 다음 줄부터 `- ` 항목을 모은다. 빈 줄과 주석 줄은
+    // 건너뛰고, 항목이 아닌 줄(다음 키)을 만나면 멈춘다 — 그래야
     // `minimumReleaseAgeExclude:` 아래의 `- ` 목록이 섞여 들지 않는다.
+    //
+    // 주석 줄에서 멈추지 않는 것이 중요하다(실측). 목록 항목 사이에 주석을
+    // 다는 것은 이 매니페스트에서 자연스러운 편집인데, 거기서 멈추면 뒤
+    // 항목이 통째로 빠진 목록이 나온다. 그 목록이 마침 모듈 리터럴과 같으면
+    // 아래 대조가 통과해, 매니페스트가 선언한 새 루트가 모든 게이트의 검사
+    // 범위 밖으로 조용히 빠진다.
+    //
+    // 항목의 선행 들여쓰기도 요구하지 않는다 — YAML 블록 시퀀스는 부모 키와
+    // 같은 열에서 시작할 수 있고 pnpm이 그것을 정상 파싱한다. 다음 키 줄은
+    // `- `로 시작하지 않으므로 멈춤 판정은 그대로 성립한다.
     const globs: string[] = [];
     for (const nextLine of lines.slice(index + 1)) {
-      if (nextLine.trim() === "") continue;
-      const itemMatch = /^[ \t]+-[ \t]+(.*)$/.exec(nextLine);
+      const trimmed = nextLine.trim();
+      if (trimmed === "" || trimmed.startsWith("#")) continue;
+      const itemMatch = /^[ \t]*-[ \t]+(.*)$/.exec(nextLine);
       if (!itemMatch) break;
       globs.push(parseGlobToken(itemMatch[1] ?? ""));
     }
@@ -387,6 +405,37 @@ describe("parseWorkspacePackageGlobs()", () => {
     ]);
   });
 
+  it("목록 중간의 들여쓴 주석 줄을 건너뛰고 뒤 항목을 계속 모은다", () => {
+    // 변이 확인: 들여쓴 주석에서 `break`하면 `beta/*`가 빠져 이 단언이 진다.
+    //
+    // 이 갈래는 **조용히** 지지 않는다는 점이 위험하다. 항목이 빠진 목록이
+    // 마침 모듈 리터럴과 같으면 "매니페스트와 문자열 그대로 같다" 대조가
+    // 통과하고, 매니페스트가 실제로 선언한 새 루트가 모든 게이트의 검사
+    // 범위 밖으로 조용히 빠진다 — 이 모듈이 막으려는 실패 형태 자체다.
+    expect(
+      parseWorkspacePackageGlobs(
+        "packages:\n  - alpha/*\n  # 새 루트: 도구 패키지\n  - beta/*\n",
+      ),
+    ).toEqual(["alpha/*", "beta/*"]);
+  });
+
+  it("들여쓰기 없는 시퀀스 항목도 packages: 목록으로 받는다", () => {
+    // 변이 확인: 항목 정규식이 선행 공백을 필수로 요구하면 빈 배열이 나와 이
+    // 단언이 진다. YAML은 블록 시퀀스의 들여쓰기를 요구하지 않는다 — pnpm이
+    // 정상 파싱하는 형태다.
+    expect(
+      parseWorkspacePackageGlobs("packages:\n- alpha/*\n- beta/*\n"),
+    ).toEqual(["alpha/*", "beta/*"]);
+  });
+
+  it("여러 줄에 걸친 flow 목록을 파싱한다", () => {
+    // 변이 확인: flow 판정을 `packages:` 같은 줄로만 좁히면 빈 배열이 나와 이
+    // 단언이 진다.
+    expect(
+      parseWorkspacePackageGlobs("packages: [\n  'alpha/*',\n  'beta/*',\n]\n"),
+    ).toEqual(["alpha/*", "beta/*"]);
+  });
+
   it("부정 glob을 항목으로 그대로 낸다", () => {
     // 오늘도 GREEN이다 — 회귀 방어용: `!`로 시작하는 항목을 버리는 필터를
     // 넣었을 때 이 단언이 지는 것을 직접 확인하고 원복했다(보고서 기록).
@@ -510,14 +559,20 @@ const createSymlinkFixtureRoot = () => {
 };
 
 describe("workspacePackageDirectories()", () => {
-  // 완료 조건 3의 RED 시나리오: `<이름>/*`가 아닌 다섯 패턴이 각각 throw하는지
-  // `it.each`로 진다.
+  // `<이름>/*`가 아닌 패턴이 각각 throw하는지 `it.each`로 진다. 뒤쪽 네 개는
+  // 이름 세그먼트 자리에 glob 메타문자가 오는 형태다 — 그 자리를 "슬래시가
+  // 없는 임의의 문자열"로 열어 두면 `resolve()`가 메타문자를 디렉터리 이름
+  // 리터럴로 해석하고, 그런 디렉터리는 없으므로 열거가 조용히 0이 된다.
   it.each([
     "apps/**",
     "apps",
     "!packages/legacy",
     "apps/**/*",
     "./apps/*",
+    "*/*",
+    "**/*",
+    "pack?ges/*",
+    "[ap]ps/*",
   ])("%s처럼 <이름>/* 형태가 아닌 glob은 throw한다", (glob) => {
     expect(() => workspacePackageDirectories(repositoryRoot, [glob])).toThrow();
   });
@@ -598,13 +653,18 @@ describe("workspacePackageDirectories()", () => {
 describe("workspaceChildDirectories()", () => {
   // glob 형태 검증은 이 함수가 단독 소유한다 — `workspacePackageDirectories()`는
   // 이 함수에 위임할 뿐이다. 위임이 깨져도(예: 검증을 지역에 다시 심으면) 여기가
-  // 직접 잡는다.
+  // 직접 잡는다. 이름 세그먼트에 glob 메타문자가 오는 형태도 함께 진다 — 위
+  // describe와 같은 목록이다.
   it.each([
     "apps/**",
     "apps",
     "!packages/legacy",
     "apps/**/*",
     "./apps/*",
+    "*/*",
+    "**/*",
+    "pack?ges/*",
+    "[ap]ps/*",
   ])("%s처럼 <이름>/* 형태가 아닌 glob은 throw한다", (glob) => {
     expect(() => workspaceChildDirectories(repositoryRoot, [glob])).toThrow();
   });
