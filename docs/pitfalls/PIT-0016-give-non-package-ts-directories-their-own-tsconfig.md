@@ -1,4 +1,4 @@
-# PIT-0016 workspace 밖 TS 디렉터리는 전용 tsconfig로 typecheck 대상에 넣는다
+# PIT-0016 추적 소스 파일 전량을 루트 typecheck 체인의 컴파일 대상에 넣는다
 
 - 상태: `ACTIVE`
 - 적용 영역: workspace·build
@@ -14,7 +14,7 @@ turbo의 workspace 인식은 `pnpm-workspace.yaml`의 `packages` glob과 각 패
 
 ## 예방 규칙
 
-- workspace 패키지가 아닌 최상위 디렉터리에 `.ts`/`.tsx` 파일을 새로 두게 되면(예: `e2e/`), 그 디렉터리 전용 `tsconfig.json`을 만든다 — 루트 `tsconfig.base.json`을 extends, `noEmit: true`, 필요한 `lib`을 명시(브라우저 API를 쓰면 `DOM`을 넣는다), `types`는 실제 필요한 것만 명시(불필요하면 `types: []`로 자동 포함을 막아 의도를 드러낸다).
+- 요구의 단위는 **파일**이다 — 추적 소스 파일 전량이 루트 `typecheck` 체인이 실행하는 프로그램의 컴파일 대상에 들어야 한다. workspace 패키지가 아닌 위치(예: `e2e/`, `scripts/`, 루트의 `*.config.ts`)에 `.ts`/`.tsx`/`.mjs` 파일을 새로 두더라도 디렉터리마다 전용 `tsconfig.json`을 자동으로 강제하지 않는다 — `docs/` 아래 `.ts` 파일 하나가 `docs/tsconfig.json` 신설을 강제하지는 않는다. 이미 체인에 연결된 tsconfig의 `include`가 그 파일을 이미 덮는다면 그것으로 충분하고, 덮는 tsconfig가 없을 때만 그 위치 전용 `tsconfig.json`을 새로 만든다 — 루트 `tsconfig.base.json`을 extends, `noEmit: true`, 필요한 `lib`을 명시(브라우저 API를 쓰면 `DOM`을 넣는다), `types`는 실제 필요한 것만 명시(불필요하면 `types: []`로 자동 포함을 막아 의도를 드러낸다). 패키지 **안**이라도 같은 사각지대가 생길 수 있다 — 대표 `tsconfig.json`이 `rootDir`/`include`로 그 패키지의 config 파일(예: `vite.config.ts`)까지 덮지 못하면 workspace 밖과 똑같이 아무 프로그램도 그 파일을 컴파일하지 않는다(`apps/demo/vite.config.ts`가 실증, Issue #105) — workspace 밖만의 문제가 아니다. 어떤 tsconfig도 루트 `typecheck` 체인에 연결되지 않으면 커버로 치지 않는다 — "tsconfig는 있는데 아무도 안 돌린다"는 별개의 무력화 갈래다. `.js`/`.mjs`/`.cjs`/`.jsx` 소스는 그 파일을 담는 프로그램의 `checkJs`가 켜져 있어야 커버로 센다 — 멤버십(`--listFilesOnly` 결과에 있다)만으로는 과대평가다. `tests/tsconfig.json`은 `checkJs: false`인 채로 `scripts/*.mjs`를 `import`로 끌어와 컴파일 대상에 담지만 아무도 그 파일의 타입을 검사하지 않는다(Issue #105 실측). 부득이하게 예외를 두면 `{ 파일, 실제로 컴파일하는 tsconfig }` 쌍으로 등록하고, 그 쌍마다 파일 존재·실제 컴파일·체인 커버리지 밖 여부를 각각 확인한다 — 파일 이름만 나열한 목록은 늘어나며 게이트를 조용히 좁힌다.
 - 루트 `package.json`의 `typecheck` 스크립트가 그 디렉터리를 거치도록 직접 연결한다(`turbo run typecheck`는 workspace 패키지만 돌기 때문에 별도로 이어 붙여야 한다) — `"typecheck": "turbo run typecheck && pnpm typecheck:e2e"`처럼 `&&`로 순차 실행하고, `pnpm verify`가 그 스크립트를 거치는지 확인한다.
 - 새 최상위 디렉터리를 workspace에 편입할지, 아니면 이 패턴처럼 독립 tsconfig+스크립트로만 typecheck에 편입할지는 그 디렉터리가 다른 패키지에 의존하는지로 가른다. workspace 패키지를 import한다면(예: `@cp949/geul-model`) PIT-0015의 `references`/`dist` 해석 문제가 그대로 적용된다. `e2e/`는 소스를 직접 import하지 않고 브라우저에서 구동 중인 앱을 playwright로 조작할 뿐이라 이 문제가 없다.
 - 새 tsconfig를 추가·수정하면 반드시 의도적으로 깬 타입 오류로 실제로 잡히는지 확인한 뒤 되돌린다(PIT-0015와 동일 절차).
@@ -51,18 +51,22 @@ pnpm typecheck:e2e
   ```
 
   `.mjs`는 타입 주석 문법을 파싱하지 않는다. `e2e/`의 `const x: number = "..."` 형태 대신 JSDoc `@type` 형태로 probe를 넣었다.
-- 재발을 구조로 막기 위해 `tests/workspace-boundaries.test.ts`에 `describe("workspace 밖 소스 디렉터리의 typecheck 편입")`를 추가했다. `it` 셋이 각각 다른 무력화 경로를 막는다.
-  1. `it("전용 tsconfig를 갖고 루트 typecheck 체인에서 도달할 수 있다")` — `git ls-files`로 대상 디렉터리를 발견하고(리터럴 목록을 쓰지 않는다) 루트 `package.json`의 `typecheck` 체인에서 `-p <dir>/tsconfig.json`을 찾는다. `pnpm run <스크립트명>` 표기도 펼친다.
-  2. `it("각 디렉터리의 추적 소스 파일을 tsconfig의 실제 컴파일 대상에 전부 포함한다")` — tsconfig가 체인에서 참조만 되고 아무것도 검사하지 않는 상태를 막는다. `include`/`exclude` glob을 흉내 내지 않고 `tsc --listFilesOnly`에게 그대로 묻는다. **검사 대상 tsconfig 자신의 `exclude`를 기대값에서 깎지 않는다** — 그러면 `exclude` 한 줄로 파일을 게이트 밖에 두어도 기대값이 같이 줄어 단언이 구현을 되뇔 뿐이다. 빠진 파일은 같은 디렉터리의 다른 tsconfig가 실제로 컴파일할 때만 정당한 예외로 본다(`tests/fixtures/dom-lib-forbidden.ts`가 그 경우다).
-  3. `it("JS 소스를 가진 디렉터리의 tsconfig는 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다")` — 2번은 그 확장자의 파일이 실제로 생겨야 발화하므로, `include`가 좁아지는 순간 자체는 이 단언이 더 먼저 잡는다. 리터럴 동등이 아니라 "확장자로 거르지 않고 하위 디렉터리까지 덮는 패턴이 있는가"라는 속성을 본다 — `["./**/*"]`와 `include` 생략은 `["**/*"]`와 컴파일 대상이 같으므로 거짓 실패로 만들지 않는다.
+- 재발을 구조로 막기 위해 `tests/workspace-boundaries.test.ts`에 `describe("workspace 밖 소스 디렉터리의 typecheck 편입")`를 두었다. 처음에는(위 항목들 당시) `it` 셋이 디렉터리 단위로 도달성·include 포함·allowJs/checkJs를 각각 봤다. Issue #105가 발견 축을 디렉터리에서 **파일 커버리지**로 교체하면서 같은 자리의 `it` 셋을 다시 짰다 — 아래가 현재 구성이다.
+  1. `it("추적 소스 파일 전량이 체인 프로그램의 컴파일 대상에 들거나 예외 목록에 있다")` — `git ls-files`로 추적 소스 파일 전량(`.js`/`.mjs`/`.cjs`/`.ts`/`.jsx`/`.tsx`)을 뽑고, 루트 `package.json`의 `typecheck` 체인이 실제로 실행하는 tsc 프로그램 전량(`turbo run typecheck`가 있으면 workspace 패키지 열거까지 펼친다)에 대해 파일마다 `tsc --listFilesOnly` 컴파일 대상 포함 여부를 본다. `.js`/`.mjs`/`.cjs`/`.jsx`는 담는 프로그램의 `checkJs`가 켜져 있어야 커버로 센다. 차집합(미커버)이 예외 목록의 파일 집합과 정확히 같아야 통과한다 — `include`/`exclude` glob을 흉내 내지 않고 tsc에게 그대로 묻는다.
+  2. `it.each(TYPECHECK_COVERAGE_EXCEPTIONS)(...)` — 예외 목록 항목마다 그 파일이 여전히 존재하고, 짝지은 tsconfig가 실제로 컴파일하며, 체인 커버리지 밖에 있는지 셋을 확인한다. 사라진 예외, 더는 컴파일하지 않는 짝, 체인이 이미 덮게 됐는데 예외로 남아 게이트 면적을 조용히 갉는 것을 항목별로 잡는다. 오늘 유일한 항목은 `tests/fixtures/dom-lib-forbidden.ts` / `tests/fixtures/io-dom-forbidden.tsconfig.json`이다(일부러 타입 오류를 담은 DOM 전역 차단 fixture라 체인에 넣으면 게이트가 항상 실패한다).
+  3. `it("소유 기준으로 뽑은 체인 프로그램은 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다")` — 판정 1(소유 기준: 프로그램 P가 대상이다 ⟺ P의 tsconfig 디렉터리에 직접 속한 추적 JS 소스가 있고 그 파일이 P의 컴파일 대상에 실제로 든다)로 대상 프로그램을 추려(오늘은 `scripts/tsconfig.json` 하나 — `tests/tsconfig.json`은 `scripts/*.mjs`를 `import`로 컴파일 대상에 담지만 그 디렉터리를 소유하지 않아 탈락한다), 그 프로그램들의 `allowJs`·`checkJs`가 켜져 있고 `include` 패턴 중 확장자로 끝나지 않는 것이 하나 이상 있는지 본다. 리터럴 동등이 아니라 그 속성만 본다 — `["./**/*"]`와 `include` 생략은 `["**/*"]`와 컴파일 대상이 같으므로 거짓 실패로 만들지 않는다.
 
-  workspace 루트 목록은 `scripts/workspace-roots.mjs`의 `WORKSPACE_ROOTS`를 재사용해 사본을 늘리지 않는다.
-- 남은 사각지대: 루트의 `playwright.config.ts`와 `vitest.config.ts`는 여전히 어떤 tsconfig의 `include`에도 잡히지 않는다. 이 pitfall과 회귀 테스트가 다루는 단위가 디렉터리라 별도 후속으로 분리했다.
+  workspace 패키지 열거는 `scripts/workspace-roots.mjs`의 `workspacePackageDirectories()`를 재사용해 사본을 늘리지 않는다.
+- 닫힌 사각지대(Issue #105): 루트의 `playwright.config.ts`·`vitest.config.ts`와 `apps/demo/vite.config.ts` 셋 다 이 pitfall과 회귀 테스트가 다루던 단위가 디렉터리였을 때는 어떤 tsconfig의 `include`에도 잡히지 않았다. 셋 모두 typecheck 체인에 편입해 닫았다 — 아래 Issue #105 항목이 그 근거다.
 - Issue #106 — **같은 증상이 디렉터리가 아니라 "게이트가 스스로 정하는 범위"에서 재발했다.** 두 갈래였다.
   1. workspace 루트 목록이 3벌이고 2벌(`check-package-boundaries.mjs`·`check-licenses.mjs`의 익명 인라인 리터럴)은 어떤 테스트도 참조하지 않았다. `scripts/workspace-roots.mjs`가 목록과 패키지 열거를 단독 소유하고 `tests/workspace-roots.test.ts`가 `pnpm-workspace.yaml`과 대조한다. 구현이 yaml을 파싱하지 않는 것은 의도다 — 파싱하면 계약 테스트가 파서를 자기 자신과 대조하는 동어반복이 된다(`PIT-0022`).
   2. 위 "예방 규칙"의 turbo 전제. `apps/demo`의 `scripts.typecheck`를 지우면 `turbo run typecheck`가 `Tasks: 9 successful, 9 total`로 exit 0이고(기준선 10) 당시 `tests/` 51건은 전량 통과했다. `--dry=json`의 총 태스크 수는 **줄지 않는다** — turbo가 그 태스크를 계속 나열하고 `command`만 `<NONEXISTENT>`로 바꾼다. 수가 주는 것은 실행이다.
 - Issue #106 — **감시 장치 자신이 cwd에 걸려 눈감았다.** `findUnlistedTestDirectories()`가 존재 판정을 cwd 상대로 해, 잘못된 cwd에서는 워크스페이스 루트가 전부 없는 것으로 보여 후보가 0건이 되고 `expect(...).toEqual([])`이 공허하게 참이 됐다. 차집합의 빈 배열은 "전부 목록에 있다"와 "후보를 못 모았다" 둘 다에서 나오므로, 수집 결과를 `collectTestDirectoryCandidates()`로 따로 내보내야 계약 테스트가 그 둘을 가른다. 검증은 `process.chdir` 대신 cwd만 다른 자식 프로세스 두 벌을 대조한다 — `chdir`는 프로세스 전역이라 같은 워커의 다른 테스트를 오염시킨다.
 - 무변화 증거의 함정: `pnpm scan:test-helpers` 출력 sha1을 그대로 대조하면 안 된다. 탐지기의 기본 대상에 `tests/`가 들어 있어, 회귀 테스트를 추가하는 것만으로 헬퍼 선언 수가 움직인다. 탐지기 동작 무변화를 보이려면 **코퍼스를 고정한 채**(테스트 파일을 이전 판으로 되돌려) 스크립트만 바꿔 비교한다.
+- Issue #105 — **같은 증상이 디렉터리도 workspace 밖도 아닌 "config 파일"에서 재발했다.** 루트의 `playwright.config.ts`·`vitest.config.ts`와 `apps/demo/vite.config.ts` 셋 다 `tsconfig.base.json`을 뺀 어떤 프로그램의 컴파일 대상에도 없었다. `apps/demo/vite.config.ts`는 workspace 패키지 **안**에 있는데도 빠졌다 — `apps/demo/tsconfig.json`이 `rootDir: "src"` + `include: ["src/**/*.ts", "src/**/*.tsx"]`라 `src/` 밖 파일을 담을 수 없어서다. workspace 밖만의 문제가 아니라는 실증이다. 커밋 `19949b2` — `tsconfig.configs.json`·`apps/demo/tsconfig.configs.json` 신설(`allowJs`/`checkJs` 켬, `include: ["*"]`, `noEmit: true`), 루트 `typecheck`에 `typecheck:configs` 연결, `apps/demo`의 `typecheck`를 `tsc --noEmit && tsc -p tsconfig.configs.json --noEmit` 두 번의 tsc 호출로 연결.
+- 세 파일을 켜서 드러난 타입 오류는 0건이었다. #95(implicit any 41건, 실제 결함 0건)와 같은 계열이고 #57(실제 결함 8개 파일 16건)과는 대비된다 — 이 pitfall이 매번 잡는 것은 "결함이 있다"가 아니라 "있어도 안 보인다"다. 확인은 각 파일 끝에 `const _pit105Probe: number = "intentional-type-error-for-issue-105";`를 추가해 `pnpm typecheck`가 실패하는지, 되돌리면 통과하는지로 했다(저장소 트리 밖 scratchpad에서 사전 확인, `PIT-0024`).
+- **판정 1의 실측** — 커버리지 판정의 입력을 "컴파일 대상에 그 파일이 있는 프로그램"(멤버십)만으로 뽑으면 안 된다. `tsc -p tests/tsconfig.json --listFilesOnly`는 `scripts/*.mjs` 3개를 담는다 — `tests/`가 그 파일들을 `import`하기 때문이다(`tests/tsconfig.json`이 있는 디렉터리에 추적 JS 소스는 없다). 소유 기준(프로그램 P가 대상이다 ⟺ P의 tsconfig 디렉터리에 직접 속한 추적 JS 소스가 있고 그 파일이 P의 컴파일 대상에 실제로 든다)을 더해야 `tests/tsconfig.json`이 JS include 단언의 대상에서 빠지고, 오늘 대상이 `scripts/tsconfig.json` 하나로 좁혀진다.
+- **`include: ["*"]`가 정당한 형태다** — 신설 두 tsconfig는 최상위 파일 전용(하위 미포함) `include: ["*"]`를 쓴다. 루트 config 전용 프로젝트에서 `["**/*"]`를 쓰면 저장소 전체를 훑는다. 그래서 JS include 단언(위 3번 `it`)에서 "하위 디렉터리까지 덮는다"를 요구 조건에서 뗐다 — 그 자리는 파일 커버리지 축(1번 `it`)이 대신 진다: `include`가 하위 디렉터리를 빼면 그 아래 파일이 미커버로 잡힌다.
 
 ## 관련 문서
 
