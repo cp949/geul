@@ -3,16 +3,21 @@
  * 디렉터리의 typecheck 편입, 그리고 workspace 안 패키지의 typecheck 편입을
  * 검증하는 계약.
  *
- * 첫째는 허용/금지 의존성 목록과 DOM 전역 차단을 대조한다. 둘째는
- * `git ls-files`로 발견한 디렉터리마다 셋을 대조한다 — 전용 tsconfig.json과
- * 루트 typecheck 체인 연결, tsc `--listFilesOnly`가 그 디렉터리의 추적 소스를
- * 실제 컴파일 대상에 넣는지(빠진 파일은 같은 디렉터리의 다른 tsconfig가
- * 컴파일해야 정당하다), JS 소스가 있으면 `allowJs`·`checkJs`를 켜고
- * `include`가 확장자를 거르지 않는지. 셋째는 열거된 workspace 패키지가
- * 빠짐없이 `scripts.typecheck`를 정의하는지 — turbo는 그 정의가 없는 패키지를
- * 대상에서 조용히 빼고 남은 태스크만 실행한다. 넷째와 다섯째는 경계 게이트와
- * 라이선스 게이트가 각각 그 열거를 실제로 훑는지 — 게이트를 실행해 출력이
- * 보고하는 매니페스트 수를 열거에서 파생한 기대값과 대조한다.
+ * 첫째는 허용/금지 의존성 목록과 DOM 전역 차단을 대조한다. 둘째는 추적 소스
+ * 파일 전량이 루트 `typecheck` 체인이 실행하는 프로그램의 컴파일 대상에
+ * 드는지를 대조한다 — `.js`/`.mjs`/`.cjs`/`.jsx`는 그 프로그램의 `checkJs`가
+ * 켜져 있어야 커버로 세고, 예외로 둔 파일은 실제로 존재하고 짝지은 tsconfig가
+ * 실제로 컴파일하며 체인 커버리지 밖에 있는지까지 확인한다. 발견이 통째로
+ * 죽는 것과 workspace 패키지가 프로그램을 하나도 못 내는 것은 각각 가드와
+ * 즉시 throw로 잡는다. 같은 describe에 남은 옛 `it`은 JS 소스가 있는 최상위
+ * 디렉터리의 tsconfig가 `allowJs`·`checkJs`를 켜고 `include`가 확장자를
+ * 거르지 않는지를 여전히 디렉터리 축으로 대조한다 — 발견 축이 둘인 중간
+ * 상태이고, 의도한 것이다(`DELTA-03`이 하나로 되돌린다). 셋째는 열거된
+ * workspace 패키지가 빠짐없이 `scripts.typecheck`를 정의하는지 — turbo는 그
+ * 정의가 없는 패키지를 대상에서 조용히 빼고 남은 태스크만 실행한다. 넷째와
+ * 다섯째는 경계 게이트와 라이선스 게이트가 각각 그 열거를 실제로 훑는지 —
+ * 게이트를 실행해 출력이 보고하는 매니페스트 수를 열거에서 파생한 기대값과
+ * 대조한다.
  *
  * 여섯째는 `scripts/headless-packages.mjs`의 `HEADLESS_PACKAGES`가 tsconfig
  * `lib`에 `DOM`이 없는 workspace 패키지 집합과 같은 값인지를 그
@@ -275,6 +280,104 @@ const typecheckedProjectPaths = async () => {
   return resolved.join(" ");
 };
 
+/**
+ * typecheck 스크립트를 `&&`로 가른 세그먼트 하나가 실행하는 tsc 프로그램의
+ * 경로(패키지 디렉터리 기준 상대 경로)를 뽑는다. 받아들이는 형태를 둘로만
+ * 정의한다 — 먼저 세그먼트가 `tsc`(다른 플래그는 허용) 호출 형태인지부터
+ * 확인하고, 아니면 `undefined`를 돌려준다(호출부가 "이 세그먼트는 프로그램을
+ * 내지 않는다"로 센다). `tsc` 호출이면 `-p`/`--project`를 세그먼트 어디서든
+ * (첫 토큰이 아니어도) 찾아 그 다음 토큰을 경로로 쓰고, 없으면
+ * `tsconfig.json`으로 기본한다.
+ *
+ * 두 분기가 겹치지 않도록 "tsc 호출인가"와 "-p/--project가 있는가"를 분리해
+ * 순서대로 판정한다 — `-p`/`--project`를 첫 토큰 위치에만 앵커링하면
+ * `"tsc --strict -p foo/tsconfig.json"`처럼 플래그가 먼저 오는 세그먼트가
+ * 그 경로를 못 찾고 조용히 `tsconfig.json` 기본값으로 오분류된다(둘째
+ * 분기가 "tsc + 임의 토큰들"을 전부 받아들이므로 첫째 분기가 놓친 것을
+ * 가려주지 못한다). 거절할 형태를 나열하지 않고 받아들일 형태만 정의하는
+ * 것이 핵심이다(`PIT-0027`) — `echo skip`이나 `node scripts/x.mjs`처럼 새
+ * 회피 형태가 나와도 거절 목록에 없다는 이유로 조용히 통과하지 않는다.
+ */
+const segmentProjectPath = (segment: string) => {
+  if (!/^tsc(?:\s+\S+)*$/.test(segment)) return undefined;
+
+  const projectMatch = /(?:^|\s)(?:-p|--project)\s+(\S+)/.exec(segment);
+  return projectMatch?.[1] ?? "tsconfig.json";
+};
+
+/**
+ * 루트 `typecheck` 체인이 실제로 실행하는 tsc 프로그램의 저장소 상대 경로
+ * 목록(`DELTA-01` 이후 15개). 도출은 두 갈래다.
+ *
+ * 1. `typecheckedProjectPaths()`가 이미 펼치는(`pnpm <스크립트>` 참조를 한
+ *    단계 전개한) 루트 체인 문자열 전체에서 `tsc -p <경로>`/
+ *    `tsc --project <경로>` 꼴을 전부 뽑는다 — 기존 전개에 추출만 더한다.
+ * 2. 그 문자열에 `turbo run typecheck`가 있으면 workspace 패키지를 열거하고,
+ *    각 패키지의 `scripts.typecheck`를 `&&`로 갈라 세그먼트마다
+ *    `segmentProjectPath()`로 프로그램을 뽑는다. 열거된 패키지 중 프로그램을
+ *    하나도 못 낸 것이 있으면 조용히 건너뛰지 않고 그 패키지 이름을 담아
+ *    즉시 throw한다 — 그 패키지가 아래 커버리지 판정에서 소리 없이 빠지는
+ *    것을 막는다(`PIT-0016`의 "turbo 전제도 검증 대상" 규칙을 확장한다).
+ *
+ * `workspacePackageDirectories()`는 `scripts/workspace-roots.mjs`에서 그대로
+ * import해 쓴다 — 사본을 새로 만들면 #106이 없앤 리터럴이 되살아난다
+ * (`PIT-0022`).
+ */
+const chainTypecheckProjects = async () => {
+  const chain = await typecheckedProjectPaths();
+  const projects: string[] = [];
+
+  for (const match of chain.matchAll(/tsc\s+(?:-p|--project)\s+(\S+)/g)) {
+    const path = match[1];
+    if (path !== undefined) projects.push(path);
+  }
+
+  if (chain.includes("turbo run typecheck")) {
+    const directories = workspacePackageDirectories(repositoryRoot);
+
+    for (const directory of directories) {
+      const name = relative(repositoryRoot, directory);
+      const scripts: Record<string, string> =
+        (await readPackage(name)).scripts ?? {};
+      const typecheck = scripts.typecheck ?? "";
+      const segments = typecheck
+        .split("&&")
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0);
+      const packageProjects = segments
+        .map((segment) => segmentProjectPath(segment))
+        .filter((path): path is string => path !== undefined)
+        .map((path) => `${name}/${path}`);
+
+      if (packageProjects.length === 0) {
+        throw new Error(
+          `${name}의 typecheck 스크립트가 tsc 프로그램을 하나도 내지 않는다: ${JSON.stringify(typecheck)}`,
+        );
+      }
+
+      projects.push(...packageProjects);
+    }
+  }
+
+  return projects;
+};
+
+/**
+ * `git ls-files`로 얻은 추적 파일 전량 중 typecheck 대상 확장자
+ * (`.js`/`.mjs`/`.cjs`/`.ts`/`.jsx`/`.tsx`)에 걸리는 저장소 상대 경로
+ * 목록(오늘 171개). `trackedSourceFiles(directory)`와 인자만 다르다 — 이
+ * 함수는 디렉터리로 좁히지 않고 저장소 전역을 낸다. 새 커버리지 축의 발견
+ * 단위가 디렉터리가 아니라 파일이기 때문이다.
+ */
+const trackedSourceFilePaths = async () => {
+  const { stdout } = await execFileAsync("git", ["ls-files"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    maxBuffer: maxStdoutBuffer,
+  });
+
+  return stdout.split("\n").filter((path) => typecheckedExtension.test(path));
+};
+
 const jsSourceExtension = /\.(?:m|c)?js$/;
 
 /**
@@ -307,14 +410,96 @@ const compiledFilePaths = async (projectPath: string) => {
 };
 
 /**
+ * `compiledFilePaths()`를 그대로 부르되, `include`가 파일을 하나도 못 잡는
+ * 상태(`tsc`가 `TS18003 No inputs were found`로 exit≠0)를 "그 프로그램이
+ * 아무것도 컴파일하지 않는다"(빈 배열)로 다룬다. `compiledFilePaths()` 자신은
+ * 고치지 않는다 — 이 파일의 다른 소비처를 건드리지 않기 위해서다. `TS18003`이
+ * 아닌 다른 실패(예: 존재하지 않는 프로젝트 경로)는 그대로 다시 던진다 —
+ * 조용히 삼키면 설정 오류를 "커버 없음"으로 잘못 보고해 원인 추적이 어려워진다.
+ * 커버리지 축이 `include` 축소(조건 3)를 "미커버 파일 목록"으로 보여줘야
+ * 하는데, `include`가 완전히 비면 tsc가 크래시로 답해 그 목록 대신 원인 불명의
+ * 예외로 죽는 것을 막는다.
+ */
+const compiledFilePathsOrEmpty = async (projectPath: string) => {
+  try {
+    return await compiledFilePaths(projectPath);
+  } catch (error) {
+    const commandError = error as { stdout?: string; stderr?: string };
+    const output = `${commandError.stdout ?? ""}${commandError.stderr ?? ""}`;
+    if (output.includes("TS18003")) return [];
+    throw error;
+  }
+};
+
+/**
+ * `tsc -p <projectPath> --showConfig`로 `extends` 체인까지 반영된 최종
+ * `compilerOptions.checkJs` 해석값을 읽는다. tsconfig 파일 자신의
+ * `compilerOptions`만 읽으면 `extends`가 설정하는 값을 놓친다 — 오늘은
+ * `tsconfig.base.json`이 `checkJs`를 설정하지 않아 결과가 같지만, `extends`
+ * 체인이 깊어지면 갈린다. `--showConfig`는 설정되지 않은 키를 아예 생략하므로
+ * (`hasCheckJs`만 나오고 `checkJs`는 없는 식) `?? true`나 `!== false`가 아니라
+ * `=== true`로 판정한다 — 그래야 `checkJs`를 명시하지 않은 프로그램이 전부
+ * "JS를 검사한다"로 잘못 통과하지 않는다.
+ */
+const resolvedCheckJs = async (projectPath: string) => {
+  const tscPath = fileURLToPath(
+    new URL("../node_modules/typescript/bin/tsc", import.meta.url),
+  );
+  const resolvedProject = fileURLToPath(
+    new URL(`../${projectPath}`, import.meta.url),
+  );
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [tscPath, "--project", resolvedProject, "--showConfig"],
+    { maxBuffer: maxStdoutBuffer },
+  );
+
+  return JSON.parse(stdout).compilerOptions?.checkJs === true;
+};
+
+/**
+ * typecheck 대상 확장자(`typecheckedExtension`) 중 `.ts`/`.tsx`가 아닌
+ * 나머지(`.js`/`.mjs`/`.cjs`/`.jsx`)인지 판정한다. 커버리지 판정이 이 그룹에만
+ * `checkJs` 요구를 추가로 건다 — `.ts`/`.tsx`는 컴파일 대상 멤버십만으로
+ * 타입 검사가 보장되지만, JS는 `checkJs`가 꺼진 프로그램이 `import`로
+ * 끌어들여도 멤버십에는 그대로 나타난다(`tests/tsconfig.json`이 `checkJs:
+ * false`인 채로 `scripts/*.mjs` 셋을 담는 것이 트랙-1 실측이다). 멤버십만
+ * 세면 `pnpm typecheck:scripts` 연결이 끊겨도 그 셋이 계속 "커버됨"으로 잘못
+ * 보인다.
+ */
+const requiresCheckJs = (file: string) => !/\.tsx?$/.test(file);
+
+/**
+ * 체인 커버리지 판정에서 예외로 두는 `{ file, project }` 쌍. `project`가
+ * `file`을 실제로 컴파일하지만 `chainTypecheckProjects()`에는 연결하지
+ * 않는다 — 형태를 쌍으로 둔 이유는 stale 판정을 리터럴 대조가 아니라 실행으로
+ * 지게 하기 위해서다(아래 "체인 커버리지 예외 목록" `it`이 항목마다 파일
+ * 존재·실제 컴파일·체인 커버리지 밖 셋을 확인한다).
+ *
+ * 오늘 유일한 항목인 `tests/fixtures/dom-lib-forbidden.ts`는 DOM 전역 차단을
+ * 확인하려고 일부러 타입 오류를 담은 fixture라, 체인에 넣으면 게이트가 항상
+ * 실패한다. 위 "DOM 전역을 사용하면 컴파일되지 않는다" `it`의 `compileFixture()`가
+ * 그 타입 오류를 이미 직접 확인한다.
+ */
+const TYPECHECK_COVERAGE_EXCEPTIONS = [
+  {
+    file: "tests/fixtures/dom-lib-forbidden.ts",
+    project: "tests/fixtures/io-dom-forbidden.tsconfig.json",
+  },
+] as const;
+
+/**
  * `git ls-files -- <directory>`로 그 디렉터리 아래 추적 파일 중 typecheck 대상
  * 확장자를 가진 것의 저장소 상대 경로를 돌려준다. 검사 대상 tsconfig의 `exclude`를
  * 읽지 않는 것이 핵심이다 — 기대값을 검사 대상이 스스로 정하면 `exclude` 한 줄로
  * 파일을 게이트 밖으로 빼도 기대값이 같이 줄어 단언이 구현을 되뇔 뿐 아무것도
  * 막지 못한다(`include` 축소·`checkJs` 해제와 같은 부류의 무력화 경로다).
- * 컴파일에서 빠진 파일이 정당한 예외인지는 기대값을 깎아서가 아니라
- * `nestedTsconfigCompiledFiles`로 같은 디렉터리의 다른 tsconfig가 그 파일을
- * 실제로 컴파일하는지 확인해서 판정한다.
+ *
+ * 컴파일 대상 포함 여부(빠진 파일이 정당한 예외인지)는 이제 이 함수가 아니라
+ * 저장소 전체를 보는 새 커버리지 축(`trackedSourceFilePaths()`·
+ * `chainTypecheckProjects()`·`TYPECHECK_COVERAGE_EXCEPTIONS`)이 진다. 이 함수의
+ * 유일한 남은 소비처는 아래 "JS 소스를 가진 디렉터리는..." `it`이고, 그 `it`은
+ * 이 결과로 "이 디렉터리에 JS 소스가 있는가"만 판정한다.
  */
 const trackedSourceFiles = async (directory: string) => {
   const { stdout } = await execFileAsync("git", ["ls-files", "--", directory], {
@@ -323,37 +508,6 @@ const trackedSourceFiles = async (directory: string) => {
   });
 
   return stdout.split("\n").filter((path) => typecheckedExtension.test(path));
-};
-
-const tsconfigFileName = /(?:^|\/)[^/]*tsconfig\.json$/;
-
-/**
- * `<directory>` 아래 추적 tsconfig 중 그 디렉터리 대표 tsconfig
- * (`<directory>/tsconfig.json`)를 뺀 나머지가 컴파일하는 파일의 합집합.
- * 대표 tsconfig가 빠뜨린 파일이 "다른 tsconfig가 대신 검사하는 정당한 예외"임을
- * 보이는 독립 근거로 쓴다 — `tests/fixtures/dom-lib-forbidden.ts`가 그 경우로,
- * DOM 전역 차단을 확인하려고 fixture 전용 tsconfig 2개로만 컴파일한다.
- * 대상은 `tsconfig.json`만이 아니라 `io-dom-forbidden.tsconfig.json`처럼
- * 접미 형태의 파일명도 포함해야 하므로 파일명 패턴으로 찾는다.
- */
-const nestedTsconfigCompiledFiles = async (directory: string) => {
-  const { stdout } = await execFileAsync("git", ["ls-files", "--", directory], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
-    maxBuffer: maxStdoutBuffer,
-  });
-  const projects = stdout
-    .split("\n")
-    .filter(
-      (path) =>
-        tsconfigFileName.test(path) && path !== `${directory}/tsconfig.json`,
-    );
-  const compiled: string[] = [];
-
-  for (const project of projects) {
-    compiled.push(...(await compiledFilePaths(project)));
-  }
-
-  return compiled;
 };
 
 describe("워크스페이스 의존성 경계", () => {
@@ -631,40 +785,115 @@ describe("unregisteredWorkspacePackages()(판정 목록 미등재 패키지)", (
   });
 });
 
-describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
-  it("전용 tsconfig를 갖고 루트 typecheck 체인에서 도달할 수 있다", async () => {
-    const directories = await trackedTopLevelSourceDirectories();
-    const chain = await typecheckedProjectPaths();
+/**
+ * `segmentProjectPath()` 자체를 리터럴 문자열로 직접 단위 테스트한다.
+ * `chainTypecheckProjects()`를 통해서만 간접으로 검증하면, 오늘 실제
+ * workspace 패키지의 `typecheck` 스크립트가 전부 `-p`/`--project`를 첫
+ * 토큰으로 두는 형태(`tsc -p <path> ...`)라 "플래그가 첫 토큰이 아닌
+ * 세그먼트"라는 갈래를 실제 트리로는 관측할 수 없다. 그 갈래를 리터럴
+ * fixture로 직접 짚는다 — `-p`/`--project`를 첫 토큰 위치에만 앵커링하면
+ * `"tsc --strict -p custom/tsconfig.json"` 같은 세그먼트가 그 경로를 못
+ * 찾고 조용히 `tsconfig.json` 기본값으로 오분류된다(`PIT-0027`).
+ */
+describe("segmentProjectPath()(typecheck 세그먼트의 프로젝트 경로 추출)", () => {
+  it.each([
+    ["tsc -p tsconfig.configs.json --noEmit", "tsconfig.configs.json"],
+    ["tsc --noEmit", "tsconfig.json"],
+    ["tsc --strict -p custom/tsconfig.json", "custom/tsconfig.json"],
+    ["echo skip", undefined],
+    ["node scripts/x.mjs", undefined],
+  ] as const)("%s → %s", (segment, expected) => {
+    expect(segmentProjectPath(segment)).toBe(expected);
+  });
+});
 
-    expect(directories.length).toBeGreaterThan(0);
-    for (const directory of directories) {
-      expect(chain).toContain(`-p ${directory}/tsconfig.json`);
-      expect(await readTsconfig(directory)).toBeTypeOf("object");
+describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
+  /**
+   * 이 describe의 공유 비용. `chainTypecheckProjects()`가 내는 프로그램
+   * 전량(오늘 15개)에 `--listFilesOnly`와 `--showConfig`를 각각 한 번씩만
+   * 돌려 아래 두 `it`이 그 결과를 나눠 쓴다 — 커버리지 `it`과 예외 목록
+   * `it`이 각자 프로그램 전량을 다시 돌리면 이 파일 전체 실행 시간이
+   * 몇 배로 늘고 `it` 하나가 vitest 기본 5초 타임아웃에 닿을 수 있다(실측:
+   * 15개 기준 `--listFilesOnly` 총합 약 1.25초, `--showConfig` 총합 약
+   * 0.6초).
+   */
+  let trackedFiles: string[];
+  let chainProjects: string[];
+  let compiledByProject: Map<string, readonly string[]>;
+  let checkJsByProject: Map<string, boolean>;
+
+  beforeAll(async () => {
+    trackedFiles = await trackedSourceFilePaths();
+    chainProjects = await chainTypecheckProjects();
+    compiledByProject = new Map();
+    checkJsByProject = new Map();
+
+    for (const project of chainProjects) {
+      compiledByProject.set(project, await compiledFilePathsOrEmpty(project));
+      checkJsByProject.set(project, await resolvedCheckJs(project));
     }
   });
 
-  it("각 디렉터리의 추적 소스 파일을 tsconfig의 실제 컴파일 대상에 전부 포함한다", async () => {
-    const directories = await trackedTopLevelSourceDirectories();
+  /**
+   * `chainProjects` 중 하나라도 `file`을 컴파일하고, JS 소스면 그 프로그램의
+   * `checkJs`도 켜져 있는지를 본다. 커버리지 `it`(차집합)과 예외 목록
+   * `it`(개별 파일이 커버리지 밖에 있는지)이 같은 판정을 공유한다 — 갈리면
+   * "차집합에 없다"와 "예외 목록 셋째 단언을 통과한다"가 서로 다른 답을
+   * 낼 수 있다.
+   */
+  const coveredByChain = (file: string) => {
+    const needsCheckJs = requiresCheckJs(file);
 
-    expect(directories.length).toBeGreaterThan(0);
-    for (const directory of directories) {
-      const tracked = await trackedSourceFiles(directory);
-      const compiled = await compiledFilePaths(`${directory}/tsconfig.json`);
-
-      expect(tracked.length).toBeGreaterThan(0);
-      const missing = tracked.filter(
-        (file) => !compiled.some((path) => path.endsWith(`/${file}`)),
+    return chainProjects.some((project) => {
+      const isCompiled = (compiledByProject.get(project) ?? []).some((path) =>
+        path.endsWith(`/${file}`),
       );
-      // 중첩 tsconfig는 대표 tsconfig가 빠뜨린 파일이 있을 때만 실행한다 —
-      // 지금 해당하는 디렉터리는 tests 하나뿐이라 나머지에서 tsc를 헛돌리지 않는다.
-      const nested =
-        missing.length > 0 ? await nestedTsconfigCompiledFiles(directory) : [];
-      const uncovered = missing.filter(
-        (file) => !nested.some((path) => path.endsWith(`/${file}`)),
-      );
+      if (!isCompiled) return false;
+      return !needsCheckJs || checkJsByProject.get(project) === true;
+    });
+  };
 
-      expect(uncovered).toEqual([]);
-    }
+  it("추적 소스 파일 전량이 체인 프로그램의 컴파일 대상에 들거나 예외 목록에 있다", () => {
+    // 가드 1 — `git ls-files`가 잘못된 cwd에서 도는 것을 잡는다.
+    expect(trackedFiles.length).toBeGreaterThan(0);
+
+    const packageDirectories = workspacePackageDirectories(repositoryRoot);
+    // 가드 2 — 가드 3의 하한이 0이면 가드 3이 공허하게 참이 되는 것을 막는다.
+    expect(packageDirectories.length).toBeGreaterThan(0);
+    // 가드 3 — turbo 갈래가 통째로 죽는 것을 잡는다. 리터럴 수가 아니라
+    // 공용 열거(`workspacePackageDirectories().length`)에서 파생한 하한을
+    // 쓴다. 이 가드가 먼저 지면 아래 차집합 단언의 거대한 실패 목록보다
+    // "발견 로직 자체가 죽었다"는 신호가 먼저 나온다.
+    expect(chainProjects.length).toBeGreaterThanOrEqual(
+      packageDirectories.length,
+    );
+
+    // 실패 메시지에 미커버 경로가 그대로 남도록 불리언이 아니라 목록으로
+    // 단언한다.
+    const uncovered = trackedFiles.filter((file) => !coveredByChain(file));
+
+    expect(uncovered.sort()).toEqual(
+      TYPECHECK_COVERAGE_EXCEPTIONS.map((exception) => exception.file).sort(),
+    );
+  });
+
+  it.each(
+    TYPECHECK_COVERAGE_EXCEPTIONS,
+  )("예외 목록 항목마다 파일 존재·실제 컴파일·체인 커버리지 밖 셋을 만족한다 — $file", async ({
+    file,
+    project,
+  }) => {
+    // 1 — 사라진 경로가 예외 목록에 남는 것을 막는다.
+    expect(trackedFiles).toContain(file);
+
+    // 2 — 근거가 죽은 예외(짝지어진 tsconfig가 더는 이 파일을 컴파일하지
+    // 않는 상태)를 막는다.
+    const compiled = await compiledFilePathsOrEmpty(project);
+    expect(compiled.some((path) => path.endsWith(`/${file}`))).toBe(true);
+
+    // 3 — 체인이 이미 덮게 된 파일이 예외 목록에 남아 커버리지 판정의
+    // 면적을 조용히 갉는 것을 막는다.
+    expect(coveredByChain(file)).toBe(false);
   });
 
   it("JS 소스를 가진 디렉터리의 tsconfig는 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다", async () => {
