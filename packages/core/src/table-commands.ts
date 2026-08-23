@@ -289,8 +289,14 @@ export const insertTableColumn = (
   atIndex: number,
   createId: IdFactory,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    insertGridColumn(table, atIndex, createId),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => insertGridColumn(table, atIndex, createId),
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, { row: 0, column: atIndex }),
+    },
   );
 
 export const deleteTableRow = (
@@ -298,8 +304,17 @@ export const deleteTableRow = (
   tableBlockId: string,
   index: number,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    deleteGridRow(table, index),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => deleteGridRow(table, index),
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, {
+          row: Math.min(index, table.rows.length - 1),
+          column: 0,
+        }),
+    },
   );
 
 export const deleteTableColumn = (
@@ -307,8 +322,17 @@ export const deleteTableColumn = (
   tableBlockId: string,
   index: number,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    deleteGridColumn(table, index),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => deleteGridColumn(table, index),
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, {
+          row: 0,
+          column: Math.min(index, table.columns.length - 1),
+        }),
+    },
   );
 
 export const moveTableRow = (
@@ -317,8 +341,14 @@ export const moveTableRow = (
   fromIndex: number,
   toIndex: number,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    moveGridRow(table, fromIndex, toIndex),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => moveGridRow(table, fromIndex, toIndex),
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, { row: toIndex, column: 0 }),
+    },
   );
 
 export const moveTableColumn = (
@@ -327,8 +357,14 @@ export const moveTableColumn = (
   fromIndex: number,
   toIndex: number,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    moveGridColumn(table, fromIndex, toIndex),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => moveGridColumn(table, fromIndex, toIndex),
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, { row: 0, column: toIndex }),
+    },
   );
 
 export const resizeTableColumn = (
@@ -385,16 +421,22 @@ export const toggleTableHeaderRow = (
   editor: Editor,
   tableBlockId: string,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    toggleGridHeaderRow(table),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => toggleGridHeaderRow(table),
+    { preserveSelection: true },
   );
 
 export const toggleTableHeaderColumn = (
   editor: Editor,
   tableBlockId: string,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    toggleGridHeaderColumn(table),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => toggleGridHeaderColumn(table),
+    { preserveSelection: true },
   );
 
 export const setTableCellColor = (

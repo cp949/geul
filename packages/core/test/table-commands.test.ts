@@ -1,8 +1,12 @@
 /**
  * 표 명령의 구조 조작 경로를 검증한다. 표 삽입, 행·열의 삽입·삭제·이동,
- * 열 너비 조절, 셀 병합·분할, 그리고 undo 단계를 만들지 않아야 하는 no-op
- * 방어 동작을 다룬다. 붙여넣기 경로는 table-paste-*.test.ts가 맡는다.
+ * 열 너비 조절, 헤더 행·열 토글, 셀 병합·분할, 그리고 undo 단계를 만들지
+ * 않아야 하는 no-op 방어 동작을 다룬다. 각 구조 변경 명령이 연산 후 캐럿을
+ * 예측 가능한 셀로 옮기는지도 함께 검증한다(applyTableGridOperation의
+ * selectCellId/preserveSelection 계약). 붙여넣기 경로는 table-paste-*.test.ts가
+ * 맡는다.
  */
+import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
@@ -17,13 +21,16 @@ import {
   moveTableRow,
   resizeTableColumn,
   splitTableCell,
+  toggleTableHeaderRow,
 } from "../src/table-commands.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
+  activeCellId,
   createTableFixtureEditor,
   docWithParagraph,
   docWithTable,
   docWithTwoRowTable,
+  selectCellRange,
 } from "./table-test-support.js";
 
 describe("표를 삽입한다", () => {
@@ -191,6 +198,19 @@ describe("표에 열을 삽입한다", () => {
     expect(firstRowCells[1]?.attrs?.columnId).toBe("col-1");
     expect(firstRowCells[2]?.attrs?.columnId).toBe("col-2");
   });
+
+  it("삽입 후 새로 생긴 열의 첫 셀로 캐럿을 옮긴다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const createId = sequentialIds("id");
+
+    const result = insertTableColumn(editor, "table-1", 1, createId);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
+    const insertedCellId = table?.content?.[0]?.content?.[1]?.attrs?.cellId;
+    expect(typeof insertedCellId).toBe("string");
+    expect(activeCellId(editor)).toBe(insertedCellId);
+  });
 });
 
 describe("표에서 행을 삭제한다", () => {
@@ -203,6 +223,15 @@ describe("표에서 행을 삭제한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content).toHaveLength(1);
     expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
+  });
+
+  it("삭제 후 살아남은 행의 첫 셀로 캐럿을 옮긴다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    const result = deleteTableRow(editor, "table-1", 0);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(activeCellId(editor)).toBe("cell-3");
   });
 
   it("삭제 직후 undo 1회로 복원된다", () => {
@@ -238,6 +267,15 @@ describe("표에서 열을 삭제한다", () => {
     expect(table?.content?.[0]?.content).toHaveLength(1);
   });
 
+  it("삭제 후 살아남은 열의 첫 행 셀로 캐럿을 옮긴다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    const result = deleteTableColumn(editor, "table-1", 0);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(activeCellId(editor)).toBe("cell-2");
+  });
+
   it("삭제 직후 undo 1회로 복원된다", () => {
     const editor = createTableFixtureEditor(docWithTable);
     const before = editor.getJSON() as TiptapJsonNode;
@@ -270,6 +308,15 @@ describe("표의 행을 이동한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
     expect(table?.content?.[1]?.attrs?.rowId).toBe("row-1");
+  });
+
+  it("이동 후 이동한 행(목표 인덱스)의 첫 셀로 캐럿을 옮긴다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    const result = moveTableRow(editor, "table-1", 0, 1);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(activeCellId(editor)).toBe("cell-1");
   });
 
   it("이동 직후 undo 1회로 복원된다", () => {
@@ -322,6 +369,22 @@ describe("표의 열을 이동한다", () => {
     const firstRowCells = table?.content?.[0]?.content ?? [];
     expect(firstRowCells[0]?.attrs?.columnId).toBe("col-2");
     expect(firstRowCells[1]?.attrs?.columnId).toBe("col-1");
+  });
+
+  it("이동 후 이동한 열(목표 인덱스)의 첫 행 셀로 캐럿을 옮긴다", () => {
+    // fromIndex=1, toIndex=0으로 검증한다(0→1이 아니다): 2열 표에서 목표
+    // 열이 마지막 열(index1)이면, selectCellId 없이도 ProseMirror의
+    // Selection.near 기본 폴백이 문서 끝에서부터 뒤로 검색해 우연히 표의
+    // "마지막 셀"에 멈춘다 — 목표 좌표와 그 폴백 결과가 같은 셀이 되어
+    // 옵션이 없어도 assertion이 통과해버린다(실측 확인). 목표 열을 index0
+    // (마지막 열이 아닌 위치)으로 바꾸면 그 우연한 일치가 사라져 옵션
+    // 유무가 실제로 갈린다.
+    const editor = createTableFixtureEditor(docWithTable);
+
+    const result = moveTableColumn(editor, "table-1", 1, 0);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(activeCellId(editor)).toBe("cell-2");
   });
 
   it("이동 직후 undo 1회로 복원된다", () => {
@@ -383,6 +446,25 @@ describe("표의 열 너비를 조절한다", () => {
       error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+});
+
+describe("표의 헤더 행·열을 토글한다", () => {
+  it("헤더 행 토글 후에도 셀 범위 선택을 유지한다", () => {
+    // 헤더 토글은 headerRows 플래그만 바꾸고 행·열·셀 id는 그대로다 —
+    // preserveSelection: true로 옛 CellSelection의 양 끝 cellId를 새 표에서
+    // 그대로 복원해야 한다(구조 불변 경로, setTableCellColor/Align과 같은 패턴).
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    selectCellRange(editor, "cell-1", "cell-2");
+
+    const result = toggleTableHeaderRow(editor, "table-1");
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(CellSelection);
+    const cellSelection = selection as CellSelection;
+    expect(cellSelection.$anchorCell.nodeAfter?.attrs.cellId).toBe("cell-1");
+    expect(cellSelection.$headCell.nodeAfter?.attrs.cellId).toBe("cell-2");
   });
 });
 
