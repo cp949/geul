@@ -23,7 +23,6 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
 
     expect(moved).toBe(true);
     expect(activeCellId(editor)).toBe("cell-2");
-    editor.destroy();
   });
 
   it("행의 마지막 셀에서 Tab은 다음 행의 첫 셀로 넘어간다", () => {
@@ -34,7 +33,6 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
 
     expect(moved).toBe(true);
     expect(activeCellId(editor)).toBe("cell-3");
-    editor.destroy();
   });
 
   it("표의 마지막 셀에서 Tab은 새 행을 추가하고 그 첫 셀로 캐럿을 옮긴다", () => {
@@ -49,7 +47,6 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
     const newCellId = table?.content?.[2]?.content?.[0]?.attrs?.cellId;
     expect(typeof newCellId).toBe("string");
     expect(activeCellId(editor)).toBe(newCellId);
-    editor.destroy();
   });
 
   it("새 행 생성은 undo 1회로 복원된다", () => {
@@ -61,7 +58,6 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("Shift+Tab은 이전 셀로 캐럿을 옮긴다", () => {
@@ -72,7 +68,6 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
 
     expect(moved).toBe(true);
     expect(activeCellId(editor)).toBe("cell-1");
-    editor.destroy();
   });
 
   it("표의 첫 셀에서 Shift+Tab은 캐럿을 그대로 두고 표 밖으로 포커스를 넘기지 않는다", () => {
@@ -84,7 +79,6 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
 
     expect(moved).toBe(true);
     expect(editor.state.selection.from).toBe(before);
-    editor.destroy();
   });
 
   it("표 밖에서는 아무 것도 하지 않고 false를 반환한다", () => {
@@ -95,6 +89,5 @@ describe("Tab/Shift+Tab 셀 탐색", () => {
       false,
     );
     expect(goToPreviousTableCell(editor)).toBe(false);
-    editor.destroy();
   });
 });

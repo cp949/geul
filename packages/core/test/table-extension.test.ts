@@ -66,7 +66,6 @@ describe("표를 렌더링한다", () => {
     expect(cols).toHaveLength(2);
     expect((cols[0] as HTMLElement).style.width).toBe("160px");
     expect((cols[1] as HTMLElement).style.width).toBe("240px");
-    editor.destroy();
   });
 });
 
@@ -125,7 +124,6 @@ describe("Table/Row/Cell 노드 스키마", () => {
     });
 
     const json = editor.getJSON();
-    editor.destroy();
 
     expect(json).toEqual({
       type: "doc",

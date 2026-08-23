@@ -23,13 +23,11 @@
  *
  * 격리 fixture 에디터의 해제 책임은 `table-test-support.ts`가 등록하는
  * module-scope `Set`과 `afterEach`가 단독으로 진다 — 왜 그런 구조인지는
- * 그 `Set` 선언부 옆 주석이 소유한다. 이 파일의 셀 선택 테스트들이 각자
- * `it` 끝에서 여전히 `editor.destroy()`를 부르는 것은 그 단독 소유와
- * 모순이 아니다 — `destroy()`는 멱등이라 호출부가 먼저 해제해도
- * `afterEach`가 나중에 같은 에디터를 다시 순회하는 것이 안전하다. 아래
- * `createTableFixtureEditor 해제 계약` 블록은 정확히 그 반대 경우 —
- * 호출부가 전혀 해제하지 않고 끝나는 경우 — 를 재현해 `afterEach`가
- * 혼자서도 정리를 끝낸다는 것을 단언한다.
+ * 그 `Set` 선언부 옆 주석이 소유한다. 이 파일의 셀 선택 테스트도 이제 다른
+ * 호출부와 마찬가지로 `afterEach` 단독 정리에 의존한다. 아래
+ * `createTableFixtureEditor 해제 계약` 블록은 정반대 경우 — 호출부가 전혀
+ * 해제하지 않고 끝나는 경우 — 를 재현해 `afterEach`가 혼자서도 정리를
+ * 끝낸다는 것을 단언한다.
  *
  * 덮지 않는 것: 같은 모듈의 `placeCaretInCell`(경계 + 1에 캐럿을 둔다)·
  * `activeCellId`(`$from.depth` 자신부터 본다)의 주장, `createTableFixtureEditor`의
@@ -80,8 +78,6 @@ describe("표 셀 선택 fixture 계약", () => {
       const selection = cellSelectionOf(editor);
       expect(selection.$anchorCell.nodeAfter?.attrs.cellId).toBe("cell-1");
       expect(selection.$headCell.nodeAfter?.attrs.cellId).toBe("cell-4");
-
-      editor.destroy();
     });
 
     it("cellId가 undefined면 셀 fixture 준비 실패로 던진다", () => {
@@ -93,8 +89,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(() => selectCellRange(editor, "cell-1", undefined)).toThrow(
         "셀 fixture 준비 실패",
       );
-
-      editor.destroy();
     });
 
     it("문서에 없는 cellId면 셀 fixture 준비 실패로 던진다", () => {
@@ -103,8 +97,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(() => selectCellRange(editor, "cell-1", "cell-없음")).toThrow(
         "셀 fixture 준비 실패",
       );
-
-      editor.destroy();
     });
 
     it("anchor가 문서에 없는 cellId여도 셀 fixture 준비 실패로 던진다", () => {
@@ -114,8 +106,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(() => selectCellRange(editor, "cell-없음", "cell-4")).toThrow(
         "셀 fixture 준비 실패",
       );
-
-      editor.destroy();
     });
   });
 
@@ -130,8 +120,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(selection.$anchorCell.pos).toBe(selection.$headCell.pos);
       expect(selection.$anchorCell.nodeAfter?.attrs.cellId).toBe("cell-3");
       expect(selection.$headCell.nodeAfter?.attrs.cellId).toBe("cell-3");
-
-      editor.destroy();
     });
 
     it("cellId가 undefined면 셀 fixture 준비 실패로 던진다", () => {
@@ -140,8 +128,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(() => selectSingleCell(editor, undefined)).toThrow(
         "셀 fixture 준비 실패",
       );
-
-      editor.destroy();
     });
 
     it("문서에 없는 cellId면 셀 fixture 준비 실패로 던진다", () => {
@@ -151,8 +137,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(() => selectSingleCell(editor, "cell-없음")).toThrow(
         "셀 fixture 준비 실패",
       );
-
-      editor.destroy();
     });
   });
 
@@ -169,8 +153,6 @@ describe("표 셀 선택 fixture 계약", () => {
 
       const selection = CellSelection.create(editor.state.doc, boundary);
       expect(selection.$anchorCell.nodeAfter?.attrs.cellId).toBe("cell-1");
-
-      editor.destroy();
     });
 
     it("셀 경계 + 1은 depth 3·node(-1)이 tableRow이고 create가 RangeError Not a table node: tableRow를 던진다", () => {
@@ -187,8 +169,6 @@ describe("표 셀 선택 fixture 계약", () => {
       expect(() => CellSelection.create(editor.state.doc, inside)).toThrow(
         "Not a table node: tableRow",
       );
-
-      editor.destroy();
     });
   });
 });
