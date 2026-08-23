@@ -9,12 +9,14 @@
  * 켜져 있어야 커버로 세고, 예외로 둔 파일은 실제로 존재하고 짝지은 tsconfig가
  * 실제로 컴파일하며 체인 커버리지 밖에 있는지까지 확인한다. 발견이 통째로
  * 죽는 것과 workspace 패키지가 프로그램을 하나도 못 내는 것은 각각 가드와
- * 즉시 throw로 잡는다. 같은 describe에 남은 옛 `it`은 JS 소스가 있는 최상위
- * 디렉터리의 tsconfig가 `allowJs`·`checkJs`를 켜고 `include`가 확장자를
- * 거르지 않는지를 여전히 디렉터리 축으로 대조한다 — 발견 축이 둘인 중간
- * 상태이고, 의도한 것이다(`DELTA-03`이 하나로 되돌린다). 셋째는 열거된
- * workspace 패키지가 빠짐없이 `scripts.typecheck`를 정의하는지 — turbo는 그
- * 정의가 없는 패키지를 대상에서 조용히 빼고 남은 태스크만 실행한다. 넷째와
+ * 즉시 throw로 잡는다. 같은 describe에 남은 그다음 `it`은 체인 프로그램 중
+ * 자신의 tsconfig 디렉터리 아래 추적 JS 소스를 실제로 컴파일 대상에 담는
+ * 것(소유 기준)만 골라, 그 프로그램의 `allowJs`·`checkJs`가 켜져 있고
+ * `include`가 확장자로 거르지 않는지를 대조한다 — 발견 축은 이 파일
+ * 커버리지와 체인 프로그램 소유 기준 둘로 정리됐고, 디렉터리 열거 축은
+ * 걷어냈다. 셋째는 열거된 workspace 패키지가 빠짐없이 `scripts.typecheck`를
+ * 정의하는지 — turbo는 그 정의가 없는 패키지를 대상에서 조용히 빼고 남은
+ * 태스크만 실행한다. 넷째와
  * 다섯째는 경계 게이트와 라이선스 게이트가 각각 그 열거를 실제로 훑는지 —
  * 게이트를 실행해 출력이 보고하는 매니페스트 수를 열거에서 파생한 기대값과
  * 대조한다.
@@ -39,10 +41,7 @@ import {
   HEADLESS_PACKAGES,
   headlessPackageDirectories,
 } from "../scripts/headless-packages.mjs";
-import {
-  WORKSPACE_ROOTS,
-  workspacePackageDirectories,
-} from "../scripts/workspace-roots.mjs";
+import { workspacePackageDirectories } from "../scripts/workspace-roots.mjs";
 
 // 저장소 루트를 cwd가 아니라 이 파일 위치로 잡는다. 이 파일의 다른 헬퍼가
 // 전부 `import.meta.url` 기준이고, cwd 상대면 잘못된 cwd에서 열거가 빈
@@ -232,30 +231,6 @@ const compileFixture = async (fixture: string) => {
 const typecheckedExtension = /\.(?:m|c)?[jt]sx?$/;
 
 /**
- * `git ls-files`로 추적 파일을 훑어 워크스페이스 루트(`WORKSPACE_ROOTS`) 밖에서
- * typecheck 대상 확장자(`.js`/`.mjs`/`.cjs`/`.ts`/`.jsx`/`.tsx`)를 가진 최상위
- * 디렉터리를 찾는다. 워크스페이스 루트를 이 파일에 리터럴로 다시 적지 않고
- * `scripts/workspace-roots.mjs`의 `WORKSPACE_ROOTS`를 재사용한다 — 그 상수는
- * `tests/workspace-roots.test.ts`가 `pnpm-workspace.yaml`과의 어긋남을 잡는
- * 계약 테스트로 감시한다. 여기서 사본을 새로 만들면 `pnpm-workspace.yaml`에서
- * 루트가 빠져도 이 테스트만 조용히 옛 목록을 계속 써 그 디렉터리를 영영
- * 제외하는 사각지대가 생긴다 — 이 테스트가 막으려는 것과 같은 형태다.
- */
-const trackedTopLevelSourceDirectories = async () => {
-  const { stdout } = await execFileAsync("git", ["ls-files"], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
-    maxBuffer: maxStdoutBuffer,
-  });
-  const directories = stdout
-    .split("\n")
-    .filter((path) => path.includes("/") && typecheckedExtension.test(path))
-    .map((path) => path.slice(0, path.indexOf("/")))
-    .filter((directory) => !WORKSPACE_ROOTS.includes(directory));
-
-  return [...new Set(directories)].sort();
-};
-
-/**
  * 루트 `package.json`의 `typecheck` 스크립트 값에서 `pnpm <스크립트명>` 참조를
  * 한 단계 펼쳐, 실제로 실행되는 tsc 명령 전체를 하나의 문자열로 이어붙인다.
  * `-p <dir>/tsconfig.json`이 체인 안에 있는지 문자열 포함으로 대조하기 위한 것이다.
@@ -365,9 +340,9 @@ const chainTypecheckProjects = async () => {
 /**
  * `git ls-files`로 얻은 추적 파일 전량 중 typecheck 대상 확장자
  * (`.js`/`.mjs`/`.cjs`/`.ts`/`.jsx`/`.tsx`)에 걸리는 저장소 상대 경로
- * 목록(오늘 171개). `trackedSourceFiles(directory)`와 인자만 다르다 — 이
- * 함수는 디렉터리로 좁히지 않고 저장소 전역을 낸다. 새 커버리지 축의 발견
- * 단위가 디렉터리가 아니라 파일이기 때문이다.
+ * 목록(오늘 171개). 파일 커버리지 축과 체인 프로그램 소유 기준 판정이 이
+ * 전역 열거 하나를 공유한다 — 디렉터리별로 `git ls-files`를 다시 부르는
+ * 두 번째 출발점을 두지 않는다(`PIT-0022`).
  */
 const trackedSourceFilePaths = async () => {
   const { stdout } = await execFileAsync("git", ["ls-files"], {
@@ -489,25 +464,95 @@ const TYPECHECK_COVERAGE_EXCEPTIONS = [
 ] as const;
 
 /**
- * `git ls-files -- <directory>`로 그 디렉터리 아래 추적 파일 중 typecheck 대상
- * 확장자를 가진 것의 저장소 상대 경로를 돌려준다. 검사 대상 tsconfig의 `exclude`를
- * 읽지 않는 것이 핵심이다 — 기대값을 검사 대상이 스스로 정하면 `exclude` 한 줄로
- * 파일을 게이트 밖으로 빼도 기대값이 같이 줄어 단언이 구현을 되뇔 뿐 아무것도
- * 막지 못한다(`include` 축소·`checkJs` 해제와 같은 부류의 무력화 경로다).
+ * 저장소 상대 경로가 직접 속한 디렉터리를 뽑는다(판정 1) — 마지막
+ * 세그먼트(파일명, 또는 체인 프로그램 경로라면 tsconfig 파일명)를 뗀
+ * 나머지다. 슬래시가 없는 경로는 저장소 루트에 직접 있다는 뜻이라 빈
+ * 문자열을 낸다. 체인 프로그램의 tsconfig 디렉터리와 추적 JS 소스 파일이
+ * 직접 속한 디렉터리를 이 함수 하나로 뽑아, 아래 소유 판정이 정확히 같은
+ * 규칙으로 둘을 비교하게 한다.
  *
- * 컴파일 대상 포함 여부(빠진 파일이 정당한 예외인지)는 이제 이 함수가 아니라
- * 저장소 전체를 보는 새 커버리지 축(`trackedSourceFilePaths()`·
- * `chainTypecheckProjects()`·`TYPECHECK_COVERAGE_EXCEPTIONS`)이 진다. 이 함수의
- * 유일한 남은 소비처는 아래 "JS 소스를 가진 디렉터리는..." `it`이고, 그 `it`은
- * 이 결과로 "이 디렉터리에 JS 소스가 있는가"만 판정한다.
+ * "그 디렉터리 아래"를 하위 디렉터리까지 재귀적으로 포함하는 뜻으로 읽지
+ * 않는다 — 재귀로 읽으면 루트 프로그램(`tsconfig.configs.json`, 디렉터리가
+ * 빈 문자열)이 `scripts/*.mjs` 전부를 포함해 저장소 전체를 "소유"하게 되어
+ * 오늘 트리에서 이미 거짓으로 대상에 들어온다(실측: 오늘
+ * `tsconfig.configs.json` 디렉터리에 직접 있는 추적 JS는 0). 대신 "직접
+ * 속한다"(dirname이 정확히 같다)로 읽는다 — 저장소 루트에 새 JS 파일을 바로
+ * 두면(디렉터리 세그먼트 없이) 그 파일의 dirname도 빈 문자열이 되어 루트
+ * 프로그램이 그 순간에만 대상에 들어온다(`DELTA-03` 조건 3).
  */
-const trackedSourceFiles = async (directory: string) => {
-  const { stdout } = await execFileAsync("git", ["ls-files", "--", directory], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
-    maxBuffer: maxStdoutBuffer,
-  });
+const repositoryRelativeDirectory = (path: string) => {
+  const slashIndex = path.lastIndexOf("/");
+  return slashIndex === -1 ? "" : path.slice(0, slashIndex);
+};
 
-  return stdout.split("\n").filter((path) => typecheckedExtension.test(path));
+/**
+ * 체인 프로그램 `project`가 JS include 단언의 대상인지를 소유 기준으로
+ * 판정한다(판정 1). 대상 ⟺ `project`의 tsconfig 디렉터리에 직접 속한 추적
+ * JS 소스가 있고, 그 파일이 `project`의 컴파일 대상에 실제로 들어 있다.
+ *
+ * 멤버십만으로 뽑으면(`--listFilesOnly`가 import로 끌려온 파일도 담으므로)
+ * `tests/tsconfig.json`처럼 소유하지 않는 프로그램까지 대상에 섞인다 — 그
+ * 프로그램은 `scripts/*.mjs` 셋을 컴파일 대상에 담지만(테스트가 그 파일들을
+ * import한다) 그 파일들이 직접 속한 디렉터리(`scripts`)를 소유하지 않는다.
+ */
+const ownsCompiledJsSource = (
+  project: string,
+  trackedFiles: readonly string[],
+  compiledFiles: readonly string[],
+) => {
+  const directory = repositoryRelativeDirectory(project);
+
+  return trackedFiles.some(
+    (file) =>
+      jsSourceExtension.test(file) &&
+      repositoryRelativeDirectory(file) === directory &&
+      compiledFiles.some((path) => path.endsWith(`/${file}`)),
+  );
+};
+
+/**
+ * `include` 패턴 하나가 확장자로 끝나는지 판정한다. 마지막 세그먼트에 점이
+ * 있고 그 뒤에 슬래시나 점이 아닌 문자가 하나 이상 있으면 참이다 — 그래야
+ * 특정 확장자만 잡는 패턴과, 별표 하나나 디렉터리 이름처럼 확장자를 거르지
+ * 않는 패턴이 갈린다(`PIT-0027` — 거절할 패턴을 나열하지 않고 통과할 속성을
+ * 정의한다).
+ */
+const patternEndsWithExtension = (pattern: string) => /\.[^./]+$/.test(pattern);
+
+/**
+ * `tsc -p <projectPath> --showConfig`로 `allowJs`·`checkJs`의 해석값과
+ * `include` 패턴 목록을 함께 얻는다. `resolvedCheckJs()`와 따로 두는 이유는
+ * 그 함수가 `checkJs` 하나만 boolean으로 좁혀 돌려주기 때문이다 — 이 단언은
+ * `allowJs`와 `include`도 필요하다. 소유 기준을 통과한 프로그램(오늘 1개)에만
+ * 부르므로, 같은 프로그램에 `--showConfig`를 한 번 더 도는 비용은 무시할
+ * 만하다(R7).
+ *
+ * `include`가 없으면 빈 배열이 아니라 tsc 기본값으로 채운다. 실측: `include`가
+ * tsc 기본값과 정확히 같으면 `--showConfig`는 그 키 자체를 생략한다 —
+ * `resolvedCheckJs()` 문서가 다루는 R1의 생략 현상과 같은 원인이지만 채우는
+ * 방향은 다르다. `checkJs`·`allowJs`는 없는 키를 `false`로 읽어야 하고(tsc
+ * 기본값이 `false`다), `include`는 tsc의 실제 기본 동작과 같은 값으로 채워야
+ * 한다.
+ */
+const resolvedProjectConfig = async (projectPath: string) => {
+  const tscPath = fileURLToPath(
+    new URL("../node_modules/typescript/bin/tsc", import.meta.url),
+  );
+  const resolvedProject = fileURLToPath(
+    new URL(`../${projectPath}`, import.meta.url),
+  );
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [tscPath, "--project", resolvedProject, "--showConfig"],
+    { maxBuffer: maxStdoutBuffer },
+  );
+  const config = JSON.parse(stdout);
+
+  return {
+    allowJs: config.compilerOptions?.allowJs === true,
+    checkJs: config.compilerOptions?.checkJs === true,
+    include: (config.include as string[] | undefined) ?? ["**/*"],
+  };
 };
 
 describe("워크스페이스 의존성 경계", () => {
@@ -896,46 +941,41 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
     expect(coveredByChain(file)).toBe(false);
   });
 
-  it("JS 소스를 가진 디렉터리의 tsconfig는 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다", async () => {
-    const directories = await trackedTopLevelSourceDirectories();
-    const jsSourceDirectories: string[] = [];
+  it("소유 기준으로 뽑은 체인 프로그램은 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다", async () => {
+    // 프로그램 P가 대상이다 ⟺ P의 tsconfig 디렉터리 아래에 추적 JS 소스가
+    // 있고, 그 파일이 P의 컴파일 대상에 실제로 들어 있다(판정 1). 오늘
+    // 대상은 `scripts/tsconfig.json` 하나다 — `tests/tsconfig.json`은
+    // `scripts/`의 `.mjs` 셋을 컴파일 대상에 담지만(테스트가 import한다)
+    // 그 디렉터리를 소유하지 않아 탈락한다.
+    const ownedProjects = chainProjects.filter((project) =>
+      ownsCompiledJsSource(
+        project,
+        trackedFiles,
+        compiledByProject.get(project) ?? [],
+      ),
+    );
 
-    for (const directory of directories) {
-      const tracked = await trackedSourceFiles(directory);
-      if (tracked.some((file) => jsSourceExtension.test(file))) {
-        jsSourceDirectories.push(directory);
-      }
-    }
+    // 대상 집합이 비면 시끄럽게 죽는다 — 소유 기준이 잘못돼 대상을 하나도
+    // 못 뽑는 회귀를 막는다. 가드가 없으면 빈 순회가 아무 단언도 실행하지
+    // 않은 채 통과한다(#106이 실증한 형태).
+    expect(ownedProjects.length).toBeGreaterThan(0);
 
-    // checkJs/allowJs는 tsconfig.base.json이 설정하지 않으므로 각 tsconfig
-    // 자신의 compilerOptions만 읽어도 최종 판정과 같다.
-    //
-    // include도 이 디렉터리에서만 확장자 비의존(["**/*"])을 요구한다 —
-    // 게이트를 실행하는 도구(scripts/*.mjs) 자신이 여기 모이고 앞으로
-    // 확장자가 늘 수 있는 데다, scripts/를 통째로 놓친 것이 Issue #95의
-    // 발단이었다. 앞 it의 --listFilesOnly 대조는 그 확장자의 파일이 실제로
-    // 하나라도 생겨야 발화하므로, include가 좁아지는 순간 자체는 이 단언이
-    // 더 먼저 잡는다.
-    //
-    // 다만 include를 리터럴 ["**/*"]와 동등 비교하지는 않는다. ["./**/*"]와
-    // include 생략(tsc의 기본값이 정확히 "**/*"다)은 컴파일 대상 파일 집합이
-    // ["**/*"]와 완전히 같고, ["**/*", "../types/**/*.d.ts"]처럼 넓히는 추가도
-    // 게이트를 약화하지 않는다. 리터럴 비교는 이 셋을 전부 거짓 실패로 만들어,
-    // 정당한 tsconfig 변경을 되돌리는 것 말고는 통과시킬 길이 없게 만든다.
-    // 그래서 "이 문자열인가"가 아니라 "확장자로 거르지 않고 하위 디렉터리까지
-    // 덮는 패턴이 하나라도 있는가"라는 속성을 단언한다 — 확장자로 거르는
-    // ["**/*.mjs"]와 하위 디렉터리를 빼는 ["*"]는 그대로 걸린다.
-    expect(jsSourceDirectories.length).toBeGreaterThan(0);
-    for (const directory of jsSourceDirectories) {
-      const tsconfig = await readTsconfig(directory);
-      const patterns: string[] = tsconfig.include ?? ["**/*"];
+    for (const project of ownedProjects) {
+      const config = await resolvedProjectConfig(project);
 
-      expect(tsconfig.compilerOptions.allowJs).toBe(true);
-      expect(tsconfig.compilerOptions.checkJs).toBe(true);
-      // 실패 메시지가 expected false to be true로만 남지 않도록 실제 include를 붙인다.
+      expect(config.allowJs, project).toBe(true);
+      expect(config.checkJs, project).toBe(true);
+
+      // include를 리터럴 값과 동등 비교하지 않는다. 하위 디렉터리까지
+      // 덮을 것도 요구하지 않는다 — 신설 `tsconfig.configs.json`은
+      // 최상위 전용(하위 미포함) include가 의도이고, 뒷절반을 떼도 잃는
+      // 것이 없다(include가 하위를 빼면 그 아래 파일은 위 커버리지 `it`이
+      // 미커버로 잡는다). "확장자로 거르지 않는 패턴이 하나라도 있는가"라는
+      // 속성만 `some`으로 본다 — `every`로 두면 넓히는 추가(패턴 여럿 중
+      // 하나만 확장자로 끝나는 경우)가 거짓 실패가 된다(`PIT-0027`).
       expect(
-        patterns.some((pattern) => pattern.replace(/^\.\//, "") === "**/*"),
-        `${directory}/tsconfig.json include: ${JSON.stringify(patterns)}`,
+        config.include.some((pattern) => !patternEndsWithExtension(pattern)),
+        `${project} include: ${JSON.stringify(config.include)}`,
       ).toBe(true);
     }
   });
