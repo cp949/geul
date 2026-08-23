@@ -31,3 +31,5 @@
 | `PIT-0025` | 사본 탐지에 축을 더하기 전 추적 소스 전량을 새 토큰으로 재스캔 | `ACTIVE` | test·계약 | Issue #108 | [상세](./PIT-0025-rescan-all-sources-before-adding-a-copy-detection-axis.md) |
 | `PIT-0026` | 이전 전 산출물에 작업 브랜치 커밋 해시를 적지 않음 | `ACTIVE` | git·process | Issue #107 | [상세](./PIT-0026-omit-work-branch-hashes-from-pre-transfer-artifacts.md) |
 | `PIT-0027` | fail-loud 검증기는 거절할 것이 아니라 통과시킬 것을 정의 | `ACTIVE` | scripts·gate·test | Issue #107 | [상세](./PIT-0027-define-what-a-validator-accepts-not-what-it-rejects.md) |
+| `PIT-0028` | 공용 모듈이 소유하는 정리 훅은 파일 경계마다 실행되게 만듦 | `ACTIVE` | core·test | Issue #103 | [상세](./PIT-0028-scope-shared-teardown-hooks-to-run-per-file.md) |
+| `PIT-0029` | pnpm이 스크립트 뒤로 넘기는 플래그는 실제 커맨드라인을 echo해 확인 | `ACTIVE` | scripts·process | Issue #103 | [상세](./PIT-0029-verify-pnpm-passthrough-flags-reach-the-real-command.md) |
