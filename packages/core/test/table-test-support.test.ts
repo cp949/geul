@@ -10,7 +10,8 @@
  * 그 주석이 근거로 적은 depth 규칙 자체, 그리고
  * `createTableFixtureEditor`가 만든 에디터가 `it` 실행 도중 던지고 그 예외를
  * 그 `it` 자신이 잡아 통과 처리되더라도(즉 `editor.destroy()`를 부르지 않고
- * 끝나더라도) 다음 `it`이 시작할 때는 이미 해제돼 있다는 것.
+ * 끝나더라도) `table-test-support.ts`가 export하는 정리 함수
+ * (`destroyFixtureEditorsForTest`)를 직접 호출하면 해제된다는 것.
  *
  * depth 규칙은 헬퍼의 동작이 아니라 `CellSelection.create`의 동작이므로
  * `create`를 직접 호출해 고정한다. 다만 위치는 `findCellBoundaryPosition`으로
@@ -26,8 +27,11 @@
  * 그 `Set` 선언부 옆 주석이 소유한다. 이 파일의 셀 선택 테스트도 이제 다른
  * 호출부와 마찬가지로 `afterEach` 단독 정리에 의존한다. 아래
  * `createTableFixtureEditor 해제 계약` 블록은 정반대 경우 — 호출부가 전혀
- * 해제하지 않고 끝나는 경우 — 를 재현해 `afterEach`가 혼자서도 정리를
- * 끝낸다는 것을 단언한다.
+ * 해제하지 않고 끝나는 경우 — 를 재현하되, `afterEach`가 실제로 실행되는지는
+ * vitest의 훅 스케줄링(`it` 등록 순서, `--sequence.shuffle`, 훅 간 실행
+ * 순서)에 기대지 않는다. `afterEach`가 참조하는 바로 그 정리 함수
+ * (`destroyFixtureEditorsForTest`)를 `it` 하나 안에서 직접 호출해, 정리 없이
+ * 남은 에디터가 실제로 해제되는지를 확인한다.
  *
  * 덮지 않는 것: 같은 모듈의 `placeCaretInCell`(경계 + 1에 캐럿을 둔다)·
  * `activeCellId`(`$from.depth` 자신부터 본다)의 주장, `createTableFixtureEditor`의
@@ -41,6 +45,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createTableFixtureEditor,
+  destroyFixtureEditorsForTest,
   docWithParagraph,
   docWithTwoRowTable,
   findCellBoundaryPosition,
@@ -174,21 +179,22 @@ describe("표 셀 선택 fixture 계약", () => {
 });
 
 describe("createTableFixtureEditor 해제 계약", () => {
-  let leaked: Editor;
+  it("editor.destroy()를 부르지 않고 끝나도 정리 함수를 직접 부르면 해제된다", () => {
+    const leaked = createTableFixtureEditor(docWithParagraph);
 
-  it("editor.destroy()를 부르지 않고 던지는 it이 있어도 그 it 자신은 통과한다", () => {
-    leaked = createTableFixtureEditor(docWithParagraph);
-
-    // 의도적으로 정리 없이 끝낸다 — leaked.destroy()는 이 it의 어떤 문장에서도
-    // 부르지 않는다. afterEach가 혼자서 해제를 끝내는지가 다음 it의 단언 대상이다.
+    // 의도적으로 정리 없이 끝낸다 — leaked.destroy()는 이 문장 이전 어디서도
+    // 부르지 않는다. 던지는 코드를 실행하고 그 예외를 그 자리에서 잡아
+    // 통과시킨다 — "정리 없이 끝나는 it 자신은 통과한다"는 것도 여기서 진다.
     expect(() => {
       throw new Error("의도된 실패");
     }).toThrow("의도된 실패");
-  });
+    expect(leaked.isDestroyed).toBe(false);
 
-  it("앞 it이 destroy() 없이 끝났어도 afterEach가 leaked를 이미 해제했다", () => {
-    // 새 에디터를 만들지 않는다 — 검증 대상은 앞 it이 끝난 뒤 afterEach가
-    // 실행됐는가다.
+    // afterEach가 참조하는 바로 그 정리 함수를 여기서 직접 호출한다 —
+    // vitest의 훅 스케줄링(it 등록 순서, --sequence.shuffle, 훅 간 실행
+    // 순서)에 기대지 않는다.
+    destroyFixtureEditorsForTest();
+
     expect(leaked.isDestroyed).toBe(true);
   });
 });

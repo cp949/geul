@@ -35,12 +35,24 @@ import {
  */
 const fixtureEditors = new Set<Editor>();
 
-afterEach(() => {
-  // destroy()는 멱등이므로 emptyDocSchema처럼 스스로 먼저 해제한 에디터를
-  // 다시 순회해도 안전하다.
+/**
+ * fixtureEditors에 남은 에디터를 전부 destroy()하고 Set을 비운다. afterEach가
+ * 그대로 참조하는 실제 정리 함수다 — destroy()는 멱등이므로 emptyDocSchema처럼
+ * 스스로 먼저 해제한 에디터를 다시 순회해도 안전하다.
+ *
+ * export하는 이유는 프로덕션 호출부가 이 함수를 직접 부르게 하려는 것이
+ * 아니다 — 정리 경로는 여전히 afterEach 하나뿐이다. 계약 테스트가 "afterEach가
+ * leaked 에디터를 실제로 해제하는가"를 검증하려면 vitest의 훅 스케줄링(it
+ * 등록 순서, --sequence.shuffle, 훅 간 실행 순서)에 기대지 않고 이 정리
+ * 로직을 그 자리에서 직접 호출해 확인해야 한다. 그래서 이름을 붙이고
+ * export한다.
+ */
+export const destroyFixtureEditorsForTest = () => {
   for (const editor of fixtureEditors) editor.destroy();
   fixtureEditors.clear();
-});
+};
+
+afterEach(destroyFixtureEditorsForTest);
 
 /**
  * 슬라이스 6 전용 격리 에디터: EditorController(createEditor())와 별개로
