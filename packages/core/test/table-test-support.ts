@@ -12,6 +12,7 @@ import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
+import { afterEach } from "vitest";
 
 import { BlockIdExtension } from "../src/block-id-extension.js";
 import {
@@ -21,19 +22,35 @@ import {
 } from "../src/table-extension.js";
 
 /**
- * 슬라이스 6 전용 격리 에디터: EditorController(createEditor())와 별개로
- * Table/Row/Cell 확장만 검증하는 독립 fixture. model-to-tiptap.ts/tiptap-to-model.ts의
- * 표 차단 분기를 거치지 않는다.
+ * createTableFixtureEditor가 만든 에디터 목록. 해제는 이 Set과 아래
+ * afterEach가 단독으로 진다(PIT-0022) — createTableFixtureEditor는 만든
+ * 에디터를 여기 등록하기만 하고, 호출부는 destroy()를 직접 부르지 않는다.
  *
- * EditorController와 달리 element에 붙은 EditorView를 그대로 둔다
- * (EditorController는 생성자에서 mount 직후 unmount한다). 이 에디터를 훑는
- * 공용 afterEach 청소기는 없으므로 에디터 참조를 받는 호출부가 `it`마다
- * `editor.destroy()`로 해제한다 — 마운트된 채 남으면 dispatch가 예약한
+ * 정리를 미루면 안 되는 이유: 마운트된 채 남으면 dispatch가 예약한
  * ProseMirror DOMObserver의 20ms flush가 jsdom 환경 해제 뒤에 실행돼
  * "ReferenceError: document is not defined" unhandled error가 된다.
  * `destroy()`가 docView를 비워 그 flush를 조기 반환시키는 것이 해제가 하는
  * 일이다. 간헐적이라 통과하는 실행이 증거가 못 된다 — 재현율은 환경에 따라
  * 다르고 0인 기계도 있으므로 실행 횟수는 근거로 적지 않는다.
+ */
+const fixtureEditors = new Set<Editor>();
+
+afterEach(() => {
+  // destroy()는 멱등이므로 emptyDocSchema처럼 스스로 먼저 해제한 에디터를
+  // 다시 순회해도 안전하다.
+  for (const editor of fixtureEditors) editor.destroy();
+  fixtureEditors.clear();
+});
+
+/**
+ * 슬라이스 6 전용 격리 에디터: EditorController(createEditor())와 별개로
+ * Table/Row/Cell 확장만 검증하는 독립 fixture. model-to-tiptap.ts/tiptap-to-model.ts의
+ * 표 차단 분기를 거치지 않는다.
+ *
+ * EditorController와 달리 element에 붙은 EditorView를 그대로 둔다
+ * (EditorController는 생성자에서 mount 직후 unmount한다). 반환하는 에디터는
+ * 위 fixtureEditors에 스스로 등록되고, 해제는 그 옆 afterEach가 진다 — 왜
+ * 해제가 필요한지는 그 주석이 설명한다.
  */
 export const createTableFixtureEditor = (content: JSONContent): Editor => {
   const editor = new Editor({
@@ -58,6 +75,7 @@ export const createTableFixtureEditor = (content: JSONContent): Editor => {
     ],
     content,
   });
+  fixtureEditors.add(editor);
   return editor;
 };
 

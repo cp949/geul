@@ -1,12 +1,16 @@
 /**
- * 공용 모듈 `table-test-support.ts`가 단독 소유하는 셀 선택 계약을 고정한다.
+ * 공용 모듈 `table-test-support.ts`가 단독 소유하는 셀 선택 계약과
+ * `createTableFixtureEditor`가 만든 에디터의 해제 시점 계약을 고정한다.
  * `selectCellRange`의 주석은 `CellSelection.create`가 기대하는 depth 규칙을
  * 단독으로 소유하는데, 그 규칙이 실제와 어긋나도 지는 것이 없었다(PIT-0022).
  *
  * 덮는 것: `selectCellRange`가 dispatch한 뒤 선택이 `CellSelection`이고 그
  * 양 끝이 넘긴 두 셀이라는 것, `selectSingleCell`이 만드는 선택의 anchor와
  * head가 같은 셀이라는 것, 두 헬퍼의 fixture 가드(`셀 fixture 준비 실패`),
- * 그리고 그 주석이 근거로 적은 depth 규칙 자체.
+ * 그 주석이 근거로 적은 depth 규칙 자체, 그리고
+ * `createTableFixtureEditor`가 만든 에디터가 `it` 실행 도중 던지고 그 예외를
+ * 그 `it` 자신이 잡아 통과 처리되더라도(즉 `editor.destroy()`를 부르지 않고
+ * 끝나더라도) 다음 `it`이 시작할 때는 이미 해제돼 있다는 것.
  *
  * depth 규칙은 헬퍼의 동작이 아니라 `CellSelection.create`의 동작이므로
  * `create`를 직접 호출해 고정한다. 다만 위치는 `findCellBoundaryPosition`으로
@@ -17,14 +21,21 @@
  * 개수는 적지 않는다 — 테스트를 더할 때마다 썩는다. 같은 헬퍼의 "못 찾으면
  * null"은 두 헬퍼의 `셀 fixture 준비 실패` 가드가 진다.
  *
- * 격리 fixture 에디터는 해제 책임이 호출부에 있다 — 왜 그런지는
- * `createTableFixtureEditor`의 주석이 소유한다. 여기서는 `it`마다
- * `editor.destroy()`로 끝낸다. 던지는 것을 단언하는 테스트도 예외가 아니다.
+ * 격리 fixture 에디터의 해제 책임은 `table-test-support.ts`가 등록하는
+ * module-scope `Set`과 `afterEach`가 단독으로 진다 — 왜 그런 구조인지는
+ * 그 `Set` 선언부 옆 주석이 소유한다. 이 파일의 셀 선택 테스트들이 각자
+ * `it` 끝에서 여전히 `editor.destroy()`를 부르는 것은 그 단독 소유와
+ * 모순이 아니다 — `destroy()`는 멱등이라 호출부가 먼저 해제해도
+ * `afterEach`가 나중에 같은 에디터를 다시 순회하는 것이 안전하다. 아래
+ * `createTableFixtureEditor 해제 계약` 블록은 정확히 그 반대 경우 —
+ * 호출부가 전혀 해제하지 않고 끝나는 경우 — 를 재현해 `afterEach`가
+ * 혼자서도 정리를 끝낸다는 것을 단언한다.
  *
  * 덮지 않는 것: 같은 모듈의 `placeCaretInCell`(경계 + 1에 캐럿을 둔다)·
- * `activeCellId`(`$from.depth` 자신부터 본다)의 주장,
- * `createTableFixtureEditor`·`emptyDocSchema`와 문서·데이터 fixture. 표 명령이
- * 이 선택을 어떻게 읽어 무엇을 하는지도 여기 범위가 아니다.
+ * `activeCellId`(`$from.depth` 자신부터 본다)의 주장, `createTableFixtureEditor`의
+ * 생성 인자 처리·`emptyDocSchema`가 돌려주는 스키마 내용과 문서·데이터
+ * fixture. 표 명령이 이 선택을 어떻게 읽어 무엇을 하는지도 여기 범위가
+ * 아니다.
  */
 import type { Editor } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
@@ -32,6 +43,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createTableFixtureEditor,
+  docWithParagraph,
   docWithTwoRowTable,
   findCellBoundaryPosition,
   selectCellRange,
@@ -178,5 +190,25 @@ describe("표 셀 선택 fixture 계약", () => {
 
       editor.destroy();
     });
+  });
+});
+
+describe("createTableFixtureEditor 해제 계약", () => {
+  let leaked: Editor;
+
+  it("editor.destroy()를 부르지 않고 던지는 it이 있어도 그 it 자신은 통과한다", () => {
+    leaked = createTableFixtureEditor(docWithParagraph);
+
+    // 의도적으로 정리 없이 끝낸다 — leaked.destroy()는 이 it의 어떤 문장에서도
+    // 부르지 않는다. afterEach가 혼자서 해제를 끝내는지가 다음 it의 단언 대상이다.
+    expect(() => {
+      throw new Error("의도된 실패");
+    }).toThrow("의도된 실패");
+  });
+
+  it("앞 it이 destroy() 없이 끝났어도 afterEach가 leaked를 이미 해제했다", () => {
+    // 새 에디터를 만들지 않는다 — 검증 대상은 앞 it이 끝난 뒤 afterEach가
+    // 실행됐는가다.
+    expect(leaked.isDestroyed).toBe(true);
   });
 });
