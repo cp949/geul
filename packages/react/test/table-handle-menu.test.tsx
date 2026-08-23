@@ -112,7 +112,9 @@ const rowsOf = (editor: EditorController) => tableBlockOf(editor).rows;
  * 병합 명령을 쓰지 않는 이유: mergeTableCells는 현재 CellSelection만을 병합
  * 범위의 권위로 삼는데(editor-controller.ts), CellSelection을 직접 세우려면
  * @tiptap/pm/tables가 필요하고 packages/react는 Tiptap에 의존할 수
- * 없다(ADR-0002) — package.json dependencies에 없어 여기서는 해석조차 되지
+ * 없다(ADR-0002 결정 본문에서 파생하는 금지 — Consequences가 이름으로
+ * 적은 것은 @tiptap/react뿐이다) — package.json dependencies에 없어
+ * 여기서는 해석조차 되지
  * 않는다(실측: MODULE_NOT_FOUND). EditorController의 공개 표면에도 선택을
  * 세우는 API가 없다 — getTableCellSelection은 읽기 전용이고 commands 31개는
  * 전부 문서 명령이다(실측). rowSpan은 문서 필드이므로 모델을 직접 만들어
