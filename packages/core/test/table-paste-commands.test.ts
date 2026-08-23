@@ -63,7 +63,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
-    editor.destroy();
   });
 
   it("블록 전체를 선택하고 호출하면 내용을 지우고 빈 문단 뒤에 표를 만든다", () => {
@@ -84,7 +83,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
-    editor.destroy();
   });
 
   it("전체 선택(Ctrl+A) 붙여넣기가 선택을 대체하고 표를 만든다", () => {
@@ -110,7 +108,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const { selection } = editor.state;
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
-    editor.destroy();
   });
 
   it("첫 블록 앞 GapCursor에서 붙여넣으면 표가 그 블록 앞에 생긴다", () => {
@@ -135,7 +132,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
     ).toBe("A");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
-    editor.destroy();
   });
 
   it("표 안에서 표 밖으로 걸친 선택은 지우지 않고 표를 손상 없이 붙여넣는다", () => {
@@ -209,7 +205,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const { selection } = editor.state;
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
-    editor.destroy();
   });
 
   it("표 밖 붙여넣기와 선택 삭제가 undo 1회로 함께 복원된다", () => {
@@ -225,7 +220,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
 
     // 선택 삭제와 표 삽입이 한 트랜잭션이어야 undo 1회로 원문이 돌아온다.
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("붙여넣기 트랜잭션이 캐럿을 화면 안으로 스크롤하도록 표시한다", () => {
@@ -245,7 +239,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       pasteTabularData(outside, oneByOneData("A"), sequentialIds("paste")).ok,
     ).toBe(true);
     expect(dispatched.at(-1)?.scrolledIntoView).toBe(true);
-    outside.destroy();
 
     const inside = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(inside, "cell-1");
@@ -259,7 +252,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       pasteTabularData(inside, oneByOneData("x"), sequentialIds("paste")).ok,
     ).toBe(true);
     expect(dispatched.at(-1)?.scrolledIntoView).toBe(true);
-    inside.destroy();
   });
 
   it("표 밖에서 호출하면 현재 블록 뒤에 새 표를 만든다", () => {
@@ -312,7 +304,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
-    editor.destroy();
   });
 
   it("표 안에서 호출하면 현재 셀을 좌상단으로 덮어쓴다", () => {
@@ -342,7 +333,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("x");
-    editor.destroy();
   });
 
   it("붙여넣기 직후 undo 1회로 복원된다", () => {
@@ -357,7 +347,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -413,7 +402,6 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.textContent).toBe("A");
-    editor.destroy();
   });
 
   it("undo 1회로 삽입 전 상태로 복원된다", () => {
@@ -430,7 +418,6 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 
     editor.commands.undo();
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   // 표 셀은 블록 자식을 가질 수 없으므로(model TableCell.content:
@@ -458,7 +445,6 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(
       doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
     ).toBe("intro\nx\noutro");
-    editor.destroy();
   });
 
   it("표 안에서 앞뒤 문단은 붙여넣은 표의 좌상단·마지막 셀에 각각 합친다", () => {
@@ -503,7 +489,6 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const cells = row.content?.[0]?.content?.[0]?.content ?? [];
     expect(cells[0]?.content?.[0]?.text).toBe("intro\na");
     expect(cells[1]?.content?.[0]?.text).toBe("b\noutro");
-    editor.destroy();
   });
 
   // 마크는 그대로 살아야 하고, 이웃한 같은 마크 런은 합쳐져야 한다 —
@@ -533,7 +518,6 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(cellContent[0]?.marks).toEqual([{ type: "bold" }]);
     expect(cellContent[1]?.text).toBe("\nx");
     expect(cellContent[1]?.marks).toBeUndefined();
-    editor.destroy();
   });
 
   it("빈 시퀀스는 PASTE_TARGET_NOT_FOUND로 거절한다", () => {
@@ -548,7 +532,6 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       error: { code: "PASTE_TARGET_NOT_FOUND" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("문단 콘텐츠가 편집 가능 계약을 어기면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
@@ -570,6 +553,5 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });

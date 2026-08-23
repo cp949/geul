@@ -44,8 +44,6 @@ describe("표를 삽입한다", () => {
     expect(doc.content?.[1]?.type).toBe("table");
     expect(doc.content?.[1]?.content).toHaveLength(2);
     expect(doc.content?.[1]?.content?.[0]?.content).toHaveLength(2);
-
-    editor.destroy();
   });
 
   it("삽입 직후 undo 1회로 표 삽입 이전 상태로 복원된다", () => {
@@ -57,7 +55,6 @@ describe("표를 삽입한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("존재하지 않는 blockId 뒤에는 삽입할 수 없고 문서를 바꾸지 않는다", () => {
@@ -77,7 +74,6 @@ describe("표를 삽입한다", () => {
       error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("행 또는 열이 1보다 작으면 거절하고 문서를 바꾸지 않는다", () => {
@@ -97,7 +93,6 @@ describe("표를 삽입한다", () => {
       error: { code: "INVALID_TABLE_SIZE" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -112,7 +107,6 @@ describe("표에 행을 삽입한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content).toHaveLength(2);
     expect(table?.content?.[1]?.content).toHaveLength(2);
-    editor.destroy();
   });
 
   it("삽입 직후 undo 1회로 복원된다", () => {
@@ -124,7 +118,6 @@ describe("표에 행을 삽입한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
@@ -139,7 +132,6 @@ describe("표에 행을 삽입한다", () => {
       error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
@@ -154,7 +146,6 @@ describe("표에 행을 삽입한다", () => {
       error: { code: "INDEX_OUT_OF_RANGE" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -169,7 +160,6 @@ describe("표에 열을 삽입한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toHaveLength(3);
     expect(table?.content?.[0]?.content).toHaveLength(3);
-    editor.destroy();
   });
 
   it("삽입 직후 undo 1회로 복원된다", () => {
@@ -181,7 +171,6 @@ describe("표에 열을 삽입한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("맨 앞(0번)에 삽입한 열은 물리 문서에서도 첫 번째 셀로 렌더된다", () => {
@@ -201,8 +190,6 @@ describe("표에 열을 삽입한다", () => {
     expect(firstRowCells[0]?.attrs?.columnId).toBe(newColumnId);
     expect(firstRowCells[1]?.attrs?.columnId).toBe("col-1");
     expect(firstRowCells[2]?.attrs?.columnId).toBe("col-2");
-
-    editor.destroy();
   });
 });
 
@@ -216,7 +203,6 @@ describe("표에서 행을 삭제한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content).toHaveLength(1);
     expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
-    editor.destroy();
   });
 
   it("삭제 직후 undo 1회로 복원된다", () => {
@@ -227,7 +213,6 @@ describe("표에서 행을 삭제한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("마지막 남은 행은 삭제를 거절하고 문서를 바꾸지 않는다", () => {
@@ -238,7 +223,6 @@ describe("표에서 행을 삭제한다", () => {
 
     expect(result).toEqual({ ok: false, error: { code: "LAST_ROW" } });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -252,7 +236,6 @@ describe("표에서 열을 삭제한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toHaveLength(1);
     expect(table?.content?.[0]?.content).toHaveLength(1);
-    editor.destroy();
   });
 
   it("삭제 직후 undo 1회로 복원된다", () => {
@@ -263,7 +246,6 @@ describe("표에서 열을 삭제한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("마지막 남은 열은 삭제를 거절하고 문서를 바꾸지 않는다", () => {
@@ -275,7 +257,6 @@ describe("표에서 열을 삭제한다", () => {
 
     expect(result).toEqual({ ok: false, error: { code: "LAST_COLUMN" } });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(beforeLastDelete);
-    editor.destroy();
   });
 });
 
@@ -289,7 +270,6 @@ describe("표의 행을 이동한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
     expect(table?.content?.[1]?.attrs?.rowId).toBe("row-1");
-    editor.destroy();
   });
 
   it("이동 직후 undo 1회로 복원된다", () => {
@@ -300,7 +280,6 @@ describe("표의 행을 이동한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
@@ -314,7 +293,6 @@ describe("표의 행을 이동한다", () => {
       error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
@@ -328,7 +306,6 @@ describe("표의 행을 이동한다", () => {
       error: { code: "INDEX_OUT_OF_RANGE" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -345,7 +322,6 @@ describe("표의 열을 이동한다", () => {
     const firstRowCells = table?.content?.[0]?.content ?? [];
     expect(firstRowCells[0]?.attrs?.columnId).toBe("col-2");
     expect(firstRowCells[1]?.attrs?.columnId).toBe("col-1");
-    editor.destroy();
   });
 
   it("이동 직후 undo 1회로 복원된다", () => {
@@ -356,7 +332,6 @@ describe("표의 열을 이동한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("범위를 벗어난 인덱스는 문서를 바꾸지 않는다", () => {
@@ -370,7 +345,6 @@ describe("표의 열을 이동한다", () => {
       error: { code: "INDEX_OUT_OF_RANGE" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -386,7 +360,6 @@ describe("표의 열 너비를 조절한다", () => {
       { id: "col-1", width: 160 },
       { id: "col-2", width: 240 },
     ]);
-    editor.destroy();
   });
 
   it("조절 직후 undo 1회로 복원된다", () => {
@@ -397,7 +370,6 @@ describe("표의 열 너비를 조절한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("허용 범위 밖 너비는 거절하고 문서를 바꾸지 않는다", () => {
@@ -411,7 +383,6 @@ describe("표의 열 너비를 조절한다", () => {
       error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -444,7 +415,6 @@ describe("표 삽입 시 트리거 블록 텍스트를 함께 지운다", () => 
     expect(doc.content?.[0]?.type).toBe("paragraph");
     expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
     expect(doc.content?.[1]?.type).toBe("table");
-    editor.destroy();
   });
 
   it("삽입 직후 undo 1회로 트리거 텍스트와 표 삽입 이전 상태로 함께 복원된다", () => {
@@ -458,7 +428,6 @@ describe("표 삽입 시 트리거 블록 텍스트를 함께 지운다", () => 
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -483,7 +452,6 @@ describe("표의 셀을 병합한다", () => {
       colspan: 2,
     });
     expect(table?.content?.[1]?.content ?? []).toHaveLength(0);
-    editor.destroy();
   });
 
   it("병합 직후 캐럿을 병합된 셀 안으로 옮긴다", () => {
@@ -503,7 +471,6 @@ describe("표의 셀을 병합한다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.attrs.cellId).toBe("cell-1");
-    editor.destroy();
   });
 
   it("병합 직후 undo 1회로 복원된다", () => {
@@ -519,7 +486,6 @@ describe("표의 셀을 병합한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("존재하지 않는 표 blockId는 TABLE_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
@@ -538,7 +504,6 @@ describe("표의 셀을 병합한다", () => {
       error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("비직사각형 범위는 NOT_RECTANGULAR를 반환하고 문서를 바꾸지 않는다", () => {
@@ -564,7 +529,6 @@ describe("표의 셀을 병합한다", () => {
       error: { code: "NOT_RECTANGULAR" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -585,7 +549,6 @@ describe("표의 병합된 셀을 분할한다", () => {
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.content?.[0]?.content).toHaveLength(2);
     expect(table?.content?.[1]?.content).toHaveLength(2);
-    editor.destroy();
   });
 
   it("분할 직후 캐럿을 분할 대상이었던 셀 안에 유지한다", () => {
@@ -604,7 +567,6 @@ describe("표의 병합된 셀을 분할한다", () => {
     expect(selection.empty).toBe(true);
     expect(selection.$from.parent.type.name).toBe("tableCell");
     expect(selection.$from.parent.attrs.cellId).toBe("cell-1");
-    editor.destroy();
   });
 
   it("분할 직후 undo 1회로 병합 상태로 복원된다", () => {
@@ -622,7 +584,6 @@ describe("표의 병합된 셀을 분할한다", () => {
     editor.commands.undo();
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(merged);
-    editor.destroy();
   });
 
   it("병합되지 않은 셀은 분할해도 성공하되 undo 단계를 만들지 않는다", () => {
@@ -636,7 +597,6 @@ describe("표의 병합된 셀을 분할한다", () => {
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
-    editor.destroy();
   });
 
   it("존재하지 않는 cellId는 CELL_NOT_FOUND를 반환하고 문서를 바꾸지 않는다", () => {
@@ -651,7 +611,6 @@ describe("표의 병합된 셀을 분할한다", () => {
       error: { code: "CELL_NOT_FOUND", cellId: "missing" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
 
@@ -675,7 +634,6 @@ describe("표 명령 방어 동작", () => {
     expect(doc.content?.[0]?.content).toHaveLength(1);
     expect(doc.content?.[0]?.content?.[0]?.content).toHaveLength(2);
     expect(doc.content?.[1]?.type).toBe("table");
-    editor.destroy();
   });
 
   it("동일 인덱스 행 이동은 성공하되 undo 단계를 만들지 않는다", () => {
@@ -688,7 +646,6 @@ describe("표 명령 방어 동작", () => {
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
-    editor.destroy();
   });
 
   it("동일 인덱스 열 이동은 성공하되 undo 단계를 만들지 않는다", () => {
@@ -701,7 +658,6 @@ describe("표 명령 방어 동작", () => {
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
-    editor.destroy();
   });
 
   it("현재 값과 같은 너비로 리사이즈하면 성공하되 undo 단계를 만들지 않는다", () => {
@@ -714,6 +670,5 @@ describe("표 명령 방어 동작", () => {
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
-    editor.destroy();
   });
 });

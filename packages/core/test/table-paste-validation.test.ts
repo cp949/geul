@@ -50,7 +50,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       error: { code: "PASTE_MERGE_CONFLICT" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("구조적으로 invalid한 TabularData는 TABULAR_DATA_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
@@ -107,7 +106,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       expect(overlappingResult.error.code).toBe("TABULAR_DATA_INVALID");
     }
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("model 인라인 텍스트 계약을 어기는 TabularData는 표 안에서도 TABULAR_DATA_INVALID로 거절한다", () => {
@@ -125,7 +123,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("서식 값 위반과 열 정렬 위반은 원인이 담긴 TABULAR_DATA_INVALID로 보고한다", () => {
@@ -179,7 +176,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("표 밖에서 빈 TabularData로 호출하면 INVALID_TABLE_SIZE로 거절하고 문서를 바꾸지 않는다", () => {
@@ -203,7 +199,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       error: { code: "INVALID_TABLE_SIZE" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("빈 텍스트 런이 든 셀은 예외 없이 TABULAR_DATA_INVALID로 거절한다", () => {
@@ -225,7 +220,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("빈 텍스트 런이 든 셀은 표 안 분기에서도 예외 없이 거절한다", () => {
@@ -242,7 +236,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("TABULAR_DATA_INVALID");
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("미지원 링크 마크가 든 셀은 삽입된 척하지 않고 TABULAR_DATA_INVALID로 거절한다", () => {
@@ -285,7 +278,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("셀 한도를 넘는 데이터는 검증·골격 생성 비용 없이 선거절한다", () => {
@@ -318,7 +310,6 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     });
     expect(idCalls).toBe(0);
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 
   it("NaN·비정수 columnCount는 예외 없이 INVALID_TABLE_SIZE로 거절한다", () => {
@@ -341,6 +332,5 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       });
     }
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    editor.destroy();
   });
 });
