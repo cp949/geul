@@ -295,7 +295,7 @@ const segmentProjectPath = (segment: string) => {
 
 /**
  * 루트 `typecheck` 체인이 실제로 실행하는 tsc 프로그램의 저장소 상대 경로
- * 목록(`DELTA-01` 이후 15개). 도출은 두 갈래다.
+ * 목록(오늘 15개). 도출은 두 갈래다.
  *
  * 1. `typecheckedProjectPaths()`가 이미 펼치는(`pnpm <스크립트>` 참조를 한
  *    단계 전개한) 루트 체인 문자열 전체에서 `tsc -p <경로>`/
@@ -404,9 +404,9 @@ const compiledFilePaths = async (projectPath: string) => {
  * 고치지 않는다 — 이 파일의 다른 소비처를 건드리지 않기 위해서다. `TS18003`이
  * 아닌 다른 실패(예: 존재하지 않는 프로젝트 경로)는 그대로 다시 던진다 —
  * 조용히 삼키면 설정 오류를 "커버 없음"으로 잘못 보고해 원인 추적이 어려워진다.
- * 커버리지 축이 `include` 축소(조건 3)를 "미커버 파일 목록"으로 보여줘야
- * 하는데, `include`가 완전히 비면 tsc가 크래시로 답해 그 목록 대신 원인 불명의
- * 예외로 죽는 것을 막는다.
+ * 커버리지 축이 `include` 축소로 파일이 컴파일 대상에서 빠지는 경우를
+ * "미커버 파일 목록"으로 보여줘야 하는데, `include`가 완전히 비면 tsc가
+ * 크래시로 답해 그 목록 대신 원인 불명의 예외로 죽는 것을 막는다.
  */
 const compiledFilePathsOrEmpty = async (projectPath: string) => {
   try {
@@ -491,7 +491,7 @@ const TYPECHECK_COVERAGE_EXCEPTIONS = [
  * `tsconfig.configs.json` 디렉터리에 직접 있는 추적 JS는 0). 대신 "직접
  * 속한다"(dirname이 정확히 같다)로 읽는다 — 저장소 루트에 새 JS 파일을 바로
  * 두면(디렉터리 세그먼트 없이) 그 파일의 dirname도 빈 문자열이 되어 루트
- * 프로그램이 그 순간에만 대상에 들어온다(`DELTA-03` 조건 3).
+ * 프로그램이 그 순간에만 대상에 들어온다.
  */
 const repositoryRelativeDirectory = (path: string) => {
   const slashIndex = path.lastIndexOf("/");
