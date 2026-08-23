@@ -16,7 +16,11 @@ import {
   sequentialIds,
   tableBlockOf,
 } from "./editor-controller-support.js";
-import { placeCaretInCell, selectCellRange } from "./table-test-support.js";
+import {
+  findCellBoundaryPosition,
+  placeCaretInCell,
+  selectCellRange,
+} from "./table-test-support.js";
 
 // jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
 // (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
@@ -479,24 +483,35 @@ describe("에디터 컨트롤러 표", () => {
 
     // 셀의 columnId를 존재하지 않는 열로 바꿔 표를 손상시킨다 — 검증 훅이
     // 던지지만 상태는 이미 손상된 채 남는다.
-    let cellPos = -1;
+    // 최초 cellId 확보는 findCellBoundaryPosition으로 대체할 수 없다 —
+    // findCellBoundaryPosition은 이미 아는 cellId로 셀을 찾는데, 여기서는
+    // cellId 자체를 아직 모르는 상태에서 셀을 찾아야 한다(순환 의존). 이
+    // 최초 조회만 가드 있는 인라인 descendants 순회로 남긴다.
+    let found: number | null = null;
     tiptap.state.doc.descendants((node, pos) => {
+      if (found !== null) return false;
       if (node.type.name === "tableCell") {
-        cellPos = pos;
+        found = pos;
         return false;
       }
       return true;
     });
-    const attrs = tiptap.state.doc.nodeAt(cellPos)?.attrs;
+    if (found === null) throw new Error("셀 fixture 준비 실패");
+    const attrs = tiptap.state.doc.nodeAt(found)?.attrs;
+    const cellId = attrs?.cellId;
+    if (typeof cellId !== "string") throw new Error("셀 fixture 준비 실패");
+
+    const corruptPos = findCellBoundaryPosition(tiptap, cellId);
+    if (corruptPos === null) throw new Error("셀 fixture 준비 실패");
     expect(() =>
       tiptap.view.dispatch(
-        tiptap.state.tr.setNodeMarkup(cellPos, undefined, {
+        tiptap.state.tr.setNodeMarkup(corruptPos, undefined, {
           ...attrs,
           columnId: "ghost",
         }),
       ),
     ).toThrow();
-    tiptap.commands.setTextSelection(cellPos + 2);
+    placeCaretInCell(tiptap, cellId);
 
     const data: TabularData = {
       columnCount: 1,
@@ -528,9 +543,11 @@ describe("에디터 컨트롤러 표", () => {
 
     // 손상 상태로 두면 mount 헬퍼의 cleanup destroy()가 readEditorDocument에서
     // 던진다 — columnId를 원복해 표를 유효하게 되돌린 뒤 destroy한다.
+    const restorePos = findCellBoundaryPosition(tiptap, cellId);
+    if (restorePos === null) throw new Error("셀 fixture 준비 실패");
     tiptap.view.dispatch(
-      tiptap.state.tr.setNodeMarkup(cellPos, undefined, {
-        ...tiptap.state.doc.nodeAt(cellPos)?.attrs,
+      tiptap.state.tr.setNodeMarkup(restorePos, undefined, {
+        ...tiptap.state.doc.nodeAt(restorePos)?.attrs,
         columnId: attrs?.columnId,
       }),
     );
