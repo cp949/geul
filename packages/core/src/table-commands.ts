@@ -147,39 +147,23 @@ const findTable = (
   return { ok: true, value: { position, node } };
 };
 
-// nextNode(치환 직후의 독립 표 노드) 안에서 cellId가 가리키는 셀의
-// 콘텐츠 시작 위치를 nextNode 기준 상대 좌표로 찾는다. 찾지 못하면 null.
-const findCellContentOffset = (
+// nextNode(치환 직후의 독립 표 노드) 안에서 cellId가 가리키는 셀의 경계
+// 위치(boundary)와 콘텐츠 시작 위치(content)를 nextNode 기준 상대 좌표로
+// 찾는다. 찾지 못하면 null.
+const findCellOffset = (
   nextNode: ProseMirrorNode,
   cellId: string,
-): number | null => {
-  let offset: number | null = null;
+): { boundary: number; content: number } | null => {
+  let found: { boundary: number; content: number } | null = null;
   nextNode.descendants((child, pos) => {
-    if (offset !== null) return false;
+    if (found !== null) return false;
     if (child.type.name === "tableCell" && child.attrs.cellId === cellId) {
-      offset = pos + 1;
+      found = { boundary: pos, content: pos + 1 };
       return false;
     }
     return true;
   });
-  return offset;
-};
-
-// nextNode 안에서 cellId가 가리키는 셀 경계의 상대 좌표를 찾는다.
-const findCellBoundaryOffset = (
-  nextNode: ProseMirrorNode,
-  cellId: string,
-): number | null => {
-  let offset: number | null = null;
-  nextNode.descendants((child, pos) => {
-    if (offset !== null) return false;
-    if (child.type.name === "tableCell" && child.attrs.cellId === cellId) {
-      offset = pos;
-      return false;
-    }
-    return true;
-  });
-  return offset;
+  return found;
 };
 
 const applyTableGridOperation = (
@@ -243,20 +227,17 @@ const applyTableGridOperation = (
     typeof preservedSelection.anchorCellId === "string" &&
     typeof preservedSelection.headCellId === "string"
   ) {
-    const anchorOffset = findCellBoundaryOffset(
+    const anchorCell = findCellOffset(
       nextNode,
       preservedSelection.anchorCellId,
     );
-    const headOffset = findCellBoundaryOffset(
-      nextNode,
-      preservedSelection.headCellId,
-    );
-    if (anchorOffset !== null && headOffset !== null) {
+    const headCell = findCellOffset(nextNode, preservedSelection.headCellId);
+    if (anchorCell !== null && headCell !== null) {
       transaction = transaction.setSelection(
         CellSelection.create(
           transaction.doc,
-          position + 1 + anchorOffset,
-          position + 1 + headOffset,
+          position + 1 + anchorCell.boundary,
+          position + 1 + headCell.boundary,
         ),
       );
     }
@@ -269,10 +250,10 @@ const applyTableGridOperation = (
       ),
     );
   } else if (targetCellId !== null) {
-    const relativeOffset = findCellContentOffset(nextNode, targetCellId);
-    if (relativeOffset !== null) {
+    const targetCell = findCellOffset(nextNode, targetCellId);
+    if (targetCell !== null) {
       const absolutePosition = Math.min(
-        position + 1 + relativeOffset,
+        position + 1 + targetCell.content,
         transaction.doc.content.size,
       );
       transaction = transaction.setSelection(
@@ -657,10 +638,10 @@ export const pasteTabularData = (
   // 안으로 옮긴다.
   const firstCellId = cellIdAtAnchor(filled.value, { row: 0, column: 0 });
   if (firstCellId !== null) {
-    const relativeOffset = findCellContentOffset(tableNode, firstCellId);
-    if (relativeOffset !== null) {
+    const firstCell = findCellOffset(tableNode, firstCellId);
+    if (firstCell !== null) {
       const absolutePosition = Math.min(
-        insertPosition + 1 + relativeOffset,
+        insertPosition + 1 + firstCell.content,
         transaction.doc.content.size,
       );
       transaction = transaction.setSelection(
@@ -953,10 +934,10 @@ export const pasteClipboardContent = (
   // pasteTabularData의 기존 공식과 동일해진다).
   const firstCellId = cellIdAtAnchor(firstTable.data, { row: 0, column: 0 });
   if (firstCellId !== null) {
-    const relativeOffset = findCellContentOffset(firstTable.node, firstCellId);
-    if (relativeOffset !== null) {
+    const firstCell = findCellOffset(firstTable.node, firstCellId);
+    if (firstCell !== null) {
       const absolutePosition = Math.min(
-        insertPosition + firstTable.offset + 1 + relativeOffset,
+        insertPosition + firstTable.offset + 1 + firstCell.content,
         transaction.doc.content.size,
       );
       transaction = transaction.setSelection(

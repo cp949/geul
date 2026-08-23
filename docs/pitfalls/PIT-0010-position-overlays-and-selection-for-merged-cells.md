@@ -45,8 +45,8 @@ pnpm test:e2e
 ## 실제 근거
 
 - `packages/react/src/table-handles.tsx`의 `readResizeSegments`/`ColumnGeometry.resizeSegments` — 열 경계 strip을 행 단위로 분할.
-- `packages/core/src/table-commands.ts`의 `applyTableGridOperation` `options.selectCellId`, `findCellContentOffset` — 병합/분할 직후 결과 셀로 selection을 명시 이동.
-- `packages/core/src/table-commands.ts`의 `options.preserveSelection`, `findCellBoundaryOffset` — 셀 서식 적용 전후 `CellSelection` anchor/head와 병합 셀 커서 `TextSelection` 보존.
+- `packages/core/src/table-commands.ts`의 `applyTableGridOperation` `options.selectCellId`, `findCellOffset`(`.content`) — 병합/분할 직후 결과 셀로 selection을 명시 이동.
+- `packages/core/src/table-commands.ts`의 `options.preserveSelection`, `findCellOffset`(`.boundary`) — 셀 서식 적용 전후 `CellSelection` anchor/head와 병합 셀 커서 `TextSelection` 보존.
 - `e2e/table-format.spec.ts`의 "셀 범위를 다시 선택하지 않고 색상과 정렬을 연속 적용한다"/"병합 셀 커서를 유지하며 색상과 정렬을 연속 적용한다".
 - `packages/core/test/table-commands.test.ts`의 "병합 직후 캐럿을 병합된 셀 안으로 옮긴다"/"분할 직후 캐럿을 분할 대상이었던 셀 안에 유지한다".
 - `packages/core/src/editor-controller.ts`의 `coversMultipleCells`/`getTableCellSelection` — 단일 셀 `CellSelection`을 병합 후보에서 제외하고 분할 판정으로 넘김.
