@@ -171,9 +171,17 @@ const findCellOffset = (
 // 등)의 트랜잭션 거절을 감지한다. EditorState.applyTransaction은 filterTransaction이
 // false를 반환하면 새 EditorState를 만들지 않고 이전 state를 참조 그대로
 // 돌려준다(실측: node_modules/.pnpm/prosemirror-state@1.4.4/.../dist/index.js:793-795).
-// EditorView.dispatch의 기본 처리(view.updateState(view.state.apply(tr)))를
-// 거치면 그 참조 동일성이 editor.state.doc까지 그대로 남는다 — 이 동일성이
+// 이 저장소는 EditorView의 기본 dispatch 처리를 타지 않는다 — Tiptap이 자신의
+// dispatchTransaction을 view prop으로 등록해 가로챈다. 거절되면 그 함수가
+// view.updateState 호출 전에 조기 return해 editor.state 참조 자체가 안 바뀐다
+// (실측: @tiptap/core@3.30.1/dist/index.js:7020-7046, rootTrWasApplied 체크).
+// 결과적으로 editor.state.doc이 dispatch 전후 동일 참조로 남는다 — 이 동일성이
 // "필터가 트랜잭션을 버렸다"는 신호다(PIT-0003의 반대쪽 누락 예방).
+// 주의: 이 신호는 트랜잭션에 문서를 바꾸는 스텝이 하나 이상 있을 때만 유효하다
+// — 스텝 없는(docChanged: false) 트랜잭션은 필터를 통과해도 doc 참조가 그대로라
+// 오탐한다. 아래 4개 호출부는 모두 dispatch 전에 반드시 replaceWith/insert로
+// 문서를 바꾸므로 안전하다 — selection만 옮기는 트랜잭션(예:
+// table-keyboard-extension.ts의 goToNextCell)에는 이 헬퍼를 재사용하지 않는다.
 const dispatchAndVerify = (
   editor: Editor,
   transaction: Transaction,
