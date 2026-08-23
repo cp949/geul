@@ -57,7 +57,9 @@ type FakeControllerOptions = {
  * ProseMirror의 CellSelection에서만 나온다(editor-controller.ts의
  * getTableCellSelection). 그런데 CellSelection을 세우려면
  * `@tiptap/pm/tables`가 필요하고 packages/react는 Tiptap/ProseMirror에
- * 의존할 수 없다(ADR-0002 패키지 경계, pnpm check:boundaries가 강제).
+ * 의존할 수 없다(ADR-0002 결정 본문에서 파생하는 금지 — Consequences가
+ * 이름으로 적은 것은 `@tiptap/react`뿐이다 — 실제로는 `pnpm test`(vitest
+ * 계약 테스트)가 강제한다).
  * EditorController의 공개 표면에도 선택을 세우는 API가 없다 —
  * getTableCellSelection은 읽기 전용이고 나머지는 전부 문서 명령이다.
  * Task 7이 병합 셀을 replaceDocument로 심을 수 있었던 것은 rowSpan/columnSpan이
@@ -327,8 +329,9 @@ const renderMergedCellTable = () => {
 describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () => {
   // vi.fn() 레인에 남긴 이유: cellIds가 2개 이상(mergeable)인 상태는
   // CellSelection에서만 나오는데, react는 CellSelection을 세울 수 없다 —
-  // ADR-0002 패키지 경계가 @tiptap/pm 의존을 금지하고 EditorController에는
-  // 선택을 세우는 공개 API가 없다.
+  // ADR-0002 결정 본문에서 파생하는 @tiptap/pm 의존 금지(Consequences가
+  // 이름으로 적은 것은 @tiptap/react뿐이다)와 EditorController에는
+  // 선택을 세우는 공개 API가 없다는 사실이 겹친다.
   // 실제로 시도한 것: 실제 마운트에서 두 셀을 가로지르는 DOM Selection을
   // 세우고 selectionchange를 발행했지만 getTableCellSelection은 null,
   // .selectedCell 데코레이션도 0개였다(실측).
@@ -347,7 +350,8 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
 
   // vi.fn() 레인에 남긴 이유: 실제 mergeTableCells는 현재 선택이
   // CellSelection일 때만 동작하고(editor-controller.ts의 가드) react는 그
-  // 선택을 만들 수 없다 — ADR-0002 패키지 경계.
+  // 선택을 만들 수 없다 — ADR-0002 결정 본문에서 파생하는 @tiptap/pm 의존
+  // 금지(Consequences가 이름으로 적은 것은 @tiptap/react뿐이다).
   // 실제로 시도한 것: 실제 마운트에서 셀에 캐럿을 두고
   // editor.commands.mergeTableCells를 불렀더니
   // {code:"COMMAND_NOT_APPLICABLE", command:"mergeTableCells"}로 거절됐고,
@@ -370,7 +374,9 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
   // 2개면 항상 함께 존재한다. 방어 분기(cellSelectionBounds의 null)를
   // 검증하는 테스트라 fake로만 세울 수 있다.
   // 실제로 시도한 것: 실제 마운트에서 cellIds 2개짜리 선택을 만들 방법이
-  // 없었다(위 두 테스트의 조사와 같음) — ADR-0002 패키지 경계.
+  // 없었다(위 두 테스트의 조사와 같음) — ADR-0002 결정 본문에서 파생하는
+  // @tiptap/pm 의존 금지(Consequences가 이름으로 적은 것은
+  // @tiptap/react뿐이다).
   it("selectedCell 데코레이션이 없으면(경계 계산 불가) 아무 툴바도 표시하지 않는다", () => {
     const controller = mergeableSelectionController();
     renderTable(controller);
@@ -409,7 +415,8 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
 
   // vi.fn() 레인에 남긴 이유: 트리플클릭이 만드는 "병합되지 않은 셀 하나짜리
   // CellSelection"도 CellSelection이라 react에서 세울 수 없다 — ADR-0002
-  // 패키지 경계. 실제 컨트롤러에서 병합되지 않은 셀의 캐럿은
+  // 결정 본문에서 파생하는 @tiptap/pm 의존 금지(Consequences가 이름으로
+  // 적은 것은 @tiptap/react뿐이다). 실제 컨트롤러에서 병합되지 않은 셀의 캐럿은
   // getTableCellSelection이 null로 돌려주므로(그게 위 테스트의 계약)
   // 캐럿으로는 이 상태를 대신할 수 없다.
   // 실제로 시도한 것: 실제 마운트에서 mousedown detail 1/2/3을 순서대로
@@ -613,8 +620,9 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
 describe("병합·분할 명령 실패 시 피드백", () => {
   // vi.fn() 레인에 남긴 이유: NOT_RECTANGULAR는 병합 셀을 가로지르는
   // CellSelection에서만 나오는 거절 코드다. 그 선택을 react에서 세울 수
-  // 없다 — ADR-0002 패키지 경계(@tiptap/pm 의존 금지, EditorController에
-  // 선택 설정 API 없음). Merge cells 버튼도 mergeable=true일 때만 뜨므로
+  // 없다 — ADR-0002 결정 본문에서 파생하는 @tiptap/pm 의존 금지
+  // (Consequences가 이름으로 적은 것은 @tiptap/react뿐이다), EditorController에
+  // 선택 설정 API 없음. Merge cells 버튼도 mergeable=true일 때만 뜨므로
   // 클릭 대상 자체가 실제 마운트에서는 존재하지 않는다.
   // 실제로 시도한 것: 실제 마운트에서 병합 셀을 심고 캐럿·DOM Selection·
   // 트리플클릭·Shift+Arrow로 셀 범위 선택을 만들어보려 했으나 전부
@@ -698,7 +706,8 @@ describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
   // vi.fn() 레인에 남긴 이유: 툴바에 "병합 실패" 메시지를 띄우려면 Merge
   // cells 버튼을 눌러야 하고, 그 버튼은 mergeable=true(cellIds 2개 이상)일
   // 때만 뜬다 — 즉 CellSelection이 필요하고 react는 그것을 세울 수 없다
-  // (ADR-0002 패키지 경계).
+  // (ADR-0002 결정 본문에서 파생하는 @tiptap/pm 의존 금지 — Consequences가
+  // 이름으로 적은 것은 @tiptap/react뿐이다).
   // 실제로 시도한 것: 실제 마운트에서 셀 범위 선택을 만들 경로를 전부
   // 시도했다(같은 파일의 다른 잔여 주석 참조) — DOM Selection·트리플클릭·
   // Shift+Arrow 모두 CellSelection을 만들지 못했다(실측).
