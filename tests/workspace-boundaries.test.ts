@@ -272,12 +272,25 @@ const typecheckedProjectPaths = async () => {
  * 가려주지 못한다). 거절할 형태를 나열하지 않고 받아들일 형태만 정의하는
  * 것이 핵심이다(`PIT-0027`) — `echo skip`이나 `node scripts/x.mjs`처럼 새
  * 회피 형태가 나와도 거절 목록에 없다는 이유로 조용히 통과하지 않는다.
+ *
+ * 같은 세그먼트에 `-p`/`--project`가 두 번 이상 나오면 마지막 매치를
+ * 채택한다 — 실제 tsc CLI 동작과 맞춘 규칙이다. 이 저장소의 실제
+ * `node_modules/typescript` 바이너리로 직접 검증했다:
+ * `node node_modules/typescript/bin/tsc -p tests/tsconfig.json -p scripts/tsconfig.json --listFilesOnly`는
+ * `scripts/tsconfig.json`을 컴파일 대상으로 삼고(`tests/` 파일 0개,
+ * `scripts/` 파일 5개), 순서를 뒤집은
+ * `node node_modules/typescript/bin/tsc -p scripts/tsconfig.json -p tests/tsconfig.json --listFilesOnly`는
+ * 반대로 `tests/tsconfig.json`을 컴파일 대상으로 삼는다 — 두 실행 모두
+ * 마지막 `-p`가 이겼다. 첫 매치를 채택하면 이 실측과 어긋난다.
  */
 const segmentProjectPath = (segment: string) => {
   if (!/^tsc(?:\s+\S+)*$/.test(segment)) return undefined;
 
-  const projectMatch = /(?:^|\s)(?:-p|--project)\s+(\S+)/.exec(segment);
-  return projectMatch?.[1] ?? "tsconfig.json";
+  const projectMatches = [
+    ...segment.matchAll(/(?:^|\s)(?:-p|--project)\s+(\S+)/g),
+  ];
+  const lastMatch = projectMatches.at(-1);
+  return lastMatch?.[1] ?? "tsconfig.json";
 };
 
 /**
@@ -845,6 +858,7 @@ describe("segmentProjectPath()(typecheck 세그먼트의 프로젝트 경로 추
     ["tsc -p tsconfig.configs.json --noEmit", "tsconfig.configs.json"],
     ["tsc --noEmit", "tsconfig.json"],
     ["tsc --strict -p custom/tsconfig.json", "custom/tsconfig.json"],
+    ["tsc -p a/tsconfig.json -p b/tsconfig.json", "b/tsconfig.json"],
     ["echo skip", undefined],
     ["node scripts/x.mjs", undefined],
   ] as const)("%s → %s", (segment, expected) => {
