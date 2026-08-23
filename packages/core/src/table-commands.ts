@@ -719,7 +719,11 @@ export const pasteTabularData = (
 
   // 네이티브 doPaste가 보장하는 scrollIntoView와 동일 — 캐럿이 옮겨간 새
   // 표가 뷰포트 밖이면 화면이 따라가야 한다.
-  editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
+  const dispatched = dispatchAndVerify(
+    editor,
+    closeHistory(transaction.scrollIntoView()),
+  );
+  if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: { blockId: filled.value.id } };
 };
@@ -1013,7 +1017,11 @@ export const pasteClipboardContent = (
     }
   }
 
-  editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
+  const dispatched = dispatchAndVerify(
+    editor,
+    closeHistory(transaction.scrollIntoView()),
+  );
+  if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: { blockId: firstTable.data.id } };
 };

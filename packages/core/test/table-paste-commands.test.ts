@@ -24,6 +24,7 @@ import {
   docWithTwoRowTable,
   oneByOneData,
   placeCaretInCell,
+  RejectAllTransactionsExtension,
 } from "./table-test-support.js";
 
 const docWithTwoParagraphs = {
@@ -348,6 +349,22 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
 
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
+
+  it("필터가 트랜잭션을 버리면 표 밖 분기는 실패를 반환하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph, [
+      RejectAllTransactionsExtension,
+    ]);
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteTabularData(editor, oneByOneData("x"), createId);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TRANSACTION_REJECTED" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
 });
 
 describe("클립보드 시퀀스를 붙여넣는다", () => {
@@ -551,6 +568,29 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
         code: "CLIPBOARD_CONTENT_INVALID",
         message: "Paragraph content contains an empty text run",
       },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("필터가 트랜잭션을 버리면 표 밖 시퀀스 조립 분기는 실패를 반환하고 문서를 바꾸지 않는다", () => {
+    // 표 하나만 넣으면 pasteClipboardContent가 pasteTabularData에 위임해
+    // 위 표 밖 분기 테스트와 같은 경로를 탄다 — 문단을 앞뒤로 둬야 이
+    // 함수 자신의 "표 밖 시퀀스 조립"(buildSequenceNode 루프) 분기를 태운다.
+    const editor = createTableFixtureEditor(docWithParagraph, [
+      RejectAllTransactionsExtension,
+    ]);
+    const createId = sequentialIds("paste");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [paragraphBlock("intro"), tableBlock("A"), paragraphBlock("outro")],
+      createId,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TRANSACTION_REJECTED" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
