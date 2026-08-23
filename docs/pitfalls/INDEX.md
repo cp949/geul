@@ -33,3 +33,5 @@
 | `PIT-0027` | fail-loud 검증기는 거절할 것이 아니라 통과시킬 것을 정의 | `ACTIVE` | scripts·gate·test | Issue #107 | [상세](./PIT-0027-define-what-a-validator-accepts-not-what-it-rejects.md) |
 | `PIT-0028` | 공용 모듈이 소유하는 정리 훅은 파일 경계마다 실행되게 만듦 | `ACTIVE` | core·test | Issue #103 | [상세](./PIT-0028-scope-shared-teardown-hooks-to-run-per-file.md) |
 | `PIT-0029` | pnpm이 스크립트 뒤로 넘기는 플래그는 실제 커맨드라인을 echo해 확인 | `ACTIVE` | scripts·process | Issue #103 | [상세](./PIT-0029-verify-pnpm-passthrough-flags-reach-the-real-command.md) |
+| `PIT-0030` | PIT-0026 위반을 서술할 때도 해시 값 자체는 인용하지 않음 | `ACTIVE` | git·process | PIT-0026 위반 정정 중(트랙-5) | [상세](./PIT-0030-omit-hash-values-when-describing-pit-0026-violations.md) |
+| `PIT-0031` | dispatch 전후 문서 참조 동일성만으로 필터 거절을 감지하지 않음 | `ACTIVE` | core | Issue #28 | [상세](./PIT-0031-pair-doc-identity-checks-with-doc-changed-for-filter-rejection.md) |
