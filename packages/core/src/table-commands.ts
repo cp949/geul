@@ -20,7 +20,7 @@ import type {
   ResolvedPos,
   Schema,
 } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import {
   inlineContentToTiptap,
@@ -60,7 +60,8 @@ export type TableCommandError =
   | { code: "INVALID_TABLE_SIZE" }
   | { code: "TABULAR_DATA_INVALID"; message: string }
   | { code: "CLIPBOARD_CONTENT_INVALID"; message: string }
-  | { code: "PASTE_TARGET_NOT_FOUND" };
+  | { code: "PASTE_TARGET_NOT_FOUND" }
+  | { code: "TRANSACTION_REJECTED" };
 
 const blockNotFound = (blockId: string): Result<never, TableCommandError> => ({
   ok: false,
@@ -166,6 +167,25 @@ const findCellOffset = (
   return found;
 };
 
+// dispatch 전후 editor.state.doc 참조 동일성으로 필터(LinkPolicyExtension
+// 등)의 트랜잭션 거절을 감지한다. EditorState.applyTransaction은 filterTransaction이
+// false를 반환하면 새 EditorState를 만들지 않고 이전 state를 참조 그대로
+// 돌려준다(실측: node_modules/.pnpm/prosemirror-state@1.4.4/.../dist/index.js:793-795).
+// EditorView.dispatch의 기본 처리(view.updateState(view.state.apply(tr)))를
+// 거치면 그 참조 동일성이 editor.state.doc까지 그대로 남는다 — 이 동일성이
+// "필터가 트랜잭션을 버렸다"는 신호다(PIT-0003의 반대쪽 누락 예방).
+const dispatchAndVerify = (
+  editor: Editor,
+  transaction: Transaction,
+): Result<undefined, TableCommandError> => {
+  const before = editor.state.doc;
+  editor.view.dispatch(transaction);
+  if (editor.state.doc === before) {
+    return { ok: false, error: { code: "TRANSACTION_REJECTED" } };
+  }
+  return { ok: true, value: undefined };
+};
+
 const applyTableGridOperation = (
   editor: Editor,
   tableBlockId: string,
@@ -264,7 +284,11 @@ const applyTableGridOperation = (
 
   // 네이티브 명령들처럼 결과 selection이 화면 안에 오도록 표시한다 —
   // 뷰포트 밖으로 커진 표에서 캐럿만 옮기면 no-op처럼 보인다.
-  editor.view.dispatch(closeHistory(transaction.scrollIntoView()));
+  const dispatched = dispatchAndVerify(
+    editor,
+    closeHistory(transaction.scrollIntoView()),
+  );
+  if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: undefined };
 };
@@ -511,7 +535,8 @@ export const insertTable = (
     transaction.mapping.map(insertPosition),
     tableNode,
   );
-  editor.view.dispatch(closeHistory(transaction));
+  const dispatched = dispatchAndVerify(editor, closeHistory(transaction));
+  if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: { blockId: table.id } };
 };

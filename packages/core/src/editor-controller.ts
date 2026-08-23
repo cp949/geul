@@ -803,6 +803,8 @@ export const createEditor = (
         return { code: "PASTE_MERGE_CONFLICT" };
       case "PASTE_TARGET_NOT_FOUND":
         return { code: "PASTE_TARGET_NOT_FOUND" };
+      case "TRANSACTION_REJECTED":
+        return { code: "TRANSACTION_REJECTED" };
       default:
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
     }

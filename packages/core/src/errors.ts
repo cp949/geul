@@ -18,4 +18,5 @@ export type EditorError =
   | { code: "INVALID_ALIGN"; align: string }
   | { code: "CELL_LIMIT_EXCEEDED" }
   | { code: "PASTE_MERGE_CONFLICT" }
-  | { code: "PASTE_TARGET_NOT_FOUND" };
+  | { code: "PASTE_TARGET_NOT_FOUND" }
+  | { code: "TRANSACTION_REJECTED" };

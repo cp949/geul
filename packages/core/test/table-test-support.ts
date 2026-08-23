@@ -8,8 +8,9 @@
  * 함수에 시그니처를 매지 않는다.
  */
 import type { TabularData } from "@cp949/geul-io";
-import type { JSONContent } from "@tiptap/core";
-import { Editor } from "@tiptap/core";
+import type { Extensions, JSONContent } from "@tiptap/core";
+import { Editor, Extension } from "@tiptap/core";
+import { Plugin } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 import { afterEach } from "vitest";
@@ -64,7 +65,10 @@ afterEach(destroyFixtureEditorsForTest);
  * 위 fixtureEditors에 스스로 등록되고, 해제는 그 옆 afterEach가 진다 — 왜
  * 해제가 필요한지는 그 주석이 설명한다.
  */
-export const createTableFixtureEditor = (content: JSONContent): Editor => {
+export const createTableFixtureEditor = (
+  content: JSONContent,
+  extraExtensions: Extensions = [],
+): Editor => {
   const editor = new Editor({
     element: document.createElement("div"),
     injectCSS: false,
@@ -84,12 +88,33 @@ export const createTableFixtureEditor = (content: JSONContent): Editor => {
       TableExtension,
       TableRowExtension,
       TableCellExtension,
+      ...extraExtensions,
     ],
     content,
   });
   fixtureEditors.add(editor);
   return editor;
 };
+
+/**
+ * 모든 트랜잭션을 무조건 버리는 테스트 전용 확장. `dispatchAndVerify`(
+ * table-commands.ts)의 거절 감지 로직은 실제 필터 거절 없이는 검증할 수
+ * 없다 — `LinkPolicyExtension`(link-policy-extension.ts)과 같은
+ * `filterTransaction` 모양으로 그 경로를 재현한다. `table-commands.test.ts`와
+ * `table-paste-commands.test.ts`가 함께 쓰므로 로컬 정의로 중복하지 않고
+ * 이 모듈이 단독 소유한다(PIT-0022).
+ */
+export const RejectAllTransactionsExtension = Extension.create({
+  name: "rejectAllTransactions",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        filterTransaction: () => false,
+      }),
+    ];
+  },
+});
 
 /**
  * 표 fixture 확장이 등록된 스키마. 문서 내용이 아니라 노드 정의만 필요한

@@ -427,6 +427,7 @@ Markdown `strict` export가 GFM으로 표현 불가능한 요소를 만나면 `E
 - `CELL_LIMIT_EXCEEDED`(붙여넣기·확장 결과가 `MAX_TABLE_LOGICAL_CELLS`(10,000)를 초과)
 - `PASTE_MERGE_CONFLICT`(붙여넣기 결과가 기존 병합 셀과 안전하게 결합되지 않음)
 - `PASTE_TARGET_NOT_FOUND`
+- `TRANSACTION_REJECTED`(dispatch 전후 문서 참조가 같음 — 필터가 트랜잭션을 통째로 버림)
 
 사용자 입력으로 예상 가능한 거부는 `Result` 실패로 반환한다. 프로그래밍 오류나 깨진 내부 불변식은 개발 환경에서 명시적으로 실패시키고, 소비자 콜백으로 진단 정보를 전달한다. 실패한 명령은 revision, selection과 문서를 변경하지 않는다.
 

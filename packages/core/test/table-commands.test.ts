@@ -30,6 +30,7 @@ import {
   docWithParagraph,
   docWithTable,
   docWithTwoRowTable,
+  RejectAllTransactionsExtension,
   selectCellRange,
 } from "./table-test-support.js";
 
@@ -752,5 +753,41 @@ describe("표 명령 방어 동작", () => {
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
     expect(editor.can().undo()).toBe(false);
+  });
+
+  it("필터가 트랜잭션을 버리면 applyTableGridOperation 경유 명령은 실패를 반환하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable, [
+      RejectAllTransactionsExtension,
+    ]);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = deleteTableRow(editor, "table-1", 0);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TRANSACTION_REJECTED" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("필터가 트랜잭션을 버리면 insertTable은 실패를 반환하고 표를 삽입하지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph, [
+      RejectAllTransactionsExtension,
+    ]);
+    const createId = sequentialIds("id");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = insertTable(
+      editor,
+      "para-1",
+      { rows: 1, columns: 1 },
+      createId,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TRANSACTION_REJECTED" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 });
