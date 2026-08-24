@@ -306,13 +306,15 @@ export const insertTableRow = (
   tableBlockId: string,
   atIndex: number,
   createId: IdFactory,
-  options?: { selectCellId?: (table: TableBlock) => string | null },
 ): Result<void, TableCommandError> =>
   applyTableGridOperation(
     editor,
     tableBlockId,
     (table) => insertGridRow(table, atIndex, createId),
-    options,
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, { row: atIndex, column: 0 }),
+    },
   );
 
 export const insertTableColumn = (

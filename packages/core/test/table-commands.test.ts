@@ -157,6 +157,19 @@ describe("표에 행을 삽입한다", () => {
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
+
+  it("삽입 후 새 행의 0열 셀로 캐럿을 옮긴다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const createId = sequentialIds("id");
+
+    const result = insertTableRow(editor, "table-1", 1, createId);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
+    const insertedCellId = table?.content?.[1]?.content?.[0]?.attrs?.cellId;
+    expect(typeof insertedCellId).toBe("string");
+    expect(activeCellId(editor)).toBe(insertedCellId);
+  });
 });
 
 describe("표에 열을 삽입한다", () => {

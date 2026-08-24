@@ -16,17 +16,15 @@ export const goToNextTableCellOrInsertRow = (
   if (goToNextCell(1)(state, editor.view.dispatch)) return true;
 
   // 마지막 셀의 Tab: 새 행을 추가하고 그 첫 셀로 캐럿을 옮긴다(TBL-011).
-  // applyTableGridOperation이 표 서브트리를 통째로 replaceWith하므로
-  // G-TBL-001 규칙대로 결과 셀을 selectCellId로 명시 지정한다.
+  // insertTableRow가 명령 정의 자체에 selectCellId(새 행 0열 셀)를
+  // 내장하므로(G-TBL-001) 이 caller는 별도 콜백을 넘기지 않는다.
   const rect = selectedRect(state);
   const tableBlockId = rect.table.attrs.blockId;
   if (typeof tableBlockId !== "string" || tableBlockId.length === 0) {
     return false;
   }
   const atIndex = rect.map.height;
-  const result = insertTableRow(editor, tableBlockId, atIndex, createId, {
-    selectCellId: (table) => table.rows[atIndex]?.cells[0]?.id ?? null,
-  });
+  const result = insertTableRow(editor, tableBlockId, atIndex, createId);
   return result.ok;
 };
 
