@@ -25,6 +25,14 @@ qq-workflow의 단계-3을 진행 (_works/20260824-04)
 
 용어: 이 흐름은 **단계**만 쓴다. ff-workflow의 트랙·DELTA 용어를 쓰지 않는다.
 
+## 진행 방식
+
+이 흐름은 단계-1의 계획 승인 한 번만 사용자에게 확인받는다. 승인 후에는 완료 조건이 전부 PASS이고 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 없는 한, 단계-2 구현부터 단계-4의 GitHub 등록·이슈 종료까지 중단 없이 이어서 실행한다. 이 GitHub 쓰기 자동 진행은 [`./issue-tracker.md`](./issue-tracker.md)의 "게시 승인"이 정한 qq-workflow 예외를 근거로 한다 — ff-workflow와 기본 레인은 그 절의 원래 확인 절차를 그대로 따른다.
+
+자동 진행은 판단을 생략한다는 뜻이 아니다. 계획서 6·7절이 다루지 않는 결정 지점을 만나면(가이드·함정 해석이 갈리거나, 완료 조건 판정이 모호하거나, 등록·종료 기준이 서지 않는 경우 등) 추측하지 않고 그 지점에서 멈춰 사용자에게 묻는다. 이 정지는 단계-1의 계획 승인과 별개다.
+
+단계-2는 subagent 협업 모드로 실행한다. 단계-1(계획 작성)과 단계-3의 완료 조건 대조(판정)는 메인 세션이 직접 쓴다 — ff-workflow의 "판단·문서 작성은 메인 세션, 조사·구현·리뷰 실행은 subagent" 원칙을 그대로 따른다.
+
 ## 작업 폴더
 
 ```
@@ -95,9 +103,11 @@ ff-workflow의 `_meta.md`와 같은 형식에서 `완료 트랙`을 `완료 단�
 
 - 입력: `01-계획.md`, 계획서 6·7절이 지목한 가이드·함정
 - 출력: 작업 브랜치 커밋
-- 절차: 회귀 테스트를 먼저 추가하고 RED를 확인한 뒤 GREEN 구현을 한다(`AGENTS.md`의 "구현 규칙"). 세분화된 커밋으로 쌓는다.
+- 절차: superpowers `subagent-driven-development`로 진행한다. 구현·리뷰 모델 배분은 그 skill에 맡긴다. 커밋은 메인 세션이 한다 — subagent 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다. 회귀 테스트를 먼저 추가하고 RED를 확인한 뒤 GREEN 구현을 하는 규칙(`AGENTS.md`의 "구현 규칙")은 그대로 적용한다.
 - 검증: 계획서의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다.
 - 정지: squash, `dev` 병합, push, GitHub 쓰기를 하지 않는다. 변경이 DELTA 크기 상한을 넘게 되면 정지하고 보고한다 — 레인 전환 판단은 사용자가 한다.
+
+subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree 격리 금지 등)은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 규칙" 절을 따른다.
 
 ## 단계-3. 리뷰
 
@@ -122,7 +132,7 @@ ff-workflow의 `_meta.md`와 같은 형식에서 `완료 트랙`을 `완료 단�
   3. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`. ff가 거절되면 현재 `dev` 기준으로 2단계를 다시 실행한다.
   4. `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
   5. 확정 해시를 `_meta.md`에 기록한다.
-  6. `pending-issues/*`의 등록 여부를 재검토하고 등록 목록과 종료 예정 이슈 목록을 사용자에게 제시해 확인받은 뒤 등록·종료한다. 기준은 [`./issue-tracker.md`](./issue-tracker.md)가 소유한다.
+  6. `pending-issues/*`의 등록 여부를 재검토해 등록·종료한다. 완료 조건이 전부 PASS이고 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 없으면 사용자 확인 없이 게시한다([`./issue-tracker.md`](./issue-tracker.md) "게시 승인"의 qq-workflow 예외). 그렇지 않거나 등록·종료 여부가 불확실하면 게시하지 않고 정지해 사용자에게 보고한다. 등록·종료 기준은 [`./issue-tracker.md`](./issue-tracker.md)가 소유한다.
   7. `pending-guides/*`·`pending-pitfalls/*`의 승격을 판단해 등록하고 해당 INDEX를 같은 변경에서 동기화한다.
   8. `docs/history/<yyyyMMdd>-<NN>-<제목>.md`를 쓴다. 담는 내용과 보관 정책은 [`../history/README.md`](../history/README.md)가 소유한다.
 - 보고: `AGENTS.md`의 "완료 보고" 형식. 삭제한 브랜치명, 미푸시 커밋 수, 닫은 이슈 번호를 남긴다.
