@@ -119,4 +119,48 @@ describe("parseClipboardTable", () => {
     expect(result.value[1]?.type).toBe("table");
     expect(result.value[2]?.type).toBe("paragraph");
   });
+
+  it("thead·tbody·tfoot이 소스 순서대로면 그대로 유지된다", () => {
+    const html =
+      "<table><thead><tr><td>H</td></tr></thead>" +
+      "<tbody><tr><td>B</td></tr></tbody>" +
+      "<tfoot><tr><td>F</td></tr></tfoot></table>";
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows.map((row) => row.cells[0]?.content)).toEqual([
+      [{ text: "H" }],
+      [{ text: "B" }],
+      [{ text: "F" }],
+    ]);
+  });
+
+  it("tfoot이 tbody보다 먼저 와도 head→body→foot 순서로 정렬한다", () => {
+    const html =
+      "<table><thead><tr><td>H</td></tr></thead>" +
+      "<tfoot><tr><td>F</td></tr></tfoot>" +
+      "<tbody><tr><td>B</td></tr></tbody></table>";
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows.map((row) => row.cells[0]?.content)).toEqual([
+      [{ text: "H" }],
+      [{ text: "B" }],
+      [{ text: "F" }],
+    ]);
+  });
+
+  it("여러 tbody/tfoot도 섹션 내부 순서를 지켜 병합된다", () => {
+    const html =
+      "<table><thead><tr><td>H</td></tr></thead>" +
+      "<tbody><tr><td>A</td></tr></tbody>" +
+      "<tfoot><tr><td>F</td></tr></tfoot>" +
+      "<tbody><tr><td>B</td></tr></tbody></table>";
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows.map((row) => row.cells[0]?.content)).toEqual([
+      [{ text: "H" }],
+      [{ text: "A" }],
+      [{ text: "B" }],
+      [{ text: "F" }],
+    ]);
+  });
 });

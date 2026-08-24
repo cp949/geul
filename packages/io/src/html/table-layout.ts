@@ -5,7 +5,7 @@ export const MAX_TABLE_COLUMNS = 10_000;
 
 export type TableRowSource = {
   element: HtmlElementNode;
-  section: "head" | "body";
+  section: "head" | "body" | "foot";
 };
 
 export type CellLayout = {
@@ -28,25 +28,42 @@ export const layoutColumnSpan = (columnSpan: number): number =>
 export const layoutRowSpan = (rowSpan: number): number =>
   Number.isInteger(rowSpan) && rowSpan >= 1 ? rowSpan : 1;
 
+// 소스 문서에서 thead/tbody/tfoot의 등장 순서는 브라우저 렌더링 순서와
+// 무관하다(예: tfoot이 tbody보다 앞에 올 수 있다). head/body/foot 세 버킷에
+// 먼저 모으고 논리 순서(head → body → foot)로 이어붙여야, 저자가 어떤 순서로
+// 섹션을 배치했든 표가 항상 같은 행 순서로 파싱된다. 같은 버킷 안에서는
+// 여러 tbody/tfoot이 있어도 만난 순서 그대로 append해 문서 순서를 지킨다.
 export const tableRows = (table: HtmlElementNode): TableRowSource[] => {
-  const rows: TableRowSource[] = [];
+  const headRows: TableRowSource[] = [];
+  const bodyRows: TableRowSource[] = [];
+  const footRows: TableRowSource[] = [];
+  const bucketFor = (section: TableRowSource["section"]): TableRowSource[] =>
+    section === "head" ? headRows : section === "foot" ? footRows : bodyRows;
 
   for (const child of childElements(table)) {
-    if (child.tagName === "thead" || child.tagName === "tbody") {
+    if (
+      child.tagName === "thead" ||
+      child.tagName === "tbody" ||
+      child.tagName === "tfoot"
+    ) {
+      const section: TableRowSource["section"] =
+        child.tagName === "thead"
+          ? "head"
+          : child.tagName === "tfoot"
+            ? "foot"
+            : "body";
+      const bucket = bucketFor(section);
       for (const row of childElements(child, "tr")) {
-        rows.push({
-          element: row,
-          section: child.tagName === "thead" ? "head" : "body",
-        });
+        bucket.push({ element: row, section });
       }
       continue;
     }
     if (child.tagName === "tr") {
-      rows.push({ element: child, section: "body" });
+      bodyRows.push({ element: child, section: "body" });
     }
   }
 
-  return rows;
+  return [...headRows, ...bodyRows, ...footRows];
 };
 
 export const layoutRows = (rows: TableRowSource[]): CellLayout[][] => {

@@ -603,6 +603,25 @@ describe("HTML 왕복 변환", () => {
     });
   });
 
+  it("importHtml도 tfoot이 tbody보다 먼저 오면 head→body→foot 순서로 파싱한다", () => {
+    const html =
+      "<table><thead><tr><td>H</td></tr></thead>" +
+      "<tfoot><tr><td>F</td></tr></tfoot>" +
+      "<tbody><tr><td>B</td></tr></tbody></table>";
+
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected a table");
+    expect(table.rows.map((row) => row.cells[0]?.content)).toEqual([
+      [{ text: "H" }],
+      [{ text: "B" }],
+      [{ text: "F" }],
+    ]);
+  });
+
   it("허용 목록 밖 data-be-align 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
     const html =
       '<table data-be-block-id="table-1"><colgroup><col data-be-column-id="column-1" data-be-width="160"></colgroup><tbody><tr data-be-row-id="row-1"><td data-be-cell-id="cell-1" data-be-column-id="column-1" rowspan="1" colspan="1" data-be-align="justify"></td></tr></tbody></table>';
