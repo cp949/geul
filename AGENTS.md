@@ -33,14 +33,14 @@ react -> core
 demo  -> react, io, model
 ```
 
-- `model`과 `io`는 DOM, React, Tiptap, ProseMirror에 의존하지 않는다.
+- `model`과 `io`의 DOM·프레임워크 비의존 불변식은 `docs/adr/0002-enforce-layered-package-boundaries.md`(ADR-0002)가 소유한다.
 - 저장 원본은 Tiptap JSON이 아닌 독자 `{ formatVersion, revision, blocks }` JSON이다.
 - 모든 블록, 행, 열과 셀은 안정 ID를 가진다.
 - 외부 입력 실패는 예상 가능한 예외 대신 구조화된 `Result<T, E>`로 반환한다.
 - HTML warning fact는 raw HAST에서 수집할 수 있지만 의미 변환에는 sanitized HAST만 사용한다.
 - HTML/GFM importer와 core는 `@cp949/geul-model`의 공통 canonicalization·validation 계약을 사용한다.
-- `core`의 공개 `.d.ts`에 `@tiptap/*` 또는 `prosemirror-*` 타입을 노출하지 않는다.
-- `react`는 `@tiptap/react`에 의존하지 않고 core의 공개 mount/command API와 저장 표현 직렬화 계약만 사용한다.
+- `core`의 공개 타입 비노출 불변식은 `docs/adr/0002-enforce-layered-package-boundaries.md`(ADR-0002)가 소유한다.
+- `react`의 core 의존 허용 표면은 `docs/adr/0002-enforce-layered-package-boundaries.md`(ADR-0002)가 소유한다.
 - table은 R0에서 model과 HTML/GFM 변환만 지원한다. 편집기가 지원하지 않는 문서는 변경 없이 `EDITOR_FEATURE_UNAVAILABLE`로 거절한다.
 - 외부 npm 의존성은 exact version을 사용하고 내부 workspace 패키지만 `workspace:*`를 사용한다.
 
