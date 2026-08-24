@@ -2,7 +2,6 @@
 
 - 상태: `ACTIVE`
 - 적용 조건: DOM node, Editor, observer, timer 또는 전역 listener를 테스트가 직접 생성
-- 관련 함정: [`PIT-0028`](../pitfalls/PIT-0028-scope-shared-teardown-hooks-to-run-per-file.md)
 
 ## 구현 규칙
 
@@ -13,4 +12,4 @@
 
 ## 완료 기준
 
-중간 assertion을 의도적으로 실패시켜도 다음 테스트에 DOM·Editor·listener가 남지 않는다.
+중간 assertion을 의도적으로 실패시켜도 다음 테스트에 DOM·Editor·listener가 남지 않는다. 공용 teardown이나 Vitest isolation 설정을 바꾸면 package 디렉터리에서 Vitest를 직접 호출해 `--no-isolate --no-file-parallelism` 조합을 반복 실행해도 다른 test file로 fixture가 새지 않는다 — 공용 module은 cache되지만 hook 등록·실행 scope는 test file 경계와 일치하지 않을 수 있다.

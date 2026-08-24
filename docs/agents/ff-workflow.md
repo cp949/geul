@@ -102,12 +102,12 @@ DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한�
 
 ## 트랙-2. 계획서 리뷰 및 수정
 
-- 입력: `01-계획.md`, `DELTA-*.md`, 관련 spec·ADR·개발 가이드·그 가이드가 연결한 `ACTIVE` pitfall, 대상 코드
+- 입력: `01-계획.md`, `DELTA-*.md`, 관련 spec·ADR·개발 가이드, 적용 조건이 맞는 `ACTIVE` pitfall, 대상 코드
 - 출력: 라운드마다 `PLAN-REVIEW-NN.md`, 수정된 `DELTA-*.md`
 - 절차: subagent 협업 모드로 진행한다. 아래 렌즈 셋을 읽기 전용 subagent 3개에 하나씩 병렬 dispatch한다. **무시해도 되는 리뷰 결과만 남을 때까지 반복한다** — 라운드마다 3개 전부를 다시 dispatch해 수정된 DELTA를 처음부터 다시 본다.
   1. **범위 정합** — DELTA 집합이 이슈·spec이 요구하는 목표를 구조적으로 빠짐없이 담는가. 비목표로 명시한 범위를 벗어나는 DELTA가 있는가.
   2. **분할과 순서** — DELTA 경계가 책임 단위로 맞는가. 선행 관계(의존 순서)가 성립하는가. 어느 DELTA도 담당하지 않는 구조적 틈이 있는가.
-  3. **외부 계약과 가이드** — 승인된 spec·ADR, 개발 가이드, 연결된 `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식과 어긋나는가. 정상 구현 경로가 없는 `guide gap`이 있는가.
+  3. **외부 계약과 가이드** — 승인된 spec·ADR, 개발 가이드, 적용 조건이 맞는 `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식과 어긋나는가. 정상 구현 경로가 없는 `guide gap`이 있는가.
 
   세 렌즈 모두 **구조적 결함만** 본다. 정확한 파일 목록, 구현 절차 서술, 검증 명령 문구, 완료 조건의 수치·건수, 중간 상태 예측은 리뷰 대상이 아니다 — dispatch 프롬프트에 이 제외 범위를 명시한다. 이런 세부는 트랙-4가 실제 코드 상태를 보고 현장에서 보정한다.
 - 메인 세션이 세 보고를 합쳐 중복을 제거하고, 진짜 구조적 결함인지 직접 확인한다. `BLOCKER`·`MAJOR`는 DELTA 파일을 수정한다. `MINOR`는 근거와 함께 `pending-issues/`로 분리한다 — 등록 기준은 [`./issue-tracker.md`](./issue-tracker.md)를 따른다. 각 DELTA의 **적용 계약과 가이드**·**적용 함정** 절도 메인 세션이 검토한다. 가이드가 없어서 구현 선택이 열려 있으면 함정을 만들지 않고 `pending-guides/`에 초안을 남긴다. 라운드가 끝날 때마다 `PLAN-REVIEW-NN`을 다음 번호로 append한다.
@@ -144,7 +144,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 트랙-6. 결함 탐지
 
-- 입력: `git diff dev...<작업 브랜치>`, 대상 코드, 관련 개발 가이드·`ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식
+- 입력: `git diff dev...<작업 브랜치>`, 대상 코드, 관련 개발 가이드, 적용 조건이 맞는 `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식
 - 출력: `IMPL-REVIEW-NN.md`(트랙-5와 같은 연속 시퀀스)
 - 렌즈: **계획 문서를 읽지 않는다.** DELTA 경계에서 생긴 횡단 결함, 회귀, 불변식 위반, 계획이 애초에 놓친 것을 찾는다. 계획을 읽으면 계획의 사각지대를 그대로 물려받는다 — 그것을 막는 것이 이 트랙의 목적이다.
 - 절차: 리뷰 초점을 갈래로 나눠 읽기 전용 subagent에 병렬 dispatch한다. 메인 세션이 보고를 합쳐 중복을 제거하고 진짜 결함인지 직접 확인한다. 수정은 subagent에 하나씩 순차 위임하고 메인 세션이 diff를 확인해 커밋한다.
@@ -172,7 +172,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
   5. 확정 해시를 `_meta.md`에 기록한다.
   6. `pending-issues/*`의 등록 여부를 재검토하고 GitHub에 등록한다. 등록 직전에 등록 목록과 종료 예정 이슈 목록을 사용자에게 제시하고 확인을 받는다 — 그 확인이 그 실행의 등록·종료 허가다.
   7. 6단계에서 확인받은 종료 예정 이슈를 `gh issue close <번호>`로 닫는다. 닫을지 말지의 판정 기준과 sub-issue 확인 절차는 [`./issue-tracker.md`](./issue-tracker.md)의 "종료 판단"이 소유한다.
-  8. `pending-guides/*`와 `pending-pitfalls/*`의 승격을 판단하고 등록한다. 승격하면 해당 INDEX를 같은 변경에서 동기화한다.
+  8. 가이드 정비를 검토한다 — 이번 작업에서 드러난 기존 가이드의 모호하거나 빠진 문구를 수정·보강하고, `pending-guides/*`와 `pending-pitfalls/*`의 승격을 판단해 등록한다. 수정·등록하면 해당 INDEX를 같은 변경에서 동기화하고, 무엇을 왜 바꿨는지 9단계의 이력에 남긴다.
   9. `docs/history/<yyyyMMdd>-<NN>-<제목>.md`를 쓴다.
 - 보고: 삭제한 브랜치명, 미푸시 커밋 수, 닫은 이슈 번호를 남긴다.
 - 정지: `dev`를 push하지 않고 `dev` → `main` 병합도 하지 않는다. 둘 다 사용자가 직접 지시하거나 수행한다.
@@ -190,7 +190,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 5. **검증 명령** — 복사해 바로 붙여 넣을 수 있는 형태.
 6. **범위 밖** — 이 DELTA에서 하지 않을 것.
 7. **적용 계약과 가이드** — 관련 spec·ADR, `G-<카테고리>-<번호>` 가이드와 기존 helper·pattern. 해당 없음도 명시한다.
-8. **적용 함정** — 선택한 가이드가 연결한 `ACTIVE` pitfall 중 실제 적용 조건이 맞는 항목과 적용 지점. 없으면 "관련 함정 없음"을 명시한다.
+8. **적용 함정** — [`docs/pitfalls/INDEX.md`](../pitfalls/INDEX.md)의 `ACTIVE` 항목 중 적용 조건이 이 DELTA와 맞는 항목과 적용 지점. 없으면 "적용 함정 없음"을 명시한다.
 
 완료 조건에 변이를 적지 못하면 그 조건은 검증 불가하다는 뜻이고, 검증 불가한 조건만 있는 DELTA는 성립하지 않는다. 그런 DELTA는 앞뒤에 합친다.
 
@@ -214,7 +214,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - 서로 무관한 공개 계약 두 개를 동시에 바꾼다.
 - 서로 다른 패키지 세 개 이상을 건드린다.
 
-**실측 보정.** 위 수치는 첫 기준선이다. 트랙-4에서 리뷰 subagent가 파일을 다 읽지 못했다고 보고하거나 컨텍스트 압박으로 판정을 유보하면 DELTA를 쪼개고, 정상 분할 지식은 `pending-guides/`에 남긴다. 가이드를 적용해도 조용히 잘못된 판정을 낸 반복 실패만 `pending-pitfalls/`에 남긴다.
+**실측 보정.** 위 수치는 첫 기준선이다. 트랙-4에서 리뷰 subagent가 파일을 다 읽지 못했다고 보고하거나 컨텍스트 압박으로 판정을 유보하면 DELTA를 쪼개고, 정상 분할 지식은 `pending-guides/`에 남긴다. 가이드를 따르지 않았거나 모호하게 해석해 반복된 실수만 `pending-pitfalls/`에 남긴다.
 
 ## 리뷰 산출물
 
@@ -377,9 +377,9 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 `pending-issues/NN.md` — 등록 전 이슈·댓글 초안. 발견 위치, 영향, 현재 범위에서 제외한 이유, 완료 조건을 적는다. 파일 형식, 등록 기준과 게시 승인은 [`./issue-tracker.md`](./issue-tracker.md)가 소유한다 — 초안은 그 문서의 "초안 형식"을 그대로 따른다.
 
-`pending-guides/NN.md` — 반복 작업의 정상 구현·검증 경로 초안. 적용 조건 / 구현 규칙 / 완료 기준 / 관련 기존 helper를 적는다.
+`pending-guides/NN.md` — 신규 가이드 또는 기존 가이드 수정·보강 초안. 적용 조건 / 구현 규칙 / 완료 기준 / 관련 기존 helper를 적는다. 기존 가이드 보강이면 대상 `G-<카테고리>-<번호>`와 모호했던 문구를 함께 적는다.
 
-`pending-pitfalls/NN.md` — 가이드가 있어도 정상 실행이 조용히 빗나가는 반복 실패. 적용 조건 / 오해하기 쉬운 신호 / 원인·회피 / 탐지를 적는다. 승격 기준은 [`../process/development-lifecycle.md`](../process/development-lifecycle.md)가 소유한다.
+`pending-pitfalls/NN.md` — 가이드나 명시적 계약을 따르지 않았거나 모호하게 해석해 반복된 실수. 적용 조건 / 오해하기 쉬운 신호 / 원인 / 탐지를 적는다. 발견한 정상 회피 경로는 `pending-guides/` 초안에 적는다. 승격 기준은 [`../pitfalls/INDEX.md`](../pitfalls/INDEX.md)의 "승격 기준"이 소유한다.
 
 ## docs/history
 

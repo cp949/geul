@@ -20,7 +20,7 @@ type UseDismissOnOutsideOrEscapeOptions = {
  * 오버레이(메뉴, 툴바 등)를 바깥 pointerdown 또는 Escape로 닫는 공용 훅.
  * table-handles.tsx, table-selection-toolbar.tsx가 각자 손으로 복제해온
  * 리스너 등록/해제 로직을 하나로 모은다(Issue #20).
- * PIT-0009: 이 훅으로 만든 Escape 닫기 e2e는 반드시 `--workers` 병렬로도
+ * G-TST-001: 이 훅으로 만든 Escape 닫기 e2e는 반드시 `--workers` 병렬로도
  * 반복 실행해 selectionchange 재오픈 레이스가 없는지 확인한다.
  */
 export const useDismissOnOutsideOrEscape = ({

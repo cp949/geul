@@ -2,8 +2,8 @@
 
 - 상태: `ACTIVE`
 - 적용 조건: 내용·mode에 따라 크기가 바뀌는 fixed overlay
-- 정상 가이드: [`G-UI-001`](../guides/G-UI-001-build-dismissible-overlays.md)
-- 최초 근거: R1
+- 지배 가이드: [`G-UI-001`](../guides/G-UI-001-build-dismissible-overlays.md)
+- 반복 근거: R1 clamp 도입 뒤 Issue #43 리뷰 — 기존 규칙이 있는 상태에서 미적용·부분 적용 clamp 잔여와 `max-height` 항목 누락이 재발
 
 ## 오해하기 쉬운 신호
 

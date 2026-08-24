@@ -339,7 +339,7 @@ test("셀 정렬을 적용하고 undo로 되돌린다 @core", async ({ page }) =
   await expect(cell).not.toHaveCSS("text-align", "center");
 });
 
-test("Escape로 셀 서식 메뉴를 닫는다 (PIT-0009)", async ({ page }) => {
+test("Escape로 셀 서식 메뉴를 닫는다 (G-TST-001)", async ({ page }) => {
   const { editable, table } = await openDemoWithTable(page);
   const cell = table.locator("td").first();
   await cell.click({ clickCount: 3 });

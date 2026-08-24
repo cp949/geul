@@ -171,7 +171,7 @@ export const TableSelectionToolbar = () => {
     };
   }, [editor, element, clearActionError]);
 
-  // 서식 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로
+  // 서식 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
   // 닫는 UI는 병렬 e2e로 검증한다). 리스너는 useDismissOnOutsideOrEscape가
   // 소유한다 — table-handles.tsx의 closeMenu와 같은 훅(Issue #20).
   const dismissFormatMenu = useCallback(() => setFormatMenuOpen(false), []);

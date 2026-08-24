@@ -2,16 +2,16 @@
 
 - 상태: `ACTIVE`
 - 적용 조건: package script 뒤에 임시 Vitest flag 전달
-- 정상 가이드: [`G-WKS-004`](../guides/G-WKS-004-verify-lint-and-gate-changes.md)
-- 최초 근거: Issue #103
+- 지배 가이드: [`G-WKS-004`](../guides/G-WKS-004-verify-lint-and-gate-changes.md)
+- 반복 근거: Issue #103 — 트랙-4와 트랙-5가 같은 무효 flag 전달을 "반복 통과" 근거로 기록했고, 트랙-6이 직접 실행으로 무효임을 확인
 
 ## 오해하기 쉬운 신호
 
 명령은 통과하지만 실제 command line이 `vitest ... -- --sequence.shuffle` 형태라 뒤 flag가 적용되지 않는다.
 
-## 원인과 회피
+## 원인
 
-pnpm과 package script의 pass-through 경계에서 `--`가 하나 더 전달된다. package 디렉터리에서 `npx vitest run --root ../.. --project <name> <flags>`를 직접 실행한다.
+pnpm과 package script의 pass-through 경계에서 `--`가 하나 더 전달된다. 직접 실행 경로는 `G-WKS-004`가 소유한다.
 
 ## 탐지
 

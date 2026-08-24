@@ -2,7 +2,7 @@
  * 실제 EditorController를 마운트하는 공용 테스트 헬퍼.
  *
  * 손으로 조립한 편집기 DOM은 프로덕션 renderHTML과 갈라져도 컴파일러가 잡지
- * 못한다(PIT-0014, Issue #62). 여기서는 진짜 createEditor()를 마운트해 편집기
+ * 못한다(G-TST-001, Issue #62). 여기서는 진짜 createEditor()를 마운트해 편집기
  * DOM을 편집기가 직접 만들게 한다. 표가 필요한 오버레이는 mountTableEditor,
  * 문단만 필요한 오버레이는 mountBlockEditor를 쓴다. 마운트 외에 표 블록 조회
  * (tableBlockOf), DOM 캐럿 배치(placeCaret), 초점 단언(focusOutsideEditor)도

@@ -86,7 +86,7 @@ const renderWithSelectedText = (
  * 초점 복구 단언 대상을 얻는다. `role="textbox"` host 자체가 아니라 그 안의
  * 편집 가능 영역을 돌려준다 — LinkToolbar의 초점 복구는
  * `'[contenteditable="true"]'`로 찾은 자식에 `focus()`를 거는데, host는 이
- * 셀렉터에 매치되지 않는다(PIT-0014). 그래서 초점 단언은 host가 아니라 이
+ * 셀렉터에 매치되지 않는다(G-TST-001). 그래서 초점 단언은 host가 아니라 이
  * 헬퍼가 돌려주는 편집 영역을 대상으로 해야 공허해지지 않는다.
  */
 const getEditable = () => {

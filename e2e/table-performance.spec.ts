@@ -50,7 +50,7 @@ const formatSamples = (samples: readonly number[]): string =>
  *
  * ClipboardEvent 생성자의 clipboardData 옵션 대신 평범한 Event에
  * defineProperty로 clipboardData를 얹는다 — Firefox는 스크립트가 생성한
- * ClipboardEvent의 clipboardData 초기값을 반영하지 않는다(PIT-0012).
+ * ClipboardEvent의 clipboardData 초기값을 반영하지 않는다(G-TST-001).
  */
 const measurePasteMs = (page: Page, tsv: string): Promise<number> =>
   page.evaluate(async (text) => {

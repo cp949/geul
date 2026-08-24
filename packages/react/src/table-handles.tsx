@@ -341,7 +341,7 @@ export const TableHandles = () => {
     focusEditor();
   }, [focusEditor]);
 
-  // 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로 닫는 UI는
+  // 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로 닫는 UI는
   // 병렬 e2e로 검증한다). 실제 리스너 등록/해제는 useDismissOnOutsideOrEscape가
   // 소유한다 — table-selection-toolbar.tsx도 같은 훅을 쓴다(Issue #20).
   const dismissMenu = useCallback(() => setMenuState(null), []);
@@ -505,7 +505,7 @@ export const TableHandles = () => {
       // 억제 키는 안정 식별자(rowId/columnId, Option A)라 커맨드 성공
       // 여부와 무관하다 — 핸들 버튼의 React key가 그 id라, 이동이 성공해
       // DOM이 재정렬되든 실패해(예: 병합 셀 경계) 그대로 남든 대상 핸들의
-      // id는 안 바뀐다(PIT-0019 갱신, Issue #63). 빈 id(getAttribute(...)
+      // id는 안 바뀐다(G-UI-002 갱신, Issue #63). 빈 id(getAttribute(...)
       // ?? "" 폴백)는 서로 다른 행이 같은 키로 충돌하므로 억제를 걸지 않는다.
       if (current.hasDragged && current.sourceId !== "") {
         // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
@@ -514,7 +514,7 @@ export const TableHandles = () => {
         // 되돌아온다. 그래서 kind+id만으로 다른 표의 같은 id를 가진 핸들과
         // 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
         // 이 click이 항상 오지는 않는다 — 이 저장소가 관측한 Chromium은
-        // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(PIT-0019).
+        // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(G-UI-002).
         // 그래서 여기 저장한 키는 handlePointerDownOnReorderHandle이
         // 다음 제스처 시작 시점에도 비운다.
         suppressedHandleClickRef.current = `${current.kind}-${current.sourceId}`;
@@ -708,7 +708,7 @@ export const TableHandles = () => {
   ) => {
     if (event.button !== 0) return;
     // 억제 키는 뒤이은 click이 소비할 때만 비워진다 — 브라우저가 그 click을
-    // 아예 합성하지 않으면(PIT-0019) 키가 남아, 나중에 같은 핸들을 진짜로
+    // 아예 합성하지 않으면(G-UI-002) 키가 남아, 나중에 같은 핸들을 진짜로
     // 클릭할 때 한 번 삼켜진다. 새 제스처를 시작하는 시점에 비운다
     // (block-side-menu.tsx의 handlePointerDownOnHandle과 같은 규칙).
     suppressedHandleClickRef.current = null;

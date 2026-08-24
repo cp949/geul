@@ -2,7 +2,6 @@
 
 - 상태: `ACTIVE`
 - 적용 조건: 같은 fixture·helper·DOM 조작·provider 조립이 두 테스트 파일에서 필요
-- 관련 함정: [`PIT-0028`](../pitfalls/PIT-0028-scope-shared-teardown-hooks-to-run-per-file.md)
 
 ## 구현 규칙
 

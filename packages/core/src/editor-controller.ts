@@ -180,7 +180,7 @@ export type TableCellSelection = {
 // 모은다. TableMap.map은 좌표마다 그 좌표를 채우는 셀의 시작 위치를 담으므로,
 // 병합 셀은 자신이 덮는 모든 좌표에서 같은 값이 반복된다 — 처음 등장하는
 // 오프셋에서만 push한다. PM 노드 참조가 아닌 원시값만 클로저 밖으로 낸다
-// (PIT-0008).
+// (G-EDT-001).
 const collectCellSelection = (
   state: EditorState,
   rect: ReturnType<typeof selectedRect>,
@@ -754,7 +754,7 @@ export const createEditor = (
     return runDocumentCommand(command, "local", run);
   };
 
-  // PIT-0008 회피: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
+  // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 이 저장소의 TS7 컴파일러가 never로 잘못 좁힌다.
   // 클로저를 넘나드는 값은 원시 타입(code 문자열, blockId, width, message)만 쓴다.
   const tableErrorFromCode = (
@@ -837,7 +837,7 @@ export const createEditor = (
     invoke: () => Result<void, TableCommandError>,
   ): Result<void, EditorError> => {
     let errorCode: TableCommandError["code"] | null = null;
-    // PIT-0008 회피: 클로저를 넘나드는 좁히기 대상은 원시 값(errorCode)만
+    // G-EDT-001 회피 규칙: 클로저를 넘나드는 좁히기 대상은 원시 값(errorCode)만
     // 쓰고, detail은 null 좁히기 없이 mutate만 하는 const 객체에 담는다.
     const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
 

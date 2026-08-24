@@ -221,7 +221,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     };
   }, [isDragging, element, editor, updateDragState]);
 
-  // 블록 메뉴는 바깥 pointerdown과 Escape로 닫는다(PIT-0009: 키보드로
+  // 블록 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
   // 닫는 UI는 병렬 e2e로 검증한다). 리스너 등록/해제는
   // useDismissOnOutsideOrEscape가 소유한다 — table-handles.tsx,
   // table-selection-toolbar.tsx와 같은 훅이다(Issue #20, #45).

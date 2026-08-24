@@ -2,8 +2,8 @@
 
 - 상태: `ACTIVE`
 - 적용 조건: validator 뒤에 `existsSync`, 기본값, optional chaining 또는 skip 처리 존재
-- 정상 가이드: [`G-WKS-004`](../guides/G-WKS-004-verify-lint-and-gate-changes.md)
-- 최초 근거: Issue #107
+- 지배 가이드: [`G-WKS-004`](../guides/G-WKS-004-verify-lint-and-gate-changes.md)
+- 반복 근거: Issue #107·#108 — 같은 브랜치의 통과 조건 안에서 같은 원인("거절 목록만 확인, 통과 면적 미확인")의 gate 구멍 4건
 
 ## 오해하기 쉬운 신호
 

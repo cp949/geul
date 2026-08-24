@@ -159,7 +159,7 @@ test("행 핸들 드래그 재정렬 직후 합성 click이 행 메뉴를 열지
   // setPointerCapture로 고정된 바로 그 버튼에 합성 click을 보낸다 — 가
   // 성립한다고 가정한다. 이 환경(Playwright/CDP)에서는 그 전제 자체를
   // 관측할 수 없다 — 이동거리가 임계값을 넘으면 브라우저가 click을 아예
-  // 합성하지 않기 때문이다(PIT-0019). 그래서 브라우저가 보냈어야 할 click을
+  // 합성하지 않기 때문이다(G-UI-002). 그래서 브라우저가 보냈어야 할 click을
   // 여기서 명시적으로 재현한다 — 대상은 여전히 setPointerCapture가 실제로
   // 고정했던 바로 그 노드(rowHandleElement)이고, moveTableRow는 실제
   // 커맨드로 이미 위에서 DOM을 갱신했다. 이 전제가 실제 물리 마우스에도
@@ -223,7 +223,7 @@ test("열 핸들 드래그 재정렬 직후 합성 click이 열 메뉴를 열지
   await expect(cell(0, 0)).toHaveText("col-b");
   await expect(cell(0, 1)).toHaveText("col-a");
 
-  // 행 테스트와 같은 이유로(PIT-0019) 합성 click을 명시적으로 재현한다.
+  // 행 테스트와 같은 이유로(G-UI-002) 합성 click을 명시적으로 재현한다.
   expect(await columnHandleElement.evaluate((el) => el.isConnected)).toBe(true);
   await columnHandleElement.dispatchEvent("click", {
     detail: 1,
@@ -279,7 +279,7 @@ test("재정렬 뒤 브라우저가 click을 합성하지 않아도 다음 진�
   await expect(cell(1, 0)).toHaveText("row-a");
 
   // 위 두 테스트와 달리 합성 click을 재현하지 않는다 — 이 환경의 Chromium은
-  // 임계값을 넘는 드래그 뒤 click을 실제로 보내지 않는다(PIT-0019). 그러면
+  // 임계값을 넘는 드래그 뒤 click을 실제로 보내지 않는다(G-UI-002). 그러면
   // 억제 키를 소비할 click이 없어 키가 그대로 남는다. 사용자가 방금 옮긴
   // 행의 핸들을 다시 진짜로 클릭하는 이 동작이 한 번 삼켜지면 안 된다.
   const movedHandleBox = await rowHandleElement.boundingBox();
