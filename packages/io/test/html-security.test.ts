@@ -228,6 +228,21 @@ describe("HTML 보안", () => {
     ]);
   });
 
+  it("제어문자 제거로 빈 조각이 사라지면 같은 mark를 가진 이웃 조각을 병합한다", () => {
+    const html = `<p><strong>abc</strong><em>\u0001</em><strong>def</strong></p>`;
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "abcdef", marks: [{ type: "bold" }] }],
+      },
+    ]);
+  });
+
   it("표 직속 비섹션 자식(caption)의 제어문자도 표 앞 문단에서 제거하고 경고한다", () => {
     const html = `<table><caption>Cap\u0001tion</caption><tbody><tr><td>a</td></tr></tbody></table>`;
     const result = importHtml(html);

@@ -44,17 +44,39 @@ const DEFAULT_COLUMN_WIDTH = 160;
 
 class HtmlDocumentInvalidError extends Error {}
 
+const marksKey = (marks: InlineContent[number]["marks"]): string =>
+  JSON.stringify(marks ?? []);
+
 // inlineContentFromNodes가 만든 각 텍스트 조각에서 model이 거절하는
 // 코드포인트(LF 제외 C0 제어문자, DEL, 짝 없는 surrogate)를 제거한다.
 // 정책은 model의 sanitizeInlineText가 단독 소유하고(G-CNV-001) 여기서는
 // 문단/헤딩/표 직속 비섹션 자식 문단 생성 지점 세 곳이 재사용만 한다.
 // whitespace collapsing은 도입하지 않는다(범위 밖) — 코드포인트 제거만
-// 한다. 제거 후 빈 조각은 원래 appendText가 만들지 않는 모양(빈 텍스트
-// 조각 없음)을 유지하기 위해 걸러낸다.
-const sanitizeInlineContentText = (content: InlineContent): InlineContent =>
-  content
-    .map((item) => ({ ...item, text: sanitizeInlineText(item.text) }))
-    .filter((item) => item.text.length > 0);
+// 한다. 코드포인트 제거로 조각이 통째로 비면 버리고, 그 결과 같은 mark
+// 조합을 가진 이웃 조각이 생기면 병합한다 — appendText(inline-content.ts)와
+// normalizeCellContent(clipboard/cell-text.ts)가 지키는 "인접 동일 mark는
+// 항상 병합" 불변식을 여기서도 유지한다(빈 조각 제거만 하고 병합을 생략하면
+// 같은 mark가 쪼개진 채 남아 export가 불필요하게 태그를 나눈다).
+const sanitizeInlineContentText = (content: InlineContent): InlineContent => {
+  const sanitized: InlineContent = [];
+  for (const item of content) {
+    const text = sanitizeInlineText(item.text);
+    if (text.length === 0) continue;
+
+    const previous = sanitized.at(-1);
+    if (
+      previous !== undefined &&
+      marksKey(previous.marks) === marksKey(item.marks)
+    ) {
+      previous.text += text;
+      continue;
+    }
+    sanitized.push(
+      item.marks === undefined ? { text } : { text, marks: item.marks },
+    );
+  }
+  return sanitized;
+};
 
 const propertyHeaderFlag = (
   element: HtmlElementNode,
