@@ -10,7 +10,7 @@
 
 ## 언제 쓰나
 
-진입 규칙은 [`../../AGENTS.md`](../../AGENTS.md)의 "레인 선택 규칙"이 소유한다. 이 흐름으로 들어오는 경로는 둘이다 — 사용자가 `ff-workflow`를 지목했거나, 레인 명시 없는 이슈 작업에서 자동 선택이 ff를 골랐다. 커맨드도 skill도 없다. 그 외에는 기본값이 아니다 — 지시가 없으면 "기본 레인"으로 진행한다.
+진입 규칙은 [`../../AGENTS.md`](../../AGENTS.md)의 "레인 선택 규칙"이 소유한다. 이 흐름으로 들어오는 경로는 둘이다 — 사용자가 `ff-workflow`를 지목했거나, 레인 명시 없는 이슈 작업에서 자동 선택이 ff를 골랐다. 그 외에는 기본값이 아니다 — 지시가 없으면 "기본 레인"으로 진행한다.
 
 기본값이 아닌 이유는 비용이다. 트랙 9개와 리뷰 3회는 파일 단위 시야로는 볼 수 없는 결함을 잡으려고 치르는 값이다. 공용 test support의 교차 파일 검토는 [`G-TST-002`](../guides/G-TST-002-own-shared-test-support.md)가 그 형태를 설명한다. 간단한 작업의 경량 흐름은 [`./qq-workflow.md`](./qq-workflow.md)가 따로 있다.
 
@@ -25,7 +25,11 @@ ff-workflow의 트랙-4의 모든 DELTA를 진행 (계획서: _works/20260823-01
 
 작업 폴더 인자는 접두 매칭을 허용한다. `20260823-01`처럼 앞부분만 주어도 `_works/` 아래에서 유일하게 매칭되면 그 폴더로 해석한다. `_works/` 접두사는 붙여도 생략해도 된다. 매칭이 없거나 둘 이상이면 후보를 출력하고 정지한다.
 
-용어: 이 흐름은 **트랙**과 **DELTA**만 쓴다. 다른 skill의 용어와 충돌하는 이름은 쓰지 않는다.
+용어: 이 흐름은 **트랙**과 **DELTA**만 쓴다.
+
+### 실행 수단 선택
+
+각 트랙은 입력·완료 기준·반환 형식이 포함된 prompt 계약을 제공한다. 트랙이 정한 메인 세션·subagent 역할, 읽기·쓰기 범위와 직렬·병렬 조건은 그대로 유지한다.
 
 ## 작업 폴더
 
@@ -89,8 +93,22 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 
 - 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화
 - 출력: 작업 폴더, `_meta.md`, `00-계획-초안.md`, 작업 브랜치
-- 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다 — 판정은 `_meta.md`의 `상태`가 `진행중`이면 미완료다. 이어받으면 그 사실을 실행 ledger(`progress.md`)에 적는다. 그다음 superpowers `brainstorming`으로 진행한다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. 사전 조사가 여러 갈래로 갈리면 읽기 전용 조사 subagent를 갈래마다 하나씩 병렬로 띄우고 결과를 메인 세션이 합친다. `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
+- 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다 — 판정은 `_meta.md`의 `상태`가 `진행중`이면 미완료다. 이어받으면 그 사실을 실행 ledger(`progress.md`)에 적는다. 그다음 아래 "조사·결정 prompt"로 진행한다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. 사전 조사가 여러 갈래로 갈리면 읽기 전용 조사 subagent를 갈래마다 하나씩 병렬로 띄우고 결과를 메인 세션이 합친다. `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
 - 정지: 커밋하지 않는다. 브랜치만 만든다.
+
+### 조사·결정 prompt
+
+```text
+AGENTS.md의 작업 시작 순서 1~9, 대상 이슈와 사용자 대화를 입력으로 계획 초안을 만든다.
+
+1. 현재 코드·테스트·계약에서 확인한 사실과 아직 확인하지 않은 가정을 구분한다.
+2. 목표, 포함·제외 범위, 구현 순서, 완료 기준과 검증 명령을 작성한다.
+3. 구현 전에 정해야 하는 선택지만 최대 3개로 압축하고 단일 권장안을 제시한다.
+4. 사용자 결정이 필요한 항목은 추측하지 않고 질문한다.
+5. 결정된 항목은 주제, 결정, 근거와 틀렸을 때 비용으로 기록한다.
+
+반환: 00-계획-초안.md에 들어갈 내용, 열린 결정, 조사 근거와 남은 불확실성.
+```
 
 ## 트랙-1. DELTA 분할
 
@@ -165,7 +183,7 @@ DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한�
 
 - 입력: 지정된 `DELTA-NN.md`, 그 DELTA가 연결한 가이드·함정, `02-테스트-계획.md`의 해당 DELTA 부분, `01-계획.md`의 의존 관계와 "## 결정"의 관련 Ruling
 - 출력: 작업 브랜치 커밋, 실행 ledger(`progress.md`) 갱신
-- 절차: DELTA마다 시작 시 세 가지를 판정해 ledger에 남긴다 — **구현 복잡도**(Micro·Standard·Risky), **검증 자동화**(Complete·Partial), **후속 기능적 의존**(None·Functional). 등급별 실행 경로는 아래 "구현 복잡도"가, 독립 reviewer의 실행 시점은 "검증 자동화와 리뷰 시점"이 소유한다. 커밋은 메인 세션이 한다 — implementer 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
+- 절차: subagent 협업 모드로 진행한다. DELTA마다 시작 시 세 가지를 판정해 ledger에 남긴다 — **구현 복잡도**(Micro·Standard·Risky), **검증 자동화**(Complete·Partial), **후속 기능적 의존**(None·Functional). 등급별 implementer와 실행 경로는 아래 "구현 복잡도"가, 독립 reviewer의 실행 시점은 "검증 자동화와 리뷰 시점"이 소유한다. 커밋은 메인 세션이 한다 — implementer 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
 - 게이트: **해당 DELTA의 완료 조건을 전부 충족한 경우에만 다음 DELTA를 시작한다.** 충족하지 못하면 정지하고 무엇이 미충족인지 보고한다.
 - 검증: DELTA의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다. focused 명령은 출력의 `Test Files`로 실제 선택 범위를 확인한다 — 패키지 `test` 스크립트는 경로가 고정돼 파일 인자가 필터로 겹쳐 전체를 실행할 수 있다. 파일 단위 실행은 `pnpm --filter <패키지> exec vitest run --root ../.. <테스트 파일...>` 형태를 쓴다.
 - 재실행: 이미 완료한 DELTA를 사용자가 다시 지시하면 독립 reviewer 1회를 실행하고 발견을 수정한다.
@@ -182,7 +200,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - 공개 타입 변경이 없거나 승인된 내부 타입 변경뿐
 - 설계 결정과 테스트 seam이 확정됐고 기존 패턴으로 구현 가능
 
-실행: fast implementer → 메인 DELTA gate → 커밋. superpowers `subagent-driven-development`(SDD)를 호출하지 않는다. SDD를 호출한 뒤 필수 절차를 임의 축약하는 방식도 쓰지 않는다.
+실행: fast implementer → 메인 DELTA gate → 커밋.
 
 **Standard** — 하나 이상 해당하고 Risky가 아니다.
 
@@ -198,9 +216,9 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - 서로 다른 패키지 3개 이상, DELTA 크기 상한 근접·초과
 - 구현 중 새 설계 결정 발생, rollback 비용 높음
 
-실행: full SDD 또는 별도 사용자 판단. spec review와 code-quality review를 분리하고, 트랙-5·6과 중복되는 검토를 시작 전에 명시한다.
+실행: implementer와 spec review·code-quality review를 분리한 prompt 세트 또는 별도 사용자 판단. 트랙-5·6과 중복되는 검토를 시작 전에 명시한다.
 
-**implementer 정의.** fast implementer는 저비용 모델의 파일 쓰기 subagent 하나, standard implementer는 세션 기본 모델의 파일 쓰기 subagent 하나다. 모델을 지정할 수 없는 환경이면 둘 다 기본 모델을 쓴다. 둘 다 아래 task bundle만 입력으로 받고, 상태·변경 파일·검증·우려만 짧게 보고한다 — 별도 장문 보고서 파일을 만들지 않는다.
+**implementer 정의.** fast implementer는 저비용 모델의 파일 쓰기 subagent 하나, standard implementer는 세션 기본 모델의 파일 쓰기 subagent 하나다. 모델을 지정할 수 없는 환경이면 둘 다 기본 모델을 쓴다. 둘 다 아래 구현 prompt만 입력으로 받고, 상태·변경 파일·검증·우려만 짧게 보고한다 — 별도 장문 보고서 파일을 만들지 않는다.
 
 **등급 상승.** 구현 중 현재 등급 조건을 벗어나면 변경을 보존하고 정지한다. 메인 세션이 새 등급으로 절차를 전환하고 전환 사실을 ledger에 남긴다. 제품 범위·공개 계약 결정이 새로 필요할 때만 사용자에게 묻는다.
 
@@ -228,13 +246,35 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 테스트는 세 종류를 구분해 계획하고 보고한다 — **bug-catching RED**(기존 결함에서 반드시 실패한다), **characterization**(기존 동작·비목표 회귀를 고정한다. 구현 전 통과할 수 있다), **post-fix mutation**(구현 후 잘못된 변이를 잡는다. 기존 코드에서 실패할 필요는 없다). 신규 테스트 수를 RED 수로 보고하지 않는다.
 
-### 실행 ledger와 dispatch 입력
+### 실행 ledger와 구현 prompt
 
 트랙-4 상세 증거는 작업당 `progress.md` 하나가 소유한다. DELTA마다 등급 판정(복잡도·자동화·후속 의존·리뷰 시점), agent 호출 수, 테스트 분류별 결과, 전체 gate 결과, 변경 파일 수, 남은 위험을 기록한다. Git diff를 별도 파일로 복제하지 않고(`review-DELTA-NN.diff` 금지 — Git이 diff를 소유한다), implementer 장문 보고서를 만들지 않는다. 시간은 성과 gate가 아니라 병목 관찰값이다.
 
 효율 목표: implementer 호출 1, reviewer 호출 조건부 0~1, 전체 DELTA gate 1회, diff 복제 파일 0, DELTA당 ledger 30~40줄 이하. reviewer가 발견 0건·수정 0건인 실행이 반복되면 즉시 reviewer 조건을 좁히고, reviewer가 트랙-5·6보다 먼저 결함을 반복 검출하면 조건을 넓힌다.
 
-메인 세션이 implementer에게 주는 **task bundle**은 다음뿐이다 — 목적, 변경 대상, 완료 조건, 해당 DELTA의 테스트 분류와 명령, 적용 가이드·함정, 트랙-4 확인사항, 관련 Ruling, 선행 DELTA가 만든 실제 변경. 다른 DELTA의 테스트 계획과 최종 체크리스트를 전달하지 않고, DELTA 내용을 별도 task brief 파일로 복제하지 않고, subagent가 작업 폴더 전체를 탐색하게 하지 않는다.
+메인 세션은 다음 prompt의 꺾쇠 항목만 실제 값으로 채워 implementer에게 전달한다. 다른 DELTA의 테스트 계획과 최종 체크리스트를 전달하지 않고, DELTA 내용을 별도 task brief 파일로 복제하지 않고, implementer가 작업 폴더 전체를 탐색하게 하지 않는다.
+
+```text
+<DELTA 경로>를 구현한다.
+
+입력:
+- 목적: <DELTA 목적>
+- 변경 대상: <허용 파일과 책임>
+- 완료 조건: <조건과 각 조건의 검출 변이>
+- 테스트: <해당 DELTA의 분류별 테스트와 focused 명령>
+- 적용 계약: <가이드·함정·관련 Ruling>
+- 선행 변경: <현재 코드에 이미 반영된 선행 DELTA 결과>
+- 트랙-4 확인사항: <있으면 기재>
+
+실행:
+1. 현재 코드와 테스트로 DELTA 전제가 성립하는지 확인한다.
+2. bug-catching RED를 먼저 재현하고 characterization의 현재 결과를 기록한다.
+3. 최소 구현으로 GREEN을 만들고 targeted 검증을 실행한다.
+4. 허용 파일 밖 변경, 계획과 다른 구현 선택 또는 새 사용자 결정이 필요하면 멈추고 보고한다.
+5. merge, push, GitHub 쓰기, 재그룹화와 커밋은 수행하지 않는다.
+
+반환: 상태, 변경 파일과 diff 요약, RED/GREEN 증거, 실행한 명령과 결과, 계획과 달랐던 사실, 우려와 범위 밖 발견.
+```
 
 ## 트랙-5. 누락 탐지
 
@@ -269,6 +309,8 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 트랙-8. 병합과 등록
 
+트랙-8 실행 지시는 작업 브랜치의 `dev` fast-forward merge를 허가한다. push·tag·PR 생성과 `dev` → `main` 병합은 포함하지 않는다. GitHub 게시·종료는 [`./issue-tracker.md`](./issue-tracker.md)를 따른다.
+
 - 입력: `04-작업결과.md`, `IMPL-REVIEW-*.md` 최소 하나, `pending-issues/*`, `pending-guides/*`, `pending-pitfalls/*`
 - 출력: `dev`의 커밋, GitHub 이슈·댓글, `docs/history/<yyyyMMdd>-<NN>-<제목>.md`, `_meta.md`의 `상태: 완료`
 - 게이트: **리뷰 트랙을 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `04-작업결과.md`와 `docs/history/`의 이력에 적는다.
@@ -278,8 +320,8 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
   3. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`. ff가 거절되면 현재 `dev` 기준으로 2단계를 다시 실행한다.
   4. `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
   5. `_meta.md`의 `상태`를 `완료`로 바꾼다. 확정 해시는 9단계의 이력이 기록한다.
-  6. `pending-issues/*`의 등록 여부를 재검토하고 GitHub에 등록한다. 등록 직전에 등록 목록을 사용자에게 제시하고 확인을 받는다 — 그 확인이 그 실행의 등록 허가다.
-  7. 이슈 종료는 별도 확인 없이 에이전트가 판정하고 같은 실행에서 `gh issue close <번호>`로 수행한다. 판정 기준과 sub-issue 확인 절차는 [`./issue-tracker.md`](./issue-tracker.md)의 "종료 판단"이 소유한다. 닫지 않은 이슈는 미충족 기준과 다음 조치를 완료 댓글이나 보고에 남긴다.
+  6. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단하고 사용자 확인 없이 수행한다.
+  7. 닫지 않은 이슈는 미충족 기준과 다음 조치를 완료 댓글이나 보고에 남긴다.
   8. 가이드 정비를 검토한다 — 이번 작업에서 드러난 기존 가이드의 모호하거나 빠진 문구를 수정·보강하고, `pending-guides/*`와 `pending-pitfalls/*`의 승격을 판단해 등록한다. 수정·등록하면 해당 INDEX를 같은 변경에서 동기화하고, 무엇을 왜 바꿨는지 9단계의 이력에 남긴다.
   9. `docs/history/<yyyyMMdd>-<NN>-<제목>.md`를 쓴다.
 - 보고: 삭제한 브랜치명, 미푸시 커밋 수, 닫은 이슈 번호를 남긴다.
@@ -482,7 +524,6 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - push, tag, PR 생성. `dev` push는 사용자가 별도로 지시한다.
 - `main`을 대상으로 하는 merge, rebase, push.
 - `git reset --hard`, 강제 push, 광범위한 `git clean`.
-- superpowers `finishing-a-development-branch` 스킬. 통합 방식 선택 메뉴를 띄우는데 이 저장소는 ff-only 고정에 PR 금지다.
 
 ## pending-issues, pending-guides와 pending-pitfalls
 

@@ -56,7 +56,7 @@ demo  -> react, io, model
 - 새 런타임 의존성이 필요하면 추가 전에 필요성과 라이선스 영향을 사용자에게 알린다.
 - 의존성을 추가하거나 변경하면 `docs/product/dependency-licenses.md`와 license 검사를 함께 갱신한다.
 - 생성된 `dist`, `coverage`, `.turbo`, `.vite`, `playwright-report`, `test-results`를 소스처럼 편집하거나 커밋하지 않는다.
-- 현재 범위 밖에서 발견한 작업은 현재 변경에 섞지 않는다. 기록 위치는 레인이 정한다 — 아래 "Git과 작업공간". GitHub 등록은 어느 레인에서든 사용자 지시를 기다린다.
+- 현재 범위 밖에서 발견한 작업은 현재 변경에 섞지 않는다. 기록 위치는 레인이 정한다 — 아래 "Git과 작업공간". GitHub 게시·종료 권한은 `docs/agents/issue-tracker.md`가 소유한다.
 - 정상 구현 경로가 없거나 불명확하면 `docs/guides/`를 추가·보강한다. 가이드나 명시적 계약을 따르지 않았거나 모호하게 해석해 반복된 실수만 `docs/pitfalls/`에 기록한다.
 - 단계 또는 릴리스 검증이 끝나면 관련 `docs/reviews/` 완료 문서의 최신 판정과 증거를 갱신한다.
 
@@ -143,7 +143,7 @@ git status --short
 - 기존 modified, untracked와 ignored 파일은 사용자 작업으로 간주하고 보존한다.
 - 요청받지 않은 파일을 되돌리거나 광범위하게 정리하지 않는다.
 - worktree는 사용자가 그 세션에서 명시적으로 요청한 경우에만 만든다. 병렬 에이전트에도 worktree 격리를 기본으로 주지 않는다.
-- `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다.
+- `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다. 예외: qq-workflow의 단계-1 계획 승인과 ff-workflow의 트랙-8 실행 지시는 작업 브랜치의 해당 종료 단계 `dev` fast-forward merge까지 허가한다. push, tag와 PR 생성은 두 레인에서도 별도 요청이 필요하다.
 - push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다. "작업 후 한번에" 같은 유예 답변은 완료 판단 시 자동 실행해도 된다는 허가가 아니다.
 - 편집기를 여는 git 명령(`git rebase -i`, `-m` 없는 `git commit`·`git commit --amend`·`git tag -a`, `--no-edit` 없는 `git merge`)을 쓰지 않는다. 에이전트 세션은 `GIT_EDITOR=true`라 입력 없이 기본값으로 조용히 성공한다 — [`PIT-0023`](./docs/pitfalls/PIT-0023-editor-opening-git-commands-succeed-silently.md).
 - merge conflict는 양쪽 변경 의도를 확인해 해결하고 전체 병합 결과를 다시 검증한다.
