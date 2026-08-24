@@ -72,6 +72,14 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   );
   const dragStateRef = useRef<DragState | null>(null);
   const suppressedHandleClickBlockIdRef = useRef<string | null>(null);
+  // 실제 마우스 클릭은 pointerdown -> pointerup -> click 세 이벤트로 온다.
+  // handlePointerDownOnHandle이 드래그 준비로 blockMenuState를 무조건
+  // null로 리셋해 React 18이 그 변경을 click보다 먼저 flush하므로,
+  // handleHandleClick이 읽는 blockMenuState는 재클릭 시 항상 null이다 —
+  // 그대로면 "닫는 쪽"을 절대 타지 못하고 매번 "여는 쪽"(재오픈)만 탄다
+  // (Issue #52 확장). pointerdown 시점에 리셋 직전 상태를 이 ref에 남겨
+  // click이 그 스냅샷으로 판정하게 한다.
+  const wasMenuOpenForBlockIdRef = useRef<string | null>(null);
   const updateDragState = useCallback((next: DragState | null) => {
     dragStateRef.current = next;
     setDragState(next);
@@ -279,6 +287,10 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     if (event.button !== 0) return;
     suppressedHandleClickBlockIdRef.current = null;
     event.currentTarget.setPointerCapture(event.pointerId);
+    wasMenuOpenForBlockIdRef.current =
+      blockMenuState !== null && blockMenuState.blockId === blockId
+        ? blockId
+        : null;
     setBlockMenuState(null);
     updateDragState({
       pointerId: event.pointerId,
@@ -297,15 +309,33 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   ) => {
     const suppressedBlockId = suppressedHandleClickBlockIdRef.current;
     suppressedHandleClickBlockIdRef.current = null;
+    const wasMenuOpenForBlockId = wasMenuOpenForBlockIdRef.current;
+    wasMenuOpenForBlockIdRef.current = null;
     if (event.detail !== 0 && suppressedBlockId === blockId) {
       return;
     }
+    // 트리거 버튼도 onMouseDown preventDefault라 초점을 받지 않는다 — 재클릭
+    // 닫기에는 바깥 클릭과 달리 "돌아갈 다른 목적지"가 없다. Escape와 같은
+    // 그룹으로 다뤄 closeBlockMenu(초점 복구 포함)를 재사용한다(G-UI-001,
+    // Issue #52). closeBlockMenu는 setState(null) 고정형이라 여는 쪽까지
+    // 대신할 수 없어, 여기서 현재 상태를 먼저 읽어 분기한다. 실제 마우스
+    // 재클릭은 pointerdown이 blockMenuState를 이미 null로 지운 뒤라
+    // wasMenuOpenForBlockIdRef의 pointerdown 시점 스냅샷도 함께 본다(Issue
+    // #52 확장) — 라이브 상태만 보면 키보드 활성화(pointerdown 없이 오는
+    // detail===0 click)는 여전히 정상 처리된다.
+    if (
+      wasMenuOpenForBlockId === blockId ||
+      (blockMenuState !== null && blockMenuState.blockId === blockId)
+    ) {
+      closeBlockMenu();
+      return;
+    }
     if (hoverBounds === null) return;
-    setBlockMenuState((current) =>
-      current !== null && current.blockId === blockId
-        ? null
-        : { blockId, left: hoverBounds.left, top: hoverBounds.top + 28 },
-    );
+    setBlockMenuState({
+      blockId,
+      left: hoverBounds.left,
+      top: hoverBounds.top + 28,
+    });
   };
 
   const handleTurnInto = (item: BlockTypeOption) => {

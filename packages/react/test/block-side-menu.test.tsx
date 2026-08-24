@@ -18,6 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BlockSideMenu } from "../src/block-side-menu.js";
 import { mountBlockEditor } from "./mount-editor.js";
 
+// jsdom은 setPointerCapture를 구현하지 않는다(table-handle-menu.test.tsx와
+// 같은 이유) — handlePointerDownOnHandle이 실제 드래그 준비로 이를 호출하므로,
+// 핸들에 pointerdown을 쏘는 테스트(재클릭 풀 제스처)에는 폴리필이 필요하다.
+if (typeof Element.prototype.setPointerCapture !== "function") {
+  Element.prototype.setPointerCapture = () => {};
+}
+
 // @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
 // cleanup을 등록한다(dist/index.js의 typeof afterEach === "function" 분기와
 // 그 else의 teardown fallback). vitest는 globals: true일 때만 그 전역을
@@ -121,8 +128,8 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(screen.getByRole("menuitem", { name: "Delete" })).not.toBeNull();
   });
 
-  it("같은 핸들을 다시 클릭하면 메뉴를 닫는다", () => {
-    openBlockMenu();
+  it("재클릭이 닫는 분기를 타면 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
+    const rendered = openBlockMenu();
     // 전제: 재클릭 전에는 메뉴가 실제로 열려 있다. openBlockMenu 내부의
     // getByRole("button", { name: dragHandleLabel })는 hover 거터의 핸들
     // 버튼(block-side-menu.tsx:331-347)을 찾을 뿐 메뉴 팝업(:379-427)과는
@@ -131,9 +138,20 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     // 통과한다(Issue #62).
     expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    // 실제 마우스 재클릭은 pointerdown -> pointerup -> click 순서로 온다
+    // (G-TST-001). click만 쏘면 handlePointerDownOnHandle의
+    // setBlockMenuState(null)를 거치지 않아 이 결함(Issue #52 확장, 실제
+    // 재클릭이 닫는 분기에 도달 못 함)을 재현하지 못하는 거짓 통과가 된다.
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    fireEvent.click(handle);
 
     expect(screen.queryByRole("menu")).toBeNull();
+    // 트리거 버튼도 onMouseDown preventDefault라 초점을 받지 않는다 — 재클릭
+    // 닫기에는 바깥 클릭과 달리 "돌아갈 다른 목적지"가 없어 Escape와 같은
+    // 그룹(초점 복구)으로 다룬다(G-UI-001, Issue #52).
+    expect(document.activeElement).toBe(rendered.editable);
   });
 
   it("종류 변경 항목을 클릭하면 setBlockType을 호출하고 메뉴를 닫으며 편집기로 초점을 되돌린다", () => {

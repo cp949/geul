@@ -205,6 +205,26 @@ describe("행/열 핸들 클릭 메뉴", () => {
     expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
   });
 
+  it("재클릭이 닫는 분기를 타면 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
+    const { contentEditable } = openRowMenu();
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+
+    // 실제 마우스 재클릭은 pointerdown -> pointerup -> click 순서로 온다
+    // (G-TST-001). block-side-menu.test.tsx의 "재클릭이 닫는 분기를 타면..."
+    // 테스트와 같은 이유로 풀 제스처를 쏜다 — click만 쏘면
+    // handlePointerDownOnReorderHandle의 setMenuState(null)를 거치지 않아
+    // 이 결함(Issue #52 확장, 실제 재클릭이 닫는 분기에 도달 못 함)을
+    // 재현하지 못하는 거짓 통과가 된다.
+    const [handle] = screen.getAllByRole("button", { name: rowHandleLabel });
+    if (handle === undefined) throw new Error("행 핸들 없음");
+    fireEvent.pointerDown(handle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    fireEvent.click(handle);
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(contentEditable);
+  });
+
   it("메뉴의 삭제 항목이 deleteTableRow를 행 인덱스로 호출하고 편집기로 초점을 되돌린다", () => {
     const { contentEditable, editor, rowIds } = openRowMenu();
 
