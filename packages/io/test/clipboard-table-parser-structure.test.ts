@@ -120,6 +120,55 @@ describe("parseClipboardTable", () => {
     expect(result.value[2]?.type).toBe("paragraph");
   });
 
+  it("clipboard 경로에서 caption이 표 앞 문단이 된다", () => {
+    const html =
+      "<table><caption>Sales 2026</caption>" +
+      "<tbody><tr><td>a</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "Sales 2026" }],
+    });
+    expect(result.value[1]?.type).toBe("table");
+  });
+
+  it("공백·제로폭 문자뿐인 caption은 문단을 만들지 않는다", () => {
+    const html =
+      "<table><caption>\u200B\u00A0\u00A0</caption>" +
+      "<tbody><tr><td>a</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0]?.type).toBe("table");
+  });
+
+  it("표 앞 기존 문단(intro)과 caption이 공존해도 문서 순서가 보존된다", () => {
+    const html =
+      "<p>intro</p>" +
+      "<table><caption>Sales 2026</caption>" +
+      "<tbody><tr><td>a</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(3);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "intro" }],
+    });
+    expect(result.value[1]).toEqual({
+      type: "paragraph",
+      content: [{ text: "Sales 2026" }],
+    });
+    expect(result.value[2]?.type).toBe("table");
+  });
+
   it("thead·tbody·tfoot이 소스 순서대로면 그대로 유지된다", () => {
     const html =
       "<table><thead><tr><td>H</td></tr></thead>" +

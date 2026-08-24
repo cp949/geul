@@ -29,10 +29,12 @@ import { htmlSanitizeSchema } from "./sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
+  hasSubstantialText,
   inferredColumnCount,
   layoutRows,
   MAX_TABLE_COLUMNS,
   type TableRowSource,
+  tableNonSectionChildren,
   tableRows,
 } from "./table-layout.js";
 
@@ -279,6 +281,25 @@ const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
       ["p", "h1", "h2", "h3", "table"].includes(node.tagName)
     ) {
       flushInlineNodes();
+      // caption 등 표 직속 비섹션 자식(thead/tbody/tfoot/tr/colgroup이
+      // 아닌 나머지)은 sanitize가 unwrap한 caption 텍스트가 대표 사례다
+      // (caption은 htmlAllowedTagNames에 없다). parseTable은 이 노드들을
+      // 읽지 않으므로 표 블록 앞에 문단으로 옮겨 담지 않으면 조용히
+      // 사라진다(이슈 #70) — clipboard 경로(clipboard-table-parser.ts의
+      // walk())와 같은 정책이다. import 쪽 문단 생성은 기존 관례대로
+      // inlineContentFromNodes만 쓴다(collapse/normalize 없음 — caption만
+      // 예외로 만들지 않는다, 기존 import 문단 생성 경로 전체의 gap이라
+      // 이 변경의 범위 밖이다).
+      if (node.tagName === "table") {
+        const nonSectionChildren = tableNonSectionChildren(node);
+        if (hasSubstantialText(textValue(nonSectionChildren))) {
+          blocks.push({
+            id: createId(),
+            type: "paragraph",
+            content: inlineContentFromNodes(nonSectionChildren),
+          });
+        }
+      }
       blocks.push(parseBlock(node, createId));
       continue;
     }

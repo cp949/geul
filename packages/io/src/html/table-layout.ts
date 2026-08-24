@@ -1,5 +1,5 @@
 import { childElements, propertyInteger } from "./hast-properties.js";
-import type { HtmlElementNode } from "./inline-content.js";
+import type { HtmlElementContent, HtmlElementNode } from "./inline-content.js";
 
 export const MAX_TABLE_COLUMNS = 10_000;
 
@@ -100,6 +100,42 @@ export const layoutRows = (rows: TableRowSource[]): CellLayout[][] => {
     return layouts;
   });
 };
+
+// caption 등 표 직속 텍스트를 문단으로 옮길지 판정하는 데 쓴다. 이 판정이
+// 묻는 것은 "사용자가 표 말고 다른 것도 골랐나"다 — 그래서 눈에 보이지 않는
+// 문자는 실질 텍스트가 아니다. \s가 이미 지우는 공백류(NBSP U+00A0 포함)에
+// 더해 제로폭 문자와 soft hyphen도 지운다: Slack/Notion/Docs가 블록 경계에
+// 심는 U+200B 한 글자 때문에 빈 문단이 생기면 사용자는 원인도 모르고
+// 되돌릴 방법도 없다. cell-text.ts의 HTML_WHITESPACE_RUN이 NBSP를 공백에서
+// 제외하는 것과 어긋나 보이지만 질문이 다르다 — 거기서는 "셀 안 이 문자를
+// 접을까"를 묻고(접으면 서식이 뭉개진다), 여기서는 "이게 사용자가 고른
+// 콘텐츠인가"를 묻는다(빈칸용 &nbsp; 문단은 아니다). clipboard·import 양쪽이
+// 이 판정을 공유해야 하므로 두 소비자의 공통 의존인 이 파일에 둔다.
+const INSUBSTANTIAL_TEXT = /[\s\u00AD\u200B-\u200D\u2060\uFEFF]/gu;
+
+export const hasSubstantialText = (value: string): boolean =>
+  value.replace(INSUBSTANTIAL_TEXT, "").length > 0;
+
+// 표 직속 자식 중 thead/tbody/tfoot/tr/colgroup(=표 격자 구조)이 아닌
+// 나머지를 순서대로 돌려준다. 대표 사례는 sanitize가 unwrap한 caption의
+// 텍스트다 — caption은 htmlAllowedTagNames에 없어 hast-util-sanitize가
+// 태그만 벗기고 그 자식(텍스트 노드)을 table의 직속 자식 자리로 끌어올린다
+// (sanitize-schema.ts). 그래서 이 헬퍼는 `childElements`(요소만 통과, 텍스트
+// 노드는 걸러짐)를 쓰지 않고 `table.children` 원본을 필터 없이 순회한다 —
+// 요소만 거르면 unwrap된 caption 텍스트 노드가 조용히 사라져 이슈 #70이
+// 지목한 결함이 그대로 재현된다.
+export const tableNonSectionChildren = (
+  table: HtmlElementNode,
+): HtmlElementContent[] =>
+  table.children.filter(
+    (child) =>
+      child.type !== "element" ||
+      (child.tagName !== "thead" &&
+        child.tagName !== "tbody" &&
+        child.tagName !== "tfoot" &&
+        child.tagName !== "tr" &&
+        child.tagName !== "colgroup"),
+  );
 
 export const columnElements = (table: HtmlElementNode): HtmlElementNode[] => {
   const colgroup = childElements(table, "colgroup")[0];

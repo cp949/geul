@@ -24,11 +24,13 @@ import { clipboardSanitizeSchema } from "../html/sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
+  hasSubstantialText,
   inferredColumnCount,
   layoutColumnSpan,
   layoutRowSpan,
   layoutRows,
   MAX_TABLE_COLUMNS,
+  tableNonSectionChildren,
   tableRows,
 } from "../html/table-layout.js";
 import type { Result } from "../result.js";
@@ -84,19 +86,9 @@ const findDataTable = (root: HtmlRoot): HtmlElementNode | undefined => {
   return undefined;
 };
 
-// 이 판정이 묻는 것은 "사용자가 표 말고 다른 것도 골랐나"다 — 그래서 눈에
-// 보이지 않는 문자는 실질 텍스트가 아니다. \s가 이미 지우는 공백류(NBSP
-// U+00A0 포함)에 더해 제로폭 문자와 soft hyphen도 지운다: Slack/Notion/Docs가
-// 블록 경계에 심는 U+200B 한 글자 때문에 표 붙여넣기가 막히면 사용자는
-// 원인도 모르고 되돌릴 방법도 없다(sawTable 때문에 TSV 짝으로도 폴백하지
-// 못한다). cell-text.ts의 HTML_WHITESPACE_RUN이 NBSP를 공백에서 제외하는
-// 것과 어긋나 보이지만 질문이 다르다 — 거기서는 "셀 안 이 문자를 접을까"를
-// 묻고(접으면 서식이 뭉개진다), 여기서는 "이게 사용자가 고른 콘텐츠인가"를
-// 묻는다(빈칸용 &nbsp; 문단은 아니다).
-const INSUBSTANTIAL_TEXT = /[\s\u00AD\u200B-\u200D\u2060\uFEFF]/gu;
-
-const hasSubstantialText = (value: string): boolean =>
-  value.replace(INSUBSTANTIAL_TEXT, "").length > 0;
+// "표 밖 실질 텍스트" 판정(hasSubstantialText/INSUBSTANTIAL_TEXT)은
+// table-layout.ts가 소유한다 — import 경로(caption 등 표 직속 비섹션 자식)와
+// 이 판정을 공유해야 하기 때문이다.
 
 // 대상 표가 이 노드들 안 어딘가에 있는지 재귀로 확인한다. walk()가 표를
 // 찾기 위해 더 파고들어야 하는지(descend), 아니면 표 없는 순수 인라인/
@@ -184,6 +176,18 @@ const blockSequenceFromNodes = (
     for (const node of list) {
       if (failure !== undefined) return;
       if (node === table) {
+        // 기존 pending(intro 등)을 먼저 내보낸 뒤에야 caption을 pending에
+        // 담는다 — 순서를 바꾸면 pending이 아직 안 비워진 상태라 caption이
+        // intro보다 앞서 나온다(문서 순서 역전). caption(표 직속 비섹션
+        // 자식, 대표 사례가 sanitize가 unwrap한 caption 텍스트)은 이 두
+        // 번째 flush()가 기존 collapseHtmlWhitespace/normalizeCellContent/
+        // hasSubstantialText 판정을 그대로 재사용하게 한다 — 셀 텍스트와
+        // 같은 정규화를 거치지 않으면 model의 isValidInlineText 검사가
+        // 거절해 readEditorDocument에서 throw된다.
+        flush();
+        pending = tableNonSectionChildren(table).map((child) =>
+          wrapInAncestors(child, ancestors),
+        );
         flush();
         const parsed = tabularDataFromTable(table);
         if (!parsed.ok) {
