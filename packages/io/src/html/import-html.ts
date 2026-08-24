@@ -1,8 +1,10 @@
 import {
   type Document,
   type IdFactory,
+  type InlineContent,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
+  sanitizeInlineText,
   type TableBlock,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
@@ -41,6 +43,18 @@ import {
 const DEFAULT_COLUMN_WIDTH = 160;
 
 class HtmlDocumentInvalidError extends Error {}
+
+// inlineContentFromNodes가 만든 각 텍스트 조각에서 model이 거절하는
+// 코드포인트(LF 제외 C0 제어문자, DEL, 짝 없는 surrogate)를 제거한다.
+// 정책은 model의 sanitizeInlineText가 단독 소유하고(G-CNV-001) 여기서는
+// 문단/헤딩/표 직속 비섹션 자식 문단 생성 지점 세 곳이 재사용만 한다.
+// whitespace collapsing은 도입하지 않는다(범위 밖) — 코드포인트 제거만
+// 한다. 제거 후 빈 조각은 원래 appendText가 만들지 않는 모양(빈 텍스트
+// 조각 없음)을 유지하기 위해 걸러낸다.
+const sanitizeInlineContentText = (content: InlineContent): InlineContent =>
+  content
+    .map((item) => ({ ...item, text: sanitizeInlineText(item.text) }))
+    .filter((item) => item.text.length > 0);
 
 const propertyHeaderFlag = (
   element: HtmlElementNode,
@@ -252,7 +266,9 @@ const parseBlock = (
   if (element.tagName === "table") return parseTable(element, createId);
 
   const id = propertyString(element, "dataBeBlockId") ?? createId();
-  const content = inlineContentFromNodes(element.children);
+  const content = sanitizeInlineContentText(
+    inlineContentFromNodes(element.children),
+  );
   if (element.tagName === "p") return { id, type: "paragraph", content };
 
   const level = Number(element.tagName.slice(1)) as 1 | 2 | 3;
@@ -269,7 +285,7 @@ const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
       blocks.push({
         id: createId(),
         type: "paragraph",
-        content: inlineContentFromNodes(inlineNodes),
+        content: sanitizeInlineContentText(inlineContentFromNodes(inlineNodes)),
       });
     }
     inlineNodes = [];
@@ -304,7 +320,9 @@ const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
           blocks.push({
             id: createId(),
             type: "paragraph",
-            content: inlineContentFromNodes(nonSectionChildren),
+            content: sanitizeInlineContentText(
+              inlineContentFromNodes(nonSectionChildren),
+            ),
           });
         }
       }

@@ -1,4 +1,8 @@
-import type { InlineContent, TextMark } from "@cp949/geul-model";
+import {
+  type InlineContent,
+  sanitizeInlineText,
+  type TextMark,
+} from "@cp949/geul-model";
 
 import type { HtmlNode } from "../html/inline-content.js";
 
@@ -6,24 +10,11 @@ import type { HtmlNode } from "../html/inline-content.js";
 // preserveWhitespace:false에서 접는 집합과 같다(NBSP는 포함하지 않는다).
 const HTML_WHITESPACE_RUN = /[\t\n\f\r ]+/g;
 
-// model의 인라인 텍스트 계약(isValidInlineText)이 금지하는 코드 포인트:
-// LF를 제외한 C0 제어문자, DEL, 짝 없는 surrogate.
-const isDisallowedCodePoint = (codePoint: number): boolean =>
-  (codePoint <= 0x1f && codePoint !== 0x0a) ||
-  codePoint === 0x7f ||
-  (codePoint >= 0xd800 && codePoint <= 0xdfff);
-
-// 클립보드 셀 텍스트에서 model이 거절하는 코드 유닛을 제거한다. for...of는
-// 코드 포인트 단위로 순회하므로 정상 surrogate pair는 그대로 통과하고 짝
-// 없는 surrogate만 버려진다.
-export const sanitizeCellText = (text: string): string => {
-  let result = "";
-  for (const character of text) {
-    if (isDisallowedCodePoint(character.codePointAt(0) ?? 0)) continue;
-    result += character;
-  }
-  return result;
-};
+// model의 인라인 텍스트 계약(isValidInlineText)이 금지하는 코드 포인트
+// 제거는 model의 sanitizeInlineText가 단독 소유한다(G-CNV-001) — 클립보드
+// 셀 텍스트 전용 정책(공백 run 접기)만 여기서 얹는다.
+export const sanitizeCellText = (text: string): string =>
+  sanitizeInlineText(text);
 
 // hast 텍스트 노드 단계에서 whitespace를 접는다. inlineContentFromNodes가
 // br을 LF로 바꾸기 전에 접어야 "원본 마크업 들여쓰기가 만든 개행"과

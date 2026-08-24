@@ -185,6 +185,78 @@ describe("HTML 보안", () => {
     ]);
   });
 
+  it("C0 제어문자·짝 없는 surrogate가 섞인 문단은 throw 없이 제거하고 경고한다", () => {
+    const html = `<p>bad\u0001\u000b${String.fromCharCode(0xd800)}text</p>`;
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "badtext" }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_CODE_POINT_REMOVED",
+        element: "p",
+      }),
+    ]);
+  });
+
+  it("같은 조건을 헤딩(h1-h3)에도 적용한다", () => {
+    const html = `<h2>bad\u0001text</h2>`;
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "heading",
+        level: 2,
+        content: [{ text: "badtext" }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_CODE_POINT_REMOVED",
+        element: "h2",
+      }),
+    ]);
+  });
+
+  it("표 직속 비섹션 자식(caption)의 제어문자도 표 앞 문단에서 제거하고 경고한다", () => {
+    const html = `<table><caption>Cap\u0001tion</caption><tbody><tr><td>a</td></tr></tbody></table>`;
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const [paragraph, table] = result.value.document.blocks;
+    expect(paragraph).toMatchObject({
+      type: "paragraph",
+      content: [{ text: "Caption" }],
+    });
+    expect(table?.type).toBe("table");
+    expect(result.value.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "UNSAFE_CODE_POINT_REMOVED",
+          element: "caption",
+        }),
+      ]),
+    );
+  });
+
+  it("금지 코드포인트가 없는 입력은 UNSAFE_CODE_POINT_REMOVED 경고를 만들지 않는다", () => {
+    const result = importHtml("<p>clean text</p>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.warnings).toEqual([]);
+  });
+
   it("공백으로 위장한 실행 가능 URL은 내보내지 않는다", () => {
     const document: Document = {
       formatVersion: 1,

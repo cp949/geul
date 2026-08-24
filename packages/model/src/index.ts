@@ -9,7 +9,10 @@ export {
 } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";
-export { isValidInlineText } from "./string-invariants.js";
+export {
+  isValidInlineText,
+  sanitizeInlineText,
+} from "./string-invariants.js";
 export type { TableColumnsAttributeError } from "./table-columns-attribute.js";
 export {
   parseTableColumns,

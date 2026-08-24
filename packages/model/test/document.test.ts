@@ -4,7 +4,11 @@
  * 표 크기·색상·정렬 검증은 document-table-validation.test.ts로 분리되어 있다.
  */
 import { describe, expect, it } from "vitest";
-import { createEmptyDocument, parseDocument } from "../src/index.js";
+import {
+  createEmptyDocument,
+  parseDocument,
+  sanitizeInlineText,
+} from "../src/index.js";
 
 const documentWithText = (text: string) => ({
   formatVersion: 1,
@@ -101,6 +105,23 @@ describe("독립 문서 모델", () => {
         path: ["blocks", 0, "content", 0, "text"],
       },
     });
+  });
+
+  it.each([
+    ["NUL", "text\u0000value", "textvalue"],
+    ["DEL", "text\u007fvalue", "textvalue"],
+    ["lone surrogate", `text${String.fromCharCode(0xd800)}value`, "textvalue"],
+  ])("sanitizeInlineText는 %s 문자를 제거하고 나머지는 그대로 둔다", (_name, text, expected) => {
+    const sanitized = sanitizeInlineText(text);
+    expect(sanitized).toBe(expected);
+    expect(parseDocument(documentWithText(sanitized))).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("sanitizeInlineText는 LF와 정상 surrogate pair를 보존한다", () => {
+    expect(sanitizeInlineText("line 1\nline 2")).toBe("line 1\nline 2");
+    expect(sanitizeInlineText("😀")).toBe("😀");
   });
 
   it.each([
