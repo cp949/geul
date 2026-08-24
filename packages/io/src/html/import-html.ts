@@ -50,7 +50,7 @@ const marksKey = (marks: InlineContent[number]["marks"]): string =>
 // inlineContentFromNodes가 만든 각 텍스트 조각에서 model이 거절하는
 // 코드포인트(LF 제외 C0 제어문자, DEL, 짝 없는 surrogate)를 제거한다.
 // 정책은 model의 sanitizeInlineText가 단독 소유하고(G-CNV-001) 여기서는
-// 문단/헤딩/표 직속 비섹션 자식 문단 생성 지점 세 곳이 재사용만 한다.
+// 문단/헤딩/표 직속 비섹션 자식 문단/표 셀 생성 지점 네 곳이 재사용만 한다.
 // whitespace collapsing은 도입하지 않는다(범위 밖) — 코드포인트 제거만
 // 한다. 코드포인트 제거로 조각이 통째로 비면 버리고, 그 결과 같은 mark
 // 조합을 가진 이웃 조각이 생기면 병합한다 — appendText(inline-content.ts)와
@@ -257,7 +257,9 @@ const parseTable = (
         columnId,
         rowSpan: layout.rowSpan,
         columnSpan: layout.columnSpan,
-        content: inlineContentFromNodes(layout.element.children),
+        content: sanitizeInlineContentText(
+          inlineContentFromNodes(layout.element.children),
+        ),
         ...(textColor === undefined ? {} : { textColor }),
         ...(backgroundColor === undefined ? {} : { backgroundColor }),
         ...(align === undefined ? {} : { align }),

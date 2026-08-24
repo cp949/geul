@@ -387,6 +387,46 @@ describe("HTML 보안", () => {
     expect(idCalls).toBeLessThan(20);
   });
 
+  it("td 셀의 C0 제어문자·짝 없는 surrogate는 throw 없이 제거하고 경고한다", () => {
+    const html = `<table><tbody><tr><td>bad${String.fromCharCode(0xd800)}text</td></tr></tbody></table>`;
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "badtext" }]);
+    expect(result.value.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "UNSAFE_CODE_POINT_REMOVED",
+          element: "td",
+        }),
+      ]),
+    );
+  });
+
+  it("th 셀의 C0 제어문자·짝 없는 surrogate는 throw 없이 제거하고 경고한다", () => {
+    const html = `<table><thead><tr><th>bad${String.fromCharCode(0xd800)}text</th></tr></thead></table>`;
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "badtext" }]);
+    expect(result.value.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "UNSAFE_CODE_POINT_REMOVED",
+          element: "th",
+        }),
+      ]),
+    );
+  });
+
   it("셀의 style 속성은 import에서 제거되고 경고로 보고된다", () => {
     const result = importHtml(
       '<table><tbody><tr><td style="color:#FF0000">a</td></tr></tbody></table>',
