@@ -43,7 +43,7 @@ GitHub Issue
 5. 목표, 포함·제외 범위, 구현 순서, 완료 기준과 검증 명령을 이슈 초안으로 기록한다.
 6. 제품 범위나 공개 계약이 불명확하면 구현 전에 사용자 결정을 받는다.
 
-GitHub 쓰기는 사용자 지시를 기다린다. ff-workflow로 진행하면 등록 전 이슈와 댓글을 `_works/<작업 폴더>/pending-issues/`에 초안으로 남긴다. 계약은 `docs/agents/issue-tracker.md`의 "게시 승인"이 소유한다.
+GitHub 쓰기는 사용자 지시를 기다린다. qq-workflow나 ff-workflow로 진행하면 등록 전 이슈와 댓글을 `_works/<작업 폴더>/pending-issues/`에 초안으로 남긴다. 계약은 `docs/agents/issue-tracker.md`의 "게시 승인"이 소유한다.
 
 이슈 생성만으로 제품 범위가 승인되지는 않는다. inventory, roadmap 또는 승인된 spec에 없는 작업은 승인 전 현재 구현 범위에 포함하지 않는다.
 
@@ -65,7 +65,7 @@ spec은 제공할 계약을, ADR은 장기 선택과 이유를 소유한다. 실
 
 ## 5. 구현과 검증
 
-1. 시작 시 branch, worktree와 `git status --short`를 확인한다. 어느 레인에서 구현하는지는 `AGENTS.md`의 "Git과 작업공간"이 소유한다 — 기본은 `dev` 직접 커밋이고, ff-workflow는 사용자가 지시할 때만 쓴다.
+1. 시작 시 branch, worktree와 `git status --short`를 확인한다. 어느 레인에서 구현하는지는 `AGENTS.md`의 "Git과 작업공간"이 소유한다 — 기본은 `dev` 직접 커밋이고, qq-workflow·ff-workflow 진입은 그 절의 "레인 선택 규칙"을 따른다.
 2. 기존 modified, untracked와 ignored 파일을 사용자 작업으로 간주해 보존한다.
 3. 기능 또는 버그 수정은 회귀 테스트를 추가하고 RED를 확인한다.
 4. 최소 구현으로 GREEN을 만든 뒤 변경 범위의 품질을 정리한다.
@@ -127,7 +127,7 @@ spec은 제공할 계약을, ADR은 장기 선택과 이유를 소유한다. 실
 | 프로젝트 고유 용어 확정 | `CONTEXT.md` | 관련 계약 변경 시 사용자 보고 |
 | 승인된 기능·기술 계약 | `docs/specs/` | 구현 전 사용자 승인 |
 | 장기 아키텍처 선택 | `docs/adr/` | 결정 승인 후 `accepted` |
-| 현재 범위 밖 작업 발견 | ff-workflow면 `_works/<작업 폴더>/pending-issues/` 초안, 기본 레인이면 사용자 보고 | 등록과 현재 범위 편입 모두 사용자 지시 필요 |
+| 현재 범위 밖 작업 발견 | qq·ff-workflow면 `_works/<작업 폴더>/pending-issues/` 초안, 기본 레인이면 사용자 보고 | 등록과 현재 범위 편입 모두 사용자 지시 필요 |
 | 반복 작업의 정상 구현법 확인 | `docs/guides/` 상세 + INDEX | 이후 DELTA·구현·테스트에 적용 |
 | 가이드 미준수·모호한 해석의 반복 실수 확인 | `docs/pitfalls/` 상세 + INDEX | 적용 조건과 탐지를 이후 리뷰에 적용 |
 | 완료 기준 변경 | 관련 `docs/reviews/` 문서 | 사용자 승인 필요 |
@@ -148,7 +148,7 @@ spec은 제공할 계약을, ADR은 장기 선택과 이유를 소유한다. 실
 3. 단계 또는 릴리스 검증이면 관련 completion 문서를 갱신한다.
 4. 별도 Issue, guide와 pitfall의 생성·상태 변경 여부를 확인한다.
 5. 제품 문서와 실제 상태가 일치하는지 확인한다.
-6. 검증 결과, 남은 제한과 다음 행동을 보고한다. ff-workflow로 진행했다면 이슈 댓글 초안으로 `_works/<작업 폴더>/pending-issues/`에 기록한다.
+6. 검증 결과, 남은 제한과 다음 행동을 보고한다. qq-workflow나 ff-workflow로 진행했다면 이슈 댓글 초안으로 `_works/<작업 폴더>/pending-issues/`에 기록한다.
 7. 완료 기준을 충족한 Issue만 종료 대상으로 삼는다. 등록과 종료는 사용자 지시를 받아 실행한다 — `docs/agents/issue-tracker.md`의 "게시 승인".
 
 commit, merge, push, tag와 PR의 승인 경계는 `AGENTS.md`의 "공통 규칙"이 소유한다.

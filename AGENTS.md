@@ -73,6 +73,7 @@ demo  -> react, io, model
 - 반복 작업의 정상 구현·검증 경로: `docs/guides/`
 - 가이드 미준수·모호한 해석으로 반복된 실수의 탐지: `docs/pitfalls/`
 - ff-workflow 절차와 `_works/` 작업공간: `docs/agents/ff-workflow.md`
+- qq-workflow 절차와 계획서 형식: `docs/agents/qq-workflow.md`
 
 같은 사실을 여러 문서에 원본처럼 복제하지 않는다. 문서 생성, 갱신과 종료 조건은 `docs/process/development-lifecycle.md`를 따른다.
 
@@ -101,17 +102,22 @@ git status --short
 
 기본 통합 브랜치는 `dev`다. `dev`에서 `main`으로의 병합은 사용자가 직접 한다. 에이전트는 `main`을 대상으로 merge, rebase와 push를 하지 않는다.
 
-### 두 가지 작업 레인
+### 세 가지 작업 레인
 
-| | 기본 | ff-workflow |
-| --- | --- | --- |
-| 진입 | **기본값** | 사용자가 명시적으로 지시할 때만 |
-| 커밋 | `dev` 직접 | `dev`에서 분기한 작업 브랜치 |
-| 리뷰 | 없음 | 트랙-2, 트랙-5, 트랙-6 |
-| 산출물 | 없음 | `_works/<작업 폴더>/` |
-| 절차 원본 | 아래 "기본 레인" | [`docs/agents/ff-workflow.md`](./docs/agents/ff-workflow.md) |
+| | 기본 | qq-workflow | ff-workflow |
+| --- | --- | --- | --- |
+| 진입 | 이슈 대상이 아닌 작업의 기본값 | 사용자 지시 또는 이슈 작업 자동 선택 | 사용자 지시 또는 이슈 작업 자동 선택 |
+| 커밋 | `dev` 직접 | `dev`에서 분기한 작업 브랜치 | `dev`에서 분기한 작업 브랜치 |
+| 리뷰 | 없음 | 병합 전 1회(단계-3) | 트랙-2, 트랙-5, 트랙-6 |
+| 산출물 | 없음 | `_works/<작업 폴더>/` 최소 구성 | `_works/<작업 폴더>/` |
+| 절차 원본 | 아래 "기본 레인" | [`docs/agents/qq-workflow.md`](./docs/agents/qq-workflow.md) | [`docs/agents/ff-workflow.md`](./docs/agents/ff-workflow.md) |
 
-**에이전트는 지시 없이 ff-workflow로 들어가지 않는다.** 레인은 작업을 시작할 때 사용자가 정하고 중간에 바뀌지 않는다. 기본 레인으로 시작한 작업이 예상보다 커져도 에이전트가 승격하지 않는다 — 커진 사실은 "완료 보고"의 남은 제한과 위험에 적고 판단은 사용자에게 남긴다.
+**레인 선택 규칙.**
+
+- 사용자가 레인을 명시하면 그 레인으로 진행한다.
+- 레인 명시 없이 GitHub 이슈를 지목해 구현·수정을 지시하면 에이전트가 이슈를 분석해 qq-workflow 또는 ff-workflow를 선택한다. 기준은 ff-workflow의 "크기 규칙"(DELTA 크기 상한과 분할 신호)이다 — 예상 변경이 DELTA 하나 크기에 들어오면 qq, 넘거나 판단이 불확실하면 ff. 선택한 레인과 이유 한두 문장을 작업 시작 시 사용자에게 보고한다.
+- 이슈 대상이 아닌 작업은 지시가 없으면 기본 레인으로 진행한다. 에이전트는 지시 없이 qq·ff로 들어가지 않는다.
+- 레인은 작업을 시작할 때 정해지고 중간에 바뀌지 않는다. 시작한 작업이 예상보다 커져도 에이전트가 승격하지 않는다 — 커진 사실은 "완료 보고"의 남은 제한과 위험에 적고 판단은 사용자에게 남긴다.
 
 ### 기본 레인
 
@@ -120,6 +126,10 @@ git status --short
 3. 별도 리뷰 세션이 없다. 되돌릴 일이 생기면 `git revert`로 한다.
 4. 현재 범위 밖에서 발견한 결함은 사용자에게 보고하고 지시를 기다린다. `_works/` 초안을 만들지 않는다.
 5. push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다.
+
+### qq-workflow
+
+단계 1~4의 절차, 계획서 형식과 `_works/` 작업 폴더 구성은 [`docs/agents/qq-workflow.md`](./docs/agents/qq-workflow.md)가 소유한다. 이 문서에 복제하지 않는다.
 
 ### ff-workflow
 

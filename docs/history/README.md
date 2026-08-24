@@ -1,6 +1,6 @@
 # 작업 이력
 
-ff-workflow 트랙-8이 작업 하나를 `dev`로 이전한 뒤 여기에 `<yyyyMMdd>-<NN>-<제목>.md`를 남긴다. 절차는 [`docs/agents/ff-workflow.md`](../agents/ff-workflow.md)의 "트랙-8. 병합과 등록"이 소유한다.
+ff-workflow 트랙-8 또는 qq-workflow 단계-4가 작업 하나를 `dev`로 이전한 뒤 여기에 `<yyyyMMdd>-<NN>-<제목>.md`를 남긴다. 절차는 [`docs/agents/ff-workflow.md`](../agents/ff-workflow.md)의 "트랙-8. 병합과 등록"과 [`docs/agents/qq-workflow.md`](../agents/qq-workflow.md)의 "단계-4. 병합과 등록"이 각각 소유한다.
 
 작업 산출물 원본은 `_works/<작업 폴더>/`에 있고 gitignore 대상이라 저장소에 남지 않는다. 여기에는 남길 값이 있는 것만 옮긴다.
 
