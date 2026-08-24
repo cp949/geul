@@ -405,8 +405,11 @@ export const resizeTableColumn = (
   index: number,
   width: number,
 ): Result<void, TableCommandError> =>
-  applyTableGridOperation(editor, tableBlockId, (table) =>
-    resizeGridColumn(table, index, width),
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => resizeGridColumn(table, index, width),
+    { preserveSelection: true },
   );
 
 // 병합 결과에서 살아남는 기준 셀의 id. 실패하면 null(선택 이동을 생략하고

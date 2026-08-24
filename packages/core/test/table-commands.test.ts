@@ -6,6 +6,7 @@
  * selectCellId/preserveSelection 계약). 붙여넣기 경로는 table-paste-*.test.ts가
  * 맡는다.
  */
+import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 
@@ -30,6 +31,7 @@ import {
   docWithParagraph,
   docWithTable,
   docWithTwoRowTable,
+  placeCaretInCell,
   RejectAllTransactionsExtension,
   selectCellRange,
 } from "./table-test-support.js";
@@ -447,6 +449,37 @@ describe("표의 열 너비를 조절한다", () => {
       error: { code: "COLUMN_WIDTH_OUT_OF_RANGE", width: 47 },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("너비 조절 후에도 두 셀에 걸친 CellSelection을 유지한다", () => {
+    // 열 너비 조절은 colwidth만 바꾸고 행·열·셀 id는 그대로다 —
+    // preserveSelection: true로 옛 CellSelection의 양 끝 cellId를 새 표에서
+    // 그대로 복원해야 한다(구조 불변 경로, toggleTableHeaderRow와 같은 패턴).
+    const editor = createTableFixtureEditor(docWithTable);
+    selectCellRange(editor, "cell-1", "cell-2");
+
+    const result = resizeTableColumn(editor, "table-1", 1, 240);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(CellSelection);
+    const cellSelection = selection as CellSelection;
+    expect(cellSelection.$anchorCell.nodeAfter?.attrs.cellId).toBe("cell-1");
+    expect(cellSelection.$headCell.nodeAfter?.attrs.cellId).toBe("cell-2");
+  });
+
+  it("너비 조절 후에도 표 안 캐럿(TextSelection) 위치를 유지한다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.state.selection;
+
+    const result = resizeTableColumn(editor, "table-1", 1, 240);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(TextSelection);
+    expect(selection.from).toBe(before.from);
+    expect(selection.to).toBe(before.to);
   });
 });
 
