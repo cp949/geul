@@ -291,8 +291,16 @@ const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
       // 예외로 만들지 않는다, 기존 import 문단 생성 경로 전체의 gap이라
       // 이 변경의 범위 밖이다).
       if (node.tagName === "table") {
-        const nonSectionChildren = tableNonSectionChildren(node);
-        if (hasSubstantialText(textValue(nonSectionChildren))) {
+        // 표 직속 비섹션 자식 사이에는 HTML5 tree construction 규칙상
+        // foster-parenting되지 않는 구조적 공백(들여쓰기·개행) 텍스트
+        // 노드가 그대로 남는다. 노드 단위로 "통째로 공백뿐인가"만 걸러내고,
+        // 실질 텍스트가 있는 노드(caption 자체의 앞뒤 공백 포함)는 내부를
+        // 손대지 않는다 — 일반 문단 생성 경로의 collapse-없음 관례를 그대로
+        // 따른다.
+        const nonSectionChildren = tableNonSectionChildren(node).filter(
+          (child) => hasSubstantialText(textValue([child])),
+        );
+        if (nonSectionChildren.length > 0) {
           blocks.push({
             id: createId(),
             type: "paragraph",

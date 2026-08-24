@@ -650,6 +650,21 @@ describe("HTML 왕복 변환", () => {
     expect(result.value.document.blocks[0]?.type).toBe("table");
   });
 
+  it("import 경로에서도 caption과 tbody 사이 구조적 공백은 표 앞 문단에 섞이지 않는다", () => {
+    const html =
+      "<table>\n  <caption>Cap</caption>\n  <tbody><tr><td>A</td></tr></tbody>\n</table>";
+
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.document.blocks).toHaveLength(2);
+    const [paragraph, table] = result.value.document.blocks;
+    expect(paragraph?.type).toBe("paragraph");
+    if (paragraph?.type !== "paragraph") throw new Error("Expected paragraph");
+    expect(paragraph.content).toEqual([{ text: "Cap" }]);
+    expect(table?.type).toBe("table");
+  });
+
   it("허용 목록 밖 data-be-align 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
     const html =
       '<table data-be-block-id="table-1"><colgroup><col data-be-column-id="column-1" data-be-width="160"></colgroup><tbody><tr data-be-row-id="row-1"><td data-be-cell-id="cell-1" data-be-column-id="column-1" rowspan="1" colspan="1" data-be-align="justify"></td></tr></tbody></table>';
