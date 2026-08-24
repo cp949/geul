@@ -6,13 +6,13 @@
 
 1. 계획을 **DELTA 단위로 분할**하고, 그 분할 자체를 별도 트랙에서 리뷰한다(트랙-2). 구현이 시작된 뒤 드러나는 계획 결함이 가장 비싸다.
 2. 구현 후 리뷰를 **누락 탐지**(트랙-5)와 **결함 탐지**(트랙-6) 두 렌즈로 나눈다. 계획을 들고 보는 눈은 계획의 사각지대를 그대로 물려받는다.
-3. 절차를 문서 하나가 소유한다. 슬래시 커맨드로 쪼개면 소유 경계가 엉킨다 — 이전 흐름에서 [`PIT-0021`](../pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md)과 [`PIT-0023`](../pitfalls/PIT-0023-editor-opening-git-commands-succeed-silently.md)이 커맨드 파일을 절차 소유자로 가리켰고, 그 커맨드를 지우는 순간 두 pitfall의 참조가 고아가 됐다. 트랙별 파일로 나누는 것도 같은 문제를 만든다. 공통 계약(작업 폴더, 브랜치 수명, 정지 조건)을 트랙 수만큼 참조해야 하고, 그 동기화 비용이 문서 하나를 읽는 비용보다 크다.
+3. 절차를 문서 하나가 소유한다. 슬래시 커맨드나 트랙별 파일로 쪼개면 공통 계약(작업 폴더, 브랜치 수명, 정지 조건)을 여러 곳에서 동기화해야 한다. interactive Git의 환경 함정만 [`PIT-0023`](../pitfalls/PIT-0023-editor-opening-git-commands-succeed-silently.md)이 별도로 소유한다.
 
 ## 언제 쓰나
 
 **사용자가 명시적으로 지시할 때만 쓴다.** 기본값이 아니다. 지시가 없으면 [`../../AGENTS.md`](../../AGENTS.md)의 "기본 레인"으로 진행한다.
 
-기본값이 아닌 이유는 비용이다. 트랙 9개와 리뷰 3회는 파일 단위 시야로는 볼 수 없는 결함을 잡으려고 치르는 값이다 — [`PIT-0022`](../pitfalls/PIT-0022-own-test-helpers-in-a-shared-module.md)가 그 형태를 실증한다. 그만한 결함이 예상되지 않는 작업에 이 흐름을 쓰면 산출물만 늘고 얻는 것이 없다.
+기본값이 아닌 이유는 비용이다. 트랙 9개와 리뷰 3회는 파일 단위 시야로는 볼 수 없는 결함을 잡으려고 치르는 값이다. 공용 test support의 교차 파일 검토는 [`G-TST-002`](../guides/G-TST-002-own-shared-test-support.md)가 그 형태를 설명한다.
 
 진입 지시로 인정하는 것은 사용자가 `ff-workflow`를 지목한 경우뿐이다. 커맨드도 skill도 없다. 에이전트는 기본 레인으로 시작한 작업을 스스로 ff-workflow로 승격하지 않는다. 작업이 예상보다 커졌으면 그 사실을 완료 보고의 "남은 제한, 위험"에 적고 판단은 사용자에게 남긴다.
 
@@ -41,6 +41,7 @@ _works/<yyyyMMdd>-<NN>-<slug>/
   IMPL-REVIEW-01.md  IMPL-REVIEW-02.md  ...
   04-작업결과.md
   pending-issues/01.md  02.md  ...
+  pending-guides/01.md  02.md  ...
   pending-pitfalls/01.md  02.md  ...
 ```
 
@@ -85,7 +86,7 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 
 ## 트랙-0. 브레인스토밍과 계획 초안
 
-- 입력: `AGENTS.md`의 "작업 시작 순서" 1~8, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화
+- 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화
 - 출력: 작업 폴더, `_meta.md`, `00-계획-초안.md`, 작업 브랜치
 - 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다. 완료 판정은 `완료 트랙` 문자열이 아니라 산출물로 한다 — `_meta.md`의 "확정 커밋 해시" 절이 채워져 있으면 완료이고, 비어 있으면 미완료다. 이어받으면 그 사실을 진행 로그에 적는다. 그다음 superpowers `brainstorming`으로 진행한다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. 사전 조사가 여러 갈래로 갈리면 읽기 전용 조사 subagent를 갈래마다 하나씩 병렬로 띄우고 결과를 메인 세션이 합친다. `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
 - 정지: 커밋하지 않는다. 브랜치만 만든다.
@@ -94,35 +95,35 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 
 - 입력: `00-계획-초안.md`
 - 출력: `01-계획.md`, `DELTA-NN.md`
-- 절차: `01-계획.md`는 목표, 포함·제외 범위, DELTA 목록과 실행 순서, DELTA 사이 의존을 담고 각 DELTA 파일을 링크한다. 각 DELTA는 "DELTA 계약" 절의 형식과 크기 규칙을 따른다.
+- 절차: `01-계획.md`는 목표, 포함·제외 범위, DELTA 목록과 실행 순서, DELTA 사이 의존을 담고 각 DELTA 파일을 링크한다. `docs/guides/INDEX.md`에서 각 DELTA의 작업 조건과 맞는 가이드를 선택한다. 각 DELTA는 "DELTA 계약" 절의 형식과 크기 규칙을 따른다.
 - 정지: 코드를 고치지 않는다.
 
 DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한다. 기존 번호를 다시 매기지 않는다 — 이미 나간 리뷰와 로그의 참조가 깨진다.
 
 ## 트랙-2. 계획서 리뷰 및 수정
 
-- 입력: `01-계획.md`, `DELTA-*.md`, 관련 spec·ADR·`ACTIVE` pitfall, 대상 코드
+- 입력: `01-계획.md`, `DELTA-*.md`, 관련 spec·ADR·개발 가이드·그 가이드가 연결한 `ACTIVE` pitfall, 대상 코드
 - 출력: 라운드마다 `PLAN-REVIEW-NN.md`, 수정된 `DELTA-*.md`
 - 절차: subagent 협업 모드로 진행한다. 아래 렌즈 셋을 읽기 전용 subagent 3개에 하나씩 병렬 dispatch한다. **무시해도 되는 리뷰 결과만 남을 때까지 반복한다** — 라운드마다 3개 전부를 다시 dispatch해 수정된 DELTA를 처음부터 다시 본다.
   1. **범위 정합** — DELTA 집합이 이슈·spec이 요구하는 목표를 구조적으로 빠짐없이 담는가. 비목표로 명시한 범위를 벗어나는 DELTA가 있는가.
   2. **분할과 순서** — DELTA 경계가 책임 단위로 맞는가. 선행 관계(의존 순서)가 성립하는가. 어느 DELTA도 담당하지 않는 구조적 틈이 있는가.
-  3. **외부 계약 충돌** — 승인된 spec·ADR, `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식, 다른 DELTA·모듈이 기대는 외부 interface와 구조적으로 어긋나는가.
+  3. **외부 계약과 가이드** — 승인된 spec·ADR, 개발 가이드, 연결된 `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식과 어긋나는가. 정상 구현 경로가 없는 `guide gap`이 있는가.
 
   세 렌즈 모두 **구조적 결함만** 본다. 정확한 파일 목록, 구현 절차 서술, 검증 명령 문구, 완료 조건의 수치·건수, 중간 상태 예측은 리뷰 대상이 아니다 — dispatch 프롬프트에 이 제외 범위를 명시한다. 이런 세부는 트랙-4가 실제 코드 상태를 보고 현장에서 보정한다.
-- 메인 세션이 세 보고를 합쳐 중복을 제거하고, 진짜 구조적 결함인지 직접 확인한다. `BLOCKER`·`MAJOR`는 DELTA 파일을 수정한다. `MINOR`는 근거와 함께 `pending-issues/`로 분리한다 — 등록 기준은 [`./issue-tracker.md`](./issue-tracker.md)를 따른다. 계획서의 구조적 타당성 판정과 각 DELTA의 **참고 pitfalls** 절(형식은 "DELTA 계약"이 소유한다) 작성도 메인 세션이 한다 — 파일을 쓰는 것은 이 트랙에서 메인 세션뿐이다. 라운드가 끝날 때마다 `PLAN-REVIEW-NN`을 다음 번호로 append한다.
+- 메인 세션이 세 보고를 합쳐 중복을 제거하고, 진짜 구조적 결함인지 직접 확인한다. `BLOCKER`·`MAJOR`는 DELTA 파일을 수정한다. `MINOR`는 근거와 함께 `pending-issues/`로 분리한다 — 등록 기준은 [`./issue-tracker.md`](./issue-tracker.md)를 따른다. 각 DELTA의 **적용 계약과 가이드**·**적용 함정** 절도 메인 세션이 검토한다. 가이드가 없어서 구현 선택이 열려 있으면 함정을 만들지 않고 `pending-guides/`에 초안을 남긴다. 라운드가 끝날 때마다 `PLAN-REVIEW-NN`을 다음 번호로 append한다.
 - 게이트: 그 라운드에서 구조적 `BLOCKER`·`MAJOR`가 0건 — `MINOR` 이하 무시해도 되는 결과만 남으면 — 트랙을 마친다. 구조적 `BLOCKER`·`MAJOR`가 남아 있으면 수정한 DELTA로 다음 라운드를 시작한다. 세부 지적(파일 목록·절차·명령·수치·중간 상태)은 애초에 리뷰 대상이 아니므로 게이트 판정에 넣지 않는다 — 그 세부는 트랙-4로 넘긴다.
 - 정지: 코드를 고치지 않는다. 커밋하지 않는다.
 
 ## 트랙-3. 테스트 계획과 최종 완료 체크리스트
 
-- 입력: `01-계획.md`, `DELTA-*.md`, `PLAN-REVIEW-*.md`
+- 입력: `01-계획.md`, `DELTA-*.md`, `PLAN-REVIEW-*.md`, DELTA가 연결한 개발 가이드
 - 출력: `02-테스트-계획.md`, `03-최종-완료-체크리스트.md`
-- 절차: `02-테스트-계획.md`는 DELTA별 RED 시나리오, 회귀 대상, 실행 명령을 담는다. `03-최종-완료-체크리스트.md`는 **트랙-5가 실측 증거와 대조할 항목 목록**이다. 각 항목은 판정 가능한 문장이어야 하고, 판정에 쓸 증거의 종류(테스트 제목, 명령 출력, 파일 경로)를 함께 적는다.
+- 절차: `02-테스트-계획.md`는 적용 가이드의 테스트 층위·fixture·변이 규칙을 사용해 DELTA별 RED 시나리오, 회귀 대상, 실행 명령을 담는다. `03-최종-완료-체크리스트.md`는 **트랙-5가 실측 증거와 대조할 항목 목록**이다. 각 항목은 판정 가능한 문장이어야 하고, 판정에 쓸 증거의 종류(테스트 제목, 명령 출력, 파일 경로)를 함께 적는다.
 - 정지: 코드를 고치지 않는다.
 
 ## 트랙-4. DELTA 구현
 
-- 입력: 지정된 `DELTA-NN.md`, `02-테스트-계획.md`, `01-계획.md`의 의존 관계
+- 입력: 지정된 `DELTA-NN.md`, 그 DELTA가 연결한 가이드·함정, `02-테스트-계획.md`, `01-계획.md`의 의존 관계
 - 출력: 작업 브랜치 커밋
 - 절차: superpowers `subagent-driven-development`로 진행한다. 구현·리뷰 모델 배분은 그 skill에 맡긴다. 커밋은 메인 세션이 한다 — subagent 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
 - 게이트: **해당 DELTA의 완료 조건을 전부 충족한 경우에만 다음 DELTA를 시작한다.** 충족하지 못하면 정지하고 무엇이 미충족인지 보고한다.
@@ -143,7 +144,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 트랙-6. 결함 탐지
 
-- 입력: `git diff dev...<작업 브랜치>`, 대상 코드, `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식
+- 입력: `git diff dev...<작업 브랜치>`, 대상 코드, 관련 개발 가이드·`ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식
 - 출력: `IMPL-REVIEW-NN.md`(트랙-5와 같은 연속 시퀀스)
 - 렌즈: **계획 문서를 읽지 않는다.** DELTA 경계에서 생긴 횡단 결함, 회귀, 불변식 위반, 계획이 애초에 놓친 것을 찾는다. 계획을 읽으면 계획의 사각지대를 그대로 물려받는다 — 그것을 막는 것이 이 트랙의 목적이다.
 - 절차: 리뷰 초점을 갈래로 나눠 읽기 전용 subagent에 병렬 dispatch한다. 메인 세션이 보고를 합쳐 중복을 제거하고 진짜 결함인지 직접 확인한다. 수정은 subagent에 하나씩 순차 위임하고 메인 세션이 diff를 확인해 커밋한다.
@@ -160,18 +161,18 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 트랙-8. 병합과 등록
 
-- 입력: `04-작업결과.md`, `IMPL-REVIEW-*.md` 최소 하나, `pending-issues/*`, `pending-pitfalls/*`
+- 입력: `04-작업결과.md`, `IMPL-REVIEW-*.md` 최소 하나, `pending-issues/*`, `pending-guides/*`, `pending-pitfalls/*`
 - 출력: `dev`의 커밋, GitHub 이슈·댓글, `docs/history/<yyyyMMdd>-<NN>-<제목>.md`, `_meta.md`의 확정 커밋 해시
 - 게이트: **리뷰 트랙을 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `04-작업결과.md`와 `docs/history/`의 이력에 적는다.
 - 절차: 메인 세션이 단독으로 직렬 수행한다. subagent에 위임하지 않는다 — 상태 파일과 git 이력을 한 세션이 다뤄야 한다.
   1. `pnpm verify` 전량을 통과시킨다.
-  2. 작업 브랜치 커밋을 의미 단위로 재그룹화한다. 실행 명령은 "재그룹화 실행 명령" 절, 순서 규칙과 무결성 판정은 [`PIT-0021`](../pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md)을 따른다.
+  2. 작업 브랜치 커밋을 "재그룹화 실행 명령" 절에 따라 의미 단위로 재그룹화한다.
   3. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`. ff가 거절되면 현재 `dev` 기준으로 2단계를 다시 실행한다.
   4. `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
   5. 확정 해시를 `_meta.md`에 기록한다.
   6. `pending-issues/*`의 등록 여부를 재검토하고 GitHub에 등록한다. 등록 직전에 등록 목록과 종료 예정 이슈 목록을 사용자에게 제시하고 확인을 받는다 — 그 확인이 그 실행의 등록·종료 허가다.
   7. 6단계에서 확인받은 종료 예정 이슈를 `gh issue close <번호>`로 닫는다. 닫을지 말지의 판정 기준과 sub-issue 확인 절차는 [`./issue-tracker.md`](./issue-tracker.md)의 "종료 판단"이 소유한다.
-  8. `pending-pitfalls/*`의 `docs/pitfalls/` 승격을 판단하고 등록한다. 승격하면 INDEX를 같은 변경에서 동기화한다.
+  8. `pending-guides/*`와 `pending-pitfalls/*`의 승격을 판단하고 등록한다. 승격하면 해당 INDEX를 같은 변경에서 동기화한다.
   9. `docs/history/<yyyyMMdd>-<NN>-<제목>.md`를 쓴다.
 - 보고: 삭제한 브랜치명, 미푸시 커밋 수, 닫은 이슈 번호를 남긴다.
 - 정지: `dev`를 push하지 않고 `dev` → `main` 병합도 하지 않는다. 둘 다 사용자가 직접 지시하거나 수행한다.
@@ -180,7 +181,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ### `DELTA-NN.md` 형식
 
-필수 섹션은 일곱이다. 1~6은 트랙-1이 쓰고, 7은 트랙-2가 채운다.
+필수 섹션은 여덟이다. 트랙-1이 쓰고 트랙-2가 적용 누락과 충돌을 검토한다.
 
 1. **목적** — 한 문장.
 2. **배경** — 왜 이 순서인가. 선행 DELTA 의존이 있으면 명시한다. 앞선 맥락이 없는 에이전트가 이 절만 읽고 왜 지금 이것을 하는지 알 수 있어야 한다.
@@ -188,7 +189,8 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 4. **완료 조건** — 검증 가능한 문장 목록. 각 조건마다 **그 조건을 지게 만드는 변이**를 함께 적는다.
 5. **검증 명령** — 복사해 바로 붙여 넣을 수 있는 형태.
 6. **범위 밖** — 이 DELTA에서 하지 않을 것.
-7. **참고 pitfalls** — 이 DELTA가 밟을 수 있는 `ACTIVE` pitfall과 각각의 적용 지점. 해당하는 것이 없으면 "관련 pitfall 없음"을 명시한다 — 빈 절과 검토하지 않은 절을 구별하기 위해서다.
+7. **적용 계약과 가이드** — 관련 spec·ADR, `G-<카테고리>-<번호>` 가이드와 기존 helper·pattern. 해당 없음도 명시한다.
+8. **적용 함정** — 선택한 가이드가 연결한 `ACTIVE` pitfall 중 실제 적용 조건이 맞는 항목과 적용 지점. 없으면 "관련 함정 없음"을 명시한다.
 
 완료 조건에 변이를 적지 못하면 그 조건은 검증 불가하다는 뜻이고, 검증 불가한 조건만 있는 DELTA는 성립하지 않는다. 그런 DELTA는 앞뒤에 합친다.
 
@@ -212,7 +214,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - 서로 무관한 공개 계약 두 개를 동시에 바꾼다.
 - 서로 다른 패키지 세 개 이상을 건드린다.
 
-**실측 보정.** 위 수치는 첫 기준선이다. 트랙-4에서 리뷰 subagent가 파일을 다 읽지 못했다고 보고하거나 컨텍스트 압박으로 판정을 유보하면, 그 DELTA를 쪼개고 실측치를 `pending-pitfalls/`에 남긴다. 수치는 실측으로 조정한다.
+**실측 보정.** 위 수치는 첫 기준선이다. 트랙-4에서 리뷰 subagent가 파일을 다 읽지 못했다고 보고하거나 컨텍스트 압박으로 판정을 유보하면 DELTA를 쪼개고, 정상 분할 지식은 `pending-guides/`에 남긴다. 가이드를 적용해도 조용히 잘못된 판정을 낸 반복 실패만 `pending-pitfalls/`에 남긴다.
 
 ## 리뷰 산출물
 
@@ -275,7 +277,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 재그룹화 실행 명령
 
-소유 경계: 순서 규칙과 무결성 판정은 [`PIT-0021`](../pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md)이 소유한다. 이 절은 그것을 실행하는 명령 순서만 소유한다.
+이 절이 실행 명령, 그룹 순서와 무결성 판정을 함께 소유한다.
 
 ### 전제
 
@@ -297,7 +299,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
    git update-ref refs/backup/<브랜치>-pre-squash HEAD
    ```
 
-2. 그룹을 정한다. `git log --oneline --name-only dev..HEAD`로 같은 파일·같은 줄을 왕복하는 상쇄 쌍을 먼저 찾는다. revert·되돌림 성격의 커밋은 원인 커밋과 같은 그룹에, 원인 커밋 뒤에 둔다. 판정 근거는 `PIT-0021`이다.
+2. 그룹을 정한다. `git log --oneline --name-only dev..HEAD`로 같은 파일·같은 줄을 왕복하는 상쇄 쌍을 먼저 찾는다. revert·되돌림 성격의 커밋은 원인 커밋과 같은 그룹에, 원인 커밋 뒤에 둔다.
 3. `dev`에서 분리해 그룹별로 재조립한다. 커밋을 원래 순서대로 나열하고 그룹마다 한 번 커밋한다.
 
    ```bash
@@ -367,15 +369,17 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - `git reset --hard`, 강제 push, 광범위한 `git clean`.
 - superpowers `finishing-a-development-branch` 스킬. 통합 방식 선택 메뉴를 띄우는데 이 저장소는 ff-only 고정에 PR 금지다.
 
-## pending-issues와 pending-pitfalls
+## pending-issues, pending-guides와 pending-pitfalls
 
-둘 다 **어느 트랙에서든 언제라도 추가할 수 있다.** 현재 범위 밖에서 발견한 것을 현재 변경에 섞지 않기 위한 자리다.
+셋 다 **어느 트랙에서든 언제라도 추가할 수 있다.** 현재 범위 밖에서 발견한 것을 현재 변경에 섞지 않기 위한 자리다.
 
-**예외 — PIT-0026.** [`PIT-0026`](../pitfalls/PIT-0026-omit-work-branch-hashes-from-pre-transfer-artifacts.md) 위반(이전 전 산출물에 작업 브랜치 커밋 해시가 남은 경우)은 저장소 어느 문서에서 발견하든 현재 트랙·DELTA 범위와 무관하게 즉시 수정한다. pending-issues·pending-pitfalls로 미루지 않는다 — 그 해시가 참조하는 커밋은 트랙-8 재그룹화로 곧 도달 불가능해지므로, 미루는 동안 죽은 링크만 늘어난다.
+**예외 — 이전 전 hash.** 작업 branch commit hash가 이전 전 산출물에 남은 경우 현재 트랙·DELTA 범위와 무관하게 즉시 수정한다. pending 항목으로 미루지 않는다. 위 "커밋 해시 참조" 절이 원본이다. 위반을 서술할 때도 hash 값은 인용하지 않고 수정 산출물을 포함해 다시 검사한다.
 
 `pending-issues/NN.md` — 등록 전 이슈·댓글 초안. 발견 위치, 영향, 현재 범위에서 제외한 이유, 완료 조건을 적는다. 파일 형식, 등록 기준과 게시 승인은 [`./issue-tracker.md`](./issue-tracker.md)가 소유한다 — 초안은 그 문서의 "초안 형식"을 그대로 따른다.
 
-`pending-pitfalls/NN.md` — 다른 에이전트도 반복하기 쉬운 실수. 증상 / 재현 / 원인 / 예방 규칙 / 검증 방법. 트랙-8에서 `docs/pitfalls/` 승격을 판단하고, 기준은 [`../process/development-lifecycle.md`](../process/development-lifecycle.md)의 문장을 그대로 쓴다 — "다른 단계에서도 같은 원인으로 재발할 수 있고 구체적인 예방·검증 규칙을 만들 수 있으면".
+`pending-guides/NN.md` — 반복 작업의 정상 구현·검증 경로 초안. 적용 조건 / 구현 규칙 / 완료 기준 / 관련 기존 helper를 적는다.
+
+`pending-pitfalls/NN.md` — 가이드가 있어도 정상 실행이 조용히 빗나가는 반복 실패. 적용 조건 / 오해하기 쉬운 신호 / 원인·회피 / 탐지를 적는다. 승격 기준은 [`../process/development-lifecycle.md`](../process/development-lifecycle.md)가 소유한다.
 
 ## docs/history
 
@@ -405,8 +409,8 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 | 어느 레인으로 작업하는가                         | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간"                             |
 | 트랙 절차와 산출물 계약                          | 이 문서                                                                             |
 | DELTA 형식과 크기 규칙                           | 이 문서의 "DELTA 계약"                                                              |
-| 재그룹화 실행 명령 순서                          | 이 문서의 "재그룹화 실행 명령"                                                      |
-| 재그룹화 순서 규칙과 무결성 판정                 | [`PIT-0021`](../pitfalls/PIT-0021-verify-regrouped-commits-against-a-backup-ref.md) |
+| 재그룹화 실행 명령·순서·무결성 판정              | 이 문서의 "재그룹화 실행 명령"                                                      |
+| 개발 가이드 ID·적용 조건                         | [`../guides/INDEX.md`](../guides/INDEX.md)                                          |
 | 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md)        |
 | 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md)                                          |
 | 저장소 이력 보관 정책과 내용 계약                | [`../history/README.md`](../history/README.md)                                      |

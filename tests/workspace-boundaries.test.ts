@@ -27,7 +27,7 @@
  * workspace 열거에 없는 항목을 받으면 throw하는지를 리터럴 fixture로 진다.
  * 이 목록의 **단독 소유**(사본이 없는지)는 이 파일이 아니라
  * `tests/workspace-roots.test.ts`가 진다 — 그 파일이 이미 소유한 사본 탐지
- * 술어를 여기서 복제하면 `PIT-0022` 위반이다.
+ * 술어를 여기서 복제하면 `G-TST-002` 위반이다.
  */
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -305,11 +305,11 @@ const segmentProjectPath = (segment: string) => {
  *    `segmentProjectPath()`로 프로그램을 뽑는다. 열거된 패키지 중 프로그램을
  *    하나도 못 낸 것이 있으면 조용히 건너뛰지 않고 그 패키지 이름을 담아
  *    즉시 throw한다 — 그 패키지가 아래 커버리지 판정에서 소리 없이 빠지는
- *    것을 막는다(`PIT-0016`의 "turbo 전제도 검증 대상" 규칙을 확장한다).
+ *    것을 막는다(`G-WKS-003`의 "turbo 전제도 검증 대상" 규칙을 확장한다).
  *
  * `workspacePackageDirectories()`는 `scripts/workspace-roots.mjs`에서 그대로
  * import해 쓴다 — 사본을 새로 만들면 #106이 없앤 리터럴이 되살아난다
- * (`PIT-0022`).
+ * (`G-TST-002`).
  */
 const chainTypecheckProjects = async () => {
   const chain = await typecheckedProjectPaths();
@@ -355,7 +355,7 @@ const chainTypecheckProjects = async () => {
  * (`.js`/`.mjs`/`.cjs`/`.ts`/`.jsx`/`.tsx`)에 걸리는 저장소 상대 경로
  * 목록(오늘 171개). 파일 커버리지 축과 체인 프로그램 소유 기준 판정이 이
  * 전역 열거 하나를 공유한다 — 디렉터리별로 `git ls-files`를 다시 부르는
- * 두 번째 출발점을 두지 않는다(`PIT-0022`).
+ * 두 번째 출발점을 두지 않는다(`G-TST-002`).
  */
 const trackedSourceFilePaths = async () => {
   const { stdout } = await execFileAsync("git", ["ls-files"], {
@@ -731,7 +731,7 @@ describe("headlessPackageDirectories()(headless 목록과 열거의 교차 검�
  *
  * 판정 대상을 리터럴 표로 적어 술어 배열과 출발점을 다르게 둔다. 술어를
  * 순회해 기대값을 만들면 단언이 구현을 되뇌고 술어가 비는 변이를 그대로
- * 통과시킨다(`PIT-0022`).
+ * 통과시킨다(`G-TST-002`).
  *
  * 개수는 고정하지 않는다 — 술어를 **더** 막는 방향으로 늘리는 것은 이
  * 계약이 겨누는 퇴행이 아니다. 겨누는 것은 막아야 할 이름이 통과하는 방향과
@@ -1011,7 +1011,7 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
  * 열거 자체의 계약(`pnpm-workspace.yaml`이 선언한 루트와
  * `workspacePackageDirectories()`가 찾는 디렉터리 집합이 같은지)은
  * `tests/workspace-roots.test.ts`가 단독으로 진다. 여기서 매니페스트를 다시
- * 파싱해 같은 대조를 쓰면 계약의 주인이 둘이 된다(`PIT-0022`). 대신 발견
+ * 파싱해 같은 대조를 쓰면 계약의 주인이 둘이 된다(`G-TST-002`). 대신 발견
  * 개수 가드를 둔다 — 열거가 통째로 죽으면 빈 집합 순회가 아무 단언도 실행하지
  * 않은 채 통과한다.
  *
@@ -1053,7 +1053,7 @@ describe("workspace 패키지의 typecheck 편입", () => {
  *
  * 스크립트 이름을 인자로 받는다. 경계 게이트와 라이선스 게이트가 이 함수 하나를
  * 공유한다 — 게이트마다 같은 try/catch를 다시 적으면 사본이 갈리고, 한쪽만
- * 고친 뒤 어느 쪽이 옳은지 판단할 근거가 사라진다(`PIT-0022`).
+ * 고친 뒤 어느 쪽이 옳은지 판단할 근거가 사라진다(`G-TST-002`).
  */
 const runGate = async (scriptName: string) => {
   const scriptPath = fileURLToPath(

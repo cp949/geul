@@ -86,7 +86,7 @@ export const parseClipboardTable = (input: {
 
 정정(2026-08-21 리뷰): 그렇다고 폴백이 **무손실은 아니다**. ProseMirror의 `blockTags`에는 `table`은 있지만 `tr`/`td`/`th`/`tbody`는 없어서, 표의 모든 셀이 구분자 없이 하나의 인라인 런으로 이어 붙는다. 실제 브라우저에서 확인: `<p>intro</p><table>12|34 / 56|78</table><p>outro</p>`를 붙이면 문서에 `intro` / `12345678` / `outro` 세 문단이 생긴다 — 셀 경계뿐 아니라 행 경계도 사라지고, 숫자 셀에서는 조용한 값 손상이 된다. 즉 이 정책은 "표 밖 문단 유실"과 "표 구조·셀 경계 유실"을 맞바꾼 것이지 손실을 없앤 것이 아니다. 당시 e2e(`e2e/table-paste.spec.ts`)는 `toContainText`가 아니라 병합된 정확한 문자열을 assert해 이 동작을 고정했다 — `toContainText("cellA")`는 `cellAcellB`에도 통과해 병합을 감췄다. 이 e2e 고정은 Issue #71 구현으로 대체됐다(바로 아래 '구현 반영' 단락과 현재 `e2e/table-paste.spec.ts` 참고).
 
-구현 반영(무손실 시퀀스 계약, Issue #71): 위 정정이 지적한 손실은 `parseClipboardTable`의 반환 타입을 바꿔 해소한다. 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고, 표 앞뒤 문단을 문단 블록으로 옮겨 담아 `ClipboardContent`(`ClipboardContentBlock[]`, `packages/io/src/clipboard/clipboard-content.ts`) 시퀀스로 반환한다 — `{type:"paragraph"; content: InlineContent} | {type:"table"; data: TabularData}`. 표를 찾지 못한 HTML과 TSV 경로는 `[{type:"table", data}]`(1개짜리 시퀀스)로 반환해 계약을 하나로 통일한다. `core`의 `pasteClipboardContent`(`table-commands.ts`)가 이 시퀀스를 순서대로 조립해 한 트랜잭션으로 삽입한다 — 표는 `buildPasteTableSkeleton`+`pasteInto`로 안정 id를 배정하고, 문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다(ADR-0001, PIT-0003). 단일 표 시퀀스는 `pasteTabularData`에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을 바꾸지 않는다 — 새 경로는 문단이 섞인 시퀀스에서만 탄다. 표 안(커서가 이미 표 셀)에서 문단이 섞인 시퀀스를 받으면 표 부분은 기존 grid-paste 경로로 붙이고, 문단 텍스트는 `withParagraphsMergedIntoCells`가 셀 인라인 콘텐츠에 합친다 — 표 셀은 블록 자식을 가질 수 없으므로(model `TableCell.content: InlineContent`) 문단을 블록으로 끼울 자리가 없지만, 버리면 조용한 텍스트 손실이 된다(변경 전에는 같은 클립보드가 `NOT_TABULAR`로 Tiptap 기본 붙여넣기에 넘어가 텍스트가 셀에 남았다). 읽기 순서를 지켜 표 앞 문단은 붙여넣은 표의 좌상단 셀 앞에, 표 뒤 문단은 마지막 셀 뒤에 LF 하나로 구분해 붙인다(셀 안 줄바꿈을 LF로 표현하는 것은 `<br>` → LF와 같은 기존 셀 텍스트 계약이다). 1×1 표에서는 두 셀이 같으므로 앞뒤 문단이 한 셀에 순서대로 쌓인다. 표 밖 텍스트의 인라인 마크는 서식 요소가 표의 형제든 표를 감싼 조상이든 같게 보존한다 — 조상인 경우 시퀀스 변환이 그 요소를 통과해 내려가므로 `wrapInAncestors`가 조상 체인을 얕은 클론으로 다시 씌워 마크(link의 `href` 포함)를 살린다. 여러 개의 독립된 데이터 표가 한 클립보드에 섞인 경우는 범위 밖으로 남는다 — `findDataTable`은 여전히 표 하나만 고르고, 고르지 않은 다른 `<table>`은 레이아웃 래퍼와 동일하게 취급돼 그 안 텍스트가 셀 경계 없이 인라인 콘텐츠로 흡수된다.
+구현 반영(무손실 시퀀스 계약, Issue #71): 위 정정이 지적한 손실은 `parseClipboardTable`의 반환 타입을 바꿔 해소한다. 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고, 표 앞뒤 문단을 문단 블록으로 옮겨 담아 `ClipboardContent`(`ClipboardContentBlock[]`, `packages/io/src/clipboard/clipboard-content.ts`) 시퀀스로 반환한다 — `{type:"paragraph"; content: InlineContent} | {type:"table"; data: TabularData}`. 표를 찾지 못한 HTML과 TSV 경로는 `[{type:"table", data}]`(1개짜리 시퀀스)로 반환해 계약을 하나로 통일한다. `core`의 `pasteClipboardContent`(`table-commands.ts`)가 이 시퀀스를 순서대로 조립해 한 트랜잭션으로 삽입한다 — 표는 `buildPasteTableSkeleton`+`pasteInto`로 안정 id를 배정하고, 문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다(ADR-0001, G-EDT-001). 단일 표 시퀀스는 `pasteTabularData`에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을 바꾸지 않는다 — 새 경로는 문단이 섞인 시퀀스에서만 탄다. 표 안(커서가 이미 표 셀)에서 문단이 섞인 시퀀스를 받으면 표 부분은 기존 grid-paste 경로로 붙이고, 문단 텍스트는 `withParagraphsMergedIntoCells`가 셀 인라인 콘텐츠에 합친다 — 표 셀은 블록 자식을 가질 수 없으므로(model `TableCell.content: InlineContent`) 문단을 블록으로 끼울 자리가 없지만, 버리면 조용한 텍스트 손실이 된다(변경 전에는 같은 클립보드가 `NOT_TABULAR`로 Tiptap 기본 붙여넣기에 넘어가 텍스트가 셀에 남았다). 읽기 순서를 지켜 표 앞 문단은 붙여넣은 표의 좌상단 셀 앞에, 표 뒤 문단은 마지막 셀 뒤에 LF 하나로 구분해 붙인다(셀 안 줄바꿈을 LF로 표현하는 것은 `<br>` → LF와 같은 기존 셀 텍스트 계약이다). 1×1 표에서는 두 셀이 같으므로 앞뒤 문단이 한 셀에 순서대로 쌓인다. 표 밖 텍스트의 인라인 마크는 서식 요소가 표의 형제든 표를 감싼 조상이든 같게 보존한다 — 조상인 경우 시퀀스 변환이 그 요소를 통과해 내려가므로 `wrapInAncestors`가 조상 체인을 얕은 클론으로 다시 씌워 마크(link의 `href` 포함)를 살린다. 여러 개의 독립된 데이터 표가 한 클립보드에 섞인 경우는 범위 밖으로 남는다 — `findDataTable`은 여전히 표 하나만 고르고, 고르지 않은 다른 `<table>`은 레이아웃 래퍼와 동일하게 취급돼 그 안 텍스트가 셀 경계 없이 인라인 콘텐츠로 흡수된다.
 
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
@@ -148,8 +148,8 @@ export const pasteInto = (
 ### 6.1 절차
 
 1. 목표 크기 계산: `requiredRows = anchor.row + data.rows.length`, `requiredColumns = anchor.column + data.columnCount`.
-2. 확장은 **기존 `insertRow`/`insertColumn`을 표 끝(현재 길이 인덱스)에 반복 호출**해서 수행한다 — 끝에 추가하는 삽입은 기존 span과 절대 교차하지 않으므로 새 격자 계산 코드가 필요 없다(PIT-0004 — 격자 연산의 단일 권위는 계속 `TableGrid`).
-3. 확장 후 논리 셀 수(`requiredRows * requiredColumns`)가 10,000을 넘으면 **뮤테이션 전에** `CELL_LIMIT_EXCEEDED`로 거절한다(PIT-0003 — 실행 가능성을 먼저 판정).
+2. 확장은 **기존 `insertRow`/`insertColumn`을 표 끝(현재 길이 인덱스)에 반복 호출**해서 수행한다 — 끝에 추가하는 삽입은 기존 span과 절대 교차하지 않으므로 새 격자 계산 코드가 필요 없다(G-TBL-001 — 격자 연산의 단일 권위는 계속 `TableGrid`).
+3. 확장 후 논리 셀 수(`requiredRows * requiredColumns`)가 10,000을 넘으면 **뮤테이션 전에** `CELL_LIMIT_EXCEEDED`로 거절한다(G-EDT-001 — 실행 가능성을 먼저 판정).
 4. 덮어쓰기 사각형(`[anchor.row, anchor.row+data.rows.length) x [anchor.column, anchor.column+data.columnCount)`) 안에 걸리는 기존 셀을 제거하고, `data`의 각 셀을 새 `cellId`로 그 위치에 꽂은 **후보 표**를 만든다.
 5. 후보 표에 `validateTableGrid`(→ `validateGridCoverage`)를 돌린다. 실패하면(기존 병합 셀이 사각형 경계를 걸쳐서 삐져나옴) 후보를 버리고 `PASTE_MERGE_CONFLICT`로 전체 거절 — **겹침 탐지 로직을 새로 안 쓰고 기존 불변식 검사기를 그대로 재사용**한다. 성공하면 후보 표를 반환한다.
 
@@ -175,10 +175,10 @@ export const pasteTabularData = (
 
 - 캐럿/선택이 표 안(`isInTable`)이면: `getTableCellSelection()`/`selectedRect`로 anchor 셀의 논리 (row, column)을 구해 `applyTableGridOperation(editor, tableBlockId, (t) => pasteInto(t, anchor, data, createId), { selectCellId: ... })`를 호출한다. `selectCellId`는 붙여넣은 영역의 좌상단 셀로 캐럿을 이동시킨다(기존 옵션 재사용, 새 플러밍 없음).
 - 표 밖이면: 현재 selection이 속한 최상위 블록을 `$from`에서 찾아(기존 `insertParagraphAfter`/`getCaretBlockContext`가 쓰는 최상위 블록 탐색과 같은 방식) 그 블록 뒤에 새로 만든 표를 끼운다(`insertTable`과 같은 삽입 경로).
-- 성공한 생성/확장/값 입력/서식 적용은 `applyTableGridOperation`의 기존 단일 `replaceWith` + `closeHistory` 트랜잭션 경로를 그대로 타므로 원자성(PIT-0003)이 자동으로 유지된다.
+- 성공한 생성/확장/값 입력/서식 적용은 `applyTableGridOperation`의 기존 단일 `replaceWith` + `closeHistory` 트랜잭션 경로를 그대로 타므로 원자성(G-EDT-001)이 자동으로 유지된다.
 - `EditorController.commands.pasteTabularData(data)`로 공개 API에도 노출한다 — 유닛 테스트가 실제 `ClipboardEvent` 없이 직접 호출해 검증할 수 있게 한다(다른 표 명령과 같은 테스트 패턴).
 
-구현 반영(표 밖 분기 계약 개정, Issue #29): 표 밖 붙여넣기는 다른 에디터와 같이 **선택을 대체한다**. selection이 비어있지 않으면 먼저 지우고, 삭제 후 캐럿이 놓인 최상위 블록 뒤에 표를 끼운 다음, 캐럿을 붙여넣은 표의 좌상단 셀 안으로 옮긴다(표 안 분기의 `selectCellId`와 대칭). 선택 삭제·표 삽입·캐럿 이동은 한 트랜잭션이라 undo 1회로 함께 복원된다. 블록 전체 내용을 선택해 지운 경우 남는 빈 문단은 그대로 둔다(블록 자체를 표로 교체하지 않는다 — 최소 변경, undo 예측 가능). 거절 경로(셀 한도 등)는 아무것도 dispatch하지 않으므로 선택도 보존된다(PIT-0003).
+구현 반영(표 밖 분기 계약 개정, Issue #29): 표 밖 붙여넣기는 다른 에디터와 같이 **선택을 대체한다**. selection이 비어있지 않으면 먼저 지우고, 삭제 후 캐럿이 놓인 최상위 블록 뒤에 표를 끼운 다음, 캐럿을 붙여넣은 표의 좌상단 셀 안으로 옮긴다(표 안 분기의 `selectCellId`와 대칭). 선택 삭제·표 삽입·캐럿 이동은 한 트랜잭션이라 undo 1회로 함께 복원된다. 블록 전체 내용을 선택해 지운 경우 남는 빈 문단은 그대로 둔다(블록 자체를 표로 교체하지 않는다 — 최소 변경, undo 예측 가능). 거절 경로(셀 한도 등)는 아무것도 dispatch하지 않으므로 선택도 보존된다(G-EDT-001).
 
 구현 반영(선택 대체의 경계 규칙, 3차 리뷰): 선택 대체(삭제)는 **선택이 표를 부분적으로 걸치지 않을 때만** 적용된다. 끝점(`$from`/`$to`)이 표 안에 있는 범위를 지우면 ProseMirror ReplaceStep이 스키마 필러로 `cellId` 없는 셀을 만들어 모델과 에디터가 영구 desync되므로, 그런 혼합 선택은 지우지 않고 붙여넣기만 한다 — 표 안 분기(head가 표 안)도 선택된 표 밖 텍스트를 지우지 않으므로 "혼합 선택은 삭제하지 않는다"로 양 분기가 일관된다. 표를 통째로 포함하는 선택은 노드 단위로 깔끔하게 지워지므로 정상 대체된다. 삽입 위치는 blockId 조회가 아니라 "삭제 후 캐럿(to)이 안쪽에 닿은 마지막 최상위 블록 바로 뒤, 없으면 문서 맨 앞"의 단일 스캔으로 계산한다 — 전체 선택(Ctrl+A) 삭제가 남기는 blockId 없는 필러 문단 뒤에도, 첫 블록 앞 GapCursor 위치(그 블록 **앞**)에도 정상 삽입된다.
 
@@ -207,7 +207,7 @@ addProseMirrorPlugins() {
 
 `editor-controller.ts`의 extension 목록에 `TableKeyboardNavigationExtension`과 같은 자리에 등록한다.
 
-구현 반영(설계 시 pseudocode 수정): 기본 붙여넣기로 폴백하는 경우는 `NOT_TABULAR` 하나뿐이다. 클립보드가 표로 인식된 뒤에는 파서 거절(`CLIPBOARD_TABLE_INVALID`)이든 명령 거절(`PASTE_MERGE_CONFLICT`, `CELL_LIMIT_EXCEEDED`, `PASTE_TARGET_NOT_FOUND` 등)이든 항상 `true`를 반환해 이벤트만 소비한다. 폴백하면 TSV는 ProseMirror가 `preserveWhitespace`로 파싱해 탭이 그대로 문서에 들어가고(모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다 — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지 않으므로 문서·selection·stored mark는 그대로 보존된다(PIT-0003).
+구현 반영(설계 시 pseudocode 수정): 기본 붙여넣기로 폴백하는 경우는 `NOT_TABULAR` 하나뿐이다. 클립보드가 표로 인식된 뒤에는 파서 거절(`CLIPBOARD_TABLE_INVALID`)이든 명령 거절(`PASTE_MERGE_CONFLICT`, `CELL_LIMIT_EXCEEDED`, `PASTE_TARGET_NOT_FOUND` 등)이든 항상 `true`를 반환해 이벤트만 소비한다. 폴백하면 TSV는 ProseMirror가 `preserveWhitespace`로 파싱해 탭이 그대로 문서에 들어가고(모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다 — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지 않으므로 문서·selection·stored mark는 그대로 보존된다(G-EDT-001).
 
 구현 반영(혼합 클립보드 폴백, Issue #37): §4.1의 판정이 `NOT_TABULAR`를 반환하는 경우에는 표 앞뒤에 문단 등 실질 콘텐츠가 섞인 클립보드도 포함된다. 표 세 노드가 노드 레벨 `parseHTML`을 정의하지 않으므로(§4.1 구현 반영, `table-extension.ts`) Tiptap 기본 붙여넣기는 표 구조를 표 노드로 만들지 않고 셀 텍스트만 평문으로 흘려보낸다 — 문단은 보존되고 표 구조(행/열 경계)만 뭉개진다. 슬라이스 11 이전 기본 붙여넣기와 동일한 폴백 동작이다.
 

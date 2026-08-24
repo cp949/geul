@@ -92,7 +92,7 @@ type TableGeometry = {
   columns: ColumnGeometry[];
 };
 
-// PIT-0004: 열 순서·개수의 권위는 표에 렌더된 data-be-columns(모델
+// G-TBL-001: 열 순서·개수의 권위는 표에 렌더된 data-be-columns(모델
 // table.columns와 같은 순서)다. columnId 문자열만 뽑아 쓴다.
 // 속성 문자열의 해석은 model이 소유하고(Issue #75) DOM 접근만 여기 남는다.
 // 해석 불가는 열 없음으로 접는다 — 핸들을 그리지 않으면 그만이고, 이

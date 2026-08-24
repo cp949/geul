@@ -389,7 +389,7 @@ describe("에디터 컨트롤러 표", () => {
     // 소비된다. 기본 붙여넣기로 폴백하면 preserveWhitespace 파싱이 탭을 그대로
     // 문서에 넣어 readEditorDocument()가 TypeError로 터지고 모델↔에디터가
     // 영구히 어긋난다. 거절된 명령은 문서·selection·stored mark를 모두
-    // 보존한다(PIT-0003).
+    // 보존한다(G-EDT-001).
     expect(editorState(editor, tiptap)).toEqual(before);
 
     // 붙여넣기 이후에도 다른 명령이 정상 동작해야 한다 — 어긋났다면

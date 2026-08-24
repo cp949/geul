@@ -176,7 +176,7 @@ const findCellOffset = (
 // view.updateState 호출 전에 조기 return해 editor.state 참조 자체가 안 바뀐다
 // (실측: @tiptap/core@3.30.1/dist/index.js:7020-7046, rootTrWasApplied 체크).
 // 결과적으로 editor.state.doc이 dispatch 전후 동일 참조로 남는다 — 이 동일성이
-// "필터가 트랜잭션을 버렸다"는 신호다(PIT-0003의 반대쪽 누락 예방).
+// "필터가 트랜잭션을 버렸다"는 신호다(G-EDT-001의 반대쪽 누락 예방).
 // 주의: 이 신호는 트랜잭션에 문서를 바꾸는 스텝이 하나 이상 있을 때만 유효하다
 // — 스텝 없는(docChanged: false) 트랜잭션은 필터를 통과해도 doc 참조가 그대로라
 // 오탐한다. 아래 4개 호출부는 모두 dispatch 전에 반드시 replaceWith/insert로
@@ -587,7 +587,7 @@ const cellIdAtAnchor = (
 // pasteTabularData/pasteClipboardContent 공용 검증이다 — 둘 다 공개 API라
 // 클립보드 파서를 거치지 않은 TabularData도 직접 들어온다. 뮤테이션 전에
 // 구조(직사각형 커버리지)와 셀 인라인 텍스트를 모두 검증해야 잘못된
-// 데이터가 문서를 깨뜨리지 않는다(PIT-0003).
+// 데이터가 문서를 깨뜨리지 않는다(G-EDT-001).
 // NaN·비정수 columnCount는 `< 1` 비교를 통과해 하류 산술(new Array 등)에서
 // RangeError로 터진다 — 크기 가드가 정수성까지 함께 판정한다.
 const validateTabularDataForPaste = (
@@ -671,7 +671,7 @@ export const pasteTabularData = (
   // tableBlockToTiptapNode(스키마 비검증 NodeType.create)를 거쳐 문서에
   // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다. 표를 먼저 만들어 실패
   // (셀 한도 등)를 트랜잭션 구성 전에 확정한다 — 거절 경로는 아무것도
-  // dispatch하지 않아야 한다(PIT-0003).
+  // dispatch하지 않아야 한다(G-EDT-001).
   const emptyTable = buildPasteTableSkeleton(
     { rows: data.rows.length, columns: data.columnCount },
     createId,
@@ -902,7 +902,7 @@ export const pasteClipboardContent = (
     return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
   }
 
-  // 뮤테이션 전에 시퀀스 전체를 검증한다(PIT-0003) — 표 부분은
+  // 뮤테이션 전에 시퀀스 전체를 검증한다(G-EDT-001) — 표 부분은
   // pasteTabularData와 같은 구조·서식·셀 한도 검증, 문단은 편집 가능
   // 콘텐츠 계약만 적용한다.
   for (const block of content) {
@@ -962,7 +962,7 @@ export const pasteClipboardContent = (
 
   // 표 밖: 시퀀스를 순서대로 노드로 조립한다. 실패 가능한 계산
   // (pasteGridInto)을 전부 먼저 끝내고 dispatch는 마지막에 한 번만 한다 —
-  // pasteTabularData의 표 밖 분기와 같은 원자성 패턴(PIT-0003).
+  // pasteTabularData의 표 밖 분기와 같은 원자성 패턴(G-EDT-001).
   let firstTable: {
     data: TableBlock;
     node: ProseMirrorNode;

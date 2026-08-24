@@ -539,7 +539,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
 
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
     // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
-    // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못
+    // 되돌린다(G-UI-001). onEscapeDismiss가 onOutsideDismiss로 잘못
     // 연결되면 초점은 그대로 버튼에 남아 이 단언이 실패한다.
     expect(document.activeElement).toBe(editable);
   });

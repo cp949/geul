@@ -10,7 +10,7 @@ import { TableMap } from "@tiptap/pm/tables";
 
 import { tableBlockToTiptapJson } from "./model-to-tiptap.js";
 
-// TableBlock → tiptap 매핑(PIT-0004 열 재정렬 포함)의 권위는 문서 로드 경로와
+// TableBlock → tiptap 매핑(G-TBL-001 열 재정렬 포함)의 권위는 문서 로드 경로와
 // 공유하는 tableBlockToTiptapJson 하나다 — 붙여넣기(PM 노드)와 로드(JSON)가
 // 서로 다른 매핑으로 갈라지지 않게 한다.
 export const tableBlockToTiptapNode = (

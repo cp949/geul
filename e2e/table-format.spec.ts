@@ -128,7 +128,7 @@ test("Escape로 표 메뉴를 닫으면 편집기로 초점을 복구한다", as
   await expect(editable).toBeFocused();
 });
 
-test("표 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다 (PIT-0013)", async ({
+test("표 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유지한다 (G-UI-001)", async ({
   page,
 }) => {
   await openDemoWithTable(page);
@@ -356,7 +356,7 @@ test("Escape로 셀 서식 메뉴를 닫는다 (PIT-0009)", async ({ page }) => 
   await expect(editable).toBeFocused();
 });
 
-test("셀 서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않는다 (PIT-0013)", async ({
+test("셀 서식 메뉴 바깥을 클릭하면 초점을 강제로 옮기지 않는다 (G-UI-001)", async ({
   page,
 }) => {
   const { table } = await openDemoWithTable(page);

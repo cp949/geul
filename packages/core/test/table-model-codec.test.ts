@@ -107,7 +107,7 @@ describe("TableBlock을 Tiptap 표 노드로 인코드한다", () => {
       rows: [
         {
           id: "row-1",
-          // 저장 배열 순서를 columnId 순서와 반대로 둔다 (PIT-0004: 배열 순서는 권위가 아니다).
+          // 저장 배열 순서를 columnId 순서와 반대로 둔다 (G-TBL-001: 배열 순서는 권위가 아니다).
           cells: [
             {
               id: "cell-2",

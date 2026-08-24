@@ -1,6 +1,6 @@
 /**
  * 셀 색상 문자열의 정규 형식 계약. 저장 포맷은 대문자 #RRGGBB만 허용하고,
- * 이 판정의 권위는 model에 둔다(PIT-0002 — core/react가 같은 규칙을
+ * 이 판정의 권위는 model에 둔다(G-CNV-001 — core/react가 같은 규칙을
  * 따로 구현하지 않는다).
  */
 import { describe, expect, it } from "vitest";

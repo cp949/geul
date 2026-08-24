@@ -20,7 +20,7 @@ export type TablePasteOptions = {
 // 파싱을 타서 탭이 그대로 문서에 들어가고(readEditorDocument가 TypeError로
 // 터져 모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다
 // — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지
-// 않으므로 문서·selection·stored mark가 그대로 보존된다(PIT-0003).
+// 않으므로 문서·selection·stored mark가 그대로 보존된다(G-EDT-001).
 export const TablePasteExtension = Extension.create<TablePasteOptions>({
   name: "tablePaste",
 

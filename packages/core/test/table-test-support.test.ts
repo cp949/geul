@@ -2,7 +2,7 @@
  * 공용 모듈 `table-test-support.ts`가 단독 소유하는 셀 선택 계약과
  * `createTableFixtureEditor`가 만든 에디터의 해제 시점 계약을 고정한다.
  * `selectCellRange`의 주석은 `CellSelection.create`가 기대하는 depth 규칙을
- * 단독으로 소유하는데, 그 규칙이 실제와 어긋나도 지는 것이 없었다(PIT-0022).
+ * 단독으로 소유하는데, 그 규칙이 실제와 어긋나도 지는 것이 없었다(G-TST-002).
  *
  * 덮는 것: `selectCellRange`가 dispatch한 뒤 선택이 `CellSelection`이고 그
  * 양 끝이 넘긴 두 셀이라는 것, `selectSingleCell`이 만드는 선택의 anchor와

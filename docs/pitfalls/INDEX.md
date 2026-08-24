@@ -1,37 +1,39 @@
-# Pitfall Index
+# 함정 목록
 
-다음 계획과 리뷰에서 재사용할 예방 규칙의 탐색 목록이다. 상세 원인과 검증법은 링크된 문서가 소유한다.
+가이드나 정상적으로 보이는 실행이 조용히 잘못된 결과를 내는 반복 실패만 기록한다. 정상 구현 절차는 [`docs/guides/`](../guides/INDEX.md)가 소유한다.
 
-| ID | 제목 | 상태 | 영역 | 최초 근거 | 상세 |
-| --- | --- | --- | --- | --- | --- |
-| `PIT-0001` | 소비자 증거로 패키지 경계 검증 | `ACTIVE` | workspace | R0 | [상세](./PIT-0001-enforce-boundaries-with-consumer-proofs.md) |
-| `PIT-0002` | canonicalization과 validation 중앙화 | `ACTIVE` | model·io·core | R0 | [상세](./PIT-0002-centralize-canonicalization-and-validation.md) |
-| `PIT-0003` | 편집기 트랜잭션 원자성 유지 | `ACTIVE` | core | R0 | [상세](./PIT-0003-keep-editor-transactions-atomic.md) |
-| `PIT-0004` | 저장 배열 대신 논리 테이블 순서 사용 | `ACTIVE` | model·io·core | R0 | [상세](./PIT-0004-use-logical-table-order.md) |
-| `PIT-0005` | 미지원 Markdown 원문 의미 보존 | `ACTIVE` | io | R0 | [상세](./PIT-0005-preserve-unsupported-markdown-meaning.md) |
-| `PIT-0006` | 배포 산출물 검증 전 build 수행 | `ACTIVE` | build·fixture | R0 | [상세](./PIT-0006-build-before-distribution-verification.md) |
-| `PIT-0007` | HTML 경고 수집과 의미 변환 분리 | `ACTIVE` | io·security | R0 | [상세](./PIT-0007-separate-html-warnings-from-semantics.md) |
-| `PIT-0008` | 클로저 경계를 넘는 객체 타입 좁히기 회피 | `ACTIVE` | core | R1 | [상세](./PIT-0008-avoid-object-narrowing-across-closures.md) |
-| `PIT-0009` | UI를 닫는 키보드 핸들러는 병렬 e2e로 검증 | `ACTIVE` | react·e2e | R1 | [상세](./PIT-0009-verify-keyboard-close-with-parallel-e2e.md) |
-| `PIT-0010` | 병합 셀에서는 오버레이 hit-test와 selection 이동을 명시적으로 다룸 | `ACTIVE` | react·core | R1 | [상세](./PIT-0010-position-overlays-and-selection-for-merged-cells.md) |
-| `PIT-0011` | 화면 밖으로 나가는 fixed 오버레이는 렌더 후 크기를 재서 접음 | `ACTIVE` | react | R1 | [상세](./PIT-0011-clamp-fixed-overlays-into-viewport.md) |
-| `PIT-0012` | 합성 paste 이벤트는 ClipboardEventInit이 아니라 defineProperty로 clipboardData를 얹음 | `ACTIVE` | e2e | R1 | [상세](./PIT-0012-synthesize-paste-events-without-clipboardeventinit.md) |
-| `PIT-0013` | 오버레이 바깥 클릭·Escape 닫기는 공용 훅으로 구현 | `ACTIVE` | react·e2e | R1 | [상세](./PIT-0013-share-outside-click-escape-dismiss-via-hook.md) |
-| `PIT-0014` | jsdom 테스트 fake는 contentEditable IDL 대신 속성으로 세움 | `ACTIVE` | react·test | Issue #48 | [상세](./PIT-0014-set-contenteditable-attribute-in-jsdom-fakes.md) |
-| `PIT-0015` | composite tsconfig 패키지는 test 전용 tsconfig.test.json을 따로 둠 | `ACTIVE` | workspace·build | Issue #32 | [상세](./PIT-0015-separate-tsconfig-for-composite-package-tests.md) |
-| `PIT-0016` | 추적 소스 파일 전량을 루트 typecheck 체인의 컴파일 대상에 넣음 | `ACTIVE` | workspace·build | Issue #57 | [상세](./PIT-0016-give-non-package-ts-directories-their-own-tsconfig.md) |
-| `PIT-0017` | document.body에 직접 붙인 테스트 노드는 finally에서 정리함 | `ACTIVE` | react·test | Issue #51 | [상세](./PIT-0017-clean-up-body-appended-test-nodes-in-finally.md) |
-| `PIT-0018` | 복잡도 회귀는 wall-clock 상한이 아니라 결정적 단언으로 잡음 | `ACTIVE` | io·test | Issue #58 | [상세](./PIT-0018-gate-complexity-regressions-deterministically.md) |
-| `PIT-0019` | 안정 key로 재사용되는 DOM의 억제 키는 안정 식별자로 고정 | `ACTIVE` | react·e2e | Issue #17 | [상세](./PIT-0019-anchor-suppression-keys-to-stable-ids.md) |
-| `PIT-0020` | lint 경고의 자동수정은 실제 타입 계약과 대조해 검증 | `ACTIVE` | react·전 패키지 | Issue #18 | [상세](./PIT-0020-verify-lint-autofix-against-the-real-contract.md) |
-| `PIT-0021` | 재그룹화한 커밋은 백업 ref와 트리 diff로 대조 | `ACTIVE` | git·process | `dev` 재그룹화 | [상세](./PIT-0021-verify-regrouped-commits-against-a-backup-ref.md) |
-| `PIT-0022` | 테스트 헬퍼는 두 번째 파일에서 복제하지 말고 공용 모듈이 단독 소유 | `ACTIVE` | 전 패키지·e2e·test | Issue #50 | [상세](./PIT-0022-own-test-helpers-in-a-shared-module.md) |
-| `PIT-0023` | 에디터를 여는 git 명령은 에이전트 세션에서 조용히 성공 | `ACTIVE` | git·process | 작업 브랜치 워크플로 리뷰 | [상세](./PIT-0023-editor-opening-git-commands-succeed-silently.md) |
-| `PIT-0024` | 에이전트 스크래치 스크립트를 저장소 트리에 두지 않음 | `ACTIVE` | 에이전트 작업공간·lint·test | Issue #107 | [상세](./PIT-0024-keep-scratch-scripts-out-of-the-repo-tree.md) |
-| `PIT-0025` | 사본 탐지에 축을 더하기 전 추적 소스 전량을 새 토큰으로 재스캔 | `ACTIVE` | test·계약 | Issue #108 | [상세](./PIT-0025-rescan-all-sources-before-adding-a-copy-detection-axis.md) |
-| `PIT-0026` | 이전 전 산출물에 작업 브랜치 커밋 해시를 적지 않음 | `ACTIVE` | git·process | Issue #107 | [상세](./PIT-0026-omit-work-branch-hashes-from-pre-transfer-artifacts.md) |
-| `PIT-0027` | fail-loud 검증기는 거절할 것이 아니라 통과시킬 것을 정의 | `ACTIVE` | scripts·gate·test | Issue #107 | [상세](./PIT-0027-define-what-a-validator-accepts-not-what-it-rejects.md) |
-| `PIT-0028` | 공용 모듈이 소유하는 정리 훅은 파일 경계마다 실행되게 만듦 | `ACTIVE` | core·test | Issue #103 | [상세](./PIT-0028-scope-shared-teardown-hooks-to-run-per-file.md) |
-| `PIT-0029` | pnpm이 스크립트 뒤로 넘기는 플래그는 실제 커맨드라인을 echo해 확인 | `ACTIVE` | scripts·process | Issue #103 | [상세](./PIT-0029-verify-pnpm-passthrough-flags-reach-the-real-command.md) |
-| `PIT-0030` | PIT-0026 위반을 서술할 때도 해시 값 자체는 인용하지 않음 | `ACTIVE` | git·process | PIT-0026 위반 정정 중(트랙-5) | [상세](./PIT-0030-omit-hash-values-when-describing-pit-0026-violations.md) |
-| `PIT-0031` | dispatch 전후 문서 참조 동일성만으로 필터 거절을 감지하지 않음 | `ACTIVE` | core | Issue #28 | [상세](./PIT-0031-pair-doc-identity-checks-with-doc-changed-for-filter-rejection.md) |
+계획할 때 먼저 가이드 INDEX에서 정상 경로를 선택한다. 아래 적용 조건이 현재 변경과 맞을 때만 상세 함정을 읽는다.
+
+## ACTIVE
+
+| ID | 적용 조건 | 오해하기 쉬운 신호 | 정상 가이드 |
+| --- | --- | --- | --- |
+| [`PIT-0006`](./PIT-0006-build-before-distribution-verification.md) | source 변경 뒤 배포 소비 검증 | stale `dist`를 검사해 통과·오진 | `G-WKS-002` |
+| [`PIT-0008`](./PIT-0008-avoid-object-narrowing-across-closures.md) | callback에서 찾은 ProseMirror node 사용 | test 통과, `tsc` narrowing 실패 | `G-EDT-001` |
+| [`PIT-0009`](./PIT-0009-verify-keyboard-close-with-parallel-e2e.md) | selection 기반 overlay의 Escape 닫기 | 단독 통과, 병렬에서 재오픈 | `G-TST-001`, `G-UI-001` |
+| [`PIT-0011`](./PIT-0011-clamp-fixed-overlays-into-viewport.md) | 내용에 따라 fixed overlay 크기 변경 | 최초 clamp 뒤 mode 전환에서 이탈 | `G-UI-001` |
+| [`PIT-0012`](./PIT-0012-synthesize-paste-events-without-clipboardeventinit.md) | E2E paste event 합성 | Chromium 통과, 다른 engine의 data 소실 | `G-TST-001` |
+| [`PIT-0014`](./PIT-0014-set-contenteditable-attribute-in-jsdom-fakes.md) | contenteditable selector를 fake DOM에서 사용 | IDL 값은 있지만 selector가 찾지 못함 | `G-TST-001` |
+| [`PIT-0015`](./PIT-0015-separate-tsconfig-for-composite-package-tests.md) | package test config가 dependency type import | verify 통과, clean typecheck 실패 | `G-WKS-003` |
+| [`PIT-0019`](./PIT-0019-anchor-suppression-keys-to-stable-ids.md) | stable-key DOM 재정렬 뒤 click 억제 | 이동 전 index가 이동 후 handler와 불일치 | `G-UI-002` |
+| [`PIT-0023`](./PIT-0023-editor-opening-git-commands-succeed-silently.md) | editor 입력을 요구하는 Git 명령 | exit 0이지만 의도한 편집 미적용 | `ff-workflow` |
+| [`PIT-0027`](./PIT-0027-define-what-a-validator-accepts-not-what-it-rejects.md) | validator 뒤 관용적 skip 처리 | exit 0과 검사 대상 0건 | `G-WKS-004` |
+| [`PIT-0028`](./PIT-0028-scope-shared-teardown-hooks-to-run-per-file.md) | 공유 teardown과 Vitest isolation 변경 | 기본 통과, no-isolate 반복 실패 | `G-TST-003` |
+| [`PIT-0029`](./PIT-0029-verify-pnpm-passthrough-flags-reach-the-real-command.md) | pnpm script에 임시 flag 전달 | 명령 통과, flag 미적용 | `G-WKS-004` |
+| [`PIT-0031`](./PIT-0031-pair-doc-identity-checks-with-doc-changed-for-filter-rejection.md) | document reference로 filter 거절 판별 | 정상 selection transaction을 거절로 오판 | `G-EDT-001` |
+| [`PIT-0032`](./PIT-0032-judge-typecheck-coverage-by-ownership-not-membership.md) | typecheck 커버리지를 멤버십·태스크 수로 판정 | 실행은 exit 0·태스크 수 감소, dry graph는 수 유지·command 누락 | `G-WKS-003` |
+| [`PIT-0034`](./PIT-0034-verify-wall-clock-limits-separate-regression-from-load-noise.md) | 복잡도 회귀를 시간 상한만으로 게이트 | 단독 통과, 동시 실행에서만 간헐 실패 | `G-TST-004` |
+| [`PIT-0035`](./PIT-0035-treat-copy-detection-scan-passes-as-partial-coverage.md) | copy-detection 스캔 결과 판독 | 0건을 사본 없음으로, 우연한 매치를 사본으로 오판 | `G-WKS-004` |
+
+## 승격 기준
+
+새 `ACTIVE` 함정은 다음 조건을 모두 만족한다.
+
+1. 적용할 가이드 또는 명시적 계약이 이미 있다.
+2. 정상적으로 보이는 실행이 잘못된 결과나 조용한 성공을 만든다.
+3. 같은 원인으로 다른 작업에서도 재발할 수 있다.
+4. 구체적인 회피와 탐지법이 있다.
+
+가이드가 없어 구현이 갈린 경우에는 pitfall 대신 가이드를 추가하거나 보강한다. 자동화할 수 있는 규칙은 test·lint·gate가 우선 소유한다.
+
+삭제한 pitfall ID는 재사용하지 않는다. 다음 신규 ID는 `PIT-0037`다. 과거 ID와 내용은 Git 이력이 보존한다.

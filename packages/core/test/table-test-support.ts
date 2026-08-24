@@ -1,7 +1,7 @@
 /**
  * 표 관련 core 테스트가 공유하는 격리 에디터와 그 스키마, 문서·데이터
  * fixture와 셀 위치·선택·캐럿 헬퍼를 소유한다. 여러 테스트 파일이 같은
- * fixture를 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ * fixture를 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(G-TST-002).
  *
  * 셀 헬퍼는 Editor를 받는다. createTableFixtureEditor가 만든 격리 에디터와
  * EditorController가 마운트한 에디터 모두가 호출부이므로 어느 한쪽의 생성
@@ -24,7 +24,7 @@ import {
 
 /**
  * createTableFixtureEditor가 만든 에디터 목록. 해제는 이 Set과 아래
- * afterEach가 단독으로 진다(PIT-0022) — createTableFixtureEditor는 만든
+ * afterEach가 단독으로 진다(G-TST-002) — createTableFixtureEditor는 만든
  * 에디터를 여기 등록하기만 하고, 호출부는 destroy()를 직접 부르지 않는다.
  *
  * 정리를 미루면 안 되는 이유: 마운트된 채 남으면 dispatch가 예약한
@@ -102,7 +102,7 @@ export const createTableFixtureEditor = (
  * 없다 — `LinkPolicyExtension`(link-policy-extension.ts)과 같은
  * `filterTransaction` 모양으로 그 경로를 재현한다. `table-commands.test.ts`와
  * `table-paste-commands.test.ts`가 함께 쓰므로 로컬 정의로 중복하지 않고
- * 이 모듈이 단독 소유한다(PIT-0022).
+ * 이 모듈이 단독 소유한다(G-TST-002).
  */
 export const RejectAllTransactionsExtension = Extension.create({
   name: "rejectAllTransactions",

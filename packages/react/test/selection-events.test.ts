@@ -40,7 +40,7 @@ const nextMacrotask = () => new Promise((resolve) => setTimeout(resolve, 0));
  * 지연분을 털어낸다(파일 첫머리 주석 참조).
  *
  * `dispose`는 반드시 `finally`에서 부른다 — body에 직접 붙인 노드는
- * `afterEach(cleanup)`의 정리 대상이 아니다(`PIT-0017`).
+ * `afterEach(cleanup)`의 정리 대상이 아니다(`G-TST-003`).
  */
 const openSelectionProbe = async () => {
   const host = document.createElement("div");

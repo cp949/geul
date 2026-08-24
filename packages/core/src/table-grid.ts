@@ -623,7 +623,7 @@ type CellFormatUpdate =
   | { property: "align"; value: CellAlign | null };
 
 // 행/열/셀 id 목록 3가지 대상 전부를 "칠할 기준 셀 id 집합"으로 좁힌다.
-// 행/열은 논리 격자 투영으로(PIT-0004 — 병합 셀이 대상 행/열을 덮으면
+// 행/열은 논리 격자 투영으로(G-TBL-001 — 병합 셀이 대상 행/열을 덮으면
 // 함께 포함), 셀 id 목록은 실제 존재하는 id인지만 확인한다.
 const resolveTargetCellIds = (
   table: TableBlock,
@@ -785,7 +785,7 @@ export const resizeColumn = (
 
 // 표 밖 붙여넣기(새 표 생성)와 표 안 덮어쓰기가 공유하는 유일한 격자 연산.
 // 확장은 덮어쓰기 사각형 밖의 좌표에만 빈 셀을 채우는 단일 패스 벌크
-// 생성이고(끝 삽입 상당이라 기존 span과 절대 교차하지 않는다 — PIT-0004),
+// 생성이고(끝 삽입 상당이라 기존 span과 절대 교차하지 않는다 — G-TBL-001),
 // 덮어쓰기 결과가 유효한지는 기존 validateTableGrid로 검증한다(겹침 탐지
 // 로직을 새로 안 쓴다).
 export const pasteInto = (

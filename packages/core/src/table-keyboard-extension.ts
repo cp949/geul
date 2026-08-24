@@ -17,7 +17,7 @@ export const goToNextTableCellOrInsertRow = (
 
   // 마지막 셀의 Tab: 새 행을 추가하고 그 첫 셀로 캐럿을 옮긴다(TBL-011).
   // applyTableGridOperation이 표 서브트리를 통째로 replaceWith하므로
-  // PIT-0010 규칙대로 결과 셀을 selectCellId로 명시 지정한다.
+  // G-TBL-001 규칙대로 결과 셀을 selectCellId로 명시 지정한다.
   const rect = selectedRect(state);
   const tableBlockId = rect.table.attrs.blockId;
   if (typeof tableBlockId !== "string" || tableBlockId.length === 0) {

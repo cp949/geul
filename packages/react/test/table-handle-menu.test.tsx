@@ -353,7 +353,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
     expect(screen.queryByRole("menu")).toBeNull();
     // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
-    // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못
+    // 되돌린다(G-UI-001). onEscapeDismiss가 onOutsideDismiss로 잘못
     // 연결되면 초점은 그대로 body에 남아 이 단언이 실패한다.
     expect(document.activeElement).toBe(contentEditable);
   });
@@ -460,7 +460,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
   });
 
   it("실제 moveTableColumn으로 표 DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지 않는다", () => {
-    // PIT-0004: 열 순서·개수의 권위는 data-be-columns다. 실제 편집기 마운트라
+    // G-TBL-001: 열 순서·개수의 권위는 data-be-columns다. 실제 편집기 마운트라
     // moveTableColumn이 그 속성을 진짜로 갱신해 Issue #17과 같은 재현 조건이
     // 그대로 만들어진다.
     const { columnIds, editable, editor, table } = renderRealTable();

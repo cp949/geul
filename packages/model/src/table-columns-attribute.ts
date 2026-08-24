@@ -39,7 +39,7 @@ const isTableColumn = (value: unknown): value is TableColumn => {
  * 키 누락으로 바꿔 parseTableColumns가 거절하는 문자열이 나온다 — 왕복이
  * 깨진다. 따라서 읽는 쪽과 같은 전부-아니면-전무 규칙을 쓰는 쪽에도
  * 적용해 해석 불가는 빈 열 목록으로 쓴다. 항목을 골라 버리지 않는 이유는
- * 읽는 쪽과 같다(PIT-0004: 열 순서·개수의 권위).
+ * 읽는 쪽과 같다(G-TBL-001: 열 순서·개수의 권위).
  *
  * 불변식: parseTableColumns(serializeTableColumns(x))는 항상 ok다.
  */
@@ -53,7 +53,7 @@ export const serializeTableColumns = (columns: TableColumn[]): string => {
  * 이 속성이 애초에 없다. 실패는 "값이 있는데 해석할 수 없다"로 좁힌다.
  *
  * 어긋난 항목을 걸러내고 나머지를 통과시키지 않는다. 이 속성은 열
- * 순서·개수의 권위이므로(PIT-0004) 항목을 조용히 버리면 권위 값이 실제
+ * 순서·개수의 권위이므로(G-TBL-001) 항목을 조용히 버리면 권위 값이 실제
  * 열과 어긋난 채 통과한다.
  */
 export const parseTableColumns = (

@@ -100,7 +100,7 @@ Geul 작업 이슈는 필요한 범위에서 다음 내용을 포함한다.
 
 - 목표와 사용자 결과
 - 포함·제외 범위
-- 관련 product, spec, ADR와 pitfall
+- 관련 product, spec, ADR, guide와 pitfall
 - 구현 순서와 체크리스트
 - 완료 기준
 - 검증 명령과 결과

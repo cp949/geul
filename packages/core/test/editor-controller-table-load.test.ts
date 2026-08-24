@@ -134,7 +134,7 @@ describe("에디터 컨트롤러 표", () => {
   });
 
   it("저장 배열의 셀 순서가 열 순서와 달라도 물리 열 순서로 로드된다", () => {
-    // PIT-0004: 저장 배열 순서는 논리 열 순서의 권위가 아니다. row-2의 셀을
+    // G-TBL-001: 저장 배열 순서는 논리 열 순서의 권위가 아니다. row-2의 셀을
     // 열 순서와 반대로 나열해도 로드가 columns 인덱스 순으로 배치해야 한다.
     const shuffled = richTableDocument();
     const table = tableBlockIn(shuffled);

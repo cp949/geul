@@ -134,7 +134,7 @@ export type Block =
 - `setBlockTextColor`/`setBlockBackgroundColor`/`setBlockTextAlignment`(선택 블록 범위 또는 caret 블록)
 - `toggleInlineTextColor`/`toggleInlineBackgroundColor`(선택 텍스트 범위, 팔레트 값 중 하나 또는 해제)
 - `selectBlockRange(fromBlockId, toBlockId)`, `deleteSelectedBlocks()`, `moveSelectedBlocksBefore(beforeBlockId)`
-- 각 명령은 기존 표 명령과 동일한 원자성 계약을 따른다 — 하나의 트랜잭션, 실패 시 문서 무변경, undo 1회 정확 복원(PIT-0003).
+- 각 명령은 기존 표 명령과 동일한 원자성 계약을 따른다 — 하나의 트랜잭션, 실패 시 문서 무변경, undo 1회 정확 복원([`G-EDT-001`](../guides/G-EDT-001-keep-editor-commands-atomic.md)).
 
 ### 5.2 Tab/Shift+Tab 3분기
 
@@ -192,7 +192,7 @@ export type Block =
 
 ### 7.2 GFM 계약 확장과 손실 정책
 
-R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 만들지 않는다, CONTEXT.md의 strict/lossy export 정의, `PIT-0005`와 같은 패턴).
+R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 만들지 않는다, CONTEXT.md의 strict/lossy export 정의, [`G-CNV-002`](../guides/G-CNV-002-preserve-imported-meaning.md)와 같은 패턴).
 
 - GFM이 직접 표현 가능한 것: H1-H6(H4-H6도 `####`~`######`로 표현 가능), 인용문(`>`), 구분선(`---`), 코드 블록(펜스 코드 블록, language 포함), 글머리·번호 목록(`start` 속성 포함), 체크 목록(`- [ ]`/`- [x]`), 중첩(들여쓰기).
 - GFM이 표현할 수 없는 것: 토글(제목/목록의 `collapsed`·`isToggleable` 자체), 인라인 색상, 블록 색상, 블록 정렬.

@@ -1,7 +1,7 @@
 /**
  * EditorController 계층의 core 테스트가 공유하는 문서 fixture와 마운트, 저장
  * 문서에서 표 블록을 꺼내는 조회를 소유한다. 여러 테스트 파일이 같은 fixture를
- * 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(PIT-0022).
+ * 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(G-TST-002).
  *
  * table-test-support.ts와의 경계는 다루는 대상이다 — EditorController와 저장
  * Document를 다루면 이 모듈, tiptap Editor를 직접 다루는 격리 fixture와 셀

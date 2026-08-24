@@ -12,8 +12,9 @@
 4. `docs/product/blocknote-free-feature-inventory.md`: 기능 ID, 목표 수준과 현재 검증 상태
 5. `docs/product/roadmap.md`: 릴리스 배정, 구현 순서와 단계 완료 조건
 6. 관련 `docs/specs/`와 `docs/adr/`: 승인된 계약과 장기 결정 이유
-7. 관련 `docs/pitfalls/`의 `ACTIVE` 항목: 재발 방지 규칙과 검증 방법
-8. 관련 `docs/reviews/`, 대상 코드와 기존 테스트: 완료 증거와 현재 동작
+7. `docs/guides/INDEX.md`에서 작업 조건에 맞는 개발 가이드
+8. 선택한 가이드가 연결한 `docs/pitfalls/`의 `ACTIVE` 항목: 정상 실행도 빗나가는 반복 실패 조건
+9. 관련 `docs/reviews/`, 대상 코드와 기존 테스트: 완료 증거와 현재 동작
 
 이슈 트래커와 도메인 문서 소비 규칙은 각각 `docs/agents/issue-tracker.md`, `docs/agents/domain.md`를 따른다.
 
@@ -56,7 +57,7 @@ demo  -> react, io, model
 - 의존성을 추가하거나 변경하면 `docs/product/dependency-licenses.md`와 license 검사를 함께 갱신한다.
 - 생성된 `dist`, `coverage`, `.turbo`, `.vite`, `playwright-report`, `test-results`를 소스처럼 편집하거나 커밋하지 않는다.
 - 현재 범위 밖에서 발견한 작업은 현재 변경에 섞지 않는다. 기록 위치는 레인이 정한다 — 아래 "Git과 작업공간". GitHub 등록은 어느 레인에서든 사용자 지시를 기다린다.
-- 다른 단계에서도 재발할 함정은 `docs/pitfalls/` 상세 문서와 INDEX에 예방 규칙·검증 방법과 함께 기록한다.
+- 정상 구현 경로가 없거나 불명확하면 `docs/guides/`를 추가·보강한다. 가이드가 있어도 정상 실행이 조용히 빗나가는 반복 실패만 `docs/pitfalls/`에 기록한다.
 - 단계 또는 릴리스 검증이 끝나면 관련 `docs/reviews/` 완료 문서의 최신 판정과 증거를 갱신한다.
 
 ## 문서 책임
@@ -67,9 +68,10 @@ demo  -> react, io, model
 - 승인된 기능·기술 계약: `docs/specs/`
 - 장기 아키텍처 결정과 이유: `docs/adr/`
 - 실행 계획과 진행 상태: GitHub Issues
-- 반복 실패 예방 규칙: `docs/pitfalls/`
 - 단계별 완료 판정과 증거: `docs/reviews/`
 - 프로젝트 공통 언어: `CONTEXT.md`
+- 반복 작업의 정상 구현·검증 경로: `docs/guides/`
+- 가이드가 있어도 재발하는 조용한 실패 조건: `docs/pitfalls/`
 - ff-workflow 절차와 `_works/` 작업공간: `docs/agents/ff-workflow.md`
 
 같은 사실을 여러 문서에 원본처럼 복제하지 않는다. 문서 생성, 갱신과 종료 조건은 `docs/process/development-lifecycle.md`를 따른다.

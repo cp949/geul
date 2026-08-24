@@ -75,7 +75,7 @@ describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
 
     expect(screen.queryByRole("menu")).toBeNull();
     // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
-    // 되돌린다(PIT-0013). onEscapeDismiss가 onOutsideDismiss로 잘못 연결되면
+    // 되돌린다(G-UI-001). onEscapeDismiss가 onOutsideDismiss로 잘못 연결되면
     // 초점은 그대로 body에 남아 이 단언이 실패한다.
     expect(document.activeElement).toBe(rendered.editable);
   });

@@ -258,7 +258,7 @@ const STUBBED_TABLE_BOX = { left: 100, top: 100, width: 200, height: 60 };
 /**
  * mountTableEditor의 docblock은 replaceDocument 뒤 반환값을 어떻게 다뤄야
  * 하는지를 단독으로 소유한다. 그 주장이 지금 실제로 참인지 여기서 고정한다 —
- * 지지 않는 주장은 조용히 거짓이 된다(PIT-0022).
+ * 지지 않는 주장은 조용히 거짓이 된다(G-TST-002).
  */
 describe("문서를 갈아끼운 뒤의 마운트 헬퍼 반환값", () => {
   it("table과 editable은 문서에서 떨어지고 host만 남는다", () => {

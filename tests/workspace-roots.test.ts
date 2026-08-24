@@ -27,7 +27,7 @@
  * (`HEADLESS_PACKAGES`)의 배열 리터럴 사본이 없는지. headless 목록은 이 파일이
  * 소유하는 모듈의 것이 아니지만, 사본 탐지 술어(`tokensInOneArrayLiteral` 등)를
  * 이 파일이 이미 단독 소유하고 있어 세 번째 토큰 축으로 여기 더한다 —
- * `tests/workspace-boundaries.test.ts`에 같은 술어를 복제하면 `PIT-0022`
+ * `tests/workspace-boundaries.test.ts`에 같은 술어를 복제하면 `G-TST-002`
  * 위반이다.
  */
 import { execFileSync } from "node:child_process";
@@ -82,7 +82,7 @@ const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
  * 정규화는 `./` 접두 제거뿐이다. 접미 glob(`apps/**`)과 부정 glob
  * (`!packages/legacy`)은 그대로 낸다 — 옛 구현의 `.replace(/\/\*+$/, "")`가
  * 다단 glob의 꼬리를 지웠고, 그 정규화 때문에 `apps/**`가 `apps/*`와 같은
- * 값으로 보여 리터럴과의 어긋남이 조용히 사라졌다(`PIT-0022`).
+ * 값으로 보여 리터럴과의 어긋남이 조용히 사라졌다(`G-TST-002`).
  */
 const parseWorkspacePackageGlobs = (manifestSource: string): string[] => {
   // CRLF를 LF로 접어 두 개행 방식을 한 갈래로 합친다. 옛 구현은 블록
@@ -328,7 +328,7 @@ const trackedSourcePaths = () =>
  * (`WORKSPACE_ROOTS`)이 서로 다른 토큰 집합으로 같은 판정을 쓴다. 정규식
  * 특수문자는 이스케이프한다 — glob의 `*`를 포함해서다. 지금 루트 이름에는
  * 특수문자가 없지만, 이스케이프를 빠뜨린 식별자 삽입이 정규화를 조용히
- * 무효로 만든 전례가 있다(`PIT-0022`의 Issue #92).
+ * 무효로 만든 전례가 있다(Issue #92).
  */
 const tokensInOneArrayLiteral = (source: string, tokens: readonly string[]) => {
   const matches = (span: string, token: string) =>
@@ -521,7 +521,7 @@ describe("workspace 패키지 glob 목록", () => {
  * 만든 `tmpRoot`를 **트리를 채우기 전에** `register`로 넘긴다. 호출자가
  * 반환값을 받아 정리 대상에 담는 형태였다면, 아래 `mkdirSync`·`symlinkSync`
  * 여섯 번 중 하나가 던졌을 때 반환이 일어나지 않아 `afterEach`가 그 트리를
- * 지나친다 — 임시 디렉터리가 남는다(`PIT-0017`과 같은 형태다). 정리 자체는
+ * 지나친다 — 임시 디렉터리가 남는다(`G-TST-003`과 같은 형태다). 정리 자체는
  * 호출자의 `afterEach`가 한다.
  */
 const createSymlinkFixtureRoot = (register: (tmpRoot: string) => void) => {
@@ -775,7 +775,7 @@ describe("workspaceChildDirectories()(자식 디렉터리 열거)", () => {
  * headless 목록 자체는 이 파일이 소유하는 모듈(`workspace-roots.mjs`)의
  * 것이 아니지만, 사본 탐지 술어(`tokensInOneArrayLiteral` 등)를 이 파일이
  * 이미 단독 소유하므로 그 술어를 다른 파일에 복제하지 않고 여기 세 번째
- * 토큰 축으로 더한다(`PIT-0022`).
+ * 토큰 축으로 더한다(`G-TST-002`).
  */
 describe("workspace 패키지 glob·루트 이름 목록·headless 목록의 단독 소유", () => {
   it("scripts/의 스크립트가 빠짐없이 이 모듈에서 목록을 import한다", () => {

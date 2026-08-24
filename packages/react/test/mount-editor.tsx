@@ -6,7 +6,7 @@
  * DOM을 편집기가 직접 만들게 한다. 표가 필요한 오버레이는 mountTableEditor,
  * 문단만 필요한 오버레이는 mountBlockEditor를 쓴다. 마운트 외에 표 블록 조회
  * (tableBlockOf), DOM 캐럿 배치(placeCaret), 초점 단언(focusOutsideEditor)도
- * 이 모듈이 단독 소유한다(PIT-0022).
+ * 이 모듈이 단독 소유한다(G-TST-002).
  *
  * 다만 jsdom은 레이아웃을 계산하지 않아 getBoundingClientRect()가 전부 0이다.
  * 오버레이 geometry는 rect에 전적으로 의존하므로 rect만 스텁한다 — 이것이

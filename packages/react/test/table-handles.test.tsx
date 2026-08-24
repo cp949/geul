@@ -96,7 +96,7 @@ const renderResizableTable = () => {
 /**
  * 첫 행의 두 열을 columnSpan 2 셀 하나로 병합한 문서를 심고, 다시 만들어진
  * 표 노드에 스텁 격자를 씌워 돌려준다. 첫 행만 보고 열 경계를 읽으면 둘째
- * 열 핸들이 사라지는 회귀(PIT-0004)를 만드는 상태다.
+ * 열 핸들이 사라지는 회귀(G-TBL-001)를 만드는 상태다.
  *
  * 병합 명령을 쓰지 않는 이유: mergeTableCells는 tableBlockId 하나만 받고 병합
  * 범위를 넘길 파라미터가 아예 없다 — 범위의 유일한 권위가 현재
@@ -269,7 +269,7 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
     });
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
-    // PIT-0004: 열 순서의 권위는 모델 columns(=data-be-columns)다.
+    // G-TBL-001: 열 순서의 권위는 모델 columns(=data-be-columns)다.
     expect(columnsOf(editor).map((column) => column.id)).toEqual([
       columnIds[1],
       columnIds[0],
@@ -476,7 +476,7 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
 describe("첫 행이 병합된 표의 열 geometry", () => {
   // 첫 행이 colspan=2로 병합되면 그 행에는 열마다 하나씩인 [data-be-column-id]
   // 셀이 없다 — 첫 행만 보고 열 경계를 읽으면 두 번째 열 핸들이 사라진다.
-  // 병합되지 않은 둘째 행의 셀 rect로 geometry를 복구해야 한다(PIT-0004).
+  // 병합되지 않은 둘째 행의 셀 rect로 geometry를 복구해야 한다(G-TBL-001).
 
   it("둘째 열 핸들이 둘째 행의 비병합 셀 경계에 위치한다", () => {
     const rendered = renderRealTable();
@@ -502,7 +502,7 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
 
     // 첫 열 경계(x=200)는 병합된 첫 행에서는 셀 경계가 아니다 — 그 행에
     // strip을 그리면 병합 셀 한가운데 클릭이 리사이즈 드래그로 가로채인다
-    // (PIT-0010). 둘째 행 구간만 남아야 한다.
+    // (G-TBL-001). 둘째 행 구간만 남아야 한다.
     const handles = Array.from(
       document.querySelectorAll<HTMLElement>("[data-be-table-resize-handle]"),
     );

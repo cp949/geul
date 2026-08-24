@@ -190,7 +190,7 @@ describe("표에 열을 삽입한다", () => {
     expect(result.ok).toBe(true);
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     expect(table?.attrs?.columns).toHaveLength(3);
-    // PIT-0004: table.columns가 새 열을 맨 앞에 둔다면, PM 문서의 물리 셀
+    // G-TBL-001: table.columns가 새 열을 맨 앞에 둔다면, PM 문서의 물리 셀
     // 순서도 그 열을 첫 번째 형제 노드로 배치해야 한다(저장 배열 append 순서가 아니라).
     const firstRowCells = table?.content?.[0]?.content ?? [];
     expect(firstRowCells).toHaveLength(3);

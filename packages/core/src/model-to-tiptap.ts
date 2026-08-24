@@ -124,7 +124,7 @@ export const inlineContentToTiptap = (
       : { marks: item.marks.map(markToTiptap) }),
   }));
 
-// PIT-0004: 저장 배열 순서는 논리 열 순서의 권위가 아니다. ProseMirror 표는
+// G-TBL-001: 저장 배열 순서는 논리 열 순서의 권위가 아니다. ProseMirror 표는
 // 셀의 물리 문서 순서(형제 노드 순서)로 열 위치를 결정하므로, tiptap JSON을
 // 만들 때는 반드시 columnId가 가리키는 table.columns 인덱스로 재정렬한다.
 export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {

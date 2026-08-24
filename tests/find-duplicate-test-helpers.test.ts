@@ -1,7 +1,7 @@
 /**
  * 테스트 헬퍼 중복 탐지기(`scripts/find-duplicate-test-helpers.mjs`)의 계약.
  *
- * PIT-0022의 검증 명령 1번은 이름 기반 grep이라 사각지대 세 개를 갖는다
+ * Issue #92 이전의 이름 기반 grep은 사각지대 세 개를 갖는다
  * (대상 glob이 react 전용 · `^` 앵커 · 이름이 다르면 못 잡음, Issue #92).
  * 이 탐지기는 그 자리를 대신하므로, 스스로가 놓치거나 잘못 잡으면 "중복이
  * 없다"는 잘못된 증거를 만든다. 여기서는 무엇을 헬퍼로 세는지, 어디까지
@@ -663,7 +663,7 @@ describe("기본 대상 디렉터리", () => {
  * 않고 `workspaceChildDirectories()`(`scripts/workspace-roots.mjs`)에
  * 위임하는지를 진다. 옛 술어(`entry.isDirectory()` 단독 판정)로는 심링크
  * 패키지 아래의 `test`가 후보에서 조용히 빠지고, `findUnlistedTestDirectories()`가
- * "목록 밖 없음"을 잘못 보고한다(`PIT-0022`).
+ * "목록 밖 없음"을 잘못 보고한다(`G-TST-002`).
  *
  * fixture의 workspace 루트 이름은 `apps`/`packages` 고정이다 —
  * `collectTestDirectoryCandidates(repoRoot)`가 `workspaceChildDirectories(repoRoot)`를
@@ -831,7 +831,7 @@ describe("collectTestDirectoryCandidates()가 자체 열거 루프를 갖지 않
    * `collectSourcePaths()`가 `.tsx?` 소스를 재귀로 모으는 자리다. 그건 중복
    * 탐지 알고리즘 자신이고 workspace 열거와 무관하다. 그 밖에
    * `readdirSync`가 하나라도 더 생기면 자식 열거 술어의 사본일 가능성이
-   * 높으니, 그 자리에서 이 계약을 다시 판단하게 한다(`PIT-0022`).
+   * 높으니, 그 자리에서 이 계약을 다시 판단하게 한다(`G-TST-002`).
    */
   it("모듈 안에서 readdirSync를 부르는 자리가 collectSourcePaths() 하나뿐이다", () => {
     const source = readFileSync(
