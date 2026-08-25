@@ -65,7 +65,7 @@ const sanitizeInlineContentText = (content: InlineContent): InlineContent => {
     const text = sanitizeInlineText(item.text);
     if (text.length === 0) continue;
 
-    const previous = sanitized.at(-1);
+    const previous = sanitized[sanitized.length - 1];
     if (
       previous !== undefined &&
       marksKey(previous.marks) === marksKey(item.marks)

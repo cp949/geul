@@ -94,7 +94,7 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
 
     // 빈 세그먼트가 사라지면서 같은 mark 조합이 이웃하게 될 수 있다 —
     // inlineContentFromNodes와 같은 병합 형태를 유지한다.
-    const previous = normalized.at(-1);
+    const previous = normalized[normalized.length - 1];
     if (
       previous !== undefined &&
       marksKey(previous.marks) === marksKey(item.marks)

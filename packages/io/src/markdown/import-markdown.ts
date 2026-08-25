@@ -216,7 +216,7 @@ const appendText = (
   if (text.length === 0) return;
 
   const normalizedMarks = canonicalizeTextMarks(marks);
-  const previous = content.at(-1);
+  const previous = content[content.length - 1];
   if (previous !== undefined && sameMarks(previous.marks, normalizedMarks)) {
     previous.text += text;
     return;
