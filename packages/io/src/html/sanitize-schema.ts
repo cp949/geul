@@ -109,13 +109,25 @@ export const clipboardAllowedAttributes: Record<string, string[]> = {
 // unwrap해 SAFE_BLOCK_DOWNGRADED로 강등). clipboard 경로는 model에 저장하지
 // 않고 blockSequenceFromNodes가 h4~h6를 문단으로 다운그레이드만 하므로,
 // sanitize 단계에서 태그 자체를 살려 파서에 도달시켜야 블록 경계로 인식할
-// 수 있다(DELTA-03, Issue #72). 문서 import 공유 목록은 이 확장과 무관하게
-// 그대로 둔다 — 공유하면 import 쪽 SAFE_BLOCK_DOWNGRADED 경고 계약이 깨진다.
+// 수 있다(DELTA-03, Issue #72). div/li/blockquote/ul/ol도 같은 자리·같은
+// 이유로 확장한다 — model에 리스트·인용문 Block 타입이 없어 문서 import는
+// 이 태그들을 만들 수 없고(공유 목록에 없음), 그래서 sanitize가 unwrap해
+// SAFE_BLOCK_DOWNGRADED로 강등된다. clipboard 경로는 blockSequenceFromNodes가
+// div/li/blockquote를 문단 경계로, ul/ol을 순수 wrapper로만 다운그레이드
+// 처리하므로(model에 저장하지 않음) sanitize 단계에서 태그를 살려야
+// 블록 경계로 인식할 수 있다(Issue #113). 문서 import 공유 목록은 이 확장과
+// 무관하게 그대로 둔다 — 공유하면 import 쪽 SAFE_BLOCK_DOWNGRADED 경고
+// 계약이 깨진다.
 export const clipboardAllowedTagNames = [
   ...htmlAllowedTagNames,
   "h4",
   "h5",
   "h6",
+  "div",
+  "li",
+  "blockquote",
+  "ul",
+  "ol",
 ];
 
 // <title>은 소스 문서 head의 메타데이터지 사용자가 선택한 본문이 아니다.

@@ -3,42 +3,16 @@
  * 문단과 표를 순서대로 블록 시퀀스에 담는지 검증한다(spec §4.1, Issue #71).
  * 표를 못 찾으면 여전히 TSV/NOT_TABULAR로 흘려보낸다는 계약과, 레이아웃 표
  * 래퍼·자기 복사가 만드는 HTML 모양도 함께 다룬다.
+ * heading·div/li/blockquote·ul/ol이 문단/표 경계로 인식되는지는
+ * `clipboard-mixed-content-block-boundary.test.ts`가 다룬다(파일 분할은
+ * Issue #113 — 20개 초과로 관심사 단위 분할).
  * `parseClipboardTable`의 나머지 케이스는 `clipboard-table-parser.test.ts`가
  * 다룬다(파일 분할은 Issue #68).
  */
 import { describe, expect, it } from "vitest";
-import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 
 const TABLE = "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>";
-
-// TABLE 리터럴이 파싱된 결과(columnCount 2, 셀 "a"/"b")를 그대로 고정한다.
-// heading 분리를 확인하는 테스트들이 표 블록까지 함께 toEqual로 단언할 때
-// 반복 정의를 피하려고 여기서 한 번만 만든다.
-const TABLE_BLOCK: ClipboardContentBlock = {
-  type: "table",
-  data: {
-    columnCount: 2,
-    rows: [
-      {
-        cells: [
-          {
-            columnIndex: 0,
-            rowSpan: 1,
-            columnSpan: 1,
-            content: [{ text: "a" }],
-          },
-          {
-            columnIndex: 1,
-            rowSpan: 1,
-            columnSpan: 1,
-            content: [{ text: "b" }],
-          },
-        ],
-      },
-    ],
-  },
-};
 
 describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // <title>은 소스 문서의 head 메타데이터지 사용자가 선택한 본문이 아니다 —
@@ -311,125 +285,5 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
         },
       ],
     });
-  });
-
-  // DELTA-03(Issue #72): blockSequenceFromNodes가 h1~h3를 heading 블록
-  // 경계로 인식한다. Issue #37 재발 방지 — toContainText 등 부분 문자열
-  // 단언은 인접 블록 병합을 감춘다(spec §4.1 '정정(2026-08-21 리뷰)').
-  // 배열 전체를 toEqual로 단언해 3원소(heading×2 + table)를 고정한다.
-  it("h1~h3 heading과 표가 섞이면 각각 정확히 분리된다", () => {
-    const result = parseClipboardTable({
-      html: "<h1>A</h1><h2>B</h2>" + TABLE,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value).toEqual([
-      { type: "heading", level: 1, content: [{ text: "A" }] },
-      { type: "heading", level: 2, content: [{ text: "B" }] },
-      TABLE_BLOCK,
-    ]);
-  });
-
-  // h4~h6는 model HeadingBlock.level(1|2|3) 밖이라 heading으로 만들 수
-  // 없다 — 문단으로 다운그레이드하되, 여전히 블록 경계로 인식해 인접
-  // h4~h6와 병합하지 않는다.
-  it("h4~h6는 heading이 아닌 문단으로 다운그레이드되고 인접 블록과 병합되지 않는다", () => {
-    const merged = parseClipboardTable({
-      html: "<h4>A</h4><h4>B</h4>" + TABLE,
-    });
-    expect(merged.ok).toBe(true);
-    if (merged.ok) {
-      expect(merged.value).toEqual([
-        { type: "paragraph", content: [{ text: "A" }] },
-        { type: "paragraph", content: [{ text: "B" }] },
-        TABLE_BLOCK,
-      ]);
-    }
-
-    // h4/h5/h6 각 레벨을 최소 1개씩 커버한다 — 셋 다 문단으로
-    // 다운그레이드됨을 확인한다.
-    const levels = parseClipboardTable({
-      html: "<h4>A</h4><h5>B</h5><h6>C</h6>" + TABLE,
-    });
-    expect(levels.ok).toBe(true);
-    if (levels.ok) {
-      expect(levels.value).toEqual([
-        { type: "paragraph", content: [{ text: "A" }] },
-        { type: "paragraph", content: [{ text: "B" }] },
-        { type: "paragraph", content: [{ text: "C" }] },
-        TABLE_BLOCK,
-      ]);
-    }
-  });
-
-  // heading 텍스트도 셀 텍스트와 같은 정규화(collapseHtmlWhitespace +
-  // normalizeCellContent)를 거쳐야 한다 — 누락되면 model의
-  // isValidInlineText가 거절하는 코드포인트가 남아 readEditorDocument에서
-  // throw된다(editor 영구 desync).
-  it("heading 텍스트도 셀과 같은 공백·제어문자 정규화를 거친다", () => {
-    const result = parseClipboardTable({ html: "<h1>\n\tA \t</h1>" + TABLE });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value[0]).toEqual({
-      type: "heading",
-      level: 1,
-      content: [{ text: "A" }],
-    });
-  });
-
-  // 트랙-6 회귀: HTML5 파싱 규칙상 <table> 시작 태그는 <p>만 자동으로
-  // 닫고 <h1>~<h6>는 닫지 않는다 — 표가 heading의 실제 자식으로 파싱
-  // 트리에 남는다(<h1>intro<table>...</table>outro</h1> 형태). 수정 전
-  // 코드는 heading을 표보다 먼저 리프로 접어 표 구조(셀 경계)가 사라지고
-  // 서로 다른 셀 값이 구분자 없이 이어붙었다(예: "ab"). heading 텍스트는
-  // model이 "표를 품은 heading"을 표현할 수 없어 문단으로 다운그레이드된다
-  // — 표 앞뒤 텍스트 순서와 표 구조(셀 값 분리)만 보존하면 된다.
-  it("heading 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
-    const result = parseClipboardTable({
-      html: `<h1>intro${TABLE}outro</h1>`,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value).toEqual([
-      { type: "paragraph", content: [{ text: "intro" }] },
-      TABLE_BLOCK,
-      { type: "paragraph", content: [{ text: "outro" }] },
-    ]);
-  });
-
-  // h4~h6도 h1~h3와 같은 파싱 규칙(table이 자동으로 닫지 않음)을 받는다.
-  it("h4~h6 안에 중첩된 표도 뭉개지지 않고 표 블록으로 보존된다", () => {
-    const result = parseClipboardTable({
-      html: `<h4>intro${TABLE}outro</h4>`,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value).toEqual([
-      { type: "paragraph", content: [{ text: "intro" }] },
-      TABLE_BLOCK,
-      { type: "paragraph", content: [{ text: "outro" }] },
-    ]);
-  });
-
-  // 트랙-6 테스트 갭: 다중 표(Issue #73)와 heading 경계 인식(Issue #72)이
-  // 같은 순회 함수를 각자 확장하면서 생기는 조합도 고정한다 — 두 표
-  // 사이에 heading이 끼어도 각 표가 독립된 표 블록으로, heading은
-  // heading대로 분리된다.
-  it("표 2개 사이에 heading이 있어도 각각 독립된 표·heading 블록으로 분리된다", () => {
-    const result = parseClipboardTable({
-      html: `${TABLE}<h2>middle</h2>${TABLE}`,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value).toEqual([
-      TABLE_BLOCK,
-      { type: "heading", level: 2, content: [{ text: "middle" }] },
-      TABLE_BLOCK,
-    ]);
   });
 });

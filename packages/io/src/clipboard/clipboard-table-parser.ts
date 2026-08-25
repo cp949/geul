@@ -137,6 +137,23 @@ const wrapInAncestors = (
     node,
   );
 
+// div/li/blockquote도 p와 같은 문단 경계다(Issue #113, 발단 #72) — model에
+// 리스트·인용문 전용 Block 타입이 없어 heading처럼 별도 타입을 만들 수는
+// 없으므로 p처럼 문단으로만 분리한다(대응 Block 타입 부재는 완료 조건이
+// 명시적으로 범위 밖으로 뺀 부분이다). p와 달리 이 세 태그는 HTML5 파싱
+// 규칙상 서로(그리고 p/heading/표)를 실제 자식으로 중첩할 수 있다(parse5로
+// 확인 — div 안 div, li 안 ul>li 등). 그래서 p가 하는 "children을 통째로
+// pending으로 바꿔치기"(flush → pending 교체 → flush)를 그대로 재사용할 수
+// 없다 — 그러면 중첩된 경계(중첩 li 등)가 개별 인식되지 못하고 하나의
+// pending으로 뭉친다. 대신 walk()로 재귀해 안쪽 경계를 개별 인식시키고,
+// 재귀 앞뒤로 flush()를 감싸 이 요소가 열리기 전 pending과 닫힌 뒤 pending을
+// 각각 확정한다 — 그래야 다음 형제 노드(다음 top-level div 등)와 안쪽
+// 콘텐츠가 구분자 없이 섞이지 않는다. p/heading의 containsAnyTable 예외와
+// 달리 이 세 태그는 표 유무와 무관하게 항상 재귀한다 — 표뿐 아니라 임의
+// 깊이의 중첩 경계를 모두 잡아야 하기 때문이다(재귀 자체가 표도 자연히
+// 표 블록으로 인식하므로 별도 표 전용 예외가 필요 없다).
+const PARAGRAPH_BOUNDARY_TAG_NAMES = new Set(["div", "li", "blockquote"]);
+
 // h1~h6만 heading 태그다. 태그명 마지막 문자에서 level을 뽑는다
 // (import-html.ts의 parseBlock과 같은 패턴 — `Number(tagName.slice(1))`).
 // clipboardAllowedTagNames가 h4~h6까지 sanitize를 통과시키므로(DELTA-03,
@@ -290,6 +307,22 @@ const blockSequenceFromNodes = (
           pending = wrapped;
           flush();
         }
+        continue;
+      }
+      if (PARAGRAPH_BOUNDARY_TAG_NAMES.has(node.tagName)) {
+        flush();
+        walk(node.children, [...ancestors, node]);
+        flush();
+        continue;
+      }
+      // ul/ol 자체는 경계가 아니라 순수 wrapper다(li만 경계) — model에
+      // 리스트 Block 타입이 없어 마커·순서도 보존하지 않는다(범위 밖).
+      // containsAnyTable로 표 유무만 게이트해 재귀 여부를 정하면 표 없는
+      // 형제 li들이 재귀되지 않고 통째로 pending에 흡수돼 하나의 문단으로
+      // 뭉친다(Issue #113 완료 조건 2 실측 — <ul><li>one</li><li>two</li>
+      // </ul> -> {p:"onetwo"}). 그래서 표 유무와 무관하게 항상 재귀한다.
+      if (node.tagName === "ul" || node.tagName === "ol") {
+        walk(node.children, [...ancestors, node]);
         continue;
       }
       if (containsAnyTable(node.children, tableSet)) {
