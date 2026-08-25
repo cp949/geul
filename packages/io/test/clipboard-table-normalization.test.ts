@@ -158,6 +158,41 @@ describe("들쭉날쭉한 HTML 표 패딩", () => {
     });
   });
 
+  it("colgroup 있음: 실제 셀의 colspan이 colgroup 열 수를 초과하면 거절한다", () => {
+    const html =
+      "<table><colgroup><col/><col/><col/></colgroup><tbody>" +
+      '<tr><td colspan="500">a</td></tr></tbody></table>';
+
+    expect(parseClipboardTable({ html })).toMatchObject({
+      ok: false,
+      error: { code: "CLIPBOARD_TABLE_INVALID" },
+    });
+  });
+
+  it("colgroup 없음: 단일 셀의 colspan이 다른 셀들이 차지하는 열 수를 초과하면 거절한다", () => {
+    const html =
+      '<table><tbody><tr><td colspan="500">a</td></tr></tbody></table>';
+
+    expect(parseClipboardTable({ html })).toMatchObject({
+      ok: false,
+      error: { code: "CLIPBOARD_TABLE_INVALID" },
+    });
+  });
+
+  it("정상 범위 colspan(3열 표에서 colspan=2)은 계속 성공한다", () => {
+    const html =
+      "<table><tbody>" +
+      "<tr><td>a</td><td>b</td><td>c</td></tr>" +
+      '<tr><td colspan="2">d</td><td>e</td></tr>' +
+      "</tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    const table = getTableFromResult(result);
+    expect(table).not.toBeNull();
+    if (!table) return;
+    expect(table.columnCount).toBe(3);
+  });
+
   it("긴 공백 run도 공백 한 칸으로 접는다", () => {
     const spaces = " ".repeat(5_000);
     const html = `<table><tbody><tr><td>a${spaces}b</td></tr></tbody></table>`;

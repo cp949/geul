@@ -366,6 +366,32 @@ const tabularDataFromTable = (
   const cols = columnElements(table);
   const rows = tableRows(table);
   const layouts = layoutRows(rows);
+
+  // 단일 셀은 표 자신이 이미 보여준 열 수보다 넓게 뻗을 수 없다(Issue #35).
+  // "표가 이미 보여준 열 수"는 colgroup 선언(cols.length)과 실제 셀의 distinct
+  // 시작 columnIndex 개수(cell.columnSpan 크기는 반영하지 않는다 — 그래야
+  // 과대 colspan 셀 자신이 그 개수를 부풀리지 못한다) 중 큰 쪽이다. colgroup도
+  // 없고 표에 셀이 이 하나뿐이면(distinct count 1) colspan=1인 평범한 단일
+  // 셀 표는 통과하고(1 > 1 거짓), colspan=500처럼 자기 자신 말고는 아무 근거도
+  // 없이 넓게 뻗는 셀만 걸린다(500 > 1). 과대 colspan을 패딩으로 감추지 않고
+  // 여기서 거절한다.
+  const distinctColumnStartCount = new Set(
+    layouts.flatMap((row) => row.map((cell) => cell.columnIndex)),
+  ).size;
+  const columnSpanBound = Math.max(cols.length, distinctColumnStartCount);
+  const hasOversizedColumnSpan = layouts
+    .flat()
+    .some((cell) => layoutColumnSpan(cell.columnSpan) > columnSpanBound);
+  if (hasOversizedColumnSpan) {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_TABLE_INVALID",
+        message: `Table cell colspan exceeds the table's own column bound ${columnSpanBound}`,
+      },
+    };
+  }
+
   // 짧은 행을 빈 셀로 채워 직사각형을 만들려면 colgroup과 실제 셀 중 넓은
   // 쪽을 열 수로 잡아야 한다(TSV 경로의 패딩과 같은 계약, spec §4.3).
   const columnCount = Math.max(cols.length, inferredColumnCount(layouts));
