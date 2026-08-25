@@ -1,0 +1,20 @@
+// SCSS 빌드 진입점(Dart Sass). Tailwind CSS v4를 대체한다(아키텍처 리뷰
+// 03.html — Chrome 75 지원을 위해 Tailwind v4의 최신 CSS 기능 의존을
+// 걷어낸다). 컴포넌트 tsx 파일 1개당 partial 1개를 미러링하고, 이
+// 파일에서 전부 @use해 단일 dist/styles.css로 컴파일한다.
+//
+// 각 partial의 값은 이전 Tailwind 유틸리티 클래스 조합의 컴파일 산출물과
+// 1:1 동일하도록 손으로 옮겼다 — e2e/tailwind-migration.spec.ts의 px 단언이
+// 이를 회귀 검증한다.
+@use "tokens";
+@use "editor";
+@use "icon-button";
+@use "link-toolbar";
+@use "formatting-toolbar";
+@use "slash-menu";
+@use "block-side-menu";
+@use "table-handles";
+@use "table-selection-toolbar";
+@use "menu-shared";
+@use "table-handle-menu";
+@use "table-cell-format-menu";

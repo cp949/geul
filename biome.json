@@ -21,15 +21,5 @@
   },
   "linter": {
     "enabled": true
-  },
-  "overrides": [
-    {
-      "includes": ["packages/react/src/tailwind.css"],
-      "css": {
-        "parser": {
-          "tailwindDirectives": true
-        }
-      }
-    }
-  ]
+  }
 }

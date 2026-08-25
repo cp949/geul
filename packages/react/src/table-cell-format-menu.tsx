@@ -11,16 +11,11 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor } from "./use-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
-const swatchClassName =
-  "geul:h-5 geul:w-5 geul:cursor-pointer geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:p-0";
-const sectionLabelClassName =
-  "geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]";
-const dividerClassName =
-  "geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]";
-const actionErrorClassName =
-  "geul:mx-2 geul:my-1 geul:text-[0.75rem] geul:text-[color:var(--be-color-danger,#d93025)]";
-const alignButtonClassName =
-  "geul:flex geul:h-7 geul:min-w-7 geul:cursor-pointer geul:items-center geul:justify-center geul:rounded geul:border-0 geul:bg-transparent geul:p-1 geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:text-[color:var(--be-color-text,#202124)]";
+const swatchClassName = "geul-menu-swatch";
+const sectionLabelClassName = "geul-menu-section-label";
+const dividerClassName = "geul-menu-divider";
+const actionErrorClassName = "geul-menu-error";
+const alignButtonClassName = "geul-cell-format-menu__align-button";
 
 export type TableCellFormatMenuProps = {
   tableBlockId: string;
@@ -76,7 +71,7 @@ export const TableCellFormatMenu = ({
   ) => (
     <>
       <p className={sectionLabelClassName}>{label}</p>
-      <div className="geul:flex geul:flex-wrap geul:gap-1 geul:px-2 geul:pb-1">
+      <div className="geul-menu-palette">
         {colors.map((color) => (
           <button
             aria-label={`${label} ${color.name}`}
@@ -112,7 +107,7 @@ export const TableCellFormatMenu = ({
   return (
     <div
       aria-label="Cell formatting"
-      className="geul:fixed geul:z-10 geul:flex geul:max-h-[calc(100vh-1rem)] geul:w-48 geul:flex-col geul:gap-0.5 geul:overflow-y-auto geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+      className="geul-menu-panel"
       data-be-cell-format-menu=""
       ref={menuRef}
       role="menu"
@@ -127,7 +122,7 @@ export const TableCellFormatMenu = ({
       {renderPalette("background", "Background color", TABLE_BACKGROUND_COLORS)}
       <hr className={dividerClassName} />
       <p className={sectionLabelClassName}>Align</p>
-      <div className="geul:flex geul:gap-1 geul:px-2 geul:pb-1">
+      <div className="geul-cell-format-menu__align-row">
         <button
           aria-label="Align left"
           className={alignButtonClassName}

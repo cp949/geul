@@ -18,11 +18,9 @@ const mergeIcon = <TableCellsMerge {...iconProps} />;
 const splitIcon = <TableCellsSplit {...iconProps} />;
 const formatIcon = <Palette {...iconProps} />;
 
-const buttonClassName =
-  "geul:h-7 geul:min-w-7 geul:rounded geul:border-0 geul:bg-transparent geul:px-1.5 geul:py-1 geul:text-[color:var(--be-color-text,#202124)] geul:cursor-pointer";
+const buttonClassName = "geul-table-selection-toolbar__button";
 
-const actionErrorClassName =
-  "geul:text-[0.75rem] geul:text-[color:var(--be-color-danger,#d93025)]";
+const actionErrorClassName = "geul-table-selection-toolbar__error";
 
 // 서식 메뉴를 토큰 위치에서 약간 아래로 띄운다 — 정확한 도킹 위치는
 // PIT-0011 클램프가 뷰포트 안으로 다시 접어 넣으므로 대략치면 충분하다.
@@ -193,7 +191,7 @@ export const TableSelectionToolbar = () => {
     <>
       <div
         aria-label="Table selection"
-        className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_1px_4px_rgba(0,0,0,0.15)] geul:[transform:translate(-50%,calc(-100%-0.5rem))]"
+        className="geul-table-selection-toolbar"
         ref={menuRef}
         role="toolbar"
         style={style}

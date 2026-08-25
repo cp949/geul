@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": [
-    "./src/styles.css",
+    "./src/styles.scss",
     "./dist/styles.css"
   ],
   "exports": {
@@ -17,9 +17,12 @@
   "files": [
     "dist"
   ],
+  "browserslist": [
+    "Chrome >= 75"
+  ],
   "scripts": {
-    "build": "tsc -b && tailwindcss -i src/tailwind.css -o dist/styles.css",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "build": "tsc -b && sass --no-source-map src/styles.scss dist/_styles.raw.css && postcss dist/_styles.raw.css -o dist/styles.css && rm dist/_styles.raw.css",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.configs.json --noEmit",
     "test": "vitest run --root ../.. packages/react/test"
   },
   "dependencies": {
@@ -29,9 +32,11 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "4.3.3",
     "@testing-library/react": "16.3.0",
     "@types/node": "22.20.1",
-    "tailwindcss": "4.3.3"
+    "autoprefixer": "10.5.4",
+    "postcss": "8.5.26",
+    "postcss-cli": "11.0.1",
+    "sass": "1.103.1"
   }
 }

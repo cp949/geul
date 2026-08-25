@@ -1,0 +1,24 @@
+.geul-table-menu__item {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  border: none;
+  background: transparent;
+  padding-inline: 0.5rem;
+  padding-block: 0.375rem;
+  text-align: left;
+  color: var(--geul-color-text, #202124);
+
+  &:hover {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+
+  &--danger {
+    color: var(--geul-color-danger, #d93025);
+
+    &:disabled {
+      pointer-events: none;
+      cursor: not-allowed;
+      opacity: 40%;
+    }
+  }
+}

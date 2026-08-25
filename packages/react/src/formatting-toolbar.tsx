@@ -129,7 +129,7 @@ export const FormattingToolbar = () => {
   return (
     <div
       aria-label="Formatting"
-      className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_1px_4px_rgba(0,0,0,0.15)] geul:[transform:translate(-50%,calc(-100%-0.5rem))]"
+      className="geul-formatting-toolbar"
       ref={menuRef}
       role="toolbar"
       style={style}
@@ -137,7 +137,7 @@ export const FormattingToolbar = () => {
       {toolbarState.blockSelection !== null && (
         <select
           aria-label="Block type"
-          className="geul:mr-1 geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-transparent geul:px-1.5 geul:py-1 geul:text-[color:var(--be-color-text,#202124)]"
+          className="geul-formatting-toolbar__select"
           onChange={(event) => {
             const blockSelection = toolbarState.blockSelection;
             if (blockSelection === null) return;
@@ -171,7 +171,7 @@ export const FormattingToolbar = () => {
       {toolbarButtons.map(({ mark, label, icon, toggle }) => (
         <IconButton
           aria-pressed={toolbarState.activeMarks.includes(mark)}
-          className="geul:min-w-7 geul:rounded geul:border-0 geul:bg-transparent geul:px-1.5 geul:py-1 geul:text-[color:var(--be-color-text,#202124)] geul:cursor-pointer geul:aria-pressed:bg-[var(--be-color-accent-muted,#e8f0fe)] geul:aria-pressed:text-[color:var(--be-color-accent,#1a73e8)]"
+          className="geul-formatting-toolbar__mark-button"
           icon={icon}
           key={mark}
           label={label}

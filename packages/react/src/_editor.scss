@@ -1,0 +1,46 @@
+.geul-editor {
+  color: var(--geul-color-text, #202124);
+  line-height: 1.6;
+
+  [contenteditable="true"] {
+    min-height: 12rem;
+    outline: none;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+
+  // tableEditing 플러그인(@tiptap/pm/tables)이 CellSelection에 속한 기준
+  // 셀마다 이 클래스를 데코레이션으로 붙인다 — 드래그로 선택 중인 직사각형
+  // 범위를 시각으로 드러낸다(spec 7.2). .selectedCell은 외부 플러그인이
+  // 소유하는 클래스라 geul- prefix 대상이 아니다.
+  .selectedCell {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+    outline: 1px solid var(--geul-color-accent, #1a73e8);
+    outline-offset: -1px;
+  }
+
+  // 헤더는 셀 종류가 아니라 표 단위 플래그다(모델 headerRows/headerColumns:
+  // 0|1). 편집기는 td를 유지하고 이 속성으로 첫 행/첫 열만 시각 구분한다 —
+  // tr은 table의 직속 자식이 아니라 tbody 안에 있어(table-extension.ts
+  // renderHTML의 ["tbody", {}, 0]) tbody의 자식은 tr뿐이고, :first-child와
+  // :first-of-type이 같은 tr을 가리킨다. 셀 색상 명령이 넣는 인라인 style은
+  // 우선순위가 높아 이 배경을 덮는다. data-be-header-rows/columns는
+  // core(table-extension.ts)/model이 공유하는 계약이라 이름을 바꾸지
+  // 않는다 — geul- 이름 변경은 CSS 전용 표면(클래스, 커스텀 프로퍼티)만
+  // 대상으로 한다.
+  table[data-be-header-rows="1"] tr:first-child > td,
+  table[data-be-header-columns="1"] tr > td:first-child {
+    background-color: var(--geul-color-surface-muted, #f1f3f4);
+    font-weight: 600;
+  }
+}

@@ -36,7 +36,7 @@ button:hover {
 
 button:focus-visible,
 textarea:focus-visible,
-.be-editor:focus-within {
+.geul-editor:focus-within {
   outline: 3px solid #7cb995;
   outline-offset: 2px;
 }
@@ -135,13 +135,13 @@ textarea:focus-visible,
   overflow-wrap: anywhere;
 }
 
-.be-editor {
+.geul-editor {
   padding: 1.5rem;
   background: white;
-  --be-color-text: #1c241f;
+  --geul-color-text: #1c241f;
 }
 
-.be-editor .ProseMirror {
+.geul-editor .ProseMirror {
   white-space: pre-wrap;
 }
 

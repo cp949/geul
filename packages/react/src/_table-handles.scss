@@ -1,0 +1,43 @@
+// touch-none — 터치 드래그를 브라우저 스크롤 제스처에 뺏기면 pointercancel로
+// 드래그가 중단된다(setPointerCapture는 이를 막지 못한다).
+.geul-table-handle {
+  height: 1.25rem;
+  width: 1.25rem;
+  touch-action: none;
+  border-radius: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0;
+  color: var(--geul-color-text, #202124);
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.geul-table-expand-button {
+  height: 1.25rem;
+  width: 1.25rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0;
+  color: var(--geul-color-text, #202124);
+}
+
+.geul-table-resize-handle {
+  position: fixed;
+  z-index: 10;
+  width: 0.25rem;
+  touch-action: none;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.geul-table-reorder-guide {
+  position: fixed;
+  z-index: 10;
+  background-color: var(--geul-color-accent, #1a73e8);
+  pointer-events: none;
+}

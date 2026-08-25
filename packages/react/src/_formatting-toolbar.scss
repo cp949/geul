@@ -1,0 +1,38 @@
+.geul-formatting-toolbar {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  gap: 0.125rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  transform: translate(-50%, calc(-100% - 0.5rem));
+}
+
+.geul-formatting-toolbar__select {
+  margin-right: 0.25rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: transparent;
+  padding-inline: 0.375rem;
+  padding-block: 0.25rem;
+  color: var(--geul-color-text, #202124);
+}
+
+.geul-formatting-toolbar__mark-button {
+  min-width: 1.75rem;
+  border-radius: 0.25rem;
+  border: none;
+  background: transparent;
+  padding-inline: 0.375rem;
+  padding-block: 0.25rem;
+  color: var(--geul-color-text, #202124);
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+    color: var(--geul-color-accent, #1a73e8);
+  }
+}

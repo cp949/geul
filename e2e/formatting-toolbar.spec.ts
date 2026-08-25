@@ -185,7 +185,7 @@ test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체�
 
   // 첫 줄이 뷰포트 맨 위(y≈2)로 오도록 정확히 그만큼만 스크롤해 선택을 화면
   // 좌상단 모서리에 붙인다. 데모 셸(width: min(76rem, 100% - 2rem), 가운데
-  // 정렬) + .editor-panel 테두리 + .be-editor 패딩 1.5rem이라 1280px 뷰포트에서
+  // 정렬) + .editor-panel 테두리 + .geul-editor 패딩 1.5rem이라 1280px 뷰포트에서
   // 첫 줄 텍스트의 좌측은 x≈50, 선택 중심은 x≈82다 — 즉 세로뿐 아니라 가로로도
   // 이미 뷰포트 가장자리다.
   await page.evaluate((delta) => window.scrollBy(0, delta), selectionBox.y - 2);

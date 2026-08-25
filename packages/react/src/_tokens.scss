@@ -1,0 +1,22 @@
+// geul UI 전체(에디터 본문 + 표 안 밖의 모든 툴바·메뉴·핸들)가 참조하는
+// --geul-color-* 8개의 기본값 SSOT다. 소비자와 공존해야 하는 컴포넌트들
+// 상당수(FormattingToolbar/LinkToolbar/SlashMenu 등)는 데모 앱 기준으로
+// .geul-editor의 형제로 렌더링돼 .geul-editor 스코프 선언이 안 닿는다 —
+// 그래서 :root에 둔다. 소비자가 값을 바꾸려면 이 이름 그대로 자신의 CSS에서
+// 재선언하면 된다(소스 순서·명시도 규칙은 styles.scss가 unlayered 순수
+// CSS로 컴파일되어 보장한다 — cascade layer를 쓰지 않는다).
+//
+// 2026-08-25 SCSS 전환(아키텍처 리뷰 03.html)으로 --be-color-*에서 이름을
+// 바꿨다 — "be"는 이 프로젝트 고유 명명이 아니라 다른 프로젝트에서 가져온
+// 이름이었다. data-be-* DOM attribute(core/model이 공유하는 표 직렬화
+// 계약)는 이번 이름 변경 범위 밖이다.
+:root {
+  --geul-color-text: #202124;
+  --geul-color-text-muted: #5f6368;
+  --geul-color-border: #dadce0;
+  --geul-color-danger: #d93025;
+  --geul-color-surface: #fff;
+  --geul-color-surface-muted: #f1f3f4;
+  --geul-color-accent: #1a73e8;
+  --geul-color-accent-muted: #e8f0fe;
+}

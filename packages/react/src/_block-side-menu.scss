@@ -1,0 +1,96 @@
+.geul-block-gutter {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  gap: 0.125rem;
+  transform: translate(-3.5rem, 0);
+}
+
+// flex 센터링은 IconButton(.geul-icon-button)이 공통으로 제공한다.
+.geul-block-gutter__button {
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0;
+  color: var(--geul-color-text, #202124);
+
+  &--drag {
+    cursor: grab;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  &--add {
+    cursor: pointer;
+  }
+}
+
+// 드롭 가이드 라인은 클릭 대상이 아니라 드래그 중인 블록이 놓일 위치를
+// 그대로 보여주는 시각 표시다(pointer-events: none).
+.geul-block-insertion-guide {
+  position: fixed;
+  z-index: 10;
+  height: 0.125rem;
+  background-color: var(--geul-color-accent, #1a73e8);
+  pointer-events: none;
+  transform: translateY(-0.0625rem);
+}
+
+// max-height: calc(100vh - 1rem) + overflow-y: auto — 클램프는 좌표만
+// 접으므로 뷰포트보다 큰 메뉴는 아래쪽 항목에 닿을 수 없다(PIT-0011 예방
+// 규칙). 1rem은 useClampedMenuPosition의 MENU_VIEWPORT_MARGIN 8px가
+// 위·아래로 두 번 들어간 값이라 클램프 결과와 정확히 맞물린다.
+.geul-block-menu {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  max-height: calc(100vh - 1rem);
+  width: 10rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow-y: auto;
+  border-radius: 0.375rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.geul-block-menu__label {
+  margin-block: 0.25rem;
+  margin-inline: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--geul-color-text-muted, #5f6368);
+}
+
+.geul-block-menu__item {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  border: none;
+  background: transparent;
+  padding-inline: 0.5rem;
+  padding-block: 0.375rem;
+  text-align: left;
+  color: var(--geul-color-text, #202124);
+
+  &:hover {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+
+  &--danger {
+    color: var(--geul-color-danger, #d93025);
+  }
+}
+
+// mx-0: preflight 미포함이라 UA의 margin-inline auto가 남으면 flex
+// column에서 hr이 0폭으로 붕괴한다.
+.geul-block-menu__divider {
+  margin-block: 0.25rem;
+  margin-inline: 0;
+  border: none;
+  border-top: 1px solid var(--geul-color-border, #dadce0);
+}

@@ -1,0 +1,60 @@
+// table-handle-menu.tsx와 table-cell-format-menu.tsx가 문자 그대로 동일한
+// Tailwind 유틸리티 문자열을 썼던 4개 클래스 + 바깥 패널을 한 곳으로
+// 모았다(스캔 결과 byte-identical 확인, 아키텍처 리뷰 02.html 후보 4/5와
+// 별개로 SCSS 전환 중 새로 발견). 두 컴포넌트가 이 파일을 함께 쓴다.
+
+.geul-menu-panel {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  max-height: calc(100vh - 1rem);
+  width: 12rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow-y: auto;
+  border-radius: 0.375rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.geul-menu-swatch {
+  height: 1.25rem;
+  width: 1.25rem;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  padding: 0;
+}
+
+.geul-menu-section-label {
+  margin-block: 0.25rem;
+  margin-inline: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--geul-color-text-muted, #5f6368);
+}
+
+.geul-menu-divider {
+  margin-block: 0.25rem;
+  margin-inline: 0;
+  border: none;
+  border-top: 1px solid var(--geul-color-border, #dadce0);
+}
+
+.geul-menu-error {
+  margin-inline: 0.5rem;
+  margin-block: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--geul-color-danger, #d93025);
+}
+
+// 색상 팔레트 스와치를 감싸는 wrap 컨테이너 — 두 컴포넌트의 renderPalette가
+// 동일하게 쓴다(byte-identical).
+.geul-menu-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding-inline: 0.5rem;
+  padding-bottom: 0.25rem;
+}

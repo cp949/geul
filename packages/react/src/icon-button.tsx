@@ -13,7 +13,7 @@ import type { ComponentPropsWithoutRef, ReactElement } from "react";
  *   iconProps가 명시 prop으로 고정한다.
  */
 
-const baseClassName = "geul:flex geul:items-center geul:justify-center";
+const baseClassName = "geul-icon-button";
 
 type IconButtonProps = {
   label: string;

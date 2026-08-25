@@ -29,12 +29,10 @@ const rowHandleIcon = <GripVertical {...iconProps} />;
 const columnHandleIcon = <GripHorizontal {...iconProps} />;
 const addIcon = <Plus {...iconProps} />;
 
-// geul:touch-none — 터치 드래그를 브라우저 스크롤 제스처에 뺏기면
+// touch-action: none — 터치 드래그를 브라우저 스크롤 제스처에 뺏기면
 // pointercancel로 드래그가 중단된다(setPointerCapture는 이를 막지 못한다).
-const handleButtonClassName =
-  "geul:h-5 geul:w-5 geul:touch-none geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-0 geul:text-[color:var(--be-color-text,#202124)]";
-const expandButtonClassName =
-  "geul:h-5 geul:w-5 geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-0 geul:text-[color:var(--be-color-text,#202124)]";
+const handleButtonClassName = "geul-table-handle";
+const expandButtonClassName = "geul-table-expand-button";
 
 // 행/열 핸들(표 바깥 24px)과 빠른 확장 버튼(표 바깥 4~24px)을 포함하는
 // hover 유지 여백. 이 여백 없이 hover를 즉시 해제하면 포인터가 표에서
@@ -916,7 +914,7 @@ export const TableHandles = () => {
         <>
           {geometry.rows.map((row) => (
             <IconButton
-              className={`${handleButtonClassName} geul:cursor-grab geul:active:cursor-grabbing`}
+              className={handleButtonClassName}
               data-be-table-row-handle=""
               icon={rowHandleIcon}
               key={`row-${row.rowId}`}
@@ -949,7 +947,7 @@ export const TableHandles = () => {
           ))}
           {geometry.columns.map((column) => (
             <IconButton
-              className={`${handleButtonClassName} geul:cursor-grab geul:active:cursor-grabbing`}
+              className={handleButtonClassName}
               data-be-table-column-handle=""
               icon={columnHandleIcon}
               key={`column-${column.columnId}`}
@@ -983,7 +981,7 @@ export const TableHandles = () => {
           {geometry.columns.flatMap((column) =>
             column.resizeSegments.map((segment) => (
               <div
-                className="geul:fixed geul:z-10 geul:w-1 geul:touch-none geul:cursor-col-resize geul:bg-transparent"
+                className="geul-table-resize-handle"
                 data-be-table-resize-handle=""
                 key={`resize-${column.columnId}-${segment.rowId}`}
                 onPointerDown={(event) =>
@@ -1032,7 +1030,7 @@ export const TableHandles = () => {
       )}
       {reorderGuideRect !== null && (
         <div
-          className="geul:fixed geul:z-10 geul:bg-[var(--be-color-accent,#1a73e8)] geul:pointer-events-none"
+          className="geul-table-reorder-guide"
           data-be-table-reorder-guide=""
           style={reorderGuideRect}
         />

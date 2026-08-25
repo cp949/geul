@@ -47,11 +47,9 @@ type BlockSideMenuProps = {
 };
 
 // flex 센터링은 IconButton이 공통으로 제공한다.
-const blockGutterButtonClassName =
-  "geul:h-6 geul:w-6 geul:rounded geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-0 geul:text-[color:var(--be-color-text,#202124)]";
+const blockGutterButtonClassName = "geul-block-gutter__button";
 
-const blockMenuItemClassName =
-  "geul:cursor-pointer geul:rounded geul:border-0 geul:bg-transparent geul:px-2 geul:py-1.5 geul:text-left geul:hover:bg-[var(--be-color-accent-muted,#e8f0fe)]";
+const blockMenuItemClassName = "geul-block-menu__item";
 
 // useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
 // table-selection-toolbar.tsx와 같은 이유로 모듈 스코프 상수로 둔다 —
@@ -360,12 +358,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     <>
       {hoverBounds !== null && hoverBlockId !== null && (
         <div
-          className="geul:fixed geul:z-10 geul:flex geul:gap-0.5 geul:[transform:translate(-3.5rem,0)]"
+          className="geul-block-gutter"
           ref={gutterClamp.menuRef}
           style={gutterClamp.style}
         >
           <IconButton
-            className={`${blockGutterButtonClassName} geul:cursor-grab geul:active:cursor-grabbing`}
+            className={`${blockGutterButtonClassName} geul-block-gutter__button--drag`}
             data-be-block-handle=""
             icon={dragHandleIcon}
             label={dragHandleLabel}
@@ -376,7 +374,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             }
           />
           <IconButton
-            className={`${blockGutterButtonClassName} geul:cursor-pointer`}
+            className={`${blockGutterButtonClassName} geul-block-gutter__button--add`}
             data-be-add-block-button=""
             icon={addBlockIcon}
             label={addBlockLabel}
@@ -392,7 +390,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           PIT-0011 클램프 마이그레이션 대상에서 제외한다(#43). */}
       {dragState?.guide !== null && dragState?.guide !== undefined && (
         <div
-          className="geul:fixed geul:z-10 geul:h-0.5 geul:bg-[var(--be-color-accent,#1a73e8)] geul:pointer-events-none geul:[transform:translateY(-0.0625rem)]"
+          className="geul-block-insertion-guide"
           data-be-block-insertion-guide=""
           style={{
             left: dragState.guide.left,
@@ -409,20 +407,16 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {blockMenuState !== null && (
         <div
           aria-label="Block menu"
-          className="geul:fixed geul:z-10 geul:flex geul:max-h-[calc(100vh-1rem)] geul:w-40 geul:flex-col geul:gap-0.5 geul:overflow-y-auto geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+          className="geul-block-menu"
           data-be-block-menu=""
           ref={blockMenuClamp.menuRef}
           role="menu"
           style={blockMenuClamp.style}
         >
-          {/* text-[0.75rem]: text-xs는 line-height까지 방출해 구 CSS(font-size만
-              지정, line-height 상속)와 달라진다 — font-size만 지정한다 */}
-          <p className="geul:my-1 geul:mx-2 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">
-            Turn into
-          </p>
+          <p className="geul-block-menu__label">Turn into</p>
           {BLOCK_TYPE_OPTIONS.map((option) => (
             <button
-              className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-text,#202124)]`}
+              className={blockMenuItemClassName}
               key={option.id}
               onClick={() => handleTurnInto(option)}
               onMouseDown={(event) => event.preventDefault()}
@@ -432,11 +426,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
               {option.label}
             </button>
           ))}
-          {/* mx-0: preflight 미포함이라 UA의 margin-inline auto가 남으면
-              flex column에서 hr이 0폭으로 붕괴한다 */}
-          <hr className="geul:my-1 geul:mx-0 geul:border-0 geul:border-t geul:border-[color:var(--be-color-border,#dadce0)]" />
+          {/* mx-0(SCSS margin-inline: 0)에 대응: preflight 미포함이라 UA의
+              margin-inline auto가 남으면 flex column에서 hr이 0폭으로
+              붕괴한다 */}
+          <hr className="geul-block-menu__divider" />
           <button
-            className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-text,#202124)]`}
+            className={blockMenuItemClassName}
             onClick={handleDuplicate}
             onMouseDown={(event) => event.preventDefault()}
             role="menuitem"
@@ -445,7 +440,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             Duplicate
           </button>
           <button
-            className={`${blockMenuItemClassName} geul:text-[color:var(--be-color-danger,#d93025)]`}
+            className={`${blockMenuItemClassName} geul-block-menu__item--danger`}
             onClick={handleDeleteBlock}
             onMouseDown={(event) => event.preventDefault()}
             role="menuitem"

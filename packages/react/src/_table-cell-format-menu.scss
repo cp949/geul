@@ -1,0 +1,24 @@
+.geul-cell-format-menu__align-row {
+  display: flex;
+  gap: 0.25rem;
+  padding-inline: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+.geul-cell-format-menu__align-button {
+  display: flex;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  border: none;
+  background: transparent;
+  padding: 0.25rem;
+  color: var(--geul-color-text, #202124);
+
+  &:hover {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+}

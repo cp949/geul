@@ -274,30 +274,26 @@ export const SlashMenu = () => {
       {menuState !== null && (
         <div
           aria-label="Slash menu"
-          className="geul:fixed geul:z-10 geul:flex geul:w-56 geul:max-h-64 geul:flex-col geul:gap-0.5 geul:overflow-y-auto geul:rounded-md geul:border geul:border-[color:var(--be-color-border,#dadce0)] geul:bg-[var(--be-color-surface,#fff)] geul:p-1 geul:shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+          className="geul-slash-menu"
           ref={menuRef}
           role="listbox"
           style={style}
         >
           {items.length === 0 && (
-            <p className="geul:m-0 geul:px-2 geul:py-1.5 geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">
-              No matches
-            </p>
+            <p className="geul-slash-menu__empty">No matches</p>
           )}
           {items.map((item, index) => (
             <button
               aria-selected={index === menuState.highlightedIndex}
-              className="geul:flex geul:cursor-pointer geul:flex-col geul:items-start geul:gap-0.5 geul:rounded geul:border-0 geul:bg-transparent geul:px-2 geul:py-1.5 geul:text-left geul:aria-selected:bg-[var(--be-color-accent-muted,#e8f0fe)]"
+              className="geul-slash-menu__item"
               key={item.id}
               onClick={() => selectItem(item)}
               onMouseDown={(event) => event.preventDefault()}
               role="option"
               type="button"
             >
-              <span className="geul:font-semibold geul:text-[color:var(--be-color-text,#202124)]">
-                {item.label}
-              </span>
-              <span className="geul:text-[0.75rem] geul:text-[color:var(--be-color-text-muted,#5f6368)]">
+              <span className="geul-slash-menu__item-label">{item.label}</span>
+              <span className="geul-slash-menu__item-description">
                 {item.description}
               </span>
             </button>

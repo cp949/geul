@@ -24,7 +24,7 @@ export const EditorContent = () => {
     <div
       aria-label="Editor"
       aria-multiline="true"
-      className="be-editor"
+      className="geul-editor"
       ref={mountRef}
       role="textbox"
       tabIndex={-1}
