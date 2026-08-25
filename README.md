@@ -28,7 +28,7 @@ demo  -> react, io, model
 
 ## 브라우저 지원
 
-공식 browser floor는 Chrome 75다([ADR-0008](./docs/adr/0008-target-chrome-75-as-official-browser-floor.md)). Geul 패키지 자체는 Chrome 75 문법으로 빌드되고 자기 소스의 런타임 API는 `pnpm check:escompat` 게이트가 막는다. 디펜던시가 쓰는 최신 런타임 API의 polyfill은 사용처 책임이다([ADR-0009](./docs/adr/0009-delegate-chrome75-runtime-api-polyfills-to-consumers.md)).
+공식 browser floor는 Chrome 75다([ADR-0008](./docs/adr/0008-target-chrome-75-as-official-browser-floor.md)). Geul 패키지 자체는 Chrome 75 문법으로 빌드되고 자기 소스의 런타임 API는 `pnpm check:escompat` 게이트가 막는다(ES 표준 API 기준 — `crypto.randomUUID` 같은 Web API 격차는 게이트 밖이고 Issue #121이 소유한다). 디펜던시가 쓰는 최신 런타임 API의 polyfill은 사용처 책임이다([ADR-0009](./docs/adr/0009-delegate-chrome75-runtime-api-polyfills-to-consumers.md)).
 
 Chrome 75를 지원해야 하는 사용처는 두 가지를 설정한다.
 
