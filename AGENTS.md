@@ -92,7 +92,7 @@ git diff --check
 git status --short
 ```
 
-`pnpm verify`는 lint, build, typecheck, unit test, package boundary, license와 E2E 회귀 게이트(`test:e2e` — chromium 전량, firefox·webkit은 `@core` 부분집합)를 포함한다. 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
+`pnpm verify`는 lint, build, typecheck, unit test, package boundary, license와 E2E 회귀 게이트(`test:e2e` — chromium 전량)를 포함한다. firefox·webkit(`@core` 부분집합)은 기본 게이트에서 제외돼 있다 — 필요할 때 `pnpm test:e2e:full`(chromium·firefox·webkit)로 실행한다. 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
 
 성능 기준선 spec(`e2e/table-performance.spec.ts`)은 게이트가 아니라 측정 도구라 `perf` 프로젝트로 분리했고 `pnpm verify`에 포함하지 않는다. 표 편집·클립보드 붙여넣기·undo의 성능 특성을 바꾸는 변경에서는 `pnpm test:e2e:perf`를 따로 실행하고 결과를 `docs/product/performance-baseline.md`에 갱신한다.
 

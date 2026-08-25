@@ -3,9 +3,10 @@ import { defineConfig, devices } from "@playwright/test";
 // chrome83 project 전용 build+preview 서버(D7). Playwright는 --project
 // 필터와 무관하게 webServer 배열 전체를 항상 띄운다(실측 확인) — 포트만
 // 다르다고 격리되지 않는다. 이 엔트리를 무조건 배열에 두면 `pnpm
-// test:e2e`/`pnpm test:e2e:perf`(chrome83과 무관한 3-엔진 회귀 게이트·성능
-// 측정)도 매번 demo 프로덕션 빌드 + `vite preview` 기동을 떠안는다(트랙-6
-// 발견 F1). `GEUL_CHROME83_WEBSERVER` 환경변수가 설정된 실행에서만 배열에
+// test:e2e`(chromium 게이트)/`pnpm test:e2e:full`(3-엔진)/`pnpm
+// test:e2e:perf`(성능 측정) — 모두 chrome83과 무관 — 도 매번 demo 프로덕션
+// 빌드 + `vite preview` 기동을 떠안는다(트랙-6 발견 F1).
+// `GEUL_CHROME83_WEBSERVER` 환경변수가 설정된 실행에서만 배열에
 // 포함해 실제로 격리한다 — `test:e2e:chrome83`의 `docker run -e
 // GEUL_CHROME83_WEBSERVER=1`이 그 실행에서만 이 값을 켠다.
 const chrome83WebServer = process.env.GEUL_CHROME83_WEBSERVER

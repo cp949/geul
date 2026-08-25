@@ -5,8 +5,9 @@
  *
  * Playwright는 `--project` 필터와 무관하게 `webServer` 배열 전체를 항상
  * 띄운다 — 환경변수 게이트 없이 두 엔트리를 그대로 두면 `pnpm
- * test:e2e`/`pnpm test:e2e:perf`(3-엔진 회귀 게이트·성능 측정, 둘 다 chrome83과
- * 무관)도 매번 demo 프로덕션 빌드 + `vite preview` 기동을 떠안는다 —
+ * test:e2e`(chromium 게이트)/`pnpm test:e2e:full`(3-엔진)/`pnpm
+ * test:e2e:perf`(성능 측정, 모두 chrome83과 무관)도 매번 demo 프로덕션
+ * 빌드 + `vite preview` 기동을 떠안는다 —
  * 설정 파일 주석이 약속한 "포트로 격리된다"가 실제로는 지켜지지 않는다.
  *
  * 매 테스트가 `vi.resetModules()`로 모듈 캐시를 비우는 이유: 같은 경로를
