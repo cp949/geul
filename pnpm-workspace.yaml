@@ -8,6 +8,11 @@ packages:
 # lazy import된다(레포에 watch 사용처 없음) — 실행 허가가 불필요해 거부한다.
 allowBuilds:
   '@parcel/watcher': false
+  # esbuild(@cp949/geul-react devDependency, DELTA-01)의 postinstall(install.js)은
+  # optionalDependencies로 설치된 플랫폼 바이너리 패키지를 generateBinPath()가
+  # require.resolve로 먼저 찾을 때만 쓰는 fallback이다. postinstall 미실행 상태에서
+  # `bin/esbuild --version`이 정상 출력됨을 실측 확인했다 — 실행 허가가 불필요해 거부한다.
+  esbuild: false
 minimumReleaseAgeExclude:
   - '@tiptap/core@3.30.1'
   - '@tiptap/extension-blockquote@3.30.1'

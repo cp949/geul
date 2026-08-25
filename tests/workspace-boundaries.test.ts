@@ -130,6 +130,7 @@ const allowedDependencies = {
       "@testing-library/react": "16.3.0",
       "@types/node": "22.20.1",
       autoprefixer: "10.5.4",
+      esbuild: "0.28.2",
       postcss: "8.5.26",
       "postcss-cli": "11.0.1",
       sass: "1.103.1",

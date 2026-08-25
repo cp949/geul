@@ -21,7 +21,7 @@
     "Chrome >= 75"
   ],
   "scripts": {
-    "build": "tsc -b && sass --no-source-map src/styles.scss dist/_styles.raw.css && postcss dist/_styles.raw.css -o dist/styles.css && rm dist/_styles.raw.css",
+    "build": "tsc -b && esbuild dist/*.js --outdir=dist --target=chrome75 --format=esm --allow-overwrite --sourcemap --sources-content=false && sass --no-source-map src/styles.scss dist/_styles.raw.css && postcss dist/_styles.raw.css -o dist/styles.css && rm dist/_styles.raw.css",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.configs.json --noEmit",
     "test": "vitest run --root ../.. packages/react/test"
   },
@@ -35,6 +35,7 @@
     "@testing-library/react": "16.3.0",
     "@types/node": "22.20.1",
     "autoprefixer": "10.5.4",
+    "esbuild": "0.28.2",
     "postcss": "8.5.26",
     "postcss-cli": "11.0.1",
     "sass": "1.103.1"
