@@ -388,7 +388,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // — 표 앞뒤 텍스트 순서와 표 구조(셀 값 분리)만 보존하면 된다.
   it("heading 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
     const result = parseClipboardTable({
-      html: "<h1>intro" + TABLE + "outro</h1>",
+      html: `<h1>intro${TABLE}outro</h1>`,
     });
 
     expect(result.ok).toBe(true);
@@ -403,7 +403,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // h4~h6도 h1~h3와 같은 파싱 규칙(table이 자동으로 닫지 않음)을 받는다.
   it("h4~h6 안에 중첩된 표도 뭉개지지 않고 표 블록으로 보존된다", () => {
     const result = parseClipboardTable({
-      html: "<h4>intro" + TABLE + "outro</h4>",
+      html: `<h4>intro${TABLE}outro</h4>`,
     });
 
     expect(result.ok).toBe(true);
@@ -421,7 +421,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // heading대로 분리된다.
   it("표 2개 사이에 heading이 있어도 각각 독립된 표·heading 블록으로 분리된다", () => {
     const result = parseClipboardTable({
-      html: TABLE + "<h2>middle</h2>" + TABLE,
+      html: `${TABLE}<h2>middle</h2>${TABLE}`,
     });
 
     expect(result.ok).toBe(true);
