@@ -111,7 +111,12 @@ export const clipboardAllowedAttributes: Record<string, string[]> = {
 // sanitize 단계에서 태그 자체를 살려 파서에 도달시켜야 블록 경계로 인식할
 // 수 있다(DELTA-03, Issue #72). 문서 import 공유 목록은 이 확장과 무관하게
 // 그대로 둔다 — 공유하면 import 쪽 SAFE_BLOCK_DOWNGRADED 경고 계약이 깨진다.
-export const clipboardAllowedTagNames = [...htmlAllowedTagNames, "h4", "h5", "h6"];
+export const clipboardAllowedTagNames = [
+  ...htmlAllowedTagNames,
+  "h4",
+  "h5",
+  "h6",
+];
 
 // <title>은 소스 문서 head의 메타데이터지 사용자가 선택한 본문이 아니다.
 // tagNames에도 strip에도 없으면 sanitize가 태그만 벗기고(unwrap) 그 텍스트를

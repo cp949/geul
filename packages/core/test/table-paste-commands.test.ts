@@ -385,7 +385,10 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       ],
     },
   });
-  const headingBlock = (text: string, level: 1 | 2 | 3): ClipboardContentBlock => ({
+  const headingBlock = (
+    text: string,
+    level: 1 | 2 | 3,
+  ): ClipboardContentBlock => ({
     type: "heading",
     level,
     content: [{ text }],

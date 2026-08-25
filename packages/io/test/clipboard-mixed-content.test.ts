@@ -22,8 +22,18 @@ const TABLE_BLOCK: ClipboardContentBlock = {
     rows: [
       {
         cells: [
-          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text: "a" }] },
-          { columnIndex: 1, rowSpan: 1, columnSpan: 1, content: [{ text: "b" }] },
+          {
+            columnIndex: 0,
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [{ text: "a" }],
+          },
+          {
+            columnIndex: 1,
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [{ text: "b" }],
+          },
         ],
       },
     ],
@@ -308,7 +318,9 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // 단언은 인접 블록 병합을 감춘다(spec §4.1 '정정(2026-08-21 리뷰)').
   // 배열 전체를 toEqual로 단언해 3원소(heading×2 + table)를 고정한다.
   it("h1~h3 heading과 표가 섞이면 각각 정확히 분리된다", () => {
-    const result = parseClipboardTable({ html: "<h1>A</h1><h2>B</h2>" + TABLE });
+    const result = parseClipboardTable({
+      html: "<h1>A</h1><h2>B</h2>" + TABLE,
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

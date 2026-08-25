@@ -259,11 +259,7 @@ const blockSequenceFromNodes = (
         const wrapped = node.children.map((child) =>
           wrapInAncestors(child, ancestors),
         );
-        if (
-          headingLevel === 1 ||
-          headingLevel === 2 ||
-          headingLevel === 3
-        ) {
+        if (headingLevel === 1 || headingLevel === 2 || headingLevel === 3) {
           const content = normalizedInlineContent(wrapped);
           const text = content.map((item) => item.text).join("");
           if (hasSubstantialText(text)) {

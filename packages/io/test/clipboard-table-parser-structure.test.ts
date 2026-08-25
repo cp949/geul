@@ -87,10 +87,7 @@ describe("parseClipboardTable", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(2);
-    expect(result.value.map((block) => block.type)).toEqual([
-      "table",
-      "table",
-    ]);
+    expect(result.value.map((block) => block.type)).toEqual(["table", "table"]);
     const [first, second] = result.value;
     if (first?.type !== "table" || second?.type !== "table") return;
     expect(first.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
@@ -114,10 +111,7 @@ describe("parseClipboardTable", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(2);
-    expect(result.value.map((block) => block.type)).toEqual([
-      "table",
-      "table",
-    ]);
+    expect(result.value.map((block) => block.type)).toEqual(["table", "table"]);
     const [first, second] = result.value;
     if (first?.type !== "table" || second?.type !== "table") return;
     expect(first.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
@@ -141,10 +135,7 @@ describe("parseClipboardTable", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(2);
-    expect(result.value.map((block) => block.type)).toEqual([
-      "table",
-      "table",
-    ]);
+    expect(result.value.map((block) => block.type)).toEqual(["table", "table"]);
     const [first, second] = result.value;
     if (first?.type !== "table" || second?.type !== "table") return;
     expect(first.data.columnCount).toBe(2);

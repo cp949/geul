@@ -945,16 +945,13 @@ export const pasteClipboardContent = (
     // 표 블록이 둘 이상인 경우 다중 표를 명시적으로 거절한다 — 표 안
     // 분기에서는 문단을 별도 블록으로 끼울 수 없으므로 다중 표를 지원할 수
     // 없다. TBL-012(성능 계약)는 표 크기 한도이지 "표 1개" 제품 계약이 아니다.
-    const tableCount = content.filter(
-      (entry) => entry.type === "table",
-    ).length;
+    const tableCount = content.filter((entry) => entry.type === "table").length;
     if (tableCount > 1) {
       return {
         ok: false,
         error: {
           code: "CLIPBOARD_CONTENT_INVALID",
-          message:
-            "Cannot paste multiple tables inside an existing table cell",
+          message: "Cannot paste multiple tables inside an existing table cell",
         },
       };
     }
