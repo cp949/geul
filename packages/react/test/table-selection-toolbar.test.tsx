@@ -619,7 +619,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
   // CellSelection에서만 나오는 거절 코드다. 그 선택을 react에서 세울 수
   // 없다 — ADR-0002 결정 본문에서 파생하는 @tiptap/pm 의존 금지
   // (Consequences가 이름으로 적은 것은 @tiptap/react뿐이다), EditorController에
-  // 선택 설정 API 없음. Merge cells 버튼도 mergeable=true일 때만 뜨므로
+  // 선택 설정 API 없음. Merge cells 버튼도 cellIds가 2개 이상일 때만 뜨므로
   // 클릭 대상 자체가 실제 마운트에서는 존재하지 않는다.
   // 실제로 시도한 것: 실제 마운트에서 병합 셀을 심고 캐럿·DOM Selection·
   // 트리플클릭·Shift+Arrow로 셀 범위 선택을 만들어보려 했으나 전부
@@ -701,7 +701,7 @@ describe("병합·분할 명령 실패 시 피드백", () => {
 
 describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
   // vi.fn() 레인에 남긴 이유: 툴바에 "병합 실패" 메시지를 띄우려면 Merge
-  // cells 버튼을 눌러야 하고, 그 버튼은 mergeable=true(cellIds 2개 이상)일
+  // cells 버튼을 눌러야 하고, 그 버튼은 cellIds가 2개 이상일
   // 때만 뜬다 — 즉 CellSelection이 필요하고 react는 그것을 세울 수 없다
   // (ADR-0002 결정 본문에서 파생하는 @tiptap/pm 의존 금지 — Consequences가
   // 이름으로 적은 것은 @tiptap/react뿐이다).
