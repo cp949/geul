@@ -385,26 +385,63 @@ const tabularDataFromTable = (
   const layouts = layoutRows(rows);
 
   // 단일 셀은 표 자신이 이미 보여준 열 수보다 넓게 뻗을 수 없다(Issue #35).
-  // "표가 이미 보여준 열 수"는 colgroup 선언(cols.length)과 실제 셀의 distinct
-  // 시작 columnIndex 개수(cell.columnSpan 크기는 반영하지 않는다 — 그래야
-  // 과대 colspan 셀 자신이 그 개수를 부풀리지 못한다) 중 큰 쪽이다. colgroup도
-  // 없고 표에 셀이 이 하나뿐이면(distinct count 1) colspan=1인 평범한 단일
-  // 셀 표는 통과하고(1 > 1 거짓), colspan=500처럼 자기 자신 말고는 아무 근거도
-  // 없이 넓게 뻗는 셀만 걸린다(500 > 1). 과대 colspan을 패딩으로 감추지 않고
-  // 여기서 거절한다.
-  const distinctColumnStartCount = new Set(
-    layouts.flatMap((row) => row.map((cell) => cell.columnIndex)),
-  ).size;
-  const columnSpanBound = Math.max(cols.length, distinctColumnStartCount);
-  const hasOversizedColumnSpan = layouts
-    .flat()
-    .some((cell) => layoutColumnSpan(cell.columnSpan) > columnSpanBound);
-  if (hasOversizedColumnSpan) {
+  // "표가 이미 보여준 열 수"는 colgroup 선언(cols.length)과, 자기 자신을 뺀
+  // 다른 모든 셀의 실제 reach(columnIndex + colspan) 중 최댓값 중 큰 쪽이다.
+  // (트랙-6) 예전에는 "distinct 시작 columnIndex 개수"를 썼는데, rowSpan 때문에
+  // 서로 다른 행의 셀이 같은 columnIndex에서 반복 시작하면(병합 셀 옆에 세로로
+  // 나열된 좁은 컬럼처럼 흔한 패턴) 개수가 실제 뒷받침 열 수보다 작게 잡혀
+  // 정당한 colspan을 오탐 거절했다. reach 최댓값은 이 상호작용에서도 정확하다.
+  // 자기 자신을 반드시 제외해야 과대 colspan 셀 자신이 그 상한을 부풀리지
+  // 못한다. 다른 셀이 아예 없거나 전부 자신보다 reach가 작아도 최소 자기 위치
+  // (columnIndex + 1, colspan=1 취급)는 상한에 반영한다 — 그래야 유일한 셀이
+  // colspan=500을 주장하는 경우도 여전히 거절된다. 과대 colspan을 패딩으로
+  // 감추지 않고 여기서 거절한다.
+  //
+  // 표 크기는 아직 MAX_TABLE_LOGICAL_CELLS 체크를 거치지 않았으므로 pairwise
+  // O(n²) 비교는 피한다. 전체 셀을 한 번 순회해 전역 최댓값(globalMaxReach),
+  // 그 값을 달성하는 셀 개수(maxReachCount), 최댓값 미만 값들의 최댓값
+  // (secondMaxReach)을 구한 뒤, 각 셀은 자신이 전역 최댓값의 유일한 소유자일
+  // 때만 secondMaxReach를(그 외에는 globalMaxReach를) "다른 셀들의 reach
+  // 최댓값"으로 쓴다.
+  const flatCells = layouts.flat();
+  const cellReach = (cell: CellLayout): number =>
+    cell.columnIndex + layoutColumnSpan(cell.columnSpan);
+  let globalMaxReach = 0;
+  let maxReachCount = 0;
+  let secondMaxReach = 0;
+  for (const cell of flatCells) {
+    const reach = cellReach(cell);
+    if (reach > globalMaxReach) {
+      secondMaxReach = globalMaxReach;
+      globalMaxReach = reach;
+      maxReachCount = 1;
+    } else if (reach === globalMaxReach) {
+      maxReachCount += 1;
+    } else if (reach > secondMaxReach) {
+      secondMaxReach = reach;
+    }
+  }
+  // 위반 셀의 상한은 셀마다 다르므로(globalMaxReach는 전역 값일 뿐, 위반한
+  // 그 셀 자신의 상한과 다를 수 있다 — 트랙-6에서 메시지가 위반 셀 자신의
+  // reach를 그대로 상한인 것처럼 보고하는 결함으로 발견) 위반 셀을 찾아
+  // 그 셀의 상한을 메시지에 그대로 쓴다.
+  const columnSpanBoundFor = (cell: CellLayout): number => {
+    const reach = cellReach(cell);
+    const othersMaxReach =
+      reach === globalMaxReach && maxReachCount === 1
+        ? secondMaxReach
+        : globalMaxReach;
+    return Math.max(cols.length, othersMaxReach, cell.columnIndex + 1);
+  };
+  const oversizedColumnSpanCell = flatCells.find(
+    (cell) => layoutColumnSpan(cell.columnSpan) > columnSpanBoundFor(cell),
+  );
+  if (oversizedColumnSpanCell !== undefined) {
     return {
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message: `Table cell colspan exceeds the table's own column bound ${columnSpanBound}`,
+        message: `Table cell colspan exceeds the table's own column bound ${columnSpanBoundFor(oversizedColumnSpanCell)}`,
       },
     };
   }

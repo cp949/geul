@@ -193,6 +193,34 @@ describe("들쭉날쭉한 HTML 표 패딩", () => {
     expect(table.columnCount).toBe(3);
   });
 
+  // 트랙-6 발견: rowSpan 때문에 서로 다른 행의 셀이 같은 columnIndex에서
+  // 시작하면 "distinct 시작 columnIndex 개수"가 실제 뒷받침 열 수보다 작게
+  // 잡혀 정상 colspan을 오탐 거절했다(Issue #35 후속).
+  it("rowSpan과 colspan이 상호작용해도 정당한 colspan은 오탐 거절하지 않는다", () => {
+    const html =
+      '<table><tbody><tr><td colspan="5" rowspan="2">A</td><td>F</td></tr>' +
+      "<tr><td>B</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    const table = getTableFromResult(result);
+    expect(table).not.toBeNull();
+    if (!table) return;
+    expect(table.columnCount).toBe(6);
+    expect(table.rows[0]?.cells[0]).toMatchObject({
+      columnIndex: 0,
+      columnSpan: 5,
+      rowSpan: 2,
+    });
+    expect(table.rows[0]?.cells[1]).toMatchObject({
+      columnIndex: 5,
+      columnSpan: 1,
+    });
+    expect(table.rows[1]?.cells[0]).toMatchObject({
+      columnIndex: 5,
+      columnSpan: 1,
+    });
+  });
+
   it("긴 공백 run도 공백 한 칸으로 접는다", () => {
     const spaces = " ".repeat(5_000);
     const html = `<table><tbody><tr><td>a${spaces}b</td></tr></tbody></table>`;
