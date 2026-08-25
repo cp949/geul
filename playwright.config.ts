@@ -24,9 +24,9 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      // R1 완료 조건(AC-05): 슬라이스 1~11 핵심 시나리오를 3-엔진에서
-      // 검증한다. 70개 전체가 아니라 @core 태그가 붙은 부분집합만 돈다 —
-      // 전체 회귀는 chromium 프로젝트가 계속 담당한다.
+      // @core 자격 기준은 엔진 간 구현 차이다(ADR 0007:
+      // docs/adr/0007-own-behavior-at-the-lowest-proving-layer.md).
+      // 태그 붙은 부분집합만 3-엔진에서 돌고, 전체 회귀는 chromium이 담당한다.
       name: "firefox",
       grep: /@core/,
       testIgnore: /table-performance\.spec\.ts$/,
