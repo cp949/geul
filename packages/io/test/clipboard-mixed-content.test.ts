@@ -378,4 +378,58 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
       content: [{ text: "A" }],
     });
   });
+
+  // 트랙-6 회귀: HTML5 파싱 규칙상 <table> 시작 태그는 <p>만 자동으로
+  // 닫고 <h1>~<h6>는 닫지 않는다 — 표가 heading의 실제 자식으로 파싱
+  // 트리에 남는다(<h1>intro<table>...</table>outro</h1> 형태). 수정 전
+  // 코드는 heading을 표보다 먼저 리프로 접어 표 구조(셀 경계)가 사라지고
+  // 서로 다른 셀 값이 구분자 없이 이어붙었다(예: "ab"). heading 텍스트는
+  // model이 "표를 품은 heading"을 표현할 수 없어 문단으로 다운그레이드된다
+  // — 표 앞뒤 텍스트 순서와 표 구조(셀 값 분리)만 보존하면 된다.
+  it("heading 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
+    const result = parseClipboardTable({
+      html: "<h1>intro" + TABLE + "outro</h1>",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      { type: "paragraph", content: [{ text: "intro" }] },
+      TABLE_BLOCK,
+      { type: "paragraph", content: [{ text: "outro" }] },
+    ]);
+  });
+
+  // h4~h6도 h1~h3와 같은 파싱 규칙(table이 자동으로 닫지 않음)을 받는다.
+  it("h4~h6 안에 중첩된 표도 뭉개지지 않고 표 블록으로 보존된다", () => {
+    const result = parseClipboardTable({
+      html: "<h4>intro" + TABLE + "outro</h4>",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      { type: "paragraph", content: [{ text: "intro" }] },
+      TABLE_BLOCK,
+      { type: "paragraph", content: [{ text: "outro" }] },
+    ]);
+  });
+
+  // 트랙-6 테스트 갭: 다중 표(Issue #73)와 heading 경계 인식(Issue #72)이
+  // 같은 순회 함수를 각자 확장하면서 생기는 조합도 고정한다 — 두 표
+  // 사이에 heading이 끼어도 각 표가 독립된 표 블록으로, heading은
+  // heading대로 분리된다.
+  it("표 2개 사이에 heading이 있어도 각각 독립된 표·heading 블록으로 분리된다", () => {
+    const result = parseClipboardTable({
+      html: TABLE + "<h2>middle</h2>" + TABLE,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      TABLE_BLOCK,
+      { type: "heading", level: 2, content: [{ text: "middle" }] },
+      TABLE_BLOCK,
+    ]);
+  });
 });

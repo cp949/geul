@@ -172,6 +172,13 @@ const headingLevelFromTagName = (
 // role=presentation 래퍼)는 인라인 콘텐츠로 재귀 병합한다 — 레이아웃 표 안
 // 형제 셀 텍스트가 데이터 표와 함께 보존되는 것도 이 재귀 덕분이다.
 //
+// 예외: `p`/heading이 찾아낸 표를 자식으로 품고 있으면 위 "블록 경계"
+// 취급을 접고 통과해 내려간다 — heading은 `<table>`이 자동으로 닫지 않아
+// (p와 달리) 실제로 표를 자식에 담을 수 있고, 접으면 표가 구분자 없는
+// 인라인 텍스트로 뭉개진다. 표 앞뒤 텍스트는 그 heading/p의 문단·heading
+// 서식을 잃고 문단으로 남는다 — model이 "표를 품은 heading"을 표현하지
+// 못하므로 표 구조 보존을 문단 다운그레이드보다 우선한다.
+//
 // 문단/heading 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
 // collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
 // 제어문자/DEL/짝 없는 surrogate 정제) 없으면 model의 isValidInlineText
@@ -241,6 +248,21 @@ const blockSequenceFromNodes = (
         continue;
       }
       if (node.type !== "element") continue;
+      const headingLevel = headingLevelFromTagName(node.tagName);
+      // p/heading이 표를 품고 있으면(HTML5 파싱 규칙상 table 시작 태그는
+      // p만 자동으로 닫고 h1~h6는 닫지 않으므로 heading은 실제로 표를
+      // 자식으로 담을 수 있다) 블록 경계로 접어 인라인 텍스트로 흡수하지
+      // 않는다 — 통과해 내려가 표를 표 블록으로 보존한다(아래 일반
+      // containsAnyTable fallback과 같은 재귀 패턴). p 쪽은 이 경로를 타는
+      // 입력이 실제로 없다(table이 p를 항상 먼저 닫는다)는 것을 parse5로
+      // 확인했지만, 같은 위험을 원천 차단하려고 p도 함께 검사한다.
+      if (
+        (node.tagName === "p" || headingLevel !== undefined) &&
+        containsAnyTable(node.children, tableSet)
+      ) {
+        walk(node.children, [...ancestors, node]);
+        continue;
+      }
       if (node.tagName === "p") {
         flush();
         pending = node.children.map((child) =>
@@ -249,7 +271,6 @@ const blockSequenceFromNodes = (
         flush();
         continue;
       }
-      const headingLevel = headingLevelFromTagName(node.tagName);
       if (headingLevel !== undefined) {
         // h1~h3는 heading으로, h4~h6는 문단으로 다운그레이드한다(model
         // HeadingBlock.level이 1~3만 허용 — DELTA-03, Issue #72). 둘 다
