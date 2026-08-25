@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
+    target: "chrome75",
     rolldownOptions: {
       output: {
         codeSplitting: {
