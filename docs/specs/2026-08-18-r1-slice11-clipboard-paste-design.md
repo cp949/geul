@@ -119,6 +119,8 @@ sanitizer는 `htmlSanitizeSchema`를 그대로 쓰되 `htmlAllowedAttributes.td`
 
 이유: `text.includes("\t")` 하나로 판정하면 탭 들여쓰기 코드나 탭이 섞인 로그가 전부 표가 되고, §7.2 계약대로 확장이 이벤트를 소비하므로 사용자가 기본 붙여넣기를 되찾을 방법이 없다. 스프레드시트 클립보드는 항상 직사각형이므로 이 조건이 실제 대상 입력을 잃지 않는다. HTML 표의 짧은 행 패딩은 그대로 유지한다 — 진짜 표 마크업은 정상적으로 들쭉날쭉하다.
 
+구현 반영(TSV whitespace 정책, Issue #34): TSV 경로의 셀 whitespace는 HTML 경로와 의도적으로 비대칭 유지한다 — **보존**하고 collapse/trim하지 않는다. `parseTsv`(`clipboard-table-parser.ts:485-528`)는 셀 텍스트에 `sanitizeCellText`(`cell-text.ts:16-17`, `:517`에서 호출)만 적용한다 — model의 `sanitizeInlineText`(`string-invariants.ts:39-46`) 위임이라 LF를 제외한 C0 제어문자·DEL·짝없는 surrogate만 제거하고 공백은 건드리지 않는다. 반면 HTML 경로(§4.2)는 `collapseHtmlWhitespace`(`cell-text.ts:22-32`)로 연속 공백 run을 하나로 접고 `normalizeCellContent`(`cell-text.ts:82-111`)로 셀 앞뒤 공백까지 trim한다. 비대칭 근거는 둘이다. (1) TSV 전용 경로(HTML 표현이 없는 클립보드)로 들어오는 실제 입력은 탭 들여쓰기 코드나 로그처럼 공백 자체가 원문의 의미인 텍스트일 가능성이 높다 — 바로 위 단락의 "탭 들여쓰기 코드/로그" 판정 근거와 같은 소스다. collapse/trim은 이런 원문을 조용히 훼손한다. (2) 실사용 스프레드시트(Excel, Google Sheets 등) 붙여넣기는 대부분 `text/html`을 함께 담아 오므로 §4.1 우선순위 규칙에 따라 HTML 경로로 처리되고 이미 collapse/trim을 거친다 — TSV whitespace 정책은 그 경로에 영향을 주지 않는다. 이 (2)는 브라우저 실측이 아니라 클립보드 payload 구성에 대한 합리적 추정이다. 이 비대칭 동작은 `clipboard-table-normalization.test.ts:77-84`가 이미 회귀 테스트로 고정한다.
+
 ## 5. 검증기 — model의 그리드 커버리지 재사용
 
 `packages/model/src/table-grid-validation.ts`를 리팩터한다:
