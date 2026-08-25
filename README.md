@@ -26,6 +26,17 @@ demo  -> react, io, model
 
 패키지 경계 불변식(비의존·타입 비노출 상세)은 [ADR-0002](./docs/adr/0002-enforce-layered-package-boundaries.md)가 소유한다.
 
+## 브라우저 지원
+
+공식 browser floor는 Chrome 75다([ADR-0008](./docs/adr/0008-target-chrome-75-as-official-browser-floor.md)). Geul 패키지 자체는 Chrome 75 문법으로 빌드되고 자기 소스의 런타임 API는 `pnpm check:escompat` 게이트가 막는다. 디펜던시가 쓰는 최신 런타임 API의 polyfill은 사용처 책임이다([ADR-0009](./docs/adr/0009-delegate-chrome75-runtime-api-polyfills-to-consumers.md)).
+
+Chrome 75를 지원해야 하는 사용처는 두 가지를 설정한다.
+
+1. 앱 엔트리의 첫 import로 `import "core-js/stable";`을 넣는다 — 디펜던시의 런타임 API 격차(예: `Array.prototype.findLast`)를 채운다.
+2. 번들러 target을 Chrome 75로 둔다(Vite: `build.target: 'chrome75'`) — 디펜던시의 문법을 downlevel한다.
+
+`apps/demo`가 이 설정의 재현 예시이고 `pnpm test:e2e:chrome83`이 실제 Chrome 83에서 검증한다. 최신 Chrome만 지원하는 사용처는 아무 조치도 필요 없다.
+
 ## 개발 환경
 
 - Node.js 22.12 이상
@@ -41,6 +52,7 @@ pnpm dev
 ```bash
 pnpm lint
 pnpm build
+pnpm check:escompat
 pnpm typecheck
 pnpm test
 pnpm test:e2e
@@ -49,7 +61,7 @@ pnpm check:licenses
 pnpm verify
 ```
 
-`pnpm verify`는 lint, build, typecheck, unit test, package boundary, license, Chromium E2E를 순서대로 실행하는 최종 게이트다.
+`pnpm verify`는 lint, build, dist ES 호환성(check:escompat), typecheck, unit test, package boundary, license, Chromium E2E를 순서대로 실행하는 최종 게이트다.
 
 단일 패키지는 filter로 검증할 수 있다.
 
