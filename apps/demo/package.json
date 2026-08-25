@@ -13,6 +13,7 @@
     "@cp949/geul-io": "workspace:*",
     "@cp949/geul-model": "workspace:*",
     "@cp949/geul-react": "workspace:*",
+    "core-js": "3.50.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   }

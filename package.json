@@ -17,6 +17,7 @@
   "scripts": {
     "build": "turbo run build",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
+    "check:escompat": "node scripts/check-escompat.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "dev": "turbo run dev --parallel",
     "lint": "biome check .",
@@ -31,7 +32,7 @@
     "test:e2e:full": "playwright test --project=chromium --project=firefox --project=webkit",
     "test:e2e:chrome83": "docker build -t geul-chrome83 docker/chrome83 && docker run --rm --network host --user \"$(id -u):$(id -g)\" -e pnpm_config_verify_deps_before_run=false -e GEUL_CHROME83_WEBSERVER=1 -v \"$(pwd)\":/repo -w /repo geul-chrome83 ./node_modules/.bin/playwright test --project=chrome83",
     "test:e2e:perf": "playwright test --project=perf",
-    "verify:packages": "pnpm lint && pnpm build && pnpm typecheck && pnpm test && pnpm check:boundaries && pnpm check:licenses",
+    "verify:packages": "pnpm lint && pnpm build && pnpm check:escompat && pnpm typecheck && pnpm test && pnpm check:boundaries && pnpm check:licenses",
     "verify": "pnpm verify:packages && pnpm test:e2e"
   },
   "devDependencies": {
@@ -41,6 +42,8 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.5",
+    "eslint": "10.9.1",
+    "eslint-plugin-es-x": "10.0.0",
     "fast-check": "4.9.0",
     "jsdom": "27.0.1",
     "turbo": "2.10.9",

@@ -8,6 +8,9 @@ packages:
 # lazy import된다(레포에 watch 사용처 없음) — 실행 허가가 불필요해 거부한다.
 allowBuilds:
   '@parcel/watcher': false
+  # core-js(@cp949/geul-demo dependency, cp949/geul#122)의 postinstall은
+  # funding 안내 메시지를 출력할 뿐이다 — 실행 허가가 불필요해 거부한다.
+  core-js: false
   # esbuild(@cp949/geul-react devDependency, DELTA-01)의 postinstall(install.js)은
   # optionalDependencies로 설치된 플랫폼 바이너리 패키지를 generateBinPath()가
   # require.resolve로 먼저 찾을 때만 쓰는 fallback이다. postinstall 미실행 상태에서
@@ -40,5 +43,4 @@ minimumReleaseAgeExclude:
   - '@tiptap/pm@3.30.1'
   - '@tiptap/starter-kit@3.30.1'
 patchedDependencies:
-  '@tiptap/core@3.30.1': patches/@tiptap__core@3.30.1.patch
   micromark-extension-gfm-table@2.1.1: patches/micromark-extension-gfm-table@2.1.1.patch

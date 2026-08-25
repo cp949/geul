@@ -4,7 +4,7 @@ The table records every direct external production dependency in the R0 workspac
 
 | Dependency | Version | License | Used by | Purpose |
 | --- | --- | --- | --- | --- |
-| `@tiptap/core` | `3.30.1` | MIT | core | Headless editor runtime and extension API. Patched — see "Patched dependencies" below |
+| `@tiptap/core` | `3.30.1` | MIT | core | Headless editor runtime and extension API |
 | `@tiptap/pm` | `3.30.1` | MIT | core | ProseMirror runtime modules used through Tiptap |
 | `@tiptap/starter-kit` | `3.30.1` | MIT | core | R0 paragraph, heading, list, and inline editing extensions |
 | `hast-util-sanitize` | `5.0.2` | MIT | io | HTML AST allowlist sanitization |
@@ -18,15 +18,15 @@ The table records every direct external production dependency in the R0 workspac
 | `lucide-react` | `1.31.0` | ISC | react | Icon-only control SVG icons. Source uses per-file named imports from the package barrel; unused icons are dropped only by bundlers honoring `sideEffects: false` (no `exports` map — the CJS `main` is a single ~1 MB file that non-bundled consumers load whole) |
 | `react` | `19.2.8` | MIT | react, demo | React bindings and demo UI |
 | `react-dom` | `19.2.8` | MIT | react, demo | Browser rendering for React bindings and demo UI |
+| `core-js` | `3.50.0` | MIT | demo | Chrome 75 consumer-role runtime polyfills loaded by the demo entry (ADR 0009); library packages never load it |
 
 ## Patched dependencies
 
-The workspace ships two modified third-party packages. Patching redistributes modified source, so each entry records the upstream license that permits it and the issue that owns removal (ADR 0006).
+The workspace ships one modified third-party package. Patching redistributes modified source, so each entry records the upstream license that permits it and the issue that owns removal (ADR 0006).
 
 | Dependency | Version | License | Reached through | Patch | Owner |
 | --- | --- | --- | --- | --- | --- |
 | `micromark-extension-gfm-table` | `2.1.1` | MIT | `remark-gfm` → `micromark-extension-gfm` | `patches/micromark-extension-gfm-table@2.1.1.patch` — replaces the `EditMap.addImplementation` linear scan with an `at -> index` `Map` lookup; output is unchanged, only cost | Issue #26. Drop the patch once the fix lands upstream |
-| `@tiptap/core` | `3.30.1` | MIT | direct (row above) | `patches/@tiptap__core@3.30.1.patch` — replaces `dispatchTransaction`'s `Array.prototype.findLast` call (Chrome 97+, unsupported on the Chrome 75 official floor, ADR 0008) with `slice().reverse().find()` in both the `dist/index.js` and `dist/index.cjs` runtime copies; output is unchanged | Issue #120. Drop the patch once the fix lands upstream or the browser floor moves past Chrome 97 |
 
 Transitive dependencies do not appear in the direct dependency table above, so `pnpm check:licenses` audits their licenses but does not record the patch on their own — this section is the record for both transitive and direct patched dependencies.
 
