@@ -25,6 +25,22 @@ export const layoutColumnSpan = (columnSpan: number): number =>
 // rowSpan도 columnSpan과 같은 규칙으로 보정한다. rowspan="0"(HTML에서
 // "섹션 끝까지"), 음수, 소수는 우리 격자 모델에 대응이 없으므로 1로 본다.
 // 커버리지 계산과 방출되는 셀이 같은 값을 써야 검증기가 어긋나지 않는다.
+//
+// layoutColumnSpan과 달리 여기엔 MAX_TABLE_COLUMNS류 상한이 없다 — 값을
+// 그대로 통과시켜도 구조적으로 안전하기 때문이다(Issue #114 조사 결론,
+// characterization 테스트: clipboard-table-normalization.test.ts "이슈 114:
+// rowSpan 열/행 수 부풀림 대칭성 조사"). colspan이 상한을 둬야 했던 이유는
+// inferredColumnCount(이 파일, 161-173행)가 "표가 이미 보여준 열 수"를 각
+// 셀의 columnSpan 값 자체로 계산하는 자기 강화 구조라, 과대 colspan 셀
+// 자신이 자기를 걸러낼 상한까지 함께 부풀렸기 때문이다(Issue #35가 별도
+// 선제 검사 oversizedColumnSpanCell을 clipboard-table-parser.ts에 추가한
+// 이유). rowSpan에는 이 자기 강화 구조가 없다 — 행 수(rowCount)는 실제
+// <tr> 개수로 고정이고(layoutRows, 85-118행이 rows.length만큼만 순회한다),
+// 어떤 셀의 rowSpan 값도 이 rowCount 자체를 바꾸지 않는다. 그래서 과대
+// rowSpan은 파생되지 않은 고정 rowCount를 넘어서기만 할 뿐이고, model의
+// validateGridCoverage(packages/model/src/table-grid-validation.ts:82-84)가
+// rowEnd(=row+rowSpan) > rowCount를 이미 SPAN_OUT_OF_BOUNDS로 거절한다 —
+// rowSpan 쪽에는 colspan과 같은 선제 검사가 필요 없다.
 export const layoutRowSpan = (rowSpan: number): number =>
   Number.isInteger(rowSpan) && rowSpan >= 1 ? rowSpan : 1;
 
