@@ -1,0 +1,32 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index d828422b45e463c229bd937d39ea416278055dde..b5fa9cbb3558ab60119d93f3e8b983783fc1f40c 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -7218,7 +7218,10 @@ var Editor = class extends EventEmitter {
+         transaction
+       });
+     }
+-    const mostRecentFocusTr = transactions.findLast((tr) => tr.getMeta("focus") || tr.getMeta("blur"));
++    // Array.prototype.findLast는 Chrome97+(ES2023)에만 있다 — Geul의 공식
++    // browser floor Chrome75(ADR-0008)는 미지원이라 동일 의미의
++    // slice().reverse().find()로 치환한다(cp949/geul#120).
++    const mostRecentFocusTr = transactions.slice().reverse().find((tr) => tr.getMeta("focus") || tr.getMeta("blur"));
+     const focus2 = mostRecentFocusTr == null ? void 0 : mostRecentFocusTr.getMeta("focus");
+     const blur2 = mostRecentFocusTr == null ? void 0 : mostRecentFocusTr.getMeta("blur");
+     if (focus2) {
+diff --git a/dist/index.js b/dist/index.js
+index a0f6db230e5c24f99066beda95637818680b3fd2..fa07534cb772c913fad1dbe317a30a1d55917338 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -7056,7 +7056,10 @@ var Editor = class extends EventEmitter {
+         transaction
+       });
+     }
+-    const mostRecentFocusTr = transactions.findLast((tr) => tr.getMeta("focus") || tr.getMeta("blur"));
++    // Array.prototype.findLast는 Chrome97+(ES2023)에만 있다 — Geul의 공식
++    // browser floor Chrome75(ADR-0008)는 미지원이라 동일 의미의
++    // slice().reverse().find()로 치환한다(cp949/geul#120).
++    const mostRecentFocusTr = transactions.slice().reverse().find((tr) => tr.getMeta("focus") || tr.getMeta("blur"));
+     const focus2 = mostRecentFocusTr == null ? void 0 : mostRecentFocusTr.getMeta("focus");
+     const blur2 = mostRecentFocusTr == null ? void 0 : mostRecentFocusTr.getMeta("blur");
+     if (focus2) {

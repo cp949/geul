@@ -1,5 +1,25 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// chrome83 project 전용 build+preview 서버(D7). Playwright는 --project
+// 필터와 무관하게 webServer 배열 전체를 항상 띄운다(실측 확인) — 포트만
+// 다르다고 격리되지 않는다. 이 엔트리를 무조건 배열에 두면 `pnpm
+// test:e2e`/`pnpm test:e2e:perf`(chrome83과 무관한 3-엔진 회귀 게이트·성능
+// 측정)도 매번 demo 프로덕션 빌드 + `vite preview` 기동을 떠안는다(트랙-6
+// 발견 F1). `GEUL_CHROME83_WEBSERVER` 환경변수가 설정된 실행에서만 배열에
+// 포함해 실제로 격리한다 — `test:e2e:chrome83`의 `docker run -e
+// GEUL_CHROME83_WEBSERVER=1`이 그 실행에서만 이 값을 켠다.
+const chrome83WebServer = process.env.GEUL_CHROME83_WEBSERVER
+  ? [
+      {
+        command:
+          "pnpm --filter @cp949/geul-react build && pnpm --filter @cp949/geul-demo build && pnpm --filter @cp949/geul-demo exec vite preview --port 4174 --host 127.0.0.1 --strictPort",
+        url: "http://127.0.0.1:4174",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
+    ]
+  : [];
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -53,15 +73,40 @@ export default defineConfig({
       workers: 1,
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      // Chrome83(Debian snapshot 고정 바이너리, docker/chrome83) 실검증
+      // 전용. 공식 browser floor는 Chrome75(ADR-0008)지만 Playwright
+      // 1.62.1이 무조건 호출하는 CDP Browser.setDownloadBehavior가
+      // Chrome82부터 존재해 83을 실제 검증 가능한 최소로 쓴다(01-계획.md
+      // D10·D11). `@core` 시나리오 1개만 선택하고, dev 서버가 아니라
+      // build+preview 산출물을 서빙한다(D7) — vite dev는 build.target을
+      // 적용하지 않아 downlevel 결과가 반영되지 않는다. `pnpm
+      // test:e2e:chrome83`(docker/chrome83 컨테이너 안에서만 실행)로만
+      // 돈다 — `pnpm test:e2e`/`pnpm verify`에는 포함하지 않는다.
+      name: "chrome83",
+      testMatch: /link-toolbar\.spec\.ts$/,
+      grep: /@core/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:4174",
+        launchOptions: {
+          executablePath: "/usr/bin/chromium",
+          args: ["--no-sandbox"],
+        },
+      },
+    },
   ],
-  webServer: {
-    // dist/styles.css가 src/*.tsx의 클래스 문자열에서 생성되므로, 단독
-    // test:e2e가 스테일 CSS로 돌지 않도록 react 패키지를 먼저 빌드한다
-    // (reuseExistingServer로 서버를 재사용하는 경우는 제외).
-    command:
-      "pnpm --filter @cp949/geul-react build && pnpm --filter @cp949/geul-demo dev --host 127.0.0.1",
-    url: "http://127.0.0.1:5173",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      // dist/styles.css가 src/*.tsx의 클래스 문자열에서 생성되므로, 단독
+      // test:e2e가 스테일 CSS로 돌지 않도록 react 패키지를 먼저 빌드한다
+      // (reuseExistingServer로 서버를 재사용하는 경우는 제외).
+      command:
+        "pnpm --filter @cp949/geul-react build && pnpm --filter @cp949/geul-demo dev --host 127.0.0.1",
+      url: "http://127.0.0.1:5173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    ...chrome83WebServer,
+  ],
 });
