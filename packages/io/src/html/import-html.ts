@@ -33,6 +33,8 @@ import {
   columnElements,
   hasSubstantialText,
   inferredColumnCount,
+  layoutColumnSpan,
+  layoutRowSpan,
   layoutRows,
   MAX_TABLE_COLUMNS,
   type TableRowSource,
@@ -189,6 +191,79 @@ const parseTable = (
   }
   const rows = tableRows(element);
   const layouts = layoutRows(rows);
+
+  // colgroup이 없으면(cols.length === 0) columnCount는 아래에서
+  // inferredColumnCount로 정한다 — 각 셀의 reach(columnIndex + colspan)
+  // 중 최댓값이다. 이 계산은 자기 강화 구조라 과대 colspan 셀 자신이
+  // 자기를 걸러낼 상한까지 함께 부풀린다(clipboard-table-parser.ts가
+  // Issue #35에서 이미 거절한 것과 같은 구조). colgroup이 있으면
+  // columnCount가 cols.length로 고정돼 셀 span에서 파생되지 않으므로 이
+  // 위험이 없고, 과대 colspan은 model의 validateGridCoverage가
+  // SPAN_OUT_OF_BOUNDS로 이미 막는다 — 그래서 이 선제 검사는 colgroup이
+  // 없을 때만 돈다(Issue #115).
+  //
+  // 판별식은 clipboard-table-parser.ts의 oversizedColumnSpanCell과 같다:
+  // 어떤 셀의 colspan이 "표가 이미 실제로 보여준 열 수"(자기 자신을 뺀 다른
+  // 모든 셀의 reach 최댓값과 자기 위치 중 큰 쪽)를 넘으면 패딩으로 감추지
+  // 않고 거절한다. 자기 자신을 반드시 제외해야 과대 colspan 셀 자신이 그
+  // 상한을 부풀리지 못한다. 표 크기가 아직 MAX_TABLE_LOGICAL_CELLS 체크를
+  // 거치지 않았으므로 pairwise O(n²) 비교 대신 전체를 한 번만 순회해
+  // 전역 최댓값(globalMaxReach)과 그 다음 최댓값(secondMaxReach)만
+  // 구해 O(n)을 유지한다.
+  //
+  // (단계-3 결함 탐지) 원본 그대로 이식하면 rowSpan이 걸린 셀이 정당한
+  // 근거로 최대 reach를 "혼자" 달성하는 경우(예: 2행을 rowSpan=2로 덮는
+  // 셀 하나가 옆 열의 좁은 셀들보다 훨씬 넓게 뻗는, 완전한 격자)까지
+  // "자기 혼자 주장"으로 오인해 정상 colspan을 거절했다. rowSpan으로 여러
+  // 행에 걸친 셀은 물리적으로 그 행 수만큼 반복 등장하는 것과 같은 근거를
+  // 표에 남긴다 — 그래서 maxReachCount를 셀 개수가 아니라 각 셀의
+  // rowSpan(행 등장 횟수)으로 가중 합산한다. rowSpan=1인 셀은 가중치 1이라
+  // 기존 "홑 셀 colspan=500만 있으면 거절" 보장은 그대로 유지된다. 이
+  // 가중치가 위조된 rowSpan(실제 <tr> 수를 넘는 값)에 악용되지 않는 이유는
+  // model의 validateGridCoverage(SPAN_OUT_OF_BOUNDS)가 rowEnd(=row+rowSpan)가
+  // 실제 rowCount를 넘는 rowSpan 주장을 이 검사와 무관하게 항상 거절하기
+  // 때문이다(Issue #114 조사 결론과 같은 근거) — 이 선제 검사를 통과해도
+  // 위조 rowSpan은 뒤이은 그리드 검증에서 막힌다.
+  if (cols.length === 0) {
+    const flatCells = layouts.flat();
+    const cellReach = (cell: CellLayout): number =>
+      cell.columnIndex + layoutColumnSpan(cell.columnSpan);
+    const cellRowWeight = (cell: CellLayout): number =>
+      layoutRowSpan(cell.rowSpan);
+    let globalMaxReach = 0;
+    let maxReachCount = 0;
+    let secondMaxReach = 0;
+    for (const cell of flatCells) {
+      const reach = cellReach(cell);
+      const weight = cellRowWeight(cell);
+      if (reach > globalMaxReach) {
+        secondMaxReach = globalMaxReach;
+        globalMaxReach = reach;
+        maxReachCount = weight;
+      } else if (reach === globalMaxReach) {
+        maxReachCount += weight;
+      } else if (reach > secondMaxReach) {
+        secondMaxReach = reach;
+      }
+    }
+    const columnSpanBoundFor = (cell: CellLayout): number => {
+      const reach = cellReach(cell);
+      const othersMaxReach =
+        reach === globalMaxReach && maxReachCount === 1
+          ? secondMaxReach
+          : globalMaxReach;
+      return Math.max(othersMaxReach, cell.columnIndex + 1);
+    };
+    const oversizedColumnSpanCell = flatCells.find(
+      (cell) => layoutColumnSpan(cell.columnSpan) > columnSpanBoundFor(cell),
+    );
+    if (oversizedColumnSpanCell !== undefined) {
+      throw new HtmlDocumentInvalidError(
+        `Table cell colspan exceeds the table's own column bound ${columnSpanBoundFor(oversizedColumnSpanCell)}`,
+      );
+    }
+  }
+
   const columnCount =
     cols.length > 0 ? cols.length : inferredColumnCount(layouts);
   if (columnCount > MAX_TABLE_COLUMNS) {

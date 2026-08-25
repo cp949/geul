@@ -519,6 +519,82 @@ describe("HTML 왕복 변환", () => {
     });
   });
 
+  // Issue #115: colgroup 없이 과대 colspan을 만나면 columnCount(=
+  // inferredColumnCount)가 그 셀 자신의 colspan으로 계산돼 자기 자신을
+  // 걸러낼 상한까지 함께 부풀린다(clipboard-table-parser.ts가 Issue #35에서
+  // 이미 거절한 것과 같은 구조). 뒷받침하는 다른 셀·행이 전혀 없는 단일 셀
+  // colspan="500" 표는 패딩으로 감춰 500열 표를 만드는 대신 거절해야 한다.
+  it("colgroup 없는 표에서 과대 colspan은 열 수를 부풀리지 않고 거절한다", () => {
+    expect(
+      importHtml(
+        '<table><tbody><tr><td colspan="500">X</td></tr></tbody></table>',
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "HTML_DOCUMENT_INVALID" },
+    });
+  });
+
+  // colgroup이 있으면 columnCount는 cols.length로 고정되고 셀 span에서
+  // 파생되지 않으므로 위 자기 강화 구조가 없다 — 과대 colspan은 model의
+  // validateGridCoverage(SPAN_OUT_OF_BOUNDS)가 이미 막는다(위 테스트).
+  // 여기서는 반대로 뒷받침하는 다른 셀이 전혀 없어도(단일 행, 단일 셀)
+  // colspan이 colgroup 열 수와 정확히 일치하면 여전히 정상 표로 가져와야
+  // 함을 고정한다 — colgroup 우선 정책이 없는 경로(위 거절 테스트)라면
+  // 같은 "뒷받침 없음" 모양이 거절되는 것과 대비된다.
+  it("colgroup 있는 표는 뒷받침하는 다른 셀이 없어도 colspan이 colgroup 열 수와 일치하면 가져온다", () => {
+    const result = importHtml(
+      '<table><colgroup><col width="120"><col width="120"></colgroup><tbody><tr><td colspan="2">Full width</td></tr></tbody></table>',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.columns).toHaveLength(2);
+    expect(table.rows[0]?.cells[0]?.columnSpan).toBe(2);
+  });
+
+  // (단계-3 결함 탐지) 위 거절 판별식을 원본(clipboard-table-parser.ts)
+  // 그대로 이식하면 rowSpan으로 여러 행을 정당하게 덮는 셀이 "자기 혼자
+  // 최대 reach를 주장"으로 오인돼 정상 colspan까지 거절되는 회귀가 있었다.
+  // 이 표는 완전한 격자다 — A(0열)와 B(1~3열, rowSpan 2)가 1행을, C(0열)와
+  // B의 rowSpan 연속이 2행을 채운다. B의 colspan=3은 다른 셀이 뒷받침하지
+  // 않아도 자기 자신이 두 행에 걸쳐 등장하는 것 자체가 근거이므로 거절되면
+  // 안 된다.
+  it("rowSpan으로 여러 행에 걸친 셀의 정당한 colspan은 오탐 거절되지 않는다", () => {
+    const result = importHtml(
+      '<table><tbody><tr><td>A</td><td colspan="3" rowspan="2">B</td></tr><tr><td>C</td></tr></tbody></table>',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.columns).toHaveLength(4);
+    expect(table.rows[0]?.cells[1]).toMatchObject({
+      columnSpan: 3,
+      rowSpan: 2,
+    });
+  });
+
+  // 위 완화(rowSpan 가중치)가 위조된 rowSpan(실제 <tr> 수를 넘는 값)으로
+  // colspan 선제 검사를 우회하는 구멍이 되지 않는지 고정한다 — 실제 행은
+  // 1개뿐인데 rowSpan="500"을 주장하면 선제 검사는 통과해도(가중치가 커서
+  // "혼자 주장"으로 안 잡힘) model의 validateGridCoverage가 rowEnd(=0+500)가
+  // 실제 rowCount(1)를 넘는 것을 SPAN_OUT_OF_BOUNDS로 거절한다(Issue #114
+  // 조사 결론과 같은 안전망).
+  it("실제 행 수를 넘는 위조 rowSpan은 선제 검사를 우회해도 그리드 검증이 거절한다", () => {
+    expect(
+      importHtml(
+        '<table><tbody><tr><td rowspan="500" colspan="500">X</td></tr></tbody></table>',
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "HTML_DOCUMENT_INVALID" },
+    });
+  });
+
   it("셀 align을 왕복 변환에서 보존한다", () => {
     const documentWithAlign: Document = {
       formatVersion: 1,
