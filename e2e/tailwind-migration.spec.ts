@@ -97,7 +97,7 @@ test("블록 메뉴 구분선이 0폭으로 붕괴하지 않고 메뉴 폭을 �
   expect(width).toBe(150);
 });
 
-test("페이지에 동일한 --tw-shadow @property가 중복 등록돼도 box-shadow가 깨지지 않는다", async ({
+test("페이지에 동일한 --tw-shadow @property가 중복 등록돼도 box-shadow가 깨지지 않는다 @core", async ({
   page,
 }) => {
   // 소비자가 자신의 별도 Tailwind 인스턴스를 페이지에 함께 로드하면 우리

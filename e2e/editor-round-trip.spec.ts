@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { openDemo } from "./support/demo.js";
 
-test("JSON·HTML·markdown을 편집하고 복원한다 @core", async ({ page }) => {
+test("JSON·HTML·markdown을 편집하고 복원한다", async ({ page }) => {
   const { editor, editable } = await openDemo(page);
   const source = page.getByLabel("Document source");
 
