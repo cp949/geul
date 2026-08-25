@@ -1,3 +1,27 @@
+/*
+ * geul UI 전체(에디터 본문 + 표 안 밖의 모든 툴바·메뉴·핸들)가 참조하는
+ * --be-color-* 8개의 기본값 SSOT다. 소비자와 공존해야 하는 컴포넌트들
+ * 상당수(FormattingToolbar/LinkToolbar/SlashMenu 등)는 데모 앱 기준으로
+ * .be-editor의 형제로 렌더링돼 .be-editor 스코프 선언이 안 닿는다 — 그래서
+ * :root에 둔다. 지금까지는 이 값들이 var(--be-color-x, #hex) fallback
+ * 리터럴로만 10여 개 파일에 흩어져 있었다(아키텍처 리뷰 03.html 1단계).
+ * 여기 선언한 값은 기존 fallback과 동일하므로 시각적 변화는 없다 — 각
+ * var() 호출의 fallback은 이 스타일시트가 로드되지 않는 예외 상황을 위한
+ * 방어로 그대로 남긴다. 소비자가 값을 바꾸려면 이 이름 그대로 자신의
+ * CSS에서 재선언하면 된다(소스 순서·명시도 규칙은 tailwind.css의
+ * unlayered 계약이 보장한다).
+ */
+:root {
+  --be-color-text: #202124;
+  --be-color-text-muted: #5f6368;
+  --be-color-border: #dadce0;
+  --be-color-danger: #d93025;
+  --be-color-surface: #fff;
+  --be-color-surface-muted: #f1f3f4;
+  --be-color-accent: #1a73e8;
+  --be-color-accent-muted: #e8f0fe;
+}
+
 .be-editor {
   color: var(--be-color-text, #202124);
   line-height: 1.6;

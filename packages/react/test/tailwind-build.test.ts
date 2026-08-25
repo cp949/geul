@@ -102,4 +102,28 @@ describe("Tailwind CSS 빌드 파이프라인", () => {
     expect(css).not.toContain("@layer utilities");
     expect(css).toContain(".geul\\:hidden {");
   });
+
+  it(":root에 --be-color-* 디자인 토큰 8개의 기본값을 선언한다(SCSS 전환 전 SSOT 확보)", async () => {
+    // 이전에는 var(--be-color-x, #hex) fallback 리터럴이 10여 개 파일에
+    // 흩어져 있을 뿐 실제 선언부가 packages/react 안에 없었다(아키텍처
+    // 리뷰 03.html 실행 순서 1단계). 값 자체는 각 fallback과 동일해야
+    // 하므로 시각적 회귀 없이 SSOT만 추가한다 — 값이 하나라도 드리프트되면
+    // 이 테스트가 잡는다.
+    const css = await buildTailwindCss();
+
+    const tokens = {
+      "--be-color-text": "#202124",
+      "--be-color-text-muted": "#5f6368",
+      "--be-color-border": "#dadce0",
+      "--be-color-danger": "#d93025",
+      "--be-color-surface": "#fff",
+      "--be-color-surface-muted": "#f1f3f4",
+      "--be-color-accent": "#1a73e8",
+      "--be-color-accent-muted": "#e8f0fe",
+    } as const;
+
+    for (const [name, value] of Object.entries(tokens)) {
+      expect(css).toContain(`${name}: ${value};`);
+    }
+  });
 });
