@@ -81,7 +81,11 @@ export const createTableFixtureEditor = (
         horizontalRule: false,
         listItem: false,
         orderedList: false,
-        heading: false,
+        // 프로덕션 스키마(editor-controller.ts)와 같은 levels로 켠다 —
+        // DELTA-04(Issue #72)의 표 안/밖 heading 붙여넣기 테스트가 실제
+        // heading 노드를 만들어야 한다. 이전에는 false였다(이 fixture가
+        // 표 확장만 검증하던 시절 heading을 쓸 일이 없었다).
+        heading: { levels: [1, 2, 3] },
         trailingNode: false,
       }),
       BlockIdExtension,

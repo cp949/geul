@@ -7,9 +7,28 @@
  * 다룬다(파일 분할은 Issue #68).
  */
 import { describe, expect, it } from "vitest";
+import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 
 const TABLE = "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>";
+
+// TABLE 리터럴이 파싱된 결과(columnCount 2, 셀 "a"/"b")를 그대로 고정한다.
+// heading 분리를 확인하는 테스트들이 표 블록까지 함께 toEqual로 단언할 때
+// 반복 정의를 피하려고 여기서 한 번만 만든다.
+const TABLE_BLOCK: ClipboardContentBlock = {
+  type: "table",
+  data: {
+    columnCount: 2,
+    rows: [
+      {
+        cells: [
+          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text: "a" }] },
+          { columnIndex: 1, rowSpan: 1, columnSpan: 1, content: [{ text: "b" }] },
+        ],
+      },
+    ],
+  },
+};
 
 describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // <title>은 소스 문서의 head 메타데이터지 사용자가 선택한 본문이 아니다 —
@@ -281,6 +300,70 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
           marks: [{ type: "link", href: "https://example.com" }],
         },
       ],
+    });
+  });
+
+  // DELTA-03(Issue #72): blockSequenceFromNodes가 h1~h3를 heading 블록
+  // 경계로 인식한다. Issue #37 재발 방지 — toContainText 등 부분 문자열
+  // 단언은 인접 블록 병합을 감춘다(spec §4.1 '정정(2026-08-21 리뷰)').
+  // 배열 전체를 toEqual로 단언해 3원소(heading×2 + table)를 고정한다.
+  it("h1~h3 heading과 표가 섞이면 각각 정확히 분리된다", () => {
+    const result = parseClipboardTable({ html: "<h1>A</h1><h2>B</h2>" + TABLE });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      { type: "heading", level: 1, content: [{ text: "A" }] },
+      { type: "heading", level: 2, content: [{ text: "B" }] },
+      TABLE_BLOCK,
+    ]);
+  });
+
+  // h4~h6는 model HeadingBlock.level(1|2|3) 밖이라 heading으로 만들 수
+  // 없다 — 문단으로 다운그레이드하되, 여전히 블록 경계로 인식해 인접
+  // h4~h6와 병합하지 않는다.
+  it("h4~h6는 heading이 아닌 문단으로 다운그레이드되고 인접 블록과 병합되지 않는다", () => {
+    const merged = parseClipboardTable({
+      html: "<h4>A</h4><h4>B</h4>" + TABLE,
+    });
+    expect(merged.ok).toBe(true);
+    if (merged.ok) {
+      expect(merged.value).toEqual([
+        { type: "paragraph", content: [{ text: "A" }] },
+        { type: "paragraph", content: [{ text: "B" }] },
+        TABLE_BLOCK,
+      ]);
+    }
+
+    // h4/h5/h6 각 레벨을 최소 1개씩 커버한다 — 셋 다 문단으로
+    // 다운그레이드됨을 확인한다.
+    const levels = parseClipboardTable({
+      html: "<h4>A</h4><h5>B</h5><h6>C</h6>" + TABLE,
+    });
+    expect(levels.ok).toBe(true);
+    if (levels.ok) {
+      expect(levels.value).toEqual([
+        { type: "paragraph", content: [{ text: "A" }] },
+        { type: "paragraph", content: [{ text: "B" }] },
+        { type: "paragraph", content: [{ text: "C" }] },
+        TABLE_BLOCK,
+      ]);
+    }
+  });
+
+  // heading 텍스트도 셀 텍스트와 같은 정규화(collapseHtmlWhitespace +
+  // normalizeCellContent)를 거쳐야 한다 — 누락되면 model의
+  // isValidInlineText가 거절하는 코드포인트가 남아 readEditorDocument에서
+  // throw된다(editor 영구 desync).
+  it("heading 텍스트도 셀과 같은 공백·제어문자 정규화를 거친다", () => {
+    const result = parseClipboardTable({ html: "<h1>\n\tA \t</h1>" + TABLE });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]).toEqual({
+      type: "heading",
+      level: 1,
+      content: [{ text: "A" }],
     });
   });
 });

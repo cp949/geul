@@ -385,6 +385,11 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       ],
     },
   });
+  const headingBlock = (text: string, level: 1 | 2 | 3): ClipboardContentBlock => ({
+    type: "heading",
+    level,
+    content: [{ text }],
+  });
 
   it("표 밖에서 문단+표+문단 시퀀스를 한 트랜잭션으로 삽입한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
@@ -614,6 +619,79 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result).toEqual({
       ok: false,
       error: { code: "TRANSACTION_REJECTED" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("표 밖 캐럿에서 heading이 섞인 시퀀스를 붙여넣으면 heading 노드가 삽입된다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+
+    const result = pasteClipboardContent(
+      editor,
+      [headingBlock("heading text", 2), tableBlock("A")],
+      createId,
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    // 첫 번째 새 블록이 heading이다
+    expect(doc.content?.[1]?.type).toBe("heading");
+    expect(doc.content?.[1]?.attrs?.level).toBe(2);
+    expect(doc.content?.[1]?.content?.[0]?.text).toBe("heading text");
+    // 새 heading도 문단과 같은 방식으로 안정 id를 받는다 —
+    // BlockIdExtension.appendTransaction이 같은 dispatch 안에서 사후
+    // 배정한다(표 밖 문단+표+문단 시퀀스 테스트의 introBlockId 단언과 대칭).
+    const headingBlockId = doc.content?.[1]?.attrs?.blockId;
+    expect(typeof headingBlockId).toBe("string");
+    expect((headingBlockId as string).length).toBeGreaterThan(0);
+    // 그 다음이 표다
+    expect(doc.content?.[2]?.type).toBe("table");
+    expect(
+      doc.content?.[2]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
+    ).toBe("A");
+  });
+
+  it("표 안에서 heading+표 혼합 시퀀스를 붙여넣으면 heading 텍스트가 셀에 문단과 같은 방식으로 병합된다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [headingBlock("intro", 2), tableBlock("x"), headingBlock("outro", 1)],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    // 표 밖에 새 블록이 생기지 않는다 — 최상위 블록 수는 그대로다
+    expect(doc.content).toHaveLength(before.content?.length ?? 0);
+    // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
+    // 문서 순서대로 한 셀에 들어간다
+    expect(
+      doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
+    ).toBe("intro\nx\noutro");
+  });
+
+  it("model 인라인 텍스트 계약을 어기는 heading 콘텐츠는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [{ type: "heading", level: 1, content: [{ text: "" }] }, tableBlock("A")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: "Heading content contains an empty text run",
+      },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });

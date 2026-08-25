@@ -760,6 +760,15 @@ const buildSequenceNode = (
     return { ok: true, value: { node, table: null } };
   }
 
+  if (block.type === "heading") {
+    const node = schema.nodeFromJSON({
+      type: "heading",
+      attrs: { level: block.level },
+      content: inlineContentToTiptap(block.content),
+    });
+    return { ok: true, value: { node, table: null } };
+  }
+
   const emptyTable = buildPasteTableSkeleton(
     { rows: block.data.rows.length, columns: block.data.columnCount },
     createId,
@@ -908,17 +917,19 @@ export const pasteClipboardContent = (
   }
 
   // 뮤테이션 전에 시퀀스 전체를 검증한다(G-EDT-001) — 표 부분은
-  // pasteTabularData와 같은 구조·서식·셀 한도 검증, 문단은 편집 가능
+  // pasteTabularData와 같은 구조·서식·셀 한도 검증, 문단과 제목은 편집 가능
   // 콘텐츠 계약만 적용한다.
   for (const block of content) {
-    if (block.type === "paragraph") {
+    if (block.type === "paragraph" || block.type === "heading") {
       const violation = inlineContentViolation(block.content);
       if (violation !== null) {
+        const blockTypeLabel =
+          block.type === "heading" ? "Heading" : "Paragraph";
         return {
           ok: false,
           error: {
             code: "CLIPBOARD_CONTENT_INVALID",
-            message: `Paragraph content ${violation}`,
+            message: `${blockTypeLabel} content ${violation}`,
           },
         };
       }
@@ -954,15 +965,20 @@ export const pasteClipboardContent = (
       return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
     }
 
-    const paragraphContent = (
+    // 문단과 heading 둘 다 셀에 병합될 자격이 있다(표는 블록 자식을 가질
+    // 수 없어 heading의 level도 문단과 동일하게 텍스트만 남긴다, DELTA-04
+    // Issue #72) — 이름을 paragraphContent에서 넓혀 그 사실을 반영한다.
+    const mergeableInlineContent = (
       blocks: readonly ClipboardContentBlock[],
     ): InlineContent[] =>
       blocks
         .filter(
           (
             entry,
-          ): entry is Extract<ClipboardContentBlock, { type: "paragraph" }> =>
-            entry.type === "paragraph",
+          ): entry is Extract<
+            ClipboardContentBlock,
+            { type: "paragraph" | "heading" }
+          > => entry.type === "paragraph" || entry.type === "heading",
         )
         .map((entry) => [...entry.content]);
 
@@ -970,8 +986,8 @@ export const pasteClipboardContent = (
       editor,
       withParagraphsMergedIntoCells(
         tableBlock.data,
-        paragraphContent(content.slice(0, tableIndex)),
-        paragraphContent(content.slice(tableIndex + 1)),
+        mergeableInlineContent(content.slice(0, tableIndex)),
+        mergeableInlineContent(content.slice(tableIndex + 1)),
       ),
       createId,
     );

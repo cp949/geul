@@ -1,4 +1,5 @@
 import {
+  type InlineContent,
   isCanonicalCellAlign,
   isCanonicalCellColor,
   MAX_TABLE_LOGICAL_CELLS,
@@ -136,6 +137,17 @@ const wrapInAncestors = (
     node,
   );
 
+// h1~h6만 heading 태그다. 태그명 마지막 문자에서 level을 뽑는다
+// (import-html.ts의 parseBlock과 같은 패턴 — `Number(tagName.slice(1))`).
+// clipboardAllowedTagNames가 h4~h6까지 sanitize를 통과시키므로(DELTA-03,
+// Issue #72) 여기서 h1~h6를 모두 인식해야 sanitize 확장이 의미가 있다.
+const headingLevelFromTagName = (
+  tagName: string,
+): 1 | 2 | 3 | 4 | 5 | 6 | undefined =>
+  /^h[1-6]$/.test(tagName)
+    ? (Number(tagName.slice(1)) as 1 | 2 | 3 | 4 | 5 | 6)
+    : undefined;
+
 // 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고 문단 블록으로 옮겨 담는다
 // — 표 앞뒤 문단은 문단으로, 표는 표 노드로, 문서 순서를 지켜 한 시퀀스로
 // 만든다(spec §4.1, Issue #71). 이 판정은 sanitize를 이미 거친 트리를
@@ -145,19 +157,22 @@ const wrapInAncestors = (
 // <div data-pm-slice="..."> 같은 래퍼에 있던 콘텐츠도 이 판정에 그대로
 // 걸린다 — 구조적 래퍼가 통째로 면제되는 허용 목록이 따로 있는 게 아니다.
 //
-// `p` 태그와 찾아낸 데이터 표들이 블록 경계다: `p`를 만나면 지금까지 쌓인
-// 인라인 콘텐츠를 문단으로 내보내고 그 `p`의 콘텐츠만 담은 문단을 하나 더
-// 내보낸다. 찾아낸 표를 만나면 그 표를 표 블록으로 내보낸다 — 형제 최상위
-// 데이터 표가 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각
-// 독립된 표 블록이 된다. TBL-012는 "단일 표 10,000 논리 셀 보장" 성능
-// 계약이지 "클립보드당 표 1개" 제품 계약이 아니므로 다중 표 지원과
-// 충돌하지 않는다. 그 외 모든 요소(레이아웃 표 래퍼의 tr/td, 서명 셀,
-// span/strong 등 인라인 서식, 그리고 findDataTables가 고르지 않은 다른
-// <table> — 셀 없는 표나 role=presentation 래퍼)는 인라인 콘텐츠로 재귀
-// 병합한다 — 레이아웃 표 안 형제 셀 텍스트가 데이터 표와 함께 보존되는
-// 것도 이 재귀 덕분이다.
+// `p`/`h1`~`h6` 태그와 찾아낸 데이터 표들이 블록 경계다: `p`나 heading을
+// 만나면 지금까지 쌓인 인라인 콘텐츠를 먼저 문단으로 내보내고 그 요소의
+// 콘텐츠만 담은 블록을 하나 더 내보낸다 — h1~h3는 `{type:"heading",level}`
+// 로, h4~h6는 model HeadingBlock.level(1~3) 제약 때문에 문단으로
+// 다운그레이드한다(DELTA-03, Issue #72; clipboardAllowedTagNames가 h4~h6도
+// sanitize를 통과시켜야 태그 자체가 여기 도달한다, sanitize-schema.ts).
+// 찾아낸 표를 만나면 그 표를 표 블록으로 내보낸다 — 형제 최상위 데이터
+// 표가 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각 독립된 표
+// 블록이 된다. TBL-012는 "단일 표 10,000 논리 셀 보장" 성능 계약이지
+// "클립보드당 표 1개" 제품 계약이 아니므로 다중 표 지원과 충돌하지 않는다.
+// 그 외 모든 요소(레이아웃 표 래퍼의 tr/td, 서명 셀, span/strong 등 인라인
+// 서식, 그리고 findDataTables가 고르지 않은 다른 <table> — 셀 없는 표나
+// role=presentation 래퍼)는 인라인 콘텐츠로 재귀 병합한다 — 레이아웃 표 안
+// 형제 셀 텍스트가 데이터 표와 함께 보존되는 것도 이 재귀 덕분이다.
 //
-// 문단 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
+// 문단/heading 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
 // collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
 // 제어문자/DEL/짝 없는 surrogate 정제) 없으면 model의 isValidInlineText
 // 검사가 거절해 readEditorDocument에서 throw된다(editor 영구 desync).
@@ -173,10 +188,19 @@ const blockSequenceFromNodes = (
   let pending: HtmlNode[] = [];
   let failure: ClipboardParseError | undefined;
 
+  // 셀 텍스트와 같은 정규화(collapseHtmlWhitespace로 공백 run 접기 →
+  // normalizeCellContent로 C0 제어문자/DEL/짝 없는 surrogate 제거)를 거쳐
+  // 인라인 콘텐츠로 만든다. flush()의 문단 생성과 heading 분기(h1~h3)가 이
+  // 정규화를 공유한다 — 누락되면 model의 isValidInlineText가 거절하는
+  // 코드포인트가 남아 readEditorDocument에서 throw된다(editor 영구 desync).
+  const normalizedInlineContent = (segment: HtmlNode[]): InlineContent => {
+    collapseHtmlWhitespace(segment);
+    return normalizeCellContent(inlineContentFromNodes(segment));
+  };
+
   const flush = (): void => {
     if (pending.length === 0) return;
-    collapseHtmlWhitespace(pending);
-    const content = normalizeCellContent(inlineContentFromNodes(pending));
+    const content = normalizedInlineContent(pending);
     const text = content.map((item) => item.text).join("");
     if (hasSubstantialText(text)) {
       blocks.push({ type: "paragraph", content });
@@ -223,6 +247,32 @@ const blockSequenceFromNodes = (
           wrapInAncestors(child, ancestors),
         );
         flush();
+        continue;
+      }
+      const headingLevel = headingLevelFromTagName(node.tagName);
+      if (headingLevel !== undefined) {
+        // h1~h3는 heading으로, h4~h6는 문단으로 다운그레이드한다(model
+        // HeadingBlock.level이 1~3만 허용 — DELTA-03, Issue #72). 둘 다
+        // 먼저 pending을 flush()해 순서를 지키고, 그 heading/h4~h6의
+        // 콘텐츠만 별도로 담아 인접 블록과 병합되지 않게 한다.
+        flush();
+        const wrapped = node.children.map((child) =>
+          wrapInAncestors(child, ancestors),
+        );
+        if (
+          headingLevel === 1 ||
+          headingLevel === 2 ||
+          headingLevel === 3
+        ) {
+          const content = normalizedInlineContent(wrapped);
+          const text = content.map((item) => item.text).join("");
+          if (hasSubstantialText(text)) {
+            blocks.push({ type: "heading", level: headingLevel, content });
+          }
+        } else {
+          pending = wrapped;
+          flush();
+        }
         continue;
       }
       if (containsAnyTable(node.children, tableSet)) {

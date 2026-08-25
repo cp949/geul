@@ -185,6 +185,31 @@ describe("HTML 보안", () => {
     ]);
   });
 
+  // DELTA-03(Issue #72): clipboard 전용 sanitize 허용 목록에 h4~h6를
+  // 추가해도 문서 import 공유 목록(htmlAllowedTagNames/htmlSanitizeSchema)은
+  // 바뀌지 않는다 — importHtml에서 h4는 여전히 sanitize가 unwrap해
+  // 문단으로 흡수되고 SAFE_BLOCK_DOWNGRADED 경고가 그대로 난다. 위 aside
+  // 사례와 대칭인 회귀 방지 테스트다.
+  it("importHtml은 h4를 여전히 문단으로 강등하고 SAFE_BLOCK_DOWNGRADED를 경고한다", () => {
+    const result = importHtml("<h4>x</h4>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "x" }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "SAFE_BLOCK_DOWNGRADED",
+        element: "h4",
+      }),
+    ]);
+  });
+
   it("C0 제어문자·짝 없는 surrogate가 섞인 문단은 throw 없이 제거하고 경고한다", () => {
     const html = `<p>bad\u0001\u000b${String.fromCharCode(0xd800)}text</p>`;
     const result = importHtml(html);
