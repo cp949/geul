@@ -43,6 +43,52 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.value[1]?.type).toBe("table");
   });
 
+  // 완료 기준(Issue #73): findDataTables가 형제 최상위 데이터 표를 문서
+  // 순서대로 모두 찾아 각각 독립된 표 블록으로 담는다 — 표 사이·앞뒤 문단도
+  // 함께 순서대로 보존된다.
+  it("표 사이·앞뒤 문단과 함께 데이터 표 2개를 순서대로 모두 보존한다", () => {
+    const html =
+      "<p>x</p>" +
+      "<table><tbody><tr><td>A1</td><td>A2</td></tr></tbody></table>" +
+      "<p>y</p>" +
+      "<table><tbody><tr><td>B1</td><td>B2</td></tr></tbody></table>" +
+      "<p>z</p>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(5);
+    expect(result.value.map((block) => block.type)).toEqual([
+      "paragraph",
+      "table",
+      "paragraph",
+      "table",
+      "paragraph",
+    ]);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [{ text: "x" }],
+    });
+    expect(result.value[2]).toEqual({
+      type: "paragraph",
+      content: [{ text: "y" }],
+    });
+    expect(result.value[4]).toEqual({
+      type: "paragraph",
+      content: [{ text: "z" }],
+    });
+    const [, first, , second] = result.value;
+    if (first?.type !== "table" || second?.type !== "table") return;
+    expect(first.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
+      [{ text: "A1" }],
+      [{ text: "A2" }],
+    ]);
+    expect(second.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
+      [{ text: "B1" }],
+      [{ text: "B2" }],
+    ]);
+  });
+
   // Slack/Notion/Docs는 블록 경계에 제로폭 문자를 흔히 심는다 — 실질
   // 콘텐츠가 아니므로 빈 문단 블록을 만들지 않는다(눈에 보이지 않는 빈
   // 문단이 편집기에 남으면 사용자가 원인도 모르고 지울 수도 없다).
@@ -66,7 +112,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     }
   });
 
-  // Outlook/Gmail HTML 메일은 여백용 빈 <table>을 중첩해 심는다. findDataTable이
+  // Outlook/Gmail HTML 메일은 여백용 빈 <table>을 중첩해 심는다. findDataTables가
   // 가장 안쪽 표를 고르므로, 빈 표를 데이터 표로 집으면 같은 행에 있는 진짜
   // 셀들이 문단으로 흩어져 표 구조 자체가 사라진다.
   it("셀 없는 중첩 표는 건너뛰고 바깥 데이터 표를 고른다", () => {
@@ -176,7 +222,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   });
 
   // Finding 1b 회귀: 표 밖 인라인 서식(<p> 없이)도 마크를 보존해야 한다.
-  // 이전에는 containsTable 판정이 없어서 <strong> 등이 recursed-into되고
+  // 이전에는 containsAnyTable 판정이 없어서 <strong> 등이 recursed-into되고
   // 마크가 손실됐다. 이제는 <strong>이 표를 담지 않으면 whole node가 pending으로
   // 가고 inlineContentFromNodes가 마크를 계산한다.
   it("표 앞 인라인 서식(문단 태그 밖)도 마크를 보존한다", () => {

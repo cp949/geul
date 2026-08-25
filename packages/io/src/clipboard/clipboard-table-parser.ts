@@ -60,7 +60,7 @@ const isLayoutTable = (table: HtmlElementNode): boolean => {
 };
 
 // 셀이 하나도 없는 표는 데이터 표가 아니다. Outlook/Gmail HTML 메일은 여백용
-// 빈 <table>을 중첩해 심는데, findDataTable이 가장 안쪽 표를 고르므로 이걸
+// 빈 <table>을 중첩해 심는데, findDataTables가 가장 안쪽 표를 고르므로 이걸
 // 데이터 표로 집으면 같은 행에 있는 진짜 셀들이 blockSequenceFromNodes에서
 // 표 없는 순수 인라인 콘텐츠로 문단 블록이 된다 — 표 구조 자체가 사라진다.
 const hasDataCells = (table: HtmlElementNode): boolean =>
@@ -70,39 +70,50 @@ const hasDataCells = (table: HtmlElementNode): boolean =>
     ),
   );
 
-const findDataTable = (root: HtmlRoot): HtmlElementNode | undefined => {
+// 형제 최상위 데이터 표를 문서 순서(pre-order DFS)대로 모두 찾는다(Issue #73
+// — 다중 표 지원). 각 최상위 노드에 대해 먼저 그 자식들을 재귀로 뒤져
+// 나온 표가 있으면 그것만 채택하고(innermost wins — 표를 품은 바깥 표
+// 자신은 후보에서 제외한다, model이 중첩 표를 표현하지 못하므로), 자식
+// 재귀에서 아무것도 못 찾았을 때만 노드 자신을 데이터 표 후보로 본다.
+// 별도 정렬은 하지 않는다 — 이 순회 순서 자체가 이미 표 발견 순서다.
+const findDataTables = (root: HtmlRoot): HtmlElementNode[] => {
+  const tables: HtmlElementNode[] = [];
   for (const node of root.children) {
     if (node.type !== "element") continue;
-    const nested = findDataTable({ type: "root", children: node.children });
-    if (nested !== undefined) return nested;
+    const nested = findDataTables({ type: "root", children: node.children });
+    if (nested.length > 0) {
+      tables.push(...nested);
+      continue;
+    }
     if (
       node.tagName === "table" &&
       !isLayoutTable(node) &&
       hasDataCells(node)
     ) {
-      return node;
+      tables.push(node);
     }
   }
-  return undefined;
+  return tables;
 };
 
 // "표 밖 실질 텍스트" 판정(hasSubstantialText/INSUBSTANTIAL_TEXT)은
 // table-layout.ts가 소유한다 — import 경로(caption 등 표 직속 비섹션 자식)와
 // 이 판정을 공유해야 하기 때문이다.
 
-// 대상 표가 이 노드들 안 어딘가에 있는지 재귀로 확인한다. walk()가 표를
-// 찾기 위해 더 파고들어야 하는지(descend), 아니면 표 없는 순수 인라인/
-// 구조 콘텐츠라 통째로 pending에 밀어 넣어도 되는지(inlineContentFromNodes가
-// 알아서 재귀하며 마크를 계산한다) 판단하는 데 쓴다.
-const containsTable = (
+// 찾아낸 표 중 하나라도 이 노드들 안 어딘가에 있는지 재귀로 확인한다.
+// walk()가 표를 찾기 위해 더 파고들어야 하는지(descend), 아니면 표 없는
+// 순수 인라인/구조 콘텐츠라 통째로 pending에 밀어 넣어도 되는지
+// (inlineContentFromNodes가 알아서 재귀하며 마크를 계산한다) 판단하는 데
+// 쓴다. 표 집합을 Set으로 받아 `has` 판정한다 — nodes.includes로 배열을
+// 매 노드마다 선형 탐색하면 표 개수만큼 비용이 곱해진다.
+const containsAnyTable = (
   nodes: readonly HtmlNode[],
-  table: HtmlElementNode,
+  tables: ReadonlySet<HtmlElementNode>,
 ): boolean => {
   for (const node of nodes) {
-    if (node === table) return true;
-    if (node.type === "element" && containsTable(node.children, table)) {
-      return true;
-    }
+    if (node.type !== "element") continue;
+    if (tables.has(node)) return true;
+    if (containsAnyTable(node.children, tables)) return true;
   }
   return false;
 };
@@ -134,14 +145,17 @@ const wrapInAncestors = (
 // <div data-pm-slice="..."> 같은 래퍼에 있던 콘텐츠도 이 판정에 그대로
 // 걸린다 — 구조적 래퍼가 통째로 면제되는 허용 목록이 따로 있는 게 아니다.
 //
-// `p` 태그와 찾아낸 표 요소가 블록 경계다: `p`를 만나면 지금까지 쌓인
+// `p` 태그와 찾아낸 데이터 표들이 블록 경계다: `p`를 만나면 지금까지 쌓인
 // 인라인 콘텐츠를 문단으로 내보내고 그 `p`의 콘텐츠만 담은 문단을 하나 더
-// 내보낸다. 그 외 모든 요소(레이아웃 표 래퍼의 tr/td, 서명 셀, span/strong
-// 등 인라인 서식)는 인라인 콘텐츠로 재귀 병합한다 — 레이아웃 표 안 형제
-// 셀 텍스트가 데이터 표와 함께 보존되는 것도 이 재귀 덕분이다. 찾아낸
-// 표가 아닌 다른 <table>(두 번째 데이터 표 등)도 같은 방식으로 재귀해
-// 텍스트만 흡수한다 — 여러 데이터 표를 한 시퀀스에 각각 표로 담는 것은
-// 범위 밖이다(findDataTable도 표 하나만 고른다, TBL-012).
+// 내보낸다. 찾아낸 표를 만나면 그 표를 표 블록으로 내보낸다 — 형제 최상위
+// 데이터 표가 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각
+// 독립된 표 블록이 된다. TBL-012는 "단일 표 10,000 논리 셀 보장" 성능
+// 계약이지 "클립보드당 표 1개" 제품 계약이 아니므로 다중 표 지원과
+// 충돌하지 않는다. 그 외 모든 요소(레이아웃 표 래퍼의 tr/td, 서명 셀,
+// span/strong 등 인라인 서식, 그리고 findDataTables가 고르지 않은 다른
+// <table> — 셀 없는 표나 role=presentation 래퍼)는 인라인 콘텐츠로 재귀
+// 병합한다 — 레이아웃 표 안 형제 셀 텍스트가 데이터 표와 함께 보존되는
+// 것도 이 재귀 덕분이다.
 //
 // 문단 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
 // collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
@@ -152,8 +166,9 @@ const wrapInAncestors = (
 // 그 요소가 주던 마크는 wrapInAncestors가 노드마다 다시 씌워 살린다.
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
-  table: HtmlElementNode,
+  tables: readonly HtmlElementNode[],
 ): Result<ClipboardContentBlock[], ClipboardParseError> => {
+  const tableSet = new Set(tables);
   const blocks: ClipboardContentBlock[] = [];
   let pending: HtmlNode[] = [];
   let failure: ClipboardParseError | undefined;
@@ -175,7 +190,7 @@ const blockSequenceFromNodes = (
   ): void => {
     for (const node of list) {
       if (failure !== undefined) return;
-      if (node === table) {
+      if (node.type === "element" && tableSet.has(node)) {
         // 기존 pending(intro 등)을 먼저 내보낸 뒤에야 caption을 pending에
         // 담는다 — 순서를 바꾸면 pending이 아직 안 비워진 상태라 caption이
         // intro보다 앞서 나온다(문서 순서 역전). caption(표 직속 비섹션
@@ -185,11 +200,11 @@ const blockSequenceFromNodes = (
         // 같은 정규화를 거치지 않으면 model의 isValidInlineText 검사가
         // 거절해 readEditorDocument에서 throw된다.
         flush();
-        pending = tableNonSectionChildren(table).map((child) =>
+        pending = tableNonSectionChildren(node).map((child) =>
           wrapInAncestors(child, ancestors),
         );
         flush();
-        const parsed = tabularDataFromTable(table);
+        const parsed = tabularDataFromTable(node);
         if (!parsed.ok) {
           failure = parsed.error;
           return;
@@ -210,7 +225,7 @@ const blockSequenceFromNodes = (
         flush();
         continue;
       }
-      if (containsTable(node.children, table)) {
+      if (containsAnyTable(node.children, tableSet)) {
         walk(node.children, [...ancestors, node]);
         continue;
       }
@@ -384,11 +399,11 @@ const parseHtmlTable = (html: string): HtmlTableOutcome => {
   // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
   sanitizeLinks(safeRoot.children);
 
-  const table = findDataTable(safeRoot);
-  if (table === undefined)
+  const tables = findDataTables(safeRoot);
+  if (tables.length === 0)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 
-  const sequence = blockSequenceFromNodes(safeRoot.children, table);
+  const sequence = blockSequenceFromNodes(safeRoot.children, tables);
   if (!sequence.ok) {
     return { ok: false, error: sequence.error, sawTable: true };
   }

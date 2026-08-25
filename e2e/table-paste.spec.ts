@@ -195,6 +195,35 @@ test("탭 없는 일반 텍스트 붙여넣기는 표를 만들지 않는다", a
   await expect(editable.locator("p").first()).toContainText("hello world");
 });
 
+test("표 2개가 있는 HTML을 표 밖에 붙이면 두 표 모두 문서에 생긴다 @core", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+
+  const twoTablesHtml =
+    "<table><tbody><tr><td>A1</td><td>A2</td></tr></tbody></table>" +
+    "<table><tbody><tr><td>B1</td><td>B2</td></tr></tbody></table>";
+
+  await editable.evaluate(dispatchPaste, { html: twoTablesHtml });
+
+  // 형제 최상위 데이터 표가 각각 독립된 <table> 노드로 문서 순서대로
+  // 남는다(Issue #73, spec §4.1 구현 반영) — 두 번째 표가 첫 표 안으로
+  // 흡수되거나 텍스트로 뭉개지지 않는다.
+  const tables = editable.locator("table");
+  await expect(tables).toHaveCount(2);
+
+  const firstCells = tables.nth(0).locator("td");
+  await expect(firstCells).toHaveCount(2);
+  await expect(firstCells.nth(0)).toHaveText("A1");
+  await expect(firstCells.nth(1)).toHaveText("A2");
+
+  const secondCells = tables.nth(1).locator("td");
+  await expect(secondCells).toHaveCount(2);
+  await expect(secondCells.nth(0)).toHaveText("B1");
+  await expect(secondCells.nth(1)).toHaveText("B2");
+});
+
 test("표 앞뒤에 문단이 섞인 HTML은 문단과 표 구조를 모두 보존한다", async ({
   page,
 }) => {

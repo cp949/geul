@@ -78,6 +78,80 @@ describe("parseClipboardTable", () => {
     expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
   });
 
+  it("형제 데이터 표 2개를 문서 순서대로 각각 표 블록으로 만든다", () => {
+    const html =
+      "<table><tbody><tr><td>A1</td><td>A2</td></tr></tbody></table>" +
+      "<table><tbody><tr><td>B1</td><td>B2</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value.map((block) => block.type)).toEqual([
+      "table",
+      "table",
+    ]);
+    const [first, second] = result.value;
+    if (first?.type !== "table" || second?.type !== "table") return;
+    expect(first.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
+      [{ text: "A1" }],
+      [{ text: "A2" }],
+    ]);
+    expect(second.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
+      [{ text: "B1" }],
+      [{ text: "B2" }],
+    ]);
+  });
+
+  it("공통 wrapper 안 형제 데이터 표 2개도 각각 표 블록으로 만든다", () => {
+    const html =
+      "<div>" +
+      "<table><tbody><tr><td>A1</td><td>A2</td></tr></tbody></table>" +
+      "<table><tbody><tr><td>B1</td><td>B2</td></tr></tbody></table>" +
+      "</div>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value.map((block) => block.type)).toEqual([
+      "table",
+      "table",
+    ]);
+    const [first, second] = result.value;
+    if (first?.type !== "table" || second?.type !== "table") return;
+    expect(first.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
+      [{ text: "A1" }],
+      [{ text: "A2" }],
+    ]);
+    expect(second.data.rows[0]?.cells.map((cell) => cell.content)).toEqual([
+      [{ text: "B1" }],
+      [{ text: "B2" }],
+    ]);
+  });
+
+  it("중첩 표와 형제 표가 함께 있어도 innermost wins를 유지하며 형제 표는 각각 인식한다", () => {
+    const html =
+      "<table><tbody><tr><td>" +
+      "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
+      "</td></tr></tbody></table>" +
+      "<table><tbody><tr><td>c</td><td>d</td></tr></tbody></table>";
+
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(2);
+    expect(result.value.map((block) => block.type)).toEqual([
+      "table",
+      "table",
+    ]);
+    const [first, second] = result.value;
+    if (first?.type !== "table" || second?.type !== "table") return;
+    expect(first.data.columnCount).toBe(2);
+    expect(first.data.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
+    expect(second.data.rows[0]?.cells[0]?.content).toEqual([{ text: "c" }]);
+  });
+
   it("표 앞뒤에 문단이 있으면 문단과 표를 순서대로 보존한다", () => {
     const html =
       "<p>intro</p>" +
