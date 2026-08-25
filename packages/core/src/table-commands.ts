@@ -805,7 +805,7 @@ const markRunKey = (marks: TextMark[] | undefined): string =>
 const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
   for (const run of runs) {
     if (run.text.length === 0) continue;
-    const previous = target.at(-1);
+    const previous = target[target.length - 1];
     if (
       previous !== undefined &&
       markRunKey(previous.marks) === markRunKey(run.marks)
