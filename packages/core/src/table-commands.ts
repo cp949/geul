@@ -931,11 +931,23 @@ export const pasteClipboardContent = (
   const state = editor.state;
 
   if (isInTable(state)) {
-    // 시퀀스의 표 부분은 기존 grid-paste 경로로 붙이고, 문단은 블록으로
-    // 끼울 자리가 없으므로 withParagraphsMergedIntoCells가 셀 텍스트에
-    // 합친다. 표 블록이 둘 이상인 시퀀스는 parseClipboardTable이 만들지
-    // 않는다(findDataTable이 표 하나만 고른다, TBL-012) — 공개 API로 직접
-    // 들어온 경우에만 가능하고, 그때는 첫 표만 붙인다.
+    // 표 블록이 둘 이상인 경우 다중 표를 명시적으로 거절한다 — 표 안
+    // 분기에서는 문단을 별도 블록으로 끼울 수 없으므로 다중 표를 지원할 수
+    // 없다. TBL-012(성능 계약)는 표 크기 한도이지 "표 1개" 제품 계약이 아니다.
+    const tableCount = content.filter(
+      (entry) => entry.type === "table",
+    ).length;
+    if (tableCount > 1) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message:
+            "Cannot paste multiple tables inside an existing table cell",
+        },
+      };
+    }
+
     const tableIndex = content.findIndex((entry) => entry.type === "table");
     const tableBlock = content[tableIndex];
     if (tableIndex === -1 || tableBlock?.type !== "table") {

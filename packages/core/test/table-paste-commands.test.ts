@@ -551,6 +551,29 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
+  it("표 안에서 표 2개가 섞인 시퀀스는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON() as TiptapJsonNode;
+    const selectionBefore = editor.state.selection.toJSON();
+
+    const result = pasteClipboardContent(
+      editor,
+      [tableBlock("A"), paragraphBlock("middle"), tableBlock("B")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: expect.stringContaining("multiple tables"),
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    expect(editor.state.selection.toJSON()).toEqual(selectionBefore);
+  });
+
   it("문단 콘텐츠가 편집 가능 계약을 어기면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
