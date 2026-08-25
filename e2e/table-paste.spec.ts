@@ -63,7 +63,7 @@ test("Google Sheets 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 
   await expect(cells.nth(3)).toHaveCSS("text-align", "right");
 });
 
-test("Excel 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 생긴다 @core", async ({
+test("Excel 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 생긴다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -195,7 +195,7 @@ test("탭 없는 일반 텍스트 붙여넣기는 표를 만들지 않는다", a
   await expect(editable.locator("p").first()).toContainText("hello world");
 });
 
-test("표 2개가 있는 HTML을 표 밖에 붙이면 두 표 모두 문서에 생긴다 @core", async ({
+test("표 2개가 있는 HTML을 표 밖에 붙이면 두 표 모두 문서에 생긴다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

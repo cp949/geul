@@ -8,9 +8,7 @@ import { expect, test } from "@playwright/test";
 
 import { insertTable, openDemo } from "./support/demo.js";
 
-test("슬래시 메뉴에서 표를 삽입하고 undo 1회로 복원한다 @core", async ({
-  page,
-}) => {
+test("슬래시 메뉴에서 표를 삽입하고 undo 1회로 복원한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
 
@@ -300,7 +298,7 @@ test("재정렬 뒤 브라우저가 click을 합성하지 않아도 다음 진�
   ).toBeVisible();
 });
 
-test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다 @core", async ({
+test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -358,9 +356,7 @@ test("Escape로 리사이즈를 취소하면 너비가 원래대로 복원된다
   await expect(editable).toBeVisible();
 });
 
-test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다 @core", async ({
-  page,
-}) => {
+test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
 
@@ -403,7 +399,7 @@ test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다 @core", 
   );
 });
 
-test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다 @core", async ({
+test("외부 HTML 표를 붙여넣으면 표가 생기고 편집이 계속된다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
