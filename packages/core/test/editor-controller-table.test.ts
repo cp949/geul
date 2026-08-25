@@ -182,7 +182,6 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getTableCellSelection()).toEqual({
         tableBlockId,
         cellIds,
-        mergeable: true,
         splitCellId: null,
       });
     });
@@ -246,7 +245,6 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getTableCellSelection()).toEqual({
         tableBlockId,
         cellIds: [topLeft],
-        mergeable: false,
         splitCellId: topLeft,
       });
     });
@@ -314,7 +312,6 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getTableCellSelection()).toEqual({
         tableBlockId,
         cellIds: [topLeft],
-        mergeable: false,
         splitCellId: null,
       });
     });
@@ -331,7 +328,6 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getTableCellSelection()).toEqual({
         tableBlockId,
         cellIds: [topLeft],
-        mergeable: false,
         splitCellId: topLeft,
       });
     });

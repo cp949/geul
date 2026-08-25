@@ -38,7 +38,6 @@ const CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS = [
 type ToolbarState = {
   tableBlockId: string;
   cellIds: string[];
-  mergeable: boolean;
   splitCellId: string | null;
   left: number;
   top: number;
@@ -144,7 +143,6 @@ export const TableSelectionToolbar = () => {
       setToolbarState({
         tableBlockId: selection.tableBlockId,
         cellIds: selection.cellIds,
-        mergeable: selection.mergeable,
         splitCellId: selection.splitCellId,
         left: bounds.left,
         top: bounds.top,
@@ -200,7 +198,7 @@ export const TableSelectionToolbar = () => {
         role="toolbar"
         style={style}
       >
-        {toolbarState.mergeable && (
+        {toolbarState.cellIds.length > 1 && (
           <IconButton
             className={buttonClassName}
             icon={mergeIcon}

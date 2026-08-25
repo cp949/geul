@@ -53,7 +53,7 @@ type FakeControllerOptions = {
  * 마운트로 넘어가지 못한 이유를 한 곳에 적는다 — 각 테스트의 잔여 주석은
  * 여기서 갈라지는 구체적 상태만 짚는다.
  *
- * `mergeable`(cellIds 2개 이상)과 트리플클릭한 단일 셀 선택은 둘 다
+ * 병합 가능(cellIds 2개 이상)과 트리플클릭한 단일 셀 선택은 둘 다
  * ProseMirror의 CellSelection에서만 나온다(editor-controller.ts의
  * getTableCellSelection). 그런데 CellSelection을 세우려면
  * `@tiptap/pm/tables`가 필요하고 packages/react는 Tiptap/ProseMirror에
@@ -148,7 +148,7 @@ const fakeController = ({
 
 /**
  * 병합 가능한 2셀 선택 상태의 fakeController를 만든다. cellIds가 2개 이상이고
- * mergeable이 true, splitCellId가 null인 TableCellSelection을 반환한다.
+ * splitCellId가 null인 TableCellSelection을 반환한다.
  * getTableCellSelection 외 FakeControllerOptions는 overrides로 그대로
  * fakeController에 전달한다.
  */
@@ -160,7 +160,6 @@ const mergeableSelectionController = (
     getTableCellSelection: () => ({
       tableBlockId: "table-1",
       cellIds: ["cell-1", "cell-2"],
-      mergeable: true,
       splitCellId: null,
     }),
   });
@@ -422,12 +421,11 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
   // 실제로 시도한 것: 실제 마운트에서 mousedown detail 1/2/3을 순서대로
   // 쐈지만 prosemirror-view의 posAtCoords가 jsdom에 없는
   // document.elementFromPoint를 불러 TypeError로 죽었다(실측).
-  it("트리플클릭한 병합되지 않은 셀 하나(mergeable=false, splitCellId=null)도 Cell formatting 버튼을 보여준다", () => {
+  it("트리플클릭한 병합되지 않은 셀 하나(cellIds 1개, splitCellId=null)도 Cell formatting 버튼을 보여준다", () => {
     const controller = fakeController({
       getTableCellSelection: () => ({
         tableBlockId: "table-1",
         cellIds: ["cell-1"],
-        mergeable: false,
         splitCellId: null,
       }),
     });
@@ -453,7 +451,6 @@ describe("병합된 셀에 캐럿을 두면 분할·서식 툴바를 표시한�
     expect(editor.getTableCellSelection()).toEqual({
       tableBlockId,
       cellIds: [firstMergedCellId],
-      mergeable: false,
       splitCellId: firstMergedCellId,
     });
 

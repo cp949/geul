@@ -165,14 +165,14 @@ export type BlockTypeDescriptor =
   | { type: "heading"; level: 1 | 2 | 3 };
 
 // CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
-// 나열한다. mergeable은 기준 셀이 2개 이상일 때, splitCellId는 선택이 이미
-// 병합된 셀 하나만 덮을 때 그 cellId다. 삼중클릭이 만드는 병합되지 않은
-// 단일 셀 CellSelection은 mergeable=false, splitCellId=null이지만
-// cellIds는 채워진다 — 서식(색상·정렬)은 여전히 대상이다(spec 7.2).
+// 나열한다. 병합 가능 여부는 cellIds.length > 1로 호출부가 직접 파생한다.
+// splitCellId는 선택이 이미 병합된 셀 하나만 덮을 때 그 cellId다. 삼중클릭이
+// 만드는 병합되지 않은 단일 셀 CellSelection은 cellIds.length가 1이라
+// 병합 대상이 아니고 splitCellId=null이지만 cellIds는 채워진다 —
+// 서식(색상·정렬)은 여전히 대상이다(spec 7.2).
 export type TableCellSelection = {
   tableBlockId: string;
   cellIds: string[];
-  mergeable: boolean;
   splitCellId: string | null;
 };
 
@@ -952,7 +952,6 @@ export const createEditor = (
         return {
           tableBlockId,
           cellIds,
-          mergeable: cellIds.length > 1,
           splitCellId: singleMergedCellId,
         };
       }
@@ -974,7 +973,6 @@ export const createEditor = (
       return {
         tableBlockId,
         cellIds: [cellId],
-        mergeable: false,
         splitCellId: cellId,
       };
     },
