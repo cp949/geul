@@ -1,3 +1,9 @@
+/**
+ * `table-handles.tsx`가 표 둘레에 그리는 fixed 오버레이(행/열 재정렬
+ * 핸들, 리사이즈 strip, 행/열 추가 버튼)의 동작을 검증한다 — 드래그
+ * 재정렬, 리사이즈, 핸들 재클릭의 메뉴 열기/닫기, 빠른 확장 버튼, 그리고
+ * 오버레이 좌표가 표의 실제 경계와 어긋나 셀 클릭을 가로채지 않는지.
+ */
 import { expect, test } from "@playwright/test";
 
 import { insertTable, openDemo } from "./support/demo.js";
@@ -460,4 +466,37 @@ test("빠른 확장 버튼으로 행과 열을 추가하고 undo 1회로 복원�
 
   await page.keyboard.press("Control+z");
   await expect(table.locator("tr").first().locator("td")).toHaveCount(3);
+});
+
+test("표 셀 편집으로 레이아웃이 밀린 뒤에도 표 핸들 오버레이가 마지막 열 셀 클릭을 가로채지 않는다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+
+  await cell(0, 0).click();
+  // 데모 앱의 "Changed block IDs" 디버그 패널(app.tsx)이 편집마다 갱신되며
+  // 줄바꿈 여부가 바뀌어, 표를 담은 상위 패널의 높이와 함께 표 자체의
+  // 화면 top이 움직인다(Issue #15). table-handles.tsx는 이 렌더 함수
+  // 본문에서 geometry를 읽는데, React가 이 DOM 변경(패널 줄바꿈)을 아직
+  // commit하기 전이라 그 읽기는 "이 렌더 이전" 표 위치를 담는다 — 핸들이
+  // 표 실제 경계보다 최대 한 렌더만큼 낡은 좌표에 그려진다.
+  await page.keyboard.type("A");
+
+  const lastCell = cell(0, 2);
+  const box = await lastCell.boundingBox();
+  if (box === null) throw new Error("표 마지막 열 셀의 좌표를 읽지 못했다");
+  // Locator.click()의 actionability 재시도(대상이 클릭 가능해질 때까지
+  // 기다리는 로직)를 거치면 재시도 사이 다른 렌더가 끼어들어 오버레이
+  // 낡음이 우연히 사라진다 — 실제 마우스 클릭이 좌표에 곧장 꽂히는
+  // 상황을 재현하려면 page.mouse.click으로 재시도 없이 좌표를 그대로
+  // 보내야 한다(이슈 본문의 elementFromPoint 재현과 같은 방식).
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.type("Z");
+
+  // 클릭이 열 재정렬 핸들 등 오버레이에 가로채이면 캐럿이 셀에 없어
+  // 이 타이핑이 어디에도 닿지 않는다(이슈 증상과 동일).
+  await expect(lastCell).toHaveText("Z");
 });
