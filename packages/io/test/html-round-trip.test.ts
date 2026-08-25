@@ -578,16 +578,73 @@ describe("HTML 왕복 변환", () => {
     });
   });
 
-  // 위 완화(rowSpan 가중치)가 위조된 rowSpan(실제 <tr> 수를 넘는 값)으로
-  // colspan 선제 검사를 우회하는 구멍이 되지 않는지 고정한다 — 실제 행은
-  // 1개뿐인데 rowSpan="500"을 주장하면 선제 검사는 통과해도(가중치가 커서
-  // "혼자 주장"으로 안 잡힘) model의 validateGridCoverage가 rowEnd(=0+500)가
-  // 실제 rowCount(1)를 넘는 것을 SPAN_OUT_OF_BOUNDS로 거절한다(Issue #114
-  // 조사 결론과 같은 안전망).
-  it("실제 행 수를 넘는 위조 rowSpan은 선제 검사를 우회해도 그리드 검증이 거절한다", () => {
+  // Issue #115 당시: 위조된 rowSpan(실제 <tr> 수를 넘는 값)이 colspan 선제
+  // 검사를 우회하는 구멍이 되지 않는지 고정했다 — 실제 행은 1개뿐인데
+  // rowSpan="500"을 주장하면(그때 cellRowWeight는 rowSpan 값 자체였으므로)
+  // 선제 검사는 통과하고 model의 validateGridCoverage가 rowEnd(=0+500)가
+  // 실제 rowCount(1)를 넘는 것을 SPAN_OUT_OF_BOUNDS로 거절했다.
+  //
+  // (Issue #117 이후 갱신) 이 표는 행이 1개뿐이라 hasIndependentRowBacking이
+  // 항상 뒷받침 없음으로 판정한다 — rowSpan이 덮을 "다른 행" 자체가 없기
+  // 때문이다. 그래서 이 케이스는 더 이상 그리드 검증까지 가지 않고 선제
+  // 검사(oversizedColumnSpanCell) 자신이 곧바로 거절한다(bound=1) — 바로
+  // 아래 "[Issue #117] 뒷받침 없이 rowSpan만 걸린 셀의 과대 colspan은
+  // 여전히 거절한다"와 같은 코드 경로다. 최종 결과(ok: false)는 그대로
+  // 유효한 회귀 방지 케이스라 유지하지만, "선제 검사를 우회해도 그리드
+  // 검증이 거절한다"는 이제 이 입력이 아니라 "뒷받침 있어도 실제 행 수를
+  // 넘는 위조 rowSpan은 그리드 검증이 거절한다"(아래 아래) 테스트가
+  // 검증한다.
+  it("실제 행 수를 넘는 위조 rowSpan은 거절된다(Issue #117 이후 선제 검사가 직접 거절)", () => {
     expect(
       importHtml(
         '<table><tbody><tr><td rowspan="500" colspan="500">X</td></tr></tbody></table>',
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "HTML_DOCUMENT_INVALID" },
+    });
+  });
+
+  // Issue #117: 위 "단계-3 결함 탐지" 주석이 남긴 cellRowWeight(=
+  // layoutRowSpan(cell.rowSpan) 값 자체로 가중)는 clipboard-table-parser.ts가
+  // Issue #116에서 이미 걷어낸 것과 같은 결함을 그대로 갖고 있었다 — 가중치가
+  // 검사 대상 셀 자기 자신의 rowSpan에서만 나오므로, rowSpan>=2인 셀은
+  // rowSpan이 덮는 다른 행이 완전히 비어 있어도(<tr></tr>, 다른 셀 전혀 없음)
+  // 자기 rowSpan 값만으로 "혼자 주장"이 아닌 것으로 위장했다. 재현
+  // 확인(수정 전): 이 입력을 importHtml에 넣으면 ok: true, columnCount: 3으로
+  // 오탐 통과했다 — Issue #35가 막으려던 "뒷받침 없는 홑 셀 과대 colspan"을
+  // rowSpan 하나만 붙이면 그대로 우회하는 셈이다. 수정은 clipboard 쪽과 같은
+  // hasIndependentRowBacking 근거(rowSpan이 덮는 다른 행에 자기 자신이 아닌
+  // 다른 셀이 실제로 있는가)로 가중치를 판단한다 — 이 표는 두 번째 행이
+  // 완전히 비어 그 근거가 없으므로 rowSpan=1 홑 셀과 같은 상한을 적용받아
+  // 거절돼야 한다.
+  it("[Issue #117] 뒷받침 없이 rowSpan만 걸린 셀의 과대 colspan은 여전히 거절한다", () => {
+    expect(
+      importHtml(
+        '<table><tbody><tr><td rowspan="2" colspan="3">X</td></tr><tr></tr></tbody></table>',
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "HTML_DOCUMENT_INVALID" },
+    });
+  });
+
+  // Issue #117: 위 테스트와 짝을 이룬다 — 여기서는 rowSpan이 덮는 두 번째
+  // 행에 C라는 진짜 다른 셀이 있어(완전한 격자) 선제 검사(hasIndependentRowBacking
+  // 기반)는 정당하게 통과한다. 하지만 B의 rowSpan 값 자체는 실제 <tr> 수(2)를
+  // 훨씬 넘는 10으로 위조돼 있다 — 선제 검사는 "다른 행에 뒷받침이 있는가"만
+  // 보고 rowSpan의 정확한 크기는 검증하지 않으므로 이 위조를 통과시킨다.
+  // 최종 방어선은 model의 validateGridCoverage다: rowEnd(=0+10)가 실제
+  // rowCount(2)를 넘으므로 SPAN_OUT_OF_BOUNDS로 거절한다(Issue #114와 같은
+  // 안전망). 이 테스트는 수정 전에도 통과할 수 있다(선제 검사가 아니라
+  // 그리드 검증이 거절하므로) — 계획서 완료 조건 4를 회귀 테스트로 고정하는
+  // 목적이다.
+  it("[Issue #117] 뒷받침 있어도 실제 행 수를 넘는 위조 rowSpan은 그리드 검증이 거절한다", () => {
+    expect(
+      importHtml(
+        "<table><tbody><tr><td>A</td>" +
+          '<td colspan="3" rowspan="10">B</td></tr>' +
+          "<tr><td>C</td></tr></tbody></table>",
       ),
     ).toMatchObject({
       ok: false,
