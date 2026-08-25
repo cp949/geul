@@ -15,6 +15,7 @@
 | [`G-WKS-003`](./G-WKS-003-typecheck-tests-and-non-package-sources.md) | TypeScript 소스 전량 typecheck | package test·config·e2e·script TS/JS 추가 |
 | [`G-WKS-004`](./G-WKS-004-verify-lint-and-gate-changes.md) | lint·gate 변경 검증 | lint autofix·validator·copy detection 변경 |
 | [`G-EDT-001`](./G-EDT-001-keep-editor-commands-atomic.md) | 편집기 command 원자성 | document·selection·stored mark·revision 변경 command 구현 |
+| [`G-EDT-002`](./G-EDT-002-resync-selection-before-reading-stale-state.md) | 클릭 직후 stale selection 재동기화 | 클릭 직후 실행될 수 있는 키보드 핸들러가 editor.state.selection을 판정에 쓰는 경우 |
 | [`G-UI-001`](./G-UI-001-build-dismissible-overlays.md) | dismissible overlay 구현 | 바깥 클릭·Escape로 닫는 UI 구현 |
 | [`G-UI-002`](./G-UI-002-key-reordered-ui-by-stable-id.md) | 재정렬 UI 식별자 | 안정 key를 가진 항목의 위치 변경·후속 이벤트 억제 |
 | [`G-CNV-001`](./G-CNV-001-centralize-canonicalization-and-validation.md) | 변환 경계 중앙화 | model·importer·core의 정규화·검증 변경 |
