@@ -370,6 +370,27 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     expect(editor.getDocument()).toEqual(paragraphDocument("original"));
   });
 
+  it("커밋 이후에도 방어적으로 복사한 문서를 반환한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+    });
+
+    expect(editor.commands.setText("block-1", "after")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    const returned = editor.getDocument();
+    const returnedBlock = returned.blocks[0];
+    const returnedItem =
+      returnedBlock?.type === "paragraph"
+        ? returnedBlock.content[0]
+        : undefined;
+    if (returnedItem !== undefined) returnedItem.text = "mutated";
+
+    expect(editor.getDocument()).toEqual(paragraphDocument("after", 1));
+  });
+
   it("destroy 이후 변경 명령이 구조적으로 실패한다", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({

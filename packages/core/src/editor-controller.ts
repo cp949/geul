@@ -232,6 +232,17 @@ const commandNotApplicable = (command: string): Result<never, EditorError> => ({
   error: { code: "COMMAND_NOT_APPLICABLE", command },
 });
 
+// Document는 문자열·숫자·리터럴유니온·배열·평문 객체로만 구성된 순수 JSON
+// 트리다(Map/Set/함수/circular 없음, packages/model/src/types.ts 확인).
+// Chrome75가 지원하지 않는 네이티브 전역 deep-clone 함수 대신 JSON 직렬화
+// 왕복으로 clone한다 — 이 트리에 명시적 undefined 값이 없어(생략된 optional
+// 필드만 존재) JSON.stringify가 그 키를 그대로 빠뜨리므로
+// exactOptionalPropertyTypes와도 충돌하지 않는다. 인자가 스프레드 등으로 얕은
+// 복사된 객체여도 직렬화 왕복이 blocks 등 중첩 배열까지 전부 새 참조로
+// 만든다.
+const cloneDocument = (document: BlockDocument): BlockDocument =>
+  JSON.parse(JSON.stringify(document)) as BlockDocument;
+
 const parseSupportedDocument = (
   input: unknown,
 ): Result<BlockDocument, EditorError> => {
@@ -312,7 +323,7 @@ export const createEditor = (
 
   const createId = options.createId ?? defaultIdFactory;
   let sessionRevision = parsedInitialDocument.value.revision;
-  let currentDocument = structuredClone(parsedInitialDocument.value);
+  let currentDocument = cloneDocument(parsedInitialDocument.value);
   let destroyed = false;
   let mountedElement: HTMLElement | null = null;
   let activeReason: ChangeReason | null = null;
@@ -343,7 +354,7 @@ export const createEditor = (
     if (sessionRevision >= Number.MAX_SAFE_INTEGER) return false;
 
     sessionRevision += 1;
-    currentDocument = structuredClone({
+    currentDocument = cloneDocument({
       ...nextDocument,
       revision: sessionRevision,
     });
@@ -879,7 +890,7 @@ export const createEditor = (
       destroyed = true;
     },
     getDocument() {
-      return structuredClone(currentDocument);
+      return cloneDocument(currentDocument);
     },
     getSelectionMarks() {
       if (destroyed) return [];
