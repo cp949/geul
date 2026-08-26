@@ -12,11 +12,12 @@
 # 스냅샷엔 82.x가 없어 83.x가 실제 시험 가능한 최소 후보다.
 FROM debian:buster-slim
 
-# pnpm@11.21.0의 engines.node 최소값(>=22.13)을 만족하려 저장소 CI 핀
-# (22.12.0)보다 패치 한 단계 위를 쓴다 — 이 컨테이너는 e2e 실행 전용이라
-# 다른 패키지의 Node 버전 계약과 무관하다.
+# 과거 pnpm@11.21.0의 engines.node 최소값(>=22.13)을 만족하려 저장소 CI 핀
+# (22.12.0)보다 패치 한 단계 위로 골랐던 값이 남아 있다. pnpm@10.34.5는
+# >=18.12만 요구해 이 여유가 더는 필요하지 않지만, 이 컨테이너는 e2e 실행
+# 전용이라 다른 패키지의 Node 버전 계약과 무관하고 낮출 이유도 없다.
 ARG NODE_VERSION=22.13.0
-ARG PNPM_VERSION=11.21.0
+ARG PNPM_VERSION=10.34.5
 
 RUN set -eux; \
     # 20200712T145349Z(83.0.4103.116-3)를 쓴다 — 같은 버전의 더 이른 리비전
@@ -37,9 +38,10 @@ RUN set -eux; \
     tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs; \
     rm /tmp/node.tar.xz; \
     export PATH="/usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin:${PATH}"; \
-    # corepack activate는 pnpm@11.21.0의 서명 키가 이 Node 버전에 번들된
-    # corepack의 키 목록에 없어 "Cannot find matching keyid"로 실패한다
-    # (corepack 자체 버그·키 로테이션) — npm 전역 설치로 우회한다.
+    # corepack activate는 pnpm 서명 키가 이 Node 버전에 번들된 corepack의
+    # 키 목록에 없으면 "Cannot find matching keyid"로 실패할 수 있다
+    # (pnpm@11.21.0에서 실측한 corepack 자체 버그·키 로테이션 문제) —
+    # 버전에 상관없이 npm 전역 설치로 이 위험 자체를 피한다.
     npm install -g "pnpm@${PNPM_VERSION}"; \
     rm -rf /var/lib/apt/lists/*
 

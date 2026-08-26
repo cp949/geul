@@ -60,17 +60,19 @@ describe("표 열 목록 속성 직렬화", () => {
     expect(serializeTableColumns(extra)).toBe('[{"id":"col-1","width":120}]');
   });
 
-  it.each(
-    unwritableColumns,
-  )("다시 읽을 수 없는 열 목록(%s)은 빈 배열 JSON으로 쓴다", (_label, columns) => {
-    expect(serializeTableColumns(columns)).toBe("[]");
-  });
+  it.each(unwritableColumns)(
+    "다시 읽을 수 없는 열 목록(%s)은 빈 배열 JSON으로 쓴다",
+    (_label, columns) => {
+      expect(serializeTableColumns(columns)).toBe("[]");
+    },
+  );
 
-  it.each(
-    unwritableColumns,
-  )("다시 읽을 수 없는 열 목록(%s)을 써도 예외를 던지지 않는다", (_label, columns) => {
-    expect(() => serializeTableColumns(columns)).not.toThrow();
-  });
+  it.each(unwritableColumns)(
+    "다시 읽을 수 없는 열 목록(%s)을 써도 예외를 던지지 않는다",
+    (_label, columns) => {
+      expect(() => serializeTableColumns(columns)).not.toThrow();
+    },
+  );
 });
 
 describe("표 열 목록 속성 왕복", () => {

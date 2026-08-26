@@ -43,36 +43,36 @@ describe("에디터 컨트롤러 mark", () => {
     { command: "toggleUnderline", mark: { type: "underline" } },
     { command: "toggleStrike", mark: { type: "strike" } },
     { command: "toggleCode", mark: { type: "code" } },
-  ] as const)("현재 선택 영역에 $mark.type을 토글하고 한 번의 undo로 복원한다", ({
-    command,
-    mark,
-  }) => {
-    const changes: DocumentChangeEvent[] = [];
-    const editor = createEditor({
-      initialDocument: paragraphDocument("content"),
-      onChange: (event) => changes.push(event),
-    });
-    const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+  ] as const)(
+    "현재 선택 영역에 $mark.type을 토글하고 한 번의 undo로 복원한다",
+    ({ command, mark }) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        onChange: (event) => changes.push(event),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection({ from: 1, to: 8 });
 
-    expect(editor.commands[command]()).toEqual({
-      ok: true,
-      value: undefined,
-    });
-    expect(editor.getDocument()).toMatchObject({
-      revision: 1,
-      blocks: [{ content: [{ text: "content", marks: [mark] }] }],
-    });
-    expect(changes).toEqual([
-      { revision: 1, changedBlockIds: ["block-1"], reason: "local" },
-    ]);
+      expect(editor.commands[command]()).toEqual({
+        ok: true,
+        value: undefined,
+      });
+      expect(editor.getDocument()).toMatchObject({
+        revision: 1,
+        blocks: [{ content: [{ text: "content", marks: [mark] }] }],
+      });
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["block-1"], reason: "local" },
+      ]);
 
-    expect(editor.commands.undo()).toMatchObject({ ok: true });
-    expect(editor.getDocument()).toMatchObject({
-      revision: 2,
-      blocks: [{ content: [{ text: "content" }] }],
-    });
-  });
+      expect(editor.commands.undo()).toMatchObject({ ok: true });
+      expect(editor.getDocument()).toMatchObject({
+        revision: 2,
+        blocks: [{ content: [{ text: "content" }] }],
+      });
+    },
+  );
 
   it("collapsed 선택 영역의 mark 토글은 COMMAND_NOT_APPLICABLE을 반환하고 이벤트를 발행하지 않는다", () => {
     const changes: DocumentChangeEvent[] = [];

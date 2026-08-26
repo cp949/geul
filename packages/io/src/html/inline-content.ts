@@ -29,9 +29,7 @@ export type HtmlElementNode = {
 };
 
 export type HtmlElementContent =
-  | HtmlTextNode
-  | HtmlCommentNode
-  | HtmlElementNode;
+  HtmlTextNode | HtmlCommentNode | HtmlElementNode;
 
 export type HtmlNode = HtmlElementContent | HtmlDoctypeNode;
 

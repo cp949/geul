@@ -8,28 +8,26 @@ const rectangularTableArbitrary = fc
   .chain((rowCount) =>
     fc
       .integer({ min: 1, max: Math.min(100, Math.floor(10_000 / rowCount)) })
-      .map(
-        (columnCount): TableBlock => ({
-          id: "table",
-          type: "table",
-          columns: Array.from({ length: columnCount }, (_, column) => ({
-            id: `column-${column}`,
-            width: 48,
+      .map((columnCount): TableBlock => ({
+        id: "table",
+        type: "table",
+        columns: Array.from({ length: columnCount }, (_, column) => ({
+          id: `column-${column}`,
+          width: 48,
+        })),
+        rows: Array.from({ length: rowCount }, (_, row) => ({
+          id: `row-${row}`,
+          cells: Array.from({ length: columnCount }, (_, column) => ({
+            id: `cell-${row}-${column}`,
+            columnId: `column-${column}`,
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [],
           })),
-          rows: Array.from({ length: rowCount }, (_, row) => ({
-            id: `row-${row}`,
-            cells: Array.from({ length: columnCount }, (_, column) => ({
-              id: `cell-${row}-${column}`,
-              columnId: `column-${column}`,
-              rowSpan: 1,
-              columnSpan: 1,
-              content: [],
-            })),
-          })),
-          headerRows: 0,
-          headerColumns: 0,
-        }),
-      ),
+        })),
+        headerRows: 0,
+        headerColumns: 0,
+      })),
   );
 
 describe("표 논리 그리드 속성", () => {

@@ -162,8 +162,7 @@ export interface EditorController {
 }
 
 export type BlockTypeDescriptor =
-  | { type: "paragraph" }
-  | { type: "heading"; level: 1 | 2 | 3 };
+  { type: "paragraph" } | { type: "heading"; level: 1 | 2 | 3 };
 
 // CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
 // 나열한다. 병합 가능 여부는 cellIds.length > 1로 호출부가 직접 파생한다.
@@ -436,7 +435,7 @@ export const createEditor = (
 
     activeReason = reason;
     pendingDocument = null;
-    let applied = false;
+    let applied: boolean;
     try {
       applied = run();
     } finally {

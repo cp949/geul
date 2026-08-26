@@ -16,28 +16,26 @@ import {
 } from "../src/table-grid.js";
 
 const initialTableArbitrary = fc.integer({ min: 2, max: 5 }).chain((rowCount) =>
-  fc.integer({ min: 2, max: 5 }).map(
-    (columnCount): TableBlock => ({
-      id: "table",
-      type: "table",
-      columns: Array.from({ length: columnCount }, (_, column) => ({
-        id: `c${column}`,
-        width: 160,
+  fc.integer({ min: 2, max: 5 }).map((columnCount): TableBlock => ({
+    id: "table",
+    type: "table",
+    columns: Array.from({ length: columnCount }, (_, column) => ({
+      id: `c${column}`,
+      width: 160,
+    })),
+    rows: Array.from({ length: rowCount }, (_, row) => ({
+      id: `r${row}`,
+      cells: Array.from({ length: columnCount }, (_, column) => ({
+        id: `cell-${row}-${column}`,
+        columnId: `c${column}`,
+        rowSpan: 1,
+        columnSpan: 1,
+        content: [],
       })),
-      rows: Array.from({ length: rowCount }, (_, row) => ({
-        id: `r${row}`,
-        cells: Array.from({ length: columnCount }, (_, column) => ({
-          id: `cell-${row}-${column}`,
-          columnId: `c${column}`,
-          rowSpan: 1,
-          columnSpan: 1,
-          content: [],
-        })),
-      })),
-      headerRows: 0,
-      headerColumns: 0,
-    }),
-  ),
+    })),
+    headerRows: 0,
+    headerColumns: 0,
+  })),
 );
 
 type Step = { kind: number; a: number; b: number };

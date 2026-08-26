@@ -604,47 +604,50 @@ describe("워크스페이스 의존성 경계", () => {
     expect(missing).toEqual([]);
   });
 
-  it.each(
-    Object.entries(allowedDependencies),
-  )("허용된 의존성 목록만 선언한다 — %s", async (name, expectedSections) => {
-    const pkg = await readPackage(name);
+  it.each(Object.entries(allowedDependencies))(
+    "허용된 의존성 목록만 선언한다 — %s",
+    async (name, expectedSections) => {
+      const pkg = await readPackage(name);
 
-    for (const section of dependencySections) {
-      expect(pkg[section] ?? {}).toEqual(expectedSections[section]);
-    }
-  });
+      for (const section of dependencySections) {
+        expect(pkg[section] ?? {}).toEqual(expectedSections[section]);
+      }
+    },
+  );
 
-  it.each(
-    Object.entries(forbiddenDependencies),
-  )("어떤 섹션에도 금지된 에디터·UI 의존성을 두지 않는다 — %s", async (name, forbidden) => {
-    const pkg = await readPackage(name);
-    const dependencies = dependencySections.flatMap((section) =>
-      Object.keys(pkg[section] ?? {}),
-    );
+  it.each(Object.entries(forbiddenDependencies))(
+    "어떤 섹션에도 금지된 에디터·UI 의존성을 두지 않는다 — %s",
+    async (name, forbidden) => {
+      const pkg = await readPackage(name);
+      const dependencies = dependencySections.flatMap((section) =>
+        Object.keys(pkg[section] ?? {}),
+      );
 
-    expect(
-      dependencies.some((dependency) =>
-        forbidden.some((name) => hasForbiddenDependency(dependency, name)),
-      ),
-    ).toBe(false);
-  });
+      expect(
+        dependencies.some((dependency) =>
+          forbidden.some((name) => hasForbiddenDependency(dependency, name)),
+        ),
+      ).toBe(false);
+    },
+  );
 
   // `packages/model`·`packages/io` 두 문자열을 배열 리터럴로 나열하지 않는다
   // — 그렇게 적으면 `HEADLESS_PACKAGES`(`scripts/headless-packages.mjs`)의
   // 두 번째 사본이 된다. 스프레드는 배열 리터럴 안에 인용 토큰을 남기지 않아
   // `tests/workspace-roots.test.ts`의 headless 축 사본 탐지에 걸리지 않는다.
-  it.each([
-    ...HEADLESS_PACKAGES,
-  ])("DOM 전역을 사용하면 컴파일되지 않는다 — %s", async (name) => {
-    const tsconfig = await readTsconfig(name);
-    const fixture = `${name.replace("packages/", "")}-dom-forbidden.tsconfig.json`;
-    const result = await compileFixture(fixture);
+  it.each([...HEADLESS_PACKAGES])(
+    "DOM 전역을 사용하면 컴파일되지 않는다 — %s",
+    async (name) => {
+      const tsconfig = await readTsconfig(name);
+      const fixture = `${name.replace("packages/", "")}-dom-forbidden.tsconfig.json`;
+      const result = await compileFixture(fixture);
 
-    expect(tsconfig.compilerOptions.lib).toEqual(["ES2022"]);
-    expect(tsconfig.compilerOptions.types).toEqual([]);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.output).toContain("Cannot find name 'document'");
-  });
+      expect(tsconfig.compilerOptions.lib).toEqual(["ES2022"]);
+      expect(tsconfig.compilerOptions.types).toEqual([]);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.output).toContain("Cannot find name 'document'");
+    },
+  );
 
   /**
    * `HEADLESS_PACKAGES` 집합이 tsconfig `lib`에 `DOM`이 없는 workspace 패키지
@@ -878,9 +881,11 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
    * 전량(오늘 15개)에 `--listFilesOnly`와 `--showConfig`를 각각 한 번씩만
    * 돌려 아래 두 `it`이 그 결과를 나눠 쓴다 — 커버리지 `it`과 예외 목록
    * `it`이 각자 프로그램 전량을 다시 돌리면 이 파일 전체 실행 시간이
-   * 몇 배로 늘고 `it` 하나가 vitest 기본 5초 타임아웃에 닿을 수 있다(실측:
-   * 15개 기준 `--listFilesOnly` 총합 약 1.25초, `--showConfig` 총합 약
-   * 0.6초).
+   * 몇 배로 늘고 `it` 하나가 vitest 기본 5초 타임아웃에 닿을 수 있다.
+   * 비용은 활성 `typescript` 컴파일러에 매인다 — 네이티브 Go 컴파일러(7.x)
+   * 기준 실측은 총합 2초 미만이었지만, classic 컴파일러(6.0.3, 프로세스당
+   * tsc 시작 비용이 훨씬 큼)로 내려온 뒤 실측하면 `beforeAll` 포함 describe
+   * 전체가 약 8~9초까지 걸린다 — 그래서 `beforeAll`에 30초 타임아웃을 둔다.
    */
   let trackedFiles: string[];
   let chainProjects: string[];
@@ -897,7 +902,7 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
       compiledByProject.set(project, await compiledFilePathsOrEmpty(project));
       checkJsByProject.set(project, await resolvedCheckJs(project));
     }
-  });
+  }, 30_000);
 
   /**
    * `chainProjects` 중 하나라도 `file`을 컴파일하고, JS 소스면 그 프로그램의
@@ -942,24 +947,22 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
     );
   });
 
-  it.each(
-    TYPECHECK_COVERAGE_EXCEPTIONS,
-  )("예외 목록 항목마다 파일 존재·실제 컴파일·체인 커버리지 밖 셋을 만족한다 — $file", async ({
-    file,
-    project,
-  }) => {
-    // 1 — 사라진 경로가 예외 목록에 남는 것을 막는다.
-    expect(trackedFiles).toContain(file);
+  it.each(TYPECHECK_COVERAGE_EXCEPTIONS)(
+    "예외 목록 항목마다 파일 존재·실제 컴파일·체인 커버리지 밖 셋을 만족한다 — $file",
+    async ({ file, project }) => {
+      // 1 — 사라진 경로가 예외 목록에 남는 것을 막는다.
+      expect(trackedFiles).toContain(file);
 
-    // 2 — 근거가 죽은 예외(짝지어진 tsconfig가 더는 이 파일을 컴파일하지
-    // 않는 상태)를 막는다.
-    const compiled = await compiledFilePathsOrEmpty(project);
-    expect(compiled.some((path) => path.endsWith(`/${file}`))).toBe(true);
+      // 2 — 근거가 죽은 예외(짝지어진 tsconfig가 더는 이 파일을 컴파일하지
+      // 않는 상태)를 막는다.
+      const compiled = await compiledFilePathsOrEmpty(project);
+      expect(compiled.some((path) => path.endsWith(`/${file}`))).toBe(true);
 
-    // 3 — 체인이 이미 덮게 된 파일이 예외 목록에 남아 커버리지 판정의
-    // 면적을 조용히 갉는 것을 막는다.
-    expect(coveredByChain(file)).toBe(false);
-  });
+      // 3 — 체인이 이미 덮게 된 파일이 예외 목록에 남아 커버리지 판정의
+      // 면적을 조용히 갉는 것을 막는다.
+      expect(coveredByChain(file)).toBe(false);
+    },
+  );
 
   it("소유 기준으로 뽑은 체인 프로그램은 allowJs·checkJs를 켜고 include로 확장자를 거르지 않는다", async () => {
     // 프로그램 P가 대상이다 ⟺ P의 tsconfig 디렉터리 아래에 추적 JS 소스가

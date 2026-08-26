@@ -105,10 +105,10 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
     table.columns.map((column, index) => [column.id, index]),
   );
   const rows = Array.from({ length: table.rows.length }, () =>
-    Array.from(
-      { length: table.columns.length },
-      (): MarkdownOutputNode => ({ type: "tableCell", children: [] }),
-    ),
+    Array.from({ length: table.columns.length }, (): MarkdownOutputNode => ({
+      type: "tableCell",
+      children: [],
+    })),
   );
 
   for (const [rowIndex, row] of table.rows.entries()) {

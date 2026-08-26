@@ -90,19 +90,20 @@ describe("micromark-extension-gfm-table 패치 무결성", () => {
     }
   });
 
-  it.each(
-    editMapCopies,
-  )("%s의 EditMap이 선형 스캔 대신 indexByAt O(1) 조회를 쓴다", (_relativePath, editMapPath) => {
-    const source = readFileSync(editMapPath, "utf8");
+  it.each(editMapCopies)(
+    "%s의 EditMap이 선형 스캔 대신 indexByAt O(1) 조회를 쓴다",
+    (_relativePath, editMapPath) => {
+      const source = readFileSync(editMapPath, "utf8");
 
-    expect(source).toContain("this.indexByAt = new Map()");
-    expect(source).toContain("editMap.indexByAt.get(at)");
-    expect(source).toContain("editMap.indexByAt.set(at, editMap.map.length)");
-    // consume()이 this.map을 비울 때 보조 Map도 같이 비워야 stale index가
-    // 다음 표로 새지 않는다.
-    expect(source).toContain("this.indexByAt.clear()");
-    expect(source).not.toMatch(
-      /while\s*\(\s*index\s*<\s*editMap\.map\.length\s*\)/,
-    );
-  });
+      expect(source).toContain("this.indexByAt = new Map()");
+      expect(source).toContain("editMap.indexByAt.get(at)");
+      expect(source).toContain("editMap.indexByAt.set(at, editMap.map.length)");
+      // consume()이 this.map을 비울 때 보조 Map도 같이 비워야 stale index가
+      // 다음 표로 새지 않는다.
+      expect(source).toContain("this.indexByAt.clear()");
+      expect(source).not.toMatch(
+        /while\s*\(\s*index\s*<\s*editMap\.map\.length\s*\)/,
+      );
+    },
+  );
 });

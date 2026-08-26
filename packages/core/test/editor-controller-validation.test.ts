@@ -112,20 +112,21 @@ describe("에디터 컨트롤러 문서 검증", () => {
         },
       ]),
     },
-  ])("문서 교체 시 $name을 원자적으로 거부한다", ({
-    document: replacement,
-  }) => {
-    const changes: DocumentChangeEvent[] = [];
-    const editor = createEditor({
-      initialDocument: paragraphDocument("kept", 3),
-      onChange: (event) => changes.push(event),
-    });
+  ])(
+    "문서 교체 시 $name을 원자적으로 거부한다",
+    ({ document: replacement }) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: paragraphDocument("kept", 3),
+        onChange: (event) => changes.push(event),
+      });
 
-    expect(editor.replaceDocument(replacement)).toMatchObject({
-      ok: false,
-      error: { code: "DOCUMENT_INVALID" },
-    });
-    expect(editor.getDocument()).toEqual(paragraphDocument("kept", 3));
-    expect(changes).toEqual([]);
-  });
+      expect(editor.replaceDocument(replacement)).toMatchObject({
+        ok: false,
+        error: { code: "DOCUMENT_INVALID" },
+      });
+      expect(editor.getDocument()).toEqual(paragraphDocument("kept", 3));
+      expect(changes).toEqual([]);
+    },
+  );
 });

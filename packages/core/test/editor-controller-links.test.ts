@@ -16,23 +16,26 @@ describe("에디터 컨트롤러 링크", () => {
     "/relative",
     "#fragment",
     "https://example.com/a–b",
-  ])("마운트된 에디터 입력에서 모델이 허용하는 링크 URL %s를 허용한다", (href) => {
-    const editor = createEditor({
-      initialDocument: paragraphDocument("content"),
-    });
-    const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+  ])(
+    "마운트된 에디터 입력에서 모델이 허용하는 링크 URL %s를 허용한다",
+    (href) => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection({ from: 1, to: 8 });
 
-    expect(tiptap.commands.setLink({ href })).toBe(true);
-    expect(editor.getDocument()).toMatchObject({
-      revision: 1,
-      blocks: [
-        {
-          content: [{ text: "content", marks: [{ type: "link", href }] }],
-        },
-      ],
-    });
-  });
+      expect(tiptap.commands.setLink({ href })).toBe(true);
+      expect(editor.getDocument()).toMatchObject({
+        revision: 1,
+        blocks: [
+          {
+            content: [{ text: "content", marks: [{ type: "link", href }] }],
+          },
+        ],
+      });
+    },
+  );
 
   it.each([
     "ftp://example.com",
@@ -44,19 +47,22 @@ describe("에디터 컨트롤러 링크", () => {
     " javascript:alert(1)",
     "java\nscript:alert(1)",
     "java﻿script:alert(1)",
-  ])("마운트된 에디터 입력에서 모델이 허용하지 않는 링크 URL %s를 거부한다", (href) => {
-    const changes: DocumentChangeEvent[] = [];
-    const editor = createEditor({
-      initialDocument: paragraphDocument("content"),
-      onChange: (event) => changes.push(event),
-    });
-    const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+  ])(
+    "마운트된 에디터 입력에서 모델이 허용하지 않는 링크 URL %s를 거부한다",
+    (href) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        onChange: (event) => changes.push(event),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection({ from: 1, to: 8 });
 
-    expect(tiptap.commands.setLink({ href })).toBe(false);
-    expect(editor.getDocument()).toEqual(paragraphDocument("content"));
-    expect(changes).toEqual([]);
-  });
+      expect(tiptap.commands.setLink({ href })).toBe(false);
+      expect(editor.getDocument()).toEqual(paragraphDocument("content"));
+      expect(changes).toEqual([]);
+    },
+  );
 
   it("에디터 생성 전에 공백으로 난독화한 링크를 거부한다", () => {
     expect(() =>

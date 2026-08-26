@@ -52,10 +52,7 @@ const LEFT_OF_ANCHOR_OFFSET_PX = LEFT_OF_ANCHOR_REM * ASSUMED_ROOT_FONT_SIZE_PX;
  * - `leftOfAnchor`: `translate(-3.5rem, 0)`. `BlockSideMenu` 사이드 버튼이 쓴다.
  */
 export type ClampAnchor =
-  | "topLeft"
-  | "centerAbove"
-  | "centerBelow"
-  | "leftOfAnchor";
+  "topLeft" | "centerAbove" | "centerBelow" | "leftOfAnchor";
 
 type BoxOffset = { dx: number; dy: number };
 

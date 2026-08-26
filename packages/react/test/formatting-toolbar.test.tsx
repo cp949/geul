@@ -31,12 +31,10 @@ type SelectionBlockType = {
 
 const fakeController = (
   getSelectionMarks = vi.fn(() => [] as string[]),
-  getSelectionBlockType = vi.fn(
-    (): SelectionBlockType => ({
-      blockId: "block-1",
-      blockType: { type: "paragraph" },
-    }),
-  ),
+  getSelectionBlockType = vi.fn((): SelectionBlockType => ({
+    blockId: "block-1",
+    blockType: { type: "paragraph" },
+  })),
   setBlockType = vi.fn(() => ({ ok: true, value: undefined })),
 ) => ({
   mount: vi.fn((element: HTMLElement) => {

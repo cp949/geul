@@ -185,28 +185,28 @@ describe("Markdown 참조 해석", () => {
     });
   });
 
-  it.each([
-    "![Diagram][",
-    "![Diagram][missing",
-  ])("깨진 이미지 참조 문자열은 경고 없이 그대로 보존한다 — %s", (source) => {
-    expect(importMarkdown(source)).toEqual({
-      ok: true,
-      value: {
-        document: {
-          formatVersion: 1,
-          revision: 0,
-          blocks: [
-            {
-              id: "markdown-1",
-              type: "paragraph",
-              content: [{ text: source }],
-            },
-          ],
+  it.each(["![Diagram][", "![Diagram][missing"])(
+    "깨진 이미지 참조 문자열은 경고 없이 그대로 보존한다 — %s",
+    (source) => {
+      expect(importMarkdown(source)).toEqual({
+        ok: true,
+        value: {
+          document: {
+            formatVersion: 1,
+            revision: 0,
+            blocks: [
+              {
+                id: "markdown-1",
+                type: "paragraph",
+                content: [{ text: source }],
+              },
+            ],
+          },
+          warnings: [],
         },
-        warnings: [],
-      },
-    });
-  });
+      });
+    },
+  );
 
   it("구두점이 뒤따르는 깨진 이미지 참조를 그대로 보존한다", () => {
     expect(importMarkdown("Before ![Diagram][missing.")).toEqual({

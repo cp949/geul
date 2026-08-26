@@ -10,7 +10,7 @@
     "url": "https://github.com/cp949/geul/issues"
   },
   "type": "module",
-  "packageManager": "pnpm@11.21.0",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -20,7 +20,9 @@
     "check:escompat": "node scripts/check-escompat.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "dev": "turbo run dev --parallel",
-    "lint": "biome check .",
+    "format": "prettier --write \"**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,css,scss}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,css,scss}\"",
+    "lint": "eslint .",
     "scan:test-helpers": "node scripts/find-duplicate-test-helpers.mjs",
     "typecheck": "turbo run typecheck && pnpm typecheck:configs && pnpm typecheck:e2e && pnpm typecheck:tests && pnpm typecheck:scripts",
     "typecheck:configs": "tsc -p tsconfig.configs.json --noEmit",
@@ -32,22 +34,27 @@
     "test:e2e:full": "playwright test --project=chromium --project=firefox --project=webkit",
     "test:e2e:chrome83": "docker build -t geul-chrome83 docker/chrome83 && docker run --rm --network host --user \"$(id -u):$(id -g)\" -e pnpm_config_verify_deps_before_run=false -e GEUL_CHROME83_WEBSERVER=1 -v \"$(pwd)\":/repo -w /repo geul-chrome83 ./node_modules/.bin/playwright test --project=chrome83",
     "test:e2e:perf": "playwright test --project=perf",
-    "verify:packages": "pnpm lint && pnpm build && pnpm check:escompat && pnpm typecheck && pnpm test && pnpm check:boundaries && pnpm check:licenses",
+    "verify:packages": "pnpm lint && pnpm run format:check && pnpm build && pnpm check:escompat && pnpm typecheck && pnpm test && pnpm check:boundaries && pnpm check:licenses",
     "verify": "pnpm verify:packages && pnpm test:e2e"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.11",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
     "@types/node": "22.20.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.5",
     "eslint": "10.9.1",
-    "eslint-plugin-es-x": "10.0.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-es-x": "9.7.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "fast-check": "4.9.0",
+    "globals": "17.11.0",
     "jsdom": "27.0.1",
+    "prettier": "3.9.6",
     "turbo": "2.10.9",
-    "typescript": "7.0.2",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0",
     "vite": "8.2.1",
     "vitest": "4.1.10"
   }

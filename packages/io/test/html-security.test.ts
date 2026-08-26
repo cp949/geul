@@ -141,26 +141,25 @@ describe("HTML 보안", () => {
     });
   });
 
-  it.each([
-    "\\evil.example",
-    "/\\evil.example",
-    "\\/evil.example",
-  ])("브라우저가 authority로 해석하는 변형 링크를 경고와 함께 제거한다 — %s", (href) => {
-    const result = importHtml(`<p><a href="${href}">unsafe</a></p>`);
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error(result.error.message);
-    expect(result.value.document.blocks[0]).toMatchObject({
-      type: "paragraph",
-      content: [{ text: "unsafe" }],
-    });
-    expect(result.value.warnings).toEqual([
-      expect.objectContaining({
-        kind: "UNSAFE_URL_REMOVED",
-        element: "a",
-        attribute: "href",
-      }),
-    ]);
-  });
+  it.each(["\\evil.example", "/\\evil.example", "\\/evil.example"])(
+    "브라우저가 authority로 해석하는 변형 링크를 경고와 함께 제거한다 — %s",
+    (href) => {
+      const result = importHtml(`<p><a href="${href}">unsafe</a></p>`);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.document.blocks[0]).toMatchObject({
+        type: "paragraph",
+        content: [{ text: "unsafe" }],
+      });
+      expect(result.value.warnings).toEqual([
+        expect.objectContaining({
+          kind: "UNSAFE_URL_REMOVED",
+          element: "a",
+          attribute: "href",
+        }),
+      ]);
+    },
+  );
 
   it("안전하지만 지원하지 않는 블록을 정화 후 강등하면 경고한다", () => {
     const result = importHtml("<aside>Loose <strong>text</strong></aside>");
@@ -413,7 +412,7 @@ describe("HTML 보안", () => {
   });
 
   it("td 셀의 C0 제어문자·짝 없는 surrogate는 throw 없이 제거하고 경고한다", () => {
-    const html = `<table><tbody><tr><td>bad${String.fromCharCode(0xd800)}text</td></tr></tbody></table>`;
+    const html = `<table><tbody><tr><td>bad\u0001\u000b${String.fromCharCode(0xd800)}text</td></tr></tbody></table>`;
     const result = importHtml(html);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -433,7 +432,7 @@ describe("HTML 보안", () => {
   });
 
   it("th 셀의 C0 제어문자·짝 없는 surrogate는 throw 없이 제거하고 경고한다", () => {
-    const html = `<table><thead><tr><th>bad${String.fromCharCode(0xd800)}text</th></tr></thead></table>`;
+    const html = `<table><thead><tr><th>bad\u0001${String.fromCharCode(0xd800)}text</th></tr></thead></table>`;
     const result = importHtml(html);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);

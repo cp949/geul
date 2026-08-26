@@ -1,0 +1,13 @@
+# biome.json의 files.includes 제외 목록과 동일하게 맞춘다.
+.worktrees/
+_tmp/
+_works/
+**/.turbo/
+**/.vite/
+**/dist/
+**/coverage/
+**/playwright-report/
+**/test-results/
+
+# 패키지 매니저가 자체 포맷을 관리하는 파일 — 재포맷 대상 아님.
+pnpm-lock.yaml

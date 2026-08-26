@@ -370,8 +370,7 @@ const parseTable = (
         "dataBeBackgroundColor",
       );
       const align = propertyString(layout.element, "dataBeAlign") as
-        | TableBlock["rows"][number]["cells"][number]["align"]
-        | undefined;
+        TableBlock["rows"][number]["cells"][number]["align"] | undefined;
 
       return {
         id: propertyString(layout.element, "dataBeCellId") ?? createId(),

@@ -111,13 +111,16 @@ describe("독립 문서 모델", () => {
     ["NUL", "text\u0000value", "textvalue"],
     ["DEL", "text\u007fvalue", "textvalue"],
     ["lone surrogate", `text${String.fromCharCode(0xd800)}value`, "textvalue"],
-  ])("sanitizeInlineText는 %s 문자를 제거하고 나머지는 그대로 둔다", (_name, text, expected) => {
-    const sanitized = sanitizeInlineText(text);
-    expect(sanitized).toBe(expected);
-    expect(parseDocument(documentWithText(sanitized))).toMatchObject({
-      ok: true,
-    });
-  });
+  ])(
+    "sanitizeInlineText는 %s 문자를 제거하고 나머지는 그대로 둔다",
+    (_name, text, expected) => {
+      const sanitized = sanitizeInlineText(text);
+      expect(sanitized).toBe(expected);
+      expect(parseDocument(documentWithText(sanitized))).toMatchObject({
+        ok: true,
+      });
+    },
+  );
 
   it("sanitizeInlineText는 LF와 정상 surrogate pair를 보존한다", () => {
     expect(sanitizeInlineText("line 1\nline 2")).toBe("line 1\nline 2");
