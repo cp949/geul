@@ -18,6 +18,7 @@ export const MAX_TABLE_COLUMNS = 10_000;
 export type TableGridInvalidReason =
   | "UNKNOWN_COLUMN"
   | "INVALID_COORDINATE"
+  | "INVALID_GRID_SIZE"
   | "SPAN_OUT_OF_BOUNDS"
   | "OVERLAPPING_CELL"
   | "UNCOVERED_COORDINATE";
@@ -90,6 +91,20 @@ export const validateGridCoverage = (
   columnCount: number,
   cells: GridCell[],
 ): Result<undefined, TableGridValidationError> => {
+  // 개별 셀 좌표는 아래에서 꼼꼼히 검사하지만, rowCount/columnCount 자체가
+  // 정수·비음수임을 보장하지 않으면 다음 줄의 new Array(rowCount *
+  // columnCount)가 (NaN이거나 곱이 음수일 때) RangeError로 Result 계약
+  // 밖으로 샌다 — 이 함수의 유일한 raw-number 호출부가 각자 앞단에
+  // 같은 가드를 재구현해온 이유다.
+  if (
+    !Number.isInteger(rowCount) ||
+    !Number.isInteger(columnCount) ||
+    rowCount < 0 ||
+    columnCount < 0
+  ) {
+    return invalid("INVALID_GRID_SIZE", rowCount, columnCount);
+  }
+
   const occupied = new Array<boolean>(rowCount * columnCount).fill(false);
 
   for (const cellEntry of cells) {

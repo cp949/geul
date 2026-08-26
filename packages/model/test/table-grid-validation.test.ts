@@ -271,6 +271,44 @@ describe("validateGridCoverage(제네릭 그리드 커버리지)", () => {
       error: { code: "TABLE_GRID_INVALID", reason: "INVALID_COORDINATE" },
     });
   });
+
+  it("음수 rowCount는 INVALID_GRID_SIZE로 거부한다", () => {
+    expect(validateGridCoverage(-1, 1, [])).toMatchObject({
+      ok: false,
+      error: {
+        code: "TABLE_GRID_INVALID",
+        reason: "INVALID_GRID_SIZE",
+        row: -1,
+        column: 1,
+      },
+    });
+  });
+
+  it("음수 columnCount는 INVALID_GRID_SIZE로 거부한다", () => {
+    expect(validateGridCoverage(1, -1, [])).toMatchObject({
+      ok: false,
+      error: {
+        code: "TABLE_GRID_INVALID",
+        reason: "INVALID_GRID_SIZE",
+        row: 1,
+        column: -1,
+      },
+    });
+  });
+
+  it("정수가 아닌 rowCount는 INVALID_GRID_SIZE로 거부한다", () => {
+    expect(validateGridCoverage(1.5, 1, [])).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_GRID_SIZE" },
+    });
+  });
+
+  it("NaN인 columnCount는 INVALID_GRID_SIZE로 거부한다", () => {
+    expect(validateGridCoverage(1, Number.NaN, [])).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_GRID_SIZE" },
+    });
+  });
 });
 
 describe("validateTableSize·tableSizeViolationMessage(표 크기 상한)", () => {

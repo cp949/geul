@@ -58,17 +58,17 @@ describe("validateTabularData", () => {
     });
   });
 
-  it("NaN·비정수·음수 columnCount는 커버리지 계산 전에 거부한다", () => {
-    // NaN은 `=== 0`도 `< 1`도 false라 기존 빈 데이터 가드를 통과하고,
-    // validateGridCoverage의 new Array(rowCount * columnCount)가
-    // RangeError를 던져 Result 계약 밖으로 예외가 새어나갔다.
+  it("NaN·비정수·음수 columnCount는 INVALID_GRID_SIZE로 거부한다", () => {
+    // NaN은 `=== 0`도 `< 1`도 false라 빈 데이터 가드를 통과한다 — 이 정수성·
+    // 부호 검사는 이제 validateGridCoverage(model)의 몫이라 여기서는 그
+    // 결과를 그대로 전달만 한다.
     for (const columnCount of [Number.NaN, 2.5, -1]) {
       expect(validateTabularData({ ...gridData(), columnCount })).toMatchObject(
         {
           ok: false,
           error: {
             code: "CLIPBOARD_TABLE_INVALID",
-            message: "columnCount must be a positive integer",
+            message: "Table layout is invalid: INVALID_GRID_SIZE",
           },
         },
       );
