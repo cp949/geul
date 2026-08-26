@@ -1,18 +1,12 @@
 import type { TableCellTarget } from "@cp949/geul-core";
 
-import {
-  TABLE_BACKGROUND_COLORS,
-  TABLE_TEXT_COLORS,
-  type TableCellColor,
-} from "./table-cell-colors.js";
+import { TableCellColorPalettes } from "./table-cell-color-palettes.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor } from "./use-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const menuItemClassName = "geul-table-menu__item";
-const swatchClassName = "geul-menu-swatch";
-const sectionLabelClassName = "geul-menu-section-label";
 const dividerClassName = "geul-menu-divider";
 const actionErrorClassName = "geul-menu-error";
 
@@ -93,59 +87,6 @@ export const TableHandleMenu = ({
       onClose,
     );
 
-  const applyColor = (property: "text" | "background", color: string | null) =>
-    runCommand(
-      () =>
-        property === "text"
-          ? editor.commands.setTableCellTextColor(tableBlockId, target, color)
-          : editor.commands.setTableCellBackgroundColor(
-              tableBlockId,
-              target,
-              color,
-            ),
-      onClose,
-    );
-
-  const renderPalette = (
-    property: "text" | "background",
-    label: string,
-    colors: TableCellColor[],
-  ) => (
-    <>
-      <p className={sectionLabelClassName}>{label}</p>
-      <div className="geul-menu-palette">
-        {colors.map((color) => (
-          <button
-            aria-label={`${label} ${color.name}`}
-            className={swatchClassName}
-            key={color.value}
-            onClick={() => applyColor(property, color.value)}
-            onMouseDown={(event) => event.preventDefault()}
-            role="menuitem"
-            style={
-              property === "background"
-                ? { backgroundColor: color.value }
-                : { backgroundColor: "transparent", color: color.value }
-            }
-            type="button"
-          >
-            {property === "text" ? "A" : ""}
-          </button>
-        ))}
-        <button
-          aria-label={`${label} None`}
-          className={swatchClassName}
-          onClick={() => applyColor(property, null)}
-          onMouseDown={(event) => event.preventDefault()}
-          role="menuitem"
-          type="button"
-        >
-          ×
-        </button>
-      </div>
-    </>
-  );
-
   return (
     <div
       aria-label={isRow ? "Table row menu" : "Table column menu"}
@@ -204,8 +145,12 @@ export const TableHandleMenu = ({
         </>
       )}
       <hr className={dividerClassName} />
-      {renderPalette("text", "Text color", TABLE_TEXT_COLORS)}
-      {renderPalette("background", "Background color", TABLE_BACKGROUND_COLORS)}
+      <TableCellColorPalettes
+        onApplied={onClose}
+        runCommand={runCommand}
+        tableBlockId={tableBlockId}
+        target={target}
+      />
     </div>
   );
 };

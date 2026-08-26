@@ -61,36 +61,11 @@ describe("셀 서식 메뉴", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("Background color None 클릭 시 null로 지운다", () => {
-    const controller = fakeController();
-    const onClose = vi.fn();
-
-    render(
-      withProvider(
-        controller,
-        <TableCellFormatMenu
-          cellIds={["cell-1"]}
-          left={100}
-          onClose={onClose}
-          tableBlockId="table-1"
-          top={100}
-        />,
-      ),
-    );
-
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: "Background color None" }),
-    );
-
-    expect(
-      controller.commands.setTableCellBackgroundColor,
-    ).toHaveBeenCalledWith(
-      "table-1",
-      { kind: "cells", cellIds: ["cell-1"] },
-      null,
-    );
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
+  // "Background color None 클릭 시 null로 지운다"는 팔레트 공용 컴포넌트로
+  // 이관됐다(4차 아키텍처 리뷰 카드 V) — None 클릭이 null을 넘기는 동작은
+  // target 종류와 무관해 table-cell-color-palettes.test.tsx가 한 번만
+  // 증명한다. 위 "Text color 스와치 클릭..." 하나로 이 메뉴가 cells target을
+  // 팔레트에 올바르게 전달한다는 사실만 남긴다.
 });
 
 describe("정렬 버튼", () => {

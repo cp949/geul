@@ -321,35 +321,12 @@ describe("행/열 핸들 클릭 메뉴", () => {
     ]);
   });
 
-  it("글자색 없음 항목은 색을 null로 지운다", () => {
-    const rendered = renderRealTable();
-    // "없음"이 지울 색을 먼저 칠해둔다. 실제 컨트롤러는 색이 없는 셀에 null을
-    // 다시 넣는 호출이 문서를 안 바꿔 COMMAND_NOT_APPLICABLE로 거절하므로,
-    // 칠하지 않은 상태에서 누르면 "지운다"가 아니라 실패 경로를 검증하게 된다.
-    const painted = rendered.editor.commands.setTableCellTextColor(
-      rendered.tableBlockId,
-      { kind: "row", index: 0 },
-      "#D93025",
-    );
-    if (!painted.ok) throw new Error("글자색 fixture 준비 실패");
-    // 색 적용이 표 DOM을 다시 만든다 — 새 tr/td에는 rect 스텁이 없어 핸들이
-    // 사라지므로 다음 pointer 이벤트 전에 다시 스텁한다.
-    rendered.restubGeometry();
-    // 칠해진 대상이 정말 첫 행인지 고정한다. ok만 보면 다른 행이 칠해져도
-    // 통과하는데, 그러면 첫 행은 여전히 색이 없어 "없음" 클릭이
-    // COMMAND_NOT_APPLICABLE로 거절되고도 아래 마지막 단언이 그대로
-    // 통과한다 — 아무것도 검증하지 못한 채 초록으로 남는다.
-    expect(
-      rowsOf(rendered.editor)[0]?.cells.map((cell) => cell.textColor),
-    ).toEqual(["#D93025", "#D93025"]);
-    clickFirstRowHandle(rendered.table);
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
-
-    expect(
-      rowsOf(rendered.editor)[0]?.cells.map((cell) => cell.textColor),
-    ).toEqual([undefined, undefined]);
-  });
+  // "글자색 없음 항목은 색을 null로 지운다"는 팔레트 공용 컴포넌트로
+  // 이관됐다(4차 아키텍처 리뷰 카드 V) — None 클릭이 null을 넘기는 동작은
+  // target 종류(행/열/셀)와 무관해 table-cell-color-palettes.test.tsx가
+  // 한 번만 증명한다. 여기 남기는 색상 테스트는 "행 대상이 실제로
+  // TableHandleMenu에서 팔레트로 올바르게 전달되는지"라는, 이 메뉴만
+  // 아는 사실 하나(위 "배경색 팔레트가...")로 좁힌다.
 
   it("스크롤하면 메뉴 위치가 갱신된 핸들 geometry를 따라간다", () => {
     const { rowIds, table } = openRowMenu();
