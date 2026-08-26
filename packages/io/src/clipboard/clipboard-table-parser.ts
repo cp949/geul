@@ -2,8 +2,7 @@ import {
   type InlineContent,
   isCanonicalCellAlign,
   isCanonicalCellColor,
-  MAX_TABLE_COLUMNS,
-  MAX_TABLE_LOGICAL_CELLS,
+  tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
@@ -306,10 +305,7 @@ const tabularDataFromTable = (
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message:
-          sizeViolation === "TOO_MANY_COLUMNS"
-            ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
-            : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+        message: tableSizeViolationMessage(sizeViolation),
       },
     };
   }
@@ -413,10 +409,7 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message:
-          sizeViolation === "TOO_MANY_COLUMNS"
-            ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
-            : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+        message: tableSizeViolationMessage(sizeViolation),
       },
     };
   }

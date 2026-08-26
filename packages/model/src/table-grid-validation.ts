@@ -68,6 +68,20 @@ export const validateTableSize = (input: {
   return undefined;
 };
 
+/**
+ * validateTableSize가 반환한 위반 종류를 사람이 읽을 메시지로 바꾼다.
+ * throw할지 Result로 감쌀지는 여전히 호출부의 에러 계약에 속하지만,
+ * 메시지 텍스트 자체는 반환 방식과 무관한 순수 문자열이라 여기서
+ * 공유한다 — import(html/markdown), 클립보드 붙여넣기 4곳 이상이 이
+ * 3항 조건문을 그대로 복붙하고 있었다.
+ */
+export const tableSizeViolationMessage = (
+  violation: TableSizeViolation,
+): string =>
+  violation === "TOO_MANY_COLUMNS"
+    ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
+    : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`;
+
 // 좌표 기반(row/column) 셀 목록이 rowCount x columnCount 격자를 겹침도
 // 빈틈도 없이 정확히 한 번씩 덮는지 검증한다. TableBlock의 columnId 기반
 // 셀도, id 없는 TabularData의 columnIndex 기반 셀도 이 함수를 공유한다.

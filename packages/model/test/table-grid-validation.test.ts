@@ -1,14 +1,20 @@
 /**
  * 표 격자 커버리지 검증기를 확인하는 테스트.
  * TableBlock 기반 `validateTableGrid`와, columnIndex 기반 좌표를 직접 받는
- * 공개 `validateGridCoverage`의 경계·불량 좌표 처리를 함께 다룬다.
+ * 공개 `validateGridCoverage`의 경계·불량 좌표 처리를 함께 다룬다. 표 크기
+ * 상한 판정 `validateTableSize`와, 3차 리뷰 후보 Q로 판정 옆에 추가된
+ * `tableSizeViolationMessage`(위반 종류 → 메시지 문자열)도 함께 다룬다.
  */
 import { describe, expect, it } from "vitest";
 import type { TableBlock } from "../src/index.js";
 import {
+  MAX_TABLE_COLUMNS,
+  MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
+  tableSizeViolationMessage,
   validateGridCoverage,
   validateTableGrid,
+  validateTableSize,
 } from "../src/index.js";
 
 const cell = (
@@ -264,5 +270,41 @@ describe("validateGridCoverage(제네릭 그리드 커버리지)", () => {
       ok: false,
       error: { code: "TABLE_GRID_INVALID", reason: "INVALID_COORDINATE" },
     });
+  });
+});
+
+describe("validateTableSize·tableSizeViolationMessage(표 크기 상한)", () => {
+  it("열 수가 상한을 넘으면 TOO_MANY_COLUMNS를 반환한다", () => {
+    expect(
+      validateTableSize({
+        columnCount: MAX_TABLE_COLUMNS + 1,
+        rowCount: 1,
+      }),
+    ).toBe("TOO_MANY_COLUMNS");
+  });
+
+  it("논리 셀 수가 상한을 넘으면 TOO_MANY_CELLS를 반환한다", () => {
+    expect(
+      validateTableSize({
+        columnCount: MAX_TABLE_COLUMNS,
+        rowCount: Math.ceil(MAX_TABLE_LOGICAL_CELLS / MAX_TABLE_COLUMNS) + 1,
+      }),
+    ).toBe("TOO_MANY_CELLS");
+  });
+
+  it("상한 안이면 undefined를 반환한다", () => {
+    expect(validateTableSize({ columnCount: 2, rowCount: 2 })).toBeUndefined();
+  });
+
+  it("TOO_MANY_COLUMNS 메시지는 MAX_TABLE_COLUMNS를 담는다", () => {
+    expect(tableSizeViolationMessage("TOO_MANY_COLUMNS")).toBe(
+      `Table column count exceeds ${MAX_TABLE_COLUMNS}`,
+    );
+  });
+
+  it("TOO_MANY_CELLS 메시지는 MAX_TABLE_LOGICAL_CELLS를 담는다", () => {
+    expect(tableSizeViolationMessage("TOO_MANY_CELLS")).toBe(
+      `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+    );
   });
 });

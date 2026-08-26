@@ -33,6 +33,7 @@ export {
   MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
   MIN_COLUMN_WIDTH,
+  tableSizeViolationMessage,
   validateGridCoverage,
   validateTableGrid,
   validateTableSize,

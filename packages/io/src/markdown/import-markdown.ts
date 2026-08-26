@@ -3,9 +3,8 @@ import {
   type Document,
   type IdFactory,
   type InlineContent,
-  MAX_TABLE_COLUMNS,
-  MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
+  tableSizeViolationMessage,
   type TextMark,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -379,9 +378,7 @@ const tableFromNode = (
   });
   if (sizeViolation !== undefined) {
     throw new MarkdownDocumentInvalidError(
-      sizeViolation === "TOO_MANY_COLUMNS"
-        ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
-        : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+      tableSizeViolationMessage(sizeViolation),
     );
   }
 

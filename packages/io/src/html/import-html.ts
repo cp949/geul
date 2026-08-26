@@ -4,10 +4,10 @@ import {
   type IdFactory,
   type InlineContent,
   MAX_TABLE_COLUMNS,
-  MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
   sanitizeInlineText,
   type TableBlock,
+  tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
@@ -182,7 +182,7 @@ const parseTable = (
   const cols = columnElements(element);
   if (cols.length > MAX_TABLE_COLUMNS) {
     throw new HtmlDocumentInvalidError(
-      `Table column count exceeds ${MAX_TABLE_COLUMNS}`,
+      tableSizeViolationMessage("TOO_MANY_COLUMNS"),
     );
   }
   const rows = tableRows(element);
@@ -216,9 +216,7 @@ const parseTable = (
   });
   if (sizeViolation !== undefined) {
     throw new HtmlDocumentInvalidError(
-      sizeViolation === "TOO_MANY_COLUMNS"
-        ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
-        : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+      tableSizeViolationMessage(sizeViolation),
     );
   }
 
