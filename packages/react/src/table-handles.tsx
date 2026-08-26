@@ -465,6 +465,11 @@ export const TableHandles = () => {
   // 경로는 이미 pointermove/frame마다 readTableGeometry를 직접 다시
   // 읽어(computeTargetIndex, scheduleVisualUpdate) 이 문제에서 자유롭고,
   // 여기서 또 재면 10,000셀 표의 드래그 프레임 예산을 두 배로 만든다.
+  // react-hooks/exhaustive-deps는 [activeTableId, element, geometry,
+  // reorderState, resizeState]를 넣으라고 제안하지만, 그 목록에 없는 다른
+  // 렌더(예: 위 형제의 줄바꿈)가 만든 레이아웃 어긋남은 그러면 못 잡아
+  // Issue #15가 되돌아온다 — 매 렌더 뒤 실행이 의도다(위 설명).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (
       activeTableId === null ||
