@@ -50,11 +50,14 @@ describe("표를 삽입한다", () => {
     );
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("표 삽입 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[1]?.type).toBe("table");
-    expect(doc.content?.[1]?.content).toHaveLength(2);
-    expect(doc.content?.[1]?.content?.[0]?.content).toHaveLength(2);
+    const table = getTableBlock(editor, result.value.blockId);
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows).toHaveLength(2);
+    expect(table.value.rows[0]?.cells).toHaveLength(2);
   });
 
   it("삽입 직후 undo 1회로 표 삽입 이전 상태로 복원된다", () => {
@@ -115,9 +118,10 @@ describe("표에 행을 삽입한다", () => {
     const result = insertTableRow(editor, "table-1", 1, createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.content).toHaveLength(2);
-    expect(table?.content?.[1]?.content).toHaveLength(2);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows).toHaveLength(2);
+    expect(table.value.rows[1]?.cells).toHaveLength(2);
   });
 
   it("삽입 직후 undo 1회로 복원된다", () => {
@@ -166,8 +170,9 @@ describe("표에 행을 삽입한다", () => {
     const result = insertTableRow(editor, "table-1", 1, createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    const insertedCellId = table?.content?.[1]?.content?.[0]?.attrs?.cellId;
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    const insertedCellId = table.value.rows[1]?.cells[0]?.id;
     expect(typeof insertedCellId).toBe("string");
     expect(activeCellId(editor)).toBe(insertedCellId);
   });
@@ -181,9 +186,10 @@ describe("표에 열을 삽입한다", () => {
     const result = insertTableColumn(editor, "table-1", 2, createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.attrs?.columns).toHaveLength(3);
-    expect(table?.content?.[0]?.content).toHaveLength(3);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.columns).toHaveLength(3);
+    expect(table.value.rows[0]?.cells).toHaveLength(3);
   });
 
   it("삽입 직후 undo 1회로 복원된다", () => {
@@ -223,8 +229,9 @@ describe("표에 열을 삽입한다", () => {
     const result = insertTableColumn(editor, "table-1", 1, createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    const insertedCellId = table?.content?.[0]?.content?.[1]?.attrs?.cellId;
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    const insertedCellId = table.value.rows[0]?.cells[1]?.id;
     expect(typeof insertedCellId).toBe("string");
     expect(activeCellId(editor)).toBe(insertedCellId);
   });
@@ -237,9 +244,10 @@ describe("표에서 행을 삭제한다", () => {
     const result = deleteTableRow(editor, "table-1", 0);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.content).toHaveLength(1);
-    expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows).toHaveLength(1);
+    expect(table.value.rows[0]?.id).toBe("row-2");
   });
 
   it("삭제 후 살아남은 행의 첫 셀로 캐럿을 옮긴다", () => {
@@ -279,9 +287,10 @@ describe("표에서 열을 삭제한다", () => {
     const result = deleteTableColumn(editor, "table-1", 0);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.attrs?.columns).toHaveLength(1);
-    expect(table?.content?.[0]?.content).toHaveLength(1);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.columns).toHaveLength(1);
+    expect(table.value.rows[0]?.cells).toHaveLength(1);
   });
 
   it("삭제 후 살아남은 열의 첫 행 셀로 캐럿을 옮긴다", () => {
@@ -322,9 +331,10 @@ describe("표의 행을 이동한다", () => {
     const result = moveTableRow(editor, "table-1", 0, 1);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.content?.[0]?.attrs?.rowId).toBe("row-2");
-    expect(table?.content?.[1]?.attrs?.rowId).toBe("row-1");
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows[0]?.id).toBe("row-2");
+    expect(table.value.rows[1]?.id).toBe("row-1");
   });
 
   it("이동 후 이동한 행(목표 인덱스)의 첫 셀로 캐럿을 옮긴다", () => {
@@ -380,6 +390,10 @@ describe("표의 열을 이동한다", () => {
     const result = moveTableColumn(editor, "table-1", 0, 1);
 
     expect(result).toEqual({ ok: true, value: undefined });
+    // raw JSON을 유지한다 — columns 메타데이터 순서와 물리 셀 columnId 순서가
+    // 일치하는지를 함께 보는 검증이라 G-TBL-001과 같은 지점(tableBlockToTiptapJson의
+    // columnIndexById 정렬)을 검사한다. getTableBlock으로 바꾸면 이 정렬 로직의
+    // 회귀를 못 잡을 위험이 같다.
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     const columns = table?.attrs?.columns as { id: string }[];
     expect(columns.map((column) => column.id)).toEqual(["col-2", "col-1"]);
@@ -435,8 +449,9 @@ describe("표의 열 너비를 조절한다", () => {
     const result = resizeTableColumn(editor, "table-1", 1, 240);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.attrs?.columns).toEqual([
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.columns).toEqual([
       { id: "col-1", width: 160 },
       { id: "col-2", width: 240 },
     ]);
@@ -573,15 +588,16 @@ describe("표의 셀을 병합한다", () => {
     );
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.content).toHaveLength(2);
-    expect(table?.content?.[0]?.content).toHaveLength(1);
-    expect(table?.content?.[0]?.content?.[0]?.attrs).toMatchObject({
-      cellId: "cell-1",
-      rowspan: 2,
-      colspan: 2,
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows).toHaveLength(2);
+    expect(table.value.rows[0]?.cells).toHaveLength(1);
+    expect(table.value.rows[0]?.cells[0]).toMatchObject({
+      id: "cell-1",
+      rowSpan: 2,
+      columnSpan: 2,
     });
-    expect(table?.content?.[1]?.content ?? []).toHaveLength(0);
+    expect(table.value.rows[1]?.cells ?? []).toHaveLength(0);
   });
 
   it("병합 직후 캐럿을 병합된 셀 안으로 옮긴다", () => {
@@ -676,9 +692,10 @@ describe("표의 병합된 셀을 분할한다", () => {
     const result = splitTableCell(editor, "table-1", "cell-1", createId);
 
     expect(result).toEqual({ ok: true, value: undefined });
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.content?.[0]?.content).toHaveLength(2);
-    expect(table?.content?.[1]?.content).toHaveLength(2);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows[0]?.cells).toHaveLength(2);
+    expect(table.value.rows[1]?.cells).toHaveLength(2);
   });
 
   it("분할 직후 캐럿을 분할 대상이었던 셀 안에 유지한다", () => {
@@ -826,8 +843,10 @@ describe("표 명령 방어 동작", () => {
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("table");
-    expect(doc.content?.[0]?.content).toHaveLength(1);
-    expect(doc.content?.[0]?.content?.[0]?.content).toHaveLength(2);
+    const originalTable = getTableBlock(editor, "table-1");
+    if (!originalTable.ok) throw new Error("표 조회 실패");
+    expect(originalTable.value.rows).toHaveLength(1);
+    expect(originalTable.value.rows[0]?.cells).toHaveLength(2);
     expect(doc.content?.[1]?.type).toBe("table");
   });
 
