@@ -28,13 +28,13 @@ export const layoutColumnSpan = (columnSpan: number): number =>
 //
 // layoutColumnSpan과 달리 여기엔 MAX_TABLE_COLUMNS류 상한이 없다 — 값을
 // 그대로 통과시켜도 구조적으로 안전하기 때문이다(Issue #114 조사 결론,
-// characterization 테스트: clipboard-table-normalization.test.ts "이슈 114:
-// rowSpan 열/행 수 부풀림 대칭성 조사"). colspan이 상한을 둬야 했던 이유는
-// inferredColumnCount(이 파일, 161-173행)가 "표가 이미 보여준 열 수"를 각
-// 셀의 columnSpan 값 자체로 계산하는 자기 강화 구조라, 과대 colspan 셀
-// 자신이 자기를 걸러낼 상한까지 함께 부풀렸기 때문이다(Issue #35가 별도
-// 선제 검사 oversizedColumnSpanCell을 clipboard-table-parser.ts에 추가한
-// 이유). rowSpan에는 이 자기 강화 구조가 없다 — 행 수(rowCount)는 실제
+// characterization 테스트: table-layout.test.ts "이슈 114: rowSpan 열/행 수
+// 부풀림 대칭성 조사"). colspan이 상한을 둬야 했던 이유는 inferredColumnCount
+// (이 파일, 아래)가 "표가 이미 보여준 열 수"를 각 셀의 columnSpan 값 자체로
+// 계산하는 자기 강화 구조라, 과대 colspan 셀 자신이 자기를 걸러낼 상한까지
+// 함께 부풀렸기 때문이다(Issue #35가 별도 선제 검사
+// findOversizedColumnSpanCell을 이 파일에 추가한 이유, 아래). rowSpan에는
+// 이 자기 강화 구조가 없다 — 행 수(rowCount)는 실제
 // <tr> 개수로 고정이고(layoutRows, 85-118행이 rows.length만큼만 순회한다),
 // 어떤 셀의 rowSpan 값도 이 rowCount 자체를 바꾸지 않는다. 그래서 과대
 // rowSpan은 파생되지 않은 고정 rowCount를 넘어서기만 할 뿐이고, model의
@@ -171,3 +171,124 @@ export const inferredColumnCount = (layouts: CellLayout[][]): number =>
       ),
     0,
   );
+
+export type OversizedColumnSpanViolation = {
+  cell: CellLayout;
+  bound: number;
+};
+
+// 단일 셀은 표가 이미 실제로 보여준 열 수보다 넓게 뻗을 수 없다(Issue #35).
+// "이미 보여준 열 수"는 호출부가 넘기는 columnFloor(colgroup 선언 등 호출부
+// 고유의 열 수 근거)와, 자기 자신을 뺀 다른 모든 셀의 실제 reach(columnIndex
+// + colspan) 중 최댓값 중 큰 쪽이다. 자기 자신을 반드시 제외해야 과대
+// colspan 셀 자신이 그 상한을 부풀리지 못한다. 다른 셀이 아예 없거나 전부
+// 자신보다 reach가 작아도 최소 자기 위치(columnIndex + 1, colspan=1 취급)는
+// 상한에 반영한다 — 그래야 유일한 셀이 colspan=500을 주장하는 경우도 여전히
+// 거절된다. 과대 colspan을 패딩으로 감추지 않고 여기서 거절한다.
+//
+// columnFloor는 언제 이 판정을 돌릴지(게이트)까지는 정하지 않는다 — 두
+// 호출부가 서로 다른 columnCount 계약을 갖기 때문이다. import-html.ts는
+// colgroup이 있으면(cols.length > 0) columnCount를 cols.length로 고정해 이
+// 자기 강화 위험 자체가 없다고 보고 cols.length === 0일 때만 이 함수를
+// 부르며 그때 columnFloor는 항상 0이다 — colgroup이 있는 경우의 과대
+// colspan은 model의 validateGridCoverage(SPAN_OUT_OF_BOUNDS)가 대신 잡는다.
+// clipboard-table-parser.ts는 columnCount를 Math.max(cols.length,
+// inferredColumnCount(layouts))로 잡아 colgroup이 있어도 span 유래 값이
+// 그걸 넘을 수 있으므로(패딩 계약, spec §4.3) 항상 이 함수를 부르고
+// columnFloor로 cols.length를 넘긴다.
+//
+// 표 크기는 아직 MAX_TABLE_LOGICAL_CELLS 체크를 거치지 않았으므로 pairwise
+// O(n²) 비교는 피한다. 전체 셀을 한 번 순회해 전역 최댓값(globalMaxReach),
+// 그 값을 달성하는 셀들의 가중 합(maxReachCount), 최댓값 미만 값들의
+// 최댓값(secondMaxReach)을 구한 뒤, 각 셀은 자신이 전역 최댓값의 유일한
+// 소유자일 때만 secondMaxReach를(그 외에는 globalMaxReach를) "다른 셀들의
+// reach 최댓값"으로 쓴다.
+//
+// (Issue #114) rowSpan은 열 쪽과 같은 자기 강화 구조가 없다 — 행 수
+// (rowCount)는 실제 <tr> 개수로 고정이라 어떤 셀의 rowSpan도 이 값을 바꾸지
+// 않고, model의 validateGridCoverage가 rowEnd(=row+rowSpan) > rowCount를
+// 이미 SPAN_OUT_OF_BOUNDS로 거절한다. 하지만 rowSpan은 이 colspan 판정의
+// 가중치 입력으로는 쓰인다 — rowSpan으로 여러 행에 걸친 셀이 정당한 근거로
+// 최대 reach를 "혼자" 달성하는 경우(예: 2행을 rowSpan=2로 덮는 셀 하나가
+// 옆 열의 좁은 셀들보다 넓게 뻗는 완전한 격자)까지 "자기 혼자 주장"으로
+// 오인하면 정상 colspan을 거절한다 — Issue #116이 clipboard 쪽에서, #117이
+// import-html 쪽에서 각각 발견했다(같은 결함이 두 파일에 따로 있었다,
+// 이관 전 이력). 첫 시도는 maxReachCount를 각 셀의 layoutRowSpan(rowSpan)
+// 값 자체로 가중했는데 틀렸다 — 가중치가 다른 셀의 독립된 증거가 아니라
+// 검사 대상 셀 자기 자신의 rowSpan에서만 나오므로, rowSpan>=2인 셀은
+// 뒷받침하는 다른 셀이 아예 없어도(예: rowSpan이 덮는 행이 완전히 빈
+// <tr></tr>) 자기 rowSpan 값만으로 maxReachCount를 1 넘겨 "혼자 주장"이
+// 아닌 것으로 위장했다 — Issue #35가 막으려던 "뒷받침 없는 홑 셀 과대
+// colspan"을 rowSpan 하나만 붙이면 그대로 우회하는 셈이라 원래 결함보다
+// 더 나쁜 새 결함이었다(BLOCKER). 올바른 근거는 "rowSpan 값 자체"가 아니라
+// "rowSpan이 덮는 다른 행에 자기 자신이 아닌 다른 셀이 실제로 있는가"다 —
+// layouts는 행 단위 배열이라 셀은 자신이 시작한 행에만 나타나므로(rowSpan
+// 으로 덮는 다른 행에는 같은 셀이 다시 나타나지 않는다), 그 다른 행에
+// 원소가 하나라도 있으면 그 행은 후보 셀과 무관한 독립된 근거다. 이 근거가
+// 하나라도 있으면 가중치를 1보다 크게(2로 충분 — maxReachCount는 ===1
+// 여부만 쓰인다) 주고, 없으면 rowSpan=1과 같은 가중치 1을 준다. rowSpan
+// 값의 크기(위조 여부 포함)는 이 함수가 검증하지 않는다 — model의
+// validateGridCoverage가 그 안전망이다.
+//
+// 반환값은 위반 셀과 그 셀의 상한만 담은 순수 데이터다 — throw할지 Result로
+// 감쌀지는 호출부의 에러 계약(import-html.ts의 HtmlDocumentInvalidError vs
+// clipboard-table-parser.ts의 ClipboardParseError)에 속하는 문제라 이 함수는
+// 관여하지 않는다.
+export const findOversizedColumnSpanCell = (
+  layouts: CellLayout[][],
+  columnFloor: number,
+): OversizedColumnSpanViolation | undefined => {
+  const rowHasOwnCell = layouts.map((row) => row.length > 0);
+  const hasIndependentRowBacking = (
+    originRowIndex: number,
+    span: number,
+  ): boolean => {
+    const spannedRowEnd = Math.min(originRowIndex + span, rowHasOwnCell.length);
+    for (let row = originRowIndex + 1; row < spannedRowEnd; row += 1) {
+      if (rowHasOwnCell[row]) return true;
+    }
+    return false;
+  };
+  const flatCells = layouts.flat();
+  const cellReach = (cell: CellLayout): number =>
+    cell.columnIndex + layoutColumnSpan(cell.columnSpan);
+  const cellRowWeight = (cell: CellLayout, originRowIndex: number): number => {
+    const span = layoutRowSpan(cell.rowSpan);
+    return span > 1 && hasIndependentRowBacking(originRowIndex, span) ? 2 : 1;
+  };
+  let globalMaxReach = 0;
+  let maxReachCount = 0;
+  let secondMaxReach = 0;
+  for (const [rowIndex, row] of layouts.entries()) {
+    for (const cell of row) {
+      const reach = cellReach(cell);
+      const weight = cellRowWeight(cell, rowIndex);
+      if (reach > globalMaxReach) {
+        secondMaxReach = globalMaxReach;
+        globalMaxReach = reach;
+        maxReachCount = weight;
+      } else if (reach === globalMaxReach) {
+        maxReachCount += weight;
+      } else if (reach > secondMaxReach) {
+        secondMaxReach = reach;
+      }
+    }
+  }
+  const columnSpanBoundFor = (cell: CellLayout): number => {
+    const reach = cellReach(cell);
+    const othersMaxReach =
+      reach === globalMaxReach && maxReachCount === 1
+        ? secondMaxReach
+        : globalMaxReach;
+    return Math.max(columnFloor, othersMaxReach, cell.columnIndex + 1);
+  };
+  const oversizedColumnSpanCell = flatCells.find(
+    (cell) => layoutColumnSpan(cell.columnSpan) > columnSpanBoundFor(cell),
+  );
+  return oversizedColumnSpanCell === undefined
+    ? undefined
+    : {
+        cell: oversizedColumnSpanCell,
+        bound: columnSpanBoundFor(oversizedColumnSpanCell),
+      };
+};

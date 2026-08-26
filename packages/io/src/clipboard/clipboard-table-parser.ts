@@ -25,6 +25,7 @@ import { clipboardSanitizeSchema } from "../html/sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
+  findOversizedColumnSpanCell,
   hasSubstantialText,
   inferredColumnCount,
   layoutColumnSpan,
@@ -418,115 +419,20 @@ const tabularDataFromTable = (
   const layouts = layoutRows(rows);
 
   // 단일 셀은 표 자신이 이미 보여준 열 수보다 넓게 뻗을 수 없다(Issue #35).
-  // "표가 이미 보여준 열 수"는 colgroup 선언(cols.length)과, 자기 자신을 뺀
-  // 다른 모든 셀의 실제 reach(columnIndex + colspan) 중 최댓값 중 큰 쪽이다.
-  // (트랙-6) 예전에는 "distinct 시작 columnIndex 개수"를 썼는데, rowSpan 때문에
-  // 서로 다른 행의 셀이 같은 columnIndex에서 반복 시작하면(병합 셀 옆에 세로로
-  // 나열된 좁은 컬럼처럼 흔한 패턴) 개수가 실제 뒷받침 열 수보다 작게 잡혀
-  // 정당한 colspan을 오탐 거절했다. reach 최댓값은 이 상호작용에서도 정확하다.
-  // 자기 자신을 반드시 제외해야 과대 colspan 셀 자신이 그 상한을 부풀리지
-  // 못한다. 다른 셀이 아예 없거나 전부 자신보다 reach가 작아도 최소 자기 위치
-  // (columnIndex + 1, colspan=1 취급)는 상한에 반영한다 — 그래야 유일한 셀이
-  // colspan=500을 주장하는 경우도 여전히 거절된다. 과대 colspan을 패딩으로
-  // 감추지 않고 여기서 거절한다.
-  //
-  // 표 크기는 아직 MAX_TABLE_LOGICAL_CELLS 체크를 거치지 않았으므로 pairwise
-  // O(n²) 비교는 피한다. 전체 셀을 한 번 순회해 전역 최댓값(globalMaxReach),
-  // 그 값을 달성하는 셀들의 가중 합(maxReachCount), 최댓값 미만 값들의
-  // 최댓값(secondMaxReach)을 구한 뒤, 각 셀은 자신이 전역 최댓값의 유일한
-  // 소유자일 때만 secondMaxReach를(그 외에는 globalMaxReach를) "다른 셀들의
-  // reach 최댓값"으로 쓴다.
-  //
-  // (Issue #116) 원본은 maxReachCount를 "그 reach를 달성한 셀 개수"로 셌는데,
-  // rowSpan으로 여러 행에 걸친 셀이 정당한 근거로 최대 reach를 "혼자"
-  // 달성하는 경우(예: 2행을 rowSpan=2로 덮는 셀 하나가 옆 열의 좁은 셀들보다
-  // 넓게 뻗는 완전한 격자)까지 "자기 혼자 주장"으로 오인해 정상 colspan을
-  // 거절했다(import-html.ts에서 Issue #115 "단계-3 결함 탐지"로 이미 발견한
-  // 것과 같은 결함).
-  //
-  // (Issue #116 단계-3 결함 탐지, BLOCKER) 첫 시도는 import-html.ts를 그대로
-  // 따라 maxReachCount를 셀 개수 대신 각 셀의 layoutRowSpan(rowSpan) 값
-  // 자체로 가중했다. 이건 틀렸다 — 가중치가 다른 셀의 독립된 증거가 아니라
-  // 검사 대상 셀 **자기 자신**의 rowSpan에서만 나오므로, rowSpan>=2인 셀은
-  // 뒷받침하는 다른 셀이 아예 없어도(예: rowSpan이 덮는 행이 완전히 빈
-  // <tr></tr>) 자기 rowSpan만으로 maxReachCount를 1 넘겨 "혼자 주장"이
-  // 아닌 것으로 위장했다. 그러면 othersMaxReach가 진짜 다른 근거인
-  // secondMaxReach 대신 자기 자신의 reach인 globalMaxReach로 쓰이고,
-  // reach(=columnIndex+colspan) >= colspan은 항상 참이므로 이 셀에 대해서는
-  // 검사가 자기 자신과 비교하는 항등식이 되어 어떤 colspan도 통과했다 —
-  // Issue #35가 막으려던 "뒷받침 없는 홑 셀 과대 colspan"을 rowSpan 하나만
-  // 붙이면 그대로 우회하는 셈이라 원래 결함보다 더 나쁜 새 결함이었다.
-  //
-  // 올바른 근거는 "rowSpan 값 자체"가 아니라 "rowSpan이 덮는 다른 행에 자기
-  // 자신이 아닌 다른 셀이 실제로 있는가"다. layouts는 행 단위 배열이라 셀은
-  // 자신이 시작한 행에만 나타나므로(rowSpan으로 덮는 다른 행에는 같은 셀이
-  // 다시 나타나지 않는다), 그 다른 행에 원소가 하나라도 있으면 그 행은
-  // 후보 셀과 무관한 독립된 근거다. 이 근거가 하나라도 있으면 가중치를
-  // 1보다 크게(2로 충분 — maxReachCount는 ===1 여부만 쓰인다) 주고, 없으면
-  // (모든 spanned row가 비어 있거나 표 범위를 벗어남) rowSpan=1과 똑같이
-  // 가중치 1을 준다. rowSpan 값의 크기(위조 여부 포함)는 이 선제 검사가
-  // 검증하지 않는다 — model의 validateGridCoverage(SPAN_OUT_OF_BOUNDS)가
-  // rowEnd(=row+rowSpan)가 실제 rowCount를 넘는 rowSpan 주장을 이 검사와
-  // 무관하게 항상 거절하는 별도 안전망이다(Issue #114 조사 결론과 같은
-  // 근거) — 다른 행의 진짜 뒷받침으로 이 선제 검사를 통과해도 rowSpan 값
-  // 자체가 위조됐으면 그 안전망이 최종적으로 거절한다.
-  const rowHasOwnCell = layouts.map((row) => row.length > 0);
-  const hasIndependentRowBacking = (
-    originRowIndex: number,
-    span: number,
-  ): boolean => {
-    const spannedRowEnd = Math.min(originRowIndex + span, rowHasOwnCell.length);
-    for (let row = originRowIndex + 1; row < spannedRowEnd; row += 1) {
-      if (rowHasOwnCell[row]) return true;
-    }
-    return false;
-  };
-  const flatCells = layouts.flat();
-  const cellReach = (cell: CellLayout): number =>
-    cell.columnIndex + layoutColumnSpan(cell.columnSpan);
-  const cellRowWeight = (cell: CellLayout, originRowIndex: number): number => {
-    const span = layoutRowSpan(cell.rowSpan);
-    return span > 1 && hasIndependentRowBacking(originRowIndex, span) ? 2 : 1;
-  };
-  let globalMaxReach = 0;
-  let maxReachCount = 0;
-  let secondMaxReach = 0;
-  for (const [rowIndex, row] of layouts.entries()) {
-    for (const cell of row) {
-      const reach = cellReach(cell);
-      const weight = cellRowWeight(cell, rowIndex);
-      if (reach > globalMaxReach) {
-        secondMaxReach = globalMaxReach;
-        globalMaxReach = reach;
-        maxReachCount = weight;
-      } else if (reach === globalMaxReach) {
-        maxReachCount += weight;
-      } else if (reach > secondMaxReach) {
-        secondMaxReach = reach;
-      }
-    }
-  }
-  // 위반 셀의 상한은 셀마다 다르므로(globalMaxReach는 전역 값일 뿐, 위반한
-  // 그 셀 자신의 상한과 다를 수 있다 — 트랙-6에서 메시지가 위반 셀 자신의
-  // reach를 그대로 상한인 것처럼 보고하는 결함으로 발견) 위반 셀을 찾아
-  // 그 셀의 상한을 메시지에 그대로 쓴다.
-  const columnSpanBoundFor = (cell: CellLayout): number => {
-    const reach = cellReach(cell);
-    const othersMaxReach =
-      reach === globalMaxReach && maxReachCount === 1
-        ? secondMaxReach
-        : globalMaxReach;
-    return Math.max(cols.length, othersMaxReach, cell.columnIndex + 1);
-  };
-  const oversizedColumnSpanCell = flatCells.find(
-    (cell) => layoutColumnSpan(cell.columnSpan) > columnSpanBoundFor(cell),
-  );
-  if (oversizedColumnSpanCell !== undefined) {
+  // "표가 이미 보여준 열 수"는 colgroup 선언(cols.length)과 span 유래 값 중
+  // 큰 쪽이다 — import-html.ts와 달리 이 파일은 colgroup이 있어도(spec §4.3
+  // 패딩 계약상 columnCount가 cols.length와 inferredColumnCount 중 큰 쪽이라)
+  // 자기 강화 위험이 남으므로 게이트 없이 항상 판정한다. 판정 자체(자기
+  // 강화를 막는 방법, rowSpan 가중치 계약, Issue #35/#114/#116/#117 이력)는
+  // findOversizedColumnSpanCell(table-layout.ts)이 소유한다 — import-html.ts와
+  // 이 판정을 공유한다.
+  const violation = findOversizedColumnSpanCell(layouts, cols.length);
+  if (violation !== undefined) {
     return {
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message: `Table cell colspan exceeds the table's own column bound ${columnSpanBoundFor(oversizedColumnSpanCell)}`,
+        message: `Table cell colspan exceeds the table's own column bound ${violation.bound}`,
       },
     };
   }
