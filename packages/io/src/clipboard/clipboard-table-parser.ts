@@ -31,6 +31,7 @@ import { clipboardSanitizeSchema } from "../html/sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
+  columnSpanViolationMessage,
   findOversizedColumnSpanCell,
   hasSubstantialText,
   inferredColumnCount,
@@ -262,6 +263,25 @@ const coveredCoordinates = (
   return covered;
 };
 
+// validateTableSize 호출→분기→CLIPBOARD_TABLE_INVALID wrap 3단계가
+// tabularDataFromTable(HTML 표 경로)과 parseTsv(TSV 경로)에 그대로
+// 반복됐다(아키텍처 리뷰 4차 카드 AA) — 이 파일 안에서만 재사용하므로
+// export하지 않는다.
+const rejectIfTableOversized = (size: {
+  columnCount: number;
+  rowCount: number;
+}): { ok: false; error: ClipboardParseError } | undefined => {
+  const sizeViolation = validateTableSize(size);
+  if (sizeViolation === undefined) return undefined;
+  return {
+    ok: false,
+    error: {
+      code: "CLIPBOARD_TABLE_INVALID",
+      message: tableSizeViolationMessage(sizeViolation),
+    },
+  };
+};
+
 const tabularDataFromTable = (
   table: HtmlElementNode,
 ): Result<TabularData, ClipboardParseError> => {
@@ -287,7 +307,7 @@ const tabularDataFromTable = (
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message: `Table cell colspan exceeds the table's own column bound ${violation.bound}`,
+        message: columnSpanViolationMessage(violation),
       },
     };
   }
@@ -296,19 +316,11 @@ const tabularDataFromTable = (
   // 쪽을 열 수로 잡아야 한다(TSV 경로의 패딩과 같은 계약, spec §4.3).
   const columnCount = Math.max(cols.length, inferredColumnCount(layouts));
 
-  const sizeViolation = validateTableSize({
+  const sizeViolation = rejectIfTableOversized({
     columnCount,
     rowCount: rows.length,
   });
-  if (sizeViolation !== undefined) {
-    return {
-      ok: false,
-      error: {
-        code: "CLIPBOARD_TABLE_INVALID",
-        message: tableSizeViolationMessage(sizeViolation),
-      },
-    };
-  }
+  if (sizeViolation !== undefined) return sizeViolation;
 
   const covered = coveredCoordinates(layouts, columnCount);
   const data: TabularData = {
@@ -400,19 +412,11 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
   if (rows.some((row) => row.length !== columnCount)) {
     return { ok: false, error: { code: "NOT_TABULAR" } };
   }
-  const sizeViolation = validateTableSize({
+  const sizeViolation = rejectIfTableOversized({
     columnCount,
     rowCount: rows.length,
   });
-  if (sizeViolation !== undefined) {
-    return {
-      ok: false,
-      error: {
-        code: "CLIPBOARD_TABLE_INVALID",
-        message: tableSizeViolationMessage(sizeViolation),
-      },
-    };
-  }
+  if (sizeViolation !== undefined) return sizeViolation;
 
   const data: TabularData = {
     columnCount,

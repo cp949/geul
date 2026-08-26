@@ -54,6 +54,18 @@ describe("parseClipboardTable", () => {
     });
   });
 
+  // parseTsv의 크기 위반 분기(HTML 표 경로와 별도 구현)는 지금까지 전용
+  // 회귀 테스트가 없었다 — 아키텍처 리뷰 4차 카드 AA 그릴링에서 발견.
+  it("10,000셀을 넘는 TSV도 CLIPBOARD_TABLE_INVALID다", () => {
+    const row = Array.from({ length: 101 }, () => "x").join("\t");
+    const text = Array.from({ length: 101 }, () => row).join("\n");
+    const result = parseClipboardTable({ text });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "CLIPBOARD_TABLE_INVALID" },
+    });
+  });
+
   // 표를 찾아 그 내용을 보고 거절했다면(CLIPBOARD_TABLE_INVALID) 함께 온
   // text/plain 짝이 우연히 표와 같은 탭 구조를 가져도 TSV로 다시 새서 이
   // 거절을 무력화하면 안 된다 — 혼합 콘텐츠 자체는 더 이상 거절 사유가

@@ -233,7 +233,9 @@ export type OversizedColumnSpanViolation = {
 // 반환값은 위반 셀과 그 셀의 상한만 담은 순수 데이터다 — throw할지 Result로
 // 감쌀지는 호출부의 에러 계약(import-html.ts의 HtmlDocumentInvalidError vs
 // clipboard-table-parser.ts의 ClipboardParseError)에 속하는 문제라 이 함수는
-// 관여하지 않는다.
+// 관여하지 않는다. 사람이 읽을 메시지 텍스트는 반환 방식과 무관한 순수
+// 문자열이라 columnSpanViolationMessage로 공유한다(아키텍처 리뷰 4차 카드
+// AA) — model의 validateTableSize/tableSizeViolationMessage와 같은 분리다.
 export const findOversizedColumnSpanCell = (
   layouts: CellLayout[][],
   columnFloor: number,
@@ -292,3 +294,12 @@ export const findOversizedColumnSpanCell = (
         bound: columnSpanBoundFor(oversizedColumnSpanCell),
       };
 };
+
+// findOversizedColumnSpanCell이 반환한 위반을 사람이 읽을 메시지로 바꾼다.
+// throw할지 Result로 감쌀지는 여전히 호출부의 에러 계약에 속하지만, 메시지
+// 텍스트 자체는 import-html.ts·clipboard-table-parser.ts가 리터럴로 각자
+// 들고 있던 것과 같은 문자열이라 여기서 공유한다(아키텍처 리뷰 4차 카드 AA).
+export const columnSpanViolationMessage = (
+  violation: OversizedColumnSpanViolation,
+): string =>
+  `Table cell colspan exceeds the table's own column bound ${violation.bound}`;

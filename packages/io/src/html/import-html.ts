@@ -41,6 +41,7 @@ import { htmlSanitizeSchema } from "./sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
+  columnSpanViolationMessage,
   findOversizedColumnSpanCell,
   hasSubstantialText,
   inferredColumnCount,
@@ -202,9 +203,7 @@ const parseTable = (
   if (cols.length === 0) {
     const violation = findOversizedColumnSpanCell(layouts, cols.length);
     if (violation !== undefined) {
-      throw new HtmlDocumentInvalidError(
-        `Table cell colspan exceeds the table's own column bound ${violation.bound}`,
-      );
+      throw new HtmlDocumentInvalidError(columnSpanViolationMessage(violation));
     }
   }
 
