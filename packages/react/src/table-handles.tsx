@@ -18,6 +18,7 @@ import { iconProps } from "./icon-props.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useFocusEditor } from "./use-focus-editor.js";
 import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
@@ -370,9 +371,7 @@ export const TableHandles = () => {
   // 스크롤/리사이즈 시 geometry 재계산을 강제하기 위한 카운터.
   const [, setGeometryVersion] = useState(0);
 
-  const focusEditor = useCallback(() => {
-    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
-  }, [element]);
+  const focusEditor = useFocusEditor(element);
 
   const closeMenu = useCallback(() => {
     setMenuState(null);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useFocusEditor } from "./use-focus-editor.js";
 
 const linkToolbarButtonClassName = "geul-link-toolbar__button";
 
@@ -124,6 +125,7 @@ export const LinkToolbar = () => {
     toolbarState.mode === "closed" ? 0 : toolbarState.top,
     "centerBelow",
   );
+  const focusEditor = useFocusEditor(element);
 
   if (toolbarState.mode === "closed") return null;
 
@@ -141,7 +143,7 @@ export const LinkToolbar = () => {
 
   const closeAndRestoreFocus = () => {
     editingRef.current = true;
-    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+    focusEditor();
     setToolbarState({ mode: "closed" });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;

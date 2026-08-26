@@ -11,6 +11,7 @@ import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useFocusEditor } from "./use-focus-editor.js";
 import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
@@ -129,9 +130,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // table-handles.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
-  const focusEditor = useCallback(() => {
-    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
-  }, [element]);
+  const focusEditor = useFocusEditor(element);
 
   // 리스너를 element가 아닌 document에 둔다. gutter는 contenteditable
   // 바깥의 오버레이라서 element 안쪽에서만 hover를 추적하면 포인터가

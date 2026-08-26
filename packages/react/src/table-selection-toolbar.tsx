@@ -9,6 +9,7 @@ import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useFocusEditor } from "./use-focus-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const mergeLabel = "Merge cells";
@@ -87,9 +88,7 @@ export const TableSelectionToolbar = () => {
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const selectionKeyRef = useRef<string | null>(null);
-  const focusEditor = useCallback(() => {
-    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
-  }, [element]);
+  const focusEditor = useFocusEditor(element);
   const closeFormatMenu = useCallback(() => {
     setFormatMenuOpen(false);
     focusEditor();

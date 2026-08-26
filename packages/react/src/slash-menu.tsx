@@ -6,6 +6,7 @@ import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useFocusEditor } from "./use-focus-editor.js";
 
 const parseSlashQuery = (text: string): string | null => {
   const match = /^\/(\S*)$/.exec(text);
@@ -96,9 +97,7 @@ export const SlashMenu = () => {
   // keydown마다 ref로 최신 menuState를 읽어 열려 있을 때만 처리한다.
   const menuStateRef = useRef<MenuState | null>(null);
   menuStateRef.current = menuState;
-  const focusEditor = useCallback(() => {
-    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
-  }, [element]);
+  const focusEditor = useFocusEditor(element);
   // hover-open("+" 버튼)은 실제 slash 문자 없이도 메뉴를 열어야 하므로,
   // 어느 blockId가 그렇게 명시적으로 열렸는지 추적해 빈 텍스트에서도
   // selectionchange 폴링이 메뉴를 즉시 닫지 않게 한다.
