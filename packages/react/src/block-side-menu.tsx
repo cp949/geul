@@ -1,5 +1,5 @@
 import { GripVertical, Plus } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
@@ -11,6 +11,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useHandleReopenSuppression } from "./use-handle-reopen-suppression.js";
+import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
 // 핸들은 드래그(재정렬)와 클릭(블록 메뉴) 두 동작을 모두 갖는다 — tooltip이
@@ -46,6 +47,47 @@ type BlockMenuState = {
 
 type BlockSideMenuProps = {
   onBlockAdded: (blockId: string) => void;
+};
+
+// usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
+// 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
+// useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프
+// 함수로 뽑았다 — 로직 자체는 그대로다.
+const computeDragGuide = (
+  element: HTMLElement,
+  clientY: number,
+  current: DragState,
+): InsertionGuide | null => {
+  const blockElements = Array.from(
+    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+  );
+  const ids = blockElements.map((candidate) =>
+    candidate.getAttribute("data-be-block-id"),
+  );
+  const targetIndex = blockElements.findIndex((candidate) => {
+    const rect = candidate.getBoundingClientRect();
+    return clientY < rect.top + rect.height / 2;
+  });
+  const sourceIndex = ids.indexOf(current.sourceBlockId);
+  const effectiveTargetIndex = targetIndex === -1 ? ids.length : targetIndex;
+  const isNoop =
+    effectiveTargetIndex === sourceIndex ||
+    effectiveTargetIndex === sourceIndex + 1;
+  if (isNoop) return null;
+
+  const guideElement =
+    targetIndex === -1
+      ? blockElements[blockElements.length - 1]
+      : blockElements[targetIndex];
+  if (guideElement === undefined) return null;
+
+  const rect = guideElement.getBoundingClientRect();
+  return {
+    beforeBlockId: targetIndex === -1 ? null : (ids[targetIndex] ?? null),
+    left: rect.left,
+    top: targetIndex === -1 ? rect.bottom : rect.top,
+    width: rect.width,
+  };
 };
 
 // flex 센터링은 IconButton이 공통으로 제공한다.
@@ -114,49 +156,14 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
 
   // 네이티브 drag는 CDP 자동화에서 OS 레벨로 제어권이 넘어가는 환경이
   // 있으므로 Pointer Event로 재정렬한다. 실제 drag 뒤 브라우저가 합성하는
-  // click은 메뉴 열기로 해석하지 않는다.
-  useEffect(() => {
-    if (!isDragging || element === null) return;
-    const ownerDocument = element.ownerDocument;
-
-    const computeGuide = (clientY: number, current: DragState) => {
-      const blockElements = Array.from(
-        element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
-      );
-      const ids = blockElements.map((candidate) =>
-        candidate.getAttribute("data-be-block-id"),
-      );
-      const targetIndex = blockElements.findIndex((candidate) => {
-        const rect = candidate.getBoundingClientRect();
-        return clientY < rect.top + rect.height / 2;
-      });
-      const sourceIndex = ids.indexOf(current.sourceBlockId);
-      const effectiveTargetIndex =
-        targetIndex === -1 ? ids.length : targetIndex;
-      const isNoop =
-        effectiveTargetIndex === sourceIndex ||
-        effectiveTargetIndex === sourceIndex + 1;
-      if (isNoop) return null;
-
-      const guideElement =
-        targetIndex === -1
-          ? blockElements[blockElements.length - 1]
-          : blockElements[targetIndex];
-      if (guideElement === undefined) return null;
-
-      const rect = guideElement.getBoundingClientRect();
-      return {
-        beforeBlockId: targetIndex === -1 ? null : (ids[targetIndex] ?? null),
-        left: rect.left,
-        top: targetIndex === -1 ? rect.bottom : rect.top,
-        width: rect.width,
-      };
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
+  // click은 메뉴 열기로 해석하지 않는다. pointerId 게이트, listener
+  // 등록/해제, keydown(Escape) 분기는 usePointerDragGesture가 맡는다
+  // (table-handles.tsx의 재정렬·리사이즈와 같은 훅).
+  const handleBlockDragMove = useCallback(
+    (event: PointerEvent) => {
+      if (element === null) return;
       const current = dragStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      if (current.cancelled) return;
+      if (current === null) return;
       const hasDragged =
         current.hasDragged ||
         Math.hypot(
@@ -166,54 +173,59 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       updateDragState({
         ...current,
         hasDragged,
-        guide: hasDragged ? computeGuide(event.clientY, current) : null,
+        guide: hasDragged
+          ? computeDragGuide(element, event.clientY, current)
+          : null,
       });
-    };
+    },
+    [element, updateDragState],
+  );
 
-    const handlePointerUp = (event: PointerEvent) => {
+  const handleBlockDragUp = useCallback(() => {
+    const current = dragStateRef.current;
+    if (current === null) return;
+    if (!current.cancelled && current.guide !== null) {
+      editor.commands.moveBlockBefore(
+        current.sourceBlockId,
+        current.guide.beforeBlockId,
+      );
+    }
+    if (current.hasDragged || current.cancelled) {
+      reopenSuppression.markSuppressed(current.sourceBlockId);
+    }
+    updateDragState(null);
+  }, [editor, updateDragState, reopenSuppression]);
+
+  const handleBlockDragCancel = useCallback(() => {
+    const current = dragStateRef.current;
+    if (current === null) return;
+    if (current.hasDragged || current.cancelled) {
+      reopenSuppression.markSuppressed(current.sourceBlockId);
+    }
+    updateDragState(null);
+  }, [updateDragState, reopenSuppression]);
+
+  const handleBlockDragEscape = useCallback(
+    (event: KeyboardEvent): true => {
+      event.preventDefault();
       const current = dragStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      if (!current.cancelled && current.guide !== null) {
-        editor.commands.moveBlockBefore(
-          current.sourceBlockId,
-          current.guide.beforeBlockId,
-        );
-      }
-      if (current.hasDragged || current.cancelled) {
-        reopenSuppression.markSuppressed(current.sourceBlockId);
-      }
-      updateDragState(null);
-    };
-
-    const handlePointerCancel = (event: PointerEvent) => {
-      const current = dragStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      if (current.hasDragged || current.cancelled) {
-        reopenSuppression.markSuppressed(current.sourceBlockId);
-      }
-      updateDragState(null);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        const current = dragStateRef.current;
-        if (current === null) return;
+      if (current !== null) {
         updateDragState({ ...current, cancelled: true, guide: null });
       }
-    };
+      return true;
+    },
+    [updateDragState],
+  );
 
-    ownerDocument.addEventListener("pointermove", handlePointerMove);
-    ownerDocument.addEventListener("pointerup", handlePointerUp);
-    ownerDocument.addEventListener("pointercancel", handlePointerCancel);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
-    return () => {
-      ownerDocument.removeEventListener("pointermove", handlePointerMove);
-      ownerDocument.removeEventListener("pointerup", handlePointerUp);
-      ownerDocument.removeEventListener("pointercancel", handlePointerCancel);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isDragging, element, editor, updateDragState, reopenSuppression]);
+  usePointerDragGesture({
+    active: isDragging,
+    element,
+    pointerId: dragState?.pointerId ?? null,
+    onMove: handleBlockDragMove,
+    onUp: handleBlockDragUp,
+    onCancel: handleBlockDragCancel,
+    onEscape: handleBlockDragEscape,
+  });
 
   // 블록 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
   // 닫는 UI는 병렬 e2e로 검증한다). 리스너 등록/해제는
