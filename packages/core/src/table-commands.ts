@@ -22,6 +22,7 @@ import type {
 } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
+import { findTopLevelBlockPosition } from "./block-position.js";
 import {
   inlineContentToTiptap,
   inlineContentViolation,
@@ -72,17 +73,6 @@ const tableNotFound = (blockId: string): Result<never, TableCommandError> => ({
   ok: false,
   error: { code: "TABLE_NOT_FOUND", blockId },
 });
-
-const findTopLevelBlockPosition = (
-  document: ProseMirrorNode,
-  blockId: string,
-): number | null => {
-  let blockPosition: number | null = null;
-  document.forEach((node, offset) => {
-    if (node.attrs.blockId === blockId) blockPosition = offset;
-  });
-  return blockPosition;
-};
 
 const buildInitialTable = (
   size: { rows: number; columns: number },
@@ -165,6 +155,25 @@ const findCellOffset = (
     return true;
   });
   return found;
+};
+
+// findCellOffset으로 찾은 셀 안에 캐럿을 놓는다. applyTableGridOperation의
+// 병합/분할 직후 캐럿 이동과 pasteTabularData/pasteClipboardContent의
+// 붙여넣은 표 좌상단 셀 진입이 모두 같은 절차(오프셋 조회 → 문서 크기로
+// clamp → TextSelection.near)를 쓴다 - base(표 노드 시작 위치 + 1, 호출부마다
+// 다름)와 node(캐럿을 놓을 표의 tiptap 노드), cellId만 다르다. cellId가 없거나
+// 그 셀을 못 찾으면 tr을 그대로 돌려준다 - 캐럿 이동은 no-op이지 실패가 아니다.
+const setCaretInCell = (
+  tr: Transaction,
+  node: ProseMirrorNode,
+  base: number,
+  cellId: string | null,
+): Transaction => {
+  if (cellId === null) return tr;
+  const cell = findCellOffset(node, cellId);
+  if (cell === null) return tr;
+  const absolutePosition = Math.min(base + cell.content, tr.doc.content.size);
+  return tr.setSelection(TextSelection.near(tr.doc.resolve(absolutePosition)));
 };
 
 // dispatch 전후 editor.state.doc 참조 동일성으로 필터(LinkPolicyExtension
@@ -277,17 +286,13 @@ const applyTableGridOperation = (
         preservedSelection.to,
       ),
     );
-  } else if (targetCellId !== null) {
-    const targetCell = findCellOffset(nextNode, targetCellId);
-    if (targetCell !== null) {
-      const absolutePosition = Math.min(
-        position + 1 + targetCell.content,
-        transaction.doc.content.size,
-      );
-      transaction = transaction.setSelection(
-        TextSelection.near(transaction.doc.resolve(absolutePosition)),
-      );
-    }
+  } else {
+    transaction = setCaretInCell(
+      transaction,
+      nextNode,
+      position + 1,
+      targetCellId,
+    );
   }
 
   // 네이티브 명령들처럼 결과 selection이 화면 안에 오도록 표시한다 —
@@ -414,20 +419,6 @@ export const resizeTableColumn = (
     { preserveSelection: true },
   );
 
-// 병합 결과에서 살아남는 기준 셀의 id. 실패하면 null(선택 이동을 생략하고
-// replaceWith의 기본 selection 매핑에 맡긴다).
-const anchorCellIdAfterMerge = (
-  table: TableBlock,
-  from: { row: number; column: number },
-  to: { row: number; column: number },
-): string | null => {
-  const projected = projectTableGrid(table);
-  if (!projected.ok) return null;
-  const row = Math.min(from.row, to.row);
-  const column = Math.min(from.column, to.column);
-  return projected.value.cellAt(row, column)?.cellId ?? null;
-};
-
 export const mergeTableCells = (
   editor: Editor,
   tableBlockId: string,
@@ -438,7 +429,16 @@ export const mergeTableCells = (
     editor,
     tableBlockId,
     (table) => mergeGridCells(table, from, to),
-    { selectCellId: (table) => anchorCellIdAfterMerge(table, from, to) },
+    // 병합 결과에서 살아남는 기준 셀은 두 코너 중 row/column이 더 작은 쪽 —
+    // cellIdAtAnchor에 미리 min을 적용해 넘긴다. 실패하면 null(선택 이동을
+    // 생략하고 replaceWith의 기본 selection 매핑에 맡긴다).
+    {
+      selectCellId: (table) =>
+        cellIdAtAnchor(table, {
+          row: Math.min(from.row, to.row),
+          column: Math.min(from.column, to.column),
+        }),
+    },
   );
 
 export const splitTableCell = (
@@ -717,18 +717,12 @@ export const pasteTabularData = (
   // 표 안 분기의 selectCellId와 대칭 — 캐럿을 붙여넣은 표의 좌상단 셀
   // 안으로 옮긴다.
   const firstCellId = cellIdAtAnchor(filled.value, { row: 0, column: 0 });
-  if (firstCellId !== null) {
-    const firstCell = findCellOffset(tableNode, firstCellId);
-    if (firstCell !== null) {
-      const absolutePosition = Math.min(
-        insertPosition + 1 + firstCell.content,
-        transaction.doc.content.size,
-      );
-      transaction = transaction.setSelection(
-        TextSelection.near(transaction.doc.resolve(absolutePosition)),
-      );
-    }
-  }
+  transaction = setCaretInCell(
+    transaction,
+    tableNode,
+    insertPosition + 1,
+    firstCellId,
+  );
 
   // 네이티브 doPaste가 보장하는 scrollIntoView와 동일 — 캐럿이 옮겨간 새
   // 표가 뷰포트 밖이면 화면이 따라가야 한다.
@@ -1033,18 +1027,12 @@ export const pasteClipboardContent = (
   // 그 표 앞에 삽입된 문단들의 누적 크기다(표가 시퀀스 첫 원소면 0이라
   // pasteTabularData의 기존 공식과 동일해진다).
   const firstCellId = cellIdAtAnchor(firstTable.data, { row: 0, column: 0 });
-  if (firstCellId !== null) {
-    const firstCell = findCellOffset(firstTable.node, firstCellId);
-    if (firstCell !== null) {
-      const absolutePosition = Math.min(
-        insertPosition + firstTable.offset + 1 + firstCell.content,
-        transaction.doc.content.size,
-      );
-      transaction = transaction.setSelection(
-        TextSelection.near(transaction.doc.resolve(absolutePosition)),
-      );
-    }
-  }
+  transaction = setCaretInCell(
+    transaction,
+    firstTable.node,
+    insertPosition + firstTable.offset + 1,
+    firstCellId,
+  );
 
   const dispatched = dispatchAndVerify(
     editor,

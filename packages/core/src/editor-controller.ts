@@ -10,12 +10,12 @@ import {
 } from "@cp949/geul-model";
 import { Editor, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 
 import { BlockIdExtension } from "./block-id-extension.js";
+import { findTopLevelBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
@@ -295,17 +295,6 @@ const sameDocumentContent = (
   previous: BlockDocument,
   next: BlockDocument,
 ): boolean => blockChanges(previous, next).length === 0;
-
-const findTopLevelBlockPosition = (
-  document: ProseMirrorNode,
-  blockId: string,
-): number | null => {
-  let blockPosition: number | null = null;
-  document.forEach((node, offset) => {
-    if (node.attrs.blockId === blockId) blockPosition = offset;
-  });
-  return blockPosition;
-};
 
 export const createEditor = (
   options: CreateEditorOptions,
