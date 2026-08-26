@@ -1,6 +1,6 @@
 import {
+  appendOrMergeInlineItem,
   type InlineContent,
-  sameMarks,
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
@@ -87,19 +87,11 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
       if (kept[offset + index] === true) text += item.text[index];
     }
     offset += item.text.length;
-    if (text.length === 0) continue;
 
-    // 빈 세그먼트가 사라지면서 같은 mark 조합이 이웃하게 될 수 있다 —
-    // inlineContentFromNodes와 같은 병합 형태를 유지한다("같은 mark
-    // 조합"의 판정은 model의 sameMarks가 소유).
-    const previous = normalized[normalized.length - 1];
-    if (previous !== undefined && sameMarks(previous.marks, item.marks)) {
-      previous.text += text;
-      continue;
-    }
-    normalized.push(
-      item.marks === undefined ? { text } : { text, marks: item.marks },
-    );
+    // 빈 세그먼트 스킵과, 세그먼트가 사라지며 이웃하게 된 같은 mark 조합의
+    // 병합은 model의 appendOrMergeInlineItem이 소유한다(다른 네 곳도 같은
+    // 계약을 쓴다).
+    appendOrMergeInlineItem(normalized, text, item.marks);
   }
 
   return normalized;

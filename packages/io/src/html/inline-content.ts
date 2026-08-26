@@ -1,7 +1,6 @@
 import {
-  canonicalizeTextMarks,
+  appendOrMergeInlineItem,
   type InlineContent,
-  sameMarks,
   type TextMark,
 } from "@cp949/geul-model";
 
@@ -58,25 +57,6 @@ const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
     )
     .map(({ mark }) => mark);
 
-const appendText = (
-  content: InlineContent,
-  text: string,
-  marks: TextMark[],
-): void => {
-  if (text.length === 0) return;
-
-  const normalizedMarks = canonicalizeTextMarks(marks);
-  const previous = content[content.length - 1];
-  if (previous !== undefined && sameMarks(previous.marks, normalizedMarks)) {
-    previous.text += text;
-    return;
-  }
-
-  content.push(
-    normalizedMarks.length === 0 ? { text } : { text, marks: normalizedMarks },
-  );
-};
-
 const markForElement = (node: HtmlElementNode): TextMark | undefined => {
   switch (node.tagName) {
     case "a": {
@@ -105,12 +85,12 @@ const readInlineNodes = (
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
-      appendText(content, node.value, marks);
+      appendOrMergeInlineItem(content, node.value, marks);
       continue;
     }
     if (node.type !== "element") continue;
     if (node.tagName === "br") {
-      appendText(content, "\n", marks);
+      appendOrMergeInlineItem(content, "\n", marks);
       continue;
     }
 

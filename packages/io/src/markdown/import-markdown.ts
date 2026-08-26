@@ -1,12 +1,11 @@
 import {
-  canonicalizeTextMarks,
+  appendOrMergeInlineItem,
   type Document,
   type IdFactory,
   type InlineContent,
   MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
-  sameMarks,
   type TextMark,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -193,24 +192,6 @@ const createDefaultIdFactory = (): IdFactory => {
   };
 };
 
-const appendText = (
-  content: InlineContent,
-  text: string,
-  marks: TextMark[],
-): void => {
-  if (text.length === 0) return;
-
-  const normalizedMarks = canonicalizeTextMarks(marks);
-  const previous = content[content.length - 1];
-  if (previous !== undefined && sameMarks(previous.marks, normalizedMarks)) {
-    previous.text += text;
-    return;
-  }
-  content.push(
-    normalizedMarks.length === 0 ? { text } : { text, marks: normalizedMarks },
-  );
-};
-
 type InlineLocation = {
   blockId: string;
   rowId?: string;
@@ -237,18 +218,18 @@ const readInlineNodes = (
     switch (node.type) {
       case "text":
       case "inlineCode":
-        appendText(
+        appendOrMergeInlineItem(
           content,
           node.value ?? "",
           node.type === "inlineCode" ? [...marks, { type: "code" }] : marks,
         );
         break;
       case "break":
-        appendText(content, "\n", marks);
+        appendOrMergeInlineItem(content, "\n", marks);
         break;
       case "html": {
         const value = rawHtmlText(node, location);
-        appendText(content, value, marks);
+        appendOrMergeInlineItem(content, value, marks);
         if (value !== "\n") {
           warnings.push({
             kind: "RAW_HTML_DOWNGRADED",
@@ -278,7 +259,7 @@ const readInlineNodes = (
             : alt.length > 0 && destination.length > 0
               ? `${alt} (${destination})`
               : alt || destination;
-        appendText(content, visibleText, marks);
+        appendOrMergeInlineItem(content, visibleText, marks);
         warnings.push({
           kind: "IMAGE_DOWNGRADED",
           blockId: location.blockId,
@@ -361,7 +342,7 @@ const readInlineNodes = (
         if (node.children !== undefined) {
           readInlineNodes(node.children, marks, content, warnings, location);
         } else {
-          appendText(
+          appendOrMergeInlineItem(
             content,
             node.value ?? node.alt ?? node.url ?? node.identifier ?? "",
             marks,

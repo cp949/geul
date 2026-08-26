@@ -1,11 +1,11 @@
 import {
+  appendOrMergeInlineItem,
   type Document,
   type IdFactory,
   type InlineContent,
   MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
-  sameMarks,
   sanitizeInlineText,
   type TableBlock,
   validateTableSize,
@@ -59,24 +59,18 @@ class HtmlDocumentInvalidError extends Error {}
 // 문단/헤딩/표 직속 비섹션 자식 문단/표 셀 생성 지점 네 곳이 재사용만 한다.
 // whitespace collapsing은 도입하지 않는다(범위 밖) — 코드포인트 제거만
 // 한다. 코드포인트 제거로 조각이 통째로 비면 버리고, 그 결과 같은 mark
-// 조합을 가진 이웃 조각이 생기면 병합한다 — appendText(inline-content.ts)와
-// normalizeCellContent(clipboard/cell-text.ts)가 지키는 "인접 동일 mark는
-// 항상 병합" 불변식을 여기서도 유지한다(빈 조각 제거만 하고 병합을 생략하면
-// 같은 mark가 쪼개진 채 남아 export가 불필요하게 태그를 나눈다). "같은 mark
-// 조합"의 판정은 model의 sameMarks가 소유한다.
+// 조합을 가진 이웃 조각이 생기면 병합한다(빈 조각 제거만 하고 병합을
+// 생략하면 같은 mark가 쪼개진 채 남아 export가 불필요하게 태그를 나눈다) —
+// 이 스킵/병합 제어 흐름은 model의 appendOrMergeInlineItem이 소유하고
+// inline-content.ts·cell-text.ts·import-markdown.ts·core의
+// table-commands.ts도 같은 계약을 쓴다.
 const sanitizeInlineContentText = (content: InlineContent): InlineContent => {
   const sanitized: InlineContent = [];
   for (const item of content) {
-    const text = sanitizeInlineText(item.text);
-    if (text.length === 0) continue;
-
-    const previous = sanitized[sanitized.length - 1];
-    if (previous !== undefined && sameMarks(previous.marks, item.marks)) {
-      previous.text += text;
-      continue;
-    }
-    sanitized.push(
-      item.marks === undefined ? { text } : { text, marks: item.marks },
+    appendOrMergeInlineItem(
+      sanitized,
+      sanitizeInlineText(item.text),
+      item.marks,
     );
   }
   return sanitized;
