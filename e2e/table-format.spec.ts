@@ -2,10 +2,11 @@
  * 표 핸들 메뉴와 셀 선택 서식의 실제 브라우저 동작을 검증한다.
  * pointer 선택, undo, 메뉴 종료와 viewport 클램프를 함께 다룬다.
  */
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { insertTable, openDemo } from "./support/demo.js";
+import { dragSelectCells } from "./support/table-selection.js";
 
 /**
  * 데모를 열고 슬래시 메뉴로 기본 3×3 표를 만들어 브라우저 조작 fixture를
@@ -213,27 +214,6 @@ test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 
  * 묶으면 tableEditing이 CellSelection 추적을 시작하지 않는 브라우저 동작
  * 차이가 있기 때문이다.
  */
-const dragSelectCells = async (
-  page: Page,
-  fromCell: Locator,
-  toCell: Locator,
-) => {
-  const fromBox = await fromCell.boundingBox();
-  const toBox = await toCell.boundingBox();
-  if (fromBox === null || toBox === null) {
-    throw new Error("Bounding boxes were not available");
-  }
-  await page.mouse.move(
-    fromBox.x + fromBox.width / 2,
-    fromBox.y + fromBox.height / 2,
-  );
-  await page.mouse.down();
-  await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {
-    steps: 5,
-  });
-  await page.mouse.up();
-};
-
 test("셀 하나를 트리플클릭으로 선택해 배경색을 적용하고 undo로 되돌린다", async ({
   page,
 }) => {

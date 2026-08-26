@@ -1,27 +1,7 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { insertTable, openDemo } from "./support/demo.js";
-
-const dragSelectCells = async (
-  page: Page,
-  fromCell: Locator,
-  toCell: Locator,
-) => {
-  const fromBox = await fromCell.boundingBox();
-  const toBox = await toCell.boundingBox();
-  if (fromBox === null || toBox === null) {
-    throw new Error("Bounding boxes were not available");
-  }
-  await page.mouse.move(
-    fromBox.x + fromBox.width / 2,
-    fromBox.y + fromBox.height / 2,
-  );
-  await page.mouse.down();
-  await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {
-    steps: 5,
-  });
-  await page.mouse.up();
-};
+import { dragSelectCells } from "./support/table-selection.js";
 
 test("셀 범위를 드래그 선택해 병합하고 undo 1회로 복원한다 @core", async ({
   page,
