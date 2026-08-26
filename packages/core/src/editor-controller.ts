@@ -753,7 +753,9 @@ export const createEditor = (
   };
 
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
-  // `!== null`로 좁히면 이 저장소의 TS7 컴파일러가 never로 잘못 좁힌다.
+  // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
+  // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
+  // 따라가는 구조적 한계다(그릴링: 카드 C9, TS 6.0.3 classic tsc에서도 재현 확인).
   // 클로저를 넘나드는 값은 원시 타입(code 문자열, blockId, width, message)만 쓴다.
   const tableErrorFromCode = (
     code: TableCommandError["code"],
