@@ -3,10 +3,12 @@ import {
   type Document,
   type IdFactory,
   type InlineContent,
+  MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
   sameMarks,
   type TextMark,
+  validateTableSize,
 } from "@cp949/geul-model";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
@@ -390,12 +392,15 @@ const tableFromNode = (
     (maximum, row) => Math.max(maximum, row.children?.length ?? 0),
     0,
   );
-  if (
-    columnCount > MAX_TABLE_LOGICAL_CELLS ||
-    sourceRows.length * columnCount > MAX_TABLE_LOGICAL_CELLS
-  ) {
+  const sizeViolation = validateTableSize({
+    columnCount,
+    rowCount: sourceRows.length,
+  });
+  if (sizeViolation !== undefined) {
     throw new MarkdownDocumentInvalidError(
-      `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+      sizeViolation === "TOO_MANY_COLUMNS"
+        ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
+        : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
     );
   }
 

@@ -25,13 +25,16 @@ export type {
   GridCell,
   TableGridInvalidReason,
   TableGridValidationError,
+  TableSizeViolation,
 } from "./table-grid-validation.js";
 export {
   MAX_COLUMN_WIDTH,
+  MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
   MIN_COLUMN_WIDTH,
   validateGridCoverage,
   validateTableGrid,
+  validateTableSize,
 } from "./table-grid-validation.js";
 export type {
   Block,

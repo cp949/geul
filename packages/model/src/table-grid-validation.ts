@@ -9,6 +9,12 @@ export const MAX_COLUMN_WIDTH = 1200;
 // 다른 경로에서 거절되지 않는다 — 이 판정의 권위는 model에 있다.
 export const MAX_TABLE_LOGICAL_CELLS = 10_000;
 
+// 표 하나가 가질 수 있는 열 수의 상한. MAX_TABLE_LOGICAL_CELLS와 같은 이유로
+// 권위가 model에 있다 — import(html/markdown)·클립보드 붙여넣기가 각자
+// 사본을 들고 다르게 판정하면 한 경로에서 통과한 표가 다른 경로에서
+// 거절된다.
+export const MAX_TABLE_COLUMNS = 10_000;
+
 export type TableGridInvalidReason =
   | "UNKNOWN_COLUMN"
   | "INVALID_COORDINATE"
@@ -41,6 +47,26 @@ const invalid = (
       ? { code: "TABLE_GRID_INVALID", reason, row }
       : { code: "TABLE_GRID_INVALID", reason, row, column },
 });
+
+export type TableSizeViolation = "TOO_MANY_COLUMNS" | "TOO_MANY_CELLS";
+
+/**
+ * 표 크기가 MAX_TABLE_COLUMNS/MAX_TABLE_LOGICAL_CELLS 예산 안에 있는지
+ * 판정한다. 위반 종류만 반환하는 순수 함수다 — throw할지 Result로 감쌀지,
+ * 메시지를 어떻게 조합할지는 호출부의 에러 계약(io의
+ * HtmlDocumentInvalidError·ClipboardParseError·MarkdownDocumentInvalidError)에
+ * 속하는 문제라 여기서 관여하지 않는다.
+ */
+export const validateTableSize = (input: {
+  columnCount: number;
+  rowCount: number;
+}): TableSizeViolation | undefined => {
+  if (input.columnCount > MAX_TABLE_COLUMNS) return "TOO_MANY_COLUMNS";
+  if (input.rowCount * input.columnCount > MAX_TABLE_LOGICAL_CELLS) {
+    return "TOO_MANY_CELLS";
+  }
+  return undefined;
+};
 
 // 좌표 기반(row/column) 셀 목록이 rowCount x columnCount 격자를 겹침도
 // 빈틈도 없이 정확히 한 번씩 덮는지 검증한다. TableBlock의 columnId 기반

@@ -2,11 +2,13 @@ import {
   type Document,
   type IdFactory,
   type InlineContent,
+  MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
   sameMarks,
   sanitizeInlineText,
   type TableBlock,
+  validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
 
@@ -43,7 +45,6 @@ import {
   hasSubstantialText,
   inferredColumnCount,
   layoutRows,
-  MAX_TABLE_COLUMNS,
   type TableRowSource,
   tableRows,
 } from "./table-layout.js";
@@ -215,14 +216,15 @@ const parseTable = (
 
   const columnCount =
     cols.length > 0 ? cols.length : inferredColumnCount(layouts);
-  if (columnCount > MAX_TABLE_COLUMNS) {
+  const sizeViolation = validateTableSize({
+    columnCount,
+    rowCount: rows.length,
+  });
+  if (sizeViolation !== undefined) {
     throw new HtmlDocumentInvalidError(
-      `Table column count exceeds ${MAX_TABLE_COLUMNS}`,
-    );
-  }
-  if (rows.length * columnCount > MAX_TABLE_LOGICAL_CELLS) {
-    throw new HtmlDocumentInvalidError(
-      `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+      sizeViolation === "TOO_MANY_COLUMNS"
+        ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
+        : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
     );
   }
 

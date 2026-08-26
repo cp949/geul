@@ -2,7 +2,9 @@ import {
   type InlineContent,
   isCanonicalCellAlign,
   isCanonicalCellColor,
+  MAX_TABLE_COLUMNS,
   MAX_TABLE_LOGICAL_CELLS,
+  validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
 
@@ -36,7 +38,6 @@ import {
   layoutColumnSpan,
   layoutRowSpan,
   layoutRows,
-  MAX_TABLE_COLUMNS,
   tableRows,
 } from "../html/table-layout.js";
 import type { Result } from "../result.js";
@@ -296,21 +297,19 @@ const tabularDataFromTable = (
   // 쪽을 열 수로 잡아야 한다(TSV 경로의 패딩과 같은 계약, spec §4.3).
   const columnCount = Math.max(cols.length, inferredColumnCount(layouts));
 
-  if (columnCount > MAX_TABLE_COLUMNS) {
+  const sizeViolation = validateTableSize({
+    columnCount,
+    rowCount: rows.length,
+  });
+  if (sizeViolation !== undefined) {
     return {
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message: `Table column count exceeds ${MAX_TABLE_COLUMNS}`,
-      },
-    };
-  }
-  if (rows.length * columnCount > MAX_TABLE_LOGICAL_CELLS) {
-    return {
-      ok: false,
-      error: {
-        code: "CLIPBOARD_TABLE_INVALID",
-        message: `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+        message:
+          sizeViolation === "TOO_MANY_COLUMNS"
+            ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
+            : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
       },
     };
   }
@@ -405,12 +404,19 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
   if (rows.some((row) => row.length !== columnCount)) {
     return { ok: false, error: { code: "NOT_TABULAR" } };
   }
-  if (rows.length * columnCount > MAX_TABLE_LOGICAL_CELLS) {
+  const sizeViolation = validateTableSize({
+    columnCount,
+    rowCount: rows.length,
+  });
+  if (sizeViolation !== undefined) {
     return {
       ok: false,
       error: {
         code: "CLIPBOARD_TABLE_INVALID",
-        message: `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+        message:
+          sizeViolation === "TOO_MANY_COLUMNS"
+            ? `Table column count exceeds ${MAX_TABLE_COLUMNS}`
+            : `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
       },
     };
   }

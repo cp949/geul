@@ -1,7 +1,7 @@
+import { MAX_TABLE_COLUMNS } from "@cp949/geul-model";
+
 import { childElements, propertyInteger } from "./hast-properties.js";
 import type { HtmlElementContent, HtmlElementNode } from "./inline-content.js";
-
-export const MAX_TABLE_COLUMNS = 10_000;
 
 export type TableRowSource = {
   element: HtmlElementNode;
