@@ -62,6 +62,7 @@ export type TableCommandError =
   | { code: "TABULAR_DATA_INVALID"; message: string }
   | { code: "CLIPBOARD_CONTENT_INVALID"; message: string }
   | { code: "PASTE_TARGET_NOT_FOUND" }
+  | { code: "MERGE_TARGET_NOT_FOUND" }
   | { code: "TRANSACTION_REJECTED" };
 
 const blockNotFound = (blockId: string): Result<never, TableCommandError> => ({
@@ -456,10 +457,21 @@ export const resizeTableColumn = (
 export const mergeTableCells = (
   editor: Editor,
   tableBlockId: string,
-  from: { row: number; column: number },
-  to: { row: number; column: number },
-): Result<void, TableCommandError> =>
-  applyTableGridOperation(
+): Result<void, TableCommandError> => {
+  // 병합 범위의 유일한 권위는 현재 CellSelection이다(spec 6.2) — 호출자는
+  // 좌표를 다시 계산해 넘기지 않는다. 선택이 이미 바뀌었거나 다른 표를
+  // 가리키면 조작 불가로 거절한다.
+  if (!(editor.state.selection instanceof CellSelection)) {
+    return { ok: false, error: { code: "MERGE_TARGET_NOT_FOUND" } };
+  }
+  const rect = selectedRect(editor.state);
+  if (rect.table.attrs.blockId !== tableBlockId) {
+    return { ok: false, error: { code: "MERGE_TARGET_NOT_FOUND" } };
+  }
+  const from = { row: rect.top, column: rect.left };
+  const to = { row: rect.bottom - 1, column: rect.right - 1 };
+
+  return applyTableGridOperation(
     editor,
     tableBlockId,
     (table) => mergeGridCells(table, from, to),
@@ -474,6 +486,7 @@ export const mergeTableCells = (
         }),
     },
   );
+};
 
 export const splitTableCell = (
   editor: Editor,

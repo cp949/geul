@@ -16,6 +16,7 @@ import {
   docWithTwoRowTable,
   oneByOneData,
   placeCaretInCell,
+  selectCellRange,
 } from "./table-test-support.js";
 
 describe("표에 표 형태 데이터를 붙여넣는다", () => {
@@ -23,12 +24,8 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     // 좌측 열(cell-1, cell-3)을 세로로 병합해 rowSpan=2 셀을 만든다 —
     // "비직사각형 범위는 NOT_RECTANGULAR..." 테스트와 같은 준비 단계다.
-    const merged = mergeTableCells(
-      editor,
-      "table-1",
-      { row: 0, column: 0 },
-      { row: 1, column: 0 },
-    );
+    selectCellRange(editor, "cell-1", "cell-3");
+    const merged = mergeTableCells(editor, "table-1");
     expect(merged.ok).toBe(true);
 
     // 병합된 셀(cell-1) 안으로 캐럿을 옮긴다. selectedRect는 이 셀의 기준

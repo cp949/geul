@@ -801,6 +801,8 @@ export const createEditor = (
         return { code: "PASTE_MERGE_CONFLICT" };
       case "PASTE_TARGET_NOT_FOUND":
         return { code: "PASTE_TARGET_NOT_FOUND" };
+      case "MERGE_TARGET_NOT_FOUND":
+        return { code: "COMMAND_NOT_APPLICABLE", command: "mergeTableCells" };
       case "TRANSACTION_REJECTED":
         return { code: "TRANSACTION_REJECTED" };
       default:
@@ -1108,23 +1110,8 @@ export const createEditor = (
         ),
       mergeTableCells: (tableBlockId) => {
         if (destroyed) return commandNotApplicable("mergeTableCells");
-        // 병합 범위의 유일한 권위는 현재 CellSelection이다(spec 6.2) — React는
-        // 좌표를 다시 계산해 넘기지 않는다. 클릭 시점에 선택이 이미 바뀌었거나
-        // 다른 표를 가리키면 조작 불가로 거절한다.
-        if (!(tiptapEditor.state.selection instanceof CellSelection)) {
-          return commandNotApplicable("mergeTableCells");
-        }
-        const rect = selectedRect(tiptapEditor.state);
-        if (rect.table.attrs.blockId !== tableBlockId) {
-          return commandNotApplicable("mergeTableCells");
-        }
         return runTableCommand("mergeTableCells", () =>
-          mergeTableCellsCommand(
-            tiptapEditor,
-            tableBlockId,
-            { row: rect.top, column: rect.left },
-            { row: rect.bottom - 1, column: rect.right - 1 },
-          ),
+          mergeTableCellsCommand(tiptapEditor, tableBlockId),
         );
       },
       splitTableCell: (tableBlockId, cellId) =>

@@ -194,6 +194,53 @@ export const docWithTable = {
 };
 
 /**
+ * 2행 3열 표 하나짜리 문서 — 병합 경계를 가로지르는 선택(NOT_RECTANGULAR)
+ * 재현에 쓴다. 2x2 표는 셀 하나만 병합해도 남은 칸이 자동으로 나머지
+ * 전체를 덮어 selectedRect가 항상 표 전체와 같아지므로(전부 tiling돼
+ * 도리어 직사각형이 된다) 경계를 벗어나는 선택 자체가 안 나온다 — 열이
+ * 3개는 있어야 병합된 셀 절반만 걸치는 rect를 selectCellRange로 재현할
+ * 수 있다.
+ */
+export const docWithTwoByThreeTable = {
+  type: "doc",
+  content: [
+    {
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [
+          { id: "col-1", width: 160 },
+          { id: "col-2", width: 160 },
+          { id: "col-3", width: 160 },
+        ],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            cellJson("cell-1", "col-1"),
+            cellJson("cell-2", "col-2"),
+            cellJson("cell-3", "col-3"),
+          ],
+        },
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-2" },
+          content: [
+            cellJson("cell-4", "col-1"),
+            cellJson("cell-5", "col-2"),
+            cellJson("cell-6", "col-3"),
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+/**
  * 2행 2열 표 하나짜리 문서 — 행이 둘 이상이어야 하는 시나리오에 쓴다. 행
  * 삭제·이동, 셀 병합, 표 안 붙여넣기가 여기 해당한다.
  */
