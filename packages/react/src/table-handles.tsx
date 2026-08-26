@@ -17,6 +17,8 @@ import { iconProps } from "./icon-props.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useHandleReopenSuppression } from "./use-handle-reopen-suppression.js";
+import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
 // 핸들은 드래그(재정렬)와 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이
 // 한쪽만 안내하면 나머지 동작의 발견성을 가린다(block-side-menu와 같은 규칙).
@@ -45,6 +47,18 @@ const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
   "[data-be-table-menu]",
   "[data-be-table-row-handle]",
   "[data-be-table-column-handle]",
+] as const;
+
+// usePointerHoverTarget에 넘기는 ignore-list. 자기 자신의 오버레이(핸들·
+// 리사이즈 스트립·확장 버튼·메뉴) 위에서는 hover 대상을 다시 판정하지
+// 않는다. 모듈 스코프 상수로 두는 이유는 위와 같다.
+const TABLE_HOVER_IGNORE_SELECTORS = [
+  "[data-be-table-row-handle]",
+  "[data-be-table-column-handle]",
+  "[data-be-table-resize-handle]",
+  "[data-be-table-expand-row]",
+  "[data-be-table-expand-column]",
+  "[data-be-table-menu]",
 ] as const;
 
 type RowGeometry = {
@@ -314,17 +328,9 @@ export const TableHandles = () => {
   const [reorderState, setReorderState] = useState<ReorderState | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [menuState, setMenuState] = useState<HandleMenuState | null>(null);
-  // 드래그로 끝난 제스처가 합성하는 click은 메뉴 열기로 해석하지 않는다
-  // (block-side-menu와 같은 규칙).
-  const suppressedHandleClickRef = useRef<string | null>(null);
-  // 실제 마우스 클릭은 pointerdown -> pointerup -> click 세 이벤트로 온다.
-  // handlePointerDownOnReorderHandle이 드래그 준비로 menuState를 무조건
-  // null로 리셋해 React 18이 그 변경을 click보다 먼저 flush하므로,
-  // handleReorderHandleClick이 읽는 menuState는 재클릭 시 항상 null이다 —
-  // 그대로면 "닫는 쪽"을 절대 타지 못하고 매번 "여는 쪽"(재오픈)만 탄다
-  // (Issue #52 확장, block-side-menu.tsx와 같은 원인). pointerdown 시점에
-  // 리셋 직전 상태를 이 ref에 남겨 click이 그 스냅샷으로 판정하게 한다.
-  const wasMenuOpenForHandleRef = useRef<string | null>(null);
+  // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
+  // block-side-menu.tsx와 같은 상태 머신을 공유한다(Issue #52).
+  const reopenSuppression = useHandleReopenSuppression();
   // 스크롤/리사이즈 시 geometry 재계산을 강제하기 위한 카운터.
   const [, setGeometryVersion] = useState(0);
   const hoverTableIdRef = useRef<string | null>(null);
@@ -366,38 +372,22 @@ export const TableHandles = () => {
   });
 
   // gutter가 표 바깥 오버레이라서, hover 추적을 element 안쪽에만 걸면
-  // 포인터가 핸들로 이동하는 순간 표 hover가 풀린다(block-side-menu와 동일한 이유).
-  useEffect(() => {
-    if (element === null) return;
-    const ownerDocument = element.ownerDocument;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest("[data-be-table-row-handle]") !== null ||
-        target.closest("[data-be-table-column-handle]") !== null ||
-        target.closest("[data-be-table-resize-handle]") !== null ||
-        target.closest("[data-be-table-expand-row]") !== null ||
-        target.closest("[data-be-table-expand-column]") !== null ||
-        target.closest("[data-be-table-menu]") !== null
-      ) {
-        return;
-      }
-
-      const tableElement = target.closest<HTMLElement>(
-        "table[data-be-block-id]",
-      );
-      if (tableElement !== null && element.contains(tableElement)) {
-        updateHoverTableId(tableElement.getAttribute("data-be-block-id"));
+  // 포인터가 핸들로 이동하는 순간 표 hover가 풀린다(block-side-menu와
+  // 동일한 이유) — 리스너 등록/해제는 usePointerHoverTarget이 소유한다.
+  const handleHoverCandidateChange = useCallback(
+    (candidate: HTMLElement | null, event: PointerEvent) => {
+      if (candidate !== null) {
+        updateHoverTableId(candidate.getAttribute("data-be-block-id"));
         return;
       }
 
       // 핸들은 표 바깥에 떠 있으므로, 표 주변 여백(HANDLE_HOVER_MARGIN)을
       // 벗어나기 전에는 hover를 유지한다 — 즉시 해제하면 핸들로 이동하는
-      // 도중 핸들이 사라진다.
+      // 도중 핸들이 사라진다. usePointerHoverTarget은 candidate만 알 뿐
+      // 이 히스테리시스를 모른다 — table-handles.tsx 전용 판단이라 콜백
+      // 안에 남긴다.
       const currentId = hoverTableIdRef.current;
-      if (currentId !== null) {
+      if (currentId !== null && element !== null) {
         const table = findTable(element, currentId);
         const rect = table?.getBoundingClientRect();
         if (
@@ -413,12 +403,15 @@ export const TableHandles = () => {
         }
       }
       updateHoverTableId(null);
-    };
-
-    ownerDocument.addEventListener("pointermove", handlePointerMove);
-    return () =>
-      ownerDocument.removeEventListener("pointermove", handlePointerMove);
-  }, [element, updateHoverTableId]);
+    },
+    [element, updateHoverTableId],
+  );
+  usePointerHoverTarget({
+    element,
+    ignoreSelectors: TABLE_HOVER_IGNORE_SELECTORS,
+    entitySelector: "table[data-be-block-id]",
+    onCandidateChange: handleHoverCandidateChange,
+  });
 
   const activeTableId =
     reorderState?.tableBlockId ??
@@ -574,7 +567,7 @@ export const TableHandles = () => {
         // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(G-UI-002).
         // 그래서 여기 저장한 키는 handlePointerDownOnReorderHandle이
         // 다음 제스처 시작 시점에도 비운다.
-        suppressedHandleClickRef.current = `${current.kind}-${current.sourceId}`;
+        reopenSuppression.markSuppressed(`${current.kind}-${current.sourceId}`);
       }
       updateReorderState(null);
     };
@@ -604,7 +597,7 @@ export const TableHandles = () => {
     };
     // reorderState 객체가 아닌 활성 여부에만 의존한다 — 객체에 의존하면
     // 드래그 중 매 pointermove마다 리스너 4개를 떼었다 다시 붙인다.
-  }, [reorderActive, element, editor, updateReorderState]);
+  }, [reorderActive, element, editor, updateReorderState, reopenSuppression]);
 
   const resizeActive = resizeState !== null;
   useEffect(() => {
@@ -743,29 +736,23 @@ export const TableHandles = () => {
     id: string,
     index: number,
   ) => {
-    const suppressed = suppressedHandleClickRef.current;
-    suppressedHandleClickRef.current = null;
-    const wasMenuOpenForHandle = wasMenuOpenForHandleRef.current;
-    wasMenuOpenForHandleRef.current = null;
-    // detail 0은 키보드 활성화다 — 드래그 억제는 포인터 click에만 적용한다.
-    // 빈 id에 대한 별도 가드는 필요 없다 — pointerUp이 빈 id로는 애초에
-    // 키를 세우지 않으므로(위 handlePointerUp) 이 비교는 자연히 거짓이다.
-    if (event.detail !== 0 && suppressed === `${kind}-${id}`) return;
-    // 트리거 버튼도 onMouseDown preventDefault라 초점을 받지 않는다 — 재클릭
-    // 닫기에는 바깥 클릭과 달리 "돌아갈 다른 목적지"가 없다. Escape와 같은
-    // 그룹으로 다뤄 closeMenu(초점 복구 포함)를 재사용한다(G-UI-001,
-    // Issue #52). closeMenu는 setState(null) 고정형이라 여는 쪽까지 대신할
-    // 수 없어, 여기서 현재 상태를 먼저 읽어 분기한다. 실제 마우스 재클릭은
-    // pointerdown이 menuState를 이미 null로 지운 뒤라
-    // wasMenuOpenForHandleRef의 pointerdown 시점 스냅샷도 함께 본다(Issue
-    // #52 확장) — 라이브 상태만 보면 키보드 활성화(pointerdown 없이 오는
-    // detail===0 click)는 여전히 정상 처리된다.
-    if (
-      wasMenuOpenForHandle === `${kind}-${index}` ||
-      (menuState !== null &&
+    // 억제 비교는 안정 id(kind-id, 이동 성공 여부와 무관), 재오픈 비교는
+    // 위치 index(kind-index) — 두 축이 다를 수 있어 별도 키로 넘긴다
+    // (useHandleReopenSuppression 참고). 빈 id에 대한 별도 가드는 필요
+    // 없다 — pointerUp이 빈 id로는 애초에 억제 키를 세우지 않는다.
+    // closeMenu는 setState(null) 고정형이라 여는 쪽까지 대신할 수 없어,
+    // outcome으로 먼저 분기한다(G-UI-001, Issue #52).
+    const outcome = reopenSuppression.consumeClick({
+      isPointerClick: event.detail !== 0,
+      suppressionKey: `${kind}-${id}`,
+      reopenKey: `${kind}-${index}`,
+      isCurrentlyOpen:
+        menuState !== null &&
         menuState.kind === kind &&
-        menuState.index === index)
-    ) {
+        menuState.index === index,
+    });
+    if (outcome === "suppressed") return;
+    if (outcome === "close") {
       closeMenu();
       return;
     }
@@ -784,14 +771,14 @@ export const TableHandles = () => {
     // 아예 합성하지 않으면(G-UI-002) 키가 남아, 나중에 같은 핸들을 진짜로
     // 클릭할 때 한 번 삼켜진다. 새 제스처를 시작하는 시점에 비운다
     // (block-side-menu.tsx의 handlePointerDownOnHandle과 같은 규칙).
-    suppressedHandleClickRef.current = null;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    wasMenuOpenForHandleRef.current =
+    reopenSuppression.onPointerDown(
       menuState !== null &&
-      menuState.kind === kind &&
-      menuState.index === sourceIndex
+        menuState.kind === kind &&
+        menuState.index === sourceIndex
         ? `${kind}-${sourceIndex}`
-        : null;
+        : null,
+    );
+    event.currentTarget.setPointerCapture(event.pointerId);
     setMenuState(null);
     updateReorderState({
       kind,

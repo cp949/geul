@@ -10,6 +10,8 @@ import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
+import { useHandleReopenSuppression } from "./use-handle-reopen-suppression.js";
+import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
 // 핸들은 드래그(재정렬)와 클릭(블록 메뉴) 두 동작을 모두 갖는다 — tooltip이
 // 한쪽만 안내하면 나머지 동작의 발견성을 가리므로 라벨이 둘 다 기술한다.
@@ -60,6 +62,14 @@ const BLOCK_MENU_DISMISS_ALLOW_SELECTORS = [
   "[data-be-block-handle]",
 ] as const;
 
+// usePointerHoverTarget ignore-list. table-handles.tsx와 같은 이유로
+// 모듈 스코프 상수로 둔다.
+const BLOCK_HOVER_IGNORE_SELECTORS = [
+  "[data-be-add-block-button]",
+  "[data-be-block-handle]",
+  "[data-be-block-menu]",
+] as const;
+
 export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
   const { element } = useEditorMount();
@@ -69,15 +79,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     null,
   );
   const dragStateRef = useRef<DragState | null>(null);
-  const suppressedHandleClickBlockIdRef = useRef<string | null>(null);
-  // 실제 마우스 클릭은 pointerdown -> pointerup -> click 세 이벤트로 온다.
-  // handlePointerDownOnHandle이 드래그 준비로 blockMenuState를 무조건
-  // null로 리셋해 React 18이 그 변경을 click보다 먼저 flush하므로,
-  // handleHandleClick이 읽는 blockMenuState는 재클릭 시 항상 null이다 —
-  // 그대로면 "닫는 쪽"을 절대 타지 못하고 매번 "여는 쪽"(재오픈)만 탄다
-  // (Issue #52 확장). pointerdown 시점에 리셋 직전 상태를 이 ref에 남겨
-  // click이 그 스냅샷으로 판정하게 한다.
-  const wasMenuOpenForBlockIdRef = useRef<string | null>(null);
+  // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
+  // table-handles.tsx와 같은 상태 머신을 공유한다(Issue #52).
+  const reopenSuppression = useHandleReopenSuppression();
   const updateDragState = useCallback((next: DragState | null) => {
     dragStateRef.current = next;
     setDragState(next);
@@ -86,41 +90,25 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
   }, [element]);
 
-  useEffect(() => {
-    if (element === null) return;
-    const ownerDocument = element.ownerDocument;
-
-    // 리스너를 element가 아닌 document에 둔다. gutter는 contenteditable
-    // 바깥의 오버레이라서 element 안쪽에서만 hover를 추적하면 포인터가
-    // 버튼으로 이동하는 순간 사라진다.
-    const handlePointerMove = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest("[data-be-add-block-button]") !== null ||
-        target.closest("[data-be-block-handle]") !== null ||
-        target.closest("[data-be-block-menu]") !== null
-      ) {
-        return;
-      }
-
-      // table은 자체 행/열 핸들(table-handles.tsx)을 가지므로 이 거터
-      // 대상에서 제외한다 — 제외하지 않으면 두 오버레이의 gutter가 표의
-      // 왼쪽 부근에서 겹쳐 렌더된다.
-      const blockElement = target.closest<HTMLElement>(
-        "[data-be-block-id]:not(table)",
-      );
-      setHoverBlockId(
-        blockElement !== null && element.contains(blockElement)
-          ? blockElement.getAttribute("data-be-block-id")
-          : null,
-      );
-    };
-
-    ownerDocument.addEventListener("pointermove", handlePointerMove);
-    return () =>
-      ownerDocument.removeEventListener("pointermove", handlePointerMove);
-  }, [element]);
+  // 리스너를 element가 아닌 document에 둔다. gutter는 contenteditable
+  // 바깥의 오버레이라서 element 안쪽에서만 hover를 추적하면 포인터가
+  // 버튼으로 이동하는 순간 사라진다 — 등록/해제는 usePointerHoverTarget이
+  // 소유한다.
+  const handleHoverCandidateChange = useCallback(
+    (candidate: HTMLElement | null) => {
+      setHoverBlockId(candidate?.getAttribute("data-be-block-id") ?? null);
+    },
+    [],
+  );
+  usePointerHoverTarget({
+    element,
+    ignoreSelectors: BLOCK_HOVER_IGNORE_SELECTORS,
+    // table은 자체 행/열 핸들(table-handles.tsx)을 가지므로 이 거터
+    // 대상에서 제외한다 — 제외하지 않으면 두 오버레이의 gutter가 표의
+    // 왼쪽 부근에서 겹쳐 렌더된다.
+    entitySelector: "[data-be-block-id]:not(table)",
+    onCandidateChange: handleHoverCandidateChange,
+  });
 
   const isDragging = dragState !== null;
 
@@ -192,7 +180,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         );
       }
       if (current.hasDragged || current.cancelled) {
-        suppressedHandleClickBlockIdRef.current = current.sourceBlockId;
+        reopenSuppression.markSuppressed(current.sourceBlockId);
       }
       updateDragState(null);
     };
@@ -201,7 +189,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       const current = dragStateRef.current;
       if (current === null || event.pointerId !== current.pointerId) return;
       if (current.hasDragged || current.cancelled) {
-        suppressedHandleClickBlockIdRef.current = current.sourceBlockId;
+        reopenSuppression.markSuppressed(current.sourceBlockId);
       }
       updateDragState(null);
     };
@@ -225,7 +213,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       ownerDocument.removeEventListener("pointercancel", handlePointerCancel);
       ownerDocument.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isDragging, element, editor, updateDragState]);
+  }, [isDragging, element, editor, updateDragState, reopenSuppression]);
 
   // 블록 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
   // 닫는 UI는 병렬 e2e로 검증한다). 리스너 등록/해제는
@@ -283,12 +271,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     blockId: string,
   ) => {
     if (event.button !== 0) return;
-    suppressedHandleClickBlockIdRef.current = null;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    wasMenuOpenForBlockIdRef.current =
+    reopenSuppression.onPointerDown(
       blockMenuState !== null && blockMenuState.blockId === blockId
         ? blockId
-        : null;
+        : null,
+    );
+    event.currentTarget.setPointerCapture(event.pointerId);
     setBlockMenuState(null);
     updateDragState({
       pointerId: event.pointerId,
@@ -305,26 +293,20 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     event: React.MouseEvent<HTMLButtonElement>,
     blockId: string,
   ) => {
-    const suppressedBlockId = suppressedHandleClickBlockIdRef.current;
-    suppressedHandleClickBlockIdRef.current = null;
-    const wasMenuOpenForBlockId = wasMenuOpenForBlockIdRef.current;
-    wasMenuOpenForBlockIdRef.current = null;
-    if (event.detail !== 0 && suppressedBlockId === blockId) {
-      return;
-    }
-    // 트리거 버튼도 onMouseDown preventDefault라 초점을 받지 않는다 — 재클릭
-    // 닫기에는 바깥 클릭과 달리 "돌아갈 다른 목적지"가 없다. Escape와 같은
-    // 그룹으로 다뤄 closeBlockMenu(초점 복구 포함)를 재사용한다(G-UI-001,
-    // Issue #52). closeBlockMenu는 setState(null) 고정형이라 여는 쪽까지
-    // 대신할 수 없어, 여기서 현재 상태를 먼저 읽어 분기한다. 실제 마우스
-    // 재클릭은 pointerdown이 blockMenuState를 이미 null로 지운 뒤라
-    // wasMenuOpenForBlockIdRef의 pointerdown 시점 스냅샷도 함께 본다(Issue
-    // #52 확장) — 라이브 상태만 보면 키보드 활성화(pointerdown 없이 오는
-    // detail===0 click)는 여전히 정상 처리된다.
-    if (
-      wasMenuOpenForBlockId === blockId ||
-      (blockMenuState !== null && blockMenuState.blockId === blockId)
-    ) {
+    // suppressionKey/reopenKey 둘 다 blockId다 — 블록은 별도 위치 축이
+    // 없다(table-handles.tsx의 index와 달리). 트리거 버튼도 onMouseDown
+    // preventDefault라 초점을 받지 않는다 — 재클릭 닫기에는 바깥 클릭과
+    // 달리 "돌아갈 다른 목적지"가 없다. Escape와 같은 그룹으로 다뤄
+    // closeBlockMenu(초점 복구 포함)를 재사용한다(G-UI-001, Issue #52).
+    const outcome = reopenSuppression.consumeClick({
+      isPointerClick: event.detail !== 0,
+      suppressionKey: blockId,
+      reopenKey: blockId,
+      isCurrentlyOpen:
+        blockMenuState !== null && blockMenuState.blockId === blockId,
+    });
+    if (outcome === "suppressed") return;
+    if (outcome === "close") {
       closeBlockMenu();
       return;
     }
