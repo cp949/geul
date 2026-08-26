@@ -10,6 +10,7 @@ import {
 } from "@cp949/geul-model";
 
 import type { EditorError } from "./errors.js";
+import { columnIndexMap } from "./table-grid.js";
 
 export type TiptapJsonMark = {
   type?: string;
@@ -128,9 +129,7 @@ export const inlineContentToTiptap = (
 // 셀의 물리 문서 순서(형제 노드 순서)로 열 위치를 결정하므로, tiptap JSON을
 // 만들 때는 반드시 columnId가 가리키는 table.columns 인덱스로 재정렬한다.
 export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {
-  const columnIndexById = new Map(
-    table.columns.map((column, index) => [column.id, index] as const),
-  );
+  const columnIndexById = columnIndexMap(table);
 
   return {
     type: "table",

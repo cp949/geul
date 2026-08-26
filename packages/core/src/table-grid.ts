@@ -23,6 +23,12 @@ const indexOutOfRange: Result<never, TableGridError> = {
   error: { code: "INDEX_OUT_OF_RANGE" },
 };
 
+// 표 열 id → 배열 인덱스 조회. table-grid.ts 6곳과 model-to-tiptap.ts가
+// 공유하는 단일 조회 지점이다(카드 Z 그릴링, 04.html) — 각자 새로 만들면
+// 조회 규칙이 갈라질 여지가 열린다.
+export const columnIndexMap = (table: TableBlock): Map<string, number> =>
+  new Map(table.columns.map((column, index) => [column.id, index] as const));
+
 export type TableGrid = {
   rowCount: number;
   columnCount: number;
@@ -51,9 +57,7 @@ export const projectTableGrid = (
 ): Result<TableGrid, TableGridValidationError> => {
   const rowCount = table.rows.length;
   const columnCount = table.columns.length;
-  const columnIndices = new Map(
-    table.columns.map((column, index) => [column.id, index] as const),
-  );
+  const columnIndices = columnIndexMap(table);
 
   const cells = new Array<
     { cellId: string; anchorRow: number; anchorColumn: number } | undefined
@@ -166,9 +170,7 @@ export const insertRow = (
     return indexOutOfRange;
   }
 
-  const columnIndices = new Map(
-    table.columns.map((column, index) => [column.id, index] as const),
-  );
+  const columnIndices = columnIndexMap(table);
   const coveredColumnIds = new Set<string>();
 
   const rows = table.rows.map((row, rowIndex) => {
@@ -223,9 +225,7 @@ export const insertColumn = (
     return indexOutOfRange;
   }
 
-  const columnIndices = new Map(
-    table.columns.map((column, index) => [column.id, index] as const),
-  );
+  const columnIndices = columnIndexMap(table);
 
   const newColumn = { id: createId(), width: DEFAULT_COLUMN_WIDTH };
   const columns = [...table.columns];
@@ -324,11 +324,7 @@ export const deleteColumn = (
     return { ok: false, error: { code: "LAST_COLUMN" } };
   }
 
-  const columnIndices = new Map(
-    table.columns.map(
-      (column, columnIndex) => [column.id, columnIndex] as const,
-    ),
-  );
+  const columnIndices = columnIndexMap(table);
   const removedColumnId = table.columns[index]?.id;
   const successorColumnId = table.columns[index + 1]?.id;
   const columns = table.columns.filter(
@@ -525,9 +521,7 @@ export const splitCell = (
   cellId: string,
   createId: IdFactory,
 ): Result<TableBlock, TableGridError> => {
-  const columnIndices = new Map(
-    table.columns.map((column, index) => [column.id, index] as const),
-  );
+  const columnIndices = columnIndexMap(table);
 
   let anchorRowIndex = -1;
   let anchorColumnIndex = -1;
@@ -879,9 +873,7 @@ export const pasteInto = (
     );
     expanded = { ...table, columns, rows: [...widenedRows, ...appendedRows] };
   }
-  const columnIndexById = new Map(
-    expanded.columns.map((column, index) => [column.id, index] as const),
-  );
+  const columnIndexById = columnIndexMap(expanded);
 
   const rows = expanded.rows.map((row, rowIndex) => {
     if (rowIndex < anchor.row || rowIndex >= overwriteRowEnd) return row;
