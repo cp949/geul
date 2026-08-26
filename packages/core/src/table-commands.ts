@@ -159,8 +159,8 @@ const setCaretInCell = (
 // "필터가 트랜잭션을 버렸다"는 신호다(G-EDT-001의 반대쪽 누락 예방).
 // 주의: 이 신호는 트랜잭션에 문서를 바꾸는 스텝이 하나 이상 있을 때만 유효하다
 // — 스텝 없는(docChanged: false) 트랜잭션은 필터를 통과해도 doc 참조가 그대로라
-// 오탐한다. 아래 4개 호출부는 모두 dispatch 전에 반드시 replaceWith/insert로
-// 문서를 바꾸므로 안전하다 — selection만 옮기는 트랜잭션(예:
+// 오탐한다. 아래 3개 호출부(finalizeAndDispatch 경유)는 모두 dispatch 전에 반드시
+// replaceWith/insert로 문서를 바꾸므로 안전하다 — selection만 옮기는 트랜잭션(예:
 // table-keyboard-extension.ts의 goToNextCell)에는 이 헬퍼를 재사용하지 않는다.
 const dispatchAndVerify = (
   editor: Editor,
@@ -173,6 +173,18 @@ const dispatchAndVerify = (
   }
   return { ok: true, value: undefined };
 };
+
+// 네이티브 명령들처럼 결과 selection이 화면 안에 오도록 표시하고(뷰포트 밖으로
+// 커진 표에서 캐럿만 옮기면 no-op처럼 보인다) undo를 한 스텝으로 닫은 뒤
+// dispatchAndVerify로 넘긴다. applyTableGridOperation·insertTable·pasteOutOfTable
+// 3곳 전부가 이 마무리를 공유해야 한다 — 예전엔 호출부마다 직접
+// closeHistory(tr.scrollIntoView())를 반복했는데, insertTable 한 곳이
+// scrollIntoView를 빠뜨려 실제 동작 drift가 났다(그릴링 C7, 2026-08-27).
+const finalizeAndDispatch = (
+  editor: Editor,
+  transaction: Transaction,
+): Result<undefined, TableCommandError> =>
+  dispatchAndVerify(editor, closeHistory(transaction.scrollIntoView()));
 
 // findTable(경로 탐색) + tiptapNodeToTableBlock(디코드)를 한 번에 수행한다 —
 // applyTableGridOperation(쓰기)과 getTableBlock(읽기)이 공유하는 유일한 조회
@@ -288,12 +300,7 @@ const applyTableGridOperation = (
     );
   }
 
-  // 네이티브 명령들처럼 결과 selection이 화면 안에 오도록 표시한다 —
-  // 뷰포트 밖으로 커진 표에서 캐럿만 옮기면 no-op처럼 보인다.
-  const dispatched = dispatchAndVerify(
-    editor,
-    closeHistory(transaction.scrollIntoView()),
-  );
+  const dispatched = finalizeAndDispatch(editor, transaction);
   if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: undefined };
@@ -565,7 +572,7 @@ export const insertTable = (
     transaction.mapping.map(insertPosition),
     tableNode,
   );
-  const dispatched = dispatchAndVerify(editor, closeHistory(transaction));
+  const dispatched = finalizeAndDispatch(editor, transaction);
   if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: { blockId: table.id } };
@@ -726,12 +733,7 @@ const pasteOutOfTable = (
     firstCellId,
   );
 
-  // 네이티브 doPaste가 보장하는 scrollIntoView와 동일 — 캐럿이 옮겨간 새
-  // 콘텐츠가 뷰포트 밖이면 화면이 따라가야 한다.
-  const dispatched = dispatchAndVerify(
-    editor,
-    closeHistory(transaction.scrollIntoView()),
-  );
+  const dispatched = finalizeAndDispatch(editor, transaction);
   if (!dispatched.ok) return dispatched;
 
   return { ok: true, value: { blockId: firstTable.data.id } };

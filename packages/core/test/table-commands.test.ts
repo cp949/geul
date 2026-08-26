@@ -73,6 +73,29 @@ describe("표를 삽입한다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
+  it("삽입 트랜잭션이 캐럿을 화면 안으로 스크롤하도록 표시한다", () => {
+    // 네이티브 명령들처럼 결과 selection이 화면 안에 오도록 표시한다 —
+    // 뷰포트 밖으로 커진 표에서 캐럿만 옮기면 no-op처럼 보인다(그릴링 C7).
+    const editor = createTableFixtureEditor(docWithParagraph);
+    const createId = sequentialIds("id");
+    const dispatched: (typeof editor.state.tr)[] = [];
+    const originalDispatch = editor.view.dispatch.bind(editor.view);
+    editor.view.dispatch = (transaction) => {
+      dispatched.push(transaction);
+      originalDispatch(transaction);
+    };
+
+    const result = insertTable(
+      editor,
+      "para-1",
+      { rows: 2, columns: 2 },
+      createId,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(dispatched.at(-1)?.scrolledIntoView).toBe(true);
+  });
+
   it("존재하지 않는 blockId 뒤에는 삽입할 수 없고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const createId = sequentialIds("id");
