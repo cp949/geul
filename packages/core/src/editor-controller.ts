@@ -274,14 +274,14 @@ const blockChanges = (
   );
   const changed: string[] = [];
 
-  for (const [index, block] of previous.blocks.entries()) {
-    const nextBlock = nextBlocks.get(block.id);
+  for (const [blockId, previousBlock] of previousBlocks) {
+    const nextBlock = nextBlocks.get(blockId);
     if (
       nextBlock === undefined ||
-      nextBlock.index !== index ||
-      nextBlock.json !== JSON.stringify(block)
+      nextBlock.index !== previousBlock.index ||
+      nextBlock.json !== previousBlock.json
     ) {
-      changed.push(block.id);
+      changed.push(blockId);
     }
   }
   for (const block of next.blocks) {
