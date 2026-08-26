@@ -108,7 +108,7 @@ afterEach(() => {
 });
 
 /**
- * 순차 id 발급기. 실제 편집기는 기본적으로 crypto.randomUUID()를 쓰는데,
+ * 순차 id 발급기. 실제 편집기는 기본적으로 @cp949/geul-model의 createRandomDocumentId()를 쓰는데,
  * 테스트가 실패했을 때 어떤 id가 어떤 행/열인지 읽을 수 있어야 한다.
  */
 const sequentialIds = (prefix: string) => {

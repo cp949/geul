@@ -248,3 +248,37 @@ test("메뉴보다 짧은 뷰포트에서도 블록 메뉴 맨 아래 Delete 항
   await expect(editable.locator("p")).toHaveCount(1);
   await expect(editable.locator("p").first()).toHaveText("second block");
 });
+
+// isValidDocumentId(model)는 형식·유일성까지 요구하지 않으므로, 실제
+// Chrome75/83에서 발급된 id 자체가 RFC4122 v4 형식인지는 이 정규식으로
+// 직접 확인한다 — "예외 없이 실행됨"과 "id가 유효함"은 다른 주장이다.
+const uuidV4Pattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다 @core", async ({
+  page,
+}) => {
+  // BlockIdExtension.appendTransaction → createId() 경로를 실제로 태운다
+  // (Chrome75/83 crypto.randomUUID() 미지원 회귀 — Issue #121).
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("first block");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("second block");
+
+  await expect(editable.locator("p")).toHaveCount(2);
+  await expect(editable.locator("p").first()).toHaveText("first block");
+  await expect(editable.locator("p").last()).toHaveText("second block");
+
+  const newBlockId = await editable
+    .locator("p")
+    .last()
+    .getAttribute("data-be-block-id");
+  expect(newBlockId).toMatch(uuidV4Pattern);
+
+  expect(pageErrors).toHaveLength(0);
+});

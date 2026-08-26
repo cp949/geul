@@ -79,13 +79,13 @@ export default defineConfig({
       // 전용. 공식 browser floor는 Chrome75(ADR-0008)지만 Playwright
       // 1.62.1이 무조건 호출하는 CDP Browser.setDownloadBehavior가
       // Chrome82부터 존재해 83을 실제 검증 가능한 최소로 쓴다(01-계획.md
-      // D10·D11). `@core` 시나리오 1개만 선택하고, dev 서버가 아니라
+      // D10·D11). `@core` 시나리오 2개(링크 툴바, 블록 분리)만 선택하고, dev 서버가 아니라
       // build+preview 산출물을 서빙한다(D7) — vite dev는 build.target을
       // 적용하지 않아 downlevel 결과가 반영되지 않는다. `pnpm
       // test:e2e:chrome83`(docker/chrome83 컨테이너 안에서만 실행)로만
       // 돈다 — `pnpm test:e2e`/`pnpm verify`에는 포함하지 않는다.
       name: "chrome83",
-      testMatch: /link-toolbar\.spec\.ts$/,
+      testMatch: /(link-toolbar|block-handle)\.spec\.ts$/,
       grep: /@core/,
       use: {
         ...devices["Desktop Chrome"],
