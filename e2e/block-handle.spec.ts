@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
+import { trackPageErrors, uuidV4Pattern } from "./support/ids.js";
 
 test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복원한다", async ({
   page,
@@ -249,19 +250,12 @@ test("메뉴보다 짧은 뷰포트에서도 블록 메뉴 맨 아래 Delete 항
   await expect(editable.locator("p").first()).toHaveText("second block");
 });
 
-// isValidDocumentId(model)는 형식·유일성까지 요구하지 않으므로, 실제
-// Chrome75/83에서 발급된 id 자체가 RFC4122 v4 형식인지는 이 정규식으로
-// 직접 확인한다 — "예외 없이 실행됨"과 "id가 유효함"은 다른 주장이다.
-const uuidV4Pattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
 test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다 @core", async ({
   page,
 }) => {
   // BlockIdExtension.appendTransaction → createId() 경로를 실제로 태운다
   // (Chrome75/83 crypto.randomUUID() 미지원 회귀 — Issue #121).
-  const pageErrors: Error[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error));
+  const pageErrors = trackPageErrors(page);
 
   const { editable } = await openDemo(page);
 

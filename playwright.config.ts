@@ -79,13 +79,18 @@ export default defineConfig({
       // 전용. 공식 browser floor는 Chrome75(ADR-0008)지만 Playwright
       // 1.62.1이 무조건 호출하는 CDP Browser.setDownloadBehavior가
       // Chrome82부터 존재해 83을 실제 검증 가능한 최소로 쓴다(01-계획.md
-      // D10·D11). `@core` 시나리오 2개(링크 툴바, 블록 분리)만 선택하고, dev 서버가 아니라
-      // build+preview 산출물을 서빙한다(D7) — vite dev는 build.target을
-      // 적용하지 않아 downlevel 결과가 반영되지 않는다. `pnpm
-      // test:e2e:chrome83`(docker/chrome83 컨테이너 안에서만 실행)로만
-      // 돈다 — `pnpm test:e2e`/`pnpm verify`에는 포함하지 않는다.
+      // D10·D11). `@core` 시나리오 3개(링크 툴바, 블록 분리, 표 행 추가)만
+      // 선택하고, dev 서버가 아니라 build+preview 산출물을 서빙한다(D7) —
+      // vite dev는 build.target을 적용하지 않아 downlevel 결과가 반영되지
+      // 않는다. `pnpm test:e2e:chrome83`(docker/chrome83 컨테이너 안에서만
+      // 실행)로만 돈다 — `pnpm test:e2e`/`pnpm verify`에는 포함하지 않는다.
+      // testMatch는 파일명 단위라 파일 하나에 `@core` 테스트가 2개 이상이면
+      // 의도치 않은 테스트까지 함께 편입된다 — 그래서 표 행 추가
+      // 시나리오는 `table-keyboard-navigation.spec.ts`(Shift+Tab 포커스
+      // 트랩 테스트 전용)에 합치지 않고 별도 파일로 뗐다(Issue #124).
       name: "chrome83",
-      testMatch: /(link-toolbar|block-handle)\.spec\.ts$/,
+      testMatch:
+        /(link-toolbar|block-handle|table-keyboard-row-insert)\.spec\.ts$/,
       grep: /@core/,
       use: {
         ...devices["Desktop Chrome"],
