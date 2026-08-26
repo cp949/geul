@@ -185,7 +185,7 @@ export type BlockLayout = {
  * 문단 블록의 스텁 격자. 기존 fake가 블록마다 손으로 씌우던 값(top 0/20/40,
  * height 20)을 그대로 살린다 — 테스트 본문의 clientY 좌표가 뜻을 유지한다.
  * 폭 600은 본문 단 하나를 가정한 값이다. BlockSideMenu의 삽입 지점 계산은
- * clientY만 읽으므로(computeGuide) 가로 값은 삽입 가이드의 길이에만 쓰인다.
+ * clientY만 읽으므로(computeDragGuide) 가로 값은 삽입 가이드의 길이에만 쓰인다.
  */
 const DEFAULT_BLOCK_LAYOUT: BlockLayout = {
   left: 0,

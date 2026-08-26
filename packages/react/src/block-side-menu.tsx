@@ -247,7 +247,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const hoverBounds = (() => {
     if (hoverBlockId === null || element === null) return null;
     // 블록 id는 임의 문자열이라 attribute selector에 보간하면 따옴표·백슬래시에서
-    // SyntaxError가 난다. computeGuide와 같은 속성값 비교로 찾는다.
+    // SyntaxError가 난다. computeDragGuide와 같은 속성값 비교로 찾는다.
     // (CSS.escape는 jsdom 테스트 환경에 없다.)
     const blockElement =
       Array.from(

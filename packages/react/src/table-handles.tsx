@@ -482,10 +482,10 @@ export const TableHandles = () => {
   // 동기로 flush된다)에 표의 실제 경계를 다시 재서 달라지면 한 번 더
   // 렌더한다 — 사용자는 어긋난 프레임을 보지 않는다(G-UI-001). 표 자체의
   // outer rect만 싼값에 비교한다 — 개별 열 폭까지 매 렌더 두 번씩
-  // 대조하면 드래그 프레임(scheduleVisualUpdate, spec 13)과 같은 비용을
+  // 대조하면 드래그 프레임(scheduleResizeVisualUpdate, spec 13)과 같은 비용을
   // 지불하게 된다. 드래그 중(reorderState/resizeState)에는 건너뛴다 — 그
   // 경로는 이미 pointermove/frame마다 readTableGeometry를 직접 다시
-  // 읽어(computeTargetIndex, scheduleVisualUpdate) 이 문제에서 자유롭고,
+  // 읽어(computeReorderTargetIndex, scheduleResizeVisualUpdate) 이 문제에서 자유롭고,
   // 여기서 또 재면 10,000셀 표의 드래그 프레임 예산을 두 배로 만든다.
   // react-hooks/exhaustive-deps는 [activeTableId, element, geometry,
   // reorderState, resizeState]를 넣으라고 제안하지만, 그 목록에 없는 다른

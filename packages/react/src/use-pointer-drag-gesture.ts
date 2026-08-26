@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 export type UsePointerDragGestureOptions = {
   /** false면 리스너를 걸지 않는다(제스처가 진행 중이 아닐 때 문서 리스너를 유지할 이유가 없다). */
@@ -7,9 +7,21 @@ export type UsePointerDragGestureOptions = {
   /**
    * active인 동안 이 pointerId와 일치하는 이벤트만 onMove/onUp/onCancel로
    * 넘긴다. 게이트를 훅이 소유해, pointerId 오판정 버그를 고치는 지점이
-   * 호출부 3곳에서 여기 한 곳으로 줄어든다.
+   * 호출부 3곳에서 여기 한 곳으로 줄어든다. 훅 내부에서는 이 값을 ref로
+   * 미러링해 매 렌더 최신값으로 게이트한다(아래 pointerIdRef 참고) — 한
+   * 상태 슬롯이 다음 렌더가 반영되기 전에(예: 멀티터치로 같은 슬롯을 다른
+   * pointerId가 덮어씀) 바뀌어도 낡은 리스너 인스턴스가 새 pointerId의
+   * 이벤트를 걸러내지 못하는 구멍을 막는다.
    */
   pointerId: number | null;
+  /**
+   * onMove/onUp/onCancel/onEscape는 참조 안정성이 있어야 한다(예:
+   * useCallback으로 의존성을 최소화해 안정화). 이 값들은 훅의 effect
+   * 의존성 배열에 들어가므로, 매 렌더 새 함수를 넘기면 제스처가 진행되는
+   * 동안(pointermove가 갱신하는 상태를 그대로 넘기는 등) 매 렌더마다
+   * document 리스너 4개를 떼었다 다시 붙인다 — table-handles.tsx의
+   * 10,000셀 표 드래그 프레임 예산(spec 13)을 갉아먹는다.
+   */
   onMove: (event: PointerEvent) => void;
   onUp: (event: PointerEvent) => void;
   onCancel: (event: PointerEvent) => void;
@@ -43,6 +55,21 @@ export const usePointerDragGesture = ({
   onCancel,
   onEscape,
 }: UsePointerDragGestureOptions): void => {
+  // pointerId를 매 커밋마다 최신값으로 미러링하는 ref. 아래 effect의
+  // pointermove/up/cancel 핸들러는 effect가 설치될 때 캡처한 pointerId
+  // 인자가 아니라 이 ref를 읽어 게이트한다 — 그러지 않으면, 같은 상태
+  // 슬롯이 다음 렌더(및 이 훅의 effect 재실행)가 반영되기 전에 다른
+  // pointerId로 덮어써질 때(예: 멀티터치로 첫 제스처가 아직 안 끝난
+  // 상태에서 두 번째 손가락이 새 pointerdown을 시작) 아직 떼어지지 않은
+  // 낡은 리스너 인스턴스가 새 pointerId의 이벤트를 걸러내 못 넘긴다.
+  // useLayoutEffect라 커밋 직후 페인트 전에 동기로 반영되므로, 그 사이
+  // 브라우저가 pointer 이벤트를 보낼 수 없다 — effect 재실행(비동기, 다음
+  // 페인트 이후)을 기다릴 필요가 없다.
+  const pointerIdRef = useRef(pointerId);
+  useLayoutEffect(() => {
+    pointerIdRef.current = pointerId;
+  });
+
   useEffect(() => {
     if (!active || element === null || pointerId === null) return;
     const ownerDocument = element.ownerDocument;
@@ -58,15 +85,15 @@ export const usePointerDragGesture = ({
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerId !== pointerId || suppressed) return;
+      if (event.pointerId !== pointerIdRef.current || suppressed) return;
       onMove(event);
     };
     const handlePointerUp = (event: PointerEvent) => {
-      if (event.pointerId !== pointerId) return;
+      if (event.pointerId !== pointerIdRef.current) return;
       onUp(event);
     };
     const handlePointerCancel = (event: PointerEvent) => {
-      if (event.pointerId !== pointerId) return;
+      if (event.pointerId !== pointerIdRef.current) return;
       onCancel(event);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
