@@ -19,10 +19,7 @@ import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import { findTopLevelBlockPosition } from "./block-position.js";
 import { inlineContentViolation } from "./model-to-tiptap.js";
-import {
-  buildOutOfTableSequence,
-  buildPasteTableSkeleton,
-} from "./table-paste-sequence.js";
+import { buildOutOfTableSequence } from "./table-paste-sequence.js";
 import {
   DEFAULT_COLUMN_WIDTH,
   deleteColumn as deleteGridColumn,
@@ -662,6 +659,76 @@ const validateTabularDataForPaste = (
   return { ok: true, value: undefined };
 };
 
+// 표 밖 삽입 조립+마무리: 클립보드 시퀀스(문단+표+문단 등, 표 하나짜리
+// 시퀀스도 포함)를 노드로 조립하고 트랜잭션(선택 삭제 판단→삽입 위치
+// 계산→노드 삽입→캐럿 이동→dispatch)까지 마무리한다. pasteTabularData(표
+// 하나짜리 시퀀스로 감싸 호출)와 pasteClipboardContent(문단이 섞인
+// 시퀀스)가 공유한다(4차 아키텍처 리뷰 카드 T) — content 검증은 호출부
+// 책임으로 남긴다, buildOutOfTableSequence와 같은 계약이다.
+const pasteOutOfTable = (
+  editor: Editor,
+  content: ClipboardContent,
+  createId: IdFactory,
+): Result<{ blockId: string }, TableCommandError> => {
+  const state = editor.state;
+  const sequence = buildOutOfTableSequence(editor.schema, content, createId);
+  if (!sequence.ok) return sequence;
+  const { nodes, firstTable } = sequence.value;
+
+  if (firstTable === null) {
+    // parseClipboardTable은 표를 하나도 못 찾으면 이 시퀀스를 만들지
+    // 않는다 — 여기 도달하는 유일한 길은 파서를 거치지 않고 직접 구성한
+    // 순수 문단 ClipboardContent다. 반환할 blockId가 없으므로 거절한다.
+    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
+  }
+
+  // 붙여넣기는 선택을 대체한다 — 선택 삭제와 삽입, 캐럿 이동을 한
+  // 트랜잭션에 담아 undo 1회로 함께 복원되게 한다. 삭제로 두 문단이
+  // 병합되면 병합된 블록(캐럿 위치)이 삽입 기준이 된다.
+  //
+  // 단, 끝점이 표 안에 있는 범위(표를 부분적으로 걸친 선택)는 지우지
+  // 않는다: 그런 범위를 deleteSelection으로 지우면 ReplaceStep이 스키마
+  // 필러로 cellId 없는 셀을 만들어 모델과 에디터가 영구 desync된다.
+  // 표를 통째로 포함하는 선택은 노드 단위로 깔끔하게 지워지므로 끝점
+  // 검사만으로 충분하다.
+  let transaction = state.tr;
+  if (
+    !state.selection.empty &&
+    !positionInsideTable(state.selection.$from) &&
+    !positionInsideTable(state.selection.$to)
+  ) {
+    transaction = transaction.deleteSelection();
+  }
+
+  const insertPosition = tableInsertPosition(
+    transaction.doc,
+    transaction.selection.to,
+  );
+  transaction = transaction.insert(insertPosition, nodes);
+
+  // 표 안 분기의 selectCellId와 대칭 — 시퀀스의 첫 표 좌상단 셀 안으로
+  // 캐럿을 옮긴다. firstTable.offset은 그 표 앞에 삽입된 노드들의 누적
+  // 크기다(표가 시퀀스 첫 원소면 0 — 표 하나짜리 호출도 이 공식을 그대로
+  // 만족한다).
+  const firstCellId = cellIdAtAnchor(firstTable.data, { row: 0, column: 0 });
+  transaction = setCaretInCell(
+    transaction,
+    firstTable.node,
+    insertPosition + firstTable.offset + 1,
+    firstCellId,
+  );
+
+  // 네이티브 doPaste가 보장하는 scrollIntoView와 동일 — 캐럿이 옮겨간 새
+  // 콘텐츠가 뷰포트 밖이면 화면이 따라가야 한다.
+  const dispatched = dispatchAndVerify(
+    editor,
+    closeHistory(transaction.scrollIntoView()),
+  );
+  if (!dispatched.ok) return dispatched;
+
+  return { ok: true, value: { blockId: firstTable.data.id } };
+};
+
 export const pasteTabularData = (
   editor: Editor,
   data: TabularData,
@@ -692,67 +759,10 @@ export const pasteTabularData = (
     return result.ok ? { ok: true, value: { blockId: tableBlockId } } : result;
   }
 
-  // 표 밖 분기는 buildPasteTableSkeleton으로 새 표를 만든다 — 0행/0열 TableBlock이
-  // tableBlockToTiptapNode(스키마 비검증 NodeType.create)를 거쳐 문서에
-  // 삽입되는 것은 함수 앞머리의 크기 가드가 막는다. 표를 먼저 만들어 실패
-  // (셀 한도 등)를 트랜잭션 구성 전에 확정한다 — 거절 경로는 아무것도
-  // dispatch하지 않아야 한다(G-EDT-001).
-  const emptyTable = buildPasteTableSkeleton(
-    { rows: data.rows.length, columns: data.columnCount },
-    createId,
-  );
-  const filled = pasteGridInto(
-    emptyTable,
-    { row: 0, column: 0 },
-    data,
-    createId,
-  );
-  if (!filled.ok) return filled;
-
-  // 붙여넣기는 선택을 대체한다 — 선택 삭제와 표 삽입, 캐럿 이동을 한
-  // 트랜잭션에 담아 undo 1회로 함께 복원되게 한다. 삭제로 두 문단이
-  // 병합되면 병합된 블록(캐럿 위치)이 삽입 기준이 된다.
-  //
-  // 단, 끝점이 표 안에 있는 범위(표를 부분적으로 걸친 선택)는 지우지
-  // 않는다: 그런 범위를 deleteSelection으로 지우면 ReplaceStep이 스키마
-  // 필러로 cellId 없는 셀을 만들어 모델과 에디터가 영구 desync된다.
-  // 표를 통째로 포함하는 선택은 노드 단위로 깔끔하게 지워지므로 끝점
-  // 검사만으로 충분하다.
-  let transaction = state.tr;
-  if (
-    !state.selection.empty &&
-    !positionInsideTable(state.selection.$from) &&
-    !positionInsideTable(state.selection.$to)
-  ) {
-    transaction = transaction.deleteSelection();
-  }
-
-  const tableNode = tableBlockToTiptapNode(editor.schema, filled.value);
-  const insertPosition = tableInsertPosition(
-    transaction.doc,
-    transaction.selection.to,
-  );
-  transaction = transaction.insert(insertPosition, tableNode);
-
-  // 표 안 분기의 selectCellId와 대칭 — 캐럿을 붙여넣은 표의 좌상단 셀
-  // 안으로 옮긴다.
-  const firstCellId = cellIdAtAnchor(filled.value, { row: 0, column: 0 });
-  transaction = setCaretInCell(
-    transaction,
-    tableNode,
-    insertPosition + 1,
-    firstCellId,
-  );
-
-  // 네이티브 doPaste가 보장하는 scrollIntoView와 동일 — 캐럿이 옮겨간 새
-  // 표가 뷰포트 밖이면 화면이 따라가야 한다.
-  const dispatched = dispatchAndVerify(
-    editor,
-    closeHistory(transaction.scrollIntoView()),
-  );
-  if (!dispatched.ok) return dispatched;
-
-  return { ok: true, value: { blockId: filled.value.id } };
+  // 표 밖 분기는 표 하나짜리 시퀀스로 감싸 pasteOutOfTable에 위임한다 —
+  // pasteClipboardContent의 표 밖 분기(문단이 섞인 시퀀스)와 조립·트랜잭션
+  // 마무리를 공유한다(4차 아키텍처 리뷰 카드 T).
+  return pasteOutOfTable(editor, [{ type: "table", data }], createId);
 };
 
 // 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
@@ -846,54 +856,8 @@ export const pasteClipboardContent = (
     );
   }
 
-  // 표 밖: 시퀀스를 순서대로 노드로 조립한다. 실패 가능한 계산
-  // (pasteGridInto)을 전부 먼저 끝내고 dispatch는 마지막에 한 번만 한다 —
-  // pasteTabularData의 표 밖 분기와 같은 원자성 패턴(G-EDT-001). 조립 자체는
-  // table-paste-sequence.ts에 위임한다 — 트랜잭션 구성·dispatch만 이 함수의
-  // 책임으로 남는다.
-  const sequence = buildOutOfTableSequence(editor.schema, content, createId);
-  if (!sequence.ok) return sequence;
-  const { nodes, firstTable } = sequence.value;
-
-  if (firstTable === null) {
-    // parseClipboardTable은 표를 하나도 못 찾으면 이 시퀀스를 만들지
-    // 않는다 — 여기 도달하는 유일한 길은 파서를 거치지 않고 직접 구성한
-    // 순수 문단 ClipboardContent다. 반환할 blockId가 없으므로 거절한다.
-    return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
-  }
-
-  let transaction = state.tr;
-  if (
-    !state.selection.empty &&
-    !positionInsideTable(state.selection.$from) &&
-    !positionInsideTable(state.selection.$to)
-  ) {
-    transaction = transaction.deleteSelection();
-  }
-
-  const insertPosition = tableInsertPosition(
-    transaction.doc,
-    transaction.selection.to,
-  );
-  transaction = transaction.insert(insertPosition, nodes);
-
-  // 표 안 분기의 selectCellId, pasteTabularData 표 밖 분기의 캐럿 이동과
-  // 대칭 — 시퀀스의 첫 표 좌상단 셀 안으로 캐럿을 옮긴다. firstTable.offset은
-  // 그 표 앞에 삽입된 문단들의 누적 크기다(표가 시퀀스 첫 원소면 0이라
-  // pasteTabularData의 기존 공식과 동일해진다).
-  const firstCellId = cellIdAtAnchor(firstTable.data, { row: 0, column: 0 });
-  transaction = setCaretInCell(
-    transaction,
-    firstTable.node,
-    insertPosition + firstTable.offset + 1,
-    firstCellId,
-  );
-
-  const dispatched = dispatchAndVerify(
-    editor,
-    closeHistory(transaction.scrollIntoView()),
-  );
-  if (!dispatched.ok) return dispatched;
-
-  return { ok: true, value: { blockId: firstTable.data.id } };
+  // 표 밖: 조립과 트랜잭션 마무리(선택 삭제 판단→삽입→캐럿 이동→dispatch)는
+  // pasteTabularData의 표 밖 분기와 pasteOutOfTable을 공유한다(4차
+  // 아키텍처 리뷰 카드 T).
+  return pasteOutOfTable(editor, content, createId);
 };
