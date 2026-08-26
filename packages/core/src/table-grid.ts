@@ -9,9 +9,9 @@ import {
   isCanonicalCellAlign,
   isCanonicalCellColor,
   MAX_COLUMN_WIDTH,
-  MAX_TABLE_LOGICAL_CELLS,
   MIN_COLUMN_WIDTH,
   validateTableGrid,
+  validateTableSize,
 } from "@cp949/geul-model";
 
 type TableCell = TableBlock["rows"][number]["cells"][number];
@@ -812,7 +812,12 @@ export const pasteInto = (
     table.columns.length,
     anchor.column + data.columnCount,
   );
-  if (requiredRows * requiredColumns > MAX_TABLE_LOGICAL_CELLS) {
+  // 위반 종류(TOO_MANY_COLUMNS/TOO_MANY_CELLS) 판정 권위는 model에 있다 —
+  // 두 상수가 언젠가 갈라져도 core가 곱셈만으로 재구현해 열-수 상한을
+  // 놓치지 않도록 model.validateTableSize에 위임한다.
+  if (
+    validateTableSize({ columnCount: requiredColumns, rowCount: requiredRows })
+  ) {
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 

@@ -8,9 +8,9 @@ import {
 import {
   type IdFactory,
   type InlineContent,
-  MAX_TABLE_LOGICAL_CELLS,
   type Result,
   type TableBlock,
+  validateTableSize,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
@@ -623,7 +623,15 @@ const validateTabularDataForPaste = (
     return { ok: false, error: { code: "INVALID_TABLE_SIZE" } };
   }
 
-  if (data.rows.length * data.columnCount > MAX_TABLE_LOGICAL_CELLS) {
+  // 위반 종류(TOO_MANY_COLUMNS/TOO_MANY_CELLS) 판정 권위는 model에 있다 —
+  // 두 상수가 언젠가 갈라져도 core가 곱셈만으로 재구현해 열-수 상한을
+  // 놓치지 않도록 model.validateTableSize에 위임한다.
+  if (
+    validateTableSize({
+      columnCount: data.columnCount,
+      rowCount: data.rows.length,
+    })
+  ) {
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 

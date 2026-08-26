@@ -309,6 +309,42 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
+  it("행 수는 1인데 열 수만으로 상한(10,000)을 넘어도 선거절한다", () => {
+    // rowCount>=1이 보장되는 한 곱셈 검사(rows.length * columnCount)만으로도
+    // 열-수 단독 상한(MAX_TABLE_COLUMNS) 위반이 자동으로 걸린다 — 두 상수
+    // (MAX_TABLE_COLUMNS/MAX_TABLE_LOGICAL_CELLS)가 오늘 같은 값이라
+    // 우연히 성립하는 동치를 락한다.
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    let idCalls = 0;
+    const countingId = () => {
+      idCalls += 1;
+      return `paste-${idCalls}`;
+    };
+    const wideData: TabularData = {
+      columnCount: 10_001,
+      rows: [
+        {
+          cells: Array.from({ length: 10_001 }, (_, columnIndex) => ({
+            columnIndex,
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [],
+          })),
+        },
+      ],
+    };
+
+    expect(pasteTabularData(editor, wideData, countingId)).toEqual({
+      ok: false,
+      error: { code: "CELL_LIMIT_EXCEEDED" },
+    });
+    expect(idCalls).toBe(0);
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
   it("NaN·비정수 columnCount는 예외 없이 INVALID_TABLE_SIZE로 거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);

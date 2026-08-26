@@ -1696,4 +1696,50 @@ describe("pasteInto", () => {
       error: { code: "CELL_LIMIT_EXCEEDED" },
     });
   });
+
+  it("행 수는 1인데 열 수만으로 상한(10,000)을 넘으면 거절한다", () => {
+    // requiredRows=1(대상 표도 1행, 붙여넣기 데이터도 1행)로 고정한 채
+    // columnCount만 10,000을 넘긴다 — 두 상한 상수가 갈라져도
+    // (MAX_TABLE_COLUMNS만 별도로 내려가도) core가 곱셈 검사만으로 여전히
+    // 이 케이스를 걸러냄을 락한다.
+    const oneRowTable: TableBlock = {
+      id: "table",
+      type: "table",
+      columns: [{ id: "c0", width: 160 }],
+      rows: [
+        {
+          id: "r0",
+          cells: [
+            { id: "a", columnId: "c0", rowSpan: 1, columnSpan: 1, content: [] },
+          ],
+        },
+      ],
+      headerRows: 0,
+      headerColumns: 0,
+    };
+    const wideData: TabularData = {
+      columnCount: 10_001,
+      rows: [
+        {
+          cells: Array.from({ length: 10_001 }, (_, columnIndex) => ({
+            columnIndex,
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [],
+          })),
+        },
+      ],
+    };
+
+    const result = pasteInto(
+      oneRowTable,
+      { row: 0, column: 0 },
+      wideData,
+      sequentialIds("id"),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "CELL_LIMIT_EXCEEDED" },
+    });
+  });
 });
