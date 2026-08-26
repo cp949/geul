@@ -306,6 +306,19 @@ const applyTableGridOperation = (
   return { ok: true, value: undefined };
 };
 
+// findTable(경로 탐색) + tiptapNodeToTableBlock(디코드)를 그대로 조합한
+// 읽기 전용 대응물 — applyTableGridOperation이 이미 같은 조합을 매 쓰기
+// 명령마다 재현하고 있었다. 호출자가 표 결과를 확인하려고 Tiptap 내부
+// 트리(attrs.cellId/rowspan/colspan 등)를 직접 순회하지 않게 한다.
+export const getTableBlock = (
+  editor: Editor,
+  tableBlockId: string,
+): Result<TableBlock, TableCommandError> => {
+  const found = findTable(editor, tableBlockId);
+  if (!found.ok) return found;
+  return tiptapNodeToTableBlock(found.value.node);
+};
+
 export const insertTableRow = (
   editor: Editor,
   tableBlockId: string,

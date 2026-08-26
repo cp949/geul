@@ -14,6 +14,7 @@ import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import {
   deleteTableColumn,
   deleteTableRow,
+  getTableBlock,
   insertTable,
   insertTableColumn,
   insertTableRow,
@@ -740,6 +741,71 @@ describe("표의 병합된 셀을 분할한다", () => {
       error: { code: "CELL_NOT_FOUND", cellId: "missing" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+});
+
+describe("표 블록을 읽는다", () => {
+  it("존재하는 표 blockId로 TableBlock을 읽는다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+
+    const result = getTableBlock(editor, "table-1");
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "table-1",
+        type: "table",
+        columns: [
+          { id: "col-1", width: 160 },
+          { id: "col-2", width: 160 },
+        ],
+        rows: [
+          {
+            id: "row-1",
+            cells: [
+              {
+                id: "cell-1",
+                columnId: "col-1",
+                rowSpan: 1,
+                columnSpan: 1,
+                content: [],
+              },
+              {
+                id: "cell-2",
+                columnId: "col-2",
+                rowSpan: 1,
+                columnSpan: 1,
+                content: [],
+              },
+            ],
+          },
+        ],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+    });
+  });
+
+  it("존재하지 않는 blockId는 TABLE_NOT_FOUND를 반환한다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+
+    const result = getTableBlock(editor, "missing");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TABLE_NOT_FOUND", blockId: "missing" },
+    });
+  });
+
+  it("표가 아닌 blockId는 TABLE_NOT_FOUND를 반환한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+
+    const result = getTableBlock(editor, "para-1");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "TABLE_NOT_FOUND", blockId: "para-1" },
+    });
   });
 });
 
