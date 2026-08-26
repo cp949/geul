@@ -6,11 +6,11 @@ import {
   validateTabularData,
 } from "@cp949/geul-io";
 import {
+  appendOrMergeInlineItem,
   type IdFactory,
   type InlineContent,
   MAX_TABLE_LOGICAL_CELLS,
   type Result,
-  sameMarks,
   type TableBlock,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
@@ -833,22 +833,13 @@ const buildSequenceNode = (
 
 // 인라인 런을 이어 붙이되 이웃한 같은 마크 런은 하나로 합치고 빈 런은
 // 버린다 — inlineContentViolation이 인접 동일 마크 런과 빈 텍스트 런을 모두
-// 거절하므로, 구분자를 끼워 넣는 쪽이 io의 normalizeCellContent와 같은 병합
-// 형태를 유지해야 한다("같은 mark 조합"의 판정은 model의 sameMarks가
-// 소유). 원본 런 객체는 수정하지 않고 교체한다(호출자가 넘긴
-// ClipboardContent를 건드리지 않는다).
+// 거절하므로, 구분자를 끼워 넣는 쪽이 다른 네 곳(io)과 같은 병합 형태를
+// 유지해야 한다. model의 appendOrMergeInlineItem은 push할 때 항상 새 조각을
+// 만들어 넣으므로(원본 run 참조를 그대로 담지 않는다) 호출자가 넘긴
+// ClipboardContent를 건드리지 않기 위한 별도 교체 로직이 필요 없다.
 const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
   for (const run of runs) {
-    if (run.text.length === 0) continue;
-    const previous = target[target.length - 1];
-    if (previous !== undefined && sameMarks(previous.marks, run.marks)) {
-      target[target.length - 1] = {
-        ...previous,
-        text: previous.text + run.text,
-      };
-      continue;
-    }
-    target.push(run);
+    appendOrMergeInlineItem(target, run.text, run.marks);
   }
 };
 
