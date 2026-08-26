@@ -203,6 +203,31 @@ const dispatchAndVerify = (
   return { ok: true, value: undefined };
 };
 
+// findTable(경로 탐색) + tiptapNodeToTableBlock(디코드)를 한 번에 수행한다 —
+// applyTableGridOperation(쓰기)과 getTableBlock(읽기)이 공유하는 유일한 조회
+// 경로다. applyTableGridOperation은 이후 replaceWith에 position/node가 그대로
+// 필요해 세 값을 함께 돌려준다.
+const decodeTable = (
+  editor: Editor,
+  tableBlockId: string,
+): Result<
+  { position: number; node: ProseMirrorNode; table: TableBlock },
+  TableCommandError
+> => {
+  const found = findTable(editor, tableBlockId);
+  if (!found.ok) return found;
+  const decoded = tiptapNodeToTableBlock(found.value.node);
+  if (!decoded.ok) return decoded;
+  return {
+    ok: true,
+    value: {
+      position: found.value.position,
+      node: found.value.node,
+      table: decoded.value,
+    },
+  };
+};
+
 const applyTableGridOperation = (
   editor: Editor,
   tableBlockId: string,
@@ -212,19 +237,16 @@ const applyTableGridOperation = (
     preserveSelection?: boolean;
   },
 ): Result<void, TableCommandError> => {
-  const found = findTable(editor, tableBlockId);
+  const found = decodeTable(editor, tableBlockId);
   if (!found.ok) return found;
-  const { position, node } = found.value;
+  const { position, node, table: decoded } = found.value;
 
-  const decoded = tiptapNodeToTableBlock(node);
-  if (!decoded.ok) return decoded;
-
-  const operated = operate(decoded.value);
+  const operated = operate(decoded);
   if (!operated.ok) return operated;
 
   // no-op 연산(동일 인덱스 이동, 동일 너비 리사이즈)은 입력 표를 참조 그대로
   // 반환한다 — 트랜잭션을 만들면 문서는 안 바뀌는데 undo 단계만 쌓인다.
-  if (operated.value === decoded.value) {
+  if (operated.value === decoded) {
     return { ok: true, value: undefined };
   }
 
@@ -306,17 +328,16 @@ const applyTableGridOperation = (
   return { ok: true, value: undefined };
 };
 
-// findTable(경로 탐색) + tiptapNodeToTableBlock(디코드)를 그대로 조합한
-// 읽기 전용 대응물 — applyTableGridOperation이 이미 같은 조합을 매 쓰기
-// 명령마다 재현하고 있었다. 호출자가 표 결과를 확인하려고 Tiptap 내부
-// 트리(attrs.cellId/rowspan/colspan 등)를 직접 순회하지 않게 한다.
+// decodeTable의 읽기 전용 대응물 — position/node 없이 TableBlock만 필요한
+// 호출자가 표 결과를 확인하려고 Tiptap 내부 트리(attrs.cellId/rowspan/colspan
+// 등)를 직접 순회하지 않게 한다.
 export const getTableBlock = (
   editor: Editor,
   tableBlockId: string,
 ): Result<TableBlock, TableCommandError> => {
-  const found = findTable(editor, tableBlockId);
+  const found = decodeTable(editor, tableBlockId);
   if (!found.ok) return found;
-  return tiptapNodeToTableBlock(found.value.node);
+  return { ok: true, value: found.value.table };
 };
 
 export const insertTableRow = (

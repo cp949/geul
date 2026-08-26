@@ -3,8 +3,9 @@
  * 열 너비 조절, 헤더 행·열 토글, 셀 병합·분할, 그리고 undo 단계를 만들지
  * 않아야 하는 no-op 방어 동작을 다룬다. 각 구조 변경 명령이 연산 후 캐럿을
  * 예측 가능한 셀로 옮기는지도 함께 검증한다(applyTableGridOperation의
- * selectCellId/preserveSelection 계약). 붙여넣기 경로는 table-paste-*.test.ts가
- * 맡는다.
+ * selectCellId/preserveSelection 계약). getTableBlock의 읽기 전용 조회(존재하는/
+ * 존재하지 않는/표가 아닌 blockId)도 다룬다. 붙여넣기 경로는
+ * table-paste-*.test.ts가 맡는다.
  */
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
@@ -391,9 +392,12 @@ describe("표의 열을 이동한다", () => {
 
     expect(result).toEqual({ ok: true, value: undefined });
     // raw JSON을 유지한다 — columns 메타데이터 순서와 물리 셀 columnId 순서가
-    // 일치하는지를 함께 보는 검증이라 G-TBL-001과 같은 지점(tableBlockToTiptapJson의
-    // columnIndexById 정렬)을 검사한다. getTableBlock으로 바꾸면 이 정렬 로직의
-    // 회귀를 못 잡을 위험이 같다.
+    // 일치하는지를 tableBlockToTiptapJson이 만든 tiptap 문서에서 직접 검사한다
+    // (G-TBL-001의 columnIndexById 정렬). getTableBlock으로 바꿔도 같은 회귀는
+    // 똑같이 잡는다 — tiptapNodeToTableBlock도 같은 물리 순서를 읽기 때문이다.
+    // 다만 그러면 이 assertion이 쓰기 경로(tableBlockToTiptapJson)뿐 아니라
+    // 읽기 경로(tiptapNodeToTableBlock)까지 함께 거치게 되어, 실패했을 때 어느
+    // 쪽 코덱이 깨졌는지 이 테스트만으로는 구분할 수 없다.
     const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
     const columns = table?.attrs?.columns as { id: string }[];
     expect(columns.map((column) => column.id)).toEqual(["col-2", "col-1"]);
