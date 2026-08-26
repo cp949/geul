@@ -10,17 +10,24 @@ export type EditorProviderProps =
       editor: EditorController;
       initialDocument?: never;
       onChange?: never;
+      onPasteRejected?: never;
     }
   | {
       children: ReactNode;
       editor?: never;
       initialDocument: CreateEditorOptions["initialDocument"];
       onChange?: CreateEditorOptions["onChange"];
+      onPasteRejected?: CreateEditorOptions["onPasteRejected"];
     };
 
 export const EditorProvider = (props: EditorProviderProps) => {
   const latestOnChange = useRef<CreateEditorOptions["onChange"]>(undefined);
-  if (props.editor === undefined) latestOnChange.current = props.onChange;
+  const latestOnPasteRejected =
+    useRef<CreateEditorOptions["onPasteRejected"]>(undefined);
+  if (props.editor === undefined) {
+    latestOnChange.current = props.onChange;
+    latestOnPasteRejected.current = props.onPasteRejected;
+  }
 
   const [configuration] = useState(() => {
     if (props.editor !== undefined) {
@@ -42,6 +49,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
     const controller = createEditor({
       initialDocument: configuration.initialDocument,
       onChange: (event) => latestOnChange.current?.(event),
+      onPasteRejected: (reason) => latestOnPasteRejected.current?.(reason),
     });
     setInternalEditor(controller);
     return () => controller.destroy();

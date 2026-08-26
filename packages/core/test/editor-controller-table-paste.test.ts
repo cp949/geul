@@ -2,10 +2,13 @@
  * 에디터 컨트롤러의 표 붙여넣기 경로를 실제 ClipboardEvent로 검증한다.
  * 마운트된 표의 colgroup 렌더, 외부 HTML 표·문단이 섞인 시퀀스·자기 복사
  * 래퍼의 붙여넣기, 셀 한도와 병합 충돌 거절이 이벤트를 소비하고 문서를
- * 보존하는지, pasteTabularData의 성공·거절 원인 전달을 다룬다.
+ * 보존하는지, pasteTabularData의 성공·거절 원인 전달을 다룬다. 파서 거절과
+ * 명령 거절 각각에서 onPasteRejected 콜백이 원인을 전달하는지,
+ * NOT_TABULAR(폴백 경로)에서는 호출되지 않는지도 다룬다(Issue #36).
  */
 import type { TabularData } from "@cp949/geul-io";
 import { describe, expect, it } from "vitest";
+import type { CreateEditorOptions } from "../src/index.js";
 import { createEditor } from "../src/index.js";
 import {
   editorState,
@@ -340,10 +343,13 @@ describe("에디터 컨트롤러 표", () => {
    * 셀에도 속하지 않게 되어 pasteTabularData가 PASTE_MERGE_CONFLICT로
    * 거절한다 — 명령 레벨 거절 경로를 실제 ClipboardEvent로 재현하는 fixture다.
    */
-  const editorWithMergedCellCaret = () => {
+  const editorWithMergedCellCaret = (
+    overrides: Pick<CreateEditorOptions, "onPasteRejected"> = {},
+  ) => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
       createId: sequentialIds("paste"),
+      ...overrides,
     });
     const { editable, tiptap } = mountTiptapEditor(editor);
     const inserted = editor.commands.insertTable("block-1", {
@@ -587,6 +593,89 @@ describe("에디터 컨트롤러 표", () => {
         message: "Cell text at row 0, cell 0 is not valid inline text",
       },
     });
+
+    editor.destroy();
+  });
+
+  it("파서가 거절한(CLIPBOARD_TABLE_INVALID) 붙여넣기는 onPasteRejected에 원인을 전달한다", () => {
+    const rejections: unknown[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+      onPasteRejected: (reason) => rejections.push(reason),
+    });
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
+
+    // 10,000셀 상한을 넘는 HTML 표 — parseClipboardTable이 표를 찾고 나서
+    // 거절하므로(sawTable: true) CLIPBOARD_TABLE_INVALID다(NOT_TABULAR가
+    // 아니다).
+    const cells = Array.from({ length: 101 }, () => "<td>x</td>").join("");
+    const rows = Array.from({ length: 101 }, () => `<tr>${cells}</tr>`).join(
+      "",
+    );
+    const data = new DataTransfer();
+    data.setData("text/html", `<table><tbody>${rows}</tbody></table>`);
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(rejections).toHaveLength(1);
+    expect(rejections[0]).toMatchObject({ code: "CLIPBOARD_TABLE_INVALID" });
+
+    editor.destroy();
+  });
+
+  it("명령이 거절한(PASTE_MERGE_CONFLICT) 붙여넣기는 onPasteRejected에 원인을 전달한다", () => {
+    const rejections: unknown[] = [];
+    const { editor, editable } = editorWithMergedCellCaret({
+      onPasteRejected: (reason) => rejections.push(reason),
+    });
+
+    const data = new DataTransfer();
+    data.setData("text/plain", "x\ty");
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(rejections).toEqual([{ code: "PASTE_MERGE_CONFLICT" }]);
+
+    editor.destroy();
+  });
+
+  it("NOT_TABULAR로 폴백하는 붙여넣기는 onPasteRejected를 호출하지 않는다", () => {
+    const rejections: unknown[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("paste"),
+      onPasteRejected: (reason) => rejections.push(reason),
+    });
+    const { editable } = mountTiptapEditor(editor);
+    editable.focus();
+
+    // 탭이 없는 평범한 텍스트 — parseClipboardTable이 표로 보지 않고
+    // NOT_TABULAR를 반환해 기본 붙여넣기로 폴백한다(spec 9.3). 이 경로는
+    // "거절"이 아니라 애초에 표 붙여넣기 대상이 아니었던 경우라 콜백
+    // 대상이 아니다.
+    const data = new DataTransfer();
+    data.setData("text/plain", "hello world");
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(rejections).toEqual([]);
 
     editor.destroy();
   });

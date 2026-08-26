@@ -20,6 +20,7 @@ import type { EditorError } from "./errors.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
+import type { PasteRejectedReason } from "./table-command-error.js";
 import {
   deleteTableColumn as deleteTableColumnCommand,
   deleteTableRow as deleteTableRowCommand,
@@ -213,6 +214,7 @@ export type CreateEditorOptions = {
   initialDocument: BlockDocument;
   createId?: IdFactory;
   onChange?: (event: DocumentChangeEvent) => void;
+  onPasteRejected?: (reason: PasteRejectedReason) => void;
 };
 
 type ChangeReason = DocumentChangeEvent["reason"];
@@ -396,7 +398,12 @@ export const createEditor = (
         TableRowExtension,
         TableCellExtension,
         TableKeyboardNavigationExtension.configure({ createId }),
-        TablePasteExtension.configure({ createId }),
+        TablePasteExtension.configure({
+          createId,
+          ...(options.onPasteRejected === undefined
+            ? {}
+            : { onPasteRejected: options.onPasteRejected }),
+        }),
         LinkPolicyExtension,
         RevisionGuardExtension.configure({
           canApplyDocumentChange: () =>
@@ -813,8 +820,9 @@ export const createEditor = (
       // 동형) — EditorError는 spec이 고정한 21개 코드 표면이라 TableCommandError
       // 쪽에서 새 코드가 늘어도 그대로 넓히지 않는다.
       case "CLIPBOARD_CONTENT_INVALID":
-        // 오늘은 도달 불가 — pasteClipboardContent(table-paste-extension.ts)가
-        // 이 Result를 버려 이 switch를 거치지 않는다.
+        // 오늘은 도달 불가 — pasteClipboardContent(table-paste-extension.ts)의
+        // 거절은 onPasteRejected로 전달되고(Issue #36) 이 switch(runTableCommand
+        // 전용)는 거치지 않는다.
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
       case "TABLE_GRID_INVALID":
         // 도달 가능 — mergeCells·resolveTargetCellIds(setCellFormat 경유,

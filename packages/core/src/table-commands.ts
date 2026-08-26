@@ -9,6 +9,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { CellSelection, selectedRect } from "@tiptap/pm/tables";
 import { findTopLevelBlockPosition } from "./block-position.js";
+import type { TableCommandError } from "./table-command-error.js";
 import {
   DEFAULT_COLUMN_WIDTH,
   deleteColumn as deleteGridColumn,
@@ -29,22 +30,18 @@ import {
   toggleHeaderRow as toggleGridHeaderRow,
 } from "./table-grid.js";
 import {
-  type TableCodecError,
   tableBlockToTiptapNode,
   tiptapNodeToTableBlock,
 } from "./table-model-codec.js";
 
-export type TableCommandError =
-  | TableGridError
-  | TableCodecError
-  | { code: "BLOCK_NOT_FOUND"; blockId: string }
-  | { code: "TABLE_NOT_FOUND"; blockId: string }
-  | { code: "INVALID_TABLE_SIZE" }
-  | { code: "TABULAR_DATA_INVALID"; message: string }
-  | { code: "CLIPBOARD_CONTENT_INVALID"; message: string }
-  | { code: "PASTE_TARGET_NOT_FOUND" }
-  | { code: "MERGE_TARGET_NOT_FOUND" }
-  | { code: "TRANSACTION_REJECTED" };
+// TableCommandError는 Tiptap/ProseMirror를 참조하지 않는 순수 데이터
+// 유니온이라 table-command-error.ts가 단독으로 소유한다 — 이 파일과
+// table-model-codec.ts는 Editor/Transaction/ProseMirrorNode/Schema를 쓰는
+// 함수와 같은 파일에서 타입을 선언하면 그 타입 하나만 import해도 파일 전체
+// (Tiptap/PM 타입 포함)가 .d.ts 의존 그래프에 딸려 나온다(ADR-0002,
+// public-types.test.ts). 이 재-export는 기존 호출부(`from "./table-commands.js"`)
+// 호환을 유지한다.
+export type { TableCommandError } from "./table-command-error.js";
 
 const blockNotFound = (blockId: string): Result<never, TableCommandError> => ({
   ok: false,

@@ -7,6 +7,41 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, EditorProvider, useEditor } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
+import { queryMountedEditable } from "./query-mounted-editable.js";
+
+// jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
+// (jsdom/jsdom#1568) — packages/core/test/editor-controller-table-paste.test.ts와
+// 같은 최소 폴리필을 여기서도 쓴다. 이후 jsdom이 네이티브로 지원하게 되면 이
+// 블록은 자동으로 건너뛴다.
+if (typeof globalThis.DataTransfer === "undefined") {
+  class JsdomDataTransfer {
+    private readonly store = new Map<string, string>();
+
+    setData(format: string, data: string): void {
+      this.store.set(format, data);
+    }
+
+    getData(format: string): string {
+      return this.store.get(format) ?? "";
+    }
+  }
+
+  globalThis.DataTransfer = JsdomDataTransfer as unknown as typeof DataTransfer;
+}
+
+if (typeof globalThis.ClipboardEvent === "undefined") {
+  class JsdomClipboardEvent extends Event {
+    readonly clipboardData: DataTransfer | null;
+
+    constructor(type: string, eventInit?: ClipboardEventInit) {
+      super(type, eventInit);
+      this.clipboardData = eventInit?.clipboardData ?? null;
+    }
+  }
+
+  globalThis.ClipboardEvent =
+    JsdomClipboardEvent as unknown as typeof ClipboardEvent;
+}
 
 // @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
 // cleanup을 등록한다(dist/index.js의 typeof afterEach === "function" 분기와
@@ -151,6 +186,67 @@ describe("React 에디터 어댑터", () => {
     expect(controller?.getDocument().blocks[0]).toMatchObject({
       content: [{ text: "changed" }],
     });
+  });
+
+  it("표 붙여넣기가 거절되면 onPasteRejected에 최신 콜백으로 원인을 전달한다", () => {
+    let controller: EditorController | undefined;
+    const firstCallback = vi.fn();
+    const latestCallback = vi.fn();
+    const CaptureEditor = () => {
+      controller = useEditor();
+      return null;
+    };
+    const view = render(
+      <EditorProvider
+        initialDocument={paragraphDocument("first")}
+        onPasteRejected={firstCallback}
+      >
+        <CaptureEditor />
+        <EditorContent />
+      </EditorProvider>,
+    );
+
+    view.rerender(
+      <EditorProvider
+        initialDocument={paragraphDocument("ignored")}
+        onPasteRejected={latestCallback}
+      >
+        <CaptureEditor />
+        <EditorContent />
+      </EditorProvider>,
+    );
+
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = queryMountedEditable(host);
+    editable.focus();
+
+    // 10,000셀 상한을 넘는 HTML 표 — 파서가 표를 찾고 나서 거절하므로
+    // CLIPBOARD_TABLE_INVALID다(editor-controller-table-paste.test.ts와 같은
+    // fixture).
+    const cells = Array.from({ length: 101 }, () => "<td>x</td>").join("");
+    const rows = Array.from({ length: 101 }, () => `<tr>${cells}</tr>`).join(
+      "",
+    );
+    const data = new DataTransfer();
+    data.setData("text/html", `<table><tbody>${rows}</tbody></table>`);
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(firstCallback).not.toHaveBeenCalled();
+    expect(latestCallback).toHaveBeenCalledTimes(1);
+    expect(latestCallback.mock.calls[0]?.[0]).toMatchObject({
+      code: "CLIPBOARD_TABLE_INVALID",
+    });
+    expect(controller?.getDocument().blocks[0]).toMatchObject({
+      content: [{ text: "first" }],
+    });
+
+    view.unmount();
   });
 
   it("EditorProvider 바깥에서 사용하면 항상 같은 오류를 던진다", () => {

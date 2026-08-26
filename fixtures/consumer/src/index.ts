@@ -14,11 +14,22 @@ import {
   type EditorError,
   EditorProvider,
   LinkToolbar,
+  type PasteRejectedReason,
   SlashMenu,
 } from "@cp949/geul-react";
 
 const document: Document = createEmptyDocument(() => "fixture-block");
-const editor: EditorController = createEditor({ initialDocument: document });
+const editor: EditorController = createEditor({
+  initialDocument: document,
+  onPasteRejected: (reason) => {
+    void reason;
+  },
+});
+const rejection: PasteRejectedReason = {
+  code: "CLIPBOARD_TABLE_INVALID",
+  message: "fixture",
+};
+void rejection;
 void importHtml("<p>Hello</p>");
 void EditorProvider;
 void EditorContent;

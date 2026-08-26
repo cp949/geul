@@ -13,6 +13,7 @@ import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 
 import { tableBlockToTiptapJson } from "./model-to-tiptap.js";
+import type { TableCodecError } from "./table-command-error.js";
 
 // TableBlock → tiptap 매핑(G-TBL-001 열 재정렬 포함)의 권위는 문서 로드 경로와
 // 공유하는 tableBlockToTiptapJson 하나다 — 붙여넣기(PM 노드)와 로드(JSON)가
@@ -31,8 +32,6 @@ export const tableBlockToTiptapNode = (
 
   return schema.nodeFromJSON(tableBlockToTiptapJson(table));
 };
-
-export type TableCodecError = { code: "TABLE_NODE_INVALID"; message: string };
 
 type TableCellFields = Omit<
   TableBlock["rows"][number]["cells"][number],

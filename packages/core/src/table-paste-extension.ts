@@ -3,10 +3,12 @@ import type { IdFactory } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 
+import type { PasteRejectedReason } from "./table-command-error.js";
 import { pasteClipboardContent } from "./table-paste-commands.js";
 
 export type TablePasteOptions = {
   createId: IdFactory;
+  onPasteRejected?: (reason: PasteRejectedReason) => void;
 };
 
 // 실제 ClipboardEvent를 가로채 표/TSV/혼합 시퀀스로 파싱되면
@@ -21,6 +23,11 @@ export type TablePasteOptions = {
 // 터져 모델↔에디터 영구 desync), HTML은 표 구조가 소실된 텍스트로 뭉개진다
 // — 둘 다 "전체 거부" 계약 위반이다. 거절된 명령은 아무것도 dispatch하지
 // 않으므로 문서·selection·stored mark가 그대로 보존된다(G-EDT-001).
+//
+// onPasteRejected는 두 거절 경로(파서·명령) 모두에서 호출되는 읽기 전용
+// 알림이다 — 어떤 transaction도 dispatch하지 않아 위 원자성 계약과
+// 충돌하지 않는다. NOT_TABULAR(기본 붙여넣기 폴백)에서는 호출하지 않는다
+// — 거절이 아니라 애초에 표 붙여넣기 대상이 아니었던 경우다(Issue #36).
 export const TablePasteExtension = Extension.create<TablePasteOptions>({
   name: "tablePaste",
 
@@ -35,6 +42,7 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
   addProseMirrorPlugins() {
     const editor = this.editor;
     const createId = this.options.createId;
+    const onPasteRejected = this.options.onPasteRejected;
 
     return [
       new Plugin({
@@ -49,9 +57,18 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
             if (html.length > 0) clipboardInput.html = html;
             if (text.length > 0) clipboardInput.text = text;
             const parsed = parseClipboardTable(clipboardInput);
-            if (!parsed.ok) return parsed.error.code !== "NOT_TABULAR";
+            if (!parsed.ok) {
+              if (parsed.error.code === "NOT_TABULAR") return false;
+              onPasteRejected?.(parsed.error);
+              return true;
+            }
 
-            pasteClipboardContent(editor, parsed.value, createId);
+            const result = pasteClipboardContent(
+              editor,
+              parsed.value,
+              createId,
+            );
+            if (!result.ok) onPasteRejected?.(result.error);
             return true;
           },
         },

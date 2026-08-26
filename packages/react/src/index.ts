@@ -3,6 +3,7 @@ export type {
   DocumentChangeEvent,
   EditorController,
   EditorError,
+  PasteRejectedReason,
 } from "@cp949/geul-core";
 export { EditorContent } from "./editor-content.js";
 export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
