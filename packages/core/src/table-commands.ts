@@ -14,18 +14,15 @@ import {
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type {
-  Node as ProseMirrorNode,
-  ResolvedPos,
-  Schema,
-} from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import { findTopLevelBlockPosition } from "./block-position.js";
+import { inlineContentViolation } from "./model-to-tiptap.js";
 import {
-  inlineContentToTiptap,
-  inlineContentViolation,
-} from "./model-to-tiptap.js";
+  buildOutOfTableSequence,
+  buildPasteTableSkeleton,
+} from "./table-paste-sequence.js";
 import {
   DEFAULT_COLUMN_WIDTH,
   deleteColumn as deleteGridColumn,
@@ -101,29 +98,6 @@ const buildInitialTable = (
     headerColumns: 0,
   };
 };
-
-// 표 밖 붙여넣기 전용 골격: 열과 행만 만들고 셀은 만들지 않는다.
-// pasteInto가 anchor (0,0)에서 모든 행·열을 덮어쓰므로 여기서 만든 셀은
-// 하나도 살아남지 못한다 — buildInitialTable을 쓰면 100x100 붙여넣기에서
-// 버려질 셀 10,000개를 만들고 id도 그만큼 더 뽑는다. 셀 없는 중간 상태는
-// pasteInto가 결과를 validateTableGrid로 검증하므로 밖으로 새지 않는다.
-const buildPasteTableSkeleton = (
-  size: { rows: number; columns: number },
-  createId: IdFactory,
-): TableBlock => ({
-  id: createId(),
-  type: "table",
-  columns: Array.from({ length: size.columns }, () => ({
-    id: createId(),
-    width: DEFAULT_COLUMN_WIDTH,
-  })),
-  rows: Array.from({ length: size.rows }, () => ({
-    id: createId(),
-    cells: [],
-  })),
-  headerRows: 0,
-  headerColumns: 0,
-});
 
 const findTable = (
   editor: Editor,
@@ -781,55 +755,6 @@ export const pasteTabularData = (
   return { ok: true, value: { blockId: filled.value.id } };
 };
 
-const buildSequenceNode = (
-  schema: Schema,
-  block: ClipboardContentBlock,
-  createId: IdFactory,
-): Result<
-  { node: ProseMirrorNode; table: TableBlock | null },
-  TableCommandError
-> => {
-  if (block.type === "paragraph") {
-    // blockId 없이 만든다 — BlockIdExtension.appendTransaction이 같은
-    // dispatch 안에서 사후 배정한다(tableInsertPosition 근처 주석의 필러
-    // 문단 처리와 같은 확립된 패턴).
-    const node = schema.nodeFromJSON({
-      type: "paragraph",
-      content: inlineContentToTiptap(block.content),
-    });
-    return { ok: true, value: { node, table: null } };
-  }
-
-  if (block.type === "heading") {
-    const node = schema.nodeFromJSON({
-      type: "heading",
-      attrs: { level: block.level },
-      content: inlineContentToTiptap(block.content),
-    });
-    return { ok: true, value: { node, table: null } };
-  }
-
-  const emptyTable = buildPasteTableSkeleton(
-    { rows: block.data.rows.length, columns: block.data.columnCount },
-    createId,
-  );
-  const filled = pasteGridInto(
-    emptyTable,
-    { row: 0, column: 0 },
-    block.data,
-    createId,
-  );
-  if (!filled.ok) return filled;
-
-  return {
-    ok: true,
-    value: {
-      node: tableBlockToTiptapNode(schema, filled.value),
-      table: filled.value,
-    },
-  };
-};
-
 // 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
 // 표가 fragment의 유일한 실질 콘텐츠일 때 반환하는 단일 표 시퀀스는
 // pasteTabularData에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을
@@ -923,28 +848,12 @@ export const pasteClipboardContent = (
 
   // 표 밖: 시퀀스를 순서대로 노드로 조립한다. 실패 가능한 계산
   // (pasteGridInto)을 전부 먼저 끝내고 dispatch는 마지막에 한 번만 한다 —
-  // pasteTabularData의 표 밖 분기와 같은 원자성 패턴(G-EDT-001).
-  let firstTable: {
-    data: TableBlock;
-    node: ProseMirrorNode;
-    offset: number;
-  } | null = null;
-  let runningOffset = 0;
-  const nodes: ProseMirrorNode[] = [];
-
-  for (const block of content) {
-    const built = buildSequenceNode(editor.schema, block, createId);
-    if (!built.ok) return built;
-    if (firstTable === null && built.value.table !== null) {
-      firstTable = {
-        data: built.value.table,
-        node: built.value.node,
-        offset: runningOffset,
-      };
-    }
-    nodes.push(built.value.node);
-    runningOffset += built.value.node.nodeSize;
-  }
+  // pasteTabularData의 표 밖 분기와 같은 원자성 패턴(G-EDT-001). 조립 자체는
+  // table-paste-sequence.ts에 위임한다 — 트랜잭션 구성·dispatch만 이 함수의
+  // 책임으로 남는다.
+  const sequence = buildOutOfTableSequence(editor.schema, content, createId);
+  if (!sequence.ok) return sequence;
+  const { nodes, firstTable } = sequence.value;
 
   if (firstTable === null) {
     // parseClipboardTable은 표를 하나도 못 찾으면 이 시퀀스를 만들지
