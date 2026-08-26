@@ -1,5 +1,5 @@
 import { GripVertical, Plus } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
@@ -11,7 +11,11 @@ import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
-import { useHandleReopenSuppression } from "./use-handle-reopen-suppression.js";
+import {
+  resolveReopenAwareClick,
+  useHandleReopenSuppression,
+} from "./use-handle-reopen-suppression.js";
+import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
@@ -117,18 +121,14 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null);
-  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dragState, dragStateRef, updateDragState] =
+    useMirroredState<DragState | null>(null);
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState | null>(
     null,
   );
-  const dragStateRef = useRef<DragState | null>(null);
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // table-handles.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
-  const updateDragState = useCallback((next: DragState | null) => {
-    dragStateRef.current = next;
-    setDragState(next);
-  }, []);
   const focusEditor = useCallback(() => {
     element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
   }, [element]);
@@ -179,7 +179,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           : null,
       });
     },
-    [element, updateDragState],
+    [element, dragStateRef, updateDragState],
   );
 
   const handleBlockDragUp = useCallback(() => {
@@ -195,7 +195,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       reopenSuppression.markSuppressed(current.sourceBlockId);
     }
     updateDragState(null);
-  }, [editor, updateDragState, reopenSuppression]);
+  }, [editor, dragStateRef, updateDragState, reopenSuppression]);
 
   const handleBlockDragCancel = useCallback(() => {
     const current = dragStateRef.current;
@@ -204,7 +204,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       reopenSuppression.markSuppressed(current.sourceBlockId);
     }
     updateDragState(null);
-  }, [updateDragState, reopenSuppression]);
+  }, [dragStateRef, updateDragState, reopenSuppression]);
 
   const handleBlockDragEscape = useCallback(
     (event: KeyboardEvent): true => {
@@ -215,7 +215,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       }
       return true;
     },
-    [updateDragState],
+    [dragStateRef, updateDragState],
   );
 
   usePointerDragGesture({
@@ -307,24 +307,27 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     // preventDefault라 초점을 받지 않는다 — 재클릭 닫기에는 바깥 클릭과
     // 달리 "돌아갈 다른 목적지"가 없다. Escape와 같은 그룹으로 다뤄
     // closeBlockMenu(초점 복구 포함)를 재사용한다(G-UI-001, Issue #52).
-    const outcome = reopenSuppression.consumeClick({
-      isPointerClick: event.detail !== 0,
-      suppressionKey: blockId,
-      reopenKey: blockId,
-      isCurrentlyOpen:
-        blockMenuState !== null && blockMenuState.blockId === blockId,
-    });
-    if (outcome === "suppressed") return;
-    if (outcome === "close") {
-      closeBlockMenu();
-      return;
-    }
-    if (hoverBounds === null) return;
-    setBlockMenuState({
-      blockId,
-      left: hoverBounds.left,
-      top: hoverBounds.top + 28,
-    });
+    resolveReopenAwareClick(
+      reopenSuppression,
+      event,
+      {
+        suppressionKey: blockId,
+        reopenKey: blockId,
+        isCurrentlyOpen:
+          blockMenuState !== null && blockMenuState.blockId === blockId,
+      },
+      {
+        onOpen: () => {
+          if (hoverBounds === null) return;
+          setBlockMenuState({
+            blockId,
+            left: hoverBounds.left,
+            top: hoverBounds.top + 28,
+          });
+        },
+        onClose: closeBlockMenu,
+      },
+    );
   };
 
   const handleTurnInto = (item: BlockTypeOption) => {

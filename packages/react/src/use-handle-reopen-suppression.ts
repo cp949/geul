@@ -78,3 +78,43 @@ export const useHandleReopenSuppression = () => {
     [onPointerDown, markSuppressed, consumeClick],
   );
 };
+
+export type ReopenAwareClickKeys = {
+  suppressionKey: string;
+  reopenKey: string;
+  isCurrentlyOpen: boolean;
+};
+
+type ReopenAwareClickCallbacks = {
+  onOpen: () => void;
+  onClose: () => void;
+};
+
+/**
+ * consumeClick의 판정(suppressed/close/open) 3분기 처리를 뽑는다 — 닫기
+ * (onClose)는 메뉴를 setState(null)만 하는 게 아니라 포커스 복구까지 포함한
+ * 고정 함수라 여는 쪽(onOpen)을 대신할 수 없어, outcome으로 먼저 분기해야
+ * 한다(table-handles.tsx의 handleReorderHandleClick, block-side-menu.tsx의
+ * handleHandleClick이 이 구조를 반복해왔다 — 3차 리뷰 후보 S).
+ * suppressionKey/reopenKey/isCurrentlyOpen과 onOpen/onClose는 클릭마다(행/열
+ * kind·id·index 또는 blockId) 달라지므로 훅으로 고정하지 않고 호출 시점
+ * 인자로 받는다 — useCallback으로 감쌀 안정 참조 이점도 실제로 쓰이지
+ * 않는다.
+ */
+export const resolveReopenAwareClick = (
+  reopenSuppression: ReturnType<typeof useHandleReopenSuppression>,
+  event: { detail: number },
+  keys: ReopenAwareClickKeys,
+  { onOpen, onClose }: ReopenAwareClickCallbacks,
+): void => {
+  const outcome = reopenSuppression.consumeClick({
+    isPointerClick: event.detail !== 0,
+    ...keys,
+  });
+  if (outcome === "suppressed") return;
+  if (outcome === "close") {
+    onClose();
+    return;
+  }
+  onOpen();
+};

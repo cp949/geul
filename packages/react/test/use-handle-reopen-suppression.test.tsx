@@ -3,7 +3,9 @@
  * 스냅샷, 드래그 종료 시 markSuppressed, 라이브 상태(isCurrentlyOpen)를
  * 올바르게 조합하는지 확인한다. consumeClick이 내부 ref를 호출마다
  * 리셋하는지도 함께 본다 — 리셋하지 않으면 다음 클릭이 같은 판정을 재사용해
- * Issue #52류 재발로 이어진다.
+ * Issue #52류 재발로 이어진다. resolveReopenAwareClick의 outcome별 3분기
+ * 디스패치(어느 콜백을 부르는지)도 여기서 함께 검증한다 — DOM에 의존하지
+ * 않는 순수 로직이라 마운트 없이 consumeClick 스텁만으로 확인한다.
  */
 // @vitest-environment jsdom
 
@@ -12,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type HandleClickOutcome,
+  resolveReopenAwareClick,
   useHandleReopenSuppression,
 } from "../src/use-handle-reopen-suppression.js";
 
@@ -155,5 +158,76 @@ describe("useHandleReopenSuppression", () => {
 
     expect(onOutcome).toHaveBeenNthCalledWith(1, "close");
     expect(onOutcome).toHaveBeenNthCalledWith(2, "open");
+  });
+});
+
+/** consumeClick이 항상 지정한 outcome을 반환하는 스텁 — DOM/렌더 없이 resolveReopenAwareClick만 단독으로 구동한다. */
+const stubReopenSuppression = (outcome: HandleClickOutcome) => ({
+  onPointerDown: vi.fn(),
+  markSuppressed: vi.fn(),
+  consumeClick: vi.fn(() => outcome),
+});
+
+const baseKeys = {
+  suppressionKey: "row-a",
+  reopenKey: "row-a",
+  isCurrentlyOpen: false,
+};
+
+describe("resolveReopenAwareClick", () => {
+  it("suppressed면 onOpen/onClose 둘 다 호출하지 않는다", () => {
+    const reopenSuppression = stubReopenSuppression("suppressed");
+    const onOpen = vi.fn();
+    const onClose = vi.fn();
+
+    resolveReopenAwareClick(reopenSuppression, { detail: 1 }, baseKeys, {
+      onOpen,
+      onClose,
+    });
+
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("close면 onClose만 호출한다", () => {
+    const reopenSuppression = stubReopenSuppression("close");
+    const onOpen = vi.fn();
+    const onClose = vi.fn();
+
+    resolveReopenAwareClick(reopenSuppression, { detail: 1 }, baseKeys, {
+      onOpen,
+      onClose,
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("open이면 onOpen만 호출한다", () => {
+    const reopenSuppression = stubReopenSuppression("open");
+    const onOpen = vi.fn();
+    const onClose = vi.fn();
+
+    resolveReopenAwareClick(reopenSuppression, { detail: 1 }, baseKeys, {
+      onOpen,
+      onClose,
+    });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("event.detail로 isPointerClick을 계산해 consumeClick에 그대로 넘긴다", () => {
+    const reopenSuppression = stubReopenSuppression("open");
+
+    resolveReopenAwareClick(reopenSuppression, { detail: 0 }, baseKeys, {
+      onOpen: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    expect(reopenSuppression.consumeClick).toHaveBeenCalledWith({
+      isPointerClick: false,
+      ...baseKeys,
+    });
   });
 });

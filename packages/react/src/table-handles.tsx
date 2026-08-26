@@ -18,7 +18,11 @@ import { iconProps } from "./icon-props.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
-import { useHandleReopenSuppression } from "./use-handle-reopen-suppression.js";
+import {
+  resolveReopenAwareClick,
+  useHandleReopenSuppression,
+} from "./use-handle-reopen-suppression.js";
+import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
@@ -352,31 +356,19 @@ const clampWidth = (width: number): number =>
 export const TableHandles = () => {
   const editor = useEditor();
   const { element } = useEditorMount();
-  const [hoverTableId, setHoverTableId] = useState<string | null>(null);
-  const [reorderState, setReorderState] = useState<ReorderState | null>(null);
-  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [hoverTableId, hoverTableIdRef, updateHoverTableId] = useMirroredState<
+    string | null
+  >(null);
+  const [reorderState, reorderStateRef, updateReorderState] =
+    useMirroredState<ReorderState | null>(null);
+  const [resizeState, resizeStateRef, updateResizeState] =
+    useMirroredState<ResizeState | null>(null);
   const [menuState, setMenuState] = useState<HandleMenuState | null>(null);
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // block-side-menu.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
   // 스크롤/리사이즈 시 geometry 재계산을 강제하기 위한 카운터.
   const [, setGeometryVersion] = useState(0);
-  const hoverTableIdRef = useRef<string | null>(null);
-  const reorderStateRef = useRef<ReorderState | null>(null);
-  const resizeStateRef = useRef<ResizeState | null>(null);
-
-  const updateHoverTableId = useCallback((next: string | null) => {
-    hoverTableIdRef.current = next;
-    setHoverTableId(next);
-  }, []);
-  const updateReorderState = useCallback((next: ReorderState | null) => {
-    reorderStateRef.current = next;
-    setReorderState(next);
-  }, []);
-  const updateResizeState = useCallback((next: ResizeState | null) => {
-    resizeStateRef.current = next;
-    setResizeState(next);
-  }, []);
 
   const focusEditor = useCallback(() => {
     element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
@@ -432,7 +424,7 @@ export const TableHandles = () => {
       }
       updateHoverTableId(null);
     },
-    [element, updateHoverTableId],
+    [element, hoverTableIdRef, updateHoverTableId],
   );
   usePointerHoverTarget({
     element,
@@ -530,7 +522,7 @@ export const TableHandles = () => {
       );
       updateReorderState({ ...current, hasDragged: true, targetIndex });
     },
-    [element, updateReorderState],
+    [element, reorderStateRef, updateReorderState],
   );
 
   const handleReorderUp = useCallback(() => {
@@ -576,19 +568,19 @@ export const TableHandles = () => {
       reopenSuppression.markSuppressed(`${current.kind}-${current.sourceId}`);
     }
     updateReorderState(null);
-  }, [editor, updateReorderState, reopenSuppression]);
+  }, [editor, reorderStateRef, updateReorderState, reopenSuppression]);
 
   const handleReorderCancel = useCallback(() => {
     if (reorderStateRef.current === null) return;
     updateReorderState(null);
-  }, [updateReorderState]);
+  }, [reorderStateRef, updateReorderState]);
 
   const handleReorderEscape = useCallback((): null | true => {
     const current = reorderStateRef.current;
     if (current === null) return null;
     updateReorderState({ ...current, cancelled: true, targetIndex: null });
     return true;
-  }, [updateReorderState]);
+  }, [reorderStateRef, updateReorderState]);
 
   usePointerDragGesture({
     active: reorderActive,
@@ -621,10 +613,12 @@ export const TableHandles = () => {
       if (table !== null) {
         setColumnStyleWidth(table, current.columnIndex, current.currentWidth);
       }
-      // 경계 strip 위치 재계산을 위해 재렌더만 트리거한다.
-      setResizeState(current);
+      // 경계 strip 위치 재계산을 위해 재렌더만 트리거한다. current는 이미
+      // resizeStateRef.current라 updateResizeState의 ref 재대입은 no-op이고
+      // setState만 실질적으로 작동한다.
+      updateResizeState(current);
     });
-  }, [element]);
+  }, [element, resizeStateRef, updateResizeState]);
 
   const restoreResizeVisualWidth = useCallback(
     (state: ResizeState) => {
@@ -647,7 +641,7 @@ export const TableHandles = () => {
       resizeStateRef.current = { ...current, currentWidth: nextWidth };
       scheduleResizeVisualUpdate();
     },
-    [scheduleResizeVisualUpdate],
+    [resizeStateRef, scheduleResizeVisualUpdate],
   );
 
   const handleResizeUp = useCallback(() => {
@@ -661,14 +655,14 @@ export const TableHandles = () => {
       );
     }
     updateResizeState(null);
-  }, [editor, updateResizeState]);
+  }, [editor, resizeStateRef, updateResizeState]);
 
   const handleResizeCancel = useCallback(() => {
     const current = resizeStateRef.current;
     if (current === null) return;
     restoreResizeVisualWidth(current);
     updateResizeState(null);
-  }, [restoreResizeVisualWidth, updateResizeState]);
+  }, [resizeStateRef, restoreResizeVisualWidth, updateResizeState]);
 
   const handleResizeEscape = useCallback((): null => {
     const current = resizeStateRef.current;
@@ -676,7 +670,7 @@ export const TableHandles = () => {
     restoreResizeVisualWidth(current);
     updateResizeState(null);
     return null;
-  }, [restoreResizeVisualWidth, updateResizeState]);
+  }, [resizeStateRef, restoreResizeVisualWidth, updateResizeState]);
 
   usePointerDragGesture({
     active: resizeActive,
@@ -759,23 +753,22 @@ export const TableHandles = () => {
     // 위치 index(kind-index) — 두 축이 다를 수 있어 별도 키로 넘긴다
     // (useHandleReopenSuppression 참고). 빈 id에 대한 별도 가드는 필요
     // 없다 — pointerUp이 빈 id로는 애초에 억제 키를 세우지 않는다.
-    // closeMenu는 setState(null) 고정형이라 여는 쪽까지 대신할 수 없어,
-    // outcome으로 먼저 분기한다(G-UI-001, Issue #52).
-    const outcome = reopenSuppression.consumeClick({
-      isPointerClick: event.detail !== 0,
-      suppressionKey: `${kind}-${id}`,
-      reopenKey: `${kind}-${index}`,
-      isCurrentlyOpen:
-        menuState !== null &&
-        menuState.kind === kind &&
-        menuState.index === index,
-    });
-    if (outcome === "suppressed") return;
-    if (outcome === "close") {
-      closeMenu();
-      return;
-    }
-    setMenuState({ kind, tableBlockId, index });
+    resolveReopenAwareClick(
+      reopenSuppression,
+      event,
+      {
+        suppressionKey: `${kind}-${id}`,
+        reopenKey: `${kind}-${index}`,
+        isCurrentlyOpen:
+          menuState !== null &&
+          menuState.kind === kind &&
+          menuState.index === index,
+      },
+      {
+        onOpen: () => setMenuState({ kind, tableBlockId, index }),
+        onClose: closeMenu,
+      },
+    );
   };
 
   const handlePointerDownOnReorderHandle = (
