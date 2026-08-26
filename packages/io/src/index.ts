@@ -4,7 +4,10 @@ export type {
 } from "./clipboard/clipboard-content.js";
 export { parseClipboardTable } from "./clipboard/clipboard-table-parser.js";
 export type { TabularCell, TabularData } from "./clipboard/tabular-data.js";
-export { validateTabularData } from "./clipboard/tabular-data.js";
+export {
+  validateTabularData,
+  withParagraphsMergedIntoCells,
+} from "./clipboard/tabular-data.js";
 export type {
   ClipboardParseError,
   ExportError,
