@@ -18,6 +18,7 @@ import { TableHandleMenu } from "./table-handle-menu.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useHandleReopenSuppression } from "./use-handle-reopen-suppression.js";
+import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
 // 핸들은 드래그(재정렬)와 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이
@@ -318,6 +319,34 @@ type ResizeState = {
   currentWidth: number;
 };
 
+// usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
+// 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
+// useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프
+// 함수로 뽑았다 — 로직 자체는 그대로다.
+const computeReorderTargetIndex = (
+  element: HTMLElement,
+  current: ReorderState,
+  clientX: number,
+  clientY: number,
+): number | null => {
+  const table = findTable(element, current.tableBlockId);
+  const currentGeometry = table === null ? null : readTableGeometry(table);
+  if (currentGeometry === null) return null;
+
+  if (current.kind === "row") {
+    const { rows } = currentGeometry;
+    const targetIndex = rows.findIndex(
+      (row) => clientY < row.top + row.height / 2,
+    );
+    return targetIndex === -1 ? rows.length : targetIndex;
+  }
+  const { columns } = currentGeometry;
+  const targetIndex = columns.findIndex(
+    (column) => clientX < column.left + column.width / 2,
+  );
+  return targetIndex === -1 ? columns.length : targetIndex;
+};
+
 const clampWidth = (width: number): number =>
   Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(width)));
 
@@ -488,198 +517,189 @@ export const TableHandles = () => {
   });
 
   const reorderActive = reorderState !== null;
-  useEffect(() => {
-    if (!reorderActive || element === null) return;
-    const ownerDocument = element.ownerDocument;
 
-    const computeTargetIndex = (
-      current: ReorderState,
-      clientX: number,
-      clientY: number,
-    ): number | null => {
-      const table = findTable(element, current.tableBlockId);
-      const currentGeometry = table === null ? null : readTableGeometry(table);
-      if (currentGeometry === null) return null;
-
-      if (current.kind === "row") {
-        const { rows } = currentGeometry;
-        const targetIndex = rows.findIndex(
-          (row) => clientY < row.top + row.height / 2,
-        );
-        return targetIndex === -1 ? rows.length : targetIndex;
-      }
-      const { columns } = currentGeometry;
-      const targetIndex = columns.findIndex(
-        (column) => clientX < column.left + column.width / 2,
-      );
-      return targetIndex === -1 ? columns.length : targetIndex;
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
+  const handleReorderMove = useCallback(
+    (event: PointerEvent) => {
+      if (element === null) return;
       const current = reorderStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      if (current.cancelled) return;
-      const targetIndex = computeTargetIndex(
+      if (current === null) return;
+      const targetIndex = computeReorderTargetIndex(
+        element,
         current,
         event.clientX,
         event.clientY,
       );
       updateReorderState({ ...current, hasDragged: true, targetIndex });
-    };
+    },
+    [element, updateReorderState],
+  );
 
-    const handlePointerUp = (event: PointerEvent) => {
-      const current = reorderStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
+  const handleReorderUp = useCallback(() => {
+    const current = reorderStateRef.current;
+    if (current === null) return;
 
-      if (!current.cancelled && current.targetIndex !== null) {
-        const toIndex =
-          current.targetIndex > current.sourceIndex
-            ? current.targetIndex - 1
-            : current.targetIndex;
-        if (toIndex !== current.sourceIndex) {
-          if (current.kind === "row") {
-            editor.commands.moveTableRow(
-              current.tableBlockId,
-              current.sourceIndex,
-              toIndex,
-            );
-          } else {
-            editor.commands.moveTableColumn(
-              current.tableBlockId,
-              current.sourceIndex,
-              toIndex,
-            );
-          }
+    if (!current.cancelled && current.targetIndex !== null) {
+      const toIndex =
+        current.targetIndex > current.sourceIndex
+          ? current.targetIndex - 1
+          : current.targetIndex;
+      if (toIndex !== current.sourceIndex) {
+        if (current.kind === "row") {
+          editor.commands.moveTableRow(
+            current.tableBlockId,
+            current.sourceIndex,
+            toIndex,
+          );
+        } else {
+          editor.commands.moveTableColumn(
+            current.tableBlockId,
+            current.sourceIndex,
+            toIndex,
+          );
         }
       }
-      // 억제 키는 안정 식별자(rowId/columnId, Option A)라 커맨드 성공
-      // 여부와 무관하다 — 핸들 버튼의 React key가 그 id라, 이동이 성공해
-      // DOM이 재정렬되든 실패해(예: 병합 셀 경계) 그대로 남든 대상 핸들의
-      // id는 안 바뀐다(G-UI-002 갱신, Issue #63). 빈 id(getAttribute(...)
-      // ?? "" 폴백)는 서로 다른 행이 같은 키로 충돌하므로 억제를 걸지 않는다.
-      if (current.hasDragged && current.sourceId !== "") {
-        // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
-        // (동시에 두 드래그가 진행될 수 없다), pointerup 이후의 합성 click은
-        // 오는 경우 setPointerCapture로 고정된 바로 그 버튼(=같은 표)으로
-        // 되돌아온다. 그래서 kind+id만으로 다른 표의 같은 id를 가진 핸들과
-        // 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
-        // 이 click이 항상 오지는 않는다 — 이 저장소가 관측한 Chromium은
-        // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(G-UI-002).
-        // 그래서 여기 저장한 키는 handlePointerDownOnReorderHandle이
-        // 다음 제스처 시작 시점에도 비운다.
-        reopenSuppression.markSuppressed(`${current.kind}-${current.sourceId}`);
-      }
-      updateReorderState(null);
-    };
+    }
+    // 억제 키는 안정 식별자(rowId/columnId, Option A)라 커맨드 성공
+    // 여부와 무관하다 — 핸들 버튼의 React key가 그 id라, 이동이 성공해
+    // DOM이 재정렬되든 실패해(예: 병합 셀 경계) 그대로 남든 대상 핸들의
+    // id는 안 바뀐다(G-UI-002 갱신, Issue #63). 빈 id(getAttribute(...)
+    // ?? "" 폴백)는 서로 다른 행이 같은 키로 충돌하므로 억제를 걸지 않는다.
+    if (current.hasDragged && current.sourceId !== "") {
+      // 키에 tableBlockId가 없다 — reorderState는 컴포넌트 전역에 하나뿐이고
+      // (동시에 두 드래그가 진행될 수 없다), pointerup 이후의 합성 click은
+      // 오는 경우 setPointerCapture로 고정된 바로 그 버튼(=같은 표)으로
+      // 되돌아온다. 그래서 kind+id만으로 다른 표의 같은 id를 가진 핸들과
+      // 오검출되지 않는다. 표 여러 개를 다루는 e2e는 아직 없다.
+      // 이 click이 항상 오지는 않는다 — 이 저장소가 관측한 Chromium은
+      // 임계값을 넘는 드래그 뒤 click을 아예 합성하지 않는다(G-UI-002).
+      // 그래서 여기 저장한 키는 handlePointerDownOnReorderHandle이
+      // 다음 제스처 시작 시점에도 비운다.
+      reopenSuppression.markSuppressed(`${current.kind}-${current.sourceId}`);
+    }
+    updateReorderState(null);
+  }, [editor, updateReorderState, reopenSuppression]);
 
-    const handlePointerCancel = (event: PointerEvent) => {
-      const current = reorderStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      updateReorderState(null);
-    };
+  const handleReorderCancel = useCallback(() => {
+    if (reorderStateRef.current === null) return;
+    updateReorderState(null);
+  }, [updateReorderState]);
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const current = reorderStateRef.current;
-      if (current === null) return;
-      updateReorderState({ ...current, cancelled: true, targetIndex: null });
-    };
+  const handleReorderEscape = useCallback((): null | true => {
+    const current = reorderStateRef.current;
+    if (current === null) return null;
+    updateReorderState({ ...current, cancelled: true, targetIndex: null });
+    return true;
+  }, [updateReorderState]);
 
-    ownerDocument.addEventListener("pointermove", handlePointerMove);
-    ownerDocument.addEventListener("pointerup", handlePointerUp);
-    ownerDocument.addEventListener("pointercancel", handlePointerCancel);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
-    return () => {
-      ownerDocument.removeEventListener("pointermove", handlePointerMove);
-      ownerDocument.removeEventListener("pointerup", handlePointerUp);
-      ownerDocument.removeEventListener("pointercancel", handlePointerCancel);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
-    };
-    // reorderState 객체가 아닌 활성 여부에만 의존한다 — 객체에 의존하면
-    // 드래그 중 매 pointermove마다 리스너 4개를 떼었다 다시 붙인다.
-  }, [reorderActive, element, editor, updateReorderState, reopenSuppression]);
+  usePointerDragGesture({
+    active: reorderActive,
+    element,
+    pointerId: reorderState?.pointerId ?? null,
+    onMove: handleReorderMove,
+    onUp: handleReorderUp,
+    onCancel: handleReorderCancel,
+    onEscape: handleReorderEscape,
+  });
 
   const resizeActive = resizeState !== null;
-  useEffect(() => {
-    if (!resizeActive || element === null) return;
-    const ownerDocument = element.ownerDocument;
-    const view = ownerDocument.defaultView;
-    let animationFrame: number | null = null;
+  // scheduleResizeVisualUpdate가 예약하는 rAF 핸들. 원래는 4-listener
+  // 이펙트의 지역 변수였지만, 콜백을 usePointerDragGesture에 넘기려면
+  // useCallback으로 안정화해야 해서 컴포넌트 스코프 ref로 옮겼다 — 아래
+  // 별도 effect가 이 ref를 보고 리사이즈 종료/언마운트 시 예약을 취소한다.
+  const resizeAnimationFrameRef = useRef<number | null>(null);
 
-    // 스펙 13절 성능 계약: pointer-move 동안에는 프레임 단위로 col 너비의
-    // 시각만 갱신하고, 문서 커밋은 pointer-up에서 한 번만 한다.
-    const scheduleVisualUpdate = () => {
-      if (animationFrame !== null || view === null) return;
-      animationFrame = view.requestAnimationFrame(() => {
-        animationFrame = null;
-        const current = resizeStateRef.current;
-        if (current === null) return;
-        const table = findTable(element, current.tableBlockId);
-        if (table !== null) {
-          setColumnStyleWidth(table, current.columnIndex, current.currentWidth);
-        }
-        // 경계 strip 위치 재계산을 위해 재렌더만 트리거한다.
-        setResizeState(current);
-      });
-    };
+  // 스펙 13절 성능 계약: pointer-move 동안에는 프레임 단위로 col 너비의
+  // 시각만 갱신하고, 문서 커밋은 pointer-up에서 한 번만 한다.
+  const scheduleResizeVisualUpdate = useCallback(() => {
+    if (element === null) return;
+    const view = element.ownerDocument.defaultView;
+    if (resizeAnimationFrameRef.current !== null || view === null) return;
+    resizeAnimationFrameRef.current = view.requestAnimationFrame(() => {
+      resizeAnimationFrameRef.current = null;
+      const current = resizeStateRef.current;
+      if (current === null) return;
+      const table = findTable(element, current.tableBlockId);
+      if (table !== null) {
+        setColumnStyleWidth(table, current.columnIndex, current.currentWidth);
+      }
+      // 경계 strip 위치 재계산을 위해 재렌더만 트리거한다.
+      setResizeState(current);
+    });
+  }, [element]);
 
-    const restoreVisualWidth = (state: ResizeState) => {
+  const restoreResizeVisualWidth = useCallback(
+    (state: ResizeState) => {
+      if (element === null) return;
       const table = findTable(element, state.tableBlockId);
       if (table !== null) {
         setColumnStyleWidth(table, state.columnIndex, state.startWidth);
       }
-    };
+    },
+    [element],
+  );
 
-    const handlePointerMove = (event: PointerEvent) => {
+  const handleResizeMove = useCallback(
+    (event: PointerEvent) => {
       const current = resizeStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
+      if (current === null) return;
       const delta = event.clientX - current.startX;
       const nextWidth = clampWidth(current.startWidth + delta);
       if (nextWidth === current.currentWidth) return;
       resizeStateRef.current = { ...current, currentWidth: nextWidth };
-      scheduleVisualUpdate();
-    };
+      scheduleResizeVisualUpdate();
+    },
+    [scheduleResizeVisualUpdate],
+  );
 
-    const handlePointerUp = (event: PointerEvent) => {
-      const current = resizeStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      if (current.currentWidth !== current.startWidth) {
-        editor.commands.resizeTableColumn(
-          current.tableBlockId,
-          current.columnIndex,
-          current.currentWidth,
-        );
-      }
-      updateResizeState(null);
-    };
+  const handleResizeUp = useCallback(() => {
+    const current = resizeStateRef.current;
+    if (current === null) return;
+    if (current.currentWidth !== current.startWidth) {
+      editor.commands.resizeTableColumn(
+        current.tableBlockId,
+        current.columnIndex,
+        current.currentWidth,
+      );
+    }
+    updateResizeState(null);
+  }, [editor, updateResizeState]);
 
-    const handlePointerCancel = (event: PointerEvent) => {
-      const current = resizeStateRef.current;
-      if (current === null || event.pointerId !== current.pointerId) return;
-      restoreVisualWidth(current);
-      updateResizeState(null);
-    };
+  const handleResizeCancel = useCallback(() => {
+    const current = resizeStateRef.current;
+    if (current === null) return;
+    restoreResizeVisualWidth(current);
+    updateResizeState(null);
+  }, [restoreResizeVisualWidth, updateResizeState]);
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const current = resizeStateRef.current;
-      if (current === null) return;
-      restoreVisualWidth(current);
-      updateResizeState(null);
-    };
+  const handleResizeEscape = useCallback((): null => {
+    const current = resizeStateRef.current;
+    if (current === null) return null;
+    restoreResizeVisualWidth(current);
+    updateResizeState(null);
+    return null;
+  }, [restoreResizeVisualWidth, updateResizeState]);
 
-    ownerDocument.addEventListener("pointermove", handlePointerMove);
-    ownerDocument.addEventListener("pointerup", handlePointerUp);
-    ownerDocument.addEventListener("pointercancel", handlePointerCancel);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
+  usePointerDragGesture({
+    active: resizeActive,
+    element,
+    pointerId: resizeState?.pointerId ?? null,
+    onMove: handleResizeMove,
+    onUp: handleResizeUp,
+    onCancel: handleResizeCancel,
+    onEscape: handleResizeEscape,
+  });
+
+  // 리사이즈가 끝나거나(커밋/취소/Escape) 언마운트되면 예약된 rAF를 반드시
+  // 취소한다 — 취소하지 않으면 이미 끝난 제스처의 낡은 currentWidth로
+  // col.style.width를 나중에 되돌려 쓴다.
+  useEffect(() => {
     return () => {
-      if (animationFrame !== null) view?.cancelAnimationFrame(animationFrame);
-      ownerDocument.removeEventListener("pointermove", handlePointerMove);
-      ownerDocument.removeEventListener("pointerup", handlePointerUp);
-      ownerDocument.removeEventListener("pointercancel", handlePointerCancel);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
+      const frame = resizeAnimationFrameRef.current;
+      if (frame === null || element === null) return;
+      resizeAnimationFrameRef.current = null;
+      element.ownerDocument.defaultView?.cancelAnimationFrame(frame);
     };
-  }, [resizeActive, element, editor, updateResizeState]);
+  }, [resizeActive, element]);
 
   // 완료 조건 3(Issue #18): 메뉴가 열린 동안 대상 행/열이 undo 등으로
   // 사라지면(인덱스가 더 이상 유효하지 않거나 표 블록 자체가 사라지면)
