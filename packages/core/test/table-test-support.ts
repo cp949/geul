@@ -9,7 +9,7 @@
  */
 import type { TabularData } from "@cp949/geul-io";
 import type { Extensions, JSONContent } from "@tiptap/core";
-import { Editor, Extension } from "@tiptap/core";
+import { Editor, Extension, getSchema } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
@@ -65,6 +65,40 @@ afterEach(destroyFixtureEditorsForTest);
  * 위 fixtureEditors에 스스로 등록되고, 해제는 그 옆 afterEach가 진다 — 왜
  * 해제가 필요한지는 그 주석이 설명한다.
  */
+/**
+ * createTableFixtureEditor와 buildTestSchema가 공유하는 확장 목록 —
+ * 스키마만 있으면 되는 테스트가 Editor를 마운트하지 않고도 같은 스키마를
+ * 얻게 한다(중복 정의는 두 목록이 갈릴 위험을 만든다).
+ */
+const TABLE_FIXTURE_EXTENSIONS: Extensions = [
+  StarterKit.configure({
+    blockquote: false,
+    bulletList: false,
+    codeBlock: false,
+    hardBreak: false,
+    horizontalRule: false,
+    listItem: false,
+    orderedList: false,
+    // 프로덕션 스키마(editor-controller.ts)와 같은 levels로 켠다 —
+    // DELTA-04(Issue #72)의 표 안/밖 heading 붙여넣기 테스트가 실제
+    // heading 노드를 만들어야 한다. 이전에는 false였다(이 fixture가
+    // 표 확장만 검증하던 시절 heading을 쓸 일이 없었다).
+    heading: { levels: [1, 2, 3] },
+    trailingNode: false,
+  }),
+  BlockIdExtension,
+  TableExtension,
+  TableRowExtension,
+  TableCellExtension,
+];
+
+/**
+ * createTableFixtureEditor와 같은 스키마를 Editor 마운트 없이 만든다 —
+ * DOM 노드 생성·EditorView 초기화가 필요 없는 순수 조립 함수(예:
+ * buildOutOfTableSequence)를 검증할 때 쓴다.
+ */
+export const buildTestSchema = () => getSchema(TABLE_FIXTURE_EXTENSIONS);
+
 export const createTableFixtureEditor = (
   content: JSONContent,
   extraExtensions: Extensions = [],
@@ -72,28 +106,7 @@ export const createTableFixtureEditor = (
   const editor = new Editor({
     element: document.createElement("div"),
     injectCSS: false,
-    extensions: [
-      StarterKit.configure({
-        blockquote: false,
-        bulletList: false,
-        codeBlock: false,
-        hardBreak: false,
-        horizontalRule: false,
-        listItem: false,
-        orderedList: false,
-        // 프로덕션 스키마(editor-controller.ts)와 같은 levels로 켠다 —
-        // DELTA-04(Issue #72)의 표 안/밖 heading 붙여넣기 테스트가 실제
-        // heading 노드를 만들어야 한다. 이전에는 false였다(이 fixture가
-        // 표 확장만 검증하던 시절 heading을 쓸 일이 없었다).
-        heading: { levels: [1, 2, 3] },
-        trailingNode: false,
-      }),
-      BlockIdExtension,
-      TableExtension,
-      TableRowExtension,
-      TableCellExtension,
-      ...extraExtensions,
-    ],
+    extensions: [...TABLE_FIXTURE_EXTENSIONS, ...extraExtensions],
     content,
   });
   fixtureEditors.add(editor);
