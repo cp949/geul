@@ -1,10 +1,22 @@
 import { parseTableColumns } from "@cp949/geul-core";
 
+import { findElementByAttribute } from "./find-by-attribute.js";
+
 // table-handles.tsx의 hover·드래그·리사이즈 오케스트레이션에서 표 DOM을
-// 읽어 좌표로 바꾸는 순수 판독 계층만 모은다. HTMLElement만 받고 React·
+// 찾아 좌표로 바꾸는 순수 판독 계층만 모은다. HTMLElement만 받고 React·
 // 에디터 마운트에는 의존하지 않는다 — table-handles.test.tsx처럼
 // mountTableEditor로 실 편집기를 띄우지 않아도 이 파일만으로 테스트할 수
 // 있다(readColumnBounds는 DOM조차 필요 없는 순수 함수다).
+
+// tableBlockId로 표 엘리먼트를 찾는 탐색 로직 자체는 find-by-attribute.ts가
+// 소유한다 — 여기서는 "table" + "data-be-block-id" 조합으로 커링해 표 도메인
+// 개념 하나로 노출한다. table-handles.tsx(9곳)와 table-selection-toolbar.tsx
+// (1곳)가 공유한다 — 원래 각자 이 조합을 따로 호출했다(그릴링에서 확인).
+export const findTable = (
+  element: HTMLElement,
+  tableBlockId: string,
+): HTMLElement | null =>
+  findElementByAttribute(element, "table", "data-be-block-id", tableBlockId);
 
 type RowGeometry = {
   rowId: string;
@@ -199,4 +211,19 @@ export const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
     rows,
     columns,
   };
+};
+
+// "표 찾기 + geometry 판독" 2단계를 한 호출로 묶는다. table-handles.tsx
+// 안에서 이 조합이 3곳(렌더 본문 geometry, readFreshGeometry,
+// computeReorderTargetIndex)에 반복돼 있었다 — computeReorderTargetIndex는
+// useCallback 안정화 때문에 컴포넌트 밖 모듈 스코프 함수라 element를 인자로
+// 받는 형태가 아니면 공유할 수 없다(그릴링에서 확인). table 자체만 필요한
+// 자리(hover 판정, 리사이즈 폭 읽기 등)는 readTableGeometry의 강제 레이아웃
+// 비용을 피하려고 findTable만 계속 직접 쓴다.
+export const readGeometryFor = (
+  element: HTMLElement,
+  tableBlockId: string,
+): TableGeometry | null => {
+  const table = findTable(element, tableBlockId);
+  return table === null ? null : readTableGeometry(table);
 };

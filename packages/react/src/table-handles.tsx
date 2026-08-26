@@ -8,12 +8,12 @@ import {
   useState,
 } from "react";
 
-import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import {
+  findTable,
+  readGeometryFor,
   readTableColumnIds,
-  readTableGeometry,
   type TableGeometry,
 } from "./table-handle-geometry.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
@@ -68,14 +68,6 @@ const TABLE_HOVER_IGNORE_SELECTORS = [
   "[data-be-table-expand-column]",
   "[data-be-table-menu]",
 ] as const;
-
-// 9곳에서 반복되는 (element, tableBlockId) 호출 형태를 유지하려는 로컬
-// 래퍼다 — 탐색 로직 자체는 find-by-attribute.ts가 소유한다.
-const findTable = (
-  element: HTMLElement,
-  tableBlockId: string,
-): HTMLElement | null =>
-  findElementByAttribute(element, "table", "data-be-block-id", tableBlockId);
 
 // colgroup col의 인라인 width는 renderHTML이 쓴 모델 열 너비다. 셀 rect는
 // 콘텐츠가 렌더 너비를 강제로 벌리면 모델 값과 어긋나므로 리사이즈 시드로
@@ -139,8 +131,7 @@ const computeReorderTargetIndex = (
   clientX: number,
   clientY: number,
 ): number | null => {
-  const table = findTable(element, current.tableBlockId);
-  const currentGeometry = table === null ? null : readTableGeometry(table);
+  const currentGeometry = readGeometryFor(element, current.tableBlockId);
   if (currentGeometry === null) return null;
 
   if (current.kind === "row") {
@@ -246,10 +237,7 @@ export const TableHandles = () => {
   const geometry =
     activeTableId === null || element === null
       ? null
-      : (() => {
-          const table = findTable(element, activeTableId);
-          return table === null ? null : readTableGeometry(table);
-        })();
+      : readGeometryFor(element, activeTableId);
 
   // 핸들은 position: fixed라 스크롤/창 크기 변경 시 pointermove 없이도
   // 표와 어긋난다 — 재렌더를 강제해 geometry를 다시 읽는다.
@@ -639,8 +627,7 @@ export const TableHandles = () => {
   // 않는 구성에서 낡을 수 있다 — 클릭 시점에 DOM에서 다시 읽는다.
   const readFreshGeometry = (): TableGeometry | null => {
     if (geometry === null || element === null) return null;
-    const table = findTable(element, geometry.tableBlockId);
-    return table === null ? null : readTableGeometry(table);
+    return readGeometryFor(element, geometry.tableBlockId);
   };
 
   const handleAddRow = () => {

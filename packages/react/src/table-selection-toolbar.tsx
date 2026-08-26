@@ -6,6 +6,7 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
+import { findTable } from "./table-handle-geometry.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -108,12 +109,7 @@ export const TableSelectionToolbar = () => {
       if (element === null) return closeAll();
       const selection = editor.getTableCellSelection();
       if (selection === null) return closeAll();
-      const table = findElementByAttribute(
-        element,
-        "table",
-        "data-be-block-id",
-        selection.tableBlockId,
-      );
+      const table = findTable(element, selection.tableBlockId);
       if (table === null) return closeAll();
       const bounds = cellSelectionBounds(table, selection.cellIds);
       if (bounds === null) return closeAll();
