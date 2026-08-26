@@ -19,4 +19,4 @@ turbo는 package가 task script를 잃어도 dry graph의 항목을 없애지 �
 git ls-files | rg '\.(m|c)?[jt]sx?$'   # 추적 소스 전량
 ```
 
-추적 소스 전량과 루트 typecheck 체인이 실제로 컴파일하는 파일 집합의 차집합을 계산하고, 예외 목록과 정확히 같은지 확인한다. `tests/workspace-boundaries.test.ts`의 "추적 소스 파일 전량이 체인 프로그램의 컴파일 대상에 들거나 예외 목록에 있다" 계약이 이 판정을 소유한다. turbo 태스크 수나 exit code만으로는 판정하지 않는다.
+추적 소스 전량과 루트 typecheck 체인이 실제로 컴파일하는 파일 집합의 차집합을 계산하고, 예외 목록과 정확히 같은지 확인한다. `tests/workspace-typecheck-coverage.test.ts`의 "추적 소스 파일 전량이 체인 프로그램의 컴파일 대상에 들거나 예외 목록에 있다" 계약이 이 판정을 소유한다. turbo 태스크 수나 exit code만으로는 판정하지 않는다.
