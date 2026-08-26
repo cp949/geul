@@ -209,6 +209,52 @@ describe("HTML 보안", () => {
     ]);
   });
 
+  // Issue #113이 clipboard 경로(clipboard-table-parser.ts)의 div/li/
+  // blockquote/ul/ol 문단 경계 인식을 고쳤을 때 HTML import 경로는 반영되지
+  // 않아 남아 있었다 — sanitize가 이 다섯 태그를 unwrap해 인접 텍스트가
+  // 구분자 없이 병합됐다(아키텍처 리뷰 2차 후보 G). documentFromRoot가
+  // clipboard-table-parser.ts와 같은 재귀 경계 인식(block-segmenter.ts)을
+  // 쓰도록 바꿔 더 이상 병합되지 않고, supportedBlockNames
+  // (import-warnings.ts)도 함께 갱신해 SAFE_BLOCK_DOWNGRADED가 나지 않는다.
+  it("div 두 개는 강등 경고 없이 각각 별도 문단이 된다", () => {
+    const result = importHtml("<div>one</div><div>two</div>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      { id: "html-1", type: "paragraph", content: [{ text: "one" }] },
+      { id: "html-2", type: "paragraph", content: [{ text: "two" }] },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it("ul/li로 감싼 인접 항목이 하나의 문단으로 뭉개지지 않는다(Issue #113 회귀의 import 경로 재현)", () => {
+    const result = importHtml("<ul><li>one</li><li>two</li></ul>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      { id: "html-1", type: "paragraph", content: [{ text: "one" }] },
+      { id: "html-2", type: "paragraph", content: [{ text: "two" }] },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it("blockquote와 중첩된 li도 강등 경고 없이 개별 문단 경계로 인식된다", () => {
+    const result = importHtml(
+      "<blockquote>quoted</blockquote><ul><li>outer<ul><li>inner</li></ul></li></ul>",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      { id: "html-1", type: "paragraph", content: [{ text: "quoted" }] },
+      { id: "html-2", type: "paragraph", content: [{ text: "outer" }] },
+      { id: "html-3", type: "paragraph", content: [{ text: "inner" }] },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
   it("C0 제어문자·짝 없는 surrogate가 섞인 문단은 throw 없이 제거하고 경고한다", () => {
     const html = `<p>bad\u0001\u000b${String.fromCharCode(0xd800)}text</p>`;
     const result = importHtml(html);

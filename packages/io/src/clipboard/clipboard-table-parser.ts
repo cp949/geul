@@ -8,16 +8,21 @@ import { sanitize } from "hast-util-sanitize";
 
 import type { ClipboardParseError } from "../errors.js";
 import {
+  type BlockSegmentPolicy,
+  isParagraphTag,
+  isTransparentListTag,
+  NESTED_BOUNDARY_TAG_NAMES,
+  segmentBlocks,
+} from "../html/block-segmenter.js";
+import {
   childElements,
   propertyString,
   sanitizeLinks,
 } from "../html/hast-properties.js";
 import {
-  type HtmlElementContent,
   type HtmlElementNode,
   type HtmlNode,
   type HtmlRoot,
-  htmlElement,
   inlineContentFromNodes,
 } from "../html/inline-content.js";
 import { asRoot, parseHtmlFragment } from "../html/parse-html.js";
@@ -32,7 +37,6 @@ import {
   layoutRowSpan,
   layoutRows,
   MAX_TABLE_COLUMNS,
-  tableNonSectionChildren,
   tableRows,
 } from "../html/table-layout.js";
 import type { Result } from "../result.js";
@@ -102,63 +106,12 @@ const findDataTables = (root: HtmlRoot): HtmlElementNode[] => {
 // table-layout.ts가 소유한다 — import 경로(caption 등 표 직속 비섹션 자식)와
 // 이 판정을 공유해야 하기 때문이다.
 
-// 찾아낸 표 중 하나라도 이 노드들 안 어딘가에 있는지 재귀로 확인한다.
-// walk()가 표를 찾기 위해 더 파고들어야 하는지(descend), 아니면 표 없는
-// 순수 인라인/구조 콘텐츠라 통째로 pending에 밀어 넣어도 되는지
-// (inlineContentFromNodes가 알아서 재귀하며 마크를 계산한다) 판단하는 데
-// 쓴다. 표 집합을 Set으로 받아 `has` 판정한다 — nodes.includes로 배열을
-// 매 노드마다 선형 탐색하면 표 개수만큼 비용이 곱해진다.
-const containsAnyTable = (
-  nodes: readonly HtmlNode[],
-  tables: ReadonlySet<HtmlElementNode>,
-): boolean => {
-  for (const node of nodes) {
-    if (node.type !== "element") continue;
-    if (tables.has(node)) return true;
-    if (containsAnyTable(node.children, tables)) return true;
-  }
-  return false;
-};
-
-// 조상 서식 체인을 노드에 얕은 클론으로 다시 씌운다. `<strong>`이나 `<a>`가
-// 표를 감싸고 있으면 walk가 그 요소를 통과해 자식으로 내려가므로, 이 복원이
-// 없으면 표 앞뒤 텍스트가 마크(link의 href 포함)를 잃는다 — 같은 서식이 표를
-// 감싸지 않고 형제로 있을 때와 결과가 달라지면 안 된다. 클론은 원본 자식을
-// 참조로 담으므로 collapseHtmlWhitespace의 제자리 수정이 그대로 원본 텍스트
-// 노드에 닿는다. 마크가 없는 조상(레이아웃 표의 table/tbody/tr 등)까지 함께
-// 씌우지만 inlineContentFromNodes가 마크 없는 태그를 그냥 재귀 통과하므로
-// 결과는 달라지지 않는다.
-const wrapInAncestors = (
-  node: HtmlElementContent,
-  ancestors: readonly HtmlElementNode[],
-): HtmlElementContent =>
-  ancestors.reduceRight<HtmlElementContent>(
-    (child, ancestor) =>
-      htmlElement(ancestor.tagName, ancestor.properties, [child]),
-    node,
-  );
-
-// div/li/blockquote도 p와 같은 문단 경계다(Issue #113, 발단 #72) — model에
-// 리스트·인용문 전용 Block 타입이 없어 heading처럼 별도 타입을 만들 수는
-// 없으므로 p처럼 문단으로만 분리한다(대응 Block 타입 부재는 완료 조건이
-// 명시적으로 범위 밖으로 뺀 부분이다). p와 달리 이 세 태그는 HTML5 파싱
-// 규칙상 서로(그리고 p/heading/표)를 실제 자식으로 중첩할 수 있다(parse5로
-// 확인 — div 안 div, li 안 ul>li 등). 그래서 p가 하는 "children을 통째로
-// pending으로 바꿔치기"(flush → pending 교체 → flush)를 그대로 재사용할 수
-// 없다 — 그러면 중첩된 경계(중첩 li 등)가 개별 인식되지 못하고 하나의
-// pending으로 뭉친다. 대신 walk()로 재귀해 안쪽 경계를 개별 인식시키고,
-// 재귀 앞뒤로 flush()를 감싸 이 요소가 열리기 전 pending과 닫힌 뒤 pending을
-// 각각 확정한다 — 그래야 다음 형제 노드(다음 top-level div 등)와 안쪽
-// 콘텐츠가 구분자 없이 섞이지 않는다. p/heading의 containsAnyTable 예외와
-// 달리 이 세 태그는 표 유무와 무관하게 항상 재귀한다 — 표뿐 아니라 임의
-// 깊이의 중첩 경계를 모두 잡아야 하기 때문이다(재귀 자체가 표도 자연히
-// 표 블록으로 인식하므로 별도 표 전용 예외가 필요 없다).
-const PARAGRAPH_BOUNDARY_TAG_NAMES = new Set(["div", "li", "blockquote"]);
-
-// h1~h6만 heading 태그다. 태그명 마지막 문자에서 level을 뽑는다
-// (import-html.ts의 parseBlock과 같은 패턴 — `Number(tagName.slice(1))`).
+// 재귀 경계 판정(문단/헤딩/표 시퀀스로 쪼개기) 자체는 block-segmenter.ts가
+// import-html.ts와 공유한다(아키텍처 리뷰 2차 후보 G) — 이 파일의 세 태그
+// (div/li/blockquote는 항상 재귀, ul/ol은 flush 없이 재귀, p/heading은 표를
+// 품었을 때만 재귀)만 정책으로 넘긴다. h1~h6는 여기서만 인식한다 —
 // clipboardAllowedTagNames가 h4~h6까지 sanitize를 통과시키므로(DELTA-03,
-// Issue #72) 여기서 h1~h6를 모두 인식해야 sanitize 확장이 의미가 있다.
+// Issue #72) import-html.ts(h1~h3만 인식)와 다르다.
 const headingLevelFromTagName = (
   tagName: string,
 ): 1 | 2 | 3 | 4 | 5 | 6 | undefined =>
@@ -168,175 +121,77 @@ const headingLevelFromTagName = (
 
 // 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고 문단 블록으로 옮겨 담는다
 // — 표 앞뒤 문단은 문단으로, 표는 표 노드로, 문서 순서를 지켜 한 시퀀스로
-// 만든다(spec §4.1, Issue #71). 이 판정은 sanitize를 이미 거친 트리를
-// 검사한다: hast-util-sanitize는 스키마 tagNames 허용 목록에도 strip
-// 목록에도 없는 태그를 벗겨내(unwrap) 그 자식(텍스트 포함)을 트리 위로
-// 그대로 끌어올리므로, <html>/<head>/<body>나 자기 복사가 만드는
-// <div data-pm-slice="..."> 같은 래퍼에 있던 콘텐츠도 이 판정에 그대로
-// 걸린다 — 구조적 래퍼가 통째로 면제되는 허용 목록이 따로 있는 게 아니다.
-//
-// `p`/`h1`~`h6` 태그와 찾아낸 데이터 표들이 블록 경계다: `p`나 heading을
-// 만나면 지금까지 쌓인 인라인 콘텐츠를 먼저 문단으로 내보내고 그 요소의
-// 콘텐츠만 담은 블록을 하나 더 내보낸다 — h1~h3는 `{type:"heading",level}`
-// 로, h4~h6는 model HeadingBlock.level(1~3) 제약 때문에 문단으로
-// 다운그레이드한다(DELTA-03, Issue #72; clipboardAllowedTagNames가 h4~h6도
-// sanitize를 통과시켜야 태그 자체가 여기 도달한다, sanitize-schema.ts).
-// 찾아낸 표를 만나면 그 표를 표 블록으로 내보낸다 — 형제 최상위 데이터
-// 표가 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각 독립된 표
-// 블록이 된다. TBL-012는 "단일 표 10,000 논리 셀 보장" 성능 계약이지
-// "클립보드당 표 1개" 제품 계약이 아니므로 다중 표 지원과 충돌하지 않는다.
-// 그 외 모든 요소(레이아웃 표 래퍼의 tr/td, 서명 셀, span/strong 등 인라인
-// 서식, 그리고 findDataTables가 고르지 않은 다른 <table> — 셀 없는 표나
-// role=presentation 래퍼)는 인라인 콘텐츠로 재귀 병합한다 — 레이아웃 표 안
-// 형제 셀 텍스트가 데이터 표와 함께 보존되는 것도 이 재귀 덕분이다.
-//
-// 예외: `p`/heading이 찾아낸 표를 자식으로 품고 있으면 위 "블록 경계"
-// 취급을 접고 통과해 내려간다 — heading은 `<table>`이 자동으로 닫지 않아
-// (p와 달리) 실제로 표를 자식에 담을 수 있고, 접으면 표가 구분자 없는
-// 인라인 텍스트로 뭉개진다. 표 앞뒤 텍스트는 그 heading/p의 문단·heading
-// 서식을 잃고 문단으로 남는다 — model이 "표를 품은 heading"을 표현하지
-// 못하므로 표 구조 보존을 문단 다운그레이드보다 우선한다.
+// 만든다(spec §4.1, Issue #71). h1~h3는 heading으로, h4~h6는 model
+// HeadingBlock.level(1~3) 제약 때문에 문단으로 다운그레이드한다(DELTA-03,
+// Issue #72) — segmentBlocks는 레벨만 실어 보내고 다운그레이드 여부는
+// 여기서 정한다. 찾아낸 표가 여럿이면(findDataTables, Issue #73) 문서
+// 순서대로 각각 독립된 표 블록이 된다.
 //
 // 문단/heading 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
 // collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
 // 제어문자/DEL/짝 없는 surrogate 정제) 없으면 model의 isValidInlineText
 // 검사가 거절해 readEditorDocument에서 throw된다(editor 영구 desync).
-//
-// 표를 담은 조상 요소는 walk가 통과해 내려가므로 pending에 남지 않는다 —
-// 그 요소가 주던 마크는 wrapInAncestors가 노드마다 다시 씌워 살린다.
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
   tables: readonly HtmlElementNode[],
 ): Result<ClipboardContentBlock[], ClipboardParseError> => {
   const tableSet = new Set(tables);
-  const blocks: ClipboardContentBlock[] = [];
-  let pending: HtmlNode[] = [];
-  let failure: ClipboardParseError | undefined;
+  const policy: BlockSegmentPolicy = {
+    isSimpleBoundary: isParagraphTag,
+    headingLevelFromTagName,
+    isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
+    isTransparent: isTransparentListTag,
+    isTableNode: (node) => tableSet.has(node),
+  };
 
   // 셀 텍스트와 같은 정규화(collapseHtmlWhitespace로 공백 run 접기 →
   // normalizeCellContent로 C0 제어문자/DEL/짝 없는 surrogate 제거)를 거쳐
-  // 인라인 콘텐츠로 만든다. flush()의 문단 생성과 heading 분기(h1~h3)가 이
-  // 정규화를 공유한다 — 누락되면 model의 isValidInlineText가 거절하는
-  // 코드포인트가 남아 readEditorDocument에서 throw된다(editor 영구 desync).
-  const normalizedInlineContent = (segment: HtmlNode[]): InlineContent => {
-    collapseHtmlWhitespace(segment);
-    return normalizeCellContent(inlineContentFromNodes(segment));
+  // 인라인 콘텐츠로 만든다. 문단 생성과 heading 분기(h1~h3)가 이 정규화를
+  // 공유한다 — 누락되면 model의 isValidInlineText가 거절하는 코드포인트가
+  // 남아 readEditorDocument에서 throw된다(editor 영구 desync).
+  const normalizedInlineContent = (segmentNodes: HtmlNode[]): InlineContent => {
+    collapseHtmlWhitespace(segmentNodes);
+    return normalizeCellContent(inlineContentFromNodes(segmentNodes));
   };
 
-  const flush = (): void => {
-    if (pending.length === 0) return;
-    const content = normalizedInlineContent(pending);
-    const text = content.map((item) => item.text).join("");
-    if (hasSubstantialText(text)) {
-      blocks.push({ type: "paragraph", content });
+  const blocks: ClipboardContentBlock[] = [];
+  for (const segment of segmentBlocks(nodes, policy)) {
+    // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
+    // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
+    // dataBeBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
+    // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
+    if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
+      const content = normalizedInlineContent(segment.nodes);
+      const text = content.map((item) => item.text).join("");
+      if (hasSubstantialText(text)) blocks.push({ type: "paragraph", content });
+      continue;
     }
-    pending = [];
-  };
-
-  const walk = (
-    list: readonly HtmlNode[],
-    ancestors: readonly HtmlElementNode[],
-  ): void => {
-    for (const node of list) {
-      if (failure !== undefined) return;
-      if (node.type === "element" && tableSet.has(node)) {
-        // 기존 pending(intro 등)을 먼저 내보낸 뒤에야 caption을 pending에
-        // 담는다 — 순서를 바꾸면 pending이 아직 안 비워진 상태라 caption이
-        // intro보다 앞서 나온다(문서 순서 역전). caption(표 직속 비섹션
-        // 자식, 대표 사례가 sanitize가 unwrap한 caption 텍스트)은 이 두
-        // 번째 flush()가 기존 collapseHtmlWhitespace/normalizeCellContent/
-        // hasSubstantialText 판정을 그대로 재사용하게 한다 — 셀 텍스트와
-        // 같은 정규화를 거치지 않으면 model의 isValidInlineText 검사가
-        // 거절해 readEditorDocument에서 throw된다.
-        flush();
-        pending = tableNonSectionChildren(node).map((child) =>
-          wrapInAncestors(child, ancestors),
-        );
-        flush();
-        const parsed = tabularDataFromTable(node);
-        if (!parsed.ok) {
-          failure = parsed.error;
-          return;
-        }
-        blocks.push({ type: "table", data: parsed.value });
-        continue;
+    if (segment.kind === "heading") {
+      const content = normalizedInlineContent(segment.nodes);
+      const text = content.map((item) => item.text).join("");
+      if (!hasSubstantialText(text)) continue;
+      if (segment.level === 1 || segment.level === 2 || segment.level === 3) {
+        blocks.push({ type: "heading", level: segment.level, content });
+      } else {
+        blocks.push({ type: "paragraph", content });
       }
-      if (node.type === "text") {
-        pending.push(wrapInAncestors(node, ancestors));
-        continue;
-      }
-      if (node.type !== "element") continue;
-      const headingLevel = headingLevelFromTagName(node.tagName);
-      // p/heading이 표를 품고 있으면(HTML5 파싱 규칙상 table 시작 태그는
-      // p만 자동으로 닫고 h1~h6는 닫지 않으므로 heading은 실제로 표를
-      // 자식으로 담을 수 있다) 블록 경계로 접어 인라인 텍스트로 흡수하지
-      // 않는다 — 통과해 내려가 표를 표 블록으로 보존한다(아래 일반
-      // containsAnyTable fallback과 같은 재귀 패턴). p 쪽은 이 경로를 타는
-      // 입력이 실제로 없다(table이 p를 항상 먼저 닫는다)는 것을 parse5로
-      // 확인했지만, 같은 위험을 원천 차단하려고 p도 함께 검사한다.
-      if (
-        (node.tagName === "p" || headingLevel !== undefined) &&
-        containsAnyTable(node.children, tableSet)
-      ) {
-        walk(node.children, [...ancestors, node]);
-        continue;
-      }
-      if (node.tagName === "p") {
-        flush();
-        pending = node.children.map((child) =>
-          wrapInAncestors(child, ancestors),
-        );
-        flush();
-        continue;
-      }
-      if (headingLevel !== undefined) {
-        // h1~h3는 heading으로, h4~h6는 문단으로 다운그레이드한다(model
-        // HeadingBlock.level이 1~3만 허용 — DELTA-03, Issue #72). 둘 다
-        // 먼저 pending을 flush()해 순서를 지키고, 그 heading/h4~h6의
-        // 콘텐츠만 별도로 담아 인접 블록과 병합되지 않게 한다.
-        flush();
-        const wrapped = node.children.map((child) =>
-          wrapInAncestors(child, ancestors),
-        );
-        if (headingLevel === 1 || headingLevel === 2 || headingLevel === 3) {
-          const content = normalizedInlineContent(wrapped);
-          const text = content.map((item) => item.text).join("");
-          if (hasSubstantialText(text)) {
-            blocks.push({ type: "heading", level: headingLevel, content });
-          }
-        } else {
-          pending = wrapped;
-          flush();
-        }
-        continue;
-      }
-      if (PARAGRAPH_BOUNDARY_TAG_NAMES.has(node.tagName)) {
-        flush();
-        walk(node.children, [...ancestors, node]);
-        flush();
-        continue;
-      }
-      // ul/ol 자체는 경계가 아니라 순수 wrapper다(li만 경계) — model에
-      // 리스트 Block 타입이 없어 마커·순서도 보존하지 않는다(범위 밖).
-      // containsAnyTable로 표 유무만 게이트해 재귀 여부를 정하면 표 없는
-      // 형제 li들이 재귀되지 않고 통째로 pending에 흡수돼 하나의 문단으로
-      // 뭉친다(Issue #113 완료 조건 2 실측 — <ul><li>one</li><li>two</li>
-      // </ul> -> {p:"onetwo"}). 그래서 표 유무와 무관하게 항상 재귀한다.
-      if (node.tagName === "ul" || node.tagName === "ol") {
-        walk(node.children, [...ancestors, node]);
-        continue;
-      }
-      if (containsAnyTable(node.children, tableSet)) {
-        walk(node.children, [...ancestors, node]);
-        continue;
-      }
-      pending.push(wrapInAncestors(node, ancestors));
+      continue;
     }
-  };
 
-  walk(nodes, []);
-  flush();
-  if (failure !== undefined) return { ok: false, error: failure };
+    // 표. caption(표 직속 비섹션 자식)은 기존 pending 뒤·표 앞이라는
+    // 문서 순서를 segmentBlocks가 이미 지킨다 — 여기서는 같은
+    // collapseHtmlWhitespace/normalizeCellContent/hasSubstantialText
+    // 정규화만 재사용한다.
+    if (segment.nonSectionChildren.length > 0) {
+      const content = normalizedInlineContent(segment.nonSectionChildren);
+      const text = content.map((item) => item.text).join("");
+      if (hasSubstantialText(text)) blocks.push({ type: "paragraph", content });
+    }
+    const parsed = tabularDataFromTable(segment.node);
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    blocks.push({ type: "table", data: parsed.value });
+  }
+
   return { ok: true, value: blocks };
 };
 

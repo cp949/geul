@@ -13,6 +13,13 @@ import { sanitize } from "hast-util-sanitize";
 import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
 import {
+  type BlockSegmentPolicy,
+  isParagraphTag,
+  isTransparentListTag,
+  NESTED_BOUNDARY_TAG_NAMES,
+  segmentBlocks,
+} from "./block-segmenter.js";
+import {
   propertyInteger,
   propertyString,
   sanitizeLinks,
@@ -38,7 +45,6 @@ import {
   layoutRows,
   MAX_TABLE_COLUMNS,
   type TableRowSource,
-  tableNonSectionChildren,
   tableRows,
 } from "./table-layout.js";
 
@@ -300,79 +306,94 @@ const parseTable = (
   };
 };
 
-const parseBlock = (
-  element: HtmlElementNode,
-  createId: IdFactory,
-): Document["blocks"][number] => {
-  if (element.tagName === "table") return parseTable(element, createId);
-
-  const id = propertyString(element, "dataBeBlockId") ?? createId();
-  const content = sanitizeInlineContentText(
-    inlineContentFromNodes(element.children),
-  );
-  if (element.tagName === "p") return { id, type: "paragraph", content };
-
-  const level = Number(element.tagName.slice(1)) as 1 | 2 | 3;
-  return { id, type: "heading", level, content };
+// documentFromRoot의 재귀 경계 판정(문단/헤딩/표 시퀀스로 쪼개기)은
+// clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
+// 공유한다(아키텍처 리뷰 2차 후보 G) — p/h1~h3/table만 보던 예전 documentFromRoot
+// 는 최상위 노드만 훑는 평면 루프라 div/li/blockquote/ul/ol처럼 중첩 가능한
+// 경계를 인식하지 못했다(Issue #113과 같은 종류의 병합). h4~h6는 여기 포함하지
+// 않는다 — model HeadingBlock.level이 1~3만 허용해 sanitize가 애초에
+// h4~h6를 unwrap하므로 headingLevelFromTagName이 h1~h3만 인식해도 충분하다
+// (그릴링 결정: 문단 경계 태그 집합만 공유, heading 다운그레이드는 clipboard
+// 고유 정책으로 남긴다).
+const importBlockSegmentPolicy: BlockSegmentPolicy = {
+  isSimpleBoundary: isParagraphTag,
+  headingLevelFromTagName: (tagName) =>
+    /^h[1-3]$/.test(tagName) ? Number(tagName[1]) : undefined,
+  isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
+  isTransparent: isTransparentListTag,
+  isTableNode: (node) => node.tagName === "table",
 };
+
+const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
+  sanitizeInlineContentText(inlineContentFromNodes(nodes));
 
 const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
   const blocks: Document["blocks"] = [];
-  let inlineNodes: HtmlNode[] = [];
 
-  const flushInlineNodes = (): void => {
-    if (inlineNodes.length === 0) return;
-    if (textValue(inlineNodes).trim().length > 0) {
+  for (const segment of segmentBlocks(
+    root.children,
+    importBlockSegmentPolicy,
+  )) {
+    if (segment.kind === "paragraph") {
+      // 경계 태그 없이 자연히 쌓인 pending(예: div/li 재귀 안 텍스트,
+      // 인식하지 않는 태그 통과분)이라 originating 요소가 없다 — 기존
+      // flushInlineNodes 관례를 그대로 따른다: collapse/normalize 없이
+      // textValue(...).trim()으로만 실질 텍스트를 거르고, id는 항상
+      // 새로 발급한다(이 gap은 이번 변경의 범위 밖이다).
+      if (textValue(segment.nodes).trim().length > 0) {
+        blocks.push({
+          id: createId(),
+          type: "paragraph",
+          content: paragraphContentFromNodes(segment.nodes),
+        });
+      }
+      continue;
+    }
+    if (segment.kind === "simpleBoundary") {
+      // p 자신의 본문 — 기존 parseBlock 관례대로 실질 텍스트 여부와
+      // 무관하게 항상 블록 하나를 낸다(빈 <p>도 빈 문단으로 보존).
+      // dataBeBlockId는 p 요소 자신의 속성이라 segment.node에서 읽는다.
+      blocks.push({
+        id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
+        type: "paragraph",
+        content: paragraphContentFromNodes(segment.nodes),
+      });
+      continue;
+    }
+    if (segment.kind === "heading") {
+      // importBlockSegmentPolicy가 h1~h3만 heading으로 인식하므로 이
+      // 분기의 level은 항상 1~3이다. dataBeBlockId는 heading 요소 자신의
+      // 속성이라 segment.node에서 읽는다(기존 parseBlock 관례).
+      blocks.push({
+        id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
+        type: "heading",
+        level: segment.level as 1 | 2 | 3,
+        content: paragraphContentFromNodes(segment.nodes),
+      });
+      continue;
+    }
+
+    // caption 등 표 직속 비섹션 자식(thead/tbody/tfoot/tr/colgroup이 아닌
+    // 나머지)은 sanitize가 unwrap한 caption 텍스트가 대표 사례다(caption은
+    // htmlAllowedTagNames에 없다). parseTable은 이 노드들을 읽지 않으므로
+    // 표 블록 앞에 문단으로 옮겨 담지 않으면 조용히 사라진다(이슈 #70).
+    // 표 직속 비섹션 자식 사이에는 HTML5 tree construction 규칙상
+    // foster-parenting되지 않는 구조적 공백(들여쓰기·개행) 텍스트 노드가
+    // 그대로 남는다. 노드 단위로 "통째로 공백뿐인가"만 걸러내고, 실질
+    // 텍스트가 있는 노드(caption 자체의 앞뒤 공백 포함)는 내부를 손대지
+    // 않는다 — 일반 문단 생성 경로의 collapse-없음 관례를 그대로 따른다.
+    const nonSectionChildren = segment.nonSectionChildren.filter((child) =>
+      hasSubstantialText(textValue([child])),
+    );
+    if (nonSectionChildren.length > 0) {
       blocks.push({
         id: createId(),
         type: "paragraph",
-        content: sanitizeInlineContentText(inlineContentFromNodes(inlineNodes)),
+        content: paragraphContentFromNodes(nonSectionChildren),
       });
     }
-    inlineNodes = [];
-  };
-
-  for (const node of root.children) {
-    if (
-      node.type === "element" &&
-      ["p", "h1", "h2", "h3", "table"].includes(node.tagName)
-    ) {
-      flushInlineNodes();
-      // caption 등 표 직속 비섹션 자식(thead/tbody/tfoot/tr/colgroup이
-      // 아닌 나머지)은 sanitize가 unwrap한 caption 텍스트가 대표 사례다
-      // (caption은 htmlAllowedTagNames에 없다). parseTable은 이 노드들을
-      // 읽지 않으므로 표 블록 앞에 문단으로 옮겨 담지 않으면 조용히
-      // 사라진다(이슈 #70) — clipboard 경로(clipboard-table-parser.ts의
-      // walk())와 같은 정책이다. import 쪽 문단 생성은 기존 관례대로
-      // inlineContentFromNodes만 쓴다(collapse/normalize 없음 — caption만
-      // 예외로 만들지 않는다, 기존 import 문단 생성 경로 전체의 gap이라
-      // 이 변경의 범위 밖이다).
-      if (node.tagName === "table") {
-        // 표 직속 비섹션 자식 사이에는 HTML5 tree construction 규칙상
-        // foster-parenting되지 않는 구조적 공백(들여쓰기·개행) 텍스트
-        // 노드가 그대로 남는다. 노드 단위로 "통째로 공백뿐인가"만 걸러내고,
-        // 실질 텍스트가 있는 노드(caption 자체의 앞뒤 공백 포함)는 내부를
-        // 손대지 않는다 — 일반 문단 생성 경로의 collapse-없음 관례를 그대로
-        // 따른다.
-        const nonSectionChildren = tableNonSectionChildren(node).filter(
-          (child) => hasSubstantialText(textValue([child])),
-        );
-        if (nonSectionChildren.length > 0) {
-          blocks.push({
-            id: createId(),
-            type: "paragraph",
-            content: sanitizeInlineContentText(
-              inlineContentFromNodes(nonSectionChildren),
-            ),
-          });
-        }
-      }
-      blocks.push(parseBlock(node, createId));
-      continue;
-    }
-    inlineNodes.push(node);
+    blocks.push(parseTable(segment.node, createId));
   }
-  flushInlineNodes();
 
   return { formatVersion: 1, revision: 0, blocks };
 };
