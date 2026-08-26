@@ -3,7 +3,7 @@ import type { IdFactory } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 
-import { pasteClipboardContent } from "./table-commands.js";
+import { pasteClipboardContent } from "./table-paste-commands.js";
 
 export type TablePasteOptions = {
   createId: IdFactory;

@@ -8,7 +8,8 @@ import type { TabularData } from "@cp949/geul-io";
 import { describe, expect, it } from "vitest";
 
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
-import { mergeTableCells, pasteTabularData } from "../src/table-commands.js";
+import { mergeTableCells } from "../src/table-commands.js";
+import { pasteTabularData } from "../src/table-paste-commands.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   createTableFixtureEditor,

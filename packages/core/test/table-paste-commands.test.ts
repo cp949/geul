@@ -11,11 +11,11 @@ import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
+import { getTableBlock } from "../src/table-commands.js";
 import {
-  getTableBlock,
   pasteClipboardContent,
   pasteTabularData,
-} from "../src/table-commands.js";
+} from "../src/table-paste-commands.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   cellJson,

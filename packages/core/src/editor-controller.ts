@@ -29,7 +29,6 @@ import {
   mergeTableCells as mergeTableCellsCommand,
   moveTableColumn as moveTableColumnCommand,
   moveTableRow as moveTableRowCommand,
-  pasteTabularData as pasteTabularDataCommand,
   resizeTableColumn as resizeTableColumnCommand,
   setTableCellAlign as setTableCellAlignCommand,
   setTableCellColor as setTableCellColorCommand,
@@ -38,6 +37,7 @@ import {
   toggleTableHeaderColumn as toggleTableHeaderColumnCommand,
   toggleTableHeaderRow as toggleTableHeaderRowCommand,
 } from "./table-commands.js";
+import { pasteTabularData as pasteTabularDataCommand } from "./table-paste-commands.js";
 import {
   TableCellExtension,
   TableExtension,
