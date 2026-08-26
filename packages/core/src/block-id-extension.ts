@@ -1,4 +1,4 @@
-import type { IdFactory } from "@cp949/geul-model";
+import { createRandomDocumentId, type IdFactory } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 
@@ -6,13 +6,11 @@ type BlockIdOptions = {
   createId: IdFactory;
 };
 
-const defaultIdFactory: IdFactory = () => globalThis.crypto.randomUUID();
-
 export const BlockIdExtension = Extension.create<BlockIdOptions>({
   name: "blockId",
 
   addOptions() {
-    return { createId: defaultIdFactory };
+    return { createId: createRandomDocumentId };
   },
 
   addGlobalAttributes() {

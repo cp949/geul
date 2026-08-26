@@ -1,6 +1,7 @@
 import type { TabularData } from "@cp949/geul-io";
 import {
   type Document as BlockDocument,
+  createRandomDocumentId,
   type IdFactory,
   isSupportedLinkHref,
   parseDocument,
@@ -217,8 +218,6 @@ export type CreateEditorOptions = {
 
 type ChangeReason = DocumentChangeEvent["reason"];
 
-const defaultIdFactory: IdFactory = () => globalThis.crypto.randomUUID();
-
 const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [
   "bold",
   "italic",
@@ -321,7 +320,7 @@ export const createEditor = (
     );
   }
 
-  const createId = options.createId ?? defaultIdFactory;
+  const createId = options.createId ?? createRandomDocumentId;
   let sessionRevision = parsedInitialDocument.value.revision;
   let currentDocument = cloneDocument(parsedInitialDocument.value);
   let destroyed = false;
