@@ -2,6 +2,7 @@ export { isCanonicalCellAlign } from "./cell-align.js";
 export { isCanonicalCellColor } from "./cell-color.js";
 export { createEmptyDocument } from "./create-document.js";
 export type { DocumentError, DocumentErrorCode } from "./errors.js";
+export { createRandomDocumentId } from "./id-factory.js";
 export { isSupportedLinkHref } from "./link-policy.js";
 export {
   canonicalizeTextMarks,
@@ -10,6 +11,7 @@ export {
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";
 export {
+  isValidDocumentId,
   isValidInlineText,
   sanitizeInlineText,
 } from "./string-invariants.js";

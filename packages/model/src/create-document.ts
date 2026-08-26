@@ -1,9 +1,8 @@
+import { createRandomDocumentId } from "./id-factory.js";
 import type { Document, IdFactory } from "./types.js";
 
-declare const crypto: { randomUUID: () => string };
-
 export const createEmptyDocument = (
-  createId: IdFactory = () => crypto.randomUUID(),
+  createId: IdFactory = createRandomDocumentId,
 ): Document => ({
   formatVersion: 1,
   revision: 0,
