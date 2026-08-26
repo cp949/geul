@@ -477,6 +477,11 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
   // 첫 행이 colspan=2로 병합되면 그 행에는 열마다 하나씩인 [data-be-column-id]
   // 셀이 없다 — 첫 행만 보고 열 경계를 읽으면 두 번째 열 핸들이 사라진다.
   // 병합되지 않은 둘째 행의 셀 rect로 geometry를 복구해야 한다(G-TBL-001).
+  //
+  // 이 알고리즘 자체(readColumnBounds의 다중 행 스캔·보간, readTableGeometry의
+  // 리사이즈 strip 제외)는 table-handle-geometry.test.tsx가 편집기 마운트
+  // 없이 직접 증명한다(ADR-0007) — 여기 남긴 테스트는 TableHandles가 그
+  // 계산 결과를 실제로 렌더에 쓰고 있다는 배선 확인 1건뿐이다.
 
   it("둘째 열 핸들이 둘째 행의 비병합 셀 경계에 위치한다", () => {
     const rendered = renderRealTable();
@@ -492,29 +497,5 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     // 오른쪽 셀: left 200, width 100)이면 240이어야 한다. 첫 행만 봤다면
     // 둘째 열 핸들 자체가 없어 이 값이 나올 수 없었다.
     expect(columnHandles[1]?.style.left).toBe("240px");
-  });
-
-  it("병합 셀이 가로지르는 행에는 리사이즈 strip을 그리지 않는다", () => {
-    const rendered = renderRealTable();
-    const table = replaceWithColumnSpanMergedTable(rendered);
-
-    fireEvent.pointerMove(table);
-
-    // 첫 열 경계(x=200)는 병합된 첫 행에서는 셀 경계가 아니다 — 그 행에
-    // strip을 그리면 병합 셀 한가운데 클릭이 리사이즈 드래그로 가로채인다
-    // (G-TBL-001). 둘째 행 구간만 남아야 한다.
-    const handles = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-be-table-resize-handle]"),
-    );
-    const firstBoundary = handles.filter(
-      (handle) => handle.style.left === "198px",
-    );
-    expect(firstBoundary).toHaveLength(1);
-    expect(firstBoundary[0]?.style.top).toBe("130px");
-    expect(firstBoundary[0]?.style.height).toBe("30px");
-    // 마지막 열 경계(x=300)는 두 행 모두에서 셀 경계다.
-    expect(
-      handles.filter((handle) => handle.style.left === "298px"),
-    ).toHaveLength(2);
   });
 });
