@@ -41,6 +41,26 @@ export const isCanonicalTextMarks = (marks: readonly TextMark[]): boolean => {
   });
 };
 
+// 인접한 두 인라인 run이 병합 가능한지("같은 mark 조합인가")를 판정한다.
+// io(inline-content.ts, cell-text.ts, import-html.ts, import-markdown.ts)와
+// core(table-commands.ts)가 이 판정을 각자 JSON.stringify나 위치 비교로
+// 재구현하다 두 곳(모두 canonicalizeTextMarks를 거치지 않는 경로)이 mark
+// 순서에 취약해졌다 — canonicalizeTextMarks로 양쪽을 정규 순서로 맞춘 뒤
+// 비교해 이 취약점을 없앤다. undefined와 []는 항상 같다("mark 없음"의 두
+// 표현).
+export const sameMarks = (
+  left: readonly TextMark[] | undefined,
+  right: readonly TextMark[] | undefined,
+): boolean => {
+  const normalizedLeft = canonicalizeTextMarks(left ?? []);
+  const normalizedRight = canonicalizeTextMarks(right ?? []);
+  if (normalizedLeft.length !== normalizedRight.length) return false;
+  return normalizedLeft.every((mark, index) => {
+    const candidate = normalizedRight[index];
+    return candidate !== undefined && sameMark(mark, candidate);
+  });
+};
+
 export const firstNonCanonicalTextMarkIndex = (
   marks: readonly TextMark[],
 ): number | undefined => {

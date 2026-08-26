@@ -5,6 +5,7 @@ import {
   type InlineContent,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
+  sameMarks,
   type TextMark,
 } from "@cp949/geul-model";
 import remarkGfm from "remark-gfm";
@@ -188,24 +189,6 @@ const createDefaultIdFactory = (): IdFactory => {
     sequence += 1;
     return `markdown-${sequence}`;
   };
-};
-
-const sameMarks = (
-  left: TextMark[] | undefined,
-  right: TextMark[],
-): boolean => {
-  const leftMarks = left ?? [];
-  return (
-    leftMarks.length === right.length &&
-    leftMarks.every((mark, index) => {
-      const candidate = right[index];
-      if (candidate === undefined || candidate.type !== mark.type) return false;
-      return (
-        mark.type !== "link" ||
-        (candidate.type === "link" && candidate.href === mark.href)
-      );
-    })
-  );
 };
 
 const appendText = (

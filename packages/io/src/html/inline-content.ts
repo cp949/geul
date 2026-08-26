@@ -1,6 +1,7 @@
 import {
   canonicalizeTextMarks,
   type InlineContent,
+  sameMarks,
   type TextMark,
 } from "@cp949/geul-model";
 
@@ -56,24 +57,6 @@ const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
           htmlWrapperMarkOrder[right.mark.type] || left.index - right.index,
     )
     .map(({ mark }) => mark);
-
-const sameMarks = (
-  left: TextMark[] | undefined,
-  right: TextMark[] | undefined,
-): boolean => {
-  const normalizedLeft = left ?? [];
-  const normalizedRight = right ?? [];
-  if (normalizedLeft.length !== normalizedRight.length) return false;
-
-  return normalizedLeft.every((mark, index) => {
-    const candidate = normalizedRight[index];
-    if (candidate === undefined || mark.type !== candidate.type) return false;
-    return (
-      mark.type !== "link" ||
-      (candidate.type === "link" && mark.href === candidate.href)
-    );
-  });
-};
 
 const appendText = (
   content: InlineContent,

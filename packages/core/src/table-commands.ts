@@ -10,8 +10,8 @@ import {
   type InlineContent,
   MAX_TABLE_LOGICAL_CELLS,
   type Result,
+  sameMarks,
   type TableBlock,
-  type TextMark,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
@@ -790,26 +790,17 @@ const buildSequenceNode = (
   };
 };
 
-const markRunKey = (marks: TextMark[] | undefined): string =>
-  JSON.stringify(
-    (marks ?? []).map((mark) =>
-      mark.type === "link" ? `link:${mark.href}` : mark.type,
-    ),
-  );
-
 // 인라인 런을 이어 붙이되 이웃한 같은 마크 런은 하나로 합치고 빈 런은
 // 버린다 — inlineContentViolation이 인접 동일 마크 런과 빈 텍스트 런을 모두
 // 거절하므로, 구분자를 끼워 넣는 쪽이 io의 normalizeCellContent와 같은 병합
-// 형태를 유지해야 한다. 원본 런 객체는 수정하지 않고 교체한다(호출자가 넘긴
+// 형태를 유지해야 한다("같은 mark 조합"의 판정은 model의 sameMarks가
+// 소유). 원본 런 객체는 수정하지 않고 교체한다(호출자가 넘긴
 // ClipboardContent를 건드리지 않는다).
 const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
   for (const run of runs) {
     if (run.text.length === 0) continue;
     const previous = target[target.length - 1];
-    if (
-      previous !== undefined &&
-      markRunKey(previous.marks) === markRunKey(run.marks)
-    ) {
+    if (previous !== undefined && sameMarks(previous.marks, run.marks)) {
       target[target.length - 1] = {
         ...previous,
         text: previous.text + run.text,

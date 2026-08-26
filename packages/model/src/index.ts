@@ -7,6 +7,7 @@ export { isSupportedLinkHref } from "./link-policy.js";
 export {
   canonicalizeTextMarks,
   isCanonicalTextMarks,
+  sameMarks,
 } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";

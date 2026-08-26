@@ -1,7 +1,7 @@
 import {
   type InlineContent,
+  sameMarks,
   sanitizeInlineText,
-  type TextMark,
 } from "@cp949/geul-model";
 
 import type { HtmlNode } from "../html/inline-content.js";
@@ -30,9 +30,6 @@ export const collapseHtmlWhitespace = (nodes: HtmlNode[]): void => {
     if (node.type === "element") collapseHtmlWhitespace(node.children);
   }
 };
-
-const marksKey = (marks: TextMark[] | undefined): string =>
-  JSON.stringify(marks ?? []);
 
 // 남은 공백 run을 하나로 줄이고 셀 앞뒤 공백과 LF에 붙은 공백을 버린다.
 // 세그먼트 경계를 넘어 이어진 공백까지 접어야 하므로 전체 텍스트를 한 번
@@ -93,12 +90,10 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
     if (text.length === 0) continue;
 
     // 빈 세그먼트가 사라지면서 같은 mark 조합이 이웃하게 될 수 있다 —
-    // inlineContentFromNodes와 같은 병합 형태를 유지한다.
+    // inlineContentFromNodes와 같은 병합 형태를 유지한다("같은 mark
+    // 조합"의 판정은 model의 sameMarks가 소유).
     const previous = normalized[normalized.length - 1];
-    if (
-      previous !== undefined &&
-      marksKey(previous.marks) === marksKey(item.marks)
-    ) {
+    if (previous !== undefined && sameMarks(previous.marks, item.marks)) {
       previous.text += text;
       continue;
     }

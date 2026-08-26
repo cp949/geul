@@ -6,6 +6,7 @@ import {
   canonicalizeTextMarks,
   isCanonicalTextMarks,
   parseDocument,
+  sameMarks,
 } from "../src/index.js";
 
 describe("독립 문서 모델 - mark 정렬/검증", () => {
@@ -131,5 +132,47 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
         path: ["blocks", 0, "content", 0, "marks", 2],
       },
     });
+  });
+});
+
+// io(inline-content.ts, cell-text.ts, import-html.ts, import-markdown.ts)와
+// core(table-commands.ts)가 인접 동일 mark run 병합 여부를 각자
+// JSON.stringify나 위치 비교로 재구현하다 두 곳이 순서에 취약해졌다 —
+// sameMarks가 정규 순서로 맞춰 비교하는 단일 판정을 소유한다.
+describe("sameMarks", () => {
+  it("mark 순서만 다른 두 배열은 같다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "bold" }, { type: "italic" }],
+        [{ type: "italic" }, { type: "bold" }],
+      ),
+    ).toBe(true);
+  });
+
+  it("marks가 없는 쪽(undefined)과 빈 배열은 같다고 판정한다", () => {
+    expect(sameMarks(undefined, [])).toBe(true);
+    expect(sameMarks([], undefined)).toBe(true);
+    expect(sameMarks(undefined, undefined)).toBe(true);
+  });
+
+  it("href가 다른 link mark는 다르다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "link", href: "https://a.example" }],
+        [{ type: "link", href: "https://b.example" }],
+      ),
+    ).toBe(false);
+  });
+
+  it("mark 종류나 개수가 다르면 다르다고 판정한다", () => {
+    expect(
+      sameMarks([{ type: "bold" }], [{ type: "bold" }, { type: "italic" }]),
+    ).toBe(false);
+  });
+
+  it("중복 mark가 섞여 있어도 정규화 후 비교한다", () => {
+    expect(
+      sameMarks([{ type: "bold" }, { type: "bold" }], [{ type: "bold" }]),
+    ).toBe(true);
   });
 });

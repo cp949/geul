@@ -4,6 +4,7 @@ import {
   type InlineContent,
   MAX_TABLE_LOGICAL_CELLS,
   parseDocument,
+  sameMarks,
   sanitizeInlineText,
   type TableBlock,
 } from "@cp949/geul-model";
@@ -45,9 +46,6 @@ const DEFAULT_COLUMN_WIDTH = 160;
 
 class HtmlDocumentInvalidError extends Error {}
 
-const marksKey = (marks: InlineContent[number]["marks"]): string =>
-  JSON.stringify(marks ?? []);
-
 // inlineContentFromNodes가 만든 각 텍스트 조각에서 model이 거절하는
 // 코드포인트(LF 제외 C0 제어문자, DEL, 짝 없는 surrogate)를 제거한다.
 // 정책은 model의 sanitizeInlineText가 단독 소유하고(G-CNV-001) 여기서는
@@ -57,7 +55,8 @@ const marksKey = (marks: InlineContent[number]["marks"]): string =>
 // 조합을 가진 이웃 조각이 생기면 병합한다 — appendText(inline-content.ts)와
 // normalizeCellContent(clipboard/cell-text.ts)가 지키는 "인접 동일 mark는
 // 항상 병합" 불변식을 여기서도 유지한다(빈 조각 제거만 하고 병합을 생략하면
-// 같은 mark가 쪼개진 채 남아 export가 불필요하게 태그를 나눈다).
+// 같은 mark가 쪼개진 채 남아 export가 불필요하게 태그를 나눈다). "같은 mark
+// 조합"의 판정은 model의 sameMarks가 소유한다.
 const sanitizeInlineContentText = (content: InlineContent): InlineContent => {
   const sanitized: InlineContent = [];
   for (const item of content) {
@@ -65,10 +64,7 @@ const sanitizeInlineContentText = (content: InlineContent): InlineContent => {
     if (text.length === 0) continue;
 
     const previous = sanitized[sanitized.length - 1];
-    if (
-      previous !== undefined &&
-      marksKey(previous.marks) === marksKey(item.marks)
-    ) {
+    if (previous !== undefined && sameMarks(previous.marks, item.marks)) {
       previous.text += text;
       continue;
     }
