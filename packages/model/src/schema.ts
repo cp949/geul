@@ -10,7 +10,9 @@ import { isValidDocumentId, isValidInlineText } from "./string-invariants.js";
 import {
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
+  tableSizeViolationMessage,
   validateTableGrid,
+  validateTableSize,
 } from "./table-grid-validation.js";
 import type { Block, Document, InlineContent } from "./types.js";
 
@@ -295,13 +297,17 @@ const validateTableLimits = (
 ): Result<undefined, DocumentError> => {
   for (const [blockIndex, block] of blocks.entries()) {
     if (block.type !== "table") continue;
-    if (block.rows.length * block.columns.length > 10_000) {
+    const violation = validateTableSize({
+      columnCount: block.columns.length,
+      rowCount: block.rows.length,
+    });
+    if (violation !== undefined) {
       return {
         ok: false,
         error: {
           code: "DOCUMENT_LIMIT_EXCEEDED",
           path: ["blocks", blockIndex],
-          message: "Table logical cell count exceeds 10000",
+          message: tableSizeViolationMessage(violation),
         },
       };
     }

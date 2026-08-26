@@ -5,7 +5,7 @@
  * 표 조작 명령은 editor-controller-table.test.ts, 붙여넣기는
  * editor-controller-table-paste.test.ts가 맡는다.
  */
-import type { Document } from "@cp949/geul-model";
+import { MAX_TABLE_COLUMNS, type Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
@@ -202,6 +202,41 @@ describe("에디터 컨트롤러 표", () => {
     expect(editor.replaceDocument(broken)).toEqual({
       ok: false,
       error: { code: "DOCUMENT_INVALID", message: "Unsupported link URL" },
+    });
+  });
+
+  it("열 수가 문서 한도를 넘는 표는 DOCUMENT_INVALID로 거절한다", () => {
+    // 3차 리뷰 카드 U 이월: parseDocument가 이제 MAX_TABLE_COLUMNS도 검사한다
+    // — 공개 진입점(replaceDocument)까지 거절이 전파되는지 증명한다. 행이
+    // 없어 논리 셀 수 판정만으로는 걸리지 않는 표라야 열 수 판정 자체를
+    // 단독으로 증명한다.
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept"),
+    });
+    const broken: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "wide-table",
+          type: "table",
+          columns: Array.from(
+            { length: MAX_TABLE_COLUMNS + 1 },
+            (_, index) => ({ id: `column-${index}`, width: 48 }),
+          ),
+          rows: [],
+          headerRows: 0,
+          headerColumns: 0,
+        },
+      ],
+    };
+
+    expect(editor.replaceDocument(broken)).toEqual({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        message: `Table column count exceeds ${MAX_TABLE_COLUMNS}`,
+      },
     });
   });
 

@@ -2,7 +2,7 @@
  * 독립 문서 모델의 표 크기(width/rowSpan)·색상·정렬 값과 셀 수 한도 검증을 확인한다.
  */
 import { describe, expect, it } from "vitest";
-import { parseDocument } from "../src/index.js";
+import { MAX_TABLE_COLUMNS, parseDocument } from "../src/index.js";
 
 describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
   it("표의 잘못된 크기 값과 색상 값을 거부한다", () => {
@@ -317,6 +317,39 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
     ).toMatchObject({
       ok: false,
       error: { code: "DOCUMENT_LIMIT_EXCEEDED", path: ["blocks", 0] },
+    });
+  });
+
+  it("행이 없어 논리 셀 수는 0이어도 열 수가 문서 한도를 넘는 표는 거부한다", () => {
+    // 3차 리뷰 카드 U: rowCount*columnCount 곱셈만 보던 예전 판정은 행이 0개면
+    // 곱이 항상 0이라 열 수가 아무리 커도 통과시켰다 — 저장 원본을 그대로
+    // 불러오는 parseDocument만 이 열 상한을 놓치고 있었다(HTML import·클립보드
+    // 붙여넣기 경로는 validateTableSize를 이미 거쳐 TOO_MANY_COLUMNS로 거절함).
+    expect(
+      parseDocument({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "wide-table",
+            type: "table",
+            columns: Array.from(
+              { length: MAX_TABLE_COLUMNS + 1 },
+              (_, index) => ({ id: `column-${index}`, width: 48 }),
+            ),
+            rows: [],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_LIMIT_EXCEEDED",
+        path: ["blocks", 0],
+        message: `Table column count exceeds ${MAX_TABLE_COLUMNS}`,
+      },
     });
   });
 });
