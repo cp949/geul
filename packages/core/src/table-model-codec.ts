@@ -4,7 +4,11 @@ import type {
   TableBlock,
   TextMark,
 } from "@cp949/geul-model";
-import { canonicalizeTextMarks, parseDocument } from "@cp949/geul-model";
+import {
+  canonicalizeTextMarks,
+  decodeTextMark,
+  parseDocument,
+} from "@cp949/geul-model";
 import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 
@@ -30,33 +34,75 @@ export const tableBlockToTiptapNode = (
 
 export type TableCodecError = { code: "TABLE_NODE_INVALID"; message: string };
 
-const markTypeNames = [
-  "bold",
-  "italic",
-  "underline",
-  "strike",
-  "code",
-] as const;
+type TableCellFields = Omit<
+  TableBlock["rows"][number]["cells"][number],
+  "content"
+>;
 
-const inlineContentFromNode = (cellNode: ProseMirrorNode): InlineContent => {
+// "attrs 객체 → TableCell 필드"의 유일한 권위. PM 노드의 .attrs도 tiptap
+// JSON의 cell attrs도 구조적으로 Record<string, unknown>이라 이 판단을
+// 공유할 수 있다(tiptap-to-model.ts가 이 함수를 가져다 쓴다). 방어적
+// 스타일(누락/오염된 값은 기본값으로 접는다)로 통일한다 —
+// TableCellExtension의 cellId·columnId 스키마 기본값이 null이라, 라이브 PM
+// attrs도 "항상 채워져 있다"고 무조건 가정할 수 없다.
+export const tableCellFieldsFromAttrs = (
+  attrs: Record<string, unknown>,
+): TableCellFields => ({
+  id: typeof attrs.cellId === "string" ? attrs.cellId : "",
+  columnId: typeof attrs.columnId === "string" ? attrs.columnId : "",
+  rowSpan: typeof attrs.rowspan === "number" ? attrs.rowspan : 1,
+  columnSpan: typeof attrs.colspan === "number" ? attrs.colspan : 1,
+  ...(typeof attrs.textColor === "string"
+    ? { textColor: attrs.textColor }
+    : {}),
+  ...(typeof attrs.backgroundColor === "string"
+    ? { backgroundColor: attrs.backgroundColor }
+    : {}),
+  ...(typeof attrs.align === "string"
+    ? { align: attrs.align as "left" | "center" | "right" }
+    : {}),
+});
+
+const inlineContentFromNode = (
+  cellNode: ProseMirrorNode,
+): Result<InlineContent, TableCodecError> => {
   const content: InlineContent = [];
-  cellNode.content.forEach((textNode) => {
-    if (!textNode.isText || textNode.text === undefined) return;
-    const marks: TextMark[] = textNode.marks.flatMap((mark): TextMark[] => {
-      if (mark.type.name === "link") {
-        const href = mark.attrs.href;
-        return typeof href === "string" ? [{ type: "link", href }] : [];
+  const textNodes: ProseMirrorNode[] = [];
+  cellNode.content.forEach((child) => textNodes.push(child));
+
+  for (const textNode of textNodes) {
+    if (!textNode.isText || textNode.text === undefined) {
+      return {
+        ok: false,
+        error: {
+          code: "TABLE_NODE_INVALID",
+          message: `Unsupported inline node: ${textNode.type.name}`,
+        },
+      };
+    }
+
+    const marks: TextMark[] = [];
+    for (const mark of textNode.marks) {
+      const decoded = decodeTextMark({
+        type: mark.type.name,
+        href: mark.attrs.href,
+      });
+      if (!decoded.ok) {
+        return {
+          ok: false,
+          error: { code: "TABLE_NODE_INVALID", message: decoded.error },
+        };
       }
-      const markType = markTypeNames.find((name) => name === mark.type.name);
-      return markType === undefined ? [] : [{ type: markType }];
-    });
+      marks.push(decoded.value);
+    }
+
     const canonicalMarks = canonicalizeTextMarks(marks);
     content.push({
       text: textNode.text,
       ...(canonicalMarks.length === 0 ? {} : { marks: canonicalMarks }),
     });
-  });
-  return content;
+  }
+  return { ok: true, value: content };
 };
 
 export const tiptapNodeToTableBlock = (
@@ -73,7 +119,8 @@ export const tiptapNodeToTableBlock = (
   }
 
   const map = TableMap.get(tableNode);
-  const columns = tableNode.attrs.columns as TableBlock["columns"];
+  const tableAttrs = tableNode.attrs as Record<string, unknown>;
+  const columns = (tableAttrs.columns ?? []) as TableBlock["columns"];
 
   const rows: TableBlock["rows"] = [];
   // TableMap.map은 격자 좌표마다 그 좌표를 채우는 셀 노드의 시작 위치를 담는다.
@@ -83,6 +130,7 @@ export const tiptapNodeToTableBlock = (
 
   for (let rowIndex = 0; rowIndex < map.height; rowIndex += 1) {
     const rowNode = tableNode.child(rowIndex);
+    const rowAttrs = rowNode.attrs as Record<string, unknown>;
     const cells: TableBlock["rows"][number]["cells"] = [];
 
     for (let columnIndex = 0; columnIndex < map.width; columnIndex += 1) {
@@ -93,25 +141,19 @@ export const tiptapNodeToTableBlock = (
       const cellNode = tableNode.nodeAt(position);
       if (cellNode === null) continue;
 
+      const content = inlineContentFromNode(cellNode);
+      if (!content.ok) return content;
+
       cells.push({
-        id: cellNode.attrs.cellId as string,
-        columnId: cellNode.attrs.columnId as string,
-        rowSpan: cellNode.attrs.rowspan as number,
-        columnSpan: cellNode.attrs.colspan as number,
-        content: inlineContentFromNode(cellNode),
-        ...(typeof cellNode.attrs.textColor === "string"
-          ? { textColor: cellNode.attrs.textColor as string }
-          : {}),
-        ...(typeof cellNode.attrs.backgroundColor === "string"
-          ? { backgroundColor: cellNode.attrs.backgroundColor as string }
-          : {}),
-        ...(typeof cellNode.attrs.align === "string"
-          ? { align: cellNode.attrs.align as "left" | "center" | "right" }
-          : {}),
+        ...tableCellFieldsFromAttrs(cellNode.attrs as Record<string, unknown>),
+        content: content.value,
       });
     }
 
-    rows.push({ id: rowNode.attrs.rowId as string, cells });
+    rows.push({
+      id: typeof rowAttrs.rowId === "string" ? rowAttrs.rowId : "",
+      cells,
+    });
   }
 
   const table: TableBlock = {
@@ -119,8 +161,8 @@ export const tiptapNodeToTableBlock = (
     type: "table",
     columns,
     rows,
-    headerRows: tableNode.attrs.headerRows as 0 | 1,
-    headerColumns: tableNode.attrs.headerColumns as 0 | 1,
+    headerRows: (tableAttrs.headerRows ?? 0) as 0 | 1,
+    headerColumns: (tableAttrs.headerColumns ?? 0) as 0 | 1,
   };
 
   const parsed = parseDocument({

@@ -1,11 +1,46 @@
 import type { TableBlock } from "@cp949/geul-model";
+import { Mark, Node as TiptapNode } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 
 import {
   tableBlockToTiptapNode,
   tiptapNodeToTableBlock,
 } from "../src/table-model-codec.js";
-import { emptyDocSchema } from "./table-test-support.js";
+import {
+  createTableFixtureEditor,
+  emptyDocSchema,
+} from "./table-test-support.js";
+
+// model의 decodeTextMark가 모르는 mark. 표 확장에 mark를 추가하고도 model의
+// mark 목록을 깜박 갱신하지 않은 상황(카드 W의 문제 시나리오)을 재현한다.
+const UnknownMark = Mark.create({ name: "highlight" });
+
+// tableCell의 content("inline*")가 text가 아닌 노드를 담는 상황을 재현한다
+// — 프로덕션 스키마에는 이런 노드가 없지만, 그 사실 자체가 이 분기를
+// 검증할 방법이 없다는 뜻은 아니다.
+const FakeInlineAtom = TiptapNode.create({
+  name: "fakeInlineAtom",
+  group: "inline",
+  inline: true,
+  atom: true,
+});
+
+/**
+ * 표 fixture 스키마에 여분 확장을 더해 만든 스키마. 프로덕션에는 없는
+ * mark·노드로 "표 셀 디코더가 미인식 콘텐츠를 만나면 어떻게 하는가"를
+ * 재현할 때만 쓴다.
+ */
+const schemaWithExtras = (
+  extraExtensions: Parameters<typeof createTableFixtureEditor>[1],
+) => {
+  const editor = createTableFixtureEditor(
+    { type: "doc", content: [{ type: "paragraph" }] },
+    extraExtensions,
+  );
+  const { schema } = editor;
+  editor.destroy();
+  return schema;
+};
 
 const sampleTable: TableBlock = {
   id: "table-1",
@@ -383,5 +418,127 @@ describe("Tiptap 표 노드를 TableBlock으로 디코드한다", () => {
         { text: "bold", marks: [{ type: "bold" }] },
       ]);
     }
+  });
+
+  it("스키마엔 있지만 model이 모르는 mark는 조용히 버리지 않고 디코드를 거절한다", () => {
+    const schema = schemaWithExtras([UnknownMark]);
+    const node = schema.nodeFromJSON({
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [{ id: "col-1", width: 160 }],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                cellId: "cell-1",
+                columnId: "col-1",
+                colspan: 1,
+                rowspan: 1,
+                colwidth: null,
+                textColor: null,
+                backgroundColor: null,
+              },
+              content: [
+                { type: "text", text: "hi", marks: [{ type: "highlight" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "TABLE_NODE_INVALID",
+        message: "Unsupported mark: highlight",
+      },
+    });
+  });
+
+  it("text가 아닌 인라인 노드가 셀에 있으면 디코드를 거절한다", () => {
+    const schema = schemaWithExtras([FakeInlineAtom]);
+    const node = schema.nodeFromJSON({
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [{ id: "col-1", width: 160 }],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                cellId: "cell-1",
+                columnId: "col-1",
+                colspan: 1,
+                rowspan: 1,
+                colwidth: null,
+                textColor: null,
+                backgroundColor: null,
+              },
+              content: [{ type: "fakeInlineAtom" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "TABLE_NODE_INVALID",
+        message: "Unsupported inline node: fakeInlineAtom",
+      },
+    });
+  });
+
+  it("cellId 없이 만들어진 PM 셀은 빈 문자열로 접었다가 문서 검증에서 거절한다(크래시 아님)", () => {
+    const schema = emptyDocSchema();
+    const node = schema.nodeFromJSON({
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [{ id: "col-1", width: 160 }],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              type: "tableCell",
+              // cellId 없음 — TableCellExtension 스키마 기본값은 null이다.
+              attrs: { columnId: "col-1" },
+              content: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = tiptapNodeToTableBlock(node);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error.code).toBe("TABLE_NODE_INVALID");
   });
 });

@@ -1,5 +1,6 @@
 import {
   canonicalizeTextMarks,
+  decodeTextMark,
   type Document,
   type IdFactory,
   type InlineContent,
@@ -11,35 +12,24 @@ import {
 
 import type { EditorError } from "./errors.js";
 import type { TiptapJsonMark, TiptapJsonNode } from "./model-to-tiptap.js";
+import { tableCellFieldsFromAttrs } from "./table-model-codec.js";
 
 const invalid = (message: string): Result<never, EditorError> => ({
   ok: false,
   error: { code: "DOCUMENT_INVALID", message },
 });
 
+// mark 이름→TextMark 판정 자체는 model의 decodeTextMark가 유일한 권위다(PM
+// 노드 경로의 table-model-codec.ts도 같은 함수를 쓴다) — 여기서는 그 결과를
+// 이 모듈의 EditorError 계약으로 옮겨 담기만 한다.
 const markFromTiptap = (
   mark: TiptapJsonMark,
 ): Result<TextMark, EditorError> => {
-  switch (mark.type) {
-    case "bold":
-      return { ok: true, value: { type: "bold" } };
-    case "italic":
-      return { ok: true, value: { type: "italic" } };
-    case "underline":
-      return { ok: true, value: { type: "underline" } };
-    case "strike":
-      return { ok: true, value: { type: "strike" } };
-    case "code":
-      return { ok: true, value: { type: "code" } };
-    case "link": {
-      const href = mark.attrs?.href;
-      return typeof href === "string"
-        ? { ok: true, value: { type: "link", href } }
-        : invalid("Link mark requires an href");
-    }
-    default:
-      return invalid(`Unsupported Tiptap mark: ${String(mark.type)}`);
+  if (mark.type === undefined) {
+    return invalid("Unsupported Tiptap mark: undefined");
   }
+  const decoded = decodeTextMark({ type: mark.type, href: mark.attrs?.href });
+  return decoded.ok ? decoded : invalid(decoded.error);
 };
 
 const inlineContentFromTiptap = (
@@ -88,22 +78,8 @@ const tableBlockFromTiptapJson = (
 
       const cellAttrs = cellNode.attrs ?? {};
       cells.push({
-        id: typeof cellAttrs.cellId === "string" ? cellAttrs.cellId : "",
-        columnId:
-          typeof cellAttrs.columnId === "string" ? cellAttrs.columnId : "",
-        rowSpan: typeof cellAttrs.rowspan === "number" ? cellAttrs.rowspan : 1,
-        columnSpan:
-          typeof cellAttrs.colspan === "number" ? cellAttrs.colspan : 1,
+        ...tableCellFieldsFromAttrs(cellAttrs),
         content: content.value,
-        ...(typeof cellAttrs.textColor === "string"
-          ? { textColor: cellAttrs.textColor }
-          : {}),
-        ...(typeof cellAttrs.backgroundColor === "string"
-          ? { backgroundColor: cellAttrs.backgroundColor }
-          : {}),
-        ...(typeof cellAttrs.align === "string"
-          ? { align: cellAttrs.align as "left" | "center" | "right" }
-          : {}),
       });
     }
 

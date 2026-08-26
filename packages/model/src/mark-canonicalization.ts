@@ -1,4 +1,15 @@
+import type { Result } from "./result.js";
 import type { TextMark } from "./types.js";
+
+// href 없이 이름만으로 만드는 mark 종류. "link"는 href가 따로 필요해 여기서
+// 뺀다 — TextMark["type"] 전체 집합에서 "link"를 제외한 것과 같다.
+export const PLAIN_TEXT_MARK_TYPES = [
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+  "code",
+] as const;
 
 const storedMarkOrder: Record<TextMark["type"], number> = {
   link: 0,
@@ -76,4 +87,26 @@ export const firstNonCanonicalTextMarkIndex = (
     if (candidate === undefined || !sameMark(mark, candidate)) return index;
   }
   return undefined;
+};
+
+export type TextMarkNameInput = { type: string; href?: unknown };
+
+// "mark 이름(+href) → TextMark"의 유일한 권위. core가 PM 노드 경로
+// (table-model-codec.ts)와 tiptap JSON 경로(tiptap-to-model.ts) 양쪽에서
+// 이 하나를 호출한다 — 두 경로가 인식하는 mark 집합과 미인식 mark의 거절
+// 여부가 다시 갈라지지 않게 한다. 인식하지 못하는 이름은 항상 거절한다
+// (관대하게 조용히 버리지 않는다) — 표 셀이든 문단이든 저장 원본이 알 수
+// 없는 mark를 담고 있으면 그 사실이 드러나야 한다.
+export const decodeTextMark = (
+  mark: TextMarkNameInput,
+): Result<TextMark, string> => {
+  if (mark.type === "link") {
+    return typeof mark.href === "string"
+      ? { ok: true, value: { type: "link", href: mark.href } }
+      : { ok: false, error: "Link mark requires an href" };
+  }
+  const known = PLAIN_TEXT_MARK_TYPES.find((name) => name === mark.type);
+  return known === undefined
+    ? { ok: false, error: `Unsupported mark: ${mark.type}` }
+    : { ok: true, value: { type: known } };
 };

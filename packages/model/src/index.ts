@@ -7,9 +7,12 @@ export { appendOrMergeInlineItem } from "./inline-content-merge.js";
 export { isSupportedLinkHref } from "./link-policy.js";
 export {
   canonicalizeTextMarks,
+  decodeTextMark,
   isCanonicalTextMarks,
+  PLAIN_TEXT_MARK_TYPES,
   sameMarks,
 } from "./mark-canonicalization.js";
+export type { TextMarkNameInput } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
 export { parseDocument } from "./schema.js";
 export {

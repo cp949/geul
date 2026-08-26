@@ -4,7 +4,10 @@ import { isCanonicalCellAlign } from "./cell-align.js";
 import { isCanonicalCellColor } from "./cell-color.js";
 import type { DocumentError } from "./errors.js";
 import { isSupportedLinkHref } from "./link-policy.js";
-import { firstNonCanonicalTextMarkIndex } from "./mark-canonicalization.js";
+import {
+  firstNonCanonicalTextMarkIndex,
+  PLAIN_TEXT_MARK_TYPES,
+} from "./mark-canonicalization.js";
 import type { Result } from "./result.js";
 import { isValidDocumentId, isValidInlineText } from "./string-invariants.js";
 import {
@@ -19,7 +22,7 @@ import type { Block, Document, InlineContent } from "./types.js";
 type DocumentPath = Array<string | number>;
 
 const textMarkSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.enum(["bold", "italic", "underline", "strike", "code"]) }),
+  z.object({ type: z.enum(PLAIN_TEXT_MARK_TYPES) }),
   z.object({ type: z.literal("link"), href: z.string() }),
 ]);
 
