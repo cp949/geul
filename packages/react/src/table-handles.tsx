@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 
+import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
@@ -257,15 +258,13 @@ const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
   };
 };
 
+// 9곳에서 반복되는 (element, tableBlockId) 호출 형태를 유지하려는 로컬
+// 래퍼다 — 탐색 로직 자체는 find-by-attribute.ts가 소유한다.
 const findTable = (
   element: HTMLElement,
   tableBlockId: string,
 ): HTMLElement | null =>
-  Array.from(
-    element.querySelectorAll<HTMLElement>("table[data-be-block-id]"),
-  ).find(
-    (candidate) => candidate.getAttribute("data-be-block-id") === tableBlockId,
-  ) ?? null;
+  findElementByAttribute(element, "table", "data-be-block-id", tableBlockId);
 
 // colgroup col의 인라인 width는 renderHTML이 쓴 모델 열 너비다. 셀 rect는
 // 콘텐츠가 렌더 너비를 강제로 벌리면 모델 값과 어긋나므로 리사이즈 시드로

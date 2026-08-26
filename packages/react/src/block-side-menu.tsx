@@ -5,6 +5,7 @@ import {
   BLOCK_TYPE_OPTIONS,
   type BlockTypeOption,
 } from "./block-type-options.js";
+import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -246,16 +247,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
 
   const hoverBounds = (() => {
     if (hoverBlockId === null || element === null) return null;
-    // 블록 id는 임의 문자열이라 attribute selector에 보간하면 따옴표·백슬래시에서
-    // SyntaxError가 난다. computeDragGuide와 같은 속성값 비교로 찾는다.
-    // (CSS.escape는 jsdom 테스트 환경에 없다.)
-    const blockElement =
-      Array.from(
-        element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
-      ).find(
-        (candidate) =>
-          candidate.getAttribute("data-be-block-id") === hoverBlockId,
-      ) ?? null;
+    const blockElement = findElementByAttribute(
+      element,
+      null,
+      "data-be-block-id",
+      hoverBlockId,
+    );
     if (blockElement === null) return null;
     const rect = blockElement.getBoundingClientRect();
     return { left: rect.left, top: rect.top };

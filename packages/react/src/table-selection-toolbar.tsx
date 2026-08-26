@@ -1,6 +1,7 @@
 import { Palette, TableCellsMerge, TableCellsSplit } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
@@ -41,24 +42,6 @@ type ToolbarState = {
   top: number;
 };
 
-const findTable = (
-  element: HTMLElement,
-  tableBlockId: string,
-): HTMLElement | null =>
-  Array.from(
-    element.querySelectorAll<HTMLElement>("table[data-be-block-id]"),
-  ).find(
-    (candidate) => candidate.getAttribute("data-be-block-id") === tableBlockId,
-  ) ?? null;
-
-const findCellElement = (
-  table: HTMLElement,
-  cellId: string,
-): HTMLElement | undefined =>
-  Array.from(table.querySelectorAll<HTMLElement>("[data-be-cell-id]")).find(
-    (candidate) => candidate.getAttribute("data-be-cell-id") === cellId,
-  );
-
 // tableEditing 플러그인이 CellSelection에 속한 각 기준 셀 노드에 데코레이션으로
 // selectedCell 클래스를 붙인다(@tiptap/pm/tables 저수준 API, spec 6.1). 셀이
 // 1개든 여러 개든 이 클래스로 화면 경계를 읽는다 — React는 별도 격자 계산을
@@ -80,8 +63,13 @@ const cellSelectionBounds = (
   }
   const soleCellId = cellIds.length === 1 ? cellIds[0] : undefined;
   if (soleCellId === undefined) return null;
-  const cellElement = findCellElement(table, soleCellId);
-  if (cellElement === undefined) return null;
+  const cellElement = findElementByAttribute(
+    table,
+    null,
+    "data-be-cell-id",
+    soleCellId,
+  );
+  if (cellElement === null) return null;
   const rect = cellElement.getBoundingClientRect();
   return { left: rect.left + rect.width / 2, top: rect.top };
 };
@@ -121,7 +109,12 @@ export const TableSelectionToolbar = () => {
       if (element === null) return closeAll();
       const selection = editor.getTableCellSelection();
       if (selection === null) return closeAll();
-      const table = findTable(element, selection.tableBlockId);
+      const table = findElementByAttribute(
+        element,
+        "table",
+        "data-be-block-id",
+        selection.tableBlockId,
+      );
       if (table === null) return closeAll();
       const bounds = cellSelectionBounds(table, selection.cellIds);
       if (bounds === null) return closeAll();
