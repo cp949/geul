@@ -805,8 +805,33 @@ export const createEditor = (
         return { code: "COMMAND_NOT_APPLICABLE", command: "mergeTableCells" };
       case "TRANSACTION_REJECTED":
         return { code: "TRANSACTION_REJECTED" };
-      default:
+      // 아래 두 case는 spec §11.3의 "core는 자체 TableGridError를 최상위
+      // EditorError에 flatten만 한다"는 원칙에 따라 새 EditorError variant를
+      // 만들지 않고 COMMAND_NOT_APPLICABLE로 흡수한다(MERGE_TARGET_NOT_FOUND와
+      // 동형) — EditorError는 spec이 고정한 21개 코드 표면이라 TableCommandError
+      // 쪽에서 새 코드가 늘어도 그대로 넓히지 않는다.
+      case "CLIPBOARD_CONTENT_INVALID":
+        // 오늘은 도달 불가 — pasteClipboardContent(table-paste-extension.ts)가
+        // 이 Result를 버려 이 switch를 거치지 않는다.
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
+      case "TABLE_GRID_INVALID":
+        // 도달 가능 — mergeCells·resolveTargetCellIds(setCellFormat 경유,
+        // table-grid.ts)가 projectTableGrid 실패를 그대로 전파해 mergeTableCells·
+        // setTableCellTextColor/BackgroundColor/Align 네 명령까지 이어진다.
+        // DOCUMENT_INVALID로 매핑하지 않는다 — 그건 parseSupportedDocument의
+        // load 경계 전용이고, 실행 중 grid 손상은 §11.3이 정의한
+        // COMMAND_NOT_APPLICABLE("현재 상태에서 적용 불가능한 모든 명령이 공유")
+        // 범주다.
+        return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
+      default: {
+        // TableCommandError에 새 variant가 추가되면 여기서 컴파일 실패한다 —
+        // 위 매핑을 빠뜨린 채 조용히 COMMAND_NOT_APPLICABLE로 뭉개지던 gap을
+        // 막는다(그릴링: 카드 M).
+        const _exhaustive: never = code;
+        throw new Error(
+          `Unhandled TableCommandError code: ${String(_exhaustive)}`,
+        );
+      }
     }
   };
 

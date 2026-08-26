@@ -812,6 +812,23 @@ describe("셀을 병합한다", () => {
     expect(t.rows[0]?.cells).toHaveLength(2);
   });
 
+  it("불변식이 깨진 표는 projectTableGrid의 TABLE_GRID_INVALID를 그대로 전파한다", () => {
+    // editor-controller.ts의 tableErrorFromCode가 이 코드를 COMMAND_NOT_APPLICABLE로
+    // 흡수하는 근거 — 카드 M 그릴링에서 확인: 문서가 load 이후 세션 중 손상되면
+    // mergeTableCells가 이 경로로 실패한다.
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1")], [cell("c", "c1"), cell("d", "c2")]],
+    );
+
+    const result = mergeCells(t, { row: 0, column: 0 }, { row: 1, column: 1 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "UNCOVERED_COORDINATE" },
+    });
+  });
+
   it("병합되는 셀들의 콘텐츠를 기준 셀 뒤에 논리 좌표 순서로 이어붙인다", () => {
     const t = table(
       ["c1", "c2"],
@@ -1046,6 +1063,27 @@ describe("행 또는 열 단위로 셀 색상을 설정한다", () => {
     expect(result).toEqual({
       ok: false,
       error: { code: "INDEX_OUT_OF_RANGE" },
+    });
+  });
+
+  it("불변식이 깨진 표는 resolveTargetCellIds에서도 TABLE_GRID_INVALID를 전파한다", () => {
+    // setCellAlign도 같은 resolveTargetCellIds를 거치므로 여기 한 곳으로 대표한다
+    // (카드 M 그릴링에서 확인).
+    const t = table(
+      ["c1", "c2"],
+      [[cell("a", "c1")], [cell("c", "c1"), cell("d", "c2")]],
+    );
+
+    const result = setCellColor(
+      t,
+      { kind: "row", index: 0 },
+      "textColor",
+      "#112233",
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "UNCOVERED_COORDINATE" },
     });
   });
 
