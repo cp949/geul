@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import {
+  getTableBlock,
   pasteClipboardContent,
   pasteTabularData,
 } from "../src/table-commands.js";
@@ -126,12 +127,13 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     // 커서가 기존 표 '앞'을 가리켰으므로 새 표는 기존 표 앞에 와야 한다 —
     // 커서가 가리키기 직전인 블록 '뒤'에 붙으면 표가 한 블록 아래로 밀린다.
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("table");
-    expect(
-      doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("A");
+    const pastedTable = getTableBlock(editor, result.value.blockId);
+    if (!pastedTable.ok) throw new Error("표 조회 실패");
+    expect(pastedTable.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
   });
 
@@ -196,12 +198,10 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(doc.content).toHaveLength(3);
     expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
-    expect(doc.content?.[1]?.content?.[0]?.content?.[0]?.attrs?.cellId).toBe(
-      "cell-1",
-    );
-    expect(
-      doc.content?.[1]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("ab");
+    const originalTable = getTableBlock(editor, "table-1");
+    if (!originalTable.ok) throw new Error("표 조회 실패");
+    expect(originalTable.value.rows[0]?.cells[0]?.id).toBe("cell-1");
+    expect(originalTable.value.rows[0]?.cells[0]?.content[0]?.text).toBe("ab");
     expect(doc.content?.[2]?.type).toBe("table");
     const { selection } = editor.state;
     expect(selection.$from.parent.type.name).toBe("tableCell");
@@ -285,6 +285,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const result = pasteTabularData(editor, twoByOne, createId);
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.type).toBe("paragraph");
@@ -292,13 +293,13 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
     const tableJson = doc.content?.[1];
     expect(tableJson?.type).toBe("table");
-    expect(tableJson?.content).toHaveLength(1);
-    expect(tableJson?.content?.[0]?.content).toHaveLength(2);
-    expect(tableJson?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("A");
-    expect(tableJson?.content?.[0]?.content?.[1]?.content?.[0]?.text).toBe("B");
-    if (result.ok) {
-      expect(result.value.blockId).toBe(tableJson?.attrs?.blockId);
-    }
+    expect(result.value.blockId).toBe(tableJson?.attrs?.blockId);
+    const table = getTableBlock(editor, result.value.blockId);
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows).toHaveLength(1);
+    expect(table.value.rows[0]?.cells).toHaveLength(2);
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
+    expect(table.value.rows[0]?.cells[1]?.content[0]?.text).toBe("B");
     // 표 안 분기의 selectCellId와 대칭 — 캐럿이 붙여넣은 표의 좌상단 셀로
     // 이동한다(Issue #29).
     const { selection } = editor.state;
@@ -316,16 +317,18 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
 
     expect(result.ok).toBe(true);
     // 표 크기는 그대로 2x2다 — 새 표를 만들지 않고 기존 표를 덮어썼다.
-    const table = (editor.getJSON() as TiptapJsonNode).content?.[0];
-    expect(table?.attrs?.blockId).toBe("table-1");
-    expect(table?.content).toHaveLength(2);
-    expect(table?.content?.[0]?.content).toHaveLength(2);
-    expect(table?.content?.[1]?.content).toHaveLength(2);
+    const tableJson = (editor.getJSON() as TiptapJsonNode).content?.[0];
+    expect(tableJson?.attrs?.blockId).toBe("table-1");
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows).toHaveLength(2);
+    expect(table.value.rows[0]?.cells).toHaveLength(2);
+    expect(table.value.rows[1]?.cells).toHaveLength(2);
     // 좌상단 셀(cell-1 자리)만 붙여넣은 텍스트로 바뀌고 나머지는 빈 채로 남는다.
-    expect(table?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("x");
-    expect(table?.content?.[0]?.content?.[1]?.content ?? []).toHaveLength(0);
-    expect(table?.content?.[1]?.content?.[0]?.content ?? []).toHaveLength(0);
-    expect(table?.content?.[1]?.content?.[1]?.content ?? []).toHaveLength(0);
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("x");
+    expect(table.value.rows[0]?.cells[1]?.content ?? []).toHaveLength(0);
+    expect(table.value.rows[1]?.cells[0]?.content ?? []).toHaveLength(0);
+    expect(table.value.rows[1]?.cells[1]?.content ?? []).toHaveLength(0);
     if (result.ok) expect(result.value.blockId).toBe("table-1");
 
     // 붙여넣은 좌상단 셀 안으로 캐럿이 옮겨간다(applyTableGridOperation의
@@ -406,15 +409,16 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     );
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(4);
     expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
     expect(doc.content?.[1]?.type).toBe("paragraph");
     expect(doc.content?.[1]?.content?.[0]?.text).toBe("intro");
     expect(doc.content?.[2]?.type).toBe("table");
-    expect(
-      doc.content?.[2]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("A");
+    const table = getTableBlock(editor, result.value.blockId);
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
     expect(doc.content?.[3]?.type).toBe("paragraph");
     expect(doc.content?.[3]?.content?.[0]?.text).toBe("outro");
     // 새 문단도 안정 id를 받는다 — BlockIdExtension의 appendTransaction이
@@ -465,11 +469,13 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const doc = editor.getJSON() as TiptapJsonNode;
     // 표 밖에 새 문단이 생기지 않는다 — 최상위 블록 수는 그대로다.
     expect(doc.content).toHaveLength(before.content?.length ?? 0);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
     // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
     // 문서 순서대로 한 셀에 들어간다.
-    expect(
-      doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("intro\nx\noutro");
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
+      "intro\nx\noutro",
+    );
   });
 
   it("표 안에서 앞뒤 문단은 붙여넣은 표의 좌상단·마지막 셀에 각각 합친다", () => {
@@ -510,10 +516,11 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     );
 
     expect(result.ok).toBe(true);
-    const row = editor.getJSON() as TiptapJsonNode;
-    const cells = row.content?.[0]?.content?.[0]?.content ?? [];
-    expect(cells[0]?.content?.[0]?.text).toBe("intro\na");
-    expect(cells[1]?.content?.[0]?.text).toBe("b\noutro");
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    const cells = table.value.rows[0]?.cells ?? [];
+    expect(cells[0]?.content[0]?.text).toBe("intro\na");
+    expect(cells[1]?.content[0]?.text).toBe("b\noutro");
   });
 
   // 마크는 그대로 살아야 하고, 이웃한 같은 마크 런은 합쳐져야 한다 —
@@ -536,9 +543,9 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     );
 
     expect(result.ok).toBe(true);
-    const doc = editor.getJSON() as TiptapJsonNode;
-    const cellContent =
-      doc.content?.[0]?.content?.[0]?.content?.[0]?.content ?? [];
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    const cellContent = table.value.rows[0]?.cells[0]?.content ?? [];
     expect(cellContent[0]?.text).toBe("bold");
     expect(cellContent[0]?.marks).toEqual([{ type: "bold" }]);
     expect(cellContent[1]?.text).toBe("\nx");
@@ -638,6 +645,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     );
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     // 첫 번째 새 블록이 heading이다
     expect(doc.content?.[1]?.type).toBe("heading");
@@ -651,9 +659,9 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect((headingBlockId as string).length).toBeGreaterThan(0);
     // 그 다음이 표다
     expect(doc.content?.[2]?.type).toBe("table");
-    expect(
-      doc.content?.[2]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("A");
+    const table = getTableBlock(editor, result.value.blockId);
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
   });
 
   it("표 안에서 heading+표 혼합 시퀀스를 붙여넣으면 heading 텍스트가 셀에 문단과 같은 방식으로 병합된다", () => {
@@ -671,11 +679,13 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const doc = editor.getJSON() as TiptapJsonNode;
     // 표 밖에 새 블록이 생기지 않는다 — 최상위 블록 수는 그대로다
     expect(doc.content).toHaveLength(before.content?.length ?? 0);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
     // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
     // 문서 순서대로 한 셀에 들어간다
-    expect(
-      doc.content?.[0]?.content?.[0]?.content?.[0]?.content?.[0]?.text,
-    ).toBe("intro\nx\noutro");
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
+      "intro\nx\noutro",
+    );
   });
 
   it("model 인라인 텍스트 계약을 어기는 heading 콘텐츠는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
