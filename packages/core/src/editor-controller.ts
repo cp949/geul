@@ -808,10 +808,10 @@ export const createEditor = (
     }
   };
 
-  // 표 명령 실패의 detail 추출은 runVoidTableCommand·pasteTabularData·
-  // insertTable 세 클로저가 각자 복제하다 캡처 누락 drift가 생겼다
-  // (pasteTabularData만 TABLE_NODE_INVALID의 message가 ""로 나갔다) —
-  // 판별과 추출을 한 곳으로 모은다.
+  // 표 명령 실패의 detail 추출은 한때 runVoidTableCommand·pasteTabularData·
+  // insertTable 세 클로저가 각자 복제하다 캡처 누락 drift가 생겼던 자리다
+  // (pasteTabularData만 TABLE_NODE_INVALID의 message가 ""로 나갔다) — 판별과
+  // 추출을 여기 하나로 모으고, 아래 runTableCommand가 그 결과를 소비한다.
   const tableErrorDetail = (
     error: TableCommandError,
   ): Parameters<typeof tableErrorFromCode>[1] => ({
@@ -830,21 +830,34 @@ export const createEditor = (
     align: error.code === "INVALID_ALIGN" ? error.align : "",
   });
 
-  const runVoidTableCommand = (
+  // 표 명령 12개(void 반환)와 pasteTabularData/insertTable(blockId 반환)가
+  // 공유하는 실행기. runDocumentCommand의 boolean 결과 위에서 표 명령
+  // 고유의 실패 detail(tableErrorDetail)과 성공 값을 함께 클로저 밖으로
+  // 끌어낸다.
+  //
+  // G-EDT-001 회피 규칙: 클로저를 넘나드는 좁히기 대상은 원시 값(errorCode)만
+  // 쓰고, detail은 null 좁히기 없이 mutate만 하는 const 객체에 담는다.
+  // 성공 값(T)은 void거나 {blockId}뿐이라 원시 캡처로 우회할 수 없다 —
+  // `result.ok`가 참이면 invoke()가 성공해 value가 반드시 채워졌다는 불변식을
+  // 아래 `as T` 캐스트 한 곳에만 문서화한다. TS가 함수 경계를 넘는 이 불변식을
+  // 구조적으로 증명하지 못하는 한계는 이 캐스트가 유일하게 아는 곳으로 남는다.
+  const runTableCommand = <T = void>(
     command: string,
-    invoke: () => Result<void, TableCommandError>,
-  ): Result<void, EditorError> => {
+    invoke: () => Result<T, TableCommandError>,
+  ): Result<T, EditorError> => {
     let errorCode: TableCommandError["code"] | null = null;
-    // G-EDT-001 회피 규칙: 클로저를 넘나드는 좁히기 대상은 원시 값(errorCode)만
-    // 쓰고, detail은 null 좁히기 없이 mutate만 하는 const 객체에 담는다.
     const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
+    let value: T | undefined;
 
     const result = runDocumentCommand(command, "local", () => {
       const outcome = invoke();
-      if (outcome.ok) return true;
-      errorCode = outcome.error.code;
-      Object.assign(errorDetail, tableErrorDetail(outcome.error));
-      return false;
+      if (!outcome.ok) {
+        errorCode = outcome.error.code;
+        Object.assign(errorDetail, tableErrorDetail(outcome.error));
+        return false;
+      }
+      value = outcome.value;
+      return true;
     });
 
     if (errorCode !== null) {
@@ -853,7 +866,8 @@ export const createEditor = (
         error: tableErrorFromCode(errorCode, errorDetail),
       };
     }
-    return result;
+    if (!result.ok) return result;
+    return { ok: true, value: value as T };
   };
 
   return {
@@ -1046,70 +1060,28 @@ export const createEditor = (
         }),
       pasteTabularData: (data) => {
         if (destroyed) return commandNotApplicable("pasteTabularData");
-
-        let errorCode: TableCommandError["code"] | null = null;
-        const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
-        let insertedBlockId = "";
-
-        const result = runDocumentCommand("pasteTabularData", "local", () => {
-          const outcome = pasteTabularDataCommand(tiptapEditor, data, createId);
-          if (!outcome.ok) {
-            errorCode = outcome.error.code;
-            Object.assign(errorDetail, tableErrorDetail(outcome.error));
-            return false;
-          }
-          insertedBlockId = outcome.value.blockId;
-          return true;
-        });
-
-        if (errorCode !== null) {
-          return {
-            ok: false,
-            error: tableErrorFromCode(errorCode, errorDetail),
-          };
-        }
-        if (!result.ok) return result;
-        return { ok: true, value: { blockId: insertedBlockId } };
+        return runTableCommand("pasteTabularData", () =>
+          pasteTabularDataCommand(tiptapEditor, data, createId),
+        );
       },
       insertTable: (afterBlockId, size, options) => {
         if (destroyed) return commandNotApplicable("insertTable");
-
-        let errorCode: TableCommandError["code"] | null = null;
-        const errorDetail = tableErrorDetail({ code: "INDEX_OUT_OF_RANGE" });
-        let insertedBlockId = "";
-
-        const result = runDocumentCommand("insertTable", "local", () => {
-          const outcome = insertTableCommand(
+        return runTableCommand("insertTable", () =>
+          insertTableCommand(
             tiptapEditor,
             afterBlockId,
             size,
             createId,
             options,
-          );
-          if (!outcome.ok) {
-            errorCode = outcome.error.code;
-            Object.assign(errorDetail, tableErrorDetail(outcome.error));
-            return false;
-          }
-          insertedBlockId = outcome.value.blockId;
-          return true;
-        });
-
-        if (errorCode !== null) {
-          return {
-            ok: false,
-            error: tableErrorFromCode(errorCode, errorDetail),
-          };
-        }
-        if (!result.ok) return result;
-        return { ok: true, value: { blockId: insertedBlockId } };
+          ),
+        );
       },
       insertTableRow: (tableBlockId, atIndex) =>
-        runVoidTableCommand("insertTableRow", () =>
+        runTableCommand("insertTableRow", () =>
           insertTableRowCommand(tiptapEditor, tableBlockId, atIndex, createId),
         ),
       insertTableColumn: (tableBlockId, atIndex) =>
-        runVoidTableCommand("insertTableColumn", () =>
+        runTableCommand("insertTableColumn", () =>
           insertTableColumnCommand(
             tiptapEditor,
             tableBlockId,
@@ -1118,11 +1090,11 @@ export const createEditor = (
           ),
         ),
       moveTableRow: (tableBlockId, fromIndex, toIndex) =>
-        runVoidTableCommand("moveTableRow", () =>
+        runTableCommand("moveTableRow", () =>
           moveTableRowCommand(tiptapEditor, tableBlockId, fromIndex, toIndex),
         ),
       moveTableColumn: (tableBlockId, fromIndex, toIndex) =>
-        runVoidTableCommand("moveTableColumn", () =>
+        runTableCommand("moveTableColumn", () =>
           moveTableColumnCommand(
             tiptapEditor,
             tableBlockId,
@@ -1131,7 +1103,7 @@ export const createEditor = (
           ),
         ),
       resizeTableColumn: (tableBlockId, index, width) =>
-        runVoidTableCommand("resizeTableColumn", () =>
+        runTableCommand("resizeTableColumn", () =>
           resizeTableColumnCommand(tiptapEditor, tableBlockId, index, width),
         ),
       mergeTableCells: (tableBlockId) => {
@@ -1146,7 +1118,7 @@ export const createEditor = (
         if (rect.table.attrs.blockId !== tableBlockId) {
           return commandNotApplicable("mergeTableCells");
         }
-        return runVoidTableCommand("mergeTableCells", () =>
+        return runTableCommand("mergeTableCells", () =>
           mergeTableCellsCommand(
             tiptapEditor,
             tableBlockId,
@@ -1156,27 +1128,27 @@ export const createEditor = (
         );
       },
       splitTableCell: (tableBlockId, cellId) =>
-        runVoidTableCommand("splitTableCell", () =>
+        runTableCommand("splitTableCell", () =>
           splitTableCellCommand(tiptapEditor, tableBlockId, cellId, createId),
         ),
       deleteTableRow: (tableBlockId, index) =>
-        runVoidTableCommand("deleteTableRow", () =>
+        runTableCommand("deleteTableRow", () =>
           deleteTableRowCommand(tiptapEditor, tableBlockId, index),
         ),
       deleteTableColumn: (tableBlockId, index) =>
-        runVoidTableCommand("deleteTableColumn", () =>
+        runTableCommand("deleteTableColumn", () =>
           deleteTableColumnCommand(tiptapEditor, tableBlockId, index),
         ),
       toggleTableHeaderRow: (tableBlockId) =>
-        runVoidTableCommand("toggleTableHeaderRow", () =>
+        runTableCommand("toggleTableHeaderRow", () =>
           toggleTableHeaderRowCommand(tiptapEditor, tableBlockId),
         ),
       toggleTableHeaderColumn: (tableBlockId) =>
-        runVoidTableCommand("toggleTableHeaderColumn", () =>
+        runTableCommand("toggleTableHeaderColumn", () =>
           toggleTableHeaderColumnCommand(tiptapEditor, tableBlockId),
         ),
       setTableCellTextColor: (tableBlockId, target, color) =>
-        runVoidTableCommand("setTableCellTextColor", () =>
+        runTableCommand("setTableCellTextColor", () =>
           setTableCellColorCommand(
             tiptapEditor,
             tableBlockId,
@@ -1186,7 +1158,7 @@ export const createEditor = (
           ),
         ),
       setTableCellBackgroundColor: (tableBlockId, target, color) =>
-        runVoidTableCommand("setTableCellBackgroundColor", () =>
+        runTableCommand("setTableCellBackgroundColor", () =>
           setTableCellColorCommand(
             tiptapEditor,
             tableBlockId,
@@ -1196,7 +1168,7 @@ export const createEditor = (
           ),
         ),
       setTableCellAlign: (tableBlockId, target, align) =>
-        runVoidTableCommand("setTableCellAlign", () =>
+        runTableCommand("setTableCellAlign", () =>
           setTableCellAlignCommand(tiptapEditor, tableBlockId, target, align),
         ),
       undo: () =>
