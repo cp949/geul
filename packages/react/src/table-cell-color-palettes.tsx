@@ -1,5 +1,6 @@
 import type { EditorError, Result, TableCellTarget } from "@cp949/geul-core";
 
+import { MenuItemButton } from "./menu-item-button.js";
 import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
@@ -66,33 +67,27 @@ export const TableCellColorPalettes = ({
       <p className={sectionLabelClassName}>{label}</p>
       <div className="geul-menu-palette">
         {colors.map((color) => (
-          <button
+          <MenuItemButton
             aria-label={`${label} ${color.name}`}
             className={swatchClassName}
             key={color.value}
             onClick={() => applyColor(property, color.value)}
-            onMouseDown={(event) => event.preventDefault()}
-            role="menuitem"
             style={
               property === "background"
                 ? { backgroundColor: color.value }
                 : { backgroundColor: "transparent", color: color.value }
             }
-            type="button"
           >
             {property === "text" ? "A" : ""}
-          </button>
+          </MenuItemButton>
         ))}
-        <button
+        <MenuItemButton
           aria-label={`${label} None`}
           className={swatchClassName}
           onClick={() => applyColor(property, null)}
-          onMouseDown={(event) => event.preventDefault()}
-          role="menuitem"
-          type="button"
         >
           ×
-        </button>
+        </MenuItemButton>
       </div>
     </>
   );

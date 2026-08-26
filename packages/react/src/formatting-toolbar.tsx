@@ -183,7 +183,6 @@ export const FormattingToolbar = () => {
                 : { ...current, activeMarks: editor.getSelectionMarks() },
             );
           }}
-          onMouseDown={(event) => event.preventDefault()}
         />
       ))}
     </div>

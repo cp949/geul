@@ -1,5 +1,6 @@
 import type { TableCellTarget } from "@cp949/geul-core";
 
+import { MenuItemButton } from "./menu-item-button.js";
 import { TableCellColorPalettes } from "./table-cell-color-palettes.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -101,47 +102,30 @@ export const TableHandleMenu = ({
           {tableCommandErrorMessage(actionError)}
         </p>
       )}
-      <button
-        className={menuItemClassName}
-        onClick={insertBefore}
-        onMouseDown={(event) => event.preventDefault()}
-        role="menuitem"
-        type="button"
-      >
+      <MenuItemButton className={menuItemClassName} onClick={insertBefore}>
         {isRow ? "Insert row above" : "Insert column left"}
-      </button>
-      <button
-        className={menuItemClassName}
-        onClick={insertAfter}
-        onMouseDown={(event) => event.preventDefault()}
-        role="menuitem"
-        type="button"
-      >
+      </MenuItemButton>
+      <MenuItemButton className={menuItemClassName} onClick={insertAfter}>
         {isRow ? "Insert row below" : "Insert column right"}
-      </button>
-      <button
+      </MenuItemButton>
+      <MenuItemButton
         className={`${menuItemClassName} geul-table-menu__item--danger`}
         disabled={!canDelete}
         onClick={remove}
-        onMouseDown={(event) => event.preventDefault()}
-        role="menuitem"
-        type="button"
       >
         {isRow ? "Delete row" : "Delete column"}
-      </button>
+      </MenuItemButton>
       {headerToggleAvailable && (
         <>
           <hr className={dividerClassName} />
-          <button
+          <MenuItemButton
             aria-checked={headerEnabled}
             className={menuItemClassName}
             onClick={toggleHeader}
-            onMouseDown={(event) => event.preventDefault()}
             role="menuitemcheckbox"
-            type="button"
           >
             {isRow ? "Header row" : "Header column"}
-          </button>
+          </MenuItemButton>
         </>
       )}
       <hr className={dividerClassName} />

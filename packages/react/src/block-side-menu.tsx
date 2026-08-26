@@ -8,6 +8,7 @@ import {
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { MenuItemButton } from "./menu-item-button.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -361,7 +362,6 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             icon={dragHandleIcon}
             label={dragHandleLabel}
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
-            onMouseDown={(event) => event.preventDefault()}
             onPointerDown={(event) =>
               handlePointerDownOnHandle(event, hoverBlockId)
             }
@@ -372,7 +372,6 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             icon={addBlockIcon}
             label={addBlockLabel}
             onClick={handleAddBlockClick}
-            onMouseDown={(event) => event.preventDefault()}
           />
         </div>
       )}
@@ -408,39 +407,30 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         >
           <p className="geul-block-menu__label">Turn into</p>
           {BLOCK_TYPE_OPTIONS.map((option) => (
-            <button
+            <MenuItemButton
               className={blockMenuItemClassName}
               key={option.id}
               onClick={() => handleTurnInto(option)}
-              onMouseDown={(event) => event.preventDefault()}
-              role="menuitem"
-              type="button"
             >
               {option.label}
-            </button>
+            </MenuItemButton>
           ))}
           {/* mx-0(SCSS margin-inline: 0)에 대응: preflight 미포함이라 UA의
               margin-inline auto가 남으면 flex column에서 hr이 0폭으로
               붕괴한다 */}
           <hr className="geul-block-menu__divider" />
-          <button
+          <MenuItemButton
             className={blockMenuItemClassName}
             onClick={handleDuplicate}
-            onMouseDown={(event) => event.preventDefault()}
-            role="menuitem"
-            type="button"
           >
             Duplicate
-          </button>
-          <button
+          </MenuItemButton>
+          <MenuItemButton
             className={`${blockMenuItemClassName} geul-block-menu__item--danger`}
             onClick={handleDeleteBlock}
-            onMouseDown={(event) => event.preventDefault()}
-            role="menuitem"
-            type="button"
           >
             Delete
-          </button>
+          </MenuItemButton>
         </div>
       )}
     </>

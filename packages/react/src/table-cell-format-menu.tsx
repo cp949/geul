@@ -1,6 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 
 import { iconProps } from "./icon-props.js";
+import { MenuItemButton } from "./menu-item-button.js";
 import { TableCellColorPalettes } from "./table-cell-color-palettes.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -69,46 +70,34 @@ export const TableCellFormatMenu = ({
       <hr className={dividerClassName} />
       <p className={sectionLabelClassName}>Align</p>
       <div className="geul-cell-format-menu__align-row">
-        <button
+        <MenuItemButton
           aria-label="Align left"
           className={alignButtonClassName}
           onClick={() => applyAlign("left")}
-          onMouseDown={(event) => event.preventDefault()}
-          role="menuitem"
-          type="button"
         >
           <AlignLeft {...iconProps} />
-        </button>
-        <button
+        </MenuItemButton>
+        <MenuItemButton
           aria-label="Align center"
           className={alignButtonClassName}
           onClick={() => applyAlign("center")}
-          onMouseDown={(event) => event.preventDefault()}
-          role="menuitem"
-          type="button"
         >
           <AlignCenter {...iconProps} />
-        </button>
-        <button
+        </MenuItemButton>
+        <MenuItemButton
           aria-label="Align right"
           className={alignButtonClassName}
           onClick={() => applyAlign("right")}
-          onMouseDown={(event) => event.preventDefault()}
-          role="menuitem"
-          type="button"
         >
           <AlignRight {...iconProps} />
-        </button>
-        <button
+        </MenuItemButton>
+        <MenuItemButton
           aria-label="Align none"
           className={alignButtonClassName}
           onClick={() => applyAlign(null)}
-          onMouseDown={(event) => event.preventDefault()}
-          role="menuitem"
-          type="button"
         >
           ×
-        </button>
+        </MenuItemButton>
       </div>
     </div>
   );

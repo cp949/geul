@@ -737,7 +737,6 @@ export const TableHandles = () => {
                   row.index,
                 )
               }
-              onMouseDown={(event) => event.preventDefault()}
               onPointerDown={(event) =>
                 handlePointerDownOnReorderHandle(
                   event,
@@ -770,7 +769,6 @@ export const TableHandles = () => {
                   column.index,
                 )
               }
-              onMouseDown={(event) => event.preventDefault()}
               onPointerDown={(event) =>
                 handlePointerDownOnReorderHandle(
                   event,
@@ -815,7 +813,6 @@ export const TableHandles = () => {
             icon={addIcon}
             label={addRowLabel}
             onClick={handleAddRow}
-            onMouseDown={(event) => event.preventDefault()}
             style={{
               position: "fixed",
               left: geometry.left + (geometry.right - geometry.left) / 2 - 10,
@@ -828,7 +825,6 @@ export const TableHandles = () => {
             icon={addIcon}
             label={addColumnLabel}
             onClick={handleAddColumn}
-            onMouseDown={(event) => event.preventDefault()}
             style={{
               position: "fixed",
               left: geometry.right + 4,

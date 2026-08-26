@@ -198,7 +198,6 @@ export const TableSelectionToolbar = () => {
                 editor.commands.mergeTableCells(toolbarState.tableBlockId),
               );
             }}
-            onMouseDown={(event) => event.preventDefault()}
           />
         )}
         {toolbarState.splitCellId !== null && (
@@ -213,7 +212,6 @@ export const TableSelectionToolbar = () => {
                 editor.commands.splitTableCell(tableBlockId, splitCellId),
               );
             }}
-            onMouseDown={(event) => event.preventDefault()}
           />
         )}
         <IconButton
@@ -233,7 +231,6 @@ export const TableSelectionToolbar = () => {
             clearActionError();
             setFormatMenuOpen(true);
           }}
-          onMouseDown={(event) => event.preventDefault()}
         />
         {actionError !== null && (
           <span className={actionErrorClassName} role="alert">
