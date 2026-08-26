@@ -508,6 +508,25 @@ describe("HTML 왕복 변환", () => {
     });
   });
 
+  // ce55f9f 이전에는 documentFromRoot가 최상위 노드만 훑는 평면 루프라
+  // div/li/blockquote 안에 중첩된 요소의 data-be-block-id를 아예 읽지
+  // 않았다 — 중첩 id가 최상위 id와 겹쳐도 항상 무시돼(inert) 조용히
+  // 통과했다. block-segmenter.ts 도입으로 이제 중첩 요소도 실제 블록이 돼
+  // 그 id를 읽으므로, 같은 id가 중첩 위치에서 재사용되면 model의 기존
+  // 중복 id 불변식(schema.ts "Duplicate id")에 걸려 거절된다 — 이건 이번
+  // 커밋이 새로 만든 실패가 아니라 이전엔 도달 못 하던 위치에서 기존
+  // 불변식이 이제 정상적으로 작동하는 것이다(고쳐야 할 회귀가 아니다).
+  it("중첩 요소가 최상위와 같은 data-be-block-id를 재사용하면 거절한다", () => {
+    expect(
+      importHtml(
+        '<p data-be-block-id="x">top</p><div><p data-be-block-id="x">nested</p></div>',
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "HTML_DOCUMENT_INVALID" },
+    });
+  });
+
   it("가져온 표 그리드가 잘못되면 HTML_DOCUMENT_INVALID로 감싼다", () => {
     expect(
       importHtml(

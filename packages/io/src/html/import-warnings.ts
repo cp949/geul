@@ -1,5 +1,9 @@
 import { isSupportedLinkHref, sanitizeInlineText } from "@cp949/geul-model";
 
+import {
+  isTransparentListTag,
+  NESTED_BOUNDARY_TAG_NAMES,
+} from "./block-segmenter.js";
 import type { HtmlNode, HtmlRoot } from "./inline-content.js";
 import {
   htmlAllowedAttributes,
@@ -70,6 +74,17 @@ const supportedBlockNames = new Set([
   "table",
 ]);
 
+// div/li/blockquote/ul/ol은 block-segmenter.ts가 "경계를 통과해 더 깊은
+// 경계를 인식시키는" 투명 컨테이너로 취급한다(재귀 경계·wrapper 태그, 아키텍처
+// 리뷰 2차 후보 G). 이 파일의 topLevel 판정도 같은 취급이어야 한다 — 이
+// 다섯 태그를 통과해 내려가도 여전히 "블록 위치"이므로, 그 자식에서
+// 미지원 태그를 만나면 topLevel 판정 그대로 SAFE_BLOCK_DOWNGRADED를
+// 내야 한다. block-segmenter.ts의 태그 집합을 그대로 재사용해야
+// sanitize-schema.ts/import-warnings.ts와의 3중 중복(설계 리뷰 지적)을
+// 더 늘리지 않는다.
+const isBlockBoundaryTag = (tagName: string): boolean =>
+  NESTED_BOUNDARY_TAG_NAMES.has(tagName) || isTransparentListTag(tagName);
+
 const collectFromNodes = (
   nodes: HtmlNode[],
   warnings: HtmlImportWarning[],
@@ -134,7 +149,12 @@ const collectFromNodes = (
       }
     }
 
-    collectFromNodes(node.children, warnings, false, node.tagName);
+    collectFromNodes(
+      node.children,
+      warnings,
+      topLevel && isBlockBoundaryTag(node.tagName),
+      node.tagName,
+    );
   }
 };
 
