@@ -671,6 +671,53 @@ describe("HTML 왕복 변환", () => {
     });
   });
 
+  // (아키텍처 리뷰 5차 후보 1) clipboard-table-parser.ts는 emit 시점에
+  // layoutRowSpan/layoutColumnSpan으로 rowspan="0"·colspan="0"·비정수
+  // rowspan을 1로 보정하지만, import-html.ts는 이 seam을 거치지 않고 raw
+  // 값을 그대로 TableBlock 셀에 담았다 — model의 validateGridCoverage가
+  // rowSpan<1 또는 비정수를 INVALID_COORDINATE로 거절해, <td rowspan="0">
+  // 같은 흔한 HTML5 마크업이 clipboard 붙여넣기는 성공하고 HTML import는
+  // 문서 전체가 거절됐다. 아래 3건은
+  // clipboard-table-parser-structure.test.ts의 동명 테스트와 짝이다.
+  it("rowspan=0은 1로 보정해 표를 살린다", () => {
+    const result = importHtml(
+      '<table><tbody><tr><td rowspan="0">a</td><td>b</td></tr>' +
+        "<tr><td>c</td><td>d</td></tr></tbody></table>",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(1);
+  });
+
+  it("colspan=0은 1로 보정해 표를 살린다", () => {
+    const result = importHtml(
+      '<table><tbody><tr><td colspan="0">a</td><td>b</td></tr></tbody></table>',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.rows[0]?.cells[0]?.columnSpan).toBe(1);
+  });
+
+  it("정수가 아닌 rowspan은 1로 보정해 표를 살린다", () => {
+    const result = importHtml(
+      '<table><tbody><tr><td rowspan="2.5">a</td><td>b</td></tr>' +
+        "<tr><td>c</td><td>d</td></tr></tbody></table>",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    expect(table?.type).toBe("table");
+    if (table?.type !== "table") throw new Error("Expected table block");
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(1);
+  });
+
   it("셀 align을 왕복 변환에서 보존한다", () => {
     const documentWithAlign: Document = {
       formatVersion: 1,

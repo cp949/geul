@@ -44,6 +44,20 @@ export const layoutColumnSpan = (columnSpan: number): number =>
 export const layoutRowSpan = (rowSpan: number): number =>
   Number.isInteger(rowSpan) && rowSpan >= 1 ? rowSpan : 1;
 
+// (아키텍처 리뷰 5차 후보 1) 최종 저장되는 columnSpan에는 malformed(0·음수·
+// 비정수) 보정만 필요하고 layoutColumnSpan의 <=MAX_TABLE_COLUMNS 상한은
+// 원치 않는다. 그 상한은 inferredColumnCount/findOversizedColumnSpanCell이
+// "표가 이미 보여준 열 수"를 계산할 때 자기 강화 열-수 부풀림을 막으려고
+// 도입한 것(Issue #35)이지, 최종 셀에 저장되는 columnSpan 값의 관심사가
+// 아니다 — 오히려 여기서 오버사이즈 colspan(예: colspan="100001")까지 1로
+// 뭉개면 model.validateGridCoverage의 SPAN_OUT_OF_BOUNDS가 그 값을 볼 기회
+// 자체가 사라져, "열 생성으로 확장하지 않고 거절한다"던 기존 계약을
+// import-html.ts가 조용히 우회하게 된다(html-security-table-limits.test.ts
+// 회귀로 발견). malformed 전용 보정은 layoutRowSpan과 계약이 완전히
+// 같아(정수·1 이상이면 그대로, 아니면 1) 그대로 위임한다.
+export const malformedColumnSpan = (columnSpan: number): number =>
+  layoutRowSpan(columnSpan);
+
 // 소스 문서에서 thead/tbody/tfoot의 등장 순서는 브라우저 렌더링 순서와
 // 무관하다(예: tfoot이 tbody보다 앞에 올 수 있다). head/body/foot 세 버킷에
 // 먼저 모으고 논리 순서(head → body → foot)로 이어붙여야, 저자가 어떤 순서로

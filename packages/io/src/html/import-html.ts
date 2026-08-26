@@ -46,6 +46,8 @@ import {
   hasSubstantialText,
   inferredColumnCount,
   layoutRows,
+  layoutRowSpan,
+  malformedColumnSpan,
   type TableRowSource,
   tableRows,
 } from "./table-layout.js";
@@ -271,8 +273,16 @@ const parseTable = (
       return {
         id: propertyString(layout.element, "dataBeCellId") ?? createId(),
         columnId,
-        rowSpan: layout.rowSpan,
-        columnSpan: layout.columnSpan,
+        // rowSpan은 clipboard-table-parser.ts와 같은 seam(layoutRowSpan)으로
+        // 보정한다 — 여기서 raw 값을 그대로 담으면 rowspan="0"·비정수
+        // rowspan처럼 흔한 malformed 마크업이 model의 validateGridCoverage에서
+        // INVALID_COORDINATE로 거절돼 문서 전체가 HTML_DOCUMENT_INVALID로
+        // 실패한다(clipboard 경로는 이미 보정해 통과한다). columnSpan은
+        // layoutColumnSpan이 아니라 malformedColumnSpan을 쓴다 — 이유는
+        // 그 함수의 선언부 주석 참조(오버사이즈 colspan 보안 거절을
+        // 우회하지 않아야 한다).
+        rowSpan: layoutRowSpan(layout.rowSpan),
+        columnSpan: malformedColumnSpan(layout.columnSpan),
         content: sanitizeInlineContentText(
           inlineContentFromNodes(layout.element.children),
         ),
