@@ -1,7 +1,9 @@
 /**
  * `playwright.config.ts`의 `webServer` 배열이 chrome83 전용 build+preview
  * 서버(포트 4174)를 `GEUL_CHROME83_WEBSERVER` 환경변수가 설정된 실행에서만
- * 포함하는지 검증한다(Issue #120 트랙-6 발견 F1).
+ * 포함하는지 검증한다(Issue #120 트랙-6 발견 F1). 그 서버 엔트리가
+ * `reuseExistingServer: false`를 써서 host에 남은 stale preview 프로세스를
+ * 재사용하지 않는지도 함께 검증한다(Issue #123).
  *
  * Playwright는 `--project` 필터와 무관하게 `webServer` 배열 전체를 항상
  * 띄운다 — 환경변수 게이트 없이 두 엔트리를 그대로 두면 `pnpm
@@ -35,7 +37,9 @@ afterEach(() => {
 const importPlaywrightConfig = async () => {
   vi.resetModules();
   const module = await import("../playwright.config.ts");
-  return module.default as { webServer: Array<{ url: string }> };
+  return module.default as {
+    webServer: Array<{ url: string; reuseExistingServer?: boolean }>;
+  };
 };
 
 describe("playwright.config.ts의 webServer 배열", () => {
@@ -56,5 +60,13 @@ describe("playwright.config.ts의 webServer 배열", () => {
     expect(config.webServer).toHaveLength(2);
     expect(config.webServer[0]?.url).toBe("http://127.0.0.1:5173");
     expect(config.webServer[1]?.url).toBe("http://127.0.0.1:4174");
+  });
+
+  it("chrome83 build+preview 서버는 CI 여부와 무관하게 기존 서버를 재사용하지 않는다(Issue #123)", async () => {
+    process.env[ENV_KEY] = "1";
+
+    const config = await importPlaywrightConfig();
+
+    expect(config.webServer[1]?.reuseExistingServer).toBe(false);
   });
 });

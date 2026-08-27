@@ -15,7 +15,11 @@ const chrome83WebServer = process.env.GEUL_CHROME83_WEBSERVER
         command:
           "pnpm --filter @cp949/geul-react build && pnpm --filter @cp949/geul-demo build && pnpm --filter @cp949/geul-demo exec vite preview --port 4174 --host 127.0.0.1 --strictPort",
         url: "http://127.0.0.1:4174",
-        reuseExistingServer: !process.env.CI,
+        // CI 여부와 무관하게 항상 새로 띄운다(Issue #123). chrome83
+        // project는 test:e2e:chrome83 하나로만, 매번 새 Docker 컨테이너로
+        // 실행되는 1회성 검증이라 서버 재사용의 이득이 없고, stale
+        // preview 재사용은 거짓 통과·거짓 실패를 만든다.
+        reuseExistingServer: false,
         timeout: 120_000,
       },
     ]
