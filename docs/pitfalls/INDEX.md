@@ -15,6 +15,7 @@
 | [`PIT-0032`](./PIT-0032-judge-typecheck-coverage-by-ownership-not-membership.md) | typecheck 커버리지를 멤버십·태스크 수로 판정 | 실행은 exit 0·태스크 수 감소, dry graph는 수 유지·command 누락 | `G-WKS-003` |
 | [`PIT-0034`](./PIT-0034-verify-wall-clock-limits-separate-regression-from-load-noise.md) | 복잡도 회귀를 시간 상한만으로 게이트 | 단독 통과, 동시 실행에서만 간헐 실패 | `G-TST-004` |
 | [`PIT-0035`](./PIT-0035-treat-copy-detection-scan-passes-as-partial-coverage.md) | copy-detection 스캔 결과 판독 | 0건을 사본 없음으로, 우연한 매치를 사본으로 오판 | `G-WKS-004` |
+| [`PIT-0037`](./PIT-0037-strip-frontmatter-before-posting-issue-tracker-drafts.md) | 이슈 트래커 초안 파일을 `--body-file`로 게시 | `gh` 명령 exit 0·URL 정상 반환, frontmatter 노출 무신호 | `issue-tracker` |
 
 ## 승격 기준
 
@@ -29,4 +30,4 @@
 
 각 함정은 지배하는 가이드를 한 방향으로만 가리킨다(`pitfall -> guide`). 가이드와 가이드 INDEX는 함정을 역참조하지 않는다.
 
-삭제한 pitfall ID는 재사용하지 않는다. 다음 신규 ID는 `PIT-0037`다. 과거 ID와 내용은 Git 이력이 보존한다.
+삭제한 pitfall ID는 재사용하지 않는다. 다음 신규 ID는 `PIT-0038`다. 과거 ID와 내용은 Git 이력이 보존한다.

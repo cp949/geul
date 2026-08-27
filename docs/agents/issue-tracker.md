@@ -43,6 +43,8 @@
 본문은 아래 "이슈 본문 계약"을 따른다.
 ````
 
+**frontmatter는 게시 대상이 아니다.** `---`로 감싼 앞 블록은 로컬 추적용 메타데이터고, 게시할 내용은 그 뒤(신규 이슈는 `# 제목` 줄과 본문, 댓글은 본문)뿐이다. 초안 파일을 `gh issue create --body-file`·`gh issue comment --body-file`·`gh issue edit --body-file`에 통째로 넘기면 frontmatter까지 공개 댓글·이슈에 그대로 노출된다 — frontmatter를 제거한 본문만 별도로 만들어 게시한다(예: `tail -n +N` 또는 frontmatter 종료 `---` 뒤부터 잘라내는 스크립트). 게시 직후 `gh api repos/<owner>/<repo>/issues/comments/<id> --jq '.body'`(또는 `gh issue view`)로 응답 첫 줄이 `---`가 아닌지 확인한다.
+
 ## 완료 댓글과 완료 보고
 
 완료 댓글 초안은 대상 이슈당 하나로 유지한다. 이미 등록한 댓글을 고쳐 다시 올리지 않는다.
