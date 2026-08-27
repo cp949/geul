@@ -309,6 +309,20 @@ describe("validateGridCoverage(제네릭 그리드 커버리지)", () => {
       error: { code: "TABLE_GRID_INVALID", reason: "INVALID_GRID_SIZE" },
     });
   });
+
+  it("rowCount가 0이면 INVALID_GRID_SIZE로 거부한다", () => {
+    expect(validateGridCoverage(0, 2, [])).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_GRID_SIZE" },
+    });
+  });
+
+  it("columnCount가 0이면 INVALID_GRID_SIZE로 거부한다", () => {
+    expect(validateGridCoverage(2, 0, [])).toMatchObject({
+      ok: false,
+      error: { code: "TABLE_GRID_INVALID", reason: "INVALID_GRID_SIZE" },
+    });
+  });
 });
 
 describe("validateTableSize·tableSizeViolationMessage(표 크기 상한)", () => {
@@ -343,6 +357,30 @@ describe("validateTableSize·tableSizeViolationMessage(표 크기 상한)", () =
   it("TOO_MANY_CELLS 메시지는 MAX_TABLE_LOGICAL_CELLS를 담는다", () => {
     expect(tableSizeViolationMessage("TOO_MANY_CELLS")).toBe(
       `Table logical cell count exceeds ${MAX_TABLE_LOGICAL_CELLS}`,
+    );
+  });
+
+  it("NaN인 rowCount는 INVALID_SIZE를 반환한다", () => {
+    expect(validateTableSize({ rowCount: Number.NaN, columnCount: 5 })).toBe(
+      "INVALID_SIZE",
+    );
+  });
+
+  it("음수 rowCount는 INVALID_SIZE를 반환한다", () => {
+    expect(validateTableSize({ rowCount: -1, columnCount: 5 })).toBe(
+      "INVALID_SIZE",
+    );
+  });
+
+  it("정수가 아닌 columnCount는 INVALID_SIZE를 반환한다", () => {
+    expect(validateTableSize({ rowCount: 5, columnCount: 2.5 })).toBe(
+      "INVALID_SIZE",
+    );
+  });
+
+  it("INVALID_SIZE 메시지는 정수·비음수 위반을 설명한다", () => {
+    expect(tableSizeViolationMessage("INVALID_SIZE")).toBe(
+      "Table size must be a non-negative integer",
     );
   });
 });

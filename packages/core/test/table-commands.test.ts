@@ -7,6 +7,7 @@
  * 존재하지 않는/표가 아닌 blockId)도 다룬다. 붙여넣기 경로는
  * table-paste-*.test.ts가 맡는다.
  */
+import { MAX_TABLE_COLUMNS } from "@cp949/geul-model";
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
@@ -130,6 +131,25 @@ describe("표를 삽입한다", () => {
     expect(result).toEqual({
       ok: false,
       error: { code: "INVALID_TABLE_SIZE" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("열 수가 상한을 넘으면 CELL_LIMIT_EXCEEDED로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    const createId = sequentialIds("id");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = insertTable(
+      editor,
+      "para-1",
+      { rows: 1, columns: MAX_TABLE_COLUMNS + 1 },
+      createId,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "CELL_LIMIT_EXCEEDED" },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });

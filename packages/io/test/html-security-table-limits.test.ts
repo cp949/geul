@@ -27,6 +27,15 @@ describe("HTML 보안", () => {
     expect(idCalls).toBeLessThan(20);
   });
 
+  it("행·열이 없는 빈 표는 거부한다", () => {
+    const result = importHtml("<table></table>");
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "HTML_DOCUMENT_INVALID" },
+    });
+  });
+
   it("추론 열 10000개는 허용하고 10001개는 모델 할당 전에 거부한다", () => {
     const atLimit = importHtml(
       `<table><tbody><tr>${"<td>x</td>".repeat(10_000)}</tr></tbody></table>`,
