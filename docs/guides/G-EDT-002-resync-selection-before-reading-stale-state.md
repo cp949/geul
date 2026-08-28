@@ -16,13 +16,15 @@ Chromium은 클릭 뒤 native `selectionchange` DOM 이벤트를 비동기로 �
 - DOM 위치 조회는 `view.posAtDOM`(공개 API)만 쓴다. **`posAtDOM`은 뷰 밖 노드에서 항상 예외를 던지지 않는다 — 음수 sentinel(`-1`)을 돌려줄 수 있다(실측).** `doc.resolve(pos)`까지 같은 `try`로 묶어, 예외와 잘못된 위치 둘 다 조용히 원래 `view.state`로 폴백한다.
 - DOM selection 조회는 전역 `document` 대신 `view.dom.ownerDocument`를 쓴다(`packages/react`의 `slash-menu.tsx`/`link-toolbar.tsx`/`formatting-toolbar.tsx`가 이미 이 관용구를 쓴다).
 - 재계산한 selection이 기존 `state.selection`과 같으면(`Selection.eq`) 파생하지 않고 `view.state`를 그대로 반환한다 — no-op 경로에서 여분의 객체를 만들지 않는다.
+- false 반환이 파괴적 기본 동작으로 이어지는 소비형 핸들러(예: 표 안 Enter — 폴스루하면 코어 keymap이 live selection 기준으로 셀·행을 분할한다)는 재계산 state가 대상 밖이어도 live `view.state`가 대상 안이면 소비한다. 역방향 stale(대상 안 캐럿 상태에서 대상 밖 클릭 직후 키 입력)에서는 재계산이 대상 밖을 가리키지만, 폴스루한 기본 동작은 live stale selection에 적용되기 때문이다. 최초 발견: Issue #134 리뷰.
 
 ## 완료 기준
 
 - 이 패턴을 쓰는 각 핸들러가 정상 경로(재계산 불필요)에서 dispatch 0~1회, stale 경로에서도 dispatch 0~1회(기존 명령 하나 그대로)임을 unit test로 고정한다.
 - `CellSelection` 활성 중에는 재계산이 no-op임을 회귀로 고정한다.
 - jsdom은 `document.createRange()`/`Selection.addRange()`를 지원하지만 **`document.body`에 연결된 노드만 `focusNode`로 추적한다** — detached 컨테이너에 mount하는 기존 fixture(`createTableFixtureEditor` 등)를 쓰는 unit은 대상 엘리먼트를 `document.body`에 붙였다가 `try/finally`로 제거해야 한다([`G-TST-003`](./G-TST-003-clean-up-test-resources.md)). 붙이지 않으면 `focusNode`가 항상 `null`이라 재계산 로직이 검증 없이 항상 no-op 경로만 타는 공허한 테스트가 된다.
+- 소비형 핸들러는 역방향 stale(재계산 대상 밖 · live 대상 안)에서 소비를 회귀로 고정한다.
 
 ## 참고 구현
 
-`packages/core/src/table-keyboard-extension.ts`의 `resolveSelectionAwareState`(Issue #118).
+`packages/core/src/table-keyboard-extension.ts`의 `resolveSelectionAwareState`(Issue #118)와 live state 폴백 소비를 포함한 `goToTableCellBelow`/`consumeKeyInsideTable`(Issue #134).
