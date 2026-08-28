@@ -370,9 +370,14 @@ type HtmlTableOutcome =
   | { ok: false; error: ClipboardParseError; sawTable: boolean };
 
 const parseHtmlTable = (html: string): HtmlTableOutcome => {
-  const unsafeRoot = parseHtmlFragment(html);
-  if (unsafeRoot === undefined)
+  // 깊이-캡 절단 사실(truncated)은 버린다 — clipboard 경로에는 경고 채널이
+  // 없다(ClipboardParseError는 NOT_TABULAR | CLIPBOARD_TABLE_INVALID 뿐).
+  // 캡 너머로 절단된 표는 표로 인식되지 않아 NOT_TABULAR(기본 붙여넣기
+  // 폴백)로 떨어진다.
+  const parsed = parseHtmlFragment(html);
+  if (parsed === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
+  const unsafeRoot = parsed.root;
 
   const safeRoot = asRoot(sanitize(unsafeRoot, clipboardSanitizeSchema));
   if (safeRoot === undefined)
@@ -441,7 +446,26 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
 
 const TABLE_TAG_PATTERN = /<table[\s>]/i;
 
+// 의도된 최후 방어선(Issue #130, 결정 5) — clipboard 경로는 DOM paste
+// 이벤트 핸들러(core의 table-paste-extension)에서 직접 불리는데, 이
+// 파이프라인에는 달리 catch가 없어 예상 밖 예외가 그대로 이벤트 밖으로
+// 샌다. 파이프라인 어디서든(파서 내부 라이브러리 재귀 포함) 예외가 나면
+// 구조화된 NOT_TABULAR로 바꿔 ProseMirror 기본 붙여넣기로 폴백시킨다.
+// 우연히 걸리는 범용 예외 처리가 아니라 이 목적으로 설계된 경계다 —
+// 정상 거절 경로는 전부 위의 구조화된 Result로 이미 표현되므로 이 catch에
+// 도달하는 것은 버그성 예외뿐이고, 그때 잃는 것은 표 파싱 시도 하나다.
 export const parseClipboardTable = (input: {
+  html?: string;
+  text?: string;
+}): Result<ClipboardContent, ClipboardParseError> => {
+  try {
+    return parseClipboardTableUnguarded(input);
+  } catch {
+    return { ok: false, error: { code: "NOT_TABULAR" } };
+  }
+};
+
+const parseClipboardTableUnguarded = (input: {
   html?: string;
   text?: string;
 }): Result<ClipboardContent, ClipboardParseError> => {

@@ -13,4 +13,4 @@ Geul은 `io -> model`, `core -> model`, `core -> io`, `react -> core`, `demo -> 
 - React 어댑터는 `@tiptap/react`에 의존하지 않는다.
 - 동일 불변식을 여러 패키지가 다시 구현하지 않고 model의 공통 계약을 사용한다.
 - `core`가 `io`에 의존하지만 `io`는 여전히 `core`/Tiptap/ProseMirror를 모른다 — 방향은 한쪽으로만 흐른다.
-- `core -> io`의 대가: `core`를 쓰는 소비자는 클립보드 붙여넣기를 쓰지 않아도 `io`의 HTML 파서(`rehype-parse`, `hast-util-sanitize`)를 번들에 포함한다. 파서를 `core`에 다시 구현하는 중복보다 이 번들 비용을 택했다. 붙여넣기를 선택적 확장으로 떼어내면 없앨 수 있으나 R1 범위 밖이다.
+- `core -> io`의 대가: `core`를 쓰는 소비자는 클립보드 붙여넣기를 쓰지 않아도 `io`의 HTML 파서(`parse5`, `hast-util-from-parse5`, `hast-util-sanitize`)를 번들에 포함한다. 파서를 `core`에 다시 구현하는 중복보다 이 번들 비용을 택했다. 붙여넣기를 선택적 확장으로 떼어내면 없앨 수 있으나 R1 범위 밖이다.

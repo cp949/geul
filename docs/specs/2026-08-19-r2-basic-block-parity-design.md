@@ -82,7 +82,7 @@ export type Block =
 - 순환 참조는 구조적으로 불가능하다 — `children`은 부모가 자식 값을 직접 포함하는 트리이며 참조나 포인터가 아니다.
 - **전역 ID 유일성**: `id`는 트리 전체(모든 깊이, 모든 블록 타입)에서 유일해야 한다. `model/src/schema.ts`의 `validateBlocks`(id 검사 부분)를 재귀로 바꾼다.
 - **재귀 검증**: `validateBlocks`가 각 노드에서 호출하는 `validateContent`(text/link href/link 중복/mark 순서 검사)를 트리 전체에 재귀 적용한다(현재는 최상위 배열 1단만 순회).
-- **중첩 깊이 상한**: `MAX_NESTING_DEPTH = 64`. 초과 문서는 `DOCUMENT_LIMIT_EXCEEDED`로 거절한다(테이블 10,000셀 상한과 같은 방어적 목적 — 실사용 들여쓰기로는 도달하지 않지만 조작된 JSON의 재귀 검증 스택 사용을 방어한다).
+- **중첩 깊이 상한**: `MAX_NESTING_DEPTH = 64`. 초과 문서는 `DOCUMENT_LIMIT_EXCEEDED`로 거절한다(테이블 10,000셀 상한과 같은 방어적 목적 — 실사용 들여쓰기로는 도달하지 않지만 조작된 JSON의 재귀 검증 스택 사용을 방어한다). 이 거절은 JSON 문서 로드(`parseDocument`) 계약이다 — HTML import는 상한 초과 중첩을 거절 대신 평탄화한다(7.1, Issue #132).
 - 표 셀 콘텐츠는 여전히 `InlineContent`만 담는다 — 표 셀 안에 블록을 중첩하지 않는다(3.1, roadmap 범위 밖).
 
 ### 3.3 인라인 색상 mark와 블록 수준 props
@@ -189,6 +189,7 @@ export type Block =
 - 인라인 색상 → `style="color:...; background-color:..."`.
 - 블록 색상/정렬 → 블록 wrapper의 `style`/`data-*` 속성(표 셀과 같은 방식).
 - 중첩 `children`은 해당 HTML 요소 안에 재귀적으로 중첩된 HTML로 표현한다.
+- import 방향의 중첩 계약(Issue #132): children wrapper 중첩이 `MAX_NESTING_DEPTH`(64)를 넘으면 문서를 거절하지 않고 초과분을 형제 블록으로 평탄화해 보이는 텍스트를 보존하며 `NESTED_CHILDREN_FLATTENED` 경고를 반환한다. 별개로 HTML 트리 자체는 파싱 직후 깊이 캡(`MAX_HTML_TREE_DEPTH = 256`, io 소유)에서 절단돼 캡 너머 서브트리는 텍스트로 평탄화되고 `DEEP_TREE_FLATTENED` 경고가 난다(Issue #130) — 두 축(모델 중첩·HTML 트리 깊이)은 상수도 경고도 분리된다. 파서 수준에서 트리를 만들 수 없는 입력(예: 매우 깊은 미폐쇄 template 중첩)은 평탄화 보존 대상이 아니라 `HTML_PARSE_FAILED` 거절이다.
 
 ### 7.2 GFM 계약 확장과 손실 정책
 
@@ -215,7 +216,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 
 `packages/model`의 `DOCUMENT_INVALID`/`DOCUMENT_LIMIT_EXCEEDED`를 재사용(전용 코드를 새로 만들지 않음):
 
-- 재귀 중첩 깊이 초과(3.2) → `DOCUMENT_LIMIT_EXCEEDED`
+- 재귀 중첩 깊이 초과(3.2, JSON 문서 로드) → `DOCUMENT_LIMIT_EXCEEDED`. HTML import는 초과 전에 평탄화하므로 이 코드를 내지 않는다(7.1, Issue #132)
 - `codeBlock` content의 mark 위반(4.3, 로드 시점) → `DOCUMENT_INVALID`
 - `collapsed`가 있는데 `isToggleable`이 아닌 heading(4.1) → `DOCUMENT_INVALID`
 - 전역 ID 중복(3.2, 트리 전체) → `DOCUMENT_INVALID`

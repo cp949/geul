@@ -7,6 +7,10 @@ import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { importHtml } from "../src/index.js";
+import {
+  buildNestedWrapperHtml,
+  documentVisibleText,
+} from "./html-depth-support.js";
 
 describe("HTML 보안", () => {
   it("안전하지만 지원하지 않는 블록을 정화 후 강등하면 경고한다", () => {
@@ -150,66 +154,94 @@ describe("HTML 보안", () => {
 // exportHtml의 children wrapper(<div data-be-block-id><p/>
 // <div data-be-children>...)를 재귀적으로 벗겨 children을 복원한다. 이
 // 재귀는 model의 findNestingDepthViolation(schema.ts)과 같은 모양의 깊이
-// 카운터로 스스로를 depth <= MAX_NESTING_DEPTH일 때만 더 내려가도록
-// 막는다(G-CNV-001, block-segmenter.ts는 고치지 않는다). exportHtml은
-// parseDocument가 문서 생성 단계에서 이미 깊이를 막아 65단 이상인 Document를
-// 애초에 만들 수 없으므로, buildNestedWrapperHtml은 손으로 조작한(정상
-// exportHtml로는 나올 수 없는) 매우 깊은 wrapper 체인 HTML 문자열로
-// documentFromRoot를 직접 공격하는 시나리오를 재현한다. 가장 안쪽은 내용을
-// 비워(children 없음) wrapper 레벨 수가 곧 만들어지는 blocks 배열 중첩
-// 깊이(model 기준 depth)와 1:1로 맞도록 한다.
-const buildNestedWrapperHtml = (levels: number): string => {
-  let html = "";
-  for (let level = levels; level >= 1; level -= 1) {
-    html = `<div data-be-block-id="b${level}"><p data-be-block-id="p${level}">t${level}</p><div data-be-children="1">${html}</div></div>`;
+// 카운터로 depth < MAX_NESTING_DEPTH일 때만 wrapper를 인식해, 만들어지는
+// children 배열이 model 상한(64)을 절대 넘지 않는다. 상한에 걸린 wrapper는
+// 거절하는 대신 평탄화해 텍스트를 보존하고 NESTED_CHILDREN_FLATTENED를
+// 경고한다(Issue #132, G-CNV-002). HTML 트리 자체의 깊이는 그 이전에
+// parseHtmlFragment의 깊이-캡(Issue #130)이 절단하므로 이 파일의 wrapper
+// 체인 시나리오는 두 방어가 함께 만드는 결과를 고정한다.
+
+// 레벨별 wrapper가 복원하는 자기 본문 블록. buildNestedWrapperHtml의
+// p 요소(dataBeBlockId=p<level>, 텍스트 t<level>)가 그대로 문단이 된다 —
+// 기대 트리를 조립하는 아래 두 헬퍼가 공유한다.
+const wrapperOwnBlock = (level: number) => ({
+  id: `p${level}`,
+  type: "paragraph" as const,
+  content: [{ text: `t${level}` }],
+});
+
+// levels 단 wrapper 체인이 만들어야 할 기대 blocks 트리를 만든다. 가장
+// 안쪽(leafBlocks가 비면 children 없는 문단)부터 바깥으로 감싸 올라간다 —
+// 테스트가 결과 구조 전체를 toEqual로 고정할 수 있게 한다.
+const expectedWrapperChain = (levels: number, leafBlocks: unknown[]) => {
+  let block: unknown =
+    leafBlocks.length > 0
+      ? { ...wrapperOwnBlock(levels), children: leafBlocks }
+      : wrapperOwnBlock(levels);
+  for (let level = levels - 1; level >= 1; level -= 1) {
+    block = { ...wrapperOwnBlock(level), children: [block] };
   }
-  return html;
+  return [block];
 };
 
 describe("재귀 스택 안전(PIT-0034)", () => {
-  it(`children 중첩이 MAX_NESTING_DEPTH(${MAX_NESTING_DEPTH})까지는 통과한다`, () => {
+  it(`children 중첩이 MAX_NESTING_DEPTH(${MAX_NESTING_DEPTH})까지는 구조를 그대로 복원한다`, () => {
     const result = importHtml(buildNestedWrapperHtml(MAX_NESTING_DEPTH));
+
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    // 64단째 wrapper는 가드가 wrapper 인식 대신 평탄화 경로로 보내지만
+    // children 컨테이너가 비어 있어 결과 블록(p64 문단, children 없음)은
+    // 끝까지 인식했을 때와 동일하다 — 기존 계약 그대로다.
+    expect(result.value.document.blocks).toEqual(
+      expectedWrapperChain(MAX_NESTING_DEPTH, []),
+    );
+    expect(result.value.warnings).toEqual([]);
   });
 
-  // 변이: blocksFromNodes의 depth 가드(depth <= MAX_NESTING_DEPTH일 때만
-  // wrapper를 인식)를 지우면 이 입력도 끝까지 재귀 해제해 실제 깊이
-  // 그대로(MAX_NESTING_DEPTH + 1) 문서를 완성한다 — parseDocument의 기존
-  // DOCUMENT_LIMIT_EXCEEDED 검증이 이 depth에서는 가드 유무와 무관하게
-  // 동일한 결과 코드로 거절하므로, 이 테스트는 "가드가 있음"이 아니라
-  // "이 depth-counter 설계가 정확히 model의 상한과 맞물려 있다"는
-  // 완료 조건 4의 관측 가능한 결과(HTML_DOCUMENT_INVALID)를 고정한다.
-  it(`children 중첩이 MAX_NESTING_DEPTH(${MAX_NESTING_DEPTH})를 한 단계라도 넘으면 HTML_DOCUMENT_INVALID로 거절한다`, () => {
+  // Issue #132: 이전 계약(HTML_DOCUMENT_INVALID 전면 거절)은 65단 문서
+  // 전체를 소비 불가로 만들었다. 새 계약은 가드를 depth < MAX_NESTING_DEPTH
+  // 로 낮춰 children 배열이 model 상한(64)에 정확히 머물게 하고, 상한에
+  // 걸린 wrapper(63단째의 children 안, model 깊이 64)를 평탄화해 64단째와
+  // 65단째 본문을 형제 문단으로 보존한다.
+  it(`children 중첩이 MAX_NESTING_DEPTH(${MAX_NESTING_DEPTH})를 넘으면 초과분을 형제 문단으로 평탄화하고 NESTED_CHILDREN_FLATTENED를 경고한다(Issue #132)`, () => {
     const result = importHtml(buildNestedWrapperHtml(MAX_NESTING_DEPTH + 1));
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.document.blocks).toEqual(
+      expectedWrapperChain(MAX_NESTING_DEPTH - 1, [
+        wrapperOwnBlock(MAX_NESTING_DEPTH),
+        wrapperOwnBlock(MAX_NESTING_DEPTH + 1),
+      ]),
+    );
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({ kind: "NESTED_CHILDREN_FLATTENED" }),
+    ]);
   });
 
-  // 완료 조건 4(관측 가능한 계약만 고정, 정정): 매우 깊게 중첩된(수천 단계)
-  // wrapper HTML을 import해도 RangeError가 호출자 밖으로 새지 않고
-  // 구조화된 Result 오류를 반환한다. wall-clock/timeout이 아니라 "던지지
-  // 않는다"와 "ok:false다"라는 결정적 조건으로만 판정한다(PIT-0034).
-  //
-  // **주의(즉시 리뷰 발견, 정정)**: 이 depth(3000)에서 실제로는 내부적으로
-  // RangeError가 발생한다 — blocksFromNodes의 depth 가드는 depth 65부터
-  // wrapper 인식을 멈추고 나머지를 plainRun으로 넘기지만, 그 뒤
-  // segmentBlocks(block-segmenter.ts의 walk)가 깊이 제한 없이 재귀해 이
-  // 깊이에서 RangeError를 던진다(일반 <div> 중첩만으로도 동일하게
-  // 재현되는, 이 DELTA 이전부터 있던 동작 — wrapper 구조와 무관). 이
-  // 테스트가 여전히 통과하는 이유는 이 depth 가드가 아니라 importHtml의
-  // 기존 최외곽 catch(모든 예외를 HTML_PARSE_FAILED로 흡수)다. 그래서
-  // 이 테스트는 "신규 depth-counter가 스택을 지킨다"가 아니라 "그 경우에도
-  // 공개 API 계약(크래시 비유출)은 성립한다"만 고정한다 — 방어 자체가
-  // 결정적이지 않다는 사실(block-segmenter.ts walk의 무제한 재귀, 이 DELTA
-  // 범위 밖)은 별도 후속 이슈로 분리했다.
-  it("매우 깊게 중첩된(수천 단계) wrapper HTML을 import해도 크래시 없이 구조화된 Result 오류를 반환한다", () => {
+  // 매우 깊은(수천 단계) wrapper 체인은 두 방어를 모두 지난다 —
+  // parseHtmlFragment의 트리 깊이-캡(#130)이 캡 너머 서브트리를 텍스트로
+  // 절단하고(DEEP_TREE_FLATTENED), blocksFromNodes의 depth 가드(#132)가
+  // 남은 wrapper를 model 상한에서 평탄화한다(NESTED_CHILDREN_FLATTENED).
+  // 이전 계약("우연한 최외곽 catch가 RangeError를 HTML_PARSE_FAILED로
+  // 흡수해 ok:false")은 방어가 아니라 사고 수습이었다 — 새 계약은 크래시
+  // 없이 ok:true로 최심부 텍스트까지 보존한다. wall-clock/timeout이 아니라
+  // 구조 단언만 쓴다(PIT-0034).
+  it("매우 깊게 중첩된(수천 단계) wrapper HTML도 크래시 없이 텍스트를 보존한 문서와 절단·평탄화 경고를 반환한다", () => {
     const veryDeepHtml = buildNestedWrapperHtml(3000);
 
     expect(() => importHtml(veryDeepHtml)).not.toThrow();
 
     const result = importHtml(veryDeepHtml);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(documentVisibleText(result.value.document)).toContain("t3000");
+    expect(result.value.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "DEEP_TREE_FLATTENED" }),
+        expect.objectContaining({ kind: "NESTED_CHILDREN_FLATTENED" }),
+      ]),
+    );
   });
 });

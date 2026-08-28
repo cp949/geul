@@ -34,9 +34,9 @@ const genericPolicy: BlockSegmentPolicy = {
  * 재귀 판정만 검증한다.
  */
 const segment = (html: string): BlockSegment[] => {
-  const root = parseHtmlFragment(html);
-  if (root === undefined) throw new Error("fixture 파싱 실패");
-  return segmentBlocks(root.children, genericPolicy);
+  const parsed = parseHtmlFragment(html);
+  if (parsed === undefined) throw new Error("fixture 파싱 실패");
+  return segmentBlocks(parsed.root.children, genericPolicy);
 };
 
 const textOf = (nodes: readonly HtmlNode[]): string =>

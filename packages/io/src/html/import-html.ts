@@ -29,7 +29,9 @@ import {
 } from "./hast-properties.js";
 import {
   collectHtmlImportWarnings,
+  deepTreeFlattenedWarning,
   type HtmlImportWarning,
+  nestedChildrenFlattenedWarning,
 } from "./import-warnings.js";
 import {
   type HtmlElementContent,
@@ -460,37 +462,31 @@ const findChildrenWrapper = (
 };
 
 // wrapper 재귀 해제 안전장치(G-CNV-001, PIT-0034) — model의
-// findNestingDepthViolation(schema.ts)과 같은 모양의 가드다: depth가
-// MAX_NESTING_DEPTH(64, blocks 배열 자체가 depth 1)를 넘어서는 호출에
-// "진입하는 시점"부터 더 이상 wrapper를 인식하지 않고 그 자리 노드를 있는
-// 그대로 plainRun에 넣어 segmentBlocks 평면 처리로 넘긴다(block-segmenter.ts
-// 는 고치지 않는다). 그래서 **이 함수 자신의 재귀 프레임**은 항상
-// MAX_NESTING_DEPTH + 1(65) 안에서 끝난다(즉시 리뷰가 depth guard를 임시
-// 무력화한 화이트박스 재현으로 확인 — depth 4000~8000에서 실제 RangeError
-// 재현, 가드 복원 후에는 재현 안 됨). 다만 이 가드가 깊이 64에서 65로 "한
-// 번 더" 내려가는 것은 허용하므로(depth <= MAX_NESTING_DEPTH일 때 재귀),
-// 만들어지는 Document의 children 배열은 depth 65에 도달할 수 있다 — 그건
-// 이 함수가 아니라 뒤이은 parseDocument(importHtml 안)의 기존
-// DOCUMENT_LIMIT_EXCEEDED 검증이 잡는다(완료 조건 4, 신규 에러 코드를
-// 만들지 않는다).
+// findNestingDepthViolation(schema.ts)과 같은 모양의 가드다: depth <
+// MAX_NESTING_DEPTH(64, blocks 배열 자체가 depth 1)일 때만 wrapper를
+// 인식해 한 단계 더 내려가므로, 이 함수의 재귀 프레임과 만들어지는
+// Document의 children 깊이가 모두 정확히 MAX_NESTING_DEPTH 안에서 끝난다 —
+// 뒤이은 parseDocument의 DOCUMENT_LIMIT_EXCEEDED 거절에 기대지 않는다.
+// 상한에 걸린 wrapper(depth >= MAX_NESTING_DEPTH에서 인식된 것)는 전면
+// 거절하는 대신 그 자리 노드를 plainRun으로 넘겨 segmentBlocks 평면
+// 처리로 평탄화하고, 실제로 잃는 구조(비어 있지 않은 children 컨테이너)가
+// 있을 때만 NESTED_CHILDREN_FLATTENED를 경고한다(Issue #132, G-CNV-002 —
+// 보이는 텍스트는 형제 문단으로 보존된다).
 //
-// **범위 한계(즉시 리뷰 발견, 정정)**: 위 보장은 이 함수 자신에게만
-// 적용된다 — plainRun으로 넘어간 노드가 segmentBlocks(block-segmenter.ts의
-// walk)로 들어간 뒤에는 그쪽 재귀가 깊이 제한 없이 NESTED_BOUNDARY_TAG_NAMES
-// (div/li/blockquote)를 따라 내려간다. 이 DELTA 이전부터 있던 동작이라(일반
-// <div> 중첩 HTML만으로도 재현 — wrapper 구조와 무관) 이 함수의 신규
-// 가드가 막을 수 있는 범위가 아니고, block-segmenter.ts를 고치지 않는다는
-// 이 DELTA의 확정 설계상 여기서 고치지도 않는다. 실측으로는 depth
-// 2000~3000대에서 RangeError가 나지만 importHtml의 기존 최외곽 catch가
-// 그것을 HTML_PARSE_FAILED로 흡수해 공개 API 계약(크래시 없이 Result 반환,
-// 완료 조건 4)은 오늘 성립한다 — 다만 그 catch는 이 목적으로 설계된
-// 결정적 방어가 아니라 우연히 걸리는 범용 예외 처리라 PIT-0034가 경계하는
-// 종류의 의존이다. 근본 수정은 block-segmenter.ts 소관이라 별도 후속
-// 이슈로 분리했다.
+// plainRun으로 넘어간 노드가 들어가는 segmentBlocks(block-segmenter.ts의
+// walk) 재귀와 이 파일의 textValue·createDefaultIdFactory 재귀는 깊이
+// 제한이 없지만, parseHtmlFragment의 깊이-캡(MAX_HTML_TREE_DEPTH, Issue
+// #130)이 HTML 트리 자체를 parse 직후에 절단하므로 전부 그 상수로 유계다.
+// 캡 "이전"인 파서 라이브러리 내부 재귀(parse5의 EOF template 정리 —
+// 닫히지 않은 중첩 template)만은 캡이 못 막는데, 그 구간은 우연한 최외곽
+// catch가 아니라 parseHtmlFragment 자신의 설계된 경계 catch가 받아
+// undefined → HTML_PARSE_FAILED로 흡수된다(PIT-0034가 경계하는 "우연한
+// catch 의존"은 결정 6 + 그 경계 catch로 제거됐다).
 const blocksFromNodes = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,
   depth: number,
+  warnings: HtmlImportWarning[],
 ): Document["blocks"] => {
   const blocks: Document["blocks"] = [];
   let plainRun: HtmlNode[] = [];
@@ -502,9 +498,18 @@ const blocksFromNodes = (
   };
 
   for (const node of nodes) {
-    const wrapper =
-      depth <= MAX_NESTING_DEPTH ? findChildrenWrapper(node) : undefined;
+    const wrapper = findChildrenWrapper(node);
     if (wrapper === undefined) {
+      plainRun.push(node);
+      continue;
+    }
+    if (depth >= MAX_NESTING_DEPTH) {
+      // children 컨테이너가 비어 있으면(정확히 상한 깊이로 끝나는 체인)
+      // 평탄화 결과가 wrapper를 인식했을 때와 동일하므로 경고하지 않는다 —
+      // 64단 입력의 기존 산출·경고를 그대로 유지한다.
+      if (wrapper.childrenNodes.length > 0) {
+        warnings.push(nestedChildrenFlattenedWarning());
+      }
       plainRun.push(node);
       continue;
     }
@@ -530,6 +535,7 @@ const blocksFromNodes = (
       wrapper.childrenNodes,
       createId,
       depth + 1,
+      warnings,
     );
     blocks.push(children.length > 0 ? { ...ownBlock, children } : ownBlock);
   }
@@ -538,8 +544,12 @@ const blocksFromNodes = (
   return blocks;
 };
 
-const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
-  const blocks = blocksFromNodes(root.children, createId, 1);
+const documentFromRoot = (
+  root: HtmlRoot,
+  createId: IdFactory,
+  warnings: HtmlImportWarning[],
+): Document => {
+  const blocks = blocksFromNodes(root.children, createId, 1, warnings);
   return { formatVersion: 1, revision: 0, blocks };
 };
 
@@ -551,8 +561,8 @@ export const importHtml = (
   ImportError
 > => {
   try {
-    const unsafeRoot = parseHtmlFragment(source);
-    if (unsafeRoot === undefined) {
+    const parsedFragment = parseHtmlFragment(source);
+    if (parsedFragment === undefined) {
       return {
         ok: false,
         error: {
@@ -561,7 +571,14 @@ export const importHtml = (
         },
       };
     }
+    // 깊이-캡 절단(Issue #130)은 sanitize·경고 수집 이전(parseHtmlFragment
+    // 내부)에 일어나므로 raw 경고 수집과 sanitize 의미 변환이 같은(절단된)
+    // 트리를 본다 — 절단 사실 자체는 캡 패스 반환값으로만 알 수 있어
+    // 여기서 경고로 바꾼다. 절단이 시간상 가장 먼저 일어난 사건이라 경고
+    // 목록 맨 앞에 둔다.
+    const { root: unsafeRoot, truncated } = parsedFragment;
     const warnings = collectHtmlImportWarnings(unsafeRoot);
+    if (truncated) warnings.unshift(deepTreeFlattenedWarning());
     const safeRoot = asRoot(sanitize(unsafeRoot, htmlSanitizeSchema));
     if (safeRoot === undefined) {
       return {
@@ -577,6 +594,7 @@ export const importHtml = (
     const document = documentFromRoot(
       safeRoot,
       options?.createId ?? createDefaultIdFactory(safeRoot),
+      warnings,
     );
     const parsed = parseDocument(document);
     if (!parsed.ok) {

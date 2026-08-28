@@ -1,10 +1,15 @@
-import { isSupportedLinkHref, sanitizeInlineText } from "@cp949/geul-model";
+import {
+  isSupportedLinkHref,
+  MAX_NESTING_DEPTH,
+  sanitizeInlineText,
+} from "@cp949/geul-model";
 
 import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
 import type { HtmlNode, HtmlRoot } from "./inline-content.js";
+import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
   htmlAllowedAttributes,
   htmlStrippedTagNames,
@@ -37,7 +42,38 @@ export type HtmlImportWarning =
       kind: "UNSAFE_CODE_POINT_REMOVED";
       element: string;
       message: string;
+    }
+  // 아래 두 kind는 특정 요소 하나에 귀속되지 않는 구조 절단이라 element
+  // 필드가 없다 — 절단은 트리·중첩 깊이라는 위치 축에서 일어나고, 절단된
+  // 서브트리의 보이는 텍스트는 결과에 보존된다(G-CNV-002).
+  | {
+      // HTML 트리 깊이가 MAX_HTML_TREE_DEPTH를 넘어 캡에서 절단됐다
+      // (Issue #130). 절단 자체는 parseHtmlFragment의 깊이-캡 패스가
+      // 수행하고, 이 경고는 그 반환값(truncated)을 문서 import 경로가
+      // 경고로 바꾼 것이다.
+      kind: "DEEP_TREE_FLATTENED";
+      message: string;
+    }
+  | {
+      // children wrapper 중첩이 model 상한(MAX_NESTING_DEPTH)에 걸려
+      // 초과분이 형제 문단으로 평탄화됐다(Issue #132). 전면 거절 대신
+      // 텍스트를 보존한다.
+      kind: "NESTED_CHILDREN_FLATTENED";
+      message: string;
     };
+
+// 두 평탄화 경고의 메시지 문안은 이 모듈이 단독 소유한다 — 발생 지점
+// (import-html.ts의 parse 직후, blocksFromNodes의 깊이 가드)이 문안을 각자
+// 들고 있으면 같은 사실이 두 표현으로 갈라진다.
+export const deepTreeFlattenedWarning = (): HtmlImportWarning => ({
+  kind: "DEEP_TREE_FLATTENED",
+  message: `HTML nested deeper than ${MAX_HTML_TREE_DEPTH} levels was flattened to text`,
+});
+
+export const nestedChildrenFlattenedWarning = (): HtmlImportWarning => ({
+  kind: "NESTED_CHILDREN_FLATTENED",
+  message: `Blocks nested deeper than ${MAX_NESTING_DEPTH} levels were flattened into sibling paragraphs`,
+});
 
 const unsafeElementNames = new Set([
   ...htmlStrippedTagNames,

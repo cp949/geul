@@ -86,8 +86,9 @@ const allowedDependencies = {
   "packages/io": {
     dependencies: {
       "@cp949/geul-model": "workspace:*",
+      "hast-util-from-parse5": "8.0.3",
       "hast-util-sanitize": "5.0.2",
-      "rehype-parse": "9.0.1",
+      parse5: "7.3.0",
       "rehype-stringify": "10.0.1",
       "remark-gfm": "4.0.1",
       "remark-parse": "11.0.0",

@@ -40,9 +40,9 @@ const findTableElement = (
  * 바꾼다.
  */
 const layoutsFromHtml = (html: string) => {
-  const root = parseHtmlFragment(html);
-  if (root === undefined) throw new Error("표 fixture 파싱 실패");
-  const table = findTableElement(root.children);
+  const parsed = parseHtmlFragment(html);
+  if (parsed === undefined) throw new Error("표 fixture 파싱 실패");
+  const table = findTableElement(parsed.root.children);
   if (table === undefined) throw new Error("표 fixture에 <table>이 없다");
   return layoutRows(tableRows(table));
 };

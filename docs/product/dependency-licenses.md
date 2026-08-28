@@ -7,8 +7,9 @@ The table records every direct external production dependency in the R0 workspac
 | `@tiptap/core` | `3.30.1` | MIT | core | Headless editor runtime and extension API |
 | `@tiptap/pm` | `3.30.1` | MIT | core | ProseMirror runtime modules used through Tiptap |
 | `@tiptap/starter-kit` | `3.30.1` | MIT | core | R0 paragraph, heading, list, and inline editing extensions |
+| `hast-util-from-parse5` | `8.0.3` | MIT | io | Parse5-tree-to-HAST conversion, run after the iterative depth cap bounds its recursion (Issue #130) |
 | `hast-util-sanitize` | `5.0.2` | MIT | io | HTML AST allowlist sanitization |
-| `rehype-parse` | `9.0.1` | MIT | io | HTML-to-HAST parsing |
+| `parse5` | `7.3.0` | MIT | io | Spec-compliant HTML parsing with iterative tree construction (safe at any input depth) |
 | `rehype-stringify` | `10.0.1` | MIT | io | Sanitized HAST-to-HTML serialization |
 | `remark-gfm` | `4.0.1` | MIT | io | GitHub Flavored Markdown tables and syntax |
 | `remark-parse` | `11.0.0` | MIT | io | Markdown-to-MDAST parsing |
