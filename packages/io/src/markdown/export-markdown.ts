@@ -1,4 +1,5 @@
 import {
+  type Block,
   type Document,
   type InlineContent,
   parseDocument,
@@ -136,6 +137,24 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
   };
 };
 
+// children이 있는 paragraph/heading을 부모 바로 뒤의 형제 블록으로
+// 평탄화한다(D5, lossy export 전용). GFM(mdast)의 paragraph/heading
+// 노드에는 자식 블록 슬롯이 없어 계층을 표현할 수 없다 — depth와 무관하게
+// 전부 평탄화해 콘텐츠는 보존하고 계층 정보만 손실로 남긴다(strict 모드는
+// analyzeMarkdownLoss가 NESTED_CHILDREN을 이미 거부하므로 이 함수에
+// 도달하지 않는다).
+const flattenBlocks = (blocks: Block[]): Block[] =>
+  blocks.flatMap((block): Block[] => {
+    if (block.type !== "paragraph" && block.type !== "heading") {
+      return [block];
+    }
+    if (block.children === undefined || block.children.length === 0) {
+      return [block];
+    }
+    const { children, ...ownBlock } = block;
+    return [ownBlock, ...flattenBlocks(children)];
+  });
+
 const documentNode = (document: Document): MarkdownOutputNode => ({
   type: "root",
   children: document.blocks.map((block) => {
@@ -196,8 +215,12 @@ export function exportMarkdown(
   }
 
   try {
+    const outputDocument: Document =
+      options.mode === "lossy"
+        ? { ...parsed.value, blocks: flattenBlocks(parsed.value.blocks) }
+        : parsed.value;
     const markdown = stringifyProcessor.stringify(
-      documentNode(parsed.value) as Parameters<
+      documentNode(outputDocument) as Parameters<
         typeof stringifyProcessor.stringify
       >[0],
     );

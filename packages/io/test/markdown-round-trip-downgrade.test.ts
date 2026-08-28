@@ -1,6 +1,7 @@
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import { importMarkdown } from "../src/index.js";
+import { exportMarkdown, importMarkdown } from "../src/index.js";
 
 describe("Markdown 강등 경고", () => {
   it("목록 항목과 중첩 항목의 경계를 경고와 함께 문단으로 보존한다", () => {
@@ -152,6 +153,63 @@ describe("Markdown 강등 경고", () => {
     expect(table.rows[0]?.cells.map((c) => c.align)).toEqual([
       undefined,
       undefined,
+    ]);
+  });
+
+  it("children이 있는 문서를 lossy로 내보내면 형제로 평탄화되고 재수입해도 계층 없이 콘텐츠를 보존한다", () => {
+    const nestedDocument: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "parent-paragraph",
+          type: "paragraph",
+          content: [{ text: "Parent" }],
+          children: [
+            {
+              id: "child-heading",
+              type: "heading",
+              level: 2,
+              content: [{ text: "Child heading" }],
+              children: [
+                {
+                  id: "grandchild-paragraph",
+                  type: "paragraph",
+                  content: [{ text: "Grandchild" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const exported = exportMarkdown(nestedDocument, { mode: "lossy" });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(exported.value.warnings).toEqual([
+      {
+        kind: "NESTED_CHILDREN",
+        blockId: "parent-paragraph",
+        message:
+          "Block parent-paragraph has nested children; GFM export flattens them into sibling blocks",
+      },
+      {
+        kind: "NESTED_CHILDREN",
+        blockId: "child-heading",
+        message:
+          "Block child-heading has nested children; GFM export flattens them into sibling blocks",
+      },
+    ]);
+
+    const imported = importMarkdown(exported.value.markdown);
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) throw new Error(imported.error.message);
+    expect(imported.value.warnings).toEqual([]);
+    expect(imported.value.document.blocks).toMatchObject([
+      { type: "paragraph", content: [{ text: "Parent" }] },
+      { type: "heading", level: 2, content: [{ text: "Child heading" }] },
+      { type: "paragraph", content: [{ text: "Grandchild" }] },
     ]);
   });
 });

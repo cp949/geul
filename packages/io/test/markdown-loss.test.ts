@@ -465,4 +465,78 @@ describe("Markdown 손실 처리", () => {
       },
     ]);
   });
+
+  it("children이 있는 문단/헤딩은 깊이와 무관하게 모두 NESTED_CHILDREN 손실로 보고한다", () => {
+    const nestedChildrenDocument: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "parent-paragraph",
+          type: "paragraph",
+          content: [{ text: "Parent" }],
+          children: [
+            {
+              id: "child-heading",
+              type: "heading",
+              level: 2,
+              content: [{ text: "Child heading" }],
+              children: [
+                {
+                  id: "grandchild-paragraph",
+                  type: "paragraph",
+                  content: [{ text: "Grandchild" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const losses = [
+      {
+        kind: "NESTED_CHILDREN",
+        blockId: "parent-paragraph",
+        message:
+          "Block parent-paragraph has nested children; GFM export flattens them into sibling blocks",
+      },
+      {
+        kind: "NESTED_CHILDREN",
+        blockId: "child-heading",
+        message:
+          "Block child-heading has nested children; GFM export flattens them into sibling blocks",
+      },
+    ] as const;
+
+    expect(exportMarkdown(nestedChildrenDocument, { mode: "strict" })).toEqual({
+      ok: false,
+      error: { code: "MARKDOWN_LOSS_NOT_ALLOWED", losses },
+    });
+
+    const lossy = exportMarkdown(nestedChildrenDocument, { mode: "lossy" });
+    expect(lossy.ok).toBe(true);
+    if (!lossy.ok) throw new Error(lossy.error.message);
+    expect(lossy.value.warnings).toEqual(losses);
+  });
+
+  it("children이 빈 배열이면 NESTED_CHILDREN 손실을 보고하지 않는다", () => {
+    const emptyChildrenDocument: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "paragraph-empty-children",
+          type: "paragraph",
+          content: [{ text: "No real children" }],
+          children: [],
+        },
+      ],
+    };
+
+    expect(exportMarkdown(emptyChildrenDocument, { mode: "strict" })).toEqual({
+      ok: true,
+      value: expect.any(String),
+    });
+  });
 });
