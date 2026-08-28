@@ -22,6 +22,7 @@ import {
 } from "./block-container-extension.js";
 import { BlockIdExtension } from "./block-id-extension.js";
 import { findBlockPosition } from "./block-position.js";
+import { BlockJoinExtension } from "./block-join-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
 import type { EditorError } from "./errors.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
@@ -624,6 +625,7 @@ export const createEditor = (
         BlockGroupExtension,
         BlockIdExtension.configure({ createId }),
         BlockSplitExtension,
+        BlockJoinExtension,
         TableExtension,
         TableRowExtension,
         TableCellExtension,

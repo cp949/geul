@@ -11,37 +11,18 @@
  * 노출되지 않는다(G-WKS-001).
  */
 import { type Document } from "@cp949/geul-model";
-import type { Editor as TiptapEditor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { describe, expect, it, vi } from "vitest";
 
 import { BlockSplitExtension } from "../src/block-split-extension.js";
 import { createEditor } from "../src/index.js";
+import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
 import {
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
 import { cellJson, createTableFixtureEditor } from "./table-test-support.js";
-
-/**
- * Enter keydown을 view.someProp("handleKeyDown", ...)로 실 디스패치하고
- * 소비 여부(어떤 핸들러가 true를 반환해 preventDefault될지)를 돌려준다 —
- * indent-keyboard-extension.test.ts의 Tab 디스패치와 같은 패턴.
- */
-const dispatchEnterKeydown = (tiptap: Pick<TiptapEditor, "view">): boolean =>
-  tiptap.view.someProp(
-    "handleKeyDown",
-    (f) =>
-      f(
-        tiptap.view,
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          cancelable: true,
-        }),
-      ) === true,
-  ) === true;
 
 /**
  * 최상위 문단 블록 두 개짜리 문서 — 두 블록을 가로지르는 범위 선택의
@@ -55,26 +36,6 @@ const twoParagraphDocument = (): Document => ({
     { id: "block-b", type: "paragraph", content: [{ text: "world" }] },
   ],
 });
-
-/**
- * blockId로 blockContainer를 찾아 그 콘텐츠 노드(paragraph/heading)의
- * 텍스트 시작 위치를 돌려준다. 컨테이너 pos + 1은 콘텐츠 노드 자신,
- * + 2가 그 안 텍스트 시작이다(D19 구조 토큰 산술 — tiptap-to-model.test.ts
- * D22 절과 같은 계산).
- */
-const contentTextStart = (tiptap: TiptapEditor, blockId: string): number => {
-  let found: number | null = null;
-  tiptap.state.doc.descendants((node, pos) => {
-    if (found !== null) return false;
-    if (node.type.name === "blockContainer" && node.attrs.blockId === blockId) {
-      found = pos + 2;
-      return false;
-    }
-    return true;
-  });
-  if (found === null) throw new Error(`blockContainer ${blockId} 조회 실패`);
-  return found;
-};
 
 describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한다", () => {
   it("한 블록 안 범위 선택 Enter는 키를 소비하고 [앞], [뒤] 두 블록으로 분할한다", () => {
@@ -93,7 +54,7 @@ describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한�
       to: textStart + 4,
     });
 
-    const handled = dispatchEnterKeydown(tiptap);
+    const handled = dispatchKeydown(tiptap, "Enter");
 
     // 키 소비 — false면 어떤 핸들러도 preventDefault하지 않아 실 브라우저
     // 에서 native contenteditable이 PM 몰래 DOM을 바꾼다(결함 1의 핵심).
@@ -142,7 +103,7 @@ describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한�
       to: contentTextStart(tiptap, "block-b") + 1,
     });
 
-    const handled = dispatchEnterKeydown(tiptap);
+    const handled = dispatchKeydown(tiptap, "Enter");
     expect(handled).toBe(true);
 
     expect(() =>
@@ -218,7 +179,7 @@ describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한�
       to: textStart + 4,
     });
 
-    const handled = dispatchEnterKeydown(tiptap);
+    const handled = dispatchKeydown(tiptap, "Enter");
     expect(handled).toBe(true);
 
     expect(() =>
@@ -312,7 +273,7 @@ describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한�
     });
 
     const dispatchSpy = vi.spyOn(editor.view, "dispatch");
-    dispatchEnterKeydown(editor);
+    dispatchKeydown(editor, "Enter");
 
     // BlockSplitExtension이 범위를 삭제한 뒤 분할에 실패해 삭제만 dispatch
     // 했다면(어중간한 dispatch) 코어 keymap 몫과 합쳐 2회가 된다 — 이
