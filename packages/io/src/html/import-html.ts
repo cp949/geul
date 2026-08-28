@@ -3,6 +3,7 @@ import {
   type Document,
   type IdFactory,
   type InlineContent,
+  MAX_NESTING_DEPTH,
   MAX_TABLE_COLUMNS,
   parseDocument,
   sanitizeInlineText,
@@ -31,6 +32,7 @@ import {
   type HtmlImportWarning,
 } from "./import-warnings.js";
 import {
+  type HtmlElementContent,
   type HtmlElementNode,
   type HtmlNode,
   type HtmlRoot,
@@ -330,13 +332,18 @@ const importBlockSegmentPolicy: BlockSegmentPolicy = {
 const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
   sanitizeInlineContentText(inlineContentFromNodes(nodes));
 
-const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
+// segmentBlocks의 경계 판정을 실제 Block으로 옮기는 변환 하나만 한다(재귀
+// unwrap은 다루지 않는다 — blocksFromNodes가 감싼다). documentFromRoot의
+// 기존 루프 그대로이고, DELTA-04는 이 함수를 두 자리에서 재사용한다: (1)
+// 최상위 nodes 중 children wrapper가 아닌 나머지("평면" 구간), (2) wrapper
+// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고).
+const blocksFromSegments = (
+  nodes: readonly HtmlNode[],
+  createId: IdFactory,
+): Document["blocks"] => {
   const blocks: Document["blocks"] = [];
 
-  for (const segment of segmentBlocks(
-    root.children,
-    importBlockSegmentPolicy,
-  )) {
+  for (const segment of segmentBlocks(nodes, importBlockSegmentPolicy)) {
     if (segment.kind === "paragraph") {
       // 경계 태그 없이 자연히 쌓인 pending(예: div/li 재귀 안 텍스트,
       // 인식하지 않는 태그 통과분)이라 originating 요소가 없다 — 기존
@@ -398,6 +405,141 @@ const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
     blocks.push(parseTable(segment.node, createId));
   }
 
+  return blocks;
+};
+
+const isElementNode = (node: HtmlNode): node is HtmlElementNode =>
+  node.type === "element";
+
+// exportHtml(blockNode)이 낸 children wrapper를 구조로만 인식한다: div
+// 자식이 정확히 2개(실질 텍스트가 섞이지 않은 순수 2-element), 첫째는
+// p/h1~h3(그 블록 자신의 본문), 둘째는 dataBeChildren이 있는 div(children
+// 목록)다. 이 두 자리 중 하나라도 어긋나면 wrapper로 보지 않고 undefined를
+// 반환한다 — 호출자(blocksFromNodes)는 그 경우 원본 노드를 그대로 평면
+// 처리(segmentBlocks)로 넘긴다. 부분 일치를 관대하게 봐주지 않는 이유:
+// export가 절대 내지 않는 애매한 구조까지 wrapper로 오인하면 사용자가 직접
+// 쓴 임의의 div(예: <div>STRAY<p>a</p><div data-be-children>b</div></div>)가
+// 뜻하지 않게 중첩 구조로 해석되고, 그 사이·앞뒤에 낀 실질 텍스트("STRAY")가
+// 결과 어디에도 담기지 못한 채 조용히 사라진다(G-CNV-002 위반 — 트랙-2
+// 라운드5 리뷰가 실측한 결함, 즉시 정정). 그래서 두 element 자리를 확인하기
+// 전에 먼저 element가 아닌 형제(text·comment 등)에 실질 텍스트가 있는지부터
+// 걸러 wrapper 인식 자체를 취소한다(공백만 있는 텍스트는 원래 export가 내는
+// 형태에도 나올 수 있어 통과시킨다 — 기존 caption 처리(`hasSubstantialText`)
+// 와 같은 판정 기준). 반대로 못 알아보면 기존 NESTED_BOUNDARY_TAG_NAMES
+// 평면 처리로 안전하게 떨어지므로(완료 조건 1의 변이 시나리오와 동일한
+// 경로) 실패 방향이 항상 더 보수적이다.
+const findChildrenWrapper = (
+  node: HtmlNode,
+):
+  | { ownNode: HtmlElementNode; childrenNodes: HtmlElementContent[] }
+  | undefined => {
+  if (node.type !== "element" || node.tagName !== "div") return undefined;
+
+  const hasStrayText = node.children.some(
+    (child) => !isElementNode(child) && hasSubstantialText(textValue([child])),
+  );
+  if (hasStrayText) return undefined;
+
+  const elementChildren = node.children.filter(isElementNode);
+  if (elementChildren.length !== 2) return undefined;
+
+  const ownNode = elementChildren[0];
+  const containerNode = elementChildren[1];
+  if (ownNode === undefined || containerNode === undefined) return undefined;
+  const isOwnBoundaryTag =
+    ownNode.tagName === "p" || /^h[1-3]$/.test(ownNode.tagName);
+  if (!isOwnBoundaryTag) return undefined;
+  if (
+    containerNode.tagName !== "div" ||
+    propertyString(containerNode, "dataBeChildren") === undefined
+  ) {
+    return undefined;
+  }
+
+  return { ownNode, childrenNodes: containerNode.children };
+};
+
+// wrapper 재귀 해제 안전장치(G-CNV-001, PIT-0034) — model의
+// findNestingDepthViolation(schema.ts)과 같은 모양의 가드다: depth가
+// MAX_NESTING_DEPTH(64, blocks 배열 자체가 depth 1)를 넘어서는 호출에
+// "진입하는 시점"부터 더 이상 wrapper를 인식하지 않고 그 자리 노드를 있는
+// 그대로 plainRun에 넣어 segmentBlocks 평면 처리로 넘긴다(block-segmenter.ts
+// 는 고치지 않는다). 그래서 **이 함수 자신의 재귀 프레임**은 항상
+// MAX_NESTING_DEPTH + 1(65) 안에서 끝난다(즉시 리뷰가 depth guard를 임시
+// 무력화한 화이트박스 재현으로 확인 — depth 4000~8000에서 실제 RangeError
+// 재현, 가드 복원 후에는 재현 안 됨). 다만 이 가드가 깊이 64에서 65로 "한
+// 번 더" 내려가는 것은 허용하므로(depth <= MAX_NESTING_DEPTH일 때 재귀),
+// 만들어지는 Document의 children 배열은 depth 65에 도달할 수 있다 — 그건
+// 이 함수가 아니라 뒤이은 parseDocument(importHtml 안)의 기존
+// DOCUMENT_LIMIT_EXCEEDED 검증이 잡는다(완료 조건 4, 신규 에러 코드를
+// 만들지 않는다).
+//
+// **범위 한계(즉시 리뷰 발견, 정정)**: 위 보장은 이 함수 자신에게만
+// 적용된다 — plainRun으로 넘어간 노드가 segmentBlocks(block-segmenter.ts의
+// walk)로 들어간 뒤에는 그쪽 재귀가 깊이 제한 없이 NESTED_BOUNDARY_TAG_NAMES
+// (div/li/blockquote)를 따라 내려간다. 이 DELTA 이전부터 있던 동작이라(일반
+// <div> 중첩 HTML만으로도 재현 — wrapper 구조와 무관) 이 함수의 신규
+// 가드가 막을 수 있는 범위가 아니고, block-segmenter.ts를 고치지 않는다는
+// 이 DELTA의 확정 설계상 여기서 고치지도 않는다. 실측으로는 depth
+// 2000~3000대에서 RangeError가 나지만 importHtml의 기존 최외곽 catch가
+// 그것을 HTML_PARSE_FAILED로 흡수해 공개 API 계약(크래시 없이 Result 반환,
+// 완료 조건 4)은 오늘 성립한다 — 다만 그 catch는 이 목적으로 설계된
+// 결정적 방어가 아니라 우연히 걸리는 범용 예외 처리라 PIT-0034가 경계하는
+// 종류의 의존이다. 근본 수정은 block-segmenter.ts 소관이라
+// pending-issues/09.md로 분리했다.
+const blocksFromNodes = (
+  nodes: readonly HtmlNode[],
+  createId: IdFactory,
+  depth: number,
+): Document["blocks"] => {
+  const blocks: Document["blocks"] = [];
+  let plainRun: HtmlNode[] = [];
+
+  const flushPlainRun = (): void => {
+    if (plainRun.length === 0) return;
+    blocks.push(...blocksFromSegments(plainRun, createId));
+    plainRun = [];
+  };
+
+  for (const node of nodes) {
+    const wrapper =
+      depth <= MAX_NESTING_DEPTH ? findChildrenWrapper(node) : undefined;
+    if (wrapper === undefined) {
+      plainRun.push(node);
+      continue;
+    }
+
+    flushPlainRun();
+    const ownBlocks = blocksFromSegments([wrapper.ownNode], createId);
+    const ownBlock = ownBlocks[0];
+    if (
+      ownBlocks.length !== 1 ||
+      ownBlock === undefined ||
+      ownBlock.type === "table"
+    ) {
+      // findChildrenWrapper가 ownNode를 p/h1~h3로만 걸렀으므로 정상 입력에서
+      // 이 분기는 도달하지 않는다 — p/heading이 (HTML5 파싱상 가능한) 표를
+      // 품고 있어 segmentBlocks가 블록 하나 대신 여러/다른 세그먼트를 냈을
+      // 때만 방어적으로 wrapper 인식을 취소하고 원본 노드를 평면 처리로
+      // 되돌린다.
+      plainRun.push(node);
+      continue;
+    }
+
+    const children = blocksFromNodes(
+      wrapper.childrenNodes,
+      createId,
+      depth + 1,
+    );
+    blocks.push(children.length > 0 ? { ...ownBlock, children } : ownBlock);
+  }
+  flushPlainRun();
+
+  return blocks;
+};
+
+const documentFromRoot = (root: HtmlRoot, createId: IdFactory): Document => {
+  const blocks = blocksFromNodes(root.children, createId, 1);
   return { formatVersion: 1, revision: 0, blocks };
 };
 

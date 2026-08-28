@@ -4,6 +4,14 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   "*": [],
   a: ["href"],
   col: ["width", "dataBeColumnId", "dataBeWidth"],
+  // DELTA-04(children 재귀 왕복): export-html.ts의 blockNode가 children 있는
+  // paragraph/heading을 감싸는 wrapper(바깥 div, children 컨테이너 div)가
+  // 쓰는 두 속성이다. dataBeBlockId는 p/h1~h3와 같은 이름을 재사용하고,
+  // dataBeChildren은 "이 div가 children 목록 컨테이너"라는 새 마커다(값은
+  // 항상 "1"). 이 목록에 없으면 sanitize가 div의 모든 속성을 지워
+  // import-html.ts의 findChildrenWrapper가 children 컨테이너를 알아보지
+  // 못하고 children이 조용히 사라진다(완료 조건 3의 변이 시나리오).
+  div: ["dataBeBlockId", "dataBeChildren"],
   h1: ["dataBeBlockId"],
   h2: ["dataBeBlockId"],
   h3: ["dataBeBlockId"],
