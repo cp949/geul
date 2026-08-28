@@ -23,7 +23,9 @@ describe("에디터 컨트롤러 링크", () => {
         initialDocument: paragraphDocument("content"),
       });
       const { tiptap } = mountTiptapEditor(editor);
-      tiptap.commands.setTextSelection({ from: 1, to: 8 });
+      // blockContainer가 문단을 감싸며 좌표가 1씩 밀렸다(D19) — 2가 "content"
+      // 시작, 9가 그 끝이다.
+      tiptap.commands.setTextSelection({ from: 2, to: 9 });
 
       expect(tiptap.commands.setLink({ href })).toBe(true);
       expect(editor.getDocument()).toMatchObject({
@@ -131,7 +133,8 @@ describe("에디터 컨트롤러 링크", () => {
     const { tiptap } = mountTiptapEditor(editor);
     const link = tiptap.schema.marks.link;
     if (link === undefined) throw new Error("Link mark is not registered");
-    tiptap.commands.setTextSelection(8);
+    // 9 = "content" 끝(D19로 컨테이너가 감싸며 좌표가 1씩 밀렸다).
+    tiptap.commands.setTextSelection(9);
     const documentBefore = tiptap.state.doc.toJSON();
     const selectionBefore = tiptap.state.selection.toJSON();
     const storedMarksBefore = tiptap.state.storedMarks;
@@ -162,7 +165,8 @@ describe("에디터 컨트롤러 링크", () => {
     const { tiptap } = mountTiptapEditor(editor);
     const link = tiptap.schema.marks.link;
     if (link === undefined) throw new Error("Link mark is not registered");
-    tiptap.commands.setTextSelection(8);
+    // 9 = "content" 끝(D19로 컨테이너가 감싸며 좌표가 1씩 밀렸다).
+    tiptap.commands.setTextSelection(9);
 
     tiptap.view.dispatch(
       tiptap.state.tr.setStoredMarks([
@@ -202,7 +206,9 @@ describe("에디터 컨트롤러 링크", () => {
       onChange: (event) => changes.push(event),
     });
     const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+    // 컨테이너가 문단을 감싸며 좌표가 1씩 밀렸다(D19) — 2가 "content" 시작,
+    // 9가 그 끝이다.
+    tiptap.commands.setTextSelection({ from: 2, to: 9 });
 
     expect(editor.commands.setLink("https://example.com")).toEqual({
       ok: true,
@@ -368,7 +374,9 @@ describe("에디터 컨트롤러 링크", () => {
       ]),
     });
     const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+    // 컨테이너가 문단을 감싸며 좌표가 1씩 밀렸다(D19) — 2가 "content" 시작,
+    // 9가 그 끝이다.
+    tiptap.commands.setTextSelection({ from: 2, to: 9 });
 
     expect(editor.commands.unsetLink()).toEqual({
       ok: true,

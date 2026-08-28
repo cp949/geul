@@ -52,7 +52,9 @@ describe("에디터 컨트롤러 mark", () => {
         onChange: (event) => changes.push(event),
       });
       const { tiptap } = mountTiptapEditor(editor);
-      tiptap.commands.setTextSelection({ from: 1, to: 8 });
+      // 컨테이너가 문단을 감싸며 좌표가 1씩 밀렸다(D19) — 2가 "content"
+      // 시작, 9가 그 끝이다.
+      tiptap.commands.setTextSelection({ from: 2, to: 9 });
 
       expect(editor.commands[command]()).toEqual({
         ok: true,
@@ -97,7 +99,9 @@ describe("에디터 컨트롤러 mark", () => {
       initialDocument: paragraphDocument("content"),
     });
     const { tiptap } = mountTiptapEditor(editor);
-    tiptap.commands.setTextSelection({ from: 1, to: 8 });
+    // 컨테이너가 문단을 감싸며 좌표가 1씩 밀렸다(D19) — 2가 "content" 시작,
+    // 9가 그 끝이다.
+    tiptap.commands.setTextSelection({ from: 2, to: 9 });
 
     expect(editor.commands.toggleBold()).toMatchObject({ ok: true });
     expect(editor.commands.toggleUnderline()).toMatchObject({ ok: true });

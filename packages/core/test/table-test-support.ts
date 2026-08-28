@@ -9,18 +9,68 @@
  */
 import type { TabularData } from "@cp949/geul-io";
 import type { Extensions, JSONContent } from "@tiptap/core";
-import { Editor, Extension, getSchema } from "@tiptap/core";
+import {
+  Editor,
+  Extension,
+  getSchema,
+  mergeAttributes,
+  Node,
+} from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 import { afterEach } from "vitest";
 
+import {
+  BlockContainerExtension,
+  BlockGroupExtension,
+} from "../src/block-container-extension.js";
 import { BlockIdExtension } from "../src/block-id-extension.js";
 import {
   TableCellExtension,
   TableExtension,
   TableRowExtension,
 } from "../src/table-extension.js";
+
+// editor-controller.ts의 ParagraphExtension/HeadingExtension과 같은 이유로
+// StarterKit 기본 paragraph/heading을 끄고 재구현한다 — group을
+// "blockContent"로 둬야 blockContainer(:content "blockContent blockGroup?")
+// 안에 들어갈 수 있다(D19). 프로덕션 정의를 그대로 가져오지 않고 이 파일이
+// 독립 소유하는 이유는 그 정의가 editor-controller.ts 모듈 비공개
+// const라서다 — export하면 그 모듈의 .d.ts가 Tiptap Node 타입을 노출해
+// public-types.test.ts(ADR-0002)를 깬다.
+const FixtureParagraphExtension = Node.create({
+  name: "paragraph",
+  group: "blockContent",
+  content: "inline*",
+  parseHTML() {
+    return [{ tag: "p" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["p", mergeAttributes(HTMLAttributes), 0];
+  },
+});
+
+const FixtureHeadingExtension = Node.create({
+  name: "heading",
+  group: "blockContent",
+  content: "inline*",
+  defining: true,
+  addAttributes() {
+    return {
+      level: { default: 1, rendered: false },
+    };
+  },
+  parseHTML() {
+    return [1, 2, 3].map((level) => ({ tag: `h${level}`, attrs: { level } }));
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const level = [1, 2, 3].includes(node.attrs.level as number)
+      ? (node.attrs.level as number)
+      : 1;
+    return [`h${level}`, mergeAttributes(HTMLAttributes), 0];
+  },
+});
 
 /**
  * createTableFixtureEditor가 만든 에디터 목록. 해제는 이 Set과 아래
@@ -79,15 +129,27 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
     horizontalRule: false,
     listItem: false,
     orderedList: false,
-    // 프로덕션 스키마(editor-controller.ts)와 같은 levels로 켠다 —
-    // DELTA-04(Issue #72)의 표 안/밖 heading 붙여넣기 테스트가 실제
-    // heading 노드를 만들어야 한다. 이전에는 false였다(이 fixture가
-    // 표 확장만 검증하던 시절 heading을 쓸 일이 없었다).
-    heading: { levels: [1, 2, 3] },
+    // paragraph/heading은 아래 Fixture*Extension으로 대체한다(D19 —
+    // blockContent 그룹, blockContainer로 감싸여야 한다).
+    paragraph: false,
+    heading: false,
     trailingNode: false,
   }),
+  FixtureParagraphExtension,
+  FixtureHeadingExtension,
+  BlockContainerExtension,
+  BlockGroupExtension,
   BlockIdExtension,
-  TableExtension,
+  // group "block"의 두 멤버(blockContainer priority 50, table 기본
+  // priority 100)가 ContentMatch.defaultType(그룹 채움 시 PM이 고르는
+  // 기본 노드) 경쟁에서 만난다 — 기본값끼리는 priority가 높은 쪽(table)이
+  // 이겨 AllSelection 삭제 등 "block+" 채움이 필요한 자리에 문단이 아니라
+  // rowId/cellId 없는 손상된 table을 채운다(실측: 프로덕션 스키마도 동일
+  // 결함 — DELTA-02a 범위 밖 발견, 이슈로 별도 등록 예정). 이 fixture는
+  // table-commands.ts/table-paste-commands.ts의 순수 함수만 겨냥하므로
+  // 여기서는 priority를 blockContainer보다 낮춰 문단이 이기게 해 기존
+  // "필러 문단" 계약을 지킨다 — 프로덕션 확장 자체는 건드리지 않는다.
+  TableExtension.extend({ priority: 40 }),
   TableRowExtension,
   TableCellExtension,
 ];
@@ -168,14 +230,21 @@ export const cellJson = (cellId: string, columnId: string) => ({
   content: [],
 });
 
-/** 문단 하나짜리 문서 — 표가 없는 상태에서 시작하는 명령의 출발점이다. */
+/**
+ * 문단 하나짜리 문서 — 표가 없는 상태에서 시작하는 명령의 출발점이다.
+ * blockId는 문단 자신이 아니라 감싸는 blockContainer의 attrs다(D19) —
+ * paragraph는 group "blockContent"라 blockContainer 없이는 doc 직속
+ * 자식이 될 스키마 경로가 없다.
+ */
 export const docWithParagraph = {
   type: "doc",
   content: [
     {
-      type: "paragraph",
+      type: "blockContainer",
       attrs: { blockId: "para-1" },
-      content: [{ type: "text", text: "hello" }],
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+      ],
     },
   ],
 };

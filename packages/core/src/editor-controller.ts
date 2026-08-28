@@ -1,5 +1,6 @@
 import type { TabularData } from "@cp949/geul-io";
 import {
+  type Block,
   type Document as BlockDocument,
   createRandomDocumentId,
   type IdFactory,
@@ -10,6 +11,7 @@ import {
 } from "@cp949/geul-model";
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
@@ -19,7 +21,7 @@ import {
   BlockGroupExtension,
 } from "./block-container-extension.js";
 import { BlockIdExtension } from "./block-id-extension.js";
-import { findTopLevelBlockPosition } from "./block-position.js";
+import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
@@ -286,6 +288,137 @@ const commandNotApplicable = (command: string): Result<never, EditorError> => ({
   error: { code: "COMMAND_NOT_APPLICABLE", command },
 });
 
+// blockId로 찾은 노드가 편집 대상 콘텐츠 그 자체인지, 아니면 그 콘텐츠를
+// 감싼 컨테이너인지 이원화해 실제로 텍스트/타입을 다루는 노드를 반환한다
+// (D19). blockContainer는 identity(blockId)만 소유하고 텍스트·타입은 항상
+// 그 첫 자식(blockContent — paragraph/heading)에 있다. table은 컨테이너로
+// 감싸이지 않으므로(D19) 매치된 노드 자신이 곧 대상이다 — setText/
+// setBlockType은 이후 textblock/paragraph·heading 검사로 표를 자연히
+// 걸러낸다.
+const findEditableBlockContent = (
+  document: ProseMirrorNode,
+  blockId: string,
+): { position: number; node: ProseMirrorNode } | null => {
+  const matchPosition = findBlockPosition(document, blockId);
+  if (matchPosition === null) return null;
+  const matchNode = document.nodeAt(matchPosition);
+  if (matchNode === null) return null;
+  if (matchNode.type.name !== "blockContainer") {
+    return { position: matchPosition, node: matchNode };
+  }
+  const contentPosition = matchPosition + 1;
+  const contentNode = document.nodeAt(contentPosition);
+  if (contentNode === null) return null;
+  return { position: contentPosition, node: contentNode };
+};
+
+// 모델 트리(BlockDocument.blocks, 임의 깊이 children)에서 blockId를 가진
+// 블록을 찾아 그 블록이 속한 형제 배열(siblings)과 그 안 인덱스를 함께
+// 반환한다. 최상위 블록은 siblings === document.blocks, 중첩 블록은 부모의
+// children이 siblings다 — moveBlockBefore의 "같은 부모 형제" 판정과
+// insertParagraphAfter/duplicateBlock의 "새로 생긴 다음 형제 조회"가 이
+// 반환값 하나로 both 처리된다(평면 인덱스 산술의 깊이-무관 대체).
+const findBlockInTree = (
+  blocks: readonly Block[],
+  blockId: string,
+): { block: Block; siblings: readonly Block[]; index: number } | null => {
+  const index = blocks.findIndex((block) => block.id === blockId);
+  if (index !== -1) {
+    const block = blocks[index];
+    return block === undefined ? null : { block, siblings: blocks, index };
+  }
+  for (const block of blocks) {
+    if (block.type === "table" || block.children === undefined) continue;
+    const found = findBlockInTree(block.children, blockId);
+    if (found !== null) return found;
+  }
+  return null;
+};
+
+// D20: moveBlockBefore/duplicateBlock은 자식 딸린 블록을 거절한다(슬라이스
+// 7a #125가 하위 트리 인지 이동·복제를 완성할 때까지). table은 애초에
+// children을 가질 수 없어(model 계층) 검사 대상에서 자연히 빠진다.
+const hasChildren = (block: Block): boolean =>
+  block.type !== "table" &&
+  block.children !== undefined &&
+  block.children.length > 0;
+
+// $pos 조상 중 가장 가까운 blockContainer의 blockId를 찾는다.
+// paragraph/heading은 더 이상 blockId를 직접 갖지 않는다(D19) — 조상인
+// blockContainer가 identity를 소유한다.
+const nearestBlockContainerId = (position: ResolvedPos): string | null => {
+  for (let depth = position.depth; depth > 0; depth -= 1) {
+    const node = position.node(depth);
+    if (node.type.name === "blockContainer") {
+      const blockId = node.attrs.blockId;
+      return typeof blockId === "string" && blockId.length > 0 ? blockId : null;
+    }
+  }
+  return null;
+};
+
+// getSelectionBlockType 전용: [from, to] 범위를 완전히 포함하는 가장 깊은
+// blockContainer(그 첫 자식이 paragraph/heading인 경우만)를 재귀로 찾는다.
+// blockGroup?이 없는 컨테이너는 자신의 nodeSize 전체(닫는 태그 포함)까지
+// 상한으로 받아들인다 — collapsed 캐럿뿐 아니라 AllSelection(전체 선택)의
+// to가 컨테이너 자신의 닫는 경계까지 닿는 경우도 "그 블록 전체 선택"으로
+// 인정해야 하기 때문이다. blockGroup이 있으면 상한을 blockContent 끝으로
+// 좁혀 자식 쪽으로 범위가 새어 들어가는 선택은 컨테이너 자신이 아니라
+// blockGroup 재귀로 넘긴다 — 부모·자식에 걸친 선택은 어느 쪽과도 매치되지
+// 않아 null로 남는다(기존 "여러 최상위 블록에 걸치면 null" 계약의 재귀판).
+const findSelectionBlock = (
+  node: ProseMirrorNode,
+  nodeStart: number,
+  from: number,
+  to: number,
+): { blockId: string; blockType: BlockTypeDescriptor } | null => {
+  let result: { blockId: string; blockType: BlockTypeDescriptor } | null = null;
+  node.forEach((child, childOffset) => {
+    if (result !== null) return;
+    const childStart = nodeStart + childOffset;
+    const childEnd = childStart + child.nodeSize;
+    if (from < childStart || to > childEnd) return;
+
+    if (child.type.name === "blockGroup") {
+      result = findSelectionBlock(child, childStart + 1, from, to);
+      return;
+    }
+    if (child.type.name !== "blockContainer") return;
+
+    const blockId = child.attrs.blockId;
+    if (typeof blockId !== "string" || blockId.length === 0) return;
+    const blockContent = child.firstChild;
+    if (blockContent === null) return;
+    const contentStart = childStart + 1;
+    const contentEnd = contentStart + blockContent.nodeSize;
+    const hasGroupChild = child.childCount > 1;
+
+    if (to <= (hasGroupChild ? contentEnd : childEnd)) {
+      if (
+        blockContent.type.name === "paragraph" ||
+        blockContent.type.name === "heading"
+      ) {
+        result = {
+          blockId,
+          blockType:
+            blockContent.type.name === "heading"
+              ? {
+                  type: "heading",
+                  level: blockContent.attrs.level as 1 | 2 | 3,
+                }
+              : { type: "paragraph" },
+        };
+      }
+      return;
+    }
+
+    if (hasGroupChild) {
+      result = findSelectionBlock(child.child(1), contentEnd + 1, from, to);
+    }
+  });
+  return result;
+};
+
 // Document는 문자열·숫자·리터럴유니온·배열·평문 객체로만 구성된 순수 JSON
 // 트리다(Map/Set/함수/circular 없음, packages/model/src/types.ts 확인).
 // Chrome75가 지원하지 않는 네이티브 전역 deep-clone 함수 대신 JSON 직렬화
@@ -312,36 +445,68 @@ const parseSupportedDocument = (
   return converted.ok ? { ok: true, value: parsed.value } : converted;
 };
 
+// blockChanges의 헬퍼: 트리 전체를 재귀 평탄화해 Map(id → {parentId, index, ownJson})으로
+// 변환한다. ownJson은 children 필드를 제외한 블록 자신의 직렬화다(깊이 무관
+// diff를 위해 자식의 변경이 부모 ownJson을 오염하지 않도록).
+const flattenBlockTree = (
+  blocks: readonly Block[],
+  parentId: string | null = null,
+): Map<string, { parentId: string | null; index: number; ownJson: string }> => {
+  const map = new Map<
+    string,
+    { parentId: string | null; index: number; ownJson: string }
+  >();
+
+  blocks.forEach((block, index) => {
+    // ownJson: children 필드를 제외한 블록 자신의 직렬화. TableBlock은
+    // children을 선언하지 않으므로 union 그대로는 구조분해 대상 필드가
+    // 아니다 — schema.ts:415와 같은 패턴으로 좁힌다.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { children, ...blockWithoutChildren } = block as Block & {
+      children?: unknown;
+    };
+    const ownJson = JSON.stringify(blockWithoutChildren);
+
+    map.set(block.id, { parentId, index, ownJson });
+
+    // 자식이 있으면 재귀 평탄화
+    if ("children" in block && block.children !== undefined) {
+      const childMap = flattenBlockTree(block.children, block.id);
+      for (const [childId, childData] of childMap) {
+        map.set(childId, childData);
+      }
+    }
+  });
+
+  return map;
+};
+
 const blockChanges = (
   previous: BlockDocument,
   next: BlockDocument,
 ): string[] => {
-  const previousBlocks = new Map(
-    previous.blocks.map((block, index) => [
-      block.id,
-      { index, json: JSON.stringify(block) },
-    ]),
-  );
-  const nextBlocks = new Map(
-    next.blocks.map((block, index) => [
-      block.id,
-      { index, json: JSON.stringify(block) },
-    ]),
-  );
+  const previousMap = flattenBlockTree(previous.blocks);
+  const nextMap = flattenBlockTree(next.blocks);
   const changed: string[] = [];
 
-  for (const [blockId, previousBlock] of previousBlocks) {
-    const nextBlock = nextBlocks.get(blockId);
+  // 기존에 있던 블록 검사
+  for (const [blockId, previousData] of previousMap) {
+    const nextData = nextMap.get(blockId);
     if (
-      nextBlock === undefined ||
-      nextBlock.index !== previousBlock.index ||
-      nextBlock.json !== previousBlock.json
+      nextData === undefined ||
+      nextData.parentId !== previousData.parentId ||
+      nextData.index !== previousData.index ||
+      nextData.ownJson !== previousData.ownJson
     ) {
       changed.push(blockId);
     }
   }
-  for (const block of next.blocks) {
-    if (!previousBlocks.has(block.id)) changed.push(block.id);
+
+  // 신규 블록 검사
+  for (const [blockId] of nextMap) {
+    if (!previousMap.has(blockId)) {
+      changed.push(blockId);
+    }
   }
 
   return changed;
@@ -511,29 +676,21 @@ export const createEditor = (
   ): Result<void, EditorError> => {
     if (destroyed) return commandNotApplicable("setText");
 
-    let targetPosition: number | null = null;
-    let targetIsTextblock = false;
-    let targetSize = 0;
-    let currentText = "";
-    tiptapEditor.state.doc.forEach((node, offset) => {
-      if (node.attrs.blockId !== blockId) return;
-      targetPosition = offset;
-      targetIsTextblock = node.isTextblock;
-      targetSize = node.content.size;
-      currentText = node.textContent;
-    });
-
-    if (targetPosition === null) {
+    const target = findEditableBlockContent(tiptapEditor.state.doc, blockId);
+    if (target === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
+    const targetPosition = target.position;
+    const targetIsTextblock = target.node.isTextblock;
+    const targetSize = target.node.content.size;
+    const currentText = target.node.textContent;
+
     // 표처럼 textblock이 아닌 블록의 content를 텍스트로 교체하면 스키마가
     // 깨진 노드가 남아 이후 모든 트랜잭션이 실패한다.
     if (!targetIsTextblock) return commandNotApplicable("setText");
     if (currentText === text) return commandNotApplicable("setText");
 
     return runDocumentCommand("setText", "local", () => {
-      if (targetPosition === null) return false;
-
       const from = targetPosition + 1;
       const to = from + targetSize;
       const transaction = tiptapEditor.state.tr;
@@ -552,40 +709,53 @@ export const createEditor = (
   ): Result<{ blockId: string }, EditorError> => {
     if (destroyed) return commandNotApplicable("insertParagraphAfter");
 
-    const blockIndex = currentDocument.blocks.findIndex(
-      (block) => block.id === blockId,
-    );
-    if (blockIndex === -1) {
+    if (findBlockInTree(currentDocument.blocks, blockId) === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
 
-    let insertPosition: number | null = null;
-    tiptapEditor.state.doc.forEach((node, offset) => {
-      if (node.attrs.blockId !== blockId) return;
-      insertPosition = offset + node.nodeSize;
-    });
-    if (insertPosition === null) {
+    // "블록 뒤" = 그 노드의 nodeSize 뒤 = 자식 딸린 블록이면 하위 트리
+    // 전체 뒤(컨테이너 nodeSize가 blockGroup을 포함한다, D20) — 별도 가드
+    // 없이 안전하다.
+    const sourcePosition = findBlockPosition(tiptapEditor.state.doc, blockId);
+    if (sourcePosition === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
+    const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
+    if (sourceNode === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    const insertPosition = sourcePosition + sourceNode.nodeSize;
 
     const result = runDocumentCommand("insertParagraphAfter", "local", () => {
-      if (insertPosition === null) return false;
       const paragraphType = tiptapEditor.schema.nodes.paragraph;
       if (paragraphType === undefined) return false;
       const paragraph = paragraphType.create();
+      // 삽입되는 문단은 컨테이너로 감싸이지 않은 맨몸 노드다 — "block" 그룹
+      // 슬롯에 들어가며 PM의 slice-fitting이 새 blockContainer로 자동
+      // 감싼다(block-container-extension.ts 계약). 감싸진 뒤
+      // BlockIdExtension.appendTransaction이 같은 dispatch 안에서 그
+      // 컨테이너에 blockId를 사후 배정한다 — insertParagraphAfter는 그
+      // 배정이 끝난 뒤의 blockId를 아래에서 형제 배열 재조회로 회수한다.
       const transaction = tiptapEditor.state.tr.insert(
         insertPosition,
         paragraph,
       );
+      // insertPosition은 fitting 뒤 새 blockContainer 자신의 위치가 된다 —
+      // +1로 컨테이너에 들어가면 blockContent(문단) 자신, +2로 그 문단의
+      // (비어 있는) 텍스트 안에 캐럿이 놓인다.
       transaction.setSelection(
-        TextSelection.create(transaction.doc, insertPosition + 1),
+        TextSelection.create(transaction.doc, insertPosition + 2),
       );
       tiptapEditor.view.dispatch(closeHistory(transaction));
       return true;
     });
     if (!result.ok) return result;
 
-    const createdBlock = currentDocument.blocks[blockIndex + 1];
+    // 부모의 children(또는 최상위 blocks) 기준 "다음 형제"로 새 블록을
+    // 찾는다 — 평면 인덱스 산술은 중첩 부모에서 깨진다(DELTA-02a).
+    const after = findBlockInTree(currentDocument.blocks, blockId);
+    const createdBlock =
+      after === null ? undefined : after.siblings[after.index + 1];
     if (createdBlock === undefined) {
       return commandNotApplicable("insertParagraphAfter");
     }
@@ -599,22 +769,21 @@ export const createEditor = (
   ): Result<void, EditorError> => {
     if (destroyed) return commandNotApplicable("setBlockType");
 
-    let targetPosition: number | null = null;
-    let currentTypeName: string | null = null;
-    let currentLevel: number | null = null;
-    let currentContentSize = 0;
-    tiptapEditor.state.doc.forEach((node, offset) => {
-      if (node.attrs.blockId !== blockId) return;
-      targetPosition = offset;
-      currentTypeName = node.type.name;
-      currentLevel =
-        typeof node.attrs.level === "number" ? node.attrs.level : null;
-      currentContentSize = node.content.size;
-    });
-
-    if (targetPosition === null) {
+    // 대상은 컨테이너가 아니라 내부 blockContent 노드다(D19) — blockId는
+    // 컨테이너 attrs 소유라 타입 변경이 identity·자식 귀속을 건드릴 구조적
+    // 경로가 없다.
+    const target = findEditableBlockContent(tiptapEditor.state.doc, blockId);
+    if (target === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
+    const targetPosition = target.position;
+    const currentTypeName = target.node.type.name;
+    const currentLevel =
+      typeof target.node.attrs.level === "number"
+        ? target.node.attrs.level
+        : null;
+    const currentContentSize = target.node.content.size;
+
     // 표 블록은 paragraph/heading으로 변환할 수 없다 — 셀 콘텐츠가
     // 인라인 스키마에 맞지 않아 변환 시도 자체가 예외를 던진다.
     if (currentTypeName !== "paragraph" && currentTypeName !== "heading") {
@@ -631,16 +800,15 @@ export const createEditor = (
     }
 
     return runDocumentCommand("setBlockType", "local", () => {
-      if (targetPosition === null) return false;
       const nodeType =
         blockType.type === "paragraph"
           ? tiptapEditor.schema.nodes.paragraph
           : tiptapEditor.schema.nodes.heading;
       if (nodeType === undefined) return false;
+      // blockId는 더 이상 이 노드의 attrs가 아니다(D19) — 컨테이너가
+      // identity를 소유해 여기서 건드릴 필요도, 경로도 없다.
       const attrs =
-        blockType.type === "paragraph"
-          ? { blockId }
-          : { blockId, level: blockType.level };
+        blockType.type === "paragraph" ? {} : { level: blockType.level };
 
       let transaction = tiptapEditor.state.tr;
       if (clearContent && currentContentSize > 0) {
@@ -664,31 +832,38 @@ export const createEditor = (
   ): Result<void, EditorError> => {
     if (destroyed) return commandNotApplicable("moveBlockBefore");
 
-    const blocks = currentDocument.blocks;
-    const sourceIndex = blocks.findIndex((block) => block.id === blockId);
-    if (sourceIndex === -1) {
+    const source = findBlockInTree(currentDocument.blocks, blockId);
+    if (source === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
+    // D20(D7 축소 잔존): 자식 딸린 블록의 하위 트리 인지 이동은 슬라이스
+    // 7a(#125) 소관이다 — 그때까지 거절한다.
+    if (hasChildren(source.block)) {
+      return commandNotApplicable("moveBlockBefore");
+    }
 
-    let targetIndex = blocks.length;
+    // 컨테이너 구조에서 "평면 인접성"은 같은-부모 형제 간 이동으로
+    // 재정의된다 — beforeBlockId도 source와 같은 형제 배열에 속해야 한다.
+    let targetIndex = source.siblings.length;
     if (beforeBlockId !== null) {
-      targetIndex = blocks.findIndex((block) => block.id === beforeBlockId);
-      if (targetIndex === -1) {
+      const target = findBlockInTree(currentDocument.blocks, beforeBlockId);
+      if (target === null) {
         return {
           ok: false,
           error: { code: "BLOCK_NOT_FOUND", blockId: beforeBlockId },
         };
       }
+      if (target.siblings !== source.siblings) {
+        return commandNotApplicable("moveBlockBefore");
+      }
+      targetIndex = target.index;
     }
-    if (targetIndex === sourceIndex || targetIndex === sourceIndex + 1) {
+    if (targetIndex === source.index || targetIndex === source.index + 1) {
       return commandNotApplicable("moveBlockBefore");
     }
 
     return runDocumentCommand("moveBlockBefore", "local", () => {
-      const sourcePosition = findTopLevelBlockPosition(
-        tiptapEditor.state.doc,
-        blockId,
-      );
+      const sourcePosition = findBlockPosition(tiptapEditor.state.doc, blockId);
       if (sourcePosition === null) return false;
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
@@ -697,14 +872,31 @@ export const createEditor = (
         sourcePosition,
         sourcePosition + sourceNode.nodeSize,
       );
-      let insertPosition = transaction.doc.content.size;
+      let insertPosition: number;
       if (beforeBlockId !== null) {
-        const mappedTargetPosition = findTopLevelBlockPosition(
+        const mappedTargetPosition = findBlockPosition(
           transaction.doc,
           beforeBlockId,
         );
         if (mappedTargetPosition === null) return false;
         insertPosition = mappedTargetPosition;
+      } else {
+        // beforeBlockId가 null이면 "자신의 부모 형제 목록 끝"으로 옮긴다 —
+        // 최상위 블록은 부모가 문서 자신이라 기존 "문서 끝" 의미와 같다.
+        // 삭제 직후 doc에서 남은 마지막 형제를 다시 찾아 그 뒤에 끼운다
+        // (형제 배열 끝 = 그 마지막 형제의 nodeSize 뒤).
+        const lastSiblingId = source.siblings[source.siblings.length - 1]?.id;
+        if (lastSiblingId === undefined) return false;
+        const mappedLastSiblingPosition = findBlockPosition(
+          transaction.doc,
+          lastSiblingId,
+        );
+        if (mappedLastSiblingPosition === null) return false;
+        const lastSiblingNode = transaction.doc.nodeAt(
+          mappedLastSiblingPosition,
+        );
+        if (lastSiblingNode === null) return false;
+        insertPosition = mappedLastSiblingPosition + lastSiblingNode.nodeSize;
       }
       transaction = transaction.insert(insertPosition, sourceNode);
       tiptapEditor.view.dispatch(closeHistory(transaction));
@@ -717,24 +909,21 @@ export const createEditor = (
   ): Result<{ blockId: string }, EditorError> => {
     if (destroyed) return commandNotApplicable("duplicateBlock");
 
-    const blockIndex = currentDocument.blocks.findIndex(
-      (block) => block.id === blockId,
-    );
-    if (blockIndex === -1) {
+    const source = findBlockInTree(currentDocument.blocks, blockId);
+    if (source === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
     // blockId만 재발급하는 복제는 표의 row/cell/column id를 그대로 복사해
     // 문서 전체 id 유일성 불변식을 깨뜨린다. 표 복제는 전용 명령이 생길
-    // 때까지 거부한다.
-    if (currentDocument.blocks[blockIndex]?.type === "table") {
+    // 때까지 거부한다. D20(D7 축소 잔존): 자식 딸린 블록의 복제는 후손
+    // blockId 전면 중복을 낳는다(재귀 id 재발급은 슬라이스 7a #125 소관) —
+    // 그때까지 거절한다.
+    if (source.block.type === "table" || hasChildren(source.block)) {
       return commandNotApplicable("duplicateBlock");
     }
 
     const result = runDocumentCommand("duplicateBlock", "local", () => {
-      const sourcePosition = findTopLevelBlockPosition(
-        tiptapEditor.state.doc,
-        blockId,
-      );
+      const sourcePosition = findBlockPosition(tiptapEditor.state.doc, blockId);
       if (sourcePosition === null) return false;
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
@@ -760,7 +949,9 @@ export const createEditor = (
     });
     if (!result.ok) return result;
 
-    const createdBlock = currentDocument.blocks[blockIndex + 1];
+    const after = findBlockInTree(currentDocument.blocks, blockId);
+    const createdBlock =
+      after === null ? undefined : after.siblings[after.index + 1];
     if (createdBlock === undefined) {
       return commandNotApplicable("duplicateBlock");
     }
@@ -769,22 +960,26 @@ export const createEditor = (
 
   const deleteBlock = (blockId: string): Result<void, EditorError> => {
     if (destroyed) return commandNotApplicable("deleteBlock");
-    if (currentDocument.blocks.length <= 1) {
+
+    const target = findBlockInTree(currentDocument.blocks, blockId);
+    if (target === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    // R0("문서는 최소 블록 1개")는 최상위 blocks 배열에 대한 불변식이다
+    // (modelToTiptap 확인) — 대상이 그 유일한 최상위 블록일 때만 걸린다.
+    // 중첩 블록 삭제는 최상위 개수를 건드리지 않아 이 가드와 무관하다
+    // (깊이와 무관하게 top-level과 동일 동작 — 완료 조건 2).
+    if (
+      target.siblings === currentDocument.blocks &&
+      target.siblings.length <= 1
+    ) {
       return commandNotApplicable("deleteBlock");
     }
 
-    const blockIndex = currentDocument.blocks.findIndex(
-      (block) => block.id === blockId,
-    );
-    if (blockIndex === -1) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-
     return runDocumentCommand("deleteBlock", "local", () => {
-      const sourcePosition = findTopLevelBlockPosition(
-        tiptapEditor.state.doc,
-        blockId,
-      );
+      // D20: 컨테이너 삭제 = 하위 트리 동반 삭제가 기본이다 — nodeSize가
+      // 자식(blockGroup) 포함이라 별도 가드 없이 이 delete 하나로 끝난다.
+      const sourcePosition = findBlockPosition(tiptapEditor.state.doc, blockId);
       if (sourcePosition === null) return false;
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
@@ -1007,8 +1202,10 @@ export const createEditor = (
       if (node.type.name !== "paragraph" && node.type.name !== "heading") {
         return null;
       }
-      const blockId = node.attrs.blockId;
-      if (typeof blockId !== "string" || blockId.length === 0) return null;
+      // blockId는 더 이상 이 노드(paragraph/heading) 자신의 attrs가
+      // 아니다(D19) — 가장 가까운 blockContainer 조상이 소유한다.
+      const blockId = nearestBlockContainerId(selection.$from);
+      if (blockId === null) return null;
 
       const blockType: BlockTypeDescriptor =
         node.type.name === "heading"
@@ -1019,26 +1216,7 @@ export const createEditor = (
     getSelectionBlockType() {
       if (destroyed) return null;
       const { selection, doc } = tiptapEditor.state;
-      const { from, to } = selection;
-
-      let result: { blockId: string; blockType: BlockTypeDescriptor } | null =
-        null;
-      doc.forEach((node, offset) => {
-        if (result !== null) return;
-        if (from < offset || to > offset + node.nodeSize) return;
-        if (node.type.name !== "paragraph" && node.type.name !== "heading") {
-          return;
-        }
-        const blockId = node.attrs.blockId;
-        if (typeof blockId !== "string" || blockId.length === 0) return;
-
-        const blockType: BlockTypeDescriptor =
-          node.type.name === "heading"
-            ? { type: "heading", level: node.attrs.level as 1 | 2 | 3 }
-            : { type: "paragraph" };
-        result = { blockId, blockType };
-      });
-      return result;
+      return findSelectionBlock(doc, 0, selection.from, selection.to);
     },
     getTableCellSelection() {
       if (destroyed) return null;

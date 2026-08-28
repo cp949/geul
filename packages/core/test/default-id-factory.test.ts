@@ -34,10 +34,20 @@ describe("defaultIdFactory 소비 경로", () => {
   });
 
   it("createId 없이 BlockIdExtension을 등록해도 유효한 blockId를 발급한다", () => {
+    // blockId는 blockContainer가 소유한다(D19) — 컨테이너 없이 만든 문서는
+    // appendTransaction의 대상이 아니라 이 배선을 검증할 수 없다.
     const editor = createTableFixtureEditor({
       type: "doc",
       content: [
-        { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+        {
+          type: "blockContainer",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "hello" }],
+            },
+          ],
+        },
       ],
     });
 

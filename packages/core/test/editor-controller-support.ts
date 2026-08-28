@@ -29,6 +29,26 @@ export const paragraphDocument = (text: string, revision = 0): Document => ({
   ],
 });
 
+/**
+ * 깊이 1 자식을 가진 최소 문서 — parent-1(문단) 아래 child-1(문단) 하나.
+ * DELTA-02a 완료 조건 2·3·4·5·7(depth≥1 명령 동작·D20 자식 딸린 블록
+ * 의미론·중첩 선택 조회)이 공유하는 fixture다(G-TST-002).
+ */
+export const nestedParagraphDocument = (): Document => ({
+  formatVersion: 1,
+  revision: 0,
+  blocks: [
+    {
+      id: "parent-1",
+      type: "paragraph",
+      content: [{ text: "parent" }],
+      children: [
+        { id: "child-1", type: "paragraph", content: [{ text: "child" }] },
+      ],
+    },
+  ],
+});
+
 export const sequentialIds = (prefix: string) => {
   let counter = 0;
   return () => {

@@ -9,7 +9,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { CellSelection, selectedRect } from "@tiptap/pm/tables";
-import { findTopLevelBlockPosition } from "./block-position.js";
+import { findBlockPosition } from "./block-position.js";
 import type { TableCommandError } from "./table-command-error.js";
 import {
   DEFAULT_COLUMN_WIDTH,
@@ -86,7 +86,9 @@ const findTable = (
   editor: Editor,
   blockId: string,
 ): Result<{ position: number; node: ProseMirrorNode }, TableCommandError> => {
-  const position = findTopLevelBlockPosition(editor.state.doc, blockId);
+  // table은 blockContainer로 감싸이지 않는다(D19) — 임의 깊이의 blockGroup
+  // 안이든 최상위든 findBlockPosition의 재귀 탐색이 그대로 찾아낸다.
+  const position = findBlockPosition(editor.state.doc, blockId);
   if (position === null) return tableNotFound(blockId);
   const node = editor.state.doc.nodeAt(position);
   if (node === null || node.type.name !== "table") {
@@ -552,10 +554,11 @@ export const insertTable = (
     return { ok: false, error: { code: "CELL_LIMIT_EXCEEDED" } };
   }
 
-  const afterPosition = findTopLevelBlockPosition(
-    editor.state.doc,
-    afterBlockId,
-  );
+  // afterBlockId는 임의 깊이의 blockContainer(문단/제목) 또는 최상위/중첩
+  // table일 수 있다(D19) — 재귀 조회가 그 컨테이너/표 노드 자체를 찾는다.
+  // "블록 뒤" 삽입은 그 노드의 nodeSize(자식 blockGroup 포함) 뒤라 하위
+  // 트리 전체를 자동으로 건너뛴다(D20, 완료 조건 9).
+  const afterPosition = findBlockPosition(editor.state.doc, afterBlockId);
   if (afterPosition === null) return blockNotFound(afterBlockId);
   const afterNode = editor.state.doc.nodeAt(afterPosition);
   if (afterNode === null) return blockNotFound(afterBlockId);
@@ -566,15 +569,24 @@ export const insertTable = (
 
   let transaction = editor.state.tr;
   // content 삭제는 textblock에만 안전하다 — 표 같은 구조 노드의 content를
-  // 지우면 노드 자체가 스키마에 맞지 않아 통째로 사라진다.
+  // 지우면 노드 자체가 스키마에 맞지 않아 통째로 사라진다. afterNode가
+  // blockContainer면 blockId는 컨테이너 attrs 소유라(D19) 지울 텍스트는
+  // 컨테이너 자신이 아니라 내부 blockContent(문단/제목) 노드에 있다.
+  const clearTarget =
+    afterNode.type.name === "blockContainer" ? afterNode.firstChild : afterNode;
+  const clearPosition =
+    afterNode.type.name === "blockContainer"
+      ? afterPosition + 1
+      : afterPosition;
   if (
     options?.clearAfterBlockText === true &&
-    afterNode.isTextblock &&
-    afterNode.content.size > 0
+    clearTarget !== null &&
+    clearTarget.isTextblock &&
+    clearTarget.content.size > 0
   ) {
     transaction = transaction.delete(
-      afterPosition + 1,
-      afterPosition + 1 + afterNode.content.size,
+      clearPosition + 1,
+      clearPosition + 1 + clearTarget.content.size,
     );
   }
   transaction = transaction.insert(

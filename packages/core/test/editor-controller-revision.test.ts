@@ -5,6 +5,7 @@ import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
   mountTiptapEditor,
   paragraphDocument,
+  nestedParagraphDocument,
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
@@ -431,16 +432,125 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     const firstContainer = document.createElement("div");
     const secondContainer = document.createElement("div");
 
+    // data-be-block-id는 더 이상 <p> 자신의 attribute가 아니다(D19) — 그
+    // 문단을 감싸는 blockContainer(<div>)가 렌더한다.
     editor.mount(firstContainer);
     expect(
-      firstContainer.querySelector("p")?.getAttribute("data-be-block-id"),
+      firstContainer
+        .querySelector("[data-be-block-id]")
+        ?.getAttribute("data-be-block-id"),
     ).toBe("block-1");
     editor.unmount();
     editor.mount(secondContainer);
 
     expect(
-      secondContainer.querySelector("p")?.getAttribute("data-be-block-id"),
+      secondContainer
+        .querySelector("[data-be-block-id]")
+        ?.getAttribute("data-be-block-id"),
     ).toBe("block-1");
     expect(editor.getDocument().blocks[0]?.id).toBe("block-1");
+  });
+
+  describe("changedBlockIds 재귀 diff", () => {
+    it("depth≥1 블록의 텍스트 수정 시 그 블록만 보고하고 조상은 미보고한다", () => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: nestedParagraphDocument(),
+        onChange: (event) => changes.push(event),
+      });
+
+      expect(editor.commands.setText("child-1", "modified")).toEqual({
+        ok: true,
+        value: undefined,
+      });
+
+      expect(changes).toEqual([
+        {
+          revision: 1,
+          changedBlockIds: ["child-1"],
+          reason: "local",
+        },
+      ]);
+      // blocks[0]은 Block 유니온이라 TableBlock에는 children이 없다 —
+      // .children을 직접 좁히지 않고 toMatchObject의 부분 매칭으로 확인한다
+      // (editor-controller-blocks.test.ts의 동일 패턴 재사용).
+      expect(editor.getDocument().blocks[0]).toMatchObject({
+        children: [{ content: [{ text: "modified" }] }],
+      });
+    });
+
+    it("자식 블록 삽입 시 자식만 보고하고 부모는 미보고한다", () => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: nestedParagraphDocument(),
+        onChange: (event) => changes.push(event),
+      });
+
+      expect(editor.commands.insertParagraphAfter("child-1")).toMatchObject({
+        ok: true,
+      });
+
+      expect(changes).toHaveLength(1);
+      expect(changes[0]?.changedBlockIds).not.toContain("parent-1");
+      expect(changes[0]?.changedBlockIds).toHaveLength(1);
+      expect(changes[0]?.changedBlockIds[0]).toBeDefined();
+    });
+
+    it("재귀속(parentId 변경) 시 이동한 블록만 보고한다", () => {
+      const changes: DocumentChangeEvent[] = [];
+      const initial: Document = {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "parent-1",
+            type: "paragraph",
+            content: [{ text: "parent" }],
+            children: [
+              {
+                id: "child-1",
+                type: "paragraph",
+                content: [{ text: "child" }],
+              },
+            ],
+          },
+        ],
+      };
+      const editor = createEditor({
+        initialDocument: initial,
+        onChange: (event) => changes.push(event),
+      });
+
+      const nextDocument: Document = {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "parent-1",
+            type: "paragraph",
+            content: [{ text: "parent" }],
+            children: [],
+          },
+          {
+            id: "child-1",
+            type: "paragraph",
+            content: [{ text: "child" }],
+          },
+        ],
+      };
+
+      expect(editor.replaceDocument(nextDocument)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+
+      expect(changes).toEqual([
+        {
+          revision: 1,
+          changedBlockIds: ["child-1"],
+          reason: "replace",
+        },
+      ]);
+    });
   });
 });

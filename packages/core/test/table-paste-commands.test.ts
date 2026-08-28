@@ -32,14 +32,18 @@ const docWithTwoParagraphs = {
   type: "doc",
   content: [
     {
-      type: "paragraph",
+      type: "blockContainer",
       attrs: { blockId: "para-1" },
-      content: [{ type: "text", text: "hello" }],
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+      ],
     },
     {
-      type: "paragraph",
+      type: "blockContainer",
       attrs: { blockId: "para-2" },
-      content: [{ type: "text", text: "world" }],
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "world" }] },
+      ],
     },
   ],
 };
@@ -48,7 +52,9 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
   it("두 문단에 걸친 선택에서 호출하면 선택을 지우고 캐럿을 새 표로 옮긴다", () => {
     const editor = createTableFixtureEditor(docWithTwoParagraphs);
     // "hello"의 "e"부터 "world"의 "w" 뒤까지 — 두 최상위 블록에 걸친 선택.
-    editor.commands.setTextSelection({ from: 2, to: 9 });
+    // blockContainer가 각 문단을 감싸며 좌표가 1씩 밀렸다(D19) — 3이
+    // "hello"의 e, 12가 "world"의 w 뒤다.
+    editor.commands.setTextSelection({ from: 3, to: 12 });
     const createId = sequentialIds("paste");
 
     const result = pasteTabularData(editor, oneByOneData("A"), createId);
@@ -59,7 +65,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
-    expect(doc.content?.[0]?.content?.[0]?.text).toBe("horld");
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("horld");
     expect(doc.content?.[1]?.type).toBe("table");
     const { selection } = editor.state;
     expect(selection.empty).toBe(true);
@@ -70,7 +76,8 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
   it("블록 전체를 선택하고 호출하면 내용을 지우고 빈 문단 뒤에 표를 만든다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     // "hello" 전체 선택 — 삭제 후 빈 문단은 그대로 남긴다(블록 교체 안 함).
-    editor.commands.setTextSelection({ from: 1, to: 6 });
+    // blockContainer가 문단을 감싸며 좌표가 1씩 밀렸다(D19).
+    editor.commands.setTextSelection({ from: 2, to: 7 });
     const createId = sequentialIds("paste");
 
     const result = pasteTabularData(editor, oneByOneData("A"), createId);
@@ -79,7 +86,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
     expect(doc.content?.[0]?.attrs?.blockId).toBe("para-1");
-    expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
+    expect(doc.content?.[0]?.content?.[0]?.content ?? []).toHaveLength(0);
     expect(doc.content?.[1]?.type).toBe("table");
     const { selection } = editor.state;
     expect(selection.empty).toBe(true);
@@ -97,15 +104,16 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       sequentialIds("paste"),
     );
 
-    // AllSelection 삭제가 남기는 스키마 필러 문단은 BlockIdExtension의
-    // appendTransaction이 돌기 전이라 blockId가 없다 — 삽입 위치가 blockId
-    // 조회에 의존하면 여기서 PASTE_TARGET_NOT_FOUND로 무너진다(3차 리뷰
-    // 재현). 필러 문단 뒤에 표가 생겨야 한다.
+    // AllSelection 삭제가 남기는 스키마 필러(blockContainer(문단))는 지우는
+    // 시점엔 BlockIdExtension의 appendTransaction이 돌기 전이라 blockId가
+    // 없다 — 삽입 위치가 blockId 조회에 의존하면 여기서
+    // PASTE_TARGET_NOT_FOUND로 무너진다(3차 리뷰 재현). 필러 뒤에 표가
+    // 생겨야 한다.
     expect(result.ok).toBe(true);
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
-    expect(doc.content?.[0]?.type).toBe("paragraph");
-    expect(doc.content?.[0]?.content ?? []).toHaveLength(0);
+    expect(doc.content?.[0]?.type).toBe("blockContainer");
+    expect(doc.content?.[0]?.content?.[0]?.content ?? []).toHaveLength(0);
     expect(doc.content?.[1]?.type).toBe("table");
     const { selection } = editor.state;
     expect(selection.$from.parent.type.name).toBe("tableCell");
@@ -145,9 +153,11 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
       type: "doc",
       content: [
         {
-          type: "paragraph",
+          type: "blockContainer",
           attrs: { blockId: "para-1" },
-          content: [{ type: "text", text: "hello" }],
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+          ],
         },
         {
           type: "table",
@@ -176,11 +186,12 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
         },
       ],
     });
-    // anchor=12(셀 "ab" 뒤), head=3(문단 중간) — prosemirror-tables의
-    // normalizeSelection은 $to.parentOffset이 0이 아니라 개입하지 않는다.
+    // anchor=14(셀 "ab" 뒤), head=4(문단 중간) — blockContainer가 문단을
+    // 감싸며 좌표가 2씩 밀렸다(D19). prosemirror-tables의 normalizeSelection은
+    // $to.parentOffset이 0이 아니라 개입하지 않는다.
     editor.view.dispatch(
       editor.state.tr.setSelection(
-        TextSelection.create(editor.state.doc, 12, 3),
+        TextSelection.create(editor.state.doc, 14, 4),
       ),
     );
 
@@ -196,7 +207,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(3);
-    expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("hello");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
     const originalTable = getTableBlock(editor, "table-1");
     if (!originalTable.ok) throw new Error("표 조회 실패");
@@ -288,9 +299,9 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(2);
-    expect(doc.content?.[0]?.type).toBe("paragraph");
+    expect(doc.content?.[0]?.type).toBe("blockContainer");
     // 캐럿 선택(빈 selection)은 지울 것이 없다 — 문단 텍스트가 남는다.
-    expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("hello");
     const tableJson = doc.content?.[1];
     expect(tableJson?.type).toBe("table");
     expect(result.value.blockId).toBe(tableJson?.attrs?.blockId);
@@ -412,17 +423,21 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
     expect(doc.content).toHaveLength(4);
-    expect(doc.content?.[0]?.content?.[0]?.text).toBe("hello");
-    expect(doc.content?.[1]?.type).toBe("paragraph");
-    expect(doc.content?.[1]?.content?.[0]?.text).toBe("intro");
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("hello");
+    // 새로 삽입된 문단은 맨몸으로 조립된다 — PM의 slice-fitting이 새
+    // blockContainer로 자동 감싼다(block-container-extension.ts 계약).
+    expect(doc.content?.[1]?.type).toBe("blockContainer");
+    expect(doc.content?.[1]?.content?.[0]?.type).toBe("paragraph");
+    expect(doc.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe("intro");
     expect(doc.content?.[2]?.type).toBe("table");
     const table = getTableBlock(editor, result.value.blockId);
     if (!table.ok) throw new Error("표 조회 실패");
     expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
-    expect(doc.content?.[3]?.type).toBe("paragraph");
-    expect(doc.content?.[3]?.content?.[0]?.text).toBe("outro");
-    // 새 문단도 안정 id를 받는다 — BlockIdExtension의 appendTransaction이
-    // 같은 dispatch 안에서 사후 배정한다.
+    expect(doc.content?.[3]?.type).toBe("blockContainer");
+    expect(doc.content?.[3]?.content?.[0]?.type).toBe("paragraph");
+    expect(doc.content?.[3]?.content?.[0]?.content?.[0]?.text).toBe("outro");
+    // 새 문단을 감싼 컨테이너도 안정 id를 받는다 — BlockIdExtension의
+    // appendTransaction이 같은 dispatch 안에서 사후 배정한다.
     const introBlockId = doc.content?.[1]?.attrs?.blockId;
     expect(typeof introBlockId).toBe("string");
     expect((introBlockId as string).length).toBeGreaterThan(0);
@@ -647,11 +662,15 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("붙여넣기 실패");
     const doc = editor.getJSON() as TiptapJsonNode;
-    // 첫 번째 새 블록이 heading이다
-    expect(doc.content?.[1]?.type).toBe("heading");
-    expect(doc.content?.[1]?.attrs?.level).toBe(2);
-    expect(doc.content?.[1]?.content?.[0]?.text).toBe("heading text");
-    // 새 heading도 문단과 같은 방식으로 안정 id를 받는다 —
+    // 첫 번째 새 블록이 heading이다 — 맨몸으로 조립돼 PM의 slice-fitting이
+    // 새 blockContainer로 자동 감싼다(block-container-extension.ts 계약).
+    expect(doc.content?.[1]?.type).toBe("blockContainer");
+    expect(doc.content?.[1]?.content?.[0]?.type).toBe("heading");
+    expect(doc.content?.[1]?.content?.[0]?.attrs?.level).toBe(2);
+    expect(doc.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe(
+      "heading text",
+    );
+    // 그 heading을 감싼 컨테이너도 안정 id를 받는다 —
     // BlockIdExtension.appendTransaction이 같은 dispatch 안에서 사후
     // 배정한다(표 밖 문단+표+문단 시퀀스 테스트의 introBlockId 단언과 대칭).
     const headingBlockId = doc.content?.[1]?.attrs?.blockId;

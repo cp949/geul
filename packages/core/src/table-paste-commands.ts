@@ -34,18 +34,20 @@ const positionInsideTable = (position: ResolvedPos): boolean => {
   return false;
 };
 
-// 선택 삭제 후 캐럿(to)이 새 표를 끼울 최상위 위치: 캐럿이 안쪽에 닿은
-// (offset < to) 마지막 최상위 블록 바로 뒤. 첫 블록 앞 GapCursor(to === 0)는
-// 어떤 블록도 조건을 만족하지 않아 문서 맨 앞이 된다 — 커서가 '가리키기
-// 직전인' 블록 뒤에 붙이면 표가 한 블록 아래로 밀린다. blockId에 의존하지
-// 않으므로 AllSelection 삭제가 남긴 필러 문단(BlockIdExtension은
-// appendTransaction에서야 id를 부여한다) 뒤에도 정상 삽입된다.
+// 선택 삭제 후 캐럿(to)이 새 표를 끼울 최상위 위치: 캐럿의 최상위 조상
+// 바로 뒤(중첩 삽입 의미 확장은 슬라이스 10(D13) 소관 — 이 슬라이스는 기존
+// 최상위 삽입 의미를 그대로 유지한다). resolve 기반 구현: `to`가 이미
+// 최상위 경계(depth 0 — 문서 시작·끝, 또는 최상위 형제 사이)면 그 위치
+// 자신이다 — 첫 블록 앞 GapCursor(to === 0)가 문서 맨 앞이 되는 것도 이
+// 분기다. `to`가 어떤 최상위 블록 안(임의 깊이)에 있으면 그 최상위 조상
+// 바로 뒤(`after(1)`)다 — 컨테이너 내부에 중첩된 캐럿이어도 조상 전체를
+// 건너뛴다. blockId에 의존하지 않으므로 AllSelection 삭제가 남긴 필러
+// 문단(BlockIdExtension은 appendTransaction에서야 id를 부여한다) 뒤에도
+// 정상 삽입된다.
 const tableInsertPosition = (doc: ProseMirrorNode, to: number): number => {
-  let position = 0;
-  doc.forEach((node, offset) => {
-    if (offset < to) position = offset + node.nodeSize;
-  });
-  return position;
+  const clamped = Math.max(0, Math.min(to, doc.content.size));
+  const $to = doc.resolve(clamped);
+  return $to.depth === 0 ? $to.pos : $to.after(1);
 };
 
 // pasteTabularData/pasteClipboardContent 공용 검증이다 — 둘 다 공개 API라
