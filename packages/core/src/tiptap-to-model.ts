@@ -1,4 +1,5 @@
 import {
+  type Block,
   canonicalizeTextMarks,
   decodeTextMark,
   type Document,
@@ -104,6 +105,111 @@ const tableBlockFromTiptapJson = (
   return { ok: true, value: table };
 };
 
+// 저장된 blockId를 신뢰하고, 없거나 빈 문자열이면 createId로 새로 발급한다
+// (라이브 에디터가 BlockIdExtension의 appendTransaction으로 이미 채워
+// 넣지만, 이 디코더는 그 보장 없이 임의 JSON을 받는 경로에서도 안전해야
+// 한다).
+const resolveBlockId = (node: TiptapJsonNode, createId: IdFactory): string => {
+  const savedId = node.attrs?.blockId;
+  return typeof savedId === "string" && savedId.length > 0
+    ? savedId
+    : createId();
+};
+
+// blockContainer 1개를 재귀로 model Block으로 디코드한다(D19). 컨테이너의
+// 첫 자식은 항상 blockContent(paragraph/heading), 두 번째(선택) 자식은
+// blockGroup이다 — 스키마 content expression "blockContent blockGroup?"이
+// 이 순서를 구조적으로 강제하므로 여기서 순서를 다시 검증하지 않는다
+// (G-CNV-001: 검증 권위는 parseDocument, 이 함수는 구조 직대응만 한다).
+const blockContainerToModel = (
+  node: TiptapJsonNode,
+  createId: IdFactory,
+): Result<Block, EditorError> => {
+  const id = resolveBlockId(node, createId);
+
+  const contentNode = node.content?.[0];
+  if (contentNode === undefined) {
+    return invalid(`Block ${id} is missing its blockContent child`);
+  }
+
+  const inlineContent = inlineContentFromTiptap(contentNode.content);
+  if (!inlineContent.ok) return inlineContent;
+
+  const groupNode = node.content?.[1];
+  const extraNode = node.content?.[2];
+  if (extraNode !== undefined) {
+    return invalid(
+      `Block ${id} has unexpected content after blockContent/blockGroup: ${String(extraNode.type)}`,
+    );
+  }
+
+  let children: Block[] | undefined;
+  if (groupNode !== undefined) {
+    if (groupNode.type !== "blockGroup") {
+      return invalid(
+        `Block ${id} has unexpected second child: ${String(groupNode.type)}`,
+      );
+    }
+    const decodedChildren: Block[] = [];
+    for (const childNode of groupNode.content ?? []) {
+      const decoded = decodeBlock(childNode, createId);
+      if (!decoded.ok) return decoded;
+      decodedChildren.push(decoded.value);
+    }
+    children = decodedChildren;
+  }
+
+  if (contentNode.type === "paragraph") {
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "paragraph",
+        content: inlineContent.value,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
+  if (contentNode.type === "heading") {
+    const level = contentNode.attrs?.level;
+    if (level !== 1 && level !== 2 && level !== 3) {
+      return invalid(`Unsupported heading level: ${String(level)}`);
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "heading",
+        level,
+        content: inlineContent.value,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
+  return invalid(
+    `Unsupported blockContent inside blockContainer: ${String(contentNode.type)}`,
+  );
+};
+
+// 문서 최상위와 blockGroup 자식이 공유하는 노드 디스패치. table은 컨테이너로
+// 감싸이지 않는다(D19) — blockContainer/table 둘 다 스키마 group "block"의
+// 멤버라 같은 위치(doc 직속 또는 blockGroup 자식)에 나란히 나타난다. 그
+// 외 타입은 거절한다(미지 노드 조용히 무시 금지 — 기존 계약 유지).
+const decodeBlock = (
+  node: TiptapJsonNode,
+  createId: IdFactory,
+): Result<Block, EditorError> => {
+  if (node.type === "table") {
+    return tableBlockFromTiptapJson(node, resolveBlockId(node, createId));
+  }
+  if (node.type === "blockContainer") {
+    return blockContainerToModel(node, createId);
+  }
+  return invalid(`Unsupported Tiptap block: ${String(node.type)}`);
+};
+
 export const tiptapToModel = (
   json: TiptapJsonNode,
   revision: number,
@@ -113,35 +219,9 @@ export const tiptapToModel = (
 
   const blocks: Document["blocks"] = [];
   for (const node of json.content ?? []) {
-    const savedId = node.attrs?.blockId;
-    const id =
-      typeof savedId === "string" && savedId.length > 0 ? savedId : createId();
-
-    if (node.type === "table") {
-      const table = tableBlockFromTiptapJson(node, id);
-      if (!table.ok) return table;
-      blocks.push(table.value);
-      continue;
-    }
-
-    const content = inlineContentFromTiptap(node.content);
-    if (!content.ok) return content;
-
-    if (node.type === "paragraph") {
-      blocks.push({ id, type: "paragraph", content: content.value });
-      continue;
-    }
-
-    if (node.type === "heading") {
-      const level = node.attrs?.level;
-      if (level !== 1 && level !== 2 && level !== 3) {
-        return invalid(`Unsupported heading level: ${String(level)}`);
-      }
-      blocks.push({ id, type: "heading", level, content: content.value });
-      continue;
-    }
-
-    return invalid(`Unsupported Tiptap block: ${String(node.type)}`);
+    const decoded = decodeBlock(node, createId);
+    if (!decoded.ok) return decoded;
+    blocks.push(decoded.value);
   }
 
   const parsed = parseDocument({ formatVersion: 1, revision, blocks });

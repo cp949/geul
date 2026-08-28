@@ -1,4 +1,5 @@
 import {
+  type Block,
   type Document,
   type InlineContent,
   isCanonicalTextMarks,
@@ -72,8 +73,12 @@ export const inlineContentViolation = (
   return null;
 };
 
+// children까지 재귀로 훑는다 — 중첩 블록의 인라인 콘텐츠도 최상위와 같은
+// 경계 계약(빈 텍스트 런 금지 등)을 적용받는다(G-CNV-001: codec은 구조
+// 직대응만 하고 검증 권위는 여전히 model parseDocument다 — 이 함수는 PM
+// 조립이 던지는 예외를 막는 사전 방어일 뿐, 최종 권위가 아니다).
 const validateEditableContent = (
-  blocks: Document["blocks"],
+  blocks: readonly Block[],
 ): Result<void, EditorError> => {
   for (const block of blocks) {
     if (block.type === "table") {
@@ -91,6 +96,11 @@ const validateEditableContent = (
     const violation = inlineContentViolation(block.content);
     if (violation !== null) {
       return invalid(`Block ${block.id} ${violation}`);
+    }
+
+    if (block.children !== undefined && block.children.length > 0) {
+      const childResult = validateEditableContent(block.children);
+      if (!childResult.ok) return childResult;
     }
   }
 
@@ -166,6 +176,40 @@ export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {
   };
 };
 
+// 문단·헤딩 노드 자체(컨테이너 내부의 blockContent) 인코딩. blockId는 더
+// 이상 여기 붙지 않는다 — D19가 identity를 blockContainer로 옮겼다.
+const blockContentToTiptapJson = (
+  block: Exclude<Block, TableBlock>,
+): TiptapJsonNode => ({
+  type: block.type,
+  ...(block.type === "heading" ? { attrs: { level: block.level } } : {}),
+  content: inlineContentToTiptap(block.content),
+});
+
+// Block 1개를 재귀로 PM JSON 노드로 인코딩한다(D19). table은 컨테이너로
+// 감싸지 않고 tableBlockToTiptapJson 결과를 그대로 직결한다 — table은
+// children을 가질 수 없어(model 계층, DELTA-01) 재귀 종료 조건이기도 하다.
+// paragraph/heading은 blockContainer(blockContent, blockGroup?(children…))로
+// 감싼다 — blockGroup은 children이 있을 때만 만든다(빈 배열/undefined 둘
+// 다 "자식 없음"으로 접는다).
+const blockToTiptapJson = (block: Block): TiptapJsonNode => {
+  if (block.type === "table") return tableBlockToTiptapJson(block);
+
+  const content: TiptapJsonNode[] = [blockContentToTiptapJson(block)];
+  if (block.children !== undefined && block.children.length > 0) {
+    content.push({
+      type: "blockGroup",
+      content: block.children.map(blockToTiptapJson),
+    });
+  }
+
+  return {
+    type: "blockContainer",
+    attrs: { blockId: block.id },
+    content,
+  };
+};
+
 export const modelToTiptap = (
   document: Document,
 ): Result<TiptapJsonNode, EditorError> => {
@@ -179,18 +223,7 @@ export const modelToTiptap = (
     ok: true,
     value: {
       type: "doc",
-      content: document.blocks.map((block) =>
-        block.type === "table"
-          ? tableBlockToTiptapJson(block)
-          : {
-              type: block.type,
-              attrs:
-                block.type === "heading"
-                  ? { blockId: block.id, level: block.level }
-                  : { blockId: block.id },
-              content: inlineContentToTiptap(block.content),
-            },
-      ),
+      content: document.blocks.map(blockToTiptapJson),
     },
   };
 };

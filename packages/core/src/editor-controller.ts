@@ -8,12 +8,16 @@ import {
   type Result,
   type TextMark,
 } from "@cp949/geul-model";
-import { Editor, type JSONContent } from "@tiptap/core";
+import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 
+import {
+  BlockContainerExtension,
+  BlockGroupExtension,
+} from "./block-container-extension.js";
 import { BlockIdExtension } from "./block-id-extension.js";
 import { findTopLevelBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
@@ -227,6 +231,56 @@ const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [
   "code",
 ];
 
+// D19: paragraph/heading의 group을 "block"에서 "blockContent"로 바꾼다 —
+// blockId identity는 blockContainer로 옮겨갔다(block-container-extension.ts).
+// StarterKit.configure()는 addOptions() 런타임 옵션만 오버라이드하고
+// group·content 같은 스키마 필드는 바꾸지 못한다(실측: @tiptap/starter-kit이
+// 내부적으로 Paragraph.configure(...)/Heading.configure(...)만 호출한다 —
+// node_modules/.pnpm/@tiptap+starter-kit.../dist/index.js 확인). 원본
+// @tiptap/extension-paragraph·extension-heading을 .extend({ group: ... })로
+// 재사용하는 대안은 두 패키지가 core의 선언된 dependency가 아니라
+// (package.json에 없음) pnpm strict 해석에서 막힌다(실측: 별도 스크립트로
+// import 시도 시 ERR_MODULE_NOT_FOUND). 새 dependency를 추가하는 대신
+// StarterKit의 paragraph/heading을 끄고(`paragraph: false, heading: false`)
+// 그 자리를 대신할 최소 재구현을 둔다 — Tiptap 3.30.1
+// extension-paragraph/extension-heading의 parseHTML·renderHTML·attrs만
+// 재현했다. addCommands(setParagraph/setHeading/toggleHeading)·
+// addKeyboardShortcuts(Mod-Alt-N)·addInputRules("# " 마크다운 규칙)는 이
+// 코드베이스 어디서도 호출되지 않아(실측: grep 0건) 이번 DELTA 범위에서
+// 제외한다 — 필요해지면 이 자리에 복원한다.
+const ParagraphExtension = Node.create({
+  name: "paragraph",
+  group: "blockContent",
+  content: "inline*",
+  parseHTML() {
+    return [{ tag: "p" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["p", mergeAttributes(HTMLAttributes), 0];
+  },
+});
+
+const HeadingExtension = Node.create({
+  name: "heading",
+  group: "blockContent",
+  content: "inline*",
+  defining: true,
+  addAttributes() {
+    return {
+      level: { default: 1, rendered: false },
+    };
+  },
+  parseHTML() {
+    return [1, 2, 3].map((level) => ({ tag: `h${level}`, attrs: { level } }));
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const level = [1, 2, 3].includes(node.attrs.level as number)
+      ? (node.attrs.level as number)
+      : 1;
+    return [`h${level}`, mergeAttributes(HTMLAttributes), 0];
+  },
+});
+
 const commandNotApplicable = (command: string): Result<never, EditorError> => ({
   ok: false,
   error: { code: "COMMAND_NOT_APPLICABLE", command },
@@ -385,7 +439,8 @@ export const createEditor = (
           horizontalRule: false,
           listItem: false,
           orderedList: false,
-          heading: { levels: [1, 2, 3] },
+          paragraph: false,
+          heading: false,
           link: {
             openOnClick: false,
             isAllowedUri: (url) => isSupportedLinkHref(url),
@@ -393,6 +448,10 @@ export const createEditor = (
           },
           trailingNode: false,
         }),
+        ParagraphExtension,
+        HeadingExtension,
+        BlockContainerExtension,
+        BlockGroupExtension,
         BlockIdExtension.configure({ createId }),
         TableExtension,
         TableRowExtension,
