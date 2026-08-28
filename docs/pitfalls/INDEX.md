@@ -16,6 +16,7 @@
 | [`PIT-0034`](./PIT-0034-verify-wall-clock-limits-separate-regression-from-load-noise.md) | 복잡도 회귀를 시간 상한만으로 게이트 | 단독 통과, 동시 실행에서만 간헐 실패 | `G-TST-004` |
 | [`PIT-0035`](./PIT-0035-treat-copy-detection-scan-passes-as-partial-coverage.md) | copy-detection 스캔 결과 판독 | 0건을 사본 없음으로, 우연한 매치를 사본으로 오판 | `G-WKS-004` |
 | [`PIT-0037`](./PIT-0037-strip-frontmatter-before-posting-issue-tracker-drafts.md) | 이슈 트래커 초안 파일을 `--body-file`로 게시 | `gh` 명령 exit 0·URL 정상 반환, frontmatter 노출 무신호 | `issue-tracker` |
+| [`PIT-0038`](./PIT-0038-run-package-typecheck-script-not-lone-tsconfig.md) | 복합 `typecheck` 스크립트가 있는 패키지의 검증을 subagent에 위임 | `tsc -p tsconfig.json` exit 0·vitest 전부 통과, 테스트 파일 타입 오류 무신호 | `G-WKS-003` |
 
 ## 승격 기준
 
@@ -30,4 +31,4 @@
 
 각 함정은 지배하는 가이드를 한 방향으로만 가리킨다(`pitfall -> guide`). 가이드와 가이드 INDEX는 함정을 역참조하지 않는다.
 
-삭제한 pitfall ID는 재사용하지 않는다. 다음 신규 ID는 `PIT-0038`다. 과거 ID와 내용은 Git 이력이 보존한다.
+삭제한 pitfall ID는 재사용하지 않는다. 다음 신규 ID는 `PIT-0039`다. 과거 ID와 내용은 Git 이력이 보존한다.

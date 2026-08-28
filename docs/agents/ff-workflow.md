@@ -138,10 +138,10 @@ DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한�
 
 ## 트랙-2. 계획서 리뷰 및 수정
 
-- 입력: `01-계획.md`(요구사항 추적표 포함), `DELTA-*.md`, 관련 spec·ADR·개발 가이드, 적용 조건이 맞는 `ACTIVE` pitfall, 대상 코드
+- 입력: `01-계획.md`(요구사항 추적표 포함), `DELTA-*.md`, 관련 spec·ADR·개발 가이드, 제품 계약 문서([`docs/product/roadmap.md`](../product/roadmap.md)의 해당 단계 범위·완료 조건과 기능 인벤토리의 대상 기능 ID 행), 적용 조건이 맞는 `ACTIVE` pitfall, 대상 코드
 - 출력: 라운드마다 `PLAN-REVIEW-NN.md`, 수정된 `DELTA-*.md`
 - 절차: subagent 협업 모드로 진행한다. 아래 렌즈 셋을 읽기 전용 subagent 3개에 하나씩 병렬 dispatch한다. 기본 경로는 두 라운드다 — 라운드 1이 구조적 발견을 전면 수집하고, 라운드 2가 수정 영향을 clean review한다.
-  1. **범위 정합** — DELTA 집합이 이슈·spec이 요구하는 목표를 구조적으로 빠짐없이 담는가. 요구사항 추적표의 각 행이 실제로 담당 DELTA의 완료 조건에 연결되는가. 비목표로 명시한 범위를 벗어나는 DELTA가 있는가.
+  1. **범위 정합** — DELTA 집합이 이슈·spec이 요구하는 목표를 구조적으로 빠짐없이 담는가. 요구사항 추적표의 각 행이 실제로 담당 DELTA의 완료 조건에 연결되는가. 비목표로 명시한 범위를 벗어나는 DELTA가 있는가. 이연 결정이 해당 릴리스 단계의 완료 조건과 대조해 귀속 경로(후속 슬라이스·이슈)를 갖는가.
   2. **분할과 순서** — DELTA 경계가 책임 단위로 맞는가. 선행 관계(의존 순서)가 성립하는가. 어느 DELTA도 담당하지 않는 구조적 틈이 있는가.
   3. **외부 계약과 가이드** — 승인된 spec·ADR, 개발 가이드, 적용 조건이 맞는 `ACTIVE` pitfall, `AGENTS.md`의 아키텍처 불변식과 어긋나는가. 정상 구현 경로가 없는 `guide gap`이 있는가.
 
@@ -185,7 +185,7 @@ DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한�
 - 출력: 작업 브랜치 커밋, 실행 ledger(`progress.md`) 갱신
 - 절차: subagent 협업 모드로 진행한다. DELTA마다 시작 시 세 가지를 판정해 ledger에 남긴다 — **구현 복잡도**(Micro·Standard·Risky), **검증 자동화**(Complete·Partial), **후속 기능적 의존**(None·Functional). 등급별 implementer와 실행 경로는 아래 "구현 복잡도"가, 독립 reviewer의 실행 시점은 "검증 자동화와 리뷰 시점"이 소유한다. 커밋은 메인 세션이 한다 — implementer 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
 - 게이트: **해당 DELTA의 완료 조건을 전부 충족한 경우에만 다음 DELTA를 시작한다.** 충족하지 못하면 정지하고 무엇이 미충족인지 보고한다.
-- 검증: DELTA의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다. focused 명령은 출력의 `Test Files`로 실제 선택 범위를 확인한다 — 패키지 `test` 스크립트는 경로가 고정돼 파일 인자가 필터로 겹쳐 전체를 실행할 수 있다. 파일 단위 실행은 `pnpm --filter <패키지> exec vitest run --root ../.. <테스트 파일...>` 형태를 쓴다.
+- 검증: DELTA의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다. focused 명령은 출력의 `Test Files`로 실제 선택 범위를 확인한다 — 패키지 `test` 스크립트는 경로가 고정돼 파일 인자가 필터로 겹쳐 전체를 실행할 수 있다. 파일 단위 실행은 `pnpm --filter <패키지> exec vitest run --root ../.. <테스트 파일...>` 형태를 쓴다. DELTA가 이 작업에서 처음 건드리는 패키지면(이전 DELTA 어느 것도 그 패키지의 소스·테스트를 변경하지 않았다면) 그 패키지의 전체 테스트를 메인 세션이 1회 독립 실행하고, 실패는 이 DELTA가 만든 것인지 사전 결함인지 구분한다(사전 결함이면 `pending-issues/`로 분리). `e2e/`를 처음 건드리는 DELTA도 같다 — `pnpm test:e2e --project=chromium` 전량 1회. 선행 DELTA가 이미 전체 실행한 패키지에는 반복하지 않는다.
 - 재실행: 이미 완료한 DELTA를 사용자가 다시 지시하면 독립 reviewer 1회를 실행하고 발견을 수정한다.
 - 정지: squash, `dev` 병합, push, GitHub 쓰기를 하지 않는다.
 
