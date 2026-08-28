@@ -123,7 +123,10 @@ describe("SlashMenu 질의 팝업", () => {
     if (paragraphBlock?.type !== "paragraph") {
       throw new Error("본문 문단을 찾지 못했다");
     }
-    const paragraph = host.querySelector<HTMLElement>("p[data-be-block-id]");
+    // D19(컨테이너 스키마)부터 blockId는 <p> 자신이 아니라 그 부모
+    // <div>(blockContainer)에 있다 — 자손 selector로 실제 문단 요소를 찾는다
+    // (pending-issues/11.md 정정, DELTA-02e).
+    const paragraph = host.querySelector<HTMLElement>("[data-be-block-id] p");
     const cell = table.querySelector<HTMLElement>("[data-be-cell-id]");
     if (paragraph === null || cell === null) {
       throw new Error("문단 또는 표 셀을 찾지 못했다");

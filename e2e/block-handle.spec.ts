@@ -268,10 +268,17 @@ test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다
   await expect(editable.locator("p").first()).toHaveText("first block");
   await expect(editable.locator("p").last()).toHaveText("second block");
 
+  // D19(컨테이너 스키마)부터 blockId는 <p> 자신이 아니라 그 부모
+  // <div>(blockContainer)에 있다 — closest로 조상 컨테이너를 찾는다
+  // (pending-issues/11.md 정정, DELTA-02e).
   const newBlockId = await editable
     .locator("p")
     .last()
-    .getAttribute("data-be-block-id");
+    .evaluate(
+      (node) =>
+        node.closest("[data-be-block-id]")?.getAttribute("data-be-block-id") ??
+        null,
+    );
   expect(newBlockId).toMatch(uuidV4Pattern);
 
   expect(pageErrors).toHaveLength(0);
