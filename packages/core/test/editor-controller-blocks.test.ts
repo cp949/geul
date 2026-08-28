@@ -120,9 +120,12 @@ describe("에디터 컨트롤러 블록 명령", () => {
       const changes: DocumentChangeEvent[] = [];
       const editor = createEditor({
         initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("gen"),
         onChange: (event) => changes.push(event),
       });
 
+      // 마지막 블록이 heading이 되면 같은 커밋에 trailing paragraph(UI-010,
+      // "gen-1")가 추가된다 — 변환 자체의 id·내용 보존은 blocks[0]이 고정한다.
       expect(
         editor.commands.setBlockType("block-1", { type: "heading", level: 2 }),
       ).toEqual({ ok: true, value: undefined });
@@ -135,14 +138,17 @@ describe("에디터 컨트롤러 블록 명령", () => {
             level: 2,
             content: [{ text: "content" }],
           },
+          { id: "gen-1", type: "paragraph", content: [] },
         ],
       });
       expect(changes).toEqual([
-        { revision: 1, changedBlockIds: ["block-1"], reason: "local" },
+        { revision: 1, changedBlockIds: ["block-1", "gen-1"], reason: "local" },
       ]);
     });
 
     it("제목을 문단으로 되돌리면서 내용을 보존한다", () => {
+      // heading으로 끝나는 문서라 로드 시점에 trailing paragraph(UI-010,
+      // "gen-1")가 붙는다 — 변환 대상과 결과는 blocks[0]이 고정한다.
       const editor = createEditor({
         initialDocument: {
           formatVersion: 1,
@@ -156,6 +162,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
             },
           ],
         },
+        createId: sequentialIds("gen"),
       });
 
       expect(
@@ -164,6 +171,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
       expect(editor.getDocument()).toMatchObject({
         blocks: [
           { id: "block-1", type: "paragraph", content: [{ text: "title" }] },
+          { id: "gen-1", type: "paragraph", content: [] },
         ],
       });
     });
@@ -186,8 +194,11 @@ describe("에디터 컨트롤러 블록 명령", () => {
     it("clearContent를 지정하면 타입을 바꾸면서 내용을 비운다", () => {
       const editor = createEditor({
         initialDocument: paragraphDocument("/heading"),
+        createId: sequentialIds("gen"),
       });
 
+      // heading 변환과 같은 커밋에 trailing paragraph(UI-010, "gen-1")가
+      // 추가된다 — clearContent의 결과는 blocks[0]이 고정한다.
       expect(
         editor.commands.setBlockType(
           "block-1",
@@ -196,7 +207,10 @@ describe("에디터 컨트롤러 블록 명령", () => {
         ),
       ).toEqual({ ok: true, value: undefined });
       expect(editor.getDocument()).toMatchObject({
-        blocks: [{ id: "block-1", type: "heading", level: 1, content: [] }],
+        blocks: [
+          { id: "block-1", type: "heading", level: 1, content: [] },
+          { id: "gen-1", type: "paragraph", content: [] },
+        ],
       });
     });
 
@@ -432,6 +446,9 @@ describe("에디터 컨트롤러 블록 명령", () => {
     });
 
     it("제목 블록을 복제하면 heading level을 보존한다", () => {
+      // R-12: 상수 팩토리는 heading으로 끝나는 이 문서의 로드 시점 trailing
+      // paragraph(UI-010)가 첫 id를 소비한 뒤 복제본과 id가 중복된다 — 순차
+      // 팩토리를 쓴다. "copy-1"은 trailing paragraph가 가져간다.
       const editor = createEditor({
         initialDocument: {
           formatVersion: 1,
@@ -445,13 +462,13 @@ describe("에디터 컨트롤러 블록 명령", () => {
             },
           ],
         },
-        createId: () => "block-2",
+        createId: sequentialIds("copy"),
       });
 
       editor.commands.duplicateBlock("block-1");
 
       expect(editor.getDocument().blocks[1]).toMatchObject({
-        id: "block-2",
+        id: "copy-2",
         type: "heading",
         level: 2,
         content: [{ text: "title" }],
@@ -631,20 +648,23 @@ describe("에디터 컨트롤러 블록 명령", () => {
     });
 
     it("depth 1 블록 뒤에 insertParagraphAfter로 같은 부모의 다음 형제를 만든다(완료 조건 2·5)", () => {
+      // R-12: 상수 팩토리는 로드 시점 trailing paragraph가 첫 id를 소비한 뒤
+      // BlockIdExtension 재시도 루프를 영원히 돌게 한다 — 순차 팩토리를 쓴다.
+      // "new-1"은 로드 정규화의 trailing paragraph가 가져간다(UI-010).
       const editor = createEditor({
         initialDocument: nestedParagraphDocument(),
-        createId: () => "child-2",
+        createId: sequentialIds("new"),
       });
 
       expect(editor.commands.insertParagraphAfter("child-1")).toEqual({
         ok: true,
-        value: { blockId: "child-2" },
+        value: { blockId: "new-2" },
       });
       expect(editor.getDocument().blocks[0]).toMatchObject({
         id: "parent-1",
         children: [
           { id: "child-1", content: [{ text: "child" }] },
-          { id: "child-2", type: "paragraph", content: [] },
+          { id: "new-2", type: "paragraph", content: [] },
         ],
       });
     });
@@ -657,9 +677,11 @@ describe("에디터 컨트롤러 블록 명령", () => {
         createId: sequentialIds("new"),
       });
 
+      // "new-1"은 로드 시점 trailing paragraph(UI-010)가 가져가고 삽입
+      // 블록은 "new-2"다 — 하위 트리 바로 뒤(= trailing 앞)에 들어간다.
       expect(editor.commands.insertParagraphAfter("parent-1")).toEqual({
         ok: true,
-        value: { blockId: "new-1" },
+        value: { blockId: "new-2" },
       });
       const document = editor.getDocument();
       expect(document.blocks).toMatchObject([
@@ -668,6 +690,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
           content: [{ text: "parent" }],
           children: [{ id: "child-1", content: [{ text: "child" }] }],
         },
+        { id: "new-2", type: "paragraph", content: [] },
         { id: "new-1", type: "paragraph", content: [] },
       ]);
     });
@@ -688,7 +711,9 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
 
       const document = editor.getDocument();
-      expect(document.blocks).toHaveLength(1);
+      // blocks 2개 = parent-1 + 로드 시점 trailing paragraph(UI-010, 자식
+      // 딸린 paragraph로 끝나는 문서라 로드에 추가됨).
+      expect(document.blocks).toHaveLength(2);
       expect(document.blocks[0]).toMatchObject({
         id: "parent-1",
         content: [{ text: "parent" }],
@@ -797,9 +822,12 @@ describe("에디터 컨트롤러 블록 명령", () => {
           },
         ],
       };
+      // R-12와 같은 부류: 자식 딸린 paragraph로 끝나는 이 문서는 로드 시점
+      // trailing paragraph(UI-010)가 첫 id를 소비하므로 상수 팩토리는 복제본
+      // id를 중복시킨다 — 순차 팩토리를 쓴다. "new-1"은 trailing이 가져간다.
       const editor = createEditor({
         initialDocument,
-        createId: () => "child-3",
+        createId: sequentialIds("new"),
       });
 
       expect(editor.commands.moveBlockBefore("child-2", "child-1")).toEqual({
@@ -814,13 +842,13 @@ describe("에디터 컨트롤러 블록 명령", () => {
 
       expect(editor.commands.duplicateBlock("child-1")).toEqual({
         ok: true,
-        value: { blockId: "child-3" },
+        value: { blockId: "new-2" },
       });
       expect(editor.getDocument().blocks[0]).toMatchObject({
         children: [
           { id: "child-2" },
           { id: "child-1", content: [{ text: "one" }] },
-          { id: "child-3", content: [{ text: "one" }] },
+          { id: "new-2", content: [{ text: "one" }] },
         ],
       });
     });

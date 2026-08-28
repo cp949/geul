@@ -6,6 +6,7 @@ import {
   mountTiptapEditor,
   paragraphDocument,
   nestedParagraphDocument,
+  sequentialIds,
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
@@ -518,6 +519,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
       };
       const editor = createEditor({
         initialDocument: initial,
+        createId: sequentialIds("gen"),
         onChange: (event) => changes.push(event),
       });
 
@@ -544,10 +546,14 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
         value: undefined,
       });
 
+      // "gen-1"은 자식 딸린 paragraph로 끝나던 initial의 로드 시점 trailing
+      // paragraph(UI-010)다 — 교체 문서는 자식 없는 paragraph로 끝나
+      // trailing이 없고, 그 소멸이 재귀속(child-1)과 함께 보고된다.
+      // parent-1은 여전히 미보고다(재귀 diff의 원래 의도).
       expect(changes).toEqual([
         {
           revision: 1,
-          changedBlockIds: ["child-1"],
+          changedBlockIds: ["child-1", "gen-1"],
           reason: "replace",
         },
       ]);

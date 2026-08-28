@@ -244,10 +244,14 @@ describe("에디터 컨트롤러 표", () => {
     const table = firstTableBlockIn(document);
     expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "intro\na" }]);
     expect(table.rows[0]?.cells[1]?.content).toEqual([{ text: "b\noutro" }]);
-    // 표 밖에 새 문단이 생기지 않는다.
-    expect(
-      document.blocks.filter((block) => block.type === "paragraph"),
-    ).toHaveLength(1);
+    // 표 밖에 새 문단이 생기지 않는다 — 문단은 fixture의 block-1과
+    // editorWithTable이 이미 갖고 있던 trailing paragraph(UI-010, 빈
+    // 문단)뿐이고 intro/outro는 문단으로 남지 않는다.
+    const paragraphs = document.blocks.filter(
+      (block) => block.type === "paragraph",
+    );
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[1]).toMatchObject({ type: "paragraph", content: [] });
 
     // 모델↔에디터가 어긋나면 readEditorDocument()가 TypeError로 터진다.
     expect(editor.commands.setText("block-1", "next")).toEqual({

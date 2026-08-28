@@ -985,7 +985,9 @@ describe("네이티브 split/join 유효성(D22)", () => {
       schema.nodeFromJSON(tiptap.state.doc.toJSON()).check(),
     ).not.toThrow();
 
-    expect(tiptap.state.doc.childCount).toBe(2);
+    // childCount 3 = heading + split이 만든 새 블록 + 로드 시점 trailing
+    // paragraph(UI-010, heading으로 끝나는 문서라 로드에 추가됨).
+    expect(tiptap.state.doc.childCount).toBe(3);
     const originalContainer = tiptap.state.doc.child(0);
     // 원본은 그대로 heading이다.
     expect(originalContainer.firstChild?.type.name).toBe("heading");
@@ -1020,7 +1022,9 @@ describe("네이티브 split/join 유효성(D22)", () => {
       schema.nodeFromJSON(tiptap.state.doc.toJSON()).check(),
     ).not.toThrow();
 
-    expect(tiptap.state.doc.childCount).toBe(2);
+    // childCount 3 = 분할된 heading 둘 + 로드 시점 trailing paragraph
+    // (UI-010, heading으로 끝나는 문서라 로드에 추가됨).
+    expect(tiptap.state.doc.childCount).toBe(3);
     const originalContainer = tiptap.state.doc.child(0);
     expect(originalContainer.firstChild?.type.name).toBe("heading");
     expect(originalContainer.firstChild?.attrs.level).toBe(2);

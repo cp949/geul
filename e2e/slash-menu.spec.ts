@@ -19,7 +19,10 @@ test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록
 
   await expect(menu).not.toBeVisible();
   await expect(editable.locator("h1")).toHaveText("");
-  await expect(editable.locator("p")).toHaveCount(0);
+  // heading 변환으로 문서가 heading으로 끝나면 trailing paragraph(UI-010)가
+  // 자동 추가된다 — 남는 문단은 그 빈 문단 하나다.
+  await expect(editable.locator("p")).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveText("");
 });
 
 test("슬래시 메뉴 선택을 undo 1회로 복원한다", async ({ page }) => {

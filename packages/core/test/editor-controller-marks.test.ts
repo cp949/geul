@@ -4,6 +4,7 @@ import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
   mountTiptapEditor,
   paragraphDocument,
+  sequentialIds,
 } from "./editor-controller-support.js";
 
 describe("에디터 컨트롤러 mark", () => {
@@ -30,11 +31,24 @@ describe("에디터 컨트롤러 mark", () => {
         },
       ],
     };
-    const editor = createEditor({ initialDocument: markedHeading });
+    const editor = createEditor({
+      initialDocument: markedHeading,
+      createId: sequentialIds("gen"),
+    });
     editor.commands.setText("heading-1", "plain");
 
+    // heading으로 끝나는 문서라 로드 시점에 trailing paragraph(UI-010,
+    // "gen-1")가 붙는다 — 로드 정규화는 히스토리 밖이라 undo는 setText만
+    // 되돌리고 trailing은 남는다.
     expect(editor.commands.undo()).toMatchObject({ ok: true });
-    expect(editor.getDocument()).toEqual({ ...markedHeading, revision: 2 });
+    expect(editor.getDocument()).toEqual({
+      ...markedHeading,
+      revision: 2,
+      blocks: [
+        ...markedHeading.blocks,
+        { id: "gen-1", type: "paragraph", content: [] },
+      ],
+    });
   });
 
   it.each([

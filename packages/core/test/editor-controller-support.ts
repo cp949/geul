@@ -12,7 +12,7 @@
  * 훅이 붙는다. editorWithTable을 table-test-support.ts로 옮기면 tiptap 노드만
  * 검증하는 파일까지 그 훅을 얻는다.
  */
-import type { Document, InlineContent } from "@cp949/geul-model";
+import type { Block, Document, InlineContent } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { afterEach } from "vitest";
 import { createEditor, type EditorController } from "../src/index.js";
@@ -47,6 +47,33 @@ export const nestedParagraphDocument = (): Document => ({
       ],
     },
   ],
+});
+
+/**
+ * 1x1 표 블록 리터럴. 표 인접 Backspace/Delete의 NodeSelection 후퇴
+ * (block-join-extension.test.ts)와 표로 끝나는 문서의 trailing 정규화
+ * (trailing-block-extension.test.ts)가 공유한다(G-TST-002).
+ */
+export const oneCellTableBlock = (id: string): Block => ({
+  id,
+  type: "table",
+  columns: [{ id: "col-1", width: 160 }],
+  rows: [
+    {
+      id: "row-1",
+      cells: [
+        {
+          id: "cell-1",
+          columnId: "col-1",
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: "cell" }],
+        },
+      ],
+    },
+  ],
+  headerRows: 0,
+  headerColumns: 0,
 });
 
 export const sequentialIds = (prefix: string) => {
@@ -99,6 +126,11 @@ export const firstTableBlockIn = (document: Document) => {
  * 셀 id 목록을 만든다. 기본값은 2x2다. 크기를 따지지 않는 호출부가 인자를
  * 생략하기도 하고 `(2, 2)`를 그대로 적기도 한다 — 무엇도 한쪽을 강제하지
  * 않으므로 둘 중 어느 표기도 규칙이 아니다.
+ *
+ * 표 삽입으로 문서가 표로 끝나므로 trailing paragraph(UI-010)가 같은
+ * dispatch에서 끝에 추가된다 — blocks는 [문단, 표, 빈 문단] 3개이고 표
+ * 인덱스는 여전히 1이다(tableBlockIn 계약 유지). trailing의 blockId는 이
+ * fixture의 순차 id 하나("id-N")를 소비한다.
  *
  * cellIds는 행 우선(row-major) 순서다 — 3x2 표에서 이 목록을 마운트된
  * 편집기의 tr별 셀 id 목록과 대조해 확인했다. 즉 인덱스 i는 행

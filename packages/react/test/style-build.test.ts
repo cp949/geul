@@ -34,6 +34,16 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).toContain(".geul-table-menu__item--danger:disabled {");
   });
 
+  it("placeholder 표시 규칙을 data-placeholder 속성 선택자로 컴파일한다(UI-009)", () => {
+    // 문구·데코레이션은 core가 소유하고(placeholder-extension.ts) react는
+    // 이 표시 규칙만 소유한다 — 규칙이 빠지면 속성은 붙는데 아무것도
+    // 보이지 않는 조용한 회귀가 된다.
+    const css = compileCss();
+
+    expect(css).toContain("[data-placeholder]::before");
+    expect(css).toContain("content: attr(data-placeholder);");
+  });
+
   it(":root에 --geul-color-* 디자인 토큰 8개의 기본값을 선언한다(SCSS 전환 SSOT)", () => {
     // packages/react/src/styles.css의 var(--be-color-x, #hex) fallback과
     // 값이 같아야 한다 — 하나라도 드리프트되면 이 테스트가 잡는다.

@@ -29,6 +29,7 @@ import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
+import { PlaceholderExtension } from "./placeholder-extension.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import {
@@ -58,6 +59,10 @@ import type { TableCellTarget } from "./table-grid.js";
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
+import {
+  ensureTrailingParagraphOnLoad,
+  TrailingBlockExtension,
+} from "./trailing-block-extension.js";
 
 export type DocumentChangeEvent = {
   revision: number;
@@ -542,6 +547,10 @@ export const createEditor = (
   let mountedElement: HTMLElement | null = null;
   let activeReason: ChangeReason | null = null;
   let pendingDocument: BlockDocument | null = null;
+  // 로드 정규화(trailing paragraph, R-11) 중임을 표시한다 — 이 동안의
+  // update는 커밋하지 않는다. 로드는 revision 증가·onChange 없이 끝나고
+  // 호출자(createEditor/replaceDocument)가 에디터 재독으로 결과를 반영한다.
+  let loadNormalizing = false;
 
   const readEditorDocument = (editor: Editor): BlockDocument => {
     const converted = tiptapToModel(
@@ -577,6 +586,7 @@ export const createEditor = (
   };
 
   const onTiptapUpdate = (editor: Editor) => {
+    if (loadNormalizing) return;
     const nextDocument = readEditorDocument(editor);
     if (activeReason === null) {
       commitDocument(nextDocument, "local");
@@ -631,6 +641,8 @@ export const createEditor = (
         TableCellExtension,
         TableKeyboardNavigationExtension.configure({ createId }),
         IndentKeyboardExtension,
+        PlaceholderExtension,
+        TrailingBlockExtension,
         TablePasteExtension.configure({
           createId,
           ...(options.onPasteRejected === undefined
@@ -644,13 +656,26 @@ export const createEditor = (
         }),
       ],
       onUpdate: ({ editor }) => onTiptapUpdate(editor),
+      // 로드 시점 trailing 정규화(UI-010 완료 조건 5·10). "mount"는 동기
+      // 이벤트고 "create"는 setTimeout 비동기라(트레일링 확장 주석 참조)
+      // 여기서 잡는다 — 정규화가 불필요한 문서와 모든 재마운트에서는
+      // no-op이다.
+      onMount: ({ editor }) => ensureTrailingParagraphOnLoad(editor),
     });
-    editor.mount(globalThis.document.createElement("div"));
-    editor.unmount();
+    loadNormalizing = true;
+    try {
+      editor.mount(globalThis.document.createElement("div"));
+      editor.unmount();
+    } finally {
+      loadNormalizing = false;
+    }
     return editor;
   };
 
   let tiptapEditor = createTiptapEditor(currentDocument);
+  // 로드 정규화 결과(trailing paragraph)를 커밋 없이 재독으로만 반영한다 —
+  // revision은 로드 값 그대로고 onChange도 발화하지 않는다(완료 조건 10).
+  currentDocument = readEditorDocument(tiptapEditor);
 
   const runDocumentCommand = (
     command: string,
@@ -1335,7 +1360,10 @@ export const createEditor = (
       tiptapEditor = replacement;
       if (mountedElement !== null) tiptapEditor.mount(mountedElement);
 
-      commitDocument(parsed.value, "replace");
+      // 커밋 소스는 입력이 아니라 에디터 재독이다(R-11) — 로드 정규화
+      // (trailing paragraph)가 반영된 문서가 한 번의 replace 커밋이 되어
+      // 커밋 상태와 에디터 실상태가 어긋나지 않는다(완료 조건 10).
+      commitDocument(readEditorDocument(tiptapEditor), "replace");
       return { ok: true, value: undefined };
     },
     commands: {

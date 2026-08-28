@@ -204,8 +204,10 @@ describe("SlashMenu 질의 팝업", () => {
 
     fireEvent.click(screen.getByRole("option", { name: /Table/ }));
 
+    // blocks 3개 = 트리거 문단 + 표 + trailing paragraph(UI-010, 표 삽입이
+    // 문서를 표로 끝나게 해 같은 dispatch에서 빈 문단이 추가된다).
     const blocks = rendered.editor.getDocument().blocks;
-    expect(blocks).toHaveLength(2);
+    expect(blocks).toHaveLength(3);
     const trigger = blocks[0];
     if (trigger?.type !== "paragraph") throw new Error("트리거 문단이 아니다");
     expect(trigger.id).toBe(blockId);

@@ -79,28 +79,41 @@ describe("에디터 컨트롤러 표", () => {
     const changes: DocumentChangeEvent[] = [];
     const editor = createEditor({
       initialDocument: paragraphDocument("kept"),
+      createId: sequentialIds("gen"),
       onChange: (event) => changes.push(event),
     });
     const loaded = richTableDocument();
 
+    // 표로 끝나는 문서라 로드 정규화가 trailing paragraph(UI-010, "gen-1")를
+    // 덧붙인다 — 표 자신의 속성 보존은 앞 블록들의 동등성이 그대로 고정한다.
     expect(editor.replaceDocument(loaded)).toEqual({
       ok: true,
       value: undefined,
     });
-    expect(editor.getDocument().blocks).toEqual(loaded.blocks);
+    expect(editor.getDocument().blocks).toEqual([
+      ...loaded.blocks,
+      { id: "gen-1", type: "paragraph", content: [] },
+    ]);
     expect(changes).toEqual([
       {
         revision: 1,
-        changedBlockIds: ["block-1", "para-1", "table-1"],
+        changedBlockIds: ["block-1", "para-1", "table-1", "gen-1"],
         reason: "replace",
       },
     ]);
   });
 
   it("표 문서를 initialDocument로 받아 에디터를 만든다", () => {
-    const editor = createEditor({ initialDocument: richTableDocument() });
+    const editor = createEditor({
+      initialDocument: richTableDocument(),
+      createId: sequentialIds("gen"),
+    });
 
-    expect(editor.getDocument().blocks).toEqual(richTableDocument().blocks);
+    // 로드 정규화의 trailing paragraph(UI-010)가 끝에 붙는다.
+    expect(editor.getDocument().blocks).toEqual([
+      ...richTableDocument().blocks,
+      { id: "gen-1", type: "paragraph", content: [] },
+    ]);
   });
 
   it("로드된 표는 라이브 에디터와 동기화된다 — 로드 후 표 명령이 동작하고 속성이 보존된다", () => {
@@ -253,7 +266,9 @@ describe("에디터 컨트롤러 표", () => {
 
     expect(result.ok).toBe(true);
     const document = editor.getDocument();
-    expect(document.blocks).toHaveLength(2);
+    // blocks 3개 = 문단 + 표 + trailing paragraph(UI-010, 표 삽입과 같은
+    // dispatch에서 추가) — 표 인덱스는 1로 고정이다.
+    expect(document.blocks).toHaveLength(3);
     const table = tableBlockIn(document);
     expect(table.rows).toHaveLength(2);
     expect(table.columns).toHaveLength(2);

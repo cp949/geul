@@ -25,6 +25,7 @@ import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
 import {
   mountTiptapEditor,
   nestedParagraphDocument,
+  oneCellTableBlock,
   sequentialIds,
 } from "./editor-controller-support.js";
 import {
@@ -56,32 +57,6 @@ const paragraphBlock = (
   type: "paragraph",
   content: text === "" ? [] : [{ text }],
   ...(children === undefined ? {} : { children }),
-});
-
-/**
- * 1x1 표 블록 리터럴 — 표 인접 Backspace/Delete가 병합 대신 표
- * NodeSelection으로 물러나야 하는 케이스(dev parity)의 이웃으로 쓴다.
- */
-const oneCellTableBlock = (id: string): Block => ({
-  id,
-  type: "table",
-  columns: [{ id: "col-1", width: 160 }],
-  rows: [
-    {
-      id: "row-1",
-      cells: [
-        {
-          id: "cell-1",
-          columnId: "col-1",
-          rowSpan: 1,
-          columnSpan: 1,
-          content: [{ text: "cell" }],
-        },
-      ],
-    },
-  ],
-  headerRows: 0,
-  headerColumns: 0,
 });
 
 /**
@@ -210,9 +185,10 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     expectSchemaValid(tiptap);
 
     // 빈 heading의 병합 = 제거("앞 블록과 병합" 쪽 충족) — heading이
-    // 중첩된 채 남는 회귀가 아니다.
+    // 중첩된 채 남는 회귀가 아니다. childCount 2 = block-a + 로드 시점
+    // trailing paragraph(UI-010, heading으로 끝나는 문서라 로드에 추가됨).
     expect(countNodes(tiptap, "heading")).toBe(0);
-    expect(tiptap.state.doc.childCount).toBe(1);
+    expect(tiptap.state.doc.childCount).toBe(2);
     const container = tiptap.state.doc.child(0);
     expect(container.attrs.blockId).toBe("block-a");
     expect(container.firstChild?.type.name).toBe("paragraph");
@@ -246,7 +222,8 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     expectSchemaValid(tiptap);
 
     // 깊이 불변 — child-2가 child-1의 자식(깊이 +1)이 되는 회귀가 아니다.
-    expect(tiptap.state.doc.childCount).toBe(1);
+    // childCount 2 = block-a + 로드 시점 trailing paragraph(UI-010).
+    expect(tiptap.state.doc.childCount).toBe(2);
     const root = tiptap.state.doc.child(0);
     expect(root.attrs.blockId).toBe("block-a");
     expect(root.childCount).toBe(2);
@@ -278,7 +255,9 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     expect(handled).toBe(true);
     expectSchemaValid(tiptap);
 
-    expect(tiptap.state.doc.childCount).toBe(1);
+    // childCount·blockContainer 2 = parent-1 + 로드 시점 trailing
+    // paragraph(UI-010, 자식 딸린 paragraph로 끝나는 문서라 로드에 추가됨).
+    expect(tiptap.state.doc.childCount).toBe(2);
     const container = tiptap.state.doc.child(0);
     expect(container.attrs.blockId).toBe("parent-1");
     expect(container.childCount).toBe(1);
@@ -286,7 +265,7 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     // 컨테이너만 지우고 빈 blockGroup을 남기면 PM이 "block+" 필러로 유령
     // 빈 블록을 다시 채운다 — 그룹째 사라져야 한다.
     expect(countNodes(tiptap, "blockGroup")).toBe(0);
-    expect(countNodes(tiptap, "blockContainer")).toBe(1);
+    expect(countNodes(tiptap, "blockContainer")).toBe(2);
 
     const { selection } = tiptap.state;
     expect(selection.empty).toBe(true);
@@ -313,7 +292,9 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     expectSchemaValid(tiptap);
 
     // block-b의 텍스트는 block-a로, 자식 block-z는 block-b의 자리(최상위)로.
-    expect(tiptap.state.doc.childCount).toBe(2);
+    // childCount 3 = block-a + block-z + 로드 시점 trailing paragraph
+    // (UI-010, 자식 딸린 paragraph로 끝나는 문서라 로드에 추가됨).
+    expect(tiptap.state.doc.childCount).toBe(3);
     const mergedInto = tiptap.state.doc.child(0);
     expect(mergedInto.attrs.blockId).toBe("block-a");
     expect(mergedInto.childCount).toBe(1);
@@ -349,8 +330,10 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     expectSchemaValid(tiptap);
 
     // 문서 순서상 바로 앞 텍스트블록은 형제 block-a가 아니라 그 자식
-    // block-x다 — 병합은 시각적으로 이전인 블록에 붙는다.
-    expect(tiptap.state.doc.childCount).toBe(1);
+    // block-x다 — 병합은 시각적으로 이전인 블록에 붙는다. childCount 2 =
+    // block-a + trailing paragraph(UI-010, 병합으로 문서가 자식 딸린
+    // paragraph로 끝나게 되어 같은 dispatch에서 추가됨).
+    expect(tiptap.state.doc.childCount).toBe(2);
     const root = tiptap.state.doc.child(0);
     expect(root.attrs.blockId).toBe("block-a");
     expect(root.firstChild?.textContent).toBe("x");
@@ -455,7 +438,9 @@ describe("텍스트 끝 Delete는 다음 텍스트블록을 끌어와 병합한�
     expect(handled).toBe(true);
     expectSchemaValid(tiptap);
 
-    expect(tiptap.state.doc.childCount).toBe(1);
+    // childCount·blockContainer 2 = parent-1 + 로드 시점 trailing
+    // paragraph(UI-010) — Backspace 쪽 케이스와 같은 구조다.
+    expect(tiptap.state.doc.childCount).toBe(2);
     const container = tiptap.state.doc.child(0);
     expect(container.attrs.blockId).toBe("parent-1");
     expect(container.childCount).toBe(1);
@@ -463,7 +448,7 @@ describe("텍스트 끝 Delete는 다음 텍스트블록을 끌어와 병합한�
     // Backspace 쪽과 같은 규칙 — 유일 자식을 지울 때는 그룹째 사라져야
     // PM "block+" 필러(유령 빈 블록)가 생기지 않는다.
     expect(countNodes(tiptap, "blockGroup")).toBe(0);
-    expect(countNodes(tiptap, "blockContainer")).toBe(1);
+    expect(countNodes(tiptap, "blockContainer")).toBe(2);
 
     const { selection } = tiptap.state;
     expect(selection.empty).toBe(true);

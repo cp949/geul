@@ -206,14 +206,17 @@ describe("컨트롤러 표 fixture 계약", () => {
       expect(table.rows.map((row) => row.cells.length)).toEqual([2, 2]);
     });
 
-    it("문단 1개 뒤에 표를 넣는다", () => {
+    it("문단 1개 뒤에 표를 넣고 trailing paragraph가 따라온다", () => {
       const { editor, tableBlockId } = editorWithTable();
 
+      // 표 삽입이 문서를 표로 끝나게 하므로 같은 dispatch에서 trailing
+      // paragraph(UI-010)가 끝에 추가된다 — 표 인덱스는 1로 고정이다.
       const { blocks } = editor.getDocument();
-      expect(blocks).toHaveLength(2);
+      expect(blocks).toHaveLength(3);
       expect(blocks[0]?.type).toBe("paragraph");
       expect(blocks[1]?.type).toBe("table");
       expect(blocks[1]?.id).toBe(tableBlockId);
+      expect(blocks[2]).toMatchObject({ type: "paragraph", content: [] });
     });
 
     it("insertTable이 거절하는 크기면 표 삽입 fixture 준비 실패로 던진다", () => {

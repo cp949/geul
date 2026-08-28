@@ -44,6 +44,18 @@
     font-weight: 600;
   }
 
+  // 빈 블록 placeholder(UI-009). 문구는 core(placeholder-extension.ts)가
+  // data-placeholder 데코레이션으로 소유하고 여기는 표시만 그린다(R-7).
+  // float + height 0은 placeholder 텍스트가 레이아웃을 밀지 않고 캐럿과
+  // 같은 줄에 겹치게 하는 상용 패턴이다.
+  [data-placeholder]::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: var(--geul-color-text-muted, #5f6368);
+    pointer-events: none;
+  }
+
   // 자식 블록 목록 wrapper(block-container-extension.ts의
   // BlockGroupExtension이 렌더링하는 [data-be-block-group])에 좌측 padding을
   // 준다. blockContainer 스키마가 자식 blockGroup을 구조적으로 자기 안에
