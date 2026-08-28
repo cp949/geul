@@ -9,8 +9,20 @@ import { mergeAttributes, Node } from "@tiptap/core";
 // 들어간다. 표는 행만 담을 수 있어 blockGroup(그룹 "block"의 형제 컨텐츠)을
 // 자식으로 가질 스키마 경로가 없다.
 //
-// defining/priority는 BlockNote v0.54.0 packages/core/src/pm-nodes/BlockContainer.ts의
+// defining은 BlockNote v0.54.0 packages/core/src/pm-nodes/BlockContainer.ts의
 // 참조 초기값이다(MPL 경계 — 구조만 참조, 코드 미복제).
+//
+// priority 1000(참조 초기값 50에서 상향): 그룹 "block"의 멤버(blockContainer,
+// table)가 "block+" 채움의 ContentMatch.defaultType 경쟁에서 만난다 — 등록
+// 순서(=priority 내림차순)가 앞선 쪽이 기본 채움 노드가 된다. 50이면
+// table(기본 100)이 이겨, 전체선택 삭제·유일 자식 삭제처럼 PM이 "block+"를
+// 새로 채우는 자리에 blockId/rowId 없는 손상된 표가 들어가 model 변환이
+// TypeError로 죽는다(트랙-6 발견, block-filler-default.test.ts가 고정).
+// BlockNote는 table도 blockContainer 안에 넣어 이 경쟁 자체가 없다 — 표
+// 비포장(D19)을 택한 이 저장소가 스스로 만든 경쟁이므로 여기서 명시적으로
+// 이긴다. 이후 그룹 "block"에 새 멤버를 추가해도 기본 채움은 항상
+// blockContainer다. 이 확장은 keymap·plugin·parseHTML이 없어 priority가
+// 스키마 등록 순서 밖에 영향을 주지 않는다.
 //
 // parseHTML(노드 단위 DOM 파싱 규칙)을 선언하지 않는다(D13 계승) — 외부
 // HTML의 중첩 div가 중첩 컨테이너로 파싱되지 않는다(table-extension.ts의
@@ -23,7 +35,7 @@ export const BlockContainerExtension = Node.create({
   group: "block",
   content: "blockContent blockGroup?",
   defining: true,
-  priority: 50,
+  priority: 1000,
 
   addAttributes() {
     return {

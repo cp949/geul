@@ -140,16 +140,13 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
   BlockContainerExtension,
   BlockGroupExtension,
   BlockIdExtension,
-  // group "block"의 두 멤버(blockContainer priority 50, table 기본
-  // priority 100)가 ContentMatch.defaultType(그룹 채움 시 PM이 고르는
-  // 기본 노드) 경쟁에서 만난다 — 기본값끼리는 priority가 높은 쪽(table)이
-  // 이겨 AllSelection 삭제 등 "block+" 채움이 필요한 자리에 문단이 아니라
-  // rowId/cellId 없는 손상된 table을 채운다(실측: 프로덕션 스키마도 동일
-  // 결함 — DELTA-02a 범위 밖 발견, 이슈로 별도 등록 예정). 이 fixture는
-  // table-commands.ts/table-paste-commands.ts의 순수 함수만 겨냥하므로
-  // 여기서는 priority를 blockContainer보다 낮춰 문단이 이기게 해 기존
-  // "필러 문단" 계약을 지킨다 — 프로덕션 확장 자체는 건드리지 않는다.
-  TableExtension.extend({ priority: 40 }),
+  // ContentMatch.defaultType("block+" 채움 기본 노드) 경쟁은 프로덕션
+  // BlockContainerExtension의 priority 1000이 소유한다(트랙-6 정정 — 종전에는
+  // 프로덕션이 table을 채우는 결함이 있어 이 fixture만 table priority를 40으로
+  // 낮춰 가리고 있었다). 이제 fixture와 프로덕션이 같은 확장을 그대로 쓴다 —
+  // 갈리는 입력(채움 경로)의 계약은 block-filler-default.test.ts가 프로덕션
+  // 스키마에서 고정한다(G-TST-002).
+  TableExtension,
   TableRowExtension,
   TableCellExtension,
 ];

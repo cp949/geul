@@ -995,10 +995,20 @@ export const createEditor = (
       const sourceNode = tiptapEditor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
 
-      const transaction = tiptapEditor.state.tr.delete(
-        sourcePosition,
-        sourcePosition + sourceNode.nodeSize,
-      );
+      // 대상이 blockGroup의 유일한 자식이면 그룹째 지운다 — 컨테이너만
+      // 지우면 빈 그룹의 "block+"를 PM이 기본 노드로 다시 채워, 지운
+      // 자리에 유령 빈 블록이 새 id로 나타난다(outdentBlockCommand의 빈
+      // 그룹 제거와 같은 규칙, 트랙-6 정정).
+      const $source = tiptapEditor.state.doc.resolve(sourcePosition);
+      const removesWholeGroup =
+        $source.parent.type.name === "blockGroup" &&
+        $source.parent.childCount === 1;
+      const deleteFrom = removesWholeGroup ? $source.before() : sourcePosition;
+      const deleteTo = removesWholeGroup
+        ? $source.after()
+        : sourcePosition + sourceNode.nodeSize;
+
+      const transaction = tiptapEditor.state.tr.delete(deleteFrom, deleteTo);
       tiptapEditor.view.dispatch(closeHistory(transaction));
       return true;
     });

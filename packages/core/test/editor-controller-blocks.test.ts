@@ -672,6 +672,37 @@ describe("에디터 컨트롤러 블록 명령", () => {
       ]);
     });
 
+    it("유일한 자식의 deleteBlock이 빈 blockGroup을 남기지 않고 부모를 자식 없는 블록으로 되돌린다", () => {
+      // 변이: 컨테이너만 삭제하면 빈 blockGroup의 "block+"를 PM이 기본
+      // 노드로 다시 채워, 지운 자리에 유령 빈 문단이 새 id로 나타난다
+      // (트랙-6 발견 — outdentBlockCommand의 빈 그룹 제거 가드와 같은
+      // 자리를 deleteBlock만 놓치고 있었다).
+      const editor = createEditor({
+        initialDocument: nestedParagraphDocument(),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+
+      expect(editor.commands.deleteBlock("child-1")).toEqual({
+        ok: true,
+        value: undefined,
+      });
+
+      const document = editor.getDocument();
+      expect(document.blocks).toHaveLength(1);
+      expect(document.blocks[0]).toMatchObject({
+        id: "parent-1",
+        content: [{ text: "parent" }],
+      });
+      expect(document.blocks[0]).not.toHaveProperty("children");
+
+      let groupCount = 0;
+      tiptap.state.doc.descendants((node) => {
+        if (node.type.name === "blockGroup") groupCount += 1;
+        return true;
+      });
+      expect(groupCount).toBe(0);
+    });
+
     it("자식 딸린 블록의 deleteBlock이 하위 트리를 동반 삭제하고 undo 1회로 전체 복원된다(완료 조건 3, G-EDT-001)", () => {
       // 변이: 컨테이너가 아닌 내부 blockContent 노드만 삭제하면 child-1이
       // 고아로 남거나 디코딩이 깨져 아래 assertion들이 실패한다.
