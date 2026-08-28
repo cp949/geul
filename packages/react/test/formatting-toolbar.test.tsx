@@ -3,7 +3,9 @@
 /**
  * FormattingToolbar 컴포넌트: 텍스트 선택에 따른 서식 툴바 노출과 mark 토글
  * 버튼 상태, 블록 종류 select 표시·변경, 에디터 바깥 선택 시 숨김 유지,
- * 아이콘·title 렌더링과 소비자 LucideProvider 설정 격리를 검증한다.
+ * 아이콘·title 렌더링과 소비자 LucideProvider 설정 격리를 검증한다. 들여쓰기/
+ * 내어쓰기 버튼의 명령 호출·게이트(blockSelection !== null) 재사용·실패
+ * 무시(DELTA-05)도 이 파일이 검증한다.
  */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -29,6 +31,13 @@ type SelectionBlockType = {
   blockType: { type: "paragraph" } | { type: "heading"; level: 1 | 2 | 3 };
 } | null;
 
+// indentBlock/outdentBlock의 Result 반환 타입을 성공/실패 양쪽 다 받도록
+// 미리 넓혀 둔다 — 실패 케이스 테스트가 기본값과 다른 모양의 vi.fn을 넘겨도
+// 대입 타입 에러(TS2322)가 나지 않는다.
+type CommandResult =
+  | { ok: true; value: undefined }
+  | { ok: false; error: { code: string; command: string } };
+
 const fakeController = (
   getSelectionMarks = vi.fn(() => [] as string[]),
   getSelectionBlockType = vi.fn((): SelectionBlockType => ({
@@ -36,6 +45,8 @@ const fakeController = (
     blockType: { type: "paragraph" },
   })),
   setBlockType = vi.fn(() => ({ ok: true, value: undefined })),
+  indentBlock = vi.fn((): CommandResult => ({ ok: true, value: undefined })),
+  outdentBlock = vi.fn((): CommandResult => ({ ok: true, value: undefined })),
 ) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -56,6 +67,8 @@ const fakeController = (
   commands: {
     setText: vi.fn(),
     setBlockType,
+    indentBlock,
+    outdentBlock,
     toggleBold: vi.fn(() => ({ ok: true, value: undefined })),
     toggleItalic: vi.fn(() => ({ ok: true, value: undefined })),
     toggleUnderline: vi.fn(() => ({ ok: true, value: undefined })),
@@ -314,5 +327,124 @@ describe("FormattingToolbar 서식 툴바", () => {
     expect(icon.getAttribute("stroke-width")).toBe("2");
     expect(icon.getAttribute("width")).toBe("16");
     expect(icon.getAttribute("height")).toBe("16");
+  });
+});
+
+describe("들여쓰기/내어쓰기 버튼", () => {
+  it("텍스트가 선택된 상태(blockSelection !== null)에서 들여쓰기 버튼 클릭 시 editor.commands.indentBlock이 해당 blockId로 호출된다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    fireEvent.click(screen.getByRole("button", { name: "Indent" }));
+
+    expect(controller.commands.indentBlock).toHaveBeenCalledWith("block-1");
+  });
+
+  it("내어쓰기 버튼도 같은 조건에서 outdentBlock을 호출한다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    fireEvent.click(screen.getByRole("button", { name: "Outdent" }));
+
+    expect(controller.commands.outdentBlock).toHaveBeenCalledWith("block-1");
+  });
+
+  it("캐럿만 있고 텍스트가 선택되지 않은 상태(toolbarState === null)에서는 버튼이 렌더링되지 않는다", () => {
+    const controller = fakeController();
+    render(withProvider(controller, <FormattingToolbar />));
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Indent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Outdent" })).toBeNull();
+  });
+
+  it("표 셀 안(캐럿·선택 모두 셀 안)에서는 버튼이 렌더링되지 않는다", () => {
+    // getSelectionBlockType이 null을 반환하는 상태는 표 셀 안에서 이미
+    // 성립하는 기존 동작(updateFromSelection)이다 — 블록 타입 select가
+    // 셀 안에서 자동 숨김되는 것과 같은 게이트를 이 버튼도 재사용한다.
+    // 변이(게이트 제거)로 이 테스트가 실제로 실패하는지는 formatting-toolbar.tsx의
+    // {toolbarState.blockSelection !== null && (...)} 조건을 지우고
+    // 확인했다(RED 재현, 이후 원상복구).
+    const controller = fakeController(
+      vi.fn(() => []),
+      vi.fn(() => null),
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    // 툴바 자체(mark 버튼)는 blockSelection과 무관하게 계속 뜬다 — 숨는
+    // 것은 들여쓰기/내어쓰기 버튼뿐이다.
+    expect(screen.getByRole("toolbar", { name: "Formatting" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Indent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Outdent" })).toBeNull();
+  });
+
+  it("버튼 클릭이 Result의 실패(COMMAND_NOT_APPLICABLE 등)를 예외로 던지지 않는다", () => {
+    const controller = fakeController(
+      undefined,
+      undefined,
+      undefined,
+      vi.fn(() => ({
+        ok: false,
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "indentBlock" },
+      })),
+      vi.fn(() => ({
+        ok: false,
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "outdentBlock" },
+      })),
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Indent" }));
+      fireEvent.click(screen.getByRole("button", { name: "Outdent" }));
+    }).not.toThrow();
   });
 });

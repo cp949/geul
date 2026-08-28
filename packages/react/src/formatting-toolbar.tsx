@@ -1,5 +1,13 @@
 import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
-import { Bold, Code, Italic, Strikethrough, Underline } from "lucide-react";
+import {
+  Bold,
+  Code,
+  IndentDecrease,
+  IndentIncrease,
+  Italic,
+  Strikethrough,
+  Underline,
+} from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 
 import {
@@ -53,6 +61,13 @@ const toolbarButtons: ReadonlyArray<{
     toggle: (editor) => void editor.commands.toggleCode(),
   },
 ];
+
+// indentBlock/outdentBlock은 mark가 아니라 1회성 블록 액션이라 위 배열의
+// 형태(mark 키, aria-pressed 눌림 상태)에 맞지 않는다 — 별도 아이콘
+// 상수·버튼 그룹으로 둔다(DELTA-05). 아이콘 element를 모듈 상수로 두는
+// 이유는 toolbarButtons와 동일하다(재렌더 시 참조 안정).
+const indentIcon = <IndentIncrease {...iconProps} />;
+const outdentIcon = <IndentDecrease {...iconProps} />;
 
 type ToolbarState = {
   activeMarks: SelectionMark[];
@@ -167,6 +182,40 @@ export const FormattingToolbar = () => {
             </option>
           ))}
         </select>
+      )}
+      {toolbarState.blockSelection !== null && (
+        <>
+          {/* 표 셀 안에서는 blockSelection이 이미 null이라(기존 동작,
+              getSelectionBlockType) 위 블록 타입 select와 같은 게이트를
+              재사용하는 것만으로 셀 안 자동 숨김이 성립한다(DELTA-05) —
+              별도 코드 불필요. aria-pressed는 쓰지 않는다: 토글 상태가
+              없는 1회성 액션 버튼이다. */}
+          <IconButton
+            className="geul-formatting-toolbar__mark-button"
+            icon={indentIcon}
+            key="indent"
+            label="Indent"
+            onClick={() => {
+              const blockSelection = toolbarState.blockSelection;
+              if (blockSelection === null) return;
+              // Result 실패(COMMAND_NOT_APPLICABLE 등)는 기존 mark
+              // 버튼과 같은 방식으로 조용히 버린다 — Tab 키 경로(D9)와
+              // 동일선상.
+              editor.commands.indentBlock(blockSelection.blockId);
+            }}
+          />
+          <IconButton
+            className="geul-formatting-toolbar__mark-button"
+            icon={outdentIcon}
+            key="outdent"
+            label="Outdent"
+            onClick={() => {
+              const blockSelection = toolbarState.blockSelection;
+              if (blockSelection === null) return;
+              editor.commands.outdentBlock(blockSelection.blockId);
+            }}
+          />
+        </>
       )}
       {toolbarButtons.map(({ mark, label, icon, toggle }) => (
         <IconButton

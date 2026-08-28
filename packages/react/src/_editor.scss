@@ -43,4 +43,16 @@
     background-color: var(--geul-color-surface-muted, #f1f3f4);
     font-weight: 600;
   }
+
+  // 자식 블록 목록 wrapper(block-container-extension.ts의
+  // BlockGroupExtension이 렌더링하는 [data-be-block-group])에 좌측 padding을
+  // 준다. blockContainer 스키마가 자식 blockGroup을 구조적으로 자기 안에
+  // 품어(DELTA-02, content "blockContent blockGroup?") DOM 자체가 이미
+  // 중첩돼 있으므로 이 규칙 하나로 충분하다 — 손자 블록의 blockGroup도
+  // 이 손자를 감싼 blockContainer 안에 있고 그 blockContainer는 이 규칙이
+  // 적용된 그룹 안에 있어, 같은 padding이 깊이만큼 재귀 누적된다(DELTA-05,
+  // D18 — flat 판의 depth 값 비례 오프셋 합성이 불필요해짐).
+  [data-be-block-group] {
+    padding-left: 1.5rem;
+  }
 }

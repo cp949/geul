@@ -219,3 +219,121 @@ test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체�
   await page.getByRole("button", { name: "Bold" }).click();
   await expect(editable.locator("strong")).toHaveText("first line");
 });
+
+test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 들여쓰여 렌더링되고 undo 1회로 복원된다 (DELTA-05)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  // Enter로 두 형제 블록을 만드는 대신 Load JSON으로 이미 평면인 두 블록을
+  // 올린다 — DELTA-05 입력이 명시한 대안(demo의 Document source textarea +
+  // Load JSON)이다. 실측 중 Enter로 블록을 나누면 새 블록이 형제가 아니라
+  // 앞 블록의 blockGroup 자식으로 들어가는 기존 회귀(이 DELTA 범위 밖,
+  // block-split-extension.ts 소관)를 발견해 이 대안으로 우회했다 — 최종
+  // 보고의 "범위 밖 발견" 참고.
+  const flatDocument = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "first-block",
+        type: "paragraph",
+        content: [{ text: "first block" }],
+      },
+      {
+        id: "second-block",
+        type: "paragraph",
+        content: [{ text: "second block" }],
+      },
+    ],
+  };
+  await page.getByLabel("Document source").fill(JSON.stringify(flatDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const firstParagraph = editable.locator(
+    '[data-be-block-id="first-block"] > p',
+  );
+  const secondParagraph = editable.locator(
+    '[data-be-block-id="second-block"] > p',
+  );
+  const beforeIndentBox = await secondParagraph.boundingBox();
+  if (beforeIndentBox === null) {
+    throw new Error("Bounding box was not available");
+  }
+
+  await selectBlockTextAndNotify(secondParagraph, "second block");
+  // 들여쓰기 전에는 blockGroup wrapper가 없다 — DELTA-02 컨테이너는 자식이
+  // 있을 때만 그 노드를 만든다.
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Indent" }).click();
+
+  // indentBlockCommand는 대상을 앞 형제(첫 블록)의 blockGroup 자식으로
+  // 옮긴다(indent-commands.ts) — 옮겨진 즉시 DOM에 wrapper가 새로 생긴다.
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+
+  const afterIndentBox = await secondParagraph.boundingBox();
+  const firstBox = await firstParagraph.boundingBox();
+  if (afterIndentBox === null || firstBox === null) {
+    throw new Error("Bounding box was not available");
+  }
+  // 변이 확인(RED): _editor.scss의 [data-be-block-group] padding-left
+  // 규칙을 지우면 DOM은 중첩돼도 시각 오프셋이 없어 아래 두 assertion이
+  // 실패한다 — 구현 중 직접 지워 재현했고(RED), 되돌린 뒤 이 커밋을 냈다.
+  expect(afterIndentBox.x).toBeGreaterThan(firstBox.x);
+  expect(afterIndentBox.x).toBeGreaterThan(beforeIndentBox.x);
+
+  await page.keyboard.press("Control+z");
+
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  const afterUndoBox = await secondParagraph.boundingBox();
+  expect(Math.abs((afterUndoBox?.x ?? -1000) - beforeIndentBox.x)).toBeLessThan(
+    2,
+  );
+
+  // 깊이 누적 확인(조건 7 후반): 3단 중첩 문서를 로드해 깊이가 늘수록
+  // 오프셋이 누적되는지 확인한다 — 그룹 padding 규칙 하나가 DOM 중첩을
+  // 타고 재귀 적용되는지의 실측이다(D18).
+  const nestedDocument = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "grandparent-1",
+        type: "paragraph",
+        content: [{ text: "grandparent text" }],
+        children: [
+          {
+            id: "parent-1",
+            type: "paragraph",
+            content: [{ text: "parent text" }],
+            children: [
+              {
+                id: "child-1",
+                type: "paragraph",
+                content: [{ text: "child text" }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  await page.getByLabel("Document source").fill(JSON.stringify(nestedDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const grandparentBox = await editable
+    .locator('[data-be-block-id="grandparent-1"] > p')
+    .boundingBox();
+  const parentBox = await editable
+    .locator('[data-be-block-id="parent-1"] > p')
+    .boundingBox();
+  const childBox = await editable
+    .locator('[data-be-block-id="child-1"] > p')
+    .boundingBox();
+  if (grandparentBox === null || parentBox === null || childBox === null) {
+    throw new Error("Bounding box was not available");
+  }
+  expect(parentBox.x).toBeGreaterThan(grandparentBox.x);
+  expect(childBox.x).toBeGreaterThan(parentBox.x);
+});
