@@ -153,7 +153,7 @@ describe("문단 전용 실제 편집기 마운트 헬퍼", () => {
     ).toEqual(["block-1", 'a"b\\c']);
     // D19(컨테이너 스키마)부터 blockId는 <p> 자신이 아니라 그 부모
     // <div>(blockContainer)에 있다 — [data-be-block-id] 조회 결과는 이제
-    // DIV다(pending-issues/11.md 정정, DELTA-02e).
+    // DIV다(DELTA-02e 정정).
     expect(blocks.map((block) => block.tagName)).toEqual(["DIV", "DIV"]);
     expect(editor.getDocument().blocks.map((block) => block.type)).toEqual([
       "paragraph",

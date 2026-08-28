@@ -227,10 +227,9 @@ test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 
 
   // Enter로 두 형제 블록을 만드는 대신 Load JSON으로 이미 평면인 두 블록을
   // 올린다 — DELTA-05 입력이 명시한 대안(demo의 Document source textarea +
-  // Load JSON)이다. 실측 중 Enter로 블록을 나누면 새 블록이 형제가 아니라
-  // 앞 블록의 blockGroup 자식으로 들어가는 기존 회귀(이 DELTA 범위 밖,
-  // block-split-extension.ts 소관)를 발견해 이 대안으로 우회했다 — 최종
-  // 보고의 "범위 밖 발견" 참고.
+  // Load JSON)이다. 작성 당시엔 Enter 분리가 형제 대신 자식으로 중첩되는
+  // 회귀 때문의 우회였으나 그 회귀는 DELTA-02d가 수정했다 — 지금은 원하는
+  // 블록 배치를 결정적으로 만드는 setup 수단으로 유지한다.
   const flatDocument = {
     formatVersion: 1,
     revision: 0,

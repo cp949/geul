@@ -259,8 +259,8 @@ test("표 앞뒤에 문단이 섞인 HTML은 문단과 표 구조를 모두 보�
   // 만든다"와 동일) — 그래서 데모가 기본으로 갖는 빈 문단이 맨 앞에 그대로
   // 남고, 그 뒤로 문단·표·문단이 이어진다.
   // D19(컨테이너 스키마)부터 문단은 blockContainer(<div data-be-block-id>)로
-  // 감싸이고 표만 컨테이너 없이 그대로 들어간다(pending-issues/11.md 정정,
-  // DELTA-02e) — 편집기 루트의 직속 자식은 이제 div/div/table/div다.
+  // 감싸이고 표만 컨테이너 없이 그대로 들어간다(DELTA-02e 정정) — 편집기
+  // 루트의 직속 자식은 이제 div/div/table/div다.
   const blockTags = await editable.evaluate((node) =>
     Array.from(node.children).map((child) => child.tagName.toLowerCase()),
   );

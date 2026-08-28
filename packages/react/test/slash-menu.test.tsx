@@ -125,7 +125,7 @@ describe("SlashMenu 질의 팝업", () => {
     }
     // D19(컨테이너 스키마)부터 blockId는 <p> 자신이 아니라 그 부모
     // <div>(blockContainer)에 있다 — 자손 selector로 실제 문단 요소를 찾는다
-    // (pending-issues/11.md 정정, DELTA-02e).
+    // (DELTA-02e 정정).
     const paragraph = host.querySelector<HTMLElement>("[data-be-block-id] p");
     const cell = table.querySelector<HTMLElement>("[data-be-cell-id]");
     if (paragraph === null || cell === null) {

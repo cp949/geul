@@ -485,8 +485,8 @@ const findChildrenWrapper = (
 // 그것을 HTML_PARSE_FAILED로 흡수해 공개 API 계약(크래시 없이 Result 반환,
 // 완료 조건 4)은 오늘 성립한다 — 다만 그 catch는 이 목적으로 설계된
 // 결정적 방어가 아니라 우연히 걸리는 범용 예외 처리라 PIT-0034가 경계하는
-// 종류의 의존이다. 근본 수정은 block-segmenter.ts 소관이라
-// pending-issues/09.md로 분리했다.
+// 종류의 의존이다. 근본 수정은 block-segmenter.ts 소관이라 별도 후속
+// 이슈로 분리했다.
 const blocksFromNodes = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,

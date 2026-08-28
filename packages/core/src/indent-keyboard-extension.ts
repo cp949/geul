@@ -12,10 +12,13 @@ import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 // 충돌한다(구현 판단 — 복제를 택했다). 클릭 직후 Tab/Shift+Tab이 눌리면
 // Chromium의 비동기 selectionchange 처리 탓에 editor.state.selection이 클릭
 // 이전 값을 그대로 들고 있을 수 있다(G-EDT-002, Issue #118과 같은 부류).
-// 실제 DOM selection으로 다시 계산한 EditorState를 판정에 쓰되, 그 파생
-// state는 dispatch하지 않고 이후 호출하는 기존 명령(indentBlockCommand/
-// outdentBlockCommand)의 단일 dispatch에만 흘려보낸다. CellSelection(범위
-// 선택)은 네이티브 Selection API로 대표되지 않으므로 건드리지 않는다.
+// 실제 DOM selection으로 다시 계산한 EditorState를 **판정에만** 쓴다 —
+// isInTable 가드와 대상 blockId 추출이 전부이고, 파생 state는 dispatch하지
+// 않으며 이후 호출하는 기존 명령(indentBlockCommand/outdentBlockCommand)은
+// live editor state 위에서 자체적으로 단일 dispatch를 만든다(파생 state를
+// 명령에 넘기지 않으므로 mismatched-transaction 위험도 없다).
+// CellSelection(범위 선택)은 네이티브 Selection API로 대표되지 않으므로
+// 건드리지 않는다.
 const resolveSelectionAwareState = (editor: Editor): EditorState => {
   const { view } = editor;
   const liveState = view.state;

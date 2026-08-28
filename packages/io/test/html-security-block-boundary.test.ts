@@ -202,8 +202,8 @@ describe("재귀 스택 안전(PIT-0034)", () => {
   // 기존 최외곽 catch(모든 예외를 HTML_PARSE_FAILED로 흡수)다. 그래서
   // 이 테스트는 "신규 depth-counter가 스택을 지킨다"가 아니라 "그 경우에도
   // 공개 API 계약(크래시 비유출)은 성립한다"만 고정한다 — 방어 자체가
-  // 결정적이지 않다는 사실은 pending-issues/09.md(block-segmenter.ts의
-  // walk 무제한 재귀, 이 DELTA 범위 밖)로 분리했다.
+  // 결정적이지 않다는 사실(block-segmenter.ts walk의 무제한 재귀, 이 DELTA
+  // 범위 밖)은 별도 후속 이슈로 분리했다.
   it("매우 깊게 중첩된(수천 단계) wrapper HTML을 import해도 크래시 없이 구조화된 Result 오류를 반환한다", () => {
     const veryDeepHtml = buildNestedWrapperHtml(3000);
 
