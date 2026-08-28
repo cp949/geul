@@ -213,13 +213,17 @@ export const emptyDocSchema = () => {
  * 표 셀 하나의 tiptap JSON을 만든다. 아래 표 fixture들이 행을 구성할 때
  * 쓰고, 공유 fixture로 표현되지 않는 문서를 테스트가 직접 조립할 때도 쓴다.
  */
-export const cellJson = (cellId: string, columnId: string) => ({
+export const cellJson = (
+  cellId: string,
+  columnId: string,
+  spans: { colspan?: number; rowspan?: number } = {},
+) => ({
   type: "tableCell",
   attrs: {
     cellId,
     columnId,
-    colspan: 1,
-    rowspan: 1,
+    colspan: spans.colspan ?? 1,
+    rowspan: spans.rowspan ?? 1,
     colwidth: null,
     textColor: null,
     backgroundColor: null,
@@ -347,6 +351,58 @@ export const docWithTwoRowTable = {
           type: "tableRow",
           attrs: { rowId: "row-2" },
           content: [cellJson("cell-3", "col-1"), cellJson("cell-4", "col-2")],
+        },
+      ],
+    },
+  ],
+};
+
+/**
+ * 3행 3열 병합 표 하나짜리 문서 — rowspan·colspan 셀을 가로지르는 selection
+ * 이동·명령의 병합 fixture(G-TBL-001)에 쓴다. 격자:
+ *
+ *   row-1: m-1 | m-2 | m-3
+ *   row-2: m-1 | m-4 | m-4   (m-1은 rowspan 2, m-4는 colspan 2)
+ *   row-3: m-5 | m-6 | m-7
+ */
+export const docWithMergedTable = {
+  type: "doc",
+  content: [
+    {
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [
+          { id: "col-1", width: 160 },
+          { id: "col-2", width: 160 },
+          { id: "col-3", width: 160 },
+        ],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            cellJson("m-1", "col-1", { rowspan: 2 }),
+            cellJson("m-2", "col-2"),
+            cellJson("m-3", "col-3"),
+          ],
+        },
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-2" },
+          content: [cellJson("m-4", "col-2", { colspan: 2 })],
+        },
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-3" },
+          content: [
+            cellJson("m-5", "col-1"),
+            cellJson("m-6", "col-2"),
+            cellJson("m-7", "col-3"),
+          ],
         },
       ],
     },

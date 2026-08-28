@@ -5,7 +5,10 @@ import {
   CellSelection,
   goToNextCell,
   isInTable,
+  moveCellForward,
+  nextCell,
   selectedRect,
+  selectionCell,
 } from "@tiptap/pm/tables";
 
 import { insertTableRow } from "./table-commands.js";
@@ -72,6 +75,38 @@ export const goToPreviousTableCell = (editor: Editor): boolean => {
   return true;
 };
 
+// 셀 안 Enter(spec 7.2, Issue #134). 표 밖에서는 false를 반환해 코어 Enter
+// 체인(블록 분할)에 맡긴다. 표 안에서는 무조건 소비한다 — 코어 체인의
+// liftEmptyBlock/splitBlock이 행·셀을 분할해 중복·빈 ID로 문서를 손상시키는
+// 폴스루를 차단한다("모든 블록, 행, 열과 셀은 안정 ID를 가진다" 불변식).
+// 아래 행 같은 열 셀이 있으면 Tab(goToNextCell)과 같은 selection 형태로
+// 이동한다 — 병합 셀 격자 판정은 자체 좌표 계산 없이 nextCell이
+// 소유한다(G-TBL-001). 마지막 행이면 dispatch 없이 no-op이다(G-EDT-001 —
+// no-op은 transaction을 만들지 않는다). CellSelection 중에도 표 안이므로
+// 소비한다 — selectionCell이 기준 셀($anchorCell/$headCell 중 뒤쪽)을 준다.
+export const goToTableCellBelow = (editor: Editor): boolean => {
+  const state = resolveSelectionAwareState(editor);
+  // 역방향 stale — DOM 캐럿은 표 밖인데 live selection이 아직 셀 안이면
+  // false 폴스루 시 코어 Enter 체인이 live stale selection에 분할 tr을
+  // 적용해 행·셀을 손상시킨다. 이동 없이 소비만 한다(no-op true).
+  if (!isInTable(state)) return isInTable(editor.view.state);
+  const $below = nextCell(selectionCell(state), "vert", 1);
+  if ($below === null) return true;
+  editor.view.dispatch(
+    state.tr
+      .setSelection(TextSelection.between($below, moveCellForward($below)))
+      .scrollIntoView(),
+  );
+  return true;
+};
+
+// 셀 안 Shift+Enter(spec 7.2). 스키마에 hardBreak가 없어 폴스루 결과가
+// 비결정적이므로 표 안에서는 무조건 소비해 no-op으로 만든다(transaction
+// 0개, G-EDT-001). 표 밖은 기존 동작에 맡긴다. live state 검사는
+// goToTableCellBelow와 같은 역방향 stale 방어다.
+export const consumeKeyInsideTable = (editor: Editor): boolean =>
+  isInTable(resolveSelectionAwareState(editor)) || isInTable(editor.view.state);
+
 export type TableKeyboardNavigationOptions = {
   createId: IdFactory;
 };
@@ -95,6 +130,8 @@ export const TableKeyboardNavigationExtension =
         Tab: () =>
           goToNextTableCellOrInsertRow(this.editor, this.options.createId),
         "Shift-Tab": () => goToPreviousTableCell(this.editor),
+        Enter: () => goToTableCellBelow(this.editor),
+        "Shift-Enter": () => consumeKeyInsideTable(this.editor),
       };
     },
   });

@@ -15,6 +15,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core";
 export const dispatchKeydown = (
   tiptap: Pick<TiptapEditor, "view">,
   key: string,
+  shiftKey = false,
 ): boolean =>
   tiptap.view.someProp(
     "handleKeyDown",
@@ -23,6 +24,7 @@ export const dispatchKeydown = (
         tiptap.view,
         new KeyboardEvent("keydown", {
           key,
+          shiftKey,
           bubbles: true,
           cancelable: true,
         }),
