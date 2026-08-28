@@ -125,8 +125,8 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `PARTIAL` | formatting toolbar nest buttons — 슬라이스 1이 서식 툴바 들여쓰기/내어쓰기 버튼(`indentBlock`/`outdentBlock`)과 중첩 시각 렌더링을 구현. 표(`TableBlock`) 들여쓰기 UI 경로는 아직 없음(Issue #126) |
 | `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |
 | `UI-008` | 링크 열기·수정·삭제 toolbar | `PARITY` | R1 | `VERIFIED` | `LinkToolbar` |
-| `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `NOT_STARTED` | `Placeholder` extension |
-| `UI-010` | 마지막 editable trailing block | `PARITY` | R2 | `NOT_STARTED` | `TrailingNode` extension |
+| `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `PARTIAL` | `Placeholder` extension — 슬라이스 2가 core 자체 데코레이션 확장으로 paragraph(캐럿 위치 시)·heading(빈 상태 상시) placeholder를 구현(표 셀 제외). 후속 블록 타입(인용문·코드·목록 등)의 placeholder는 각 타입을 추가하는 슬라이스가 완료 기준으로 포함한다 |
+| `UI-010` | 마지막 editable trailing block | `PARITY` | R2 | `VERIFIED` | `TrailingNode` extension — 슬라이스 2가 core 자체 불변식(`appendTransaction` + 로드 정규화)으로 구현, Tiptap `TrailingNode` 미사용. 마지막 최상위 블록이 자식 없는 paragraph가 아니면 빈 paragraph 자동 추가(로드 포함, 로드 시 revision·onChange 억제) |
 | `UI-011` | 기본 키보드 단축키와 입력 규칙 | `PARITY` | R2 | `NOT_STARTED` | keyboard shortcuts, block input rules |
 | `UI-012` | emoji picker | `PARITY` | R4 | `NOT_STARTED` | grid suggestion menu, emoji items |
 | `UI-013` | 메뉴·popover portal target 제어 | `PARITY` | R4 | `NOT_STARTED` | React component portal API |
