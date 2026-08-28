@@ -14,7 +14,7 @@ export {
 } from "./mark-canonicalization.js";
 export type { TextMarkNameInput } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
-export { parseDocument } from "./schema.js";
+export { MAX_NESTING_DEPTH, parseDocument } from "./schema.js";
 export {
   isValidDocumentId,
   isValidInlineText,

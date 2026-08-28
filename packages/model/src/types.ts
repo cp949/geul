@@ -8,12 +8,14 @@ export type ParagraphBlock = {
   id: string;
   type: "paragraph";
   content: InlineContent;
+  children?: Block[];
 };
 export type HeadingBlock = {
   id: string;
   type: "heading";
   level: 1 | 2 | 3;
   content: InlineContent;
+  children?: Block[];
 };
 export type TableColumn = { id: string; width: number };
 export type TableBlock = {
