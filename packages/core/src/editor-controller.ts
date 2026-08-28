@@ -24,6 +24,8 @@ import { BlockIdExtension } from "./block-id-extension.js";
 import { findBlockPosition } from "./block-position.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
 import type { EditorError } from "./errors.js";
+import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
+import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
@@ -96,6 +98,8 @@ export interface EditorController {
     ): Result<void, EditorError>;
     duplicateBlock(blockId: string): Result<{ blockId: string }, EditorError>;
     deleteBlock(blockId: string): Result<void, EditorError>;
+    indentBlock(blockId: string): Result<void, EditorError>;
+    outdentBlock(blockId: string): Result<void, EditorError>;
     toggleBold(): Result<void, EditorError>;
     toggleItalic(): Result<void, EditorError>;
     toggleUnderline(): Result<void, EditorError>;
@@ -624,6 +628,7 @@ export const createEditor = (
         TableRowExtension,
         TableCellExtension,
         TableKeyboardNavigationExtension.configure({ createId }),
+        IndentKeyboardExtension,
         TablePasteExtension.configure({
           createId,
           ...(options.onPasteRejected === undefined
@@ -995,6 +1000,39 @@ export const createEditor = (
     });
   };
 
+  // DELTA-03: deleteBlock과 같은 순서(가드 → findBlockInTree/findBlockPosition
+  // → 순수 함수 위임)를 따른다. indentBlockCommand/outdentBlockCommand는 이미
+  // EditorError 모양의 Result를 반환하고(D2 — 신규 코드 없음), BLOCK_NOT_FOUND는
+  // 이 모델 트리 가드가 앞서 잡아내므로 그 아래에서 실패하는 경로는 전부
+  // COMMAND_NOT_APPLICABLE로 수렴한다 — runDocumentCommand의 기본 실패값과
+  // 코드가 일치해 별도로 캡처해 되돌릴 필요가 없다(runTableCommand의
+  // 클로저 좁히기 회피가 여기선 불필요).
+  const indentBlock = (blockId: string): Result<void, EditorError> => {
+    if (destroyed) return commandNotApplicable("indentBlock");
+
+    if (findBlockInTree(currentDocument.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    return runDocumentCommand("indentBlock", "local", () => {
+      const outcome = indentBlockCommand(tiptapEditor, blockId);
+      return outcome.ok;
+    });
+  };
+
+  const outdentBlock = (blockId: string): Result<void, EditorError> => {
+    if (destroyed) return commandNotApplicable("outdentBlock");
+
+    if (findBlockInTree(currentDocument.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    return runDocumentCommand("outdentBlock", "local", () => {
+      const outcome = outdentBlockCommand(tiptapEditor, blockId);
+      return outcome.ok;
+    });
+  };
+
   const runSelectionCommand = (
     command: string,
     run: () => boolean,
@@ -1291,6 +1329,8 @@ export const createEditor = (
       moveBlockBefore,
       duplicateBlock,
       deleteBlock,
+      indentBlock,
+      outdentBlock,
       toggleBold: () =>
         runSelectionCommand("toggleBold", () =>
           tiptapEditor.commands.toggleBold(),
