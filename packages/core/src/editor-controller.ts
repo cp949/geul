@@ -945,10 +945,14 @@ export const createEditor = (
         insertPosition,
         duplicateNode,
       );
+      // 복제본은 항상 자식 없는 blockContainer(위 hasChildren/table 가드)라
+      // 유일한 자식이 blockContent다. 텍스트 끝은 컨테이너 닫힘(-1)이 아니라
+      // 그 안쪽 blockContent 닫힘 직전(-2)이다 — D19 이전 flat 스키마의 -1
+      // 산술을 그대로 두면 캐럿이 비-textblock 경계에 놓인다.
       transaction.setSelection(
         TextSelection.create(
           transaction.doc,
-          insertPosition + duplicateNode.nodeSize - 1,
+          insertPosition + duplicateNode.nodeSize - 2,
         ),
       );
       tiptapEditor.view.dispatch(closeHistory(transaction));

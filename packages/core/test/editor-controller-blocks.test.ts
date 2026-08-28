@@ -467,16 +467,17 @@ describe("에디터 컨트롤러 블록 명령", () => {
 
       editor.commands.duplicateBlock("block-1");
 
-      let newBlockPosition: number | null = null;
-      tiptap.state.doc.forEach((node, offset) => {
-        if (node.attrs.blockId === "block-2") newBlockPosition = offset;
+      // 구현 공식(nodeSize 산술)을 미러링하지 않고 결과 selection의 의미를
+      // 직접 단언한다 — 캐럿이 복제본 문단 "텍스트"의 끝(인라인 위치)에
+      // 있어야 하고, 컨테이너 경계(비-textblock 위치)에 놓이면 안 된다
+      // (트랙-6 발견: D19 컨테이너 도입 후 -1 오프셋이 경계를 가리켰다).
+      const { selection } = tiptap.state;
+      expect(selection.empty).toBe(true);
+      expect(selection.$from.parent.type.name).toBe("paragraph");
+      expect(selection.$from.parentOffset).toBe("content".length);
+      expect(editor.getCaretBlockContext()).toMatchObject({
+        blockId: "block-2",
       });
-      expect(newBlockPosition).not.toBeNull();
-      const newBlockNode = tiptap.state.doc.nodeAt(newBlockPosition ?? 0);
-      expect(newBlockNode).not.toBeNull();
-      expect(tiptap.state.selection.from).toBe(
-        (newBlockPosition ?? 0) + (newBlockNode?.nodeSize ?? 0) - 1,
-      );
     });
 
     it("duplicateBlock을 한 번의 undo로 복원한다", () => {
