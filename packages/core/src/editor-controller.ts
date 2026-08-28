@@ -22,6 +22,7 @@ import {
 } from "./block-container-extension.js";
 import { BlockIdExtension } from "./block-id-extension.js";
 import { findBlockPosition } from "./block-position.js";
+import { BlockSplitExtension } from "./block-split-extension.js";
 import type { EditorError } from "./errors.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
@@ -618,6 +619,7 @@ export const createEditor = (
         BlockContainerExtension,
         BlockGroupExtension,
         BlockIdExtension.configure({ createId }),
+        BlockSplitExtension,
         TableExtension,
         TableRowExtension,
         TableCellExtension,
