@@ -22,6 +22,7 @@ import { modelToTiptap } from "../src/model-to-tiptap.js";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
 import {
+  liveSchema,
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
@@ -31,17 +32,6 @@ import {
 // 호출되면(즉 저장된 id를 잃어버렸으면) 테스트가 즉시 실패로 드러난다.
 const unusedIdFactory: IdFactory = () => {
   throw new Error("createId는 모든 블록에 이미 id가 있을 때 호출되면 안 된다");
-};
-
-// 표 명령 등과 무관하게 스키마·appendTransaction만 검사하는 테스트가 공유하는
-// 최소 마운트 헬퍼. paragraphDocument("seed")는 실제 콘텐츠와 무관한
-// placeholder다 — 각 테스트가 자신의 트랜잭션으로 문서를 직접 조작한다.
-const liveSchema = () => {
-  const editor = createEditor({
-    initialDocument: paragraphDocument("seed"),
-    createId: sequentialIds("seed"),
-  });
-  return mountTiptapEditor(editor).tiptap.schema;
 };
 
 describe("tiptap JSON을 독자 문서 모델로 디코드한다", () => {

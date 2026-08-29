@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
   documentWithContent,
+  editorState,
+  mountTiptapEditor,
   paragraphDocument,
 } from "./editor-controller-support.js";
 
@@ -19,6 +21,25 @@ describe("에디터 컨트롤러 문서 검증", () => {
       error: { code: "DOCUMENT_INVALID" },
     });
     expect(editor.getDocument()).toEqual(paragraphDocument("kept", 3));
+    expect(changes).toEqual([]);
+  });
+
+  it("마운트된 에디터에서 무효 교체 문서를 거절하면 문서·selection·Tiptap doc·onChange가 무변경이다", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("kept", 3),
+      onChange: (event) => changes.push(event),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const before = editorState(editor, tiptap);
+
+    expect(
+      editor.replaceDocument(documentWithContent([{ text: "" }])),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "DOCUMENT_INVALID" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
     expect(changes).toEqual([]);
   });
 

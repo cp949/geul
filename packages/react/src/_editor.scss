@@ -19,6 +19,37 @@
     font-size: 1.25rem;
   }
 
+  h4 {
+    font-size: 1.1rem;
+  }
+
+  h5 {
+    font-size: 1rem;
+  }
+
+  h6 {
+    font-size: 0.9rem;
+  }
+
+  blockquote {
+    margin: 0;
+    padding-left: 1rem;
+    border-left: 3px solid var(--geul-color-accent, #1a73e8);
+    color: var(--geul-color-text-muted, #5f6368);
+  }
+
+  // 시각적으로는 얇은 구분선이지만, block-side-menu.tsx의 hover 위치 계산은
+  // 이 블록 요소의 getBoundingClientRect()에 기대므로(pointermove 추적) 기본
+  // 두께(1px 안팎)만으로는 포인터가 실제로 머무르기 어렵다. padding-block으로
+  // 세로 히트 영역을 넓히고 border-top 한 줄로 얇은 시각적 선을 그린다.
+  hr {
+    box-sizing: border-box;
+    height: auto;
+    padding-block: 0.75rem;
+    border: none;
+    border-top: 1px solid var(--geul-color-border, #dadce0);
+  }
+
   // tableEditing 플러그인(@tiptap/pm/tables)이 CellSelection에 속한 기준
   // 셀마다 이 클래스를 데코레이션으로 붙인다 — 드래그로 선택 중인 직사각형
   // 범위를 시각으로 드러낸다(spec 7.2). .selectedCell은 외부 플러그인이

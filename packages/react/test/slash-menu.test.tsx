@@ -163,7 +163,8 @@ describe("SlashMenu 질의 팝업", () => {
     typeIntoBlock(rendered, 0, "/");
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(5);
+    // paragraph + heading 1-6 + quote(8) + table + divider = 10.
+    expect(screen.getAllByRole("option")).toHaveLength(10);
     expect(screen.getByRole("option", { name: /Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /Heading 1/ })).not.toBeNull();
   });
@@ -173,7 +174,8 @@ describe("SlashMenu 질의 팝업", () => {
 
     typeIntoBlock(rendered, 0, "/head");
 
-    expect(screen.getAllByRole("option")).toHaveLength(3);
+    // heading 1-6 = 6.
+    expect(screen.getAllByRole("option")).toHaveLength(6);
     expect(screen.queryByRole("option", { name: /^Text/ })).toBeNull();
   });
 
@@ -193,6 +195,74 @@ describe("SlashMenu 질의 팝업", () => {
     expect(block.level).toBe(1);
     // clearContent: true — 트리거로 쓴 "/h1"이 본문에 남지 않는다.
     expect(block.content).toEqual([]);
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it.each([4, 5, 6] as const)(
+    "Heading %i 항목 클릭이 clearContent와 함께 setBlockType(level %i)을 호출한다",
+    (level) => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, 0, `/h${level}`);
+      const option = screen.getByRole("option", {
+        name: new RegExp(`Heading ${level}`),
+      });
+      focusOutsideEditor(option);
+
+      fireEvent.click(option);
+
+      // 실제 setBlockType(blockId, {heading,level}, {clearContent:true})가
+      // 돌았음을 문서로 본다 — 스파이는 명령이 아무것도 하지 않아도 통과한다.
+      const block = rendered.editor.getDocument().blocks[0];
+      if (block?.type !== "heading") throw new Error("제목 블록이 아니다");
+      expect(block.id).toBe(blockId);
+      expect(block.level).toBe(level);
+      // clearContent: true — 트리거로 쓴 "/h4" 등이 본문에 남지 않는다.
+      expect(block.content).toEqual([]);
+      expect(document.activeElement).toBe(rendered.editable);
+    },
+  );
+
+  it("Quote 항목 클릭이 clearContent와 함께 setBlockType(quote)을 호출한다", () => {
+    const rendered = renderCaretBlocks();
+    const blockId = typeIntoBlock(rendered, 0, "/quote");
+    const option = screen.getByRole("option", { name: /Quote/ });
+    focusOutsideEditor(option);
+
+    fireEvent.click(option);
+
+    const block = rendered.editor.getDocument().blocks[0];
+    if (block?.type !== "quote") throw new Error("인용 블록이 아니다");
+    expect(block.id).toBe(blockId);
+    // clearContent: true — 트리거로 쓴 "/quote"가 본문에 남지 않는다.
+    expect(block.content).toEqual([]);
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("Divider 항목을 클릭하면 트리거 블록 텍스트를 지우며 divider를 삽입하고 편집기로 초점을 되돌린다", () => {
+    const rendered = renderCaretBlocks();
+    const blockId = typeIntoBlock(rendered, 0, "/divider");
+    // 전제: 아직 divider가 없다. 있었다면 아래 "divider가 생겼다"는 삽입과
+    // 무관하다.
+    expect(rendered.editor.getDocument().blocks).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("option", { name: /Divider/ }));
+
+    // blocks 3개 = 트리거 문단 + divider + trailing paragraph(문서 끝에
+    // divider가 놓이면 같은 dispatch에서 빈 문단이 뒤따른다, divider-commands.ts).
+    const blocks = rendered.editor.getDocument().blocks;
+    expect(blocks).toHaveLength(3);
+    const trigger = blocks[0];
+    if (trigger?.type !== "paragraph") throw new Error("트리거 문단이 아니다");
+    expect(trigger.id).toBe(blockId);
+    // clearAfterBlockText: true — 트리거 블록의 "/divider"가 지워진다.
+    expect(trigger.content).toEqual([]);
+    const divider = blocks[1];
+    if (divider?.type !== "divider") throw new Error("divider 블록이 아니다");
+    const trailing = blocks[2];
+    if (trailing?.type !== "paragraph")
+      throw new Error("trailing 문단이 아니다");
+    expect(trailing.content).toEqual([]);
+    expect(screen.queryByRole("listbox")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
   });
 
@@ -289,7 +359,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
     expect(inserted.content).toEqual([]);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(5);
+    expect(screen.getAllByRole("option")).toHaveLength(10);
 
     // 메뉴가 "그 블록"으로 열렸는지는 캐럿 갱신 한 번으로 갈린다. 실제
     // insertParagraphAfter는 캐럿을 새 문단으로 옮기므로(전제), 메뉴가 hover한

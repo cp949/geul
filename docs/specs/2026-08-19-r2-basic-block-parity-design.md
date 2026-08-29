@@ -128,6 +128,7 @@ export type Block =
 ### 5.1 명령(신규)
 
 - `setHeadingLevel(blockId, level)` — 기존 `setBlockType`을 확장하지 않고 heading 전용 level 변경으로 분리(문단 등 다른 타입과 신호가 다르다).
+  - 정정(2026-08-28, Issue #38 슬라이스 3): `setHeadingLevel`을 신설하지 않는다 — heading level 변경은 기존 `setBlockType`이 단일 경로로 소유한다(`setBlockType(blockId, { type: "heading", level })`). 근거: `packages/core/src/editor-controller.ts`의 `setBlockType`이 이미 현재 블록의 level을 읽어 동일 타입·동일 level 재적용을 `COMMAND_NOT_APPLICABLE`로 거절하고(`clearContent` 옵션으로 콘텐츠를 비우는 호출은 예외) level attr 적용까지 소유하며, React 소비 표면 3곳(슬래시 메뉴 `slash-menu.tsx`, 서식 툴바 `formatting-toolbar.tsx`, 블록 메뉴 Turn into `block-side-menu.tsx`)이 전부 이 경로를 쓴다. 원문의 전제("문단 등 다른 타입과 신호가 다르다")와 달리 level은 `setBlockType`의 heading 대상 인자에 이미 포함돼 있어 별도 명령을 두면 같은 로직이 두 경로에 중복된다 — 모든 입력 경로가 같은 명령을 호출하고 로직을 중복 구현하지 않는다(6.1과 같은 원칙).
 - `toggleHeadingCollapse(blockId)`, `toggleListItemCollapse(blockId)`
 - `toggleCheckListItemChecked(blockId)`
 - `indentBlock(blockId)`, `outdentBlock(blockId)` — 형제 관계를 부모-자식으로 바꾸거나 되돌린다.

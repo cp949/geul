@@ -1,7 +1,8 @@
 /**
  * 문서 끝 trailing paragraph 불변식(UI-010, spec §6.4)을 검증한다.
  * 마지막 최상위 블록이 자식 없는 paragraph가 아니면(heading·표·자식 딸린
- * paragraph) 빈 paragraph가 자동 추가된다 — 로드(초기 문서 설정·
+ * paragraph, 그리고 Issue #38 슬라이스 3의 quote·divider — DELTA-05 05-C4
+ * characterization) 빈 paragraph가 자동 추가된다 — 로드(초기 문서 설정·
  * replaceDocument) 시점 포함. 로드 시점 추가는 revision 증가·onChange 없이
  * 히스토리 밖에서 끝나고(R-11), 편집이 트리거한 추가는 그 편집과 한 커밋·
  * 한 히스토리 이벤트가 된다(R-8). 자동 추가 paragraph의 blockId는
@@ -11,8 +12,12 @@ import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
 import {
+  dividerD1,
+  documentOf,
   nestedParagraphDocument,
+  okResult,
   oneCellTableBlock,
+  paragraphBlock,
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
@@ -231,6 +236,60 @@ describe("편집 시점 trailing paragraph", () => {
     ]);
 
     expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks).toEqual(tailDocument.blocks);
+  });
+
+  it("마지막 블록이 quote로 바뀌면 같은 커밋에서 빈 paragraph를 추가한다", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+      createId: sequentialIds("gen"),
+      onChange: (event) => changes.push(event),
+    });
+
+    // 판정 술어는 "자식 없는 paragraph"라 quote도 heading과 같이 걸린다 —
+    // 코드 변경 없이 성립하는 회귀 고정(characterization).
+    expect(editor.commands.setBlockType("block-1", { type: "quote" })).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks).toEqual([
+      { id: "block-1", type: "quote", content: [{ text: "content" }] },
+      trailingParagraph("gen-1"),
+    ]);
+    expect(changes).toEqual([
+      {
+        revision: 1,
+        changedBlockIds: ["block-1", "gen-1"],
+        reason: "local",
+      },
+    ]);
+
+    // 타입 변환과 trailing 추가가 한 히스토리 이벤트다(R-8).
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual(
+      paragraphDocument("content").blocks,
+    );
+  });
+
+  it("divider 뒤 trailing paragraph를 삭제하면 재추가되고 undo 1회로 삭제 전 문서가 복원된다", () => {
+    // divider는 컨테이너 없이 doc 직하에 놓이는 atom이라 술어의 첫 분기
+    // (blockContainer가 아님)에서 걸러진다 — 표와 같은 경로.
+    const tailDocument = documentOf(
+      dividerD1,
+      paragraphBlock("tail-1", "tail"),
+    );
+    const editor = createEditor({
+      initialDocument: tailDocument,
+      createId: sequentialIds("gen"),
+    });
+
+    expect(editor.commands.deleteBlock("tail-1")).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      dividerD1,
+      trailingParagraph("gen-1"),
+    ]);
+
+    expect(editor.commands.undo()).toEqual(okResult);
     expect(editor.getDocument().blocks).toEqual(tailDocument.blocks);
   });
 });

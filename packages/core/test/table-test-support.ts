@@ -174,7 +174,7 @@ export const createTableFixtureEditor = (
 
 /**
  * 모든 트랜잭션을 무조건 버리는 테스트 전용 확장. `dispatchAndVerify`(
- * table-commands.ts)의 거절 감지 로직은 실제 필터 거절 없이는 검증할 수
+ * dispatch.ts)의 거절 감지 로직은 실제 필터 거절 없이는 검증할 수
  * 없다 — `LinkPolicyExtension`(link-policy-extension.ts)과 같은
  * `filterTransaction` 모양으로 그 경로를 재현한다. `table-commands.test.ts`와
  * `table-paste-commands.test.ts`가 함께 쓰므로 로컬 정의로 중복하지 않고

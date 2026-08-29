@@ -117,10 +117,11 @@ const resolveBlockId = (node: TiptapJsonNode, createId: IdFactory): string => {
 };
 
 // blockContainer 1개를 재귀로 model Block으로 디코드한다(D19). 컨테이너의
-// 첫 자식은 항상 blockContent(paragraph/heading), 두 번째(선택) 자식은
-// blockGroup이다 — 스키마 content expression "blockContent blockGroup?"이
-// 이 순서를 구조적으로 강제하므로 여기서 순서를 다시 검증하지 않는다
-// (G-CNV-001: 검증 권위는 parseDocument, 이 함수는 구조 직대응만 한다).
+// 첫 자식은 항상 blockContent(paragraph/heading/quote), 두 번째(선택)
+// 자식은 blockGroup이다 — 스키마 content expression "blockContent
+// blockGroup?"이 이 순서를 구조적으로 강제하므로 여기서 순서를 다시
+// 검증하지 않는다(G-CNV-001: 검증 권위는 parseDocument, 이 함수는 구조
+// 직대응만 한다).
 const blockContainerToModel = (
   node: TiptapJsonNode,
   createId: IdFactory,
@@ -173,7 +174,14 @@ const blockContainerToModel = (
 
   if (contentNode.type === "heading") {
     const level = contentNode.attrs?.level;
-    if (level !== 1 && level !== 2 && level !== 3) {
+    if (
+      level !== 1 &&
+      level !== 2 &&
+      level !== 3 &&
+      level !== 4 &&
+      level !== 5 &&
+      level !== 6
+    ) {
       return invalid(`Unsupported heading level: ${String(level)}`);
     }
     return {
@@ -188,21 +196,40 @@ const blockContainerToModel = (
     };
   }
 
+  if (contentNode.type === "quote") {
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "quote",
+        content: inlineContent.value,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
   return invalid(
     `Unsupported blockContent inside blockContainer: ${String(contentNode.type)}`,
   );
 };
 
-// 문서 최상위와 blockGroup 자식이 공유하는 노드 디스패치. table은 컨테이너로
-// 감싸이지 않는다(D19) — blockContainer/table 둘 다 스키마 group "block"의
-// 멤버라 같은 위치(doc 직속 또는 blockGroup 자식)에 나란히 나타난다. 그
-// 외 타입은 거절한다(미지 노드 조용히 무시 금지 — 기존 계약 유지).
+// 문서 최상위와 blockGroup 자식이 공유하는 노드 디스패치. table·divider는
+// 컨테이너로 감싸이지 않는다(D19) — blockContainer/table/divider 모두
+// 스키마 group "block"의 멤버라 같은 위치(doc 직속 또는 blockGroup 자식)에
+// 나란히 나타난다. 그 외 타입은 거절한다(미지 노드 조용히 무시 금지 —
+// 기존 계약 유지).
 const decodeBlock = (
   node: TiptapJsonNode,
   createId: IdFactory,
 ): Result<Block, EditorError> => {
   if (node.type === "table") {
     return tableBlockFromTiptapJson(node, resolveBlockId(node, createId));
+  }
+  if (node.type === "divider") {
+    return {
+      ok: true,
+      value: { id: resolveBlockId(node, createId), type: "divider" },
+    };
   }
   if (node.type === "blockContainer") {
     return blockContainerToModel(node, createId);

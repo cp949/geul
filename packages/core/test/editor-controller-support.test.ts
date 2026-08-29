@@ -28,14 +28,17 @@
  * 만드는지도 여기 범위가 아니다 — 여기서 보는 것은 fixture가 그 결과를 어떤
  * 모양으로 내놓는가다.
  */
+import { pasteData } from "./clipboard-test-support.js";
 import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import {
   editorWithTable,
   firstTableBlockIn,
+  liveSchema,
   mountTiptapEditor,
   paragraphDocument,
+  requireNode,
   tableBlockIn,
   tableBlockOf,
 } from "./editor-controller-support.js";
@@ -248,5 +251,67 @@ describe("컨트롤러 표 fixture 계약", () => {
       ]);
       expect(renderedByRow.flat()).toEqual(cellIds);
     });
+  });
+});
+
+describe("liveSchema", () => {
+  it("liveSchema는 프로덕션 스키마를 돌려준다", () => {
+    const schema = liveSchema();
+
+    expect(schema.nodes.blockContainer).toBeDefined();
+    expect(schema.nodes.table).toBeDefined();
+    expect(schema.nodes.divider).toBeDefined();
+    expect(schema.nodes.doc?.contentMatch.defaultType?.name).toBe(
+      "blockContainer",
+    );
+  });
+});
+
+describe("requireNode", () => {
+  it("존재하는 노드 타입을 돌려준다", () => {
+    expect(requireNode(liveSchema(), "paragraph").name).toBe("paragraph");
+  });
+
+  it("없는 노드 이름이면 던진다", () => {
+    const schema = liveSchema();
+
+    expect(() => requireNode(schema, "nope")).toThrow("nope node missing");
+  });
+});
+
+describe("clipboard-test-support", () => {
+  it("ClipboardEvent 폴리필이 clipboardData.getData를 왕복한다", () => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "hello");
+
+    const event = new ClipboardEvent("paste", { clipboardData: data });
+
+    expect(event.clipboardData?.getData("text/plain")).toBe("hello");
+  });
+
+  it("pasteData는 항목 전부를 담은 paste 이벤트를 bubbles·cancelable로 dispatch한다", () => {
+    const editable = document.createElement("div");
+    const received: ClipboardEvent[] = [];
+    const onPaste = (event: Event) => {
+      received.push(event as ClipboardEvent);
+    };
+    editable.addEventListener("paste", onPaste);
+    try {
+      pasteData(editable, {
+        "text/html": "<p>hello</p>",
+        "text/plain": "hello",
+      });
+
+      expect(received).toHaveLength(1);
+      const pastedEvent = received[0];
+      expect(pastedEvent?.clipboardData?.getData("text/html")).toBe(
+        "<p>hello</p>",
+      );
+      expect(pastedEvent?.clipboardData?.getData("text/plain")).toBe("hello");
+      expect(pastedEvent?.bubbles).toBe(true);
+      expect(pastedEvent?.cancelable).toBe(true);
+    } finally {
+      editable.removeEventListener("paste", onPaste);
+    }
   });
 });

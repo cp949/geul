@@ -25,6 +25,13 @@ type SlashMenuItem =
       label: string;
       description: string;
       keywords: readonly string[];
+    }
+  | {
+      kind: "insertDivider";
+      id: string;
+      label: string;
+      description: string;
+      keywords: readonly string[];
     };
 
 const TABLE_SLASH_ITEM: SlashMenuItem = {
@@ -35,12 +42,21 @@ const TABLE_SLASH_ITEM: SlashMenuItem = {
   keywords: ["table", "grid"],
 };
 
+const DIVIDER_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertDivider",
+  id: "divider",
+  label: "Divider",
+  description: "Insert a horizontal divider",
+  keywords: ["divider", "hr", "separator"],
+};
+
 const SLASH_MENU_ITEMS: readonly SlashMenuItem[] = [
   ...BLOCK_TYPE_OPTIONS.map((option) => ({
     kind: "blockType" as const,
     ...option,
   })),
   TABLE_SLASH_ITEM,
+  DIVIDER_SLASH_ITEM,
 ];
 
 const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
@@ -193,12 +209,16 @@ export const SlashMenu = () => {
         editor.commands.setBlockType(current.blockId, item.blockType, {
           clearContent: true,
         });
-      } else {
+      } else if (item.kind === "insertTable") {
         editor.commands.insertTable(
           current.blockId,
           { rows: 3, columns: 3 },
           { clearAfterBlockText: true },
         );
+      } else {
+        editor.commands.insertDivider(current.blockId, {
+          clearAfterBlockText: true,
+        });
       }
       explicitOpenBlockIdRef.current = null;
       dismissedQueryRef.current = null;

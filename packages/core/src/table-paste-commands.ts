@@ -14,11 +14,11 @@ import {
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { isInTable, selectedRect } from "@tiptap/pm/tables";
+import { finalizeAndDispatch } from "./dispatch.js";
 import { inlineContentViolation } from "./model-to-tiptap.js";
 import {
   applyTableGridOperation,
   cellIdAtAnchor,
-  finalizeAndDispatch,
   setCaretInCell,
   type TableCommandError,
 } from "./table-commands.js";

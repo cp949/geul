@@ -14,8 +14,16 @@
  */
 import type { Block, Document, InlineContent } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
-import { afterEach } from "vitest";
-import { createEditor, type EditorController } from "../src/index.js";
+import type { NodeType, Schema } from "@tiptap/pm/model";
+import { NodeSelection } from "@tiptap/pm/state";
+import { afterEach, expect } from "vitest";
+import { findBlockPosition } from "../src/block-position.js";
+import {
+  createEditor,
+  type DocumentChangeEvent,
+  type EditorController,
+} from "../src/index.js";
+import { contentTextStart } from "./block-test-support.js";
 
 export const paragraphDocument = (text: string, revision = 0): Document => ({
   formatVersion: 1,
@@ -40,6 +48,57 @@ export const documentOf = (...blocks: Block[]): Document => ({
 });
 
 /**
+ * 문단 블록 리터럴을 만든다. 텍스트가 빈 문자열이면 content를 빈 배열로
+ * 둔다(빈 블록) — 빈 text 조각을 넣지 않는 저장 문서의 정규형과 같다.
+ * block-join-extension(병합 fixture)과 divider 명령 테스트(삽입 결과의 빈
+ * 문단)가 공유한다(G-TST-002).
+ */
+export const paragraphBlock = (
+  id: string,
+  text: string,
+  children?: Block[],
+): Block => ({
+  id,
+  type: "paragraph",
+  content: text === "" ? [] : [{ text }],
+  ...(children === undefined ? {} : { children }),
+});
+
+/**
+ * 문서를 문단으로 닫는 꼬리 블록 — heading·quote로 끝나면 로드 시 trailing
+ * paragraph(UI-010)가 붙어 배치가 흔들리므로 이 블록으로 닫는다.
+ * headingLevels456Document·quote 명령 테스트가 공유한다(G-TST-002).
+ */
+export const tailParagraphBlock: Block = {
+  id: "tail",
+  type: "paragraph",
+  content: [{ text: "tail" }],
+};
+
+/**
+ * level 4·5·6 heading 세 개 뒤에 문단 하나를 둔 문서. 꼬리는
+ * tailParagraphBlock이다. heading-levels의 렌더·컨텍스트 조회 케이스와
+ * quote-divider-round-trip의 level 4-6 왕복 케이스가 공유한다(G-TST-002).
+ */
+export const headingLevels456Document = (): Document =>
+  documentOf(
+    { id: "h4", type: "heading", level: 4, content: [{ text: "four" }] },
+    { id: "h5", type: "heading", level: 5, content: [{ text: "five" }] },
+    { id: "h6", type: "heading", level: 6, content: [{ text: "six" }] },
+    tailParagraphBlock,
+  );
+
+/**
+ * 깊이 1 자식 fixture — nestedParagraphDocument와 부모 타입 변환 테스트가
+ * 공유.
+ */
+export const childParagraphBlock: Block = {
+  id: "child-1",
+  type: "paragraph",
+  content: [{ text: "child" }],
+};
+
+/**
  * 깊이 1 자식을 가진 최소 문서 — parent-1(문단) 아래 child-1(문단) 하나.
  * DELTA-02a 완료 조건 2·3·4·5·7(depth≥1 명령 동작·D20 자식 딸린 블록
  * 의미론·중첩 선택 조회)이 공유하는 fixture다(G-TST-002).
@@ -52,9 +111,7 @@ export const nestedParagraphDocument = (): Document => ({
       id: "parent-1",
       type: "paragraph",
       content: [{ text: "parent" }],
-      children: [
-        { id: "child-1", type: "paragraph", content: [{ text: "child" }] },
-      ],
+      children: [childParagraphBlock],
     },
   ],
 });
@@ -196,6 +253,46 @@ export const mountTiptapEditor = (
   return { editable, tiptap: editable.editor };
 };
 
+/**
+ * onChange를 모으며 마운트한 에디터 — id는 "id-N" 순차 배정이다.
+ * insertDivider 계약·divider 삭제 characterization
+ * (editor-controller-divider.test.ts)과 divider 명령 characterization
+ * (editor-controller-divider-commands.test.ts)이 공유한다(G-TST-002).
+ */
+export const mounted = (initialDocument: Document) => {
+  const changes: DocumentChangeEvent[] = [];
+  const onChange = (event: DocumentChangeEvent) => changes.push(event);
+  const createId = sequentialIds("id");
+  const editor = createEditor({ initialDocument, createId, onChange });
+  return { editor, changes, ...mountTiptapEditor(editor) };
+};
+
+/**
+ * 표 명령 등과 무관하게 스키마·appendTransaction만 검사하는 테스트가 공유하는
+ * 최소 마운트 헬퍼. 프로덕션 스키마를 돌려준다. paragraphDocument("seed")는
+ * 실제 콘텐츠와 무관한 placeholder다 — 각 테스트가 자신의 트랜잭션으로 문서를
+ * 직접 조작한다.
+ */
+export const liveSchema = () => {
+  const editor = createEditor({
+    initialDocument: paragraphDocument("seed"),
+    createId: sequentialIds("seed"),
+  });
+  return mountTiptapEditor(editor).tiptap.schema;
+};
+
+/**
+ * 스키마에서 이름으로 노드 타입을 찾는다 — 없으면 던진다. `nodes.x?.…` 형태의
+ * optional chaining은 노드가 없을 때 `undefined`가 되어
+ * `expect(undefined).not.toBeNull()`이 공허 통과하는 함정이 있다 — 이 helper로
+ * 노드 부재 가드를 통일해 그 함정을 막는다.
+ */
+export const requireNode = (schema: Schema, name: string): NodeType => {
+  const node = schema.nodes[name];
+  if (node === undefined) throw new Error(`${name} node missing`);
+  return node;
+};
+
 export const editorState = (
   editor: EditorController,
   tiptap: TiptapEditor,
@@ -207,8 +304,26 @@ export const editorState = (
 });
 
 /**
- * quote 블록 리터럴 — DELTA-04 실제 변환 전까지 core가 DOCUMENT_INVALID로
- * 거절하는 대상 확인용(unsupported-block-load.test.ts). children은 quote
+ * undo 뒤 기대 상태 — before(editorState 스냅샷)와 같되 revision만 오른다.
+ * quote·divider 명령 테스트가 "undo 1회 복원" 단언에 공유한다(G-TST-002).
+ */
+export const restored = (
+  before: ReturnType<typeof editorState>,
+  revision: number,
+) => ({ ...before, document: { ...before.document, revision } });
+
+/**
+ * blockId 문단의 텍스트 시작(contentTextStart)에 놓인 빈 TextSelection JSON.
+ * setBlockType·insertDivider가 캐럿을 콘텐츠 시작에 두는 계약을 quote·
+ * heading-levels·divider 명령 테스트가 같은 리터럴로 단언한다(G-TST-002).
+ */
+export const caretAt = (tiptap: TiptapEditor, blockId: string) => {
+  const position = contentTextStart(tiptap, blockId);
+  return { type: "text", anchor: position, head: position };
+};
+
+/**
+ * quote 블록 리터럴 — quote/divider 왕복·명령 fixture. children은 quote
  * 아래 자식 블록을 붙이는 인자로, 후속 DELTA(quote 변환·명령)의 fixture가
  * 쓴다. io에도 같은 빌더가 있지만 패키지 경계상 import하지 않는다.
  */
@@ -225,9 +340,65 @@ export const quoteBlock = (
 
 /**
  * divider 블록 리터럴 — content도 children도 없는 리프. quote와 마찬가지로
- * DELTA-04 전까지 core가 거절하는 대상이다.
+ * quote/divider 왕복·명령 fixture로 쓴다.
  */
 export const dividerBlock = (id: string): Block => ({
   id,
   type: "divider",
 });
+
+/**
+ * "문단-divider-문단" 3블록 fixture 구성 요소와 그 문서. insertDivider
+ * 계약(editor-controller-divider.test.ts)과 divider 명령
+ * characterization(editor-controller-divider-commands.test.ts)이
+ * 동일 사본으로 두던 것을 승격했다(G-TST-002).
+ */
+export const firstParagraphBlock = paragraphBlock("block-1", "first");
+export const secondParagraphBlock = paragraphBlock("block-2", "second");
+export const dividerD1 = dividerBlock("d-1");
+export const dividerBetweenParagraphsDocument = () =>
+  documentOf(firstParagraphBlock, dividerD1, secondParagraphBlock);
+
+/**
+ * 명령 Result 단언 리터럴 — 성공 void(okResult) / COMMAND_NOT_APPLICABLE
+ * 거절(notApplicable). 값이 있는 성공은 호출부가 직접 쓴다. divider·quote
+ * 명령 테스트가 공유한다(G-TST-002).
+ */
+export const okResult = { ok: true, value: undefined };
+export const notApplicable = (command: string) => ({
+  ok: false,
+  error: { code: "COMMAND_NOT_APPLICABLE", command },
+});
+
+/**
+ * blockId 블록을 NodeSelection으로 선택한다 — 비포장 atom 블록(divider)은
+ * 캐럿(TextSelection)을 둘 안쪽이 없어 이 방식으로만 선택할 수 있다. 04b
+ * 삭제 characterization(editor-controller-divider.test.ts)과 04c 명령
+ * characterization(editor-controller-divider-commands.test.ts)이
+ * 공유한다(G-TST-002).
+ */
+export const selectBlockNode = (
+  tiptap: TiptapEditor,
+  blockId: string,
+): void => {
+  const position = findBlockPosition(tiptap.state.doc, blockId);
+  if (position === null) throw new Error(`블록 ${blockId} 조회 실패`);
+  const { tr, doc } = tiptap.state;
+  tiptap.view.dispatch(tr.setSelection(NodeSelection.create(doc, position)));
+};
+
+/**
+ * 현재 selection이 blockId divider의 NodeSelection인지 단언한다. 04c 명령
+ * characterization(editor-controller-divider-commands.test.ts)과 05 join
+ * 테스트(block-join-extension.test.ts)가 공유한다(G-TST-002).
+ */
+export const expectDividerNodeSelection = (
+  tiptap: Pick<TiptapEditor, "state">,
+  blockId: string,
+): void => {
+  const { selection } = tiptap.state;
+  expect(selection).toBeInstanceOf(NodeSelection);
+  const { node } = selection as NodeSelection;
+  expect(node.type.name).toBe("divider");
+  expect(node.attrs.blockId).toBe(blockId);
+};

@@ -1,5 +1,5 @@
 import { Extension, type Editor } from "@tiptap/core";
-import { Fragment } from "@tiptap/pm/model";
+import { Fragment, type Node } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
@@ -25,6 +25,15 @@ export const BlockSplitExtension = Extension.create({
   },
 });
 
+// 이 확장이 분할하는 콘텐츠 노드 — blockContainer의 blockContent 멤버
+// (paragraph/heading/quote, D19). quote는 문단 동형 계약(spec §4.2 —
+// inline* content, 차이는 타입뿐)이라 heading과 같은 분할 규칙을 받는다
+// (Issue #38 슬라이스 3). divider는 atom·콘텐츠 없음이라 대상이 아니다.
+function isSplittableContent(node: Node): boolean {
+  const name = node.type.name;
+  return name === "paragraph" || name === "heading" || name === "quote";
+}
+
 // this.editor를 직접 받아 addKeyboardShortcuts 밖에서도 테스트 가능한
 // 형태로 분리했다(export 안 함 — 공개 API가 아니다, G-WKS-001).
 function splitBlockContainer(editor: Editor): boolean {
@@ -32,13 +41,10 @@ function splitBlockContainer(editor: Editor): boolean {
   const { selection } = state;
 
   const fromParent = selection.$from.parent;
-  if (
-    fromParent.type.name !== "paragraph" &&
-    fromParent.type.name !== "heading"
-  ) {
+  if (!isSplittableContent(fromParent)) {
     // 표 셀 등을 여기서 배제한다: 표 셀 content는 "inline*"라(D19,
-    // table-extension.ts) $from.parent가 애초에 paragraph/heading이 될
-    // 수 없다 — 별도 isInTable 가드 불필요(직접 확인 완료, 즉시 리뷰가
+    // table-extension.ts) $from.parent가 애초에 paragraph/heading/quote가
+    // 될 수 없다 — 별도 isInTable 가드 불필요(직접 확인 완료, 즉시 리뷰가
     // 아래 blockContainer 검사가 아니라 이 지점이 실제 배제 지점임을
     // 정정). 범위 선택도 마찬가지다 — 셀 안 범위는 삭제조차 하지 않고
     // 즉시 물러난다.
@@ -79,10 +85,7 @@ function splitBlockContainer(editor: Editor): boolean {
 function splitAtCaret(tr: Transaction): boolean {
   const { $from } = tr.selection;
   const contentNode = $from.parent;
-  if (
-    contentNode.type.name !== "paragraph" &&
-    contentNode.type.name !== "heading"
-  ) {
+  if (!isSplittableContent(contentNode)) {
     return false;
   }
 
@@ -109,7 +112,8 @@ function splitAtCaret(tr: Transaction): boolean {
   // 복사가 아니라 빈 paragraph다 — dev(StarterKit splitBlock +
   // defaultBlockAt)가 그랬다. heading 끝 Enter가 같은 level의 heading을
   // 복제하지 않고 본문 문단을 여는 흐름의 복원이다. 중간·시작 split은
-  // 기존대로 원본 타입·attrs를 복사한다.
+  // 기존대로 원본 타입·attrs를 복사한다. quote도 같은 규칙이다 — 끝 Enter는
+  // 인용을 닫고 문단을 열며, 중간 Enter는 앞뒤 모두 quote로 남는다.
   const newContentNode =
     afterContent.size === 0
       ? contentNode.type.schema.nodes.paragraph!.create()

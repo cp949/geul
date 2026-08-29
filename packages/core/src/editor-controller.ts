@@ -3,6 +3,7 @@ import {
   type Block,
   type Document as BlockDocument,
   createRandomDocumentId,
+  type HeadingBlock,
   type IdFactory,
   isSupportedLinkHref,
   parseDocument,
@@ -12,7 +13,11 @@ import {
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
-import { type EditorState, TextSelection } from "@tiptap/pm/state";
+import {
+  type EditorState,
+  NodeSelection,
+  TextSelection,
+} from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 import StarterKit from "@tiptap/starter-kit";
 
@@ -24,12 +29,18 @@ import { BlockIdExtension } from "./block-id-extension.js";
 import { findBlockPosition } from "./block-position.js";
 import { BlockJoinExtension } from "./block-join-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
+import {
+  type DividerCommandError,
+  insertDivider as insertDividerCommand,
+} from "./divider-commands.js";
+import { DividerExtension } from "./divider-extension.js";
 import type { EditorError } from "./errors.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import { PlaceholderExtension } from "./placeholder-extension.js";
+import { QuoteExtension } from "./quote-extension.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import {
@@ -121,6 +132,10 @@ export interface EditorController {
       size: { rows: number; columns: number },
       options?: { clearAfterBlockText?: boolean },
     ): Result<{ blockId: string }, EditorError>;
+    insertDivider(
+      afterBlockId: string,
+      options?: { clearAfterBlockText?: boolean },
+    ): Result<{ blockId: string }, EditorError>;
     insertTableRow(
       tableBlockId: string,
       atIndex: number,
@@ -179,8 +194,14 @@ export interface EditorController {
   };
 }
 
+// spec §4.1 — heading level 1-6. 모델 HeadingBlock.level 범위를 그대로 파생해
+// 두 곳에 리터럴을 복제하지 않는다. 공개 export가 아닌 module-local 별칭이다.
+type HeadingLevel = HeadingBlock["level"];
+
 export type BlockTypeDescriptor =
-  { type: "paragraph" } | { type: "heading"; level: 1 | 2 | 3 };
+  | { type: "paragraph" }
+  | { type: "heading"; level: HeadingLevel }
+  | { type: "quote" };
 
 // CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
 // 나열한다. 병합 가능 여부는 cellIds.length > 1로 호출부가 직접 파생한다.
@@ -284,12 +305,15 @@ const HeadingExtension = Node.create({
     };
   },
   parseHTML() {
-    return [1, 2, 3].map((level) => ({ tag: `h${level}`, attrs: { level } }));
+    return [1, 2, 3, 4, 5, 6].map((level) => ({
+      tag: `h${level}`,
+      attrs: { level },
+    }));
   },
   renderHTML({ node, HTMLAttributes }) {
-    const level = [1, 2, 3].includes(node.attrs.level as number)
-      ? (node.attrs.level as number)
-      : 1;
+    // level attr을 그대로 태그에 쓴다 — 범위 검증은 변환기(tiptapToModel)가
+    // 소유하므로 여기서 폴백하면 level 4-6 문서가 h1로 잘못 렌더된다.
+    const level = node.attrs.level as HeadingLevel;
     return [`h${level}`, mergeAttributes(HTMLAttributes), 0];
   },
 });
@@ -302,10 +326,10 @@ const commandNotApplicable = (command: string): Result<never, EditorError> => ({
 // blockId로 찾은 노드가 편집 대상 콘텐츠 그 자체인지, 아니면 그 콘텐츠를
 // 감싼 컨테이너인지 이원화해 실제로 텍스트/타입을 다루는 노드를 반환한다
 // (D19). blockContainer는 identity(blockId)만 소유하고 텍스트·타입은 항상
-// 그 첫 자식(blockContent — paragraph/heading)에 있다. table은 컨테이너로
-// 감싸이지 않으므로(D19) 매치된 노드 자신이 곧 대상이다 — setText/
-// setBlockType은 이후 textblock/paragraph·heading 검사로 표를 자연히
-// 걸러낸다.
+// 그 첫 자식(blockContent — paragraph/heading/quote)에 있다. table은
+// 컨테이너로 감싸이지 않으므로(D19) 매치된 노드 자신이 곧 대상이다 —
+// setText/setBlockType은 이후 textblock/paragraph·heading·quote 검사로
+// 표를 자연히 걸러낸다.
 const findEditableBlockContent = (
   document: ProseMirrorNode,
   blockId: string,
@@ -375,7 +399,7 @@ const nearestBlockContainerId = (position: ResolvedPos): string | null => {
 };
 
 // getSelectionBlockType 전용: [from, to] 범위를 완전히 포함하는 가장 깊은
-// blockContainer(그 첫 자식이 paragraph/heading인 경우만)를 재귀로 찾는다.
+// blockContainer(그 첫 자식이 paragraph/heading/quote인 경우만)를 재귀로 찾는다.
 // blockGroup?이 없는 컨테이너는 자신의 nodeSize 전체(닫는 태그 포함)까지
 // 상한으로 받아들인다 — collapsed 캐럿뿐 아니라 AllSelection(전체 선택)의
 // to가 컨테이너 자신의 닫는 경계까지 닿는 경우도 "그 블록 전체 선택"으로
@@ -411,19 +435,21 @@ const findSelectionBlock = (
     const hasGroupChild = child.childCount > 1;
 
     if (to <= (hasGroupChild ? contentEnd : childEnd)) {
+      const typeName = blockContent.type.name;
       if (
-        blockContent.type.name === "paragraph" ||
-        blockContent.type.name === "heading"
+        typeName === "paragraph" ||
+        typeName === "heading" ||
+        typeName === "quote"
       ) {
         result = {
           blockId,
           blockType:
-            blockContent.type.name === "heading"
+            typeName === "heading"
               ? {
                   type: "heading",
-                  level: blockContent.attrs.level as 1 | 2 | 3,
+                  level: blockContent.attrs.level as HeadingLevel,
                 }
-              : { type: "paragraph" },
+              : { type: typeName },
         };
       }
       return;
@@ -637,6 +663,7 @@ export const createEditor = (
         }),
         ParagraphExtension,
         HeadingExtension,
+        QuoteExtension,
         BlockContainerExtension,
         BlockGroupExtension,
         BlockIdExtension.configure({ createId }),
@@ -645,6 +672,7 @@ export const createEditor = (
         TableExtension,
         TableRowExtension,
         TableCellExtension,
+        DividerExtension,
         TableKeyboardNavigationExtension.configure({ createId }),
         IndentKeyboardExtension,
         PlaceholderExtension,
@@ -824,31 +852,34 @@ export const createEditor = (
         : null;
     const currentContentSize = target.node.content.size;
 
-    // 표 블록은 paragraph/heading으로 변환할 수 없다 — 셀 콘텐츠가
-    // 인라인 스키마에 맞지 않아 변환 시도 자체가 예외를 던진다.
-    if (currentTypeName !== "paragraph" && currentTypeName !== "heading") {
+    // 표 블록은 paragraph/heading/quote로 변환할 수 없다 — 셀 콘텐츠가
+    // 인라인 스키마에 맞지 않아 변환 시도 자체가 예외를 던진다. quote는
+    // paragraph와 같은 inline* 콘텐츠라(spec §4.2 — quote는 Turn into
+    // 대상, divider는 제외) 상호 변환 대상이다.
+    if (
+      currentTypeName !== "paragraph" &&
+      currentTypeName !== "heading" &&
+      currentTypeName !== "quote"
+    ) {
       return commandNotApplicable("setBlockType");
     }
 
     const clearContent = options?.clearContent ?? false;
     const isSameType =
-      blockType.type === "paragraph"
-        ? currentTypeName === "paragraph"
-        : currentTypeName === "heading" && currentLevel === blockType.level;
+      blockType.type === "heading"
+        ? currentTypeName === "heading" && currentLevel === blockType.level
+        : currentTypeName === blockType.type;
     if (isSameType && (!clearContent || currentContentSize === 0)) {
       return commandNotApplicable("setBlockType");
     }
 
     return runDocumentCommand("setBlockType", "local", () => {
-      const nodeType =
-        blockType.type === "paragraph"
-          ? tiptapEditor.schema.nodes.paragraph
-          : tiptapEditor.schema.nodes.heading;
+      const nodeType = tiptapEditor.schema.nodes[blockType.type];
       if (nodeType === undefined) return false;
       // blockId는 더 이상 이 노드의 attrs가 아니다(D19) — 컨테이너가
       // identity를 소유해 여기서 건드릴 필요도, 경로도 없다.
       const attrs =
-        blockType.type === "paragraph" ? {} : { level: blockType.level };
+        blockType.type === "heading" ? { level: blockType.level } : {};
 
       let transaction = tiptapEditor.state.tr;
       if (clearContent && currentContentSize > 0) {
@@ -978,16 +1009,31 @@ export const createEditor = (
         insertPosition,
         duplicateNode,
       );
-      // 복제본은 항상 자식 없는 blockContainer(위 hasChildren/table 가드)라
-      // 유일한 자식이 blockContent다. 텍스트 끝은 컨테이너 닫힘(-1)이 아니라
-      // 그 안쪽 blockContent 닫힘 직전(-2)이다 — D19 이전 flat 스키마의 -1
-      // 산술을 그대로 두면 캐럿이 비-textblock 경계에 놓인다.
-      transaction.setSelection(
-        TextSelection.create(
-          transaction.doc,
-          insertPosition + duplicateNode.nodeSize - 2,
-        ),
-      );
+      if (duplicateNode.type.name === "blockContainer") {
+        // 복제본은 자식 없는 blockContainer(위 hasChildren/table 가드)라
+        // 유일한 자식이 blockContent다. 텍스트 끝은 컨테이너 닫힘(-1)이 아니라
+        // 그 안쪽 blockContent 닫힘 직전(-2)이다 — D19 이전 flat 스키마의 -1
+        // 산술을 그대로 두면 캐럿이 비-textblock 경계에 놓인다. -2 산술은
+        // blockContainer 전제이므로 그 전제 자체로 게이트한다.
+        transaction.setSelection(
+          TextSelection.create(
+            transaction.doc,
+            insertPosition + duplicateNode.nodeSize - 2,
+          ),
+        );
+      } else {
+        // 복제본이 divider 같은 비포장 블록이면(위 hasChildren/table 가드
+        // 통과 후 남는 유일한 비-blockContainer 경우) 안쪽에 캐럿을 둘
+        // textblock이 없다 — 위 -2 산술을 적용하면 블록 사이 위치를 가리킨다
+        // (트랙-4 발견). 이런 블록의 복제는 blockId 재발급만으로 안전하고
+        // (자식·행·셀 id가 없어 표 복제 거절의 근거인 id 중복 위험이 없다),
+        // NodeSelection은 atom이든 아니든 모든 블록 노드에 유효하다 —
+        // 표 전례를 따라 거절하는 대신 복제본 자신을 NodeSelection으로
+        // 선택한다.
+        transaction.setSelection(
+          NodeSelection.create(transaction.doc, insertPosition),
+        );
+      }
       tiptapEditor.view.dispatch(closeHistory(transaction));
       return true;
     });
@@ -1248,6 +1294,61 @@ export const createEditor = (
     return { ok: true, value: value as T };
   };
 
+  // divider 삽입 명령(divider-commands.ts)의 Result를 runDocumentCommand의
+  // boolean 위에서 꺼내는 래퍼. runTableCommand를 재사용하지 않는다 — 그
+  // 실행기는 TableCommandError 전체(격자 오류 detail 추출·tableErrorFromCode
+  // 분기)를 전제하는데 divider 명령의 오류는 BLOCK_NOT_FOUND·
+  // TRANSACTION_REJECTED 둘뿐이라 표 의미를 빌릴 이유가 없다.
+  //
+  // G-EDT-001 회피 규칙: 클로저 밖으로 나오는 값은 mutate만 하는 const 홀더
+  // 객체(captured)에 담는다 — runTableCommand의 errorDetail과 같은 형태다.
+  // `let x: T | null = null` 원시 캡처는 TS가 클로저 안 대입을 보지 못해
+  // 초기 리터럴 null로 좁히고, `x !== null` 블록 안에서 x가 never가 된다 —
+  // 비교식이 통과하는 건 never가 모든 타입과 comparable이기 때문이지 좁히기가
+  // 옳아서가 아니다(속성 접근·switch로 바꾸면 깨진다). 홀더 객체의 속성은
+  // 초기 리터럴로 좁혀지지 않아 클로저 대입 뒤에도 정상 narrowing이다.
+  // BLOCK_NOT_FOUND의 blockId는 명령이 조회하는 유일한 블록인 afterBlockId
+  // 그 자체라 따로 캡처하지 않는다.
+  const insertDivider = (
+    afterBlockId: string,
+    options?: { clearAfterBlockText?: boolean },
+  ): Result<{ blockId: string }, EditorError> => {
+    if (destroyed) return commandNotApplicable("insertDivider");
+    const captured: {
+      code: DividerCommandError["code"] | null;
+      blockId: string | null;
+    } = { code: null, blockId: null };
+
+    const result = runDocumentCommand("insertDivider", "local", () => {
+      const outcome = insertDividerCommand(
+        tiptapEditor,
+        afterBlockId,
+        createId,
+        options,
+      );
+      if (!outcome.ok) {
+        captured.code = outcome.error.code;
+        return false;
+      }
+      captured.blockId = outcome.value.blockId;
+      return true;
+    });
+
+    if (captured.code !== null) {
+      return captured.code === "BLOCK_NOT_FOUND"
+        ? {
+            ok: false,
+            error: { code: "BLOCK_NOT_FOUND", blockId: afterBlockId },
+          }
+        : { ok: false, error: { code: "TRANSACTION_REJECTED" } };
+    }
+    if (!result.ok) return result;
+    if (captured.blockId === null) {
+      return commandNotApplicable("insertDivider");
+    }
+    return { ok: true, value: { blockId: captured.blockId } };
+  };
+
   return {
     mount(element) {
       if (destroyed) return;
@@ -1286,18 +1387,23 @@ export const createEditor = (
       if (!selection.empty) return null;
 
       const node = selection.$from.parent;
-      if (node.type.name !== "paragraph" && node.type.name !== "heading") {
+      const typeName = node.type.name;
+      if (
+        typeName !== "paragraph" &&
+        typeName !== "heading" &&
+        typeName !== "quote"
+      ) {
         return null;
       }
-      // blockId는 더 이상 이 노드(paragraph/heading) 자신의 attrs가
+      // blockId는 더 이상 이 노드(paragraph/heading/quote) 자신의 attrs가
       // 아니다(D19) — 가장 가까운 blockContainer 조상이 소유한다.
       const blockId = nearestBlockContainerId(selection.$from);
       if (blockId === null) return null;
 
       const blockType: BlockTypeDescriptor =
-        node.type.name === "heading"
-          ? { type: "heading", level: node.attrs.level as 1 | 2 | 3 }
-          : { type: "paragraph" };
+        typeName === "heading"
+          ? { type: "heading", level: node.attrs.level as HeadingLevel }
+          : { type: typeName };
       return { blockId, blockType, text: node.textContent };
     },
     getSelectionBlockType() {
@@ -1442,6 +1548,7 @@ export const createEditor = (
           ),
         );
       },
+      insertDivider,
       insertTableRow: (tableBlockId, atIndex) =>
         runTableCommand("insertTableRow", () =>
           insertTableRowCommand(tiptapEditor, tableBlockId, atIndex, createId),

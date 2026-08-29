@@ -5,12 +5,15 @@
  * 축만 다룬다 — 선택 삭제 후 그 캐럿 위치에서 collapsed 규칙으로 분할하고
  * (dev의 StarterKit splitBlock 의미론), 삭제와 분할이 단일 dispatch(undo
  * 1회 단위, G-EDT-001)여야 하며, 표 셀 안 범위에는 관여하지 않아야 한다.
+ * 함께 quote 블록의 Enter 분할(collapsed·범위·자식 딸린 quote)이 heading과
+ * 같은 규칙 — 중간·시작은 원본 타입 복사, 끝은 빈 paragraph — 을 따르는지
+ * 고정한다(Issue #38 슬라이스 3, DELTA-05 05-C1).
  *
  * 키 소비(반환 true)는 view.someProp("handleKeyDown", ...) 실 디스패치로
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
  * 노출되지 않는다(G-WKS-001).
  */
-import { type Document } from "@cp949/geul-model";
+import { type Block, type Document } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,9 +21,13 @@ import { BlockSplitExtension } from "../src/block-split-extension.js";
 import { createEditor } from "../src/index.js";
 import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
 import {
+  documentOf,
   mountTiptapEditor,
+  paragraphBlock,
   paragraphDocument,
+  quoteBlock,
   sequentialIds,
+  tailParagraphBlock,
 } from "./editor-controller-support.js";
 import { cellJson, createTableFixtureEditor } from "./table-test-support.js";
 
@@ -289,5 +296,163 @@ describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한�
       return true;
     });
     expect(containerCount).toBe(0);
+  });
+});
+
+/**
+ * quote 블록 하나 뒤에 tailParagraphBlock을 둔 문서를 마운트한다. 새 블록
+ * id는 "id-1"부터 순차 배정된다.
+ */
+const mountQuoteDocument = (quoteText: string, quoteChildren?: Block[]) => {
+  const editor = createEditor({
+    initialDocument: documentOf(
+      quoteBlock("q-1", quoteText, quoteChildren),
+      tailParagraphBlock,
+    ),
+    createId: sequentialIds("id"),
+  });
+  return { editor, ...mountTiptapEditor(editor) };
+};
+
+describe("quote 블록의 Enter 분할", () => {
+  it("quote 콘텐츠 중간 캐럿 Enter가 heading과 같은 규칙으로 [앞 quote], [뒤 quote] 두 블록으로 분할되고 undo 1회로 복원된다", () => {
+    const { editor, tiptap } = mountQuoteDocument("ABCDEF");
+    const beforeJson = tiptap.state.doc.toJSON();
+    const beforeDocument = editor.getDocument();
+
+    // "ABC|DEF"
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "q-1") + 3);
+    const handled = dispatchKeydown(tiptap, "Enter");
+
+    expect(handled).toBe(true);
+    expect(() =>
+      tiptap.schema.nodeFromJSON(tiptap.state.doc.toJSON()).check(),
+    ).not.toThrow();
+
+    // 중간 split은 원본 타입·attrs 복사 — 뒤 블록도 quote다(heading 규칙
+    // 준용). 자식 없는 블록이라 새 블록은 형제로 들어간다(D24).
+    expect(editor.getDocument().blocks).toEqual([
+      quoteBlock("q-1", "ABC"),
+      quoteBlock("id-1", "DEF"),
+      tailParagraphBlock,
+    ]);
+    const created = tiptap.state.doc.child(1);
+    expect(created.firstChild?.type.name).toBe("quote");
+
+    // 캐럿은 뒤 quote 텍스트 시작에 있다.
+    const { selection } = tiptap.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent).toBe(created.firstChild);
+    expect(selection.$from.parentOffset).toBe(0);
+
+    // 분할 전체가 단일 dispatch(undo 1회 단위)다(G-EDT-001).
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+    expect(editor.getDocument().blocks).toEqual(beforeDocument.blocks);
+  });
+
+  it("quote 끝 캐럿 Enter는 빈 paragraph를 형제로 열고 quote를 복제하지 않는다", () => {
+    const { editor, tiptap } = mountQuoteDocument("ABCDEF");
+    const beforeJson = tiptap.state.doc.toJSON();
+
+    // "ABCDEF|"
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "q-1") + 6);
+    const handled = dispatchKeydown(tiptap, "Enter");
+
+    expect(handled).toBe(true);
+    expect(() =>
+      tiptap.schema.nodeFromJSON(tiptap.state.doc.toJSON()).check(),
+    ).not.toThrow();
+
+    // 블록 끝 split의 새 콘텐츠 노드는 빈 paragraph다 — heading 끝 Enter가
+    // 같은 level heading을 복제하지 않는 규칙(block-split-extension.ts)과
+    // 같다.
+    expect(editor.getDocument().blocks).toEqual([
+      quoteBlock("q-1", "ABCDEF"),
+      paragraphBlock("id-1", ""),
+      tailParagraphBlock,
+    ]);
+    const created = tiptap.state.doc.child(1);
+    expect(created.firstChild?.type.name).toBe("paragraph");
+
+    const { selection } = tiptap.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent).toBe(created.firstChild);
+    expect(selection.$from.parentOffset).toBe(0);
+
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+  });
+
+  it("quote 안 범위 선택 Enter가 선택을 지운 위치에서 분할한다", () => {
+    const { editor, tiptap } = mountQuoteDocument("ABCDEF");
+    const beforeJson = tiptap.state.doc.toJSON();
+
+    // "AB|CD|EF"
+    const textStart = contentTextStart(tiptap, "q-1");
+    tiptap.commands.setTextSelection({
+      from: textStart + 2,
+      to: textStart + 4,
+    });
+    const handled = dispatchKeydown(tiptap, "Enter");
+
+    expect(handled).toBe(true);
+    expect(() =>
+      tiptap.schema.nodeFromJSON(tiptap.state.doc.toJSON()).check(),
+    ).not.toThrow();
+
+    // 선택 "CD"가 지워지고 남은 캐럿 "AB|EF"에서 중간 규칙(원본 타입
+    // 복사)으로 분할된다.
+    expect(editor.getDocument().blocks).toEqual([
+      quoteBlock("q-1", "AB"),
+      quoteBlock("id-1", "EF"),
+      tailParagraphBlock,
+    ]);
+
+    const { selection } = tiptap.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent).toBe(tiptap.state.doc.child(1).firstChild);
+    expect(selection.$from.parentOffset).toBe(0);
+
+    // 삭제+분할이 undo 1회로 통째로 복원된다.
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+  });
+
+  it("자식 딸린 quote 끝 Enter가 새 블록을 첫 자식으로 넣고 자식 귀속이 불변이다", () => {
+    const { editor, tiptap } = mountQuoteDocument("ABC", [
+      paragraphBlock("c-1", "child"),
+    ]);
+    const beforeJson = tiptap.state.doc.toJSON();
+
+    // "ABC|" — 끝 split이라 새 콘텐츠 노드는 빈 paragraph이고, 자식이
+    // 있으므로 형제가 아니라 원본의 첫 자식으로 들어간다(D23).
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "q-1") + 3);
+    const handled = dispatchKeydown(tiptap, "Enter");
+
+    expect(handled).toBe(true);
+    expect(() =>
+      tiptap.schema.nodeFromJSON(tiptap.state.doc.toJSON()).check(),
+    ).not.toThrow();
+
+    expect(editor.getDocument().blocks).toEqual([
+      quoteBlock("q-1", "ABC", [
+        paragraphBlock("id-1", ""),
+        paragraphBlock("c-1", "child"),
+      ]),
+      tailParagraphBlock,
+    ]);
+
+    // 캐럿은 새 첫 자식 텍스트 시작에 있다.
+    const group = tiptap.state.doc.child(0).child(1);
+    expect(group.type.name).toBe("blockGroup");
+    const created = group.child(0);
+    const { selection } = tiptap.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent).toBe(created.firstChild);
+    expect(selection.$from.parentOffset).toBe(0);
+
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
   });
 });

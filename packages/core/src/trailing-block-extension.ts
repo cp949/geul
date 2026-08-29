@@ -3,10 +3,12 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, type Transaction } from "@tiptap/pm/state";
 
 // 마지막 최상위 블록이 "자식 없는 paragraph"인가(UI-010 판정 기준, R-6).
-// doc 직하 자식은 blockContainer(content "blockContent blockGroup?") 또는
-// table뿐이라(block-container-extension.ts), childCount 1 = blockGroup
-// 없음이고 첫 자식 타입이 paragraph/heading을 가른다. table은 컨테이너로
-// 감싸이지 않아(D19) 첫 분기에서 걸러진다.
+// doc 직하 자식은 blockContainer(content "blockContent blockGroup?")·
+// table·divider(비포장 atom)뿐이라(block-container-extension.ts,
+// divider-extension.ts), childCount 1 = blockGroup 없음이고 첫 자식 타입이
+// paragraph/heading/quote를 가른다. table·divider는 컨테이너로 감싸이지
+// 않아(D19) 첫 분기에서 걸러진다 — divider로 끝나는 문서에도 trailing
+// paragraph가 붙는다.
 const endsWithChildlessParagraph = (doc: ProseMirrorNode): boolean => {
   const lastBlock = doc.lastChild;
   return (

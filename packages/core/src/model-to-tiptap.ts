@@ -7,6 +7,7 @@ import {
   isSupportedLinkHref,
   isValidInlineText,
   type ParagraphBlock,
+  type QuoteBlock,
   type Result,
   type TableBlock,
   type TextMark,
@@ -83,14 +84,8 @@ const validateEditableContent = (
   blocks: readonly Block[],
 ): Result<void, EditorError> => {
   for (const block of blocks) {
-    // 임시 계약: quote·divider는 아직 PM 노드가 없다(DELTA-03 이전).
-    // 스키마에 노드가 없다는 사실만 거절할 뿐 새 검증 규칙이 아니다
-    // (G-CNV-001). DELTA-04가 실제 변환으로 이 분기를 교체한다.
-    if (block.type === "quote" || block.type === "divider") {
-      return invalid(
-        `Block ${block.id} has unsupported type "${block.type}" (no editor node yet)`,
-      );
-    }
+    // divider는 content·children이 없어 검사 대상이 없다(DividerBlock 리프).
+    if (block.type === "divider") continue;
 
     if (block.type === "table") {
       for (const row of block.rows) {
@@ -187,32 +182,28 @@ export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {
   };
 };
 
-// 문단·헤딩 노드 자체(컨테이너 내부의 blockContent) 인코딩. blockId는 더
-// 이상 여기 붙지 않는다 — D19가 identity를 blockContainer로 옮겼다.
+// 문단·헤딩·인용 노드 자체(컨테이너 내부의 blockContent) 인코딩. blockId는
+// 더 이상 여기 붙지 않는다 — D19가 identity를 blockContainer로 옮겼다.
 const blockContentToTiptapJson = (
-  block: ParagraphBlock | HeadingBlock,
+  block: ParagraphBlock | HeadingBlock | QuoteBlock,
 ): TiptapJsonNode => ({
   type: block.type,
   ...(block.type === "heading" ? { attrs: { level: block.level } } : {}),
   content: inlineContentToTiptap(block.content),
 });
 
-// Block 1개를 재귀로 PM JSON 노드로 인코딩한다(D19). table은 컨테이너로
-// 감싸지 않고 tableBlockToTiptapJson 결과를 그대로 직결한다 — table은
-// children을 가질 수 없어(model 계층, DELTA-01) 재귀 종료 조건이기도 하다.
-// paragraph/heading은 blockContainer(blockContent, blockGroup?(children…))로
-// 감싼다 — blockGroup은 children이 있을 때만 만든다(빈 배열/undefined 둘
-// 다 "자식 없음"으로 접는다).
+// Block 1개를 재귀로 PM JSON 노드로 인코딩한다(D19). table·divider는
+// 컨테이너로 감싸지 않는다 — table은 tableBlockToTiptapJson 결과를 그대로
+// 직결하고, divider는 table처럼 컨테이너 없이 직결하고 id를 명시
+// 배정한다(parseDOM 없음과 짝 — 변환기·명령이 명시 배정). 둘 다 children을
+// 가질 수 없어(model 계층, DELTA-01) 재귀 종료 조건이기도 하다.
+// paragraph/heading/quote는 blockContainer(blockContent, blockGroup?(
+// children…))로 감싼다 — blockGroup은 children이 있을 때만 만든다(빈
+// 배열/undefined 둘 다 "자식 없음"으로 접는다).
 const blockToTiptapJson = (block: Block): TiptapJsonNode => {
   if (block.type === "table") return tableBlockToTiptapJson(block);
-
-  // 도달 불가 방어: validateEditableContent가 quote·divider를 이미
-  // 거절하므로(위) 정상 경로는 여기 닿지 않는다. DELTA-04가 실제 매핑을
-  // 추가하면 이 분기를 지운다.
-  if (block.type === "quote" || block.type === "divider") {
-    throw new Error(
-      `Unreachable: block ${block.id} type "${block.type}" is rejected before encoding`,
-    );
+  if (block.type === "divider") {
+    return { type: "divider", attrs: { blockId: block.id } };
   }
 
   const content: TiptapJsonNode[] = [blockContentToTiptapJson(block)];

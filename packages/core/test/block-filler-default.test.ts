@@ -5,7 +5,9 @@
  * 같은 채움 경로가 blockId/rowId 없는 손상된 표를 만들어 model 변환이
  * TypeError로 죽고 편집기가 영구 desync된다(트랙-6 발견). 이 파일은 그
  * 경쟁의 승자와, 실제 keymap 경로(Ctrl+A → Backspace)의 사용자 관찰 결과를
- * 프로덕션 스키마에서 직접 고정한다.
+ * 프로덕션 스키마에서 직접 고정한다. blockContainer의 content(그룹
+ * blockContent — paragraph·heading·quote)에서도 같은 경쟁이 있어 채움
+ * 기본 노드가 paragraph임을 함께 고정한다.
  */
 import { parseDocument, type Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -41,7 +43,7 @@ const dispatchKeydown = (
   );
 };
 
-describe("그룹 block 채움 기본 노드 경쟁", () => {
+describe("그룹 block·blockContent 채움 기본 노드 경쟁", () => {
   it("프로덕션 스키마에서 doc과 blockGroup의 채움 기본 노드는 blockContainer다", () => {
     const editor = createEditor({ initialDocument: twoParagraphDocument() });
     const { tiptap } = mountTiptapEditor(editor);
@@ -50,6 +52,18 @@ describe("그룹 block 채움 기본 노드 경쟁", () => {
     expect(nodes.doc?.contentMatch.defaultType?.name).toBe("blockContainer");
     expect(nodes.blockGroup?.contentMatch.defaultType?.name).toBe(
       "blockContainer",
+    );
+    expect(nodes.divider).toBeDefined();
+  });
+
+  it("프로덕션 스키마에서 blockContainer의 채움 기본 노드는 paragraph다", () => {
+    const editor = createEditor({ initialDocument: twoParagraphDocument() });
+    const { tiptap } = mountTiptapEditor(editor);
+    const { nodes } = tiptap.schema;
+
+    expect(nodes.quote).toBeDefined();
+    expect(nodes.blockContainer?.contentMatch.defaultType?.name).toBe(
+      "paragraph",
     );
   });
 
@@ -69,11 +83,14 @@ describe("그룹 block 채움 기본 노드 경쟁", () => {
     expect(saved.blocks[0]?.id).toBeTruthy();
 
     let tableCount = 0;
+    let dividerCount = 0;
     tiptap.state.doc.descendants((node) => {
       if (node.type.name === "table") tableCount += 1;
+      if (node.type.name === "divider") dividerCount += 1;
       return true;
     });
     expect(tableCount).toBe(0);
+    expect(dividerCount).toBe(0);
 
     // 저장→재로드 round-trip이 스키마 검증을 통과한다(초안 07 완료 조건).
     // replaceDocument는 동일 내용 문서를 no-op으로 거절하므로 model 검증을

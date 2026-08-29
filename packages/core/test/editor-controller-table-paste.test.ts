@@ -24,41 +24,7 @@ import {
   placeCaretInCell,
   selectCellRange,
 } from "./table-test-support.js";
-
-// jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
-// (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
-// 검증하려면 TablePasteExtension이 실제로 사용하는 표면(getData)만 최소로
-// 폴리필한다. 이후 jsdom이 네이티브로 지원하게 되면 이 블록은 자동으로
-// 건너뛴다.
-if (typeof globalThis.DataTransfer === "undefined") {
-  class JsdomDataTransfer {
-    private readonly store = new Map<string, string>();
-
-    setData(format: string, data: string): void {
-      this.store.set(format, data);
-    }
-
-    getData(format: string): string {
-      return this.store.get(format) ?? "";
-    }
-  }
-
-  globalThis.DataTransfer = JsdomDataTransfer as unknown as typeof DataTransfer;
-}
-
-if (typeof globalThis.ClipboardEvent === "undefined") {
-  class JsdomClipboardEvent extends Event {
-    readonly clipboardData: DataTransfer | null;
-
-    constructor(type: string, eventInit?: ClipboardEventInit) {
-      super(type, eventInit);
-      this.clipboardData = eventInit?.clipboardData ?? null;
-    }
-  }
-
-  globalThis.ClipboardEvent =
-    JsdomClipboardEvent as unknown as typeof ClipboardEvent;
-}
+import { pasteData } from "./clipboard-test-support.js";
 
 describe("에디터 컨트롤러 표", () => {
   it("마운트된 표는 colgroup col로 모델 열 너비를 렌더하고 리사이즈를 반영한다", () => {
@@ -97,18 +63,9 @@ describe("에디터 컨트롤러 표", () => {
     const { editable } = mountTiptapEditor(editor);
     editable.focus();
 
-    const data = new DataTransfer();
-    data.setData(
-      "text/html",
-      "<table><tbody><tr><td>ext</td></tr></tbody></table>",
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html": "<table><tbody><tr><td>ext</td></tr></tbody></table>",
+    });
 
     const document = editor.getDocument();
     expect(document.blocks.some((block) => block.type === "table")).toBe(true);
@@ -130,18 +87,10 @@ describe("에디터 컨트롤러 표", () => {
     const { editable } = mountTiptapEditor(editor);
     editable.focus();
 
-    const data = new DataTransfer();
-    data.setData(
-      "text/html",
-      "<p>intro</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table><p>outro</p>",
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html":
+        "<p>intro</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table><p>outro</p>",
+    });
 
     const document = editor.getDocument();
     const introIndex = document.blocks.findIndex(
@@ -180,20 +129,12 @@ describe("에디터 컨트롤러 표", () => {
     const { editable } = mountTiptapEditor(editor);
     editable.focus();
 
-    const data = new DataTransfer();
-    data.setData(
-      "text/html",
-      '<div data-pm-slice="1 1 []"><p>intro</p>' +
+    pasteData(editable, {
+      "text/html":
+        '<div data-pm-slice="1 1 []"><p>intro</p>' +
         "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" +
         "<p>outro</p></div>",
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    });
 
     const document = editor.getDocument();
     expect(document.blocks.some((block) => block.type === "table")).toBe(true);
@@ -227,18 +168,10 @@ describe("에디터 컨트롤러 표", () => {
     if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
     placeCaretInCell(tiptap, topLeft);
 
-    const data = new DataTransfer();
-    data.setData(
-      "text/html",
-      "<p>intro</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table><p>outro</p>",
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html":
+        "<p>intro</p><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table><p>outro</p>",
+    });
 
     const document = editor.getDocument();
     const table = firstTableBlockIn(document);
@@ -270,18 +203,10 @@ describe("에디터 컨트롤러 표", () => {
     const { editable } = mountTiptapEditor(editor);
     editable.focus();
 
-    const data = new DataTransfer();
-    data.setData(
-      "text/html",
-      "<table>\n\t<tbody>\n\t\t<tr>\n\t\t\t<td>Alice\tSmith</td>\n\t\t</tr>\n\t</tbody>\n</table>",
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html":
+        "<table>\n\t<tbody>\n\t\t<tr>\n\t\t\t<td>Alice\tSmith</td>\n\t\t</tr>\n\t</tbody>\n</table>",
+    });
 
     const document = editor.getDocument();
     const table = firstTableBlockIn(document);
@@ -310,31 +235,16 @@ describe("에디터 컨트롤러 표", () => {
     const rows = Array.from({ length: 101 }, () => `<tr>${cells}</tr>`).join(
       "",
     );
-    const htmlData = new DataTransfer();
-    htmlData.setData("text/html", `<table><tbody>${rows}</tbody></table>`);
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: htmlData,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html": `<table><tbody>${rows}</tbody></table>`,
+    });
 
     expect(editor.getDocument().blocks).toEqual(before.blocks);
 
     const tsvLine = Array.from({ length: 101 }, () => "x").join("\t");
-    const tsvData = new DataTransfer();
-    tsvData.setData(
-      "text/plain",
-      Array.from({ length: 101 }, () => tsvLine).join("\n"),
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: tsvData,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/plain": Array.from({ length: 101 }, () => tsvLine).join("\n"),
+    });
 
     expect(editor.getDocument().blocks).toEqual(before.blocks);
 
@@ -385,15 +295,7 @@ describe("에디터 컨트롤러 표", () => {
     const { editor, editable, tiptap } = editorWithMergedCellCaret();
     const before = editorState(editor, tiptap);
 
-    const data = new DataTransfer();
-    data.setData("text/plain", "x\ty");
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, { "text/plain": "x\ty" });
 
     // 파싱은 성공했으므로 명령이 PASTE_MERGE_CONFLICT로 거절해도 이벤트는
     // 소비된다. 기본 붙여넣기로 폴백하면 preserveWhitespace 파싱이 탭을 그대로
@@ -416,18 +318,10 @@ describe("에디터 컨트롤러 표", () => {
     const { editor, editable, tiptap } = editorWithMergedCellCaret();
     const before = editorState(editor, tiptap);
 
-    const data = new DataTransfer();
-    data.setData(
-      "text/html",
-      "<table><tbody><tr><td>x</td><td>y</td></tr></tbody></table>",
-    );
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html":
+        "<table><tbody><tr><td>x</td><td>y</td></tr></tbody></table>",
+    });
 
     // HTML 경로는 desync까지 가지는 않지만 기본 붙여넣기로 폴백하면 표
     // 구조가 소실된 채 텍스트만 들어간다 — 역시 "전체 거부" 계약 위반이다.
@@ -618,15 +512,9 @@ describe("에디터 컨트롤러 표", () => {
     const rows = Array.from({ length: 101 }, () => `<tr>${cells}</tr>`).join(
       "",
     );
-    const data = new DataTransfer();
-    data.setData("text/html", `<table><tbody>${rows}</tbody></table>`);
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, {
+      "text/html": `<table><tbody>${rows}</tbody></table>`,
+    });
 
     expect(rejections).toHaveLength(1);
     expect(rejections[0]).toMatchObject({ code: "CLIPBOARD_TABLE_INVALID" });
@@ -640,15 +528,7 @@ describe("에디터 컨트롤러 표", () => {
       onPasteRejected: (reason) => rejections.push(reason),
     });
 
-    const data = new DataTransfer();
-    data.setData("text/plain", "x\ty");
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, { "text/plain": "x\ty" });
 
     expect(rejections).toEqual([{ code: "PASTE_MERGE_CONFLICT" }]);
 
@@ -669,15 +549,7 @@ describe("에디터 컨트롤러 표", () => {
     // NOT_TABULAR를 반환해 기본 붙여넣기로 폴백한다(spec 9.3). 이 경로는
     // "거절"이 아니라 애초에 표 붙여넣기 대상이 아니었던 경우라 콜백
     // 대상이 아니다.
-    const data = new DataTransfer();
-    data.setData("text/plain", "hello world");
-    editable.dispatchEvent(
-      new ClipboardEvent("paste", {
-        clipboardData: data,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+    pasteData(editable, { "text/plain": "hello world" });
 
     expect(rejections).toEqual([]);
 

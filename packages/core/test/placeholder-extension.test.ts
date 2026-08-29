@@ -1,9 +1,9 @@
 /**
  * 빈 블록 placeholder 데코레이션(UI-009, spec §6.4)을 검증한다.
  * 빈 paragraph는 캐럿(selection anchor)이 그 블록 안에 있을 때만, 빈
- * heading(레벨 1·2·3)은 캐럿 위치와 무관하게 data-placeholder 속성을 받고,
- * 표 셀 안에는 붙지 않으며, 저장 문서에는 어떤 흔적도 남기지 않는다
- * (계획 완료 조건 1~4).
+ * heading(레벨 1~6)·빈 quote는 캐럿 위치와 무관하게 data-placeholder
+ * 속성을 받고, 표 셀 안에는 붙지 않으며, 저장 문서에는 어떤 흔적도 남기지
+ * 않는다(계획 완료 조건 1~4, Issue #38 슬라이스 3 DELTA-05 05-C3).
  */
 import type { Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -11,12 +11,15 @@ import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
+  documentOf,
+  headingLevels456Document,
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
 
 const PARAGRAPH_PLACEHOLDER = "Enter text or type '/' for commands";
+const QUOTE_PLACEHOLDER = "Quote";
 
 /**
  * 빈 paragraph(p-empty)와 내용 있는 paragraph(p-filled)를 나란히 둔 문서.
@@ -45,6 +48,27 @@ const emptyHeadingsDocument = (): Document => ({
     { id: "head-3", type: "heading", level: 3, content: [] },
     { id: "p-end", type: "paragraph", content: [{ text: "end" }] },
   ],
+});
+
+/**
+ * 빈 quote 하나 뒤에 내용 있는 paragraph를 둔 문서. 캐럿을 quote 안·밖
+ * 양쪽에 두고 quote placeholder의 "상시" 조건을 관찰한다.
+ */
+const emptyQuoteDocument = (): Document =>
+  documentOf(
+    { id: "q-empty", type: "quote", content: [] },
+    { id: "p-end", type: "paragraph", content: [{ text: "end" }] },
+  );
+
+/**
+ * headingLevels456Document의 heading 셋(h4·h5·h6)을 비운 변형 — 꼬리
+ * 문단(tail)은 그대로 둬 캐럿을 heading 밖에 둘 수 있다.
+ */
+const emptyHeadings456Document = (): Document => ({
+  ...headingLevels456Document(),
+  blocks: headingLevels456Document().blocks.map((block) =>
+    block.type === "heading" ? { ...block, content: [] } : block,
+  ),
 });
 
 /**
@@ -123,5 +147,54 @@ describe("placeholder 데코레이션", () => {
     tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-empty"));
     expect(editable.querySelector("[data-placeholder]")).not.toBeNull();
     expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("빈 quote는 캐럿 위치와 무관하게 Quote placeholder가 붙고 저장 문서에 흔적이 없다", () => {
+    const editor = createEditor({ initialDocument: emptyQuoteDocument() });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    const before = editor.getDocument();
+
+    // 캐럿이 quote 밖(p-end)에 있어도 붙는다 — heading과 같은 상시 조건.
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-end"));
+    expect(
+      editable.querySelector("blockquote")?.getAttribute("data-placeholder"),
+    ).toBe(QUOTE_PLACEHOLDER);
+    // 내용 있는 p-end에는 붙지 않는다 — data-placeholder는 quote 하나뿐이다.
+    expect(editable.querySelectorAll("[data-placeholder]")).toHaveLength(1);
+
+    // 캐럿이 quote 안에 있어도 같은 문구다.
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "q-empty"));
+    expect(
+      editable.querySelector("blockquote")?.getAttribute("data-placeholder"),
+    ).toBe(QUOTE_PLACEHOLDER);
+
+    // 데코레이션일 뿐 저장 문서는 로드 그대로다.
+    expect(editor.getDocument()).toEqual(before);
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "q-empty",
+      type: "quote",
+      content: [],
+    });
+  });
+
+  it("빈 h4·h5·h6에 Heading 4/5/6 placeholder가 상시 붙는다", () => {
+    const editor = createEditor({
+      initialDocument: emptyHeadings456Document(),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "tail"));
+
+    // 문구는 `Heading ${level}` 보간이다 — level을 하드코딩하면 4~6이
+    // 어긋난다(characterization).
+    expect(editable.querySelector("h4")?.getAttribute("data-placeholder")).toBe(
+      "Heading 4",
+    );
+    expect(editable.querySelector("h5")?.getAttribute("data-placeholder")).toBe(
+      "Heading 5",
+    );
+    expect(editable.querySelector("h6")?.getAttribute("data-placeholder")).toBe(
+      "Heading 6",
+    );
+    expect(editable.querySelectorAll("[data-placeholder]")).toHaveLength(3);
   });
 });
