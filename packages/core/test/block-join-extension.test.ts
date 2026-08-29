@@ -16,6 +16,9 @@
  * NodeSelection으로 선택한다(05-C5 — 첫 키는 selection-only, 이어지는 키가
  * divider를 지우고 그 삭제가 undo 1회 단위다).
  *
+ * Issue #138이 더한 축: 표가 인접한 중첩 위치에서도 첫 키는 표 전체
+ * CellSelection만 만들고, 이어지는 키는 표만 삭제해 undo 1회로 복원한다.
+ *
  * 키 소비(반환 true)는 view.someProp("handleKeyDown", ...) 실 디스패치로
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
  * 노출되지 않는다(G-WKS-001).
@@ -357,8 +360,8 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     const handled = dispatchKeydown(tiptap, "Backspace");
 
     // dev parity: 표 뒤 블록 선두 Backspace는 표를 선택할 뿐 문서를 바꾸지
-    // 않는다(셀 병합·자식화 없음). selectNodeBackward가 세우는 표
-    // NodeSelection은 tableEditing({ allowTableNodeSelection: false },
+    // 않는다(셀 병합·자식화 없음). 직접 세운 표 NodeSelection은
+    // tableEditing({ allowTableNodeSelection: false },
     // table-extension.ts)의 normalizeSelection이 같은 dispatch 안에서 표
     // 전체 CellSelection으로 정규화한다 — 이 에디터에서 "표가 선택된"
     // 상태의 관측 가능한 형태다.
@@ -801,6 +804,142 @@ describe("divider 인접 Backspace/Delete(표 전례)", () => {
 
     expect(editor.commands.undo()).toEqual(okResult);
     expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+});
+
+/**
+ * Issue #138의 Backspace/Delete 대칭 중첩 배치를 마운트하고 표에 인접한
+ * 텍스트 경계에 캐럿을 둔다. 각 테스트는 첫 키부터 공개 상태를 관찰한다.
+ */
+const mountedBesideNestedTable = (key: "Backspace" | "Delete") => {
+  const context = mounted(
+    documentOf(
+      paragraphBlock(
+        "p-1",
+        "one",
+        key === "Backspace"
+          ? [paragraphBlock("c-1", "c"), oneCellTableBlock("t-1")]
+          : [oneCellTableBlock("t-1"), paragraphBlock("c-1", "c")],
+      ),
+      paragraphBlock("p-2", "two"),
+    ),
+  );
+  context.tiptap.commands.setTextSelection(
+    key === "Backspace"
+      ? contentTextStart(context.tiptap, "p-2")
+      : contentTextStart(context.tiptap, "p-1") + "one".length,
+  );
+  return context;
+};
+
+describe("중첩 표 인접 Backspace/Delete", () => {
+  it("앞 형제의 마지막 자식 표에 인접한 Backspace는 표 전체를 선택하고 문서·revision·히스토리를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mountedBesideNestedTable("Backspace");
+    const before = editorState(editor, tiptap);
+
+    const handled = dispatchKeydown(tiptap, "Backspace");
+
+    expect(handled).toBe(true);
+    expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
+    const selection = tiptap.state.selection as CellSelection;
+    expect(selection.$anchorCell.node(-1).attrs.blockId).toBe("t-1");
+    expect(selection.$headCell.node(-1).attrs.blockId).toBe("t-1");
+    expect(tiptap.state.doc.toJSON()).toEqual(before.tiptapDocument);
+    expect(editor.getDocument()).toEqual(before.document);
+    expect(changes).toEqual([]);
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  it("부모의 첫 자식 표에 인접한 Delete는 표 전체를 선택하고 문서·revision·히스토리를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mountedBesideNestedTable("Delete");
+    const before = editorState(editor, tiptap);
+
+    const handled = dispatchKeydown(tiptap, "Delete");
+
+    expect(handled).toBe(true);
+    expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
+    const selection = tiptap.state.selection as CellSelection;
+    expect(selection.$anchorCell.node(-1).attrs.blockId).toBe("t-1");
+    expect(selection.$headCell.node(-1).attrs.blockId).toBe("t-1");
+    expect(tiptap.state.doc.toJSON()).toEqual(before.tiptapDocument);
+    expect(editor.getDocument()).toEqual(before.document);
+    expect(changes).toEqual([]);
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  it("중첩 표 CellSelection에서 Backspace 한 번 더는 표만 삭제하고 undo 1회로 선택과 문서를 복원한다", () => {
+    const { editor, tiptap, changes } = mountedBesideNestedTable("Backspace");
+
+    dispatchKeydown(tiptap, "Backspace");
+    const beforeDelete = editorState(editor, tiptap);
+    expect(changes).toEqual([]);
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("p-1", "one", [paragraphBlock("c-1", "c")]),
+      paragraphBlock("p-2", "two"),
+    ]);
+    expect(countNodes(tiptap, "table")).toBe(0);
+    expect(countNodes(tiptap, "blockGroup")).toBe(1);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.reason).toBe("local");
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(beforeDelete, 2));
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  it("중첩 표 CellSelection에서 Delete 한 번 더는 표만 삭제하고 undo 1회로 선택과 문서를 복원한다", () => {
+    const { editor, tiptap, changes } = mountedBesideNestedTable("Delete");
+
+    dispatchKeydown(tiptap, "Delete");
+    const beforeDelete = editorState(editor, tiptap);
+    expect(changes).toEqual([]);
+
+    expect(dispatchKeydown(tiptap, "Delete")).toBe(true);
+
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("p-1", "one", [paragraphBlock("c-1", "c")]),
+      paragraphBlock("p-2", "two"),
+    ]);
+    expect(countNodes(tiptap, "table")).toBe(0);
+    expect(countNodes(tiptap, "blockGroup")).toBe(1);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]?.reason).toBe("local");
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(beforeDelete, 2));
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  it("표가 blockGroup의 유일한 자식이면 Backspace 두 번이 빈 문단을 채우지 않고 그룹까지 제거한다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(
+        paragraphBlock("p-1", "one", [oneCellTableBlock("t-1")]),
+        paragraphBlock("p-2", "two"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-2"));
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+    const beforeDelete = editorState(editor, tiptap);
+    expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
+    expect(changes).toEqual([]);
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("p-1", "one"),
+      paragraphBlock("p-2", "two"),
+    ]);
+    expect(countNodes(tiptap, "table")).toBe(0);
+    expect(countNodes(tiptap, "blockGroup")).toBe(0);
+    expect(changes).toHaveLength(1);
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(beforeDelete, 2));
     expect(editor.commands.undo()).toEqual(notApplicable("undo"));
   });
 });

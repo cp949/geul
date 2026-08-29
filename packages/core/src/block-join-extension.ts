@@ -1,5 +1,4 @@
 import { Extension, type Editor } from "@tiptap/core";
-import { selectNodeBackward, selectNodeForward } from "@tiptap/pm/commands";
 import { Fragment, type Node, type ResolvedPos } from "@tiptap/pm/model";
 import {
   NodeSelection,
@@ -7,6 +6,7 @@ import {
   TextSelection,
   type EditorState,
 } from "@tiptap/pm/state";
+import { CellSelection } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
@@ -30,6 +30,10 @@ import type { EditorView } from "@tiptap/pm/view";
 // 전례다(아래 selectAdjacentAtom).
 export const BlockJoinExtension = Extension.create({
   name: "blockJoin",
+  // 표 전체 CellSelection의 두 번째 Backspace/Delete를 tableEditing보다 먼저
+  // 처리한다. 이 일반 Extension은 스키마 노드가 아니므로 block 그룹의
+  // defaultType 등록 순서에는 영향을 주지 않는다(G-EDT-003).
+  priority: 101,
 
   addKeyboardShortcuts() {
     return {
@@ -73,6 +77,59 @@ function hasTableCellAncestor($pos: ResolvedPos): boolean {
     if ($pos.node(depth).type.name === "tableCell") return true;
   }
   return false;
+}
+
+// 표 셀 안의 커서 위치에서 table 조상 시작 위치를 구해 그 표를 직접
+// NodeSelection으로 선택한다. selectNodeBackward/selectNodeForward는 캐럿
+// 컨테이너의 형제를 선택하므로 중첩 표에서는 조상 blockContainer를 잘못
+// 선택한다. tableEditing의 normalizeSelection이 이 dispatch를 표 전체
+// CellSelection으로 정규화한다.
+function selectTableAncestor(
+  view: EditorView,
+  state: EditorState,
+  $insideTable: ResolvedPos,
+): boolean {
+  for (let depth = $insideTable.depth; depth > 0; depth -= 1) {
+    if ($insideTable.node(depth).type.name !== "table") continue;
+    view.dispatch(
+      state.tr
+        .setSelection(
+          NodeSelection.create(state.doc, $insideTable.before(depth)),
+        )
+        .scrollIntoView(),
+    );
+    return true;
+  }
+  return false;
+}
+
+// 첫 인접 키가 만든 표 전체 CellSelection에서 같은 키가 다시 들어오면 표
+// 노드 범위만 삭제한다. 부분 행·열·셀 선택은 tableEditing의 기존 삭제
+// 계약에 맡긴다. 삭제는 단일 transaction이라 undo 한 번으로 직전 표 선택과
+// 문서를 함께 복원한다(G-EDT-001).
+function deleteSelectedTable(editor: Editor): boolean {
+  const { state, view } = editor;
+  const { selection } = state;
+  if (
+    !(selection instanceof CellSelection) ||
+    !selection.isColSelection() ||
+    !selection.isRowSelection()
+  ) {
+    return false;
+  }
+  const tableDepth = selection.$anchorCell.depth - 1;
+  const table = selection.$anchorCell.node(tableDepth);
+  if (table.type.name !== "table") return false;
+  const tableStart = selection.$anchorCell.before(tableDepth);
+  const $table = state.doc.resolve(tableStart);
+  const removesWholeGroup =
+    $table.parent.type.name === "blockGroup" && $table.parent.childCount === 1;
+  const deleteFrom = removesWholeGroup ? $table.before() : tableStart;
+  const deleteTo = removesWholeGroup
+    ? $table.after()
+    : tableStart + table.nodeSize;
+  view.dispatch(state.tr.delete(deleteFrom, deleteTo).scrollIntoView());
+  return true;
 }
 
 // 문서 순서상 pos 바로 앞에서 "시각적으로 인접한" 리프 블록 노드와 그 시작
@@ -152,6 +209,7 @@ function selectAdjacentAtom(
 // 블록 선두 Backspace: 시각적으로 이전인 텍스트블록에 병합한다. 블록
 // 중간(parentOffset > 0)은 기본 문자 삭제 몫이라 관여하지 않는다.
 function joinBackwardAtBlockStart(editor: Editor): boolean {
+  if (deleteSelectedTable(editor)) return true;
   const context = caretContext(editor);
   if (context === null) return false;
   const { $from, containerDepth } = context;
@@ -178,14 +236,10 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
 
   const $target = previous.$head;
   if (hasTableCellAncestor($target)) {
-    // 표 안으로는 병합하지 않는다 — dev(joinBackward 실패 후
-    // selectNodeBackward)처럼 표를 NodeSelection으로 선택하고 그 반환값을
-    // 반환한다. view를 넘기지 않아 관여 판정이 endOfTextblock(DOM 측정)
-    // 대신 순수 parentOffset 검사로 떨어진다 — 위에서 이미
-    // parentOffset === 0을 확인했다. (이 NodeSelection은 tableEditing의
-    // normalizeSelection이 같은 dispatch에서 표 전체 CellSelection으로
-    // 정규화한다 — table-extension.ts의 allowTableNodeSelection: false.)
-    return selectNodeBackward(state, view.dispatch);
+    // 표 안으로는 병합하지 않는다. 시각적으로 인접한 표 시작 위치에 직접
+    // NodeSelection을 두면 tableEditing의 normalizeSelection이 같은 dispatch
+    // 안에서 표 전체 CellSelection으로 정규화한다.
+    return selectTableAncestor(view, state, $target);
   }
 
   mergeContainers(view, state, {
@@ -200,6 +254,7 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
 // 텍스트 끝 Delete: 시각적으로 다음인 텍스트블록을 자기 끝으로 끌어와
 // 병합한다. 텍스트 중간은 기본 문자 삭제 몫이라 관여하지 않는다.
 function joinForwardAtTextEnd(editor: Editor): boolean {
+  if (deleteSelectedTable(editor)) return true;
   const context = caretContext(editor);
   if (context === null) return false;
   const { $from } = context;
@@ -221,10 +276,9 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
 
   const $next = next.$head;
   if (hasTableCellAncestor($next)) {
-    // Backspace 쪽과 대칭 — 표 콘텐츠를 끌어오지 않고 표를
-    // NodeSelection으로 선택한다(view 생략 이유도 동일: 위에서 텍스트 끝을
-    // 이미 확인했다).
-    return selectNodeForward(state, view.dispatch);
+    // Backspace 쪽과 대칭 — 표 콘텐츠를 끌어오지 않고 시각적으로 인접한
+    // 표 조상 시작 위치를 직접 선택한다.
+    return selectTableAncestor(view, state, $next);
   }
 
   const nextContainerDepth = $next.depth - 1;
