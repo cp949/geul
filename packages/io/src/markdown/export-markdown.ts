@@ -1,10 +1,8 @@
 import {
   type Block,
-  type DividerBlock,
   type Document,
   type InlineContent,
   parseDocument,
-  type QuoteBlock,
   type TableBlock,
   type TextMark,
 } from "@cp949/geul-model";
@@ -14,11 +12,15 @@ import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
 import type { Result } from "../result.js";
-import { findUnsupportedBlock } from "../unsupported-block.js";
 import { computeColumnAlignments } from "./column-align.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 
-const stringifyProcessor = unified().use(remarkStringify).use(remarkGfm);
+// rule: "-"는 mdast-util-to-markdown(remark-stringify 내부 직렬화기) 기존
+// 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
+// DELTA-07).
+const stringifyProcessor = unified()
+  .use(remarkStringify, { rule: "-" })
+  .use(remarkGfm);
 
 type MarkdownOutputNode = {
   type: string;
@@ -140,18 +142,7 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
   };
 };
 
-// exportMarkdown이 parseDocument 직후 findUnsupportedBlock으로 먼저 거절하므로
-// flattenBlocks·documentNode는 정상 경로에서 quote·divider를 만나지 않는다 —
-// 임시 방어(둘 다 try 안이라 MARKDOWN_SERIALIZE_FAILED로 감싸짐).
-const unreachableUnsupportedBlock = (
-  block: QuoteBlock | DividerBlock,
-): never => {
-  throw new Error(
-    `Unsupported block type "${block.type}" reached Markdown export (block ${block.id})`,
-  );
-};
-
-// children이 있는 paragraph/heading을 부모 바로 뒤의 형제 블록으로
+// children이 있는 paragraph/heading/quote를 부모 바로 뒤의 형제 블록으로
 // 평탄화한다(D5, lossy export 전용). GFM(mdast)의 paragraph/heading
 // 노드에는 자식 블록 슬롯이 없어 계층을 표현할 수 없다 — depth와 무관하게
 // 전부 평탄화해 콘텐츠는 보존하고 계층 정보만 손실로 남긴다(strict 모드는
@@ -160,9 +151,11 @@ const unreachableUnsupportedBlock = (
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
     if (block.type === "table") return [block];
-    if (block.type === "quote" || block.type === "divider") {
-      return unreachableUnsupportedBlock(block);
-    }
+    // divider는 DividerBlock에 children 필드 자체가 없어(옵셔널이 아니라
+    // 부재) 아래 block.children 접근을 태우려면 먼저 좁혀야 한다 — table과
+    // 같은 리프 취급. quote는 children이 옵셔널 필드라(divider와 달리 TS
+    // 타입 문제가 없다) 아래 범용 분기로 자연스럽게 통과한다(07a).
+    if (block.type === "divider") return [block];
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
@@ -174,8 +167,14 @@ const documentNode = (document: Document): MarkdownOutputNode => ({
   type: "root",
   children: document.blocks.map((block) => {
     if (block.type === "table") return tableNode(block);
-    if (block.type === "quote" || block.type === "divider") {
-      return unreachableUnsupportedBlock(block);
+    if (block.type === "divider") return { type: "thematicBreak" };
+    if (block.type === "quote") {
+      return {
+        type: "blockquote",
+        children: [
+          { type: "paragraph", children: inlineNodes(block.content, false) },
+        ],
+      };
     }
     if (block.type === "heading") {
       return {
@@ -220,19 +219,6 @@ export function exportMarkdown(
       error: {
         code: "MARKDOWN_DOCUMENT_INVALID",
         message: `Cannot export invalid document: ${parsed.error.message}`,
-      },
-    };
-  }
-  // 임시 계약 — quote·divider GFM 매핑이 들어오면(DELTA-07·07a) 제거한다.
-  // analyzeMarkdownLoss보다 앞에 둔다: 손실 분석은 try 밖이고 공개 export라
-  // 거절을 그 안의 예외로 만들 수 없다.
-  const unsupported = findUnsupportedBlock(parsed.value.blocks);
-  if (unsupported !== undefined) {
-    return {
-      ok: false,
-      error: {
-        code: "MARKDOWN_DOCUMENT_INVALID",
-        message: `Cannot export block ${unsupported.id}: block type "${unsupported.type}" has no Markdown mapping yet`,
       },
     };
   }

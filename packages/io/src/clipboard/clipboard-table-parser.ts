@@ -110,9 +110,9 @@ const findDataTables = (root: HtmlRoot): HtmlElementNode[] => {
 // 재귀 경계 판정(문단/헤딩/표 시퀀스로 쪼개기) 자체는 block-segmenter.ts가
 // import-html.ts와 공유한다(아키텍처 리뷰 2차 후보 G) — 이 파일의 세 태그
 // (div/li/blockquote는 항상 재귀, ul/ol은 flush 없이 재귀, p/heading은 표를
-// 품었을 때만 재귀)만 정책으로 넘긴다. h1~h6는 여기서만 인식한다 —
-// clipboardAllowedTagNames가 h4~h6까지 sanitize를 통과시키므로(DELTA-03,
-// Issue #72) import-html.ts(h1~h3만 인식)와 다르다.
+// 품었을 때만 재귀)만 정책으로 넘긴다. h1~h6는 여기서 인식한다 —
+// import-html.ts도 이제 h1~h6를 heading으로 인식하므로(별개 DELTA에서 정정)
+// 이 파일과 다르지 않다.
 const headingLevelFromTagName = (
   tagName: string,
 ): 1 | 2 | 3 | 4 | 5 | 6 | undefined =>
@@ -122,11 +122,11 @@ const headingLevelFromTagName = (
 
 // 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고 문단 블록으로 옮겨 담는다
 // — 표 앞뒤 문단은 문단으로, 표는 표 노드로, 문서 순서를 지켜 한 시퀀스로
-// 만든다(spec §4.1, Issue #71). h1~h3는 heading으로, h4~h6는 model
-// HeadingBlock.level(1~3) 제약 때문에 문단으로 다운그레이드한다(DELTA-03,
-// Issue #72) — segmentBlocks는 레벨만 실어 보내고 다운그레이드 여부는
-// 여기서 정한다. 찾아낸 표가 여럿이면(findDataTables, Issue #73) 문서
-// 순서대로 각각 독립된 표 블록이 된다.
+// 만든다(spec §4.1, Issue #71). h1~h6는 모두 heading으로 유지한다 — model
+// HeadingBlock.level이 1~6으로 확장돼(DELTA-04, Issue #38) 이제 h4~h6를
+// 문단으로 다운그레이드할 이유가 없다(Issue #38 슬라이스 3). 찾아낸 표가
+// 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각 독립된 표 블록이
+// 된다.
 //
 // 문단/heading 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
 // collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
@@ -137,7 +137,11 @@ const blockSequenceFromNodes = (
   tables: readonly HtmlElementNode[],
 ): Result<ClipboardContentBlock[], ClipboardParseError> => {
   const tableSet = new Set(tables);
-  const policy: BlockSegmentPolicy = {
+  // headingLevelFromTagName의 반환 타입(1~6)을 그대로 실어 segment.level이
+  // number가 아닌 좁혀진 리터럴 유니언으로 나오게 한다(import-html.ts의
+  // importBlockSegmentPolicy와 같은 패턴) — heading 분기에서 캐스트 없이
+  // ClipboardContentBlock의 heading level에 대입하기 위해서다.
+  const policy: BlockSegmentPolicy<1 | 2 | 3 | 4 | 5 | 6> = {
     isSimpleBoundary: isParagraphTag,
     headingLevelFromTagName,
     isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
@@ -147,7 +151,7 @@ const blockSequenceFromNodes = (
 
   // 셀 텍스트와 같은 정규화(collapseHtmlWhitespace로 공백 run 접기 →
   // normalizeCellContent로 C0 제어문자/DEL/짝 없는 surrogate 제거)를 거쳐
-  // 인라인 콘텐츠로 만든다. 문단 생성과 heading 분기(h1~h3)가 이 정규화를
+  // 인라인 콘텐츠로 만든다. 문단 생성과 heading 분기(h1~h6)가 이 정규화를
   // 공유한다 — 누락되면 model의 isValidInlineText가 거절하는 코드포인트가
   // 남아 readEditorDocument에서 throw된다(editor 영구 desync).
   const normalizedInlineContent = (segmentNodes: HtmlNode[]): InlineContent => {
@@ -171,11 +175,7 @@ const blockSequenceFromNodes = (
       const content = normalizedInlineContent(segment.nodes);
       const text = content.map((item) => item.text).join("");
       if (!hasSubstantialText(text)) continue;
-      if (segment.level === 1 || segment.level === 2 || segment.level === 3) {
-        blocks.push({ type: "heading", level: segment.level, content });
-      } else {
-        blocks.push({ type: "paragraph", content });
-      }
+      blocks.push({ type: "heading", level: segment.level, content });
       continue;
     }
     // 클립보드 정책은 isDividerTag를 넘기지 않아 도달하지 않는다 — 공유

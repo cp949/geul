@@ -82,8 +82,9 @@ export type BlockSegmentPolicy<Level extends number = number> = {
   isSimpleBoundary: (tagName: string) => boolean;
   // heading 레벨을 인식한다. 반환값이 있으면 경계로 취급하고
   // {kind:"heading"} 세그먼트를 낸다 — 그 레벨을 실제 heading으로 쓸지
-  // 문단으로 다운그레이드할지는 호출자가 정한다(예: import는 h1~h6 전부
-  // heading, clipboard는 h4~h6을 문단으로 내린다).
+  // 문단으로 다운그레이드할지는 호출자가 정한다(import·clipboard 둘 다
+  // h1~h6 전부 heading으로 쓴다 — DELTA-08, Issue #38 슬라이스 3 이후로
+  // clipboard의 h4~h6 다운그레이드는 없다).
   headingLevelFromTagName: (tagName: string) => Level | undefined;
   // hr처럼 콘텐츠 없이 그 자체가 블록(model divider)인 태그 판정. 선택적이다
   // — 넘기지 않는 소비자(clipboard-table-parser.ts)에서는 hr이 예전처럼

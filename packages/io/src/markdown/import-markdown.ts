@@ -1,6 +1,7 @@
 import {
   appendOrMergeInlineItem,
   type Document,
+  type HeadingBlock,
   type IdFactory,
   type InlineContent,
   parseDocument,
@@ -34,6 +35,10 @@ type MarkdownNode = {
 };
 
 type MarkdownRoot = MarkdownNode & { type: "root"; children: MarkdownNode[] };
+
+// remark-parse는 heading depth로 1-6만 생성한다(mdast 계약) — 리터럴
+// 유니온을 여기서 다시 쓰지 않고 model의 HeadingBlock에서 파생한다.
+type HeadingLevel = HeadingBlock["level"];
 
 const normalizeIdentifier = (identifier: string): string =>
   identifier.trim().replace(/\s+/g, " ").toLowerCase();
@@ -164,12 +169,13 @@ const resolveReferences = (
 
 export type ImportWarning = {
   kind:
-    | "HEADING_DEPTH_DOWNGRADED"
     | "RAW_HTML_DOWNGRADED"
     | "LIST_DOWNGRADED"
     | "IMAGE_DOWNGRADED"
     | "UNSUPPORTED_BLOCK_DOWNGRADED"
-    | "UNSUPPORTED_INLINE_DOWNGRADED";
+    | "UNSUPPORTED_INLINE_DOWNGRADED"
+    | "QUOTE_CHILD_DOWNGRADED"
+    | "NESTED_QUOTE_FLATTENED";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -520,6 +526,67 @@ function listBlocksFromNode(
   return blocks;
 }
 
+// blockquote 안 문단마다 children 없는 형제 quote 블록을 만든다(D8) —
+// import 직후 quote가 children을 갖지 않아야 그 문서를 다시 strict
+// export했을 때 NESTED_CHILDREN으로 실패하는 비대칭이 생기지 않는다.
+// 비문단 자식(heading·list·table 등)은 인용 구조를 표현할 수 없으므로 일반
+// blocksFromNode 매핑으로 풀어내고 QUOTE_CHILD_DOWNGRADED로 경고하며,
+// 중첩 blockquote는 같은 규칙을 재귀 적용한 뒤 NESTED_QUOTE_FLATTENED로
+// 경고한다(G-CNV-002 — 구조 단순화를 조용히 버리지 않는다).
+function blockquoteToBlocks(
+  node: MarkdownNode,
+  createId: IdFactory,
+  warnings: ImportWarning[],
+): Document["blocks"] {
+  const blocks: Document["blocks"] = [];
+
+  for (const child of node.children ?? []) {
+    if (child.type === "paragraph") {
+      const id = createId();
+      blocks.push({
+        id,
+        type: "quote",
+        content: inlineContentFromNodes(child.children ?? [], warnings, {
+          blockId: id,
+          inTableCell: false,
+        }),
+      });
+      continue;
+    }
+
+    if (child.type === "blockquote") {
+      const nestedBlocks = blockquoteToBlocks(child, createId, warnings);
+      blocks.push(...nestedBlocks);
+      const firstNestedBlock = nestedBlocks[0];
+      if (firstNestedBlock !== undefined) {
+        warnings.push({
+          kind: "NESTED_QUOTE_FLATTENED",
+          blockId: firstNestedBlock.id,
+          message: "Nested blockquote was flattened into sibling blocks",
+        });
+      }
+      continue;
+    }
+
+    const childBlocks = blocksFromNode(child, createId, warnings);
+    blocks.push(...childBlocks);
+    const firstChildBlock = childBlocks[0];
+    if (firstChildBlock !== undefined) {
+      warnings.push({
+        kind: "QUOTE_CHILD_DOWNGRADED",
+        blockId: firstChildBlock.id,
+        message: `Blockquote child "${child.type}" was imported outside the quote structure`,
+      });
+    }
+  }
+
+  if (blocks.length === 0) {
+    blocks.push({ id: createId(), type: "quote", content: [] });
+  }
+
+  return blocks;
+}
+
 const unsupportedBlockText = (node: MarkdownNode): string =>
   node.value ?? node.alt ?? node.url ?? node.identifier ?? "";
 
@@ -575,23 +642,23 @@ function blocksFromNode(
       blockId: id,
       inTableCell: false,
     });
-    const depth = node.depth ?? 0;
-    if (depth >= 1 && depth <= 3) {
-      return [
-        {
-          id,
-          type: "heading",
-          level: depth as 1 | 2 | 3,
-          content,
-        },
-      ];
-    }
-    warnings.push({
-      kind: "HEADING_DEPTH_DOWNGRADED",
-      blockId: id,
-      message: `Heading depth ${node.depth ?? "unknown"} was imported as a paragraph`,
-    });
-    return [{ id, type: "paragraph", content }];
+    const depth = (node.depth ?? 1) as HeadingLevel;
+    return [
+      {
+        id,
+        type: "heading",
+        level: depth,
+        content,
+      },
+    ];
+  }
+
+  if (node.type === "thematicBreak") {
+    return [{ id: createId(), type: "divider" }];
+  }
+
+  if (node.type === "blockquote") {
+    return blockquoteToBlocks(node, createId, warnings);
   }
 
   if (node.type === "html") {

@@ -7,12 +7,12 @@ import type { TabularData } from "./tabular-data.js";
 // 편집기 타입도 참조하지 않는다), 표는 기존 TabularData 그대로다. id 배정은
 // core가 붙여넣기 대상(기존 표 확장 vs 새 표 생성)에 따라 다르게 한다.
 //
-// heading level은 1~3만 담는다 — model HeadingBlock.level 제약과 같다(DELTA-03,
-// Issue #72). h4~h6는 이 variant를 쓰지 않고 paragraph로 다운그레이드된다
-// (blockSequenceFromNodes가 만든다).
+// heading level은 1~6 전부 담는다 — model HeadingBlock.level이 1~6으로
+// 확장됐다(DELTA-04, Issue #38). h4~h6도 이 variant를 그대로 쓴다 —
+// paragraph로 다운그레이드하지 않는다(Issue #38 슬라이스 3).
 export type ClipboardContentBlock =
   | { type: "paragraph"; content: InlineContent }
-  | { type: "heading"; level: 1 | 2 | 3; content: InlineContent }
+  | { type: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; content: InlineContent }
   | { type: "table"; data: TabularData };
 
 // 항상 1개 이상의 원소를 담는다 — 표를 하나도 못 찾은 클립보드는 이 타입

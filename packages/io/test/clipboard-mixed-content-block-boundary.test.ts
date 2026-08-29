@@ -61,33 +61,34 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     ]);
   });
 
-  // h4~h6는 model HeadingBlock.level(1|2|3) 밖이라 heading으로 만들 수
-  // 없다 — 문단으로 다운그레이드하되, 여전히 블록 경계로 인식해 인접
-  // h4~h6와 병합하지 않는다.
-  it("h4~h6는 heading이 아닌 문단으로 다운그레이드되고 인접 블록과 병합되지 않는다", () => {
+  // h4~h6는 model HeadingBlock.level이 1~6으로 확장돼(Issue #38 슬라이스
+  // 3, DELTA-04) 더 이상 문단으로 다운그레이드하지 않는다 — heading level
+  // 4~6으로 그대로 유지되고, 여전히 블록 경계로 인식해 인접 h4~h6와
+  // 병합하지 않는다.
+  it("h4~h6는 heading level 4-6으로 유지되고 인접 블록과 병합되지 않는다", () => {
     const merged = parseClipboardTable({
       html: "<h4>A</h4><h4>B</h4>" + TABLE,
     });
     expect(merged.ok).toBe(true);
     if (merged.ok) {
       expect(merged.value).toEqual([
-        { type: "paragraph", content: [{ text: "A" }] },
-        { type: "paragraph", content: [{ text: "B" }] },
+        { type: "heading", level: 4, content: [{ text: "A" }] },
+        { type: "heading", level: 4, content: [{ text: "B" }] },
         TABLE_BLOCK,
       ]);
     }
 
-    // h4/h5/h6 각 레벨을 최소 1개씩 커버한다 — 셋 다 문단으로
-    // 다운그레이드됨을 확인한다.
+    // h4/h5/h6 각 레벨을 최소 1개씩 커버한다 — 셋 다 해당 레벨의 heading
+    // 으로 유지됨을 확인한다.
     const levels = parseClipboardTable({
       html: "<h4>A</h4><h5>B</h5><h6>C</h6>" + TABLE,
     });
     expect(levels.ok).toBe(true);
     if (levels.ok) {
       expect(levels.value).toEqual([
-        { type: "paragraph", content: [{ text: "A" }] },
-        { type: "paragraph", content: [{ text: "B" }] },
-        { type: "paragraph", content: [{ text: "C" }] },
+        { type: "heading", level: 4, content: [{ text: "A" }] },
+        { type: "heading", level: 5, content: [{ text: "B" }] },
+        { type: "heading", level: 6, content: [{ text: "C" }] },
         TABLE_BLOCK,
       ]);
     }

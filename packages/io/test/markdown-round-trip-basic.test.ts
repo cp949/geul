@@ -305,9 +305,9 @@ describe("Markdown 왕복 변환", () => {
     });
   });
 
-  it("허용 깊이를 넘는 제목은 강등하고 원시 HTML은 표 줄바꿈을 제외하면 비활성으로 유지한다", () => {
+  it("원시 HTML은 표 줄바꿈을 제외하면 비활성으로 유지한다", () => {
     const result = importMarkdown(
-      '#### Deep\n\n<div onclick="alert(1)">raw</div>\n\n| A |\n| - |\n| line<br />next |\n| literal<span>x</span> |',
+      'Deep\n\n<div onclick="alert(1)">raw</div>\n\n| A |\n| - |\n| line<br />next |\n| literal<span>x</span> |',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -335,10 +335,6 @@ describe("Markdown 왕복 변환", () => {
     ]);
     expect(result.value.warnings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          kind: "HEADING_DEPTH_DOWNGRADED",
-          blockId: "markdown-1",
-        }),
         expect.objectContaining({
           kind: "RAW_HTML_DOWNGRADED",
           blockId: "markdown-2",

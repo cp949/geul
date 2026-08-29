@@ -336,8 +336,9 @@ const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
 // clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
 // 공유한다(아키텍처 리뷰 2차 후보 G) — p/h1~h3/table만 보던 예전 documentFromRoot
 // 는 최상위 노드만 훑는 평면 루프라 div/li/blockquote/ul/ol처럼 중첩 가능한
-// 경계를 인식하지 못했다(Issue #113과 같은 종류의 병합). heading 다운그레이드는
-// clipboard 고유 정책으로 남긴다(그릴링 결정: 문단 경계 태그 집합만 공유).
+// 경계를 인식하지 못했다(Issue #113과 같은 종류의 병합). heading 다운그레이드
+// 정책은 이제 없다 — import·clipboard 둘 다 h1~h6 전부 heading으로 쓴다
+// (DELTA-08, Issue #38 슬라이스 3). 공유는 문단 경계 태그 집합만이다(그릴링 결정).
 // hr은 콘텐츠 없는 세그먼트로 받아 divider 블록으로 옮긴다(spec §7.1) —
 // clipboard 정책은 isDividerTag를 넘기지 않아 hr 처리가 갈라진다.
 // blockquote도 같은 방식으로 세그먼트로 받아 quote 블록으로 옮긴다
