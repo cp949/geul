@@ -183,4 +183,11 @@ describe("CodeBlock GFM 가져오기", () => {
       },
     });
   });
+
+  it("parser가 변형하는 NUL CodeBlock source를 MARKDOWN_DOCUMENT_INVALID로 거절한다", () => {
+    expect(importMarkdown("```\nbefore\u0000after\n```")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "MARKDOWN_DOCUMENT_INVALID" }),
+    });
+  });
 });

@@ -723,7 +723,11 @@ export const importMarkdown = (
   options?: { createId?: IdFactory },
 ): Result<ImportSuccess, ImportError> => {
   try {
-    const root = asMarkdownRoot(parseProcessor.parse(source));
+    // remark는 U+0000을 U+FFFD로 바꿔 CodeBlock source 위반을 숨긴다.
+    // 같은 길이의 다른 금지 C0로 치환해 model validation까지 보존한다.
+    const root = asMarkdownRoot(
+      parseProcessor.parse(source.replace(/\0/g, "\u0001")),
+    );
     if (root === undefined) {
       return {
         ok: false,

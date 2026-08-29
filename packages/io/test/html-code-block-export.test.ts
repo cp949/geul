@@ -354,6 +354,13 @@ describe("CodeBlock HTML 가져오기", () => {
     });
   });
 
+  it("parser가 변형하는 NUL CodeBlock source를 HTML_DOCUMENT_INVALID로 거절한다", () => {
+    expect(importHtml("<pre><code>before\u0000after</code></pre>")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "HTML_DOCUMENT_INVALID" }),
+    });
+  });
+
   it("clipboard의 pre는 문단 콘텐츠로 남고 CodeBlock segment를 opt-in하지 않는다", () => {
     const result = parseClipboardTable({
       html: "<pre><code>before</code></pre><table><tr><td>A</td></tr></table>",

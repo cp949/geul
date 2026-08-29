@@ -164,14 +164,18 @@ const collectFromNodes = (
   topLevel: boolean,
   insideSupportedBoundary: boolean,
   parentElement: string,
-  insidePre: boolean,
+  insideCodeBlockPre: boolean,
+  insideTable: boolean,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
       // raw HAST 텍스트 노드 기준으로 sanitize 전후를 비교한다(G-CNV-002 —
       // warning fact는 raw HAST에서 수집한다). 정책은 model의
       // sanitizeInlineText가 단독 소유한다(G-CNV-001).
-      if (!insidePre && sanitizeInlineText(node.value) !== node.value) {
+      if (
+        !insideCodeBlockPre &&
+        sanitizeInlineText(node.value) !== node.value
+      ) {
         warnings.push({
           kind: "UNSAFE_CODE_POINT_REMOVED",
           element: parentElement,
@@ -207,7 +211,15 @@ const collectFromNodes = (
     // code의 language/class metadata는 CodeBlock의 pre 안에서만 의미가 있다.
     // sanitizer schema는 semantic importer의 입력 보존을 위해 이를 남기지만,
     // raw warning은 현재 문맥에서 실제로 지원되는 속성만 보고한다.
-    if (!insidePre && node.tagName === "code") {
+    if (!insideCodeBlockPre && node.tagName === "code") {
+      allowedAttributes.delete("dataLanguage");
+      allowedAttributes.delete("className");
+    }
+    // table cell의 pre는 TableCell.content 인라인 경로로 변환돼 CodeBlock
+    // id/language/class 의미를 갖지 않는다. sanitizer가 semantic importer
+    // 입력 보존을 위해 남긴 속성이라도 이 문맥에서는 실제로 버려진다.
+    if (insideTable && node.tagName === "pre") {
+      allowedAttributes.delete("dataBeBlockId");
       allowedAttributes.delete("dataLanguage");
       allowedAttributes.delete("className");
     }
@@ -243,7 +255,8 @@ const collectFromNodes = (
           (insideSupportedBoundary && supportedInlineNames.has(node.tagName))),
       insideSupportedBoundary || isBlockBoundaryTag(node.tagName),
       node.tagName,
-      insidePre || node.tagName === "pre",
+      insideCodeBlockPre || (node.tagName === "pre" && !insideTable),
+      insideTable || node.tagName === "table",
     );
   }
 };
@@ -255,6 +268,6 @@ export const collectHtmlImportWarnings = (
   // 최상위 loose 텍스트(문서 어떤 요소로도 감싸이지 않은 텍스트, 예:
   // documentFromRoot의 flushInlineNodes가 문단으로 승격하는 텍스트)에는
   // 감싸는 태그가 없으므로 "text" sentinel을 element로 쓴다.
-  collectFromNodes(root.children, warnings, true, false, "text", false);
+  collectFromNodes(root.children, warnings, true, false, "text", false, false);
   return warnings;
 };

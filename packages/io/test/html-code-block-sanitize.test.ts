@@ -39,24 +39,26 @@ describe("HTML CodeBlock 입력 정제", () => {
         }),
       ]),
     );
-    expect(result.value.warnings).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "UNSAFE_ATTRIBUTE_REMOVED",
-          element: "pre",
-          attribute: "dataBeBlockId",
-        }),
-        expect.objectContaining({
-          kind: "UNSAFE_ATTRIBUTE_REMOVED",
-          element: "code",
-          attribute: "dataBeBlockId",
-        }),
-        expect.objectContaining({
-          kind: "UNSAFE_ATTRIBUTE_REMOVED",
-          element: "code",
-          attribute: "dataLanguage",
-        }),
-      ]),
+    expect(result.value.warnings).not.toContainEqual(
+      expect.objectContaining({
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "pre",
+        attribute: "dataBeBlockId",
+      }),
+    );
+    expect(result.value.warnings).toContainEqual(
+      expect.objectContaining({
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "code",
+        attribute: "dataBeBlockId",
+      }),
+    );
+    expect(result.value.warnings).not.toContainEqual(
+      expect.objectContaining({
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "code",
+        attribute: "dataLanguage",
+      }),
     );
   });
 
@@ -75,6 +77,56 @@ describe("HTML CodeBlock 입력 정제", () => {
   it("pre 밖 literal Tab은 기존 코드포인트 경고를 유지한다", () => {
     expect(importWarningKinds("<p>one\ttwo</p>")).toContain(
       "UNSAFE_CODE_POINT_REMOVED",
+    );
+  });
+
+  it("table cell의 pre에서 제거되는 Tab과 metadata를 경고한다", () => {
+    const result = importHtml(
+      '<table><tr><td><pre data-language="ts"><code class="language-js">one\ttwo</code></pre></td></tr></table>',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks[0]).toMatchObject({
+      type: "table",
+      rows: [{ cells: [{ content: [{ text: "onetwo" }] }] }],
+    });
+    expect(result.value.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "UNSAFE_CODE_POINT_REMOVED",
+          element: "code",
+        }),
+        expect.objectContaining({
+          kind: "UNSAFE_ATTRIBUTE_REMOVED",
+          element: "pre",
+          attribute: "dataLanguage",
+        }),
+        expect.objectContaining({
+          kind: "UNSAFE_ATTRIBUTE_REMOVED",
+          element: "code",
+          attribute: "className",
+        }),
+      ]),
+    );
+  });
+
+  it("CodeBlock pre 안 table descendant의 보존되는 Tab은 경고하지 않는다", () => {
+    const result = importHtml(
+      "<pre>before<table><tr><td>a\tb</td></tr></table>after</pre>",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "codeBlock",
+        content: [{ text: "beforea\tbafter" }],
+      },
+    ]);
+    expect(result.value.warnings).not.toContainEqual(
+      expect.objectContaining({ kind: "UNSAFE_CODE_POINT_REMOVED" }),
     );
   });
 
