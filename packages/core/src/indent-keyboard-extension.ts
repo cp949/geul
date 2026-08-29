@@ -57,9 +57,9 @@ const nearestBlockContainerId = (state: EditorState): string | null => {
 
 // 표 셀 안이면 표 셀 탐색(TableKeyboardNavigationExtension)에 양보하고
 // (false), 표 밖이면 캐럿이 속한 blockContainer를 대상으로 command를
-// 호출한다. command의 성공/실패(COMMAND_NOT_APPLICABLE 등, Ruling D2)와
-// 무관하게 항상 true를 반환한다 — 표 밖으로 판정된 이상 적용 불가한 경우도
-// 포커스가 에디터 밖으로 나가지 않게 키 이벤트를 소비하는 것이 계약이다.
+// 호출한다. command가 성공한 경우에만 true를 반환해 키 이벤트를 소비한다.
+// 적용할 block이 없거나 command가 COMMAND_NOT_APPLICABLE 등으로 실패하면
+// false를 반환해 브라우저 기본 순차 포커스 이동을 허용한다.
 const routeToBlockCommand = (
   editor: Editor,
   command: (editor: Editor, blockId: string) => Result<void, EditorError>,
@@ -68,8 +68,8 @@ const routeToBlockCommand = (
   if (isInTable(state)) return false;
 
   const blockId = nearestBlockContainerId(state);
-  if (blockId !== null) command(editor, blockId);
-  return true;
+  if (blockId === null) return false;
+  return command(editor, blockId).ok;
 };
 
 export const indentBlockShortcut = (editor: Editor): boolean =>

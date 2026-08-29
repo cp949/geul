@@ -142,7 +142,7 @@ export type Block =
 
 1. 캐럿이 표 셀 안 → 기존 `goToNextCell`(셀 탐색, 마지막 셀은 새 행 생성). 변경 없음.
 2. 캐럿이 `codeBlock` 안 → 탭 문자(`\t`)를 콘텐츠에 삽입. 들여쓰기·셀 탐색과 무관.
-3. 그 외(문단, heading, quote, 목록 항목 등) → `indentBlock`/`outdentBlock`. `outdentBlock`이 적용 불가(최상위 블록)면 키 이벤트만 소비하고 아무 것도 하지 않는다(R1 슬라이스 10의 첫 셀 `Shift+Tab`과 같은 원칙).
+3. 그 외(문단, heading, quote, 목록 항목 등) → `indentBlock`/`outdentBlock`. 명령이 성공한 경우에만 키 이벤트를 소비한다. 적용 불가(예: 최상위 블록의 `Shift+Tab`)면 이벤트를 소비하지 않고 브라우저 기본 순차 포커스 이동을 허용한다. 표 셀 안 첫 셀의 `Shift+Tab`은 1번 분기의 기존 계약에 따라 계속 소비한다.
 
 ### 5.3 다중 블록 선택과 이동
 

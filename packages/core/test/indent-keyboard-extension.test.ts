@@ -1,7 +1,7 @@
 /**
  * IndentKeyboardExtension이 표 밖 Tab/Shift+Tab을 indentBlockCommand/
  * outdentBlockCommand로 올바르게 라우팅하는지 검증한다. 완료 조건 1(표 밖
- * 라우팅과 적용 불가 시에도 키 이벤트 소비)과 완료 조건 3·4(G-EDT-002 stale
+ * 라우팅과 적용 불가 시 브라우저 기본 동작 허용)과 완료 조건 3·4(G-EDT-002 stale
  * selection 재동기화와 dispatch 0~1회 계약)를 다룬다.
  *
  * 대부분의 it은 exported 순수 함수(indentBlockShortcut/outdentBlockShortcut)를
@@ -171,7 +171,7 @@ describe("Tab/Shift+Tab 라우팅", () => {
     expect(outdentedDoc.content?.[1]?.attrs?.blockId).toBe("child-1");
   });
 
-  it("적용 불가(내어쓰기 불가한 최상위 블록)일 때도 키 이벤트는 소비돼 포커스가 에디터 밖으로 이동하지 않는다", () => {
+  it("적용 불가한 최상위 블록에서는 키 이벤트를 소비하지 않고 문서를 변경하지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const pos = findBlockContentPosition(editor, "para-1");
     if (pos === null) throw new Error("fixture 준비 실패");
@@ -182,8 +182,8 @@ describe("Tab/Shift+Tab 라우팅", () => {
     const indentConsumed = indentBlockShortcut(editor);
     const outdentConsumed = outdentBlockShortcut(editor);
 
-    expect(indentConsumed).toBe(true);
-    expect(outdentConsumed).toBe(true);
+    expect(indentConsumed).toBe(false);
+    expect(outdentConsumed).toBe(false);
     expect(editor.getJSON()).toEqual(before);
   });
 });
