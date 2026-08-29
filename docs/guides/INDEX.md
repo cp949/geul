@@ -18,7 +18,7 @@
 | [`G-WKS-006`](./G-WKS-006-replace-unsupported-web-apis-at-the-floor-browser.md) | floor 미지원 Web API 대체 구현 | Geul 자기 소스가 호출하는 Web API가 Chrome75 floor에서 미지원 |
 | [`G-EDT-001`](./G-EDT-001-keep-editor-commands-atomic.md) | 편집기 command 원자성 | document·selection·stored mark·revision 변경 command 구현 |
 | [`G-EDT-002`](./G-EDT-002-resync-selection-before-reading-stale-state.md) | 클릭 직후 stale selection 재동기화 | 클릭 직후 실행될 수 있는 키보드 핸들러가 editor.state.selection을 판정에 쓰는 경우 |
-| [`G-EDT-003`](./G-EDT-003-design-pm-block-node-schemas-and-group-fill-contracts.md) | PM 블록 노드 스키마·그룹 채움 계약 | PM 블록 노드 타입 신설, 스키마 그룹 참여 노드 추가·제거, 노드 priority 변경 |
+| [`G-EDT-003`](./G-EDT-003-design-pm-block-node-schemas-and-group-fill-contracts.md) | PM 블록 노드 스키마·그룹 채움 계약 | PM 블록 노드 타입 신설, 비포장 그룹 멤버 추가, 스키마 그룹 참여 노드 추가·제거, 노드 priority 변경 |
 | [`G-UI-001`](./G-UI-001-build-dismissible-overlays.md) | dismissible overlay 구현 | 바깥 클릭·Escape로 닫는 UI 구현 |
 | [`G-UI-002`](./G-UI-002-key-reordered-ui-by-stable-id.md) | 재정렬 UI 식별자 | 안정 key를 가진 항목의 위치 변경·후속 이벤트 억제 |
 | [`G-CNV-001`](./G-CNV-001-centralize-canonicalization-and-validation.md) | 변환 경계 중앙화 | model·importer·core의 정규화·검증 변경 |
