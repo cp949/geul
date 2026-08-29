@@ -20,18 +20,21 @@ const insertCodeBlock = async (page: Page, editable: Locator) => {
 
 /** fixed overlay가 네 viewport 경계의 공통 8px 여백 안에 있는지 확인한다. */
 const expectInsideViewport = async (page: Page, overlay: Locator) => {
-  const box = await overlay.boundingBox();
-  const viewport = page.viewportSize();
-  expect(box).not.toBeNull();
-  expect(viewport).not.toBeNull();
-  expect(box?.x ?? -1).toBeGreaterThanOrEqual(CLAMP_BOUNDARY_MIN_MARGIN_PX);
-  expect(box?.y ?? -1).toBeGreaterThanOrEqual(CLAMP_BOUNDARY_MIN_MARGIN_PX);
-  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
-    (viewport?.width ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
-  );
-  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
-    (viewport?.height ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
-  );
+  await expect
+    .poll(async () => {
+      const box = await overlay.boundingBox();
+      const viewport = page.viewportSize();
+      if (box === null || viewport === null) return null;
+      return {
+        bottom:
+          box.y + box.height <= viewport.height - CLAMP_BOUNDARY_MIN_MARGIN_PX,
+        left: box.x >= CLAMP_BOUNDARY_MIN_MARGIN_PX,
+        right:
+          box.x + box.width <= viewport.width - CLAMP_BOUNDARY_MIN_MARGIN_PX,
+        top: box.y >= CLAMP_BOUNDARY_MIN_MARGIN_PX,
+      };
+    })
+    .toEqual({ bottom: true, left: true, right: true, top: true });
 };
 
 test("Slash /code는 빈 CodeBlock과 Code placeholder, plain monospace 스타일을 렌더한다", async ({
@@ -83,6 +86,25 @@ test("블록 메뉴의 Code는 기존 source를 표시한 채 DOM을 CodeBlock�
   await expect(editable.locator("pre[data-be-code-block] code")).toHaveText(
     "const value = 1;",
   );
+});
+
+test("활성 CodeBlock의 블록 메뉴 Text를 실제 클릭해 source를 보존한 문단으로 되돌린다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const codeBlock = await insertCodeBlock(page, editable);
+  await codeBlock.click();
+  await page.keyboard.type("const answer = 42;");
+
+  await codeBlock.hover();
+  await page
+    .getByRole("button", { name: "Drag to reorder, click for options" })
+    .click();
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await menu.getByRole("menuitem", { name: "Text" }).click();
+
+  await expect(editable.locator("pre[data-be-code-block]")).toHaveCount(0);
+  await expect(editable.locator("p").first()).toHaveText("const answer = 42;");
 });
 
 test("language Enter alias와 실제 option click은 표시값을 canonicalize하고 편집기로 초점을 복구한다", async ({
@@ -192,4 +214,59 @@ test("짧은 뷰포트에서 language suggestion 크기가 바뀌어도 네 경�
   await suggestions.getByRole("option", { name: /Markdown/ }).click();
   await expect(input).toHaveValue("markdown");
   await expect(editable).toBeFocused();
+});
+
+test("scroll과 viewport resize 뒤 language overlay가 활성 CodeBlock을 추적하고 200px 폭의 네 경계 안에 머문다", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 320 });
+  const { editable } = await openDemo(page);
+  await editable.click();
+  for (let index = 0; index < 16; index += 1) {
+    await page.keyboard.type(`line ${index}`);
+    await page.keyboard.press("Enter");
+  }
+  await page.keyboard.type("/code");
+  await page.getByRole("option", { name: /Code/ }).click();
+
+  const codeBlock = editable.locator("pre[data-be-code-block]");
+  const overlay = page
+    .getByRole("combobox", { name: "Code language" })
+    .locator("xpath=../..");
+  await page.evaluate(() => {
+    document.body.style.paddingBottom = "1000px";
+  });
+  await codeBlock.evaluate((element) =>
+    element.scrollIntoView({ block: "center" }),
+  );
+  await expectInsideViewport(page, overlay);
+  await expect
+    .poll(async () => {
+      const blockBox = await codeBlock.boundingBox();
+      const overlayBox = await overlay.boundingBox();
+      if (blockBox === null || overlayBox === null) return null;
+      return Math.round(overlayBox.y - (blockBox.y + blockBox.height));
+    })
+    .toBe(0);
+
+  await page.evaluate(() => window.scrollBy(0, -40));
+  await expect
+    .poll(async () => {
+      const blockBox = await codeBlock.boundingBox();
+      const overlayBox = await overlay.boundingBox();
+      if (blockBox === null || overlayBox === null) return null;
+      return Math.round(overlayBox.y - (blockBox.y + blockBox.height));
+    })
+    .toBe(0);
+
+  await page.setViewportSize({ width: 200, height: 480 });
+  await expectInsideViewport(page, overlay);
+  await expect
+    .poll(async () => {
+      const blockBox = await codeBlock.boundingBox();
+      const overlayBox = await overlay.boundingBox();
+      if (blockBox === null || overlayBox === null) return null;
+      return Math.round(overlayBox.y - (blockBox.y + blockBox.height));
+    })
+    .toBe(0);
 });

@@ -150,6 +150,61 @@ describe("CodeBlock 언어 combobox 표시와 선택", () => {
     expect(root?.style.left).toBe("8px");
     expect(root?.style.top).toBe("20px");
   });
+
+  it("owner window scroll과 resize에서 활성 CodeBlock의 현재 rect로 anchor를 다시 계산한다", () => {
+    const rendered = mountCodeFixture();
+    const codeBlock = rendered.blocks[0];
+    const root = languageInput().closest<HTMLElement>(
+      ".geul-code-block-language",
+    );
+    if (codeBlock === undefined || root === null) {
+      throw new Error("CodeBlock 또는 language overlay를 찾지 못했다");
+    }
+    let left = 40;
+    let bottom = 80;
+    codeBlock.getBoundingClientRect = () =>
+      ({
+        left,
+        bottom,
+        right: left + 120,
+        top: bottom - 30,
+        width: 120,
+        height: 30,
+        x: left,
+        y: bottom - 30,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.scroll(window);
+    expect(root.style.left).toBe("40px");
+    expect(root.style.top).toBe("80px");
+
+    left = 60;
+    bottom = 100;
+    fireEvent(window, new Event("resize"));
+    expect(root.style.left).toBe("60px");
+    expect(root.style.top).toBe("100px");
+  });
+
+  it("unmount에서 owner window scroll과 resize listener를 같은 callback으로 해제한다", () => {
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    const removeEventListener = vi.spyOn(window, "removeEventListener");
+    mountCodeFixture();
+    const scrollListeners = addEventListener.mock.calls.filter(
+      ([type]) => type === "scroll",
+    );
+    const resizeListeners = addEventListener.mock.calls.filter(
+      ([type]) => type === "resize",
+    );
+
+    expect(scrollListeners).toHaveLength(2);
+    expect(resizeListeners).toHaveLength(2);
+    cleanup();
+
+    for (const listener of [...scrollListeners, ...resizeListeners]) {
+      expect(removeEventListener).toHaveBeenCalledWith(...listener);
+    }
+  });
 });
 
 describe("CodeBlock 언어 combobox suggestion과 ARIA", () => {

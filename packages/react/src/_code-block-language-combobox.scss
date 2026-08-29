@@ -4,6 +4,7 @@
   z-index: 30;
   display: flex;
   width: 14rem;
+  max-width: calc(100vw - 1rem);
   max-height: calc(100vh - 1rem);
   flex-direction: column;
   border: 1px solid var(--geul-color-border, #dadce0);

@@ -46,7 +46,7 @@
 // 위·아래로 두 번 들어간 값이라 클램프 결과와 정확히 맞물린다.
 .geul-block-menu {
   position: fixed;
-  z-index: 10;
+  z-index: 40;
   display: flex;
   max-height: calc(100vh - 1rem);
   width: 10rem;

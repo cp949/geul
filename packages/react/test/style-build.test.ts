@@ -1,3 +1,7 @@
+/**
+ * React SCSS 진입점의 실제 컴파일 결과와 PostCSS 호환성 처리를 검증한다.
+ * DOM 계약, 디자인 토큰, overlay viewport 제약을 함께 고정한다.
+ */
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,8 +20,10 @@ const entryPath = join(packageRoot, "src/styles.scss");
 // (레포 관례: 이전 tailwind-build.test.ts의 엔진 버전 대조와 동일 이유).
 const manifest = require(join(packageRoot, "package.json"));
 
+/** 실제 패키지 SCSS 진입점을 소비자에게 배포되는 CSS 형태로 컴파일한다. */
 const compileCss = (): string => sass.compile(entryPath).css;
 
+/** Autoprefixer 설정이 독립 SCSS 입력에도 적용되는지 확인할 CSS를 만든다. */
 const compileCanary = async (scss: string): Promise<string> => {
   const raw = sass.compileString(scss).css;
   const result = await postcss([
@@ -65,6 +71,28 @@ describe("SCSS 빌드 파이프라인", () => {
 
     expect(rule).toContain("box-sizing: border-box;");
     expect(rule).toContain("max-height: calc(100vh - 1rem);");
+  });
+
+  it("CodeBlock language overlay 폭을 좁은 viewport의 양쪽 8px 여백 안으로 제한한다", () => {
+    const css = compileCss();
+    const rule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
+      ?.groups?.body;
+
+    expect(rule).toContain("width: 14rem;");
+    expect(rule).toContain("max-width: calc(100vw - 1rem);");
+    expect(rule).toContain("box-sizing: border-box;");
+  });
+
+  it("Block menu가 CodeBlock language overlay보다 높은 click 계층을 사용한다", () => {
+    const css = compileCss();
+    const languageRule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(
+      css,
+    )?.groups?.body;
+    const blockMenuRule = /\.geul-block-menu \{(?<body>[^}]*)\}/.exec(css)
+      ?.groups?.body;
+
+    expect(languageRule).toContain("z-index: 30;");
+    expect(blockMenuRule).toContain("z-index: 40;");
   });
 
   it(":root에 --geul-color-* 디자인 토큰 8개의 기본값을 선언한다(SCSS 전환 SSOT)", () => {

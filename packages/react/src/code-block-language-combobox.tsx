@@ -151,6 +151,26 @@ export const CodeBlockLanguageCombobox = () => {
     };
   }, [element, readActiveCodeBlock, updateAnchor]);
 
+  useEffect(() => {
+    const ownerWindow = element?.ownerDocument.defaultView;
+    if (ownerWindow === undefined || ownerWindow === null) return;
+    const updateAnchorFromCurrentBlock = () => {
+      const current = languageStateRef.current;
+      if (current !== null) updateAnchor(current.blockId);
+    };
+
+    ownerWindow.addEventListener("scroll", updateAnchorFromCurrentBlock, true);
+    ownerWindow.addEventListener("resize", updateAnchorFromCurrentBlock);
+    return () => {
+      ownerWindow.removeEventListener(
+        "scroll",
+        updateAnchorFromCurrentBlock,
+        true,
+      );
+      ownerWindow.removeEventListener("resize", updateAnchorFromCurrentBlock);
+    };
+  }, [element, updateAnchor]);
+
   const cancelDraft = useCallback(() => {
     dirtyRef.current = false;
     setLanguageState((current) =>
