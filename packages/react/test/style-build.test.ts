@@ -58,6 +58,15 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).not.toMatch(/\[data-be-code-block\].*(?:\.token|language-)/);
   });
 
+  it("CodeBlock language overlay의 최대 높이에 padding과 border를 포함한다", () => {
+    const css = compileCss();
+    const rule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
+      ?.groups?.body;
+
+    expect(rule).toContain("box-sizing: border-box;");
+    expect(rule).toContain("max-height: calc(100vh - 1rem);");
+  });
+
   it(":root에 --geul-color-* 디자인 토큰 8개의 기본값을 선언한다(SCSS 전환 SSOT)", () => {
     // packages/react/src/styles.css의 var(--be-color-x, #hex) fallback과
     // 값이 같아야 한다 — 하나라도 드리프트되면 이 테스트가 잡는다.

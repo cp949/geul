@@ -4,7 +4,7 @@
  * 손으로 조립한 편집기 DOM은 프로덕션 renderHTML과 갈라져도 컴파일러가 잡지
  * 못한다(G-TST-001, Issue #62). 여기서는 진짜 createEditor()를 마운트해 편집기
  * DOM을 편집기가 직접 만들게 한다. 표가 필요한 오버레이는 mountTableEditor,
- * 문단만 필요한 오버레이는 mountBlockEditor를 쓴다. 마운트 외에 표 블록 조회
+ * 일반 블록이 필요한 오버레이는 mountBlockEditor를 쓴다. 마운트 외에 표 블록 조회
  * (tableBlockOf), DOM 캐럿 배치(placeCaret), 초점 단언(focusOutsideEditor)도
  * 이 모듈이 단독 소유한다(G-TST-002).
  *
@@ -12,7 +12,11 @@
  * 오버레이 geometry는 rect에 전적으로 의존하므로 rect만 스텁한다 — 이것이
  * 실제 마운트로도 없앨 수 없는 유일한 fake다.
  */
-import { createEditor, type EditorController } from "@cp949/geul-core";
+import {
+  createEditor,
+  type CreateEditorOptions,
+  type EditorController,
+} from "@cp949/geul-core";
 import { render, screen } from "@testing-library/react";
 import { act, type ReactNode } from "react";
 import { afterEach, expect } from "vitest";
@@ -182,7 +186,7 @@ export type BlockLayout = {
 };
 
 /**
- * 문단 블록의 스텁 격자. 기존 fake가 블록마다 손으로 씌우던 값(top 0/20/40,
+ * 일반 블록의 스텁 격자. 기존 fake가 블록마다 손으로 씌우던 값(top 0/20/40,
  * height 20)을 그대로 살린다 — 테스트 본문의 clientY 좌표가 뜻을 유지한다.
  * 폭 600은 본문 단 하나를 가정한 값이다. BlockSideMenu의 삽입 지점 계산은
  * clientY만 읽으므로(computeDragGuide) 가로 값은 삽입 가이드의 길이에만 쓰인다.
@@ -196,8 +200,10 @@ const DEFAULT_BLOCK_LAYOUT: BlockLayout = {
 
 export type MountBlockEditorOptions = {
   blockIds?: readonly string[];
+  initialBlocks?: CreateEditorOptions["initialDocument"]["blocks"];
   children?: ReactNode;
   layout?: BlockLayout;
+  onChange?: CreateEditorOptions["onChange"];
 };
 
 export type MountedBlockEditor = {
@@ -210,9 +216,9 @@ export type MountedBlockEditor = {
 };
 
 /**
- * 실제 편집기를 문단 블록만으로 마운트한다. 표가 없으므로 SlashMenu처럼
- * 문단을 대상으로 도는 오버레이가 표 오버레이와 섞이지 않는다 — 표가 필요한
- * 테스트는 mountTableEditor를 쓴다.
+ * 실제 편집기를 일반 블록 문서로 마운트한다. `initialBlocks`가 없으면 기존
+ * 계약대로 `blockIds`에 대응하는 문단을 만들고, 있으면 CodeBlock을 포함한
+ * 저장 블록을 그대로 쓴다. 표 fixture는 mountTableEditor를 쓴다.
  *
  * `blockIds`는 초기 문서의 블록 id다. 실제 앱도 초기 문서의 id는 저장소에서
  * 받아 그대로 쓰므로 여기서 직접 지정한다(따옴표·백슬래시가 든 id처럼 특정
@@ -226,23 +232,29 @@ export type MountedBlockEditor = {
  */
 export const mountBlockEditor = ({
   blockIds = ["block-1"],
+  initialBlocks,
   children,
   layout = DEFAULT_BLOCK_LAYOUT,
+  onChange,
 }: MountBlockEditorOptions = {}): MountedBlockEditor => {
-  if (blockIds.length === 0) {
-    throw new Error("문단 블록이 최소 하나 필요하다");
+  const resolvedBlocks =
+    initialBlocks ??
+    blockIds.map((id) => ({
+      id,
+      type: "paragraph" as const,
+      content: [{ text: "본문" }],
+    }));
+  if (resolvedBlocks.length === 0) {
+    throw new Error("편집 블록이 최소 하나 필요하다");
   }
   const editor = createEditor({
     initialDocument: {
       formatVersion: 1,
       revision: 0,
-      blocks: blockIds.map((id) => ({
-        id,
-        type: "paragraph" as const,
-        content: [{ text: "본문" }],
-      })),
+      blocks: resolvedBlocks,
     },
     createId: sequentialIds("id"),
+    ...(onChange === undefined ? {} : { onChange }),
   });
   mountedEditors.add(editor);
 
@@ -281,11 +293,19 @@ export const mountBlockEditor = ({
     return blockElements;
   };
   const blocks = restubGeometry();
-  if (blocks.length !== blockIds.length) {
-    throw new Error("문단이 요청한 개수만큼 렌더되지 않았다");
+  const documentBlocks = editor.getDocument().blocks;
+  if (blocks.length !== documentBlocks.length) {
+    throw new Error("블록이 요청한 개수만큼 렌더되지 않았다");
   }
 
-  return { editor, host, editable, blockIds, blocks, restubGeometry };
+  return {
+    editor,
+    host,
+    editable,
+    blockIds: documentBlocks.map((block) => block.id),
+    blocks,
+    restubGeometry,
+  };
 };
 
 export type MountTableEditorOptions = {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BlockSideMenu } from "./block-side-menu.js";
 import { BLOCK_TYPE_OPTIONS } from "./block-type-options.js";
+import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -298,6 +299,7 @@ export const SlashMenu = () => {
   return (
     <>
       <BlockSideMenu onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
+      <CodeBlockLanguageCombobox />
       <TableHandles />
       <TableSelectionToolbar />
       {menuState !== null && (
