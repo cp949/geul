@@ -34,6 +34,10 @@ import {
   insertDivider as insertDividerCommand,
 } from "./divider-commands.js";
 import { DividerExtension } from "./divider-extension.js";
+import {
+  collectDocumentIdentityIds,
+  createUniqueDocumentId,
+} from "./document-id-factory.js";
 import type { EditorError } from "./errors.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
@@ -250,6 +254,12 @@ const collectCellSelection = (
 
 export type CreateEditorOptions = {
   initialDocument: BlockDocument;
+  /**
+   * 매 호출마다 model ID 문자열 계약을 만족하고 현재 문서의 모든
+   * block·table column·row·cell ID와 유일한 ID를 반환해야 한다.
+   * BlockIdExtension의 누락·중복 block ID 보정과 duplicateBlock은 100회
+   * 안에 유효하고 유일한 ID를 얻지 못하면 RangeError를 던진다.
+   */
   createId?: IdFactory;
   onChange?: (event: DocumentChangeEvent) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
@@ -992,6 +1002,14 @@ export const createEditor = (
     if (source.block.type === "table" || hasChildren(source.block)) {
       return commandNotApplicable("duplicateBlock");
     }
+    if (sessionRevision >= Number.MAX_SAFE_INTEGER) {
+      return commandNotApplicable("duplicateBlock");
+    }
+
+    const duplicateId = createUniqueDocumentId(
+      createId,
+      collectDocumentIdentityIds(currentDocument),
+    );
 
     const result = runDocumentCommand("duplicateBlock", "local", () => {
       const sourcePosition = findBlockPosition(tiptapEditor.state.doc, blockId);
@@ -1001,7 +1019,7 @@ export const createEditor = (
 
       const insertPosition = sourcePosition + sourceNode.nodeSize;
       const duplicateNode = sourceNode.type.create(
-        { ...sourceNode.attrs, blockId: createId() },
+        { ...sourceNode.attrs, blockId: duplicateId },
         sourceNode.content,
         sourceNode.marks,
       );

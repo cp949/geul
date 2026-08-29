@@ -1,6 +1,12 @@
-import { createRandomDocumentId, type IdFactory } from "@cp949/geul-model";
+import {
+  createRandomDocumentId,
+  type IdFactory,
+  isValidDocumentId,
+  type TableColumn,
+} from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
+import { createUniqueDocumentId } from "./document-id-factory.js";
 
 type BlockIdOptions = {
   createId: IdFactory;
@@ -10,7 +16,9 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
   name: "blockId",
 
   addOptions() {
-    return { createId: createRandomDocumentId };
+    return {
+      createId: createRandomDocumentId,
+    };
   },
 
   // blockId는 blockContainer가 identity 소유자다(D19) — paragraph/heading은
@@ -48,6 +56,38 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
             return null;
           }
 
+          const nonBlockContainerIdentityIds = new Set<string>();
+          const occupiedIds = new Set<string>();
+          const addNonBlockContainerIdentity = (value: unknown): void => {
+            if (typeof value !== "string") return;
+            occupiedIds.add(value);
+            nonBlockContainerIdentityIds.add(value);
+          };
+          nextState.doc.descendants((node) => {
+            if (node.type.name === "blockContainer") {
+              const blockId = node.attrs.blockId;
+              if (typeof blockId === "string" && isValidDocumentId(blockId)) {
+                occupiedIds.add(blockId);
+              }
+            } else if (node.type.name === "table") {
+              addNonBlockContainerIdentity(node.attrs.blockId);
+              for (const column of (node.attrs.columns ??
+                []) as TableColumn[]) {
+                addNonBlockContainerIdentity(column.id);
+              }
+            } else if (node.type.name === "tableRow") {
+              addNonBlockContainerIdentity(node.attrs.rowId);
+            } else if (
+              node.type.name === "tableCell" ||
+              node.type.name === "tableHeader"
+            ) {
+              addNonBlockContainerIdentity(node.attrs.cellId);
+            } else if (node.type.name === "divider") {
+              addNonBlockContainerIdentity(node.attrs.blockId);
+            }
+            return true;
+          });
+
           const seenIds = new Set<string>();
           const transaction = nextState.tr;
           let changed = false;
@@ -63,21 +103,21 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
             const currentId = node.attrs.blockId;
             if (
               typeof currentId === "string" &&
-              currentId.length > 0 &&
-              !seenIds.has(currentId)
+              isValidDocumentId(currentId) &&
+              !seenIds.has(currentId) &&
+              !nonBlockContainerIdentityIds.has(currentId)
             ) {
               seenIds.add(currentId);
+              occupiedIds.add(currentId);
               // 유효 id를 확인했어도 이 컨테이너의 자식 blockGroup 안에 더
               // 깊은 blockContainer가 있을 수 있다 — 하위 탐색을 끊지 않는다
               // (완료 조건 5: depth≥1 신규 블록도 id를 받아야 한다).
               return true;
             }
 
-            let nextId = createId();
-            while (nextId.length === 0 || seenIds.has(nextId)) {
-              nextId = createId();
-            }
+            const nextId = createUniqueDocumentId(createId, occupiedIds);
             seenIds.add(nextId);
+            occupiedIds.add(nextId);
             transaction.setNodeMarkup(position, undefined, {
               ...node.attrs,
               blockId: nextId,
