@@ -86,13 +86,13 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `BLK-008` | 시작 번호를 지원하는 번호 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-009` | 체크 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-010` | 자식을 접는 토글 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
-| `BLK-011` | 코드 블록과 언어 속성 | `PARITY` | R2 | `PARTIAL` | 슬라이스 4 Workflow A(Issue #38) — 저장형·validation/canonicalization, core schema·model↔PM codec·production load/save·일반 명령·중첩, HTML/GFM export 완료. HTML/GFM import는 RD-003, 생성·종류 변경·mark guard·placeholder·language UI·keyboard·React 통합은 Workflow B/RD-004로 이월 |
+| `BLK-011` | 코드 블록과 언어 속성 | `PARITY` | R2 | `PARTIAL` | 슬라이스 4 Workflow A+B(Issue #38, RD-001·RD-002·RD-004) — 저장형·validation/canonicalization, core schema·model↔PM codec·production load/save·일반 명령·중첩, HTML/GFM export, 생성·종류 변경·mark guard·`Code` placeholder·language UI·Tab/Shift+Tab·React/Chromium 통합 완료. HTML/GFM import·metadata warning·완전 round-trip은 RD-003에 남음 |
 | `BLK-012` | 문서형 테이블 | `ENHANCED` | R1 | `VERIFIED` | R1 슬라이스 6-12: 표 편집·조작(`TBL-*`)에 더해 슬라이스 12가 표 문서 로드 차단을 해제해 저장 round-trip(열 너비·병합·헤더·색상) 완료 |
 | `BLK-013` | 일반 파일 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
 | `BLK-014` | 이미지 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
 | `BLK-015` | 비디오 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
 | `BLK-016` | 오디오 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
-| `BLK-017` | 코드 구문 강조·언어 선택·탭 들여쓰기 | `PARITY` | R5 | `NOT_STARTED` | `@blocknote/code-block`, `features/blocks/code-blocks.mdx` |
+| `BLK-017` | 코드 구문 강조·언어 선택·탭 들여쓰기 | `PARITY` | R5 | `PARTIAL` | RD-004가 editable language 선택과 CodeBlock Tab 공백 2개·Shift+Tab focus escape를 구현. syntax highlighting은 R5 잔여 범위 |
 | `BLK-018` | Mermaid 다이어그램 블록 | `PARITY` | R5 | `NOT_STARTED` | `@blocknote/diagram-block`, `features/blocks/diagrams.mdx` |
 | `BLK-019` | LaTeX 수식 블록 | `PARITY` | R5 | `NOT_STARTED` | `@blocknote/math-block`, `features/blocks/math.mdx` |
 
@@ -125,9 +125,9 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `PARTIAL` | formatting toolbar nest buttons — 슬라이스 1이 서식 툴바 들여쓰기/내어쓰기 버튼(`indentBlock`/`outdentBlock`)과 중첩 시각 렌더링을 구현. 표(`TableBlock`) 들여쓰기 UI 경로는 아직 없음(Issue #126) |
 | `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |
 | `UI-008` | 링크 열기·수정·삭제 toolbar | `PARITY` | R1 | `VERIFIED` | `LinkToolbar` |
-| `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `PARTIAL` | `Placeholder` extension — 슬라이스 2가 core 자체 데코레이션 확장으로 paragraph(캐럿 위치 시)·heading(빈 상태 상시) placeholder를 구현(표 셀 제외). 슬라이스 3이 인용문 placeholder(상시 "Quote" 표시)를 추가했다. 코드·목록 등 나머지 블록 타입의 placeholder는 각 타입을 추가하는 슬라이스가 완료 기준으로 포함한다 |
+| `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `PARTIAL` | `Placeholder` extension — 슬라이스 2가 paragraph(캐럿 위치 시)·heading(빈 상태 상시), 슬라이스 3이 인용문(상시 `Quote`), RD-004가 CodeBlock(상시 `Code`) placeholder를 core 데코레이션과 React CSS로 구현. 목록 등 나머지 블록 타입은 각 추가 슬라이스가 소유 |
 | `UI-010` | 마지막 editable trailing block | `PARITY` | R2 | `VERIFIED` | `TrailingNode` extension — 슬라이스 2가 core 자체 불변식(`appendTransaction` + 로드 정규화)으로 구현, Tiptap `TrailingNode` 미사용. 마지막 최상위 블록이 자식 없는 paragraph가 아니면 빈 paragraph 자동 추가(로드 포함, 로드 시 revision·onChange 억제) |
-| `UI-011` | 기본 키보드 단축키와 입력 규칙 | `PARITY` | R2 | `NOT_STARTED` | keyboard shortcuts, block input rules |
+| `UI-011` | 기본 키보드 단축키와 입력 규칙 | `PARITY` | R2 | `PARTIAL` | RD-004가 CodeBlock Tab 공백 2개·Shift+Tab focus escape와 CodeBlock 교차 mark shortcut 소비 후 no-op을 구현. 나머지 R2 keyboard shortcut·block input rule은 후속 슬라이스 범위 |
 | `UI-012` | emoji picker | `PARITY` | R4 | `NOT_STARTED` | grid suggestion menu, emoji items |
 | `UI-013` | 메뉴·popover portal target 제어 | `PARITY` | R4 | `NOT_STARTED` | React component portal API |
 | `UI-014` | 블록 복제·삭제 menu | `ENHANCED` | R1 | `VERIFIED` | 삭제 parity + 승인된 복제 계약(복제본 바로 다음 삽입, 포커스 이동) |

@@ -1,3 +1,7 @@
+/**
+ * Slash menu의 검색·키보드·블록 추가 배선과 fixed overlay viewport clamp를
+ * 실제 Chromium event 순서로 검증한다.
+ */
 import { expect, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
@@ -145,8 +149,9 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Divider 항목까지 뷰
 
   // 클램프가 없으면 Divider 항목이 뷰포트 밖으로 나가 클릭이 "element is
   // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오). 슬래시
-  // 메뉴의 마지막 항목은 DELTA-09가 확정한 순서(paragraph → heading 1-6 →
-  // quote → table → divider)로 Table이 아니라 Divider다.
+  // 메뉴의 마지막 항목은 현재 공용 블록 순서(paragraph → heading 1-6 →
+  // quote → code) 뒤 table → divider가 이어져 여전히 Divider다.
+  await expect(menu.getByRole("option", { name: /Code/ })).toBeVisible();
   await menu.getByRole("option", { name: /Divider/ }).click();
   await expect(editable.locator("hr")).toBeVisible();
 });
