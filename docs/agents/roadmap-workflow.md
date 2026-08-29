@@ -31,13 +31,21 @@ Issue / Slice
 ## 작업공간
 
 ```text
-_works/roadmap/<issueNN-sliceNN-slug>/
+_works/roadmap/
   roadmap.md
   progress.md
   RD-001.md  RD-002.md  ...
 ```
 
-Issue가 없으면 `issueNN-`을 생략한다. 한 roadmap 안에서 RD ID를 발급하며 삭제한 ID를 재사용하지 않는다.
+active roadmap 작업공간은 `_works/roadmap/` 하나다. Issue·슬라이스별 하위 폴더를 만들지 않는다. 한 roadmap 안에서 RD ID를 발급하며 삭제한 ID를 재사용하지 않는다.
+
+새 roadmap을 등록하기 전에 `_works/roadmap/` 상태를 확인한다.
+
+1. 없거나 비어 있으면 새 roadmap 파일을 루트에 만든다.
+2. 모든 RD와 전체 통합 검증이 완료된 roadmap이면 아래 "roadmap 정리"에 따라 먼저 archive한다.
+3. 미완료 roadmap이면 파일을 유지한다. 새 roadmap으로 덮어쓰거나 `_completed`로 옮기지 않는다. 기존 roadmap을 재개하거나 사용자에게 경합을 보고한다.
+
+이 단계는 `_works/roadmap/`이 새 roadmap 파일만 포함할 때 완료다.
 
 `roadmap.md`는 전체 결과 경계, 상태와 의존 DAG를 소유한다. `RD-NNN.md`는 해당 결과의 진입 조건, 포함·제외 범위, 완료 조건과 확정 결정을 소유한다. 상세 DELTA와 파일 목록은 현재 실행할 RD의 qq·ff 작업 폴더가 소유한다. `progress.md`는 readiness probe, 순서 변경, 숨은 의존 발견과 자동 재계획 이력을 append한다.
 
@@ -151,7 +159,7 @@ roadmap 하위 qq-workflow가 브랜치 생성 전에 두 번째 DELTA 필요성
 하위 작업 폴더의 `_meta.md`에는 다음 포인터를 추가한다.
 
 ```markdown
-상위 로드맵: _works/roadmap/<slug>/roadmap.md#RD-NNN
+상위 로드맵: _works/roadmap/roadmap.md#RD-NNN
 ```
 
 ## 다음 작업 선택
@@ -213,6 +221,32 @@ helper·fixture·호출 순서가 예상과 다르면 DELTA 완료 조건을 유
 4. 제품 기능 상태가 실제로 바뀐 경우에만 lifecycle의 제품 문서 갱신표를 적용한다.
 
 모든 RD가 `DONE`이고 전체 통합 검증이 통과해야 roadmap을 완료한다. 남은 RD가 있는데 개별 기능이 동작한다는 이유로 Issue·슬라이스 완료를 주장하지 않는다.
+
+### roadmap 정리
+
+roadmap 완료 동기화가 끝나면 active 작업공간 전체를 다음 위치로 옮긴다.
+
+```text
+_works/_completed/yyyyMMdd-NN-roadmap-<title>/
+  roadmap.md
+  progress.md
+  RD-001.md  RD-002.md  ...
+```
+
+- `yyyyMMdd`: archive를 실행한 로컬 날짜다.
+- `NN`: 같은 날짜의 `_works/_completed/yyyyMMdd-*-roadmap-*` 중 가장 큰 두 자리 번호 + 1이다. 항목이 없으면 `01`부터 시작한다. 삭제된 번호를 재사용하지 않는다.
+- `<title>`: roadmap 결과를 식별하는 짧은 lowercase ASCII kebab-case다. Issue 번호나 slice 번호만으로 이름을 만들지 않는다.
+- archive 폴더에는 active `_works/roadmap/`의 파일 전체를 직접 넣는다. `roadmap/` 또는 Issue slug 중간 폴더를 한 번 더 중첩하지 않는다.
+- 상대 링크가 archive 뒤에도 같은 폴더 안의 대상을 가리키는지 확인한다.
+- `_works/roadmap/`의 이전 파일과 하위 폴더가 남지 않았는지 확인한다. 빈 디렉터리는 제거하거나 다음 roadmap 생성 시 재사용한다.
+- `_works/`는 Git ignored 작업공간이다. archive를 위해 root `_completed/`를 만들거나 `.gitignore` 규칙을 추가하지 않는다.
+
+정리 완료 조건:
+
+- archive 폴더가 완료 roadmap의 파일을 전부 포함한다.
+- `_works/roadmap/`에 완료 roadmap 파일이 남아 있지 않다.
+- 다음 roadmap을 등록할 때 `_works/roadmap/`에는 새 roadmap 파일만 존재한다.
+- `git status --short`에 archive 파일이 나타나지 않는다.
 
 ## 소유 경계
 
