@@ -13,7 +13,7 @@ test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록
   await page.keyboard.type("/head");
 
   await expect(menu).toBeVisible();
-  await expect(page.getByRole("option")).toHaveCount(3);
+  await expect(page.getByRole("option")).toHaveCount(6);
 
   await page.getByRole("option", { name: /Heading 1/ }).click();
 
@@ -113,7 +113,7 @@ test("서식 툴바의 select로 블록 종류를 바꿔도 내용을 보존한�
   await expect(editable.locator("p")).toHaveText("Hello R1");
 });
 
-test("문서 하단에서 슬래시 메뉴를 열어도 Table 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
+test("문서 하단에서 슬래시 메뉴를 열어도 Divider 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -143,8 +143,10 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Table 항목까지 뷰�
     (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
   );
 
-  // 클램프가 없으면 Table 항목이 뷰포트 밖으로 나가 클릭이 "element is
-  // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
-  await menu.getByRole("option", { name: /Table/ }).click();
-  await expect(editable.locator("table")).toBeVisible();
+  // 클램프가 없으면 Divider 항목이 뷰포트 밖으로 나가 클릭이 "element is
+  // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오). 슬래시
+  // 메뉴의 마지막 항목은 DELTA-09가 확정한 순서(paragraph → heading 1-6 →
+  // quote → table → divider)로 Table이 아니라 Divider다.
+  await menu.getByRole("option", { name: /Divider/ }).click();
+  await expect(editable.locator("hr")).toBeVisible();
 });

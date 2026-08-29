@@ -78,10 +78,10 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | --- | --- | --- | --- | --- | --- |
 | `BLK-001` | 문단 | `PARITY` | R1 | `VERIFIED` | R0 기본 편집 + R1 slash 메뉴·drag·복제·삭제 메뉴(슬라이스 3-4) 통합 완료 |
 | `BLK-002` | 제목 H1-H3 | `PARITY` | R1 | `VERIFIED` | R0 기본 편집 + R1 slash 메뉴·drag·복제·삭제 메뉴(슬라이스 3-4) 통합 완료 |
-| `BLK-003` | 제목 H4-H6 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
+| `BLK-003` | 제목 H4-H6 | `PARITY` | R2 | `VERIFIED` | 슬라이스 3(Issue #38) — `model`의 `HeadingBlock.level` 1-6 확장, `core` 편집·명령·placeholder·split/join, `io` HTML/GFM/clipboard 3경로 대칭 매핑, `react` 슬래시 메뉴·Turn into·툴바·scss, e2e 계산 스타일까지 전 계층 완결 |
 | `BLK-004` | 자식을 접는 토글 제목 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
-| `BLK-005` | 인용문 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
-| `BLK-006` | 구분선 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/typography.mdx` |
+| `BLK-005` | 인용문 | `PARITY` | R2 | `PARTIAL` | 슬라이스 3(Issue #38) — `QuoteBlock` 신설, 편집·변환·placeholder·HTML round-trip·GFM(strict 거절/lossy 평탄화) 완료. `TextBlockProps`(색상·정렬)는 슬라이스 8, GFM `>` 중첩(`children`) 표현 재평가는 슬라이스 5로 이월 |
+| `BLK-006` | 구분선 | `PARITY` | R2 | `PARTIAL` | 슬라이스 3(Issue #38) — `DividerBlock` 신설, 삽입·삭제(Backspace/Delete, 표 전례)·HTML/GFM round-trip 완료. 종류 변경(Turn into) 비대상은 설계 결정(콘텐츠 없는 블록 — 표 전례와 동일, 잔여 아님), 클립보드 `<hr>` 붙여넣기는 슬라이스 10으로 이월 |
 | `BLK-007` | 글머리 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-008` | 시작 번호를 지원하는 번호 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-009` | 체크 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
@@ -125,7 +125,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `PARTIAL` | formatting toolbar nest buttons — 슬라이스 1이 서식 툴바 들여쓰기/내어쓰기 버튼(`indentBlock`/`outdentBlock`)과 중첩 시각 렌더링을 구현. 표(`TableBlock`) 들여쓰기 UI 경로는 아직 없음(Issue #126) |
 | `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |
 | `UI-008` | 링크 열기·수정·삭제 toolbar | `PARITY` | R1 | `VERIFIED` | `LinkToolbar` |
-| `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `PARTIAL` | `Placeholder` extension — 슬라이스 2가 core 자체 데코레이션 확장으로 paragraph(캐럿 위치 시)·heading(빈 상태 상시) placeholder를 구현(표 셀 제외). 후속 블록 타입(인용문·코드·목록 등)의 placeholder는 각 타입을 추가하는 슬라이스가 완료 기준으로 포함한다 |
+| `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `PARTIAL` | `Placeholder` extension — 슬라이스 2가 core 자체 데코레이션 확장으로 paragraph(캐럿 위치 시)·heading(빈 상태 상시) placeholder를 구현(표 셀 제외). 슬라이스 3이 인용문 placeholder(상시 "Quote" 표시)를 추가했다. 코드·목록 등 나머지 블록 타입의 placeholder는 각 타입을 추가하는 슬라이스가 완료 기준으로 포함한다 |
 | `UI-010` | 마지막 editable trailing block | `PARITY` | R2 | `VERIFIED` | `TrailingNode` extension — 슬라이스 2가 core 자체 불변식(`appendTransaction` + 로드 정규화)으로 구현, Tiptap `TrailingNode` 미사용. 마지막 최상위 블록이 자식 없는 paragraph가 아니면 빈 paragraph 자동 추가(로드 포함, 로드 시 revision·onChange 억제) |
 | `UI-011` | 기본 키보드 단축키와 입력 규칙 | `PARITY` | R2 | `NOT_STARTED` | keyboard shortcuts, block input rules |
 | `UI-012` | emoji picker | `PARITY` | R4 | `NOT_STARTED` | grid suggestion menu, emoji items |
