@@ -11,6 +11,7 @@
 - 닫힘은 하위 요소가 아니라 `role="toolbar"`·`role="menu"` 컨테이너 부재로 단언한다.
 - Escape는 편집 대상의 초점 복구까지, 바깥 클릭은 클릭 대상의 자연스러운 초점 이동까지 확인한다.
 - keyboard close 경로는 기본 worker 수로 반복해 재오픈 race를 확인한다: `npx playwright test <spec> -g '<닫기 시나리오>' --repeat-each=20 --workers=5`.
+- fixed overlay는 scroll·viewport resize 후 anchor와 같이 이동하는지, 네 viewport 경계 안에 있는지를 같이 확인한다. React render·`ResizeObserver`는 비동기라 단발 `boundingBox()` 값 대신 `expect.poll`로 최종 geometry 수렴을 기다린다.
 - 브라우저 event 합성 helper는 Chromium·Firefox·WebKit 최소 재현으로 먼저 검증한다: `pnpm exec playwright test <spec> --project=chromium --project=firefox --project=webkit`.
 
 ## 완료 기준
