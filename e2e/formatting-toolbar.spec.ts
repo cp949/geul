@@ -362,3 +362,76 @@ test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 
   expect(parentBox.x).toBeGreaterThan(grandparentBox.x);
   expect(childBox.x).toBeGreaterThan(parentBox.x);
 });
+
+test("텍스트를 다시 선택하지 않고 두 단계 들여쓰기와 연속 내어쓰기를 적용한다 @core", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const sourceDocument = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "outer",
+        type: "paragraph",
+        content: [{ text: "outer" }],
+        children: [
+          { id: "inner", type: "paragraph", content: [{ text: "inner" }] },
+        ],
+      },
+      {
+        id: "target",
+        type: "paragraph",
+        content: [{ text: "target text" }],
+      },
+    ],
+  };
+  await page.getByLabel("Document source").fill(JSON.stringify(sourceDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const target = editable.locator('[data-be-block-id="target"] > p');
+  await selectBlockTextAndNotify(target, "target text");
+  const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  const indent = page.getByRole("button", { name: "Indent" });
+  const outdent = page.getByRole("button", { name: "Outdent" });
+
+  await expect(toolbar).toBeVisible();
+  await expect(indent).toBeEnabled();
+  await expect(outdent).toBeDisabled();
+
+  await indent.click();
+  await expect(
+    editable.locator(
+      '[data-be-block-id="outer"] > [data-be-block-group] > [data-be-block-id="target"]',
+    ),
+  ).toHaveCount(1);
+  await expect(toolbar).toBeVisible();
+  await expect(indent).toBeEnabled();
+  await expect(outdent).toBeEnabled();
+  await expect
+    .poll(() => page.evaluate(() => document.getSelection()?.toString()))
+    .toBe("target text");
+
+  await indent.click();
+  await expect(
+    editable.locator(
+      '[data-be-block-id="inner"] > [data-be-block-group] > [data-be-block-id="target"]',
+    ),
+  ).toHaveCount(1);
+
+  await outdent.click();
+  await expect(
+    editable.locator(
+      '[data-be-block-id="outer"] > [data-be-block-group] > [data-be-block-id="target"]',
+    ),
+  ).toHaveCount(1);
+  await outdent.click();
+  await expect(
+    editable.locator(':scope > [data-be-block-id="target"]'),
+  ).toHaveCount(1);
+  await expect(toolbar).toBeVisible();
+  await expect(outdent).toBeDisabled();
+  await expect
+    .poll(() => page.evaluate(() => document.getSelection()?.toString()))
+    .toBe("target text");
+});

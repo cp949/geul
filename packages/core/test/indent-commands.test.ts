@@ -10,9 +10,12 @@
  */
 import { MAX_NESTING_DEPTH, parseDocument } from "@cp949/geul-model";
 import type { JSONContent } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
+import { findBlockPosition } from "../src/block-position.js";
 import {
+  getBlockNestingActionState,
   indentBlockCommand,
   outdentBlockCommand,
 } from "../src/indent-commands.js";
@@ -130,6 +133,49 @@ const buildNestedModelChain = (depth: number): NestedFixtureBlock => {
 };
 
 describe("indentBlock", () => {
+  it("첫 형제·중첩 불가 직전 형제·깊이 상한에서는 들여쓰기를 불가로 판정한다", () => {
+    const firstEditor = createTableFixtureEditor({
+      type: "doc",
+      content: [containerJson("p1", "one"), containerJson("p2", "two")],
+    });
+    expect(getBlockNestingActionState(firstEditor.state.doc, "p1")).toEqual({
+      canIndent: false,
+      canOutdent: false,
+    });
+
+    const tableEditor = createTableFixtureEditor({
+      type: "doc",
+      content: [tableJson("table-1"), containerJson("p1", "one")],
+    });
+    expect(getBlockNestingActionState(tableEditor.state.doc, "p1")).toEqual({
+      canIndent: false,
+      canOutdent: false,
+    });
+
+    const chainLevels = MAX_NESTING_DEPTH - 1;
+    const deepEditor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        buildDeepChainDoc(chainLevels, [
+          containerJson(`chain-${MAX_NESTING_DEPTH}`, "sibling"),
+          containerJson("target", "target"),
+        ]),
+      ],
+    });
+    expect(getBlockNestingActionState(deepEditor.state.doc, "target")).toEqual({
+      canIndent: false,
+      canOutdent: true,
+    });
+  });
+
+  it("존재하지 않는 블록은 들여쓰기와 내어쓰기를 모두 불가로 판정한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+
+    expect(
+      getBlockNestingActionState(editor.state.doc, "no-such-block"),
+    ).toEqual({ canIndent: false, canOutdent: false });
+  });
+
   it("바로 앞 형제(컨테이너)의 자식으로 대상을 이동한다 — 자식 딸린 대상은 하위 트리째, undo 1회로 복원", () => {
     const editor = createTableFixtureEditor({
       type: "doc",
@@ -285,6 +331,41 @@ describe("indentBlock", () => {
       error: { code: "DOCUMENT_LIMIT_EXCEEDED" },
     });
   });
+
+  it("비축약 역방향 텍스트 선택의 오프셋과 방향을 들여쓰기 뒤 복원한다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [containerJson("p1", "one"), containerJson("p2", "second text")],
+    });
+    const beforePosition = findBlockPosition(editor.state.doc, "p2");
+    if (beforePosition === null) throw new Error("p2 위치를 찾지 못했다");
+    editor.commands.setTextSelection({
+      from: beforePosition + 2,
+      to: beforePosition + 8,
+    });
+    const forward = editor.state.selection;
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, forward.head, forward.anchor),
+      ),
+    );
+    const beforeAnchorOffset = editor.state.selection.anchor - beforePosition;
+    const beforeHeadOffset = editor.state.selection.head - beforePosition;
+
+    const result = indentBlockCommand(editor, "p2");
+
+    expect(result.ok).toBe(true);
+    const afterPosition = findBlockPosition(editor.state.doc, "p2");
+    if (afterPosition === null) throw new Error("이동한 p2 위치를 찾지 못했다");
+    expect(editor.state.selection.empty).toBe(false);
+    expect(editor.state.selection.anchor - afterPosition).toBe(
+      beforeAnchorOffset,
+    );
+    expect(editor.state.selection.head - afterPosition).toBe(beforeHeadOffset);
+    expect(editor.state.selection.anchor).toBeGreaterThan(
+      editor.state.selection.head,
+    );
+  });
 });
 
 describe("outdentBlock", () => {
@@ -362,6 +443,36 @@ describe("outdentBlock", () => {
     expect(blockIdOf(childAt(doc, 0))).toBe("p1");
     expect(childAt(doc, 1).type).toBe("table");
     expect(blockIdOf(childAt(doc, 1))).toBe("table-1");
+  });
+
+  it("비축약 텍스트 선택의 오프셋을 내어쓰기 뒤 복원한다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "parent", [
+          containerJson("c1", "child text"),
+        ]),
+      ],
+    });
+    const beforePosition = findBlockPosition(editor.state.doc, "c1");
+    if (beforePosition === null) throw new Error("c1 위치를 찾지 못했다");
+    editor.commands.setTextSelection({
+      from: beforePosition + 2,
+      to: beforePosition + 7,
+    });
+    const beforeAnchorOffset = editor.state.selection.anchor - beforePosition;
+    const beforeHeadOffset = editor.state.selection.head - beforePosition;
+
+    const result = outdentBlockCommand(editor, "c1");
+
+    expect(result.ok).toBe(true);
+    const afterPosition = findBlockPosition(editor.state.doc, "c1");
+    if (afterPosition === null) throw new Error("이동한 c1 위치를 찾지 못했다");
+    expect(editor.state.selection.empty).toBe(false);
+    expect(editor.state.selection.anchor - afterPosition).toBe(
+      beforeAnchorOffset,
+    );
+    expect(editor.state.selection.head - afterPosition).toBe(beforeHeadOffset);
   });
 
   it("outdent로 부모의 blockGroup이 비면 그룹 노드가 제거되고 문서가 스키마-유효하다", () => {

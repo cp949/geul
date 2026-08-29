@@ -72,6 +72,7 @@ const outdentIcon = <IndentDecrease {...iconProps} />;
 type ToolbarState = {
   activeMarks: SelectionMark[];
   blockSelection: { blockId: string; blockType: BlockTypeDescriptor } | null;
+  nestingActions: { canIndent: boolean; canOutdent: boolean } | null;
   left: number;
   top: number;
 };
@@ -131,9 +132,14 @@ export const FormattingToolbar = () => {
         top: 0,
         width: 0,
       };
+      const blockSelection = editor.getSelectionBlockType();
       setToolbarState({
         activeMarks: editor.getSelectionMarks(),
-        blockSelection: editor.getSelectionBlockType(),
+        blockSelection,
+        nestingActions:
+          blockSelection === null
+            ? null
+            : editor.getBlockNestingActionState(blockSelection.blockId),
         left: bounds.left + bounds.width / 2,
         top: bounds.top,
       });
@@ -193,10 +199,19 @@ export const FormattingToolbar = () => {
             setToolbarState((current) =>
               current === null
                 ? null
-                : {
-                    ...current,
-                    blockSelection: editor.getSelectionBlockType(),
-                  },
+                : (() => {
+                    const nextBlockSelection = editor.getSelectionBlockType();
+                    return {
+                      ...current,
+                      blockSelection: nextBlockSelection,
+                      nestingActions:
+                        nextBlockSelection === null
+                          ? null
+                          : editor.getBlockNestingActionState(
+                              nextBlockSelection.blockId,
+                            ),
+                    };
+                  })(),
             );
           }}
           onMouseDown={(event) => event.preventDefault()}
@@ -217,7 +232,11 @@ export const FormattingToolbar = () => {
               별도 코드 불필요. aria-pressed는 쓰지 않는다: 토글 상태가
               없는 1회성 액션 버튼이다. */}
           <IconButton
+            aria-disabled={
+              toolbarState.nestingActions?.canIndent === true ? "false" : "true"
+            }
             className="geul-formatting-toolbar__mark-button"
+            disabled={toolbarState.nestingActions?.canIndent !== true}
             icon={indentIcon}
             key="indent"
             label="Indent"
@@ -228,10 +247,26 @@ export const FormattingToolbar = () => {
               // 버튼과 같은 방식으로 조용히 버린다 — Tab 키 경로(D9)와
               // 동일선상.
               editor.commands.indentBlock(blockSelection.blockId);
+              setToolbarState((current) =>
+                current === null
+                  ? null
+                  : {
+                      ...current,
+                      nestingActions: editor.getBlockNestingActionState(
+                        blockSelection.blockId,
+                      ),
+                    },
+              );
             }}
           />
           <IconButton
+            aria-disabled={
+              toolbarState.nestingActions?.canOutdent === true
+                ? "false"
+                : "true"
+            }
             className="geul-formatting-toolbar__mark-button"
+            disabled={toolbarState.nestingActions?.canOutdent !== true}
             icon={outdentIcon}
             key="outdent"
             label="Outdent"
@@ -239,6 +274,16 @@ export const FormattingToolbar = () => {
               const blockSelection = toolbarState.blockSelection;
               if (blockSelection === null) return;
               editor.commands.outdentBlock(blockSelection.blockId);
+              setToolbarState((current) =>
+                current === null
+                  ? null
+                  : {
+                      ...current,
+                      nestingActions: editor.getBlockNestingActionState(
+                        blockSelection.blockId,
+                      ),
+                    },
+              );
             }}
           />
         </>

@@ -39,7 +39,11 @@ import {
   createUniqueDocumentId,
 } from "./document-id-factory.js";
 import type { EditorError } from "./errors.js";
-import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
+import {
+  getBlockNestingActionState,
+  indentBlockCommand,
+  outdentBlockCommand,
+} from "./indent-commands.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
@@ -85,6 +89,11 @@ export type DocumentChangeEvent = {
   reason: "local" | "replace" | "undo" | "redo";
 };
 
+export type BlockNestingActionState = {
+  canIndent: boolean;
+  canOutdent: boolean;
+};
+
 export interface EditorController {
   mount(element: HTMLElement): void;
   unmount(): void;
@@ -101,6 +110,7 @@ export interface EditorController {
     blockId: string;
     blockType: BlockTypeDescriptor;
   } | null;
+  getBlockNestingActionState(blockId: string): BlockNestingActionState;
   getTableCellSelection(): TableCellSelection | null;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
@@ -1428,6 +1438,12 @@ export const createEditor = (
       if (destroyed) return null;
       const { selection, doc } = tiptapEditor.state;
       return findSelectionBlock(doc, 0, selection.from, selection.to);
+    },
+    getBlockNestingActionState(blockId) {
+      if (destroyed || sessionRevision >= Number.MAX_SAFE_INTEGER) {
+        return { canIndent: false, canOutdent: false };
+      }
+      return getBlockNestingActionState(tiptapEditor.state.doc, blockId);
     },
     getTableCellSelection() {
       if (destroyed) return null;

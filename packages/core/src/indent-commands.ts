@@ -50,16 +50,88 @@ const subtreeHeight = (node: ProseMirrorNode): number => {
   return max;
 };
 
-// 이동 직후 캐럿을 이동한 블록(blockId는 이동 전과 동일하게 유지된다) 콘텐츠
-// 안으로 옮긴다(G-EDT-001 안정 ID selection 복원 — applyTableGridOperation의
-// cellId 복원 전례 준용). 표처럼 콘텐츠 시작이 텍스트가 아니어도
-// TextSelection.near가 가장 가까운 유효 위치(첫 셀 문단 등)를 찾는다.
-const placeCaretInMovedBlock = (
+type BlockNestingActionState = {
+  canIndent: boolean;
+  canOutdent: boolean;
+};
+
+// 명령 실행 없이 blockId의 중첩 action 가능 여부를 판정한다. 실제 명령과
+// EditorController 공개 query가 이 함수 하나를 공유해 Tab·버튼의 구조 조건이
+// 갈리지 않게 한다.
+export const getBlockNestingActionState = (
+  doc: ProseMirrorNode,
+  blockId: string,
+): BlockNestingActionState => {
+  const targetPosition = findBlockPosition(doc, blockId);
+  if (targetPosition === null) {
+    return { canIndent: false, canOutdent: false };
+  }
+  const targetNode = doc.nodeAt(targetPosition);
+  if (targetNode === null) {
+    return { canIndent: false, canOutdent: false };
+  }
+
+  const $target = doc.resolve(targetPosition);
+  const previousSibling = $target.nodeBefore;
+  const canIndent =
+    previousSibling !== null &&
+    previousSibling.type.name === "blockContainer" &&
+    typeof previousSibling.attrs.blockId === "string" &&
+    previousSibling.attrs.blockId.length > 0 &&
+    modelDepthAt($target) + 1 + subtreeHeight(targetNode) <= MAX_NESTING_DEPTH;
+
+  return { canIndent, canOutdent: $target.depth > 0 };
+};
+
+type TextSelectionBookmark = {
+  anchorOffset: number;
+  headOffset: number;
+};
+
+// 이동 대상 내부의 비축약 텍스트 선택만 상대 오프셋과 방향을 보존한다.
+// collapsed selection·NodeSelection·대상 밖 선택은 기존 캐럿 배치 계약을 쓴다.
+const captureTextSelection = (
+  editor: Editor,
+  targetPosition: number,
+  targetNode: ProseMirrorNode,
+): TextSelectionBookmark | null => {
+  const { selection } = editor.state;
+  if (!(selection instanceof TextSelection) || selection.empty) return null;
+  const targetStart = targetPosition + 1;
+  const targetEnd = targetPosition + targetNode.nodeSize - 1;
+  if (
+    selection.anchor < targetStart ||
+    selection.anchor > targetEnd ||
+    selection.head < targetStart ||
+    selection.head > targetEnd
+  ) {
+    return null;
+  }
+  return {
+    anchorOffset: selection.anchor - targetPosition,
+    headOffset: selection.head - targetPosition,
+  };
+};
+
+// 안정 ID로 이동 후 위치를 다시 찾는다. 비축약 TextSelection bookmark가 있으면
+// anchor/head를 그대로 복원하고, 없으면 기존 TextSelection.near 캐럿 경로를
+// 유지한다(G-EDT-001).
+const placeSelectionInMovedBlock = (
   tr: Transaction,
   blockId: string,
+  bookmark: TextSelectionBookmark | null,
 ): Transaction => {
   const position = findBlockPosition(tr.doc, blockId);
   if (position === null) return tr;
+  if (bookmark !== null) {
+    return tr.setSelection(
+      TextSelection.create(
+        tr.doc,
+        position + bookmark.anchorOffset,
+        position + bookmark.headOffset,
+      ),
+    );
+  }
   const resolved = tr.doc.resolve(Math.min(position + 1, tr.doc.content.size));
   return tr.setSelection(TextSelection.near(resolved));
 };
@@ -79,23 +151,22 @@ export const indentBlockCommand = (
   const targetNode = doc.nodeAt(targetPosition);
   if (targetNode === null) return blockNotFound(blockId);
 
+  const actionState = getBlockNestingActionState(doc, blockId);
+  if (!actionState.canIndent) return commandNotApplicable("indentBlock");
+
   const $target = doc.resolve(targetPosition);
   const previousSibling = $target.nodeBefore;
-  if (
-    previousSibling === null ||
-    previousSibling.type.name !== "blockContainer"
-  ) {
-    return commandNotApplicable("indentBlock");
-  }
+  if (previousSibling === null) return commandNotApplicable("indentBlock");
   const previousSiblingId = previousSibling.attrs.blockId;
   if (typeof previousSiblingId !== "string" || previousSiblingId.length === 0) {
     return commandNotApplicable("indentBlock");
   }
 
-  const newDepth = modelDepthAt($target) + 1 + subtreeHeight(targetNode);
-  if (newDepth > MAX_NESTING_DEPTH) {
-    return commandNotApplicable("indentBlock");
-  }
+  const selectionBookmark = captureTextSelection(
+    editor,
+    targetPosition,
+    targetNode,
+  );
 
   let tr = editor.state.tr.delete(
     targetPosition,
@@ -128,7 +199,7 @@ export const indentBlockCommand = (
     tr = tr.insert(groupSlotStart, newGroupNode);
   }
 
-  tr = placeCaretInMovedBlock(tr, blockId);
+  tr = placeSelectionInMovedBlock(tr, blockId, selectionBookmark);
 
   editor.view.dispatch(closeHistory(tr));
   return { ok: true, value: undefined };
@@ -150,11 +221,15 @@ export const outdentBlockCommand = (
   const targetNode = doc.nodeAt(targetPosition);
   if (targetNode === null) return blockNotFound(blockId);
 
+  const actionState = getBlockNestingActionState(doc, blockId);
+  if (!actionState.canOutdent) return commandNotApplicable("outdentBlock");
+
   const $target = doc.resolve(targetPosition);
-  if ($target.depth === 0) {
-    // 최상위 블록 — 부모 컨테이너가 없다.
-    return commandNotApplicable("outdentBlock");
-  }
+  const selectionBookmark = captureTextSelection(
+    editor,
+    targetPosition,
+    targetNode,
+  );
 
   const groupDepth = $target.depth;
   const groupNode = $target.node(groupDepth);
@@ -187,7 +262,7 @@ export const outdentBlockCommand = (
   const insertPosition = mappedParentPosition + mappedParentNode.nodeSize;
   tr = tr.insert(insertPosition, targetNode);
 
-  tr = placeCaretInMovedBlock(tr, blockId);
+  tr = placeSelectionInMovedBlock(tr, blockId, selectionBookmark);
 
   editor.view.dispatch(closeHistory(tr));
   return { ok: true, value: undefined };
