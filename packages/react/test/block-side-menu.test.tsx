@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSideMenu } from "../src/block-side-menu.js";
 import { mountBlockEditor } from "./mount-editor.js";
+import { selectText } from "./selection-events.js";
 
 // jsdom은 setPointerCapture를 구현하지 않는다(table-handle-menu.test.tsx와
 // 같은 이유) — handlePointerDownOnHandle이 실제 드래그 준비로 이를 호출하므로,
@@ -170,6 +171,37 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     // handleTurnInto는 clearContent 옵션 없이 호출한다 — 트리거로 쓴
     // 본문 텍스트가 그대로 남는다(SlashMenu의 clearContent:true 경로와 다르다).
     expect(after.content).toEqual(before.content);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("Code 종류 변경은 id와 source를 보존하고 mark를 제거하며 text 언어를 적용한다", () => {
+    const rendered = renderBlockMenu();
+    const paragraph = rendered.host.querySelector("p");
+    const text = paragraph?.firstChild ?? null;
+    const blockElement = rendered.blocks[0];
+    if (paragraph === null || text === null || blockElement === undefined) {
+      throw new Error("본문 문단 fixture를 찾지 못했다");
+    }
+    rendered.editable.focus();
+    selectText(text, 0, 2);
+    const marked = rendered.editor.commands.toggleBold();
+    if (!marked.ok) throw new Error("굵게 mark fixture 준비 실패");
+    const before = rendered.editor.getDocument().blocks[0];
+    if (before?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(before.content).toEqual([
+      { text: "본문", marks: [{ type: "bold" }] },
+    ]);
+
+    fireEvent.pointerMove(blockElement);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Code" }));
+
+    const after = rendered.editor.getDocument().blocks[0];
+    if (after?.type !== "codeBlock") throw new Error("코드 블록이 아니다");
+    expect(after.id).toBe(before.id);
+    expect(after.content).toEqual([{ text: "본문" }]);
+    expect(after.language).toBe("text");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
   });

@@ -69,6 +69,13 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
     keywords: ["quote", "blockquote", "citation"],
     blockType: { type: "quote" },
   },
+  {
+    id: "code",
+    label: "Code",
+    description: "Write plain code",
+    keywords: ["code", "codeblock", "pre"],
+    blockType: { type: "codeBlock" },
+  },
 ];
 
 export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
@@ -80,6 +87,6 @@ export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
     case "quote":
       return "quote";
     case "codeBlock":
-      return "";
+      return "code";
   }
 };

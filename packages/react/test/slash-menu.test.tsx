@@ -163,8 +163,8 @@ describe("SlashMenu 질의 팝업", () => {
     typeIntoBlock(rendered, 0, "/");
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    // paragraph + heading 1-6 + quote(8) + table + divider = 10.
-    expect(screen.getAllByRole("option")).toHaveLength(10);
+    // paragraph + heading 1-6 + quote + code(9) + table + divider = 11.
+    expect(screen.getAllByRole("option")).toHaveLength(11);
     expect(screen.getByRole("option", { name: /Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /Heading 1/ })).not.toBeNull();
   });
@@ -237,6 +237,49 @@ describe("SlashMenu 질의 팝업", () => {
     expect(block.content).toEqual([]);
     expect(document.activeElement).toBe(rendered.editable);
   });
+
+  it("Code 항목 클릭이 같은 id의 빈 CodeBlock을 text 언어로 만들고 편집기로 초점을 되돌린다", () => {
+    const rendered = renderCaretBlocks();
+    const blockId = typeIntoBlock(rendered, 0, "/code");
+    const option = screen.getByRole("option", { name: /Code/ });
+    focusOutsideEditor(option);
+
+    fireEvent.click(option);
+
+    const block = rendered.editor.getDocument().blocks[0];
+    if (block?.type !== "codeBlock") throw new Error("코드 블록이 아니다");
+    expect(block.id).toBe(blockId);
+    expect(block.content).toEqual([]);
+    expect(block.language).toBe("text");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it.each(["/", "/code"])(
+    "CodeBlock source가 %s여도 selectionchange로 Slash menu를 열지 않는다",
+    (source) => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, 0, source);
+      const converted = rendered.editor.commands.setBlockType(blockId, {
+        type: "codeBlock",
+      });
+      if (!converted.ok) throw new Error("코드 블록 fixture 준비 실패");
+      const code = rendered.host.querySelector<HTMLElement>(
+        "[data-be-code-block] code",
+      );
+      if (code === null) throw new Error("코드 편집 DOM을 찾지 못했다");
+
+      placeCaret(code);
+      expect(rendered.editor.getCaretBlockContext()).toEqual({
+        blockId,
+        blockType: { type: "codeBlock", language: "text" },
+        text: source,
+      });
+      fireSelectionChange();
+
+      expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
+    },
+  );
 
   it("Divider 항목을 클릭하면 트리거 블록 텍스트를 지우며 divider를 삽입하고 편집기로 초점을 되돌린다", () => {
     const rendered = renderCaretBlocks();
@@ -359,7 +402,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
     expect(inserted.content).toEqual([]);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(10);
+    expect(screen.getAllByRole("option")).toHaveLength(11);
 
     // 메뉴가 "그 블록"으로 열렸는지는 캐럿 갱신 한 번으로 갈린다. 실제
     // insertParagraphAfter는 캐럿을 새 문단으로 옮기므로(전제), 메뉴가 hover한

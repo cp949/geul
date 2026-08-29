@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 import {
   BLOCK_TYPE_OPTIONS,
   blockTypeToOptionId,
-  type BlockTypeOption,
 } from "../src/block-type-options.js";
 
 describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
@@ -45,17 +44,19 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     );
   });
 
-  it("codeBlock descriptor는 Turn into 옵션으로 노출하지 않는다", () => {
-    type OptionBlockType = BlockTypeOption["blockType"];
-    const unsupportedOption: OptionBlockType = {
-      // @ts-expect-error CodeBlock은 selection descriptor이며 setBlockType 옵션이 아니다.
-      type: "codeBlock",
-      language: "javascript",
-    };
+  it("Code 옵션이 세 소비 표면의 공용 목록에 필요한 descriptor와 검색어를 제공한다", () => {
+    const option = BLOCK_TYPE_OPTIONS.find(({ id }) => id === "code");
+
+    expect(option).toEqual({
+      id: "code",
+      label: "Code",
+      description: "Write plain code",
+      keywords: expect.arrayContaining(["code"]),
+      blockType: { type: "codeBlock" },
+    });
     expect(
       blockTypeToOptionId({ type: "codeBlock", language: "javascript" }),
-    ).toBe("");
-    expect(unsupportedOption.type).toBe("codeBlock");
+    ).toBe("code");
   });
 
   it("옵션마다 blockTypeToOptionId(option.blockType) === option.id다", () => {

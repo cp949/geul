@@ -151,6 +151,16 @@ export const SlashMenu = () => {
         return;
       }
 
+      // CodeBlock source는 슬래시 명령 입력이 아니라 그대로 보존할 코드다.
+      // 텍스트 shape만 보면 paragraph의 "/query"와 구분할 수 없으므로 core가
+      // 제공하는 blockType discriminator를 먼저 확인한다.
+      if (context.blockType.type === "codeBlock") {
+        explicitOpenBlockIdRef.current = null;
+        dismissedQueryRef.current = null;
+        setMenuState(null);
+        return;
+      }
+
       const dismissed = dismissedQueryRef.current;
       if (
         dismissed !== null &&

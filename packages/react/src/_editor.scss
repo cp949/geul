@@ -38,6 +38,21 @@
     color: var(--geul-color-text-muted, #5f6368);
   }
 
+  // CodeBlock은 language metadata와 무관한 plain source 영역이다. syntax token
+  // selector 없이 읽기 쉬운 고정폭 글꼴과 긴 줄의 가로 스크롤만 제공한다.
+  [data-be-code-block] {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    border: 1px solid var(--geul-color-border, #dadce0);
+    border-radius: 0.375rem;
+    background: var(--geul-color-surface-muted, #f1f3f4);
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    white-space: pre;
+  }
+
   // 시각적으로는 얇은 구분선이지만, block-side-menu.tsx의 hover 위치 계산은
   // 이 블록 요소의 getBoundingClientRect()에 기대므로(pointermove 추적) 기본
   // 두께(1px 안팎)만으로는 포인터가 실제로 머무르기 어렵다. padding-block으로

@@ -44,6 +44,20 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).toContain("content: attr(data-placeholder);");
   });
 
+  it("CodeBlock을 plain monospace와 가로 overflow가 있는 코드 영역으로 컴파일한다", () => {
+    const css = compileCss();
+    const rule = /\.geul-editor \[data-be-code-block\] \{(?<body>[^}]*)\}/.exec(
+      css,
+    )?.groups?.body;
+
+    expect(rule).toContain("font-family: ui-monospace");
+    expect(rule).toContain("padding: 0.75rem 1rem;");
+    expect(rule).toContain("background:");
+    expect(rule).toContain("border: 1px solid");
+    expect(rule).toContain("overflow-x: auto;");
+    expect(css).not.toMatch(/\[data-be-code-block\].*(?:\.token|language-)/);
+  });
+
   it(":root에 --geul-color-* 디자인 토큰 8개의 기본값을 선언한다(SCSS 전환 SSOT)", () => {
     // packages/react/src/styles.css의 var(--be-color-x, #hex) fallback과
     // 값이 같아야 한다 — 하나라도 드리프트되면 이 테스트가 잡는다.
