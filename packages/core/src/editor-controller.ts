@@ -175,7 +175,8 @@ type HeadingLevel = HeadingBlock["level"];
 type SetBlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
-  | { type: "quote" };
+  | { type: "quote" }
+  | { type: "codeBlock"; language?: string };
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }

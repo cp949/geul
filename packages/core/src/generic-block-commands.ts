@@ -1,7 +1,14 @@
-import type { Block, HeadingBlock, Result } from "@cp949/geul-model";
+import {
+  canonicalizeCodeBlockLanguage,
+  isValidCodeBlockLanguage,
+  isValidInlineText,
+  type Block,
+  type HeadingBlock,
+  type Result,
+} from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import {
@@ -18,10 +25,8 @@ import {
 type BlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingBlock["level"] }
-  | { type: "quote" };
-
-type RuntimeBlockTypeDescriptor =
-  BlockTypeDescriptor | { type: "codeBlock"; language?: string };
+  | { type: "quote" }
+  | { type: "codeBlock"; language?: string };
 
 const findEditableBlockContent = (
   document: ProseMirrorNode,
@@ -144,12 +149,13 @@ export const createGenericBlockCommands = (
 
   const setBlockType = (
     blockId: string,
-    blockType: RuntimeBlockTypeDescriptor,
+    blockType: BlockTypeDescriptor,
     options?: { clearContent?: boolean },
   ): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("setBlockType");
-    if (blockType.type === "codeBlock") {
-      return commandNotApplicable("setBlockType");
+    const modelTarget = findBlockInTree(session.document.blocks, blockId);
+    if (modelTarget === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
     const target = findEditableBlockContent(session.editor.state.doc, blockId);
     if (target === null) {
@@ -159,7 +165,8 @@ export const createGenericBlockCommands = (
     if (
       currentTypeName !== "paragraph" &&
       currentTypeName !== "heading" &&
-      currentTypeName !== "quote"
+      currentTypeName !== "quote" &&
+      currentTypeName !== "codeBlock"
     ) {
       return commandNotApplicable("setBlockType");
     }
@@ -169,16 +176,81 @@ export const createGenericBlockCommands = (
         : null;
     const currentContentSize = target.node.content.size;
     const clearContent = options?.clearContent ?? false;
+    const changesCodeBlockBoundary =
+      currentTypeName === "codeBlock" || blockType.type === "codeBlock";
+    if (
+      blockType.type === "codeBlock" &&
+      currentTypeName !== "codeBlock" &&
+      hasChildren(modelTarget.block)
+    ) {
+      return commandNotApplicable("setBlockType");
+    }
+    if (
+      currentTypeName === "codeBlock" &&
+      blockType.type !== "codeBlock" &&
+      !clearContent &&
+      !isValidInlineText(target.node.textContent)
+    ) {
+      return commandNotApplicable("setBlockType");
+    }
+    let codeBlockLanguage: string | null = null;
+    if (blockType.type === "codeBlock") {
+      const requestedLanguage = blockType.language ?? "text";
+      const language = requestedLanguage === "" ? "text" : requestedLanguage;
+      if (!isValidCodeBlockLanguage(language)) {
+        return commandNotApplicable("setBlockType");
+      }
+      codeBlockLanguage = canonicalizeCodeBlockLanguage(language);
+    }
     const isSameType =
       blockType.type === "heading"
         ? currentTypeName === "heading" && currentLevel === blockType.level
-        : currentTypeName === blockType.type;
+        : blockType.type === "codeBlock"
+          ? currentTypeName === "codeBlock" &&
+            target.node.attrs.language === codeBlockLanguage
+          : currentTypeName === blockType.type;
     if (isSameType && (!clearContent || currentContentSize === 0)) {
+      // language setter는 UI commit seam이기도 하다. 유효 입력이 이미 같은
+      // canonical 상태면 transaction 없이 성공해 caller가 거절과 구분한다.
+      if (blockType.type === "codeBlock") {
+        return { ok: true, value: undefined };
+      }
       return commandNotApplicable("setBlockType");
     }
     return session.runDocumentCommand("setBlockType", "local", () => {
       const nodeType = session.editor.schema.nodes[blockType.type];
       if (nodeType === undefined) return false;
+      if (changesCodeBlockBoundary) {
+        const source = clearContent ? "" : target.node.textContent;
+        const content =
+          source === "" ? undefined : session.editor.schema.text(source);
+        const attrs =
+          blockType.type === "heading"
+            ? { level: blockType.level }
+            : blockType.type === "codeBlock"
+              ? { language: codeBlockLanguage }
+              : {};
+        const replacement = nodeType.create(attrs, content);
+        const transaction = session.editor.state.tr.replaceWith(
+          target.position,
+          target.position + target.node.nodeSize,
+          replacement,
+        );
+        if (currentTypeName !== blockType.type || clearContent) {
+          transaction.setSelection(
+            TextSelection.create(transaction.doc, target.position + 1),
+          );
+        } else {
+          transaction.setSelection(
+            Selection.fromJSON(
+              transaction.doc,
+              session.editor.state.selection.toJSON(),
+            ),
+          );
+        }
+        session.editor.view.dispatch(closeHistory(transaction));
+        return true;
+      }
       let transaction = session.editor.state.tr;
       if (clearContent && currentContentSize > 0) {
         transaction = transaction.delete(
