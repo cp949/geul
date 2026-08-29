@@ -22,6 +22,8 @@ const parseProcessor = unified().use(remarkParse).use(remarkGfm);
 type MarkdownNode = {
   type: string;
   value?: string;
+  lang?: string | null;
+  meta?: string | null;
   depth?: number;
   url?: string;
   alt?: string;
@@ -175,7 +177,8 @@ export type ImportWarning = {
     | "UNSUPPORTED_BLOCK_DOWNGRADED"
     | "UNSUPPORTED_INLINE_DOWNGRADED"
     | "QUOTE_CHILD_DOWNGRADED"
-    | "NESTED_QUOTE_FLATTENED";
+    | "NESTED_QUOTE_FLATTENED"
+    | "CODE_BLOCK_META_DROPPED";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -634,6 +637,28 @@ function blocksFromNode(
   }
   if (node.type === "paragraph") {
     return [paragraphFromNodes(node.children ?? [], createId, warnings)];
+  }
+
+  if (node.type === "code") {
+    const id = createId();
+    const source = (node.value ?? "").replace(/\r\n?/g, "\n");
+    if (node.meta !== undefined && node.meta !== null && node.meta.length > 0) {
+      warnings.push({
+        kind: "CODE_BLOCK_META_DROPPED",
+        blockId: id,
+        message: "Code block meta was dropped during import",
+      });
+    }
+    return [
+      {
+        id,
+        type: "codeBlock",
+        ...(node.lang === undefined || node.lang === null
+          ? {}
+          : { language: node.lang }),
+        content: source.length === 0 ? [] : [{ text: source }],
+      },
+    ];
   }
 
   if (node.type === "heading") {

@@ -77,7 +77,7 @@ describe("Markdown 강등 경고", () => {
     });
   });
 
-  it("지원하지 않는 leaf 블록을 인라인 경고 중복 없이 보존한다", () => {
+  it("fenced code를 강등 경고 없이 CodeBlock으로 보존한다", () => {
     expect(importMarkdown("```ts\nconst x = 1;\nconst y = 2;\n```")).toEqual({
       ok: true,
       value: {
@@ -87,18 +87,13 @@ describe("Markdown 강등 경고", () => {
           blocks: [
             {
               id: "markdown-1",
-              type: "paragraph",
+              type: "codeBlock",
+              language: "typescript",
               content: [{ text: "const x = 1;\nconst y = 2;" }],
             },
           ],
         },
-        warnings: [
-          {
-            kind: "UNSUPPORTED_BLOCK_DOWNGRADED",
-            blockId: "markdown-1",
-            message: "Unsupported block code was imported as paragraphs",
-          },
-        ],
+        warnings: [],
       },
     });
   });
