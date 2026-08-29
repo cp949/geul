@@ -36,12 +36,13 @@ describe("HTML 보안", () => {
     ]);
   });
 
-  // DELTA-03(Issue #72): clipboard 전용 sanitize 허용 목록에 h4~h6를
-  // 추가해도 문서 import 공유 목록(htmlAllowedTagNames/htmlSanitizeSchema)은
-  // 바뀌지 않는다 — importHtml에서 h4는 여전히 sanitize가 unwrap해
-  // 문단으로 흡수되고 SAFE_BLOCK_DOWNGRADED 경고가 그대로 난다. 위 aside
-  // 사례와 대칭인 회귀 방지 테스트다.
-  it("importHtml은 h4를 여전히 문단으로 강등하고 SAFE_BLOCK_DOWNGRADED를 경고한다", () => {
+  // DELTA-06(Issue #38): model HeadingBlock.level이 1~6으로 넓어지면서
+  // h4~h6가 문서 import 공유 목록(htmlAllowedTagNames/htmlSanitizeSchema)과
+  // supportedBlockNames(import-warnings.ts)에 함께 들어왔다 — importHtml은
+  // h4를 더 이상 문단으로 강등하지 않고 heading 4로 들여오며, 강등이
+  // 없으므로 SAFE_BLOCK_DOWNGRADED도 내지 않는다(G-CNV-002: 경고 목록은
+  // 실제 지원과 일치). 위 aside 사례(여전히 미지원)와 대비되는 계약이다.
+  it("importHtml은 h4를 heading 4로 들여오고 SAFE_BLOCK_DOWNGRADED를 내지 않는다", () => {
     const result = importHtml("<h4>x</h4>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -49,49 +50,42 @@ describe("HTML 보안", () => {
     expect(result.value.document.blocks).toEqual([
       {
         id: "html-1",
-        type: "paragraph",
+        type: "heading",
+        level: 4,
         content: [{ text: "x" }],
       },
     ]);
-    expect(result.value.warnings).toEqual([
-      expect.objectContaining({
-        kind: "SAFE_BLOCK_DOWNGRADED",
-        element: "h4",
-      }),
-    ]);
+    expect(result.value.warnings).toEqual([]);
   });
 
-  // ce55f9f는 div/li/blockquote/ul/ol을 supportedBlockNames에 추가했지만
-  // import-warnings.ts의 topLevel 판정은 그대로 두어 회귀가 생겼다 —
-  // collectFromNodes가 div 자신은 지원 태그라 통과시키면서도 재귀 호출은
-  // 항상 topLevel:false로 넘겨, div 안에 중첩된 미지원 태그(h4 등)가 더는
-  // 어떤 경고도 받지 못했다(이전엔 최소한 div 자신이 오귀속으로라도
-  // SAFE_BLOCK_DOWNGRADED를 냈다). isBlockBoundaryTag로 이 다섯 태그를
-  // 통과할 때만 topLevel을 유지해 실제 원인 태그(h4)에 정확히 귀속된
-  // 경고를 되살린다.
-  it("div에 중첩된 h4도 SAFE_BLOCK_DOWNGRADED로 경고한다", () => {
+  // div는 block-segmenter.ts의 재귀 경계라 그 안의 h4도 최상위 h4와 같은
+  // 블록 위치다 — import-warnings.ts의 topLevel 판정이 div를 통과해
+  // 내려가도(isBlockBoundaryTag) h4가 이제 supportedBlockNames에 있으므로
+  // 경고가 없고, segmentBlocks가 div 안 h4를 heading 세그먼트로 인식한다.
+  // (div를 통과한 topLevel 판정 자체가 살아 있는지는 바로 아래 span 사례가
+  // 계속 고정한다.)
+  it("div에 중첩된 h4도 heading 4로 들어오고 SAFE_BLOCK_DOWNGRADED가 없다", () => {
     const result = importHtml("<div><h4>text</h4></div>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
     expect(result.value.document.blocks).toEqual([
-      { id: "html-1", type: "paragraph", content: [{ text: "text" }] },
+      { id: "html-1", type: "heading", level: 4, content: [{ text: "text" }] },
     ]);
-    expect(result.value.warnings).toEqual([
-      expect.objectContaining({
-        kind: "SAFE_BLOCK_DOWNGRADED",
-        element: "h4",
-      }),
-    ]);
+    expect(result.value.warnings).toEqual([]);
   });
 
   // 이미 지원하지 않는 태그(span) 자신이 경고를 낸 뒤에는 그 안에 중첩된
   // 내용까지 각각 다시 경고하지 않는다 — isBlockBoundaryTag는 div/li/
   // blockquote/ul/ol만 통과시키고, span처럼 애초에 미지원인 태그를 지나면
   // topLevel을 false로 낮춰 중복 경고를 막는다(기존 aside 사례와 같은
-  // "하나의 경고로 대표한다" 관례).
+  // "하나의 경고로 대표한다" 관례). 안쪽 태그는 h4가 지원 태그로 승격된
+  // 뒤에도 여전히 미지원인 section을 쓴다 — 지원 태그면 애초에 경고가 없어
+  // 중복 억제를 검증하지 못한다.
   it("미지원 태그 안에 중첩된 내용은 중복 경고하지 않는다", () => {
-    const result = importHtml("<div><span><h4>text</h4></span></div>");
+    const result = importHtml(
+      "<div><span><section>text</section></span></div>",
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
@@ -134,7 +128,11 @@ describe("HTML 보안", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
-  it("blockquote와 중첩된 li도 강등 경고 없이 개별 문단 경계로 인식된다", () => {
+  // DELTA-06a(Issue #38): blockquote는 더 이상 문단 경계가 아니라 quote
+  // 블록이다(D6 — 블록 자식 없이 인라인만 들면 그 인라인이 content). li는
+  // 여전히 문단 경계다. 클립보드 경로의 blockquote 문단 경계 계약은
+  // clipboard-mixed-content-block-boundary.test.ts가 따로 고정한다.
+  it("blockquote는 quote 블록이 되고 중첩된 li는 여전히 강등 경고 없이 개별 문단 경계로 인식된다", () => {
     const result = importHtml(
       "<blockquote>quoted</blockquote><ul><li>outer<ul><li>inner</li></ul></li></ul>",
     );
@@ -142,7 +140,7 @@ describe("HTML 보안", () => {
     if (!result.ok) throw new Error(result.error.message);
 
     expect(result.value.document.blocks).toEqual([
-      { id: "html-1", type: "paragraph", content: [{ text: "quoted" }] },
+      { id: "html-1", type: "quote", content: [{ text: "quoted" }] },
       { id: "html-2", type: "paragraph", content: [{ text: "outer" }] },
       { id: "html-3", type: "paragraph", content: [{ text: "inner" }] },
     ]);

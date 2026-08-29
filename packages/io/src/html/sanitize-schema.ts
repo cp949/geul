@@ -3,10 +3,16 @@ import type { Schema } from "hast-util-sanitize";
 export const htmlAllowedAttributes: Record<string, string[]> = {
   "*": [],
   a: ["href"],
+  // blockquote(quote)는 블록 id를 자신이 갖는다(DELTA-06a — export-html.ts가
+  // <blockquote data-be-block-id><p>content</p>[<div data-be-children>]>로
+  // 낸다). 이 항목이 없으면 sanitize가 "*" 규칙으로 id를 지워 quote의 id가
+  // 왕복에서 새로 발급된다. 안쪽 children 컨테이너 div는 아래 div 항목이
+  // 그대로 받는다.
+  blockquote: ["dataBeBlockId"],
   col: ["width", "dataBeColumnId", "dataBeWidth"],
   // DELTA-04(children 재귀 왕복): export-html.ts의 blockNode가 children 있는
   // paragraph/heading을 감싸는 wrapper(바깥 div, children 컨테이너 div)가
-  // 쓰는 두 속성이다. dataBeBlockId는 p/h1~h3와 같은 이름을 재사용하고,
+  // 쓰는 두 속성이다. dataBeBlockId는 p/h1~h6/hr와 같은 이름을 재사용하고,
   // dataBeChildren은 "이 div가 children 목록 컨테이너"라는 새 마커다(값은
   // 항상 "1"). 이 목록에 없으면 sanitize가 div의 모든 속성을 지워
   // import-html.ts의 findChildrenWrapper가 children 컨테이너를 알아보지
@@ -15,6 +21,12 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   h1: ["dataBeBlockId"],
   h2: ["dataBeBlockId"],
   h3: ["dataBeBlockId"],
+  h4: ["dataBeBlockId"],
+  h5: ["dataBeBlockId"],
+  h6: ["dataBeBlockId"],
+  // hr(divider)은 속성이 블록 id뿐이다 — 이 항목이 없으면 sanitize가 "*"
+  // 규칙으로 id를 지워 divider의 id가 왕복에서 새로 발급된다.
+  hr: ["dataBeBlockId"],
   p: ["dataBeBlockId"],
   table: ["dataBeBlockId", "dataBeHeaderRows", "dataBeHeaderColumns"],
   td: [
@@ -53,9 +65,19 @@ export const htmlStrippedTagNames = [
 
 export const htmlAllowedTagNames = [
   "p",
+  // h1~h6는 model HeadingBlock.level 1~6과 1:1이다(DELTA-06, Issue #38 —
+  // 그 전에는 model이 1~3만 허용해 h4~h6를 unwrap했다).
   "h1",
   "h2",
   "h3",
+  "h4",
+  "h5",
+  "h6",
+  // hr은 model divider의 HTML 매핑이다(spec §7.1). 콘텐츠 없는 void 요소라
+  // 표 태그(ancestors: table)처럼 조상 제약을 둘 이유가 없다 — 블록 위치면
+  // block-segmenter.ts가 hr 세그먼트로 내고, 표 셀 안이면
+  // inlineContentFromNodes가 텍스트 없이 지나간다.
+  "hr",
   "strong",
   "em",
   "u",
@@ -63,13 +85,16 @@ export const htmlAllowedTagNames = [
   "code",
   "a",
   "br",
-  // div/li/blockquote/ul/ol도 p와 같은 문단 경계다(아키텍처 리뷰 2차 후보
-  // G, Issue #113의 import 경로 반영). model에 리스트·인용문 전용 Block
-  // 타입이 없어 heading처럼 별도 타입을 만들 수는 없으므로 p처럼 문단으로만
-  // 분리한다 — sanitize가 이 태그를 unwrap하면 documentFromRoot의
-  // block-segmenter.ts 재귀가 애초에 경계를 볼 수 없으므로 여기서 살려야
-  // 한다. clipboardAllowedTagNames가 이 다섯을 별도로 다시 얹지 않고
-  // 이 목록을 그대로 상속하는 이유이기도 하다.
+  // div/li/ul/ol은 p와 같은 문단 경계다(아키텍처 리뷰 2차 후보 G, Issue
+  // #113의 import 경로 반영). model에 리스트 전용 Block 타입이 없어 heading
+  // 처럼 별도 타입을 만들 수는 없으므로 p처럼 문단으로만 분리한다 —
+  // sanitize가 이 태그를 unwrap하면 documentFromRoot의 block-segmenter.ts
+  // 재귀가 애초에 경계를 볼 수 없으므로 여기서 살려야 한다.
+  // blockquote는 문서 import에서 model quote 블록의 HTML 매핑이고(DELTA-06a,
+  // spec §7.1 — content + children 중첩), 클립보드 경로에서는 여전히 문단
+  // 경계다(clipboard-table-parser.ts가 isQuoteTag를 넘기지 않는다).
+  // clipboardAllowedTagNames가 이 다섯을 별도로 다시 얹지 않고 이 목록을
+  // 그대로 상속하는 이유이기도 하다.
   "div",
   "li",
   "blockquote",
@@ -123,21 +148,18 @@ export const clipboardAllowedAttributes: Record<string, string[]> = {
   th: clipboardCellAttributes,
 };
 
-// clipboard 경로 전용 tagNames 오버라이드. h4~h6만 남는다 — model
-// HeadingBlock.level이 1~3만 허용해 import-html.ts가 h4~h6를 만들 수 없기
-// 때문이다(그래서 sanitize가 unwrap해 SAFE_BLOCK_DOWNGRADED로 강등된다).
-// clipboard 경로는 model에 저장하지 않고 blockSequenceFromNodes가 h4~h6를
-// 문단으로 다운그레이드만 하므로, sanitize 단계에서 태그 자체를 살려
-// 파서에 도달시켜야 블록 경계로 인식할 수 있다(DELTA-03, Issue #72).
-// div/li/blockquote/ul/ol은 htmlAllowedTagNames가 이미 공유하므로(아키텍처
-// 리뷰 2차 후보 G) 여기서 다시 얹지 않는다 — import 경로도 이제 같은 태그를
-// 문단 경계로 인식해 SAFE_BLOCK_DOWNGRADED 계약이 깨지지 않는다.
-export const clipboardAllowedTagNames = [
-  ...htmlAllowedTagNames,
-  "h4",
-  "h5",
-  "h6",
-];
+// clipboard 경로 전용 tagNames. DELTA-03(Issue #72)에서는 h4~h6를 여기서만
+// 얹었다 — 당시 model HeadingBlock.level이 1~3이라 문서 import 공유 목록에는
+// 넣을 수 없었고, clipboard는 blockSequenceFromNodes가 h4~h6를 문단으로
+// 다운그레이드만 하므로 태그를 파서까지 살려 블록 경계로 인식시키기만 하면
+// 됐다. DELTA-06(Issue #38)이 h4~h6·hr을 공유 목록에 올려 두 목록의 내용이
+// 같아졌지만 이름은 따로 둔다 — 두 경로의 허용 목록이 같아야 한다는 계약은
+// 없고(clipboardStrippedTagNames가 이미 갈라져 있다) clipboardSanitizeSchema
+// 가 어느 목록을 쓰는지 드러나야 한다. hr은 clipboard 정책
+// (clipboard-table-parser.ts)이 divider 세그먼트로 인식하지 않아 pending
+// 인라인 노드로 지나가며 텍스트를 내지 않는다 — clipboard의 hr 처리는
+// 슬라이스 10 소관이다.
+export const clipboardAllowedTagNames = [...htmlAllowedTagNames];
 
 // <title>은 소스 문서 head의 메타데이터지 사용자가 선택한 본문이 아니다.
 // tagNames에도 strip에도 없으면 sanitize가 태그만 벗기고(unwrap) 그 텍스트를

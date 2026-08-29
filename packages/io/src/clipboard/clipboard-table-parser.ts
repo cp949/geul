@@ -178,6 +178,12 @@ const blockSequenceFromNodes = (
       }
       continue;
     }
+    // 클립보드 정책은 isDividerTag를 넘기지 않아 도달하지 않는다 — 공유
+    // union의 exhaustiveness 반영, hr 처리는 슬라이스 10 소관.
+    if (segment.kind === "hr") continue;
+    // 클립보드 정책은 isQuoteTag를 넘기지 않아 도달하지 않는다 — 공유
+    // union의 exhaustiveness 반영, blockquote 매핑은 슬라이스 10 소관.
+    if (segment.kind === "blockquote") continue;
 
     // 표. caption(표 직속 비섹션 자식)은 기존 pending 뒤·표 앞이라는
     // 문서 순서를 segmentBlocks가 이미 지킨다 — 여기서는 같은

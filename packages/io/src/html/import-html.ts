@@ -1,6 +1,7 @@
 import {
   appendOrMergeInlineItem,
   type Document,
+  type HeadingBlock,
   type IdFactory,
   type InlineContent,
   MAX_NESTING_DEPTH,
@@ -313,35 +314,133 @@ const parseTable = (
   };
 };
 
-// documentFromRoot의 재귀 경계 판정(문단/헤딩/표 시퀀스로 쪼개기)은
+// heading 태그명 → model HeadingBlock["level"]. h1~h6 전부가 heading이다
+// (DELTA-06, Issue #38 — model이 level 1~6을 허용하고 sanitize도 h4~h6를
+// 살린다). 정규식 + Number() + 캐스트 대신 표를 쓰는 이유: 표의 값 타입이
+// 곧 model 계약이라 세그먼트의 level이 캐스트 없이 HeadingBlock["level"]로
+// 좁혀지고(segmentBlocks<Level>), 범위 검증을 io에 중복하지 않는다
+// (G-CNV-001 — 최종 검증은 parseDocument). Record 대신 Map인 이유는
+// "constructor" 같은 프로토타입 키가 태그명으로 들어와도 값을 돌려주지
+// 않게 하기 위해서다. findChildrenWrapper의 자기 콘텐츠 판정도 이 표를
+// 공유해 두 자리의 heading 태그 집합이 어긋나지 않는다.
+const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
+  ["h1", 1],
+  ["h2", 2],
+  ["h3", 3],
+  ["h4", 4],
+  ["h5", 5],
+  ["h6", 6],
+]);
+
+// documentFromRoot의 재귀 경계 판정(문단/헤딩/구분선/표 시퀀스로 쪼개기)은
 // clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
 // 공유한다(아키텍처 리뷰 2차 후보 G) — p/h1~h3/table만 보던 예전 documentFromRoot
 // 는 최상위 노드만 훑는 평면 루프라 div/li/blockquote/ul/ol처럼 중첩 가능한
-// 경계를 인식하지 못했다(Issue #113과 같은 종류의 병합). h4~h6는 여기 포함하지
-// 않는다 — model HeadingBlock.level이 1~3만 허용해 sanitize가 애초에
-// h4~h6를 unwrap하므로 headingLevelFromTagName이 h1~h3만 인식해도 충분하다
-// (그릴링 결정: 문단 경계 태그 집합만 공유, heading 다운그레이드는 clipboard
-// 고유 정책으로 남긴다).
-const importBlockSegmentPolicy: BlockSegmentPolicy = {
+// 경계를 인식하지 못했다(Issue #113과 같은 종류의 병합). heading 다운그레이드는
+// clipboard 고유 정책으로 남긴다(그릴링 결정: 문단 경계 태그 집합만 공유).
+// hr은 콘텐츠 없는 세그먼트로 받아 divider 블록으로 옮긴다(spec §7.1) —
+// clipboard 정책은 isDividerTag를 넘기지 않아 hr 처리가 갈라진다.
+// blockquote도 같은 방식으로 세그먼트로 받아 quote 블록으로 옮긴다
+// (DELTA-06a, D6 분할 규칙은 splitQuoteChildren) — clipboard 정책은
+// isQuoteTag를 넘기지 않아 blockquote가 문단 경계로 남는다.
+const importBlockSegmentPolicy: BlockSegmentPolicy<HeadingBlock["level"]> = {
   isSimpleBoundary: isParagraphTag,
-  headingLevelFromTagName: (tagName) =>
-    /^h[1-3]$/.test(tagName) ? Number(tagName[1]) : undefined,
+  headingLevelFromTagName: (tagName) => headingLevelByTagName.get(tagName),
   isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
   isTransparent: isTransparentListTag,
   isTableNode: (node) => node.tagName === "table",
+  isDividerTag: (tagName) => tagName === "hr",
+  isQuoteTag: (tagName) => tagName === "blockquote",
 };
 
 const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
   sanitizeInlineContentText(inlineContentFromNodes(nodes));
 
+const isElementNode = (node: HtmlNode): node is HtmlElementNode =>
+  node.type === "element";
+
+// blockquote 직속 자식 중 "블록 자리를 차지하는" 요소 판정 — segmentBlocks가
+// importBlockSegmentPolicy로 경계·컨테이너·표로 인식하는 태그와 정확히 같은
+// 집합이다(그 외 요소와 텍스트는 인라인이라 pending으로 쌓인다). D6의 "첫
+// 자식이 문단인가/비문단인가"는 이 판정 위에서만 뜻이 있다 — strong 같은
+// 인라인 요소를 블록으로 세면 인라인만 든 인용문이 빈 content가 된다.
+const isBlockLevelElement = (node: HtmlElementNode): boolean =>
+  importBlockSegmentPolicy.isSimpleBoundary(node.tagName) ||
+  importBlockSegmentPolicy.headingLevelFromTagName(node.tagName) !==
+    undefined ||
+  importBlockSegmentPolicy.isDividerTag?.(node.tagName) === true ||
+  importBlockSegmentPolicy.isQuoteTag?.(node.tagName) === true ||
+  importBlockSegmentPolicy.isNestedBoundary(node.tagName) ||
+  importBlockSegmentPolicy.isTransparent(node.tagName) ||
+  importBlockSegmentPolicy.isTableNode(node);
+
+// D6(blockquote 분할 규칙, spec §7.1): blockquote의 자식을 quote content와
+// children으로 나눈다. 머리(공백뿐인 텍스트를 건너뛴 첫 실질 노드)가
+// <p>면 그 인라인이 content이고 나머지 자식이 children이다(export-html.ts가
+// 내는 <blockquote><p>content</p>[<div data-be-children>]> 형상의 역변환).
+// 머리가 h2·ul·중첩 blockquote처럼 비문단 블록이면 content는 비고 전부
+// children이다. 머리가 텍스트나 인라인 요소면 두 갈래다 — 블록 자식이
+// 하나도 없으면(손으로 쓴 <blockquote>인용</blockquote>) 인라인 전체가
+// content이고, 블록 자식이 섞여 있으면 문서 순서를 지키려 content를 비우고
+// 전부 children으로 넘긴다(앞선 인라인 run은 segmentBlocks가 문단으로
+// 낸다 — 승격하면 content가 뒤의 블록보다 앞서 원래 순서와 어긋난다).
+// children 자리가 export가 낸 단일 data-be-children 컨테이너뿐이면 그 안의
+// 노드를 꺼낸다 — 컨테이너 div를 그대로 넘기면 segmentBlocks가 div를 문단
+// 경계로 걸어 들어가 그 안의 children wrapper를 평면 처리해 버린다.
+const splitQuoteChildren = (
+  node: HtmlElementNode,
+): { contentNodes: HtmlNode[]; childrenNodes: HtmlNode[] } => {
+  const head = node.children.find(
+    (child) => isElementNode(child) || hasSubstantialText(textValue([child])),
+  );
+  if (head === undefined) return { contentNodes: [], childrenNodes: [] };
+
+  if (!isElementNode(head) || !isBlockLevelElement(head)) {
+    const hasBlockChild = node.children.some(
+      (child) => isElementNode(child) && isBlockLevelElement(child),
+    );
+    return hasBlockChild
+      ? { contentNodes: [], childrenNodes: node.children }
+      : { contentNodes: node.children, childrenNodes: [] };
+  }
+
+  const rest = isParagraphTag(head.tagName)
+    ? node.children.filter((child) => child !== head)
+    : node.children;
+  const contentNodes = isParagraphTag(head.tagName) ? head.children : [];
+
+  const restElements = rest.filter(isElementNode);
+  const container = restElements[0];
+  const isSingleChildrenContainer =
+    restElements.length === 1 &&
+    container !== undefined &&
+    container.tagName === "div" &&
+    propertyString(container, "dataBeChildren") !== undefined &&
+    !rest.some(
+      (child) =>
+        !isElementNode(child) && hasSubstantialText(textValue([child])),
+    );
+  return {
+    contentNodes,
+    childrenNodes:
+      isSingleChildrenContainer && container !== undefined
+        ? container.children
+        : rest,
+  };
+};
+
 // segmentBlocks의 경계 판정을 실제 Block으로 옮기는 변환 하나만 한다(재귀
 // unwrap은 다루지 않는다 — blocksFromNodes가 감싼다). documentFromRoot의
 // 기존 루프 그대로이고, DELTA-04는 이 함수를 두 자리에서 재사용한다: (1)
 // 최상위 nodes 중 children wrapper가 아닌 나머지("평면" 구간), (2) wrapper
-// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고).
+// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고). depth·warnings는
+// blockquote 세그먼트의 children 재귀(blocksFromNodes로 되돌아감)가 wrapper
+// 재귀와 같은 깊이 가드를 받기 위해서만 받는다(DELTA-06a).
 const blocksFromSegments = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,
+  depth: number,
+  warnings: HtmlImportWarning[],
 ): Document["blocks"] => {
   const blocks: Document["blocks"] = [];
 
@@ -373,15 +472,64 @@ const blocksFromSegments = (
       continue;
     }
     if (segment.kind === "heading") {
-      // importBlockSegmentPolicy가 h1~h3만 heading으로 인식하므로 이
-      // 분기의 level은 항상 1~3이다. dataBeBlockId는 heading 요소 자신의
-      // 속성이라 segment.node에서 읽는다(기존 parseBlock 관례).
+      // level은 headingLevelByTagName의 값 타입(HeadingBlock["level"])을
+      // 세그먼트가 그대로 실어 온다 — 캐스트도 재검증도 없다. dataBeBlockId는
+      // heading 요소 자신의 속성이라 segment.node에서 읽는다(기존 parseBlock
+      // 관례).
       blocks.push({
         id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
         type: "heading",
-        level: segment.level as 1 | 2 | 3,
+        level: segment.level,
         content: paragraphContentFromNodes(segment.nodes),
       });
+      continue;
+    }
+    if (segment.kind === "hr") {
+      // divider는 콘텐츠·children 없는 리프다(spec §4.2). 빈 <p>를 빈 문단으로
+      // 보존하는 관례처럼 hr 하나당 divider 하나를 항상 낸다.
+      blocks.push({
+        id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
+        type: "divider",
+      });
+      continue;
+    }
+    if (segment.kind === "blockquote") {
+      // quote(D6 — splitQuoteChildren). blockquote 하나당 quote 하나를 항상
+      // 낸다(빈 <blockquote>도 빈 quote — 빈 <p> 관례와 같다). id는 children
+      // 재귀보다 먼저 발급해 문서 순서(부모 → 자식)대로 html-N이 붙게 한다.
+      // children은 blocksFromNodes로 되돌아가 wrapper·중첩 blockquote를 다시
+      // 인식하며, wrapper와 같은 깊이 가드를 받는다: depth >= MAX_NESTING_DEPTH
+      // 면 children 배열을 만들 수 없으므로 quote는 content만 지키고 children
+      // 자리의 노드는 같은 depth의 형제 블록으로 평탄화한다 — 실제로 블록이
+      // 나왔을 때만(공백뿐이면 잃는 구조가 없다) NESTED_CHILDREN_FLATTENED를
+      // 경고한다(Issue #132, G-CNV-002). 같은 depth 재귀는 HTML 트리 한 단계를
+      // 소비하므로 MAX_HTML_TREE_DEPTH로 유계다.
+      const id = propertyString(segment.node, "dataBeBlockId") ?? createId();
+      const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
+      const content = paragraphContentFromNodes(contentNodes);
+      if (depth >= MAX_NESTING_DEPTH) {
+        const flattened = blocksFromNodes(
+          childrenNodes,
+          createId,
+          depth,
+          warnings,
+        );
+        if (flattened.length > 0)
+          warnings.push(nestedChildrenFlattenedWarning());
+        blocks.push({ id, type: "quote", content }, ...flattened);
+        continue;
+      }
+      const children = blocksFromNodes(
+        childrenNodes,
+        createId,
+        depth + 1,
+        warnings,
+      );
+      blocks.push(
+        children.length > 0
+          ? { id, type: "quote", content, children }
+          : { id, type: "quote", content },
+      );
       continue;
     }
 
@@ -410,15 +558,13 @@ const blocksFromSegments = (
   return blocks;
 };
 
-const isElementNode = (node: HtmlNode): node is HtmlElementNode =>
-  node.type === "element";
-
 // exportHtml(blockNode)이 낸 children wrapper를 구조로만 인식한다: div
 // 자식이 정확히 2개(실질 텍스트가 섞이지 않은 순수 2-element), 첫째는
-// p/h1~h3(그 블록 자신의 본문), 둘째는 dataBeChildren이 있는 div(children
-// 목록)다. 이 두 자리 중 하나라도 어긋나면 wrapper로 보지 않고 undefined를
-// 반환한다 — 호출자(blocksFromNodes)는 그 경우 원본 노드를 그대로 평면
-// 처리(segmentBlocks)로 넘긴다. 부분 일치를 관대하게 봐주지 않는 이유:
+// p/h1~h6(그 블록 자신의 본문 — hr은 children을 가질 수 없는 divider라
+// export가 이 자리에 절대 내지 않으므로 보지 않는다), 둘째는 dataBeChildren이
+// 있는 div(children 목록)다. 이 두 자리 중 하나라도 어긋나면 wrapper로 보지
+// 않고 undefined를 반환한다 — 호출자(blocksFromNodes)는 그 경우 원본 노드를 그대로
+// 평면 처리(segmentBlocks)로 넘긴다. 부분 일치를 관대하게 봐주지 않는 이유:
 // export가 절대 내지 않는 애매한 구조까지 wrapper로 오인하면 사용자가 직접
 // 쓴 임의의 div(예: <div>STRAY<p>a</p><div data-be-children>b</div></div>)가
 // 뜻하지 않게 중첩 구조로 해석되고, 그 사이·앞뒤에 낀 실질 텍스트("STRAY")가
@@ -449,7 +595,8 @@ const findChildrenWrapper = (
   const containerNode = elementChildren[1];
   if (ownNode === undefined || containerNode === undefined) return undefined;
   const isOwnBoundaryTag =
-    ownNode.tagName === "p" || /^h[1-3]$/.test(ownNode.tagName);
+    isParagraphTag(ownNode.tagName) ||
+    headingLevelByTagName.has(ownNode.tagName);
   if (!isOwnBoundaryTag) return undefined;
   if (
     containerNode.tagName !== "div" ||
@@ -493,7 +640,7 @@ const blocksFromNodes = (
 
   const flushPlainRun = (): void => {
     if (plainRun.length === 0) return;
-    blocks.push(...blocksFromSegments(plainRun, createId));
+    blocks.push(...blocksFromSegments(plainRun, createId, depth, warnings));
     plainRun = [];
   };
 
@@ -515,14 +662,19 @@ const blocksFromNodes = (
     }
 
     flushPlainRun();
-    const ownBlocks = blocksFromSegments([wrapper.ownNode], createId);
+    const ownBlocks = blocksFromSegments(
+      [wrapper.ownNode],
+      createId,
+      depth,
+      warnings,
+    );
     const ownBlock = ownBlocks[0];
     if (
       ownBlocks.length !== 1 ||
       ownBlock === undefined ||
       (ownBlock.type !== "paragraph" && ownBlock.type !== "heading")
     ) {
-      // findChildrenWrapper가 ownNode를 p/h1~h3로만 걸렀으므로 정상 입력에서
+      // findChildrenWrapper가 ownNode를 p/h1~h6로만 걸렀으므로 정상 입력에서
       // 이 분기는 도달하지 않는다 — p/heading이 (HTML5 파싱상 가능한) 표를
       // 품고 있어 segmentBlocks가 블록 하나 대신 여러/다른(paragraph·heading
       // 이외 — children을 가질 수 없는 divider 포함) 세그먼트를 냈을 때만

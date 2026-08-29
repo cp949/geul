@@ -1,14 +1,17 @@
 /**
- * quote·divider 블록을 담은 Document를 짧게 만드는 fixture 빌더다.
- * 미지원 블록 임시 거절 테스트(unsupported-block-export.test.ts)와 quote·divider
- * 실제 매핑이 들어오는 후속 DELTA(06·06a·07·07a)의 테스트가 같은 블록 모양을
- * 공유한다 — 블록 리터럴을 각 테스트 파일에 흩어 두면 id·type 규약이 어긋나기
- * 쉽다. 단순 리터럴 빌더라 별도 계약 테스트는 두지 않는다.
+ * quote·divider·heading·paragraph 블록을 담은 Document를 짧게 만드는 fixture
+ * 빌더다. 미지원 블록 임시 거절 테스트(unsupported-block-export.test.ts)와
+ * quote·divider 실제 매핑이 들어오는 DELTA(06·06a·07·07a)의 테스트, h4-h6·hr
+ * 왕복 테스트(html-heading-divider.test.ts)가 같은 블록 모양을 공유한다 —
+ * 블록 리터럴을 각 테스트 파일에 흩어 두면 id·type 규약이 어긋나기 쉽다.
+ * 단순 리터럴 빌더라 별도 계약 테스트는 두지 않는다.
  */
 import type {
   Block,
   DividerBlock,
   Document,
+  HeadingBlock,
+  ParagraphBlock,
   QuoteBlock,
 } from "@cp949/geul-model";
 
@@ -32,6 +35,33 @@ export const dividerBlock = (id: string): DividerBlock => ({
   id,
   type: "divider",
 });
+
+/**
+ * 텍스트 한 조각을 content로 갖는 heading 블록을 만든다. children을 주면
+ * 그대로 붙여 children wrapper 시나리오를 짧게 표현한다.
+ */
+export const headingBlock = (
+  id: string,
+  level: HeadingBlock["level"],
+  text: string,
+  children?: Block[],
+): HeadingBlock =>
+  children === undefined
+    ? { id, type: "heading", level, content: [{ text }] }
+    : { id, type: "heading", level, content: [{ text }], children };
+
+/**
+ * 텍스트 한 조각을 content로 갖는 paragraph 블록을 만든다(headingBlock과
+ * 같은 children 규약).
+ */
+export const paragraphBlock = (
+  id: string,
+  text: string,
+  children?: Block[],
+): ParagraphBlock =>
+  children === undefined
+    ? { id, type: "paragraph", content: [{ text }] }
+    : { id, type: "paragraph", content: [{ text }], children };
 
 /**
  * 블록 배열을 formatVersion 1·revision 0의 Document로 감싼다.

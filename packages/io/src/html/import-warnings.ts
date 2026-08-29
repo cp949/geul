@@ -91,9 +91,11 @@ const unsafeElementNames = new Set([
   "select",
   "textarea",
 ]);
-// div/li/blockquote/ul/ol은 htmlAllowedTagNames가 이제 문단 경계로 허용한다
-// (아키텍처 리뷰 2차 후보 G) — sanitize가 더 이상 이 태그를 unwrap하지
-// 않으므로 SAFE_BLOCK_DOWNGRADED로 강등됐다고 보고하면 사실과 어긋난다.
+// div/li/blockquote/ul/ol은 htmlAllowedTagNames가 이제 문단 경계로 허용하고
+// (아키텍처 리뷰 2차 후보 G), h4~h6·hr은 DELTA-06(Issue #38)이 heading 4~6·
+// divider 매핑으로 승격했다 — sanitize가 더 이상 이 태그를 unwrap하지
+// 않으므로 SAFE_BLOCK_DOWNGRADED로 강등됐다고 보고하면 사실과 어긋난다
+// (G-CNV-002: 경고 목록은 실제 지원과 일치해야 한다).
 // 이 집합은 raw HAST(sanitize 이전)를 검사하므로 sanitize 허용 목록과
 // 별개로 직접 갱신해야 한다 — 둘을 하나로 합치면 이 파일이 sanitize-schema
 // 구현 디테일에 결합된다.
@@ -102,6 +104,10 @@ const supportedBlockNames = new Set([
   "h1",
   "h2",
   "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
   "div",
   "li",
   "blockquote",

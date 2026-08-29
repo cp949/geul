@@ -29,6 +29,7 @@ R2는 일반적인 Notion형 문서를 BlockNote 무료 기본 블록 수준으�
 
 - `IO-007`은 roadmap에 R2로 배정돼 있으나, 파일 붙여넣기의 실제 목적지인 파일/이미지/비디오/오디오 블록(`BLK-013`~`BLK-016`)은 R3 범위다. R2는 `IO-007`을 **HTML·Markdown·plain text 붙여넣기까지만** 구현하고, 파일 붙여넣기는 R3에서 파일 블록과 함께 완성한다(사용자 승인 완료). `IO-007`은 R2 완료 시점에 `PARTIAL`로 남고, R3 완료 조건에 "파일 붙여넣기 완성"을 추가한다.
 - 표 중첩은 범위 밖이다 — `TableBlock`에 `children`을 추가하지 않는다(3.2). 이는 **표 셀 안에 블록을 넣는 것**만 막는다. `TableBlock` 자신은 다른 블록(예: 토글 목록 항목)의 `children` 값으로 들어갈 수 있다 — `indentBlock`/`outdentBlock`은 블록 타입과 무관하게 동작하는 일반 명령이라 표만 예외 취급하지 않는다(5.1). 즉 "표를 들여쓰기"는 R2 범위이고 "표 셀 안에 블록 중첩"만 범위 밖이다.
+- R2 완료 조건 1(11절)의 "종류 변경"은 콘텐츠 블록을 대상으로 한다 — 표와 구분선은 제외한다(표는 R1부터 Turn into 목록 밖이다)(사용자 승인 완료 2026-08-28, Issue #38 슬라이스 3).
 - R2 이후 기능은 이 명세의 범위가 아니다: 파일/미디어 블록, 확장성 API, Yjs 공동편집, XLSX/CSV, iframe/p5.js.
 
 ## 3. 문서 모델
@@ -129,6 +130,7 @@ export type Block =
 
 - `setHeadingLevel(blockId, level)` — 기존 `setBlockType`을 확장하지 않고 heading 전용 level 변경으로 분리(문단 등 다른 타입과 신호가 다르다).
   - 정정(2026-08-28, Issue #38 슬라이스 3): `setHeadingLevel`을 신설하지 않는다 — heading level 변경은 기존 `setBlockType`이 단일 경로로 소유한다(`setBlockType(blockId, { type: "heading", level })`). 근거: `packages/core/src/editor-controller.ts`의 `setBlockType`이 이미 현재 블록의 level을 읽어 동일 타입·동일 level 재적용을 `COMMAND_NOT_APPLICABLE`로 거절하고(`clearContent` 옵션으로 콘텐츠를 비우는 호출은 예외) level attr 적용까지 소유하며, React 소비 표면 3곳(슬래시 메뉴 `slash-menu.tsx`, 서식 툴바 `formatting-toolbar.tsx`, 블록 메뉴 Turn into `block-side-menu.tsx`)이 전부 이 경로를 쓴다. 원문의 전제("문단 등 다른 타입과 신호가 다르다")와 달리 level은 `setBlockType`의 heading 대상 인자에 이미 포함돼 있어 별도 명령을 두면 같은 로직이 두 경로에 중복된다 — 모든 입력 경로가 같은 명령을 호출하고 로직을 중복 구현하지 않는다(6.1과 같은 원칙).
+- `insertDivider(afterBlockId, options?: { clearAfterBlockText?: boolean })` — 구분선 삽입 전용 명령이다. `setBlockType`의 변환 대상이 아니다(content 폐기형 변환을 Turn into·툴바에 열지 않는다 — 표와 같은 원칙)(사용자 승인 완료 2026-08-28, Issue #38 슬라이스 3).
 - `toggleHeadingCollapse(blockId)`, `toggleListItemCollapse(blockId)`
 - `toggleCheckListItemChecked(blockId)`
 - `indentBlock(blockId)`, `outdentBlock(blockId)` — 형제 관계를 부모-자식으로 바꾸거나 되돌린다.
@@ -184,6 +186,7 @@ export type Block =
 
 - H4-H6 → `h4`~`h6`. 토글 제목/토글 목록의 `collapsed` → `<details open={!collapsed}>`류 표현(정확한 매핑은 슬라이스 착수 시 확정, `isToggleable`이 없으면 일반 heading으로 export).
 - 인용문 → `blockquote`(children은 blockquote 안에 중첩 HTML로).
+- import 방향: `<blockquote>`의 첫 자식이 문단이면 그 문단의 인라인 콘텐츠가 quote `content`가 되고 나머지 자식은 `children`이 된다. 첫 자식이 비문단이면 `content`는 빈 채로 두고 전부 `children`이 된다(사용자 승인 완료 2026-08-28, Issue #38 슬라이스 3).
 - 구분선 → `hr`.
 - 코드 블록 → `<pre><code class="language-...">`(language 없으면 class 생략).
 - 목록 4종 → `ul`/`ol`(`start` 속성 매핑)/체크박스는 `input[type=checkbox][disabled]` 또는 `data-checked` 속성(정확한 형태는 슬라이스 착수 시 확정) / 토글은 `details`.
@@ -201,6 +204,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - `strict` export는 이 중 하나라도 문서에 있으면 실패하고 구조화된 손실 정보(블록 ID, 기능 종류)를 반환한다.
   - `lossy` export는 토글을 일반 목록/heading으로 낮추고(접힘 상태·`isToggleable` 정보만 버림, 콘텐츠는 보존), 색상·정렬을 버리고, 각 손실을 경고 목록에 기록한다.
 - GFM import는 토글 문법이 없으므로 토글을 만들지 않는다. 체크 목록(`- [ ]`)은 `checkListItem`으로, 번호 목록의 시작 값은 `startNumber`로 매핑한다.
+- 정정(2026-08-28, Issue #38 슬라이스 3): (a) `paragraph`/`heading`/`quote`의 `children`은 GFM 표현 불가 목록이다 — `strict` export는 거절하고, `lossy` export는 자식을 형제로 평탄화하며 `NESTED_CHILDREN` 경고를 반환한다(슬라이스 1 규칙에 quote를 편입한다). (b) GFM import는 `>` 안 문단을 문단마다 형제 `quote`로 분해하고 `children`을 만들지 않는다(import 직후 strict 실패의 비대칭을 막는다); 비문단 자식은 unwrap하고 경고를 1회 반환하며, 중첩된 `>`는 재귀적으로 처리한다. (c) 목록·인용문 컨테이너의 중첩 표현은 슬라이스 5에서 재평가한다.
 
 ### 7.3 일반 clipboard(`IO-007`, 2.2에서 파일 제외)
 
