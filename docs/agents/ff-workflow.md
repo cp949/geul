@@ -14,6 +14,8 @@
 
 기본값이 아닌 이유는 비용이다. 트랙 9개와 리뷰 3회는 파일 단위 시야로는 볼 수 없는 결함을 잡으려고 치르는 값이다. 공용 test support의 교차 파일 검토는 [`G-TST-002`](../guides/G-TST-002-own-shared-test-support.md)가 그 형태를 설명한다. 간단한 작업의 경량 흐름은 [`./qq-workflow.md`](./qq-workflow.md)가 따로 있다.
 
+roadmap-workflow의 RD를 실행하는 경우 상위 결과·진입 조건·의존 DAG와 DELTA 계획 예산은 [`./roadmap-workflow.md`](./roadmap-workflow.md)가 소유한다. 이 ff-workflow는 해당 RD 내부 구현·리뷰·병합 절차를 소유한다.
+
 에이전트는 기본 레인이나 qq-workflow로 시작한 작업을 스스로 ff-workflow로 승격하지 않는다. 작업이 예상보다 커졌으면 그 사실을 완료 보고의 "남은 제한, 위험"에 적고 판단은 사용자에게 남긴다.
 
 트랙 지시는 작업 폴더를 항상 함께 받는다.
@@ -54,7 +56,7 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 
 ### `_meta.md`
 
-서술 문서가 아니라 manifest다. 다음 세 필드만 둔다.
+서술 문서가 아니라 manifest다. 독립 workflow는 다음 기본 세 필드만 둔다.
 
 ```markdown
 ---
@@ -65,6 +67,12 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 ```
 
 트랙-8의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 트랙-0이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다 — 트랙별 완료 판정에는 쓰지 않는다.
+
+roadmap 하위 작업이면 다음 포인터를 네 번째 필드로 추가한다. 독립 ff-workflow에서는 생략한다.
+
+```markdown
+상위 로드맵: _works/roadmap/<slug>/roadmap.md#RD-NNN
+```
 
 여기에 두지 않는 것과 그 소유자:
 
@@ -91,7 +99,7 @@ _works/<yyyyMMdd>-<NN>-<slug>/
 
 ## 트랙-0. 브레인스토밍과 계획 초안
 
-- 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화
+- 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화, roadmap 하위 작업이면 대상 `RD-NNN.md`와 readiness probe
 - 출력: 작업 폴더, `_meta.md`, `00-계획-초안.md`, 작업 브랜치
 - 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다 — 판정은 `_meta.md`의 `상태`가 `진행중`이면 미완료다. 이어받으면 그 사실을 실행 ledger(`progress.md`)에 적는다. 그다음 아래 "조사·결정 prompt"로 진행한다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. 사전 조사가 여러 갈래로 갈리면 읽기 전용 조사 subagent를 갈래마다 하나씩 병렬로 띄우고 결과를 메인 세션이 합친다. `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
 - 정지: 커밋하지 않는다. 브랜치만 만든다.
@@ -113,10 +121,10 @@ AGENTS.md의 작업 시작 순서 1~9, 대상 이슈와 사용자 대화를 입�
 
 ## 트랙-1. DELTA 분할
 
-- 입력: `00-계획-초안.md`
+- 입력: `00-계획-초안.md`, roadmap 하위 작업이면 대상 `RD-NNN.md`
 - 출력: `01-계획.md`, `DELTA-NN.md`
-- 절차: `01-계획.md`는 목표, 포함·제외 범위, DELTA 목록과 실행 순서, DELTA 사이 의존, 요구사항 추적표, "## 결정"(트랙-0의 결정을 옮겨 시작)을 담고 각 DELTA 파일을 링크한다. 실행 DELTA는 3~5개를 목표로 하고 7개를 상한으로 한다. `docs/guides/INDEX.md`에서 각 DELTA의 작업 조건과 맞는 가이드를 선택한다. 각 DELTA는 "DELTA 계약" 절의 형식과 크기 규칙을 따른다.
-- 게이트: 요구사항 추적표에 담당 DELTA나 완료 조건이 없는 행이 있으면 트랙-1을 완료하지 않는다. 실행 DELTA가 7개를 넘으면 현재 범위를 독립 완료 조건을 가진 복수 workflow로 나눈 분할안을 보고하고 정지한다.
+- 절차: `01-계획.md`는 목표, 포함·제외 범위, DELTA 목록과 실행 순서, DELTA 사이 의존, 요구사항 추적표, "## 결정"(트랙-0의 결정을 옮겨 시작)을 담고 각 DELTA 파일을 링크한다. 독립 workflow는 실행 DELTA 3~5개를 목표로 한다. roadmap 하위 workflow는 초기 2개를 목표로 하고 [`./roadmap-workflow.md`](./roadmap-workflow.md)의 DELTA 예산을 적용한다. 두 경우 모두 7개가 상한이다. `docs/guides/INDEX.md`에서 각 DELTA의 작업 조건과 맞는 가이드를 선택한다. 각 DELTA는 "DELTA 계약" 절의 형식과 크기 규칙을 따른다.
+- 게이트: 요구사항 추적표에 담당 DELTA나 완료 조건이 없는 행이 있으면 트랙-1을 완료하지 않는다. 독립 workflow의 실행 DELTA가 7개를 넘으면 복수 workflow 분할안을 보고하고 정지한다. roadmap 하위 workflow는 상위 roadmap에 독립 RD를 추가하고 현재 RD가 7개 이하가 될 때까지 트랙-1을 완료하지 않는다.
 - 정지: 코드를 고치지 않는다.
 
 **요구사항 추적표.** 조사 사실이 담당 DELTA의 완료 조건으로 전사됐는지를 기계적으로 확인하는 장치다. 트랙-0이 원인을 이미 확인했어도 이 표를 거치지 않으면 DELTA에서 누락된다.
@@ -124,9 +132,9 @@ AGENTS.md의 작업 시작 순서 1~9, 대상 이슈와 사용자 대화를 입�
 ```markdown
 ## 요구사항 추적
 
-| 원본 요구사항 | 담당 DELTA | 완료 조건 | 관련 계약 |
-| --- | --- | --- | --- |
-| Issue #NN 완료 기준 1 | DELTA-01 | 조건 1, 2 | spec §N |
+| 원본 요구사항         | 담당 DELTA | 완료 조건 | 관련 계약 |
+| --------------------- | ---------- | --------- | --------- |
+| Issue #NN 완료 기준 1 | DELTA-01   | 조건 1, 2 | spec §N   |
 ```
 
 작성 규칙:
@@ -135,7 +143,7 @@ AGENTS.md의 작업 시작 순서 1~9, 대상 이슈와 사용자 대화를 입�
 - 사용자 결정("## 결정"의 Ruling)과 트랙-0이 확인한 원인 중 구현 성립에 필요한 선행 조건을 옮긴다.
 - 관련 spec·ADR의 필수 갱신 여부를 표시한다.
 
-DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한다. 기존 번호를 다시 매기지 않는다 — 이미 나간 리뷰와 로그의 참조가 깨진다. 추가 후 실행 DELTA가 7개를 넘으면 번호를 더 만들지 않고 workflow 분할안을 보고한 뒤 정지한다.
+DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한다. 기존 번호를 다시 매기지 않는다 — 이미 나간 리뷰와 로그의 참조가 깨진다. 추가 후 실행 DELTA가 7개를 넘으면 번호를 더 만들지 않는다. 독립 workflow는 분할안을 보고하고 정지한다. roadmap 하위 workflow는 상위 roadmap의 독립 RD로 분리한다.
 
 ## 트랙-2. 계획서 리뷰 및 수정
 
@@ -184,7 +192,7 @@ DELTA를 나중에 끼워야 하면 `DELTA-02a.md`, `DELTA-02b.md`로 추가한�
 
 - 입력: 지정된 `DELTA-NN.md`, 그 DELTA가 연결한 가이드·함정, `02-테스트-계획.md`의 해당 DELTA 부분, `01-계획.md`의 의존 관계와 "## 결정"의 관련 Ruling
 - 출력: 작업 브랜치 커밋, 실행 ledger(`progress.md`) 갱신
-- 절차: subagent 협업 모드로 진행한다. DELTA마다 시작 시 세 가지를 판정해 ledger에 남긴다 — **구현 복잡도**(Micro·Standard·Risky), **검증 자동화**(Complete·Partial), **후속 기능적 의존**(None·Functional). 등급별 implementer와 실행 경로는 아래 "구현 복잡도"가, 독립 reviewer의 실행 시점은 "검증 자동화와 리뷰 시점"이 소유한다. 커밋은 메인 세션이 한다 — implementer 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다.
+- 절차: subagent 협업 모드로 진행한다. DELTA마다 시작 시 세 가지를 판정해 ledger에 남긴다 — **구현 복잡도**(Micro·Standard·Risky), **검증 자동화**(Complete·Partial), **후속 기능적 의존**(None·Functional). 등급별 implementer와 실행 경로는 아래 "구현 복잡도"가, 독립 reviewer의 실행 시점은 "검증 자동화와 리뷰 시점"이 소유한다. 커밋은 메인 세션이 한다 — implementer 작업 하나가 끝날 때마다 diff를 확인하고 커밋한다. roadmap 하위 작업은 각 DELTA gate 뒤 남은 DELTA와 상위 RD 의존을 재평가하고 순서 변경·숨은 의존을 상위 `progress.md`에 동기화한다.
 - 게이트: **해당 DELTA의 완료 조건을 전부 충족한 경우에만 다음 DELTA를 시작한다.** 충족하지 못하면 정지하고 무엇이 미충족인지 보고한다.
 - 검증: DELTA의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다. focused 명령은 출력의 `Test Files`로 실제 선택 범위를 확인한다 — 패키지 `test` 스크립트는 경로가 고정돼 파일 인자가 필터로 겹쳐 전체를 실행할 수 있다. 파일 단위 실행은 `pnpm --filter <패키지> exec vitest run --root ../.. <테스트 파일...>` 형태를 쓴다. DELTA가 이 작업에서 처음 건드리는 패키지면(이전 DELTA 어느 것도 그 패키지의 소스·테스트를 변경하지 않았다면) 그 패키지의 전체 테스트를 메인 세션이 1회 독립 실행하고, 실패는 이 DELTA가 만든 것인지 사전 결함인지 구분한다(사전 결함이면 `pending-issues/`로 분리). `e2e/`를 처음 건드리는 DELTA도 같다 — `pnpm test:e2e --project=chromium` 전량 1회. 선행 DELTA가 이미 전체 실행한 패키지에는 반복하지 않는다.
 - 재실행: 이미 완료한 DELTA를 사용자가 다시 지시하면 독립 reviewer 1회를 실행하고 발견을 수정한다.
@@ -355,9 +363,10 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 **Workflow DELTA 수.** `01-계획.md`의 실행 목록에 있는 DELTA를 세며, 폐기·대체되어 실행하지 않는 이력 파일은 제외한다.
 
-- 목표: 3~5개
+- 독립 workflow 목표: 3~5개
+- roadmap 하위 workflow: [`./roadmap-workflow.md`](./roadmap-workflow.md)의 초기 계획·자동 재계획 예산 적용
 - 상한: 7개
-- 1~2개로 충분하면 qq-workflow 적합성을 다시 판정한다.
+- 독립 workflow가 1~2개로 충분하면 qq-workflow 적합성을 다시 판정한다. roadmap 하위 workflow의 초기 2개는 ff-workflow를 유지한다.
 - 8개 이상이면 요구사항·사용자 결과·의존 경계로 범위를 나눠 각각 별도 workflow로 등록한다. DELTA 자체 상한을 넘긴 채 파일 수만 7개 이하로 줄이지 않는다.
 
 이 상한은 통합 리뷰의 완전성을 보호한다. 트랙-3은 모든 DELTA의 RED·회귀·완료 조건을 하나의 테스트 계획과 체크리스트로 연결하고, 트랙-5·6은 DELTA 간 의존·횡단 회귀·누락을 변경 전체에서 다시 판정한다. DELTA가 너무 많으면 각 DELTA의 국소 검증이 통과해도 이 교차 관계를 한 리뷰에서 끝까지 추적할 수 없다. 20개 DELTA를 한 workflow에 두는 경우가 대표적이다.
@@ -404,7 +413,7 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - 대상: <작업 브랜치> / DELTA-01 ~ DELTA-04
 - 시점: yyyy-MM-dd
 
-## 발견                      <!-- 확정 결함만 기록한다 -->
+## 발견 <!-- 확정 결함만 기록한다 -->
 
 ### F1 <제목> — MAJOR
 
@@ -413,11 +422,11 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 - 실제/기대: <실측>
 - 위반 계약: <문서 경로와 문구>
 
-## 처리                      <!-- 발견별 수정 / 범위 밖 / 오탐과 변경한 테스트·코드 -->
+## 처리 <!-- 발견별 수정 / 범위 밖 / 오탐과 변경한 테스트·코드 -->
 
-## 검증                      <!-- 최종 focused gate와 결과 -->
+## 검증 <!-- 최종 focused gate와 결과 -->
 
-## 남은 위험                 <!-- 현재 변경으로 닫히지 않은 위험만 -->
+## 남은 위험 <!-- 현재 변경으로 닫히지 않은 위험만 -->
 ```
 
 기록하지 않는 것: 어느 reviewer가 같은 결함을 몇 번 발견했는지, 조사 중 확인한 모든 정상 경로, 테스트 전체 출력, commit message와 중복되는 변경 설명.
@@ -428,10 +437,10 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 ## 검증 게이트
 
-| 시점             | 검증                       |
-| ---------------- | -------------------------- |
-| 트랙-4 각 DELTA  | DELTA의 검증 명령(focused) |
-| 트랙-6 종료      | `pnpm verify` 전량 1회     |
+| 시점            | 검증                       |
+| --------------- | -------------------------- |
+| 트랙-4 각 DELTA | DELTA의 검증 명령(focused) |
+| 트랙-6 종료     | `pnpm verify` 전량 1회     |
 
 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
 
@@ -577,14 +586,14 @@ subagent 협업의 공통 규칙(파일 쓰는 subagent는 하나씩, worktree �
 
 같은 사실을 두 곳에 원본처럼 쓰지 않는다. 이 흐름이 쓰는 계약의 소유자는 다음과 같다.
 
-| 질문                                             | 소유자                                                                              |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| 어느 레인으로 작업하는가                         | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간"                             |
-| 트랙 절차와 산출물 계약                          | 이 문서                                                                             |
-| DELTA 형식과 크기 규칙                           | 이 문서의 "DELTA 계약"                                                              |
-| 재그룹화 실행 명령·순서·무결성 판정              | 이 문서의 "재그룹화 실행 명령"                                                      |
-| 개발 가이드 ID·적용 조건                         | [`../guides/INDEX.md`](../guides/INDEX.md)                                          |
-| 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md)        |
-| 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md)                                          |
-| 저장소 이력 보관 정책과 내용 계약                | [`../history/README.md`](../history/README.md)                                      |
-| 아키텍처 불변식과 구현 규칙                      | [`../../AGENTS.md`](../../AGENTS.md)                                                |
+| 질문                                             | 소유자                                                                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------------- |
+| 어느 레인으로 작업하는가                         | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간"                      |
+| 트랙 절차와 산출물 계약                          | 이 문서                                                                      |
+| DELTA 형식과 크기 규칙                           | 이 문서의 "DELTA 계약"                                                       |
+| 재그룹화 실행 명령·순서·무결성 판정              | 이 문서의 "재그룹화 실행 명령"                                               |
+| 개발 가이드 ID·적용 조건                         | [`../guides/INDEX.md`](../guides/INDEX.md)                                   |
+| 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |
+| 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md)                                   |
+| 저장소 이력 보관 정책과 내용 계약                | [`../history/README.md`](../history/README.md)                               |
+| 아키텍처 불변식과 구현 규칙                      | [`../../AGENTS.md`](../../AGENTS.md)                                         |
