@@ -139,6 +139,14 @@ export type Block =
 - `selectBlockRange(fromBlockId, toBlockId)`, `deleteSelectedBlocks()`, `moveSelectedBlocksBefore(beforeBlockId)`
 - 각 명령은 기존 표 명령과 동일한 원자성 계약을 따른다 — 하나의 트랜잭션, 실패 시 문서 무변경, undo 1회 정확 복원([`G-EDT-001`](../guides/G-EDT-001-keep-editor-commands-atomic.md)).
 
+#### 네이티브 블록 split/join
+
+- `paragraph`/`heading`/`quote`의 Enter split은 `blockContainer(content: "blockContent blockGroup?")`를 직접 재구성하는 커스텀 경로가 소유한다. 범위 선택이면 선택 삭제와 분할을 같은 트랜잭션에 쌓는다. 산출 문서는 스키마에 유효하고 원본 컨테이너의 `blockId`와 기존 자식의 순서·귀속을 보존한다. 새 컨테이너의 `blockId`는 같은 `view.dispatch` 처리 중 `BlockIdExtension.appendTransaction`의 별도 트랜잭션에서 다른 값으로 최종화된다. 캐럿은 두 위치 분기 모두 새 블록 콘텐츠 시작에 결정적으로 놓인다. 성공한 split과 ID 최종화는 단일 `view.dispatch`로 처리되고 undo 1회로 함께 복원된다([`G-EDT-001`](../guides/G-EDT-001-keep-editor-commands-atomic.md), [`G-EDT-003`](../guides/G-EDT-003-design-pm-block-node-schemas-and-group-fill-contracts.md)).
+- Enter split의 위치는 원본의 기존 자식 유무로 정한다. 자식이 없으면 새 블록을 원본의 다음 형제로 삽입한다. 기존 자식이 있으면 새 블록을 원본의 첫 자식, 즉 기존 첫 자식 앞에 삽입한다. 분할 뒤 콘텐츠(`afterContent`)가 비면 새 콘텐츠는 빈 `paragraph`이고, 비지 않으면 원본 콘텐츠 노드 타입과 attrs를 유지한다.
+- 텍스트 블록 선두의 Backspace와 끝의 Delete는 중첩 깊이와 무관하게 해당 방향에서 시각적으로 인접한 텍스트 블록과 병합한다. 제거되는 블록의 인라인 콘텐츠는 대상 텍스트 블록 끝으로 이동하고 대상 타입은 유지되며, 제거되는 블록의 자식은 그 자리에 같은 순서로 승격된다. 구조 변경·콘텐츠 병합·병합 접점으로의 캐럿 이동은 단일 트랜잭션에 들어가고 undo 1회로 함께 복원된다.
+- 인접 리프가 `divider` 또는 `table`이면 그 너머의 텍스트와 병합하지 않는다. 첫 Backspace/Delete는 인접 `divider`를 `NodeSelection`, 인접 `table`을 표 전체 `CellSelection`으로 선택하는 selection-only 동작이다. 같은 키를 한 번 더 누르면 선택된 노드만 삭제하며, 이 삭제가 undo 1회 단위다. 중첩 위치에서도 형제 컨테이너나 다른 자식을 함께 선택·삭제하지 않는다.
+- 표 셀에서는 일반 블록 split/join 확장이 관여하지 않고 표 키보드 계약이 키별 동작을 별도로 소유한다. Enter는 아래 행의 같은 열 셀로 이동하며, 이동할 아래 셀이 없으면 transaction 없이 키를 소비한다. Backspace/Delete는 셀 콘텐츠와 셀 선택에서는 `tableEditing` 계약을 따르고, 위의 표 전체 `CellSelection` 삭제만 블록 join 경계가 처리한다. 따라서 표 셀 Enter를 전체 무동작으로 취급하지 않는다.
+
 ### 5.2 Tab/Shift+Tab 3분기
 
 우선순위는 다음과 같다(R1 `table-keyboard-extension.ts`가 이미 1번을 구현했다).
