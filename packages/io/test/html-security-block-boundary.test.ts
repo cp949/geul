@@ -75,6 +75,113 @@ describe("HTML 보안", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
+  it("div 안의 strong은 bold mark를 보존하고 강등 경고를 만들지 않는다", () => {
+    const result = importHtml("<div>a <strong>b</strong></div>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "a " }, { text: "b", marks: [{ type: "bold" }] }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it("blockquote 안의 strong은 bold mark를 보존하고 강등 경고를 만들지 않는다", () => {
+    const result = importHtml("<blockquote>a <strong>b</strong></blockquote>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "quote",
+        content: [{ text: "a " }, { text: "b", marks: [{ type: "bold" }] }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it("li 안의 em은 italic mark를 보존하고 강등 경고를 만들지 않는다", () => {
+    const result = importHtml("<ul><li>a <em>b</em></li></ul>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "a " }, { text: "b", marks: [{ type: "italic" }] }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it.each([
+    ["div", "<div>%s</div>"],
+    ["li", "<ul><li>%s</li></ul>"],
+    ["blockquote", "<blockquote>%s</blockquote>"],
+    ["ul", "<ul>%s</ul>"],
+    ["ol", "<ol>%s</ol>"],
+  ])(
+    "%s 경계 안의 지원 인라인 요소는 강등 경고를 만들지 않는다",
+    (_boundary, wrapper) => {
+      const inlineHtml =
+        '<strong>b</strong><em>i</em><u>u</u><s>s</s><code>c</code><a href="https://example.com">a</a><br>z';
+      const result = importHtml(wrapper.replace("%s", inlineHtml));
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+
+      expect(result.value.document.blocks).toHaveLength(1);
+      expect(result.value.warnings).toEqual([]);
+    },
+  );
+
+  it("지원 경계 안의 실제 미지원 블록은 강등 경고를 유지한다", () => {
+    const result = importHtml("<div><section>text</section></div>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "text" }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "SAFE_BLOCK_DOWNGRADED",
+        element: "section",
+      }),
+    ]);
+  });
+
+  it("지원 인라인 아래의 미지원 블록은 mark를 보존하고 강등 경고를 유지한다", () => {
+    const result = importHtml(
+      "<div><strong><section>x</section></strong></div>",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "x", marks: [{ type: "bold" }] }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "SAFE_BLOCK_DOWNGRADED",
+        element: "section",
+      }),
+    ]);
+  });
+
   it("미지원 안전 조상 안의 h4·blockquote·hr도 지원 블록 경계를 보존한다", () => {
     const cases = [
       {

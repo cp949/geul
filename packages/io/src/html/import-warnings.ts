@@ -116,6 +116,20 @@ const supportedBlockNames = new Set([
   "table",
 ]);
 
+// 이 집합은 warning 판정만 소유한다. sanitizer 허용 목록과 공유하면 raw
+// warning fact 수집기가 sanitize 구현에 결합된다(ADR-0003). 이 요소들은
+// 지원 경계 컨테이너 안에서 mark·link·줄바꿈 의미로 보존되므로 블록
+// 강등 경고 대상이 아니다. 루트 인라인은 기존 강등 경고 계약을 유지한다.
+const supportedInlineNames = new Set([
+  "strong",
+  "em",
+  "u",
+  "s",
+  "code",
+  "a",
+  "br",
+]);
+
 // div/li/blockquote/ul/ol은 block-segmenter.ts가 "경계를 통과해 더 깊은
 // 경계를 인식시키는" 투명 컨테이너로 취급한다(재귀 경계·wrapper 태그, 아키텍처
 // 리뷰 2차 후보 G). 이 파일의 topLevel 판정도 같은 취급이어야 한다 — 이
@@ -131,6 +145,7 @@ const collectFromNodes = (
   nodes: HtmlNode[],
   warnings: HtmlImportWarning[],
   topLevel: boolean,
+  insideSupportedBoundary: boolean,
   parentElement: string,
 ): void => {
   for (const node of nodes) {
@@ -156,7 +171,11 @@ const collectFromNodes = (
         element: node.tagName,
         message: `Unsafe ${node.tagName} element was removed`,
       });
-    } else if (topLevel && !supportedBlockNames.has(node.tagName)) {
+    } else if (
+      topLevel &&
+      !supportedBlockNames.has(node.tagName) &&
+      !(insideSupportedBoundary && supportedInlineNames.has(node.tagName))
+    ) {
       warnings.push({
         kind: "SAFE_BLOCK_DOWNGRADED",
         element: node.tagName,
@@ -194,7 +213,10 @@ const collectFromNodes = (
     collectFromNodes(
       node.children,
       warnings,
-      topLevel && isBlockBoundaryTag(node.tagName),
+      topLevel &&
+        (isBlockBoundaryTag(node.tagName) ||
+          (insideSupportedBoundary && supportedInlineNames.has(node.tagName))),
+      insideSupportedBoundary || isBlockBoundaryTag(node.tagName),
       node.tagName,
     );
   }
@@ -207,6 +229,6 @@ export const collectHtmlImportWarnings = (
   // 최상위 loose 텍스트(문서 어떤 요소로도 감싸이지 않은 텍스트, 예:
   // documentFromRoot의 flushInlineNodes가 문단으로 승격하는 텍스트)에는
   // 감싸는 태그가 없으므로 "text" sentinel을 element로 쓴다.
-  collectFromNodes(root.children, warnings, true, "text");
+  collectFromNodes(root.children, warnings, true, false, "text");
   return warnings;
 };
