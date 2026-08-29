@@ -86,7 +86,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `BLK-008` | 시작 번호를 지원하는 번호 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-009` | 체크 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
 | `BLK-010` | 자식을 접는 토글 목록 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/list-types.mdx` |
-| `BLK-011` | 코드 블록과 언어 속성 | `PARITY` | R2 | `NOT_STARTED` | `features/blocks/code-blocks.mdx` |
+| `BLK-011` | 코드 블록과 언어 속성 | `PARITY` | R2 | `PARTIAL` | 슬라이스 4 Workflow A(Issue #38) — 저장형·validation/canonicalization, core schema·model↔PM codec·production load/save·일반 명령·중첩, HTML/GFM export 완료. HTML/GFM import는 RD-003, 생성·종류 변경·mark guard·placeholder·language UI·keyboard·React 통합은 Workflow B/RD-004로 이월 |
 | `BLK-012` | 문서형 테이블 | `ENHANCED` | R1 | `VERIFIED` | R1 슬라이스 6-12: 표 편집·조작(`TBL-*`)에 더해 슬라이스 12가 표 문서 로드 차단을 해제해 저장 round-trip(열 너비·병합·헤더·색상) 완료 |
 | `BLK-013` | 일반 파일 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
 | `BLK-014` | 이미지 블록 | `PARITY` | R3 | `NOT_STARTED` | `features/blocks/embeds.mdx` |
