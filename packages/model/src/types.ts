@@ -24,6 +24,12 @@ export type QuoteBlock = {
   children?: Block[];
 };
 export type DividerBlock = { id: string; type: "divider" };
+export type CodeBlock = {
+  id: string;
+  type: "codeBlock";
+  language?: string;
+  content: InlineContent;
+};
 export type TableColumn = { id: string; width: number };
 export type TableBlock = {
   id: string;
@@ -46,6 +52,11 @@ export type TableBlock = {
   headerColumns: 0 | 1;
 };
 export type Block =
-  ParagraphBlock | HeadingBlock | TableBlock | QuoteBlock | DividerBlock;
+  | ParagraphBlock
+  | HeadingBlock
+  | TableBlock
+  | QuoteBlock
+  | DividerBlock
+  | CodeBlock;
 export type Document = { formatVersion: 1; revision: number; blocks: Block[] };
 export type IdFactory = () => string;

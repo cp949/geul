@@ -1,5 +1,11 @@
 export { isCanonicalCellAlign } from "./cell-align.js";
 export { isCanonicalCellColor } from "./cell-color.js";
+export {
+  canonicalizeCodeBlockLanguage,
+  isSafeCodeBlockLanguageClassToken,
+  isValidCodeBlockLanguage,
+  isValidCodeBlockSource,
+} from "./code-block.js";
 export { createEmptyDocument } from "./create-document.js";
 export type { DocumentError, DocumentErrorCode } from "./errors.js";
 export { createRandomDocumentId } from "./id-factory.js";
@@ -43,6 +49,7 @@ export {
 } from "./table-grid-validation.js";
 export type {
   Block,
+  CodeBlock,
   DividerBlock,
   Document,
   HeadingBlock,

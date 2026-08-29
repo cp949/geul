@@ -2,12 +2,11 @@ import { mergeAttributes, Node } from "@tiptap/core";
 
 // PM은 한 노드에서 inline/block 콘텐츠 혼합을 금지해 paragraph/heading에 자식
 // 블록을 직접 붙일 수 없다 — blockContainer가 identity(blockId)를 소유하는
-// 컨테이너 노드로 강제된다(D19). content "blockContent blockGroup?"는 "표는
-// 자식 블록을 가질 수 없다"(spec §2.2, D15)를 content expression 자체가
-// 구조적으로 강제한다 — table은 이 컨테이너로 감싸지 않고 group "block"만
-// 유지해(table-extension.ts:66, 무변경) doc/blockGroup의 자식으로 직접
-// 들어간다. 표는 행만 담을 수 있어 blockGroup(그룹 "block"의 형제 컨텐츠)을
-// 자식으로 가질 스키마 경로가 없다.
+// 컨테이너 노드로 강제된다(D19). nestableBlockContent만 선택적 blockGroup을
+// 뒤에 가질 수 있고 leafBlockContent는 단독이어야 한다. 이 분기는 CodeBlock이
+// own children을 가질 수 없도록 content expression 자체로 강제한다. table은
+// 이 컨테이너로 감싸지 않고 group "block"을 유지해 doc/blockGroup의 자식으로
+// 직접 들어간다.
 //
 // defining은 BlockNote v0.54.0 packages/core/src/pm-nodes/BlockContainer.ts의
 // 참조 초기값이다(MPL 경계 — 구조만 참조, 코드 미복제).
@@ -33,7 +32,7 @@ import { mergeAttributes, Node } from "@tiptap/core";
 export const BlockContainerExtension = Node.create({
   name: "blockContainer",
   group: "block",
-  content: "blockContent blockGroup?",
+  content: "(nestableBlockContent blockGroup?) | leafBlockContent",
   defining: true,
   priority: 1000,
 

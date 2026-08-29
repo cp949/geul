@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/core";
 
 // quote는 문단 동형 계약이다(spec §4.2 — content+children, 차이는 타입과
-// HTML 매핑 blockquote뿐) — paragraph/heading과 같은 blockContent 그룹·
+// HTML 매핑 blockquote뿐) — paragraph/heading과 같은 nestableBlockContent 그룹·
 // blockContainer 포장 패턴을 따른다(editor-controller.ts의 인라인
 // HeadingExtension 전례 — 이 파일은 새 파일로 둔다). identity(blockId)는
 // blockContainer가 소유하므로 quote 자체는 attrs가 없다.
@@ -21,7 +21,7 @@ import { mergeAttributes, Node } from "@tiptap/core";
 // (구조만 참조, 코드 미복제).
 export const QuoteExtension = Node.create({
   name: "quote",
-  group: "blockContent",
+  group: "nestableBlockContent",
   content: "inline*",
   defining: true,
   parseHTML() {

@@ -1,6 +1,7 @@
 import {
   type Block,
   canonicalizeTextMarks,
+  type CodeBlock,
   decodeTextMark,
   type Document,
   type IdFactory,
@@ -116,12 +117,51 @@ const resolveBlockId = (node: TiptapJsonNode, createId: IdFactory): string => {
     : createId();
 };
 
+// CodeBlock PM leaf는 여러 text child를 가질 수 있지만 저장 원본은 source
+// 하나만 가진다. 모든 child를 순서대로 합쳐 [] | [{ text }] 정규형을 만들고,
+// source 문자·language 값 검증과 known alias canonicalization은 문서 끝의
+// parseDocument에 맡긴다(G-CNV-001).
+const codeBlockFromTiptap = (
+  node: TiptapJsonNode,
+  id: string,
+): Result<CodeBlock, EditorError> => {
+  let source = "";
+  for (const child of node.content ?? []) {
+    if (child.type !== "text" || typeof child.text !== "string") {
+      return invalid(`Unsupported CodeBlock child: ${String(child.type)}`);
+    }
+    if ((child.marks?.length ?? 0) > 0) {
+      return invalid("CodeBlock text child must not have marks");
+    }
+    source += child.text;
+  }
+
+  const language = node.attrs?.language;
+  if (
+    language !== undefined &&
+    language !== null &&
+    typeof language !== "string"
+  ) {
+    return invalid("CodeBlock language attr must be a string or null");
+  }
+
+  return {
+    ok: true,
+    value: {
+      id,
+      type: "codeBlock",
+      content: source === "" ? [] : [{ text: source }],
+      ...(typeof language === "string" ? { language } : {}),
+    },
+  };
+};
+
 // blockContainer 1개를 재귀로 model Block으로 디코드한다(D19). 컨테이너의
-// 첫 자식은 항상 blockContent(paragraph/heading/quote), 두 번째(선택)
-// 자식은 blockGroup이다 — 스키마 content expression "blockContent
-// blockGroup?"이 이 순서를 구조적으로 강제하므로 여기서 순서를 다시
-// 검증하지 않는다(G-CNV-001: 검증 권위는 parseDocument, 이 함수는 구조
-// 직대응만 한다).
+// 첫 자식은 항상 blockContent(paragraph/heading/quote/codeBlock), 두 번째
+// (선택) 자식은 nestable content의 blockGroup이다. CodeBlock은 leaf라 두
+// 번째 자식을 거절한다. 나머지는 스키마 content expression이 순서를
+// 구조적으로 강제하므로 여기서 순서를 다시 검증하지 않는다(G-CNV-001:
+// 검증 권위는 parseDocument, 이 함수는 구조 직대응만 한다).
 const blockContainerToModel = (
   node: TiptapJsonNode,
   createId: IdFactory,
@@ -131,6 +171,13 @@ const blockContainerToModel = (
   const contentNode = node.content?.[0];
   if (contentNode === undefined) {
     return invalid(`Block ${id} is missing its blockContent child`);
+  }
+
+  if (contentNode.type === "codeBlock") {
+    if (node.content?.[1] !== undefined) {
+      return invalid(`CodeBlock ${id} must not have its own blockGroup`);
+    }
+    return codeBlockFromTiptap(contentNode, id);
   }
 
   const inlineContent = inlineContentFromTiptap(contentNode.content);

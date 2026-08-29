@@ -2,6 +2,11 @@ import { z } from "zod";
 
 import { isCanonicalCellAlign } from "./cell-align.js";
 import { isCanonicalCellColor } from "./cell-color.js";
+import {
+  canonicalizeCodeBlockLanguage,
+  isValidCodeBlockLanguage,
+  isValidCodeBlockSource,
+} from "./code-block.js";
 import type { DocumentError } from "./errors.js";
 import { isSupportedLinkHref } from "./link-policy.js";
 import {
@@ -75,6 +80,25 @@ const dividerBlockSchema = z
   })
   .strict();
 
+const codeBlockContentSchema = z
+  .array(
+    z
+      .object({
+        text: z.string(),
+      })
+      .strict(),
+  )
+  .max(1);
+
+const codeBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("codeBlock"),
+    language: z.string().optional(),
+    content: codeBlockContentSchema,
+  })
+  .strict();
+
 // paragraph/heading/quoteBlockSchema는 children으로 blockSchema를 재귀 참조한다.
 // discriminatedUnion이 멤버 스키마의 구체 ZodObject 모양(리터럴 판별 필드)을
 // 직접 봐야 하므로 paragraph/heading/quoteBlockSchema 자체는 z.ZodType<T>로
@@ -108,13 +132,15 @@ type QuoteBlockNode = {
 };
 
 type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
+type CodeBlockNode = z.infer<typeof codeBlockSchema>;
 
 type BlockNode =
   | ParagraphBlockNode
   | HeadingBlockNode
   | z.infer<typeof tableBlockSchema>
   | QuoteBlockNode
-  | DividerBlockNode;
+  | DividerBlockNode
+  | CodeBlockNode;
 
 const paragraphBlockSchema = z.object({
   id: z.string(),
@@ -157,6 +183,7 @@ const blockSchema = z.discriminatedUnion("type", [
   tableBlockSchema,
   quoteBlockSchema,
   dividerBlockSchema,
+  codeBlockSchema,
 ]);
 
 const documentSchema = z.object({
@@ -255,6 +282,34 @@ const validateBlocksAt = (
     // 않게 여기서 끝낸다.
     if (block.type === "divider") continue;
 
+    if (block.type === "codeBlock") {
+      const item = block.content[0];
+      if (item !== undefined) {
+        if (item.text.length === 0) {
+          return invalid(
+            [...blockPath, "content", 0, "text"],
+            "CodeBlock source run must not be empty",
+          );
+        }
+        if (!isValidCodeBlockSource(item.text)) {
+          return invalid(
+            [...blockPath, "content", 0, "text"],
+            "CodeBlock source may contain LF and Tab but no other C0 controls, DEL, or invalid surrogate code units",
+          );
+        }
+      }
+      if (
+        block.language !== undefined &&
+        !isValidCodeBlockLanguage(block.language)
+      ) {
+        return invalid(
+          [...blockPath, "language"],
+          "CodeBlock language must be non-empty and contain no control characters or invalid surrogate code units",
+        );
+      }
+      continue;
+    }
+
     if (
       block.type === "paragraph" ||
       block.type === "heading" ||
@@ -339,9 +394,9 @@ const visitTableBlocks = (
       if (!result.ok) return result;
       continue;
     }
-    // divider는 children 필드가 없는 리프다 — 나머지(paragraph/heading/quote)만
-    // children으로 내려간다.
-    if (block.type === "divider") continue;
+    // divider와 codeBlock은 children 필드가 없는 리프다 — 나머지
+    // (paragraph/heading/quote)만 children으로 내려간다.
+    if (block.type === "divider" || block.type === "codeBlock") continue;
     if (block.children !== undefined) {
       const children = visitTableBlocks(
         block.children,
@@ -487,7 +542,16 @@ const findNestingDepthViolation = (
 
   for (const [index, block] of blocks.entries()) {
     if (block === null || typeof block !== "object") continue;
-    const children = (block as { children?: unknown }).children;
+    const { type, children } = block as {
+      type?: unknown;
+      children?: unknown;
+    };
+    // schema가 children을 허용하는 블록만 따라간다. table/divider/codeBlock과
+    // 알 수 없는 판별자의 children은 strict shape 위반이므로 zod가 원래
+    // DOCUMENT_INVALID path에서 판정해야 한다.
+    if (type !== "paragraph" && type !== "heading" && type !== "quote") {
+      continue;
+    }
     // 빈 children 배열은 "자식 없음"이다 — 다른 층(validateBlocksAt,
     // model-to-tiptap)과 같은 해석. 배열이 아닌 값은 어차피 zod가 거절하므로
     // 깊이 위반으로 오분류하지 않고 그쪽에 맡긴다.
@@ -521,6 +585,25 @@ const validateNestingDepth = (
     };
   }
   return { ok: true, value: undefined };
+};
+
+const canonicalizeCodeBlockLanguages = (blocks: Block[]): void => {
+  for (const block of blocks) {
+    if (block.type === "codeBlock") {
+      if (block.language !== undefined) {
+        block.language = canonicalizeCodeBlockLanguage(block.language);
+      }
+      continue;
+    }
+    if (
+      (block.type === "paragraph" ||
+        block.type === "heading" ||
+        block.type === "quote") &&
+      block.children !== undefined
+    ) {
+      canonicalizeCodeBlockLanguages(block.children);
+    }
+  }
 };
 
 export const parseDocument = (
@@ -571,6 +654,8 @@ export const parseDocument = (
   if (!limits.ok) return limits;
   const grids = validateTableGrids(document.blocks);
   if (!grids.ok) return grids;
+
+  canonicalizeCodeBlockLanguages(document.blocks);
 
   return { ok: true, value: document };
 };

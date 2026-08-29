@@ -10,8 +10,8 @@ import { expect } from "vitest";
 
 /**
  * attachNode를 document.body에 붙이고 rangeStartNode(생략 시 attachNode
- * 자신) 위치에 collapsed caret을 두는 네이티브 Selection을 만든 뒤 fn을
- * 실행하고 정리한다.
+ * 자신)의 rangeStartOffset(기본 0) 위치에 collapsed caret을 두는 네이티브
+ * Selection을 만든 뒤 fn을 실행하고 정리한다.
  *
  * jsdom(과 실제 브라우저)의 Selection API는 document.body에 연결된 노드만
  * focusNode로 추적한다 — 부착이 필요한 이유다. 정리(selection 해제 +
@@ -21,6 +21,7 @@ export const withNativeCaret = (
   attachNode: HTMLElement,
   fn: () => void,
   rangeStartNode: Node = attachNode,
+  rangeStartOffset = 0,
 ): void => {
   const ownerDocument = attachNode.ownerDocument;
   ownerDocument.body.append(attachNode);
@@ -28,7 +29,7 @@ export const withNativeCaret = (
     const range = ownerDocument.createRange();
     const selection = ownerDocument.getSelection();
 
-    range.setStart(rangeStartNode, 0);
+    range.setStart(rangeStartNode, rangeStartOffset);
     range.collapse(true);
 
     expect(selection).not.toBeNull();
@@ -39,6 +40,42 @@ export const withNativeCaret = (
     // 된다.
     expect(selection?.focusNode).not.toBeNull();
 
+    fn();
+  } finally {
+    ownerDocument.getSelection()?.removeAllRanges();
+    attachNode.remove();
+  }
+};
+
+/**
+ * attachNode를 document.body에 붙이고 anchor/focus 방향을 보존한 native
+ * Text Selection을 만든 뒤 fn을 실행한다. CodeBlock 범위 삭제 테스트가 PM
+ * selection과 같은 방향의 DOM selection을 조립할 때 사용한다.
+ */
+export const withNativeSelection = (
+  attachNode: HTMLElement,
+  fn: () => void,
+  anchorNode: Node,
+  anchorOffset: number,
+  focusNode: Node,
+  focusOffset: number,
+): void => {
+  const ownerDocument = attachNode.ownerDocument;
+  ownerDocument.body.append(attachNode);
+  try {
+    const selection = ownerDocument.getSelection();
+    expect(selection).not.toBeNull();
+    selection?.removeAllRanges();
+    selection?.setBaseAndExtent(
+      anchorNode,
+      anchorOffset,
+      focusNode,
+      focusOffset,
+    );
+    expect(selection?.anchorNode).toBe(anchorNode);
+    expect(selection?.anchorOffset).toBe(anchorOffset);
+    expect(selection?.focusNode).toBe(focusNode);
+    expect(selection?.focusOffset).toBe(focusOffset);
     fn();
   } finally {
     ownerDocument.getSelection()?.removeAllRanges();

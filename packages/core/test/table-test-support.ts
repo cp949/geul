@@ -26,6 +26,7 @@ import {
   BlockGroupExtension,
 } from "../src/block-container-extension.js";
 import { BlockIdExtension } from "../src/block-id-extension.js";
+import { CodeBlockExtension } from "../src/code-block-extension.js";
 import {
   TableCellExtension,
   TableExtension,
@@ -34,14 +35,14 @@ import {
 
 // editor-controller.ts의 ParagraphExtension/HeadingExtension과 같은 이유로
 // StarterKit 기본 paragraph/heading을 끄고 재구현한다 — group을
-// "blockContent"로 둬야 blockContainer(:content "blockContent blockGroup?")
-// 안에 들어갈 수 있다(D19). 프로덕션 정의를 그대로 가져오지 않고 이 파일이
-// 독립 소유하는 이유는 그 정의가 editor-controller.ts 모듈 비공개
+// "nestableBlockContent"로 둬야 blockContainer의 중첩 가능 분기에 들어갈
+// 수 있다(D19). 프로덕션 정의를 그대로 가져오지 않고 이 파일이 독립 소유하는
+// 이유는 그 정의가 production-editor-assembly.ts 모듈 비공개
 // const라서다 — export하면 그 모듈의 .d.ts가 Tiptap Node 타입을 노출해
 // public-types.test.ts(ADR-0002)를 깬다.
 const FixtureParagraphExtension = Node.create({
   name: "paragraph",
-  group: "blockContent",
+  group: "nestableBlockContent",
   content: "inline*",
   parseHTML() {
     return [{ tag: "p" }];
@@ -53,7 +54,7 @@ const FixtureParagraphExtension = Node.create({
 
 const FixtureHeadingExtension = Node.create({
   name: "heading",
-  group: "blockContent",
+  group: "nestableBlockContent",
   content: "inline*",
   defining: true,
   addAttributes() {
@@ -130,13 +131,14 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
     listItem: false,
     orderedList: false,
     // paragraph/heading은 아래 Fixture*Extension으로 대체한다(D19 —
-    // blockContent 그룹, blockContainer로 감싸여야 한다).
+    // nestableBlockContent 그룹, blockContainer로 감싸여야 한다).
     paragraph: false,
     heading: false,
     trailingNode: false,
   }),
   FixtureParagraphExtension,
   FixtureHeadingExtension,
+  CodeBlockExtension,
   BlockContainerExtension,
   BlockGroupExtension,
   BlockIdExtension,
@@ -234,7 +236,7 @@ export const cellJson = (
 /**
  * 문단 하나짜리 문서 — 표가 없는 상태에서 시작하는 명령의 출발점이다.
  * blockId는 문단 자신이 아니라 감싸는 blockContainer의 attrs다(D19) —
- * paragraph는 group "blockContent"라 blockContainer 없이는 doc 직속
+ * paragraph는 group "nestableBlockContent"라 blockContainer 없이는 doc 직속
  * 자식이 될 스키마 경로가 없다.
  */
 export const docWithParagraph = {

@@ -10,8 +10,8 @@ import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import {
   createEditor,
-  type BlockTypeDescriptor,
   type DocumentChangeEvent,
+  type EditorController,
 } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
@@ -46,7 +46,9 @@ describe("setBlockType quote 편입(Turn into 대상)", () => {
       onChange: (event) => changes.push(event),
     });
     const { tiptap } = mountTiptapEditor(editor);
-    const steps: BlockTypeDescriptor[] = [
+    const steps: Array<
+      Parameters<EditorController["commands"]["setBlockType"]>[1]
+    > = [
       { type: "quote" },
       { type: "heading", level: 2 },
       { type: "quote" },

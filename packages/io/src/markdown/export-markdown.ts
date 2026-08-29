@@ -27,6 +27,7 @@ type MarkdownOutputNode = {
   value?: string;
   depth?: number;
   url?: string;
+  lang?: string;
   align?: Array<"left" | "center" | "right" | null>;
   children?: MarkdownOutputNode[];
 };
@@ -151,11 +152,10 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
     if (block.type === "table") return [block];
-    // divider는 DividerBlock에 children 필드 자체가 없어(옵셔널이 아니라
-    // 부재) 아래 block.children 접근을 태우려면 먼저 좁혀야 한다 — table과
-    // 같은 리프 취급. quote는 children이 옵셔널 필드라(divider와 달리 TS
-    // 타입 문제가 없다) 아래 범용 분기로 자연스럽게 통과한다(07a).
-    if (block.type === "divider") return [block];
+    // divider와 CodeBlock은 children 필드 자체가 없어(옵셔널이 아니라 부재)
+    // 아래 block.children 접근 전에 좁힌다. quote는 children이 옵셔널이라
+    // 아래 범용 분기로 자연스럽게 통과한다(07a).
+    if (block.type === "divider" || block.type === "codeBlock") return [block];
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
@@ -163,11 +163,28 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
     return [ownBlock, ...flattenBlocks(children)];
   });
 
+// remark-stringify는 info string의 공백·backtick은 entity로 바꾸지만 기존
+// entity 형태의 ampersand는 그대로 둔다. 재파싱 때 `&copy;`가 `©`가 되지
+// 않도록 ampersand를 먼저 escape해 unknown language를 exact 보존한다.
+const codeBlockLanguage = (language: string): string =>
+  language.replace(/&/g, "&amp;");
+
 const documentNode = (document: Document): MarkdownOutputNode => ({
   type: "root",
   children: document.blocks.map((block) => {
     if (block.type === "table") return tableNode(block);
     if (block.type === "divider") return { type: "thematicBreak" };
+    // CodeBlock은 model 검증을 통과한 plain-text leaf다. mdast code node가
+    // fence 길이와 info string entity escape를 맡아 source/language를 보존한다.
+    if (block.type === "codeBlock") {
+      return {
+        type: "code",
+        value: block.content[0]?.text ?? "",
+        ...(block.language === undefined
+          ? {}
+          : { lang: codeBlockLanguage(block.language) }),
+      };
+    }
     if (block.type === "quote") {
       return {
         type: "blockquote",

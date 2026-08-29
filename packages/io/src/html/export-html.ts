@@ -1,5 +1,7 @@
 import {
+  type CodeBlock,
   type Document,
+  isSafeCodeBlockLanguageClassToken,
   parseDocument,
   type TableBlock,
 } from "@cp949/geul-model";
@@ -125,6 +127,25 @@ const tableNode = (table: TableBlock): HtmlElementNode => {
   );
 };
 
+// CodeBlock source는 일반 inline content와 달리 LF와 literal Tab을 허용하는
+// plain text다. inlineContentToNodes를 쓰면 LF가 <br>로 바뀌므로 text node
+// 하나로 직렬화한다. class에는 안전한 language token만 복제한다(spec §7.1).
+const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
+  const codeProperties: HtmlElementNode["properties"] = {};
+  if (block.language !== undefined) {
+    codeProperties.dataLanguage = block.language;
+    if (isSafeCodeBlockLanguageClassToken(block.language)) {
+      codeProperties.className = [`language-${block.language}`];
+    }
+  }
+
+  return htmlElement("pre", { dataBeBlockId: block.id }, [
+    htmlElement("code", codeProperties, [
+      { type: "text", value: block.content[0]?.text ?? "" },
+    ]),
+  ]);
+};
+
 // children이 있는 paragraph/heading은 자기 자신(children 없이, blockId
 // 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-be-block-id>
 // wrapper 하나로 묶는다(트랙-2 라운드4 확정, 후보 A). <p>는 HTML5상 <div>를
@@ -144,6 +165,7 @@ const tableNode = (table: TableBlock): HtmlElementNode => {
 // (아래 quote 분기).
 const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
+  if (block.type === "codeBlock") return codeBlockNode(block);
   // divider → <hr data-be-block-id>(spec §7.1). 콘텐츠·children 없는 void
   // 요소 하나다 — import-html.ts의 hr 세그먼트가 dataBeBlockId를 되읽는다.
   if (block.type === "divider") {

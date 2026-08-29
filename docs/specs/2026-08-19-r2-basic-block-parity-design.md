@@ -75,7 +75,7 @@ export type Block =
 
 - `TableBlock`은 변경하지 않는다. `DividerBlock`과 `CodeBlock`은 `children`을 갖지 않는다(리프 블록).
 - `formatVersion`은 `1`을 유지한다 — 모든 신규 필드가 optional이라 R0/R1 문서는 그대로 유효하다.
-- `codeBlock.content`는 `InlineContent` 타입을 재사용하되 값 수준에서 `marks`를 금지한다(4.3).
+- `codeBlock.content`는 `InlineContent` 타입을 재사용하지만 plain-text source의 정규 저장형은 빈 source의 `[]` 또는 비어 있지 않은 source의 `[{ text: source }]` 두 형태뿐이다. 빈 text run, text run 2개 이상과 `marks` key는 `DOCUMENT_INVALID`다(4.3). HTML/GFM round-trip은 이 단일 source 문자열의 동등성을 판정한다.
 
 ### 3.2 중첩 블록 모델(`DOC-002`)
 
@@ -108,13 +108,16 @@ export type Block =
 
 ### 4.3 코드 블록
 
-- `codeBlock.content`는 `InlineContent`를 재사용하지만 값 수준에서 `marks`가 있으면 안 된다(구문 강조는 `language` 속성 기반 렌더링이지 인라인 mark가 아니다).
+- `codeBlock.content`는 `InlineContent`를 재사용하지만 plain-text source 하나만 저장한다. 빈 source는 `[]`, 비어 있지 않은 source는 정확히 `[{ text: source }]`다. 빈 text run, text run 2개 이상과 `marks` key는 정규 저장형이 아니므로 `DOCUMENT_INVALID`다. 인접 run 경계는 사용자 의미가 아니며 별도 metadata로 인코딩하지 않는다.
+- code source 문자열은 LF(`U+000A`)와 Tab(`U+0009`)을 허용한다. 나머지 C0 control, DEL과 invalid surrogate는 거절한다. 일반 `InlineContent`의 LF-only 문자열 불변식은 바꾸지 않고 CodeBlock 전용 검증을 둔다.
 - 위반은 두 레이어에서 거절한다(R1 `INVALID_ALIGN` 패턴과 동일한 이유 — 문서 로드 시점 무결성과 대화형 명령 시점 거절을 분리):
-  - **model**: `parseDocument`가 `codeBlock` content의 `marks` 존재를 `DOCUMENT_INVALID`로 거절한다(`validateCodeBlockMarks`, `schema.ts`에 추가).
-  - **core**: `toggleBold`/`toggleItalic`/`setLink` 등 mark 토글 명령이 caret/selection이 `codeBlock` 안이면 새 `EditorError` 코드 `CODE_BLOCK_MARK_NOT_ALLOWED`로 거절한다(문서 변경 없음).
-- `language`는 자유 문자열이다(제어 문자 금지, `string-invariants.ts` 재사용). 특정 하이라이터 언어 목록·구문 강조 렌더링 방식은 이 슬라이스 구현 시 확정한다.
+  - **model**: `parseDocument`가 위 content 정규형·문자 불변식·mark 금지를 검증하고 위반을 `DOCUMENT_INVALID`로 거절한다.
+  - **core 공개 command**: caret이 CodeBlock 안이거나 selection이 CodeBlock을 한 글자라도 교차하면 `toggleBold`/`toggleItalic`/`toggleUnderline`/`toggleStrike`/`toggleCode`/`setLink`/`unsetLink` 전체를 새 `EditorError` 코드 `CODE_BLOCK_MARK_NOT_ALLOWED`로 거절한다. document, ProseMirror document, selection, stored mark, revision과 change event는 모두 바뀌지 않는다.
+  - **DOM/StarterKit 단축키**: 같은 selection 조건에서 `Mod-b`·`Mod-i`·`Mod-e`·`Mod-Shift-s` 등 mark 단축키를 소비하고 완전한 no-op으로 처리한다. DOM 경로에는 오류 반환 호출자가 없으므로 외부 오류 callback을 신설하지 않는다.
+- `language`는 optional 자유 문자열이지만 빈 문자열은 `DOCUMENT_INVALID`다. 제어 문자는 기존 문자열 불변식으로 거절한다. known alias만 trim·case-insensitive하게 canonical ID로 바꾸고 unknown은 공백·대소문자를 포함해 exact 보존한다. 신규 CodeBlock과 UI에서 비운 language draft는 `"text"`를 저장한다. 미지정 필드는 유효한 기존 상태이며 로드에서 `"text"`를 강제 삽입하지 않는다.
+- known alias는 `plain text`/`none`→`text`, `js`→`javascript`, `ts`→`typescript`, `sh`/`shell`→`bash`, `py`→`python`, `md`→`markdown`이다. syntax highlighting과 highlighter dependency는 이 슬라이스 범위가 아니며 R5 `BLK-017`의 잔여 범위다.
 - `codeBlock`은 `children`을 갖지 않는다(리프 블록).
-- Tab 처리는 5.2 참고 — 코드 블록 안에서는 셀 탐색도 들여쓰기도 아닌 탭 문자 삽입이다.
+- Tab 처리는 5.2를 따른다. 저장 가능한 literal Tab과 키보드 Tab의 indentation UX는 별도 계약이다.
 
 ### 4.4 목록 4종
 
@@ -152,8 +155,10 @@ export type Block =
 우선순위는 다음과 같다(R1 `table-keyboard-extension.ts`가 이미 1번을 구현했다).
 
 1. 캐럿이 표 셀 안 → 기존 `goToNextCell`(셀 탐색, 마지막 셀은 새 행 생성). 변경 없음.
-2. 캐럿이 `codeBlock` 안 → 탭 문자(`\t`)를 콘텐츠에 삽입. 들여쓰기·셀 탐색과 무관.
+2. 캐럿이 `codeBlock` 안 → 공백 2개를 콘텐츠에 삽입하고 키 이벤트를 소비한다. Shift+Tab은 source·블록 중첩을 바꾸지 않고 소비하지 않아 브라우저 기본 순차 포커스 이동을 허용한다. literal Tab은 외부 source에서 보존할 수 있지만 키보드 Tab 조작은 literal Tab을 만들지 않는다.
 3. 그 외(문단, heading, quote, 목록 항목 등) → `indentBlock`/`outdentBlock`. 명령이 성공한 경우에만 키 이벤트를 소비한다. 적용 불가(예: 최상위 블록의 `Shift+Tab`)면 이벤트를 소비하지 않고 브라우저 기본 순차 포커스 이동을 허용한다. 표 셀 안 첫 셀의 `Shift+Tab`은 1번 분기의 기존 계약에 따라 계속 소비한다.
+
+CodeBlock의 Enter는 source에 LF를 삽입하는 일반 code editing만 담당한다. triple Enter exit, ArrowUp/ArrowDown exit와 빈 CodeBlock의 Backspace→paragraph 전환은 이 슬라이스에서 추가하지 않는다. 기존 공개 block command와 side menu가 종류 변경·이동 경로를 소유하며, 추가 keyboard parity는 슬라이스 9에서 재평가한다.
 
 ### 5.3 다중 블록 선택과 이동
 
@@ -182,11 +187,19 @@ export type Block =
 ### 6.4 placeholder와 trailing block
 
 - 빈 블록에 타입별 placeholder 텍스트를 표시한다(예: "글을 입력하세요", "제목", 목록 항목 placeholder). 저장 JSON에 포함하지 않는다 — 순수 렌더링.
+- 빈 CodeBlock은 caret 위치와 무관하게 `Code` placeholder를 항상 표시한다. CodeBlock의 타입을 식별하는 표시이며 저장 JSON에는 남지 않는다.
 - 문서 끝에는 항상 편집 가능한 마지막 블록(`paragraph`)이 있어야 한다. 사용자가 문서 끝 블록을 지우거나 다른 타입으로 바꾸면 core가 자동으로 빈 `paragraph`를 추가한다.
 
 ### 6.5 색상 팔레트
 
 - 인라인 색상 툴바(글자색/배경색)와 블록 색상 메뉴는 R1 표 셀 색상 메뉴와 같은 컴포넌트를 재사용하거나(가능하면) 같은 팔레트 상수를 공유하는 별도 컴포넌트로 만든다 — 팔레트 값 자체는 3.3에서 이미 고정했다.
+
+### 6.6 CodeBlock language UI
+
+- CodeBlock이 활성 상태면 always-available editable combobox를 표시한다. Plain Text, JavaScript, TypeScript, HTML, CSS, JSON, Bash, Python, Java, Kotlin, SQL, Markdown의 display name·alias suggestion을 제공하고 unknown 현재값도 exact 표시한다.
+- Enter와 option click만 draft를 commit한다. Escape와 바깥 pointerdown은 draft를 취소한다. Escape는 editor focus를 복원하고 바깥 pointerdown은 자연스러운 focus 이동을 유지한다.
+- 입력을 전부 비운 뒤 commit하면 `"text"`를 저장한다. known alias는 4.3 규칙으로 canonicalize하고 unknown은 그대로 저장한다.
+- UI는 plain monospace source만 표시한다. syntax highlighting, grammar, theme, Copy control, line wrap toggle과 line number는 이 슬라이스 범위가 아니다.
 
 ## 7. 문서 입출력
 
@@ -196,7 +209,10 @@ export type Block =
 - 인용문 → `blockquote`(children은 blockquote 안에 중첩 HTML로).
 - import 방향: `<blockquote>`의 첫 자식이 문단이면 그 문단의 인라인 콘텐츠가 quote `content`가 되고 나머지 자식은 `children`이 된다. 첫 자식이 비문단이면 `content`는 빈 채로 두고 전부 `children`이 된다(사용자 승인 완료 2026-08-28, Issue #38 슬라이스 3).
 - 구분선 → `hr`.
-- 코드 블록 → `<pre><code class="language-...">`(language 없으면 class 생략).
+- 코드 블록 export → `<pre><code data-language="..." class="language-...">source</code></pre>`. language가 있으면 exact 값을 HTML escape한 `data-language`에 저장한다. `/^[A-Za-z0-9][A-Za-z0-9_-]*$/`을 만족할 때만 같은 값의 `language-*` class를 병기한다. language가 없으면 두 metadata를 모두 생략한다.
+- 코드 블록 import는 `<pre><code>`와 bare `<pre>`를 모두 받는다. language metadata가 없는 bare `<pre>`는 language 없는 CodeBlock이다. bare `<pre>` 자체의 `data-language`·`language-*` class는 다음 우선순위의 `<pre>` 후보로 처리한다. source는 sanitized descendant text를 문서 순서대로 연결하고 `<br>`만 LF로 바꾼다. `span` 등 wrapper는 visible text만 보존하고 element 경계 자체로 LF를 만들지 않는다.
+- language import 우선순위는 `<code data-language>` → `<pre data-language>` → `<code class="language-*">` → `<pre class="language-*">`다. 빈 `data-language`는 미지정으로 보고 다음 후보를 읽는다. 같은 위치에 `language-*` class가 여러 개면 첫 token을 쓴다. 선택되지 않은 non-empty metadata가 선택값과 다르면 결과는 유지하고 `CODE_BLOCK_LANGUAGE_METADATA_IGNORED` warning을 반환한다. 같은 값의 중복은 warning이 아니다.
+- `<pre>` descendant text의 code-point warning은 Code source 문자 계약을 따른다. literal Tab은 허용된 source이므로 `UNSAFE_CODE_POINT_REMOVED`를 반환하지 않는다. 선택된 language 또는 source가 4.3의 문자 계약을 위반하면 값을 보정하거나 후순위 metadata로 fallback하지 않고 `HTML_DOCUMENT_INVALID`로 거절하며 document·warning 목록을 반환하지 않는다.
 - 목록 4종 → `ul`/`ol`(`start` 속성 매핑)/체크박스는 `input[type=checkbox][disabled]` 또는 `data-checked` 속성(정확한 형태는 슬라이스 착수 시 확정) / 토글은 `details`.
 - 인라인 색상 → `style="color:...; background-color:..."`.
 - 블록 색상/정렬 → 블록 wrapper의 `style`/`data-*` 속성(표 셀과 같은 방식).
@@ -212,6 +228,8 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - `strict` export는 이 중 하나라도 문서에 있으면 실패하고 구조화된 손실 정보(블록 ID, 기능 종류)를 반환한다.
   - `lossy` export는 토글을 일반 목록/heading으로 낮추고(접힘 상태·`isToggleable` 정보만 버림, 콘텐츠는 보존), 색상·정렬을 버리고, 각 손실을 경고 목록에 기록한다.
 - GFM import는 토글 문법이 없으므로 토글을 만들지 않는다. 체크 목록(`- [ ]`)은 `checkListItem`으로, 번호 목록의 시작 값은 `startNumber`로 매핑한다.
+- fenced code와 네 칸 들여쓴 CommonMark code를 모두 CodeBlock으로 import한다. 들여쓴 code는 language가 없고 export는 항상 fenced code 정규형을 사용한다. source의 CRLF·CR은 LF로 canonicalize하며 warning을 만들지 않는다. source의 LF·공백·literal Tab·fence 충돌 문자는 보존하고 필요한 경우 serializer가 더 긴 fence를 선택한다.
+- GFM info string의 language는 4.3 규칙으로 canonicalize한다. mdast `meta`는 저장 필드가 없으므로 language만 보존하고 `CODE_BLOCK_META_DROPPED` warning을 반환한다. 모델의 공백 포함 unknown language는 exporter가 GFM entity로 escape해 exact 보존한다.
 - 정정(2026-08-28, Issue #38 슬라이스 3): (a) `paragraph`/`heading`/`quote`의 `children`은 GFM 표현 불가 목록이다 — `strict` export는 거절하고, `lossy` export는 자식을 형제로 평탄화하며 `NESTED_CHILDREN` 경고를 반환한다(슬라이스 1 규칙에 quote를 편입한다). (b) GFM import는 `>` 안 문단을 문단마다 형제 `quote`로 분해하고 `children`을 만들지 않는다(import 직후 strict 실패의 비대칭을 막는다); 비문단 자식은 unwrap하고 경고를 1회 반환하며, 중첩된 `>`는 재귀적으로 처리한다. (c) 목록·인용문 컨테이너의 중첩 표현은 슬라이스 5에서 재평가한다.
 
 ### 7.3 일반 clipboard(`IO-007`, 2.2에서 파일 제외)
@@ -230,17 +248,24 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 `packages/model`의 `DOCUMENT_INVALID`/`DOCUMENT_LIMIT_EXCEEDED`를 재사용(전용 코드를 새로 만들지 않음):
 
 - 재귀 중첩 깊이 초과(3.2, JSON 문서 로드) → `DOCUMENT_LIMIT_EXCEEDED`. HTML import는 초과 전에 평탄화하므로 이 코드를 내지 않는다(7.1, Issue #132)
-- `codeBlock` content의 mark 위반(4.3, 로드 시점) → `DOCUMENT_INVALID`
+- `codeBlock` content의 비정규 shape, 금지 mark, 금지 source 문자 또는 빈 language(4.3, 로드 시점) → `DOCUMENT_INVALID`
 - `collapsed`가 있는데 `isToggleable`이 아닌 heading(4.1) → `DOCUMENT_INVALID`
 - 전역 ID 중복(3.2, 트리 전체) → `DOCUMENT_INVALID`
+
+`packages/io` import warning union에 추가:
+
+- HTML `CODE_BLOCK_LANGUAGE_METADATA_IGNORED` — 우선순위에서 탈락한 non-empty language metadata가 선택값과 충돌
+- GFM `CODE_BLOCK_META_DROPPED` — mdast code `meta`를 저장 모델이 표현하지 못해 제거
+
+HTML CodeBlock의 선택된 language/source 문자 위반은 warning으로 복구하지 않고 기존 `HTML_DOCUMENT_INVALID` import error로 반환한다(7.1).
 
 ## 9. 검증 전략
 
 R1 `docs/specs/2026-08-14-tiptap-block-editor-mvp-design.md` 12절의 전략을 R2 대상으로 확장한다 — 새 카테고리만 기록한다.
 
-- **모델 단위 테스트**: 재귀 `children` round-trip, 전역 ID 유일성(깊은 중첩 포함), 깊이 상한 거절, `codeBlock` mark 거절, heading `collapsed`/`isToggleable` 불변식.
-- **입출력 단위 테스트**: HTML/GFM 신규 요소 round-trip(7.1), GFM strict 실패 케이스(토글·색상·정렬), GFM lossy 손실 경고, IO-007 clipboard 우선순위 fixture.
-- **코어 통합 테스트**: 각 신규 명령의 단일 트랜잭션·무변경 실패, `indentBlock`/`outdentBlock`의 3분기 Tab 라우팅, 다중 선택 삭제/이동의 `children` 동반 이동.
+- **모델 단위 테스트**: 재귀 `children` round-trip, 전역 ID 유일성(깊은 중첩 포함), 깊이 상한 거절, `codeBlock` 단일 source 정규형·mark·문자·language 거절, heading `collapsed`/`isToggleable` 불변식.
+- **입출력 단위 테스트**: HTML/GFM 신규 요소 round-trip(7.1), bare `<pre>`·metadata 우선순위/충돌 warning·GFM meta warning·indented code·CRLF canonicalization, GFM strict 실패 케이스(토글·색상·정렬), GFM lossy 손실 경고, IO-007 clipboard 우선순위 fixture.
+- **코어 통합 테스트**: 각 신규 명령의 단일 트랜잭션·무변경 실패, `indentBlock`/`outdentBlock`/Code 공백 2개의 3분기 Tab 라우팅, Code/mixed selection의 공개 command 오류와 DOM mark 단축키 no-op, 다중 선택 삭제/이동의 `children` 동반 이동.
 - **Playwright**: 슬라이스마다 Chromium 시나리오, 슬라이스 11에서 3-엔진 전체 게이트(R1과 동일한 순서).
 
 ## 10. 후속 확장 경계

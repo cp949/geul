@@ -1,5 +1,6 @@
 import {
   type Block,
+  type CodeBlock,
   type Document,
   type HeadingBlock,
   type InlineContent,
@@ -86,6 +87,11 @@ const validateEditableContent = (
   for (const block of blocks) {
     // divider는 content·children이 없어 검사 대상이 없다(DividerBlock 리프).
     if (block.type === "divider") continue;
+
+    // CodeBlock source는 일반 inline text와 달리 literal Tab을 허용한다.
+    // source·language 판정과 canonicalization은 model parseDocument만 소유하고,
+    // core는 여기서 일반 inline validator를 중복 적용하지 않는다(G-CNV-001).
+    if (block.type === "codeBlock") continue;
 
     if (block.type === "table") {
       for (const row of block.rows) {
@@ -192,6 +198,15 @@ const blockContentToTiptapJson = (
   content: inlineContentToTiptap(block.content),
 });
 
+// CodeBlock은 source run 경계를 저장하지 않는 model 정규형을 그대로 PM의
+// text* content로 옮긴다. language 부재는 CodeBlockExtension attr 기본값과
+// 같은 null로 명시한다. source·language 보정은 model 권위라 여기서 하지 않는다.
+const codeBlockContentToTiptapJson = (block: CodeBlock): TiptapJsonNode => ({
+  type: "codeBlock",
+  attrs: { language: block.language ?? null },
+  content: inlineContentToTiptap(block.content),
+});
+
 // Block 1개를 재귀로 PM JSON 노드로 인코딩한다(D19). table·divider는
 // 컨테이너로 감싸지 않는다 — table은 tableBlockToTiptapJson 결과를 그대로
 // 직결하고, divider는 table처럼 컨테이너 없이 직결하고 id를 명시
@@ -199,11 +214,20 @@ const blockContentToTiptapJson = (
 // 가질 수 없어(model 계층, DELTA-01) 재귀 종료 조건이기도 하다.
 // paragraph/heading/quote는 blockContainer(blockContent, blockGroup?(
 // children…))로 감싼다 — blockGroup은 children이 있을 때만 만든다(빈
-// 배열/undefined 둘 다 "자식 없음"으로 접는다).
+// 배열/undefined 둘 다 "자식 없음"으로 접는다). CodeBlock도 container로
+// 감싸지만 leaf라 own blockGroup을 만들지 않는다.
 const blockToTiptapJson = (block: Block): TiptapJsonNode => {
   if (block.type === "table") return tableBlockToTiptapJson(block);
   if (block.type === "divider") {
     return { type: "divider", attrs: { blockId: block.id } };
+  }
+
+  if (block.type === "codeBlock") {
+    return {
+      type: "blockContainer",
+      attrs: { blockId: block.id },
+      content: [codeBlockContentToTiptapJson(block)],
+    };
   }
 
   const content: TiptapJsonNode[] = [blockContentToTiptapJson(block)];

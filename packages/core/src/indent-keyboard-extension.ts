@@ -1,43 +1,11 @@
 import type { Result } from "@cp949/geul-model";
 import { type Editor, Extension } from "@tiptap/core";
-import { type EditorState, TextSelection } from "@tiptap/pm/state";
-import { CellSelection, isInTable } from "@tiptap/pm/tables";
+import type { EditorState } from "@tiptap/pm/state";
+import { isInTable } from "@tiptap/pm/tables";
 
 import type { EditorError } from "./errors.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
-
-// table-keyboard-extension.ts의 resolveSelectionAwareState와 동일 로직의
-// 복제본이다. 원본은 export하지 않는 모듈 비공개 함수라 그대로 가져다 쓸 수
-// 없고, 공유 모듈로 뽑으면 원본 파일에 diff가 생겨 완료 조건("diff 0")과
-// 충돌한다(구현 판단 — 복제를 택했다). 클릭 직후 Tab/Shift+Tab이 눌리면
-// Chromium의 비동기 selectionchange 처리 탓에 editor.state.selection이 클릭
-// 이전 값을 그대로 들고 있을 수 있다(G-EDT-002, Issue #118과 같은 부류).
-// 실제 DOM selection으로 다시 계산한 EditorState를 **판정에만** 쓴다 —
-// isInTable 가드와 대상 blockId 추출이 전부이고, 파생 state는 dispatch하지
-// 않으며 이후 호출하는 기존 명령(indentBlockCommand/outdentBlockCommand)은
-// live editor state 위에서 자체적으로 단일 dispatch를 만든다(파생 state를
-// 명령에 넘기지 않으므로 mismatched-transaction 위험도 없다).
-// CellSelection(범위 선택)은 네이티브 Selection API로 대표되지 않으므로
-// 건드리지 않는다.
-const resolveSelectionAwareState = (editor: Editor): EditorState => {
-  const { view } = editor;
-  const liveState = view.state;
-  if (liveState.selection instanceof CellSelection) return liveState;
-  const domSelection = view.dom.ownerDocument.getSelection();
-  if (domSelection === null || domSelection.focusNode === null)
-    return liveState;
-  // view.posAtDOM은 뷰 밖 노드에서 항상 예외를 던지지 않는다 — 음수
-  // sentinel(-1)을 돌려주는 경우를 실측했다. doc.resolve(pos)까지 같은
-  // try에 넣어 그 경우도 조용히 원래 state로 폴백한다.
-  try {
-    const pos = view.posAtDOM(domSelection.focusNode, domSelection.focusOffset);
-    const resynced = TextSelection.near(liveState.doc.resolve(pos));
-    if (resynced.eq(liveState.selection)) return liveState;
-    return liveState.apply(liveState.tr.setSelection(resynced));
-  } catch {
-    return liveState;
-  }
-};
+import { resolveSelectionAwareState } from "./selection-aware-state.js";
 
 // 캐럿(state.selection.$from)에서 가장 가까운 blockContainer 조상의
 // blockId를 찾는다. depth 역순으로 올라가며 첫 blockContainer를 찾으면 그
@@ -55,6 +23,13 @@ const nearestBlockContainerId = (state: EditorState): string | null => {
   return null;
 };
 
+// CodeBlock은 RD-004 전 Tab/Shift+Tab 편집 의미가 아직 없다. DOM 기준으로
+// 재계산한 selection의 직접 textblock이 CodeBlock이면 일반 indent/outdent
+// router로 넘기지 않고 키를 소비한다. selection-only 파생 state도 실제
+// dispatch하지 않으므로 document·selection·history가 모두 그대로다.
+const isCodeBlockSelection = (state: EditorState): boolean =>
+  state.selection.$from.parent.type.name === "codeBlock";
+
 // 표 셀 안이면 표 셀 탐색(TableKeyboardNavigationExtension)에 양보하고
 // (false), 표 밖이면 캐럿이 속한 blockContainer를 대상으로 command를
 // 호출한다. command가 성공한 경우에만 true를 반환해 키 이벤트를 소비한다.
@@ -66,6 +41,7 @@ const routeToBlockCommand = (
 ): boolean => {
   const state = resolveSelectionAwareState(editor);
   if (isInTable(state)) return false;
+  if (isCodeBlockSelection(state)) return true;
 
   const blockId = nearestBlockContainerId(state);
   if (blockId === null) return false;

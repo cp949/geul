@@ -103,6 +103,8 @@ export const documentVisibleText = (document: Document): string => {
       // DividerBlock에는 content·children이 없다(리프 블록).
       if (block.type === "divider") continue;
       for (const item of block.content) parts.push(item.text);
+      // CodeBlock은 source content만 있고 children은 없는 리프 블록이다.
+      if (block.type === "codeBlock") continue;
       if (block.children !== undefined && block.children.length > 0) {
         stack.push(block.children);
       }

@@ -55,6 +55,14 @@ type BlockNestingActionState = {
   canOutdent: boolean;
 };
 
+// blockContainer의 첫 content node가 schema의 nestable group에 속할 때만
+// 자식 부모로 쓸 수 있다. container 이름만 보면 leafBlockContent인
+// CodeBlock도 부모 후보가 되어 거절 transaction이 dispatch된다(G-EDT-003).
+const isNestableBlockContainer = (node: ProseMirrorNode): boolean =>
+  node.type.name === "blockContainer" &&
+  node.childCount > 0 &&
+  node.child(0).type.isInGroup("nestableBlockContent");
+
 // 명령 실행 없이 blockId의 중첩 action 가능 여부를 판정한다. 실제 명령과
 // EditorController 공개 query가 이 함수 하나를 공유해 Tab·버튼의 구조 조건이
 // 갈리지 않게 한다.
@@ -75,7 +83,7 @@ export const getBlockNestingActionState = (
   const previousSibling = $target.nodeBefore;
   const canIndent =
     previousSibling !== null &&
-    previousSibling.type.name === "blockContainer" &&
+    isNestableBlockContainer(previousSibling) &&
     typeof previousSibling.attrs.blockId === "string" &&
     previousSibling.attrs.blockId.length > 0 &&
     modelDepthAt($target) + 1 + subtreeHeight(targetNode) <= MAX_NESTING_DEPTH;
@@ -136,11 +144,12 @@ const placeSelectionInMovedBlock = (
   return tr.setSelection(TextSelection.near(resolved));
 };
 
-// 형제 → 자식(들여쓰기). 대상의 바로 앞 형제가 blockContainer면 그 형제의
-// blockGroup 마지막 자식으로 대상(하위 트리째)을 옮긴다 — blockGroup이
-// 없으면 새로 만든다. 바로 앞 형제가 없거나(첫 자식) blockContainer가
-// 아니면(표) COMMAND_NOT_APPLICABLE이다(D9 — 표를 건너뛰고 이전 후보를
-// 찾지 않는다). 결과 최대 깊이가 MAX_NESTING_DEPTH를 넘으면 거절한다(D14).
+// 형제 → 자식(들여쓰기). 대상의 바로 앞 형제가 nestableBlockContent를 가진
+// blockContainer면 그 형제의 blockGroup 마지막 자식으로 대상(하위 트리째)을
+// 옮긴다 — blockGroup이 없으면 새로 만든다. 바로 앞 형제가 없거나(첫 자식),
+// container가 아니거나(표), leafBlockContent container면(CodeBlock)
+// COMMAND_NOT_APPLICABLE이다(D9 — 적용 불가 형제를 건너뛰고 이전 후보를 찾지
+// 않는다). 결과 최대 깊이가 MAX_NESTING_DEPTH를 넘으면 거절한다(D14).
 export const indentBlockCommand = (
   editor: Editor,
   blockId: string,

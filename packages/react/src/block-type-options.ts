@@ -1,11 +1,15 @@
-import type { BlockTypeDescriptor } from "@cp949/geul-core";
+import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
+
+type SetBlockTypeInput = Parameters<
+  EditorController["commands"]["setBlockType"]
+>[1];
 
 export type BlockTypeOption = {
   id: string;
   label: string;
   description: string;
   keywords: readonly string[];
-  blockType: BlockTypeDescriptor;
+  blockType: SetBlockTypeInput;
 };
 
 export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
@@ -68,7 +72,14 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
 ];
 
 export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
-  if (blockType.type === "paragraph") return "paragraph";
-  if (blockType.type === "quote") return "quote";
-  return `heading-${blockType.level}`;
+  switch (blockType.type) {
+    case "paragraph":
+      return "paragraph";
+    case "heading":
+      return `heading-${blockType.level}`;
+    case "quote":
+      return "quote";
+    case "codeBlock":
+      return "";
+  }
 };
