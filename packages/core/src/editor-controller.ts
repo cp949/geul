@@ -15,6 +15,7 @@ import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
 } from "./divider-commands.js";
+import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
 import type { EditorError } from "./errors.js";
 import { createGenericBlockCommands } from "./generic-block-commands.js";
 import { getBlockNestingActionState } from "./indent-commands.js";
@@ -348,17 +349,27 @@ export const createEditor = (
   const session = new ProductionEditorSession(options);
   const genericBlockCommands = createGenericBlockCommands(session);
 
+  const rejectCodeBlockMark = (): Result<void, EditorError> | null => {
+    if (session.isDestroyed) return null;
+    const state = session.editor.state;
+    return selectionIntersectsCodeBlock(state.doc, state.selection)
+      ? { ok: false, error: { code: "CODE_BLOCK_MARK_NOT_ALLOWED" } }
+      : null;
+  };
+
   const runSelectionCommand = (
     command: string,
     run: () => boolean,
   ): Result<void, EditorError> => {
+    const rejected = rejectCodeBlockMark();
+    if (rejected !== null) return rejected;
     if (session.editor.state.selection.empty) {
       return commandNotApplicable(command);
     }
     return session.runDocumentCommand(command, "local", run);
   };
 
-  const runLinkCommand = (
+  const runApplicableLinkCommand = (
     command: string,
     run: () => boolean,
   ): Result<void, EditorError> => {
@@ -369,6 +380,15 @@ export const createEditor = (
       return commandNotApplicable(command);
     }
     return session.runDocumentCommand(command, "local", run);
+  };
+
+  const runLinkCommand = (
+    command: string,
+    run: () => boolean,
+  ): Result<void, EditorError> => {
+    const rejected = rejectCodeBlockMark();
+    if (rejected !== null) return rejected;
+    return runApplicableLinkCommand(command, run);
   };
 
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
@@ -694,13 +714,15 @@ export const createEditor = (
           session.editor.commands.toggleCode(),
         ),
       setLink: (href) => {
+        const rejected = rejectCodeBlockMark();
+        if (rejected !== null) return rejected;
         if (!isSupportedLinkHref(href)) {
           return { ok: false, error: { code: "LINK_HREF_REJECTED", href } };
         }
         if (session.editor.isActive("link", { href })) {
           return commandNotApplicable("setLink");
         }
-        return runLinkCommand("setLink", () => {
+        return runApplicableLinkCommand("setLink", () => {
           const chain = session.editor.chain();
           if (session.editor.state.selection.empty) {
             chain.extendMarkRange("link");

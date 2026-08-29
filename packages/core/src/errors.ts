@@ -2,6 +2,7 @@ export type EditorError =
   | { code: "DOCUMENT_INVALID"; message: string }
   | { code: "BLOCK_NOT_FOUND"; blockId: string }
   | { code: "COMMAND_NOT_APPLICABLE"; command: string }
+  | { code: "CODE_BLOCK_MARK_NOT_ALLOWED" }
   | { code: "LINK_HREF_REJECTED"; href: string }
   | { code: "TABLE_NOT_FOUND"; blockId: string }
   | { code: "TABLE_NODE_INVALID"; message: string }

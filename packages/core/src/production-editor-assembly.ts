@@ -11,6 +11,7 @@ import { BlockIdExtension } from "./block-id-extension.js";
 import { BlockJoinExtension } from "./block-join-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
+import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
 import { DividerExtension } from "./divider-extension.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
@@ -107,6 +108,7 @@ export const createProductionEditor = (options: {
       HeadingExtension,
       QuoteExtension,
       CodeBlockExtension,
+      CodeBlockMarkGuardExtension,
       BlockContainerExtension,
       BlockGroupExtension,
       BlockIdExtension.configure({ createId: options.createId }),

@@ -1,13 +1,127 @@
+/**
+ * 에디터 컨트롤러의 링크 정책과 CodeBlock 링크 금지 경계를 검증한다.
+ * URL 검증 우선순위, 상태 원자성, undo 복원을 함께 다룬다.
+ */
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
+import { contentTextStart } from "./block-test-support.js";
 import {
+  documentOf,
   documentWithContent,
   editorState,
   mountTiptapEditor,
+  paragraphBlock,
   paragraphDocument,
 } from "./editor-controller-support.js";
 
+const codeBlockLinkGuardDocument: Document = documentOf(
+  paragraphBlock("before", "left"),
+  {
+    id: "code",
+    type: "codeBlock",
+    content: [{ text: "code" }],
+    language: "text",
+  },
+  paragraphBlock("tail", "tail"),
+);
+
 describe("에디터 컨트롤러 링크", () => {
+  it.each([
+    {
+      command: "setLink",
+      run: (editor: ReturnType<typeof createEditor>) =>
+        editor.commands.setLink("javascript:alert(1)"),
+    },
+    {
+      command: "unsetLink",
+      run: (editor: ReturnType<typeof createEditor>) =>
+        editor.commands.unsetLink(),
+    },
+  ])(
+    "CodeBlock 내부 caret에서 $command를 다른 검증보다 먼저 CODE_BLOCK_MARK_NOT_ALLOWED로 거절한다",
+    ({ run }) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: codeBlockLinkGuardDocument,
+        onChange: (event) => changes.push(event),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 1);
+      const before = editorState(editor, tiptap);
+
+      expect(run(editor)).toEqual({
+        ok: false,
+        error: { code: "CODE_BLOCK_MARK_NOT_ALLOWED" },
+      });
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+    },
+  );
+
+  it.each([
+    {
+      command: "setLink",
+      run: (editor: ReturnType<typeof createEditor>) =>
+        editor.commands.setLink("https://example.com"),
+    },
+    {
+      command: "unsetLink",
+      run: (editor: ReturnType<typeof createEditor>) =>
+        editor.commands.unsetLink(),
+    },
+  ])(
+    "CodeBlock 문자를 교차하는 선택에서 $command를 상태 변경 없이 거절한다",
+    ({ run }) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: codeBlockLinkGuardDocument,
+        onChange: (event) => changes.push(event),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection({
+        from: contentTextStart(tiptap, "before"),
+        to: contentTextStart(tiptap, "code") + 1,
+      });
+      const before = editorState(editor, tiptap);
+
+      expect(run(editor)).toEqual({
+        ok: false,
+        error: { code: "CODE_BLOCK_MARK_NOT_ALLOWED" },
+      });
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+    },
+  );
+
+  it("선택 끝점만 CodeBlock 시작 경계에 닿으면 일반 텍스트에 링크를 적용한다", () => {
+    const editor = createEditor({
+      initialDocument: codeBlockLinkGuardDocument,
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({
+      from: contentTextStart(tiptap, "before"),
+      to: contentTextStart(tiptap, "code"),
+    });
+
+    expect(editor.commands.setLink("https://example.com")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument().blocks[0]).toEqual({
+      ...paragraphBlock("before", "left"),
+      content: [
+        {
+          text: "left",
+          marks: [{ type: "link", href: "https://example.com" }],
+        },
+      ],
+    });
+    expect(editor.getDocument().blocks[1]).toEqual(
+      codeBlockLinkGuardDocument.blocks[1],
+    );
+  });
+
   it.each([
     "http://example.com",
     "https://example.com",

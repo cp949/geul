@@ -1,13 +1,164 @@
+/**
+ * 에디터 컨트롤러의 인라인 mark 토글과 CodeBlock mark 금지 경계를 검증한다.
+ * 성공·거절·undo에서 독자 문서와 ProseMirror 상태를 함께 고정한다.
+ */
 import type { Document } from "@cp949/geul-model";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
+import { contentTextStart } from "./block-test-support.js";
 import {
+  documentOf,
+  editorState,
   mountTiptapEditor,
+  paragraphBlock,
   paragraphDocument,
   sequentialIds,
+  setBoldStoredMark,
 } from "./editor-controller-support.js";
 
+const codeBlockMarkGuardDocument: Document = documentOf(
+  paragraphBlock("before", "left"),
+  {
+    id: "code",
+    type: "codeBlock",
+    content: [{ text: "code" }],
+    language: "text",
+  },
+  paragraphBlock("tail", "tail"),
+);
+
 describe("에디터 컨트롤러 mark", () => {
+  it.each([
+    "toggleBold",
+    "toggleItalic",
+    "toggleUnderline",
+    "toggleStrike",
+    "toggleCode",
+  ] as const)(
+    "CodeBlock 내부 caret에서 %s를 상태 변경 없이 CODE_BLOCK_MARK_NOT_ALLOWED로 거절한다",
+    (command) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: codeBlockMarkGuardDocument,
+        onChange: (event) => changes.push(event),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 1);
+      setBoldStoredMark(tiptap);
+      const before = editorState(editor, tiptap);
+      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+
+      expect(editor.commands[command]()).toEqual({
+        ok: false,
+        error: { code: "CODE_BLOCK_MARK_NOT_ALLOWED" },
+      });
+      expect(dispatchSpy).not.toHaveBeenCalled();
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+      dispatchSpy.mockRestore();
+    },
+  );
+
+  it.each([
+    "toggleBold",
+    "toggleItalic",
+    "toggleUnderline",
+    "toggleStrike",
+    "toggleCode",
+  ] as const)(
+    "CodeBlock 문자를 교차하는 선택에서 %s를 상태 변경 없이 거절한다",
+    (command) => {
+      const changes: DocumentChangeEvent[] = [];
+      const editor = createEditor({
+        initialDocument: codeBlockMarkGuardDocument,
+        onChange: (event) => changes.push(event),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      tiptap.commands.setTextSelection({
+        from: contentTextStart(tiptap, "before"),
+        to: contentTextStart(tiptap, "code") + 1,
+      });
+      const before = editorState(editor, tiptap);
+
+      expect(editor.commands[command]()).toEqual({
+        ok: false,
+        error: { code: "CODE_BLOCK_MARK_NOT_ALLOWED" },
+      });
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+    },
+  );
+
+  it("선택 끝점만 CodeBlock 시작 경계에 닿으면 일반 텍스트에 mark를 적용한다", () => {
+    const editor = createEditor({
+      initialDocument: codeBlockMarkGuardDocument,
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection({
+      from: contentTextStart(tiptap, "before"),
+      to: contentTextStart(tiptap, "code"),
+    });
+
+    expect(editor.commands.toggleBold()).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument().blocks).toEqual([
+      {
+        ...paragraphBlock("before", "left"),
+        content: [{ text: "left", marks: [{ type: "bold" }] }],
+      },
+      codeBlockMarkGuardDocument.blocks[1],
+      paragraphBlock("tail", "tail"),
+    ]);
+  });
+
+  it("CodeBlock 거절 7개가 기존 undo 이력과 전체 상태를 보존한다", () => {
+    const changes: DocumentChangeEvent[] = [];
+    const editor = createEditor({
+      initialDocument: codeBlockMarkGuardDocument,
+      onChange: (event) => changes.push(event),
+    });
+    expect(editor.commands.setText("tail", "changed")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 1);
+    setBoldStoredMark(tiptap);
+    const before = editorState(editor, tiptap);
+    const tiptapDocumentBefore = tiptap.state.doc;
+    const selectionBefore = tiptap.state.selection;
+    const storedMarksBefore = tiptap.state.storedMarks;
+
+    const outcomes = [
+      editor.commands.toggleBold(),
+      editor.commands.toggleItalic(),
+      editor.commands.toggleUnderline(),
+      editor.commands.toggleStrike(),
+      editor.commands.toggleCode(),
+      editor.commands.setLink("javascript:alert(1)"),
+      editor.commands.unsetLink(),
+    ];
+
+    expect(outcomes).toEqual(
+      Array.from({ length: 7 }, () => ({
+        ok: false,
+        error: { code: "CODE_BLOCK_MARK_NOT_ALLOWED" },
+      })),
+    );
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(tiptap.state.doc).toBe(tiptapDocumentBefore);
+    expect(tiptap.state.selection).toBe(selectionBefore);
+    expect(tiptap.state.storedMarks).toBe(storedMarksBefore);
+    expect(changes).toHaveLength(1);
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument()).toMatchObject({
+      revision: 2,
+      blocks: codeBlockMarkGuardDocument.blocks,
+    });
+  });
+
   it("undo 시 지원하는 mark와 heading 메타데이터를 복원한다", () => {
     const markedHeading: Document = {
       formatVersion: 1,
