@@ -339,7 +339,12 @@ const findBlockInTree = (
     return block === undefined ? null : { block, siblings: blocks, index };
   }
   for (const block of blocks) {
-    if (block.type === "table" || block.children === undefined) continue;
+    if (
+      block.type === "table" ||
+      block.type === "divider" ||
+      block.children === undefined
+    )
+      continue;
     const found = findBlockInTree(block.children, blockId);
     if (found !== null) return found;
   }
@@ -347,10 +352,11 @@ const findBlockInTree = (
 };
 
 // D20: moveBlockBefore/duplicateBlock은 자식 딸린 블록을 거절한다(슬라이스
-// 7a #125가 하위 트리 인지 이동·복제를 완성할 때까지). table은 애초에
-// children을 가질 수 없어(model 계층) 검사 대상에서 자연히 빠진다.
+// 7a #125가 하위 트리 인지 이동·복제를 완성할 때까지). table·divider는
+// 애초에 children을 가질 수 없어(model 계층) 검사 대상에서 자연히 빠진다.
 const hasChildren = (block: Block): boolean =>
   block.type !== "table" &&
+  block.type !== "divider" &&
   block.children !== undefined &&
   block.children.length > 0;
 

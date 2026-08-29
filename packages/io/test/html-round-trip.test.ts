@@ -1052,7 +1052,7 @@ describe("재귀 중첩 HTML 왕복", () => {
     if (!result.ok) throw new Error(result.error.message);
 
     const texts = result.value.document.blocks.flatMap((block) =>
-      block.type === "table" ? [] : block.content.map((item) => item.text),
+      "content" in block ? block.content.map((item) => item.text) : [],
     );
     expect(texts).toContain("STRAY");
   });

@@ -110,16 +110,18 @@ const collectTableLosses = (
   }
 };
 
-// paragraph/heading은 children(재귀, 임의 깊이)을 가질 수 있다(DELTA-01).
+// paragraph/heading/quote는 children(재귀, 임의 깊이)을 가질 수 있다(DELTA-01).
 // GFM(mdast)의 paragraph/heading 노드에는 자식 블록 슬롯이 없어 이를
 // 표현할 수 없다(D5) — 블록마다 NESTED_CHILDREN을 기록한 뒤 children을
 // 재귀적으로 순회해 더 깊은 블록의 손실(자체 콘텐츠 손실과 그 블록의
-// children 존재 여부)도 놓치지 않는다.
+// children 존재 여부)도 놓치지 않는다. divider는 content도 children도 없는
+// 리프라 기록할 손실이 없다.
 const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   if (block.type === "table") {
     collectTableLosses(block, losses);
     return;
   }
+  if (block.type === "divider") return;
 
   if (hasUnderline(block.content)) {
     losses.push({

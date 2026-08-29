@@ -13,10 +13,17 @@ export type ParagraphBlock = {
 export type HeadingBlock = {
   id: string;
   type: "heading";
-  level: 1 | 2 | 3;
+  level: 1 | 2 | 3 | 4 | 5 | 6;
   content: InlineContent;
   children?: Block[];
 };
+export type QuoteBlock = {
+  id: string;
+  type: "quote";
+  content: InlineContent;
+  children?: Block[];
+};
+export type DividerBlock = { id: string; type: "divider" };
 export type TableColumn = { id: string; width: number };
 export type TableBlock = {
   id: string;
@@ -38,6 +45,7 @@ export type TableBlock = {
   headerRows: 0 | 1;
   headerColumns: 0 | 1;
 };
-export type Block = ParagraphBlock | HeadingBlock | TableBlock;
+export type Block =
+  ParagraphBlock | HeadingBlock | TableBlock | QuoteBlock | DividerBlock;
 export type Document = { formatVersion: 1; revision: number; blocks: Block[] };
 export type IdFactory = () => string;

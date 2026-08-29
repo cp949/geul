@@ -100,6 +100,8 @@ export const documentVisibleText = (document: Document): string => {
         }
         continue;
       }
+      // DividerBlock에는 content·children이 없다(리프 블록).
+      if (block.type === "divider") continue;
       for (const item of block.content) parts.push(item.text);
       if (block.children !== undefined && block.children.length > 0) {
         stack.push(block.children);

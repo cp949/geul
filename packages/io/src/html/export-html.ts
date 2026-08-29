@@ -8,6 +8,7 @@ import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
 import type { Result } from "../result.js";
+import { findUnsupportedBlock } from "../unsupported-block.js";
 import {
   type HtmlElementContent,
   type HtmlElementNode,
@@ -140,6 +141,13 @@ const tableNode = (table: TableBlock): HtmlElementNode => {
 // 둘째 dataBeChildren 있는 div)만 wrapper로 인식한다.
 const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
+  if (block.type === "quote" || block.type === "divider") {
+    // exportHtml이 parseDocument 직후 findUnsupportedBlock으로 먼저 거절하므로
+    // 정상 경로에서 도달하지 않는다 — 임시 방어(HTML_SERIALIZE_FAILED로 감싸짐).
+    throw new Error(
+      `Unsupported block type "${block.type}" reached HTML export (block ${block.id})`,
+    );
+  }
 
   const tagName = block.type === "paragraph" ? "p" : `h${block.level}`;
   const ownNode = htmlElement(
@@ -169,6 +177,17 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
       error: {
         code: "HTML_DOCUMENT_INVALID",
         message: `Cannot export invalid document: ${parsed.error.message}`,
+      },
+    };
+  }
+  // 임시 계약 — quote·divider HTML 매핑이 들어오면(DELTA-06·06a) 제거한다.
+  const unsupported = findUnsupportedBlock(parsed.value.blocks);
+  if (unsupported !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "HTML_DOCUMENT_INVALID",
+        message: `Cannot export block ${unsupported.id}: block type "${unsupported.type}" has no HTML mapping yet`,
       },
     };
   }

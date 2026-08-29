@@ -5,32 +5,10 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "../src/index.js";
-
-type NestedFixtureBlock = {
-  id: string;
-  type: "paragraph";
-  content: Array<{ text: string }>;
-  children?: NestedFixtureBlock[];
-};
-
-// 최하위 블록부터 감싸 올라가며 depth단 체인 문서를 만든다 — chain-1이
-// 최상위, chain-<depth>가 가장 깊은 잎이다.
-const buildNestedChainDocument = (depth: number) => {
-  let innermost: NestedFixtureBlock = {
-    id: `chain-${depth}`,
-    type: "paragraph",
-    content: [],
-  };
-  for (let level = depth - 1; level >= 1; level -= 1) {
-    innermost = {
-      id: `chain-${level}`,
-      type: "paragraph",
-      content: [],
-      children: [innermost],
-    };
-  }
-  return { formatVersion: 1, revision: 0, blocks: [innermost] };
-};
+import {
+  buildNestedChainDocument,
+  type NestedFixtureBlock,
+} from "./nested-chain-support.js";
 
 describe("children 필드 보존과 표 거절", () => {
   it("children이 있는 문서가 parseDocument 통과 후에도 children을 유지한다", () => {

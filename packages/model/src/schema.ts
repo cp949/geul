@@ -64,10 +64,21 @@ const tableBlockSchema = z
   })
   .strict();
 
-// paragraph/headingBlockSchema는 children으로 blockSchema를 재귀 참조한다.
+// .strict() — DividerBlock은 콘텐츠도 children도 없는 리프다(spec §4.2). 기본
+// z.object()는 미선언 키(content·children)를 에러 없이 조용히 제거해 구분선에
+// 실려 온 하위 블록·텍스트가 무음 유실된다 — strict()로 미선언 키를 파싱
+// 실패로 승격시켜 DOCUMENT_INVALID 거절을 zod 파싱 단계에서 확보한다.
+const dividerBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("divider"),
+  })
+  .strict();
+
+// paragraph/heading/quoteBlockSchema는 children으로 blockSchema를 재귀 참조한다.
 // discriminatedUnion이 멤버 스키마의 구체 ZodObject 모양(리터럴 판별 필드)을
-// 직접 봐야 하므로 paragraph/headingBlockSchema 자체는 z.ZodType<T>로 넓히지
-// 않는다 — 순환은 children 필드의 z.lazy 콜백 반환 타입 하나에만 명시
+// 직접 봐야 하므로 paragraph/heading/quoteBlockSchema 자체는 z.ZodType<T>로
+// 넓히지 않는다 — 순환은 children 필드의 z.lazy 콜백 반환 타입 하나에만 명시
 // 타입(BlockNode[])을 달아 끊는다. BlockNode는 zod가 실제로 추론하는 모양
 // (옵셔널 필드가 항상 `T | undefined`를 명시하는 모양)을 그대로 따르는 스키마
 // 전용 타입이다 — model의 손으로 쓴 Block 계열 타입(`children?: Block[]`)은
@@ -84,13 +95,26 @@ type ParagraphBlockNode = {
 type HeadingBlockNode = {
   id: string;
   type: "heading";
-  level: 1 | 2 | 3;
+  level: 1 | 2 | 3 | 4 | 5 | 6;
   content: z.infer<typeof inlineContentSchema>;
   children?: BlockNode[] | undefined;
 };
 
+type QuoteBlockNode = {
+  id: string;
+  type: "quote";
+  content: z.infer<typeof inlineContentSchema>;
+  children?: BlockNode[] | undefined;
+};
+
+type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
+
 type BlockNode =
-  ParagraphBlockNode | HeadingBlockNode | z.infer<typeof tableBlockSchema>;
+  | ParagraphBlockNode
+  | HeadingBlockNode
+  | z.infer<typeof tableBlockSchema>
+  | QuoteBlockNode
+  | DividerBlockNode;
 
 const paragraphBlockSchema = z.object({
   id: z.string(),
@@ -104,7 +128,23 @@ const paragraphBlockSchema = z.object({
 const headingBlockSchema = z.object({
   id: z.string(),
   type: z.literal("heading"),
-  level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  level: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+    z.literal(5),
+    z.literal(6),
+  ]),
+  content: inlineContentSchema,
+  children: z
+    .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
+    .optional(),
+});
+
+const quoteBlockSchema = z.object({
+  id: z.string(),
+  type: z.literal("quote"),
   content: inlineContentSchema,
   children: z
     .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
@@ -115,6 +155,8 @@ const blockSchema = z.discriminatedUnion("type", [
   paragraphBlockSchema,
   headingBlockSchema,
   tableBlockSchema,
+  quoteBlockSchema,
+  dividerBlockSchema,
 ]);
 
 const documentSchema = z.object({
@@ -209,7 +251,15 @@ const validateBlocksAt = (
     const blockId = validateId(ids, block.id, [...blockPath, "id"]);
     if (!blockId.ok) return blockId;
 
-    if (block.type === "paragraph" || block.type === "heading") {
+    // divider는 id 외에 검증할 필드가 없다 — 아래 표 코드 경로로 떨어지지
+    // 않게 여기서 끝낸다.
+    if (block.type === "divider") continue;
+
+    if (
+      block.type === "paragraph" ||
+      block.type === "heading" ||
+      block.type === "quote"
+    ) {
       const content = validateContent(block.content, [...blockPath, "content"]);
       if (!content.ok) return content;
       if (block.children !== undefined) {
@@ -270,7 +320,7 @@ const validateBlocks = (blocks: Block[]): Result<undefined, DocumentError> =>
   validateBlocksAt(blocks, ["blocks"], new Set<string>());
 
 // 표 전용 검증(열 너비·셀 속성·크기 상한·격자)이 트리 전체에서 같은 규칙으로
-// 적용되게 하는 단일 순회 지점이다 — 최상위 배열만 돌면 paragraph/heading의
+// 적용되게 하는 단일 순회 지점이다 — 최상위 배열만 돌면 paragraph/heading/quote의
 // children으로 들어간 표(스키마·indentBlock이 허용하는 배치)가 네 검증을
 // 통째로 우회한다. 깊이 상한은 validateNestingDepth가 이미 보장하므로 이
 // 재귀는 상수 깊이 안에서 끝난다.
@@ -289,6 +339,9 @@ const visitTableBlocks = (
       if (!result.ok) return result;
       continue;
     }
+    // divider는 children 필드가 없는 리프다 — 나머지(paragraph/heading/quote)만
+    // children으로 내려간다.
+    if (block.type === "divider") continue;
     if (block.children !== undefined) {
       const children = visitTableBlocks(
         block.children,

@@ -1,8 +1,10 @@
 import {
   type Block,
+  type DividerBlock,
   type Document,
   type InlineContent,
   parseDocument,
+  type QuoteBlock,
   type TableBlock,
   type TextMark,
 } from "@cp949/geul-model";
@@ -12,6 +14,7 @@ import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
 import type { Result } from "../result.js";
+import { findUnsupportedBlock } from "../unsupported-block.js";
 import { computeColumnAlignments } from "./column-align.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 
@@ -137,6 +140,17 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
   };
 };
 
+// exportMarkdown이 parseDocument 직후 findUnsupportedBlock으로 먼저 거절하므로
+// flattenBlocks·documentNode는 정상 경로에서 quote·divider를 만나지 않는다 —
+// 임시 방어(둘 다 try 안이라 MARKDOWN_SERIALIZE_FAILED로 감싸짐).
+const unreachableUnsupportedBlock = (
+  block: QuoteBlock | DividerBlock,
+): never => {
+  throw new Error(
+    `Unsupported block type "${block.type}" reached Markdown export (block ${block.id})`,
+  );
+};
+
 // children이 있는 paragraph/heading을 부모 바로 뒤의 형제 블록으로
 // 평탄화한다(D5, lossy export 전용). GFM(mdast)의 paragraph/heading
 // 노드에는 자식 블록 슬롯이 없어 계층을 표현할 수 없다 — depth와 무관하게
@@ -145,8 +159,9 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 // 도달하지 않는다).
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
-    if (block.type !== "paragraph" && block.type !== "heading") {
-      return [block];
+    if (block.type === "table") return [block];
+    if (block.type === "quote" || block.type === "divider") {
+      return unreachableUnsupportedBlock(block);
     }
     if (block.children === undefined || block.children.length === 0) {
       return [block];
@@ -159,6 +174,9 @@ const documentNode = (document: Document): MarkdownOutputNode => ({
   type: "root",
   children: document.blocks.map((block) => {
     if (block.type === "table") return tableNode(block);
+    if (block.type === "quote" || block.type === "divider") {
+      return unreachableUnsupportedBlock(block);
+    }
     if (block.type === "heading") {
       return {
         type: "heading",
@@ -202,6 +220,19 @@ export function exportMarkdown(
       error: {
         code: "MARKDOWN_DOCUMENT_INVALID",
         message: `Cannot export invalid document: ${parsed.error.message}`,
+      },
+    };
+  }
+  // 임시 계약 — quote·divider GFM 매핑이 들어오면(DELTA-07·07a) 제거한다.
+  // analyzeMarkdownLoss보다 앞에 둔다: 손실 분석은 try 밖이고 공개 export라
+  // 거절을 그 안의 예외로 만들 수 없다.
+  const unsupported = findUnsupportedBlock(parsed.value.blocks);
+  if (unsupported !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "MARKDOWN_DOCUMENT_INVALID",
+        message: `Cannot export block ${unsupported.id}: block type "${unsupported.type}" has no Markdown mapping yet`,
       },
     };
   }

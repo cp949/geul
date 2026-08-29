@@ -43,11 +43,13 @@ export {
 } from "./table-grid-validation.js";
 export type {
   Block,
+  DividerBlock,
   Document,
   HeadingBlock,
   IdFactory,
   InlineContent,
   ParagraphBlock,
+  QuoteBlock,
   TableBlock,
   TableColumn,
   TextMark,

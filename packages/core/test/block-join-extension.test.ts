@@ -23,6 +23,7 @@ import { BlockJoinExtension } from "../src/block-join-extension.js";
 import { createEditor } from "../src/index.js";
 import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
 import {
+  documentOf,
   mountTiptapEditor,
   nestedParagraphDocument,
   oneCellTableBlock,
@@ -33,16 +34,6 @@ import {
   createTableFixtureEditor,
   placeCaretInCell,
 } from "./table-test-support.js";
-
-/**
- * 최상위 블록 배열만 다른 문서를 만든다 — 각 케이스가 블록 배치를 그
- * 자리에서 선언해 fixture와 단언을 나란히 읽게 한다.
- */
-const documentOf = (...blocks: Block[]): Document => ({
-  formatVersion: 1,
-  revision: 0,
-  blocks,
-});
 
 /**
  * 문단 블록 리터럴을 만든다. 텍스트가 빈 문자열이면 content를 빈 배열로

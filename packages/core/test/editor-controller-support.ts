@@ -30,6 +30,16 @@ export const paragraphDocument = (text: string, revision = 0): Document => ({
 });
 
 /**
+ * 최상위 블록 배열만 다른 문서를 만든다 — 각 케이스가 블록 배치를 그
+ * 자리에서 선언해 fixture와 단언을 나란히 읽게 한다.
+ */
+export const documentOf = (...blocks: Block[]): Document => ({
+  formatVersion: 1,
+  revision: 0,
+  blocks,
+});
+
+/**
  * 깊이 1 자식을 가진 최소 문서 — parent-1(문단) 아래 child-1(문단) 하나.
  * DELTA-02a 완료 조건 2·3·4·5·7(depth≥1 명령 동작·D20 자식 딸린 블록
  * 의미론·중첩 선택 조회)이 공유하는 fixture다(G-TST-002).
@@ -194,4 +204,30 @@ export const editorState = (
   selection: tiptap.state.selection.toJSON(),
   storedMarks: tiptap.state.storedMarks?.map((mark) => mark.toJSON()) ?? null,
   tiptapDocument: tiptap.state.doc.toJSON(),
+});
+
+/**
+ * quote 블록 리터럴 — DELTA-04 실제 변환 전까지 core가 DOCUMENT_INVALID로
+ * 거절하는 대상 확인용(unsupported-block-load.test.ts). children은 quote
+ * 아래 자식 블록을 붙이는 인자로, 후속 DELTA(quote 변환·명령)의 fixture가
+ * 쓴다. io에도 같은 빌더가 있지만 패키지 경계상 import하지 않는다.
+ */
+export const quoteBlock = (
+  id: string,
+  text: string,
+  children?: Block[],
+): Block => ({
+  id,
+  type: "quote",
+  content: [{ text }],
+  ...(children === undefined ? {} : { children }),
+});
+
+/**
+ * divider 블록 리터럴 — content도 children도 없는 리프. quote와 마찬가지로
+ * DELTA-04 전까지 core가 거절하는 대상이다.
+ */
+export const dividerBlock = (id: string): Block => ({
+  id,
+  type: "divider",
 });

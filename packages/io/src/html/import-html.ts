@@ -520,13 +520,13 @@ const blocksFromNodes = (
     if (
       ownBlocks.length !== 1 ||
       ownBlock === undefined ||
-      ownBlock.type === "table"
+      (ownBlock.type !== "paragraph" && ownBlock.type !== "heading")
     ) {
       // findChildrenWrapper가 ownNode를 p/h1~h3로만 걸렀으므로 정상 입력에서
       // 이 분기는 도달하지 않는다 — p/heading이 (HTML5 파싱상 가능한) 표를
-      // 품고 있어 segmentBlocks가 블록 하나 대신 여러/다른 세그먼트를 냈을
-      // 때만 방어적으로 wrapper 인식을 취소하고 원본 노드를 평면 처리로
-      // 되돌린다.
+      // 품고 있어 segmentBlocks가 블록 하나 대신 여러/다른(paragraph·heading
+      // 이외 — children을 가질 수 없는 divider 포함) 세그먼트를 냈을 때만
+      // 방어적으로 wrapper 인식을 취소하고 원본 노드를 평면 처리로 되돌린다.
       plainRun.push(node);
       continue;
     }
