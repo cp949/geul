@@ -8,7 +8,7 @@ import {
   Strikethrough,
   Underline,
 } from "lucide-react";
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useRef, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
@@ -76,10 +76,35 @@ type ToolbarState = {
   top: number;
 };
 
+/**
+ * 서식 툴바가 추적한 자기 에디터 Range를 DOM selection으로 복원한다.
+ * 이미 교체된 노드를 가리키는 Range나 다른 에디터의 Range는 적용하지 않는다.
+ */
+const restoreEditorSelection = (
+  element: HTMLElement | null,
+  range: Range | null,
+) => {
+  const selection = element?.ownerDocument.getSelection();
+  if (
+    element === null ||
+    range === null ||
+    selection === undefined ||
+    selection === null ||
+    !element.contains(range.startContainer) ||
+    !element.contains(range.endContainer)
+  ) {
+    return;
+  }
+
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
 export const FormattingToolbar = () => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
+  const trackedRange = useRef<Range | null>(null);
 
   useEffect(() => {
     const updateFromSelection = () => {
@@ -100,6 +125,7 @@ export const FormattingToolbar = () => {
       }
 
       const range = selection.getRangeAt(0);
+      trackedRange.current = range.cloneRange();
       const bounds = range.getBoundingClientRect?.() ?? {
         left: 0,
         top: 0,
@@ -224,7 +250,14 @@ export const FormattingToolbar = () => {
           icon={icon}
           key={mark}
           label={label}
-          onClick={() => {
+          onClick={(event) => {
+            // 키보드로 활성화한 button click은 WebKit에서 편집기의 DOM
+            // selection을 잃을 수 있다. 툴바가 표시될 때 자기 에디터에서
+            // 추적한 Range만 command 전에 복원한다. 포인터 click(detail > 0)은
+            // IconButton의 mousedown 기본 동작 억제 계약을 그대로 사용한다.
+            if (event.detail === 0) {
+              restoreEditorSelection(element, trackedRange.current);
+            }
             toggle(editor);
             setToolbarState((current) =>
               current === null
