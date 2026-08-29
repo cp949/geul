@@ -268,6 +268,17 @@ export const mounted = (initialDocument: Document) => {
 };
 
 /**
+ * 거절·selection-only command가 기존 stored mark를 보존하는지 검증할 수
+ * 있도록 문서·history 변경 없이 bold stored mark를 강제로 설정한다.
+ * mark를 금지하는 CodeBlock caret에서도 fixture 상태를 만들 수 있다.
+ */
+export const setBoldStoredMark = (tiptap: TiptapEditor): void => {
+  const bold = tiptap.schema.marks.bold;
+  if (bold === undefined) throw new Error("bold mark 조회 실패");
+  tiptap.view.dispatch(tiptap.state.tr.setStoredMarks([bold.create()]));
+};
+
+/**
  * 표 명령 등과 무관하게 스키마·appendTransaction만 검사하는 테스트가 공유하는
  * 최소 마운트 헬퍼. 프로덕션 스키마를 돌려준다. paragraphDocument("seed")는
  * 실제 콘텐츠와 무관한 placeholder다 — 각 테스트가 자신의 트랜잭션으로 문서를

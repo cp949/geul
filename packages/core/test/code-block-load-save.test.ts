@@ -19,6 +19,7 @@ import {
   mountTiptapEditor,
   notApplicable,
   paragraphBlock,
+  setBoldStoredMark,
   sequentialIds,
 } from "./editor-controller-support.js";
 import {
@@ -64,16 +65,6 @@ const mountedCodeEditor = (initialDocument: Document) => {
     onChange: (event) => changes.push(event),
   });
   return { editor, changes, ...mountTiptapEditor(editor) };
-};
-
-/**
- * 거절·selection-only 경계가 stored mark까지 보존하는지 관찰할 수 있도록
- * 현재 selection에 bold stored mark를 둔다. 문서 transaction/history는 만들지 않는다.
- */
-const setBoldStoredMark = (tiptap: TiptapEditor): void => {
-  const bold = tiptap.schema.marks.bold;
-  if (bold === undefined) throw new Error("bold mark 조회 실패");
-  tiptap.view.dispatch(tiptap.state.tr.setStoredMarks([bold.create()]));
 };
 
 /**
@@ -277,75 +268,6 @@ describe("CodeBlock 입력 검증과 명령 원자성", () => {
       );
     },
   );
-
-  it.each([
-    { name: "setText", command: "setText" },
-    { name: "setBlockType", command: "setBlockType" },
-  ] as const)(
-    "CodeBlock의 $name은 COMMAND_NOT_APPLICABLE이며 모든 상태와 history를 보존한다",
-    ({ command }) => {
-      const { editor, tiptap, changes } = mountedCodeEditor(
-        documentOf(
-          codeBlock("code", "source", "javascript"),
-          paragraphBlock("tail", "tail"),
-        ),
-      );
-      tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 2);
-      setBoldStoredMark(tiptap);
-      const before = editorState(editor, tiptap);
-      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
-
-      const result =
-        command === "setText"
-          ? editor.commands.setText("code", "changed")
-          : editor.commands.setBlockType("code", { type: "paragraph" });
-
-      expect(result).toEqual(notApplicable(command));
-      expect(dispatchSpy).not.toHaveBeenCalled();
-      expect(editorState(editor, tiptap)).toEqual(before);
-      expect(changes).toEqual([]);
-      expect(editor.commands.undo()).toEqual(notApplicable("undo"));
-      dispatchSpy.mockRestore();
-    },
-  );
-
-  it("setBlockType의 CodeBlock descriptor 입력은 compile-time과 runtime에서 원자적으로 거절된다", () => {
-    type SetBlockTypeInput = Parameters<
-      EditorController["commands"]["setBlockType"]
-    >[1];
-    const unsupported: SetBlockTypeInput = {
-      // @ts-expect-error CodeBlock은 selection descriptor일 뿐 setBlockType 입력이 아니다.
-      type: "codeBlock",
-      language: "javascript",
-    };
-    const changes: DocumentChangeEvent[] = [];
-    const editor = createEditor({
-      initialDocument: documentOf(paragraphBlock("kept", "before")),
-      onChange: (event) => changes.push(event),
-    });
-    const { tiptap } = mountTiptapEditor(editor);
-    expect(editor.commands.setText("kept", "after")).toEqual({
-      ok: true,
-      value: undefined,
-    });
-    setBoldStoredMark(tiptap);
-    changes.length = 0;
-    const before = editorState(editor, tiptap);
-    const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
-
-    expect(editor.commands.setBlockType("kept", unsupported)).toEqual(
-      notApplicable("setBlockType"),
-    );
-    expect(dispatchSpy).not.toHaveBeenCalled();
-    expect(editorState(editor, tiptap)).toEqual(before);
-    expect(changes).toEqual([]);
-    dispatchSpy.mockRestore();
-
-    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
-    expect(editor.getDocument().blocks[0]).toEqual(
-      paragraphBlock("kept", "before"),
-    );
-  });
 });
 
 describe("CodeBlock 공개 선택 문맥", () => {
