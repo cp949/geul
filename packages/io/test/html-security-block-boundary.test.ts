@@ -75,6 +75,119 @@ describe("HTML 보안", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
+  it("미지원 안전 조상 안의 h4·blockquote·hr도 지원 블록 경계를 보존한다", () => {
+    const cases = [
+      {
+        html: '<a href="https://example.com"><h4>H</h4></a>',
+        block: {
+          id: "html-1",
+          type: "heading",
+          level: 4,
+          content: [
+            {
+              text: "H",
+              marks: [{ type: "link", href: "https://example.com" }],
+            },
+          ],
+        },
+      },
+      {
+        html: '<a href="https://example.com"><blockquote><p>Q</p><h4>C</h4></blockquote></a>',
+        block: {
+          id: "html-1",
+          type: "quote",
+          content: [
+            {
+              text: "Q",
+              marks: [{ type: "link", href: "https://example.com" }],
+            },
+          ],
+          children: [
+            {
+              id: "html-2",
+              type: "heading",
+              level: 4,
+              content: [
+                {
+                  text: "C",
+                  marks: [{ type: "link", href: "https://example.com" }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        html: '<a href="https://example.com"><hr></a>',
+        block: { id: "html-1", type: "divider" },
+      },
+    ];
+
+    for (const { html, block } of cases) {
+      const result = importHtml(html);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+
+      expect(result.value.document.blocks).toEqual([block]);
+      expect(result.value.warnings).toEqual([
+        expect.objectContaining({
+          kind: "SAFE_BLOCK_DOWNGRADED",
+          element: "a",
+        }),
+      ]);
+    }
+  });
+
+  it("heading 안의 quote·divider 경계와 앞뒤 텍스트 순서를 보존한다", () => {
+    const cases = [
+      {
+        html: "<h1>before<blockquote><p>quote</p></blockquote>after</h1>",
+        blocks: [
+          {
+            id: "html-1",
+            type: "paragraph",
+            content: [{ text: "before" }],
+          },
+          {
+            id: "html-2",
+            type: "quote",
+            content: [{ text: "quote" }],
+          },
+          {
+            id: "html-3",
+            type: "paragraph",
+            content: [{ text: "after" }],
+          },
+        ],
+      },
+      {
+        html: "<h1>before<hr>after</h1>",
+        blocks: [
+          {
+            id: "html-1",
+            type: "paragraph",
+            content: [{ text: "before" }],
+          },
+          { id: "html-2", type: "divider" },
+          {
+            id: "html-3",
+            type: "paragraph",
+            content: [{ text: "after" }],
+          },
+        ],
+      },
+    ];
+
+    for (const { html, blocks } of cases) {
+      const result = importHtml(html);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+
+      expect(result.value.document.blocks).toEqual(blocks);
+      expect(result.value.warnings).toEqual([]);
+    }
+  });
+
   // 이미 지원하지 않는 태그(span) 자신이 경고를 낸 뒤에는 그 안에 중첩된
   // 내용까지 각각 다시 경고하지 않는다 — isBlockBoundaryTag는 div/li/
   // blockquote/ul/ol만 통과시키고, span처럼 애초에 미지원인 태그를 지나면

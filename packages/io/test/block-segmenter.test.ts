@@ -143,15 +143,20 @@ describe("segmentBlocks", () => {
     ]);
   });
 
-  it("표 없는 임의 인라인 wrapper(span 등)는 재귀하지 않고 통째로 pending에 담는다", () => {
+  it("임의 인라인 wrapper(span 등) 안에서도 인식된 블록 경계를 분리하고 조상을 보존한다", () => {
     const segments = segment("<span><div>a</div><div>b</div></span>");
-    // span은 정책에 없는(경계도 wrapper도 아닌) 태그이자 표를 담고 있지도
-    // 않으므로 통째로 pending에 밀어 넣는다 — 안의 div 두 개는 개별
-    // 경계로 인식되지 않고 하나의 문단으로 뭉친다. 두 소비자의 기존 walk가
-    // 이미 갖던 한계이지, 이번 변경이 새로 만든 것이 아니다.
-    expect(segments.map((s) => s.kind)).toEqual(["paragraph"]);
+    // span 자체는 정책에 없지만 안의 div는 경계다. 경계를 분리하면서도
+    // 각 텍스트를 감싼 span 조상은 잃지 않는다.
+    expect(segments.map((s) => s.kind)).toEqual(["paragraph", "paragraph"]);
     expect(
-      segments[0]?.kind === "paragraph" ? textOf(segments[0].nodes) : "",
-    ).toBe("ab");
+      segments.map((s) => (s.kind === "paragraph" ? textOf(s.nodes) : "")),
+    ).toEqual(["a", "b"]);
+    expect(
+      segments.map((s) =>
+        s.kind === "paragraph" && s.nodes[0]?.type === "element"
+          ? s.nodes[0].tagName
+          : "",
+      ),
+    ).toEqual(["span", "span"]);
   });
 });

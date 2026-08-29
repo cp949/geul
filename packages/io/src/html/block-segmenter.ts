@@ -128,6 +128,24 @@ const wrapInAncestors = (
     node,
   );
 
+// blockquote는 요소 자체를 세그먼트로 넘겨 호출자가 content/children을
+// 나눈다. 조상 마크를 blockquote 바깥에 다시 씌우면 그 분할 전에 블록
+// 구조가 숨으므로, 구조는 유지하고 각 텍스트 leaf에만 조상 체인을 복원한다.
+const wrapTextDescendantsInAncestors = (
+  node: HtmlElementContent,
+  ancestors: readonly HtmlElementNode[],
+): HtmlElementContent => {
+  if (node.type === "text") return wrapInAncestors(node, ancestors);
+  if (node.type === "comment") return node;
+  return htmlElement(
+    node.tagName,
+    node.properties,
+    node.children.map((child) =>
+      wrapTextDescendantsInAncestors(child, ancestors),
+    ),
+  );
+};
+
 export const segmentBlocks = <Level extends number = number>(
   nodes: readonly HtmlNode[],
   policy: BlockSegmentPolicy<Level>,
@@ -141,14 +159,25 @@ export const segmentBlocks = <Level extends number = number>(
     pending = [];
   };
 
-  // walk()가 표를 찾기 위해 더 파고들어야 하는지(descend), 아니면 표 없는
-  // 순수 인라인/구조 콘텐츠라 통째로 pending에 밀어 넣어도 되는지 판단하는
-  // 데 쓴다.
-  const containsAnyTable = (list: readonly HtmlNode[]): boolean => {
+  // 미지원 안전 요소(<a>, <span> 등)는 그 자체로는 블록 경계가 아니지만,
+  // 안쪽에 소비자가 인식하는 블록이 있으면 재귀해 그 경계를 보존해야 한다.
+  // 표만 찾으면 h1~h6·blockquote·hr가 조상 인라인 요소와 함께 pending에
+  // 흡수돼 문단으로 강등되거나(hr) 완전히 사라진다. 정책 판정을 그대로
+  // 사용해 document import와 clipboard가 각자 허용한 경계만 탐지한다.
+  const containsAnyBlockBoundary = (list: readonly HtmlNode[]): boolean => {
     for (const node of list) {
       if (node.type !== "element") continue;
-      if (policy.isTableNode(node)) return true;
-      if (containsAnyTable(node.children)) return true;
+      if (
+        policy.isTableNode(node) ||
+        policy.isSimpleBoundary(node.tagName) ||
+        policy.headingLevelFromTagName(node.tagName) !== undefined ||
+        policy.isDividerTag?.(node.tagName) === true ||
+        policy.isQuoteTag?.(node.tagName) === true ||
+        policy.isNestedBoundary(node.tagName)
+      ) {
+        return true;
+      }
+      if (containsAnyBlockBoundary(node.children)) return true;
     }
     return false;
   };
@@ -191,18 +220,29 @@ export const segmentBlocks = <Level extends number = number>(
       // 소비자에서 blockquote가 문단 경계로 풀리지 않는다.
       if (policy.isQuoteTag?.(node.tagName) === true) {
         flush();
-        segments.push({ kind: "blockquote", node });
+        segments.push({
+          kind: "blockquote",
+          node: htmlElement(
+            node.tagName,
+            node.properties,
+            node.children.map((child) =>
+              wrapTextDescendantsInAncestors(child, ancestors),
+            ),
+          ),
+        });
         continue;
       }
 
       const headingLevel = policy.headingLevelFromTagName(node.tagName);
-      // p/heading이 표를 자식으로 품고 있으면(HTML5 파싱 규칙상 table
-      // 시작 태그는 p만 자동으로 닫고 heading은 닫지 않아 실제로 표를
-      // 담을 수 있다) 블록 경계로 접어 인라인 텍스트로 흡수하지 않는다 —
-      // 통과해 내려가 표를 표 세그먼트로 보존한다.
+      // p/heading이 지원 블록 경계를 자식으로 품으면 요소 전체를
+      // 인라인 본문으로 접지 않고 자식 시퀀스를 재귀 분할한다. HTML5
+      // parser는 table·blockquote·hr 등을 heading 안에 보존할 수 있다.
+      // 표만 검사하면 quote는 heading 텍스트로 평탄화되고 divider는
+      // 조용히 사라진다. 외부 heading 자체의 의미는 보존할 수 없으므로
+      // 표 중첩 계약처럼 앞뒤 텍스트를 paragraph로 보존한다.
       if (
         (policy.isSimpleBoundary(node.tagName) || headingLevel !== undefined) &&
-        containsAnyTable(node.children)
+        containsAnyBlockBoundary(node.children)
       ) {
         walk(node.children, [...ancestors, node]);
         continue;
@@ -240,7 +280,7 @@ export const segmentBlocks = <Level extends number = number>(
         walk(node.children, [...ancestors, node]);
         continue;
       }
-      if (containsAnyTable(node.children)) {
+      if (containsAnyBlockBoundary(node.children)) {
         walk(node.children, [...ancestors, node]);
         continue;
       }
