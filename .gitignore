@@ -1,5 +1,4 @@
 _works/
-_completed/
 .claude/settings.local.json
 .claude/*.lock
 _tmp/
