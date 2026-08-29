@@ -26,7 +26,10 @@ import { tableNonSectionChildren } from "./table-layout.js";
 // — import-html.ts는 model HeadingBlock["level"]을 넘겨 세그먼트에서 캐스트
 // 없이 좁혀진 level을 받고(DELTA-06), clipboard-table-parser.ts와 테스트의
 // number 정책은 기본값 그대로다.
-export type BlockSegment<Level extends number = number> =
+export type BlockSegment<
+  Level extends number = number,
+  IncludeCodeBlock extends boolean = false,
+> =
   // 경계 태그를 만나지 않고 그냥 쌓인 pending(loose 텍스트, 또는
   // div/li/blockquote 재귀 안에서 나온 내용)이다. 이걸 만든 특정 요소가
   // 없으므로 원본 element 참조가 없다 — import-html.ts는 이 kind만
@@ -65,6 +68,12 @@ export type BlockSegment<Level extends number = number> =
   // 정책에서만 나온다 — 넘기지 않으면(clipboard) blockquote는 예전처럼
   // isNestedBoundary(NESTED_BOUNDARY_TAG_NAMES)의 문단 경계로 남는다.
   | { kind: "blockquote"; node: HtmlElementNode }
+  // pre를 CodeBlock으로 해석할지는 document import policy만 opt-in한다.
+  // 원본 sanitized 요소를 그대로 넘겨 source·metadata 선택은 호출자가
+  // 담당한다. clipboard policy에서는 이 variant가 나오지 않는다.
+  | (IncludeCodeBlock extends true
+      ? { kind: "codeBlock"; node: HtmlElementNode }
+      : never)
   | {
       kind: "table";
       node: HtmlElementNode;
@@ -76,7 +85,10 @@ export type BlockSegment<Level extends number = number> =
       nonSectionChildren: HtmlElementContent[];
     };
 
-export type BlockSegmentPolicy<Level extends number = number> = {
+export type BlockSegmentPolicy<
+  Level extends number = number,
+  IncludeCodeBlock extends boolean = false,
+> = {
   // p처럼 "경계를 만나면 지금까지 쌓인 내용을 flush하고 그 요소의 자식으로
   // pending을 통째로 교체한다"만 하는(재귀하지 않는) 태그.
   isSimpleBoundary: (tagName: string) => boolean;
@@ -98,6 +110,8 @@ export type BlockSegmentPolicy<Level extends number = number> = {
   // 소관). isNestedBoundary보다 먼저 판정한다 — 같은 태그가 두 집합에 있을
   // 때 세그먼트 승격이 이긴다.
   isQuoteTag?: (tagName: string) => boolean;
+  // pre처럼 마크·일반 인라인 해석을 바이패스하고 리프 블록으로
+  // 유지할 태그. document import만 넘기며 clipboard는 opt-in하지 않는다.
   // div/li/blockquote처럼 "경계를 만나면 flush하고, 안쪽을 재귀 탐색해
   // 더 깊은 경계를 개별 인식시킨 뒤 다시 flush한다"태그. 표 유무와
   // 무관하게 항상 재귀한다 — 임의 깊이의 중첩 경계를 전부 잡아야 하기
@@ -110,7 +124,9 @@ export type BlockSegmentPolicy<Level extends number = number> = {
   // findDataTables가 미리 고른 표 집합의 멤버십 검사처럼 호출자마다
   // 다르다 — 표 탐지 알고리즘 자체는 이 모듈이 아니라 호출자가 소유한다.
   isTableNode: (node: HtmlElementNode) => boolean;
-};
+} & (IncludeCodeBlock extends true
+  ? { isCodeBlockTag: (tagName: string) => boolean }
+  : { isCodeBlockTag?: undefined });
 
 // 조상 서식 체인을 노드에 얕은 클론으로 다시 씌운다. 재귀 중 표나 중첩
 // 경계를 만나 pending을 flush하면 그 안의 텍스트가 원래 있던 위치의 조상
@@ -146,11 +162,19 @@ const wrapTextDescendantsInAncestors = (
   );
 };
 
-export const segmentBlocks = <Level extends number = number>(
+export function segmentBlocks<Level extends number = number>(
   nodes: readonly HtmlNode[],
-  policy: BlockSegmentPolicy<Level>,
-): BlockSegment<Level>[] => {
-  const segments: BlockSegment<Level>[] = [];
+  policy: BlockSegmentPolicy<Level, true>,
+): BlockSegment<Level, true>[];
+export function segmentBlocks<Level extends number = number>(
+  nodes: readonly HtmlNode[],
+  policy: BlockSegmentPolicy<Level, false>,
+): BlockSegment<Level, false>[];
+export function segmentBlocks<Level extends number = number>(
+  nodes: readonly HtmlNode[],
+  policy: BlockSegmentPolicy<Level, true> | BlockSegmentPolicy<Level, false>,
+): BlockSegment<Level, true>[] {
+  const segments: BlockSegment<Level, true>[] = [];
   let pending: HtmlElementContent[] = [];
 
   const flush = (): void => {
@@ -173,6 +197,7 @@ export const segmentBlocks = <Level extends number = number>(
         policy.headingLevelFromTagName(node.tagName) !== undefined ||
         policy.isDividerTag?.(node.tagName) === true ||
         policy.isQuoteTag?.(node.tagName) === true ||
+        policy.isCodeBlockTag?.(node.tagName) === true ||
         policy.isNestedBoundary(node.tagName)
       ) {
         return true;
@@ -230,6 +255,13 @@ export const segmentBlocks = <Level extends number = number>(
             ),
           ),
         });
+        continue;
+      }
+      // pre는 자식의 code·br·wrapper를 다른 블록 경계로 해석하지
+      // 않고 sanitized 서브트리 전체를 semantic caller에 넘긴다.
+      if (policy.isCodeBlockTag?.(node.tagName) === true) {
+        flush();
+        segments.push({ kind: "codeBlock", node });
         continue;
       }
 
@@ -291,7 +323,7 @@ export const segmentBlocks = <Level extends number = number>(
   walk(nodes, []);
   flush();
   return segments;
-};
+}
 
 // div/li는 model에 리스트 전용 Block 타입이 없어 heading처럼 별도 타입을
 // 만들 수 없으므로 문단으로만 분리한다(Issue #113, #72). blockquote는 model

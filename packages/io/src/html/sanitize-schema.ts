@@ -28,6 +28,8 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // 규칙으로 id를 지워 divider의 id가 왕복에서 새로 발급된다.
   hr: ["dataBeBlockId"],
   p: ["dataBeBlockId"],
+  pre: ["dataBeBlockId", "dataLanguage", "className"],
+  code: ["dataLanguage", "className"],
   table: ["dataBeBlockId", "dataBeHeaderRows", "dataBeHeaderColumns"],
   td: [
     "rowSpan",
@@ -65,6 +67,7 @@ export const htmlStrippedTagNames = [
 
 export const htmlAllowedTagNames = [
   "p",
+  "pre",
   // h1~h6는 model HeadingBlock.level 1~6과 1:1이다(DELTA-06, Issue #38 —
   // 그 전에는 model이 1~3만 허용해 h4~h6를 unwrap했다).
   "h1",

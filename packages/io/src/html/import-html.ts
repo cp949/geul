@@ -29,6 +29,7 @@ import {
   sanitizeLinks,
 } from "./hast-properties.js";
 import {
+  codeBlockLanguageMetadataIgnoredWarning,
   collectHtmlImportWarnings,
   deepTreeFlattenedWarning,
   type HtmlImportWarning,
@@ -138,6 +139,34 @@ const textValue = (nodes: HtmlNode[]): string =>
           : "",
     )
     .join("");
+
+// hast className은 parse5 변환에서 token 배열이지만 수동 생성 HAST와
+// sanitizer 표면을 모두 받기 위해 문자열도 방어적으로 처리한다. 한
+// 위치의 첫 language-* suffix만 선택 우선순위에 쓰지만, 나머지 suffix도
+// exact metadata conflict 판정에 필요하므로 순서대로 모두 반환한다.
+const classLanguages = (element: HtmlElementNode): string[] => {
+  const className = element.properties.className;
+  const tokens = Array.isArray(className)
+    ? className.filter((value): value is string => typeof value === "string")
+    : typeof className === "string"
+      ? className.split(/\s+/)
+      : [];
+  return tokens.flatMap((token) =>
+    token.startsWith("language-") && token.length > "language-".length
+      ? [token.slice("language-".length)]
+      : [],
+  );
+};
+
+// language metadata에 참여하는 code는 pre의 첫 direct child뿐이다.
+// descendant code를 찾으면 wrapper 안 metadata가 우선순위를 탈취한다.
+const firstDirectCode = (
+  element: HtmlElementNode,
+): HtmlElementNode | undefined =>
+  element.children.find(
+    (child): child is HtmlElementNode =>
+      child.type === "element" && child.tagName === "code",
+  );
 
 const inferHeaderRows = (
   rows: TableRowSource[],
@@ -344,7 +373,10 @@ const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
 // blockquote도 같은 방식으로 세그먼트로 받아 quote 블록으로 옮긴다
 // (DELTA-06a, D6 분할 규칙은 splitQuoteChildren) — clipboard 정책은
 // isQuoteTag를 넘기지 않아 blockquote가 문단 경계로 남는다.
-const importBlockSegmentPolicy: BlockSegmentPolicy<HeadingBlock["level"]> = {
+const importBlockSegmentPolicy: BlockSegmentPolicy<
+  HeadingBlock["level"],
+  true
+> = {
   isSimpleBoundary: isParagraphTag,
   headingLevelFromTagName: (tagName) => headingLevelByTagName.get(tagName),
   isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
@@ -352,6 +384,7 @@ const importBlockSegmentPolicy: BlockSegmentPolicy<HeadingBlock["level"]> = {
   isTableNode: (node) => node.tagName === "table",
   isDividerTag: (tagName) => tagName === "hr",
   isQuoteTag: (tagName) => tagName === "blockquote",
+  isCodeBlockTag: (tagName) => tagName === "pre",
 };
 
 const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
@@ -371,6 +404,7 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
     undefined ||
   importBlockSegmentPolicy.isDividerTag?.(node.tagName) === true ||
   importBlockSegmentPolicy.isQuoteTag?.(node.tagName) === true ||
+  importBlockSegmentPolicy.isCodeBlockTag?.(node.tagName) === true ||
   importBlockSegmentPolicy.isNestedBoundary(node.tagName) ||
   importBlockSegmentPolicy.isTransparent(node.tagName) ||
   importBlockSegmentPolicy.isTableNode(node);
@@ -531,6 +565,45 @@ const blocksFromSegments = (
           ? { id, type: "quote", content, children }
           : { id, type: "quote", content },
       );
+      continue;
+    }
+    if (segment.kind === "codeBlock") {
+      const source = textValue(segment.node.children);
+      const id = propertyString(segment.node, "dataBeBlockId") ?? createId();
+      const directCode = firstDirectCode(segment.node);
+      const directCodeDataLanguage =
+        directCode === undefined
+          ? undefined
+          : propertyString(directCode, "dataLanguage");
+      const preDataLanguage = propertyString(segment.node, "dataLanguage");
+      const directCodeClassLanguages =
+        directCode === undefined ? [] : classLanguages(directCode);
+      const preClassLanguages = classLanguages(segment.node);
+      const selectionCandidates = [
+        directCodeDataLanguage,
+        preDataLanguage,
+        directCodeClassLanguages[0],
+        preClassLanguages[0],
+      ].filter((value): value is string => value !== undefined);
+      const language = selectionCandidates[0];
+      const exactMetadataCandidates = [
+        directCodeDataLanguage,
+        preDataLanguage,
+        ...directCodeClassLanguages,
+        ...preClassLanguages,
+      ].filter((value): value is string => value !== undefined);
+      if (
+        language !== undefined &&
+        exactMetadataCandidates.some((candidate) => candidate !== language)
+      ) {
+        warnings.push(codeBlockLanguageMetadataIgnoredWarning(id));
+      }
+      blocks.push({
+        id,
+        type: "codeBlock",
+        content: source.length === 0 ? [] : [{ text: source }],
+        ...(language === undefined ? {} : { language }),
+      });
       continue;
     }
 
