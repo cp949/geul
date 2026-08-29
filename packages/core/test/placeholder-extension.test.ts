@@ -1,7 +1,7 @@
 /**
  * 빈 블록 placeholder 데코레이션(UI-009, spec §6.4)을 검증한다.
  * 빈 paragraph는 캐럿(selection anchor)이 그 블록 안에 있을 때만, 빈
- * heading(레벨 1~6)·빈 quote는 캐럿 위치와 무관하게 data-placeholder
+ * heading(레벨 1~6)·빈 quote·빈 CodeBlock은 캐럿 위치와 무관하게 data-placeholder
  * 속성을 받고, 표 셀 안에는 붙지 않으며, 저장 문서에는 어떤 흔적도 남기지
  * 않는다(계획 완료 조건 1~4, Issue #38 슬라이스 3 DELTA-05 05-C3).
  */
@@ -20,6 +20,7 @@ import {
 
 const PARAGRAPH_PLACEHOLDER = "Enter text or type '/' for commands";
 const QUOTE_PLACEHOLDER = "Quote";
+const CODE_PLACEHOLDER = "Code";
 
 /**
  * 빈 paragraph(p-empty)와 내용 있는 paragraph(p-filled)를 나란히 둔 문서.
@@ -57,6 +58,21 @@ const emptyHeadingsDocument = (): Document => ({
 const emptyQuoteDocument = (): Document =>
   documentOf(
     { id: "q-empty", type: "quote", content: [] },
+    { id: "p-end", type: "paragraph", content: [{ text: "end" }] },
+  );
+
+/**
+ * 빈 CodeBlock과 내용이 있는 CodeBlock 뒤에 paragraph를 둔다.
+ * 캐럿을 CodeBlock 안·밖으로 옮겨 상시 placeholder 계약을 비교한다.
+ */
+const codePlaceholderDocument = (): Document =>
+  documentOf(
+    { id: "code-empty", type: "codeBlock", content: [] },
+    {
+      id: "code-filled",
+      type: "codeBlock",
+      content: [{ text: "const value = 1;" }],
+    },
     { id: "p-end", type: "paragraph", content: [{ text: "end" }] },
   );
 
@@ -175,6 +191,23 @@ describe("placeholder 데코레이션", () => {
       type: "quote",
       content: [],
     });
+  });
+
+  it("빈 CodeBlock은 캐럿 안·밖에서 Code placeholder가 붙고 내용이 있으면 붙지 않는다", () => {
+    const editor = createEditor({ initialDocument: codePlaceholderDocument() });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    const before = editor.getDocument();
+    const emptyCode = editable.querySelector("pre[data-be-code-block]");
+    const filledCode = editable.querySelectorAll("pre[data-be-code-block]")[1];
+
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-end"));
+    expect(emptyCode?.getAttribute("data-placeholder")).toBe(CODE_PLACEHOLDER);
+    expect(filledCode?.hasAttribute("data-placeholder")).toBe(false);
+
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "code-empty"));
+    expect(emptyCode?.getAttribute("data-placeholder")).toBe(CODE_PLACEHOLDER);
+    expect(editable.querySelectorAll("[data-placeholder]")).toHaveLength(1);
+    expect(editor.getDocument()).toEqual(before);
   });
 
   it("빈 h4·h5·h6에 Heading 4/5/6 placeholder가 상시 붙는다", () => {

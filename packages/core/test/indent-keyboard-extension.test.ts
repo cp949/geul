@@ -54,10 +54,30 @@ const containerWithGroupJson = (
   ],
 });
 
+/** CodeBlock 콘텐츠를 가진 blockContainer의 Tiptap JSON. */
+const codeContainerJson = (blockId: string, source: string): JSONContent => ({
+  type: "blockContainer",
+  attrs: { blockId },
+  content: [{ type: "codeBlock", content: [{ type: "text", text: source }] }],
+});
+
 /** 형제 문단 2개(p1, p2) — p2를 indent하면 p1의 자식이 된다. */
 const twoSiblingParagraphsDoc = (): JSONContent => ({
   type: "doc",
   content: [containerJson("p1", "one"), containerJson("p2", "two")],
+});
+
+/**
+ * 일반 문단 두 개 뒤에 CodeBlock을 둔다. native 문단 caret과 stale
+ * CodeBlock selection이 엇갈린 역방향 stale routing을 조립한다.
+ */
+const paragraphsAndCodeDoc = (): JSONContent => ({
+  type: "doc",
+  content: [
+    containerJson("p1", "one"),
+    containerJson("p2", "two"),
+    codeContainerJson("code", "source"),
+  ],
 });
 
 /**
@@ -209,6 +229,25 @@ describe("stale selection 재동기화(G-EDT-002, Issue #118과 같은 부류)",
     const outdentedDoc = outdentEditor.getJSON() as TiptapJsonNode;
     // child-1이 top-level로 나왔다 — 클릭한 블록(child-1)이 대상이었다는 증거.
     expect(outdentedDoc.content).toHaveLength(2);
+  });
+
+  it("native 일반 caret과 stale CodeBlock selection이 엇갈려도 native 문단을 indent한다", () => {
+    const editor = createTableFixtureEditor(paragraphsAndCodeDoc());
+
+    withStaleSelection(editor, "p2", "code", () => {
+      expect(indentBlockShortcut(editor)).toBe(true);
+    });
+
+    const document = editor.getJSON() as TiptapJsonNode;
+    expect(document.content).toHaveLength(2);
+    expect(document.content?.[0]?.attrs?.blockId).toBe("p1");
+    expect(
+      document.content?.[0]?.content?.[1]?.content?.[0]?.attrs?.blockId,
+    ).toBe("p2");
+    expect(document.content?.[1]?.attrs?.blockId).toBe("code");
+    expect(document.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe(
+      "source",
+    );
   });
 
   it("정상 경로(재계산 불필요)에서 dispatch 0~1회다", () => {

@@ -1,5 +1,6 @@
 import type { Result } from "@cp949/geul-model";
 import { type Editor, Extension } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 import type { EditorState } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
@@ -23,12 +24,21 @@ const nearestBlockContainerId = (state: EditorState): string | null => {
   return null;
 };
 
-// CodeBlock은 RD-004 전 Tab/Shift+Tab 편집 의미가 아직 없다. DOM 기준으로
-// 재계산한 selection의 직접 textblock이 CodeBlock이면 일반 indent/outdent
-// router로 넘기지 않고 키를 소비한다. selection-only 파생 state도 실제
-// dispatch하지 않으므로 document·selection·history가 모두 그대로다.
-const isCodeBlockSelection = (state: EditorState): boolean =>
+// CodeBlock Tab 계약은 빈 TextSelection(caret)에만 적용한다. DOM 기준으로
+// 재계산한 selection이 codeBlock의 직접 content 안인지 판정한다.
+const isCodeBlockCaret = (state: EditorState): boolean =>
+  state.selection.empty &&
   state.selection.$from.parent.type.name === "codeBlock";
+
+// selection-only 파생 state와 live state가 같은 doc 참조를 공유할 때
+// 파생 state에서 공백 2개 삽입 transaction을 만들어 실제 view에 한
+// 번만 dispatch한다. closeHistory로 한 Tab을 하나의 undo 단위로 닫는다.
+const insertCodeBlockIndent = (editor: Editor, state: EditorState): boolean => {
+  if (state.doc !== editor.view.state.doc) return false;
+  const transaction = state.tr.insertText("  ", state.selection.from);
+  editor.view.dispatch(closeHistory(transaction));
+  return true;
+};
 
 // 표 셀 안이면 표 셀 탐색(TableKeyboardNavigationExtension)에 양보하고
 // (false), 표 밖이면 캐럿이 속한 blockContainer를 대상으로 command를
@@ -38,10 +48,15 @@ const isCodeBlockSelection = (state: EditorState): boolean =>
 const routeToBlockCommand = (
   editor: Editor,
   command: (editor: Editor, blockId: string) => Result<void, EditorError>,
+  codeBlockAction: "insert" | "pass",
 ): boolean => {
   const state = resolveSelectionAwareState(editor);
   if (isInTable(state)) return false;
-  if (isCodeBlockSelection(state)) return true;
+  if (isCodeBlockCaret(state)) {
+    return codeBlockAction === "insert"
+      ? insertCodeBlockIndent(editor, state)
+      : false;
+  }
 
   const blockId = nearestBlockContainerId(state);
   if (blockId === null) return false;
@@ -49,10 +64,10 @@ const routeToBlockCommand = (
 };
 
 export const indentBlockShortcut = (editor: Editor): boolean =>
-  routeToBlockCommand(editor, indentBlockCommand);
+  routeToBlockCommand(editor, indentBlockCommand, "insert");
 
 export const outdentBlockShortcut = (editor: Editor): boolean =>
-  routeToBlockCommand(editor, outdentBlockCommand);
+  routeToBlockCommand(editor, outdentBlockCommand, "pass");
 
 // 표 밖 Tab/Shift+Tab을 indentBlockCommand/outdentBlockCommand로 라우팅한다
 // (spec §5.2 Tab 3분기 중 "그 외 → indent/outdent" 분기). 옵션이 없다 — 두

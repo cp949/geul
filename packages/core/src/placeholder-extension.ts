@@ -10,9 +10,10 @@ const PARAGRAPH_PLACEHOLDER = "Enter text or type '/' for commands";
 // 표시는 heading이 전례다. 빈 quote는 테두리(blockquote 스타일)만 남아
 // 타입 힌트가 없으면 무엇인지 알 수 없다(Issue #38 슬라이스 3).
 const QUOTE_PLACEHOLDER = "Quote";
+const CODE_PLACEHOLDER = "Code";
 
 // 빈 paragraph는 캐럿(selection anchor)이 그 블록 안에 있을 때만, 빈
-// heading·quote는 상시 data-placeholder 노드 데코레이션을 받는다(R-3). 빈
+// heading·quote·codeBlock은 상시 data-placeholder 노드 데코레이션을 받는다(R-3). 빈
 // textblock의 내부 위치는 position + 1 하나뿐이라 anchor 비교 하나로
 // "캐럿이 그 블록 안"이 판정된다.
 const placeholderDecorations = (state: EditorState): DecorationSet => {
@@ -29,7 +30,8 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
     if (
       typeName !== "paragraph" &&
       typeName !== "heading" &&
-      typeName !== "quote"
+      typeName !== "quote" &&
+      typeName !== "codeBlock"
     ) {
       return true;
     }
@@ -40,9 +42,11 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
         ? `Heading ${node.attrs.level as number}`
         : typeName === "quote"
           ? QUOTE_PLACEHOLDER
-          : anchor === position + 1
-            ? PARAGRAPH_PLACEHOLDER
-            : null;
+          : typeName === "codeBlock"
+            ? CODE_PLACEHOLDER
+            : anchor === position + 1
+              ? PARAGRAPH_PLACEHOLDER
+              : null;
     if (text !== null) {
       decorations.push(
         Decoration.node(position, position + node.nodeSize, {

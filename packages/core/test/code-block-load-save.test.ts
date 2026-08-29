@@ -1,6 +1,6 @@
 /**
- * CodeBlock production 활성화 경계의 load/save, 입력 검증, 공개 선택 문맥과
- * RD-004 전 명령·키보드 무손실 guard를 검증한다.
+ * CodeBlock production 활성화 경계의 load/save, 입력 검증, 공개 선택 문맥,
+ * Tab 편집과 지원 범위 밖 keyboard 무손실 guard를 검증한다.
  */
 import type { CodeBlock, Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -101,7 +101,7 @@ const withStaleBlockCaret = (
 };
 
 /**
- * CodeBlock keyboard 거절 전후의 전체 관찰 상태와 history 부재를 단언한다.
+ * CodeBlock 무변경 keyboard 경계 전후의 전체 관찰 상태와 history 부재를 단언한다.
  * dispatch 수는 호출부가 정상/stale 또는 selection/no-op 계약에 맞춰 넘긴다.
  */
 const expectKeyboardBoundary = (
@@ -309,7 +309,7 @@ describe("CodeBlock 공개 선택 문맥", () => {
   });
 });
 
-describe("CodeBlock Tab과 Shift+Tab guard", () => {
+describe("CodeBlock Tab과 Shift+Tab 편집", () => {
   /** 일반 indent가 성공할 수 있는 top-level CodeBlock 배치를 만든다. */
   const tabDocument = () =>
     documentOf(
@@ -328,52 +328,111 @@ describe("CodeBlock Tab과 Shift+Tab guard", () => {
     );
 
   it.each([
-    { key: "Tab", shift: false, document: tabDocument },
-    { key: "Shift+Tab", shift: true, document: shiftTabDocument },
+    { name: "시작", offset: 0, source: "  source" },
+    { name: "중간", offset: 3, source: "sou  rce" },
+    { name: "끝", offset: 6, source: "source  " },
   ])(
-    "정상 CodeBlock caret의 $key은 dispatch 없이 모든 상태를 보존한다",
-    ({ shift, document }) => {
-      const { editor, tiptap, changes } = mountedCodeEditor(document());
-      tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 2);
-      setBoldStoredMark(tiptap);
-      const before = expectKeyboardBoundary(
-        editor,
-        tiptap,
-        changes,
-        () => dispatchKeydown(tiptap, "Tab", shift),
-        0,
-      );
-      expect(editorState(editor, tiptap)).toEqual(before);
+    "CodeBlock $name caret의 Tab은 공백 2개를 삽입하고 caret을 2칸 옮긴다",
+    ({ offset, source }) => {
+      const { editor, tiptap, changes } = mountedCodeEditor(tabDocument());
+      const start = contentTextStart(tiptap, "code");
+      tiptap.commands.setTextSelection(start + offset);
+      const before = editorState(editor, tiptap);
+      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+
+      expect(dispatchKeydown(tiptap, "Tab")).toBe(true);
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      dispatchSpy.mockRestore();
+      expect(editor.getDocument()).toEqual({
+        ...before.document,
+        revision: 1,
+        blocks: [
+          paragraphBlock("previous", "previous"),
+          codeBlock("code", source, "javascript"),
+          paragraphBlock("tail", "tail"),
+        ],
+      });
+      expect(tiptap.state.selection.toJSON()).toEqual({
+        type: "text",
+        anchor: start + offset + 2,
+        head: start + offset + 2,
+      });
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["code"], reason: "local" },
+      ]);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editorState(editor, tiptap)).toEqual({
+        ...before,
+        document: { ...before.document, revision: 2 },
+      });
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["code"], reason: "local" },
+        { revision: 2, changedBlockIds: ["code"], reason: "undo" },
+      ]);
+      expect(editor.commands.undo()).toEqual(notApplicable("undo"));
     },
   );
 
-  it.each([
-    { key: "Tab", shift: false, document: tabDocument, stale: "previous" },
-    {
-      key: "Shift+Tab",
-      shift: true,
-      document: shiftTabDocument,
-      stale: "stale",
-    },
-  ])(
-    "stale CodeBlock caret의 $key도 DOM selection을 판정하고 dispatch 없이 상태를 보존한다",
-    ({ shift, document, stale }) => {
-      const { editor, tiptap, changes } = mountedCodeEditor(document());
-      let before: ReturnType<typeof editorState> | null = null;
-      withStaleBlockCaret(tiptap, "code", stale, () => {
-        setBoldStoredMark(tiptap);
-        before = expectKeyboardBoundary(
-          editor,
-          tiptap,
-          changes,
-          () => dispatchKeydown(tiptap, "Tab", shift),
-          0,
-        );
-        expect(editorState(editor, tiptap)).toEqual(before);
-      });
-      expect(before).not.toBeNull();
-    },
-  );
+  it("CodeBlock Shift+Tab은 소비하지 않고 모든 상태와 history를 보존한다", () => {
+    const { editor, tiptap, changes } = mountedCodeEditor(shiftTabDocument());
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 2);
+    setBoldStoredMark(tiptap);
+    const before = editorState(editor, tiptap);
+    const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "Tab", true)).toBe(false);
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    dispatchSpy.mockRestore();
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  it("stale 일반 selection 상태에서 native CodeBlock caret의 Tab은 CodeBlock을 편집한다", () => {
+    const { editor, tiptap, changes } = mountedCodeEditor(tabDocument());
+    withStaleBlockCaret(
+      tiptap,
+      "code",
+      "previous",
+      () => {
+        const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+        expect(dispatchKeydown(tiptap, "Tab")).toBe(true);
+        expect(dispatchSpy).toHaveBeenCalledTimes(1);
+        dispatchSpy.mockRestore();
+      },
+      3,
+    );
+
+    expect(editor.getDocument()).toEqual({
+      formatVersion: 1,
+      revision: 1,
+      blocks: [
+        paragraphBlock("previous", "previous"),
+        codeBlock("code", "sou  rce", "javascript"),
+        paragraphBlock("tail", "tail"),
+      ],
+    });
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["code"], reason: "local" },
+    ]);
+  });
+
+  it("stale 일반 selection 상태에서 native CodeBlock caret의 Shift+Tab은 소비하지 않는다", () => {
+    const { editor, tiptap, changes } = mountedCodeEditor(shiftTabDocument());
+    let before: ReturnType<typeof editorState> | null = null;
+    withStaleBlockCaret(tiptap, "code", "stale", () => {
+      before = editorState(editor, tiptap);
+      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+      expect(dispatchKeydown(tiptap, "Tab", true)).toBe(false);
+      expect(dispatchSpy).not.toHaveBeenCalled();
+      dispatchSpy.mockRestore();
+      expect(editorState(editor, tiptap)).toEqual(before);
+    });
+    expect(before).not.toBeNull();
+    expect(changes).toEqual([]);
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
 });
 
 describe("CodeBlock과 일반 text block의 Backspace/Delete 경계", () => {
