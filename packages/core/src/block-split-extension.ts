@@ -2,6 +2,8 @@ import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
+import { resolveSelectionAwareState } from "./selection-aware-state.js";
+
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
 // block-container-extension.ts). Tiptap 기본 splitBlock은 canSplit(doc, pos,
 // depth=1, ...)로 depth 1 split만 시도한다 — 컨테이너까지 함께 쪼개야 하는
@@ -17,6 +19,12 @@ import { TextSelection, type Transaction } from "@tiptap/pm/state";
 // 참조, 코드 미복제 — MPL 경계).
 export const BlockSplitExtension = Extension.create({
   name: "blockSplit",
+  // TableKeyboardNavigationExtension보다 먼저 DOM-derived selection을
+  // 확인한다. live CellSelection 직후 표 밖 목록을 클릭하고
+  // Enter를 누른 경우 stale 표 핸들러가 키를 선점하지 않는다.
+  // 실제 표 selection에서는 아래 가드가 false를 반환해 표
+  // Enter 계약에 그대로 양보한다.
+  priority: 101,
 
   addKeyboardShortcuts() {
     return {
@@ -25,20 +33,37 @@ export const BlockSplitExtension = Extension.create({
   },
 });
 
-// 이 확장이 분할하는 콘텐츠 노드 — blockContainer의 blockContent 멤버
-// (paragraph/heading/quote, D19). quote는 문단 동형 계약(spec §4.2 —
-// inline* content, 차이는 타입뿐)이라 heading과 같은 분할 규칙을 받는다
-// (Issue #38 슬라이스 3). divider는 atom·콘텐츠 없음이라 대상이 아니다.
+// 이 확장이 분할하거나 종료하는 콘텐츠 노드 — blockContainer의 blockContent
+// 멤버(paragraph/heading/quote/bulletListItem/numberedListItem, D19). quote는
+// 문단 동형 계약(spec §4.2 — inline* content, 차이는 타입뿐)이라 heading과
+// 같은 분할 규칙을 받는다(Issue #38 슬라이스 3). 목록은 non-empty split과
+// empty paragraph exit의 별도 규칙을 받는다(spec §5.1). divider는
+// atom·콘텐츠 없음이라 대상이 아니다.
 function isSplittableContent(node: Node): boolean {
   const name = node.type.name;
-  return name === "paragraph" || name === "heading" || name === "quote";
+  return (
+    name === "paragraph" ||
+    name === "heading" ||
+    name === "quote" ||
+    name === "bulletListItem" ||
+    name === "numberedListItem"
+  );
+}
+
+function isListItemContent(node: Node): boolean {
+  const name = node.type.name;
+  return name === "bulletListItem" || name === "numberedListItem";
 }
 
 // this.editor를 직접 받아 addKeyboardShortcuts 밖에서도 테스트 가능한
 // 형태로 분리했다(export 안 함 — 공개 API가 아니다, G-WKS-001).
 function splitBlockContainer(editor: Editor): boolean {
-  const { state, view } = editor;
-  const { selection } = state;
+  const { view } = editor;
+  const liveState = view.state;
+  const selectionAwareState = resolveSelectionAwareState(editor, {
+    allowNativeTextSelectionFromCellSelection: true,
+  });
+  const { selection } = selectionAwareState;
 
   const fromParent = selection.$from.parent;
   if (!isSplittableContent(fromParent)) {
@@ -62,7 +87,14 @@ function splitBlockContainer(editor: Editor): boolean {
   // 어긋날 위험이 있다(jsdom은 이 기본 동작을 구현하지 않아 테스트로는
   // 드러나지 않음). 그래서 false는 위·아래 가드처럼 이 커맨드가 정말
   // 관여하지 않아야 하는 위치에서만 반환한다.
-  const tr = state.tr;
+  // G-EDT-002의 파생 state는 selection 판정에만 쓴다. 문서 transaction은
+  // 반드시 live state에서 만들고 DOM-derived selection만 같은 doc 위의 첫
+  // step으로 옮긴다. 이어지는 delete/split과 단일 dispatch·undo 단위를
+  // 유지하면서 mismatched transaction을 피한다.
+  const tr = liveState.tr;
+  if (!selection.eq(liveState.selection)) {
+    tr.setSelection(selection);
+  }
   if (!selection.empty) {
     tr.deleteSelection();
   }
@@ -100,6 +132,20 @@ function splitAtCaret(tr: Transaction): boolean {
   const containerEnd = $from.after(containerDepth);
   const splitOffset = $from.parentOffset;
 
+  // 빈 목록 Enter는 새 항목을 만들지 않고 현재 content node만 paragraph로
+  // 바꾼다. blockContainer를 재구성하지 않으므로 원본 blockId, 기존
+  // blockGroup(children), 부모 안 인덱스와 중첩 깊이가 그대로 남는다.
+  // 타입 전환과 selection을 같은 tr에 담아 dispatch·revision/event·undo를
+  // 각각 한 번으로 유지한다(G-EDT-001).
+  if (isListItemContent(contentNode) && contentNode.content.size === 0) {
+    const contentPosition = $from.before($from.depth);
+    const paragraph = contentNode.type.schema.nodes.paragraph;
+    if (paragraph === undefined) return false;
+    tr.setNodeMarkup(contentPosition, paragraph);
+    tr.setSelection(TextSelection.create(tr.doc, contentPosition + 1));
+    return true;
+  }
+
   const beforeContent = contentNode.content.cut(0, splitOffset);
   const afterContent = contentNode.content.cut(splitOffset);
 
@@ -114,8 +160,12 @@ function splitAtCaret(tr: Transaction): boolean {
   // 복제하지 않고 본문 문단을 여는 흐름의 복원이다. 중간·시작 split은
   // 기존대로 원본 타입·attrs를 복사한다. quote도 같은 규칙이다 — 끝 Enter는
   // 인용을 닫고 문단을 열며, 중간 Enter는 앞뒤 모두 quote로 남는다.
-  const newContentNode =
-    afterContent.size === 0
+  const newContentNode = isListItemContent(contentNode)
+    ? // 목록은 캐럿 뒤가 비어도 같은 목록 타입을 유지한다. numbered의
+      // startNumber는 명시 시작점이므로 파생된 새 항목에 복제하지 않고
+      // schema 기본값(null)을 쓴다(spec §4.4/§5.1).
+      contentNode.type.create(null, afterContent, contentNode.marks)
+    : afterContent.size === 0
       ? contentNode.type.schema.nodes.paragraph!.create()
       : contentNode.type.create(
           contentNode.attrs,

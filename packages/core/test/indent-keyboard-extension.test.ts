@@ -1,8 +1,8 @@
 /**
- * IndentKeyboardExtension이 표 밖 Tab/Shift+Tab을 indentBlockCommand/
- * outdentBlockCommand로 올바르게 라우팅하는지 검증한다. 완료 조건 1(표 밖
- * 라우팅과 적용 불가 시 브라우저 기본 동작 허용)과 완료 조건 3·4(G-EDT-002 stale
- * selection 재동기화와 dispatch 0~1회 계약)를 다룬다.
+ * IndentKeyboardExtension이 목록을 포함한 표 밖 Tab/Shift+Tab을 기존
+ * indentBlockCommand/outdentBlockCommand로 라우팅하는지 검증한다. 목록 하위
+ * 트리·selection·revision/event·dispatch·undo 원자성, 적용 불가 브라우저
+ * 폴스루와 table → CodeBlock → 일반 블록 우선순위를 함께 고정한다.
  *
  * 대부분의 it은 exported 순수 함수(indentBlockShortcut/outdentBlockShortcut)를
  * 직접 호출해 Tiptap의 keymap 플러그인 체인을 우회한다 — table-keyboard-
@@ -23,7 +23,19 @@ import {
 } from "../src/indent-keyboard-extension.js";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { TableKeyboardNavigationExtension } from "../src/table-keyboard-extension.js";
-import { sequentialIds } from "./editor-controller-support.js";
+import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
+import {
+  documentOf,
+  editorState,
+  listItemBlock,
+  mounted,
+  notApplicable,
+  oneCellTableBlock,
+  paragraphBlock,
+  restored,
+  sequentialIds,
+  tailParagraphBlock,
+} from "./editor-controller-support.js";
 import { withNativeCaret } from "./native-selection-test-support.js";
 import {
   activeCellId,
@@ -208,7 +220,255 @@ describe("Tab/Shift+Tab 라우팅", () => {
   });
 });
 
+describe("목록 Tab/Shift+Tab 원자성", () => {
+  it.each([
+    ["글머리", "bulletListItem"],
+    ["번호", "numberedListItem"],
+  ] as const)(
+    "%s 목록 Tab은 대상 하위 트리와 역방향 selection을 보존해 한 transaction으로 중첩하고 undo 1회로 복원한다",
+    (_label, type) => {
+      const target = listItemBlock("target", type, "대상본문", {
+        children: [paragraphBlock("child", "하위")],
+      });
+      const initial = documentOf(
+        listItemBlock("previous", type, "이전"),
+        target,
+        tailParagraphBlock,
+      );
+      const { editor, tiptap, changes } = mounted(initial);
+      const targetStart = findBlockContentPosition(tiptap, target.id);
+      if (targetStart === null) throw new Error("fixture 준비 실패");
+      tiptap.view.dispatch(
+        tiptap.state.tr.setSelection(
+          TextSelection.create(
+            tiptap.state.doc,
+            targetStart + 4,
+            targetStart + 1,
+          ),
+        ),
+      );
+      const before = editorState(editor, tiptap);
+      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+      const transactions: Array<{
+        docChanged: boolean;
+        appendedCount: number;
+      }> = [];
+      tiptap.on("transaction", ({ transaction, appendedTransactions }) => {
+        transactions.push({
+          docChanged: transaction.docChanged,
+          appendedCount: appendedTransactions.length,
+        });
+      });
+
+      expect(dispatchKeydown(tiptap, "Tab")).toBe(true);
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      expect(transactions).toEqual([{ docChanged: true, appendedCount: 0 }]);
+      expect(editor.getDocument()).toEqual({
+        ...documentOf(
+          listItemBlock("previous", type, "이전", { children: [target] }),
+          tailParagraphBlock,
+        ),
+        revision: 1,
+      });
+      const movedStart = findBlockContentPosition(tiptap, target.id);
+      if (movedStart === null) throw new Error("중첩 결과 조회 실패");
+      expect(tiptap.state.selection.toJSON()).toEqual({
+        type: "text",
+        anchor: movedStart + 4,
+        head: movedStart + 1,
+      });
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({ revision: 1, reason: "local" });
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+      expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+    },
+  );
+
+  it.each([
+    ["글머리", "bulletListItem"],
+    ["번호", "numberedListItem"],
+  ] as const)(
+    "%s 목록 Shift+Tab은 대상 하위 트리와 역방향 selection을 보존해 한 transaction으로 내어쓰고 undo 1회로 복원한다",
+    (_label, type) => {
+      const target = listItemBlock("target", type, "대상본문", {
+        children: [paragraphBlock("child", "하위")],
+      });
+      const initial = documentOf(
+        listItemBlock("parent", type, "부모", { children: [target] }),
+        tailParagraphBlock,
+      );
+      const { editor, tiptap, changes } = mounted(initial);
+      const targetStart = findBlockContentPosition(tiptap, target.id);
+      if (targetStart === null) throw new Error("fixture 준비 실패");
+      tiptap.view.dispatch(
+        tiptap.state.tr.setSelection(
+          TextSelection.create(
+            tiptap.state.doc,
+            targetStart + 4,
+            targetStart + 1,
+          ),
+        ),
+      );
+      const before = editorState(editor, tiptap);
+      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+      const transactions: Array<{
+        docChanged: boolean;
+        appendedCount: number;
+      }> = [];
+      tiptap.on("transaction", ({ transaction, appendedTransactions }) => {
+        transactions.push({
+          docChanged: transaction.docChanged,
+          appendedCount: appendedTransactions.length,
+        });
+      });
+
+      expect(dispatchKeydown(tiptap, "Tab", true)).toBe(true);
+
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+      expect(transactions).toEqual([{ docChanged: true, appendedCount: 0 }]);
+      expect(editor.getDocument()).toEqual({
+        ...documentOf(
+          listItemBlock("parent", type, "부모"),
+          target,
+          tailParagraphBlock,
+        ),
+        revision: 1,
+      });
+      const movedStart = findBlockContentPosition(tiptap, target.id);
+      if (movedStart === null) throw new Error("내어쓰기 결과 조회 실패");
+      expect(tiptap.state.selection.toJSON()).toEqual({
+        type: "text",
+        anchor: movedStart + 4,
+        head: movedStart + 1,
+      });
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({ revision: 1, reason: "local" });
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+      expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+    },
+  );
+
+  it.each([
+    ["Tab", false],
+    ["Shift+Tab", true],
+  ] as const)(
+    "적용 불가한 최상위 목록의 %s은 소비하지 않고 document·selection·event·history를 보존한다",
+    (_label, shiftKey) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(
+          listItemBlock("target", "bulletListItem", "대상"),
+          tailParagraphBlock,
+        ),
+      );
+      const targetStart = findBlockContentPosition(tiptap, "target");
+      if (targetStart === null) throw new Error("fixture 준비 실패");
+      tiptap.commands.setTextSelection(targetStart + 1);
+      const before = editorState(editor, tiptap);
+      const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+
+      expect(dispatchKeydown(tiptap, "Tab", shiftKey)).toBe(false);
+
+      expect(dispatchSpy).not.toHaveBeenCalled();
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+      expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+    },
+  );
+});
+
+describe("CodeBlock과 일반 블록 Tab 우선순위", () => {
+  it("CodeBlock caret의 Tab은 일반 블록 중첩 대신 공백 2개를 한 transaction으로 삽입한다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(
+        { id: "code", type: "codeBlock", content: [{ text: "source" }] },
+        tailParagraphBlock,
+      ),
+    );
+    const codeStart = findBlockContentPosition(tiptap, "code");
+    if (codeStart === null) throw new Error("fixture 준비 실패");
+    tiptap.commands.setTextSelection(codeStart + 1);
+    const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "Tab")).toBe(true);
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    expect(editor.getDocument()).toEqual({
+      ...documentOf(
+        { id: "code", type: "codeBlock", content: [{ text: "s  ource" }] },
+        tailParagraphBlock,
+      ),
+      revision: 1,
+    });
+    expect(tiptap.state.selection.toJSON()).toEqual({
+      type: "text",
+      anchor: codeStart + 3,
+      head: codeStart + 3,
+    });
+    expect(changes).toHaveLength(1);
+  });
+
+  it("CodeBlock Shift+Tab은 일반 블록 내어쓰기 대신 브라우저 포커스 이동을 허용한다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(
+        { id: "code", type: "codeBlock", content: [{ text: "source" }] },
+        tailParagraphBlock,
+      ),
+    );
+    const codeStart = findBlockContentPosition(tiptap, "code");
+    if (codeStart === null) throw new Error("fixture 준비 실패");
+    tiptap.commands.setTextSelection(codeStart + 1);
+    const before = editorState(editor, tiptap);
+    const dispatchSpy = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "Tab", true)).toBe(false);
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+});
+
 describe("stale selection 재동기화(G-EDT-002, Issue #118과 같은 부류)", () => {
+  it("표 CellSelection 직후 목록을 클릭한 Tab은 클릭한 목록을 indent한다", () => {
+    const first = listItemBlock("list-1", "bulletListItem", "가나");
+    const second = listItemBlock("list-2", "bulletListItem", "다라");
+    const { editor, tiptap } = mounted(
+      documentOf(
+        oneCellTableBlock("table-1"),
+        first,
+        second,
+        tailParagraphBlock,
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, first.id));
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    const targetPosition = contentTextStart(tiptap, second.id) + 1;
+    const targetDom = tiptap.view.domAtPos(targetPosition);
+    withNativeCaret(
+      tiptap.view.dom,
+      () => {
+        expect(indentBlockShortcut(tiptap)).toBe(true);
+      },
+      targetDom.node,
+      targetDom.offset,
+    );
+
+    expect(editor.getDocument().blocks).toEqual([
+      oneCellTableBlock("table-1"),
+      listItemBlock("list-1", "bulletListItem", "가나", {
+        children: [second],
+      }),
+      tailParagraphBlock,
+    ]);
+  });
+
   it("클릭으로 캐럿을 다른 블록에 옮긴 직후 곧바로 누른 Tab/Shift+Tab이 클릭한 블록을 대상으로 한다", () => {
     // Tab: 클릭한 p2가 대상이어야 indent가 성공한다(stale한 p1이 대상이면
     // 앞 형제가 없어 실패하고 문서가 그대로 남는다 — 변이 재현 지점).
@@ -295,19 +555,6 @@ describe("표 셀 안 Tab/Shift+Tab은 실제 keymap 디스패치에서도 Inden
   // 실행된다 — isInTable 가드가 없으면 이 확장이 Tab을 먼저 삼켜(표 셀
   // 안에는 blockContainer 조상이 없어 아무 command도 호출하지 않지만 여전히
   // true를 반환한다) 셀 탐색이 도달하지 못한다.
-  const dispatchTabKeydown = (editor: Editor, shift: boolean): boolean => {
-    const event = new KeyboardEvent("keydown", {
-      key: "Tab",
-      shiftKey: shift,
-      bubbles: true,
-      cancelable: true,
-    });
-    return (
-      editor.view.someProp("handleKeyDown", (f) => f(editor.view, event)) ===
-      true
-    );
-  };
-
   const mountedTableEditor = () =>
     createTableFixtureEditor(docWithTwoRowTable, [
       TableKeyboardNavigationExtension.configure({
@@ -322,7 +569,7 @@ describe("표 셀 안 Tab/Shift+Tab은 실제 keymap 디스패치에서도 Inden
     const editor = mountedTableEditor();
     placeCaretInCell(editor, "cell-1");
 
-    const handled = dispatchTabKeydown(editor, false);
+    const handled = dispatchKeydown(editor, "Tab");
 
     expect(handled).toBe(true);
     expect(activeCellId(editor)).toBe("cell-2");
@@ -333,7 +580,7 @@ describe("표 셀 안 Tab/Shift+Tab은 실제 keymap 디스패치에서도 Inden
     placeCaretInCell(editor, "cell-1");
     const before = editor.state.selection.from;
 
-    const handled = dispatchTabKeydown(editor, true);
+    const handled = dispatchKeydown(editor, "Tab", true);
 
     expect(handled).toBe(true);
     expect(editor.state.selection.from).toBe(before);

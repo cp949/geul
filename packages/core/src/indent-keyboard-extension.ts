@@ -50,7 +50,9 @@ const routeToBlockCommand = (
   command: (editor: Editor, blockId: string) => Result<void, EditorError>,
   codeBlockAction: "insert" | "pass",
 ): boolean => {
-  const state = resolveSelectionAwareState(editor);
+  const state = resolveSelectionAwareState(editor, {
+    allowNativeTextSelectionFromCellSelection: true,
+  });
   if (isInTable(state)) return false;
   if (isCodeBlockCaret(state)) {
     return codeBlockAction === "insert"

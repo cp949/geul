@@ -64,6 +64,27 @@ export const paragraphBlock = (
   ...(children === undefined ? {} : { children }),
 });
 
+export type ListItemType = "bulletListItem" | "numberedListItem";
+
+/**
+ * 목록 keyboard 계약이 목록 판별자, 명시 시작 번호와 자식 배치를 독립적으로
+ * 조립하도록 저장 정규형 목록 항목을 만든다.
+ */
+export const listItemBlock = (
+  id: string,
+  type: ListItemType,
+  text: string,
+  options?: { startNumber?: number; children?: Block[] },
+): Block => ({
+  id,
+  type,
+  content: text === "" ? [] : [{ text }],
+  ...(type === "numberedListItem" && options?.startNumber !== undefined
+    ? { startNumber: options.startNumber }
+    : {}),
+  ...(options?.children === undefined ? {} : { children: options.children }),
+});
+
 /**
  * 문서를 문단으로 닫는 꼬리 블록 — heading·quote로 끝나면 로드 시 trailing
  * paragraph(UI-010)가 붙어 배치가 흔들리므로 이 블록으로 닫는다.

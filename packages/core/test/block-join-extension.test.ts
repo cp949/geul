@@ -709,6 +709,39 @@ const expectSecondKeyDeletesDivider = (key: "Backspace" | "Delete"): void => {
 };
 
 describe("divider 인접 Backspace/Delete(표 전례)", () => {
+  it.each(["Backspace", "Delete"] as const)(
+    "DOM에 붙은 divider NodeSelection에서 %s 한 번 더는 divider만 삭제한다",
+    (key) => {
+      const { editor, editable, tiptap } = mounted(
+        dividerBetweenParagraphsDocument(),
+      );
+      placeCaretBesideDivider(tiptap, key);
+      expect(dispatchKeydown(tiptap, key)).toBe(true);
+      expectDividerNodeSelection(tiptap, "d-1");
+      const beforeDelete = editorState(editor, tiptap);
+      const container = editable.parentElement;
+      if (container === null) throw new Error("편집기 컨테이너 조회 실패");
+      document.body.append(container);
+      const coordsAtPos = vi
+        .spyOn(tiptap.view, "coordsAtPos")
+        .mockReturnValue({ left: 0, right: 0, top: 0, bottom: 0 });
+
+      try {
+        tiptap.view.focus();
+        expect(dispatchKeydown(tiptap, key)).toBe(true);
+        expect(editor.getDocument().blocks).toEqual([
+          firstParagraphBlock,
+          secondParagraphBlock,
+        ]);
+        expect(editor.commands.undo()).toEqual(okResult);
+        expect(editorState(editor, tiptap)).toEqual(restored(beforeDelete, 2));
+      } finally {
+        coordsAtPos.mockRestore();
+        container.remove();
+      }
+    },
+  );
+
   it("divider 바로 뒤 텍스트블록 선두 Backspace가 divider를 NodeSelection으로 선택하고 doc·revision을 바꾸지 않으며 히스토리 항목을 만들지 않는다", () => {
     expectFirstKeySelectsDivider("Backspace");
   });
@@ -834,6 +867,41 @@ const mountedBesideNestedTable = (key: "Backspace" | "Delete") => {
 };
 
 describe("중첩 표 인접 Backspace/Delete", () => {
+  it.each(["Backspace", "Delete"] as const)(
+    "DOM에 붙은 중첩 표 CellSelection에서 %s 한 번 더는 표만 삭제한다",
+    (key) => {
+      const { editor, editable, tiptap } = mountedBesideNestedTable(key);
+      const container = editable.parentElement;
+      if (container === null) throw new Error("편집기 컨테이너 조회 실패");
+
+      try {
+        expect(dispatchKeydown(tiptap, key)).toBe(true);
+        expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
+        const beforeDelete = editorState(editor, tiptap);
+        document.body.append(container);
+        tiptap.view.focus();
+        expect(document.getSelection()?.focusNode).not.toBeNull();
+        const coordsAtPos = vi
+          .spyOn(tiptap.view, "coordsAtPos")
+          .mockReturnValue({ left: 0, right: 0, top: 0, bottom: 0 });
+
+        try {
+          expect(dispatchKeydown(tiptap, key)).toBe(true);
+
+          expect(countNodes(tiptap, "table")).toBe(0);
+          expect(editor.commands.undo()).toEqual(okResult);
+          expect(editorState(editor, tiptap)).toEqual(
+            restored(beforeDelete, 2),
+          );
+        } finally {
+          coordsAtPos.mockRestore();
+        }
+      } finally {
+        container.remove();
+      }
+    },
+  );
+
   it("앞 형제의 마지막 자식 표에 인접한 Backspace는 표 전체를 선택하고 문서·revision·히스토리를 바꾸지 않는다", () => {
     const { editor, tiptap, changes } = mountedBesideNestedTable("Backspace");
     const before = editorState(editor, tiptap);

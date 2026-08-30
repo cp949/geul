@@ -46,11 +46,11 @@ export const BlockJoinExtension = Extension.create({
 });
 
 // Backspace/Delete 공통 가드. 캐럿(collapsed)이고 $from.parent가
-// paragraph/heading/quote(blockContainer의 blockContent 멤버, D19)이며 그
-// 부모가 blockContainer일 때만 이 확장이 관여한다. 표 셀 배제는 split과
-// 같은 지점이다 — 셀 content는 "inline*"라(D19) $from.parent가 애초에
-// 이 셋이 될 수 없다. 범위 선택은 기본 체인의 deleteSelection이 정상
-// 처리하므로 물러난다.
+// paragraph/heading/quote/목록 항목(blockContainer의 blockContent 멤버,
+// D19)이며 그 부모가 blockContainer일 때만 이 확장이 관여한다.
+// 표 셀 배제는 split과 같은 지점이다 — 셀 content는 "inline*"라(D19)
+// $from.parent가 애초에 이 다섯 타입이 될 수 없다. 범위 선택은 기본
+// 체인의 deleteSelection이 정상 처리하므로 물러난다.
 function caretContext(
   state: EditorState,
 ): { $from: ResolvedPos; containerDepth: number } | null {
@@ -61,7 +61,9 @@ function caretContext(
   if (
     parentType !== "paragraph" &&
     parentType !== "heading" &&
-    parentType !== "quote"
+    parentType !== "quote" &&
+    parentType !== "bulletListItem" &&
+    parentType !== "numberedListItem"
   ) {
     return null;
   }
@@ -69,6 +71,25 @@ function caretContext(
   if (containerDepth < 1) return null;
   if ($from.node(containerDepth).type.name !== "blockContainer") return null;
   return { $from, containerDepth };
+}
+
+function isListItemContent(node: Node): boolean {
+  const name = node.type.name;
+  return name === "bulletListItem" || name === "numberedListItem";
+}
+
+// DOM-derived selection이 해당 경계 밖이어도 live selection이 병합
+// 경계에 stale하면 키를 소비한다. 폴스루하면 기본 keymap이
+// live stale selection에 구조 변경을 적용한다(G-EDT-002).
+function isJoinBoundary(
+  state: EditorState,
+  direction: "backward" | "forward",
+): boolean {
+  const context = caretContext(state);
+  if (context === null) return false;
+  return direction === "backward"
+    ? context.$from.parentOffset === 0
+    : context.$from.parentOffset === context.$from.parent.content.size;
 }
 
 // RD-004 전 CodeBlock 선두 Backspace와 끝 Delete는 브라우저/StarterKit의
@@ -294,8 +315,8 @@ function isLiveCodeRelatedBoundary(
 function handleCodeBlockBoundary(
   editor: Editor,
   direction: "backward" | "forward",
+  selectionState = resolveSelectionAwareState(editor),
 ): boolean {
-  const selectionState = resolveSelectionAwareState(editor);
   if (consumeCodeBlockBoundary(selectionState, direction)) return true;
 
   const liveState = editor.state;
@@ -324,20 +345,51 @@ function handleCodeBlockBoundary(
 // 블록 선두 Backspace: 시각적으로 이전인 텍스트블록에 병합한다. 블록
 // 중간(parentOffset > 0)은 기본 문자 삭제 몫이라 관여하지 않는다.
 function joinBackwardAtBlockStart(editor: Editor): boolean {
-  if (deleteSelectedTable(editor)) return true;
-  if (handleCodeBlockBoundary(editor, "backward")) return true;
-  const context = caretContext(editor.state);
-  if (context === null) return false;
+  const state = resolveSelectionAwareState(editor, {
+    allowNativeTextSelectionFromCellSelection: true,
+  });
+  const liveState = editor.state;
+  const selectionIsStale = !state.selection.eq(liveState.selection);
+  // 유효한 DOM-derived 일반 join이면 live stale CellSelection·CodeBlock
+  // 보호보다 우선한다. 단, DOM caret의 실제 인접 대상이
+  // CodeBlock이면 기존 selection-only 이동 계약을 계속 우선한다.
+  const nativeJoinOverridesLive =
+    selectionIsStale &&
+    isJoinBoundary(state, "backward") &&
+    adjacentCodeBlockAtTextBoundary(state, "backward") === null;
+  // derived 위치에 일반 join이 없으면 derived CodeBlock 경계 동작만
+  // 먼저 시도한 뒤 키를 소비한다. false로 폴스루하면 기본
+  // keymap이 live stale CellSelection·NodeSelection을 삭제한다.
+  if (selectionIsStale) {
+    if (!nativeJoinOverridesLive) {
+      if (handleCodeBlockBoundary(editor, "backward", state)) return true;
+      return true;
+    }
+  } else {
+    if (handleCodeBlockBoundary(editor, "backward", state)) return true;
+    if (deleteSelectedTable(editor)) return true;
+  }
+  const context = caretContext(state);
+  if (context === null) {
+    return selectionIsStale && isJoinBoundary(liveState, "backward");
+  }
   const { $from, containerDepth } = context;
-  if ($from.parentOffset !== 0) return false;
+  if ($from.parentOffset !== 0) {
+    return selectionIsStale && isJoinBoundary(liveState, "backward");
+  }
 
-  const { state, view } = editor;
+  const { view } = editor;
   const containerStart = $from.before(containerDepth);
 
   // 시각적으로 바로 앞 노드가 atom(divider)이면 병합 대신 선택으로 끝난다
   // — 아래 findFrom은 커서 위치만 찾아 atom을 건너뛰므로 먼저 판정한다.
   const adjacent = leafBefore(state.doc, containerStart);
-  if (selectAdjacentAtom(view, state, adjacent)) {
+  if (adjacent === null && isListItemContent($from.parent)) {
+    return exitLeadingListItem(view, liveState, {
+      contentPosition: $from.before($from.depth),
+    });
+  }
+  if (selectAdjacentAtom(view, liveState, adjacent)) {
     return true;
   }
   // 자기 컨테이너 시작 앞에서 역방향으로 첫 커서 위치를 찾는다 — 앞
@@ -348,17 +400,19 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
     -1,
     true,
   );
-  if (previous === null) return false;
+  if (previous === null) {
+    return selectionIsStale && isJoinBoundary(liveState, "backward");
+  }
 
   const $target = previous.$head;
   if (hasTableCellAncestor($target)) {
     // 표 안으로는 병합하지 않는다. 시각적으로 인접한 표 시작 위치에 직접
     // NodeSelection을 두면 tableEditing의 normalizeSelection이 같은 dispatch
     // 안에서 표 전체 CellSelection으로 정규화한다.
-    return selectTableAncestor(view, state, $target);
+    return selectTableAncestor(view, liveState, $target);
   }
 
-  mergeContainers(view, state, {
+  mergeContainers(view, liveState, {
     removed: $from.node(containerDepth),
     removedStart: containerStart,
     mergePos: $target.pos,
@@ -370,45 +424,92 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
 // 텍스트 끝 Delete: 시각적으로 다음인 텍스트블록을 자기 끝으로 끌어와
 // 병합한다. 텍스트 중간은 기본 문자 삭제 몫이라 관여하지 않는다.
 function joinForwardAtTextEnd(editor: Editor): boolean {
-  if (deleteSelectedTable(editor)) return true;
-  if (handleCodeBlockBoundary(editor, "forward")) return true;
-  const context = caretContext(editor.state);
-  if (context === null) return false;
+  const state = resolveSelectionAwareState(editor, {
+    allowNativeTextSelectionFromCellSelection: true,
+  });
+  const liveState = editor.state;
+  const selectionIsStale = !state.selection.eq(liveState.selection);
+  // Backspace와 같은 우선순위 계약의 정방향 대칭이다.
+  const nativeJoinOverridesLive =
+    selectionIsStale &&
+    isJoinBoundary(state, "forward") &&
+    adjacentCodeBlockAtTextBoundary(state, "forward") === null;
+  // Backspace와 같게 derived 무동작을 live stale 삭제로 폴백하지 않는다.
+  if (selectionIsStale) {
+    if (!nativeJoinOverridesLive) {
+      if (handleCodeBlockBoundary(editor, "forward", state)) return true;
+      return true;
+    }
+  } else {
+    if (handleCodeBlockBoundary(editor, "forward", state)) return true;
+    if (deleteSelectedTable(editor)) return true;
+  }
+  const context = caretContext(state);
+  if (context === null) {
+    return selectionIsStale && isJoinBoundary(liveState, "forward");
+  }
   const { $from } = context;
-  if ($from.parentOffset !== $from.parent.content.size) return false;
+  if ($from.parentOffset !== $from.parent.content.size) {
+    return selectionIsStale && isJoinBoundary(liveState, "forward");
+  }
 
-  const { state, view } = editor;
+  const { view } = editor;
 
   // Backspace 쪽과 대칭 — 시각적으로 바로 다음 노드(자기 blockGroup의 첫
   // 자식 또는 다음 형제)가 atom이면 선택으로 끝난다.
   const adjacent = leafAfter(state.doc, $from.after());
-  if (selectAdjacentAtom(view, state, adjacent)) {
+  if (selectAdjacentAtom(view, liveState, adjacent)) {
     return true;
   }
   // 자기 콘텐츠 노드 끝 뒤에서 정방향으로 첫 커서 위치를 찾는다 — 자기
   // 컨테이너에 자식이 있으면 첫 자식의 텍스트블록, 없으면 다음
   // 형제/조상의 다음에 닿는다. 없으면 문서 끝이다.
   const next = Selection.findFrom(state.doc.resolve($from.after()), 1, true);
-  if (next === null) return false;
+  if (next === null) {
+    return selectionIsStale && isJoinBoundary(liveState, "forward");
+  }
 
   const $next = next.$head;
   if (hasTableCellAncestor($next)) {
     // Backspace 쪽과 대칭 — 표 콘텐츠를 끌어오지 않고 시각적으로 인접한
     // 표 조상 시작 위치를 직접 선택한다.
-    return selectTableAncestor(view, state, $next);
+    return selectTableAncestor(view, liveState, $next);
   }
 
   const nextContainerDepth = $next.depth - 1;
-  if (nextContainerDepth < 1) return false;
+  if (nextContainerDepth < 1) {
+    return selectionIsStale && isJoinBoundary(liveState, "forward");
+  }
   const nextContainer = $next.node(nextContainerDepth);
-  if (nextContainer.type.name !== "blockContainer") return false;
+  if (nextContainer.type.name !== "blockContainer") {
+    return selectionIsStale && isJoinBoundary(liveState, "forward");
+  }
 
-  mergeContainers(view, state, {
+  mergeContainers(view, liveState, {
     removed: nextContainer,
     removedStart: $next.before(nextContainerDepth),
     mergePos: $from.pos,
     inline: $next.parent.content,
   });
+  return true;
+}
+
+// 문서 최선두 목록 항목은 병합 대상이 없으므로 그 자리에서
+// paragraph로 바꿔 목록을 종료한다. 콘테이너를 재구성하지 않아
+// blockId·blockGroup(children)·깊이를 그대로 보존한다. DOM-derived
+// state는 판정·위치 계산에만 쓰고 문서 transaction은 유효한 live
+// state에서 만든다(G-EDT-002).
+function exitLeadingListItem(
+  view: EditorView,
+  state: EditorState,
+  exit: { contentPosition: number },
+): boolean {
+  const paragraph = state.schema.nodes.paragraph;
+  if (paragraph === undefined) return false;
+  const tr = state.tr;
+  tr.setNodeMarkup(exit.contentPosition, paragraph);
+  tr.setSelection(TextSelection.create(tr.doc, exit.contentPosition + 1));
+  view.dispatch(tr);
   return true;
 }
 
