@@ -1,4 +1,5 @@
 import {
+  type Block,
   appendOrMergeInlineItem,
   type Document,
   type HeadingBlock,
@@ -43,7 +44,10 @@ import {
   inlineContentFromNodes,
 } from "./inline-content.js";
 import { asRoot, parseHtmlFragment } from "./parse-html.js";
-import { htmlSanitizeSchema } from "./sanitize-schema.js";
+import {
+  htmlAllowedAttributes,
+  htmlSanitizeSchema,
+} from "./sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
@@ -59,6 +63,19 @@ import {
 } from "./table-layout.js";
 
 const DEFAULT_COLUMN_WIDTH = 160;
+
+// 목록 import가 의미로 소비하는 속성을 sanitizer의 document-import 전용
+// schema에 추가한다. raw HAST를 다시 읽지 않고 li ID와 ol start도 sanitized
+// HAST에서만 읽기 위한 경계다. 공유 schema 객체는 clipboard 소비자가 함께
+// 쓰므로 변경하지 않고 이 importer에서만 얕은 복사한다.
+const htmlImportSanitizeSchema = {
+  ...htmlSanitizeSchema,
+  attributes: {
+    ...htmlAllowedAttributes,
+    li: ["dataBeBlockId"],
+    ol: ["start"],
+  },
+};
 
 class HtmlDocumentInvalidError extends Error {}
 
@@ -393,6 +410,11 @@ const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
 const isElementNode = (node: HtmlNode): node is HtmlElementNode =>
   node.type === "element";
 
+const isListElement = (
+  node: HtmlNode,
+): node is HtmlElementNode & { tagName: "ul" | "ol" } =>
+  node.type === "element" && (node.tagName === "ul" || node.tagName === "ol");
+
 // blockquote 직속 자식 중 "블록 자리를 차지하는" 요소 판정 — segmentBlocks가
 // importBlockSegmentPolicy로 경계·컨테이너·표로 인식하는 태그와 정확히 같은
 // 집합이다(그 외 요소와 텍스트는 인라인이라 pending으로 쌓인다). D6의 "첫
@@ -408,6 +430,49 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
   importBlockSegmentPolicy.isNestedBoundary(node.tagName) ||
   importBlockSegmentPolicy.isTransparent(node.tagName) ||
   importBlockSegmentPolicy.isTableNode(node);
+
+// li가 목록 블록의 안정 ID와 content를 직접 소유한다(RD-003 HTML 정규형).
+// 첫 실질 자식이 p면 그 p는 content wrapper일 뿐 별도 paragraph/ID가 아니다.
+// direct inline run으로 시작하면 첫 block boundary 전까지가 content이고,
+// 이후 flow content는 종류와 무관하게 children 변환 경계로 넘긴다.
+const splitListItemChildren = (
+  node: HtmlElementNode,
+): { contentNodes: HtmlNode[]; childrenNodes: HtmlNode[] } => {
+  const firstSubstantialIndex = node.children.findIndex(
+    (child) => isElementNode(child) || hasSubstantialText(textValue([child])),
+  );
+  if (firstSubstantialIndex < 0) {
+    return { contentNodes: [], childrenNodes: [] };
+  }
+
+  const first = node.children[firstSubstantialIndex];
+  if (first === undefined) {
+    return { contentNodes: [], childrenNodes: [] };
+  }
+  if (isElementNode(first) && isParagraphTag(first.tagName)) {
+    return {
+      contentNodes: first.children,
+      childrenNodes: node.children.filter((child) => child !== first),
+    };
+  }
+  if (isElementNode(first) && isBlockLevelElement(first)) {
+    return { contentNodes: [], childrenNodes: node.children };
+  }
+
+  const firstBoundaryIndex = node.children.findIndex(
+    (child, index) =>
+      index >= firstSubstantialIndex &&
+      isElementNode(child) &&
+      isBlockLevelElement(child),
+  );
+  if (firstBoundaryIndex < 0) {
+    return { contentNodes: node.children, childrenNodes: [] };
+  }
+  return {
+    contentNodes: node.children.slice(0, firstBoundaryIndex),
+    childrenNodes: node.children.slice(firstBoundaryIndex),
+  };
+};
 
 // D6(blockquote 분할 규칙, spec §7.1): blockquote의 자식을 quote content와
 // children으로 나눈다. 머리(공백뿐인 텍스트를 건너뛴 첫 실질 노드)가
@@ -682,6 +747,143 @@ const findChildrenWrapper = (
   return { ownNode, childrenNodes: containerNode.children };
 };
 
+type ListItemBlock = Extract<
+  Block,
+  { type: "bulletListItem" | "numberedListItem" }
+>;
+
+// raw warning fact 중 sanitized 목록 변환이 실제로 소비해 보존한 속성 하나만
+// 제거한다. 전역 필터와 달리 blocksFromListElement에 도달하지 않은 standalone
+// li, 비-li ol, 표 셀 내부 목록의 속성 손실 warning은 그대로 남는다.
+const consumePreservedListAttributeWarning = (
+  warnings: HtmlImportWarning[],
+  element: "li" | "ol",
+  attribute: "dataBeBlockId" | "start",
+): void => {
+  const index = warnings.findIndex(
+    (warning) =>
+      warning.kind === "UNSAFE_ATTRIBUTE_REMOVED" &&
+      warning.element === element &&
+      warning.attribute === attribute,
+  );
+  if (index >= 0) warnings.splice(index, 1);
+};
+
+// sanitized li 하나를 목록 블록으로 만든다. children depth가 model 상한에
+// 닿으면 부모 항목은 유지하고 초과 블록을 같은 배열의 뒤쪽 형제로 내보낸다.
+// quote/wrapper 경계와 같은 NESTED_CHILDREN_FLATTENED 계약이다.
+const blocksFromListItem = (
+  node: HtmlElementNode,
+  listType: ListItemBlock["type"],
+  startNumber: number | undefined,
+  createId: IdFactory,
+  depth: number,
+  warnings: HtmlImportWarning[],
+): Document["blocks"] => {
+  const id = propertyString(node, "dataBeBlockId") ?? createId();
+  const { contentNodes, childrenNodes } = splitListItemChildren(node);
+  const content = paragraphContentFromNodes(contentNodes);
+  const ownBlock: ListItemBlock =
+    listType === "numberedListItem"
+      ? {
+          id,
+          type: "numberedListItem",
+          content,
+          ...(startNumber === undefined ? {} : { startNumber }),
+        }
+      : { id, type: "bulletListItem", content };
+
+  if (depth >= MAX_NESTING_DEPTH) {
+    const flattened = blocksFromNodes(childrenNodes, createId, depth, warnings);
+    if (flattened.length > 0) {
+      warnings.push(nestedChildrenFlattenedWarning());
+    }
+    return [ownBlock, ...flattened];
+  }
+
+  const children = blocksFromNodes(
+    childrenNodes,
+    createId,
+    depth + 1,
+    warnings,
+  );
+  return children.length > 0 ? [{ ...ownBlock, children }] : [ownBlock];
+};
+
+// ul/ol 직속 li를 문서 순서대로 목록 항목으로 해석한다. ol[start]는 HTML
+// 컨테이너의 첫 li에만 명시 startNumber로 붙는다. 별도 default ol이 같은
+// model sibling scope의 번호 항목 바로 뒤에 오면 HTML의 새 컨테이너가 뜻하는
+// 1 재시작을 첫 항목에 명시한다. 같은 ol의 후속 li에는 복제하지 않는다.
+// malformed 비-li flow content도 버리지 않고 기존 blocksFromNodes 경계로
+// 형제 블록화한다.
+const blocksFromListElement = (
+  node: HtmlElementNode & { tagName: "ul" | "ol" },
+  createId: IdFactory,
+  depth: number,
+  warnings: HtmlImportWarning[],
+  restartDefaultOrderedList: boolean,
+): Document["blocks"] => {
+  const blocks: Document["blocks"] = [];
+  let nonItemRun: HtmlNode[] = [];
+  let itemIndex = 0;
+  let flowInterruptedSinceItem = false;
+  const explicitStart =
+    node.tagName === "ol" ? propertyInteger(node, "start", Number.NaN) : NaN;
+
+  const flushNonItemRun = (): void => {
+    if (nonItemRun.length === 0) return;
+    const previousLength = blocks.length;
+    blocks.push(...blocksFromNodes(nonItemRun, createId, depth, warnings));
+    if (itemIndex > 0 && blocks.length > previousLength) {
+      flowInterruptedSinceItem = true;
+    }
+    nonItemRun = [];
+  };
+
+  for (const child of node.children) {
+    if (!isElementNode(child) || child.tagName !== "li") {
+      nonItemRun.push(child);
+      continue;
+    }
+    flushNonItemRun();
+    if (propertyString(child, "dataBeBlockId") !== undefined) {
+      consumePreservedListAttributeWarning(warnings, "li", "dataBeBlockId");
+    }
+    if (
+      node.tagName === "ol" &&
+      itemIndex === 0 &&
+      Number.isInteger(explicitStart)
+    ) {
+      consumePreservedListAttributeWarning(warnings, "ol", "start");
+    }
+    const startNumber =
+      itemIndex === 0 && Number.isInteger(explicitStart)
+        ? explicitStart
+        : itemIndex === 0 &&
+            blocks.length === 0 &&
+            restartDefaultOrderedList &&
+            !Number.isInteger(explicitStart)
+          ? 1
+          : itemIndex > 0 && flowInterruptedSinceItem
+            ? (Number.isInteger(explicitStart) ? explicitStart : 1) + itemIndex
+            : undefined;
+    blocks.push(
+      ...blocksFromListItem(
+        child,
+        node.tagName === "ul" ? "bulletListItem" : "numberedListItem",
+        startNumber,
+        createId,
+        depth,
+        warnings,
+      ),
+    );
+    itemIndex += 1;
+    flowInterruptedSinceItem = false;
+  }
+  flushNonItemRun();
+  return blocks;
+};
+
 // wrapper 재귀 해제 안전장치(G-CNV-001, PIT-0034) — model의
 // findNestingDepthViolation(schema.ts)과 같은 모양의 가드다: depth <
 // MAX_NESTING_DEPTH(64, blocks 배열 자체가 depth 1)일 때만 wrapper를
@@ -719,6 +921,20 @@ const blocksFromNodes = (
   };
 
   for (const node of nodes) {
+    if (isListElement(node)) {
+      flushPlainRun();
+      const previousBlock = blocks[blocks.length - 1];
+      blocks.push(
+        ...blocksFromListElement(
+          node,
+          createId,
+          depth,
+          warnings,
+          node.tagName === "ol" && previousBlock?.type === "numberedListItem",
+        ),
+      );
+      continue;
+    }
     const wrapper = findChildrenWrapper(node);
     if (wrapper === undefined) {
       plainRun.push(node);
@@ -807,7 +1023,7 @@ export const importHtml = (
     const { root: unsafeRoot, truncated } = parsedFragment;
     const warnings = collectHtmlImportWarnings(unsafeRoot);
     if (truncated) warnings.unshift(deepTreeFlattenedWarning());
-    const safeRoot = asRoot(sanitize(unsafeRoot, htmlSanitizeSchema));
+    const safeRoot = asRoot(sanitize(unsafeRoot, htmlImportSanitizeSchema));
     if (safeRoot === undefined) {
       return {
         ok: false,

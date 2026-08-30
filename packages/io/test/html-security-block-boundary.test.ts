@@ -105,7 +105,7 @@ describe("HTML 보안", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
-  it("li 안의 em은 italic mark를 보존하고 강등 경고를 만들지 않는다", () => {
+  it("li 목록 항목은 em의 italic mark를 보존하고 강등 경고를 만들지 않는다", () => {
     const result = importHtml("<ul><li>a <em>b</em></li></ul>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -113,7 +113,7 @@ describe("HTML 보안", () => {
     expect(result.value.document.blocks).toEqual([
       {
         id: "html-1",
-        type: "paragraph",
+        type: "bulletListItem",
         content: [{ text: "a " }, { text: "b", marks: [{ type: "italic" }] }],
       },
     ]);
@@ -336,23 +336,32 @@ describe("HTML 보안", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
-  it("ul/li로 감싼 인접 항목이 하나의 문단으로 뭉개지지 않는다(Issue #113 회귀의 import 경로 재현)", () => {
+  it("ul/li로 감싼 인접 항목이 개별 글머리 목록으로 보존된다(Issue #113 회귀의 import 경로 재현)", () => {
     const result = importHtml("<ul><li>one</li><li>two</li></ul>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
     expect(result.value.document.blocks).toEqual([
-      { id: "html-1", type: "paragraph", content: [{ text: "one" }] },
-      { id: "html-2", type: "paragraph", content: [{ text: "two" }] },
+      {
+        id: "html-1",
+        type: "bulletListItem",
+        content: [{ text: "one" }],
+      },
+      {
+        id: "html-2",
+        type: "bulletListItem",
+        content: [{ text: "two" }],
+      },
     ]);
     expect(result.value.warnings).toEqual([]);
   });
 
   // DELTA-06a(Issue #38): blockquote는 더 이상 문단 경계가 아니라 quote
-  // 블록이다(D6 — 블록 자식 없이 인라인만 들면 그 인라인이 content). li는
-  // 여전히 문단 경계다. 클립보드 경로의 blockquote 문단 경계 계약은
+  // 블록이다(D6 — 블록 자식 없이 인라인만 들면 그 인라인이 content). li도
+  // 목록 블록으로 승격되고 중첩 ul은 children을 만든다. 클립보드 경로의
+  // blockquote 문단 경계 계약은
   // clipboard-mixed-content-block-boundary.test.ts가 따로 고정한다.
-  it("blockquote는 quote 블록이 되고 중첩된 li는 여전히 강등 경고 없이 개별 문단 경계로 인식된다", () => {
+  it("blockquote는 quote 블록이 되고 중첩된 li는 강등 경고 없이 목록 children으로 인식된다", () => {
     const result = importHtml(
       "<blockquote>quoted</blockquote><ul><li>outer<ul><li>inner</li></ul></li></ul>",
     );
@@ -361,8 +370,18 @@ describe("HTML 보안", () => {
 
     expect(result.value.document.blocks).toEqual([
       { id: "html-1", type: "quote", content: [{ text: "quoted" }] },
-      { id: "html-2", type: "paragraph", content: [{ text: "outer" }] },
-      { id: "html-3", type: "paragraph", content: [{ text: "inner" }] },
+      {
+        id: "html-2",
+        type: "bulletListItem",
+        content: [{ text: "outer" }],
+        children: [
+          {
+            id: "html-3",
+            type: "bulletListItem",
+            content: [{ text: "inner" }],
+          },
+        ],
+      },
     ]);
     expect(result.value.warnings).toEqual([]);
   });

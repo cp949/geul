@@ -2,7 +2,8 @@ import { fromParse5 } from "hast-util-from-parse5";
 import { parseFragment } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
 
-import type { HtmlRoot } from "./inline-content.js";
+import type { HtmlElementNode, HtmlRoot } from "./inline-content.js";
+import { setRawIntegerProperties } from "./hast-properties.js";
 import { clipboardStrippedTagNames } from "./sanitize-schema.js";
 
 // HTML 트리 깊이 캡(Issue #130). 모델 중첩 축의 MAX_NESTING_DEPTH(64)와는
@@ -15,6 +16,19 @@ export const MAX_HTML_TREE_DEPTH = 256;
 
 type Parse5Fragment = DefaultTreeAdapterMap["documentFragment"];
 type Parse5Child = DefaultTreeAdapterMap["childNode"];
+
+// property-information이 known numeric HTML attribute를 HAST number로 바꿀
+// 때 공백→0, 0x10→16처럼 원문 문법을 잃는다. propertyInteger의 현재 소비
+// 표면만 raw attribute name→HAST property name으로 대응시켜 보존한다.
+const integerPropertyNameByAttributeName = new Map<string, string>([
+  ["start", "start"],
+  ["rowspan", "rowSpan"],
+  ["colspan", "colSpan"],
+  ["width", "width"],
+  ["data-be-width", "dataBeWidth"],
+  ["data-be-header-rows", "dataBeHeaderRows"],
+  ["data-be-header-columns", "dataBeHeaderColumns"],
+]);
 
 export type ParsedHtmlFragment = {
   root: HtmlRoot;
@@ -37,6 +51,69 @@ const flattenSkippedTagNames = new Set(clipboardStrippedTagNames);
 const isParse5Element = (
   node: Parse5Child,
 ): node is DefaultTreeAdapterMap["element"] => "childNodes" in node;
+
+// parse5와 fromParse5 HAST의 element preorder를 반복 순회해 numeric
+// attribute raw lexeme를 대응 HAST element.data에 싣는다. sanitize는 data를
+// 구조 복제하므로 sanitized HAST 소비자까지 문법 fact가 유지된다. 태그
+// 대응이 어긋나면 잘못된 element에 원문을 붙이지 않고 건너뛴다.
+const preserveRawIntegerProperties = (
+  fragment: Parse5Fragment,
+  root: HtmlRoot,
+): void => {
+  const parse5Elements: DefaultTreeAdapterMap["element"][] = [];
+  const parse5Stack: Parse5Child[] = [...fragment.childNodes].reverse();
+  for (
+    let node = parse5Stack.pop();
+    node !== undefined;
+    node = parse5Stack.pop()
+  ) {
+    if (!isParse5Element(node)) continue;
+    parse5Elements.push(node);
+    // fromParse5는 template.content를 element.children 밖 별도 Root로 옮기고
+    // sanitizer는 template을 strip한다. content까지 preorder에 넣으면 뒤의
+    // 같은 tag element와 index가 어긋나 raw lexeme가 잘못 대응된다.
+    const children = node.childNodes;
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index];
+      if (child !== undefined) parse5Stack.push(child);
+    }
+  }
+
+  const hastElements: HtmlElementNode[] = [];
+  const hastStack = [...root.children].reverse();
+  for (let node = hastStack.pop(); node !== undefined; node = hastStack.pop()) {
+    if (node.type !== "element") continue;
+    hastElements.push(node);
+    for (let index = node.children.length - 1; index >= 0; index -= 1) {
+      const child = node.children[index];
+      if (child !== undefined) hastStack.push(child);
+    }
+  }
+
+  for (let index = 0; index < parse5Elements.length; index += 1) {
+    const parse5Element = parse5Elements[index];
+    const hastElement = hastElements[index];
+    if (
+      parse5Element === undefined ||
+      hastElement === undefined ||
+      parse5Element.tagName !== hastElement.tagName
+    ) {
+      continue;
+    }
+    const rawIntegerProperties: Record<string, string> = {};
+    for (const attribute of parse5Element.attrs) {
+      const propertyName = integerPropertyNameByAttributeName.get(
+        attribute.name,
+      );
+      if (propertyName !== undefined) {
+        rawIntegerProperties[propertyName] = attribute.value;
+      }
+    }
+    if (Object.keys(rawIntegerProperties).length > 0) {
+      setRawIntegerProperties(hastElement, rawIntegerProperties);
+    }
+  }
+};
 
 // 블록 경계로 취급해 앞뒤에 개행 구분자를 넣는 태그. 완전한 CSS display
 // 목록이 아니라 "인접 텍스트가 붙으면 의미가 바뀌는" 흔한 블록 컨테이너의
@@ -222,6 +299,7 @@ export const parseHtmlFragment = (
     const fragment = parseFragment(html, { scriptingEnabled: false });
     const truncated = capParse5TreeDepth(fragment);
     const root = asRoot(fromParse5(fragment));
+    if (root !== undefined) preserveRawIntegerProperties(fragment, root);
     return root === undefined ? undefined : { root, truncated };
   } catch {
     return undefined;

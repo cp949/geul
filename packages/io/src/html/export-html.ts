@@ -153,11 +153,14 @@ type ListItemBlock = Extract<
 >;
 
 const listItemNode = (block: ListItemBlock): HtmlElementNode =>
-  htmlElement(
-    "li",
-    { dataBeBlockId: block.id },
-    inlineContentToNodes(block.content),
-  );
+  htmlElement("li", { dataBeBlockId: block.id }, [
+    ...(block.children === undefined || block.children.length === 0
+      ? inlineContentToNodes(block.content)
+      : [
+          htmlElement("p", {}, inlineContentToNodes(block.content)),
+          ...blockNodes(block.children),
+        ]),
+  ]);
 
 const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
   const first = blocks[0];

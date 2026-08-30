@@ -157,7 +157,7 @@ describe("외부 blockquote import(D6 첫 문단 승격)", () => {
     ]);
   });
 
-  it("blockquote 안 li·중첩 blockquote가 children으로 재귀 매핑된다", () => {
+  it("blockquote 안 목록 항목·중첩 blockquote가 각 타입의 children으로 재귀 매핑된다", () => {
     expectImportedBlocks(
       "<blockquote><p>A</p><ul><li>one</li><li>two</li></ul><blockquote><p>inner</p></blockquote></blockquote>",
       [
@@ -166,8 +166,16 @@ describe("외부 blockquote import(D6 첫 문단 승격)", () => {
           type: "quote",
           content: [{ text: "A" }],
           children: [
-            paragraphBlock("html-2", "one"),
-            paragraphBlock("html-3", "two"),
+            {
+              id: "html-2",
+              type: "bulletListItem",
+              content: [{ text: "one" }],
+            },
+            {
+              id: "html-3",
+              type: "bulletListItem",
+              content: [{ text: "two" }],
+            },
             quoteBlock("html-4", "inner"),
           ],
         },
