@@ -154,6 +154,13 @@ export type Block =
 - 인접 리프가 `divider` 또는 `table`이면 그 너머의 텍스트와 병합하지 않는다. 첫 Backspace/Delete는 인접 `divider`를 `NodeSelection`, 인접 `table`을 표 전체 `CellSelection`으로 선택하는 selection-only 동작이다. 같은 키를 한 번 더 누르면 선택된 노드만 삭제하며, 이 삭제가 undo 1회 단위다. 중첩 위치에서도 형제 컨테이너나 다른 자식을 함께 선택·삭제하지 않는다.
 - 표 셀에서는 일반 블록 split/join 확장이 관여하지 않고 표 키보드 계약이 키별 동작을 별도로 소유한다. Enter는 아래 행의 같은 열 셀로 이동하며, 이동할 아래 셀이 없으면 transaction 없이 키를 소비한다. Backspace/Delete는 셀 콘텐츠와 셀 선택에서는 `tableEditing` 계약을 따르고, 위의 표 전체 `CellSelection` 삭제만 블록 join 경계가 처리한다. 따라서 표 셀 Enter를 전체 무동작으로 취급하지 않는다.
 
+#### 목록 native input rule
+
+- native text input에서 최종 space 직전 현재 `blockContainer`의 content node가 `paragraph`이고 전체 inline text가 exact `-` 또는 `1.`일 때만 각각 `bulletListItem`·`numberedListItem`으로 바꾼다. 번호 목록에는 `startNumber`를 넣지 않는다. top-level·중첩·`children` 보유 paragraph를 허용하며 안정 ID, `children`, 부모 안 위치와 중첩 깊이를 보존한다.
+- 선행 공백, 문장 중간 marker, `-- `·`* `·`+ `·`2. `·`01. `과 heading·quote·CodeBlock·기존 목록·표 셀 paragraph는 변환하지 않는다. paste와 기본 programmatic insertion에도 적용하지 않는다. 범위 선택을 native marker 입력으로 대체한 뒤 exact 상태가 된 paragraph는 다음 native space에서 변환한다.
+- marker text만 제거하고 빈 목록 content 시작에 캐럿을 둔다. marker의 active inline marks는 stored marks로 보존한다. `-  `·`1.  `의 첫 space는 변환을 실행하고 둘째 space는 목록 content에 native 입력된다.
+- 변환은 custom Tiptap `InputRule`이 현재 chainable transaction을 직접 변경한다. public `setBlockType`을 중첩 호출하지 않는다. 타입·selection 변경, `BlockIdExtension`/trailing append transaction, revision/change event는 단일 `view.dispatch`와 history 단위다. 변환 직후 public undo 한 번은 최종 space 직전 marker paragraph와 trailing 상태를 복원한다. 즉시 Backspace는 `undoInputRule`을 우선 적용해 literal `- ` 또는 `1. ` paragraph를 복원한다(Issue #38 슬라이스 5 RD-006).
+
 ### 5.2 Tab/Shift+Tab 3분기
 
 우선순위는 다음과 같다(R1 `table-keyboard-extension.ts`가 이미 1번을 구현했다).

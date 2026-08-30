@@ -283,3 +283,52 @@ test("목록 Tab과 Shift+Tab은 순차 focus 이동을 억제하고 편집기 f
   await expect(editable).toBeFocused();
   await expect(second).toHaveAttribute("data-be-list-marker", "8.");
 });
+
+for (const [marker, type, contentAttribute, renderedMarker] of [
+  ["-", "bulletListItem", "data-be-bullet-list-item", "•"],
+  ["1.", "numberedListItem", "data-be-numbered-list-item", "1."],
+] as const) {
+  test(`native ${marker} space 입력은 production editor에서 ${type} DOM으로 변환하고 focus를 유지한다`, async ({
+    page,
+  }) => {
+    const { editable } = await openDemo(page);
+    await loadDocument(page, {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "target", type: "paragraph", content: [] },
+        { id: "tail", type: "paragraph", content: [{ text: "꼬리" }] },
+      ],
+    });
+
+    const target = editable.locator('[data-be-block-id="target"]');
+    await target.locator("p").click();
+    await page.keyboard.type(`${marker} `);
+
+    await expect(target).toHaveAttribute("data-be-list-marker", renderedMarker);
+    await expect(target.locator(`[${contentAttribute}]`)).toHaveCount(1);
+    await expect(editable).toBeFocused();
+  });
+}
+
+test("native - 뒤 두 space는 첫 space에서 목록으로 변환하고 둘째 space를 content에 입력한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await loadDocument(page, {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      { id: "target", type: "paragraph", content: [] },
+      { id: "tail", type: "paragraph", content: [{ text: "꼬리" }] },
+    ],
+  });
+
+  const target = editable.locator('[data-be-block-id="target"]');
+  await target.locator("p").click();
+  await page.keyboard.type("-  ");
+
+  await expect(target).toHaveAttribute("data-be-list-marker", "•");
+  await expect(target.locator("[data-be-bullet-list-item]")).toHaveText(" ");
+  await expect(editable).toBeFocused();
+});

@@ -20,6 +20,7 @@ import {
   BulletListItemExtension,
   NumberedListItemExtension,
 } from "./list-item-extension.js";
+import { ListInputRuleExtension } from "./list-input-rule-extension.js";
 import { modelToTiptap } from "./model-to-tiptap.js";
 import { PlaceholderExtension } from "./placeholder-extension.js";
 import { QuoteExtension } from "./quote-extension.js";
@@ -136,6 +137,7 @@ export const createProductionEditor = (options: {
       HeadingExtension,
       ProductionBulletListItemExtension,
       ProductionNumberedListItemExtension,
+      ListInputRuleExtension,
       QuoteExtension,
       CodeBlockExtension,
       CodeBlockMarkGuardExtension,
