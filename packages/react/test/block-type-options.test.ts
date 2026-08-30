@@ -59,6 +59,19 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     ).toBe("code");
   });
 
+  it("blockTypeToOptionId는 bullet과 startNumber 미지정·0·명시 numbered를 공용 option id로 해석한다", () => {
+    expect(blockTypeToOptionId({ type: "bulletListItem" })).toBe("bullet-list");
+    expect(blockTypeToOptionId({ type: "numberedListItem" })).toBe(
+      "numbered-list",
+    );
+    expect(
+      blockTypeToOptionId({ type: "numberedListItem", startNumber: 0 }),
+    ).toBe("numbered-list");
+    expect(
+      blockTypeToOptionId({ type: "numberedListItem", startNumber: 42 }),
+    ).toBe("numbered-list");
+  });
+
   it("옵션마다 blockTypeToOptionId(option.blockType) === option.id다", () => {
     for (const option of BLOCK_TYPE_OPTIONS) {
       expect(blockTypeToOptionId(option.blockType)).toBe(option.id);

@@ -3,10 +3,7 @@ import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 type SetBlockTypeInput = Parameters<
   EditorController["commands"]["setBlockType"]
 >[1];
-type SupportedBlockTypeInput = Extract<
-  SetBlockTypeInput,
-  { type: BlockTypeDescriptor["type"] }
->;
+type SupportedBlockTypeInput = SetBlockTypeInput & BlockTypeDescriptor;
 
 export type BlockTypeOption = {
   id: string;
@@ -92,5 +89,9 @@ export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
       return "quote";
     case "codeBlock":
       return "code";
+    case "bulletListItem":
+      return "bullet-list";
+    case "numberedListItem":
+      return "numbered-list";
   }
 };

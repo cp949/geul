@@ -2,6 +2,7 @@ import {
   createEditor,
   parseTableColumns,
   serializeTableColumns,
+  type BlockTypeDescriptor,
   type TableColumn,
   type TableColumnsAttributeError,
   type SetBlockTypeDescriptor,
@@ -43,6 +44,38 @@ const setBlockTypes: SetBlockTypeDescriptor[] = [
   { type: "numberedListItem", startNumber: null },
 ];
 void setBlockTypes;
+const blockTypeOutputs: BlockTypeDescriptor[] = [
+  { type: "bulletListItem" },
+  { type: "numberedListItem" },
+  { type: "numberedListItem", startNumber: 0 },
+];
+// output descriptor는 저장 정규형만 보고하므로 command input 전용 null을
+// 허용하지 않는다.
+const invalidBlockTypeOutput: BlockTypeDescriptor = {
+  type: "numberedListItem",
+  // @ts-expect-error BlockTypeDescriptor numbered startNumber는 null을 거절한다.
+  startNumber: null,
+};
+void invalidBlockTypeOutput;
+const consumeBlockTypeOutput = (blockType: BlockTypeDescriptor): string => {
+  switch (blockType.type) {
+    case "paragraph":
+    case "quote":
+    case "bulletListItem":
+      return blockType.type;
+    case "heading":
+      return `${blockType.type}:${blockType.level}`;
+    case "codeBlock":
+      return `${blockType.type}:${blockType.language ?? ""}`;
+    case "numberedListItem":
+      return `${blockType.type}:${blockType.startNumber ?? ""}`;
+    default: {
+      const exhaustive: never = blockType;
+      return exhaustive;
+    }
+  }
+};
+void blockTypeOutputs.map(consumeBlockTypeOutput);
 const editor: EditorController = createEditor({
   initialDocument: document,
   onPasteRejected: (reason) => {

@@ -185,7 +185,9 @@ export type BlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
   | { type: "quote" }
-  | { type: "codeBlock"; language?: string };
+  | { type: "codeBlock"; language?: string }
+  | { type: "bulletListItem" }
+  | { type: "numberedListItem"; startNumber?: number };
 
 // PM block content node를 공개 primitive descriptor로 좁힌다. caret과 selection
 // 조회가 같은 타입·attrs 규칙을 공유하고 PM node 자체는 공개하지 않는다.
@@ -204,6 +206,15 @@ const blockTypeDescriptorFromNode = (
         type: "codeBlock",
         ...(typeof node.attrs.language === "string"
           ? { language: node.attrs.language }
+          : {}),
+      };
+    case "bulletListItem":
+      return { type: "bulletListItem" };
+    case "numberedListItem":
+      return {
+        type: "numberedListItem",
+        ...(typeof node.attrs.startNumber === "number"
+          ? { startNumber: node.attrs.startNumber }
           : {}),
       };
     default:
