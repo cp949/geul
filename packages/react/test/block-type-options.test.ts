@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   BLOCK_TYPE_OPTIONS,
   blockTypeToOptionId,
+  getBlockTypeOptionsForSource,
 } from "../src/block-type-options.js";
 
 describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
@@ -59,6 +60,25 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     ).toBe("code");
   });
 
+  it("목록 옵션이 공용 id·label·검색어·command descriptor를 제공한다", () => {
+    expect(BLOCK_TYPE_OPTIONS.find(({ id }) => id === "bullet-list")).toEqual({
+      id: "bullet-list",
+      label: "Bulleted List",
+      description: "Create a bulleted list",
+      keywords: ["bullet", "list", "unordered", "ul"],
+      blockType: { type: "bulletListItem" },
+    });
+    expect(BLOCK_TYPE_OPTIONS.find(({ id }) => id === "numbered-list")).toEqual(
+      {
+        id: "numbered-list",
+        label: "Numbered List",
+        description: "Create a numbered list",
+        keywords: ["number", "list", "ordered", "ol"],
+        blockType: { type: "numberedListItem" },
+      },
+    );
+  });
+
   it("blockTypeToOptionId는 bullet과 startNumber 미지정·0·명시 numbered를 공용 option id로 해석한다", () => {
     expect(blockTypeToOptionId({ type: "bulletListItem" })).toBe("bullet-list");
     expect(blockTypeToOptionId({ type: "numberedListItem" })).toBe(
@@ -76,5 +96,65 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     for (const option of BLOCK_TYPE_OPTIONS) {
       expect(blockTypeToOptionId(option.blockType)).toBe(option.id);
     }
+  });
+
+  it("CodeBlock source에서는 두 목록 옵션을 제외한다", () => {
+    const ids = getBlockTypeOptionsForSource({ type: "codeBlock" }).map(
+      ({ id }) => id,
+    );
+
+    expect(ids).toEqual([
+      "paragraph",
+      "heading-1",
+      "heading-2",
+      "heading-3",
+      "heading-4",
+      "heading-5",
+      "heading-6",
+      "quote",
+      "code",
+    ]);
+  });
+
+  it.each([
+    { type: "bulletListItem" as const },
+    { type: "numberedListItem" as const },
+  ])("$type source에서는 Code 옵션만 제외한다", (source) => {
+    const ids = getBlockTypeOptionsForSource(source).map(({ id }) => id);
+
+    expect(ids).toEqual([
+      "paragraph",
+      "heading-1",
+      "heading-2",
+      "heading-3",
+      "heading-4",
+      "heading-5",
+      "heading-6",
+      "quote",
+      "bullet-list",
+      "numbered-list",
+    ]);
+  });
+
+  it.each([
+    { type: "paragraph" as const },
+    { type: "heading" as const, level: 3 as const },
+    { type: "quote" as const },
+  ])("$type source에서는 Code와 두 목록 옵션을 모두 유지한다", (source) => {
+    const ids = getBlockTypeOptionsForSource(source).map(({ id }) => id);
+
+    expect(ids).toEqual([
+      "paragraph",
+      "heading-1",
+      "heading-2",
+      "heading-3",
+      "heading-4",
+      "heading-5",
+      "heading-6",
+      "quote",
+      "code",
+      "bullet-list",
+      "numbered-list",
+    ]);
   });
 });

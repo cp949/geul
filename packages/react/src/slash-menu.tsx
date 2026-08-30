@@ -1,7 +1,11 @@
+import type { BlockTypeDescriptor } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BlockSideMenu } from "./block-side-menu.js";
-import { BLOCK_TYPE_OPTIONS } from "./block-type-options.js";
+import {
+  BLOCK_TYPE_OPTIONS,
+  getBlockTypeOptionsForSource,
+} from "./block-type-options.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
@@ -51,8 +55,10 @@ const DIVIDER_SLASH_ITEM: SlashMenuItem = {
   keywords: ["divider", "hr", "separator"],
 };
 
-const SLASH_MENU_ITEMS: readonly SlashMenuItem[] = [
-  ...BLOCK_TYPE_OPTIONS.map((option) => ({
+const getSlashMenuItems = (
+  source: BlockTypeDescriptor,
+): readonly SlashMenuItem[] => [
+  ...getBlockTypeOptionsForSource(source).map((option) => ({
     kind: "blockType" as const,
     ...option,
   })),
@@ -69,13 +75,17 @@ const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
   );
 };
 
-const filterItems = (query: string): SlashMenuItem[] =>
-  SLASH_MENU_ITEMS.filter((item) => matchesQuery(item, query));
+const filterItems = (
+  source: BlockTypeDescriptor,
+  query: string,
+): SlashMenuItem[] =>
+  getSlashMenuItems(source).filter((item) => matchesQuery(item, query));
 
 type MenuPosition = { left: number; top: number };
 
 type MenuState = {
   blockId: string;
+  sourceBlockType: BlockTypeDescriptor;
   query: string;
   highlightedIndex: number;
 } & MenuPosition;
@@ -129,12 +139,17 @@ export const SlashMenu = () => {
     null,
   );
 
-  const openMenuAt = (blockId: string, query: string) => {
+  const openMenuAt = (
+    blockId: string,
+    sourceBlockType: BlockTypeDescriptor,
+    query: string,
+  ) => {
     explicitOpenBlockIdRef.current = query.length === 0 ? blockId : null;
     dismissedQueryRef.current = null;
     const bounds = element === null ? null : readCaretBounds(element);
     setMenuState((current) => ({
       blockId,
+      sourceBlockType,
       query,
       highlightedIndex: 0,
       left: bounds?.left ?? current?.left ?? 96,
@@ -187,12 +202,16 @@ export const SlashMenu = () => {
       const bounds = element === null ? null : readCaretBounds(element);
       setMenuState((current) => ({
         blockId: context.blockId,
+        sourceBlockType: context.blockType,
         query: resolvedQuery,
         highlightedIndex:
           current !== null && current.blockId === context.blockId
             ? Math.min(
                 current.highlightedIndex,
-                Math.max(filterItems(resolvedQuery).length - 1, 0),
+                Math.max(
+                  filterItems(context.blockType, resolvedQuery).length - 1,
+                  0,
+                ),
               )
             : 0,
         left: bounds?.left ?? current?.left ?? 96,
@@ -210,7 +229,10 @@ export const SlashMenu = () => {
     };
   }, [editor, element]);
 
-  const items = menuState === null ? [] : filterItems(menuState.query);
+  const items =
+    menuState === null
+      ? []
+      : filterItems(menuState.sourceBlockType, menuState.query);
 
   const selectItem = useCallback(
     (item: SlashMenuItem) => {
@@ -261,7 +283,11 @@ export const SlashMenu = () => {
         event.preventDefault();
         setMenuState((currentState) => {
           if (currentState === null) return null;
-          const count = Math.max(filterItems(currentState.query).length, 1);
+          const count = Math.max(
+            filterItems(currentState.sourceBlockType, currentState.query)
+              .length,
+            1,
+          );
           return {
             ...currentState,
             highlightedIndex: (currentState.highlightedIndex + 1) % count,
@@ -273,7 +299,11 @@ export const SlashMenu = () => {
         event.preventDefault();
         setMenuState((currentState) => {
           if (currentState === null) return null;
-          const count = Math.max(filterItems(currentState.query).length, 1);
+          const count = Math.max(
+            filterItems(currentState.sourceBlockType, currentState.query)
+              .length,
+            1,
+          );
           return {
             ...currentState,
             highlightedIndex:
@@ -283,7 +313,10 @@ export const SlashMenu = () => {
         return;
       }
       if (event.key === "Enter") {
-        const currentItems = filterItems(current.query);
+        const currentItems = filterItems(
+          current.sourceBlockType,
+          current.query,
+        );
         const item = currentItems[current.highlightedIndex];
         if (item !== undefined) {
           event.preventDefault();
@@ -298,7 +331,11 @@ export const SlashMenu = () => {
 
   return (
     <>
-      <BlockSideMenu onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
+      <BlockSideMenu
+        onBlockAdded={(blockId) =>
+          openMenuAt(blockId, { type: "paragraph" }, "")
+        }
+      />
       <CodeBlockLanguageCombobox />
       <TableHandles />
       <TableSelectionToolbar />
@@ -319,7 +356,7 @@ export const SlashMenu = () => {
               className="geul-slash-menu__item"
               key={item.id}
               onClick={() => selectItem(item)}
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={(event) => event.preventDefault()}
               role="option"
               type="button"
             >

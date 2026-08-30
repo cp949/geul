@@ -163,8 +163,29 @@ describe("SlashMenu 질의 팝업", () => {
     typeIntoBlock(rendered, 0, "/");
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    // paragraph + heading 1-6 + quote + code(9) + table + divider = 11.
-    expect(screen.getAllByRole("option")).toHaveLength(11);
+    // 기존 option 순서 뒤에 목록 둘, 삽입 전용 Table·Divider가 이어진다.
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(13);
+    expect(
+      options.map(
+        (option) =>
+          option.querySelector(".geul-slash-menu__item-label")?.textContent,
+      ),
+    ).toEqual([
+      "Text",
+      "Heading 1",
+      "Heading 2",
+      "Heading 3",
+      "Heading 4",
+      "Heading 5",
+      "Heading 6",
+      "Quote",
+      "Code",
+      "Bulleted List",
+      "Numbered List",
+      "Table",
+      "Divider",
+    ]);
     expect(screen.getByRole("option", { name: /Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /Heading 1/ })).not.toBeNull();
   });
@@ -254,6 +275,109 @@ describe("SlashMenu 질의 팝업", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
   });
+
+  it.each([
+    {
+      query: "/bullet",
+      label: "Bulleted List",
+      type: "bulletListItem" as const,
+    },
+    {
+      query: "/number",
+      label: "Numbered List",
+      type: "numberedListItem" as const,
+    },
+  ])(
+    "$label 항목의 pointerdown→click이 트리거를 지우고 같은 id의 목록을 만든 뒤 메뉴를 닫고 초점을 복원한다",
+    ({ query, label, type }) => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, 0, query);
+      const option = screen.getByRole("option", { name: new RegExp(label) });
+      focusOutsideEditor(option);
+
+      expect(fireEvent.pointerDown(option)).toBe(false);
+      fireEvent.click(option);
+
+      const block = rendered.editor.getDocument().blocks[0];
+      expect(block?.type).toBe(type);
+      if (
+        block?.type !== "bulletListItem" &&
+        block?.type !== "numberedListItem"
+      ) {
+        throw new Error("목록 블록이 아니다");
+      }
+      expect(block.id).toBe(blockId);
+      expect(block.content).toEqual([]);
+      expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    },
+  );
+
+  it("ArrowDown 후 Enter가 강조한 Numbered List command를 실행한다", () => {
+    const rendered = renderCaretBlocks();
+    const blockId = typeIntoBlock(rendered, 0, "/list");
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    expect(
+      screen
+        .getByRole("option", { name: /Bulleted List/ })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowDown" })).toBe(false);
+    expect(
+      screen
+        .getByRole("option", { name: /Numbered List/ })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
+
+    const block = rendered.editor.getDocument().blocks[0];
+    if (block?.type !== "numberedListItem") {
+      throw new Error("번호 목록 블록이 아니다");
+    }
+    expect(block.id).toBe(blockId);
+    expect(block.content).toEqual([]);
+    expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it.each([
+    {
+      type: "bulletListItem" as const,
+      selector: "[data-be-bullet-list-item]",
+    },
+    {
+      type: "numberedListItem" as const,
+      selector: "[data-be-numbered-list-item]",
+    },
+  ])(
+    "$type source의 Slash menu는 Code를 제외하고 두 목록·Table·Divider를 유지한다",
+    ({ type, selector }) => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, 0, "/");
+      const converted = rendered.editor.commands.setBlockType(blockId, {
+        type,
+      });
+      if (!converted.ok) throw new Error("목록 블록 fixture 준비 실패");
+      const listItem = rendered.host.querySelector<HTMLElement>(selector);
+      if (listItem === null) throw new Error("목록 편집 DOM을 찾지 못했다");
+
+      placeCaret(listItem);
+      expect(rendered.editor.getCaretBlockContext()?.blockType.type).toBe(type);
+      fireSelectionChange();
+
+      expect(screen.queryByRole("option", { name: /^Code/ })).toBeNull();
+      expect(
+        screen.getByRole("option", { name: /Bulleted List/ }),
+      ).not.toBeNull();
+      expect(
+        screen.getByRole("option", { name: /Numbered List/ }),
+      ).not.toBeNull();
+      expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
+      expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
+      expect(screen.getAllByRole("option")).toHaveLength(12);
+    },
+  );
 
   it.each(["/", "/code"])(
     "CodeBlock source가 %s여도 selectionchange로 Slash menu를 열지 않는다",
@@ -402,7 +526,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
     expect(inserted.content).toEqual([]);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(11);
+    expect(screen.getAllByRole("option")).toHaveLength(13);
 
     // 메뉴가 "그 블록"으로 열렸는지는 캐럿 갱신 한 번으로 갈린다. 실제
     // insertParagraphAfter는 캐럿을 새 문단으로 옮기므로(전제), 메뉴가 hover한

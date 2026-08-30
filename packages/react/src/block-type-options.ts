@@ -77,7 +77,35 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
     keywords: ["code", "codeblock", "pre"],
     blockType: { type: "codeBlock" },
   },
+  {
+    id: "bullet-list",
+    label: "Bulleted List",
+    description: "Create a bulleted list",
+    keywords: ["bullet", "list", "unordered", "ul"],
+    blockType: { type: "bulletListItem" },
+  },
+  {
+    id: "numbered-list",
+    label: "Numbered List",
+    description: "Create a numbered list",
+    keywords: ["number", "list", "ordered", "ol"],
+    blockType: { type: "numberedListItem" },
+  },
 ];
+
+export const getBlockTypeOptionsForSource = (
+  source: BlockTypeDescriptor,
+): readonly BlockTypeOption[] => {
+  if (source.type === "codeBlock") {
+    return BLOCK_TYPE_OPTIONS.filter(
+      ({ id }) => id !== "bullet-list" && id !== "numbered-list",
+    );
+  }
+  if (source.type === "bulletListItem" || source.type === "numberedListItem") {
+    return BLOCK_TYPE_OPTIONS.filter(({ id }) => id !== "code");
+  }
+  return BLOCK_TYPE_OPTIONS;
+};
 
 export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
   switch (blockType.type) {
