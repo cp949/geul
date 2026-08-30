@@ -87,7 +87,10 @@ export const createGenericBlockCommands = (
     if (
       (target.node.type.name !== "paragraph" &&
         target.node.type.name !== "heading" &&
-        target.node.type.name !== "quote") ||
+        target.node.type.name !== "quote" &&
+        target.node.type.name !== "bulletListItem" &&
+        target.node.type.name !== "numberedListItem") ||
+      !isValidInlineText(text) ||
       target.node.textContent === text
     ) {
       return commandNotApplicable("setText");

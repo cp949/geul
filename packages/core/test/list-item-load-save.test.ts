@@ -92,7 +92,9 @@ describe("production 목록 load/save", () => {
 
   it("createEditor와 replaceDocument가 top-level과 nested 목록 값을 그대로 저장한다", () => {
     const created = createEditor({ initialDocument: listDocument(4) });
-    const replaced = createEditor({ initialDocument: paragraphDocument("이전") });
+    const replaced = createEditor({
+      initialDocument: paragraphDocument("이전"),
+    });
     try {
       expect(created.getDocument()).toEqual(listDocument(4));
       expect(replaced.replaceDocument(listDocument(9))).toEqual({

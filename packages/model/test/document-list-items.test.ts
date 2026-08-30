@@ -132,7 +132,9 @@ describe("목록 항목 strict 형상과 인라인 검증", () => {
       {
         id: "mark-1",
         type: "numberedListItem",
-        content: [{ text: "text", marks: [{ type: "bold" }, { type: "bold" }] }],
+        content: [
+          { text: "text", marks: [{ type: "bold" }, { type: "bold" }] },
+        ],
       },
       { id: "", type: "bulletListItem", content: [] },
     ];

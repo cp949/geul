@@ -204,7 +204,7 @@ const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
 // startNumber는 새 list의 start가 되어 그 항목부터 번호를 다시 시작한다.
 const blockNodes = (blocks: Block[]): MarkdownOutputNode[] => {
   const nodes: MarkdownOutputNode[] = [];
-  for (let index = 0; index < blocks.length; ) {
+  for (let index = 0; index < blocks.length;) {
     const first = blocks[index];
     if (
       first?.type !== "bulletListItem" &&
@@ -220,10 +220,7 @@ const blockNodes = (blocks: Block[]): MarkdownOutputNode[] => {
     while (nextIndex < blocks.length) {
       const next = blocks[nextIndex];
       if (next?.type !== first.type) break;
-      if (
-        next.type === "numberedListItem" &&
-        next.startNumber !== undefined
-      ) {
+      if (next.type === "numberedListItem" && next.startNumber !== undefined) {
         break;
       }
       items.push(next);
@@ -249,10 +246,7 @@ const blockNode = (block: Block): MarkdownOutputNode => {
         : { lang: codeBlockLanguage(block.language) }),
     };
   }
-  if (
-    block.type === "bulletListItem" ||
-    block.type === "numberedListItem"
-  ) {
+  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
     return listNode([block]);
   }
   if (block.type === "quote") {

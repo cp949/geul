@@ -175,7 +175,7 @@ const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
 // startNumber는 그 항목에서 새 ol을 시작해야 의미가 보존된다.
 const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
   const nodes: HtmlElementNode[] = [];
-  for (let index = 0; index < blocks.length; ) {
+  for (let index = 0; index < blocks.length;) {
     const first = blocks[index];
     if (
       first?.type !== "bulletListItem" &&
@@ -191,10 +191,7 @@ const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
     while (nextIndex < blocks.length) {
       const next = blocks[nextIndex];
       if (next?.type !== first.type) break;
-      if (
-        next.type === "numberedListItem" &&
-        next.startNumber !== undefined
-      ) {
+      if (next.type === "numberedListItem" && next.startNumber !== undefined) {
         break;
       }
       items.push(next);
@@ -226,10 +223,7 @@ const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
 const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "codeBlock") return codeBlockNode(block);
-  if (
-    block.type === "bulletListItem" ||
-    block.type === "numberedListItem"
-  ) {
+  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
     return listNode([block]);
   }
   // divider → <hr data-be-block-id>(spec §7.1). 콘텐츠·children 없는 void
@@ -250,11 +244,7 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
     ];
     if (block.children !== undefined && block.children.length > 0) {
       quoteChildren.push(
-        htmlElement(
-          "div",
-          { dataBeChildren: "1" },
-          blockNodes(block.children),
-        ),
+        htmlElement("div", { dataBeChildren: "1" }, blockNodes(block.children)),
       );
     }
     return htmlElement(
