@@ -1,10 +1,14 @@
+/**
+ * Markdown import가 지원 문법은 model 의미로 보존하고 미지원 문법만
+ * 구조화된 경고와 함께 강등하는지 검증한다.
+ */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown, importMarkdown } from "../src/index.js";
 
 describe("Markdown 강등 경고", () => {
-  it("목록 항목과 중첩 항목의 경계를 경고와 함께 문단으로 보존한다", () => {
+  it("목록 항목의 타입과 중첩 계층을 경고 없이 보존한다", () => {
     const result = importMarkdown(
       "- First item\n- Second item\n  - Nested item",
     );
@@ -14,34 +18,23 @@ describe("Markdown 강등 경고", () => {
     expect(result.value.document.blocks).toEqual([
       {
         id: "markdown-1",
-        type: "paragraph",
+        type: "bulletListItem",
         content: [{ text: "First item" }],
       },
       {
         id: "markdown-2",
-        type: "paragraph",
+        type: "bulletListItem",
         content: [{ text: "Second item" }],
-      },
-      {
-        id: "markdown-3",
-        type: "paragraph",
-        content: [{ text: "Nested item" }],
+        children: [
+          {
+            id: "markdown-3",
+            type: "bulletListItem",
+            content: [{ text: "Nested item" }],
+          },
+        ],
       },
     ]);
-    expect(result.value.warnings).toEqual([
-      expect.objectContaining({
-        kind: "LIST_DOWNGRADED",
-        blockId: "markdown-1",
-      }),
-      expect.objectContaining({
-        kind: "LIST_DOWNGRADED",
-        blockId: "markdown-2",
-      }),
-      expect.objectContaining({
-        kind: "LIST_DOWNGRADED",
-        blockId: "markdown-3",
-      }),
-    ]);
+    expect(result.value.warnings).toEqual([]);
   });
 
   it("이미지의 alt와 대상 주소를 경고와 함께 보이는 텍스트로 보존한다", () => {

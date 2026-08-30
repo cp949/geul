@@ -29,6 +29,9 @@ type MarkdownNode = {
   alt?: string;
   identifier?: string;
   align?: Array<"left" | "right" | "center" | null>;
+  ordered?: boolean;
+  start?: number | null;
+  checked?: boolean | null;
   position?: {
     start: { offset?: number };
     end: { offset?: number };
@@ -472,13 +475,38 @@ const paragraphFromText = (
   content: text.length === 0 ? [] : [{ text }],
 });
 
-const addListWarning = (blockId: string, warnings: ImportWarning[]): void => {
-  warnings.push({
-    kind: "LIST_DOWNGRADED",
-    blockId,
-    message: "List item was imported as one or more paragraphs",
-  });
+// 서로 다른 mdast node가 만든 block sequence는 model의 평평한 형제
+// 배열에서 컨테이너 경계를 잃는다. 앞 numbered sibling과 인접한 새
+// sequence의 첫 numbered 항목에 start를 명시해 GFM 번호 재시작을 보존한다.
+const appendNodeBlocks = (
+  blocks: Document["blocks"],
+  node: MarkdownNode,
+  nodeBlocks: Document["blocks"],
+): void => {
+  const previousBlock = blocks[blocks.length - 1];
+  const firstBlock = nodeBlocks[0];
+  if (
+    previousBlock?.type === "numberedListItem" &&
+    firstBlock?.type === "numberedListItem" &&
+    firstBlock.startNumber === undefined
+  ) {
+    firstBlock.startNumber =
+      node.type === "list" && node.ordered === true ? (node.start ?? 1) : 1;
+  }
+  blocks.push(...nodeBlocks);
 };
+
+function blocksFromNodes(
+  nodes: MarkdownNode[],
+  createId: IdFactory,
+  warnings: ImportWarning[],
+): Document["blocks"] {
+  const blocks: Document["blocks"] = [];
+  for (const node of nodes) {
+    appendNodeBlocks(blocks, node, blocksFromNode(node, createId, warnings));
+  }
+  return blocks;
+}
 
 function listBlocksFromNode(
   node: MarkdownNode,
@@ -487,42 +515,68 @@ function listBlocksFromNode(
 ): Document["blocks"] {
   const blocks: Document["blocks"] = [];
 
-  for (const item of node.children ?? []) {
+  for (const [itemIndex, item] of (node.children ?? []).entries()) {
     if (item.type !== "listItem") {
       blocks.push(...blocksFromNode(item, createId, warnings));
       continue;
     }
 
-    let itemParagraphId: string | undefined;
-    for (const child of item.children ?? []) {
-      if (child.type === "list") {
-        if (itemParagraphId === undefined) {
-          const paragraph = paragraphFromNodes([], createId, warnings);
-          blocks.push(paragraph);
-          itemParagraphId = paragraph.id;
-          addListWarning(itemParagraphId, warnings);
-        }
-        blocks.push(...listBlocksFromNode(child, createId, warnings));
-        continue;
-      }
+    const id = createId();
+    const itemChildren = item.children ?? [];
+    const contentNode =
+      itemChildren[0]?.type === "paragraph" ? itemChildren[0] : undefined;
+    const childNodes =
+      contentNode === undefined ? itemChildren : itemChildren.slice(1);
+    const children = blocksFromNodes(childNodes, createId, warnings);
+    const isTaskItem = item.checked === true || item.checked === false;
+    const content: InlineContent = [];
+    if (isTaskItem) {
+      appendOrMergeInlineItem(
+        content,
+        item.checked === true ? "[x] " : "[ ] ",
+        [],
+      );
+    }
+    readInlineNodes(contentNode?.children ?? [], [], content, warnings, {
+      blockId: id,
+      inTableCell: false,
+    });
 
-      const childBlocks = blocksFromNode(child, createId, warnings);
-      blocks.push(...childBlocks);
-      if (itemParagraphId === undefined) {
-        const paragraph = childBlocks.find(
-          (block) => block.type === "paragraph",
-        );
-        if (paragraph !== undefined) {
-          itemParagraphId = paragraph.id;
-          addListWarning(itemParagraphId, warnings);
-        }
-      }
+    if (isTaskItem) {
+      blocks.push({
+        id,
+        type: "paragraph",
+        content,
+        ...(children.length === 0 ? {} : { children }),
+      });
+      warnings.push({
+        kind: "LIST_DOWNGRADED",
+        blockId: id,
+        message: "GFM task list item was imported as a paragraph",
+      });
+      continue;
     }
 
-    if (itemParagraphId === undefined) {
-      const paragraph = paragraphFromNodes([], createId, warnings);
-      blocks.push(paragraph);
-      addListWarning(paragraph.id, warnings);
+    if (node.ordered === true) {
+      blocks.push({
+        id,
+        type: "numberedListItem",
+        ...(itemIndex === 0 &&
+        node.start !== undefined &&
+        node.start !== null &&
+        node.start !== 1
+          ? { startNumber: node.start }
+          : {}),
+        content,
+        ...(children.length === 0 ? {} : { children }),
+      });
+    } else {
+      blocks.push({
+        id,
+        type: "bulletListItem",
+        content,
+        ...(children.length === 0 ? {} : { children }),
+      });
     }
   }
 
@@ -559,7 +613,7 @@ function blockquoteToBlocks(
 
     if (child.type === "blockquote") {
       const nestedBlocks = blockquoteToBlocks(child, createId, warnings);
-      blocks.push(...nestedBlocks);
+      appendNodeBlocks(blocks, child, nestedBlocks);
       const firstNestedBlock = nestedBlocks[0];
       if (firstNestedBlock !== undefined) {
         warnings.push({
@@ -572,7 +626,7 @@ function blockquoteToBlocks(
     }
 
     const childBlocks = blocksFromNode(child, createId, warnings);
-    blocks.push(...childBlocks);
+    appendNodeBlocks(blocks, child, childBlocks);
     const firstChildBlock = childBlocks[0];
     if (firstChildBlock !== undefined) {
       warnings.push({
@@ -601,9 +655,7 @@ function unsupportedBlocksFromNode(
   const hasBlockChildren =
     node.children?.some((child) => blockNodeTypes.has(child.type)) === true;
   const blocks = hasBlockChildren
-    ? (node.children ?? []).flatMap((child) =>
-        blocksFromNode(child, createId, warnings),
-      )
+    ? blocksFromNodes(node.children ?? [], createId, warnings)
     : [
         node.children !== undefined && node.children.length > 0
           ? paragraphFromNodes(node.children, createId, warnings)
@@ -697,9 +749,7 @@ const documentFromRoot = (
   createId: IdFactory,
   warnings: ImportWarning[],
 ): Document => {
-  const blocks = root.children.flatMap((node) =>
-    blocksFromNode(node, createId, warnings),
-  );
+  const blocks = blocksFromNodes(root.children, createId, warnings);
 
   return { formatVersion: 1, revision: 0, blocks };
 };

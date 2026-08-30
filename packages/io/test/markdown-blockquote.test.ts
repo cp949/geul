@@ -38,6 +38,60 @@ describe("quote ↔ blockquote 왕복(D8)", () => {
 });
 
 describe("blockquote 안 비문단·중첩 자식(D8)", () => {
+  it("중첩 blockquote에서 평탄화된 별도 번호 목록의 1 재시작과 기존 경고를 보존한다", () => {
+    const { document, warnings } = importOk("> 1. 바깥\n>\n> > 1. 안쪽");
+
+    expect(document.blocks).toEqual([
+      {
+        id: "markdown-1",
+        type: "numberedListItem",
+        content: [{ text: "바깥" }],
+      },
+      {
+        id: "markdown-2",
+        type: "numberedListItem",
+        startNumber: 1,
+        content: [{ text: "안쪽" }],
+      },
+    ]);
+    expect(warnings).toEqual([
+      {
+        kind: "QUOTE_CHILD_DOWNGRADED",
+        blockId: "markdown-1",
+        message: expect.stringContaining("list"),
+      },
+      {
+        kind: "QUOTE_CHILD_DOWNGRADED",
+        blockId: "markdown-2",
+        message: expect.stringContaining("list"),
+      },
+      {
+        kind: "NESTED_QUOTE_FLATTENED",
+        blockId: "markdown-2",
+        message: expect.stringContaining("blockquote"),
+      },
+    ]);
+  });
+
+  it("blockquote 안 목록은 목록 블록으로 풀리고 QUOTE_CHILD_DOWNGRADED 경고가 유지된다", () => {
+    const { document, warnings } = importOk("> - 항목");
+
+    expect(document.blocks).toEqual([
+      {
+        id: "markdown-1",
+        type: "bulletListItem",
+        content: [{ text: "항목" }],
+      },
+    ]);
+    expect(warnings).toEqual([
+      {
+        kind: "QUOTE_CHILD_DOWNGRADED",
+        blockId: "markdown-1",
+        message: expect.stringContaining("list"),
+      },
+    ]);
+  });
+
   it("blockquote 안 heading이 일반 heading 블록으로 풀리고 QUOTE_CHILD_DOWNGRADED 경고가 1회 기록된다", () => {
     const { document, warnings } = importOk("> ## 제목\n>\n> 본문");
 
