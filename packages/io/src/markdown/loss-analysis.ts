@@ -110,12 +110,11 @@ const collectTableLosses = (
   }
 };
 
-// paragraph/heading/quote는 children(재귀, 임의 깊이)을 가질 수 있다(DELTA-01).
-// GFM(mdast)의 paragraph/heading 노드에는 자식 블록 슬롯이 없어 이를
-// 표현할 수 없다(D5) — 블록마다 NESTED_CHILDREN을 기록한 뒤 children을
-// 재귀적으로 순회해 더 깊은 블록의 손실(자체 콘텐츠 손실과 그 블록의
-// children 존재 여부)도 놓치지 않는다. divider는 content가 없고 CodeBlock은
-// plain-text source를 GFM code node로 직접 표현할 수 있는 리프라 손실이 없다.
+// paragraph/heading/quote의 children은 대응 mdast 노드에 블록 슬롯이 없어
+// NESTED_CHILDREN이다. 목록 항목의 children은 mdast listItem이 직접
+// 표현하므로 손실 없이 재귀 순회한다. 단, 빈 own content 뒤 첫 paragraph는
+// GFM이 own paragraph와 child paragraph 경계를 구분하지 못하므로 부모 목록
+// 항목의 NESTED_CHILDREN으로 분류한다.
 const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   if (block.type === "table") {
     collectTableLosses(block, losses);
@@ -138,11 +137,20 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     });
   }
   if (block.children !== undefined && block.children.length > 0) {
-    losses.push({
-      kind: "NESTED_CHILDREN",
-      blockId: block.id,
-      message: `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`,
-    });
+    const hasAmbiguousLeadingParagraph =
+      (block.type === "bulletListItem" || block.type === "numberedListItem") &&
+      block.content.length === 0 &&
+      block.children[0]?.type === "paragraph";
+    if (
+      (block.type !== "bulletListItem" && block.type !== "numberedListItem") ||
+      hasAmbiguousLeadingParagraph
+    ) {
+      losses.push({
+        kind: "NESTED_CHILDREN",
+        blockId: block.id,
+        message: `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`,
+      });
+    }
     for (const child of block.children) {
       collectBlockLosses(child, losses);
     }

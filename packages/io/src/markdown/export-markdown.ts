@@ -147,11 +147,11 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 };
 
 // children이 있는 paragraph/heading/quote를 부모 바로 뒤의 형제 블록으로
-// 평탄화한다(D5, lossy export 전용). GFM(mdast)의 paragraph/heading
-// 노드에는 자식 블록 슬롯이 없어 계층을 표현할 수 없다 — depth와 무관하게
-// 전부 평탄화해 콘텐츠는 보존하고 계층 정보만 손실로 남긴다(strict 모드는
-// analyzeMarkdownLoss가 NESTED_CHILDREN을 이미 거부하므로 이 함수에
-// 도달하지 않는다).
+// 평탄화한다(D5, lossy export 전용). 목록 항목은 mdast listItem의 block
+// children으로 계층을 표현할 수 있으므로 컨테이너를 유지한 채 내부에서
+// 표현 불가능한 자식만 재귀적으로 평탄화한다. own content가 비고 첫 자식이
+// paragraph면 GFM이 둘의 경계를 구분하지 못하므로 그 paragraph를 content로
+// 승격하고 나머지 목록 계층을 유지한다.
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
     if (block.type === "table") return [block];
@@ -161,6 +161,24 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
     if (block.type === "divider" || block.type === "codeBlock") return [block];
     if (block.children === undefined || block.children.length === 0) {
       return [block];
+    }
+    if (block.type === "bulletListItem" || block.type === "numberedListItem") {
+      const { children, ...ownBlock } = block;
+      const flattenedChildren = flattenBlocks(children);
+      const firstChild = flattenedChildren[0];
+      if (block.content.length === 0 && firstChild?.type === "paragraph") {
+        const remainingChildren = flattenedChildren.slice(1);
+        return [
+          {
+            ...ownBlock,
+            content: firstChild.content,
+            ...(remainingChildren.length === 0
+              ? {}
+              : { children: remainingChildren }),
+          },
+        ];
+      }
+      return [{ ...ownBlock, children: flattenedChildren }];
     }
     const { children, ...ownBlock } = block;
     return [ownBlock, ...flattenBlocks(children)];
@@ -180,23 +198,36 @@ type ListItemBlock = Extract<
 const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
   const first = blocks[0];
   if (first === undefined) throw new Error("Cannot serialize an empty list");
+  const spread = blocks.some(
+    (block) => block.children !== undefined && block.children.length > 0,
+  );
   return {
     type: "list",
     ordered: first.type === "numberedListItem",
-    spread: false,
+    spread,
     ...(first.type === "numberedListItem" && first.startNumber !== undefined
       ? { start: first.startNumber }
       : {}),
-    children: blocks.map((block) => ({
-      type: "listItem",
-      spread: false,
-      children: [
-        {
-          type: "paragraph",
-          children: inlineNodes(block.content, false),
-        },
-      ],
-    })),
+    children: blocks.map((block) => {
+      const childNodes = blockNodes(block.children ?? []);
+      const ownParagraph: MarkdownOutputNode = {
+        type: "paragraph",
+        children: inlineNodes(block.content, false),
+      };
+      return {
+        type: "listItem",
+        spread: block.children !== undefined && block.children.length > 0,
+        // 빈 own paragraph는 Markdown에 materialize되지 않는다. 첫 자식이
+        // non-paragraph면 이를 첫 mdast child로 직접 두어 `- > quote` 같은
+        // 표현 가능한 빈-content 목록 구조를 보존한다.
+        children:
+          block.content.length === 0 &&
+          childNodes.length > 0 &&
+          childNodes[0]?.type !== "paragraph"
+            ? childNodes
+            : [ownParagraph, ...childNodes],
+      };
+    }),
   };
 };
 
