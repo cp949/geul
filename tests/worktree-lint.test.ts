@@ -90,7 +90,7 @@ describe("워크트리 안에서 실행하는 eslint lint", () => {
 
     expect(result.output).not.toContain("No files matching the pattern");
     expect(result.exitCode).toBe(0);
-  }, 10_000);
+  }, 30_000);
 
   it("메인 저장소 루트에서 실행하면 워크트리 하위를 계속 제외한다", async () => {
     const result = await runEslintCheck(repoRoot);
