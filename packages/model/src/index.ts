@@ -49,12 +49,14 @@ export {
 } from "./table-grid-validation.js";
 export type {
   Block,
+  BulletListItemBlock,
   CodeBlock,
   DividerBlock,
   Document,
   HeadingBlock,
   IdFactory,
   InlineContent,
+  NumberedListItemBlock,
   ParagraphBlock,
   QuoteBlock,
   TableBlock,

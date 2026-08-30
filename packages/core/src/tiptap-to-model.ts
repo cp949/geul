@@ -157,9 +157,9 @@ const codeBlockFromTiptap = (
 };
 
 // blockContainer 1개를 재귀로 model Block으로 디코드한다(D19). 컨테이너의
-// 첫 자식은 항상 blockContent(paragraph/heading/quote/codeBlock), 두 번째
-// (선택) 자식은 nestable content의 blockGroup이다. CodeBlock은 leaf라 두
-// 번째 자식을 거절한다. 나머지는 스키마 content expression이 순서를
+// 첫 자식은 항상 blockContent(paragraph/heading/quote/list/codeBlock), 두
+// 번째(선택) 자식은 nestable content의 blockGroup이다. CodeBlock은 leaf라
+// 두 번째 자식을 거절한다. 나머지는 스키마 content expression이 순서를
 // 구조적으로 강제하므로 여기서 순서를 다시 검증하지 않는다(G-CNV-001:
 // 검증 권위는 parseDocument, 이 함수는 구조 직대응만 한다).
 const blockContainerToModel = (
@@ -250,6 +250,36 @@ const blockContainerToModel = (
         id,
         type: "quote",
         content: inlineContent.value,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
+  if (contentNode.type === "bulletListItem") {
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "bulletListItem",
+        content: inlineContent.value,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
+  if (contentNode.type === "numberedListItem") {
+    // JSON attr은 unknown이지만 값 정책을 여기서 재구현하지 않는다. null은
+    // 필드 부재로 직대응하고 그 외 값은 마지막 parseDocument가 검증한다.
+    const startNumber = contentNode.attrs?.startNumber;
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "numberedListItem",
+        content: inlineContent.value,
+        ...(startNumber === undefined || startNumber === null
+          ? {}
+          : { startNumber: startNumber as number }),
         ...(children === undefined ? {} : { children }),
       },
     };

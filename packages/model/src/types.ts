@@ -23,6 +23,19 @@ export type QuoteBlock = {
   content: InlineContent;
   children?: Block[];
 };
+export type BulletListItemBlock = {
+  id: string;
+  type: "bulletListItem";
+  content: InlineContent;
+  children?: Block[];
+};
+export type NumberedListItemBlock = {
+  id: string;
+  type: "numberedListItem";
+  content: InlineContent;
+  startNumber?: number;
+  children?: Block[];
+};
 export type DividerBlock = { id: string; type: "divider" };
 export type CodeBlock = {
   id: string;
@@ -57,6 +70,8 @@ export type Block =
   | TableBlock
   | QuoteBlock
   | DividerBlock
-  | CodeBlock;
+  | CodeBlock
+  | BulletListItemBlock
+  | NumberedListItemBlock;
 export type Document = { formatVersion: 1; revision: number; blocks: Block[] };
 export type IdFactory = () => string;

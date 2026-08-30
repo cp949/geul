@@ -19,7 +19,7 @@ import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 // 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
 // DELTA-07).
 const stringifyProcessor = unified()
-  .use(remarkStringify, { rule: "-" })
+  .use(remarkStringify, { rule: "-", incrementListMarker: false })
   .use(remarkGfm);
 
 type MarkdownOutputNode = {
@@ -29,6 +29,9 @@ type MarkdownOutputNode = {
   url?: string;
   lang?: string;
   align?: Array<"left" | "center" | "right" | null>;
+  ordered?: boolean;
+  start?: number;
+  spread?: boolean;
   children?: MarkdownOutputNode[];
 };
 
@@ -169,42 +172,113 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
 const codeBlockLanguage = (language: string): string =>
   language.replace(/&/g, "&amp;");
 
-const documentNode = (document: Document): MarkdownOutputNode => ({
-  type: "root",
-  children: document.blocks.map((block) => {
-    if (block.type === "table") return tableNode(block);
-    if (block.type === "divider") return { type: "thematicBreak" };
-    // CodeBlock은 model 검증을 통과한 plain-text leaf다. mdast code node가
-    // fence 길이와 info string entity escape를 맡아 source/language를 보존한다.
-    if (block.type === "codeBlock") {
-      return {
-        type: "code",
-        value: block.content[0]?.text ?? "",
-        ...(block.language === undefined
-          ? {}
-          : { lang: codeBlockLanguage(block.language) }),
-      };
+type ListItemBlock = Extract<
+  Block,
+  { type: "bulletListItem" | "numberedListItem" }
+>;
+
+const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
+  const first = blocks[0];
+  if (first === undefined) throw new Error("Cannot serialize an empty list");
+  return {
+    type: "list",
+    ordered: first.type === "numberedListItem",
+    spread: false,
+    ...(first.type === "numberedListItem" && first.startNumber !== undefined
+      ? { start: first.startNumber }
+      : {}),
+    children: blocks.map((block) => ({
+      type: "listItem",
+      spread: false,
+      children: [
+        {
+          type: "paragraph",
+          children: inlineNodes(block.content, false),
+        },
+      ],
+    })),
+  };
+};
+
+// 연속된 flat 목록 형제를 mdast list로 묶는다. 번호 항목의 명시적
+// startNumber는 새 list의 start가 되어 그 항목부터 번호를 다시 시작한다.
+const blockNodes = (blocks: Block[]): MarkdownOutputNode[] => {
+  const nodes: MarkdownOutputNode[] = [];
+  for (let index = 0; index < blocks.length; ) {
+    const first = blocks[index];
+    if (
+      first?.type !== "bulletListItem" &&
+      first?.type !== "numberedListItem"
+    ) {
+      if (first !== undefined) nodes.push(blockNode(first));
+      index += 1;
+      continue;
     }
-    if (block.type === "quote") {
-      return {
-        type: "blockquote",
-        children: [
-          { type: "paragraph", children: inlineNodes(block.content, false) },
-        ],
-      };
+
+    const items: ListItemBlock[] = [first];
+    let nextIndex = index + 1;
+    while (nextIndex < blocks.length) {
+      const next = blocks[nextIndex];
+      if (next?.type !== first.type) break;
+      if (
+        next.type === "numberedListItem" &&
+        next.startNumber !== undefined
+      ) {
+        break;
+      }
+      items.push(next);
+      nextIndex += 1;
     }
-    if (block.type === "heading") {
-      return {
-        type: "heading",
-        depth: block.level,
-        children: inlineNodes(block.content, false),
-      };
-    }
+    nodes.push(listNode(items));
+    index = nextIndex;
+  }
+  return nodes;
+};
+
+const blockNode = (block: Block): MarkdownOutputNode => {
+  if (block.type === "table") return tableNode(block);
+  if (block.type === "divider") return { type: "thematicBreak" };
+  // CodeBlock은 model 검증을 통과한 plain-text leaf다. mdast code node가
+  // fence 길이와 info string entity escape를 맡아 source/language를 보존한다.
+  if (block.type === "codeBlock") {
     return {
-      type: "paragraph",
+      type: "code",
+      value: block.content[0]?.text ?? "",
+      ...(block.language === undefined
+        ? {}
+        : { lang: codeBlockLanguage(block.language) }),
+    };
+  }
+  if (
+    block.type === "bulletListItem" ||
+    block.type === "numberedListItem"
+  ) {
+    return listNode([block]);
+  }
+  if (block.type === "quote") {
+    return {
+      type: "blockquote",
+      children: [
+        { type: "paragraph", children: inlineNodes(block.content, false) },
+      ],
+    };
+  }
+  if (block.type === "heading") {
+    return {
+      type: "heading",
+      depth: block.level,
       children: inlineNodes(block.content, false),
     };
-  }),
+  }
+  return {
+    type: "paragraph",
+    children: inlineNodes(block.content, false),
+  };
+};
+
+const documentNode = (document: Document): MarkdownOutputNode => ({
+  type: "root",
+  children: blockNodes(document.blocks),
 });
 
 export type MarkdownLossNotAllowedError = {

@@ -15,6 +15,10 @@ import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.j
 import { DividerExtension } from "./divider-extension.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
+import {
+  BulletListItemExtension,
+  NumberedListItemExtension,
+} from "./list-item-extension.js";
 import { modelToTiptap } from "./model-to-tiptap.js";
 import { PlaceholderExtension } from "./placeholder-extension.js";
 import { QuoteExtension } from "./quote-extension.js";
@@ -65,6 +69,29 @@ const HeadingExtension = Node.create({
   },
 });
 
+// 목록 content node의 내부 DOM은 공개 HTML 변환 계약이 아니다. production
+// EditorView가 inline content를 그릴 최소 div만 제공하고 parseHTML은 열지
+// 않는다. 모델의 startNumber는 PM attr에만 보존한다.
+const ProductionBulletListItemExtension = BulletListItemExtension.extend({
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-be-bullet-list-item": "" }),
+      0,
+    ];
+  },
+});
+
+const ProductionNumberedListItemExtension = NumberedListItemExtension.extend({
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-be-numbered-list-item": "" }),
+      0,
+    ];
+  },
+});
+
 export const createProductionEditor = (options: {
   document: BlockDocument;
   createId: IdFactory;
@@ -106,6 +133,8 @@ export const createProductionEditor = (options: {
       }),
       ParagraphExtension,
       HeadingExtension,
+      ProductionBulletListItemExtension,
+      ProductionNumberedListItemExtension,
       QuoteExtension,
       CodeBlockExtension,
       CodeBlockMarkGuardExtension,

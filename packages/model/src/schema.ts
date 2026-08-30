@@ -131,6 +131,21 @@ type QuoteBlockNode = {
   children?: BlockNode[] | undefined;
 };
 
+type BulletListItemBlockNode = {
+  id: string;
+  type: "bulletListItem";
+  content: z.infer<typeof inlineContentSchema>;
+  children?: BlockNode[] | undefined;
+};
+
+type NumberedListItemBlockNode = {
+  id: string;
+  type: "numberedListItem";
+  content: z.infer<typeof inlineContentSchema>;
+  startNumber?: number | undefined;
+  children?: BlockNode[] | undefined;
+};
+
 type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
 type CodeBlockNode = z.infer<typeof codeBlockSchema>;
 
@@ -139,6 +154,8 @@ type BlockNode =
   | HeadingBlockNode
   | z.infer<typeof tableBlockSchema>
   | QuoteBlockNode
+  | BulletListItemBlockNode
+  | NumberedListItemBlockNode
   | DividerBlockNode
   | CodeBlockNode;
 
@@ -177,11 +194,39 @@ const quoteBlockSchema = z.object({
     .optional(),
 });
 
+// 목록 항목은 text block과 같은 재귀 children을 가지지만 type별 저장 필드를
+// 정확히 구분한다. strict()가 bullet의 startNumber와 임의 필드의 무음 유실을
+// DOCUMENT_INVALID로 바꾼다.
+const bulletListItemBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("bulletListItem"),
+    content: inlineContentSchema,
+    children: z
+      .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
+      .optional(),
+  })
+  .strict();
+
+const numberedListItemBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("numberedListItem"),
+    content: inlineContentSchema,
+    startNumber: z.number().int().min(0).max(999_999_999).optional(),
+    children: z
+      .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
+      .optional(),
+  })
+  .strict();
+
 const blockSchema = z.discriminatedUnion("type", [
   paragraphBlockSchema,
   headingBlockSchema,
   tableBlockSchema,
   quoteBlockSchema,
+  bulletListItemBlockSchema,
+  numberedListItemBlockSchema,
   dividerBlockSchema,
   codeBlockSchema,
 ]);
@@ -313,7 +358,9 @@ const validateBlocksAt = (
     if (
       block.type === "paragraph" ||
       block.type === "heading" ||
-      block.type === "quote"
+      block.type === "quote" ||
+      block.type === "bulletListItem" ||
+      block.type === "numberedListItem"
     ) {
       const content = validateContent(block.content, [...blockPath, "content"]);
       if (!content.ok) return content;
@@ -395,7 +442,7 @@ const visitTableBlocks = (
       continue;
     }
     // divider와 codeBlock은 children 필드가 없는 리프다 — 나머지
-    // (paragraph/heading/quote)만 children으로 내려간다.
+    // (paragraph/heading/quote/목록 항목)만 children으로 내려간다.
     if (block.type === "divider" || block.type === "codeBlock") continue;
     if (block.children !== undefined) {
       const children = visitTableBlocks(
@@ -549,7 +596,13 @@ const findNestingDepthViolation = (
     // schema가 children을 허용하는 블록만 따라간다. table/divider/codeBlock과
     // 알 수 없는 판별자의 children은 strict shape 위반이므로 zod가 원래
     // DOCUMENT_INVALID path에서 판정해야 한다.
-    if (type !== "paragraph" && type !== "heading" && type !== "quote") {
+    if (
+      type !== "paragraph" &&
+      type !== "heading" &&
+      type !== "quote" &&
+      type !== "bulletListItem" &&
+      type !== "numberedListItem"
+    ) {
       continue;
     }
     // 빈 children 배열은 "자식 없음"이다 — 다른 층(validateBlocksAt,
@@ -598,7 +651,9 @@ const canonicalizeCodeBlockLanguages = (blocks: Block[]): void => {
     if (
       (block.type === "paragraph" ||
         block.type === "heading" ||
-        block.type === "quote") &&
+        block.type === "quote" ||
+        block.type === "bulletListItem" ||
+        block.type === "numberedListItem") &&
       block.children !== undefined
     ) {
       canonicalizeCodeBlockLanguages(block.children);

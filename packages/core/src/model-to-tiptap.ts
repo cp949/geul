@@ -1,5 +1,6 @@
 import {
   type Block,
+  type BulletListItemBlock,
   type CodeBlock,
   type Document,
   type HeadingBlock,
@@ -7,6 +8,7 @@ import {
   isCanonicalTextMarks,
   isSupportedLinkHref,
   isValidInlineText,
+  type NumberedListItemBlock,
   type ParagraphBlock,
   type QuoteBlock,
   type Result,
@@ -188,13 +190,23 @@ export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {
   };
 };
 
-// 문단·헤딩·인용 노드 자체(컨테이너 내부의 blockContent) 인코딩. blockId는
-// 더 이상 여기 붙지 않는다 — D19가 identity를 blockContainer로 옮겼다.
+// 문단·헤딩·인용·목록 노드 자체(컨테이너 내부의 blockContent) 인코딩.
+// blockId는 더 이상 여기 붙지 않는다 — D19가 identity를 blockContainer로
+// 옮겼다. 번호 목록의 null attr은 model 필드 부재와 직대응한다.
 const blockContentToTiptapJson = (
-  block: ParagraphBlock | HeadingBlock | QuoteBlock,
+  block:
+    | ParagraphBlock
+    | HeadingBlock
+    | QuoteBlock
+    | BulletListItemBlock
+    | NumberedListItemBlock,
 ): TiptapJsonNode => ({
   type: block.type,
-  ...(block.type === "heading" ? { attrs: { level: block.level } } : {}),
+  ...(block.type === "heading"
+    ? { attrs: { level: block.level } }
+    : block.type === "numberedListItem"
+      ? { attrs: { startNumber: block.startNumber ?? null } }
+      : {}),
   content: inlineContentToTiptap(block.content),
 });
 

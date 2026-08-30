@@ -6,7 +6,12 @@ import {
   type TableColumnsAttributeError,
 } from "@cp949/geul-core";
 import { importHtml } from "@cp949/geul-io";
-import { createEmptyDocument, type Document } from "@cp949/geul-model";
+import {
+  type BulletListItemBlock,
+  createEmptyDocument,
+  type Document,
+  type NumberedListItemBlock,
+} from "@cp949/geul-model";
 import {
   type DocumentChangeEvent,
   EditorContent,
@@ -19,6 +24,19 @@ import {
 } from "@cp949/geul-react";
 
 const document: Document = createEmptyDocument(() => "fixture-block");
+const bulletListItem: BulletListItemBlock = {
+  id: "fixture-bullet",
+  type: "bulletListItem",
+  content: [{ text: "bullet" }],
+};
+const numberedListItem: NumberedListItemBlock = {
+  id: "fixture-numbered",
+  type: "numberedListItem",
+  startNumber: 0,
+  content: [{ text: "numbered" }],
+};
+void bulletListItem;
+void numberedListItem;
 const editor: EditorController = createEditor({
   initialDocument: document,
   onPasteRejected: (reason) => {

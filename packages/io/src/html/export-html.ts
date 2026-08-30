@@ -1,4 +1,5 @@
 import {
+  type Block,
   type CodeBlock,
   type Document,
   isSafeCodeBlockLanguageClassToken,
@@ -146,6 +147,65 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   ]);
 };
 
+type ListItemBlock = Extract<
+  Block,
+  { type: "bulletListItem" | "numberedListItem" }
+>;
+
+const listItemNode = (block: ListItemBlock): HtmlElementNode =>
+  htmlElement(
+    "li",
+    { dataBeBlockId: block.id },
+    inlineContentToNodes(block.content),
+  );
+
+const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
+  const first = blocks[0];
+  if (first === undefined) throw new Error("Cannot serialize an empty list");
+  return htmlElement(
+    first.type === "bulletListItem" ? "ul" : "ol",
+    first.type === "numberedListItem" && first.startNumber !== undefined
+      ? { start: first.startNumber }
+      : {},
+    blocks.map(listItemNode),
+  );
+};
+
+// 연속된 flat 목록 형제를 종류별 컨테이너로 묶는다. 번호 항목의 명시적
+// startNumber는 그 항목에서 새 ol을 시작해야 의미가 보존된다.
+const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
+  const nodes: HtmlElementNode[] = [];
+  for (let index = 0; index < blocks.length; ) {
+    const first = blocks[index];
+    if (
+      first?.type !== "bulletListItem" &&
+      first?.type !== "numberedListItem"
+    ) {
+      if (first !== undefined) nodes.push(blockNode(first));
+      index += 1;
+      continue;
+    }
+
+    const items: ListItemBlock[] = [first];
+    let nextIndex = index + 1;
+    while (nextIndex < blocks.length) {
+      const next = blocks[nextIndex];
+      if (next?.type !== first.type) break;
+      if (
+        next.type === "numberedListItem" &&
+        next.startNumber !== undefined
+      ) {
+        break;
+      }
+      items.push(next);
+      nextIndex += 1;
+    }
+    nodes.push(listNode(items));
+    index = nextIndex;
+  }
+  return nodes;
+};
+
 // children이 있는 paragraph/heading은 자기 자신(children 없이, blockId
 // 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-be-block-id>
 // wrapper 하나로 묶는다(트랙-2 라운드4 확정, 후보 A). <p>는 HTML5상 <div>를
@@ -166,6 +226,12 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
 const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "codeBlock") return codeBlockNode(block);
+  if (
+    block.type === "bulletListItem" ||
+    block.type === "numberedListItem"
+  ) {
+    return listNode([block]);
+  }
   // divider → <hr data-be-block-id>(spec §7.1). 콘텐츠·children 없는 void
   // 요소 하나다 — import-html.ts의 hr 세그먼트가 dataBeBlockId를 되읽는다.
   if (block.type === "divider") {
@@ -187,7 +253,7 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
         htmlElement(
           "div",
           { dataBeChildren: "1" },
-          block.children.map(blockNode),
+          blockNodes(block.children),
         ),
       );
     }
@@ -215,7 +281,7 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   // 분기를 추가하지 않는다.
   return htmlElement("div", { dataBeBlockId: block.id }, [
     ownNode,
-    htmlElement("div", { dataBeChildren: "1" }, block.children.map(blockNode)),
+    htmlElement("div", { dataBeChildren: "1" }, blockNodes(block.children)),
   ]);
 };
 
@@ -233,7 +299,7 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
   try {
     const root: HtmlRoot = {
       type: "root",
-      children: parsed.value.blocks.map(blockNode),
+      children: blockNodes(parsed.value.blocks),
     };
     return {
       ok: true,
