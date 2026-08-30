@@ -3,13 +3,17 @@ import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 type SetBlockTypeInput = Parameters<
   EditorController["commands"]["setBlockType"]
 >[1];
+type SupportedBlockTypeInput = Extract<
+  SetBlockTypeInput,
+  { type: BlockTypeDescriptor["type"] }
+>;
 
 export type BlockTypeOption = {
   id: string;
   label: string;
   description: string;
   keywords: readonly string[];
-  blockType: SetBlockTypeInput;
+  blockType: SupportedBlockTypeInput;
 };
 
 export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [

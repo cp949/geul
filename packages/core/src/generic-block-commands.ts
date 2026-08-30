@@ -2,8 +2,8 @@ import {
   canonicalizeCodeBlockLanguage,
   isValidCodeBlockLanguage,
   isValidInlineText,
+  parseDocument,
   type Block,
-  type HeadingBlock,
   type Result,
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
@@ -16,17 +16,12 @@ import {
   createUniqueDocumentId,
 } from "./document-id-factory.js";
 import type { EditorError } from "./errors.js";
+import type { SetBlockTypeDescriptor } from "./editor-controller.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 import {
   commandNotApplicable,
   type ProductionEditorSession,
 } from "./production-editor-session.js";
-
-type BlockTypeDescriptor =
-  | { type: "paragraph" }
-  | { type: "heading"; level: HeadingBlock["level"] }
-  | { type: "quote" }
-  | { type: "codeBlock"; language?: string };
 
 const findEditableBlockContent = (
   document: ProseMirrorNode,
@@ -152,7 +147,7 @@ export const createGenericBlockCommands = (
 
   const setBlockType = (
     blockId: string,
-    blockType: BlockTypeDescriptor,
+    blockType: SetBlockTypeDescriptor,
     options?: { clearContent?: boolean },
   ): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("setBlockType");
@@ -169,6 +164,8 @@ export const createGenericBlockCommands = (
       currentTypeName !== "paragraph" &&
       currentTypeName !== "heading" &&
       currentTypeName !== "quote" &&
+      currentTypeName !== "bulletListItem" &&
+      currentTypeName !== "numberedListItem" &&
       currentTypeName !== "codeBlock"
     ) {
       return commandNotApplicable("setBlockType");
@@ -179,6 +176,18 @@ export const createGenericBlockCommands = (
         : null;
     const currentContentSize = target.node.content.size;
     const clearContent = options?.clearContent ?? false;
+    const currentIsList =
+      currentTypeName === "bulletListItem" ||
+      currentTypeName === "numberedListItem";
+    const targetIsList =
+      blockType.type === "bulletListItem" ||
+      blockType.type === "numberedListItem";
+    if (
+      (currentTypeName === "codeBlock" && targetIsList) ||
+      (currentIsList && blockType.type === "codeBlock")
+    ) {
+      return commandNotApplicable("setBlockType");
+    }
     const changesCodeBlockBoundary =
       currentTypeName === "codeBlock" || blockType.type === "codeBlock";
     if (
@@ -205,13 +214,43 @@ export const createGenericBlockCommands = (
       }
       codeBlockLanguage = canonicalizeCodeBlockLanguage(language);
     }
+    let numberedStartNumber: number | null = null;
+    if (blockType.type === "numberedListItem") {
+      numberedStartNumber =
+        blockType.startNumber === undefined &&
+        currentTypeName === "numberedListItem"
+          ? ((target.node.attrs.startNumber as number | null | undefined) ??
+            null)
+          : (blockType.startNumber ?? null);
+      if (
+        numberedStartNumber !== null &&
+        !parseDocument({
+          formatVersion: 1,
+          revision: 0,
+          blocks: [
+            {
+              id: "set-block-type-number-validation",
+              type: "numberedListItem",
+              content: [],
+              startNumber: numberedStartNumber,
+            },
+          ],
+        }).ok
+      ) {
+        return commandNotApplicable("setBlockType");
+      }
+    }
     const isSameType =
       blockType.type === "heading"
         ? currentTypeName === "heading" && currentLevel === blockType.level
         : blockType.type === "codeBlock"
           ? currentTypeName === "codeBlock" &&
             target.node.attrs.language === codeBlockLanguage
-          : currentTypeName === blockType.type;
+          : blockType.type === "numberedListItem"
+            ? currentTypeName === "numberedListItem" &&
+              ((target.node.attrs.startNumber as number | null | undefined) ??
+                null) === numberedStartNumber
+            : currentTypeName === blockType.type;
     if (isSameType && (!clearContent || currentContentSize === 0)) {
       // language setter는 UI commit seam이기도 하다. 유효 입력이 이미 같은
       // canonical 상태면 transaction 없이 성공해 caller가 거절과 구분한다.
@@ -261,14 +300,13 @@ export const createGenericBlockCommands = (
           target.position + 1 + currentContentSize,
         );
       }
-      transaction = transaction.setNodeMarkup(
-        target.position,
-        nodeType,
-        blockType.type === "heading" ? { level: blockType.level } : {},
-      );
-      transaction.setSelection(
-        TextSelection.create(transaction.doc, target.position + 1),
-      );
+      const attrs =
+        blockType.type === "heading"
+          ? { level: blockType.level }
+          : blockType.type === "numberedListItem"
+            ? { startNumber: numberedStartNumber }
+            : {};
+      transaction = transaction.setNodeMarkup(target.position, nodeType, attrs);
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });

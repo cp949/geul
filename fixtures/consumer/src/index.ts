@@ -4,6 +4,7 @@ import {
   serializeTableColumns,
   type TableColumn,
   type TableColumnsAttributeError,
+  type SetBlockTypeDescriptor,
 } from "@cp949/geul-core";
 import { importHtml } from "@cp949/geul-io";
 import {
@@ -35,8 +36,13 @@ const numberedListItem: NumberedListItemBlock = {
   startNumber: 0,
   content: [{ text: "numbered" }],
 };
-void bulletListItem;
-void numberedListItem;
+void [bulletListItem, numberedListItem];
+const setBlockTypes: SetBlockTypeDescriptor[] = [
+  { type: "bulletListItem" },
+  { type: "numberedListItem" },
+  { type: "numberedListItem", startNumber: null },
+];
+void setBlockTypes;
 const editor: EditorController = createEditor({
   initialDocument: document,
   onPasteRejected: (reason) => {
@@ -49,10 +55,7 @@ const rejection: PasteRejectedReason = {
 };
 void rejection;
 void importHtml("<p>Hello</p>");
-void EditorProvider;
-void EditorContent;
-void LinkToolbar;
-void SlashMenu;
+void [EditorProvider, EditorContent, LinkToolbar, SlashMenu];
 const pasted = editor.commands.pasteTabularData({ columnCount: 1, rows: [] });
 void pasted;
 void editor;

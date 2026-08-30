@@ -173,11 +173,13 @@ export interface EditorController {
 // 두 곳에 리터럴을 복제하지 않는다. 공개 export가 아닌 module-local 별칭이다.
 type HeadingLevel = HeadingBlock["level"];
 
-type SetBlockTypeDescriptor =
+export type SetBlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
   | { type: "quote" }
-  | { type: "codeBlock"; language?: string };
+  | { type: "codeBlock"; language?: string }
+  | { type: "bulletListItem" }
+  | { type: "numberedListItem"; startNumber?: number | null };
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }

@@ -19,6 +19,7 @@ export type {
   CreateEditorOptions,
   DocumentChangeEvent,
   EditorController,
+  SetBlockTypeDescriptor,
   TableCellSelection,
 } from "./editor-controller.js";
 export { createEditor } from "./editor-controller.js";
