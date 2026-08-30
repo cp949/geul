@@ -1,29 +1,47 @@
 /**
- * EditorController 계층의 core 테스트가 공유하는 문서 fixture와 마운트, 저장
- * 문서에서 표 블록을 꺼내는 조회를 소유한다. 여러 테스트 파일이 같은 fixture를
- * 쓰므로 사본을 만들지 않고 이 모듈이 단독으로 갖는다(G-TST-002).
+ * EditorController 계층의 core 테스트가 공유하는 통합 support 진입점.
+ * 목록 command용 문서 fixture·마운트·상태 단언은 좁은
+ * list-item-block-type-support.ts에서 re-export하고, 이 모듈은 저장 문서에서
+ * 표 블록을 꺼내는 조회와 나머지 fixture를 소유한다(G-TST-002).
  *
  * table-test-support.ts와의 경계는 다루는 대상이다 — EditorController와 저장
  * Document를 다루면 이 모듈, tiptap Editor를 직접 다루는 격리 fixture와 셀
  * 위치·선택·캐럿 헬퍼면 저 모듈이다. 표 fixture가 양쪽에 나뉘어 있는 것은 그
  * 때문이고, 이름이 아니라 이 기준으로 찾는다.
  *
- * 이 모듈은 아래 afterEach 훅을 module scope에 등록하므로 import하는 것만으로
- * 훅이 붙는다. editorWithTable을 table-test-support.ts로 옮기면 tiptap 노드만
- * 검증하는 파일까지 그 훅을 얻는다.
+ * re-export 원본은 afterEach 훅을 module scope에 등록하므로 이 모듈을
+ * import하는 기존 테스트에도 cleanup 훅이 붙는다. editorWithTable을
+ * table-test-support.ts로 옮기면 tiptap 노드만 검증하는 파일까지 그 훅을
+ * 얻는다.
  */
 import type { Block, Document, InlineContent } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { NodeType, Schema } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
-import { afterEach, expect } from "vitest";
+import { expect } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
+import { createEditor, type EditorController } from "../src/index.js";
 import {
-  createEditor,
-  type DocumentChangeEvent,
-  type EditorController,
-} from "../src/index.js";
-import { contentTextStart } from "./block-test-support.js";
+  documentOf,
+  mountTiptapEditor,
+  paragraphBlock,
+  sequentialIds,
+} from "./list-item-block-type-support.js";
+
+export {
+  caretAt,
+  documentOf,
+  editorState,
+  type ListItemType,
+  listItemBlock,
+  mounted,
+  mountTiptapEditor,
+  notApplicable,
+  paragraphBlock,
+  restored,
+  sequentialIds,
+  setBoldStoredMark,
+} from "./list-item-block-type-support.js";
 
 export const paragraphDocument = (text: string, revision = 0): Document => ({
   formatVersion: 1,
@@ -35,54 +53,6 @@ export const paragraphDocument = (text: string, revision = 0): Document => ({
       content: [{ text }],
     },
   ],
-});
-
-/**
- * 최상위 블록 배열만 다른 문서를 만든다 — 각 케이스가 블록 배치를 그
- * 자리에서 선언해 fixture와 단언을 나란히 읽게 한다.
- */
-export const documentOf = (...blocks: Block[]): Document => ({
-  formatVersion: 1,
-  revision: 0,
-  blocks,
-});
-
-/**
- * 문단 블록 리터럴을 만든다. 텍스트가 빈 문자열이면 content를 빈 배열로
- * 둔다(빈 블록) — 빈 text 조각을 넣지 않는 저장 문서의 정규형과 같다.
- * block-join-extension(병합 fixture)과 divider 명령 테스트(삽입 결과의 빈
- * 문단)가 공유한다(G-TST-002).
- */
-export const paragraphBlock = (
-  id: string,
-  text: string,
-  children?: Block[],
-): Block => ({
-  id,
-  type: "paragraph",
-  content: text === "" ? [] : [{ text }],
-  ...(children === undefined ? {} : { children }),
-});
-
-export type ListItemType = "bulletListItem" | "numberedListItem";
-
-/**
- * 목록 keyboard 계약이 목록 판별자, 명시 시작 번호와 자식 배치를 독립적으로
- * 조립하도록 저장 정규형 목록 항목을 만든다.
- */
-export const listItemBlock = (
-  id: string,
-  type: ListItemType,
-  text: string,
-  options?: { startNumber?: number; children?: Block[] },
-): Block => ({
-  id,
-  type,
-  content: text === "" ? [] : [{ text }],
-  ...(type === "numberedListItem" && options?.startNumber !== undefined
-    ? { startNumber: options.startNumber }
-    : {}),
-  ...(options?.children === undefined ? {} : { children: options.children }),
 });
 
 /**
@@ -164,14 +134,6 @@ export const oneCellTableBlock = (id: string): Block => ({
   headerColumns: 0,
 });
 
-export const sequentialIds = (prefix: string) => {
-  let counter = 0;
-  return () => {
-    counter += 1;
-    return `${prefix}-${counter}`;
-  };
-};
-
 export const documentWithContent = (content: InlineContent): Document => ({
   formatVersion: 1,
   revision: 0,
@@ -247,59 +209,6 @@ export const editorWithTable = (rows = 2, columns = 2) => {
 };
 
 /**
- * 테스트가 마운트한 에디터 목록. 마운트된 채 남으면 ProseMirror DOMObserver의
- * 지연 flush가 jsdom 환경 해제 이후에 실행되어 "document is not defined"
- * unhandled error가 된다. afterEach에서 일괄 해제한다.
- */
-const mountedEditors = new Set<EditorController>();
-
-afterEach(() => {
-  // destroy()는 멱등이므로 테스트가 이미 해제한 에디터도 안전하다.
-  for (const editor of mountedEditors) editor.destroy();
-  mountedEditors.clear();
-});
-
-export const mountTiptapEditor = (
-  editor: EditorController,
-): { editable: HTMLElement; tiptap: TiptapEditor } => {
-  const container = document.createElement("div");
-  editor.mount(container);
-  const editable = container.querySelector<
-    HTMLElement & { editor?: TiptapEditor }
-  >("[contenteditable='true']");
-  if (editable?.editor === undefined) {
-    throw new Error("Mounted Tiptap editor was not available");
-  }
-  mountedEditors.add(editor);
-  return { editable, tiptap: editable.editor };
-};
-
-/**
- * onChange를 모으며 마운트한 에디터 — id는 "id-N" 순차 배정이다.
- * insertDivider 계약·divider 삭제 characterization
- * (editor-controller-divider.test.ts)과 divider 명령 characterization
- * (editor-controller-divider-commands.test.ts)이 공유한다(G-TST-002).
- */
-export const mounted = (initialDocument: Document) => {
-  const changes: DocumentChangeEvent[] = [];
-  const onChange = (event: DocumentChangeEvent) => changes.push(event);
-  const createId = sequentialIds("id");
-  const editor = createEditor({ initialDocument, createId, onChange });
-  return { editor, changes, ...mountTiptapEditor(editor) };
-};
-
-/**
- * 거절·selection-only command가 기존 stored mark를 보존하는지 검증할 수
- * 있도록 문서·history 변경 없이 bold stored mark를 강제로 설정한다.
- * mark를 금지하는 CodeBlock caret에서도 fixture 상태를 만들 수 있다.
- */
-export const setBoldStoredMark = (tiptap: TiptapEditor): void => {
-  const bold = tiptap.schema.marks.bold;
-  if (bold === undefined) throw new Error("bold mark 조회 실패");
-  tiptap.view.dispatch(tiptap.state.tr.setStoredMarks([bold.create()]));
-};
-
-/**
  * 표 명령 등과 무관하게 스키마·appendTransaction만 검사하는 테스트가 공유하는
  * 최소 마운트 헬퍼. 프로덕션 스키마를 돌려준다. paragraphDocument("seed")는
  * 실제 콘텐츠와 무관한 placeholder다 — 각 테스트가 자신의 트랜잭션으로 문서를
@@ -323,35 +232,6 @@ export const requireNode = (schema: Schema, name: string): NodeType => {
   const node = schema.nodes[name];
   if (node === undefined) throw new Error(`${name} node missing`);
   return node;
-};
-
-export const editorState = (
-  editor: EditorController,
-  tiptap: TiptapEditor,
-) => ({
-  document: editor.getDocument(),
-  selection: tiptap.state.selection.toJSON(),
-  storedMarks: tiptap.state.storedMarks?.map((mark) => mark.toJSON()) ?? null,
-  tiptapDocument: tiptap.state.doc.toJSON(),
-});
-
-/**
- * undo 뒤 기대 상태 — before(editorState 스냅샷)와 같되 revision만 오른다.
- * quote·divider 명령 테스트가 "undo 1회 복원" 단언에 공유한다(G-TST-002).
- */
-export const restored = (
-  before: ReturnType<typeof editorState>,
-  revision: number,
-) => ({ ...before, document: { ...before.document, revision } });
-
-/**
- * blockId 문단의 텍스트 시작(contentTextStart)에 놓인 빈 TextSelection JSON.
- * setBlockType·insertDivider가 캐럿을 콘텐츠 시작에 두는 계약을 quote·
- * heading-levels·divider 명령 테스트가 같은 리터럴로 단언한다(G-TST-002).
- */
-export const caretAt = (tiptap: TiptapEditor, blockId: string) => {
-  const position = contentTextStart(tiptap, blockId);
-  return { type: "text", anchor: position, head: position };
 };
 
 /**
@@ -397,11 +277,6 @@ export const dividerBetweenParagraphsDocument = () =>
  * 명령 테스트가 공유한다(G-TST-002).
  */
 export const okResult = { ok: true, value: undefined };
-export const notApplicable = (command: string) => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
-
 /**
  * blockId 블록을 NodeSelection으로 선택한다 — 비포장 atom 블록(divider)은
  * 캐럿(TextSelection)을 둘 안쪽이 없어 이 방식으로만 선택할 수 있다. 04b

@@ -45,8 +45,8 @@ describe("setBlockType heading level 4-6", () => {
       expect(
         editor.commands.setBlockType("block-1", { type: "heading", level }),
       ).toEqual({ ok: true, value: undefined });
-      // setBlockType은 targetPosition + 1(변환된 블록의 콘텐츠 시작)에 캐럿을
-      // 둔다 — 문서·selection·storedMarks·Tiptap doc을 한 번에 고정한다.
+      // 변환 전 콘텐츠 시작의 캐럿을 setBlockType 뒤에도 보존한다.
+      // 문서·selection·storedMarks·Tiptap doc을 한 번에 고정한다.
       // tiptapDocument는 PM doc JSON 전체가 아니라 heading 노드의 attrs.level만
       // 부분 매칭(objectContaining)으로 확인한다 — 자기 자신과 비교하는 공허
       // 단언을 피한다.
