@@ -1,6 +1,6 @@
 import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 import { GripVertical, Plus } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
@@ -294,6 +294,38 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     onOutsideDismiss: dismissBlockMenu,
     onEscapeDismiss: closeBlockMenu,
   });
+
+  useEffect(() => {
+    if (element === null) return;
+    const ownerWindow = element.ownerDocument.defaultView;
+    if (ownerWindow === null) return;
+
+    const refreshBlockMenuGeometry = () => {
+      setBlockMenuState((current) => {
+        if (current === null) return null;
+        const blockElement = findElementByAttribute(
+          element,
+          null,
+          "data-be-block-id",
+          current.blockId,
+        );
+        if (blockElement === null) return current;
+        const rect = blockElement.getBoundingClientRect();
+        const left = rect.left;
+        const top = rect.top + 28;
+        return current.left === left && current.top === top
+          ? current
+          : { ...current, left, top };
+      });
+    };
+
+    ownerWindow.addEventListener("scroll", refreshBlockMenuGeometry, true);
+    ownerWindow.addEventListener("resize", refreshBlockMenuGeometry);
+    return () => {
+      ownerWindow.removeEventListener("scroll", refreshBlockMenuGeometry, true);
+      ownerWindow.removeEventListener("resize", refreshBlockMenuGeometry);
+    };
+  }, [element]);
 
   const hoverBounds = (() => {
     if (hoverBlockId === null || element === null) return null;

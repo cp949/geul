@@ -4,7 +4,10 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
+import {
+  CLAMP_BOUNDARY_MIN_MARGIN_PX,
+  expectOverlayWithinViewport,
+} from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 import { trackPageErrors, uuidV4Pattern } from "./support/ids.js";
 
@@ -159,6 +162,27 @@ test("블록 메뉴 바깥을 클릭하면 클릭한 컨트롤에 초점을 유�
   await expect(saveButton).toBeFocused();
 });
 
+test("Turn into의 번호 목록을 클릭하면 내용을 보존하고 메뉴를 닫는다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("보존할 내용");
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Numbered List" }).click();
+
+  await expect(menu).toHaveCount(0);
+  const listItem = editable.locator("[data-be-list-marker]").first();
+  await expect(listItem).toHaveAttribute("data-be-list-marker", "1.");
+  await expect(listItem).toContainText("보존할 내용");
+  await expect(editable).toBeFocused();
+});
+
 test("좁은 뷰포트에서도 드래그 핸들이 화면 안에서 클릭 가능하다 (PIT-0011)", async ({
   page,
 }) => {
@@ -216,6 +240,59 @@ test("문서 하단 블록에서 메뉴를 열어도 Delete 항목까지 뷰포�
   // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오).
   await menu.getByRole("menuitem", { name: "Delete" }).click();
   await expect(editable.locator("p").last()).not.toHaveText("line 24");
+});
+
+test("스크롤·뷰포트 변경 후 블록 메뉴가 블록을 따르고 마지막 목록 항목을 클릭한다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const blocks = Array.from({ length: 31 }, (_, index) => ({
+    id: `block-menu-${index}`,
+    type: "paragraph",
+    content: [{ text: `line ${index}` }],
+  }));
+  await page
+    .getByLabel("Document source")
+    .fill(JSON.stringify({ formatVersion: 1, revision: 0, blocks }));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const target = editable.locator('[data-be-block-id="block-menu-15"] > p');
+  await target.evaluate((element) =>
+    element.scrollIntoView({ block: "center" }),
+  );
+  await page.evaluate(() => {
+    const target = document.querySelector<HTMLElement>(
+      '[data-be-block-id="block-menu-15"] > p',
+    );
+    if (target === null) throw new Error("Block menu target was not found");
+    window.scrollBy(0, target.getBoundingClientRect().y - 100);
+  });
+  await target.hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  await page.evaluate(() => window.scrollBy(0, 80));
+
+  await expect
+    .poll(async () => {
+      const targetBox = await target.boundingBox();
+      const menuBox = await menu.boundingBox();
+      if (targetBox === null || menuBox === null) {
+        return Number.POSITIVE_INFINITY;
+      }
+      return Math.abs(menuBox.y - (targetBox.y + 28));
+    })
+    .toBeLessThan(24);
+
+  await page.setViewportSize({ width: 320, height: 300 });
+  await expectOverlayWithinViewport(menu, page);
+  await menu.getByRole("menuitem", { name: "Numbered List" }).click();
+
+  await expect(
+    editable.locator('[data-be-block-id="block-menu-15"]'),
+  ).toHaveAttribute("data-be-list-marker", "1.");
+  await expect(editable).toBeFocused();
 });
 
 test("메뉴보다 짧은 뷰포트에서도 블록 메뉴 맨 아래 Delete 항목을 클릭할 수 있다 (PIT-0011)", async ({

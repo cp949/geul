@@ -4,7 +4,10 @@
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
+import {
+  CLAMP_BOUNDARY_MIN_MARGIN_PX,
+  expectOverlayWithinViewport,
+} from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
 
@@ -191,6 +194,14 @@ test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
       );
     })
     .toBeLessThan(24);
+
+  await page.setViewportSize({ width: 320, height: 200 });
+  await expectOverlayWithinViewport(
+    page.getByRole("toolbar", { name: "Formatting" }),
+    page,
+  );
+  await page.getByRole("button", { name: "Inline code" }).click();
+  await expect(editable.locator("code").last()).toHaveText("line 11");
 });
 
 test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체가 화면 안에 남는다 (PIT-0011)", async ({
@@ -244,6 +255,29 @@ test("선택이 뷰포트 좌상단 모서리에 붙어도 서식 툴바 전체�
   // 옮긴 뒤에도 선택을 잃지 않고 mark가 적용되는지 확인하는 용도다.
   await page.getByRole("button", { name: "Bold" }).click();
   await expect(editable.locator("strong")).toHaveText("first line");
+});
+
+test("실제 범위 선택을 글머리 목록으로 바꾸면 현재 옵션과 목록 DOM을 갱신한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("선택한 목록 내용");
+
+  await selectBlockTextAndNotify(editable.locator("p").first(), "List source");
+
+  const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  const blockTypeSelect = page.getByRole("combobox", { name: "Block type" });
+  await expect(toolbar).toBeVisible();
+  await expect(blockTypeSelect).toHaveValue("paragraph");
+
+  await blockTypeSelect.selectOption("bullet-list");
+
+  await expect(toolbar).toBeVisible();
+  await expect(blockTypeSelect).toHaveValue("bullet-list");
+  const listItem = editable.locator("[data-be-list-marker]").first();
+  await expect(listItem).toHaveAttribute("data-be-list-marker", "•");
+  await expect(listItem).toContainText("선택한 목록 내용");
 });
 
 test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 들여쓰여 렌더링되고 undo 1회로 복원된다 (DELTA-05)", async ({

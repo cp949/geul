@@ -16,6 +16,7 @@
  */
 
 import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SlashMenu } from "../src/index.js";
@@ -109,6 +110,49 @@ const typeIntoBlock = (
 /** 현재 문서의 블록 id 목록. 재정렬·삽입 결과를 순서까지 이 목록으로 본다. */
 const blockIdsOf = (rendered: MountedBlockEditor) =>
   rendered.editor.getDocument().blocks.map((block) => block.id);
+
+/**
+ * selectionchange와 같은 React batch에서 다시 렌더된 뒤 layout effect로 Escape를
+ * 보낸다. SlashMenu의 menu DOM commit 뒤 active passive effect 전 event seam이다.
+ */
+const EscapeOnSlashMenuCommit = ({
+  onEscapeDispatched,
+}: {
+  onEscapeDispatched: () => void;
+}) => {
+  const [selectionVersion, setSelectionVersion] = useState(0);
+  const hasDispatchedRef = useRef(false);
+
+  useEffect(() => {
+    const handleSelectionChange = () =>
+      setSelectionVersion((current) => current + 1);
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () =>
+      document.removeEventListener("selectionchange", handleSelectionChange);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (selectionVersion === 0 || hasDispatchedRef.current) return;
+    const menu = document.querySelector(
+      '[role="listbox"][aria-label="Slash menu"]',
+    );
+    const editable = document.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (menu === null || editable === null) return;
+    hasDispatchedRef.current = true;
+    editable.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Escape",
+      }),
+    );
+    onEscapeDispatched();
+  }, [onEscapeDispatched, selectionVersion]);
+
+  return null;
+};
 
 describe("SlashMenu 질의 팝업", () => {
   it("캐럿이 블록 안에 없으면 렌더링하지 않는다", () => {
@@ -466,6 +510,29 @@ describe("SlashMenu 질의 팝업", () => {
     fireEvent.keyDown(rendered.host, { key: "Escape" });
 
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("메뉴 DOM이 commit된 직후 Escape를 누르면 effect 등록 전에도 닫히고 편집기 초점을 유지한다", async () => {
+    let resolveEscape!: () => void;
+    const escapeDispatched = new Promise<void>((resolve) => {
+      resolveEscape = resolve;
+    });
+    const rendered = mountBlockEditor({
+      children: (
+        <>
+          <EscapeOnSlashMenuCommit onEscapeDispatched={resolveEscape} />
+          <SlashMenu />
+        </>
+      ),
+    });
+    rendered.editable.focus();
+    expect(document.activeElement).toBe(rendered.editable);
+
+    typeIntoBlock(rendered, 0, "/");
+    await escapeDispatched;
+
+    expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
   });
 });
 

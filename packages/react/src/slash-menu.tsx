@@ -10,8 +10,13 @@ import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+
+const SLASH_MENU_DISMISS_ALLOW_SELECTORS = [".geul-slash-menu"] as const;
+// Escape는 effect 등록 race가 없는 상시 element keydown listener가 소유한다.
+const IGNORE_ESCAPE_DISMISS = () => {};
 
 const parseSlashQuery = (text: string): string | null => {
   const match = /^\/(\S*)$/.exec(text);
@@ -138,6 +143,19 @@ export const SlashMenu = () => {
   const dismissedQueryRef = useRef<{ blockId: string; text: string } | null>(
     null,
   );
+  const dismissMenu = useCallback(() => {
+    const context = editor.getCaretBlockContext();
+    dismissedQueryRef.current =
+      context === null
+        ? null
+        : { blockId: context.blockId, text: context.text };
+    explicitOpenBlockIdRef.current = null;
+    setMenuState(null);
+  }, [editor]);
+  const dismissMenuAndFocusEditor = useCallback(() => {
+    dismissMenu();
+    focusEditor();
+  }, [dismissMenu, focusEditor]);
 
   const openMenuAt = (
     blockId: string,
@@ -220,12 +238,17 @@ export const SlashMenu = () => {
     };
 
     const ownerDocument = element?.ownerDocument;
+    const ownerWindow = ownerDocument?.defaultView;
     ownerDocument?.addEventListener("selectionchange", updateFromCaret);
     ownerDocument?.addEventListener("input", updateFromCaret);
+    ownerWindow?.addEventListener("scroll", updateFromCaret, true);
+    ownerWindow?.addEventListener("resize", updateFromCaret);
     updateFromCaret();
     return () => {
       ownerDocument?.removeEventListener("selectionchange", updateFromCaret);
       ownerDocument?.removeEventListener("input", updateFromCaret);
+      ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
+      ownerWindow?.removeEventListener("resize", updateFromCaret);
     };
   }, [editor, element]);
 
@@ -261,6 +284,14 @@ export const SlashMenu = () => {
     [editor, focusEditor],
   );
 
+  useDismissOnOutsideOrEscape({
+    active: menuState !== null,
+    element,
+    allowSelectors: SLASH_MENU_DISMISS_ALLOW_SELECTORS,
+    onOutsideDismiss: dismissMenu,
+    onEscapeDismiss: IGNORE_ESCAPE_DISMISS,
+  });
+
   useEffect(() => {
     if (element === null) return;
 
@@ -270,13 +301,7 @@ export const SlashMenu = () => {
 
       if (event.key === "Escape") {
         event.preventDefault();
-        const context = editor.getCaretBlockContext();
-        dismissedQueryRef.current =
-          context === null
-            ? null
-            : { blockId: context.blockId, text: context.text };
-        explicitOpenBlockIdRef.current = null;
-        setMenuState(null);
+        dismissMenuAndFocusEditor();
         return;
       }
       if (event.key === "ArrowDown") {
@@ -327,7 +352,7 @@ export const SlashMenu = () => {
 
     element.addEventListener("keydown", handleKeyDown, true);
     return () => element.removeEventListener("keydown", handleKeyDown, true);
-  }, [editor, element, selectItem]);
+  }, [dismissMenuAndFocusEditor, element, selectItem]);
 
   return (
     <>

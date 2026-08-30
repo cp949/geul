@@ -4,7 +4,10 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
+import {
+  CLAMP_BOUNDARY_MIN_MARGIN_PX,
+  expectOverlayWithinViewport,
+} from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 
 test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다 @core", async ({
@@ -58,6 +61,31 @@ test("키보드만으로 메뉴 항목을 이동하고 선택한다", async ({ p
   await expect(editable.locator("h1")).toHaveCount(1);
 });
 
+test("글머리 목록 항목을 클릭하면 실제 목록으로 바꾸고 편집기 초점을 복구한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/bullet");
+  await expect(menu).toBeVisible();
+
+  await menu.getByRole("option", { name: /Bulleted List/ }).click();
+
+  await expect(menu).toHaveCount(0);
+  const listItem = editable.locator("[data-be-list-marker]").first();
+  await expect(listItem).toHaveAttribute("data-be-list-marker", "•");
+  await expect(listItem.locator("[data-be-bullet-list-item]")).toHaveAttribute(
+    "data-placeholder",
+    "List item",
+  );
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.type("첫 목록");
+  await expect(listItem).toContainText("첫 목록");
+});
+
 test("Escape로 메뉴를 닫으면 블록은 그대로 둔다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const menu = page.getByRole("listbox", { name: "Slash menu" });
@@ -70,6 +98,24 @@ test("Escape로 메뉴를 닫으면 블록은 그대로 둔다", async ({ page }
 
   await expect(menu).not.toBeVisible();
   await expect(editable.locator("p")).toHaveText("/head");
+  await expect(editable).toBeFocused();
+});
+
+test("슬래시 메뉴 바깥을 클릭하면 메뉴를 닫고 클릭한 컨트롤로 초점을 옮긴다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/head");
+  await expect(menu).toBeVisible();
+
+  const saveButton = page.getByRole("button", { name: "Save JSON" });
+  await saveButton.click();
+
+  await expect(menu).toHaveCount(0);
+  await expect(saveButton).toBeFocused();
 });
 
 test("hover 시 나타나는 블록 추가 버튼으로 블록을 넣고 그 블록의 메뉴를 연다", async ({
@@ -154,4 +200,50 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Divider 항목까지 뷰
   await expect(menu.getByRole("option", { name: /Code/ })).toBeVisible();
   await menu.getByRole("option", { name: /Divider/ }).click();
   await expect(editable.locator("hr")).toBeVisible();
+});
+
+test("스크롤·뷰포트 변경 후 슬래시 메뉴가 caret을 따르고 마지막 목록 항목을 클릭한다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const blocks = Array.from({ length: 31 }, (_, index) => ({
+    id: `slash-${index}`,
+    type: "paragraph",
+    content: index === 15 ? [] : [{ text: `line ${index}` }],
+  }));
+  await page
+    .getByLabel("Document source")
+    .fill(JSON.stringify({ formatVersion: 1, revision: 0, blocks }));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const target = editable.locator('[data-be-block-id="slash-15"] > p');
+  await target.evaluate((element) =>
+    element.scrollIntoView({ block: "center" }),
+  );
+  await target.click();
+  await page.keyboard.type("/");
+
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  await expect(menu).toBeVisible();
+  await page.evaluate(() => window.scrollBy(0, 80));
+
+  await expect
+    .poll(async () => {
+      const caret = await page.evaluate(() =>
+        document.getSelection()?.getRangeAt(0).getBoundingClientRect().toJSON(),
+      );
+      const box = await menu.boundingBox();
+      if (caret === undefined || box === null) return Number.POSITIVE_INFINITY;
+      return Math.abs(box.y - caret.bottom);
+    })
+    .toBeLessThan(24);
+
+  await page.setViewportSize({ width: 320, height: 300 });
+  await expectOverlayWithinViewport(menu, page);
+  await menu.getByRole("option", { name: /Numbered List/ }).click();
+
+  await expect(
+    editable.locator("[data-be-list-marker]").first(),
+  ).toHaveAttribute("data-be-list-marker", "1.");
+  await expect(editable).toBeFocused();
 });

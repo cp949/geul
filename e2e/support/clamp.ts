@@ -2,6 +2,7 @@
  * 클램프 e2e(PIT-0011)가 뷰포트 경계를 확인할 때 쓰는 공통 여백 상수.
  * 스펙 파일마다 -4/-2/무허용(0)으로 갈라져 있던 값을 여기로 모은다(#44 항목 4).
  */
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * `useClampedMenuPosition`이 보장하는 뷰포트 여백(px) — 훅의
@@ -37,3 +38,26 @@ const CLAMP_BOUNDARY_TOLERANCE_PX = 4;
  */
 export const CLAMP_BOUNDARY_MIN_MARGIN_PX =
   CLAMP_VIEWPORT_MARGIN_PX - CLAMP_BOUNDARY_TOLERANCE_PX;
+
+/**
+ * fixed overlay가 비동기 측정 후 뷰포트 네 경계 안으로 수렴하는지 확인한다.
+ * ResizeObserver·React render 순서에 의존하지 않도록 최종 geometry를 poll한다.
+ */
+export const expectOverlayWithinViewport = async (
+  overlay: Locator,
+  page: Page,
+): Promise<void> => {
+  await expect
+    .poll(async () => {
+      const box = await overlay.boundingBox();
+      const viewport = page.viewportSize();
+      if (box === null || viewport === null) return false;
+      return (
+        box.x >= CLAMP_BOUNDARY_MIN_MARGIN_PX &&
+        box.y >= CLAMP_BOUNDARY_MIN_MARGIN_PX &&
+        box.x + box.width <= viewport.width - CLAMP_BOUNDARY_MIN_MARGIN_PX &&
+        box.y + box.height <= viewport.height - CLAMP_BOUNDARY_MIN_MARGIN_PX
+      );
+    })
+    .toBe(true);
+};

@@ -197,8 +197,11 @@ describe("CodeBlock 언어 combobox 표시와 선택", () => {
       ([type]) => type === "resize",
     );
 
-    expect(scrollListeners).toHaveLength(2);
-    expect(resizeListeners).toHaveLength(2);
+    // 이 fixture는 SlashMenu·BlockSideMenu 등 sibling overlay도 함께
+    // mount한다. listener 개수는 sibling 구성에 결합하지 않고, 실제로
+    // 등록된 owner window listener가 전부 같은 인자로 해제되는지만 본다.
+    expect(scrollListeners.length).toBeGreaterThan(0);
+    expect(resizeListeners.length).toBeGreaterThan(0);
     cleanup();
 
     for (const listener of [...scrollListeners, ...resizeListeners]) {
