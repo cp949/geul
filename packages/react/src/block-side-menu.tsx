@@ -1,9 +1,11 @@
+import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import {
   BLOCK_TYPE_OPTIONS,
   type BlockTypeOption,
+  getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
@@ -54,6 +56,54 @@ type BlockMenuState = {
 
 type BlockSideMenuProps = {
   onBlockAdded: (blockId: string) => void;
+};
+
+type StoredBlock = ReturnType<
+  EditorController["getDocument"]
+>["blocks"][number];
+
+// Turn into의 권위는 DOM 투영이 아니라 최신 저장 document다. blockId를
+// 안정 ID로 재귀 조회해 top-level·nested block이 같은 descriptor 경로를 쓴다.
+const findBlockTypeDescriptor = (
+  blocks: readonly StoredBlock[],
+  blockId: string,
+): BlockTypeDescriptor | null => {
+  for (const block of blocks) {
+    if (block.id === blockId) {
+      switch (block.type) {
+        case "paragraph":
+          return { type: "paragraph" };
+        case "heading":
+          return { type: "heading", level: block.level };
+        case "quote":
+          return { type: "quote" };
+        case "codeBlock":
+          return {
+            type: "codeBlock",
+            ...(block.language === undefined
+              ? {}
+              : { language: block.language }),
+          };
+        case "bulletListItem":
+          return { type: "bulletListItem" };
+        case "numberedListItem":
+          return {
+            type: "numberedListItem",
+            ...(block.startNumber === undefined
+              ? {}
+              : { startNumber: block.startNumber }),
+          };
+        case "divider":
+        case "table":
+          return null;
+      }
+    }
+    if ("children" in block && block.children !== undefined) {
+      const nested = findBlockTypeDescriptor(block.children, blockId);
+      if (nested !== null) return nested;
+    }
+  }
+  return null;
 };
 
 // usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
@@ -267,6 +317,14 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     blockMenuState?.left ?? 0,
     blockMenuState?.top ?? 0,
   );
+  const blockTypeOptions = (() => {
+    if (blockMenuState === null) return BLOCK_TYPE_OPTIONS;
+    const source = findBlockTypeDescriptor(
+      editor.getDocument().blocks,
+      blockMenuState.blockId,
+    );
+    return source === null ? [] : getBlockTypeOptionsForSource(source);
+  })();
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
@@ -332,7 +390,18 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
 
   const handleTurnInto = (item: BlockTypeOption) => {
     if (blockMenuState === null) return;
-    editor.commands.setBlockType(blockMenuState.blockId, item.blockType);
+    const source = findBlockTypeDescriptor(
+      editor.getDocument().blocks,
+      blockMenuState.blockId,
+    );
+    const isAllowed =
+      source !== null &&
+      getBlockTypeOptionsForSource(source).some(
+        (option) => option.id === item.id,
+      );
+    if (isAllowed) {
+      editor.commands.setBlockType(blockMenuState.blockId, item.blockType);
+    }
     closeBlockMenu();
   };
 
@@ -406,7 +475,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           style={blockMenuClamp.style}
         >
           <p className="geul-block-menu__label">Turn into</p>
-          {BLOCK_TYPE_OPTIONS.map((option) => (
+          {blockTypeOptions.map((option) => (
             <MenuItemButton
               className={blockMenuItemClassName}
               key={option.id}

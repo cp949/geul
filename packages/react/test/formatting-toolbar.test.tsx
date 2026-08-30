@@ -8,7 +8,14 @@
  * 무시(DELTA-05)도 이 파일이 검증한다.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import type { BlockTypeDescriptor } from "@cp949/geul-core";
 import { LucideProvider } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +35,7 @@ afterEach(cleanup);
 
 type SelectionBlockType = {
   blockId: string;
-  blockType: { type: "paragraph" } | { type: "heading"; level: 1 | 2 | 3 };
+  blockType: BlockTypeDescriptor;
 } | null;
 
 // indentBlock/outdentBlock의 Result 반환 타입을 성공/실패 양쪽 다 받도록
@@ -53,7 +60,10 @@ const fakeController = (
     blockId: "block-1",
     blockType: { type: "paragraph" },
   })),
-  setBlockType = vi.fn(() => ({ ok: true, value: undefined })),
+  setBlockType = vi.fn((...args: [string, BlockTypeDescriptor]) => {
+    void args;
+    return { ok: true as const, value: undefined };
+  }),
   indentBlock = vi.fn((): CommandResult => ({ ok: true, value: undefined })),
   outdentBlock = vi.fn((): CommandResult => ({ ok: true, value: undefined })),
   getBlockNestingActionState = vi.fn((): BlockNestingActionState => ({
@@ -229,6 +239,253 @@ describe("FormattingToolbar 서식 툴바", () => {
         }) as HTMLSelectElement
       ).value,
     ).toBe("heading-2");
+  });
+
+  it.each([
+    [
+      "CodeBlock",
+      { type: "codeBlock" },
+      [
+        "paragraph",
+        "heading-1",
+        "heading-2",
+        "heading-3",
+        "heading-4",
+        "heading-5",
+        "heading-6",
+        "quote",
+        "code",
+      ],
+    ],
+    [
+      "bulletListItem",
+      { type: "bulletListItem" },
+      [
+        "paragraph",
+        "heading-1",
+        "heading-2",
+        "heading-3",
+        "heading-4",
+        "heading-5",
+        "heading-6",
+        "quote",
+        "bullet-list",
+        "numbered-list",
+      ],
+    ],
+    [
+      "numberedListItem",
+      { type: "numberedListItem" },
+      [
+        "paragraph",
+        "heading-1",
+        "heading-2",
+        "heading-3",
+        "heading-4",
+        "heading-5",
+        "heading-6",
+        "quote",
+        "bullet-list",
+        "numbered-list",
+      ],
+    ],
+    [
+      "paragraph",
+      { type: "paragraph" },
+      [
+        "paragraph",
+        "heading-1",
+        "heading-2",
+        "heading-3",
+        "heading-4",
+        "heading-5",
+        "heading-6",
+        "quote",
+        "code",
+        "bullet-list",
+        "numbered-list",
+      ],
+    ],
+  ] as const)(
+    "%s source의 option ID와 순서를 고정한다",
+    (_title, blockType, expectedIds) => {
+      const controller = fakeController(
+        vi.fn(() => []),
+        vi.fn(() => ({ blockId: "block-1", blockType })),
+      );
+      render(
+        withProvider(
+          controller,
+          <>
+            <FormattingToolbar />
+            <EditorContent />
+          </>,
+        ),
+      );
+      const textNode = screen.getByRole("textbox", { name: "Editor" })
+        .firstChild?.firstChild;
+      if (!textNode) throw new Error("Text node was not rendered");
+      selectText(textNode, 0, 8);
+
+      const ids = Array.from(
+        (
+          screen.getByRole("combobox", {
+            name: "Block type",
+          }) as HTMLSelectElement
+        ).options,
+      ).map((option) => option.value);
+      expect(ids).toEqual(expectedIds);
+    },
+  );
+
+  it("명시 startNumber가 있는 numbered 목록도 numbered-list option을 선택한다", () => {
+    const controller = fakeController(
+      vi.fn(() => []),
+      vi.fn(() => ({
+        blockId: "block-1",
+        blockType: { type: "numberedListItem", startNumber: 42 },
+      })),
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Block type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("numbered-list");
+  });
+
+  it.each([
+    [
+      "paragraph",
+      "bullet-list",
+      { type: "paragraph" },
+      { type: "bulletListItem" },
+    ],
+    [
+      "paragraph",
+      "numbered-list",
+      { type: "paragraph" },
+      { type: "numberedListItem" },
+    ],
+    [
+      "bulletListItem",
+      "paragraph",
+      { type: "bulletListItem" },
+      { type: "paragraph" },
+    ],
+    [
+      "numberedListItem",
+      "heading-1",
+      { type: "numberedListItem" },
+      { type: "heading", level: 1 },
+    ],
+    ["bulletListItem", "quote", { type: "bulletListItem" }, { type: "quote" }],
+  ] as const)(
+    "%s에서 %s로 변환할 때 내용을 보존한다",
+    (_source, targetId, blockType, expectedType) => {
+      const setBlockType = vi.fn((...args: [string, BlockTypeDescriptor]) => {
+        void args;
+        return { ok: true as const, value: undefined };
+      });
+      const controller = fakeController(
+        vi.fn(() => []),
+        vi.fn(() => ({ blockId: "block-1", blockType })),
+        setBlockType,
+      );
+      render(
+        withProvider(
+          controller,
+          <>
+            <FormattingToolbar />
+            <EditorContent />
+          </>,
+        ),
+      );
+      const textNode = screen.getByRole("textbox", { name: "Editor" })
+        .firstChild?.firstChild;
+      if (!textNode) throw new Error("Text node was not rendered");
+      selectText(textNode, 0, 8);
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Block type" }), {
+        target: { value: targetId },
+      });
+
+      expect(setBlockType).toHaveBeenCalledWith("block-1", expectedType);
+      expect(setBlockType.mock.calls[0]).toHaveLength(2);
+    },
+  );
+
+  it("목록 변환은 내용을 지우지 않고 변환 후 descriptor를 다시 읽는다", () => {
+    let currentBlockType: BlockTypeDescriptor = { type: "paragraph" };
+    const getSelectionBlockType = vi.fn(() => ({
+      blockId: "block-1",
+      blockType: currentBlockType,
+    }));
+    const setBlockType = vi.fn(
+      (_blockId: string, blockType: BlockTypeDescriptor) => {
+        currentBlockType = blockType;
+        return { ok: true as const, value: undefined };
+      },
+    );
+    const controller = fakeController(
+      vi.fn(() => []),
+      getSelectionBlockType,
+      setBlockType,
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Block type" }), {
+      target: { value: "bullet-list" },
+    });
+
+    expect(setBlockType).toHaveBeenCalledWith("block-1", {
+      type: "bulletListItem",
+    });
+    expect(setBlockType.mock.calls[0]).toHaveLength(2);
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Block type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("bullet-list");
+
+    currentBlockType = { type: "paragraph" };
+    act(() => document.dispatchEvent(new Event("selectionchange")));
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Block type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("paragraph");
   });
 
   it("블록 종류 select를 바꾸면 setBlockType을 호출한다", () => {

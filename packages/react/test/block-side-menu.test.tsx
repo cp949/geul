@@ -175,6 +175,154 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(document.activeElement).toBe(rendered.editable);
   });
 
+  it("Turn into는 최신 top-level·nested block source에 공용 Code/list filter를 적용한다", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["code-source", "parent", "nested-list"],
+    });
+    const codeResult = rendered.editor.commands.setBlockType("code-source", {
+      type: "codeBlock",
+    });
+    const listResult = rendered.editor.commands.setBlockType("nested-list", {
+      type: "bulletListItem",
+    });
+    const indentResult = rendered.editor.commands.indentBlock("nested-list");
+    if (!codeResult.ok || !listResult.ok || !indentResult.ok) {
+      throw new Error("Turn into source fixture 준비 실패");
+    }
+    const blocks = rendered.restubGeometry();
+    const codeBlock = blocks.find(
+      (block) => block.getAttribute("data-be-block-id") === "code-source",
+    );
+    const nestedList = blocks.find(
+      (block) => block.getAttribute("data-be-block-id") === "nested-list",
+    );
+    if (codeBlock === undefined || nestedList === undefined) {
+      throw new Error("top-level·nested block 요소를 찾지 못했다");
+    }
+
+    fireEvent.pointerMove(codeBlock);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.getByRole("menuitem", { name: "Code" })).toBeTruthy();
+    expect(
+      screen.queryByRole("menuitem", { name: "Bulleted List" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Numbered List" }),
+    ).toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerMove(nestedList);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.queryByRole("menuitem", { name: "Code" })).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "Bulleted List" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("menuitem", { name: "Numbered List" }),
+    ).toBeTruthy();
+  });
+
+  it("열린 뒤 source가 바뀐 Turn into는 click 시점 최신 문맥에서 무효 option 실행을 막는다", () => {
+    const rendered = openBlockMenu();
+    const before = rendered.editor.getDocument().blocks[0];
+    if (before?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(screen.getByRole("menuitem", { name: "Code" })).toBeTruthy();
+
+    const changed = rendered.editor.commands.setBlockType(before.id, {
+      type: "bulletListItem",
+    });
+    if (!changed.ok) throw new Error("외부 source 변경 fixture 준비 실패");
+    const setBlockType = vi.spyOn(rendered.editor.commands, "setBlockType");
+    const staleOption = screen.getByRole("menuitem", { name: "Code" });
+
+    fireEvent.pointerDown(staleOption);
+    fireEvent.mouseDown(staleOption);
+    fireEvent.click(staleOption);
+
+    expect(setBlockType).not.toHaveBeenCalled();
+    const after = rendered.editor.getDocument().blocks[0];
+    if (after?.type !== "bulletListItem") {
+      throw new Error("무효 Code option이 source를 변경했다");
+    }
+    expect(after.id).toBe(before.id);
+    expect(after.content).toEqual(before.content);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it.each([
+    {
+      source: "paragraph" as const,
+      label: "Bulleted List",
+      expectedType: "bulletListItem",
+    },
+    {
+      source: "paragraph" as const,
+      label: "Numbered List",
+      expectedType: "numberedListItem",
+    },
+    {
+      source: "bulletListItem" as const,
+      label: "Text",
+      expectedType: "paragraph",
+    },
+    {
+      source: "numberedListItem" as const,
+      label: "Text",
+      expectedType: "paragraph",
+    },
+    {
+      source: "bulletListItem" as const,
+      label: "Heading 2",
+      expectedType: "heading",
+    },
+    {
+      source: "numberedListItem" as const,
+      label: "Quote",
+      expectedType: "quote",
+    },
+  ])(
+    "$source에서 $label 선택은 pointerdown→click 동안 content·ID를 보존하고 메뉴를 닫는다",
+    ({ source, label, expectedType }) => {
+      const rendered = renderBlockMenu();
+      if (source !== "paragraph") {
+        const prepared = rendered.editor.commands.setBlockType("block-1", {
+          type: source,
+        });
+        if (!prepared.ok) throw new Error("목록 source fixture 준비 실패");
+      }
+      const [blockElement] = rendered.restubGeometry();
+      if (blockElement === undefined) throw new Error("블록 요소가 없다");
+      const before = rendered.editor.getDocument().blocks[0];
+      if (before === undefined || !("content" in before)) {
+        throw new Error("텍스트 source 블록이 아니다");
+      }
+      rendered.editable.focus();
+      fireEvent.pointerMove(blockElement);
+      fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+      const option = screen.getByRole("menuitem", { name: label });
+
+      fireEvent.pointerDown(option);
+      fireEvent.mouseDown(option);
+
+      expect(document.activeElement).toBe(rendered.editable);
+
+      fireEvent.click(option);
+
+      const after = rendered.editor.getDocument().blocks[0];
+      if (after === undefined || !("content" in after)) {
+        throw new Error("변환된 텍스트 블록이 아니다");
+      }
+      expect(after.type).toBe(expectedType);
+      expect(after.id).toBe(before.id);
+      expect(after.content).toEqual(before.content);
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    },
+  );
+
   it("Code 종류 변경은 id와 source를 보존하고 mark를 제거하며 text 언어를 적용한다", () => {
     const rendered = renderBlockMenu();
     const paragraph = rendered.host.querySelector("p");

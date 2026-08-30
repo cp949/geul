@@ -8,11 +8,17 @@ import {
   Strikethrough,
   Underline,
 } from "lucide-react";
-import { type ReactElement, useEffect, useRef, useState } from "react";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
-  BLOCK_TYPE_OPTIONS,
   blockTypeToOptionId,
+  getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
@@ -107,44 +113,44 @@ export const FormattingToolbar = () => {
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const trackedRange = useRef<Range | null>(null);
 
-  useEffect(() => {
-    const updateFromSelection = () => {
-      const selection = element?.ownerDocument.getSelection();
-      if (
-        element === null ||
-        selection === undefined ||
-        selection === null ||
-        selection.rangeCount === 0 ||
-        selection.isCollapsed ||
-        selection.anchorNode === null ||
-        selection.focusNode === null ||
-        !element.contains(selection.anchorNode) ||
-        !element.contains(selection.focusNode)
-      ) {
-        setToolbarState(null);
-        return;
-      }
+  const updateFromSelection = useCallback(() => {
+    const selection = element?.ownerDocument.getSelection();
+    if (
+      element === null ||
+      selection === undefined ||
+      selection === null ||
+      selection.rangeCount === 0 ||
+      selection.isCollapsed ||
+      selection.anchorNode === null ||
+      selection.focusNode === null ||
+      !element.contains(selection.anchorNode) ||
+      !element.contains(selection.focusNode)
+    ) {
+      setToolbarState(null);
+      return;
+    }
 
-      const range = selection.getRangeAt(0);
-      trackedRange.current = range.cloneRange();
-      const bounds = range.getBoundingClientRect?.() ?? {
-        left: 0,
-        top: 0,
-        width: 0,
-      };
-      const blockSelection = editor.getSelectionBlockType();
-      setToolbarState({
-        activeMarks: editor.getSelectionMarks(),
-        blockSelection,
-        nestingActions:
-          blockSelection === null
-            ? null
-            : editor.getBlockNestingActionState(blockSelection.blockId),
-        left: bounds.left + bounds.width / 2,
-        top: bounds.top,
-      });
+    const range = selection.getRangeAt(0);
+    trackedRange.current = range.cloneRange();
+    const bounds = range.getBoundingClientRect?.() ?? {
+      left: 0,
+      top: 0,
+      width: 0,
     };
+    const blockSelection = editor.getSelectionBlockType();
+    setToolbarState({
+      activeMarks: editor.getSelectionMarks(),
+      blockSelection,
+      nestingActions:
+        blockSelection === null
+          ? null
+          : editor.getBlockNestingActionState(blockSelection.blockId),
+      left: bounds.left + bounds.width / 2,
+      top: bounds.top,
+    });
+  }, [editor, element]);
 
+  useEffect(() => {
     const ownerDocument = element?.ownerDocument;
     const ownerWindow = ownerDocument?.defaultView;
     ownerDocument?.addEventListener("selectionchange", updateFromSelection);
@@ -163,7 +169,7 @@ export const FormattingToolbar = () => {
       ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
       ownerWindow?.removeEventListener("resize", updateFromSelection);
     };
-  }, [editor, element]);
+  }, [element, updateFromSelection]);
 
   const { menuRef, style } = useClampedMenuPosition(
     toolbarState?.left ?? 0,
@@ -188,7 +194,10 @@ export const FormattingToolbar = () => {
           onChange={(event) => {
             const blockSelection = toolbarState.blockSelection;
             if (blockSelection === null) return;
-            const option = BLOCK_TYPE_OPTIONS.find(
+            const options = getBlockTypeOptionsForSource(
+              blockSelection.blockType,
+            );
+            const option = options.find(
               (candidate) => candidate.id === event.currentTarget.value,
             );
             if (option === undefined) return;
@@ -196,28 +205,14 @@ export const FormattingToolbar = () => {
               blockSelection.blockId,
               option.blockType,
             );
-            setToolbarState((current) =>
-              current === null
-                ? null
-                : (() => {
-                    const nextBlockSelection = editor.getSelectionBlockType();
-                    return {
-                      ...current,
-                      blockSelection: nextBlockSelection,
-                      nestingActions:
-                        nextBlockSelection === null
-                          ? null
-                          : editor.getBlockNestingActionState(
-                              nextBlockSelection.blockId,
-                            ),
-                    };
-                  })(),
-            );
+            updateFromSelection();
           }}
           onMouseDown={(event) => event.preventDefault()}
           value={blockTypeToOptionId(toolbarState.blockSelection.blockType)}
         >
-          {BLOCK_TYPE_OPTIONS.map((option) => (
+          {getBlockTypeOptionsForSource(
+            toolbarState.blockSelection.blockType,
+          ).map((option) => (
             <option key={option.id} value={option.id}>
               {option.label}
             </option>
