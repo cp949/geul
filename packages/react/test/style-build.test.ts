@@ -50,6 +50,33 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).toContain("content: attr(data-placeholder);");
   });
 
+  it("목록 marker를 blockContainer 앞에 그리고 콘텐츠 placeholder와 중첩 padding을 함께 컴파일한다", () => {
+    const css = compileCss();
+    const markerLayout =
+      /\.geul-editor \[data-be-list-marker\] \{(?<body>[^}]*)\}/.exec(css)
+        ?.groups?.body;
+    const marker =
+      /\.geul-editor \[data-be-list-marker\]::before \{(?<body>[^}]*)\}/.exec(
+        css,
+      )?.groups?.body;
+
+    expect(markerLayout).toContain("display: grid;");
+    expect(markerLayout).toContain(
+      "grid-template-columns: max-content minmax(0, 1fr);",
+    );
+    expect(markerLayout).toContain("column-gap: 0.5rem;");
+    expect(marker).toContain("content: attr(data-be-list-marker);");
+    expect(marker).toContain("grid-column: 1;");
+    expect(marker).toContain("grid-row: 1;");
+    expect(marker).not.toContain("position: absolute;");
+    expect(css).toContain("[data-be-list-marker] > [data-be-block-group]");
+    expect(css).toContain("grid-column: 2;");
+    expect(css).toContain("grid-row: 2;");
+    expect(css).toContain("[data-placeholder]::before");
+    expect(css).toContain("[data-be-block-group] {");
+    expect(css).toContain("padding-left: 1.5rem;");
+  });
+
   it("CodeBlock을 plain monospace와 가로 overflow가 있는 코드 영역으로 컴파일한다", () => {
     const css = compileCss();
     const rule = /\.geul-editor \[data-be-code-block\] \{(?<body>[^}]*)\}/.exec(

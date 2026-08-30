@@ -11,6 +11,7 @@ const PARAGRAPH_PLACEHOLDER = "Enter text or type '/' for commands";
 // 타입 힌트가 없으면 무엇인지 알 수 없다(Issue #38 슬라이스 3).
 const QUOTE_PLACEHOLDER = "Quote";
 const CODE_PLACEHOLDER = "Code";
+const LIST_ITEM_PLACEHOLDER = "List item";
 
 // 빈 paragraph는 캐럿(selection anchor)이 그 블록 안에 있을 때만, 빈
 // heading·quote·codeBlock은 상시 data-placeholder 노드 데코레이션을 받는다(R-3). 빈
@@ -31,7 +32,9 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
       typeName !== "paragraph" &&
       typeName !== "heading" &&
       typeName !== "quote" &&
-      typeName !== "codeBlock"
+      typeName !== "codeBlock" &&
+      typeName !== "bulletListItem" &&
+      typeName !== "numberedListItem"
     ) {
       return true;
     }
@@ -44,9 +47,11 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
           ? QUOTE_PLACEHOLDER
           : typeName === "codeBlock"
             ? CODE_PLACEHOLDER
-            : anchor === position + 1
-              ? PARAGRAPH_PLACEHOLDER
-              : null;
+            : typeName === "bulletListItem" || typeName === "numberedListItem"
+              ? LIST_ITEM_PLACEHOLDER
+              : anchor === position + 1
+                ? PARAGRAPH_PLACEHOLDER
+                : null;
     if (text !== null) {
       decorations.push(
         Decoration.node(position, position + node.nodeSize, {

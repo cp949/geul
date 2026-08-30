@@ -102,6 +102,40 @@
     pointer-events: none;
   }
 
+  // marker는 목록 content node가 아니라 blockContainer decoration에 붙는다.
+  // max-content marker track이 startNumber 상한(999999999)까지 실제 문구 폭을
+  // 확보하고 content는 남은 폭을 쓴다. content의 [data-placeholder]::before와
+  // 서로 다른 pseudo-element라 빈 항목에서도 marker와 `List item`을 동시에
+  // 표시한다. blockGroup은 content 열의 다음 행에서 기존 재귀 padding을 더한다.
+  [data-be-list-marker] {
+    position: relative;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 0.5rem;
+  }
+
+  [data-be-list-marker]::before {
+    content: attr(data-be-list-marker);
+    grid-column: 1;
+    grid-row: 1;
+    text-align: right;
+    pointer-events: none;
+  }
+
+  [data-be-list-marker] > [data-be-bullet-list-item],
+  [data-be-list-marker] > [data-be-numbered-list-item] {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  [data-be-list-marker] > [data-be-block-group] {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+  }
+
   // 자식 블록 목록 wrapper(block-container-extension.ts의
   // BlockGroupExtension이 렌더링하는 [data-be-block-group])에 좌측 padding을
   // 준다. blockContainer 스키마가 자식 blockGroup을 구조적으로 자기 안에

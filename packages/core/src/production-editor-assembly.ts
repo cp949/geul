@@ -15,6 +15,7 @@ import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.j
 import { DividerExtension } from "./divider-extension.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
+import { ListPresentationExtension } from "./list-presentation-extension.js";
 import {
   BulletListItemExtension,
   NumberedListItemExtension,
@@ -151,6 +152,7 @@ export const createProductionEditor = (options: {
         createId: options.createId,
       }),
       IndentKeyboardExtension,
+      ListPresentationExtension,
       PlaceholderExtension,
       TrailingBlockExtension,
       TablePasteExtension.configure({
