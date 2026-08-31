@@ -1,3 +1,7 @@
+import {
+  isInlineContentBlockType,
+  isListItemBlockType,
+} from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
 import { Plugin } from "@tiptap/pm/state";
@@ -28,14 +32,7 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
     // 블록"이 아니다(대상 아님).
     if (node.type.name === "table") return false;
     const typeName = node.type.name;
-    if (
-      typeName !== "paragraph" &&
-      typeName !== "heading" &&
-      typeName !== "quote" &&
-      typeName !== "codeBlock" &&
-      typeName !== "bulletListItem" &&
-      typeName !== "numberedListItem"
-    ) {
+    if (!isInlineContentBlockType(typeName)) {
       return true;
     }
     if (node.content.size > 0) return false;
@@ -47,7 +44,7 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
           ? QUOTE_PLACEHOLDER
           : typeName === "codeBlock"
             ? CODE_PLACEHOLDER
-            : typeName === "bulletListItem" || typeName === "numberedListItem"
+            : isListItemBlockType(typeName)
               ? LIST_ITEM_PLACEHOLDER
               : anchor === position + 1
                 ? PARAGRAPH_PLACEHOLDER

@@ -1,5 +1,8 @@
 import {
   canonicalizeCodeBlockLanguage,
+  isInlineContentBlockType,
+  isListItemBlockType,
+  isNestableBlockType,
   isValidCodeBlockLanguage,
   isValidInlineText,
   parseDocument,
@@ -80,11 +83,7 @@ export const createGenericBlockCommands = (
     const targetPosition = target.position;
     const targetSize = target.node.content.size;
     if (
-      (target.node.type.name !== "paragraph" &&
-        target.node.type.name !== "heading" &&
-        target.node.type.name !== "quote" &&
-        target.node.type.name !== "bulletListItem" &&
-        target.node.type.name !== "numberedListItem") ||
+      !isNestableBlockType(target.node.type.name) ||
       !isValidInlineText(text) ||
       target.node.textContent === text
     ) {
@@ -160,14 +159,7 @@ export const createGenericBlockCommands = (
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
     const currentTypeName = target.node.type.name;
-    if (
-      currentTypeName !== "paragraph" &&
-      currentTypeName !== "heading" &&
-      currentTypeName !== "quote" &&
-      currentTypeName !== "bulletListItem" &&
-      currentTypeName !== "numberedListItem" &&
-      currentTypeName !== "codeBlock"
-    ) {
+    if (!isInlineContentBlockType(currentTypeName)) {
       return commandNotApplicable("setBlockType");
     }
     const currentLevel =
@@ -176,12 +168,8 @@ export const createGenericBlockCommands = (
         : null;
     const currentContentSize = target.node.content.size;
     const clearContent = options?.clearContent ?? false;
-    const currentIsList =
-      currentTypeName === "bulletListItem" ||
-      currentTypeName === "numberedListItem";
-    const targetIsList =
-      blockType.type === "bulletListItem" ||
-      blockType.type === "numberedListItem";
+    const currentIsList = isListItemBlockType(currentTypeName);
+    const targetIsList = isListItemBlockType(blockType.type);
     if (
       (currentTypeName === "codeBlock" && targetIsList) ||
       (currentIsList && blockType.type === "codeBlock")

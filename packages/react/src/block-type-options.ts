@@ -1,4 +1,8 @@
-import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
+import {
+  isListItemBlockType,
+  type BlockTypeDescriptor,
+  type EditorController,
+} from "@cp949/geul-core";
 
 type SetBlockTypeInput = Parameters<
   EditorController["commands"]["setBlockType"]
@@ -101,7 +105,7 @@ export const getBlockTypeOptionsForSource = (
       ({ id }) => id !== "bullet-list" && id !== "numbered-list",
     );
   }
-  if (source.type === "bulletListItem" || source.type === "numberedListItem") {
+  if (isListItemBlockType(source.type)) {
     return BLOCK_TYPE_OPTIONS.filter(({ id }) => id !== "code");
   }
   return BLOCK_TYPE_OPTIONS;

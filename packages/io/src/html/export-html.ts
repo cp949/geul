@@ -2,7 +2,10 @@ import {
   type Block,
   type CodeBlock,
   type Document,
+  type HeadingBlock,
+  isListItemBlockType,
   isSafeCodeBlockLanguageClassToken,
+  type ListItemBlock,
   parseDocument,
   type TableBlock,
 } from "@cp949/geul-model";
@@ -147,11 +150,6 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   ]);
 };
 
-type ListItemBlock = Extract<
-  Block,
-  { type: "bulletListItem" | "numberedListItem" }
->;
-
 const listItemNode = (block: ListItemBlock): HtmlElementNode =>
   htmlElement("li", { dataBeBlockId: block.id }, [
     ...(block.children === undefined || block.children.length === 0
@@ -180,16 +178,13 @@ const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
   const nodes: HtmlElementNode[] = [];
   for (let index = 0; index < blocks.length;) {
     const first = blocks[index];
-    if (
-      first?.type !== "bulletListItem" &&
-      first?.type !== "numberedListItem"
-    ) {
+    if (first === undefined || !isListItemBlockType(first.type)) {
       if (first !== undefined) nodes.push(blockNode(first));
       index += 1;
       continue;
     }
 
-    const items: ListItemBlock[] = [first];
+    const items: ListItemBlock[] = [first as ListItemBlock];
     let nextIndex = index + 1;
     while (nextIndex < blocks.length) {
       const next = blocks[nextIndex];
@@ -226,8 +221,8 @@ const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
 const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "codeBlock") return codeBlockNode(block);
-  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
-    return listNode([block]);
+  if (isListItemBlockType(block.type)) {
+    return listNode([block as ListItemBlock]);
   }
   // divider → <hr data-be-block-id>(spec §7.1). 콘텐츠·children 없는 void
   // 요소 하나다 — import-html.ts의 hr 세그먼트가 dataBeBlockId를 되읽는다.
@@ -258,7 +253,11 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   }
 
   // heading은 model HeadingBlock.level(1~6)을 그대로 h1~h6 태그명으로 쓴다.
-  const tagName = block.type === "paragraph" ? "p" : `h${block.level}`;
+  // isListItemBlockType(위)이 discriminated union인 block 자체는 좁히지
+  // 못해, table/codeBlock/목록/divider/quote를 모두 걸러낸 이 지점이
+  // paragraph 아니면 heading뿐이라는 것을 predicate 계약으로 명시한다.
+  const tagName =
+    block.type === "paragraph" ? "p" : `h${(block as HeadingBlock).level}`;
   const ownNode = htmlElement(
     tagName,
     { dataBeBlockId: block.id },

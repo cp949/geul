@@ -1,3 +1,4 @@
+import { isListItemBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node, type ResolvedPos } from "@tiptap/pm/model";
 import {
@@ -58,13 +59,7 @@ function caretContext(
   if (!selection.empty) return null;
   const { $from } = selection;
   const parentType = $from.parent.type.name;
-  if (
-    parentType !== "paragraph" &&
-    parentType !== "heading" &&
-    parentType !== "quote" &&
-    parentType !== "bulletListItem" &&
-    parentType !== "numberedListItem"
-  ) {
+  if (!isNestableBlockType(parentType)) {
     return null;
   }
   const containerDepth = $from.depth - 1;
@@ -74,8 +69,7 @@ function caretContext(
 }
 
 function isListItemContent(node: Node): boolean {
-  const name = node.type.name;
-  return name === "bulletListItem" || name === "numberedListItem";
+  return isListItemBlockType(node.type.name);
 }
 
 // DOM-derived selection이 해당 경계 밖이어도 live selection이 병합

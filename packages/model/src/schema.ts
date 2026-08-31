@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isNestableBlockType, type NestableBlockType } from "./block-kind.js";
 import { isCanonicalCellAlign } from "./cell-align.js";
 import { isCanonicalCellColor } from "./cell-color.js";
 import {
@@ -355,18 +356,19 @@ const validateBlocksAt = (
       continue;
     }
 
-    if (
-      block.type === "paragraph" ||
-      block.type === "heading" ||
-      block.type === "quote" ||
-      block.type === "bulletListItem" ||
-      block.type === "numberedListItem"
-    ) {
-      const content = validateContent(block.content, [...blockPath, "content"]);
+    if (isNestableBlockType(block.type)) {
+      // isNestableBlockType은 model 밖(core의 PM node.type.name 등)에서도
+      // 쓰는 문자열 predicate라 discriminated union인 block 자체는 좁히지
+      // 못한다 — 명시적으로 좁힌다.
+      const nestable = block as Extract<Block, { type: NestableBlockType }>;
+      const content = validateContent(nestable.content, [
+        ...blockPath,
+        "content",
+      ]);
       if (!content.ok) return content;
-      if (block.children !== undefined) {
+      if (nestable.children !== undefined) {
         const children = validateBlocksAt(
-          block.children,
+          nestable.children,
           [...blockPath, "children"],
           ids,
         );
@@ -375,7 +377,10 @@ const validateBlocksAt = (
       continue;
     }
 
-    for (const [columnIndex, column] of block.columns.entries()) {
+    // 위에서 divider/codeBlock/nestable을 모두 걸러냈으니 predicate 계약상
+    // 이 지점은 table뿐이다.
+    const table = block as TableBlock;
+    for (const [columnIndex, column] of table.columns.entries()) {
       const columnId = validateId(ids, column.id, [
         ...blockPath,
         "columns",
@@ -385,7 +390,7 @@ const validateBlocksAt = (
       if (!columnId.ok) return columnId;
     }
 
-    for (const [rowIndex, row] of block.rows.entries()) {
+    for (const [rowIndex, row] of table.rows.entries()) {
       const rowId = validateId(ids, row.id, [
         ...blockPath,
         "rows",
@@ -596,13 +601,7 @@ const findNestingDepthViolation = (
     // schema가 children을 허용하는 블록만 따라간다. table/divider/codeBlock과
     // 알 수 없는 판별자의 children은 strict shape 위반이므로 zod가 원래
     // DOCUMENT_INVALID path에서 판정해야 한다.
-    if (
-      type !== "paragraph" &&
-      type !== "heading" &&
-      type !== "quote" &&
-      type !== "bulletListItem" &&
-      type !== "numberedListItem"
-    ) {
+    if (typeof type !== "string" || !isNestableBlockType(type)) {
       continue;
     }
     // 빈 children 배열은 "자식 없음"이다 — 다른 층(validateBlocksAt,
@@ -648,15 +647,10 @@ const canonicalizeCodeBlockLanguages = (blocks: Block[]): void => {
       }
       continue;
     }
-    if (
-      (block.type === "paragraph" ||
-        block.type === "heading" ||
-        block.type === "quote" ||
-        block.type === "bulletListItem" ||
-        block.type === "numberedListItem") &&
-      block.children !== undefined
-    ) {
-      canonicalizeCodeBlockLanguages(block.children);
+    if (isNestableBlockType(block.type)) {
+      const children = (block as Extract<Block, { type: NestableBlockType }>)
+        .children;
+      if (children !== undefined) canonicalizeCodeBlockLanguages(children);
     }
   }
 };

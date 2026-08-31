@@ -2,6 +2,8 @@ import {
   type Block,
   type Document,
   type InlineContent,
+  isListItemBlockType,
+  type ListItemBlock,
   parseDocument,
   type TableBlock,
   type TextMark,
@@ -162,7 +164,7 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
-    if (block.type === "bulletListItem" || block.type === "numberedListItem") {
+    if (isListItemBlockType(block.type)) {
       const { children, ...ownBlock } = block;
       const flattenedChildren = flattenBlocks(children);
       const firstChild = flattenedChildren[0];
@@ -189,11 +191,6 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
 // 않도록 ampersand를 먼저 escape해 unknown language를 exact 보존한다.
 const codeBlockLanguage = (language: string): string =>
   language.replace(/&/g, "&amp;");
-
-type ListItemBlock = Extract<
-  Block,
-  { type: "bulletListItem" | "numberedListItem" }
->;
 
 const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
   const first = blocks[0];
@@ -237,16 +234,13 @@ const blockNodes = (blocks: Block[]): MarkdownOutputNode[] => {
   const nodes: MarkdownOutputNode[] = [];
   for (let index = 0; index < blocks.length;) {
     const first = blocks[index];
-    if (
-      first?.type !== "bulletListItem" &&
-      first?.type !== "numberedListItem"
-    ) {
+    if (first === undefined || !isListItemBlockType(first.type)) {
       if (first !== undefined) nodes.push(blockNode(first));
       index += 1;
       continue;
     }
 
-    const items: ListItemBlock[] = [first];
+    const items: ListItemBlock[] = [first as ListItemBlock];
     let nextIndex = index + 1;
     while (nextIndex < blocks.length) {
       const next = blocks[nextIndex];
@@ -277,8 +271,8 @@ const blockNode = (block: Block): MarkdownOutputNode => {
         : { lang: codeBlockLanguage(block.language) }),
     };
   }
-  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
-    return listNode([block]);
+  if (isListItemBlockType(block.type)) {
+    return listNode([block as ListItemBlock]);
   }
   if (block.type === "quote") {
     return {

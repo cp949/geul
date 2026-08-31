@@ -1,3 +1,13 @@
+export type {
+  InlineContentBlockType,
+  ListItemBlockType,
+  NestableBlockType,
+} from "./block-kind.js";
+export {
+  isInlineContentBlockType,
+  isListItemBlockType,
+  isNestableBlockType,
+} from "./block-kind.js";
 export { isCanonicalCellAlign } from "./cell-align.js";
 export { isCanonicalCellColor } from "./cell-color.js";
 export {
@@ -56,6 +66,7 @@ export type {
   HeadingBlock,
   IdFactory,
   InlineContent,
+  ListItemBlock,
   NumberedListItemBlock,
   ParagraphBlock,
   QuoteBlock,

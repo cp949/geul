@@ -73,5 +73,9 @@ export type Block =
   | CodeBlock
   | BulletListItemBlock
   | NumberedListItemBlock;
+// bulletListItem·numberedListItem만 뽑은 부분 유니온이다. io export가
+// 목록 형제를 묶어 <ul>/<ol> 또는 mdast list로 직렬화할 때 쓴다 — 세
+// 패키지(io/html, io/markdown)가 각자 선언하던 동명 타입을 model로 옮겼다.
+export type ListItemBlock = BulletListItemBlock | NumberedListItemBlock;
 export type Document = { formatVersion: 1; revision: number; blocks: Block[] };
 export type IdFactory = () => string;

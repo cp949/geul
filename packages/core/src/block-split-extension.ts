@@ -1,3 +1,4 @@
+import { isListItemBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
@@ -40,19 +41,11 @@ export const BlockSplitExtension = Extension.create({
 // empty paragraph exit의 별도 규칙을 받는다(spec §5.1). divider는
 // atom·콘텐츠 없음이라 대상이 아니다.
 function isSplittableContent(node: Node): boolean {
-  const name = node.type.name;
-  return (
-    name === "paragraph" ||
-    name === "heading" ||
-    name === "quote" ||
-    name === "bulletListItem" ||
-    name === "numberedListItem"
-  );
+  return isNestableBlockType(node.type.name);
 }
 
 function isListItemContent(node: Node): boolean {
-  const name = node.type.name;
-  return name === "bulletListItem" || name === "numberedListItem";
+  return isListItemBlockType(node.type.name);
 }
 
 // this.editor를 직접 받아 addKeyboardShortcuts 밖에서도 테스트 가능한

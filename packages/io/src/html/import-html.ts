@@ -1,10 +1,10 @@
 import {
-  type Block,
   appendOrMergeInlineItem,
   type Document,
   type HeadingBlock,
   type IdFactory,
   type InlineContent,
+  type ListItemBlock,
   MAX_NESTING_DEPTH,
   MAX_TABLE_COLUMNS,
   parseDocument,
@@ -746,11 +746,6 @@ const findChildrenWrapper = (
 
   return { ownNode, childrenNodes: containerNode.children };
 };
-
-type ListItemBlock = Extract<
-  Block,
-  { type: "bulletListItem" | "numberedListItem" }
->;
 
 // raw warning fact 중 sanitized 목록 변환이 실제로 소비해 보존한 속성 하나만
 // 제거한다. 전역 필터와 달리 blocksFromListElement에 도달하지 않은 standalone

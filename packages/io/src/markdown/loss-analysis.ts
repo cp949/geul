@@ -1,4 +1,9 @@
-import type { Block, Document, InlineContent } from "@cp949/geul-model";
+import {
+  isListItemBlockType,
+  type Block,
+  type Document,
+  type InlineContent,
+} from "@cp949/geul-model";
 
 import { computeColumnAlignments } from "./column-align.js";
 
@@ -138,13 +143,10 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   }
   if (block.children !== undefined && block.children.length > 0) {
     const hasAmbiguousLeadingParagraph =
-      (block.type === "bulletListItem" || block.type === "numberedListItem") &&
+      isListItemBlockType(block.type) &&
       block.content.length === 0 &&
       block.children[0]?.type === "paragraph";
-    if (
-      (block.type !== "bulletListItem" && block.type !== "numberedListItem") ||
-      hasAmbiguousLeadingParagraph
-    ) {
+    if (!isListItemBlockType(block.type) || hasAmbiguousLeadingParagraph) {
       losses.push({
         kind: "NESTED_CHILDREN",
         blockId: block.id,
