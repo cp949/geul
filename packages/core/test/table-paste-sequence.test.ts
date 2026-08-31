@@ -57,9 +57,7 @@ const numberedItemBlock = (
 ): ClipboardContentBlock => ({
   type: "numberedListItem",
   content: [{ text }],
-  ...(opts.startNumber !== undefined
-    ? { startNumber: opts.startNumber }
-    : {}),
+  ...(opts.startNumber !== undefined ? { startNumber: opts.startNumber } : {}),
   ...(opts.children !== undefined ? { children: opts.children } : {}),
 });
 

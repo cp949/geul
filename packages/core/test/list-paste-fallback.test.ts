@@ -5,7 +5,14 @@
  * quote-paste-fallback.test.ts와 같은 패턴(errors 이벤트 리스너로 미처리
  * 예외 감지)을 쓴다.
  */
-import { MAX_NESTING_DEPTH, type Block } from "@cp949/geul-model";
+import {
+  isInlineContentBlockType,
+  isNestableBlockType,
+  MAX_NESTING_DEPTH,
+  type Block,
+  type InlineContentBlockType,
+  type NestableBlockType,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
@@ -55,12 +62,17 @@ const buildListDepthChain = (depth: number): Block => {
   return innermost;
 };
 
-/** Document blocks 트리의 최대 절대 깊이(top-level=1)를 구한다. */
+/** Document blocks 트리의 최대 절대 깊이(top-level=1)를 구한다.
+ * isNestableBlockType은 discriminated union인 block 자체를 좁히지
+ * 못한다(model/src/schema.ts의 validateBlocksAt과 같은 이유) — 명시적으로
+ * 좁힌다. */
 const maxBlockDepth = (blocks: readonly Block[], depth = 1): number =>
   blocks.reduce((max, block) => {
+    if (!isNestableBlockType(block.type)) return Math.max(max, depth);
+    const nestable = block as Extract<Block, { type: NestableBlockType }>;
     const childDepth =
-      block.children !== undefined && block.children.length > 0
-        ? maxBlockDepth(block.children, depth + 1)
+      nestable.children !== undefined && nestable.children.length > 0
+        ? maxBlockDepth(nestable.children, depth + 1)
         : depth;
     return Math.max(max, childDepth);
   }, depth);
@@ -76,10 +88,7 @@ describe("PM 기본 붙여넣기 폴백의 외부 ul/ol", () => {
     tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
 
     withUnhandledErrorTracking((errors) => {
-      pasteHtml(
-        editable,
-        "<p>a</p><ul><li>x</li><li>y</li></ul><p>b</p>",
-      );
+      pasteHtml(editable, "<p>a</p><ul><li>x</li><li>y</li></ul><p>b</p>");
 
       const blocks = editor.getDocument().blocks;
       const items = blocks.filter((block) => block.type === "bulletListItem");
@@ -106,15 +115,42 @@ describe("PM 기본 붙여넣기 폴백의 외부 ul/ol", () => {
       pasteHtml(editable, '<ol start="5"><li>z</li><li>w</li></ol>');
 
       const blocks = editor.getDocument().blocks;
-      const items = blocks.filter(
-        (block) => block.type === "numberedListItem",
-      );
+      const items = blocks.filter((block) => block.type === "numberedListItem");
       expect(items).toHaveLength(2);
       expect(items[0]).toMatchObject({
         content: [{ text: "z" }],
         startNumber: 5,
       });
       expect(items[1]?.startNumber).toBeUndefined();
+
+      expect(errors).toEqual([]);
+    });
+  });
+
+  // 트랙-6 결함 탐지(BLOCKER): explicitStartNumber는 정수이기만 하면
+  // 그대로 통과시켰다 — model schema의 startNumber 범위(min(0).max(999_999_999))를
+  // 벗어난 값이 검증 없이 insertContent되면 readEditorDocument가 그 범위
+  // 위반을 throw new TypeError로 바꿔 모델↔에디터를 영구 desync시킨다.
+  // 범위 밖 값은 explicit start가 아예 없었던 것처럼(undefined) 처리해
+  // throw 없이 진행돼야 한다 — 비정수 start를 undefined로 접는 기존
+  // 정책(위 테스트의 items[1])과 같은 원칙.
+  it("ol[start]가 model 범위를 벗어나면 무시되고 기본 번호로 반영된다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      createId: sequentialIds("id"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+    withUnhandledErrorTracking((errors) => {
+      pasteHtml(editable, '<ol start="-1"><li>z</li></ol>');
+
+      const blocks = editor.getDocument().blocks;
+      const items = blocks.filter((block) => block.type === "numberedListItem");
+      expect(items).toHaveLength(1);
+      expect(items[0]?.content).toEqual([{ text: "z" }]);
+      expect(items[0]?.startNumber).toBeUndefined();
 
       expect(errors).toEqual([]);
     });
@@ -130,10 +166,7 @@ describe("PM 기본 붙여넣기 폴백의 외부 ul/ol", () => {
     tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
 
     withUnhandledErrorTracking((errors) => {
-      pasteHtml(
-        editable,
-        "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>",
-      );
+      pasteHtml(editable, "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>");
 
       const blocks = editor.getDocument().blocks;
       const items = blocks.filter((block) => block.type === "bulletListItem");
@@ -172,11 +205,23 @@ describe("PM 기본 붙여넣기 폴백의 외부 ul/ol", () => {
       expect(maxBlockDepth(document.blocks)).toBeLessThanOrEqual(
         MAX_NESTING_DEPTH,
       );
+      // isNestableBlockType/isInlineContentBlockType은 maxBlockDepth와 같은
+      // 이유로 discriminated union인 block 자체를 좁히지 못한다 — 명시적으로
+      // 좁힌다.
       const leaf = document.blocks
         .flatMap(function collect(block): Block[] {
-          return [block, ...(block.children ?? []).flatMap(collect)];
+          const children = isNestableBlockType(block.type)
+            ? ((block as Extract<Block, { type: NestableBlockType }>)
+                .children ?? [])
+            : [];
+          return [block, ...children.flatMap(collect)];
         })
-        .find((block) => block.content?.[0]?.text === "leaf");
+        .find(
+          (block) =>
+            isInlineContentBlockType(block.type) &&
+            (block as Extract<Block, { type: InlineContentBlockType }>)
+              .content[0]?.text === "leaf",
+        );
       expect(leaf).toBeDefined();
     });
   });

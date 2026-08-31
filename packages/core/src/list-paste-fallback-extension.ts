@@ -1,4 +1,8 @@
-import { type IdFactory, MAX_NESTING_DEPTH } from "@cp949/geul-model";
+import {
+  type IdFactory,
+  MAX_NESTING_DEPTH,
+  parseDocument,
+} from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { DOMParser as PmDomParser, type Schema } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
@@ -77,16 +81,39 @@ const inlineJsonFromNodes = (
   return json ?? [];
 };
 
+// numberedListItem.startNumber가 model schema 범위(min(0).max(999_999_999))
+// 안인지 판정한다. table-paste-commands.ts의 isStartNumberInRange와 같은
+// generic-block-commands.ts(setBlockType) 프로브 패턴이지만 이 파일은 io를
+// 거치지 않는 독립 경로라 코드는 공유하지 않는다(explicitStartNumber
+// 자신의 배경과 동일한 이유).
+const isStartNumberInRange = (startNumber: number): boolean =>
+  parseDocument({
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "list-paste-fallback-start-number-probe",
+        type: "numberedListItem",
+        content: [],
+        startNumber,
+      },
+    ],
+  }).ok;
+
 // ol[start]는 그 ol의 첫 li에만 붙인다(형제 scope 재시작은 범위 밖) —
 // io의 list-block-builder.ts:parseExplicitStartNumber와 같은 정책을
 // DOM 입력에 다시 구현한다(이 파일은 io를 거치지 않는 독립 경로라 코드는
-// 공유하지 않는다, DELTA-03 배경).
+// 공유하지 않는다, DELTA-03 배경). model 범위를 벗어난 값(트랙-6 결함
+// 탐지 BLOCKER — 검증 없이 insertContent되면 readEditorDocument가
+// throw new TypeError로 모델↔에디터를 영구 desync시킨다)은 explicit
+// start가 아예 없었던 것처럼 null로 접는다 — 비정수 start와 같은 처리.
 const explicitStartNumber = (list: Element): number | null => {
   if (list.tagName !== "OL") return null;
   const raw = list.getAttribute("start");
   if (raw === null) return null;
   const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) ? parsed : null;
+  if (!Number.isInteger(parsed)) return null;
+  return isStartNumberInRange(parsed) ? parsed : null;
 };
 
 // ul/ol 하나를 blockContainer(li) JSON 배열로 바꾼다. 각 li가

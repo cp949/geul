@@ -8,6 +8,8 @@ import {
 import {
   type IdFactory,
   type InlineContent,
+  MAX_NESTING_DEPTH,
+  parseDocument,
   type Result,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -212,14 +214,51 @@ export const pasteTabularData = (
   return pasteOutOfTable(editor, [{ type: "table", data }], createId);
 };
 
+// numberedListItem.startNumber가 model schema 범위(min(0).max(999_999_999))
+// 안인지 판정한다. 상수를 core가 복제하지 않고 generic-block-commands.ts의
+// setBlockType과 같은 방식으로 parseDocument 프로브에 위임한다 — 범위가
+// 바뀌어도 이 판정은 갱신할 필요가 없다.
+const isStartNumberInRange = (startNumber: number): boolean =>
+  parseDocument({
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "clipboard-paste-start-number-probe",
+        type: "numberedListItem",
+        content: [],
+        startNumber,
+      },
+    ],
+  }).ok;
+
 // 표 밖 붙여넣기 검증: 문단/heading은 편집 가능 콘텐츠 계약(inline), 표는
 // pasteTabularData와 같은 구조·서식·셀 한도 검증, 목록 항목
 // (bulletListItem/numberedListItem)은 자신의 content(inline)와 children을
 // 재귀로(같은 규칙) 검사한다(DELTA-02, Issue #143 (b)) — 위반이 있으면
 // CLIPBOARD_CONTENT_INVALID로 거절한다.
+//
+// depth는 model/schema.ts의 findNestingDepthViolation과 같은 정의(top-level
+// 1, blocks 배열 자체가 그 depth)다 — pasteOutOfTable의 삽입은 항상
+// 최상위(depth 1)에서 시작하므로(tableInsertPosition 계약, D13) 캐럿의
+// 실제 깊이는 무관하다. 여기서 거절하지 않으면 뮤테이션(finalizeAndDispatch)
+// 뒤 readEditorDocument가 DOCUMENT_LIMIT_EXCEEDED를 throw new TypeError로
+// 바꿔 모델↔에디터가 영구 desync된다(트랙-6 결함 탐지 BLOCKER, 경로 (c)의
+// clampDepth와 대칭되는 guard가 이 경로엔 없었다) — G-EDT-001("뮤테이션
+// 전에 판정").
 const validateOutOfTableContent = (
   blocks: readonly ClipboardContentBlock[],
+  depth = 1,
 ): Result<undefined, TableCommandError> => {
+  if (depth > MAX_NESTING_DEPTH) {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: `Nesting depth exceeds ${MAX_NESTING_DEPTH}`,
+      },
+    };
+  }
   for (const block of blocks) {
     if (block.type === "paragraph" || block.type === "heading") {
       const violation = inlineContentViolation(block.content);
@@ -251,8 +290,24 @@ const validateOutOfTableContent = (
           },
         };
       }
+      if (
+        block.type === "numberedListItem" &&
+        block.startNumber !== undefined &&
+        !isStartNumberInRange(block.startNumber)
+      ) {
+        return {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_CONTENT_INVALID",
+            message: "Numbered list item startNumber is out of range",
+          },
+        };
+      }
       if (block.children !== undefined && block.children.length > 0) {
-        const childResult = validateOutOfTableContent(block.children);
+        const childResult = validateOutOfTableContent(
+          block.children,
+          depth + 1,
+        );
         if (!childResult.ok) return childResult;
       }
       continue;

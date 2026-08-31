@@ -6,6 +6,7 @@
  * 경로는 table-paste-validation.test.ts가 맡는다.
  */
 import type { ClipboardContentBlock, TabularData } from "@cp949/geul-io";
+import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import { GapCursor } from "@tiptap/pm/gapcursor";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
@@ -426,6 +427,16 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       : {}),
     ...(opts.children !== undefined ? { children: opts.children } : {}),
   });
+  // depth단짜리 bulletListItem 체인 ClipboardContentBlock — 이 블록을
+  // 표 밖 시퀀스 최상위(depth 1)에 두면 리프가 절대 깊이 depth에 있다
+  // (list-paste-fallback.test.ts의 buildListDepthChain과 같은 패턴).
+  const nestedBulletChain = (depth: number): ClipboardContentBlock => {
+    let innermost = bulletItemBlock("leaf");
+    for (let level = depth - 1; level >= 1; level -= 1) {
+      innermost = bulletItemBlock("mid", [innermost]);
+    }
+    return innermost;
+  };
 
   it("표 밖에서 문단+표+문단 시퀀스를 한 트랜잭션으로 삽입한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
@@ -856,5 +867,57 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
       "intro\nx\noutro",
     );
+  });
+
+  // 트랙-6 결함 탐지(BLOCKER): pasteOutOfTable의 삽입은 항상 최상위(depth
+  // 1)에서 시작한다(tableInsertPosition 계약, D13) — 목록 항목의 children
+  // 재귀 자체가 MAX_NESTING_DEPTH를 넘으면 clampDepth(경로 c)와 대칭되는
+  // guard 없이 그대로 dispatch돼 readEditorDocument가 DOCUMENT_LIMIT_EXCEEDED를
+  // throw new TypeError로 바꾼다(production-editor-session.ts) — 모델↔에디터
+  // 영구 desync. 뮤테이션 전에 거절해야 한다(G-EDT-001).
+  it("표 밖에서 MAX_NESTING_DEPTH를 넘는 중첩 목록이 섞인 시퀀스는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [nestedBulletChain(MAX_NESTING_DEPTH + 1), tableBlock("A")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: expect.stringContaining(String(MAX_NESTING_DEPTH)),
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  // 트랙-6 결함 탐지(BLOCKER): list-block-builder.ts의 parseExplicitStartNumber는
+  // ol[start]가 정수이기만 하면 그대로 통과시킨다 — model schema의
+  // startNumber 범위(min(0).max(999_999_999))를 벗어난 값이 검증 없이
+  // dispatch되면 위와 같은 이유로 readEditorDocument가 TypeError를 던진다.
+  it("numberedListItem의 startNumber가 model 범위를 벗어나면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [numberedItemBlock("z", { startNumber: -1 }), tableBlock("A")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: expect.stringContaining("startNumber"),
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 });
