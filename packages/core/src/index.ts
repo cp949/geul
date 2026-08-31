@@ -24,13 +24,17 @@ export {
 } from "@cp949/geul-model";
 export type {
   BlockTypeDescriptor,
+  BlockTypeSource,
   CreateEditorOptions,
   DocumentChangeEvent,
   EditorController,
   SetBlockTypeDescriptor,
   TableCellSelection,
 } from "./editor-controller.js";
-export { createEditor } from "./editor-controller.js";
+export {
+  blockTypeDescriptorFromBlock,
+  createEditor,
+} from "./editor-controller.js";
 export type { EditorError } from "./errors.js";
 export type { TableCellTarget } from "./table-grid.js";
 export type { PasteRejectedReason } from "./table-command-error.js";

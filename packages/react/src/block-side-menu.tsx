@@ -1,4 +1,8 @@
-import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
+import {
+  blockTypeDescriptorFromBlock,
+  type BlockTypeDescriptor,
+  type EditorController,
+} from "@cp949/geul-core";
 import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -64,40 +68,14 @@ type StoredBlock = ReturnType<
 
 // Turn into의 권위는 DOM 투영이 아니라 최신 저장 document다. blockId를
 // 안정 ID로 재귀 조회해 top-level·nested block이 같은 descriptor 경로를 쓴다.
+// leaf 매핑(type→BlockTypeDescriptor) 자체는 core의 blockTypeDescriptorFromBlock이
+// 소유한다(아키텍처 리뷰 6차 후보 L3) — 여기 남는 건 id 재귀 조회뿐이다.
 const findBlockTypeDescriptor = (
   blocks: readonly StoredBlock[],
   blockId: string,
 ): BlockTypeDescriptor | null => {
   for (const block of blocks) {
-    if (block.id === blockId) {
-      switch (block.type) {
-        case "paragraph":
-          return { type: "paragraph" };
-        case "heading":
-          return { type: "heading", level: block.level };
-        case "quote":
-          return { type: "quote" };
-        case "codeBlock":
-          return {
-            type: "codeBlock",
-            ...(block.language === undefined
-              ? {}
-              : { language: block.language }),
-          };
-        case "bulletListItem":
-          return { type: "bulletListItem" };
-        case "numberedListItem":
-          return {
-            type: "numberedListItem",
-            ...(block.startNumber === undefined
-              ? {}
-              : { startNumber: block.startNumber }),
-          };
-        case "divider":
-        case "table":
-          return null;
-      }
-    }
+    if (block.id === blockId) return blockTypeDescriptorFromBlock(block);
     if ("children" in block && block.children !== undefined) {
       const nested = findBlockTypeDescriptor(block.children, blockId);
       if (nested !== null) return nested;

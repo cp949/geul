@@ -189,11 +189,37 @@ export type BlockTypeDescriptor =
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number };
 
-// PM block content node를 공개 primitive descriptor로 좁힌다. caret과 selection
-// 조회가 같은 타입·attrs 규칙을 공유하고 PM node 자체는 공개하지 않는다.
-const blockTypeDescriptorFromNode = (
+// react/block-side-menu.tsx의 findBlockTypeDescriptor가 저장 Block에서
+// 재구현하던 것과 같은 leaf 매핑이다(아키텍처 리뷰 6차 후보 L3). 입력은
+// 진짜 model Block이 아니다 — PM node(아래 blockTypeDescriptorFromNode)와
+// 저장 Block 양쪽 모두 이 판별 유니온으로 구조적으로 좁혀지므로(각 호출자가
+// 자기 표현에서 이 유니온만 조립), Block 전체를 여기로 들여오거나
+// PM→Block 변환을 새로 만들 필요가 없다. table·divider는
+// BlockTypeDescriptor가 다루지 않는 종류라 null로 떨어진다 — 두 호출자
+// 모두 원래 코드에서 이미 이렇게 동작했다(react는 명시 null 분기, core는
+// default 분기).
+export type BlockTypeSource =
+  | { type: "paragraph" }
+  | { type: "heading"; level: HeadingLevel }
+  | { type: "quote" }
+  | { type: "codeBlock"; language?: string }
+  | { type: "bulletListItem" }
+  | { type: "numberedListItem"; startNumber?: number }
+  | { type: "divider" }
+  | { type: "table" };
+
+export const blockTypeDescriptorFromBlock = (
+  source: BlockTypeSource,
+): BlockTypeDescriptor | null =>
+  source.type === "divider" || source.type === "table" ? null : source;
+
+// PM block content node를 BlockTypeSource로 좁힌 뒤 blockTypeDescriptorFromBlock에
+// 위임한다. PM attrs는 unknown이라 캐스트가 이 지점에서만 필요하다 — caret과
+// selection 조회가 같은 타입·attrs 규칙을 공유하고 PM node 자체는 공개하지
+// 않는다.
+const blockTypeSourceFromNode = (
   node: ProseMirrorNode,
-): BlockTypeDescriptor | null => {
+): BlockTypeSource | null => {
   switch (node.type.name) {
     case "paragraph":
       return { type: "paragraph" };
@@ -217,9 +243,20 @@ const blockTypeDescriptorFromNode = (
           ? { startNumber: node.attrs.startNumber }
           : {}),
       };
+    case "divider":
+      return { type: "divider" };
+    case "table":
+      return { type: "table" };
     default:
       return null;
   }
+};
+
+const blockTypeDescriptorFromNode = (
+  node: ProseMirrorNode,
+): BlockTypeDescriptor | null => {
+  const source = blockTypeSourceFromNode(node);
+  return source === null ? null : blockTypeDescriptorFromBlock(source);
 };
 
 // CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
