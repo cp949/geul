@@ -33,6 +33,7 @@ import {
 } from "./table-extension.js";
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
+import { ListPasteFallbackExtension } from "./list-paste-fallback-extension.js";
 import {
   ensureTrailingParagraphOnLoad,
   TrailingBlockExtension,
@@ -74,6 +75,15 @@ const HeadingExtension = Node.create({
 // 목록 content node의 내부 DOM은 공개 HTML 변환 계약이 아니다. production
 // EditorView가 inline content를 그릴 최소 div만 제공하고 parseHTML은 열지
 // 않는다. 모델의 startNumber는 PM attr에만 보존한다.
+//
+// 외부 ul/ol 붙여넣기(DELTA-03, Issue #143 (c))도 이 parseHTML 부재를
+// 바꾸지 않는다 — list-paste-fallback-extension.ts가 clipboard HTML을
+// 직접 파싱해 blockContainer/blockGroup JSON을 조립하고
+// editor.commands.insertContent로 꽂는다(TablePasteExtension과 같은
+// handlePaste 가로채기 패턴). 실측 결과 표준 parseHTML(findWrapping 기반
+// 자동 래핑)로는 중첩 목록에서 blockGroup 2단 래핑을 만들 수 없다 —
+// ContentMatch.findWrapping이 항상 최단 경로(최상위 1단 래핑, 즉 평탄화)
+// 를 우선해 중첩이 사라진다. 자세한 근거는 그 파일의 상단 주석 참고.
 const ProductionBulletListItemExtension = BulletListItemExtension.extend({
   renderHTML({ HTMLAttributes }) {
     return [
@@ -163,6 +173,7 @@ export const createProductionEditor = (options: {
           ? {}
           : { onPasteRejected: options.onPasteRejected }),
       }),
+      ListPasteFallbackExtension.configure({ createId: options.createId }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
         canApplyDocumentChange: options.canApplyDocumentChange,

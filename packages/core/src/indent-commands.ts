@@ -28,7 +28,7 @@ const commandNotApplicable = (command: string): Result<never, EditorError> => ({
 // PM depth가 레벨마다 2씩(컨테이너+blockGroup) 증가하는 패턴에 기대는 대신
 // 조상 각각의 타입을 직접 확인한다 — 스키마가 바뀌어도 이 계산은 깨지지
 // 않는다.
-const modelDepthAt = ($pos: ResolvedPos): number => {
+export const modelDepthAt = ($pos: ResolvedPos): number => {
   let depth = 1;
   for (let d = 0; d <= $pos.depth; d += 1) {
     if ($pos.node(d).type.name === "blockContainer") depth += 1;
