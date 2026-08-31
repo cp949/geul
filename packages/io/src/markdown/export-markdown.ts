@@ -16,7 +16,11 @@ import type { ExportError } from "../errors.js";
 import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
 import { computeColumnAlignments } from "./column-align.js";
-import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
+import {
+  analyzeMarkdownLoss,
+  hasAmbiguousLeadingListParagraph,
+  type MarkdownLoss,
+} from "./loss-analysis.js";
 
 // rule: "-"는 mdast-util-to-markdown(remark-stringify 내부 직렬화기) 기존
 // 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
@@ -169,7 +173,14 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
       const { children, ...ownBlock } = block;
       const flattenedChildren = flattenBlocks(children);
       const firstChild = flattenedChildren[0];
-      if (block.content.length === 0 && firstChild?.type === "paragraph") {
+      // hasAmbiguousLeadingListParagraph(block)가 승격 여부를 결정한다.
+      // firstChild?.type==="paragraph"는 순수 TS 좁히기용이다 — block.children[0]과
+      // flattenedChildren[0]은 다른 값이라 TS가 둘의 동치를 모른다(hasAmbiguousLeadingListParagraph
+      // 문서 참고, 두 값은 항상 같은 판정으로 일치하도록 증명됨).
+      if (
+        hasAmbiguousLeadingListParagraph(block) &&
+        firstChild?.type === "paragraph"
+      ) {
         const remainingChildren = flattenedChildren.slice(1);
         return [
           {
@@ -217,11 +228,14 @@ const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
         spread: block.children !== undefined && block.children.length > 0,
         // 빈 own paragraph는 Markdown에 materialize되지 않는다. 첫 자식이
         // non-paragraph면 이를 첫 mdast child로 직접 두어 `- > quote` 같은
-        // 표현 가능한 빈-content 목록 구조를 보존한다.
+        // 표현 가능한 빈-content 목록 구조를 보존한다. hasAmbiguousLeadingListParagraph는
+        // flattenBlocks가 이미 한 번 승격을 시도한 뒤에도 남는 잔여 모호함
+        // (예: 승격된 첫 child 자체가 빈 paragraph라 다음 child가 다시 첫
+        // 자리에 오는 경우)까지 같은 판정으로 잡는다.
         children:
           block.content.length === 0 &&
           childNodes.length > 0 &&
-          childNodes[0]?.type !== "paragraph"
+          !hasAmbiguousLeadingListParagraph(block)
             ? childNodes
             : [ownParagraph, ...childNodes],
       };

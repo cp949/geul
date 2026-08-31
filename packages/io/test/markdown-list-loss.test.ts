@@ -144,6 +144,42 @@ describe("GFM 목록 children 손실 분류", () => {
     ]);
   });
 
+  it("승격된 첫 child가 비어 있고 그 뒤도 paragraph면 lossy export가 빈 own paragraph로 경계를 다시 표시한다", () => {
+    // flattenBlocks는 한 블록당 한 번만 승격한다 — 빈 목록 content에 빈
+    // paragraph를 승격해도 그 결과가 다시 "content 비고 첫 child가
+    // paragraph"인 채로 남을 수 있다(2번째 child가 paragraph인 경우). 이
+    // 잔여 모호함은 listNode가 own paragraph를 materialize해 표시한다.
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "residual",
+          type: "bulletListItem",
+          content: [],
+          children: [
+            { id: "p1", type: "paragraph", content: [] },
+            { id: "p2", type: "paragraph", content: [{ text: "실제 텍스트" }] },
+          ],
+        },
+      ],
+    };
+
+    const exported = exportMarkdown(document, { mode: "lossy" });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(exported.value).toEqual({
+      markdown: "*\n\n  실제 텍스트\n",
+      warnings: [
+        {
+          kind: "NESTED_CHILDREN",
+          blockId: "residual",
+          message: expect.stringContaining("residual"),
+        },
+      ],
+    });
+  });
+
   it("paragraph·heading·quote children만 strict export에서 NESTED_CHILDREN으로 거절한다", () => {
     const document: Document = {
       formatVersion: 1,

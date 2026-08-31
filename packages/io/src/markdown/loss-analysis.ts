@@ -3,6 +3,7 @@ import {
   type Block,
   type Document,
   type InlineContent,
+  type ListItemBlock,
 } from "@cp949/geul-model";
 
 import { computeColumnAlignments } from "./column-align.js";
@@ -117,6 +118,21 @@ const collectTableLosses = (
 
 // paragraph/heading/quote의 children은 대응 mdast 노드에 블록 슬롯이 없어
 // NESTED_CHILDREN이다. 목록 항목의 children은 mdast listItem이 직접
+// GFM은 목록 항목의 own content와 첫 child paragraph 경계를 구분하지
+// 못한다 — "own content가 비어 있고 첫 child가 paragraph"인 모양은 재파싱 때
+// 항상 같은 트리로 뭉친다. 이 판정을 여기서 소유하고 export-markdown.ts의
+// flattenBlocks(승격 여부)·listNode(own paragraph materialize 여부)가
+// 같은 함수를 호출한다(아키텍처 리뷰 6차 후보 L5) — 세 곳이 독립된 조건을
+// 유지하면 한쪽만 조정될 때 손실 보고와 실제 출력이 조용히 어긋난다.
+export const hasAmbiguousLeadingListParagraph = (block: Block): boolean => {
+  // isListItemBlockType은 block.type(string)만 좁힌다 — block 자신의
+  // discriminated union은 좁혀지지 않는다(TS 제약, 아키텍처 리뷰 6차 L1에서
+  // 처음 부딪힘). predicate가 이미 그 계약을 증명했으므로 캐스트는 안전하다.
+  if (!isListItemBlockType(block.type)) return false;
+  const item = block as ListItemBlock;
+  return item.content.length === 0 && item.children?.[0]?.type === "paragraph";
+};
+
 // 표현하므로 손실 없이 재귀 순회한다. 단, 빈 own content 뒤 첫 paragraph는
 // GFM이 own paragraph와 child paragraph 경계를 구분하지 못하므로 부모 목록
 // 항목의 NESTED_CHILDREN으로 분류한다.
@@ -142,11 +158,10 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     });
   }
   if (block.children !== undefined && block.children.length > 0) {
-    const hasAmbiguousLeadingParagraph =
-      isListItemBlockType(block.type) &&
-      block.content.length === 0 &&
-      block.children[0]?.type === "paragraph";
-    if (!isListItemBlockType(block.type) || hasAmbiguousLeadingParagraph) {
+    if (
+      !isListItemBlockType(block.type) ||
+      hasAmbiguousLeadingListParagraph(block)
+    ) {
       losses.push({
         kind: "NESTED_CHILDREN",
         blockId: block.id,
