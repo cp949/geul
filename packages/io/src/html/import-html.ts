@@ -646,6 +646,10 @@ const blocksFromSegments = (
       );
       continue;
     }
+    // document import 정책은 isListTag를 넘기지 않아 도달하지 않는다 —
+    // 공유 union의 exhaustiveness 반영(DELTA-01, Issue #143 (b)), ul/ol
+    // 매핑은 이 파일의 blocksFromListElement가 이미 따로 담당한다.
+    if (segment.kind === "list") continue;
     if (segment.kind === "codeBlock") {
       const source = textValue(segment.node.children);
       const id = propertyString(segment.node, "dataBeBlockId") ?? createId();

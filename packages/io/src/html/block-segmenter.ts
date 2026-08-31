@@ -68,6 +68,16 @@ export type BlockSegment<
   // 정책에서만 나온다 — 넘기지 않으면(clipboard) blockquote는 예전처럼
   // isNestedBoundary(NESTED_BOUNDARY_TAG_NAMES)의 문단 경계로 남는다.
   | { kind: "blockquote"; node: HtmlElementNode }
+  // ul/ol 태그 자신(DELTA-01, Issue #143 (b)) — blockquote와 같은 이유로
+  // 재귀하지 않는다: 마커 타입(bulletListItem/numberedListItem)·중첩
+  // 계층·명시적 startNumber를 담을 li 분할(첫 <p> 또는 첫 block-level
+  // 자식 전까지를 content로 승격, 그 지점부터는 children으로 재귀)은
+  // 호출자 몫이라 원본 요소만 준다 — 여기서 재귀하면 li 경계가 pending에
+  // 섞여 사라진다. isListTag를 넘긴 정책에서만 나온다 — 넘기지 않으면
+  // (import-html.ts) ul/ol은 예전처럼 isTransparent의 순수 wrapper로
+  // 남는다(문서 import의 리스트 매핑은 blocksFromListElement가 이미
+  // 따로 담당).
+  | { kind: "list"; node: HtmlElementNode }
   // pre를 CodeBlock으로 해석할지는 document import policy만 opt-in한다.
   // 원본 sanitized 요소를 그대로 넘겨 source·metadata 선택은 호출자가
   // 담당한다. clipboard policy에서는 이 variant가 나오지 않는다.
@@ -110,6 +120,13 @@ export type BlockSegmentPolicy<
   // 소관). isNestedBoundary보다 먼저 판정한다 — 같은 태그가 두 집합에 있을
   // 때 세그먼트 승격이 이긴다.
   isQuoteTag?: (tagName: string) => boolean;
+  // ul/ol처럼 그 자체가 블록(목록)이면서 안쪽 해석(li 분할, 마커·순서·중첩)을
+  // 호출자가 맡는 태그 판정. 선택적이다 — 넘기지 않는 소비자(import-html.ts)
+  // 에서는 ul/ol이 isTransparent 쪽으로 떨어져 예전처럼 순수 wrapper고 li만
+  // 경계다(문서 import 계약 불변 — 리스트 매핑은 blocksFromListElement
+  // 소관). isNestedBoundary·isTransparent보다 먼저 판정한다 — 같은 태그가
+  // 두 집합에 있을 때 세그먼트 승격이 이긴다(isQuoteTag와 동일 원칙).
+  isListTag?: (tagName: string) => boolean;
   // pre처럼 마크·일반 인라인 해석을 바이패스하고 리프 블록으로
   // 유지할 태그. document import만 넘기며 clipboard는 opt-in하지 않는다.
   // div/li/blockquote처럼 "경계를 만나면 flush하고, 안쪽을 재귀 탐색해
@@ -144,20 +161,30 @@ const wrapInAncestors = (
     node,
   );
 
-// blockquote는 요소 자체를 세그먼트로 넘겨 호출자가 content/children을
-// 나눈다. 조상 마크를 blockquote 바깥에 다시 씌우면 그 분할 전에 블록
-// 구조가 숨으므로, 구조는 유지하고 각 텍스트 leaf에만 조상 체인을 복원한다.
+// blockquote/list(ul·ol)는 요소 자체를 세그먼트로 넘겨 호출자가
+// content/children을 나눈다. 조상 마크를 그 바깥에 다시 씌우면 분할 전에
+// 블록 구조가 숨으므로, 구조는 유지하고 각 텍스트 leaf에만 조상 체인을
+// 복원한다. isTableNode에 걸리는 노드는 재귀하지 않고 원본 참조를 그대로
+// 돌려준다 — walk() 자신이 표를 항상 policy.isTableNode로 먼저 걸러 원본
+// 노드를 세그먼트에 넣듯(233행), 여기서 새 복제본을 만들면
+// clipboard-table-parser.ts의 tableSet(node identity 멤버십) 판정이 깨져
+// li 안 중첩 표가 표로 인식되지 않고 인라인 텍스트로 뭉개진다(DELTA-01
+// 구현 중 RED로 실측). 표 내부는 어차피 조상 마크를 적용하지 않는다 —
+// walk의 kind: "table" 분기도 표 노드 자체는 wrapInAncestors 없이 그대로
+// 세그먼트에 넣는다(240행).
 const wrapTextDescendantsInAncestors = (
   node: HtmlElementContent,
   ancestors: readonly HtmlElementNode[],
+  isTableNode: (node: HtmlElementNode) => boolean,
 ): HtmlElementContent => {
   if (node.type === "text") return wrapInAncestors(node, ancestors);
   if (node.type === "comment") return node;
+  if (isTableNode(node)) return node;
   return htmlElement(
     node.tagName,
     node.properties,
     node.children.map((child) =>
-      wrapTextDescendantsInAncestors(child, ancestors),
+      wrapTextDescendantsInAncestors(child, ancestors, isTableNode),
     ),
   );
 };
@@ -197,6 +224,7 @@ export function segmentBlocks<Level extends number = number>(
         policy.headingLevelFromTagName(node.tagName) !== undefined ||
         policy.isDividerTag?.(node.tagName) === true ||
         policy.isQuoteTag?.(node.tagName) === true ||
+        policy.isListTag?.(node.tagName) === true ||
         policy.isCodeBlockTag?.(node.tagName) === true ||
         policy.isNestedBoundary(node.tagName)
       ) {
@@ -251,7 +279,33 @@ export function segmentBlocks<Level extends number = number>(
             node.tagName,
             node.properties,
             node.children.map((child) =>
-              wrapTextDescendantsInAncestors(child, ancestors),
+              wrapTextDescendantsInAncestors(
+                child,
+                ancestors,
+                policy.isTableNode,
+              ),
+            ),
+          ),
+        });
+        continue;
+      }
+      // ul/ol도 안쪽을 통째로 호출자에 넘긴다 — li 분할(content/children)과
+      // 마커·순서·중첩 보존은 list-block-builder.ts+clipboard-table-parser.ts
+      // 몫이다. 아래 isNestedBoundary·isTransparent 분기보다 먼저 와야
+      // 정책이 있는 소비자에서 ul/ol이 순수 wrapper로 풀리지 않는다.
+      if (policy.isListTag?.(node.tagName) === true) {
+        flush();
+        segments.push({
+          kind: "list",
+          node: htmlElement(
+            node.tagName,
+            node.properties,
+            node.children.map((child) =>
+              wrapTextDescendantsInAncestors(
+                child,
+                ancestors,
+                policy.isTableNode,
+              ),
             ),
           ),
         });
@@ -335,9 +389,15 @@ export function segmentBlocks<Level extends number = number>(
 // 문단 경계 태그 집합을 공유하기로 한 그릴링 결정(2차 리뷰 후보 G, Q2).
 export const NESTED_BOUNDARY_TAG_NAMES = new Set(["div", "li", "blockquote"]);
 
-// ul/ol 자체는 경계가 아니라 순수 wrapper다(li만 경계) — model에 리스트
-// Block 타입이 없어 마커·순서도 보존하지 않는다. 두 소비자가 동일하게
-// 쓴다.
+// ul/ol 태그 판정 자체는 하나만 있으면 된다 — 두 소비자가 이 판정을 서로
+// 다른 정책 필드에 꽂아 쓴다(DELTA-01, Issue #143 (b)). import-html.ts는
+// isTransparent에 꽂아 예전 그대로 ul/ol을 순수 wrapper로 재귀하고 li만
+// 경계로 본다(리스트 매핑은 blocksFromListElement가 이미 따로 담당).
+// clipboard-table-parser.ts는 isListTag에 꽂아 ul/ol 자신을 kind: "list"
+// 리프로 접는다 — 마커 타입(bulletListItem/numberedListItem)·중첩 계층·
+// 명시적 startNumber 보존은 list-block-builder.ts+clipboard-table-parser.ts가
+// 담당하고, segmentBlocks 자신은 여전히 문단/헤딩/표/quote와 동일한 원칙으로
+// 순수 경계 판정만 한다(해석은 하지 않는다).
 export const isTransparentListTag = (tagName: string): boolean =>
   tagName === "ul" || tagName === "ol";
 

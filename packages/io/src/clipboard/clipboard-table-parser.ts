@@ -26,8 +26,16 @@ import {
   type HtmlRoot,
   inlineContentFromNodes,
 } from "../html/inline-content.js";
+import {
+  markerTypeFromTag,
+  parseExplicitStartNumber,
+  splitListItemChildren,
+} from "../html/list-block-builder.js";
 import { asRoot, parseHtmlFragment } from "../html/parse-html.js";
-import { clipboardSanitizeSchema } from "../html/sanitize-schema.js";
+import {
+  clipboardAllowedAttributes,
+  clipboardSanitizeSchema,
+} from "../html/sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
@@ -107,9 +115,9 @@ const findDataTables = (root: HtmlRoot): HtmlElementNode[] => {
 // table-layout.ts가 소유한다 — import 경로(caption 등 표 직속 비섹션 자식)와
 // 이 판정을 공유해야 하기 때문이다.
 
-// 재귀 경계 판정(문단/헤딩/표 시퀀스로 쪼개기) 자체는 block-segmenter.ts가
-// import-html.ts와 공유한다(아키텍처 리뷰 2차 후보 G) — 이 파일의 세 태그
-// (div/li/blockquote는 항상 재귀, ul/ol은 flush 없이 재귀, p/heading은 표를
+// 재귀 경계 판정(문단/헤딩/표/목록 시퀀스로 쪼개기) 자체는 block-segmenter.ts가
+// import-html.ts와 공유한다(아키텍처 리뷰 2차 후보 G) — 이 파일의 네 태그
+// (div/li/blockquote는 항상 재귀, ul/ol은 리프로 접기, p/heading은 표를
 // 품었을 때만 재귀)만 정책으로 넘긴다. h1~h6는 여기서 인식한다 —
 // import-html.ts도 이제 h1~h6를 heading으로 인식하므로(별개 DELTA에서 정정)
 // 이 파일과 다르지 않다.
@@ -126,12 +134,14 @@ const headingLevelFromTagName = (
 // HeadingBlock.level이 1~6으로 확장돼(DELTA-04, Issue #38) 이제 h4~h6를
 // 문단으로 다운그레이드할 이유가 없다(Issue #38 슬라이스 3). 찾아낸 표가
 // 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각 독립된 표 블록이
-// 된다.
+// 된다. ul/ol은 kind: "list" 세그먼트로 나와 li마다 마커 타입·중첩 계층·
+// 명시적 startNumber를 보존한다(DELTA-01, Issue #143 (b)).
 //
-// 문단/heading 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야 한다 —
-// collapseHtmlWhitespace(정규 공백 run 접기)와 normalizeCellContent(C0
-// 제어문자/DEL/짝 없는 surrogate 정제) 없으면 model의 isValidInlineText
-// 검사가 거절해 readEditorDocument에서 throw된다(editor 영구 desync).
+// 문단/heading/목록 항목 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야
+// 한다 — collapseHtmlWhitespace(정규 공백 run 접기)와
+// normalizeCellContent(C0 제어문자/DEL/짝 없는 surrogate 정제) 없으면
+// model의 isValidInlineText 검사가 거절해 readEditorDocument에서
+// throw된다(editor 영구 desync).
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
   tables: readonly HtmlElementNode[],
@@ -146,6 +156,10 @@ const blockSequenceFromNodes = (
     headingLevelFromTagName,
     isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
     isTransparent: isTransparentListTag,
+    // ul/ol 자신을 kind: "list" 리프로 접는다 — isTransparentListTag를
+    // 그대로 재사용한다(block-segmenter.ts의 isTransparentListTag 주석
+    // 참고, 두 정책 필드에 같은 태그 판정을 서로 다른 소비자가 꽂아 쓴다).
+    isListTag: isTransparentListTag,
     isTableNode: (node) => tableSet.has(node),
   };
 
@@ -159,47 +173,119 @@ const blockSequenceFromNodes = (
     return normalizeCellContent(inlineContentFromNodes(segmentNodes));
   };
 
-  const blocks: ClipboardContentBlock[] = [];
-  for (const segment of segmentBlocks(nodes, policy)) {
-    // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
-    // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
-    // dataBeBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
-    // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
-    if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
-      const content = normalizedInlineContent(segment.nodes);
-      const text = content.map((item) => item.text).join("");
-      if (hasSubstantialText(text)) blocks.push({ type: "paragraph", content });
-      continue;
-    }
-    if (segment.kind === "heading") {
-      const content = normalizedInlineContent(segment.nodes);
-      const text = content.map((item) => item.text).join("");
-      if (!hasSubstantialText(text)) continue;
-      blocks.push({ type: "heading", level: segment.level, content });
-      continue;
-    }
-    // 클립보드 정책은 isDividerTag를 넘기지 않아 도달하지 않는다 — 공유
-    // union의 exhaustiveness 반영, hr 처리는 슬라이스 10 소관.
-    if (segment.kind === "hr") continue;
-    // 클립보드 정책은 isQuoteTag를 넘기지 않아 도달하지 않는다 — 공유
-    // union의 exhaustiveness 반영, blockquote 매핑은 슬라이스 10 소관.
-    if (segment.kind === "blockquote") continue;
+  // li 안 "block-level" 판정 — splitListItemChildren이 content/children을
+  // 나눌 때 쓴다. 새 태그 분류를 만들지 않고 이 파일이 이미 정책으로
+  // 넘기는 표·목록·문단 경계 집합을 그대로 조립한다(트랙-4 확인,
+  // import-html.ts의 isBlockLevelElement와 같은 원칙 — 단 표 판정은
+  // 이 파일의 tableSet 멤버십을 쓴다).
+  const isBlockLevelNode = (node: HtmlElementNode): boolean =>
+    policy.isTableNode(node) ||
+    isTransparentListTag(node.tagName) ||
+    NESTED_BOUNDARY_TAG_NAMES.has(node.tagName);
 
-    // 표. caption(표 직속 비섹션 자식)은 기존 pending 뒤·표 앞이라는
-    // 문서 순서를 segmentBlocks가 이미 지킨다 — 여기서는 같은
-    // collapseHtmlWhitespace/normalizeCellContent/hasSubstantialText
-    // 정규화만 재사용한다.
-    if (segment.nonSectionChildren.length > 0) {
-      const content = normalizedInlineContent(segment.nonSectionChildren);
-      const text = content.map((item) => item.text).join("");
-      if (hasSubstantialText(text)) blocks.push({ type: "paragraph", content });
+  // ul/ol 세그먼트 하나(kind: "list"의 node)를 li마다
+  // bulletListItem/numberedListItem으로 바꾼다. explicit start는
+  // import-html.ts의 blocksFromListElement와 같은 원칙으로 그 ol의 첫
+  // li에만 붙인다(형제 scope 재시작 로직은 범위 밖) — li의 children은
+  // blocksFromNodeList를 재귀 호출해 표·중첩 목록·문단을 그대로 처리한다.
+  const blocksFromListNode = (
+    listNode: HtmlElementNode,
+  ): Result<ClipboardContentBlock[], ClipboardParseError> => {
+    const markerType = markerTypeFromTag(listNode.tagName);
+    const explicitStart = parseExplicitStartNumber(listNode);
+    const blocks: ClipboardContentBlock[] = [];
+    let itemIndex = 0;
+    for (const child of listNode.children) {
+      if (child.type !== "element" || child.tagName !== "li") continue;
+      const { contentNodes, childrenNodes } = splitListItemChildren(
+        child,
+        isBlockLevelNode,
+      );
+      const content = normalizedInlineContent(contentNodes);
+      const childrenResult = blocksFromNodeList(childrenNodes);
+      if (!childrenResult.ok) return childrenResult;
+      const children = childrenResult.value;
+      const startNumber = itemIndex === 0 ? explicitStart : undefined;
+      blocks.push(
+        markerType === "numberedListItem"
+          ? {
+              type: "numberedListItem",
+              content,
+              ...(startNumber === undefined ? {} : { startNumber }),
+              ...(children.length > 0 ? { children } : {}),
+            }
+          : {
+              type: "bulletListItem",
+              content,
+              ...(children.length > 0 ? { children } : {}),
+            },
+      );
+      itemIndex += 1;
     }
-    const parsed = tabularDataFromTable(segment.node);
-    if (!parsed.ok) return { ok: false, error: parsed.error };
-    blocks.push({ type: "table", data: parsed.value });
-  }
+    return { ok: true, value: blocks };
+  };
 
-  return { ok: true, value: blocks };
+  // 세그먼트 하나를 ClipboardContentBlock[]로 바꾸는 루프 — 최상위 nodes와
+  // 목록 항목의 childrenNodes가 모두 이 함수를 통과한다(blocksFromNodes가
+  // blocksFromListItem을 재귀 호출하는 import-html.ts와 같은 구조, 코드는
+  // 공유하지 않는다).
+  const blocksFromNodeList = (
+    nodeList: readonly HtmlNode[],
+  ): Result<ClipboardContentBlock[], ClipboardParseError> => {
+    const blocks: ClipboardContentBlock[] = [];
+    for (const segment of segmentBlocks(nodeList, policy)) {
+      // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
+      // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
+      // dataBeBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
+      // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
+      if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
+        const content = normalizedInlineContent(segment.nodes);
+        const text = content.map((item) => item.text).join("");
+        if (hasSubstantialText(text)) {
+          blocks.push({ type: "paragraph", content });
+        }
+        continue;
+      }
+      if (segment.kind === "heading") {
+        const content = normalizedInlineContent(segment.nodes);
+        const text = content.map((item) => item.text).join("");
+        if (!hasSubstantialText(text)) continue;
+        blocks.push({ type: "heading", level: segment.level, content });
+        continue;
+      }
+      // 클립보드 정책은 isDividerTag를 넘기지 않아 도달하지 않는다 — 공유
+      // union의 exhaustiveness 반영, hr 처리는 슬라이스 10 소관.
+      if (segment.kind === "hr") continue;
+      // 클립보드 정책은 isQuoteTag를 넘기지 않아 도달하지 않는다 — 공유
+      // union의 exhaustiveness 반영, blockquote 매핑은 슬라이스 10 소관.
+      if (segment.kind === "blockquote") continue;
+      if (segment.kind === "list") {
+        const listResult = blocksFromListNode(segment.node);
+        if (!listResult.ok) return listResult;
+        blocks.push(...listResult.value);
+        continue;
+      }
+
+      // 표. caption(표 직속 비섹션 자식)은 기존 pending 뒤·표 앞이라는
+      // 문서 순서를 segmentBlocks가 이미 지킨다 — 여기서는 같은
+      // collapseHtmlWhitespace/normalizeCellContent/hasSubstantialText
+      // 정규화만 재사용한다.
+      if (segment.nonSectionChildren.length > 0) {
+        const content = normalizedInlineContent(segment.nonSectionChildren);
+        const text = content.map((item) => item.text).join("");
+        if (hasSubstantialText(text)) {
+          blocks.push({ type: "paragraph", content });
+        }
+      }
+      const parsed = tabularDataFromTable(segment.node);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
+      blocks.push({ type: "table", data: parsed.value });
+    }
+
+    return { ok: true, value: blocks };
+  };
+
+  return blocksFromNodeList(nodes);
 };
 
 const canonicalColor = (value: string | undefined): string | undefined =>
@@ -375,6 +461,17 @@ type HtmlTableOutcome =
   | { ok: true; value: ClipboardContentBlock[] }
   | { ok: false; error: ClipboardParseError; sawTable: boolean };
 
+// 목록 파싱이 소비하는 ol[start]를 clipboard sanitize 단계에 추가한다.
+// clipboardAllowedAttributes에는 ol 항목이 없어(sanitize-schema.ts) start가
+// 그대로 두면 제거되고 parseExplicitStartNumber가 항상 undefined를 받는다.
+// import-html.ts:71-78의 htmlImportSanitizeSchema와 완전히 같은 패턴으로
+// (공유 schema 객체는 바꾸지 않고) 이 파일에서만 얕은 복사한다 — raw HAST가
+// 아니라 sanitized HAST에서만 start를 읽기 위한 경계다(G-CNV-002).
+const clipboardListSanitizeSchema = {
+  ...clipboardSanitizeSchema,
+  attributes: { ...clipboardAllowedAttributes, ol: ["start"] },
+};
+
 const parseHtmlTable = (html: string): HtmlTableOutcome => {
   // 깊이-캡 절단 사실(truncated)은 버린다 — clipboard 경로에는 경고 채널이
   // 없다(ClipboardParseError는 NOT_TABULAR | CLIPBOARD_TABLE_INVALID 뿐).
@@ -385,7 +482,7 @@ const parseHtmlTable = (html: string): HtmlTableOutcome => {
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
   const unsafeRoot = parsed.root;
 
-  const safeRoot = asRoot(sanitize(unsafeRoot, clipboardSanitizeSchema));
+  const safeRoot = asRoot(sanitize(unsafeRoot, clipboardListSanitizeSchema));
   if (safeRoot === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 

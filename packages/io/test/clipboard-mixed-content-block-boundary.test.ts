@@ -183,21 +183,22 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     ]);
   });
 
-  // 완료 조건 2, 5(Issue #113): ul/ol 자체는 순수 wrapper로 두고 li만
-  // 문단 경계로 인식한다 — <ul><li>one</li><li>two</li></ul>이
-  // {p:"onetwo"} 하나로 뭉치던 이슈 실측 케이스가 li 2개짜리 문단으로
-  // 분리된다. ol도 같은 wrapper 취급을 받는지 함께 확인한다(리스트
-  // 마커·순서 자체는 model에 대응 Block 타입이 없어 보존하지 않는다 —
-  // 범위 밖).
-  it("ul/ol 안 연속된 li는 각각 독립된 문단으로 분리된다", () => {
+  // 완료 조건 1(Issue #143 (b), DELTA-01): ul/ol 자신은 kind: "list"
+  // 리프로 접히고, li마다 bulletListItem/numberedListItem으로 보존된다
+  // — <ul><li>one</li><li>two</li></ul>이 더 이상 {p:"onetwo"}로도
+  // {p:"one"}/{p:"two"}로도 뭉개지지 않고 마커 타입이 있는 목록 항목
+  // 2개로 분리된다. ol은 명시적 start가 없으므로 startNumber 없이
+  // numberedListItem 2개로 분리되는지 함께 확인한다(startNumber 보존은
+  // 별도 테스트 — "ol[start]는...").
+  it("ul/ol 안 연속된 li는 각각 독립된 목록 항목으로 분리된다", () => {
     const ulResult = parseClipboardTable({
       html: `<ul><li>one</li><li>two</li></ul>${TABLE}`,
     });
     expect(ulResult.ok).toBe(true);
     if (ulResult.ok) {
       expect(ulResult.value).toEqual([
-        { type: "paragraph", content: [{ text: "one" }] },
-        { type: "paragraph", content: [{ text: "two" }] },
+        { type: "bulletListItem", content: [{ text: "one" }] },
+        { type: "bulletListItem", content: [{ text: "two" }] },
         TABLE_BLOCK,
       ]);
     }
@@ -208,11 +209,28 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(olResult.ok).toBe(true);
     if (olResult.ok) {
       expect(olResult.value).toEqual([
-        { type: "paragraph", content: [{ text: "one" }] },
-        { type: "paragraph", content: [{ text: "two" }] },
+        { type: "numberedListItem", content: [{ text: "one" }] },
+        { type: "numberedListItem", content: [{ text: "two" }] },
         TABLE_BLOCK,
       ]);
     }
+  });
+
+  // 완료 조건 2(Issue #143 (b), DELTA-01): ol[start]는 sanitize 단계에서
+  // 소실되지 않고 첫 li의 numberedListItem.startNumber로 보존된다 —
+  // 로컬 sanitize schema 확장(clipboardListSanitizeSchema) 없이는 start가
+  // 제거돼 startNumber가 항상 undefined다.
+  it("ol[start]는 첫 li의 startNumber로 보존된다", () => {
+    const result = parseClipboardTable({
+      html: `${TABLE}<ol start="3"><li>x</li></ol>`,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      TABLE_BLOCK,
+      { type: "numberedListItem", content: [{ text: "x" }], startNumber: 3 },
+    ]);
   });
 
   // 완료 조건 3(Issue #113): blockquote도 문단 경계다 — 인접한 p/div와
@@ -233,14 +251,16 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   });
 
   // 완료 조건 4(Issue #113): HTML5 파싱 규칙상 <table> 시작 태그는 <p>만
-  // 자동으로 닫고 div/li/blockquote는 닫지 않는다(parse5로 확인) — 표가
-  // 이 세 태그의 실제 자식으로 파싱 트리에 남을 수 있다. p/heading과 같은
+  // 자동으로 닫고 div/blockquote는 닫지 않는다(parse5로 확인) — 표가
+  // 이 두 태그의 실제 자식으로 파싱 트리에 남을 수 있다. p/heading과 같은
   // containsAnyTable 예외가 필요하다: 표를 자식으로 품으면 문단 경계
-  // 취급을 접고 통과해 내려가 표 구조(셀 경계)를 보존한다.
-  it("div/li/blockquote 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
+  // 취급을 접고 통과해 내려가 표 구조(셀 경계)를 보존한다. li 케이스는
+  // 아래 별도 테스트로 분리했다 — DELTA-01(Issue #143 (b))부터 li는
+  // 더 이상 문단 경계가 아니라 bulletListItem/numberedListItem의
+  // children으로 담긴다.
+  it("div/blockquote 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
     const cases = [
       { label: "div", html: `<div>intro${TABLE}outro</div>` },
-      { label: "li", html: `<ul><li>intro${TABLE}outro</li></ul>` },
       {
         label: "blockquote",
         html: `<blockquote>intro${TABLE}outro</blockquote>`,
@@ -259,11 +279,37 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     }
   });
 
-  // 완료 조건 5(Issue #113): "ul/ol을 순수 wrapper로 두고 li만 경계로
-  // 추가"하는 것이 중첩 li(리스트 안 리스트)에서도 충분한지 확인한다.
-  // li를 flush→pending 치환→flush로 끝내지 않고 재귀(walk)로 처리하므로
-  // 중첩된 li도 각자 독립된 문단 경계로 인식되고 문서 순서가 보존된다.
-  it("중첩된 li도 각각 독립된 문단으로 분리되고 순서가 보존된다", () => {
+  // 완료 조건 3(Issue #143 (b), DELTA-01): li 안에 중첩된 표는
+  // splitListItemChildren의 block-level 판정(isTableNode 포함)이 표를
+  // children으로 보존한다 — 인라인 텍스트로 뭉개지지도, div/blockquote
+  // 처럼 별도 paragraph 블록으로 흩어지지도 않는다. 첫 실질 자식이
+  // 텍스트("intro")라 그 텍스트가 content로 승격되고, 표부터 끝까지가
+  // children이다.
+  it("li 안에 중첩된 표는 뭉개지지 않고 bulletListItem의 children으로 보존된다", () => {
+    const result = parseClipboardTable({
+      html: `<ul><li>intro${TABLE}outro</li></ul>`,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      {
+        type: "bulletListItem",
+        content: [{ text: "intro" }],
+        children: [
+          TABLE_BLOCK,
+          { type: "paragraph", content: [{ text: "outro" }] },
+        ],
+      },
+    ]);
+  });
+
+  // 완료 조건 1(Issue #143 (b), DELTA-01): 중첩 li(리스트 안 리스트)도
+  // splitListItemChildren이 첫 block-level 자식(중첩 ul) 전까지를
+  // content로, 그 지점부터를 children으로 나누고, children은
+  // blocksFromNodeList로 재귀해 중첩 목록도 bulletListItem 트리로
+  // 보존한다 — 순서(one → nested → two)도 문서 순서 그대로 유지된다.
+  it("중첩된 li도 각각 독립된 bulletListItem으로 분리되고 순서가 보존된다", () => {
     const result = parseClipboardTable({
       html: `<ul><li>one<ul><li>nested</li></ul></li><li>two</li></ul>${TABLE}`,
     });
@@ -271,9 +317,12 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toEqual([
-      { type: "paragraph", content: [{ text: "one" }] },
-      { type: "paragraph", content: [{ text: "nested" }] },
-      { type: "paragraph", content: [{ text: "two" }] },
+      {
+        type: "bulletListItem",
+        content: [{ text: "one" }],
+        children: [{ type: "bulletListItem", content: [{ text: "nested" }] }],
+      },
+      { type: "bulletListItem", content: [{ text: "two" }] },
       TABLE_BLOCK,
     ]);
   });
