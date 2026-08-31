@@ -13,6 +13,7 @@ import remarkStringify from "remark-stringify";
 import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
+import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
 import { computeColumnAlignments } from "./column-align.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
@@ -228,34 +229,13 @@ const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
   };
 };
 
-// 연속된 flat 목록 형제를 mdast list로 묶는다. 번호 항목의 명시적
-// startNumber는 새 list의 start가 되어 그 항목부터 번호를 다시 시작한다.
-const blockNodes = (blocks: Block[]): MarkdownOutputNode[] => {
-  const nodes: MarkdownOutputNode[] = [];
-  for (let index = 0; index < blocks.length;) {
-    const first = blocks[index];
-    if (first === undefined || !isListItemBlockType(first.type)) {
-      if (first !== undefined) nodes.push(blockNode(first));
-      index += 1;
-      continue;
-    }
-
-    const items: ListItemBlock[] = [first as ListItemBlock];
-    let nextIndex = index + 1;
-    while (nextIndex < blocks.length) {
-      const next = blocks[nextIndex];
-      if (next?.type !== first.type) break;
-      if (next.type === "numberedListItem" && next.startNumber !== undefined) {
-        break;
-      }
-      items.push(next);
-      nextIndex += 1;
-    }
-    nodes.push(listNode(items));
-    index = nextIndex;
-  }
-  return nodes;
-};
+// 연속된 flat 목록 형제를 mdast list로 묶는 경계 판정은
+// list-item-run-grouping.ts가 소유한다(export-html.ts와 공유, 아키텍처
+// 리뷰 6차 후보 L2) — 여기서는 mdast list 생성(listNode)만 주입한다.
+const blockNodes = (blocks: Block[]): MarkdownOutputNode[] =>
+  groupListItemRuns(blocks, listNode).map((entry) =>
+    entry.kind === "block" ? blockNode(entry.block) : entry.node,
+  );
 
 const blockNode = (block: Block): MarkdownOutputNode => {
   if (block.type === "table") return tableNode(block);

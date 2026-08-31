@@ -13,6 +13,7 @@ import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
+import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
 import {
   type HtmlElementContent,
@@ -172,34 +173,13 @@ const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
   );
 };
 
-// 연속된 flat 목록 형제를 종류별 컨테이너로 묶는다. 번호 항목의 명시적
-// startNumber는 그 항목에서 새 ol을 시작해야 의미가 보존된다.
-const blockNodes = (blocks: Block[]): HtmlElementNode[] => {
-  const nodes: HtmlElementNode[] = [];
-  for (let index = 0; index < blocks.length;) {
-    const first = blocks[index];
-    if (first === undefined || !isListItemBlockType(first.type)) {
-      if (first !== undefined) nodes.push(blockNode(first));
-      index += 1;
-      continue;
-    }
-
-    const items: ListItemBlock[] = [first as ListItemBlock];
-    let nextIndex = index + 1;
-    while (nextIndex < blocks.length) {
-      const next = blocks[nextIndex];
-      if (next?.type !== first.type) break;
-      if (next.type === "numberedListItem" && next.startNumber !== undefined) {
-        break;
-      }
-      items.push(next);
-      nextIndex += 1;
-    }
-    nodes.push(listNode(items));
-    index = nextIndex;
-  }
-  return nodes;
-};
+// 연속된 flat 목록 형제를 종류별 컨테이너로 묶는 경계 판정은
+// list-item-run-grouping.ts가 소유한다(export-markdown.ts와 공유, 아키텍처
+// 리뷰 6차 후보 L2) — 여기서는 <ul>/<ol> 생성(listNode)만 주입한다.
+const blockNodes = (blocks: Block[]): HtmlElementNode[] =>
+  groupListItemRuns(blocks, listNode).map((entry) =>
+    entry.kind === "block" ? blockNode(entry.block) : entry.node,
+  );
 
 // children이 있는 paragraph/heading은 자기 자신(children 없이, blockId
 // 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-be-block-id>
