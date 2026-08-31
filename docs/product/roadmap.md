@@ -105,6 +105,8 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 - 다중 선택 조작과 undo가 브라우저에서 검증된다.
 - 일반 clipboard 우선순위와 fallback이 fixture로 고정된다.
 
+`IO-007`의 파일 붙여넣기 부분은 R3로 이월되어 R2 완료 시점에 `PARTIAL`로 남는다(사용자 승인 완료 2026-08-27, Issue #38, spec §2.2). 위 4개 완료 조건과 별개로, §4의 이월 예외 조항에 따라 `IO-007`은 이 `PARTIAL` 상태로 R2 완료 판정에 포함된다.
+
 ### R3 — 파일·미디어 parity
 
 **사용자 결과:** 이미지, 비디오, 오디오와 파일을 문서에 추가하고 관리할 수 있다.
@@ -264,7 +266,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 
 각 단계는 다음 조건을 모두 만족해야 완료된다.
 
-- 단계에 배정된 모든 기능 ID가 `VERIFIED`다.
+- 단계에 배정된 모든 기능 ID가 `VERIFIED`다. 단, 후속 단계로 이월이 사용자 승인되고 그 승인 근거(Issue 번호·일자)와 이월 조건이 해당 단계 절에 기록된 기능 ID는 `PARTIAL`로 완료 판정에 참여한다.
 - 요구되는 unit, property, integration과 browser test가 통과한다.
 - 독자 JSON round-trip이 통과한다.
 - 관련 HTML/GFM 보존 또는 손실 계약이 통과한다.
