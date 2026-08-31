@@ -84,11 +84,36 @@ export const sequentialIds = (prefix: string) => {
  */
 const mountedEditors = new Set<EditorController>();
 
-afterEach(() => {
-  // destroy()는 멱등이므로 테스트가 이미 해제한 에디터도 안전하다.
-  for (const editor of mountedEditors) editor.destroy();
+/**
+ * mountedEditors에 남은 editor를 전부 destroy()하고 Set을 비운다. afterEach가
+ * 그대로 참조하는 실제 정리 함수다 — destroy()는 멱등이므로 테스트가 이미
+ * 해제한 editor를 다시 순회해도 안전하다.
+ *
+ * export하는 이유는 프로덕션 호출부가 이 함수를 직접 부르게 하려는 것이
+ * 아니다 — 정리 경로는 여전히 afterEach 하나뿐이다. 계약 테스트가
+ * "destroy() 실패가 나머지 정리를 막지 않는가"를 검증하려면 vitest의 훅
+ * 스케줄링에 기대지 않고 이 정리 로직을 그 자리에서 직접 호출해 확인해야
+ * 한다(G-TST-003). 그래서 이름을 붙이고 export한다.
+ */
+export const destroyMountedEditorsForTest = () => {
+  const errors: unknown[] = [];
+  for (const editor of mountedEditors) {
+    try {
+      editor.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
   mountedEditors.clear();
-});
+  if (errors.length > 0) {
+    throw new AggregateError(
+      errors,
+      "mounted editor cleanup 중 destroy() 실패가 있었다",
+    );
+  }
+};
+
+afterEach(destroyMountedEditorsForTest);
 
 /**
  * EditorController를 DOM에 마운트하고 내부 Tiptap Editor까지 돌려준다.

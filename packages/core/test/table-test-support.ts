@@ -100,8 +100,21 @@ const fixtureEditors = new Set<Editor>();
  * export한다.
  */
 export const destroyFixtureEditorsForTest = () => {
-  for (const editor of fixtureEditors) editor.destroy();
+  const errors: unknown[] = [];
+  for (const editor of fixtureEditors) {
+    try {
+      editor.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
   fixtureEditors.clear();
+  if (errors.length > 0) {
+    throw new AggregateError(
+      errors,
+      "fixture editor cleanup 중 destroy() 실패가 있었다",
+    );
+  }
 };
 
 afterEach(destroyFixtureEditorsForTest);
