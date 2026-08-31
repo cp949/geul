@@ -407,6 +407,25 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     level,
     content: [{ text }],
   });
+  const bulletItemBlock = (
+    text: string,
+    children?: ClipboardContentBlock[],
+  ): ClipboardContentBlock => ({
+    type: "bulletListItem",
+    content: [{ text }],
+    ...(children !== undefined ? { children } : {}),
+  });
+  const numberedItemBlock = (
+    text: string,
+    opts: { startNumber?: number; children?: ClipboardContentBlock[] } = {},
+  ): ClipboardContentBlock => ({
+    type: "numberedListItem",
+    content: [{ text }],
+    ...(opts.startNumber !== undefined
+      ? { startNumber: opts.startNumber }
+      : {}),
+    ...(opts.children !== undefined ? { children: opts.children } : {}),
+  });
 
   it("표 밖에서 문단+표+문단 시퀀스를 한 트랜잭션으로 삽입한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
@@ -726,5 +745,116 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  // 완료 조건 1(Issue #143 (b), DELTA-02): 표 밖 캐럿에서 목록 항목이
+  // 섞인 시퀀스를 붙이면 blockContainer/blockGroup 목록 트리가 삽입된다.
+  it("표 밖 캐럿에서 목록 항목이 섞인 시퀀스를 붙여넣으면 목록 트리가 삽입된다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const createId = sequentialIds("paste");
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        bulletItemBlock("a"),
+        bulletItemBlock("b", [numberedItemBlock("c", { startNumber: 2 })]),
+        tableBlock("A"),
+      ],
+      createId,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("붙여넣기 실패");
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content?.[1]?.type).toBe("blockContainer");
+    expect(doc.content?.[1]?.content?.[0]?.type).toBe("bulletListItem");
+    expect(doc.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe("a");
+    expect(doc.content?.[2]?.type).toBe("blockContainer");
+    expect(doc.content?.[2]?.content?.[0]?.type).toBe("bulletListItem");
+    expect(doc.content?.[2]?.content?.[1]?.type).toBe("blockGroup");
+    const nestedItem = doc.content?.[2]?.content?.[1]?.content?.[0];
+    expect(nestedItem?.type).toBe("blockContainer");
+    expect(nestedItem?.content?.[0]?.type).toBe("numberedListItem");
+    expect(nestedItem?.content?.[0]?.attrs?.startNumber).toBe(2);
+    expect(doc.content?.[3]?.type).toBe("table");
+  });
+
+  // 완료 조건 3(Issue #143 (b), DELTA-02): 표 밖 검증이 목록 항목 자신의
+  // content도 문단/heading과 같은 inlineContentViolation 규칙으로 거절한다.
+  it("목록 항목 콘텐츠가 편집 가능 계약을 어기면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [{ type: "bulletListItem", content: [{ text: "" }] }, tableBlock("A")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: "Bullet list item content contains an empty text run",
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  // 완료 조건 3 재귀: children 안 위반도 같은 규칙으로 거절한다.
+  it("목록 항목 children 안 콘텐츠가 편집 가능 계약을 어겨도 재귀 검증이 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        {
+          type: "bulletListItem",
+          content: [{ text: "a" }],
+          children: [{ type: "paragraph", content: [{ text: "" }] }],
+        },
+        tableBlock("A"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: "Paragraph content contains an empty text run",
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  // 완료 조건 4(Issue #143 (b), DELTA-02): "표 안" 병합 경로는 코드
+  // 변경 없이 기존 mergeableInlineContent 타입 predicate가 목록 variant를
+  // 구조적으로 배제한다 — 목록은 조용히 드롭되고 문단만 셀에 병합된다.
+  it("표 안에서 목록 항목이 섞인 시퀀스는 목록을 드롭하고 문단만 셀에 합친다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        paragraphBlock("intro"),
+        bulletItemBlock("dropped"),
+        tableBlock("x"),
+        paragraphBlock("outro"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
+      "intro\nx\noutro",
+    );
   });
 });

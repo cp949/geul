@@ -42,6 +42,27 @@ const tableBlock = (text: string): ClipboardContentBlock => ({
   },
 });
 
+const bulletItemBlock = (
+  text: string,
+  children?: ClipboardContentBlock[],
+): ClipboardContentBlock => ({
+  type: "bulletListItem",
+  content: [{ text }],
+  ...(children !== undefined ? { children } : {}),
+});
+
+const numberedItemBlock = (
+  text: string,
+  opts: { startNumber?: number; children?: ClipboardContentBlock[] } = {},
+): ClipboardContentBlock => ({
+  type: "numberedListItem",
+  content: [{ text }],
+  ...(opts.startNumber !== undefined
+    ? { startNumber: opts.startNumber }
+    : {}),
+  ...(opts.children !== undefined ? { children: opts.children } : {}),
+});
+
 describe("buildOutOfTableSequence", () => {
   it("표가 없는 시퀀스는 노드만 만들고 firstTable은 null이다", () => {
     const result = buildOutOfTableSequence(
@@ -140,5 +161,94 @@ describe("buildOutOfTableSequence", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("한도 초과가 거절되지 않음");
     expect(result.error.code).toBe("CELL_LIMIT_EXCEEDED");
+  });
+
+  // 완료 조건 1(Issue #143 (b), DELTA-02): 목록 항목은 항상 완전한
+  // blockContainer(blockContent, blockGroup?(children…)) 트리로 조립된다 —
+  // 문단/heading의 bare + appendTransaction 사후 배정에 기대지 않는다.
+  it("목록 항목은 blockContainer(content, blockGroup?(children)) 트리로 조립된다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [bulletItemBlock("a"), bulletItemBlock("b", [bulletItemBlock("c")])],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const [a, b] = result.value.nodes;
+    expect(a?.type.name).toBe("blockContainer");
+    expect(a?.childCount).toBe(1);
+    expect(a?.child(0).type.name).toBe("bulletListItem");
+    expect(a?.child(0).textContent).toBe("a");
+
+    expect(b?.type.name).toBe("blockContainer");
+    expect(b?.child(0).type.name).toBe("bulletListItem");
+    expect(b?.child(0).textContent).toBe("b");
+    expect(b?.child(1).type.name).toBe("blockGroup");
+    const nested = b?.child(1).child(0);
+    expect(nested?.type.name).toBe("blockContainer");
+    expect(nested?.child(0).type.name).toBe("bulletListItem");
+    expect(nested?.child(0).textContent).toBe("c");
+  });
+
+  it("목록 항목마다 고유한 blockId를 받는다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [bulletItemBlock("a"), bulletItemBlock("b", [bulletItemBlock("c")])],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const [a, b] = result.value.nodes;
+    const nestedId = b?.child(1).child(0).attrs.blockId;
+    const ids = [a?.attrs.blockId, b?.attrs.blockId, nestedId];
+    expect(new Set(ids).size).toBe(3);
+    for (const id of ids) {
+      expect(typeof id).toBe("string");
+      expect((id as string).length).toBeGreaterThan(0);
+    }
+  });
+
+  // 완료 조건 2: numberedListItem의 startNumber가 attrs에 정확히
+  // 반영된다(model-to-tiptap.ts의 blockContentToTiptapJson과 같은 attrs
+  // 계약 — startNumber: block.startNumber ?? null).
+  it("numberedListItem의 startNumber가 attrs에 반영된다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [numberedItemBlock("x", { startNumber: 3 })],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    expect(result.value.nodes[0]?.child(0).attrs.startNumber).toBe(3);
+  });
+
+  it("startNumber가 없는 numberedListItem은 attrs가 null이다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [numberedItemBlock("x")],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    expect(result.value.nodes[0]?.child(0).attrs.startNumber).toBeNull();
+  });
+
+  // 범위 밖(DELTA-02): 목록 항목 children 안에 중첩된 표는 firstTable
+  // 추적 대상이 아니다 — 최상위 시퀀스의 첫 표만 추적하는 기존 동작을
+  // 유지한다.
+  it("목록 항목 children 안 표는 firstTable 추적 대상이 아니다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [bulletItemBlock("intro", [tableBlock("A")])],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    expect(result.value.firstTable).toBeNull();
   });
 });

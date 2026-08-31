@@ -212,6 +212,57 @@ export const pasteTabularData = (
   return pasteOutOfTable(editor, [{ type: "table", data }], createId);
 };
 
+// 표 밖 붙여넣기 검증: 문단/heading은 편집 가능 콘텐츠 계약(inline), 표는
+// pasteTabularData와 같은 구조·서식·셀 한도 검증, 목록 항목
+// (bulletListItem/numberedListItem)은 자신의 content(inline)와 children을
+// 재귀로(같은 규칙) 검사한다(DELTA-02, Issue #143 (b)) — 위반이 있으면
+// CLIPBOARD_CONTENT_INVALID로 거절한다.
+const validateOutOfTableContent = (
+  blocks: readonly ClipboardContentBlock[],
+): Result<undefined, TableCommandError> => {
+  for (const block of blocks) {
+    if (block.type === "paragraph" || block.type === "heading") {
+      const violation = inlineContentViolation(block.content);
+      if (violation !== null) {
+        const blockTypeLabel =
+          block.type === "heading" ? "Heading" : "Paragraph";
+        return {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_CONTENT_INVALID",
+            message: `${blockTypeLabel} content ${violation}`,
+          },
+        };
+      }
+      continue;
+    }
+    if (block.type === "bulletListItem" || block.type === "numberedListItem") {
+      const violation = inlineContentViolation(block.content);
+      if (violation !== null) {
+        const blockTypeLabel =
+          block.type === "numberedListItem"
+            ? "Numbered list item"
+            : "Bullet list item";
+        return {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_CONTENT_INVALID",
+            message: `${blockTypeLabel} content ${violation}`,
+          },
+        };
+      }
+      if (block.children !== undefined && block.children.length > 0) {
+        const childResult = validateOutOfTableContent(block.children);
+        if (!childResult.ok) return childResult;
+      }
+      continue;
+    }
+    const validated = validateTabularDataForPaste(block.data);
+    if (!validated.ok) return validated;
+  }
+  return { ok: true, value: undefined };
+};
+
 // 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
 // 표가 fragment의 유일한 실질 콘텐츠일 때 반환하는 단일 표 시퀀스는
 // pasteTabularData에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을
@@ -229,28 +280,10 @@ export const pasteClipboardContent = (
     return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
   }
 
-  // 뮤테이션 전에 시퀀스 전체를 검증한다(G-EDT-001) — 표 부분은
-  // pasteTabularData와 같은 구조·서식·셀 한도 검증, 문단과 제목은 편집 가능
-  // 콘텐츠 계약만 적용한다.
-  for (const block of content) {
-    if (block.type === "paragraph" || block.type === "heading") {
-      const violation = inlineContentViolation(block.content);
-      if (violation !== null) {
-        const blockTypeLabel =
-          block.type === "heading" ? "Heading" : "Paragraph";
-        return {
-          ok: false,
-          error: {
-            code: "CLIPBOARD_CONTENT_INVALID",
-            message: `${blockTypeLabel} content ${violation}`,
-          },
-        };
-      }
-      continue;
-    }
-    const validated = validateTabularDataForPaste(block.data);
-    if (!validated.ok) return validated;
-  }
+  // 뮤테이션 전에 시퀀스 전체를 검증한다(G-EDT-001) — validateOutOfTableContent가
+  // 표·문단·제목·목록 항목(재귀) 각각의 계약을 적용한다.
+  const outOfTableValidation = validateOutOfTableContent(content);
+  if (!outOfTableValidation.ok) return outOfTableValidation;
 
   const state = editor.state;
 

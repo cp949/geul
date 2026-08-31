@@ -28,6 +28,10 @@ import {
 import { BlockIdExtension } from "../src/block-id-extension.js";
 import { CodeBlockExtension } from "../src/code-block-extension.js";
 import {
+  BulletListItemExtension,
+  NumberedListItemExtension,
+} from "../src/list-item-extension.js";
+import {
   TableCellExtension,
   TableExtension,
   TableRowExtension,
@@ -70,6 +74,34 @@ const FixtureHeadingExtension = Node.create({
       ? (node.attrs.level as number)
       : 1;
     return [`h${level}`, mergeAttributes(HTMLAttributes), 0];
+  },
+});
+
+// list-item-extension.ts의 bulletListItem/numberedListItem은 DOM 표현
+// (renderHTML)이 없다 — production-editor-assembly.ts의
+// ProductionBulletListItemExtension/ProductionNumberedListItemExtension이
+// 그 자리를 채우지만 모듈 비공개 const라 가져올 수 없다(위
+// FixtureParagraphExtension/FixtureHeadingExtension과 같은 이유). DOM에
+// 마운트되는 createTableFixtureEditor가 이 확장을 쓰므로(DELTA-02, Issue
+// #143 (b)) 최소 renderHTML만 이 파일이 독립 소유한다 — production과 같은
+// data-be-* 속성 모양을 그대로 따른다.
+const FixtureBulletListItemExtension = BulletListItemExtension.extend({
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-be-bullet-list-item": "" }),
+      0,
+    ];
+  },
+});
+
+const FixtureNumberedListItemExtension = NumberedListItemExtension.extend({
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-be-numbered-list-item": "" }),
+      0,
+    ];
   },
 });
 
@@ -152,6 +184,8 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
   FixtureParagraphExtension,
   FixtureHeadingExtension,
   CodeBlockExtension,
+  FixtureBulletListItemExtension,
+  FixtureNumberedListItemExtension,
   BlockContainerExtension,
   BlockGroupExtension,
   BlockIdExtension,
