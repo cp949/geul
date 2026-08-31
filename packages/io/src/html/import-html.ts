@@ -479,14 +479,20 @@ const splitListItemChildren = (
 // <p>면 그 인라인이 content이고 나머지 자식이 children이다(export-html.ts가
 // 내는 <blockquote><p>content</p>[<div data-be-children>]> 형상의 역변환).
 // 머리가 h2·ul·중첩 blockquote처럼 비문단 블록이면 content는 비고 전부
-// children이다. 머리가 텍스트나 인라인 요소면 두 갈래다 — 블록 자식이
-// 하나도 없으면(손으로 쓴 <blockquote>인용</blockquote>) 인라인 전체가
-// content이고, 블록 자식이 섞여 있으면 문서 순서를 지키려 content를 비우고
-// 전부 children으로 넘긴다(앞선 인라인 run은 segmentBlocks가 문단으로
-// 낸다 — 승격하면 content가 뒤의 블록보다 앞서 원래 순서와 어긋난다).
+// children이다. 머리가 텍스트나 인라인 요소면(손으로 쓴 HTML에서만
+// 나타난다 — geul 자체 export는 own content를 항상 <p>로 감싼다)
+// splitListItemChildren과 동일한 규칙을 쓴다: 블록 형제가 하나도 없으면
+// 인라인 전체가 content이고, 있으면 첫 block-boundary 전까지를 content로
+// 승격하고 boundary부터를 children으로 넘긴다(Issue #142 정정 — 이전에는
+// 이 분기에서 content를 항상 비우고 전부 children으로 넘겼다. 근거로 든
+// "승격하면 문서 순서가 어긋난다"는 실측에서 재현되지 않았다: content는
+// blockContainer 스키마상 children보다 항상 먼저 렌더링되므로 승격해도
+// 순서는 그대로 보존된다 — 차이는 순서가 아니라 구조적 귀속뿐이었다).
 // children 자리가 export가 낸 단일 data-be-children 컨테이너뿐이면 그 안의
 // 노드를 꺼낸다 — 컨테이너 div를 그대로 넘기면 segmentBlocks가 div를 문단
-// 경계로 걸어 들어가 그 안의 children wrapper를 평면 처리해 버린다.
+// 경계로 걸어 들어가 그 안의 children wrapper를 평면 처리해 버린다(문단
+// head·비문단 블록 head 분기에서만 나타나는 형상이라 아래 두 분기에만
+// 적용한다).
 const splitQuoteChildren = (
   node: HtmlElementNode,
 ): { contentNodes: HtmlNode[]; childrenNodes: HtmlNode[] } => {
@@ -496,12 +502,20 @@ const splitQuoteChildren = (
   if (head === undefined) return { contentNodes: [], childrenNodes: [] };
 
   if (!isElementNode(head) || !isBlockLevelElement(head)) {
-    const hasBlockChild = node.children.some(
-      (child) => isElementNode(child) && isBlockLevelElement(child),
+    const headIndex = node.children.indexOf(head);
+    const firstBoundaryIndex = node.children.findIndex(
+      (child, index) =>
+        index >= headIndex &&
+        isElementNode(child) &&
+        isBlockLevelElement(child),
     );
-    return hasBlockChild
-      ? { contentNodes: [], childrenNodes: node.children }
-      : { contentNodes: node.children, childrenNodes: [] };
+    if (firstBoundaryIndex < 0) {
+      return { contentNodes: node.children, childrenNodes: [] };
+    }
+    return {
+      contentNodes: node.children.slice(0, firstBoundaryIndex),
+      childrenNodes: node.children.slice(firstBoundaryIndex),
+    };
   }
 
   const rest = isParagraphTag(head.tagName)

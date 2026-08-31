@@ -3,9 +3,12 @@
  * 검증한다. export는 quote를 <blockquote data-be-block-id><p>content</p>
  * [<div data-be-children>…]</blockquote>로 내고, import는 D6 분할 규칙 —
  * 첫 블록 자식이 <p>면 그 인라인이 content, 나머지는 children; 첫 자식이
- * 비문단이면 content 빈 채 전부 children; 블록 자식이 없으면 인라인 전체가
- * content — 로 되읽어 자기 출력을 원본 모델로 복원한다. 클립보드 경로의
- * "blockquote는 문단 경계" 계약(슬라이스 10 소관)은 그대로다(06a-C3).
+ * h2 등 비문단 블록 요소면 content 빈 채 전부 children; 첫 자식이 태그 없는
+ * 인라인이면 list item(splitListItemChildren)과 동일하게 블록 형제가
+ * 없으면 인라인 전체가 content, 있으면 첫 block-boundary 전까지만 content로
+ * 승격(Issue #142 정정) — 로 되읽어 자기 출력을 원본 모델로 복원한다.
+ * 클립보드 경로의 "blockquote는 문단 경계" 계약(슬라이스 10 소관)은
+ * 그대로다(06a-C3).
  */
 import type { Block, Document } from "@cp949/geul-model";
 import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
@@ -155,6 +158,29 @@ describe("외부 blockquote import(D6 첫 문단 승격)", () => {
         ],
       },
     ]);
+  });
+
+  // Issue #142 정정: 이전에는 첫 자식이 태그 없는 bare 인라인이면(사람이
+  // 손으로 쓴 HTML에서만 나타난다 — geul 자체 export는 own content를 항상
+  // <p>로 감싼다) content를 비우고 전부 children으로 넘겼다. list item과
+  // 동일 규칙으로 통일해 첫 block-boundary 전까지를 content로 승격한다 —
+  // content는 blockContainer 스키마상 항상 children보다 먼저 렌더링되므로
+  // 승격해도 문서 순서는 그대로다.
+  it("첫 자식이 태그 없는 인라인이고 뒤에 block 형제가 있으면 boundary 전까지 content로 승격된다", () => {
+    expectImportedBlocks(
+      "<blockquote>lead text<p>middle</p>trailing text</blockquote>",
+      [
+        {
+          id: "html-1",
+          type: "quote",
+          content: [{ text: "lead text" }],
+          children: [
+            paragraphBlock("html-2", "middle"),
+            paragraphBlock("html-3", "trailing text"),
+          ],
+        },
+      ],
+    );
   });
 
   it("blockquote 안 목록 항목·중첩 blockquote가 각 타입의 children으로 재귀 매핑된다", () => {

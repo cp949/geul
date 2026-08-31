@@ -218,7 +218,7 @@ CodeBlock의 Enter는 source에 LF를 삽입하는 일반 code editing만 담당
 
 - H4-H6 → `h4`~`h6`. 토글 제목/토글 목록의 `collapsed` → `<details open={!collapsed}>`류 표현(정확한 매핑은 슬라이스 착수 시 확정, `isToggleable`이 없으면 일반 heading으로 export).
 - 인용문 → `blockquote`(children은 blockquote 안에 중첩 HTML로).
-- import 방향: `<blockquote>`의 첫 자식이 문단이면 그 문단의 인라인 콘텐츠가 quote `content`가 되고 나머지 자식은 `children`이 된다. 첫 자식이 비문단이면 `content`는 빈 채로 두고 전부 `children`이 된다(사용자 승인 완료 2026-08-28, Issue #38 슬라이스 3).
+- import 방향: `<blockquote>`의 첫 자식이 문단이면 그 문단의 인라인 콘텐츠가 quote `content`가 되고 나머지 자식은 `children`이 된다. 첫 자식이 `h2`·`ul`·중첩 `blockquote`처럼 비문단 블록 요소면 `content`는 빈 채로 두고 전부 `children`이 된다(사용자 승인 완료 2026-08-28, Issue #38 슬라이스 3). 첫 자식이 태그로 감싸이지 않은 인라인 텍스트·요소면(손으로 쓴 HTML에서만 나타난다 — geul 자체 export는 own content를 항상 `<p>`로 감싼다) list item(`splitListItemChildren`)과 동일한 규칙을 쓴다: 블록 형제가 없으면 인라인 전체가 `content`이고, 있으면 첫 block-boundary 전까지를 `content`로 승격하고 boundary부터를 `children`으로 넘긴다(Issue #142 정정, 2026-09-01 — 이전에는 이 경우도 `content`를 비웠으나 근거였던 "승격하면 문서 순서가 어긋난다"가 실측에서 재현되지 않아 list와 통일했다).
 - 구분선 → `hr`.
 - 코드 블록 export → `<pre><code data-language="..." class="language-...">source</code></pre>`. language가 있으면 exact 값을 HTML escape한 `data-language`에 저장한다. `/^[A-Za-z0-9][A-Za-z0-9_-]*$/`을 만족할 때만 같은 값의 `language-*` class를 병기한다. language가 없으면 두 metadata를 모두 생략한다.
 - 코드 블록 import는 `<pre><code>`와 bare `<pre>`를 모두 받는다. language metadata가 없는 bare `<pre>`는 language 없는 CodeBlock이다. bare `<pre>` 자체의 `data-language`·`language-*` class는 다음 우선순위의 `<pre>` 후보로 처리한다. source는 sanitized descendant text를 문서 순서대로 연결하고 `<br>`만 LF로 바꾼다. `span` 등 wrapper는 visible text만 보존하고 element 경계 자체로 LF를 만들지 않는다.
