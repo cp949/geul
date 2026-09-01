@@ -221,7 +221,7 @@ DELTA 선택은 정상 동작이라 보고 사항이 아니다.
 
 ## RD 완료와 roadmap 종료
 
-하위 qq·ff workflow가 리뷰와 최종 gate를 통과하고 `dev`로 이전된 뒤에만 RD를 `DONE`으로 바꾼다. 이어 다음을 수행한다.
+RD의 "완료 조건" 체크리스트 전체가 체크되면 `DONE`이다. 각 DELTA가 이미 개별적으로 리뷰·`dev` 이전을 마쳤으므로 RD 단위의 별도 게이트는 없다 — 마지막 DELTA 완료 시점에 메인 세션이 완료 조건 전체를 실측 증거와 한 번 더 재대조한다. 재대조를 통과하면 다음을 수행한다.
 
 1. RD 완료 증거와 실제 결과를 `RD-NNN.md`와 `progress.md`에 기록한다.
 2. DAG와 나머지 RD의 readiness를 다시 판정한다.
@@ -262,8 +262,9 @@ _works/_completed/yyyyMMdd-NN-roadmap-<title>/
 | ----------------------------------- | ---------------------------------------------------------------------------- |
 | roadmap-workflow 진입 여부          | [`../../AGENTS.md`](../../AGENTS.md)의 "레인 선택 규칙"                      |
 | RD 결과·상태·의존 DAG·자동 재계획   | 이 문서                                                                      |
-| RD 내부 DELTA 형식·리뷰·브랜치 수명 | [`./ff-workflow.md`](./ff-workflow.md)                                       |
-| 단일 DELTA 크기 작업 절차           | [`./qq-workflow.md`](./qq-workflow.md)                                       |
+| DELTA 사이클 절차·문서 형식         | 이 문서의 "경량 DELTA 사이클"                                                |
+| 재그룹화·커밋 해시 참조·pending 셋  | [`./ff-workflow.md`](./ff-workflow.md)(참조, 복제 없음)                      |
+| 승격된 DELTA의 워크플로 절차         | 승격 대상에 따라 [`./ff-workflow.md`](./ff-workflow.md) 또는 [`./qq-workflow.md`](./qq-workflow.md) |
 | 제품 범위·릴리스 완료 조건          | [`../product/roadmap.md`](../product/roadmap.md)                             |
 | 실행 계획과 진행 상태 원본          | GitHub Issue                                                                 |
 | 문서 생성·갱신과 종료 조건          | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |
