@@ -2,11 +2,11 @@ import {
   type Block,
   type Document,
   type InlineContent,
-  isListItemBlockType,
   type ListItemBlock,
   parseDocument,
   type TableBlock,
   type TextMark,
+  type ToggleListItemBlock,
 } from "@cp949/geul-model";
 import remarkGfm from "remark-gfm";
 import remarkStringify from "remark-stringify";
@@ -19,6 +19,7 @@ import { computeColumnAlignments } from "./column-align.js";
 import {
   analyzeMarkdownLoss,
   hasAmbiguousLeadingListParagraph,
+  isGfmListLikeBlockType,
   type MarkdownLoss,
 } from "./loss-analysis.js";
 
@@ -155,11 +156,12 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 };
 
 // children이 있는 paragraph/heading/quote를 부모 바로 뒤의 형제 블록으로
-// 평탄화한다(D5, lossy export 전용). 목록 항목은 mdast listItem의 block
-// children으로 계층을 표현할 수 있으므로 컨테이너를 유지한 채 내부에서
-// 표현 불가능한 자식만 재귀적으로 평탄화한다. own content가 비고 첫 자식이
-// paragraph면 GFM이 둘의 경계를 구분하지 못하므로 그 paragraph를 content로
-// 승격하고 나머지 목록 계층을 유지한다.
+// 평탄화한다(D5, lossy export 전용). 목록 항목(toggleListItem 포함,
+// isGfmListLikeBlockType)은 mdast listItem의 block children으로 계층을
+// 표현할 수 있으므로 컨테이너를 유지한 채 내부에서 표현 불가능한 자식만
+// 재귀적으로 평탄화한다. own content가 비고 첫 자식이 paragraph면 GFM이
+// 둘의 경계를 구분하지 못하므로 그 paragraph를 content로 승격하고 나머지
+// 목록 계층을 유지한다.
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
     if (block.type === "table") return [block];
@@ -170,7 +172,7 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
-    if (isListItemBlockType(block.type)) {
+    if (isGfmListLikeBlockType(block.type)) {
       const { children, ...ownBlock } = block;
       const flattenedChildren = flattenBlocks(children);
       const firstChild = flattenedChildren[0];
@@ -205,7 +207,9 @@ const flattenBlocks = (blocks: Block[]): Block[] =>
 const codeBlockLanguage = (language: string): string =>
   language.replace(/&/g, "&amp;");
 
-const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
+const listNode = (
+  blocks: Array<ListItemBlock | ToggleListItemBlock>,
+): MarkdownOutputNode => {
   const first = blocks[0];
   if (first === undefined) throw new Error("Cannot serialize an empty list");
   const spread = blocks.some(
@@ -277,8 +281,8 @@ const blockNode = (block: Block): MarkdownOutputNode => {
         : { lang: codeBlockLanguage(block.language) }),
     };
   }
-  if (isListItemBlockType(block.type)) {
-    return listNode([block as ListItemBlock]);
+  if (isGfmListLikeBlockType(block.type)) {
+    return listNode([block as ListItemBlock | ToggleListItemBlock]);
   }
   if (block.type === "quote") {
     return {

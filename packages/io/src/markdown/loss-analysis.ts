@@ -4,6 +4,8 @@ import {
   type Document,
   type InlineContent,
   type ListItemBlock,
+  type ListItemBlockType,
+  type ToggleListItemBlock,
 } from "@cp949/geul-model";
 
 import { computeColumnAlignments } from "./column-align.js";
@@ -21,7 +23,8 @@ export type MarkdownLoss = {
     | "HEADER_COLUMN"
     | "INLINE_CODE_NEWLINE"
     | "NESTED_CHILDREN"
-    | "CHECKED_STATE_LOST";
+    | "CHECKED_STATE_LOST"
+    | "TOGGLE_STATE_LOST";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -117,6 +120,19 @@ const collectTableLosses = (
   }
 };
 
+// toggleListItem은 model isListItemBlockType(로드맵 D2, <ul>/<li> HTML 직렬화
+// 축)에 없어 GFM export가 기본적으로 이를 목록으로 인식하지 못하고 default
+// 분기로 떨어뜨려 글머리 기호 자체를 잃는다. GFM lossy export는 toggleListItem을
+// 접힘 정보만 버린 채 일반 글머리 목록으로 낮추므로(spec §7.2) "GFM에서
+// 목록처럼 다뤄야 하는 블록"을 판정하는 이 지역 predicate가 필요하다. model에
+// 추가하지 않는다 — groupListItemRuns(html·markdown 공유)는 isListItemBlockType을
+// 그대로 쓰는 채로 남아야 toggleListItem이 <ul>/<li>로 다시 묶이려는 시도가
+// 생기지 않는다(D2가 막은 표 전용 분기 오판 문제 재발 방지).
+export const isGfmListLikeBlockType = (
+  type: string,
+): type is ListItemBlockType | "toggleListItem" =>
+  isListItemBlockType(type) || type === "toggleListItem";
+
 // paragraph/heading/quote의 children은 대응 mdast 노드에 블록 슬롯이 없어
 // NESTED_CHILDREN이다. 목록 항목의 children은 mdast listItem이 직접
 // GFM은 목록 항목의 own content와 첫 child paragraph 경계를 구분하지
@@ -126,11 +142,11 @@ const collectTableLosses = (
 // 같은 함수를 호출한다(아키텍처 리뷰 6차 후보 L5) — 세 곳이 독립된 조건을
 // 유지하면 한쪽만 조정될 때 손실 보고와 실제 출력이 조용히 어긋난다.
 export const hasAmbiguousLeadingListParagraph = (block: Block): boolean => {
-  // isListItemBlockType은 block.type(string)만 좁힌다 — block 자신의
+  // isGfmListLikeBlockType은 block.type(string)만 좁힌다 — block 자신의
   // discriminated union은 좁혀지지 않는다(TS 제약, 아키텍처 리뷰 6차 L1에서
   // 처음 부딪힘). predicate가 이미 그 계약을 증명했으므로 캐스트는 안전하다.
-  if (!isListItemBlockType(block.type)) return false;
-  const item = block as ListItemBlock;
+  if (!isGfmListLikeBlockType(block.type)) return false;
+  const item = block as ListItemBlock | ToggleListItemBlock;
   return item.content.length === 0 && item.children?.[0]?.type === "paragraph";
 };
 
@@ -158,9 +174,11 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       message: `Block ${block.id} contains inline code with a newline`,
     });
   }
-  if (block.children !== undefined && block.children.length > 0) {
+  const hasChildren = block.children !== undefined && block.children.length > 0;
+
+  if (hasChildren) {
     if (
-      !isListItemBlockType(block.type) ||
+      !isGfmListLikeBlockType(block.type) ||
       hasAmbiguousLeadingListParagraph(block)
     ) {
       losses.push({
@@ -171,7 +189,7 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     } else if (
       block.type === "checkListItem" &&
       block.content.length === 0 &&
-      block.children[0]?.type !== "paragraph"
+      block.children?.[0]?.type !== "paragraph"
     ) {
       // mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일 때만
       // `[ ]`/`[x]`를 붙인다(export-markdown.ts listNode 주석 참고). own
@@ -184,7 +202,25 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
         message: `Block ${block.id} has empty content and a non-paragraph first child; GFM cannot anchor the checkbox marker`,
       });
     }
-    for (const child of block.children) {
+  }
+
+  // "토글이라는 사실 자체"는 GFM이 표현할 수 없는 상태라 children 유무와
+  // 무관하게 항상 보고한다(spec §7.2) — CHECKED_STATE_LOST처럼 특정 구조
+  // 조합에서만 나는 손실과 다르다. heading에 children이 있으면 위
+  // NESTED_CHILDREN과 함께 보고된다(서로 억제하지 않음).
+  if (
+    (block.type === "heading" && block.isToggleable === true) ||
+    block.type === "toggleListItem"
+  ) {
+    losses.push({
+      kind: "TOGGLE_STATE_LOST",
+      blockId: block.id,
+      message: `Block ${block.id} is a toggle; GFM export does not preserve the collapsed state`,
+    });
+  }
+
+  if (hasChildren) {
+    for (const child of block.children ?? []) {
       collectBlockLosses(child, losses);
     }
   }
