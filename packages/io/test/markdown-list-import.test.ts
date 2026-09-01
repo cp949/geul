@@ -28,44 +28,8 @@ const buildNestedListMarkdown = (levels: number): string =>
   ).join("\n");
 
 describe("GFM 목록 기본 의미", () => {
-  it("체크·미체크 task 항목을 상태 표식이 있는 문단으로 강등하고 children을 보존한다", () => {
-    const { document, warnings } = importDocument(
-      ["- [x] 완료", "  - 자식", "- [ ] 미완료"].join("\n"),
-    );
-
-    expect(document.blocks).toEqual([
-      {
-        id: "markdown-1",
-        type: "paragraph",
-        content: [{ text: "[x] 완료" }],
-        children: [
-          {
-            id: "markdown-2",
-            type: "bulletListItem",
-            content: [{ text: "자식" }],
-          },
-        ],
-      },
-      {
-        id: "markdown-3",
-        type: "paragraph",
-        content: [{ text: "[ ] 미완료" }],
-      },
-    ]);
-    expect(warnings).toEqual([
-      {
-        kind: "LIST_DOWNGRADED",
-        blockId: "markdown-1",
-        message: expect.stringContaining("task list"),
-      },
-      {
-        kind: "LIST_DOWNGRADED",
-        blockId: "markdown-3",
-        message: expect.stringContaining("task list"),
-      },
-    ]);
-  });
-
+  // task 항목(`- [ ]`/`- [x]`)의 checkListItem 매핑은
+  // markdown-check-list-item-import.test.ts가 전담한다(RD-002 DELTA-02).
   it("task가 아닌 글머리·번호 항목은 목록 타입으로 경고 없이 보존한다", () => {
     const { document, warnings } = importDocument("- 일반\n\n1. 번호");
 

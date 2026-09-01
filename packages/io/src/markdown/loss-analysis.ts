@@ -20,7 +20,8 @@ export type MarkdownLoss = {
     | "HEADER_ROW"
     | "HEADER_COLUMN"
     | "INLINE_CODE_NEWLINE"
-    | "NESTED_CHILDREN";
+    | "NESTED_CHILDREN"
+    | "CHECKED_STATE_LOST";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -166,6 +167,21 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
         kind: "NESTED_CHILDREN",
         blockId: block.id,
         message: `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`,
+      });
+    } else if (
+      block.type === "checkListItem" &&
+      block.content.length === 0 &&
+      block.children[0]?.type !== "paragraph"
+    ) {
+      // mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일 때만
+      // `[ ]`/`[x]`를 붙인다(export-markdown.ts listNode 주석 참고). own
+      // content가 비고 첫 child가 non-paragraph면(예: quote) 체크박스가
+      // stringify에서 조용히 사라진다 — 콘텐츠·중첩은 보존되지만 checked만
+      // 손실되는 별도 카테고리라 NESTED_CHILDREN과 분리한다.
+      losses.push({
+        kind: "CHECKED_STATE_LOST",
+        blockId: block.id,
+        message: `Block ${block.id} has empty content and a non-paragraph first child; GFM cannot anchor the checkbox marker`,
       });
     }
     for (const child of block.children) {

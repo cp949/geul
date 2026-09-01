@@ -175,7 +175,6 @@ const resolveReferences = (
 export type ImportWarning = {
   kind:
     | "RAW_HTML_DOWNGRADED"
-    | "LIST_DOWNGRADED"
     | "IMAGE_DOWNGRADED"
     | "UNSUPPORTED_BLOCK_DOWNGRADED"
     | "UNSUPPORTED_INLINE_DOWNGRADED"
@@ -528,31 +527,19 @@ function listBlocksFromNode(
     const childNodes =
       contentNode === undefined ? itemChildren : itemChildren.slice(1);
     const children = blocksFromNodes(childNodes, createId, warnings);
-    const isTaskItem = item.checked === true || item.checked === false;
     const content: InlineContent = [];
-    if (isTaskItem) {
-      appendOrMergeInlineItem(
-        content,
-        item.checked === true ? "[x] " : "[ ] ",
-        [],
-      );
-    }
     readInlineNodes(contentNode?.children ?? [], [], content, warnings, {
       blockId: id,
       inTableCell: false,
     });
 
-    if (isTaskItem) {
+    if (item.checked === true || item.checked === false) {
       blocks.push({
         id,
-        type: "paragraph",
+        type: "checkListItem",
+        checked: item.checked,
         content,
         ...(children.length === 0 ? {} : { children }),
-      });
-      warnings.push({
-        kind: "LIST_DOWNGRADED",
-        blockId: id,
-        message: "GFM task list item was imported as a paragraph",
       });
       continue;
     }

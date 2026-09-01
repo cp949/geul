@@ -39,6 +39,7 @@ type MarkdownOutputNode = {
   ordered?: boolean;
   start?: number;
   spread?: boolean;
+  checked?: boolean;
   children?: MarkdownOutputNode[];
 };
 
@@ -226,6 +227,17 @@ const listNode = (blocks: ListItemBlock[]): MarkdownOutputNode => {
       return {
         type: "listItem",
         spread: block.children !== undefined && block.children.length > 0,
+        // mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일
+        // 때만 `[ ]`/`[x]`를 붙인다(라이브러리 소스 확인). 아래 own paragraph
+        // 생략 최적화 때문에 첫 자식이 non-paragraph가 되는 조합(own content
+        // 비고 첫 child가 quote 등)은 checked가 stringify 시 조용히
+        // 사라진다 — own paragraph를 강제로 materialize해 봐도 그 빈
+        // paragraph와 다음 child 사이 필수 빈 줄을 체크박스 정규식 후처리가
+        // 잘라먹어 깨진 Markdown이 나온다(실측 확인, 라이브러리 결함에 가까운
+        // 상호작용이라 이 DELTA에서 우회하지 않는다). 대신 이 조합을
+        // loss-analysis.ts의 CHECKED_STATE_LOST로 명시 보고해 조용한 손실을
+        // 막는다 — checked는 그 케이스에서만 값이 있어도 stringify가 무시한다.
+        ...(block.type === "checkListItem" ? { checked: block.checked } : {}),
         // 빈 own paragraph는 Markdown에 materialize되지 않는다. 첫 자식이
         // non-paragraph면 이를 첫 mdast child로 직접 두어 `- > quote` 같은
         // 표현 가능한 빈-content 목록 구조를 보존한다. hasAmbiguousLeadingListParagraph는
