@@ -14,7 +14,7 @@ ff-workflow에서 DELTA 분할(트랙-1), 계획서 리뷰(트랙-2), 테스트 
 
 적합한 크기는 ff-workflow의 DELTA 하나다 — 상한은 [`./ff-workflow.md`](./ff-workflow.md)의 "크기 규칙"을 그대로 차용한다. 계획 단계에서 상한을 넘을 것으로 보이거나 구현 중 넘게 되면 그 사실을 보고하고 판단은 사용자에게 남긴다. 에이전트는 스스로 ff-workflow로 승격하거나 레인을 바꾸지 않는다.
 
-roadmap-workflow의 RD를 실행하는 경우 상위 결과·진입 조건과 의존 DAG는 [`./roadmap-workflow.md`](./roadmap-workflow.md)가 소유한다. qq-workflow는 DELTA 하나 크기의 RD 구현·리뷰·병합을 소유한다.
+roadmap-workflow의 RD는 기본적으로 [`./roadmap-workflow.md`](./roadmap-workflow.md)의 "경량 DELTA 사이클"로 실행하고 이 qq-workflow에 위임하지 않는다. RD의 특정 DELTA가 그 문서 "승격 예외" 조건에 해당해 승격된 경우에만 이 qq-workflow가 그 DELTA의 구현·리뷰·병합을 소유한다.
 
 중단 작업 재개나 완료 단계 재실행의 단계 지시는 작업 폴더를 함께 받는다. 새 작업은 작업 설명만으로 시작한다.
 
@@ -61,10 +61,10 @@ ff-workflow의 `_meta.md`와 같은 기본 3필드 manifest다.
 ---
 ```
 
-roadmap 하위 작업이면 다음 포인터를 네 번째 필드로 추가한다. 독립 qq-workflow에서는 생략한다.
+roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필드로 추가한다. 독립 qq-workflow에서는 생략한다.
 
 ```markdown
-상위 로드맵: _works/roadmap/<slug>/roadmap.md#RD-NNN
+상위 로드맵: _works/roadmap/roadmap.md#RD-NNN
 ```
 
 단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. 확정 커밋 해시는 Git과 `docs/history/`가, 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
@@ -91,7 +91,7 @@ roadmap 하위 작업이면 다음 포인터를 네 번째 필드로 추가한�
 
 ## 단계-1. 계획
 
-- 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화, roadmap 하위 작업이면 대상 `RD-NNN.md`와 readiness probe
+- 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화, roadmap-workflow에서 승격된 작업이면 대상 `RD-NNN.md`와 승격 사유
 - 출력: 작업 폴더, `_meta.md`, `01-계획.md`, 사용자 승인, 작업 브랜치
 - 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다 — 판정은 `_meta.md`의 `상태`가 `진행중`이면 미완료다. `docs/guides/INDEX.md`와 `docs/pitfalls/INDEX.md`를 대조해 계획서의 6·7절을 채운다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. **계획서를 사용자에게 제시하고 승인을 받는다.** 승인 후 `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
 - 정지: 사용자 승인 전에 브랜치를 만들거나 코드를 고치지 않는다. 커밋하지 않는다.
@@ -100,9 +100,9 @@ roadmap 하위 작업이면 다음 포인터를 네 번째 필드로 추가한�
 
 - 입력: `01-계획.md`, 계획서 6·7절이 지목한 가이드·함정
 - 출력: 작업 브랜치 커밋
-- 절차: subagent 협업 모드로 진행한다. 메인 세션이 아래 "구현 prompt"를 파일 쓰기 subagent 하나에 전달한다. subagent가 반환하면 메인 세션은 diff와 검증 증거를 확인한 뒤 커밋한다. roadmap 하위 작업은 구현 gate 뒤 상위 RD 의존을 재평가하고 순서 변경·숨은 의존을 상위 `progress.md`에 동기화한다.
+- 절차: subagent 협업 모드로 진행한다. 메인 세션이 아래 "구현 prompt"를 파일 쓰기 subagent 하나에 전달한다. subagent가 반환하면 메인 세션은 diff와 검증 증거를 확인한 뒤 커밋한다. roadmap-workflow에서 승격된 작업은 구현 gate 뒤 상위 RD의 "예상 DELTA"·"완료 조건" 체크리스트를 갱신하고 남은 상위 RD 의존을 재평가한다.
 - 검증: 계획서의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다.
-- 정지: squash, `dev` 병합, push, GitHub 쓰기를 하지 않는다. 변경이 DELTA 크기 상한을 넘게 되면 정지하고 보고한다. 독립 qq-workflow의 레인 전환 판단은 사용자가 한다. roadmap 하위 작업은 상위 roadmap-workflow가 선행·후속 RD 분리를 자동 재계획한다.
+- 정지: squash, `dev` 병합, push, GitHub 쓰기를 하지 않는다. 변경이 DELTA 크기 상한을 넘게 되면 정지하고 보고한다. 독립 qq-workflow의 레인 전환 판단은 사용자가 한다. roadmap-workflow에서 승격된 작업은 상위 roadmap-workflow의 "RD 사이" 규칙을 따른다.
 
 ### 구현 prompt
 
