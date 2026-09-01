@@ -207,9 +207,9 @@ describe("SlashMenu 질의 팝업", () => {
     typeIntoBlock(rendered, 0, "/");
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    // 기존 option 순서 뒤에 목록 둘, 삽입 전용 Table·Divider가 이어진다.
+    // 기존 option 순서 뒤에 목록 셋, 삽입 전용 Table·Divider가 이어진다.
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(13);
+    expect(options).toHaveLength(14);
     expect(
       options.map(
         (option) =>
@@ -227,6 +227,7 @@ describe("SlashMenu 질의 팝업", () => {
       "Code",
       "Bulleted List",
       "Numbered List",
+      "Check List",
       "Table",
       "Divider",
     ]);
@@ -331,6 +332,11 @@ describe("SlashMenu 질의 팝업", () => {
       label: "Numbered List",
       type: "numberedListItem" as const,
     },
+    {
+      query: "/check",
+      label: "Check List",
+      type: "checkListItem" as const,
+    },
   ])(
     "$label 항목의 pointerdown→click이 트리거를 지우고 같은 id의 목록을 만든 뒤 메뉴를 닫고 초점을 복원한다",
     ({ query, label, type }) => {
@@ -346,7 +352,8 @@ describe("SlashMenu 질의 팝업", () => {
       expect(block?.type).toBe(type);
       if (
         block?.type !== "bulletListItem" &&
-        block?.type !== "numberedListItem"
+        block?.type !== "numberedListItem" &&
+        block?.type !== "checkListItem"
       ) {
         throw new Error("목록 블록이 아니다");
       }
@@ -360,7 +367,11 @@ describe("SlashMenu 질의 팝업", () => {
   it("ArrowDown 후 Enter가 강조한 Numbered List command를 실행한다", () => {
     const rendered = renderCaretBlocks();
     const blockId = typeIntoBlock(rendered, 0, "/list");
-    expect(screen.getAllByRole("option")).toHaveLength(2);
+    // "/list"는 라벨에 "List"가 들어간 Bulleted/Numbered/Check List 셋을
+    // 모두 매치한다(matchesQuery의 라벨 부분 일치) — 배열 순서상 Bulleted
+    // List가 0번, Numbered List가 1번이라 ArrowDown 한 번의 목적지는
+    // 그대로다.
+    expect(screen.getAllByRole("option")).toHaveLength(3);
     expect(
       screen
         .getByRole("option", { name: /Bulleted List/ })
@@ -394,8 +405,12 @@ describe("SlashMenu 질의 팝업", () => {
       type: "numberedListItem" as const,
       selector: "[data-be-numbered-list-item]",
     },
+    {
+      type: "checkListItem" as const,
+      selector: "[data-be-check-list-item]",
+    },
   ])(
-    "$type source의 Slash menu는 Code를 제외하고 두 목록·Table·Divider를 유지한다",
+    "$type source의 Slash menu는 Code를 제외하고 세 목록·Table·Divider를 유지한다",
     ({ type, selector }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, "/");
@@ -417,9 +432,10 @@ describe("SlashMenu 질의 팝업", () => {
       expect(
         screen.getByRole("option", { name: /Numbered List/ }),
       ).not.toBeNull();
+      expect(screen.getByRole("option", { name: /Check List/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
-      expect(screen.getAllByRole("option")).toHaveLength(12);
+      expect(screen.getAllByRole("option")).toHaveLength(13);
     },
   );
 
@@ -593,7 +609,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
     expect(inserted.content).toEqual([]);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(13);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
 
     // 메뉴가 "그 블록"으로 열렸는지는 캐럿 갱신 한 번으로 갈린다. 실제
     // insertParagraphAfter는 캐럿을 새 문단으로 옮기므로(전제), 메뉴가 hover한

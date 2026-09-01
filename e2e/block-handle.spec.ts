@@ -183,6 +183,31 @@ test("Turn into의 번호 목록을 클릭하면 내용을 보존하고 메뉴�
   await expect(editable).toBeFocused();
 });
 
+test("Turn into의 체크 목록을 클릭하면 내용을 보존하고 클릭으로 checked를 토글한다 (RD-001 DELTA-06)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("보존할 내용");
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Check List" }).click();
+
+  await expect(menu).toHaveCount(0);
+  const listItem = editable.locator("[data-be-check-list-item]").first();
+  await expect(listItem).toContainText("보존할 내용");
+  await expect(editable).toBeFocused();
+
+  const marker = listItem.locator("[data-be-check-marker]");
+  await expect(marker).toHaveAttribute("data-be-checked", "false");
+  await marker.click();
+  await expect(marker).toHaveAttribute("data-be-checked", "true");
+});
+
 test("좁은 뷰포트에서도 드래그 핸들이 화면 안에서 클릭 가능하다 (PIT-0011)", async ({
   page,
 }) => {

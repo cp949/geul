@@ -70,6 +70,8 @@ const consumeBlockTypeOutput = (blockType: BlockTypeDescriptor): string => {
       return `${blockType.type}:${blockType.language ?? ""}`;
     case "numberedListItem":
       return `${blockType.type}:${blockType.startNumber ?? ""}`;
+    case "checkListItem":
+      return blockType.type;
     default: {
       const exhaustive: never = blockType;
       return exhaustive;

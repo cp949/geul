@@ -95,6 +95,13 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
     keywords: ["number", "list", "ordered", "ol"],
     blockType: { type: "numberedListItem" },
   },
+  {
+    id: "check-list",
+    label: "Check List",
+    description: "Track tasks with a checklist",
+    keywords: ["check", "checkbox", "checklist", "todo", "task"],
+    blockType: { type: "checkListItem" },
+  },
 ];
 
 export const getBlockTypeOptionsForSource = (
@@ -102,7 +109,8 @@ export const getBlockTypeOptionsForSource = (
 ): readonly BlockTypeOption[] => {
   if (source.type === "codeBlock") {
     return BLOCK_TYPE_OPTIONS.filter(
-      ({ id }) => id !== "bullet-list" && id !== "numbered-list",
+      ({ id }) =>
+        id !== "bullet-list" && id !== "numbered-list" && id !== "check-list",
     );
   }
   if (isListItemBlockType(source.type)) {
@@ -125,5 +133,7 @@ export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
       return "bullet-list";
     case "numberedListItem":
       return "numbered-list";
+    case "checkListItem":
+      return "check-list";
   }
 };

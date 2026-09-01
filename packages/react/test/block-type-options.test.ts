@@ -77,6 +77,13 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
         blockType: { type: "numberedListItem" },
       },
     );
+    expect(BLOCK_TYPE_OPTIONS.find(({ id }) => id === "check-list")).toEqual({
+      id: "check-list",
+      label: "Check List",
+      description: "Track tasks with a checklist",
+      keywords: ["check", "checkbox", "checklist", "todo", "task"],
+      blockType: { type: "checkListItem" },
+    });
   });
 
   it("blockTypeToOptionId는 bullet과 startNumber 미지정·0·명시 numbered를 공용 option id로 해석한다", () => {
@@ -92,13 +99,17 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     ).toBe("numbered-list");
   });
 
+  it("blockTypeToOptionId가 checkListItem을 check-list로 해석한다", () => {
+    expect(blockTypeToOptionId({ type: "checkListItem" })).toBe("check-list");
+  });
+
   it("옵션마다 blockTypeToOptionId(option.blockType) === option.id다", () => {
     for (const option of BLOCK_TYPE_OPTIONS) {
       expect(blockTypeToOptionId(option.blockType)).toBe(option.id);
     }
   });
 
-  it("CodeBlock source에서는 두 목록 옵션을 제외한다", () => {
+  it("CodeBlock source에서는 세 목록 옵션을 제외한다", () => {
     const ids = getBlockTypeOptionsForSource({ type: "codeBlock" }).map(
       ({ id }) => id,
     );
@@ -119,6 +130,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
   it.each([
     { type: "bulletListItem" as const },
     { type: "numberedListItem" as const },
+    { type: "checkListItem" as const },
   ])("$type source에서는 Code 옵션만 제외한다", (source) => {
     const ids = getBlockTypeOptionsForSource(source).map(({ id }) => id);
 
@@ -133,6 +145,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "quote",
       "bullet-list",
       "numbered-list",
+      "check-list",
     ]);
   });
 
@@ -140,7 +153,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     { type: "paragraph" as const },
     { type: "heading" as const, level: 3 as const },
     { type: "quote" as const },
-  ])("$type source에서는 Code와 두 목록 옵션을 모두 유지한다", (source) => {
+  ])("$type source에서는 Code와 세 목록 옵션을 모두 유지한다", (source) => {
     const ids = getBlockTypeOptionsForSource(source).map(({ id }) => id);
 
     expect(ids).toEqual([
@@ -155,6 +168,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "code",
       "bullet-list",
       "numbered-list",
+      "check-list",
     ]);
   });
 });

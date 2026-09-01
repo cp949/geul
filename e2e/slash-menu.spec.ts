@@ -86,6 +86,31 @@ test("글머리 목록 항목을 클릭하면 실제 목록으로 바꾸고 편�
   await expect(listItem).toContainText("첫 목록");
 });
 
+test("체크 목록 항목을 Slash로 만들고 마커 클릭으로 checked를 토글한다 (RD-001 DELTA-06)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/check");
+  await expect(menu).toBeVisible();
+
+  await menu.getByRole("option", { name: /Check List/ }).click();
+
+  await expect(menu).toHaveCount(0);
+  const listItem = editable.locator("[data-be-check-list-item]").first();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.type("할 일");
+  await expect(listItem).toContainText("할 일");
+
+  const marker = listItem.locator("[data-be-check-marker]");
+  await expect(marker).toHaveAttribute("data-be-checked", "false");
+  await marker.click();
+  await expect(marker).toHaveAttribute("data-be-checked", "true");
+});
+
 test("Escape로 메뉴를 닫으면 블록은 그대로 둔다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const menu = page.getByRole("listbox", { name: "Slash menu" });

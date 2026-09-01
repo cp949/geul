@@ -63,11 +63,12 @@ describe("blockTypeDescriptorFromBlock", () => {
     expect(blockTypeDescriptorFromBlock({ type: "toggleListItem" })).toBeNull();
   });
 
-  // checkListItem은 Issue #38 슬라이스 6 RD-001에서 model Block에 추가됐지만
-  // BlockTypeDescriptor는 아직 Turn into 대상으로 다루지 않는다(react UI
-  // DELTA 범위) — toggleListItem과 같은 자리에서 null이다. toggleListItem
-  // 테스트와 같은 이유로 BlockTypeSource 멤버 누락을 런타임에서도 고정한다.
-  it("checkListItem은 아직 BlockTypeDescriptor가 다루지 않는 종류라 null이다", () => {
-    expect(blockTypeDescriptorFromBlock({ type: "checkListItem" })).toBeNull();
+  // checkListItem은 Issue #38 슬라이스 6 RD-001 DELTA-06부터 Turn into
+  // 대상이다 — paragraph·quote·bulletListItem과 같은 자리에서 attrs 없는
+  // descriptor를 그대로 낸다(toggleListItem은 여전히 null, 위 테스트 참고).
+  it("checkListItem은 attrs 없는 descriptor를 그대로 낸다", () => {
+    expect(blockTypeDescriptorFromBlock({ type: "checkListItem" })).toEqual({
+      type: "checkListItem",
+    });
   });
 });

@@ -264,12 +264,22 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
       expectedType: "numberedListItem",
     },
     {
+      source: "paragraph" as const,
+      label: "Check List",
+      expectedType: "checkListItem",
+    },
+    {
       source: "bulletListItem" as const,
       label: "Text",
       expectedType: "paragraph",
     },
     {
       source: "numberedListItem" as const,
+      label: "Text",
+      expectedType: "paragraph",
+    },
+    {
+      source: "checkListItem" as const,
       label: "Text",
       expectedType: "paragraph",
     },
