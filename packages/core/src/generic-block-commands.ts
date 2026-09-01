@@ -18,6 +18,10 @@ import {
 } from "./block-position.js";
 import { toggleCheckListItemCheckedCommand } from "./check-list-item-commands.js";
 import {
+  toggleHeadingCollapseCommand,
+  toggleListItemCollapseCommand,
+} from "./toggle-collapse-commands.js";
+import {
   collectDocumentIdentityIds,
   createUniqueDocumentId,
 } from "./document-id-factory.js";
@@ -503,6 +507,41 @@ export const createGenericBlockCommands = (
     );
   };
 
+  const toggleHeadingCollapse = (
+    blockId: string,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) {
+      return commandNotApplicable("toggleHeadingCollapse");
+    }
+    // runDocumentCommand의 run()은 boolean만 돌려받아 BLOCK_NOT_FOUND와
+    // COMMAND_NOT_APPLICABLE을 구분하지 못한다 — toggleCheckListItemChecked와
+    // 같은 이유로 모델 트리 조회를 여기서 먼저 해 정확한 오류 코드를 낸다.
+    if (findBlockInTree(session.document.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    return session.runDocumentCommand(
+      "toggleHeadingCollapse",
+      "local",
+      () => toggleHeadingCollapseCommand(session.editor, blockId).ok,
+    );
+  };
+
+  const toggleListItemCollapse = (
+    blockId: string,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) {
+      return commandNotApplicable("toggleListItemCollapse");
+    }
+    if (findBlockInTree(session.document.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    return session.runDocumentCommand(
+      "toggleListItemCollapse",
+      "local",
+      () => toggleListItemCollapseCommand(session.editor, blockId).ok,
+    );
+  };
+
   return {
     setText,
     insertParagraphAfter,
@@ -513,5 +552,7 @@ export const createGenericBlockCommands = (
     indentBlock,
     outdentBlock,
     toggleCheckListItemChecked,
+    toggleHeadingCollapse,
+    toggleListItemCollapse,
   };
 };
