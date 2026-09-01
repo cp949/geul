@@ -89,11 +89,16 @@ describe("createEditor round trip", () => {
         '[data-be-block-id="check-checked"]',
       );
       if (container === null) throw new Error("check-checked 조회 실패");
-      expect(container.querySelector("[data-be-check-list-item]")).not.toBeNull();
+      expect(
+        container.querySelector("[data-be-check-list-item]"),
+      ).not.toBeNull();
 
       let checkedAttr: unknown;
       tiptap.state.doc.descendants((node) => {
-        if (node.type.name === "checkListItem" && node.textContent === "checked") {
+        if (
+          node.type.name === "checkListItem" &&
+          node.textContent === "checked"
+        ) {
           checkedAttr = node.attrs.checked;
         }
       });

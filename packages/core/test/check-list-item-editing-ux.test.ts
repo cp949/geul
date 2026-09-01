@@ -53,9 +53,9 @@ describe("checkListItem 빈 블록 placeholder", () => {
       '[data-be-block-id="empty-check"]',
     );
     if (container === null) throw new Error("empty-check 조회 실패");
-    expect(
-      container.firstElementChild?.getAttribute("data-placeholder"),
-    ).toBe("List item");
+    expect(container.firstElementChild?.getAttribute("data-placeholder")).toBe(
+      "List item",
+    );
   });
 
   it("내용 있는 checkListItem은 placeholder를 받지 않는다", () => {
@@ -69,9 +69,9 @@ describe("checkListItem 빈 블록 placeholder", () => {
       '[data-be-block-id="filled-check"]',
     );
     if (container === null) throw new Error("filled-check 조회 실패");
-    expect(
-      container.firstElementChild?.hasAttribute("data-placeholder"),
-    ).toBe(false);
+    expect(container.firstElementChild?.hasAttribute("data-placeholder")).toBe(
+      false,
+    );
   });
 });
 

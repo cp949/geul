@@ -32,10 +32,14 @@ export const toggleCheckListItemCheckedCommand = (
     return commandNotApplicable("toggleCheckListItemChecked");
   }
 
-  const transaction = editor.state.tr.setNodeMarkup(target.position, undefined, {
-    ...target.node.attrs,
-    checked: !target.node.attrs.checked,
-  });
+  const transaction = editor.state.tr.setNodeMarkup(
+    target.position,
+    undefined,
+    {
+      ...target.node.attrs,
+      checked: !target.node.attrs.checked,
+    },
+  );
   editor.view.dispatch(closeHistory(transaction));
   return { ok: true, value: undefined };
 };

@@ -59,16 +59,13 @@ describe("checkListItem 공개 모델", () => {
     expect(parseDocument(input)).toEqual({ ok: true, value: input });
   });
 
-  it.each([true, false])(
-    "checked: %s는 그대로 보존된다",
-    (checked) => {
-      const input = documentOf([
-        { id: "check-1", type: "checkListItem", content: [], checked },
-      ]);
+  it.each([true, false])("checked: %s는 그대로 보존된다", (checked) => {
+    const input = documentOf([
+      { id: "check-1", type: "checkListItem", content: [], checked },
+    ]);
 
-      expect(parseDocument(input)).toEqual({ ok: true, value: input });
-    },
-  );
+    expect(parseDocument(input)).toEqual({ ok: true, value: input });
+  });
 });
 
 describe("checkListItem strict 형상과 checked 필드 검증", () => {

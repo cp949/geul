@@ -109,8 +109,6 @@ export type Block =
 // 옮겼다. toggleListItem은 <details>로 개별 렌더링돼(spec §7.1) 여기 넣지
 // 않는다(ListItemBlockType과 같은 경계, 로드맵 D2).
 export type ListItemBlock =
-  | BulletListItemBlock
-  | NumberedListItemBlock
-  | CheckListItemBlock;
+  BulletListItemBlock | NumberedListItemBlock | CheckListItemBlock;
 export type Document = { formatVersion: 1; revision: number; blocks: Block[] };
 export type IdFactory = () => string;

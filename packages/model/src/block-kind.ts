@@ -6,9 +6,7 @@
 
 /** bulletListItem·numberedListItem·checkListItem — 목록 항목 블록 종류. */
 export type ListItemBlockType =
-  | "bulletListItem"
-  | "numberedListItem"
-  | "checkListItem";
+  "bulletListItem" | "numberedListItem" | "checkListItem";
 
 export const isListItemBlockType = (type: string): type is ListItemBlockType =>
   type === "bulletListItem" ||

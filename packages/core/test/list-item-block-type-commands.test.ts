@@ -292,7 +292,12 @@ describe("checkListItem 변환", () => {
         { text: " text" },
       ];
       const children: Block[] = [paragraph("child", "child")];
-      const sourceBlock = { id: "target", ...source, content, children } as Block;
+      const sourceBlock = {
+        id: "target",
+        ...source,
+        content,
+        children,
+      } as Block;
       const { editor, tiptap } = mounted(
         documentOf(sourceBlock, paragraph("tail", "tail")),
       );
@@ -336,9 +341,7 @@ describe("checkListItem 변환", () => {
       const sourceWithContent = { ...sourceBlock, content };
       const { editor } = mountedBlock(sourceWithContent);
 
-      expect(editor.commands.setBlockType("target", target)).toEqual(
-        okResult,
-      );
+      expect(editor.commands.setBlockType("target", target)).toEqual(okResult);
 
       expect(editor.getDocument().blocks[0]).toEqual({
         id: "target",
@@ -361,8 +364,11 @@ describe("checkListItem 변환", () => {
   it.each([false, true])(
     "checkListItem↔codeBlock 양방향 변환은 clearContent(%s)와 무관하게 거절한다",
     (clearContent) => {
-      const { editor: toCode, changes: toCodeChanges, tiptap: toCodeTiptap } =
-        mountedBlock(checkListItemBlock("target", "item", false));
+      const {
+        editor: toCode,
+        changes: toCodeChanges,
+        tiptap: toCodeTiptap,
+      } = mountedBlock(checkListItemBlock("target", "item", false));
       expectAtomicRejection(toCode, toCodeTiptap, toCodeChanges, () =>
         toCode.commands.setBlockType(
           "target",

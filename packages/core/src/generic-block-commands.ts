@@ -499,8 +499,7 @@ export const createGenericBlockCommands = (
     return session.runDocumentCommand(
       "toggleCheckListItemChecked",
       "local",
-      () =>
-        toggleCheckListItemCheckedCommand(session.editor, blockId).ok,
+      () => toggleCheckListItemCheckedCommand(session.editor, blockId).ok,
     );
   };
 

@@ -34,7 +34,9 @@ const checkListItemBlock = (
 describe("toggleCheckListItemChecked", () => {
   it("checked: false인 항목을 true로 반전한다", () => {
     const source = checkListItemBlock("check-1", "본문", false);
-    const { editor, tiptap } = mounted(documentOf(source, paragraphBlock("tail", "꼬리")));
+    const { editor, tiptap } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
     const before = editorState(editor, tiptap);
 
     expect(editor.commands.toggleCheckListItemChecked("check-1")).toEqual(
@@ -55,7 +57,9 @@ describe("toggleCheckListItemChecked", () => {
 
   it("checked: true인 항목을 false로 반전한다", () => {
     const source = checkListItemBlock("check-1", "본문", true);
-    const { editor } = mounted(documentOf(source, paragraphBlock("tail", "꼬리")));
+    const { editor } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
 
     expect(editor.commands.toggleCheckListItemChecked("check-1")).toEqual(
       okResult,
@@ -72,7 +76,9 @@ describe("toggleCheckListItemChecked", () => {
 
   it("존재하지 않는 blockId는 BLOCK_NOT_FOUND를 반환하고 문서·selection을 그대로 둔다", () => {
     const source = checkListItemBlock("check-1", "본문", false);
-    const { editor, tiptap } = mounted(documentOf(source, paragraphBlock("tail", "꼬리")));
+    const { editor, tiptap } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
     const before = editorState(editor, tiptap);
 
     expect(editor.commands.toggleCheckListItemChecked("missing")).toEqual({
@@ -85,7 +91,9 @@ describe("toggleCheckListItemChecked", () => {
 
   it("checkListItem이 아닌 블록에는 COMMAND_NOT_APPLICABLE을 반환하고 문서·selection을 그대로 둔다", () => {
     const source = paragraphBlock("para-1", "본문");
-    const { editor, tiptap } = mounted(documentOf(source, paragraphBlock("tail", "꼬리")));
+    const { editor, tiptap } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
     const before = editorState(editor, tiptap);
 
     expect(editor.commands.toggleCheckListItemChecked("para-1")).toEqual(
