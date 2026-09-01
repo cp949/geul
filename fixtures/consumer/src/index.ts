@@ -24,6 +24,7 @@ import {
   type PasteRejectedReason,
   SlashMenu,
 } from "@cp949/geul-react";
+import "@cp949/geul-react/styles.css";
 
 const document: Document = createEmptyDocument(() => "fixture-block");
 const bulletListItem: BulletListItemBlock = {

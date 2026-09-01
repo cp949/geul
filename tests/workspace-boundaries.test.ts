@@ -152,7 +152,9 @@ const allowedDependencies = {
       "@cp949/geul-model": "workspace:*",
       "@cp949/geul-react": "workspace:*",
     },
-    devDependencies: {},
+    // esbuild(fixture build 스크립트, DELTA-01)는 packages/react가 이미 쓰는
+    // 버전(0.28.2)과 exact 고정 일치한다.
+    devDependencies: { esbuild: "0.28.2" },
     peerDependencies: {},
     optionalDependencies: {},
   },

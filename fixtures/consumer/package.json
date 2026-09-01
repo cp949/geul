@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "esbuild src/index.ts --bundle --outdir=dist --format=esm --platform=browser",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -11,5 +12,8 @@
     "@cp949/geul-io": "workspace:*",
     "@cp949/geul-model": "workspace:*",
     "@cp949/geul-react": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }
