@@ -63,9 +63,14 @@ describe("setBlockType quote 편입(Turn into 대상)", () => {
       expect(editor.commands.setBlockType("block-1", step)).toEqual(okResult);
       // 적용 직후 문서·selection·storedMarks·Tiptap doc을 한 번에 고정한다.
       const { tiptapDocument, ...applied } = editorState(editor, tiptap);
+      // RD-003이 HeadingExtension에 isToggleable/collapsed(기본값 null)
+      // attrs를 추가해 level 외 키가 실려 온다 — 이 단언은 level 보존만 본다.
       const contentMatcher =
         step.type === "heading"
-          ? { type: "heading", attrs: { level: step.level } }
+          ? {
+              type: "heading",
+              attrs: expect.objectContaining({ level: step.level }),
+            }
           : { type: step.type };
       expect(applied).toEqual({
         document: {

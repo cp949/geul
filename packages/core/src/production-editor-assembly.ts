@@ -19,6 +19,7 @@ import { ListPresentationExtension } from "./list-presentation-extension.js";
 import {
   BulletListItemExtension,
   NumberedListItemExtension,
+  ToggleListItemExtension,
 } from "./list-item-extension.js";
 import { ListInputRuleExtension } from "./list-input-rule-extension.js";
 import { modelToTiptap } from "./model-to-tiptap.js";
@@ -34,6 +35,7 @@ import {
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ListPasteFallbackExtension } from "./list-paste-fallback-extension.js";
+import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
   ensureTrailingParagraphOnLoad,
   TrailingBlockExtension,
@@ -59,7 +61,14 @@ const HeadingExtension = Node.create({
   content: "inline*",
   defining: true,
   addAttributes() {
-    return { level: { default: 1, rendered: false } };
+    return {
+      level: { default: 1, rendered: false },
+      // null은 model의 isToggleable/collapsed 필드 부재와 직대응한다
+      // (numberedListItem.startNumber와 같은 패턴). 값 자체의 유효성(collapsed엔
+      // isToggleable: true 필요)은 model parseDocument가 단독 판정한다.
+      isToggleable: { default: null, rendered: false },
+      collapsed: { default: null, rendered: false },
+    };
   },
   parseHTML() {
     return [1, 2, 3, 4, 5, 6].map((level) => ({
@@ -99,6 +108,16 @@ const ProductionNumberedListItemExtension = NumberedListItemExtension.extend({
     return [
       "div",
       mergeAttributes(HTMLAttributes, { "data-be-numbered-list-item": "" }),
+      0,
+    ];
+  },
+});
+
+const ProductionToggleListItemExtension = ToggleListItemExtension.extend({
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-be-toggle-list-item": "" }),
       0,
     ];
   },
@@ -147,6 +166,7 @@ export const createProductionEditor = (options: {
       HeadingExtension,
       ProductionBulletListItemExtension,
       ProductionNumberedListItemExtension,
+      ProductionToggleListItemExtension,
       ListInputRuleExtension,
       QuoteExtension,
       CodeBlockExtension,
@@ -166,6 +186,7 @@ export const createProductionEditor = (options: {
       IndentKeyboardExtension,
       ListPresentationExtension,
       PlaceholderExtension,
+      ToggleCollapseVisibilityExtension,
       TrailingBlockExtension,
       TablePasteExtension.configure({
         createId: options.createId,

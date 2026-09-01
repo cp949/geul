@@ -73,7 +73,13 @@ describe("setBlockType heading level 4-6", () => {
           type: "blockContainer",
           attrs: { blockId: "block-1" },
           content: expect.arrayContaining([
-            expect.objectContaining({ type: "heading", attrs: { level } }),
+            expect.objectContaining({
+              type: "heading",
+              // RD-003이 HeadingExtension에 isToggleable/collapsed(기본값
+              // null) attrs를 추가해 level 외 키가 실려 온다 — 이 테스트는
+              // level 보존만 본다.
+              attrs: expect.objectContaining({ level }),
+            }),
           ]),
         }),
       );

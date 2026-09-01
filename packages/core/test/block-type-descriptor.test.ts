@@ -51,4 +51,15 @@ describe("blockTypeDescriptorFromBlock", () => {
     expect(blockTypeDescriptorFromBlock({ type: "divider" })).toBeNull();
     expect(blockTypeDescriptorFromBlock({ type: "table" })).toBeNull();
   });
+
+  // toggleListItem은 RD-003(Issue #38 슬라이스 6)에서 model Block에
+  // 추가됐지만 BlockTypeDescriptor는 아직 Turn into 대상으로 다루지
+  // 않는다(RD-004 범위) — divider·table과 같은 자리에서 null이다. 이
+  // 회귀 테스트가 없으면 BlockTypeSource가 Block과 어긋나도(멤버 누락)
+  // 발견이 늦어진다 — react/block-side-menu.tsx의 findBlockTypeDescriptor가
+  // 저장 Block을 그대로 넘겨 컴파일 시점에 잡히긴 하지만, 런타임 계약도
+  // 여기서 고정한다.
+  it("toggleListItem은 아직 BlockTypeDescriptor가 다루지 않는 종류라 null이다", () => {
+    expect(blockTypeDescriptorFromBlock({ type: "toggleListItem" })).toBeNull();
+  });
 });

@@ -231,6 +231,11 @@ const blockContainerToModel = (
     ) {
       return invalid(`Unsupported heading level: ${String(level)}`);
     }
+    // JSON attr은 unknown이지만 값 정책을 여기서 재구현하지 않는다. null은
+    // 필드 부재로 직대응하고(numberedListItem.startNumber와 같은 패턴), 그
+    // 외 값(불리언이 아닌 값 포함)은 마지막 parseDocument가 검증한다.
+    const isToggleable = contentNode.attrs?.isToggleable;
+    const collapsed = contentNode.attrs?.collapsed;
     return {
       ok: true,
       value: {
@@ -238,6 +243,12 @@ const blockContainerToModel = (
         type: "heading",
         level,
         content: inlineContent.value,
+        ...(isToggleable === undefined || isToggleable === null
+          ? {}
+          : { isToggleable: isToggleable as boolean }),
+        ...(collapsed === undefined || collapsed === null
+          ? {}
+          : { collapsed: collapsed as boolean }),
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -280,6 +291,25 @@ const blockContainerToModel = (
         ...(startNumber === undefined || startNumber === null
           ? {}
           : { startNumber: startNumber as number }),
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
+  if (contentNode.type === "toggleListItem") {
+    // JSON attr은 unknown이지만 값 정책을 여기서 재구현하지 않는다. null은
+    // model collapsed 필드 부재와 직대응하고(heading·numberedListItem.startNumber와
+    // 같은 패턴), 그 외 값은 마지막 parseDocument가 검증한다.
+    const collapsed = contentNode.attrs?.collapsed;
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "toggleListItem",
+        content: inlineContent.value,
+        ...(collapsed === undefined || collapsed === null
+          ? {}
+          : { collapsed: collapsed as boolean }),
         ...(children === undefined ? {} : { children }),
       },
     };

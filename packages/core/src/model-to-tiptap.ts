@@ -14,6 +14,7 @@ import {
   type Result,
   type TableBlock,
   type TextMark,
+  type ToggleListItemBlock,
 } from "@cp949/geul-model";
 
 import type { EditorError } from "./errors.js";
@@ -199,14 +200,26 @@ const blockContentToTiptapJson = (
     | HeadingBlock
     | QuoteBlock
     | BulletListItemBlock
-    | NumberedListItemBlock,
+    | NumberedListItemBlock
+    | ToggleListItemBlock,
 ): TiptapJsonNode => ({
   type: block.type,
   ...(block.type === "heading"
-    ? { attrs: { level: block.level } }
+    ? {
+        attrs: {
+          level: block.level,
+          // null은 model 필드 부재와 직대응한다(numberedListItem.startNumber와
+          // 같은 패턴) — isToggleable/collapsed 값 자체의 유효성은 model
+          // parseDocument가 단독 판정한다(G-CNV-001).
+          isToggleable: block.isToggleable ?? null,
+          collapsed: block.collapsed ?? null,
+        },
+      }
     : block.type === "numberedListItem"
       ? { attrs: { startNumber: block.startNumber ?? null } }
-      : {}),
+      : block.type === "toggleListItem"
+        ? { attrs: { collapsed: block.collapsed ?? null } }
+        : {}),
   content: inlineContentToTiptap(block.content),
 });
 

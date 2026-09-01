@@ -198,6 +198,14 @@ export type BlockTypeDescriptor =
 // BlockTypeDescriptor가 다루지 않는 종류라 null로 떨어진다 — 두 호출자
 // 모두 원래 코드에서 이미 이렇게 동작했다(react는 명시 null 분기, core는
 // default 분기).
+//
+// react/block-side-menu.tsx의 findBlockTypeDescriptor가 저장 Block을 좁히지
+// 않고 그대로 넘기므로, model의 Block 유니온이 늘 때마다 이 유니온도 같은
+// 멤버를 갖춰야 한다 — 아니면 그 호출부가 컴파일 실패한다. toggleListItem은
+// RD-003(Issue #38 슬라이스 6)에서 Block에 추가됐지만 BlockTypeDescriptor가
+// 아직 Turn into 대상으로 다루지 않아 table·divider와 같은 자리에서
+// null로 떨어진다 — RD-004가 BlockTypeDescriptor에 toggleListItem을 추가하면
+// 이 null 분기에서 뺀다.
 export type BlockTypeSource =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
@@ -205,13 +213,18 @@ export type BlockTypeSource =
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number }
+  | { type: "toggleListItem" }
   | { type: "divider" }
   | { type: "table" };
 
 export const blockTypeDescriptorFromBlock = (
   source: BlockTypeSource,
 ): BlockTypeDescriptor | null =>
-  source.type === "divider" || source.type === "table" ? null : source;
+  source.type === "divider" ||
+  source.type === "table" ||
+  source.type === "toggleListItem"
+    ? null
+    : source;
 
 // PM block content node를 BlockTypeSource로 좁힌 뒤 blockTypeDescriptorFromBlock에
 // 위임한다. PM attrs는 unknown이라 캐스트가 이 지점에서만 필요하다 — caret과
@@ -243,6 +256,8 @@ const blockTypeSourceFromNode = (
           ? { startNumber: node.attrs.startNumber }
           : {}),
       };
+    case "toggleListItem":
+      return { type: "toggleListItem" };
     case "divider":
       return { type: "divider" };
     case "table":

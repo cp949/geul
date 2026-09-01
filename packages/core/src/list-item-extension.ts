@@ -28,3 +28,22 @@ export const NumberedListItemExtension = Node.create({
     };
   },
 });
+
+// toggleListItem은 bulletListItem/numberedListItem과 같은 nestableBlockContent
+// content node다(RD-003, 로드맵 D2 정정 — ListItemBlockType이 아닌
+// NestableBlockType에 직접 추가). collapsed 기본값 null은 model의 collapsed
+// 필드 부재와 직대응한다 — heading의 isToggleable/collapsed와 같은 표현
+// 패턴이다. 접힘 자식 숨김은 core 전용 decoration
+// (toggle-collapse-visibility-extension.ts)이 attrs.collapsed를 직접 읽어
+// 처리하고, 사용자 커맨드(toggleListItemCollapse 등)는 RD-004 범위다.
+export const ToggleListItemExtension = Node.create({
+  name: "toggleListItem",
+  priority: 99,
+  ...listItemContentNode,
+
+  addAttributes() {
+    return {
+      collapsed: { default: null, rendered: false },
+    };
+  },
+});
