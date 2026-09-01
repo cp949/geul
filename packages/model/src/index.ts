@@ -1,10 +1,12 @@
 export type {
   InlineContentBlockType,
+  ListEntryBlockType,
   ListItemBlockType,
   NestableBlockType,
 } from "./block-kind.js";
 export {
   isInlineContentBlockType,
+  isListEntryBlockType,
   isListItemBlockType,
   isNestableBlockType,
 } from "./block-kind.js";

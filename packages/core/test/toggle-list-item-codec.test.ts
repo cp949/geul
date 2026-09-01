@@ -45,7 +45,9 @@ function toggleDocument(): Document {
     ],
   });
   if (!parsed.ok)
-    throw new Error(`toggleListItem fixture 준비 실패: ${parsed.error.message}`);
+    throw new Error(
+      `toggleListItem fixture 준비 실패: ${parsed.error.message}`,
+    );
   return parsed.value;
 }
 

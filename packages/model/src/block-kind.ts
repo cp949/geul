@@ -10,6 +10,26 @@ export type ListItemBlockType = "bulletListItem" | "numberedListItem";
 export const isListItemBlockType = (type: string): type is ListItemBlockType =>
   type === "bulletListItem" || type === "numberedListItem";
 
+// bulletListItem·numberedListItem·toggleListItem — 편집기 UX(빈 블록
+// placeholder 문구, 빈 항목 Enter 종료, 선두 Backspace 종료)가 "목록
+// 항목처럼" 동작해야 하는 블록 종류다. isListItemBlockType과 의도적으로
+// 분리한다 — isListItemBlockType은 <ul>/<ol> HTML 직렬화(io) 대상만
+// 판정하는 좁은 계약이고 toggleListItem은 <details>로 개별 렌더링돼(spec
+// §7.1) 여기 들어가면 안 되지만(로드맵 D2), core의
+// placeholder-extension.ts·block-split-extension.ts·block-join-extension.ts
+// 세 곳은 원래 isListItemBlockType을 이 UX 판정에 재사용하고 있었다 —
+// toggleListItem을 그 predicate에서 뺀 채로 두면 이 세 곳에서 "그냥
+// 텍스트 블록"으로 취급돼 빈 토글 목록이 아무 placeholder 없이 보이고
+// Enter로 빠져나올 수 없다(RD-003 트랙-3 결함 탐지 F2). io 직렬화와 core
+// 편집 UX는 서로 다른 축이라 predicate를 분리해서 둘 다 정확하게
+// 유지한다.
+export type ListEntryBlockType = ListItemBlockType | "toggleListItem";
+
+export const isListEntryBlockType = (
+  type: string,
+): type is ListEntryBlockType =>
+  type === "toggleListItem" || isListItemBlockType(type);
+
 // children 필드를 가질 수 있는 블록 종류다. Tiptap의 nestableBlockContent
 // group(core/list-item-extension.ts 등)과 정확히 대응한다.
 //

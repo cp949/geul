@@ -181,9 +181,7 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       expect(hiddenGroup).not.toBeNull();
       expect(getComputedStyle(hiddenGroup as Element).display).toBe("none");
       expect(
-        editable.querySelector(
-          '[data-be-block-id="toggle-collapsed-child"]',
-        ),
+        editable.querySelector('[data-be-block-id="toggle-collapsed-child"]'),
       ).not.toBeNull();
 
       const visibleGroup = editable.querySelector(

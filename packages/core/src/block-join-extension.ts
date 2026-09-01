@@ -1,4 +1,4 @@
-import { isListItemBlockType, isNestableBlockType } from "@cp949/geul-model";
+import { isListEntryBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node, type ResolvedPos } from "@tiptap/pm/model";
 import {
@@ -69,7 +69,7 @@ function caretContext(
 }
 
 function isListItemContent(node: Node): boolean {
-  return isListItemBlockType(node.type.name);
+  return isListEntryBlockType(node.type.name);
 }
 
 // DOM-derived selection이 해당 경계 밖이어도 live selection이 병합

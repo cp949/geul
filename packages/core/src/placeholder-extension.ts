@@ -1,6 +1,6 @@
 import {
   isInlineContentBlockType,
-  isListItemBlockType,
+  isListEntryBlockType,
 } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
@@ -44,7 +44,7 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
           ? QUOTE_PLACEHOLDER
           : typeName === "codeBlock"
             ? CODE_PLACEHOLDER
-            : isListItemBlockType(typeName)
+            : isListEntryBlockType(typeName)
               ? LIST_ITEM_PLACEHOLDER
               : anchor === position + 1
                 ? PARAGRAPH_PLACEHOLDER

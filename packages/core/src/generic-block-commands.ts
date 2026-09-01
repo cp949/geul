@@ -166,6 +166,23 @@ export const createGenericBlockCommands = (
       typeof target.node.attrs.level === "number"
         ? target.node.attrs.level
         : null;
+    // heading의 isToggleable/collapsed는 SetBlockTypeDescriptor가 받는
+    // 값이 아니다(level만 받는다) — level만 바뀌는 호출(같은 heading 안
+    // 레벨 변경)에서 currentTypeName이 heading일 때만 현재 값을
+    // 캐리포워드한다. numberedListItem.startNumber와 같은 이유:
+    // setNodeMarkup에 attrs를 부분만 넘기면 PM이 나머지를 schema
+    // default(null)로 채워 기존 값을 지운다(RD-003 트랙-3 결함 탐지 F1).
+    // heading이 아닌 타입에서 heading으로 새로 바뀌는 경우는 캐리포워드할
+    // 원본이 없으므로 null(토글 아님)이 맞다.
+    const currentIsToggleable =
+      currentTypeName === "heading"
+        ? ((target.node.attrs.isToggleable as boolean | null | undefined) ??
+          null)
+        : null;
+    const currentCollapsed =
+      currentTypeName === "heading"
+        ? ((target.node.attrs.collapsed as boolean | null | undefined) ?? null)
+        : null;
     const currentContentSize = target.node.content.size;
     const clearContent = options?.clearContent ?? false;
     const currentIsList = isListItemBlockType(currentTypeName);
@@ -290,7 +307,11 @@ export const createGenericBlockCommands = (
       }
       const attrs =
         blockType.type === "heading"
-          ? { level: blockType.level }
+          ? {
+              level: blockType.level,
+              isToggleable: currentIsToggleable,
+              collapsed: currentCollapsed,
+            }
           : blockType.type === "numberedListItem"
             ? { startNumber: numberedStartNumber }
             : {};

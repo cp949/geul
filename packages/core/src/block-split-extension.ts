@@ -1,4 +1,4 @@
-import { isListItemBlockType, isNestableBlockType } from "@cp949/geul-model";
+import { isListEntryBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
@@ -45,7 +45,7 @@ function isSplittableContent(node: Node): boolean {
 }
 
 function isListItemContent(node: Node): boolean {
-  return isListItemBlockType(node.type.name);
+  return isListEntryBlockType(node.type.name);
 }
 
 // this.editor를 직접 받아 addKeyboardShortcuts 밖에서도 테스트 가능한
