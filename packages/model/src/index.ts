@@ -62,6 +62,7 @@ export {
 export type {
   Block,
   BulletListItemBlock,
+  CheckListItemBlock,
   CodeBlock,
   DividerBlock,
   Document,

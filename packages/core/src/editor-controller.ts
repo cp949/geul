@@ -205,7 +205,8 @@ export type BlockTypeDescriptor =
 // RD-003(Issue #38 슬라이스 6)에서 Block에 추가됐지만 BlockTypeDescriptor가
 // 아직 Turn into 대상으로 다루지 않아 table·divider와 같은 자리에서
 // null로 떨어진다 — RD-004가 BlockTypeDescriptor에 toggleListItem을 추가하면
-// 이 null 분기에서 뺀다.
+// 이 null 분기에서 뺀다. checkListItem도 RD-001(model 저장 계약 DELTA)에서
+// 같은 이유로 추가됐다 — Turn into 배선은 이 RD의 react UI DELTA가 맡는다.
 export type BlockTypeSource =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
@@ -213,6 +214,7 @@ export type BlockTypeSource =
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number }
+  | { type: "checkListItem" }
   | { type: "toggleListItem" }
   | { type: "divider" }
   | { type: "table" };
@@ -222,6 +224,7 @@ export const blockTypeDescriptorFromBlock = (
 ): BlockTypeDescriptor | null =>
   source.type === "divider" ||
   source.type === "table" ||
+  source.type === "checkListItem" ||
   source.type === "toggleListItem"
     ? null
     : source;

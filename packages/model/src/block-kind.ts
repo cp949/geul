@@ -4,11 +4,16 @@
 // (아키텍처 리뷰 6차 L1, ADR-0002가 정한 "동일 불변식을 여러 패키지가
 // 다시 구현하지 않는다"를 model 자신에게도 적용한다.)
 
-/** bulletListItem·numberedListItem — 목록 항목 블록 종류. */
-export type ListItemBlockType = "bulletListItem" | "numberedListItem";
+/** bulletListItem·numberedListItem·checkListItem — 목록 항목 블록 종류. */
+export type ListItemBlockType =
+  | "bulletListItem"
+  | "numberedListItem"
+  | "checkListItem";
 
 export const isListItemBlockType = (type: string): type is ListItemBlockType =>
-  type === "bulletListItem" || type === "numberedListItem";
+  type === "bulletListItem" ||
+  type === "numberedListItem" ||
+  type === "checkListItem";
 
 // bulletListItem·numberedListItem·toggleListItem — 편집기 UX(빈 블록
 // placeholder 문구, 빈 항목 Enter 종료, 선두 Backspace 종료)가 "목록

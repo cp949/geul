@@ -7,7 +7,7 @@
  * 이 모듈은 아래 afterEach 훅을 module scope에 등록한다. 마운트된 편집기를
  * 일괄 해제해 ProseMirror DOMObserver의 지연 flush를 막는다(G-TST-003).
  */
-import type { Block, Document, ListItemBlockType } from "@cp949/geul-model";
+import type { Block, Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { afterEach } from "vitest";
 
@@ -45,7 +45,11 @@ export const paragraphBlock = (
   ...(children === undefined ? {} : { children }),
 });
 
-export type ListItemType = ListItemBlockType;
+// model의 ListItemBlockType(bulletListItem/numberedListItem/checkListItem)을
+// 그대로 재노출하지 않는다 — 이 helper는 startNumber 조립만 알고 checked를
+// 몰라 checkListItem literal을 받으면 Block에 할당 불가능해진다(RD-001
+// DELTA-01 회귀). 이 support가 실제로 조립하는 두 종류만 남긴다.
+export type ListItemType = "bulletListItem" | "numberedListItem";
 
 /**
  * 목록 keyboard 계약이 목록 판별자, 명시 시작 번호와 자식 배치를 독립적으로

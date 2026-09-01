@@ -149,6 +149,14 @@ type NumberedListItemBlockNode = {
   children?: BlockNode[] | undefined;
 };
 
+type CheckListItemBlockNode = {
+  id: string;
+  type: "checkListItem";
+  content: z.infer<typeof inlineContentSchema>;
+  checked: boolean;
+  children?: BlockNode[] | undefined;
+};
+
 type ToggleListItemBlockNode = {
   id: string;
   type: "toggleListItem";
@@ -167,6 +175,7 @@ type BlockNode =
   | QuoteBlockNode
   | BulletListItemBlockNode
   | NumberedListItemBlockNode
+  | CheckListItemBlockNode
   | ToggleListItemBlockNode
   | DividerBlockNode
   | CodeBlockNode;
@@ -234,6 +243,22 @@ const numberedListItemBlockSchema = z
   })
   .strict();
 
+// checkListItem은 bulletListItem과 같은 목록 항목 shape(content + 재귀
+// children) 위에 checked 하나만 얹는다. toggleListItem의 collapsed와 달리
+// checked는 optional이 아니다 — 누락·오타입 문서를 이 스키마 한 곳에서
+// DOCUMENT_INVALID로 거절한다(G-CNV-001).
+const checkListItemBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("checkListItem"),
+    content: inlineContentSchema,
+    checked: z.boolean(),
+    children: z
+      .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
+      .optional(),
+  })
+  .strict();
+
 // toggleListItem은 bulletListItem/numberedListItem과 같은 목록 항목 shape
 // (content + 재귀 children) 위에 collapsed 하나만 얹는다. collapsed 값 자체는
 // heading의 isToggleable 같은 선행 조건이 없다 — 타입 자체가 토글 여부를
@@ -257,6 +282,7 @@ const blockSchema = z.discriminatedUnion("type", [
   quoteBlockSchema,
   bulletListItemBlockSchema,
   numberedListItemBlockSchema,
+  checkListItemBlockSchema,
   toggleListItemBlockSchema,
   dividerBlockSchema,
   codeBlockSchema,
