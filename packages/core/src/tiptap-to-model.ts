@@ -296,6 +296,23 @@ const blockContainerToModel = (
     };
   }
 
+  if (contentNode.type === "checkListItem") {
+    // JSON attr은 unknown이지만 값 정책을 여기서 재구현하지 않는다.
+    // checked는 model 필수 필드라 numberedListItem.startNumber·
+    // toggleListItem.collapsed처럼 부재를 필드 생략으로 옮길 수 없다 —
+    // 그대로 옮기고 부재·오타입 거절은 최종 parseDocument에 맡긴다.
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "checkListItem",
+        content: inlineContent.value,
+        checked: contentNode.attrs?.checked as boolean,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
   if (contentNode.type === "toggleListItem") {
     // JSON attr은 unknown이지만 값 정책을 여기서 재구현하지 않는다. null은
     // model collapsed 필드 부재와 직대응하고(heading·numberedListItem.startNumber와

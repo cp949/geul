@@ -194,12 +194,10 @@ export const tableBlockToTiptapJson = (table: TableBlock): TiptapJsonNode => {
 
 // 문단·헤딩·인용·목록 노드 자체(컨테이너 내부의 blockContent) 인코딩.
 // blockId는 더 이상 여기 붙지 않는다 — D19가 identity를 blockContainer로
-// 옮겼다. 번호 목록의 null attr은 model 필드 부재와 직대응한다.
-// checkListItem은 이 함수의 매개변수 유니온에 model Block 확장(RD-001
-// DELTA-01)을 따라 들어왔지만 PM 노드가 아직 없어(후속 DELTA 예정) bullet과
-// 같은 무속성 분기로 떨어진다 — checked는 아직 attrs로 인코딩하지 않는다.
-// PM 노드·codec을 구현하는 DELTA가 numberedListItem/toggleListItem처럼
-// 전용 삼항 분기를 추가해야 한다.
+// 옮겼다. 번호 목록의 null attr은 model 필드 부재와 직대응한다. checkListItem의
+// checked는 model 필수 필드라 numberedListItem.startNumber·
+// toggleListItem.collapsed와 달리 null(필드 부재)로 떨어지는 경우가 없다 —
+// 항상 boolean 값을 그대로 옮긴다(RD-001 DELTA-02).
 const blockContentToTiptapJson = (
   block:
     | ParagraphBlock
@@ -224,9 +222,11 @@ const blockContentToTiptapJson = (
       }
     : block.type === "numberedListItem"
       ? { attrs: { startNumber: block.startNumber ?? null } }
-      : block.type === "toggleListItem"
-        ? { attrs: { collapsed: block.collapsed ?? null } }
-        : {}),
+      : block.type === "checkListItem"
+        ? { attrs: { checked: block.checked } }
+        : block.type === "toggleListItem"
+          ? { attrs: { collapsed: block.collapsed ?? null } }
+          : {}),
   content: inlineContentToTiptap(block.content),
 });
 

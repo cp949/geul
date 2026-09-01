@@ -18,6 +18,7 @@ import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
 import {
   BulletListItemExtension,
+  CheckListItemExtension,
   NumberedListItemExtension,
   ToggleListItemExtension,
 } from "./list-item-extension.js";
@@ -113,6 +114,19 @@ const ProductionNumberedListItemExtension = NumberedListItemExtension.extend({
   },
 });
 
+// checked 시각 표시(체크박스 아이콘·클릭 UI)는 이 DELTA 범위가 아니다 —
+// 저장 계층만 완성한다(RD-001 DELTA-02, 그릴링 결정). rendered: false라
+// checked는 이 wrapper div의 DOM 속성으로 투영되지 않는다.
+const ProductionCheckListItemExtension = CheckListItemExtension.extend({
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-be-check-list-item": "" }),
+      0,
+    ];
+  },
+});
+
 const ProductionToggleListItemExtension = ToggleListItemExtension.extend({
   renderHTML({ HTMLAttributes }) {
     return [
@@ -166,6 +180,7 @@ export const createProductionEditor = (options: {
       HeadingExtension,
       ProductionBulletListItemExtension,
       ProductionNumberedListItemExtension,
+      ProductionCheckListItemExtension,
       ProductionToggleListItemExtension,
       ListInputRuleExtension,
       QuoteExtension,

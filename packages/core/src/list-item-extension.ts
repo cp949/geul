@@ -15,6 +15,22 @@ export const BulletListItemExtension = Node.create({
   ...listItemContentNode,
 });
 
+// checked 기본값은 numberedListItem.startNumber·toggleListItem.collapsed의
+// null(=model 필드 부재 표현)과 다르다 — model CheckListItemBlock.checked는
+// 필수 boolean이라 부재를 표현할 필요가 없다. false를 기본값으로 써서
+// PM 노드 생성 시 항상 유효한 boolean을 갖게 한다(RD-001 DELTA-02).
+export const CheckListItemExtension = Node.create({
+  name: "checkListItem",
+  priority: 99,
+  ...listItemContentNode,
+
+  addAttributes() {
+    return {
+      checked: { default: false, rendered: false },
+    };
+  },
+});
+
 export const NumberedListItemExtension = Node.create({
   name: "numberedListItem",
   priority: 99,
