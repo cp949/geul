@@ -35,9 +35,11 @@ _works/roadmap/
   roadmap.md
   progress.md
   RD-001.md  RD-002.md  ...
+  result/
+    RD-001-DELTA-01.md  RD-002-DELTA-01.md  ...
 ```
 
-active roadmap 작업공간은 `_works/roadmap/` 하나다. Issue·슬라이스별 하위 폴더를 만들지 않는다. 한 roadmap 안에서 RD ID를 발급하며 삭제한 ID를 재사용하지 않는다.
+active roadmap 작업공간은 `_works/roadmap/` 하나다. Issue·슬라이스별 하위 폴더를 만들지 않는다 — `result/`는 DELTA별 계획·결과 파일을 모으는 고정 하위 폴더이고 이 규칙의 예외다. 한 roadmap 안에서 RD ID를 발급하며 삭제한 ID를 재사용하지 않는다.
 
 새 roadmap을 등록하기 전에 `_works/roadmap/` 상태를 확인한다.
 
@@ -64,11 +66,19 @@ active roadmap 작업공간은 `_works/roadmap/` 하나다. Issue·슬라이스�
 ## 진입 조건
 ## 포함 범위
 ## 제외 범위
+
+## 예상 DELTA (참고용 — 확정 아님, 언제든 추가·삭제·수정)
+
+- [ ] DELTA-01: <한 줄 스코프>
+
 ## 완료 조건
+
+- [ ] 조건 1: <검증가능 문장> — 증거: <미충족>
+
 ## 결정
 ```
 
-결정은 주제, 결정, 근거와 틀렸을 때 비용을 기록한다. DELTA·파일 목록·테스트 건수는 하위 workflow 계획 전에는 쓰지 않는다.
+결정은 주제, 결정, 근거와 틀렸을 때 비용을 기록한다. 예상 DELTA는 한 줄 스코프만 적는다 — 상세 계획(변경 대상·완료 조건과 검출 변이·검증 명령·적용 가이드와 함정)은 그 DELTA를 시작할 때 `result/RD-NNN-DELTA-NN.md`에 채운다.
 
 ## RD 상태
 
@@ -79,9 +89,9 @@ CANDIDATE → READY → ACTIVE → DONE
 
 - `CANDIDATE`: 결과 경계만 있고 readiness probe를 통과하지 않았다.
 - `READY`: 모든 선행 RD가 `DONE`이고 readiness probe가 진입 가능으로 판정했다.
-- `ACTIVE`: 현재 qq·ff workflow가 실행 중이다. 한 roadmap에서 하나만 허용한다.
+- `ACTIVE`: 이 RD에 속한 DELTA 사이클이 하나 이상 시작됐고 아직 완료 조건 체크리스트가 다 차지 않았다. 여러 RD가 동시에 `ACTIVE`일 수 있다.
 - `BLOCKED`: 선행 RD, 계약 결정 또는 외부 조건이 없어 진행할 수 없다. `blocked by`와 근거를 함께 기록한다.
-- `DONE`: 하위 workflow의 리뷰·최종 gate·`dev` 이전과 RD 완료 동기화가 끝났다.
+- `DONE`: 완료 조건 체크리스트 전체를 체크하고 최종 재대조를 마쳤다.
 
 ## roadmap 작성
 
