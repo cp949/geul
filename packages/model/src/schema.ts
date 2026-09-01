@@ -122,6 +122,8 @@ type HeadingBlockNode = {
   type: "heading";
   level: 1 | 2 | 3 | 4 | 5 | 6;
   content: z.infer<typeof inlineContentSchema>;
+  isToggleable?: boolean | undefined;
+  collapsed?: boolean | undefined;
   children?: BlockNode[] | undefined;
 };
 
@@ -147,6 +149,14 @@ type NumberedListItemBlockNode = {
   children?: BlockNode[] | undefined;
 };
 
+type ToggleListItemBlockNode = {
+  id: string;
+  type: "toggleListItem";
+  content: z.infer<typeof inlineContentSchema>;
+  collapsed?: boolean | undefined;
+  children?: BlockNode[] | undefined;
+};
+
 type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
 type CodeBlockNode = z.infer<typeof codeBlockSchema>;
 
@@ -157,6 +167,7 @@ type BlockNode =
   | QuoteBlockNode
   | BulletListItemBlockNode
   | NumberedListItemBlockNode
+  | ToggleListItemBlockNode
   | DividerBlockNode
   | CodeBlockNode;
 
@@ -181,6 +192,8 @@ const headingBlockSchema = z.object({
     z.literal(6),
   ]),
   content: inlineContentSchema,
+  isToggleable: z.boolean().optional(),
+  collapsed: z.boolean().optional(),
   children: z
     .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
     .optional(),
@@ -221,6 +234,22 @@ const numberedListItemBlockSchema = z
   })
   .strict();
 
+// toggleListItem은 bulletListItem/numberedListItem과 같은 목록 항목 shape
+// (content + 재귀 children) 위에 collapsed 하나만 얹는다. collapsed 값 자체는
+// heading의 isToggleable 같은 선행 조건이 없다 — 타입 자체가 토글 여부를
+// 뜻한다(spec §4.4).
+const toggleListItemBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("toggleListItem"),
+    content: inlineContentSchema,
+    collapsed: z.boolean().optional(),
+    children: z
+      .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
+      .optional(),
+  })
+  .strict();
+
 const blockSchema = z.discriminatedUnion("type", [
   paragraphBlockSchema,
   headingBlockSchema,
@@ -228,6 +257,7 @@ const blockSchema = z.discriminatedUnion("type", [
   quoteBlockSchema,
   bulletListItemBlockSchema,
   numberedListItemBlockSchema,
+  toggleListItemBlockSchema,
   dividerBlockSchema,
   codeBlockSchema,
 ]);
@@ -354,6 +384,23 @@ const validateBlocksAt = (
         );
       }
       continue;
+    }
+
+    // heading 전용 불변식(spec §4.1): collapsed가 있는데 isToggleable이
+    // true가 아니면 거절한다. codeBlock과 같은 구조 — nestable 공통 처리
+    // (content·children 재귀) 전에 타입 전용 검증을 먼저 건다. 이 판정을
+    // 다른 곳(core codec 등)에 복제하지 않는다(G-CNV-001) — heading의
+    // collapsed·isToggleable은 여기서만 유효성을 판정하고 나머지 계층은
+    // 값을 그대로 직대응한다.
+    if (
+      block.type === "heading" &&
+      block.collapsed !== undefined &&
+      block.isToggleable !== true
+    ) {
+      return invalid(
+        [...blockPath, "collapsed"],
+        "Heading collapsed requires isToggleable: true",
+      );
     }
 
     if (isNestableBlockType(block.type)) {

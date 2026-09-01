@@ -73,4 +73,5 @@ export type {
   TableBlock,
   TableColumn,
   TextMark,
+  ToggleListItemBlock,
 } from "./types.js";

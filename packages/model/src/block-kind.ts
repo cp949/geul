@@ -12,13 +12,21 @@ export const isListItemBlockType = (type: string): type is ListItemBlockType =>
 
 // children 필드를 가질 수 있는 블록 종류다. Tiptap의 nestableBlockContent
 // group(core/list-item-extension.ts 등)과 정확히 대응한다.
+//
+// toggleListItem은 ListItemBlockType에 넣지 않고 여기 직접 추가한다(RD-003
+// 착수 전 로드맵 D2 정정) — isListItemBlockType은 bulletListItem/
+// numberedListItem처럼 <ul>/<ol> 직렬화(io) 대상인 두 종류만 판정하는
+// 계약이고, 세 겹 포함 관계(목록 항목 ⊂ 중첩 가능)상 여기 넣지 않으면
+// isNestableBlockType이 toggleListItem을 표(table) 전용 분기로 잘못
+// 떨어뜨린다(model/src/schema.ts의 validateBlocksAt).
 export type NestableBlockType =
-  "paragraph" | "heading" | "quote" | ListItemBlockType;
+  "paragraph" | "heading" | "quote" | ListItemBlockType | "toggleListItem";
 
 export const isNestableBlockType = (type: string): type is NestableBlockType =>
   type === "paragraph" ||
   type === "heading" ||
   type === "quote" ||
+  type === "toggleListItem" ||
   isListItemBlockType(type);
 
 // content: InlineContent 필드를 가지는 블록 종류다(table·divider 제외).

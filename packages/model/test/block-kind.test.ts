@@ -16,6 +16,7 @@ const ALL_BLOCK_TYPES = [
   "quote",
   "bulletListItem",
   "numberedListItem",
+  "toggleListItem",
   "codeBlock",
   "divider",
   "table",
@@ -25,6 +26,10 @@ describe("isListItemBlockType", () => {
   it.each([
     ["bulletListItem", true],
     ["numberedListItem", true],
+    // toggleListItem은 로드맵 D2 정정에 따라 ListItemBlockType에 넣지
+    // 않는다 — bulletListItem/numberedListItem처럼 <ul>/<ol> 직렬화(io)
+    // 대상이 아니다.
+    ["toggleListItem", false],
     ["paragraph", false],
     ["heading", false],
     ["quote", false],
@@ -44,6 +49,10 @@ describe("isNestableBlockType", () => {
     ["quote", true],
     ["bulletListItem", true],
     ["numberedListItem", true],
+    // toggleListItem은 ListItemBlockType을 거치지 않고 NestableBlockType에
+    // 직접 추가된다(로드맵 D2 정정) — isListItemBlockType이 false여도
+    // 중첩 가능은 true다.
+    ["toggleListItem", true],
     ["codeBlock", false],
     ["divider", false],
     ["table", false],
@@ -66,6 +75,7 @@ describe("isInlineContentBlockType", () => {
     ["quote", true],
     ["bulletListItem", true],
     ["numberedListItem", true],
+    ["toggleListItem", true],
     ["codeBlock", true],
     ["divider", false],
     ["table", false],
