@@ -10,10 +10,13 @@ import {
   type Result,
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 
-import { findBlockPosition } from "./block-position.js";
+import {
+  findBlockPosition,
+  findEditableBlockContent,
+} from "./block-position.js";
+import { toggleCheckListItemCheckedCommand } from "./check-list-item-commands.js";
 import {
   collectDocumentIdentityIds,
   createUniqueDocumentId,
@@ -25,24 +28,6 @@ import {
   commandNotApplicable,
   type ProductionEditorSession,
 } from "./production-editor-session.js";
-
-const findEditableBlockContent = (
-  document: ProseMirrorNode,
-  blockId: string,
-): { position: number; node: ProseMirrorNode } | null => {
-  const matchPosition = findBlockPosition(document, blockId);
-  if (matchPosition === null) return null;
-  const matchNode = document.nodeAt(matchPosition);
-  if (matchNode === null) return null;
-  if (matchNode.type.name !== "blockContainer") {
-    return { position: matchPosition, node: matchNode };
-  }
-  const contentPosition = matchPosition + 1;
-  const contentNode = document.nodeAt(contentPosition);
-  return contentNode === null
-    ? null
-    : { position: contentPosition, node: contentNode };
-};
 
 const findBlockInTree = (
   blocks: readonly Block[],
@@ -499,6 +484,26 @@ export const createGenericBlockCommands = (
     );
   };
 
+  const toggleCheckListItemChecked = (
+    blockId: string,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) {
+      return commandNotApplicable("toggleCheckListItemChecked");
+    }
+    // runDocumentCommand의 run()은 boolean만 돌려받아 BLOCK_NOT_FOUND와
+    // COMMAND_NOT_APPLICABLE을 구분하지 못한다 — indentBlock/outdentBlock과
+    // 같은 이유로 모델 트리 조회를 여기서 먼저 해 정확한 오류 코드를 낸다.
+    if (findBlockInTree(session.document.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    return session.runDocumentCommand(
+      "toggleCheckListItemChecked",
+      "local",
+      () =>
+        toggleCheckListItemCheckedCommand(session.editor, blockId).ok,
+    );
+  };
+
   return {
     setText,
     insertParagraphAfter,
@@ -508,5 +513,6 @@ export const createGenericBlockCommands = (
     deleteBlock,
     indentBlock,
     outdentBlock,
+    toggleCheckListItemChecked,
   };
 };

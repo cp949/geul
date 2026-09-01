@@ -24,3 +24,27 @@ export const findBlockPosition = (
   });
   return blockPosition;
 };
+
+// blockId로 편집 대상 콘텐츠 노드를 찾는다. blockId는 blockContainer(중첩
+// 가능 블록)나 table 같은 비-container 노드 어느 쪽에도 붙을 수 있다 —
+// blockContainer면 실제 콘텐츠는 그 자식(position + 1)에 있고, 아니면 그
+// 노드 자신이 콘텐츠다. generic-block-commands.ts(setText·setBlockType 등)와
+// check-list-item-commands.ts 둘 다 필요로 해 findBlockPosition과 같은 이유로
+// 공유 프리미티브로 둔다(RD-001 DELTA-03).
+export const findEditableBlockContent = (
+  document: ProseMirrorNode,
+  blockId: string,
+): { position: number; node: ProseMirrorNode } | null => {
+  const matchPosition = findBlockPosition(document, blockId);
+  if (matchPosition === null) return null;
+  const matchNode = document.nodeAt(matchPosition);
+  if (matchNode === null) return null;
+  if (matchNode.type.name !== "blockContainer") {
+    return { position: matchPosition, node: matchNode };
+  }
+  const contentPosition = matchPosition + 1;
+  const contentNode = document.nodeAt(contentPosition);
+  return contentNode === null
+    ? null
+    : { position: contentPosition, node: contentNode };
+};
