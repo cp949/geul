@@ -131,6 +131,11 @@ const supportedBlockNames = new Set([
   "ul",
   "ol",
   "table",
+  // details는 isToggleable heading·toggleListItem의 HTML 표현이다
+  // (RD-005-DELTA-01, 로드맵 D4). table과 같은 이유로 자식(summary/children
+  // div/내부 hN)은 별도 등록이 필요 없다 — details는 isBlockBoundaryTag에
+  // 없어 자식으로 내려가면 topLevel이 자동으로 꺼진다(150행 부근 주석).
+  "details",
 ]);
 
 // 이 집합은 warning 판정만 소유한다. sanitizer 허용 목록과 공유하면 raw

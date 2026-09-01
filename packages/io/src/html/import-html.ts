@@ -46,6 +46,7 @@ import {
 import { asRoot, parseHtmlFragment } from "./parse-html.js";
 import {
   htmlAllowedAttributes,
+  htmlAllowedTagNames,
   htmlSanitizeSchema,
 } from "./sanitize-schema.js";
 import {
@@ -70,10 +71,16 @@ const DEFAULT_COLUMN_WIDTH = 160;
 // 쓰므로 변경하지 않고 이 importer에서만 얕은 복사한다.
 const htmlImportSanitizeSchema = {
   ...htmlSanitizeSchema,
+  // details/summary는 document-import 전용이다(RD-005-DELTA-01) — 공유
+  // htmlAllowedTagNames(clipboard와 공유)에는 올리지 않는다. tagNames를
+  // override하는 첫 사례라 li/ol의 attributes-only override와 다르다.
+  tagNames: [...htmlAllowedTagNames, "details", "summary"],
   attributes: {
     ...htmlAllowedAttributes,
     li: ["dataBeBlockId", "dataBeChecked"],
     ol: ["start"],
+    details: ["dataBeBlockId", "dataBeToggleable", "dataBeCollapsed", "open"],
+    summary: ["dataBeBlockId"],
   },
 };
 
@@ -765,13 +772,92 @@ const findChildrenWrapper = (
   return { ownNode, childrenNodes: containerNode.children };
 };
 
+// isToggleable heading·toggleListItem이 공유하는 <details> 표현을 구조로만
+// 인식한다(로드맵 D4, RD-005-DELTA-01.md "착수 전 결정" — findChildrenWrapper와
+// 같은 "부분 일치를 관대하게 봐주지 않는다" 원칙). own-format 마커
+// (data-be-toggleable="true")와 구조(첫 element 자식이 정확히 <summary>,
+// 있으면 둘째는 dataBeChildren 있는 <div>) 둘 다 확인한다 — 손으로 쓴
+// <details>(예: FAQ 아코디언)를 own-format으로 오인하지 않기 위해서다.
+// <summary>의 유일한 element 자식이 h1~h6고 다른 실질 텍스트가 없으면
+// heading(<summary>가 <hN>을 감싼 것), 아니면 toggleListItem(<summary>가
+// own content를 직접 담음, <li>가 없는 목록 항목이라 여기서 처음 id가
+// 등장한다)이다.
+const findDetailsWrapper = (
+  node: HtmlNode,
+):
+  | {
+      kind: "heading";
+      ownNode: HtmlElementNode;
+      collapsed: boolean | undefined;
+      childrenNodes: HtmlElementContent[];
+    }
+  | {
+      kind: "toggleListItem";
+      summaryNode: HtmlElementNode;
+      collapsed: boolean | undefined;
+      childrenNodes: HtmlElementContent[];
+    }
+  | undefined => {
+  if (node.type !== "element" || node.tagName !== "details") return undefined;
+  if (propertyString(node, "dataBeToggleable") !== "true") return undefined;
+
+  const hasStrayText = node.children.some(
+    (child) => !isElementNode(child) && hasSubstantialText(textValue([child])),
+  );
+  if (hasStrayText) return undefined;
+
+  const elementChildren = node.children.filter(isElementNode);
+  if (elementChildren.length < 1 || elementChildren.length > 2)
+    return undefined;
+
+  const summaryNode = elementChildren[0];
+  if (summaryNode === undefined || summaryNode.tagName !== "summary") {
+    return undefined;
+  }
+
+  const containerNode = elementChildren[1];
+  let childrenNodes: HtmlElementContent[] = [];
+  if (containerNode !== undefined) {
+    if (
+      containerNode.tagName !== "div" ||
+      propertyString(containerNode, "dataBeChildren") === undefined
+    ) {
+      return undefined;
+    }
+    childrenNodes = containerNode.children;
+  }
+
+  const collapsedAttr = propertyString(node, "dataBeCollapsed");
+  const collapsed =
+    collapsedAttr === undefined ? undefined : collapsedAttr === "true";
+
+  const summaryHasStrayText = summaryNode.children.some(
+    (child) => !isElementNode(child) && hasSubstantialText(textValue([child])),
+  );
+  const summaryElementChildren = summaryNode.children.filter(isElementNode);
+  const headingChild = summaryElementChildren[0];
+  if (
+    !summaryHasStrayText &&
+    summaryElementChildren.length === 1 &&
+    summaryNode.children.length === 1 &&
+    headingChild !== undefined &&
+    headingLevelByTagName.has(headingChild.tagName)
+  ) {
+    return { kind: "heading", ownNode: headingChild, collapsed, childrenNodes };
+  }
+
+  return { kind: "toggleListItem", summaryNode, collapsed, childrenNodes };
+};
+
 // raw warning fact 중 sanitized 목록 변환이 실제로 소비해 보존한 속성 하나만
 // 제거한다. 전역 필터와 달리 blocksFromListElement에 도달하지 않은 standalone
-// li, 비-li ol, 표 셀 내부 목록의 속성 손실 warning은 그대로 남는다.
-const consumePreservedListAttributeWarning = (
+// li, 비-li ol, 표 셀 내부 목록의 속성 손실 warning은 그대로 남는다. li/ol
+// 전용이었으나 RD-005-DELTA-01에서 details/summary까지 다뤄 이름과 매개변수
+// 타입을 일반화했다.
+const consumePreservedAttributeWarning = (
   warnings: HtmlImportWarning[],
-  element: "li" | "ol",
-  attribute: "dataBeBlockId" | "dataBeChecked" | "start",
+  element: string,
+  attribute: string,
 ): void => {
   const index = warnings.findIndex(
     (warning) =>
@@ -867,7 +953,7 @@ const blocksFromListElement = (
     }
     flushNonItemRun();
     if (propertyString(child, "dataBeBlockId") !== undefined) {
-      consumePreservedListAttributeWarning(warnings, "li", "dataBeBlockId");
+      consumePreservedAttributeWarning(warnings, "li", "dataBeBlockId");
     }
     // data-be-checked 존재 여부가 tag보다 우선한다 — own export는 항상
     // <ul>에 checkListItem을 낸다(로드맵 D3). 속성이 있으면 own-format
@@ -875,14 +961,14 @@ const blocksFromListElement = (
     const isCheckListItem =
       propertyString(child, "dataBeChecked") !== undefined;
     if (isCheckListItem) {
-      consumePreservedListAttributeWarning(warnings, "li", "dataBeChecked");
+      consumePreservedAttributeWarning(warnings, "li", "dataBeChecked");
     }
     if (
       node.tagName === "ol" &&
       itemIndex === 0 &&
       Number.isInteger(explicitStart)
     ) {
-      consumePreservedListAttributeWarning(warnings, "ol", "start");
+      consumePreservedAttributeWarning(warnings, "ol", "start");
     }
     const startNumber =
       itemIndex === 0 && Number.isInteger(explicitStart)
@@ -965,6 +1051,81 @@ const blocksFromNodes = (
           node.tagName === "ol" && previousBlock?.type === "numberedListItem",
         ),
       );
+      continue;
+    }
+    const details = findDetailsWrapper(node);
+    if (details !== undefined) {
+      if (depth >= MAX_NESTING_DEPTH) {
+        // findChildrenWrapper의 depth 가드와 동일 원칙(63행 부근) — 정확히
+        // 상한 깊이로 끝나는 체인은 경고하지 않는다.
+        if (details.childrenNodes.length > 0) {
+          warnings.push(nestedChildrenFlattenedWarning());
+        }
+        plainRun.push(node);
+        continue;
+      }
+
+      flushPlainRun();
+      // own-format 마커·구조를 raw HAST에서도 이미 확인했으므로(findDetailsWrapper)
+      // sanitize가 details의 신규 속성 전부(공유 htmlAllowedAttributes에
+      // "details" 항목 자체가 없어 전부 raw 오탐 대상이다)를 보존한 이번
+      // 결과에 대한 raw "제거됨" 오탐만 지운다(consumePreservedAttributeWarning,
+      // li/ol과 동일 패턴).
+      consumePreservedAttributeWarning(warnings, "details", "dataBeBlockId");
+      consumePreservedAttributeWarning(warnings, "details", "dataBeToggleable");
+      consumePreservedAttributeWarning(warnings, "details", "dataBeCollapsed");
+      consumePreservedAttributeWarning(warnings, "details", "open");
+      const children = blocksFromNodes(
+        details.childrenNodes,
+        createId,
+        depth + 1,
+        warnings,
+      );
+
+      if (details.kind === "heading") {
+        const headingBlocks = blocksFromSegments(
+          [details.ownNode],
+          createId,
+          depth,
+          warnings,
+        );
+        const headingBlock = headingBlocks[0];
+        if (
+          headingBlocks.length !== 1 ||
+          headingBlock === undefined ||
+          headingBlock.type !== "heading"
+        ) {
+          // findDetailsWrapper가 ownNode를 h1~h6로만 걸렀으므로 정상 입력에서
+          // 도달하지 않는다(findChildrenWrapper의 동일 방어 분기와 같은 이유).
+          plainRun.push(node);
+          continue;
+        }
+        blocks.push({
+          ...headingBlock,
+          isToggleable: true,
+          ...(details.collapsed === undefined
+            ? {}
+            : { collapsed: details.collapsed }),
+          ...(children.length > 0 ? { children } : {}),
+        });
+        continue;
+      }
+
+      if (propertyString(details.summaryNode, "dataBeBlockId") !== undefined) {
+        consumePreservedAttributeWarning(warnings, "summary", "dataBeBlockId");
+      }
+      const id =
+        propertyString(details.summaryNode, "dataBeBlockId") ?? createId();
+      const content = paragraphContentFromNodes(details.summaryNode.children);
+      blocks.push({
+        id,
+        type: "toggleListItem",
+        content,
+        ...(details.collapsed === undefined
+          ? {}
+          : { collapsed: details.collapsed }),
+        ...(children.length > 0 ? { children } : {}),
+      });
       continue;
     }
     const wrapper = findChildrenWrapper(node);
