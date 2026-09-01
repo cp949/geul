@@ -36,6 +36,45 @@ export const modelDepthAt = ($pos: ResolvedPos): number => {
   return depth;
 };
 
+// list-paste-fallback-extension.ts의 handlePaste가 넘기는
+// view.state.selection.$from은 두 가지 서로 다른 위치 종류일 수 있다 —
+// modelDepthAt에 그대로 넘기면 그중 하나에서만 맞는 값이 나온다(qq-workflow
+// 단계-3 결함 탐지 F1). 이 함수가 위치 종류를 스스로 판별해 맞는 계산을
+// 고른다:
+//
+// (1) 콘텐츠 노드 내부(캐럿, TextSelection.$from) — $pos.parent가
+// paragraph·heading·quote·listItem·codeBlock 등 blockContainer의 content
+// 자식이다. 이 조상 체인은 캐럿이 속한 blockContainer 자신도 포함한다 —
+// 모든 텍스트/캐럿 보유 콘텐츠 노드는 정확히 하나의 blockContainer 직계
+// 자식이라는 현재 스키마 불변식 때문이다(isNestableBlockContainer가
+// 기대는 것과 같은 "content node는 blockContainer의 child(0)" 구조).
+// modelDepthAt을 그대로 쓰면 이 blockContainer 1개가 이중으로 잡혀
+// 실제보다 1 크게 나온다 — 그 초과분 1만 제외한다.
+//
+// (2) block-level 형제 사이 경계(NodeSelection.$anchor·GapCursor 등) —
+// $pos.parent.type.name이 "blockGroup"이거나 $pos.depth === 0(부모가
+// doc)이다. divider(divider-extension.ts)·table(table-extension.ts)은
+// "표(table-extension.ts)와 동형"이라는 divider-extension.ts 상단 주석대로
+// blockContainer로 감싸이지 않는 atom/노드이고, blockGroup 또는 doc의
+// "block+" content에 blockContainer와 나란히 직계 자식으로 들어간다.
+// BlockJoinExtension.selectAdjacentAtom(block-join-extension.ts)이
+// divider 인접 Backspace/Delete에서 만드는 NodeSelection이 정확히 이
+// 위치를 $anchor로 쓴다 — 이 위치는 modelDepthAt이 원래 전제하는 "대상
+// 노드 바로 앞 경계" 계약과 정확히 일치하므로 보정 없이 modelDepthAt을
+// 그대로 쓴다.
+//
+// 이름을 "Caret"이 아니라 "PasteTarget"으로 둔 이유: 이 함수는 이제
+// TextSelection의 캐럿뿐 아니라 NodeSelection·GapCursor 같은 경계 위치도
+// 올바르게 처리해야 한다 — "Caret"만으로는 그 두 번째 경로를 부정확하게
+// 암시한다. 실제 유일한 소비자(list-paste-fallback-extension.ts의
+// handlePaste)가 이 함수를 붙여넣기 대상 위치 계산에만 쓴다는 사실을 그대로
+// 반영한다.
+export const modelDepthAtPasteTarget = ($pos: ResolvedPos): number => {
+  const isBlockLevelBoundary =
+    $pos.depth === 0 || $pos.parent.type.name === "blockGroup";
+  return isBlockLevelBoundary ? modelDepthAt($pos) : modelDepthAt($pos) - 1;
+};
+
 // target 노드 자신의 하위 트리 높이(자식이 없으면 0). blockContainer가
 // 아니면(table) 애초에 blockGroup 자식을 가질 스키마 경로가 없어 항상 0이다
 // (D19 — 표는 children 불가).

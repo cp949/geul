@@ -8,7 +8,7 @@ import { DOMParser as PmDomParser, type Schema } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
-import { modelDepthAt } from "./indent-commands.js";
+import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import type { TiptapJsonNode } from "./model-to-tiptap.js";
 
 // PM 기본 붙여넣기 폴백 경로(c)에서 외부 ul/ol의 목록 구조(마커 타입·중첩
@@ -202,8 +202,8 @@ const topLevelNodesFromDom = (
 // 부모의 형제로(같은 depth에서) 승격한다(부모 항목 자체는 유지). depth는
 // indent-commands.ts의 modelDepthAt/subtreeHeight와 같은 정의(top-level=1)
 // 를 쓴다 — startDepth는 이 nodes 배열이 삽입될 자리의 depth
-// (modelDepthAt($from))다. PLAN-REVIEW-01 라운드 2 N1 — 붙여넣기 대상
-// 위치가 이미 깊으면(예: 60) slice 자신의 내부 높이만으로는 못 잡는
+// (modelDepthAtPasteTarget($from))다. PLAN-REVIEW-01 라운드 2 N1 — 붙여넣기
+// 대상 위치가 이미 깊으면(예: 60) slice 자신의 내부 높이만으로는 못 잡는
 // 합산 초과(60+5=65 > 64)를 이 함수가 잡는다.
 const clampDepth = (
   nodes: TiptapJsonNode[],
@@ -283,7 +283,9 @@ export const ListPasteFallbackExtension =
               const nodes = topLevelNodesFromDom(schema, dom.body, createId);
               if (nodes.length === 0) return false;
 
-              const targetDepth = modelDepthAt(view.state.selection.$from);
+              const targetDepth = modelDepthAtPasteTarget(
+                view.state.selection.$from,
+              );
               const clamped = clampDepth(nodes, targetDepth);
 
               // focus()를 별도로 호출하지 않는다 — paste 이벤트는 이미
