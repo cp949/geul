@@ -254,3 +254,139 @@ describe("목록 변환 원자성과 CodeBlock 경계", () => {
     );
   });
 });
+
+/**
+ * checkListItem은 checked가 필수 필드라 위 공유 sources/targets 행렬의
+ * `...source`/`...target` 스프레드 패턴(numberedListItem의 optional
+ * startNumber를 전제)과 맞지 않는다(RD-001 DELTA-04) — 로컬 builder와
+ * 전용 행렬로 분리한다(G-TST-002).
+ */
+describe("checkListItem 변환", () => {
+  /** checked를 명시로 받는 checkListItem 전용 리터럴 builder. */
+  const checkListItemBlock = (
+    id: string,
+    text: string,
+    checked: boolean,
+    children?: Block[],
+  ): Block => ({
+    id,
+    type: "checkListItem",
+    checked,
+    content: text === "" ? [] : [{ text }],
+    ...(children === undefined ? {} : { children }),
+  });
+
+  const otherSources = [
+    { type: "paragraph" },
+    { type: "heading", level: 3 },
+    { type: "quote" },
+    { type: "bulletListItem" },
+    { type: "numberedListItem", startNumber: 4 },
+  ] as const satisfies readonly SetBlockTypeDescriptor[];
+
+  it.each(otherSources)(
+    "%o에서 checkListItem으로 바꾸면 id·content·children을 보존하고 checked는 false로 생성된다",
+    (source) => {
+      const content = [
+        { text: "marked", marks: [{ type: "bold" as const }] },
+        { text: " text" },
+      ];
+      const children: Block[] = [paragraph("child", "child")];
+      const sourceBlock = { id: "target", ...source, content, children } as Block;
+      const { editor, tiptap } = mounted(
+        documentOf(sourceBlock, paragraph("tail", "tail")),
+      );
+      const start = contentTextStart(tiptap, "target");
+      tiptap.view.dispatch(
+        tiptap.state.tr.setSelection(
+          TextSelection.create(tiptap.state.doc, start + 5, start + 1),
+        ),
+      );
+      const selection = tiptap.state.selection.toJSON();
+
+      expect(
+        editor.commands.setBlockType("target", { type: "checkListItem" }),
+      ).toEqual(okResult);
+
+      expect(editor.getDocument().blocks[0]).toEqual({
+        id: "target",
+        type: "checkListItem",
+        checked: false,
+        content,
+        children,
+      });
+      expect(tiptap.state.selection.toJSON()).toEqual(selection);
+    },
+  );
+
+  const otherTargets = [
+    { type: "paragraph" },
+    { type: "heading", level: 2 },
+    { type: "quote" },
+    { type: "bulletListItem" },
+    { type: "numberedListItem", startNumber: 8 },
+  ] as const satisfies readonly SetBlockTypeDescriptor[];
+
+  it.each(otherTargets)(
+    "checkListItem에서 %o로 바꾸면 id·content·children을 보존한다(checked는 버려진다)",
+    (target) => {
+      const content = [{ text: "본문" }];
+      const children: Block[] = [paragraph("child", "child")];
+      const sourceBlock = checkListItemBlock("target", "", true, children);
+      const sourceWithContent = { ...sourceBlock, content };
+      const { editor } = mountedBlock(sourceWithContent);
+
+      expect(editor.commands.setBlockType("target", target)).toEqual(
+        okResult,
+      );
+
+      expect(editor.getDocument().blocks[0]).toEqual({
+        id: "target",
+        ...target,
+        content,
+        children,
+      });
+    },
+  );
+
+  it("checkListItem에 checkListItem을 재적용하면 거절하고 상태를 그대로 둔다", () => {
+    const { editor, changes, tiptap } = mountedBlock(
+      checkListItemBlock("target", "item", false),
+    );
+    expectAtomicRejection(editor, tiptap, changes, () =>
+      editor.commands.setBlockType("target", { type: "checkListItem" }),
+    );
+  });
+
+  it.each([false, true])(
+    "checkListItem↔codeBlock 양방향 변환은 clearContent(%s)와 무관하게 거절한다",
+    (clearContent) => {
+      const { editor: toCode, changes: toCodeChanges, tiptap: toCodeTiptap } =
+        mountedBlock(checkListItemBlock("target", "item", false));
+      expectAtomicRejection(toCode, toCodeTiptap, toCodeChanges, () =>
+        toCode.commands.setBlockType(
+          "target",
+          { type: "codeBlock" },
+          { clearContent },
+        ),
+      );
+
+      const {
+        editor: fromCode,
+        changes: fromCodeChanges,
+        tiptap: fromCodeTiptap,
+      } = mountedBlock({
+        id: "target",
+        type: "codeBlock",
+        content: [{ text: "code" }],
+      });
+      expectAtomicRejection(fromCode, fromCodeTiptap, fromCodeChanges, () =>
+        fromCode.commands.setBlockType(
+          "target",
+          { type: "checkListItem" },
+          { clearContent },
+        ),
+      );
+    },
+  );
+});

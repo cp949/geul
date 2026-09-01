@@ -180,7 +180,11 @@ export type SetBlockTypeDescriptor =
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
-  | { type: "numberedListItem"; startNumber?: number | null };
+  | { type: "numberedListItem"; startNumber?: number | null }
+  // BlockTypeDescriptor(조회)는 아직 checkListItem을 포함하지 않는다 —
+  // Turn into 배선은 체크박스 클릭 UI DELTA가 맡는다(RD-001 DELTA-04는
+  // setBlockType 변환 대상만 연다, 아래 blockTypeSourceFromNode 주석 참고).
+  | { type: "checkListItem" };
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }
