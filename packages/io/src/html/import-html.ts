@@ -72,7 +72,7 @@ const htmlImportSanitizeSchema = {
   ...htmlSanitizeSchema,
   attributes: {
     ...htmlAllowedAttributes,
-    li: ["dataBeBlockId"],
+    li: ["dataBeBlockId", "dataBeChecked"],
     ol: ["start"],
   },
 };
@@ -771,7 +771,7 @@ const findChildrenWrapper = (
 const consumePreservedListAttributeWarning = (
   warnings: HtmlImportWarning[],
   element: "li" | "ol",
-  attribute: "dataBeBlockId" | "start",
+  attribute: "dataBeBlockId" | "dataBeChecked" | "start",
 ): void => {
   const index = warnings.findIndex(
     (warning) =>
@@ -804,7 +804,14 @@ const blocksFromListItem = (
           content,
           ...(startNumber === undefined ? {} : { startNumber }),
         }
-      : { id, type: "bulletListItem", content };
+      : listType === "checkListItem"
+        ? {
+            id,
+            type: "checkListItem",
+            content,
+            checked: propertyString(node, "dataBeChecked") === "true",
+          }
+        : { id, type: "bulletListItem", content };
 
   if (depth >= MAX_NESTING_DEPTH) {
     const flattened = blocksFromNodes(childrenNodes, createId, depth, warnings);
@@ -862,6 +869,14 @@ const blocksFromListElement = (
     if (propertyString(child, "dataBeBlockId") !== undefined) {
       consumePreservedListAttributeWarning(warnings, "li", "dataBeBlockId");
     }
+    // data-be-checked 존재 여부가 tag보다 우선한다 — own export는 항상
+    // <ul>에 checkListItem을 낸다(로드맵 D3). 속성이 있으면 own-format
+    // 계약이라 raw 오탐 경고도 함께 억제한다.
+    const isCheckListItem =
+      propertyString(child, "dataBeChecked") !== undefined;
+    if (isCheckListItem) {
+      consumePreservedListAttributeWarning(warnings, "li", "dataBeChecked");
+    }
     if (
       node.tagName === "ol" &&
       itemIndex === 0 &&
@@ -883,7 +898,11 @@ const blocksFromListElement = (
     blocks.push(
       ...blocksFromListItem(
         child,
-        node.tagName === "ul" ? "bulletListItem" : "numberedListItem",
+        isCheckListItem
+          ? "checkListItem"
+          : node.tagName === "ul"
+            ? "bulletListItem"
+            : "numberedListItem",
         startNumber,
         createId,
         depth,

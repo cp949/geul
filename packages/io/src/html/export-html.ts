@@ -152,20 +152,32 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
 };
 
 const listItemNode = (block: ListItemBlock): HtmlElementNode =>
-  htmlElement("li", { dataBeBlockId: block.id }, [
-    ...(block.children === undefined || block.children.length === 0
-      ? inlineContentToNodes(block.content)
-      : [
-          htmlElement("p", {}, inlineContentToNodes(block.content)),
-          ...blockNodes(block.children),
-        ]),
-  ]);
+  htmlElement(
+    "li",
+    {
+      dataBeBlockId: block.id,
+      ...(block.type === "checkListItem"
+        ? { dataBeChecked: String(block.checked) }
+        : {}),
+    },
+    [
+      ...(block.children === undefined || block.children.length === 0
+        ? inlineContentToNodes(block.content)
+        : [
+            htmlElement("p", {}, inlineContentToNodes(block.content)),
+            ...blockNodes(block.children),
+          ]),
+    ],
+  );
 
+// numberedListItem만 <ol>이다 — bulletListItem·checkListItem은 둘 다
+// 번호가 없는 <ul>이다(로드맵 D3, checkListItem은 data-be-checked로만
+// 구분한다).
 const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
   const first = blocks[0];
   if (first === undefined) throw new Error("Cannot serialize an empty list");
   return htmlElement(
-    first.type === "bulletListItem" ? "ul" : "ol",
+    first.type === "numberedListItem" ? "ol" : "ul",
     first.type === "numberedListItem" && first.startNumber !== undefined
       ? { start: first.startNumber }
       : {},
