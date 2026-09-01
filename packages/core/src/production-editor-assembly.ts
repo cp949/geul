@@ -37,6 +37,7 @@ import {
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ListPasteFallbackExtension } from "./list-paste-fallback-extension.js";
+import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
   ensureTrailingParagraphOnLoad,
@@ -204,6 +205,7 @@ export const createProductionEditor = (options: {
       CheckListItemMarkerExtension,
       PlaceholderExtension,
       ToggleCollapseVisibilityExtension,
+      ToggleCollapseMarkerExtension,
       TrailingBlockExtension,
       TablePasteExtension.configure({
         createId: options.createId,

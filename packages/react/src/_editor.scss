@@ -155,6 +155,24 @@
     content: "☐";
   }
 
+  // 접힘 트라이앵글 클릭 UI(toggle-collapse-marker-extension.ts가 isToggleable
+  // heading·toggleListItem 콘텐츠 시작에 꽂는 decoration widget, RD-004
+  // DELTA-03 — 문구·클릭은 core, 표시는 CSS, check-marker와 같은 원칙).
+  [data-be-toggle-marker] {
+    display: inline-block;
+    margin-right: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  [data-be-toggle-marker][data-be-collapsed="true"]::before {
+    content: "▶";
+  }
+
+  [data-be-toggle-marker][data-be-collapsed="false"]::before {
+    content: "▼";
+  }
+
   // 자식 블록 목록 wrapper(block-container-extension.ts의
   // BlockGroupExtension이 렌더링하는 [data-be-block-group])에 좌측 padding을
   // 준다. blockContainer 스키마가 자식 blockGroup을 구조적으로 자기 안에
