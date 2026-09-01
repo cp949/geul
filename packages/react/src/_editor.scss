@@ -136,6 +136,25 @@
     min-width: 0;
   }
 
+  // 체크박스 클릭 UI(check-list-item-marker-extension.ts가 checkListItem
+  // 콘텐츠 시작에 꽂는 decoration widget, R-7 — 문구·클릭은 core, 표시는
+  // CSS). bullet·numbered marker와 달리 별도 marker 열이 아니라 텍스트
+  // 바로 앞 인라인 위치라 grid 레이아웃이 필요 없다.
+  [data-be-check-marker] {
+    display: inline-block;
+    margin-right: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  [data-be-check-marker][data-be-checked="true"]::before {
+    content: "☑";
+  }
+
+  [data-be-check-marker][data-be-checked="false"]::before {
+    content: "☐";
+  }
+
   // 자식 블록 목록 wrapper(block-container-extension.ts의
   // BlockGroupExtension이 렌더링하는 [data-be-block-group])에 좌측 padding을
   // 준다. blockContainer 스키마가 자식 blockGroup을 구조적으로 자기 안에
