@@ -143,30 +143,37 @@ REPLAN_WITHIN_RD
 CONTRACT_DECISION_REQUIRED
 ```
 
-`READY`만 하위 workflow를 시작한다. `BLOCKED_BY`는 DAG edge와 상태를 갱신한 뒤 다른 READY RD를 찾는다. `REPLAN_WITHIN_RD`는 RD 결과를 유지한 채 진입 조건이나 내부 책임 경계를 고친 뒤 probe를 다시 실행한다. `CONTRACT_DECISION_REQUIRED`만 사용자에게 묻는다.
+`READY`만 DELTA 사이클을 시작한다. `BLOCKED_BY`는 DAG edge와 상태를 갱신한 뒤 다른 READY RD를 찾는다. `REPLAN_WITHIN_RD`는 RD 결과를 유지한 채 진입 조건이나 내부 책임 경계를 고친 뒤 probe를 다시 실행한다. `CONTRACT_DECISION_REQUIRED`만 사용자에게 묻는다.
 
-## RD 상세 계획과 DELTA 예산
+## 경량 DELTA 사이클
 
-현재 `READY` RD 하나만 상세 계획한다.
+현재 `ACTIVE`이거나 새로 `READY`가 된 RD는 DELTA를 미리 여러 개 계획하지 않는다. "다음 DELTA 선택" 절차로 DELTA 하나만 골라 계획·구현·리뷰·병합까지 완결하고, 그 결과를 보고 나서 다음 DELTA를 고른다.
 
-- readiness probe가 DELTA 하나의 크기와 완료 경계를 확정하면 qq-workflow를 쓴다.
-- 그 외에는 초기 DELTA 1~2개로 ff-workflow를 쓴다. roadmap 하위 ff-workflow는 일반 ff 목표값 `3~5개` 대신 이 절의 예산을 적용한다.
-- 초기 분석에서 DELTA 3개 이상이 필요하면 RD 결과를 더 작게 나눌 수 있는지 먼저 검토한다.
+roadmap 승인 이후 사용자 승인 게이트 없이 자동 진행한다. 아래 "사용자 결정 경계"에 해당할 때만 멈추고 묻는다.
 
-DELTA 예산:
+1. "다음 DELTA 선택" 절차로 DELTA 하나를 정한다.
+2. `_works/roadmap/result/RD-NNN-DELTA-NN.md`를 만들고 "## 계획" 절(목적·변경 대상·완료 조건과 검출 변이·검증 명령·적용 가이드와 함정)을 채운다.
+3. `dev`에서 분기해 구현한다. 회귀 테스트 RED를 먼저 확인하고 최소 구현으로 GREEN을 만든다.
+4. 메인 세션이 직접 완료 조건 대조와 결함 탐지를 한 번에 수행한다 — subagent dispatch 없이 진행한다. DELTA 하나 크기에서는 별도 dispatch 비용이 검토 비용보다 크다.
+5. 발견을 수정한다. 회귀 테스트 RED를 먼저 확인하고 기존 테스트를 지우거나 약화해 통과시키지 않는다.
+6. `result/RD-NNN-DELTA-NN.md`의 "## 결과" 절(상태·검증·리뷰 발견과 처리·변경 파일·남은 위험)을 채운다.
+7. [`./ff-workflow.md`](./ff-workflow.md)의 "재그룹화 실행 명령"을 그대로 써서 재조립하고 `dev`에 ff-only 병합한다. 브랜치를 삭제하고 백업 ref를 정리한다.
+8. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단하고 `docs/history/`에 기록한다.
+9. `RD-NNN.md`의 "예상 DELTA" 체크박스와 "완료 조건" 체크리스트를 갱신한다 — 이 DELTA가 충족한 완료 조건이 있으면 체크하고 증거(테스트 제목·명령·`result/` 파일 경로)를 적는다.
 
-```text
-초기 계획: 1~2
-자동 재계획: 3~4
-RD 경계 재검토: 5~7
-절대 상한: 7
-```
+커밋 해시 참조, pending-issues·pending-guides·pending-pitfalls, subagent 협업 규칙은 모두 [`./ff-workflow.md`](./ff-workflow.md)를 참조한다 — 복제하지 않는다.
 
-초기 2개는 작업량 예측값이 아니라 숨은 선행 작업과 구현 중 학습을 수용하는 계획 여유다. 완료 조건 하나와 검출 변이가 응집된 작업은 1개로 유지한다. DELTA 수를 맞추려고 나누지 않는다.
+백로그(예상 DELTA)가 늘어나 RD 결과가 실제로는 여러 결과를 담고 있다고 판단되면(하드 상한 없음), 위 "roadmap 작성" 절의 원칙에 따라 RD를 나눈다.
 
-roadmap 하위 qq-workflow가 브랜치 생성 전에 두 번째 DELTA 필요성을 발견하면 상위 조정자가 ff-workflow로 다시 선택한다. 이는 시작한 레인의 중간 승격이 아니라 readiness 판정 수정이다. 브랜치 생성 뒤에는 qq-workflow 크기 상한을 유지하고, 추가 결과는 현재 RD의 선행·후속 RD로 분리한다.
+### 승격 예외
 
-하위 작업 폴더의 `_meta.md`에는 다음 포인터를 추가한다.
+구현 중 다음 신호가 나타나면 이 사이클을 멈추고 사용자에게 qq-workflow 또는 ff-workflow로 독립 승격할지 묻는다. 에이전트가 스스로 승격하지 않는다.
+
+- 패키지 경계 또는 공개 API shape 변경, 신규 외부 의존성
+- DB migration·production config·credential·보안 경계 변경
+- 변경 diff가 [`./ff-workflow.md`](./ff-workflow.md) "크기 규칙"의 DELTA 크기 상한에 근접·초과
+
+승격한 하위 workflow의 `_meta.md`에는 다음 포인터를 추가한다.
 
 ```markdown
 상위 로드맵: _works/roadmap/roadmap.md#RD-NNN
