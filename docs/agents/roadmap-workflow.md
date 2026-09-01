@@ -1,6 +1,6 @@
 # roadmap-workflow
 
-하나의 qq-workflow나 ff-workflow로 끝까지 추적하기 큰 Issue·슬라이스를 독립 완료 결과인 roadmap item(`RD-NNN`)으로 나누고, 준비된 RD부터 실행하는 상위 조정 흐름이다. roadmap-workflow 자체는 작업 레인이 아니다. 각 RD 구현은 qq-workflow 또는 ff-workflow를 사용한다.
+하나의 qq-workflow나 ff-workflow로 끝까지 추적하기 큰 Issue·슬라이스를 독립 완료 결과인 roadmap item(`RD-NNN`)으로 나누고, 준비된 RD부터 실행하는 상위 조정 흐름이다. roadmap-workflow 자체는 작업 레인이 아니다. 각 RD는 이 문서의 "경량 DELTA 사이클"로 실행하고, 특정 DELTA가 승격 조건에 해당할 때만 qq-workflow 또는 ff-workflow를 예외로 쓴다.
 
 ## 언제 쓰나
 
@@ -18,9 +18,9 @@
 ```text
 Issue / Slice
   └─ roadmap
-      ├─ RD-001 → qq-workflow 또는 ff-workflow
-      ├─ RD-002 → qq-workflow 또는 ff-workflow
-      └─ RD-003 → qq-workflow 또는 ff-workflow
+      ├─ RD-001 → 경량 DELTA 사이클 (승격 시 qq·ff-workflow)
+      ├─ RD-002 → 경량 DELTA 사이클 (승격 시 qq·ff-workflow)
+      └─ RD-003 → 경량 DELTA 사이클 (승격 시 qq·ff-workflow)
 ```
 
 - `RD-NNN`: 독립 완료 조건과 통합 검증 결과를 가진 roadmap item이다.
@@ -47,7 +47,7 @@ active roadmap 작업공간은 `_works/roadmap/` 하나다. Issue·슬라이스�
 
 이 단계는 `_works/roadmap/`이 새 roadmap 파일만 포함할 때 완료다.
 
-`roadmap.md`는 전체 결과 경계, 상태와 의존 DAG를 소유한다. `RD-NNN.md`는 해당 결과의 진입 조건, 포함·제외 범위, 완료 조건과 확정 결정을 소유한다. 상세 DELTA와 파일 목록은 현재 실행할 RD의 qq·ff 작업 폴더가 소유한다. `progress.md`는 readiness probe, 순서 변경, 숨은 의존 발견과 자동 재계획 이력을 append한다.
+`roadmap.md`는 전체 결과 경계, 상태와 의존 DAG를 소유한다. `RD-NNN.md`는 해당 결과의 진입 조건, 포함·제외 범위, 예상 DELTA 백로그, 완료 조건 체크리스트와 확정 결정을 소유한다. DELTA별 상세 계획·파일 목록·결과는 `result/RD-NNN-DELTA-NN.md`가 소유한다(승격된 DELTA는 예외로 해당 qq·ff 작업 폴더가 소유한다). `progress.md`는 readiness probe, RD 전환과 숨은 의존 발견 이력을 append한다.
 
 실행 계획과 제품 진행 상태의 원본은 GitHub Issue다. `_works/roadmap/`은 실행 중 조정 작업공간이며 승인된 제품 범위·spec·roadmap을 대신하지 않는다.
 
