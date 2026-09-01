@@ -192,12 +192,18 @@ export type SetBlockTypeDescriptor =
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }
-  | { type: "heading"; level: HeadingLevel }
+  // isToggleable은 SetBlockTypeDescriptor.heading(DELTA-02, 명령 입력)과
+  // 대칭인 조회 방향 필드다(RD-004 DELTA-04) — 있으면 현재 heading이 토글
+  // 제목이라는 뜻이고, 없으면(undefined) 일반 heading이다. numberedListItem
+  // startNumber와 같은 옵셔널 pass-through 패턴(생략 가능한 캐리포워드
+  // 대상이 아니라 "있는 그대로 보고").
+  | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number }
-  | { type: "checkListItem" };
+  | { type: "checkListItem" }
+  | { type: "toggleListItem" };
 
 // react/block-side-menu.tsx의 findBlockTypeDescriptor가 저장 Block에서
 // 재구현하던 것과 같은 leaf 매핑이다(아키텍처 리뷰 6차 후보 L3). 입력은
@@ -211,15 +217,12 @@ export type BlockTypeDescriptor =
 //
 // react/block-side-menu.tsx의 findBlockTypeDescriptor가 저장 Block을 좁히지
 // 않고 그대로 넘기므로, model의 Block 유니온이 늘 때마다 이 유니온도 같은
-// 멤버를 갖춰야 한다 — 아니면 그 호출부가 컴파일 실패한다. toggleListItem은
-// RD-003(Issue #38 슬라이스 6)에서 Block에 추가됐지만 BlockTypeDescriptor가
-// 아직 Turn into 대상으로 다루지 않아 table·divider와 같은 자리에서
-// null로 떨어진다 — RD-004가 BlockTypeDescriptor에 toggleListItem을 추가하면
-// 이 null 분기에서 뺀다. checkListItem은 RD-001 DELTA-06부터
+// 멤버를 갖춰야 한다 — 아니면 그 호출부가 컴파일 실패한다. checkListItem은
+// RD-001 DELTA-06부터, toggleListItem은 RD-004 DELTA-04부터
 // BlockTypeDescriptor에 포함돼 이 null 분기에서 빠졌다.
 export type BlockTypeSource =
   | { type: "paragraph" }
-  | { type: "heading"; level: HeadingLevel }
+  | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
@@ -232,11 +235,7 @@ export type BlockTypeSource =
 export const blockTypeDescriptorFromBlock = (
   source: BlockTypeSource,
 ): BlockTypeDescriptor | null =>
-  source.type === "divider" ||
-  source.type === "table" ||
-  source.type === "toggleListItem"
-    ? null
-    : source;
+  source.type === "divider" || source.type === "table" ? null : source;
 
 // PM block content node를 BlockTypeSource로 좁힌 뒤 blockTypeDescriptorFromBlock에
 // 위임한다. PM attrs는 unknown이라 캐스트가 이 지점에서만 필요하다 — caret과
@@ -249,7 +248,16 @@ const blockTypeSourceFromNode = (
     case "paragraph":
       return { type: "paragraph" };
     case "heading":
-      return { type: "heading", level: node.attrs.level as HeadingLevel };
+      return {
+        type: "heading",
+        level: node.attrs.level as HeadingLevel,
+        // PM은 isToggleable을 true 또는 null로만 저장한다(headingIsToggleable
+        // ? true : null, generic-block-commands.ts) — 이 typeof 가드가
+        // 정확히 true일 때만 필드를 채운다.
+        ...(typeof node.attrs.isToggleable === "boolean"
+          ? { isToggleable: node.attrs.isToggleable }
+          : {}),
+      };
     case "quote":
       return { type: "quote" };
     case "codeBlock":

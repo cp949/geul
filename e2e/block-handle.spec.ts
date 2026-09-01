@@ -208,6 +208,31 @@ test("Turn into의 체크 목록을 클릭하면 내용을 보존하고 클릭�
   await expect(marker).toHaveAttribute("data-be-checked", "true");
 });
 
+test("Turn into의 토글 목록을 클릭하면 내용을 보존하고 클릭으로 collapsed를 토글한다 (RD-004 DELTA-04)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("보존할 내용");
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Toggle List" }).click();
+
+  await expect(menu).toHaveCount(0);
+  const listItem = editable.locator("[data-be-toggle-list-item]").first();
+  await expect(listItem).toContainText("보존할 내용");
+  await expect(editable).toBeFocused();
+
+  const marker = listItem.locator("[data-be-toggle-marker]");
+  await expect(marker).toHaveAttribute("data-be-collapsed", "false");
+  await marker.click();
+  await expect(marker).toHaveAttribute("data-be-collapsed", "true");
+});
+
 test("좁은 뷰포트에서도 드래그 핸들이 화면 안에서 클릭 가능하다 (PIT-0011)", async ({
   page,
 }) => {
@@ -271,6 +296,12 @@ test("스크롤·뷰포트 변경 후 블록 메뉴가 블록을 따르고 마�
   page,
 }) => {
   const { editable } = await openDemo(page);
+  // Turn into 옵션이 RD-004 DELTA-04로 12(heading 6 + toggle-heading 6)까지
+  // 늘어 블록 메뉴 전체 높이(max-height: calc(100vh - 1rem))가 기본
+  // 720px 뷰포트에서 704px에 달한다 — 아래 "메뉴가 target을 따라간다"
+  // 검증은 메뉴가 top에 clamp되지 않을 여유가 필요해 기본 뷰포트보다
+  // 넉넉한 높이로 시작한다(두 번째 시나리오는 여전히 320x300으로 좁힌다).
+  await page.setViewportSize({ width: 1280, height: 1000 });
   const blocks = Array.from({ length: 31 }, (_, index) => ({
     id: `block-menu-${index}`,
     type: "paragraph",

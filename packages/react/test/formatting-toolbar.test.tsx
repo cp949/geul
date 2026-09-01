@@ -241,6 +241,40 @@ describe("FormattingToolbar 서식 툴바", () => {
     ).toBe("heading-2");
   });
 
+  // isToggleable(RD-004 DELTA-04)이 BlockTypeDescriptor.heading에 없으면
+  // select가 isToggleable heading을 일반 heading-2로 오분류한다 — 이
+  // 회귀를 고정한다.
+  it("블록 종류 select에 isToggleable heading을 toggle-heading-N으로 표시한다", () => {
+    const controller = fakeController(
+      vi.fn(() => []),
+      vi.fn(() => ({
+        blockId: "block-1",
+        blockType: { type: "heading", level: 2, isToggleable: true },
+      })),
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Block type",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("toggle-heading-2");
+  });
+
   it.each([
     [
       "CodeBlock",
@@ -253,6 +287,12 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-4",
         "heading-5",
         "heading-6",
+        "toggle-heading-1",
+        "toggle-heading-2",
+        "toggle-heading-3",
+        "toggle-heading-4",
+        "toggle-heading-5",
+        "toggle-heading-6",
         "quote",
         "code",
       ],
@@ -268,10 +308,17 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-4",
         "heading-5",
         "heading-6",
+        "toggle-heading-1",
+        "toggle-heading-2",
+        "toggle-heading-3",
+        "toggle-heading-4",
+        "toggle-heading-5",
+        "toggle-heading-6",
         "quote",
         "bullet-list",
         "numbered-list",
         "check-list",
+        "toggle-list",
       ],
     ],
     [
@@ -285,10 +332,17 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-4",
         "heading-5",
         "heading-6",
+        "toggle-heading-1",
+        "toggle-heading-2",
+        "toggle-heading-3",
+        "toggle-heading-4",
+        "toggle-heading-5",
+        "toggle-heading-6",
         "quote",
         "bullet-list",
         "numbered-list",
         "check-list",
+        "toggle-list",
       ],
     ],
     [
@@ -302,10 +356,41 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-4",
         "heading-5",
         "heading-6",
+        "toggle-heading-1",
+        "toggle-heading-2",
+        "toggle-heading-3",
+        "toggle-heading-4",
+        "toggle-heading-5",
+        "toggle-heading-6",
         "quote",
         "bullet-list",
         "numbered-list",
         "check-list",
+        "toggle-list",
+      ],
+    ],
+    [
+      "toggleListItem",
+      { type: "toggleListItem" },
+      [
+        "paragraph",
+        "heading-1",
+        "heading-2",
+        "heading-3",
+        "heading-4",
+        "heading-5",
+        "heading-6",
+        "toggle-heading-1",
+        "toggle-heading-2",
+        "toggle-heading-3",
+        "toggle-heading-4",
+        "toggle-heading-5",
+        "toggle-heading-6",
+        "quote",
+        "bullet-list",
+        "numbered-list",
+        "check-list",
+        "toggle-list",
       ],
     ],
     [
@@ -319,11 +404,18 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-4",
         "heading-5",
         "heading-6",
+        "toggle-heading-1",
+        "toggle-heading-2",
+        "toggle-heading-3",
+        "toggle-heading-4",
+        "toggle-heading-5",
+        "toggle-heading-6",
         "quote",
         "code",
         "bullet-list",
         "numbered-list",
         "check-list",
+        "toggle-list",
       ],
     ],
   ] as const)(
@@ -415,6 +507,24 @@ describe("FormattingToolbar 서식 툴바", () => {
       { type: "heading", level: 1 },
     ],
     ["bulletListItem", "quote", { type: "bulletListItem" }, { type: "quote" }],
+    [
+      "paragraph",
+      "toggle-list",
+      { type: "paragraph" },
+      { type: "toggleListItem" },
+    ],
+    [
+      "toggleListItem",
+      "paragraph",
+      { type: "toggleListItem" },
+      { type: "paragraph" },
+    ],
+    [
+      "paragraph",
+      "toggle-heading-1",
+      { type: "paragraph" },
+      { type: "heading", level: 1, isToggleable: true },
+    ],
   ] as const)(
     "%s에서 %s로 변환할 때 내용을 보존한다",
     (_source, targetId, blockType, expectedType) => {

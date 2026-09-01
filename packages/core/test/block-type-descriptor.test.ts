@@ -26,6 +26,23 @@ describe("blockTypeDescriptorFromBlock", () => {
     );
   });
 
+  // isToggleable은 RD-004 DELTA-04부터 조회 방향(BlockTypeSource/
+  // BlockTypeDescriptor)에도 생긴 옵셔널 pass-through 필드다(Turn into UI가
+  // 명령 입력(SetBlockTypeDescriptor, DELTA-02)과 대칭으로 현재 상태를
+  // 읽을 수 있어야 한다) — 있으면 그대로 옮기고 없으면(undefined) 생략한다.
+  it("heading의 isToggleable을 있으면 그대로 보존하고 없으면 생략한다", () => {
+    expect(
+      blockTypeDescriptorFromBlock({
+        type: "heading",
+        level: 2,
+        isToggleable: true,
+      }),
+    ).toEqual({ type: "heading", level: 2, isToggleable: true });
+    expect(blockTypeDescriptorFromBlock({ type: "heading", level: 2 })).toEqual(
+      { type: "heading", level: 2 },
+    );
+  });
+
   it("codeBlock은 language가 있으면 포함하고 없으면 생략한다", () => {
     expect(
       blockTypeDescriptorFromBlock({ type: "codeBlock", language: "ts" }),
@@ -53,19 +70,19 @@ describe("blockTypeDescriptorFromBlock", () => {
   });
 
   // toggleListItem은 RD-003(Issue #38 슬라이스 6)에서 model Block에
-  // 추가됐지만 BlockTypeDescriptor는 아직 Turn into 대상으로 다루지
-  // 않는다(RD-004 범위) — divider·table과 같은 자리에서 null이다. 이
-  // 회귀 테스트가 없으면 BlockTypeSource가 Block과 어긋나도(멤버 누락)
-  // 발견이 늦어진다 — react/block-side-menu.tsx의 findBlockTypeDescriptor가
-  // 저장 Block을 그대로 넘겨 컴파일 시점에 잡히긴 하지만, 런타임 계약도
-  // 여기서 고정한다.
-  it("toggleListItem은 아직 BlockTypeDescriptor가 다루지 않는 종류라 null이다", () => {
-    expect(blockTypeDescriptorFromBlock({ type: "toggleListItem" })).toBeNull();
+  // 추가됐고 RD-004 DELTA-04부터 Turn into 대상이다 — divider·table과
+  // 달리 attrs 없는 descriptor를 그대로 낸다(checkListItem과 동일 자리,
+  // 아래 테스트 참고).
+  it("toggleListItem은 attrs 없는 descriptor를 그대로 낸다", () => {
+    expect(blockTypeDescriptorFromBlock({ type: "toggleListItem" })).toEqual({
+      type: "toggleListItem",
+    });
   });
 
   // checkListItem은 Issue #38 슬라이스 6 RD-001 DELTA-06부터 Turn into
   // 대상이다 — paragraph·quote·bulletListItem과 같은 자리에서 attrs 없는
-  // descriptor를 그대로 낸다(toggleListItem은 여전히 null, 위 테스트 참고).
+  // descriptor를 그대로 낸다(toggleListItem도 RD-004 DELTA-04부터 같은
+  // 자리, 위 테스트 참고).
   it("checkListItem은 attrs 없는 descriptor를 그대로 낸다", () => {
     expect(blockTypeDescriptorFromBlock({ type: "checkListItem" })).toEqual({
       type: "checkListItem",

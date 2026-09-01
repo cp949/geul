@@ -71,6 +71,7 @@ const consumeBlockTypeOutput = (blockType: BlockTypeDescriptor): string => {
     case "numberedListItem":
       return `${blockType.type}:${blockType.startNumber ?? ""}`;
     case "checkListItem":
+    case "toggleListItem":
       return blockType.type;
     default: {
       const exhaustive: never = blockType;

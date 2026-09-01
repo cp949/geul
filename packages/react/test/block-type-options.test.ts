@@ -45,6 +45,20 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     );
   });
 
+  // isToggleable(RD-004 DELTA-04)은 heading option id를 heading-N과
+  // toggle-heading-N 두 갈래로 나누는 축이다 — level만으로는 구분되지 않는다.
+  it("blockTypeToOptionId가 isToggleable heading을 toggle-heading-N으로, 아니면 heading-N으로 해석한다", () => {
+    expect(
+      blockTypeToOptionId({ type: "heading", level: 1, isToggleable: true }),
+    ).toBe("toggle-heading-1");
+    expect(
+      blockTypeToOptionId({ type: "heading", level: 6, isToggleable: true }),
+    ).toBe("toggle-heading-6");
+    expect(
+      blockTypeToOptionId({ type: "heading", level: 3, isToggleable: false }),
+    ).toBe("heading-3");
+  });
+
   it("Code 옵션이 세 소비 표면의 공용 목록에 필요한 descriptor와 검색어를 제공한다", () => {
     const option = BLOCK_TYPE_OPTIONS.find(({ id }) => id === "code");
 
@@ -84,6 +98,28 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       keywords: ["check", "checkbox", "checklist", "todo", "task"],
       blockType: { type: "checkListItem" },
     });
+    expect(BLOCK_TYPE_OPTIONS.find(({ id }) => id === "toggle-list")).toEqual({
+      id: "toggle-list",
+      label: "Toggle List",
+      description: "Create a collapsible toggle list",
+      keywords: expect.arrayContaining(["toggle", "list", "collapsible"]),
+      blockType: { type: "toggleListItem" },
+    });
+  });
+
+  it("toggle-heading-1~6 옵션이 레벨별로 isToggleable:true descriptor를 제공한다", () => {
+    for (const level of [1, 2, 3, 4, 5, 6] as const) {
+      const option = BLOCK_TYPE_OPTIONS.find(
+        ({ id }) => id === `toggle-heading-${level}`,
+      );
+      expect(option).toBeDefined();
+      expect(option?.blockType).toEqual({
+        type: "heading",
+        level,
+        isToggleable: true,
+      });
+      expect(option?.label).toBe(`Toggle Heading ${level}`);
+    }
   });
 
   it("blockTypeToOptionId는 bullet과 startNumber 미지정·0·명시 numbered를 공용 option id로 해석한다", () => {
@@ -99,8 +135,9 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     ).toBe("numbered-list");
   });
 
-  it("blockTypeToOptionId가 checkListItem을 check-list로 해석한다", () => {
+  it("blockTypeToOptionId가 checkListItem을 check-list로, toggleListItem을 toggle-list로 해석한다", () => {
     expect(blockTypeToOptionId({ type: "checkListItem" })).toBe("check-list");
+    expect(blockTypeToOptionId({ type: "toggleListItem" })).toBe("toggle-list");
   });
 
   it("옵션마다 blockTypeToOptionId(option.blockType) === option.id다", () => {
@@ -109,7 +146,11 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     }
   });
 
-  it("CodeBlock source에서는 세 목록 옵션을 제외한다", () => {
+  // codeBlock↔heading 전환은 isToggleable 값과 무관하게 항상 허용되므로
+  // (DELTA-02 changesCodeBlockBoundary), toggle-heading-N은 제외하지 않는다
+  // — codeBlock↔목록류(toggle-list 포함)만 command guard(isListEntryBlockType)가
+  // 거절한다.
+  it("CodeBlock source에서는 네 목록 옵션(toggle-list 포함)을 제외하고 toggle-heading은 유지한다", () => {
     const ids = getBlockTypeOptionsForSource({ type: "codeBlock" }).map(
       ({ id }) => id,
     );
@@ -122,6 +163,12 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "heading-4",
       "heading-5",
       "heading-6",
+      "toggle-heading-1",
+      "toggle-heading-2",
+      "toggle-heading-3",
+      "toggle-heading-4",
+      "toggle-heading-5",
+      "toggle-heading-6",
       "quote",
       "code",
     ]);
@@ -131,6 +178,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     { type: "bulletListItem" as const },
     { type: "numberedListItem" as const },
     { type: "checkListItem" as const },
+    { type: "toggleListItem" as const },
   ])("$type source에서는 Code 옵션만 제외한다", (source) => {
     const ids = getBlockTypeOptionsForSource(source).map(({ id }) => id);
 
@@ -142,18 +190,30 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "heading-4",
       "heading-5",
       "heading-6",
+      "toggle-heading-1",
+      "toggle-heading-2",
+      "toggle-heading-3",
+      "toggle-heading-4",
+      "toggle-heading-5",
+      "toggle-heading-6",
       "quote",
       "bullet-list",
       "numbered-list",
       "check-list",
+      "toggle-list",
     ]);
   });
 
   it.each([
     { type: "paragraph" as const },
     { type: "heading" as const, level: 3 as const },
+    {
+      type: "heading" as const,
+      level: 2 as const,
+      isToggleable: true as const,
+    },
     { type: "quote" as const },
-  ])("$type source에서는 Code와 세 목록 옵션을 모두 유지한다", (source) => {
+  ])("$type source에서는 Code와 목록 옵션을 모두 유지한다", (source) => {
     const ids = getBlockTypeOptionsForSource(source).map(({ id }) => id);
 
     expect(ids).toEqual([
@@ -164,11 +224,18 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "heading-4",
       "heading-5",
       "heading-6",
+      "toggle-heading-1",
+      "toggle-heading-2",
+      "toggle-heading-3",
+      "toggle-heading-4",
+      "toggle-heading-5",
+      "toggle-heading-6",
       "quote",
       "code",
       "bullet-list",
       "numbered-list",
       "check-list",
+      "toggle-list",
     ]);
   });
 });

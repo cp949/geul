@@ -207,9 +207,10 @@ describe("SlashMenu 질의 팝업", () => {
     typeIntoBlock(rendered, 0, "/");
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    // 기존 option 순서 뒤에 목록 셋, 삽입 전용 Table·Divider가 이어진다.
+    // 기존 option 순서 뒤에 목록 넷(toggle-list 포함), 삽입 전용
+    // Table·Divider가 이어진다.
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(14);
+    expect(options).toHaveLength(21);
     expect(
       options.map(
         (option) =>
@@ -223,16 +224,23 @@ describe("SlashMenu 질의 팝업", () => {
       "Heading 4",
       "Heading 5",
       "Heading 6",
+      "Toggle Heading 1",
+      "Toggle Heading 2",
+      "Toggle Heading 3",
+      "Toggle Heading 4",
+      "Toggle Heading 5",
+      "Toggle Heading 6",
       "Quote",
       "Code",
       "Bulleted List",
       "Numbered List",
       "Check List",
+      "Toggle List",
       "Table",
       "Divider",
     ]);
-    expect(screen.getByRole("option", { name: /Text/ })).not.toBeNull();
-    expect(screen.getByRole("option", { name: /Heading 1/ })).not.toBeNull();
+    expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
+    expect(screen.getByRole("option", { name: /^Heading 1/ })).not.toBeNull();
   });
 
   it("입력한 질의에 맞춰 항목을 걸러낸다", () => {
@@ -240,15 +248,19 @@ describe("SlashMenu 질의 팝업", () => {
 
     typeIntoBlock(rendered, 0, "/head");
 
-    // heading 1-6 = 6.
-    expect(screen.getAllByRole("option")).toHaveLength(6);
+    // "head"는 label·keyword 부분 일치로 heading 1-6과 toggle heading
+    // 1-6을 모두 매치한다(RD-004 DELTA-04, toggle-heading의 keywords에도
+    // "heading"이 있다) — 6 + 6 = 12.
+    expect(screen.getAllByRole("option")).toHaveLength(12);
     expect(screen.queryByRole("option", { name: /^Text/ })).toBeNull();
   });
 
   it("항목을 클릭하면 clearContent와 함께 setBlockType을 호출하고 편집기로 초점을 되돌린다", () => {
     const rendered = renderCaretBlocks();
     const blockId = typeIntoBlock(rendered, 0, "/h1");
-    const option = screen.getByRole("option", { name: /Heading 1/ });
+    // "/h1"은 keyword 부분 일치로 Toggle Heading 1도 함께 매치한다(RD-004
+    // DELTA-04) — 앵커로 Heading 1만 정확히 좁힌다.
+    const option = screen.getByRole("option", { name: /^Heading 1/ });
     focusOutsideEditor(option);
 
     fireEvent.click(option);
@@ -269,8 +281,10 @@ describe("SlashMenu 질의 팝업", () => {
     (level) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, `/h${level}`);
+      // 앵커로 Toggle Heading %i(같은 키워드 "h%i"를 공유, RD-004
+      // DELTA-04)와 구분한다.
       const option = screen.getByRole("option", {
-        name: new RegExp(`Heading ${level}`),
+        name: new RegExp(`^Heading ${level}`),
       });
       focusOutsideEditor(option);
 
@@ -287,6 +301,28 @@ describe("SlashMenu 질의 팝업", () => {
       expect(document.activeElement).toBe(rendered.editable);
     },
   );
+
+  it("Toggle Heading 1 항목 클릭이 clearContent와 함께 isToggleable:true heading을 만든다(RD-004 DELTA-04)", () => {
+    const rendered = renderCaretBlocks();
+    // "/toggle"은 Toggle List·Toggle Heading 1-6 전부를 매치한다 — accessible
+    // name은 라벨+설명 텍스트가 이어붙어 "Toggle Heading 1Large collapsible
+    // heading"이 되므로(다른 Heading 테스트와 동일 이유) 왼쪽 앵커만 쓴다.
+    // "Toggle Heading 1"과 겹치는 다른 접두어는 없다(레벨이 1-6뿐).
+    const blockId = typeIntoBlock(rendered, 0, "/toggle");
+    const option = screen.getByRole("option", { name: /^Toggle Heading 1/ });
+    focusOutsideEditor(option);
+
+    fireEvent.click(option);
+
+    const block = rendered.editor.getDocument().blocks[0];
+    if (block?.type !== "heading") throw new Error("제목 블록이 아니다");
+    expect(block.id).toBe(blockId);
+    expect(block.level).toBe(1);
+    expect(block.isToggleable).toBe(true);
+    // clearContent: true — 트리거로 쓴 질의가 본문에 남지 않는다.
+    expect(block.content).toEqual([]);
+    expect(document.activeElement).toBe(rendered.editable);
+  });
 
   it("Quote 항목 클릭이 clearContent와 함께 setBlockType(quote)을 호출한다", () => {
     const rendered = renderCaretBlocks();
@@ -337,11 +373,18 @@ describe("SlashMenu 질의 팝업", () => {
       label: "Check List",
       type: "checkListItem" as const,
     },
+    {
+      query: "/toggle",
+      label: "Toggle List",
+      type: "toggleListItem" as const,
+    },
   ])(
     "$label 항목의 pointerdown→click이 트리거를 지우고 같은 id의 목록을 만든 뒤 메뉴를 닫고 초점을 복원한다",
     ({ query, label, type }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, query);
+      // label 정규식은 앵커 없이도 유일하게 매치한다 — "Toggle List"는
+      // "Toggle Heading N"(RD-004 DELTA-04)과 공통 접두어를 공유하지 않는다.
       const option = screen.getByRole("option", { name: new RegExp(label) });
       focusOutsideEditor(option);
 
@@ -353,7 +396,8 @@ describe("SlashMenu 질의 팝업", () => {
       if (
         block?.type !== "bulletListItem" &&
         block?.type !== "numberedListItem" &&
-        block?.type !== "checkListItem"
+        block?.type !== "checkListItem" &&
+        block?.type !== "toggleListItem"
       ) {
         throw new Error("목록 블록이 아니다");
       }
@@ -367,11 +411,11 @@ describe("SlashMenu 질의 팝업", () => {
   it("ArrowDown 후 Enter가 강조한 Numbered List command를 실행한다", () => {
     const rendered = renderCaretBlocks();
     const blockId = typeIntoBlock(rendered, 0, "/list");
-    // "/list"는 라벨에 "List"가 들어간 Bulleted/Numbered/Check List 셋을
-    // 모두 매치한다(matchesQuery의 라벨 부분 일치) — 배열 순서상 Bulleted
-    // List가 0번, Numbered List가 1번이라 ArrowDown 한 번의 목적지는
-    // 그대로다.
-    expect(screen.getAllByRole("option")).toHaveLength(3);
+    // "/list"는 라벨에 "List"가 들어간 Bulleted/Numbered/Check/Toggle List
+    // 넷을 모두 매치한다(matchesQuery의 라벨 부분 일치, toggle-list는
+    // RD-004 DELTA-04 추가) — 배열 순서상 Bulleted List가 0번, Numbered
+    // List가 1번이라 ArrowDown 한 번의 목적지는 그대로다.
+    expect(screen.getAllByRole("option")).toHaveLength(4);
     expect(
       screen
         .getByRole("option", { name: /Bulleted List/ })
@@ -409,8 +453,12 @@ describe("SlashMenu 질의 팝업", () => {
       type: "checkListItem" as const,
       selector: "[data-be-check-list-item]",
     },
+    {
+      type: "toggleListItem" as const,
+      selector: "[data-be-toggle-list-item]",
+    },
   ])(
-    "$type source의 Slash menu는 Code를 제외하고 세 목록·Table·Divider를 유지한다",
+    "$type source의 Slash menu는 Code를 제외하고 네 목록·Table·Divider를 유지한다",
     ({ type, selector }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, "/");
@@ -433,9 +481,12 @@ describe("SlashMenu 질의 팝업", () => {
         screen.getByRole("option", { name: /Numbered List/ }),
       ).not.toBeNull();
       expect(screen.getByRole("option", { name: /Check List/ })).not.toBeNull();
+      expect(
+        screen.getByRole("option", { name: /Toggle List/ }),
+      ).not.toBeNull();
       expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
-      expect(screen.getAllByRole("option")).toHaveLength(13);
+      expect(screen.getAllByRole("option")).toHaveLength(20);
     },
   );
 
@@ -609,7 +660,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
     expect(inserted.content).toEqual([]);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(14);
+    expect(screen.getAllByRole("option")).toHaveLength(21);
 
     // 메뉴가 "그 블록"으로 열렸는지는 캐럿 갱신 한 번으로 갈린다. 실제
     // insertParagraphAfter는 캐럿을 새 문단으로 옮기므로(전제), 메뉴가 hover한

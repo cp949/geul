@@ -224,8 +224,8 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
   });
 });
 
-describe("caret 컨텍스트는 toggleListItem을 아직 보고하지 않는다(RD-004 범위)", () => {
-  it("toggleListItem 안 캐럿에서 getCaretBlockContext가 null이다", () => {
+describe("caret 컨텍스트가 toggleListItem을 보고한다(RD-004 DELTA-04)", () => {
+  it("toggleListItem 안 캐럿에서 getCaretBlockContext가 toggleListItem descriptor를 보고한다", () => {
     const editor = createEditor({ initialDocument: toggleListItemDocument() });
     try {
       const { tiptap } = mountTiptapEditor(editor);
@@ -233,7 +233,9 @@ describe("caret 컨텍스트는 toggleListItem을 아직 보고하지 않는다(
         contentTextStart(tiptap, "toggle-visible"),
       );
 
-      expect(editor.getCaretBlockContext()).toBeNull();
+      expect(editor.getCaretBlockContext()?.blockType).toEqual({
+        type: "toggleListItem",
+      });
     } finally {
       editor.destroy();
     }
