@@ -178,12 +178,17 @@ type HeadingLevel = HeadingBlock["level"];
 
 export type SetBlockTypeDescriptor =
   | { type: "paragraph" }
-  | { type: "heading"; level: HeadingLevel }
+  // isToggleable은 numberedListItem.startNumber와 같은 캐리포워드 패턴이다
+  // (RD-004 DELTA-02) — 생략하면 heading→heading 재호출일 때만 현재 값을
+  // 캐리포워드하고, 명시하면 그 값을 쓴다. boolean이 on/off를 다
+  // 표현하므로 startNumber류의 명시적 해제용 `| null`이 필요 없다.
+  | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number | null }
-  | { type: "checkListItem" };
+  | { type: "checkListItem" }
+  | { type: "toggleListItem" };
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }

@@ -1,7 +1,7 @@
 import {
   canonicalizeCodeBlockLanguage,
   isInlineContentBlockType,
-  isListItemBlockType,
+  isListEntryBlockType,
   isNestableBlockType,
   isValidCodeBlockLanguage,
   isValidInlineText,
@@ -155,14 +155,12 @@ export const createGenericBlockCommands = (
       typeof target.node.attrs.level === "number"
         ? target.node.attrs.level
         : null;
-    // heading의 isToggleable/collapsed는 SetBlockTypeDescriptor가 받는
-    // 값이 아니다(level만 받는다) — level만 바뀌는 호출(같은 heading 안
-    // 레벨 변경)에서 currentTypeName이 heading일 때만 현재 값을
-    // 캐리포워드한다. numberedListItem.startNumber와 같은 이유:
-    // setNodeMarkup에 attrs를 부분만 넘기면 PM이 나머지를 schema
-    // default(null)로 채워 기존 값을 지운다(RD-003 트랙-3 결함 탐지 F1).
-    // heading이 아닌 타입에서 heading으로 새로 바뀌는 경우는 캐리포워드할
-    // 원본이 없으므로 null(토글 아님)이 맞다.
+    // level만 바뀌는 호출(같은 heading 안 레벨 변경)에서 isToggleable을
+    // 생략하면 currentTypeName이 heading일 때만 현재 값을 캐리포워드한다.
+    // numberedListItem.startNumber와 같은 이유: setNodeMarkup에 attrs를
+    // 부분만 넘기면 PM이 나머지를 schema default(null)로 채워 기존 값을
+    // 지운다(RD-003 트랙-3 결함 탐지 F1). heading이 아닌 타입에서 heading으로
+    // 새로 바뀌는 경우는 캐리포워드할 원본이 없으므로 null(토글 아님)이 맞다.
     const currentIsToggleable =
       currentTypeName === "heading"
         ? ((target.node.attrs.isToggleable as boolean | null | undefined) ??
@@ -172,10 +170,32 @@ export const createGenericBlockCommands = (
       currentTypeName === "heading"
         ? ((target.node.attrs.collapsed as boolean | null | undefined) ?? null)
         : null;
+    // isToggleable 자체는 RD-004 DELTA-02부터 SetBlockTypeDescriptor가 받는
+    // 값이다(numberedListItem.startNumber와 같은 캐리포워드 패턴, 위 주석).
+    // 최종 값을 여기서 한 번에 boolean으로 좁혀 attrs 조립과 isSameType
+    // 비교가 같은 값을 쓰게 한다.
+    const headingIsToggleable =
+      blockType.type === "heading"
+        ? (blockType.isToggleable ?? currentIsToggleable ?? false)
+        : false;
+    // isToggleable이 true가 아닌 모든 경로(명시 해제·캐리포워드 대상 없음)에서
+    // collapsed도 함께 null로 되돌린다 — 그러지 않으면 model 불변식(collapsed는
+    // isToggleable:true인 heading만 가능, model/schema.ts validateBlocksAt)을
+    // 어긴 DOCUMENT_INVALID 문서가 만들어져 production-editor-session.ts의
+    // readEditorDocument가 매 커밋마다 호출하는 tiptapToModel에서 TypeError를
+    // 던진다(G-CNV-001 — 불변식 판정은 여전히 model 한 곳에서만 하고, 여기서는
+    // 그 불변식을 어기지 않는 값만 쓴다).
+    const headingCollapsed = headingIsToggleable ? currentCollapsed : null;
     const currentContentSize = target.node.content.size;
     const clearContent = options?.clearContent ?? false;
-    const currentIsList = isListItemBlockType(currentTypeName);
-    const targetIsList = isListItemBlockType(blockType.type);
+    // bulletListItem/numberedListItem/checkListItem/toggleListItem 넷 다
+    // "목록"이다(spec 글머리·번호·체크·토글 목록) — isListItemBlockType(io
+    // <ul>/<ol> 직렬화 축)이 아니라 isListEntryBlockType(io 축과 분리된 편집
+    // UX 축, RD-003 F2)을 써서 toggleListItem도 이 가드에 포함한다. 그러지
+    // 않으면 자식 없는 toggleListItem만 codeBlock 변환이 허용되는 비대칭이
+    // 생긴다(RD-003 트랙-3 pending 이슈, IMPL-REVIEW-01.md "남은 위험").
+    const currentIsList = isListEntryBlockType(currentTypeName);
+    const targetIsList = isListEntryBlockType(blockType.type);
     if (
       (currentTypeName === "codeBlock" && targetIsList) ||
       (currentIsList && blockType.type === "codeBlock")
@@ -236,7 +256,9 @@ export const createGenericBlockCommands = (
     }
     const isSameType =
       blockType.type === "heading"
-        ? currentTypeName === "heading" && currentLevel === blockType.level
+        ? currentTypeName === "heading" &&
+          currentLevel === blockType.level &&
+          (currentIsToggleable ?? false) === headingIsToggleable
         : blockType.type === "codeBlock"
           ? currentTypeName === "codeBlock" &&
             target.node.attrs.language === codeBlockLanguage
@@ -262,7 +284,11 @@ export const createGenericBlockCommands = (
           source === "" ? undefined : session.editor.schema.text(source);
         const attrs =
           blockType.type === "heading"
-            ? { level: blockType.level }
+            ? {
+                level: blockType.level,
+                isToggleable: headingIsToggleable ? true : null,
+                collapsed: headingCollapsed,
+              }
             : blockType.type === "codeBlock"
               ? { language: codeBlockLanguage }
               : {};
@@ -298,8 +324,8 @@ export const createGenericBlockCommands = (
         blockType.type === "heading"
           ? {
               level: blockType.level,
-              isToggleable: currentIsToggleable,
-              collapsed: currentCollapsed,
+              isToggleable: headingIsToggleable ? true : null,
+              collapsed: headingCollapsed,
             }
           : blockType.type === "numberedListItem"
             ? { startNumber: numberedStartNumber }

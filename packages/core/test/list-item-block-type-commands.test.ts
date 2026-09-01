@@ -52,6 +52,7 @@ describe("목록 text block 변환 행렬", () => {
     { type: "quote" },
     { type: "bulletListItem" },
     { type: "numberedListItem", startNumber: 4 },
+    { type: "toggleListItem" },
   ] as const satisfies readonly SetBlockTypeDescriptor[];
   const targets = [
     { type: "paragraph" },
@@ -59,6 +60,7 @@ describe("목록 text block 변환 행렬", () => {
     { type: "quote" },
     { type: "bulletListItem" },
     { type: "numberedListItem", startNumber: 8 },
+    { type: "toggleListItem" },
   ] as const satisfies readonly SetBlockTypeDescriptor[];
   const matrix = sources.flatMap((source) =>
     targets
@@ -162,6 +164,11 @@ describe("목록 변환 원자성과 CodeBlock 경계", () => {
       list("target", "bulletListItem", "item"),
       { type: "bulletListItem" },
     ],
+    [
+      "toggle 동일",
+      list("target", "toggleListItem", "item"),
+      { type: "toggleListItem" },
+    ],
     ["numbered 생략 동일", numbered(12), { type: "numberedListItem" }],
     [
       "numbered 명시 동일",
@@ -176,12 +183,20 @@ describe("목록 변환 원자성과 CodeBlock 경계", () => {
           { type: "numberedListItem", startNumber },
         ] as Reject,
     ),
-    ...(["bulletListItem", "numberedListItem"] as const).flatMap((type) =>
+    // toggleListItem은 checkListItem과 달리 필수 attrs가 없어(collapsed는
+    // optional) list()가 그대로 조립할 수 있다 — RD-003 트랙-3 pending
+    // 이슈(자식 없는 toggleListItem이 codeBlock 변환을 비대칭으로 허용)를
+    // 이 루프에 편입해 고정한다(RD-004 DELTA-02). checkListItem은 필수
+    // checked 필드 문제가 여전히 남아 있어(RD-001 DELTA-04 선례) 별도
+    // describe를 그대로 둔다.
+    ...(
+      ["bulletListItem", "numberedListItem", "toggleListItem"] as const
+    ).flatMap((type) =>
       [false, true].flatMap((clearContent) => {
         const target =
-          type === "bulletListItem"
-            ? ({ type } as const)
-            : ({ type, startNumber: 3 } as const);
+          type === "numberedListItem"
+            ? ({ type, startNumber: 3 } as const)
+            : ({ type } as const);
         return [
           [
             "목록→Code",
@@ -223,6 +238,24 @@ describe("목록 변환 원자성과 CodeBlock 경계", () => {
     ).toEqual(okResult);
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(editor.getDocument().revision).toBe(1);
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["target"], reason: "local" },
+    ]);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("paragraph→toggleListItem 변환은 undo 한 번으로 상태를 복원한다(RD-004 DELTA-02)", () => {
+    const { editor, changes, tiptap } = mountedBlock(
+      paragraph("target", "text"),
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setBlockType("target", { type: "toggleListItem" }),
+    ).toEqual(okResult);
+    expect(editor.getDocument().blocks[0]).toEqual(
+      list("target", "toggleListItem", "text"),
+    );
     expect(changes).toEqual([
       { revision: 1, changedBlockIds: ["target"], reason: "local" },
     ]);
