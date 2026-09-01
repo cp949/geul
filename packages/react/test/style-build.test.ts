@@ -167,6 +167,87 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).toContain('table[data-be-header-columns="1"]');
   });
 
+  it("Chrome 75가 지원하지 않는 @container 컨테이너 쿼리를 사용하지 않는다(ADR 0008)", () => {
+    // container query는 Chrome 105+에서 지원된다 — ADR 0008의 Chrome 75
+    // floor를 넘는다. 손으로 쓴 SCSS라 지금은 안 생기지만 회귀 감지 장치가
+    // 없었다(Issue #147) — @layer 게이트(위)와 같은 패턴으로 고정한다.
+    const css = compileCss();
+    const root = postcss.parse(css);
+    const containerAtRules: string[] = [];
+    root.walkAtRules("container", (atRule) => {
+      containerAtRules.push(atRule.toString());
+    });
+
+    expect(containerAtRules).toEqual([]);
+  });
+
+  it("합성 @container at-rule은 실제로 검출된다(vacuous-predicate 방지)", () => {
+    // 위 테스트는 실제 컴파일 CSS에 @container가 이미 0건이라, walkAtRules
+    // 술어를 통째로 비워도(항상 push 안 함) 똑같이 통과한다 — 트랙-6
+    // 결함 탐지(DELTA 경계·테스트 갭 렌즈)가 지적한 취약점. 술어가 실제로
+    // 동작함을 합성 at-rule로 증명한다.
+    const canary = sass.compileString(
+      "@container (min-width: 1px) { .probe { color: red; } }",
+    ).css;
+    const root = postcss.parse(canary);
+    const containerAtRules: string[] = [];
+    root.walkAtRules("container", (atRule) => {
+      containerAtRules.push(atRule.toString());
+    });
+
+    expect(containerAtRules).not.toEqual([]);
+  });
+
+  it("Chrome 75가 지원하지 않는 :has() 셀렉터를 사용하지 않는다(ADR 0008, has-로 시작하는 클래스명과는 구분한다)", () => {
+    // :has()는 Chrome 105+에서 지원된다. 셀렉터 문자열 전체를 훑지 않고
+    // rule.selector 단위로 검사해 `.icon-has-badge` 같은 클래스명(문자열
+    // "has-"를 우연히 포함)을 오탐하지 않는다 — 오탐 없음은 바로 아래
+    // 테스트가 합성 selector로 고정한다(G-WKS-004의 여집합 입력 요구).
+    const css = compileCss();
+    const root = postcss.parse(css);
+    const hasSelectors: string[] = [];
+    root.walkRules((rule) => {
+      if (/:has\(/.test(rule.selector)) {
+        hasSelectors.push(rule.selector);
+      }
+    });
+
+    expect(hasSelectors).toEqual([]);
+  });
+
+  it("합성 :has() selector는 실제로 검출된다(vacuous-predicate 방지)", () => {
+    // 위 테스트도 같은 취약점을 공유한다 — 실제 CSS에 "has" 문자열 자체가
+    // 없어 술어를 비워도 통과한다. 합성 selector로 술어가 실제로 동작함을
+    // 증명한다(트랙-6 결함 탐지, DELTA 경계·테스트 갭 렌즈).
+    const canary = sass.compileString(".probe:has(.x) { color: red; }").css;
+    const root = postcss.parse(canary);
+    const hasSelectors: string[] = [];
+    root.walkRules((rule) => {
+      if (/:has\(/.test(rule.selector)) {
+        hasSelectors.push(rule.selector);
+      }
+    });
+
+    expect(hasSelectors).toEqual([".probe:has(.x)"]);
+  });
+
+  it("has-로 시작하는 클래스명을 :has() 오탐으로 잡지 않는다(G-WKS-004 여집합 입력)", () => {
+    // 위 테스트의 정규식 경계(`rule.selector` 단위, `/:has\(/`)가 실제로
+    // "has-" 문자열 포함과 ":has(" pseudo-class를 구분하는지 합성 selector로
+    // 직접 검증한다 — 실제 SCSS 소스엔 이런 클래스명이 없어(위 테스트만으로는)
+    // 이 구분 로직 자체가 한 번도 실행되지 않는다.
+    const canary = sass.compileString(".icon-has-badge { color: blue; }").css;
+    const root = postcss.parse(canary);
+    const hasSelectors: string[] = [];
+    root.walkRules((rule) => {
+      if (/:has\(/.test(rule.selector)) {
+        hasSelectors.push(rule.selector);
+      }
+    });
+
+    expect(hasSelectors).toEqual([]);
+  });
+
   it("PostCSS Autoprefixer가 package.json의 Browserslist를 읽어 필요한 vendor prefix를 추가한다", async () => {
     // appearance는 Chrome 75 타겟에서 -webkit- prefix가 필요하다(autoprefixer
     // --info로 실측 확인). 실제 컴포넌트 CSS는 이 속성을 쓰지 않으므로

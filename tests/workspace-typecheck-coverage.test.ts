@@ -558,9 +558,9 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
  * 개수 가드를 둔다 — 열거가 통째로 죽으면 빈 집합 순회가 아무 단언도 실행하지
  * 않은 채 통과한다.
  *
- * 단언 대상은 `typecheck` 하나다. `build`나 `test`로 넓히지 않는다 —
- * `fixtures/consumer`는 `typecheck` 단일 스크립트만 가진 패키지라 즉시 거짓
- * 실패한다.
+ * 단언 대상은 `typecheck` 하나다. `test`로 넓히지 않는다 — `fixtures/consumer`는
+ * `test` 스크립트가 없는 패키지라 즉시 거짓 실패한다(Issue #147로 `build`는
+ * 갖게 됐지만 `test`는 여전히 없다).
  */
 describe("workspace 패키지의 typecheck 편입", () => {
   it("열거된 패키지가 빠짐없이 비어 있지 않은 typecheck 스크립트를 정의한다", async () => {
