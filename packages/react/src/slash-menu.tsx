@@ -1,6 +1,7 @@
 import type { BlockTypeDescriptor } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
 import { BlockSideMenu } from "./block-side-menu.js";
 import {
   BLOCK_TYPE_OPTIONS,
@@ -364,6 +365,7 @@ export const SlashMenu = () => {
       <CodeBlockLanguageCombobox />
       <TableHandles />
       <TableSelectionToolbar />
+      <BlockSelectionToolbar />
       {menuState !== null && (
         <div
           aria-label="Slash menu"
