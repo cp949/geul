@@ -568,6 +568,18 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         blockId,
       );
 
+    // range-move만 propagation을 끊는다. BlockSelectionToolbar의
+    // useDismissOnOutsideOrEscape가 document pointerdown을 "바깥 클릭"으로
+    // 판정해 clearBlockSelection을 먼저 실행하면, 뒤이은
+    // moveSelectedBlocksBefore가 core에서 getBlockSelection()===null을
+    // 만나 COMMAND_NOT_APPLICABLE로 거절된다(e2e 실측 발견, Issue #38
+    // 슬라이스7 DELTA-05 즉시 리뷰 MAJOR-1). 범위 밖 blockId의 handle
+    // pointerdown(평범한 재정렬 진입점)은 여기서 걸러지지 않으므로 여전히
+    // "바깥"으로 전파돼 stale 선택을 지운다(DELTA-04 완료 조건 8 보존) —
+    // allow-list로는 이 둘을 구분할 수 없어(handle은 블록마다가 아니라
+    // hover 중인 블록 하나에만 있는 공용 버튼) 호출부에서 조건부로 끊는다.
+    if (isRangeMove) event.stopPropagation();
+
     updateDragState({
       pointerId: event.pointerId,
       sourceBlockId: blockId,

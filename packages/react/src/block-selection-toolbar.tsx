@@ -27,6 +27,14 @@ const highlightClassName = "geul-block-selection-toolbar__highlight";
 // useDismissOnOutsideOrEscape allow-list. table-selection-toolbar.tsx,
 // block-side-menu.tsx와 같은 이유로 모듈 스코프 상수로 둔다 — 매 렌더 새
 // 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
+// `[data-be-block-handle]`을 여기 추가하지 않는다 — 이 handle은 블록마다
+// 있는 게 아니라 hover 중인 블록 하나에만 렌더되는 공용 버튼이라, 정적
+// 셀렉터로는 "범위 안 blockId 재드래그(range-move)"와 "범위 밖 blockId의
+// 평범한 재정렬 드래그"를 구분하지 못한다 — 넣으면 후자까지 "바깥"
+// 취급을 잃어 지워져야 할 stale 선택이 남는다(Issue #38 슬라이스7
+// DELTA-05 즉시 리뷰 MAJOR-1). range-move 시작 시 이 훅에 도달하기
+// 전에 이벤트 전파를 끊는 쪽은 block-side-menu.tsx의
+// handlePointerDownOnHandle이 소유한다(호출부 쪽 stopPropagation).
 const BLOCK_SELECTION_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   "[data-be-block-selection-toolbar]",
 ] as const;

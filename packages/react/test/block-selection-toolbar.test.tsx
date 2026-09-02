@@ -322,6 +322,7 @@ describe("바깥 pointerdown으로 선택을 해제한다", () => {
       screen.getByRole("toolbar", { name: "Block selection" }),
     ).not.toBeNull();
   });
+
 });
 
 describe("Escape로 선택을 해제한다", () => {

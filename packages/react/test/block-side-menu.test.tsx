@@ -758,6 +758,49 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     });
   });
 
+  // BlockSelectionToolbar의 useDismissOnOutsideOrEscape는 document
+  // pointerdown을 "바깥 클릭"으로 판정해 clearBlockSelection을 호출한다
+  // (block-selection-toolbar.tsx). range-move로 진입하는 handle
+  // pointerdown까지 이 리스너에 도달하면 선택이 먼저 지워져 뒤이은
+  // moveSelectedBlocksBefore가 COMMAND_NOT_APPLICABLE로 거절된다(e2e
+  // 실측 발견, Issue #38 슬라이스7 DELTA-05 즉시 리뷰 MAJOR-1) — 반대로
+  // 범위 밖 blockId의 handle pointerdown(평범한 재정렬 진입점)은 여전히
+  // "바깥"으로 전파돼 stale 선택을 지워야 한다(DELTA-04 완료 조건 8).
+  // 이 계약은 allow-list가 아니라 이 핸들러가 직접 stopPropagation을
+  // 호출하는지로만 검증할 수 있다 — allow-list는 handle 전체를 정적으로
+  // 예외 처리해 두 경우를 구분하지 못한다.
+  it("range-move로 진입하는 handle pointerdown은 document 바깥-클릭 리스너로 전파되지 않지만, 범위 밖 handle pointerdown은 그대로 전파된다(회귀, 즉시 리뷰 발견)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["b1", "b2", "b3", "b4"],
+    });
+    const selected = rendered.editor.commands.selectBlockRange("b2", "b3");
+    if (!selected.ok) throw new Error("범위 선택 fixture 준비 실패");
+
+    const outsideDismiss = vi.fn();
+    document.addEventListener("pointerdown", outsideDismiss);
+    try {
+      const [b1, b2] = rendered.blocks;
+      if (b1 === undefined || b2 === undefined) {
+        throw new Error("블록 요소가 없다");
+      }
+      const handle = () => screen.getByRole("button", { name: dragHandleLabel });
+
+      // b2는 선택 범위(b2~b3) 안이다 — range-move 진입.
+      fireEvent.pointerMove(b2);
+      fireEvent.pointerDown(handle(), { pointerId: 1 });
+      fireEvent.pointerUp(handle(), { pointerId: 1 });
+      expect(outsideDismiss).not.toHaveBeenCalled();
+
+      // b1은 선택 범위 밖이다 — 평범한 재정렬 진입점, 여전히 전파돼야 한다.
+      fireEvent.pointerMove(b1);
+      fireEvent.pointerDown(handle(), { pointerId: 2 });
+      fireEvent.pointerUp(handle(), { pointerId: 2 });
+      expect(outsideDismiss).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("pointerdown", outsideDismiss);
+    }
+  });
+
   it("hasDragged 임계값(4px) 미만 이동은 클릭으로 해석돼 어떤 새 판정도 발동하지 않는다(조건8, characterization)", () => {
     const rendered = renderBlockMenu({
       blockIds: ["block-1", "block-2", "block-3"],
