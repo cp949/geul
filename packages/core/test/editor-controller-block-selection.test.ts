@@ -309,6 +309,20 @@ describe("에디터 컨트롤러 선택 범위 삭제(deleteSelectedBlocks)", ()
     expect(editor.getBlockSelection()).toBeNull();
   });
 
+  // 트랙-6 결함 탐지(IMPL-REVIEW-02)가 지목한 테스트 갭 — 위 케이스는 모두
+  // 범위가 블록 2개 이상이다. from===to(단일 블록 범위)가 범위 삭제와 같은
+  // 결과를 내는지 별도로 고정한다.
+  it("선택 범위가 블록 하나뿐이어도(from===to) 그 블록만 삭제한다", () => {
+    const editor = createEditor({ initialDocument: threeSiblingsDocument() });
+    editor.commands.selectBlockRange("block-2", "block-2");
+
+    expect(editor.commands.deleteSelectedBlocks()).toEqual(okResult);
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "block-1",
+      "block-3",
+    ]);
+  });
+
   it("blockSelection이 가리키는 blockId가 외부 명령으로 사라졌으면 BLOCK_NOT_FOUND로 거절한다(완료 조건 13)", () => {
     const editor = createEditor({ initialDocument: threeSiblingsDocument() });
     editor.commands.selectBlockRange("block-1", "block-2");
@@ -435,6 +449,24 @@ describe("에디터 컨트롤러 선택 범위 이동(moveSelectedBlocksBefore)"
       { id: "block-2" },
       { id: "block-3" },
       { id: "block-4" },
+    ]);
+  });
+
+  // 트랙-6 결함 탐지(IMPL-REVIEW-02)가 지목한 테스트 갭 — 위 유효 이동
+  // 케이스는 범위가 블록 2개다. from===to(단일 블록 범위)가 기존
+  // moveBlockBefore(단일 블록 명령)와 같은 결과를 내는지 별도로 고정한다.
+  it("선택 범위가 블록 하나뿐이어도(from===to) 그 블록만 이동한다", () => {
+    const editor = createEditor({ initialDocument: fourSiblingsDocument() });
+    editor.commands.selectBlockRange("block-2", "block-2");
+
+    expect(editor.commands.moveSelectedBlocksBefore("block-4")).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "block-1",
+      "block-3",
+      "block-2",
+      "block-4",
     ]);
   });
 

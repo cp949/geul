@@ -278,9 +278,9 @@ test("선택 범위와 무관한 blockId의 handle을 드래그해도 여전히 
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
   ).toHaveCount(0);
-  await expect(
-    page.locator("[data-be-block-selection-highlight]"),
-  ).toHaveCount(0);
+  await expect(page.locator("[data-be-block-selection-highlight]")).toHaveCount(
+    0,
+  );
 
   // 드래그 자체는 정상적으로 이어져야 한다(이 회귀와 무관한 정상 경로).
   const b5Center = await centerOf(page.locator('[data-be-block-id="b5"]'));
@@ -307,9 +307,9 @@ test("선택 범위 밖을 클릭하면 하이라이트와 툴바가 사라진�
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
   ).toHaveCount(0);
-  await expect(
-    page.locator("[data-be-block-selection-highlight]"),
-  ).toHaveCount(0);
+  await expect(page.locator("[data-be-block-selection-highlight]")).toHaveCount(
+    0,
+  );
 });
 
 test("Escape를 누르면 하이라이트와 툴바가 사라지고 편집기로 초점이 복귀해 다음 타이핑이 반영된다", async ({
@@ -337,9 +337,9 @@ test("Escape를 누르면 하이라이트와 툴바가 사라지고 편집기로
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
   ).toHaveCount(0);
-  await expect(
-    page.locator("[data-be-block-selection-highlight]"),
-  ).toHaveCount(0);
+  await expect(page.locator("[data-be-block-selection-highlight]")).toHaveCount(
+    0,
+  );
   await expect(editable).toBeFocused();
 
   await page.keyboard.type(" appended");

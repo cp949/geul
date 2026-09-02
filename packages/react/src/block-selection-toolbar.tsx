@@ -203,16 +203,29 @@ export const BlockSelectionToolbar = () => {
     });
   }, [editor, element]);
 
+  // pointerup은 마이크로태스크로 미뤄 재조회한다. 이 컴포넌트는 편집기
+  // 마운트 시점에 한 번 마운트돼 pointerup 리스너를 즉시 건다 — 같은
+  // document를 쓰는 핸들 드래그(BlockSideMenu, DELTA-03)는 드래그가
+  // 시작될 때(이 컴포넌트보다 한참 뒤)에야 자신의 pointerup 리스너를
+  // 걸고 그 안에서 selectBlockRange/moveSelectedBlocksBefore를 커밋한다.
+  // 같은 target의 리스너는 등록 순서대로 동기 실행되므로, 여기서 동기로
+  // 재조회하면 이 컴포넌트의 리스너(먼저 등록)가 항상 그 커밋(나중에
+  // 등록) 전에 stale 상태를 읽는다 — 뒤이은 mouseup 호환 이벤트가
+  // 우연히 다시 읽어줄 때만 화면이 맞아 보인다(트랙-6 결함 탐지,
+  // IMPL-REVIEW-02 F1). 마이크로태스크로 미루면 같은 pointerup
+  // 디스패치 안에서 동기 실행되는 다른 리스너(그 커밋)가 먼저 끝난
+  // 뒤에 읽으므로 이 경쟁이 사라진다.
+  const handleDeferredPointerUp = useCallback(() => {
+    queueMicrotask(updateFromSelection);
+  }, [updateFromSelection]);
+
   useEffect(() => {
     const ownerDocument = element?.ownerDocument;
     const ownerWindow = ownerDocument?.defaultView;
     ownerDocument?.addEventListener("selectionchange", updateFromSelection);
     ownerDocument?.addEventListener("mouseup", updateFromSelection);
     ownerDocument?.addEventListener("keyup", updateFromSelection);
-    // 핸들 드래그(BlockSideMenu, DELTA-03)가 pointerup에서
-    // selectBlockRange/moveSelectedBlocksBefore를 커밋한다 — 이 컴포넌트도
-    // pointer 기반 드래그 종료를 잡아야 한다.
-    ownerDocument?.addEventListener("pointerup", updateFromSelection);
+    ownerDocument?.addEventListener("pointerup", handleDeferredPointerUp);
     ownerWindow?.addEventListener("scroll", updateFromSelection, true);
     ownerWindow?.addEventListener("resize", updateFromSelection);
     updateFromSelection();
@@ -223,11 +236,11 @@ export const BlockSelectionToolbar = () => {
       );
       ownerDocument?.removeEventListener("mouseup", updateFromSelection);
       ownerDocument?.removeEventListener("keyup", updateFromSelection);
-      ownerDocument?.removeEventListener("pointerup", updateFromSelection);
+      ownerDocument?.removeEventListener("pointerup", handleDeferredPointerUp);
       ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
       ownerWindow?.removeEventListener("resize", updateFromSelection);
     };
-  }, [updateFromSelection, element]);
+  }, [updateFromSelection, handleDeferredPointerUp, element]);
 
   // 바깥 pointerdown/Escape로 선택을 해제한다(G-UI-001). clearBlockSelection은
   // selectionchange 같은 네이티브 이벤트를 일으키지 않는 세션 필드

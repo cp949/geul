@@ -13,6 +13,7 @@
  */
 
 import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BlockSelectionToolbar } from "../src/block-selection-toolbar.js";
@@ -322,7 +323,6 @@ describe("바깥 pointerdown으로 선택을 해제한다", () => {
       screen.getByRole("toolbar", { name: "Block selection" }),
     ).not.toBeNull();
   });
-
 });
 
 describe("Escape로 선택을 해제한다", () => {
@@ -402,5 +402,42 @@ describe("명령 실패 시 예외를 던지지 않고 상태를 유지한다(�
     expect(
       screen.getByRole("toolbar", { name: "Block selection" }),
     ).not.toBeNull();
+  });
+});
+
+describe("pointerup 리스너 등록 순서와 무관하게 같은 이벤트로 재조회한다", () => {
+  // BlockSideMenu의 드래그 종료 핸들러(usePointerDragGesture)는 드래그가
+  // 시작될 때(즉 이 컴포넌트가 마운트되고 한참 뒤) document에 pointerup
+  // 리스너를 등록하고, 그 안에서 selectBlockRange/moveSelectedBlocksBefore를
+  // 커밋한다. 같은 target에 걸린 리스너는 등록 순서대로 동기 실행되므로,
+  // 이 컴포넌트가 마운트 시 건 pointerup 리스너가 먼저 stale 상태를 읽고
+  // 나중에야 저 커밋이 일어나면 그 pointerup 한 번으로는 툴바가 갱신되지
+  // 않는다(트랙-6 결함 탐지, IMPL-REVIEW-02 F1). 마운트 뒤 등록되는
+  // "늦은" pointerup 리스너로 이 순서를 재현한다.
+  it("마운트 뒤 등록된 다른 pointerup 리스너가 그 안에서 selectBlockRange를 커밋해도 같은 이벤트만으로 툴바가 뜬다", async () => {
+    const { editor } = renderToolbar();
+
+    const commitOnPointerUp = () => {
+      editor.commands.selectBlockRange("block-2", "block-4");
+    };
+    document.addEventListener("pointerup", commitOnPointerUp);
+
+    await act(async () => {
+      document.dispatchEvent(new PointerEvent("pointerup"));
+      // 재조회가 마이크로태스크로 미뤄져 있으면 이 await로 그 큐를
+      // 비운다 — 추가 이벤트(mouseup 등)를 별도로 쏘지 않는다.
+      await Promise.resolve();
+    });
+
+    document.removeEventListener("pointerup", commitOnPointerUp);
+
+    expect(
+      screen.getByRole("toolbar", { name: "Block selection" }),
+    ).not.toBeNull();
+    expect(highlightedBlockIds().sort()).toEqual([
+      "block-2",
+      "block-3",
+      "block-4",
+    ]);
   });
 });

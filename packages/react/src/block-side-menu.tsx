@@ -401,9 +401,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     if (!current.cancelled) {
       if (current.mode === "range-move") {
         if (current.guide !== null) {
-          editor.commands.moveSelectedBlocksBefore(
-            current.guide.beforeBlockId,
-          );
+          editor.commands.moveSelectedBlocksBefore(current.guide.beforeBlockId);
         }
       } else if (current.mode === "range-select") {
         if (current.rangeSelectCandidateBlockId !== null) {

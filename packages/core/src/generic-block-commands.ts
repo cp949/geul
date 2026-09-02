@@ -588,11 +588,17 @@ export const createGenericBlockCommands = (
     if (session.isDestroyed) return commandNotApplicable("selectBlockRange");
     const from = findBlockInTree(session.document.blocks, fromBlockId);
     if (from === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: fromBlockId } };
+      return {
+        ok: false,
+        error: { code: "BLOCK_NOT_FOUND", blockId: fromBlockId },
+      };
     }
     const to = findBlockInTree(session.document.blocks, toBlockId);
     if (to === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: toBlockId } };
+      return {
+        ok: false,
+        error: { code: "BLOCK_NOT_FOUND", blockId: toBlockId },
+      };
     }
     if (from.siblings !== to.siblings) {
       return commandNotApplicable("selectBlockRange");

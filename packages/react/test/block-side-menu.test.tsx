@@ -783,7 +783,8 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
       if (b1 === undefined || b2 === undefined) {
         throw new Error("블록 요소가 없다");
       }
-      const handle = () => screen.getByRole("button", { name: dragHandleLabel });
+      const handle = () =>
+        screen.getByRole("button", { name: dragHandleLabel });
 
       // b2는 선택 범위(b2~b3) 안이다 — range-move 진입.
       fireEvent.pointerMove(b2);
