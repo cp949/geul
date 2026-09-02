@@ -16,7 +16,7 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSideMenu } from "../src/block-side-menu.js";
-import { mountBlockEditor } from "./mount-editor.js";
+import { mountBlockEditor, stubRect } from "./mount-editor.js";
 import { selectText } from "./selection-events.js";
 
 // jsdom은 setPointerCapture를 구현하지 않는다(table-handle-menu.test.tsx와
@@ -449,5 +449,341 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(blocks[0]?.id).toBe("block-2");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이동(Issue #38 슬라이스7 DELTA-03)", () => {
+  it("인접 형제 own rect 위로 드래그하면 기존 단일 재정렬 guide만 쓰고 selectBlockRange를 호출하지 않는다(조건1, characterization)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // block-2(20~40)의 하반부를 겨냥한다 — 상반부(20~30)는 block-1이 이미
+    // 그 자리 바로 앞이라 no-op으로 가이드가 그려지지 않는다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 35 });
+
+    expect(
+      document.querySelector("[data-be-block-insertion-guide]"),
+    ).not.toBeNull();
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    // 실제 moveBlockBefore("block-1","block-3")가 돌았음을 순서로 본다.
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["block-2", "block-1", "block-3"]);
+    expect(rendered.editor.getBlockSelection()).toBeNull();
+  });
+
+  it("flat DOM 인덱스로는 멀어 보여도 실제 트리로 인접 형제면 selectBlockRange를 호출하지 않는다(조건1a, bug-catching RED+mutation)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const listResult = rendered.editor.commands.setBlockType("block-2", {
+      type: "bulletListItem",
+    });
+    const indentResult = rendered.editor.commands.indentBlock("block-2");
+    if (!listResult.ok || !indentResult.ok) {
+      throw new Error("nested fixture 준비 실패");
+    }
+
+    // 전제: block-2는 이제 block-1의 child다. flat DOM 순서로는 block-1(0)·
+    // block-2(1)·block-3(2)라 block-1↔block-3이 flat 인덱스로 2칸 떨어져
+    // 보이지만, 실제 최상위 형제 목록은 [block-1, block-3]으로 진짜 인접
+    // 형제다 — own-rect 판정이 flat 인덱스가 아니라 이 트리를 봐야 한다.
+    const topLevel = rendered.editor.getDocument().blocks;
+    const parent = topLevel[0];
+    if (
+      parent === undefined ||
+      !("children" in parent) ||
+      parent.children === undefined
+    ) {
+      throw new Error("block-1이 children을 갖지 않는다");
+    }
+    expect(topLevel.map((block) => block.id)).toEqual(["block-1", "block-3"]);
+    expect(parent.children.map((block) => block.id)).toEqual(["block-2"]);
+
+    const blocks = rendered.restubGeometry();
+    const block1 = blocks.find(
+      (block) => block.getAttribute("data-be-block-id") === "block-1",
+    );
+    if (block1 === undefined) throw new Error("block-1 요소를 찾지 못했다");
+
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // restubGeometry는 DOM 순서(block-1·block-2·block-3)대로 20px 높이를
+    // 매긴다 — block-3의 own rect(40~60)를 겨냥한다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 45 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    // 변이: own-rect 판정이 flat DOM 인덱스로 인접을 재면 block-1↔block-3
+    // (flat diff 2)를 "인접하지 않다"로 오판해 selectBlockRange를 호출해
+    // 버린다 — 둘은 실제 최상위 형제로 진짜 인접이라 core도 이 호출을
+    // 받아들여 버려서(같은 부모라 COMMAND_NOT_APPLICABLE로 거절되지 않음)
+    // 관측 가능한 차이가 된다.
+    expect(rendered.editor.getBlockSelection()).toBeNull();
+  });
+
+  it("비인접 대상이 시작 블록과 다른 부모면 selectBlockRange를 호출하지 않는다(조건3, bug-catching RED)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const listResult = rendered.editor.commands.setBlockType("block-2", {
+      type: "bulletListItem",
+    });
+    const indentResult = rendered.editor.commands.indentBlock("block-2");
+    if (!listResult.ok || !indentResult.ok) {
+      throw new Error("nested fixture 준비 실패");
+    }
+    const blocks = rendered.restubGeometry();
+    const block3 = blocks.find(
+      (block) => block.getAttribute("data-be-block-id") === "block-3",
+    );
+    if (block3 === undefined) throw new Error("block-3 요소를 찾지 못했다");
+
+    fireEvent.pointerMove(block3);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // block-2(20~40, block-1의 child)의 own rect를 겨냥한다 — block-3와는
+    // 다른 부모다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 25 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(rendered.editor.getBlockSelection()).toBeNull();
+  });
+
+  it("비인접·같은 부모 형제 own rect 위로 드래그하면 range-select 후보를 계산하고 pointerup에서 selectBlockRange를 호출한다(조건2, bug-catching RED+mutation)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // block-3(40~60)의 own rect를 겨냥한다 — block-1과는 2칸 떨어진 비인접
+    // 형제다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 45 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    // 변이: 전환 판정이 없으면 moveBlockBefore만 호출돼 문서 순서가 바뀐다.
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["block-1", "block-2", "block-3"]);
+    expect(rendered.editor.getBlockSelection()).toEqual({
+      fromBlockId: "block-1",
+      toBlockId: "block-3",
+    });
+  });
+
+  it("이미 선택된 범위 안 handle을 드래그하면 range-move 모드로 시작해 moveSelectedBlocksBefore를 호출하고 선택을 유지한다(조건4·5·6)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["b1", "b2", "b3", "b4"],
+    });
+    const selected = rendered.editor.commands.selectBlockRange("b2", "b3");
+    if (!selected.ok) throw new Error("범위 선택 fixture 준비 실패");
+
+    const [, b2] = rendered.blocks;
+    if (b2 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(b2);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // b4(60~80) 아래를 겨냥한다 — computeDragGuide와 같은 midpoint 탐색을
+    // 쓰지만 no-op 판정은 범위[1,2] 전체 기준으로 넓어진다(조건6).
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 75 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    // 변이: 모드 판정이 없으면 b2 하나만 moveBlockBefore로 이동해 b3가
+    // 남는다(조건5).
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["b1", "b4", "b2", "b3"]);
+    // 이동 뒤에도 선택 범위가 유지된다(DELTA-02 조건12 재확인, 상하 이동
+    // 버튼 연타 지원).
+    expect(rendered.editor.getBlockSelection()).toEqual({
+      fromBlockId: "b2",
+      toBlockId: "b3",
+    });
+  });
+
+  it("범위 이동 모드의 no-op 판정은 단일 소스 인덱스가 아니라 선택 범위 끝(endIndex+1)까지 넓게 잡는다(조건6, 즉시 리뷰 발견)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["b1", "b2", "b3", "b4"],
+    });
+    const selected = rendered.editor.commands.selectBlockRange("b2", "b3");
+    if (!selected.ok) throw new Error("범위 선택 fixture 준비 실패");
+
+    const [, b2] = rendered.blocks;
+    if (b2 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(b2);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // b4(60~80) 상반부(65 < 60+20/2)를 겨냥한다 — midpoint 탐색의
+    // targetIndex는 3(범위 바로 다음 자리, endIndex+1)이다. 범위[1,2] 전체
+    // 기준 no-op은 [1,3]까지라 여기서도 no-op이어야 하지만, 위 테스트처럼
+    // 단일 소스 인덱스(sourceIndex=1) 기준 no-op({1,2})만 봤다면 3은
+    // no-op이 아니라고 오판해 가이드를 그려버린다 — 위 테스트(clientY 75)는
+    // 이 경계를 지나쳐 두 구현을 구분하지 못하므로 별도로 고정한다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 65 });
+
+    expect(
+      document.querySelector("[data-be-block-insertion-guide]"),
+    ).toBeNull();
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["b1", "b2", "b3", "b4"]);
+    expect(rendered.editor.getBlockSelection()).toEqual({
+      fromBlockId: "b2",
+      toBlockId: "b3",
+    });
+  });
+
+  it("자식이 있는 블록의 own rect가 자손을 감싸도(실제 DOM처럼) 가장 깊이 중첩된 블록을 hover 대상으로 판정한다(조건2 일반화, 즉시 리뷰 발견)", () => {
+    // p 뒤에 z를 하나 더 둔다 — c1~c3를 전부 p 밑으로 들여쓰면 p가 문서의
+    // 마지막 최상위 블록이 되는데, TrailingBlockExtension(UI-010)은 마지막
+    // 최상위가 "자식 없는 paragraph"가 아니면 빈 paragraph를 자동으로
+    // 덧붙인다 — z가 그 자리를 대신 지켜 트리 모양이 조용히 바뀌지 않는다.
+    const rendered = renderBlockMenu({
+      blockIds: ["p", "c1", "c2", "c3", "z"],
+    });
+    const indent1 = rendered.editor.commands.indentBlock("c1");
+    const indent2 = rendered.editor.commands.indentBlock("c2");
+    const indent3 = rendered.editor.commands.indentBlock("c3");
+    if (!indent1.ok || !indent2.ok || !indent3.ok) {
+      throw new Error("중첩 3-child fixture 준비 실패");
+    }
+
+    // 전제: 최상위는 [p, z]뿐이고 c1·c2·c3는 전부 p의 실제 자식(형제)이다.
+    const topLevel = rendered.editor.getDocument().blocks;
+    const parent = topLevel[0];
+    if (
+      parent === undefined ||
+      !("children" in parent) ||
+      parent.children === undefined
+    ) {
+      throw new Error("p가 children을 갖지 않는다");
+    }
+    expect(topLevel.map((block) => block.id)).toEqual(["p", "z"]);
+    expect(parent.children.map((block) => block.id)).toEqual([
+      "c1",
+      "c2",
+      "c3",
+    ]);
+
+    const blocks = rendered.restubGeometry();
+    const parentElement = blocks.find(
+      (block) => block.getAttribute("data-be-block-id") === "p",
+    );
+    const c1Element = blocks.find(
+      (block) => block.getAttribute("data-be-block-id") === "c1",
+    );
+    if (parentElement === undefined || c1Element === undefined) {
+      throw new Error("p·c1 요소를 찾지 못했다");
+    }
+    // 실제 브라우저에서는 blockContainer가 자기 blockGroup을 DOM 안에 그대로
+    // 품어(block-container-extension.ts) p의 own rect가 c1~c3 전체를
+    // 감싼다. restubGeometry는 모든 블록에 서로 겹치지 않는 flat 밴드를
+    // 매겨(문서 순서 0~20/20~40/40~60/60~80) 이 실제 포함 관계를 재현하지
+    // 않으므로, p의 rect만 c1~c3 전체를 덮도록 직접 넓힌다.
+    stubRect(parentElement, { left: 0, top: 0, width: 600, height: 80 });
+
+    fireEvent.pointerMove(c1Element);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // c3의 own rect(60~80) 안을 겨냥한다 — p의 넓힌 rect(0~80)도 이
+    // clientY를 덮으므로, 첫 매치(조상 p)를 취하면 오판한다: p와 c1은
+    // siblings가 달라(p는 최상위, c1은 p.children) "다른 부모"로 오판해
+    // range-select가 전환되지 않는다. 마지막 매치(가장 깊이 중첩된 c3)를
+    // 취해야 c1과 같은 부모(p.children)로 올바르게 판정한다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 65 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(rendered.editor.getBlockSelection()).toEqual({
+      fromBlockId: "c1",
+      toBlockId: "c3",
+    });
+  });
+
+  it("range-select 전환 도중 pointercancel로 취소하면 어떤 명령도 호출하지 않는다(조건7, characterization)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 45 });
+    fireEvent.pointerCancel(handle, { pointerId: 1 });
+
+    expect(rendered.editor.getBlockSelection()).toBeNull();
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["block-1", "block-2", "block-3"]);
+  });
+
+  it("range-move 모드에서 Escape로 취소하면 moveSelectedBlocksBefore를 호출하지 않는다(조건7, characterization)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["b1", "b2", "b3", "b4"],
+    });
+    const selected = rendered.editor.commands.selectBlockRange("b2", "b3");
+    if (!selected.ok) throw new Error("범위 선택 fixture 준비 실패");
+
+    const [, b2] = rendered.blocks;
+    if (b2 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(b2);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 75 });
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["b1", "b2", "b3", "b4"]);
+    expect(rendered.editor.getBlockSelection()).toEqual({
+      fromBlockId: "b2",
+      toBlockId: "b3",
+    });
+  });
+
+  it("hasDragged 임계값(4px) 미만 이동은 클릭으로 해석돼 어떤 새 판정도 발동하지 않는다(조건8, characterization)", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // dy=2 < 4 — 드래그로 해석되지 않는다.
+    fireEvent.pointerMove(handle, { pointerId: 1, clientY: 2 });
+
+    expect(
+      document.querySelector("[data-be-block-insertion-guide]"),
+    ).toBeNull();
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(
+      rendered.editor.getDocument().blocks.map((block) => block.id),
+    ).toEqual(["block-1", "block-2", "block-3"]);
+    expect(rendered.editor.getBlockSelection()).toBeNull();
+
+    // 기존 "클릭=블록 메뉴 열기" 계약이 그대로 살아 있다 — 억제되지 않는다.
+    fireEvent.click(handle, { detail: 1 });
+    expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
   });
 });

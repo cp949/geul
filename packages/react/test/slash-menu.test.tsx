@@ -768,10 +768,13 @@ describe("SlashMenu 드래그 핸들", () => {
     fireEvent.pointerMove(block3);
     const handle = screen.getByRole("button", { name: dragHandleLabel });
     fireEvent.pointerDown(handle, { pointerId: 1 });
-    // 첫 블록 상반부(5 < 0 + 20/2)를 겨냥한다. 세로 좌표만 준 이유: 이 fixture에는
-    // 표가 없어 TableHandles의 hover 여백(HANDLE_HOVER_MARGIN) 판정이 없고,
-    // BlockSideMenu의 삽입 지점 계산은 clientY만 읽는다.
-    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 5 });
+    // block-2 상반부(25 < 20 + 20/2)를 겨냥한다 — block-3의 바로 위 형제라
+    // 인접 형제 재정렬로 남는다(Issue #38 슬라이스7 DELTA-03). 세로 좌표만
+    // 준 이유: 이 fixture에는 표가 없어 TableHandles의 hover 여백
+    // (HANDLE_HOVER_MARGIN) 판정이 없고, BlockSideMenu의 삽입 지점 계산은
+    // clientY만 읽는다. block-1(2칸 비인접)을 겨냥하면 DELTA-03의 2단계
+    // 드래그가 range-select로 전환해 삽입 가이드가 뜨지 않는다.
+    fireEvent.pointerMove(editable, { pointerId: 1, clientY: 25 });
 
     expect(
       document.querySelector("[data-be-block-insertion-guide]"),
@@ -779,11 +782,11 @@ describe("SlashMenu 드래그 핸들", () => {
 
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
-    // 실제 moveBlockBefore(block-3, block-1)이 돌았음을 블록 순서로 본다 —
+    // 실제 moveBlockBefore(block-3, block-2)이 돌았음을 블록 순서로 본다 —
     // 개수만 세면 어느 블록이 움직였는지 구분하지 못한다.
     expect(blockIdsOf(rendered)).toEqual([
-      blockIds[2],
       blockIds[0],
+      blockIds[2],
       blockIds[1],
     ]);
   });
@@ -902,7 +905,10 @@ describe("SlashMenu 드래그 핸들", () => {
       clientX: 0,
       clientY: 50,
     });
-    fireEvent.pointerMove(editable, { pointerId: 2, clientX: 0, clientY: 5 });
+    // block-2 상반부(25 < 20 + 20/2, block-3의 인접 형제)를 겨냥한다 —
+    // block-1(2칸 비인접)을 겨냥하면 DELTA-03의 2단계 드래그가 range-select로
+    // 전환해 무시된 pointerId 검증과 무관하게 삽입 가이드가 뜨지 않는다.
+    fireEvent.pointerMove(editable, { pointerId: 2, clientX: 0, clientY: 25 });
     fireEvent.pointerUp(editable, { pointerId: 2 });
 
     expect(
@@ -910,14 +916,14 @@ describe("SlashMenu 드래그 핸들", () => {
     ).toBeNull();
     expect(editor.getDocument()).toEqual(documentBeforeDrag);
 
-    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 0, clientY: 5 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 0, clientY: 25 });
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
     // 같은 pointerId로 다시 끌면 재정렬이 커밋된다 — 위 두 부재가 "드래그가
     // 처음부터 죽어 있었다"로 통과하지 않음을 이 성공 경로가 고정한다.
     expect(blockIdsOf(rendered)).toEqual([
-      blockIds[2],
       blockIds[0],
+      blockIds[2],
       blockIds[1],
     ]);
   });

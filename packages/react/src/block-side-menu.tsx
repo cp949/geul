@@ -42,6 +42,14 @@ type InsertionGuide = {
   width: number;
 };
 
+// 핸들 드래그의 세 가지 해석이다(Issue #38 슬라이스7 DELTA-03).
+// - "reorder": 기존 단일 블록 재정렬(인접 형제 hover 또는 폴백).
+// - "range-select": 인접하지 않은 같은 부모 형제 own rect 위로 들어가
+//   pointerup 시 selectBlockRange를 커밋할 후보 상태.
+// - "range-move": 이미 있는 blockSelection 범위 안 blockId의 handle을
+//   다시 pointerdown해 그 범위 전체를 이동하는 모드(pointerdown 시점에만 결정).
+type DragMode = "reorder" | "range-select" | "range-move";
+
 type DragState = {
   pointerId: number;
   sourceBlockId: string;
@@ -50,6 +58,13 @@ type DragState = {
   hasDragged: boolean;
   cancelled: boolean;
   guide: InsertionGuide | null;
+  mode: DragMode;
+  // range-select 후보 blockId. mode가 "range-select"일 때만 의미가 있고
+  // pointerup에서 selectBlockRange(sourceBlockId, 이 값)로 커밋한다.
+  rangeSelectCandidateBlockId: string | null;
+  // range-move 모드가 이동할 범위. pointerdown 시점의 getBlockSelection()을
+  // 그대로 캡처한다 — 드래그 도중 다른 명령이 선택을 바꾸지 않는다는 전제다.
+  rangeSelection: { fromBlockId: string; toBlockId: string } | null;
 };
 
 type BlockMenuState = {
@@ -108,6 +123,120 @@ const computeDragGuide = (
   const isNoop =
     effectiveTargetIndex === sourceIndex ||
     effectiveTargetIndex === sourceIndex + 1;
+  if (isNoop) return null;
+
+  const guideElement =
+    targetIndex === -1
+      ? blockElements[blockElements.length - 1]
+      : blockElements[targetIndex];
+  if (guideElement === undefined) return null;
+
+  const rect = guideElement.getBoundingClientRect();
+  return {
+    beforeBlockId: targetIndex === -1 ? null : (ids[targetIndex] ?? null),
+    left: rect.left,
+    top: targetIndex === -1 ? rect.bottom : rect.top,
+    width: rect.width,
+  };
+};
+
+// core generic-block-commands.ts의 findBlockInTree와 같은 모양의 로컬
+// tree-walk다. core 내부 함수라 export되지 않아 import할 수 없다(Issue #38
+// 슬라이스7 DELTA-03). own-rect hover 대상이 시작 블록의 실제 인접 형제인지,
+// 같은 부모인지(조건1a — flat DOM 인덱스가 아니라 이 트리로 판정해야 한다)를
+// 가리는 데 쓴다.
+const findBlockInTreeForDrag = (
+  blocks: readonly StoredBlock[],
+  blockId: string,
+): { siblings: readonly StoredBlock[]; index: number } | null => {
+  const index = blocks.findIndex((block) => block.id === blockId);
+  if (index !== -1) return { siblings: blocks, index };
+  for (const block of blocks) {
+    if (!("children" in block) || block.children === undefined) continue;
+    const found = findBlockInTreeForDrag(block.children, blockId);
+    if (found !== null) return found;
+  }
+  return null;
+};
+
+// 이미 있는 blockSelection의 범위(from~to, 같은 부모 형제 구간) 안에 blockId가
+// 포함되는지 실제 트리 구조로 판정한다. handlePointerDownOnHandle이 드래그
+// 모드를 "range-move"로 시작할지 결정하는 데만 쓴다.
+const isBlockIdWithinBlockSelection = (
+  blocks: readonly StoredBlock[],
+  selection: { fromBlockId: string; toBlockId: string },
+  blockId: string,
+): boolean => {
+  const from = findBlockInTreeForDrag(blocks, selection.fromBlockId);
+  const to = findBlockInTreeForDrag(blocks, selection.toBlockId);
+  const target = findBlockInTreeForDrag(blocks, blockId);
+  if (from === null || to === null || target === null) return false;
+  if (from.siblings !== to.siblings || from.siblings !== target.siblings) {
+    return false;
+  }
+  const startIndex = Math.min(from.index, to.index);
+  const endIndex = Math.max(from.index, to.index);
+  return target.index >= startIndex && target.index <= endIndex;
+};
+
+// 포인터 클라이언트 좌표가 어느 블록의 own rect(top~bottom 전체) 안에 있는지
+// 찾는다. computeDragGuide의 형제 사이 midpoint 판정과는 목적이 다르다 —
+// 여기서는 "포인터가 지금 어느 블록 위에 있는가"만 본다(01-계획.md "재드래그로
+// 범위 이동 판정 신호" 결정).
+const findOwnRectBlockId = (
+  element: HTMLElement,
+  clientY: number,
+): string | null => {
+  const blockElements = Array.from(
+    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+  );
+  // 자식이 있는 블록은 자기 blockGroup을 DOM 안에 그대로 품는다
+  // (blockContainer의 content hole, block-container-extension.ts) — 조상의
+  // own rect가 모든 자손의 rect를 감싼다. querySelectorAll은 document
+  // order(전위 순회)라 조상이 항상 자손보다 배열 앞에 오므로, 첫 매치를
+  // 취하면 자손 영역을 가리켜도 항상 최상위 조상으로 뭉개진다. 형제는
+  // 서로 겹치지 않게 세로로 쌓이므로 한 clientY가 속하는 매치들은 조상→
+  // 자손 한 사슬뿐이다 — 마지막 매치가 그 사슬에서 가장 깊이 중첩된(가장
+  // 구체적인) 블록이다(즉시 리뷰 발견, Issue #38 슬라이스7 DELTA-03).
+  let hitId: string | null = null;
+  for (const candidate of blockElements) {
+    const rect = candidate.getBoundingClientRect();
+    if (clientY >= rect.top && clientY < rect.bottom) {
+      hitId = candidate.getAttribute("data-be-block-id");
+    }
+  }
+  return hitId;
+};
+
+// range-move 모드의 삽입 가이드다. computeDragGuide와 같은 형제 사이 midpoint
+// 탐색을 재사용하되(그 함수 자체는 건드리지 않는다 — 단일 블록 재정렬에 계속
+// 그대로 쓰인다), no-op 판정을 단일 sourceIndex가 아니라 선택 범위
+// [startIndex, endIndex] 전체로 넓힌다 — 범위 안 임의 지점으로의 이동은 전부
+// no-op이다(정확한 경계값은 core가 최종 가드, DELTA-03 범위 밖).
+const computeRangeMoveDragGuide = (
+  element: HTMLElement,
+  clientY: number,
+  fromBlockId: string,
+  toBlockId: string,
+): InsertionGuide | null => {
+  const blockElements = Array.from(
+    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+  );
+  const ids = blockElements.map((candidate) =>
+    candidate.getAttribute("data-be-block-id"),
+  );
+  const targetIndex = blockElements.findIndex((candidate) => {
+    const rect = candidate.getBoundingClientRect();
+    return clientY < rect.top + rect.height / 2;
+  });
+  const startIndex = ids.indexOf(fromBlockId);
+  const endIndex = ids.indexOf(toBlockId);
+  const effectiveTargetIndex = targetIndex === -1 ? ids.length : targetIndex;
+  const isNoop =
+    startIndex !== -1 &&
+    endIndex !== -1 &&
+    effectiveTargetIndex >= startIndex &&
+    effectiveTargetIndex <= endIndex + 1;
   if (isNoop) return null;
 
   const guideElement =
@@ -199,25 +328,96 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           event.clientX - current.startX,
           event.clientY - current.startY,
         ) >= 4;
-      updateDragState({
-        ...current,
-        hasDragged,
-        guide: hasDragged
-          ? computeDragGuide(element, event.clientY, current)
-          : null,
-      });
+
+      // 클릭으로 해석될 짧은 이동(조건8)에는 어떤 새 판정도 발동하지 않는다
+      // — hasDragged가 false인 동안은 guide/후보를 그대로 null로 둔다.
+      if (!hasDragged) {
+        updateDragState({ ...current, hasDragged });
+        return;
+      }
+
+      // range-move: pointerdown 시점에 이미 결정된 모드다(조건4). 이동 내내
+      // 유지되며, 가이드만 범위 기준 no-op 판정으로 다시 계산한다(조건6).
+      if (current.mode === "range-move") {
+        const guide =
+          current.rangeSelection === null
+            ? null
+            : computeRangeMoveDragGuide(
+                element,
+                event.clientY,
+                current.rangeSelection.fromBlockId,
+                current.rangeSelection.toBlockId,
+              );
+        updateDragState({ ...current, hasDragged, guide });
+        return;
+      }
+
+      // reorder 진입점: own-rect hover 대상이 실제(트리) 인접 형제면 기존
+      // 재정렬 guide를 그대로 쓰고(조건1·1a), 인접하지 않은 같은 부모 형제면
+      // range-select 후보로 전환하며(조건2), 다른 부모거나 hover 대상이
+      // 없으면 기존 computeDragGuide 폴백을 유지한다(조건3).
+      const documentBlocks = editor.getDocument().blocks;
+      const hoveredBlockId = findOwnRectBlockId(element, event.clientY);
+      const sourceLocation = findBlockInTreeForDrag(
+        documentBlocks,
+        current.sourceBlockId,
+      );
+      const hoveredLocation =
+        hoveredBlockId === null
+          ? null
+          : findBlockInTreeForDrag(documentBlocks, hoveredBlockId);
+      const isSameParentNonAdjacentSibling =
+        hoveredBlockId !== null &&
+        hoveredBlockId !== current.sourceBlockId &&
+        hoveredLocation !== null &&
+        sourceLocation !== null &&
+        hoveredLocation.siblings === sourceLocation.siblings &&
+        Math.abs(hoveredLocation.index - sourceLocation.index) !== 1;
+
+      updateDragState(
+        isSameParentNonAdjacentSibling
+          ? {
+              ...current,
+              hasDragged,
+              mode: "range-select",
+              guide: null,
+              rangeSelectCandidateBlockId: hoveredBlockId,
+            }
+          : {
+              ...current,
+              hasDragged,
+              mode: "reorder",
+              guide: computeDragGuide(element, event.clientY, current),
+              rangeSelectCandidateBlockId: null,
+            },
+      );
     },
-    [element, dragStateRef, updateDragState],
+    [element, dragStateRef, updateDragState, editor],
   );
 
   const handleBlockDragUp = useCallback(() => {
     const current = dragStateRef.current;
     if (current === null) return;
-    if (!current.cancelled && current.guide !== null) {
-      editor.commands.moveBlockBefore(
-        current.sourceBlockId,
-        current.guide.beforeBlockId,
-      );
+    if (!current.cancelled) {
+      if (current.mode === "range-move") {
+        if (current.guide !== null) {
+          editor.commands.moveSelectedBlocksBefore(
+            current.guide.beforeBlockId,
+          );
+        }
+      } else if (current.mode === "range-select") {
+        if (current.rangeSelectCandidateBlockId !== null) {
+          editor.commands.selectBlockRange(
+            current.sourceBlockId,
+            current.rangeSelectCandidateBlockId,
+          );
+        }
+      } else if (current.guide !== null) {
+        editor.commands.moveBlockBefore(
+          current.sourceBlockId,
+          current.guide.beforeBlockId,
+        );
+      }
     }
     if (current.hasDragged || current.cancelled) {
       reopenSuppression.markSuppressed(current.sourceBlockId);
@@ -355,6 +555,19 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     );
     event.currentTarget.setPointerCapture(event.pointerId);
     setBlockMenuState(null);
+
+    // 이미 blockSelection이 있고 그 범위 안 blockId의 handle을 눌렀다면
+    // "범위 이동"으로 시작한다(조건4) — 아니면 기존과 같은 단일 재정렬
+    // 진입점("reorder")이다.
+    const existingSelection = editor.getBlockSelection();
+    const isRangeMove =
+      existingSelection !== null &&
+      isBlockIdWithinBlockSelection(
+        editor.getDocument().blocks,
+        existingSelection,
+        blockId,
+      );
+
     updateDragState({
       pointerId: event.pointerId,
       sourceBlockId: blockId,
@@ -363,6 +576,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       hasDragged: false,
       cancelled: false,
       guide: null,
+      mode: isRangeMove ? "range-move" : "reorder",
+      rangeSelectCandidateBlockId: null,
+      rangeSelection: isRangeMove ? existingSelection : null,
     });
   };
 
