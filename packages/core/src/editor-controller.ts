@@ -89,6 +89,9 @@ export interface EditorController {
       blockId: string,
       beforeBlockId: string | null,
     ): Result<void, EditorError>;
+    moveSelectedBlocksBefore(
+      beforeBlockId: string | null,
+    ): Result<void, EditorError>;
     selectBlockRange(
       fromBlockId: string,
       toBlockId: string,
@@ -96,6 +99,7 @@ export interface EditorController {
     clearBlockSelection(): Result<void, EditorError>;
     duplicateBlock(blockId: string): Result<{ blockId: string }, EditorError>;
     deleteBlock(blockId: string): Result<void, EditorError>;
+    deleteSelectedBlocks(): Result<void, EditorError>;
     indentBlock(blockId: string): Result<void, EditorError>;
     outdentBlock(blockId: string): Result<void, EditorError>;
     toggleCheckListItemChecked(blockId: string): Result<void, EditorError>;

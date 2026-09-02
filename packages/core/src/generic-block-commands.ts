@@ -57,6 +57,57 @@ const hasChildren = (block: Block): boolean =>
   block.children !== undefined &&
   block.children.length > 0;
 
+type BlockSelectionRangeResolution = {
+  siblings: readonly Block[];
+  startIndex: number;
+  endIndex: number;
+  rangeBlocks: readonly Block[];
+};
+
+// blockSelection이 가리키는 fromBlockId/toBlockId를 현재 documentBlocks에서
+// 다시 찾아 범위를 확정한다. deleteSelectedBlocks·moveSelectedBlocksBefore가
+// 호출 시점마다 공유하는 mutation 전 판정이다(DELTA-02 완료 조건 13) —
+// blockSelection은 runDocumentCommand를 거치지 않는 세션 필드라 외부 명령
+// (예: indentBlock으로 범위 안 블록이 다른 부모로 옮겨짐, 또는 deleteBlock으로
+// 범위 안 블록이 사라짐)이 stale하게 만들 수 있다. blockId 자체가
+// 사라졌으면 BLOCK_NOT_FOUND, 더 이상 같은 부모 형제가 아니면
+// COMMAND_NOT_APPLICABLE로 구분한다. findBlockInTree·hasChildren처럼 순수
+// 함수로 두어 session 없이도 테스트하기 쉽게 한다.
+const resolveBlockSelectionRange = (
+  documentBlocks: readonly Block[],
+  selection: { fromBlockId: string; toBlockId: string },
+  command: string,
+): Result<BlockSelectionRangeResolution, EditorError> => {
+  const from = findBlockInTree(documentBlocks, selection.fromBlockId);
+  if (from === null) {
+    return {
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: selection.fromBlockId },
+    };
+  }
+  const to = findBlockInTree(documentBlocks, selection.toBlockId);
+  if (to === null) {
+    return {
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: selection.toBlockId },
+    };
+  }
+  if (from.siblings !== to.siblings) {
+    return commandNotApplicable(command);
+  }
+  const startIndex = Math.min(from.index, to.index);
+  const endIndex = Math.max(from.index, to.index);
+  return {
+    ok: true,
+    value: {
+      siblings: from.siblings,
+      startIndex,
+      endIndex,
+      rangeBlocks: from.siblings.slice(startIndex, endIndex + 1),
+    },
+  };
+};
+
 export const createGenericBlockCommands = (
   session: ProductionEditorSession,
 ) => {
@@ -399,6 +450,132 @@ export const createGenericBlockCommands = (
     });
   };
 
+  // spec §5.3 — blockSelection 범위(및 그 children)를 같은 부모 형제 목록
+  // 안에서 통째로 이동한다. moveBlockBefore(위)의 부모 일치·no-op 가드를
+  // 범위로 확장해 재사용하되, hasChildren 가드(348-349행)는 재사용하지
+  // 않는다 — children 동반 이동이 이 명령의 핵심 계약이다(DELTA-02
+  // 트랙-4 확인사항 1). 문서 하나를 여러 트랜잭션으로 쪼개지 않도록 delete →
+  // insert를 한 dispatch로 묶는다(G-EDT-001, moveBlockBefore와 같은 이유로
+  // delete 전에 원본 Fragment를 캡처한다 — delete 후에는 위치가 무효화된다).
+  const moveSelectedBlocksBefore = (
+    beforeBlockId: string | null,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) {
+      return commandNotApplicable("moveSelectedBlocksBefore");
+    }
+    const selection = session.getBlockSelection();
+    if (selection === null) {
+      return commandNotApplicable("moveSelectedBlocksBefore");
+    }
+    const resolved = resolveBlockSelectionRange(
+      session.document.blocks,
+      selection,
+      "moveSelectedBlocksBefore",
+    );
+    if (!resolved.ok) return resolved;
+    const { siblings, endIndex, rangeBlocks } = resolved.value;
+
+    // beforeBlockId가 범위 내부(또는 그 children, 재귀 포함)를 가리키면
+    // 자기 범위 안으로 이동하는 셈이라 거절한다(완료 조건 8).
+    const rangeIds = new Set<string>();
+    const collectRangeIds = (blocks: readonly Block[]): void => {
+      for (const block of blocks) {
+        rangeIds.add(block.id);
+        if ("children" in block && block.children !== undefined) {
+          collectRangeIds(block.children);
+        }
+      }
+    };
+    collectRangeIds(rangeBlocks);
+
+    let targetIndex = siblings.length;
+    if (beforeBlockId !== null) {
+      if (rangeIds.has(beforeBlockId)) {
+        return commandNotApplicable("moveSelectedBlocksBefore");
+      }
+      const target = findBlockInTree(session.document.blocks, beforeBlockId);
+      if (target === null) {
+        return {
+          ok: false,
+          error: { code: "BLOCK_NOT_FOUND", blockId: beforeBlockId },
+        };
+      }
+      // moveBlockBefore의 "같은 부모 형제만 허용" 가드 재사용(완료 조건 7).
+      if (target.siblings !== siblings) {
+        return commandNotApplicable("moveSelectedBlocksBefore");
+      }
+      targetIndex = target.index;
+    }
+    // rangeIds 가드로 targetIndex는 이미 [startIndex, endIndex] 밖으로
+    // 좁혀졌다 — 남은 no-op은 범위 바로 다음 자리(endIndex+1)로 이동하는
+    // 경우뿐이다(완료 조건 10). beforeBlockId=null(끝으로 이동, 완료 조건
+    // 9)도 범위가 이미 끝이면 여기서 같이 걸러진다.
+    if (targetIndex === endIndex + 1) {
+      return commandNotApplicable("moveSelectedBlocksBefore");
+    }
+
+    const firstBlockId = rangeBlocks[0]?.id;
+    const lastBlockId = rangeBlocks[rangeBlocks.length - 1]?.id;
+    if (firstBlockId === undefined || lastBlockId === undefined) {
+      return commandNotApplicable("moveSelectedBlocksBefore");
+    }
+    const lastSiblingId = siblings[siblings.length - 1]?.id;
+
+    // 이동은 blockId를 바꾸지 않으므로 성공 후에도 session.setBlockSelection을
+    // 호출하지 않는다 — getBlockSelection()이 이동 전과 같은
+    // {fromBlockId, toBlockId}를 유지해야 한다(완료 조건 12, 상하 이동 버튼
+    // 연타 지원).
+    return session.runDocumentCommand(
+      "moveSelectedBlocksBefore",
+      "local",
+      () => {
+        const firstPosition = findBlockPosition(
+          session.editor.state.doc,
+          firstBlockId,
+        );
+        if (firstPosition === null) return false;
+        const lastPosition = findBlockPosition(
+          session.editor.state.doc,
+          lastBlockId,
+        );
+        if (lastPosition === null) return false;
+        const lastRangeNode = session.editor.state.doc.nodeAt(lastPosition);
+        if (lastRangeNode === null) return false;
+        const endPosition = lastPosition + lastRangeNode.nodeSize;
+        const sourceSlice = session.editor.state.doc.slice(
+          firstPosition,
+          endPosition,
+        );
+        let transaction = session.editor.state.tr.delete(
+          firstPosition,
+          endPosition,
+        );
+        let insertPosition: number;
+        if (beforeBlockId !== null) {
+          const targetPosition = findBlockPosition(
+            transaction.doc,
+            beforeBlockId,
+          );
+          if (targetPosition === null) return false;
+          insertPosition = targetPosition;
+        } else {
+          if (lastSiblingId === undefined) return false;
+          const lastSiblingPosition = findBlockPosition(
+            transaction.doc,
+            lastSiblingId,
+          );
+          if (lastSiblingPosition === null) return false;
+          const lastSiblingNode = transaction.doc.nodeAt(lastSiblingPosition);
+          if (lastSiblingNode === null) return false;
+          insertPosition = lastSiblingPosition + lastSiblingNode.nodeSize;
+        }
+        transaction = transaction.insert(insertPosition, sourceSlice.content);
+        session.editor.view.dispatch(closeHistory(transaction));
+        return true;
+      },
+    );
+  };
+
   // spec §5.3 — 같은 부모 형제 범위만 blockSelection으로 성립한다. moveBlockBefore의
   // "같은 부모 형제만 허용" 가드(target.siblings !== source.siblings)를 그대로
   // 재사용한다. 문서를 바꾸지 않으므로 runDocumentCommand를 거치지 않는다 —
@@ -531,6 +708,78 @@ export const createGenericBlockCommands = (
     });
   };
 
+  // spec §5.3 — blockSelection 범위(및 각 블록의 children)를 통째로
+  // 삭제한다. deleteBlock(위)의 removesWholeGroup 판정·최상위 유일 블록
+  // 가드를 범위로 확장해 재사용한다(DELTA-02) — 범위 안 각 블록을 개별
+  // 삭제하지 않고 하나의 transaction.delete로 묶어 undo 1단위를 보장한다
+  // (G-EDT-001).
+  const deleteSelectedBlocks = (): Result<void, EditorError> => {
+    if (session.isDestroyed) {
+      return commandNotApplicable("deleteSelectedBlocks");
+    }
+    const selection = session.getBlockSelection();
+    if (selection === null) {
+      return commandNotApplicable("deleteSelectedBlocks");
+    }
+    const resolved = resolveBlockSelectionRange(
+      session.document.blocks,
+      selection,
+      "deleteSelectedBlocks",
+    );
+    if (!resolved.ok) return resolved;
+    const { siblings, rangeBlocks } = resolved.value;
+    // deleteBlock의 "최상위 유일 블록" 가드(target.siblings.length<=1)를
+    // 범위로 확장한다 — 범위가 최상위 문서 전체를 덮으면 빈 최상위 문서가
+    // 만들어지므로 거절한다(완료 조건 4).
+    if (
+      siblings === session.document.blocks &&
+      rangeBlocks.length === siblings.length
+    ) {
+      return commandNotApplicable("deleteSelectedBlocks");
+    }
+    const firstBlockId = rangeBlocks[0]?.id;
+    const lastBlockId = rangeBlocks[rangeBlocks.length - 1]?.id;
+    if (firstBlockId === undefined || lastBlockId === undefined) {
+      return commandNotApplicable("deleteSelectedBlocks");
+    }
+    const rangeBlockCount = rangeBlocks.length;
+    const result = session.runDocumentCommand(
+      "deleteSelectedBlocks",
+      "local",
+      () => {
+        const firstPosition = findBlockPosition(
+          session.editor.state.doc,
+          firstBlockId,
+        );
+        if (firstPosition === null) return false;
+        const lastPosition = findBlockPosition(
+          session.editor.state.doc,
+          lastBlockId,
+        );
+        if (lastPosition === null) return false;
+        const lastNode = session.editor.state.doc.nodeAt(lastPosition);
+        if (lastNode === null) return false;
+        const $first = session.editor.state.doc.resolve(firstPosition);
+        // deleteBlock과 같은 판정: 범위가 blockGroup의 전체 자식과
+        // 일치하면 blockGroup 노드 자체를 지워 빈 컨테이너가 남지 않게
+        // 한다(완료 조건 3). 1이 아니라 rangeBlockCount와 비교하는 점이
+        // 단일 블록 버전과 다르다.
+        const removesWholeGroup =
+          $first.parent.type.name === "blockGroup" &&
+          $first.parent.childCount === rangeBlockCount;
+        const transaction = session.editor.state.tr.delete(
+          removesWholeGroup ? $first.before() : firstPosition,
+          removesWholeGroup ? $first.after() : lastPosition + lastNode.nodeSize,
+        );
+        session.editor.view.dispatch(closeHistory(transaction));
+        return true;
+      },
+    );
+    // 삭제 대상 자체가 사라지므로 성공 후 선택 상태를 지운다(완료 조건 5).
+    if (result.ok) session.setBlockSelection(null);
+    return result;
+  };
+
   const indentBlock = (blockId: string): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("indentBlock");
     if (findBlockInTree(session.document.blocks, blockId) === null) {
@@ -614,10 +863,12 @@ export const createGenericBlockCommands = (
     insertParagraphAfter,
     setBlockType,
     moveBlockBefore,
+    moveSelectedBlocksBefore,
     selectBlockRange,
     clearBlockSelection,
     duplicateBlock,
     deleteBlock,
+    deleteSelectedBlocks,
     indentBlock,
     outdentBlock,
     toggleCheckListItemChecked,
