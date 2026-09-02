@@ -16,6 +16,13 @@ import { createProductionEditor } from "./production-editor-assembly.js";
 
 type ChangeReason = "local" | "replace" | "undo" | "redo";
 
+// spec §5.3 — ProseMirror Selection과 독립적인 core 자체 상태. 세션 밖으로는
+// getBlockSelection()/setBlockSelection() 두 메서드로만 노출한다. editor-controller.ts의
+// 공개 `BlockSelection` 타입과 구조가 같지만 import는 하지 않는다 — 이 파일의
+// ChangeReason과 DocumentChangeEvent.reason이 이미 같은 방식으로 유니온을
+// 복제한다(순환 의존 회피 관례).
+type BlockSelectionRange = { fromBlockId: string; toBlockId: string };
+
 export const commandNotApplicable = (
   command: string,
 ): Result<never, EditorError> => ({
@@ -103,6 +110,7 @@ export class ProductionEditorSession {
   private mountedElement: HTMLElement | null = null;
   private activeReason: ChangeReason | null = null;
   private pendingDocument: BlockDocument | null = null;
+  private blockSelection: BlockSelectionRange | null = null;
 
   constructor(
     private readonly options: {
@@ -171,6 +179,18 @@ export class ProductionEditorSession {
 
   getDocument(): BlockDocument {
     return cloneDocument(this.currentDocument);
+  }
+
+  // 문서 비저장 세션 필드 조회·갱신. runDocumentCommand를 거치지 않아
+  // revision·onChange·undo 스택 어느 것도 건드리지 않는다(spec §5.3,
+  // DELTA-01 완료 조건 7) — 호출자(generic-block-commands.ts의
+  // selectBlockRange/clearBlockSelection)가 그 대신 유효성 가드를 진다.
+  getBlockSelection(): BlockSelectionRange | null {
+    return this.blockSelection;
+  }
+
+  setBlockSelection(next: BlockSelectionRange | null): void {
+    this.blockSelection = next;
   }
 
   replaceDocument(next: unknown): Result<void, EditorError> {

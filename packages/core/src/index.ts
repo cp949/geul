@@ -28,6 +28,7 @@ export {
   serializeTableColumns,
 } from "@cp949/geul-model";
 export type {
+  BlockSelection,
   BlockTypeDescriptor,
   BlockTypeSource,
   CreateEditorOptions,

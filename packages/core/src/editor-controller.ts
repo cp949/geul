@@ -73,6 +73,7 @@ export interface EditorController {
   } | null;
   getBlockNestingActionState(blockId: string): BlockNestingActionState;
   getTableCellSelection(): TableCellSelection | null;
+  getBlockSelection(): BlockSelection | null;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
@@ -88,6 +89,11 @@ export interface EditorController {
       blockId: string,
       beforeBlockId: string | null,
     ): Result<void, EditorError>;
+    selectBlockRange(
+      fromBlockId: string,
+      toBlockId: string,
+    ): Result<void, EditorError>;
+    clearBlockSelection(): Result<void, EditorError>;
     duplicateBlock(blockId: string): Result<{ blockId: string }, EditorError>;
     deleteBlock(blockId: string): Result<void, EditorError>;
     indentBlock(blockId: string): Result<void, EditorError>;
@@ -306,6 +312,16 @@ export type TableCellSelection = {
   tableBlockId: string;
   cellIds: string[];
   splitCellId: string | null;
+};
+
+// spec §5.3 — 같은 부모 형제 범위의 다중 블록 선택. ProseMirror Selection과
+// 독립적인 core 자체 상태라 production-editor-session.ts가 문서 비저장 세션
+// 필드로 소유하고(BlockSelectionRange, 구조는 이 타입과 같되 순환 의존을
+// 피하려 별도 선언) 여기서는 조회 결과 shape만 공개한다. 항상 문서 순서로
+// 정규화된 값이다(fromBlockId가 toBlockId보다 앞).
+export type BlockSelection = {
+  fromBlockId: string;
+  toBlockId: string;
 };
 
 // selectedRect가 덮는 좌표들을 훑어 서로 다른 기준 셀의 id만 순서대로
@@ -774,6 +790,10 @@ export const createEditor = (
         cellIds: [cellId],
         splitCellId: cellId,
       };
+    },
+    getBlockSelection() {
+      if (session.isDestroyed) return null;
+      return session.getBlockSelection();
     },
     replaceDocument(next) {
       return session.replaceDocument(next);

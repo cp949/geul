@@ -399,6 +399,47 @@ export const createGenericBlockCommands = (
     });
   };
 
+  // spec §5.3 — 같은 부모 형제 범위만 blockSelection으로 성립한다. moveBlockBefore의
+  // "같은 부모 형제만 허용" 가드(target.siblings !== source.siblings)를 그대로
+  // 재사용한다. 문서를 바꾸지 않으므로 runDocumentCommand를 거치지 않는다 —
+  // G-EDT-001은 document/selection(PM)/mark/revision/undo를 바꾸는 명령에만
+  // 적용되고 이 명령은 그중 어느 것도 바꾸지 않는다(DELTA-01).
+  const selectBlockRange = (
+    fromBlockId: string,
+    toBlockId: string,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("selectBlockRange");
+    const from = findBlockInTree(session.document.blocks, fromBlockId);
+    if (from === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: fromBlockId } };
+    }
+    const to = findBlockInTree(session.document.blocks, toBlockId);
+    if (to === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: toBlockId } };
+    }
+    if (from.siblings !== to.siblings) {
+      return commandNotApplicable("selectBlockRange");
+    }
+    session.setBlockSelection(
+      from.index <= to.index
+        ? { fromBlockId, toBlockId }
+        : { fromBlockId: toBlockId, toBlockId: fromBlockId },
+    );
+    return { ok: true, value: undefined };
+  };
+
+  // blockSelection이 이미 없는 상태의 재호출은 다른 명령들의 no-op 관례와
+  // 같이 거절한다(DELTA-01 완료 조건 6). selectBlockRange와 같은 이유로
+  // runDocumentCommand를 거치지 않는다.
+  const clearBlockSelection = (): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("clearBlockSelection");
+    if (session.getBlockSelection() === null) {
+      return commandNotApplicable("clearBlockSelection");
+    }
+    session.setBlockSelection(null);
+    return { ok: true, value: undefined };
+  };
+
   const duplicateBlock = (
     blockId: string,
   ): Result<{ blockId: string }, EditorError> => {
@@ -573,6 +614,8 @@ export const createGenericBlockCommands = (
     insertParagraphAfter,
     setBlockType,
     moveBlockBefore,
+    selectBlockRange,
+    clearBlockSelection,
     duplicateBlock,
     deleteBlock,
     indentBlock,
