@@ -153,6 +153,51 @@ test("mark 토글을 undo 1회로 복원한다", async ({ page }) => {
   await expect(editable).toHaveText("Hello R1");
 });
 
+test("인라인 글자색 팔레트로 선택 텍스트에 색상을 적용하고 computed style을 반영하며 undo 1회로 복원한다 (RD-003 DELTA-01)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+
+  await page.getByRole("button", { name: "Text color" }).click();
+  await page.getByRole("menuitem", { name: "Text color Blue" }).click();
+
+  // 팔레트는 적용 즉시 닫힌다(DELTA-01 계획 — 트리거 재클릭·Escape와 같은
+  // "닫기+초점 복구" 경로를 스와치 클릭도 공유한다).
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  const coloredText = editable.locator("span");
+  await expect(coloredText).toHaveCSS("color", "rgb(26, 115, 232)");
+
+  await page.keyboard.press("Control+z");
+
+  await expect(editable.locator("span")).toHaveCount(0);
+  await expect(editable).toHaveText("Hello R1");
+});
+
+test("인라인 배경색 팔레트에서 배경색을 적용하고 None으로 해제한다 (RD-003 DELTA-01)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+
+  await page.getByRole("button", { name: "Background color" }).click();
+  await page.getByRole("menuitem", { name: "Background color Blue" }).click();
+
+  await expect(editable.locator("span")).toHaveCSS(
+    "background-color",
+    "rgb(232, 240, 254)",
+  );
+
+  await page.getByRole("button", { name: "Background color" }).click();
+  await page.getByRole("menuitem", { name: "Background color None" }).click();
+
+  await expect(editable.locator("span")).toHaveCount(0);
+});
+
 test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();

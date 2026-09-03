@@ -398,12 +398,14 @@ test("스크롤·뷰포트 변경 후 블록 메뉴가 블록을 따르고 마�
   page,
 }) => {
   const { editable } = await openDemo(page);
-  // Turn into 옵션이 RD-004 DELTA-04로 12(heading 6 + toggle-heading 6)까지
-  // 늘어 블록 메뉴 전체 높이(max-height: calc(100vh - 1rem))가 기본
-  // 720px 뷰포트에서 704px에 달한다 — 아래 "메뉴가 target을 따라간다"
-  // 검증은 메뉴가 top에 clamp되지 않을 여유가 필요해 기본 뷰포트보다
-  // 넉넉한 높이로 시작한다(두 번째 시나리오는 여전히 320x300으로 좁힌다).
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  // Turn into 옵션(12, RD-004 DELTA-04)에 이어 RD-003 DELTA-02가 Text
+  // color/Background color 팔레트(각 9항목)·Align 행을 더해 블록 메뉴 전체
+  // 높이(max-height: calc(100vh - 1rem))가 실측 약 1146px에 달한다(paragraph
+  // 소스 기준 — isNestableBlockType 게이트로 색상·정렬 섹션까지 포함된
+  // 최댓값). 아래 "메뉴가 target을 따라간다" 검증은 메뉴가 top에 clamp되지
+  // 않을 여유가 필요해 그 실측치보다 넉넉한 높이로 시작한다(두 번째
+  // 시나리오는 여전히 320x300으로 좁혀 clamp 자체를 검증한다).
+  await page.setViewportSize({ width: 1280, height: 1500 });
   const blocks = Array.from({ length: 31 }, (_, index) => ({
     id: `block-menu-${index}`,
     type: "paragraph",
@@ -523,4 +525,48 @@ test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다
   expect(newBlockId).toMatch(uuidV4Pattern);
 
   expect(pageErrors).toHaveLength(0);
+});
+
+test("블록 메뉴에서 글자색을 적용하면 문서에 반영되고 undo 1회로 복원된다 (RD-003 DELTA-02)", async ({
+  page,
+}) => {
+  // 블록 수준 textColor/backgroundColor/textAlignment는 편집 화면에 시각
+  // 렌더가 없다(block-container-extension.ts:57-59, RD-003.md D5) — 인라인
+  // 색상(formatting-toolbar.spec.ts)과 달리 computed style 대신 "Save
+  // JSON"으로 읽은 문서 값으로 반영을 검증한다(editor-round-trip.spec.ts와
+  // 같은 패턴).
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("color me");
+
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+  await page.getByRole("menuitem", { name: "Text color Blue" }).click();
+
+  const source = page.getByLabel("Document source");
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  const applied = JSON.parse(await source.inputValue());
+  expect(applied.blocks[0].textColor).toBe("#1A73E8");
+
+  await page.keyboard.press("Control+z");
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  const reverted = JSON.parse(await source.inputValue());
+  expect(reverted.blocks[0].textColor).toBeUndefined();
+});
+
+test("블록 메뉴에서 정렬을 적용하면 문서에 반영된다 (RD-003 DELTA-02)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("align me");
+
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+  await page.getByRole("menuitem", { name: "Align center" }).click();
+
+  const source = page.getByLabel("Document source");
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  const applied = JSON.parse(await source.inputValue());
+  expect(applied.blocks[0].textAlignment).toBe("center");
 });

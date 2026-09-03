@@ -95,7 +95,11 @@ test("블록 메뉴 구분선이 0폭으로 붕괴하지 않고 메뉴 폭을 �
   const menu = page.getByRole("menu", { name: "Block menu" });
   await expect(menu).toBeVisible();
 
-  const separator = menu.locator("hr");
+  // RD-003 DELTA-02가 색상·정렬 섹션 앞에 구분선을 하나 더 추가해 이제
+  // 블록 메뉴 안에 hr이 2개다 — 같은 .geul-block-menu__divider 클래스를
+  // 공유하는 동형 요소라 첫 번째만 재도 이 규칙(margin-inline: 0)이
+  // 적용되는지는 동일하게 증명된다.
+  const separator = menu.locator("hr").first();
   const width = await separator.evaluate(
     (element) => element.getBoundingClientRect().width,
   );
