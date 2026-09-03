@@ -385,9 +385,7 @@ describe("CodeBlock 타입 비종속 블록 명령", () => {
     const otherChild = paragraphBlock("other-child", "other");
     const secondParent = paragraphBlock("parent-2", "parent two", [otherChild]);
     const topTail = paragraphBlock("top-tail", "tail");
-    const { editor } = mounted(
-      documentOf(firstParent, secondParent, topTail),
-    );
+    const { editor } = mounted(documentOf(firstParent, secondParent, topTail));
     const before = editor.getDocument();
 
     expect(editor.commands.moveBlockBefore("code-1", "other-child")).toEqual({

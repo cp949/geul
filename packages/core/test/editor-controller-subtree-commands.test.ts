@@ -162,14 +162,17 @@ describe("moveBlockBefore 하위 트리 계약(Issue #125)", () => {
   });
 
   it("이동 후 최심부가 정확히 MAX_NESTING_DEPTH(64)면 성공한다(D3 경계)", () => {
-    // 목적지(e-1..e-60)는 깊이 60, 소스(f-1..f-4)는 subtreeHeight=3 — 이동
-    // 결과 최심부는 정확히 60+3=64로 상한과 같다.
+    // 목적지(e-1..e-60)는 깊이 60, 소스(f-1..f-5)는 subtreeHeight=4(레벨
+    // 5개 - 1) — 이동 결과 최심부는 정확히 60+4=64로 상한과 같다.
+    // (트랙-6류 결함 탐지 F1 수정: 원래 f-1..f-4는 subtreeHeight=3이라 결과가
+    // 63이었다 — "정확히 64"라는 주석·테스트 제목과 실제 산술이 어긋나 있었고,
+    // `>` → `>=` mutation을 이 fixture로는 잡아내지 못했다.)
     const initialDocument: Document = {
       formatVersion: 1,
       revision: 0,
       blocks: [
         buildChain(idsFor("e", 60)),
-        buildChain(idsFor("f", 4)),
+        buildChain(idsFor("f", 5)),
         tailParagraphBlock,
       ],
     };

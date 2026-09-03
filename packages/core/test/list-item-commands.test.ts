@@ -419,14 +419,13 @@ describe("목록 항목 공용 블록 명령", () => {
     const otherChild = paragraphBlock("other-child", "다른 자식");
     const secondParent = paragraphBlock("parent-2", "둘째 부모", [otherChild]);
     const tail = paragraphBlock("tail", "꼬리");
-    const { editor } = mounted(
-      documentOf(firstParent, secondParent, tail),
-    );
+    const { editor } = mounted(documentOf(firstParent, secondParent, tail));
     const before = editor.getDocument();
 
-    expect(editor.commands.moveBlockBefore("numbered", "other-child")).toEqual(
-      { ok: true, value: undefined },
-    );
+    expect(editor.commands.moveBlockBefore("numbered", "other-child")).toEqual({
+      ok: true,
+      value: undefined,
+    });
     expect(editor.getDocument().blocks).toMatchObject([
       { id: "parent-1" },
       {
