@@ -10,6 +10,7 @@ import {
 import { BlockIdExtension } from "./block-id-extension.js";
 import { BlockJoinExtension } from "./block-join-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
+import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
@@ -207,6 +208,7 @@ export const createProductionEditor = (options: {
         createId: options.createId,
       }),
       IndentKeyboardExtension,
+      BlockTypeKeyboardExtension,
       ListPresentationExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension,

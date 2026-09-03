@@ -4,25 +4,10 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { EditorState } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
+import { nearestBlockContainerId } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
-
-// 캐럿(state.selection.$from)에서 가장 가까운 blockContainer 조상의
-// blockId를 찾는다. depth 역순으로 올라가며 첫 blockContainer를 찾으면 그
-// attrs.blockId를 반환한다 — 스키마상 blockContainer는 항상 유효한
-// blockId를 갖지만 방어적으로 없으면 null이다.
-const nearestBlockContainerId = (state: EditorState): string | null => {
-  const { $from } = state.selection;
-  for (let depth = $from.depth; depth >= 0; depth -= 1) {
-    const node = $from.node(depth);
-    if (node.type.name === "blockContainer") {
-      const blockId = node.attrs.blockId;
-      return typeof blockId === "string" && blockId.length > 0 ? blockId : null;
-    }
-  }
-  return null;
-};
 
 // CodeBlock Tab 계약은 빈 TextSelection(caret)에만 적용한다. DOM 기준으로
 // 재계산한 selection이 codeBlock의 직접 content 안인지 판정한다.

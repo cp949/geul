@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { EditorState } from "@tiptap/pm/state";
 
 // blockId를 가진 블록 노드의 문서 내 위치를 임의 깊이에서 찾는다(D19 —
 // 컨테이너 도입으로 블록이 blockGroup 안에 중첩될 수 있다). table-commands.ts와
@@ -47,4 +48,22 @@ export const findEditableBlockContent = (
   return contentNode === null
     ? null
     : { position: contentPosition, node: contentNode };
+};
+
+// 캐럿(state.selection.$from)에서 가장 가까운 blockContainer 조상의
+// blockId를 찾는다. depth 역순으로 올라가며 첫 blockContainer를 찾으면 그
+// attrs.blockId를 반환한다 — 스키마상 blockContainer는 항상 유효한
+// blockId를 갖지만 방어적으로 없으면 null이다. indent-keyboard-extension.ts와
+// block-type-keyboard-extension.ts 둘 다 필요로 해(RD-001 DELTA-01)
+// findBlockPosition·findEditableBlockContent와 같은 이유로 여기서 공유한다.
+export const nearestBlockContainerId = (state: EditorState): string | null => {
+  const { $from } = state.selection;
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    const node = $from.node(depth);
+    if (node.type.name === "blockContainer") {
+      const blockId = node.attrs.blockId;
+      return typeof blockId === "string" && blockId.length > 0 ? blockId : null;
+    }
+  }
+  return null;
 };
