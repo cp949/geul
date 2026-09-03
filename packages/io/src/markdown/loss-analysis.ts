@@ -24,7 +24,13 @@ export type MarkdownLoss = {
     | "INLINE_CODE_NEWLINE"
     | "NESTED_CHILDREN"
     | "CHECKED_STATE_LOST"
-    | "TOGGLE_STATE_LOST";
+    | "TOGGLE_STATE_LOST"
+    // RD-004 DELTA-03. INLINE_COLOR는 인라인 textColor/backgroundColor
+    // mark(DELTA-01, CELL_COLOR와 달리 셀 자체가 아니라 콘텐츠 안 mark).
+    // BLOCK_COLOR/BLOCK_ALIGN은 블록 레벨 TextBlockProps(DELTA-02).
+    | "INLINE_COLOR"
+    | "BLOCK_COLOR"
+    | "BLOCK_ALIGN";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -34,6 +40,13 @@ export type MarkdownLoss = {
 const hasUnderline = (content: InlineContent): boolean =>
   content.some((item) =>
     (item.marks ?? []).some((mark) => mark.type === "underline"),
+  );
+
+const hasColorMark = (content: InlineContent): boolean =>
+  content.some((item) =>
+    (item.marks ?? []).some(
+      (mark) => mark.type === "textColor" || mark.type === "backgroundColor",
+    ),
   );
 
 const hasInlineCodeNewline = (content: InlineContent): boolean =>
@@ -116,6 +129,13 @@ const collectTableLosses = (
           message: `Cell ${cell.id} contains inline code with a newline`,
         });
       }
+      if (hasColorMark(cell.content)) {
+        losses.push({
+          kind: "INLINE_COLOR",
+          ...location,
+          message: `Cell ${cell.id} contains inline text or background color`,
+        });
+      }
     }
   }
 };
@@ -172,6 +192,30 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       kind: "INLINE_CODE_NEWLINE",
       blockId: block.id,
       message: `Block ${block.id} contains inline code with a newline`,
+    });
+  }
+  // RD-004 DELTA-03. table/divider/codeBlock은 위에서 이미 반환했으므로
+  // 남는 타입(paragraph/heading/quote/목록 4종)이 전부 TextBlockProps를
+  // 가진다(실측 확인, export-html.ts의 blockNode와 같은 TS 좁힘).
+  if (hasColorMark(block.content)) {
+    losses.push({
+      kind: "INLINE_COLOR",
+      blockId: block.id,
+      message: `Block ${block.id} contains inline text or background color`,
+    });
+  }
+  if (block.textColor !== undefined || block.backgroundColor !== undefined) {
+    losses.push({
+      kind: "BLOCK_COLOR",
+      blockId: block.id,
+      message: `Block ${block.id} has text or background color`,
+    });
+  }
+  if (block.textAlignment !== undefined) {
+    losses.push({
+      kind: "BLOCK_ALIGN",
+      blockId: block.id,
+      message: `Block ${block.id} has text alignment`,
     });
   }
   const hasChildren = block.children !== undefined && block.children.length > 0;
