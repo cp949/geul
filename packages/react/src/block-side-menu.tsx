@@ -1,9 +1,16 @@
 import {
   blockTypeDescriptorFromBlock,
+  isNestableBlockType,
   type BlockTypeDescriptor,
   type EditorController,
 } from "@cp949/geul-core";
-import { GripVertical, Plus } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  GripVertical,
+  Plus,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -15,6 +22,10 @@ import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
+import {
+  TABLE_BACKGROUND_COLORS,
+  TABLE_TEXT_COLORS,
+} from "./table-cell-colors.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -258,6 +269,17 @@ const computeRangeMoveDragGuide = (
 const blockGutterButtonClassName = "geul-block-gutter__button";
 
 const blockMenuItemClassName = "geul-block-menu__item";
+
+// RD-003 DELTA-02: 블록 메뉴 색상·정렬 섹션. 클래스는 DELTA-01(formatting-toolbar.tsx)·
+// TableCellColorPalettes·TableCellFormatMenu와 같은 공유 scss(_menu-shared.scss,
+// _table-cell-format-menu.scss)를 재사용한다 — 신규 scss 없음.
+const colorSectionLabelClassName = "geul-menu-section-label";
+const colorSwatchClassName = "geul-menu-swatch";
+const alignButtonClassName = "geul-cell-format-menu__align-button";
+
+const alignLeftIcon = <AlignLeft {...iconProps} />;
+const alignCenterIcon = <AlignCenter {...iconProps} />;
+const alignRightIcon = <AlignRight {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
 // table-selection-toolbar.tsx와 같은 이유로 모듈 스코프 상수로 둔다 —
@@ -525,14 +547,21 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     blockMenuState?.left ?? 0,
     blockMenuState?.top ?? 0,
   );
-  const blockTypeOptions = (() => {
-    if (blockMenuState === null) return BLOCK_TYPE_OPTIONS;
-    const source = findBlockTypeDescriptor(
-      editor.getDocument().blocks,
-      blockMenuState.blockId,
-    );
-    return source === null ? [] : getBlockTypeOptionsForSource(source);
-  })();
+  // Turn into 옵션과 색상·정렬 섹션 게이트(RD-003 DELTA-02)가 같은 source
+  // descriptor를 쓴다 — 여기서 한 번만 구한다.
+  const blockMenuSource =
+    blockMenuState === null
+      ? null
+      : findBlockTypeDescriptor(
+          editor.getDocument().blocks,
+          blockMenuState.blockId,
+        );
+  const blockTypeOptions =
+    blockMenuState === null
+      ? BLOCK_TYPE_OPTIONS
+      : blockMenuSource === null
+        ? []
+        : getBlockTypeOptionsForSource(blockMenuSource);
   // Indent/Outdent 비활성 판정은 core의 getBlockNestingActionState 한 곳을
   // 공유한다(formatting-toolbar.tsx와 같은 관용구, Issue #126) — 표는 이
   // gutter의 hover 대상에서 이미 제외돼 blockMenuState.blockId가 표를 가리킬
@@ -541,6 +570,24 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     blockMenuState === null
       ? null
       : editor.getBlockNestingActionState(blockMenuState.blockId);
+
+  // 색상·정렬은 Indent/Outdent와 같은 "재조정 가능" 액션이라 적용 후에도
+  // 메뉴를 닫지 않는다(Turn into/Duplicate/Delete 같은 일회성 액션과 다른
+  // 분류 — RD-003-DELTA-02 계획 "배경" 절).
+  const applyBlockTextColor = (color: string | null) => {
+    if (blockMenuState === null) return;
+    editor.commands.setBlockTextColor(blockMenuState.blockId, color);
+  };
+  const applyBlockBackgroundColor = (color: string | null) => {
+    if (blockMenuState === null) return;
+    editor.commands.setBlockBackgroundColor(blockMenuState.blockId, color);
+  };
+  const applyBlockTextAlignment = (
+    align: "left" | "center" | "right" | null,
+  ) => {
+    if (blockMenuState === null) return;
+    editor.commands.setBlockTextAlignment(blockMenuState.blockId, align);
+  };
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
@@ -770,6 +817,93 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           >
             Delete
           </MenuItemButton>
+          {blockMenuSource !== null &&
+            isNestableBlockType(blockMenuSource.type) && (
+              <>
+                {/* table/divider/codeBlock은 TextBlockProps 대상이 아니다(spec
+                    §3.3) — isNestableBlockType이 정확히 그 7개 대상 타입만
+                    인정한다(RD-002 DELTA-02와 같은 predicate). table 자체는
+                    gutter hover 대상에서 이미 제외돼 blockMenuSource.type이
+                    "table"일 일이 없다(위 nestingActions 주석과 같은 불변식). */}
+                <hr className="geul-block-menu__divider" />
+                <p className={colorSectionLabelClassName}>Text color</p>
+                <div className="geul-menu-palette">
+                  {TABLE_TEXT_COLORS.map((color) => (
+                    <MenuItemButton
+                      aria-label={`Text color ${color.name}`}
+                      className={colorSwatchClassName}
+                      key={color.value}
+                      onClick={() => applyBlockTextColor(color.value)}
+                      style={{
+                        backgroundColor: "transparent",
+                        color: color.value,
+                      }}
+                    >
+                      A
+                    </MenuItemButton>
+                  ))}
+                  <MenuItemButton
+                    aria-label="Text color None"
+                    className={colorSwatchClassName}
+                    onClick={() => applyBlockTextColor(null)}
+                  >
+                    ×
+                  </MenuItemButton>
+                </div>
+                <p className={colorSectionLabelClassName}>Background color</p>
+                <div className="geul-menu-palette">
+                  {TABLE_BACKGROUND_COLORS.map((color) => (
+                    <MenuItemButton
+                      aria-label={`Background color ${color.name}`}
+                      className={colorSwatchClassName}
+                      key={color.value}
+                      onClick={() => applyBlockBackgroundColor(color.value)}
+                      style={{ backgroundColor: color.value }}
+                    >
+                      {""}
+                    </MenuItemButton>
+                  ))}
+                  <MenuItemButton
+                    aria-label="Background color None"
+                    className={colorSwatchClassName}
+                    onClick={() => applyBlockBackgroundColor(null)}
+                  >
+                    ×
+                  </MenuItemButton>
+                </div>
+                <p className={colorSectionLabelClassName}>Align</p>
+                <div className="geul-cell-format-menu__align-row">
+                  <MenuItemButton
+                    aria-label="Align left"
+                    className={alignButtonClassName}
+                    onClick={() => applyBlockTextAlignment("left")}
+                  >
+                    {alignLeftIcon}
+                  </MenuItemButton>
+                  <MenuItemButton
+                    aria-label="Align center"
+                    className={alignButtonClassName}
+                    onClick={() => applyBlockTextAlignment("center")}
+                  >
+                    {alignCenterIcon}
+                  </MenuItemButton>
+                  <MenuItemButton
+                    aria-label="Align right"
+                    className={alignButtonClassName}
+                    onClick={() => applyBlockTextAlignment("right")}
+                  >
+                    {alignRightIcon}
+                  </MenuItemButton>
+                  <MenuItemButton
+                    aria-label="Align none"
+                    className={alignButtonClassName}
+                    onClick={() => applyBlockTextAlignment(null)}
+                  >
+                    ×
+                  </MenuItemButton>
+                </div>
+              </>
+            )}
         </div>
       )}
     </>

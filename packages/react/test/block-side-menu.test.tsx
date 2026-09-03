@@ -16,7 +16,11 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSideMenu } from "../src/block-side-menu.js";
-import { mountBlockEditor, stubRect } from "./mount-editor.js";
+import {
+  mountBlockEditor,
+  stubRect,
+  type MountBlockEditorOptions,
+} from "./mount-editor.js";
 import { selectText } from "./selection-events.js";
 
 // jsdom은 setPointerCapture를 구현하지 않는다(table-handle-menu.test.tsx와
@@ -43,7 +47,7 @@ const dragHandleLabel = "Drag to reorder, click for options";
  * add-block 버튼)는 slash-menu.test.tsx가 다룬다. 여기서는 컴포넌트가 요구하는
  * 필수 prop을 채우는 자리표시자로만 쓴다.
  */
-const renderBlockMenu = (options?: { blockIds?: readonly string[] }) =>
+const renderBlockMenu = (options?: Omit<MountBlockEditorOptions, "children">) =>
   mountBlockEditor({
     ...options,
     children: <BlockSideMenu onBlockAdded={vi.fn()} />,
@@ -449,6 +453,115 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(blocks[0]?.id).toBe("block-2");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
+  it("paragraph 소스에서는 Text color/Background color/Align 섹션이 보인다", () => {
+    openBlockMenu();
+
+    expect(screen.getByText("Text color")).toBeTruthy();
+    expect(screen.getByText("Background color")).toBeTruthy();
+    expect(screen.getByText("Align")).toBeTruthy();
+    expect(
+      screen.getByRole("menuitem", { name: "Text color Blue" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Align center" })).toBeTruthy();
+  });
+
+  it("Text color 스와치를 클릭하면 실제 문서에 반영되고 메뉴는 열린 채로 남는다", () => {
+    const rendered = openBlockMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
+
+    const after = rendered.editor.getDocument().blocks[0];
+    if (after?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(after.textColor).toBe("#1A73E8");
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+  });
+
+  it("Text color None을 클릭하면 textColor가 문서에서 해제된다", () => {
+    const rendered = openBlockMenu();
+    const applied = rendered.editor.commands.setBlockTextColor(
+      "block-1",
+      "#1A73E8",
+    );
+    if (!applied.ok) throw new Error("textColor fixture 준비 실패");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
+
+    const after = rendered.editor.getDocument().blocks[0];
+    if (after?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(after.textColor).toBeUndefined();
+  });
+
+  it("Background color 스와치·None도 backgroundColor에 반영·해제한다", () => {
+    const rendered = openBlockMenu();
+
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Background color Blue" }),
+    );
+
+    const applied = rendered.editor.getDocument().blocks[0];
+    if (applied?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(applied.backgroundColor).toBe("#E8F0FE");
+
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Background color None" }),
+    );
+
+    const cleared = rendered.editor.getDocument().blocks[0];
+    if (cleared?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(cleared.backgroundColor).toBeUndefined();
+  });
+
+  it("Align center를 클릭하면 textAlignment가 반영되고, Align none으로 해제한다", () => {
+    const rendered = openBlockMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Align center" }));
+
+    const aligned = rendered.editor.getDocument().blocks[0];
+    if (aligned?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(aligned.textAlignment).toBe("center");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Align none" }));
+
+    const cleared = rendered.editor.getDocument().blocks[0];
+    if (cleared?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    expect(cleared.textAlignment).toBeUndefined();
+  });
+
+  it("codeBlock 소스에서는 색상·정렬 섹션이 비노출된다", () => {
+    const rendered = openBlockMenu();
+    const converted = rendered.editor.commands.setBlockType("block-1", {
+      type: "codeBlock",
+    });
+    if (!converted.ok) throw new Error("codeBlock 변환 fixture 준비 실패");
+    fireEvent.keyDown(document, { key: "Escape" });
+    const [blockElement] = rendered.restubGeometry();
+    if (blockElement === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(blockElement);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(screen.queryByText("Text color")).toBeNull();
+    expect(screen.queryByText("Align")).toBeNull();
+  });
+
+  it("divider 소스에서는 색상·정렬 섹션이 비노출된다", () => {
+    const rendered = renderBlockMenu({
+      initialBlocks: [{ id: "block-1", type: "divider" }],
+    });
+    const [blockElement] = rendered.blocks;
+    if (blockElement === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(blockElement);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(screen.queryByText("Text color")).toBeNull();
+    expect(screen.queryByText("Align")).toBeNull();
   });
 });
 
