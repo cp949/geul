@@ -7,7 +7,12 @@ import type { Block, Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it, vi } from "vitest";
 
-import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
+import {
+  contentTextStart,
+  dispatchKeydown,
+  dispatchTextInput,
+  typeNativeText,
+} from "./block-test-support.js";
 import { pasteData } from "./clipboard-test-support.js";
 import {
   documentOf,
@@ -15,29 +20,6 @@ import {
   mounted,
   paragraphBlock,
 } from "./list-item-block-type-support.js";
-
-/** native text 삽입 직전의 ProseMirror handleTextInput 경계를 호출한다. */
-const dispatchTextInput = (tiptap: TiptapEditor, text: string): boolean => {
-  const { from, to } = tiptap.state.selection;
-  return (
-    tiptap.view.someProp(
-      "handleTextInput",
-      (handler) =>
-        handler(tiptap.view, from, to, text, () =>
-          tiptap.state.tr.insertText(text, from, to),
-        ) === true,
-    ) === true
-  );
-};
-
-/** input rule 미소비 텍스트를 브라우저 기본 입력과 같은 범위에 삽입한다. */
-const typeNativeText = (tiptap: TiptapEditor, text: string): boolean => {
-  const { from, to } = tiptap.state.selection;
-  const consumed = dispatchTextInput(tiptap, text);
-  if (!consumed)
-    tiptap.view.dispatch(tiptap.state.tr.insertText(text, from, to));
-  return consumed;
-};
 
 /** 문서에서 주어진 텍스트 조각의 시작 위치를 찾는다. */
 const textStart = (tiptap: TiptapEditor, text: string): number => {

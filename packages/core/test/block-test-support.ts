@@ -1,7 +1,7 @@
 /**
- * 블록 키보드 계약 테스트가 공유하는 keydown 실 디스패치와 블록 텍스트 위치
- * 조회를 소유한다. 두 번째 소비 파일이 생긴 시점에 사본 대신 이 모듈로
- * 올렸다(G-TST-002).
+ * 블록 키보드·native input rule 계약 테스트가 공유하는 keydown·text input
+ * 실 디스패치와 블록 텍스트 위치 조회를 소유한다. 두 번째 소비 파일이 생긴
+ * 시점에 사본 대신 이 모듈로 올렸다(G-TST-002).
  */
 import type { Editor as TiptapEditor } from "@tiptap/core";
 
@@ -30,6 +30,43 @@ export const dispatchKeydown = (
         }),
       ) === true,
   ) === true;
+
+/**
+ * native text input 직전의 ProseMirror handleTextInput 경계를 실
+ * 디스패치하고 input rule이 소비했는지(true) 아닌지를 돌려준다. list와
+ * block-type native shorthand 테스트가 공유한다(RD-002, 두 번째 소비 파일).
+ */
+export const dispatchTextInput = (
+  tiptap: Pick<TiptapEditor, "view" | "state">,
+  text: string,
+): boolean => {
+  const { from, to } = tiptap.state.selection;
+  return (
+    tiptap.view.someProp(
+      "handleTextInput",
+      (handler) =>
+        handler(tiptap.view, from, to, text, () =>
+          tiptap.state.tr.insertText(text, from, to),
+        ) === true,
+    ) === true
+  );
+};
+
+/**
+ * input rule 미소비 텍스트를 브라우저 기본 입력과 같은 범위에 삽입한다.
+ * dispatchTextInput이 소비하지 않으면(input rule 비대상) 직접 insertText로
+ * 폴백해 실제 타이핑과 같은 최종 문서 상태를 만든다.
+ */
+export const typeNativeText = (
+  tiptap: Pick<TiptapEditor, "view" | "state">,
+  text: string,
+): boolean => {
+  const { from, to } = tiptap.state.selection;
+  const consumed = dispatchTextInput(tiptap, text);
+  if (!consumed)
+    tiptap.view.dispatch(tiptap.state.tr.insertText(text, from, to));
+  return consumed;
+};
 
 /**
  * blockId로 blockContainer를 찾아 그 콘텐츠 노드(paragraph/heading)의

@@ -1,11 +1,13 @@
 /**
- * Issue #38 슬라이스 3(heading 4-6·quote·divider) 중 실제 브라우저에서만
- * 증명 가능한 두 시나리오만 여기 남긴다(ADR-0007). 그 외 — 슬래시 메뉴
- * 항목 클릭이 올바른 명령을 호출하는지, 옵션 목록 구성 — 는 이미
- * `packages/react/test/slash-menu.test.tsx`(jsdom)와 core 테스트가
- * 소유한다. 두 테스트 모두 core 소유 단언(undo 단계 수·trailing·모델
- * 상태·`getDocument()`)이나 io 소유 단언(문자열 왕복)은 하지 않는다 —
- * DOM·computed style만 본다.
+ * Issue #38 슬라이스 3(heading 4-6·quote·divider)과 슬라이스 9 RD-002(신규
+ * 블록 입력 규칙, `_works/roadmap/RD-002.md`) 중 실제 브라우저에서만 증명
+ * 가능한 시나리오만 여기 남긴다(ADR-0007). 그 외 — 슬래시 메뉴 항목 클릭이
+ * 올바른 명령을 호출하는지, 옵션 목록 구성, native shorthand 입력 규칙의
+ * 정확 일치·caret·Backspace 복원 로직 — 는 이미
+ * `packages/react/test/slash-menu.test.tsx`(jsdom)와 core 테스트
+ * (`block-type-input-rule-extension.test.ts`)가 소유한다. 이 파일의 테스트는
+ * core 소유 단언(undo 단계 수·trailing·모델 상태·`getDocument()`)이나 io
+ * 소유 단언(문자열 왕복)은 하지 않는다 — DOM·computed style만 본다.
  *
  * 09a-C1(실제 레이아웃): divider(`hr`)의 hit area는 `_editor.scss`의
  * `padding-block` 규칙으로 시각적 두께(1px)보다 훨씬 넓다. side-menu가
@@ -17,6 +19,18 @@
  * blockquote·hr에 콘텐츠 스타일이 실제로 적용되는지는
  * `getComputedStyle`로만 증명 가능하다 — scss 규칙이 존재한다는 사실만으로는
  * 캐스케이드·특이성 충돌이 없다는 것을 보장하지 않는다.
+ *
+ * RD-002-C3(네이티브 입력의 기본 동작, ADR-0007 여섯 범주 중 하나): Tiptap
+ * `InputRule`은 ProseMirror `handleTextInput` prop 위에서 동작하는데, 이
+ * prop은 브라우저의 실제 keydown→composition→beforeinput→input→DOM mutation
+ * 경로 위에서만 호출된다. core 유닛 테스트는 이 prop을 `view.someProp`으로
+ * 직접 호출해 로직만 증명한다(`dispatchTextInput`, block-test-support.ts) —
+ * 그 경로가 실제 브라우저 타이핑으로도 똑같이 도달하고 최종 DOM이 관찰
+ * 가능한 계약대로 나오는지는 실제 타이핑(`page.keyboard.type`)으로만
+ * 증명된다. 직접 선례: 슬라이스 5 RD-006(목록 native shorthand)의
+ * `e2e/list-item.spec.ts`("native - space 입력은…" 계열)가 같은 메커니즘에
+ * 이미 이 판단을 적용했다 — jsdom 쪽엔 대응하는 Playwright 0건이 없는
+ * RD-001(키보드 단축키, 단일 keydown이라 jsdom 재현 완전)과 반대 사례다.
  */
 import { expect, test, type Locator } from "@playwright/test";
 
@@ -114,4 +128,39 @@ test("h4-h6 폰트 크기가 단조 감소하고 blockquote·hr에 콘텐츠 스
     "3px",
   );
   await expect(editable.locator("hr")).toHaveCSS("border-top-width", "1px");
+});
+
+test("native #/>/--- 입력은 production editor에서 heading/quote/divider DOM으로 변환하고 focus를 유지한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const source = page.getByLabel("Document source");
+
+  await source.fill(
+    JSON.stringify({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "heading-target", type: "paragraph", content: [] },
+        { id: "quote-target", type: "paragraph", content: [] },
+        { id: "divider-target", type: "paragraph", content: [] },
+      ],
+    }),
+  );
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  await editable.locator('[data-be-block-id="heading-target"] p').click();
+  await page.keyboard.type("# ");
+  await expect(editable.locator("h1")).toHaveCount(1);
+  await expect(editable).toBeFocused();
+
+  await editable.locator('[data-be-block-id="quote-target"] p').click();
+  await page.keyboard.type("> ");
+  await expect(editable.locator("blockquote")).toHaveCount(1);
+  await expect(editable).toBeFocused();
+
+  await editable.locator('[data-be-block-id="divider-target"] p').click();
+  await page.keyboard.type("---");
+  await expect(editable.locator("hr")).toHaveCount(1);
+  await expect(editable).toBeFocused();
 });

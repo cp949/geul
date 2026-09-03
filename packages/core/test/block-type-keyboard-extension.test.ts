@@ -22,8 +22,10 @@ import {
 } from "../src/block-type-keyboard-extension.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
+  dividerBlock,
   documentOf,
   editorState,
+  headingBlock,
   listItemBlock,
   mounted,
   notApplicable,
@@ -37,23 +39,6 @@ import {
   docWithTwoRowTable,
   placeCaretInCell,
 } from "./table-test-support.js";
-
-/** heading 리터럴 — isToggleable/collapsed는 지정할 때만 채운다. */
-const headingBlock = (
-  id: string,
-  level: 1 | 2 | 3 | 4 | 5 | 6,
-  text: string,
-  options?: { isToggleable?: boolean; collapsed?: boolean },
-): Block => ({
-  id,
-  type: "heading",
-  level,
-  content: text === "" ? [] : [{ text }],
-  ...(options?.isToggleable === undefined
-    ? {}
-    : { isToggleable: options.isToggleable }),
-  ...(options?.collapsed === undefined ? {} : { collapsed: options.collapsed }),
-});
 
 /** checkListItem 리터럴. */
 const checkListItemBlock = (
@@ -74,9 +59,6 @@ const codeBlock = (id: string, text: string): Block => ({
   language: "text",
   content: text === "" ? [] : [{ text }],
 });
-
-/** dividerBlock 리터럴. */
-const dividerBlock = (id: string): Block => ({ id, type: "divider" });
 
 // TrailingBlockExtension이 마지막 블록이 빈 paragraph가 아니면 문서 끝에
 // 빈 paragraph를 자동 삽입한다(production 편집기 배치 계약) — 모든 fixture를

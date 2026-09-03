@@ -235,9 +235,34 @@ export const requireNode = (schema: Schema, name: string): NodeType => {
 };
 
 /**
+ * heading 블록 리터럴 — isToggleable/collapsed는 지정할 때만 채운다(둘 다
+ * model 필드 부재를 null로 표현). block-type-keyboard-extension.test.ts(RD-001
+ * 캐럿 단축키)와 block-type-input-rule-extension.test.ts(RD-002 native
+ * shorthand)가 같은 heading 리터럴을 필요로 해 공유 위치로 옮겼다(G-TST-002).
+ */
+export const headingBlock = (
+  id: string,
+  level: 1 | 2 | 3 | 4 | 5 | 6,
+  text: string,
+  options?: { isToggleable?: boolean; collapsed?: boolean },
+): Block => ({
+  id,
+  type: "heading",
+  level,
+  content: text === "" ? [] : [{ text }],
+  ...(options?.isToggleable === undefined
+    ? {}
+    : { isToggleable: options.isToggleable }),
+  ...(options?.collapsed === undefined ? {} : { collapsed: options.collapsed }),
+});
+
+/**
  * quote 블록 리터럴 — quote/divider 왕복·명령 fixture. children은 quote
  * 아래 자식 블록을 붙이는 인자로, 후속 DELTA(quote 변환·명령)의 fixture가
- * 쓴다. io에도 같은 빌더가 있지만 패키지 경계상 import하지 않는다.
+ * 쓴다. io에도 같은 빌더가 있지만 패키지 경계상 import하지 않는다. 빈
+ * 텍스트는 content를 빈 배열로 둔다 — paragraphBlock·headingBlock과 같은
+ * 저장 정규형(빈 text 조각을 넣지 않음, RD-002 block-type-input-rule
+ * 변환 결과의 빈 quote가 첫 소비 사례).
  */
 export const quoteBlock = (
   id: string,
@@ -246,7 +271,7 @@ export const quoteBlock = (
 ): Block => ({
   id,
   type: "quote",
-  content: [{ text }],
+  content: text === "" ? [] : [{ text }],
   ...(children === undefined ? {} : { children }),
 });
 

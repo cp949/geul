@@ -9,6 +9,15 @@ import {
 } from "@tiptap/pm/state";
 
 type InputRuleUndoState = {
+  // 이 undo 정보가 속한 실제 isInputRules plugin 참조. Tiptap core는
+  // addInputRules를 가진 확장마다 별도 plugin 인스턴스를 하나씩 만든다
+  // (extensionManager.ts) — StarterKit의 mark 확장(Bold 등)·
+  // ListInputRuleExtension·BlockTypeInputRuleExtension(RD-002) 전부 각자의
+  // isInputRules 플러그인을 갖는다. 어느 확장의 규칙이 발동했는지에 따라
+  // plugin이 달라지므로 payload 자체에 실어 둔다 — appendTransaction이
+  // "누구에게" meta를 되돌려 줄지 알아야 한다(RD-002 실측: 문서 끝 divider
+  // 변환처럼 BlockIdExtension의 후속 append가 낀 경우에만 드러나는 문제).
+  plugin: Plugin;
   transform: Transaction;
   from: number;
   to: number;
@@ -19,13 +28,25 @@ const inputRuleUndoBridgeKey = new PluginKey<InputRuleUndoState | null>(
   "listInputRuleUndoBridge",
 );
 
-// Tiptap inputRulesPlugin은 공개 key를 export하지 않고 spec.isInputRules만
-// undoInputRule 탐색 표면으로 쓴다. 같은 식별자를 사용해 실제 plugin과 meta를
-// 재사용하고 undo 동작 자체는 복제하지 않는다.
-const inputRulesPlugin = (state: EditorState) =>
+// 이 transaction에 meta를 막 실어 보낸 isInputRules plugin을 찾는다(발동한
+// 확장 자신). Tiptap의 run()이 tr.setMeta(plugin, {...})으로 심는 것과 같은
+// 식별자(spec.isInputRules)를 재사용하고 undo 동작 자체는 복제하지 않는다.
+const firedInputRulesPlugin = (transaction: Transaction, state: EditorState) =>
   state.plugins.find(
     (plugin) =>
-      (plugin.spec as { isInputRules?: boolean }).isInputRules === true,
+      (plugin.spec as { isInputRules?: boolean }).isInputRules === true &&
+      transaction.getMeta(plugin) !== undefined,
+  );
+
+// Backspace 판정 전용 — "지금 되돌릴 것이 있는가"를 판정할 때는 어느
+// 확장이 발동했는지 몰라도 되므로 활성 상태(getState가 null이 아님)인
+// 아무 isInputRules plugin이나 찾는다 — bridge가 이미 복원해 둔 상태도
+// 여기 포함된다.
+const activeInputRulesPlugin = (state: EditorState) =>
+  state.plugins.find(
+    (plugin) =>
+      (plugin.spec as { isInputRules?: boolean }).isInputRules === true &&
+      plugin.getState(state) != null,
   );
 
 const createListInputRule = (
@@ -61,15 +82,19 @@ const createListInputRule = (
 
 export const ListInputRuleExtension = Extension.create({
   name: "listInputRule",
-  // 빈 목록의 구조 편집 Backspace보다 input-rule 복원을 먼저 판정한다.
-  // undoInputRule 상태가 없으면 false를 반환해 기존 목록 keymap으로 폴스루한다.
+  // BlockJoinExtension(priority 101)의 구조 편집 Backspace(예: divider
+  // 인접 시 병합 대신 선택)보다 input-rule 복원을 먼저 판정한다. 이 파일이
+  // 소유한 규칙(목록)뿐 아니라 활성 상태인 다른 addInputRules 확장의 규칙
+  // (BlockTypeInputRuleExtension 등, RD-002)도 activeInputRulesPlugin으로
+  // 함께 찾는다 — Backspace 핸들러는 어느 확장 하나를 편애하지 않는다.
+  // undoInputRule 상태가 없으면 false를 반환해 기존 keymap으로 폴스루한다.
   priority: 1_100,
 
   addKeyboardShortcuts() {
     return {
       Backspace: () => {
         const { state } = this.editor;
-        const plugin = inputRulesPlugin(state);
+        const plugin = activeInputRulesPlugin(state);
         const undoable = plugin?.getState(state);
         const hasUndoableInputRule =
           undoable !== null && undoable !== undefined;
@@ -115,11 +140,16 @@ export const ListInputRuleExtension = Extension.create({
         state: {
           init: () => null,
           apply: (transaction, previous, _oldState, nextState) => {
-            const plugin = inputRulesPlugin(nextState);
-            if (plugin === undefined) return null;
-            const undoable = transaction.getMeta(plugin) as
-              InputRuleUndoState | undefined;
-            if (undoable !== undefined) return undoable;
+            const plugin = firedInputRulesPlugin(transaction, nextState);
+            if (plugin !== undefined) {
+              return {
+                plugin,
+                ...(transaction.getMeta(plugin) as Omit<
+                  InputRuleUndoState,
+                  "plugin"
+                >),
+              };
+            }
             return transaction.getMeta("appendedTransaction") !== undefined
               ? previous
               : null;
@@ -127,18 +157,15 @@ export const ListInputRuleExtension = Extension.create({
         },
         appendTransaction: (_transactions, _previousState, nextState) => {
           const undoable = inputRuleUndoBridgeKey.getState(nextState);
-          const plugin = inputRulesPlugin(nextState);
-          const currentInputRuleState = plugin?.getState(nextState);
+          if (undoable === null || undoable === undefined) return null;
+          const currentInputRuleState = undoable.plugin.getState(nextState);
           if (
-            undoable === null ||
-            undoable === undefined ||
-            plugin === undefined ||
-            (currentInputRuleState !== null &&
-              currentInputRuleState !== undefined)
+            currentInputRuleState !== null &&
+            currentInputRuleState !== undefined
           ) {
             return null;
           }
-          return nextState.tr.setMeta(plugin, undoable);
+          return nextState.tr.setMeta(undoable.plugin, undoable);
         },
       }),
     ];
