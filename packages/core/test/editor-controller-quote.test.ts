@@ -84,7 +84,7 @@ describe("setBlockType quote 편입(Turn into 대상)", () => {
       expect(tiptapDocument.content).toContainEqual(
         expect.objectContaining({
           type: "blockContainer",
-          attrs: { blockId: "block-1" },
+          attrs: expect.objectContaining({ blockId: "block-1" }),
           content: expect.arrayContaining([
             expect.objectContaining(contentMatcher),
           ]),

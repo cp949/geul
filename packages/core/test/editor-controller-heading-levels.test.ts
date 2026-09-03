@@ -71,7 +71,7 @@ describe("setBlockType heading level 4-6", () => {
       expect(tiptapDocument.content).toContainEqual(
         expect.objectContaining({
           type: "blockContainer",
-          attrs: { blockId: "block-1" },
+          attrs: expect.objectContaining({ blockId: "block-1" }),
           content: expect.arrayContaining([
             expect.objectContaining({
               type: "heading",

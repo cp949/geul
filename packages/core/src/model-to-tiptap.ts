@@ -276,7 +276,14 @@ const blockToTiptapJson = (block: Block): TiptapJsonNode => {
 
   return {
     type: "blockContainer",
-    attrs: { blockId: block.id },
+    attrs: {
+      blockId: block.id,
+      // TextBlockProps(RD-001 DELTA-02) — block은 여기서 이미 codeBlock/
+      // table/divider가 제외된 7개 타입으로 좁혀져 있다(위 이른 반환들).
+      textColor: block.textColor ?? null,
+      backgroundColor: block.backgroundColor ?? null,
+      textAlignment: block.textAlignment ?? null,
+    },
     content,
   };
 };

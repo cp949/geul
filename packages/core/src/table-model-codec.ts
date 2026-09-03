@@ -85,6 +85,7 @@ const inlineContentFromNode = (
       const decoded = decodeTextMark({
         type: mark.type.name,
         href: mark.attrs.href,
+        color: mark.attrs.color,
       });
       if (!decoded.ok) {
         return {

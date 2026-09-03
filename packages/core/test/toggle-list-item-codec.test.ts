@@ -56,7 +56,12 @@ const expectedPmDocument: TiptapJsonNode = {
   content: [
     {
       type: "blockContainer",
-      attrs: { blockId: "toggle-collapsed" },
+      attrs: {
+        blockId: "toggle-collapsed",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "toggleListItem",
@@ -68,7 +73,12 @@ const expectedPmDocument: TiptapJsonNode = {
           content: [
             {
               type: "blockContainer",
-              attrs: { blockId: "paragraph-child" },
+              attrs: {
+                blockId: "paragraph-child",
+                textColor: null,
+                backgroundColor: null,
+                textAlignment: null,
+              },
               content: [
                 {
                   type: "paragraph",
@@ -82,7 +92,12 @@ const expectedPmDocument: TiptapJsonNode = {
     },
     {
       type: "blockContainer",
-      attrs: { blockId: "toggle-explicit-false" },
+      attrs: {
+        blockId: "toggle-explicit-false",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "toggleListItem",
@@ -93,7 +108,12 @@ const expectedPmDocument: TiptapJsonNode = {
     },
     {
       type: "blockContainer",
-      attrs: { blockId: "toggle-absent" },
+      attrs: {
+        blockId: "toggle-absent",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "toggleListItem",

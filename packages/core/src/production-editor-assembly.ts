@@ -28,6 +28,10 @@ import { modelToTiptap } from "./model-to-tiptap.js";
 import { PlaceholderExtension } from "./placeholder-extension.js";
 import { QuoteExtension } from "./quote-extension.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
+import {
+  BackgroundColorMark,
+  TextColorMark,
+} from "./text-color-mark-extension.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import {
   TableCellExtension,
@@ -178,6 +182,8 @@ export const createProductionEditor = (options: {
         },
         trailingNode: false,
       }),
+      TextColorMark,
+      BackgroundColorMark,
       ParagraphExtension,
       HeadingExtension,
       ProductionBulletListItemExtension,

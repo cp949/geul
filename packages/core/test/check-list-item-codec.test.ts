@@ -51,7 +51,12 @@ const expectedPmDocument: TiptapJsonNode = {
   content: [
     {
       type: "blockContainer",
-      attrs: { blockId: "check-checked" },
+      attrs: {
+        blockId: "check-checked",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "checkListItem",
@@ -63,7 +68,12 @@ const expectedPmDocument: TiptapJsonNode = {
           content: [
             {
               type: "blockContainer",
-              attrs: { blockId: "paragraph-child" },
+              attrs: {
+                blockId: "paragraph-child",
+                textColor: null,
+                backgroundColor: null,
+                textAlignment: null,
+              },
               content: [
                 {
                   type: "paragraph",
@@ -77,7 +87,12 @@ const expectedPmDocument: TiptapJsonNode = {
     },
     {
       type: "blockContainer",
-      attrs: { blockId: "check-unchecked" },
+      attrs: {
+        blockId: "check-unchecked",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "checkListItem",

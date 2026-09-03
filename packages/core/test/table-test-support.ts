@@ -36,6 +36,10 @@ import {
   TableExtension,
   TableRowExtension,
 } from "../src/table-extension.js";
+import {
+  BackgroundColorMark,
+  TextColorMark,
+} from "../src/text-color-mark-extension.js";
 
 // editor-controller.ts의 ParagraphExtension/HeadingExtension과 같은 이유로
 // StarterKit 기본 paragraph/heading을 끄고 재구현한다 — group을
@@ -183,6 +187,12 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
   }),
   FixtureParagraphExtension,
   FixtureHeadingExtension,
+  // 표 fixture 스키마가 production과 같은 인라인 mark 집합을 갖게 한다 —
+  // table-model-codec.ts의 표 셀 라이브 PM 노드 경로(RD-001 DELTA-02)가
+  // textColor/backgroundColor mark를 다루므로 이 스키마도 그 mark를 알아야
+  // schema.nodeFromJSON이 던지지 않는다.
+  TextColorMark,
+  BackgroundColorMark,
   CodeBlockExtension,
   FixtureBulletListItemExtension,
   FixtureNumberedListItemExtension,

@@ -9,6 +9,7 @@ import {
   parseDocument,
   type Result,
   type TableBlock,
+  type TextBlockProps,
   type TextMark,
 } from "@cp949/geul-model";
 
@@ -30,7 +31,11 @@ const markFromTiptap = (
   if (mark.type === undefined) {
     return invalid("Unsupported Tiptap mark: undefined");
   }
-  const decoded = decodeTextMark({ type: mark.type, href: mark.attrs?.href });
+  const decoded = decodeTextMark({
+    type: mark.type,
+    href: mark.attrs?.href,
+    color: mark.attrs?.color,
+  });
   return decoded.ok ? decoded : invalid(decoded.error);
 };
 
@@ -207,6 +212,26 @@ const blockContainerToModel = (
     children = decodedChildren;
   }
 
+  // TextBlockProps(RD-001 DELTA-02) — node는 blockContainer라 이 7개 분기가
+  // 모두 공유한다(model-to-tiptap.ts 인코드와 대칭으로 한 곳에서만 읽는다).
+  // 값 정책은 여기서 재구현하지 않는다: null/undefined는 필드 부재로 접고
+  // (heading의 isToggleable/collapsed와 같은 패턴), 그 외 값(형식 오류
+  // 포함)은 마지막 parseDocument가 검증한다.
+  const textColor = node.attrs?.textColor;
+  const backgroundColor = node.attrs?.backgroundColor;
+  const textAlignment = node.attrs?.textAlignment;
+  const textBlockProps: TextBlockProps = {
+    ...(textColor === undefined || textColor === null
+      ? {}
+      : { textColor: textColor as string }),
+    ...(backgroundColor === undefined || backgroundColor === null
+      ? {}
+      : { backgroundColor: backgroundColor as string }),
+    ...(textAlignment === undefined || textAlignment === null
+      ? {}
+      : { textAlignment: textAlignment as "left" | "center" | "right" }),
+  };
+
   if (contentNode.type === "paragraph") {
     return {
       ok: true,
@@ -214,6 +239,7 @@ const blockContainerToModel = (
         id,
         type: "paragraph",
         content: inlineContent.value,
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -249,6 +275,7 @@ const blockContainerToModel = (
         ...(collapsed === undefined || collapsed === null
           ? {}
           : { collapsed: collapsed as boolean }),
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -261,6 +288,7 @@ const blockContainerToModel = (
         id,
         type: "quote",
         content: inlineContent.value,
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -273,6 +301,7 @@ const blockContainerToModel = (
         id,
         type: "bulletListItem",
         content: inlineContent.value,
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -291,6 +320,7 @@ const blockContainerToModel = (
         ...(startNumber === undefined || startNumber === null
           ? {}
           : { startNumber: startNumber as number }),
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -308,6 +338,7 @@ const blockContainerToModel = (
         type: "checkListItem",
         content: inlineContent.value,
         checked: contentNode.attrs?.checked as boolean,
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };
@@ -327,6 +358,7 @@ const blockContainerToModel = (
         ...(collapsed === undefined || collapsed === null
           ? {}
           : { collapsed: collapsed as boolean }),
+        ...textBlockProps,
         ...(children === undefined ? {} : { children }),
       },
     };

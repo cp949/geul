@@ -306,6 +306,8 @@ describe("Tiptap 표 노드를 TableBlock으로 디코드한다", () => {
                     { type: "italic" },
                     { type: "strike" },
                     { type: "underline" },
+                    { type: "textColor", color: "#AABBCC" },
+                    { type: "backgroundColor", color: "#112233" },
                   ],
                 },
               ],

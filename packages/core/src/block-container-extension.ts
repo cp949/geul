@@ -47,6 +47,16 @@ export const BlockContainerExtension = Node.create({
             : {};
         },
       },
+      // model TextBlockProps(RD-001 DELTA-01)의 PM 표현. paragraph/heading/
+      // quote/목록 4종 7개 타입이 이 컨테이너 하나를 공유하므로(D19) attrs도
+      // 여기 한 곳에만 둔다 — 7개 blockContent 노드마다 중복 선언하지
+      // 않는다. codeBlock도 이 컨테이너를 쓰지만 TextBlockProps 대상이
+      // 아니라(model-to-tiptap.ts) 이 필드를 받지 않는다. heading의
+      // isToggleable/collapsed와 같은 저장 전용 attrs다(`rendered: false`,
+      // null=필드 부재) — 편집기 내 시각 렌더는 이 DELTA 범위 밖이다.
+      textColor: { default: null, rendered: false },
+      backgroundColor: { default: null, rendered: false },
+      textAlignment: { default: null, rendered: false },
     };
   },
 

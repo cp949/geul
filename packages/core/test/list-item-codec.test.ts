@@ -53,7 +53,12 @@ const expectedPmDocument: TiptapJsonNode = {
   content: [
     {
       type: "blockContainer",
-      attrs: { blockId: "bullet-1" },
+      attrs: {
+        blockId: "bullet-1",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "bulletListItem",
@@ -64,7 +69,12 @@ const expectedPmDocument: TiptapJsonNode = {
           content: [
             {
               type: "blockContainer",
-              attrs: { blockId: "numbered-auto" },
+              attrs: {
+                blockId: "numbered-auto",
+                textColor: null,
+                backgroundColor: null,
+                textAlignment: null,
+              },
               content: [
                 {
                   type: "numberedListItem",
@@ -76,7 +86,12 @@ const expectedPmDocument: TiptapJsonNode = {
                   content: [
                     {
                       type: "blockContainer",
-                      attrs: { blockId: "paragraph-child" },
+                      attrs: {
+                        blockId: "paragraph-child",
+                        textColor: null,
+                        backgroundColor: null,
+                        textAlignment: null,
+                      },
                       content: [
                         {
                           type: "paragraph",
@@ -94,7 +109,12 @@ const expectedPmDocument: TiptapJsonNode = {
     },
     {
       type: "blockContainer",
-      attrs: { blockId: "numbered-explicit" },
+      attrs: {
+        blockId: "numbered-explicit",
+        textColor: null,
+        backgroundColor: null,
+        textAlignment: null,
+      },
       content: [
         {
           type: "numberedListItem",

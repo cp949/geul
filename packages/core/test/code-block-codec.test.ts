@@ -122,7 +122,12 @@ describe("CodeBlock codec 왕복", () => {
           },
           {
             type: "blockContainer",
-            attrs: { blockId: "parent" },
+            attrs: {
+              blockId: "parent",
+              textColor: null,
+              backgroundColor: null,
+              textAlignment: null,
+            },
             content: [
               { type: "paragraph", content: [] },
               {
