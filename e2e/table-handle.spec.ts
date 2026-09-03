@@ -496,3 +496,136 @@ test("표 셀 편집으로 레이아웃이 밀린 뒤에도 표 핸들 오버레
   // 이 타이핑이 어디에도 닿지 않는다(이슈 증상과 동일).
   await expect(lastCell).toHaveText("Z");
 });
+
+// 최소 유효 표 하나짜리 model JSON. 열 너비·헤더 플래그는 table-test-support.ts의
+// core fixture와 같은 모양이다(model.TableBlock 계약, packages/model/src/types.ts).
+const minimalTableBlock = (blockId: string) => ({
+  id: blockId,
+  type: "table",
+  columns: [
+    { id: "col-1", width: 160 },
+    { id: "col-2", width: 160 },
+  ],
+  rows: [
+    {
+      id: "row-1",
+      cells: [
+        {
+          id: "cell-1",
+          columnId: "col-1",
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: "a" }],
+        },
+        {
+          id: "cell-2",
+          columnId: "col-2",
+          rowSpan: 1,
+          columnSpan: 1,
+          content: [{ text: "b" }],
+        },
+      ],
+    },
+  ],
+  headerRows: 0,
+  headerColumns: 0,
+});
+
+test("최상위 표 hover 시 Indent 버튼이 앞 형제의 자식으로 표를 옮기고 undo 1회로 복원된다 (Issue #126)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const sourceDocument = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      { id: "before", type: "paragraph", content: [{ text: "before" }] },
+      minimalTableBlock("table-1"),
+    ],
+  };
+  await page.getByLabel("Document source").fill(JSON.stringify(sourceDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const table = editable.locator("table");
+  await expect(table).toBeVisible();
+  // Load JSON 직후에는 포커스가 그 버튼에 있다 — contenteditable 안을 먼저
+  // 클릭해야 이어지는 Control+z가 ProseMirror history로 라우팅된다(그렇지
+  // 않으면 view.dom 바깥 포커스라 keydown이 편집기에 닿지 않는다).
+  await table.locator("td").first().click();
+  await table.locator("td").first().hover();
+
+  const indentButton = page.getByRole("button", { name: "Indent table" });
+  const outdentButton = page.getByRole("button", { name: "Outdent table" });
+  await expect(indentButton).toBeEnabled();
+  // 최상위(depth 0)라 canOutdent는 false다(indent-commands.ts).
+  await expect(outdentButton).toBeDisabled();
+
+  await indentButton.click();
+
+  await expect(
+    editable.locator(
+      '[data-be-block-id="before"] > [data-be-block-group] > [data-be-block-id="table-1"]',
+    ),
+  ).toHaveCount(1);
+
+  await page.keyboard.press("Control+z");
+
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(
+    editable.locator(':scope > [data-be-block-id="table-1"]'),
+  ).toHaveCount(1);
+});
+
+test("다른 블록의 자식인 표 hover 시 Outdent 버튼이 표를 형제로 되돌리고 undo 1회로 복원된다 (Issue #126)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const sourceDocument = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "toggle-1",
+        type: "toggleListItem",
+        content: [{ text: "toggle" }],
+        children: [minimalTableBlock("table-1")],
+      },
+    ],
+  };
+  await page.getByLabel("Document source").fill(JSON.stringify(sourceDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  await expect(
+    editable.locator(
+      '[data-be-block-id="toggle-1"] > [data-be-block-group] > [data-be-block-id="table-1"]',
+    ),
+  ).toHaveCount(1);
+
+  const table = editable.locator("table");
+  await expect(table).toBeVisible();
+  // 위 top-level 테스트와 같은 이유로 contenteditable 안을 먼저 클릭해
+  // Control+z가 ProseMirror history에 닿게 한다.
+  await table.locator("td").first().click();
+  await table.locator("td").first().hover();
+
+  const indentButton = page.getByRole("button", { name: "Indent table" });
+  const outdentButton = page.getByRole("button", { name: "Outdent table" });
+  // 앞 형제가 없는 유일한 자식이라 canIndent는 false다(indent-commands.ts).
+  await expect(indentButton).toBeDisabled();
+  await expect(outdentButton).toBeEnabled();
+
+  await outdentButton.click();
+
+  await expect(
+    editable.locator(':scope > [data-be-block-id="table-1"]'),
+  ).toHaveCount(1);
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+
+  await page.keyboard.press("Control+z");
+
+  await expect(
+    editable.locator(
+      '[data-be-block-id="toggle-1"] > [data-be-block-group] > [data-be-block-id="table-1"]',
+    ),
+  ).toHaveCount(1);
+});

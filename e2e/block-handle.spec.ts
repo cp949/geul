@@ -126,6 +126,101 @@ test("블록 메뉴에서 삭제하면 블록이 사라지고 undo 1회로 복�
   await expect(editable.locator("p").last()).toHaveText("second block");
 });
 
+test("블록 메뉴에서 Indent를 클릭하면 앞 형제의 자식으로 들여쓰기되고 undo 1회로 복원된다 (Issue #126)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("first block");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("second block");
+
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+
+  const secondBlock = editable.locator("p").nth(1);
+  await secondBlock.hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Indent" }).click();
+
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+  // trailing-block-extension.ts(UI-010): 최상위 마지막 블록이 더는
+  // "자식 없는 paragraph"가 아니라, 같은 dispatch가 문서 끝에 새 빈
+  // paragraph를 추가한다 — 그래서 "second block"은 더 이상 p.last()가
+  // 아니라 nth(1)이다. undo 1회가 이 추가도 함께 되돌린다(R-8).
+  await expect(editable.locator("p").nth(1)).toHaveText("second block");
+
+  await page.keyboard.press("Control+z");
+
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(editable.locator("p")).toHaveCount(2);
+});
+
+test("블록 메뉴에서 Outdent를 클릭하면 부모의 형제로 내어쓰기되고 undo 1회로 복원된다 (Issue #126)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const nestedDocument = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "parent-1",
+        type: "paragraph",
+        content: [{ text: "parent" }],
+        children: [
+          { id: "child-1", type: "paragraph", content: [{ text: "child" }] },
+        ],
+      },
+    ],
+  };
+  await page.getByLabel("Document source").fill(JSON.stringify(nestedDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+
+  const childBlock = editable.locator('[data-be-block-id="child-1"] > p');
+  await childBlock.hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Outdent" }).click();
+
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(
+    editable.locator(':scope > [data-be-block-id="child-1"]'),
+  ).toHaveCount(1);
+
+  await page.keyboard.press("Control+z");
+
+  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+});
+
+test("블록 메뉴의 Indent/Outdent 항목은 적용 불가 상태에서 비활성화된다 (Issue #126)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("only block");
+
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+
+  const menu = page.getByRole("menu", { name: "Block menu" });
+  await expect(menu).toBeVisible();
+  // 앞 형제도 없고(canIndent false) 최상위 depth 0(canOutdent false)이라
+  // getBlockNestingActionState가 둘 다 false를 반환한다(indent-commands.ts).
+  await expect(menu.getByRole("menuitem", { name: "Indent" })).toBeDisabled();
+  await expect(menu.getByRole("menuitem", { name: "Outdent" })).toBeDisabled();
+});
+
 test("Escape로 블록 메뉴를 닫으면 편집기로 초점을 복구한다", async ({
   page,
 }) => {
@@ -354,8 +449,8 @@ test("스크롤·뷰포트 변경 후 블록 메뉴가 블록을 따르고 마�
 test("메뉴보다 짧은 뷰포트에서도 블록 메뉴 맨 아래 Delete 항목을 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
-  // 블록 메뉴는 "Turn into" 헤더 + 블록 타입 9개 + 구분선 + Duplicate +
-  // Delete라 높이 200px 뷰포트의 클램프 여백(위아래 8px씩)을
+  // 블록 메뉴는 "Turn into" 헤더 + 블록 타입 9개 + 구분선 + Indent + Outdent +
+  // Duplicate + Delete라 높이 200px 뷰포트의 클램프 여백(위아래 8px씩)을
   // 빼면 184px만 남아 메뉴가 확실히 넘친다. 클램프는 좌표만 접을 뿐이라
   // 뷰포트보다 큰 메뉴의 아래쪽 항목에는 닿지 못한다 — max-height와
   // overflow-y가 함께 있어야 한다(PIT-0011 예방 규칙).

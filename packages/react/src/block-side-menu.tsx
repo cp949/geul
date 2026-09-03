@@ -533,6 +533,14 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     );
     return source === null ? [] : getBlockTypeOptionsForSource(source);
   })();
+  // Indent/Outdent 비활성 판정은 core의 getBlockNestingActionState 한 곳을
+  // 공유한다(formatting-toolbar.tsx와 같은 관용구, Issue #126) — 표는 이
+  // gutter의 hover 대상에서 이미 제외돼 blockMenuState.blockId가 표를 가리킬
+  // 일이 없다.
+  const nestingActions =
+    blockMenuState === null
+      ? null
+      : editor.getBlockNestingActionState(blockMenuState.blockId);
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
@@ -641,6 +649,18 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     closeBlockMenu();
   };
 
+  const handleIndentBlock = () => {
+    if (blockMenuState === null) return;
+    editor.commands.indentBlock(blockMenuState.blockId);
+    closeBlockMenu();
+  };
+
+  const handleOutdentBlock = () => {
+    if (blockMenuState === null) return;
+    editor.commands.outdentBlock(blockMenuState.blockId);
+    closeBlockMenu();
+  };
+
   const handleDuplicate = () => {
     if (blockMenuState === null) return;
     editor.commands.duplicateBlock(blockMenuState.blockId);
@@ -724,6 +744,20 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
               margin-inline auto가 남으면 flex column에서 hr이 0폭으로
               붕괴한다 */}
           <hr className="geul-block-menu__divider" />
+          <MenuItemButton
+            className={blockMenuItemClassName}
+            disabled={nestingActions?.canIndent !== true}
+            onClick={handleIndentBlock}
+          >
+            Indent
+          </MenuItemButton>
+          <MenuItemButton
+            className={blockMenuItemClassName}
+            disabled={nestingActions?.canOutdent !== true}
+            onClick={handleOutdentBlock}
+          >
+            Outdent
+          </MenuItemButton>
           <MenuItemButton
             className={blockMenuItemClassName}
             onClick={handleDuplicate}

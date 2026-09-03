@@ -81,6 +81,11 @@
     background-color: var(--geul-color-accent-muted, #e8f0fe);
   }
 
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
   &--danger {
     color: var(--geul-color-danger, #d93025);
   }

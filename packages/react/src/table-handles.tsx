@@ -1,5 +1,11 @@
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-core";
-import { GripHorizontal, GripVertical, Plus } from "lucide-react";
+import {
+  GripHorizontal,
+  GripVertical,
+  IndentDecrease,
+  IndentIncrease,
+  Plus,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -34,15 +40,26 @@ const rowHandleLabel = "Drag to reorder row, click for options";
 const columnHandleLabel = "Drag to reorder column, click for options";
 const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
+// 표를 대상화할 팝업 메뉴는 두지 않는다 — block-side-menu.tsx의 gutter가
+// <table>을 hover 대상에서 제외해(entitySelector ":not(table)") 그 블록
+// 메뉴가 표에 절대 열리지 않으므로, 직접 IconButton 2개가 표의 유일한
+// Indent/Outdent 진입점이다(01-계획.md "결정", Issue #126).
+const indentTableLabel = "Indent table";
+const outdentTableLabel = "Outdent table";
 
 const rowHandleIcon = <GripVertical {...iconProps} />;
 const columnHandleIcon = <GripHorizontal {...iconProps} />;
 const addIcon = <Plus {...iconProps} />;
+const indentTableIcon = <IndentIncrease {...iconProps} />;
+const outdentTableIcon = <IndentDecrease {...iconProps} />;
 
 // touch-action: none — 터치 드래그를 브라우저 스크롤 제스처에 뺏기면
 // pointercancel로 드래그가 중단된다(setPointerCapture는 이를 막지 못한다).
 const handleButtonClassName = "geul-table-handle";
 const expandButtonClassName = "geul-table-expand-button";
+// addRow/addColumn(expandButtonClassName)과 같은 "직접 클릭 버튼" 모양을
+// 쓰되, 재정렬(cursor: grab)이 아니라 1회성 액션이라 별도 클래스로 둔다.
+const nestingButtonClassName = "geul-table-nesting-button";
 
 // 행/열 핸들(표 바깥 24px)과 빠른 확장 버튼(표 바깥 4~24px)을 포함하는
 // hover 유지 여백. 이 여백 없이 hover를 즉시 해제하면 포인터가 표에서
@@ -67,6 +84,8 @@ const TABLE_HOVER_IGNORE_SELECTORS = [
   "[data-be-table-expand-row]",
   "[data-be-table-expand-column]",
   "[data-be-table-menu]",
+  "[data-be-table-indent]",
+  "[data-be-table-outdent]",
 ] as const;
 
 // colgroup col의 인라인 width는 renderHTML이 쓴 모델 열 너비다. 셀 rect는
@@ -238,6 +257,12 @@ export const TableHandles = () => {
     activeTableId === null || element === null
       ? null
       : readGeometryFor(element, activeTableId);
+  // Indent/Outdent 비활성 판정은 core의 getBlockNestingActionState 한 곳을
+  // 공유한다(formatting-toolbar.tsx와 같은 관용구, Issue #126).
+  const tableNestingActions =
+    geometry === null
+      ? null
+      : editor.getBlockNestingActionState(geometry.tableBlockId);
 
   // 핸들은 position: fixed라 스크롤/창 크기 변경 시 pointermove 없이도
   // 표와 어긋난다 — 재렌더를 강제해 geometry를 다시 읽는다.
@@ -642,6 +667,18 @@ export const TableHandles = () => {
     editor.commands.insertTableColumn(fresh.tableBlockId, fresh.columns.length);
   };
 
+  const handleIndentTable = () => {
+    const fresh = readFreshGeometry();
+    if (fresh === null) return;
+    editor.commands.indentBlock(fresh.tableBlockId);
+  };
+
+  const handleOutdentTable = () => {
+    const fresh = readFreshGeometry();
+    if (fresh === null) return;
+    editor.commands.outdentBlock(fresh.tableBlockId);
+  };
+
   const reorderGuideRect = (() => {
     if (
       geometry === null ||
@@ -816,6 +853,43 @@ export const TableHandles = () => {
               position: "fixed",
               left: geometry.right + 4,
               top: geometry.top + (geometry.bottom - geometry.top) / 2 - 10,
+            }}
+          />
+          {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
+              row 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열
+              중앙이라 더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md
+              "결정") — 새 clamp 로직 없이 기존 fixed 좌표 관용구를 그대로
+              쓴다(PIT-0011). */}
+          <IconButton
+            aria-disabled={
+              tableNestingActions?.canIndent === true ? "false" : "true"
+            }
+            className={nestingButtonClassName}
+            data-be-table-indent=""
+            disabled={tableNestingActions?.canIndent !== true}
+            icon={indentTableIcon}
+            label={indentTableLabel}
+            onClick={handleIndentTable}
+            style={{
+              position: "fixed",
+              left: geometry.left - 48,
+              top: geometry.top - 24,
+            }}
+          />
+          <IconButton
+            aria-disabled={
+              tableNestingActions?.canOutdent === true ? "false" : "true"
+            }
+            className={nestingButtonClassName}
+            data-be-table-outdent=""
+            disabled={tableNestingActions?.canOutdent !== true}
+            icon={outdentTableIcon}
+            label={outdentTableLabel}
+            onClick={handleOutdentTable}
+            style={{
+              position: "fixed",
+              left: geometry.left - 24,
+              top: geometry.top - 24,
             }}
           />
         </>
