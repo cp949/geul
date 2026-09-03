@@ -191,7 +191,10 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
             id: "bad-color",
             type: "paragraph",
             content: [
-              { text: "colored", marks: [{ type: "textColor", color: "#aabbcc" }] },
+              {
+                text: "colored",
+                marks: [{ type: "textColor", color: "#aabbcc" }],
+              },
             ],
           },
         ],

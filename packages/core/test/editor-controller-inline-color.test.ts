@@ -146,7 +146,10 @@ describe("에디터 컨트롤러 인라인 색상 토글", () => {
         blocks: [
           {
             content: [
-              { text: "content", marks: [{ type: markType, color: "#AABBCC" }] },
+              {
+                text: "content",
+                marks: [{ type: markType, color: "#AABBCC" }],
+              },
             ],
           },
         ],
@@ -212,9 +215,9 @@ describe("에디터 컨트롤러 인라인 색상 토글", () => {
     const { tiptap } = mountTiptapEditor(editor);
     tiptap.commands.setTextSelection({ from: 2, to: 9 });
 
-    expect(
-      editor.commands.toggleInlineTextColor("#AABBCC"),
-    ).toMatchObject({ ok: true });
+    expect(editor.commands.toggleInlineTextColor("#AABBCC")).toMatchObject({
+      ok: true,
+    });
     expect(
       editor.commands.toggleInlineBackgroundColor("#112233"),
     ).toMatchObject({ ok: true });
@@ -236,14 +239,17 @@ describe("에디터 컨트롤러 인라인 색상 토글", () => {
     });
 
     // backgroundColor 해제가 textColor는 건드리지 않는다.
-    expect(
-      editor.commands.toggleInlineBackgroundColor(null),
-    ).toMatchObject({ ok: true });
+    expect(editor.commands.toggleInlineBackgroundColor(null)).toMatchObject({
+      ok: true,
+    });
     expect(editor.getDocument()).toMatchObject({
       blocks: [
         {
           content: [
-            { text: "content", marks: [{ type: "textColor", color: "#AABBCC" }] },
+            {
+              text: "content",
+              marks: [{ type: "textColor", color: "#AABBCC" }],
+            },
           ],
         },
       ],

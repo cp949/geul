@@ -28,16 +28,51 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // import-html.ts의 findChildrenWrapper가 children 컨테이너를 알아보지
   // 못하고 children이 조용히 사라진다(완료 조건 3의 변이 시나리오).
   div: ["dataBeBlockId", "dataBeChildren"],
-  h1: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
-  h2: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
-  h3: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
-  h4: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
-  h5: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
-  h6: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
+  h1: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
+  h2: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
+  h3: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
+  h4: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
+  h5: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
+  h6: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
   // hr(divider)은 속성이 블록 id뿐이다 — 이 항목이 없으면 sanitize가 "*"
   // 규칙으로 id를 지워 divider의 id가 왕복에서 새로 발급된다.
   hr: ["dataBeBlockId"],
-  p: ["dataBeBlockId", "dataBeTextColor", "dataBeBackgroundColor", "dataBeTextAlignment"],
+  p: [
+    "dataBeBlockId",
+    "dataBeTextColor",
+    "dataBeBackgroundColor",
+    "dataBeTextAlignment",
+  ],
   pre: ["dataBeBlockId", "dataLanguage", "className"],
   // 인라인 textColor/backgroundColor mark의 HTML 매핑이다(spec §7.1, RD-004
   // DELTA-01). 표 셀 색상(`data-be-*`)과 달리 실제 CSS `style` 속성을 쓴다 —

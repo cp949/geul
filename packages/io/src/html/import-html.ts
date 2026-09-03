@@ -106,7 +106,9 @@ const htmlImportSanitizeSchema = {
 // importHtml 끝의 parseDocument 한 곳(G-CNV-001)이 한다.
 const textBlockPropsFromElement = (
   element: HtmlElementNode,
-): Partial<Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">> => {
+): Partial<
+  Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">
+> => {
   const textColor = propertyString(element, "dataBeTextColor");
   const backgroundColor = propertyString(element, "dataBeBackgroundColor");
   const textAlignment = propertyString(element, "dataBeTextAlignment") as
@@ -1004,11 +1006,7 @@ const blocksFromListElement = (
       consumePreservedAttributeWarning(warnings, "li", "dataBeTextColor");
     }
     if (propertyString(child, "dataBeBackgroundColor") !== undefined) {
-      consumePreservedAttributeWarning(
-        warnings,
-        "li",
-        "dataBeBackgroundColor",
-      );
+      consumePreservedAttributeWarning(warnings, "li", "dataBeBackgroundColor");
     }
     if (propertyString(child, "dataBeTextAlignment") !== undefined) {
       consumePreservedAttributeWarning(warnings, "li", "dataBeTextAlignment");
@@ -1194,8 +1192,7 @@ const blocksFromNodes = (
         );
       }
       if (
-        propertyString(details.summaryNode, "dataBeTextAlignment") !==
-        undefined
+        propertyString(details.summaryNode, "dataBeTextAlignment") !== undefined
       ) {
         consumePreservedAttributeWarning(
           warnings,

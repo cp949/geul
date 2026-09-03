@@ -161,11 +161,9 @@ const wrapMark = (
       // reverse+reduce 실측 확인).
       return element("span", { style: `color:${mark.color}` }, [node]);
     case "backgroundColor":
-      return element(
-        "span",
-        { style: `background-color:${mark.color}` },
-        [node],
-      );
+      return element("span", { style: `background-color:${mark.color}` }, [
+        node,
+      ]);
   }
 };
 

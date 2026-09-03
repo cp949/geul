@@ -108,12 +108,17 @@ describe.each(blockColorCommands)("$command", ({ command, field }) => {
 
   it("명시적 null을 넘기면 설정된 색을 해제한다", () => {
     const source = paragraphWithProps("p-1", "본문", { [field]: "#AABBCC" });
-    const { editor } = mounted(documentOf(source, paragraphBlock("tail", "꼬리")));
+    const { editor } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
 
     expect(editor.commands[command]("p-1", null)).toEqual(okResult);
 
     expect(editor.getDocument()).toEqual({
-      ...documentOf(paragraphBlock("p-1", "본문"), paragraphBlock("tail", "꼬리")),
+      ...documentOf(
+        paragraphBlock("p-1", "본문"),
+        paragraphBlock("tail", "꼬리"),
+      ),
       revision: 1,
     });
   });
@@ -136,7 +141,9 @@ describe.each(blockColorCommands)("$command", ({ command, field }) => {
   });
 
   it("존재하지 않는 blockId는 BLOCK_NOT_FOUND를 무변경으로 반환한다", () => {
-    const { editor, tiptap } = mounted(documentOf(paragraphBlock("p-1", "본문")));
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("p-1", "본문")),
+    );
     const before = editorState(editor, tiptap);
 
     expect(editor.commands[command]("missing", "#AABBCC")).toEqual({
@@ -187,7 +194,9 @@ describe("setBlockTextAlignment", () => {
   });
 
   it("이미 같은 정렬이 설정된 상태에서 같은 값을 다시 호출하면 무변경 COMMAND_NOT_APPLICABLE이다", () => {
-    const source = paragraphWithProps("p-1", "본문", { textAlignment: "center" });
+    const source = paragraphWithProps("p-1", "본문", {
+      textAlignment: "center",
+    });
     const { editor, tiptap } = mounted(
       documentOf(source, paragraphBlock("tail", "꼬리")),
     );
@@ -200,15 +209,22 @@ describe("setBlockTextAlignment", () => {
   });
 
   it("명시적 null을 넘기면 설정된 정렬을 해제한다", () => {
-    const source = paragraphWithProps("p-1", "본문", { textAlignment: "center" });
-    const { editor } = mounted(documentOf(source, paragraphBlock("tail", "꼬리")));
+    const source = paragraphWithProps("p-1", "본문", {
+      textAlignment: "center",
+    });
+    const { editor } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
 
     expect(editor.commands.setBlockTextAlignment("p-1", null)).toEqual(
       okResult,
     );
 
     expect(editor.getDocument()).toEqual({
-      ...documentOf(paragraphBlock("p-1", "본문"), paragraphBlock("tail", "꼬리")),
+      ...documentOf(
+        paragraphBlock("p-1", "본문"),
+        paragraphBlock("tail", "꼬리"),
+      ),
       revision: 1,
     });
   });
@@ -229,7 +245,9 @@ describe("setBlockTextAlignment", () => {
   });
 
   it("존재하지 않는 blockId는 BLOCK_NOT_FOUND를 무변경으로 반환한다", () => {
-    const { editor, tiptap } = mounted(documentOf(paragraphBlock("p-1", "본문")));
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("p-1", "본문")),
+    );
     const before = editorState(editor, tiptap);
 
     expect(editor.commands.setBlockTextAlignment("missing", "center")).toEqual({
@@ -280,7 +298,8 @@ describe("TextBlockProps 적용 대상 판정 공통 계약", () => {
       okResult,
     );
 
-    const [resultHeading, resultQuote, resultList] = editor.getDocument().blocks;
+    const [resultHeading, resultQuote, resultList] =
+      editor.getDocument().blocks;
     expect(resultHeading).toMatchObject({ textColor: "#112233" });
     expect(resultQuote).toMatchObject({ textColor: "#112233" });
     expect(resultList).toMatchObject({ textColor: "#112233" });

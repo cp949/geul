@@ -31,7 +31,8 @@ describe("인라인 색상·블록 색상/정렬 GFM 손실", () => {
           {
             kind: "INLINE_COLOR",
             blockId: "paragraph-1",
-            message: "Block paragraph-1 contains inline text or background color",
+            message:
+              "Block paragraph-1 contains inline text or background color",
           },
         ],
       },
@@ -107,7 +108,10 @@ describe("인라인 색상·블록 색상/정렬 GFM 손실", () => {
           id: "paragraph-1",
           type: "paragraph",
           content: [
-            { text: "x", marks: [{ type: "backgroundColor", color: "#000000" }] },
+            {
+              text: "x",
+              marks: [{ type: "backgroundColor", color: "#000000" }],
+            },
           ],
           textColor: "#FF0000",
           textAlignment: "right",
@@ -123,7 +127,8 @@ describe("인라인 색상·블록 색상/정렬 GFM 손실", () => {
           {
             kind: "INLINE_COLOR",
             blockId: "paragraph-1",
-            message: "Block paragraph-1 contains inline text or background color",
+            message:
+              "Block paragraph-1 contains inline text or background color",
           },
           {
             kind: "BLOCK_COLOR",
@@ -200,7 +205,10 @@ describe("인라인 색상·블록 색상/정렬 GFM 손실", () => {
           id: "paragraph-1",
           type: "paragraph",
           content: [
-            { text: "x", marks: [{ type: "backgroundColor", color: "#000000" }] },
+            {
+              text: "x",
+              marks: [{ type: "backgroundColor", color: "#000000" }],
+            },
           ],
           textColor: "#FF0000",
           textAlignment: "right",

@@ -227,7 +227,11 @@ describe("인라인 색상 mark HTML import", () => {
           formatVersion: 1,
           revision: 0,
           blocks: [
-            { id: "paragraph-1", type: "paragraph", content: [{ text: "named" }] },
+            {
+              id: "paragraph-1",
+              type: "paragraph",
+              content: [{ text: "named" }],
+            },
           ],
         },
         warnings: [],
