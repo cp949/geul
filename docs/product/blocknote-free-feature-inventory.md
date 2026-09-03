@@ -58,7 +58,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | ID | 기능 | 목표 | 단계 | 상태 | BlockNote 근거 |
 | --- | --- | --- | --- | --- | --- |
 | `DOC-001` | 안정적인 블록 ID와 블록 트리 | `PARITY` | R0 | `VERIFIED` | `foundations/document-structure.mdx` |
-| `DOC-002` | 자식 블록 중첩 모델 | `PARITY` | R2 | `PARTIAL` | `foundations/document-structure.mdx` — 슬라이스 1(Issue #38)이 `paragraph`·`heading` 중첩을 구현(재귀 검증·깊이 상한 64, 컨테이너 스키마, HTML/GFM round-trip). 자식 딸린 블록의 이동·복제(`moveBlockBefore`/`duplicateBlock`)는 하위 트리 미인지로 거절 잔존(Issue #125), 다른 블록 타입의 중첩은 후속 슬라이스 |
+| `DOC-002` | 자식 블록 중첩 모델 | `PARITY` | R2 | `PARTIAL` | `foundations/document-structure.mdx` — 슬라이스 1(Issue #38)이 `paragraph`·`heading` 중첩을 구현(재귀 검증·깊이 상한 64, 컨테이너 스키마, HTML/GFM round-trip). 자식 딸린 블록의 `moveBlockBefore`/`duplicateBlock`은 Issue #125가 하위 트리 인지 구현으로 해소(2026-09-03, spec §5.4) — 남은 `PARTIAL` 사유는 다른 블록 타입의 중첩(paragraph/heading 외)만 후속 슬라이스로 남았다 |
 | `DOC-003` | 독자 JSON 저장·복원 | `ENHANCED` | R0 | `VERIFIED` | `foundations/supported-formats.mdx` |
 | `DOC-004` | 블록 읽기와 순회 API | `PARITY` | R4 | `NOT_STARTED` | `reference/editor/manipulating-content.mdx` |
 | `DOC-005` | 블록 삽입·수정·교체·삭제 API | `PARITY` | R4 | `NOT_STARTED` | `reference/editor/manipulating-content.mdx` |
@@ -120,7 +120,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-001` | 검색 가능한 슬래시 메뉴 | `PARITY` | R1 | `VERIFIED` | `SuggestionMenu`, default slash items |
 | `UI-002` | 블록 추가 버튼 | `PARITY` | R1 | `VERIFIED` | `SideMenu/AddBlockButton` |
 | `UI-003` | 블록 drag handle과 재정렬 | `PARITY` | R1 | `VERIFIED` | `SideMenu`, drag extension(구현은 Pointer Event 사용) |
-| `UI-004` | 여러 블록 선택·이동·삭제 | `PARITY` | R2 | `NOT_STARTED` | `SideMenu/MultipleNodeSelection` |
+| `UI-004` | 여러 블록 선택·이동·삭제 | `PARITY` | R2 | `VERIFIED` | `SideMenu/MultipleNodeSelection` — Issue #38 슬라이스 7(2026-09-03 dev 병합)이 `blockSelection` 상태·`selectBlockRange`/`deleteSelectedBlocks`/`moveSelectedBlocksBefore`·`BlockSelectionToolbar`·`e2e/block-selection.spec.ts`로 구현·검증(이 갱신은 Issue #125 정리 세션이 실측 대조 후 소급 반영 — 슬라이스 7 자체 완료 시점에 누락됐던 inventory 동기화) |
 | `UI-005` | 블록 종류 변경 메뉴 | `PARITY` | R1 | `VERIFIED` | formatting toolbar block type select |
 | `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `PARTIAL` | formatting toolbar nest buttons — 슬라이스 1이 서식 툴바 들여쓰기/내어쓰기 버튼(`indentBlock`/`outdentBlock`)과 중첩 시각 렌더링을 구현. 표(`TableBlock`) 들여쓰기 UI 경로는 아직 없음(Issue #126) |
 | `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |

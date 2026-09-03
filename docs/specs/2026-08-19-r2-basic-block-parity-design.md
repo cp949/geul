@@ -178,6 +178,18 @@ CodeBlock의 Enter는 source에 LF를 삽입하는 일반 code editing만 담당
 - 삭제는 선택된 블록과 그 `children`을 통째로 삭제한다.
 - ProseMirror에는 다중 노드 selection이 없다(`NodeSelection`은 단일 노드) — 선택 상태는 core가 별도로 관리하는 `blockSelection: { fromBlockId, toBlockId } | null`이며 ProseMirror `Selection`과 독립적이다. React는 이 상태를 읽어 하이라이트만 그린다(7.1 원칙 재사용 — 좌표 계산과 표시만).
 
+### 5.4 단일 블록 하위 트리 인지 이동·복제(Issue #125)
+
+`moveBlockBefore`/`duplicateBlock`(R1 기존 명령)은 슬라이스 1이 `children`을 도입한 뒤 한동안 자식 딸린 블록을 `COMMAND_NOT_APPLICABLE`로 거절했다(Issue #125). 2026-09-03 이 거절을 아래 계약으로 교체했다.
+
+- **`moveBlockBefore(blockId, beforeBlockId)`**: 목적지는 (a) 다른 부모의 `children` 목록 안 임의 위치, (b) `beforeBlockId === null`인 최상위 문서 끝을 모두 지원한다. `null`은 항상 최상위 문서 끝을 의미하며 소스의 현재 부모 끝이 아니다. 원본과 하위 트리 전체(표 포함)를 하나의 transaction으로 옮긴다.
+  - 목적지가 소스 자신의 하위 트리 안(자손)이면 mutation 전 `COMMAND_NOT_APPLICABLE`.
+  - 이동 결과 최심부가 `MAX_NESTING_DEPTH`(64, 3.2)를 넘으면 mutation 전 `COMMAND_NOT_APPLICABLE`(새 에러 코드를 만들지 않고 `indentBlock`과 같은 코드로 수렴 — 5.1 결정에 이어 공개 에러 union을 바꾸지 않는다는 원칙 유지).
+  - 표를 소스로 한 이동은 같은 부모 형제 간·cross-parent 모두 성공한다(신규 거절 가드 없음 — 표는 스키마상 `blockContainer`와 동급 형제라 core 계약을 막을 근거가 없다. 제품 UI가 표를 드래그 후보에서 제외하는 것은 UI 계층의 선택이다).
+- **`duplicateBlock(blockId)`**: 자식이 있는 블록을 대상으로 호출하면 하위 트리 전체를 복제하고 모든 `blockId`를 원본과 겹치지 않게 재귀 재발급한다. 복제되는 하위 트리 안에 표가 자식으로 들어있으면(표 자신이 직접 대상이 아닌 경우) 그 표의 column/row/cell id도 함께 재귀 재발급한다 — clone(참조 복사)이 표 내부 id 중복을 낳기 때문이다. 표 자신이 직접 duplicate 대상인 경우는 계속 `COMMAND_NOT_APPLICABLE`(id 재사용이 아니라 clone 자체가 표 row/cell/column id 중복을 낳는 문제라 전용 처리 없이는 위험하다는 판단을 유지).
+- 두 명령 모두 성공은 revision과 `onChange`를 한 번만 변경하고 undo 1회로 원본 트리와 selection을 복원한다.
+- `UI-004`(다중 블록 선택 이동, 5.3)와는 별개 계약이다 — `moveSelectedBlocksBefore`는 여전히 같은 부모 형제 안으로만 제한된다.
+
 ## 6. React UX
 
 ### 6.1 들여쓰기/내어쓰기 UI
