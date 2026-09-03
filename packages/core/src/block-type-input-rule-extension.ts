@@ -2,12 +2,20 @@ import { Extension, InputRule } from "@tiptap/core";
 import type { Mark, NodeType } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextSelection } from "@tiptap/pm/state";
+import { canonicalizeCodeBlockLanguage } from "@cp949/geul-model";
 
-// heading(1~6)·quote·checkListItem 입력 규칙. list-input-rule-extension.ts의
-// createListInputRule과 같은 계약이다 — 빈 paragraph 선두에서 marker + 공백
-// 정확 일치 시에만 반응하고, 캐럿이 속한 blockContainer의 콘텐츠 노드
-// 타입만 바꾼다(blockId 불변). 셋 다 nestableBlockContent라 setBlockType으로
-// 표현 가능하다(content 없는 divider만 구조적 예외, 아래 별도 handler).
+// heading(1~6)·quote·checkListItem·codeBlock 입력 규칙. list-input-rule-
+// extension.ts의 createListInputRule과 같은 계약이다 — 빈 paragraph
+// 선두에서 marker + 공백 정확 일치 시에만 반응하고, 캐럿이 속한
+// blockContainer의 콘텐츠 노드 타입만 바꾼다(blockId 불변). heading/quote/
+// checkListItem은 nestableBlockContent라 setBlockType으로 표현 가능하다
+// (content 없는 divider만 구조적 예외, 아래 별도 handler). codeBlock은
+// leafBlockContent라 setBlockType 자체는 가능하지만(구조적 치환 불필요),
+// blockContainer.content가 "(nestableBlockContent blockGroup?) |
+// leafBlockContent"라 대상에 이미 blockGroup(들여쓴 자식)이 있으면 그
+// alternative를 만족 못 해 PM이 조용히 no-op한다 — 아래 allowsChildren 가드가
+// 이를 막는다(RD-003.md "결정" (a), generic-block-commands.ts의 기존
+// `hasChildren` 가드와 같은 제약의 InputRule 쪽 대응).
 // 즉시 Backspace 복원은 이 파일에서 별도로 구현하지 않는다 —
 // ListInputRuleExtension의 Backspace 단축키와 undo-bridge plugin이 대신
 // 처리한다. Tiptap core는 addInputRules를 가진 확장마다 별도 isInputRules
@@ -22,8 +30,13 @@ const createBlockTypeInputRule = (
   attrsFromMatch: (
     match: RegExpMatchArray,
   ) => Record<string, unknown> | undefined,
-): InputRule =>
-  new InputRule({
+): InputRule => {
+  // 타입명을 하드코딩하지 않고 그룹으로 판정한다 — 현재는 codeBlock만
+  // leafBlockContent라 이 가드가 실제로 걸리지만, 향후 다른 leafBlockContent
+  // 대상이 추가돼도 재사용된다.
+  const allowsChildren = type.isInGroup("nestableBlockContent");
+
+  return new InputRule({
     find,
     handler: ({ state, range, match }) => {
       const $from = state.doc.resolve(range.from);
@@ -37,12 +50,15 @@ const createBlockTypeInputRule = (
       const marker = match[0].slice(0, -1);
       // Tiptap matcher는 캐럿 앞 텍스트만 읽는다. 전체 pre-input paragraph와
       // selection을 별도로 확인해야 suffix·선택 대체·simulated input을
-      // 막는다(list-input-rule-extension.ts와 동일 근거).
+      // 막는다(list-input-rule-extension.ts와 동일 근거). childCount > 1은
+      // container가 콘텐츠 노드 뒤에 blockGroup(들여쓴 자식)을 이미 갖고
+      // 있다는 뜻 — leafBlockContent 대상은 이 상태와 공존할 수 없다.
       if (
         !state.selection.empty ||
         $from.parent.type.name !== "paragraph" ||
         container.type.name !== "blockContainer" ||
-        $from.parent.textContent !== marker
+        $from.parent.textContent !== marker ||
+        (!allowsChildren && container.childCount > 1)
       ) {
         return null;
       }
@@ -56,6 +72,7 @@ const createBlockTypeInputRule = (
         .setStoredMarks(storedMarks);
     },
   });
+};
 
 // divider `---` 입력 규칙. content 없는 비포장 atom(divider-extension.ts)이라
 // heading/quote와 달리 setBlockType으로 표현할 수 없다 — 대상 blockContainer
@@ -129,10 +146,12 @@ export const BlockTypeInputRuleExtension = Extension.create({
     const heading = this.editor.schema.nodes.heading;
     const quote = this.editor.schema.nodes.quote;
     const checkListItem = this.editor.schema.nodes.checkListItem;
+    const codeBlock = this.editor.schema.nodes.codeBlock;
     if (
       heading === undefined ||
       quote === undefined ||
-      checkListItem === undefined
+      checkListItem === undefined ||
+      codeBlock === undefined
     ) {
       return [];
     }
@@ -151,6 +170,17 @@ export const BlockTypeInputRuleExtension = Extension.create({
       createBlockTypeInputRule(/^\[[Xx]\]\s$/, checkListItem, () => ({
         checked: true,
       })),
+      // codeBlock은 leafBlockContent라 위 allowsChildren 가드가 적용된다
+      // (RD-003.md "결정" (a)). 빈 language 캡처는 spec 4.3·기존 setBlockType
+      // 커맨드(generic-block-commands.ts)와 같은 계약으로 "text"를 쓴다
+      // (RD-003.md "결정" (d)).
+      createBlockTypeInputRule(/^```(\S*)\s$/, codeBlock, (match) => {
+        const captured = match[1] as string;
+        return {
+          language:
+            captured === "" ? "text" : canonicalizeCodeBlockLanguage(captured),
+        };
+      }),
     ];
   },
 });

@@ -301,6 +301,22 @@ export const checkListItemBlock = (
 });
 
 /**
+ * codeBlock 블록 리터럴. 펜스 native shorthand(RD-003 DELTA-01)가 쓴다.
+ * quote·checkListItem과 같은 저장 정규형(빈 텍스트는 content를 빈 배열로) —
+ * model `CodeBlock.language`는 optional이라 생략 시 필드 자체를 넣지 않는다.
+ */
+export const codeBlockBlock = (
+  id: string,
+  source: string,
+  language?: string,
+): Block => ({
+  id,
+  type: "codeBlock",
+  content: source === "" ? [] : [{ text: source }],
+  ...(language === undefined ? {} : { language }),
+});
+
+/**
  * "문단-divider-문단" 3블록 fixture 구성 요소와 그 문서. insertDivider
  * 계약(editor-controller-divider.test.ts)과 divider 명령
  * characterization(editor-controller-divider-commands.test.ts)이

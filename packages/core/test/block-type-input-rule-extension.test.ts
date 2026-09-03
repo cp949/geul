@@ -1,10 +1,12 @@
 /**
- * BlockTypeInputRuleExtension이 heading(1~6)·quote·divider·checkListItem
- * native markdown-style shorthand를 정확 일치에서만 변환하는지, blockId·
- * caret·즉시 Backspace 복원 계약을 지키는지 검증한다. divider는 content
- * 없는 비포장 atom이라 구조적 치환(caret 배치·trailing paragraph)까지
- * 고정한다. 즉시 Backspace 복원은 이 확장이 아니라 ListInputRuleExtension의
- * 전역 undo-bridge가 처리한다(list-input-rule-extension.test.ts와 같은
+ * BlockTypeInputRuleExtension이 heading(1~6)·quote·divider·checkListItem·
+ * codeBlock native markdown-style shorthand를 정확 일치에서만 변환하는지,
+ * blockId·caret·즉시 Backspace 복원 계약을 지키는지 검증한다. divider는
+ * content 없는 비포장 atom이라 구조적 치환(caret 배치·trailing paragraph)
+ * 까지 고정한다. codeBlock은 `leafBlockContent`라 대상 문단에 이미 자식
+ * 블록(blockGroup)이 있으면 변환하지 않는 구조 가드까지 고정한다(RD-003.md
+ * "결정" (a)). 즉시 Backspace 복원은 이 확장이 아니라 ListInputRuleExtension
+ * 의 전역 undo-bridge가 처리한다(list-input-rule-extension.test.ts와 같은
  * 계약 — dispatchTextInput/typeNativeText는 block-test-support.ts로 옮긴
  * 공유 헬퍼다).
  */
@@ -18,6 +20,7 @@ import {
 } from "./block-test-support.js";
 import {
   checkListItemBlock,
+  codeBlockBlock,
   dividerBlock,
   documentOf,
   headingBlock,
@@ -207,6 +210,74 @@ describe("checkListItem native shorthand exact 변환", () => {
   );
 });
 
+describe("코드 블록 펜스 native shorthand exact 변환", () => {
+  it.each([
+    ["```js", "javascript"],
+    ["```ts", "typescript"],
+    ["```", "text"],
+  ] as const)(
+    "exact %s 뒤 native space는 안정 ID를 보존한 codeBlock(language=%s)으로 변환한다",
+    (marker, language) => {
+      const { editor, tiptap } = mounted(
+        documentOf(
+          paragraphBlock("target", marker),
+          paragraphBlock("tail", "꼬리"),
+        ),
+      );
+      tiptap.commands.setTextSelection(
+        contentTextStart(tiptap, "target") + marker.length,
+      );
+
+      expect(dispatchTextInput(tiptap, " ")).toBe(true);
+      expect(editor.getDocument().blocks[0]).toEqual(
+        codeBlockBlock("target", "", language),
+      );
+      expect(tiptap.state.selection.from).toBe(
+        contentTextStart(tiptap, "target"),
+      );
+    },
+  );
+
+  it.each([
+    ["선행 공백", " ```"],
+    ["문장 중간", "x```"],
+    ["2개 백틱만", "``"],
+  ])(
+    "%s 텍스트 뒤 native space는 codeBlock으로 변환하지 않는다",
+    (_label, text) => {
+      const { editor, tiptap } = mounted(
+        documentOf(
+          paragraphBlock("target", text),
+          paragraphBlock("tail", "꼬리"),
+        ),
+      );
+      tiptap.commands.setTextSelection(
+        contentTextStart(tiptap, "target") + text.length,
+      );
+
+      expect(dispatchTextInput(tiptap, " ")).toBe(false);
+      expect(editor.getDocument().blocks[0]).toEqual(
+        paragraphBlock("target", text),
+      );
+    },
+  );
+
+  it("자식 블록이 있는 문단은 codeBlock으로 변환하지 않는다(leafBlockContent는 blockGroup과 공존 불가)", () => {
+    const child = paragraphBlock("child-1", "child");
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("target", "```js", [child])),
+    );
+    tiptap.commands.setTextSelection(
+      contentTextStart(tiptap, "target") + "```js".length,
+    );
+
+    expect(dispatchTextInput(tiptap, " ")).toBe(false);
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphBlock("target", "```js", [child]),
+    );
+  });
+});
+
 describe("새 블록 타입 native shorthand 즉시 Backspace 복원", () => {
   it("heading 변환 직후 Backspace는 marker 문단으로 복원한다", () => {
     const { editor, tiptap } = mounted(
@@ -276,6 +347,22 @@ describe("새 블록 타입 native shorthand 즉시 Backspace 복원", () => {
     expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
     expect(editor.getDocument().blocks).toEqual([
       paragraphBlock("target", "[x] "),
+      paragraphBlock("tail", ""),
+    ]);
+  });
+
+  it("codeBlock 변환 직후 Backspace는 marker 문단으로 복원한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("target", "```js"), paragraphBlock("tail", "")),
+    );
+    tiptap.commands.setTextSelection(
+      contentTextStart(tiptap, "target") + "```js".length,
+    );
+    expect(dispatchTextInput(tiptap, " ")).toBe(true);
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("target", "```js "),
       paragraphBlock("tail", ""),
     ]);
   });

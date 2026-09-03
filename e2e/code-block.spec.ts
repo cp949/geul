@@ -2,6 +2,10 @@
  * Issue #38 슬라이스 4 RD-004 — CodeBlock의 demo 배선, plain source 스타일,
  * language combobox 실제 event·focus 순서와 Tab/Shift+Tab 브라우저 동작을
  * 검증한다. 저장형·revision·undo 계약은 core/react unit test가 소유한다.
+ * 슬라이스 9 RD-003 DELTA-01 — 펜스(```lang) native shorthand의 실제 브라우저
+ * 타이핑 경로(keydown→composition→input→DOM mutation)도 이 파일이 검증한다
+ * (ADR-0007, RD-003.md "결정" (c)). 입력 규칙 로직 자체는 core 유닛 테스트
+ * (block-type-input-rule-extension.test.ts)가 소유한다.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -66,6 +70,22 @@ test("Slash /code는 빈 CodeBlock과 Code placeholder, plain monospace 스타�
   expect(style.borderStyle).toBe("solid");
   expect(Number.parseFloat(style.borderWidth)).toBeGreaterThan(0);
   expect(style.overflowX).toBe("auto");
+});
+
+test("펜스 ```lang 입력은 production editor에서 codeBlock DOM으로 변환하고 language를 canonicalize한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("```js ");
+
+  const codeBlock = editable.locator("pre[data-be-code-block]");
+  await expect(codeBlock).toBeVisible();
+  await expect(codeBlock.locator("code")).toHaveText("");
+
+  const input = page.getByRole("combobox", { name: "Code language" });
+  await expect(input).toHaveValue("javascript");
+  await expect(editable).toBeFocused();
 });
 
 test("블록 메뉴의 Code는 기존 source를 표시한 채 DOM을 CodeBlock으로 바꾼다", async ({
