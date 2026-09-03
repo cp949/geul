@@ -13,7 +13,12 @@ const loadDocument = async (page: Page, document: unknown): Promise<void> => {
   await page.getByRole("button", { name: "Load JSON" }).click();
 };
 
-/** 다음 실제 keydown이 editor에서 preventDefault됐는지 document bubble에서 읽는다. */
+/**
+ * 다음 실제 keydown이 editor에서 preventDefault됐는지 document bubble에서 읽는다.
+ * 등록한 keydown 리스너는 `window`에 임시로 붙잡아 뒀다가 `finally`에서
+ * `removeEventListener`로 제거한다(G-TST-003) — `page.keyboard.press`가
+ * 던지는 경로에서도 정리가 빠지지 않게 한다.
+ */
 const pressAndReadConsumption = async (
   page: Page,
   key: string,
@@ -23,15 +28,33 @@ const pressAndReadConsumption = async (
     : key;
   await page.evaluate((targetKey) => {
     delete document.body.dataset.beTestKeyConsumed;
-    document.addEventListener("keydown", (event) => {
+    const listener = (event: KeyboardEvent) => {
       if (event.key !== targetKey) return;
       document.body.dataset.beTestKeyConsumed = String(event.defaultPrevented);
-    });
+    };
+    document.addEventListener("keydown", listener);
+    (
+      window as typeof window & {
+        __beTestKeydownListener__?: (event: KeyboardEvent) => void;
+      }
+    ).__beTestKeydownListener__ = listener;
   }, expectedKey);
-  await page.keyboard.press(key);
-  return page.evaluate(
-    () => document.body.dataset.beTestKeyConsumed === "true",
-  );
+  try {
+    await page.keyboard.press(key);
+    return await page.evaluate(
+      () => document.body.dataset.beTestKeyConsumed === "true",
+    );
+  } finally {
+    await page.evaluate(() => {
+      const win = window as typeof window & {
+        __beTestKeydownListener__?: (event: KeyboardEvent) => void;
+      };
+      if (win.__beTestKeydownListener__ !== undefined) {
+        document.removeEventListener("keydown", win.__beTestKeydownListener__);
+        delete win.__beTestKeydownListener__;
+      }
+    });
+  }
 };
 
 /** blockContainer의 직접 목록 content locator를 찾는다. */
