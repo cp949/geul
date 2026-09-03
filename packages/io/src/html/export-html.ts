@@ -8,6 +8,7 @@ import {
   type ListItemBlock,
   parseDocument,
   type TableBlock,
+  type TextBlockProps,
 } from "@cp949/geul-model";
 import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
@@ -24,6 +25,23 @@ import {
 } from "./inline-content.js";
 
 const stringifyProcessor = unified().use(rehypeStringify);
+
+// TextBlockProps(RD-001)를 가진 7개 블록 타입(paragraph/heading/quote/목록
+// 4종)이 공유하는 data-be-* 매핑이다. 표 셀 색상·정렬(cellNode 아래)과 같은
+// 패턴이지만 필드명이 align이 아니라 textAlignment라 별도 속성명을 쓴다.
+const textBlockPropsAttributes = (
+  block: TextBlockProps,
+): HtmlElementNode["properties"] => ({
+  ...(block.textColor === undefined
+    ? {}
+    : { dataBeTextColor: block.textColor }),
+  ...(block.backgroundColor === undefined
+    ? {}
+    : { dataBeBackgroundColor: block.backgroundColor }),
+  ...(block.textAlignment === undefined
+    ? {}
+    : { dataBeTextAlignment: block.textAlignment }),
+});
 
 const cellNode = (
   table: TableBlock,
@@ -159,6 +177,7 @@ const listItemNode = (block: ListItemBlock): HtmlElementNode =>
       ...(block.type === "checkListItem"
         ? { dataBeChecked: String(block.checked) }
         : {}),
+      ...textBlockPropsAttributes(block),
     },
     [
       ...(block.children === undefined || block.children.length === 0
@@ -259,7 +278,7 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
       block.collapsed,
       htmlElement(
         "summary",
-        { dataBeBlockId: block.id },
+        { dataBeBlockId: block.id, ...textBlockPropsAttributes(block) },
         inlineContentToNodes(block.content),
       ),
       block.children,
@@ -288,7 +307,7 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
     }
     return htmlElement(
       "blockquote",
-      { dataBeBlockId: block.id },
+      { dataBeBlockId: block.id, ...textBlockPropsAttributes(block) },
       quoteChildren,
     );
   }
@@ -301,7 +320,7 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
     block.type === "paragraph" ? "p" : `h${(block as HeadingBlock).level}`;
   const ownNode = htmlElement(
     tagName,
-    { dataBeBlockId: block.id },
+    { dataBeBlockId: block.id, ...textBlockPropsAttributes(block) },
     inlineContentToNodes(block.content),
   );
 

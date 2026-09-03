@@ -11,6 +11,7 @@ import {
   sanitizeInlineText,
   type TableBlock,
   tableSizeViolationMessage,
+  type TextBlockProps,
   validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
@@ -77,11 +78,44 @@ const htmlImportSanitizeSchema = {
   tagNames: [...htmlAllowedTagNames, "details", "summary"],
   attributes: {
     ...htmlAllowedAttributes,
-    li: ["dataBeBlockId", "dataBeChecked"],
+    // 뒤 세 속성(TextBlockProps, RD-004 DELTA-02)은 li(bulletListItem/
+    // numberedListItem/checkListItem)·summary(toggleListItem)가 공유하는
+    // 블록 레벨 색상·정렬 매핑이다 — 위 htmlAllowedAttributes의
+    // p/h1~h6/blockquote와 같은 이름 규칙.
+    li: [
+      "dataBeBlockId",
+      "dataBeChecked",
+      "dataBeTextColor",
+      "dataBeBackgroundColor",
+      "dataBeTextAlignment",
+    ],
     ol: ["start"],
     details: ["dataBeBlockId", "dataBeToggleable", "dataBeCollapsed", "open"],
-    summary: ["dataBeBlockId"],
+    summary: [
+      "dataBeBlockId",
+      "dataBeTextColor",
+      "dataBeBackgroundColor",
+      "dataBeTextAlignment",
+    ],
   },
+};
+
+// TextBlockProps(RD-001) 3필드를 data-be-*에서 읽는다. 표 셀 import의
+// textColor/backgroundColor/align 읽기(아래 modelRows 구성부)와 같은 전략 —
+// 정규형 검증은 하지 않고 원시 문자열을 그대로 통과시킨다. 최종 검증은
+// importHtml 끝의 parseDocument 한 곳(G-CNV-001)이 한다.
+const textBlockPropsFromElement = (
+  element: HtmlElementNode,
+): Partial<Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">> => {
+  const textColor = propertyString(element, "dataBeTextColor");
+  const backgroundColor = propertyString(element, "dataBeBackgroundColor");
+  const textAlignment = propertyString(element, "dataBeTextAlignment") as
+    TextBlockProps["textAlignment"] | undefined;
+  return {
+    ...(textColor === undefined ? {} : { textColor }),
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    ...(textAlignment === undefined ? {} : { textAlignment }),
+  };
 };
 
 class HtmlDocumentInvalidError extends Error {}
@@ -589,6 +623,7 @@ const blocksFromSegments = (
         id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
         type: "paragraph",
         content: paragraphContentFromNodes(segment.nodes),
+        ...textBlockPropsFromElement(segment.node),
       });
       continue;
     }
@@ -602,6 +637,7 @@ const blocksFromSegments = (
         type: "heading",
         level: segment.level,
         content: paragraphContentFromNodes(segment.nodes),
+        ...textBlockPropsFromElement(segment.node),
       });
       continue;
     }
@@ -628,6 +664,7 @@ const blocksFromSegments = (
       const id = propertyString(segment.node, "dataBeBlockId") ?? createId();
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
       const content = paragraphContentFromNodes(contentNodes);
+      const quoteProps = textBlockPropsFromElement(segment.node);
       if (depth >= MAX_NESTING_DEPTH) {
         const flattened = blocksFromNodes(
           childrenNodes,
@@ -637,7 +674,10 @@ const blocksFromSegments = (
         );
         if (flattened.length > 0)
           warnings.push(nestedChildrenFlattenedWarning());
-        blocks.push({ id, type: "quote", content }, ...flattened);
+        blocks.push(
+          { id, type: "quote", content, ...quoteProps },
+          ...flattened,
+        );
         continue;
       }
       const children = blocksFromNodes(
@@ -648,8 +688,8 @@ const blocksFromSegments = (
       );
       blocks.push(
         children.length > 0
-          ? { id, type: "quote", content, children }
-          : { id, type: "quote", content },
+          ? { id, type: "quote", content, ...quoteProps, children }
+          : { id, type: "quote", content, ...quoteProps },
       );
       continue;
     }
@@ -882,6 +922,7 @@ const blocksFromListItem = (
   const id = propertyString(node, "dataBeBlockId") ?? createId();
   const { contentNodes, childrenNodes } = splitListItemChildren(node);
   const content = paragraphContentFromNodes(contentNodes);
+  const listItemProps = textBlockPropsFromElement(node);
   const ownBlock: ListItemBlock =
     listType === "numberedListItem"
       ? {
@@ -889,6 +930,7 @@ const blocksFromListItem = (
           type: "numberedListItem",
           content,
           ...(startNumber === undefined ? {} : { startNumber }),
+          ...listItemProps,
         }
       : listType === "checkListItem"
         ? {
@@ -896,8 +938,9 @@ const blocksFromListItem = (
             type: "checkListItem",
             content,
             checked: propertyString(node, "dataBeChecked") === "true",
+            ...listItemProps,
           }
-        : { id, type: "bulletListItem", content };
+        : { id, type: "bulletListItem", content, ...listItemProps };
 
   if (depth >= MAX_NESTING_DEPTH) {
     const flattened = blocksFromNodes(childrenNodes, createId, depth, warnings);
@@ -954,6 +997,21 @@ const blocksFromListElement = (
     flushNonItemRun();
     if (propertyString(child, "dataBeBlockId") !== undefined) {
       consumePreservedAttributeWarning(warnings, "li", "dataBeBlockId");
+    }
+    // TextBlockProps 3필드(RD-004 DELTA-02)도 li/dataBeBlockId와 같은 raw
+    // 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
+    if (propertyString(child, "dataBeTextColor") !== undefined) {
+      consumePreservedAttributeWarning(warnings, "li", "dataBeTextColor");
+    }
+    if (propertyString(child, "dataBeBackgroundColor") !== undefined) {
+      consumePreservedAttributeWarning(
+        warnings,
+        "li",
+        "dataBeBackgroundColor",
+      );
+    }
+    if (propertyString(child, "dataBeTextAlignment") !== undefined) {
+      consumePreservedAttributeWarning(warnings, "li", "dataBeTextAlignment");
     }
     // data-be-checked 존재 여부가 tag보다 우선한다 — own export는 항상
     // <ul>에 checkListItem을 낸다(로드맵 D3). 속성이 있으면 own-format
@@ -1114,6 +1172,37 @@ const blocksFromNodes = (
       if (propertyString(details.summaryNode, "dataBeBlockId") !== undefined) {
         consumePreservedAttributeWarning(warnings, "summary", "dataBeBlockId");
       }
+      // TextBlockProps 3필드(RD-004 DELTA-02)도 summary/dataBeBlockId와 같은
+      // raw 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
+      if (
+        propertyString(details.summaryNode, "dataBeTextColor") !== undefined
+      ) {
+        consumePreservedAttributeWarning(
+          warnings,
+          "summary",
+          "dataBeTextColor",
+        );
+      }
+      if (
+        propertyString(details.summaryNode, "dataBeBackgroundColor") !==
+        undefined
+      ) {
+        consumePreservedAttributeWarning(
+          warnings,
+          "summary",
+          "dataBeBackgroundColor",
+        );
+      }
+      if (
+        propertyString(details.summaryNode, "dataBeTextAlignment") !==
+        undefined
+      ) {
+        consumePreservedAttributeWarning(
+          warnings,
+          "summary",
+          "dataBeTextAlignment",
+        );
+      }
       const id =
         propertyString(details.summaryNode, "dataBeBlockId") ?? createId();
       const content = paragraphContentFromNodes(details.summaryNode.children);
@@ -1124,6 +1213,7 @@ const blocksFromNodes = (
         ...(details.collapsed === undefined
           ? {}
           : { collapsed: details.collapsed }),
+        ...textBlockPropsFromElement(details.summaryNode),
         ...(children.length > 0 ? { children } : {}),
       });
       continue;
