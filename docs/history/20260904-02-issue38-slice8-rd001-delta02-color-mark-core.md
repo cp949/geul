@@ -32,7 +32,7 @@ roadmap-workflow RD-001(저장 계약 파운데이션)의 두 번째이자 마�
 
 ## 등록한 이슈
 
-- 완료 댓글: 게시하지 않음. RD-001(저장 계약 파운데이션)은 완료됐으나 이 DELTA는 roadmap-workflow의 "경량 DELTA 사이클"로 실행했다 — ff-workflow 트랙-0~8 전체(계획서 리뷰·결함 탐지 subagent·`pnpm verify` 전량)를 거치지 않아 issue-tracker.md "게시 승인"의 workflow 완료 자동 게시 예외(ff-workflow 트랙-8/qq-workflow 단계-4 한정) 대상이 아니라고 판단했다. Issue #38은 후속 RD-002~004와 슬라이스가 다수 남아 있다. 사용자가 게시를 지시하면 이 문서 내용을 초안으로 완료 댓글을 만들 수 있다.
+- 완료 댓글: roadmap-workflow의 "경량 DELTA 사이클"은 issue-tracker.md "게시 승인"의 workflow 완료 자동 게시 예외(ff-workflow 트랙-8/qq-workflow 단계-4 한정) 대상이 아니라고 판단해 초안만 준비하고 사용자에게 게시 여부를 물었다. 사용자가 게시를 지시해 RD-001(DELTA-01+02 통합 요약) 완료 댓글을 게시함: https://github.com/cp949/geul/issues/38#issuecomment-5530484358 — Issue #38은 후속 RD-002~004와 슬라이스가 다수 남아 `OPEN` 유지, 닫지 않음.
 - 범위 밖 신규 이슈 등록 없음.
 
 ## 남은 제한
