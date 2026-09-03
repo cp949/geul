@@ -3,15 +3,19 @@ import {
   type Document as BlockDocument,
   type HeadingBlock,
   type IdFactory,
+  isCanonicalCellAlign,
   isCanonicalCellColor,
+  isNestableBlockType,
   isSupportedLinkHref,
   type Result,
   type TextMark,
 } from "@cp949/geul-model";
+import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
+import { findBlockPosition } from "./block-position.js";
 import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
@@ -116,6 +120,18 @@ export interface EditorController {
     toggleInlineTextColor(color: string | null): Result<void, EditorError>;
     toggleInlineBackgroundColor(
       color: string | null,
+    ): Result<void, EditorError>;
+    setBlockTextColor(
+      blockId: string,
+      color: string | null,
+    ): Result<void, EditorError>;
+    setBlockBackgroundColor(
+      blockId: string,
+      color: string | null,
+    ): Result<void, EditorError>;
+    setBlockTextAlignment(
+      blockId: string,
+      align: "left" | "center" | "right" | null,
     ): Result<void, EditorError>;
     pasteTabularData(
       data: TabularData,
@@ -531,6 +547,55 @@ export const createEditor = (
     );
   };
 
+  // setBlockTextColor/setBlockBackgroundColor/setBlockTextAlignment(RD-002
+  // DELTA-02)가 공유하는 본체. TextBlockProps 3필드 모두 blockContainer
+  // attrs에 있다(RD-001 DELTA-02, block-container-extension.ts) — blockId로
+  // 그 컨테이너를 찾고(BLOCK_NOT_FOUND), 콘텐츠 타입이 isNestableBlockType
+  // 7종(paragraph/heading/quote/목록 4종)이 아니면 COMMAND_NOT_APPLICABLE로
+  // 거절한다. table·divider는 blockContainer로 감싸이지 않아 첫 조건에서,
+  // codeBlock은 leafBlockContent라 isNestableBlockType에서 걸린다(spec
+  // §3.3). 값 검증(validate)과 attrs 병합(nextAttrs)만 property별로 주입받고,
+  // nextAttrs는 항상 기존 attrs를 스프레드한 뒤 대상 필드만 바꾼다 —
+  // setNodeMarkup에 부분 attrs를 넘기면 나머지가 schema default(null)로
+  // 리셋되는 함정을 피한다(check-list-item-commands.ts와 동일 경계).
+  const runSetBlockTextPropCommand = (
+    command: string,
+    blockId: string,
+    value: string | null,
+    validate: (value: string) => EditorError | null,
+    nextAttrs: (
+      attrs: Record<string, unknown>,
+      value: string | null,
+    ) => Record<string, unknown>,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (
+      node.type.name !== "blockContainer" ||
+      !isNestableBlockType(node.child(0).type.name)
+    ) {
+      return commandNotApplicable(command);
+    }
+    if (value !== null) {
+      const error = validate(value);
+      if (error !== null) return { ok: false, error };
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        nextAttrs(node.attrs, value),
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
   // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
@@ -889,6 +954,39 @@ export const createEditor = (
           "toggleInlineBackgroundColor",
           "backgroundColor",
           color,
+        ),
+      setBlockTextColor: (blockId, color) =>
+        runSetBlockTextPropCommand(
+          "setBlockTextColor",
+          blockId,
+          color,
+          (value) =>
+            isCanonicalCellColor(value)
+              ? null
+              : { code: "INVALID_COLOR", color: value },
+          (attrs, value) => ({ ...attrs, textColor: value }),
+        ),
+      setBlockBackgroundColor: (blockId, color) =>
+        runSetBlockTextPropCommand(
+          "setBlockBackgroundColor",
+          blockId,
+          color,
+          (value) =>
+            isCanonicalCellColor(value)
+              ? null
+              : { code: "INVALID_COLOR", color: value },
+          (attrs, value) => ({ ...attrs, backgroundColor: value }),
+        ),
+      setBlockTextAlignment: (blockId, align) =>
+        runSetBlockTextPropCommand(
+          "setBlockTextAlignment",
+          blockId,
+          align,
+          (value) =>
+            isCanonicalCellAlign(value)
+              ? null
+              : { code: "INVALID_ALIGN", align: value },
+          (attrs, value) => ({ ...attrs, textAlignment: value }),
         ),
       pasteTabularData: (data) => {
         if (session.isDestroyed)
