@@ -303,18 +303,21 @@ describe("CodeBlock 타입 비종속 블록 명령", () => {
     expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
   });
 
-  it("CodeBlock generic command의 unknown ID와 no-op과 다른 부모 이동 거절은 전체 상태와 기존 undo를 보존한다", () => {
+  it("CodeBlock generic command의 unknown ID와 no-op 거절은 전체 상태와 기존 undo를 보존한다", () => {
+    // Issue #125(D1)부터 moveBlockBefore는 cross-parent 이동을 허용한다 —
+    // 이 테스트는 그와 무관하게 여전히 거절되는 경우(BLOCK_NOT_FOUND, 같은
+    // 부모 안 이미 그 자리인 no-op)만 남긴다. cross-parent 성공은 아래
+    // "CodeBlock의 cross-parent moveBlockBefore가 성공하고..." 테스트가
+    // 검증한다.
     const code = codeBlock("code-1", "reject", "text");
     const childTail = paragraphBlock("child-tail", "child tail");
     const firstParent = paragraphBlock("parent-1", "parent one", [
       code,
       childTail,
     ]);
-    const otherChild = paragraphBlock("other-child", "other");
-    const secondParent = paragraphBlock("parent-2", "parent two", [otherChild]);
     const topTail = paragraphBlock("top-tail", "tail");
     const { editor, changes, tiptap } = mounted(
-      documentOf(firstParent, secondParent, topTail),
+      documentOf(firstParent, topTail),
     );
     expect(editor.commands.setText("top-tail", "changed")).toEqual({
       ok: true,
@@ -361,21 +364,54 @@ describe("CodeBlock 타입 비종속 블록 명령", () => {
         command: "moveBlockBefore",
       },
     });
-    expect(editor.commands.moveBlockBefore("code-1", "other-child")).toEqual({
-      ok: false,
-      error: {
-        code: "COMMAND_NOT_APPLICABLE",
-        command: "moveBlockBefore",
-      },
-    });
     expect(dispatchCount).toBe(0);
     expect(editorState(editor, tiptap)).toEqual(before);
     expect(changes).toEqual(changesBefore);
 
     expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
     expect(editor.getDocument()).toEqual({
-      ...documentOf(firstParent, secondParent, topTail),
+      ...documentOf(firstParent, topTail),
       revision: 2,
     });
+  });
+
+  it("CodeBlock의 cross-parent moveBlockBefore가 성공하고 language·content를 보존하며 undo 1회로 복원된다(Issue #125 D1)", () => {
+    const code = codeBlock("code-1", "reject", "text");
+    const childTail = paragraphBlock("child-tail", "child tail");
+    const firstParent = paragraphBlock("parent-1", "parent one", [
+      code,
+      childTail,
+    ]);
+    const otherChild = paragraphBlock("other-child", "other");
+    const secondParent = paragraphBlock("parent-2", "parent two", [otherChild]);
+    const topTail = paragraphBlock("top-tail", "tail");
+    const { editor } = mounted(
+      documentOf(firstParent, secondParent, topTail),
+    );
+    const before = editor.getDocument();
+
+    expect(editor.commands.moveBlockBefore("code-1", "other-child")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(editor.getDocument().blocks).toMatchObject([
+      { id: "parent-1", children: [{ id: "child-tail" }] },
+      {
+        id: "parent-2",
+        children: [
+          {
+            id: "code-1",
+            type: "codeBlock",
+            language: "text",
+            content: [{ text: "reject" }],
+          },
+          { id: "other-child" },
+        ],
+      },
+      { id: "top-tail" },
+    ]);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks).toEqual(before.blocks);
   });
 });

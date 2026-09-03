@@ -1,7 +1,8 @@
 /**
  * 글머리·번호 목록 항목에 적용하는 generic block command와 indent/outdent를
  * production EditorController 경계에서 검증한다. 값·안정 ID·selection·원자성,
- * undo 단위와 Issue #125의 subtree 거절 경계를 함께 고정한다.
+ * undo 단위와 Issue #125의 하위 트리 인지 duplicateBlock·cross-parent
+ * moveBlockBefore가 목록 판별자·startNumber를 보존하는지를 함께 고정한다.
  */
 import type { Block } from "@cp949/geul-model";
 import { TextSelection } from "@tiptap/pm/state";
@@ -373,11 +374,41 @@ describe("목록 항목 공용 블록 명령", () => {
     expect(changes).toEqual([]);
   });
 
-  it("자식 딸린 목록 복제와 부모를 넘는 이동은 COMMAND_NOT_APPLICABLE로 subtree 전체를 보존한다", () => {
+  // Issue #125(D6·D1)부터 자식 딸린 목록의 duplicateBlock과 목록 항목의
+  // cross-parent moveBlockBefore는 더 이상 거절되지 않는다 — 이 두 테스트가
+  // 옛 "COMMAND_NOT_APPLICABLE로 subtree 전체를 보존한다" 테스트를 새 GREEN
+  // 계약(하위 트리 재귀 복제·cross-parent 이동 성공)으로 교체한다. 목록
+  // 판별자와 startNumber가 이 파일의 관심사이므로, 두 명령이 그 값을
+  // 정확히 보존하는지가 여기서 새로 검증할 핵심이다.
+  it("자식 딸린 목록을 duplicateBlock하면 하위 트리를 재귀 복제하고 판별자를 보존하며 undo 1회로 복원된다(Issue #125 D6)", () => {
     const child = paragraphBlock("child", "자식");
     const bullet = listItemBlock("bullet", "bulletListItem", "부모", {
       children: [child],
     });
+    const tail = paragraphBlock("tail", "꼬리");
+    const { editor } = mounted(documentOf(bullet, tail));
+    const before = editor.getDocument();
+
+    expect(editor.commands.duplicateBlock("bullet")).toEqual({
+      ok: true,
+      value: { blockId: "id-1" },
+    });
+    expect(editor.getDocument().blocks).toMatchObject([
+      { id: "bullet", type: "bulletListItem", children: [{ id: "child" }] },
+      {
+        id: "id-1",
+        type: "bulletListItem",
+        content: [{ text: "부모" }],
+        children: [{ content: [{ text: "자식" }] }],
+      },
+      { id: "tail" },
+    ]);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks).toEqual(before.blocks);
+  });
+
+  it("번호 목록의 cross-parent moveBlockBefore가 성공하고 startNumber를 보존하며 undo 1회로 복원된다(Issue #125 D1)", () => {
     const numbered = listItemBlock(
       "numbered",
       "numberedListItem",
@@ -388,21 +419,33 @@ describe("목록 항목 공용 블록 명령", () => {
     const otherChild = paragraphBlock("other-child", "다른 자식");
     const secondParent = paragraphBlock("parent-2", "둘째 부모", [otherChild]);
     const tail = paragraphBlock("tail", "꼬리");
-    const { editor, changes, tiptap } = mounted(
-      documentOf(bullet, firstParent, secondParent, tail),
+    const { editor } = mounted(
+      documentOf(firstParent, secondParent, tail),
     );
-    const before = editorState(editor, tiptap);
-    const dispatch = vi.spyOn(tiptap.view, "dispatch");
+    const before = editor.getDocument();
 
-    expect(editor.commands.duplicateBlock("bullet")).toEqual(
-      notApplicable("duplicateBlock"),
-    );
     expect(editor.commands.moveBlockBefore("numbered", "other-child")).toEqual(
-      notApplicable("moveBlockBefore"),
+      { ok: true, value: undefined },
     );
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(editorState(editor, tiptap)).toEqual(before);
-    expect(changes).toEqual([]);
-    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+    expect(editor.getDocument().blocks).toMatchObject([
+      { id: "parent-1" },
+      {
+        id: "parent-2",
+        children: [
+          {
+            id: "numbered",
+            type: "numberedListItem",
+            startNumber: 4,
+            content: [{ text: "이동 대상" }],
+          },
+          { id: "other-child" },
+        ],
+      },
+      { id: "tail" },
+    ]);
+    expect(editor.getDocument().blocks[0]).not.toHaveProperty("children");
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks).toEqual(before.blocks);
   });
 });

@@ -3,12 +3,13 @@ import { expect, test } from "@playwright/test";
 import { openDemo } from "./support/demo.js";
 import { trackPageErrors } from "./support/ids.js";
 
-// DELTA-05 D18: computeDragGuide(block-side-menu.tsx)는
-// querySelectorAll("[data-be-block-id]") 평면 리스트 + Y좌표 인덱스
-// 산술로 드롭 대상을 정한다 — 중첩 DOM에서 이 쿼리는 부모·자식 컨테이너를
-// 함께 반환한다. 손상 방어는 editor-controller.ts의 moveBlockBefore D20
-// 가드(자식 딸린 source 거절 + 같은-부모 아닌 target 거절)가 소유하므로
-// 이 파일은 코드 변경 없이 회귀만 검증한다.
+// Issue #125(D1)부터 moveBlockBefore는 cross-parent 이동(다른 부모의
+// children 목록 임의 위치)을 허용한다 — 이 파일은 옛 DELTA-05가 고정했던
+// "거절" 계약을 GREEN(성공) 계약으로 교체하고, 자식이 있는 블록 자신을
+// 드래그할 때 하위 트리 전체가 동반 이동하는지(UI-003)를 추가로 검증한다.
+// 두 시나리오 모두 target·source를 DOM index가 아니라 blockId로 판정한다는
+// computeDragGuide/moveBlockBefore의 계약은 그대로다(G-UI-002) — 달라진
+// 것은 core가 그 결과를 더 이상 거절하지 않는다는 점뿐이다.
 const nestedDocument = {
   formatVersion: 1,
   revision: 0,
@@ -29,7 +30,7 @@ const nestedDocument = {
   ],
 };
 
-test("중첩 문서에서 side-menu 드래그 드롭이 모델을 손상시키지 않는다 (DELTA-05)", async ({
+test("중첩 문서에서 side-menu 드래그 드롭이 cross-parent 이동으로 성공하고 undo 1회로 원래 구조를 복원한다 (Issue #125 D1)", async ({
   page,
 }) => {
   const pageErrors = trackPageErrors(page);
@@ -37,6 +38,9 @@ test("중첩 문서에서 side-menu 드래그 드롭이 모델을 손상시키�
 
   await page.getByLabel("Document source").fill(JSON.stringify(nestedDocument));
   await page.getByRole("button", { name: "Load JSON" }).click();
+  // 편집기에 초점을 둔다 — 그러지 않으면 초점이 "Load JSON" 버튼에 남아
+  // 아래 Control+z가 편집기의 undo 키맵에 닿지 않고 조용히 무시된다.
+  await editable.click();
 
   // 로드 직후 구조 확인: child-1은 parent-1의 blockGroup 안에, top-2는
   // 최상위에 있다.
@@ -65,20 +69,38 @@ test("중첩 문서에서 side-menu 드래그 드롭이 모델을 손상시키�
     handleBox.y + handleBox.height / 2,
   );
   await page.mouse.down();
-  // child-1 자신의 줄 상단 바로 아래로 포인터를 옮긴다 — parent-1
-  // 컨테이너는 child-1을 DOM 안에 품고 있어 그 bounding rect가 자기 텍스트
-  // + child-1 텍스트를 모두 덮는다. 이 Y는 parent-1 전체의 세로 중심보다는
-  // 아래(그래서 computeDragGuide가 parent-1을 건너뛴다)면서 child-1 자신의
-  // 세로 중심보다는 위(그래서 child-1이 targetIndex로 뽑힌다)에 있다 —
-  // 즉 드롭 목표가 "child-1의 형제 목록 앞"이 되어 D20의 같은-부모 가드가
-  // 정확히 이 케이스를 거절해야 한다.
+  // child-1 자신의 줄 상단 바로 아래로 포인터를 옮긴다 — 드롭 목표가
+  // "child-1의 형제 목록(= parent-1의 children) 앞"이 된다.
   await page.mouse.move(childBox.x + childBox.width / 2, childBox.y + 2, {
     steps: 5,
   });
   await page.mouse.up();
 
-  // 거절(COMMAND_NOT_APPLICABLE)로 끝나 문서가 원래 구조 그대로다 — top-2는
-  // parent-1의 자식으로 편입되지 않았고 순서도 그대로다.
+  // top-2가 parent-1의 자식으로 편입되고 child-1 바로 앞에 놓인다 —
+  // D1(a)(다른 부모의 children 목록 안 임의 위치)가 실제 drag 경로에서도
+  // 성립함을 확인한다. 이동 후 최상위 블록이 parent-1(자식 있음) 하나뿐이라
+  // 같은 dispatch 안에서 UI-010 trailing paragraph가 하나 더 붙는다 —
+  // 3개가 아니라 4개다.
+  await expect(editable.locator("p")).toHaveCount(4);
+  await expect(editable.locator("p").nth(0)).toHaveText("parent block");
+  await expect(editable.locator("p").nth(1)).toHaveText("top block two");
+  await expect(editable.locator("p").nth(2)).toHaveText("child block");
+  await expect(editable.locator("p").nth(3)).toHaveText("");
+  await expect(
+    editable.locator(
+      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="top-2"]',
+    ),
+  ).toHaveCount(1);
+  await expect(
+    editable.locator(
+      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="child-1"]',
+    ),
+  ).toHaveCount(1);
+
+  await page.keyboard.press("Control+z");
+
+  // undo 1회로 원래 DOM 구조(top-2가 다시 최상위, child-1이 다시 parent-1의
+  // 유일한 자식)로 완전히 복원된다.
   await expect(editable.locator("p")).toHaveCount(3);
   await expect(editable.locator("p").nth(0)).toHaveText("parent block");
   await expect(editable.locator("p").nth(1)).toHaveText("child block");
@@ -93,6 +115,106 @@ test("중첩 문서에서 side-menu 드래그 드롭이 모델을 손상시키�
       '[data-be-block-id="parent-1"] [data-be-block-id="top-2"]',
     ),
   ).toHaveCount(0);
+
+  expect(pageErrors).toHaveLength(0);
+});
+
+const subtreeDocument = {
+  formatVersion: 1,
+  revision: 0,
+  blocks: [
+    {
+      id: "group-1",
+      type: "paragraph",
+      content: [{ text: "group block" }],
+      children: [
+        {
+          id: "group-1-child",
+          type: "paragraph",
+          content: [{ text: "group child block" }],
+        },
+      ],
+    },
+    { id: "solo-1", type: "paragraph", content: [{ text: "solo block" }] },
+  ],
+};
+
+test("자식이 있는 블록 자신을 드래그하면 하위 트리 전체가 동반 이동하고 undo 1회로 복원된다 (Issue #125 UI-003)", async ({
+  page,
+}) => {
+  const pageErrors = trackPageErrors(page);
+  const { editable } = await openDemo(page);
+
+  await page
+    .getByLabel("Document source")
+    .fill(JSON.stringify(subtreeDocument));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+  // 편집기에 초점을 둔다 — 그러지 않으면 초점이 "Load JSON" 버튼에 남아
+  // 아래 Control+z가 편집기의 undo 키맵에 닿지 않고 조용히 무시된다.
+  await editable.click();
+
+  await expect(
+    editable.locator(
+      '[data-be-block-id="group-1"] > [data-be-block-group] > [data-be-block-id="group-1-child"]',
+    ),
+  ).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveCount(3);
+
+  // group-1 "자신"(그 자식이 아니라)의 줄을 hover해 핸들을 그 블록에
+  // 붙인다 — 하위 트리를 가진 블록을 직접 드래그하는 시나리오다.
+  const groupParagraph = editable.locator('[data-be-block-id="group-1"] > p');
+  const soloParagraph = editable.locator('[data-be-block-id="solo-1"] > p');
+  await groupParagraph.hover();
+  const handle = page.getByRole("button", { name: "Drag to reorder" });
+  await expect(handle).toBeVisible();
+
+  const handleBox = await handle.boundingBox();
+  const soloBox = await soloParagraph.boundingBox();
+  if (handleBox === null || soloBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  // solo-1 아래로 포인터를 옮겨 문서 끝으로의 이동을 요청한다(beforeBlockId
+  // null, R2 — 최상위 문서 끝).
+  await page.mouse.move(
+    soloBox.x + soloBox.width / 2,
+    soloBox.y + soloBox.height + 20,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+
+  // group-1이 solo-1 뒤로 이동하되, group-1-child는 여전히 group-1의
+  // blockGroup 안에 남아 하위 트리 전체가 함께 옮겨졌음을 보여준다. 이동 후
+  // 최상위 마지막 블록이 group-1(자식 있음)이라 같은 dispatch 안에서
+  // UI-010 trailing paragraph가 하나 더 붙는다 — 3개가 아니라 4개다.
+  await expect(editable.locator("p")).toHaveCount(4);
+  await expect(editable.locator("p").nth(0)).toHaveText("solo block");
+  await expect(editable.locator("p").nth(1)).toHaveText("group block");
+  await expect(editable.locator("p").nth(2)).toHaveText("group child block");
+  await expect(editable.locator("p").nth(3)).toHaveText("");
+  await expect(
+    editable.locator(
+      '[data-be-block-id="group-1"] > [data-be-block-group] > [data-be-block-id="group-1-child"]',
+    ),
+  ).toHaveCount(1);
+
+  await page.keyboard.press("Control+z");
+
+  // undo 1회로 순서와 하위 트리 귀속이 모두 원래대로 복원된다.
+  await expect(editable.locator("p")).toHaveCount(3);
+  await expect(editable.locator("p").nth(0)).toHaveText("group block");
+  await expect(editable.locator("p").nth(1)).toHaveText("group child block");
+  await expect(editable.locator("p").nth(2)).toHaveText("solo block");
+  await expect(
+    editable.locator(
+      '[data-be-block-id="group-1"] > [data-be-block-group] > [data-be-block-id="group-1-child"]',
+    ),
+  ).toHaveCount(1);
 
   expect(pageErrors).toHaveLength(0);
 });

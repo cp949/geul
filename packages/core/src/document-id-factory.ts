@@ -43,3 +43,21 @@ export const createUniqueDocumentId = (
   }
   throw new RangeError(allocationErrorMessage);
 };
+
+// Issue #125 D6·D7 — 하위 트리(자식 blockId, 표라면 column/row/cell id까지)를
+// 재귀적으로 재발급할 때 이 클로저 하나로 반복 호출한다. createUniqueDocumentId를
+// 그대로 감싸되, 발급한 id를 매 호출 후 occupiedIds에 더해 같은 재귀 안에서
+// 나중에 발급되는 id가 방금 쓴 id와 다시 충돌하지 않게 한다 — 호출부
+// (generic-block-commands.ts duplicateBlock)가 이 순서를 직접 관리하지
+// 않아도 된다. occupiedIds는 mutable Set을 받는다 — 소비 표시가 이 함수의
+// 핵심 부작용이라 ReadonlySet으로 좁히지 않는다.
+export const createDocumentIdAllocator = (
+  createId: IdFactory,
+  occupiedIds: Set<string>,
+): (() => string) => {
+  return () => {
+    const id = createUniqueDocumentId(createId, occupiedIds);
+    occupiedIds.add(id);
+    return id;
+  };
+};

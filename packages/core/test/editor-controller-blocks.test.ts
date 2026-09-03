@@ -770,9 +770,14 @@ describe("에디터 컨트롤러 블록 명령", () => {
       ]);
     });
 
-    it("자식 딸린 블록의 moveBlockBefore/duplicateBlock이 COMMAND_NOT_APPLICABLE을 반환하고 문서를 바꾸지 않는다(완료 조건 4)", () => {
-      // 변이: duplicateBlock 가드를 제거하면 복제본 하위 트리(child-1)의
-      // blockId가 원본과 전면 중복돼 id 유일성이 깨진다.
+    // Issue #125(D1)부터 moveBlockBefore는 자식이 있는 블록도 하위 트리째
+    // 이동을 허용한다(하위 트리 이동 자체의 회귀는
+    // editor-controller-subtree-commands.test.ts 소관) — 이 테스트는 그
+    // 허용과 무관하게, parent-1이 이미 block-2 바로 앞자리라 이동이 자리를
+    // 바꾸지 않는 no-op이라서 거절됨을 확인한다("자식이 있어서"가 아니다).
+    // duplicateBlock의 하위 트리 재귀 복제 성공은 새 GREEN 계약이라 이
+    // 파일이 아니라 그 신규 테스트 파일이 검증한다(완료 조건 6·12).
+    it("자식 딸린 블록의 moveBlockBefore가 이미 그 자리인 이동은 no-op으로 거절한다", () => {
       const initialDocument: Document = {
         formatVersion: 1,
         revision: 0,
@@ -798,10 +803,6 @@ describe("에디터 컨트롤러 블록 명령", () => {
       expect(editor.commands.moveBlockBefore("parent-1", "block-2")).toEqual({
         ok: false,
         error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlockBefore" },
-      });
-      expect(editor.commands.duplicateBlock("parent-1")).toEqual({
-        ok: false,
-        error: { code: "COMMAND_NOT_APPLICABLE", command: "duplicateBlock" },
       });
       expect(editor.getDocument()).toEqual(before);
     });
@@ -853,7 +854,11 @@ describe("에디터 컨트롤러 블록 명령", () => {
       });
     });
 
-    it("같은 부모의 형제가 아닌 타깃의 moveBlockBefore는 거절된다(완료 조건 4)", () => {
+    it("다른 부모의 형제 목록으로 이동하면 moveBlockBefore가 성공하고 유일한 자식을 잃은 부모에 빈 blockGroup을 남기지 않는다(Issue #125 D1, R2)", () => {
+      // 변이(회귀): 소스가 유일한 자식일 때 그 노드만 지우면 부모의
+      // blockGroup이 0개 자식으로 남아 "block+" 스키마를 어긴다 —
+      // moveBlockBefore가 deleteBlock과 같은 removesWholeGroup 판정을
+      // 공유해야 한다.
       const initialDocument: Document = {
         formatVersion: 1,
         revision: 0,
@@ -874,13 +879,32 @@ describe("에디터 컨트롤러 블록 명령", () => {
         ],
       };
       const editor = createEditor({ initialDocument });
+      const { tiptap } = mountTiptapEditor(editor);
       const before = editor.getDocument();
 
       expect(editor.commands.moveBlockBefore("child-1", "block-2")).toEqual({
-        ok: false,
-        error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlockBefore" },
+        ok: true,
+        value: undefined,
       });
-      expect(editor.getDocument()).toEqual(before);
+      expect(editor.getDocument().blocks).toMatchObject([
+        { id: "parent-1", content: [{ text: "parent" }] },
+        { id: "child-1", content: [{ text: "child" }] },
+        { id: "block-2", content: [{ text: "two" }] },
+      ]);
+      expect(editor.getDocument().blocks[0]).not.toHaveProperty("children");
+
+      let groupCount = 0;
+      tiptap.state.doc.descendants((node) => {
+        if (node.type.name === "blockGroup") groupCount += 1;
+        return true;
+      });
+      expect(groupCount).toBe(0);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      // undo도 revision을 새로 증가시킨다(commitDocument가 reason과 무관하게
+      // sessionRevision을 1 올린다) — 복원 비교는 blocks만 본다(table.test.ts의
+      // undo 계약 테스트와 같은 관례).
+      expect(editor.getDocument().blocks).toEqual(before.blocks);
     });
 
     it("중첩 블록 안 caret·선택에서 그 블록의 blockId·타입을 보고한다(완료 조건 7)", () => {

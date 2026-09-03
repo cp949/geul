@@ -5,11 +5,14 @@ import {
   isNestableBlockType,
   isValidCodeBlockLanguage,
   isValidInlineText,
+  MAX_NESTING_DEPTH,
   parseDocument,
   type Block,
   type Result,
+  type TableColumn,
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 
 import {
@@ -23,7 +26,7 @@ import {
 } from "./toggle-collapse-commands.js";
 import {
   collectDocumentIdentityIds,
-  createUniqueDocumentId,
+  createDocumentIdAllocator,
 } from "./document-id-factory.js";
 import type { EditorError } from "./errors.js";
 import type { SetBlockTypeDescriptor } from "./editor-controller.js";
@@ -56,6 +59,148 @@ const hasChildren = (block: Block): boolean =>
   "children" in block &&
   block.children !== undefined &&
   block.children.length > 0;
+
+// Issue #125 D2 — beforeBlockId가 ancestorBlock 자신의 하위 트리 안(자손)에
+// 있는지 재귀로 판정한다. moveBlockBefore가 자기 자손 앞으로 이동을
+// mutation 전에 거절하는 데만 쓴다 — ancestorBlock 자신은 포함하지 않는다
+// (자기 자신 이동은 기존 no-op 판정이 별도로 잡는다).
+const isDescendantOfBlock = (
+  ancestorBlock: Block,
+  candidateId: string,
+): boolean => {
+  if (!("children" in ancestorBlock) || ancestorBlock.children === undefined) {
+    return false;
+  }
+  for (const child of ancestorBlock.children) {
+    if (child.id === candidateId) return true;
+    if (isDescendantOfBlock(child, candidateId)) return true;
+  }
+  return false;
+};
+
+// Issue #125 D3 — beforeBlockId가 현재 트리에서 위치할 모델 깊이(top-level=1,
+// model/schema.ts와 같은 정의)를 구한다. moveBlockBefore가 이동 결과 깊이를
+// mutation 전에 사전 판정하는 데 쓴다 — beforeBlockId 자신의 깊이가 곧 그
+// 형제 목록에 새로 끼워질 소스 블록의 깊이다.
+const findBlockDepth = (
+  blocks: readonly Block[],
+  targetId: string,
+  depth: number,
+): number | null => {
+  for (const block of blocks) {
+    if (block.id === targetId) return depth;
+    if ("children" in block && block.children !== undefined) {
+      const found = findBlockDepth(block.children, targetId, depth + 1);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+};
+
+// Issue #125 D3 — block 자신의 하위 트리 높이(자식이 없으면 0). indent-commands.ts의
+// PM Node 버전 subtreeHeight와 같은 정의를 model Block 트리에서 재사용한다 —
+// moveBlockBefore는 PM transaction을 만들기 전에 판정해야 해서 PM Node가
+// 아직 없고, session.document.blocks(모델 트리)만으로 계산해야 한다.
+const subtreeHeightOfBlock = (block: Block): number => {
+  if (!("children" in block) || block.children === undefined) return 0;
+  let max = 0;
+  for (const child of block.children) {
+    const height = 1 + subtreeHeightOfBlock(child);
+    if (height > max) max = height;
+  }
+  return max;
+};
+
+// Issue #125 D6·D7 — duplicateBlock이 하위 트리(표라면 column/row/cell id까지)를
+// 재귀적으로 복제하며 새 id를 부여한다. node 자신의 새 blockId는 호출부가
+// 정한다(루트는 mutation 전 미리 뽑아둔 id, 재귀 호출은 takeId()로 매번 새로
+// 뽑는다) — takeId 소비 순서 자체는 계약이 아니고 유일성만 보장하면 된다.
+//
+// table 분기: column은 attrs.columns(JSON 배열)에 저장되고 row/cell은 실제
+// PM 자식 노드다(table-extension.ts) — 셋 다 원본과 겹치지 않는 새 id로
+// 바꾸고, cell.columnId는 옛 column id가 아니라 새로 발급한 column id를
+// 가리키도록 remap한다(참조 무결성, D7).
+//
+// blockContainer 분기: childCount<2는 자식이 없다는 뜻(콘텐츠 노드
+// 하나뿐, blockGroup 없음) — attrs.blockId만 새로 부여하고 content는 그대로
+// clone한다(기존 leaf 복제와 동일 동작, 회귀 없음). childCount>=2면 두 번째
+// 자식이 blockGroup이다 — 그 자식들(blockContainer 또는 table) 각각을 이
+// 함수로 재귀 호출해 새 id를 부여한다.
+//
+// divider 같은 leaf 노드(blockContainer도 table도 아님)는 마지막 분기로
+// 떨어져 attrs.blockId만 새로 부여한다 — 기존 divider 복제 동작과 동일하다.
+const cloneBlockSubtreeWithFreshIds = (
+  node: ProseMirrorNode,
+  blockId: string,
+  takeId: () => string,
+): ProseMirrorNode => {
+  if (node.type.name === "table") {
+    const oldColumns = (node.attrs.columns ?? []) as TableColumn[];
+    const columnIdMap = new Map<string, string>();
+    const newColumns = oldColumns.map((column) => {
+      const newColumnId = takeId();
+      columnIdMap.set(column.id, newColumnId);
+      return { ...column, id: newColumnId };
+    });
+    const newRows: ProseMirrorNode[] = [];
+    node.forEach((rowNode) => {
+      const newCells: ProseMirrorNode[] = [];
+      rowNode.forEach((cellNode) => {
+        const oldColumnId =
+          typeof cellNode.attrs.columnId === "string"
+            ? cellNode.attrs.columnId
+            : null;
+        const newColumnId =
+          oldColumnId === null
+            ? cellNode.attrs.columnId
+            : (columnIdMap.get(oldColumnId) ?? oldColumnId);
+        newCells.push(
+          cellNode.type.create(
+            { ...cellNode.attrs, cellId: takeId(), columnId: newColumnId },
+            cellNode.content,
+            cellNode.marks,
+          ),
+        );
+      });
+      newRows.push(
+        rowNode.type.create(
+          { ...rowNode.attrs, rowId: takeId() },
+          Fragment.from(newCells),
+        ),
+      );
+    });
+    return node.type.create(
+      { ...node.attrs, blockId, columns: newColumns },
+      Fragment.from(newRows),
+    );
+  }
+
+  if (node.type.name !== "blockContainer" || node.childCount < 2) {
+    return node.type.create(
+      { ...node.attrs, blockId },
+      node.content,
+      node.marks,
+    );
+  }
+
+  const contentNode = node.child(0);
+  const groupNode = node.child(1);
+  const newGroupChildren: ProseMirrorNode[] = [];
+  groupNode.forEach((child) => {
+    newGroupChildren.push(
+      cloneBlockSubtreeWithFreshIds(child, takeId(), takeId),
+    );
+  });
+  const newGroup = groupNode.type.create(
+    groupNode.attrs,
+    Fragment.from(newGroupChildren),
+  );
+  return node.type.create(
+    { ...node.attrs, blockId },
+    Fragment.from([contentNode, newGroup]),
+    node.marks,
+  );
+};
 
 type BlockSelectionRangeResolution = {
   siblings: readonly Block[];
@@ -387,6 +532,12 @@ export const createGenericBlockCommands = (
     });
   };
 
+  // Issue #125 D1~D5 — 하위 트리 인지 이동. 목적지는 (a) 다른 부모의
+  // children 목록 안 임의 위치, (b) beforeBlockId===null인 최상위 문서 끝을
+  // 모두 지원한다(R2 — null은 항상 최상위 문서 끝이지, 소스의 현재 부모
+  // 끝이 아니다). 원본과 그 하위 트리 전체(표 포함)를 하나의 transaction으로
+  // 옮긴다 — hasChildren·"같은 부모 형제만" 두 가드를 모두 제거하고, 대신
+  // 자기 자손 이동 거절(D2)과 깊이 사전 판정(D3)으로 대체한다.
   const moveBlockBefore = (
     blockId: string,
     beforeBlockId: string | null,
@@ -396,10 +547,20 @@ export const createGenericBlockCommands = (
     if (source === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
-    if (hasChildren(source.block))
-      return commandNotApplicable("moveBlockBefore");
-    let targetIndex = source.siblings.length;
-    if (beforeBlockId !== null) {
+
+    let targetSiblings: readonly Block[];
+    let targetIndex: number;
+    let destinationDepth: number;
+    if (beforeBlockId === null) {
+      targetSiblings = session.document.blocks;
+      targetIndex = targetSiblings.length;
+      destinationDepth = 1;
+    } else {
+      // D2: beforeBlockId가 소스 자신의 하위 트리 안(자손)이면 mutation 전에
+      // 거절한다 — 자기 자신으로의 이동(선행 no-op 판정)과는 다른 가드다.
+      if (isDescendantOfBlock(source.block, beforeBlockId)) {
+        return commandNotApplicable("moveBlockBefore");
+      }
       const target = findBlockInTree(session.document.blocks, beforeBlockId);
       if (target === null) {
         return {
@@ -407,14 +568,33 @@ export const createGenericBlockCommands = (
           error: { code: "BLOCK_NOT_FOUND", blockId: beforeBlockId },
         };
       }
-      if (target.siblings !== source.siblings) {
-        return commandNotApplicable("moveBlockBefore");
-      }
+      targetSiblings = target.siblings;
       targetIndex = target.index;
+      // target은 findBlockInTree로 이미 찾았으니 findBlockDepth는 항상 값을
+      // 반환한다 — null 분기는 타입 좁히기용 방어일 뿐이다.
+      destinationDepth =
+        findBlockDepth(session.document.blocks, beforeBlockId, 1) ?? 1;
     }
-    if (targetIndex === source.index || targetIndex === source.index + 1) {
+
+    if (
+      targetSiblings === source.siblings &&
+      (targetIndex === source.index || targetIndex === source.index + 1)
+    ) {
       return commandNotApplicable("moveBlockBefore");
     }
+
+    // D3: 이동 후 하위 트리 최심부가 MAX_NESTING_DEPTH(64)를 넘으면 mutation
+    // 전에 거절한다 — indentBlockCommand의 modelDepthAt+subtreeHeight 사전
+    // 판정과 같은 산술을 model 트리 위에서 재사용한다. 새 EditorError 코드를
+    // 만들지 않고(범위 밖: 공개 에러 union 변경) indentBlockCommand와 같이
+    // COMMAND_NOT_APPLICABLE로 수렴한다.
+    if (
+      destinationDepth + subtreeHeightOfBlock(source.block) >
+      MAX_NESTING_DEPTH
+    ) {
+      return commandNotApplicable("moveBlockBefore");
+    }
+
     return session.runDocumentCommand("moveBlockBefore", "local", () => {
       const sourcePosition = findBlockPosition(
         session.editor.state.doc,
@@ -423,9 +603,21 @@ export const createGenericBlockCommands = (
       if (sourcePosition === null) return false;
       const sourceNode = session.editor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
+      // deleteBlock과 같은 판정: 소스가 blockGroup의 유일한 자식이면
+      // 소스만 지워서는 "block+"를 위반하는 빈 그룹이 남는다 — 그룹 자체를
+      // 지운다. 이전 구현은 hasChildren 가드로 소스가 항상 leaf였고, leaf가
+      // 유일한 자식인 경우는 "같은 부모 형제만" 가드가 no-op으로 흡수해
+      // 이 분기에 도달할 수 없었다 — cross-parent 이동을 여는 이 변경에서
+      // 처음으로 도달 가능해졌다.
+      const $source = session.editor.state.doc.resolve(sourcePosition);
+      const removesWholeGroup =
+        $source.parent.type.name === "blockGroup" &&
+        $source.parent.childCount === 1;
       let transaction = session.editor.state.tr.delete(
-        sourcePosition,
-        sourcePosition + sourceNode.nodeSize,
+        removesWholeGroup ? $source.before() : sourcePosition,
+        removesWholeGroup
+          ? $source.after()
+          : sourcePosition + sourceNode.nodeSize,
       );
       let insertPosition: number;
       if (beforeBlockId !== null) {
@@ -436,14 +628,19 @@ export const createGenericBlockCommands = (
         if (targetPosition === null) return false;
         insertPosition = targetPosition;
       } else {
-        const lastSiblingId = source.siblings[source.siblings.length - 1]?.id;
-        if (lastSiblingId === undefined) return false;
-        const lastPosition = findBlockPosition(transaction.doc, lastSiblingId);
+        // R2: null은 소스의 현재 부모가 아니라 항상 최상위 문서 끝이다.
+        const lastTopLevelId =
+          session.document.blocks[session.document.blocks.length - 1]?.id;
+        if (lastTopLevelId === undefined) return false;
+        const lastPosition = findBlockPosition(transaction.doc, lastTopLevelId);
         if (lastPosition === null) return false;
         const lastNode = transaction.doc.nodeAt(lastPosition);
         if (lastNode === null) return false;
         insertPosition = lastPosition + lastNode.nodeSize;
       }
+      // sourceNode 자체가 이미 하위 트리 전체(blockContainer라면 자신의
+      // blockGroup 자식까지)를 담고 있다 — delete+insert 한 번으로 원본과
+      // 모든 후손이 함께 옮겨진다(별도 재귀 조립이 필요 없다).
       transaction = transaction.insert(insertPosition, sourceNode);
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -451,12 +648,14 @@ export const createGenericBlockCommands = (
   };
 
   // spec §5.3 — blockSelection 범위(및 그 children)를 같은 부모 형제 목록
-  // 안에서 통째로 이동한다. moveBlockBefore(위)의 부모 일치·no-op 가드를
-  // 범위로 확장해 재사용하되, hasChildren 가드(348-349행)는 재사용하지
-  // 않는다 — children 동반 이동이 이 명령의 핵심 계약이다(DELTA-02
-  // 트랙-4 확인사항 1). 문서 하나를 여러 트랜잭션으로 쪼개지 않도록 delete →
-  // insert를 한 dispatch로 묶는다(G-EDT-001, moveBlockBefore와 같은 이유로
-  // delete 전에 원본 Fragment를 캡처한다 — delete 후에는 위치가 무효화된다).
+  // 안에서만 통째로 이동한다. 이 "같은 부모 형제만" 제약은
+  // moveSelectedBlocksBefore 자신의 설계다(DELTA-02) — moveBlockBefore(위)는
+  // Issue #125부터 cross-parent 이동을 허용하지만, blockSelection 범위
+  // 이동은 이번 변경의 범위 밖이라 그대로 둔다. children 동반 이동은 애초에
+  // hasChildren류 가드가 없었다(DELTA-02 트랙-4 확인사항 1, 범위 삭제와 같은
+  // 이유). 문서 하나를 여러 트랜잭션으로 쪼개지 않도록 delete → insert를
+  // 한 dispatch로 묶는다(G-EDT-001, moveBlockBefore와 같은 이유로 delete
+  // 전에 원본 Fragment를 캡처한다 — delete 후에는 위치가 무효화된다).
   const moveSelectedBlocksBefore = (
     beforeBlockId: string | null,
   ): Result<void, EditorError> => {
@@ -623,6 +822,11 @@ export const createGenericBlockCommands = (
     return { ok: true, value: undefined };
   };
 
+  // Issue #125 D6~D9 — 자식이 있는 블록을 대상으로 호출하면 하위 트리
+  // 전체(표가 자식으로 들어있다면 그 column/row/cell id까지, D7)를 복제하고
+  // 모든 id를 원본과 겹치지 않게 재귀 재발급한다. 표 자신이 직접 대상인
+  // 경우는 여전히 거절한다(D8 — clone이 표 row/cell/column id 중복을 낳는
+  // 문제는 전용 처리 없이는 위험하다는 판단을 그대로 유지).
   const duplicateBlock = (
     blockId: string,
   ): Result<{ blockId: string }, EditorError> => {
@@ -631,16 +835,21 @@ export const createGenericBlockCommands = (
     if (source === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
-    if (source.block.type === "table" || hasChildren(source.block)) {
+    if (source.block.type === "table") {
       return commandNotApplicable("duplicateBlock");
     }
     if (session.revision >= Number.MAX_SAFE_INTEGER) {
       return commandNotApplicable("duplicateBlock");
     }
-    const duplicateId = createUniqueDocumentId(
+    // takeId()는 호출할 때마다 새 유일 id를 하나 내주고 점유 집합에 더한다
+    // (createDocumentIdAllocator, document-id-factory.ts) — 재귀 복제 안에서
+    // 몇 번을 불러도 서로 충돌하지 않는다. 루트 복제본 id는 기존 계약과
+    // 같은 순서로 가장 먼저 소비한다(RangeError 시 mutation 전 실패 유지).
+    const takeId = createDocumentIdAllocator(
       session.createId,
       collectDocumentIdentityIds(session.document),
     );
+    const duplicateId = takeId();
     const result = session.runDocumentCommand("duplicateBlock", "local", () => {
       const sourcePosition = findBlockPosition(
         session.editor.state.doc,
@@ -650,23 +859,33 @@ export const createGenericBlockCommands = (
       const sourceNode = session.editor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
       const insertPosition = sourcePosition + sourceNode.nodeSize;
-      const duplicateNode = sourceNode.type.create(
-        { ...sourceNode.attrs, blockId: duplicateId },
-        sourceNode.content,
-        sourceNode.marks,
+      const duplicateNode = cloneBlockSubtreeWithFreshIds(
+        sourceNode,
+        duplicateId,
+        takeId,
       );
       const transaction = session.editor.state.tr.insert(
         insertPosition,
         duplicateNode,
       );
-      transaction.setSelection(
-        duplicateNode.type.name === "blockContainer"
-          ? TextSelection.create(
-              transaction.doc,
-              insertPosition + duplicateNode.nodeSize - 2,
-            )
-          : NodeSelection.create(transaction.doc, insertPosition),
-      );
+      if (duplicateNode.type.name === "blockContainer") {
+        // 캐럿은 항상 복제된 "루트" 블록 자신의 콘텐츠 끝에 놓인다 —
+        // 자식까지 포함한 duplicateNode.nodeSize를 쓰면 하위 트리가 있을 때
+        // blockGroup 안쪽으로 어긋난다(트랙-6류 회귀). child(0)(루트 자신의
+        // 콘텐츠 노드) 크기만으로 위치를 구해 leaf/subtree 모두 같은 공식이
+        // 되게 한다.
+        const contentNode = duplicateNode.child(0);
+        transaction.setSelection(
+          TextSelection.create(
+            transaction.doc,
+            insertPosition + contentNode.nodeSize,
+          ),
+        );
+      } else {
+        transaction.setSelection(
+          NodeSelection.create(transaction.doc, insertPosition),
+        );
+      }
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });
