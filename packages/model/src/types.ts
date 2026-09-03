@@ -1,15 +1,29 @@
 export type TextMark =
   | { type: "bold" | "italic" | "underline" | "strike" | "code" }
-  | { type: "link"; href: string };
+  | { type: "link"; href: string }
+  | { type: "textColor"; color: string }
+  | { type: "backgroundColor"; color: string };
 
 export type InlineContent = Array<{ text: string; marks?: TextMark[] }>;
+
+// 콘텐츠를 갖는 nestable 블록 7종(paragraph/heading/quote/목록 4종) 공통
+// optional 필드다(spec §3.3). `table`/`divider`/`codeBlock`에는 붙이지
+// 않는다 — 표는 이미 셀 단위 색상·정렬을 갖고, divider는 콘텐츠가 없고,
+// codeBlock은 구문 강조 색상과 충돌한다. 값의 정규형(색상 `#RRGGBB` 대문자,
+// 정렬 enum)은 표 셀과 같은 `isCanonicalCellColor`/`isCanonicalCellAlign`을
+// 재사용해 schema.ts가 검증한다(G-CNV-001).
+export type TextBlockProps = {
+  textColor?: string;
+  backgroundColor?: string;
+  textAlignment?: "left" | "center" | "right";
+};
 
 export type ParagraphBlock = {
   id: string;
   type: "paragraph";
   content: InlineContent;
   children?: Block[];
-};
+} & TextBlockProps;
 export type HeadingBlock = {
   id: string;
   type: "heading";
@@ -21,26 +35,26 @@ export type HeadingBlock = {
   isToggleable?: boolean;
   collapsed?: boolean;
   children?: Block[];
-};
+} & TextBlockProps;
 export type QuoteBlock = {
   id: string;
   type: "quote";
   content: InlineContent;
   children?: Block[];
-};
+} & TextBlockProps;
 export type BulletListItemBlock = {
   id: string;
   type: "bulletListItem";
   content: InlineContent;
   children?: Block[];
-};
+} & TextBlockProps;
 export type NumberedListItemBlock = {
   id: string;
   type: "numberedListItem";
   content: InlineContent;
   startNumber?: number;
   children?: Block[];
-};
+} & TextBlockProps;
 // checked는 선행 조건 없는 단일 필드다 — heading의 isToggleable+collapsed
 // 같은 교차 필드 불변식이 없어 필수(optional 아님)로 둔다. 생성 시 기본값
 // false는 command 계층(Issue #38 슬라이스 6 RD-001 후속 DELTA)이 정한다.
@@ -50,7 +64,7 @@ export type CheckListItemBlock = {
   content: InlineContent;
   checked: boolean;
   children?: Block[];
-};
+} & TextBlockProps;
 // toggleListItem은 block-kind.ts의 NestableBlockType에 ListItemBlockType과
 // 별도로 직접 추가된다 — <ul>/<ol> 표현을 갖는 bulletListItem/
 // numberedListItem과 달리 자체 HTML 요소 계열이 없어 ListItemBlock 부분
@@ -63,7 +77,7 @@ export type ToggleListItemBlock = {
   content: InlineContent;
   collapsed?: boolean;
   children?: Block[];
-};
+} & TextBlockProps;
 export type DividerBlock = { id: string; type: "divider" };
 export type CodeBlock = {
   id: string;

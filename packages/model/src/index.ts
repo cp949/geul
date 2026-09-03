@@ -75,6 +75,7 @@ export type {
   QuoteBlock,
   TableBlock,
   TableColumn,
+  TextBlockProps,
   TextMark,
   ToggleListItemBlock,
 } from "./types.js";

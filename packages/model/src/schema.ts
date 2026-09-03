@@ -30,6 +30,8 @@ type DocumentPath = Array<string | number>;
 const textMarkSchema = z.discriminatedUnion("type", [
   z.object({ type: z.enum(PLAIN_TEXT_MARK_TYPES) }),
   z.object({ type: z.literal("link"), href: z.string() }),
+  z.object({ type: z.literal("textColor"), color: z.string() }),
+  z.object({ type: z.literal("backgroundColor"), color: z.string() }),
 ]);
 
 const inlineContentSchema = z.array(
@@ -110,12 +112,24 @@ const codeBlockSchema = z
 // exactOptionalPropertyTypes 아래에서 이 모양과 바로 맞지 않는다. 공개 모델
 // 타입으로의 변환은 기존과 같이 parseDocument의 `as Document` 캐스트가
 // 담당한다.
+// TextBlockProps 3필드는 zod가 실제로 추론하는 모양(`T | undefined`)을
+// 따르는 스키마 전용 shape다 — model의 손으로 쓴 TextBlockProps(`textColor?:
+// string`)와 exactOptionalPropertyTypes 아래에서 바로 맞지 않는 이유는
+// children과 같다(위 주석 참고). textAlignment도 표 셀 align과 같은 이유로
+// 여기서는 느슨한 string으로 둔다 — enum 정규형 판정은 zod가 아니라
+// validateTextBlockProps(아래)가 isCanonicalCellAlign으로 단독 수행한다.
+type TextBlockPropsNode = {
+  textColor?: string | undefined;
+  backgroundColor?: string | undefined;
+  textAlignment?: string | undefined;
+};
+
 type ParagraphBlockNode = {
   id: string;
   type: "paragraph";
   content: z.infer<typeof inlineContentSchema>;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type HeadingBlockNode = {
   id: string;
@@ -125,21 +139,21 @@ type HeadingBlockNode = {
   isToggleable?: boolean | undefined;
   collapsed?: boolean | undefined;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type QuoteBlockNode = {
   id: string;
   type: "quote";
   content: z.infer<typeof inlineContentSchema>;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type BulletListItemBlockNode = {
   id: string;
   type: "bulletListItem";
   content: z.infer<typeof inlineContentSchema>;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type NumberedListItemBlockNode = {
   id: string;
@@ -147,7 +161,7 @@ type NumberedListItemBlockNode = {
   content: z.infer<typeof inlineContentSchema>;
   startNumber?: number | undefined;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type CheckListItemBlockNode = {
   id: string;
@@ -155,7 +169,7 @@ type CheckListItemBlockNode = {
   content: z.infer<typeof inlineContentSchema>;
   checked: boolean;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type ToggleListItemBlockNode = {
   id: string;
@@ -163,7 +177,7 @@ type ToggleListItemBlockNode = {
   content: z.infer<typeof inlineContentSchema>;
   collapsed?: boolean | undefined;
   children?: BlockNode[] | undefined;
-};
+} & TextBlockPropsNode;
 
 type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
 type CodeBlockNode = z.infer<typeof codeBlockSchema>;
@@ -180,6 +194,17 @@ type BlockNode =
   | DividerBlockNode
   | CodeBlockNode;
 
+// TextBlockProps 3필드(model 손글씨 타입과 동일 optional shape) — 콘텐츠를
+// 갖는 nestable 블록 7종 스키마가 공통으로 spread한다. 정규형(색상
+// #RRGGBB 대문자, 정렬 enum) 판정은 여기서 하지 않는다 — zod는 타입만
+// 확인하고, validateTextBlockProps(아래)가 parseDocument 조립 시점에
+// isCanonicalCellColor/isCanonicalCellAlign으로 단독 판정한다(G-CNV-001).
+const textBlockPropsShape = {
+  textColor: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  textAlignment: z.string().optional(),
+};
+
 const paragraphBlockSchema = z.object({
   id: z.string(),
   type: z.literal("paragraph"),
@@ -187,6 +212,7 @@ const paragraphBlockSchema = z.object({
   children: z
     .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
     .optional(),
+  ...textBlockPropsShape,
 });
 
 const headingBlockSchema = z.object({
@@ -206,6 +232,7 @@ const headingBlockSchema = z.object({
   children: z
     .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
     .optional(),
+  ...textBlockPropsShape,
 });
 
 const quoteBlockSchema = z.object({
@@ -215,6 +242,7 @@ const quoteBlockSchema = z.object({
   children: z
     .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
     .optional(),
+  ...textBlockPropsShape,
 });
 
 // 목록 항목은 text block과 같은 재귀 children을 가지지만 type별 저장 필드를
@@ -228,6 +256,7 @@ const bulletListItemBlockSchema = z
     children: z
       .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
       .optional(),
+    ...textBlockPropsShape,
   })
   .strict();
 
@@ -240,6 +269,7 @@ const numberedListItemBlockSchema = z
     children: z
       .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
       .optional(),
+    ...textBlockPropsShape,
   })
   .strict();
 
@@ -256,6 +286,7 @@ const checkListItemBlockSchema = z
     children: z
       .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
       .optional(),
+    ...textBlockPropsShape,
   })
   .strict();
 
@@ -272,6 +303,7 @@ const toggleListItemBlockSchema = z
     children: z
       .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
       .optional(),
+    ...textBlockPropsShape,
   })
   .strict();
 
@@ -341,6 +373,15 @@ const validateContent = (
         return invalid(
           [...contentPath, contentIndex, "marks", markIndex, "href"],
           "Unsupported link URL",
+        );
+      }
+      if (
+        (mark.type === "textColor" || mark.type === "backgroundColor") &&
+        !isCanonicalCellColor(mark.color)
+      ) {
+        return invalid(
+          [...contentPath, contentIndex, "marks", markIndex, "color"],
+          `${mark.type} must be an uppercase #RRGGBB color`,
         );
       }
     }
@@ -606,6 +647,67 @@ const validateCells = (blocks: Block[]): Result<undefined, DocumentError> =>
     return { ok: true, value: undefined };
   });
 
+// TextBlockProps(textColor/backgroundColor/textAlignment) 정규형 검증이다.
+// validateCells와 같은 이유로 별도 순회 함수로 둔다 — validateBlocksAt은
+// 구조 불변식(id 유일성·content·heading 교차 필드)을 판정하는 자리이고,
+// 이 함수는 표 셀 색상·정렬 검증과 같은 "타입값 정규형" 범주다. 대상은
+// isNestableBlockType으로 좁힌 7개 타입뿐이다(table/divider/codeBlock은
+// 이 필드 자체를 zod 스키마가 선언하지 않아 이미 DOCUMENT_INVALID로
+// 거절된다). 재귀는 nestable children을 따라간다 — 깊이 상한은
+// validateNestingDepth가 이미 보장한다.
+const validateTextBlockPropsAt = (
+  blocks: Block[],
+  path: DocumentPath,
+): Result<undefined, DocumentError> => {
+  for (const [blockIndex, block] of blocks.entries()) {
+    const blockPath = [...path, blockIndex];
+    if (!isNestableBlockType(block.type)) continue;
+    const nestable = block as Extract<Block, { type: NestableBlockType }>;
+
+    if (
+      nestable.textColor !== undefined &&
+      !isCanonicalCellColor(nestable.textColor)
+    ) {
+      return invalid(
+        [...blockPath, "textColor"],
+        "textColor must be an uppercase #RRGGBB color",
+      );
+    }
+    if (
+      nestable.backgroundColor !== undefined &&
+      !isCanonicalCellColor(nestable.backgroundColor)
+    ) {
+      return invalid(
+        [...blockPath, "backgroundColor"],
+        "backgroundColor must be an uppercase #RRGGBB color",
+      );
+    }
+    if (
+      nestable.textAlignment !== undefined &&
+      !isCanonicalCellAlign(nestable.textAlignment)
+    ) {
+      return invalid(
+        [...blockPath, "textAlignment"],
+        "textAlignment must be one of left, center, right",
+      );
+    }
+
+    if (nestable.children !== undefined) {
+      const children = validateTextBlockPropsAt(nestable.children, [
+        ...blockPath,
+        "children",
+      ]);
+      if (!children.ok) return children;
+    }
+  }
+  return { ok: true, value: undefined };
+};
+
+const validateTextBlockProps = (
+  blocks: Block[],
+): Result<undefined, DocumentError> =>
+  validateTextBlockPropsAt(blocks, ["blocks"]);
+
 const validateTableLimits = (
   blocks: Block[],
 ): Result<undefined, DocumentError> =>
@@ -772,6 +874,8 @@ export const parseDocument = (
   if (!widths.ok) return widths;
   const cells = validateCells(document.blocks);
   if (!cells.ok) return cells;
+  const textBlockProps = validateTextBlockProps(document.blocks);
+  if (!textBlockProps.ok) return textBlockProps;
   const limits = validateTableLimits(document.blocks);
   if (!limits.ok) return limits;
   const grids = validateTableGrids(document.blocks);

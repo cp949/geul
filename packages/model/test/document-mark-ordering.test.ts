@@ -30,6 +30,22 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
     ]);
   });
 
+  it("textColor/backgroundColor를 기존 6종 뒤 정규 순서에 편입한다", () => {
+    expect(
+      canonicalizeTextMarks([
+        { type: "backgroundColor", color: "#112233" },
+        { type: "bold" },
+        { type: "textColor", color: "#AABBCC" },
+        { type: "underline" },
+      ]),
+    ).toEqual([
+      { type: "bold" },
+      { type: "underline" },
+      { type: "textColor", color: "#AABBCC" },
+      { type: "backgroundColor", color: "#112233" },
+    ]);
+  });
+
   it("동일한 mark는 중복을 제거해 멱등한 정규 배열로 만든다", () => {
     const once = canonicalizeTextMarks([
       { type: "underline" },
@@ -130,6 +146,91 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
       error: {
         code: "DOCUMENT_INVALID",
         path: ["blocks", 0, "content", 0, "marks", 2],
+      },
+    });
+  });
+
+  it("textColor/backgroundColor mark는 정규 #RRGGBB 대문자 색상값과 함께 통과한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "colored",
+          type: "paragraph",
+          content: [
+            {
+              text: "colored",
+              marks: [
+                { type: "textColor", color: "#AABBCC" },
+                { type: "backgroundColor", color: "#112233" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    const block = result.value.blocks[0];
+    if (block?.type !== "paragraph") throw new Error("Expected a paragraph");
+    expect(block.content[0]?.marks).toEqual([
+      { type: "textColor", color: "#AABBCC" },
+      { type: "backgroundColor", color: "#112233" },
+    ]);
+  });
+
+  it("textColor color가 소문자 #rrggbb면 거절한다", () => {
+    expect(
+      parseDocument({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "bad-color",
+            type: "paragraph",
+            content: [
+              { text: "colored", marks: [{ type: "textColor", color: "#aabbcc" }] },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "content", 0, "marks", 0, "color"],
+      },
+    });
+  });
+
+  it("같은 인라인 항목에 textColor 마크가 2개면 거절한다(타입당 최대 1개)", () => {
+    expect(
+      parseDocument({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "duplicate-text-color",
+            type: "paragraph",
+            content: [
+              {
+                text: "colored",
+                marks: [
+                  { type: "textColor", color: "#AABBCC" },
+                  { type: "textColor", color: "#112233" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "content", 0, "marks", 1],
       },
     });
   });

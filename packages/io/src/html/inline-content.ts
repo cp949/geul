@@ -38,6 +38,10 @@ export type HtmlRoot = {
   children: HtmlNode[];
 };
 
+// textColor/backgroundColor는 기존 6종 뒤(6·7)에 붙는다 — RD-001
+// DELTA-01(model TextMark 확장)이 이 Record를 컴파일 오류로 강제 갱신시켜
+// 여기 추가했다. HTML `<span style>` 인코드·디코드 자체는 RD-004 범위다
+// (아래 wrapMark의 명시 거절 참고).
 const htmlWrapperMarkOrder: Record<TextMark["type"], number> = {
   link: 0,
   bold: 1,
@@ -45,6 +49,8 @@ const htmlWrapperMarkOrder: Record<TextMark["type"], number> = {
   underline: 3,
   strike: 4,
   code: 5,
+  textColor: 6,
+  backgroundColor: 7,
 };
 
 const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
@@ -132,6 +138,20 @@ const wrapMark = (
       return element("s", {}, [node]);
     case "code":
       return element("code", {}, [node]);
+    case "textColor":
+    case "backgroundColor":
+      // spec §7.1·roadmap D1이 `<span style="...">` 마크당 1개 중첩으로
+      // 이미 결정했지만, sanitize-schema.ts의 htmlAllowedTagNames에 `span`이
+      // 아직 없고 markForElement(디코드 방향)도 이 태그를 모른다 —
+      // 인코드만 먼저 열면 재파싱·sanitize에서 조용히 사라지는 반쪽
+      // round-trip이 된다. RD-004가 스키마 허용·디코드와 함께 이 case를
+      // 구현으로 교체한다. 이 경로는 RD-002(명령)·RD-004 전까지 어떤
+      // 프로덕션 문서도 도달하지 않는다(오늘 이 mark를 만드는 경로가
+      // 없다) — 그래도 언젠가 도달하면 잘못된 손실 대신 여기서 명시적으로
+      // 멈춘다.
+      throw new Error(
+        `${mark.type} HTML export is not implemented yet (RD-004)`,
+      );
   }
 };
 

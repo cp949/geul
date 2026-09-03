@@ -38,4 +38,30 @@ describe("독립 문서 모델 - decodeTextMark", () => {
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.error).toContain("highlight");
   });
+
+  it.each(["textColor", "backgroundColor"] as const)(
+    "%s 이름을 문자열 color와 함께 있어야 TextMark로 디코드한다",
+    (type) => {
+      expect(decodeTextMark({ type, color: "#AABBCC" })).toEqual({
+        ok: true,
+        value: { type, color: "#AABBCC" },
+      });
+    },
+  );
+
+  it.each(["textColor", "backgroundColor"] as const)(
+    "%s인데 color가 없으면 거절한다",
+    (type) => {
+      const result = decodeTextMark({ type });
+      expect(result.ok).toBe(false);
+    },
+  );
+
+  it.each(["textColor", "backgroundColor"] as const)(
+    "%s인데 color가 문자열이 아니면 거절한다",
+    (type) => {
+      const result = decodeTextMark({ type, color: 42 });
+      expect(result.ok).toBe(false);
+    },
+  );
 });

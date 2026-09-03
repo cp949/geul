@@ -137,6 +137,10 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
       return { type: "code" };
     case "link":
       return { type: "link", attrs: { href: mark.href } };
+    case "textColor":
+      return { type: "textColor", attrs: { color: mark.color } };
+    case "backgroundColor":
+      return { type: "backgroundColor", attrs: { color: mark.color } };
   }
 };
 

@@ -44,6 +44,9 @@ type MarkdownOutputNode = {
   children?: MarkdownOutputNode[];
 };
 
+// textColor/backgroundColor는 기존 6종 뒤(6·7)에 붙는다 — RD-001
+// DELTA-01(model TextMark 확장)이 이 Record를 컴파일 오류로 강제 갱신시켜
+// 여기 추가했다.
 const markOrder: Record<TextMark["type"], number> = {
   link: 0,
   bold: 1,
@@ -51,6 +54,8 @@ const markOrder: Record<TextMark["type"], number> = {
   strike: 3,
   code: 4,
   underline: 5,
+  textColor: 6,
+  backgroundColor: 7,
 };
 
 const wrapNodes = (
@@ -69,6 +74,14 @@ const wrapNodes = (
     case "underline":
       return nodes;
     case "code":
+      return nodes;
+    case "textColor":
+    case "backgroundColor":
+      // GFM/commonmark에는 색상을 표현할 구문이 없다 — underline·code와
+      // 같은 이유로 값을 버리고 콘텐츠만 통과시킨다(최종 lossy 동작,
+      // 임시 스텁이 아니다). strict export의 거절과 손실 경고 보고는 더
+      // 상위 계층(analyzeMarkdownLoss)이 맡는다 — RD-004가 그 카테고리를
+      // 추가한다.
       return nodes;
   }
 };
