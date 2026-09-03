@@ -3,6 +3,7 @@ import {
   type Document as BlockDocument,
   type HeadingBlock,
   type IdFactory,
+  isCanonicalCellColor,
   isSupportedLinkHref,
   type Result,
   type TextMark,
@@ -112,6 +113,10 @@ export interface EditorController {
     toggleCode(): Result<void, EditorError>;
     setLink(href: string): Result<void, EditorError>;
     unsetLink(): Result<void, EditorError>;
+    toggleInlineTextColor(color: string | null): Result<void, EditorError>;
+    toggleInlineBackgroundColor(
+      color: string | null,
+    ): Result<void, EditorError>;
     pasteTabularData(
       data: TabularData,
     ): Result<{ blockId: string }, EditorError>;
@@ -498,6 +503,34 @@ export const createEditor = (
     return runApplicableLinkCommand(command, run);
   };
 
+  // toggleInlineTextColor/toggleInlineBackgroundColor(RD-002 DELTA-01)가
+  // 공유하는 본체. setLink와 같은 순서(CodeBlock 가드 → 값 검증)를 따른다.
+  // `color`가 `null`이면 검증을 생략하고 해제로 취급한다(setCellColor와
+  // 동형, table-grid.ts:720-730). mutation은 Tiptap 코어 제네릭 chain
+  // 명령(`toggleMark`/`unsetMark`)만 쓴다 — attrs가 있는 mark도 별도
+  // `addCommands()` 없이 이름만으로 동작하고, `toggleMark`의 attrs-aware
+  // 활성 판정이 spec의 "같은 값 재적용 시 해제" 토글 의미를 그대로
+  // 구현한다.
+  const runInlineColorCommand = (
+    command: string,
+    markName: "textColor" | "backgroundColor",
+    color: string | null,
+  ): Result<void, EditorError> => {
+    const rejected = rejectCodeBlockMark();
+    if (rejected !== null) return rejected;
+    if (color !== null && !isCanonicalCellColor(color)) {
+      return { ok: false, error: { code: "INVALID_COLOR", color } };
+    }
+    if (session.editor.state.selection.empty) {
+      return commandNotApplicable(command);
+    }
+    return session.runDocumentCommand(command, "local", () =>
+      color === null
+        ? session.editor.commands.unsetMark(markName)
+        : session.editor.commands.toggleMark(markName, { color }),
+    );
+  };
+
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
   // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
@@ -849,6 +882,14 @@ export const createEditor = (
           }
           return chain.unsetLink().run();
         }),
+      toggleInlineTextColor: (color) =>
+        runInlineColorCommand("toggleInlineTextColor", "textColor", color),
+      toggleInlineBackgroundColor: (color) =>
+        runInlineColorCommand(
+          "toggleInlineBackgroundColor",
+          "backgroundColor",
+          color,
+        ),
       pasteTabularData: (data) => {
         if (session.isDestroyed)
           return commandNotApplicable("pasteTabularData");
