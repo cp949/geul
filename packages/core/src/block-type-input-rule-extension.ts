@@ -3,19 +3,19 @@ import type { Mark, NodeType } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextSelection } from "@tiptap/pm/state";
 
-// heading(1~6)·quote 입력 규칙. list-input-rule-extension.ts의
+// heading(1~6)·quote·checkListItem 입력 규칙. list-input-rule-extension.ts의
 // createListInputRule과 같은 계약이다 — 빈 paragraph 선두에서 marker + 공백
 // 정확 일치 시에만 반응하고, 캐럿이 속한 blockContainer의 콘텐츠 노드
-// 타입만 바꾼다(blockId 불변). 즉시 Backspace 복원은 이 파일에서 별도로
-// 구현하지 않는다 — ListInputRuleExtension의 Backspace 단축키와 undo-bridge
-// plugin이 대신 처리한다. Tiptap core는 addInputRules를 가진 확장마다 별도
-// isInputRules plugin 인스턴스를 만들어(이 확장도 하나를 갖는다) 단순히
-// "플래그가 있는 첫 plugin"만 찾으면 이 확장이 발동했을 때 못 찾는다 —
+// 타입만 바꾼다(blockId 불변). 셋 다 nestableBlockContent라 setBlockType으로
+// 표현 가능하다(content 없는 divider만 구조적 예외, 아래 별도 handler).
+// 즉시 Backspace 복원은 이 파일에서 별도로 구현하지 않는다 —
+// ListInputRuleExtension의 Backspace 단축키와 undo-bridge plugin이 대신
+// 처리한다. Tiptap core는 addInputRules를 가진 확장마다 별도 isInputRules
+// plugin 인스턴스를 만들어(이 확장도 하나를 갖는다) 단순히 "플래그가 있는
+// 첫 plugin"만 찾으면 이 확장이 발동했을 때 못 찾는다 —
 // list-input-rule-extension.ts는 활성 상태 판정(Backspace)과 발동 plugin
 // 참조 보존(undo-bridge)을 모두 확장 비의존적으로 고쳐 이 확장의 규칙에도
 // 그대로 적용된다(RD-002 DELTA-01 구현 중 실측·수정, RD-002.md "결정" 참고).
-//
-// checkListItem 입력 규칙(RD-002 DELTA-02)도 이 helper를 그대로 재사용한다.
 const createBlockTypeInputRule = (
   find: RegExp,
   type: NodeType,
@@ -128,7 +128,14 @@ export const BlockTypeInputRuleExtension = Extension.create({
   addInputRules() {
     const heading = this.editor.schema.nodes.heading;
     const quote = this.editor.schema.nodes.quote;
-    if (heading === undefined || quote === undefined) return [];
+    const checkListItem = this.editor.schema.nodes.checkListItem;
+    if (
+      heading === undefined ||
+      quote === undefined ||
+      checkListItem === undefined
+    ) {
+      return [];
+    }
 
     return [
       createBlockTypeInputRule(/^(#{1,6})\s$/, heading, (match) => ({
@@ -136,6 +143,14 @@ export const BlockTypeInputRuleExtension = Extension.create({
       })),
       createBlockTypeInputRule(/^>\s$/, quote, () => undefined),
       createDividerInputRule(),
+      // checkListItem은 heading/quote와 같은 nestableBlockContent라 divider
+      // 같은 구조적 예외 없이 setBlockType으로 표현된다(RD-002 DELTA-02).
+      createBlockTypeInputRule(/^\[\s*\]\s$/, checkListItem, () => ({
+        checked: false,
+      })),
+      createBlockTypeInputRule(/^\[[Xx]\]\s$/, checkListItem, () => ({
+        checked: true,
+      })),
     ];
   },
 });

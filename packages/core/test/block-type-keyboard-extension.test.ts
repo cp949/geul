@@ -22,6 +22,7 @@ import {
 } from "../src/block-type-keyboard-extension.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
+  checkListItemBlock,
   dividerBlock,
   documentOf,
   editorState,
@@ -39,18 +40,6 @@ import {
   docWithTwoRowTable,
   placeCaretInCell,
 } from "./table-test-support.js";
-
-/** checkListItem 리터럴. */
-const checkListItemBlock = (
-  id: string,
-  text: string,
-  checked: boolean,
-): Block => ({
-  id,
-  type: "checkListItem",
-  checked,
-  content: text === "" ? [] : [{ text }],
-});
 
 /** codeBlock 리터럴. */
 const codeBlock = (id: string, text: string): Block => ({

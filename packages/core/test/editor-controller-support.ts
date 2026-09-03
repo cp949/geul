@@ -285,6 +285,22 @@ export const dividerBlock = (id: string): Block => ({
 });
 
 /**
+ * checkListItem 블록 리터럴. block-type-keyboard-extension.test.ts(RD-001
+ * 캐럿 단축키)와 block-type-input-rule-extension.test.ts(RD-002 DELTA-02
+ * native shorthand)가 같은 리터럴을 필요로 해 공유 위치로 옮겼다(G-TST-002).
+ */
+export const checkListItemBlock = (
+  id: string,
+  text: string,
+  checked: boolean,
+): Block => ({
+  id,
+  type: "checkListItem",
+  checked,
+  content: text === "" ? [] : [{ text }],
+});
+
+/**
  * "문단-divider-문단" 3블록 fixture 구성 요소와 그 문서. insertDivider
  * 계약(editor-controller-divider.test.ts)과 divider 명령
  * characterization(editor-controller-divider-commands.test.ts)이
