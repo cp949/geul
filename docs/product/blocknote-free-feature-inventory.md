@@ -122,7 +122,7 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `UI-003` | 블록 drag handle과 재정렬 | `PARITY` | R1 | `VERIFIED` | `SideMenu`, drag extension(구현은 Pointer Event 사용) |
 | `UI-004` | 여러 블록 선택·이동·삭제 | `PARITY` | R2 | `VERIFIED` | `SideMenu/MultipleNodeSelection` — Issue #38 슬라이스 7(2026-09-03 dev 병합)이 `blockSelection` 상태·`selectBlockRange`/`deleteSelectedBlocks`/`moveSelectedBlocksBefore`·`BlockSelectionToolbar`·`e2e/block-selection.spec.ts`로 구현·검증(이 갱신은 Issue #125 정리 세션이 실측 대조 후 소급 반영 — 슬라이스 7 자체 완료 시점에 누락됐던 inventory 동기화) |
 | `UI-005` | 블록 종류 변경 메뉴 | `PARITY` | R1 | `VERIFIED` | formatting toolbar block type select |
-| `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `PARTIAL` | formatting toolbar nest buttons — 슬라이스 1이 서식 툴바 들여쓰기/내어쓰기 버튼(`indentBlock`/`outdentBlock`)과 중첩 시각 렌더링을 구현. 표(`TableBlock`) 들여쓰기 UI 경로는 아직 없음(Issue #126) |
+| `UI-006` | 블록 중첩·중첩 해제 UI | `PARITY` | R2 | `VERIFIED` | formatting toolbar nest buttons — 슬라이스 1이 서식 툴바 들여쓰기/내어쓰기 버튼(`indentBlock`/`outdentBlock`)과 중첩 시각 렌더링을 구현. 슬라이스 7b(Issue #126, 2026-09-03 dev 병합)가 `block-side-menu.tsx`(일반 블록)와 `table-handles.tsx`(표 전용 직접 버튼) 경로를 추가해 표를 포함한 모든 블록 타입에 들여쓰기/내어쓰기 UI가 있다 |
 | `UI-007` | 텍스트 선택 formatting toolbar | `PARITY` | R1 | `VERIFIED` | `FormattingToolbar` |
 | `UI-008` | 링크 열기·수정·삭제 toolbar | `PARITY` | R1 | `VERIFIED` | `LinkToolbar` |
 | `UI-009` | placeholder와 빈 문서 안내 | `PARITY` | R2 | `PARTIAL` | `Placeholder` extension — 슬라이스 2가 paragraph(캐럿 위치 시)·heading(빈 상태 상시), 슬라이스 3이 인용문(상시 `Quote`), 슬라이스 4 RD-004가 CodeBlock(상시 `Code`), 슬라이스 5 RD-002가 글머리·번호 목록(상시 `List item`) placeholder를 core 데코레이션과 React CSS로 구현. 체크·토글 목록 등 후속 블록 타입은 각 추가 슬라이스가 소유 |
