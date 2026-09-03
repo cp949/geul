@@ -200,6 +200,13 @@ test("블록 메뉴에서 Outdent를 클릭하면 부모의 형제로 내어쓰�
   await page.keyboard.press("Control+z");
 
   await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+  // 개수뿐 아니라 재중첩 위치까지 확인한다(table-handle.spec.ts의
+  // Indent/Outdent undo 검증과 같은 엄격도, qq-workflow 단계-3 MINOR).
+  await expect(
+    editable.locator(
+      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="child-1"]',
+    ),
+  ).toHaveCount(1);
 });
 
 test("블록 메뉴의 Indent/Outdent 항목은 적용 불가 상태에서 비활성화된다 (Issue #126)", async ({
