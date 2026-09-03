@@ -29,6 +29,11 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   hr: ["dataBeBlockId"],
   p: ["dataBeBlockId"],
   pre: ["dataBeBlockId", "dataLanguage", "className"],
+  // 인라인 textColor/backgroundColor mark의 HTML 매핑이다(spec §7.1, RD-004
+  // DELTA-01). 표 셀 색상(`data-be-*`)과 달리 실제 CSS `style` 속성을 쓴다 —
+  // 문서 안에서 두 인코딩이 공존하는 것은 spec이 이미 결정했다
+  // (inline-content.ts의 wrapMark 참고).
+  span: ["style"],
   code: ["dataLanguage", "className"],
   table: ["dataBeBlockId", "dataBeHeaderRows", "dataBeHeaderColumns"],
   td: [
@@ -88,6 +93,9 @@ export const htmlAllowedTagNames = [
   "code",
   "a",
   "br",
+  // span은 model에 전용 타입이 없다 — textColor/backgroundColor mark의 HTML
+  // 인코딩 전용 인라인 wrapper다(위 htmlAllowedAttributes.span 참고).
+  "span",
   // div/li/ul/ol은 p와 같은 문단 경계다(아키텍처 리뷰 2차 후보 G, Issue
   // #113의 import 경로 반영). model에 리스트 전용 Block 타입이 없어 heading
   // 처럼 별도 타입을 만들 수는 없으므로 p처럼 문단으로만 분리한다 —

@@ -4,6 +4,8 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
+import { parseStyleDeclarations } from "../clipboard/style-declarations.js";
+
 export type HtmlTextNode = {
   type: "text";
   value: string;
@@ -38,10 +40,8 @@ export type HtmlRoot = {
   children: HtmlNode[];
 };
 
-// textColor/backgroundColor는 기존 6종 뒤(6·7)에 붙는다 — RD-001
-// DELTA-01(model TextMark 확장)이 이 Record를 컴파일 오류로 강제 갱신시켜
-// 여기 추가했다. HTML `<span style>` 인코드·디코드 자체는 RD-004 범위다
-// (아래 wrapMark의 명시 거절 참고).
+// textColor/backgroundColor는 기존 6종 뒤(6·7)에 붙는다 — 기존 값(0-5)을
+// 그대로 두고 뒤에 이어 붙여야 순서·중첩(D1)이 유지된다.
 const htmlWrapperMarkOrder: Record<TextMark["type"], number> = {
   link: 0,
   bold: 1,
@@ -63,24 +63,41 @@ const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
     )
     .map(({ mark }) => mark);
 
-const markForElement = (node: HtmlElementNode): TextMark | undefined => {
+// 다른 6개 case는 항상 mark 0개 또는 1개지만 span은 style 선언 하나에
+// color·background-color가 동시에 있을 수 있어(우리 export는 만들지 않는
+// 모양이지만 외부 HTML은 흔히 이렇게 낸다) 반환형이 배열이다 — 한쪽만
+// 반환하면 나머지 하나가 조용히 사라진다.
+const marksForElement = (node: HtmlElementNode): TextMark[] => {
   switch (node.tagName) {
     case "a": {
       const href = node.properties.href;
-      return typeof href === "string" ? { type: "link", href } : undefined;
+      return typeof href === "string" ? [{ type: "link", href }] : [];
     }
     case "strong":
-      return { type: "bold" };
+      return [{ type: "bold" }];
     case "em":
-      return { type: "italic" };
+      return [{ type: "italic" }];
     case "u":
-      return { type: "underline" };
+      return [{ type: "underline" }];
     case "s":
-      return { type: "strike" };
+      return [{ type: "strike" }];
     case "code":
-      return { type: "code" };
+      return [{ type: "code" }];
+    case "span": {
+      const style = node.properties.style;
+      if (typeof style !== "string") return [];
+      const parsed = parseStyleDeclarations(style);
+      const marks: TextMark[] = [];
+      if (parsed.color !== undefined) {
+        marks.push({ type: "textColor", color: parsed.color });
+      }
+      if (parsed.backgroundColor !== undefined) {
+        marks.push({ type: "backgroundColor", color: parsed.backgroundColor });
+      }
+      return marks;
+    }
     default:
-      return undefined;
+      return [];
   }
 };
 
@@ -100,10 +117,9 @@ const readInlineNodes = (
       continue;
     }
 
-    const mark = markForElement(node);
     readInlineNodes(
       node.children,
-      mark === undefined ? marks : [...marks, mark],
+      [...marks, ...marksForElement(node)],
       content,
     );
   }
@@ -139,18 +155,16 @@ const wrapMark = (
     case "code":
       return element("code", {}, [node]);
     case "textColor":
+      // spec §7.1·roadmap D1: `<span style="color:...">` 마크당 1개 중첩(병합
+      // 단일 span 아님) — htmlWrapperMarkOrder(6=textColor, 7=backgroundColor)
+      // 순서 그대로 textColor가 backgroundColor를 감싼다(inlineContentToNodes의
+      // reverse+reduce 실측 확인).
+      return element("span", { style: `color:${mark.color}` }, [node]);
     case "backgroundColor":
-      // spec §7.1·roadmap D1이 `<span style="...">` 마크당 1개 중첩으로
-      // 이미 결정했지만, sanitize-schema.ts의 htmlAllowedTagNames에 `span`이
-      // 아직 없고 markForElement(디코드 방향)도 이 태그를 모른다 —
-      // 인코드만 먼저 열면 재파싱·sanitize에서 조용히 사라지는 반쪽
-      // round-trip이 된다. RD-004가 스키마 허용·디코드와 함께 이 case를
-      // 구현으로 교체한다. 이 경로는 RD-002(명령)·RD-004 전까지 어떤
-      // 프로덕션 문서도 도달하지 않는다(오늘 이 mark를 만드는 경로가
-      // 없다) — 그래도 언젠가 도달하면 잘못된 손실 대신 여기서 명시적으로
-      // 멈춘다.
-      throw new Error(
-        `${mark.type} HTML export is not implemented yet (RD-004)`,
+      return element(
+        "span",
+        { style: `background-color:${mark.color}` },
+        [node],
       );
   }
 };
