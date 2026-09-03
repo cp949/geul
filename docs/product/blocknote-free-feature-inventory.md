@@ -107,10 +107,10 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | `INL-005` | 밑줄 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
 | `INL-006` | 취소선 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
 | `INL-007` | 인라인 코드 | `PARITY` | R1 | `VERIFIED` | `defaultStyleSpecs` |
-| `INL-008` | 글자색 | `PARITY` | R2 | `NOT_STARTED` | `defaultStyleSpecs` |
-| `INL-009` | 텍스트 배경색 | `PARITY` | R2 | `NOT_STARTED` | `defaultStyleSpecs` |
-| `INL-010` | 블록 글자색·배경색 | `PARITY` | R2 | `NOT_STARTED` | default block props, drag handle color menu |
-| `INL-011` | 블록 텍스트 정렬 | `PARITY` | R2 | `NOT_STARTED` | default block props, formatting toolbar |
+| `INL-008` | 글자색 | `PARITY` | R2 | `VERIFIED` | 슬라이스 8 RD-001~RD-004 완료(Issue #38) — `TextMark.textColor` 저장·검증, `toggleInlineTextColor` 명령·undo, 서식 툴바 팔레트(표 셀 8색+없음 재사용), HTML `<span style="color:...">` round-trip과 GFM strict 거절(`INLINE_COLOR`)·lossy 콘텐츠 보존을 unit·Chromium gate로 검증 |
+| `INL-009` | 텍스트 배경색 | `PARITY` | R2 | `VERIFIED` | 슬라이스 8 RD-001~RD-004 완료(Issue #38) — `TextMark.backgroundColor` 저장·검증, `toggleInlineBackgroundColor` 명령·undo, 서식 툴바 팔레트, HTML `<span style="background-color:...">` round-trip(2종 동시 지정 시 마크당 span 1개 중첩)과 GFM strict 거절·lossy 보존을 unit·Chromium gate로 검증 |
+| `INL-010` | 블록 글자색·배경색 | `PARITY` | R2 | `VERIFIED` | 슬라이스 8 RD-001~RD-004 완료(Issue #38) — `TextBlockProps.textColor`/`backgroundColor`(`paragraph`/`heading`/`quote`/목록 4종) 저장·검증, `setBlockTextColor`/`setBlockBackgroundColor` 명령·undo, 블록 메뉴 색상 섹션(`table`/`divider`/`codeBlock` 비노출), HTML `data-be-text-color`/`data-be-background-color` round-trip과 GFM strict 거절(`BLOCK_COLOR`)·lossy 보존을 unit·Chromium gate로 검증 |
+| `INL-011` | 블록 텍스트 정렬 | `PARITY` | R2 | `VERIFIED` | 슬라이스 8 RD-001~RD-004 완료(Issue #38) — `TextBlockProps.textAlignment` 저장·검증, `setBlockTextAlignment` 명령·undo, 블록 메뉴 정렬 섹션, HTML `data-be-text-alignment` round-trip과 GFM strict 거절(`BLOCK_ALIGN`)·lossy 보존을 unit·Chromium gate로 검증 |
 | `INL-012` | 인라인 LaTeX 수식 | `PARITY` | R5 | `NOT_STARTED` | `@blocknote/math-block`, `features/blocks/math.mdx` |
 
 ### 3.4 블록 편집 UI
