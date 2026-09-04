@@ -187,6 +187,15 @@ export interface EditorController {
     // 등록된 AbortSignal을 abort한다. 진행 중인 업로드가 없으면
     // COMMAND_NOT_APPLICABLE(다른 selection-only 명령과 동일 재사용).
     cancelMediaUpload(blockId: string): Result<void, EditorError>;
+    // spec §4.2 — uploadMediaFile과 같은 파이프라인을 재사용하되(RD-002),
+    // 새 업로드가 status: success가 될 때까지 대상 블록의 기존
+    // url/name/caption/backgroundColor를 전혀 바꾸지 않는다(실패해도
+    // 원상 유지, 별도 롤백 로직 없음). 반환 Promise의 ok/error 계약은
+    // uploadMediaFile과 동일하다.
+    replaceMediaBlockFile(
+      blockId: string,
+      file: File,
+    ): Promise<Result<void, EditorError>>;
     pasteTabularData(
       data: TabularData,
     ): Result<{ blockId: string }, EditorError>;
@@ -736,6 +745,7 @@ export const createEditor = (
   // setNodeMarkup에 부분 attrs를 넘기면 나머지가 schema default로
   // 리셋되는 함정을 runSetMediaBlockAttrCommand와 동일하게 피한다).
   const applyUploadedMediaAttrs = (
+    command: string,
     blockId: string,
     url: string,
     name: string | undefined,
@@ -750,7 +760,7 @@ export const createEditor = (
     ) {
       return false;
     }
-    return session.runDocumentCommand("uploadMediaFile", "local", () => {
+    return session.runDocumentCommand(command, "local", () => {
       const nextAttrs = {
         ...node.attrs,
         url,
@@ -766,20 +776,23 @@ export const createEditor = (
     }).ok;
   };
 
-  // spec §4 — uploadMediaFile 본체. 콜백 호출 → pending "uploading" → 완료
-  // 분기 순으로 진행한다. 사전 조건 실패(파괴됨·콜백 미등록·대상 없음·
-  // 대상이 media 아님·이미 진행 중)만 즉시 ok:false로 알리고, 콜백이 실제로
-  // 정착한 뒤의 성공/실패/취소는 항상 ok:true로 해결된다 — 결과는
-  // getMediaUploadState()/onUploadStateChange로만 관찰한다(pending 상태가
-  // 유일한 진실 소스, Promise 값과 이중 소스로 나누지 않는다).
+  // spec §4 — uploadMediaFile/replaceMediaBlockFile 공용 본체(RD-002가
+  // command 이름만 매개변수화해 재사용 — RD-002-DELTA-01.md "결정").
+  // 콜백 호출 → pending "uploading" → 완료 분기 순으로 진행한다. 사전
+  // 조건 실패(파괴됨·콜백 미등록·대상 없음·대상이 media 아님·이미 진행
+  // 중)만 즉시 ok:false로 알리고, 콜백이 실제로 정착한 뒤의 성공/실패/
+  // 취소는 항상 ok:true로 해결된다 — 결과는 getMediaUploadState()/
+  // onUploadStateChange로만 관찰한다(pending 상태가 유일한 진실 소스,
+  // Promise 값과 이중 소스로 나누지 않는다).
   const runMediaUpload = async (
+    command: string,
     blockId: string,
     file: File,
   ): Promise<Result<void, EditorError>> => {
-    if (session.isDestroyed) return commandNotApplicable("uploadMediaFile");
+    if (session.isDestroyed) return commandNotApplicable(command);
     const { uploadFile } = session;
     if (uploadFile === undefined) {
-      return commandNotApplicable("uploadMediaFile");
+      return commandNotApplicable(command);
     }
     const { doc } = session.editor.state;
     const position = findBlockPosition(doc, blockId);
@@ -788,10 +801,10 @@ export const createEditor = (
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
     if (!isMediaBlockKind(node.type.name)) {
-      return commandNotApplicable("uploadMediaFile");
+      return commandNotApplicable(command);
     }
     if (session.getMediaUploadController(blockId) !== null) {
-      return commandNotApplicable("uploadMediaFile");
+      return commandNotApplicable(command);
     }
 
     const controller = session.beginMediaUpload(blockId);
@@ -849,7 +862,7 @@ export const createEditor = (
     // 없다. revision overflow만 이론상 false를 만들 수 있지만 기존
     // undo/redo도 그 경계에서 같은 방식(commandNotApplicable)으로 조용히
     // 흡수한다 — 이 명령만 다르게 취급할 계약상 근거가 없다.
-    applyUploadedMediaAttrs(blockId, result.url, result.name);
+    applyUploadedMediaAttrs(command, blockId, result.url, result.name);
     session.endMediaUpload(blockId, null);
     return { ok: true, value: undefined };
   };
@@ -1355,7 +1368,10 @@ export const createEditor = (
               : { code: "INVALID_COLOR", color: value },
           (attrs, value) => ({ ...attrs, backgroundColor: value }),
         ),
-      uploadMediaFile: (blockId, file) => runMediaUpload(blockId, file),
+      uploadMediaFile: (blockId, file) =>
+        runMediaUpload("uploadMediaFile", blockId, file),
+      replaceMediaBlockFile: (blockId, file) =>
+        runMediaUpload("replaceMediaBlockFile", blockId, file),
       cancelMediaUpload: (blockId) => {
         const controller = session.getMediaUploadController(blockId);
         if (controller === null) {

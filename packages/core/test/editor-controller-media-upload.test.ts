@@ -1,14 +1,14 @@
 /**
  * upload 콜백 배선·`uploadMediaFile`/`cancelMediaUpload`·session pending
- * 상태 맵과 경합 가드(RD-001, Issue #152 슬라이스3 `MED-002` 일부, spec §4)를
+ * 상태 맵과 경합 가드(RD-001, Issue #152 슬라이스3 `MED-002` 일부, spec §4)와
+ * `replaceMediaBlockFile`의 교체 유지 정책(RD-002, `MED-005`, spec §4.2)을
  * 고정한다.
  *
  * mock `UploadFile`은 즉시 resolve하지 않고 `pending` 배열에 resolver를
- * 쌓아 두는 controllable 형태다 — `uploadMediaFile`이 반환하는 Promise가
- * 실제로 콜백 완료를 기다리는지, 완료 전 상태(pending "uploading")를
- * 관찰할 수 있는지 검증하려면 콜백을 테스트가 직접 제어해야 한다.
- * `replaceMediaBlockFile`(RD-002)·react Upload UI(RD-003)는 이 DELTA
- * 범위가 아니다.
+ * 쌓아 두는 controllable 형태다 — `uploadMediaFile`/`replaceMediaBlockFile`이
+ * 반환하는 Promise가 실제로 콜백 완료를 기다리는지, 완료 전 상태(pending
+ * "uploading")를 관찰할 수 있는지 검증하려면 콜백을 테스트가 직접 제어해야
+ * 한다. react Upload UI(RD-003)는 이 DELTA 범위가 아니다.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -351,5 +351,186 @@ describe("cancelMediaUpload", () => {
     expect(editor.commands.cancelMediaUpload("m-1")).toEqual(
       notApplicable("cancelMediaUpload"),
     );
+  });
+});
+
+/**
+ * `replaceMediaBlockFile`(RD-002, spec §4.2, `MED-005`)은 `uploadMediaFile`과
+ * 같은 `runMediaUpload` 파이프라인을 command 이름만 다르게 재사용한다
+ * (`_works/roadmap/result/RD-002-DELTA-01.md` "결정"). 경합 가드·동시 호출
+ * 거절·`UPLOAD_CALLBACK_THREW`/`LINK_HREF_REJECTED` 흡수는 `uploadMediaFile`
+ * 쪽에서 이미 고정했고 command 인자와 무관한 공용 로직이라 여기서
+ * 반복하지 않는다 — 이 describe는 "교체 유지 정책"(성공 전까지 기존
+ * url/name/caption/backgroundColor 불변)과 command 매개변수화 자체만 고정한다.
+ */
+describe("replaceMediaBlockFile — 성공", () => {
+  it("기존 caption/backgroundColor를 유지한 채 새 url(및 name)로 교체되고 undo 1회로 복원된다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("image", "m-1", {
+          url: "https://example.com/old.png",
+          name: "old.png",
+          caption: "설명",
+          backgroundColor: "#AABBCC",
+        }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+    const before = editorState(editor, tiptap);
+
+    const replacePromise = editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    expect(pending).toHaveLength(1);
+    expect(editor.getMediaUploadState("m-1")).toBe("uploading");
+    // 성공 전까지는 문서가 전혀 바뀌지 않는다(spec §4.2 "애초에 아무것도
+    // 바꾸지 않는다").
+    expect(editorState(editor, tiptap)).toEqual(before);
+
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/new.png",
+      name: "new.png",
+    });
+    expect(await replacePromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("image", "m-1", {
+        url: "https://example.com/new.png",
+        name: "new.png",
+        caption: "설명",
+        backgroundColor: "#AABBCC",
+      }),
+      tailParagraphBlock,
+    ]);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+    ]);
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("name 미지정 결과는 기존 name을 그대로 유지한다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor } = mountedWithUpload(
+      documentOf(
+        mediaBlock("file", "m-1", {
+          url: "https://example.com/old.pdf",
+          name: "old.pdf",
+        }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+
+    const replacePromise = editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/new.pdf",
+    });
+    await replacePromise;
+
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("file", "m-1", {
+        url: "https://example.com/new.pdf",
+        name: "old.pdf",
+      }),
+      tailParagraphBlock,
+    ]);
+  });
+});
+
+describe("replaceMediaBlockFile — 실패·취소", () => {
+  it("status: error 결과는 문서 트랜잭션을 만들지 않아 기존 url/name/caption/backgroundColor가 그대로 유지된다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("image", "m-1", {
+          url: "https://example.com/old.png",
+          name: "old.png",
+          caption: "설명",
+          backgroundColor: "#AABBCC",
+        }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+    const before = editorState(editor, tiptap);
+
+    const replacePromise = editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    pending[0]!.resolve({
+      status: "error",
+      code: "NETWORK_ERROR",
+      message: "업로드 실패",
+    });
+    expect(await replacePromise).toEqual(okResult);
+
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+    expect(editor.getMediaUploadState("m-1")).toEqual({
+      status: "error",
+      code: "NETWORK_ERROR",
+      message: "업로드 실패",
+    });
+  });
+
+  it("status: cancelled 결과는 문서 트랜잭션을 만들지 않아 기존 url/name/caption/backgroundColor가 그대로 유지된다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("video", "m-1", {
+          url: "https://example.com/old.mp4",
+          caption: "설명",
+        }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+    const before = editorState(editor, tiptap);
+
+    const replacePromise = editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    pending[0]!.resolve({ status: "cancelled" });
+    expect(await replacePromise).toEqual(okResult);
+
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+});
+
+describe("replaceMediaBlockFile — 사전 조건", () => {
+  it("uploadFile 미등록 시 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE(command: replaceMediaBlockFile)을 반환한다", async () => {
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("file", "m-1", { url: "https://example.com/old.pdf" }),
+        tailParagraphBlock,
+      ),
+    );
+    const before = editorState(editor, tiptap);
+
+    const result = await editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    // command 매개변수화 자체를 검증한다 — uploadMediaFile 쪽 로직을 그대로
+    // 재사용해도 이 command 이름은 uploadMediaFile로 새지 않아야 한다
+    // (RD-002-DELTA-01.md 완료 조건 4).
+    expect(result).toEqual(notApplicable("replaceMediaBlockFile"));
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
   });
 });
