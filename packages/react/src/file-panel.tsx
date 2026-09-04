@@ -23,6 +23,14 @@ const kindLabel = (kind: MediaBlockKind): string =>
 
 type PanelPosition = { left: number; top: number };
 
+// Upload 탭의 서브 상태(RD-003 DELTA-02). success/cancelled는 core pending
+// 맵에서 구분하지 않으므로(spec §4.2, 둘 다 null) 여기서도 별도 상태를 두지
+// 않는다 — 둘 다 "idle"로 수렴한다(RD-003-DELTA-02.md "결정" 3).
+type UploadSubState =
+  | { status: "idle" }
+  | { status: "uploading" }
+  | { status: "error"; code: string; message: string };
+
 type PanelState =
   | { mode: "closed" }
   | ({
@@ -33,6 +41,14 @@ type PanelState =
       rejected: boolean;
       /** 마지막으로 성공 적용된 이름 초깃값(추출 실패 시 URL 자체). 아직 제출 전이면 null. */
       appliedName: string | null;
+      /** 기본값은 항상 "embed" — uploadFile 등록 여부가 기본 활성 탭을
+       * 바꾸지 않는다(RD-003-DELTA-02.md "결정" 2). */
+      activeTab: "embed" | "upload";
+      upload: UploadSubState;
+      /** retry가 파일 선택 대화상자를 다시 열지 않고 재사용할 원본 File.
+       * 패널이 닫혔다 다시 열리면(로컬 state 전부 소실) null로 되돌아간다 —
+       * 그 경우 시딩된 error는 보여주되 Retry는 숨긴다(결정 5). */
+      heldFile: File | null;
     } & PanelPosition);
 
 /**
@@ -69,6 +85,7 @@ export const FilePanel = () => {
   const dismissedBlockIdRef = useRef<string | null>(null);
   const openBlockIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const updateFromSelection = () => {
@@ -95,6 +112,19 @@ export const FilePanel = () => {
       editingRef.current = true;
       const bounds =
         readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+      // Upload 탭 초깃값 시딩(RD-003-DELTA-02.md "결정" 5) — 이전에 이
+      // 블록에서 실패해 error pending이 남아 있으면 재오픈 즉시 그 에러를
+      // 보여준다. uploadFile 미등록이면 pending 자체를 조회하지 않는다
+      // (호출해도 항상 null이지만, 등록 여부와 무관한 호출을 피한다).
+      const pending = editor.isUploadEnabled()
+        ? editor.getMediaUploadState(media.blockId)
+        : null;
+      const upload: UploadSubState =
+        pending === "uploading"
+          ? { status: "uploading" }
+          : pending === null
+            ? { status: "idle" }
+            : { status: "error", code: pending.code, message: pending.message };
       setPanelState({
         mode: "open",
         blockId: media.blockId,
@@ -102,6 +132,9 @@ export const FilePanel = () => {
         draft: "",
         rejected: false,
         appliedName: null,
+        activeTab: "embed",
+        upload,
+        heldFile: null,
         left: bounds.left,
         top: bounds.top,
       });
@@ -130,6 +163,83 @@ export const FilePanel = () => {
   useEffect(() => {
     if (panelState.mode === "open") inputRef.current?.focus();
   }, [panelState.mode]);
+
+  // 탭 전환(Upload 클릭)으로만 발동한다 — 최초 열림은 위 effect가 이미
+  // 처리한다(기본 활성 탭은 항상 embed). panelState.mode 하나로는 탭
+  // 전환을 못 잡으므로 activeTab을 별도 원시값 의존성으로 뽑아 쓴다.
+  const activeTab = panelState.mode === "open" ? panelState.activeTab : null;
+  useEffect(() => {
+    if (activeTab === "upload") fileInputRef.current?.focus();
+  }, [activeTab]);
+
+  // Upload/Embed 공용 — 파일 선택 직후와 retry 둘 다 이 함수로 들어온다
+  // (RD-003.md "결정" — Promise를 직접 await해 loading→성공/실패/취소를
+  // 로컬 state로 반영, getMediaUploadState는 열릴 때 초깃값 시딩용으로만
+  // 쓴다). 성공/취소는 pending이 둘 다 null이라 구분하지 않는다(결정 3).
+  const startUpload = useCallback(
+    async (blockId: string, file: File) => {
+      setPanelState((prev) =>
+        prev.mode === "open" && prev.blockId === blockId
+          ? { ...prev, heldFile: file, upload: { status: "uploading" } }
+          : prev,
+      );
+      const result = await editor.commands.uploadMediaFile(blockId, file);
+      setPanelState((prev) => {
+        if (prev.mode !== "open" || prev.blockId !== blockId) return prev;
+        if (!result.ok) {
+          // 사전조건 실패(BLOCK_NOT_FOUND·COMMAND_NOT_APPLICABLE 등)만
+          // 여기로 온다 — 콜백이 실제 정착한 뒤의 성공/실패/취소는 항상
+          // ok:true라 아래 getMediaUploadState 분기가 담당한다.
+          return {
+            ...prev,
+            upload: {
+              status: "error",
+              code: result.error.code,
+              message: "Upload could not start.",
+            },
+          };
+        }
+        const pending = editor.getMediaUploadState(blockId);
+        if (pending === "uploading") return prev;
+        if (pending === null) {
+          return { ...prev, upload: { status: "idle" }, heldFile: null };
+        }
+        return {
+          ...prev,
+          upload: {
+            status: "error",
+            code: pending.code,
+            message: pending.message,
+          },
+        };
+      });
+    },
+    [editor],
+  );
+
+  const handleFileChange = (event: { currentTarget: HTMLInputElement }) => {
+    if (panelState.mode !== "open") return;
+    const file = event.currentTarget.files?.[0] ?? null;
+    event.currentTarget.value = "";
+    if (file === null) return;
+    void startUpload(panelState.blockId, file);
+  };
+
+  const handleRetry = () => {
+    if (panelState.mode !== "open" || panelState.heldFile === null) return;
+    void startUpload(panelState.blockId, panelState.heldFile);
+  };
+
+  const handleCancel = () => {
+    if (panelState.mode !== "open") return;
+    editor.commands.cancelMediaUpload(panelState.blockId);
+  };
+
+  const handleTabClick = (tab: "embed" | "upload") => {
+    setPanelState((prev) =>
+      prev.mode === "open" ? { ...prev, activeTab: tab } : prev,
+    );
+  };
 
   const { menuRef, style } = useClampedMenuPosition(
     panelState.mode === "closed" ? 0 : panelState.left,
@@ -166,6 +276,14 @@ export const FilePanel = () => {
 
   if (panelState.mode === "closed") return null;
 
+  // 등록 여부는 마운트 시점에 고정된다(EditorProvider "결정") — 렌더마다
+  // 다시 불러도 값은 안정적이다. 미등록이면 tablist 자체를 렌더링하지
+  // 않는다(RD-003-DELTA-02.md "결정" 1) — 기존 13개 단일 모드 테스트가
+  // 그대로 통과해야 한다.
+  const uploadEnabled = editor.isUploadEnabled();
+  const showEmbedTab = !uploadEnabled || panelState.activeTab === "embed";
+  const showUploadTab = uploadEnabled && panelState.activeTab === "upload";
+
   const applyUrl = () => {
     if (panelState.mode !== "open") return;
     const result = editor.commands.setMediaBlockUrl(
@@ -199,35 +317,118 @@ export const FilePanel = () => {
       role="toolbar"
       style={style}
     >
-      <input
-        aria-label={`${kindLabel(panelState.kind)} URL`}
-        onChange={(event) => {
-          if (panelState.mode !== "open") return;
-          setPanelState({
-            ...panelState,
-            draft: event.currentTarget.value,
-            rejected: false,
-          });
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            applyUrl();
-          }
-        }}
-        ref={inputRef}
-        type="text"
-        value={panelState.draft}
-      />
-      <button
-        aria-label="Save URL"
-        className={filePanelButtonClassName}
-        onClick={applyUrl}
-        onMouseDown={(event) => event.preventDefault()}
-        type="button"
-      >
-        Save
-      </button>
+      {uploadEnabled && (
+        <div
+          aria-label="Media source"
+          className="geul-file-panel__tablist"
+          role="tablist"
+        >
+          <button
+            aria-selected={panelState.activeTab === "embed"}
+            className={filePanelButtonClassName}
+            onClick={() => handleTabClick("embed")}
+            onMouseDown={(event) => event.preventDefault()}
+            role="tab"
+            type="button"
+          >
+            Embed
+          </button>
+          <button
+            aria-selected={panelState.activeTab === "upload"}
+            className={filePanelButtonClassName}
+            onClick={() => handleTabClick("upload")}
+            onMouseDown={(event) => event.preventDefault()}
+            role="tab"
+            type="button"
+          >
+            Upload
+          </button>
+        </div>
+      )}
+      {showEmbedTab && (
+        <>
+          <input
+            aria-label={`${kindLabel(panelState.kind)} URL`}
+            onChange={(event) => {
+              if (panelState.mode !== "open") return;
+              setPanelState({
+                ...panelState,
+                draft: event.currentTarget.value,
+                rejected: false,
+              });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyUrl();
+              }
+            }}
+            ref={inputRef}
+            type="text"
+            value={panelState.draft}
+          />
+          <button
+            aria-label="Save URL"
+            className={filePanelButtonClassName}
+            onClick={applyUrl}
+            onMouseDown={(event) => event.preventDefault()}
+            type="button"
+          >
+            Save
+          </button>
+          {panelState.rejected && (
+            <span className="geul-file-panel__error" role="alert">
+              Unsupported media URL
+            </span>
+          )}
+          {panelState.appliedName !== null && (
+            <p className="geul-file-panel__name">
+              Name: {panelState.appliedName}
+            </p>
+          )}
+        </>
+      )}
+      {showUploadTab && (
+        <div className="geul-file-panel__upload">
+          <input
+            aria-label={`${kindLabel(panelState.kind)} file`}
+            disabled={panelState.upload.status === "uploading"}
+            onChange={handleFileChange}
+            ref={fileInputRef}
+            type="file"
+          />
+          {panelState.upload.status === "uploading" && (
+            <>
+              <p role="status">Uploading…</p>
+              <button
+                className={filePanelButtonClassName}
+                onClick={handleCancel}
+                onMouseDown={(event) => event.preventDefault()}
+                type="button"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+          {panelState.upload.status === "error" && (
+            <>
+              <span className="geul-file-panel__error" role="alert">
+                {panelState.upload.message}
+              </span>
+              {panelState.heldFile !== null && (
+                <button
+                  className={filePanelButtonClassName}
+                  onClick={handleRetry}
+                  onMouseDown={(event) => event.preventDefault()}
+                  type="button"
+                >
+                  Retry
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       <button
         aria-label="Close file panel"
         className={filePanelButtonClassName}
@@ -237,14 +438,6 @@ export const FilePanel = () => {
       >
         Close
       </button>
-      {panelState.rejected && (
-        <span className="geul-file-panel__error" role="alert">
-          Unsupported media URL
-        </span>
-      )}
-      {panelState.appliedName !== null && (
-        <p className="geul-file-panel__name">Name: {panelState.appliedName}</p>
-      )}
     </div>
   );
 };
