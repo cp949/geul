@@ -15,7 +15,7 @@ const loadDocument = async (page: Page, document: unknown): Promise<void> => {
   await page.getByRole("button", { name: "Load JSON" }).click();
 };
 
-test("체크박스를 클릭하면 checked 표시가 반전되고 저장 JSON에 반영된다", async ({
+test("체크박스를 클릭하면 checked 표시가 반전되고 저장 JSON에 반영된다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

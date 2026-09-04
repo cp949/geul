@@ -130,7 +130,7 @@ test("h4-h6 폰트 크기가 단조 감소하고 blockquote·hr에 콘텐츠 스
   await expect(editable.locator("hr")).toHaveCSS("border-top-width", "1px");
 });
 
-test("native #/>/--- 입력은 production editor에서 heading/quote/divider DOM으로 변환하고 focus를 유지한다", async ({
+test("native #/>/--- 입력은 production editor에서 heading/quote/divider DOM으로 변환하고 focus를 유지한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

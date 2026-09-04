@@ -527,7 +527,7 @@ test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다
   expect(pageErrors).toHaveLength(0);
 });
 
-test("블록 메뉴에서 글자색을 적용하면 문서에 반영되고 undo 1회로 복원된다 (RD-003 DELTA-02)", async ({
+test("블록 메뉴에서 글자색을 적용하면 문서에 반영되고 undo 1회로 복원된다 (RD-003 DELTA-02) @core", async ({
   page,
 }) => {
   // 블록 수준 textColor/backgroundColor/textAlignment는 편집 화면에 시각

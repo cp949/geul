@@ -139,7 +139,7 @@ const subtreeDocument = {
   ],
 };
 
-test("자식이 있는 블록 자신을 드래그하면 하위 트리 전체가 동반 이동하고 undo 1회로 복원된다 (Issue #125 UI-003)", async ({
+test("자식이 있는 블록 자신을 드래그하면 하위 트리 전체가 동반 이동하고 undo 1회로 복원된다 (Issue #125 UI-003) @core", async ({
   page,
 }) => {
   const pageErrors = trackPageErrors(page);

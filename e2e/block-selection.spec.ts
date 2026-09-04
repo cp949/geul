@@ -110,7 +110,7 @@ const dragHandleTo = async (
   await page.mouse.up();
 };
 
-test("핸들 드래그로 비인접 형제 범위를 선택하면 하이라이트와 BlockSelectionToolbar가 뜬다", async ({
+test("핸들 드래그로 비인접 형제 범위를 선택하면 하이라이트와 BlockSelectionToolbar가 뜬다 @core", async ({
   page,
 }) => {
   await openWithFixture(page);
@@ -139,7 +139,7 @@ test("핸들 드래그로 비인접 형제 범위를 선택하면 하이라이�
   expect(highlighted.sort()).toEqual(["b1", "b2", "b2-child", "b3"]);
 });
 
-test("삭제 버튼을 클릭하면 선택 범위와 children이 함께 사라지고 Control+z 1회로 복원된다", async ({
+test("삭제 버튼을 클릭하면 선택 범위와 children이 함께 사라지고 Control+z 1회로 복원된다 @core", async ({
   page,
 }) => {
   const { editable } = await openWithFixture(page);

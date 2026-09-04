@@ -334,7 +334,7 @@ for (const [marker, type, contentAttribute, renderedMarker] of [
   });
 }
 
-test("native - 뒤 두 space는 첫 space에서 목록으로 변환하고 둘째 space를 content에 입력한다", async ({
+test("native - 뒤 두 space는 첫 space에서 목록으로 변환하고 둘째 space를 content에 입력한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

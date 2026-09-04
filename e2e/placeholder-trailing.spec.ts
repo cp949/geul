@@ -35,7 +35,7 @@ test("빈 paragraph는 캐럿이 있을 때만 placeholder를 보인다", async 
   await expect(editable.locator("[data-placeholder]")).toHaveCount(0);
 });
 
-test("heading으로 끝나는 문서를 로드하면 trailing paragraph가 생기고 빈 heading은 placeholder를 상시 보인다", async ({
+test("heading으로 끝나는 문서를 로드하면 trailing paragraph가 생기고 빈 heading은 placeholder를 상시 보인다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

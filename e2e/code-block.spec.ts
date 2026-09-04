@@ -72,7 +72,7 @@ test("Slash /code는 빈 CodeBlock과 Code placeholder, plain monospace 스타�
   expect(style.overflowX).toBe("auto");
 });
 
-test("펜스 ```lang 입력은 production editor에서 codeBlock DOM으로 변환하고 language를 canonicalize한다", async ({
+test("펜스 ```lang 입력은 production editor에서 codeBlock DOM으로 변환하고 language를 canonicalize한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

@@ -5,8 +5,10 @@
  * `clipboard-paste-priority.test.ts`(core, RD-006 DELTA-01)가 jsdom
  * 수준에서 이미 fixture로 고정했다 — 이 파일은 그 계약이 실제 Chromium
  * DOM·ClipboardEvent에서도 성립하는지만 대표적으로 재확인한다(전체
- * 블록 타입을 반복하지 않는다). `@core`를 붙이지 않는다 — Firefox/
- * WebKit 3-엔진 게이트는 슬라이스 11 범위다.
+ * 블록 타입을 반복하지 않는다). HTML own-wrapper·Markdown text 2건에
+ * `@core`를 붙여 Firefox/WebKit 3-엔진에서도 돈다(Issue #38 슬라이스 11,
+ * `_works/roadmap/RD-001-DELTA-01.md`) — 표 우선·파일 무시 2건은 표
+ * 경로(`table-paste.spec.ts`)·negative case라 대표성이 낮아 제외했다.
  */
 import { expect, test } from "@playwright/test";
 
@@ -14,7 +16,7 @@ import { dispatchPaste } from "./support/clipboard.js";
 import { openDemo } from "./support/demo.js";
 import { trackPageErrors } from "./support/ids.js";
 
-test("own-export 중첩 wrapper HTML을 붙이면 실제 DOM에 blockGroup 중첩이 반영된다", async ({
+test("own-export 중첩 wrapper HTML을 붙이면 실제 DOM에 blockGroup 중첩이 반영된다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -43,7 +45,7 @@ test("own-export 중첩 wrapper HTML을 붙이면 실제 DOM에 blockGroup 중�
   ).toHaveCount(0);
 });
 
-test("Markdown 문법 plain text만 붙이면 heading과 목록으로 반영된다", async ({
+test("Markdown 문법 plain text만 붙이면 heading과 목록으로 반영된다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);

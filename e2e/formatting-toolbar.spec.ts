@@ -153,7 +153,7 @@ test("mark 토글을 undo 1회로 복원한다", async ({ page }) => {
   await expect(editable).toHaveText("Hello R1");
 });
 
-test("인라인 글자색 팔레트로 선택 텍스트에 색상을 적용하고 computed style을 반영하며 undo 1회로 복원한다 (RD-003 DELTA-01)", async ({
+test("인라인 글자색 팔레트로 선택 텍스트에 색상을 적용하고 computed style을 반영하며 undo 1회로 복원한다 (RD-003 DELTA-01) @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
