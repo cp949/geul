@@ -9,6 +9,7 @@ import {
 import type { Editor } from "@tiptap/core";
 
 import type { EditorError } from "./errors.js";
+import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
@@ -111,6 +112,13 @@ export class ProductionEditorSession {
   private activeReason: ChangeReason | null = null;
   private pendingDocument: BlockDocument | null = null;
   private blockSelection: BlockSelectionRange | null = null;
+  // spec §4.2 — blockSelection과 같은 세션 전용 상태(모델 스키마 밖,
+  // runDocumentCommand 밖). uploadState는 "uploading" | 에러 상태만 담는다
+  // (성공·취소는 흔적을 남기지 않고 항목을 지운다). uploadControllers는
+  // 진행 중인 업로드의 AbortController만 담고 완료 즉시 제거한다 —
+  // cancelMediaUpload(editor-controller.ts)가 이 맵으로 취소 대상을 찾는다.
+  private readonly uploadState = new Map<string, MediaUploadState>();
+  private readonly uploadControllers = new Map<string, AbortController>();
 
   constructor(
     private readonly options: {
@@ -122,6 +130,11 @@ export class ProductionEditorSession {
         reason: ChangeReason;
       }) => void;
       onPasteRejected?: (reason: PasteRejectedReason) => void;
+      uploadFile?: UploadFile;
+      onUploadStateChange?: (
+        blockId: string,
+        state: MediaUploadState | null,
+      ) => void;
     },
   ) {
     const parsed = parseSupportedDocument(options.initialDocument);
@@ -191,6 +204,48 @@ export class ProductionEditorSession {
 
   setBlockSelection(next: BlockSelectionRange | null): void {
     this.blockSelection = next;
+  }
+
+  get uploadFile(): UploadFile | undefined {
+    return this.options.uploadFile;
+  }
+
+  getMediaUploadState(blockId: string): MediaUploadState | null {
+    return this.uploadState.get(blockId) ?? null;
+  }
+
+  getMediaUploadController(blockId: string): AbortController | null {
+    return this.uploadControllers.get(blockId) ?? null;
+  }
+
+  // 업로드 시작 — 컨트롤러를 등록하고 상태를 "uploading"으로 알린다.
+  // 호출자(editor-controller.ts::runMediaUpload)가 같은 블록의 진행 중
+  // 업로드가 없는지 먼저 확인한다(getMediaUploadController).
+  beginMediaUpload(blockId: string): AbortController {
+    const controller = new AbortController();
+    this.uploadControllers.set(blockId, controller);
+    this.setMediaUploadState(blockId, "uploading");
+    return controller;
+  }
+
+  // 업로드 종료 — 진행 중 컨트롤러를 제거하고 최종 상태를 알린다.
+  // outcome이 null이면 성공·취소(흔적 없음)이고, 에러면 code·message가
+  // pending 상태로 남는다(spec §4.2).
+  endMediaUpload(blockId: string, outcome: MediaUploadState | null): void {
+    this.uploadControllers.delete(blockId);
+    this.setMediaUploadState(blockId, outcome);
+  }
+
+  private setMediaUploadState(
+    blockId: string,
+    state: MediaUploadState | null,
+  ): void {
+    if (state === null) {
+      this.uploadState.delete(blockId);
+    } else {
+      this.uploadState.set(blockId, state);
+    }
+    this.options.onUploadStateChange?.(blockId, state);
   }
 
   replaceDocument(next: unknown): Result<void, EditorError> {

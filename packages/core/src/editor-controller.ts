@@ -29,6 +29,11 @@ import {
   type InsertMediaBlockError,
   insertMediaBlock as insertMediaBlockCommand,
 } from "./media-commands.js";
+import type {
+  MediaUploadState,
+  UploadFile,
+  UploadResult,
+} from "./media-upload.js";
 import {
   commandNotApplicable,
   ProductionEditorSession,
@@ -99,6 +104,11 @@ export interface EditorController {
   getBlockNestingActionState(blockId: string): BlockNestingActionState;
   getTableCellSelection(): TableCellSelection | null;
   getBlockSelection(): BlockSelection | null;
+  // spec §4.2 — 업로드 중(pending) 상태 읽기 전용 조회. 문서 round-trip
+  // 대상이 아니다(session 전용, blockSelection과 같은 자리). 변경은
+  // CreateEditorOptions.onUploadStateChange로 push 알림한다(commands.
+  // uploadMediaFile/cancelMediaUpload 주석 참고).
+  getMediaUploadState(blockId: string): MediaUploadState | null;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
@@ -163,6 +173,20 @@ export interface EditorController {
       blockId: string,
       color: string | null,
     ): Result<void, EditorError>;
+    // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
+    // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
+    // 사전 조건 실패(BLOCK_NOT_FOUND·미등록·이미 진행 중 등)만 ok:false로
+    // 알린다 — 콜백이 실제로 완료된 뒤의 성공/실패/취소는 항상 ok:true로
+    // 해결되고, 결과는 getMediaUploadState()/onUploadStateChange로만
+    // 관찰한다(RD-001.md "결정" — pending 상태가 유일한 진실 소스, Promise
+    // 값과 이중 소스로 나누지 않는다).
+    uploadMediaFile(
+      blockId: string,
+      file: File,
+    ): Promise<Result<void, EditorError>>;
+    // 등록된 AbortSignal을 abort한다. 진행 중인 업로드가 없으면
+    // COMMAND_NOT_APPLICABLE(다른 selection-only 명령과 동일 재사용).
+    cancelMediaUpload(blockId: string): Result<void, EditorError>;
     pasteTabularData(
       data: TabularData,
     ): Result<{ blockId: string }, EditorError>;
@@ -442,6 +466,19 @@ export type CreateEditorOptions = {
   createId?: IdFactory;
   onChange?: (event: DocumentChangeEvent) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  // spec §4.1 — 미등록 시 uploadMediaFile은 COMMAND_NOT_APPLICABLE로
+  // 거절되고, drag/drop·paste 파일 페이로드는 무시된다(R2 결정 유지,
+  // 슬라이스4 몫).
+  uploadFile?: UploadFile;
+  // spec §4.2 — pending 업로드 상태(session 전용) 변경 push 알림. 문서
+  // 변경이 아니므로 onChange와 분리한다(DocumentChangeEvent는
+  // revision·changedBlockIds를 갖는 문서 커밋 전용 shape이고, pending
+  // 변경은 revision을 올리지 않아 그 shape에 맞지 않는다 — RD-001.md
+  // "결정").
+  onUploadStateChange?: (
+    blockId: string,
+    state: MediaUploadState | null,
+  ) => void;
 };
 
 const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [
@@ -689,6 +726,132 @@ export const createEditor = (
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });
+  };
+
+  // spec §4 — uploadMediaFile이 성공 분기에서 쓰는 본체.
+  // runSetMediaBlockAttrCommand와 같은 모양(찾기→가드→setNodeMarkup
+  // 1회)이지만 한 트랜잭션에 url+name을 함께 세팅한다(spec §4.2 "url 및
+  // 반환된 name을 단일 트랜잭션으로 세팅"). name이 undefined면 기존
+  // node.attrs를 스프레드해 그대로 유지한다(name 미지정 시 유지 계약,
+  // setNodeMarkup에 부분 attrs를 넘기면 나머지가 schema default로
+  // 리셋되는 함정을 runSetMediaBlockAttrCommand와 동일하게 피한다).
+  const applyUploadedMediaAttrs = (
+    blockId: string,
+    url: string,
+    name: string | undefined,
+  ): boolean => {
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (
+      position === null ||
+      node === null ||
+      !isMediaBlockKind(node.type.name)
+    ) {
+      return false;
+    }
+    return session.runDocumentCommand("uploadMediaFile", "local", () => {
+      const nextAttrs = {
+        ...node.attrs,
+        url,
+        ...(name === undefined ? {} : { name }),
+      };
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        nextAttrs,
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    }).ok;
+  };
+
+  // spec §4 — uploadMediaFile 본체. 콜백 호출 → pending "uploading" → 완료
+  // 분기 순으로 진행한다. 사전 조건 실패(파괴됨·콜백 미등록·대상 없음·
+  // 대상이 media 아님·이미 진행 중)만 즉시 ok:false로 알리고, 콜백이 실제로
+  // 정착한 뒤의 성공/실패/취소는 항상 ok:true로 해결된다 — 결과는
+  // getMediaUploadState()/onUploadStateChange로만 관찰한다(pending 상태가
+  // 유일한 진실 소스, Promise 값과 이중 소스로 나누지 않는다).
+  const runMediaUpload = async (
+    blockId: string,
+    file: File,
+  ): Promise<Result<void, EditorError>> => {
+    if (session.isDestroyed) return commandNotApplicable("uploadMediaFile");
+    const { uploadFile } = session;
+    if (uploadFile === undefined) {
+      return commandNotApplicable("uploadMediaFile");
+    }
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (!isMediaBlockKind(node.type.name)) {
+      return commandNotApplicable("uploadMediaFile");
+    }
+    if (session.getMediaUploadController(blockId) !== null) {
+      return commandNotApplicable("uploadMediaFile");
+    }
+
+    const controller = session.beginMediaUpload(blockId);
+    let result: UploadResult;
+    try {
+      result = await uploadFile(file, controller.signal);
+    } catch {
+      result = {
+        status: "error",
+        code: "UPLOAD_CALLBACK_THREW",
+        message: "uploadFile 콜백이 reject했다",
+      };
+    }
+
+    if (session.isDestroyed) return { ok: true, value: undefined };
+    // 경합 가드(spec §4.2) — 완료 시점에 대상 블록이 여전히 존재하는지
+    // 재확인한다. undo로 사라지거나 다른 파일로 교체된 뒤 이전 결과가
+    // 늦게 도착하는 경우를 막는다. 존재하지 않으면 결과 종류와 무관하게
+    // 완료 결과를 무시하고 pending 상태만 지운다.
+    const stillExists =
+      findBlockPosition(session.editor.state.doc, blockId) !== null;
+    if (!stillExists) {
+      session.endMediaUpload(blockId, null);
+      return { ok: true, value: undefined };
+    }
+
+    if (result.status === "cancelled") {
+      session.endMediaUpload(blockId, null);
+      return { ok: true, value: undefined };
+    }
+    if (result.status === "error") {
+      session.endMediaUpload(blockId, {
+        status: "error",
+        code: result.code,
+        message: result.message,
+      });
+      return { ok: true, value: undefined };
+    }
+
+    // success — url이 기존 setMediaBlockUrl과 동일한 정책을 통과해야
+    // 한다(isSupportedLinkHref 재사용, 신규 URL 검증 코드 없음). 위반하면
+    // 업로드는 "콜백 성공"이었지만 geul은 문서를 바꾸지 않고 에러
+    // pending으로 흡수한다 — 업로드 성공이 URL 정책을 우회하는 구멍을
+    // 막는다.
+    if (!isSupportedLinkHref(result.url)) {
+      session.endMediaUpload(blockId, {
+        status: "error",
+        code: "LINK_HREF_REJECTED",
+        message: `업로드 결과 URL이 허용되지 않는다: ${result.url}`,
+      });
+      return { ok: true, value: undefined };
+    }
+    // 반환값(boolean)을 무시한다 — stillExists 재확인과 이 호출 사이에
+    // await이 없어(동기 연속) 대상이 사라지거나 media가 아니게 될 수
+    // 없다. revision overflow만 이론상 false를 만들 수 있지만 기존
+    // undo/redo도 그 경계에서 같은 방식(commandNotApplicable)으로 조용히
+    // 흡수한다 — 이 명령만 다르게 취급할 계약상 근거가 없다.
+    applyUploadedMediaAttrs(blockId, result.url, result.name);
+    session.endMediaUpload(blockId, null);
+    return { ok: true, value: undefined };
   };
 
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
@@ -1059,6 +1222,10 @@ export const createEditor = (
       if (session.isDestroyed) return null;
       return session.getBlockSelection();
     },
+    getMediaUploadState(blockId) {
+      if (session.isDestroyed) return null;
+      return session.getMediaUploadState(blockId);
+    },
     replaceDocument(next) {
       return session.replaceDocument(next);
     },
@@ -1188,6 +1355,15 @@ export const createEditor = (
               : { code: "INVALID_COLOR", color: value },
           (attrs, value) => ({ ...attrs, backgroundColor: value }),
         ),
+      uploadMediaFile: (blockId, file) => runMediaUpload(blockId, file),
+      cancelMediaUpload: (blockId) => {
+        const controller = session.getMediaUploadController(blockId);
+        if (controller === null) {
+          return commandNotApplicable("cancelMediaUpload");
+        }
+        controller.abort();
+        return { ok: true, value: undefined };
+      },
       pasteTabularData: (data) => {
         if (session.isDestroyed)
           return commandNotApplicable("pasteTabularData");
