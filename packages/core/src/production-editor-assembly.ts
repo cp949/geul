@@ -95,7 +95,10 @@ const HeadingExtension = Node.create({
 
 // 목록 content node의 내부 DOM은 공개 HTML 변환 계약이 아니다. production
 // EditorView가 inline content를 그릴 최소 div만 제공하고 parseHTML은 열지
-// 않는다. 모델의 startNumber는 PM attr에만 보존한다.
+// 않는다. 상태(checked/startNumber/collapsed)는 rendered: false라 PM
+// attr에는 항상 남지만(list-item-extension.ts), production DOM에도
+// io.importHtml이 own-content로 재인식할 수 있도록 data-be-* attribute로
+// 노출한다(RD-003 — 이전에는 DOM에 전혀 투영되지 않았다).
 //
 // 외부 ul/ol 붙여넣기(DELTA-03, Issue #143 (c))도 이 parseHTML 부재를
 // 바꾸지 않는다 — list-paste-fallback-extension.ts가 clipboard HTML을
@@ -115,34 +118,56 @@ const ProductionBulletListItemExtension = BulletListItemExtension.extend({
   },
 });
 
+// startNumber는 model optional 필드(부재=null)다 — own-export의
+// dataBeCollapsed(<details>, "정의된 경우만 출력")와 같은 패턴으로 값이
+// 있을 때만 data-be-start-number를 낸다. io.importHtml의
+// buildProductionListItemBlock이 부재 시 필드를 생략해 model 계약과
+// 대응한다(RD-003 DELTA-01).
 const ProductionNumberedListItemExtension = NumberedListItemExtension.extend({
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-be-numbered-list-item": "" }),
+      mergeAttributes(HTMLAttributes, {
+        "data-be-numbered-list-item": "",
+        ...(node.attrs.startNumber === null
+          ? {}
+          : { "data-be-start-number": String(node.attrs.startNumber) }),
+      }),
       0,
     ];
   },
 });
 
 // checked 시각 표시(체크박스 아이콘·클릭 UI)는 이 DELTA 범위가 아니다 —
-// 저장 계층만 완성한다(RD-001 DELTA-02, 그릴링 결정). rendered: false라
-// checked는 이 wrapper div의 DOM 속성으로 투영되지 않는다.
+// 저장 계층만 완성한다(RD-001 DELTA-02, 그릴링 결정). checked는 model
+// 필수 필드(부재 상태가 없다)라 own-export(<li data-be-checked>,
+// export-html.ts)와 같이 항상 문자열로 낸다 — startNumber/collapsed처럼
+// "정의된 경우만" 조건부가 아니다(RD-003).
 const ProductionCheckListItemExtension = CheckListItemExtension.extend({
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-be-check-list-item": "" }),
+      mergeAttributes(HTMLAttributes, {
+        "data-be-check-list-item": "",
+        "data-be-checked": String(Boolean(node.attrs.checked)),
+      }),
       0,
     ];
   },
 });
 
+// collapsed는 heading의 isToggleable/collapsed와 같은 optional 패턴(부재
+// =null) — numberedListItem.startNumber와 동일하게 정의된 경우만 낸다.
 const ProductionToggleListItemExtension = ToggleListItemExtension.extend({
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-be-toggle-list-item": "" }),
+      mergeAttributes(HTMLAttributes, {
+        "data-be-toggle-list-item": "",
+        ...(node.attrs.collapsed === null
+          ? {}
+          : { "data-be-collapsed": String(node.attrs.collapsed) }),
+      }),
       0,
     ];
   },
