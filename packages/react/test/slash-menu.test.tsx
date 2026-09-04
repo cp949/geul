@@ -208,9 +208,10 @@ describe("SlashMenu 질의 팝업", () => {
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
     // 기존 option 순서 뒤에 목록 넷(toggle-list 포함), 삽입 전용
-    // Table·Divider가 이어진다.
+    // Table·Divider·File·Image·Video·Audio가 이어진다(RD-003 DELTA-01,
+    // spec §3.1 file/image/video/audio 순서).
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(21);
+    expect(options).toHaveLength(25);
     expect(
       options.map(
         (option) =>
@@ -238,6 +239,10 @@ describe("SlashMenu 질의 팝업", () => {
       "Toggle List",
       "Table",
       "Divider",
+      "File",
+      "Image",
+      "Video",
+      "Audio",
     ]);
     expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Heading 1/ })).not.toBeNull();
@@ -458,7 +463,7 @@ describe("SlashMenu 질의 팝업", () => {
       selector: "[data-be-toggle-list-item]",
     },
   ])(
-    "$type source의 Slash menu는 Code를 제외하고 네 목록·Table·Divider를 유지한다",
+    "$type source의 Slash menu는 Code를 제외하고 네 목록·Table·Divider·media 4종을 유지한다",
     ({ type, selector }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, "/");
@@ -486,7 +491,8 @@ describe("SlashMenu 질의 팝업", () => {
       ).not.toBeNull();
       expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
-      expect(screen.getAllByRole("option")).toHaveLength(20);
+      expect(screen.getByRole("option", { name: /Image/ })).not.toBeNull();
+      expect(screen.getAllByRole("option")).toHaveLength(24);
     },
   );
 
@@ -543,6 +549,54 @@ describe("SlashMenu 질의 팝업", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
   });
+
+  it.each([
+    { mediaKind: "file" as const, optionName: /^File/ },
+    { mediaKind: "image" as const, optionName: /^Image/ },
+    { mediaKind: "video" as const, optionName: /^Video/ },
+    { mediaKind: "audio" as const, optionName: /^Audio/ },
+  ])(
+    "$mediaKind 항목을 클릭하면 트리거 블록 텍스트를 지우며 빈 미디어 블록을 삽입하고 그 블록을 NodeSelection으로 선택한다",
+    ({ mediaKind, optionName }) => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, 0, `/${mediaKind}`);
+      // 전제: 아직 media 블록이 없다.
+      expect(rendered.editor.getDocument().blocks).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole("option", { name: optionName }));
+
+      // blocks 3개 = 트리거 문단 + media + trailing paragraph(문서 끝에
+      // media가 놓이면 divider·table과 같은 이유로 같은 dispatch에서 빈
+      // 문단이 뒤따른다, media-commands.ts).
+      const blocks = rendered.editor.getDocument().blocks;
+      expect(blocks).toHaveLength(3);
+      const trigger = blocks[0];
+      if (trigger?.type !== "paragraph")
+        throw new Error("트리거 문단이 아니다");
+      expect(trigger.id).toBe(blockId);
+      // clearAfterBlockText: true — 트리거 블록의 "/$mediaKind"가 지워진다.
+      expect(trigger.content).toEqual([]);
+      const media = blocks[1];
+      if (media?.type !== mediaKind) throw new Error("미디어 블록이 아니다");
+      const trailing = blocks[2];
+      if (trailing?.type !== "paragraph")
+        throw new Error("trailing 문단이 아니다");
+      expect(trailing.content).toEqual([]);
+      expect(screen.queryByRole("listbox")).toBeNull();
+      // insertMediaBlock은 divider와 달리 삽입한 블록 자신을 NodeSelection
+      // 으로 선택한다(RD-001 media-commands.ts, RD-003 File Panel 자동
+      // 오픈 전제) — selectItem()의 focusEditor() 뒤에도 DOM 초점만 옮길
+      // 뿐 PM selection은 그대로 유지된다.
+      expect(rendered.editor.getSelectionMediaBlock()).toEqual({
+        blockId: media.id,
+        kind: mediaKind,
+        url: null,
+        name: null,
+        caption: null,
+      });
+      expect(document.activeElement).toBe(rendered.editable);
+    },
+  );
 
   it("표 항목을 클릭하면 트리거 블록 텍스트를 지우며 3x3 표를 삽입한다", () => {
     const rendered = renderCaretBlocks();
@@ -660,7 +714,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
     expect(inserted.content).toEqual([]);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(21);
+    expect(screen.getAllByRole("option")).toHaveLength(25);
 
     // 메뉴가 "그 블록"으로 열렸는지는 캐럿 갱신 한 번으로 갈린다. 실제
     // insertParagraphAfter는 캐럿을 새 문단으로 옮기므로(전제), 메뉴가 hover한

@@ -13,6 +13,7 @@ import {
   EditorContent,
   type EditorError,
   EditorProvider,
+  FilePanel,
   FormattingToolbar,
   LinkToolbar,
   SlashMenu,
@@ -208,6 +209,7 @@ const EditorWorkspace = ({
         <FormattingToolbar />
         <LinkToolbar />
         <SlashMenu />
+        <FilePanel />
         <EditorContent />
       </section>
 

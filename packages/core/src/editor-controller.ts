@@ -12,7 +12,7 @@ import {
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
-import type { EditorState } from "@tiptap/pm/state";
+import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
 import { findBlockPosition } from "./block-position.js";
@@ -24,7 +24,7 @@ import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.
 import type { EditorError } from "./errors.js";
 import { createGenericBlockCommands } from "./generic-block-commands.js";
 import { getBlockNestingActionState } from "./indent-commands.js";
-import type { MediaBlockKind } from "./media-block-kind.js";
+import { isMediaBlockKind, type MediaBlockKind } from "./media-block-kind.js";
 import {
   type InsertMediaBlockError,
   insertMediaBlock as insertMediaBlockCommand,
@@ -80,6 +80,21 @@ export interface EditorController {
   getSelectionBlockType(): {
     blockId: string;
     blockType: BlockTypeDescriptor;
+  } | null;
+  // media 4종(file/image/video/audio)은 blockContainer로 감싸이지 않는
+  // atom이라(RD-002 "## 결정") getSelectionBlockType의 blockContainer
+  // 전용 tree-walk(findSelectionBlock)이 구조적으로 못 본다 — 선택은
+  // 항상 NodeSelection이므로 별도로 조회한다(RD-003 DELTA-01, File
+  // Panel·RD-004 toolbar가 함께 쓸 공용 seam). BlockTypeDescriptor
+  // 유니온에 4종을 추가하지 않는 이유는 그 타입이 setBlockType로 전환
+  // 가능한 "Turn into" 대상 판별용이고 media는 그 명령으로 전환할 수
+  // 없어서다(RD-001 — insertMediaBlock 전용 삽입).
+  getSelectionMediaBlock(): {
+    blockId: string;
+    kind: MediaBlockKind;
+    url: string | null;
+    name: string | null;
+    caption: string | null;
   } | null;
   getBlockNestingActionState(blockId: string): BlockNestingActionState;
   getTableCellSelection(): TableCellSelection | null;
@@ -972,6 +987,23 @@ export const createEditor = (
       if (session.isDestroyed) return null;
       const { selection, doc } = session.editor.state;
       return findSelectionBlock(doc, 0, selection.from, selection.to);
+    },
+    getSelectionMediaBlock() {
+      if (session.isDestroyed) return null;
+      const { selection } = session.editor.state;
+      if (!(selection instanceof NodeSelection)) return null;
+      const { node } = selection;
+      if (!isMediaBlockKind(node.type.name)) return null;
+      const blockId = node.attrs.blockId;
+      if (typeof blockId !== "string" || blockId.length === 0) return null;
+      return {
+        blockId,
+        kind: node.type.name,
+        url: typeof node.attrs.url === "string" ? node.attrs.url : null,
+        name: typeof node.attrs.name === "string" ? node.attrs.name : null,
+        caption:
+          typeof node.attrs.caption === "string" ? node.attrs.caption : null,
+      };
     },
     getBlockNestingActionState(blockId) {
       if (session.isDestroyed || session.revision >= Number.MAX_SAFE_INTEGER) {

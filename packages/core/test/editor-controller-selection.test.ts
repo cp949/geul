@@ -6,9 +6,16 @@ import { AllSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
+  dividerBlock,
+  documentOf,
+  mediaBlock,
   mountTiptapEditor,
   paragraphDocument,
+  selectBlockNode,
+  tailParagraphBlock,
 } from "./editor-controller-support.js";
+
+const MEDIA_KINDS = ["file", "image", "video", "audio"] as const;
 
 describe("에디터 컨트롤러 선택 영역 조회", () => {
   it("블록별 들여쓰기와 내어쓰기 가능 상태를 core 판정에서 보고한다", () => {
@@ -265,5 +272,85 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
     );
 
     expect(editor.getSelectionBlockType()).toBeNull();
+  });
+
+  it.each(MEDIA_KINDS)(
+    "%s 빈 블록을 NodeSelection으로 선택하면 blockId·kind를 보고하고 url/name/caption은 null이다",
+    (kind) => {
+      const editor = createEditor({
+        initialDocument: documentOf(
+          mediaBlock(kind, "m-1"),
+          tailParagraphBlock,
+        ),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      selectBlockNode(tiptap, "m-1");
+
+      expect(editor.getSelectionMediaBlock()).toEqual({
+        blockId: "m-1",
+        kind,
+        url: null,
+        name: null,
+        caption: null,
+      });
+    },
+  );
+
+  it("url/name/caption이 채워진 미디어 블록을 선택하면 그대로 보고한다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("image", "m-1", {
+          url: "https://example.com/pic.png",
+          name: "pic.png",
+          caption: "a cat",
+        }),
+        tailParagraphBlock,
+      ),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    selectBlockNode(tiptap, "m-1");
+
+    expect(editor.getSelectionMediaBlock()).toEqual({
+      blockId: "m-1",
+      kind: "image",
+      url: "https://example.com/pic.png",
+      name: "pic.png",
+      caption: "a cat",
+    });
+  });
+
+  it("텍스트 선택(NodeSelection 아님)에서는 미디어 블록 선택이 null이다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(3);
+
+    expect(editor.getSelectionMediaBlock()).toBeNull();
+  });
+
+  it("media가 아닌 atom(divider)을 NodeSelection으로 선택하면 null이다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(dividerBlock("d-1"), tailParagraphBlock),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    selectBlockNode(tiptap, "d-1");
+
+    expect(editor.getSelectionMediaBlock()).toBeNull();
+  });
+
+  it("destroy 이후에는 미디어 블록 선택이 null이다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("file", "m-1"),
+        tailParagraphBlock,
+      ),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    selectBlockNode(tiptap, "m-1");
+
+    editor.destroy();
+
+    expect(editor.getSelectionMediaBlock()).toBeNull();
   });
 });

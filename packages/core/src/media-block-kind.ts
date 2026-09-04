@@ -11,3 +11,14 @@
 // 함께 노출된다(실측: public-types.test.ts RED). tiptap import가 전혀 없는
 // 이 파일로 분리해 reachable해도 안전하게 한다.
 export type MediaBlockKind = "file" | "image" | "video" | "audio";
+
+// editor-controller.ts::getSelectionMediaBlock(RD-003 DELTA-01)이 PM
+// NodeSelection의 node.type.name(런타임엔 평범한 string)을 MediaBlockKind로
+// 좁히는 데 쓴다. `string`에 대한 `!==` 리터럴 비교 연쇄는 TS가 좁히지
+// 않으므로(넓은 원시 타입에서 유한 리터럴을 뺀 나머지를 계산하지 않는다)
+// 이 파일처럼 명시적 타입가드가 필요하다.
+export const isMediaBlockKind = (value: string): value is MediaBlockKind =>
+  value === "file" ||
+  value === "image" ||
+  value === "video" ||
+  value === "audio";

@@ -1,4 +1,4 @@
-import type { BlockTypeDescriptor } from "@cp949/geul-core";
+import type { BlockTypeDescriptor, MediaBlockKind } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
@@ -43,6 +43,17 @@ type SlashMenuItem =
       label: string;
       description: string;
       keywords: readonly string[];
+    }
+  // media 4종(file/image/video/audio)은 하나의 kind 태그를 공유하고
+  // mediaKind로만 갈린다 — BLOCK_TYPE_OPTIONS 여러 항목이 kind:
+  // "blockType" 하나를 공유하는 것과 같은 모양이다(RD-003 DELTA-01).
+  | {
+      kind: "insertMedia";
+      mediaKind: MediaBlockKind;
+      id: string;
+      label: string;
+      description: string;
+      keywords: readonly string[];
     };
 
 const TABLE_SLASH_ITEM: SlashMenuItem = {
@@ -61,6 +72,40 @@ const DIVIDER_SLASH_ITEM: SlashMenuItem = {
   keywords: ["divider", "hr", "separator"],
 };
 
+// spec §3.1 순서(file/image/video/audio)를 그대로 따른다.
+const FILE_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertMedia",
+  mediaKind: "file",
+  id: "file",
+  label: "File",
+  description: "Insert a file",
+  keywords: ["file", "attachment", "document"],
+};
+const IMAGE_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertMedia",
+  mediaKind: "image",
+  id: "image",
+  label: "Image",
+  description: "Insert an image",
+  keywords: ["image", "picture", "photo"],
+};
+const VIDEO_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertMedia",
+  mediaKind: "video",
+  id: "video",
+  label: "Video",
+  description: "Insert a video",
+  keywords: ["video", "movie", "clip"],
+};
+const AUDIO_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertMedia",
+  mediaKind: "audio",
+  id: "audio",
+  label: "Audio",
+  description: "Insert an audio file",
+  keywords: ["audio", "sound", "music"],
+};
+
 const getSlashMenuItems = (
   source: BlockTypeDescriptor,
 ): readonly SlashMenuItem[] => [
@@ -70,6 +115,10 @@ const getSlashMenuItems = (
   })),
   TABLE_SLASH_ITEM,
   DIVIDER_SLASH_ITEM,
+  FILE_SLASH_ITEM,
+  IMAGE_SLASH_ITEM,
+  VIDEO_SLASH_ITEM,
+  AUDIO_SLASH_ITEM,
 ];
 
 const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
@@ -272,6 +321,10 @@ export const SlashMenu = () => {
           { rows: 3, columns: 3 },
           { clearAfterBlockText: true },
         );
+      } else if (item.kind === "insertMedia") {
+        editor.commands.insertMediaBlock(current.blockId, item.mediaKind, {
+          clearAfterBlockText: true,
+        });
       } else {
         editor.commands.insertDivider(current.blockId, {
           clearAfterBlockText: true,

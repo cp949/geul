@@ -243,7 +243,7 @@ test("서식 툴바의 select로 블록 종류를 바꿔도 내용을 보존한�
   await expect(editable.locator("p")).toHaveText("Hello R1");
 });
 
-test("문서 하단에서 슬래시 메뉴를 열어도 Divider 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
+test("문서 하단에서 슬래시 메뉴를 열어도 Audio 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -273,13 +273,19 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Divider 항목까지 뷰
     (viewportSize?.height ?? 0) - CLAMP_BOUNDARY_MIN_MARGIN_PX,
   );
 
-  // 클램프가 없으면 Divider 항목이 뷰포트 밖으로 나가 클릭이 "element is
+  // 클램프가 없으면 마지막 항목이 뷰포트 밖으로 나가 클릭이 "element is
   // outside of the viewport"로 타임아웃한다(PIT-0011 실측 시나리오). 슬래시
-  // 메뉴의 마지막 항목은 현재 공용 블록 순서(paragraph → heading 1-6 →
-  // quote → code) 뒤 table → divider가 이어져 여전히 Divider다.
+  // 메뉴의 마지막 항목은 공용 블록 순서(paragraph → heading 1-6 → quote →
+  // code) 뒤 table → divider → file → image → video → audio가 이어져
+  // Audio다(RD-003 DELTA-01, media 4종 추가로 Divider에서 밀려남).
   await expect(menu.getByRole("option", { name: /Code/ })).toBeVisible();
-  await menu.getByRole("option", { name: /Divider/ }).click();
-  await expect(editable.locator("hr")).toBeVisible();
+  await menu.getByRole("option", { name: /^Audio/ }).click();
+  // 빈 미디어 블록은 콘텐츠 없는 div라 화면 크기가 0이다(RD-002 core 렌더
+  // 전용, react 빈 상태 CSS는 아직 없다) — toBeVisible()은 0x0 요소를
+  // "hidden"으로 판정하므로 존재 여부만 본다.
+  await expect(editable.locator('[data-be-media-empty="audio"]')).toHaveCount(
+    1,
+  );
 });
 
 test("스크롤·뷰포트 변경 후 슬래시 메뉴가 caret을 따르고 마지막 목록 항목을 클릭한다 (PIT-0011)", async ({
