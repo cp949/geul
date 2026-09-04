@@ -13,6 +13,7 @@ import { BlockSplitExtension } from "./block-split-extension.js";
 import { BlockTypeInputRuleExtension } from "./block-type-input-rule-extension.js";
 import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
+import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
 import { DividerExtension } from "./divider-extension.js";
@@ -197,6 +198,7 @@ export const createProductionEditor = (options: {
       QuoteExtension,
       CodeBlockExtension,
       CodeBlockMarkGuardExtension,
+      CodeBlockExitExtension,
       BlockContainerExtension,
       BlockGroupExtension,
       BlockIdExtension.configure({ createId: options.createId }),
