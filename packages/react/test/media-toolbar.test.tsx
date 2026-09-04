@@ -6,11 +6,18 @@
  * 않음(FilePanel과 상호 배타), rename/caption의 draft/Save/Cancel 편집과
  * 실패 시 에러 표시, delete의 명령 호출, download 링크의 href/download
  * 속성, selectionchange에 따른 표시·숨김 전환, Escape/바깥 클릭에 따른
- * 닫힘과 focus 복원 차이를 검증한다(RD-004 DELTA-01).
+ * 닫힘과 focus 복원 차이(RD-004 DELTA-01), Replace 트리거의 파일 선택·
+ * loading/에러·retry·cancel(RD-003 DELTA-03)을 검증한다.
  */
 
-import type { MediaBlockKind } from "@cp949/geul-core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { EditorError, MediaBlockKind } from "@cp949/geul-core";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, MediaToolbar } from "../src/index.js";
@@ -32,11 +39,23 @@ type SelectionMediaBlock = {
 
 type CommandResult = { ok: boolean; error?: { code: string } };
 
+type ReplaceMediaFileResult =
+  { ok: true; value: undefined } | { ok: false; error: EditorError };
+
+type MediaUploadState =
+  "uploading" | { status: "error"; code: string; message: string } | null;
+
 type FakeControllerOptions = {
   getSelectionMediaBlock?: () => SelectionMediaBlock | null;
   setMediaBlockName?: (blockId: string, name: string) => CommandResult;
   setMediaBlockCaption?: (blockId: string, caption: string) => CommandResult;
   deleteBlock?: (blockId: string) => CommandResult;
+  isUploadEnabled?: () => boolean;
+  getMediaUploadState?: (blockId: string) => MediaUploadState;
+  replaceMediaBlockFile?: (
+    blockId: string,
+    file: File,
+  ) => Promise<ReplaceMediaFileResult>;
 };
 
 const fakeController = ({
@@ -44,6 +63,9 @@ const fakeController = ({
   setMediaBlockName = () => ({ ok: true }),
   setMediaBlockCaption = () => ({ ok: true }),
   deleteBlock = () => ({ ok: true }),
+  isUploadEnabled = () => false,
+  getMediaUploadState = () => null,
+  replaceMediaBlockFile = () => Promise.resolve({ ok: true, value: undefined }),
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -61,11 +83,15 @@ const fakeController = ({
   destroy: vi.fn(),
   getDocument: vi.fn(),
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
+  isUploadEnabled: vi.fn(isUploadEnabled),
+  getMediaUploadState: vi.fn(getMediaUploadState),
   replaceDocument: vi.fn(),
   commands: {
     setMediaBlockName: vi.fn(setMediaBlockName),
     setMediaBlockCaption: vi.fn(setMediaBlockCaption),
     deleteBlock: vi.fn(deleteBlock),
+    replaceMediaBlockFile: vi.fn(replaceMediaBlockFile),
+    cancelMediaUpload: vi.fn(() => ({ ok: true, value: undefined })),
   },
 });
 
@@ -349,5 +375,207 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
     expect(document.activeElement).toBe(outside);
     outside.remove();
+  });
+});
+
+describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
+  it("uploadFile 미등록 시 Replace 버튼이 보이지 않는다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    expect(screen.queryByRole("button", { name: "Replace file" })).toBeNull();
+  });
+
+  it("uploadFile 등록 시 Replace 버튼이 보이고 클릭하면 file input이 나타난다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    expect(screen.getByLabelText("Image file")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+  });
+
+  it("파일을 선택하면 replaceMediaBlockFile을 호출하고 loading을 보여준다", () => {
+    const replaceMediaBlockFile = vi.fn(() => new Promise<never>(() => {}));
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+
+    expect(replaceMediaBlockFile).toHaveBeenCalledWith("media-1", file);
+    expect(screen.getByRole("status")).not.toBeNull();
+  });
+
+  it("교체 성공 시 view로 돌아가 갱신된 url/name을 반영한다", async () => {
+    let callCount = 0;
+    const controller = fakeController({
+      getSelectionMediaBlock: () => {
+        callCount += 1;
+        // 첫 조회(마운트)는 교체 전 값, 이후(교체 성공 재조회)는 새 값.
+        return callCount === 1
+          ? filledImageBlock
+          : {
+              ...filledImageBlock,
+              url: "https://example.com/dir/new.png",
+              name: "new.png",
+            };
+      },
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile: () =>
+        Promise.resolve<ReplaceMediaFileResult>({ ok: true, value: undefined }),
+      getMediaUploadState: () => null,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    });
+    const download = screen.getByRole("link", { name: "Download" });
+    expect(download.getAttribute("href")).toBe(
+      "https://example.com/dir/new.png",
+    );
+    expect(download.getAttribute("download")).toBe("new.png");
+  });
+
+  it("교체 실패 시 에러와 Retry를 보여주고 view로 돌아가지 않는다(기존 값 유지)", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile: () =>
+        Promise.resolve<ReplaceMediaFileResult>({ ok: true, value: undefined }),
+      getMediaUploadState: () => ({
+        status: "error",
+        code: "UPLOAD_FAILED",
+        message: "교체 실패",
+      }),
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toBe("교체 실패");
+    });
+    expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+  });
+
+  it("Retry 클릭 시 같은 File로 replaceMediaBlockFile을 재호출한다", async () => {
+    let callCount = 0;
+    const replaceMediaBlockFile = vi.fn(() => {
+      callCount += 1;
+      return Promise.resolve<ReplaceMediaFileResult>({
+        ok: true,
+        value: undefined,
+      });
+    });
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile,
+      getMediaUploadState: () =>
+        callCount < 2
+          ? { status: "error", code: "UPLOAD_FAILED", message: "실패" }
+          : null,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(replaceMediaBlockFile).toHaveBeenCalledTimes(2);
+    });
+    expect(replaceMediaBlockFile).toHaveBeenNthCalledWith(1, "media-1", file);
+    expect(replaceMediaBlockFile).toHaveBeenNthCalledWith(2, "media-1", file);
+  });
+
+  it("uploading 중 Cancel 클릭 시 cancelMediaUpload를 호출하고 view로 돌아간다(기존 값 유지)", () => {
+    const replaceMediaBlockFile = vi.fn(() => new Promise<never>(() => {}));
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(controller.commands.cancelMediaUpload).toHaveBeenCalledWith(
+      "media-1",
+    );
+    const download = screen.getByRole("link", { name: "Download" });
+    expect(download.getAttribute("href")).toBe(
+      "https://example.com/dir/photo.png",
+    );
+  });
+
+  it("에러 상태에서 Cancel 클릭 시 재시도 없이 view(기존 값)로 돌아간다", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile: () =>
+        Promise.resolve<ReplaceMediaFileResult>({ ok: true, value: undefined }),
+      getMediaUploadState: () => ({
+        status: "error",
+        code: "UPLOAD_FAILED",
+        message: "교체 실패",
+      }),
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    const download = screen.getByRole("link", { name: "Download" });
+    expect(download.getAttribute("href")).toBe(
+      "https://example.com/dir/photo.png",
+    );
   });
 });

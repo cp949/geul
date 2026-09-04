@@ -50,10 +50,26 @@ type MediaInfo = {
   caption: string | null;
 };
 
+// Upload 탭(file-panel.tsx, RD-003 DELTA-02)과 같은 모양이지만 코드는
+// 공유하지 않는다 — RD-003-DELTA-03.md "결정"(사용처 2곳뿐이라 훅 추출
+// 이득이 적다, 이 저장소의 두 파일이 이미 selection 상태 기계·kindLabel을
+// 각자 복제하는 관례와 일치).
+type UploadSubState =
+  | { status: "idle" }
+  | { status: "uploading" }
+  | { status: "error"; code: string; message: string };
+
 type ToolbarState =
   | { mode: "closed" }
   | ({ mode: "view" } & MediaInfo & ToolbarPosition)
   | ({ mode: "editingName" | "editingCaption"; draft: string } & MediaInfo &
+      ToolbarPosition)
+  | ({
+      mode: "replacing";
+      upload: UploadSubState;
+      /** retry가 파일 선택 대화상자를 다시 열지 않고 재사용할 원본 File. */
+      heldFile: File | null;
+    } & MediaInfo &
       ToolbarPosition);
 
 /**
@@ -92,6 +108,7 @@ export const MediaToolbar = () => {
   // (G-UI-001, file-panel.tsx dismissedBlockIdRef와 같은 문제·같은 해법).
   const dismissedBlockIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const { actionError, runCommand, clearActionError } =
     useTableCommandFeedback();
 
@@ -157,6 +174,153 @@ export const MediaToolbar = () => {
       inputRef.current?.focus();
     }
   }, [toolbarState.mode]);
+
+  useEffect(() => {
+    if (toolbarState.mode === "replacing") replaceFileInputRef.current?.focus();
+  }, [toolbarState.mode]);
+
+  // Upload/Replace 공용 — 파일 선택 직후와 retry 둘 다 이 함수로 들어온다
+  // (RD-003.md "결정" 그대로 — Promise를 직접 await해 loading→성공/실패/
+  // 취소를 로컬 state로 반영, file-panel.tsx startUpload와 같은 패턴).
+  const startReplaceUpload = useCallback(
+    async (blockId: string, file: File) => {
+      setToolbarState((prev) =>
+        prev.mode === "replacing" && prev.blockId === blockId
+          ? { ...prev, heldFile: file, upload: { status: "uploading" } }
+          : prev,
+      );
+      const result = await editor.commands.replaceMediaBlockFile(blockId, file);
+      if (!result.ok) {
+        // 사전조건 실패만 여기로 온다 — 콜백이 실제 정착한 뒤의 성공/실패/
+        // 취소는 항상 ok:true라 아래 getMediaUploadState 분기가 담당한다.
+        setToolbarState((prev) =>
+          prev.mode === "replacing" && prev.blockId === blockId
+            ? {
+                ...prev,
+                upload: {
+                  status: "error",
+                  code: result.error.code,
+                  message: "Upload could not start.",
+                },
+              }
+            : prev,
+        );
+        return;
+      }
+      const pending = editor.getMediaUploadState(blockId);
+      if (pending === "uploading") return;
+      if (pending !== null) {
+        setToolbarState((prev) =>
+          prev.mode === "replacing" && prev.blockId === blockId
+            ? {
+                ...prev,
+                upload: {
+                  status: "error",
+                  code: pending.code,
+                  message: pending.message,
+                },
+              }
+            : prev,
+        );
+        return;
+      }
+      // 성공 — url/name이 실제로 바뀌었으므로 finishEditing처럼 로컬 캐시
+      // 값을 재사용하지 않고 core를 다시 조회해 "view"로 돌아간다(RD-003-
+      // DELTA-03.md "결정"). 대기 중 이미 다른 상태로 나갔으면(Cancel 등)
+      // 손대지 않는다 — updateFromSelection과 같은 판정을 여기 인라인한다
+      // (updateFromSelection을 setState 콜백 안에서 부르면 안 돼 직접 푼다).
+      setToolbarState((prev) => {
+        if (prev.mode !== "replacing" || prev.blockId !== blockId) return prev;
+        editingRef.current = false;
+        if (element === null) return { mode: "closed" };
+        const media = editor.getSelectionMediaBlock();
+        if (media === null || media.url === null || media.blockId !== blockId) {
+          return { mode: "closed" };
+        }
+        const bounds =
+          readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+        return {
+          mode: "view",
+          blockId: media.blockId,
+          kind: media.kind,
+          url: media.url,
+          name: media.name,
+          caption: media.caption,
+          left: bounds.left,
+          top: bounds.top,
+        };
+      });
+    },
+    [editor, element],
+  );
+
+  const startReplacing = () => {
+    if (toolbarState.mode !== "view") return;
+    clearActionError();
+    editingRef.current = true;
+    const { blockId, kind, url, name, caption, left, top } = toolbarState;
+    const pending = editor.getMediaUploadState(blockId);
+    const upload: UploadSubState =
+      pending === "uploading"
+        ? { status: "uploading" }
+        : pending === null
+          ? { status: "idle" }
+          : { status: "error", code: pending.code, message: pending.message };
+    setToolbarState({
+      mode: "replacing",
+      blockId,
+      kind,
+      url,
+      name,
+      caption,
+      left,
+      top,
+      upload,
+      heldFile: null,
+    });
+  };
+
+  const handleReplaceFileChange = (event: {
+    currentTarget: HTMLInputElement;
+  }) => {
+    if (toolbarState.mode !== "replacing") return;
+    const file = event.currentTarget.files?.[0] ?? null;
+    event.currentTarget.value = "";
+    if (file === null) return;
+    void startReplaceUpload(toolbarState.blockId, file);
+  };
+
+  const handleReplaceRetry = () => {
+    if (toolbarState.mode !== "replacing" || toolbarState.heldFile === null) {
+      return;
+    }
+    void startReplaceUpload(toolbarState.blockId, toolbarState.heldFile);
+  };
+
+  // uploading 중이면 먼저 abort하고, 상태와 무관하게 교체 전 값(로컬에
+  // 이미 아는 값)으로 즉시 view로 돌아간다 — cancelEditing과 같은 방식
+  // (core를 다시 조회하지 않는다, 교체가 실제로 반영된 적이 없어서다).
+  const cancelReplacing = () => {
+    if (toolbarState.mode !== "replacing") return;
+    if (toolbarState.upload.status === "uploading") {
+      editor.commands.cancelMediaUpload(toolbarState.blockId);
+    }
+    const { blockId, kind, url, name, caption, left, top } = toolbarState;
+    editingRef.current = true;
+    setToolbarState({
+      mode: "view",
+      blockId,
+      kind,
+      url,
+      name,
+      caption,
+      left,
+      top,
+    });
+    element?.ownerDocument.defaultView?.setTimeout(() => {
+      editingRef.current = false;
+    });
+  };
 
   const { menuRef, style } = useClampedMenuPosition(
     toolbarState.mode === "closed" ? 0 : toolbarState.left,
@@ -313,6 +477,17 @@ export const MediaToolbar = () => {
     >
       {toolbarState.mode === "view" && (
         <>
+          {editor.isUploadEnabled() && (
+            <button
+              aria-label="Replace file"
+              className={mediaToolbarButtonClassName}
+              onClick={startReplacing}
+              onMouseDown={(event) => event.preventDefault()}
+              type="button"
+            >
+              Replace
+            </button>
+          )}
           <button
             aria-label="Rename"
             className={mediaToolbarButtonClassName}
@@ -415,6 +590,46 @@ export const MediaToolbar = () => {
             aria-label="Cancel"
             className={mediaToolbarButtonClassName}
             onClick={cancelEditing}
+            onMouseDown={(event) => event.preventDefault()}
+            type="button"
+          >
+            Cancel
+          </button>
+        </>
+      )}
+      {toolbarState.mode === "replacing" && (
+        <>
+          <input
+            aria-label={`${kindLabel(toolbarState.kind)} file`}
+            disabled={toolbarState.upload.status === "uploading"}
+            onChange={handleReplaceFileChange}
+            ref={replaceFileInputRef}
+            type="file"
+          />
+          {toolbarState.upload.status === "uploading" && (
+            <p role="status">Uploading…</p>
+          )}
+          {toolbarState.upload.status === "error" && (
+            <>
+              <span className="geul-media-toolbar__error" role="alert">
+                {toolbarState.upload.message}
+              </span>
+              {toolbarState.heldFile !== null && (
+                <button
+                  className={mediaToolbarButtonClassName}
+                  onClick={handleReplaceRetry}
+                  onMouseDown={(event) => event.preventDefault()}
+                  type="button"
+                >
+                  Retry
+                </button>
+              )}
+            </>
+          )}
+          <button
+            aria-label="Cancel"
+            className={mediaToolbarButtonClassName}
+            onClick={cancelReplacing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
