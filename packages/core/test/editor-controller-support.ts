@@ -14,7 +14,13 @@
  * table-test-support.ts로 옮기면 tiptap 노드만 검증하는 파일까지 그 훅을
  * 얻는다.
  */
-import type { Block, Document, InlineContent } from "@cp949/geul-model";
+import {
+  isNestableBlockType,
+  type Block,
+  type Document,
+  type InlineContent,
+  type NestableBlockType,
+} from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { NodeType, Schema } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -54,6 +60,25 @@ export const paragraphDocument = (text: string, revision = 0): Document => ({
     },
   ],
 });
+
+/**
+ * Document blocks 트리의 최대 절대 깊이(top-level=1)를 구한다.
+ * isNestableBlockType은 discriminated union인 block 자체를 좁히지
+ * 못한다(model/src/schema.ts의 validateBlocksAt과 같은 이유) — 명시적으로
+ * 좁힌다. list-paste-fallback.test.ts의 로컬 헬퍼가
+ * clipboard-paste-extension.test.ts의 두 번째 소비로 여기로 승격했다
+ * (G-TST-002).
+ */
+export const maxBlockDepth = (blocks: readonly Block[], depth = 1): number =>
+  blocks.reduce((max, block) => {
+    if (!isNestableBlockType(block.type)) return Math.max(max, depth);
+    const nestable = block as Extract<Block, { type: NestableBlockType }>;
+    const childDepth =
+      nestable.children !== undefined && nestable.children.length > 0
+        ? maxBlockDepth(nestable.children, depth + 1)
+        : depth;
+    return Math.max(max, childDepth);
+  }, depth);
 
 /**
  * 문서를 문단으로 닫는 꼬리 블록 — heading·quote로 끝나면 로드 시 trailing

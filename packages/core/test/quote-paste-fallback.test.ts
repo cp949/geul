@@ -1,18 +1,28 @@
 /**
- * PM 기본 붙여넣기 폴백으로 들어오는 외부 <blockquote>가 03a 시점의 임시
- * 결함(변환 거절→TypeError→에디터 desync) 없이 quote 블록으로 반영되는지
- * 검증한다(DELTA-04 붙여넣기 회귀 이월).
+ * 외부 <blockquote>가 03a 시점의 임시 결함(변환 거절→TypeError→에디터
+ * desync) 없이 quote 블록으로 반영되는지 검증한다(DELTA-04 붙여넣기 회귀
+ * 이월). 이 시나리오는 RD-004(Issue #38 슬라이스 10)부터 PM 기본 붙여넣기
+ * 폴백이 아니라 `ClipboardPasteExtension`이 가로챈다 — `io.importHtml`이
+ * 클립보드 HTML 전체를 독립 document로 파싱해 삽입하므로, 캐럿이 있던
+ * "seed" 문단에 첫 문단("a")이 병합되지 않고 별도 블록으로 삽입된다(RD-004
+ * "## 결정" — 정확히 같은 id 문자열·블록 구조를 요구하지 않는다, "quote
+ * 블록 1개·content 보존·에러 없음"이라는 의미만 유지하면 된다). id
+ * 시퀀스가 늘어난 이유도 이 구조 변화 때문이다(id-1="a", id-2=quote,
+ * id-3="b").
  */
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
-import { pasteHtml } from "./clipboard-test-support.js";
+import {
+  pasteHtml,
+  withUnhandledErrorTracking,
+} from "./clipboard-test-support.js";
 import {
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
 
-describe("PM 기본 붙여넣기 폴백의 외부 blockquote", () => {
+describe("ClipboardPasteExtension이 가로챈 외부 blockquote", () => {
   it("문단 사이 blockquote가 섞인 외부 HTML을 붙여넣으면 throw 없이 quote 블록이 문서에 반영된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),
@@ -22,13 +32,7 @@ describe("PM 기본 붙여넣기 폴백의 외부 blockquote", () => {
     editable.focus();
     tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
 
-    // jsdom dispatchEvent는 리스너 예외를 재던지지 않는다 —
-    // expect(() => ...).not.toThrow()는 공허하게 통과한다. window의 전역
-    // error 이벤트로 실제 미처리 예외 유무를 잡는다.
-    const errors: unknown[] = [];
-    const onError = (event: ErrorEvent) => errors.push(event.error);
-    window.addEventListener("error", onError);
-    try {
+    withUnhandledErrorTracking((errors) => {
       pasteHtml(editable, "<p>a</p><blockquote>q</blockquote><p>b</p>");
 
       const blocks = editor.getDocument().blocks;
@@ -39,11 +43,10 @@ describe("PM 기본 붙여넣기 폴백의 외부 blockquote", () => {
         "block-1",
         "id-1",
         "id-2",
+        "id-3",
       ]);
 
       expect(errors).toEqual([]);
-    } finally {
-      window.removeEventListener("error", onError);
-    }
+    });
   });
 });

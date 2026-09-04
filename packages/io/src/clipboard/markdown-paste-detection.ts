@@ -12,11 +12,23 @@ export type MarkdownPasteDetection =
 // 목록류·codeBlock·divider 등 GFM 전용 타입) 복잡한 것으로 본다. 인라인
 // 서식(bold 등)만 있는 단일 paragraph는 복잡하다고 보지 않는다(RD-001.md
 // "## 결정" — 파서 기반 판정, 정규식 사전 휴리스틱 배제).
+//
+// 단일 블록이 GFM 전용 타입이어도 그 인라인 content가 완전히 비어 있으면
+// (예: "- " 하나만 — 뒤에 아무 내용도 없는 목록 마커) 감지하지 않는다.
+// "- "/"> "/"# " 처럼 문장 중간에 흔히 타이핑되는 순수 텍스트가 우연히
+// GFM 마커 문법과 겹치는 경우를 사용자가 의도한 구조로 오인하지 않기
+// 위해서다(RD-004 core ClipboardPasteExtension 통합 중 실측 회귀 —
+// list-input-rule-extension.test.ts "paste insertion은 exact shorthand를
+// 변환하지 않는다"). divider·table처럼 InlineContent 필드 자체가 없는
+// 타입은 이 예외 대상이 아니다 — 마커만으로 이미 완결된 의미를 가진다.
 const isComplexMarkdownStructure = (document: Document): boolean => {
   if (document.blocks.length !== 1) {
     return document.blocks.length > 1;
   }
-  return document.blocks[0]?.type !== "paragraph";
+  const only = document.blocks[0];
+  if (only === undefined || only.type === "paragraph") return false;
+  if (!("content" in only)) return true;
+  return only.content.length > 0;
 };
 
 /**

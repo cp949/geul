@@ -37,6 +37,33 @@ describe("detectMarkdownPaste", () => {
     },
   );
 
+  // RD-004 core ClipboardPasteExtension 통합 중 실측 회귀 — "- " 하나만
+  // 붙여넣으면(뒤에 아무 내용도 없는 목록 마커) 문장 중간에 흔히 타이핑되는
+  // 순수 텍스트와 구분할 수 없다. GFM 마커 문법과 우연히 겹치는 빈 콘텐츠는
+  // 감지하지 않는다(list-input-rule-extension.test.ts "paste insertion은
+  // exact shorthand를 변환하지 않는다"가 이 계약에 기댄다).
+  it.each([
+    ["bulletListItem", "- "],
+    ["numberedListItem", "1. "],
+    ["quote", "> "],
+    ["heading", "# "],
+  ])(
+    "GFM 전용 타입 %s이어도 content가 비어 있으면 감지하지 않는다",
+    (_label, source) => {
+      const result = detectMarkdownPaste(source);
+
+      expect(result).toEqual({ detected: false });
+    },
+  );
+
+  // divider는 InlineContent 필드가 없어 위 예외 대상이 아니다 — 마커
+  // 자체(구분선)만으로 이미 완결된 의미를 가진다.
+  it("divider는 content 개념이 없어 예외 없이 그대로 감지한다", () => {
+    const result = detectMarkdownPaste("---");
+
+    expect(result.detected).toBe(true);
+  });
+
   it("두 블록 이상이면 각 블록이 paragraph뿐이어도 감지한다", () => {
     const result = detectMarkdownPaste("first\n\nsecond");
 

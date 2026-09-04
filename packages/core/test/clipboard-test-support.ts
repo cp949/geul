@@ -57,3 +57,23 @@ export const pasteData = (
 /** text/html 하나만 담는 pasteData 축약. */
 export const pasteHtml = (editable: HTMLElement, html: string): void =>
   pasteData(editable, { "text/html": html });
+
+/**
+ * jsdom dispatchEvent는 리스너 예외를 재던지지 않는다 — window의 전역
+ * error 이벤트로만 실제 미처리 예외 유무를 잡는다. quote-paste-fallback.
+ * test.ts가 인라인으로 처음 쓴 패턴을 list-paste-fallback.test.ts가 로컬
+ * 헬퍼로 옮겼고, clipboard-paste-extension.test.ts가 세 번째 소비 파일로
+ * 등장해 여기로 승격했다(G-TST-002).
+ */
+export const withUnhandledErrorTracking = (
+  run: (errors: unknown[]) => void,
+): void => {
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent) => errors.push(event.error);
+  window.addEventListener("error", onError);
+  try {
+    run(errors);
+  } finally {
+    window.removeEventListener("error", onError);
+  }
+};

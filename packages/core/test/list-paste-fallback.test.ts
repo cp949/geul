@@ -17,30 +17,20 @@ import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
-import { pasteHtml } from "./clipboard-test-support.js";
+import {
+  pasteHtml,
+  withUnhandledErrorTracking,
+} from "./clipboard-test-support.js";
 import {
   dividerBlock,
   documentOf,
   listItemBlock,
+  maxBlockDepth,
   mountTiptapEditor,
   paragraphDocument,
   selectBlockNode,
   sequentialIds,
 } from "./editor-controller-support.js";
-
-/** jsdom dispatchEvent는 리스너 예외를 재던지지 않는다 — window의 전역
- * error 이벤트로만 실제 미처리 예외 유무를 잡는다(quote-paste-fallback와
- * 동일 근거). */
-const withUnhandledErrorTracking = (run: (errors: unknown[]) => void) => {
-  const errors: unknown[] = [];
-  const onError = (event: ErrorEvent) => errors.push(event.error);
-  window.addEventListener("error", onError);
-  try {
-    run(errors);
-  } finally {
-    window.removeEventListener("error", onError);
-  }
-};
 
 /** depth단짜리 <ul><li>...</li></ul> 체인 HTML — li가 정확히 depth개
  * 중첩된다(리프는 leafText, 그 외는 "x"). */
@@ -81,21 +71,6 @@ const buildListChainEndingInDivider = (depth: number): Block => {
   }
   return innermost;
 };
-
-/** Document blocks 트리의 최대 절대 깊이(top-level=1)를 구한다.
- * isNestableBlockType은 discriminated union인 block 자체를 좁히지
- * 못한다(model/src/schema.ts의 validateBlocksAt과 같은 이유) — 명시적으로
- * 좁힌다. */
-const maxBlockDepth = (blocks: readonly Block[], depth = 1): number =>
-  blocks.reduce((max, block) => {
-    if (!isNestableBlockType(block.type)) return Math.max(max, depth);
-    const nestable = block as Extract<Block, { type: NestableBlockType }>;
-    const childDepth =
-      nestable.children !== undefined && nestable.children.length > 0
-        ? maxBlockDepth(nestable.children, depth + 1)
-        : depth;
-    return Math.max(max, childDepth);
-  }, depth);
 
 describe("PM 기본 붙여넣기 폴백의 외부 ul/ol", () => {
   it("문단 사이 목록이 섞인 외부 HTML을 붙여넣으면 throw 없이 bulletListItem이 문서에 반영된다", () => {

@@ -45,6 +45,7 @@ import {
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ListPasteFallbackExtension } from "./list-paste-fallback-extension.js";
+import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
@@ -230,6 +231,15 @@ export const createProductionEditor = (options: {
       ToggleCollapseVisibilityExtension,
       ToggleCollapseMarkerExtension,
       TrailingBlockExtension,
+      // ExtensionManager.plugins가 addProseMirrorPlugins 결과를
+      // extensions 선언 순서의 "역순"으로 모아 우선순위를 매긴다(Tiptap
+      // 3.30.1 sortExtensions([...extensions].reverse()) — 실측 확인,
+      // RD-004 readiness probe). handlePaste는 그 순서대로 처음 true를
+      // 반환하는 쪽에서 멈추므로, 실제 가로채기 우선순위는 선언 역순이다
+      // — 아래에서 가장 먼저 선언한 ClipboardPasteExtension이 실제로는
+      // 가장 나중에 시도된다(표·목록이 먼저 자기 콘텐츠를 판정하고,
+      // 자기 것이 아니면 넘겨서 이 확장이 그 나머지만 받는다).
+      ClipboardPasteExtension.configure({ createId: options.createId }),
       TablePasteExtension.configure({
         createId: options.createId,
         ...(options.onPasteRejected === undefined
