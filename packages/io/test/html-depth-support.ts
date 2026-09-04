@@ -102,6 +102,15 @@ export const documentVisibleText = (document: Document): string => {
       }
       // DividerBlock에는 content·children이 없다(리프 블록).
       if (block.type === "divider") continue;
+      // 4종 미디어 블록(RD-003)도 content가 없다 — plain string
+      // prop(name/caption)뿐이라 인라인 텍스트 수집 대상이 아니다.
+      if (
+        block.type === "file" ||
+        block.type === "image" ||
+        block.type === "video" ||
+        block.type === "audio"
+      )
+        continue;
       for (const item of block.content) parts.push(item.text);
       // CodeBlock은 source content만 있고 children은 없는 리프 블록이다.
       if (block.type === "codeBlock") continue;

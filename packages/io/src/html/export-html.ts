@@ -289,6 +289,21 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "divider") {
     return htmlElement("hr", { dataBeBlockId: block.id }, []);
   }
+  // 4종 미디어 블록(file/image/video/audio) — RD-003(io 컴파일 안전 최소
+  // 패치, R3 슬라이스1)의 placeholder다. 실제 spec §7.1
+  // <figure>/<img>/<video>/<audio>/<a> 매핑은 슬라이스6이 구현하고 이
+  // 분기를 교체한다. 지금은 어떤 사용자 경로도 이 4종을 포함한 문서를
+  // export로 넘기지 않으므로(슬라이스2 이후에나 생성 가능) 출력 형태
+  // 자체는 관찰되지 않는다 — 목적은 model Block union 확장 뒤에도 이
+  // 함수가 컴파일되는 것뿐이다(빈 <div>, content·children 미접근).
+  if (
+    block.type === "file" ||
+    block.type === "image" ||
+    block.type === "video" ||
+    block.type === "audio"
+  ) {
+    return htmlElement("div", { dataBeBlockId: block.id }, []);
+  }
   // quote → <blockquote data-be-block-id><p>content</p>[<div
   // data-be-children>children</div>]</blockquote>(spec §7.1 — children은
   // blockquote 안에 중첩 HTML로, DELTA-06a). blockquote 자신이 id 소유자라

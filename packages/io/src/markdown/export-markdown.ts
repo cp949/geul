@@ -178,10 +178,19 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
     if (block.type === "table") return [block];
-    // divider와 CodeBlock은 children 필드 자체가 없어(옵셔널이 아니라 부재)
-    // 아래 block.children 접근 전에 좁힌다. quote는 children이 옵셔널이라
-    // 아래 범용 분기로 자연스럽게 통과한다(07a).
-    if (block.type === "divider" || block.type === "codeBlock") return [block];
+    // divider·CodeBlock·4종 미디어 블록(RD-003)은 children 필드 자체가
+    // 없어(옵셔널이 아니라 부재) 아래 block.children 접근 전에 좁힌다.
+    // quote는 children이 옵셔널이라 아래 범용 분기로 자연스럽게
+    // 통과한다(07a).
+    if (
+      block.type === "divider" ||
+      block.type === "codeBlock" ||
+      block.type === "file" ||
+      block.type === "image" ||
+      block.type === "video" ||
+      block.type === "audio"
+    )
+      return [block];
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
@@ -283,6 +292,19 @@ const blockNodes = (blocks: Block[]): MarkdownOutputNode[] =>
 const blockNode = (block: Block): MarkdownOutputNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "divider") return { type: "thematicBreak" };
+  // 4종 미디어 블록(file/image/video/audio) — RD-003(io 컴파일 안전 최소
+  // 패치)의 placeholder다. 실제 GFM 계약(spec §7.2 — image만 strict
+  // round-trip, 나머지는 strict 거절/lossy link 강등)은 슬라이스6이
+  // 구현하고 이 분기를 교체한다. content가 없는 leaf라 표현할 인라인이
+  // 없다 — 빈 paragraph로 최소 안전 출력한다.
+  if (
+    block.type === "file" ||
+    block.type === "image" ||
+    block.type === "video" ||
+    block.type === "audio"
+  ) {
+    return { type: "paragraph", children: [] };
+  }
   // CodeBlock은 model 검증을 통과한 plain-text leaf다. mdast code node가
   // fence 길이와 info string entity escape를 맡아 source/language를 보존한다.
   if (block.type === "codeBlock") {

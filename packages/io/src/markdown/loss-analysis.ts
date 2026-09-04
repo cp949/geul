@@ -179,6 +179,17 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     return;
   }
   if (block.type === "divider" || block.type === "codeBlock") return;
+  // 4종 미디어 블록(RD-003 컴파일 안전 최소 패치) — 슬라이스6이 spec §7.2의
+  // 신규 손실 카테고리(MEDIA_PREVIEW_WIDTH 등)를 여기 추가하고 이 조기
+  // 반환을 교체한다. 지금은 어떤 문서도 이 경로로 들어오지 않아(슬라이스2
+  // 이후 생성 가능) 손실 미보고의 실제 영향이 없다.
+  if (
+    block.type === "file" ||
+    block.type === "image" ||
+    block.type === "video" ||
+    block.type === "audio"
+  )
+    return;
 
   if (hasUnderline(block.content)) {
     losses.push({

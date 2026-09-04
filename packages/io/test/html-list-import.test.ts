@@ -57,6 +57,10 @@ const measureListTree = (
         block.type !== "table" &&
         block.type !== "divider" &&
         block.type !== "codeBlock" &&
+        block.type !== "file" &&
+        block.type !== "image" &&
+        block.type !== "video" &&
+        block.type !== "audio" &&
         block.children !== undefined
       ) {
         stack.push({ blocks: block.children, depth: frame.depth + 1 });
