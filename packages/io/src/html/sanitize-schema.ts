@@ -27,7 +27,11 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // 항상 "1"). 이 목록에 없으면 sanitize가 div의 모든 속성을 지워
   // import-html.ts의 findChildrenWrapper가 children 컨테이너를 알아보지
   // 못하고 children이 조용히 사라진다(완료 조건 3의 변이 시나리오).
-  div: ["dataBeBlockId", "dataBeChildren"],
+  // dataBeBlockGroup은 own export가 아니라 생산 편집기 in-editor copy가
+  // 만드는 alternate children 컨테이너 마커다(BlockGroupExtension, 값은
+  // 항상 빈 문자열) — RD-002, findChildrenWrapper가 dataBeChildren과
+  // 동등하게 인식한다.
+  div: ["dataBeBlockId", "dataBeChildren", "dataBeBlockGroup"],
   h1: [
     "dataBeBlockId",
     "dataBeTextColor",

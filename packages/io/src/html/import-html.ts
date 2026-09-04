@@ -782,6 +782,29 @@ const blocksFromSegments = (
 // 와 같은 판정 기준). 반대로 못 알아보면 기존 NESTED_BOUNDARY_TAG_NAMES
 // 평면 처리로 안전하게 떨어지므로(완료 조건 1의 변이 시나리오와 동일한
 // 경로) 실패 방향이 항상 더 보수적이다.
+// p/h1~h6(own-export가 기존에 쓰던 own-content 태그)에 blockquote·pre를
+// 더한다 — 생산 편집기는 quote·codeBlock도 같은 blockContainer wrapper로
+// 감싸 own-content 자리에 낸다(RD-002, quote-extension.ts/
+// code-block-extension.ts). divider는 여기 들어가지 않는다 — model
+// DividerBlock에 children 필드가 없어 own-content(=children을 가질 수
+// 있는 부모) 자리에 올 수 없고, child 자리(childrenNodes 재귀)로만
+// 등장한다.
+const isOwnBoundaryTag = (tagName: string): boolean =>
+  isParagraphTag(tagName) ||
+  headingLevelByTagName.has(tagName) ||
+  tagName === "blockquote" ||
+  tagName === "pre";
+
+// 컨테이너 div가 children 목록 wrapper임을 나타내는 두 마커 — own-export의
+// dataBeChildren(값 "1")과 생산 편집기 in-editor copy의 dataBeBlockGroup
+// (BlockGroupExtension이 항상 빈 문자열로 낸다, block-container-extension.ts)
+// 은 alternate 표현일 뿐 의미가 같다(RD-002). dataBeBlockGroup은 값이 항상
+// 빈 문자열이라 propertyString(빈 문자열을 "없음"으로 접는다)로는 존재
+// 여부를 판정할 수 없어 raw property 존재만 직접 확인한다.
+const isChildrenContainerMarker = (node: HtmlElementNode): boolean =>
+  propertyString(node, "dataBeChildren") !== undefined ||
+  node.properties.dataBeBlockGroup !== undefined;
+
 const findChildrenWrapper = (
   node: HtmlNode,
 ):
@@ -795,18 +818,42 @@ const findChildrenWrapper = (
   if (hasStrayText) return undefined;
 
   const elementChildren = node.children.filter(isElementNode);
+
+  // 생산 편집기는 children 없는 leaf 블록도 예외 없이 blockContainer로
+  // 감싼다(BlockContainerExtension) — own-export(children 있을 때만 감싼다)
+  // 와 달리 "own-content 하나만" 형태가 나온다. 임의 외부 HTML(예:
+  // `<div><p>...</p></div>` 같은 흔한 CMS 출력)까지 오인식하지 않도록
+  // 바깥 div 자신이 비어 있지 않은 dataBeBlockId를 가질 때만 인정한다 —
+  // own·생산 편집기 둘 다 이 마커를 실제로 싣지만, 임의 외부 HTML은
+  // 이 저장소 전용 속성명을 우연히 쓸 가능성이 사실상 없다.
+  if (elementChildren.length === 1) {
+    const soleChild = elementChildren[0];
+    if (soleChild === undefined || !isOwnBoundaryTag(soleChild.tagName)) {
+      return undefined;
+    }
+    if (propertyString(node, "dataBeBlockId") === undefined) {
+      return undefined;
+    }
+    return { ownNode: soleChild, childrenNodes: [] };
+  }
+
   if (elementChildren.length !== 2) return undefined;
 
   const ownNode = elementChildren[0];
   const containerNode = elementChildren[1];
   if (ownNode === undefined || containerNode === undefined) return undefined;
-  const isOwnBoundaryTag =
-    isParagraphTag(ownNode.tagName) ||
-    headingLevelByTagName.has(ownNode.tagName);
-  if (!isOwnBoundaryTag) return undefined;
+  if (!isOwnBoundaryTag(ownNode.tagName)) return undefined;
+  // codeBlock(model CodeBlock)은 divider와 같은 이유로 children 필드가
+  // 없는 리프다 — blockContainer.content 표현("(nestableBlockContent
+  // blockGroup?) | leafBlockContent")도 leafBlockContent 뒤에 blockGroup을
+  // 절대 허용하지 않는다. pre가 own-content이면서 children 컨테이너
+  // 형제까지 있는 입력은 정상 생산 출력에 존재할 수 없으므로 방어적으로
+  // wrapper 인식을 취소한다(위 findChildrenWrapper 1-child 분기는 pre를
+  // 그대로 인정한다 — children 없는 codeBlock은 정상이다).
+  if (ownNode.tagName === "pre") return undefined;
   if (
     containerNode.tagName !== "div" ||
-    propertyString(containerNode, "dataBeChildren") === undefined
+    !isChildrenContainerMarker(containerNode)
   ) {
     return undefined;
   }
@@ -1238,20 +1285,46 @@ const blocksFromNodes = (
       depth,
       warnings,
     );
-    const ownBlock = ownBlocks[0];
+    const rawOwnBlock = ownBlocks[0];
     if (
       ownBlocks.length !== 1 ||
-      ownBlock === undefined ||
-      (ownBlock.type !== "paragraph" && ownBlock.type !== "heading")
+      rawOwnBlock === undefined ||
+      (rawOwnBlock.type !== "paragraph" &&
+        rawOwnBlock.type !== "heading" &&
+        rawOwnBlock.type !== "quote" &&
+        rawOwnBlock.type !== "codeBlock")
     ) {
-      // findChildrenWrapper가 ownNode를 p/h1~h6로만 걸렀으므로 정상 입력에서
-      // 이 분기는 도달하지 않는다 — p/heading이 (HTML5 파싱상 가능한) 표를
-      // 품고 있어 segmentBlocks가 블록 하나 대신 여러/다른(paragraph·heading
-      // 이외 — children을 가질 수 없는 divider 포함) 세그먼트를 냈을 때만
-      // 방어적으로 wrapper 인식을 취소하고 원본 노드를 평면 처리로 되돌린다.
+      // findChildrenWrapper가 ownNode를 own-content 태그로만 걸렀으므로
+      // 정상 입력에서 이 분기는 도달하지 않는다 — 그 태그가 (HTML5
+      // 파싱상 가능한) 표를 품고 있어 segmentBlocks가 블록 하나 대신
+      // 여러/다른(own-content 이외 — children을 가질 수 없는 divider
+      // 포함) 세그먼트를 냈을 때만 방어적으로 wrapper 인식을 취소하고
+      // 원본 노드를 평면 처리로 되돌린다.
       plainRun.push(node);
       continue;
     }
+
+    // own-export는 own-content 태그(p/hN 등) 자신에 dataBeBlockId를 싣고,
+    // 바깥 wrapper div의 같은 속성은 순전히 장식이다 — wrapper id는 항상
+    // 버려지고 own-content 자신의 id(또는 없으면 새로 발급한 id)가
+    // 이긴다(기존 계약, html-security-block-boundary.test.ts의 깊이-체인
+    // 픽스처가 서로 다른 id로 이를 고정한다). 생산 편집기는 반대로
+    // own-content 태그 자신에 id를 싣지 않고 바깥 blockContainer div
+    // (RD-002)에만 싣는다 — ownNode 자신이 id가 없을 때만 바깥 id로
+    // 보충해 두 계약을 함께 만족한다.
+    const ownNodeHasOwnBlockId =
+      propertyString(wrapper.ownNode, "dataBeBlockId") !== undefined;
+    // findChildrenWrapper가 node를 div element로만 인정해 wrapper를
+    // 반환했으므로 isElementNode는 항상 true다 — TS 좁히기 목적으로만
+    // 확인한다.
+    const outerBlockId =
+      !ownNodeHasOwnBlockId && isElementNode(node)
+        ? propertyString(node, "dataBeBlockId")
+        : undefined;
+    const ownBlock =
+      outerBlockId === undefined
+        ? rawOwnBlock
+        : { ...rawOwnBlock, id: outerBlockId };
 
     const children = blocksFromNodes(
       wrapper.childrenNodes,
@@ -1259,7 +1332,16 @@ const blocksFromNodes = (
       depth + 1,
       warnings,
     );
-    blocks.push(children.length > 0 ? { ...ownBlock, children } : ownBlock);
+    // codeBlock(model CodeBlock)엔 children 필드가 없다 — findChildrenWrapper
+    // 가 이미 pre를 2-child(children 컨테이너 형제 있음) 분기에서 거절해
+    // children이 항상 빈 배열이지만, 그 보장은 값 단계라 타입엔 드러나지
+    // 않는다. 판정식에 타입 좁히기를 그대로 반영해 스프레드가 CodeBlock에
+    // 없는 키를 얹지 않게 한다.
+    blocks.push(
+      children.length > 0 && ownBlock.type !== "codeBlock"
+        ? { ...ownBlock, children }
+        : ownBlock,
+    );
   }
   flushPlainRun();
 
