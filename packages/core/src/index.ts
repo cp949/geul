@@ -42,5 +42,6 @@ export {
   createEditor,
 } from "./editor-controller.js";
 export type { EditorError } from "./errors.js";
+export type { MediaBlockKind } from "./media-block-kind.js";
 export type { TableCellTarget } from "./table-grid.js";
 export type { PasteRejectedReason } from "./table-command-error.js";

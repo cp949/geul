@@ -26,7 +26,11 @@ import type { NodeType, Schema } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { expect } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
-import { createEditor, type EditorController } from "../src/index.js";
+import {
+  createEditor,
+  type EditorController,
+  type MediaBlockKind,
+} from "../src/index.js";
 import {
   documentOf,
   mountTiptapEditor,
@@ -352,6 +356,64 @@ export const secondParagraphBlock = paragraphBlock("block-2", "second");
 export const dividerD1 = dividerBlock("d-1");
 export const dividerBetweenParagraphsDocument = () =>
   documentOf(firstParagraphBlock, dividerD1, secondParagraphBlock);
+
+/**
+ * 4종 미디어 블록(file/image/video/audio) 리터럴 — insertMediaBlock·
+ * setMediaBlockUrl/Name/Caption/BackgroundColor 명령 테스트
+ * (editor-controller-media-commands.test.ts)가 공유한다. kind별 전용
+ * optional prop(previewWidth 등)은 이 명령 4개가 다루지 않아(RD-001 제외
+ * 범위 — RD-002 렌더링·후속 슬라이스 몫) 넣지 않는다. quote·divider와 같은
+ * 저장 정규형 원칙(생략 가능한 필드는 값이 있을 때만 넣는다)을 따른다.
+ */
+export const mediaBlock = (
+  kind: MediaBlockKind,
+  id: string,
+  props?: {
+    url?: string;
+    name?: string;
+    caption?: string;
+    backgroundColor?: string;
+  },
+): Block => {
+  const common = {
+    id,
+    ...(props?.url === undefined ? {} : { url: props.url }),
+    ...(props?.name === undefined ? {} : { name: props.name }),
+    ...(props?.caption === undefined ? {} : { caption: props.caption }),
+    ...(props?.backgroundColor === undefined
+      ? {}
+      : { backgroundColor: props.backgroundColor }),
+  };
+  switch (kind) {
+    case "file":
+      return { ...common, type: "file" };
+    case "image":
+      return { ...common, type: "image" };
+    case "video":
+      return { ...common, type: "video" };
+    case "audio":
+      return { ...common, type: "audio" };
+  }
+};
+
+/**
+ * 현재 selection이 blockId 미디어 블록의 NodeSelection인지 단언한다.
+ * expectDividerNodeSelection과 같은 이유(비포장 atom은 NodeSelection으로만
+ * 선택된다)로, insertMediaBlock(media-commands.ts)이 divider와 달리 삽입한
+ * 블록 자신을 선택해야 하는 계약(RD-003 File Panel 자동 오픈 판정 근거)을
+ * 고정한다.
+ */
+export const expectMediaBlockNodeSelection = (
+  tiptap: Pick<TiptapEditor, "state">,
+  blockId: string,
+  kind: MediaBlockKind,
+): void => {
+  const { selection } = tiptap.state;
+  expect(selection).toBeInstanceOf(NodeSelection);
+  const { node } = selection as NodeSelection;
+  expect(node.type.name).toBe(kind);
+  expect(node.attrs.blockId).toBe(blockId);
+};
 
 /**
  * 명령 Result 단언 리터럴 — 성공 void(okResult) / COMMAND_NOT_APPLICABLE

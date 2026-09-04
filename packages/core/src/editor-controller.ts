@@ -24,6 +24,11 @@ import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.
 import type { EditorError } from "./errors.js";
 import { createGenericBlockCommands } from "./generic-block-commands.js";
 import { getBlockNestingActionState } from "./indent-commands.js";
+import type { MediaBlockKind } from "./media-block-kind.js";
+import {
+  type InsertMediaBlockError,
+  insertMediaBlock as insertMediaBlockCommand,
+} from "./media-commands.js";
 import {
   commandNotApplicable,
   ProductionEditorSession,
@@ -133,6 +138,16 @@ export interface EditorController {
       blockId: string,
       align: "left" | "center" | "right" | null,
     ): Result<void, EditorError>;
+    setMediaBlockUrl(blockId: string, url: string): Result<void, EditorError>;
+    setMediaBlockName(blockId: string, name: string): Result<void, EditorError>;
+    setMediaBlockCaption(
+      blockId: string,
+      caption: string,
+    ): Result<void, EditorError>;
+    setMediaBlockBackgroundColor(
+      blockId: string,
+      color: string | null,
+    ): Result<void, EditorError>;
     pasteTabularData(
       data: TabularData,
     ): Result<{ blockId: string }, EditorError>;
@@ -143,6 +158,11 @@ export interface EditorController {
     ): Result<{ blockId: string }, EditorError>;
     insertDivider(
       afterBlockId: string,
+      options?: { clearAfterBlockText?: boolean },
+    ): Result<{ blockId: string }, EditorError>;
+    insertMediaBlock(
+      afterBlockId: string,
+      kind: MediaBlockKind,
       options?: { clearAfterBlockText?: boolean },
     ): Result<{ blockId: string }, EditorError>;
     insertTableRow(
@@ -610,6 +630,52 @@ export const createEditor = (
     });
   };
 
+  const isMediaBlockNodeName = (name: string): name is MediaBlockKind =>
+    name === "file" || name === "image" || name === "video" || name === "audio";
+
+  // setMediaBlockUrl/Name/Caption/BackgroundColor가 공유하는 본체.
+  // runSetBlockTextPropCommand와 같은 모양(찾기→가드→검증→setNodeMarkup 1회)
+  // 이지만 가드가 다르다 — media 4종은 divider·table처럼 blockContainer로
+  // 감싸이지 않는 atom이라(media-block-extension.ts) 그 helper의
+  // `blockContainer && isNestableBlockType` 가드를 그대로 못 쓴다(RD-001.md
+  // "결정"). setNodeMarkup으로 attrs 일부만 바꿔도 나머지는 항상
+  // node.attrs를 스프레드해 유지한다 — 부분 attrs를 넘기면 schema
+  // default(null)로 리셋되는 함정을 그대로 피한다.
+  const runSetMediaBlockAttrCommand = (
+    command: string,
+    blockId: string,
+    value: string | null,
+    validate: (value: string) => EditorError | null,
+    nextAttrs: (
+      attrs: Record<string, unknown>,
+      value: string | null,
+    ) => Record<string, unknown>,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (!isMediaBlockNodeName(node.type.name)) {
+      return commandNotApplicable(command);
+    }
+    if (value !== null) {
+      const error = validate(value);
+      if (error !== null) return { ok: false, error };
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        nextAttrs(node.attrs, value),
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
   // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
@@ -813,6 +879,56 @@ export const createEditor = (
     return { ok: true, value: { blockId: captured.blockId } };
   };
 
+  // insertDivider 래퍼와 동일 구조(media-commands.ts::insertMediaBlock의
+  // Result를 session.runDocumentCommand의 boolean 위에서 꺼낸다) — kind만
+  // 추가로 그대로 전달한다. 오류가 BLOCK_NOT_FOUND·TRANSACTION_REJECTED
+  // 둘뿐인 것도 divider와 같다(InsertMediaBlockError).
+  const insertMediaBlock = (
+    afterBlockId: string,
+    kind: MediaBlockKind,
+    options?: { clearAfterBlockText?: boolean },
+  ): Result<{ blockId: string }, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("insertMediaBlock");
+    const captured: {
+      code: InsertMediaBlockError["code"] | null;
+      blockId: string | null;
+    } = { code: null, blockId: null };
+
+    const result = session.runDocumentCommand(
+      "insertMediaBlock",
+      "local",
+      () => {
+        const outcome = insertMediaBlockCommand(
+          session.editor,
+          afterBlockId,
+          kind,
+          session.createId,
+          options,
+        );
+        if (!outcome.ok) {
+          captured.code = outcome.error.code;
+          return false;
+        }
+        captured.blockId = outcome.value.blockId;
+        return true;
+      },
+    );
+
+    if (captured.code !== null) {
+      return captured.code === "BLOCK_NOT_FOUND"
+        ? {
+            ok: false,
+            error: { code: "BLOCK_NOT_FOUND", blockId: afterBlockId },
+          }
+        : { ok: false, error: { code: "TRANSACTION_REJECTED" } };
+    }
+    if (!result.ok) return result;
+    if (captured.blockId === null) {
+      return commandNotApplicable("insertMediaBlock");
+    }
+    return { ok: true, value: { blockId: captured.blockId } };
+  };
+
   return {
     mount(element) {
       session.mount(element);
@@ -1002,6 +1118,44 @@ export const createEditor = (
               : { code: "INVALID_ALIGN", align: value },
           (attrs, value) => ({ ...attrs, textAlignment: value }),
         ),
+      setMediaBlockUrl: (blockId, url) =>
+        runSetMediaBlockAttrCommand(
+          "setMediaBlockUrl",
+          blockId,
+          url,
+          (value) =>
+            isSupportedLinkHref(value)
+              ? null
+              : { code: "LINK_HREF_REJECTED", href: value },
+          (attrs, value) => ({ ...attrs, url: value }),
+        ),
+      setMediaBlockName: (blockId, name) =>
+        runSetMediaBlockAttrCommand(
+          "setMediaBlockName",
+          blockId,
+          name,
+          () => null,
+          (attrs, value) => ({ ...attrs, name: value }),
+        ),
+      setMediaBlockCaption: (blockId, caption) =>
+        runSetMediaBlockAttrCommand(
+          "setMediaBlockCaption",
+          blockId,
+          caption,
+          () => null,
+          (attrs, value) => ({ ...attrs, caption: value }),
+        ),
+      setMediaBlockBackgroundColor: (blockId, color) =>
+        runSetMediaBlockAttrCommand(
+          "setMediaBlockBackgroundColor",
+          blockId,
+          color,
+          (value) =>
+            isCanonicalCellColor(value)
+              ? null
+              : { code: "INVALID_COLOR", color: value },
+          (attrs, value) => ({ ...attrs, backgroundColor: value }),
+        ),
       pasteTabularData: (data) => {
         if (session.isDestroyed)
           return commandNotApplicable("pasteTabularData");
@@ -1022,6 +1176,7 @@ export const createEditor = (
         );
       },
       insertDivider,
+      insertMediaBlock,
       insertTableRow: (tableBlockId, atIndex) =>
         runTableCommand("insertTableRow", () =>
           insertTableRowCommand(
