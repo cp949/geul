@@ -85,6 +85,45 @@ export type CodeBlock = {
   language?: string;
   content: InlineContent;
 };
+// 4종 leaf 미디어 블록(file/image/video/audio) 공통 optional 필드다(spec
+// §3.1). 콘텐츠가 rich text가 아니라 plain string prop(name/caption)이므로
+// TextBlockProps(textColor/backgroundColor/textAlignment)를 재사용하지
+// 않는다 — 대신 backgroundColor 하나만(블록 전체 배경) 공통으로 갖는다.
+// url은 packages/model/src/link-policy.ts의 isSupportedLinkHref로,
+// backgroundColor는 cell-color.ts의 isCanonicalCellColor로 검증한다(모두
+// 기존 계약 재사용, schema.ts가 검증). caption은 plain string이다(rich
+// text 아님 — BlockNote와 동일, 색상 마크 적용 대상이 아니다).
+export type MediaBlockCommon = {
+  url?: string;
+  name?: string;
+  caption?: string;
+  backgroundColor?: string;
+};
+export type FileBlock = { id: string; type: "file" } & MediaBlockCommon;
+// previewWidth/textAlignment는 image/video만 갖는다(BlockNote 실측과 정확히
+// 대응, spec §3.1). previewWidth는 양의 유한수만 검증하고 상한을 두지
+// 않는다(media-block.ts의 isValidMediaPreviewWidth, spec §5.3).
+export type ImageBlock = {
+  id: string;
+  type: "image";
+  showPreview?: boolean;
+  previewWidth?: number;
+  textAlignment?: "left" | "center" | "right";
+} & MediaBlockCommon;
+export type VideoBlock = {
+  id: string;
+  type: "video";
+  showPreview?: boolean;
+  previewWidth?: number;
+  textAlignment?: "left" | "center" | "right";
+} & MediaBlockCommon;
+// audio는 previewWidth/textAlignment가 없다(BlockNote 실측 확인, spec
+// §3.1) — showPreview만 image/video와 공유한다.
+export type AudioBlock = {
+  id: string;
+  type: "audio";
+  showPreview?: boolean;
+} & MediaBlockCommon;
 export type TableColumn = { id: string; width: number };
 export type TableBlock = {
   id: string;
@@ -116,7 +155,11 @@ export type Block =
   | BulletListItemBlock
   | NumberedListItemBlock
   | CheckListItemBlock
-  | ToggleListItemBlock;
+  | ToggleListItemBlock
+  | FileBlock
+  | ImageBlock
+  | VideoBlock
+  | AudioBlock;
 // bulletListItem·numberedListItem·checkListItem만 뽑은 부분 유니온이다. io
 // export가 목록 형제를 묶어 <ul>/<ol> 또는 mdast list로 직렬화할 때 쓴다 —
 // 세 패키지(io/html, io/markdown)가 각자 선언하던 동명 타입을 model로

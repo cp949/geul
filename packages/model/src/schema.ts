@@ -14,6 +14,7 @@ import {
   firstNonCanonicalTextMarkIndex,
   PLAIN_TEXT_MARK_TYPES,
 } from "./mark-canonicalization.js";
+import { isValidMediaPreviewWidth } from "./media-block.js";
 import type { Result } from "./result.js";
 import { isValidDocumentId, isValidInlineText } from "./string-invariants.js";
 import {
@@ -102,6 +103,67 @@ const codeBlockSchema = z
   })
   .strict();
 
+// 4종 leaf 미디어 블록(file/image/video/audio) 공통 shape다(spec §3.1).
+// url/backgroundColor는 여기서 타입만 확인하고, 정규 계약 판정
+// (isSupportedLinkHref/isCanonicalCellColor)은 divider/codeBlock과 같은
+// 자리(validateBlocksAt)에서 단독 수행한다(G-CNV-001). previewWidth도 같은
+// 이유로 여기서는 느슨한 z.number()만 쓴다 — 표 열 너비와 달리 정수·상한을
+// 강제하지 않는다(media-block.ts, spec §5.3).
+const mediaBlockCommonShape = {
+  url: z.string().optional(),
+  name: z.string().optional(),
+  caption: z.string().optional(),
+  backgroundColor: z.string().optional(),
+};
+
+// .strict() — FileBlock은 showPreview/previewWidth/textAlignment를 갖지
+// 않는다(spec §3.1, BlockNote 실측). 기본 z.object()는 미선언 키를 조용히
+// 제거해 shape 위반이 무음 유실되므로, divider/codeBlock과 같은 이유로
+// strict()가 DOCUMENT_INVALID 거절을 zod 파싱 단계에서 확보한다.
+const fileBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("file"),
+    ...mediaBlockCommonShape,
+  })
+  .strict();
+
+// .strict() — ImageBlock/VideoBlock은 showPreview/previewWidth/textAlignment를
+// 갖는다(spec §3.1). audio/file과 필드 집합이 달라 별도 스키마로 둔다 —
+// 하나로 합치면 audio에 previewWidth가 섞여도 조용히 통과한다(완료 조건 5).
+const imageBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("image"),
+    showPreview: z.boolean().optional(),
+    previewWidth: z.number().optional(),
+    textAlignment: z.string().optional(),
+    ...mediaBlockCommonShape,
+  })
+  .strict();
+
+const videoBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("video"),
+    showPreview: z.boolean().optional(),
+    previewWidth: z.number().optional(),
+    textAlignment: z.string().optional(),
+    ...mediaBlockCommonShape,
+  })
+  .strict();
+
+// .strict() — AudioBlock은 showPreview만 갖고 previewWidth/textAlignment는
+// 갖지 않는다(spec §3.1, BlockNote 실측 — audio는 previewWidth가 없다).
+const audioBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("audio"),
+    showPreview: z.boolean().optional(),
+    ...mediaBlockCommonShape,
+  })
+  .strict();
+
 // paragraph/heading/quoteBlockSchema는 children으로 blockSchema를 재귀 참조한다.
 // discriminatedUnion이 멤버 스키마의 구체 ZodObject 모양(리터럴 판별 필드)을
 // 직접 봐야 하므로 paragraph/heading/quoteBlockSchema 자체는 z.ZodType<T>로
@@ -181,6 +243,10 @@ type ToggleListItemBlockNode = {
 
 type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
 type CodeBlockNode = z.infer<typeof codeBlockSchema>;
+type FileBlockNode = z.infer<typeof fileBlockSchema>;
+type ImageBlockNode = z.infer<typeof imageBlockSchema>;
+type VideoBlockNode = z.infer<typeof videoBlockSchema>;
+type AudioBlockNode = z.infer<typeof audioBlockSchema>;
 
 type BlockNode =
   | ParagraphBlockNode
@@ -192,7 +258,11 @@ type BlockNode =
   | CheckListItemBlockNode
   | ToggleListItemBlockNode
   | DividerBlockNode
-  | CodeBlockNode;
+  | CodeBlockNode
+  | FileBlockNode
+  | ImageBlockNode
+  | VideoBlockNode
+  | AudioBlockNode;
 
 // TextBlockProps 3필드(model 손글씨 타입과 동일 optional shape) — 콘텐츠를
 // 갖는 nestable 블록 7종 스키마가 공통으로 spread한다. 정규형(색상
@@ -318,6 +388,10 @@ const blockSchema = z.discriminatedUnion("type", [
   toggleListItemBlockSchema,
   dividerBlockSchema,
   codeBlockSchema,
+  fileBlockSchema,
+  imageBlockSchema,
+  videoBlockSchema,
+  audioBlockSchema,
 ]);
 
 const documentSchema = z.object({
@@ -453,6 +527,55 @@ const validateBlocksAt = (
       continue;
     }
 
+    // 4종 leaf 미디어 블록(spec §3.1) — divider/codeBlock과 같은 자리에서
+    // 타입 전용 검증을 마치고 continue한다. block.type 판별자 비교 3개를
+    // 겹쳐 쓰면 discriminated union인 block 자체가 좁혀진다(codeBlock처럼
+    // 별도 as 캐스트가 필요 없다). url/backgroundColor는 4종 공통,
+    // previewWidth/textAlignment는 image/video만 존재한다 — audio/file은
+    // zod .strict() shape 자체가 이 필드를 거절하므로 여기서 다시 확인하지
+    // 않는다(완료 조건 5는 스키마 계층이 담당, G-CNV-001 — 같은 불변식을
+    // 두 계층에서 판정하지 않는다).
+    if (
+      block.type === "file" ||
+      block.type === "image" ||
+      block.type === "video" ||
+      block.type === "audio"
+    ) {
+      if (block.url !== undefined && !isSupportedLinkHref(block.url)) {
+        return invalid([...blockPath, "url"], "Unsupported media URL");
+      }
+      if (
+        block.backgroundColor !== undefined &&
+        !isCanonicalCellColor(block.backgroundColor)
+      ) {
+        return invalid(
+          [...blockPath, "backgroundColor"],
+          "backgroundColor must be an uppercase #RRGGBB color",
+        );
+      }
+      if (block.type === "image" || block.type === "video") {
+        if (
+          block.previewWidth !== undefined &&
+          !isValidMediaPreviewWidth(block.previewWidth)
+        ) {
+          return invalid(
+            [...blockPath, "previewWidth"],
+            "previewWidth must be a positive finite number",
+          );
+        }
+        if (
+          block.textAlignment !== undefined &&
+          !isCanonicalCellAlign(block.textAlignment)
+        ) {
+          return invalid(
+            [...blockPath, "textAlignment"],
+            "textAlignment must be one of left, center, right",
+          );
+        }
+      }
+      continue;
+    }
+
     // heading 전용 불변식(spec §4.1): collapsed가 있는데 isToggleable이
     // true가 아니면 거절한다. codeBlock과 같은 구조 — nestable 공통 처리
     // (content·children 재귀) 전에 타입 전용 검증을 먼저 건다. 이 판정을
@@ -491,8 +614,8 @@ const validateBlocksAt = (
       continue;
     }
 
-    // 위에서 divider/codeBlock/nestable을 모두 걸러냈으니 predicate 계약상
-    // 이 지점은 table뿐이다.
+    // 위에서 divider/codeBlock/4종 미디어/nestable을 모두 걸러냈으니
+    // predicate 계약상 이 지점은 table뿐이다.
     const table = block as TableBlock;
     for (const [columnIndex, column] of table.columns.entries()) {
       const columnId = validateId(ids, column.id, [
@@ -560,9 +683,17 @@ const visitTableBlocks = (
       if (!result.ok) return result;
       continue;
     }
-    // divider와 codeBlock은 children 필드가 없는 리프다 — 나머지
-    // (paragraph/heading/quote/목록 항목)만 children으로 내려간다.
-    if (block.type === "divider" || block.type === "codeBlock") continue;
+    // divider·codeBlock·4종 미디어 블록은 children 필드가 없는 리프다 —
+    // 나머지(paragraph/heading/quote/목록 항목)만 children으로 내려간다.
+    if (
+      block.type === "divider" ||
+      block.type === "codeBlock" ||
+      block.type === "file" ||
+      block.type === "image" ||
+      block.type === "video" ||
+      block.type === "audio"
+    )
+      continue;
     if (block.children !== undefined) {
       const children = visitTableBlocks(
         block.children,

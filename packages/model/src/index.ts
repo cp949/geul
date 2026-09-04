@@ -23,6 +23,7 @@ export type { DocumentError, DocumentErrorCode } from "./errors.js";
 export { createRandomDocumentId } from "./id-factory.js";
 export { appendOrMergeInlineItem } from "./inline-content-merge.js";
 export { isSupportedLinkHref } from "./link-policy.js";
+export { isValidMediaPreviewWidth } from "./media-block.js";
 export {
   canonicalizeTextMarks,
   decodeTextMark,
@@ -60,16 +61,20 @@ export {
   validateTableSize,
 } from "./table-grid-validation.js";
 export type {
+  AudioBlock,
   Block,
   BulletListItemBlock,
   CheckListItemBlock,
   CodeBlock,
   DividerBlock,
   Document,
+  FileBlock,
   HeadingBlock,
   IdFactory,
+  ImageBlock,
   InlineContent,
   ListItemBlock,
+  MediaBlockCommon,
   NumberedListItemBlock,
   ParagraphBlock,
   QuoteBlock,
@@ -78,4 +83,5 @@ export type {
   TextBlockProps,
   TextMark,
   ToggleListItemBlock,
+  VideoBlock,
 } from "./types.js";
