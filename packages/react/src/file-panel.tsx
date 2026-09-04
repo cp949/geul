@@ -2,6 +2,10 @@ import type { MediaBlockKind } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { extractNameFromUrl } from "./extract-name-from-url.js";
+import {
+  FALLBACK_BLOCK_POSITION,
+  readBlockBounds,
+} from "./read-block-bounds.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -30,29 +34,6 @@ type PanelState =
       /** 마지막으로 성공 적용된 이름 초깃값(추출 실패 시 URL 자체). 아직 제출 전이면 null. */
       appliedName: string | null;
     } & PanelPosition);
-
-/**
- * 대상 미디어 블록의 렌더된 DOM(`[data-be-block-id]`, RD-002 DELTA-01)
- * bounding rect를 읽어 패널을 그 아래 앵커한다. LinkToolbar가 브라우저
- * Selection range로 좌표를 읽는 것과 달리 블록 자체를 selector로 찾는다 —
- * media 블록은 atom이라 텍스트 range가 아니라 NodeSelection이고, 이
- * selector는 RD-002가 부여한 계약이라 selection range 해석 없이도 항상
- * 존재한다.
- */
-const readBlockBounds = (
-  element: HTMLElement,
-  blockId: string,
-): PanelPosition | null => {
-  const target = element.querySelector<HTMLElement>(
-    `[data-be-block-id="${blockId}"]`,
-  );
-  if (target === null) return null;
-  const rect = target.getBoundingClientRect();
-  return { left: rect.left + rect.width / 2, top: rect.bottom };
-};
-
-/** 대상 블록 DOM을 못 찾았을 때(드문 경우)만 쓰는 임의 뷰포트 안쪽 좌표 — link-toolbar.tsx의 같은 이름 상수와 같은 이유. */
-const FALLBACK_POSITION: PanelPosition = { left: 96, top: 48 };
 
 /**
  * `url` 없는 빈 미디어 블록이 선택되면 자동으로 열려 URL 입력을 받는
@@ -113,7 +94,7 @@ export const FilePanel = () => {
       openBlockIdRef.current = media.blockId;
       editingRef.current = true;
       const bounds =
-        readBlockBounds(element, media.blockId) ?? FALLBACK_POSITION;
+        readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
       setPanelState({
         mode: "open",
         blockId: media.blockId,

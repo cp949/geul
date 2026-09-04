@@ -16,6 +16,7 @@ import {
   FilePanel,
   FormattingToolbar,
   LinkToolbar,
+  MediaToolbar,
   SlashMenu,
   useEditor,
 } from "@cp949/geul-react";
@@ -210,6 +211,7 @@ const EditorWorkspace = ({
         <LinkToolbar />
         <SlashMenu />
         <FilePanel />
+        <MediaToolbar />
         <EditorContent />
       </section>
 
