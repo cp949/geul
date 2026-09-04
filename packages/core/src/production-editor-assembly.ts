@@ -9,6 +9,7 @@ import {
 } from "./block-container-extension.js";
 import { BlockIdExtension } from "./block-id-extension.js";
 import { BlockJoinExtension } from "./block-join-extension.js";
+import { BlockMoveKeyboardExtension } from "./block-move-keyboard-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
 import { BlockTypeInputRuleExtension } from "./block-type-input-rule-extension.js";
 import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
@@ -213,6 +214,7 @@ export const createProductionEditor = (options: {
       }),
       IndentKeyboardExtension,
       BlockTypeKeyboardExtension,
+      BlockMoveKeyboardExtension,
       ListPresentationExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension,

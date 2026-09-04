@@ -32,6 +32,33 @@ export const dispatchKeydown = (
   ) === true;
 
 /**
+ * Mod-Shift-<key> keydown을 실 디스패치한다("Mod"는 jsdom 기본 플랫폼
+ * 기준 ctrlKey). `addKeyboardShortcuts`로만 등록된 커맨드는 editor.commands로
+ * 노출되지 않아(G-WKS-001) 이 경로가 유일한 트리거인 이유는 dispatchKeydown과
+ * 같다 — block-type-keyboard-extension.test.ts(Mod-Shift-6~9)의 로컬
+ * 사본이 두 번째 소비 파일(block-move-commands.test.ts)에서 이 모듈로
+ * 올라왔다(G-TST-002).
+ */
+export const dispatchModShiftKeydown = (
+  tiptap: Pick<TiptapEditor, "view">,
+  key: string,
+): boolean =>
+  tiptap.view.someProp(
+    "handleKeyDown",
+    (f) =>
+      f(
+        tiptap.view,
+        new KeyboardEvent("keydown", {
+          key,
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ) === true,
+  ) === true;
+
+/**
  * native text input 직전의 ProseMirror handleTextInput 경계를 실
  * 디스패치하고 input rule이 소비했는지(true) 아닌지를 돌려준다. list와
  * block-type native shorthand 테스트가 공유한다(RD-002, 두 번째 소비 파일).

@@ -20,7 +20,10 @@ import {
   BlockTypeKeyboardExtension,
   setBlockTypeShortcut,
 } from "../src/block-type-keyboard-extension.js";
-import { contentTextStart } from "./block-test-support.js";
+import {
+  contentTextStart,
+  dispatchModShiftKeydown,
+} from "./block-test-support.js";
 import {
   checkListItemBlock,
   dividerBlock,
@@ -277,25 +280,6 @@ describe("실제 keymap 등록(Mod-Alt-N/Mod-Alt-q/Mod-Shift-6~9)", () => {
             key,
             ctrlKey: true,
             altKey: true,
-            bubbles: true,
-            cancelable: true,
-          }),
-        ) === true,
-    ) === true;
-
-  const dispatchModShiftKeydown = (
-    editor: Pick<Editor, "view">,
-    key: string,
-  ): boolean =>
-    editor.view.someProp(
-      "handleKeyDown",
-      (f) =>
-        f(
-          editor.view,
-          new KeyboardEvent("keydown", {
-            key,
-            ctrlKey: true,
-            shiftKey: true,
             bubbles: true,
             cancelable: true,
           }),
