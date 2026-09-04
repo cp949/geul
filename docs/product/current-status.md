@@ -3,7 +3,7 @@
 ## 현재 단계
 
 - 마지막 완료 단계: R2 — 기본 블록 parity ([완료 판정](../reviews/r2-basic-block-parity-completion.md) `R2-01`, `PASS`)
-- 다음 진행 단계: R3 — 파일·미디어 parity (계획 Issue 미작성 — `docs/product/roadmap.md` R3 절이 범위·완료 조건 원본)
+- 다음 진행 단계: R3 — 파일·미디어 parity (계획 [Issue #152](https://github.com/cp949/geul/issues/152) 게시, 슬라이스 1~7 전부 미착수 — 설계 원본은 [R3 spec](../specs/2026-09-04-r3-file-media-parity-design.md))
 - R2 실행 상태: 구현 계획 [Issue #38](https://github.com/cp949/geul/issues/38) 슬라이스 1~11 전부 완료 — 슬라이스 1(중첩 블록 모델 파운데이션 + 들여쓰기/내어쓰기 UI)·슬라이스 2(placeholder, trailing block)·슬라이스 3(H4-H6, 인용문, 구분선)·슬라이스 4(코드 블록)·슬라이스 5(글머리·번호 목록)·슬라이스 6(체크·토글 목록 + 토글 제목)·슬라이스 7(다중 블록 선택·이동·삭제, `UI-004`)·슬라이스 7a(하위 트리 인지 `moveBlockBefore`/`duplicateBlock`, [Issue #125](https://github.com/cp949/geul/issues/125))·슬라이스 7b(표 들여쓰기/내어쓰기 UI 경로, [Issue #126](https://github.com/cp949/geul/issues/126))·슬라이스 8(글자색/배경색/정렬, `INL-008`~`INL-011`)·슬라이스 9(키보드 단축키와 입력 규칙, `UI-011`)·슬라이스 10(일반 clipboard, `IO-007` 부분)·슬라이스 11(Chromium/Firefox/WebKit 3-엔진 게이트, R2 완료 판정)
 - R1 실행 상태: 구현 계획 [Issue #3](https://github.com/cp949/geul/issues/3) 슬라이스 1~13 전부 완료 — 1(서식 툴바)·2(링크 툴바)·3(슬래시 메뉴·블록 추가·블록 종류 변경)·4(블록 drag handle과 복제·삭제 메뉴)·5(`TableGrid` 연산 모듈)·6(Table/Row/Cell Tiptap 노드와 기본 명령)·7(표 handle UI: 재정렬·열 너비 조절·빠른 확장)·8(셀 범위 선택, 병합/분할)·9a(표 핸들 클릭 메뉴, 헤더 행/열 토글, 행/열 색상·삭제)·9b(셀 단위 글자색·배경색, 셀 텍스트 정렬)·10(Tab/Shift+Tab 키보드 셀 탐색, 마지막 셀 Tab의 새 행 생성)·11(스프레드시트 클립보드 붙여넣기, 10,000셀 성능 기준선)·12(표 문서 로드 차단 해제)·13(3-엔진 게이트, R1 완료 판정)
 
@@ -19,7 +19,7 @@ R2는 `model`의 `Block` 공통 `children?: Block[]`로 문서를 재귀 트리�
 
 ## 바로 다음 작업
 
-R2가 완료됐다(2026-09-04, [완료 판정](../reviews/r2-basic-block-parity-completion.md) `R2-01` `PASS`). R3(파일·미디어 parity — 이미지·비디오·오디오·파일 블록, URL 삽입·upload callback, drag/drop·paste, 이름·caption·교체·삭제·다운로드, preview/링크 전환, 이미지·비디오 크기 조절)의 계획 Issue는 아직 작성되지 않았다 — 범위·기능 ID(`BLK-013`~`BLK-016`, `MED-001`~`MED-008`)와 완료 조건은 `docs/product/roadmap.md`의 R3 절이 원본이다. `IO-007`의 파일 붙여넣기 부분(R2에서 R3로 이월 승인, Issue #38 spec 2.2)은 R3 계획 Issue의 완료 조건에 포함시킨다.
+R2가 완료됐다(2026-09-04, [완료 판정](../reviews/r2-basic-block-parity-completion.md) `R2-01` `PASS`). R3(파일·미디어 parity — 이미지·비디오·오디오·파일 블록, URL 삽입·upload callback, drag/drop·paste, 이름·caption·교체·삭제·다운로드, preview/링크 전환, 이미지·비디오 크기 조절) 계획 [Issue #152](https://github.com/cp949/geul/issues/152)를 게시했다(2026-09-04, 브레인스토밍 결과 반영). 저장 모델·upload 계약(`Result` 기반 구조화 성공/실패/취소)·명령·HTML/GFM 계약은 [R3 spec](../specs/2026-09-04-r3-file-media-parity-design.md)이 원본이고, 슬라이스 순서·체크리스트·완료 기준은 Issue #152가 원본이다. `IO-007`의 파일 붙여넣기 부분(R2에서 R3로 이월 승인, Issue #38 spec 2.2)은 Issue #152 슬라이스4의 완료 기준에 포함됐다. 슬라이스 1~7 전부 미착수 — 다음 작업은 슬라이스 1(저장 모델 파운데이션, `BLK-013`~`016`)이다. 레인(기본/qq/ff/roadmap-workflow)은 슬라이스 착수 시 `AGENTS.md` 규칙으로 판정한다.
 
 슬라이스 1(중첩 블록 모델 파운데이션 + 들여쓰기/내어쓰기 UI, `DOC-002`·`UI-006`)을 완료했다 — `model`에 재귀 검증(깊이 상한 64)과 `children?: Block[]`을 추가하고, `core`에 컨테이너 스키마·재귀 PM↔모델 변환·`indentBlock`/`outdentBlock` 명령과 Tab/Shift+Tab 키바인딩을, `io`에 HTML/GFM 재귀 왕복(GFM은 손실 처리, D8)을, `react`에 서식 툴바 들여쓰기/내어쓰기 버튼과 중첩 시각 렌더링을 구현했다. 중첩은 `paragraph`·`heading` 한정이고, 자식 딸린 블록의 이동·복제(`moveBlockBefore`/`duplicateBlock`)는 하위 트리를 인지하지 못해 거절이 잔존한다(Issue #125, 슬라이스 7a로 이월). 표 들여쓰기 UI 경로는 별도 이월됐다(Issue #126, 슬라이스 7b). `DOC-002`·`UI-006`을 `PARTIAL`로 갱신했다. 세부 구현 결정과 완료 조건은 Issue #38이 원본이다.
 
