@@ -36,7 +36,7 @@ export const modelDepthAt = ($pos: ResolvedPos): number => {
   return depth;
 };
 
-// list-paste-fallback-extension.ts의 handlePaste가 넘기는
+// ClipboardPasteExtension의 handlePaste가 넘기는
 // view.state.selection.$from은 두 가지 서로 다른 위치 종류일 수 있다 —
 // modelDepthAt에 그대로 넘기면 그중 하나에서만 맞는 값이 나온다(qq-workflow
 // 단계-3 결함 탐지 F1). 이 함수가 위치 종류를 스스로 판별해 맞는 계산을
@@ -66,9 +66,8 @@ export const modelDepthAt = ($pos: ResolvedPos): number => {
 // 이름을 "Caret"이 아니라 "PasteTarget"으로 둔 이유: 이 함수는 이제
 // TextSelection의 캐럿뿐 아니라 NodeSelection·GapCursor 같은 경계 위치도
 // 올바르게 처리해야 한다 — "Caret"만으로는 그 두 번째 경로를 부정확하게
-// 암시한다. 실제 유일한 소비자(list-paste-fallback-extension.ts의
-// handlePaste)가 이 함수를 붙여넣기 대상 위치 계산에만 쓴다는 사실을 그대로
-// 반영한다.
+// 암시한다. 실제 소비자(clipboard-paste-extension.ts의 handlePaste)가 이
+// 함수를 붙여넣기 대상 위치 계산에만 쓴다는 사실을 그대로 반영한다.
 export const modelDepthAtPasteTarget = ($pos: ResolvedPos): number => {
   const isBlockLevelBoundary =
     $pos.depth === 0 || $pos.parent.type.name === "blockGroup";

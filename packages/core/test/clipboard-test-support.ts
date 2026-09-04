@@ -61,9 +61,10 @@ export const pasteHtml = (editable: HTMLElement, html: string): void =>
 /**
  * jsdom dispatchEvent는 리스너 예외를 재던지지 않는다 — window의 전역
  * error 이벤트로만 실제 미처리 예외 유무를 잡는다. quote-paste-fallback.
- * test.ts가 인라인으로 처음 쓴 패턴을 list-paste-fallback.test.ts가 로컬
- * 헬퍼로 옮겼고, clipboard-paste-extension.test.ts가 세 번째 소비 파일로
- * 등장해 여기로 승격했다(G-TST-002).
+ * test.ts가 인라인으로 처음 쓴 패턴을 옛 list-paste-fallback.test.ts(삭제
+ * 됨, RD-005)가 로컬 헬퍼로 옮겼고, clipboard-paste-extension.test.ts가
+ * 세 번째 소비 파일로 등장해 여기로 승격했다(G-TST-002).
+ * clipboard-paste-list.test.ts(RD-005)도 이 헬퍼를 쓴다.
  */
 export const withUnhandledErrorTracking = (
   run: (errors: unknown[]) => void,

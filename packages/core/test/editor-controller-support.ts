@@ -65,9 +65,9 @@ export const paragraphDocument = (text: string, revision = 0): Document => ({
  * Document blocks 트리의 최대 절대 깊이(top-level=1)를 구한다.
  * isNestableBlockType은 discriminated union인 block 자체를 좁히지
  * 못한다(model/src/schema.ts의 validateBlocksAt과 같은 이유) — 명시적으로
- * 좁힌다. list-paste-fallback.test.ts의 로컬 헬퍼가
+ * 좁힌다. 옛 list-paste-fallback.test.ts(삭제됨, RD-005)의 로컬 헬퍼가
  * clipboard-paste-extension.test.ts의 두 번째 소비로 여기로 승격했다
- * (G-TST-002).
+ * (G-TST-002). clipboard-paste-list.test.ts(RD-005)도 이 헬퍼를 쓴다.
  */
 export const maxBlockDepth = (blocks: readonly Block[], depth = 1): number =>
   blocks.reduce((max, block) => {

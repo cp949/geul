@@ -44,7 +44,6 @@ import {
 } from "./table-extension.js";
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
-import { ListPasteFallbackExtension } from "./list-paste-fallback-extension.js";
 import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
@@ -100,14 +99,18 @@ const HeadingExtension = Node.create({
 // io.importHtml이 own-content로 재인식할 수 있도록 data-be-* attribute로
 // 노출한다(RD-003 — 이전에는 DOM에 전혀 투영되지 않았다).
 //
-// 외부 ul/ol 붙여넣기(DELTA-03, Issue #143 (c))도 이 parseHTML 부재를
-// 바꾸지 않는다 — list-paste-fallback-extension.ts가 clipboard HTML을
-// 직접 파싱해 blockContainer/blockGroup JSON을 조립하고
-// editor.commands.insertContent로 꽂는다(TablePasteExtension과 같은
-// handlePaste 가로채기 패턴). 실측 결과 표준 parseHTML(findWrapping 기반
-// 자동 래핑)로는 중첩 목록에서 blockGroup 2단 래핑을 만들 수 없다 —
+// 외부 ul/ol 붙여넣기(Issue #143 (c))도 이 parseHTML 부재를 바꾸지 않는다 —
+// ClipboardPasteExtension이 clipboard HTML을 io.importHtml로 파싱해
+// modelToTiptap JSON을 editor.commands.insertContent로 꽂는다
+// (TablePasteExtension과 같은 handlePaste 가로채기 패턴). 예전엔
+// 목록만 별도 확장(list-paste-fallback-extension.ts, 삭제됨)이 독립
+// DOM 파서로 처리했지만, io.importHtml이 own-format·외부 ul/ol을 이미
+// 동등하게 처리해(중첩·ol[start]·깊이 상한 포함) RD-005가 그 확장을
+// 제거하고 ClipboardPasteExtension 하나로 흡수했다. 실측 결과 표준
+// parseHTML(findWrapping 기반 자동 래핑)로는 중첩 목록에서 blockGroup
+// 2단 래핑을 만들 수 없다는 사실은 여전히 유효하다 —
 // ContentMatch.findWrapping이 항상 최단 경로(최상위 1단 래핑, 즉 평탄화)
-// 를 우선해 중첩이 사라진다. 자세한 근거는 그 파일의 상단 주석 참고.
+// 를 우선해 중첩이 사라진다.
 const ProductionBulletListItemExtension = BulletListItemExtension.extend({
   renderHTML({ HTMLAttributes }) {
     return [
@@ -261,9 +264,10 @@ export const createProductionEditor = (options: {
       // 3.30.1 sortExtensions([...extensions].reverse()) — 실측 확인,
       // RD-004 readiness probe). handlePaste는 그 순서대로 처음 true를
       // 반환하는 쪽에서 멈추므로, 실제 가로채기 우선순위는 선언 역순이다
-      // — 아래에서 가장 먼저 선언한 ClipboardPasteExtension이 실제로는
-      // 가장 나중에 시도된다(표·목록이 먼저 자기 콘텐츠를 판정하고,
-      // 자기 것이 아니면 넘겨서 이 확장이 그 나머지만 받는다).
+      // — 아래에서 먼저 선언한 ClipboardPasteExtension이 실제로는 나중에
+      // 시도된다(표가 먼저 자기 콘텐츠를 판정하고, 자기 것이 아니면
+      // 넘겨서 이 확장이 표 아닌 나머지 전부를 받는다 — 목록도 이제 이
+      // 확장이 io.importHtml로 직접 처리한다, RD-005).
       ClipboardPasteExtension.configure({ createId: options.createId }),
       TablePasteExtension.configure({
         createId: options.createId,
@@ -271,7 +275,6 @@ export const createProductionEditor = (options: {
           ? {}
           : { onPasteRejected: options.onPasteRejected }),
       }),
-      ListPasteFallbackExtension.configure({ createId: options.createId }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
         canApplyDocumentChange: options.canApplyDocumentChange,

@@ -1107,12 +1107,34 @@ const buildProductionListItemBlock = (
   }
 };
 
+// numberedListItem.startNumber가 model schema 범위(min(0).max(999_999_999))
+// 안인지 판정한다. table-paste-commands.ts의 isStartNumberInRange와 같은
+// 방식으로 상수를 복제하지 않고 parseDocument 프로브에 위임한다 — 범위가
+// 바뀌어도 이 판정은 갱신할 필요가 없다.
+const isStartNumberInRange = (startNumber: number): boolean =>
+  parseDocument({
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "html-import-start-number-probe",
+        type: "numberedListItem",
+        content: [],
+        startNumber,
+      },
+    ],
+  }).ok;
+
 // ul/ol 직속 li를 문서 순서대로 목록 항목으로 해석한다. ol[start]는 HTML
 // 컨테이너의 첫 li에만 명시 startNumber로 붙는다. 별도 default ol이 같은
 // model sibling scope의 번호 항목 바로 뒤에 오면 HTML의 새 컨테이너가 뜻하는
 // 1 재시작을 첫 항목에 명시한다. 같은 ol의 후속 li에는 복제하지 않는다.
 // malformed 비-li flow content도 버리지 않고 기존 blocksFromNodes 경계로
-// 형제 블록화한다.
+// 형제 블록화한다. model 범위를 벗어난 start(음수 등)는 explicit start가
+// 아예 없었던 것처럼 접는다 — 검증 없이 아래로 흘려보내면 이 함수가 만드는
+// Document 전체가 뒤이은 parseDocument에서 거절돼 목록 아닌 나머지
+// 콘텐츠까지 통째로 사라진다(RD-005 readiness probe 실측 — 옛
+// list-paste-fallback-extension.ts가 이미 같은 접이식 정책을 썼다).
 const blocksFromListElement = (
   node: HtmlElementNode & { tagName: "ul" | "ol" },
   createId: IdFactory,
@@ -1124,8 +1146,12 @@ const blocksFromListElement = (
   let nonItemRun: HtmlNode[] = [];
   let itemIndex = 0;
   let flowInterruptedSinceItem = false;
-  const explicitStart =
+  const rawExplicitStart =
     node.tagName === "ol" ? propertyInteger(node, "start", Number.NaN) : NaN;
+  const explicitStart =
+    Number.isInteger(rawExplicitStart) && isStartNumberInRange(rawExplicitStart)
+      ? rawExplicitStart
+      : Number.NaN;
 
   const flushNonItemRun = (): void => {
     if (nonItemRun.length === 0) return;

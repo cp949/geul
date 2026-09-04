@@ -7,42 +7,15 @@
  * ProductionEditorSession을 거쳐 이미 이 함수를 쓴다)로 실제 에디터를 만들고
  * getHTML()로 실제 렌더 DOM을 얻는다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Document } from "@cp949/geul-model";
 import { importHtml } from "@cp949/geul-io";
 import { describe, expect, it } from "vitest";
 
-import { createProductionEditor } from "../src/production-editor-assembly.js";
-
-// 문서가 childless paragraph로 끝나지 않으면 ensureTrailingParagraphOnLoad가
-// createId로 새 blockContainer id를 발급해 trailing paragraph를 붙인다
-// (trailing-block-extension.ts, UI-010 불변식) — 이 fixture는 매번 그
-// trailing paragraph를 직접 명시해 예측 불가능한 새 id 발급을 피한다.
-const TRAILING_ID = "trailing";
-
-const documentOf = (...blocks: Block[]): Document => ({
-  formatVersion: 1,
-  revision: 0,
-  blocks: [...blocks, { id: TRAILING_ID, type: "paragraph", content: [] }],
-});
-
-/** production 편집기로 문서를 로드하고 실제 렌더 HTML을 얻는다. */
-function productionHtml(document: Document): string {
-  const editor = createProductionEditor({
-    document,
-    createId: () => {
-      throw new Error(
-        "이 fixture는 trailing paragraph를 이미 포함해 새 id 발급이 없어야 한다",
-      );
-    },
-    onUpdate: () => {},
-    canApplyDocumentChange: () => true,
-  });
-  try {
-    return editor.getHTML();
-  } finally {
-    editor.destroy();
-  }
-}
+import {
+  PRODUCTION_TRAILING_ID,
+  productionDocumentOf as documentOf,
+  productionHtml,
+} from "./production-editor-test-support.js";
 
 /** io.importHtml 결과에서 trailing paragraph를 떼어 원본 fixture와 비교한다. */
 function importedBlocksWithoutTrailing(html: string): Document["blocks"] {
@@ -51,7 +24,7 @@ function importedBlocksWithoutTrailing(html: string): Document["blocks"] {
   if (!result.ok) throw new Error(result.error.message);
   const blocks = result.value.document.blocks;
   expect(blocks.at(-1)).toEqual({
-    id: TRAILING_ID,
+    id: PRODUCTION_TRAILING_ID,
     type: "paragraph",
     content: [],
   });

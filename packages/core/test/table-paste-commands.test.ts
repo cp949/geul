@@ -429,7 +429,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
   });
   // depth단짜리 bulletListItem 체인 ClipboardContentBlock — 이 블록을
   // 표 밖 시퀀스 최상위(depth 1)에 두면 리프가 절대 깊이 depth에 있다
-  // (list-paste-fallback.test.ts의 buildListDepthChain과 같은 패턴).
+  // (clipboard-paste-list.test.ts의 buildListDepthChain과 같은 패턴).
   const nestedBulletChain = (depth: number): ClipboardContentBlock => {
     let innermost = bulletItemBlock("leaf");
     for (let level = depth - 1; level >= 1; level -= 1) {

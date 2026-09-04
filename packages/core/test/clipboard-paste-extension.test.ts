@@ -116,9 +116,8 @@ describe("ClipboardPasteExtension", () => {
     });
   });
 
-  // 외부 <hr> 단독 붙여넣기가 divider로 반영된다(BLK-006 해소) — 목록
-  // 요소가 없어 ListPasteFallbackExtension을 거치지 않고 이 확장이 처음
-  // 처리한다.
+  // 외부 <hr> 단독 붙여넣기가 divider로 반영된다(BLK-006 해소) — 이
+  // 확장이 표 아닌 HTML 전부를 처리한다(RD-005).
   it("외부 <hr> 붙여넣기가 divider 블록으로 반영된다(BLK-006)", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),

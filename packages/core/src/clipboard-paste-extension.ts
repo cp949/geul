@@ -19,11 +19,12 @@ import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 // handlePaste 가로채기 패턴으로 표를 처리하므로 이 확장은 그 패턴을
 // 그대로 따르되 표가 아닌 콘텐츠만 다룬다.
 //
-// 등록 순서는 ListPasteFallbackExtension 다음이다(RD-004 "## 결정") —
-// 옛 확장이 목록 요소(ul/ol) 있는 HTML만 가로채므로 목록 없는 HTML만
-// 자연히 이 확장으로 흘러온다. 이 확장 자신은 목록을 배제하는 코드를
-// 두지 않는다 — RD-005가 옛 확장을 제거하는 순간 목록류까지 그대로
-// 흡수한다.
+// 목록·체크 목록·토글 목록(own-format `ul`/`li`와 RD-003이 편입한
+// production 마커 둘 다)도 이 확장이 그대로 처리한다 — 목록을 배제하는
+// 코드를 두지 않는다. 예전엔 등록 순서상 목록 전용 별도 확장(RD-004
+// "## 결정" 당시 상태)이 목록 있는 HTML을 먼저 가로챘지만, 그 확장이
+// 다루던 시나리오(중첩·ol[start]·깊이 상한)를 io.importHtml이 이미
+// 동등하게 처리해 RD-005가 그 확장을 제거하고 이 확장 하나로 흡수했다.
 //
 // own export document HTML의 data-be-children wrapper와 생산 편집기
 // in-editor copy의 data-be-block-group wrapper(RD-002가 io.importHtml
@@ -34,10 +35,10 @@ import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 export type ClipboardPasteOptions = { createId: IdFactory };
 
 // 이미 조립된 blockContainer JSON 배열의 절대 깊이가 MAX_NESTING_DEPTH를
-// 넘지 않도록 평탄화한다. list-paste-fallback-extension.ts의 clampDepth와
-// 같은 정책(초과 지점의 blockGroup을 지우지 않고 그 children을 부모의
-// 형제로 승격)이지만 RD-005가 그 파일을 통째로 삭제할 예정이라 공유
-// 모듈로 뽑지 않고 독립 복제한다(RD-004 "## 결정").
+// 넘지 않도록 평탄화한다(초과 지점의 blockGroup을 지우지 않고 그
+// children을 부모의 형제로 승격). 옛 list-paste-fallback-extension.ts가
+// 같은 정책의 clampDepth를 독립 복제해 썼지만 RD-005가 그 파일을 삭제해
+// 이제 이 함수가 유일한 구현이다.
 const clampDepth = (
   nodes: TiptapJsonNode[],
   startDepth: number,
