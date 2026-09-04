@@ -69,6 +69,18 @@ describe("blockTypeDescriptorFromBlock", () => {
     expect(blockTypeDescriptorFromBlock({ type: "table" })).toBeNull();
   });
 
+  // RD-002 DELTA-01 — media 4종(file/image/video/audio)은 spec §2.2가 이미
+  // 확정한 "Turn into 제외"의 구현이다(divider/table과 같은 자리). 이
+  // 확장이 없으면 react/block-side-menu.tsx의 findBlockTypeDescriptor가
+  // 저장 Block(model union 확장분)을 그대로 넘길 때 컴파일이 깨진다(실측
+  // 확인, editor-controller.ts BlockTypeSource 주석 참고).
+  it("file·image·video·audio는 Turn into 대상이 아니라 null이다", () => {
+    expect(blockTypeDescriptorFromBlock({ type: "file" })).toBeNull();
+    expect(blockTypeDescriptorFromBlock({ type: "image" })).toBeNull();
+    expect(blockTypeDescriptorFromBlock({ type: "video" })).toBeNull();
+    expect(blockTypeDescriptorFromBlock({ type: "audio" })).toBeNull();
+  });
+
   // toggleListItem은 RD-003(Issue #38 슬라이스 6)에서 model Block에
   // 추가됐고 RD-004 DELTA-04부터 Turn into 대상이다 — divider·table과
   // 달리 attrs 없는 descriptor를 그대로 낸다(checkListItem과 동일 자리,

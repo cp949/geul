@@ -1,10 +1,13 @@
 import {
+  type AudioBlock,
   type Block,
   type BulletListItemBlock,
   type CheckListItemBlock,
   type CodeBlock,
   type Document,
+  type FileBlock,
   type HeadingBlock,
+  type ImageBlock,
   type InlineContent,
   isCanonicalTextMarks,
   isSupportedLinkHref,
@@ -16,6 +19,7 @@ import {
   type TableBlock,
   type TextMark,
   type ToggleListItemBlock,
+  type VideoBlock,
 } from "@cp949/geul-model";
 
 import type { EditorError } from "./errors.js";
@@ -96,6 +100,16 @@ const validateEditableContent = (
     // source·language 판정과 canonicalization은 model parseDocument만 소유하고,
     // core는 여기서 일반 inline validator를 중복 적용하지 않는다(G-CNV-001).
     if (block.type === "codeBlock") continue;
+
+    // 4종 미디어 블록(RD-002 DELTA-01)도 divider와 같은 leaf라 content·
+    // children이 없어 검사 대상이 없다(spec §3.1).
+    if (
+      block.type === "file" ||
+      block.type === "image" ||
+      block.type === "video" ||
+      block.type === "audio"
+    )
+      continue;
 
     if (block.type === "table") {
       for (const row of block.rows) {
@@ -243,11 +257,39 @@ const codeBlockContentToTiptapJson = (block: CodeBlock): TiptapJsonNode => ({
   content: inlineContentToTiptap(block.content),
 });
 
-// Block 1개를 재귀로 PM JSON 노드로 인코딩한다(D19). table·divider는
-// 컨테이너로 감싸지 않는다 — table은 tableBlockToTiptapJson 결과를 그대로
-// 직결하고, divider는 table처럼 컨테이너 없이 직결하고 id를 명시
-// 배정한다(parseDOM 없음과 짝 — 변환기·명령이 명시 배정). 둘 다 children을
-// 가질 수 없어(model 계층, DELTA-01) 재귀 종료 조건이기도 하다.
+// 4종 미디어 블록(file/image/video/audio) 인코딩(RD-002 DELTA-01, spec
+// §3.1) — divider와 같은 패턴으로 컨테이너 없이 attrs에 전체 prop을 직접
+// 배정한다. 값 검증(previewWidth 양수 등)은 model parseDocument 권위라
+// 여기서는 null 승격(필드 부재 ↔ PM attr 기본값)만 한다(numberedListItem.
+// startNumber와 같은 패턴).
+const mediaBlockToTiptapJson = (
+  block: FileBlock | ImageBlock | VideoBlock | AudioBlock,
+): TiptapJsonNode => ({
+  type: block.type,
+  attrs: {
+    blockId: block.id,
+    url: block.url ?? null,
+    name: block.name ?? null,
+    caption: block.caption ?? null,
+    backgroundColor: block.backgroundColor ?? null,
+    ...(block.type === "file"
+      ? {}
+      : block.type === "audio"
+        ? { showPreview: block.showPreview ?? null }
+        : {
+            showPreview: block.showPreview ?? null,
+            previewWidth: block.previewWidth ?? null,
+            textAlignment: block.textAlignment ?? null,
+          }),
+  },
+});
+
+// Block 1개를 재귀로 PM JSON 노드로 인코딩한다(D19). table·divider·4종
+// 미디어 블록은 컨테이너로 감싸지 않는다 — table은 tableBlockToTiptapJson
+// 결과를 그대로 직결하고, divider·미디어는 table처럼 컨테이너 없이
+// 직결하고 id를 명시 배정한다(parseDOM 없음과 짝 — 변환기·명령이 명시
+// 배정). 셋 다 children을 가질 수 없어(model 계층, DELTA-01) 재귀 종료
+// 조건이기도 하다.
 // paragraph/heading/quote는 blockContainer(blockContent, blockGroup?(
 // children…))로 감싼다 — blockGroup은 children이 있을 때만 만든다(빈
 // 배열/undefined 둘 다 "자식 없음"으로 접는다). CodeBlock도 container로
@@ -256,6 +298,14 @@ const blockToTiptapJson = (block: Block): TiptapJsonNode => {
   if (block.type === "table") return tableBlockToTiptapJson(block);
   if (block.type === "divider") {
     return { type: "divider", attrs: { blockId: block.id } };
+  }
+  if (
+    block.type === "file" ||
+    block.type === "image" ||
+    block.type === "video" ||
+    block.type === "audio"
+  ) {
+    return mediaBlockToTiptapJson(block);
   }
 
   if (block.type === "codeBlock") {

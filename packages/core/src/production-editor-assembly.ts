@@ -22,6 +22,12 @@ import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
 import {
+  AudioBlockExtension,
+  FileBlockExtension,
+  ImageBlockExtension,
+  VideoBlockExtension,
+} from "./media-block-extension.js";
+import {
   BulletListItemExtension,
   CheckListItemExtension,
   NumberedListItemExtension,
@@ -243,6 +249,10 @@ export const createProductionEditor = (options: {
       TableRowExtension,
       TableCellExtension,
       DividerExtension,
+      FileBlockExtension,
+      ImageBlockExtension,
+      VideoBlockExtension,
+      AudioBlockExtension,
       TableKeyboardNavigationExtension.configure({
         createId: options.createId,
       }),

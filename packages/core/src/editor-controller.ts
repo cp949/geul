@@ -250,7 +250,10 @@ export type BlockTypeDescriptor =
 // 않고 그대로 넘기므로, model의 Block 유니온이 늘 때마다 이 유니온도 같은
 // 멤버를 갖춰야 한다 — 아니면 그 호출부가 컴파일 실패한다. checkListItem은
 // RD-001 DELTA-06부터, toggleListItem은 RD-004 DELTA-04부터
-// BlockTypeDescriptor에 포함돼 이 null 분기에서 빠졌다.
+// BlockTypeDescriptor에 포함돼 이 null 분기에서 빠졌다. file/image/video/
+// audio는 RD-002 DELTA-01(R3 슬라이스1)부터 반대로 divider/table과 같은
+// null 자리에 추가됐다 — spec §2.2가 이미 "media Turn into 제외"를
+// 확정했다(새 제품 결정 아님, 실측 tsc로 이 결합을 확인한 뒤 반영).
 export type BlockTypeSource =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
@@ -261,12 +264,23 @@ export type BlockTypeSource =
   | { type: "checkListItem" }
   | { type: "toggleListItem" }
   | { type: "divider" }
-  | { type: "table" };
+  | { type: "table" }
+  | { type: "file" }
+  | { type: "image" }
+  | { type: "video" }
+  | { type: "audio" };
 
 export const blockTypeDescriptorFromBlock = (
   source: BlockTypeSource,
 ): BlockTypeDescriptor | null =>
-  source.type === "divider" || source.type === "table" ? null : source;
+  source.type === "divider" ||
+  source.type === "table" ||
+  source.type === "file" ||
+  source.type === "image" ||
+  source.type === "video" ||
+  source.type === "audio"
+    ? null
+    : source;
 
 // PM block content node를 BlockTypeSource로 좁힌 뒤 blockTypeDescriptorFromBlock에
 // 위임한다. PM attrs는 unknown이라 캐스트가 이 지점에서만 필요하다 — caret과

@@ -84,6 +84,17 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
               addNonBlockContainerIdentity(node.attrs.cellId);
             } else if (node.type.name === "divider") {
               addNonBlockContainerIdentity(node.attrs.blockId);
+            } else if (
+              node.type.name === "file" ||
+              node.type.name === "image" ||
+              node.type.name === "video" ||
+              node.type.name === "audio"
+            ) {
+              // 4종 미디어 블록(RD-002 DELTA-01)도 divider·table과 같은
+              // 비포장 자체-identity 노드다 — blockContainer 자동 id
+              // 발급이 이미 존재하는 미디어 블록 id와 충돌하지 않도록
+              // 점유 id로 등록한다(spec §3.1, G-EDT-003).
+              addNonBlockContainerIdentity(node.attrs.blockId);
             }
             return true;
           });

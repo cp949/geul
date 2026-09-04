@@ -161,6 +161,51 @@ const codeBlockFromTiptap = (
   };
 };
 
+// 4종 미디어 블록(file/image/video/audio) 디코드(RD-002 DELTA-01, spec
+// §3.1) — divider와 같은 자리에서 저장 attrs를 model prop으로 직대응한다.
+// 실패 경로가 없다(모든 값이 optional이고 형식 검증은 마지막
+// parseDocument가 담당, G-CNV-001). null/undefined는 필드 부재로
+// 접는다(다른 optional prop들과 같은 패턴).
+const mediaBlockFromTiptapJson = (node: TiptapJsonNode, id: string): Block => {
+  const attrs = node.attrs ?? {};
+  const url = attrs.url;
+  const name = attrs.name;
+  const caption = attrs.caption;
+  const backgroundColor = attrs.backgroundColor;
+  const common = {
+    ...(typeof url === "string" ? { url } : {}),
+    ...(typeof name === "string" ? { name } : {}),
+    ...(typeof caption === "string" ? { caption } : {}),
+    ...(typeof backgroundColor === "string" ? { backgroundColor } : {}),
+  };
+
+  if (node.type === "file") {
+    return { id, type: "file", ...common };
+  }
+
+  const showPreview = attrs.showPreview;
+  const showPreviewProp =
+    typeof showPreview === "boolean" ? { showPreview } : {};
+
+  if (node.type === "audio") {
+    return { id, type: "audio", ...common, ...showPreviewProp };
+  }
+
+  const previewWidth = attrs.previewWidth;
+  const textAlignment = attrs.textAlignment;
+  const imageOrVideoProps = {
+    ...showPreviewProp,
+    ...(typeof previewWidth === "number" ? { previewWidth } : {}),
+    ...(typeof textAlignment === "string"
+      ? { textAlignment: textAlignment as "left" | "center" | "right" }
+      : {}),
+  };
+
+  return node.type === "video"
+    ? { id, type: "video", ...common, ...imageOrVideoProps }
+    : { id, type: "image", ...common, ...imageOrVideoProps };
+};
+
 // blockContainer 1개를 재귀로 model Block으로 디코드한다(D19). 컨테이너의
 // 첫 자식은 항상 blockContent(paragraph/heading/quote/list/codeBlock), 두
 // 번째(선택) 자식은 nestable content의 blockGroup이다. CodeBlock은 leaf라
@@ -385,6 +430,17 @@ const decodeBlock = (
     return {
       ok: true,
       value: { id: resolveBlockId(node, createId), type: "divider" },
+    };
+  }
+  if (
+    node.type === "file" ||
+    node.type === "image" ||
+    node.type === "video" ||
+    node.type === "audio"
+  ) {
+    return {
+      ok: true,
+      value: mediaBlockFromTiptapJson(node, resolveBlockId(node, createId)),
     };
   }
   if (node.type === "blockContainer") {
