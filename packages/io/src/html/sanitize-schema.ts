@@ -31,7 +31,23 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // 만드는 alternate children 컨테이너 마커다(BlockGroupExtension, 값은
   // 항상 빈 문자열) — RD-002, findChildrenWrapper가 dataBeChildren과
   // 동등하게 인식한다.
-  div: ["dataBeBlockId", "dataBeChildren", "dataBeBlockGroup"],
+  // 뒤 4개(dataBeBulletListItem 등)는 목록류 4종의 production own-content
+  // 존재 마커(Production*ListItemExtension.renderHTML, 값은 항상 빈
+  // 문자열)고, 그 뒤 3개(dataBeChecked/dataBeStartNumber/dataBeCollapsed)는
+  // 상태 마커다 — RD-003, import-html.ts의 productionListItemType이
+  // 인식한다.
+  div: [
+    "dataBeBlockId",
+    "dataBeChildren",
+    "dataBeBlockGroup",
+    "dataBeBulletListItem",
+    "dataBeNumberedListItem",
+    "dataBeCheckListItem",
+    "dataBeToggleListItem",
+    "dataBeChecked",
+    "dataBeStartNumber",
+    "dataBeCollapsed",
+  ],
   h1: [
     "dataBeBlockId",
     "dataBeTextColor",

@@ -1,5 +1,7 @@
 import {
   appendOrMergeInlineItem,
+  type BulletListItemBlock,
+  type CheckListItemBlock,
   type Document,
   type HeadingBlock,
   type IdFactory,
@@ -7,11 +9,13 @@ import {
   type ListItemBlock,
   MAX_NESTING_DEPTH,
   MAX_TABLE_COLUMNS,
+  type NumberedListItemBlock,
   parseDocument,
   sanitizeInlineText,
   type TableBlock,
   tableSizeViolationMessage,
   type TextBlockProps,
+  type ToggleListItemBlock,
   validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
@@ -782,18 +786,53 @@ const blocksFromSegments = (
 // 와 같은 판정 기준). 반대로 못 알아보면 기존 NESTED_BOUNDARY_TAG_NAMES
 // 평면 처리로 안전하게 떨어지므로(완료 조건 1의 변이 시나리오와 동일한
 // 경로) 실패 방향이 항상 더 보수적이다.
+// RD-003이 편입하는 목록류 4종. toggleListItem은 ListItemBlock 유니온
+// 밖이지만(model D2 경계) production 마커 인식은 4종을 동일하게 다룬다.
+type ProductionListItemType =
+  "bulletListItem" | "numberedListItem" | "checkListItem" | "toggleListItem";
+
+// 목록류 4종의 production own-content 존재 마커 — 값은 항상 빈 문자열이라
+// (dataBeBlockGroup과 같은 이유) propertyString이 아닌 raw property 존재만
+// 확인한다. RD-003.
+const productionListItemMarkerProperty: Record<ProductionListItemType, string> =
+  {
+    bulletListItem: "dataBeBulletListItem",
+    numberedListItem: "dataBeNumberedListItem",
+    checkListItem: "dataBeCheckListItem",
+    toggleListItem: "dataBeToggleListItem",
+  };
+
+// node가 목록류 production own-content div면 그 블록 타입을, 아니면
+// undefined를 반환한다. tagName만으로는(전부 "div") own-content div와
+// wrapper/children-container div를 구분할 수 없어 마커 속성으로 판정한다
+// (isChildrenContainerMarker와 같은 원칙).
+const productionListItemType = (
+  node: HtmlElementNode,
+): ProductionListItemType | undefined => {
+  if (node.tagName !== "div") return undefined;
+  const entries = Object.entries(productionListItemMarkerProperty) as Array<
+    [ProductionListItemType, string]
+  >;
+  for (const [type, property] of entries) {
+    if (node.properties[property] !== undefined) return type;
+  }
+  return undefined;
+};
+
 // p/h1~h6(own-export가 기존에 쓰던 own-content 태그)에 blockquote·pre를
 // 더한다 — 생산 편집기는 quote·codeBlock도 같은 blockContainer wrapper로
 // 감싸 own-content 자리에 낸다(RD-002, quote-extension.ts/
 // code-block-extension.ts). divider는 여기 들어가지 않는다 — model
 // DividerBlock에 children 필드가 없어 own-content(=children을 가질 수
 // 있는 부모) 자리에 올 수 없고, child 자리(childrenNodes 재귀)로만
-// 등장한다.
-const isOwnBoundaryTag = (tagName: string): boolean =>
-  isParagraphTag(tagName) ||
-  headingLevelByTagName.has(tagName) ||
-  tagName === "blockquote" ||
-  tagName === "pre";
+// 등장한다. 목록류 4종(전부 div 태그)은 productionListItemType의 마커
+// 판정으로 더한다(RD-003) — tagName만으로는 wrapper div와 구분할 수 없다.
+const isOwnBoundaryTag = (node: HtmlElementNode): boolean =>
+  isParagraphTag(node.tagName) ||
+  headingLevelByTagName.has(node.tagName) ||
+  node.tagName === "blockquote" ||
+  node.tagName === "pre" ||
+  productionListItemType(node) !== undefined;
 
 // 컨테이너 div가 children 목록 wrapper임을 나타내는 두 마커 — own-export의
 // dataBeChildren(값 "1")과 생산 편집기 in-editor copy의 dataBeBlockGroup
@@ -828,7 +867,7 @@ const findChildrenWrapper = (
   // 이 저장소 전용 속성명을 우연히 쓸 가능성이 사실상 없다.
   if (elementChildren.length === 1) {
     const soleChild = elementChildren[0];
-    if (soleChild === undefined || !isOwnBoundaryTag(soleChild.tagName)) {
+    if (soleChild === undefined || !isOwnBoundaryTag(soleChild)) {
       return undefined;
     }
     if (propertyString(node, "dataBeBlockId") === undefined) {
@@ -842,7 +881,7 @@ const findChildrenWrapper = (
   const ownNode = elementChildren[0];
   const containerNode = elementChildren[1];
   if (ownNode === undefined || containerNode === undefined) return undefined;
-  if (!isOwnBoundaryTag(ownNode.tagName)) return undefined;
+  if (!isOwnBoundaryTag(ownNode)) return undefined;
   // codeBlock(model CodeBlock)은 divider와 같은 이유로 children 필드가
   // 없는 리프다 — blockContainer.content 표현("(nestableBlockContent
   // blockGroup?) | leafBlockContent")도 leafBlockContent 뒤에 blockGroup을
@@ -1006,6 +1045,66 @@ const blocksFromListItem = (
     warnings,
   );
   return children.length > 0 ? [{ ...ownBlock, children }] : [ownBlock];
+};
+
+// production 목록류 own-content div(findChildrenWrapper가 productionListItemType로
+// 걸러 넘긴 것) 하나를 목록 블록으로 만든다. blocksFromListItem(li 기반
+// own-format)과 같은 이유로 blocksFromSegments(범용 segmentBlocks)를 거치지
+// 않는다 — segmentBlocks의 정책은 tagName 기반이라 generic div를 항상
+// paragraph로만 보고, 목록류 4타입을 낼 수 없다(RD-003 readiness probe
+// 확인). own-content div 자신은 production에서 id를 갖지 않는 것이 보통이라
+// createId()로 임시 발급하지만, 호출부(blocksFromNodes)가 바깥 wrapper div의
+// id로 즉시 덮어쓴다(own-export 동형 계약, findChildrenWrapper 소비부 참고).
+const buildProductionListItemBlock = (
+  type: ProductionListItemType,
+  ownNode: HtmlElementNode,
+  createId: IdFactory,
+):
+  | BulletListItemBlock
+  | NumberedListItemBlock
+  | CheckListItemBlock
+  | ToggleListItemBlock => {
+  // TextBlockProps(textColor/backgroundColor/textAlignment)는 이 DELTA
+  // 범위가 아니다 — Production*ListItemExtension이 아직 이 속성을 DOM에
+  // 노출하지 않는다(production-editor-assembly.ts). div 허용 목록에도
+  // 올리지 않았으므로 sanitize가 어차피 지운다.
+  const id = propertyString(ownNode, "dataBeBlockId") ?? createId();
+  const content = paragraphContentFromNodes(ownNode.children);
+  switch (type) {
+    case "numberedListItem": {
+      const startNumber = propertyInteger(
+        ownNode,
+        "dataBeStartNumber",
+        Number.NaN,
+      );
+      return {
+        id,
+        type,
+        content,
+        ...(Number.isNaN(startNumber) ? {} : { startNumber }),
+      };
+    }
+    case "checkListItem":
+      return {
+        id,
+        type,
+        content,
+        checked: propertyString(ownNode, "dataBeChecked") === "true",
+      };
+    case "toggleListItem": {
+      const collapsedAttr = propertyString(ownNode, "dataBeCollapsed");
+      return {
+        id,
+        type,
+        content,
+        ...(collapsedAttr === undefined
+          ? {}
+          : { collapsed: collapsedAttr === "true" }),
+      };
+    }
+    case "bulletListItem":
+      return { id, type, content };
+  }
 };
 
 // ul/ol 직속 li를 문서 순서대로 목록 항목으로 해석한다. ol[start]는 HTML
@@ -1279,27 +1378,41 @@ const blocksFromNodes = (
     }
 
     flushPlainRun();
-    const ownBlocks = blocksFromSegments(
-      [wrapper.ownNode],
-      createId,
-      depth,
-      warnings,
-    );
-    const rawOwnBlock = ownBlocks[0];
-    if (
-      ownBlocks.length !== 1 ||
-      rawOwnBlock === undefined ||
-      (rawOwnBlock.type !== "paragraph" &&
-        rawOwnBlock.type !== "heading" &&
-        rawOwnBlock.type !== "quote" &&
-        rawOwnBlock.type !== "codeBlock")
-    ) {
+    // 목록류 own-content(전부 div 태그)는 blocksFromSegments(범용
+    // segmentBlocks)를 거치지 않는다 — segmentBlocks의 정책은 tagName
+    // 기반이라 generic div를 항상 paragraph로만 보고 목록류 4타입을 낼 수
+    // 없다(RD-003). buildProductionListItemBlock이 own-content div를 직접
+    // 목록 블록으로 만든다.
+    const listItemType = productionListItemType(wrapper.ownNode);
+    const rawOwnBlock =
+      listItemType === undefined
+        ? (() => {
+            const ownBlocks = blocksFromSegments(
+              [wrapper.ownNode],
+              createId,
+              depth,
+              warnings,
+            );
+            const candidate = ownBlocks[0];
+            return ownBlocks.length === 1 &&
+              candidate !== undefined &&
+              (candidate.type === "paragraph" ||
+                candidate.type === "heading" ||
+                candidate.type === "quote" ||
+                candidate.type === "codeBlock")
+              ? candidate
+              : undefined;
+          })()
+        : buildProductionListItemBlock(listItemType, wrapper.ownNode, createId);
+    if (rawOwnBlock === undefined) {
       // findChildrenWrapper가 ownNode를 own-content 태그로만 걸렀으므로
       // 정상 입력에서 이 분기는 도달하지 않는다 — 그 태그가 (HTML5
       // 파싱상 가능한) 표를 품고 있어 segmentBlocks가 블록 하나 대신
       // 여러/다른(own-content 이외 — children을 가질 수 없는 divider
       // 포함) 세그먼트를 냈을 때만 방어적으로 wrapper 인식을 취소하고
-      // 원본 노드를 평면 처리로 되돌린다.
+      // 원본 노드를 평면 처리로 되돌린다. 목록류 분기(listItemType 있음)는
+      // buildProductionListItemBlock이 항상 값을 반환하므로 이 갈래로
+      // 오지 않는다.
       plainRun.push(node);
       continue;
     }
