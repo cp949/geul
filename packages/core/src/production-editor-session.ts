@@ -249,6 +249,13 @@ export class ProductionEditorSession {
         : { onPasteRejected: this.options.onPasteRejected }),
       canApplyDocumentChange: () =>
         this.sessionRevision < Number.MAX_SAFE_INTEGER,
+      // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한
+      // 경로다 — this.blockSelection은 이 생성자 실행 시점엔 아직
+      // 초기화 전이어도 클로저 자체는 유효하고, 실제 호출(키보드
+      // shortcut 발동)은 생성자 완료 이후라 안전하다(RD-004.md "결정"
+      // (c), production-editor-assembly.ts·block-move-keyboard-extension.ts
+      // 배선 참고).
+      getBlockSelection: () => this.getBlockSelection(),
     });
   }
 

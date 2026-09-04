@@ -73,3 +73,64 @@ export const moveBlockAdjacent = (
   editor.view.dispatch(tr.scrollIntoView());
   return true;
 };
+
+// moveSelectedBlocksBefore(generic-block-commands.ts)도 session bound
+// (model tree resolveBlockSelectionRange·findBlockInTree)라 재사용하지
+// 않는다 — 위 moveBlockAdjacent와 같은 이유(RD-004.md "결정" (b)). 그
+// 커맨드의 계약(같은 형제 배열이 아니면 거절, startIndex/endIndex는
+// from·to 인덱스의 min/max)을 PM ResolvedPos.index()로 재현한다. 범위는
+// blockId를 안 바꾸므로(moveSelectedBlocksBefore 자신의 계약과 동일)
+// session.setBlockSelection을 다시 부를 필요가 없다 — 이 함수는 PM
+// selection도 건드리지 않는다(block 선택은 PM Selection과 독립된 별도
+// 상태라 여기서 다룰 것이 없다).
+export const moveBlockRangeAdjacent = (
+  editor: Editor,
+  fromBlockId: string,
+  toBlockId: string,
+  direction: MoveDirection,
+): boolean => {
+  const { state } = editor;
+  const fromStart = findBlockPosition(state.doc, fromBlockId);
+  const toStart = findBlockPosition(state.doc, toBlockId);
+  if (fromStart === null || toStart === null) return false;
+
+  const $from = state.doc.resolve(fromStart);
+  const $to = state.doc.resolve(toStart);
+  if ($from.parent !== $to.parent) return false;
+  const parent = $from.parent;
+
+  const fromIndex = $from.index();
+  const toIndex = $to.index();
+  const startIndex = Math.min(fromIndex, toIndex);
+  const endIndex = Math.max(fromIndex, toIndex);
+
+  const siblingIndex = direction === "up" ? startIndex - 1 : endIndex + 1;
+  if (siblingIndex < 0 || siblingIndex >= parent.childCount) return false;
+
+  const rangeStart = fromIndex <= toIndex ? fromStart : toStart;
+  const lastNodeStart = fromIndex >= toIndex ? fromStart : toStart;
+  const lastNode = state.doc.nodeAt(lastNodeStart);
+  if (lastNode === null) return false;
+  const rangeEnd = lastNodeStart + lastNode.nodeSize;
+  // moveSelectedBlocksBefore의 sourceSlice와 같은 패턴 — 범위 경계가 항상
+  // 형제 노드 경계와 정확히 맞아 openStart/openEnd 0인 완전한 Fragment다.
+  const rangeFragment = state.doc.slice(rangeStart, rangeEnd).content;
+
+  const siblingNode = parent.child(siblingIndex);
+  const replaceFrom =
+    direction === "up" ? rangeStart - siblingNode.nodeSize : rangeStart;
+  const replaceTo =
+    direction === "up" ? rangeEnd : rangeEnd + siblingNode.nodeSize;
+  const replacement =
+    direction === "up"
+      ? rangeFragment.append(Fragment.from(siblingNode))
+      : Fragment.from(siblingNode).append(rangeFragment);
+
+  const tr = closeHistory(state.tr).replaceWith(
+    replaceFrom,
+    replaceTo,
+    replacement,
+  );
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+};

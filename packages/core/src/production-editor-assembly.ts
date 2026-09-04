@@ -153,6 +153,11 @@ export const createProductionEditor = (options: {
   onUpdate: (editor: Editor) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
   canApplyDocumentChange: () => boolean;
+  // BlockMoveKeyboardExtension 전용 — production-editor-session.ts의
+  // ProductionEditorSession.getBlockSelection과 구조가 같지만 import하지
+  // 않는다(그 파일의 순환 의존 회피 관례, block-move-keyboard-extension.ts
+  // 참고). 미지정이면 그 확장 자신의 기본값(항상 null)을 쓴다.
+  getBlockSelection?: () => { fromBlockId: string; toBlockId: string } | null;
 }): Editor => {
   const converted = modelToTiptap(options.document);
   if (!converted.ok) {
@@ -214,7 +219,11 @@ export const createProductionEditor = (options: {
       }),
       IndentKeyboardExtension,
       BlockTypeKeyboardExtension,
-      BlockMoveKeyboardExtension,
+      BlockMoveKeyboardExtension.configure(
+        options.getBlockSelection === undefined
+          ? {}
+          : { getBlockSelection: options.getBlockSelection },
+      ),
       ListPresentationExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension,

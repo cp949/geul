@@ -129,6 +129,142 @@ describe("들여쓴 blockGroup 안 형제 배열 이동", () => {
   });
 });
 
+describe("활성 블록 선택 범위 이동", () => {
+  it("범위(2블록 이상)를 위로 옮기면 범위 전체가 한 칸 위 형제와 자리를 바꾸고 범위 안 순서는 그대로다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("a", "A"),
+        paragraphBlock("b", "B"),
+        paragraphBlock("c", "C"),
+        paragraphBlock("d", "D"),
+      ),
+    );
+    expect(editor.commands.selectBlockRange("b", "c")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(dispatchModShiftKeydown(tiptap, "ArrowUp")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("b", "B"),
+      paragraphBlock("c", "C"),
+      paragraphBlock("a", "A"),
+      paragraphBlock("d", "D"),
+    ]);
+    expect(editor.getBlockSelection()).toEqual({
+      fromBlockId: "b",
+      toBlockId: "c",
+    });
+  });
+
+  it("범위를 아래로 옮기면 범위 전체가 한 칸 아래 형제와 자리를 바꾼다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("a", "A"),
+        paragraphBlock("b", "B"),
+        paragraphBlock("c", "C"),
+        paragraphBlock("d", "D"),
+      ),
+    );
+    expect(editor.commands.selectBlockRange("b", "c")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(dispatchModShiftKeydown(tiptap, "ArrowDown")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("a", "A"),
+      paragraphBlock("d", "D"),
+      paragraphBlock("b", "B"),
+      paragraphBlock("c", "C"),
+    ]);
+  });
+
+  it("toBlockId가 fromBlockId보다 문서상 앞이어도(역순 선택) 올바르게 이동한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("a", "A"),
+        paragraphBlock("b", "B"),
+        paragraphBlock("c", "C"),
+        paragraphBlock("d", "D"),
+      ),
+    );
+    // 사용자가 c에서 b 쪽으로 거꾸로 드래그한 선택 — fromBlockId가 뒤쪽이다.
+    expect(editor.commands.selectBlockRange("c", "b")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(dispatchModShiftKeydown(tiptap, "ArrowUp")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("b", "B"),
+      paragraphBlock("c", "C"),
+      paragraphBlock("a", "A"),
+      paragraphBlock("d", "D"),
+    ]);
+  });
+
+  it("범위 맨 위에서 위로는 no-op이다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("a", "A"),
+        paragraphBlock("b", "B"),
+        paragraphBlock("c", "C"),
+      ),
+    );
+    expect(editor.commands.selectBlockRange("a", "b")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(dispatchModShiftKeydown(tiptap, "ArrowUp")).toBe(false);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("a", "A"),
+      paragraphBlock("b", "B"),
+      paragraphBlock("c", "C"),
+    ]);
+  });
+
+  it("범위 맨 아래에서 아래로는 no-op이다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("a", "A"),
+        paragraphBlock("b", "B"),
+        paragraphBlock("c", "C"),
+      ),
+    );
+    expect(editor.commands.selectBlockRange("b", "c")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(dispatchModShiftKeydown(tiptap, "ArrowDown")).toBe(false);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("a", "A"),
+      paragraphBlock("b", "B"),
+      paragraphBlock("c", "C"),
+    ]);
+  });
+
+  it("활성 블록 선택이 없으면 캐럿 단일 블록 경로로 폴백한다(회귀 없음)", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("a", "A"),
+        paragraphBlock("b", "B"),
+        paragraphBlock("c", "C"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "b"));
+
+    expect(dispatchModShiftKeydown(tiptap, "ArrowUp")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("b", "B"),
+      paragraphBlock("a", "A"),
+      paragraphBlock("c", "C"),
+    ]);
+  });
+});
+
 describe("표 셀 안에서는 관여하지 않는다", () => {
   it("표 셀 안 keydown은 실제 keymap 디스패치에서도 소비되지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable, [
