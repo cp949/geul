@@ -6,31 +6,8 @@
  */
 import { expect, test } from "@playwright/test";
 
+import { dispatchPaste } from "./support/clipboard.js";
 import { openDemo } from "./support/demo.js";
-
-/**
- * 대상 엘리먼트에 ClipboardEvent("paste")를 직접 디스패치한다.
- * 실제 브라우저의 클립보드 접근 권한 없이도 text/html·text/plain 붙여넣기를 재현한다.
- *
- * Firefox는 ClipboardEvent 생성자의 clipboardData 초기값을 합성(untrusted)
- * 이벤트에 반영하지 않는다 — clipboardData 자체는 null이 아니지만 types가
- * 빈 배열로 나온다. 대신 평범한 Event에 clipboardData를 defineProperty로
- * 얹으면 세 엔진(Chromium/Firefox/WebKit) 모두 types가 채워진다.
- */
-const dispatchPaste = (
-  target: Element,
-  input: { html?: string; text?: string },
-): void => {
-  const data = new DataTransfer();
-  if (input.html !== undefined) data.setData("text/html", input.html);
-  if (input.text !== undefined) data.setData("text/plain", input.text);
-  const event = new Event("paste", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "clipboardData", {
-    value: data,
-    configurable: true,
-  });
-  target.dispatchEvent(event);
-};
 
 test("Google Sheets 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 생긴다 @core", async ({
   page,
