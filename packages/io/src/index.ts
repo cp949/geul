@@ -3,6 +3,8 @@ export type {
   ClipboardContentBlock,
 } from "./clipboard/clipboard-content.js";
 export { parseClipboardTable } from "./clipboard/clipboard-table-parser.js";
+export type { MarkdownPasteDetection } from "./clipboard/markdown-paste-detection.js";
+export { detectMarkdownPaste } from "./clipboard/markdown-paste-detection.js";
 export type { TabularCell, TabularData } from "./clipboard/tabular-data.js";
 export {
   validateTabularData,
