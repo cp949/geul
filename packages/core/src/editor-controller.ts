@@ -109,6 +109,11 @@ export interface EditorController {
   // CreateEditorOptions.onUploadStateChange로 push 알림한다(commands.
   // uploadMediaFile/cancelMediaUpload 주석 참고).
   getMediaUploadState(blockId: string): MediaUploadState | null;
+  // spec §4.1 — uploadFile 콜백이 등록됐는지 여부. react Upload UI(RD-003)가
+  // File Panel Upload 탭 노출 여부를 결정하는 유일한 판정 지점이다(콜백
+  // 등록 시에만 true, "탭 자체 미노출" 계약). 파괴된 세션은 어떤 명령도
+  // 적용할 수 없으므로 false를 반환한다(다른 isDestroyed 가드와 동일 원칙).
+  isUploadEnabled(): boolean;
   replaceDocument(next: unknown): Result<void, EditorError>;
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
@@ -1238,6 +1243,10 @@ export const createEditor = (
     getMediaUploadState(blockId) {
       if (session.isDestroyed) return null;
       return session.getMediaUploadState(blockId);
+    },
+    isUploadEnabled() {
+      if (session.isDestroyed) return false;
+      return session.uploadFile !== undefined;
     },
     replaceDocument(next) {
       return session.replaceDocument(next);

@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
-import type { CreateEditorOptions, EditorController } from "@cp949/geul-core";
+import type {
+  CreateEditorOptions,
+  EditorController,
+  UploadFile,
+  UploadResult,
+} from "@cp949/geul-core";
 import { cleanup, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -65,6 +70,32 @@ const paragraphDocument = (
     },
   ],
 });
+
+const mediaDocument: CreateEditorOptions["initialDocument"] = {
+  formatVersion: 1,
+  revision: 0,
+  blocks: [{ id: "block-1", type: "image" }],
+};
+
+/**
+ * `uploadFile`/`onUploadStateChange` 플러밍(RD-003 DELTA-01) 전용 mock —
+ * `editor-controller-media-upload.test.ts`의 `controllableUploadFile()`과
+ * 같은 모양이다(resolve를 테스트가 직접 제어). core 테스트는 core 패키지
+ * 안에서 독립적으로 갖고 있어(패키지 경계, ADR-0002) 여기서 import하지
+ * 않고 그 모양만 복제한다 — 이 파일에서 쓰는 곳이 세 곳뿐이라 별도
+ * 공유 헬퍼로 추출하지 않는다.
+ */
+const controllableUploadFile = (): {
+  uploadFile: UploadFile;
+  pending: { resolve: (r: UploadResult) => void }[];
+} => {
+  const pending: { resolve: (r: UploadResult) => void }[] = [];
+  const uploadFile: UploadFile = () =>
+    new Promise((resolve) => {
+      pending.push({ resolve });
+    });
+  return { uploadFile, pending };
+};
 
 const fakeController = () => ({
   mount: vi.fn(),
@@ -245,6 +276,125 @@ describe("React 에디터 어댑터", () => {
     expect(controller?.getDocument().blocks[0]).toMatchObject({
       content: [{ text: "first" }],
     });
+
+    view.unmount();
+  });
+
+  it("uploadFile 등록 여부는 마운트 시점에 고정되고 isUploadEnabled로 조회된다", () => {
+    let withUpload: EditorController | undefined;
+    const CaptureEditor = (props: {
+      onCapture: (e: EditorController) => void;
+    }) => {
+      const editor = useEditor();
+      props.onCapture(editor);
+      return null;
+    };
+    const { uploadFile } = controllableUploadFile();
+
+    const withoutUploadView = render(
+      <EditorProvider initialDocument={mediaDocument}>
+        <CaptureEditor onCapture={(e) => (withUpload = e)} />
+      </EditorProvider>,
+    );
+    expect(withUpload?.isUploadEnabled()).toBe(false);
+    withoutUploadView.unmount();
+
+    let withUploadEditor: EditorController | undefined;
+    const withUploadView = render(
+      <EditorProvider initialDocument={mediaDocument} uploadFile={uploadFile}>
+        <CaptureEditor onCapture={(e) => (withUploadEditor = e)} />
+      </EditorProvider>,
+    );
+    expect(withUploadEditor?.isUploadEnabled()).toBe(true);
+    withUploadView.unmount();
+  });
+
+  it("업로드는 최신 uploadFile 콜백으로 전달된다", async () => {
+    let controller: EditorController | undefined;
+    const firstUpload = controllableUploadFile();
+    const latestUpload = controllableUploadFile();
+    const CaptureEditor = () => {
+      controller = useEditor();
+      return null;
+    };
+    const view = render(
+      <EditorProvider
+        initialDocument={mediaDocument}
+        uploadFile={firstUpload.uploadFile}
+      >
+        <CaptureEditor />
+      </EditorProvider>,
+    );
+
+    view.rerender(
+      <EditorProvider
+        initialDocument={mediaDocument}
+        uploadFile={latestUpload.uploadFile}
+      >
+        <CaptureEditor />
+      </EditorProvider>,
+    );
+
+    const uploadPromise = controller?.commands.uploadMediaFile(
+      "block-1",
+      new File(["binary"], "photo.png", { type: "image/png" }),
+    );
+    expect(firstUpload.pending).toHaveLength(0);
+    expect(latestUpload.pending).toHaveLength(1);
+
+    latestUpload.pending[0]?.resolve({
+      status: "success",
+      url: "https://example.com/photo.png",
+    });
+    expect(await uploadPromise).toEqual({ ok: true, value: undefined });
+
+    view.unmount();
+  });
+
+  it("pending 상태 전이를 최신 onUploadStateChange 콜백으로 전달한다", async () => {
+    let controller: EditorController | undefined;
+    const { uploadFile, pending } = controllableUploadFile();
+    const firstCallback = vi.fn();
+    const latestCallback = vi.fn();
+    const CaptureEditor = () => {
+      controller = useEditor();
+      return null;
+    };
+    const view = render(
+      <EditorProvider
+        initialDocument={mediaDocument}
+        uploadFile={uploadFile}
+        onUploadStateChange={firstCallback}
+      >
+        <CaptureEditor />
+      </EditorProvider>,
+    );
+
+    view.rerender(
+      <EditorProvider
+        initialDocument={mediaDocument}
+        uploadFile={uploadFile}
+        onUploadStateChange={latestCallback}
+      >
+        <CaptureEditor />
+      </EditorProvider>,
+    );
+
+    const uploadPromise = controller?.commands.uploadMediaFile(
+      "block-1",
+      new File(["binary"], "photo.png", { type: "image/png" }),
+    );
+    expect(firstCallback).not.toHaveBeenCalled();
+    expect(latestCallback).toHaveBeenCalledWith("block-1", "uploading");
+
+    pending[0]?.resolve({
+      status: "success",
+      url: "https://example.com/photo.png",
+    });
+    await uploadPromise;
+
+    expect(latestCallback).toHaveBeenCalledWith("block-1", null);
+    expect(firstCallback).not.toHaveBeenCalled();
 
     view.unmount();
   });

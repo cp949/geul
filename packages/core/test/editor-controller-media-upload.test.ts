@@ -1,8 +1,9 @@
 /**
  * upload 콜백 배선·`uploadMediaFile`/`cancelMediaUpload`·session pending
  * 상태 맵과 경합 가드(RD-001, Issue #152 슬라이스3 `MED-002` 일부, spec §4)와
- * `replaceMediaBlockFile`의 교체 유지 정책(RD-002, `MED-005`, spec §4.2)을
- * 고정한다.
+ * `replaceMediaBlockFile`의 교체 유지 정책(RD-002, `MED-005`, spec §4.2)과
+ * `isUploadEnabled()`(RD-003 DELTA-01, react Upload 탭 노출 판정 지점, spec
+ * §6.1)를 고정한다.
  *
  * mock `UploadFile`은 즉시 resolve하지 않고 `pending` 배열에 resolver를
  * 쌓아 두는 controllable 형태다 — `uploadMediaFile`/`replaceMediaBlockFile`이
@@ -532,5 +533,29 @@ describe("replaceMediaBlockFile — 사전 조건", () => {
     expect(result).toEqual(notApplicable("replaceMediaBlockFile"));
     expect(editorState(editor, tiptap)).toEqual(before);
     expect(changes).toEqual([]);
+  });
+});
+
+/**
+ * `isUploadEnabled()`(RD-003 DELTA-01)는 react Upload 탭 노출 여부의 유일한
+ * 판정 지점이다(spec §6.1 "uploadFile 콜백 등록 시만 노출"). `session
+ * .uploadFile !== undefined`를 그대로 반영하므로 별도 pending 상태와는
+ * 무관하다.
+ */
+describe("isUploadEnabled", () => {
+  it("uploadFile 등록 시 true를 반환한다", () => {
+    const { uploadFile } = controllableUploadFile();
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+    expect(editor.isUploadEnabled()).toBe(true);
+  });
+
+  it("uploadFile 미등록 시 false를 반환한다", () => {
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    expect(editor.isUploadEnabled()).toBe(false);
   });
 });
