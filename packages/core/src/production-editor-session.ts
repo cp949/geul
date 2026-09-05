@@ -13,7 +13,11 @@ import { closeHistory } from "@tiptap/pm/history";
 import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { isMediaBlockKind } from "./media-block-kind.js";
-import type { MediaUploadState, UploadFile, UploadResult } from "./media-upload.js";
+import type {
+  MediaUploadState,
+  UploadFile,
+  UploadResult,
+} from "./media-upload.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";

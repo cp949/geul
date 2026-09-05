@@ -12,12 +12,28 @@
 import { describe, expect, it } from "vitest";
 
 import { findBlockPosition } from "../src/block-position.js";
-import { createEditor, type UploadFile, type UploadResult } from "../src/index.js";
-import { dropFiles, pasteFiles, withUnhandledErrorTracking } from "./clipboard-test-support.js";
-import { documentOf, mediaBlock, mountTiptapEditor, paragraphBlock, sequentialIds, tailParagraphBlock } from "./editor-controller-support.js";
+import {
+  createEditor,
+  type UploadFile,
+  type UploadResult,
+} from "../src/index.js";
+import {
+  dropFiles,
+  pasteFiles,
+  withUnhandledErrorTracking,
+} from "./clipboard-test-support.js";
+import {
+  documentOf,
+  mediaBlock,
+  mountTiptapEditor,
+  paragraphBlock,
+  sequentialIds,
+  tailParagraphBlock,
+} from "./editor-controller-support.js";
 
 /** 이름·MIME만 지정한 File을 만든다(media-drop-paste-extension.test.ts와 동일 패턴). */
-const fileOf = (name: string, type: string): File => new File([], name, { type });
+const fileOf = (name: string, type: string): File =>
+  new File([], name, { type });
 
 /**
  * uploadFile을 테스트가 원하는 시점에 resolve할 수 있게 호출을 쌓아 두는
@@ -49,7 +65,10 @@ describe("drop/paste 업로드 트리거", () => {
   it("paste한 파일이 삽입 직후 uploadFile을 호출하고, 성공 결과가 url/name을 attrs로 반영한다", async () => {
     const { uploadFile, pending } = controllableUploadFile();
     const editor = createEditor({
-      initialDocument: documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
       createId: sequentialIds("id"),
       uploadFile,
     });
@@ -91,7 +110,10 @@ describe("drop/paste 업로드 트리거", () => {
   it("파일 2개를 한 번에 drop하면 각각 독립적으로 업로드되어 한쪽 실패가 다른 쪽 성공에 영향을 주지 않는다", async () => {
     const { uploadFile, pending } = controllableUploadFile();
     const editor = createEditor({
-      initialDocument: documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
       createId: sequentialIds("id"),
       uploadFile,
     });

@@ -32,7 +32,8 @@ import {
 import { findCellBoundaryPosition } from "./table-test-support.js";
 
 /** 이름·MIME만 지정한 File을 만든다(media-drop-paste-detection.test.ts와 동일 패턴). */
-const fileOf = (name: string, type: string): File => new File([], name, { type });
+const fileOf = (name: string, type: string): File =>
+  new File([], name, { type });
 
 /** DELTA-01 범위에서 실제로 호출되지 않는 stub — isUploadEnabled 게이트만 켠다. */
 const noopUploadFile: UploadFile = () => new Promise(() => {});
@@ -42,7 +43,9 @@ const noopUploadFile: UploadFile = () => new Promise(() => {});
  * 파일의 모든 "정상 동작" 테스트가 공유하는 준비 단계다 — no-op 회귀
  * 테스트만 uploadFile을 일부러 빼고 createEditor를 직접 호출한다.
  */
-const mountedWithUploadEnabled = (initialDocument: ReturnType<typeof documentOf>) => {
+const mountedWithUploadEnabled = (
+  initialDocument: ReturnType<typeof documentOf>,
+) => {
   const editor = createEditor({
     initialDocument,
     createId: sequentialIds("id"),
@@ -57,7 +60,10 @@ const mountedWithUploadEnabled = (initialDocument: ReturnType<typeof documentOf>
  * paragraph·codeBlock처럼 blockContainer로 감싸인 leaf textblock 전부에
  * 통용된다(내용이 있어도 위치만 그 시작점일 뿐 캐럿은 여전히 그 블록 안).
  */
-const placeCaretInBlock = (tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"], blockId: string) => {
+const placeCaretInBlock = (
+  tiptap: ReturnType<typeof mountTiptapEditor>["tiptap"],
+  blockId: string,
+) => {
   const containerPos = findBlockPosition(tiptap.state.doc, blockId);
   if (containerPos === null) throw new Error(`블록을 찾지 못했다: ${blockId}`);
   tiptap.commands.setTextSelection(containerPos + 2);
@@ -91,7 +97,10 @@ const stubDropGeometry = (
       y: rect.top,
       toJSON: () => ({}),
     }) as DOMRect;
-  tiptap.view.posAtCoords = () => ({ pos: containerPos + 2, inside: containerPos });
+  tiptap.view.posAtCoords = () => ({
+    pos: containerPos + 2,
+    inside: containerPos,
+  });
   return containerPos;
 };
 
@@ -144,7 +153,10 @@ describe("표 셀 바이패스(D1) — paste·drop 공통", () => {
 describe("CodeBlock 일반 규칙(D5)", () => {
   it("CodeBlock 안 paste는 표처럼 바이패스하지 않고 일반 규칙(뒤에 삽입)을 따른다", () => {
     const { editor, editable, tiptap } = mountedWithUploadEnabled(
-      documentOf(codeBlockBlock("cb-1", "code text", "typescript"), tailParagraphBlock),
+      documentOf(
+        codeBlockBlock("cb-1", "code text", "typescript"),
+        tailParagraphBlock,
+      ),
     );
     editable.focus();
     placeCaretInBlock(tiptap, "cb-1");
@@ -277,7 +289,10 @@ describe("D7 — range selection 삭제", () => {
     editable.focus();
     const containerPos = findBlockPosition(tiptap.state.doc, "p-1");
     if (containerPos === null) throw new Error("fixture 준비 실패");
-    tiptap.commands.setTextSelection({ from: containerPos + 2, to: containerPos + 2 + "hello".length });
+    tiptap.commands.setTextSelection({
+      from: containerPos + 2,
+      to: containerPos + 2 + "hello".length,
+    });
 
     withUnhandledErrorTracking((errors) => {
       pasteFiles(editable, [fileOf("photo.png", "image/png")]);
@@ -303,7 +318,10 @@ describe("D7 — range selection 삭제", () => {
     // drop 좌표는 서로 무관하다.
     const p1Pos = findBlockPosition(tiptap.state.doc, "p-1");
     if (p1Pos === null) throw new Error("fixture 준비 실패");
-    tiptap.commands.setTextSelection({ from: p1Pos + 2, to: p1Pos + 2 + "hello".length });
+    tiptap.commands.setTextSelection({
+      from: p1Pos + 2,
+      to: p1Pos + 2 + "hello".length,
+    });
     stubDropGeometry(tiptap, "p-2", { top: 100, height: 40 });
 
     withUnhandledErrorTracking((errors) => {
@@ -410,7 +428,10 @@ describe("D4 — 우선순위(파일이 표·HTML보다 먼저)", () => {
 describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경계)", () => {
   it("uploadFile 미등록이면 paste의 파일 페이로드는 완전히 무시된다(문서 불변)", () => {
     const editor = createEditor({
-      initialDocument: documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
       createId: sequentialIds("id"),
     });
     const { editable, tiptap } = mountTiptapEditor(editor);
@@ -428,7 +449,10 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
 
   it("uploadFile 미등록이면 drop의 파일 페이로드도 완전히 무시된다(문서 불변)", () => {
     const editor = createEditor({
-      initialDocument: documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
       createId: sequentialIds("id"),
     });
     const { editable } = mountTiptapEditor(editor);
@@ -436,7 +460,10 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
     const before = editor.getDocument().blocks;
 
     withUnhandledErrorTracking((errors) => {
-      dropFiles(editable, [fileOf("photo.png", "image/png")], { clientX: 0, clientY: 0 });
+      dropFiles(editable, [fileOf("photo.png", "image/png")], {
+        clientX: 0,
+        clientY: 0,
+      });
 
       expect(editor.getDocument().blocks).toEqual(before);
       expect(errors).toEqual([]);
@@ -445,7 +472,10 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
 
   it("uploadFile 미등록이어도 같은 paste의 text/html은 기존 확장이 그대로 처리한다", () => {
     const editor = createEditor({
-      initialDocument: documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
       createId: sequentialIds("id"),
     });
     const { editable, tiptap } = mountTiptapEditor(editor);
@@ -453,15 +483,20 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
     placeCaretInBlock(tiptap, "p-1");
 
     withUnhandledErrorTracking((errors) => {
-      pasteFilesAndHtml(editable, [fileOf("photo.png", "image/png")], "<p>world</p>");
+      pasteFilesAndHtml(
+        editable,
+        [fileOf("photo.png", "image/png")],
+        "<p>world</p>",
+      );
 
       const blocks = editor.getDocument().blocks;
-      expect(blocks.some((block) => block.type === "file" || block.type === "image")).toBe(
-        false,
-      );
+      expect(
+        blocks.some((block) => block.type === "file" || block.type === "image"),
+      ).toBe(false);
       expect(
         blocks.some(
-          (block) => block.type === "paragraph" && block.content[0]?.text === "world",
+          (block) =>
+            block.type === "paragraph" && block.content[0]?.text === "world",
         ),
       ).toBe(true);
       expect(errors).toEqual([]);

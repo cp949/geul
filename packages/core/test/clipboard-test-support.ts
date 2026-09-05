@@ -101,7 +101,9 @@ const dataTransferWithEntries = (
     getAsFile: () => entry.file,
     webkitGetAsEntry: () => ({ isDirectory: entry.isDirectory }),
   }));
-  (data as unknown as { files: File[] }).files = entries.map((entry) => entry.file);
+  (data as unknown as { files: File[] }).files = entries.map(
+    (entry) => entry.file,
+  );
   return data;
 };
 

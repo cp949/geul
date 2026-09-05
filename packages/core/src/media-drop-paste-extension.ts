@@ -6,7 +6,10 @@ import { NodeSelection, Plugin } from "@tiptap/pm/state";
 
 import { finalizeAndDispatch } from "./dispatch.js";
 import { insertMediaBlock as insertMediaBlockCommand } from "./media-commands.js";
-import { detectMediaBlockKind, filterUploadableFiles } from "./media-drop-paste-detection.js";
+import {
+  detectMediaBlockKind,
+  filterUploadableFiles,
+} from "./media-drop-paste-detection.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
 
 // spec §5.2 — File drop/paste가 media 블록을 만드는 신규 확장(RD-002
@@ -61,7 +64,9 @@ const findAncestor = (
 const isEmptyParagraphContainer = (container: ProseMirrorNode): boolean => {
   const first = container.firstChild;
   return (
-    first !== null && first.type.name === "paragraph" && first.content.size === 0
+    first !== null &&
+    first.type.name === "paragraph" &&
+    first.content.size === 0
   );
 };
 
@@ -150,7 +155,9 @@ const chainRemainingFiles = (
 // 문단 판정 없이 그 표 블록 바로 뒤에 삽입한다.
 const resolveTableBypass = ($pos: ResolvedPos): { position: number } | null => {
   const table = findAncestor($pos, "table");
-  return table === null ? null : { position: table.position + table.node.nodeSize };
+  return table === null
+    ? null
+    : { position: table.position + table.node.nodeSize };
 };
 
 type PasteTarget =
@@ -169,8 +176,15 @@ const resolvePasteTarget = ($pos: ResolvedPos): PasteTarget => {
   if (container === null) return { mode: "insert", position: $pos.pos };
 
   return isEmptyParagraphContainer(container.node)
-    ? { mode: "replace", position: container.position, nodeSize: container.node.nodeSize }
-    : { mode: "insert", position: container.position + container.node.nodeSize };
+    ? {
+        mode: "replace",
+        position: container.position,
+        nodeSize: container.node.nodeSize,
+      }
+    : {
+        mode: "insert",
+        position: container.position + container.node.nodeSize,
+      };
 };
 
 // drop 전용 위치 판정 — F2(기존 block-side-menu.tsx의 `clientY < rect.top +
@@ -191,7 +205,9 @@ const resolveDropTarget = (
   const rect = dom instanceof HTMLElement ? dom.getBoundingClientRect() : null;
   const before = rect !== null && clientY < rect.top + rect.height / 2;
   return {
-    position: before ? container.position : container.position + container.node.nodeSize,
+    position: before
+      ? container.position
+      : container.position + container.node.nodeSize,
   };
 };
 
@@ -222,12 +238,17 @@ const collectDropEntries = (
       const file = item.getAsFile();
       if (file === null) continue;
       const asEntry =
-        typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null;
+        typeof item.webkitGetAsEntry === "function"
+          ? item.webkitGetAsEntry()
+          : null;
       entries.push({ file, isDirectory: asEntry?.isDirectory === true });
     }
     return entries;
   }
-  return Array.from(dataTransfer.files).map((file) => ({ file, isDirectory: false }));
+  return Array.from(dataTransfer.files).map((file) => ({
+    file,
+    isDirectory: false,
+  }));
 };
 
 export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
@@ -275,7 +296,13 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             const firstKind = detectMediaBlockKind(firstFile);
             const first =
               target.mode === "replace"
-                ? replaceWithMedia(editor, target.position, target.nodeSize, firstKind, createId)
+                ? replaceWithMedia(
+                    editor,
+                    target.position,
+                    target.nodeSize,
+                    firstKind,
+                    createId,
+                  )
                 : insertMediaAt(editor, target.position, firstKind, createId);
             if (first !== null) triggerUpload(first.blockId, firstFile);
             chainRemainingFiles(editor, createId, files, first, triggerUpload);
@@ -285,7 +312,9 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             if (!isUploadEnabled) return false;
             const dataTransfer = event.dataTransfer;
             if (dataTransfer === null) return false;
-            const files = filterUploadableFiles(collectDropEntries(dataTransfer));
+            const files = filterUploadableFiles(
+              collectDropEntries(dataTransfer),
+            );
             if (files.length === 0) return false;
 
             // D7은 paste 전용이다 — drop 대상은 좌표가 정하므로 현재
@@ -293,7 +322,10 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             // 않는다. paste는 selection 자체가 대상이라 여기서 지운다(위
             // handlePaste), drop에서 지우면 드롭과 무관한 다른 위치의
             // selection이 사라지는 부작용이 된다.
-            const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            const coords = view.posAtCoords({
+              left: event.clientX,
+              top: event.clientY,
+            });
             if (coords === null) return false;
             const $pos = editor.state.doc.resolve(coords.pos);
             const target = resolveDropTarget(view, $pos, event.clientY);
