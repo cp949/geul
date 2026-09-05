@@ -25,6 +25,13 @@ export type MediaDropPasteOptions = {
   // 생성 시점에 계산한 정적 boolean 하나로 충분하다(production-editor-session.ts
   // ::createTiptapEditor()가 계산해 넘긴다).
   isUploadEnabled: boolean;
+  // RD-002 DELTA-02 — 삽입한 media 블록마다 실제 업로드를 트리거하는
+  // 세션 클로저(production-editor-session.ts::createTiptapEditor()가
+  // session.uploadMediaFile을 fire-and-forget으로 감싸 넘긴다). 이
+  // 확장은 반환값을 기다리지 않는다 — isUploadEnabled===false면 이
+  // 옵션이 호출되는 코드 경로 자체에 도달하지 않는다(두 핸들러 모두
+  // 파일 존재 확인 전에 게이트에서 이미 return false).
+  triggerMediaUpload: (blockId: string, file: File) => void;
 };
 
 type InsertOutcome = { blockId: string } | null;
@@ -112,12 +119,16 @@ const replaceWithMedia = (
 
 // D2 다중 파일 체이닝 — 첫 파일 이후는 항상 "직전 반환 blockId 뒤에 삽입"만
 // 반복한다(기존 insertMediaBlock, session 무관). 앞선 삽입이 거절되면(희귀)
-// 더 이상 유효한 anchor가 없으므로 남은 파일을 조용히 포기한다.
+// 더 이상 유효한 anchor가 없으므로 남은 파일을 조용히 포기한다. 삽입이
+// 성공한 파일마다(RD-002 DELTA-02) triggerUpload(blockId, file)을 그
+// 자리에서 바로 호출한다 — 다음 파일의 anchor 삽입 실패와 무관하게 이미
+// 성공한 블록은 업로드를 시작해야 한다.
 const chainRemainingFiles = (
   editor: Editor,
   createId: IdFactory,
   files: readonly File[],
   first: InsertOutcome,
+  triggerUpload: (blockId: string, file: File) => void,
 ): void => {
   let previous = first;
   for (let index = 1; index < files.length; index += 1) {
@@ -131,6 +142,7 @@ const chainRemainingFiles = (
       createId,
     );
     previous = result.ok ? result.value : null;
+    if (result.ok) triggerUpload(result.value.blockId, file);
   }
 };
 
@@ -227,6 +239,10 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
         throw new Error("MediaDropPasteExtension requires a createId option");
       },
       isUploadEnabled: false,
+      triggerMediaUpload: () => {
+        // isUploadEnabled===false 경로에서만 도달 가능한 기본값이라(위
+        // MediaDropPasteOptions 주석) 실제로 호출되지 않는다 — no-op.
+      },
     };
   },
 
@@ -234,6 +250,7 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
     const editor = this.editor;
     const createId = this.options.createId;
     const isUploadEnabled = this.options.isUploadEnabled;
+    const triggerUpload = this.options.triggerMediaUpload;
 
     return [
       new Plugin({
@@ -260,7 +277,8 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               target.mode === "replace"
                 ? replaceWithMedia(editor, target.position, target.nodeSize, firstKind, createId)
                 : insertMediaAt(editor, target.position, firstKind, createId);
-            chainRemainingFiles(editor, createId, files, first);
+            if (first !== null) triggerUpload(first.blockId, firstFile);
+            chainRemainingFiles(editor, createId, files, first, triggerUpload);
             return true;
           },
           handleDrop: (view, event) => {
@@ -287,7 +305,8 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               detectMediaBlockKind(firstFile),
               createId,
             );
-            chainRemainingFiles(editor, createId, files, first);
+            if (first !== null) triggerUpload(first.blockId, firstFile);
+            chainRemainingFiles(editor, createId, files, first, triggerUpload);
             event.preventDefault();
             return true;
           },

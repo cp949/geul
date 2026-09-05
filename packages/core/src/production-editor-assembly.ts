@@ -199,6 +199,10 @@ export const createProductionEditor = (options: {
   // live-closure가 아니라 세션 생성 시점에 계산한 정적 boolean으로 넘긴다.
   // 미지정이면 그 확장 자신의 기본값(false, no-op)을 쓴다.
   isUploadEnabled?: boolean;
+  // MediaDropPasteExtension 전용(RD-002 DELTA-02) — getBlockSelection과
+  // 같은 모양의 클로저다. drop/paste가 media 블록을 삽입한 직후 그 실제
+  // 업로드를 트리거한다. 미지정이면 그 확장 자신의 기본값(no-op)을 쓴다.
+  triggerMediaUpload?: (blockId: string, file: File) => void;
 }): Editor => {
   const converted = modelToTiptap(options.document);
   if (!converted.ok) {
@@ -298,6 +302,9 @@ export const createProductionEditor = (options: {
       MediaDropPasteExtension.configure({
         createId: options.createId,
         isUploadEnabled: options.isUploadEnabled ?? false,
+        ...(options.triggerMediaUpload === undefined
+          ? {}
+          : { triggerMediaUpload: options.triggerMediaUpload }),
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({

@@ -3,13 +3,17 @@ import {
   type Document as BlockDocument,
   createRandomDocumentId,
   type IdFactory,
+  isSupportedLinkHref,
   parseDocument,
   type Result,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 
+import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
-import type { MediaUploadState, UploadFile } from "./media-upload.js";
+import { isMediaBlockKind } from "./media-block-kind.js";
+import type { MediaUploadState, UploadFile, UploadResult } from "./media-upload.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
@@ -248,6 +252,141 @@ export class ProductionEditorSession {
     this.options.onUploadStateChange?.(blockId, state);
   }
 
+  // spec §4 — uploadMediaFile이 성공 분기에서 쓰는 본체(RD-002 DELTA-02가
+  // editor-controller.ts에서 이 세션으로 이동 — 이동 사유는 uploadMediaFile
+  // 주석 참고). url+name을 단일 트랜잭션으로 세팅한다(spec §4.2 "url 및
+  // 반환된 name을 단일 트랜잭션으로 세팅"). name이 undefined면 기존
+  // node.attrs를 스프레드해 그대로 유지한다 — setNodeMarkup에 부분 attrs를
+  // 넘기면 나머지가 schema default로 리셋되는 함정을 피한다.
+  private applyUploadedMediaAttrs(
+    command: string,
+    blockId: string,
+    url: string,
+    name: string | undefined,
+  ): boolean {
+    const { doc } = this.tiptapEditor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (
+      position === null ||
+      node === null ||
+      !isMediaBlockKind(node.type.name)
+    ) {
+      return false;
+    }
+    return this.runDocumentCommand(command, "local", () => {
+      const nextAttrs = {
+        ...node.attrs,
+        url,
+        ...(name === undefined ? {} : { name }),
+      };
+      const transaction = this.tiptapEditor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        nextAttrs,
+      );
+      this.tiptapEditor.view.dispatch(closeHistory(transaction));
+      return true;
+    }).ok;
+  }
+
+  // spec §4 — uploadMediaFile/replaceMediaBlockFile(editor-controller.ts)와
+  // MediaDropPasteExtension의 drop/paste 트리거(RD-002 DELTA-02) 공용
+  // 본체다. editor-controller.ts::createEditor()의 옛 `runMediaUpload`
+  // 클로저를 그대로 이 세션 메서드로 옮겼다 — 그 클로저는 `session = new
+  // ProductionEditorSession(options)` 다음 줄부터 정의돼 세션 생성자 안의
+  // createTiptapEditor()가 만드는 MediaDropPasteExtension 시점엔 존재하지
+  // 않았다(RD-002-DELTA-02.md "배경"). 콜백 호출 → pending "uploading" →
+  // 완료 분기 순으로 진행한다. 사전 조건 실패(파괴됨·콜백 미등록·대상
+  // 없음·대상이 media 아님·이미 진행 중)만 즉시 ok:false로 알리고, 콜백이
+  // 실제로 정착한 뒤의 성공/실패/취소는 항상 ok:true로 해결된다 — 결과는
+  // getMediaUploadState()/onUploadStateChange로만 관찰한다(pending 상태가
+  // 유일한 진실 소스, Promise 값과 이중 소스로 나누지 않는다). drop/paste
+  // 트리거는 이 Promise를 기다리지 않고 fire-and-forget으로 호출한다(RD-001
+  // "결정" — 공개 uploadMediaFile과 동일 원칙).
+  async uploadMediaFile(
+    command: string,
+    blockId: string,
+    file: File,
+  ): Promise<Result<void, EditorError>> {
+    if (this.destroyed) return commandNotApplicable(command);
+    const { uploadFile } = this;
+    if (uploadFile === undefined) {
+      return commandNotApplicable(command);
+    }
+    const { doc } = this.tiptapEditor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (!isMediaBlockKind(node.type.name)) {
+      return commandNotApplicable(command);
+    }
+    if (this.getMediaUploadController(blockId) !== null) {
+      return commandNotApplicable(command);
+    }
+
+    const controller = this.beginMediaUpload(blockId);
+    let result: UploadResult;
+    try {
+      result = await uploadFile(file, controller.signal);
+    } catch {
+      result = {
+        status: "error",
+        code: "UPLOAD_CALLBACK_THREW",
+        message: "uploadFile 콜백이 reject했다",
+      };
+    }
+
+    if (this.destroyed) return { ok: true, value: undefined };
+    // 경합 가드(spec §4.2) — 완료 시점에 대상 블록이 여전히 존재하는지
+    // 재확인한다. undo로 사라지거나 다른 파일로 교체된 뒤 이전 결과가
+    // 늦게 도착하는 경우를 막는다. 존재하지 않으면 결과 종류와 무관하게
+    // 완료 결과를 무시하고 pending 상태만 지운다.
+    const stillExists =
+      findBlockPosition(this.tiptapEditor.state.doc, blockId) !== null;
+    if (!stillExists) {
+      this.endMediaUpload(blockId, null);
+      return { ok: true, value: undefined };
+    }
+
+    if (result.status === "cancelled") {
+      this.endMediaUpload(blockId, null);
+      return { ok: true, value: undefined };
+    }
+    if (result.status === "error") {
+      this.endMediaUpload(blockId, {
+        status: "error",
+        code: result.code,
+        message: result.message,
+      });
+      return { ok: true, value: undefined };
+    }
+
+    // success — url이 기존 setMediaBlockUrl과 동일한 정책을 통과해야
+    // 한다(isSupportedLinkHref 재사용, 신규 URL 검증 코드 없음). 위반하면
+    // 업로드는 "콜백 성공"이었지만 geul은 문서를 바꾸지 않고 에러
+    // pending으로 흡수한다 — 업로드 성공이 URL 정책을 우회하는 구멍을
+    // 막는다.
+    if (!isSupportedLinkHref(result.url)) {
+      this.endMediaUpload(blockId, {
+        status: "error",
+        code: "LINK_HREF_REJECTED",
+        message: `업로드 결과 URL이 허용되지 않는다: ${result.url}`,
+      });
+      return { ok: true, value: undefined };
+    }
+    // 반환값(boolean)을 무시한다 — stillExists 재확인과 이 호출 사이에
+    // await이 없어(동기 연속) 대상이 사라지거나 media가 아니게 될 수
+    // 없다. revision overflow만 이론상 false를 만들 수 있지만 기존
+    // undo/redo도 그 경계에서 같은 방식(commandNotApplicable)으로 조용히
+    // 흡수한다 — 이 명령만 다르게 취급할 계약상 근거가 없다.
+    this.applyUploadedMediaAttrs(command, blockId, result.url, result.name);
+    this.endMediaUpload(blockId, null);
+    return { ok: true, value: undefined };
+  }
+
   replaceDocument(next: unknown): Result<void, EditorError> {
     if (this.destroyed) return commandNotApplicable("replaceDocument");
     const parsed = parseSupportedDocument(next);
@@ -316,6 +455,15 @@ export class ProductionEditorSession {
       // 포함)마다 여기서 다시 계산해도 항상 같은 값이다(RD-002 readiness
       // probe, production-editor-assembly.ts 배선 참고).
       isUploadEnabled: this.options.uploadFile !== undefined,
+      // MediaDropPasteExtension 전용(RD-002 DELTA-02) — getBlockSelection과
+      // 같은 모양의 클로저다. drop/paste가 삽입한 media 블록마다 이 세션의
+      // uploadMediaFile을 fire-and-forget으로 호출한다(반환 Promise는
+      // 버린다 — 결과는 getMediaUploadState/onUploadStateChange로만
+      // 관찰한다). command 라벨("mediaDropPasteUpload")은 공개 API에
+      // 노출되지 않는 내부 에러 분류용 문자열이다.
+      triggerMediaUpload: (blockId: string, file: File) => {
+        void this.uploadMediaFile("mediaDropPasteUpload", blockId, file);
+      },
     });
   }
 
