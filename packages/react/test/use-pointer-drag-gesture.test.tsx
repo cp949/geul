@@ -202,6 +202,43 @@ describe("usePointerDragGesture", () => {
     expect(onUp).toHaveBeenCalledTimes(1);
   });
 
+  it("Escape는 stopPropagation을 호출해 같은 document의 다른 bubble-phase 리스너(예: MediaToolbar의 dismiss-on-escape)로 전파되지 않는다", () => {
+    // MediaToolbar 같은 형제 컴포넌트가 이 훅보다 먼저 mount돼 이미
+    // document에 bubble-phase Escape 리스너를 걸어 둔 상태를 흉내낸다 —
+    // 등록 순서와 무관하게 이 훅(capture phase)이 이겨야 한다(RD-001
+    // DELTA-03 e2e 실측: 등록 순서상 그 리스너가 항상 먼저 붙는다).
+    const otherBubbleListener = vi.fn();
+    document.addEventListener("keydown", otherBubbleListener);
+    const onEscape = vi.fn(() => null);
+    render(
+      <Probe
+        active
+        onCancel={vi.fn()}
+        onEscape={onEscape}
+        onMove={vi.fn()}
+        onUp={vi.fn()}
+        pointerId={1}
+      />,
+    );
+
+    // document 자신을 대상으로 dispatch하면 capture/bubble 구분이
+    // 사라진다(AT_TARGET 단계는 등록 순서로만 처리된다) — 위 다른 파일의
+    // dispatchKey는 document.dispatchEvent를 쓰지만, 여기서는 실제 event
+    // target이 document의 자손이어야 capture가 먼저 온다는 전제 자체를
+    // 검증하므로 body에서 dispatch한다.
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Escape",
+      }),
+    );
+
+    expect(onEscape).toHaveBeenCalled();
+    expect(otherBubbleListener).not.toHaveBeenCalled();
+    document.removeEventListener("keydown", otherBubbleListener);
+  });
+
   it("언마운트하면 리스너를 제거한다", () => {
     const onMove = vi.fn();
     const { unmount } = render(

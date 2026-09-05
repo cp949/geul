@@ -81,7 +81,7 @@ export const usePointerDragGesture = ({
       ownerDocument.removeEventListener("pointermove", handlePointerMove);
       ownerDocument.removeEventListener("pointerup", handlePointerUp);
       ownerDocument.removeEventListener("pointercancel", handlePointerCancel);
-      ownerDocument.removeEventListener("keydown", handleKeyDown);
+      ownerDocument.removeEventListener("keydown", handleKeyDown, true);
     };
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -98,6 +98,15 @@ export const usePointerDragGesture = ({
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // capture phase에서 잡아 stopPropagation한다 — 활성 제스처가 있는
+      // 동안은 이 훅이 Escape를 독점한다. 그러지 않으면 media 리사이즈
+      // 드래그처럼 형제 selection 기반 오버레이(MediaToolbar)가 등록만
+      // 먼저 해 둔 별도 bubble-phase Escape 리스너가 같은 keydown에서
+      // 함께 발화해, "리사이즈만 취소"할 의도로 누른 Escape가 관계없는
+      // toolbar까지 닫아버린다(RD-001 DELTA-03 e2e 실측 — 등록 순서상
+      // MediaToolbar의 리스너가 이 훅보다 먼저 붙어 bubble에서는 이길
+      // 수 없다, capture만이 순서와 무관하게 우선한다).
+      event.stopPropagation();
       if (onEscape(event) === null) {
         detach();
         return;
@@ -108,7 +117,7 @@ export const usePointerDragGesture = ({
     ownerDocument.addEventListener("pointermove", handlePointerMove);
     ownerDocument.addEventListener("pointerup", handlePointerUp);
     ownerDocument.addEventListener("pointercancel", handlePointerCancel);
-    ownerDocument.addEventListener("keydown", handleKeyDown);
+    ownerDocument.addEventListener("keydown", handleKeyDown, true);
     return detach;
   }, [active, element, pointerId, onMove, onUp, onCancel, onEscape]);
 };
