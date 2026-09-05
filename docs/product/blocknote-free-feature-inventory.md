@@ -158,10 +158,10 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | ID        | 기능                            | 목표     | 단계 | 상태          | BlockNote 근거                      |
 | --------- | ------------------------------- | -------- | ---- | ------------- | ----------------------------------- |
 | `MED-001` | URL 기반 파일·미디어 삽입       | `PARITY` | R3   | `VERIFIED`    | Issue #152 슬라이스2(roadmap-workflow RD-001~003) — `insertMediaBlock` 명령, Slash 4항목(file/image/video/audio), File Panel URL 입력·저장, JSON round-trip과 Chromium e2e로 검증(`features/blocks/embeds.mdx`) |
-| `MED-002` | 소비자 제공 upload callback     | `PARITY` | R3   | `NOT_STARTED` | file panel and upload API           |
+| `MED-002` | 소비자 제공 upload callback     | `PARITY` | R3   | `VERIFIED`    | Issue #152 슬라이스3(roadmap-workflow RD-001~003) — `uploadFile` 콜백 배선(`CreateEditorOptions`), `uploadMediaFile`/`cancelMediaUpload` 명령, pending 상태 맵과 경합 가드, File Panel Upload 탭(loading/에러/retry/cancel)을 성공/실패/취소 3분기·경합 가드 Chromium e2e로 검증(file panel and upload API) |
 | `MED-003` | 파일 drag/drop과 paste          | `PARITY` | R3   | `NOT_STARTED` | paste handling, file extensions     |
 | `MED-004` | 파일 이름과 caption             | `PARITY` | R3   | `VERIFIED`    | Issue #152 슬라이스2(roadmap-workflow RD-001·RD-004) — `setMediaBlockName`/`setMediaBlockCaption` 명령, File Panel 이름 초깃값 추출과 toolbar rename/caption 편집을 undo 1회 복원까지 Chromium e2e로 검증(file block props and toolbar) |
-| `MED-005` | 파일 교체와 삭제                | `PARITY` | R3   | `PARTIAL`     | Issue #152 슬라이스2(roadmap-workflow RD-004) — 삭제(기존 `deleteBlock` 재사용) 완료. 파일 교체(`replaceMediaBlockFile`)는 슬라이스3 upload 잔여 |
+| `MED-005` | 파일 교체와 삭제                | `PARITY` | R3   | `VERIFIED`    | Issue #152 슬라이스2~3(roadmap-workflow RD-004, RD-002·RD-003) — 삭제(기존 `deleteBlock` 재사용)와 파일 교체(`replaceMediaBlockFile`, 성공 전까지 기존 url/name/caption/backgroundColor 유지) 모두 완료. Media Toolbar Replace 트리거와 실패 시 기존 값 유지를 Chromium e2e로 검증 |
 | `MED-006` | 파일 다운로드와 preview         | `PARITY` | R3   | `PARTIAL`     | Issue #152 슬라이스2(roadmap-workflow RD-004) — 다운로드(`<a download>`) 완료. preview 너비 조절·전환 토글은 슬라이스5 잔여 |
 | `MED-007` | 이미지·비디오 preview 너비 조절 | `PARITY` | R3   | `NOT_STARTED` | image/video block props and toolbar |
 | `MED-008` | preview와 링크 표시 전환        | `PARITY` | R3   | `NOT_STARTED` | embed block props                   |
