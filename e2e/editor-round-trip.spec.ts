@@ -61,9 +61,15 @@ test("화면의 가져오기·내보내기 컨트롤을 거쳐 위험한 HTML을
   await page.getByRole("button", { name: "Export HTML" }).click();
 
   const exported = await source.inputValue();
-  expect(exported).toContain("Unsafe linkVisible text");
+  // <img>는 슬라이스6(Issue #152)부터 HTML import allowlist에 편입돼 별도
+  // image 블록으로 정상 복원된다(packages/io/test/html-security.test.ts).
+  // "Unsafe link"/"Visible text"는 더 이상 한 문단에 붙어 있지 않고 그
+  // 사이에 안전한 <img>가 끼어든다 — 위험한 부분(onerror)만 제거 대상이다.
+  expect(exported).toContain("Unsafe link");
+  expect(exported).toContain("Visible text");
+  expect(exported).toMatch(/<img[^>]*data-be-media-type="image"/);
   expect(exported).not.toMatch(
-    /script|onclick|onerror|javascript:|position\s*:|<img/i,
+    /script|onclick|onerror|javascript:|position\s*:/i,
   );
 });
 
