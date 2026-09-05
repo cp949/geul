@@ -311,6 +311,11 @@ export class ProductionEditorSession {
       // (c), production-editor-assembly.ts·block-move-keyboard-extension.ts
       // 배선 참고).
       getBlockSelection: () => this.getBlockSelection(),
+      // MediaDropPasteExtension 전용 — uploadFile 콜백 등록 여부는 세션
+      // 생애주기 동안 불변이라(재설정 API 없음) 매 재구성(replaceDocument
+      // 포함)마다 여기서 다시 계산해도 항상 같은 값이다(RD-002 readiness
+      // probe, production-editor-assembly.ts 배선 참고).
+      isUploadEnabled: this.options.uploadFile !== undefined,
     });
   }
 

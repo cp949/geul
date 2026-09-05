@@ -51,6 +51,7 @@ import {
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
+import { MediaDropPasteExtension } from "./media-drop-paste-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
@@ -193,6 +194,11 @@ export const createProductionEditor = (options: {
   // 않는다(그 파일의 순환 의존 회피 관례, block-move-keyboard-extension.ts
   // 참고). 미지정이면 그 확장 자신의 기본값(항상 null)을 쓴다.
   getBlockSelection?: () => { fromBlockId: string; toBlockId: string } | null;
+  // MediaDropPasteExtension 전용 — uploadFile 콜백 등록 여부는 세션
+  // 생애주기 동안 불변이라(RD-002 readiness probe) getBlockSelection류
+  // live-closure가 아니라 세션 생성 시점에 계산한 정적 boolean으로 넘긴다.
+  // 미지정이면 그 확장 자신의 기본값(false, no-op)을 쓴다.
+  isUploadEnabled?: boolean;
 }): Editor => {
   const converted = modelToTiptap(options.document);
   if (!converted.ok) {
@@ -284,6 +290,14 @@ export const createProductionEditor = (options: {
         ...(options.onPasteRejected === undefined
           ? {}
           : { onPasteRejected: options.onPasteRejected }),
+      }),
+      // TablePasteExtension보다 뒤(배열상 더 아래)에 선언해 선언 역순
+      // 우선순위(위 주석)로 이 확장이 파일 존재 여부를 표보다 먼저
+      // 판정하게 한다(D4 — 파일 > 표 > HTML > Markdown 감지 > plain text,
+      // RD-002 readiness probe).
+      MediaDropPasteExtension.configure({
+        createId: options.createId,
+        isUploadEnabled: options.isUploadEnabled ?? false,
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
