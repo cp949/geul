@@ -9,6 +9,7 @@ import {
 } from "@cp949/geul-io";
 import { createEmptyDocument } from "@cp949/geul-model";
 import {
+  type CreateEditorOptions,
   type DocumentChangeEvent,
   EditorContent,
   type EditorError,
@@ -37,6 +38,41 @@ type EditorWorkspaceProps = {
 
 const errorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
+
+// e2e(RD-003 DELTA-04)가 업로드 성공/실패/취소 3분기와 경합 가드를
+// 결정적으로 재현하기 위한 데모 전용 mock — 실제 서버 업로드가 없어
+// 파일명으로 분기한다("reject" 포함 시 실패, 그 외 성공). 지연은 e2e가
+// loading 상태를 관찰하고 취소·undo 같은 경합 조작을 끼워 넣을 시간을
+// 준다. url은 isSupportedLinkHref(https만 허용, blob: 등은 거부)를
+// 통과해야 하므로 https 스킴을 쓴다.
+const DEMO_UPLOAD_DELAY_MS = 300;
+
+const demoUploadFile: CreateEditorOptions["uploadFile"] = (file, signal) => {
+  if (signal.aborted) return Promise.resolve({ status: "cancelled" });
+  return new Promise((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve({ status: "cancelled" });
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(
+        file.name.includes("reject")
+          ? {
+              status: "error",
+              code: "DEMO_UPLOAD_REJECTED",
+              message: `Demo upload rejected: ${file.name}`,
+            }
+          : {
+              status: "success",
+              url: `https://example.com/uploads/${encodeURIComponent(file.name)}`,
+              name: file.name,
+            },
+      );
+    }, DEMO_UPLOAD_DELAY_MS);
+    signal.addEventListener("abort", onAbort);
+  });
+};
 
 const EditorWorkspace = ({
   changedBlockIds,
@@ -252,7 +288,11 @@ export const App = () => {
   }, []);
 
   return (
-    <EditorProvider initialDocument={initialDocument} onChange={onChange}>
+    <EditorProvider
+      initialDocument={initialDocument}
+      onChange={onChange}
+      uploadFile={demoUploadFile}
+    >
       <EditorWorkspace changedBlockIds={changedBlockIds} revision={revision} />
     </EditorProvider>
   );
