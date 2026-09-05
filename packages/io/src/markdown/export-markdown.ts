@@ -35,6 +35,7 @@ type MarkdownOutputNode = {
   value?: string;
   depth?: number;
   url?: string;
+  alt?: string;
   lang?: string;
   align?: Array<"left" | "center" | "right" | null>;
   ordered?: boolean;
@@ -178,10 +179,11 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 const flattenBlocks = (blocks: Block[]): Block[] =>
   blocks.flatMap((block): Block[] => {
     if (block.type === "table") return [block];
-    // divider·CodeBlock·4종 미디어 블록(RD-003)은 children 필드 자체가
-    // 없어(옵셔널이 아니라 부재) 아래 block.children 접근 전에 좁힌다.
-    // quote는 children이 옵셔널이라 아래 범용 분기로 자연스럽게
-    // 통과한다(07a).
+    // divider·CodeBlock·4종 미디어 블록은 children 필드 자체가 없어(옵셔널이
+    // 아니라 부재, leaf 블록) 아래 block.children 접근 전에 좁힌다 — 이
+    // early return 자체는 RD-002(GFM 계약 구현)가 와도 바뀌지 않는다,
+    // 애초에 flatten할 children이 없다. quote는 children이 옵셔널이라 아래
+    // 범용 분기로 자연스럽게 통과한다(07a).
     if (
       block.type === "divider" ||
       block.type === "codeBlock" ||
@@ -292,18 +294,38 @@ const blockNodes = (blocks: Block[]): MarkdownOutputNode[] =>
 const blockNode = (block: Block): MarkdownOutputNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "divider") return { type: "thematicBreak" };
-  // 4종 미디어 블록(file/image/video/audio) — RD-003(io 컴파일 안전 최소
-  // 패치)의 placeholder다. 실제 GFM 계약(spec §7.2 — image만 strict
-  // round-trip, 나머지는 strict 거절/lossy link 강등)은 슬라이스6이
-  // 구현하고 이 분기를 교체한다. content가 없는 leaf라 표현할 인라인이
-  // 없다 — 빈 paragraph로 최소 안전 출력한다.
+  // 4종 미디어 블록(file/image/video/audio) — Issue #152 슬라이스6, RD-002
+  // DELTA-01(spec §7.2). previewWidth/showPreview/textAlignment/caption/
+  // backgroundColor는 어느 조합이든 이 함수가 그냥 버린다 — strict export는
+  // loss-analysis.ts가 이미 그 값들을 거절했으므로 이 함수에 도달하는 시점엔
+  // 값이 있어도(lossy) 안전하게 폐기할 수 있다(폐기 자체는 경고로 이미
+  // 보고됨, G-CNV-002). name이 없으면 url을 텍스트로 쓴다(mediaAnchorNode,
+  // export-html.ts 전례와 동일 공식).
   if (
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
     block.type === "audio"
   ) {
-    return { type: "paragraph", children: [] };
+    const url = block.url ?? "";
+    const text = block.name ?? url;
+    // Image는 showPreview:false일 때만 링크로 강등한다(html export의
+    // `block.type !== "file" && block.showPreview === false`와 동일 조건 —
+    // 재import가 `![]()`만 Image로 인식하므로(spec §7.3) 강등된 이미지도
+    // 이미 손실이라 링크로 낸다). Video/Audio/File은 GFM 표현 수단이
+    // 아예 없어 showPreview와 무관하게 항상 링크다.
+    if (block.type === "image" && block.showPreview !== false) {
+      return {
+        type: "paragraph",
+        children: [{ type: "image", url, alt: text }],
+      };
+    }
+    return {
+      type: "paragraph",
+      children: [
+        { type: "link", url, children: [{ type: "text", value: text }] },
+      ],
+    };
   }
   // CodeBlock은 model 검증을 통과한 plain-text leaf다. mdast code node가
   // fence 길이와 info string entity escape를 맡아 source/language를 보존한다.

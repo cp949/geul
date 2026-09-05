@@ -30,7 +30,21 @@ export type MarkdownLoss = {
     // BLOCK_COLOR/BLOCK_ALIGN은 블록 레벨 TextBlockProps(DELTA-02).
     | "INLINE_COLOR"
     | "BLOCK_COLOR"
-    | "BLOCK_ALIGN";
+    | "BLOCK_ALIGN"
+    // Issue #152 슬라이스6 RD-002 DELTA-01. 4종 미디어 블록(file/image/
+    // video/audio) 전용 손실 카테고리(spec §7.2). backgroundColor는 별도
+    // kind를 신설하지 않고 위 BLOCK_COLOR를 재사용한다(RD-002-DELTA-01.md
+    // "결정" — table의 CELL_COLOR와 달리 media에는 별도 location 축이
+    // 없어 분리할 이유가 없다).
+    | "MEDIA_PREVIEW_WIDTH"
+    | "MEDIA_SHOW_PREVIEW"
+    | "MEDIA_TEXT_ALIGNMENT"
+    | "MEDIA_CAPTION"
+    // spec이 명명하지 않은 kind다 — video/audio/file은 다른 prop이 전혀
+    // 없어도 블록 타입 자체가 GFM에 표현 수단이 없다(TOGGLE_STATE_LOST와
+    // 동일 논리, RD-002-DELTA-01.md "결정"). Image는 이 kind를 절대 갖지
+    // 않는다.
+    | "MEDIA_TYPE_LOST";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -179,17 +193,74 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     return;
   }
   if (block.type === "divider" || block.type === "codeBlock") return;
-  // 4종 미디어 블록(RD-003 컴파일 안전 최소 패치) — 슬라이스6이 spec §7.2의
-  // 신규 손실 카테고리(MEDIA_PREVIEW_WIDTH 등)를 여기 추가하고 이 조기
-  // 반환을 교체한다. 지금은 어떤 문서도 이 경로로 들어오지 않아(슬라이스2
-  // 이후 생성 가능) 손실 미보고의 실제 영향이 없다.
+  // 4종 미디어 블록(Issue #152 슬라이스6, RD-002 DELTA-01, spec §7.2).
+  // Image만 GFM 고유 표현 수단(`![name](url)`)이 있어 MEDIA_TYPE_LOST를
+  // 갖지 않는다 — 나머지 prop(previewWidth/showPreview/textAlignment/
+  // caption/backgroundColor)은 값이 실제로 있을 때만 개별 보고한다.
+  // Video/Audio/File은 그 prop들과 무관하게 항상 MEDIA_TYPE_LOST를 추가로
+  // 보고한다(TOGGLE_STATE_LOST와 동일 논리 — 재import 시 어떤 조합으로도
+  // 원래 타입으로 복원되지 않는다, spec §7.3). previewWidth/textAlignment는
+  // image/video만, showPreview는 image/video/audio만 갖는다(model
+  // MediaBlockCommon 확장 shape, file은 넷 다 없음).
   if (
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
     block.type === "audio"
-  )
+  ) {
+    if (block.backgroundColor !== undefined) {
+      losses.push({
+        kind: "BLOCK_COLOR",
+        blockId: block.id,
+        message: `Block ${block.id} has a background color`,
+      });
+    }
+    if (block.caption !== undefined) {
+      losses.push({
+        kind: "MEDIA_CAPTION",
+        blockId: block.id,
+        message: `Block ${block.id} has a caption`,
+      });
+    }
+    if (
+      (block.type === "image" || block.type === "video") &&
+      block.previewWidth !== undefined
+    ) {
+      losses.push({
+        kind: "MEDIA_PREVIEW_WIDTH",
+        blockId: block.id,
+        message: `Block ${block.id} has a preview width`,
+      });
+    }
+    if (
+      block.type !== "file" && // file은 showPreview 자체가 없다(mediaVisualNode 전례와 동일 조건)
+      block.showPreview === false
+    ) {
+      losses.push({
+        kind: "MEDIA_SHOW_PREVIEW",
+        blockId: block.id,
+        message: `Block ${block.id} has showPreview overridden to false`,
+      });
+    }
+    if (
+      (block.type === "image" || block.type === "video") &&
+      block.textAlignment !== undefined
+    ) {
+      losses.push({
+        kind: "MEDIA_TEXT_ALIGNMENT",
+        blockId: block.id,
+        message: `Block ${block.id} has text alignment`,
+      });
+    }
+    if (block.type !== "image") {
+      losses.push({
+        kind: "MEDIA_TYPE_LOST",
+        blockId: block.id,
+        message: `Block ${block.id} has type "${block.type}"; GFM has no native syntax for it`,
+      });
+    }
     return;
+  }
 
   if (hasUnderline(block.content)) {
     losses.push({
