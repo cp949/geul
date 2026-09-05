@@ -183,6 +183,14 @@ export interface EditorController {
       blockId: string,
       width: number,
     ): Result<void, EditorError>;
+    // image/video/audio 전용(spec §5.1 MED-008). file 대상은
+    // MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED로 거절한다(§8). false면 편집 DOM이
+    // 미디어 태그 대신 <a href={url}>{name ?? url}</a>를 렌더한다(FileBlock과
+    // 동일 패턴, media-block-extension.ts 참고).
+    setMediaShowPreview(
+      blockId: string,
+      show: boolean,
+    ): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
     // 사전 조건 실패(BLOCK_NOT_FOUND·미등록·이미 진행 중 등)만 ok:false로
@@ -791,6 +799,47 @@ export const createEditor = (
     });
   };
 
+  const isPreviewToggleableMediaBlockKind = (
+    name: string,
+  ): name is "image" | "video" | "audio" =>
+    name === "image" || name === "video" || name === "audio";
+
+  // setMediaShowPreview 전용 본체(RD-002 DELTA-01). 위
+  // runSetMediaPreviewWidthCommand와 같은 "찾기→가드→setNodeMarkup 1회"
+  // 골격이지만 값 타입이 boolean이고 kind 가드가 반대 방향이다(resize는
+  // image/video만 허용해 audio/file을 거절하지만, 이 명령은 image/video/
+  // audio를 허용하고 file만 거절한다 — 위 isPreviewToggleableMediaBlockKind).
+  // boolean은 TS 시그니처 자체가 값 공간 전체를 강제하므로(model
+  // showPreview?: boolean과 동형) previewWidth처럼 별도 값 검증 단계가 없다.
+  const runSetMediaShowPreviewCommand = (
+    blockId: string,
+    show: boolean,
+  ): Result<void, EditorError> => {
+    const command = "setMediaShowPreview";
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (!isPreviewToggleableMediaBlockKind(node.type.name)) {
+      return {
+        ok: false,
+        error: { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" },
+      };
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        { ...node.attrs, showPreview: show },
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
   // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
@@ -1298,6 +1347,8 @@ export const createEditor = (
         ),
       setMediaPreviewWidth: (blockId, width) =>
         runSetMediaPreviewWidthCommand(blockId, width),
+      setMediaShowPreview: (blockId, show) =>
+        runSetMediaShowPreviewCommand(blockId, show),
       // RD-002 DELTA-02 — 오케스트레이션 본체(session.uploadMediaFile)를
       // 세션으로 이동했다. 여기는 command 이름만 매개변수화해 위임하는
       // 얇은 wrapper다(공개 시그니처·Result/Promise 계약은 그대로).

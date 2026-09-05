@@ -31,9 +31,11 @@ import { mergeAttributes, Node } from "@tiptap/core";
 // (RD-002 DELTA-01) — react가 selection·toolbar·File Panel을 붙일 대상을
 // 얻는다(spec §6.1~§6.3). image/video의 previewWidth는 슬라이스5 RD-001
 // DELTA-01이 인라인 width 스타일로 투영을 완성했다(아래
-// previewWidthStyleAttrs). showPreview/textAlignment/backgroundColor는
-// 아직 DOM에 투영하지 않는다(showPreview는 슬라이스5 RD-002 몫,
-// textAlignment는 roadmap.md "결과 경계" 제외 범위 — pending-issue로 이월).
+// previewWidthStyleAttrs). image/video/audio의 showPreview:false는
+// 슬라이스5 RD-002 DELTA-01이 미디어 태그 대신 <a> 링크로 투영을
+// 완성했다(아래 mediaAnchorChildren, FileBlock과 동일 패턴 재사용).
+// textAlignment/backgroundColor는 아직 DOM에 투영하지 않는다(textAlignment는
+// roadmap.md "결과 경계" 제외 범위 — pending-issue로 이월).
 // io HTML export/import의 <figure> 계약(packages/io, 슬라이스6)과는
 // 별개다 — 여기 DOM 모양이 그 계약을 구속하지 않는다(ADR-0002 — io는 PM
 // DOM이 아니라 저장 Document를 직접 읽고 쓴다).
@@ -99,6 +101,22 @@ const captionChildren = (attrs: Record<string, unknown>): DOMOutputSpec[] => {
     : [["div", { "data-be-media-caption": "" }, caption]];
 };
 
+// file의 항상-링크 표시와 image/video/audio의 showPreview:false(슬라이스5
+// RD-002 DELTA-01, spec §5.1 MED-008)가 공유하는 <a> 출력. name이 없으면
+// url 자체를 링크 텍스트로 쓴다 — 신규 DOM shape을 설계하지 않고 이미
+// 존재하는 FileBlock 패턴을 그대로 재사용한다(RD-002.md "결정").
+const mediaAnchorChildren = (
+  url: string,
+  name: string | null,
+): DOMOutputSpec[] => [["a", { href: url }, name ?? url]];
+
+// showPreview attrs는 기본값 null이 "미설정"을 뜻하고 spec §3.1상 기본
+// 동작은 preview 표시다 — 명시적 false만 링크로 전환한다(previewWidth의
+// "양의 유한수만 스타일을 낸다"는 방어적 가드와 같은 태도, 로드 경로가
+// 항상 boolean|null만 주지만 이 판정 자체는 그 보장에 기대지 않는다).
+const isPreviewSuppressed = (attrs: Record<string, unknown>): boolean =>
+  attrs.showPreview === false;
+
 export const FileBlockExtension = Node.create({
   name: "file",
   group: "block",
@@ -113,7 +131,7 @@ export const FileBlockExtension = Node.create({
     // file은 <a href="url">name 또는 url</a>로 매핑한다(RD-002.md 포함
     // 범위) — name이 없으면 url 자체를 링크 텍스트로 쓴다.
     const children: DOMOutputSpec[] =
-      url === null ? [] : [["a", { href: url }, name ?? url]];
+      url === null ? [] : mediaAnchorChildren(url, name);
     return [
       "div",
       mergeAttributes(
@@ -142,20 +160,23 @@ export const ImageBlockExtension = Node.create({
     const name = nonEmptyString(node.attrs.name);
     const caption = nonEmptyString(node.attrs.caption);
     // alt는 caption이 있으면 caption, 없으면 name을 재사용한다(spec §6.3,
-    // 별도 alt prop 신설 없음 — 2026-09-04 사용자 확정).
+    // 별도 alt prop 신설 없음 — 2026-09-04 사용자 확정). showPreview:false면
+    // img 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
       url === null
         ? []
-        : [
-            [
-              "img",
-              {
-                src: url,
-                alt: caption ?? name ?? "",
-                ...previewWidthStyleAttrs(node.attrs),
-              },
-            ],
-          ];
+        : isPreviewSuppressed(node.attrs)
+          ? mediaAnchorChildren(url, name)
+          : [
+              [
+                "img",
+                {
+                  src: url,
+                  alt: caption ?? name ?? "",
+                  ...previewWidthStyleAttrs(node.attrs),
+                },
+              ],
+            ];
     return [
       "div",
       mergeAttributes(
@@ -181,21 +202,25 @@ export const VideoBlockExtension = Node.create({
 
   renderHTML({ HTMLAttributes, node }) {
     const url = nonEmptyString(node.attrs.url);
+    const name = nonEmptyString(node.attrs.name);
     // 재생·일시정지·탐색·음량 이상의 신규 UI를 만들지 않는다(spec §2 제외
-    // 범위) — 네이티브 <video controls>만 낸다.
+    // 범위) — 네이티브 <video controls>만 낸다. showPreview:false면 video
+    // 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
       url === null
         ? []
-        : [
-            [
-              "video",
-              {
-                controls: "",
-                src: url,
-                ...previewWidthStyleAttrs(node.attrs),
-              },
-            ],
-          ];
+        : isPreviewSuppressed(node.attrs)
+          ? mediaAnchorChildren(url, name)
+          : [
+              [
+                "video",
+                {
+                  controls: "",
+                  src: url,
+                  ...previewWidthStyleAttrs(node.attrs),
+                },
+              ],
+            ];
     return [
       "div",
       mergeAttributes(
@@ -221,8 +246,14 @@ export const AudioBlockExtension = Node.create({
 
   renderHTML({ HTMLAttributes, node }) {
     const url = nonEmptyString(node.attrs.url);
+    const name = nonEmptyString(node.attrs.name);
+    // showPreview:false면 audio 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
-      url === null ? [] : [["audio", { controls: "", src: url }]];
+      url === null
+        ? []
+        : isPreviewSuppressed(node.attrs)
+          ? mediaAnchorChildren(url, name)
+          : [["audio", { controls: "", src: url }]];
     return [
       "div",
       mergeAttributes(

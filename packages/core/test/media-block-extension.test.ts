@@ -4,8 +4,11 @@
  * 로드하고 `editor.view.dom` 렌더 결과를 단언한다 — media-commands 명령을
  * 거치지 않고도 검증 가능하다(RD-002.md 포함 범위). 명령 자체는
  * editor-controller-media-commands.test.ts가 소유한다. previewWidth 인라인
- * width 스타일 투영(슬라이스5 RD-001 DELTA-01, MED-007)도 이 파일이
- * 소유한다 — 같은 renderHTML 검증 관심사다.
+ * width 스타일 투영(슬라이스5 RD-001 DELTA-01, MED-007)과 showPreview:false의
+ * <a> 대체 투영(슬라이스5 RD-002 DELTA-01, MED-008)도 이 파일이 소유한다 —
+ * 같은 renderHTML 검증 관심사다. 이 파일명의 "RD-002"는 이미 완료된
+ * 슬라이스4 roadmap의 ID이고, 주석 속 "슬라이스5 RD-002"는 별도 roadmap
+ * (`_works/roadmap/`)의 동명 ID다 — RD 번호는 roadmap마다 독립 발급된다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -177,6 +180,61 @@ describe("previewWidth 렌더 — image/video(슬라이스5 RD-001 DELTA-01)", (
       audioDom.querySelector<HTMLElement>('[data-be-block-id="audio-1"] audio')
         ?.style.width,
     ).toBe("");
+  });
+});
+
+describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01)", () => {
+  it.each(["image", "video", "audio"] as const)(
+    "%s는 showPreview:false면 미디어 태그 대신 <a>를 렌더한다",
+    (kind) => {
+      const dom = mountedDom(kind, {
+        url: "https://example.com/x",
+        name: "x.dat",
+        showPreview: false,
+      });
+      const wrapper = dom.querySelector(`[data-be-block-id="${kind}-1"]`);
+      const tag = kind === "image" ? "img" : kind;
+      expect(wrapper?.querySelector(tag)).toBeNull();
+      const link = wrapper?.querySelector("a");
+      expect(link?.getAttribute("href")).toBe("https://example.com/x");
+      expect(link?.textContent).toBe("x.dat");
+    },
+  );
+
+  it.each(["image", "video", "audio"] as const)(
+    "%s는 showPreview가 없거나 true면 기존 미디어 태그를 렌더한다(회귀)",
+    (kind) => {
+      const dom = mountedDom(kind, { url: "https://example.com/x" });
+      const wrapper = dom.querySelector(`[data-be-block-id="${kind}-1"]`);
+      const tag = kind === "image" ? "img" : kind;
+      expect(wrapper?.querySelector(tag)).not.toBeNull();
+      expect(wrapper?.querySelector("a")).toBeNull();
+    },
+  );
+
+  it.each(["image", "video", "audio"] as const)(
+    "%s는 showPreview:false여도 caption을 그대로 렌더한다",
+    (kind) => {
+      const dom = mountedDom(kind, {
+        url: "https://example.com/x",
+        caption: "설명 텍스트",
+        showPreview: false,
+      });
+      const caption = dom.querySelector(
+        `[data-be-block-id="${kind}-1"] [data-be-media-caption]`,
+      );
+      expect(caption?.textContent).toBe("설명 텍스트");
+    },
+  );
+
+  it("file은 showPreview attrs 자체가 없어 렌더가 바뀌지 않는다(회귀)", () => {
+    const dom = mountedDom("file", {
+      url: "https://example.com/doc.pdf",
+      name: "doc.pdf",
+    });
+    const link = dom.querySelector('[data-be-block-id="file-1"] a');
+    expect(link?.getAttribute("href")).toBe("https://example.com/doc.pdf");
+    expect(link?.textContent).toBe("doc.pdf");
   });
 });
 

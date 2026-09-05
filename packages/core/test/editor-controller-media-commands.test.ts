@@ -1,7 +1,8 @@
 /**
  * 4종 미디어 블록(file/image/video/audio) 삽입·기본 명령(슬라이스2 RD-001,
  * Issue #152 슬라이스2 MED-001·MED-004~006 일부, spec §5.1)을 고정한다.
- * setMediaPreviewWidth(슬라이스5 RD-001 DELTA-01, MED-007)도 이 파일이
+ * setMediaPreviewWidth(슬라이스5 RD-001 DELTA-01, MED-007)와
+ * setMediaShowPreview(슬라이스5 RD-002 DELTA-01, MED-008)도 이 파일이
  * 소유한다 — 같은 "media 명령 공용 골격" 관심사라 별도 파일로 쪼개지 않는다.
  *
  * insertMediaBlock의 selection 계약은 divider와 다르다 — 삽입한 블록 자신을
@@ -9,11 +10,13 @@
  * media-commands.ts 주석 참고). setMediaBlockUrl/Name/Caption/
  * BackgroundColor의 media-only 가드(blockContainer 전제 helper 재사용
  * 불가)는 editor-controller.ts의 runSetMediaBlockAttrCommand 주석 참고.
- * setMediaPreviewWidth는 값 타입(number)과 kind 가드(image/video만)가 달라
- * 그 헬퍼를 재사용하지 않고 별도 함수(runSetMediaPreviewWidthCommand)로
- * 구현한다(RD-001-DELTA-01.md "배경" 참고). 콘텐츠 렌더링(renderHTML)의
- * previewWidth 투영은 media-block-extension.test.ts가, react 소비는
- * RD-003/004·슬라이스5 DELTA-02가 소관이다.
+ * setMediaPreviewWidth(값 타입 number, image/video만)와 setMediaShowPreview
+ * (값 타입 boolean, image/video/audio만)는 값 타입과 kind 가드가 서로도
+ * 다르고 그 헬퍼와도 달라 각각 별도 함수(runSetMediaPreviewWidthCommand·
+ * runSetMediaShowPreviewCommand)로 구현한다(RD-001-DELTA-01.md·
+ * RD-002-DELTA-01.md "배경" 참고). 콘텐츠 렌더링(renderHTML)의 투영은
+ * media-block-extension.test.ts가, react 소비는 RD-003/004·슬라이스5
+ * DELTA-02가 소관이다.
  */
 import { describe, expect, it } from "vitest";
 import type { MediaBlockKind } from "../src/index.js";
@@ -311,7 +314,44 @@ describe("setMediaPreviewWidth", () => {
   );
 });
 
-describe("알 수 없는 blockId — setter 5개 공통", () => {
+describe("setMediaShowPreview", () => {
+  it.each(["image", "video", "audio"] as const)(
+    "%s: boolean 값을 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다",
+    (kind) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(mediaBlock(kind, "m-1"), tailParagraphBlock),
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaShowPreview("m-1", false)).toEqual(
+        okResult,
+      );
+      expect(editor.getDocument().blocks).toEqual([
+        mediaBlock(kind, "m-1", { showPreview: false }),
+        tailParagraphBlock,
+      ]);
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+      ]);
+      expect(editor.commands.undo()).toEqual(okResult);
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+    },
+  );
+
+  it("file 대상은 MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED이고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(mediaBlock("file", "m-1")),
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setMediaShowPreview("m-1", false)).toEqual({
+      ok: false,
+      error: { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+});
+
+describe("알 수 없는 blockId — setter 6개 공통", () => {
   const missingBlockCases = [
     {
       command: "setMediaBlockUrl",
@@ -337,6 +377,11 @@ describe("알 수 없는 blockId — setter 5개 공통", () => {
       command: "setMediaPreviewWidth",
       call: (editor: ReturnType<typeof mounted>["editor"]) =>
         editor.commands.setMediaPreviewWidth("missing", 320),
+    },
+    {
+      command: "setMediaShowPreview",
+      call: (editor: ReturnType<typeof mounted>["editor"]) =>
+        editor.commands.setMediaShowPreview("missing", false),
     },
   ] as const;
 
