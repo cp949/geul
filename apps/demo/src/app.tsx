@@ -17,6 +17,7 @@ import {
   FilePanel,
   FormattingToolbar,
   LinkToolbar,
+  MediaResizeHandles,
   MediaToolbar,
   SlashMenu,
   useEditor,
@@ -248,6 +249,7 @@ const EditorWorkspace = ({
         <SlashMenu />
         <FilePanel />
         <MediaToolbar />
+        <MediaResizeHandles />
         <EditorContent />
       </section>
 

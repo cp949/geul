@@ -10,6 +10,7 @@ export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
 export { FilePanel } from "./file-panel.js";
 export { FormattingToolbar } from "./formatting-toolbar.js";
 export { LinkToolbar } from "./link-toolbar.js";
+export { MediaResizeHandles } from "./media-resize-handles.js";
 export { MediaToolbar } from "./media-toolbar.js";
 export { SlashMenu } from "./slash-menu.js";
 // TableHandles는 BlockSideMenu처럼 SlashMenu가 자동 마운트한다 — 공개

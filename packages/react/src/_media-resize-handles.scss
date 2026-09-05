@@ -1,0 +1,33 @@
+// media 블록(image/video)은 이제껏 어떤 CSS도 받지 않았다 — renderHTML이
+// previewWidth를 인라인 width로만 투영했다(슬라이스5 RD-001 DELTA-01).
+// "중심 고정 대칭 리사이즈"(spec §6.3)가 실제로 성립하려면 폭이 바뀔 때
+// 좌우 여백이 자동으로 같이 움직여야 한다 — margin:0 auto가 그 역할을
+// 한다(media-resize-handles.tsx 컴포넌트 주석에 수치 유도 과정을 남겨
+// 뒀다). max-width:100%는 애초에 원본이 래퍼(=content 폭)보다 크면
+// "최대는 content 폭" 완료 조건이 리사이즈 이전부터 깨진 채 시작하는
+// 것을 막는다.
+.geul-editor [data-be-block-id] {
+  > img,
+  > video {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+  }
+}
+
+// touch-action: none — table-handles.tsx의 geul-table-resize-handle과 같은
+// 이유(터치 드래그를 브라우저 스크롤 제스처에 뺏기면 pointercancel로
+// 드래그가 중단된다, setPointerCapture는 이를 막지 못한다).
+.geul-media-resize-handle {
+  position: fixed;
+  z-index: 10;
+  height: 1rem;
+  width: 1rem;
+  touch-action: none;
+  border-radius: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  // col-resize(표 전용 의미)가 아니라 ew-resize를 쓴다 — 표가 아닌 일반
+  // 수평 리사이즈라는 의미 차이를 커서로도 드러낸다.
+  cursor: ew-resize;
+}
