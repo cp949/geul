@@ -70,6 +70,22 @@ import {
 
 const DEFAULT_COLUMN_WIDTH = 160;
 
+// 4종 미디어 블록(file/image/video/audio, spec §7.1)이 공유하는 data-be-*
+// 속성 전체(RD-001-DELTA-01 export 계약과 동일 집합) — 어느 태그가 어느
+// 서브셋만 실제로 쓰는지는 export 쪽 타입 제약(mediaDataAttributes)이 이미
+// 지키므로 여기서는 태그마다 7개 전부를 공통 허용한다(표 셀·목록 마커
+// allowlist의 기존 관례와 동일 — sanitize는 존재 여부만 검사하고 타입별
+// 제약은 parseDocument가 최종 판정).
+const mediaDataAttributeNames = [
+  "dataBeBlockId",
+  "dataBeMediaType",
+  "dataBeName",
+  "dataBeBackgroundColor",
+  "dataBeShowPreview",
+  "dataBePreviewWidth",
+  "dataBeTextAlignment",
+];
+
 // 목록 import가 의미로 소비하는 속성을 sanitizer의 document-import 전용
 // schema에 추가한다. raw HAST를 다시 읽지 않고 li ID와 ol start도 sanitized
 // HAST에서만 읽기 위한 경계다. 공유 schema 객체는 clipboard 소비자가 함께
@@ -79,7 +95,25 @@ const htmlImportSanitizeSchema = {
   // details/summary는 document-import 전용이다(RD-005-DELTA-01) — 공유
   // htmlAllowedTagNames(clipboard와 공유)에는 올리지 않는다. tagNames를
   // override하는 첫 사례라 li/ol의 attributes-only override와 다르다.
-  tagNames: [...htmlAllowedTagNames, "details", "summary"],
+  // img/figure/figcaption/video/audio(RD-001-DELTA-02)도 같은 이유로
+  // document-import 전용이다 — 공유 목록에 올리면 clipboardAllowedTagNames
+  // (= [...htmlAllowedTagNames])가 그대로 상속해 clipboard 붙여넣기
+  // sanitize도 이 태그를 보존하게 되는데, clipboard-table-parser.ts는
+  // isMediaNode를 전달하지 않아 이 태그를 전혀 인식하지 못하고 figure/img가
+  // pending 텍스트로 뭉개지는 의도치 않은 동작 변화가 생긴다(RD-001-
+  // DELTA-02.md "결정" — hast-util-sanitize의 tagNames 판정이 strip보다
+  // 항상 우선이라 clipboardStrippedTagNames에 추가해도 막지 못함을 실측
+  // 확인했다).
+  tagNames: [
+    ...htmlAllowedTagNames,
+    "details",
+    "summary",
+    "img",
+    "figure",
+    "figcaption",
+    "video",
+    "audio",
+  ],
   attributes: {
     ...htmlAllowedAttributes,
     // 뒤 세 속성(TextBlockProps, RD-004 DELTA-02)은 li(bulletListItem/
@@ -100,6 +134,23 @@ const htmlImportSanitizeSchema = {
       "dataBeTextColor",
       "dataBeBackgroundColor",
       "dataBeTextAlignment",
+    ],
+    // file, 또는 showPreview:false로 강등된 image/video/audio가 bare 시각
+    // 태그일 때 data-be-*를 직접 갖는다(RD-001-DELTA-01 export 계약) — 기존
+    // href는 공유 목록(htmlAllowedAttributes.a)에 이미 있어 스프레드로
+    // 유지된다.
+    a: [...(htmlAllowedAttributes.a ?? []), ...mediaDataAttributeNames],
+    img: ["src", "alt", ...mediaDataAttributeNames],
+    video: ["src", "controls", ...mediaDataAttributeNames],
+    audio: ["src", "controls", ...mediaDataAttributeNames],
+    figure: [...mediaDataAttributeNames],
+    // div는 이미 children wrapper·목록류 마커를 갖는다(공유 목록) — url
+    // 없는 빈 미디어 블록(<div data-be-block-id data-be-media-type>)도
+    // 같은 태그를 재사용하므로 media 속성만 추가한다(dataBeBlockId는
+    // 이미 있어 제외).
+    div: [
+      ...(htmlAllowedAttributes.div ?? []),
+      ...mediaDataAttributeNames.filter((name) => name !== "dataBeBlockId"),
     ],
   },
 };
@@ -425,6 +476,55 @@ const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
   ["h6", 6],
 ]);
 
+// 4종 미디어 블록 판별 타입(export-html.ts의 MediaBlock과 동형, spec §3.1).
+type MediaBlock = Extract<
+  Document["blocks"][number],
+  { type: "file" | "image" | "video" | "audio" }
+>;
+
+// img/video/audio는 own-format 여부와 무관하게 태그명만으로 판정해도
+// 안전하다(RD-001.md "결정" — 다른 의미로 쓰이지 않는다, showPreview:false로
+// 강등돼도 <a>가 되므로 이 세 태그 자체가 나오는 경우는 항상 media다).
+// a/div/figure는 일반 링크·children wrapper를 겸하는 태그라 태그명만으로는
+// 판정할 수 없다 — data-be-media-type 마커 값이 4종 중 하나일 때만 그
+// 태그를 media로 본다. img/video/audio에 데이터가 모순되게 실려도(예:
+// <video data-be-media-type="image">) 태그명이 이긴다 — own export가
+// 만들 수 없는 조합이고, 방어적으로 태그명을 신뢰하는 편이 안전하다.
+const mediaTypeFromNode = (
+  node: HtmlElementNode,
+): MediaBlock["type"] | undefined => {
+  if (node.tagName === "img") return "image";
+  if (node.tagName === "video") return "video";
+  if (node.tagName === "audio") return "audio";
+  const raw = propertyString(node, "dataBeMediaType");
+  return raw === "file" || raw === "image" || raw === "video" || raw === "audio"
+    ? raw
+    : undefined;
+};
+
+// block-segmenter.ts에 넘기는 노드-레벨 predicate(RD-001.md "결정" —
+// isTableNode류 시그니처를 재사용한다, isDividerTag류 태그명-only로는
+// own-format <a>/<div>와 일반 <a>/<div>를 구분할 수 없다). a/div/figure는
+// mediaTypeFromNode가 유효값을 돌려줄 때만 media로 승격한다 — 그 외(마커
+// 없는 임의 <a>, children wrapper div 등)는 기존 처리 경로에 그대로 남는다.
+const isMediaNode = (node: HtmlElementNode): boolean => {
+  if (
+    node.tagName === "img" ||
+    node.tagName === "video" ||
+    node.tagName === "audio"
+  ) {
+    return true;
+  }
+  if (
+    node.tagName === "a" ||
+    node.tagName === "div" ||
+    node.tagName === "figure"
+  ) {
+    return mediaTypeFromNode(node) !== undefined;
+  }
+  return false;
+};
+
 // documentFromRoot의 재귀 경계 판정(문단/헤딩/구분선/표 시퀀스로 쪼개기)은
 // clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
 // 공유한다(아키텍처 리뷰 2차 후보 G) — p/h1~h3/table만 보던 예전 documentFromRoot
@@ -449,6 +549,7 @@ const importBlockSegmentPolicy: BlockSegmentPolicy<
   isDividerTag: (tagName) => tagName === "hr",
   isQuoteTag: (tagName) => tagName === "blockquote",
   isCodeBlockTag: (tagName) => tagName === "pre",
+  isMediaNode,
 };
 
 const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
@@ -476,7 +577,152 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
   importBlockSegmentPolicy.isCodeBlockTag?.(node.tagName) === true ||
   importBlockSegmentPolicy.isNestedBoundary(node.tagName) ||
   importBlockSegmentPolicy.isTransparent(node.tagName) ||
-  importBlockSegmentPolicy.isTableNode(node);
+  importBlockSegmentPolicy.isTableNode(node) ||
+  importBlockSegmentPolicy.isMediaNode?.(node) === true;
+
+// consumePreservedAttributeWarning은 li/ol/details/summary(아래)와 동일
+// 패턴이다 — htmlImportSanitizeSchema(이 파일 상단)의 로컬 override가 실제
+// 허용하는 속성이라도 import-warnings.ts의 경고 판정은 공유
+// htmlAllowedAttributes만 보므로(sanitizer 결합 회피 원칙) raw "제거됨"
+// 오탐이 남는다 — media가 실제로 보존한 속성만 여기서 지운다(G-CNV-002).
+// data-be-*는 segment.node 자신이 갖고(bare 태그·div·figure 공통), src/alt/
+// controls는 visualNode가 갖는다 — figure에서는 이 둘이 다른 노드라
+// mediaBlockFromNode가 각각 따로 호출한다.
+const consumeMediaDataAttributeWarnings = (
+  warnings: HtmlImportWarning[],
+  node: HtmlElementNode,
+): void => {
+  for (const attribute of [
+    "dataBeBlockId",
+    "dataBeMediaType",
+    "dataBeName",
+    "dataBeBackgroundColor",
+    "dataBeShowPreview",
+    "dataBePreviewWidth",
+    "dataBeTextAlignment",
+  ]) {
+    consumePreservedAttributeWarning(warnings, node.tagName, attribute);
+  }
+};
+
+const consumeMediaVisualAttributeWarnings = (
+  warnings: HtmlImportWarning[],
+  visualNode: HtmlElementNode,
+): void => {
+  if (visualNode.tagName === "img") {
+    consumePreservedAttributeWarning(warnings, "img", "src");
+    consumePreservedAttributeWarning(warnings, "img", "alt");
+    return;
+  }
+  if (visualNode.tagName === "video" || visualNode.tagName === "audio") {
+    consumePreservedAttributeWarning(warnings, visualNode.tagName, "src");
+    consumePreservedAttributeWarning(warnings, visualNode.tagName, "controls");
+  }
+  // <a>의 href는 공유 htmlAllowedAttributes.a에 이미 있어 오탐이 나지
+  // 않는다 — 소비할 것이 없다.
+};
+
+// segmentBlocks가 낸 kind:"media" 세그먼트 하나를 4종 Block으로 디코드한다.
+// data-be-*는 항상 node(세그먼트 자신) 속성이고, src/href는 visualNode(시각
+// 태그) 속성이다 — figure/div/bare 시각 태그 세 형태 중 figure만 이 둘이
+// 다른 노드다(export-html.ts가 caption 있을 때 data-be-*를 figure 자신에만
+// 싣고 안쪽 시각 태그에는 싣지 않는다, RD-001-DELTA-01 "설계"). bare 태그는
+// node 자신이 visualNode이고, div(빈 블록)는 visualNode가 없다(url undefined).
+// figure의 자식을 segmentBlocks로 재귀 분할하지 않고 여기서 직접 들여다봐야
+// 중복 생성 방지 가드가 성립한다(RD-001 완료 조건 2 — block-segmenter.ts의
+// media 세그먼트가 안쪽으로 재귀하지 않는 이유와 대칭).
+const mediaBlockFromNode = (
+  node: HtmlElementNode,
+  createId: IdFactory,
+  warnings: HtmlImportWarning[],
+): MediaBlock => {
+  const isFigure = node.tagName === "figure";
+  const isEmptyPlaceholder = node.tagName === "div";
+  const wrapperChildren =
+    isFigure || isEmptyPlaceholder ? node.children.filter(isElementNode) : [];
+  const visualNode = isFigure
+    ? wrapperChildren.find(
+        (child) =>
+          child.tagName === "img" ||
+          child.tagName === "video" ||
+          child.tagName === "audio" ||
+          child.tagName === "a",
+      )
+    : isEmptyPlaceholder
+      ? undefined
+      : node;
+  const figcaptionNode = wrapperChildren.find(
+    (child) => child.tagName === "figcaption",
+  );
+
+  consumeMediaDataAttributeWarnings(warnings, node);
+  if (visualNode !== undefined) {
+    consumeMediaVisualAttributeWarnings(warnings, visualNode);
+  }
+
+  const mediaType = mediaTypeFromNode(node) ?? "file";
+  const id = propertyString(node, "dataBeBlockId") ?? createId();
+  const name = propertyString(node, "dataBeName");
+  const backgroundColor = propertyString(node, "dataBeBackgroundColor");
+  const showPreviewRaw = propertyString(node, "dataBeShowPreview");
+  const previewWidthRaw = propertyInteger(
+    node,
+    "dataBePreviewWidth",
+    Number.NaN,
+  );
+  const previewWidth = Number.isNaN(previewWidthRaw)
+    ? undefined
+    : previewWidthRaw;
+  const textAlignment = propertyString(node, "dataBeTextAlignment") as
+    "left" | "center" | "right" | undefined;
+  // caption은 plain string이다(rich text 아님, spec §3.1) — 인라인 mark를
+  // 보존할 필요가 없어 textValue로 평탄화한다. sanitizeInlineText는 raw
+  // 텍스트 스캐너(import-warnings.ts)가 이 노드에 대해 이미
+  // UNSAFE_CODE_POINT_REMOVED를 낼 수 있으므로 실제로도 제거해 경고와
+  // 실동작을 맞춘다(G-CNV-002) — data-be-name은 속성값이라 그 스캐너가
+  // 애초에 검사하지 않으므로 대칭 처리하지 않는다(표 셀 속성값과 동일
+  // 관례).
+  const caption =
+    figcaptionNode === undefined
+      ? undefined
+      : sanitizeInlineText(textValue(figcaptionNode.children));
+  const url =
+    visualNode === undefined
+      ? undefined
+      : visualNode.tagName === "a"
+        ? propertyString(visualNode, "href")
+        : propertyString(visualNode, "src");
+
+  const common = {
+    id,
+    ...(url === undefined ? {} : { url }),
+    ...(name === undefined ? {} : { name }),
+    ...(caption === undefined ? {} : { caption }),
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+  };
+
+  if (mediaType === "file") {
+    return { ...common, type: "file" };
+  }
+  if (mediaType === "audio") {
+    return {
+      ...common,
+      type: "audio",
+      ...(showPreviewRaw === undefined
+        ? {}
+        : { showPreview: showPreviewRaw === "true" }),
+    };
+  }
+  return {
+    ...common,
+    type: mediaType,
+    ...(showPreviewRaw === undefined
+      ? {}
+      : { showPreview: showPreviewRaw === "true" }),
+    ...(previewWidth === undefined ? {} : { previewWidth }),
+    ...(textAlignment === undefined ? {} : { textAlignment }),
+  };
+};
 
 // li가 목록 블록의 안정 ID와 content를 직접 소유한다(RD-003 HTML 정규형).
 // 첫 실질 자식이 p면 그 p는 content wrapper일 뿐 별도 paragraph/ID가 아니다.
@@ -654,6 +900,15 @@ const blocksFromSegments = (
         id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
         type: "divider",
       });
+      continue;
+    }
+    if (segment.kind === "media") {
+      // 4종 미디어 블록(RD-001-DELTA-02) — mediaBlockFromNode가 figure/div/
+      // bare 시각 태그 세 형태를 모두 판별해 디코드한다. figure의 자식은
+      // 여기서 재귀하지 않는다(segment.node 자체가 이미 완결된 leaf다) —
+      // 중복 생성 방지 가드는 block-segmenter.ts의 media 세그먼트가 안쪽을
+      // 재귀하지 않는다는 사실과 대칭이다.
+      blocks.push(mediaBlockFromNode(segment.node, createId, warnings));
       continue;
     }
     if (segment.kind === "blockquote") {

@@ -93,7 +93,20 @@ export type BlockSegment<
       // 않는다. 몇 개를 묶어 하나의 문단으로 만들지, 조각 단위로 실질
       // 텍스트를 거를지는 호출자 정책이라 여기서는 원본 노드 배열만 준다.
       nonSectionChildren: HtmlElementContent[];
-    };
+    }
+  // 4종 미디어 블록(file/image/video/audio, spec §7.1) 태그 자신(RD-001-
+  // DELTA-02) — hr/blockquote와 같은 이유로 "판정"만 하고 안쪽으로 재귀하지
+  // 않는다: figure의 내부(시각 태그+figcaption)를 여기서 재귀하면 안쪽
+  // img/a가 독립된 media 세그먼트로 다시 걸려 블록이 중복 생성된다(RD-001
+  // 완료 조건의 중복 생성 방지 가드). own-format 판정(어느 <a>/<div>가
+  // media인지)은 노드 전체를 봐야 하므로(RD-001.md "결정" — <a>는 일반
+  // link mark의 보편적 캐리어라 태그명만으로는 판정할 수 없다) isMediaNode를
+  // isDividerTag류(태그명만)가 아니라 isTableNode류(노드 전체) 시그니처로
+  // 둔다. isMediaNode를 넘기지 않는 소비자(clipboard-table-parser.ts)에서는
+  // 이 kind가 런타임에 나오지 않는다 — 다만 union 자체는 hr/blockquote/list와
+  // 같이 무조건 포함이라 그 소비자도 dead-branch를 명시해야 한다(그 파일의
+  // 주석 참고).
+  | { kind: "media"; node: HtmlElementNode };
 
 export type BlockSegmentPolicy<
   Level extends number = number,
@@ -141,6 +154,13 @@ export type BlockSegmentPolicy<
   // findDataTables가 미리 고른 표 집합의 멤버십 검사처럼 호출자마다
   // 다르다 — 표 탐지 알고리즘 자체는 이 모듈이 아니라 호출자가 소유한다.
   isTableNode: (node: HtmlElementNode) => boolean;
+  // 4종 미디어 블록(file/image/video/audio) 태그 자신 판정(RD-001-DELTA-02).
+  // 선택적이다 — 넘기지 않는 소비자(clipboard-table-parser.ts)에서는 이
+  // kind가 나오지 않는다. isTableNode와 같은 노드 전체 검사 시그니처를
+  // 쓴다 — own-format <a>/<div>(마커 속성 존재)와 일반 <a>/<div>를
+  // 구분하려면 태그명만으로는 부족하다(위 BlockSegment의 media variant
+  // 주석 참고).
+  isMediaNode?: (node: HtmlElementNode) => boolean;
 } & (IncludeCodeBlock extends true
   ? { isCodeBlockTag: (tagName: string) => boolean }
   : { isCodeBlockTag?: undefined });
@@ -226,6 +246,7 @@ export function segmentBlocks<Level extends number = number>(
         policy.isQuoteTag?.(node.tagName) === true ||
         policy.isListTag?.(node.tagName) === true ||
         policy.isCodeBlockTag?.(node.tagName) === true ||
+        policy.isMediaNode?.(node) === true ||
         policy.isNestedBoundary(node.tagName)
       ) {
         return true;
@@ -316,6 +337,16 @@ export function segmentBlocks<Level extends number = number>(
       if (policy.isCodeBlockTag?.(node.tagName) === true) {
         flush();
         segments.push({ kind: "codeBlock", node });
+        continue;
+      }
+      // 4종 미디어 블록 태그 자신(RD-001-DELTA-02) — hr/quote/list와 같은
+      // 이유로 안쪽(figure의 시각 태그+figcaption)을 재귀하지 않는다. 여기서
+      // 재귀하면 안쪽 img/a가 독립 media 세그먼트로 다시 걸려 블록이
+      // 중복 생성된다. 디코드(시각 태그·figcaption 분리)는 import-html.ts가
+      // segment.node를 직접 들여다봐서 한다.
+      if (policy.isMediaNode?.(node) === true) {
+        flush();
+        segments.push({ kind: "media", node });
         continue;
       }
 

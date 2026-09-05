@@ -75,9 +75,13 @@ describe("HTML 보안", () => {
           kind: "UNSAFE_ELEMENT_REMOVED",
           element: "script",
         }),
+        // img는 RD-001-DELTA-02부터 문서 import 전용 allowlist에 있어 태그
+        // 자체는 더 이상 제거되지 않는다(image 블록으로 정상 복원된다) —
+        // 실제 위험 요소는 onerror 속성이고, 그것만 계속 제거·경고된다.
         expect.objectContaining({
-          kind: "UNSAFE_ELEMENT_REMOVED",
+          kind: "UNSAFE_ATTRIBUTE_REMOVED",
           element: "img",
+          attribute: "onError",
         }),
         expect.objectContaining({
           kind: "UNSAFE_ATTRIBUTE_REMOVED",
@@ -99,10 +103,15 @@ describe("HTML 보안", () => {
     expect(exported.value).not.toMatch(
       /script|onerror|onclick|javascript:|data:text\/html/i,
     );
+    // src는 RD-001-DELTA-02부터 img/video/audio의 정상 속성이라(위와 동일
+    // 이유) 이 deny-list에서 제외한다 — style/class/id/on*/data-arbitrary
+    // 류는 여전히 지원되지 않아 그대로 남는다.
     expect(exported.value).not.toMatch(
-      /(?:\s|<)(?:style|class|id|src|on\w+|data-arbitrary|data-__proto__|__proto__|constructor|prototype)=/i,
+      /(?:\s|<)(?:style|class|id|on\w+|data-arbitrary|data-__proto__|__proto__|constructor|prototype)=/i,
     );
-    expect(exported.value).not.toMatch(/<\/?(?:svg|style|img|iframe|object)/i);
+    // img도 같은 이유로 이 deny-list에서 제외한다 — svg/style/iframe/object는
+    // 여전히 전면 미지원이다.
+    expect(exported.value).not.toMatch(/<\/?(?:svg|style|iframe|object)/i);
   });
 
   it("지원하는 링크와 상대 경로는 남기고 위험한 링크만 제거한다", () => {

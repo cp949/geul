@@ -259,6 +259,12 @@ const blockSequenceFromNodes = (
       // 클립보드 정책은 isQuoteTag를 넘기지 않아 도달하지 않는다 — 공유
       // union의 exhaustiveness 반영, blockquote 매핑은 슬라이스 10 소관.
       if (segment.kind === "blockquote") continue;
+      // 클립보드 정책은 isMediaNode를 넘기지 않아 도달하지 않는다 — 공유
+      // union의 exhaustiveness 반영(RD-001-DELTA-02, block-segmenter.ts의
+      // BlockSegment media variant 주석 참고). 미디어 붙여넣기는 별도
+      // File[] 추출 경로(spec §5.2)가 담당하고 이 HTML fragment 경로와
+      // 무관하다.
+      if (segment.kind === "media") continue;
       if (segment.kind === "list") {
         const listResult = blocksFromListNode(segment.node);
         if (!listResult.ok) return listResult;

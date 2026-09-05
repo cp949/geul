@@ -8,7 +8,7 @@ import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
-import type { HtmlNode, HtmlRoot } from "./inline-content.js";
+import type { HtmlElementNode, HtmlNode, HtmlRoot } from "./inline-content.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
   htmlAllowedAttributes,
@@ -93,9 +93,11 @@ export const codeBlockLanguageMetadataIgnoredWarning = (
 
 const unsafeElementNames = new Set([
   ...htmlStrippedTagNames,
-  "img",
-  "audio",
-  "video",
+  // img/audio/video는 RD-001-DELTA-02부터 document import 전용 allowlist
+  // (import-html.ts의 htmlImportSanitizeSchema)에 있어 더 이상 실제로
+  // 제거되지 않는다 — 이 집합에 남기면 "제거됨" 경고가 거짓이 된다
+  // (G-CNV-002). source는 own export가 <source> 자식을 내지 않아(항상
+  // src 속성만 쓴다) 계속 실제로 제거되므로 남긴다.
   "source",
   "track",
   "link",
@@ -136,7 +138,35 @@ const supportedBlockNames = new Set([
   // div/내부 hN)은 별도 등록이 필요 없다 — details는 isBlockBoundaryTag에
   // 없어 자식으로 내려가면 topLevel이 자동으로 꺼진다(150행 부근 주석).
   "details",
+  // 4종 미디어 블록(file/image/video/audio, spec §7.1)의 bare 시각
+  // 태그·wrapper다(RD-001-DELTA-02). figure와 같은 이유로 자식(img/a/
+  // figcaption)은 별도 등록이 필요 없다 — figure/img/video/audio 모두
+  // isBlockBoundaryTag에 없어 자식으로 내려가면 topLevel이 꺼진다. own-format
+  // File <a>(마커 있는 <a>)는 태그명 집합이 아니라 isOwnMediaAnchorElement
+  // 노드 판정으로 별도 처리한다(아래) — <a>는 일반 링크의 보편적 캐리어라 이
+  // 집합에 통째로 넣으면 마커 없는 임의 링크까지 downgrade 경고가 사라진다.
+  "img",
+  "video",
+  "audio",
+  "figure",
+  "figcaption",
 ]);
+
+// data-be-media-type 값 검사만으로 own-format File 앵커를 판정한다 — 정확한
+// 4종 판정(isMediaNode/mediaTypeFromNode)은 import-html.ts가 단독 소유하고
+// (sanitizer 결합 회피 원칙, 위 파일 헤더 주석), 이 파일은 독립적으로
+// 마커 유효성만 다시 확인한다. 마커 없는 임의 <a>는 여전히 top-level
+// downgrade 경고 대상이다(기존 동작 불변).
+const isOwnMediaAnchorElement = (node: HtmlElementNode): boolean => {
+  if (node.tagName !== "a") return false;
+  const mediaType = node.properties.dataBeMediaType;
+  return (
+    mediaType === "file" ||
+    mediaType === "image" ||
+    mediaType === "video" ||
+    mediaType === "audio"
+  );
+};
 
 // 이 집합은 warning 판정만 소유한다. sanitizer 허용 목록과 공유하면 raw
 // warning fact 수집기가 sanitize 구현에 결합된다(ADR-0003). 이 요소들은
@@ -201,7 +231,8 @@ const collectFromNodes = (
     } else if (
       topLevel &&
       !supportedBlockNames.has(node.tagName) &&
-      !(insideSupportedBoundary && supportedInlineNames.has(node.tagName))
+      !(insideSupportedBoundary && supportedInlineNames.has(node.tagName)) &&
+      !isOwnMediaAnchorElement(node)
     ) {
       warnings.push({
         kind: "SAFE_BLOCK_DOWNGRADED",
