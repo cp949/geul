@@ -594,6 +594,7 @@ describe("SlashMenu 질의 팝업", () => {
         name: null,
         caption: null,
         showPreview: mediaKind === "file" ? null : true,
+        textAlignment: null,
       });
       expect(document.activeElement).toBe(rendered.editable);
     },

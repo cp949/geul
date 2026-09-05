@@ -102,6 +102,11 @@ export interface EditorController {
     // 미설정(null)이 기본 true를 뜻하는 실제 유효값을 보고한다(슬라이스5
     // RD-002 DELTA-02, react MediaToolbar의 preview 토글 버튼이 소비한다).
     showPreview: boolean | null;
+    // image/video만 실제 유효값을 보고한다(Issue #154, MED-009) — audio/file은
+    // attrs 자체가 없어 null이다(showPreview와 반대 kind 집합, setMediaPreviewWidth
+    // 의 MEDIA_RESIZE_NOT_SUPPORTED 대상과 동일 경계). react MediaToolbar의
+    // 정렬 버튼 3개가 aria-pressed 판정에 소비한다.
+    textAlignment: "left" | "center" | "right" | null;
   } | null;
   getBlockNestingActionState(blockId: string): BlockNestingActionState;
   getTableCellSelection(): TableCellSelection | null;
@@ -195,6 +200,14 @@ export interface EditorController {
     setMediaShowPreview(
       blockId: string,
       show: boolean,
+    ): Result<void, EditorError>;
+    // image/video 전용(spec §5.1 신규, Issue #154 MED-009). audio/file 대상은
+    // MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED로 거절한다(§8). setBlockTextAlignment
+    // (텍스트 블록, blockContainer attrs)와 동형 시그니처 — null로 리셋
+    // 가능하다(media attrs 스키마 기본값 null과 동일 의미로 속성을 지운다).
+    setMediaTextAlignment(
+      blockId: string,
+      alignment: "left" | "center" | "right" | null,
     ): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
@@ -845,6 +858,52 @@ export const createEditor = (
     });
   };
 
+  const isTextAlignableMediaBlockKind = (
+    name: string,
+  ): name is "image" | "video" => name === "image" || name === "video";
+
+  // setMediaTextAlignment 전용 본체(Issue #154, MED-009). 위
+  // runSetMediaPreviewWidthCommand·runSetMediaShowPreviewCommand와 같은
+  // "찾기→가드→검증→setNodeMarkup 1회" 골격이지만, kind 가드 집합이
+  // isResizableMediaBlockKind(image/video)와 우연히 같아도 관심사가
+  // 다르므로(리사이즈가 아니라 정렬) 공유하지 않고 전용 가드를 새로 둔다
+  // (runSetMediaShowPreviewCommand 위 주석이 이미 "명령마다 전용 가드
+  // 함수" 컨벤션의 이유를 문서화). 값 검증은 setBlockTextAlignment
+  // (runSetBlockTextPropCommand)와 동일하게 isCanonicalCellAlign을
+  // 재사용한다 — value가 TS 시그니처로 이미 좁혀져 있어도(런타임 caller가
+  // 그 타입을 우회할 수 있으므로) 방어적으로 검증한다.
+  const runSetMediaTextAlignmentCommand = (
+    blockId: string,
+    alignment: "left" | "center" | "right" | null,
+  ): Result<void, EditorError> => {
+    const command = "setMediaTextAlignment";
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (!isTextAlignableMediaBlockKind(node.type.name)) {
+      return {
+        ok: false,
+        error: { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" },
+      };
+    }
+    if (alignment !== null && !isCanonicalCellAlign(alignment)) {
+      return { ok: false, error: { code: "INVALID_ALIGN", align: alignment } };
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        { ...node.attrs, textAlignment: alignment },
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
   // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
@@ -1159,6 +1218,11 @@ export const createEditor = (
           typeof node.attrs.caption === "string" ? node.attrs.caption : null,
         showPreview:
           node.type.name === "file" ? null : node.attrs.showPreview !== false,
+        textAlignment:
+          isTextAlignableMediaBlockKind(node.type.name) &&
+          typeof node.attrs.textAlignment === "string"
+            ? (node.attrs.textAlignment as "left" | "center" | "right")
+            : null,
       };
     },
     getBlockNestingActionState(blockId) {
@@ -1356,6 +1420,8 @@ export const createEditor = (
         runSetMediaPreviewWidthCommand(blockId, width),
       setMediaShowPreview: (blockId, show) =>
         runSetMediaShowPreviewCommand(blockId, show),
+      setMediaTextAlignment: (blockId, alignment) =>
+        runSetMediaTextAlignmentCommand(blockId, alignment),
       // RD-002 DELTA-02 — 오케스트레이션 본체(session.uploadMediaFile)를
       // 세션으로 이동했다. 여기는 command 이름만 매개변수화해 위임하는
       // 얇은 wrapper다(공개 시그니처·Result/Promise 계약은 그대로).

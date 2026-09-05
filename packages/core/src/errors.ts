@@ -22,4 +22,5 @@ export type EditorError =
   | { code: "PASTE_TARGET_NOT_FOUND" }
   | { code: "TRANSACTION_REJECTED" }
   | { code: "MEDIA_RESIZE_NOT_SUPPORTED" }
-  | { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" };
+  | { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" }
+  | { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" };

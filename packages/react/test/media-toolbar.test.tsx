@@ -10,6 +10,9 @@
  * 닫힘과 focus 복원 차이(RD-004 DELTA-01), Replace 트리거의 파일 선택·
  * loading/에러·retry·cancel(RD-003 DELTA-03), preview 토글의 노출 조건·
  * aria-pressed·명령 호출과 실패 처리(슬라이스5 RD-002 DELTA-02)를 검증한다.
+ * image/video 전용 정렬 버튼 3개(좌/중/우)의 노출 조건(audio/file 제외)·
+ * aria-pressed·클릭(같은 값 재클릭 시 null 해제)·실패 처리도 검증한다
+ * (Issue #154, MED-009).
  */
 
 import type { EditorError, MediaBlockKind } from "@cp949/geul-core";
@@ -38,6 +41,7 @@ type SelectionMediaBlock = {
   name: string | null;
   caption: string | null;
   showPreview: boolean | null;
+  textAlignment: "left" | "center" | "right" | null;
 };
 
 type CommandResult = { ok: boolean; error?: { code: string } };
@@ -53,6 +57,10 @@ type FakeControllerOptions = {
   setMediaBlockName?: (blockId: string, name: string) => CommandResult;
   setMediaBlockCaption?: (blockId: string, caption: string) => CommandResult;
   setMediaShowPreview?: (blockId: string, show: boolean) => CommandResult;
+  setMediaTextAlignment?: (
+    blockId: string,
+    alignment: "left" | "center" | "right" | null,
+  ) => CommandResult;
   deleteBlock?: (blockId: string) => CommandResult;
   isUploadEnabled?: () => boolean;
   getMediaUploadState?: (blockId: string) => MediaUploadState;
@@ -67,6 +75,7 @@ const fakeController = ({
   setMediaBlockName = () => ({ ok: true }),
   setMediaBlockCaption = () => ({ ok: true }),
   setMediaShowPreview = () => ({ ok: true }),
+  setMediaTextAlignment = () => ({ ok: true }),
   deleteBlock = () => ({ ok: true }),
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
@@ -95,6 +104,7 @@ const fakeController = ({
     setMediaBlockName: vi.fn(setMediaBlockName),
     setMediaBlockCaption: vi.fn(setMediaBlockCaption),
     setMediaShowPreview: vi.fn(setMediaShowPreview),
+    setMediaTextAlignment: vi.fn(setMediaTextAlignment),
     deleteBlock: vi.fn(deleteBlock),
     replaceMediaBlockFile: vi.fn(replaceMediaBlockFile),
     cancelMediaUpload: vi.fn(() => ({ ok: true, value: undefined })),
@@ -108,6 +118,7 @@ const emptyImageBlock: SelectionMediaBlock = {
   name: null,
   caption: null,
   showPreview: true,
+  textAlignment: null,
 };
 
 const filledImageBlock: SelectionMediaBlock = {
@@ -117,6 +128,7 @@ const filledImageBlock: SelectionMediaBlock = {
   name: "photo.png",
   caption: null,
   showPreview: true,
+  textAlignment: null,
 };
 
 const filledFileBlock: SelectionMediaBlock = {
@@ -126,6 +138,20 @@ const filledFileBlock: SelectionMediaBlock = {
   name: "doc.pdf",
   caption: null,
   showPreview: null,
+  textAlignment: null,
+};
+
+// 정렬 버튼 노출 조건(image/video만) 검증용 — Preview 버튼 노출 조건
+// (file만 제외)과 반대 kind 집합이라 file 픽스처만으로는 audio 배제를
+// 확인할 수 없다(Issue #154, MED-009).
+const filledAudioBlock: SelectionMediaBlock = {
+  blockId: "media-1",
+  kind: "audio",
+  url: "https://example.com/dir/track.mp3",
+  name: "track.mp3",
+  caption: null,
+  showPreview: true,
+  textAlignment: null,
 };
 
 const renderToolbar = (controller: ReturnType<typeof fakeController>) =>
@@ -246,6 +272,119 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
         .getByRole("button", { name: "Preview" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
+  });
+
+  it("url 있는 image/video 블록을 선택하면 정렬 버튼 3개가 보인다(Issue #154, MED-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    expect(screen.getByRole("button", { name: "Align left" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Align center" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Align right" })).not.toBeNull();
+  });
+
+  it("file/audio 대상은 정렬 버튼이 없다(Issue #154, MED-009)", () => {
+    const fileController = fakeController({
+      getSelectionMediaBlock: () => filledFileBlock,
+    });
+    renderToolbar(fileController);
+    expect(screen.queryByRole("button", { name: "Align left" })).toBeNull();
+    cleanup();
+
+    const audioController = fakeController({
+      getSelectionMediaBlock: () => filledAudioBlock,
+    });
+    renderToolbar(audioController);
+    expect(screen.queryByRole("button", { name: "Align left" })).toBeNull();
+  });
+
+  it("정렬 버튼은 현재 textAlignment 값을 aria-pressed로 반영한다(Issue #154, MED-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        ...filledImageBlock,
+        textAlignment: "center",
+      }),
+    });
+    renderToolbar(controller);
+
+    expect(
+      screen
+        .getByRole("button", { name: "Align left" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "Align center" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Align right" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("정렬 버튼 클릭 시 setMediaTextAlignment를 호출하고 aria-pressed가 갱신된다(Issue #154, MED-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Align right" }));
+
+    expect(controller.commands.setMediaTextAlignment).toHaveBeenCalledWith(
+      "media-1",
+      "right",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Align right" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("이미 활성인 정렬 버튼을 다시 클릭하면 null로 해제한다(Issue #154, MED-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        ...filledImageBlock,
+        textAlignment: "right",
+      }),
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Align right" }));
+
+    expect(controller.commands.setMediaTextAlignment).toHaveBeenCalledWith(
+      "media-1",
+      null,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Align right" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("정렬 변경이 거부되면 aria-pressed를 바꾸지 않고 에러를 표시한다(Issue #154, MED-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      setMediaTextAlignment: () => ({
+        ok: false,
+        error: { code: "BLOCK_NOT_FOUND" },
+      }),
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Align left" }));
+
+    expect(screen.getByRole("alert")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Align left" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 
   it("Rename 클릭 시 현재 이름을 기본값으로 편집 입력에 초점이 간다", () => {

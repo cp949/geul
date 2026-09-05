@@ -4,17 +4,20 @@
  * setMediaPreviewWidth(슬라이스5 RD-001 DELTA-01, MED-007)와
  * setMediaShowPreview(슬라이스5 RD-002 DELTA-01, MED-008)도 이 파일이
  * 소유한다 — 같은 "media 명령 공용 골격" 관심사라 별도 파일로 쪼개지 않는다.
+ * setMediaTextAlignment(Issue #154, MED-009)도 같은 이유로 여기에 둔다.
  *
  * insertMediaBlock의 selection 계약은 divider와 다르다 — 삽입한 블록 자신을
  * NodeSelection으로 선택한다(react File Panel의 자동 오픈 판정 근거,
  * media-commands.ts 주석 참고). setMediaBlockUrl/Name/Caption/
  * BackgroundColor의 media-only 가드(blockContainer 전제 helper 재사용
  * 불가)는 editor-controller.ts의 runSetMediaBlockAttrCommand 주석 참고.
- * setMediaPreviewWidth(값 타입 number, image/video만)와 setMediaShowPreview
- * (값 타입 boolean, image/video/audio만)는 값 타입과 kind 가드가 서로도
- * 다르고 그 헬퍼와도 달라 각각 별도 함수(runSetMediaPreviewWidthCommand·
- * runSetMediaShowPreviewCommand)로 구현한다(RD-001-DELTA-01.md·
- * RD-002-DELTA-01.md "배경" 참고). 콘텐츠 렌더링(renderHTML)의 투영은
+ * setMediaPreviewWidth(값 타입 number, image/video만)·setMediaShowPreview
+ * (값 타입 boolean, image/video/audio만)·setMediaTextAlignment(값 타입
+ * string|null, image/video만)는 값 타입과 kind 가드가 서로도 다르고 그
+ * 헬퍼와도 달라 각각 별도 함수(runSetMediaPreviewWidthCommand·
+ * runSetMediaShowPreviewCommand·runSetMediaTextAlignmentCommand)로
+ * 구현한다(RD-001-DELTA-01.md·RD-002-DELTA-01.md "배경", Issue #154 계획
+ * "적용 계약과 가이드" 참고). 콘텐츠 렌더링(renderHTML)의 투영은
  * media-block-extension.test.ts가, react 소비는 RD-003/004·슬라이스5
  * DELTA-02가 소관이다.
  */
@@ -351,7 +354,63 @@ describe("setMediaShowPreview", () => {
   });
 });
 
-describe("알 수 없는 blockId — setter 6개 공통", () => {
+describe("setMediaTextAlignment(Issue #154, MED-009)", () => {
+  it.each(["image", "video"] as const)(
+    "%s: left/center/right 값을 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다",
+    (kind) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(mediaBlock(kind, "m-1"), tailParagraphBlock),
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaTextAlignment("m-1", "center")).toEqual(
+        okResult,
+      );
+      expect(editor.getDocument().blocks).toEqual([
+        mediaBlock(kind, "m-1", { textAlignment: "center" }),
+        tailParagraphBlock,
+      ]);
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+      ]);
+      expect(editor.commands.undo()).toEqual(okResult);
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+    },
+  );
+
+  it("null은 기존 정렬 값을 지운다", () => {
+    const { editor } = mounted(
+      documentOf(
+        mediaBlock("image", "m-1", { textAlignment: "left" }),
+        tailParagraphBlock,
+      ),
+    );
+    expect(editor.commands.setMediaTextAlignment("m-1", null)).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("image", "m-1"),
+      tailParagraphBlock,
+    ]);
+  });
+
+  it.each(["audio", "file"] as const)(
+    "%s 대상은 MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED이고 문서를 바꾸지 않는다",
+    (kind) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(mediaBlock(kind, "m-1")),
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaTextAlignment("m-1", "left")).toEqual({
+        ok: false,
+        error: { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" },
+      });
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+    },
+  );
+});
+
+describe("알 수 없는 blockId — setter 7개 공통", () => {
   const missingBlockCases = [
     {
       command: "setMediaBlockUrl",
@@ -382,6 +441,11 @@ describe("알 수 없는 blockId — setter 6개 공통", () => {
       command: "setMediaShowPreview",
       call: (editor: ReturnType<typeof mounted>["editor"]) =>
         editor.commands.setMediaShowPreview("missing", false),
+    },
+    {
+      command: "setMediaTextAlignment",
+      call: (editor: ReturnType<typeof mounted>["editor"]) =>
+        editor.commands.setMediaTextAlignment("missing", "left"),
     },
   ] as const;
 

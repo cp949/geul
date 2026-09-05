@@ -125,6 +125,7 @@ export type UploadFile = (file: File, signal: AbortSignal) => Promise<UploadResu
 - `setMediaBlockName(blockId, name)`, `setMediaBlockCaption(blockId, caption)`, `setMediaBlockBackgroundColor(blockId, color)`
 - `setMediaShowPreview(blockId, boolean)` — image/video/audio 대상(`MED-008`), file 대상 호출은 신규 `EditorError` 코드로 거절(§8)
 - `setMediaPreviewWidth(blockId, number)` — image/video 대상(`MED-007`), audio/file 대상 호출은 같은 방식으로 거절
+- `setMediaTextAlignment(blockId, "left" | "center" | "right" | null)` — image/video 대상(`MED-009`, Issue #154), `null`은 속성 제거(리셋). audio/file 대상 호출은 신규 `EditorError` 코드로 거절(§8)
 - 삭제는 기존 `deleteBlock` 재사용. 다운로드는 core 명령이 아니다(§6.3).
 
 ### 5.2 Drag/drop·Paste — `IO-007` 이월분 완성
@@ -198,6 +199,7 @@ HTML import에서 외부 `<a>`(geul 자체 export 형태가 아닌 임의 anchor
 
 - `MEDIA_RESIZE_NOT_SUPPORTED` — `setMediaPreviewWidth`를 audio/file 블록에 호출
 - `MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED` — `setMediaShowPreview`를 file 블록에 호출
+- `MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED` — `setMediaTextAlignment`를 audio/file 블록에 호출(Issue #154)
 
 `packages/model`의 `DOCUMENT_INVALID`를 재사용(전용 코드를 새로 만들지 않음):
 

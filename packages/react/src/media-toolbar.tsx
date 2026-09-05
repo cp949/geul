@@ -62,6 +62,10 @@ type MediaInfo = {
   // file은 null(preview 토글 자체가 없는 kind, getSelectionMediaBlock과 같은
   // 경계). image/video/audio는 실제 유효값(슬라이스5 RD-002 DELTA-02).
   showPreview: boolean | null;
+  // image/video만 실제 유효값(Issue #154, MED-009) — audio/file은
+  // 정렬 자체가 없는 kind라 null(showPreview와 반대 kind 집합,
+  // getSelectionMediaBlock과 같은 경계).
+  textAlignment: "left" | "center" | "right" | null;
 };
 
 // Upload 탭(file-panel.tsx, RD-003 DELTA-02)과 같은 모양이지만 코드는
@@ -101,7 +105,10 @@ type ToolbarState =
  * 명령을 생략)를 재사용한다. delete는 `block-selection-toolbar.tsx`처럼
  * `useTableCommandFeedback`으로 `Result` 실패를 처리한다 — 성공 뒤 focus를
  * 옮기지 않는 것도 그 전례와 같다(view 모드 버튼은 mousedown에서 초점
- * 이동을 막아 애초에 DOM 초점을 받지 않는다).
+ * 이동을 막아 애초에 DOM 초점을 받지 않는다). image/video 전용 정렬
+ * 버튼 3개(좌/중/우, Issue #154 MED-009)는 `toggleShowPreview`의
+ * "성공 시에만 로컬 state 반영" 패턴을 재사용하고, 같은 값 재클릭은
+ * 해제(`null`)한다(`setMediaAlignment` 주석 참고).
  */
 export const MediaToolbar = () => {
   const editor = useEditor();
@@ -155,6 +162,7 @@ export const MediaToolbar = () => {
       name: media.name,
       caption: media.caption,
       showPreview: media.showPreview,
+      textAlignment: media.textAlignment,
       left: bounds.left,
       top: bounds.top,
     });
@@ -262,6 +270,7 @@ export const MediaToolbar = () => {
           name: media.name,
           caption: media.caption,
           showPreview: media.showPreview,
+          textAlignment: media.textAlignment,
           left: bounds.left,
           top: bounds.top,
         };
@@ -274,8 +283,17 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const { blockId, kind, url, name, caption, showPreview, left, top } =
-      toolbarState;
+    const {
+      blockId,
+      kind,
+      url,
+      name,
+      caption,
+      showPreview,
+      textAlignment,
+      left,
+      top,
+    } = toolbarState;
     const pending = editor.getMediaUploadState(blockId);
     const upload: UploadSubState =
       pending === "uploading"
@@ -291,6 +309,7 @@ export const MediaToolbar = () => {
       name,
       caption,
       showPreview,
+      textAlignment,
       left,
       top,
       upload,
@@ -323,8 +342,17 @@ export const MediaToolbar = () => {
     if (toolbarState.upload.status === "uploading") {
       editor.commands.cancelMediaUpload(toolbarState.blockId);
     }
-    const { blockId, kind, url, name, caption, showPreview, left, top } =
-      toolbarState;
+    const {
+      blockId,
+      kind,
+      url,
+      name,
+      caption,
+      showPreview,
+      textAlignment,
+      left,
+      top,
+    } = toolbarState;
     editingRef.current = true;
     setToolbarState({
       mode: "view",
@@ -334,6 +362,7 @@ export const MediaToolbar = () => {
       name,
       caption,
       showPreview,
+      textAlignment,
       left,
       top,
     });
@@ -390,7 +419,8 @@ export const MediaToolbar = () => {
     ) {
       return;
     }
-    const { blockId, kind, url, showPreview, left, top } = toolbarState;
+    const { blockId, kind, url, showPreview, textAlignment, left, top } =
+      toolbarState;
     editingRef.current = true;
     focusEditor();
     viewBlockIdRef.current = blockId;
@@ -402,6 +432,7 @@ export const MediaToolbar = () => {
       name,
       caption,
       showPreview,
+      textAlignment,
       left,
       top,
     });
@@ -425,8 +456,17 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const { blockId, kind, url, name, caption, showPreview, left, top } =
-      toolbarState;
+    const {
+      blockId,
+      kind,
+      url,
+      name,
+      caption,
+      showPreview,
+      textAlignment,
+      left,
+      top,
+    } = toolbarState;
     setToolbarState({
       mode: "editingName",
       blockId,
@@ -435,6 +475,7 @@ export const MediaToolbar = () => {
       name,
       caption,
       showPreview,
+      textAlignment,
       left,
       top,
       draft: name ?? "",
@@ -444,8 +485,17 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const { blockId, kind, url, name, caption, showPreview, left, top } =
-      toolbarState;
+    const {
+      blockId,
+      kind,
+      url,
+      name,
+      caption,
+      showPreview,
+      textAlignment,
+      left,
+      top,
+    } = toolbarState;
     setToolbarState({
       mode: "editingCaption",
       blockId,
@@ -454,6 +504,7 @@ export const MediaToolbar = () => {
       name,
       caption,
       showPreview,
+      textAlignment,
       left,
       top,
       draft: caption ?? "",
@@ -501,6 +552,27 @@ export const MediaToolbar = () => {
         setToolbarState((prev) =>
           prev.mode === "view" && prev.blockId === blockId
             ? { ...prev, showPreview: next }
+            : prev,
+        ),
+    );
+  };
+  // image/video 전용(kind가 "image"|"video"일 때만 렌더되는 버튼 3개에서만
+  // 호출된다, 아래 JSX 게이트 — Issue #154, MED-009). 같은 값 버튼을
+  // 다시 클릭하면 해제(null)한다 — toggleInlineTextColor의 "같은 값
+  // 재적용 시 해제" 관례와 동일(runInlineColorCommand 주석 참고). 성공하면
+  // core를 다시 조회하지 않고 반영값을 로컬 state에 바로 넣는다
+  // (toggleShowPreview와 같은 패턴) — 실패하면 로컬 state를 건드리지 않아
+  // aria-pressed가 실제 문서 상태와 어긋나지 않는다.
+  const setMediaAlignment = (align: "left" | "center" | "right") => {
+    if (toolbarState.mode !== "view") return;
+    const { blockId, textAlignment } = toolbarState;
+    const next = textAlignment === align ? null : align;
+    runCommand(
+      () => editor.commands.setMediaTextAlignment(blockId, next),
+      () =>
+        setToolbarState((prev) =>
+          prev.mode === "view" && prev.blockId === blockId
+            ? { ...prev, textAlignment: next }
             : prev,
         ),
     );
@@ -563,6 +635,40 @@ export const MediaToolbar = () => {
             >
               Preview
             </button>
+          )}
+          {(toolbarState.kind === "image" || toolbarState.kind === "video") && (
+            <>
+              <button
+                aria-label="Align left"
+                aria-pressed={toolbarState.textAlignment === "left"}
+                className={mediaToolbarButtonClassName}
+                onClick={() => setMediaAlignment("left")}
+                onMouseDown={(event) => event.preventDefault()}
+                type="button"
+              >
+                Align left
+              </button>
+              <button
+                aria-label="Align center"
+                aria-pressed={toolbarState.textAlignment === "center"}
+                className={mediaToolbarButtonClassName}
+                onClick={() => setMediaAlignment("center")}
+                onMouseDown={(event) => event.preventDefault()}
+                type="button"
+              >
+                Align center
+              </button>
+              <button
+                aria-label="Align right"
+                aria-pressed={toolbarState.textAlignment === "right"}
+                className={mediaToolbarButtonClassName}
+                onClick={() => setMediaAlignment("right")}
+                onMouseDown={(event) => event.preventDefault()}
+                type="button"
+              >
+                Align right
+              </button>
+            </>
           )}
           <button
             aria-label="Delete media block"

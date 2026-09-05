@@ -360,8 +360,9 @@ export const dividerBetweenParagraphsDocument = () =>
 /**
  * 4종 미디어 블록(file/image/video/audio) 리터럴 — insertMediaBlock·
  * setMediaBlockUrl/Name/Caption/BackgroundColor·setMediaPreviewWidth·
- * setMediaShowPreview 명령 테스트(editor-controller-media-commands.test.ts)가
- * 공유한다. previewWidth는 image/video만(RD-001 DELTA-01), showPreview는
+ * setMediaShowPreview·setMediaTextAlignment 명령 테스트
+ * (editor-controller-media-commands.test.ts)가 공유한다. previewWidth·
+ * textAlignment는 image/video만(RD-001 DELTA-01, Issue #154), showPreview는
  * image/video/audio만(RD-002 DELTA-01) 갖는 kind 전용 prop이라 호출부가 그
  * kind에만 넘긴다. quote·divider와 같은 저장 정규형 원칙(생략 가능한 필드는
  * 값이 있을 때만 넣는다)을 따른다.
@@ -376,6 +377,7 @@ export const mediaBlock = (
     backgroundColor?: string;
     previewWidth?: number;
     showPreview?: boolean;
+    textAlignment?: "left" | "center" | "right";
   },
 ): Block => {
   const common = {
@@ -391,15 +393,19 @@ export const mediaBlock = (
     props?.previewWidth === undefined
       ? {}
       : { previewWidth: props.previewWidth };
+  const align =
+    props?.textAlignment === undefined
+      ? {}
+      : { textAlignment: props.textAlignment };
   const show =
     props?.showPreview === undefined ? {} : { showPreview: props.showPreview };
   switch (kind) {
     case "file":
       return { ...common, type: "file" };
     case "image":
-      return { ...common, ...preview, ...show, type: "image" };
+      return { ...common, ...preview, ...align, ...show, type: "image" };
     case "video":
-      return { ...common, ...preview, ...show, type: "video" };
+      return { ...common, ...preview, ...align, ...show, type: "video" };
     case "audio":
       return { ...common, ...show, type: "audio" };
   }

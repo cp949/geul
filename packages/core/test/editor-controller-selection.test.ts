@@ -293,6 +293,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
         name: null,
         caption: null,
         showPreview: kind === "file" ? null : true,
+        textAlignment: null,
       });
     },
   );
@@ -318,6 +319,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
       name: "pic.png",
       caption: "a cat",
       showPreview: true,
+      textAlignment: null,
     });
   });
 
@@ -340,6 +342,31 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
         name: null,
         caption: null,
         showPreview: false,
+        textAlignment: null,
+      });
+    },
+  );
+
+  it.each(["image", "video"] as const)(
+    "%s: textAlignment이 세팅된 블록을 선택하면 그대로 보고한다(Issue #154, MED-009)",
+    (kind) => {
+      const editor = createEditor({
+        initialDocument: documentOf(
+          mediaBlock(kind, "m-1", { textAlignment: "center" }),
+          tailParagraphBlock,
+        ),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      selectBlockNode(tiptap, "m-1");
+
+      expect(editor.getSelectionMediaBlock()).toEqual({
+        blockId: "m-1",
+        kind,
+        url: null,
+        name: null,
+        caption: null,
+        showPreview: true,
+        textAlignment: "center",
       });
     },
   );

@@ -6,7 +6,11 @@
  * Escape/바깥 클릭에 따른 닫힘과 focus 복원 차이를 실제 Chromium event
  * 순서로 검증한다. Preview 토글(image/video/audio 전용, 슬라이스5 RD-002
  * DELTA-03)의 `<img>`↔`<a>` 실제 DOM 교체·undo·aria-pressed·JSON
- * round-trip도 이 파일이 검증한다.
+ * round-trip도 이 파일이 검증한다. 정렬 버튼 3개(image/video 전용, Issue
+ * #154 MED-009)의 aria-pressed 반영·undo 1회 복원·audio/file 미노출도
+ * 검증한다 — textAlignment는 아직 편집 DOM에 투영하지 않아(media-block-
+ * extension.ts 주석) 시각 스타일이 아닌 aria-pressed로 "DOM 반영"을
+ * 확인한다.
  */
 import { expect, test } from "@playwright/test";
 
@@ -256,4 +260,139 @@ test("showPreview:false가 Save/Load JSON round-trip 이후에도 유지된다 @
     "href",
     "https://example.com/dir/photo.png",
   );
+});
+
+test("정렬 버튼 클릭 시 aria-pressed가 반영되고 undo 1회로 복원된다(Issue #154, MED-009) @core", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+
+  const leftButton = page.getByRole("button", { name: "Align left" });
+  const centerButton = page.getByRole("button", { name: "Align center" });
+  const rightButton = page.getByRole("button", { name: "Align right" });
+  await expect(leftButton).toHaveAttribute("aria-pressed", "false");
+  await expect(centerButton).toHaveAttribute("aria-pressed", "false");
+  await expect(rightButton).toHaveAttribute("aria-pressed", "false");
+
+  await centerButton.click();
+
+  await expect(centerButton).toHaveAttribute("aria-pressed", "true");
+  await expect(leftButton).toHaveAttribute("aria-pressed", "false");
+  await expect(rightButton).toHaveAttribute("aria-pressed", "false");
+
+  await page.keyboard.press("Control+z");
+
+  await expect(centerButton).toHaveAttribute("aria-pressed", "false");
+});
+
+test("이미 활성인 정렬 버튼을 다시 클릭하면 해제되고 undo 1회로 복원된다(Issue #154, MED-009)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  const rightButton = page.getByRole("button", { name: "Align right" });
+
+  await rightButton.click();
+  await expect(rightButton).toHaveAttribute("aria-pressed", "true");
+
+  await rightButton.click();
+
+  await expect(rightButton).toHaveAttribute("aria-pressed", "false");
+
+  await page.keyboard.press("Control+z");
+
+  await expect(rightButton).toHaveAttribute("aria-pressed", "true");
+});
+
+test("정렬 값이 Save/Load JSON round-trip 이후에도 유지된다(Issue #154, MED-009) @core", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const source = page.getByLabel("Document source");
+  await insertFilledImage(page, editable);
+
+  await page.getByRole("button", { name: "Align center" }).click();
+  await expect(
+    page.getByRole("button", { name: "Align center" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  // Media toolbar가 열린 채로 "Save JSON"(편집기 바깥 버튼)을 바로 클릭하지
+  // 않는다 — 위 showPreview round-trip 테스트와 같은 이유(바깥-클릭 dismiss와
+  // Save JSON 자신의 onClick이 동시에 수행돼야 하는 조합의 기존 결함,
+  // `pending-issues/02.md`). Escape로 먼저 닫는다.
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  await expect(source).toContainText('"textAlignment": "center"');
+  const json = await source.inputValue();
+
+  await editable.fill("Temporary text");
+  await source.fill(json);
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  // textAlignment는 편집 DOM에 시각 투영되지 않으므로(media-block-
+  // extension.ts 주석) 이미지를 다시 선택해 toolbar aria-pressed로 복원
+  // 여부를 확인한다.
+  const wrapper = editable
+    .locator("[data-be-block-id]")
+    .filter({ has: page.locator("img") });
+  await wrapper.click();
+  await expect(
+    page.getByRole("button", { name: "Align center" }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("file 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-009)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/file");
+  await page.getByRole("option", { name: /^File/ }).click();
+  await page
+    .getByRole("textbox", { name: "File URL" })
+    .fill("https://example.com/dir/doc.pdf");
+  await page.getByRole("button", { name: "Save URL" }).click();
+  await page.keyboard.press("Escape");
+
+  const wrapper = editable
+    .locator("[data-be-block-id]")
+    .filter({ has: page.locator("a") });
+  await wrapper.click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+
+  await expect(page.getByRole("button", { name: "Align left" })).toHaveCount(0);
+});
+
+test("audio 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-009)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/audio");
+  await page.getByRole("option", { name: /^Audio/ }).click();
+  await page
+    .getByRole("textbox", { name: "Audio URL" })
+    .fill("https://example.com/dir/track.mp3");
+  await page.getByRole("button", { name: "Save URL" }).click();
+  await page.keyboard.press("Escape");
+
+  const wrapper = editable
+    .locator("[data-be-block-id]")
+    .filter({ has: page.locator("audio") });
+  await wrapper.click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+
+  await expect(page.getByRole("button", { name: "Align left" })).toHaveCount(0);
+  // Preview 토글은 audio 대상이라 여전히 노출된다(슬라이스5 RD-002
+  // DELTA-01) — 정렬 버튼만 image/video 전용으로 구분됨을 함께 확인한다.
+  await expect(page.getByRole("button", { name: "Preview" })).toBeVisible();
 });
