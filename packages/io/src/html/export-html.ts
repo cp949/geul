@@ -43,6 +43,123 @@ const textBlockPropsAttributes = (
     : { dataBeTextAlignment: block.textAlignment }),
 });
 
+// 4종 leaf 미디어 블록 공통 판별 타입(spec §3.1) — url/name/caption/
+// backgroundColor는 4종 공통, showPreview는 image/video/audio, previewWidth/
+// textAlignment는 image/video만 갖는다(model MediaBlockCommon과 동형).
+type MediaBlock = Extract<
+  Document["blocks"][number],
+  { type: "file" | "image" | "video" | "audio" }
+>;
+
+// outer 요소(figure 있으면 figure, 없으면 bare 시각 태그/빈 div)가 항상 싣는
+// data-be-*(RD-001-DELTA-01.md "설계" 키 순서 고정). dataBeMediaType은
+// own-format 마커 겸 showPreview:false 강등 시 타입 판별자를 겸한다(RD-001.md
+// "결정" — file과 강등된 image/video/audio가 똑같이 <a>로 나오므로 태그명만
+// 으로 구분할 수 없다). dataBeName은 caption이 alt를 덮어써도(image) name이
+// 사라지지 않도록 4종 공통 단일 진실 공급원으로 별도로 싣는다 — alt·anchor
+// 텍스트는 표현용일 뿐 권위 있는 값이 아니다.
+const mediaDataAttributes = (
+  block: MediaBlock,
+): HtmlElementNode["properties"] => ({
+  dataBeBlockId: block.id,
+  dataBeMediaType: block.type,
+  ...(block.name === undefined ? {} : { dataBeName: block.name }),
+  ...(block.backgroundColor === undefined
+    ? {}
+    : { dataBeBackgroundColor: block.backgroundColor }),
+  ...(block.type !== "file" && block.showPreview !== undefined
+    ? { dataBeShowPreview: String(block.showPreview) }
+    : {}),
+  ...((block.type === "image" || block.type === "video") &&
+  block.previewWidth !== undefined
+    ? { dataBePreviewWidth: String(block.previewWidth) }
+    : {}),
+  ...((block.type === "image" || block.type === "video") &&
+  block.textAlignment !== undefined
+    ? { dataBeTextAlignment: block.textAlignment }
+    : {}),
+});
+
+// image의 model type은 "image"지만 HTML 태그명은 "img"다 — video/audio는
+// 타입명과 태그명이 같다.
+const mediaVisualTagName = (type: "image" | "video" | "audio"): string =>
+  type === "image" ? "img" : type;
+
+// file, 또는 showPreview:false로 강등된 image/video/audio가 공유하는 <a>
+// 출력이다. name이 없으면 url 자체를 링크 텍스트로 쓴다(core
+// mediaAnchorChildren 선례 재사용, 슬라이스5 RD-002.md "결정" 대응) —
+// io는 별도 계약이지만(ADR-0002) 같은 질문에 같은 답을 반복하지 않는다.
+// extraAttrs가 비어 있지 않으면 이 태그 자신이 outer(figure로 감싸지 않음)
+// 라는 뜻이다 — figure로 감쌀 때는 빈 객체를 넘긴다(data-be-*는 figure가
+// 갖는다).
+const mediaAnchorNode = (
+  url: string,
+  name: string | undefined,
+  extraAttrs: HtmlElementNode["properties"],
+): HtmlElementNode =>
+  htmlElement("a", { href: url, ...extraAttrs }, [
+    { type: "text", value: name ?? url },
+  ]);
+
+// image/video/audio의 정상(showPreview !== false) 시각 태그. alt는 spec
+// §2.2·§7.1대로 caption이 있으면 caption, 없으면 name을 재사용한다(별도 alt
+// prop 신설 없음 — 2026-09-04 사용자 확정, core ImageBlockExtension과 동일
+// 공식).
+const mediaVisualNode = (
+  block: Extract<MediaBlock, { type: "image" | "video" | "audio" }>,
+  url: string,
+  extraAttrs: HtmlElementNode["properties"],
+): HtmlElementNode => {
+  if (block.type === "image") {
+    return htmlElement(
+      "img",
+      {
+        src: url,
+        alt: block.caption ?? block.name ?? "",
+        ...extraAttrs,
+      },
+      [],
+    );
+  }
+  return htmlElement(
+    mediaVisualTagName(block.type),
+    { src: url, controls: true, ...extraAttrs },
+    [],
+  );
+};
+
+// 4종 미디어 블록의 HTML export 전체(spec §7.1). url 없는 빈 블록은
+// 크래시 없이 data-be-*만 실은 <div>로 보존한다(문서에 실제로 존재할 수
+// 있는 상태 — model이 url을 optional로 둔다, 시각 콘텐츠가 없을 뿐 name·
+// caption 등은 여전히 round-trip 대상이다).
+const mediaBlockNode = (block: MediaBlock): HtmlElementNode => {
+  const dataAttrs = mediaDataAttributes(block);
+  const { url, caption } = block;
+
+  if (url === undefined) {
+    return htmlElement(
+      "div",
+      dataAttrs,
+      caption === undefined
+        ? []
+        : [htmlElement("figcaption", {}, [{ type: "text", value: caption }])],
+    );
+  }
+
+  const suppressed = block.type !== "file" && block.showPreview === false;
+  const visual =
+    block.type === "file" || suppressed
+      ? mediaAnchorNode(url, block.name, caption === undefined ? dataAttrs : {})
+      : mediaVisualNode(block, url, caption === undefined ? dataAttrs : {});
+
+  if (caption === undefined) return visual;
+
+  return htmlElement("figure", dataAttrs, [
+    visual,
+    htmlElement("figcaption", {}, [{ type: "text", value: caption }]),
+  ]);
+};
+
 const cellNode = (
   table: TableBlock,
   rowIndex: number,
@@ -289,20 +406,14 @@ const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
   if (block.type === "divider") {
     return htmlElement("hr", { dataBeBlockId: block.id }, []);
   }
-  // 4종 미디어 블록(file/image/video/audio) — RD-003(io 컴파일 안전 최소
-  // 패치, R3 슬라이스1)의 placeholder다. 실제 spec §7.1
-  // <figure>/<img>/<video>/<audio>/<a> 매핑은 슬라이스6이 구현하고 이
-  // 분기를 교체한다. 지금은 어떤 사용자 경로도 이 4종을 포함한 문서를
-  // export로 넘기지 않으므로(슬라이스2 이후에나 생성 가능) 출력 형태
-  // 자체는 관찰되지 않는다 — 목적은 model Block union 확장 뒤에도 이
-  // 함수가 컴파일되는 것뿐이다(빈 <div>, content·children 미접근).
+  // 4종 미디어 블록(file/image/video/audio, spec §7.1) — RD-001-DELTA-01.
   if (
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
     block.type === "audio"
   ) {
-    return htmlElement("div", { dataBeBlockId: block.id }, []);
+    return mediaBlockNode(block);
   }
   // quote → <blockquote data-be-block-id><p>content</p>[<div
   // data-be-children>children</div>]</blockquote>(spec §7.1 — children은
