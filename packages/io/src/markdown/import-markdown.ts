@@ -474,6 +474,38 @@ const paragraphFromText = (
   content: text.length === 0 ? [] : [{ text }],
 });
 
+// paragraph가 image/imageReference 노드 하나만 담을 때 ImageBlock으로
+// 승격한다(Issue #152 슬라이스6, RD-002 DELTA-02, spec §7.3). image
+// 타입은 url 유무와 무관하게 항상 승격한다 — `![alt]()`는 문법 자체가
+// 모호함 없이 "url 없는 이미지"를 뜻한다(HTML DELTA-02가 이미 url 없는
+// media 블록을 정당한 상태로 다룬 전례). imageReference는 참조가
+// 해석됐을 때만(node.url !== undefined) 승격하고, 끊어진 참조(정의
+// 없음)는 undefined를 반환해 호출자가 기존 다운그레이드(readInlineNodes의
+// missingIdentifier 텍스트 + IMAGE_DOWNGRADED)를 그대로 쓰게 한다 — 실패
+// 정보를 조용히 버리지 않는다(G-CNV-002). alt/url이 빈 문자열이면 해당
+// model 필드 자체를 생략한다(paragraphFromText의 "빈 문자열은 생략"
+// 관례 재사용 — export-markdown.ts가 name 없을 때 alt=""로 내므로
+// 대칭을 지켜야 정확한 round-trip identity가 성립한다).
+const imageBlockFromSingleChild = (
+  node: MarkdownNode,
+  createId: IdFactory,
+): Document["blocks"][number] | undefined => {
+  if (node.type !== "image" && node.type !== "imageReference") {
+    return undefined;
+  }
+  if (node.type === "imageReference" && node.url === undefined) {
+    return undefined;
+  }
+  const url = node.url ?? "";
+  const name = node.alt ?? "";
+  return {
+    id: createId(),
+    type: "image",
+    ...(url.length === 0 ? {} : { url }),
+    ...(name.length === 0 ? {} : { name }),
+  };
+};
+
 // 서로 다른 mdast node가 만든 block sequence는 model의 평평한 형제
 // 배열에서 컨테이너 경계를 잃는다. 앞 numbered sibling과 인접한 새
 // sequence의 첫 numbered 항목에 start를 명시해 GFM 번호 재시작을 보존한다.
@@ -675,7 +707,14 @@ function blocksFromNode(
     return listBlocksFromNode(node, createId, warnings);
   }
   if (node.type === "paragraph") {
-    return [paragraphFromNodes(node.children ?? [], createId, warnings)];
+    const children = node.children ?? [];
+    const onlyChild = children.length === 1 ? children[0] : undefined;
+    const promoted =
+      onlyChild === undefined
+        ? undefined
+        : imageBlockFromSingleChild(onlyChild, createId);
+    if (promoted !== undefined) return [promoted];
+    return [paragraphFromNodes(children, createId, warnings)];
   }
 
   if (node.type === "code") {
