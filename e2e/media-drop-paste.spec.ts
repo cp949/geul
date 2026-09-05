@@ -70,7 +70,7 @@ const setupTwoParagraphsAndTargetBox = async (
   return box;
 };
 
-test("drop 좌표가 대상 블록 rect 실측 위쪽 절반이면 그 블록 앞에 삽입되고 실제 업로드까지 완주한다", async ({
+test("drop 좌표가 대상 블록 rect 실측 위쪽 절반이면 그 블록 앞에 삽입되고 실제 업로드까지 완주한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
