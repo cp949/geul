@@ -2,12 +2,14 @@
 
 /**
  * MediaToolbar 컴포넌트: url 있는 미디어 블록 선택 시 rename/caption/
- * delete/download 4개 control 노출, 빈 블록(url 없음)에는 렌더링하지
+ * delete/download 4개 control 노출(image/video/audio는 preview 토글까지
+ * 5개, 슬라이스5 RD-002 DELTA-02), 빈 블록(url 없음)에는 렌더링하지
  * 않음(FilePanel과 상호 배타), rename/caption의 draft/Save/Cancel 편집과
  * 실패 시 에러 표시, delete의 명령 호출, download 링크의 href/download
  * 속성, selectionchange에 따른 표시·숨김 전환, Escape/바깥 클릭에 따른
  * 닫힘과 focus 복원 차이(RD-004 DELTA-01), Replace 트리거의 파일 선택·
- * loading/에러·retry·cancel(RD-003 DELTA-03)을 검증한다.
+ * loading/에러·retry·cancel(RD-003 DELTA-03), preview 토글의 노출 조건·
+ * aria-pressed·명령 호출과 실패 처리(슬라이스5 RD-002 DELTA-02)를 검증한다.
  */
 
 import type { EditorError, MediaBlockKind } from "@cp949/geul-core";
@@ -35,6 +37,7 @@ type SelectionMediaBlock = {
   url: string | null;
   name: string | null;
   caption: string | null;
+  showPreview: boolean | null;
 };
 
 type CommandResult = { ok: boolean; error?: { code: string } };
@@ -49,6 +52,7 @@ type FakeControllerOptions = {
   getSelectionMediaBlock?: () => SelectionMediaBlock | null;
   setMediaBlockName?: (blockId: string, name: string) => CommandResult;
   setMediaBlockCaption?: (blockId: string, caption: string) => CommandResult;
+  setMediaShowPreview?: (blockId: string, show: boolean) => CommandResult;
   deleteBlock?: (blockId: string) => CommandResult;
   isUploadEnabled?: () => boolean;
   getMediaUploadState?: (blockId: string) => MediaUploadState;
@@ -62,6 +66,7 @@ const fakeController = ({
   getSelectionMediaBlock = () => null,
   setMediaBlockName = () => ({ ok: true }),
   setMediaBlockCaption = () => ({ ok: true }),
+  setMediaShowPreview = () => ({ ok: true }),
   deleteBlock = () => ({ ok: true }),
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
@@ -89,6 +94,7 @@ const fakeController = ({
   commands: {
     setMediaBlockName: vi.fn(setMediaBlockName),
     setMediaBlockCaption: vi.fn(setMediaBlockCaption),
+    setMediaShowPreview: vi.fn(setMediaShowPreview),
     deleteBlock: vi.fn(deleteBlock),
     replaceMediaBlockFile: vi.fn(replaceMediaBlockFile),
     cancelMediaUpload: vi.fn(() => ({ ok: true, value: undefined })),
@@ -101,6 +107,7 @@ const emptyImageBlock: SelectionMediaBlock = {
   url: null,
   name: null,
   caption: null,
+  showPreview: true,
 };
 
 const filledImageBlock: SelectionMediaBlock = {
@@ -109,6 +116,16 @@ const filledImageBlock: SelectionMediaBlock = {
   url: "https://example.com/dir/photo.png",
   name: "photo.png",
   caption: null,
+  showPreview: true,
+};
+
+const filledFileBlock: SelectionMediaBlock = {
+  blockId: "media-1",
+  kind: "file",
+  url: "https://example.com/dir/doc.pdf",
+  name: "doc.pdf",
+  caption: null,
+  showPreview: null,
 };
 
 const renderToolbar = (controller: ReturnType<typeof fakeController>) =>
@@ -143,7 +160,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
-  it("url 있는 미디어 블록을 선택하면 4개 control이 보인다", () => {
+  it("url 있는 미디어 블록을 선택하면 5개 control이 보인다(image/video/audio, 슬라이스5 RD-002 DELTA-02)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
@@ -154,10 +171,81 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     ).not.toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Edit caption" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Preview" })).not.toBeNull();
     expect(
       screen.getByRole("button", { name: "Delete media block" }),
     ).not.toBeNull();
     expect(screen.getByRole("link", { name: "Download" })).not.toBeNull();
+  });
+
+  it("file 대상은 Preview 토글 버튼이 없다(4개 control, 슬라이스5 RD-002 DELTA-02)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledFileBlock,
+    });
+    renderToolbar(controller);
+
+    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Edit caption" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Delete media block" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Download" })).not.toBeNull();
+  });
+
+  it("Preview 버튼은 현재 showPreview 값을 aria-pressed로 반영한다(슬라이스5 RD-002 DELTA-02)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        ...filledImageBlock,
+        showPreview: false,
+      }),
+    });
+    renderToolbar(controller);
+
+    expect(
+      screen
+        .getByRole("button", { name: "Preview" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("Preview 클릭 시 setMediaShowPreview를 반대 값으로 호출하고 aria-pressed가 갱신된다(슬라이스5 RD-002 DELTA-02)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(controller.commands.setMediaShowPreview).toHaveBeenCalledWith(
+      "media-1",
+      false,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Preview" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("Preview 토글이 거부되면 aria-pressed를 바꾸지 않고 에러를 표시한다(슬라이스5 RD-002 DELTA-02)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      setMediaShowPreview: () => ({
+        ok: false,
+        error: { code: "BLOCK_NOT_FOUND" },
+      }),
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(screen.getByRole("alert")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Preview" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("Rename 클릭 시 현재 이름을 기본값으로 편집 입력에 초점이 간다", () => {

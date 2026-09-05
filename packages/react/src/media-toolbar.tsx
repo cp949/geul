@@ -59,6 +59,9 @@ type MediaInfo = {
   url: string;
   name: string | null;
   caption: string | null;
+  // file은 null(preview 토글 자체가 없는 kind, getSelectionMediaBlock과 같은
+  // 경계). image/video/audio는 실제 유효값(슬라이스5 RD-002 DELTA-02).
+  showPreview: boolean | null;
 };
 
 // Upload 탭(file-panel.tsx, RD-003 DELTA-02)과 같은 모양이지만 코드는
@@ -151,6 +154,7 @@ export const MediaToolbar = () => {
       url: media.url,
       name: media.name,
       caption: media.caption,
+      showPreview: media.showPreview,
       left: bounds.left,
       top: bounds.top,
     });
@@ -257,6 +261,7 @@ export const MediaToolbar = () => {
           url: media.url,
           name: media.name,
           caption: media.caption,
+          showPreview: media.showPreview,
           left: bounds.left,
           top: bounds.top,
         };
@@ -269,7 +274,8 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const { blockId, kind, url, name, caption, left, top } = toolbarState;
+    const { blockId, kind, url, name, caption, showPreview, left, top } =
+      toolbarState;
     const pending = editor.getMediaUploadState(blockId);
     const upload: UploadSubState =
       pending === "uploading"
@@ -284,6 +290,7 @@ export const MediaToolbar = () => {
       url,
       name,
       caption,
+      showPreview,
       left,
       top,
       upload,
@@ -316,7 +323,8 @@ export const MediaToolbar = () => {
     if (toolbarState.upload.status === "uploading") {
       editor.commands.cancelMediaUpload(toolbarState.blockId);
     }
-    const { blockId, kind, url, name, caption, left, top } = toolbarState;
+    const { blockId, kind, url, name, caption, showPreview, left, top } =
+      toolbarState;
     editingRef.current = true;
     setToolbarState({
       mode: "view",
@@ -325,6 +333,7 @@ export const MediaToolbar = () => {
       url,
       name,
       caption,
+      showPreview,
       left,
       top,
     });
@@ -381,7 +390,7 @@ export const MediaToolbar = () => {
     ) {
       return;
     }
-    const { blockId, kind, url, left, top } = toolbarState;
+    const { blockId, kind, url, showPreview, left, top } = toolbarState;
     editingRef.current = true;
     focusEditor();
     viewBlockIdRef.current = blockId;
@@ -392,6 +401,7 @@ export const MediaToolbar = () => {
       url,
       name,
       caption,
+      showPreview,
       left,
       top,
     });
@@ -415,7 +425,8 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const { blockId, kind, url, name, caption, left, top } = toolbarState;
+    const { blockId, kind, url, name, caption, showPreview, left, top } =
+      toolbarState;
     setToolbarState({
       mode: "editingName",
       blockId,
@@ -423,6 +434,7 @@ export const MediaToolbar = () => {
       url,
       name,
       caption,
+      showPreview,
       left,
       top,
       draft: name ?? "",
@@ -432,7 +444,8 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const { blockId, kind, url, name, caption, left, top } = toolbarState;
+    const { blockId, kind, url, name, caption, showPreview, left, top } =
+      toolbarState;
     setToolbarState({
       mode: "editingCaption",
       blockId,
@@ -440,6 +453,7 @@ export const MediaToolbar = () => {
       url,
       name,
       caption,
+      showPreview,
       left,
       top,
       draft: caption ?? "",
@@ -468,6 +482,27 @@ export const MediaToolbar = () => {
     runCommand(
       () => editor.commands.setMediaBlockCaption(blockId, draft),
       () => finishEditing(name, draft),
+    );
+  };
+  // image/video/audio 전용(kind !== "file"일 때만 렌더되는 버튼에서만
+  // 호출된다, 아래 JSX 게이트). 성공하면 core를 다시 조회하지 않고
+  // 반전값을 로컬 state에 바로 반영한다(applyName/applyCaption과 같은
+  // 패턴) — 실패하면 로컬 state를 건드리지 않아 aria-pressed가 실제
+  // 문서 상태와 어긋나지 않는다(슬라이스5 RD-002 DELTA-02).
+  const toggleShowPreview = () => {
+    if (toolbarState.mode !== "view" || toolbarState.showPreview === null) {
+      return;
+    }
+    const { blockId, showPreview } = toolbarState;
+    const next = !showPreview;
+    runCommand(
+      () => editor.commands.setMediaShowPreview(blockId, next),
+      () =>
+        setToolbarState((prev) =>
+          prev.mode === "view" && prev.blockId === blockId
+            ? { ...prev, showPreview: next }
+            : prev,
+        ),
     );
   };
   const handleDelete = () => {
@@ -517,6 +552,18 @@ export const MediaToolbar = () => {
           >
             Caption
           </button>
+          {toolbarState.kind !== "file" && (
+            <button
+              aria-label="Preview"
+              aria-pressed={toolbarState.showPreview === true}
+              className={mediaToolbarButtonClassName}
+              onClick={toggleShowPreview}
+              onMouseDown={(event) => event.preventDefault()}
+              type="button"
+            >
+              Preview
+            </button>
+          )}
           <button
             aria-label="Delete media block"
             className={dangerButtonClassName}

@@ -292,6 +292,7 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
         url: null,
         name: null,
         caption: null,
+        showPreview: kind === "file" ? null : true,
       });
     },
   );
@@ -316,8 +317,32 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
       url: "https://example.com/pic.png",
       name: "pic.png",
       caption: "a cat",
+      showPreview: true,
     });
   });
+
+  it.each(["image", "video", "audio"] as const)(
+    "%s: showPreview:false인 블록을 선택하면 그대로 보고한다(슬라이스5 RD-002 DELTA-02)",
+    (kind) => {
+      const editor = createEditor({
+        initialDocument: documentOf(
+          mediaBlock(kind, "m-1", { showPreview: false }),
+          tailParagraphBlock,
+        ),
+      });
+      const { tiptap } = mountTiptapEditor(editor);
+      selectBlockNode(tiptap, "m-1");
+
+      expect(editor.getSelectionMediaBlock()).toEqual({
+        blockId: "m-1",
+        kind,
+        url: null,
+        name: null,
+        caption: null,
+        showPreview: false,
+      });
+    },
+  );
 
   it("텍스트 선택(NodeSelection 아님)에서는 미디어 블록 선택이 null이다", () => {
     const editor = createEditor({
