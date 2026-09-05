@@ -39,8 +39,8 @@ Chrome 75를 지원해야 하는 사용처는 두 가지를 설정한다.
 
 ## 개발 환경
 
-- Node.js 22.12 이상
-- pnpm 11.21.0
+- Node.js 24.18 이상
+- pnpm 11.25.0
 
 ```bash
 pnpm install

@@ -20,12 +20,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.12.0
+          node-version: 24.18.1
 
       - name: Activate pinned pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@10.34.5 --activate
+          corepack prepare pnpm@11.25.0 --activate
 
       - name: Install dependencies from lockfile
         run: pnpm install --frozen-lockfile
