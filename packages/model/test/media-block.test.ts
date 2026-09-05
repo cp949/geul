@@ -9,17 +9,18 @@ import { describe, expect, it } from "vitest";
 import { isValidMediaPreviewWidth } from "../src/index.js";
 
 describe("isValidMediaPreviewWidth", () => {
-  it.each([1, 0.5, 320, 1_000_000])(
-    "양의 유한수 %s를 허용한다",
-    (value) => {
-      expect(isValidMediaPreviewWidth(value)).toBe(true);
-    },
-  );
+  it.each([1, 0.5, 320, 1_000_000])("양의 유한수 %s를 허용한다", (value) => {
+    expect(isValidMediaPreviewWidth(value)).toBe(true);
+  });
 
-  it.each([0, -1, -0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
-    "0·음수·유한하지 않은 값 %s를 거부한다",
-    (value) => {
-      expect(isValidMediaPreviewWidth(value)).toBe(false);
-    },
-  );
+  it.each([
+    0,
+    -1,
+    -0.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ])("0·음수·유한하지 않은 값 %s를 거부한다", (value) => {
+    expect(isValidMediaPreviewWidth(value)).toBe(false);
+  });
 });
