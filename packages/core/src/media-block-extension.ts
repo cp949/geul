@@ -29,11 +29,14 @@ import { mergeAttributes, Node } from "@tiptap/core";
 //
 // renderHTML은 kind별 실제 콘텐츠(url/name/caption)만 DOM에 투영한다
 // (RD-002 DELTA-01) — react가 selection·toolbar·File Panel을 붙일 대상을
-// 얻는다(spec §6.1~§6.3). showPreview/previewWidth/textAlignment/
-// backgroundColor는 아직 DOM에 투영하지 않는다(슬라이스5 resize·preview
-// 토글 몫, RD-002.md 제외 범위). io HTML export/import의 <figure> 계약
-// (packages/io, 슬라이스6)과는 별개다 — 여기 DOM 모양이 그 계약을 구속하지
-// 않는다(ADR-0002 — io는 PM DOM이 아니라 저장 Document를 직접 읽고 쓴다).
+// 얻는다(spec §6.1~§6.3). image/video의 previewWidth는 슬라이스5 RD-001
+// DELTA-01이 인라인 width 스타일로 투영을 완성했다(아래
+// previewWidthStyleAttrs). showPreview/textAlignment/backgroundColor는
+// 아직 DOM에 투영하지 않는다(showPreview는 슬라이스5 RD-002 몫,
+// textAlignment는 roadmap.md "결과 경계" 제외 범위 — pending-issue로 이월).
+// io HTML export/import의 <figure> 계약(packages/io, 슬라이스6)과는
+// 별개다 — 여기 DOM 모양이 그 계약을 구속하지 않는다(ADR-0002 — io는 PM
+// DOM이 아니라 저장 Document를 직접 읽고 쓴다).
 const blockIdAttribute = () => ({
   blockId: {
     default: null,
@@ -69,6 +72,22 @@ const previewAttributes = () => ({
 // UI(RD-003 File Panel)를 붙이기 전까지 화면에 아무 영향이 없다.
 const nonEmptyString = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
+
+// previewWidth 인라인 width 스타일 투영(슬라이스5 RD-001 DELTA-01, spec
+// §5.1 MED-007). 실제 clamp(64px~content 폭)는 react 리사이즈 핸들이
+// 담당하고(§6.3) 여기는 model이 이미 검증한 값을 그대로 옮기기만 한다 —
+// 방어적으로 양의 유한수가 아니면 스타일을 내지 않는다(로드 경로가 항상
+// isValidMediaPreviewWidth를 통과한 값만 주지만, 이 렌더 함수 자체는 그
+// 보장에 기대지 않는다). image/video만 호출한다 — file/audio는 attrs
+// 자체에 previewWidth가 없다.
+const previewWidthStyleAttrs = (
+  attrs: Record<string, unknown>,
+): Record<string, string> => {
+  const width = attrs.previewWidth;
+  return typeof width === "number" && Number.isFinite(width) && width > 0
+    ? { style: `width: ${width}px` }
+    : {};
+};
 
 // caption은 4종 공통이라 헬퍼 하나로 공유한다. 없으면 DOM에 아무 것도
 // 남기지 않는다(완료 조건 2) — 조건부로 배열에 넣지 않는 방식이지 빈
@@ -125,7 +144,18 @@ export const ImageBlockExtension = Node.create({
     // alt는 caption이 있으면 caption, 없으면 name을 재사용한다(spec §6.3,
     // 별도 alt prop 신설 없음 — 2026-09-04 사용자 확정).
     const children: DOMOutputSpec[] =
-      url === null ? [] : [["img", { src: url, alt: caption ?? name ?? "" }]];
+      url === null
+        ? []
+        : [
+            [
+              "img",
+              {
+                src: url,
+                alt: caption ?? name ?? "",
+                ...previewWidthStyleAttrs(node.attrs),
+              },
+            ],
+          ];
     return [
       "div",
       mergeAttributes(
@@ -154,7 +184,18 @@ export const VideoBlockExtension = Node.create({
     // 재생·일시정지·탐색·음량 이상의 신규 UI를 만들지 않는다(spec §2 제외
     // 범위) — 네이티브 <video controls>만 낸다.
     const children: DOMOutputSpec[] =
-      url === null ? [] : [["video", { controls: "", src: url }]];
+      url === null
+        ? []
+        : [
+            [
+              "video",
+              {
+                controls: "",
+                src: url,
+                ...previewWidthStyleAttrs(node.attrs),
+              },
+            ],
+          ];
     return [
       "div",
       mergeAttributes(

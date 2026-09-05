@@ -7,6 +7,7 @@ import {
   isCanonicalCellColor,
   isNestableBlockType,
   isSupportedLinkHref,
+  isValidMediaPreviewWidth,
   type Result,
   type TextMark,
 } from "@cp949/geul-model";
@@ -173,6 +174,14 @@ export interface EditorController {
     setMediaBlockBackgroundColor(
       blockId: string,
       color: string | null,
+    ): Result<void, EditorError>;
+    // image/video 전용(spec §5.1 MED-007). audio/file 대상은
+    // MEDIA_RESIZE_NOT_SUPPORTED로 거절한다(§8) — 실제 clamp(64px~content
+    // 폭)는 react 리사이즈 핸들 UI 몫이고 이 명령은 model
+    // isValidMediaPreviewWidth(양의 유한수, 상한 없음)만 검증한다(spec §5.3).
+    setMediaPreviewWidth(
+      blockId: string,
+      width: number,
     ): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
@@ -738,6 +747,50 @@ export const createEditor = (
     });
   };
 
+  const isResizableMediaBlockKind = (name: string): name is "image" | "video" =>
+    name === "image" || name === "video";
+
+  // setMediaPreviewWidth 전용 본체. runSetMediaBlockAttrCommand를 재사용하지
+  // 않는다 — 값 타입이 string이 아니라 number이고, kind 가드도 4종 전체가
+  // 아니라 image/video만이라(위 isResizableMediaBlockKind) 그 헬퍼의
+  // `value: string | null` 시그니처에 끼워 넣을 수 없다(readiness probe
+  // 결론, RD-001-DELTA-01.md "배경" 참고). "찾기→가드→검증→setNodeMarkup
+  // 1회" 골격은 위 두 헬퍼와 동일하게 따른다.
+  const runSetMediaPreviewWidthCommand = (
+    blockId: string,
+    width: number,
+  ): Result<void, EditorError> => {
+    const command = "setMediaPreviewWidth";
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (!isResizableMediaBlockKind(node.type.name)) {
+      return { ok: false, error: { code: "MEDIA_RESIZE_NOT_SUPPORTED" } };
+    }
+    if (!isValidMediaPreviewWidth(width)) {
+      return {
+        ok: false,
+        error: {
+          code: "DOCUMENT_INVALID",
+          message: "previewWidth must be a positive finite number",
+        },
+      };
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        { ...node.attrs, previewWidth: width },
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // G-EDT-001 회피 규칙: TableCommandError 같은 객체 타입을 클로저 밖 let에 담아
   // `!== null`로 좁히면 never로 잘못 좁혀진다 — TS 버전과 무관하다. 콜백
   // 안에서만 재대입되는 let을 바깥 스코프의 control-flow analysis가 못
@@ -1243,6 +1296,8 @@ export const createEditor = (
               : { code: "INVALID_COLOR", color: value },
           (attrs, value) => ({ ...attrs, backgroundColor: value }),
         ),
+      setMediaPreviewWidth: (blockId, width) =>
+        runSetMediaPreviewWidthCommand(blockId, width),
       // RD-002 DELTA-02 — 오케스트레이션 본체(session.uploadMediaFile)를
       // 세션으로 이동했다. 여기는 command 이름만 매개변수화해 위임하는
       // 얇은 wrapper다(공개 시그니처·Result/Promise 계약은 그대로).

@@ -20,4 +20,5 @@ export type EditorError =
   | { code: "CELL_LIMIT_EXCEEDED" }
   | { code: "PASTE_MERGE_CONFLICT" }
   | { code: "PASTE_TARGET_NOT_FOUND" }
-  | { code: "TRANSACTION_REJECTED" };
+  | { code: "TRANSACTION_REJECTED" }
+  | { code: "MEDIA_RESIZE_NOT_SUPPORTED" };

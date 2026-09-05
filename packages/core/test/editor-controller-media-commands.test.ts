@@ -1,13 +1,19 @@
 /**
- * 4종 미디어 블록(file/image/video/audio) 삽입·기본 명령(RD-001, Issue #152
- * 슬라이스2 MED-001·MED-004~006 일부, spec §5.1)을 고정한다.
+ * 4종 미디어 블록(file/image/video/audio) 삽입·기본 명령(슬라이스2 RD-001,
+ * Issue #152 슬라이스2 MED-001·MED-004~006 일부, spec §5.1)을 고정한다.
+ * setMediaPreviewWidth(슬라이스5 RD-001 DELTA-01, MED-007)도 이 파일이
+ * 소유한다 — 같은 "media 명령 공용 골격" 관심사라 별도 파일로 쪼개지 않는다.
  *
  * insertMediaBlock의 selection 계약은 divider와 다르다 — 삽입한 블록 자신을
  * NodeSelection으로 선택한다(react File Panel의 자동 오픈 판정 근거,
  * media-commands.ts 주석 참고). setMediaBlockUrl/Name/Caption/
  * BackgroundColor의 media-only 가드(blockContainer 전제 helper 재사용
  * 불가)는 editor-controller.ts의 runSetMediaBlockAttrCommand 주석 참고.
- * 콘텐츠 렌더링(renderHTML)·react 소비는 각각 RD-002·RD-003/004 소관이다.
+ * setMediaPreviewWidth는 값 타입(number)과 kind 가드(image/video만)가 달라
+ * 그 헬퍼를 재사용하지 않고 별도 함수(runSetMediaPreviewWidthCommand)로
+ * 구현한다(RD-001-DELTA-01.md "배경" 참고). 콘텐츠 렌더링(renderHTML)의
+ * previewWidth 투영은 media-block-extension.test.ts가, react 소비는
+ * RD-003/004·슬라이스5 DELTA-02가 소관이다.
  */
 import { describe, expect, it } from "vitest";
 import type { MediaBlockKind } from "../src/index.js";
@@ -249,7 +255,63 @@ describe("setMediaBlockBackgroundColor", () => {
   });
 });
 
-describe("알 수 없는 blockId — setter 4개 공통", () => {
+describe("setMediaPreviewWidth", () => {
+  it.each(["image", "video"] as const)(
+    "%s: 양의 유한수를 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다",
+    (kind) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(mediaBlock(kind, "m-1"), tailParagraphBlock),
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaPreviewWidth("m-1", 320)).toEqual(
+        okResult,
+      );
+      expect(editor.getDocument().blocks).toEqual([
+        mediaBlock(kind, "m-1", { previewWidth: 320 }),
+        tailParagraphBlock,
+      ]);
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+      ]);
+      expect(editor.commands.undo()).toEqual(okResult);
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+    },
+  );
+
+  it.each(["audio", "file"] as const)(
+    "%s 대상은 MEDIA_RESIZE_NOT_SUPPORTED이고 문서를 바꾸지 않는다",
+    (kind) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(mediaBlock(kind, "m-1")),
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaPreviewWidth("m-1", 320)).toEqual({
+        ok: false,
+        error: { code: "MEDIA_RESIZE_NOT_SUPPORTED" },
+      });
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+    },
+  );
+
+  it.each([-1, 0, Number.NaN, Number.POSITIVE_INFINITY])(
+    "%s는 DOCUMENT_INVALID이고 문서를 바꾸지 않는다",
+    (value) => {
+      const { editor, tiptap, changes } = mounted(
+        documentOf(mediaBlock("image", "m-1")),
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaPreviewWidth("m-1", value)).toMatchObject({
+        ok: false,
+        error: { code: "DOCUMENT_INVALID" },
+      });
+      expect(editorState(editor, tiptap)).toEqual(before);
+      expect(changes).toEqual([]);
+    },
+  );
+});
+
+describe("알 수 없는 blockId — setter 5개 공통", () => {
   const missingBlockCases = [
     {
       command: "setMediaBlockUrl",
@@ -270,6 +332,11 @@ describe("알 수 없는 blockId — setter 4개 공통", () => {
       command: "setMediaBlockBackgroundColor",
       call: (editor: ReturnType<typeof mounted>["editor"]) =>
         editor.commands.setMediaBlockBackgroundColor("missing", "#AABBCC"),
+    },
+    {
+      command: "setMediaPreviewWidth",
+      call: (editor: ReturnType<typeof mounted>["editor"]) =>
+        editor.commands.setMediaPreviewWidth("missing", 320),
     },
   ] as const;
 

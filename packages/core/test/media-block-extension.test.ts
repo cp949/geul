@@ -1,9 +1,11 @@
 /**
- * media-block-extension.ts의 kind별 renderHTML을 검증한다(RD-002
+ * media-block-extension.ts의 kind별 renderHTML을 검증한다(슬라이스4 RD-002
  * DELTA-01). model 문서를 직접 구성해 production `createEditor()`에
  * 로드하고 `editor.view.dom` 렌더 결과를 단언한다 — media-commands 명령을
  * 거치지 않고도 검증 가능하다(RD-002.md 포함 범위). 명령 자체는
- * editor-controller-media-commands.test.ts가 소유한다.
+ * editor-controller-media-commands.test.ts가 소유한다. previewWidth 인라인
+ * width 스타일 투영(슬라이스5 RD-001 DELTA-01, MED-007)도 이 파일이
+ * 소유한다 — 같은 renderHTML 검증 관심사다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -136,6 +138,46 @@ describe("url 없는 빈 상태 — 4종 공통", () => {
       expect(wrapper?.children).toHaveLength(0);
     },
   );
+});
+
+describe("previewWidth 렌더 — image/video(슬라이스5 RD-001 DELTA-01)", () => {
+  it.each(["image", "video"] as const)(
+    "%s는 previewWidth가 있으면 인라인 width 스타일을 낸다",
+    (kind) => {
+      const dom = mountedDom(kind, {
+        url: "https://example.com/x",
+        previewWidth: 320,
+      });
+      const el = dom.querySelector<HTMLElement>(
+        `[data-be-block-id="${kind}-1"] ${kind === "image" ? "img" : "video"}`,
+      );
+      expect(el?.style.width).toBe("320px");
+    },
+  );
+
+  it.each(["image", "video"] as const)(
+    "%s는 previewWidth가 없으면 width 스타일을 내지 않는다",
+    (kind) => {
+      const dom = mountedDom(kind, { url: "https://example.com/x" });
+      const el = dom.querySelector<HTMLElement>(
+        `[data-be-block-id="${kind}-1"] ${kind === "image" ? "img" : "video"}`,
+      );
+      expect(el?.style.width).toBe("");
+    },
+  );
+
+  it("file/audio는 previewWidth attrs 자체가 없어 width 스타일이 없다(회귀)", () => {
+    const fileDom = mountedDom("file", { url: "https://example.com/x" });
+    const audioDom = mountedDom("audio", { url: "https://example.com/x" });
+    expect(
+      fileDom.querySelector<HTMLElement>('[data-be-block-id="file-1"] a')?.style
+        .width,
+    ).toBe("");
+    expect(
+      audioDom.querySelector<HTMLElement>('[data-be-block-id="audio-1"] audio')
+        ?.style.width,
+    ).toBe("");
+  });
 });
 
 describe("selector — RD-003·RD-004가 대상 블록을 찾는 최소 계약", () => {
