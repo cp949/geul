@@ -1,14 +1,23 @@
 /**
  * 일반 clipboard 붙여넣기(Issue #38 슬라이스 10, RD-006 DELTA-02)의
  * 실제 브라우저 대표 시나리오 4개 — 구조 보존 HTML, Markdown 텍스트,
- * 표 우선 회귀, 파일 단독 무시. 우선순위·전체 블록 타입 교차는
- * `clipboard-paste-priority.test.ts`(core, RD-006 DELTA-01)가 jsdom
- * 수준에서 이미 fixture로 고정했다 — 이 파일은 그 계약이 실제 Chromium
- * DOM·ClipboardEvent에서도 성립하는지만 대표적으로 재확인한다(전체
- * 블록 타입을 반복하지 않는다). HTML own-wrapper·Markdown text 2건에
+ * 표 우선 회귀, 파일 단독 clipboard의 데모 앱 배선. 우선순위·전체 블록
+ * 타입 교차는 `clipboard-paste-priority.test.ts`(core, RD-006 DELTA-01)가
+ * jsdom 수준에서 이미 fixture로 고정했다 — 이 파일은 그 계약이 실제
+ * Chromium DOM·ClipboardEvent에서도 성립하는지만 대표적으로 재확인한다
+ * (전체 블록 타입을 반복하지 않는다). HTML own-wrapper·Markdown text 2건에
  * `@core`를 붙여 Firefox/WebKit 3-엔진에서도 돈다(Issue #38 슬라이스 11,
- * `_works/roadmap/RD-001-DELTA-01.md`) — 표 우선·파일 무시 2건은 표
- * 경로(`table-paste.spec.ts`)·negative case라 대표성이 낮아 제외했다.
+ * `_works/roadmap/RD-001-DELTA-01.md`) — 표 우선·파일 단독 2건은 표
+ * 경로(`table-paste.spec.ts`)·후속 슬라이스(Issue #152) 전용 계약이라
+ * 대표성이 낮아 제외했다.
+ *
+ * 마지막 테스트는 원래 "파일 단독 clipboard는 무시된다"(IO-007 own
+ * 경계)를 검증했으나, RD-002(Issue #152 슬라이스4, DELTA-01)가 병합되며
+ * 그 계약이 spec §4/§5.2로 대체됐다 — 데모(`apps/demo`)는 RD-003
+ * DELTA-04부터 `uploadFile`을 항상 등록해 뒀으므로 이제 파일 단독
+ * clipboard도 media 블록을 만들고 실제 업로드까지 완주한다. 이 테스트가
+ * 그 새 계약(데모 앱 배선, ADR-0007)으로 갱신됐다(RD-002 DELTA-03,
+ * `_works/roadmap/result/RD-002-DELTA-03.md` "배경").
  */
 import { expect, test } from "@playwright/test";
 
@@ -106,26 +115,21 @@ test("서식 있는 표 HTML과 Markdown처럼 보이는 plain text가 동시에
   await expect(editable.locator("table")).toHaveCount(0);
 });
 
-test("파일 단독 클립보드는 실제 ClipboardEvent로도 무시되고 문서가 바뀌지 않는다", async ({
+test("파일 단독 클립보드는 실제 uploadFile까지 완주해 media 블록을 만든다", async ({
   page,
 }) => {
   const pageErrors = trackPageErrors(page);
   const { editable } = await openDemo(page);
   await editable.click();
 
-  const before = await editable.innerHTML();
-
   await editable.evaluate(dispatchPaste, { fileNames: ["photo.png"] });
 
-  // ProseMirror는 파일 단독 붙여넣기에서 clipboardData만으로 읽을 수 없는
-  // 콘텐츠를 판정하려고 화면 밖 임시 contenteditable(`position: fixed;
-  // left: -10000px`)을 순간적으로 만들었다가 지운다 — Geul 코드가 만드는
-  // DOM이 아니라 ProseMirror 내부 구현 세부다. `editable` locator(role
-  // 기반)가 그 임시 노드까지 함께 집어 strict mode 위반을 낼 수 있어,
-  // 정착된 실제 편집기 root(`.tiptap.ProseMirror`, 임시 노드는 이 클래스가
-  // 없다)만 골라 폴링한다.
-  await expect
-    .poll(() => page.locator(".tiptap.ProseMirror").innerHTML())
-    .toBe(before);
+  // 데모(app.tsx)의 실제 uploadFile은 300ms 뒤 성공으로 resolve한다
+  // (media-upload.spec.ts와 같은 mock) — toHaveAttribute의 기본 폴링이
+  // 그 지연을 기다린다.
+  await expect(editable.locator("img")).toHaveAttribute(
+    "src",
+    "https://example.com/uploads/photo.png",
+  );
   expect(pageErrors).toEqual([]);
 });
