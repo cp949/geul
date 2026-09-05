@@ -376,6 +376,30 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(document.activeElement).toBe(outside);
     outside.remove();
   });
+
+  it("리사이즈 핸들 pointerdown은 바깥 클릭으로 취급하지 않는다(RD-001 DELTA-02 회귀)", () => {
+    // media-resize-handles.tsx의 MediaResizeHandles는 app.tsx에서
+    // MediaToolbar와 형제로 마운트되고, 실제로 그리는 핸들은
+    // `[data-be-block-id]` 밖의 fixed 오버레이 div다(여기선 그 모양만
+    // 재현한다) — 이 selector가 allow-list에 없으면 드래그 시작
+    // pointerdown 자체가 "바깥 클릭"으로 오판정돼 toolbar가 닫히고,
+    // 드래그 중 선택이 그대로 유지되는 한(resize는 selection을 바꾸지
+    // 않는다) dismissedBlockIdRef가 계속 같은 블록을 가리켜 재오픈도
+    // 막힌다(media-toolbar.tsx dismissedBlockIdRef 주석 참고).
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    const handle = document.createElement("div");
+    handle.setAttribute("data-be-media-resize-handle", "right");
+    document.body.append(handle);
+
+    fireEvent.pointerDown(handle);
+
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+    handle.remove();
+  });
 });
 
 describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {

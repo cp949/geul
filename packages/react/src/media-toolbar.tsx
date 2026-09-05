@@ -32,9 +32,20 @@ const dangerButtonClassName =
 // selector로 전부 "바깥 아님" 처리하고, 그 뒤 실제 상태 반영은
 // updateFromSelection(selectionchange/mouseup)에 맡긴다 — 편집기 완전
 // 바깥(예: "Save JSON" 버튼)만 진짜 바깥 클릭으로 남는다.
+// `[data-be-media-resize-handle]`(media-resize-handles.tsx)도 같은 이유로
+// 포함한다: MediaResizeHandles는 app.tsx에서 이 toolbar와 형제로 마운트되고
+// 자기 핸들을 `[data-be-block-id]` 밖의 fixed 오버레이로 그린다(리사이즈는
+// 시각 좌표만 필요할 뿐 셀 텍스트처럼 편집기 DOM 안에 있을 이유가 없다).
+// 이 selector가 없으면 핸들 드래그 시작 pointerdown 자체가 "바깥 클릭"으로
+// 오판정돼 toolbar가 닫히고, 리사이즈가 selection을 바꾸지 않는 한
+// dismissedBlockIdRef가 계속 같은 blockId를 가리켜 드래그가 끝난 뒤에도
+// 재오픈이 막힌다(코드리뷰 발견, RD-001 DELTA-02 회귀 — data-be-* 속성
+// 컨벤션을 쓴다, CSS 클래스명이 아니라 — `[data-be-block-id]`와 같은 이유로
+// 스타일링과 무관한 구조 계약이다).
 const MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   ".geul-media-toolbar",
   "[data-be-block-id]",
+  "[data-be-media-resize-handle]",
 ] as const;
 
 const kindLabel = (kind: MediaBlockKind): string =>

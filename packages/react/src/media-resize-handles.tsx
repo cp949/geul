@@ -31,6 +31,12 @@ type ResizeState = {
   // 사이 바뀌는 경우는 다루지 않는다).
   maxWidth: number;
   currentWidth: number;
+  // 드래그 시작 시점에 media 엘리먼트에 실제로 걸려 있던 인라인
+  // `style.width` 원본 그대로(previewWidth 미설정이면 빈 문자열). 취소·
+  // 커밋실패 복원이 `${startWidth}px`처럼 숫자를 다시 조립하면 원래 없던
+  // 인라인 width가 새로 생겨 fluid 이미지가 고정폭으로 굳어버린다(코드리뷰
+  // 발견) — 항상 이 원본 문자열로만 되돌린다.
+  startStyleWidth: string;
 };
 
 // 상한(content 폭)이 하한(64px)보다 좁은 축퇴 상황(media가 좁은 표 셀
@@ -64,14 +70,33 @@ const findMediaElement = (
     ":scope > img, :scope > video",
   );
 
+const findResizableMedia = (
+  element: HTMLElement,
+  blockId: string,
+): HTMLImageElement | HTMLVideoElement | null => {
+  const wrapper = findMediaWrapper(element, blockId);
+  return wrapper === null ? null : findMediaElement(wrapper);
+};
+
 const setMediaStyleWidth = (
   element: HTMLElement,
   blockId: string,
   width: number,
 ): void => {
-  const wrapper = findMediaWrapper(element, blockId);
-  const media = wrapper === null ? null : findMediaElement(wrapper);
+  const media = findResizableMedia(element, blockId);
   if (media !== null) media.style.width = `${width}px`;
+};
+
+// 취소·커밋실패 복원 전용: `setMediaStyleWidth`처럼 숫자를 px로 새로
+// 조립하지 않고, 드래그 시작 시점에 캡처해 둔 원본 인라인 문자열을 그대로
+// 되돌린다(빈 문자열 포함 — previewWidth 미설정 상태를 그대로 복원한다).
+const restoreMediaStyleWidth = (
+  element: HTMLElement,
+  blockId: string,
+  styleWidth: string,
+): void => {
+  const media = findResizableMedia(element, blockId);
+  if (media !== null) media.style.width = styleWidth;
 };
 
 /**
@@ -189,7 +214,7 @@ export const MediaResizeHandles = () => {
   const restoreResizeVisualWidth = useCallback(
     (state: ResizeState) => {
       if (element === null) return;
-      setMediaStyleWidth(element, state.blockId, state.startWidth);
+      restoreMediaStyleWidth(element, state.blockId, state.startStyleWidth);
     },
     [element],
   );
@@ -227,9 +252,9 @@ export const MediaResizeHandles = () => {
         current.currentWidth,
       );
       // 커밋 실패(예: 드래그 도중 블록이 삭제·교체됨)는 모델을 바꾸지
-      // 않는다 — 드래그 중 직접 mutate해 둔 인라인 style.width만 시작
-      // 폭으로 되돌려 DOM이 실제로 반영되지 않은 폭에서 계속 어긋난 채
-      // 남지 않게 한다(코드리뷰 발견).
+      // 않는다 — 드래그 중 직접 mutate해 둔 인라인 style.width만 드래그
+      // 시작 시점의 원본 값(startStyleWidth)으로 되돌려 DOM이 실제로
+      // 반영되지 않은 폭에서 계속 어긋난 채 남지 않게 한다(코드리뷰 발견).
       if (!result.ok) restoreResizeVisualWidth(current);
     }
     updateResizeState(null);
@@ -285,6 +310,13 @@ export const MediaResizeHandles = () => {
     // 함께 끌고 다닌다).
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    // 취소·커밋실패 복원용 원본 인라인 값을 여기서 한 번만 캡처한다(rect
+    // 폭이 아니라 실제 style.width 문자열 — table-handles.tsx의
+    // handlePointerDownOnResizeHandle이 readColumnStyleWidth를 드래그 시작
+    // 시점에 한 번만 읽는 것과 같은 지점, 같은 이유).
+    const startMedia =
+      element === null ? null : findResizableMedia(element, blockId);
+    const startStyleWidth = startMedia?.style.width ?? "";
     updateResizeState({
       pointerId: event.pointerId,
       blockId,
@@ -293,6 +325,7 @@ export const MediaResizeHandles = () => {
       startWidth,
       maxWidth,
       currentWidth: startWidth,
+      startStyleWidth,
     });
   };
 

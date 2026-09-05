@@ -7,8 +7,10 @@
  * 움직임(spec §6.3 중심 고정 대칭 — CSS `margin:0 auto` 정렬 아래에서
  * 경계 이동량이 폭 변화량의 절반이라, 커서를 1:1로 따라가려면 폭을 2배로
  * 바꿔야 한다), 64px~content 폭(래퍼 rect) clamp, pointer-up 1회 커밋과
- * 변화 없을 때 커밋 생략, Escape·pointercancel 취소 시 원래 폭 복원과
- * 명령 미호출, 선택 해제 시 즉시 사라짐을 검증한다.
+ * 변화 없을 때 커밋 생략, Escape·pointercancel·커밋 실패 시 드래그 시작
+ * 시점의 원본 인라인 스타일(previewWidth 미설정이면 빈 문자열, 설정돼
+ * 있었으면 그 값)로 복원하고 명령 미호출, 선택 해제 시 즉시 사라짐을
+ * 검증한다.
  *
  * `media-toolbar.test.tsx`의 fake 컨트롤러 관례(NodeSelection을 jsdom에서
  * 직접 재현하지 않고 getSelectionMediaBlock 반환값으로 대체)와
@@ -314,7 +316,7 @@ describe("핸들 드래그로 폭을 조절한다", () => {
     expect(controller.commands.setMediaPreviewWidth).not.toHaveBeenCalled();
   });
 
-  it("Escape로 취소하면 명령을 호출하지 않고 원래 폭으로 복원한다", async () => {
+  it("Escape로 취소하면 명령을 호출하지 않고 원본 인라인 스타일로 복원한다", async () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageSelection,
     });
@@ -332,11 +334,42 @@ describe("핸들 드래그로 폭을 조절한다", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
-    expect(media.style.width).toBe("200px");
+    // fakeController가 만드는 media 엘리먼트는 드래그 전 인라인 width가
+    // 전혀 없다(previewWidth 미설정, fluid) — "시작 폭(rect 기준
+    // 200px)"으로 되돌리면 없던 인라인 width가 새로 생겨 취소 이후에도
+    // 고정폭으로 굳는다(코드리뷰 발견). 원본 그대로(빈 문자열)로
+    // 복원해야 한다.
+    expect(media.style.width).toBe("");
     expect(controller.commands.setMediaPreviewWidth).not.toHaveBeenCalled();
   });
 
-  it("pointercancel도 명령을 호출하지 않고 원래 폭으로 복원한다", async () => {
+  it("이미 previewWidth가 설정돼 있었으면 취소 시 그 원본 값으로 복원한다(시작 rect 폭이 아니다)", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageSelection,
+    });
+    renderHandles(controller);
+    const editable = getEditable();
+    const media = getMediaElement();
+    // media-block-extension.ts의 previewWidthStyleAttrs가 실제로 내는
+    // 인라인 스타일과 같은 모양 — previewWidth가 이미 180으로 설정된
+    // 상태를 흉내낸다. MEDIA_RECT(width 200)는 jsdom rect 스텁이라 이
+    // 인라인 값과 무관하게 고정돼 있다 — 즉 startWidth(200, clamp 계산용)와
+    // 복원 대상(180, 원본 인라인 값)이 서로 다른 값임을 이 테스트가 보장한다.
+    media.style.width = "180px";
+
+    fireEvent.pointerDown(getHandle("right"), { pointerId: 1, clientX: 300 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 320 });
+    await awaitAnimationFrame();
+    expect(media.style.width).toBe("240px");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(media.style.width).toBe("180px");
+    expect(controller.commands.setMediaPreviewWidth).not.toHaveBeenCalled();
+  });
+
+  it("pointercancel도 명령을 호출하지 않고 원본 인라인 스타일(빈 문자열)로 복원한다", async () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageSelection,
     });
@@ -351,7 +384,7 @@ describe("핸들 드래그로 폭을 조절한다", () => {
 
     fireEvent.pointerCancel(editable, { pointerId: 1 });
 
-    expect(media.style.width).toBe("200px");
+    expect(media.style.width).toBe("");
     expect(controller.commands.setMediaPreviewWidth).not.toHaveBeenCalled();
   });
 
@@ -397,7 +430,8 @@ describe("핸들 드래그로 폭을 조절한다", () => {
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
     // 드래그 중 mutate해 둔 인라인 style이 커밋 실패 후에도 240px로 남으면
-    // 모델(변경 없음)과 DOM이 어긋난다 — 시작 폭으로 되돌려야 한다.
-    expect(media.style.width).toBe("200px");
+    // 모델(변경 없음)과 DOM이 어긋난다 — 원본 인라인 값(여기선 없었으므로
+    // 빈 문자열)으로 되돌려야 한다.
+    expect(media.style.width).toBe("");
   });
 });
