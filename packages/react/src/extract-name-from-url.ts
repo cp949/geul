@@ -16,7 +16,7 @@ export const extractNameFromUrl = (url: string): string | null => {
     pathname = url.split("#")[0]?.split("?")[0] ?? url;
   }
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
-  const lastSegment = segments.at(-1);
+  const lastSegment = segments[segments.length - 1];
   if (lastSegment === undefined) return null;
   try {
     const decoded = decodeURIComponent(lastSegment);
