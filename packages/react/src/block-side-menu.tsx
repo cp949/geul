@@ -1,7 +1,9 @@
 import {
   blockTypeDescriptorFromBlock,
+  isKnownBlockType,
   isNestableBlockType,
   type BlockTypeDescriptor,
+  type BlockTypeSource,
   type EditorController,
 } from "@cp949/geul-core";
 import {
@@ -101,7 +103,13 @@ const findBlockTypeDescriptor = (
   blockId: string,
 ): BlockTypeDescriptor | null => {
   for (const block of blocks) {
-    if (block.id === blockId) return blockTypeDescriptorFromBlock(block);
+    if (block.id === blockId) {
+      // top-level CustomBlock(model, RD-002-DELTA-01)의 서술자는 아직 없다
+      // (registry는 RD-002-DELTA-11) — "찾지 못함"과 동일하게 취급한다
+      // (core의 generic-block-commands.ts와 같은 패턴).
+      if (!isKnownBlockType(block.type)) return null;
+      return blockTypeDescriptorFromBlock(block as BlockTypeSource);
+    }
     if ("children" in block && block.children !== undefined) {
       const nested = findBlockTypeDescriptor(block.children, blockId);
       if (nested !== null) return nested;

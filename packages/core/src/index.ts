@@ -17,9 +17,15 @@ export type {
 // 같은 이유로 react까지 통과시킨다. isListEntryBlockType(RD-003 F2)은 io
 // 직렬화 축과 분리된 편집 UX 축 판정이다 — react block-type-options.ts가
 // 이 predicate로 Turn into 옵션 필터를 codeBlock 가드(core
-// generic-block-commands.ts)와 일치시킨다.
+// generic-block-commands.ts)와 일치시킨다. isKnownBlockType(RD-002-DELTA-09)도
+// 같은 이유로 통과시킨다 — block-side-menu.tsx의 findBlockTypeDescriptor가
+// 저장 Block(top-level CustomBlock 포함, RD-002-DELTA-01)을 좁히지 않고
+// blockTypeDescriptorFromBlock에 그대로 넘기던 계약(BlockTypeSource 타입
+// 주석 참고)이 CustomBlock에서 깨져, 미등록 타입을 "찾지 못함"과 동일하게
+// 취급하는 기존 패턴(generic-block-commands.ts)을 여기서도 재사용한다.
 export {
   isInlineContentBlockType,
+  isKnownBlockType,
   isListEntryBlockType,
   isListItemBlockType,
   isNestableBlockType,
