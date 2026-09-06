@@ -37,6 +37,7 @@ export {
   MAX_NESTING_DEPTH,
   parseBlockOrCustomBlock,
   parseDocument,
+  parseInlineContentItem,
 } from "./schema.js";
 export {
   isValidDocumentId,
@@ -71,6 +72,7 @@ export type {
   CheckListItemBlock,
   CodeBlock,
   CustomBlock,
+  CustomTextMark,
   DividerBlock,
   Document,
   FileBlock,
@@ -78,6 +80,7 @@ export type {
   IdFactory,
   ImageBlock,
   InlineContent,
+  InlineContentItem,
   ListItemBlock,
   MediaBlockCommon,
   NumberedListItemBlock,

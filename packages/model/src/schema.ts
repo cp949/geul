@@ -27,9 +27,12 @@ import {
 import type {
   Block,
   CustomBlock,
+  CustomTextMark,
   Document,
   InlineContent,
+  InlineContentItem,
   TableBlock,
+  TextMark,
 } from "./types.js";
 
 type DocumentPath = Array<string | number>;
@@ -488,6 +491,111 @@ const blockOrCustomBlockSchema = z
       return z.NEVER;
     }
     return result.data as CustomBlock;
+  });
+
+// CustomTextMark(EXT-003)의 envelope 검증이다 — CustomBlock과 같은 이유로
+// 구조만 본다. TextMark는 id가 없다(마크는 개별 식별되지 않는다).
+const customTextMarkSchema = z
+  .object({
+    type: z.string(),
+    props: z.record(z.string(), jsonPrimitivePropSchema).optional(),
+  })
+  .strict();
+
+// 알려진 8종(5개 plain 유형 + link/textColor/backgroundColor) mark
+// 판별자다. PLAIN_TEXT_MARK_TYPES(기존 canonical 목록)를 그대로 재사용해
+// KNOWN_BLOCK_TYPES처럼 별도 하드코딩 목록을 늘리지 않는다.
+const KNOWN_TEXT_MARK_TYPES: ReadonlySet<string> = new Set<string>([
+  ...PLAIN_TEXT_MARK_TYPES,
+  "link",
+  "textColor",
+  "backgroundColor",
+]);
+
+// blockOrCustomBlockSchema와 동일한 라우팅 패턴이다(spec §4.3). 알려진
+// 8종이면 기존 textMarkSchema로, 아니면 customTextMarkSchema로 위임한다.
+const textMarkOrCustomSchema = z
+  .custom<unknown>()
+  .transform((raw, ctx): TextMark | CustomTextMark => {
+    const type =
+      typeof raw === "object" && raw !== null && "type" in raw
+        ? (raw as { type?: unknown }).type
+        : undefined;
+
+    const forwardIssues = (issues: readonly unknown[]): void => {
+      for (const issue of issues)
+        ctx.addIssue(issue as unknown as Parameters<typeof ctx.addIssue>[0]);
+    };
+
+    if (typeof type === "string" && KNOWN_TEXT_MARK_TYPES.has(type)) {
+      const result = textMarkSchema.safeParse(raw);
+      if (!result.success) {
+        forwardIssues(result.error.issues);
+        return z.NEVER;
+      }
+      return result.data as TextMark;
+    }
+
+    const result = customTextMarkSchema.safeParse(raw);
+    if (!result.success) {
+      forwardIssues(result.error.issues);
+      return z.NEVER;
+    }
+    return result.data as CustomTextMark;
+  });
+
+// EXT-002 커스텀 inline 원소(leaf)의 envelope 검증이다. text 런과 달리
+// `type: "custom"` 리터럴로 스스로를 식별한다(spec §4.2).
+const customInlineContentItemSchema = z
+  .object({
+    type: z.literal("custom"),
+    customType: z.string(),
+    props: z.record(z.string(), jsonPrimitivePropSchema).optional(),
+  })
+  .strict();
+
+// 기존 inlineContentSchema 원소({text, marks?})와 같은 shape이지만 marks가
+// textMarkOrCustomSchema로 CustomTextMark(EXT-003)도 받는다는 점만 다르다.
+// .strict() — 기존 inlineContentSchema는 strict가 아니지만(레거시 유지),
+// 이 신규 병행 타입은 다른 신규 스키마와 같은 강도로 미선언 키를 거절한다.
+const textRunItemSchema = z
+  .object({
+    text: z.string(),
+    marks: z.array(textMarkOrCustomSchema).optional(),
+  })
+  .strict();
+
+// InlineContentItem(EXT-002) 라우팅이다. text 런과 달리 두 변형은 리터럴
+// type 값("custom" 존재 여부)으로만 구분되므로 판별 로직이 blockOrCustom과
+// 다르다 — "알려진 타입 목록 대조"가 아니라 "type === 'custom'인가"로 나눈다.
+const inlineContentItemSchema = z
+  .custom<unknown>()
+  .transform((raw, ctx): InlineContentItem => {
+    const isCustomVariant =
+      typeof raw === "object" &&
+      raw !== null &&
+      (raw as { type?: unknown }).type === "custom";
+
+    const forwardIssues = (issues: readonly unknown[]): void => {
+      for (const issue of issues)
+        ctx.addIssue(issue as unknown as Parameters<typeof ctx.addIssue>[0]);
+    };
+
+    if (isCustomVariant) {
+      const result = customInlineContentItemSchema.safeParse(raw);
+      if (!result.success) {
+        forwardIssues(result.error.issues);
+        return z.NEVER;
+      }
+      return result.data as InlineContentItem;
+    }
+
+    const result = textRunItemSchema.safeParse(raw);
+    if (!result.success) {
+      forwardIssues(result.error.issues);
+      return z.NEVER;
+    }
+    return result.data as InlineContentItem;
   });
 
 const invalid = (
@@ -1126,6 +1234,27 @@ export const parseBlockOrCustomBlock = (
         code: "DOCUMENT_INVALID",
         path: documentPath(issue?.path ?? []),
         message: issue?.message ?? "Invalid block",
+      },
+    };
+  }
+  return { ok: true, value: parsed.data };
+};
+
+// InlineContentItem(EXT-002)/CustomTextMark(EXT-003)의 단일 진입점이다.
+// parseBlockOrCustomBlock과 같은 이유로 기존 InlineContent/inlineContentSchema는
+// 아직 바꾸지 않는다 — RD-002가 core registry를 배선할 때 함께 넓힌다.
+export const parseInlineContentItem = (
+  input: unknown,
+): Result<InlineContentItem, DocumentError> => {
+  const parsed = inlineContentItemSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: documentPath(issue?.path ?? []),
+        message: issue?.message ?? "Invalid inline content item",
       },
     };
   }

@@ -6,6 +6,28 @@ export type TextMark =
 
 export type InlineContent = Array<{ text: string; marks?: TextMark[] }>;
 
+// EXT-002/EXT-003의 열린 catch-all 변형이다(spec §4.2). CustomBlock과 같은
+// 이유로 기존 `TextMark`/`InlineContent`에는 넣지 않는다 — 넣으면
+// core/react/io의 기존 소비처가 즉시 깨진다. `Document`/`parseDocument`와
+// 마찬가지로 `InlineContent` 배선도 core registry를 실제로 붙이는 RD-002로
+// 미룬다(RD-001-DELTA-01 "설계 결정"과 동일 근거, _works/roadmap/RD-002.md).
+export type CustomTextMark = {
+  type: string;
+  props?: Record<string, string | number | boolean | null>;
+};
+
+// 텍스트 런 옆에 두는 열린 catch-all inline 원소다(EXT-002, leaf 전용).
+// text 런의 marks는 기존 TextMark 옆에 CustomTextMark도 받는다(EXT-003,
+// spec §4.2 "TextMark = 기존 4종 | CustomTextMark" — TextMark 자체는 넓히지
+// 않고 이 신규 타입의 marks 필드에서만 유니온한다).
+export type InlineContentItem =
+  | { text: string; marks?: Array<TextMark | CustomTextMark> }
+  | {
+      type: "custom";
+      customType: string;
+      props?: Record<string, string | number | boolean | null>;
+    };
+
 // 콘텐츠를 갖는 nestable 블록 7종(paragraph/heading/quote/목록 4종) 공통
 // optional 필드다(spec §3.3). `table`/`divider`/`codeBlock`에는 붙이지
 // 않는다 — 표는 이미 셀 단위 색상·정렬을 갖고, divider는 콘텐츠가 없고,
