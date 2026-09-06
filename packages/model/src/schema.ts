@@ -9,6 +9,7 @@ import {
   isValidCodeBlockSource,
 } from "./code-block.js";
 import type { DocumentError } from "./errors.js";
+import { isTextRunItem } from "./inline-content-kind.js";
 import { isSupportedLinkHref } from "./link-policy.js";
 import {
   firstNonCanonicalTextMarkIndex,
@@ -45,11 +46,14 @@ const textMarkSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("backgroundColor"), color: z.string() }),
 ]);
 
-const inlineContentSchema = z.array(
-  z.object({
-    text: z.string(),
-    marks: z.array(textMarkSchema).optional(),
-  }),
+// InlineContentItem(EXT-002/EXT-003, RD-001-DELTA-02가 이미 추가)로
+// 위젠한다(RD-002-DELTA-13). inlineContentItemSchema는 이 정의보다
+// 아래(라우팅 스키마 절)에 있어 z.lazy로 순방향 참조한다 — 재귀 children
+// 필드가 뒤에 오는 blockSchema를 참조하는 기존 패턴(288행 등,
+// `z.lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))`)과 동일
+// 해법이라 파일을 재배치하지 않는다.
+const inlineContentSchema = z.lazy(
+  (): z.ZodType<InlineContentItem[]> => z.array(inlineContentItemSchema),
 );
 
 // .strict() — TableBlock은 children을 허용하지 않는다(spec 2.2, D15). 스키마가
@@ -523,6 +527,13 @@ const KNOWN_TEXT_MARK_TYPES: ReadonlySet<string> = new Set<string>([
   "backgroundColor",
 ]);
 
+// core/io(DELTA-14+)와 model 내부(validateContent, RD-002-DELTA-13)가
+// TextMark와 CustomTextMark를 구분할 때 재사용하는 predicate다 —
+// isKnownBlockType(DELTA-01)과 같은 이유로 `type is TextMark["type"]`만
+// 좁힌다.
+export const isKnownTextMarkType = (type: string): type is TextMark["type"] =>
+  KNOWN_TEXT_MARK_TYPES.has(type);
+
 // blockOrCustomBlockSchema와 동일한 라우팅 패턴이다(spec §4.3). 알려진
 // 8종이면 기존 textMarkSchema로, 아니면 customTextMarkSchema로 위임한다.
 const textMarkOrCustomSchema = z
@@ -645,13 +656,33 @@ const validateContent = (
   contentPath: DocumentPath,
 ): Result<undefined, DocumentError> => {
   for (const [contentIndex, item] of content.entries()) {
+    // 커스텀 inline 원소(EXT-002)는 customInlineContentItemSchema가 이미
+    // envelope을 검증했다 — model은 타입별 의미를 모른다(spec §4.2,
+    // ADR-0002 순수성, RD-002-DELTA-12와 같은 근거). isKnownBlockType의
+    // divider 분기와 동일하게 여기서 더 볼 필드가 없다(RD-002-DELTA-13).
+    if (!isTextRunItem(item)) continue;
+
     if (!isValidInlineText(item.text)) {
       return invalid(
         [...contentPath, contentIndex, "text"],
         "Inline text must use LF line breaks and contain no other C0 controls, DEL, or invalid surrogate code units",
       );
     }
-    for (const [markIndex, mark] of (item.marks ?? []).entries()) {
+
+    // marks는 이제 TextMark 옆에 CustomTextMark(EXT-003)도 담는다.
+    // CustomTextMark.type: string(비literal)이 discriminated union 좁히기를
+    // 흐려(CustomBlock.type과 동일 원인, DELTA-01 "설계 발견") 아래 4개
+    // 판정(href·색상·중복 link·canonical 순서) 전부 "알려진 마크만" 걸러
+    // 원본 인덱스(markIndex)를 보존한 목록으로 수행한다 — CustomTextMark가
+    // 전혀 없으면 이 필터는 no-op이라 기존 동작과 100% 동일하다.
+    const knownMarks = (item.marks ?? [])
+      .map((mark, markIndex) => ({ mark, markIndex }))
+      .filter(
+        (entry): entry is { mark: TextMark; markIndex: number } =>
+          isKnownTextMarkType(entry.mark.type),
+      );
+
+    for (const { mark, markIndex } of knownMarks) {
       if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
         return invalid(
           [...contentPath, contentIndex, "marks", markIndex, "href"],
@@ -669,7 +700,7 @@ const validateContent = (
       }
     }
     let hasLink = false;
-    for (const [markIndex, mark] of (item.marks ?? []).entries()) {
+    for (const { mark, markIndex } of knownMarks) {
       if (mark.type !== "link") continue;
       if (hasLink) {
         return invalid(
@@ -679,12 +710,17 @@ const validateContent = (
       }
       hasLink = true;
     }
-    const invalidMarkIndex = firstNonCanonicalTextMarkIndex(item.marks ?? []);
-    if (invalidMarkIndex !== undefined) {
-      return invalid(
-        [...contentPath, contentIndex, "marks", invalidMarkIndex],
-        "Inline marks must use the canonical stored order without duplicate mark types",
-      );
+    const invalidKnownIndex = firstNonCanonicalTextMarkIndex(
+      knownMarks.map((entry) => entry.mark),
+    );
+    if (invalidKnownIndex !== undefined) {
+      const originalIndex = knownMarks[invalidKnownIndex]?.markIndex;
+      if (originalIndex !== undefined) {
+        return invalid(
+          [...contentPath, contentIndex, "marks", originalIndex],
+          "Inline marks must use the canonical stored order without duplicate mark types",
+        );
+      }
     }
   }
   return { ok: true, value: undefined };
@@ -720,8 +756,14 @@ const validateBlocksAt = (
     if (known.type === "divider") continue;
 
     if (known.type === "codeBlock") {
+      // codeBlockSchema는 content를 codeBlockContentSchema(marks 없음,
+      // 커스텀 변형 없음, .max(1))라는 별도의 더 좁은 스키마로 이미
+      // 검증한다 — 이 지점에 커스텀 inline 원소가 올 수 없다.
+      // isTextRunItem은 InlineContent 위젠(RD-002-DELTA-13)이 넓힌
+      // known.content의 타입을 순수하게 좁히는 용도이고 새 거절 로직이
+      // 아니다.
       const item = known.content[0];
-      if (item !== undefined) {
+      if (item !== undefined && isTextRunItem(item)) {
         if (item.text.length === 0) {
           return invalid(
             [...blockPath, "content", 0, "text"],

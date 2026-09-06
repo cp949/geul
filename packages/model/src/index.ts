@@ -21,6 +21,7 @@ export {
 export { createEmptyDocument } from "./create-document.js";
 export type { DocumentError, DocumentErrorCode } from "./errors.js";
 export { createRandomDocumentId } from "./id-factory.js";
+export { isTextRunItem } from "./inline-content-kind.js";
 export { appendOrMergeInlineItem } from "./inline-content-merge.js";
 export { isSupportedLinkHref } from "./link-policy.js";
 export { isValidMediaPreviewWidth } from "./media-block.js";
@@ -35,6 +36,7 @@ export type { TextMarkNameInput } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
 export {
   isKnownBlockType,
+  isKnownTextMarkType,
   MAX_NESTING_DEPTH,
   parseBlockOrCustomBlock,
   parseDocument,

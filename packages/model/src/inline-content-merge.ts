@@ -1,3 +1,4 @@
+import { isTextRunItem } from "./inline-content-kind.js";
 import { canonicalizeTextMarks, sameMarks } from "./mark-canonicalization.js";
 import type { InlineContent, TextMark } from "./types.js";
 
@@ -21,8 +22,20 @@ export const appendOrMergeInlineItem = (
 ): void => {
   if (text.length === 0) return;
 
+  // 이 함수는 텍스트 런만 push하고(아래 push 지점 참고) 그 marks는 항상
+  // 이 함수의 `marks` 매개변수(readonly TextMark[])에서 canonicalizeTextMarks로
+  // 만든 TextMark[]뿐이다 — 실제로는 항상 텍스트 런·TextMark[]이지만,
+  // InlineContent 위젠(RD-002-DELTA-13)으로 넓어진 타입을 컴파일러에
+  // 알리려면 명시적으로 좁혀야 한다(DELTA-01의 `known`/`as Block` 캐스트와
+  // 동일 성격). CustomTextMark를 담은 marks를 병합할 가능성은 이 함수의
+  // 계약 밖이다(io 소비처가 CustomTextMark를 만들지 않는다, DELTA-14+
+  // 대상).
   const previous = target[target.length - 1];
-  if (previous !== undefined && sameMarks(previous.marks, marks)) {
+  if (
+    previous !== undefined &&
+    isTextRunItem(previous) &&
+    sameMarks(previous.marks as readonly TextMark[] | undefined, marks)
+  ) {
     previous.text += text;
     return;
   }

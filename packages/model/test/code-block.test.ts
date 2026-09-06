@@ -76,7 +76,11 @@ describe("CodeBlock 공개 계약", () => {
       content: [{ text: "line 1\n\tline 2 😀" }],
     };
 
-    expect(isValidCodeBlockSource(block.content[0]?.text ?? "")).toBe(true);
+    // content 원소도 텍스트 런뿐이다(InlineContentItem 위젠,
+    // RD-002-DELTA-13) — codeBlock은 커스텀 원소를 허용하지 않으므로 as로
+    // 좁혀도 안전하다.
+    const item = block.content[0] as { text: string } | undefined;
+    expect(isValidCodeBlockSource(item?.text ?? "")).toBe(true);
     expect(isValidCodeBlockSource("bad\u0000source")).toBe(false);
     expect(isValidCodeBlockLanguage(block.language ?? "")).toBe(true);
     expect(isValidCodeBlockLanguage("")).toBe(false);

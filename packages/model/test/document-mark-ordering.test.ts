@@ -179,7 +179,10 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
     // 담으므로 as Block으로 좁혀도 안전하다.
     const block = result.value.blocks[0] as Block | undefined;
     if (block?.type !== "paragraph") throw new Error("Expected a paragraph");
-    expect(block.content[0]?.marks).toEqual([
+    // content 원소도 텍스트 런뿐이다(InlineContentItem 위젠,
+    // RD-002-DELTA-13) — 커스텀 원소가 없는 fixture라 as로 좁혀도 안전하다.
+    const item = block.content[0] as { marks?: unknown } | undefined;
+    expect(item?.marks).toEqual([
       { type: "textColor", color: "#AABBCC" },
       { type: "backgroundColor", color: "#112233" },
     ]);

@@ -4,22 +4,24 @@ export type TextMark =
   | { type: "textColor"; color: string }
   | { type: "backgroundColor"; color: string };
 
-export type InlineContent = Array<{ text: string; marks?: TextMark[] }>;
+// 기존 8종 nestable/codeBlock content와 table 셀 content가 공유하는
+// 배열이다. RD-002-DELTA-13 이전에는 텍스트 런만 담았으나(`{text,
+// marks?: TextMark[]}`), `Document`/`Block[]` 위젠(RD-002-DELTA-01)과
+// 같은 이유로 이제 InlineContentItem 전체(텍스트 런 | 커스텀 inline
+// 원소, EXT-002/EXT-003 포함)를 담는다 — core registry를 실제로 배선하는
+// RD-002 시점에 넓힌다.
+export type InlineContent = InlineContentItem[];
 
 // EXT-002/EXT-003의 열린 catch-all 변형이다(spec §4.2). CustomBlock과 같은
-// 이유로 기존 `TextMark`/`InlineContent`에는 넣지 않는다 — 넣으면
-// core/react/io의 기존 소비처가 즉시 깨진다. `Document`/`parseDocument`와
-// 마찬가지로 `InlineContent` 배선도 core registry를 실제로 붙이는 RD-002로
-// 미룬다(RD-001-DELTA-01 "설계 결정"과 동일 근거, _works/roadmap/RD-002.md).
+// 이유로 기존 `TextMark`에는 넣지 않는다 — 텍스트 런의 marks 필드에서만
+// TextMark 옆에 유니온한다(TextMark 자체는 넓히지 않는다).
 export type CustomTextMark = {
   type: string;
   props?: Record<string, string | number | boolean | null>;
 };
 
 // 텍스트 런 옆에 두는 열린 catch-all inline 원소다(EXT-002, leaf 전용).
-// text 런의 marks는 기존 TextMark 옆에 CustomTextMark도 받는다(EXT-003,
-// spec §4.2 "TextMark = 기존 4종 | CustomTextMark" — TextMark 자체는 넓히지
-// 않고 이 신규 타입의 marks 필드에서만 유니온한다).
+// InlineContent(위)의 원소 타입이다(RD-002-DELTA-13부터 실제로 연결).
 export type InlineContentItem =
   | { text: string; marks?: Array<TextMark | CustomTextMark> }
   | {
