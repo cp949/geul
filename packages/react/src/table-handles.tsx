@@ -1,11 +1,3 @@
-import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-core";
-import {
-  GripHorizontal,
-  GripVertical,
-  IndentDecrease,
-  IndentIncrease,
-  Plus,
-} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -15,7 +7,6 @@ import {
 } from "react";
 
 import { IconButton } from "./icon-button.js";
-import { iconProps } from "./icon-props.js";
 import {
   findTable,
   readGeometryFor,
@@ -23,6 +14,37 @@ import {
   type TableGeometry,
 } from "./table-handle-geometry.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
+import {
+  addColumnLabel,
+  addIcon,
+  addRowLabel,
+  columnHandleIcon,
+  columnHandleLabel,
+  expandButtonClassName,
+  HANDLE_HOVER_MARGIN,
+  handleButtonClassName,
+  indentTableIcon,
+  indentTableLabel,
+  nestingButtonClassName,
+  outdentTableIcon,
+  outdentTableLabel,
+  rowHandleIcon,
+  rowHandleLabel,
+  TABLE_HOVER_IGNORE_SELECTORS,
+  TABLE_MENU_DISMISS_ALLOW_SELECTORS,
+} from "./table-handles-constants.js";
+import {
+  clampWidth,
+  computeReorderTargetIndex,
+  readColumnStyleWidth,
+  setColumnStyleWidth,
+} from "./table-handles-helpers.js";
+import type {
+  HandleMenuState,
+  ReorderKind,
+  ReorderState,
+  ResizeState,
+} from "./table-handles-types.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -33,142 +55,6 @@ import {
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
-
-// 핸들은 드래그(재정렬)와 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이
-// 한쪽만 안내하면 나머지 동작의 발견성을 가린다(block-side-menu와 같은 규칙).
-const rowHandleLabel = "Drag to reorder row, click for options";
-const columnHandleLabel = "Drag to reorder column, click for options";
-const addRowLabel = "Add row";
-const addColumnLabel = "Add column";
-// 표를 대상화할 팝업 메뉴는 두지 않는다 — block-side-menu.tsx의 gutter가
-// <table>을 hover 대상에서 제외해(entitySelector ":not(table)") 그 블록
-// 메뉴가 표에 절대 열리지 않으므로, 직접 IconButton 2개가 표의 유일한
-// Indent/Outdent 진입점이다(01-계획.md "결정", Issue #126).
-const indentTableLabel = "Indent table";
-const outdentTableLabel = "Outdent table";
-
-const rowHandleIcon = <GripVertical {...iconProps} />;
-const columnHandleIcon = <GripHorizontal {...iconProps} />;
-const addIcon = <Plus {...iconProps} />;
-const indentTableIcon = <IndentIncrease {...iconProps} />;
-const outdentTableIcon = <IndentDecrease {...iconProps} />;
-
-// touch-action: none — 터치 드래그를 브라우저 스크롤 제스처에 뺏기면
-// pointercancel로 드래그가 중단된다(setPointerCapture는 이를 막지 못한다).
-const handleButtonClassName = "geul-table-handle";
-const expandButtonClassName = "geul-table-expand-button";
-// addRow/addColumn(expandButtonClassName)과 같은 "직접 클릭 버튼" 모양을
-// 쓰되, 재정렬(cursor: grab)이 아니라 1회성 액션이라 별도 클래스로 둔다.
-const nestingButtonClassName = "geul-table-nesting-button";
-
-// 행/열 핸들(표 바깥 24px)과 빠른 확장 버튼(표 바깥 4~24px)을 포함하는
-// hover 유지 여백. 이 여백 없이 hover를 즉시 해제하면 포인터가 표에서
-// 핸들로 이동하는 도중 핸들이 언마운트된다.
-const HANDLE_HOVER_MARGIN = 28;
-
-// useDismissOnOutsideOrEscape에 넘기는 allow-list. 모듈 스코프 상수로 둔다 —
-// 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
-const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-be-table-menu]",
-  "[data-be-table-row-handle]",
-  "[data-be-table-column-handle]",
-] as const;
-
-// usePointerHoverTarget에 넘기는 ignore-list. 자기 자신의 오버레이(핸들·
-// 리사이즈 스트립·확장 버튼·메뉴) 위에서는 hover 대상을 다시 판정하지
-// 않는다. 모듈 스코프 상수로 두는 이유는 위와 같다.
-const TABLE_HOVER_IGNORE_SELECTORS = [
-  "[data-be-table-row-handle]",
-  "[data-be-table-column-handle]",
-  "[data-be-table-resize-handle]",
-  "[data-be-table-expand-row]",
-  "[data-be-table-expand-column]",
-  "[data-be-table-menu]",
-  "[data-be-table-indent]",
-  "[data-be-table-outdent]",
-] as const;
-
-// colgroup col의 인라인 width는 renderHTML이 쓴 모델 열 너비다. 셀 rect는
-// 콘텐츠가 렌더 너비를 강제로 벌리면 모델 값과 어긋나므로 리사이즈 시드로
-// 쓰지 않는다.
-const readColumnStyleWidth = (
-  table: HTMLElement,
-  index: number,
-): number | null => {
-  const col = table.querySelectorAll<HTMLElement>("colgroup col")[index];
-  if (col === undefined) return null;
-  const width = Number.parseFloat(col.style.width);
-  return Number.isFinite(width) ? width : null;
-};
-
-const setColumnStyleWidth = (
-  table: HTMLElement,
-  index: number,
-  width: number,
-): void => {
-  const col = table.querySelectorAll<HTMLElement>("colgroup col")[index];
-  if (col !== undefined) col.style.width = `${width}px`;
-};
-
-type ReorderKind = "row" | "column";
-
-type ReorderState = {
-  kind: ReorderKind;
-  pointerId: number;
-  tableBlockId: string;
-  // 억제 키의 기준(Option A, Issue #63). sourceIndex는 moveTableRow/
-  // moveTableColumn 커맨드가 index를 받으므로 이동 계산에만 쓴다.
-  sourceId: string;
-  sourceIndex: number;
-  hasDragged: boolean;
-  cancelled: boolean;
-  targetIndex: number | null;
-};
-
-type HandleMenuState = {
-  kind: ReorderKind;
-  tableBlockId: string;
-  index: number;
-};
-
-type ResizeState = {
-  pointerId: number;
-  tableBlockId: string;
-  columnIndex: number;
-  startX: number;
-  startWidth: number;
-  currentWidth: number;
-};
-
-// usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
-// 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
-// useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프
-// 함수로 뽑았다 — 로직 자체는 그대로다.
-const computeReorderTargetIndex = (
-  element: HTMLElement,
-  current: ReorderState,
-  clientX: number,
-  clientY: number,
-): number | null => {
-  const currentGeometry = readGeometryFor(element, current.tableBlockId);
-  if (currentGeometry === null) return null;
-
-  if (current.kind === "row") {
-    const { rows } = currentGeometry;
-    const targetIndex = rows.findIndex(
-      (row) => clientY < row.top + row.height / 2,
-    );
-    return targetIndex === -1 ? rows.length : targetIndex;
-  }
-  const { columns } = currentGeometry;
-  const targetIndex = columns.findIndex(
-    (column) => clientX < column.left + column.width / 2,
-  );
-  return targetIndex === -1 ? columns.length : targetIndex;
-};
-
-const clampWidth = (width: number): number =>
-  Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(width)));
 
 export const TableHandles = () => {
   const editor = useEditor();
