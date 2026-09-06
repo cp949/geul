@@ -188,6 +188,13 @@ export const createProductionEditor = (options: {
   createId: IdFactory;
   onUpdate: (editor: Editor) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  // spec §3.3(DOC-009), RD-004-DELTA-01 — Tiptap 네이티브 onSelectionUpdate에
+  // 무인자로 위임한다. 3.30.1 dispatchTransaction이 이미
+  // `!prevState.selection.eq(nextState.selection)`로 실제 변경 여부를
+  // 판정하고 filterTransaction이 거절한 transaction에는 발화하지 않는다
+  // (RD-004-DELTA-01 "## 계획"의 설계 결정, 실측:
+  // @tiptap/core/dist/index.js:7033-7058). 미지정이면 등록하지 않는다.
+  onSelectionChange?: () => void;
   canApplyDocumentChange: () => boolean;
   // BlockMoveKeyboardExtension 전용 — production-editor-session.ts의
   // ProductionEditorSession.getBlockSelection과 구조가 같지만 import하지
@@ -316,6 +323,9 @@ export const createProductionEditor = (options: {
     },
     onMount: ({ editor: mountedEditor }) =>
       ensureTrailingParagraphOnLoad(mountedEditor),
+    ...(options.onSelectionChange === undefined
+      ? {}
+      : { onSelectionUpdate: () => options.onSelectionChange?.() }),
   });
 
   loadNormalizing = true;

@@ -641,6 +641,19 @@ export type CreateEditorOptions = {
     blockId: string,
     state: MediaUploadState | null,
   ) => void;
+  // spec §3.3(DOC-009), RD-004-DELTA-01 — mount(element) 성공 직후 /
+  // unmount() 직전 각각 무인자로 1회 발화한다. 세션 생성 시 내부
+  // load-normalizing dummy mount/unmount(production-editor-assembly.ts)와
+  // replaceDocument()의 내부 remount에는 발화하지 않는다 — 소비자가
+  // 직접 호출하는 EditorController.mount()/unmount()에만 대응한다
+  // (RD-004-DELTA-01 "## 계획"의 설계 결정).
+  onMount?: () => void;
+  onUnmount?: () => void;
+  // spec §3.3(DOC-009), RD-004-DELTA-01 — PM selection이 실제로 바뀔 때만
+  // 무인자로 발화한다(조회는 기존 getCaretBlockContext 등으로). Tiptap
+  // 자신의 selection.eq 비교에 위임해 같은 위치로의 재호출·거절된
+  // transaction에는 발화하지 않는다.
+  onSelectionChange?: () => void;
 };
 
 const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [

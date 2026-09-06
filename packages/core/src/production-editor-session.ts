@@ -143,6 +143,9 @@ export class ProductionEditorSession {
         blockId: string,
         state: MediaUploadState | null,
       ) => void;
+      onMount?: () => void;
+      onUnmount?: () => void;
+      onSelectionChange?: () => void;
     },
   ) {
     const parsed = parseSupportedDocument(options.initialDocument);
@@ -181,10 +184,12 @@ export class ProductionEditorSession {
     if (this.mountedElement !== null) this.tiptapEditor.unmount();
     this.tiptapEditor.mount(element);
     this.mountedElement = element;
+    this.options.onMount?.();
   }
 
   unmount(): void {
     if (this.destroyed || this.mountedElement === null) return;
+    this.options.onUnmount?.();
     this.tiptapEditor.unmount();
     this.mountedElement = null;
   }
@@ -445,6 +450,9 @@ export class ProductionEditorSession {
       ...(this.options.onPasteRejected === undefined
         ? {}
         : { onPasteRejected: this.options.onPasteRejected }),
+      ...(this.options.onSelectionChange === undefined
+        ? {}
+        : { onSelectionChange: this.options.onSelectionChange }),
       canApplyDocumentChange: () =>
         this.sessionRevision < Number.MAX_SAFE_INTEGER,
       // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한
