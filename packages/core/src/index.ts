@@ -50,6 +50,7 @@ export type {
   CreateEditorOptions,
   CustomBlockDefinition,
   CustomInlineContentDefinition,
+  CustomStyleDefinition,
   DocumentChangeEvent,
   EditorController,
   EnabledBlockTypes,

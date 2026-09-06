@@ -39,4 +39,6 @@ export type EditorError =
   // insertCustomInlineContent(RD-002-DELTA-18) 전용 — CUSTOM_BLOCK_TYPE_NOT_REGISTERED와
   // 같은 이유(소비자가 등록하지 않은 type 이름을 실수로 넘기는 실제 도달
   // 가능한 경로).
-  | { code: "CUSTOM_INLINE_CONTENT_TYPE_NOT_REGISTERED"; type: string };
+  | { code: "CUSTOM_INLINE_CONTENT_TYPE_NOT_REGISTERED"; type: string }
+  // toggleCustomStyle(RD-002-DELTA-19) 전용 — 위 두 코드와 동일 이유.
+  | { code: "CUSTOM_STYLE_TYPE_NOT_REGISTERED"; type: string };

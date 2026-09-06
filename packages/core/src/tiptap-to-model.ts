@@ -3,6 +3,7 @@ import {
   canonicalizeTextMarks,
   type CodeBlock,
   type CustomBlock,
+  type CustomTextMark,
   decodeTextMark,
   type Document,
   type IdFactory,
@@ -56,6 +57,7 @@ const markFromTiptap = (
 const inlineContentFromTiptap = (
   nodes: TiptapJsonNode[] | undefined,
   customInlineContentTypes: ReadonlySet<string>,
+  customStyleTypes: ReadonlySet<string>,
 ): Result<InlineContent, EditorError> => {
   const content: InlineContent = [];
 
@@ -85,17 +87,36 @@ const inlineContentFromTiptap = (
       return invalid(`Unsupported inline node: ${String(node.type)}`);
     }
 
+    // 등록된 커스텀 마크(RD-002-DELTA-19)는 canonicalizeTextMarks(model,
+    // TextMark 전용)를 거치지 않는다 — model의 schema.ts::validateContent가
+    // 이미 CustomTextMark를 canonical 순서 판정에서 제외해 저장 순서를
+    // 강제하지 않으므로(RD-002-DELTA-19 "결정" 2), 알려진 마크만 정규
+    // 순서로 만들고 커스텀 마크는 PM이 준 순서 그대로 뒤에 붙인다.
     const marks: TextMark[] = [];
+    const customMarks: CustomTextMark[] = [];
     for (const mark of node.marks ?? []) {
+      if (typeof mark.type === "string" && customStyleTypes.has(mark.type)) {
+        const props = mark.attrs?.props;
+        customMarks.push({
+          type: mark.type,
+          ...(props !== null && props !== undefined
+            ? { props: props as NonNullable<CustomTextMark["props"]> }
+            : {}),
+        });
+        continue;
+      }
       const converted = markFromTiptap(mark);
       if (!converted.ok) return converted;
       marks.push(converted.value);
     }
 
-    const canonicalMarks = canonicalizeTextMarks(marks);
+    const allMarks: Array<TextMark | CustomTextMark> = [
+      ...canonicalizeTextMarks(marks),
+      ...customMarks,
+    ];
     content.push({
       text: node.text,
-      ...(canonicalMarks.length === 0 ? {} : { marks: canonicalMarks }),
+      ...(allMarks.length === 0 ? {} : { marks: allMarks }),
     });
   }
 
@@ -110,6 +131,7 @@ const tableBlockFromTiptapJson = (
   node: TiptapJsonNode,
   id: string,
   customInlineContentTypes: ReadonlySet<string>,
+  customStyleTypes: ReadonlySet<string>,
 ): Result<TableBlock, EditorError> => {
   const attrs = node.attrs ?? {};
 
@@ -120,6 +142,7 @@ const tableBlockFromTiptapJson = (
       const content = inlineContentFromTiptap(
         cellNode.content,
         customInlineContentTypes,
+        customStyleTypes,
       );
       if (!content.ok) return content;
 
@@ -256,6 +279,7 @@ const blockContainerToModel = (
   node: TiptapJsonNode,
   createId: IdFactory,
   customInlineContentTypes: ReadonlySet<string>,
+  customStyleTypes: ReadonlySet<string>,
 ): Result<Block, EditorError> => {
   const id = resolveBlockId(node, createId);
 
@@ -274,6 +298,7 @@ const blockContainerToModel = (
   const inlineContent = inlineContentFromTiptap(
     contentNode.content,
     customInlineContentTypes,
+    customStyleTypes,
   );
   if (!inlineContent.ok) return inlineContent;
 
@@ -299,6 +324,7 @@ const blockContainerToModel = (
         createId,
         NO_CUSTOM_BLOCK_TYPES,
         customInlineContentTypes,
+        customStyleTypes,
       );
       if (!decoded.ok) return decoded;
       // NO_CUSTOM_BLOCK_TYPES를 넘겼으므로 decoded.value는 CustomBlock일
@@ -496,12 +522,14 @@ const decodeBlock = (
   createId: IdFactory,
   customBlockTypes: ReadonlySet<string>,
   customInlineContentTypes: ReadonlySet<string>,
+  customStyleTypes: ReadonlySet<string>,
 ): Result<Block | CustomBlock, EditorError> => {
   if (node.type === "table") {
     return tableBlockFromTiptapJson(
       node,
       resolveBlockId(node, createId),
       customInlineContentTypes,
+      customStyleTypes,
     );
   }
   if (node.type === "divider") {
@@ -522,7 +550,12 @@ const decodeBlock = (
     };
   }
   if (node.type === "blockContainer") {
-    return blockContainerToModel(node, createId, customInlineContentTypes);
+    return blockContainerToModel(
+      node,
+      createId,
+      customInlineContentTypes,
+      customStyleTypes,
+    );
   }
   if (typeof node.type === "string" && customBlockTypes.has(node.type)) {
     return {
@@ -540,6 +573,7 @@ export const tiptapToModel = (
   options?: {
     customBlockTypes?: ReadonlySet<string>;
     customInlineContentTypes?: ReadonlySet<string>;
+    customStyleTypes?: ReadonlySet<string>;
   },
 ): Result<Document, EditorError> => {
   if (json.type !== "doc") return invalid("Tiptap content must be a document");
@@ -547,6 +581,7 @@ export const tiptapToModel = (
   const customBlockTypes = options?.customBlockTypes ?? new Set<string>();
   const customInlineContentTypes =
     options?.customInlineContentTypes ?? new Set<string>();
+  const customStyleTypes = options?.customStyleTypes ?? new Set<string>();
   const blocks: Document["blocks"] = [];
   for (const node of json.content ?? []) {
     const decoded = decodeBlock(
@@ -554,6 +589,7 @@ export const tiptapToModel = (
       createId,
       customBlockTypes,
       customInlineContentTypes,
+      customStyleTypes,
     );
     if (!decoded.ok) return decoded;
     blocks.push(decoded.value);

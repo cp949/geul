@@ -21,6 +21,7 @@ import { findBlockPosition } from "./block-position.js";
 import type {
   CustomBlockDefinition,
   CustomInlineContentDefinition,
+  CustomStyleDefinition,
   EditorController,
 } from "./editor-controller.js";
 import type { EditorError } from "./errors.js";
@@ -62,6 +63,7 @@ const parseSupportedDocument = (
   input: unknown,
   customBlockTypes: ReadonlySet<string>,
   customInlineContentTypes: ReadonlySet<string>,
+  customStyleTypes: ReadonlySet<string>,
   enabledBlockTypes: EnabledBlockTypes | undefined,
 ): Result<BlockDocument, EditorError> => {
   const parsed = parseDocument(input);
@@ -74,6 +76,7 @@ const parseSupportedDocument = (
   const converted = modelToTiptap(parsed.value, {
     customBlockTypes,
     customInlineContentTypes,
+    customStyleTypes,
     ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
   });
   return converted.ok ? { ok: true, value: parsed.value } : converted;
@@ -173,6 +176,12 @@ export class ProductionEditorSession {
     return new Set(Object.keys(this.options.customInlineContent ?? {}));
   }
 
+  // registry(RD-002-DELTA-19)에 등록된 커스텀 스타일 type 이름 집합 —
+  // customBlockTypes/customInlineContentTypes와 동일 패턴.
+  private get customStyleTypes(): ReadonlySet<string> {
+    return new Set(Object.keys(this.options.customStyles ?? {}));
+  }
+
   constructor(
     private readonly options: {
       initialDocument: BlockDocument;
@@ -204,6 +213,9 @@ export class ProductionEditorSession {
       // spec §4.4(EXT-002), RD-002-DELTA-18 — customBlocks와 동일 시점에
       // PM inline atom 노드를 조건부로 추가한다.
       customInlineContent?: Record<string, CustomInlineContentDefinition>;
+      // spec §4.4(EXT-003), RD-002-DELTA-19 — customBlocks와 동일 시점에
+      // PM Mark를 조건부로 추가한다.
+      customStyles?: Record<string, CustomStyleDefinition>;
       // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny
       // 목록. 세션 생애주기 동안 불변이라(재설정 API 없음) 매번 이
       // 옵션에서 다시 읽는다(customBlocks와 같은 패턴).
@@ -221,6 +233,7 @@ export class ProductionEditorSession {
       options.initialDocument,
       new Set(Object.keys(options.customBlocks ?? {})),
       new Set(Object.keys(options.customInlineContent ?? {})),
+      new Set(Object.keys(options.customStyles ?? {})),
       options.enabledBlockTypes,
     );
     if (!parsed.ok) {
@@ -493,6 +506,7 @@ export class ProductionEditorSession {
       next,
       this.customBlockTypes,
       this.customInlineContentTypes,
+      this.customStyleTypes,
       this.options.enabledBlockTypes,
     );
     if (!parsed.ok) return parsed;
@@ -556,6 +570,12 @@ export class ProductionEditorSession {
             customInlineContent: this.options.customInlineContent,
             customInlineContentEditor: this.controllerEditor,
           }),
+      // customStyles(RD-002-DELTA-19)는 customBlocks/customInlineContent와
+      // 달리 editor 참조가 필요 없다(CustomStyleDefinition.render는 값만
+      // 받는다, spec §4.4) — 지연 바인딩 Proxy 배선이 없다.
+      ...(this.options.customStyles === undefined
+        ? {}
+        : { customStyles: this.options.customStyles }),
       ...(this.options.enabledBlockTypes === undefined
         ? {}
         : { enabledBlockTypes: this.options.enabledBlockTypes }),
@@ -653,6 +673,7 @@ export class ProductionEditorSession {
       {
         customBlockTypes: this.customBlockTypes,
         customInlineContentTypes: this.customInlineContentTypes,
+        customStyleTypes: this.customStyleTypes,
       },
     );
     if (!converted.ok) {
@@ -673,6 +694,7 @@ export class ProductionEditorSession {
       {
         customBlockTypes: this.customBlockTypes,
         customInlineContentTypes: this.customInlineContentTypes,
+        customStyleTypes: this.customStyleTypes,
       },
     );
     if (!converted.ok) {

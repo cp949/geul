@@ -24,15 +24,18 @@ import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
 import { createCustomBlockExtension } from "./custom-block-extension.js";
 import { createCustomInlineContentExtension } from "./custom-inline-content-extension.js";
+import { createCustomStyleMark } from "./custom-style-mark-extension.js";
 import { DividerExtension } from "./divider-extension.js";
-// EditorController/CustomBlockDefinition/CustomInlineContentDefinition을
-// import type으로만 참조한다(RD-002-DELTA-11 "결정" 4 — 100개 이상
-// 메서드를 가진 공개 인터페이스라 production-editor-session.ts 관례(구조적
-// 복제)를 따르지 않는다. 값 import가 아니라 컴파일 시 완전히 지워져
-// 런타임 순환 의존이 생기지 않는다).
+// EditorController/CustomBlockDefinition/CustomInlineContentDefinition/
+// CustomStyleDefinition을 import type으로만 참조한다(RD-002-DELTA-11
+// "결정" 4 — 100개 이상 메서드를 가진 공개 인터페이스라
+// production-editor-session.ts 관례(구조적 복제)를 따르지 않는다. 값
+// import가 아니라 컴파일 시 완전히 지워져 런타임 순환 의존이 생기지
+// 않는다).
 import type {
   CustomBlockDefinition,
   CustomInlineContentDefinition,
+  CustomStyleDefinition,
   EditorController,
 } from "./editor-controller.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
@@ -245,6 +248,10 @@ export const createProductionEditor = (options: {
   // 온다(customBlocks/customBlockEditor와 동일 근거).
   customInlineContent?: Record<string, CustomInlineContentDefinition>;
   customInlineContentEditor?: EditorController;
+  // spec §4.4(EXT-003), RD-002-DELTA-19 — customBlocks와 동일 시점에 PM
+  // Mark를 조건부로 추가한다. editor 참조가 필요 없어(CustomStyleDefinition.
+  // render는 값만 받는다) customStyleEditor 같은 짝이 없다.
+  customStyles?: Record<string, CustomStyleDefinition>;
   // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny 목록.
   // 미지정이면 isBlockTypeEnabled가 항상 true라 아래 조건부 스프레드가
   // 전부 무조건 포함으로 접혀 기존 동작과 100% 같다.
@@ -294,6 +301,7 @@ export const createProductionEditor = (options: {
     customInlineContentTypes: new Set(
       Object.keys(options.customInlineContent ?? {}),
     ),
+    customStyleTypes: new Set(Object.keys(options.customStyles ?? {})),
     ...(options.enabledBlockTypes === undefined
       ? {}
       : { enabledBlockTypes: options.enabledBlockTypes }),
@@ -432,6 +440,12 @@ export const createProductionEditor = (options: {
             definition,
             options.customInlineContentEditor as EditorController,
           ),
+      ),
+      // registry(RD-002-DELTA-19, CreateEditorOptions.customStyles)에
+      // 등록된 타입마다 PM Mark 하나씩 — editor 참조가 필요 없어
+      // customBlocks/customInlineContent와 달리 지연 바인딩 Proxy가 없다.
+      ...Object.entries(options.customStyles ?? {}).map(([type, definition]) =>
+        createCustomStyleMark(type, definition),
       ),
       TableKeyboardNavigationExtension.configure({
         createId: options.createId,

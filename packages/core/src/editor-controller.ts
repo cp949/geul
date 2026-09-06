@@ -2,6 +2,7 @@ import type { TabularData } from "@cp949/geul-io";
 import {
   type Block,
   type CustomBlock,
+  type CustomTextMark,
   type Document as BlockDocument,
   type DocumentBlock,
   type HeadingBlock,
@@ -336,6 +337,14 @@ export interface EditorController {
     toggleInlineTextColor(color: string | null): Result<void, EditorError>;
     toggleInlineBackgroundColor(
       color: string | null,
+    ): Result<void, EditorError>;
+    // spec §4.4, RD-002-DELTA-19 — 등록되지 않은 type은
+    // CUSTOM_STYLE_TYPE_NOT_REGISTERED로 거절한다(insertCustomBlock/
+    // insertCustomInlineContent와 동일 근거). 같은 값으로 다시 호출하면
+    // 해제된다(toggleInlineTextColor와 동일한 toggle 의미).
+    toggleCustomStyle(
+      type: string,
+      props?: Record<string, string | number | boolean | null>,
     ): Result<void, EditorError>;
     setBlockTextColor(
       blockId: string,
@@ -726,6 +735,22 @@ export type CustomInlineContentDefinition = {
   toHtml?: (item: Extract<InlineContentItem, { type: "custom" }>) => string;
 };
 
+// spec §4.4(EXT-003), RD-002-DELTA-19 — CustomBlockDefinition/
+// CustomInlineContentDefinition과 달리 render()가 `editor`를 받지 않는다
+// (spec §4.4 원문 — 스타일은 값만으로 렌더가 결정된다, 지연 바인딩 Proxy
+// 불필요). PM Mark의 배열 기반 DOMOutputSpec으로의 변환은
+// custom-style-mark-extension.ts가 전담한다(HTMLElement를 반환하면 태그·
+// 속성만 추출하고 자식은 버린다 — Mark는 PM이 감싼 콘텐츠를 관리해야 해
+// NodeView처럼 완성된 서브트리를 그대로 못 쓴다).
+export type CustomStyleDefinition = {
+  render: (
+    value: CustomTextMark,
+  ) => HTMLElement | { className?: string; style?: Partial<CSSStyleDeclaration> };
+  // 미등록 시 io HTML 손실 정책(spec §4.5, 범위 밖)이 적용된다 — 이번
+  // DELTA는 이 필드를 저장만 하고 io로 연결하지 않는다.
+  toHtml?: (value: CustomTextMark) => string;
+};
+
 export type CreateEditorOptions = {
   initialDocument: BlockDocument;
   /**
@@ -783,6 +808,10 @@ export type CreateEditorOptions = {
   // 제약). 등록되지 않은 커스텀 inline 타입은 여전히
   // EDITOR_FEATURE_UNAVAILABLE로 거절된다(model-to-tiptap.ts).
   customInlineContent?: Record<string, CustomInlineContentDefinition>;
+  // spec §4.4(EXT-003), RD-002-DELTA-19 — 등록된 타입마다 PM Mark를
+  // 조건부로 추가한다. 등록되지 않은 커스텀 마크는 여전히
+  // EDITOR_FEATURE_UNAVAILABLE로 거절된다(model-to-tiptap.ts).
+  customStyles?: Record<string, CustomStyleDefinition>;
   // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny
   // 목록. 비활성화한 타입은 PM 스키마에 노드로 등록되지 않고,
   // initialDocument/replaceDocument/붙여넣기 어느 경로로 만나도
@@ -972,6 +1001,40 @@ export const createEditor = (
       color === null
         ? session.editor.commands.unsetMark(markName)
         : session.editor.commands.toggleMark(markName, { color }),
+    );
+  };
+
+  // registry(RD-002-DELTA-19)에 등록된 커스텀 스타일을 selection에
+  // 적용/해제한다 — runInlineColorCommand와 같은 "같은 값 재적용 시 해제"
+  // 의미를 목표로 하지만, Tiptap의 제네릭 toggleMark는 attrs 활성 판정을
+  // 얕은 비교로 한다(실측: `props`처럼 값이 객체인 attr은 매 호출마다
+  // 새로 만든 리터럴이라 참조가 달라 항상 "비활성"으로 오판되고, 재호출이
+  // 항상 재적용으로만 이어져 해제가 전혀 안 된다 — `color`처럼 값이
+  // primitive string인 runInlineColorCommand에서는 이 문제가 드러나지
+  // 않았다). `editor.getAttributes(type).props`를 직접 읽어 JSON 직렬화로
+  // 깊은 비교를 한 뒤 `setMark`/`unsetMark`를 명시적으로 선택한다.
+  const toggleCustomStyle = (
+    type: string,
+    props?: Record<string, string | number | boolean | null>,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("toggleCustomStyle");
+    const rejected = rejectCodeBlockMark();
+    if (rejected !== null) return rejected;
+    if (session.editor.schema.marks[type] === undefined) {
+      return { ok: false, error: { code: "CUSTOM_STYLE_TYPE_NOT_REGISTERED", type } };
+    }
+    if (session.editor.state.selection.empty) {
+      return commandNotApplicable("toggleCustomStyle");
+    }
+    const nextProps = props ?? null;
+    const alreadyActive =
+      session.editor.isActive(type) &&
+      JSON.stringify(session.editor.getAttributes(type).props ?? null) ===
+        JSON.stringify(nextProps);
+    return session.runDocumentCommand("toggleCustomStyle", "local", () =>
+      alreadyActive
+        ? session.editor.commands.unsetMark(type)
+        : session.editor.commands.setMark(type, { props: nextProps }),
     );
   };
 
@@ -2424,6 +2487,7 @@ export const createEditor = (
           "backgroundColor",
           color,
         ),
+      toggleCustomStyle,
       setBlockTextColor: (blockId, color) =>
         runSetBlockTextPropCommand(
           "setBlockTextColor",

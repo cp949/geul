@@ -5,6 +5,7 @@ import {
   type CheckListItemBlock,
   type CodeBlock,
   type CustomBlock,
+  type CustomTextMark,
   type Document,
   type FileBlock,
   type HeadingBlock,
@@ -86,12 +87,31 @@ export type InlineContentViolation = {
 // customStyleTypes, 추후 DELTA)가 없어 PM으로 표현하지 못하는 것뿐이다 —
 // "문서가 잘못됨"을 뜻하는 나머지 DOCUMENT_INVALID 판정과 분류가 다르다
 // (top-level CustomBlock 거절, DELTA-04/12와 같은 기준).
+// 등록된 CustomTextMark(RD-002-DELTA-19)를 "인접 동일 마크" 서명에 포함
+//시키기 위한 직렬화. type 기준으로 정렬한다 — model(schema.ts
+// validateContent)이 이미 CustomTextMark를 canonical 순서 판정에서
+// 제외해 저장 순서를 강제하지 않으므로(아래 knownMarks 필터와 동일 원칙,
+// RD-002-DELTA-19.md "결정" 2), 배열 위치가 달라도 내용(type+props)이
+// 같으면 동일해야 한다. 정렬하지 않으면 순서만 다른 동일 커스텀 마크
+// 조합이 다른 서명으로 오판된다.
+const customMarkSignature = (marks: readonly (TextMark | CustomTextMark)[]): string =>
+  JSON.stringify(
+    marks
+      .filter((mark): mark is CustomTextMark => !isKnownTextMarkType(mark.type))
+      .map((mark) => ({ type: mark.type, props: mark.props ?? null }))
+      .sort((left, right) => left.type.localeCompare(right.type)),
+  );
+
 export const inlineContentViolation = (
   content: InlineContent,
-  options?: { customInlineContentTypes?: ReadonlySet<string> },
+  options?: {
+    customInlineContentTypes?: ReadonlySet<string>;
+    customStyleTypes?: ReadonlySet<string>;
+  },
 ): InlineContentViolation | null => {
   const customInlineContentTypes =
     options?.customInlineContentTypes ?? new Set<string>();
+  const customStyleTypes = options?.customStyleTypes ?? new Set<string>();
   let previousMarks: string | undefined;
 
   for (const item of content) {
@@ -123,7 +143,7 @@ export const inlineContentViolation = (
     }
     const marks = item.marks ?? [];
     const unregisteredMark = marks.find(
-      (mark) => !isKnownTextMarkType(mark.type),
+      (mark) => !isKnownTextMarkType(mark.type) && !customStyleTypes.has(mark.type),
     );
     if (unregisteredMark !== undefined) {
       return {
@@ -131,9 +151,17 @@ export const inlineContentViolation = (
         reason: `contains an unregistered custom mark type "${unregisteredMark.type}"`,
       };
     }
-    // 위에서 CustomTextMark(알 수 없는 type)를 모두 거절해 이 지점의
-    // marks는 TextMark만 남는다.
-    const knownMarks = marks as TextMark[];
+    // 위에서 미등록 CustomTextMark를 모두 거절했다 — 아래 4개 판정(링크
+    // href·canonical 순서 등)은 알려진 마크만 걸러 대상으로 한다(model의
+    // schema.ts::validateContent와 동일 원칙, RD-002-DELTA-19 "결정" 2 —
+    // CustomTextMark는 이 판정들에 전혀 참여하지 않는다). 캐스트 대신
+    // 필터를 쓴다 — CustomTextMark.type: string이 discriminated union
+    // 좁히기를 흐리는 기존 문제(DELTA-01 "설계 발견")와 별개로, 이제는
+    // 등록된 커스텀 마크가 실제로 배열에 남아 있을 수 있어 캐스트 자체가
+    // 부정확하다.
+    const knownMarks = marks.filter((mark): mark is TextMark =>
+      isKnownTextMarkType(mark.type),
+    );
     for (const mark of knownMarks) {
       if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
         return {
@@ -149,7 +177,13 @@ export const inlineContentViolation = (
       };
     }
 
-    const currentMarks = JSON.stringify(knownMarks.map(markKey));
+    // 등록된 커스텀 마크의 type+props까지 서명에 포함한다(RD-002-DELTA-19
+    // "결정" 3) — 알려진 마크만으로 서명을 만들면 커스텀 마크의 props가
+    // 다른 두 인접 런(예: 하이라이트 색상이 다른 두 런)을 "동일 마크"로
+    // 오판해 유효한 문서를 거절하게 된다. 커스텀 마크가 없으면 이 접미사는
+    // 항상 "[]"로 접혀 회귀가 없다.
+    const currentMarks =
+      JSON.stringify(knownMarks.map(markKey)) + "|" + customMarkSignature(marks);
     if (currentMarks === previousMarks) {
       return {
         code: "DOCUMENT_INVALID",
@@ -167,7 +201,10 @@ export const inlineContentViolation = (
 // 조립이 던지는 예외를 막는 사전 방어일 뿐, 최종 권위가 아니다).
 const validateEditableContent = (
   blocks: readonly Block[],
-  options?: { customInlineContentTypes?: ReadonlySet<string> },
+  options?: {
+    customInlineContentTypes?: ReadonlySet<string>;
+    customStyleTypes?: ReadonlySet<string>;
+  },
 ): Result<void, EditorError> => {
   for (const block of blocks) {
     // divider는 content·children이 없어 검사 대상이 없다(DividerBlock 리프).
@@ -247,6 +284,14 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
   }
 };
 
+// 등록된 커스텀 마크(RD-002-DELTA-19)는 여기서 등록 여부를 다시 확인하지
+// 않는다 — inlineContentToTiptap과 같은 설계(등록 여부 확인은
+// validateEditableContent 앞단이 소유).
+const markToTiptapAny = (mark: TextMark | CustomTextMark): TiptapJsonMark =>
+  isKnownTextMarkType(mark.type)
+    ? markToTiptap(mark as TextMark)
+    : { type: mark.type, attrs: { props: (mark as CustomTextMark).props ?? null } };
+
 export const inlineContentToTiptap = (
   content: InlineContent,
 ): TiptapJsonNode[] =>
@@ -275,7 +320,7 @@ export const inlineContentToTiptap = (
       text: run.text,
       ...(run.marks === undefined
         ? {}
-        : { marks: (run.marks as TextMark[]).map(markToTiptap) }),
+        : { marks: run.marks.map(markToTiptapAny) }),
     };
   });
 
@@ -505,6 +550,7 @@ export const modelToTiptap = (
   options?: {
     customBlockTypes?: ReadonlySet<string>;
     customInlineContentTypes?: ReadonlySet<string>;
+    customStyleTypes?: ReadonlySet<string>;
     enabledBlockTypes?: EnabledBlockTypes;
   },
 ): Result<TiptapJsonNode, EditorError> => {
