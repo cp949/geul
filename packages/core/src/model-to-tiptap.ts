@@ -10,9 +10,12 @@ import {
   type HeadingBlock,
   type ImageBlock,
   type InlineContent,
+  type InlineContentItem,
   isCanonicalTextMarks,
   isKnownBlockType,
+  isKnownTextMarkType,
   isSupportedLinkHref,
+  isTextRunItem,
   isValidInlineText,
   type NumberedListItemBlock,
   type ParagraphBlock,
@@ -67,39 +70,82 @@ const invalid = (message: string): Result<never, EditorError> => ({
 const markKey = (mark: TextMark): string =>
   mark.type === "link" ? `link:${mark.href}` : mark.type;
 
+export type InlineContentViolation = {
+  code: "DOCUMENT_INVALID" | "EDITOR_FEATURE_UNAVAILABLE";
+  reason: string;
+};
+
 // 편집기에 커밋되는 인라인 콘텐츠의 항목 계약: 빈 텍스트 런 금지
 // (ProseMirror는 빈 텍스트 노드를 만들 수 없다), 빈 마크 배열 금지,
 // 미지원 링크 금지(LinkPolicyExtension이 트랜잭션째 버리기 전에 경계에서
 // 거절), 정규 마크 순서, 인접 동일 마크 런 금지. 위반이 없으면 null,
-// 있으면 위반을 설명하는 서술어를 반환한다 — 호출자가 위치(블록 id, 셀
-// 좌표)를 앞에 붙여 message를 만든다.
+// 있으면 위반을 설명하는 서술어와 코드를 반환한다 — 호출자가 위치(블록
+// id, 셀 좌표)를 앞에 붙여 message를 만든다.
+//
+// 커스텀 inline 원소(EXT-002)·CustomTextMark(EXT-003)는 model 계약상
+// 완전히 유효하지만 이 에디터 인스턴스에 registry(customInlineContentTypes/
+// customStyleTypes, 추후 DELTA)가 없어 PM으로 표현하지 못하는 것뿐이다 —
+// "문서가 잘못됨"을 뜻하는 나머지 DOCUMENT_INVALID 판정과 분류가 다르다
+// (top-level CustomBlock 거절, DELTA-04/12와 같은 기준).
 export const inlineContentViolation = (
   content: InlineContent,
-): string | null => {
+): InlineContentViolation | null => {
   let previousMarks: string | undefined;
 
   for (const item of content) {
+    if (!isTextRunItem(item)) {
+      return {
+        code: "EDITOR_FEATURE_UNAVAILABLE",
+        reason: `contains an unregistered custom inline type "${item.customType}"`,
+      };
+    }
     if (item.text.length === 0) {
-      return "contains an empty text run";
+      return { code: "DOCUMENT_INVALID", reason: "contains an empty text run" };
     }
     if (!isValidInlineText(item.text)) {
-      return "contains invalid inline text (control characters, DEL, or an unpaired surrogate)";
+      return {
+        code: "DOCUMENT_INVALID",
+        reason:
+          "contains invalid inline text (control characters, DEL, or an unpaired surrogate)",
+      };
     }
     if (item.marks?.length === 0) {
-      return "contains an empty mark set";
+      return { code: "DOCUMENT_INVALID", reason: "contains an empty mark set" };
     }
-    for (const mark of item.marks ?? []) {
+    const marks = item.marks ?? [];
+    const unregisteredMark = marks.find(
+      (mark) => !isKnownTextMarkType(mark.type),
+    );
+    if (unregisteredMark !== undefined) {
+      return {
+        code: "EDITOR_FEATURE_UNAVAILABLE",
+        reason: `contains an unregistered custom mark type "${unregisteredMark.type}"`,
+      };
+    }
+    // 위에서 CustomTextMark(알 수 없는 type)를 모두 거절해 이 지점의
+    // marks는 TextMark만 남는다.
+    const knownMarks = marks as TextMark[];
+    for (const mark of knownMarks) {
       if (mark.type === "link" && !isSupportedLinkHref(mark.href)) {
-        return "contains an unsupported link URL";
+        return {
+          code: "DOCUMENT_INVALID",
+          reason: "contains an unsupported link URL",
+        };
       }
     }
-    if (!isCanonicalTextMarks(item.marks ?? [])) {
-      return "contains noncanonical mark ordering";
+    if (!isCanonicalTextMarks(knownMarks)) {
+      return {
+        code: "DOCUMENT_INVALID",
+        reason: "contains noncanonical mark ordering",
+      };
     }
 
-    const currentMarks = JSON.stringify((item.marks ?? []).map(markKey));
+    const currentMarks = JSON.stringify(knownMarks.map(markKey));
     if (currentMarks === previousMarks) {
-      return "contains adjacent inline runs with identical marks";
+      return {
+        code: "DOCUMENT_INVALID",
+        reason: "contains adjacent inline runs with identical marks",
+      };
     }
     previousMarks = currentMarks;
   }
@@ -137,7 +183,13 @@ const validateEditableContent = (
         for (const cell of row.cells) {
           const violation = inlineContentViolation(cell.content);
           if (violation !== null) {
-            return invalid(`Block ${block.id} cell ${cell.id} ${violation}`);
+            return {
+              ok: false,
+              error: {
+                code: violation.code,
+                message: `Block ${block.id} cell ${cell.id} ${violation.reason}`,
+              },
+            };
           }
         }
       }
@@ -146,7 +198,13 @@ const validateEditableContent = (
 
     const violation = inlineContentViolation(block.content);
     if (violation !== null) {
-      return invalid(`Block ${block.id} ${violation}`);
+      return {
+        ok: false,
+        error: {
+          code: violation.code,
+          message: `Block ${block.id} ${violation.reason}`,
+        },
+      };
     }
 
     if (block.children !== undefined && block.children.length > 0) {
@@ -182,13 +240,23 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
 export const inlineContentToTiptap = (
   content: InlineContent,
 ): TiptapJsonNode[] =>
-  content.map((item) => ({
-    type: "text",
-    text: item.text,
-    ...(item.marks === undefined
-      ? {}
-      : { marks: item.marks.map(markToTiptap) }),
-  }));
+  content.map((item) => {
+    // 계약: validateEditableContent(inlineContentViolation)가 이 시점
+    // 이전에 이미 커스텀 inline 원소·CustomTextMark를
+    // EDITOR_FEATURE_UNAVAILABLE로 거절했다는 전제 위에서 텍스트 런·
+    // 알려진 마크로 캐스트한다(DELTA-14 "설계 결정" 3). insertBlocks 등
+    // 저수준 API가 이 계약을 우회하는 위험은 새로 생기지 않는다 — 이
+    // 함수가 PM 조립 예외를 막는 사전 방어일 뿐 최종 권위가 아니라는
+    // 기존 위 주석이 이미 인정하는 범주다.
+    const run = item as Extract<InlineContentItem, { text: string }>;
+    return {
+      type: "text",
+      text: run.text,
+      ...(run.marks === undefined
+        ? {}
+        : { marks: (run.marks as TextMark[]).map(markToTiptap) }),
+    };
+  });
 
 // G-TBL-001: 저장 배열 순서는 논리 열 순서의 권위가 아니다. ProseMirror 표는
 // 셀의 물리 문서 순서(형제 노드 순서)로 열 위치를 결정하므로, tiptap JSON을

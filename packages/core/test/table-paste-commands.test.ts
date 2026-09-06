@@ -655,6 +655,39 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
+  // model의 InlineContent 위젠(RD-002-DELTA-13)이 열어 준 커스텀 inline
+  // 원소(EXT-002)가 붙여넣기 경로에도 섞일 수 있다 — registry(추후 DELTA)가
+  // 없어 여전히 기존 CLIPBOARD_CONTENT_INVALID로 거절한다(RD-002-DELTA-14,
+  // inlineContentViolation.reason만 재사용하고 code는 이 경로 자체의
+  // 것을 유지).
+  it("문단 콘텐츠에 커스텀 inline 원소가 있으면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        {
+          type: "paragraph",
+          content: [{ type: "custom", customType: "myWidget" }],
+        },
+        tableBlock("A"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message:
+          'Paragraph content contains an unregistered custom inline type "myWidget"',
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
   it("필터가 트랜잭션을 버리면 표 밖 시퀀스 조립 분기는 실패를 반환하고 문서를 바꾸지 않는다", () => {
     // 표 하나만 넣으면 pasteClipboardContent가 pasteTabularData에 위임해
     // 위 표 밖 분기 테스트와 같은 경로를 탄다 — 문단을 앞뒤로 둬야 이

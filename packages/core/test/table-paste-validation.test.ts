@@ -278,6 +278,14 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
+  // 참고: TabularData 경로(io의 validateTabularData가 core의
+  // inlineContentViolation보다 먼저 셀 content를 훑는다)는 커스텀 inline
+  // 원소 검증을 이 DELTA 범위에서 다루지 않는다 — io src(item.text 직접
+  // 접근, RD-002-DELTA-13 실측 "io src 8파일/39곳"에 포함된 기존 미해결
+  // typecheck 에러 중 하나)가 이 DELTA-14 범위 밖이라 io를 먼저 고치지
+  // 않으면 이 경로를 커스텀 원소로 검증할 수 없다(크래시로 먼저 끊긴다).
+  // 후속 io DELTA가 해소한 뒤 이 테스트를 추가한다.
+
   it("셀 한도를 넘는 데이터는 검증·골격 생성 비용 없이 선거절한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);

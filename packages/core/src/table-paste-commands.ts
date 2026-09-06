@@ -103,7 +103,7 @@ const validateTabularDataForPaste = (
           ok: false,
           error: {
             code: "TABULAR_DATA_INVALID",
-            message: `Cell content at row ${rowIndex}, cell ${cellIndex} ${violation}`,
+            message: `Cell content at row ${rowIndex}, cell ${cellIndex} ${violation.reason}`,
           },
         };
       }
@@ -269,7 +269,7 @@ const validateOutOfTableContent = (
           ok: false,
           error: {
             code: "CLIPBOARD_CONTENT_INVALID",
-            message: `${blockTypeLabel} content ${violation}`,
+            message: `${blockTypeLabel} content ${violation.reason}`,
           },
         };
       }
@@ -286,7 +286,7 @@ const validateOutOfTableContent = (
           ok: false,
           error: {
             code: "CLIPBOARD_CONTENT_INVALID",
-            message: `${blockTypeLabel} content ${violation}`,
+            message: `${blockTypeLabel} content ${violation.reason}`,
           },
         };
       }
