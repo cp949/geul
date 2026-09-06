@@ -13,7 +13,7 @@ import type { TableBlock } from "@cp949/geul-model";
 import { validateTableGrid } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import { pasteInto } from "../src/table-grid.js";
+import { pasteInto } from "../src/table-grid-paste.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import { oneByOneData } from "./table-test-support.js";
 

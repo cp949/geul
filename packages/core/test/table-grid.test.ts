@@ -7,23 +7,26 @@
 import type { TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import {
+  resizeColumn,
+  setCellAlign,
+  setCellColor,
+  toggleHeaderColumn,
+  toggleHeaderRow,
+  validateColumnWidth,
+} from "../src/table-grid-format.js";
+import { mergeCells, splitCell } from "../src/table-grid-merge.js";
+import {
   deleteColumn,
   deleteRow,
   insertColumn,
   insertRow,
-  isRectangular,
-  mergeCells,
   moveColumn,
   moveRow,
+} from "../src/table-grid-structure.js";
+import {
+  isRectangular,
   projectTableGrid,
-  resizeColumn,
-  setCellAlign,
-  setCellColor,
-  splitCell,
   type TableGrid,
-  toggleHeaderColumn,
-  toggleHeaderRow,
-  validateColumnWidth,
 } from "../src/table-grid.js";
 import { sequentialIds } from "./editor-controller-support.js";
 

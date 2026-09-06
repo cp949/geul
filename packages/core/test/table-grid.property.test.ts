@@ -2,18 +2,17 @@ import type { IdFactory, TableBlock } from "@cp949/geul-model";
 import { validateTableGrid } from "@cp949/geul-model";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { mergeCells, splitCell } from "../src/table-grid-merge.js";
+import { pasteInto } from "../src/table-grid-paste.js";
 import {
   deleteColumn,
   deleteRow,
   insertColumn,
   insertRow,
-  mergeCells,
   moveColumn,
   moveRow,
-  pasteInto,
-  projectTableGrid,
-  splitCell,
-} from "../src/table-grid.js";
+} from "../src/table-grid-structure.js";
+import { projectTableGrid } from "../src/table-grid.js";
 
 const initialTableArbitrary = fc.integer({ min: 2, max: 5 }).chain((rowCount) =>
   fc.integer({ min: 2, max: 5 }).map((columnCount): TableBlock => ({

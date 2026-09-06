@@ -6,10 +6,8 @@ import {
   tableBlockToTiptapJson,
   type TiptapJsonNode,
 } from "./model-to-tiptap.js";
-import {
-  DEFAULT_COLUMN_WIDTH,
-  pasteInto as pasteGridInto,
-} from "./table-grid.js";
+import { pasteInto as pasteGridInto } from "./table-grid-paste.js";
+import { DEFAULT_COLUMN_WIDTH } from "./table-grid.js";
 import { tableBlockToTiptapNode } from "./table-model-codec.js";
 import type { TableCommandError } from "./table-commands.js";
 

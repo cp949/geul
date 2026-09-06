@@ -12,23 +12,29 @@ import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
 import type { TableCommandError } from "./table-command-error.js";
 import {
-  DEFAULT_COLUMN_WIDTH,
+  resizeColumn as resizeGridColumn,
+  setCellAlign as setGridCellAlign,
+  setCellColor as setGridCellColor,
+  toggleHeaderColumn as toggleGridHeaderColumn,
+  toggleHeaderRow as toggleGridHeaderRow,
+} from "./table-grid-format.js";
+import {
+  mergeCells as mergeGridCells,
+  splitCell as splitGridCell,
+} from "./table-grid-merge.js";
+import {
   deleteColumn as deleteGridColumn,
   deleteRow as deleteGridRow,
   insertColumn as insertGridColumn,
   insertRow as insertGridRow,
-  mergeCells as mergeGridCells,
   moveColumn as moveGridColumn,
   moveRow as moveGridRow,
+} from "./table-grid-structure.js";
+import {
+  DEFAULT_COLUMN_WIDTH,
   projectTableGrid,
-  resizeColumn as resizeGridColumn,
-  setCellAlign as setGridCellAlign,
-  setCellColor as setGridCellColor,
-  splitCell as splitGridCell,
   type TableCellTarget,
   type TableGridError,
-  toggleHeaderColumn as toggleGridHeaderColumn,
-  toggleHeaderRow as toggleGridHeaderRow,
 } from "./table-grid.js";
 import {
   tableBlockToTiptapNode,

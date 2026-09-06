@@ -24,7 +24,7 @@ import {
   setCaretInCell,
   type TableCommandError,
 } from "./table-commands.js";
-import { pasteInto as pasteGridInto } from "./table-grid.js";
+import { pasteInto as pasteGridInto } from "./table-grid-paste.js";
 import { buildOutOfTableSequence } from "./table-paste-sequence.js";
 
 // $pos가 표 노드 안에 있는지 — 조상 depth를 거슬러 올라가며 검사한다.
