@@ -1,5 +1,6 @@
 import {
   appendOrMergeInlineItem,
+  type Block,
   type BulletListItemBlock,
   type CheckListItemBlock,
   type Document,
@@ -848,8 +849,8 @@ const blocksFromSegments = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
-): Document["blocks"] => {
-  const blocks: Document["blocks"] = [];
+): Block[] => {
+  const blocks: Block[] = [];
 
   for (const segment of segmentBlocks(nodes, importBlockSegmentPolicy)) {
     if (segment.kind === "paragraph") {
@@ -1261,7 +1262,7 @@ const blocksFromListItem = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
-): Document["blocks"] => {
+): Block[] => {
   const id = propertyString(node, "dataBeBlockId") ?? createId();
   const { contentNodes, childrenNodes } = splitListItemChildren(node);
   const content = paragraphContentFromNodes(contentNodes);
@@ -1396,8 +1397,8 @@ const blocksFromListElement = (
   depth: number,
   warnings: HtmlImportWarning[],
   restartDefaultOrderedList: boolean,
-): Document["blocks"] => {
-  const blocks: Document["blocks"] = [];
+): Block[] => {
+  const blocks: Block[] = [];
   let nonItemRun: HtmlNode[] = [];
   let itemIndex = 0;
   let flowInterruptedSinceItem = false;
@@ -1511,8 +1512,8 @@ const blocksFromNodes = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
-): Document["blocks"] => {
-  const blocks: Document["blocks"] = [];
+): Block[] => {
+  const blocks: Block[] = [];
   let plainRun: HtmlNode[] = [];
 
   const flushPlainRun = (): void => {
