@@ -1,33 +1,22 @@
-import {
-  blockTypeDescriptorFromBlock,
-  isKnownBlockType,
-  isNestableBlockType,
-  type BlockTypeDescriptor,
-  type BlockTypeSource,
-  type EditorController,
-} from "@cp949/geul-core";
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  GripVertical,
-  Plus,
-} from "lucide-react";
+import { GripVertical, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  BLOCK_TYPE_OPTIONS,
-  type BlockTypeOption,
-  getBlockTypeOptionsForSource,
-} from "./block-type-options.js";
+  computeDragGuide,
+  computeRangeMoveDragGuide,
+  findBlockInTreeForDrag,
+  findOwnRectBlockId,
+  isBlockIdWithinBlockSelection,
+} from "./block-side-menu-geometry.js";
+import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
+import type {
+  BlockMenuState,
+  BlockSideMenuProps,
+  DragState,
+} from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
-import { MenuItemButton } from "./menu-item-button.js";
-import {
-  TABLE_BACKGROUND_COLORS,
-  TABLE_TEXT_COLORS,
-} from "./table-cell-colors.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -48,246 +37,8 @@ const addBlockLabel = "Add block";
 const dragHandleIcon = <GripVertical {...iconProps} />;
 const addBlockIcon = <Plus {...iconProps} />;
 
-type InsertionGuide = {
-  beforeBlockId: string | null;
-  left: number;
-  top: number;
-  width: number;
-};
-
-// 핸들 드래그의 세 가지 해석이다(Issue #38 슬라이스7 DELTA-03).
-// - "reorder": 기존 단일 블록 재정렬(인접 형제 hover 또는 폴백).
-// - "range-select": 인접하지 않은 같은 부모 형제 own rect 위로 들어가
-//   pointerup 시 selectBlockRange를 커밋할 후보 상태.
-// - "range-move": 이미 있는 blockSelection 범위 안 blockId의 handle을
-//   다시 pointerdown해 그 범위 전체를 이동하는 모드(pointerdown 시점에만 결정).
-type DragMode = "reorder" | "range-select" | "range-move";
-
-type DragState = {
-  pointerId: number;
-  sourceBlockId: string;
-  startX: number;
-  startY: number;
-  hasDragged: boolean;
-  cancelled: boolean;
-  guide: InsertionGuide | null;
-  mode: DragMode;
-  // range-select 후보 blockId. mode가 "range-select"일 때만 의미가 있고
-  // pointerup에서 selectBlockRange(sourceBlockId, 이 값)로 커밋한다.
-  rangeSelectCandidateBlockId: string | null;
-  // range-move 모드가 이동할 범위. pointerdown 시점의 getBlockSelection()을
-  // 그대로 캡처한다 — 드래그 도중 다른 명령이 선택을 바꾸지 않는다는 전제다.
-  rangeSelection: { fromBlockId: string; toBlockId: string } | null;
-};
-
-type BlockMenuState = {
-  blockId: string;
-  left: number;
-  top: number;
-};
-
-type BlockSideMenuProps = {
-  onBlockAdded: (blockId: string) => void;
-};
-
-type StoredBlock = ReturnType<
-  EditorController["getDocument"]
->["blocks"][number];
-
-// Turn into의 권위는 DOM 투영이 아니라 최신 저장 document다. blockId를
-// 안정 ID로 재귀 조회해 top-level·nested block이 같은 descriptor 경로를 쓴다.
-// leaf 매핑(type→BlockTypeDescriptor) 자체는 core의 blockTypeDescriptorFromBlock이
-// 소유한다(아키텍처 리뷰 6차 후보 L3) — 여기 남는 건 id 재귀 조회뿐이다.
-const findBlockTypeDescriptor = (
-  blocks: readonly StoredBlock[],
-  blockId: string,
-): BlockTypeDescriptor | null => {
-  for (const block of blocks) {
-    if (block.id === blockId) {
-      // top-level CustomBlock(model, RD-002-DELTA-01)의 서술자는 아직 없다
-      // (registry는 RD-002-DELTA-11) — "찾지 못함"과 동일하게 취급한다
-      // (core의 generic-block-commands.ts와 같은 패턴).
-      if (!isKnownBlockType(block.type)) return null;
-      return blockTypeDescriptorFromBlock(block as BlockTypeSource);
-    }
-    if ("children" in block && block.children !== undefined) {
-      const nested = findBlockTypeDescriptor(block.children, blockId);
-      if (nested !== null) return nested;
-    }
-  }
-  return null;
-};
-
-// usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
-// 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
-// useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프
-// 함수로 뽑았다 — 로직 자체는 그대로다.
-const computeDragGuide = (
-  element: HTMLElement,
-  clientY: number,
-  current: DragState,
-): InsertionGuide | null => {
-  const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
-  );
-  const ids = blockElements.map((candidate) =>
-    candidate.getAttribute("data-be-block-id"),
-  );
-  const targetIndex = blockElements.findIndex((candidate) => {
-    const rect = candidate.getBoundingClientRect();
-    return clientY < rect.top + rect.height / 2;
-  });
-  const sourceIndex = ids.indexOf(current.sourceBlockId);
-  const effectiveTargetIndex = targetIndex === -1 ? ids.length : targetIndex;
-  const isNoop =
-    effectiveTargetIndex === sourceIndex ||
-    effectiveTargetIndex === sourceIndex + 1;
-  if (isNoop) return null;
-
-  const guideElement =
-    targetIndex === -1
-      ? blockElements[blockElements.length - 1]
-      : blockElements[targetIndex];
-  if (guideElement === undefined) return null;
-
-  const rect = guideElement.getBoundingClientRect();
-  return {
-    beforeBlockId: targetIndex === -1 ? null : (ids[targetIndex] ?? null),
-    left: rect.left,
-    top: targetIndex === -1 ? rect.bottom : rect.top,
-    width: rect.width,
-  };
-};
-
-// core generic-block-commands.ts의 findBlockInTree와 같은 모양의 로컬
-// tree-walk다. core 내부 함수라 export되지 않아 import할 수 없다(Issue #38
-// 슬라이스7 DELTA-03). own-rect hover 대상이 시작 블록의 실제 인접 형제인지,
-// 같은 부모인지(조건1a — flat DOM 인덱스가 아니라 이 트리로 판정해야 한다)를
-// 가리는 데 쓴다.
-const findBlockInTreeForDrag = (
-  blocks: readonly StoredBlock[],
-  blockId: string,
-): { siblings: readonly StoredBlock[]; index: number } | null => {
-  const index = blocks.findIndex((block) => block.id === blockId);
-  if (index !== -1) return { siblings: blocks, index };
-  for (const block of blocks) {
-    if (!("children" in block) || block.children === undefined) continue;
-    const found = findBlockInTreeForDrag(block.children, blockId);
-    if (found !== null) return found;
-  }
-  return null;
-};
-
-// 이미 있는 blockSelection의 범위(from~to, 같은 부모 형제 구간) 안에 blockId가
-// 포함되는지 실제 트리 구조로 판정한다. handlePointerDownOnHandle이 드래그
-// 모드를 "range-move"로 시작할지 결정하는 데만 쓴다.
-const isBlockIdWithinBlockSelection = (
-  blocks: readonly StoredBlock[],
-  selection: { fromBlockId: string; toBlockId: string },
-  blockId: string,
-): boolean => {
-  const from = findBlockInTreeForDrag(blocks, selection.fromBlockId);
-  const to = findBlockInTreeForDrag(blocks, selection.toBlockId);
-  const target = findBlockInTreeForDrag(blocks, blockId);
-  if (from === null || to === null || target === null) return false;
-  if (from.siblings !== to.siblings || from.siblings !== target.siblings) {
-    return false;
-  }
-  const startIndex = Math.min(from.index, to.index);
-  const endIndex = Math.max(from.index, to.index);
-  return target.index >= startIndex && target.index <= endIndex;
-};
-
-// 포인터 클라이언트 좌표가 어느 블록의 own rect(top~bottom 전체) 안에 있는지
-// 찾는다. computeDragGuide의 형제 사이 midpoint 판정과는 목적이 다르다 —
-// 여기서는 "포인터가 지금 어느 블록 위에 있는가"만 본다(01-계획.md "재드래그로
-// 범위 이동 판정 신호" 결정).
-const findOwnRectBlockId = (
-  element: HTMLElement,
-  clientY: number,
-): string | null => {
-  const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
-  );
-  // 자식이 있는 블록은 자기 blockGroup을 DOM 안에 그대로 품는다
-  // (blockContainer의 content hole, block-container-extension.ts) — 조상의
-  // own rect가 모든 자손의 rect를 감싼다. querySelectorAll은 document
-  // order(전위 순회)라 조상이 항상 자손보다 배열 앞에 오므로, 첫 매치를
-  // 취하면 자손 영역을 가리켜도 항상 최상위 조상으로 뭉개진다. 형제는
-  // 서로 겹치지 않게 세로로 쌓이므로 한 clientY가 속하는 매치들은 조상→
-  // 자손 한 사슬뿐이다 — 마지막 매치가 그 사슬에서 가장 깊이 중첩된(가장
-  // 구체적인) 블록이다(즉시 리뷰 발견, Issue #38 슬라이스7 DELTA-03).
-  let hitId: string | null = null;
-  for (const candidate of blockElements) {
-    const rect = candidate.getBoundingClientRect();
-    if (clientY >= rect.top && clientY < rect.bottom) {
-      hitId = candidate.getAttribute("data-be-block-id");
-    }
-  }
-  return hitId;
-};
-
-// range-move 모드의 삽입 가이드다. computeDragGuide와 같은 형제 사이 midpoint
-// 탐색을 재사용하되(그 함수 자체는 건드리지 않는다 — 단일 블록 재정렬에 계속
-// 그대로 쓰인다), no-op 판정을 단일 sourceIndex가 아니라 선택 범위
-// [startIndex, endIndex] 전체로 넓힌다 — 범위 안 임의 지점으로의 이동은 전부
-// no-op이다(정확한 경계값은 core가 최종 가드, DELTA-03 범위 밖).
-const computeRangeMoveDragGuide = (
-  element: HTMLElement,
-  clientY: number,
-  fromBlockId: string,
-  toBlockId: string,
-): InsertionGuide | null => {
-  const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
-  );
-  const ids = blockElements.map((candidate) =>
-    candidate.getAttribute("data-be-block-id"),
-  );
-  const targetIndex = blockElements.findIndex((candidate) => {
-    const rect = candidate.getBoundingClientRect();
-    return clientY < rect.top + rect.height / 2;
-  });
-  const startIndex = ids.indexOf(fromBlockId);
-  const endIndex = ids.indexOf(toBlockId);
-  const effectiveTargetIndex = targetIndex === -1 ? ids.length : targetIndex;
-  const isNoop =
-    startIndex !== -1 &&
-    endIndex !== -1 &&
-    effectiveTargetIndex >= startIndex &&
-    effectiveTargetIndex <= endIndex + 1;
-  if (isNoop) return null;
-
-  const guideElement =
-    targetIndex === -1
-      ? blockElements[blockElements.length - 1]
-      : blockElements[targetIndex];
-  if (guideElement === undefined) return null;
-
-  const rect = guideElement.getBoundingClientRect();
-  return {
-    beforeBlockId: targetIndex === -1 ? null : (ids[targetIndex] ?? null),
-    left: rect.left,
-    top: targetIndex === -1 ? rect.bottom : rect.top,
-    width: rect.width,
-  };
-};
-
 // flex 센터링은 IconButton이 공통으로 제공한다.
 const blockGutterButtonClassName = "geul-block-gutter__button";
-
-const blockMenuItemClassName = "geul-block-menu__item";
-
-// RD-003 DELTA-02: 블록 메뉴 색상·정렬 섹션. 클래스는 DELTA-01(formatting-toolbar.tsx)·
-// TableCellColorPalettes·TableCellFormatMenu와 같은 공유 scss(_menu-shared.scss,
-// _table-cell-format-menu.scss)를 재사용한다 — 신규 scss 없음.
-const colorSectionLabelClassName = "geul-menu-section-label";
-const colorSwatchClassName = "geul-menu-swatch";
-const alignButtonClassName = "geul-cell-format-menu__align-button";
-
-const alignLeftIcon = <AlignLeft {...iconProps} />;
-const alignCenterIcon = <AlignCenter {...iconProps} />;
-const alignRightIcon = <AlignRight {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
 // table-selection-toolbar.tsx와 같은 이유로 모듈 스코프 상수로 둔다 —
@@ -551,51 +302,6 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     hoverBounds?.top ?? 0,
     "leftOfAnchor",
   );
-  const blockMenuClamp = useClampedMenuPosition(
-    blockMenuState?.left ?? 0,
-    blockMenuState?.top ?? 0,
-  );
-  // Turn into 옵션과 색상·정렬 섹션 게이트(RD-003 DELTA-02)가 같은 source
-  // descriptor를 쓴다 — 여기서 한 번만 구한다.
-  const blockMenuSource =
-    blockMenuState === null
-      ? null
-      : findBlockTypeDescriptor(
-          editor.getDocument().blocks,
-          blockMenuState.blockId,
-        );
-  const blockTypeOptions =
-    blockMenuState === null
-      ? BLOCK_TYPE_OPTIONS
-      : blockMenuSource === null
-        ? []
-        : getBlockTypeOptionsForSource(blockMenuSource);
-  // Indent/Outdent 비활성 판정은 core의 getBlockNestingActionState 한 곳을
-  // 공유한다(formatting-toolbar.tsx와 같은 관용구, Issue #126) — 표는 이
-  // gutter의 hover 대상에서 이미 제외돼 blockMenuState.blockId가 표를 가리킬
-  // 일이 없다.
-  const nestingActions =
-    blockMenuState === null
-      ? null
-      : editor.getBlockNestingActionState(blockMenuState.blockId);
-
-  // 색상·정렬은 Indent/Outdent와 같은 "재조정 가능" 액션이라 적용 후에도
-  // 메뉴를 닫지 않는다(Turn into/Duplicate/Delete 같은 일회성 액션과 다른
-  // 분류 — RD-003-DELTA-02 계획 "배경" 절).
-  const applyBlockTextColor = (color: string | null) => {
-    if (blockMenuState === null) return;
-    editor.commands.setBlockTextColor(blockMenuState.blockId, color);
-  };
-  const applyBlockBackgroundColor = (color: string | null) => {
-    if (blockMenuState === null) return;
-    editor.commands.setBlockBackgroundColor(blockMenuState.blockId, color);
-  };
-  const applyBlockTextAlignment = (
-    align: "left" | "center" | "right" | null,
-  ) => {
-    if (blockMenuState === null) return;
-    editor.commands.setBlockTextAlignment(blockMenuState.blockId, align);
-  };
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
@@ -687,47 +393,6 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     );
   };
 
-  const handleTurnInto = (item: BlockTypeOption) => {
-    if (blockMenuState === null) return;
-    const source = findBlockTypeDescriptor(
-      editor.getDocument().blocks,
-      blockMenuState.blockId,
-    );
-    const isAllowed =
-      source !== null &&
-      getBlockTypeOptionsForSource(source).some(
-        (option) => option.id === item.id,
-      );
-    if (isAllowed) {
-      editor.commands.setBlockType(blockMenuState.blockId, item.blockType);
-    }
-    closeBlockMenu();
-  };
-
-  const handleIndentBlock = () => {
-    if (blockMenuState === null) return;
-    editor.commands.indentBlock(blockMenuState.blockId);
-    closeBlockMenu();
-  };
-
-  const handleOutdentBlock = () => {
-    if (blockMenuState === null) return;
-    editor.commands.outdentBlock(blockMenuState.blockId);
-    closeBlockMenu();
-  };
-
-  const handleDuplicate = () => {
-    if (blockMenuState === null) return;
-    editor.commands.duplicateBlock(blockMenuState.blockId);
-    closeBlockMenu();
-  };
-
-  const handleDeleteBlock = () => {
-    if (blockMenuState === null) return;
-    editor.commands.deleteBlock(blockMenuState.blockId);
-    closeBlockMenu();
-  };
-
   return (
     <>
       {hoverBounds !== null && hoverBlockId !== null && (
@@ -771,148 +436,13 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           }}
         />
       )}
-      {/* max-h-[calc(100vh-1rem)] + overflow-y-auto: 클램프는 좌표만 접으므로
-          뷰포트보다 큰 메뉴는 아래쪽 항목에 닿을 수 없다(PIT-0011 예방 규칙).
-          1rem은 useClampedMenuPosition의 MENU_VIEWPORT_MARGIN 8px가 위·아래로
-          두 번 들어간 값이라 클램프 결과와 정확히 맞물린다. R2에서 블록 타입
-          목록이 늘면 일반 뷰포트에서도 넘친다. */}
       {blockMenuState !== null && (
-        <div
-          aria-label="Block menu"
-          className="geul-block-menu"
-          data-be-block-menu=""
-          ref={blockMenuClamp.menuRef}
-          role="menu"
-          style={blockMenuClamp.style}
-        >
-          <p className="geul-block-menu__label">Turn into</p>
-          {blockTypeOptions.map((option) => (
-            <MenuItemButton
-              className={blockMenuItemClassName}
-              key={option.id}
-              onClick={() => handleTurnInto(option)}
-            >
-              {option.label}
-            </MenuItemButton>
-          ))}
-          {/* mx-0(SCSS margin-inline: 0)에 대응: preflight 미포함이라 UA의
-              margin-inline auto가 남으면 flex column에서 hr이 0폭으로
-              붕괴한다 */}
-          <hr className="geul-block-menu__divider" />
-          <MenuItemButton
-            className={blockMenuItemClassName}
-            disabled={nestingActions?.canIndent !== true}
-            onClick={handleIndentBlock}
-          >
-            Indent
-          </MenuItemButton>
-          <MenuItemButton
-            className={blockMenuItemClassName}
-            disabled={nestingActions?.canOutdent !== true}
-            onClick={handleOutdentBlock}
-          >
-            Outdent
-          </MenuItemButton>
-          <MenuItemButton
-            className={blockMenuItemClassName}
-            onClick={handleDuplicate}
-          >
-            Duplicate
-          </MenuItemButton>
-          <MenuItemButton
-            className={`${blockMenuItemClassName} geul-block-menu__item--danger`}
-            onClick={handleDeleteBlock}
-          >
-            Delete
-          </MenuItemButton>
-          {blockMenuSource !== null &&
-            isNestableBlockType(blockMenuSource.type) && (
-              <>
-                {/* table/divider/codeBlock은 TextBlockProps 대상이 아니다(spec
-                    §3.3) — isNestableBlockType이 정확히 그 7개 대상 타입만
-                    인정한다(RD-002 DELTA-02와 같은 predicate). table 자체는
-                    gutter hover 대상에서 이미 제외돼 blockMenuSource.type이
-                    "table"일 일이 없다(위 nestingActions 주석과 같은 불변식). */}
-                <hr className="geul-block-menu__divider" />
-                <p className={colorSectionLabelClassName}>Text color</p>
-                <div className="geul-menu-palette">
-                  {TABLE_TEXT_COLORS.map((color) => (
-                    <MenuItemButton
-                      aria-label={`Text color ${color.name}`}
-                      className={colorSwatchClassName}
-                      key={color.value}
-                      onClick={() => applyBlockTextColor(color.value)}
-                      style={{
-                        backgroundColor: "transparent",
-                        color: color.value,
-                      }}
-                    >
-                      A
-                    </MenuItemButton>
-                  ))}
-                  <MenuItemButton
-                    aria-label="Text color None"
-                    className={colorSwatchClassName}
-                    onClick={() => applyBlockTextColor(null)}
-                  >
-                    ×
-                  </MenuItemButton>
-                </div>
-                <p className={colorSectionLabelClassName}>Background color</p>
-                <div className="geul-menu-palette">
-                  {TABLE_BACKGROUND_COLORS.map((color) => (
-                    <MenuItemButton
-                      aria-label={`Background color ${color.name}`}
-                      className={colorSwatchClassName}
-                      key={color.value}
-                      onClick={() => applyBlockBackgroundColor(color.value)}
-                      style={{ backgroundColor: color.value }}
-                    >
-                      {""}
-                    </MenuItemButton>
-                  ))}
-                  <MenuItemButton
-                    aria-label="Background color None"
-                    className={colorSwatchClassName}
-                    onClick={() => applyBlockBackgroundColor(null)}
-                  >
-                    ×
-                  </MenuItemButton>
-                </div>
-                <p className={colorSectionLabelClassName}>Align</p>
-                <div className="geul-cell-format-menu__align-row">
-                  <MenuItemButton
-                    aria-label="Align left"
-                    className={alignButtonClassName}
-                    onClick={() => applyBlockTextAlignment("left")}
-                  >
-                    {alignLeftIcon}
-                  </MenuItemButton>
-                  <MenuItemButton
-                    aria-label="Align center"
-                    className={alignButtonClassName}
-                    onClick={() => applyBlockTextAlignment("center")}
-                  >
-                    {alignCenterIcon}
-                  </MenuItemButton>
-                  <MenuItemButton
-                    aria-label="Align right"
-                    className={alignButtonClassName}
-                    onClick={() => applyBlockTextAlignment("right")}
-                  >
-                    {alignRightIcon}
-                  </MenuItemButton>
-                  <MenuItemButton
-                    aria-label="Align none"
-                    className={alignButtonClassName}
-                    onClick={() => applyBlockTextAlignment(null)}
-                  >
-                    ×
-                  </MenuItemButton>
-                </div>
-              </>
-            )}
-        </div>
+        <BlockSideMenuMenu
+          blockId={blockMenuState.blockId}
+          left={blockMenuState.left}
+          onClose={closeBlockMenu}
+          top={blockMenuState.top}
+        />
       )}
     </>
   );
