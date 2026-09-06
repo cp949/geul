@@ -15,6 +15,7 @@ import {
   type BulletListItemBlock,
   type DocumentBlock,
   type InlineContentBlockType,
+  type InlineContentItem,
   type NestableBlockType,
   type NumberedListItemBlock,
 } from "@cp949/geul-model";
@@ -223,8 +224,9 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
         .find(
           (block) =>
             isInlineContentBlockType(block.type) &&
-            (block as Extract<Block, { type: InlineContentBlockType }>)
-              .content[0]?.text === "leaf",
+            ((block as Extract<Block, { type: InlineContentBlockType }>)
+              .content[0] as Extract<InlineContentItem, { text: string }> | undefined)
+              ?.text === "leaf",
         );
       expect(leaf).toBeDefined();
     });

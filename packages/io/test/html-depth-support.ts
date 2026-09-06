@@ -8,6 +8,7 @@ import {
   isKnownBlockType,
   type Block,
   type Document,
+  type InlineContentItem,
   type TableBlock,
 } from "@cp949/geul-model";
 
@@ -112,7 +113,12 @@ export const documentVisibleText = (document: Document): string => {
         // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
         for (const row of (block as TableBlock).rows) {
           for (const cell of row.cells) {
-            for (const item of cell.content) parts.push(item.text);
+            // 계약 전제 캐스트 — 이 헬퍼가 조립하는 깊은 wrapper 체인
+            // fixture는 항상 텍스트 런만 담는다.
+            for (const item of cell.content as Array<
+              Extract<InlineContentItem, { text: string }>
+            >)
+              parts.push(item.text);
           }
         }
         continue;
@@ -128,7 +134,11 @@ export const documentVisibleText = (document: Document): string => {
         block.type === "audio"
       )
         continue;
-      for (const item of block.content) parts.push(item.text);
+      // 계약 전제 캐스트 — 같은 이유(위 table 분기 주석 참고).
+      for (const item of block.content as Array<
+        Extract<InlineContentItem, { text: string }>
+      >)
+        parts.push(item.text);
       // CodeBlock은 source content만 있고 children은 없는 리프 블록이다.
       if (block.type === "codeBlock") continue;
       if (block.children !== undefined && block.children.length > 0) {

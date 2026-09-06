@@ -2,7 +2,7 @@
  * 클립보드 표 파서가 model 인라인 텍스트 계약에 맞는 셀 콘텐츠만 내보내는지,
  * 그리고 들쭉날쭉한 HTML 표를 빈 셀로 패딩해 직사각형으로 만드는지 검증한다.
  */
-import { isValidInlineText } from "@cp949/geul-model";
+import { isValidInlineText, type InlineContentItem } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import type { ClipboardContent } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
@@ -44,7 +44,11 @@ describe("클립보드 표 셀 텍스트 정규화", () => {
     const table = getTableFromResult(result);
     expect(table).not.toBeNull();
     if (!table) return;
-    const content = table.rows[0]?.cells[0]?.content ?? [];
+    // 계약 전제 캐스트 — 이 테스트의 fixture는 텍스트 런만 만든다
+    // (`InlineContent`가 RD-002-DELTA-13으로 커스텀 원소를 포함하게 넓어짐).
+    const content = (table.rows[0]?.cells[0]?.content ?? []) as Array<
+      Extract<InlineContentItem, { text: string }>
+    >;
     expect(content.map((item) => item.text).join("")).toBe("a b c");
     expect(
       content.some((item) =>
@@ -94,7 +98,11 @@ describe("클립보드 표 셀 텍스트 정규화", () => {
     const [paragraph] = result.value;
     expect(paragraph?.type).toBe("paragraph");
     if (paragraph?.type !== "paragraph") return;
-    const text = paragraph.content.map((item) => item.text).join("");
+    const text = (
+      paragraph.content as Array<Extract<InlineContentItem, { text: string }>>
+    )
+      .map((item) => item.text)
+      .join("");
     expect(text).toBe("abc");
     expect(isValidInlineText(text)).toBe(true);
   });

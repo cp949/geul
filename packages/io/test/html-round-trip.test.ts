@@ -2,6 +2,7 @@ import {
   isKnownBlockType,
   type Block,
   type Document,
+  type InlineContentItem,
   type TableBlock,
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -1060,7 +1061,12 @@ describe("재귀 중첩 HTML 왕복", () => {
       // 않으므로 명시적으로 캐스트한다.
       if (!isKnownBlockType(block.type)) return [];
       const known = block as Block;
-      return "content" in known ? known.content.map((item) => item.text) : [];
+      // 계약 전제 캐스트 — 이 테스트의 fixture는 텍스트 런만 만든다.
+      return "content" in known
+        ? (
+            known.content as Array<Extract<InlineContentItem, { text: string }>>
+          ).map((item) => item.text)
+        : [];
     });
     expect(texts).toContain("STRAY");
   });

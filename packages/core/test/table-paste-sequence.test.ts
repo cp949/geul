@@ -6,6 +6,7 @@
  * 시나리오는 table-paste-commands.test.ts가 다룬다).
  */
 import type { ClipboardContentBlock } from "@cp949/geul-io";
+import type { InlineContentItem } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { buildOutOfTableSequence } from "../src/table-paste-sequence.js";
@@ -108,7 +109,11 @@ describe("buildOutOfTableSequence", () => {
     expect(firstTable).not.toBeNull();
     expect(firstTable?.offset).toBe(nodes[0]?.nodeSize);
     expect(firstTable?.node).toBe(nodes[1]);
-    expect(firstTable?.data.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
+    expect(
+      (firstTable?.data.rows[0]?.cells[0]?.content[0] as
+        | Extract<InlineContentItem, { text: string }>
+        | undefined)?.text,
+    ).toBe("A");
   });
 
   it("표가 시퀀스 첫 원소면 firstTable.offset은 0이다", () => {
@@ -133,7 +138,9 @@ describe("buildOutOfTableSequence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("조립 실패");
     expect(
-      result.value.firstTable?.data.rows[0]?.cells[0]?.content[0]?.text,
+      (result.value.firstTable?.data.rows[0]?.cells[0]?.content[0] as
+        | Extract<InlineContentItem, { text: string }>
+        | undefined)?.text,
     ).toBe("A");
   });
 

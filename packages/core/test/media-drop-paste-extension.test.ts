@@ -8,7 +8,7 @@
  * 주입한다 — 실제 브라우저 hit-testing 통합은 DELTA-03 Playwright e2e가
  * 검증한다(계획 문서 "범위 밖" 참고).
  */
-import type { ParagraphBlock } from "@cp949/geul-model";
+import type { InlineContentItem, ParagraphBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { findBlockPosition } from "../src/block-position.js";
@@ -498,7 +498,9 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
         blocks.some(
           (block) =>
             block.type === "paragraph" &&
-            (block as ParagraphBlock).content[0]?.text === "world",
+            ((block as ParagraphBlock).content[0] as
+              | Extract<InlineContentItem, { text: string }>
+              | undefined)?.text === "world",
         ),
       ).toBe(true);
       expect(errors).toEqual([]);

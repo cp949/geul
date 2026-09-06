@@ -1,6 +1,7 @@
 import type {
   Document,
   InlineContent,
+  InlineContentItem,
   ParagraphBlock,
 } from "@cp949/geul-model";
 import { TextSelection } from "@tiptap/pm/state";
@@ -362,17 +363,19 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     const editor = createEditor({ initialDocument: initial });
 
     const inputBlock = initial.blocks[0];
-    const inputItem =
+    const inputItem = (
       inputBlock?.type === "paragraph"
         ? (inputBlock as ParagraphBlock).content[0]
-        : undefined;
+        : undefined
+    ) as Extract<InlineContentItem, { text: string }> | undefined;
     if (inputItem !== undefined) inputItem.text = "input";
     const returned = editor.getDocument();
     const returnedBlock = returned.blocks[0];
-    const returnedItem =
+    const returnedItem = (
       returnedBlock?.type === "paragraph"
         ? (returnedBlock as ParagraphBlock).content[0]
-        : undefined;
+        : undefined
+    ) as Extract<InlineContentItem, { text: string }> | undefined;
     if (returnedItem !== undefined) returnedItem.text = "returned";
 
     expect(editor.getDocument()).toEqual(paragraphDocument("original"));
@@ -390,10 +393,11 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
 
     const returned = editor.getDocument();
     const returnedBlock = returned.blocks[0];
-    const returnedItem =
+    const returnedItem = (
       returnedBlock?.type === "paragraph"
         ? (returnedBlock as ParagraphBlock).content[0]
-        : undefined;
+        : undefined
+    ) as Extract<InlineContentItem, { text: string }> | undefined;
     if (returnedItem !== undefined) returnedItem.text = "mutated";
 
     expect(editor.getDocument()).toEqual(paragraphDocument("after", 1));

@@ -6,7 +6,11 @@
  * 경로는 table-paste-validation.test.ts가 맡는다.
  */
 import type { ClipboardContentBlock, TabularData } from "@cp949/geul-io";
-import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
+import {
+  MAX_NESTING_DEPTH,
+  type InlineContentItem,
+  type TableBlock,
+} from "@cp949/geul-model";
 import { GapCursor } from "@tiptap/pm/gapcursor";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
@@ -48,6 +52,19 @@ const docWithTwoParagraphs = {
     },
   ],
 };
+
+/** 표 셀 content[itemIndex]를 텍스트 런으로 좁히는 계약 전제 캐스트다
+ * (`InlineContent`가 RD-002-DELTA-13으로 커스텀 원소를 포함하게 넓혀졌지만
+ * 이 파일의 표 붙여넣기 fixture는 항상 텍스트 런만 만든다). */
+const cellItemAt = (
+  table: TableBlock,
+  row: number,
+  col: number,
+  itemIndex = 0,
+): Extract<InlineContentItem, { text: string }> | undefined =>
+  table.rows[row]?.cells[col]?.content[itemIndex] as
+    | Extract<InlineContentItem, { text: string }>
+    | undefined;
 
 describe("표에 표 형태 데이터를 붙여넣는다", () => {
   it("두 문단에 걸친 선택에서 호출하면 선택을 지우고 캐럿을 새 표로 옮긴다", () => {
@@ -142,7 +159,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(doc.content?.[0]?.type).toBe("table");
     const pastedTable = getTableBlock(editor, result.value.blockId);
     if (!pastedTable.ok) throw new Error("표 조회 실패");
-    expect(pastedTable.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
+    expect(cellItemAt(pastedTable.value, 0, 0)?.text).toBe("A");
     expect(doc.content?.[1]?.attrs?.blockId).toBe("table-1");
   });
 
@@ -213,7 +230,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     const originalTable = getTableBlock(editor, "table-1");
     if (!originalTable.ok) throw new Error("표 조회 실패");
     expect(originalTable.value.rows[0]?.cells[0]?.id).toBe("cell-1");
-    expect(originalTable.value.rows[0]?.cells[0]?.content[0]?.text).toBe("ab");
+    expect(cellItemAt(originalTable.value, 0, 0)?.text).toBe("ab");
     expect(doc.content?.[2]?.type).toBe("table");
     const { selection } = editor.state;
     expect(selection.$from.parent.type.name).toBe("tableCell");
@@ -310,8 +327,8 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     if (!table.ok) throw new Error("표 조회 실패");
     expect(table.value.rows).toHaveLength(1);
     expect(table.value.rows[0]?.cells).toHaveLength(2);
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
-    expect(table.value.rows[0]?.cells[1]?.content[0]?.text).toBe("B");
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("A");
+    expect(cellItemAt(table.value, 0, 1)?.text).toBe("B");
     // 표 안 분기의 selectCellId와 대칭 — 캐럿이 붙여넣은 표의 좌상단 셀로
     // 이동한다(Issue #29).
     const { selection } = editor.state;
@@ -337,7 +354,7 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
     expect(table.value.rows[0]?.cells).toHaveLength(2);
     expect(table.value.rows[1]?.cells).toHaveLength(2);
     // 좌상단 셀(cell-1 자리)만 붙여넣은 텍스트로 바뀌고 나머지는 빈 채로 남는다.
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("x");
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("x");
     expect(table.value.rows[0]?.cells[1]?.content ?? []).toHaveLength(0);
     expect(table.value.rows[1]?.cells[0]?.content ?? []).toHaveLength(0);
     expect(table.value.rows[1]?.cells[1]?.content ?? []).toHaveLength(0);
@@ -462,7 +479,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(doc.content?.[2]?.type).toBe("table");
     const table = getTableBlock(editor, result.value.blockId);
     if (!table.ok) throw new Error("표 조회 실패");
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("A");
     expect(doc.content?.[3]?.type).toBe("blockContainer");
     expect(doc.content?.[3]?.content?.[0]?.type).toBe("paragraph");
     expect(doc.content?.[3]?.content?.[0]?.content?.[0]?.text).toBe("outro");
@@ -518,7 +535,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     if (!table.ok) throw new Error("표 조회 실패");
     // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
     // 문서 순서대로 한 셀에 들어간다.
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
       "intro\nx\noutro",
     );
   });
@@ -563,9 +580,8 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     const table = getTableBlock(editor, "table-1");
     if (!table.ok) throw new Error("표 조회 실패");
-    const cells = table.value.rows[0]?.cells ?? [];
-    expect(cells[0]?.content[0]?.text).toBe("intro\na");
-    expect(cells[1]?.content[0]?.text).toBe("b\noutro");
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("intro\na");
+    expect(cellItemAt(table.value, 0, 1)?.text).toBe("b\noutro");
   });
 
   // 마크는 그대로 살아야 하고, 이웃한 같은 마크 런은 합쳐져야 한다 —
@@ -590,11 +606,12 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     const table = getTableBlock(editor, "table-1");
     if (!table.ok) throw new Error("표 조회 실패");
-    const cellContent = table.value.rows[0]?.cells[0]?.content ?? [];
-    expect(cellContent[0]?.text).toBe("bold");
-    expect(cellContent[0]?.marks).toEqual([{ type: "bold" }]);
-    expect(cellContent[1]?.text).toBe("\nx");
-    expect(cellContent[1]?.marks).toBeUndefined();
+    expect(cellItemAt(table.value, 0, 0, 0)?.text).toBe("bold");
+    expect(cellItemAt(table.value, 0, 0, 0)?.marks).toEqual([
+      { type: "bold" },
+    ]);
+    expect(cellItemAt(table.value, 0, 0, 1)?.text).toBe("\nx");
+    expect(cellItemAt(table.value, 0, 0, 1)?.marks).toBeUndefined();
   });
 
   it("빈 시퀀스는 PASTE_TARGET_NOT_FOUND로 거절한다", () => {
@@ -743,7 +760,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(doc.content?.[2]?.type).toBe("table");
     const table = getTableBlock(editor, result.value.blockId);
     if (!table.ok) throw new Error("표 조회 실패");
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe("A");
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("A");
   });
 
   it("표 안에서 heading+표 혼합 시퀀스를 붙여넣으면 heading 텍스트가 셀에 문단과 같은 방식으로 병합된다", () => {
@@ -765,7 +782,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     if (!table.ok) throw new Error("표 조회 실패");
     // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
     // 문서 순서대로 한 셀에 들어간다
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
       "intro\nx\noutro",
     );
   });
@@ -897,7 +914,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     const table = getTableBlock(editor, "table-1");
     if (!table.ok) throw new Error("표 조회 실패");
-    expect(table.value.rows[0]?.cells[0]?.content[0]?.text).toBe(
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
       "intro\nx\noutro",
     );
   });

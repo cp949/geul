@@ -13,6 +13,7 @@ import { exportHtml } from "@cp949/geul-io";
 import type {
   Block,
   BulletListItemBlock,
+  InlineContentItem,
   ParagraphBlock,
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -207,7 +208,9 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
       const parent = blocks.find(
         (block): block is ParagraphBlock =>
           block.type === "paragraph" &&
-          (block as ParagraphBlock).content[0]?.text === "t1",
+          ((block as ParagraphBlock).content[0] as
+            | Extract<InlineContentItem, { text: string }>
+            | undefined)?.text === "t1",
       );
       expect(parent?.type === "paragraph" && parent.children).toMatchObject([
         { type: "paragraph", content: [{ text: "t2" }] },
@@ -241,7 +244,9 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
       const pastedParagraphParent = blocks.find(
         (block): block is ParagraphBlock =>
           block.type === "paragraph" &&
-          (block as ParagraphBlock).content[0]?.text === "parent",
+          ((block as ParagraphBlock).content[0] as
+            | Extract<InlineContentItem, { text: string }>
+            | undefined)?.text === "parent",
       );
       expect(
         pastedParagraphParent?.type === "paragraph" &&
@@ -251,7 +256,9 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
       const pastedListParent = blocks.find(
         (block): block is BulletListItemBlock =>
           block.type === "bulletListItem" &&
-          (block as BulletListItemBlock).content[0]?.text === "parent",
+          ((block as BulletListItemBlock).content[0] as
+            | Extract<InlineContentItem, { text: string }>
+            | undefined)?.text === "parent",
       );
       expect(
         pastedListParent?.type === "bulletListItem" &&
