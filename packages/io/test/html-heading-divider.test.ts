@@ -6,7 +6,7 @@
  * 블록이 아니라 셀 인라인 텍스트로 남는 기존 경계는 회귀로 고정한다.
  * blockquote 매핑은 범위 밖이다(DELTA-06a).
  */
-import type { Document } from "@cp949/geul-model";
+import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml } from "../src/index.js";
@@ -161,8 +161,11 @@ describe("경계 유지(회귀)", () => {
     expect(document.blocks.map((block) => block.type)).toEqual(["table"]);
     const [table] = document.blocks;
     if (table?.type !== "table") throw new Error("표 블록이 아니다");
+    // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
     expect(
-      table.rows.map((row) => row.cells.map((cell) => cell.content)),
+      (table as TableBlock).rows.map((row) =>
+        row.cells.map((cell) => cell.content),
+      ),
     ).toEqual([[[{ text: "abc" }]]]);
     expect(warnings).toEqual([]);
   });

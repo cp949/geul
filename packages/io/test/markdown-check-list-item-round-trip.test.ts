@@ -3,7 +3,7 @@
  * 검증한다(RD-002 완료 조건 2번). GFM은 own-format ID를 보존하지 않으므로
  * 다른 GFM 목록 round-trip 테스트와 동일하게 ID를 제외한 의미로 비교한다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown, importMarkdown } from "../src/index.js";
@@ -13,7 +13,7 @@ type BlockMeaning = Record<string, unknown>;
 /**
  * GFM이 보존하지 않는 안정 ID만 제거해 재귀 구조와 순서를 비교한다.
  */
-const blockMeaning = (block: Block): BlockMeaning => {
+const blockMeaning = (block: Document["blocks"][number]): BlockMeaning => {
   const withoutId = Object.fromEntries(
     Object.entries(block).filter(([key]) => key !== "id" && key !== "children"),
   );

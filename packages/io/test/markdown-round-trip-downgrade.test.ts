@@ -2,7 +2,7 @@
  * Markdown import가 지원 문법은 model 의미로 보존하고 미지원 문법만
  * 구조화된 경고와 함께 강등하는지 검증한다.
  */
-import type { Document } from "@cp949/geul-model";
+import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown, importMarkdown } from "../src/index.js";
@@ -101,8 +101,14 @@ describe("Markdown 강등 경고", () => {
     expect(result.value.warnings).toEqual([]);
     const table = result.value.document.blocks[0];
     if (table?.type !== "table") throw new Error("Expected a table");
-    expect(table.rows[0]?.cells.map((c) => c.align)).toEqual(["left", "right"]);
-    expect(table.rows[1]?.cells.map((c) => c.align)).toEqual(["left", "right"]);
+    expect((table as TableBlock).rows[0]?.cells.map((c) => c.align)).toEqual([
+      "left",
+      "right",
+    ]);
+    expect((table as TableBlock).rows[1]?.cells.map((c) => c.align)).toEqual([
+      "left",
+      "right",
+    ]);
   });
 
   it("정렬 구문이 없는 열은 align을 지정하지 않는다", () => {
@@ -112,7 +118,7 @@ describe("Markdown 강등 경고", () => {
 
     const table = result.value.document.blocks[0];
     if (table?.type !== "table") throw new Error("Expected a table");
-    expect(table.rows[0]?.cells.map((c) => c.align)).toEqual([
+    expect((table as TableBlock).rows[0]?.cells.map((c) => c.align)).toEqual([
       undefined,
       undefined,
     ]);

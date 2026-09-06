@@ -2,7 +2,7 @@
  * GFM 목록 안팎에서 표현 불가능한 paragraph·heading·quote children만
  * NESTED_CHILDREN으로 분류하고 lossy 평탄화가 목록 계층을 보존하는지 검증한다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,7 +17,7 @@ type BlockMeaning = Record<string, unknown>;
  * 안정 ID만 제거해 lossy export 뒤 남아야 하는 블록 계층과 형제 순서를
  * 비교한다. 이 fixture에는 ID 참조를 가진 표가 없다.
  */
-const blockMeaning = (block: Block): BlockMeaning => {
+const blockMeaning = (block: Document["blocks"][number]): BlockMeaning => {
   const withoutId = Object.fromEntries(
     Object.entries(block).filter(([key]) => key !== "id" && key !== "children"),
   );

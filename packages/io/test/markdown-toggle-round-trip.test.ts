@@ -3,7 +3,7 @@
  * 보존하고(RD-005 완료 조건 3번), 인접한 bulletListItem·toggleListItem이
  * 별도 mdast list로 나뉘어도 재병합되지 않음을 검증한다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown, importMarkdown } from "../src/index.js";
@@ -14,7 +14,7 @@ type BlockMeaning = Record<string, unknown>;
  * GFM이 보존하지 않는 안정 ID만 제거해 lossy round-trip 뒤 블록 계층과
  * 형제 순서를 원본과 비교할 수 있는 의미 표현을 만든다.
  */
-const blockMeaning = (block: Block): BlockMeaning => {
+const blockMeaning = (block: Document["blocks"][number]): BlockMeaning => {
   const withoutId = Object.fromEntries(
     Object.entries(block).filter(([key]) => key !== "id" && key !== "children"),
   );

@@ -4,7 +4,12 @@
  * 검증 대상이 "재귀 크래시가 없다"이므로 측정 도구 자신이 재귀로 터지면
  * 실패 원인을 가려버린다(PIT-0034 — 깊이·구조 단언만 사용하는 계약의 일부).
  */
-import type { Document } from "@cp949/geul-model";
+import {
+  isKnownBlockType,
+  type Block,
+  type Document,
+  type TableBlock,
+} from "@cp949/geul-model";
 
 import type { HtmlNode, HtmlRoot } from "../src/html/inline-content.js";
 
@@ -82,18 +87,30 @@ export const htmlVisibleText = (root: HtmlRoot): string => {
 };
 
 /**
+ * top-level에만 있을 수 있는 CustomBlock(model, RD-002-DELTA-01)을 제외한다
+ * — `.filter(isBlock)`로 배열 전체를 `Block[]`로 좁혀, `isKnownBlockType`이
+ * `block.type`만 좁히고 `block` 자체는 좁히지 못하는 한계(discriminated
+ * union 잔여분기)를 호출부 캐스트 없이 우회한다.
+ */
+const isBlock = (block: Document["blocks"][number]): block is Block =>
+  isKnownBlockType(block.type);
+
+/**
  * Document의 모든 블록(중첩 children·표 셀 포함)에서 인라인 텍스트를 모아
  * 이어 붙인다. 깊은 입력이 평탄화된 뒤에도 특정 텍스트가 결과 문서 어딘가에
  * 살아 있는지(블록 배치와 무관하게) 단언하는 데 쓴다.
  */
 export const documentVisibleText = (document: Document): string => {
   const parts: string[] = [];
-  const stack: Document["blocks"][] = [document.blocks];
+  // children은 top-level 전용이라 넓히지 않아(model 설계 결정) 재귀 스택은
+  // 항상 Block[]만 담는다.
+  const stack: Block[][] = [document.blocks.filter(isBlock)];
   for (let blocks = stack.pop(); blocks !== undefined; blocks = stack.pop()) {
     for (const block of blocks) {
       if (block.type === "table") {
         // TableBlock에는 children이 없다(표 셀은 InlineContent만 담는다).
-        for (const row of block.rows) {
+        // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
+        for (const row of (block as TableBlock).rows) {
           for (const cell of row.cells) {
             for (const item of cell.content) parts.push(item.text);
           }

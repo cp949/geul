@@ -1,4 +1,4 @@
-import type { Document } from "@cp949/geul-model";
+import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown, importMarkdown } from "../src/index.js";
@@ -225,10 +225,11 @@ describe("Markdown 손실 처리", () => {
     const invalidDocument = {
       ...richTableDocument,
       blocks: richTableDocument.blocks.map((block) =>
+        // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
         block.type === "table"
           ? {
               ...block,
-              columns: block.columns.map((column) => ({
+              columns: (block as TableBlock).columns.map((column) => ({
                 ...column,
                 width: 47,
               })),

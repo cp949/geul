@@ -2,7 +2,12 @@
 // DELTA-01). 손실 카테고리 자체는 markdown-media-loss.test.ts가 고정한다 —
 // 이 파일은 blockNode가 실제로 내는 markdown 문자열 모양(image 구문 vs
 // link 강등)만 다룬다.
-import type { Document } from "@cp949/geul-model";
+import type {
+  AudioBlock,
+  Document,
+  FileBlock,
+  VideoBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown } from "../src/index.js";
@@ -103,7 +108,12 @@ describe("4종 미디어 블록 GFM export", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
-      blocks: [{ id: "media-1", type, url, name }],
+      // it.each 케이스 배열은 type을 "video"|"audio"|"file" 유니온 하나로
+      // 묶어 넘긴다 — 판별 유니온 리터럴 할당이 아니라 캐스트가 필요하다.
+      blocks: [
+        { id: "media-1", type, url, name } as
+          FileBlock | VideoBlock | AudioBlock,
+      ],
     };
 
     const lossy = exportMarkdown(document, { mode: "lossy" });

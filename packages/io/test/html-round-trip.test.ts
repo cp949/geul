@@ -1,4 +1,9 @@
-import type { Document } from "@cp949/geul-model";
+import {
+  isKnownBlockType,
+  type Block,
+  type Document,
+  type TableBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml } from "../src/index.js";
@@ -137,11 +142,10 @@ describe("HTML 왕복 변환", () => {
     const table = imported.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected a table");
-    expect(table.headerColumns).toBe(1);
-    expect(table.rows[0]?.cells.map((cell) => cell.id)).toEqual([
-      "reversed-cell-1",
-      "reversed-cell-2",
-    ]);
+    expect((table as TableBlock).headerColumns).toBe(1);
+    expect((table as TableBlock).rows[0]?.cells.map((cell) => cell.id)).toEqual(
+      ["reversed-cell-1", "reversed-cell-2"],
+    );
   });
 
   it("헤더 셀이 본문 행까지 걸치면 thead 없이 헤더 메타데이터를 유지한다", () => {
@@ -570,8 +574,8 @@ describe("HTML 왕복 변환", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.columns).toHaveLength(2);
-    expect(table.rows[0]?.cells[0]?.columnSpan).toBe(2);
+    expect((table as TableBlock).columns).toHaveLength(2);
+    expect((table as TableBlock).rows[0]?.cells[0]?.columnSpan).toBe(2);
   });
 
   // (단계-3 결함 탐지) 위 거절 판별식을 원본(clipboard-table-parser.ts)
@@ -590,8 +594,8 @@ describe("HTML 왕복 변환", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.columns).toHaveLength(4);
-    expect(table.rows[0]?.cells[1]).toMatchObject({
+    expect((table as TableBlock).columns).toHaveLength(4);
+    expect((table as TableBlock).rows[0]?.cells[1]).toMatchObject({
       columnSpan: 3,
       rowSpan: 2,
     });
@@ -689,8 +693,8 @@ describe("HTML 왕복 변환", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.rows).toHaveLength(2);
-    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(1);
+    expect((table as TableBlock).rows).toHaveLength(2);
+    expect((table as TableBlock).rows[0]?.cells[0]?.rowSpan).toBe(1);
   });
 
   it("colspan=0은 1로 보정해 표를 살린다", () => {
@@ -702,7 +706,7 @@ describe("HTML 왕복 변환", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.rows[0]?.cells[0]?.columnSpan).toBe(1);
+    expect((table as TableBlock).rows[0]?.cells[0]?.columnSpan).toBe(1);
   });
 
   it("정수가 아닌 rowspan은 1로 보정해 표를 살린다", () => {
@@ -715,7 +719,7 @@ describe("HTML 왕복 변환", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(1);
+    expect((table as TableBlock).rows[0]?.cells[0]?.rowSpan).toBe(1);
   });
 
   it("셀 align을 왕복 변환에서 보존한다", () => {
@@ -814,11 +818,9 @@ describe("HTML 왕복 변환", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected a table");
-    expect(table.rows.map((row) => row.cells[0]?.content)).toEqual([
-      [{ text: "H" }],
-      [{ text: "B" }],
-      [{ text: "F" }],
-    ]);
+    expect(
+      (table as TableBlock).rows.map((row) => row.cells[0]?.content),
+    ).toEqual([[{ text: "H" }], [{ text: "B" }], [{ text: "F" }]]);
   });
 
   it("import 경로에서도 caption이 표 앞 문단이 된다", () => {
@@ -1051,9 +1053,15 @@ describe("재귀 중첩 HTML 왕복", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
-    const texts = result.value.document.blocks.flatMap((block) =>
-      "content" in block ? block.content.map((item) => item.text) : [],
-    );
+    const texts = result.value.document.blocks.flatMap((block) => {
+      // isKnownBlockType은 block.type만 좁히고 block 자체는 좁히지 못한다
+      // (discriminated union 잔여분기) — CustomBlock도 동명의 content:
+      // "none"|"inline" 필드를 가져 "content" in block만으로는 구분되지
+      // 않으므로 명시적으로 캐스트한다.
+      if (!isKnownBlockType(block.type)) return [];
+      const known = block as Block;
+      return "content" in known ? known.content.map((item) => item.text) : [];
+    });
     expect(texts).toContain("STRAY");
   });
 });

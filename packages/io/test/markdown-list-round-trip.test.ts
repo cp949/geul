@@ -2,7 +2,7 @@
  * GFM 목록 export/import가 목록 항목의 표현 가능한 자식 계층과 시작 번호를
  * ID를 제외한 저장 의미로 보존하는지 검증한다.
  */
-import type { Block, Document, TableBlock } from "@cp949/geul-model";
+import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -39,8 +39,9 @@ const tableMeaning = (table: TableBlock): BlockMeaning => ({
  * GFM이 보존하지 않는 안정 ID만 제거해 목록의 재귀 구조와 형제 순서를
  * 직접 비교할 수 있는 의미 표현을 만든다.
  */
-const blockMeaning = (block: Block): BlockMeaning => {
-  if (block.type === "table") return tableMeaning(block);
+const blockMeaning = (block: Document["blocks"][number]): BlockMeaning => {
+  // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
+  if (block.type === "table") return tableMeaning(block as TableBlock);
   const withoutId = Object.fromEntries(
     Object.entries(block).filter(([key]) => key !== "id" && key !== "children"),
   );

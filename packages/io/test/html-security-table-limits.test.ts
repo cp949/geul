@@ -3,6 +3,7 @@
  * 콘텐츠(C0 제어문자, style 속성) 정제를 다룬다. html-security.test.ts에서
  * 관심사 단위로 분리했다(AGENTS.md: describe 직속 it 20개 이상 시 분리).
  */
+import type { TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { importHtml } from "../src/index.js";
@@ -45,8 +46,8 @@ describe("HTML 보안", () => {
     const table = atLimit.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.columns).toHaveLength(10_000);
-    expect(table.rows[0]?.cells).toHaveLength(10_000);
+    expect((table as TableBlock).columns).toHaveLength(10_000);
+    expect((table as TableBlock).rows[0]?.cells).toHaveLength(10_000);
 
     let idCalls = 0;
     const excessive = importHtml(
@@ -93,7 +94,9 @@ describe("HTML 보안", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "badtext" }]);
+    expect((table as TableBlock).rows[0]?.cells[0]?.content).toEqual([
+      { text: "badtext" },
+    ]);
     expect(result.value.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -113,7 +116,9 @@ describe("HTML 보안", () => {
     const table = result.value.document.blocks[0];
     expect(table?.type).toBe("table");
     if (table?.type !== "table") throw new Error("Expected table block");
-    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "badtext" }]);
+    expect((table as TableBlock).rows[0]?.cells[0]?.content).toEqual([
+      { text: "badtext" },
+    ]);
     expect(result.value.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

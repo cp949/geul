@@ -6,7 +6,12 @@
 // Video/Audio/File은 다른 prop이 전부 비어 있어도 MEDIA_TYPE_LOST(신규,
 // spec이 이름 붙이지 않은 kind — TOGGLE_STATE_LOST와 동일 논리로 이번
 // DELTA가 도입, RD-002-DELTA-01.md "결정" 참고)가 항상 보고된다.
-import type { Document } from "@cp949/geul-model";
+import type {
+  AudioBlock,
+  Document,
+  FileBlock,
+  VideoBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown } from "../src/index.js";
@@ -259,13 +264,14 @@ describe("4종 미디어 블록 GFM 손실", () => {
       const document: Document = {
         formatVersion: 1,
         revision: 0,
+        // it.each 케이스의 type은 유니온 하나로 묶여 캐스트가 필요하다.
         blocks: [
           {
             id: "media-1",
             type,
             url: "https://example.com/a",
             name: "미디어",
-          },
+          } as FileBlock | VideoBlock | AudioBlock,
         ],
       };
 

@@ -5,7 +5,7 @@
  * 규칙이 아니라 loss-analysis.ts의 기존 `isListItemBlockType` 기반 정책이
  * 이미 checkListItem에도 적용됨을 검증한다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -19,7 +19,7 @@ type BlockMeaning = Record<string, unknown>;
 /**
  * GFM이 보존하지 않는 안정 ID만 제거해 재귀 구조와 순서를 비교한다.
  */
-const blockMeaning = (block: Block): BlockMeaning => {
+const blockMeaning = (block: Document["blocks"][number]): BlockMeaning => {
   const withoutId = Object.fromEntries(
     Object.entries(block).filter(([key]) => key !== "id" && key !== "children"),
   );

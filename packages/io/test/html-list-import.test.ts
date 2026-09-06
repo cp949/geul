@@ -500,7 +500,8 @@ describe("HTML 목록 보안과 깊이 경계", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
-    expect(measureListTree(result.value.document.blocks)).toEqual({
+    // importHtml은 CustomBlock을 만드는 문법이 없어(DELTA-06) 항상 Block[]다.
+    expect(measureListTree(result.value.document.blocks as Block[])).toEqual({
       itemCount: MAX_NESTING_DEPTH + 1,
       maxDepth: MAX_NESTING_DEPTH,
     });

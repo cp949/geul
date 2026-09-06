@@ -13,7 +13,12 @@
  * `createId` 옵션으로 원본 id 순서를 재생해 `toEqual(original)` 정확한
  * 비교를 만든다(markdown-round-trip-basic.test.ts의 기존 패턴 재사용).
  */
-import type { Document } from "@cp949/geul-model";
+import type {
+  AudioBlock,
+  Document,
+  FileBlock,
+  VideoBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown, importMarkdown } from "../src/index.js";
@@ -213,12 +218,13 @@ describe("미디어 블록 GFM round-trip(export→import 연결)", () => {
     it.each(["video", "audio", "file"] as const)(
       "%s 빈 블록(url·name만)은 재import 후 타입 자체를 잃고 plain paragraph + link mark가 된다",
       (type) => {
+        // it.each 케이스의 type은 유니온 하나로 묶여 캐스트가 필요하다.
         const original = documentOf({
           id: "media-1",
           type,
           url: "https://example.com/a",
           name: "미디어",
-        });
+        } as FileBlock | VideoBlock | AudioBlock);
         const result = lossyRoundTrip(original, ["media-1"]);
         expect(result.document).toEqual(
           documentOf({
