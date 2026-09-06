@@ -34,14 +34,14 @@ export {
 } from "./mark-canonicalization.js";
 export type { TextMarkNameInput } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
+export { isKnownBlockType } from "./block-schema.js";
+export { MAX_NESTING_DEPTH } from "./document-nesting-depth.js";
 export {
-  isKnownBlockType,
-  isKnownTextMarkType,
-  MAX_NESTING_DEPTH,
   parseBlockOrCustomBlock,
   parseDocument,
   parseInlineContentItem,
-} from "./schema.js";
+} from "./parse-document.js";
+export { isKnownTextMarkType } from "./text-mark-schema.js";
 export {
   isValidDocumentId,
   isValidInlineText,
