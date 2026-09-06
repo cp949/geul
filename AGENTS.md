@@ -41,7 +41,7 @@ demo  -> react, io, model
 - HTML/GFM importer와 core는 `@cp949/geul-model`의 공통 canonicalization·validation 계약을 사용한다.
 - `core`의 공개 타입 비노출 불변식은 `docs/adr/0002-enforce-layered-package-boundaries.md`(ADR-0002)가 소유한다.
 - `react`의 core 의존 허용 표면은 `docs/adr/0002-enforce-layered-package-boundaries.md`(ADR-0002)가 소유한다.
-- table은 R0에서 model과 HTML/GFM 변환만 지원한다. 편집기가 지원하지 않는 문서는 변경 없이 `EDITOR_FEATURE_UNAVAILABLE`로 거절한다.
+- model은 유효하지만 에디터가 아직 지원하지 못하는 문서는 변경 없이 `EDITOR_FEATURE_UNAVAILABLE`로 거절한다(현재 생산처: top-level `CustomBlock`, `core/model-to-tiptap.ts` — table은 R1 슬라이스12부터 완전히 지원돼 이 생산처가 아니다).
 - 외부 npm 의존성은 exact version을 사용하고 내부 workspace 패키지만 `workspace:*`를 사용한다.
 
 ## 구현 규칙
