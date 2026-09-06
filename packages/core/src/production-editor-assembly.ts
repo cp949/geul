@@ -1,6 +1,7 @@
 import type { Document as BlockDocument, IdFactory } from "@cp949/geul-model";
 import { isSupportedLinkHref } from "@cp949/geul-model";
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
+import type { Transaction } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 
 import {
@@ -195,7 +196,19 @@ export const createProductionEditor = (options: {
   // (RD-004-DELTA-01 "## 계획"의 설계 결정, 실측:
   // @tiptap/core/dist/index.js:7033-7058). 미지정이면 등록하지 않는다.
   onSelectionChange?: () => void;
-  canApplyDocumentChange: () => boolean;
+  // RD-004-DELTA-02 — canApplyDocumentChange가 두 번째 인자로
+  // loadNormalizing을 받는다. 이 함수 자신의 아래 내부
+  // load-normalizing dummy mount/unmount 구간에서만 `true`다 —
+  // RD-004-DELTA-01이 onMount/onUnmount에 적용한 원칙(생성
+  // 시점·replaceDocument 내부 재구성 시 소비자 훅 배제)을
+  // onBeforeChange에도 그대로 적용한다. 평가 순서(revision guard가
+  // 항상 먼저)는 production-editor-session.ts::evaluateBeforeChange가
+  // 소유한다 — 이 인자는 그 함수가 loadNormalizing 여부를 알기 위한
+  // 것뿐이다.
+  canApplyDocumentChange: (
+    transaction: Transaction,
+    loadNormalizing: boolean,
+  ) => boolean;
   // BlockMoveKeyboardExtension 전용 — production-editor-session.ts의
   // ProductionEditorSession.getBlockSelection과 구조가 같지만 import하지
   // 않는다(그 파일의 순환 의존 회피 관례, block-move-keyboard-extension.ts
@@ -315,7 +328,8 @@ export const createProductionEditor = (options: {
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
-        canApplyDocumentChange: options.canApplyDocumentChange,
+        canApplyDocumentChange: (transaction) =>
+          options.canApplyDocumentChange(transaction, loadNormalizing),
       }),
     ],
     onUpdate: ({ editor: updatedEditor }) => {

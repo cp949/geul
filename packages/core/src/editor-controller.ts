@@ -654,6 +654,16 @@ export type CreateEditorOptions = {
   // 자신의 selection.eq 비교에 위임해 같은 위치로의 재호출·거절된
   // transaction에는 발화하지 않는다.
   onSelectionChange?: () => void;
+  // spec §3.3(DOC-010), RD-004-DELTA-02 — 다중 등록을 허용하는 내부
+  // AND-결합·fail-fast 목록의 두 번째 항목이다(첫 항목은 기존 revision
+  // overflow 가드, 소비자에 노출되지 않는다). `false`를 반환하면 그
+  // transaction 전체를 거절한다(문서 미변경, onChange 미발화). `void`는
+  // 허용을 뜻한다 — `false`만 거절 신호다. 문서를 바꾸지 않는
+  // transaction(selection-only)에는 호출되지 않는다. 한 논리적 편집당
+  // 정확히 1회만 호출된다 — BlockIdExtension 등이 같은 dispatch에
+  // 이어 붙이는 정규화 transaction에는 중복 호출되지 않는다
+  // (RD-004-DELTA-02 "## 계획"의 설계 결정).
+  onBeforeChange?: (context: { changes: DocumentChangeEvent }) => boolean | void;
 };
 
 const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [

@@ -9,6 +9,8 @@ import {
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
@@ -146,6 +148,13 @@ export class ProductionEditorSession {
       onMount?: () => void;
       onUnmount?: () => void;
       onSelectionChange?: () => void;
+      onBeforeChange?: (context: {
+        changes: {
+          revision: number;
+          changedBlockIds: readonly string[];
+          reason: ChangeReason;
+        };
+      }) => boolean | void;
     },
   ) {
     const parsed = parseSupportedDocument(options.initialDocument);
@@ -453,8 +462,8 @@ export class ProductionEditorSession {
       ...(this.options.onSelectionChange === undefined
         ? {}
         : { onSelectionChange: this.options.onSelectionChange }),
-      canApplyDocumentChange: () =>
-        this.sessionRevision < Number.MAX_SAFE_INTEGER,
+      canApplyDocumentChange: (transaction, loadNormalizing) =>
+        this.evaluateBeforeChange(transaction, loadNormalizing),
       // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한
       // 경로다 — this.blockSelection은 이 생성자 실행 시점엔 아직
       // 초기화 전이어도 클로저 자체는 유효하고, 실제 호출(키보드
@@ -477,6 +486,76 @@ export class ProductionEditorSession {
         void this.uploadMediaFile("mediaDropPasteUpload", blockId, file);
       },
     });
+  }
+
+  // spec §3.3(DOC-010), RD-004-DELTA-02 — canApplyDocumentChange 목록의
+  // 평가 순서를 소유한다: (1) 기존 revision overflow 가드(항상 먼저,
+  // loadNormalizing 여부와 무관 — 회귀 없음), (2) load-normalizing
+  // 내부 transaction은 제외(RD-004-DELTA-01이 onMount/onUnmount에 적용한
+  // "생성 시점 미발화" 원칙의 연장), (3) 소비자가 onBeforeChange를
+  // 등록하지 않았으면 조회 자체를 생략, (4) BlockIdExtension 등이
+  // root transaction에 이어 붙이는 appended transaction은 제외(한
+  // 논리적 편집당 정확히 1회만 평가하기 위함). "appendedTransaction"
+  // meta로는 구분할 수 없다 — prosemirror-state의 applyTransaction이
+  // 그 meta를 appended transaction의 filterTransaction 판정 **이후에만**
+  // 설정한다(실측, prosemirror-state/dist/index.js). 대신
+  // `transaction.before`(이 transaction이 만들어질 때의 시작 문서)가
+  // `this.tiptapEditor.state.doc`(전체 dispatch가 끝나기 전까지는
+  // 갱신되지 않는, 이 batch 시작 시점의 문서)와 같은지로 판정한다 —
+  // root transaction만 이 값이 같다. (5) 실제 모델 블록 변경이 없으면
+  // 제외(commitDocument의 no-op 판정과 동일 기준), (6) 소비자
+  // onBeforeChange 호출 — false 반환 시에만 거절한다.
+  private evaluateBeforeChange(
+    transaction: Transaction,
+    loadNormalizing: boolean,
+  ): boolean {
+    if (this.sessionRevision >= Number.MAX_SAFE_INTEGER) return false;
+    if (loadNormalizing) return true;
+    const onBeforeChange = this.options.onBeforeChange;
+    if (onBeforeChange === undefined) return true;
+    if (transaction.before !== this.tiptapEditor.state.doc) return true;
+    const changedBlockIds = blockChanges(
+      this.currentDocument,
+      this.buildBeforeChangeDocument(transaction.doc),
+    );
+    if (changedBlockIds.length === 0) return true;
+    return (
+      onBeforeChange({
+        changes: {
+          revision: this.sessionRevision + 1,
+          changedBlockIds,
+          reason: this.activeReason ?? "local",
+        },
+      }) !== false
+    );
+  }
+
+  // onBeforeChange preview 전용 변환 — this.createId(세션 공유
+  // 시퀀스)를 여기서 소비하면 실제 커밋 시점에 BlockIdExtension의
+  // appendTransaction이 같은 factory를 다시 호출해 카운터가 어긋난다.
+  // 이 평가 1회 전용의 격리된 placeholder factory를 대신 쓴다 —
+  // BlockIdExtension이 아직 배정하지 않은 신규 노드는 이 placeholder
+  // id로 changedBlockIds에 나타날 수 있고, 실제 커밋 id와 다를 수
+  // 있다(RD-004-DELTA-02 "## 계획"의 설계 결정, 새 블록을 만들지 않는
+  // 대다수 편집은 기존 id를 그대로 읽어 이 placeholder가 관여하지
+  // 않는다).
+  private buildBeforeChangeDocument(doc: ProseMirrorNode): BlockDocument {
+    let previewIdSeq = 0;
+    const previewCreateId: IdFactory = () =>
+      `__pending-block-${(previewIdSeq += 1)}__`;
+    const converted = tiptapToModel(
+      doc.toJSON() as TiptapJsonNode,
+      this.sessionRevision,
+      previewCreateId,
+    );
+    if (!converted.ok) {
+      throw new TypeError(
+        converted.error.code === "DOCUMENT_INVALID"
+          ? converted.error.message
+          : converted.error.code,
+      );
+    }
+    return converted.value;
   }
 
   private readEditorDocument(editor: Editor): BlockDocument {
