@@ -294,7 +294,12 @@ const mediaBlockToTiptapJson = (
 // children…))로 감싼다 — blockGroup은 children이 있을 때만 만든다(빈
 // 배열/undefined 둘 다 "자식 없음"으로 접는다). CodeBlock도 container로
 // 감싸지만 leaf라 own blockGroup을 만들지 않는다.
-const blockToTiptapJson = (block: Block): TiptapJsonNode => {
+// insertBlocks 등 범용 조작 API(spec §3.2, RD-002)가 문서 전체가 아니라
+// 새로 삽입·수정한 블록 몇 개만 인코딩해야 해서 export한다 — modelToTiptap은
+// Document 전체(빈 blocks 거절 등)를 요구해 이 용도에 맞지 않는다. 재귀
+// 규칙(D19 컨테이너·table/divider/media 비포장)은 모두 위 modelToTiptap과
+// 동일하다.
+export const blockToTiptapJson = (block: Block): TiptapJsonNode => {
   if (block.type === "table") return tableBlockToTiptapJson(block);
   if (block.type === "divider") {
     return { type: "divider", attrs: { blockId: block.id } };

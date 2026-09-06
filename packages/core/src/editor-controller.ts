@@ -9,11 +9,16 @@ import {
   isNestableBlockType,
   isSupportedLinkHref,
   isValidMediaPreviewWidth,
+  parseDocument,
   type Result,
   type TextMark,
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
+import {
+  Fragment,
+  type Node as ProseMirrorNode,
+  type ResolvedPos,
+} from "@tiptap/pm/model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
@@ -24,6 +29,7 @@ import {
   findParentInTree,
   walkBlockTree,
 } from "./block-tree.js";
+import { insertSiblingsInTree } from "./block-tree-edit.js";
 import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
@@ -38,6 +44,7 @@ import {
   insertMediaBlock as insertMediaBlockCommand,
 } from "./media-commands.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
+import { blockToTiptapJson } from "./model-to-tiptap.js";
 import {
   commandNotApplicable,
   ProductionEditorSession,
@@ -74,6 +81,21 @@ export type BlockNestingActionState = {
   canOutdent: boolean;
 };
 
+// 범용 조작 API(spec §3.2, DOC-005)의 입력 타입 — 임의 Block 형태를 받되
+// type은 필수, id는 선택(생략하면 createId()로 배정)이다. spec 문서가 적은
+// `Partial<Omit<Block,"type"|"id">>`는 그대로 쓰지 않는다 — Omit/Pick은
+// 유니온에 분배되지 않고 keyof Block이 14개 변형 전체의 교집합(사실상
+// id·type만)으로 무너져, 그 표기대로면 content·rows 등 타입별 필드를 아예
+// 못 받는 빈 타입이 된다(RD-002-DELTA-01 "## 계획"의 설계 결정, tsc 실측
+// 확인). 분배 조건부 타입으로 각 변형의 나머지 필드를 개별적으로
+// partial화한다. children(nestable 7종)이 있으면 그 원소는 재귀적으로
+// partial하지 않다 — 완전한 Block(id 포함)이어야 한다(같은 결정).
+export type PartialBlock = {
+  [T in Block["type"]]: { type: T; id?: string } & Partial<
+    Omit<Extract<Block, { type: T }>, "type" | "id">
+  >;
+}[Block["type"]];
+
 export interface EditorController {
   mount(element: HTMLElement): void;
   unmount(): void;
@@ -93,6 +115,17 @@ export interface EditorController {
     callback: (block: Block, parent: Block | null) => boolean | void,
     options?: { reverse?: boolean },
   ): void;
+  // 범용 조작 API(spec §3.2, DOC-005) — 기존 타입 전용 명령(commands.*)과
+  // 별개 계층, 임의 Block 형태를 받는다. 표·미디어처럼 이미 전용 명령
+  // (insertMediaBlock, table 명령 15종)이 있는 타입은 그 명령이 더 정확한
+  // 에러를 준다 — 이 API는 대체가 아니라 병행이다. 새 완화 검증을 만들지
+  // 않고 기존 model 검증(parseDocument)에 위임한다(RD-002-DELTA-01
+  // "## 계획"의 설계 결정).
+  insertBlocks(
+    blocksToInsert: PartialBlock[],
+    referenceBlockId: string,
+    placement?: "before" | "after",
+  ): Result<Block[], EditorError>;
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
   getCaretBlockContext(): {
@@ -1178,6 +1211,85 @@ export const createEditor = (
     return { ok: true, value: { blockId: captured.blockId } };
   };
 
+  // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-01). 검증 전략은
+  // "새 블록만 격리 검증"이 아니라 "현재 문서 전체에 스플라이스한 후보
+  // 문서를 통째로 parseDocument"다 — id 유일성과 중첩 깊이는 새 블록만
+  // 봐서는 판정할 수 없다(RD-002-DELTA-01 "## 계획"의 설계 결정).
+  // parseDocument 실패는 기존 parseSupportedDocument(production-editor-session.ts)와
+  // 동일하게 EditorError.DOCUMENT_INVALID로 뭉뚱그린다 — DocumentError의
+  // 더 세분화된 code(DOCUMENT_LIMIT_EXCEEDED 등)는 message로만 보존한다.
+  const insertBlocksImpl = (
+    blocksToInsert: PartialBlock[],
+    referenceBlockId: string,
+    placement: "before" | "after" = "before",
+  ): Result<Block[], EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("insertBlocks");
+
+    const withIds = blocksToInsert.map(
+      (block) =>
+        ({ ...block, id: block.id ?? session.createId() }) as Block,
+    );
+    const currentDocument = session.getDocument();
+    const nextBlocks = insertSiblingsInTree(
+      currentDocument.blocks,
+      referenceBlockId,
+      withIds,
+      placement,
+    );
+    if (nextBlocks === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: referenceBlockId } };
+    }
+
+    const parsed = parseDocument({ ...currentDocument, blocks: nextBlocks });
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        error: { code: "DOCUMENT_INVALID", message: parsed.error.message },
+      };
+    }
+
+    const insertedBlocks = withIds
+      .map((block) => findBlockInTree(parsed.value.blocks, block.id))
+      .filter((block): block is Block => block !== undefined);
+    // 도달 불가 방어선 — parseDocument가 성공하면 스플라이스한 블록 전부가
+    // 그 결과 트리에 그대로 남아 있어야 한다(id를 지우거나 바꾸는 정규화
+    // 규칙이 없다).
+    if (insertedBlocks.length !== withIds.length) {
+      return commandNotApplicable("insertBlocks");
+    }
+
+    const referencePosition = findBlockPosition(
+      session.editor.state.doc,
+      referenceBlockId,
+    );
+    const referenceNode =
+      referencePosition === null
+        ? null
+        : session.editor.state.doc.nodeAt(referencePosition);
+    if (referencePosition === null || referenceNode === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: referenceBlockId } };
+    }
+    const insertPosition =
+      placement === "before"
+        ? referencePosition
+        : referencePosition + referenceNode.nodeSize;
+    const fragment = Fragment.fromJSON(
+      session.editor.schema,
+      insertedBlocks.map(blockToTiptapJson),
+    );
+
+    const result = session.runDocumentCommand("insertBlocks", "local", () => {
+      const transaction = session.editor.state.tr.insert(
+        insertPosition,
+        fragment,
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+    if (!result.ok) return result;
+    return { ok: true, value: insertedBlocks };
+  };
+
   return {
     mount(element) {
       session.mount(element);
@@ -1210,6 +1322,9 @@ export const createEditor = (
         callback,
         options?.reverse ?? false,
       );
+    },
+    insertBlocks(blocksToInsert, referenceBlockId, placement) {
+      return insertBlocksImpl(blocksToInsert, referenceBlockId, placement);
     },
     getSelectionMarks() {
       if (session.isDestroyed) return [];

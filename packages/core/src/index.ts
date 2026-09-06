@@ -1,5 +1,6 @@
 export type { TabularCell, TabularData } from "@cp949/geul-io";
 export type {
+  Block,
   InlineContentBlockType,
   ListItemBlock,
   ListItemBlockType,
@@ -34,6 +35,7 @@ export type {
   CreateEditorOptions,
   DocumentChangeEvent,
   EditorController,
+  PartialBlock,
   SetBlockTypeDescriptor,
   TableCellSelection,
 } from "./editor-controller.js";
