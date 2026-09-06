@@ -16,8 +16,8 @@ import {
   removeBlocksFromTree,
   updateBlockInTree,
 } from "./block-tree-edit.js";
+import type { PartialBlock } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
-import type { PartialBlock } from "./editor-controller.js";
 import { blockToTiptapJson } from "./model-to-tiptap.js";
 import {
   commandNotApplicable,

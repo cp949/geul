@@ -36,8 +36,8 @@ import type {
   CustomBlockDefinition,
   CustomInlineContentDefinition,
   CustomStyleDefinition,
-  EditorController,
-} from "./editor-controller.js";
+} from "./custom-extension-definitions.js";
+import type { EditorController } from "./editor-controller-types.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";

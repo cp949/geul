@@ -1,10 +1,8 @@
 import type { InlineContentItem } from "@cp949/geul-model";
 import { mergeAttributes, Node } from "@tiptap/core";
 
-import type {
-  CustomInlineContentDefinition,
-  EditorController,
-} from "./editor-controller.js";
+import type { CustomInlineContentDefinition } from "./custom-extension-definitions.js";
+import type { EditorController } from "./editor-controller-types.js";
 
 // EditorController를 import type으로 참조한다(런타임 순환 의존 없음,
 // custom-block-extension.ts와 동일 근거 — RD-002-DELTA-11 "결정" 4). 이

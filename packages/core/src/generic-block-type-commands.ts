@@ -11,8 +11,8 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 
 import { findEditableBlockContent } from "./block-position.js";
+import type { SetBlockTypeDescriptor } from "./block-type-descriptor.js";
 import type { EditorError } from "./errors.js";
-import type { SetBlockTypeDescriptor } from "./editor-controller.js";
 import {
   commandNotApplicable,
   type ProductionEditorSession,

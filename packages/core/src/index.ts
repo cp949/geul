@@ -44,24 +44,26 @@ export {
   serializeTableColumns,
 } from "@cp949/geul-model";
 export type {
-  BlockSelection,
   BlockTypeDescriptor,
   BlockTypeSource,
-  CreateEditorOptions,
+  SetBlockTypeDescriptor,
+} from "./block-type-descriptor.js";
+export { blockTypeDescriptorFromBlock } from "./block-type-descriptor.js";
+export type {
   CustomBlockDefinition,
   CustomInlineContentDefinition,
   CustomStyleDefinition,
+} from "./custom-extension-definitions.js";
+export type { EnabledBlockTypes } from "./editor-controller.js";
+export { createEditor } from "./editor-controller.js";
+export type {
+  BlockSelection,
+  CreateEditorOptions,
   DocumentChangeEvent,
   EditorController,
-  EnabledBlockTypes,
   PartialBlock,
-  SetBlockTypeDescriptor,
   TableCellSelection,
-} from "./editor-controller.js";
-export {
-  blockTypeDescriptorFromBlock,
-  createEditor,
-} from "./editor-controller.js";
+} from "./editor-controller-types.js";
 export type { EditorError } from "./errors.js";
 export type { MediaBlockKind } from "./media-block-kind.js";
 export type {

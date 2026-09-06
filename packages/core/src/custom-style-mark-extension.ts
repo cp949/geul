@@ -1,7 +1,7 @@
 import type { CustomTextMark } from "@cp949/geul-model";
 import { Mark, mergeAttributes } from "@tiptap/core";
 
-import type { CustomStyleDefinition } from "./editor-controller.js";
+import type { CustomStyleDefinition } from "./custom-extension-definitions.js";
 
 // 등록된 커스텀 스타일(spec §4.4, EXT-003)마다 PM Mark를 하나 만든다
 // (RD-002-DELTA-19). text-color-mark-extension.ts와 같은 "addAttributes +

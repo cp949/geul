@@ -1,10 +1,8 @@
 import type { CustomBlock } from "@cp949/geul-model";
 import { mergeAttributes, Node } from "@tiptap/core";
 
-import type {
-  CustomBlockDefinition,
-  EditorController,
-} from "./editor-controller.js";
+import type { CustomBlockDefinition } from "./custom-extension-definitions.js";
+import type { EditorController } from "./editor-controller-types.js";
 
 // EditorController를 import type으로 참조한다(런타임 순환 의존 없음 —
 // TypeScript type-only import는 컴파일 시 완전히 지워진다, RD-002-DELTA-11

@@ -22,8 +22,8 @@ import type {
   CustomBlockDefinition,
   CustomInlineContentDefinition,
   CustomStyleDefinition,
-  EditorController,
-} from "./editor-controller.js";
+} from "./custom-extension-definitions.js";
+import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
 import { isMediaBlockKind } from "./media-block-kind.js";
 import type {
