@@ -62,7 +62,10 @@ import {
   insertMediaBlock as insertMediaBlockCommand,
 } from "./media-commands.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
-import { blockToTiptapJson } from "./model-to-tiptap.js";
+import {
+  blockToTiptapJson,
+  type EnabledBlockTypes,
+} from "./model-to-tiptap.js";
 import {
   commandNotApplicable,
   ProductionEditorSession,
@@ -87,6 +90,10 @@ import {
 } from "./table-commands.js";
 import { pasteTabularData as pasteTabularDataCommand } from "./table-paste-commands.js";
 import type { TableCellTarget } from "./table-grid.js";
+
+// index.ts가 CreateEditorOptions와 함께 재수출할 수 있도록 이 타입을
+// 여기서도 내보낸다(CustomBlockDefinition과 같은 위치, RD-002-DELTA-12).
+export type { EnabledBlockTypes };
 
 export type DocumentChangeEvent = {
   revision: number;
@@ -741,6 +748,11 @@ export type CreateEditorOptions = {
   // PM 스키마는 여전히 에디터 생성 시점에 정적으로 결정된다 — 마운트
   // 이후 동적 스키마 변경은 시도하지 않는다(spec §4.4 명시).
   customBlocks?: Record<string, CustomBlockDefinition>;
+  // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny
+  // 목록. 비활성화한 타입은 PM 스키마에 노드로 등록되지 않고,
+  // initialDocument/replaceDocument/붙여넣기 어느 경로로 만나도
+  // EDITOR_FEATURE_UNAVAILABLE로 거절된다(production-editor-assembly.ts).
+  enabledBlockTypes?: EnabledBlockTypes;
 };
 
 const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [

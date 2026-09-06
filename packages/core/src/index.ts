@@ -51,6 +51,7 @@ export type {
   CustomBlockDefinition,
   DocumentChangeEvent,
   EditorController,
+  EnabledBlockTypes,
   PartialBlock,
   SetBlockTypeDescriptor,
   TableCellSelection,

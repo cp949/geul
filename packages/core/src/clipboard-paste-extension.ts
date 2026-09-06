@@ -33,6 +33,16 @@ import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 // 원본 그대로 전달된다 — 이 확장은 두 형식을 구분하는 사전 정규화
 // 코드를 갖지 않는다(G-CNV-002, 의미는 sanitize 이후 HAST에서만 만든다).
 
+// enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12)를 이 확장의 두
+// modelToTiptap 호출부(아래)에 threading하지 않는다 — 착수 중
+// "비활성 타입 붙여넣기가 insertContent에서 크래시할 것"이라는 가설을
+// 세웠다가 실측(node_modules/@tiptap/core/src/commands/insertContentAt.ts)
+// 으로 반증했다: `content = createNodeFromContent(...)`가 항상(editor
+// 옵션과 무관) try/catch로 감싸여 있어 알 수 없는 노드 타입이면
+// `emitContentError` 이벤트만 내고 `return false`로 조용히 끝난다 —
+// uncaught exception이 없다. modelToTiptap이 미리 거절하든 안 하든
+// 관찰 가능한 결과(붙여넣기가 아무것도 넣지 않는다)가 같아 이 스레딩은
+// 검출 변이를 만들 수 없는 죽은 코드였다.
 export type ClipboardPasteOptions = { createId: IdFactory };
 
 // 이미 조립된 blockContainer JSON 배열의 절대 깊이가 MAX_NESTING_DEPTH를

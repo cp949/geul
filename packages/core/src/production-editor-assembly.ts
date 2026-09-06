@@ -1,4 +1,8 @@
-import type { Document as BlockDocument, IdFactory } from "@cp949/geul-model";
+import type {
+  Block,
+  Document as BlockDocument,
+  IdFactory,
+} from "@cp949/geul-model";
 import { isSupportedLinkHref } from "@cp949/geul-model";
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
 import type { Transaction } from "@tiptap/pm/state";
@@ -44,7 +48,11 @@ import {
   ToggleListItemExtension,
 } from "./list-item-extension.js";
 import { ListInputRuleExtension } from "./list-input-rule-extension.js";
-import { modelToTiptap } from "./model-to-tiptap.js";
+import {
+  type EnabledBlockTypes,
+  isBlockTypeEnabled,
+  modelToTiptap,
+} from "./model-to-tiptap.js";
 import { PlaceholderExtension } from "./placeholder-extension.js";
 import { QuoteExtension } from "./quote-extension.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
@@ -68,6 +76,28 @@ import {
   ensureTrailingParagraphOnLoad,
   TrailingBlockExtension,
 } from "./trailing-block-extension.js";
+
+// enabledBlockTypes(RD-002-DELTA-12)로 group "nestableBlockContent"(7종)나
+// "leafBlockContent"(codeBlock 단독)의 멤버가 전부 사라지면
+// BlockContainerExtension.content(block-container-extension.ts, 고정
+// "(nestableBlockContent blockGroup?) | leafBlockContent")가 존재하지 않는
+// 그룹 이름을 참조하게 돼 `new Schema(...)`가 즉시
+// `SyntaxError: No node type or group 'X' found`를 던진다(착수 중 실측
+// 발견 — allow:["paragraph"]로 codeBlock을 포함한 나머지 6+1종을 모두
+// 끄면 leafBlockContent 그룹이 비어 재현됨). 두 그룹 각각의 생존 여부에
+// 따라 content 표현식을 동적으로 좁혀 존재하지 않는 그룹을 참조하지
+// 않게 한다. 두 그룹이 전부 비면(예: enabledBlockTypes가 8종 전부를
+// 끄는 극단적 구성) blockContainer 자체를 스키마에서 뺀다 — 이 경우는
+// spec이 명시적으로 다루지 않는 극단값이라 "남은 위험"에 남긴다.
+const NESTABLE_BLOCK_CONTENT_TYPES: readonly Block["type"][] = [
+  "paragraph",
+  "heading",
+  "quote",
+  "bulletListItem",
+  "numberedListItem",
+  "checkListItem",
+  "toggleListItem",
+];
 
 // D19: paragraph/heading identity는 blockContainer가 소유한다. StarterKit의
 // 기본 노드는 group을 configure할 수 없어 nestableBlockContent용 최소 노드를 둔다.
@@ -206,6 +236,10 @@ export const createProductionEditor = (options: {
   // ProductionEditorSession이 같은 options에서 파생한다).
   customBlocks?: Record<string, CustomBlockDefinition>;
   customBlockEditor?: EditorController;
+  // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny 목록.
+  // 미지정이면 isBlockTypeEnabled가 항상 true라 아래 조건부 스프레드가
+  // 전부 무조건 포함으로 접혀 기존 동작과 100% 같다.
+  enabledBlockTypes?: EnabledBlockTypes;
   // spec §3.4(DOC-013), RD-005-DELTA-01 — PM `editable` prop 초기값.
   // ProductionEditorSession이 세션 레벨로 소유한 editableState를 매
   // 재구성(replaceDocument 포함)마다 그대로 넘긴다 — 이 함수 자신은
@@ -248,6 +282,9 @@ export const createProductionEditor = (options: {
 }): Editor => {
   const converted = modelToTiptap(options.document, {
     customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
+    ...(options.enabledBlockTypes === undefined
+      ? {}
+      : { enabledBlockTypes: options.enabledBlockTypes }),
   });
   if (!converted.ok) {
     throw new TypeError(
@@ -256,6 +293,24 @@ export const createProductionEditor = (options: {
         : converted.error.code,
     );
   }
+
+  // 위 NESTABLE_BLOCK_CONTENT_TYPES 주석 참고 — BlockContainerExtension의
+  // content 표현식이 참조할 수 있는 그룹만 남긴다.
+  const hasNestableBlockContent = NESTABLE_BLOCK_CONTENT_TYPES.some((type) =>
+    isBlockTypeEnabled(type, options.enabledBlockTypes),
+  );
+  const hasLeafBlockContent = isBlockTypeEnabled(
+    "codeBlock",
+    options.enabledBlockTypes,
+  );
+  const blockContainerContent =
+    hasNestableBlockContent && hasLeafBlockContent
+      ? "(nestableBlockContent blockGroup?) | leafBlockContent"
+      : hasNestableBlockContent
+        ? "nestableBlockContent blockGroup?"
+        : hasLeafBlockContent
+          ? "leafBlockContent"
+          : undefined;
 
   let loadNormalizing = false;
   const editor = new Editor({
@@ -283,31 +338,67 @@ export const createProductionEditor = (options: {
       }),
       TextColorMark,
       BackgroundColorMark,
-      ParagraphExtension,
-      HeadingExtension,
-      ProductionBulletListItemExtension,
-      ProductionNumberedListItemExtension,
-      ProductionCheckListItemExtension,
-      ProductionToggleListItemExtension,
+      // enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12) — 각 block
+      // type을 정의하는 "주 확장"만 조건부로 넣는다. input rule·keyboard·
+      // marker 등 "보조 확장"(ListInputRuleExtension 등, 아래 그대로 무조건
+      // 포함)은 이미 대상 노드가 스키마에 없으면(this.editor.schema.nodes.X
+      // === undefined) 조용히 스킵하는 방어 코드를 갖고 있어(착수 전 실측,
+      // block-type-input-rule-extension.ts 등) 추가 가드가 필요 없다.
+      ...(isBlockTypeEnabled("paragraph", options.enabledBlockTypes)
+        ? [ParagraphExtension]
+        : []),
+      ...(isBlockTypeEnabled("heading", options.enabledBlockTypes)
+        ? [HeadingExtension]
+        : []),
+      ...(isBlockTypeEnabled("bulletListItem", options.enabledBlockTypes)
+        ? [ProductionBulletListItemExtension]
+        : []),
+      ...(isBlockTypeEnabled("numberedListItem", options.enabledBlockTypes)
+        ? [ProductionNumberedListItemExtension]
+        : []),
+      ...(isBlockTypeEnabled("checkListItem", options.enabledBlockTypes)
+        ? [ProductionCheckListItemExtension]
+        : []),
+      ...(isBlockTypeEnabled("toggleListItem", options.enabledBlockTypes)
+        ? [ProductionToggleListItemExtension]
+        : []),
       ListInputRuleExtension,
       BlockTypeInputRuleExtension,
-      QuoteExtension,
-      CodeBlockExtension,
+      ...(isBlockTypeEnabled("quote", options.enabledBlockTypes)
+        ? [QuoteExtension]
+        : []),
+      ...(isBlockTypeEnabled("codeBlock", options.enabledBlockTypes)
+        ? [CodeBlockExtension]
+        : []),
       CodeBlockMarkGuardExtension,
       CodeBlockExitExtension,
-      BlockContainerExtension,
+      ...(blockContainerContent === undefined
+        ? []
+        : [BlockContainerExtension.extend({ content: blockContainerContent })]),
       BlockGroupExtension,
       BlockIdExtension.configure({ createId: options.createId }),
       BlockSplitExtension,
       BlockJoinExtension,
-      TableExtension,
-      TableRowExtension,
-      TableCellExtension,
-      DividerExtension,
-      FileBlockExtension,
-      ImageBlockExtension,
-      VideoBlockExtension,
-      AudioBlockExtension,
+      // table 3종 노드(table/tableRow/tableCell)는 표 기능 하나를
+      // 이루는 묶음이라 한 조건으로 함께 켜고 끈다.
+      ...(isBlockTypeEnabled("table", options.enabledBlockTypes)
+        ? [TableExtension, TableRowExtension, TableCellExtension]
+        : []),
+      ...(isBlockTypeEnabled("divider", options.enabledBlockTypes)
+        ? [DividerExtension]
+        : []),
+      ...(isBlockTypeEnabled("file", options.enabledBlockTypes)
+        ? [FileBlockExtension]
+        : []),
+      ...(isBlockTypeEnabled("image", options.enabledBlockTypes)
+        ? [ImageBlockExtension]
+        : []),
+      ...(isBlockTypeEnabled("video", options.enabledBlockTypes)
+        ? [VideoBlockExtension]
+        : []),
+      ...(isBlockTypeEnabled("audio", options.enabledBlockTypes)
+        ? [AudioBlockExtension]
+        : []),
       // registry(RD-002-DELTA-11, CreateEditorOptions.customBlocks)에
       // 등록된 타입마다 PM atom 노드 하나씩(customBlockEditor는 customBlocks가
       // 있을 때 항상 함께 온다 — session이 같은 options에서 파생).

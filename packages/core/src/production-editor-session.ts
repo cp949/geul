@@ -25,7 +25,11 @@ import type {
   UploadFile,
   UploadResult,
 } from "./media-upload.js";
-import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
+import {
+  type EnabledBlockTypes,
+  modelToTiptap,
+  type TiptapJsonNode,
+} from "./model-to-tiptap.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 import { createProductionEditor } from "./production-editor-assembly.js";
@@ -52,6 +56,7 @@ const cloneDocument = (document: BlockDocument): BlockDocument =>
 const parseSupportedDocument = (
   input: unknown,
   customBlockTypes: ReadonlySet<string>,
+  enabledBlockTypes: EnabledBlockTypes | undefined,
 ): Result<BlockDocument, EditorError> => {
   const parsed = parseDocument(input);
   if (!parsed.ok) {
@@ -60,7 +65,10 @@ const parseSupportedDocument = (
       error: { code: "DOCUMENT_INVALID", message: parsed.error.message },
     };
   }
-  const converted = modelToTiptap(parsed.value, { customBlockTypes });
+  const converted = modelToTiptap(parsed.value, {
+    customBlockTypes,
+    ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
+  });
   return converted.ok ? { ok: true, value: parsed.value } : converted;
 };
 
@@ -179,6 +187,10 @@ export class ProductionEditorSession {
       // spec §4.4, RD-002-DELTA-11 — createTiptapEditor가 등록된 타입마다
       // PM atom 노드를 조건부로 추가한다(production-editor-assembly.ts).
       customBlocks?: Record<string, CustomBlockDefinition>;
+      // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny
+      // 목록. 세션 생애주기 동안 불변이라(재설정 API 없음) 매번 이
+      // 옵션에서 다시 읽는다(customBlocks와 같은 패턴).
+      enabledBlockTypes?: EnabledBlockTypes;
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
     // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
@@ -191,6 +203,7 @@ export class ProductionEditorSession {
     const parsed = parseSupportedDocument(
       options.initialDocument,
       new Set(Object.keys(options.customBlocks ?? {})),
+      options.enabledBlockTypes,
     );
     if (!parsed.ok) {
       throw new TypeError(
@@ -458,7 +471,11 @@ export class ProductionEditorSession {
 
   replaceDocument(next: unknown): Result<void, EditorError> {
     if (this.destroyed) return commandNotApplicable("replaceDocument");
-    const parsed = parseSupportedDocument(next, this.customBlockTypes);
+    const parsed = parseSupportedDocument(
+      next,
+      this.customBlockTypes,
+      this.options.enabledBlockTypes,
+    );
     if (!parsed.ok) return parsed;
     if (blockChanges(this.currentDocument, parsed.value).length === 0) {
       return commandNotApplicable("replaceDocument");
@@ -514,6 +531,9 @@ export class ProductionEditorSession {
             customBlocks: this.options.customBlocks,
             customBlockEditor: this.controllerEditor,
           }),
+      ...(this.options.enabledBlockTypes === undefined
+        ? {}
+        : { enabledBlockTypes: this.options.enabledBlockTypes }),
       ...(this.options.onPasteRejected === undefined
         ? {}
         : { onPasteRejected: this.options.onPasteRejected }),

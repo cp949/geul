@@ -24,8 +24,27 @@ import {
   type VideoBlock,
 } from "@cp949/geul-model";
 
+import { walkBlockTree } from "./block-tree.js";
 import type { EditorError } from "./errors.js";
 import { columnIndexMap } from "./table-grid.js";
+
+// enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12) — 기존 14종 대상
+// allow/deny 목록. model에 "14종 전체 목록" export가 없고(만들 필요도
+// 없다) allow 모드도 매 타입마다 predicate 호출로 판정한다(여집합을
+// 미리 계산하지 않는다). 옵션 미지정이면 항상 true(회귀 없음).
+export type EnabledBlockTypes = {
+  mode: "allow" | "deny";
+  types: readonly Block["type"][];
+};
+
+export const isBlockTypeEnabled = (
+  type: Block["type"],
+  enabledBlockTypes?: EnabledBlockTypes,
+): boolean => {
+  if (enabledBlockTypes === undefined) return true;
+  const listed = enabledBlockTypes.types.includes(type);
+  return enabledBlockTypes.mode === "allow" ? listed : !listed;
+};
 
 export type TiptapJsonMark = {
   type?: string;
@@ -361,9 +380,43 @@ const customBlockToTiptapJson = (block: CustomBlock): TiptapJsonNode => ({
   },
 });
 
+// enabledBlockTypes(RD-002-DELTA-12)로 비활성화한 알려진 타입이 문서
+// 어디에라도(최상위든 임의 깊이 중첩 children이든) 있으면 그 블록을
+// 반환한다 — 7개 nestable 타입(paragraph/heading/quote/목록 4종)은 자식을
+// 가질 수 있어 top-level만으로는 부족하다(CustomBlock 거절과 다른
+// 이유, CustomBlock은 leaf·top-level 전용). PM 스키마에 없는 노드
+// 타입으로 Editor를 만들거나 insertContent하면 PM이 예외를 던지므로
+// 로드 자체를 막는다. block-tree.ts의 기존 재사용 프리미티브를 그대로
+// 쓴다 — 재귀를 여기서 다시 구현하지 않는다.
+const findDisabledBlock = (
+  blocks: Document["blocks"],
+  enabledBlockTypes: EnabledBlockTypes | undefined,
+): Document["blocks"][number] | undefined => {
+  if (enabledBlockTypes === undefined) return undefined;
+  let found: Document["blocks"][number] | undefined;
+  walkBlockTree(
+    blocks,
+    null,
+    (block) => {
+      if (
+        isKnownBlockType(block.type) &&
+        !isBlockTypeEnabled(block.type, enabledBlockTypes)
+      ) {
+        found = block;
+        return false;
+      }
+    },
+    false,
+  );
+  return found;
+};
+
 export const modelToTiptap = (
   document: Document,
-  options?: { customBlockTypes?: ReadonlySet<string> },
+  options?: {
+    customBlockTypes?: ReadonlySet<string>;
+    enabledBlockTypes?: EnabledBlockTypes;
+  },
 ): Result<TiptapJsonNode, EditorError> => {
   if (document.blocks.length === 0) {
     return invalid("R0 editor documents require at least one block");
@@ -385,6 +438,19 @@ export const modelToTiptap = (
       error: {
         code: "EDITOR_FEATURE_UNAVAILABLE",
         message: `Block ${rejectedBlock.id} has unregistered custom type "${rejectedBlock.type}" — register it via CreateEditorOptions.customBlocks`,
+      },
+    };
+  }
+  const disabledBlock = findDisabledBlock(
+    document.blocks,
+    options?.enabledBlockTypes,
+  );
+  if (disabledBlock !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "EDITOR_FEATURE_UNAVAILABLE",
+        message: `Block ${disabledBlock.id} has type "${disabledBlock.type}" disabled via CreateEditorOptions.enabledBlockTypes`,
       },
     };
   }
