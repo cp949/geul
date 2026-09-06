@@ -1,5 +1,6 @@
 import {
   type InlineContent,
+  type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
   tableSizeViolationMessage,
@@ -142,6 +143,14 @@ const headingLevelFromTagName = (
 // normalizeCellContent(C0 제어문자/DEL/짝 없는 surrogate 정제) 없으면
 // model의 isValidInlineText 검사가 거절해 readEditorDocument에서
 // throw된다(editor 영구 desync).
+// normalizedInlineContent(아래)가 만드는 콘텐츠는 항상 텍스트 런뿐이다 —
+// HTML 파서에는 커스텀 inline 원소를 만드는 문법이 없다(cell-text.ts와 같은
+// 근거, RD-002-DELTA-15). hasSubstantialText 판정에 쓸 순수 텍스트만 뽑는다.
+const visibleText = (content: InlineContent): string =>
+  (content as Array<Extract<InlineContentItem, { text: string }>>)
+    .map((item) => item.text)
+    .join("");
+
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
   tables: readonly HtmlElementNode[],
@@ -240,7 +249,7 @@ const blockSequenceFromNodes = (
       // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
       if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
         const content = normalizedInlineContent(segment.nodes);
-        const text = content.map((item) => item.text).join("");
+        const text = visibleText(content);
         if (hasSubstantialText(text)) {
           blocks.push({ type: "paragraph", content });
         }
@@ -248,7 +257,7 @@ const blockSequenceFromNodes = (
       }
       if (segment.kind === "heading") {
         const content = normalizedInlineContent(segment.nodes);
-        const text = content.map((item) => item.text).join("");
+        const text = visibleText(content);
         if (!hasSubstantialText(text)) continue;
         blocks.push({ type: "heading", level: segment.level, content });
         continue;
@@ -278,7 +287,7 @@ const blockSequenceFromNodes = (
       // 정규화만 재사용한다.
       if (segment.nonSectionChildren.length > 0) {
         const content = normalizedInlineContent(segment.nonSectionChildren);
-        const text = content.map((item) => item.text).join("");
+        const text = visibleText(content);
         if (hasSubstantialText(text)) {
           blocks.push({ type: "paragraph", content });
         }

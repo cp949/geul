@@ -197,6 +197,30 @@ describe("validateTabularData", () => {
       error: { code: "CLIPBOARD_TABLE_INVALID" },
     });
   });
+
+  it("커스텀 inline 원소가 든 셀은 텍스트 계약 검사를 건너뛰고 통과시킨다(수용 판정은 core의 몫)", () => {
+    // model 계약상 커스텀 원소(EXT-002)는 완전히 유효하다 — 이 함수는
+    // 텍스트 런의 정규 형식만 검사하고, 등록 여부(수용 판정)는 이 함수
+    // 다음에 실행되는 core의 inlineContentViolation이 판정한다
+    // (RD-002-DELTA-14 "남은 위험" 1번, RD-002-DELTA-15). 가드가 없으면
+    // item.text가 undefined라 TypeError로 크래시했다.
+    const data: TabularData = {
+      columnCount: 1,
+      rows: [
+        {
+          cells: [
+            {
+              columnIndex: 0,
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ type: "custom", customType: "mention" }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(validateTabularData(data)).toEqual({ ok: true, value: undefined });
+  });
 });
 
 /**

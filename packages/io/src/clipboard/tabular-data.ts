@@ -1,9 +1,12 @@
 import {
   appendOrMergeInlineItem,
   type InlineContent,
+  type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
+  isTextRunItem,
   isValidInlineText,
+  type TextMark,
   validateGridCoverage,
 } from "@cp949/geul-model";
 
@@ -51,6 +54,14 @@ export const validateTabularData = (
   for (const [rowIndex, row] of data.rows.entries()) {
     for (const [cellIndex, cellEntry] of row.cells.entries()) {
       for (const item of cellEntry.content) {
+        // 커스텀 inline 원소(EXT-002)는 model 계약상 완전히 유효하다 — 이
+        // 함수는 텍스트 런의 정규 형식만 검사하고, 등록 여부(수용 판정)는
+        // 이 함수 다음에 실행되는 core의 inlineContentViolation
+        // (EDITOR_FEATURE_UNAVAILABLE)이 판정한다(validateTabularDataForPaste가
+        // validateTabularData 다음에 셀마다 그 판정을 부른다). 이 가드가
+        // 없으면 item.text가 undefined라 TypeError로 크래시했다
+        // (RD-002-DELTA-14 "남은 위험" 1번, RD-002-DELTA-15).
+        if (!isTextRunItem(item)) continue;
         if (isValidInlineText(item.text)) continue;
         return {
           ok: false,
@@ -140,8 +151,17 @@ export const validateTabularData = (
 // (원본 run 참조를 그대로 담지 않는다) 호출자가 넘긴 데이터를 건드리지 않기
 // 위한 별도 교체 로직이 필요 없다.
 const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
-  for (const run of runs) {
-    appendOrMergeInlineItem(target, run.text, run.marks);
+  // 계약: withParagraphsMergedIntoCells 호출 시점에는 core(pasteClipboardContent)가
+  // leading/trailing(inlineContentViolation)과 표 자신의 셀 콘텐츠
+  // (validateTabularDataForPaste)를 이미 검증했다는 전제 위에서 텍스트
+  // 런으로 캐스트한다(model-to-tiptap.ts의 inlineContentToTiptap과 같은
+  // 패턴, RD-002-DELTA-14 설계 결정 3) — 이 함수를 io 공개 API로 직접(core
+  // 검증을 우회해) 호출하는 위험은 새로 생기지 않은 기존 위험 범주다.
+  for (const run of runs as Array<Extract<InlineContentItem, { text: string }>>) {
+    // appendOrMergeInlineItem은 CustomTextMark를 담은 marks 병합을 계약
+    // 밖으로 명시한다(inline-content-merge.ts 주석) — 위 계약 전제(항상
+    // 텍스트 런)와 같은 근거로 TextMark[]로 캐스트한다.
+    appendOrMergeInlineItem(target, run.text, run.marks as TextMark[] | undefined);
   }
 };
 
@@ -151,7 +171,8 @@ const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
 const joinInlineSegments = (segments: InlineContent[]): InlineContent => {
   const joined: InlineContent = [];
   for (const segment of segments) {
-    if (segment.every((run) => run.text.length === 0)) continue;
+    const runs = segment as Array<Extract<InlineContentItem, { text: string }>>;
+    if (runs.every((run) => run.text.length === 0)) continue;
     if (joined.length > 0) appendInlineRuns(joined, [{ text: "\n" }]);
     appendInlineRuns(joined, segment);
   }

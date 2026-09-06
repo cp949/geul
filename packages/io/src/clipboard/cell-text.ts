@@ -1,7 +1,9 @@
 import {
   appendOrMergeInlineItem,
   type InlineContent,
+  type InlineContentItem,
   sanitizeInlineText,
+  type TextMark,
 } from "@cp949/geul-model";
 
 import type { HtmlNode } from "../html/inline-content.js";
@@ -77,11 +79,16 @@ const keptCodeUnits = (flat: string): boolean[] => {
 };
 
 export const normalizeCellContent = (content: InlineContent): InlineContent => {
-  const kept = keptCodeUnits(content.map((item) => item.text).join(""));
+  // inlineContentFromNodes(HTML 파서)가 만드는 콘텐츠는 항상 텍스트 런뿐이다
+  // — 이 함수의 유일한 호출부(clipboard-table-parser.ts)가 그 결과만
+  // 넘긴다. HTML/TSV 파싱 경로에는 커스텀 inline 원소를 만드는 문법이
+  // 없다(import-html.ts/RD-002-DELTA-06과 같은 근거, RD-002-DELTA-15).
+  const textRuns = content as Array<Extract<InlineContentItem, { text: string }>>;
+  const kept = keptCodeUnits(textRuns.map((item) => item.text).join(""));
   const normalized: InlineContent = [];
   let offset = 0;
 
-  for (const item of content) {
+  for (const item of textRuns) {
     let text = "";
     for (let index = 0; index < item.text.length; index += 1) {
       if (kept[offset + index] === true) text += item.text[index];
@@ -90,8 +97,11 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
 
     // 빈 세그먼트 스킵과, 세그먼트가 사라지며 이웃하게 된 같은 mark 조합의
     // 병합은 model의 appendOrMergeInlineItem이 소유한다(다른 네 곳도 같은
-    // 계약을 쓴다).
-    appendOrMergeInlineItem(normalized, text, item.marks);
+    // 계약을 쓴다). appendOrMergeInlineItem은 CustomTextMark를 담은 marks
+    // 병합을 계약 밖으로 명시한다(inline-content-merge.ts 주석) — 이
+    // 파일은 HTML 파서 산출물만 다뤄 항상 TextMark[]뿐이다(위 캐스트와
+    // 같은 근거).
+    appendOrMergeInlineItem(normalized, text, item.marks as TextMark[] | undefined);
   }
 
   return normalized;
