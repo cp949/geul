@@ -62,3 +62,74 @@ export const insertSiblingsInTree = (
   }
   return null;
 };
+
+// blockId 위치의 블록을 `replace`가 반환한 새 블록으로 통째로 교체한 새
+// 트리를 반환한다(불변 갱신). replace는 교체 대상 블록 하나만 받는다 —
+// updateBlock(spec §3.2, RD-002-DELTA-02)이 이미 병합을 끝낸 완성된 Block을
+// 만들어 넘기고, 이 함수는 그 값을 트리의 올바른 위치에 스플라이스하는
+// 책임만 진다. blockId를 찾지 못하면 null(BLOCK_NOT_FOUND 판정은 호출자
+// 몫) — insertSiblingsInTree와 동일 탐색·전파 구조.
+export const updateBlockInTree = (
+  blocks: readonly Block[],
+  blockId: string,
+  replace: (block: Block) => Block,
+): Block[] | null => {
+  const index = blocks.findIndex((block) => block.id === blockId);
+  if (index !== -1) {
+    const target = blocks[index];
+    if (target === undefined) return null;
+    return [
+      ...blocks.slice(0, index),
+      replace(target),
+      ...blocks.slice(index + 1),
+    ];
+  }
+  for (let i = 0; i < blocks.length; i += 1) {
+    const block = blocks[i];
+    if (block === undefined) continue;
+    const children = childrenOf(block);
+    if (children === undefined || children.length === 0) continue;
+    const spliced = updateBlockInTree(children, blockId, replace);
+    if (spliced === null) continue;
+    return [
+      ...blocks.slice(0, i),
+      withChildren(block, spliced),
+      ...blocks.slice(i + 1),
+    ];
+  }
+  return null;
+};
+
+// idsToRemove에 속한 블록을 트리 전 깊이에서 제거한 새 트리와, 제거된
+// 블록들(자신의 children 서브트리 포함, 문서 순서)을 함께 반환한다(불변
+// 갱신). replaceBlocks(spec §3.2, RD-002-DELTA-02)가 소비한다 — 제거
+// 대상의 자식은 승격하지 않는다(RD-002-DELTA-02 "## 계획"의 설계 결정,
+// 기존 commands.deleteBlock이 PM nodeSize 범위를 통째로 지우는 것과 같은
+// 의미). 한 블록이 제거되면 그 서브트리 안에서 다시 idsToRemove를 찾지
+// 않는다 — 이미 제거된 블록의 자식은 제거 사유를 물을 필요가 없다.
+export const removeBlocksFromTree = (
+  blocks: readonly Block[],
+  idsToRemove: ReadonlySet<string>,
+): { blocks: Block[]; removed: Block[] } => {
+  const removed: Block[] = [];
+  const nextBlocks: Block[] = [];
+  for (const block of blocks) {
+    if (idsToRemove.has(block.id)) {
+      removed.push(block);
+      continue;
+    }
+    const children = childrenOf(block);
+    if (children === undefined || children.length === 0) {
+      nextBlocks.push(block);
+      continue;
+    }
+    const childResult = removeBlocksFromTree(children, idsToRemove);
+    removed.push(...childResult.removed);
+    nextBlocks.push(
+      childResult.removed.length === 0
+        ? block
+        : withChildren(block, childResult.blocks),
+    );
+  }
+  return { blocks: nextBlocks, removed };
+};

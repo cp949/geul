@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createEditor, type Block, type PartialBlock } from "../src/index.js";
-import { documentOf, paragraphBlock, sequentialIds } from "./editor-controller-support.js";
+import {
+  documentOf,
+  headingBlock,
+  paragraphBlock,
+  sequentialIds,
+} from "./editor-controller-support.js";
 
 const twoParagraphDocument = () =>
   documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two"));
@@ -151,5 +156,294 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — insertBlo
       id: "parent-1",
       children: [{ id: "child-1" }, { id: "new-2" }],
     });
+  });
+});
+
+describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — updateBlock", () => {
+  it("update.type이 기존 블록과 다르면 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 1, RD-002.md 확정 결정)", () => {
+    const before = twoParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.updateBlock("block-1", {
+      type: "heading",
+      level: 1,
+      content: [{ text: "changed" }],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "updateBlock" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("같은 타입이면 지정한 필드만 병합하고 나머지는 유지한다(완료 조건 2)", () => {
+    const block = {
+      id: "block-1",
+      type: "paragraph",
+      content: [{ text: "one" }],
+      textColor: "#FF0000",
+    } as Block;
+    const editor = createEditor({ initialDocument: documentOf(block) });
+
+    const result = editor.updateBlock("block-1", {
+      type: "paragraph",
+      content: [{ text: "changed" }],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "block-1",
+        type: "paragraph",
+        content: [{ text: "changed" }],
+        textColor: "#FF0000",
+      },
+    });
+    expect(editor.getDocument().blocks[0]).toEqual(
+      result.ok ? result.value : undefined,
+    );
+  });
+
+  it("children이 있는 블록을 수정해도 children은 그대로 유지된다(완료 조건 2의 재귀 경계 확인)", () => {
+    const child = paragraphBlock("child-1", "child");
+    const parent = paragraphBlock("parent-1", "parent", [child]);
+    const editor = createEditor({
+      initialDocument: documentOf(parent, paragraphBlock("tail", "tail")),
+    });
+
+    const result = editor.updateBlock("parent-1", {
+      type: "paragraph",
+      content: [{ text: "changed" }],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: "parent-1",
+        type: "paragraph",
+        content: [{ text: "changed" }],
+        children: [child],
+      },
+    });
+    expect(editor.getDocument().blocks[0]).toEqual(
+      result.ok ? result.value : undefined,
+    );
+  });
+
+  it("update.id는 무시하고 blockId 인자의 id를 유지한다(설계 결정)", () => {
+    const editor = createEditor({ initialDocument: twoParagraphDocument() });
+
+    const result = editor.updateBlock("block-1", {
+      id: "renamed",
+      type: "paragraph",
+      content: [{ text: "changed" }],
+    } as PartialBlock);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.id).toBe("block-1");
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "block-2",
+    ]);
+  });
+
+  it("알 수 없는 blockId에 대해 BLOCK_NOT_FOUND를 반환한다(완료 조건 3)", () => {
+    const editor = createEditor({ initialDocument: twoParagraphDocument() });
+
+    const result = editor.updateBlock("missing", {
+      type: "paragraph",
+      content: [{ text: "x" }],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+  });
+
+  it("병합 결과가 타입별 필수 구조를 위반하면 문서를 바꾸지 않고 DOCUMENT_INVALID를 반환한다(완료 조건 4)", () => {
+    const before = documentOf(
+      headingBlock("h-1", 1, "title"),
+      paragraphBlock("tail", "tail"),
+    );
+    const editor = createEditor({ initialDocument: before });
+
+    const invalidUpdate = {
+      type: "heading",
+      level: 99,
+    } as unknown as PartialBlock;
+    const result = editor.updateBlock("h-1", invalidUpdate);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("DOCUMENT_INVALID");
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("단일 undo step이다(완료 조건 5)", () => {
+    const editor = createEditor({ initialDocument: twoParagraphDocument() });
+
+    editor.updateBlock("block-1", {
+      type: "paragraph",
+      content: [{ text: "changed" }],
+    });
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      content: [{ text: "changed" }],
+    });
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      content: [{ text: "one" }],
+    });
+  });
+});
+
+describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — replaceBlocks", () => {
+  const threeParagraphDocument = () =>
+    documentOf(
+      paragraphBlock("block-1", "one"),
+      paragraphBlock("block-2", "two"),
+      paragraphBlock("block-3", "three"),
+    );
+
+  it("blockIdsToRemove를 제거하고 blocksToInsert를 blockIdsToRemove[0] 자리에 삽입한다(완료 조건 6)", () => {
+    const editor = createEditor({
+      initialDocument: threeParagraphDocument(),
+      createId: () => "new-1",
+    });
+
+    const result = editor.replaceBlocks(
+      ["block-2"],
+      [{ type: "paragraph", content: [{ text: "new" }] }],
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        insertedBlocks: [
+          { id: "new-1", type: "paragraph", content: [{ text: "new" }] },
+        ],
+        removedBlocks: [
+          { id: "block-2", type: "paragraph", content: [{ text: "two" }] },
+        ],
+      },
+    });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "new-1",
+      "block-3",
+    ]);
+  });
+
+  it("여러 blockId를 인자 순서와 무관하게 제거하고, 앵커(첫 번째 id) 자리에 삽입한다(완료 조건 6)", () => {
+    const editor = createEditor({
+      initialDocument: threeParagraphDocument(),
+      createId: sequentialIds("new"),
+    });
+
+    const result = editor.replaceBlocks(
+      ["block-3", "block-1"],
+      [
+        { type: "paragraph", content: [{ text: "a" }] },
+        { id: "explicit-id", type: "paragraph", content: [{ text: "b" }] },
+      ],
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.value.removedBlocks.map((b) => b.id)).toEqual([
+      "block-3",
+      "block-1",
+    ]);
+    expect(result.value.insertedBlocks.map((b) => b.id)).toEqual([
+      "new-1",
+      "explicit-id",
+    ]);
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-2",
+      "new-1",
+      "explicit-id",
+    ]);
+  });
+
+  it("blockIdsToRemove 중 하나라도 없으면 문서를 바꾸지 않고 BLOCK_NOT_FOUND를 반환한다(완료 조건 7)", () => {
+    const before = threeParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.replaceBlocks(
+      ["block-2", "missing"],
+      [{ type: "paragraph", content: [{ text: "new" }] }],
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("blockIdsToRemove가 빈 배열이면 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 8)", () => {
+    const editor = createEditor({ initialDocument: threeParagraphDocument() });
+
+    const result = editor.replaceBlocks(
+      [],
+      [{ type: "paragraph", content: [{ text: "new" }] }],
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "replaceBlocks" },
+    });
+  });
+
+  it("문서의 모든 블록을 제거하고 아무것도 삽입하지 않으면 문서를 바꾸지 않고 DOCUMENT_INVALID를 반환한다(완료 조건 9, R0)", () => {
+    const before = documentOf(paragraphBlock("block-1", "one"));
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.replaceBlocks(["block-1"], []);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("DOCUMENT_INVALID");
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("삽입 블록이 타입별 필수 구조를 위반하면 문서를 바꾸지 않고 DOCUMENT_INVALID를 반환한다(insertBlocks와 공유하는 검증 재확인)", () => {
+    const before = threeParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const invalidTable = { id: "bad-table", type: "table" } as PartialBlock;
+    const result = editor.replaceBlocks(["block-2"], [invalidTable]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("DOCUMENT_INVALID");
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("단일 undo step이다(완료 조건 10)", () => {
+    const editor = createEditor({
+      initialDocument: threeParagraphDocument(),
+      createId: () => "new-1",
+    });
+
+    editor.replaceBlocks(
+      ["block-2"],
+      [{ type: "paragraph", content: [{ text: "new" }] }],
+    );
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "new-1",
+      "block-3",
+    ]);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "block-2",
+      "block-3",
+    ]);
   });
 });

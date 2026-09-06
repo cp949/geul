@@ -29,7 +29,11 @@ import {
   findParentInTree,
   walkBlockTree,
 } from "./block-tree.js";
-import { insertSiblingsInTree } from "./block-tree-edit.js";
+import {
+  insertSiblingsInTree,
+  removeBlocksFromTree,
+  updateBlockInTree,
+} from "./block-tree-edit.js";
 import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
@@ -126,6 +130,27 @@ export interface EditorController {
     referenceBlockId: string,
     placement?: "before" | "after",
   ): Result<Block[], EditorError>;
+  // spec §3.2, RD-002-DELTA-02 — 같은 타입 안에서만 필드를 병합한다.
+  // update.type이 대상 블록의 type과 다르면 COMMAND_NOT_APPLICABLE로
+  // 거절한다(RD-002.md "## 결정", 타입 변경은 commands.setBlockType으로
+  // 안내). update.id는 무시한다 — 블록은 항상 blockId 인자의 id를
+  // 유지한다(같은 문서의 "## 결정").
+  updateBlock(
+    blockId: string,
+    update: PartialBlock,
+  ): Result<Block, EditorError>;
+  // spec §3.2, RD-002-DELTA-02 — blockIdsToRemove 전부를 제거하고
+  // blocksToInsert를 blockIdsToRemove[0]이 있던 자리에 삽입한다. 제거
+  // 대상은 자신의 children 서브트리와 함께 사라진다(자식 승격 없음,
+  // RD-002-DELTA-02 "## 계획"의 설계 결정 — 기존 commands.deleteBlock과
+  // 동일 의미).
+  replaceBlocks(
+    blockIdsToRemove: string[],
+    blocksToInsert: PartialBlock[],
+  ): Result<
+    { insertedBlocks: Block[]; removedBlocks: Block[] },
+    EditorError
+  >;
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
   getCaretBlockContext(): {
@@ -1211,13 +1236,47 @@ export const createEditor = (
     return { ok: true, value: { blockId: captured.blockId } };
   };
 
-  // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-01). 검증 전략은
-  // "새 블록만 격리 검증"이 아니라 "현재 문서 전체에 스플라이스한 후보
-  // 문서를 통째로 parseDocument"다 — id 유일성과 중첩 깊이는 새 블록만
-  // 봐서는 판정할 수 없다(RD-002-DELTA-01 "## 계획"의 설계 결정).
-  // parseDocument 실패는 기존 parseSupportedDocument(production-editor-session.ts)와
-  // 동일하게 EditorError.DOCUMENT_INVALID로 뭉뚱그린다 — DocumentError의
-  // 더 세분화된 code(DOCUMENT_LIMIT_EXCEEDED 등)는 message로만 보존한다.
+  // insertBlocks/updateBlock/replaceBlocks(spec §3.2, DOC-005)가 공유하는
+  // 후보 문서 검증. 검증 전략은 "새·수정 블록만 격리 검증"이 아니라
+  // "현재 문서 전체에 스플라이스한 후보 문서를 통째로 parseDocument"다 —
+  // id 유일성과 중첩 깊이는 대상 블록만 봐서는 판정할 수 없다
+  // (RD-002-DELTA-01 "## 계획"의 설계 결정). parseDocument 실패는 기존
+  // parseSupportedDocument(production-editor-session.ts)와 동일하게
+  // EditorError.DOCUMENT_INVALID로 뭉뚱그린다 — DocumentError의 더
+  // 세분화된 code(DOCUMENT_LIMIT_EXCEEDED 등)는 message로만 보존한다.
+  // parseDocument(model 계층)는 빈 배열을 허용한다 — R0(문서는 항상 1개
+  // 이상 블록, modelToTiptap.ts 참고)는 core의 불변식이라 여기서 별도
+  // 재확인한다. insertBlocks/updateBlock은 블록 수를 줄이지 않아 이
+  // 분기에 도달할 수 없지만, replaceBlocks는 제거 개수가 삽입 개수보다
+  // 많을 수 있어 처음으로 도달 가능해진다(RD-002-DELTA-02 "## 계획"의
+  // 설계 결정).
+  const validateCandidateDocument = (
+    candidateBlocks: Block[],
+    currentDocument: BlockDocument,
+  ): Result<BlockDocument, EditorError> => {
+    const parsed = parseDocument({
+      ...currentDocument,
+      blocks: candidateBlocks,
+    });
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        error: { code: "DOCUMENT_INVALID", message: parsed.error.message },
+      };
+    }
+    if (parsed.value.blocks.length === 0) {
+      return {
+        ok: false,
+        error: {
+          code: "DOCUMENT_INVALID",
+          message: "R0 editor documents require at least one block",
+        },
+      };
+    }
+    return parsed;
+  };
+
+  // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-01).
   const insertBlocksImpl = (
     blocksToInsert: PartialBlock[],
     referenceBlockId: string,
@@ -1240,16 +1299,11 @@ export const createEditor = (
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: referenceBlockId } };
     }
 
-    const parsed = parseDocument({ ...currentDocument, blocks: nextBlocks });
-    if (!parsed.ok) {
-      return {
-        ok: false,
-        error: { code: "DOCUMENT_INVALID", message: parsed.error.message },
-      };
-    }
+    const validated = validateCandidateDocument(nextBlocks, currentDocument);
+    if (!validated.ok) return validated;
 
     const insertedBlocks = withIds
-      .map((block) => findBlockInTree(parsed.value.blocks, block.id))
+      .map((block) => findBlockInTree(validated.value.blocks, block.id))
       .filter((block): block is Block => block !== undefined);
     // 도달 불가 방어선 — parseDocument가 성공하면 스플라이스한 블록 전부가
     // 그 결과 트리에 그대로 남아 있어야 한다(id를 지우거나 바꾸는 정규화
@@ -1290,6 +1344,176 @@ export const createEditor = (
     return { ok: true, value: insertedBlocks };
   };
 
+  // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-02). update.type이
+  // 대상 블록의 type과 다르면 COMMAND_NOT_APPLICABLE로 거절한다(RD-002.md
+  // "## 결정" 확정 사항) — 같은 타입 안에서 update가 지정한 최상위
+  // 필드만 병합한다(스프레드, PartialBlock의 "최상위만 partial" 계약).
+  // update.id는 무시한다(RD-002-DELTA-02 "## 계획"의 설계 결정) — 블록은
+  // 항상 blockId 인자의 id를 유지한다.
+  const updateBlockImpl = (
+    blockId: string,
+    update: PartialBlock,
+  ): Result<Block, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("updateBlock");
+
+    const currentDocument = session.getDocument();
+    const target = findBlockInTree(currentDocument.blocks, blockId);
+    if (target === undefined) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (update.type !== target.type) {
+      return commandNotApplicable("updateBlock");
+    }
+
+    const merged = {
+      ...target,
+      ...update,
+      id: target.id,
+      type: target.type,
+    } as Block;
+    const nextBlocks = updateBlockInTree(
+      currentDocument.blocks,
+      blockId,
+      () => merged,
+    );
+    if (nextBlocks === null) {
+      // 도달 불가 방어선 — findBlockInTree가 이미 같은 트리에서 찾았다.
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+
+    const validated = validateCandidateDocument(nextBlocks, currentDocument);
+    if (!validated.ok) return validated;
+
+    const updatedBlock = findBlockInTree(validated.value.blocks, blockId);
+    if (updatedBlock === undefined) {
+      // 도달 불가 방어선 — insertBlocksImpl과 동일 전제(정규화가 id를
+      // 지우거나 바꾸지 않는다).
+      return commandNotApplicable("updateBlock");
+    }
+
+    const position = findBlockPosition(session.editor.state.doc, blockId);
+    const node =
+      position === null ? null : session.editor.state.doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    const fragment = Fragment.fromJSON(session.editor.schema, [
+      blockToTiptapJson(updatedBlock),
+    ]);
+
+    const result = session.runDocumentCommand("updateBlock", "local", () => {
+      const transaction = session.editor.state.tr.replaceWith(
+        position,
+        position + node.nodeSize,
+        fragment,
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+    if (!result.ok) return result;
+    return { ok: true, value: updatedBlock };
+  };
+
+  // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-02). blockIdsToRemove[0]이
+  // 원래 있던 자리에 blocksToInsert를 삽입하고 blockIdsToRemove 전부(자신의
+  // children 서브트리 포함)를 제거한다 — 순서는 "앵커가 아직 트리에 있을
+  // 때 그 앞에 삽입 → 이후 blockIdsToRemove 전부(앵커 포함) 제거"다
+  // (RD-002-DELTA-02 "## 계획"의 설계 결정, 제거 후에는 앵커 위치를 가리킬
+  // 안정적 참조가 없다).
+  const replaceBlocksImpl = (
+    blockIdsToRemove: string[],
+    blocksToInsert: PartialBlock[],
+  ): Result<{ insertedBlocks: Block[]; removedBlocks: Block[] }, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("replaceBlocks");
+    const anchorId = blockIdsToRemove[0];
+    if (anchorId === undefined) {
+      return commandNotApplicable("replaceBlocks");
+    }
+
+    const currentDocument = session.getDocument();
+    const removedBlocks: Block[] = [];
+    for (const id of blockIdsToRemove) {
+      const found = findBlockInTree(currentDocument.blocks, id);
+      if (found === undefined) {
+        return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: id } };
+      }
+      removedBlocks.push(found);
+    }
+
+    const withIds = blocksToInsert.map(
+      (block) => ({ ...block, id: block.id ?? session.createId() }) as Block,
+    );
+    const withInserted = insertSiblingsInTree(
+      currentDocument.blocks,
+      anchorId,
+      withIds,
+      "before",
+    );
+    if (withInserted === null) {
+      // 도달 불가 방어선 — 위 루프가 anchorId(blockIdsToRemove[0])의
+      // 존재를 이미 확인했다.
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: anchorId } };
+    }
+    const removeIdSet = new Set(blockIdsToRemove);
+    const { blocks: nextBlocks } = removeBlocksFromTree(
+      withInserted,
+      removeIdSet,
+    );
+
+    const validated = validateCandidateDocument(nextBlocks, currentDocument);
+    if (!validated.ok) return validated;
+
+    const insertedBlocks = withIds
+      .map((block) => findBlockInTree(validated.value.blocks, block.id))
+      .filter((block): block is Block => block !== undefined);
+    if (insertedBlocks.length !== withIds.length) {
+      // 도달 불가 방어선 — insertBlocksImpl과 동일 전제.
+      return commandNotApplicable("replaceBlocks");
+    }
+
+    const result = session.runDocumentCommand("replaceBlocks", "local", () => {
+      const anchorPosition = findBlockPosition(session.editor.state.doc, anchorId);
+      if (anchorPosition === null) return false;
+      const fragment = Fragment.fromJSON(
+        session.editor.schema,
+        insertedBlocks.map(blockToTiptapJson),
+      );
+      let transaction = session.editor.state.tr.insert(
+        anchorPosition,
+        fragment,
+      );
+
+      // blockIdsToRemove 전부를 제거한다. 매 삭제 뒤 남은 블록 위치가
+      // 바뀌므로 transaction.doc(그 시점까지의 누적 결과)에서 매번 다시
+      // 조회한다 — 인자 순서와 무관하게 항상 최신 위치를 얻는다. 조상과
+      // 자손이 함께 들어오면 자손이 조상과 함께 이미 사라져 findBlockPosition이
+      // null을 반환하고, 이 경우 명령 전체를 거절한다(dispatch 전이라 부분
+      // 적용 없음, RD-002-DELTA-02 "## 계획"의 설계 결정).
+      for (const id of blockIdsToRemove) {
+        const position = findBlockPosition(transaction.doc, id);
+        if (position === null) return false;
+        const node = transaction.doc.nodeAt(position);
+        if (node === null) return false;
+        // deleteBlock(generic-block-commands.ts)과 동일한 판정 — 대상이
+        // blockGroup의 유일한 자식이면 대상만 지워서는 "block+"를 위반하는
+        // 빈 그룹이 남는다, 그룹 자체를 지운다.
+        const $position = transaction.doc.resolve(position);
+        const removesWholeGroup =
+          $position.parent.type.name === "blockGroup" &&
+          $position.parent.childCount === 1;
+        transaction = transaction.delete(
+          removesWholeGroup ? $position.before() : position,
+          removesWholeGroup ? $position.after() : position + node.nodeSize,
+        );
+      }
+
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+    if (!result.ok) return result;
+    return { ok: true, value: { insertedBlocks, removedBlocks } };
+  };
+
   return {
     mount(element) {
       session.mount(element);
@@ -1325,6 +1549,12 @@ export const createEditor = (
     },
     insertBlocks(blocksToInsert, referenceBlockId, placement) {
       return insertBlocksImpl(blocksToInsert, referenceBlockId, placement);
+    },
+    updateBlock(blockId, update) {
+      return updateBlockImpl(blockId, update);
+    },
+    replaceBlocks(blockIdsToRemove, blocksToInsert) {
+      return replaceBlocksImpl(blockIdsToRemove, blocksToInsert);
     },
     getSelectionMarks() {
       if (session.isDestroyed) return [];
