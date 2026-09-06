@@ -3,7 +3,7 @@
  * handleTextInput 경계에서 검증한다. exact 대상·비대상, 중첩 구조, selection,
  * stored marks, revision/event, history와 trailing paragraph 원자성을 다룬다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Block, Document, TableBlock } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -173,7 +173,9 @@ describe("목록 native shorthand exact 변환", () => {
     expect(typeNativeText(tiptap, " ")).toBe(false);
     const table = editor.getDocument().blocks[0];
     if (table?.type !== "table") throw new Error("표 fixture 소실");
-    expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "- " }]);
+    expect((table as TableBlock).rows[0]?.cells[0]?.content).toEqual([
+      { text: "- " },
+    ]);
   });
 
   it.each([

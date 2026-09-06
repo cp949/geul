@@ -5,7 +5,7 @@
  * 속성을 받고, 표 셀 안에는 붙지 않으며, 저장 문서에는 어떤 흔적도 남기지
  * 않는다(계획 완료 조건 1~4, Issue #38 슬라이스 3 DELTA-05 05-C3).
  */
-import type { Document } from "@cp949/geul-model";
+import type { Document, HeadingBlock } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
@@ -83,7 +83,9 @@ const codePlaceholderDocument = (): Document =>
 const emptyHeadings456Document = (): Document => ({
   ...headingLevels456Document(),
   blocks: headingLevels456Document().blocks.map((block) =>
-    block.type === "heading" ? { ...block, content: [] } : block,
+    block.type === "heading"
+      ? { ...(block as HeadingBlock), content: [] }
+      : block,
   ),
 });
 

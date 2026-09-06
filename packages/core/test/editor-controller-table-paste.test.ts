@@ -7,6 +7,7 @@
  * NOT_TABULAR(폴백 경로)에서는 호출되지 않는지도 다룬다(Issue #36).
  */
 import type { TabularData } from "@cp949/geul-io";
+import type { ParagraphBlock, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import type { CreateEditorOptions } from "../src/index.js";
 import { createEditor } from "../src/index.js";
@@ -95,22 +96,25 @@ describe("에디터 컨트롤러 표", () => {
     const document = editor.getDocument();
     const introIndex = document.blocks.findIndex(
       (block) =>
-        block.type === "paragraph" && block.content[0]?.text === "intro",
+        block.type === "paragraph" &&
+        (block as ParagraphBlock).content[0]?.text === "intro",
     );
     const tableIndex = document.blocks.findIndex(
       (block) => block.type === "table",
     );
     const outroIndex = document.blocks.findIndex(
       (block) =>
-        block.type === "paragraph" && block.content[0]?.text === "outro",
+        block.type === "paragraph" &&
+        (block as ParagraphBlock).content[0]?.text === "outro",
     );
     expect(introIndex).toBeGreaterThanOrEqual(0);
     expect(introIndex).toBeLessThan(tableIndex);
     expect(tableIndex).toBeLessThan(outroIndex);
     const table = document.blocks[tableIndex];
     if (table?.type === "table") {
-      expect(table.rows[0]?.cells[0]?.content[0]?.text).toBe("a");
-      expect(table.rows[0]?.cells[1]?.content[0]?.text).toBe("b");
+      const tableBlock = table as TableBlock;
+      expect(tableBlock.rows[0]?.cells[0]?.content[0]?.text).toBe("a");
+      expect(tableBlock.rows[0]?.cells[1]?.content[0]?.text).toBe("b");
     }
 
     expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
@@ -141,13 +145,15 @@ describe("에디터 컨트롤러 표", () => {
     expect(
       document.blocks.some(
         (block) =>
-          block.type === "paragraph" && block.content[0]?.text === "intro",
+          block.type === "paragraph" &&
+          (block as ParagraphBlock).content[0]?.text === "intro",
       ),
     ).toBe(true);
     expect(
       document.blocks.some(
         (block) =>
-          block.type === "paragraph" && block.content[0]?.text === "outro",
+          block.type === "paragraph" &&
+          (block as ParagraphBlock).content[0]?.text === "outro",
       ),
     ).toBe(true);
 

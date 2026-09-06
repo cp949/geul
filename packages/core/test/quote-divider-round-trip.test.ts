@@ -6,7 +6,7 @@
  * 끝나게 구성하고, 정규화 자체를 확인하는 케이스만 quote/divider로 끝나는
  * 문서를 쓴다.
  */
-import type { Block, Document } from "@cp949/geul-model";
+import type { Document, DocumentBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import { modelToTiptap } from "../src/model-to-tiptap.js";
@@ -26,7 +26,7 @@ import {
  * model→PM→model 왕복 단언(toEqual(initialDocument.blocks))이 반복되는
  * 각 it에서 createId: sequentialIds("gen") 생성 규칙을 통일한다.
  */
-const roundTripBlocks = (initialDocument: Document): Block[] =>
+const roundTripBlocks = (initialDocument: Document): DocumentBlock[] =>
   createEditor({
     initialDocument,
     createId: sequentialIds("gen"),

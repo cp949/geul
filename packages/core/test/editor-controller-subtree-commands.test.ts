@@ -8,7 +8,12 @@
  * editor-controller-divider-commands.test.ts·editor-controller-table.test.ts가
  * 계속 소유한다 — 이 파일은 하위 트리가 실제로 관여하는 시나리오만 담는다.
  */
-import type { Block, Document, TableBlock } from "@cp949/geul-model";
+import type {
+  Block,
+  Document,
+  ParagraphBlock,
+  TableBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
@@ -473,12 +478,12 @@ describe("duplicateBlock 하위 트리 계약(Issue #125)", () => {
     const document = editor.getDocument();
     const originalTable = findTableBlock(
       document.blocks[0]?.type === "paragraph"
-        ? (document.blocks[0].children ?? [])
+        ? ((document.blocks[0] as ParagraphBlock).children ?? [])
         : [],
     );
     const duplicatedTable = findTableBlock(
       document.blocks[1]?.type === "paragraph"
-        ? (document.blocks[1].children ?? [])
+        ? ((document.blocks[1] as ParagraphBlock).children ?? [])
         : [],
     );
 

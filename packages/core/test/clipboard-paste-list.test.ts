@@ -12,8 +12,11 @@ import {
   isNestableBlockType,
   MAX_NESTING_DEPTH,
   type Block,
+  type BulletListItemBlock,
+  type DocumentBlock,
   type InlineContentBlockType,
   type NestableBlockType,
+  type NumberedListItemBlock,
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
@@ -93,7 +96,9 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
       pasteHtml(editable, "<p>a</p><ul><li>x</li><li>y</li></ul><p>b</p>");
 
       const blocks = editor.getDocument().blocks;
-      const items = blocks.filter((block) => block.type === "bulletListItem");
+      const items = blocks.filter(
+        (block): block is BulletListItemBlock => block.type === "bulletListItem",
+      );
       expect(items).toHaveLength(2);
       expect(items.map((item) => item.content)).toEqual([
         [{ text: "x" }],
@@ -117,7 +122,9 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
       pasteHtml(editable, '<ol start="5"><li>z</li><li>w</li></ol>');
 
       const blocks = editor.getDocument().blocks;
-      const items = blocks.filter((block) => block.type === "numberedListItem");
+      const items = blocks.filter(
+        (block): block is NumberedListItemBlock => block.type === "numberedListItem",
+      );
       expect(items).toHaveLength(2);
       expect(items[0]).toMatchObject({
         content: [{ text: "z" }],
@@ -147,7 +154,9 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
       pasteHtml(editable, '<ol start="-1"><li>z</li></ol>');
 
       const blocks = editor.getDocument().blocks;
-      const items = blocks.filter((block) => block.type === "numberedListItem");
+      const items = blocks.filter(
+        (block): block is NumberedListItemBlock => block.type === "numberedListItem",
+      );
       expect(items).toHaveLength(1);
       expect(items[0]?.content).toEqual([{ text: "z" }]);
       expect(items[0]?.startNumber).toBeUndefined();
@@ -169,7 +178,9 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
       pasteHtml(editable, "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>");
 
       const blocks = editor.getDocument().blocks;
-      const items = blocks.filter((block) => block.type === "bulletListItem");
+      const items = blocks.filter(
+        (block): block is BulletListItemBlock => block.type === "bulletListItem",
+      );
       expect(items).toHaveLength(2);
       expect(items[0]?.content).toEqual([{ text: "a" }]);
       expect(items[0]?.children).toHaveLength(1);
@@ -202,7 +213,7 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
         MAX_NESTING_DEPTH,
       );
       const leaf = document.blocks
-        .flatMap(function collect(block): Block[] {
+        .flatMap(function collect(block): DocumentBlock[] {
           const children = isNestableBlockType(block.type)
             ? ((block as Extract<Block, { type: NestableBlockType }>)
                 .children ?? [])

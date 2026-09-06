@@ -18,8 +18,10 @@ import {
   isNestableBlockType,
   type Block,
   type Document,
+  type DocumentBlock,
   type InlineContent,
   type NestableBlockType,
+  type TableBlock,
 } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { NodeType, Schema } from "@tiptap/pm/model";
@@ -73,7 +75,10 @@ export const paragraphDocument = (text: string, revision = 0): Document => ({
  * clipboard-paste-extension.test.ts의 두 번째 소비로 여기로 승격했다
  * (G-TST-002). clipboard-paste-list.test.ts(RD-005)도 이 헬퍼를 쓴다.
  */
-export const maxBlockDepth = (blocks: readonly Block[], depth = 1): number =>
+export const maxBlockDepth = (
+  blocks: readonly DocumentBlock[],
+  depth = 1,
+): number =>
   blocks.reduce((max, block) => {
     if (!isNestableBlockType(block.type)) return Math.max(max, depth);
     const nestable = block as Extract<Block, { type: NestableBlockType }>;
@@ -174,17 +179,17 @@ export const documentWithContent = (content: InlineContent): Document => ({
  * 이 계열 fixture가 문단 1개 뒤에 표를 넣는 배치이기 때문이다. 타입 가드를
  * 겸하므로 호출부는 반환값을 표 블록으로 좁혀 쓴다.
  */
-export const tableBlockIn = (document: Document) => {
+export const tableBlockIn = (document: Document): TableBlock => {
   const block = document.blocks[1];
   if (block?.type !== "table") throw new Error("Expected a table block");
-  return block;
+  return block as TableBlock;
 };
 
 /**
  * tableBlockIn의 컨트롤러판. 인덱스와 타입 가드 규칙 자체는 tableBlockIn이
  * 단독으로 소유한다.
  */
-export const tableBlockOf = (editor: EditorController) =>
+export const tableBlockOf = (editor: EditorController): TableBlock =>
   tableBlockIn(editor.getDocument());
 
 /**
@@ -194,10 +199,10 @@ export const tableBlockOf = (editor: EditorController) =>
  * 인덱스를 전제하지 않는 것이 이 질의가 tableBlockIn과 갈리는 이유다. 여러
  * 표가 있으면 문서 순서로 첫 번째를 준다.
  */
-export const firstTableBlockIn = (document: Document) => {
+export const firstTableBlockIn = (document: Document): TableBlock => {
   const block = document.blocks.find((b) => b.type === "table");
   if (block?.type !== "table") throw new Error("표 블록이 없다");
-  return block;
+  return block as TableBlock;
 };
 
 /**

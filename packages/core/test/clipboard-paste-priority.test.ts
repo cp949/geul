@@ -10,7 +10,11 @@
  * production wrapper 교차**만 새로 다룬다.
  */
 import { exportHtml } from "@cp949/geul-io";
-import type { Block } from "@cp949/geul-model";
+import type {
+  Block,
+  BulletListItemBlock,
+  ParagraphBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
@@ -201,8 +205,9 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
 
       const blocks = editor.getDocument().blocks;
       const parent = blocks.find(
-        (block) =>
-          block.type === "paragraph" && block.content[0]?.text === "t1",
+        (block): block is ParagraphBlock =>
+          block.type === "paragraph" &&
+          (block as ParagraphBlock).content[0]?.text === "t1",
       );
       expect(parent?.type === "paragraph" && parent.children).toMatchObject([
         { type: "paragraph", content: [{ text: "t2" }] },
@@ -234,8 +239,9 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
 
       const blocks = editor.getDocument().blocks;
       const pastedParagraphParent = blocks.find(
-        (block) =>
-          block.type === "paragraph" && block.content[0]?.text === "parent",
+        (block): block is ParagraphBlock =>
+          block.type === "paragraph" &&
+          (block as ParagraphBlock).content[0]?.text === "parent",
       );
       expect(
         pastedParagraphParent?.type === "paragraph" &&
@@ -243,9 +249,9 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
       ).toMatchObject([{ type: "paragraph", content: [{ text: "child" }] }]);
 
       const pastedListParent = blocks.find(
-        (block) =>
+        (block): block is BulletListItemBlock =>
           block.type === "bulletListItem" &&
-          block.content[0]?.text === "parent",
+          (block as BulletListItemBlock).content[0]?.text === "parent",
       );
       expect(
         pastedListParent?.type === "bulletListItem" &&

@@ -1,4 +1,8 @@
-import type { Document, InlineContent } from "@cp949/geul-model";
+import type {
+  Document,
+  InlineContent,
+  ParagraphBlock,
+} from "@cp949/geul-model";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
@@ -359,13 +363,15 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
 
     const inputBlock = initial.blocks[0];
     const inputItem =
-      inputBlock?.type === "paragraph" ? inputBlock.content[0] : undefined;
+      inputBlock?.type === "paragraph"
+        ? (inputBlock as ParagraphBlock).content[0]
+        : undefined;
     if (inputItem !== undefined) inputItem.text = "input";
     const returned = editor.getDocument();
     const returnedBlock = returned.blocks[0];
     const returnedItem =
       returnedBlock?.type === "paragraph"
-        ? returnedBlock.content[0]
+        ? (returnedBlock as ParagraphBlock).content[0]
         : undefined;
     if (returnedItem !== undefined) returnedItem.text = "returned";
 
@@ -386,7 +392,7 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     const returnedBlock = returned.blocks[0];
     const returnedItem =
       returnedBlock?.type === "paragraph"
-        ? returnedBlock.content[0]
+        ? (returnedBlock as ParagraphBlock).content[0]
         : undefined;
     if (returnedItem !== undefined) returnedItem.text = "mutated";
 

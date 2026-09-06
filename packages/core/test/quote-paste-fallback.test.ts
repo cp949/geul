@@ -10,6 +10,7 @@
  * 시퀀스가 늘어난 이유도 이 구조 변화 때문이다(id-1="a", id-2=quote,
  * id-3="b").
  */
+import type { QuoteBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
@@ -36,7 +37,9 @@ describe("ClipboardPasteExtension이 가로챈 외부 blockquote", () => {
       pasteHtml(editable, "<p>a</p><blockquote>q</blockquote><p>b</p>");
 
       const blocks = editor.getDocument().blocks;
-      const quote = blocks.find((block) => block.type === "quote");
+      const quote = blocks.find(
+        (block): block is QuoteBlock => block.type === "quote",
+      );
       expect(quote).toBeDefined();
       expect(quote?.content).toEqual([{ text: "q" }]);
       expect(blocks.map((block) => block.id)).toEqual([

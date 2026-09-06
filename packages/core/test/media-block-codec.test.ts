@@ -42,7 +42,18 @@ describe("4종 미디어 블록 codec 왕복", () => {
   it.each(["file", "image", "video", "audio"] as const)(
     "%s의 최소 shape(id·type만)이 왕복한다",
     (type) => {
-      expectRoundTrip(documentOf({ id: `${type}-min`, type }));
+      // it.each 콜백의 case별 리터럴이 유니온 하나로 묶여(RD-002-DELTA-08과
+      // 동일 패턴) `type` 필드만 유니온으로 추론된다 — 개별 media 타입으로
+      // 캐스트해 해소한다.
+      expectRoundTrip(
+        documentOf(
+          { id: `${type}-min`, type } as
+            | FileBlock
+            | ImageBlock
+            | VideoBlock
+            | AudioBlock,
+        ),
+      );
     },
   );
 

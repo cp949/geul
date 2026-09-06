@@ -6,6 +6,7 @@
  * editor-controller-table-paste.test.ts의 "표 앞뒤에 문단이 섞인 클립보드
  * 붙여넣기" 케이스(혼합 붙여넣기 구조가 가장 가깝다).
  */
+import type { HeadingBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
@@ -32,7 +33,8 @@ describe("클립보드 h4-h6 붙여넣기(DELTA-04 의존)", () => {
     const document = editor.getDocument();
     expect(
       document.blocks.some(
-        (block) => block.type === "heading" && block.level === 4,
+        (block) =>
+          block.type === "heading" && (block as HeadingBlock).level === 4,
       ),
     ).toBe(true);
     expect(document.blocks.some((block) => block.type === "table")).toBe(true);
@@ -41,7 +43,8 @@ describe("클립보드 h4-h6 붙여넣기(DELTA-04 의존)", () => {
     const afterUndo = editor.getDocument();
     expect(
       afterUndo.blocks.some(
-        (block) => block.type === "heading" && block.level === 4,
+        (block) =>
+          block.type === "heading" && (block as HeadingBlock).level === 4,
       ),
     ).toBe(false);
     expect(afterUndo.blocks.some((block) => block.type === "table")).toBe(
