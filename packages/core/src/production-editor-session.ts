@@ -14,6 +14,10 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
+// EditorController/CustomBlockDefinition을 import type으로만 참조한다
+// (RD-002-DELTA-11 "결정" 4 — production-editor-assembly.ts와 동일 근거,
+// 값 import가 아니라 컴파일 시 지워져 런타임 순환 의존이 생기지 않는다).
+import type { CustomBlockDefinition, EditorController } from "./editor-controller.js";
 import type { EditorError } from "./errors.js";
 import { isMediaBlockKind } from "./media-block-kind.js";
 import type {
@@ -47,6 +51,7 @@ const cloneDocument = (document: BlockDocument): BlockDocument =>
 
 const parseSupportedDocument = (
   input: unknown,
+  customBlockTypes: ReadonlySet<string>,
 ): Result<BlockDocument, EditorError> => {
   const parsed = parseDocument(input);
   if (!parsed.ok) {
@@ -55,7 +60,7 @@ const parseSupportedDocument = (
       error: { code: "DOCUMENT_INVALID", message: parsed.error.message },
     };
   }
-  const converted = modelToTiptap(parsed.value);
+  const converted = modelToTiptap(parsed.value, { customBlockTypes });
   return converted.ok ? { ok: true, value: parsed.value } : converted;
 };
 
@@ -138,6 +143,14 @@ export class ProductionEditorSession {
   // 기본값(true)으로 리셋된다.
   private editableState = true;
 
+  // registry(RD-002-DELTA-11)에 등록된 커스텀 block type 이름 집합 —
+  // modelToTiptap/tiptapToModel의 top-level 거절·복원 분기가 소비한다.
+  // 매 접근마다 계산한다(호출 빈도가 낮고 options.customBlocks가 세션
+  // 생애주기 동안 불변이라 캐싱 이점이 없다).
+  private get customBlockTypes(): ReadonlySet<string> {
+    return new Set(Object.keys(this.options.customBlocks ?? {}));
+  }
+
   constructor(
     private readonly options: {
       initialDocument: BlockDocument;
@@ -163,9 +176,22 @@ export class ProductionEditorSession {
           reason: ChangeReason;
         };
       }) => boolean | void;
+      // spec §4.4, RD-002-DELTA-11 — createTiptapEditor가 등록된 타입마다
+      // PM atom 노드를 조건부로 추가한다(production-editor-assembly.ts).
+      customBlocks?: Record<string, CustomBlockDefinition>;
     },
+    // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
+    // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
+    // createTiptapEditor가 트리거하는 dummy mount/unmount 구간)에는 아직
+    // 완성되지 않은 EditorController를 가리킨다(DELTA-11.md "결정" 2).
+    // 이 세션은 이 값을 그대로 createProductionEditor에 전달만 하고
+    // 스스로 호출하지 않는다.
+    private readonly controllerEditor: EditorController,
   ) {
-    const parsed = parseSupportedDocument(options.initialDocument);
+    const parsed = parseSupportedDocument(
+      options.initialDocument,
+      new Set(Object.keys(options.customBlocks ?? {})),
+    );
     if (!parsed.ok) {
       throw new TypeError(
         parsed.error.code === "DOCUMENT_INVALID" ||
@@ -432,7 +458,7 @@ export class ProductionEditorSession {
 
   replaceDocument(next: unknown): Result<void, EditorError> {
     if (this.destroyed) return commandNotApplicable("replaceDocument");
-    const parsed = parseSupportedDocument(next);
+    const parsed = parseSupportedDocument(next, this.customBlockTypes);
     if (!parsed.ok) return parsed;
     if (blockChanges(this.currentDocument, parsed.value).length === 0) {
       return commandNotApplicable("replaceDocument");
@@ -482,6 +508,12 @@ export class ProductionEditorSession {
       createId: this.createId,
       onUpdate: (editor) => this.onTiptapUpdate(editor),
       editable: this.editableState,
+      ...(this.options.customBlocks === undefined
+        ? {}
+        : {
+            customBlocks: this.options.customBlocks,
+            customBlockEditor: this.controllerEditor,
+          }),
       ...(this.options.onPasteRejected === undefined
         ? {}
         : { onPasteRejected: this.options.onPasteRejected }),
@@ -573,6 +605,7 @@ export class ProductionEditorSession {
       doc.toJSON() as TiptapJsonNode,
       this.sessionRevision,
       previewCreateId,
+      { customBlockTypes: this.customBlockTypes },
     );
     if (!converted.ok) {
       throw new TypeError(
@@ -589,6 +622,7 @@ export class ProductionEditorSession {
       editor.getJSON() as TiptapJsonNode,
       this.sessionRevision,
       this.createId,
+      { customBlockTypes: this.customBlockTypes },
     );
     if (!converted.ok) {
       throw new TypeError(

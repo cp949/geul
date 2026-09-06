@@ -4,6 +4,7 @@ import {
   type BulletListItemBlock,
   type CheckListItemBlock,
   type CodeBlock,
+  type CustomBlock,
   type Document,
   type FileBlock,
   type HeadingBlock,
@@ -344,30 +345,52 @@ export const blockToTiptapJson = (block: Block): TiptapJsonNode => {
   };
 };
 
+// registry(RD-002-DELTA-11)에 등록된 CustomBlock을 PM JSON으로 인코딩한다.
+// blockToTiptapJson(위, export)에는 이 분기를 섞지 않는다 — CustomBlock은
+// top-level 전용이라(RD-002-DELTA-01 "설계 결정") 그 함수의 다른 소비처
+// (children 재귀, insertBlocks류 범용 API)에는 나타날 수 없다. content
+// 모드("none"|"inline")는 실제 PM 콘텐츠 표현과 무관하게 attrs에 그대로
+// 저장해 round-trip만 보존한다(DELTA-11.md "결정" 1 — model에 인라인
+// 텍스트를 담을 필드가 없어 실제 편집은 범위 밖).
+const customBlockToTiptapJson = (block: CustomBlock): TiptapJsonNode => ({
+  type: block.type,
+  attrs: {
+    blockId: block.id,
+    contentMode: block.content,
+    props: block.props ?? null,
+  },
+});
+
 export const modelToTiptap = (
   document: Document,
+  options?: { customBlockTypes?: ReadonlySet<string> },
 ): Result<TiptapJsonNode, EditorError> => {
   if (document.blocks.length === 0) {
     return invalid("R0 editor documents require at least one block");
   }
+  const customBlockTypes = options?.customBlockTypes ?? new Set<string>();
   // top-level CustomBlock(model, RD-002-DELTA-01)은 model 계약상 유효하지만
-  // PM atom 노드가 아직 등록되지 않았다(registry는 RD-002-DELTA-06) —
-  // 조용히 무시하거나 blockToTiptapJson/validateEditableContent가 알려진
-  // 14종 전용 필드(content: InlineContent 등)에 접근해 잘못 동작하게
-  // 두지 않고 로드 자체를 명시적으로 거절한다.
-  const customBlock = document.blocks.find(
-    (block) => !isKnownBlockType(block.type),
+  // registry(CreateEditorOptions.customBlocks, RD-002-DELTA-11)에 등록되지
+  // 않은 타입은 PM atom 노드가 없다 — 조용히 무시하거나
+  // blockToTiptapJson/validateEditableContent가 알려진 14종 전용 필드
+  // (content: InlineContent 등)에 접근해 잘못 동작하게 두지 않고 로드
+  // 자체를 명시적으로 거절한다.
+  const rejectedBlock = document.blocks.find(
+    (block) =>
+      !isKnownBlockType(block.type) && !customBlockTypes.has(block.type),
   );
-  if (customBlock !== undefined) {
+  if (rejectedBlock !== undefined) {
     return {
       ok: false,
       error: {
         code: "EDITOR_FEATURE_UNAVAILABLE",
-        message: `Block ${customBlock.id} has unregistered custom type "${customBlock.type}" — customBlocks registry is not supported yet`,
+        message: `Block ${rejectedBlock.id} has unregistered custom type "${rejectedBlock.type}" — register it via CreateEditorOptions.customBlocks`,
       },
     };
   }
-  const knownBlocks = document.blocks as Block[];
+  const knownBlocks = document.blocks.filter((block) =>
+    isKnownBlockType(block.type),
+  ) as Block[];
 
   const representable = validateEditableContent(knownBlocks);
   if (!representable.ok) return representable;
@@ -376,7 +399,11 @@ export const modelToTiptap = (
     ok: true,
     value: {
       type: "doc",
-      content: knownBlocks.map(blockToTiptapJson),
+      content: document.blocks.map((block) =>
+        isKnownBlockType(block.type)
+          ? blockToTiptapJson(block as Block)
+          : customBlockToTiptapJson(block as CustomBlock),
+      ),
     },
   };
 };

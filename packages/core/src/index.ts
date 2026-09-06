@@ -6,6 +6,7 @@ export type { TabularCell, TabularData } from "@cp949/geul-io";
 export type {
   Block,
   CodeBlock,
+  CustomBlock,
   HeadingBlock,
   InlineContentBlockType,
   ListItemBlock,
@@ -47,6 +48,7 @@ export type {
   BlockTypeDescriptor,
   BlockTypeSource,
   CreateEditorOptions,
+  CustomBlockDefinition,
   DocumentChangeEvent,
   EditorController,
   PartialBlock,

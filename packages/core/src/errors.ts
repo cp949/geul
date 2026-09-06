@@ -25,9 +25,14 @@ export type EditorError =
   | { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" }
   | { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" }
   // top-level CustomBlock(model, RD-002-DELTA-01)은 저장 계약상 유효하지만
-  // PM atom 노드가 아직 등록되지 않아(registry는 RD-002-DELTA-06) 이
-  // 에디터가 로드할 수 없다 — 조용히 무시하거나 잘못 렌더링하지 않고 로드
-  // 자체를 거절한다. 표가 R0에서 쓰던 것과 같은 이름·의미의 손실 정책
-  // 카테고리다(docs/reviews/r0-project-foundation-completion.md 참고 —
-  // 표가 R1에서 지원되며 이 코드의 생산처가 한 번 사라졌었다).
-  | { code: "EDITOR_FEATURE_UNAVAILABLE"; message: string };
+  // PM atom 노드가 등록돼 있지 않으면(registry는 RD-002-DELTA-11,
+  // CreateEditorOptions.customBlocks) 이 에디터가 로드할 수 없다 — 조용히
+  // 무시하거나 잘못 렌더링하지 않고 로드 자체를 거절한다. 표가 R0에서 쓰던
+  // 것과 같은 이름·의미의 손실 정책 카테고리다(docs/reviews/r0-project-
+  // foundation-completion.md 참고 — 표가 R1에서 지원되며 이 코드의
+  // 생산처가 한 번 사라졌었다).
+  | { code: "EDITOR_FEATURE_UNAVAILABLE"; message: string }
+  // insertCustomBlock(RD-002-DELTA-11) 전용 — insertMediaBlock의 스키마
+  // 부재(도달 불가 방어선, throw)와 달리 여기서는 소비자가 등록하지 않은
+  // type 이름을 실수로 넘기는 실제 도달 가능한 경로다.
+  | { code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED"; type: string };

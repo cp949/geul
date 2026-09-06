@@ -1,6 +1,7 @@
 import type { TabularData } from "@cp949/geul-io";
 import {
   type Block,
+  type CustomBlock,
   type Document as BlockDocument,
   type DocumentBlock,
   type HeadingBlock,
@@ -43,11 +44,15 @@ import {
   removeBlocksFromTree,
   updateBlockInTree,
 } from "./block-tree-edit.js";
+import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
+import {
+  type InsertCustomBlockError,
+  insertCustomBlock as insertCustomBlockCommand,
+} from "./custom-block-commands.js";
 import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
 } from "./divider-commands.js";
-import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
 import type { EditorError } from "./errors.js";
 import { createGenericBlockCommands } from "./generic-block-commands.js";
 import { getBlockNestingActionState } from "./indent-commands.js";
@@ -406,6 +411,16 @@ export interface EditorController {
       kind: MediaBlockKind,
       options?: { clearAfterBlockText?: boolean },
     ): Result<{ blockId: string }, EditorError>;
+    // spec §4.4, RD-002-DELTA-11 — 등록되지 않은 type은
+    // CUSTOM_BLOCK_TYPE_NOT_REGISTERED로 거절한다(insertMediaBlock의 스키마
+    // 부재 throw와 달리 이건 소비자가 실제로 만날 수 있는 오류).
+    insertCustomBlock(
+      afterBlockId: string,
+      type: string,
+      content: "none" | "inline",
+      props?: Record<string, string | number | boolean | null>,
+      options?: { clearAfterBlockText?: boolean },
+    ): Result<{ blockId: string }, EditorError>;
     insertTableRow(
       tableBlockId: string,
       atIndex: number,
@@ -657,6 +672,23 @@ const collectCellSelection = (
   return { cellIds, singleMergedCellId };
 };
 
+// spec §4.4(EXT-001), RD-002-DELTA-11 — registry 등록 계약 그대로(비제네릭,
+// §4.1 "결정"). render()는 raw HTMLElement만 다뤄 ADR-0002(공개 표면에
+// Tiptap/PM 타입 비노출)를 그대로 만족한다. contentRef는 이번 DELTA에서
+// core가 쓰지 않는 예약 필드다(custom-block-extension.ts 주석,
+// DELTA-11.md "결정" 1 — content: "inline" 인스턴스의 실제 PM 콘텐츠
+// 표현은 model에 저장 필드가 없어 범위 밖).
+export type CustomBlockDefinition = {
+  render: (context: { block: CustomBlock; editor: EditorController }) => {
+    element: HTMLElement;
+    contentRef?: HTMLElement;
+  };
+  // 미등록 시 io HTML/GFM 손실 정책(spec §4.5, RD-003)이 적용된다 —
+  // 이번 DELTA는 이 두 필드를 저장만 하고 io로 연결하지 않는다(범위 밖).
+  toHtml?: (block: CustomBlock) => string;
+  toMarkdown?: (block: CustomBlock) => string;
+};
+
 export type CreateEditorOptions = {
   initialDocument: BlockDocument;
   /**
@@ -704,6 +736,11 @@ export type CreateEditorOptions = {
   // 이어 붙이는 정규화 transaction에는 중복 호출되지 않는다
   // (RD-004-DELTA-02 "## 계획"의 설계 결정).
   onBeforeChange?: (context: { changes: DocumentChangeEvent }) => boolean | void;
+  // spec §4.4(EXT-001), RD-002-DELTA-11 — 등록된 타입마다 createEditor()
+  // 호출 시점에 PM atom 노드를 조건부로 추가한다(포함 범위 "결과" 참고).
+  // PM 스키마는 여전히 에디터 생성 시점에 정적으로 결정된다 — 마운트
+  // 이후 동적 스키마 변경은 시도하지 않는다(spec §4.4 명시).
+  customBlocks?: Record<string, CustomBlockDefinition>;
 };
 
 const toggleableMarkTypes: ReadonlyArray<TextMark["type"]> = [
@@ -782,10 +819,43 @@ const findSelectionBlock = (
   return result;
 };
 
+// customBlocks(RD-002-DELTA-11) NodeView가 CustomBlockDefinition.render에
+// 넘길 EditorController 참조를 만든다. session 생성(아래 new
+// ProductionEditorSession) 안에서 dummy mount/unmount(production-editor-
+// assembly.ts)가 즉시 일어나므로, initialDocument에 등록된 커스텀 block이
+// 있으면 이 함수가 끝나기 전에 render()가 호출될 수 있다 — 이 시점엔
+// controller 변수 자체가 아직 없다(DELTA-11.md "결정" 2). controllerBox가
+// 채워지기 전까지는 이 Proxy의 속성 접근이 undefined를 반환한다(참조
+// 자체는 항상 유효 — 던지지 않는다). 실사용 mount()는 session 생성이
+// 끝난 뒤 일어나 NodeView가 다시 만들어지므로(unmount가 이전 것을
+// 파기) 그때는 이미 채워진 controllerBox를 통해 완전히 동작한다.
+// **제약**: render()는 이 참조의 메서드를 동기적으로 호출하면 안 된다 —
+// 참조만 캡처해 이벤트 핸들러 등 나중 호출에만 쓴다.
+const createDeferredControllerFacade = (): {
+  facade: EditorController;
+  box: { current: EditorController | null };
+} => {
+  const box: { current: EditorController | null } = { current: null };
+  const facade = new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        const current = box.current;
+        if (current === null) return undefined;
+        const value = Reflect.get(current, prop, current);
+        return typeof value === "function" ? value.bind(current) : value;
+      },
+    },
+  ) as EditorController;
+  return { facade, box };
+};
+
 export const createEditor = (
   options: CreateEditorOptions,
 ): EditorController => {
-  const session = new ProductionEditorSession(options);
+  const { facade: controllerFacade, box: controllerBox } =
+    createDeferredControllerFacade();
+  const session = new ProductionEditorSession(options, controllerFacade);
   const genericBlockCommands = createGenericBlockCommands(session);
 
   const rejectCodeBlockMark = (): Result<void, EditorError> | null => {
@@ -1333,6 +1403,61 @@ export const createEditor = (
     if (!result.ok) return result;
     if (captured.blockId === null) {
       return commandNotApplicable("insertMediaBlock");
+    }
+    return { ok: true, value: { blockId: captured.blockId } };
+  };
+
+  // insertMediaBlock 래퍼와 동일 구조 — 오류 유니온만 다르다
+  // (InsertCustomBlockError, DELTA-11.md "결정" 5).
+  const insertCustomBlock = (
+    afterBlockId: string,
+    type: string,
+    content: "none" | "inline",
+    props?: Record<string, string | number | boolean | null>,
+    options?: { clearAfterBlockText?: boolean },
+  ): Result<{ blockId: string }, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("insertCustomBlock");
+    const captured: {
+      code: InsertCustomBlockError["code"] | null;
+      blockId: string | null;
+    } = { code: null, blockId: null };
+
+    const result = session.runDocumentCommand(
+      "insertCustomBlock",
+      "local",
+      () => {
+        const outcome = insertCustomBlockCommand(
+          session.editor,
+          afterBlockId,
+          type,
+          content,
+          props,
+          session.createId,
+          options,
+        );
+        if (!outcome.ok) {
+          captured.code = outcome.error.code;
+          return false;
+        }
+        captured.blockId = outcome.value.blockId;
+        return true;
+      },
+    );
+
+    if (captured.code !== null) {
+      if (captured.code === "CUSTOM_BLOCK_TYPE_NOT_REGISTERED") {
+        return { ok: false, error: { code: captured.code, type } };
+      }
+      return captured.code === "BLOCK_NOT_FOUND"
+        ? {
+            ok: false,
+            error: { code: "BLOCK_NOT_FOUND", blockId: afterBlockId },
+          }
+        : { ok: false, error: { code: "TRANSACTION_REJECTED" } };
+    }
+    if (!result.ok) return result;
+    if (captured.blockId === null) {
+      return commandNotApplicable("insertCustomBlock");
     }
     return { ok: true, value: { blockId: captured.blockId } };
   };
@@ -1975,7 +2100,7 @@ export const createEditor = (
     return { ok: true, value: undefined };
   };
 
-  return {
+  const controller: EditorController = {
     mount(element) {
       session.mount(element);
     },
@@ -2326,6 +2451,7 @@ export const createEditor = (
       },
       insertDivider,
       insertMediaBlock,
+      insertCustomBlock,
       insertTableRow: (tableBlockId, atIndex) =>
         runTableCommand("insertTableRow", () =>
           insertTableRowCommand(
@@ -2426,4 +2552,9 @@ export const createEditor = (
         ),
     },
   };
+  // customBlocks NodeView가 dummy mount 구간에서 캡처한 지연 참조를 이제
+  // 완성한다 — 실사용 mount()가 만드는 NodeView부터는 완전히 동작한다
+  // (DELTA-11.md "결정" 2).
+  controllerBox.current = controller;
+  return controller;
 };

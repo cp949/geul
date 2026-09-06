@@ -2,6 +2,7 @@ import {
   type Block,
   canonicalizeTextMarks,
   type CodeBlock,
+  type CustomBlock,
   decodeTextMark,
   type Document,
   type IdFactory,
@@ -16,6 +17,13 @@ import {
 import type { EditorError } from "./errors.js";
 import type { TiptapJsonMark, TiptapJsonNode } from "./model-to-tiptap.js";
 import { tableCellFieldsFromAttrs } from "./table-model-codec.js";
+
+// blockGroup 자식(중첩 children) 디코드 전용 — CustomBlock은 top-level
+// 전용이라(RD-002-DELTA-01 "설계 결정" 1) 이 위치에는 절대 나타날 수
+// 없다. 빈 집합을 넘겨 decodeBlock이 그 불변식을 그대로 강제하게 한다
+// (customBlockTypes를 threading하지 않으면 미지 노드를 조용히 허용해버릴
+// 위험이 있다).
+const NO_CUSTOM_BLOCK_TYPES: ReadonlySet<string> = new Set();
 
 const invalid = (message: string): Result<never, EditorError> => ({
   ok: false,
@@ -250,9 +258,12 @@ const blockContainerToModel = (
     }
     const decodedChildren: Block[] = [];
     for (const childNode of groupNode.content ?? []) {
-      const decoded = decodeBlock(childNode, createId);
+      const decoded = decodeBlock(childNode, createId, NO_CUSTOM_BLOCK_TYPES);
       if (!decoded.ok) return decoded;
-      decodedChildren.push(decoded.value);
+      // NO_CUSTOM_BLOCK_TYPES를 넘겼으므로 decoded.value는 CustomBlock일
+      // 수 없다(top-level 전용 불변식, 위 주석) — decodeBlock의 반환
+      // 타입 자체는 그 사실을 표현하지 못해 캐스트한다.
+      decodedChildren.push(decoded.value as Block);
     }
     children = decodedChildren;
   }
@@ -414,15 +425,36 @@ const blockContainerToModel = (
   );
 };
 
+// registry(RD-002-DELTA-11)에 등록된 CustomBlock PM 노드를 디코드한다 —
+// customBlockToTiptapJson(model-to-tiptap.ts)의 반대쪽. contentMode/props
+// attrs를 그대로 되돌린다(round-trip만 보존, DELTA-11.md "결정" 1).
+const customBlockFromTiptapJson = (
+  node: TiptapJsonNode,
+  id: string,
+): CustomBlock => {
+  const attrs = node.attrs ?? {};
+  const contentMode = attrs.contentMode === "inline" ? "inline" : "none";
+  const props = attrs.props;
+  return {
+    id,
+    type: node.type ?? "",
+    content: contentMode,
+    ...(props !== null && props !== undefined
+      ? { props: props as NonNullable<CustomBlock["props"]> }
+      : {}),
+  };
+};
+
 // 문서 최상위와 blockGroup 자식이 공유하는 노드 디스패치. table·divider는
 // 컨테이너로 감싸이지 않는다(D19) — blockContainer/table/divider 모두
 // 스키마 group "block"의 멤버라 같은 위치(doc 직속 또는 blockGroup 자식)에
-// 나란히 나타난다. 그 외 타입은 거절한다(미지 노드 조용히 무시 금지 —
-// 기존 계약 유지).
+// 나란히 나타난다. 그 외 타입 중 registry에 등록된 것은 CustomBlock으로,
+// 아니면 거절한다(미지 노드 조용히 무시 금지 — 기존 계약 유지).
 const decodeBlock = (
   node: TiptapJsonNode,
   createId: IdFactory,
-): Result<Block, EditorError> => {
+  customBlockTypes: ReadonlySet<string>,
+): Result<Block | CustomBlock, EditorError> => {
   if (node.type === "table") {
     return tableBlockFromTiptapJson(node, resolveBlockId(node, createId));
   }
@@ -446,6 +478,12 @@ const decodeBlock = (
   if (node.type === "blockContainer") {
     return blockContainerToModel(node, createId);
   }
+  if (typeof node.type === "string" && customBlockTypes.has(node.type)) {
+    return {
+      ok: true,
+      value: customBlockFromTiptapJson(node, resolveBlockId(node, createId)),
+    };
+  }
   return invalid(`Unsupported Tiptap block: ${String(node.type)}`);
 };
 
@@ -453,12 +491,14 @@ export const tiptapToModel = (
   json: TiptapJsonNode,
   revision: number,
   createId: IdFactory,
+  options?: { customBlockTypes?: ReadonlySet<string> },
 ): Result<Document, EditorError> => {
   if (json.type !== "doc") return invalid("Tiptap content must be a document");
 
+  const customBlockTypes = options?.customBlockTypes ?? new Set<string>();
   const blocks: Document["blocks"] = [];
   for (const node of json.content ?? []) {
-    const decoded = decodeBlock(node, createId);
+    const decoded = decodeBlock(node, createId, customBlockTypes);
     if (!decoded.ok) return decoded;
     blocks.push(decoded.value);
   }

@@ -18,7 +18,16 @@ import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension
 import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
+import { createCustomBlockExtension } from "./custom-block-extension.js";
 import { DividerExtension } from "./divider-extension.js";
+// EditorController/CustomBlockDefinition을 import type으로만 참조한다
+// (RD-002-DELTA-11 "결정" 4 — 100개 이상 메서드를 가진 공개 인터페이스라
+// production-editor-session.ts 관례(구조적 복제)를 따르지 않는다. 값 import가
+// 아니라 컴파일 시 완전히 지워져 런타임 순환 의존이 생기지 않는다).
+import type {
+  CustomBlockDefinition,
+  EditorController,
+} from "./editor-controller.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
@@ -189,6 +198,14 @@ export const createProductionEditor = (options: {
   createId: IdFactory;
   onUpdate: (editor: Editor) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  // spec §4.4(EXT-001), RD-002-DELTA-11 — 등록된 타입마다 PM atom 노드를
+  // 조건부로 추가한다(customBlockEditor는 그 NodeView가 CustomBlockDefinition.render에
+  // 넘길 EditorController 참조 — 세션 생성 시점엔 아직 완성 전이라 지연
+  // 바인딩 Proxy를 받는다, editor-controller.ts::createEditor 배선 참고).
+  // customBlocks가 있으면 customBlockEditor도 항상 함께 온다(둘 다
+  // ProductionEditorSession이 같은 options에서 파생한다).
+  customBlocks?: Record<string, CustomBlockDefinition>;
+  customBlockEditor?: EditorController;
   // spec §3.4(DOC-013), RD-005-DELTA-01 — PM `editable` prop 초기값.
   // ProductionEditorSession이 세션 레벨로 소유한 editableState를 매
   // 재구성(replaceDocument 포함)마다 그대로 넘긴다 — 이 함수 자신은
@@ -229,7 +246,9 @@ export const createProductionEditor = (options: {
   // 업로드를 트리거한다. 미지정이면 그 확장 자신의 기본값(no-op)을 쓴다.
   triggerMediaUpload?: (blockId: string, file: File) => void;
 }): Editor => {
-  const converted = modelToTiptap(options.document);
+  const converted = modelToTiptap(options.document, {
+    customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
+  });
   if (!converted.ok) {
     throw new TypeError(
       converted.error.code === "DOCUMENT_INVALID"
@@ -289,6 +308,16 @@ export const createProductionEditor = (options: {
       ImageBlockExtension,
       VideoBlockExtension,
       AudioBlockExtension,
+      // registry(RD-002-DELTA-11, CreateEditorOptions.customBlocks)에
+      // 등록된 타입마다 PM atom 노드 하나씩(customBlockEditor는 customBlocks가
+      // 있을 때 항상 함께 온다 — session이 같은 options에서 파생).
+      ...Object.entries(options.customBlocks ?? {}).map(([type, definition]) =>
+        createCustomBlockExtension(
+          type,
+          definition,
+          options.customBlockEditor as EditorController,
+        ),
+      ),
       TableKeyboardNavigationExtension.configure({
         createId: options.createId,
       }),

@@ -1,0 +1,82 @@
+import type { IdFactory, Result } from "@cp949/geul-model";
+import type { Editor } from "@tiptap/core";
+import { NodeSelection } from "@tiptap/pm/state";
+
+import { findBlockPosition } from "./block-position.js";
+import { finalizeAndDispatch } from "./dispatch.js";
+
+// insertMediaBlock(media-commands.ts)과 동일 골격이다 — afterBlockId 뒤에
+// 삽입, 삽입한 블록 자신을 NodeSelection으로 선택(atom은 캐럿을 둘 안쪽이
+// 없다), clearAfterBlockText로 트리거 문단을 같은 트랜잭션에서 비운다.
+//
+// insertMediaBlock과 다른 점 하나: 스키마 노드 부재가 도달 불가 방어선이
+// 아니라 소비자가 실제로 만날 수 있는 오류다(등록하지 않은 type 이름을
+// 실수로 넘길 수 있음) — throw 대신 CUSTOM_BLOCK_TYPE_NOT_REGISTERED로
+// 거절한다(RD-002-DELTA-11.md "결정" 5).
+export type InsertCustomBlockError =
+  | { code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED"; type: string }
+  | { code: "BLOCK_NOT_FOUND"; blockId: string }
+  | { code: "TRANSACTION_REJECTED" };
+
+const blockNotFound = (
+  blockId: string,
+): Result<never, InsertCustomBlockError> => ({
+  ok: false,
+  error: { code: "BLOCK_NOT_FOUND", blockId },
+});
+
+export const insertCustomBlock = (
+  editor: Editor,
+  afterBlockId: string,
+  type: string,
+  content: "none" | "inline",
+  props: Record<string, string | number | boolean | null> | undefined,
+  createId: IdFactory,
+  options?: { clearAfterBlockText?: boolean },
+): Result<{ blockId: string }, InsertCustomBlockError> => {
+  const customType = editor.schema.nodes[type];
+  if (customType === undefined) {
+    return { ok: false, error: { code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED", type } };
+  }
+
+  const afterPosition = findBlockPosition(editor.state.doc, afterBlockId);
+  if (afterPosition === null) return blockNotFound(afterBlockId);
+  const afterNode = editor.state.doc.nodeAt(afterPosition);
+  if (afterNode === null) return blockNotFound(afterBlockId);
+  const insertPosition = afterPosition + afterNode.nodeSize;
+
+  const blockId = createId();
+  const customNode = customType.create({
+    blockId,
+    contentMode: content,
+    props: props ?? null,
+  });
+
+  let transaction = editor.state.tr;
+  const clearTarget =
+    afterNode.type.name === "blockContainer" ? afterNode.firstChild : afterNode;
+  const clearPosition =
+    afterNode.type.name === "blockContainer"
+      ? afterPosition + 1
+      : afterPosition;
+  if (
+    options?.clearAfterBlockText === true &&
+    clearTarget !== null &&
+    clearTarget.isTextblock &&
+    clearTarget.content.size > 0
+  ) {
+    transaction = transaction.delete(
+      clearPosition + 1,
+      clearPosition + 1 + clearTarget.content.size,
+    );
+  }
+  const customPosition = transaction.mapping.map(insertPosition);
+  transaction = transaction.insert(customPosition, customNode);
+  transaction.setSelection(
+    NodeSelection.create(transaction.doc, customPosition),
+  );
+
+  const dispatched = finalizeAndDispatch(editor, transaction);
+  if (!dispatched.ok) return dispatched;
+  return { ok: true, value: { blockId } };
+};
