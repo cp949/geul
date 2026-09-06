@@ -447,3 +447,90 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — replaceBl
     ]);
   });
 });
+
+describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — removeBlocks", () => {
+  const threeParagraphDocument = () =>
+    documentOf(
+      paragraphBlock("block-1", "one"),
+      paragraphBlock("block-2", "two"),
+      paragraphBlock("block-3", "three"),
+    );
+
+  it("blockIds 전부를 제거하고 인자 순서로 반환한다(완료 조건 1)", () => {
+    const editor = createEditor({ initialDocument: threeParagraphDocument() });
+
+    const result = editor.removeBlocks(["block-3", "block-1"]);
+
+    expect(result).toEqual({
+      ok: true,
+      value: [
+        { id: "block-3", type: "paragraph", content: [{ text: "three" }] },
+        { id: "block-1", type: "paragraph", content: [{ text: "one" }] },
+      ],
+    });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual(["block-2"]);
+  });
+
+  it("blockIds 중 하나라도 없으면 문서를 바꾸지 않고 BLOCK_NOT_FOUND를 반환한다(완료 조건 2)", () => {
+    const before = threeParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.removeBlocks(["block-2", "missing"]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("blockIds가 빈 배열이면 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 3)", () => {
+    const editor = createEditor({ initialDocument: threeParagraphDocument() });
+
+    const result = editor.removeBlocks([]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "removeBlocks" },
+    });
+  });
+
+  it("문서의 모든 블록을 제거하면 문서를 바꾸지 않고 DOCUMENT_INVALID를 반환한다(완료 조건 4, R0)", () => {
+    const before = threeParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.removeBlocks(["block-1", "block-2", "block-3"]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error.code).toBe("DOCUMENT_INVALID");
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("여러 블록을 한 번에 제거해도 undo 1회로 전부 복원한다(완료 조건 5)", () => {
+    const editor = createEditor({ initialDocument: threeParagraphDocument() });
+
+    editor.removeBlocks(["block-1", "block-3"]);
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual(["block-2"]);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "block-2",
+      "block-3",
+    ]);
+  });
+
+  it("자식을 가진 블록을 제거하면 children 서브트리도 함께 사라진다(설계 결정 상속)", () => {
+    const child = paragraphBlock("child-1", "child");
+    const parent = paragraphBlock("parent-1", "parent", [child]);
+    const editor = createEditor({
+      initialDocument: documentOf(parent, paragraphBlock("tail", "tail")),
+    });
+
+    const result = editor.removeBlocks(["parent-1"]);
+
+    expect(result.ok).toBe(true);
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual(["tail"]);
+  });
+});

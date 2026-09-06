@@ -151,6 +151,11 @@ export interface EditorController {
     { insertedBlocks: Block[]; removedBlocks: Block[] },
     EditorError
   >;
+  // spec §3.2, RD-002-DELTA-03 — blockIds 전부를 자신의 children
+  // 서브트리와 함께 제거한다(replaceBlocks와 동일 의미, RD-002-DELTA-02
+  // "## 계획"의 설계 결정 상속). 빈 배열은 COMMAND_NOT_APPLICABLE, 문서의
+  // 모든 블록을 제거하면(R0 위반) DOCUMENT_INVALID다.
+  removeBlocks(blockIds: string[]): Result<Block[], EditorError>;
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
   getCaretBlockContext(): {
@@ -1514,6 +1519,65 @@ export const createEditor = (
     return { ok: true, value: { insertedBlocks, removedBlocks } };
   };
 
+  // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-03). replaceBlocksImpl의
+  // "삽입" 절반이 없는 부분집합이다 — blockIds 전부를 자신의 children
+  // 서브트리와 함께 제거한다(같은 설계 결정 상속, RD-002-DELTA-02
+  // "## 계획"). 신규 트리 유틸리티 없이 removeBlocksFromTree·
+  // validateCandidateDocument를 그대로 재사용한다.
+  const removeBlocksImpl = (
+    blockIds: string[],
+  ): Result<Block[], EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("removeBlocks");
+    if (blockIds.length === 0) {
+      return commandNotApplicable("removeBlocks");
+    }
+
+    const currentDocument = session.getDocument();
+    const removedBlocks: Block[] = [];
+    for (const id of blockIds) {
+      const found = findBlockInTree(currentDocument.blocks, id);
+      if (found === undefined) {
+        return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: id } };
+      }
+      removedBlocks.push(found);
+    }
+
+    const { blocks: nextBlocks } = removeBlocksFromTree(
+      currentDocument.blocks,
+      new Set(blockIds),
+    );
+    const validated = validateCandidateDocument(nextBlocks, currentDocument);
+    if (!validated.ok) return validated;
+
+    const result = session.runDocumentCommand("removeBlocks", "local", () => {
+      let transaction = session.editor.state.tr;
+      // replaceBlocksImpl의 제거 루프와 동일 — 인자 순서로 순회하며 매번
+      // transaction.doc에서 위치를 다시 조회한다(매 삭제 뒤 남은 블록
+      // 위치가 바뀐다). 조상·자손이 함께 들어오면 자손이 이미 사라져
+      // findBlockPosition이 null을 반환하고, 명령 전체를 거절한다(dispatch
+      // 전이라 부분 적용 없음).
+      for (const id of blockIds) {
+        const position = findBlockPosition(transaction.doc, id);
+        if (position === null) return false;
+        const node = transaction.doc.nodeAt(position);
+        if (node === null) return false;
+        const $position = transaction.doc.resolve(position);
+        const removesWholeGroup =
+          $position.parent.type.name === "blockGroup" &&
+          $position.parent.childCount === 1;
+        transaction = transaction.delete(
+          removesWholeGroup ? $position.before() : position,
+          removesWholeGroup ? $position.after() : position + node.nodeSize,
+        );
+      }
+
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+    if (!result.ok) return result;
+    return { ok: true, value: removedBlocks };
+  };
+
   return {
     mount(element) {
       session.mount(element);
@@ -1555,6 +1619,9 @@ export const createEditor = (
     },
     replaceBlocks(blockIdsToRemove, blocksToInsert) {
       return replaceBlocksImpl(blockIdsToRemove, blocksToInsert);
+    },
+    removeBlocks(blockIds) {
+      return removeBlocksImpl(blockIds);
     },
     getSelectionMarks() {
       if (session.isDestroyed) return [];
