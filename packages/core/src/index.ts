@@ -1,11 +1,19 @@
 export type { TabularCell, TabularData } from "@cp949/geul-io";
+// CodeBlock/HeadingBlock/ParagraphBlock/TableBlock(RD-002-DELTA-10)도 react가
+// model에 직접 의존하지 않아 core가 통과시킨다 — react test 헬퍼(mount-editor.tsx의
+// tableBlockOf 등)가 top-level CustomBlock(DELTA-01) 위젠 이후 "이 literal은
+// 예약값이라 CustomBlock일 수 없다" 캐스트(`as TableBlock` 등)에 쓴다.
 export type {
   Block,
+  CodeBlock,
+  HeadingBlock,
   InlineContentBlockType,
   ListItemBlock,
   ListItemBlockType,
   NestableBlockType,
+  ParagraphBlock,
   Result,
+  TableBlock,
   TableColumn,
   TableColumnsAttributeError,
 } from "@cp949/geul-model";

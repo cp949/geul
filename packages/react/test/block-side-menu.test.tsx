@@ -12,6 +12,7 @@
  * slash-menu.test.tsx가 다룬다.
  */
 
+import type { CodeBlock, HeadingBlock, ParagraphBlock } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -168,8 +169,10 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
 
     // 실제 setBlockType(blockId, {type:"heading", level:2})가 돌았음을
     // 문서로 본다 — 스파이는 명령이 아무것도 하지 않아도 통과한다.
-    const after = rendered.editor.getDocument().blocks[0];
-    if (after?.type !== "heading") throw new Error("제목 블록이 아니다");
+    const rawAfter = rendered.editor.getDocument().blocks[0];
+    if (rawAfter?.type !== "heading") throw new Error("제목 블록이 아니다");
+    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const after = rawAfter as HeadingBlock;
     expect(after.id).toBe(before.id);
     expect(after.level).toBe(2);
     // handleTurnInto는 clearContent 옵션 없이 호출한다 — 트리거로 쓴
@@ -364,8 +367,10 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Toggle Heading 1" }));
 
-    const toggled = rendered.editor.getDocument().blocks[0];
-    if (toggled?.type !== "heading") throw new Error("제목 블록이 아니다");
+    const rawToggled = rendered.editor.getDocument().blocks[0];
+    if (rawToggled?.type !== "heading") throw new Error("제목 블록이 아니다");
+    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const toggled = rawToggled as HeadingBlock;
     expect(toggled.id).toBe(before.id);
     expect(toggled.level).toBe(1);
     expect(toggled.isToggleable).toBe(true);
@@ -403,8 +408,10 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Code" }));
 
-    const after = rendered.editor.getDocument().blocks[0];
-    if (after?.type !== "codeBlock") throw new Error("코드 블록이 아니다");
+    const rawAfter = rendered.editor.getDocument().blocks[0];
+    if (rawAfter?.type !== "codeBlock") throw new Error("코드 블록이 아니다");
+    // "codeBlock"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const after = rawAfter as CodeBlock;
     expect(after.id).toBe(before.id);
     expect(after.content).toEqual([{ text: "본문" }]);
     expect(after.language).toBe("text");
@@ -474,8 +481,10 @@ describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
 
-    const after = rendered.editor.getDocument().blocks[0];
-    if (after?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const rawAfter = rendered.editor.getDocument().blocks[0];
+    if (rawAfter?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    // "paragraph"는 예약 리터럴이라 CustomBlock일 수 없다.
+    const after = rawAfter as ParagraphBlock;
     expect(after.textColor).toBe("#1A73E8");
     expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
   });
@@ -490,8 +499,10 @@ describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
 
-    const after = rendered.editor.getDocument().blocks[0];
-    if (after?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const rawAfter = rendered.editor.getDocument().blocks[0];
+    if (rawAfter?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    // "paragraph"는 예약 리터럴이라 CustomBlock일 수 없다.
+    const after = rawAfter as ParagraphBlock;
     expect(after.textColor).toBeUndefined();
   });
 
@@ -502,16 +513,19 @@ describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
       screen.getByRole("menuitem", { name: "Background color Blue" }),
     );
 
-    const applied = rendered.editor.getDocument().blocks[0];
-    if (applied?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const rawApplied = rendered.editor.getDocument().blocks[0];
+    if (rawApplied?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    // "paragraph"는 예약 리터럴이라 CustomBlock일 수 없다.
+    const applied = rawApplied as ParagraphBlock;
     expect(applied.backgroundColor).toBe("#E8F0FE");
 
     fireEvent.click(
       screen.getByRole("menuitem", { name: "Background color None" }),
     );
 
-    const cleared = rendered.editor.getDocument().blocks[0];
-    if (cleared?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const rawCleared = rendered.editor.getDocument().blocks[0];
+    if (rawCleared?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const cleared = rawCleared as ParagraphBlock;
     expect(cleared.backgroundColor).toBeUndefined();
   });
 
@@ -520,14 +534,17 @@ describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Align center" }));
 
-    const aligned = rendered.editor.getDocument().blocks[0];
-    if (aligned?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const rawAligned = rendered.editor.getDocument().blocks[0];
+    if (rawAligned?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    // "paragraph"는 예약 리터럴이라 CustomBlock일 수 없다.
+    const aligned = rawAligned as ParagraphBlock;
     expect(aligned.textAlignment).toBe("center");
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Align none" }));
 
-    const cleared = rendered.editor.getDocument().blocks[0];
-    if (cleared?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const rawCleared = rendered.editor.getDocument().blocks[0];
+    if (rawCleared?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+    const cleared = rawCleared as ParagraphBlock;
     expect(cleared.textAlignment).toBeUndefined();
   });
 

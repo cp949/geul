@@ -15,6 +15,7 @@
  * role을 내는 상황에서도 대상이 흔들리지 않게 한다.
  */
 
+import type { CodeBlock, HeadingBlock, TableBlock } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -272,8 +273,10 @@ describe("SlashMenu 질의 팝업", () => {
 
     // 실제 setBlockType(blockId, {heading,1}, {clearContent:true})가 돌았음을
     // 문서로 본다 — 스파이는 명령이 아무것도 하지 않아도 통과한다.
-    const block = rendered.editor.getDocument().blocks[0];
-    if (block?.type !== "heading") throw new Error("제목 블록이 아니다");
+    const rawBlock = rendered.editor.getDocument().blocks[0];
+    if (rawBlock?.type !== "heading") throw new Error("제목 블록이 아니다");
+    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const block = rawBlock as HeadingBlock;
     expect(block.id).toBe(blockId);
     expect(block.level).toBe(1);
     // clearContent: true — 트리거로 쓴 "/h1"이 본문에 남지 않는다.
@@ -297,8 +300,10 @@ describe("SlashMenu 질의 팝업", () => {
 
       // 실제 setBlockType(blockId, {heading,level}, {clearContent:true})가
       // 돌았음을 문서로 본다 — 스파이는 명령이 아무것도 하지 않아도 통과한다.
-      const block = rendered.editor.getDocument().blocks[0];
-      if (block?.type !== "heading") throw new Error("제목 블록이 아니다");
+      const rawBlock = rendered.editor.getDocument().blocks[0];
+      if (rawBlock?.type !== "heading") throw new Error("제목 블록이 아니다");
+      // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
+      const block = rawBlock as HeadingBlock;
       expect(block.id).toBe(blockId);
       expect(block.level).toBe(level);
       // clearContent: true — 트리거로 쓴 "/h4" 등이 본문에 남지 않는다.
@@ -319,8 +324,10 @@ describe("SlashMenu 질의 팝업", () => {
 
     fireEvent.click(option);
 
-    const block = rendered.editor.getDocument().blocks[0];
-    if (block?.type !== "heading") throw new Error("제목 블록이 아니다");
+    const rawBlock = rendered.editor.getDocument().blocks[0];
+    if (rawBlock?.type !== "heading") throw new Error("제목 블록이 아니다");
+    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const block = rawBlock as HeadingBlock;
     expect(block.id).toBe(blockId);
     expect(block.level).toBe(1);
     expect(block.isToggleable).toBe(true);
@@ -353,8 +360,10 @@ describe("SlashMenu 질의 팝업", () => {
 
     fireEvent.click(option);
 
-    const block = rendered.editor.getDocument().blocks[0];
-    if (block?.type !== "codeBlock") throw new Error("코드 블록이 아니다");
+    const rawBlock = rendered.editor.getDocument().blocks[0];
+    if (rawBlock?.type !== "codeBlock") throw new Error("코드 블록이 아니다");
+    // "codeBlock"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const block = rawBlock as CodeBlock;
     expect(block.id).toBe(blockId);
     expect(block.content).toEqual([]);
     expect(block.language).toBe("text");
@@ -617,8 +626,10 @@ describe("SlashMenu 질의 팝업", () => {
     expect(trigger.id).toBe(blockId);
     // clearAfterBlockText: true — 트리거 블록의 "/table"이 지워진다.
     expect(trigger.content).toEqual([]);
-    const table = blocks[1];
-    if (table?.type !== "table") throw new Error("표 블록이 아니다");
+    const rawTable = blocks[1];
+    if (rawTable?.type !== "table") throw new Error("표 블록이 아니다");
+    // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
+    const table = rawTable as TableBlock;
     expect(table.rows).toHaveLength(3);
     expect(table.columns).toHaveLength(3);
     expect(table.rows[0]?.cells).toHaveLength(3);

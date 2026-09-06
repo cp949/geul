@@ -16,6 +16,7 @@ import {
   createEditor,
   type CreateEditorOptions,
   type EditorController,
+  type TableBlock,
 } from "@cp949/geul-core";
 import { render, screen } from "@testing-library/react";
 import { act, type ReactNode } from "react";
@@ -127,10 +128,11 @@ const sequentialIds = (prefix: string) => {
  * 실제 문서에서 표 블록을 읽는다. 명령이 진짜라 호출 스파이 대신 이 결과를
  * 단언한다 — 스파이는 명령이 아무것도 하지 않아도 통과한다.
  */
-export const tableBlockOf = (editor: EditorController) => {
+export const tableBlockOf = (editor: EditorController): TableBlock => {
   const block = editor.getDocument().blocks[1];
   if (block?.type !== "table") throw new Error("표 블록을 찾지 못했다");
-  return block;
+  // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
+  return block as TableBlock;
 };
 
 /**
@@ -439,9 +441,10 @@ export const mountTableEditor = ({
       .getDocument()
       .blocks.find((candidate) => candidate.id === tableBlockId);
     for (let index = 0; index < columnCount; index += 1) {
+      // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
       const currentWidth =
         currentTableBlock?.type === "table"
-          ? currentTableBlock.columns[index]?.width
+          ? (currentTableBlock as TableBlock).columns[index]?.width
           : undefined;
       if (currentWidth === layout.columnWidth) continue;
       const resized = editor.commands.resizeTableColumn(

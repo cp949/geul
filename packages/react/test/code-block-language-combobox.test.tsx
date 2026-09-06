@@ -5,6 +5,7 @@
  * 블록 선택·초점·위치 변화 대응을 실제 EditorController 마운트로 검증한다.
  */
 
+import type { CodeBlock } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -82,7 +83,8 @@ const languageInput = (): HTMLInputElement =>
 const storedLanguage = (rendered: MountedBlockEditor): string | undefined => {
   const block = rendered.editor.getDocument().blocks[0];
   if (block?.type !== "codeBlock") throw new Error("CodeBlock이 아니다");
-  return block.language;
+  // "codeBlock"은 예약 리터럴이라 CustomBlock일 수 없다.
+  return (block as CodeBlock).language;
 };
 
 describe("CodeBlock 언어 combobox 표시와 선택", () => {
