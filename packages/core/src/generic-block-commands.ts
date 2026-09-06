@@ -1,6 +1,7 @@
 import {
   canonicalizeCodeBlockLanguage,
   isInlineContentBlockType,
+  isKnownBlockType,
   isListEntryBlockType,
   isNestableBlockType,
   isValidCodeBlockLanguage,
@@ -8,6 +9,7 @@ import {
   MAX_NESTING_DEPTH,
   parseDocument,
   type Block,
+  type DocumentBlock,
   type Result,
   type TableColumn,
 } from "@cp949/geul-model";
@@ -36,14 +38,20 @@ import {
   type ProductionEditorSession,
 } from "./production-editor-session.js";
 
+// 이 파일의 명령(setBlockType 등)은 모두 알려진 14종 전용 계약이다 —
+// blockId가 top-level CustomBlock(top-level 전용, RD-002-DELTA-01)을
+// 가리키면 "찾지 못함"과 동일하게 처리한다(block-tree-edit.ts의
+// updateBlockInTree와 같은 근거). 반환 타입은 그대로 Block 기반이라
+// 이 함수 밖 ~20곳 호출부는 변경이 필요 없다.
 const findBlockInTree = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   blockId: string,
 ): { block: Block; siblings: readonly Block[]; index: number } | null => {
   const index = blocks.findIndex((block) => block.id === blockId);
   if (index !== -1) {
     const block = blocks[index];
-    return block === undefined ? null : { block, siblings: blocks, index };
+    if (block === undefined || !isKnownBlockType(block.type)) return null;
+    return { block: block as Block, siblings: blocks as readonly Block[], index };
   }
   for (const block of blocks) {
     if (!("children" in block) || block.children === undefined) {
@@ -83,7 +91,7 @@ const isDescendantOfBlock = (
 // mutation 전에 사전 판정하는 데 쓴다 — beforeBlockId 자신의 깊이가 곧 그
 // 형제 목록에 새로 끼워질 소스 블록의 깊이다.
 const findBlockDepth = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   targetId: string,
   depth: number,
 ): number | null => {
@@ -219,7 +227,7 @@ type BlockSelectionRangeResolution = {
 // COMMAND_NOT_APPLICABLE로 구분한다. findBlockInTree·hasChildren처럼 순수
 // 함수로 두어 session 없이도 테스트하기 쉽게 한다.
 const resolveBlockSelectionRange = (
-  documentBlocks: readonly Block[],
+  documentBlocks: readonly DocumentBlock[],
   selection: { fromBlockId: string; toBlockId: string },
   command: string,
 ): Result<BlockSelectionRangeResolution, EditorError> => {
@@ -552,7 +560,9 @@ export const createGenericBlockCommands = (
     let targetIndex: number;
     let destinationDepth: number;
     if (beforeBlockId === null) {
-      targetSiblings = session.document.blocks;
+      // 문서 맨 끝으로 이동 — length/참조 비교만 쓰므로 top-level에
+      // CustomBlock이 섞여 있어도(top-level 전용, RD-002-DELTA-01) 안전하다.
+      targetSiblings = session.document.blocks as readonly Block[];
       targetIndex = targetSiblings.length;
       destinationDepth = 1;
     } else {
