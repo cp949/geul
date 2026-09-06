@@ -9,6 +9,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const mediaToolbarButtonClassName = "geul-media-toolbar__button";
@@ -168,26 +169,7 @@ export const MediaToolbar = () => {
     });
   }, [editor, element]);
 
-  useEffect(() => {
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromSelection);
-    ownerDocument?.addEventListener("mouseup", updateFromSelection);
-    ownerDocument?.addEventListener("keyup", updateFromSelection);
-    ownerWindow?.addEventListener("scroll", updateFromSelection, true);
-    ownerWindow?.addEventListener("resize", updateFromSelection);
-    updateFromSelection();
-    return () => {
-      ownerDocument?.removeEventListener(
-        "selectionchange",
-        updateFromSelection,
-      );
-      ownerDocument?.removeEventListener("mouseup", updateFromSelection);
-      ownerDocument?.removeEventListener("keyup", updateFromSelection);
-      ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
-      ownerWindow?.removeEventListener("resize", updateFromSelection);
-    };
-  }, [updateFromSelection, element]);
+  useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   useEffect(() => {
     if (

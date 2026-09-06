@@ -10,6 +10,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 const filePanelButtonClassName = "geul-file-panel__button";
 
@@ -87,78 +88,59 @@ export const FilePanel = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const updateFromSelection = () => {
-      if (editingRef.current) return;
-      if (element === null) {
-        openBlockIdRef.current = null;
-        dismissedBlockIdRef.current = null;
-        setPanelState({ mode: "closed" });
-        return;
-      }
+  const updateFromSelection = useCallback(() => {
+    if (editingRef.current) return;
+    if (element === null) {
+      openBlockIdRef.current = null;
+      dismissedBlockIdRef.current = null;
+      setPanelState({ mode: "closed" });
+      return;
+    }
 
-      const media = editor.getSelectionMediaBlock();
-      if (media === null || media.url !== null) {
-        // 실제로 다른 블록(또는 url이 채워진 블록)으로 선택이 옮겨갔다 —
-        // 다음에 다시 이 blockId로 돌아오면 다시 열려야 하므로 잊는다.
-        openBlockIdRef.current = null;
-        dismissedBlockIdRef.current = null;
-        setPanelState({ mode: "closed" });
-        return;
-      }
-      if (dismissedBlockIdRef.current === media.blockId) return;
+    const media = editor.getSelectionMediaBlock();
+    if (media === null || media.url !== null) {
+      // 실제로 다른 블록(또는 url이 채워진 블록)으로 선택이 옮겨갔다 —
+      // 다음에 다시 이 blockId로 돌아오면 다시 열려야 하므로 잊는다.
+      openBlockIdRef.current = null;
+      dismissedBlockIdRef.current = null;
+      setPanelState({ mode: "closed" });
+      return;
+    }
+    if (dismissedBlockIdRef.current === media.blockId) return;
 
-      openBlockIdRef.current = media.blockId;
-      editingRef.current = true;
-      const bounds =
-        readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
-      // Upload 탭 초깃값 시딩(RD-003-DELTA-02.md "결정" 5) — 이전에 이
-      // 블록에서 실패해 error pending이 남아 있으면 재오픈 즉시 그 에러를
-      // 보여준다. uploadFile 미등록이면 pending 자체를 조회하지 않는다
-      // (호출해도 항상 null이지만, 등록 여부와 무관한 호출을 피한다).
-      const pending = editor.isUploadEnabled()
-        ? editor.getMediaUploadState(media.blockId)
-        : null;
-      const upload: UploadSubState =
-        pending === "uploading"
-          ? { status: "uploading" }
-          : pending === null
-            ? { status: "idle" }
-            : { status: "error", code: pending.code, message: pending.message };
-      setPanelState({
-        mode: "open",
-        blockId: media.blockId,
-        kind: media.kind,
-        draft: "",
-        rejected: false,
-        appliedName: null,
-        activeTab: "embed",
-        upload,
-        heldFile: null,
-        left: bounds.left,
-        top: bounds.top,
-      });
-    };
-
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromSelection);
-    ownerDocument?.addEventListener("mouseup", updateFromSelection);
-    ownerDocument?.addEventListener("keyup", updateFromSelection);
-    ownerWindow?.addEventListener("scroll", updateFromSelection, true);
-    ownerWindow?.addEventListener("resize", updateFromSelection);
-    updateFromSelection();
-    return () => {
-      ownerDocument?.removeEventListener(
-        "selectionchange",
-        updateFromSelection,
-      );
-      ownerDocument?.removeEventListener("mouseup", updateFromSelection);
-      ownerDocument?.removeEventListener("keyup", updateFromSelection);
-      ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
-      ownerWindow?.removeEventListener("resize", updateFromSelection);
-    };
+    openBlockIdRef.current = media.blockId;
+    editingRef.current = true;
+    const bounds =
+      readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+    // Upload 탭 초깃값 시딩(RD-003-DELTA-02.md "결정" 5) — 이전에 이
+    // 블록에서 실패해 error pending이 남아 있으면 재오픈 즉시 그 에러를
+    // 보여준다. uploadFile 미등록이면 pending 자체를 조회하지 않는다
+    // (호출해도 항상 null이지만, 등록 여부와 무관한 호출을 피한다).
+    const pending = editor.isUploadEnabled()
+      ? editor.getMediaUploadState(media.blockId)
+      : null;
+    const upload: UploadSubState =
+      pending === "uploading"
+        ? { status: "uploading" }
+        : pending === null
+          ? { status: "idle" }
+          : { status: "error", code: pending.code, message: pending.message };
+    setPanelState({
+      mode: "open",
+      blockId: media.blockId,
+      kind: media.kind,
+      draft: "",
+      rejected: false,
+      appliedName: null,
+      activeTab: "embed",
+      upload,
+      heldFile: null,
+      left: bounds.left,
+      top: bounds.top,
+    });
   }, [editor, element]);
+
+  useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   useEffect(() => {
     if (panelState.mode === "open") inputRef.current?.focus();

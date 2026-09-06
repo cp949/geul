@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 const linkToolbarButtonClassName = "geul-link-toolbar__button";
 
@@ -62,59 +63,40 @@ export const LinkToolbar = () => {
   const editingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const updateFromSelection = () => {
-      if (editingRef.current) return;
-      if (element === null) {
-        setToolbarState({ mode: "closed" });
-        return;
-      }
+  const updateFromSelection = useCallback(() => {
+    if (editingRef.current) return;
+    if (element === null) {
+      setToolbarState({ mode: "closed" });
+      return;
+    }
 
-      const selection = element.ownerDocument.getSelection();
-      const hasRange =
-        selection !== null &&
-        selection.rangeCount > 0 &&
-        !selection.isCollapsed &&
-        selection.anchorNode !== null &&
-        selection.focusNode !== null &&
-        element.contains(selection.anchorNode) &&
-        element.contains(selection.focusNode);
-      const activeLink = editor.getSelectionLink();
+    const selection = element.ownerDocument.getSelection();
+    const hasRange =
+      selection !== null &&
+      selection.rangeCount > 0 &&
+      !selection.isCollapsed &&
+      selection.anchorNode !== null &&
+      selection.focusNode !== null &&
+      element.contains(selection.anchorNode) &&
+      element.contains(selection.focusNode);
+    const activeLink = editor.getSelectionLink();
 
-      if (!hasRange && activeLink === null) {
-        setToolbarState({ mode: "closed" });
-        return;
-      }
+    if (!hasRange && activeLink === null) {
+      setToolbarState({ mode: "closed" });
+      return;
+    }
 
-      const bounds =
-        readSelectionBounds(element) ?? UNREADABLE_SELECTION_POSITION;
-      setToolbarState({
-        mode: "view",
-        left: bounds.left,
-        top: bounds.top,
-        href: activeLink?.href ?? null,
-      });
-    };
-
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromSelection);
-    ownerDocument?.addEventListener("mouseup", updateFromSelection);
-    ownerDocument?.addEventListener("keyup", updateFromSelection);
-    ownerWindow?.addEventListener("scroll", updateFromSelection, true);
-    ownerWindow?.addEventListener("resize", updateFromSelection);
-    updateFromSelection();
-    return () => {
-      ownerDocument?.removeEventListener(
-        "selectionchange",
-        updateFromSelection,
-      );
-      ownerDocument?.removeEventListener("mouseup", updateFromSelection);
-      ownerDocument?.removeEventListener("keyup", updateFromSelection);
-      ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
-      ownerWindow?.removeEventListener("resize", updateFromSelection);
-    };
+    const bounds =
+      readSelectionBounds(element) ?? UNREADABLE_SELECTION_POSITION;
+    setToolbarState({
+      mode: "view",
+      left: bounds.left,
+      top: bounds.top,
+      href: activeLink?.href ?? null,
+    });
   }, [editor, element]);
+
+  useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   useEffect(() => {
     if (toolbarState.mode === "editing") inputRef.current?.focus();

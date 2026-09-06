@@ -14,7 +14,6 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   useCallback,
-  useEffect,
   useRef,
   useState,
 } from "react";
@@ -35,6 +34,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
 
@@ -197,26 +197,7 @@ export const FormattingToolbar = () => {
     });
   }, [editor, element]);
 
-  useEffect(() => {
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromSelection);
-    ownerDocument?.addEventListener("mouseup", updateFromSelection);
-    ownerDocument?.addEventListener("keyup", updateFromSelection);
-    ownerWindow?.addEventListener("scroll", updateFromSelection, true);
-    ownerWindow?.addEventListener("resize", updateFromSelection);
-    updateFromSelection();
-    return () => {
-      ownerDocument?.removeEventListener(
-        "selectionchange",
-        updateFromSelection,
-      );
-      ownerDocument?.removeEventListener("mouseup", updateFromSelection);
-      ownerDocument?.removeEventListener("keyup", updateFromSelection);
-      ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
-      ownerWindow?.removeEventListener("resize", updateFromSelection);
-    };
-  }, [element, updateFromSelection]);
+  useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   const { menuRef, style } = useClampedMenuPosition(
     toolbarState?.left ?? 0,

@@ -1,5 +1,5 @@
 import { Palette, TableCellsMerge, TableCellsSplit } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
@@ -11,6 +11,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const mergeLabel = "Merge cells";
@@ -98,62 +99,43 @@ export const TableSelectionToolbar = () => {
   const { actionError, runCommand, clearActionError } =
     useTableCommandFeedback();
 
-  useEffect(() => {
-    const updateFromSelection = () => {
-      const closeAll = () => {
-        setToolbarState(null);
-        selectionKeyRef.current = null;
-        setFormatMenuOpen(false);
-      };
-
-      if (element === null) return closeAll();
-      const selection = editor.getTableCellSelection();
-      if (selection === null) return closeAll();
-      const table = findTable(element, selection.tableBlockId);
-      if (table === null) return closeAll();
-      const bounds = cellSelectionBounds(table, selection.cellIds);
-      if (bounds === null) return closeAll();
-
-      const selectionKey = `${selection.tableBlockId} ${selection.cellIds.join(" ")}`;
-      // 실패 메시지는 그때 선택돼 있던 셀에 대한 것이다 — 대상이 바뀌면
-      // 다른 셀을 가리키는 낡은 메시지가 되므로 지운다(TableHandleMenu가
-      // table-handles.tsx의 key로 리마운트해 얻는 초기화와 같은 효과다).
-      // 실패한 명령은 트랜잭션을 dispatch하지 않아 selection이 그대로이므로
-      // (editor-controller.ts의 runDocumentCommand) 방금 띄운 메시지가 이
-      // 분기에 걸려 곧바로 사라지지는 않는다.
-      if (selectionKeyRef.current !== selectionKey) {
-        selectionKeyRef.current = selectionKey;
-        setFormatMenuOpen(false);
-        clearActionError();
-      }
-      setToolbarState({
-        tableBlockId: selection.tableBlockId,
-        cellIds: selection.cellIds,
-        splitCellId: selection.splitCellId,
-        left: bounds.left,
-        top: bounds.top,
-      });
+  const updateFromSelection = useCallback(() => {
+    const closeAll = () => {
+      setToolbarState(null);
+      selectionKeyRef.current = null;
+      setFormatMenuOpen(false);
     };
 
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromSelection);
-    ownerDocument?.addEventListener("mouseup", updateFromSelection);
-    ownerDocument?.addEventListener("keyup", updateFromSelection);
-    ownerWindow?.addEventListener("scroll", updateFromSelection, true);
-    ownerWindow?.addEventListener("resize", updateFromSelection);
-    updateFromSelection();
-    return () => {
-      ownerDocument?.removeEventListener(
-        "selectionchange",
-        updateFromSelection,
-      );
-      ownerDocument?.removeEventListener("mouseup", updateFromSelection);
-      ownerDocument?.removeEventListener("keyup", updateFromSelection);
-      ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
-      ownerWindow?.removeEventListener("resize", updateFromSelection);
-    };
+    if (element === null) return closeAll();
+    const selection = editor.getTableCellSelection();
+    if (selection === null) return closeAll();
+    const table = findTable(element, selection.tableBlockId);
+    if (table === null) return closeAll();
+    const bounds = cellSelectionBounds(table, selection.cellIds);
+    if (bounds === null) return closeAll();
+
+    const selectionKey = `${selection.tableBlockId} ${selection.cellIds.join(" ")}`;
+    // 실패 메시지는 그때 선택돼 있던 셀에 대한 것이다 — 대상이 바뀌면
+    // 다른 셀을 가리키는 낡은 메시지가 되므로 지운다(TableHandleMenu가
+    // table-handles.tsx의 key로 리마운트해 얻는 초기화와 같은 효과다).
+    // 실패한 명령은 트랜잭션을 dispatch하지 않아 selection이 그대로이므로
+    // (editor-controller.ts의 runDocumentCommand) 방금 띄운 메시지가 이
+    // 분기에 걸려 곧바로 사라지지는 않는다.
+    if (selectionKeyRef.current !== selectionKey) {
+      selectionKeyRef.current = selectionKey;
+      setFormatMenuOpen(false);
+      clearActionError();
+    }
+    setToolbarState({
+      tableBlockId: selection.tableBlockId,
+      cellIds: selection.cellIds,
+      splitCellId: selection.splitCellId,
+      left: bounds.left,
+      top: bounds.top,
+    });
   }, [editor, element, clearActionError]);
+
+  useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   // 서식 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
   // 닫는 UI는 병렬 e2e로 검증한다). 리스너는 useDismissOnOutsideOrEscape가
