@@ -70,13 +70,18 @@ const isEmptyParagraphContainer = (container: ProseMirrorNode): boolean => {
   );
 };
 
-// media 노드를 position 자리에 새로 삽입한다(insertMediaBlock의 afterBlockId
-// 조회 없이 이미 해석해 둔 raw position에 직접 넣는다 — table 뒤·blockContainer
-// 앞/뒤 모두 이 하나의 함수로 표현된다). 거절되면(TRANSACTION_REJECTED, 희귀)
-// null을 반환해 체이닝을 멈추게 한다.
-const insertMediaAt = (
+// media 노드를 target 위치에 넣는다 — "insert"면 raw position에 그대로
+// 끼우고(table 뒤·blockContainer 앞/뒤 모두 이 한 분기로 표현된다), "replace"면
+// 대상 range(빈 paragraph 컨테이너)를 지우고 그 자리에 넣는다. insertMediaBlock
+// (media-commands.ts)과 달리 afterBlockId 조회가 없다 — paste/drop이 이미
+// 해석해 둔 raw position/range를 그대로 받는다. 원래 insertMediaAt/
+// replaceWithMedia 두 함수였다(그릴링 C3, 2026-09-06) — schema 조회+가드+
+// createId+NodeSelection+dispatch 10줄이 트랜잭션 생성 한 줄만 빼고 완전히
+// 동일해 병합했다. 거절되면(TRANSACTION_REJECTED, 희귀) null을 반환해
+// 체이닝을 멈추게 한다.
+const insertMediaAtTarget = (
   editor: Editor,
-  position: number,
+  target: MediaInsertTarget,
   kind: MediaBlockKind,
   createId: IdFactory,
 ): InsertOutcome => {
@@ -88,36 +93,17 @@ const insertMediaAt = (
   }
   const blockId = createId();
   const mediaNode = mediaType.create({ blockId });
-  const transaction = editor.state.tr.insert(position, mediaNode);
-  transaction.setSelection(NodeSelection.create(transaction.doc, position));
-  const dispatched = finalizeAndDispatch(editor, transaction);
-  return dispatched.ok ? { blockId } : null;
-};
-
-// blockContainer 전체(paragraph 포함)를 media 노드로 교체한다(paste 전용
-// "빈 paragraph 교체" 규칙). insertMediaAt과 달리 대상 range를 지우고 그
-// 자리에 media 노드를 넣는다 — 교체 뒤에는 빈 paragraph가 남지 않는다.
-const replaceWithMedia = (
-  editor: Editor,
-  position: number,
-  nodeSize: number,
-  kind: MediaBlockKind,
-  createId: IdFactory,
-): InsertOutcome => {
-  const mediaType = editor.schema.nodes[kind];
-  if (mediaType === undefined) {
-    throw new TypeError(
-      `${kind} 노드 타입이 스키마에 없다 — createProductionEditor가 확장 등록을 보장한다`,
-    );
-  }
-  const blockId = createId();
-  const mediaNode = mediaType.create({ blockId });
-  const transaction = editor.state.tr.replaceWith(
-    position,
-    position + nodeSize,
-    mediaNode,
+  const transaction =
+    target.mode === "replace"
+      ? editor.state.tr.replaceWith(
+          target.position,
+          target.position + target.nodeSize,
+          mediaNode,
+        )
+      : editor.state.tr.insert(target.position, mediaNode);
+  transaction.setSelection(
+    NodeSelection.create(transaction.doc, target.position),
   );
-  transaction.setSelection(NodeSelection.create(transaction.doc, position));
   const dispatched = finalizeAndDispatch(editor, transaction);
   return dispatched.ok ? { blockId } : null;
 };
@@ -160,7 +146,11 @@ const resolveTableBypass = ($pos: ResolvedPos): { position: number } | null => {
     : { position: table.position + table.node.nodeSize };
 };
 
-type PasteTarget =
+// insertMediaAtTarget의 입력 — "insert"는 raw position, "replace"는
+// range(position+nodeSize)를 지우고 그 자리에 넣는다. paste 쪽만 replace를
+// 만들어낸다(resolvePasteTarget) — drop은 항상 insert라 resolveDropTarget은
+// { position }만 반환하고 handleDrop이 호출부에서 mode: "insert"로 감싼다.
+type MediaInsertTarget =
   | { mode: "insert"; position: number }
   | { mode: "replace"; position: number; nodeSize: number };
 
@@ -168,7 +158,7 @@ type PasteTarget =
 // 삽입"으로 가른다(spec §5.2 불릿 1·2). drop과 별개 규칙이다(RD-002.md
 // "결정" — spec §5.2 재독해, 3개 불릿은 paste/drop 각자의 규칙이지 하나가
 // 아니다).
-const resolvePasteTarget = ($pos: ResolvedPos): PasteTarget => {
+const resolvePasteTarget = ($pos: ResolvedPos): MediaInsertTarget => {
   const bypass = resolveTableBypass($pos);
   if (bypass !== null) return { mode: "insert", position: bypass.position };
 
@@ -294,16 +284,12 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             const firstFile = files[0];
             if (firstFile === undefined) return true;
             const firstKind = detectMediaBlockKind(firstFile);
-            const first =
-              target.mode === "replace"
-                ? replaceWithMedia(
-                    editor,
-                    target.position,
-                    target.nodeSize,
-                    firstKind,
-                    createId,
-                  )
-                : insertMediaAt(editor, target.position, firstKind, createId);
+            const first = insertMediaAtTarget(
+              editor,
+              target,
+              firstKind,
+              createId,
+            );
             if (first !== null) triggerUpload(first.blockId, firstFile);
             chainRemainingFiles(editor, createId, files, first, triggerUpload);
             return true;
@@ -331,9 +317,9 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             const target = resolveDropTarget(view, $pos, event.clientY);
             const firstFile = files[0];
             if (firstFile === undefined) return true;
-            const first = insertMediaAt(
+            const first = insertMediaAtTarget(
               editor,
-              target.position,
+              { mode: "insert", position: target.position },
               detectMediaBlockKind(firstFile),
               createId,
             );
