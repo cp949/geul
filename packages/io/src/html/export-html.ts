@@ -3,6 +3,7 @@ import {
   type CodeBlock,
   type Document,
   type HeadingBlock,
+  type InlineContentItem,
   isKnownBlockType,
   isListItemBlockType,
   isSafeCodeBlockLanguageClassToken,
@@ -15,6 +16,7 @@ import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
+import { blocksInlineContentViolation } from "../inline-content-violation.js";
 import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
 import {
@@ -280,9 +282,15 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
     }
   }
 
+  // CodeBlock.content는 model 계약상 항상 텍스트 런 1개뿐이다(코드 블록은
+  // 커스텀 inline 원소·mark를 담지 않는다) — 계약 전제 캐스트(DELTA-14
+  // inlineContentToTiptap과 동일 패턴).
+  const source = block.content[0] as
+    | Extract<InlineContentItem, { text: string }>
+    | undefined;
   return htmlElement("pre", { dataBeBlockId: block.id }, [
     htmlElement("code", codeProperties, [
-      { type: "text", value: block.content[0]?.text ?? "" },
+      { type: "text", value: source?.text ?? "" },
     ]),
   ]);
 };
@@ -501,6 +509,27 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
       error: {
         code: "HTML_DOCUMENT_INVALID",
         message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — customBlocks registry is not supported yet`,
+      },
+    };
+  }
+  // block 내부 inline 레벨 커스텀 원소·CustomTextMark(EXT-002/EXT-003)도
+  // 같은 이유로 임시 거절한다(RD-002-DELTA-16) — top-level 게이트(위)는
+  // 최상위 block 타입만 보고 content 안쪽은 검사하지 않아, 이 가드가 없으면
+  // inlineContentToNodes가 item.text/item.marks에 무가드 접근해 크래시한다.
+  const inlineViolation = blocksInlineContentViolation(
+    parsed.value.blocks as Block[],
+  );
+  if (inlineViolation !== null) {
+    return {
+      ok: false,
+      error: {
+        code: "HTML_DOCUMENT_INVALID",
+        message:
+          `Block ${inlineViolation.blockId}` +
+          (inlineViolation.cellId === undefined
+            ? ""
+            : ` cell ${inlineViolation.cellId}`) +
+          ` ${inlineViolation.reason} — customInlineContent/customStyles registry is not supported yet`,
       },
     };
   }

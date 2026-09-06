@@ -16,6 +16,7 @@ import {
   type TableBlock,
   tableSizeViolationMessage,
   type TextBlockProps,
+  type TextMark,
   type ToggleListItemBlock,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -191,7 +192,11 @@ class HtmlDocumentInvalidError extends Error {}
 // table-commands.ts도 같은 계약을 쓴다.
 const sanitizeInlineContentText = (content: InlineContent): InlineContent => {
   const sanitized: InlineContent = [];
-  for (const item of content) {
+  for (const rawItem of content) {
+    // false widening: HTML 파서(inlineContentFromNodes)는 텍스트 런만
+    // 만든다 — 커스텀 inline 원소를 생성하는 경로가 없다(DELTA-06과
+    // 동일 근거).
+    const item = rawItem as { text: string; marks?: TextMark[] };
     appendOrMergeInlineItem(
       sanitized,
       sanitizeInlineText(item.text),

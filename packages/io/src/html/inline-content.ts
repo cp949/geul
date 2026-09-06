@@ -182,7 +182,14 @@ const textWithBreaks = (text: string): HtmlElementContent[] => {
 export const inlineContentToNodes = (
   content: InlineContent,
 ): HtmlElementContent[] =>
-  content.flatMap((item) => {
+  content.flatMap((rawItem) => {
+    // 계약: exportHtml의 blocksInlineContentViolation(RD-002-DELTA-16)가
+    // 이 함수 호출 전에 이미 커스텀 inline 원소·CustomTextMark를
+    // HTML_DOCUMENT_INVALID로 거절했다는 전제 위에서 텍스트 런·알려진
+    // 마크로 캐스트한다(core inlineContentToTiptap과 동일 패턴). 이
+    // 함수는 packages/io/src/index.ts에 재수출되지 않는 내부 전용이라
+    // exportHtml 진입점 게이트를 우회해 호출될 길이 없다.
+    const item = rawItem as { text: string; marks?: TextMark[] };
     const marks = htmlWrapperMarks(item.marks ?? []);
     return textWithBreaks(item.text).map((textNode) =>
       [...marks]

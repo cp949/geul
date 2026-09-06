@@ -14,6 +14,7 @@ import remarkStringify from "remark-stringify";
 import { unified } from "unified";
 
 import type { ExportError } from "../errors.js";
+import { blocksInlineContentViolation } from "../inline-content-violation.js";
 import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
 import { computeColumnAlignments } from "./column-align.js";
@@ -109,7 +110,14 @@ const inlineNodes = (
   content: InlineContent,
   inTableCell: boolean,
 ): MarkdownOutputNode[] =>
-  content.flatMap((item) => {
+  content.flatMap((rawItem) => {
+    // 계약: exportMarkdown의 blocksInlineContentViolation(RD-002-DELTA-16)
+    // 가 이 함수 호출 전에 이미 커스텀 inline 원소·CustomTextMark를
+    // MARKDOWN_DOCUMENT_INVALID로 거절했다는 전제 위에서 텍스트 런·알려진
+    // 마크로 캐스트한다(core inlineContentToTiptap과 동일 패턴). 이 함수는
+    // packages/io/src/index.ts에 재수출되지 않는 내부 전용이라 진입점
+    // 게이트를 우회해 호출될 길이 없다.
+    const item = rawItem as { text: string; marks?: TextMark[] };
     const marks = (item.marks ?? [])
       .filter((mark) => mark.type !== "underline")
       .map((mark, index) => ({ mark, index }))
@@ -331,9 +339,15 @@ const blockNode = (block: Block): MarkdownOutputNode => {
   // CodeBlock은 model 검증을 통과한 plain-text leaf다. mdast code node가
   // fence 길이와 info string entity escape를 맡아 source/language를 보존한다.
   if (block.type === "codeBlock") {
+    // CodeBlock.content는 model 계약상 항상 텍스트 런 1개뿐이다(코드
+    // 블록은 커스텀 inline 원소·mark를 담지 않는다) — 계약 전제 캐스트
+    // (export-html.ts::codeBlockNode와 동일 패턴).
+    const source = block.content[0] as
+      | { text: string; marks?: TextMark[] }
+      | undefined;
     return {
       type: "code",
-      value: block.content[0]?.text ?? "",
+      value: source?.text ?? "",
       ...(block.language === undefined
         ? {}
         : { lang: codeBlockLanguage(block.language) }),
@@ -414,6 +428,29 @@ export function exportMarkdown(
       error: {
         code: "MARKDOWN_DOCUMENT_INVALID",
         message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — customBlocks registry is not supported yet`,
+      },
+    };
+  }
+
+  // block 내부 inline 레벨 커스텀 원소·CustomTextMark(EXT-002/EXT-003)도
+  // mode(strict/lossy)와 무관하게 임시 거절한다(RD-002-DELTA-16) — "손실"이
+  // 아니라 "표현 수단 자체가 없음"(top-level CustomBlock과 같은 급)이라
+  // lossy 모드가 조용히 통과시키면 안 된다. mode 분기(아래 losses 검사)보다
+  // 먼저 실행한다.
+  const inlineViolation = blocksInlineContentViolation(
+    parsed.value.blocks as Block[],
+  );
+  if (inlineViolation !== null) {
+    return {
+      ok: false,
+      error: {
+        code: "MARKDOWN_DOCUMENT_INVALID",
+        message:
+          `Block ${inlineViolation.blockId}` +
+          (inlineViolation.cellId === undefined
+            ? ""
+            : ` cell ${inlineViolation.cellId}`) +
+          ` ${inlineViolation.reason} — customInlineContent/customStyles registry is not supported yet`,
       },
     };
   }

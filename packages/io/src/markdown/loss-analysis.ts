@@ -1,6 +1,7 @@
 import {
   isKnownBlockType,
   isListItemBlockType,
+  isTextRunItem,
   type Block,
   type Document,
   type InlineContent,
@@ -52,21 +53,33 @@ export type MarkdownLoss = {
   message: string;
 };
 
+// analyzeMarkdownLoss는 exportMarkdown 내부 호출 경로 외에도 직접 호출
+// 가능한 공개 API다(DELTA-07 결정 근거) — exportMarkdown의
+// blocksInlineContentViolation 게이트(RD-002-DELTA-16)를 우회해 호출될 수
+// 있으므로 세 predicate 모두 자체 방어로 isTextRunItem 가드를 둔다. 커스텀
+// inline 원소는 손실 카테고리 어휘에 없으므로(exportMarkdown이 이미 별도로
+// 거절을 전담) 여기서는 조용히 skip한다(순수 탐색, 판정 로직 무변경 —
+// top-level CustomBlock을 collectBlockLosses가 건너뛰는 것과 동일 원칙).
 const hasUnderline = (content: InlineContent): boolean =>
-  content.some((item) =>
-    (item.marks ?? []).some((mark) => mark.type === "underline"),
+  content.some(
+    (item) =>
+      isTextRunItem(item) &&
+      (item.marks ?? []).some((mark) => mark.type === "underline"),
   );
 
 const hasColorMark = (content: InlineContent): boolean =>
-  content.some((item) =>
-    (item.marks ?? []).some(
-      (mark) => mark.type === "textColor" || mark.type === "backgroundColor",
-    ),
+  content.some(
+    (item) =>
+      isTextRunItem(item) &&
+      (item.marks ?? []).some(
+        (mark) => mark.type === "textColor" || mark.type === "backgroundColor",
+      ),
   );
 
 const hasInlineCodeNewline = (content: InlineContent): boolean =>
   content.some(
     (item) =>
+      isTextRunItem(item) &&
       item.text.includes("\n") &&
       (item.marks ?? []).some((mark) => mark.type === "code"),
   );
