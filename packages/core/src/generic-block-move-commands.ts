@@ -1,5 +1,5 @@
 import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
-import type { Block, DocumentBlock, Result } from "@cp949/geul-model";
+import type { Block, Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findBlockPosition } from "./block-position.js";
