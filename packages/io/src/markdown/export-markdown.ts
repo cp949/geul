@@ -2,6 +2,7 @@ import {
   type Block,
   type Document,
   type InlineContent,
+  isKnownBlockType,
   type ListItemBlock,
   parseDocument,
   type TableBlock,
@@ -364,7 +365,7 @@ const blockNode = (block: Block): MarkdownOutputNode => {
 
 const documentNode = (document: Document): MarkdownOutputNode => ({
   type: "root",
-  children: blockNodes(document.blocks),
+  children: blockNodes(document.blocks as Block[]),
 });
 
 export type MarkdownLossNotAllowedError = {
@@ -400,6 +401,23 @@ export function exportMarkdown(
     };
   }
 
+  // top-level CustomBlock(model, RD-002-DELTA-01)의 markdown 렌더러가 아직
+  // 없다(registry는 RD-002-DELTA-11) — mode(strict/lossy)와 무관하게 명시적
+  // 거절한다(io/export-html.ts와 같은 임시 정지 동작, RD-002-DELTA-07). RD-003이
+  // 나중에 진짜 CUSTOM_BLOCK_LOST strict/lossy 정책으로 교체한다.
+  const unsupportedBlock = parsed.value.blocks.find(
+    (block) => !isKnownBlockType(block.type),
+  );
+  if (unsupportedBlock !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "MARKDOWN_DOCUMENT_INVALID",
+        message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — customBlocks registry is not supported yet`,
+      },
+    };
+  }
+
   const losses = analyzeMarkdownLoss(parsed.value);
   if (options.mode === "strict" && losses.length > 0) {
     return {
@@ -411,7 +429,10 @@ export function exportMarkdown(
   try {
     const outputDocument: Document =
       options.mode === "lossy"
-        ? { ...parsed.value, blocks: flattenBlocks(parsed.value.blocks) }
+        ? {
+            ...parsed.value,
+            blocks: flattenBlocks(parsed.value.blocks as Block[]),
+          }
         : parsed.value;
     const markdown = stringifyProcessor.stringify(
       documentNode(outputDocument) as Parameters<

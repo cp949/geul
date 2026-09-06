@@ -1,5 +1,6 @@
 import {
   appendOrMergeInlineItem,
+  type Block,
   type Document,
   type HeadingBlock,
   type IdFactory,
@@ -376,7 +377,7 @@ const tableFromNode = (
   node: MarkdownNode,
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"][number] => {
+): Block => {
   const tableId = createId();
   const sourceRows = node.children ?? [];
   const columnCount = sourceRows.reduce(
@@ -453,7 +454,7 @@ const paragraphFromNodes = (
   nodes: MarkdownNode[],
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"][number] => {
+): Block => {
   const id = createId();
   return {
     id,
@@ -468,7 +469,7 @@ const paragraphFromNodes = (
 const paragraphFromText = (
   text: string,
   createId: IdFactory,
-): Document["blocks"][number] => ({
+): Block => ({
   id: createId(),
   type: "paragraph",
   content: text.length === 0 ? [] : [{ text }],
@@ -489,7 +490,7 @@ const paragraphFromText = (
 const imageBlockFromSingleChild = (
   node: MarkdownNode,
   createId: IdFactory,
-): Document["blocks"][number] | undefined => {
+): Block | undefined => {
   if (node.type !== "image" && node.type !== "imageReference") {
     return undefined;
   }
@@ -510,9 +511,9 @@ const imageBlockFromSingleChild = (
 // 배열에서 컨테이너 경계를 잃는다. 앞 numbered sibling과 인접한 새
 // sequence의 첫 numbered 항목에 start를 명시해 GFM 번호 재시작을 보존한다.
 const appendNodeBlocks = (
-  blocks: Document["blocks"],
+  blocks: Block[],
   node: MarkdownNode,
-  nodeBlocks: Document["blocks"],
+  nodeBlocks: Block[],
 ): void => {
   const previousBlock = blocks[blocks.length - 1];
   const firstBlock = nodeBlocks[0];
@@ -531,8 +532,8 @@ function blocksFromNodes(
   nodes: MarkdownNode[],
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"] {
-  const blocks: Document["blocks"] = [];
+): Block[] {
+  const blocks: Block[] = [];
   for (const node of nodes) {
     appendNodeBlocks(blocks, node, blocksFromNode(node, createId, warnings));
   }
@@ -543,8 +544,8 @@ function listBlocksFromNode(
   node: MarkdownNode,
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"] {
-  const blocks: Document["blocks"] = [];
+): Block[] {
+  const blocks: Block[] = [];
 
   for (const [itemIndex, item] of (node.children ?? []).entries()) {
     if (item.type !== "listItem") {
@@ -613,8 +614,8 @@ function blockquoteToBlocks(
   node: MarkdownNode,
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"] {
-  const blocks: Document["blocks"] = [];
+): Block[] {
+  const blocks: Block[] = [];
 
   for (const child of node.children ?? []) {
     if (child.type === "paragraph") {
@@ -670,7 +671,7 @@ function unsupportedBlocksFromNode(
   node: MarkdownNode,
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"] {
+): Block[] {
   const hasBlockChildren =
     node.children?.some((child) => blockNodeTypes.has(child.type)) === true;
   const blocks = hasBlockChildren
@@ -698,7 +699,7 @@ function blocksFromNode(
   node: MarkdownNode,
   createId: IdFactory,
   warnings: ImportWarning[],
-): Document["blocks"] {
+): Block[] {
   if (node.type === "definition") return [];
   if (node.type === "table") {
     return [tableFromNode(node, createId, warnings)];

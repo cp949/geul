@@ -1,4 +1,5 @@
 import {
+  isKnownBlockType,
   isListItemBlockType,
   type Block,
   type Document,
@@ -355,8 +356,13 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
 export const analyzeMarkdownLoss = (document: Document): MarkdownLoss[] => {
   const losses: MarkdownLoss[] = [];
 
+  // top-level CustomBlock(model, RD-002-DELTA-01)은 이 함수의 손실 분류
+  // 어휘에 아직 없다(RD-003이 다룰 영역) — 호출자(exportMarkdown)가 이미
+  // 별도로 거절하므로 여기서는 조용히 건너뛴다(순수 탐색, 판정 로직
+  // 무변경).
   for (const block of document.blocks) {
-    collectBlockLosses(block, losses);
+    if (!isKnownBlockType(block.type)) continue;
+    collectBlockLosses(block as Block, losses);
   }
 
   return losses;
