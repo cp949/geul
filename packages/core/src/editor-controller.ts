@@ -27,6 +27,7 @@ import {
   findAdjacentInTree,
   findBlockInTree,
   findParentInTree,
+  findSiblingContext,
   walkBlockTree,
 } from "./block-tree.js";
 import {
@@ -156,6 +157,13 @@ export interface EditorController {
   // "## 계획"의 설계 결정 상속). 빈 배열은 COMMAND_NOT_APPLICABLE, 문서의
   // 모든 블록을 제거하면(R0 위반) DOCUMENT_INVALID다.
   removeBlocks(blockIds: string[]): Result<Block[], EditorError>;
+  // spec §3.2, RD-002-DELTA-04(DOC-006) — 기존 moveBlockBefore 조합.
+  // blockIds는 같은 부모의 연속한 형제 범위여야 한다(RD-002-DELTA-04
+  // "## 계획"의 설계 결정, moveSelectedBlocksBefore와 동일 제약). 범위
+  // 바로 앞/뒤 형제 하나와 자리를 통째로 바꾼다 — 범위 자신은 재조립하지
+  // 않는다.
+  moveBlocksUp(blockIds: string[]): Result<void, EditorError>;
+  moveBlocksDown(blockIds: string[]): Result<void, EditorError>;
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
   getCaretBlockContext(): {
@@ -1578,6 +1586,152 @@ export const createEditor = (
     return { ok: true, value: removedBlocks };
   };
 
+  // moveBlocksUp/moveBlocksDown(spec §3.2, DOC-006, RD-002-DELTA-04)이
+  // 공유하는 범위 검증. blockIds는 같은 부모의 연속한 형제 범위여야
+  // 한다(RD-002-DELTA-04 "## 계획"의 설계 결정, moveSelectedBlocksBefore와
+  // 동일 제약) — 인자 순서는 무관하고, 형제 배열 안 인덱스로 정규화해
+  // 연속성을 검증한다.
+  const resolveMoveRange = (
+    blockIds: string[],
+    command: string,
+  ): Result<
+    { siblings: readonly Block[]; startIndex: number; endIndex: number },
+    EditorError
+  > => {
+    if (blockIds.length === 0) return commandNotApplicable(command);
+
+    const currentDocument = session.getDocument();
+    let siblings: readonly Block[] | undefined;
+    const indices: number[] = [];
+    for (const id of blockIds) {
+      const context = findSiblingContext(currentDocument.blocks, id);
+      if (context === undefined) {
+        return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: id } };
+      }
+      if (siblings === undefined) {
+        siblings = context.siblings;
+      } else if (context.siblings !== siblings) {
+        // 서로 다른 부모의 형제 — "위/아래로 한 칸"의 의미가 성립하지 않는다.
+        return commandNotApplicable(command);
+      }
+      indices.push(context.index);
+    }
+    if (siblings === undefined) {
+      // 도달 불가 방어선 — 위 루프가 최소 1회 실행됐다(blockIds 비어있지 않음).
+      return commandNotApplicable(command);
+    }
+
+    const sortedIndices = [...new Set(indices)].sort((a, b) => a - b);
+    const startIndex = sortedIndices[0];
+    const endIndex = sortedIndices[sortedIndices.length - 1];
+    if (startIndex === undefined || endIndex === undefined) {
+      return commandNotApplicable(command);
+    }
+    if (sortedIndices.length !== endIndex - startIndex + 1) {
+      // 범위 안에 blockIds가 가리키지 않는 형제가 끼어 있다 — 연속하지 않음.
+      return commandNotApplicable(command);
+    }
+
+    return { ok: true, value: { siblings, startIndex, endIndex } };
+  };
+
+  // spec §3.2, DOC-006, RD-002-DELTA-04. 범위 자신은 재조립하지 않고, 그
+  // 바로 앞 형제 하나만 delete → 범위 뒤에 insert한다(moveBlockBefore의
+  // "delete → transaction.doc에서 위치 재조회 → insert" 기술 재사용,
+  // 공개 commands.moveBlockBefore는 호출하지 않는다 — "## 계획"의 설계
+  // 결정, beforeBlockId=null의 "항상 최상위 문서 끝" 의미와 충돌한다).
+  // 앞 형제를 지워도 범위 자신이 같은 형제 배열에 남아 있어(비어있지
+  // 않음) blockGroup이 통째로 비는 경우가 없다 — deleteBlock의
+  // removesWholeGroup 판정이 필요 없다.
+  const moveBlocksUpImpl = (blockIds: string[]): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("moveBlocksUp");
+    const resolved = resolveMoveRange(blockIds, "moveBlocksUp");
+    if (!resolved.ok) return resolved;
+    const { siblings, startIndex, endIndex } = resolved.value;
+    if (startIndex === 0) return commandNotApplicable("moveBlocksUp");
+
+    const precedingBlock = siblings[startIndex - 1];
+    const lastRangeBlock = siblings[endIndex];
+    if (precedingBlock === undefined || lastRangeBlock === undefined) {
+      return commandNotApplicable("moveBlocksUp"); // 도달 불가 방어선
+    }
+
+    return session.runDocumentCommand("moveBlocksUp", "local", () => {
+      const precedingPosition = findBlockPosition(
+        session.editor.state.doc,
+        precedingBlock.id,
+      );
+      if (precedingPosition === null) return false;
+      const precedingNode = session.editor.state.doc.nodeAt(precedingPosition);
+      if (precedingNode === null) return false;
+
+      const transaction = session.editor.state.tr.delete(
+        precedingPosition,
+        precedingPosition + precedingNode.nodeSize,
+      );
+      const lastRangePosition = findBlockPosition(
+        transaction.doc,
+        lastRangeBlock.id,
+      );
+      if (lastRangePosition === null) return false;
+      const lastRangeNode = transaction.doc.nodeAt(lastRangePosition);
+      if (lastRangeNode === null) return false;
+      session.editor.view.dispatch(
+        closeHistory(
+          transaction.insert(
+            lastRangePosition + lastRangeNode.nodeSize,
+            precedingNode,
+          ),
+        ),
+      );
+      return true;
+    });
+  };
+
+  // moveBlocksUpImpl의 대칭 방향 — 범위 바로 뒤 형제 하나만 delete → 범위
+  // 앞에 insert한다.
+  const moveBlocksDownImpl = (
+    blockIds: string[],
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("moveBlocksDown");
+    const resolved = resolveMoveRange(blockIds, "moveBlocksDown");
+    if (!resolved.ok) return resolved;
+    const { siblings, startIndex, endIndex } = resolved.value;
+    if (endIndex === siblings.length - 1) {
+      return commandNotApplicable("moveBlocksDown");
+    }
+
+    const followingBlock = siblings[endIndex + 1];
+    const firstRangeBlock = siblings[startIndex];
+    if (followingBlock === undefined || firstRangeBlock === undefined) {
+      return commandNotApplicable("moveBlocksDown"); // 도달 불가 방어선
+    }
+
+    return session.runDocumentCommand("moveBlocksDown", "local", () => {
+      const followingPosition = findBlockPosition(
+        session.editor.state.doc,
+        followingBlock.id,
+      );
+      if (followingPosition === null) return false;
+      const followingNode = session.editor.state.doc.nodeAt(followingPosition);
+      if (followingNode === null) return false;
+
+      const transaction = session.editor.state.tr.delete(
+        followingPosition,
+        followingPosition + followingNode.nodeSize,
+      );
+      const firstRangePosition = findBlockPosition(
+        transaction.doc,
+        firstRangeBlock.id,
+      );
+      if (firstRangePosition === null) return false;
+      session.editor.view.dispatch(
+        closeHistory(transaction.insert(firstRangePosition, followingNode)),
+      );
+      return true;
+    });
+  };
+
   return {
     mount(element) {
       session.mount(element);
@@ -1622,6 +1776,12 @@ export const createEditor = (
     },
     removeBlocks(blockIds) {
       return removeBlocksImpl(blockIds);
+    },
+    moveBlocksUp(blockIds) {
+      return moveBlocksUpImpl(blockIds);
+    },
+    moveBlocksDown(blockIds) {
+      return moveBlocksDownImpl(blockIds);
     },
     getSelectionMarks() {
       if (session.isDestroyed) return [];

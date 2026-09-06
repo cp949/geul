@@ -91,6 +91,27 @@ export const findParentInTree = (
   return found;
 };
 
+// blockId가 속한 형제 배열(참조)과 그 안에서의 인덱스를 찾는다(DOC-006,
+// moveBlocksUp/moveBlocksDown 전용, RD-002-DELTA-04). "같은 부모 형제인가"
+// 판정은 이 함수가 반환한 siblings 참조를 `===`로 비교해서 한다 —
+// generic-block-commands.ts의 동일 모양 module-local 헬퍼(findBlockInTree)와
+// 목적이 같지만, 그 파일을 이 DELTA 범위에서 건드리지 않으므로 독립적으로
+// 둔다.
+export const findSiblingContext = (
+  blocks: readonly Block[],
+  blockId: string,
+): { siblings: readonly Block[]; index: number } | undefined => {
+  const index = blocks.findIndex((block) => block.id === blockId);
+  if (index !== -1) return { siblings: blocks, index };
+  for (const block of blocks) {
+    const children = childrenOf(block);
+    if (children === undefined || children.length === 0) continue;
+    const found = findSiblingContext(children, blockId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+};
+
 // forEachBlock과 동일한 문서 순서에서 blockId 바로 앞/뒤 블록을 찾는다.
 // 형제 범위로 좁히지 않고 트리 전체를 하나의 순서로 다룬다 — forEachBlock과
 // "다음/이전"의 의미가 갈리지 않게 한다(RD-001-DELTA-01 "## 계획"의 설계

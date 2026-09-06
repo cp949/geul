@@ -534,3 +534,180 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — removeBlo
     expect(editor.getDocument().blocks.map((b) => b.id)).toEqual(["tail"]);
   });
 });
+
+describe("에디터 컨트롤러 범용 블록 조작 API(DOC-006) — moveBlocksUp/moveBlocksDown", () => {
+  const fourParagraphDocument = () =>
+    documentOf(
+      paragraphBlock("block-1", "one"),
+      paragraphBlock("block-2", "two"),
+      paragraphBlock("block-3", "three"),
+      paragraphBlock("block-4", "four"),
+    );
+
+  it("연속한 범위를 바로 앞 형제와 통째로 바꾼다(완료 조건 1)", () => {
+    const editor = createEditor({ initialDocument: fourParagraphDocument() });
+
+    const result = editor.moveBlocksUp(["block-2", "block-3"]);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-2",
+      "block-3",
+      "block-1",
+      "block-4",
+    ]);
+  });
+
+  it("범위가 이미 맨 앞이면 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 2)", () => {
+    const before = fourParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.moveBlocksUp(["block-1", "block-2"]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlocksUp" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("연속한 범위를 바로 뒤 형제와 통째로 바꾼다(완료 조건 3)", () => {
+    const editor = createEditor({ initialDocument: fourParagraphDocument() });
+
+    const result = editor.moveBlocksDown(["block-2", "block-3"]);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "block-4",
+      "block-2",
+      "block-3",
+    ]);
+  });
+
+  it("범위가 이미 맨 끝이면 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 4)", () => {
+    const before = fourParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.moveBlocksDown(["block-3", "block-4"]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlocksDown" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("서로 다른 부모의 blockId가 섞이면 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 5)", () => {
+    // child-2(부모 children 배열의 인덱스 1)와 sib-b(최상위 배열의 인덱스
+    // 2)를 섞는다 — 두 인덱스 모두 각자의 경계(맨 앞/맨 뒤)가 아니라서
+    // "같은 형제 배열" 검사를 생략해도 startIndex===0 같은 경계 가드에
+    // 우연히 걸리지 않는다(mutation 검증으로 실측 확인, 이전 fixture는
+    // 우연히 경계에 걸려 이 검사 자체를 격리하지 못했다).
+    const parent = paragraphBlock("parent-1", "parent", [
+      paragraphBlock("child-1", "c1"),
+      paragraphBlock("child-2", "c2"),
+      paragraphBlock("child-3", "c3"),
+    ]);
+    const before = documentOf(
+      parent,
+      paragraphBlock("sib-a", "a"),
+      paragraphBlock("sib-b", "b"),
+      paragraphBlock("sib-c", "c"),
+      paragraphBlock("tail", "tail"),
+    );
+    const editor = createEditor({ initialDocument: before });
+
+    const result = editor.moveBlocksUp(["child-2", "sib-b"]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlocksUp" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("같은 부모 안에서 연속하지 않으면 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 6)", () => {
+    const before = fourParagraphDocument();
+    const editor = createEditor({ initialDocument: before });
+
+    // block-2·block-4(인덱스 1·3)는 경계(맨 앞/맨 뒤) 가드에 걸리지 않아
+    // 연속성 검사 자체를 격리해서 검증한다 — block-1·block-3(인덱스 0·2)를
+    // 쓰면 startIndex===0 가드가 먼저 걸려 연속성 검사를 우회해도 우연히
+    // 통과한다(mutation 검증으로 실측 확인).
+    const result = editor.moveBlocksUp(["block-2", "block-4"]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlocksUp" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("알 수 없는 blockId에 대해 BLOCK_NOT_FOUND를 반환한다(완료 조건 7)", () => {
+    const editor = createEditor({ initialDocument: fourParagraphDocument() });
+
+    const result = editor.moveBlocksUp(["block-2", "missing"]);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+  });
+
+  it("blockIds가 빈 배열이면 COMMAND_NOT_APPLICABLE을 반환한다(완료 조건 8)", () => {
+    const editor = createEditor({ initialDocument: fourParagraphDocument() });
+
+    expect(editor.moveBlocksUp([])).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlocksUp" },
+    });
+    expect(editor.moveBlocksDown([])).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlocksDown" },
+    });
+  });
+
+  it("단일 undo step이다(완료 조건 9)", () => {
+    const editor = createEditor({ initialDocument: fourParagraphDocument() });
+
+    editor.moveBlocksUp(["block-2", "block-3"]);
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-2",
+      "block-3",
+      "block-1",
+      "block-4",
+    ]);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks.map((b) => b.id)).toEqual([
+      "block-1",
+      "block-2",
+      "block-3",
+      "block-4",
+    ]);
+  });
+
+  it("depth 1(중첩) 형제 범위에도 동일하게 동작한다(완료 조건 10)", () => {
+    const childA = paragraphBlock("child-a", "a");
+    const childB = paragraphBlock("child-b", "b");
+    const childC = paragraphBlock("child-c", "c");
+    const parent = paragraphBlock("parent-1", "parent", [
+      childA,
+      childB,
+      childC,
+    ]);
+    const editor = createEditor({
+      initialDocument: documentOf(parent, paragraphBlock("tail", "tail")),
+    });
+
+    const result = editor.moveBlocksDown(["child-a"]);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const document = editor.getDocument();
+    expect(document.blocks[0]).toMatchObject({
+      id: "parent-1",
+      children: [{ id: "child-b" }, { id: "child-a" }, { id: "child-c" }],
+    });
+  });
+});
