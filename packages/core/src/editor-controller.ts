@@ -1,5 +1,6 @@
 import type { TabularData } from "@cp949/geul-io";
 import {
+  type Block,
   type Document as BlockDocument,
   type HeadingBlock,
   type IdFactory,
@@ -17,6 +18,12 @@ import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
 import { findBlockPosition } from "./block-position.js";
+import {
+  findAdjacentInTree,
+  findBlockInTree,
+  findParentInTree,
+  walkBlockTree,
+} from "./block-tree.js";
 import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
@@ -72,6 +79,20 @@ export interface EditorController {
   unmount(): void;
   destroy(): void;
   getDocument(): BlockDocument;
+  // 단일 블록 조회·순회(spec §3.2, DOC-004). getDocument()가 반환하는 저장
+  // Block 트리를 대상으로 한다 — PM 노드가 아니다. getPrevBlock/getNextBlock은
+  // 형제 범위로 좁히지 않고 forEachBlock과 동일한 문서 순서(pre-order DFS)를
+  // 공유한다(RD-001-DELTA-01 "## 계획"의 설계 결정, block-tree.ts).
+  getBlock(blockId: string): Block | undefined;
+  getPrevBlock(blockId: string): Block | undefined;
+  getNextBlock(blockId: string): Block | undefined;
+  // 최상위 블록의 부모는 Block이 아니므로 undefined다 — "찾지 못함"과
+  // 구분하지 않는다(spec 시그니처가 Block | undefined 하나뿐).
+  getParentBlock(blockId: string): Block | undefined;
+  forEachBlock(
+    callback: (block: Block, parent: Block | null) => boolean | void,
+    options?: { reverse?: boolean },
+  ): void;
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
   getCaretBlockContext(): {
@@ -1169,6 +1190,26 @@ export const createEditor = (
     },
     getDocument() {
       return session.getDocument();
+    },
+    getBlock(blockId) {
+      return findBlockInTree(session.getDocument().blocks, blockId);
+    },
+    getPrevBlock(blockId) {
+      return findAdjacentInTree(session.getDocument().blocks, blockId, "prev");
+    },
+    getNextBlock(blockId) {
+      return findAdjacentInTree(session.getDocument().blocks, blockId, "next");
+    },
+    getParentBlock(blockId) {
+      return findParentInTree(session.getDocument().blocks, blockId);
+    },
+    forEachBlock(callback, options) {
+      walkBlockTree(
+        session.getDocument().blocks,
+        null,
+        callback,
+        options?.reverse ?? false,
+      );
     },
     getSelectionMarks() {
       if (session.isDestroyed) return [];
