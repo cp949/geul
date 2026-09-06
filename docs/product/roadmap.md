@@ -143,7 +143,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 - 사용자 정의 slash/suggestion menu
 - formatting/link/side/table UI 교체
 - CSS 변수, theme, DOM attribute와 style override
-- i18n과 BlockNote v0.54.0 기본 locale 사전 전체
+- i18n과 BlockNote v0.54.0 기본 locale 사전 전체 (보류 — 2026-09-06, Issue #156)
 - emoji picker와 portal target
 - BlockNote가 지원하는 mobile·touch UI
 - 키보드 focus와 ARIA 접근성
@@ -167,6 +167,8 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 - Next.js fixture가 SSR 중 editor DOM을 평가하지 않고 client에서 정상 mount된다.
 - server 환경에서 DOM 전역 없이 지원 변환을 수행한다.
 - 공개 API에 Tiptap/ProseMirror 타입이 노출되지 않는다.
+
+`EXT-009`/`EXT-010`(i18n)은 사용자가 명시적으로 재개를 지시할 때까지 착수를 보류한다. 나머지 R4 범위가 몇 차례 배포로 안정화된 후 지원할 계획이다(2026-09-06 결정, Issue #156). 위 완료 조건 중 v0.54.0 locale 검증 1개가 이 보류 대상이다 — R4는 이 조건을 제외한 나머지가 모두 충족되면 먼저 게이트를 통과하고, i18n은 재개·완료 시 별도로 충족한다(진행 순서와 세부 조건은 Issue #156 소유).
 
 ### R5 — 고급 무료 콘텐츠
 
