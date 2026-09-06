@@ -1,5 +1,6 @@
 import {
   type Block,
+  type CustomBlock,
   type Document,
   type InlineContent,
   isKnownBlockType,
@@ -185,8 +186,18 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
 // 재귀적으로 평탄화한다. own content가 비고 첫 자식이 paragraph면 GFM이
 // 둘의 경계를 구분하지 못하므로 그 paragraph를 content로 승격하고 나머지
 // 목록 계층을 유지한다.
-const flattenBlocks = (blocks: Block[]): Block[] =>
+const flattenBlocks = (
+  blocks: Block[],
+  customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>,
+): Block[] =>
   blocks.flatMap((block): Block[] => {
+    // top-level 전용 CustomBlock(model, RD-002)은 children 필드가 없다.
+    // lossy export에서 미등록이면 폐기하고(RD-003, CUSTOM_BLOCK_LOST는
+    // analyzeMarkdownLoss가 이미 warnings로 보고했다), 등록돼 있으면 그대로
+    // 통과시켜 blockNodes가 렌더러로 렌더하게 한다.
+    if (!isKnownBlockType(block.type)) {
+      return customBlockToMarkdown?.[block.type] !== undefined ? [block] : [];
+    }
     if (block.type === "table") return [block];
     // divider·CodeBlock·4종 미디어 블록은 children 필드 자체가 없어(옵셔널이
     // 아니라 부재, leaf 블록) 아래 block.children 접근 전에 좁힌다 — 이
@@ -295,10 +306,26 @@ const listNode = (
 // 연속된 flat 목록 형제를 mdast list로 묶는 경계 판정은
 // list-item-run-grouping.ts가 소유한다(export-html.ts와 공유, 아키텍처
 // 리뷰 6차 후보 L2) — 여기서는 mdast list 생성(listNode)만 주입한다.
-const blockNodes = (blocks: Block[]): MarkdownOutputNode[] =>
-  groupListItemRuns(blocks, listNode).map((entry) =>
-    entry.kind === "block" ? blockNode(entry.block) : entry.node,
-  );
+const blockNodes = (
+  blocks: Block[],
+  customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>,
+): MarkdownOutputNode[] =>
+  groupListItemRuns(blocks, listNode).map((entry) => {
+    if (entry.kind !== "block") return entry.node;
+    // top-level 전용 CustomBlock(model, RD-002)이 Block[]로 캐스트된 채
+    // 여기 도달할 수 있다 — strict 거절/lossy 폐기(analyzeMarkdownLoss·
+    // flattenBlocks)를 이미 거친 뒤라 등록된 타입만 남는다(RD-003). 렌더러가
+    // 반환한 markdown 문자열은 mdast 표준 raw HTML 블록 노드로 그대로
+    // 삽입한다(CommonMark가 1급으로 지원, 재파싱 없음).
+    if (!isKnownBlockType(entry.block.type)) {
+      const renderer = customBlockToMarkdown?.[entry.block.type];
+      return {
+        type: "html",
+        value: renderer!(entry.block as unknown as CustomBlock),
+      };
+    }
+    return blockNode(entry.block);
+  });
 
 const blockNode = (block: Block): MarkdownOutputNode => {
   if (block.type === "table") return tableNode(block);
@@ -377,9 +404,12 @@ const blockNode = (block: Block): MarkdownOutputNode => {
   };
 };
 
-const documentNode = (document: Document): MarkdownOutputNode => ({
+const documentNode = (
+  document: Document,
+  customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>,
+): MarkdownOutputNode => ({
   type: "root",
-  children: blockNodes(document.blocks as Block[]),
+  children: blockNodes(document.blocks as Block[], customBlockToMarkdown),
 });
 
 export type MarkdownLossNotAllowedError = {
@@ -391,15 +421,24 @@ export type MarkdownExportError = ExportError | MarkdownLossNotAllowedError;
 
 export function exportMarkdown(
   document: Document,
-  options: { mode: "strict" },
+  options: {
+    mode: "strict";
+    customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>;
+  },
 ): Result<string, MarkdownExportError>;
 export function exportMarkdown(
   document: Document,
-  options: { mode: "lossy" },
+  options: {
+    mode: "lossy";
+    customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>;
+  },
 ): Result<{ markdown: string; warnings: MarkdownLoss[] }, ExportError>;
 export function exportMarkdown(
   document: Document,
-  options: { mode: "strict" | "lossy" },
+  options: {
+    mode: "strict" | "lossy";
+    customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>;
+  },
 ): Result<
   string | { markdown: string; warnings: MarkdownLoss[] },
   MarkdownExportError
@@ -415,28 +454,13 @@ export function exportMarkdown(
     };
   }
 
-  // top-level CustomBlock(model, RD-002-DELTA-01)의 markdown 렌더러가 아직
-  // 없다(registry는 RD-002-DELTA-11) — mode(strict/lossy)와 무관하게 명시적
-  // 거절한다(io/export-html.ts와 같은 임시 정지 동작, RD-002-DELTA-07). RD-003이
-  // 나중에 진짜 CUSTOM_BLOCK_LOST strict/lossy 정책으로 교체한다.
-  const unsupportedBlock = parsed.value.blocks.find(
-    (block) => !isKnownBlockType(block.type),
-  );
-  if (unsupportedBlock !== undefined) {
-    return {
-      ok: false,
-      error: {
-        code: "MARKDOWN_DOCUMENT_INVALID",
-        message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — customBlocks registry is not supported yet`,
-      },
-    };
-  }
-
-  // block 내부 inline 레벨 커스텀 원소·CustomTextMark(EXT-002/EXT-003)도
-  // mode(strict/lossy)와 무관하게 임시 거절한다(RD-002-DELTA-16) — "손실"이
-  // 아니라 "표현 수단 자체가 없음"(top-level CustomBlock과 같은 급)이라
-  // lossy 모드가 조용히 통과시키면 안 된다. mode 분기(아래 losses 검사)보다
-  // 먼저 실행한다.
+  // block 내부 inline 레벨 커스텀 원소·CustomTextMark(EXT-002/EXT-003)는
+  // mode(strict/lossy)와 무관하게 임시 거절한다(RD-002-DELTA-16, RD-003
+  // 범위 밖 — customInlineContent/customStyles는 이 RD가 다루지 않는다).
+  // "손실"이 아니라 "표현 수단 자체가 없음"이라 lossy 모드가 조용히
+  // 통과시키면 안 된다. blocksInlineContentViolation은 등록된 top-level
+  // CustomBlock(아래 loss 분석에서 허용되는 것)을 divider/media와 동일하게
+  // 건너뛴다(자체 방어, inline-content-violation.ts).
   const inlineViolation = blocksInlineContentViolation(
     parsed.value.blocks as Block[],
   );
@@ -455,7 +479,14 @@ export function exportMarkdown(
     };
   }
 
-  const losses = analyzeMarkdownLoss(parsed.value);
+  // top-level CustomBlock(model, RD-002-DELTA-01) 중 customBlockToMarkdown에
+  // 등록되지 않은 타입은 신규 손실 카테고리 CUSTOM_BLOCK_LOST로 처리한다
+  // (RD-003, spec §4.5) — 기존 MEDIA_TYPE_LOST/INLINE_COLOR와 동일한
+  // strict/lossy 이분법을 그대로 재사용한다. 등록된 타입은 손실이 아니다.
+  const customBlockTypes = new Set(
+    Object.keys(options.customBlockToMarkdown ?? {}),
+  );
+  const losses = analyzeMarkdownLoss(parsed.value, customBlockTypes);
   if (options.mode === "strict" && losses.length > 0) {
     return {
       ok: false,
@@ -468,13 +499,17 @@ export function exportMarkdown(
       options.mode === "lossy"
         ? {
             ...parsed.value,
-            blocks: flattenBlocks(parsed.value.blocks as Block[]),
+            blocks: flattenBlocks(
+              parsed.value.blocks as Block[],
+              options.customBlockToMarkdown,
+            ),
           }
         : parsed.value;
     const markdown = stringifyProcessor.stringify(
-      documentNode(outputDocument) as Parameters<
-        typeof stringifyProcessor.stringify
-      >[0],
+      documentNode(
+        outputDocument,
+        options.customBlockToMarkdown,
+      ) as Parameters<typeof stringifyProcessor.stringify>[0],
     );
     if (options.mode === "strict") return { ok: true, value: markdown };
     return { ok: true, value: { markdown, warnings: losses } };

@@ -1,13 +1,15 @@
 /**
  * top-level CustomBlock(model, RD-002-DELTA-01)이 포함된 문서를 exportHtml에
- * 넣으면 HTML_DOCUMENT_INVALID로 명시적으로 거절하는지 확인한다 — CustomBlock의
- * HTML 렌더러(registry, RD-002-DELTA-11)가 아직 없어 조용히 무시하거나 잘못된
- * HTML을 낼 수 없다(core의 EDITOR_FEATURE_UNAVAILABLE과 같은 임시 거절 패턴,
- * RD-002-DELTA-05). 뒤이은 describe 블록(RD-002-DELTA-16)은 같은 임시 거절
- * 정책을 block **내부** inline 레벨 커스텀 원소·CustomTextMark에도 적용한다 —
- * top-level 게이트만으로는 걸러지지 않는 크래시 경로를 막는다.
+ * 넣을 때의 계약을 확인한다. `customBlockToHtml`에 등록되지 않은 타입은
+ * HTML_DOCUMENT_INVALID로 명시적으로 거절된다 — exportHtml은 strict/lossy
+ * 모드가 없어(spec §4.5 시그니처) 미등록은 항상 즉시 거절로 충분하다(RD-003).
+ * 등록된 타입은 그 렌더러의 출력이 결과 HTML에 raw로 그대로 포함된다(두 번째
+ * describe). 뒤이은 세 번째 describe(RD-002-DELTA-16)는 `customBlockToHtml`과
+ * 무관하게 block **내부** inline 레벨 커스텀 원소·CustomTextMark를 여전히
+ * 무조건 거절한다 — `customInlineContent`/`customStyles`는 이 RD(RD-003)
+ * 범위 밖이다.
  */
-import type { Document, TableBlock } from "@cp949/geul-model";
+import type { CustomBlock, Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml } from "../src/index.js";
@@ -21,9 +23,23 @@ const documentWithCustomBlock: Document = {
   blocks: [paragraphBlock("p1", "hi"), widget],
 };
 
-describe("HTML_DOCUMENT_INVALID: top-level CustomBlock export 거절", () => {
-  it("top-level CustomBlock이 있으면 HTML_DOCUMENT_INVALID를 반환하고 message에 custom type을 포함한다", () => {
+describe("HTML_DOCUMENT_INVALID: 미등록 top-level CustomBlock export 거절", () => {
+  it("등록되지 않은 top-level CustomBlock이 있으면 HTML_DOCUMENT_INVALID를 반환하고 message에 custom type을 포함한다", () => {
     const result = exportHtml(documentWithCustomBlock);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "HTML_DOCUMENT_INVALID",
+        message: expect.stringContaining("myWidget"),
+      },
+    });
+  });
+
+  it("다른 타입만 등록돼 있으면 미등록 타입은 여전히 거절된다", () => {
+    const result = exportHtml(documentWithCustomBlock, {
+      customBlockToHtml: { otherWidget: () => "<span/>" },
+    });
 
     expect(result).toEqual({
       ok: false,
@@ -38,6 +54,48 @@ describe("HTML_DOCUMENT_INVALID: top-level CustomBlock export 거절", () => {
     const result = exportHtml(buildDocument([paragraphBlock("p1", "hi")]));
 
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("customBlockToHtml: 등록된 CustomBlock 렌더(RD-003)", () => {
+  const renderer = (block: CustomBlock): string =>
+    `<div data-widget-id="${block.id}">rendered</div>`;
+
+  it("등록된 렌더러의 출력이 결과 HTML에 raw로 그대로 포함된다", () => {
+    const result = exportHtml(documentWithCustomBlock, {
+      customBlockToHtml: { myWidget: renderer },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.stringContaining(
+        '<div data-widget-id="widget-1">rendered</div>',
+      ),
+    });
+  });
+
+  it('content:"inline" 모드 CustomBlock이 등록돼도 blocksInlineContentViolation에서 크래시하지 않는다', () => {
+    const inlineWidget = {
+      id: "widget-2",
+      type: "myInlineWidget",
+      content: "inline" as const,
+    };
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [inlineWidget],
+    };
+
+    const result = exportHtml(document, {
+      customBlockToHtml: { myInlineWidget: renderer },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.stringContaining(
+        '<div data-widget-id="widget-2">rendered</div>',
+      ),
+    });
   });
 });
 

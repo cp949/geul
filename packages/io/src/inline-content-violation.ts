@@ -1,6 +1,7 @@
 import {
   type Block,
   type InlineContent,
+  isKnownBlockType,
   isKnownTextMarkType,
   isTextRunItem,
 } from "@cp949/geul-model";
@@ -36,12 +37,15 @@ export const inlineContentViolation = (
 
 // core의 validateEditableContent와 동형 재귀(block/children/table cell) —
 // exportHtml/exportMarkdown의 top-level 게이트(isKnownBlockType, DELTA-05/07)
-// 뒤에서 호출되므로 blocks는 이미 CustomBlock이 없는 Block[]로 캐스트된
-// 상태를 받는다.
+// 뒤에서 호출되므로 blocks는 등록되지 않은 CustomBlock이 없는 상태로
+// 도달한다. 다만 RD-003부터 그 게이트가 **등록된** CustomBlock은 통과시켜
+// 이 함수까지 넘길 수 있다 — CustomBlock에는 `content`(InlineContent) 필드
+// 자체가 없어(model, leaf 전용) divider/media와 동일하게 건너뛴다(아래).
 export const blocksInlineContentViolation = (
   blocks: readonly Block[],
 ): { blockId: string; cellId?: string; reason: string } | null => {
   for (const block of blocks) {
+    if (!isKnownBlockType(block.type)) continue;
     if (block.type === "divider" || block.type === "codeBlock") continue;
     if (
       block.type === "file" ||

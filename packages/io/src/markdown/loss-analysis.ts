@@ -46,7 +46,11 @@ export type MarkdownLoss = {
     // 없어도 블록 타입 자체가 GFM에 표현 수단이 없다(TOGGLE_STATE_LOST와
     // 동일 논리, RD-002-DELTA-01.md "결정"). Image는 이 kind를 절대 갖지
     // 않는다.
-    | "MEDIA_TYPE_LOST";
+    | "MEDIA_TYPE_LOST"
+    // RD-003. top-level CustomBlock(model, RD-002-DELTA-01) 중
+    // customBlockToMarkdown에 등록되지 않은 타입(spec §4.5) — 등록된
+    // 타입은 이 kind를 갖지 않는다(정상 렌더).
+    | "CUSTOM_BLOCK_LOST";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -366,15 +370,30 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   }
 };
 
-export const analyzeMarkdownLoss = (document: Document): MarkdownLoss[] => {
+// analyzeMarkdownLoss는 exportMarkdown 내부 호출 경로 외에도 직접 호출
+// 가능한 공개 API다(DELTA-07 결정 근거 재확인) — customBlockTypes를
+// 생략하면(외부 소비자가 등록 정보를 모르는 기본 호출) 모든 top-level
+// CustomBlock을 미등록으로 간주해 CUSTOM_BLOCK_LOST를 보고한다(안전한
+// 기본값 — "알려주지 않으면 아무것도 등록되지 않은 것으로 취급").
+export const analyzeMarkdownLoss = (
+  document: Document,
+  customBlockTypes?: ReadonlySet<string>,
+): MarkdownLoss[] => {
   const losses: MarkdownLoss[] = [];
 
-  // top-level CustomBlock(model, RD-002-DELTA-01)은 이 함수의 손실 분류
-  // 어휘에 아직 없다(RD-003이 다룰 영역) — 호출자(exportMarkdown)가 이미
-  // 별도로 거절하므로 여기서는 조용히 건너뛴다(순수 탐색, 판정 로직
-  // 무변경).
   for (const block of document.blocks) {
-    if (!isKnownBlockType(block.type)) continue;
+    if (!isKnownBlockType(block.type)) {
+      // 등록된 타입(customBlockTypes에 있음)은 exportMarkdown이 렌더러로
+      // 정상 변환하므로 손실이 아니다 — RD-003, spec §4.5.
+      if (customBlockTypes?.has(block.type) !== true) {
+        losses.push({
+          kind: "CUSTOM_BLOCK_LOST",
+          blockId: block.id,
+          message: `Block ${block.id} has unregistered custom type "${block.type}"; no customBlockToMarkdown renderer is registered for it`,
+        });
+      }
+      continue;
+    }
     collectBlockLosses(block as Block, losses);
   }
 

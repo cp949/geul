@@ -1,6 +1,7 @@
 import {
   type Block,
   type CodeBlock,
+  type CustomBlock,
   type Document,
   type HeadingBlock,
   type InlineContentItem,
@@ -22,12 +23,30 @@ import type { Result } from "../result.js";
 import {
   type HtmlElementContent,
   type HtmlElementNode,
-  type HtmlRoot,
+  type HtmlRawNode,
   htmlElement,
   inlineContentToNodes,
 } from "./inline-content.js";
 
-const stringifyProcessor = unified().use(rehypeStringify);
+// exportHtml이 직접 구성하는 출력 트리 전용 루트다 — import·clipboard
+// 파싱 소비처가 공유하는 `HtmlRoot`(inline-content.ts, "raw"를 절대 만들지
+// 않는다)와 분리한다(위 blockNodes/knownBlockNodes 분리와 동일 이유).
+type HtmlExportRoot = {
+  type: "root";
+  children: Array<HtmlElementContent | HtmlRawNode>;
+};
+
+// allowDangerousHtml: customBlockToHtml(spec §4.5, RD-003)가 반환한
+// 완성된 HTML 문자열을 raw 노드로 escape 없이 통과시키기 위해 필요하다
+// (사전 검증: 이 옵션 없이는 raw 노드 value가 그대로 escape된다). 등록된
+// 렌더러가 없으면 이 경로 자체가 실행되지 않는다.
+const stringifyProcessor = unified().use(rehypeStringify, {
+  allowDangerousHtml: true,
+});
+
+export type ExportHtmlOptions = {
+  customBlockToHtml?: Record<string, (block: CustomBlock) => string>;
+};
 
 // TextBlockProps(RD-001)를 가진 7개 블록 타입(paragraph/heading/quote/목록
 // 4종)이 공유하는 data-be-* 매핑이다. 표 셀 색상·정렬(cellNode 아래)과 같은
@@ -310,7 +329,7 @@ const listItemNode = (block: ListItemBlock): HtmlElementNode =>
         ? inlineContentToNodes(block.content)
         : [
             htmlElement("p", {}, inlineContentToNodes(block.content)),
-            ...blockNodes(block.children),
+            ...knownBlockNodes(block.children),
           ]),
     ],
   );
@@ -333,7 +352,7 @@ const detailsNode = (
   const detailsChildren: HtmlElementContent[] = [summary];
   if (children !== undefined && children.length > 0) {
     detailsChildren.push(
-      htmlElement("div", { dataBeChildren: "1" }, blockNodes(children)),
+      htmlElement("div", { dataBeChildren: "1" }, knownBlockNodes(children)),
     );
   }
   return htmlElement(
@@ -368,10 +387,33 @@ const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
 // 연속된 flat 목록 형제를 종류별 컨테이너로 묶는 경계 판정은
 // list-item-run-grouping.ts가 소유한다(export-markdown.ts와 공유, 아키텍처
 // 리뷰 6차 후보 L2) — 여기서는 <ul>/<ol> 생성(listNode)만 주입한다.
-const blockNodes = (blocks: Block[]): HtmlElementNode[] =>
-  groupListItemRuns(blocks, listNode).map((entry) =>
-    entry.kind === "block" ? blockNode(entry.block) : entry.node,
-  );
+const blockNodes = (
+  blocks: Block[],
+  customBlockToHtml?: Record<string, (block: CustomBlock) => string>,
+): Array<HtmlElementContent | HtmlRawNode> =>
+  groupListItemRuns(blocks, listNode).map((entry) => {
+    if (entry.kind !== "block") return entry.node;
+    // top-level 전용 CustomBlock(model, RD-002)이 Block[]로 캐스트된 채
+    // 여기 도달할 수 있다 — exportHtml 진입점이 등록된 타입만 통과시켰다는
+    // 계약 위에서 렌더러를 바로 호출한다(RD-003). 렌더러가 반환한 문자열은
+    // 구조화된 트리로 재파싱하지 않고 raw 노드로 그대로 삽입한다.
+    if (!isKnownBlockType(entry.block.type)) {
+      const renderer = customBlockToHtml?.[entry.block.type];
+      return {
+        type: "raw" as const,
+        value: renderer!(entry.block as unknown as CustomBlock),
+      };
+    }
+    return blockNode(entry.block);
+  });
+
+// CustomBlock은 top-level 전용 leaf라(model, RD-002) 어떤 블록의 children
+// 자리에도 나타나지 않는다 — 이 불변식 위에서 재귀 호출 자리는 raw 노드가
+// 섞이지 않은 blockNodes 결과만 받는다고 좁혀 쓴다(customBlockToHtml을
+// threading하지 않는 이유이기도 하다). 최상위 호출(exportHtml 본문)만
+// customBlockToHtml을 직접 전달하고 이 헬퍼를 거치지 않는다.
+const knownBlockNodes = (blocks: Block[]): HtmlElementContent[] =>
+  blockNodes(blocks) as HtmlElementContent[];
 
 // children이 있는 paragraph/heading은 자기 자신(children 없이, blockId
 // 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-be-block-id>
@@ -437,7 +479,11 @@ const blockNode = (block: Block): HtmlElementNode => {
     ];
     if (block.children !== undefined && block.children.length > 0) {
       quoteChildren.push(
-        htmlElement("div", { dataBeChildren: "1" }, blockNodes(block.children)),
+        htmlElement(
+          "div",
+          { dataBeChildren: "1" },
+          knownBlockNodes(block.children),
+        ),
       );
     }
     return htmlElement(
@@ -480,11 +526,18 @@ const blockNode = (block: Block): HtmlElementNode => {
   // 분기를 추가하지 않는다.
   return htmlElement("div", { dataBeBlockId: block.id }, [
     ownNode,
-    htmlElement("div", { dataBeChildren: "1" }, blockNodes(block.children)),
+    htmlElement(
+      "div",
+      { dataBeChildren: "1" },
+      knownBlockNodes(block.children),
+    ),
   ]);
 };
 
-export const exportHtml = (document: Document): Result<string, ExportError> => {
+export const exportHtml = (
+  document: Document,
+  options?: ExportHtmlOptions,
+): Result<string, ExportError> => {
   const parsed = parseDocument(document);
   if (!parsed.ok) {
     return {
@@ -495,20 +548,22 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
       },
     };
   }
-  // top-level CustomBlock(model, RD-002-DELTA-01)의 HTML 렌더러가 아직 없다
-  // (registry는 RD-002-DELTA-11) — 조용히 무시하거나 잘못된 HTML을 내는 대신
-  // 명시적으로 거절한다(core의 EDITOR_FEATURE_UNAVAILABLE과 같은 임시 정지
-  // 동작, RD-002-DELTA-05). RD-003이 나중에 진짜 CUSTOM_BLOCK_LOST
-  // strict/lossy 정책으로 교체한다.
+  // top-level CustomBlock(model, RD-002-DELTA-01) 중 customBlockToHtml에
+  // 등록되지 않은 타입만 거절한다(RD-003, spec §4.5 CUSTOM_BLOCK_LOST) —
+  // exportHtml은 strict/lossy 모드가 없어(spec 시그니처 참고) 미등록은
+  // 항상 즉시 거절로 충분하다. 등록된 타입은 아래 blockNodes가 렌더러를
+  // 호출해 처리한다.
   const unsupportedBlock = parsed.value.blocks.find(
-    (block) => !isKnownBlockType(block.type),
+    (block) =>
+      !isKnownBlockType(block.type) &&
+      options?.customBlockToHtml?.[block.type] === undefined,
   );
   if (unsupportedBlock !== undefined) {
     return {
       ok: false,
       error: {
         code: "HTML_DOCUMENT_INVALID",
-        message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — customBlocks registry is not supported yet`,
+        message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — no customBlockToHtml renderer is registered for it`,
       },
     };
   }
@@ -516,6 +571,8 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
   // 같은 이유로 임시 거절한다(RD-002-DELTA-16) — top-level 게이트(위)는
   // 최상위 block 타입만 보고 content 안쪽은 검사하지 않아, 이 가드가 없으면
   // inlineContentToNodes가 item.text/item.marks에 무가드 접근해 크래시한다.
+  // blocksInlineContentViolation은 등록된 CustomBlock(RD-003으로 위 게이트를
+  // 통과한 것)을 divider/media와 동일하게 건너뛴다(자체 방어).
   const inlineViolation = blocksInlineContentViolation(
     parsed.value.blocks as Block[],
   );
@@ -534,13 +591,23 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
     };
   }
   try {
-    const root: HtmlRoot = {
+    const root: HtmlExportRoot = {
       type: "root",
-      children: blockNodes(parsed.value.blocks as Block[]),
+      children: blockNodes(
+        parsed.value.blocks as Block[],
+        options?.customBlockToHtml,
+      ),
     };
     return {
       ok: true,
-      value: stringifyProcessor.stringify(root),
+      // "raw" 노드는 hast-util-raw의 타입 확장 없이는 hast의 공식
+      // RootContent 유니온에 없다 — 런타임은 hast-util-to-html이
+      // allowDangerousHtml 옵션만으로 이미 지원함을 스크립트로 확인했다
+      // (export-markdown.ts의 documentNode 캐스트와 동일한 계약 전제
+      // 캐스트, RD-003).
+      value: stringifyProcessor.stringify(
+        root as Parameters<typeof stringifyProcessor.stringify>[0],
+      ),
     };
   } catch (error) {
     return {

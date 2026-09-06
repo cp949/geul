@@ -35,6 +35,21 @@ export type HtmlElementContent =
 
 export type HtmlNode = HtmlElementContent | HtmlDoctypeNode;
 
+// customBlockToHtml(spec §4.5, RD-003)이 반환하는 완성된 HTML 문자열을
+// 구조화된 트리로 재파싱하지 않고 그대로 삽입하는 자리다 — hast의 표준
+// raw-node passthrough(`allowDangerousHtml: true`, export-html.ts의
+// stringifyProcessor 설정 참고)만으로 escape 없이 직렬화된다. 소비자가
+// 자기 렌더러를 등록한 신뢰 경계 안의 동작이라 별도 sanitize를 하지
+// 않는다(`toHtml`은 문자열을 그대로 반환하는 계약, React의
+// dangerouslySetInnerHTML과 동일한 신뢰 모델). `HtmlNode`/`HtmlRoot`(import·
+// clipboard 파싱 소비처가 실제로 parse한 hast 트리에 쓰는 공유 타입, "raw"를
+// 절대 만들지 않는다)에는 합류시키지 않는다 — export-html.ts가 자신이
+// 직접 구성하는 출력 트리에서만 로컬 타입으로 얹는다.
+export type HtmlRawNode = {
+  type: "raw";
+  value: string;
+};
+
 export type HtmlRoot = {
   type: "root";
   children: HtmlNode[];
