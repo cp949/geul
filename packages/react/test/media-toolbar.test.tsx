@@ -32,7 +32,14 @@ import { queryMountedEditable } from "./query-mounted-editable.js";
 // link-toolbar.test.tsx/file-panel.test.tsx와 같은 이유(@testing-library/react가
 // 전역 afterEach/teardown이 함수일 때만 자동 cleanup을 등록하는데, 저장소
 // vitest.config.ts는 globals:true가 아니라 자동 등록이 없다).
-afterEach(cleanup);
+// vi.restoreAllMocks()는 그릴링 C4 안전망 테스트가 거는 개별 엘리먼트
+// getBoundingClientRect spy(use-clamped-menu-position.test.tsx와 같은
+// 패턴)를 테스트마다 되돌린다 — vitest.config.ts에 restoreMocks 설정이
+// 없어 명시적으로 불러야 한다.
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 type SelectionMediaBlock = {
   blockId: string;
@@ -492,6 +499,58 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(document.activeElement).toBe(editable);
   });
 
+  it("이름 편집을 마치면 위치·Preview·정렬 상태가 편집 전 값 그대로 유지된다(그릴링 C4 안전망)", () => {
+    // showPreview는 filledImageBlock 기본값(true)을 그대로 쓴다 —
+    // aria-pressed={showPreview === true}라 false/null 회귀 둘 다
+    // "false"로 렌더돼 구분이 안 된다. true로 시작해야 회귀 시 "false"로
+    // 갈라져 실제로 검증력이 있다.
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        ...filledImageBlock,
+        textAlignment: "center",
+      }),
+    });
+    renderToolbar(controller);
+    const blockElement = getEditable().querySelector(
+      '[data-be-block-id="media-1"]',
+    );
+    if (blockElement === null) throw new Error("media block DOM missing");
+    const toolbar = () => screen.getByRole("toolbar");
+    const initialLeft = toolbar().style.left;
+    const initialTop = toolbar().style.top;
+
+    // finishEditing이 carryMediaInfo 대신 readBlockBounds를 다시 부르면
+    // 이 새 rect가 반영돼 left/top이 바뀐다 — 지금은 toolbarState를 그대로
+    // 캐리해야 한다(updateFromSelection만 이 값을 다시 읽는다).
+    vi.spyOn(blockElement, "getBoundingClientRect").mockReturnValue({
+      left: 400,
+      top: 300,
+      right: 420,
+      bottom: 310,
+      x: 400,
+      y: 300,
+      width: 20,
+      height: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+
+    expect(toolbar().style.left).toBe(initialLeft);
+    expect(toolbar().style.top).toBe(initialTop);
+    expect(
+      screen
+        .getByRole("button", { name: "Preview" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Align center" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
   it("Caption 클릭 시 현재 caption을 기본값으로 편집 입력에 초점이 간다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => ({
@@ -796,6 +855,58 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/photo.png",
     );
+  });
+
+  it("Replace를 취소하면 위치·Preview·정렬 상태가 교체 전 값 그대로 유지된다(그릴링 C4 안전망)", () => {
+    // showPreview는 filledImageBlock 기본값(true)을 그대로 쓴다 — 위 rename
+    // 테스트와 같은 이유(false/null 회귀가 aria-pressed="false"로 뭉개진다).
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        ...filledImageBlock,
+        textAlignment: "center",
+      }),
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+    const blockElement = getEditable().querySelector(
+      '[data-be-block-id="media-1"]',
+    );
+    if (blockElement === null) throw new Error("media block DOM missing");
+    const toolbar = () => screen.getByRole("toolbar");
+    const initialLeft = toolbar().style.left;
+    const initialTop = toolbar().style.top;
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    // cancelReplacing이 carryMediaInfo 대신 readBlockBounds를 다시 부르면
+    // 이 새 rect가 반영된다 — 지금은 replacing 진입 시 캐리해 둔 값을 그대로
+    // 되돌려야 한다(core를 다시 조회하지 않는다, cancelReplacing 주석 참고).
+    vi.spyOn(blockElement, "getBoundingClientRect").mockReturnValue({
+      left: 400,
+      top: 300,
+      right: 420,
+      bottom: 310,
+      x: 400,
+      y: 300,
+      width: 20,
+      height: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(toolbar().style.left).toBe(initialLeft);
+    expect(toolbar().style.top).toBe(initialTop);
+    expect(
+      screen
+        .getByRole("button", { name: "Preview" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Align center" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("에러 상태에서 Cancel 클릭 시 재시도 없이 view(기존 값)로 돌아간다", async () => {

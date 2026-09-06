@@ -91,6 +91,29 @@ type ToolbarState =
     } & MediaInfo &
       ToolbarPosition);
 
+// "closed" 외 4개 mode 전부가 이 9필드(MediaInfo 7개 + left/top)를 shape
+// 그대로 캐리한다 — mode 전이마다 손으로 9개를 나열하면(구조분해+리턴
+// 리터럴 이중) 필드가 늘 때마다(showPreview, textAlignment 이력) 같은 곳을
+// 반복해서 고쳐야 한다(그릴링 C4, 2026-09-06). `{ ...prev, mode: X }`로
+// 단순 spread하지 않는 이유: prev가 replacing/editingName 등이면 그 mode
+// 전용 필드(upload/heldFile/draft)가 새 상태에 런타임으로 남는다 — 이
+// 화이트리스트 추출이 그 누출을 막는다.
+const carryMediaInfo = (
+  prev: MediaInfo & ToolbarPosition,
+  patch: Partial<MediaInfo> = {},
+): MediaInfo & ToolbarPosition => ({
+  blockId: prev.blockId,
+  kind: prev.kind,
+  url: prev.url,
+  name: prev.name,
+  caption: prev.caption,
+  showPreview: prev.showPreview,
+  textAlignment: prev.textAlignment,
+  left: prev.left,
+  top: prev.top,
+  ...patch,
+});
+
 /**
  * `url`이 있는 미디어 블록을 선택하면 나타나는 편집 toolbar(spec §6.2,
  * §6.3 다운로드 부분, RD-004 DELTA-01). `url` 없는 블록은 `FilePanel`이
@@ -155,15 +178,15 @@ export const MediaToolbar = () => {
     viewBlockIdRef.current = media.blockId;
     const bounds =
       readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+    // media는 core 재조회 결과라 prev를 캐리하는 게 아니다 — carryMediaInfo의
+    // 화이트리스트가 막으려는 "잉여 mode 필드 누출"이 애초에 없어(media는
+    // 정확히 MediaInfo 7필드 shape) 단순 spread로 충분하다. url은 spread가
+    // narrow 전 타입(string | null)을 그대로 들고 오므로 위 가드로 이미
+    // 좁혀진 media.url을 다시 덮어써 string으로 맞춘다.
     setToolbarState({
       mode: "view",
-      blockId: media.blockId,
-      kind: media.kind,
+      ...media,
       url: media.url,
-      name: media.name,
-      caption: media.caption,
-      showPreview: media.showPreview,
-      textAlignment: media.textAlignment,
       left: bounds.left,
       top: bounds.top,
     });
@@ -244,15 +267,12 @@ export const MediaToolbar = () => {
         }
         const bounds =
           readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+        // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
+        // 잉여 필드가 없는 fresh MediaInfo다.
         return {
           mode: "view",
-          blockId: media.blockId,
-          kind: media.kind,
+          ...media,
           url: media.url,
-          name: media.name,
-          caption: media.caption,
-          showPreview: media.showPreview,
-          textAlignment: media.textAlignment,
           left: bounds.left,
           top: bounds.top,
         };
@@ -265,18 +285,7 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const {
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-    } = toolbarState;
-    const pending = editor.getMediaUploadState(blockId);
+    const pending = editor.getMediaUploadState(toolbarState.blockId);
     const upload: UploadSubState =
       pending === "uploading"
         ? { status: "uploading" }
@@ -285,15 +294,7 @@ export const MediaToolbar = () => {
           : { status: "error", code: pending.code, message: pending.message };
     setToolbarState({
       mode: "replacing",
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
+      ...carryMediaInfo(toolbarState),
       upload,
       heldFile: null,
     });
@@ -324,30 +325,8 @@ export const MediaToolbar = () => {
     if (toolbarState.upload.status === "uploading") {
       editor.commands.cancelMediaUpload(toolbarState.blockId);
     }
-    const {
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-    } = toolbarState;
     editingRef.current = true;
-    setToolbarState({
-      mode: "view",
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-    });
+    setToolbarState({ mode: "view", ...carryMediaInfo(toolbarState) });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
     });
@@ -401,22 +380,12 @@ export const MediaToolbar = () => {
     ) {
       return;
     }
-    const { blockId, kind, url, showPreview, textAlignment, left, top } =
-      toolbarState;
     editingRef.current = true;
     focusEditor();
-    viewBlockIdRef.current = blockId;
+    viewBlockIdRef.current = toolbarState.blockId;
     setToolbarState({
       mode: "view",
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
+      ...carryMediaInfo(toolbarState, { name, caption }),
     });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
@@ -438,58 +407,20 @@ export const MediaToolbar = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const {
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-    } = toolbarState;
     setToolbarState({
       mode: "editingName",
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-      draft: name ?? "",
+      ...carryMediaInfo(toolbarState),
+      draft: toolbarState.name ?? "",
     });
   };
   const startEditingCaption = () => {
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    const {
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-    } = toolbarState;
     setToolbarState({
       mode: "editingCaption",
-      blockId,
-      kind,
-      url,
-      name,
-      caption,
-      showPreview,
-      textAlignment,
-      left,
-      top,
-      draft: caption ?? "",
+      ...carryMediaInfo(toolbarState),
+      draft: toolbarState.caption ?? "",
     });
   };
 
