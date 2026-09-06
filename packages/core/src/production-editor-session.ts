@@ -129,6 +129,13 @@ export class ProductionEditorSession {
   // cancelMediaUpload(editor-controller.ts)가 이 맵으로 취소 대상을 찾는다.
   private readonly uploadState = new Map<string, MediaUploadState>();
   private readonly uploadControllers = new Map<string, AbortController>();
+  // spec §3.4(DOC-013), RD-005-DELTA-01 — blockSelection/uploadState와
+  // 같은 이유로 세션이 소유한다. replaceDocument()가 tiptap Editor를
+  // 완전히 새로 만들 때마다(createTiptapEditor) 이 값을 그대로 넘겨야
+  // 문서 교체가 읽기 전용 상태를 조용히 풀지 않는다 — Tiptap 자신의
+  // Editor.isEditable/options.editable에만 맡기면 재구성마다 Tiptap
+  // 기본값(true)으로 리셋된다.
+  private editableState = true;
 
   constructor(
     private readonly options: {
@@ -186,6 +193,22 @@ export class ProductionEditorSession {
 
   get isDestroyed(): boolean {
     return this.destroyed;
+  }
+
+  // spec §3.4(DOC-013) — 파괴된 세션은 항상 false를 반환한다(다른
+  // isDestroyed 가드와 동일 원칙, editor-controller.ts의
+  // isUploadEnabled() 선례). Tiptap 자신의 Editor.isEditable에
+  // 위임하지 않는다 — destroy 후 그 getter는 editorView 대신 반환하는
+  // stub proxy가 editable: true를 하드코딩해(@tiptap/core 실측)
+  // 항상 true를 돌려준다.
+  get isEditable(): boolean {
+    return !this.destroyed && this.editableState;
+  }
+
+  set isEditable(value: boolean) {
+    if (this.destroyed) return;
+    this.editableState = value;
+    this.tiptapEditor.setEditable(value, false);
   }
 
   mount(element: HTMLElement): void {
@@ -456,6 +479,7 @@ export class ProductionEditorSession {
       document,
       createId: this.createId,
       onUpdate: (editor) => this.onTiptapUpdate(editor),
+      editable: this.editableState,
       ...(this.options.onPasteRejected === undefined
         ? {}
         : { onPasteRejected: this.options.onPasteRejected }),

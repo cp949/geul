@@ -239,6 +239,15 @@ export interface EditorController {
   // 적용할 수 없으므로 false를 반환한다(다른 isDestroyed 가드와 동일 원칙).
   isUploadEnabled(): boolean;
   replaceDocument(next: unknown): Result<void, EditorError>;
+  // spec §3.4(DOC-013), RD-005-DELTA-01 — `false`는 ProseMirror
+  // `editable` prop을 통해 사용자 DOM 입력(타이핑·클릭 편집)만
+  // 차단한다. 프로그램적 `commands.*`/§3.2 API 호출은 읽기 전용
+  // 상태에서도 계속 허용한다(BlockNote의 `isEditable`과 동일 의미,
+  // RD-005.md "## 결정"). `replaceDocument()`로 문서를 교체해도 값이
+  // 유지된다. 파괴된 세션의 getter는 항상 `false`, setter는 아무
+  // 효과가 없다(다른 isDestroyed 가드와 동일 원칙).
+  get isEditable(): boolean;
+  set isEditable(value: boolean);
   readonly commands: {
     setText(blockId: string, text: string): Result<void, EditorError>;
     insertParagraphAfter(
@@ -2100,6 +2109,12 @@ export const createEditor = (
     },
     replaceDocument(next) {
       return session.replaceDocument(next);
+    },
+    get isEditable() {
+      return session.isEditable;
+    },
+    set isEditable(value) {
+      session.isEditable = value;
     },
     commands: {
       ...genericBlockCommands,

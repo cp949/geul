@@ -189,6 +189,11 @@ export const createProductionEditor = (options: {
   createId: IdFactory;
   onUpdate: (editor: Editor) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  // spec §3.4(DOC-013), RD-005-DELTA-01 — PM `editable` prop 초기값.
+  // ProductionEditorSession이 세션 레벨로 소유한 editableState를 매
+  // 재구성(replaceDocument 포함)마다 그대로 넘긴다 — 이 함수 자신은
+  // Tiptap 기본값(true)만 안다. 미지정이면 Tiptap 기본값을 쓴다.
+  editable?: boolean;
   // spec §3.3(DOC-009), RD-004-DELTA-01 — Tiptap 네이티브 onSelectionUpdate에
   // 무인자로 위임한다. 3.30.1 dispatchTransaction이 이미
   // `!prevState.selection.eq(nextState.selection)`로 실제 변경 여부를
@@ -238,6 +243,7 @@ export const createProductionEditor = (options: {
     element: null,
     content: converted.value as JSONContent,
     injectCSS: false,
+    editable: options.editable ?? true,
     extensions: [
       StarterKit.configure({
         blockquote: false,
