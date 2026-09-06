@@ -10,7 +10,6 @@ import {
   type HeadingBlock,
   type ImageBlock,
   type InlineContent,
-  type InlineContentItem,
   isCanonicalTextMarks,
   isKnownBlockType,
   isKnownTextMarkType,
@@ -89,15 +88,25 @@ export type InlineContentViolation = {
 // (top-level CustomBlock 거절, DELTA-04/12와 같은 기준).
 export const inlineContentViolation = (
   content: InlineContent,
+  options?: { customInlineContentTypes?: ReadonlySet<string> },
 ): InlineContentViolation | null => {
+  const customInlineContentTypes =
+    options?.customInlineContentTypes ?? new Set<string>();
   let previousMarks: string | undefined;
 
   for (const item of content) {
     if (!isTextRunItem(item)) {
-      return {
-        code: "EDITOR_FEATURE_UNAVAILABLE",
-        reason: `contains an unregistered custom inline type "${item.customType}"`,
-      };
+      if (!customInlineContentTypes.has(item.customType)) {
+        return {
+          code: "EDITOR_FEATURE_UNAVAILABLE",
+          reason: `contains an unregistered custom inline type "${item.customType}"`,
+        };
+      }
+      // 등록된 커스텀 inline 원소는 atom 노드로 표현 가능하다(RD-002-DELTA-18) —
+      // "인접 동일 마크" 판정은 연속된 텍스트 런 사이에만 적용된다. 이
+      // 원소가 그 인접성을 끊으므로 previousMarks를 리셋한다.
+      previousMarks = undefined;
+      continue;
     }
     if (item.text.length === 0) {
       return { code: "DOCUMENT_INVALID", reason: "contains an empty text run" };
@@ -158,6 +167,7 @@ export const inlineContentViolation = (
 // 조립이 던지는 예외를 막는 사전 방어일 뿐, 최종 권위가 아니다).
 const validateEditableContent = (
   blocks: readonly Block[],
+  options?: { customInlineContentTypes?: ReadonlySet<string> },
 ): Result<void, EditorError> => {
   for (const block of blocks) {
     // divider는 content·children이 없어 검사 대상이 없다(DividerBlock 리프).
@@ -181,7 +191,7 @@ const validateEditableContent = (
     if (block.type === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
-          const violation = inlineContentViolation(cell.content);
+          const violation = inlineContentViolation(cell.content, options);
           if (violation !== null) {
             return {
               ok: false,
@@ -196,7 +206,7 @@ const validateEditableContent = (
       continue;
     }
 
-    const violation = inlineContentViolation(block.content);
+    const violation = inlineContentViolation(block.content, options);
     if (violation !== null) {
       return {
         ok: false,
@@ -208,7 +218,7 @@ const validateEditableContent = (
     }
 
     if (block.children !== undefined && block.children.length > 0) {
-      const childResult = validateEditableContent(block.children);
+      const childResult = validateEditableContent(block.children, options);
       if (!childResult.ok) return childResult;
     }
   }
@@ -242,13 +252,24 @@ export const inlineContentToTiptap = (
 ): TiptapJsonNode[] =>
   content.map((item) => {
     // 계약: validateEditableContent(inlineContentViolation)가 이 시점
-    // 이전에 이미 커스텀 inline 원소·CustomTextMark를
-    // EDITOR_FEATURE_UNAVAILABLE로 거절했다는 전제 위에서 텍스트 런·
-    // 알려진 마크로 캐스트한다(DELTA-14 "설계 결정" 3). insertBlocks 등
-    // 저수준 API가 이 계약을 우회하는 위험은 새로 생기지 않는다 — 이
-    // 함수가 PM 조립 예외를 막는 사전 방어일 뿐 최종 권위가 아니라는
-    // 기존 위 주석이 이미 인정하는 범주다.
-    const run = item as Extract<InlineContentItem, { text: string }>;
+    // 이전에 이미 미등록 커스텀 inline 원소·CustomTextMark를
+    // EDITOR_FEATURE_UNAVAILABLE로 거절했다는 전제 위에서 동작한다
+    // (DELTA-14 "설계 결정" 3). insertBlocks 등 저수준 API가 이 계약을
+    // 우회하는 위험은 새로 생기지 않는다 — 이 함수가 PM 조립 예외를
+    // 막는 사전 방어일 뿐 최종 권위가 아니라는 기존 위 주석이 이미
+    // 인정하는 범주다(RD-002-DELTA-14.md "남은 위험").
+    //
+    // 등록된 커스텀 inline 원소는 여기서 등록 여부를 다시 확인하지
+    // 않는다(RD-002-DELTA-18) — customBlockToTiptapJson이 top-level
+    // CustomBlock의 등록 여부를 modelToTiptap 앞단에만 맡기는 것과 같은
+    // 설계(그 함수도 등록 여부를 재확인하지 않는다).
+    if (!isTextRunItem(item)) {
+      return {
+        type: item.customType,
+        attrs: { props: item.props ?? null },
+      };
+    }
+    const run = item;
     return {
       type: "text",
       text: run.text,
@@ -483,6 +504,7 @@ export const modelToTiptap = (
   document: Document,
   options?: {
     customBlockTypes?: ReadonlySet<string>;
+    customInlineContentTypes?: ReadonlySet<string>;
     enabledBlockTypes?: EnabledBlockTypes;
   },
 ): Result<TiptapJsonNode, EditorError> => {
@@ -526,7 +548,7 @@ export const modelToTiptap = (
     isKnownBlockType(block.type),
   ) as Block[];
 
-  const representable = validateEditableContent(knownBlocks);
+  const representable = validateEditableContent(knownBlocks, options);
   if (!representable.ok) return representable;
 
   return {

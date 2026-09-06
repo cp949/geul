@@ -49,6 +49,7 @@ export type {
   BlockTypeSource,
   CreateEditorOptions,
   CustomBlockDefinition,
+  CustomInlineContentDefinition,
   DocumentChangeEvent,
   EditorController,
   EnabledBlockTypes,

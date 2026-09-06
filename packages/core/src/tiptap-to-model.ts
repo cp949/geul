@@ -7,6 +7,7 @@ import {
   type Document,
   type IdFactory,
   type InlineContent,
+  type InlineContentItem,
   parseDocument,
   type Result,
   type TableBlock,
@@ -47,13 +48,40 @@ const markFromTiptap = (
   return decoded.ok ? decoded : invalid(decoded.error);
 };
 
+// customInlineContentTypes(RD-002-DELTA-18) — registry(CreateEditorOptions.
+// customInlineContent)에 등록된 inline atom 노드는 텍스트 런과 별도
+// 분기로 디코드한다(customBlockFromTiptapJson과 같은 round-trip:
+// customType/props attrs를 그대로 되돌린다). 등록되지 않은 노드 타입은
+// 기존과 동일하게 거절한다(미지 노드 조용히 무시 금지, 기존 계약 유지).
 const inlineContentFromTiptap = (
   nodes: TiptapJsonNode[] | undefined,
+  customInlineContentTypes: ReadonlySet<string>,
 ): Result<InlineContent, EditorError> => {
   const content: InlineContent = [];
 
   for (const node of nodes ?? []) {
-    if (node.type !== "text" || typeof node.text !== "string") {
+    if (node.type !== "text") {
+      if (
+        typeof node.type === "string" &&
+        customInlineContentTypes.has(node.type)
+      ) {
+        const props = node.attrs?.props;
+        content.push({
+          type: "custom",
+          customType: node.type,
+          ...(props !== null && props !== undefined
+            ? {
+                props: props as NonNullable<
+                  Extract<InlineContentItem, { type: "custom" }>["props"]
+                >,
+              }
+            : {}),
+        });
+        continue;
+      }
+      return invalid(`Unsupported inline node: ${String(node.type)}`);
+    }
+    if (typeof node.text !== "string") {
       return invalid(`Unsupported inline node: ${String(node.type)}`);
     }
 
@@ -81,6 +109,7 @@ const inlineContentFromTiptap = (
 const tableBlockFromTiptapJson = (
   node: TiptapJsonNode,
   id: string,
+  customInlineContentTypes: ReadonlySet<string>,
 ): Result<TableBlock, EditorError> => {
   const attrs = node.attrs ?? {};
 
@@ -88,7 +117,10 @@ const tableBlockFromTiptapJson = (
   for (const rowNode of node.content ?? []) {
     const cells: TableBlock["rows"][number]["cells"] = [];
     for (const cellNode of rowNode.content ?? []) {
-      const content = inlineContentFromTiptap(cellNode.content);
+      const content = inlineContentFromTiptap(
+        cellNode.content,
+        customInlineContentTypes,
+      );
       if (!content.ok) return content;
 
       const cellAttrs = cellNode.attrs ?? {};
@@ -223,6 +255,7 @@ const mediaBlockFromTiptapJson = (node: TiptapJsonNode, id: string): Block => {
 const blockContainerToModel = (
   node: TiptapJsonNode,
   createId: IdFactory,
+  customInlineContentTypes: ReadonlySet<string>,
 ): Result<Block, EditorError> => {
   const id = resolveBlockId(node, createId);
 
@@ -238,7 +271,10 @@ const blockContainerToModel = (
     return codeBlockFromTiptap(contentNode, id);
   }
 
-  const inlineContent = inlineContentFromTiptap(contentNode.content);
+  const inlineContent = inlineContentFromTiptap(
+    contentNode.content,
+    customInlineContentTypes,
+  );
   if (!inlineContent.ok) return inlineContent;
 
   const groupNode = node.content?.[1];
@@ -258,7 +294,12 @@ const blockContainerToModel = (
     }
     const decodedChildren: Block[] = [];
     for (const childNode of groupNode.content ?? []) {
-      const decoded = decodeBlock(childNode, createId, NO_CUSTOM_BLOCK_TYPES);
+      const decoded = decodeBlock(
+        childNode,
+        createId,
+        NO_CUSTOM_BLOCK_TYPES,
+        customInlineContentTypes,
+      );
       if (!decoded.ok) return decoded;
       // NO_CUSTOM_BLOCK_TYPES를 넘겼으므로 decoded.value는 CustomBlock일
       // 수 없다(top-level 전용 불변식, 위 주석) — decodeBlock의 반환
@@ -454,9 +495,14 @@ const decodeBlock = (
   node: TiptapJsonNode,
   createId: IdFactory,
   customBlockTypes: ReadonlySet<string>,
+  customInlineContentTypes: ReadonlySet<string>,
 ): Result<Block | CustomBlock, EditorError> => {
   if (node.type === "table") {
-    return tableBlockFromTiptapJson(node, resolveBlockId(node, createId));
+    return tableBlockFromTiptapJson(
+      node,
+      resolveBlockId(node, createId),
+      customInlineContentTypes,
+    );
   }
   if (node.type === "divider") {
     return {
@@ -476,7 +522,7 @@ const decodeBlock = (
     };
   }
   if (node.type === "blockContainer") {
-    return blockContainerToModel(node, createId);
+    return blockContainerToModel(node, createId, customInlineContentTypes);
   }
   if (typeof node.type === "string" && customBlockTypes.has(node.type)) {
     return {
@@ -491,14 +537,24 @@ export const tiptapToModel = (
   json: TiptapJsonNode,
   revision: number,
   createId: IdFactory,
-  options?: { customBlockTypes?: ReadonlySet<string> },
+  options?: {
+    customBlockTypes?: ReadonlySet<string>;
+    customInlineContentTypes?: ReadonlySet<string>;
+  },
 ): Result<Document, EditorError> => {
   if (json.type !== "doc") return invalid("Tiptap content must be a document");
 
   const customBlockTypes = options?.customBlockTypes ?? new Set<string>();
+  const customInlineContentTypes =
+    options?.customInlineContentTypes ?? new Set<string>();
   const blocks: Document["blocks"] = [];
   for (const node of json.content ?? []) {
-    const decoded = decodeBlock(node, createId, customBlockTypes);
+    const decoded = decodeBlock(
+      node,
+      createId,
+      customBlockTypes,
+      customInlineContentTypes,
+    );
     if (!decoded.ok) return decoded;
     blocks.push(decoded.value);
   }

@@ -14,10 +14,15 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
-// EditorController/CustomBlockDefinition을 import type으로만 참조한다
-// (RD-002-DELTA-11 "결정" 4 — production-editor-assembly.ts와 동일 근거,
-// 값 import가 아니라 컴파일 시 지워져 런타임 순환 의존이 생기지 않는다).
-import type { CustomBlockDefinition, EditorController } from "./editor-controller.js";
+// EditorController/CustomBlockDefinition/CustomInlineContentDefinition을
+// import type으로만 참조한다(RD-002-DELTA-11 "결정" 4 —
+// production-editor-assembly.ts와 동일 근거, 값 import가 아니라 컴파일
+// 시 지워져 런타임 순환 의존이 생기지 않는다).
+import type {
+  CustomBlockDefinition,
+  CustomInlineContentDefinition,
+  EditorController,
+} from "./editor-controller.js";
 import type { EditorError } from "./errors.js";
 import { isMediaBlockKind } from "./media-block-kind.js";
 import type {
@@ -56,6 +61,7 @@ const cloneDocument = (document: BlockDocument): BlockDocument =>
 const parseSupportedDocument = (
   input: unknown,
   customBlockTypes: ReadonlySet<string>,
+  customInlineContentTypes: ReadonlySet<string>,
   enabledBlockTypes: EnabledBlockTypes | undefined,
 ): Result<BlockDocument, EditorError> => {
   const parsed = parseDocument(input);
@@ -67,6 +73,7 @@ const parseSupportedDocument = (
   }
   const converted = modelToTiptap(parsed.value, {
     customBlockTypes,
+    customInlineContentTypes,
     ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
   });
   return converted.ok ? { ok: true, value: parsed.value } : converted;
@@ -159,6 +166,13 @@ export class ProductionEditorSession {
     return new Set(Object.keys(this.options.customBlocks ?? {}));
   }
 
+  // registry(RD-002-DELTA-18)에 등록된 커스텀 inline 원소 type 이름
+  // 집합 — customBlockTypes와 동일 패턴(매 접근마다 계산, 캐싱 이점
+  // 없음).
+  private get customInlineContentTypes(): ReadonlySet<string> {
+    return new Set(Object.keys(this.options.customInlineContent ?? {}));
+  }
+
   constructor(
     private readonly options: {
       initialDocument: BlockDocument;
@@ -187,6 +201,9 @@ export class ProductionEditorSession {
       // spec §4.4, RD-002-DELTA-11 — createTiptapEditor가 등록된 타입마다
       // PM atom 노드를 조건부로 추가한다(production-editor-assembly.ts).
       customBlocks?: Record<string, CustomBlockDefinition>;
+      // spec §4.4(EXT-002), RD-002-DELTA-18 — customBlocks와 동일 시점에
+      // PM inline atom 노드를 조건부로 추가한다.
+      customInlineContent?: Record<string, CustomInlineContentDefinition>;
       // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny
       // 목록. 세션 생애주기 동안 불변이라(재설정 API 없음) 매번 이
       // 옵션에서 다시 읽는다(customBlocks와 같은 패턴).
@@ -203,6 +220,7 @@ export class ProductionEditorSession {
     const parsed = parseSupportedDocument(
       options.initialDocument,
       new Set(Object.keys(options.customBlocks ?? {})),
+      new Set(Object.keys(options.customInlineContent ?? {})),
       options.enabledBlockTypes,
     );
     if (!parsed.ok) {
@@ -474,6 +492,7 @@ export class ProductionEditorSession {
     const parsed = parseSupportedDocument(
       next,
       this.customBlockTypes,
+      this.customInlineContentTypes,
       this.options.enabledBlockTypes,
     );
     if (!parsed.ok) return parsed;
@@ -530,6 +549,12 @@ export class ProductionEditorSession {
         : {
             customBlocks: this.options.customBlocks,
             customBlockEditor: this.controllerEditor,
+          }),
+      ...(this.options.customInlineContent === undefined
+        ? {}
+        : {
+            customInlineContent: this.options.customInlineContent,
+            customInlineContentEditor: this.controllerEditor,
           }),
       ...(this.options.enabledBlockTypes === undefined
         ? {}
@@ -625,7 +650,10 @@ export class ProductionEditorSession {
       doc.toJSON() as TiptapJsonNode,
       this.sessionRevision,
       previewCreateId,
-      { customBlockTypes: this.customBlockTypes },
+      {
+        customBlockTypes: this.customBlockTypes,
+        customInlineContentTypes: this.customInlineContentTypes,
+      },
     );
     if (!converted.ok) {
       throw new TypeError(
@@ -642,7 +670,10 @@ export class ProductionEditorSession {
       editor.getJSON() as TiptapJsonNode,
       this.sessionRevision,
       this.createId,
-      { customBlockTypes: this.customBlockTypes },
+      {
+        customBlockTypes: this.customBlockTypes,
+        customInlineContentTypes: this.customInlineContentTypes,
+      },
     );
     if (!converted.ok) {
       throw new TypeError(

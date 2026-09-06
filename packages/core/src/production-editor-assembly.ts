@@ -23,13 +23,16 @@ import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
 import { createCustomBlockExtension } from "./custom-block-extension.js";
+import { createCustomInlineContentExtension } from "./custom-inline-content-extension.js";
 import { DividerExtension } from "./divider-extension.js";
-// EditorController/CustomBlockDefinition을 import type으로만 참조한다
-// (RD-002-DELTA-11 "결정" 4 — 100개 이상 메서드를 가진 공개 인터페이스라
-// production-editor-session.ts 관례(구조적 복제)를 따르지 않는다. 값 import가
-// 아니라 컴파일 시 완전히 지워져 런타임 순환 의존이 생기지 않는다).
+// EditorController/CustomBlockDefinition/CustomInlineContentDefinition을
+// import type으로만 참조한다(RD-002-DELTA-11 "결정" 4 — 100개 이상
+// 메서드를 가진 공개 인터페이스라 production-editor-session.ts 관례(구조적
+// 복제)를 따르지 않는다. 값 import가 아니라 컴파일 시 완전히 지워져
+// 런타임 순환 의존이 생기지 않는다).
 import type {
   CustomBlockDefinition,
+  CustomInlineContentDefinition,
   EditorController,
 } from "./editor-controller.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
@@ -236,6 +239,12 @@ export const createProductionEditor = (options: {
   // ProductionEditorSession이 같은 options에서 파생한다).
   customBlocks?: Record<string, CustomBlockDefinition>;
   customBlockEditor?: EditorController;
+  // spec §4.4(EXT-002), RD-002-DELTA-18 — customBlocks와 동일 시점·동일
+  // 지연 바인딩 Proxy 구조로 PM inline atom 노드를 조건부로 추가한다.
+  // customInlineContent가 있으면 customInlineContentEditor도 항상 함께
+  // 온다(customBlocks/customBlockEditor와 동일 근거).
+  customInlineContent?: Record<string, CustomInlineContentDefinition>;
+  customInlineContentEditor?: EditorController;
   // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny 목록.
   // 미지정이면 isBlockTypeEnabled가 항상 true라 아래 조건부 스프레드가
   // 전부 무조건 포함으로 접혀 기존 동작과 100% 같다.
@@ -282,6 +291,9 @@ export const createProductionEditor = (options: {
 }): Editor => {
   const converted = modelToTiptap(options.document, {
     customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
+    customInlineContentTypes: new Set(
+      Object.keys(options.customInlineContent ?? {}),
+    ),
     ...(options.enabledBlockTypes === undefined
       ? {}
       : { enabledBlockTypes: options.enabledBlockTypes }),
@@ -408,6 +420,18 @@ export const createProductionEditor = (options: {
           definition,
           options.customBlockEditor as EditorController,
         ),
+      ),
+      // registry(RD-002-DELTA-18, CreateEditorOptions.customInlineContent)에
+      // 등록된 타입마다 PM inline atom 노드 하나씩(customInlineContentEditor는
+      // customInlineContent가 있을 때 항상 함께 온다 — customBlocks와 동일
+      // 근거).
+      ...Object.entries(options.customInlineContent ?? {}).map(
+        ([type, definition]) =>
+          createCustomInlineContentExtension(
+            type,
+            definition,
+            options.customInlineContentEditor as EditorController,
+          ),
       ),
       TableKeyboardNavigationExtension.configure({
         createId: options.createId,

@@ -6,6 +6,7 @@ import {
   type DocumentBlock,
   type HeadingBlock,
   type IdFactory,
+  type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
   isInlineContentBlockType,
@@ -49,6 +50,10 @@ import {
   type InsertCustomBlockError,
   insertCustomBlock as insertCustomBlockCommand,
 } from "./custom-block-commands.js";
+import {
+  type InsertCustomInlineContentError,
+  insertCustomInlineContent as insertCustomInlineContentCommand,
+} from "./custom-inline-content-commands.js";
 import {
   type DividerCommandError,
   insertDivider as insertDividerCommand,
@@ -428,6 +433,14 @@ export interface EditorController {
       props?: Record<string, string | number | boolean | null>,
       options?: { clearAfterBlockText?: boolean },
     ): Result<{ blockId: string }, EditorError>;
+    // spec §4.4, RD-002-DELTA-18 — 현재 selection(caret)에 삽입한다(inline
+    // 원소는 model에 id가 없어 afterBlockId 같은 위치 식별자를 받지
+    // 않는다). 등록되지 않은 type은 CUSTOM_INLINE_CONTENT_TYPE_NOT_REGISTERED로
+    // 거절한다(insertCustomBlock과 동일 근거).
+    insertCustomInlineContent(
+      type: string,
+      props?: Record<string, string | number | boolean | null>,
+    ): Result<void, EditorError>;
     insertTableRow(
       tableBlockId: string,
       atIndex: number,
@@ -696,6 +709,23 @@ export type CustomBlockDefinition = {
   toMarkdown?: (block: CustomBlock) => string;
 };
 
+// spec §4.4(EXT-002), RD-002-DELTA-18 — CustomBlockDefinition과 같은
+// registry 계약이지만 render()는 {element}로 감싸지 않고 HTMLElement를
+// 직접 반환한다(spec §4.4 원문 그대로) — inline 원소는 contentRef 예약
+// 필드에 대응하는 개념이 없다(atom, 항상 leaf). toMarkdown이 없다 —
+// InlineContentItem의 커스텀 변형은 spec §4.5가 markdown 손실 정책을
+// block 단위(CUSTOM_BLOCK_LOST)로만 정의해 두어 별도 markdown 렌더러가
+// 아직 없다(io 연결 자체가 이번 DELTA 범위 밖, RD-002-DELTA-18.md "범위 밖").
+export type CustomInlineContentDefinition = {
+  render: (context: {
+    item: Extract<InlineContentItem, { type: "custom" }>;
+    editor: EditorController;
+  }) => HTMLElement;
+  // 미등록 시 io HTML 손실 정책(spec §4.5, 범위 밖)이 적용된다 — 이번
+  // DELTA는 이 필드를 저장만 하고 io로 연결하지 않는다.
+  toHtml?: (item: Extract<InlineContentItem, { type: "custom" }>) => string;
+};
+
 export type CreateEditorOptions = {
   initialDocument: BlockDocument;
   /**
@@ -748,6 +778,11 @@ export type CreateEditorOptions = {
   // PM 스키마는 여전히 에디터 생성 시점에 정적으로 결정된다 — 마운트
   // 이후 동적 스키마 변경은 시도하지 않는다(spec §4.4 명시).
   customBlocks?: Record<string, CustomBlockDefinition>;
+  // spec §4.4(EXT-002), RD-002-DELTA-18 — 등록된 타입마다 PM inline atom
+  // 노드를 조건부로 추가한다(customBlocks와 동일 시점·동일 정적 스키마
+  // 제약). 등록되지 않은 커스텀 inline 타입은 여전히
+  // EDITOR_FEATURE_UNAVAILABLE로 거절된다(model-to-tiptap.ts).
+  customInlineContent?: Record<string, CustomInlineContentDefinition>;
   // spec §4.4(EXT-004), RD-002-DELTA-12 — 기존 14종 대상 allow/deny
   // 목록. 비활성화한 타입은 PM 스키마에 노드로 등록되지 않고,
   // initialDocument/replaceDocument/붙여넣기 어느 경로로 만나도
@@ -1472,6 +1507,45 @@ export const createEditor = (
       return commandNotApplicable("insertCustomBlock");
     }
     return { ok: true, value: { blockId: captured.blockId } };
+  };
+
+  // insertCustomBlock 래퍼와 같은 캡처 구조이지만 afterBlockId가 없다 —
+  // 현재 selection(caret)에 삽입한다(RD-002-DELTA-18.md "결정" 5, inline
+  // 원소는 model에 id가 없어 block처럼 위치를 식별할 identity가 없다).
+  const insertCustomInlineContent = (
+    type: string,
+    props?: Record<string, string | number | boolean | null>,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) {
+      return commandNotApplicable("insertCustomInlineContent");
+    }
+    const captured: {
+      code: InsertCustomInlineContentError["code"] | null;
+    } = { code: null };
+
+    const result = session.runDocumentCommand(
+      "insertCustomInlineContent",
+      "local",
+      () => {
+        const outcome = insertCustomInlineContentCommand(
+          session.editor,
+          type,
+          props,
+        );
+        if (!outcome.ok) {
+          captured.code = outcome.error.code;
+          return false;
+        }
+        return true;
+      },
+    );
+
+    if (captured.code !== null) {
+      return captured.code === "CUSTOM_INLINE_CONTENT_TYPE_NOT_REGISTERED"
+        ? { ok: false, error: { code: captured.code, type } }
+        : { ok: false, error: { code: "TRANSACTION_REJECTED" } };
+    }
+    return result;
   };
 
   // insertBlocks/updateBlock/replaceBlocks(spec §3.2, DOC-005)가 공유하는
@@ -2464,6 +2538,7 @@ export const createEditor = (
       insertDivider,
       insertMediaBlock,
       insertCustomBlock,
+      insertCustomInlineContent,
       insertTableRow: (tableBlockId, atIndex) =>
         runTableCommand("insertTableRow", () =>
           insertTableRowCommand(
