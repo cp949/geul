@@ -3,6 +3,7 @@ import {
   type CodeBlock,
   type Document,
   type HeadingBlock,
+  isKnownBlockType,
   isListItemBlockType,
   isSafeCodeBlockLanguageClassToken,
   type ListItemBlock,
@@ -381,7 +382,7 @@ const blockNodes = (blocks: Block[]): HtmlElementNode[] =>
 // quote는 이 wrapper를 쓰지 않는다 — blockquote가 flow content를 담을 수
 // 있어 자기 콘텐츠 <p>와 children 컨테이너를 blockquote 안에 직접 둔다
 // (아래 quote 분기).
-const blockNode = (block: Document["blocks"][number]): HtmlElementNode => {
+const blockNode = (block: Block): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "codeBlock") return codeBlockNode(block);
   if (isListItemBlockType(block.type)) {
@@ -486,10 +487,27 @@ export const exportHtml = (document: Document): Result<string, ExportError> => {
       },
     };
   }
+  // top-level CustomBlock(model, RD-002-DELTA-01)의 HTML 렌더러가 아직 없다
+  // (registry는 RD-002-DELTA-11) — 조용히 무시하거나 잘못된 HTML을 내는 대신
+  // 명시적으로 거절한다(core의 EDITOR_FEATURE_UNAVAILABLE과 같은 임시 정지
+  // 동작, RD-002-DELTA-05). RD-003이 나중에 진짜 CUSTOM_BLOCK_LOST
+  // strict/lossy 정책으로 교체한다.
+  const unsupportedBlock = parsed.value.blocks.find(
+    (block) => !isKnownBlockType(block.type),
+  );
+  if (unsupportedBlock !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "HTML_DOCUMENT_INVALID",
+        message: `Block ${unsupportedBlock.id} has unregistered custom type "${unsupportedBlock.type}" — customBlocks registry is not supported yet`,
+      },
+    };
+  }
   try {
     const root: HtmlRoot = {
       type: "root",
-      children: blockNodes(parsed.value.blocks),
+      children: blockNodes(parsed.value.blocks as Block[]),
     };
     return {
       ok: true,
