@@ -188,8 +188,9 @@ const runGate = async () => {
 };
 
 // vitest 등이 이 모듈을 import할 때 게이트가 돌지 않도록, 직접 실행일 때만
-// 실행한다. engines가 Node 22를 허용하므로 import.meta.main(Node 24+)을
-// 쓰지 않는다.
+// 실행한다. engines.node가 >=24.18.0로 올라 import.meta.main도 쓸 수 있지만
+// (cp949/geul#157), 기존 realpathSync 비교 방식을 그대로 둔다 — 동작이
+// 동등해 바꿀 이유가 없다.
 const isDirectRun =
   process.argv[1] !== undefined &&
   realpathSync(process.argv[1]) ===
