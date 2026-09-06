@@ -24,7 +24,13 @@ import {
   validateTableGrid,
   validateTableSize,
 } from "./table-grid-validation.js";
-import type { Block, Document, InlineContent, TableBlock } from "./types.js";
+import type {
+  Block,
+  CustomBlock,
+  Document,
+  InlineContent,
+  TableBlock,
+} from "./types.js";
 
 type DocumentPath = Array<string | number>;
 
@@ -399,6 +405,90 @@ const documentSchema = z.object({
   revision: z.number(),
   blocks: z.array(blockSchema),
 });
+
+// CustomBlock(EXT-001)의 envelope(구조) 검증이다. 타입별 props 의미는
+// 소비자 registry를 아는 react 계층의 책임이다 — model은 구조만 안다(spec
+// §4.2, ADR-0002 순수성 유지, 그릴링 Q3 2026-09-06 채택). .strict() —
+// 다른 block 스키마와 같은 이유로 미선언 키를 파싱 실패로 승격시킨다.
+const jsonPrimitivePropSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
+const customBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.string(),
+    content: z.union([z.literal("none"), z.literal("inline")]),
+    props: z.record(z.string(), jsonPrimitivePropSchema).optional(),
+  })
+  .strict();
+
+// 알려진 14종 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을
+// 이 목록과 대조해 blockSchema/customBlockSchema로 라우팅한다(spec §4.3).
+// Block 유니온에 15번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
+// blockSchema 배열 자체도 수동 갱신 대상이라 같은 지점에 한 줄이 늘 뿐이다.
+// 이 파일 밖에는 노출하지 않는다 — 현재 소비처가 이 라우팅 하나뿐이다.
+const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
+  "paragraph",
+  "heading",
+  "table",
+  "quote",
+  "bulletListItem",
+  "numberedListItem",
+  "checkListItem",
+  "toggleListItem",
+  "divider",
+  "codeBlock",
+  "file",
+  "image",
+  "video",
+  "audio",
+]);
+
+// discriminatedUnion 옵션 전원이 리터럴 판별자를 가져야 하는 zod 제약 때문에
+// CustomBlock(임의 문자열 type)을 blockSchema 옵션에 직접 섞을 수 없다(spec
+// §4.3, zod 4.4.3 2026-09-06 실측 — catch-all을 섞으면 런타임 에러, z.union
+// 우회는 에러 메시지 품질 저하). 파싱 전 원시 type 값을 먼저 보고 알려진
+// 타입이면 blockSchema로, 아니면 customBlockSchema로 위임한다. 실패 시
+// 원본 스키마의 issue를 그대로 전달해(ctx.addIssue) 라우팅 도입 전과 동일한
+// path·message 품질을 보존한다(완료 조건 6).
+const blockOrCustomBlockSchema = z
+  .custom<unknown>()
+  .transform((raw, ctx): Block | CustomBlock => {
+    const type =
+      typeof raw === "object" && raw !== null && "type" in raw
+        ? (raw as { type?: unknown }).type
+        : undefined;
+
+    // ctx.addIssue의 매개변수 타입(exactOptionalPropertyTypes 아래 zod
+    // 내부 $ZodSuperRefineIssue)이 safeParse가 실제로 반환하는 $ZodIssue와
+    // 구조적으로 정확히 맞지 않는다(2026-09-06 tsc 실측) — 완료된 파싱의
+    // issue를 그대로 전달하는 spec §4.3 패턴 자체는 zod 4.4.3에서 런타임
+    // 검증됐으므로 이 캐스트로 형만 맞춘다.
+    const forwardIssues = (issues: readonly unknown[]): void => {
+      for (const issue of issues)
+        ctx.addIssue(issue as unknown as Parameters<typeof ctx.addIssue>[0]);
+    };
+
+    if (typeof type === "string" && KNOWN_BLOCK_TYPES.has(type)) {
+      const result = blockSchema.safeParse(raw);
+      if (!result.success) {
+        forwardIssues(result.error.issues);
+        return z.NEVER;
+      }
+      return result.data as Block;
+    }
+
+    const result = customBlockSchema.safeParse(raw);
+    if (!result.success) {
+      forwardIssues(result.error.issues);
+      return z.NEVER;
+    }
+    return result.data as CustomBlock;
+  });
 
 const invalid = (
   path: DocumentPath,
@@ -1015,4 +1105,29 @@ export const parseDocument = (
   canonicalizeCodeBlockLanguages(document.blocks);
 
   return { ok: true, value: document };
+};
+
+// CustomBlock(EXT-001)의 단일 진입점이다. Document/parseDocument는 아직 이
+// 라우팅을 쓰지 않는다 — Document.blocks를 넓히면 core/react/io의 기존
+// Block[] 소비처가 즉시 깨진다(2026-09-06 grep 72곳). core에 customBlocks
+// registry를 실제로 배선하는 RD-002가 그 소비처들을 함께 넓힌다
+// (RD-001-DELTA-01 "설계 결정", _works/roadmap/RD-002.md). id 유일성 등
+// 문서 전체 검증(validateBlocksAt)도 아직 배선하지 않는다 — 이 함수는
+// envelope(구조) 검증만 한다.
+export const parseBlockOrCustomBlock = (
+  input: unknown,
+): Result<Block | CustomBlock, DocumentError> => {
+  const parsed = blockOrCustomBlockSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: documentPath(issue?.path ?? []),
+        message: issue?.message ?? "Invalid block",
+      },
+    };
+  }
+  return { ok: true, value: parsed.data };
 };

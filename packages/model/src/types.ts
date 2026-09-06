@@ -160,6 +160,25 @@ export type Block =
   | ImageBlock
   | VideoBlock
   | AudioBlock;
+
+// 닫힌 14종 Block 유니온 옆에 두는 열린 catch-all 변형이다(EXT-001, spec
+// §4.1~§4.2). leaf 전용이라 children이 없다 — 커스텀 block의 자식 중첩은
+// 이번 범위 밖이다(Issue #156 제외 범위, 2026-09-06 확정). 의도적으로
+// `Block` 유니온 멤버로 넣지 않는다 — 넣으면 `Block["type"]`이 임의
+// string으로 넓어져 기존 exhaustive switch를 전부 깨뜨린다. `props` 값은
+// JSON 원시값만 허용한다(중첩 객체·배열 불가, 이번 범위의 단순화). 타입별
+// `props` 의미는 검증하지 않는다 — model은 소비자 registry를 모른 채
+// envelope(구조)만 안다(ADR-0002 순수성 유지, 그릴링 Q3 2026-09-06 채택).
+// `Document`/`parseDocument`는 아직 이 타입을 받지 않는다 — `core`가
+// registry를 실제로 배선할 때 함께 넓힌다(RD-001-DELTA-01 "설계 결정",
+// _works/roadmap/RD-002.md).
+export type CustomBlock = {
+  id: string;
+  type: string;
+  content: "none" | "inline";
+  props?: Record<string, string | number | boolean | null>;
+};
+
 // bulletListItem·numberedListItem·checkListItem만 뽑은 부분 유니온이다. io
 // export가 목록 형제를 묶어 <ul>/<ol> 또는 mdast list로 직렬화할 때 쓴다 —
 // 세 패키지(io/html, io/markdown)가 각자 선언하던 동명 타입을 model로
