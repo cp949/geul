@@ -305,8 +305,7 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   // 커스텀 inline 원소·mark를 담지 않는다) — 계약 전제 캐스트(DELTA-14
   // inlineContentToTiptap과 동일 패턴).
   const source = block.content[0] as
-    | Extract<InlineContentItem, { text: string }>
-    | undefined;
+    Extract<InlineContentItem, { text: string }> | undefined;
   return htmlElement("pre", { dataBeBlockId: block.id }, [
     htmlElement("code", codeProperties, [
       { type: "text", value: source?.text ?? "" },

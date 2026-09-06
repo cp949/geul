@@ -94,7 +94,9 @@ export type InlineContentViolation = {
 // RD-002-DELTA-19.md "결정" 2), 배열 위치가 달라도 내용(type+props)이
 // 같으면 동일해야 한다. 정렬하지 않으면 순서만 다른 동일 커스텀 마크
 // 조합이 다른 서명으로 오판된다.
-const customMarkSignature = (marks: readonly (TextMark | CustomTextMark)[]): string =>
+const customMarkSignature = (
+  marks: readonly (TextMark | CustomTextMark)[],
+): string =>
   JSON.stringify(
     marks
       .filter((mark): mark is CustomTextMark => !isKnownTextMarkType(mark.type))
@@ -143,7 +145,8 @@ export const inlineContentViolation = (
     }
     const marks = item.marks ?? [];
     const unregisteredMark = marks.find(
-      (mark) => !isKnownTextMarkType(mark.type) && !customStyleTypes.has(mark.type),
+      (mark) =>
+        !isKnownTextMarkType(mark.type) && !customStyleTypes.has(mark.type),
     );
     if (unregisteredMark !== undefined) {
       return {
@@ -183,7 +186,9 @@ export const inlineContentViolation = (
     // 오판해 유효한 문서를 거절하게 된다. 커스텀 마크가 없으면 이 접미사는
     // 항상 "[]"로 접혀 회귀가 없다.
     const currentMarks =
-      JSON.stringify(knownMarks.map(markKey)) + "|" + customMarkSignature(marks);
+      JSON.stringify(knownMarks.map(markKey)) +
+      "|" +
+      customMarkSignature(marks);
     if (currentMarks === previousMarks) {
       return {
         code: "DOCUMENT_INVALID",
@@ -290,7 +295,10 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
 const markToTiptapAny = (mark: TextMark | CustomTextMark): TiptapJsonMark =>
   isKnownTextMarkType(mark.type)
     ? markToTiptap(mark as TextMark)
-    : { type: mark.type, attrs: { props: (mark as CustomTextMark).props ?? null } };
+    : {
+        type: mark.type,
+        attrs: { props: (mark as CustomTextMark).props ?? null },
+      };
 
 export const inlineContentToTiptap = (
   content: InlineContent,

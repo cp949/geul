@@ -8,7 +8,10 @@ import {
 } from "./editor-controller-support.js";
 
 const twoParagraphDocument = () =>
-  documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two"));
+  documentOf(
+    paragraphBlock("block-1", "one"),
+    paragraphBlock("block-2", "two"),
+  );
 
 describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — insertBlocks", () => {
   it("기본 placement(before)는 대상 블록 앞에 삽입한다", () => {

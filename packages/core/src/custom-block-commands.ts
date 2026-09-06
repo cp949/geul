@@ -36,7 +36,10 @@ export const insertCustomBlock = (
 ): Result<{ blockId: string }, InsertCustomBlockError> => {
   const customType = editor.schema.nodes[type];
   if (customType === undefined) {
-    return { ok: false, error: { code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED", type } };
+    return {
+      ok: false,
+      error: { code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED", type },
+    };
   }
 
   const afterPosition = findBlockPosition(editor.state.doc, afterBlockId);

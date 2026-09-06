@@ -17,7 +17,10 @@ import type { CustomBlock, Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { analyzeMarkdownLoss, exportMarkdown } from "../src/index.js";
-import { buildDocument, paragraphBlock } from "./fixtures/quote-divider-document.js";
+import {
+  buildDocument,
+  paragraphBlock,
+} from "./fixtures/quote-divider-document.js";
 
 const widget = { id: "widget-1", type: "myWidget", content: "none" as const };
 
@@ -139,7 +142,7 @@ describe("customBlockToMarkdown: 등록된 CustomBlock 렌더(RD-003)", () => {
     });
   });
 
-  it("content:\"inline\" 모드 CustomBlock이 등록돼도 blocksInlineContentViolation에서 크래시하지 않는다", () => {
+  it('content:"inline" 모드 CustomBlock이 등록돼도 blocksInlineContentViolation에서 크래시하지 않는다', () => {
     const inlineWidget = {
       id: "widget-2",
       type: "myInlineWidget",
@@ -191,7 +194,9 @@ describe("MARKDOWN_DOCUMENT_INVALID: inline-level 커스텀 원소·마크 expor
   };
 
   it("strict 모드에서 인라인 레벨 커스텀 원소가 있으면 MARKDOWN_DOCUMENT_INVALID를 반환한다", () => {
-    expect(exportMarkdown(documentWithCustomInline, { mode: "strict" })).toEqual({
+    expect(
+      exportMarkdown(documentWithCustomInline, { mode: "strict" }),
+    ).toEqual({
       ok: false,
       error: {
         code: "MARKDOWN_DOCUMENT_INVALID",
@@ -201,13 +206,15 @@ describe("MARKDOWN_DOCUMENT_INVALID: inline-level 커스텀 원소·마크 expor
   });
 
   it("lossy 모드에서도 인라인 레벨 커스텀 원소가 있으면 손실 경고 대신 MARKDOWN_DOCUMENT_INVALID를 반환한다", () => {
-    expect(exportMarkdown(documentWithCustomInline, { mode: "lossy" })).toEqual({
-      ok: false,
-      error: {
-        code: "MARKDOWN_DOCUMENT_INVALID",
-        message: expect.stringContaining("myWidgetInline"),
+    expect(exportMarkdown(documentWithCustomInline, { mode: "lossy" })).toEqual(
+      {
+        ok: false,
+        error: {
+          code: "MARKDOWN_DOCUMENT_INVALID",
+          message: expect.stringContaining("myWidgetInline"),
+        },
       },
-    });
+    );
   });
 
   it("미등록 CustomTextMark가 있으면 두 모드 모두 MARKDOWN_DOCUMENT_INVALID를 반환한다", () => {

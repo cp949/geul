@@ -63,8 +63,7 @@ const cellItemAt = (
   itemIndex = 0,
 ): Extract<InlineContentItem, { text: string }> | undefined =>
   table.rows[row]?.cells[col]?.content[itemIndex] as
-    | Extract<InlineContentItem, { text: string }>
-    | undefined;
+    Extract<InlineContentItem, { text: string }> | undefined;
 
 describe("표에 표 형태 데이터를 붙여넣는다", () => {
   it("두 문단에 걸친 선택에서 호출하면 선택을 지우고 캐럿을 새 표로 옮긴다", () => {
@@ -535,9 +534,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     if (!table.ok) throw new Error("표 조회 실패");
     // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
     // 문서 순서대로 한 셀에 들어간다.
-    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
-      "intro\nx\noutro",
-    );
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("intro\nx\noutro");
   });
 
   it("표 안에서 앞뒤 문단은 붙여넣은 표의 좌상단·마지막 셀에 각각 합친다", () => {
@@ -607,9 +604,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const table = getTableBlock(editor, "table-1");
     if (!table.ok) throw new Error("표 조회 실패");
     expect(cellItemAt(table.value, 0, 0, 0)?.text).toBe("bold");
-    expect(cellItemAt(table.value, 0, 0, 0)?.marks).toEqual([
-      { type: "bold" },
-    ]);
+    expect(cellItemAt(table.value, 0, 0, 0)?.marks).toEqual([{ type: "bold" }]);
     expect(cellItemAt(table.value, 0, 0, 1)?.text).toBe("\nx");
     expect(cellItemAt(table.value, 0, 0, 1)?.marks).toBeUndefined();
   });
@@ -782,9 +777,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     if (!table.ok) throw new Error("표 조회 실패");
     // 1×1 표라 좌상단 셀이 곧 마지막 셀이다 — intro/셀 텍스트/outro가
     // 문서 순서대로 한 셀에 들어간다
-    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
-      "intro\nx\noutro",
-    );
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("intro\nx\noutro");
   });
 
   it("model 인라인 텍스트 계약을 어기는 heading 콘텐츠는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
@@ -914,9 +907,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     const table = getTableBlock(editor, "table-1");
     if (!table.ok) throw new Error("표 조회 실패");
-    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
-      "intro\nx\noutro",
-    );
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe("intro\nx\noutro");
   });
 
   // 트랙-6 결함 탐지(BLOCKER): pasteOutOfTable의 삽입은 항상 최상위(depth

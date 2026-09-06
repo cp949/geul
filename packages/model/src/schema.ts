@@ -52,8 +52,8 @@ const textMarkSchema = z.discriminatedUnion("type", [
 // 필드가 뒤에 오는 blockSchema를 참조하는 기존 패턴(288행 등,
 // `z.lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))`)과 동일
 // 해법이라 파일을 재배치하지 않는다.
-const inlineContentSchema = z.lazy(
-  (): z.ZodType<InlineContentItem[]> => z.array(inlineContentItemSchema),
+const inlineContentSchema = z.lazy((): z.ZodType<InlineContentItem[]> =>
+  z.array(inlineContentItemSchema),
 );
 
 // .strict() — TableBlock은 children을 허용하지 않는다(spec 2.2, D15). 스키마가
@@ -677,9 +677,8 @@ const validateContent = (
     // 전혀 없으면 이 필터는 no-op이라 기존 동작과 100% 동일하다.
     const knownMarks = (item.marks ?? [])
       .map((mark, markIndex) => ({ mark, markIndex }))
-      .filter(
-        (entry): entry is { mark: TextMark; markIndex: number } =>
-          isKnownTextMarkType(entry.mark.type),
+      .filter((entry): entry is { mark: TextMark; markIndex: number } =>
+        isKnownTextMarkType(entry.mark.type),
       );
 
     for (const { mark, markIndex } of knownMarks) {

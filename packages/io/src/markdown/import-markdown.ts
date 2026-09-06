@@ -466,10 +466,7 @@ const paragraphFromNodes = (
   };
 };
 
-const paragraphFromText = (
-  text: string,
-  createId: IdFactory,
-): Block => ({
+const paragraphFromText = (text: string, createId: IdFactory): Block => ({
   id: createId(),
   type: "paragraph",
   content: text.length === 0 ? [] : [{ text }],

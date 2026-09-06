@@ -51,7 +51,11 @@ const findBlockInTree = (
   if (index !== -1) {
     const block = blocks[index];
     if (block === undefined || !isKnownBlockType(block.type)) return null;
-    return { block: block as Block, siblings: blocks as readonly Block[], index };
+    return {
+      block: block as Block,
+      siblings: blocks as readonly Block[],
+      index,
+    };
   }
   for (const block of blocks) {
     if (!("children" in block) || block.children === undefined) {

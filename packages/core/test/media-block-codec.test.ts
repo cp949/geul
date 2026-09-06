@@ -46,13 +46,8 @@ describe("4종 미디어 블록 codec 왕복", () => {
       // 동일 패턴) `type` 필드만 유니온으로 추론된다 — 개별 media 타입으로
       // 캐스트해 해소한다.
       expectRoundTrip(
-        documentOf(
-          { id: `${type}-min`, type } as
-            | FileBlock
-            | ImageBlock
-            | VideoBlock
-            | AudioBlock,
-        ),
+        documentOf({ id: `${type}-min`, type } as
+          FileBlock | ImageBlock | VideoBlock | AudioBlock),
       );
     },
   );

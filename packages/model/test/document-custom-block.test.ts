@@ -94,11 +94,9 @@ describe("커스텀 block 라우팅", () => {
     expect(viaBlock.ok).toBe(false);
     if (viaDocument.ok || viaBlock.ok) return;
 
-    const documentError = (
-      viaDocument as { ok: false; error: DocumentError }
-    ).error;
-    const blockError = (viaBlock as { ok: false; error: DocumentError })
+    const documentError = (viaDocument as { ok: false; error: DocumentError })
       .error;
+    const blockError = (viaBlock as { ok: false; error: DocumentError }).error;
 
     expect(blockError).toEqual({
       ...documentError,

@@ -60,7 +60,11 @@ export const blocksInlineContentViolation = (
         for (const cell of row.cells) {
           const violation = inlineContentViolation(cell.content);
           if (violation !== null) {
-            return { blockId: block.id, cellId: cell.id, reason: violation.reason };
+            return {
+              blockId: block.id,
+              cellId: cell.id,
+              reason: violation.reason,
+            };
           }
         }
       }

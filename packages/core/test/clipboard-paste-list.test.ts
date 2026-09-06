@@ -98,7 +98,8 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
 
       const blocks = editor.getDocument().blocks;
       const items = blocks.filter(
-        (block): block is BulletListItemBlock => block.type === "bulletListItem",
+        (block): block is BulletListItemBlock =>
+          block.type === "bulletListItem",
       );
       expect(items).toHaveLength(2);
       expect(items.map((item) => item.content)).toEqual([
@@ -124,7 +125,8 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
 
       const blocks = editor.getDocument().blocks;
       const items = blocks.filter(
-        (block): block is NumberedListItemBlock => block.type === "numberedListItem",
+        (block): block is NumberedListItemBlock =>
+          block.type === "numberedListItem",
       );
       expect(items).toHaveLength(2);
       expect(items[0]).toMatchObject({
@@ -156,7 +158,8 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
 
       const blocks = editor.getDocument().blocks;
       const items = blocks.filter(
-        (block): block is NumberedListItemBlock => block.type === "numberedListItem",
+        (block): block is NumberedListItemBlock =>
+          block.type === "numberedListItem",
       );
       expect(items).toHaveLength(1);
       expect(items[0]?.content).toEqual([{ text: "z" }]);
@@ -180,7 +183,8 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
 
       const blocks = editor.getDocument().blocks;
       const items = blocks.filter(
-        (block): block is BulletListItemBlock => block.type === "bulletListItem",
+        (block): block is BulletListItemBlock =>
+          block.type === "bulletListItem",
       );
       expect(items).toHaveLength(2);
       expect(items[0]?.content).toEqual([{ text: "a" }]);
@@ -224,9 +228,11 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
         .find(
           (block) =>
             isInlineContentBlockType(block.type) &&
-            ((block as Extract<Block, { type: InlineContentBlockType }>)
-              .content[0] as Extract<InlineContentItem, { text: string }> | undefined)
-              ?.text === "leaf",
+            (
+              (block as Extract<Block, { type: InlineContentBlockType }>)
+                .content[0] as
+                Extract<InlineContentItem, { text: string }> | undefined
+            )?.text === "leaf",
         );
       expect(leaf).toBeDefined();
     });

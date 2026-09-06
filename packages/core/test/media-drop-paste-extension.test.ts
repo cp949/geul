@@ -498,9 +498,10 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
         blocks.some(
           (block) =>
             block.type === "paragraph" &&
-            ((block as ParagraphBlock).content[0] as
-              | Extract<InlineContentItem, { text: string }>
-              | undefined)?.text === "world",
+            (
+              (block as ParagraphBlock).content[0] as
+                Extract<InlineContentItem, { text: string }> | undefined
+            )?.text === "world",
         ),
       ).toBe(true);
       expect(errors).toEqual([]);

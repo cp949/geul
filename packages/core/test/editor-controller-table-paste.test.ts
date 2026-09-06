@@ -101,9 +101,10 @@ describe("에디터 컨트롤러 표", () => {
     const introIndex = document.blocks.findIndex(
       (block) =>
         block.type === "paragraph" &&
-        ((block as ParagraphBlock).content[0] as
-          | Extract<InlineContentItem, { text: string }>
-          | undefined)?.text === "intro",
+        (
+          (block as ParagraphBlock).content[0] as
+            Extract<InlineContentItem, { text: string }> | undefined
+        )?.text === "intro",
     );
     const tableIndex = document.blocks.findIndex(
       (block) => block.type === "table",
@@ -111,9 +112,10 @@ describe("에디터 컨트롤러 표", () => {
     const outroIndex = document.blocks.findIndex(
       (block) =>
         block.type === "paragraph" &&
-        ((block as ParagraphBlock).content[0] as
-          | Extract<InlineContentItem, { text: string }>
-          | undefined)?.text === "outro",
+        (
+          (block as ParagraphBlock).content[0] as
+            Extract<InlineContentItem, { text: string }> | undefined
+        )?.text === "outro",
     );
     expect(introIndex).toBeGreaterThanOrEqual(0);
     expect(introIndex).toBeLessThan(tableIndex);
@@ -122,14 +124,16 @@ describe("에디터 컨트롤러 표", () => {
     if (table?.type === "table") {
       const tableBlock = table as TableBlock;
       expect(
-        (tableBlock.rows[0]?.cells[0]?.content[0] as
-          | Extract<InlineContentItem, { text: string }>
-          | undefined)?.text,
+        (
+          tableBlock.rows[0]?.cells[0]?.content[0] as
+            Extract<InlineContentItem, { text: string }> | undefined
+        )?.text,
       ).toBe("a");
       expect(
-        (tableBlock.rows[0]?.cells[1]?.content[0] as
-          | Extract<InlineContentItem, { text: string }>
-          | undefined)?.text,
+        (
+          tableBlock.rows[0]?.cells[1]?.content[0] as
+            Extract<InlineContentItem, { text: string }> | undefined
+        )?.text,
       ).toBe("b");
     }
 
@@ -162,18 +166,20 @@ describe("에디터 컨트롤러 표", () => {
       document.blocks.some(
         (block) =>
           block.type === "paragraph" &&
-          ((block as ParagraphBlock).content[0] as
-            | Extract<InlineContentItem, { text: string }>
-            | undefined)?.text === "intro",
+          (
+            (block as ParagraphBlock).content[0] as
+              Extract<InlineContentItem, { text: string }> | undefined
+          )?.text === "intro",
       ),
     ).toBe(true);
     expect(
       document.blocks.some(
         (block) =>
           block.type === "paragraph" &&
-          ((block as ParagraphBlock).content[0] as
-            | Extract<InlineContentItem, { text: string }>
-            | undefined)?.text === "outro",
+          (
+            (block as ParagraphBlock).content[0] as
+              Extract<InlineContentItem, { text: string }> | undefined
+          )?.text === "outro",
       ),
     ).toBe(true);
 

@@ -145,7 +145,10 @@ describe("customBlocks registry(RD-002-DELTA-11)", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: { code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED", type: "unregisteredWidget" },
+      error: {
+        code: "CUSTOM_BLOCK_TYPE_NOT_REGISTERED",
+        type: "unregisteredWidget",
+      },
     });
     expect(editor.getDocument()).toEqual(before);
   });

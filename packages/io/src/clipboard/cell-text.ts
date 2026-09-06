@@ -83,7 +83,9 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
   // — 이 함수의 유일한 호출부(clipboard-table-parser.ts)가 그 결과만
   // 넘긴다. HTML/TSV 파싱 경로에는 커스텀 inline 원소를 만드는 문법이
   // 없다(import-html.ts/RD-002-DELTA-06과 같은 근거, RD-002-DELTA-15).
-  const textRuns = content as Array<Extract<InlineContentItem, { text: string }>>;
+  const textRuns = content as Array<
+    Extract<InlineContentItem, { text: string }>
+  >;
   const kept = keptCodeUnits(textRuns.map((item) => item.text).join(""));
   const normalized: InlineContent = [];
   let offset = 0;
@@ -101,7 +103,11 @@ export const normalizeCellContent = (content: InlineContent): InlineContent => {
     // 병합을 계약 밖으로 명시한다(inline-content-merge.ts 주석) — 이
     // 파일은 HTML 파서 산출물만 다뤄 항상 TextMark[]뿐이다(위 캐스트와
     // 같은 근거).
-    appendOrMergeInlineItem(normalized, text, item.marks as TextMark[] | undefined);
+    appendOrMergeInlineItem(
+      normalized,
+      text,
+      item.marks as TextMark[] | undefined,
+    );
   }
 
   return normalized;

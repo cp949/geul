@@ -110,9 +110,10 @@ describe("buildOutOfTableSequence", () => {
     expect(firstTable?.offset).toBe(nodes[0]?.nodeSize);
     expect(firstTable?.node).toBe(nodes[1]);
     expect(
-      (firstTable?.data.rows[0]?.cells[0]?.content[0] as
-        | Extract<InlineContentItem, { text: string }>
-        | undefined)?.text,
+      (
+        firstTable?.data.rows[0]?.cells[0]?.content[0] as
+          Extract<InlineContentItem, { text: string }> | undefined
+      )?.text,
     ).toBe("A");
   });
 
@@ -138,9 +139,10 @@ describe("buildOutOfTableSequence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("조립 실패");
     expect(
-      (result.value.firstTable?.data.rows[0]?.cells[0]?.content[0] as
-        | Extract<InlineContentItem, { text: string }>
-        | undefined)?.text,
+      (
+        result.value.firstTable?.data.rows[0]?.cells[0]?.content[0] as
+          Extract<InlineContentItem, { text: string }> | undefined
+      )?.text,
     ).toBe("A");
   });
 

@@ -201,7 +201,10 @@ describe("에디터 컨트롤러 커서·선택 setter API(DOC-007) — setTextC
 describe("에디터 컨트롤러 커서·선택 setter API(DOC-008) — setSelection", () => {
   it("startBlockId 콘텐츠 시작부터 endBlockId 콘텐츠 끝까지 선택한다(완료 조건 5)", () => {
     const { editor, tiptap } = mounted(
-      documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two")),
+      documentOf(
+        paragraphBlock("block-1", "one"),
+        paragraphBlock("block-2", "two"),
+      ),
     );
 
     const result = editor.setSelection("block-1", "block-2");
@@ -218,7 +221,10 @@ describe("에디터 컨트롤러 커서·선택 setter API(DOC-008) — setSelec
 
   it("startBlockId가 문서 순서상 뒤여도 순서를 정규화하지 않는다(설계 결정)", () => {
     const { editor, tiptap } = mounted(
-      documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two")),
+      documentOf(
+        paragraphBlock("block-1", "one"),
+        paragraphBlock("block-2", "two"),
+      ),
     );
 
     // 인자 순서를 문서 순서와 반대로 준다 — anchor는 여전히 startBlockId
@@ -273,7 +279,10 @@ describe("에디터 컨트롤러 커서·선택 setter API(DOC-008) — setSelec
 
   it("startBlockId를 찾지 못하면 BLOCK_NOT_FOUND를 반환한다(완료 조건 7)", () => {
     const { editor } = mounted(
-      documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two")),
+      documentOf(
+        paragraphBlock("block-1", "one"),
+        paragraphBlock("block-2", "two"),
+      ),
     );
 
     const result = editor.setSelection("missing", "block-2");
@@ -286,7 +295,10 @@ describe("에디터 컨트롤러 커서·선택 setter API(DOC-008) — setSelec
 
   it("endBlockId를 찾지 못하면 BLOCK_NOT_FOUND를 반환한다(완료 조건 7)", () => {
     const { editor } = mounted(
-      documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two")),
+      documentOf(
+        paragraphBlock("block-1", "one"),
+        paragraphBlock("block-2", "two"),
+      ),
     );
 
     const result = editor.setSelection("block-1", "missing");
@@ -299,7 +311,10 @@ describe("에디터 컨트롤러 커서·선택 setter API(DOC-008) — setSelec
 
   it("문서(모델 트리)를 바꾸지 않는다 — onChange가 발화하지 않는다(완료 조건 8)", () => {
     const { editor, changes } = mounted(
-      documentOf(paragraphBlock("block-1", "one"), paragraphBlock("block-2", "two")),
+      documentOf(
+        paragraphBlock("block-1", "one"),
+        paragraphBlock("block-2", "two"),
+      ),
     );
     const before = editor.getDocument();
 

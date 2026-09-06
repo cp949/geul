@@ -157,11 +157,17 @@ const appendInlineRuns = (target: InlineContent, runs: InlineContent): void => {
   // 런으로 캐스트한다(model-to-tiptap.ts의 inlineContentToTiptap과 같은
   // 패턴, RD-002-DELTA-14 설계 결정 3) — 이 함수를 io 공개 API로 직접(core
   // 검증을 우회해) 호출하는 위험은 새로 생기지 않은 기존 위험 범주다.
-  for (const run of runs as Array<Extract<InlineContentItem, { text: string }>>) {
+  for (const run of runs as Array<
+    Extract<InlineContentItem, { text: string }>
+  >) {
     // appendOrMergeInlineItem은 CustomTextMark를 담은 marks 병합을 계약
     // 밖으로 명시한다(inline-content-merge.ts 주석) — 위 계약 전제(항상
     // 텍스트 런)와 같은 근거로 TextMark[]로 캐스트한다.
-    appendOrMergeInlineItem(target, run.text, run.marks as TextMark[] | undefined);
+    appendOrMergeInlineItem(
+      target,
+      run.text,
+      run.marks as TextMark[] | undefined,
+    );
   }
 };
 

@@ -13,7 +13,10 @@ import type { CustomBlock, Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml } from "../src/index.js";
-import { buildDocument, paragraphBlock } from "./fixtures/quote-divider-document.js";
+import {
+  buildDocument,
+  paragraphBlock,
+} from "./fixtures/quote-divider-document.js";
 
 const widget = { id: "widget-1", type: "myWidget", content: "none" as const };
 
@@ -166,7 +169,11 @@ describe("HTML_DOCUMENT_INVALID: inline-level 커스텀 원소·마크 export �
       headerRows: 0,
       headerColumns: 0,
     };
-    const document: Document = { formatVersion: 1, revision: 0, blocks: [table] };
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [table],
+    };
 
     expect(exportHtml(document)).toEqual({
       ok: false,

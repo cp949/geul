@@ -9,10 +9,7 @@
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import {
-  createEditor,
-  type CustomStyleDefinition,
-} from "../src/index.js";
+import { createEditor, type CustomStyleDefinition } from "../src/index.js";
 import {
   caretAt,
   mountTiptapEditor,
@@ -23,7 +20,9 @@ import {
 const highlightDefinition: CustomStyleDefinition = {
   render: (value) => ({
     className: "highlight",
-    style: { backgroundColor: (value.props?.color as string | undefined) ?? "yellow" },
+    style: {
+      backgroundColor: (value.props?.color as string | undefined) ?? "yellow",
+    },
   }),
 };
 
@@ -69,8 +68,14 @@ describe("customStyles registry(RD-002-DELTA-19)", () => {
           id: "block-1",
           type: "paragraph",
           content: [
-            { text: "a", marks: [{ type: "myHighlight", props: { color: "pink" } }] },
-            { text: "b", marks: [{ type: "myHighlight", props: { color: "blue" } }] },
+            {
+              text: "a",
+              marks: [{ type: "myHighlight", props: { color: "pink" } }],
+            },
+            {
+              text: "b",
+              marks: [{ type: "myHighlight", props: { color: "blue" } }],
+            },
           ],
         },
       ],
@@ -132,7 +137,10 @@ describe("customStyles registry(RD-002-DELTA-19)", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: { code: "CUSTOM_STYLE_TYPE_NOT_REGISTERED", type: "unregisteredStyle" },
+      error: {
+        code: "CUSTOM_STYLE_TYPE_NOT_REGISTERED",
+        type: "unregisteredStyle",
+      },
     });
     expect(editor.getDocument()).toEqual(before);
   });

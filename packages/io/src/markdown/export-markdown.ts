@@ -370,8 +370,7 @@ const blockNode = (block: Block): MarkdownOutputNode => {
     // 블록은 커스텀 inline 원소·mark를 담지 않는다) — 계약 전제 캐스트
     // (export-html.ts::codeBlockNode와 동일 패턴).
     const source = block.content[0] as
-      | { text: string; marks?: TextMark[] }
-      | undefined;
+      { text: string; marks?: TextMark[] } | undefined;
     return {
       type: "code",
       value: source?.text ?? "",
@@ -506,10 +505,9 @@ export function exportMarkdown(
           }
         : parsed.value;
     const markdown = stringifyProcessor.stringify(
-      documentNode(
-        outputDocument,
-        options.customBlockToMarkdown,
-      ) as Parameters<typeof stringifyProcessor.stringify>[0],
+      documentNode(outputDocument, options.customBlockToMarkdown) as Parameters<
+        typeof stringifyProcessor.stringify
+      >[0],
     );
     if (options.mode === "strict") return { ok: true, value: markdown };
     return { ok: true, value: { markdown, warnings: losses } };

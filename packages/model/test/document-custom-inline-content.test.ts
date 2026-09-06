@@ -90,9 +90,7 @@ describe("커스텀 inline 원소·text mark 라우팅", () => {
     const viaDocument = parseDocument({
       formatVersion: 1,
       revision: 0,
-      blocks: [
-        { id: "p1", type: "paragraph", content: [malformedTextRun] },
-      ],
+      blocks: [{ id: "p1", type: "paragraph", content: [malformedTextRun] }],
     });
     const viaItem = parseInlineContentItem(malformedTextRun);
 

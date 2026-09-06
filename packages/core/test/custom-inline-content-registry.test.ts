@@ -135,9 +135,7 @@ describe("customInlineContent registry(RD-002-DELTA-18)", () => {
     tiptap.commands.setTextSelection(caretAt(tiptap, "block-1").anchor);
     const before = editor.getDocument();
 
-    const result = editor.commands.insertCustomInlineContent(
-      "unregisteredTag",
-    );
+    const result = editor.commands.insertCustomInlineContent("unregisteredTag");
 
     expect(result).toEqual({
       ok: false,

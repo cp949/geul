@@ -129,7 +129,10 @@ describe("EDITOR_FEATURE_UNAVAILABLE: 커스텀 inline 원소·마크 거절", (
 
     const result = editor.replaceDocument(
       documentWithContent([
-        { text: "hi", marks: [{ type: "highlight", props: { shade: "yellow" } }] },
+        {
+          text: "hi",
+          marks: [{ type: "highlight", props: { shade: "yellow" } }],
+        },
       ]),
     );
 

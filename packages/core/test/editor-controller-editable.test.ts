@@ -12,7 +12,9 @@ import {
 
 describe("에디터 컨트롤러 isEditable", () => {
   it("isEditable = false로 설정하면 마운트된 DOM의 contenteditable 속성이 false로 바뀐다", () => {
-    const editor = createEditor({ initialDocument: paragraphDocument("content") });
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
     const { editable } = mountTiptapEditor(editor);
     expect(editable.getAttribute("contenteditable")).toBe("true");
 
@@ -24,7 +26,9 @@ describe("에디터 컨트롤러 isEditable", () => {
   });
 
   it("isEditable = false 상태에서도 commands.* 호출은 계속 성공한다", () => {
-    const editor = createEditor({ initialDocument: paragraphDocument("before") });
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+    });
     editor.isEditable = false;
 
     expect(editor.commands.setText("block-1", "after")).toEqual({
@@ -37,7 +41,9 @@ describe("에디터 컨트롤러 isEditable", () => {
   });
 
   it("getter가 setter 이후 값을 정확히 반영한다", () => {
-    const editor = createEditor({ initialDocument: paragraphDocument("content") });
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
     expect(editor.isEditable).toBe(true);
 
     editor.isEditable = false;
@@ -48,7 +54,9 @@ describe("에디터 컨트롤러 isEditable", () => {
   });
 
   it("destroy 이후 getter는 false를 반환하고 setter는 아무 효과가 없다", () => {
-    const editor = createEditor({ initialDocument: paragraphDocument("content") });
+    const editor = createEditor({
+      initialDocument: paragraphDocument("content"),
+    });
     editor.destroy();
 
     expect(editor.isEditable).toBe(false);
@@ -59,7 +67,9 @@ describe("에디터 컨트롤러 isEditable", () => {
   });
 
   it("replaceDocument() 이후에도 직전에 설정한 isEditable 값이 유지된다", () => {
-    const editor = createEditor({ initialDocument: paragraphDocument("before") });
+    const editor = createEditor({
+      initialDocument: paragraphDocument("before"),
+    });
     const container = document.createElement("div");
     editor.mount(container);
     editor.isEditable = false;
