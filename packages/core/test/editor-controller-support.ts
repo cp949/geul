@@ -19,6 +19,7 @@ import {
   type Block,
   type Document,
   type DocumentBlock,
+  type IdFactory,
   type InlineContent,
   type NestableBlockType,
   type TableBlock,
@@ -472,4 +473,10 @@ export const expectDividerNodeSelection = (
   const { node } = selection as NodeSelection;
   expect(node.type.name).toBe("divider");
   expect(node.attrs.blockId).toBe(blockId);
+};
+
+// 모든 블록이 이미 id를 가진 문서를 왕복시킬 때 쓴다 — createId가 실제로
+// 호출되면(즉 저장된 id를 잃어버렸으면) 테스트가 즉시 실패로 드러난다.
+export const unusedIdFactory: IdFactory = () => {
+  throw new Error("createId는 모든 블록에 이미 id가 있을 때 호출되면 안 된다");
 };

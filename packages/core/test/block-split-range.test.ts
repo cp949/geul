@@ -1,6 +1,6 @@
 /**
  * BlockSplitExtension의 범위 선택 Enter 계약을 확인한다(결함 1 수정 고정).
- * collapsed 캐럿 Enter의 D22/D23/D24 계약은 tiptap-to-model.test.ts의
+ * collapsed 캐럿 Enter의 D22/D23/D24 계약은 block-split-collapsed.test.ts의
  * "네이티브 split/join 유효성(D22)" 절이 소유하고, 이 파일은 범위 선택
  * 축만 다룬다 — 선택 삭제 후 그 캐럿 위치에서 collapsed 규칙으로 분할하고
  * (dev의 StarterKit splitBlock 의미론), 삭제와 분할이 단일 dispatch(undo
