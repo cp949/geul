@@ -176,7 +176,7 @@ describe("범위 선택 Enter는 선택을 지운 캐럿 위치에서 분할한�
     tiptap.view.dispatch(tiptap.state.tr.insert(rootEnd, blockGroup));
     const beforeSplitJson = tiptap.state.doc.toJSON();
     // setup 삽입과 split이 한 undo 그룹으로 병합되지 않게 history 경계를
-    // 닫는다 — tiptap-to-model.test.ts D22 절과 같은 이유·같은 패턴.
+    // 닫는다 — block-split-collapsed.test.ts D22 절과 같은 이유·같은 패턴.
     tiptap.view.dispatch(closeHistory(tiptap.state.tr));
 
     // 부모 텍스트의 "CD"를 선택한다: "AB|CD|EF".

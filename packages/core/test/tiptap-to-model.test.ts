@@ -9,10 +9,10 @@
  * blockId 발급 재귀는 block-id-extension.test.ts, 네이티브 split/join
  * 유효성(D22)은 block-split-collapsed.test.ts로 책임별 분리했다.
  */
-import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
-import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { describe, expect, it } from "vitest";
 
+import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
+import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { sequentialIds, unusedIdFactory } from "./editor-controller-support.js";
 
 describe("tiptap JSON을 독자 문서 모델로 디코드한다", () => {

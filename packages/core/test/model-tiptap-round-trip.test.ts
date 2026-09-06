@@ -12,10 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { modelToTiptap } from "../src/model-to-tiptap.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
-import {
-  liveSchema,
-  unusedIdFactory,
-} from "./editor-controller-support.js";
+import { liveSchema, unusedIdFactory } from "./editor-controller-support.js";
 
 describe("컨테이너 구조 왕복(D19)", () => {
   it("children을 가진 Document를 modelToTiptap → tiptapToModel로 왕복하면 원본과 구조적으로 동일하다(id·타입·content·children)", () => {
