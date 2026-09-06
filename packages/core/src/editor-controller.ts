@@ -2,11 +2,13 @@ import type { TabularData } from "@cp949/geul-io";
 import {
   type Block,
   type Document as BlockDocument,
+  type DocumentBlock,
   type HeadingBlock,
   type IdFactory,
   isCanonicalCellAlign,
   isCanonicalCellColor,
   isInlineContentBlockType,
+  isKnownBlockType,
   isNestableBlockType,
   isSupportedLinkHref,
   isValidMediaPreviewWidth,
@@ -107,6 +109,28 @@ export type PartialBlock = {
   >;
 }[Block["type"]];
 
+// insertBlocks/updateBlock/replaceBlocks/removeBlocks/moveBlocksUp·Down(spec
+// §3.2)은 같은 타입 안에서만 필드를 병합하거나 PartialBlock(위, 알려진
+// 14종 전용)을 다루는 기존 계약이다 — top-level CustomBlock(top-level
+// 전용, RD-002-DELTA-01)을 이 범용 명령의 대상으로 삼는 계약은 아직 없다
+// (등록·렌더·round-trip은 RD-002 후속 DELTA). findBlockInTree 등이 반환한
+// 값이 CustomBlock이면 이 두 헬퍼가 "찾지 못함"과 동일하게 취급해, 이
+// 파일의 기존 BLOCK_NOT_FOUND/COMMAND_NOT_APPLICABLE 판정 경로를 그대로
+// 재사용한다 — getBlock 계열(DOC-004, 아래 인터페이스)만 예외로 CustomBlock을
+// 그대로 반환한다.
+const asKnownBlock = (block: DocumentBlock | undefined): Block | undefined =>
+  block !== undefined && isKnownBlockType(block.type)
+    ? (block as Block)
+    : undefined;
+const asKnownSiblings = (
+  context: { siblings: readonly DocumentBlock[]; index: number } | undefined,
+): { siblings: readonly Block[]; index: number } | undefined => {
+  if (context === undefined) return undefined;
+  const target = context.siblings[context.index];
+  if (target === undefined || !isKnownBlockType(target.type)) return undefined;
+  return { siblings: context.siblings as readonly Block[], index: context.index };
+};
+
 export interface EditorController {
   mount(element: HTMLElement): void;
   unmount(): void;
@@ -115,15 +139,22 @@ export interface EditorController {
   // 단일 블록 조회·순회(spec §3.2, DOC-004). getDocument()가 반환하는 저장
   // Block 트리를 대상으로 한다 — PM 노드가 아니다. getPrevBlock/getNextBlock은
   // 형제 범위로 좁히지 않고 forEachBlock과 동일한 문서 순서(pre-order DFS)를
-  // 공유한다(RD-001-DELTA-01 "## 계획"의 설계 결정, block-tree.ts).
-  getBlock(blockId: string): Block | undefined;
-  getPrevBlock(blockId: string): Block | undefined;
-  getNextBlock(blockId: string): Block | undefined;
+  // 공유한다(RD-001-DELTA-01 "## 계획"의 설계 결정, block-tree.ts). 이
+  // 4개(+forEachBlock)는 top-level CustomBlock도 그대로 반환한다
+  // (RD-002-DELTA-02 "## 결정" — 읽기 전용 조회는 커스텀 여부를 가리지
+  // 않는다. 등록·렌더는 아직 지원하지 않지만 존재 자체는 조회 가능해야
+  // 한다). insertBlocks 등 범용 조작 API는 여전히 Block만 다룬다(아래).
+  getBlock(blockId: string): DocumentBlock | undefined;
+  getPrevBlock(blockId: string): DocumentBlock | undefined;
+  getNextBlock(blockId: string): DocumentBlock | undefined;
   // 최상위 블록의 부모는 Block이 아니므로 undefined다 — "찾지 못함"과
   // 구분하지 않는다(spec 시그니처가 Block | undefined 하나뿐).
-  getParentBlock(blockId: string): Block | undefined;
+  getParentBlock(blockId: string): DocumentBlock | undefined;
   forEachBlock(
-    callback: (block: Block, parent: Block | null) => boolean | void,
+    callback: (
+      block: DocumentBlock,
+      parent: DocumentBlock | null,
+    ) => boolean | void,
     options?: { reverse?: boolean },
   ): void;
   // 범용 조작 API(spec §3.2, DOC-005) — 기존 타입 전용 명령(commands.*)과
@@ -1321,7 +1352,7 @@ export const createEditor = (
   // 많을 수 있어 처음으로 도달 가능해진다(RD-002-DELTA-02 "## 계획"의
   // 설계 결정).
   const validateCandidateDocument = (
-    candidateBlocks: Block[],
+    candidateBlocks: DocumentBlock[],
     currentDocument: BlockDocument,
   ): Result<BlockDocument, EditorError> => {
     const parsed = parseDocument({
@@ -1427,7 +1458,9 @@ export const createEditor = (
     if (session.isDestroyed) return commandNotApplicable("updateBlock");
 
     const currentDocument = session.getDocument();
-    const target = findBlockInTree(currentDocument.blocks, blockId);
+    const target = asKnownBlock(
+      findBlockInTree(currentDocument.blocks, blockId),
+    );
     if (target === undefined) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
@@ -1454,7 +1487,9 @@ export const createEditor = (
     const validated = validateCandidateDocument(nextBlocks, currentDocument);
     if (!validated.ok) return validated;
 
-    const updatedBlock = findBlockInTree(validated.value.blocks, blockId);
+    const updatedBlock = asKnownBlock(
+      findBlockInTree(validated.value.blocks, blockId),
+    );
     if (updatedBlock === undefined) {
       // 도달 불가 방어선 — insertBlocksImpl과 동일 전제(정규화가 id를
       // 지우거나 바꾸지 않는다).
@@ -1503,7 +1538,7 @@ export const createEditor = (
     const currentDocument = session.getDocument();
     const removedBlocks: Block[] = [];
     for (const id of blockIdsToRemove) {
-      const found = findBlockInTree(currentDocument.blocks, id);
+      const found = asKnownBlock(findBlockInTree(currentDocument.blocks, id));
       if (found === undefined) {
         return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: id } };
       }
@@ -1600,7 +1635,7 @@ export const createEditor = (
     const currentDocument = session.getDocument();
     const removedBlocks: Block[] = [];
     for (const id of blockIds) {
-      const found = findBlockInTree(currentDocument.blocks, id);
+      const found = asKnownBlock(findBlockInTree(currentDocument.blocks, id));
       if (found === undefined) {
         return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: id } };
       }
@@ -1661,7 +1696,9 @@ export const createEditor = (
     let siblings: readonly Block[] | undefined;
     const indices: number[] = [];
     for (const id of blockIds) {
-      const context = findSiblingContext(currentDocument.blocks, id);
+      const context = asKnownSiblings(
+        findSiblingContext(currentDocument.blocks, id),
+      );
       if (context === undefined) {
         return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId: id } };
       }
@@ -1863,10 +1900,15 @@ export const createEditor = (
       };
     }
     if (node.type.name === "table") {
-      const tableModel = findBlockInTree(session.getDocument().blocks, blockId);
-      if (tableModel === undefined || tableModel.type !== "table") {
+      const found = findBlockInTree(session.getDocument().blocks, blockId);
+      if (found === undefined || found.type !== "table") {
         return commandNotApplicable(command); // 도달 불가 방어선
       }
+      // "table"은 KNOWN_BLOCK_TYPES 예약 리터럴이라 customBlockSchema로
+      // 라우팅될 수 없다(model schema.ts) — 위 판별로 found는 실제로 항상
+      // TableBlock이다. isKnownBlockType과 같은 이유로 이 타입 좁히기가
+      // TS에는 안 보여 명시적으로 캐스트한다.
+      const tableModel = found as TableBlock;
       const cellRange = firstTableCellRange(tableModel, node, position);
       if (cellRange === null) return commandNotApplicable(command); // 도달 불가 방어선
       return {

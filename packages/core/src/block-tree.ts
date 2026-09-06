@@ -1,14 +1,18 @@
 import {
   isNestableBlockType,
   type Block,
+  type DocumentBlock,
   type NestableBlockType,
 } from "@cp949/geul-model";
 
 // children은 7개 nestable 타입(paragraph/heading/quote/목록 4종)에만 있고
-// table/divider/codeBlock/media 4종에는 필드 자체가 없다 — Block 유니온
-// 전체에서 직접 접근할 수 없다(schema.ts의 동일 좁히기 패턴 재사용, RD-001
-// "## 결정"은 여기 없음, 기존 model 계약 그대로).
-const childrenOf = (block: Block): Block[] | undefined => {
+// table/divider/codeBlock/media 4종·CustomBlock(top-level 전용,
+// RD-002-DELTA-01)에는 필드 자체가 없다 — Block 유니온 전체에서 직접
+// 접근할 수 없다(schema.ts의 동일 좁히기 패턴 재사용, RD-001 "## 결정"은
+// 여기 없음, 기존 model 계약 그대로). 파라미터를 DocumentBlock으로 넓혀도
+// isNestableBlockType이 CustomBlock의 임의 type 문자열에 항상 false를
+// 반환해 안전하다.
+const childrenOf = (block: DocumentBlock): Block[] | undefined => {
   if (!isNestableBlockType(block.type)) return undefined;
   return (block as Extract<Block, { type: NestableBlockType }>).children;
 };
@@ -24,9 +28,9 @@ const childrenOf = (block: Block): Block[] | undefined => {
 // 멈춰도 그 사실이 모든 상위 호출로 전파돼 형제 루프와 조상 재귀 전부가
 // 멈춘다(RD-001-DELTA-01 완료 조건 4의 두 번째 변이).
 export const walkBlockTree = (
-  blocks: readonly Block[],
-  parent: Block | null,
-  visit: (block: Block, parent: Block | null) => boolean | void,
+  blocks: readonly DocumentBlock[],
+  parent: DocumentBlock | null,
+  visit: (block: DocumentBlock, parent: DocumentBlock | null) => boolean | void,
   reverse: boolean,
 ): boolean => {
   const siblings = reverse ? [...blocks].reverse() : blocks;
@@ -52,10 +56,10 @@ export const walkBlockTree = (
 // 불변식이라 첫 일치를 최종값으로 삼는다(block-position.ts의
 // findBlockPosition과 동일 전제).
 export const findBlockInTree = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   blockId: string,
-): Block | undefined => {
-  let found: Block | undefined;
+): DocumentBlock | undefined => {
+  let found: DocumentBlock | undefined;
   walkBlockTree(
     blocks,
     null,
@@ -74,10 +78,10 @@ export const findBlockInTree = (
 // (spec §3.2 시그니처가 Block | undefined 하나뿐, RD-001-DELTA-01
 // "## 계획"의 설계 결정).
 export const findParentInTree = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   blockId: string,
-): Block | undefined => {
-  let found: Block | undefined;
+): DocumentBlock | undefined => {
+  let found: DocumentBlock | undefined;
   walkBlockTree(
     blocks,
     null,
@@ -98,9 +102,9 @@ export const findParentInTree = (
 // 목적이 같지만, 그 파일을 이 DELTA 범위에서 건드리지 않으므로 독립적으로
 // 둔다.
 export const findSiblingContext = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   blockId: string,
-): { siblings: readonly Block[]; index: number } | undefined => {
+): { siblings: readonly DocumentBlock[]; index: number } | undefined => {
   const index = blocks.findIndex((block) => block.id === blockId);
   if (index !== -1) return { siblings: blocks, index };
   for (const block of blocks) {
@@ -117,12 +121,12 @@ export const findSiblingContext = (
 // "다음/이전"의 의미가 갈리지 않게 한다(RD-001-DELTA-01 "## 계획"의 설계
 // 결정).
 export const findAdjacentInTree = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   blockId: string,
   direction: "prev" | "next",
-): Block | undefined => {
-  let previous: Block | undefined;
-  let result: Block | undefined;
+): DocumentBlock | undefined => {
+  let previous: DocumentBlock | undefined;
+  let result: DocumentBlock | undefined;
   let armed = false;
   walkBlockTree(
     blocks,
