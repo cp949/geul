@@ -3,8 +3,9 @@
  * 알려진 14종 block으로의 라우팅 위임이 parseDocument와 동일한 에러
  * path·message를 유지하는지도 함께 고정한다(spec §4.2~§4.3,
  * docs/specs/2026-09-06-r4-extensibility-integration-parity-design.md).
- * Document/parseDocument 자체는 아직 커스텀 block을 받지 않는다 —
- * RD-001-DELTA-01 "설계 결정" 참고.
+ * Document/parseDocument는 top-level CustomBlock을 받는다(RD-002-DELTA-01) —
+ * nested children으로 들어간 CustomBlock은 여전히 거절된다(top-level 전용,
+ * RD-002-DELTA-01 "설계 결정" 1).
  */
 import { describe, expect, it } from "vitest";
 
@@ -126,5 +127,73 @@ describe("커스텀 block 라우팅", () => {
       headerRows: 2,
       headerColumns: 0,
     });
+  });
+
+  it("잘못된 CustomBlock(여분 키)의 에러가 parseDocument와 동일하다", () => {
+    expectSameErrorAsParseDocument({
+      id: "widget-2",
+      type: "myWidget",
+      extra: "x",
+    });
+  });
+});
+
+describe("Document 최상위 CustomBlock(RD-002-DELTA-01)", () => {
+  it("top-level CustomBlock을 포함한 문서가 parseDocument로 파싱되고 JSON round-trip을 보존한다", () => {
+    const widget = {
+      id: "widget-1",
+      type: "myWidget",
+      content: "none",
+      props: { count: 3 },
+    };
+    const raw = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "p1", type: "paragraph", content: [{ text: "hi" }] },
+        widget,
+      ],
+    };
+
+    const result = parseDocument(raw);
+
+    expect(result).toEqual({ ok: true, value: raw });
+  });
+
+  it("top-level CustomBlock의 id가 다른 block의 id와 충돌하면 Duplicate id로 거절한다", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "dup", type: "paragraph", content: [{ text: "hi" }] },
+        { id: "dup", type: "myWidget", content: "none" },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 1, "id"],
+        message: "Duplicate id: dup",
+      },
+    });
+  });
+
+  it("다른 block의 children에 중첩된 CustomBlock은 여전히 거절된다(top-level 전용)", () => {
+    const result = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "p1",
+          type: "paragraph",
+          content: [{ text: "hi" }],
+          children: [{ id: "widget-3", type: "myWidget", content: "none" }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
   });
 });

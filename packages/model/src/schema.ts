@@ -29,6 +29,7 @@ import type {
   CustomBlock,
   CustomTextMark,
   Document,
+  DocumentBlock,
   InlineContent,
   InlineContentItem,
   TableBlock,
@@ -403,12 +404,6 @@ const blockSchema = z.discriminatedUnion("type", [
   audioBlockSchema,
 ]);
 
-const documentSchema = z.object({
-  formatVersion: z.number(),
-  revision: z.number(),
-  blocks: z.array(blockSchema),
-});
-
 // CustomBlock(EXT-001)의 envelope(구조) 검증이다. 타입별 props 의미는
 // 소비자 registry를 아는 react 계층의 책임이다 — model은 구조만 안다(spec
 // §4.2, ADR-0002 순수성 유지, 그릴링 Q3 2026-09-06 채택). .strict() —
@@ -433,7 +428,6 @@ const customBlockSchema = z
 // 이 목록과 대조해 blockSchema/customBlockSchema로 라우팅한다(spec §4.3).
 // Block 유니온에 15번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
 // blockSchema 배열 자체도 수동 갱신 대상이라 같은 지점에 한 줄이 늘 뿐이다.
-// 이 파일 밖에는 노출하지 않는다 — 현재 소비처가 이 라우팅 하나뿐이다.
 const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
   "paragraph",
   "heading",
@@ -450,6 +444,14 @@ const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
   "video",
   "audio",
 ]);
+
+// core/io(RD-002 DELTA-02~04)가 document.blocks 원소를 알려진 Block과
+// CustomBlock으로 구분할 때 재사용하는 predicate다 — KNOWN_BLOCK_TYPES를
+// 중복 정의하지 않는다(RD-002-DELTA-01 "설계 결정" 3). isNestableBlockType과
+// 같은 이유로 `type is Block["type"]`만 좁힌다 — discriminated union인
+// block 자체를 좁히려면 호출부에서 명시적으로 캐스트한다.
+export const isKnownBlockType = (type: string): type is Block["type"] =>
+  KNOWN_BLOCK_TYPES.has(type);
 
 // discriminatedUnion 옵션 전원이 리터럴 판별자를 가져야 하는 zod 제약 때문에
 // CustomBlock(임의 문자열 type)을 blockSchema 옵션에 직접 섞을 수 없다(spec
@@ -492,6 +494,15 @@ const blockOrCustomBlockSchema = z
     }
     return result.data as CustomBlock;
   });
+
+// blocks는 top-level만 blockOrCustomBlockSchema로 라우팅한다(RD-002-DELTA-01
+// "설계 결정" 1) — CustomBlock은 leaf·top-level 전용이라 각 block의 재귀
+// children 스키마(z.lazy(() => z.array(blockSchema)))는 그대로 둔다.
+const documentSchema = z.object({
+  formatVersion: z.number(),
+  revision: z.number(),
+  blocks: z.array(blockOrCustomBlockSchema),
+});
 
 // CustomTextMark(EXT-003)의 envelope 검증이다 — CustomBlock과 같은 이유로
 // 구조만 본다. TextMark는 id가 없다(마크는 개별 식별되지 않는다).
@@ -684,7 +695,7 @@ const validateContent = (
 // 위치의 blockPath 접두사이고, 최상위 호출은 validateBlocks가 ["blocks"]로
 // 시작한다.
 const validateBlocksAt = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
   path: DocumentPath,
   ids: Set<string>,
 ): Result<undefined, DocumentError> => {
@@ -693,12 +704,23 @@ const validateBlocksAt = (
     const blockId = validateId(ids, block.id, [...blockPath, "id"]);
     if (!blockId.ok) return blockId;
 
+    // CustomBlock(top-level 전용, RD-002-DELTA-01)은 envelope을
+    // customBlockSchema가 이미 검증했다 — 위 id 유일성 외에 이 함수가 추가로
+    // 볼 필드가 없다. divider와 같은 자리에서 끝낸다. isKnownBlockType은
+    // block.type만 좁히고 discriminated union인 block 자체는 좁히지 못해
+    // (isNestableBlockType과 같은 이유), 아래부터는 명시적으로 as Block
+    // 캐스트한 known을 쓴다 — CustomBlock.type: string이 나머지 분기의
+    // 리터럴 비교(예: known.type === "divider")에 섞여 discriminated union
+    // 좁히기가 흐려지는 것을 막는다.
+    if (!isKnownBlockType(block.type)) continue;
+    const known = block as Block;
+
     // divider는 id 외에 검증할 필드가 없다 — 아래 표 코드 경로로 떨어지지
     // 않게 여기서 끝낸다.
-    if (block.type === "divider") continue;
+    if (known.type === "divider") continue;
 
-    if (block.type === "codeBlock") {
-      const item = block.content[0];
+    if (known.type === "codeBlock") {
+      const item = known.content[0];
       if (item !== undefined) {
         if (item.text.length === 0) {
           return invalid(
@@ -714,8 +736,8 @@ const validateBlocksAt = (
         }
       }
       if (
-        block.language !== undefined &&
-        !isValidCodeBlockLanguage(block.language)
+        known.language !== undefined &&
+        !isValidCodeBlockLanguage(known.language)
       ) {
         return invalid(
           [...blockPath, "language"],
@@ -726,35 +748,35 @@ const validateBlocksAt = (
     }
 
     // 4종 leaf 미디어 블록(spec §3.1) — divider/codeBlock과 같은 자리에서
-    // 타입 전용 검증을 마치고 continue한다. block.type 판별자 비교 3개를
-    // 겹쳐 쓰면 discriminated union인 block 자체가 좁혀진다(codeBlock처럼
+    // 타입 전용 검증을 마치고 continue한다. known.type 판별자 비교 3개를
+    // 겹쳐 쓰면 discriminated union인 known이 좁혀진다(codeBlock처럼
     // 별도 as 캐스트가 필요 없다). url/backgroundColor는 4종 공통,
     // previewWidth/textAlignment는 image/video만 존재한다 — audio/file은
     // zod .strict() shape 자체가 이 필드를 거절하므로 여기서 다시 확인하지
     // 않는다(완료 조건 5는 스키마 계층이 담당, G-CNV-001 — 같은 불변식을
     // 두 계층에서 판정하지 않는다).
     if (
-      block.type === "file" ||
-      block.type === "image" ||
-      block.type === "video" ||
-      block.type === "audio"
+      known.type === "file" ||
+      known.type === "image" ||
+      known.type === "video" ||
+      known.type === "audio"
     ) {
-      if (block.url !== undefined && !isSupportedLinkHref(block.url)) {
+      if (known.url !== undefined && !isSupportedLinkHref(known.url)) {
         return invalid([...blockPath, "url"], "Unsupported media URL");
       }
       if (
-        block.backgroundColor !== undefined &&
-        !isCanonicalCellColor(block.backgroundColor)
+        known.backgroundColor !== undefined &&
+        !isCanonicalCellColor(known.backgroundColor)
       ) {
         return invalid(
           [...blockPath, "backgroundColor"],
           "backgroundColor must be an uppercase #RRGGBB color",
         );
       }
-      if (block.type === "image" || block.type === "video") {
+      if (known.type === "image" || known.type === "video") {
         if (
-          block.previewWidth !== undefined &&
-          !isValidMediaPreviewWidth(block.previewWidth)
+          known.previewWidth !== undefined &&
+          !isValidMediaPreviewWidth(known.previewWidth)
         ) {
           return invalid(
             [...blockPath, "previewWidth"],
@@ -762,8 +784,8 @@ const validateBlocksAt = (
           );
         }
         if (
-          block.textAlignment !== undefined &&
-          !isCanonicalCellAlign(block.textAlignment)
+          known.textAlignment !== undefined &&
+          !isCanonicalCellAlign(known.textAlignment)
         ) {
           return invalid(
             [...blockPath, "textAlignment"],
@@ -781,9 +803,9 @@ const validateBlocksAt = (
     // collapsed·isToggleable은 여기서만 유효성을 판정하고 나머지 계층은
     // 값을 그대로 직대응한다.
     if (
-      block.type === "heading" &&
-      block.collapsed !== undefined &&
-      block.isToggleable !== true
+      known.type === "heading" &&
+      known.collapsed !== undefined &&
+      known.isToggleable !== true
     ) {
       return invalid(
         [...blockPath, "collapsed"],
@@ -791,11 +813,11 @@ const validateBlocksAt = (
       );
     }
 
-    if (isNestableBlockType(block.type)) {
+    if (isNestableBlockType(known.type)) {
       // isNestableBlockType은 model 밖(core의 PM node.type.name 등)에서도
-      // 쓰는 문자열 predicate라 discriminated union인 block 자체는 좁히지
+      // 쓰는 문자열 predicate라 discriminated union인 known은 좁히지
       // 못한다 — 명시적으로 좁힌다.
-      const nestable = block as Extract<Block, { type: NestableBlockType }>;
+      const nestable = known as Extract<Block, { type: NestableBlockType }>;
       const content = validateContent(nestable.content, [
         ...blockPath,
         "content",
@@ -814,7 +836,7 @@ const validateBlocksAt = (
 
     // 위에서 divider/codeBlock/4종 미디어/nestable을 모두 걸러냈으니
     // predicate 계약상 이 지점은 table뿐이다.
-    const table = block as TableBlock;
+    const table = known as TableBlock;
     for (const [columnIndex, column] of table.columns.entries()) {
       const columnId = validateId(ids, column.id, [
         ...blockPath,
@@ -858,7 +880,9 @@ const validateBlocksAt = (
   return { ok: true, value: undefined };
 };
 
-const validateBlocks = (blocks: Block[]): Result<undefined, DocumentError> =>
+const validateBlocks = (
+  blocks: DocumentBlock[],
+): Result<undefined, DocumentError> =>
   validateBlocksAt(blocks, ["blocks"], new Set<string>());
 
 // 표 전용 검증(열 너비·셀 속성·크기 상한·격자)이 트리 전체에서 같은 규칙으로
@@ -867,7 +891,7 @@ const validateBlocks = (blocks: Block[]): Result<undefined, DocumentError> =>
 // 통째로 우회한다. 깊이 상한은 validateNestingDepth가 이미 보장하므로 이
 // 재귀는 상수 깊이 안에서 끝난다.
 const visitTableBlocks = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
   path: DocumentPath,
   visit: (
     table: TableBlock,
@@ -876,25 +900,29 @@ const visitTableBlocks = (
 ): Result<undefined, DocumentError> => {
   for (const [blockIndex, block] of blocks.entries()) {
     const blockPath = [...path, blockIndex];
-    if (block.type === "table") {
-      const result = visit(block, blockPath);
+    // CustomBlock(top-level 전용)은 table도 children도 없는 리프다 —
+    // validateBlocksAt과 같은 이유로 known: Block 캐스트 전에 걸러낸다.
+    if (!isKnownBlockType(block.type)) continue;
+    const known = block as Block;
+    if (known.type === "table") {
+      const result = visit(known, blockPath);
       if (!result.ok) return result;
       continue;
     }
     // divider·codeBlock·4종 미디어 블록은 children 필드가 없는 리프다 —
     // 나머지(paragraph/heading/quote/목록 항목)만 children으로 내려간다.
     if (
-      block.type === "divider" ||
-      block.type === "codeBlock" ||
-      block.type === "file" ||
-      block.type === "image" ||
-      block.type === "video" ||
-      block.type === "audio"
+      known.type === "divider" ||
+      known.type === "codeBlock" ||
+      known.type === "file" ||
+      known.type === "image" ||
+      known.type === "video" ||
+      known.type === "audio"
     )
       continue;
-    if (block.children !== undefined) {
+    if (known.children !== undefined) {
       const children = visitTableBlocks(
-        block.children,
+        known.children,
         [...blockPath, "children"],
         visit,
       );
@@ -905,7 +933,7 @@ const visitTableBlocks = (
 };
 
 const validateColumnWidths = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
 ): Result<undefined, DocumentError> =>
   visitTableBlocks(blocks, ["blocks"], (table, tablePath) => {
     for (const [columnIndex, column] of table.columns.entries()) {
@@ -924,7 +952,9 @@ const validateColumnWidths = (
     return { ok: true, value: undefined };
   });
 
-const validateCells = (blocks: Block[]): Result<undefined, DocumentError> =>
+const validateCells = (
+  blocks: DocumentBlock[],
+): Result<undefined, DocumentError> =>
   visitTableBlocks(blocks, ["blocks"], (table, tablePath) => {
     for (const [rowIndex, row] of table.rows.entries()) {
       for (const [cellIndex, cell] of row.cells.entries()) {
@@ -985,7 +1015,7 @@ const validateCells = (blocks: Block[]): Result<undefined, DocumentError> =>
 // 거절된다). 재귀는 nestable children을 따라간다 — 깊이 상한은
 // validateNestingDepth가 이미 보장한다.
 const validateTextBlockPropsAt = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
   path: DocumentPath,
 ): Result<undefined, DocumentError> => {
   for (const [blockIndex, block] of blocks.entries()) {
@@ -1033,12 +1063,12 @@ const validateTextBlockPropsAt = (
 };
 
 const validateTextBlockProps = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
 ): Result<undefined, DocumentError> =>
   validateTextBlockPropsAt(blocks, ["blocks"]);
 
 const validateTableLimits = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
 ): Result<undefined, DocumentError> =>
   visitTableBlocks(blocks, ["blocks"], (table, tablePath) => {
     const violation = validateTableSize({
@@ -1059,7 +1089,7 @@ const validateTableLimits = (
   });
 
 const validateTableGrids = (
-  blocks: Block[],
+  blocks: DocumentBlock[],
 ): Result<undefined, DocumentError> =>
   visitTableBlocks(blocks, ["blocks"], (table, tablePath) => {
     const result = validateTableGrid(table);
@@ -1143,16 +1173,20 @@ const validateNestingDepth = (
   return { ok: true, value: undefined };
 };
 
-const canonicalizeCodeBlockLanguages = (blocks: Block[]): void => {
+const canonicalizeCodeBlockLanguages = (blocks: DocumentBlock[]): void => {
   for (const block of blocks) {
-    if (block.type === "codeBlock") {
-      if (block.language !== undefined) {
-        block.language = canonicalizeCodeBlockLanguage(block.language);
+    // CustomBlock(top-level 전용)에는 language/children 필드 자체가 없다 —
+    // validateBlocksAt과 같은 이유로 known: Block 캐스트 전에 걸러낸다.
+    if (!isKnownBlockType(block.type)) continue;
+    const known = block as Block;
+    if (known.type === "codeBlock") {
+      if (known.language !== undefined) {
+        known.language = canonicalizeCodeBlockLanguage(known.language);
       }
       continue;
     }
-    if (isNestableBlockType(block.type)) {
-      const children = (block as Extract<Block, { type: NestableBlockType }>)
+    if (isNestableBlockType(known.type)) {
+      const children = (known as Extract<Block, { type: NestableBlockType }>)
         .children;
       if (children !== undefined) canonicalizeCodeBlockLanguages(children);
     }

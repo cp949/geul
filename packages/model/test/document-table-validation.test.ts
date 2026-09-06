@@ -2,6 +2,7 @@
  * 독립 문서 모델의 표 크기(width/rowSpan)·색상·정렬 값과 셀 수 한도 검증을 확인한다.
  */
 import { describe, expect, it } from "vitest";
+import type { Block } from "../src/index.js";
 import { MAX_TABLE_COLUMNS, parseDocument } from "../src/index.js";
 
 describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
@@ -149,7 +150,10 @@ describe("독립 문서 모델 - 표 크기·색상·정렬 검증", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const parsedTable = result.value.blocks[0];
+    // 이 문서엔 CustomBlock이 없다 — Document.blocks가 top-level에서
+    // CustomBlock도 받게 된 뒤(RD-002-DELTA-01)로도 이 fixture는 순수 Block만
+    // 담으므로 as Block으로 좁혀도 안전하다.
+    const parsedTable = result.value.blocks[0] as Block | undefined;
     if (parsedTable?.type !== "table") throw new Error("Expected a table");
     expect(parsedTable.rows[0]?.cells[0]?.align).toBe("center");
   });

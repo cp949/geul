@@ -2,6 +2,7 @@
  * 독립 문서 모델의 저장용 텍스트 mark 정규 순서와 검증 계약을 확인한다.
  */
 import { describe, expect, it } from "vitest";
+import type { Block } from "../src/index.js";
 import {
   canonicalizeTextMarks,
   isCanonicalTextMarks,
@@ -173,7 +174,10 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
 
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) return;
-    const block = result.value.blocks[0];
+    // 이 문서엔 CustomBlock이 없다 — Document.blocks가 top-level에서
+    // CustomBlock도 받게 된 뒤(RD-002-DELTA-01)로도 이 fixture는 순수 Block만
+    // 담으므로 as Block으로 좁혀도 안전하다.
+    const block = result.value.blocks[0] as Block | undefined;
     if (block?.type !== "paragraph") throw new Error("Expected a paragraph");
     expect(block.content[0]?.marks).toEqual([
       { type: "textColor", color: "#AABBCC" },

@@ -34,6 +34,7 @@ export {
 export type { TextMarkNameInput } from "./mark-canonicalization.js";
 export type { Result } from "./result.js";
 export {
+  isKnownBlockType,
   MAX_NESTING_DEPTH,
   parseBlockOrCustomBlock,
   parseDocument,
@@ -75,6 +76,7 @@ export type {
   CustomTextMark,
   DividerBlock,
   Document,
+  DocumentBlock,
   FileBlock,
   HeadingBlock,
   IdFactory,

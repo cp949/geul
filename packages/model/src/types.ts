@@ -191,15 +191,21 @@ export type Block =
 // JSON 원시값만 허용한다(중첩 객체·배열 불가, 이번 범위의 단순화). 타입별
 // `props` 의미는 검증하지 않는다 — model은 소비자 registry를 모른 채
 // envelope(구조)만 안다(ADR-0002 순수성 유지, 그릴링 Q3 2026-09-06 채택).
-// `Document`/`parseDocument`는 아직 이 타입을 받지 않는다 — `core`가
-// registry를 실제로 배선할 때 함께 넓힌다(RD-001-DELTA-01 "설계 결정",
-// _works/roadmap/RD-002.md).
+// `Document`(top-level만)는 RD-002-DELTA-01부터 이 타입을 받는다 — 다른
+// `Block`의 `children`으로 중첩하는 것은 여전히 범위 밖이다(top-level
+// 전용, RD-002-DELTA-01 "설계 결정" 1, _works/roadmap/RD-002.md).
 export type CustomBlock = {
   id: string;
   type: string;
   content: "none" | "inline";
   props?: Record<string, string | number | boolean | null>;
 };
+
+// Document 최상위 blocks 배열의 원소 타입이다 — 알려진 14종 Block 또는
+// CustomBlock 하나. `Block` 자체의 재귀 `children` 필드는 넓히지 않는다 —
+// children은 여전히 Block[]만 담는다(top-level 전용, 위 CustomBlock 주석
+// 참고).
+export type DocumentBlock = Block | CustomBlock;
 
 // bulletListItem·numberedListItem·checkListItem만 뽑은 부분 유니온이다. io
 // export가 목록 형제를 묶어 <ul>/<ol> 또는 mdast list로 직렬화할 때 쓴다 —
@@ -208,5 +214,9 @@ export type CustomBlock = {
 // 않는다(ListItemBlockType과 같은 경계, 로드맵 D2).
 export type ListItemBlock =
   BulletListItemBlock | NumberedListItemBlock | CheckListItemBlock;
-export type Document = { formatVersion: 1; revision: number; blocks: Block[] };
+export type Document = {
+  formatVersion: 1;
+  revision: number;
+  blocks: DocumentBlock[];
+};
 export type IdFactory = () => string;
