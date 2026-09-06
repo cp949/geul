@@ -1,6 +1,7 @@
 import {
   type Block,
   type Document as BlockDocument,
+  type DocumentBlock,
   createRandomDocumentId,
   type IdFactory,
   isSupportedLinkHref,
@@ -59,7 +60,7 @@ const parseSupportedDocument = (
 };
 
 const flattenBlockTree = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   parentId: string | null = null,
 ): Map<string, { parentId: string | null; index: number; ownJson: string }> => {
   const map = new Map<
@@ -167,7 +168,8 @@ export class ProductionEditorSession {
     const parsed = parseSupportedDocument(options.initialDocument);
     if (!parsed.ok) {
       throw new TypeError(
-        parsed.error.code === "DOCUMENT_INVALID"
+        parsed.error.code === "DOCUMENT_INVALID" ||
+          parsed.error.code === "EDITOR_FEATURE_UNAVAILABLE"
           ? parsed.error.message
           : parsed.error.code,
       );

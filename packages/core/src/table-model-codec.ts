@@ -184,5 +184,8 @@ export const tiptapNodeToTableBlock = (
       error: { code: "TABLE_NODE_INVALID", message: "Expected a table block" },
     };
   }
-  return { ok: true, value: parsedTable };
+  // "table"은 KNOWN_BLOCK_TYPES 예약 리터럴이라 customBlockSchema로 라우팅될
+  // 수 없다(model schema.ts) — 위 판별로 parsedTable은 실제로 항상
+  // TableBlock이다(document-id-factory.ts와 동일 근거).
+  return { ok: true, value: parsedTable as TableBlock };
 };

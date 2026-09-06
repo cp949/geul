@@ -10,6 +10,7 @@ import {
   type ImageBlock,
   type InlineContent,
   isCanonicalTextMarks,
+  isKnownBlockType,
   isSupportedLinkHref,
   isValidInlineText,
   type NumberedListItemBlock,
@@ -349,14 +350,33 @@ export const modelToTiptap = (
   if (document.blocks.length === 0) {
     return invalid("R0 editor documents require at least one block");
   }
-  const representable = validateEditableContent(document.blocks);
+  // top-level CustomBlock(model, RD-002-DELTA-01)은 model 계약상 유효하지만
+  // PM atom 노드가 아직 등록되지 않았다(registry는 RD-002-DELTA-06) —
+  // 조용히 무시하거나 blockToTiptapJson/validateEditableContent가 알려진
+  // 14종 전용 필드(content: InlineContent 등)에 접근해 잘못 동작하게
+  // 두지 않고 로드 자체를 명시적으로 거절한다.
+  const customBlock = document.blocks.find(
+    (block) => !isKnownBlockType(block.type),
+  );
+  if (customBlock !== undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "EDITOR_FEATURE_UNAVAILABLE",
+        message: `Block ${customBlock.id} has unregistered custom type "${customBlock.type}" — customBlocks registry is not supported yet`,
+      },
+    };
+  }
+  const knownBlocks = document.blocks as Block[];
+
+  const representable = validateEditableContent(knownBlocks);
   if (!representable.ok) return representable;
 
   return {
     ok: true,
     value: {
       type: "doc",
-      content: document.blocks.map(blockToTiptapJson),
+      content: knownBlocks.map(blockToTiptapJson),
     },
   };
 };

@@ -1,6 +1,7 @@
 import { detectMarkdownPaste, importHtml } from "@cp949/geul-io";
 import {
   type Block,
+  type DocumentBlock,
   type IdFactory,
   MAX_NESTING_DEPTH,
 } from "@cp949/geul-model";
@@ -85,18 +86,21 @@ const clampDepth = (
 // 이 확장이 접근할 수 없는 세션 내부 상태가 필요해 재사용하지 않는다
 // (readiness probe 근거, `_works/roadmap/result/RD-004-DELTA-01.md`).
 const reassignNonTableBlockIds = (
-  blocks: readonly Block[],
+  blocks: readonly DocumentBlock[],
   createId: IdFactory,
-): Block[] =>
-  blocks.map((block): Block => {
+): DocumentBlock[] =>
+  blocks.map((block): DocumentBlock => {
     if (block.type === "table") return block;
     if (!("children" in block) || block.children === undefined) {
       return { ...block, id: createId() };
     }
+    // block.children은 항상 Block[](CustomBlock은 leaf라 children 필드
+    // 자체가 없다) — 재귀는 그 children에서만 도니 반환값도 실제로는 항상
+    // Block[]이다(block-tree-edit.ts의 동일 근거).
     return {
       ...block,
       id: createId(),
-      children: reassignNonTableBlockIds(block.children, createId),
+      children: reassignNonTableBlockIds(block.children, createId) as Block[],
     };
   });
 

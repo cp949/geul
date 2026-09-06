@@ -1,19 +1,29 @@
 import {
   isValidDocumentId,
-  type Block,
   type Document,
+  type DocumentBlock,
   type IdFactory,
+  type TableBlock,
 } from "@cp949/geul-model";
 
 const MAX_DOCUMENT_ID_ATTEMPTS = 100;
 
 const allocationErrorMessage = `createId failed to return a valid unique document id after ${MAX_DOCUMENT_ID_ATTEMPTS} attempts`;
 
-const collectBlockIdentityIds = (block: Block, ids: Set<string>): void => {
+// CustomBlock(top-level 전용, RD-002-DELTA-01)은 id 하나뿐이라 위 add 한
+// 줄로 충분하다 — "table" 리터럴은 KNOWN_BLOCK_TYPES 예약값이라
+// customBlockSchema로 라우팅될 수 없으므로(model schema.ts) 이 판별
+// 이후의 block은 실제로 항상 TableBlock이다(table-model-codec.ts와 동일
+// 근거). "children" in block도 CustomBlock에는 그 키가 없어 안전하다.
+const collectBlockIdentityIds = (
+  block: DocumentBlock,
+  ids: Set<string>,
+): void => {
   ids.add(block.id);
   if (block.type === "table") {
-    for (const column of block.columns) ids.add(column.id);
-    for (const row of block.rows) {
+    const table = block as TableBlock;
+    for (const column of table.columns) ids.add(column.id);
+    for (const row of table.rows) {
       ids.add(row.id);
       for (const cell of row.cells) ids.add(cell.id);
     }
