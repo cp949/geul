@@ -1,4 +1,4 @@
-import type { EditorController } from "@cp949/geul-core";
+import type { Dictionary, EditorController } from "@cp949/geul-core";
 import {
   createContext,
   type Dispatch,
@@ -31,3 +31,9 @@ export const useEditorMount = (): EditorMountContextValue => {
   if (mount === null) throw new Error(missingProviderMessage);
   return mount;
 };
+
+// spec §8(EXT-009), RD-002-DELTA-01 — 별도 Context를 두지 않고
+// `EditorController.getDictionary()`(construction-time readback)를 그대로
+// 감싼다. `EditorProvider`의 "external"/"internal" 모드 어느 쪽이든 같은
+// 방식으로 동작한다(RD-002.md "## 결정").
+export const useDictionary = (): Dictionary => useEditor().getDictionary();

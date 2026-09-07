@@ -485,6 +485,45 @@ describe("EditorProvider — keyboardShortcuts(EXT-005)", () => {
   });
 });
 
+describe("EditorProvider — dictionary(EXT-009)", () => {
+  it("override 시 EditorContent의 접근 가능한 이름이 override 값으로 바뀐다", () => {
+    render(
+      <EditorProvider
+        initialDocument={paragraphDocument("seed")}
+        dictionary={{
+          placeholder: {
+            paragraph: "Enter text or type '/' for commands",
+            heading: "Heading {level}",
+            quote: "Quote",
+            codeBlock: "Code",
+            listItem: "List item",
+          },
+          editor: { ariaLabel: "편집기" },
+        }}
+      >
+        <EditorContent />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "편집기" })).not.toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Editor" })).toBeNull();
+  });
+
+  it('dictionary 미지정 시 기본값(en) "Editor"가 그대로 쓰인다', () => {
+    let controller: EditorController | undefined;
+
+    render(
+      <EditorProvider initialDocument={paragraphDocument("seed")}>
+        <CaptureEditor onCapture={(editor) => (controller = editor)} />
+        <EditorContent />
+      </EditorProvider>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Editor" })).not.toBeNull();
+    expect(controller?.getDictionary().editor.ariaLabel).toBe("Editor");
+  });
+});
+
 describe("EditorProvider — attributeOverrides(EXT-008)", () => {
   it("editor/blockContainer/blockGroup 3개 역할이 렌더된 DOM에 반영된다", () => {
     const nestedDocument: CreateEditorOptions["initialDocument"] = {

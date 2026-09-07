@@ -30,6 +30,7 @@ export type EditorProviderProps =
       commands?: never;
       keyboardShortcuts?: never;
       attributeOverrides?: never;
+      dictionary?: never;
     }
   | {
       children: ReactNode;
@@ -70,6 +71,10 @@ export type EditorProviderProps =
       // renderHTML로 각각 에디터 생성 시점에 배선된다(core 계약).
       // customBlocks 등과 같은 이유로 마운트 시점 값만 읽는다.
       attributeOverrides?: CreateEditorOptions["attributeOverrides"];
+      // spec §8(EXT-009) — customBlocks 등과 같은 이유로 마운트 시점 값만
+      // 읽는다(dictionary는 core PM 스키마 급으로 생성 시점에 고정되는
+      // 계약, RD-001.md "결정"). latest-ref 대상이 아니다.
+      dictionary?: CreateEditorOptions["dictionary"];
     };
 
 export const EditorProvider = (props: EditorProviderProps) => {
@@ -118,6 +123,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
       customStyles: props.customStyles,
       enabledBlockTypes: props.enabledBlockTypes,
       attributeOverrides: props.attributeOverrides,
+      dictionary: props.dictionary,
       // "## 결정" 1 — 등록 key 집합만 마운트 시 고정한다. 함수 본체는
       // latestCommands/latestKeyboardShortcuts를 거쳐 최신값으로 간다.
       commandKeys:
@@ -176,6 +182,9 @@ export const EditorProvider = (props: EditorProviderProps) => {
       ...(configuration.attributeOverrides === undefined
         ? {}
         : { attributeOverrides: configuration.attributeOverrides }),
+      ...(configuration.dictionary === undefined
+        ? {}
+        : { dictionary: configuration.dictionary }),
       ...(configuration.commandKeys === undefined
         ? {}
         : {

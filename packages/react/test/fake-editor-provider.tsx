@@ -48,7 +48,11 @@
  * provider 조립까지 함께 한다.
  */
 
-import type { EditorController } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type Dictionary,
+  type EditorController,
+} from "@cp949/geul-core";
 import type { ReactNode } from "react";
 
 import { EditorProvider } from "../src/index.js";
@@ -84,12 +88,29 @@ export type FakeEditorController = {
  * fake 컨트롤러를 `editor` prop에 실은 `EditorProvider` 요소를 만든다.
  * 컨트롤러는 읽지도 검사하지도 않고 그대로 넘긴다 — 오용 검출은 전적으로 위
  * 파라미터 타입이 하고, 런타임은 무엇을 넘겨도 정상으로 보인다.
+ *
+ * `getDictionary`는 `FakeEditorController`에 넣지 않는다 — RD-002-DELTA-01
+ * 이후 `editor-content.tsx`가 `useDictionary()`(→ `editor.getDictionary()`)를
+ * 호출하는데, `<EditorContent />`를 자식으로 두는 호출부가 이 저장소
+ * 전체에 76곳 있어(실측) 전부에 필드를 추가하게 하는 비용이 이 헬퍼가
+ * 얻는 오용 감지 이득보다 크다. 대신 `controller`에 없을 때만 여기서
+ * 기본값(`DEFAULT_DICTIONARY`)을 **제자리에서** 채워 넣는다 — 새 객체로
+ * 감싸거나 스프레드하면 `element.props.editor`가 더는 넘긴 `controller`와
+ * `toBe`(참조 동일성)로 같지 않아 `fake-editor-provider.test.tsx`의
+ * "손대지 않은 채 그대로 넘긴다" 계약이 깨진다(실측 — 스프레드로
+ * 시도했다가 그 계약 테스트 8건이 깨져 이 방식으로 바꿨다).
  */
 export const withProvider = (
   controller: FakeEditorController,
   children: ReactNode,
-) => (
-  <EditorProvider editor={controller as unknown as EditorController}>
-    {children}
-  </EditorProvider>
-);
+) => {
+  const mutable = controller as FakeEditorController & {
+    getDictionary?: () => Dictionary;
+  };
+  mutable.getDictionary ??= () => DEFAULT_DICTIONARY;
+  return (
+    <EditorProvider editor={controller as unknown as EditorController}>
+      {children}
+    </EditorProvider>
+  );
+};

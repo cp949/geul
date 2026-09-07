@@ -20,6 +20,13 @@ export type Dictionary = {
     codeBlock: string;
     listItem: string;
   };
+  // RD-002-DELTA-01 — react `EditorContent`의 contenteditable 호스트 aria-label.
+  // 수십 개 react 테스트가 `getByRole("textbox", { name: "Editor" })`로 이
+  // 값을 셀렉터로 쓴다 — 기본값을 바꾸면 이 DELTA 범위 밖에서 무더기
+  // 회귀가 난다(의도된 회귀 가드, RD-002-DELTA-01.md 참고).
+  editor: {
+    ariaLabel: string;
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -32,5 +39,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     quote: "Quote",
     codeBlock: "Code",
     listItem: "List item",
+  },
+  editor: {
+    ariaLabel: "Editor",
   },
 };

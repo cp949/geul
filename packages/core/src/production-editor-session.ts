@@ -20,7 +20,7 @@ import type {
   CustomInlineContentDefinition,
   CustomStyleDefinition,
 } from "./custom-extension-definitions.js";
-import type { Dictionary } from "./dictionary.js";
+import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
@@ -340,6 +340,13 @@ export class ProductionEditorSession {
 
   get uploadFile(): UploadFile | undefined {
     return this.options.uploadFile;
+  }
+
+  // spec §8(EXT-009), RD-002-DELTA-01 — construction-time 옵션 readback,
+  // uploadFile getter와 동일 자리·근거. dictionary는 세션 생애주기 동안
+  // 불변이라(재설정 API 없음) 매 호출마다 다시 읽어도 항상 같은 값이다.
+  getDictionary(): Dictionary {
+    return this.options.dictionary ?? DEFAULT_DICTIONARY;
   }
 
   getMediaUploadState(blockId: string): MediaUploadState | null {

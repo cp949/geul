@@ -282,6 +282,9 @@ export const createEditor = (
       if (session.isDestroyed) return false;
       return session.uploadFile !== undefined;
     },
+    getDictionary() {
+      return session.getDictionary();
+    },
     replaceDocument(next) {
       return session.replaceDocument(next);
     },

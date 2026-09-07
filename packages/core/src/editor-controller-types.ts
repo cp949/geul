@@ -186,6 +186,13 @@ export interface EditorController {
   // 등록 시에만 true, "탭 자체 미노출" 계약). 파괴된 세션은 어떤 명령도
   // 적용할 수 없으므로 false를 반환한다(다른 isDestroyed 가드와 동일 원칙).
   isUploadEnabled(): boolean;
+  // spec §8(EXT-009), RD-002-DELTA-01 — construction-time `dictionary`
+  // readback(`isUploadEnabled()`와 동일 자리). react가 `EditorProvider`의
+  // "external"(이미 만들어진 editor를 그대로 전달)/"internal" 모드 어느
+  // 쪽이든 동일하게 활성 dictionary를 읽는 유일한 경로다(RD-002.md
+  // "## 결정" — 별도 React Context를 두지 않는 이유). 미지정으로
+  // 생성했으면 `DEFAULT_DICTIONARY`(en)를 반환한다.
+  getDictionary(): Dictionary;
   replaceDocument(next: unknown): Result<void, EditorError>;
   // spec §3.4(DOC-013), RD-005-DELTA-01 — `false`는 ProseMirror
   // `editable` prop을 통해 사용자 DOM 입력(타이핑·클릭 편집)만
