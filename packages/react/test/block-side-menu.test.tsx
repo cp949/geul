@@ -433,6 +433,24 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(screen.getByRole("menuitem", { name: "왼쪽 정렬" })).toBeTruthy();
   });
 
+  it("dictionary override 시 색상 섹션 property 라벨·색상 이름·None이 바뀐다(EXT-009)", () => {
+    openBlockMenu({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        color: {
+          ...DEFAULT_DICTIONARY.color,
+          textLabel: "글자색",
+          none: "없음",
+          names: { ...DEFAULT_DICTIONARY.color.names, blue: "파랑" },
+        },
+      },
+    });
+
+    expect(screen.getByText("글자색")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "글자색 파랑" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "글자색 없음" })).toBeTruthy();
+  });
+
   it("Code 종류 변경은 id와 source를 보존하고 mark를 제거하며 text 언어를 적용한다", () => {
     const rendered = renderBlockMenu();
     const paragraph = rendered.host.querySelector("p");

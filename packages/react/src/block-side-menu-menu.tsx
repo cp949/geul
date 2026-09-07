@@ -180,11 +180,13 @@ export const BlockSideMenuMenu = ({
                 gutter hover 대상에서 이미 제외돼 blockMenuSource.type이
                 "table"일 일이 없다(위 nestingActions 주석과 같은 불변식). */}
             <hr className="geul-block-menu__divider" />
-            <p className={colorSectionLabelClassName}>Text color</p>
+            <p className={colorSectionLabelClassName}>
+              {dictionary.color.textLabel}
+            </p>
             <div className="geul-menu-palette">
               {TABLE_TEXT_COLORS.map((color) => (
                 <MenuItemButton
-                  aria-label={`Text color ${color.name}`}
+                  aria-label={`${dictionary.color.textLabel} ${dictionary.color.names[color.id]}`}
                   className={colorSwatchClassName}
                   key={color.value}
                   onClick={() => applyBlockTextColor(color.value)}
@@ -197,18 +199,20 @@ export const BlockSideMenuMenu = ({
                 </MenuItemButton>
               ))}
               <MenuItemButton
-                aria-label="Text color None"
+                aria-label={`${dictionary.color.textLabel} ${dictionary.color.none}`}
                 className={colorSwatchClassName}
                 onClick={() => applyBlockTextColor(null)}
               >
                 ×
               </MenuItemButton>
             </div>
-            <p className={colorSectionLabelClassName}>Background color</p>
+            <p className={colorSectionLabelClassName}>
+              {dictionary.color.backgroundLabel}
+            </p>
             <div className="geul-menu-palette">
               {TABLE_BACKGROUND_COLORS.map((color) => (
                 <MenuItemButton
-                  aria-label={`Background color ${color.name}`}
+                  aria-label={`${dictionary.color.backgroundLabel} ${dictionary.color.names[color.id]}`}
                   className={colorSwatchClassName}
                   key={color.value}
                   onClick={() => applyBlockBackgroundColor(color.value)}
@@ -218,7 +222,7 @@ export const BlockSideMenuMenu = ({
                 </MenuItemButton>
               ))}
               <MenuItemButton
-                aria-label="Background color None"
+                aria-label={`${dictionary.color.backgroundLabel} ${dictionary.color.none}`}
                 className={colorSwatchClassName}
                 onClick={() => applyBlockBackgroundColor(null)}
               >

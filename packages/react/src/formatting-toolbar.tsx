@@ -97,11 +97,6 @@ const backgroundColorIcon = <PaintBucket {...iconProps} />;
 const colorMenuSectionLabelClassName = "geul-menu-section-label";
 const colorMenuSwatchClassName = "geul-menu-swatch";
 
-const colorMenuPropertyLabel = {
-  text: "Text color",
-  background: "Background color",
-} as const;
-
 // useDismissOnOutsideOrEscape allow-list. 트리거 버튼도 포함해야 재클릭이
 // "바깥 클릭"으로 먼저 닫히는 레이스 없이 트리거의 onClick 토글만으로
 // 재클릭 닫기가 성립한다(block-side-menu.tsx의 BLOCK_MENU_DISMISS_ALLOW_SELECTORS와
@@ -284,16 +279,21 @@ export const FormattingToolbar = ({
     closeColorMenu();
   };
 
+  const colorPropertyLabel = (property: "text" | "background") =>
+    property === "text"
+      ? dictionary.color.textLabel
+      : dictionary.color.backgroundLabel;
+
   const renderColorSwatches = (
     property: "text" | "background",
     colors: TableCellColor[],
   ) => {
-    const label = colorMenuPropertyLabel[property];
+    const label = colorPropertyLabel(property);
     return (
       <div className="geul-menu-palette">
         {colors.map((color) => (
           <MenuItemButton
-            aria-label={`${label} ${color.name}`}
+            aria-label={`${label} ${dictionary.color.names[color.id]}`}
             className={colorMenuSwatchClassName}
             key={color.value}
             onClick={(event) => applyInlineColor(event, property, color.value)}
@@ -307,7 +307,7 @@ export const FormattingToolbar = ({
           </MenuItemButton>
         ))}
         <MenuItemButton
-          aria-label={`${label} None`}
+          aria-label={`${label} ${dictionary.color.none}`}
           className={colorMenuSwatchClassName}
           onClick={(event) => applyInlineColor(event, property, null)}
         >
@@ -472,7 +472,7 @@ export const FormattingToolbar = ({
           data-geul-color-trigger=""
           icon={textColorIcon}
           key="text-color"
-          label="Text color"
+          label={dictionary.color.textLabel}
           onClick={(event) => handleColorTriggerClick("text", event)}
         />
         <IconButton
@@ -480,13 +480,13 @@ export const FormattingToolbar = ({
           data-geul-color-trigger=""
           icon={backgroundColorIcon}
           key="background-color"
-          label="Background color"
+          label={dictionary.color.backgroundLabel}
           onClick={(event) => handleColorTriggerClick("background", event)}
         />
       </div>
       {colorMenuState !== null && (
         <div
-          aria-label={colorMenuPropertyLabel[colorMenuState.property]}
+          aria-label={colorPropertyLabel(colorMenuState.property)}
           className="geul-menu-panel"
           data-geul-color-menu=""
           ref={colorMenuRef}
@@ -494,7 +494,7 @@ export const FormattingToolbar = ({
           style={colorMenuStyle}
         >
           <p className={colorMenuSectionLabelClassName}>
-            {colorMenuPropertyLabel[colorMenuState.property]}
+            {colorPropertyLabel(colorMenuState.property)}
           </p>
           {renderColorSwatches(
             colorMenuState.property,

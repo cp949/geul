@@ -152,6 +152,32 @@ describe("정렬 버튼", () => {
     expect(screen.getByRole("menu", { name: "셀 서식" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "오른쪽 정렬" })).toBeTruthy();
   });
+
+  it("dictionary override 시 색상 property 라벨·이름이 바뀐다(EXT-009, TableCellColorPalettes 공유)", () => {
+    const controller = fakeController({
+      ...DEFAULT_DICTIONARY,
+      color: {
+        ...DEFAULT_DICTIONARY.color,
+        backgroundLabel: "배경색",
+        names: { ...DEFAULT_DICTIONARY.color.names, green: "초록" },
+      },
+    });
+
+    render(
+      withProvider(
+        controller,
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={vi.fn()}
+          tableBlockId="table-1"
+          top={100}
+        />,
+      ),
+    );
+
+    expect(screen.getByRole("menuitem", { name: "배경색 초록" })).toBeTruthy();
+  });
 });
 
 describe("명령 실패 시 피드백", () => {

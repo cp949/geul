@@ -3,8 +3,9 @@
 /**
  * FormattingToolbar의 인라인 색상 팔레트 열기·명령·dismiss·focus 계약을 확인한다.
  */
+import { DEFAULT_DICTIONARY } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, FormattingToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
@@ -48,6 +49,36 @@ describe("인라인 색상 팔레트", () => {
     expect(
       screen.getByRole("menuitem", { name: "Text color None" }),
     ).toBeTruthy();
+  });
+
+  it("dictionary override 시 property 라벨과 색상 이름이 바뀐다(EXT-009)", () => {
+    const controller = fakeController();
+    controller.getDictionary = vi.fn(() => ({
+      ...DEFAULT_DICTIONARY,
+      color: {
+        ...DEFAULT_DICTIONARY.color,
+        textLabel: "글자색",
+        names: { ...DEFAULT_DICTIONARY.color.names, blue: "파랑" },
+      },
+    }));
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+    fireEvent.click(screen.getByRole("button", { name: "글자색" }));
+
+    expect(screen.getByRole("menu", { name: "글자색" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "글자색 파랑" })).toBeTruthy();
   });
 
   it("글자색 스와치를 클릭하면 그 색상값으로 toggleInlineTextColor를 호출하고 팔레트를 닫는다", () => {

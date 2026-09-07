@@ -101,6 +101,27 @@ export type Dictionary = {
     headerColumn: string;
     cellFormattingAriaLabel: string;
   };
+  // RD-002-DELTA-05 — 색상 이름 8종과 "Text color"/"Background color"
+  // property 라벨. `names`의 key는 react `table-cell-colors.ts`의
+  // `TableCellColorId`와 정확히 일치한다. 3곳(`table-cell-color-palettes.tsx`,
+  // `block-side-menu-menu.tsx`, `formatting-toolbar.tsx`)이 각자
+  // `${textLabel} ${names[id]}` 형태로 조합해 aria-label을 만든다 — 이
+  // 네임스페이스는 조합 전 조각만 소유한다.
+  color: {
+    textLabel: string;
+    backgroundLabel: string;
+    none: string;
+    names: {
+      gray: string;
+      red: string;
+      orange: string;
+      yellow: string;
+      green: string;
+      blue: string;
+      purple: string;
+      pink: string;
+    };
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -213,5 +234,20 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     headerRow: "Header row",
     headerColumn: "Header column",
     cellFormattingAriaLabel: "Cell formatting",
+  },
+  color: {
+    textLabel: "Text color",
+    backgroundLabel: "Background color",
+    none: "None",
+    names: {
+      gray: "Gray",
+      red: "Red",
+      orange: "Orange",
+      yellow: "Yellow",
+      green: "Green",
+      blue: "Blue",
+      purple: "Purple",
+      pink: "Pink",
+    },
   },
 };

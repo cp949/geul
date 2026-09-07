@@ -6,7 +6,7 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
-import { useEditor } from "./use-editor.js";
+import { useDictionary, useEditor } from "./use-editor.js";
 
 const swatchClassName = "geul-menu-swatch";
 const sectionLabelClassName = "geul-menu-section-label";
@@ -44,6 +44,7 @@ export const TableCellColorPalettes = ({
   onApplied,
 }: TableCellColorPalettesProps) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
 
   const applyColor = (property: "text" | "background", color: string | null) =>
     runCommand(
@@ -68,7 +69,7 @@ export const TableCellColorPalettes = ({
       <div className="geul-menu-palette">
         {colors.map((color) => (
           <MenuItemButton
-            aria-label={`${label} ${color.name}`}
+            aria-label={`${label} ${dictionary.color.names[color.id]}`}
             className={swatchClassName}
             key={color.value}
             onClick={() => applyColor(property, color.value)}
@@ -82,7 +83,7 @@ export const TableCellColorPalettes = ({
           </MenuItemButton>
         ))}
         <MenuItemButton
-          aria-label={`${label} None`}
+          aria-label={`${label} ${dictionary.color.none}`}
           className={swatchClassName}
           onClick={() => applyColor(property, null)}
         >
@@ -94,8 +95,12 @@ export const TableCellColorPalettes = ({
 
   return (
     <>
-      {renderPalette("text", "Text color", TABLE_TEXT_COLORS)}
-      {renderPalette("background", "Background color", TABLE_BACKGROUND_COLORS)}
+      {renderPalette("text", dictionary.color.textLabel, TABLE_TEXT_COLORS)}
+      {renderPalette(
+        "background",
+        dictionary.color.backgroundLabel,
+        TABLE_BACKGROUND_COLORS,
+      )}
     </>
   );
 };
