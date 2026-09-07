@@ -10,7 +10,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import type { BlockTypeDescriptor } from "@cp949/geul-core";
+import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
 import { LucideProvider } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -720,6 +720,50 @@ describe("FormattingToolbar 서식 툴바", () => {
 
       const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
       expect(container.contains(toolbar)).toBe(true);
+    });
+  });
+
+  describe("component override", () => {
+    const CustomToolbar = ({ editor }: { editor: EditorController }) => (
+      <button onClick={() => editor.commands.toggleBold()} type="button">
+        Custom bold
+      </button>
+    );
+
+    it("지정하면 소비자 컴포넌트가 렌더되고 editor를 받는다", () => {
+      const controller = fakeController(vi.fn(() => ["bold"]));
+      render(
+        withProvider(
+          controller,
+          <>
+            <FormattingToolbar component={CustomToolbar} />
+            <EditorContent />
+          </>,
+        ),
+      );
+      const textNode = screen.getByRole("textbox", { name: "Editor" })
+        .firstChild?.firstChild;
+      if (!textNode) throw new Error("Text node was not rendered");
+      selectText(textNode, 0, 8);
+
+      const button = screen.getByRole("button", { name: "Custom bold" });
+      fireEvent.click(button);
+
+      expect(controller.commands.toggleBold).toHaveBeenCalledOnce();
+      // 기본 내장 UI(마크 버튼·블록 타입 select·색상 트리거)는 통째
+      // 교체되어 하나도 남지 않는다.
+      expect(screen.queryByRole("button", { name: "Italic" })).toBeNull();
+      expect(screen.queryByRole("combobox", { name: "Block type" })).toBeNull();
+    });
+
+    it("지정해도 표시 판정(선택 없으면 렌더 안 함)은 wrapper가 그대로 유지한다", () => {
+      const controller = fakeController();
+      render(
+        withProvider(controller, <FormattingToolbar component={CustomToolbar} />),
+      );
+
+      expect(screen.queryByRole("toolbar")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Custom bold" })).toBeNull();
     });
   });
 });

@@ -11,6 +11,7 @@ import {
   Underline,
 } from "lucide-react";
 import {
+  type FC,
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -152,13 +153,22 @@ const restoreEditorSelection = (
  * DELTA-01). 미지정(기본값 `null`)이면 기존처럼 부모 트리 내부에 그대로
  * 렌더한다 — additive 확장이라 기존 소비자·테스트의 DOM 배치 가정을 깨지
  * 않는다.
+ *
+ * `component`를 지정하면 위치 계산·표시 판정·dismiss는 이 컴포넌트가 그대로
+ * 담당하고 내부 JSX(마크 버튼·블록 타입 select·색상 팔레트)만 `<Component
+ * editor={editor} />`로 통째 교체한다(RD-001 DELTA-01, roadmap.md "`component`
+ * override payload" 결정). `editor` 하나만 넘기고 activeMarks 등 계산된 로컬
+ * state는 넘기지 않는다 — 소비자가 이미 공개된 `editor.getSelectionMarks()`
+ * 등으로 직접 조회한다.
  */
 export type FormattingToolbarProps = {
   portalTarget?: HTMLElement | null;
+  component?: FC<{ editor: EditorController }>;
 };
 
 export const FormattingToolbar = ({
   portalTarget = null,
+  component: Component,
 }: FormattingToolbarProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
@@ -306,6 +316,23 @@ export const FormattingToolbar = ({
   };
 
   if (toolbarState === null) return null;
+
+  if (Component !== undefined) {
+    const overridden = (
+      <div
+        aria-label="Formatting"
+        className="geul-formatting-toolbar"
+        ref={menuRef}
+        role="toolbar"
+        style={style}
+      >
+        <Component editor={editor} />
+      </div>
+    );
+    return portalTarget === null
+      ? overridden
+      : createPortal(overridden, portalTarget);
+  }
 
   const content = (
     <>
