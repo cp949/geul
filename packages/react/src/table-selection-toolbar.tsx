@@ -209,7 +209,7 @@ export const TableSelectionToolbar = () => {
         />
         {actionError !== null && (
           <span className={actionErrorClassName} role="alert">
-            {tableCommandErrorMessage(actionError)}
+            {tableCommandErrorMessage(actionError, dictionary)}
           </span>
         )}
       </div>

@@ -222,6 +222,29 @@ export type Dictionary = {
     label: string;
     suggestionsAriaLabel: string;
   };
+  // RD-002-DELTA-10(RD-002 마지막) — 표 명령 실패 문구.
+  // `table-command-error-messages.ts`의 `tableCommandErrorMessage`가 이
+  // 네임스페이스를 조회한다. 그 함수는 컴포넌트가 아니라 순수 함수라
+  // useDictionary()를 직접 부를 수 없다 — 호출부(이미 useDictionary()를
+  // 가진 3개 소비처)가 dictionary를 인자로 넘긴다.
+  error: {
+    lastRow: string;
+    lastColumn: string;
+    cellNotFound: string;
+    invalidColor: string;
+    invalidAlign: string;
+    notRectangular: string;
+    actionFailed: string;
+  };
+  // RD-002-DELTA-10 — 업로드·URL 검증 상태 문구. "Uploading…"/"Upload
+  // could not start."는 media-toolbar.tsx·file-panel.tsx 둘 다 하드코딩
+  // 리터럴로 갖고 있던 것을 하나로 통합한다.
+  status: {
+    uploading: string;
+    uploadCouldNotStart: string;
+    unsupportedLinkUrl: string;
+    unsupportedMediaUrl: string;
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -430,5 +453,20 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     plainText: "Plain Text",
     label: "Code language",
     suggestionsAriaLabel: "Code language suggestions",
+  },
+  error: {
+    lastRow: "Can't delete the last row",
+    lastColumn: "Can't delete the last column",
+    cellNotFound: "Cell no longer exists",
+    invalidColor: "Unsupported color",
+    invalidAlign: "Unsupported alignment",
+    notRectangular: "Selection isn't rectangular",
+    actionFailed: "Action failed",
+  },
+  status: {
+    uploading: "Uploading…",
+    uploadCouldNotStart: "Upload could not start.",
+    unsupportedLinkUrl: "Unsupported link URL",
+    unsupportedMediaUrl: "Unsupported media URL",
   },
 };

@@ -239,7 +239,7 @@ export const MediaToolbar = ({
                 upload: {
                   status: "error",
                   code: result.error.code,
-                  message: "Upload could not start.",
+                  message: dictionary.status.uploadCouldNotStart,
                 },
               }
             : prev,
@@ -289,7 +289,7 @@ export const MediaToolbar = ({
         };
       });
     },
-    [editor, element],
+    [editor, element, dictionary.status.uploadCouldNotStart],
   );
 
   const startReplacing = () => {
@@ -723,7 +723,7 @@ export const MediaToolbar = ({
             type="file"
           />
           {toolbarState.upload.status === "uploading" && (
-            <p role="status">Uploading…</p>
+            <p role="status">{dictionary.status.uploading}</p>
           )}
           {toolbarState.upload.status === "error" && (
             <>

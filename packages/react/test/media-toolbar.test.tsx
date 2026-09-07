@@ -791,6 +791,28 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     expect(screen.getByRole("status")).not.toBeNull();
   });
 
+  it("dictionary override 시 Uploading… 상태 문구가 바뀐다(EXT-009)", () => {
+    const replaceMediaBlockFile = vi.fn(() => new Promise<never>(() => {}));
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile,
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        status: { ...DEFAULT_DICTIONARY.status, uploading: "업로드 중…" },
+      },
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+
+    expect(screen.getByRole("status").textContent).toBe("업로드 중…");
+  });
+
   it("교체 성공 시 view로 돌아가 갱신된 url/name을 반영한다", async () => {
     let callCount = 0;
     const controller = fakeController({
@@ -853,6 +875,38 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     });
     expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+  });
+
+  it("dictionary override 시 사전조건 실패 메시지(Upload could not start.)가 바뀐다(EXT-009)", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      replaceMediaBlockFile: () =>
+        Promise.resolve<ReplaceMediaFileResult>({
+          ok: false,
+          error: { code: "BLOCK_NOT_FOUND", blockId: "media-1" },
+        }),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        status: {
+          ...DEFAULT_DICTIONARY.status,
+          uploadCouldNotStart: "업로드를 시작할 수 없습니다.",
+        },
+      },
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const file = new File(["x"], "new.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toBe(
+        "업로드를 시작할 수 없습니다.",
+      );
+    });
   });
 
   it("Retry 클릭 시 같은 File로 replaceMediaBlockFile을 재호출한다", async () => {

@@ -188,7 +188,7 @@ export const FilePanel = ({
             upload: {
               status: "error",
               code: result.error.code,
-              message: "Upload could not start.",
+              message: dictionary.status.uploadCouldNotStart,
             },
           };
         }
@@ -207,7 +207,7 @@ export const FilePanel = ({
         };
       });
     },
-    [editor],
+    [editor, dictionary.status.uploadCouldNotStart],
   );
 
   const handleFileChange = (event: { currentTarget: HTMLInputElement }) => {
@@ -391,7 +391,7 @@ export const FilePanel = ({
           </button>
           {panelState.rejected && (
             <span className="geul-file-panel__error" role="alert">
-              Unsupported media URL
+              {dictionary.status.unsupportedMediaUrl}
             </span>
           )}
           {panelState.appliedName !== null && (
@@ -416,7 +416,7 @@ export const FilePanel = ({
           />
           {panelState.upload.status === "uploading" && (
             <>
-              <p role="status">Uploading…</p>
+              <p role="status">{dictionary.status.uploading}</p>
               <button
                 className={filePanelButtonClassName}
                 onClick={handleCancel}

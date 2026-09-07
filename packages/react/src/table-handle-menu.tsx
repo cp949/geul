@@ -104,7 +104,7 @@ export const TableHandleMenu = ({
     >
       {actionError !== null && (
         <p className={actionErrorClassName} role="alert">
-          {tableCommandErrorMessage(actionError)}
+          {tableCommandErrorMessage(actionError, dictionary)}
         </p>
       )}
       <MenuItemButton className={menuItemClassName} onClick={insertBefore}>

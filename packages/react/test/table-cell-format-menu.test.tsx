@@ -256,4 +256,48 @@ describe("명령 실패 시 피드백", () => {
     expect(screen.getByRole("alert").textContent).toBe("Action failed");
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("dictionary override 시 에러 문구가 바뀐다(EXT-009, 공유 tableCommandErrorMessage 재사용 확인)", () => {
+    const base = fakeController({
+      ...DEFAULT_DICTIONARY,
+      error: {
+        ...DEFAULT_DICTIONARY.error,
+        cellNotFound: "셀을 더 이상 찾을 수 없음",
+      },
+    });
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        setTableCellTextColor: vi.fn(
+          () =>
+            ({
+              ok: false,
+              error: { code: "CELL_NOT_FOUND", cellId: "cell-1" },
+            }) as ReturnType<
+              EditorController["commands"]["setTableCellTextColor"]
+            >,
+        ),
+      },
+    };
+
+    render(
+      withProvider(
+        controller,
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={vi.fn()}
+          tableBlockId="table-1"
+          top={100}
+        />,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "셀을 더 이상 찾을 수 없음",
+    );
+  });
 });

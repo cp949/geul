@@ -217,6 +217,33 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
   });
 
+  it("dictionary override 시 거부 메시지(Unsupported link URL)가 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      setLink: () => ({
+        ok: false,
+        error: { code: "LINK_HREF_REJECTED" },
+      }),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        status: {
+          ...DEFAULT_DICTIONARY.status,
+          unsupportedLinkUrl: "지원하지 않는 링크 URL",
+        },
+      },
+    });
+    renderWithSelectedText(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Link URL" }), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save link" }));
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "지원하지 않는 링크 URL",
+    );
+  });
+
   it("제거 컨트롤로 링크를 제거하고 편집기로 초점을 되돌린다", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),

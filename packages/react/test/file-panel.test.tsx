@@ -286,6 +286,33 @@ describe("FilePanel 파일 패널", () => {
     expect(screen.getByRole("textbox", { name: "Image URL" })).not.toBeNull();
   });
 
+  it("dictionary override 시 거부 메시지(Unsupported media URL)가 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+      setMediaBlockUrl: () => ({
+        ok: false,
+        error: { code: "LINK_HREF_REJECTED" },
+      }),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        status: {
+          ...DEFAULT_DICTIONARY.status,
+          unsupportedMediaUrl: "지원하지 않는 미디어 URL",
+        },
+      },
+    });
+    renderPanel(controller);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "지원하지 않는 미디어 URL",
+    );
+  });
+
   it("Escape는 패널을 닫고 편집기로 focus를 복원한다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,

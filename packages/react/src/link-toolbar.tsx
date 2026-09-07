@@ -283,7 +283,7 @@ export const LinkToolbar = ({
           </button>
           {toolbarState.rejected && (
             <span className="geul-link-toolbar__error" role="alert">
-              Unsupported link URL
+              {dictionary.status.unsupportedLinkUrl}
             </span>
           )}
         </>
