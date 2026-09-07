@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { EditorController } from "@cp949/geul-core";
+import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -55,13 +56,18 @@ const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
   };
 };
 
-/** DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고. */
+/**
+ * `formatting-toolbar.tsx`와 동일 계약 — `portalTarget`(RD-003 DELTA-02),
+ * `component`(RD-001 DELTA-02) 참고.
+ */
 export type LinkToolbarProps = {
   portalTarget?: HTMLElement | null;
+  component?: FC<{ editor: EditorController }>;
 };
 
 export const LinkToolbar = ({
   portalTarget = null,
+  component: Component,
 }: LinkToolbarProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
@@ -118,6 +124,23 @@ export const LinkToolbar = ({
   const focusEditor = useFocusEditor(element);
 
   if (toolbarState.mode === "closed") return null;
+
+  if (Component !== undefined) {
+    const overridden = (
+      <div
+        aria-label="Link"
+        className="geul-link-toolbar"
+        ref={menuRef}
+        role="toolbar"
+        style={style}
+      >
+        <Component editor={editor} />
+      </div>
+    );
+    return portalTarget === null
+      ? overridden
+      : createPortal(overridden, portalTarget);
+  }
 
   const startEditing = () => {
     editingRef.current = true;

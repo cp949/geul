@@ -6,10 +6,11 @@
  * URL 입력에서 Escape 시 닫힘과 편집기로의 초점 복구를 검증한다.
  */
 
+import type { EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EditorContent, LinkToolbar } from "../src/index.js";
+import { EditorContent, LinkToolbar, type LinkToolbarProps } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 import { collapseSelection, selectText } from "./selection-events.js";
@@ -64,12 +65,13 @@ const fakeController = ({
 
 const renderWithSelectedText = (
   controller: ReturnType<typeof fakeController>,
+  props: LinkToolbarProps = {},
 ) => {
   render(
     withProvider(
       controller,
       <>
-        <LinkToolbar />
+        <LinkToolbar {...props} />
         <EditorContent />
       </>,
     ),
@@ -340,6 +342,42 @@ describe("LinkToolbar 링크 툴바", () => {
 
       const toolbar = screen.getByRole("toolbar", { name: "Link" });
       expect(container.contains(toolbar)).toBe(true);
+    });
+  });
+
+  describe("component override", () => {
+    const CustomLinkToolbar = ({ editor }: { editor: EditorController }) => (
+      <button onClick={() => editor.commands.unsetLink()} type="button">
+        Custom remove link
+      </button>
+    );
+
+    it("지정하면 소비자 컴포넌트가 렌더되고 editor를 받는다", () => {
+      const controller = fakeController();
+      renderWithSelectedText(controller, { component: CustomLinkToolbar });
+
+      const button = screen.getByRole("button", {
+        name: "Custom remove link",
+      });
+      fireEvent.click(button);
+
+      expect(controller.commands.unsetLink).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("button", { name: "Add link" })).toBeNull();
+    });
+
+    it("지정해도 표시 판정은 wrapper가 그대로 유지한다", () => {
+      const controller = fakeController();
+      render(
+        withProvider(
+          controller,
+          <LinkToolbar component={CustomLinkToolbar} />,
+        ),
+      );
+
+      expect(screen.queryByRole("toolbar")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Custom remove link" }),
+      ).toBeNull();
     });
   });
 });
