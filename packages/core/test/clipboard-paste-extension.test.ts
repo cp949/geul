@@ -24,6 +24,7 @@ import {
   paragraphBlock,
   paragraphDocument,
   sequentialIds,
+  tableBlockOf,
 } from "./editor-controller-support.js";
 import { placeCaretInCell } from "./table-test-support.js";
 
@@ -271,6 +272,163 @@ describe("ClipboardPasteExtension", () => {
       expect(maxBlockDepth(document.blocks)).toBeLessThanOrEqual(
         MAX_NESTING_DEPTH,
       );
+    });
+  });
+
+  // IO-008(RD-001-DELTA-01) — 등록된 pasteHandler가 기본 동작을
+  // 대체(true)·취소(false)·위임(undefined)할 수 있는지 검증한다.
+  describe("pasteHandler(IO-008)", () => {
+    it("true를 반환하면 기본 처리를 대체해 문서를 바꾸지 않는다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        pasteHandler: () => true,
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, "<h4>t</h4>");
+
+        expect(editor.getDocument().blocks).toHaveLength(1);
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("false를 반환하면 취소되어 PM 기본 plain-text 붙여넣기도 일어나지 않는다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        pasteHandler: () => false,
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        // pasteHandler 없이 이 입력을 붙여넣으면 PM 기본 처리가
+        // "seedworld"로 이어붙인다(위 "단일 plain 문단" 테스트 참고) —
+        // false는 그 기본 처리까지 억제해 아무 것도 삽입하지 않는다.
+        pasteData(editable, { "text/plain": "world" });
+
+        const blocks = editor.getDocument().blocks;
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ content: [{ text: "seed" }] });
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("undefined를 반환하면 기존 붙여넣기 동작이 그대로 발생한다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        pasteHandler: () => undefined,
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, "<h4>t</h4>");
+
+        const inserted = editor.getDocument().blocks[1];
+        expect(inserted).toMatchObject({ type: "heading", level: 4 });
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("defaultPasteHandler()를 호출해 위임하면 기존 동작과 동일한 결과를 낸다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        pasteHandler: (context) => context.defaultPasteHandler(),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, "<h4>t</h4>");
+
+        const inserted = editor.getDocument().blocks[1];
+        expect(inserted).toMatchObject({ type: "heading", level: 4 });
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("context.editor가 EditorController facade로 동작해 호출 시점 문서를 조회할 수 있다", () => {
+      const seenBlockCounts: number[] = [];
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        pasteHandler: (context) => {
+          seenBlockCounts.push(context.editor.getDocument().blocks.length);
+          return undefined;
+        },
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, "<h4>t</h4>");
+
+        // 삽입 전(캐럿이 있던 문단 하나뿐인) 시점의 문서를 봤어야 한다 —
+        // context.editor가 세션 완성 전 지연 바인딩 Proxy가 아니라 실제
+        // 호출 시점 EditorController를 가리킨다는 증거다.
+        expect(seenBlockCounts).toEqual([1]);
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("표 셀 안에서는 pasteHandler가 호출되지 않는다(기존 표 가드 유지)", () => {
+      let called = false;
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("id"),
+        pasteHandler: () => {
+          called = true;
+          return true;
+        },
+      });
+      const inserted = editor.commands.insertTable("block-1", {
+        rows: 2,
+        columns: 2,
+      });
+      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+      const table = tableBlockOf(editor);
+      const cellIds = table.rows.flatMap((row) => row.cells.map((c) => c.id));
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      const cellId = cellIds[0];
+      if (cellId === undefined) throw new Error("셀 fixture 준비 실패");
+      placeCaretInCell(tiptap, cellId);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, "<blockquote>q</blockquote>");
+
+        expect(called).toBe(false);
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("pasteHandler 미등록 시 기존 동작을 그대로 유지한다(하위호환)", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, "<h4>t</h4>");
+
+        const inserted = editor.getDocument().blocks[1];
+        expect(inserted).toMatchObject({ type: "heading", level: 4 });
+        expect(errors).toEqual([]);
+      });
     });
   });
 });

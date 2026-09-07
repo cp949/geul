@@ -235,6 +235,17 @@ export const createProductionEditor = (options: {
   createId: IdFactory;
   onUpdate: (editor: Editor) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  // spec §10(IO-008), RD-001-DELTA-01 — ClipboardPasteExtension의 override
+  // hook. pasteHandlerEditor는 customBlockEditor와 동일 근거(호출 시점엔
+  // 완성돼 있는 지연 바인딩 Proxy)로 EditorController를 넘긴다.
+  // pasteHandler가 있으면 pasteHandlerEditor도 항상 함께 온다(customBlocks/
+  // customBlockEditor와 동일 근거).
+  pasteHandler?: (context: {
+    event: ClipboardEvent;
+    editor: EditorController;
+    defaultPasteHandler: () => boolean;
+  }) => boolean | undefined;
+  pasteHandlerEditor?: EditorController;
   // spec §4.4(EXT-001), RD-002-DELTA-11 — 등록된 타입마다 PM atom 노드를
   // 조건부로 추가한다(customBlockEditor는 그 NodeView가 CustomBlockDefinition.render에
   // 넘길 EditorController 참조 — 세션 생성 시점엔 아직 완성 전이라 지연
@@ -499,7 +510,15 @@ export const createProductionEditor = (options: {
       // 시도된다(표가 먼저 자기 콘텐츠를 판정하고, 자기 것이 아니면
       // 넘겨서 이 확장이 표 아닌 나머지 전부를 받는다 — 목록도 이제 이
       // 확장이 io.importHtml로 직접 처리한다, RD-005).
-      ClipboardPasteExtension.configure({ createId: options.createId }),
+      ClipboardPasteExtension.configure({
+        createId: options.createId,
+        ...(options.pasteHandler === undefined
+          ? {}
+          : {
+              pasteHandler: options.pasteHandler,
+              controllerFacade: options.pasteHandlerEditor,
+            }),
+      }),
       TablePasteExtension.configure({
         createId: options.createId,
         ...(options.onPasteRejected === undefined

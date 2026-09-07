@@ -9,6 +9,7 @@ import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
+import type { EditorController } from "./editor-controller-types.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 
@@ -43,7 +44,19 @@ import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 // uncaught exception이 없다. modelToTiptap이 미리 거절하든 안 하든
 // 관찰 가능한 결과(붙여넣기가 아무것도 넣지 않는다)가 같아 이 스레딩은
 // 검출 변이를 만들 수 없는 죽은 코드였다.
-export type ClipboardPasteOptions = { createId: IdFactory };
+export type ClipboardPasteOptions = {
+  createId: IdFactory;
+  // spec §10(IO-008), RD-001-DELTA-01 — 등록된 pasteHandler가 아래
+  // handlePaste의 기본 처리 직전에 호출된다. controllerFacade는
+  // pasteHandler가 있을 때만 함께 온다(production-editor-assembly.ts
+  // 배선 근거).
+  pasteHandler?: (context: {
+    event: ClipboardEvent;
+    editor: EditorController;
+    defaultPasteHandler: () => boolean;
+  }) => boolean | undefined;
+  controllerFacade?: EditorController;
+};
 
 // 이미 조립된 blockContainer JSON 배열의 절대 깊이가 MAX_NESTING_DEPTH를
 // 넘지 않도록 평탄화한다(초과 지점의 blockGroup을 지우지 않고 그
@@ -128,59 +141,84 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
   addProseMirrorPlugins() {
     const editor = this.editor;
     const createId = this.options.createId;
+    const pasteHandler = this.options.pasteHandler;
+    const controllerFacade = this.options.controllerFacade;
 
     return [
       new Plugin({
         props: {
           handlePaste: (view, event) => {
-            // 표 셀 안에서는 손대지 않는다(R1 계약 그대로).
+            // 표 셀 안에서는 손대지 않는다(R1 계약 그대로) — pasteHandler도
+            // 호출하지 않는다(roadmap.md "제외 범위", IO-008은 표·미디어
+            // 붙여넣기를 대상으로 하지 않는다).
             if (isInTable(view.state)) return false;
-            const clipboardData = event.clipboardData;
-            if (clipboardData === null) return false;
 
-            const html = clipboardData.getData("text/html");
-            const text = clipboardData.getData("text/plain");
+            // spec §10(IO-008) — 기존 handlePaste 로직 전체를 그대로
+            // defaultPasteHandler로 노출한다. pasteHandler가 undefined를
+            // 반환(기본 동작 위임)하면 이 함수를 그대로 호출한다.
+            const defaultHandlePaste = (): boolean => {
+              const clipboardData = event.clipboardData;
+              if (clipboardData === null) return false;
 
-            const insert = (nodes: TiptapJsonNode[]): void => {
-              if (nodes.length === 0) return;
-              const targetDepth = modelDepthAtPasteTarget(
-                view.state.selection.$from,
-              );
-              editor.commands.insertContent(clampDepth(nodes, targetDepth));
-            };
+              const html = clipboardData.getData("text/html");
+              const text = clipboardData.getData("text/plain");
 
-            if (html.length > 0) {
-              // TablePasteExtension이 이 확장보다 먼저 등록돼 있어(
-              // production-editor-assembly.ts) 표 형태 HTML은 여기
-              // 도달하지 않는다 — 이 확장 안에서 표 여부를 다시
-              // 판정하지 않는다.
-              // createId를 넘기지 않는다 — 이 결과의 모든 비표 블록 id는
-              // 어차피 아래에서 전부 재발급되므로, importHtml 내부가 임시로
-              // 발급하는 기본 id(own 마커가 없는 블록에만 해당)까지 editor의
-              // createId로 낭비하지 않는다.
-              const imported = importHtml(html);
-              if (!imported.ok) return true;
-              const document = {
-                ...imported.value.document,
-                blocks: reassignNonTableBlockIds(
-                  imported.value.document.blocks,
-                  createId,
-                ),
+              const insert = (nodes: TiptapJsonNode[]): void => {
+                if (nodes.length === 0) return;
+                const targetDepth = modelDepthAtPasteTarget(
+                  view.state.selection.$from,
+                );
+                editor.commands.insertContent(clampDepth(nodes, targetDepth));
               };
-              const encoded = modelToTiptap(document);
+
+              if (html.length > 0) {
+                // TablePasteExtension이 이 확장보다 먼저 등록돼 있어(
+                // production-editor-assembly.ts) 표 형태 HTML은 여기
+                // 도달하지 않는다 — 이 확장 안에서 표 여부를 다시
+                // 판정하지 않는다.
+                // createId를 넘기지 않는다 — 이 결과의 모든 비표 블록 id는
+                // 어차피 아래에서 전부 재발급되므로, importHtml 내부가 임시로
+                // 발급하는 기본 id(own 마커가 없는 블록에만 해당)까지 editor의
+                // createId로 낭비하지 않는다.
+                const imported = importHtml(html);
+                if (!imported.ok) return true;
+                const document = {
+                  ...imported.value.document,
+                  blocks: reassignNonTableBlockIds(
+                    imported.value.document.blocks,
+                    createId,
+                  ),
+                };
+                const encoded = modelToTiptap(document);
+                if (!encoded.ok) return true;
+                insert(encoded.value.content ?? []);
+                return true;
+              }
+
+              if (text.length === 0) return false;
+
+              const detection = detectMarkdownPaste(text, { createId });
+              if (!detection.detected) return false;
+
+              const encoded = modelToTiptap(detection.document);
               if (!encoded.ok) return true;
               insert(encoded.value.content ?? []);
               return true;
+            };
+
+            if (pasteHandler === undefined || controllerFacade === undefined) {
+              return defaultHandlePaste();
             }
 
-            if (text.length === 0) return false;
-
-            const detection = detectMarkdownPaste(text, { createId });
-            if (!detection.detected) return false;
-
-            const encoded = modelToTiptap(detection.document);
-            if (!encoded.ok) return true;
-            insert(encoded.value.content ?? []);
+            const result = pasteHandler({
+              event,
+              editor: controllerFacade,
+              defaultPasteHandler: defaultHandlePaste,
+            });
+            if (result === undefined) return defaultHandlePaste();
+            // true(처리됨)·false(취소) 둘 다 PM handlePaste 레벨에선 true를
+            // 반환해야 한다 — false(취소)는 PM 기본 plain-text 붙여넣기까지
+            // 억제해야 하므로 PM의 "위임" 신호(false)를 쓸 수 없다.
             return true;
           },
         },

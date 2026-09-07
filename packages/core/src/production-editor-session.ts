@@ -184,6 +184,14 @@ export class ProductionEditorSession {
         reason: ChangeReason;
       }) => void;
       onPasteRejected?: (reason: PasteRejectedReason) => void;
+      // spec §10(IO-008), RD-001-DELTA-01 — customBlocks/keyboardShortcuts와
+      // 동일 시점·동일 지연 바인딩 참조(controllerEditor) 구조로
+      // createTiptapEditor에 전달한다.
+      pasteHandler?: (context: {
+        event: ClipboardEvent;
+        editor: EditorController;
+        defaultPasteHandler: () => boolean;
+      }) => boolean | undefined;
       uploadFile?: UploadFile;
       onUploadStateChange?: (
         blockId: string,
@@ -467,6 +475,14 @@ export class ProductionEditorSession {
       ...(this.options.onPasteRejected === undefined
         ? {}
         : { onPasteRejected: this.options.onPasteRejected }),
+      // spec §10(IO-008), RD-001-DELTA-01 — customBlocks/keyboardShortcuts와
+      // 동일 근거로 controllerFacade를 pasteHandlerEditor로 넘긴다.
+      ...(this.options.pasteHandler === undefined
+        ? {}
+        : {
+            pasteHandler: this.options.pasteHandler,
+            pasteHandlerEditor: this.controllerEditor,
+          }),
       ...(this.options.onSelectionChange === undefined
         ? {}
         : { onSelectionChange: this.options.onSelectionChange }),

@@ -450,6 +450,20 @@ export type CreateEditorOptions = {
   createId?: IdFactory;
   onChange?: (event: DocumentChangeEvent) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  // spec §10(IO-008), RD-001-DELTA-01 — ClipboardPasteExtension이 표·미디어가
+  // 아닌 붙여넣기(own HTML/외부 HTML/Markdown/plain text)를 처리하기 직전에
+  // 호출한다. `true`는 처리됨(기본 동작 중단), `false`는 취소(아무 것도
+  // 삽입하지 않음, PM 기본 plain-text 붙여넣기도 포함해 억제), `undefined`는
+  // `defaultPasteHandler()`로 위임 가능한 기본 동작 위임이다. 표
+  // (TablePasteExtension)·미디어(MediaDropPasteExtension) 붙여넣기는
+  // 이 hook의 대상이 아니다(roadmap.md "제외 범위"). raw PM Plugin/Tiptap
+  // Extension은 노출하지 않는다(ADR-0002) — `event`만 원본 DOM
+  // ClipboardEvent이고 `editor`는 EditorController다.
+  pasteHandler?: (context: {
+    event: ClipboardEvent;
+    editor: EditorController;
+    defaultPasteHandler: () => boolean;
+  }) => boolean | undefined;
   // spec §4.1 — 미등록 시 uploadMediaFile은 COMMAND_NOT_APPLICABLE로
   // 거절되고, drag/drop·paste 파일 페이로드는 무시된다(R2 결정 유지,
   // 슬라이스4 몫).
