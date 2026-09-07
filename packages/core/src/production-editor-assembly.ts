@@ -24,6 +24,7 @@ import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
 import { createCustomBlockExtension } from "./custom-block-extension.js";
 import { createCustomInlineContentExtension } from "./custom-inline-content-extension.js";
+import { CustomKeyboardShortcutsExtension } from "./custom-keyboard-shortcuts-extension.js";
 import { createCustomStyleMark } from "./custom-style-mark-extension.js";
 import { DividerExtension } from "./divider-extension.js";
 // EditorController/CustomBlockDefinition/CustomInlineContentDefinition/
@@ -295,6 +296,13 @@ export const createProductionEditor = (options: {
   // 같은 모양의 클로저다. drop/paste가 media 블록을 삽입한 직후 그 실제
   // 업로드를 트리거한다. 미지정이면 그 확장 자신의 기본값(no-op)을 쓴다.
   triggerMediaUpload?: (blockId: string, file: File) => void;
+  // spec §5(EXT-005), RD-002-DELTA-01 — CustomKeyboardShortcutsExtension에
+  // 그대로 전달한다(keyboardShortcutsEditor는 customBlockEditor와 동일한
+  // 지연 바인딩 Proxy — editor-controller.ts::createEditor 배선 참고).
+  // keyboardShortcuts가 있으면 keyboardShortcutsEditor도 항상 함께 온다
+  // (customBlocks/customBlockEditor와 동일 근거).
+  keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
+  keyboardShortcutsEditor?: EditorController;
 }): Editor => {
   const converted = modelToTiptap(options.document, {
     customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
@@ -495,6 +503,19 @@ export const createProductionEditor = (options: {
         canApplyDocumentChange: (transaction) =>
           options.canApplyDocumentChange(transaction, loadNormalizing),
       }),
+      // 배열 맨 끝(roadmap.md "결정") — 선언 역순 keymap 우선순위(위
+      // ClipboardPasteExtension 주석 참고)로 등록된 keyboardShortcuts가
+      // 내장 키 9개보다 항상 먼저 시도된다.
+      ...(options.keyboardShortcuts === undefined
+        ? []
+        : [
+            CustomKeyboardShortcutsExtension.configure({
+              keyboardShortcuts: options.keyboardShortcuts,
+              ...(options.keyboardShortcutsEditor === undefined
+                ? {}
+                : { controllerFacade: options.keyboardShortcutsEditor }),
+            }),
+          ]),
     ],
     onUpdate: ({ editor: updatedEditor }) => {
       if (!loadNormalizing) options.onUpdate(updatedEditor);

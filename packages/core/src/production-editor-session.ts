@@ -212,6 +212,10 @@ export class ProductionEditorSession {
       // 목록. 세션 생애주기 동안 불변이라(재설정 API 없음) 매번 이
       // 옵션에서 다시 읽는다(customBlocks와 같은 패턴).
       enabledBlockTypes?: EnabledBlockTypes;
+      // spec §5(EXT-005), RD-002-DELTA-01 — customBlocks와 동일 시점·동일
+      // 지연 바인딩 참조(controllerEditor) 구조로 createTiptapEditor에
+      // 전달한다.
+      keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
     // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
@@ -442,6 +446,14 @@ export class ProductionEditorSession {
       ...(this.options.customStyles === undefined
         ? {}
         : { customStyles: this.options.customStyles }),
+      // spec §5(EXT-005), RD-002-DELTA-01 — customBlocks/customInlineContent와
+      // 동일 근거로 controllerFacade를 keyboardShortcutsEditor로 넘긴다.
+      ...(this.options.keyboardShortcuts === undefined
+        ? {}
+        : {
+            keyboardShortcuts: this.options.keyboardShortcuts,
+            keyboardShortcutsEditor: this.controllerEditor,
+          }),
       ...(this.options.enabledBlockTypes === undefined
         ? {}
         : { enabledBlockTypes: this.options.enabledBlockTypes }),

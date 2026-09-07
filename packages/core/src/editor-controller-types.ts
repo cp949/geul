@@ -514,4 +514,14 @@ export type CreateEditorOptions = {
     string,
     (editor: EditorController, ...args: unknown[]) => Result<void, EditorError>
   >;
+  // spec §5(EXT-005), RD-002-DELTA-01 — 등록된 함수는 내장 keyboard
+  // shortcut 9개(block-join/move/split/type-keyboard, code-block-exit/
+  // mark-guard, indent-keyboard, list-input-rule, table-keyboard)와 겹쳐도
+  // 항상 우선한다(roadmap.md "결정" — CustomKeyboardShortcutsExtension을
+  // extensions 배열 끝에 두어 Tiptap 3.30.1의 선언 역순 keymap 우선순위를
+  // 이용한다). 겹치는 키는 등록 시 console.warn으로 알리되 등록을 막지
+  // 않는다. `false`를 반환하면 ProseMirror keymap 표준 폴스루로 내장
+  // shortcut이 이어서 실행된다. raw PM Plugin/Tiptap Extension은 노출하지
+  // 않는다(ADR-0002).
+  keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
 };
