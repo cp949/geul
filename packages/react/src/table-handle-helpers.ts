@@ -4,7 +4,7 @@ import {
   readGeometryFor,
   type TableGeometry,
 } from "./table-handle-geometry.js";
-import type { HandleMenuState, ReorderState } from "./table-handles-types.js";
+import type { HandleMenuState, ReorderState } from "./table-handle-types.js";
 
 // colgroup col의 인라인 width는 renderHTML이 쓴 모델 열 너비다. 셀 rect는
 // 콘텐츠가 렌더 너비를 강제로 벌리면 모델 값과 어긋나므로 리사이즈 시드로

@@ -18,7 +18,7 @@ import {
   HANDLE_HOVER_MARGIN,
   TABLE_HOVER_IGNORE_SELECTORS,
   TABLE_MENU_DISMISS_ALLOW_SELECTORS,
-} from "./table-handles-constants.js";
+} from "./table-handle-constants.js";
 import {
   clampWidth,
   computeMenuPosition,
@@ -26,13 +26,13 @@ import {
   computeReorderTargetIndex,
   readColumnStyleWidth,
   setColumnStyleWidth,
-} from "./table-handles-helpers.js";
+} from "./table-handle-helpers.js";
 import type {
   HandleMenuState,
   ReorderKind,
   ReorderState,
   ResizeState,
-} from "./table-handles-types.js";
+} from "./table-handle-types.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";

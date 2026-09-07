@@ -15,9 +15,9 @@ import {
   outdentTableLabel,
   rowHandleIcon,
   rowHandleLabel,
-} from "./table-handles-constants.js";
-import type { ReorderGuideRect } from "./table-handles-helpers.js";
-import type { ReorderKind } from "./table-handles-types.js";
+} from "./table-handle-constants.js";
+import type { ReorderGuideRect } from "./table-handle-helpers.js";
+import type { ReorderKind } from "./table-handle-types.js";
 
 export type TableHandleOverlaysProps = {
   geometry: TableGeometry;
