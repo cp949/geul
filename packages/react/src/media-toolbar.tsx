@@ -1,5 +1,6 @@
 import type { MediaBlockKind } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   FALLBACK_BLOCK_POSITION,
@@ -134,7 +135,14 @@ const carryMediaInfo = (
  * "성공 시에만 로컬 state 반영" 패턴을 재사용하고, 같은 값 재클릭은
  * 해제(`null`)한다(`setMediaAlignment` 주석 참고).
  */
-export const MediaToolbar = () => {
+/** DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고. */
+export type MediaToolbarProps = {
+  portalTarget?: HTMLElement | null;
+};
+
+export const MediaToolbar = ({
+  portalTarget = null,
+}: MediaToolbarProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState>({
@@ -498,7 +506,7 @@ export const MediaToolbar = () => {
     );
   };
 
-  return (
+  const content = (
     <div
       aria-label="Media toolbar"
       className="geul-media-toolbar"
@@ -721,4 +729,6 @@ export const MediaToolbar = () => {
       )}
     </div>
   );
+
+  return portalTarget === null ? content : createPortal(content, portalTarget);
 };

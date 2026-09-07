@@ -941,3 +941,37 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     );
   });
 });
+
+describe("MediaToolbar portalTarget(슬라이스4 RD-003 DELTA-03)", () => {
+  it("지정하면 그 요소 하위에 렌더한다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    const portalTarget = document.createElement("div");
+    document.body.appendChild(portalTarget);
+    render(
+      withProvider(
+        controller,
+        <>
+          <MediaToolbar portalTarget={portalTarget} />
+          <EditorContent />
+        </>,
+      ),
+    );
+
+    const toolbar = screen.getByRole("toolbar", { name: "Media toolbar" });
+    expect(portalTarget.contains(toolbar)).toBe(true);
+
+    portalTarget.remove();
+  });
+
+  it("지정하지 않으면 기존 위치(부모 트리 내부)에 렌더한다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    const { container } = renderToolbar(controller);
+
+    const toolbar = screen.getByRole("toolbar", { name: "Media toolbar" });
+    expect(container.contains(toolbar)).toBe(true);
+  });
+});

@@ -14,7 +14,7 @@ export {
 } from "./formatting-toolbar.js";
 export { LinkToolbar, type LinkToolbarProps } from "./link-toolbar.js";
 export { MediaResizeHandles } from "./media-resize-handles.js";
-export { MediaToolbar } from "./media-toolbar.js";
+export { MediaToolbar, type MediaToolbarProps } from "./media-toolbar.js";
 export { SlashMenu } from "./slash-menu.js";
 // TableHandles는 BlockSideMenu처럼 SlashMenu가 자동 마운트한다 — 공개
 // export하면 소비자가 중복 마운트해 핸들 오버레이가 두 벌 겹친다.
