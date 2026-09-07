@@ -56,6 +56,21 @@ export type Dictionary = {
     "check-list": { label: string; description: string };
     "toggle-list": { label: string; description: string };
   };
+  // RD-002-DELTA-03 — react `slash-menu.tsx` 자체 문구. `file`/`image`/
+  // `video`/`audio` key는 `MediaBlockKind`(core `media-block-kind.ts`) 리터럴과
+  // 정확히 일치한다 — react가 `item.mediaKind`로 직접 인덱싱한다.
+  // `TABLE_SLASH_ITEM` 등 slash-menu.tsx 모듈 상수의 `label`/`description`은
+  // blockType과 동일 이유로 검색 매칭 전용으로 남고 dictionary와 무관하다.
+  slashMenu: {
+    ariaLabel: string;
+    noMatches: string;
+    table: { label: string; description: string };
+    divider: { label: string; description: string };
+    file: { label: string; description: string };
+    image: { label: string; description: string };
+    video: { label: string; description: string };
+    audio: { label: string; description: string };
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -134,5 +149,15 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       label: "Toggle List",
       description: "Create a collapsible toggle list",
     },
+  },
+  slashMenu: {
+    ariaLabel: "Slash menu",
+    noMatches: "No matches",
+    table: { label: "Table", description: "Insert a table" },
+    divider: { label: "Divider", description: "Insert a horizontal divider" },
+    file: { label: "File", description: "Insert a file" },
+    image: { label: "Image", description: "Insert an image" },
+    video: { label: "Video", description: "Insert a video" },
+    audio: { label: "Audio", description: "Insert an audio file" },
   },
 };

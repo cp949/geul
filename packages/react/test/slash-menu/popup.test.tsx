@@ -212,6 +212,33 @@ describe("SlashMenu 질의 팝업", () => {
     ).toBe("본문");
   });
 
+  it("dictionary override 시 컨테이너 aria-label·No matches·삽입 항목 텍스트가 바뀐다(EXT-009)", () => {
+    const rendered = renderCaretBlocks({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        slashMenu: {
+          ...DEFAULT_DICTIONARY.slashMenu,
+          ariaLabel: "슬래시 메뉴",
+          noMatches: "일치하는 항목 없음",
+          table: { label: "표", description: "표 삽입" },
+        },
+      },
+    });
+
+    typeIntoBlock(rendered, 0, "/xyz매치없음");
+    expect(screen.getByRole("listbox", { name: "슬래시 메뉴" })).not.toBeNull();
+    expect(screen.getByText("일치하는 항목 없음")).not.toBeNull();
+
+    typeIntoBlock(rendered, 0, "/table");
+    const option = screen.getByRole("option", { name: /^표/ });
+    expect(
+      option.querySelector(".geul-slash-menu__item-label")?.textContent,
+    ).toBe("표");
+    expect(
+      option.querySelector(".geul-slash-menu__item-description")?.textContent,
+    ).toBe("표 삽입");
+  });
+
   it("입력한 질의에 맞춰 항목을 걸러낸다", () => {
     const rendered = renderCaretBlocks();
 

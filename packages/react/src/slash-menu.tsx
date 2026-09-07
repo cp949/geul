@@ -1,5 +1,6 @@
 import type {
   BlockTypeDescriptor,
+  Dictionary,
   EditorController,
   MediaBlockKind,
 } from "@cp949/geul-core";
@@ -196,6 +197,27 @@ const filterItems = (
   getSlashMenuItems(source, customItems).filter((item) =>
     matchesQuery(item, query),
   );
+
+// spec §8(EXT-009), RD-002-DELTA-03 — 렌더 텍스트를 kind별로 dictionary에서
+// 읽는다. 검색(matchesQuery/filterItems)은 위 고정 영어 label·keywords를
+// 그대로 쓴다 — 이 함수는 그쪽을 건드리지 않는다(DELTA-02·03 공통 결정).
+const slashMenuItemText = (
+  dictionary: Dictionary,
+  item: SlashMenuItem,
+): { label: string; description: string } => {
+  switch (item.kind) {
+    case "blockType":
+      return blockTypeText(dictionary, item.id);
+    case "insertTable":
+      return dictionary.slashMenu.table;
+    case "insertDivider":
+      return dictionary.slashMenu.divider;
+    case "insertMedia":
+      return dictionary.slashMenu[item.mediaKind];
+    case "custom":
+      return { label: item.label, description: item.description };
+  }
+};
 
 type MenuPosition = { left: number; top: number };
 
@@ -528,41 +550,40 @@ export const SlashMenu = ({
   const menuContent =
     menuState === null ? null : (
       <div
-        aria-label="Slash menu"
+        aria-label={dictionary.slashMenu.ariaLabel}
         className="geul-slash-menu"
         ref={menuRef}
         role="listbox"
         style={style}
       >
         {items.length === 0 && (
-          <p className="geul-slash-menu__empty">No matches</p>
+          <p className="geul-slash-menu__empty">
+            {dictionary.slashMenu.noMatches}
+          </p>
         )}
-        {items.map((item, index) => (
-          <button
-            aria-selected={index === menuState.highlightedIndex}
-            className="geul-slash-menu__item"
-            id={`${menuId}-${item.id}`}
-            key={item.id}
-            onClick={() => selectItem(item)}
-            onPointerDown={(event) => event.preventDefault()}
-            role="option"
-            type="button"
-          >
-            {item.kind === "custom" && item.icon !== undefined && (
-              <span className="geul-slash-menu__item-icon">{item.icon}</span>
-            )}
-            <span className="geul-slash-menu__item-label">
-              {item.kind === "blockType"
-                ? blockTypeText(dictionary, item.id).label
-                : item.label}
-            </span>
-            <span className="geul-slash-menu__item-description">
-              {item.kind === "blockType"
-                ? blockTypeText(dictionary, item.id).description
-                : item.description}
-            </span>
-          </button>
-        ))}
+        {items.map((item, index) => {
+          const { label, description } = slashMenuItemText(dictionary, item);
+          return (
+            <button
+              aria-selected={index === menuState.highlightedIndex}
+              className="geul-slash-menu__item"
+              id={`${menuId}-${item.id}`}
+              key={item.id}
+              onClick={() => selectItem(item)}
+              onPointerDown={(event) => event.preventDefault()}
+              role="option"
+              type="button"
+            >
+              {item.kind === "custom" && item.icon !== undefined && (
+                <span className="geul-slash-menu__item-icon">{item.icon}</span>
+              )}
+              <span className="geul-slash-menu__item-label">{label}</span>
+              <span className="geul-slash-menu__item-description">
+                {description}
+              </span>
+            </button>
+          );
+        })}
       </div>
     );
 
