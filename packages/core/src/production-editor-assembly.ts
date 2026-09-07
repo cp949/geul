@@ -38,6 +38,7 @@ import type {
   CustomInlineContentDefinition,
   CustomStyleDefinition,
 } from "./custom-extension-definitions.js";
+import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
@@ -324,6 +325,9 @@ export const createProductionEditor = (options: {
     blockContainer?: Record<string, string>;
     blockGroup?: Record<string, string>;
   };
+  // spec §8(EXT-009), RD-001-DELTA-01 — PlaceholderExtension에
+  // 그대로 넘긴다. 미지정이면 `DEFAULT_DICTIONARY`(en)를 쓴다.
+  dictionary?: Dictionary;
 }): Editor => {
   const converted = modelToTiptap(options.document, {
     customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
@@ -497,7 +501,9 @@ export const createProductionEditor = (options: {
       ),
       ListPresentationExtension,
       CheckListItemMarkerExtension,
-      PlaceholderExtension,
+      PlaceholderExtension.configure({
+        dictionary: options.dictionary ?? DEFAULT_DICTIONARY,
+      }),
       ToggleCollapseVisibilityExtension,
       ToggleCollapseMarkerExtension,
       TrailingBlockExtension,

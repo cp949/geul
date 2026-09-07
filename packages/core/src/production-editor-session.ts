@@ -20,6 +20,7 @@ import type {
   CustomInlineContentDefinition,
   CustomStyleDefinition,
 } from "./custom-extension-definitions.js";
+import type { Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
@@ -231,6 +232,9 @@ export class ProductionEditorSession {
         blockContainer?: Record<string, string>;
         blockGroup?: Record<string, string>;
       };
+      // spec §8(EXT-009), RD-001-DELTA-01 — attributeOverrides와 동일하게
+      // createTiptapEditor가 매 재구성마다 그대로 전달한다.
+      dictionary?: Dictionary;
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
     // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
@@ -493,6 +497,12 @@ export class ProductionEditorSession {
       ...(this.options.attributeOverrides === undefined
         ? {}
         : { attributeOverrides: this.options.attributeOverrides }),
+      // spec §8(EXT-009), RD-001-DELTA-01 — attributeOverrides와 동일 근거로
+      // replaceDocument()가 재구성하는 매 Tiptap Editor 생성마다 다시
+      // 넘겨야 override가 유지된다.
+      ...(this.options.dictionary === undefined
+        ? {}
+        : { dictionary: this.options.dictionary }),
       canApplyDocumentChange: (transaction, loadNormalizing) =>
         this.evaluateBeforeChange(transaction, loadNormalizing),
       // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한

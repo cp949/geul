@@ -17,6 +17,7 @@ import type {
   CustomInlineContentDefinition,
   CustomStyleDefinition,
 } from "./custom-extension-definitions.js";
+import type { Dictionary } from "./dictionary.js";
 import type { EditorError } from "./errors.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
@@ -557,4 +558,9 @@ export type CreateEditorOptions = {
     // attribute-override-merge.ts 규칙을 쓴다.
     blockGroup?: Record<string, string>;
   };
+  // spec §8(EXT-009), RD-001-DELTA-01 — 미지정 시 `DEFAULT_DICTIONARY`(en)를
+  // 쓴다. 자동 딥 병합은 하지 않는다 — 소비자가 `DEFAULT_DICTIONARY`를
+  // 스프레드해 필요한 key만 override한다(dictionary.ts, spec §8.1
+  // "단순함 우선").
+  dictionary?: Dictionary;
 };

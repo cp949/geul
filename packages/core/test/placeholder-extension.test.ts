@@ -8,7 +8,7 @@
 import type { Document, HeadingBlock } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
-import { createEditor } from "../src/index.js";
+import { createEditor, DEFAULT_DICTIONARY } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
   documentOf,
@@ -233,5 +233,63 @@ describe("placeholder 데코레이션", () => {
       "Heading 6",
     );
     expect(editable.querySelectorAll("[data-placeholder]")).toHaveLength(3);
+  });
+});
+
+/**
+ * dictionary override(spec §8.1, RD-001-DELTA-01)가 placeholder 문구를
+ * 실제로 대체함을 검증한다. 자동 딥 병합은 없다 — 소비자가
+ * `DEFAULT_DICTIONARY`를 스프레드해 필요한 key만 바꾼다.
+ */
+describe("dictionary override", () => {
+  it("paragraph placeholder 문구가 override로 바뀐다", () => {
+    const editor = createEditor({
+      initialDocument: emptyAndFilledParagraphs(),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        placeholder: {
+          ...DEFAULT_DICTIONARY.placeholder,
+          paragraph: "텍스트 입력",
+        },
+      },
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-empty"));
+    expect(editable.querySelector("p")?.getAttribute("data-placeholder")).toBe(
+      "텍스트 입력",
+    );
+  });
+
+  it("heading placeholder override가 {level} 토큰을 올바르게 치환한다", () => {
+    const editor = createEditor({
+      initialDocument: emptyHeadingsDocument(),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        placeholder: {
+          ...DEFAULT_DICTIONARY.placeholder,
+          heading: "제목 {level}",
+        },
+      },
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-end"));
+
+    expect(editable.querySelector("h1")?.getAttribute("data-placeholder")).toBe(
+      "제목 1",
+    );
+    expect(editable.querySelector("h2")?.getAttribute("data-placeholder")).toBe(
+      "제목 2",
+    );
+  });
+
+  it("dictionary를 지정하지 않으면 기본(en) 문구가 그대로 쓰인다", () => {
+    const editor = createEditor({ initialDocument: emptyQuoteDocument() });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-end"));
+
+    expect(
+      editable.querySelector("blockquote")?.getAttribute("data-placeholder"),
+    ).toBe(DEFAULT_DICTIONARY.placeholder.quote);
   });
 });

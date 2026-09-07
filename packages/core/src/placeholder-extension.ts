@@ -6,22 +6,23 @@ import { Extension } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
 import { Plugin } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 
-// 문구는 core가 소유한다(R-4·R-7: 영어 하드코딩, react는 표시 CSS만).
-const PARAGRAPH_PLACEHOLDER = "Enter text or type '/' for commands";
-// quote placeholder는 heading처럼 캐럿 위치와 무관하게 상시 표시한다 —
-// spec §6.4 "빈 블록에 타입별 placeholder"의 확장이고, 구조 블록의 상시
-// 표시는 heading이 전례다. 빈 quote는 테두리(blockquote 스타일)만 남아
-// 타입 힌트가 없으면 무엇인지 알 수 없다(Issue #38 슬라이스 3).
-const QUOTE_PLACEHOLDER = "Quote";
-const CODE_PLACEHOLDER = "Code";
-const LIST_ITEM_PLACEHOLDER = "List item";
+export type PlaceholderExtensionOptions = {
+  // spec §8(EXT-009), RD-001-DELTA-01 — 문구는 core가 소유한다(R-4·R-7:
+  // 하드코딩 대신 dictionary 소유, react는 표시 CSS만). 항상 완전한 값이다
+  // — production-editor-assembly.ts가 `DEFAULT_DICTIONARY`로 폴백해 넘긴다.
+  dictionary: Dictionary;
+};
 
 // 빈 paragraph는 캐럿(selection anchor)이 그 블록 안에 있을 때만, 빈
 // heading·quote·codeBlock은 상시 data-placeholder 노드 데코레이션을 받는다(R-3). 빈
 // textblock의 내부 위치는 position + 1 하나뿐이라 anchor 비교 하나로
 // "캐럿이 그 블록 안"이 판정된다.
-const placeholderDecorations = (state: EditorState): DecorationSet => {
+const placeholderDecorations = (
+  state: EditorState,
+  placeholder: Dictionary["placeholder"],
+): DecorationSet => {
   const decorations: Decoration[] = [];
   const anchor = state.selection.anchor;
 
@@ -39,15 +40,19 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
 
     const text =
       typeName === "heading"
-        ? `Heading ${node.attrs.level as number}`
+        ? // "{level}" 토큰을 실제 레벨 숫자로 치환한다(dictionary.ts).
+          placeholder.heading.replace(
+            "{level}",
+            String(node.attrs.level as number),
+          )
         : typeName === "quote"
-          ? QUOTE_PLACEHOLDER
+          ? placeholder.quote
           : typeName === "codeBlock"
-            ? CODE_PLACEHOLDER
+            ? placeholder.codeBlock
             : isListEntryBlockType(typeName)
-              ? LIST_ITEM_PLACEHOLDER
+              ? placeholder.listItem
               : anchor === position + 1
-                ? PARAGRAPH_PLACEHOLDER
+                ? placeholder.paragraph
                 : null;
     if (text !== null) {
       decorations.push(
@@ -65,16 +70,22 @@ const placeholderDecorations = (state: EditorState): DecorationSet => {
 // 빈 블록 placeholder(UI-009, spec §6.4). 데코레이션으로만 존재해 저장
 // 문서에 흔적이 없다. 표시는 react가 [data-placeholder]::before CSS로
 // 그린다(_editor.scss, R-7).
-export const PlaceholderExtension = Extension.create({
-  name: "placeholder",
+export const PlaceholderExtension =
+  Extension.create<PlaceholderExtensionOptions>({
+    name: "placeholder",
 
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        props: {
-          decorations: placeholderDecorations,
-        },
-      }),
-    ];
-  },
-});
+    addOptions() {
+      return { dictionary: DEFAULT_DICTIONARY };
+    },
+
+    addProseMirrorPlugins() {
+      const { placeholder } = this.options.dictionary;
+      return [
+        new Plugin({
+          props: {
+            decorations: (state) => placeholderDecorations(state, placeholder),
+          },
+        }),
+      ];
+    },
+  });

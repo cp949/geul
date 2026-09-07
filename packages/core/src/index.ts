@@ -56,6 +56,8 @@ export type {
 } from "./custom-extension-definitions.js";
 export type { EnabledBlockTypes } from "./editor-controller.js";
 export { createEditor } from "./editor-controller.js";
+export type { Dictionary } from "./dictionary.js";
+export { DEFAULT_DICTIONARY } from "./dictionary.js";
 export type {
   BlockSelection,
   CreateEditorOptions,
