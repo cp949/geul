@@ -311,6 +311,7 @@ export const createProductionEditor = (options: {
   attributeOverrides?: {
     editor?: Record<string, string>;
     blockContainer?: Record<string, string>;
+    blockGroup?: Record<string, string>;
   };
 }): Editor => {
   const converted = modelToTiptap(options.document, {
@@ -418,7 +419,9 @@ export const createProductionEditor = (options: {
               attributeOverrides: options.attributeOverrides?.blockContainer ?? {},
             }),
           ]),
-      BlockGroupExtension,
+      BlockGroupExtension.configure({
+        attributeOverrides: options.attributeOverrides?.blockGroup ?? {},
+      }),
       BlockIdExtension.configure({ createId: options.createId }),
       BlockSplitExtension,
       BlockJoinExtension,

@@ -221,6 +221,7 @@ export class ProductionEditorSession {
       attributeOverrides?: {
         editor?: Record<string, string>;
         blockContainer?: Record<string, string>;
+        blockGroup?: Record<string, string>;
       };
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔

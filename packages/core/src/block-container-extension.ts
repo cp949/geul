@@ -86,14 +86,25 @@ export const BlockContainerExtension = Node.create<{
 // 자식 블록 목록의 wrapper. parseHTML 미선언 근거는 BlockContainerExtension과
 // 동일하다. DOM 표현은 data-geul-block-group 불리언 속성으로 식별한다(표의
 // data-geul-* 명명 관례를 따른다) — 렌더 전용이며 이 속성으로 파싱하지 않는다.
-export const BlockGroupExtension = Node.create({
+export const BlockGroupExtension = Node.create<{
+  // spec §7(EXT-008), R4 슬라이스5 RD-002-DELTA-03 —
+  // CreateEditorOptions.attributeOverrides.blockGroup이 여기로
+  // .configure()된다(production-editor-assembly.ts). BlockContainerExtension과
+  // 같은 attribute-override-merge.ts를 재사용한다.
+  attributeOverrides: Record<string, string>;
+}>({
   name: "blockGroup",
   content: "block+",
 
+  addOptions() {
+    return { attributeOverrides: {} };
+  },
+
   renderHTML({ HTMLAttributes }) {
+    const base = { ...HTMLAttributes, "data-geul-block-group": "" };
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-geul-block-group": "" }),
+      mergeAttributes(mergeAttributeOverrides(base, this.options.attributeOverrides)),
       0,
     ];
   },

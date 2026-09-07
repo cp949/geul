@@ -538,5 +538,9 @@ export type CreateEditorOptions = {
     // renderHTML에 배선된다. `data-geul-block-id` 등 예약/필수 attribute
     // 충돌 시 무시+`console.warn`(attribute-override-merge.ts 참고).
     blockContainer?: Record<string, string>;
+    // R4 슬라이스5 RD-002-DELTA-03 — 자식 블록 목록 wrapper
+    // (`data-geul-block-group`)에 배선된다. blockContainer와 같은
+    // attribute-override-merge.ts 규칙을 쓴다.
+    blockGroup?: Record<string, string>;
   };
 };
