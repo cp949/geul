@@ -8,7 +8,7 @@ import {
 } from "./read-block-bounds.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
@@ -49,9 +49,6 @@ const MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-block-id]",
   "[data-geul-media-resize-handle]",
 ] as const;
-
-const kindLabel = (kind: MediaBlockKind): string =>
-  kind.charAt(0).toUpperCase() + kind.slice(1);
 
 type ToolbarPosition = { left: number; top: number };
 
@@ -149,6 +146,7 @@ export const MediaToolbar = ({
   component: Component,
 }: MediaToolbarProps = {}) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState>({
     mode: "closed",
@@ -383,7 +381,7 @@ export const MediaToolbar = ({
   if (Component !== undefined) {
     const overridden = (
       <div
-        aria-label="Media toolbar"
+        aria-label={dictionary.toolbar.media.ariaLabel}
         className="geul-media-toolbar"
         ref={menuRef}
         role="toolbar"
@@ -530,7 +528,7 @@ export const MediaToolbar = ({
 
   const content = (
     <div
-      aria-label="Media toolbar"
+      aria-label={dictionary.toolbar.media.ariaLabel}
       className="geul-media-toolbar"
       ref={menuRef}
       role="toolbar"
@@ -540,100 +538,100 @@ export const MediaToolbar = ({
         <>
           {editor.isUploadEnabled() && (
             <button
-              aria-label="Replace file"
+              aria-label={dictionary.toolbar.media.replaceAriaLabel}
               className={mediaToolbarButtonClassName}
               onClick={startReplacing}
               onMouseDown={(event) => event.preventDefault()}
               type="button"
             >
-              Replace
+              {dictionary.toolbar.media.replace}
             </button>
           )}
           <button
-            aria-label="Rename"
+            aria-label={dictionary.toolbar.media.rename}
             className={mediaToolbarButtonClassName}
             onClick={startEditingName}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Rename
+            {dictionary.toolbar.media.rename}
           </button>
           <button
-            aria-label="Edit caption"
+            aria-label={dictionary.toolbar.media.editCaptionAriaLabel}
             className={mediaToolbarButtonClassName}
             onClick={startEditingCaption}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Caption
+            {dictionary.toolbar.media.caption}
           </button>
           {toolbarState.kind !== "file" && (
             <button
-              aria-label="Preview"
+              aria-label={dictionary.toolbar.media.preview}
               aria-pressed={toolbarState.showPreview === true}
               className={mediaToolbarButtonClassName}
               onClick={toggleShowPreview}
               onMouseDown={(event) => event.preventDefault()}
               type="button"
             >
-              Preview
+              {dictionary.toolbar.media.preview}
             </button>
           )}
           {(toolbarState.kind === "image" || toolbarState.kind === "video") && (
             <>
               <button
-                aria-label="Align left"
+                aria-label={dictionary.toolbar.media.alignLeft}
                 aria-pressed={toolbarState.textAlignment === "left"}
                 className={mediaToolbarButtonClassName}
                 onClick={() => setMediaAlignment("left")}
                 onMouseDown={(event) => event.preventDefault()}
                 type="button"
               >
-                Align left
+                {dictionary.toolbar.media.alignLeft}
               </button>
               <button
-                aria-label="Align center"
+                aria-label={dictionary.toolbar.media.alignCenter}
                 aria-pressed={toolbarState.textAlignment === "center"}
                 className={mediaToolbarButtonClassName}
                 onClick={() => setMediaAlignment("center")}
                 onMouseDown={(event) => event.preventDefault()}
                 type="button"
               >
-                Align center
+                {dictionary.toolbar.media.alignCenter}
               </button>
               <button
-                aria-label="Align right"
+                aria-label={dictionary.toolbar.media.alignRight}
                 aria-pressed={toolbarState.textAlignment === "right"}
                 className={mediaToolbarButtonClassName}
                 onClick={() => setMediaAlignment("right")}
                 onMouseDown={(event) => event.preventDefault()}
                 type="button"
               >
-                Align right
+                {dictionary.toolbar.media.alignRight}
               </button>
             </>
           )}
           <button
-            aria-label="Delete media block"
+            aria-label={dictionary.toolbar.media.deleteAriaLabel}
             className={dangerButtonClassName}
             onClick={handleDelete}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Delete
+            {dictionary.toolbar.media.delete}
           </button>
           {/* cross-origin url은 강제 다운로드를 보장하지 않는다(브라우저
               same-origin 정책, spec §6.3) — 링크가 열리기만 할 수도 있다.
               download 속성은 name이 없어도 항상 둔다 — 없으면 강제 다운로드
               힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. */}
           <a
-            aria-label="Download"
+            aria-label={dictionary.toolbar.media.download}
             className={mediaToolbarButtonClassName}
             download={toolbarState.name ?? ""}
             href={toolbarState.url}
             onMouseDown={(event) => event.preventDefault()}
           >
-            Download
+            {dictionary.toolbar.media.download}
           </a>
         </>
       )}
@@ -643,8 +641,14 @@ export const MediaToolbar = ({
           <input
             aria-label={
               toolbarState.mode === "editingName"
-                ? `${kindLabel(toolbarState.kind)} name`
-                : `${kindLabel(toolbarState.kind)} caption`
+                ? dictionary.toolbar.media.nameInputAriaLabel.replace(
+                    "{kind}",
+                    dictionary.toolbar.kindNames[toolbarState.kind],
+                  )
+                : dictionary.toolbar.media.captionInputAriaLabel.replace(
+                    "{kind}",
+                    dictionary.toolbar.kindNames[toolbarState.kind],
+                  )
             }
             onChange={(event) => {
               if (
@@ -682,7 +686,9 @@ export const MediaToolbar = ({
           />
           <button
             aria-label={
-              toolbarState.mode === "editingName" ? "Save name" : "Save caption"
+              toolbarState.mode === "editingName"
+                ? dictionary.toolbar.media.saveNameAriaLabel
+                : dictionary.toolbar.media.saveCaptionAriaLabel
             }
             className={mediaToolbarButtonClassName}
             onClick={
@@ -691,23 +697,26 @@ export const MediaToolbar = ({
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Save
+            {dictionary.toolbar.media.save}
           </button>
           <button
-            aria-label="Cancel"
+            aria-label={dictionary.toolbar.media.cancel}
             className={mediaToolbarButtonClassName}
             onClick={cancelEditing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Cancel
+            {dictionary.toolbar.media.cancel}
           </button>
         </>
       )}
       {toolbarState.mode === "replacing" && (
         <>
           <input
-            aria-label={`${kindLabel(toolbarState.kind)} file`}
+            aria-label={dictionary.toolbar.media.replaceFileInputAriaLabel.replace(
+              "{kind}",
+              dictionary.toolbar.kindNames[toolbarState.kind],
+            )}
             disabled={toolbarState.upload.status === "uploading"}
             onChange={handleReplaceFileChange}
             ref={replaceFileInputRef}
@@ -728,19 +737,19 @@ export const MediaToolbar = ({
                   onMouseDown={(event) => event.preventDefault()}
                   type="button"
                 >
-                  Retry
+                  {dictionary.toolbar.media.retry}
                 </button>
               )}
             </>
           )}
           <button
-            aria-label="Cancel"
+            aria-label={dictionary.toolbar.media.cancel}
             className={mediaToolbarButtonClassName}
             onClick={cancelReplacing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Cancel
+            {dictionary.toolbar.media.cancel}
           </button>
         </>
       )}

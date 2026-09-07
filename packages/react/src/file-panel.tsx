@@ -9,7 +9,7 @@ import {
 } from "./read-block-bounds.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
@@ -19,9 +19,6 @@ const filePanelButtonClassName = "geul-file-panel__button";
 // 같은 이유로 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가
 // 리스너를 매 렌더 떼었다 다시 붙인다).
 const FILE_PANEL_DISMISS_ALLOW_SELECTORS = [".geul-file-panel"] as const;
-
-const kindLabel = (kind: MediaBlockKind): string =>
-  kind.charAt(0).toUpperCase() + kind.slice(1);
 
 type PanelPosition = { left: number; top: number };
 
@@ -80,6 +77,7 @@ export const FilePanel = ({
   component: Component,
 }: FilePanelProps = {}) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [panelState, setPanelState] = useState<PanelState>({ mode: "closed" });
   // 패널이 열려 있는 동안(항상 "입력 중" 상태다 — url 없는 블록에서만
@@ -274,7 +272,7 @@ export const FilePanel = ({
   if (Component !== undefined) {
     const overridden = (
       <div
-        aria-label="File panel"
+        aria-label={dictionary.toolbar.filePanel.ariaLabel}
         className="geul-file-panel"
         ref={menuRef}
         role="toolbar"
@@ -323,7 +321,7 @@ export const FilePanel = ({
 
   const content = (
     <div
-      aria-label="File panel"
+      aria-label={dictionary.toolbar.filePanel.ariaLabel}
       className="geul-file-panel"
       ref={menuRef}
       role="toolbar"
@@ -331,7 +329,7 @@ export const FilePanel = ({
     >
       {uploadEnabled && (
         <div
-          aria-label="Media source"
+          aria-label={dictionary.toolbar.filePanel.sourceAriaLabel}
           className="geul-file-panel__tablist"
           role="tablist"
         >
@@ -343,7 +341,7 @@ export const FilePanel = ({
             role="tab"
             type="button"
           >
-            Embed
+            {dictionary.toolbar.filePanel.embedTab}
           </button>
           <button
             aria-selected={panelState.activeTab === "upload"}
@@ -353,14 +351,17 @@ export const FilePanel = ({
             role="tab"
             type="button"
           >
-            Upload
+            {dictionary.toolbar.filePanel.uploadTab}
           </button>
         </div>
       )}
       {showEmbedTab && (
         <>
           <input
-            aria-label={`${kindLabel(panelState.kind)} URL`}
+            aria-label={dictionary.toolbar.filePanel.urlInputAriaLabel.replace(
+              "{kind}",
+              dictionary.toolbar.kindNames[panelState.kind],
+            )}
             onChange={(event) => {
               if (panelState.mode !== "open") return;
               setPanelState({
@@ -380,13 +381,13 @@ export const FilePanel = ({
             value={panelState.draft}
           />
           <button
-            aria-label="Save URL"
+            aria-label={dictionary.toolbar.filePanel.saveUrl}
             className={filePanelButtonClassName}
             onClick={applyUrl}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Save
+            {dictionary.toolbar.filePanel.save}
           </button>
           {panelState.rejected && (
             <span className="geul-file-panel__error" role="alert">
@@ -395,7 +396,8 @@ export const FilePanel = ({
           )}
           {panelState.appliedName !== null && (
             <p className="geul-file-panel__name">
-              Name: {panelState.appliedName}
+              {dictionary.toolbar.filePanel.namePrefix}
+              {panelState.appliedName}
             </p>
           )}
         </>
@@ -403,7 +405,10 @@ export const FilePanel = ({
       {showUploadTab && (
         <div className="geul-file-panel__upload">
           <input
-            aria-label={`${kindLabel(panelState.kind)} file`}
+            aria-label={dictionary.toolbar.filePanel.fileInputAriaLabel.replace(
+              "{kind}",
+              dictionary.toolbar.kindNames[panelState.kind],
+            )}
             disabled={panelState.upload.status === "uploading"}
             onChange={handleFileChange}
             ref={fileInputRef}
@@ -418,7 +423,7 @@ export const FilePanel = ({
                 onMouseDown={(event) => event.preventDefault()}
                 type="button"
               >
-                Cancel
+                {dictionary.toolbar.filePanel.cancel}
               </button>
             </>
           )}
@@ -434,7 +439,7 @@ export const FilePanel = ({
                   onMouseDown={(event) => event.preventDefault()}
                   type="button"
                 >
-                  Retry
+                  {dictionary.toolbar.filePanel.retry}
                 </button>
               )}
             </>
@@ -442,13 +447,13 @@ export const FilePanel = ({
         </div>
       )}
       <button
-        aria-label="Close file panel"
+        aria-label={dictionary.toolbar.filePanel.closeAriaLabel}
         className={filePanelButtonClassName}
         onClick={dismissPanelAndFocusEditor}
         onMouseDown={(event) => event.preventDefault()}
         type="button"
       >
-        Close
+        {dictionary.toolbar.filePanel.close}
       </button>
     </div>
   );

@@ -122,6 +122,54 @@ export type Dictionary = {
       pink: string;
     };
   };
+  // RD-002-DELTA-06 — `toolbar.kindNames`는 react `media-toolbar.tsx`/
+  // `file-panel.tsx`가 지금 각자 복제해 갖고 있던 `kindLabel(kind)`(첫
+  // 글자만 대문자화)를 대체하는 공유 조회 테이블이다. `nameInputAriaLabel`
+  // 등 `{kind}` 토큰을 포함한 필드는 `placeholder.heading`의 `{level}`과
+  // 동일한 문자열 치환 관용구를 쓴다(별도 함수 타입 없음). `toolbar.link`/
+  // `toolbar.tableSelection`/`toolbar.blockSelection`/`toolbar.formatting`은
+  // DELTA-07이 추가한다.
+  toolbar: {
+    kindNames: { file: string; image: string; video: string; audio: string };
+    media: {
+      ariaLabel: string;
+      replaceAriaLabel: string;
+      replace: string;
+      rename: string;
+      editCaptionAriaLabel: string;
+      caption: string;
+      preview: string;
+      alignLeft: string;
+      alignCenter: string;
+      alignRight: string;
+      deleteAriaLabel: string;
+      delete: string;
+      download: string;
+      nameInputAriaLabel: string;
+      captionInputAriaLabel: string;
+      saveNameAriaLabel: string;
+      saveCaptionAriaLabel: string;
+      save: string;
+      cancel: string;
+      replaceFileInputAriaLabel: string;
+      retry: string;
+    };
+    filePanel: {
+      ariaLabel: string;
+      sourceAriaLabel: string;
+      embedTab: string;
+      uploadTab: string;
+      urlInputAriaLabel: string;
+      saveUrl: string;
+      save: string;
+      namePrefix: string;
+      fileInputAriaLabel: string;
+      cancel: string;
+      retry: string;
+      closeAriaLabel: string;
+      close: string;
+    };
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -248,6 +296,47 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       blue: "Blue",
       purple: "Purple",
       pink: "Pink",
+    },
+  },
+  toolbar: {
+    kindNames: { file: "File", image: "Image", video: "Video", audio: "Audio" },
+    media: {
+      ariaLabel: "Media toolbar",
+      replaceAriaLabel: "Replace file",
+      replace: "Replace",
+      rename: "Rename",
+      editCaptionAriaLabel: "Edit caption",
+      caption: "Caption",
+      preview: "Preview",
+      alignLeft: "Align left",
+      alignCenter: "Align center",
+      alignRight: "Align right",
+      deleteAriaLabel: "Delete media block",
+      delete: "Delete",
+      download: "Download",
+      nameInputAriaLabel: "{kind} name",
+      captionInputAriaLabel: "{kind} caption",
+      saveNameAriaLabel: "Save name",
+      saveCaptionAriaLabel: "Save caption",
+      save: "Save",
+      cancel: "Cancel",
+      replaceFileInputAriaLabel: "{kind} file",
+      retry: "Retry",
+    },
+    filePanel: {
+      ariaLabel: "File panel",
+      sourceAriaLabel: "Media source",
+      embedTab: "Embed",
+      uploadTab: "Upload",
+      urlInputAriaLabel: "{kind} URL",
+      saveUrl: "Save URL",
+      save: "Save",
+      namePrefix: "Name: ",
+      fileInputAriaLabel: "{kind} file",
+      cancel: "Cancel",
+      retry: "Retry",
+      closeAriaLabel: "Close file panel",
+      close: "Close",
     },
   },
 };

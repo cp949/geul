@@ -15,10 +15,12 @@
  * (Issue #154, MED-009).
  */
 
-import type {
-  EditorController,
-  EditorError,
-  MediaBlockKind,
+import {
+  DEFAULT_DICTIONARY,
+  type Dictionary,
+  type EditorController,
+  type EditorError,
+  type MediaBlockKind,
 } from "@cp949/geul-core";
 import {
   cleanup,
@@ -79,6 +81,7 @@ type FakeControllerOptions = {
     blockId: string,
     file: File,
   ) => Promise<ReplaceMediaFileResult>;
+  dictionary?: Dictionary;
 };
 
 const fakeController = ({
@@ -91,6 +94,7 @@ const fakeController = ({
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
   replaceMediaBlockFile = () => Promise.resolve({ ok: true, value: undefined }),
+  dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -110,6 +114,7 @@ const fakeController = ({
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isUploadEnabled: vi.fn(isUploadEnabled),
   getMediaUploadState: vi.fn(getMediaUploadState),
+  getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
     setMediaBlockName: vi.fn(setMediaBlockName),
@@ -186,6 +191,34 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     renderToolbar(fakeController());
 
     expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("dictionary override 시 컨테이너·버튼(aria-label≠텍스트 포함)이 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        toolbar: {
+          ...DEFAULT_DICTIONARY.toolbar,
+          media: {
+            ...DEFAULT_DICTIONARY.toolbar.media,
+            ariaLabel: "미디어 툴바",
+            replaceAriaLabel: "파일 교체하기",
+            replace: "교체",
+            deleteAriaLabel: "미디어 블록 삭제하기",
+            delete: "삭제",
+          },
+        },
+      },
+    });
+    renderToolbar(controller);
+
+    expect(screen.getByRole("toolbar", { name: "미디어 툴바" })).toBeTruthy();
+    const deleteButton = screen.getByRole("button", {
+      name: "미디어 블록 삭제하기",
+    });
+    expect(deleteButton).toBeTruthy();
+    expect(deleteButton.textContent).toBe("삭제");
   });
 
   it("url 없는 미디어 블록을 선택하면 렌더링하지 않는다(FilePanel 담당)", () => {
@@ -431,6 +464,30 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     );
     expect(screen.queryByRole("textbox", { name: "Image name" })).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+  });
+
+  it("dictionary override 시 {kind} 템플릿과 Save name aria-label이 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        toolbar: {
+          ...DEFAULT_DICTIONARY.toolbar,
+          kindNames: { ...DEFAULT_DICTIONARY.toolbar.kindNames, image: "사진" },
+          media: {
+            ...DEFAULT_DICTIONARY.toolbar.media,
+            nameInputAriaLabel: "{kind} 이름",
+            saveNameAriaLabel: "이름 저장",
+          },
+        },
+      },
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+
+    expect(screen.getByRole("textbox", { name: "사진 이름" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "이름 저장" })).not.toBeNull();
   });
 
   it("Enter로도 이름을 제출한다", () => {

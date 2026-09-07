@@ -8,10 +8,12 @@
  * retry·cancel(RD-003 DELTA-02)을 검증한다.
  */
 
-import type {
-  EditorController,
-  EditorError,
-  MediaBlockKind,
+import {
+  DEFAULT_DICTIONARY,
+  type Dictionary,
+  type EditorController,
+  type EditorError,
+  type MediaBlockKind,
 } from "@cp949/geul-core";
 import {
   cleanup,
@@ -57,6 +59,7 @@ type FakeControllerOptions = {
     blockId: string,
     file: File,
   ) => Promise<UploadMediaFileResult>;
+  dictionary?: Dictionary;
 };
 
 const fakeController = ({
@@ -65,6 +68,7 @@ const fakeController = ({
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
   uploadMediaFile = () => Promise.resolve({ ok: true, value: undefined }),
+  dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -84,6 +88,7 @@ const fakeController = ({
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isUploadEnabled: vi.fn(isUploadEnabled),
   getMediaUploadState: vi.fn(getMediaUploadState),
+  getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
     setMediaBlockUrl: vi.fn(setMediaBlockUrl),
@@ -156,6 +161,41 @@ describe("FilePanel 파일 패널", () => {
     renderPanel(controller);
 
     expect(screen.getByRole("textbox", { name: "Video URL" })).not.toBeNull();
+  });
+
+  it("dictionary override 시 컨테이너·탭·URL 라벨·Save URL(aria-label≠텍스트)·Close가 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+      isUploadEnabled: () => true,
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        toolbar: {
+          ...DEFAULT_DICTIONARY.toolbar,
+          kindNames: { ...DEFAULT_DICTIONARY.toolbar.kindNames, image: "사진" },
+          filePanel: {
+            ...DEFAULT_DICTIONARY.toolbar.filePanel,
+            ariaLabel: "파일 패널",
+            embedTab: "삽입",
+            uploadTab: "업로드",
+            urlInputAriaLabel: "{kind} 링크",
+            saveUrl: "URL 저장하기",
+            save: "저장",
+            closeAriaLabel: "파일 패널 닫기",
+            close: "닫기",
+          },
+        },
+      },
+    });
+    renderPanel(controller);
+
+    expect(screen.getByRole("toolbar", { name: "파일 패널" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "삽입" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "업로드" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "사진 링크" })).toBeTruthy();
+    const saveButton = screen.getByRole("button", { name: "URL 저장하기" });
+    expect(saveButton.textContent).toBe("저장");
+    const closeButton = screen.getByRole("button", { name: "파일 패널 닫기" });
+    expect(closeButton.textContent).toBe("닫기");
   });
 
   it("URL을 입력해 저장하면 setMediaBlockUrl을 호출한다", () => {
