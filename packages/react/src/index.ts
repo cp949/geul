@@ -1,3 +1,11 @@
+// Next.js App Router client-only 통합(EXT-013, spec §11.3, R4 슬라이스8
+// RD-002). React hook을 쓰는 컴포넌트를 노출하므로 RSC 경계에서 client
+// component로 취급돼야 한다 — BlockNote 선례와 동일 형태(코드 비복사).
+// 이 지시어는 directive prologue(파일의 첫 statement)여야 유효하므로 이
+// export보다 앞에 둔다. 다른 번들러·런타임에서는 무해한 문자열 리터럴이라
+// breaking 없는 additive 변경이다(`packages/react/README.md` 참고).
+"use client";
+
 export type {
   CreateEditorOptions,
   DocumentChangeEvent,
