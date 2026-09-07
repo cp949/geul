@@ -6,7 +6,6 @@ import {
   useState,
 } from "react";
 
-import { IconButton } from "./icon-button.js";
 import {
   findTable,
   readGeometryFor,
@@ -14,27 +13,16 @@ import {
   type TableGeometry,
 } from "./table-handle-geometry.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
+import { TableHandleOverlays } from "./table-handle-overlays.js";
 import {
-  addColumnLabel,
-  addIcon,
-  addRowLabel,
-  columnHandleIcon,
-  columnHandleLabel,
-  expandButtonClassName,
   HANDLE_HOVER_MARGIN,
-  handleButtonClassName,
-  indentTableIcon,
-  indentTableLabel,
-  nestingButtonClassName,
-  outdentTableIcon,
-  outdentTableLabel,
-  rowHandleIcon,
-  rowHandleLabel,
   TABLE_HOVER_IGNORE_SELECTORS,
   TABLE_MENU_DISMISS_ALLOW_SELECTORS,
 } from "./table-handles-constants.js";
 import {
   clampWidth,
+  computeMenuPosition,
+  computeReorderGuideRect,
   computeReorderTargetIndex,
   readColumnStyleWidth,
   setColumnStyleWidth,
@@ -565,226 +553,28 @@ export const TableHandles = () => {
     editor.commands.outdentBlock(fresh.tableBlockId);
   };
 
-  const reorderGuideRect = (() => {
-    if (
-      geometry === null ||
-      reorderState === null ||
-      !reorderState.hasDragged ||
-      reorderState.targetIndex === null
-    ) {
-      return null;
-    }
-
-    if (reorderState.kind === "row") {
-      const { rows } = geometry;
-      const target = rows[reorderState.targetIndex];
-      const lastRow = rows[rows.length - 1];
-      const top =
-        target !== undefined
-          ? target.top
-          : (lastRow?.top ?? geometry.top) + (lastRow?.height ?? 0);
-      return {
-        left: geometry.left,
-        top,
-        width: geometry.right - geometry.left,
-        height: 2,
-      };
-    }
-
-    const { columns } = geometry;
-    const target = columns[reorderState.targetIndex];
-    const lastColumn = columns[columns.length - 1];
-    const left =
-      target !== undefined
-        ? target.left
-        : (lastColumn?.left ?? geometry.left) + (lastColumn?.width ?? 0);
-    return {
-      left,
-      top: geometry.top,
-      width: 2,
-      height: geometry.bottom - geometry.top,
-    };
-  })();
+  const reorderGuideRect = computeReorderGuideRect(geometry, reorderState);
 
   // 메뉴 좌표를 click 시점에 고정하면 연 채로 스크롤/창 크기 변경 시
   // 앵커(핸들)와 어긋난다 — 핸들 자신처럼 매 렌더마다 geometry에서 다시
   // 계산한다(geometry는 scroll/resize 시 geometryVersion을 통해 갱신된다).
-  const menuPosition = (() => {
-    if (menuState === null || geometry === null) return null;
-    if (menuState.kind === "row") {
-      const row = geometry.rows.find(
-        (entry) => entry.index === menuState.index,
-      );
-      return row === undefined
-        ? null
-        : { left: geometry.left, top: row.top + row.height };
-    }
-    const column = geometry.columns.find(
-      (entry) => entry.index === menuState.index,
-    );
-    return column === undefined
-      ? null
-      : { left: column.left, top: geometry.top };
-  })();
+  const menuPosition = computeMenuPosition(geometry, menuState);
 
   return (
     <>
       {geometry !== null && (
-        <>
-          {geometry.rows.map((row) => (
-            <IconButton
-              className={handleButtonClassName}
-              data-be-table-row-handle=""
-              icon={rowHandleIcon}
-              key={`row-${row.rowId}`}
-              label={rowHandleLabel}
-              onClick={(event) =>
-                handleReorderHandleClick(
-                  event,
-                  "row",
-                  geometry.tableBlockId,
-                  row.rowId,
-                  row.index,
-                )
-              }
-              onPointerDown={(event) =>
-                handlePointerDownOnReorderHandle(
-                  event,
-                  "row",
-                  geometry.tableBlockId,
-                  row.rowId,
-                  row.index,
-                )
-              }
-              style={{
-                position: "fixed",
-                left: geometry.left - 24,
-                top: row.top + row.height / 2 - 10,
-              }}
-            />
-          ))}
-          {geometry.columns.map((column) => (
-            <IconButton
-              className={handleButtonClassName}
-              data-be-table-column-handle=""
-              icon={columnHandleIcon}
-              key={`column-${column.columnId}`}
-              label={columnHandleLabel}
-              onClick={(event) =>
-                handleReorderHandleClick(
-                  event,
-                  "column",
-                  geometry.tableBlockId,
-                  column.columnId,
-                  column.index,
-                )
-              }
-              onPointerDown={(event) =>
-                handlePointerDownOnReorderHandle(
-                  event,
-                  "column",
-                  geometry.tableBlockId,
-                  column.columnId,
-                  column.index,
-                )
-              }
-              style={{
-                position: "fixed",
-                left: column.left + column.width / 2 - 10,
-                top: geometry.top - 24,
-              }}
-            />
-          ))}
-          {geometry.columns.flatMap((column) =>
-            column.resizeSegments.map((segment) => (
-              <div
-                className="geul-table-resize-handle"
-                data-be-table-resize-handle=""
-                key={`resize-${column.columnId}-${segment.rowId}`}
-                onPointerDown={(event) =>
-                  handlePointerDownOnResizeHandle(
-                    event,
-                    geometry.tableBlockId,
-                    column.index,
-                    column.width,
-                  )
-                }
-                style={{
-                  left: column.left + column.width - 2,
-                  top: segment.top,
-                  height: segment.height,
-                }}
-              />
-            )),
-          )}
-          <IconButton
-            className={expandButtonClassName}
-            data-be-table-expand-row=""
-            icon={addIcon}
-            label={addRowLabel}
-            onClick={handleAddRow}
-            style={{
-              position: "fixed",
-              left: geometry.left + (geometry.right - geometry.left) / 2 - 10,
-              top: geometry.bottom + 4,
-            }}
-          />
-          <IconButton
-            className={expandButtonClassName}
-            data-be-table-expand-column=""
-            icon={addIcon}
-            label={addColumnLabel}
-            onClick={handleAddColumn}
-            style={{
-              position: "fixed",
-              left: geometry.right + 4,
-              top: geometry.top + (geometry.bottom - geometry.top) / 2 - 10,
-            }}
-          />
-          {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
-              row 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열
-              중앙이라 더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md
-              "결정") — 새 clamp 로직 없이 기존 fixed 좌표 관용구를 그대로
-              쓴다(PIT-0011). */}
-          <IconButton
-            aria-disabled={
-              tableNestingActions?.canIndent === true ? "false" : "true"
-            }
-            className={nestingButtonClassName}
-            data-be-table-indent=""
-            disabled={tableNestingActions?.canIndent !== true}
-            icon={indentTableIcon}
-            label={indentTableLabel}
-            onClick={handleIndentTable}
-            style={{
-              position: "fixed",
-              left: geometry.left - 48,
-              top: geometry.top - 24,
-            }}
-          />
-          <IconButton
-            aria-disabled={
-              tableNestingActions?.canOutdent === true ? "false" : "true"
-            }
-            className={nestingButtonClassName}
-            data-be-table-outdent=""
-            disabled={tableNestingActions?.canOutdent !== true}
-            icon={outdentTableIcon}
-            label={outdentTableLabel}
-            onClick={handleOutdentTable}
-            style={{
-              position: "fixed",
-              left: geometry.left - 24,
-              top: geometry.top - 24,
-            }}
-          />
-        </>
-      )}
-      {reorderGuideRect !== null && (
-        <div
-          className="geul-table-reorder-guide"
-          data-be-table-reorder-guide=""
-          style={reorderGuideRect}
+        <TableHandleOverlays
+          canIndentTable={tableNestingActions?.canIndent === true}
+          canOutdentTable={tableNestingActions?.canOutdent === true}
+          geometry={geometry}
+          onAddColumn={handleAddColumn}
+          onAddRow={handleAddRow}
+          onIndentTable={handleIndentTable}
+          onOutdentTable={handleOutdentTable}
+          onReorderHandleClick={handleReorderHandleClick}
+          onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
+          onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
+          reorderGuideRect={reorderGuideRect}
         />
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (

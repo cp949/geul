@@ -398,8 +398,8 @@ describe("행/열 핸들 클릭 메뉴", () => {
     fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
     // clientX를 표 가로 범위 안(150)으로 줘야 한다 — 생략하면 jsdom
     // PointerEvent의 clientX 기본값 0이 표 hover 여백(HANDLE_HOVER_MARGIN)
-    // 밖이라, 별도의 hover 추적 리스너(handlePointerMove,
-    // table-handles.tsx:366-413)가 이 이벤트만으로 hoverTableId를 지운다.
+    // 밖이라, 별도의 hover 추적 리스너(handleHoverCandidateChange,
+    // table-handles.tsx:86-117)가 이 이벤트만으로 hoverTableId를 지운다.
     // 드래그 중에는 reorderState.tableBlockId가 activeTableId를 우선하므로
     // 안 드러나지만, pointerUp이 reorderState를 지우고 나면 activeTableId가
     // hoverTableId로 폴백해 geometry가 null이 되고 핸들 버튼 전부가
