@@ -280,6 +280,62 @@ describe("React 에디터 어댑터", () => {
     view.unmount();
   });
 
+  // IO-008(RD-001-DELTA-02) — pasteHandler도 onPasteRejected와 동일한
+  // latest-ref threading 계약을 따른다.
+  it("pasteHandler가 EditorProvider를 통해 등록되고 최신 콜백으로 동작한다", () => {
+    let controller: EditorController | undefined;
+    const firstHandler = vi.fn(() => true);
+    const latestHandler = vi.fn(() => true);
+    const CaptureEditor = () => {
+      controller = useEditor();
+      return null;
+    };
+    const view = render(
+      <EditorProvider
+        initialDocument={paragraphDocument("first")}
+        pasteHandler={firstHandler}
+      >
+        <CaptureEditor />
+        <EditorContent />
+      </EditorProvider>,
+    );
+
+    view.rerender(
+      <EditorProvider
+        initialDocument={paragraphDocument("ignored")}
+        pasteHandler={latestHandler}
+      >
+        <CaptureEditor />
+        <EditorContent />
+      </EditorProvider>,
+    );
+
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const editable = queryMountedEditable(host);
+    editable.focus();
+
+    const data = new DataTransfer();
+    data.setData("text/html", "<h4>t</h4>");
+    editable.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(firstHandler).not.toHaveBeenCalled();
+    expect(latestHandler).toHaveBeenCalledTimes(1);
+    // latestHandler가 true(처리됨)를 반환했으므로 기본 처리가 억제돼
+    // 문서가 바뀌지 않는다.
+    expect(controller?.getDocument().blocks).toHaveLength(1);
+    expect(controller?.getDocument().blocks[0]).toMatchObject({
+      content: [{ text: "first" }],
+    });
+
+    view.unmount();
+  });
+
   it("uploadFile 등록 여부는 마운트 시점에 고정되고 isUploadEnabled로 조회된다", () => {
     let withUpload: EditorController | undefined;
     const CaptureEditor = (props: {

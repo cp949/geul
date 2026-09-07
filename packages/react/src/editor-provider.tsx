@@ -11,6 +11,7 @@ export type EditorProviderProps =
       initialDocument?: never;
       onChange?: never;
       onPasteRejected?: never;
+      pasteHandler?: never;
       uploadFile?: never;
       onUploadStateChange?: never;
     }
@@ -20,6 +21,9 @@ export type EditorProviderProps =
       initialDocument: CreateEditorOptions["initialDocument"];
       onChange?: CreateEditorOptions["onChange"];
       onPasteRejected?: CreateEditorOptions["onPasteRejected"];
+      // spec §10(IO-008), RD-001-DELTA-02 — onPasteRejected와 동일 근거로
+      // latest-ref threading한다(그릴링 결정, roadmap.md).
+      pasteHandler?: CreateEditorOptions["pasteHandler"];
       // spec §4.1/§6.1 — 등록 여부(존재 vs undefined)는 initialDocument와
       // 같은 방식으로 마운트 시점에 고정한다(RD-003-DELTA-01.md "결정").
       // 런타임에 껐다 켰다 하는 것은 지원하지 않는다 — isUploadEnabled()가
@@ -34,12 +38,15 @@ export const EditorProvider = (props: EditorProviderProps) => {
   const latestOnChange = useRef<CreateEditorOptions["onChange"]>(undefined);
   const latestOnPasteRejected =
     useRef<CreateEditorOptions["onPasteRejected"]>(undefined);
+  const latestPasteHandler =
+    useRef<CreateEditorOptions["pasteHandler"]>(undefined);
   const latestUploadFile = useRef<CreateEditorOptions["uploadFile"]>(undefined);
   const latestOnUploadStateChange =
     useRef<CreateEditorOptions["onUploadStateChange"]>(undefined);
   if (props.editor === undefined) {
     latestOnChange.current = props.onChange;
     latestOnPasteRejected.current = props.onPasteRejected;
+    latestPasteHandler.current = props.pasteHandler;
     latestUploadFile.current = props.uploadFile;
     latestOnUploadStateChange.current = props.onUploadStateChange;
   }
@@ -68,6 +75,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
       initialDocument: configuration.initialDocument,
       onChange: (event) => latestOnChange.current?.(event),
       onPasteRejected: (reason) => latestOnPasteRejected.current?.(reason),
+      pasteHandler: (context) => latestPasteHandler.current?.(context),
       onUploadStateChange: (blockId, state) =>
         latestOnUploadStateChange.current?.(blockId, state),
       ...(configuration.uploadEnabled
