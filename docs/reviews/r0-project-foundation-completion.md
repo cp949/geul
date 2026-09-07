@@ -41,7 +41,7 @@
 | `AC-01` | `PASS` | `49fed67`이 build 선행, 배포·브라우저 게이트와 최종 리뷰 수정을 함께 고정했다. | `pnpm verify` exit 0. lint, build, typecheck, 176개 unit/integration test, package boundary, license, Chromium E2E 4개가 통과했다. |
 | `AC-02` | `PASS` | `1cfb626`이 model/io의 DOM 없는 compiler fixture와 workspace 의존 경계를 추가했고 `49fed67`이 배포 소비 검증을 추가했다. | DOM 전역이 없는 Node에서 model/io/core `dist/index.js` 동시 import 성공. package boundary와 consumer fixture typecheck 통과. |
 | `AC-03` | `PASS` | `8bafbb8`이 독자 문서 decoder, 표 논리 격자와 의미 검증 순서를 하나의 model 계약으로 고정했다. | model test 49개 통과. `document.test.ts`, `table-grid-validation.test.ts`, property test가 구조화된 오류와 격자 불변식을 검증한다. |
-| `AC-04` | `PASS` | `1b2c23e`이 HTML round-trip을 추가했고 `49fed67`이 비정렬 기준 셀, 교차 header, mark와 문자열 불변식을 보강했다. | io test 53개와 Chromium의 reversed-anchor/header metadata 시나리오 통과. `html-round-trip.test.ts`가 ID, mark, 병합, header, width, color를 검증한다. |
+| `AC-04` | `PASS` | `1b2c23e`이 HTML round-trip을 추가했고 `49fed67`이 비정렬 기준 셀, 교차 header, mark와 문자열 불변식을 보강했다. | io test 53개와 Chromium의 reversed-anchor/header metadata 시나리오 통과. `html-round-trip/`가 ID, mark, 병합, header, width, color를 검증한다. |
 | `AC-05` | `PASS` | `a23cfe8`이 strict/lossy export, downgrade, reference 복원과 손실 위치 계약을 고정했다. | `markdown-loss.test.ts`와 `markdown-round-trip.test.ts`를 포함한 io test 통과. Chromium table 시나리오에서 strict 실패와 lossy warning을 확인했다. |
 | `AC-06` | `PASS` | `1b2c23e`이 sanitize를 도입했고 `49fed67`이 raw warning/sanitized 의미 경계와 comment 회귀를 보강했다. | `html-security.test.ts`와 위험 HTML Chromium 시나리오 통과. |
 | `AC-07` | `PASS` | `3990396`이 독자 core API를 추가했고 `49fed67`이 배포 경계 검사를 연결했다. | `public-types.test.ts`와 `check-package-boundaries.mjs` 통과. 3개의 도달 가능한 core 공개 declaration에서 Tiptap/ProseMirror 누수가 없음을 확인했다. |

@@ -144,7 +144,7 @@ export const nestedParagraphDocument = (): Document => ({
 
 /**
  * 1x1 표 블록 리터럴. 표 인접 Backspace/Delete의 NodeSelection 후퇴
- * (block-join-extension.test.ts)와 표로 끝나는 문서의 trailing 정규화
+ * (block-join/)와 표로 끝나는 문서의 trailing 정규화
  * (trailing-block-extension.test.ts)가 공유한다(G-TST-002).
  */
 export const oneCellTableBlock = (id: string): Block => ({
@@ -462,7 +462,7 @@ export const selectBlockNode = (
 /**
  * 현재 selection이 blockId divider의 NodeSelection인지 단언한다. 04c 명령
  * characterization(editor-controller-divider-commands.test.ts)과 05 join
- * 테스트(block-join-extension.test.ts)가 공유한다(G-TST-002).
+ * 테스트(block-join/)가 공유한다(G-TST-002).
  */
 export const expectDividerNodeSelection = (
   tiptap: Pick<TiptapEditor, "state">,

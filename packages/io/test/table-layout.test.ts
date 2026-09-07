@@ -2,7 +2,7 @@
  * table-layout.ts가 소유하는 표 구조 판정을 직접 검증한다. 특히
  * findOversizedColumnSpanCell은 import-html.ts와 clipboard-table-parser.ts가
  * 공유하는 오버사이즈 colspan/rowSpan 판정이라, 두 소비자의 통합 테스트
- * (html-round-trip.test.ts, clipboard-table-normalization.test.ts)와 별개로
+ * (html-round-trip/, clipboard-table-normalization.test.ts)와 별개로
  * 판정 함수 자체를 이 파일에서 직접 검증한다.
  */
 import { describe, expect, it } from "vitest";

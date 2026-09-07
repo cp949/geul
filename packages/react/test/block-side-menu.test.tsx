@@ -9,7 +9,7 @@
  * 조립한 fake 컨트롤러/DOM 레인은 남아 있지 않다. 명령이 진짜라 호출 스파이
  * 대신 문서 결과를 단언한다. `<BlockSideMenu />`는 `<SlashMenu />`를 거치지
  * 않고 직접 마운트한다(Issue #59) — hover 거터의 add-block 버튼 클릭 경로는
- * slash-menu.test.tsx가 다룬다.
+ * slash-menu/가 다룬다.
  */
 
 import type { CodeBlock, HeadingBlock, ParagraphBlock } from "@cp949/geul-core";
@@ -45,7 +45,7 @@ const dragHandleLabel = "Drag to reorder, click for options";
 /**
  * 실제 편집기를 마운트하고 BlockSideMenu를 얹는다. onBlockAdded는 이 파일의
  * 8개 테스트가 검증하는 대상이 아니다 — 블록 추가 버튼 클릭 경로(hover 거터의
- * add-block 버튼)는 slash-menu.test.tsx가 다룬다. 여기서는 컴포넌트가 요구하는
+ * add-block 버튼)는 slash-menu/가 다룬다. 여기서는 컴포넌트가 요구하는
  * 필수 prop을 채우는 자리표시자로만 쓴다.
  */
 const renderBlockMenu = (options?: Omit<MountBlockEditorOptions, "children">) =>

@@ -4,7 +4,7 @@
  * 가능한 시나리오만 여기 남긴다(ADR-0007). 그 외 — 슬래시 메뉴 항목 클릭이
  * 올바른 명령을 호출하는지, 옵션 목록 구성, native shorthand 입력 규칙의
  * 정확 일치·caret·Backspace 복원 로직 — 는 이미
- * `packages/react/test/slash-menu.test.tsx`(jsdom)와 core 테스트
+ * `packages/react/test/slash-menu/`(jsdom)와 core 테스트
  * (`block-type-input-rule-extension.test.ts`)가 소유한다. 이 파일의 테스트는
  * core 소유 단언(undo 단계 수·trailing·모델 상태·`getDocument()`)이나 io
  * 소유 단언(문자열 왕복)은 하지 않는다 — DOM·computed style만 본다.

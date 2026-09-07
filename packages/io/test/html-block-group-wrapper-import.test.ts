@@ -8,7 +8,7 @@
  * `data-be-block-id` 값 보존, `data-be-block-group` 속성의 sanitize
  * 허용, 그리고 own 마커 없는 임의 외부 HTML을 오인식하지 않는지를
  * 함께 다룬다. 기존 own-export document HTML 회귀는 이 파일이 아니라
- * `html-round-trip.test.ts` 등 기존 파일이 재실행으로 계속 지킨다.
+ * `html-round-trip/` 등 기존 파일이 재실행으로 계속 지킨다.
  */
 import { describe, expect, it } from "vitest";
 
