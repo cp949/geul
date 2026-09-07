@@ -310,6 +310,7 @@ export const createProductionEditor = (options: {
   // 참고.
   attributeOverrides?: {
     editor?: Record<string, string>;
+    blockContainer?: Record<string, string>;
   };
 }): Editor => {
   const converted = modelToTiptap(options.document, {
@@ -410,7 +411,13 @@ export const createProductionEditor = (options: {
       CodeBlockExitExtension,
       ...(blockContainerContent === undefined
         ? []
-        : [BlockContainerExtension.extend({ content: blockContainerContent })]),
+        : [
+            BlockContainerExtension.extend({
+              content: blockContainerContent,
+            }).configure({
+              attributeOverrides: options.attributeOverrides?.blockContainer ?? {},
+            }),
+          ]),
       BlockGroupExtension,
       BlockIdExtension.configure({ createId: options.createId }),
       BlockSplitExtension,

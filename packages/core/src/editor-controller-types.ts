@@ -534,5 +534,9 @@ export type CreateEditorOptions = {
   // 없음. `blockContainer`/`blockGroup` 역할은 DELTA-02/03이 추가한다.
   attributeOverrides?: {
     editor?: Record<string, string>;
+    // R4 슬라이스5 RD-002-DELTA-02 — block-container-extension.ts의
+    // renderHTML에 배선된다. `data-geul-block-id` 등 예약/필수 attribute
+    // 충돌 시 무시+`console.warn`(attribute-override-merge.ts 참고).
+    blockContainer?: Record<string, string>;
   };
 };

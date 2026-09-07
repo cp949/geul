@@ -1,5 +1,7 @@
 import { mergeAttributes, Node } from "@tiptap/core";
 
+import { mergeAttributeOverrides } from "./attribute-override-merge.js";
+
 // PM은 한 노드에서 inline/block 콘텐츠 혼합을 금지해 paragraph/heading에 자식
 // 블록을 직접 붙일 수 없다 — blockContainer가 identity(blockId)를 소유하는
 // 컨테이너 노드로 강제된다(D19). nestableBlockContent만 선택적 blockGroup을
@@ -29,12 +31,22 @@ import { mergeAttributes, Node } from "@tiptap/core";
 // data-geul-block-id div가 id 중복/미검증 컨테이너를 만든다). 붙여넣은
 // <p>/<hN>은 PM slice-fitting(ContentMatch.findWrapping)이 스키마 group
 // 요구에 의해 새 blockContainer로 자동 wrap한다 — 별도 코드 불필요.
-export const BlockContainerExtension = Node.create({
+export const BlockContainerExtension = Node.create<{
+  // spec §7(EXT-008), R4 슬라이스5 RD-002-DELTA-02 —
+  // CreateEditorOptions.attributeOverrides.blockContainer가 여기로
+  // .configure()된다(production-editor-assembly.ts). 병합·충돌 규칙은
+  // attribute-override-merge.ts가 소유한다.
+  attributeOverrides: Record<string, string>;
+}>({
   name: "blockContainer",
   group: "block",
   content: "(nestableBlockContent blockGroup?) | leafBlockContent",
   defining: true,
   priority: 1000,
+
+  addOptions() {
+    return { attributeOverrides: {} };
+  },
 
   addAttributes() {
     return {
@@ -61,7 +73,13 @@ export const BlockContainerExtension = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes(HTMLAttributes), 0];
+    return [
+      "div",
+      mergeAttributes(
+        mergeAttributeOverrides(HTMLAttributes, this.options.attributeOverrides),
+      ),
+      0,
+    ];
   },
 });
 

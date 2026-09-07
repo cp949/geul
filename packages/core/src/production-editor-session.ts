@@ -220,6 +220,7 @@ export class ProductionEditorSession {
       // 매 재구성마다 그대로 전달한다(customBlocks와 동일 패턴).
       attributeOverrides?: {
         editor?: Record<string, string>;
+        blockContainer?: Record<string, string>;
       };
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
