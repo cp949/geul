@@ -4,16 +4,13 @@ import {
   type DocumentBlock,
   createRandomDocumentId,
   type IdFactory,
-  isSupportedLinkHref,
   parseDocument,
   type Result,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
-import { findBlockPosition } from "./block-position.js";
 // EditorController/CustomBlockDefinition/CustomInlineContentDefinition을
 // import type으로만 참조한다(RD-002-DELTA-11 "결정" 4 —
 // production-editor-assembly.ts와 동일 근거, 값 import가 아니라 컴파일
@@ -25,17 +22,13 @@ import type {
 } from "./custom-extension-definitions.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
-import { isMediaBlockKind } from "./media-block-kind.js";
-import type {
-  MediaUploadState,
-  UploadFile,
-  UploadResult,
-} from "./media-upload.js";
+import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import {
   type EnabledBlockTypes,
   modelToTiptap,
   type TiptapJsonNode,
 } from "./model-to-tiptap.js";
+import { MediaUploadTracker } from "./production-editor-media-upload.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 import { createProductionEditor } from "./production-editor-assembly.js";
@@ -146,13 +139,12 @@ export class ProductionEditorSession {
   private activeReason: ChangeReason | null = null;
   private pendingDocument: BlockDocument | null = null;
   private blockSelection: BlockSelectionRange | null = null;
-  // spec §4.2 — blockSelection과 같은 세션 전용 상태(모델 스키마 밖,
-  // runDocumentCommand 밖). uploadState는 "uploading" | 에러 상태만 담는다
-  // (성공·취소는 흔적을 남기지 않고 항목을 지운다). uploadControllers는
-  // 진행 중인 업로드의 AbortController만 담고 완료 즉시 제거한다 —
-  // cancelMediaUpload(editor-controller.ts)가 이 맵으로 취소 대상을 찾는다.
-  private readonly uploadState = new Map<string, MediaUploadState>();
-  private readonly uploadControllers = new Map<string, AbortController>();
+  // spec §4.2 — uploadState/uploadControllers 맵과 그 상태 기계는
+  // production-editor-media-upload.ts::MediaUploadTracker가 소유한다. 이
+  // 세션은 MediaUploadHost 표면(isDestroyed/editor/uploadFile/
+  // runDocumentCommand/notifyUploadStateChange)만 구현해 트래커에
+  // 주입한다.
+  private readonly mediaUpload = new MediaUploadTracker(this);
   // spec §3.4(DOC-013), RD-005-DELTA-01 — blockSelection/uploadState와
   // 같은 이유로 세션이 소유한다. replaceDocument()가 tiptap Editor를
   // 완전히 새로 만들 때마다(createTiptapEditor) 이 값을 그대로 넘겨야
@@ -328,176 +320,50 @@ export class ProductionEditorSession {
   }
 
   getMediaUploadState(blockId: string): MediaUploadState | null {
-    return this.uploadState.get(blockId) ?? null;
+    return this.mediaUpload.getMediaUploadState(blockId);
   }
 
   getMediaUploadController(blockId: string): AbortController | null {
-    return this.uploadControllers.get(blockId) ?? null;
+    return this.mediaUpload.getMediaUploadController(blockId);
   }
 
   // 업로드 시작 — 컨트롤러를 등록하고 상태를 "uploading"으로 알린다.
   // 호출자(editor-controller.ts::runMediaUpload)가 같은 블록의 진행 중
   // 업로드가 없는지 먼저 확인한다(getMediaUploadController).
   beginMediaUpload(blockId: string): AbortController {
-    const controller = new AbortController();
-    this.uploadControllers.set(blockId, controller);
-    this.setMediaUploadState(blockId, "uploading");
-    return controller;
+    return this.mediaUpload.beginMediaUpload(blockId);
   }
 
   // 업로드 종료 — 진행 중 컨트롤러를 제거하고 최종 상태를 알린다.
   // outcome이 null이면 성공·취소(흔적 없음)이고, 에러면 code·message가
   // pending 상태로 남는다(spec §4.2).
   endMediaUpload(blockId: string, outcome: MediaUploadState | null): void {
-    this.uploadControllers.delete(blockId);
-    this.setMediaUploadState(blockId, outcome);
+    this.mediaUpload.endMediaUpload(blockId, outcome);
   }
 
-  private setMediaUploadState(
+  // MediaUploadHost 표면 — production-editor-media-upload.ts::
+  // MediaUploadTracker가 상태 변경을 알릴 때 호출한다. options가
+  // private라 트래커에 직접 넘길 수 없어 이 위임 메서드로 대신한다.
+  notifyUploadStateChange(
     blockId: string,
     state: MediaUploadState | null,
   ): void {
-    if (state === null) {
-      this.uploadState.delete(blockId);
-    } else {
-      this.uploadState.set(blockId, state);
-    }
     this.options.onUploadStateChange?.(blockId, state);
-  }
-
-  // spec §4 — uploadMediaFile이 성공 분기에서 쓰는 본체(RD-002 DELTA-02가
-  // editor-controller.ts에서 이 세션으로 이동 — 이동 사유는 uploadMediaFile
-  // 주석 참고). url+name을 단일 트랜잭션으로 세팅한다(spec §4.2 "url 및
-  // 반환된 name을 단일 트랜잭션으로 세팅"). name이 undefined면 기존
-  // node.attrs를 스프레드해 그대로 유지한다 — setNodeMarkup에 부분 attrs를
-  // 넘기면 나머지가 schema default로 리셋되는 함정을 피한다.
-  private applyUploadedMediaAttrs(
-    command: string,
-    blockId: string,
-    url: string,
-    name: string | undefined,
-  ): boolean {
-    const { doc } = this.tiptapEditor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (
-      position === null ||
-      node === null ||
-      !isMediaBlockKind(node.type.name)
-    ) {
-      return false;
-    }
-    return this.runDocumentCommand(command, "local", () => {
-      const nextAttrs = {
-        ...node.attrs,
-        url,
-        ...(name === undefined ? {} : { name }),
-      };
-      const transaction = this.tiptapEditor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        nextAttrs,
-      );
-      this.tiptapEditor.view.dispatch(closeHistory(transaction));
-      return true;
-    }).ok;
   }
 
   // spec §4 — uploadMediaFile/replaceMediaBlockFile(editor-controller.ts)와
   // MediaDropPasteExtension의 drop/paste 트리거(RD-002 DELTA-02) 공용
-  // 본체다. editor-controller.ts::createEditor()의 옛 `runMediaUpload`
-  // 클로저를 그대로 이 세션 메서드로 옮겼다 — 그 클로저는 `session = new
-  // ProductionEditorSession(options)` 다음 줄부터 정의돼 세션 생성자 안의
-  // createTiptapEditor()가 만드는 MediaDropPasteExtension 시점엔 존재하지
-  // 않았다(RD-002-DELTA-02.md "배경"). 콜백 호출 → pending "uploading" →
-  // 완료 분기 순으로 진행한다. 사전 조건 실패(파괴됨·콜백 미등록·대상
-  // 없음·대상이 media 아님·이미 진행 중)만 즉시 ok:false로 알리고, 콜백이
-  // 실제로 정착한 뒤의 성공/실패/취소는 항상 ok:true로 해결된다 — 결과는
-  // getMediaUploadState()/onUploadStateChange로만 관찰한다(pending 상태가
-  // 유일한 진실 소스, Promise 값과 이중 소스로 나누지 않는다). drop/paste
-  // 트리거는 이 Promise를 기다리지 않고 fire-and-forget으로 호출한다(RD-001
-  // "결정" — 공개 uploadMediaFile과 동일 원칙).
+  // 본체다. 실제 상태 기계는 production-editor-media-upload.ts::
+  // MediaUploadTracker가 소유한다(RD-002 DELTA-02가 editor-controller.ts에서
+  // 이 세션으로 이동시킨 로직을 분리 작업이 다시 트래커로 옮겼다) — 이
+  // 메서드는 이 세션 자신을 MediaUploadHost로 넘겨 위임하는 thin
+  // wrapper다.
   async uploadMediaFile(
     command: string,
     blockId: string,
     file: File,
   ): Promise<Result<void, EditorError>> {
-    if (this.destroyed) return commandNotApplicable(command);
-    const { uploadFile } = this;
-    if (uploadFile === undefined) {
-      return commandNotApplicable(command);
-    }
-    const { doc } = this.tiptapEditor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (!isMediaBlockKind(node.type.name)) {
-      return commandNotApplicable(command);
-    }
-    if (this.getMediaUploadController(blockId) !== null) {
-      return commandNotApplicable(command);
-    }
-
-    const controller = this.beginMediaUpload(blockId);
-    let result: UploadResult;
-    try {
-      result = await uploadFile(file, controller.signal);
-    } catch {
-      result = {
-        status: "error",
-        code: "UPLOAD_CALLBACK_THREW",
-        message: "uploadFile 콜백이 reject했다",
-      };
-    }
-
-    if (this.destroyed) return { ok: true, value: undefined };
-    // 경합 가드(spec §4.2) — 완료 시점에 대상 블록이 여전히 존재하는지
-    // 재확인한다. undo로 사라지거나 다른 파일로 교체된 뒤 이전 결과가
-    // 늦게 도착하는 경우를 막는다. 존재하지 않으면 결과 종류와 무관하게
-    // 완료 결과를 무시하고 pending 상태만 지운다.
-    const stillExists =
-      findBlockPosition(this.tiptapEditor.state.doc, blockId) !== null;
-    if (!stillExists) {
-      this.endMediaUpload(blockId, null);
-      return { ok: true, value: undefined };
-    }
-
-    if (result.status === "cancelled") {
-      this.endMediaUpload(blockId, null);
-      return { ok: true, value: undefined };
-    }
-    if (result.status === "error") {
-      this.endMediaUpload(blockId, {
-        status: "error",
-        code: result.code,
-        message: result.message,
-      });
-      return { ok: true, value: undefined };
-    }
-
-    // success — url이 기존 setMediaBlockUrl과 동일한 정책을 통과해야
-    // 한다(isSupportedLinkHref 재사용, 신규 URL 검증 코드 없음). 위반하면
-    // 업로드는 "콜백 성공"이었지만 geul은 문서를 바꾸지 않고 에러
-    // pending으로 흡수한다 — 업로드 성공이 URL 정책을 우회하는 구멍을
-    // 막는다.
-    if (!isSupportedLinkHref(result.url)) {
-      this.endMediaUpload(blockId, {
-        status: "error",
-        code: "LINK_HREF_REJECTED",
-        message: `업로드 결과 URL이 허용되지 않는다: ${result.url}`,
-      });
-      return { ok: true, value: undefined };
-    }
-    // 반환값(boolean)을 무시한다 — stillExists 재확인과 이 호출 사이에
-    // await이 없어(동기 연속) 대상이 사라지거나 media가 아니게 될 수
-    // 없다. revision overflow만 이론상 false를 만들 수 있지만 기존
-    // undo/redo도 그 경계에서 같은 방식(commandNotApplicable)으로 조용히
-    // 흡수한다 — 이 명령만 다르게 취급할 계약상 근거가 없다.
-    this.applyUploadedMediaAttrs(command, blockId, result.url, result.name);
-    this.endMediaUpload(blockId, null);
-    return { ok: true, value: undefined };
+    return this.mediaUpload.uploadMediaFile(command, blockId, file);
   }
 
   replaceDocument(next: unknown): Result<void, EditorError> {
