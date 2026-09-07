@@ -404,6 +404,17 @@ export interface EditorController {
     undo(): Result<void, EditorError>;
     redo(): Result<void, EditorError>;
   };
+  // spec §5(EXT-005), RD-001-DELTA-01 — CreateEditorOptions.commands로
+  // 등록한 함수를 호출한다. `commands`(위, 고정 shape)와 물리적으로 다른
+  // 조회 테이블이라 등록 이름이 겹쳐도 충돌하지 않는다(spec §5 "단순
+  // 객체 키 분리 — 별도 충돌 감지 로직 불필요"). 등록되지 않은 name은
+  // COMMAND_NOT_APPLICABLE로 거절한다(기존 commands.*의 미해당 상황과
+  // 같은 에러 코드 재사용). `Record<string, Fn>`을 직접 노출하는 대신
+  // 메서드로 둔 이유: `noUncheckedIndexedAccess`(tsconfig.base.json) 아래
+  // Record 속성 접근은 항상 `Fn | undefined`가 돼 모든 소비자 호출부에
+  // 널 체크를 강제한다 — 미등록 이름을 정상 오류 값으로 돌려주는 이
+  // 메서드가 그 부담을 대신 진다.
+  runCustomCommand(name: string, ...args: unknown[]): Result<void, EditorError>;
 }
 
 // CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
@@ -496,4 +507,11 @@ export type CreateEditorOptions = {
   // initialDocument/replaceDocument/붙여넣기 어느 경로로 만나도
   // EDITOR_FEATURE_UNAVAILABLE로 거절된다(production-editor-assembly.ts).
   enabledBlockTypes?: EnabledBlockTypes;
+  // spec §5(EXT-005), RD-001-DELTA-01 — 등록된 함수는
+  // EditorController.runCustomCommand(name, ...args)로 호출한다(위 참고).
+  // raw PM Plugin/Tiptap Extension은 노출하지 않는다(ADR-0002).
+  commands?: Record<
+    string,
+    (editor: EditorController, ...args: unknown[]) => Result<void, EditorError>
+  >;
 };

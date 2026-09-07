@@ -1,3 +1,4 @@
+import type { Result } from "@cp949/geul-model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
@@ -17,13 +18,17 @@ import type {
   CreateEditorOptions,
   EditorController,
 } from "./editor-controller-types.js";
+import type { EditorError } from "./errors.js";
 import { createGenericBlockCommands } from "./generic-block-commands.js";
 import { getBlockNestingActionState } from "./indent-commands.js";
 import { createInlineMarkCommands } from "./inline-mark-commands.js";
 import { createInsertBlockCommands } from "./insert-block-commands.js";
 import { isMediaBlockKind } from "./media-block-kind.js";
 import type { EnabledBlockTypes } from "./model-to-tiptap.js";
-import { ProductionEditorSession } from "./production-editor-session.js";
+import {
+  commandNotApplicable,
+  ProductionEditorSession,
+} from "./production-editor-session.js";
 import { createSelectionCursorCommands } from "./selection-cursor-commands.js";
 import {
   blockTypeDescriptorFromNode,
@@ -78,6 +83,19 @@ export const createEditor = (
   const { facade: controllerFacade, box: controllerBox } =
     createDeferredControllerFacade();
   const session = new ProductionEditorSession(options, controllerFacade);
+  // spec §5(EXT-005), RD-001-DELTA-01 — 등록된 각 함수에 controllerFacade를
+  // partial-apply해 소비자가 나머지 인자만 넘기게 한다. customBlocks의
+  // NodeView와 달리 이 함수들은 controller 완성 전(dummy mount 구간)에
+  // 호출될 일이 없어 facade의 지연 바인딩 제약(동기 호출 금지)에 걸리지
+  // 않는다. 조회 테이블 자체는 공개하지 않는다 — runCustomCommand만
+  // 노출한다(editor-controller-types.ts의 필드 주석 참고).
+  const customCommandFns: Record<
+    string,
+    (...args: unknown[]) => Result<void, EditorError>
+  > = {};
+  for (const [name, run] of Object.entries(options.commands ?? {})) {
+    customCommandFns[name] = (...args) => run(controllerFacade, ...args);
+  }
   const genericBlockCommands = createGenericBlockCommands(session);
   const inlineMarkCommands = createInlineMarkCommands(session);
   const blockAttributeCommands = createBlockAttributeCommands(session);
@@ -287,6 +305,10 @@ export const createEditor = (
         session.runDocumentCommand("redo", "redo", () =>
           session.editor.commands.redo(),
         ),
+    },
+    runCustomCommand(name, ...args) {
+      const run = customCommandFns[name];
+      return run === undefined ? commandNotApplicable(name) : run(...args);
     },
   };
   // customBlocks NodeView가 dummy mount 구간에서 캡처한 지연 참조를 이제
