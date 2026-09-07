@@ -167,6 +167,114 @@ test("Escape로 취소하면 원래 폭으로 복원되고 Media Toolbar가 닫�
   await expect(toolbar).toBeVisible();
 });
 
+/**
+ * Playwright `page.touchscreen`은 탭만 지원한다(공식 타입 주석 —
+ * "This class is limited to emulating tap gestures", `touchscreen.tap()`
+ * 하나뿐). 좌표 이동이 있는 드래그를 재현하려면 `touchscreen.tap()`이 내부적으로
+ * 쓰는 것과 같은 계층인 CDP `Input.dispatchTouchEvent`를 직접 호출해야 한다
+ * — `elementHandle.dispatchEvent`로 `TouchEvent`를 합성하면(비trusted)
+ * Chromium의 touch->pointer 합성이 일어나지 않아 `MediaResizeHandles`(순수
+ * Pointer Events 기반, `pointerType` 분기 없음)의 리스너에 닿지 않는다.
+ */
+const dragHandleWithTouch = async (
+  page: Page,
+  handle: Locator,
+  dx: number,
+): Promise<void> => {
+  const box = await handle.boundingBox();
+  if (box === null) throw new Error("핸들 bounding box 없음");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const client = await page.context().newCDPSession(page);
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y }],
+  });
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ x: x + dx, y }],
+  });
+  // touchEnd/touchCancel은 touchPoints를 비워야 한다(CDP 계약 — "must not
+  // contain any touch points").
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+};
+
+/**
+ * `insertFilledImage`(support/demo.ts)와 같은 흐름이지만 마우스가 아니라
+ * touch(`tap`)로 조작한다. mobile project(hasTouch:true)에서
+ * `wrapper.click()`(mouse 이벤트)으로는 Media Toolbar가 뜨지 않음을 실측
+ * 확인했다 — hasTouch 컨텍스트에서 mouse 이벤트만으로는 미디어 블록
+ * selection이 서지 않는다(디버그 재현: 같은 흐름을 `tap()`으로 바꾸면
+ * 정상 동작). 이 파일에서만 쓰므로 desktop 12+개 spec이 의존하는
+ * `insertFilledImage`를 건드리지 않고 지역 함수로 둔다(사용처 1곳, 공용화
+ * 문턱 미달).
+ */
+const insertFilledImageWithTap = async (
+  page: Page,
+  editable: Locator,
+  url: string,
+): Promise<Locator> => {
+  await editable.tap();
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).tap();
+  await page
+    .getByRole("textbox", { name: "Image URL" })
+    .pressSequentially(url);
+  await page.getByRole("button", { name: "Save URL" }).tap();
+  const image = editable.locator("img");
+  await expect(image).toHaveAttribute("src", url);
+
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+
+  const wrapper = editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("img") });
+  await wrapper.tap();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  return image;
+};
+
+test("touch로 오른쪽 핸들을 끌면 실제 touch 입력으로도 폭이 바뀐다 @mobile", async ({
+  page,
+}) => {
+  await routeResizeImage(page);
+  const { editable } = await openDemo(page);
+  const image = await insertFilledImageWithTap(
+    page,
+    editable,
+    RESIZE_IMAGE_URL,
+  );
+  // 드래그 전에는 previewWidth가 없어 인라인 style width 자체가 없다(취소
+  // 테스트 F6 주석과 동일한 전제) — 자연 크기(300px)는 style이 아니라 실제
+  // 렌더 bounding box로 확인한다.
+  const startBox = await image.boundingBox();
+  if (startBox === null) throw new Error("이미지 bounding box 없음");
+  expect(Math.round(startBox.width)).toBe(300);
+
+  // 왼쪽으로 20px 축소 — 자연 크기(300px)가 이미 렌더돼 있다는 것은 그
+  // 폭이 래퍼 content 폭(상한) 이하라는 뜻이라, 줄이는 방향은 상한 clamp와
+  // 무관하다(Pixel 5의 좁은 뷰포트에서도 성립). 결과 폭(260px)도 64px
+  // 하한과 충분히 떨어져 있어 하한 clamp도 걸리지 않는다.
+  await dragHandleWithTouch(
+    page,
+    page.locator('[data-geul-media-resize-handle="right"]'),
+    -20,
+  );
+
+  // 2배: 컴포넌트 주석 "중심 고정 대칭 리사이즈" 참고 — 위 mouse 기반
+  // 테스트와 같은 산식(폭 변화량 = 포인터 이동량의 2배)이 touch 입력에서도
+  // 성립함을 증명한다.
+  await expect(image).toHaveAttribute("style", /width:\s*260px/);
+});
+
 test("pointer-up 커밋은 undo 1회로 복원된다", async ({ page }) => {
   await routeResizeImage(page);
   const { editable } = await openDemo(page);
