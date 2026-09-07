@@ -1,14 +1,7 @@
 /**
  * HTML 내보내기와 기본 왕복 변환 계약을 검증한다.
  */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import {
-  isKnownBlockType,
-  type Block,
-  type Document,
-  type InlineContentItem,
-  type TableBlock,
-} from "@cp949/geul-model";
+import type { Document, TableBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml } from "../../src/index.js";

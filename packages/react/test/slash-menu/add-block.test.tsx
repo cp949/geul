@@ -1,33 +1,17 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // @vitest-environment jsdom
 
 /**
  * SlashMenu와 BlockSideMenu의 블록 추가 버튼 동작을 검증한다.
  */
 
-import type { CodeBlock, HeadingBlock, TableBlock } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SlashMenu } from "../../src/index.js";
-import { expectIconOnlyButton } from "../expect-icon-button.js";
-import {
-  focusOutsideEditor,
-  type MountedBlockEditor,
-  mountBlockEditor,
-  mountTableEditor,
-  placeCaret,
-} from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
 import {
   addBlockLabel,
-  addRowLabel,
   blockIdsOf,
-  dragHandleLabel,
-  renderCaretBlocks,
   renderRealBlocks,
-  typeIntoBlock,
 } from "./slash-menu-test-support.js";
 
 afterEach(cleanup);

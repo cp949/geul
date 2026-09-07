@@ -1,81 +1,15 @@
 /**
  * 중첩 블록의 HTML 왕복 변환 계약을 검증한다.
  */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   isKnownBlockType,
   type Block,
   type Document,
   type InlineContentItem,
-  type TableBlock,
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml } from "../../src/index.js";
-
-const documentWithMergedTable: Document = {
-  formatVersion: 1,
-  revision: 0,
-  blocks: [
-    {
-      id: "table-1",
-      type: "table",
-      columns: [
-        { id: "column-1", width: 160 },
-        { id: "column-2", width: 240 },
-      ],
-      rows: [
-        {
-          id: "row-1",
-          cells: [
-            {
-              id: "cell-1",
-              columnId: "column-1",
-              rowSpan: 1,
-              columnSpan: 2,
-              content: [{ text: "Header", marks: [{ type: "bold" }] }],
-              textColor: "#112233",
-              backgroundColor: "#AABBCC",
-            },
-          ],
-        },
-        {
-          id: "row-2",
-          cells: [
-            {
-              id: "cell-2",
-              columnId: "column-1",
-              rowSpan: 2,
-              columnSpan: 1,
-              content: [{ text: "Row header" }],
-            },
-            {
-              id: "cell-3",
-              columnId: "column-2",
-              rowSpan: 1,
-              columnSpan: 1,
-              content: [{ text: "Body" }],
-            },
-          ],
-        },
-        {
-          id: "row-3",
-          cells: [
-            {
-              id: "cell-4",
-              columnId: "column-2",
-              rowSpan: 1,
-              columnSpan: 1,
-              content: [],
-            },
-          ],
-        },
-      ],
-      headerRows: 1,
-      headerColumns: 1,
-    },
-  ],
-};
 
 describe("재귀 중첩 HTML 왕복", () => {
   // 후보 A(트랙-2 라운드4 확정): children이 있는 블록만

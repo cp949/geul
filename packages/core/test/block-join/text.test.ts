@@ -23,27 +23,16 @@
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
  * 노출되지 않는다(G-WKS-001).
  */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it, vi } from "vitest";
 
 import { BlockJoinExtension } from "../../src/block-join-extension.js";
 import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
 import {
-  dividerBetweenParagraphsDocument,
-  dividerD1,
   documentOf,
-  editorState,
-  expectDividerNodeSelection,
-  firstParagraphBlock,
-  mounted,
   nestedParagraphDocument,
-  notApplicable,
-  okResult,
   oneCellTableBlock,
   paragraphBlock,
-  restored,
-  secondParagraphBlock,
   tailParagraphBlock,
 } from "../editor-controller-support.js";
 import {

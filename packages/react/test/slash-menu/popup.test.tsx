@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // @vitest-environment jsdom
 
 /**
@@ -11,28 +10,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SlashMenu } from "../../src/index.js";
-import { expectIconOnlyButton } from "../expect-icon-button.js";
 import {
   focusOutsideEditor,
-  type MountedBlockEditor,
   mountBlockEditor,
   mountTableEditor,
   placeCaret,
 } from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
-import {
-  addBlockLabel,
-  addRowLabel,
-  dragHandleLabel,
-  renderCaretBlocks,
-  renderRealBlocks,
-  typeIntoBlock,
-} from "./slash-menu-test-support.js";
+import { renderCaretBlocks, typeIntoBlock } from "./slash-menu-test-support.js";
 
 afterEach(cleanup);
-
-const blockIdsOf = (rendered: MountedBlockEditor) =>
-  rendered.editor.getDocument().blocks.map((block) => block.id);
 
 /**
  * selectionchange와 같은 React batch에서 다시 렌더된 뒤 layout effect로 Escape를
