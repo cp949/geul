@@ -1,5 +1,5 @@
-import type { MediaBlockKind } from "@cp949/geul-core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -135,13 +135,18 @@ const carryMediaInfo = (
  * "성공 시에만 로컬 state 반영" 패턴을 재사용하고, 같은 값 재클릭은
  * 해제(`null`)한다(`setMediaAlignment` 주석 참고).
  */
-/** DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고. */
+/**
+ * `formatting-toolbar.tsx`와 동일 계약 — `portalTarget`(RD-003 DELTA-03),
+ * `component`(RD-001 DELTA-03) 참고.
+ */
 export type MediaToolbarProps = {
   portalTarget?: HTMLElement | null;
+  component?: FC<{ editor: EditorController }>;
 };
 
 export const MediaToolbar = ({
   portalTarget = null,
+  component: Component,
 }: MediaToolbarProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
@@ -374,6 +379,23 @@ export const MediaToolbar = ({
   });
 
   if (toolbarState.mode === "closed") return null;
+
+  if (Component !== undefined) {
+    const overridden = (
+      <div
+        aria-label="Media toolbar"
+        className="geul-media-toolbar"
+        ref={menuRef}
+        role="toolbar"
+        style={style}
+      >
+        <Component editor={editor} />
+      </div>
+    );
+    return portalTarget === null
+      ? overridden
+      : createPortal(overridden, portalTarget);
+  }
 
   // rename/caption 편집을 마치고 view로 돌아간다. 편집 중 알아낸 blockId/
   // kind/url은 그대로 두고 name/caption만 호출부가 넘긴 값으로 갱신한다 —

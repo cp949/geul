@@ -15,7 +15,11 @@
  * (Issue #154, MED-009).
  */
 
-import type { EditorError, MediaBlockKind } from "@cp949/geul-core";
+import type {
+  EditorController,
+  EditorError,
+  MediaBlockKind,
+} from "@cp949/geul-core";
 import {
   cleanup,
   fireEvent,
@@ -973,5 +977,47 @@ describe("MediaToolbar portalTarget(슬라이스4 RD-003 DELTA-03)", () => {
 
     const toolbar = screen.getByRole("toolbar", { name: "Media toolbar" });
     expect(container.contains(toolbar)).toBe(true);
+  });
+});
+
+describe("MediaToolbar component override(슬라이스4 RD-001 DELTA-03)", () => {
+  const CustomMediaToolbar = ({ editor }: { editor: EditorController }) => (
+    <button
+      onClick={() => editor.commands.deleteBlock("media-1")}
+      type="button"
+    >
+      Custom delete
+    </button>
+  );
+
+  it("지정하면 소비자 컴포넌트가 렌더되고 editor를 받는다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    render(
+      withProvider(
+        controller,
+        <>
+          <MediaToolbar component={CustomMediaToolbar} />
+          <EditorContent />
+        </>,
+      ),
+    );
+
+    const button = screen.getByRole("button", { name: "Custom delete" });
+    fireEvent.click(button);
+
+    expect(controller.commands.deleteBlock).toHaveBeenCalledWith("media-1");
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+  });
+
+  it("지정해도 표시 판정은 wrapper가 그대로 유지한다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(controller, <MediaToolbar component={CustomMediaToolbar} />),
+    );
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Custom delete" })).toBeNull();
   });
 });
