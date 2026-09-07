@@ -1,5 +1,6 @@
 import type { MediaBlockKind } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { extractNameFromUrl } from "./extract-name-from-url.js";
 import {
@@ -65,7 +66,12 @@ type PanelState =
  * 일어날 때마다 다시 읽을 뿐 별도 열림 상태를 직접 소유하지 않는다
  * (LinkToolbar와 같은 아키텍처).
  */
-export const FilePanel = () => {
+/** DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고. */
+export type FilePanelProps = {
+  portalTarget?: HTMLElement | null;
+};
+
+export const FilePanel = ({ portalTarget = null }: FilePanelProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [panelState, setPanelState] = useState<PanelState>({ mode: "closed" });
@@ -291,7 +297,7 @@ export const FilePanel = () => {
     });
   };
 
-  return (
+  const content = (
     <div
       aria-label="File panel"
       className="geul-file-panel"
@@ -422,4 +428,6 @@ export const FilePanel = () => {
       </button>
     </div>
   );
+
+  return portalTarget === null ? content : createPortal(content, portalTarget);
 };

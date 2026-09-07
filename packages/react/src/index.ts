@@ -7,7 +7,7 @@ export type {
 } from "@cp949/geul-core";
 export { EditorContent } from "./editor-content.js";
 export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
-export { FilePanel } from "./file-panel.js";
+export { FilePanel, type FilePanelProps } from "./file-panel.js";
 export {
   FormattingToolbar,
   type FormattingToolbarProps,

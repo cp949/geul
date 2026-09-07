@@ -515,3 +515,37 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 });
+
+describe("FilePanel portalTarget(슬라이스4 RD-003 DELTA-04)", () => {
+  it("지정하면 그 요소 하위에 렌더한다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    const portalTarget = document.createElement("div");
+    document.body.appendChild(portalTarget);
+    render(
+      withProvider(
+        controller,
+        <>
+          <FilePanel portalTarget={portalTarget} />
+          <EditorContent />
+        </>,
+      ),
+    );
+
+    const panel = screen.getByRole("toolbar", { name: "File panel" });
+    expect(portalTarget.contains(panel)).toBe(true);
+
+    portalTarget.remove();
+  });
+
+  it("지정하지 않으면 기존 위치(부모 트리 내부)에 렌더한다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    const { container } = renderPanel(controller);
+
+    const panel = screen.getByRole("toolbar", { name: "File panel" });
+    expect(container.contains(panel)).toBe(true);
+  });
+});
