@@ -17,7 +17,11 @@ import {
   placeCaret,
 } from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
-import { renderCaretBlocks, typeIntoBlock } from "./slash-menu-test-support.js";
+import {
+  dragHandleLabel,
+  renderCaretBlocks,
+  typeIntoBlock,
+} from "./slash-menu-test-support.js";
 
 afterEach(cleanup);
 
@@ -576,5 +580,56 @@ describe("SlashMenu 질의 팝업", () => {
 
     expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("SlashMenu portalTarget(슬라이스4 RD-003 DELTA-05)", () => {
+  it("지정하면 슬래시 팝업만 그 요소 하위에 렌더한다", () => {
+    const portalTarget = document.createElement("div");
+    document.body.appendChild(portalTarget);
+    const rendered = mountBlockEditor({
+      children: <SlashMenu portalTarget={portalTarget} />,
+    });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/");
+
+    const menu = screen.getByRole("listbox", { name: "Slash menu" });
+    expect(portalTarget.contains(menu)).toBe(true);
+
+    portalTarget.remove();
+  });
+
+  it("지정해도 BlockSideMenu의 드래그 핸들은 그대로 제자리(portalTarget 밖)에 렌더한다", () => {
+    const portalTarget = document.createElement("div");
+    document.body.appendChild(portalTarget);
+    const rendered = mountBlockEditor({
+      children: <SlashMenu portalTarget={portalTarget} />,
+    });
+    rendered.editable.focus();
+
+    // BlockSideMenu의 드래그 핸들은 hover(pointerMove)로만 나타난다
+    // (block-side-menu.tsx:398, hoverBounds !== null 게이트) — SlashMenu
+    // 전체 fragment를 통째로 portal에 넣는 회귀라면 이 핸들도 portalTarget
+    // 하위로 옮겨진다.
+    const block = rendered.blocks[0];
+    if (block === undefined) throw new Error("블록을 찾지 못했다");
+    fireEvent.pointerMove(block);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    expect(portalTarget.contains(handle)).toBe(false);
+
+    portalTarget.remove();
+  });
+
+  it("지정하지 않으면 슬래시 팝업이 기존 위치(부모 트리 내부, EditorContent와 형제)에 렌더한다", () => {
+    const rendered = mountBlockEditor({ children: <SlashMenu /> });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/");
+
+    const menu = screen.getByRole("listbox", { name: "Slash menu" });
+    // portal이면 menu는 document.body 직속(별도 컨테이너)에 붙어 host와
+    // 부모를 공유하지 않는다 — 형제 관계 확인으로 "옮기지 않았음"을 잠근다.
+    expect(menu.parentElement).toBe(rendered.host.parentElement);
   });
 });

@@ -1,5 +1,6 @@
 import type { BlockTypeDescriptor, MediaBlockKind } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
 import { BlockSideMenu } from "./block-side-menu.js";
@@ -163,7 +164,18 @@ const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
   return { left: bounds.left, top: bounds.top + bounds.height };
 };
 
-export const SlashMenu = () => {
+/**
+ * DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고.
+ * 이 컴포넌트가 내부 자동 마운트하는 `BlockSideMenu`/`CodeBlockLanguageCombobox`/
+ * `TableHandles`/`TableSelectionToolbar`/`BlockSelectionToolbar`(중복 마운트
+ * 방지, spec §6.1)는 각자 독립된 오버레이라 이 prop과 무관하다 — `portalTarget`은
+ * 슬래시 명령 팝업 자신에만 적용한다(RD-003-DELTA-05.md "범위 판단").
+ */
+export type SlashMenuProps = {
+  portalTarget?: HTMLElement | null;
+};
+
+export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
@@ -408,6 +420,36 @@ export const SlashMenu = () => {
     return () => element.removeEventListener("keydown", handleKeyDown, true);
   }, [dismissMenuAndFocusEditor, element, selectItem]);
 
+  const menuContent = menuState === null ? null : (
+    <div
+      aria-label="Slash menu"
+      className="geul-slash-menu"
+      ref={menuRef}
+      role="listbox"
+      style={style}
+    >
+      {items.length === 0 && (
+        <p className="geul-slash-menu__empty">No matches</p>
+      )}
+      {items.map((item, index) => (
+        <button
+          aria-selected={index === menuState.highlightedIndex}
+          className="geul-slash-menu__item"
+          key={item.id}
+          onClick={() => selectItem(item)}
+          onPointerDown={(event) => event.preventDefault()}
+          role="option"
+          type="button"
+        >
+          <span className="geul-slash-menu__item-label">{item.label}</span>
+          <span className="geul-slash-menu__item-description">
+            {item.description}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
       <BlockSideMenu
@@ -419,35 +461,10 @@ export const SlashMenu = () => {
       <TableHandles />
       <TableSelectionToolbar />
       <BlockSelectionToolbar />
-      {menuState !== null && (
-        <div
-          aria-label="Slash menu"
-          className="geul-slash-menu"
-          ref={menuRef}
-          role="listbox"
-          style={style}
-        >
-          {items.length === 0 && (
-            <p className="geul-slash-menu__empty">No matches</p>
-          )}
-          {items.map((item, index) => (
-            <button
-              aria-selected={index === menuState.highlightedIndex}
-              className="geul-slash-menu__item"
-              key={item.id}
-              onClick={() => selectItem(item)}
-              onPointerDown={(event) => event.preventDefault()}
-              role="option"
-              type="button"
-            >
-              <span className="geul-slash-menu__item-label">{item.label}</span>
-              <span className="geul-slash-menu__item-description">
-                {item.description}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      {menuContent !== null &&
+        (portalTarget === null
+          ? menuContent
+          : createPortal(menuContent, portalTarget))}
     </>
   );
 };
