@@ -18,6 +18,10 @@
 
   &--drag {
     cursor: grab;
+    // 터치 드래그를 브라우저 스크롤 제스처에 뺏기면 pointercancel로
+    // 드래그가 중단된다(table-handles·media-resize-handles와 동일 방어,
+    // spec 2026-09-06-r4-...-design.md §9.2).
+    touch-action: none;
 
     &:active {
       cursor: grabbing;

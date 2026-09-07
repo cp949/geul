@@ -58,6 +58,65 @@ test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복�
   await expect(editable.locator("p").last()).toHaveText("second block");
 });
 
+test("드래그 핸들이 touch-action:none을 적용하고 pointerdown 기본 동작을 막는다 @core", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first block");
+
+  const firstBlock = editable.locator("p").first();
+  await firstBlock.hover();
+  const handle = page.getByRole("button", { name: "Drag to reorder" });
+  await expect(handle).toBeVisible();
+
+  // 실기기 터치에서 브라우저가 드래그를 스크롤 제스처로 가로채지 않으려면
+  // 두 방어가 함께 있어야 한다 — computed style만으로는 캐스케이드·특이성
+  // 충돌이 없다는 것을 보장하지 못한다(heading-quote-divider.spec.ts
+  // "09a-C2"와 동일 논리).
+  const touchAction = await handle.evaluate(
+    (element) => getComputedStyle(element).touchAction,
+  );
+  expect(touchAction).toBe("none");
+
+  // event.defaultPrevented는 React의 위임 핸들러(root container의
+  // bubble-phase 리스너, target 자신의 리스너보다 늦게 실행)가
+  // preventDefault()를 부른 뒤에만 true가 된다 — 같은 이벤트 객체를
+  // window에 보관해 두고 dispatch가 전부 끝난 뒤(mouse.up 이후) 별도
+  // evaluate로 읽어야 정확하다(리스너 콜백 안에서 곧바로 읽으면 target
+  // phase 시점의 값이라 false로 관찰된다).
+  await handle.evaluate((element: HTMLButtonElement) => {
+    (
+      window as typeof window & { __pointerdownEvent?: PointerEvent | undefined }
+    ).__pointerdownEvent = undefined;
+    element.addEventListener(
+      "pointerdown",
+      (event) => {
+        (
+          window as typeof window & { __pointerdownEvent?: PointerEvent | undefined }
+        ).__pointerdownEvent = event;
+      },
+      { once: true },
+    );
+  });
+  const handleBox = await handle.boundingBox();
+  if (handleBox === null) throw new Error("Bounding box was not available");
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.up();
+
+  const defaultPrevented = await page.evaluate(
+    () =>
+      (
+        window as typeof window & { __pointerdownEvent?: PointerEvent }
+      ).__pointerdownEvent?.defaultPrevented,
+  );
+  expect(defaultPrevented).toBe(true);
+});
+
 test("블록 메뉴에서 복제하면 원본 바로 다음에 블록이 생기고 undo 1회로 복원된다", async ({
   page,
 }) => {

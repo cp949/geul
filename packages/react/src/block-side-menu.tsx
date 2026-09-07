@@ -315,6 +315,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     blockId: string,
   ) => {
     if (event.button !== 0) return;
+    // 실기기 터치에서 핸들을 누르고 움직이면 브라우저가 스크롤 제스처로
+    // 판단해 pointercancel로 드래그를 끊을 수 있다 — table-handles의
+    // 재정렬 핸들에는 없지만(스크롤 방향과 재정렬 방향이 겹치지 않아
+    // 실사용 위험이 낮음) 블록 gutter는 문서 전체 세로 스크롤과 드래그
+    // 방향이 겹쳐 spec §9.2가 방어적 수정으로 명시 승인했다.
+    event.preventDefault();
     reopenSuppression.onPointerDown(
       blockMenuState !== null && blockMenuState.blockId === blockId
         ? blockId
