@@ -92,6 +92,62 @@ const notifyResize = (stub: ResizeObserverStub) => {
   });
 };
 
+type VisualViewportListeners = Record<string, Array<() => void>>;
+
+type VisualViewportStub = {
+  offsetLeft: number;
+  offsetTop: number;
+  width: number;
+  height: number;
+  listeners: VisualViewportListeners;
+  addEventListener: (type: string, callback: () => void) => void;
+  removeEventListener: (type: string, callback: () => void) => void;
+};
+
+/**
+ * jsdom에는 visualViewport가 없다. 가상 키보드는 innerWidth/innerHeight를
+ * 거의 바꾸지 않고 visualViewport만 줄이므로(레이아웃 뷰포트와 분리), 훅이
+ * 그 축소를 실제로 참조하는지 보려면 최소 EventTarget 계약을 흉내 낸
+ * 가짜가 필요하다.
+ */
+const stubVisualViewport = (bounds: {
+  offsetLeft?: number;
+  offsetTop?: number;
+  width: number;
+  height: number;
+}): VisualViewportStub => {
+  const listeners: VisualViewportListeners = { resize: [], scroll: [] };
+  const stub: VisualViewportStub = {
+    offsetLeft: bounds.offsetLeft ?? 0,
+    offsetTop: bounds.offsetTop ?? 0,
+    width: bounds.width,
+    height: bounds.height,
+    listeners,
+    addEventListener: (type, callback) => {
+      (listeners[type] ??= []).push(callback);
+    },
+    removeEventListener: (type, callback) => {
+      listeners[type] = (listeners[type] ?? []).filter(
+        (registered) => registered !== callback,
+      );
+    },
+  };
+  Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value: stub,
+  });
+  return stub;
+};
+
+const notifyVisualViewport = (
+  stub: VisualViewportStub,
+  type: "resize" | "scroll",
+) => {
+  act(() => {
+    for (const callback of stub.listeners[type] ?? []) callback();
+  });
+};
+
 beforeEach(() => {
   stubViewport(1000, 800);
 });
@@ -100,6 +156,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(window, "visualViewport");
 });
 
 describe("useClampedMenuPosition", () => {
@@ -254,5 +311,51 @@ describe("useClampedMenuPosition", () => {
     unmount();
 
     expect(observer.disconnected).toBe(1);
+  });
+
+  it("visualViewport가 뷰포트보다 작으면(가상 키보드) 그 경계 기준으로 클램프한다", () => {
+    stubMenuRect(200, 100);
+    stubVisualViewport({ offsetLeft: 20, offsetTop: 50, width: 600, height: 300 });
+
+    const { getByTestId } = render(<Probe left={1000} top={1000} />);
+    const probe = getByTestId("probe");
+
+    // visualViewport 기준: maxLeft = 20+600-200-8=412, maxTop = 50+300-100-8=242.
+    // innerWidth/innerHeight(1000x800, beforeEach 스텁) 기준이었다면 692/692가 나왔을 것이다.
+    expect(probe.dataset.left).toBe("412");
+    expect(probe.dataset.top).toBe("242");
+  });
+
+  it("visualViewport의 resize 이벤트가 오면 그 크기를 다시 읽어 재클램프한다", () => {
+    stubMenuRect(200, 100);
+    const stub = stubVisualViewport({ width: 1000, height: 800 });
+
+    const { getByTestId } = render(<Probe left={100} top={700} />);
+    const probe = getByTestId("probe");
+
+    // 초기: visualViewport 800 기준 maxTop = 800-100-8=692, top=700 -> 692.
+    expect(probe.dataset.top).toBe("692");
+
+    // 가상 키보드가 올라와 visualViewport.height만 줄어든다(innerHeight는 그대로).
+    stub.height = 300;
+    notifyVisualViewport(stub, "resize");
+
+    // maxTop = 300-100-8=192.
+    expect(probe.dataset.top).toBe("192");
+  });
+
+  it("언마운트하면 visualViewport 리스너를 해제한다", () => {
+    stubMenuRect(200, 100);
+    const stub = stubVisualViewport({ width: 1000, height: 800 });
+
+    const { unmount } = render(<Probe left={100} top={100} />);
+    // 해제를 증명하려면 먼저 등록됐음을 확인해야 한다 — 그래야 아래
+    // toHaveLength(0)이 "애초에 등록 안 함"으로 공허하게 참이 되지 않는다.
+    expect((stub.listeners.resize ?? []).length).toBeGreaterThan(0);
+
+    unmount();
+
+    expect(stub.listeners.resize).toHaveLength(0);
+    expect(stub.listeners.scroll).toHaveLength(0);
   });
 });

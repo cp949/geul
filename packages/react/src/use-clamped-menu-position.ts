@@ -109,15 +109,26 @@ export const useClampedMenuPosition = (
     const clampToViewport = () => {
       const rect = node.getBoundingClientRect();
       const { dx, dy } = ANCHOR_OFFSETS[anchor](rect);
-      const minLeft = MENU_VIEWPORT_MARGIN - dx;
+      // 가상 키보드가 뜨면 visualViewport만 줄고 innerWidth/innerHeight(레이아웃
+      // 뷰포트)는 거의 그대로다 — 있으면 그 경계를 우선한다(offsetLeft/offsetTop
+      // 포함, pinch-zoom 등으로 레이아웃 뷰포트에서 밀려나 있을 수 있다).
+      const bounds = view.visualViewport
+        ? {
+            left: view.visualViewport.offsetLeft,
+            top: view.visualViewport.offsetTop,
+            width: view.visualViewport.width,
+            height: view.visualViewport.height,
+          }
+        : { left: 0, top: 0, width: view.innerWidth, height: view.innerHeight };
+      const minLeft = MENU_VIEWPORT_MARGIN + bounds.left - dx;
       const maxLeft = Math.max(
         minLeft,
-        view.innerWidth - rect.width - MENU_VIEWPORT_MARGIN - dx,
+        bounds.left + bounds.width - rect.width - MENU_VIEWPORT_MARGIN - dx,
       );
-      const minTop = MENU_VIEWPORT_MARGIN - dy;
+      const minTop = MENU_VIEWPORT_MARGIN + bounds.top - dy;
       const maxTop = Math.max(
         minTop,
-        view.innerHeight - rect.height - MENU_VIEWPORT_MARGIN - dy,
+        bounds.top + bounds.height - rect.height - MENU_VIEWPORT_MARGIN - dy,
       );
       const nextLeft = Math.min(Math.max(left, minLeft), maxLeft);
       const nextTop = Math.min(Math.max(top, minTop), maxTop);
@@ -132,12 +143,25 @@ export const useClampedMenuPosition = (
 
     clampToViewport();
 
+    const visualViewport = view.visualViewport;
+    visualViewport?.addEventListener("resize", clampToViewport);
+    visualViewport?.addEventListener("scroll", clampToViewport);
+
     // jsdom에는 ResizeObserver가 없다 — 단위 테스트는 마운트 직후 클램프만
     // 검증하고 여기서 그대로 빠져나간다.
-    if (typeof view.ResizeObserver !== "function") return;
+    if (typeof view.ResizeObserver !== "function") {
+      return () => {
+        visualViewport?.removeEventListener("resize", clampToViewport);
+        visualViewport?.removeEventListener("scroll", clampToViewport);
+      };
+    }
     const observer = new view.ResizeObserver(clampToViewport);
     observer.observe(node);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      visualViewport?.removeEventListener("resize", clampToViewport);
+      visualViewport?.removeEventListener("scroll", clampToViewport);
+    };
   }, [left, top, anchor]);
 
   return {
