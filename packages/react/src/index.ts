@@ -8,7 +8,10 @@ export type {
 export { EditorContent } from "./editor-content.js";
 export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
 export { FilePanel } from "./file-panel.js";
-export { FormattingToolbar } from "./formatting-toolbar.js";
+export {
+  FormattingToolbar,
+  type FormattingToolbarProps,
+} from "./formatting-toolbar.js";
 export { LinkToolbar } from "./link-toolbar.js";
 export { MediaResizeHandles } from "./media-resize-handles.js";
 export { MediaToolbar } from "./media-toolbar.js";

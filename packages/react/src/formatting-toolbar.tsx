@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import {
   blockTypeToOptionId,
@@ -146,7 +147,19 @@ const restoreEditorSelection = (
   selection.addRange(range);
 };
 
-export const FormattingToolbar = () => {
+/**
+ * `portalTarget`을 지정하면 `createPortal`로 그 요소 하위에 렌더한다(RD-003
+ * DELTA-01). 미지정(기본값 `null`)이면 기존처럼 부모 트리 내부에 그대로
+ * 렌더한다 — additive 확장이라 기존 소비자·테스트의 DOM 배치 가정을 깨지
+ * 않는다.
+ */
+export type FormattingToolbarProps = {
+  portalTarget?: HTMLElement | null;
+};
+
+export const FormattingToolbar = ({
+  portalTarget = null,
+}: FormattingToolbarProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
@@ -294,7 +307,7 @@ export const FormattingToolbar = () => {
 
   if (toolbarState === null) return null;
 
-  return (
+  const content = (
     <>
       <div
         aria-label="Formatting"
@@ -464,4 +477,6 @@ export const FormattingToolbar = () => {
       )}
     </>
   );
+
+  return portalTarget === null ? content : createPortal(content, portalTarget);
 };
