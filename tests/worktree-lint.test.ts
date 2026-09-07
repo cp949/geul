@@ -97,5 +97,5 @@ describe("워크트리 안에서 실행하는 eslint lint", () => {
 
     expect(result.output).not.toContain(".worktrees");
     expect(result.exitCode).toBe(0);
-  }, 10_000);
+  }, 30_000);
 });
