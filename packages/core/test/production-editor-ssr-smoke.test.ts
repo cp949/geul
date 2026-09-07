@@ -34,7 +34,9 @@ describe("createEditor() — document 없는 Node 환경(SSR)", () => {
   });
 
   it("document 없는 환경에서 크래시하지 않는다", () => {
-    expect(() => createEditor({ initialDocument: paragraphOnlyDocument })).not.toThrow();
+    expect(() =>
+      createEditor({ initialDocument: paragraphOnlyDocument }),
+    ).not.toThrow();
   });
 
   it("document 없는 환경에서는 로드 시점 trailing paragraph 정규화가 아직 적용되지 않는다(알려진 제약 — 실제 client mount 시점에 적용)", () => {
