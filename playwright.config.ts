@@ -45,6 +45,12 @@ export default defineConfig({
     // 프로젝트가 단독으로 가져간다(testIgnore).
     {
       name: "chromium",
+      // @mobile 태그 테스트는 hasTouch:true 컨텍스트를 전제해(`element.tap()`
+      // 등) chromium(hasTouch 없음)에서 곧바로 실패한다 — mobile project의
+      // `grep: /@mobile/`과 정확히 상보적으로 제외한다(RD-001 DELTA-01 구현
+      // 중 발견: 이 옵션 없이 `pnpm test:e2e` 전체를 돌려보니 chromium이
+      // 같은 파일을 집어 tap() 에러로 실패했다).
+      grepInvert: /@mobile/,
       testIgnore: /table-performance\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
     },
@@ -62,6 +68,19 @@ export default defineConfig({
       grep: /@core/,
       testIgnore: /table-performance\.spec\.ts$/,
       use: { ...devices["Desktop Safari"] },
+    },
+    {
+      // 모바일 터치 입력 회귀 게이트(UI-015, R4 슬라이스6 RD-001). `isMobile`은
+      // Playwright 공식 타입 주석 확인 결과 Firefox가 미지원이라(Chromium/
+      // WebKit만) Chromium 기반 1개(Pixel 5)로 시작한다(그릴링 결정,
+      // _works/roadmap/roadmap.md "결정"). 기존 spec 대부분이 데스크톱
+      // hover·넓은 기본 뷰포트를 전제해 그대로 돌리면 무관한 대량 실패를
+      // 내므로, firefox/webkit의 `@core` 부분집합 패턴과 동일하게 `@mobile`
+      // 태그가 붙은 touch 전용 테스트만 돈다.
+      name: "mobile",
+      grep: /@mobile/,
+      testIgnore: /table-performance\.spec\.ts$/,
+      use: { ...devices["Pixel 5"] },
     },
     {
       // 성능 기준선 기록 전용(`pnpm test:e2e:perf`). 게이트가 아니다 —
