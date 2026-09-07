@@ -4,7 +4,7 @@ import { MenuItemButton } from "./menu-item-button.js";
 import { TableCellColorPalettes } from "./table-cell-color-palettes.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useEditor } from "./use-editor.js";
+import { useDictionary, useEditor } from "./use-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const menuItemClassName = "geul-table-menu__item";
@@ -41,6 +41,7 @@ export const TableHandleMenu = ({
   onClose,
 }: TableHandleMenuProps) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { menuRef, style } = useClampedMenuPosition(left, top);
   // 완료 조건 1(Issue #18): 실패한 명령의 Result를 버리지 않는다 — 실패하면
   // 메뉴를 닫지 않고 사용자가 이유를 볼 수 있게 인라인 메시지로 남긴다.
@@ -90,7 +91,11 @@ export const TableHandleMenu = ({
 
   return (
     <div
-      aria-label={isRow ? "Table row menu" : "Table column menu"}
+      aria-label={
+        isRow
+          ? dictionary.menu.tableRowMenuAriaLabel
+          : dictionary.menu.tableColumnMenuAriaLabel
+      }
       className="geul-menu-panel"
       data-geul-table-menu=""
       ref={menuRef}
@@ -103,17 +108,21 @@ export const TableHandleMenu = ({
         </p>
       )}
       <MenuItemButton className={menuItemClassName} onClick={insertBefore}>
-        {isRow ? "Insert row above" : "Insert column left"}
+        {isRow
+          ? dictionary.menu.insertRowAbove
+          : dictionary.menu.insertColumnLeft}
       </MenuItemButton>
       <MenuItemButton className={menuItemClassName} onClick={insertAfter}>
-        {isRow ? "Insert row below" : "Insert column right"}
+        {isRow
+          ? dictionary.menu.insertRowBelow
+          : dictionary.menu.insertColumnRight}
       </MenuItemButton>
       <MenuItemButton
         className={`${menuItemClassName} geul-table-menu__item--danger`}
         disabled={!canDelete}
         onClick={remove}
       >
-        {isRow ? "Delete row" : "Delete column"}
+        {isRow ? dictionary.menu.deleteRow : dictionary.menu.deleteColumn}
       </MenuItemButton>
       {headerToggleAvailable && (
         <>
@@ -124,7 +133,7 @@ export const TableHandleMenu = ({
             onClick={toggleHeader}
             role="menuitemcheckbox"
           >
-            {isRow ? "Header row" : "Header column"}
+            {isRow ? dictionary.menu.headerRow : dictionary.menu.headerColumn}
           </MenuItemButton>
         </>
       )}

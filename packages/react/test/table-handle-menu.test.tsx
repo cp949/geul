@@ -10,13 +10,18 @@
  * 호출 스파이 대신 문서 결과(rowsOf/tableBlockOf)를 단언한다.
  */
 
-import type { EditorController } from "@cp949/geul-core";
+import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
-import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
+import {
+  type MountTableEditorOptions,
+  mountTableEditor,
+  stubRect,
+  tableBlockOf,
+} from "./mount-editor.js";
 
 // @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
 // cleanup을 등록한다(dist/index.js의 typeof afterEach === "function" 분기와
@@ -42,7 +47,9 @@ if (typeof Element.prototype.releasePointerCapture !== "function") {
  * 컨트롤러 레인 시절 renderTable이 쓰던 필드 이름(editable/contentEditable)을
  * 그대로 유지해 각 테스트 본문 수정을 최소화한다.
  */
-const renderRealTable = (options?: { rows?: number; columns?: number }) => {
+const renderRealTable = (
+  options?: Pick<MountTableEditorOptions, "rows" | "columns" | "dictionary">,
+) => {
   const mounted = mountTableEditor({
     ...options,
     children: <TableHandles />,
@@ -88,14 +95,18 @@ const clickFirstColumnHandle = (table: HTMLElement) => {
 };
 
 /** 실제 마운트한 표에서 행 메뉴를 연 상태로 만든다. */
-const openRowMenu = (options?: { rows?: number; columns?: number }) => {
+const openRowMenu = (
+  options?: Pick<MountTableEditorOptions, "rows" | "columns" | "dictionary">,
+) => {
   const rendered = renderRealTable(options);
   clickFirstRowHandle(rendered.table);
   return rendered;
 };
 
 /** 실제 마운트한 표에서 열 메뉴를 연 상태로 만든다. */
-const openColumnMenu = (options?: { rows?: number; columns?: number }) => {
+const openColumnMenu = (
+  options?: Pick<MountTableEditorOptions, "rows" | "columns" | "dictionary">,
+) => {
   const rendered = renderRealTable(options);
   clickFirstColumnHandle(rendered.table);
   return rendered;
@@ -203,6 +214,34 @@ describe("행/열 핸들 클릭 메뉴", () => {
     openRowMenu();
 
     expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+  });
+
+  it("dictionary override 시 행/열 메뉴 aria-label과 항목 텍스트가 바뀐다(EXT-009)", () => {
+    const dictionary = {
+      ...DEFAULT_DICTIONARY,
+      menu: {
+        ...DEFAULT_DICTIONARY.menu,
+        tableRowMenuAriaLabel: "표 행 메뉴",
+        tableColumnMenuAriaLabel: "표 열 메뉴",
+        insertRowAbove: "위에 행 삽입",
+        insertColumnLeft: "왼쪽에 열 삽입",
+        deleteRow: "행 삭제",
+        deleteColumn: "열 삭제",
+      },
+    };
+
+    openRowMenu({ dictionary });
+    expect(screen.getByRole("menu", { name: "표 행 메뉴" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "위에 행 삽입" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "행 삭제" })).toBeTruthy();
+    cleanup();
+
+    openColumnMenu({ dictionary });
+    expect(screen.getByRole("menu", { name: "표 열 메뉴" })).toBeTruthy();
+    expect(
+      screen.getByRole("menuitem", { name: "왼쪽에 열 삽입" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "열 삭제" })).toBeTruthy();
   });
 
   it("재클릭이 닫는 분기를 타면 메뉴를 닫고 편집기로 초점을 되돌린다", () => {

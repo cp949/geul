@@ -124,14 +124,14 @@ export const BlockSideMenuMenu = ({
     // 두 번 들어간 값이라 클램프 결과와 정확히 맞물린다. R2에서 블록 타입
     // 목록이 늘면 일반 뷰포트에서도 넘친다.
     <div
-      aria-label="Block menu"
+      aria-label={dictionary.menu.blockMenuAriaLabel}
       className="geul-block-menu"
       data-geul-block-menu=""
       ref={menuRef}
       role="menu"
       style={style}
     >
-      <p className="geul-block-menu__label">Turn into</p>
+      <p className="geul-block-menu__label">{dictionary.menu.turnInto}</p>
       {blockTypeOptions.map((option) => (
         <MenuItemButton
           className={blockMenuItemClassName}
@@ -150,26 +150,26 @@ export const BlockSideMenuMenu = ({
         disabled={nestingActions?.canIndent !== true}
         onClick={handleIndentBlock}
       >
-        Indent
+        {dictionary.menu.indent}
       </MenuItemButton>
       <MenuItemButton
         className={blockMenuItemClassName}
         disabled={nestingActions?.canOutdent !== true}
         onClick={handleOutdentBlock}
       >
-        Outdent
+        {dictionary.menu.outdent}
       </MenuItemButton>
       <MenuItemButton
         className={blockMenuItemClassName}
         onClick={handleDuplicate}
       >
-        Duplicate
+        {dictionary.menu.duplicate}
       </MenuItemButton>
       <MenuItemButton
         className={`${blockMenuItemClassName} geul-block-menu__item--danger`}
         onClick={handleDeleteBlock}
       >
-        Delete
+        {dictionary.menu.delete}
       </MenuItemButton>
       {blockMenuSource !== null &&
         isNestableBlockType(blockMenuSource.type) && (
@@ -225,31 +225,33 @@ export const BlockSideMenuMenu = ({
                 ×
               </MenuItemButton>
             </div>
-            <p className={colorSectionLabelClassName}>Align</p>
+            <p className={colorSectionLabelClassName}>
+              {dictionary.menu.align}
+            </p>
             <div className="geul-cell-format-menu__align-row">
               <MenuItemButton
-                aria-label="Align left"
+                aria-label={dictionary.menu.alignLeft}
                 className={alignButtonClassName}
                 onClick={() => applyBlockTextAlignment("left")}
               >
                 {alignLeftIcon}
               </MenuItemButton>
               <MenuItemButton
-                aria-label="Align center"
+                aria-label={dictionary.menu.alignCenter}
                 className={alignButtonClassName}
                 onClick={() => applyBlockTextAlignment("center")}
               >
                 {alignCenterIcon}
               </MenuItemButton>
               <MenuItemButton
-                aria-label="Align right"
+                aria-label={dictionary.menu.alignRight}
                 className={alignButtonClassName}
                 onClick={() => applyBlockTextAlignment("right")}
               >
                 {alignRightIcon}
               </MenuItemButton>
               <MenuItemButton
-                aria-label="Align none"
+                aria-label={dictionary.menu.alignNone}
                 className={alignButtonClassName}
                 onClick={() => applyBlockTextAlignment(null)}
               >

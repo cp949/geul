@@ -71,6 +71,36 @@ export type Dictionary = {
     video: { label: string; description: string };
     audio: { label: string; description: string };
   };
+  // RD-002-DELTA-04 — `block-side-menu-menu.tsx`/`table-handle-menu.tsx`/
+  // `table-cell-format-menu.tsx`의 색상 무관 문구. `align*`/`cellFormattingAriaLabel`
+  // 등은 세 컴포넌트가 지금 각자 하드코딩으로 중복 소유하던 것을 하나로
+  // 합친 key다(실측, RD-002-DELTA-04.md 참고). 색상 이름·"Text color"/
+  // "Background color" property 라벨은 `color.*`(DELTA-05) 소관이라 여기
+  // 없다.
+  menu: {
+    blockMenuAriaLabel: string;
+    turnInto: string;
+    indent: string;
+    outdent: string;
+    duplicate: string;
+    delete: string;
+    align: string;
+    alignLeft: string;
+    alignCenter: string;
+    alignRight: string;
+    alignNone: string;
+    tableRowMenuAriaLabel: string;
+    tableColumnMenuAriaLabel: string;
+    insertRowAbove: string;
+    insertRowBelow: string;
+    insertColumnLeft: string;
+    insertColumnRight: string;
+    deleteRow: string;
+    deleteColumn: string;
+    headerRow: string;
+    headerColumn: string;
+    cellFormattingAriaLabel: string;
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -159,5 +189,29 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     image: { label: "Image", description: "Insert an image" },
     video: { label: "Video", description: "Insert a video" },
     audio: { label: "Audio", description: "Insert an audio file" },
+  },
+  menu: {
+    blockMenuAriaLabel: "Block menu",
+    turnInto: "Turn into",
+    indent: "Indent",
+    outdent: "Outdent",
+    duplicate: "Duplicate",
+    delete: "Delete",
+    align: "Align",
+    alignLeft: "Align left",
+    alignCenter: "Align center",
+    alignRight: "Align right",
+    alignNone: "Align none",
+    tableRowMenuAriaLabel: "Table row menu",
+    tableColumnMenuAriaLabel: "Table column menu",
+    insertRowAbove: "Insert row above",
+    insertRowBelow: "Insert row below",
+    insertColumnLeft: "Insert column left",
+    insertColumnRight: "Insert column right",
+    deleteRow: "Delete row",
+    deleteColumn: "Delete column",
+    headerRow: "Header row",
+    headerColumn: "Header column",
+    cellFormattingAriaLabel: "Cell formatting",
   },
 };

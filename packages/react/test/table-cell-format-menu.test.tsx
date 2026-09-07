@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
-import type { EditorController } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type Dictionary,
+  type EditorController,
+} from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TableCellFormatMenu } from "../src/table-cell-format-menu.js";
@@ -15,7 +19,7 @@ import { withProvider } from "./fake-editor-provider.js";
 // "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
 
-const fakeController = () => ({
+const fakeController = (dictionary?: Dictionary) => ({
   mount: vi.fn(),
   unmount: vi.fn(),
   destroy: vi.fn(),
@@ -25,6 +29,7 @@ const fakeController = () => ({
   getCaretBlockContext: vi.fn(() => null),
   getSelectionBlockType: vi.fn(() => null),
   getTableCellSelection: vi.fn(() => null),
+  getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
     setTableCellTextColor: vi.fn(() => ({ ok: true, value: undefined })),
@@ -119,6 +124,33 @@ describe("정렬 버튼", () => {
       { kind: "cells", cellIds: ["cell-1"] },
       null,
     );
+  });
+
+  it("dictionary override 시 Cell formatting 컨테이너와 Align 버튼 텍스트가 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      ...DEFAULT_DICTIONARY,
+      menu: {
+        ...DEFAULT_DICTIONARY.menu,
+        cellFormattingAriaLabel: "셀 서식",
+        alignRight: "오른쪽 정렬",
+      },
+    });
+
+    render(
+      withProvider(
+        controller,
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={vi.fn()}
+          tableBlockId="table-1"
+          top={100}
+        />,
+      ),
+    );
+
+    expect(screen.getByRole("menu", { name: "셀 서식" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "오른쪽 정렬" })).toBeTruthy();
   });
 });
 

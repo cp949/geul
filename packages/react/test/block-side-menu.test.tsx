@@ -409,6 +409,30 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(screen.queryByRole("menuitem", { name: "Text" })).toBeNull();
   });
 
+  it("dictionary override 시 Block menu 컨테이너·Indent/Outdent/Duplicate/Delete/Align 문구가 바뀐다(EXT-009)", () => {
+    openBlockMenu({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        menu: {
+          ...DEFAULT_DICTIONARY.menu,
+          blockMenuAriaLabel: "블록 메뉴",
+          indent: "들여쓰기",
+          outdent: "내어쓰기",
+          duplicate: "복제",
+          delete: "삭제",
+          alignLeft: "왼쪽 정렬",
+        },
+      },
+    });
+
+    expect(screen.getByRole("menu", { name: "블록 메뉴" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "들여쓰기" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "내어쓰기" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "복제" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "삭제" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "왼쪽 정렬" })).toBeTruthy();
+  });
+
   it("Code 종류 변경은 id와 source를 보존하고 mark를 제거하며 text 언어를 적용한다", () => {
     const rendered = renderBlockMenu();
     const paragraph = rendered.host.querySelector("p");
