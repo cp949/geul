@@ -405,15 +405,27 @@ describe("명령 실패 시 예외를 던지지 않고 상태를 유지한다(�
   });
 });
 
-describe("pointerup 리스너 등록 순서와 무관하게 같은 이벤트로 재조회한다", () => {
+describe("pointerup 이벤트 하나로 재조회가 결국 일어난다(jsdom sanity — 실제 리스너 실행 순서 경쟁의 회귀 방지는 e2e가 담당)", () => {
   // BlockSideMenu의 드래그 종료 핸들러(usePointerDragGesture)는 드래그가
   // 시작될 때(즉 이 컴포넌트가 마운트되고 한참 뒤) document에 pointerup
   // 리스너를 등록하고, 그 안에서 selectBlockRange/moveSelectedBlocksBefore를
-  // 커밋한다. 같은 target에 걸린 리스너는 등록 순서대로 동기 실행되므로,
-  // 이 컴포넌트가 마운트 시 건 pointerup 리스너가 먼저 stale 상태를 읽고
-  // 나중에야 저 커밋이 일어나면 그 pointerup 한 번으로는 툴바가 갱신되지
-  // 않는다(트랙-6 결함 탐지, IMPL-REVIEW-02 F1). 마운트 뒤 등록되는
-  // "늦은" pointerup 리스너로 이 순서를 재현한다.
+  // 커밋한다. 실제 Chromium은 같은 target에 걸린 리스너를 등록 순서대로
+  // 동기 실행하되 **각 리스너 콜백이 반환할 때마다** microtask checkpoint가
+  // 도므로(dispatch 전체가 끝난 뒤가 아니다), 이 컴포넌트가 마운트 시 건
+  // pointerup 리스너(먼저 등록)가 `queueMicrotask`로 재조회를 미뤄도 그
+  // microtask가 나중에 등록된 저 커밋 리스너보다 먼저 실행돼 stale 상태를
+  // 읽는다(RD-001 DELTA-04 e2e 실측, `event.preventDefault()`가 이를
+  // 가리던 `mouseup` 호환 이벤트를 억제하면서 드러남) — 그래서
+  // `setTimeout(fn, 0)`(매크로태스크)로 고쳤다.
+  //
+  // 이 unit 테스트는 그 실제 순서 경쟁을 재현하지 못한다: jsdom의
+  // dispatchEvent는 (`queueMicrotask`로 구현했던 이전 버전으로 직접
+  // 확인) 두 리스너를 모두 동기 실행한 뒤에야 이어지는 await가 microtask
+  // 큐를 비운다 — 그래서 `queueMicrotask` 버전도, `setTimeout(0)` 버전도
+  // (아래처럼 실제 매크로태스크 tick까지 기다리면) 똑같이 통과한다. 즉
+  // 이 테스트는 "재조회가 결국 일어나는지"만 보장하는 sanity check다 —
+  // 실제 리스너 실행 순서 경쟁에 대한 회귀 방지는
+  // `e2e/block-selection.spec.ts`(mutation 확인 완료)가 담당한다.
   it("마운트 뒤 등록된 다른 pointerup 리스너가 그 안에서 selectBlockRange를 커밋해도 같은 이벤트만으로 툴바가 뜬다", async () => {
     const { editor } = renderToolbar();
 
@@ -424,9 +436,10 @@ describe("pointerup 리스너 등록 순서와 무관하게 같은 이벤트로 
 
     await act(async () => {
       document.dispatchEvent(new PointerEvent("pointerup"));
-      // 재조회가 마이크로태스크로 미뤄져 있으면 이 await로 그 큐를
-      // 비운다 — 추가 이벤트(mouseup 등)를 별도로 쏘지 않는다.
-      await Promise.resolve();
+      // 재조회가 매크로태스크(setTimeout 0)로 미뤄져 있으므로 실제 타이머
+      // tick을 기다린다 — microtask만 비우는 `await Promise.resolve()`로는
+      // 부족하다(위 주석 참고).
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
     document.removeEventListener("pointerup", commitOnPointerUp);

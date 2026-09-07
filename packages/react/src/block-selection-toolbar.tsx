@@ -1,6 +1,6 @@
 import type { EditorController } from "@cp949/geul-core";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
@@ -203,20 +203,30 @@ export const BlockSelectionToolbar = () => {
     });
   }, [editor, element]);
 
-  // pointerup은 마이크로태스크로 미뤄 재조회한다. 이 컴포넌트는 편집기
-  // 마운트 시점에 한 번 마운트돼 pointerup 리스너를 즉시 건다 — 같은
-  // document를 쓰는 핸들 드래그(BlockSideMenu, DELTA-03)는 드래그가
-  // 시작될 때(이 컴포넌트보다 한참 뒤)에야 자신의 pointerup 리스너를
-  // 걸고 그 안에서 selectBlockRange/moveSelectedBlocksBefore를 커밋한다.
-  // 같은 target의 리스너는 등록 순서대로 동기 실행되므로, 여기서 동기로
-  // 재조회하면 이 컴포넌트의 리스너(먼저 등록)가 항상 그 커밋(나중에
-  // 등록) 전에 stale 상태를 읽는다 — 뒤이은 mouseup 호환 이벤트가
-  // 우연히 다시 읽어줄 때만 화면이 맞아 보인다(트랙-6 결함 탐지,
-  // IMPL-REVIEW-02 F1). 마이크로태스크로 미루면 같은 pointerup
-  // 디스패치 안에서 동기 실행되는 다른 리스너(그 커밋)가 먼저 끝난
-  // 뒤에 읽으므로 이 경쟁이 사라진다.
+  // pointerup은 매크로태스크(setTimeout 0)로 미뤄 재조회한다. 이 컴포넌트는
+  // 편집기 마운트 시점에 한 번 마운트돼 pointerup 리스너를 즉시 건다 —
+  // 같은 document를 쓰는 핸들 드래그(BlockSideMenu)는 드래그가 시작될 때
+  // (이 컴포넌트보다 한참 뒤)에야 자신의 pointerup 리스너를 걸고 그 안에서
+  // selectBlockRange/moveSelectedBlocksBefore를 커밋한다. 같은 target의
+  // 리스너는 등록 순서대로 동기 실행되지만, **각 리스너 콜백이 반환할
+  // 때마다** microtask checkpoint가 도므로(dispatch 전체가 끝난 뒤가
+  // 아니다) `queueMicrotask`로는 이 컴포넌트의 리스너(먼저 등록)가 그
+  // 커밋(나중에 등록) 전에 이미 실행돼 버려 여전히 stale 상태를 읽는다
+  // (RD-001 DELTA-04 e2e 실측 — `event.preventDefault()`가 pointerdown의
+  // 호환 mouseup을 억제하기 전까지는, pointerup dispatch 뒤에 별도로
+  // dispatch되는 mouseup이 항상 최신 상태를 다시 읽어줘 이 결함이 가려져
+  // 있었을 뿐이다). `setTimeout(fn, 0)`은 이 pointerup dispatch 전체(그
+  // 안의 모든 동기 리스너와 그 사이 microtask)가 완전히 끝난 뒤에만
+  // 실행되므로, 두 리스너의 상대적 등록 순서와 무관하게 항상 최신 상태를
+  // 읽는다.
+  const deferredPointerUpTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const handleDeferredPointerUp = useCallback(() => {
-    queueMicrotask(updateFromSelection);
+    if (deferredPointerUpTimeoutRef.current !== null) {
+      clearTimeout(deferredPointerUpTimeoutRef.current);
+    }
+    deferredPointerUpTimeoutRef.current = setTimeout(updateFromSelection, 0);
   }, [updateFromSelection]);
 
   useEffect(() => {
@@ -239,6 +249,12 @@ export const BlockSelectionToolbar = () => {
       ownerDocument?.removeEventListener("pointerup", handleDeferredPointerUp);
       ownerWindow?.removeEventListener("scroll", updateFromSelection, true);
       ownerWindow?.removeEventListener("resize", updateFromSelection);
+      // 예약된 재조회가 언마운트 후 stale 클로저로 실행되지 않게 취소한다
+      // (media-resize-handles.tsx의 rAF 취소와 같은 이유).
+      if (deferredPointerUpTimeoutRef.current !== null) {
+        clearTimeout(deferredPointerUpTimeoutRef.current);
+        deferredPointerUpTimeoutRef.current = null;
+      }
     };
   }, [updateFromSelection, handleDeferredPointerUp, element]);
 
