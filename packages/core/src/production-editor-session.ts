@@ -216,6 +216,11 @@ export class ProductionEditorSession {
       // 지연 바인딩 참조(controllerEditor) 구조로 createTiptapEditor에
       // 전달한다.
       keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
+      // spec §7(EXT-008), R4 슬라이스5 RD-002-DELTA-01 — createTiptapEditor가
+      // 매 재구성마다 그대로 전달한다(customBlocks와 동일 패턴).
+      attributeOverrides?: {
+        editor?: Record<string, string>;
+      };
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
     // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
@@ -463,6 +468,13 @@ export class ProductionEditorSession {
       ...(this.options.onSelectionChange === undefined
         ? {}
         : { onSelectionChange: this.options.onSelectionChange }),
+      // spec §7(EXT-008), RD-002-DELTA-01 — replaceDocument()가 재구성하는
+      // 매 Tiptap Editor 생성마다 다시 넘겨야 override가 유지된다
+      // (onPasteRejected 등 위 옵션들과 동일 실수 클래스,
+      // editor-controller-editable.test.ts의 isEditable 선례와 동형).
+      ...(this.options.attributeOverrides === undefined
+        ? {}
+        : { attributeOverrides: this.options.attributeOverrides }),
       canApplyDocumentChange: (transaction, loadNormalizing) =>
         this.evaluateBeforeChange(transaction, loadNormalizing),
       // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한

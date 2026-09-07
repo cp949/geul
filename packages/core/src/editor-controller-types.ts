@@ -524,4 +524,15 @@ export type CreateEditorOptions = {
   // shortcut이 이어서 실행된다. raw PM Plugin/Tiptap Extension은 노출하지
   // 않는다(ADR-0002).
   keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
+  // spec §7(EXT-008), R4 슬라이스5 RD-002-DELTA-01 — DOM 역할별 전역 정적
+  // attribute 주입(roadmap.md "결정" — BlockNote의 domAttributes/block 이름을
+  // 그대로 쓰지 않고 geul 자체 이름을 쓴다, ADR-0004 대조 재검토). `editor`는
+  // Tiptap의 editorProps.attributes로 배선되고, `.geul-editor`(React 마운트
+  // 호스트)가 아니라 ProseMirror가 실제로 만드는 편집 가능 DOM이 대상이다
+  // (production-editor-assembly.ts 참고). class 병합(공백 join)은
+  // ProseMirror의 computeDocDeco()가 네이티브로 처리한다 — 별도 병합 로직
+  // 없음. `blockContainer`/`blockGroup` 역할은 DELTA-02/03이 추가한다.
+  attributeOverrides?: {
+    editor?: Record<string, string>;
+  };
 };

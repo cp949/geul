@@ -303,6 +303,14 @@ export const createProductionEditor = (options: {
   // (customBlocks/customBlockEditor와 동일 근거).
   keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
   keyboardShortcutsEditor?: EditorController;
+  // spec §7(EXT-008), R4 슬라이스5 RD-002-DELTA-01 — editorProps.attributes로
+  // 그대로 넘긴다. class 병합(공백 join)은 ProseMirror computeDocDeco()가
+  // 네이티브로 처리해 여기서 별도 병합 로직이 필요 없다(readiness probe
+  // 실측, @tiptap/pm/dist/index.js). CreateEditorOptions.attributeOverrides
+  // 참고.
+  attributeOverrides?: {
+    editor?: Record<string, string>;
+  };
 }): Editor => {
   const converted = modelToTiptap(options.document, {
     customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
@@ -525,6 +533,15 @@ export const createProductionEditor = (options: {
     ...(options.onSelectionChange === undefined
       ? {}
       : { onSelectionUpdate: () => options.onSelectionChange?.() }),
+    // spec §7(EXT-008), RD-002-DELTA-01 — editorProps.attributes로 넘기면
+    // ProseMirror computeDocDeco()가 role="textbox"(Tiptap 기본값)와
+    // class(공백 join, "tiptap" prepend는 Tiptap 자신의 별도 단계)를
+    // 알아서 병합한다. 미지정이면 editorProps 자체를 비워 기존 동작과
+    // 100% 같게 한다(exactOptionalPropertyTypes — attributes: undefined를
+    // 명시적으로 넣으면 EditorProps 타입과 충돌한다).
+    ...(options.attributeOverrides?.editor === undefined
+      ? {}
+      : { editorProps: { attributes: options.attributeOverrides.editor } }),
   });
 
   loadNormalizing = true;
