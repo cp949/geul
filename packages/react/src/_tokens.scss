@@ -19,4 +19,15 @@
   --geul-color-surface-muted: #f1f3f4;
   --geul-color-accent: #1a73e8;
   --geul-color-accent-muted: #e8f0fe;
+  // 선택 범위 하이라이트 오버레이 전용 반투명 tint(R4 슬라이스5
+  // RD-001-DELTA-01). accent-muted(불투명, 뱃지·버튼 배경)와 값·용도가
+  // 달라 별도 변수로 분리했다 — 재사용하면 두 다른 시각 효과가 한
+  // 토큰에 묶인다(_block-selection-toolbar.scss 참고).
+  --geul-color-accent-highlight: rgba(26, 115, 232, 0.16);
+
+  // box-shadow 2종(R4 슬라이스5 RD-001-DELTA-01) — 메뉴류(슬래시메뉴·
+  // 블록메뉴·이모지피커·코드블록 언어콤보박스)와 툴바류(포매팅·블록선택·
+  // 링크·표선택 툴바)가 서로 다른 굵기를 쓴다.
+  --geul-shadow-menu: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --geul-shadow-toolbar: 0 1px 4px rgba(0, 0, 0, 0.15);
 }

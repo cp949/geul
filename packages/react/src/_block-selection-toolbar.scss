@@ -10,7 +10,7 @@
   border: 1px solid var(--geul-color-border, #dadce0);
   background: var(--geul-color-surface, #fff);
   padding: 0.25rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--geul-shadow-toolbar, 0 1px 4px rgba(0, 0, 0, 0.15));
   transform: translate(-50%, calc(-100% - 0.5rem));
 }
 
@@ -46,6 +46,6 @@
 .geul-block-selection-toolbar__highlight {
   position: fixed;
   z-index: 5;
-  background: rgba(26, 115, 232, 0.16);
+  background: var(--geul-color-accent-highlight, rgba(26, 115, 232, 0.16));
   pointer-events: none;
 }

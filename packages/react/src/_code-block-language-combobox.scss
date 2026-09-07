@@ -10,7 +10,7 @@
   border: 1px solid var(--geul-color-border, #dadce0);
   border-radius: 0.5rem;
   background: var(--geul-color-surface, #fff);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
   padding: 0.5rem;
 }
 

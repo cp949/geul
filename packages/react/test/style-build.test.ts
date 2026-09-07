@@ -122,9 +122,12 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(blockMenuRule).toContain("z-index: 40;");
   });
 
-  it(":root에 --geul-color-* 디자인 토큰 8개의 기본값을 선언한다(SCSS 전환 SSOT)", () => {
+  it(":root에 --geul-color-* 디자인 토큰 9개의 기본값을 선언한다(SCSS 전환 SSOT)", () => {
     // packages/react/src/styles.css의 var(--be-color-x, #hex) fallback과
     // 값이 같아야 한다 — 하나라도 드리프트되면 이 테스트가 잡는다.
+    // accent-highlight는 R4 슬라이스5 RD-001-DELTA-01이 추가한 9번째
+    // 토큰이다 — accent-muted(불투명 뱃지·버튼 배경)와 값·용도가 달라
+    // 별도 변수로 분리했다(선택 범위 하이라이트 오버레이 전용 반투명 tint).
     const css = compileCss();
 
     const tokens = {
@@ -136,11 +139,66 @@ describe("SCSS 빌드 파이프라인", () => {
       "--geul-color-surface-muted": "#f1f3f4",
       "--geul-color-accent": "#1a73e8",
       "--geul-color-accent-muted": "#e8f0fe",
+      "--geul-color-accent-highlight": "rgba(26, 115, 232, 0.16)",
     } as const;
 
     for (const [name, value] of Object.entries(tokens)) {
       expect(css).toContain(`${name}: ${value};`);
     }
+  });
+
+  it(":root에 --geul-shadow-* 디자인 토큰 2개의 기본값을 선언한다(R4 슬라이스5 RD-001-DELTA-01)", () => {
+    const css = compileCss();
+
+    const tokens = {
+      "--geul-shadow-menu": "0 2px 8px rgba(0, 0, 0, 0.15)",
+      "--geul-shadow-toolbar": "0 1px 4px rgba(0, 0, 0, 0.15)",
+    } as const;
+
+    for (const [name, value] of Object.entries(tokens)) {
+      expect(css).toContain(`${name}: ${value};`);
+    }
+  });
+
+  it("box-shadow 하드코딩 값을 --geul-shadow-* override 가능한 var()로 컴파일한다(R4 슬라이스5 RD-001-DELTA-01)", () => {
+    const css = compileCss();
+
+    const menuRules = [
+      /\.geul-code-block-language \{(?<body>[^}]*)\}/,
+      /\.geul-block-menu \{(?<body>[^}]*)\}/,
+      /\.geul-slash-menu \{(?<body>[^}]*)\}/,
+      /\.geul-emoji-picker \{(?<body>[^}]*)\}/,
+    ];
+    for (const pattern of menuRules) {
+      const body = pattern.exec(css)?.groups?.body;
+      expect(body).toContain(
+        "box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));",
+      );
+    }
+
+    const toolbarRules = [
+      /\.geul-formatting-toolbar \{(?<body>[^}]*)\}/,
+      /\.geul-block-selection-toolbar \{(?<body>[^}]*)\}/,
+      /\.geul-link-toolbar \{(?<body>[^}]*)\}/,
+      /\.geul-table-selection-toolbar \{(?<body>[^}]*)\}/,
+    ];
+    for (const pattern of toolbarRules) {
+      const body = pattern.exec(css)?.groups?.body;
+      expect(body).toContain(
+        "box-shadow: var(--geul-shadow-toolbar, 0 1px 4px rgba(0, 0, 0, 0.15));",
+      );
+    }
+  });
+
+  it("선택 범위 하이라이트 배경을 --geul-color-accent-highlight override 가능한 var()로 컴파일한다(R4 슬라이스5 RD-001-DELTA-01)", () => {
+    const css = compileCss();
+    const body = /\.geul-block-selection-toolbar__highlight \{(?<body>[^}]*)\}/.exec(
+      css,
+    )?.groups?.body;
+
+    expect(body).toContain(
+      "background: var(--geul-color-accent-highlight, rgba(26, 115, 232, 0.16));",
+    );
   });
 
   it("생성 CSS에 미해결 @use나 Sass 변수를 남기지 않는다", () => {
