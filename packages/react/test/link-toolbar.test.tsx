@@ -296,4 +296,50 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
     expect(document.activeElement).toBe(editable);
   });
+
+  describe("portalTarget", () => {
+    it("지정하면 그 요소 하위에 렌더한다", () => {
+      const controller = fakeController();
+      const portalTarget = document.createElement("div");
+      document.body.appendChild(portalTarget);
+      render(
+        withProvider(
+          controller,
+          <>
+            <LinkToolbar portalTarget={portalTarget} />
+            <EditorContent />
+          </>,
+        ),
+      );
+      const textNode = screen.getByRole("textbox", { name: "Editor" })
+        .firstChild?.firstChild;
+      if (!textNode) throw new Error("Text node was not rendered");
+      selectText(textNode, 0, 8);
+
+      const toolbar = screen.getByRole("toolbar", { name: "Link" });
+      expect(portalTarget.contains(toolbar)).toBe(true);
+
+      portalTarget.remove();
+    });
+
+    it("지정하지 않으면 기존 위치(부모 트리 내부)에 렌더한다", () => {
+      const controller = fakeController();
+      const { container } = render(
+        withProvider(
+          controller,
+          <>
+            <LinkToolbar />
+            <EditorContent />
+          </>,
+        ),
+      );
+      const textNode = screen.getByRole("textbox", { name: "Editor" })
+        .firstChild?.firstChild;
+      if (!textNode) throw new Error("Text node was not rendered");
+      selectText(textNode, 0, 8);
+
+      const toolbar = screen.getByRole("toolbar", { name: "Link" });
+      expect(container.contains(toolbar)).toBe(true);
+    });
+  });
 });

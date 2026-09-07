@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -54,7 +55,14 @@ const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
   };
 };
 
-export const LinkToolbar = () => {
+/** DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고. */
+export type LinkToolbarProps = {
+  portalTarget?: HTMLElement | null;
+};
+
+export const LinkToolbar = ({
+  portalTarget = null,
+}: LinkToolbarProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState>({
@@ -153,7 +161,7 @@ export const LinkToolbar = () => {
     closeAndRestoreFocus();
   };
 
-  return (
+  const content = (
     <div
       aria-label="Link"
       className="geul-link-toolbar"
@@ -258,4 +266,6 @@ export const LinkToolbar = () => {
       )}
     </div>
   );
+
+  return portalTarget === null ? content : createPortal(content, portalTarget);
 };

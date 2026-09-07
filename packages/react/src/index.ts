@@ -12,7 +12,7 @@ export {
   FormattingToolbar,
   type FormattingToolbarProps,
 } from "./formatting-toolbar.js";
-export { LinkToolbar } from "./link-toolbar.js";
+export { LinkToolbar, type LinkToolbarProps } from "./link-toolbar.js";
 export { MediaResizeHandles } from "./media-resize-handles.js";
 export { MediaToolbar } from "./media-toolbar.js";
 export { SlashMenu } from "./slash-menu.js";
