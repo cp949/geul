@@ -36,6 +36,29 @@ exportHtml(document, {
 });
 ```
 
-## Markdown 서버 사용법
+### `exportMarkdown` / `importMarkdown`
 
-(`exportMarkdown`/`importMarkdown` 문서화는 Issue #156 슬라이스9 RD-002에서 이어서 작성한다.)
+```ts
+import { exportMarkdown, importMarkdown } from "@cp949/geul-io";
+
+const result = exportMarkdown(document, { mode: "strict" });
+if (result.ok) {
+  const markdown: string = result.value;
+}
+
+const imported = importMarkdown(markdown);
+if (imported.ok) {
+  const { document, warnings } = imported.value;
+}
+```
+
+`exportMarkdown`은 `mode: "strict"` | `"lossy"`를 요구한다. 문서에 등록되지 않은 커스텀 블록 타입(`EXT-001`)이 있으면 손실 카테고리 `CUSTOM_BLOCK_LOST`로 취급한다 — `strict` 모드는 `{ code: "MARKDOWN_LOSS_NOT_ALLOWED", losses }`로 거절하고, `lossy` 모드는 해당 블록을 결과에서 폐기하고 `warnings`로 함께 반환한다(`exportHtml`의 단순 거절과 다른 손실 이분법). 커스텀 블록을 직렬화하려면 `options.customBlockToMarkdown`에 타입별 렌더러를 등록한다.
+
+```ts
+exportMarkdown(document, {
+  mode: "lossy",
+  customBlockToMarkdown: {
+    myCustomBlock: (block) => `<!-- myCustomBlock: ${block.props.text} -->`,
+  },
+});
+```
