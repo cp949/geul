@@ -199,6 +199,20 @@ export type Dictionary = {
       ariaLabel: string;
     };
   };
+  // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
+  // 추가·들여쓰기)와 `block-side-menu.tsx`(블록 드래그·추가)의 hover
+  // 오버레이 아이콘 버튼 라벨. 둘 다 성격이 같아 하나의 네임스페이스로
+  // 묶는다.
+  handle: {
+    dragRow: string;
+    dragColumn: string;
+    addRow: string;
+    addColumn: string;
+    indentTable: string;
+    outdentTable: string;
+    dragBlock: string;
+    addBlock: string;
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -392,5 +406,15 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     formatting: {
       ariaLabel: "Formatting",
     },
+  },
+  handle: {
+    dragRow: "Drag to reorder row, click for options",
+    dragColumn: "Drag to reorder column, click for options",
+    addRow: "Add row",
+    addColumn: "Add column",
+    indentTable: "Indent table",
+    outdentTable: "Outdent table",
+    dragBlock: "Drag to reorder, click for options",
+    addBlock: "Add block",
   },
 };

@@ -8,19 +8,14 @@ import {
 
 import { iconProps } from "./icon-props.js";
 
-// 핸들은 드래그(재정렬)와 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이
-// 한쪽만 안내하면 나머지 동작의 발견성을 가린다(block-side-menu와 같은 규칙).
-export const rowHandleLabel = "Drag to reorder row, click for options";
-export const columnHandleLabel = "Drag to reorder column, click for options";
-export const addRowLabel = "Add row";
-export const addColumnLabel = "Add column";
-// 표를 대상화할 팝업 메뉴는 두지 않는다 — block-side-menu.tsx의 gutter가
-// <table>을 hover 대상에서 제외해(entitySelector ":not(table)") 그 블록
-// 메뉴가 표에 절대 열리지 않으므로, 직접 IconButton 2개가 표의 유일한
-// Indent/Outdent 진입점이다(01-계획.md "결정", Issue #126).
-export const indentTableLabel = "Indent table";
-export const outdentTableLabel = "Outdent table";
-
+// spec §8(EXT-009), RD-002-DELTA-08 — 라벨 문구는 core Dictionary.handle이
+// 소유한다(react가 useDictionary()로 읽는다). 핸들은 드래그(재정렬)와
+// 클릭(행/열 메뉴) 두 동작을 갖는다 — 라벨이 한쪽만 안내하면 나머지 동작의
+// 발견성을 가린다(block-side-menu와 같은 규칙). 표를 대상화할 팝업 메뉴는
+// 두지 않는다 — block-side-menu.tsx의 gutter가 <table>을 hover 대상에서
+// 제외해(entitySelector ":not(table)") 그 블록 메뉴가 표에 절대 열리지
+// 않으므로, 직접 IconButton 2개가 표의 유일한 Indent/Outdent 진입점이다
+// (01-계획.md "결정", Issue #126).
 export const rowHandleIcon = <GripVertical {...iconProps} />;
 export const columnHandleIcon = <GripHorizontal {...iconProps} />;
 export const addIcon = <Plus {...iconProps} />;

@@ -10,12 +10,17 @@
  * 호출 스파이 대신 문서 결과(rowIdsOf/columnsOf)를 단언한다.
  */
 
-import type { EditorController } from "@cp949/geul-core";
+import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
-import { mountTableEditor, stubRect, tableBlockOf } from "./mount-editor.js";
+import {
+  type MountTableEditorOptions,
+  mountTableEditor,
+  stubRect,
+  tableBlockOf,
+} from "./mount-editor.js";
 
 // @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
 // cleanup을 등록한다(dist/index.js의 typeof afterEach === "function" 분기와
@@ -44,8 +49,9 @@ if (typeof Element.prototype.releasePointerCapture !== "function") {
  * mountTableEditor가 주는 뜻 그대로 쓴다. 둘을 바꿔 쓰면 host를 겨냥한
  * 조작이 조용히 편집 영역을 때린다.
  */
-const renderRealTable = (options?: { rows?: number; columns?: number }) =>
-  mountTableEditor({ ...options, children: <TableHandles /> });
+const renderRealTable = (
+  options?: Pick<MountTableEditorOptions, "rows" | "columns" | "dictionary">,
+) => mountTableEditor({ ...options, children: <TableHandles /> });
 
 /**
  * 표 블록의 행 id 목록. 개수만 세면 어느 행이 움직였는지 구분하지 못하므로
@@ -200,6 +206,28 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     ).toHaveLength(2);
     expect(screen.getByRole("button", { name: addRowLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: addColumnLabel })).not.toBeNull();
+  });
+
+  it("dictionary override 시 행/열 핸들·Add row/column·Indent/Outdent table이 바뀐다(EXT-009)", () => {
+    const { table } = renderRealTable({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        handle: {
+          ...DEFAULT_DICTIONARY.handle,
+          dragRow: "행 드래그",
+          addRow: "행 추가",
+          indentTable: "표 들여쓰기",
+        },
+      },
+    });
+
+    fireEvent.pointerMove(table);
+
+    expect(screen.getAllByRole("button", { name: "행 드래그" })).toHaveLength(
+      2,
+    );
+    expect(screen.getByRole("button", { name: "행 추가" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "표 들여쓰기" })).not.toBeNull();
   });
 
   it("표 밖으로 나가면 핸들을 숨긴다", () => {

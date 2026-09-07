@@ -19,7 +19,7 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import {
   resolveReopenAwareClick,
@@ -31,9 +31,6 @@ import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
 // 핸들은 드래그(재정렬)와 클릭(블록 메뉴) 두 동작을 모두 갖는다 — tooltip이
 // 한쪽만 안내하면 나머지 동작의 발견성을 가리므로 라벨이 둘 다 기술한다.
-const dragHandleLabel = "Drag to reorder, click for options";
-const addBlockLabel = "Add block";
-
 const dragHandleIcon = <GripVertical {...iconProps} />;
 const addBlockIcon = <Plus {...iconProps} />;
 
@@ -59,6 +56,7 @@ const BLOCK_HOVER_IGNORE_SELECTORS = [
 
 export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null);
   const [dragState, dragStateRef, updateDragState] =
@@ -411,7 +409,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             className={`${blockGutterButtonClassName} geul-block-gutter__button--drag`}
             data-geul-block-handle=""
             icon={dragHandleIcon}
-            label={dragHandleLabel}
+            label={dictionary.handle.dragBlock}
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
             onPointerDown={(event) =>
               handlePointerDownOnHandle(event, hoverBlockId)
@@ -421,7 +419,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             className={`${blockGutterButtonClassName} geul-block-gutter__button--add`}
             data-geul-add-block-button=""
             icon={addBlockIcon}
-            label={addBlockLabel}
+            label={dictionary.handle.addBlock}
             onClick={handleAddBlockClick}
           />
         </div>

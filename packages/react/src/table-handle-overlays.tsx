@@ -1,23 +1,18 @@
 import { IconButton } from "./icon-button.js";
 import type { TableGeometry } from "./table-handle-geometry.js";
 import {
-  addColumnLabel,
   addIcon,
-  addRowLabel,
   columnHandleIcon,
-  columnHandleLabel,
   expandButtonClassName,
   handleButtonClassName,
   indentTableIcon,
-  indentTableLabel,
   nestingButtonClassName,
   outdentTableIcon,
-  outdentTableLabel,
   rowHandleIcon,
-  rowHandleLabel,
 } from "./table-handle-constants.js";
 import type { ReorderGuideRect } from "./table-handle-helpers.js";
 import type { ReorderKind } from "./table-handle-types.js";
+import { useDictionary } from "./use-editor.js";
 
 export type TableHandleOverlaysProps = {
   geometry: TableGeometry;
@@ -69,157 +64,160 @@ export const TableHandleOverlays = ({
   onAddColumn,
   onIndentTable,
   onOutdentTable,
-}: TableHandleOverlaysProps) => (
-  <>
-    {geometry.rows.map((row) => (
-      <IconButton
-        className={handleButtonClassName}
-        data-geul-table-row-handle=""
-        icon={rowHandleIcon}
-        key={`row-${row.rowId}`}
-        label={rowHandleLabel}
-        onClick={(event) =>
-          onReorderHandleClick(
-            event,
-            "row",
-            geometry.tableBlockId,
-            row.rowId,
-            row.index,
-          )
-        }
-        onPointerDown={(event) =>
-          onReorderHandlePointerDown(
-            event,
-            "row",
-            geometry.tableBlockId,
-            row.rowId,
-            row.index,
-          )
-        }
-        style={{
-          position: "fixed",
-          left: geometry.left - 24,
-          top: row.top + row.height / 2 - 10,
-        }}
-      />
-    ))}
-    {geometry.columns.map((column) => (
-      <IconButton
-        className={handleButtonClassName}
-        data-geul-table-column-handle=""
-        icon={columnHandleIcon}
-        key={`column-${column.columnId}`}
-        label={columnHandleLabel}
-        onClick={(event) =>
-          onReorderHandleClick(
-            event,
-            "column",
-            geometry.tableBlockId,
-            column.columnId,
-            column.index,
-          )
-        }
-        onPointerDown={(event) =>
-          onReorderHandlePointerDown(
-            event,
-            "column",
-            geometry.tableBlockId,
-            column.columnId,
-            column.index,
-          )
-        }
-        style={{
-          position: "fixed",
-          left: column.left + column.width / 2 - 10,
-          top: geometry.top - 24,
-        }}
-      />
-    ))}
-    {geometry.columns.flatMap((column) =>
-      column.resizeSegments.map((segment) => (
-        <div
-          className="geul-table-resize-handle"
-          data-geul-table-resize-handle=""
-          key={`resize-${column.columnId}-${segment.rowId}`}
-          onPointerDown={(event) =>
-            onResizeHandlePointerDown(
+}: TableHandleOverlaysProps) => {
+  const dictionary = useDictionary();
+  return (
+    <>
+      {geometry.rows.map((row) => (
+        <IconButton
+          className={handleButtonClassName}
+          data-geul-table-row-handle=""
+          icon={rowHandleIcon}
+          key={`row-${row.rowId}`}
+          label={dictionary.handle.dragRow}
+          onClick={(event) =>
+            onReorderHandleClick(
               event,
+              "row",
               geometry.tableBlockId,
-              column.index,
-              column.width,
+              row.rowId,
+              row.index,
+            )
+          }
+          onPointerDown={(event) =>
+            onReorderHandlePointerDown(
+              event,
+              "row",
+              geometry.tableBlockId,
+              row.rowId,
+              row.index,
             )
           }
           style={{
-            left: column.left + column.width - 2,
-            top: segment.top,
-            height: segment.height,
+            position: "fixed",
+            left: geometry.left - 24,
+            top: row.top + row.height / 2 - 10,
           }}
         />
-      )),
-    )}
-    <IconButton
-      className={expandButtonClassName}
-      data-geul-table-expand-row=""
-      icon={addIcon}
-      label={addRowLabel}
-      onClick={onAddRow}
-      style={{
-        position: "fixed",
-        left: geometry.left + (geometry.right - geometry.left) / 2 - 10,
-        top: geometry.bottom + 4,
-      }}
-    />
-    <IconButton
-      className={expandButtonClassName}
-      data-geul-table-expand-column=""
-      icon={addIcon}
-      label={addColumnLabel}
-      onClick={onAddColumn}
-      style={{
-        position: "fixed",
-        left: geometry.right + 4,
-        top: geometry.top + (geometry.bottom - geometry.top) / 2 - 10,
-      }}
-    />
-    {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
-        row 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열
-        중앙이라 더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md
-        "결정") — 새 clamp 로직 없이 기존 fixed 좌표 관용구를 그대로
-        쓴다(PIT-0011). */}
-    <IconButton
-      aria-disabled={canIndentTable ? "false" : "true"}
-      className={nestingButtonClassName}
-      data-geul-table-indent=""
-      disabled={!canIndentTable}
-      icon={indentTableIcon}
-      label={indentTableLabel}
-      onClick={onIndentTable}
-      style={{
-        position: "fixed",
-        left: geometry.left - 48,
-        top: geometry.top - 24,
-      }}
-    />
-    <IconButton
-      aria-disabled={canOutdentTable ? "false" : "true"}
-      className={nestingButtonClassName}
-      data-geul-table-outdent=""
-      disabled={!canOutdentTable}
-      icon={outdentTableIcon}
-      label={outdentTableLabel}
-      onClick={onOutdentTable}
-      style={{
-        position: "fixed",
-        left: geometry.left - 24,
-        top: geometry.top - 24,
-      }}
-    />
-    {reorderGuideRect !== null && (
-      <div
-        className="geul-table-reorder-guide"
-        data-geul-table-reorder-guide=""
-        style={reorderGuideRect}
+      ))}
+      {geometry.columns.map((column) => (
+        <IconButton
+          className={handleButtonClassName}
+          data-geul-table-column-handle=""
+          icon={columnHandleIcon}
+          key={`column-${column.columnId}`}
+          label={dictionary.handle.dragColumn}
+          onClick={(event) =>
+            onReorderHandleClick(
+              event,
+              "column",
+              geometry.tableBlockId,
+              column.columnId,
+              column.index,
+            )
+          }
+          onPointerDown={(event) =>
+            onReorderHandlePointerDown(
+              event,
+              "column",
+              geometry.tableBlockId,
+              column.columnId,
+              column.index,
+            )
+          }
+          style={{
+            position: "fixed",
+            left: column.left + column.width / 2 - 10,
+            top: geometry.top - 24,
+          }}
+        />
+      ))}
+      {geometry.columns.flatMap((column) =>
+        column.resizeSegments.map((segment) => (
+          <div
+            className="geul-table-resize-handle"
+            data-geul-table-resize-handle=""
+            key={`resize-${column.columnId}-${segment.rowId}`}
+            onPointerDown={(event) =>
+              onResizeHandlePointerDown(
+                event,
+                geometry.tableBlockId,
+                column.index,
+                column.width,
+              )
+            }
+            style={{
+              left: column.left + column.width - 2,
+              top: segment.top,
+              height: segment.height,
+            }}
+          />
+        )),
+      )}
+      <IconButton
+        className={expandButtonClassName}
+        data-geul-table-expand-row=""
+        icon={addIcon}
+        label={dictionary.handle.addRow}
+        onClick={onAddRow}
+        style={{
+          position: "fixed",
+          left: geometry.left + (geometry.right - geometry.left) / 2 - 10,
+          top: geometry.bottom + 4,
+        }}
       />
-    )}
-  </>
-);
+      <IconButton
+        className={expandButtonClassName}
+        data-geul-table-expand-column=""
+        icon={addIcon}
+        label={dictionary.handle.addColumn}
+        onClick={onAddColumn}
+        style={{
+          position: "fixed",
+          left: geometry.right + 4,
+          top: geometry.top + (geometry.bottom - geometry.top) / 2 - 10,
+        }}
+      />
+      {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
+          row 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열
+          중앙이라 더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md
+          "결정") — 새 clamp 로직 없이 기존 fixed 좌표 관용구를 그대로
+          쓴다(PIT-0011). */}
+      <IconButton
+        aria-disabled={canIndentTable ? "false" : "true"}
+        className={nestingButtonClassName}
+        data-geul-table-indent=""
+        disabled={!canIndentTable}
+        icon={indentTableIcon}
+        label={dictionary.handle.indentTable}
+        onClick={onIndentTable}
+        style={{
+          position: "fixed",
+          left: geometry.left - 48,
+          top: geometry.top - 24,
+        }}
+      />
+      <IconButton
+        aria-disabled={canOutdentTable ? "false" : "true"}
+        className={nestingButtonClassName}
+        data-geul-table-outdent=""
+        disabled={!canOutdentTable}
+        icon={outdentTableIcon}
+        label={dictionary.handle.outdentTable}
+        onClick={onOutdentTable}
+        style={{
+          position: "fixed",
+          left: geometry.left - 24,
+          top: geometry.top - 24,
+        }}
+      />
+      {reorderGuideRect !== null && (
+        <div
+          className="geul-table-reorder-guide"
+          data-geul-table-reorder-guide=""
+          style={reorderGuideRect}
+        />
+      )}
+    </>
+  );
+};

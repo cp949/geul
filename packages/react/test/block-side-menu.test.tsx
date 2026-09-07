@@ -451,6 +451,26 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(screen.getByRole("menuitem", { name: "글자색 없음" })).toBeTruthy();
   });
 
+  it("dictionary override 시 드래그 핸들·Add block 라벨이 바뀐다(EXT-009)", () => {
+    const rendered = renderBlockMenu({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        handle: {
+          ...DEFAULT_DICTIONARY.handle,
+          dragBlock: "블록 드래그",
+          addBlock: "블록 추가",
+        },
+      },
+    });
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+
+    fireEvent.pointerMove(block);
+
+    expect(screen.getByRole("button", { name: "블록 드래그" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "블록 추가" })).toBeTruthy();
+  });
+
   it("Code 종류 변경은 id와 source를 보존하고 mark를 제거하며 text 언어를 적용한다", () => {
     const rendered = renderBlockMenu();
     const paragraph = rendered.host.querySelector("p");
