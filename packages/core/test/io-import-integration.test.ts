@@ -7,7 +7,7 @@ import { createEditor } from "../src/index.js";
 describe("IO와 core 연동", () => {
   it("중첩된 중복 HTML mark도 공용 정규화를 거치면 허용한다", () => {
     const imported = importHtml(
-      '<p data-be-block-id="html-duplicate"><strong><strong>x</strong></strong></p>',
+      '<p data-geul-block-id="html-duplicate"><strong><strong>x</strong></strong></p>',
     );
     expect(imported.ok).toBe(true);
     if (!imported.ok) throw new Error(imported.error.message);
@@ -55,7 +55,7 @@ describe("IO와 core 연동", () => {
 
   it("HTML에서 가져온 결합 mark를 추가 정규화 없이 허용한다", () => {
     const imported = importHtml(
-      '<p data-be-block-id="html-combined"><em><code><strong><a href="https://example.com"><u><s>combined</s></u></a></strong></code></em></p>',
+      '<p data-geul-block-id="html-combined"><em><code><strong><a href="https://example.com"><u><s>combined</s></u></a></strong></code></em></p>',
     );
     expect(imported.ok).toBe(true);
     if (!imported.ok) throw new Error(imported.error.message);

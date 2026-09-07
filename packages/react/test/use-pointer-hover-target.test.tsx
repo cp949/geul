@@ -28,26 +28,26 @@ const Probe = ({ onCandidateChange }: ProbeProps) => {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   usePointerHoverTarget({
     element: container,
-    ignoreSelectors: ["[data-be-ignored]"],
-    entitySelector: "[data-be-entity]",
+    ignoreSelectors: ["[data-geul-ignored]"],
+    entitySelector: "[data-geul-entity]",
     onCandidateChange,
   });
   return (
     <div>
       <div data-testid="container" ref={setContainer}>
-        <button data-be-entity="" data-testid="inside-entity" type="button">
+        <button data-geul-entity="" data-testid="inside-entity" type="button">
           inside
         </button>
         <button
-          data-be-entity=""
-          data-be-ignored=""
+          data-geul-entity=""
+          data-geul-ignored=""
           data-testid="ignored-entity"
           type="button"
         >
           ignored
         </button>
       </div>
-      <button data-be-entity="" data-testid="outside-entity" type="button">
+      <button data-geul-entity="" data-testid="outside-entity" type="button">
         outside
       </button>
     </div>

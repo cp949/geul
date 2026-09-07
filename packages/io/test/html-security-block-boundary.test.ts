@@ -388,8 +388,8 @@ describe("HTML 보안", () => {
 });
 
 // DELTA-04(children 재귀 왕복): import-html.ts의 blocksFromNodes가
-// exportHtml의 children wrapper(<div data-be-block-id><p/>
-// <div data-be-children>...)를 재귀적으로 벗겨 children을 복원한다. 이
+// exportHtml의 children wrapper(<div data-geul-block-id><p/>
+// <div data-geul-children>...)를 재귀적으로 벗겨 children을 복원한다. 이
 // 재귀는 model의 findNestingDepthViolation(schema.ts)과 같은 모양의 깊이
 // 카운터로 depth < MAX_NESTING_DEPTH일 때만 wrapper를 인식해, 만들어지는
 // children 배열이 model 상한(64)을 절대 넘지 않는다. 상한에 걸린 wrapper는
@@ -399,7 +399,7 @@ describe("HTML 보안", () => {
 // 체인 시나리오는 두 방어가 함께 만드는 결과를 고정한다.
 
 // 레벨별 wrapper가 복원하는 자기 본문 블록. buildNestedWrapperHtml의
-// p 요소(dataBeBlockId=p<level>, 텍스트 t<level>)가 그대로 문단이 된다 —
+// p 요소(dataGeulBlockId=p<level>, 텍스트 t<level>)가 그대로 문단이 된다 —
 // 기대 트리를 조립하는 아래 두 헬퍼가 공유한다.
 const wrapperOwnBlock = (level: number) => ({
   id: `p${level}`,

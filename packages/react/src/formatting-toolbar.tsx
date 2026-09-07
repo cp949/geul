@@ -106,8 +106,8 @@ const colorMenuPropertyLabel = {
 // 재클릭 닫기가 성립한다(block-side-menu.tsx의 BLOCK_MENU_DISMISS_ALLOW_SELECTORS와
 // 같은 이유, RD-003-DELTA-01 계획 "배경" 절).
 const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-be-color-menu]",
-  "[data-be-color-trigger]",
+  "[data-geul-color-menu]",
+  "[data-geul-color-trigger]",
 ] as const;
 
 type ToolbarState = {
@@ -467,7 +467,7 @@ export const FormattingToolbar = ({
         ))}
         <IconButton
           className="geul-formatting-toolbar__mark-button"
-          data-be-color-trigger=""
+          data-geul-color-trigger=""
           icon={textColorIcon}
           key="text-color"
           label="Text color"
@@ -475,7 +475,7 @@ export const FormattingToolbar = ({
         />
         <IconButton
           className="geul-formatting-toolbar__mark-button"
-          data-be-color-trigger=""
+          data-geul-color-trigger=""
           icon={backgroundColorIcon}
           key="background-color"
           label="Background color"
@@ -486,7 +486,7 @@ export const FormattingToolbar = ({
         <div
           aria-label={colorMenuPropertyLabel[colorMenuState.property]}
           className="geul-menu-panel"
-          data-be-color-menu=""
+          data-geul-color-menu=""
           ref={colorMenuRef}
           role="menu"
           style={colorMenuStyle}

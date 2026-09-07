@@ -36,7 +36,7 @@ export type BlockSegment<
   // 실질 텍스트 판정(비었으면 블록을 만들지 않음)을 적용한다.
   | { kind: "paragraph"; nodes: HtmlElementContent[] }
   // p 자신의 본문(wholesale 교체, 재귀하지 않음). node를 함께 주는 이유는
-  // dataBeBlockId 같은 그 요소 자신의 속성을 호출자가 읽어야 해서다 —
+  // dataGeulBlockId 같은 그 요소 자신의 속성을 호출자가 읽어야 해서다 —
   // import-html.ts는 p 하나당 블록 하나를 실질 텍스트 여부와 무관하게
   // 낸다(기존 parseBlock 관례, 빈 <p>도 빈 문단으로 보존).
   | {
@@ -57,7 +57,7 @@ export type BlockSegment<
   // 없어 pending과 무관하고, flush()는 pending이 비어 있으면 아무것도 내지
   // 않으므로 문서 첫/마지막 블록이거나 hr만 든 div 안에 있어도 세그먼트가
   // 사라지지 않는다 — 별도 표식이 필요 없다(트랙-4 확인). node를 주는 이유는
-  // simpleBoundary와 같다(dataBeBlockId). model divider로 해석할지는 호출자가
+  // simpleBoundary와 같다(dataGeulBlockId). model divider로 해석할지는 호출자가
   // 정한다. hr은 isDividerTag를 넘긴 정책에서만 나온다 — 소비자는 union
   // exhaustiveness로 hr 분기를 갖는다.
   | { kind: "hr"; node: HtmlElementNode }

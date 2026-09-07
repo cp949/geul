@@ -67,7 +67,7 @@ test("오른쪽 핸들을 dx만큼 끌면 실제 레이아웃에서도 폭이 2*
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable, RESIZE_IMAGE_URL);
   const wrapper = editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") });
 
   const before = await readMargins(image, wrapper);
@@ -79,7 +79,7 @@ test("오른쪽 핸들을 dx만큼 끌면 실제 레이아웃에서도 폭이 2*
   const dx = 40;
   const start = await beginDrag(
     page,
-    page.locator('[data-be-media-resize-handle="right"]'),
+    page.locator('[data-geul-media-resize-handle="right"]'),
   );
   await dragTo(page, start, dx);
 
@@ -102,7 +102,7 @@ test("왼쪽으로 한참 끌어도 64px 밑으로 내려가지 않는다", asyn
 
   const start = await beginDrag(
     page,
-    page.locator('[data-be-media-resize-handle="right"]'),
+    page.locator('[data-geul-media-resize-handle="right"]'),
   );
   await dragTo(page, start, -9999);
 
@@ -118,7 +118,7 @@ test("오른쪽으로 한참 끌어도 실제 측정한 래퍼 content 폭을 �
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable, RESIZE_IMAGE_URL);
   const wrapper = editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") });
   const wrapperBox = await wrapper.boundingBox();
   if (wrapperBox === null) throw new Error("래퍼 bounding box 없음");
@@ -126,7 +126,7 @@ test("오른쪽으로 한참 끌어도 실제 측정한 래퍼 content 폭을 �
 
   const start = await beginDrag(
     page,
-    page.locator('[data-be-media-resize-handle="right"]'),
+    page.locator('[data-geul-media-resize-handle="right"]'),
   );
   await dragTo(page, start, 9999);
 
@@ -148,7 +148,7 @@ test("Escape로 취소하면 원래 폭으로 복원되고 Media Toolbar가 닫�
 
   const start = await beginDrag(
     page,
-    page.locator('[data-be-media-resize-handle="right"]'),
+    page.locator('[data-geul-media-resize-handle="right"]'),
   );
   await dragTo(page, start, 40);
 
@@ -174,7 +174,7 @@ test("pointer-up 커밋은 undo 1회로 복원된다", async ({ page }) => {
 
   const start = await beginDrag(
     page,
-    page.locator('[data-be-media-resize-handle="right"]'),
+    page.locator('[data-geul-media-resize-handle="right"]'),
   );
   await dragTo(page, start, 40);
   await page.mouse.up();

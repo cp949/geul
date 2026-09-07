@@ -74,7 +74,7 @@ export const TableHandleOverlays = ({
     {geometry.rows.map((row) => (
       <IconButton
         className={handleButtonClassName}
-        data-be-table-row-handle=""
+        data-geul-table-row-handle=""
         icon={rowHandleIcon}
         key={`row-${row.rowId}`}
         label={rowHandleLabel}
@@ -106,7 +106,7 @@ export const TableHandleOverlays = ({
     {geometry.columns.map((column) => (
       <IconButton
         className={handleButtonClassName}
-        data-be-table-column-handle=""
+        data-geul-table-column-handle=""
         icon={columnHandleIcon}
         key={`column-${column.columnId}`}
         label={columnHandleLabel}
@@ -139,7 +139,7 @@ export const TableHandleOverlays = ({
       column.resizeSegments.map((segment) => (
         <div
           className="geul-table-resize-handle"
-          data-be-table-resize-handle=""
+          data-geul-table-resize-handle=""
           key={`resize-${column.columnId}-${segment.rowId}`}
           onPointerDown={(event) =>
             onResizeHandlePointerDown(
@@ -159,7 +159,7 @@ export const TableHandleOverlays = ({
     )}
     <IconButton
       className={expandButtonClassName}
-      data-be-table-expand-row=""
+      data-geul-table-expand-row=""
       icon={addIcon}
       label={addRowLabel}
       onClick={onAddRow}
@@ -171,7 +171,7 @@ export const TableHandleOverlays = ({
     />
     <IconButton
       className={expandButtonClassName}
-      data-be-table-expand-column=""
+      data-geul-table-expand-column=""
       icon={addIcon}
       label={addColumnLabel}
       onClick={onAddColumn}
@@ -189,7 +189,7 @@ export const TableHandleOverlays = ({
     <IconButton
       aria-disabled={canIndentTable ? "false" : "true"}
       className={nestingButtonClassName}
-      data-be-table-indent=""
+      data-geul-table-indent=""
       disabled={!canIndentTable}
       icon={indentTableIcon}
       label={indentTableLabel}
@@ -203,7 +203,7 @@ export const TableHandleOverlays = ({
     <IconButton
       aria-disabled={canOutdentTable ? "false" : "true"}
       className={nestingButtonClassName}
-      data-be-table-outdent=""
+      data-geul-table-outdent=""
       disabled={!canOutdentTable}
       icon={outdentTableIcon}
       label={outdentTableLabel}
@@ -217,7 +217,7 @@ export const TableHandleOverlays = ({
     {reorderGuideRect !== null && (
       <div
         className="geul-table-reorder-guide"
-        data-be-table-reorder-guide=""
+        data-geul-table-reorder-guide=""
         style={reorderGuideRect}
       />
     )}

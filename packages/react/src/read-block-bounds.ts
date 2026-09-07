@@ -1,7 +1,7 @@
 export type MenuPosition = { left: number; top: number };
 
 /**
- * 대상 블록의 렌더된 DOM(`[data-be-block-id]`, RD-002 DELTA-01 계약)
+ * 대상 블록의 렌더된 DOM(`[data-geul-block-id]`, RD-002 DELTA-01 계약)
  * bounding rect를 읽어 그 아래 앵커할 좌표를 구한다. `FilePanel`(RD-003
  * DELTA-01)과 `MediaToolbar`(RD-004 DELTA-01) 둘 다 같은 media 블록 DOM을
  * 서로 다른 시점(빈 블록 편집 vs 채워진 블록 편집)에 앵커하는 데 쓴다 —
@@ -14,7 +14,7 @@ export const readBlockBounds = (
   blockId: string,
 ): MenuPosition | null => {
   const target = element.querySelector<HTMLElement>(
-    `[data-be-block-id="${blockId}"]`,
+    `[data-geul-block-id="${blockId}"]`,
   );
   if (target === null) return null;
   const rect = target.getBoundingClientRect();

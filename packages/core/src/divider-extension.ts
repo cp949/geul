@@ -34,7 +34,7 @@ export const DividerExtension = Node.create({
         renderHTML: (attributes) =>
           typeof attributes.blockId === "string" &&
           attributes.blockId.length > 0
-            ? { "data-be-block-id": attributes.blockId }
+            ? { "data-geul-block-id": attributes.blockId }
             : {},
       },
     };

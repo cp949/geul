@@ -32,9 +32,9 @@ test("own-export 중첩 wrapper HTML을 붙이면 실제 DOM에 blockGroup 중�
   await editable.click();
 
   const nestedHtml =
-    '<div data-be-block-id="src-parent"><p data-be-block-id="src-parent-p">parent block</p>' +
-    '<div data-be-children="1"><div data-be-block-id="src-child">' +
-    '<p data-be-block-id="src-child-p">child block</p></div></div></div>';
+    '<div data-geul-block-id="src-parent"><p data-geul-block-id="src-parent-p">parent block</p>' +
+    '<div data-geul-children="1"><div data-geul-block-id="src-child">' +
+    '<p data-geul-block-id="src-child-p">child block</p></div></div></div>';
 
   await editable.evaluate(dispatchPaste, { html: nestedHtml });
 
@@ -44,13 +44,13 @@ test("own-export 중첩 wrapper HTML을 붙이면 실제 DOM에 blockGroup 중�
   await expect(editable.locator("p", { hasText: "child block" })).toHaveCount(
     1,
   );
-  // child block은 [data-be-block-group] 안에서만 나타난다 — 형제가 아니라
+  // child block은 [data-geul-block-group] 안에서만 나타난다 — 형제가 아니라
   // 실제로 중첩됐다는 뜻이다(RD-002 own wrapper 계약, 완료 조건 5 보강).
   await expect(
-    editable.locator("[data-be-block-group] p", { hasText: "child block" }),
+    editable.locator("[data-geul-block-group] p", { hasText: "child block" }),
   ).toHaveCount(1);
   await expect(
-    editable.locator("[data-be-block-group] p", { hasText: "parent block" }),
+    editable.locator("[data-geul-block-group] p", { hasText: "parent block" }),
   ).toHaveCount(0);
 });
 
@@ -65,14 +65,14 @@ test("Markdown 문법 plain text만 붙이면 heading과 목록으로 반영된�
   });
 
   await expect(editable.locator("h1", { hasText: "제목" })).toHaveCount(1);
-  // 목록류 production 마커는 <li>가 아니라 <div data-be-bullet-list-item>다
+  // 목록류 production 마커는 <li>가 아니라 <div data-geul-bullet-list-item>다
   // (RD-003 — production-editor-assembly.ts).
-  await expect(editable.locator("[data-be-bullet-list-item]")).toHaveCount(2);
+  await expect(editable.locator("[data-geul-bullet-list-item]")).toHaveCount(2);
   await expect(
-    editable.locator("[data-be-bullet-list-item]").nth(0),
+    editable.locator("[data-geul-bullet-list-item]").nth(0),
   ).toContainText("항목 하나");
   await expect(
-    editable.locator("[data-be-bullet-list-item]").nth(1),
+    editable.locator("[data-geul-bullet-list-item]").nth(1),
   ).toContainText("항목 둘");
 });
 
@@ -109,7 +109,7 @@ test("서식 있는 표 HTML과 Markdown처럼 보이는 plain text가 동시에
   await expect(table.locator("td").nth(1)).toHaveText("b");
   // Markdown 감지 경로로 새지 않았다 — heading·목록 마커가 생기지 않는다.
   await expect(editable.locator("h1")).toHaveCount(0);
-  await expect(editable.locator("[data-be-bullet-list-item]")).toHaveCount(0);
+  await expect(editable.locator("[data-geul-bullet-list-item]")).toHaveCount(0);
 
   await page.keyboard.press("Control+z");
   await expect(editable.locator("table")).toHaveCount(0);

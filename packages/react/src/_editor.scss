@@ -40,7 +40,7 @@
 
   // CodeBlock은 language metadata와 무관한 plain source 영역이다. syntax token
   // selector 없이 읽기 쉬운 고정폭 글꼴과 긴 줄의 가로 스크롤만 제공한다.
-  [data-be-code-block] {
+  [data-geul-code-block] {
     margin: 0;
     padding: 0.75rem 1rem;
     overflow-x: auto;
@@ -80,12 +80,11 @@
   // tr은 table의 직속 자식이 아니라 tbody 안에 있어(table-extension.ts
   // renderHTML의 ["tbody", {}, 0]) tbody의 자식은 tr뿐이고, :first-child와
   // :first-of-type이 같은 tr을 가리킨다. 셀 색상 명령이 넣는 인라인 style은
-  // 우선순위가 높아 이 배경을 덮는다. data-be-header-rows/columns는
-  // core(table-extension.ts)/model이 공유하는 계약이라 이름을 바꾸지
-  // 않는다 — geul- 이름 변경은 CSS 전용 표면(클래스, 커스텀 프로퍼티)만
-  // 대상으로 한다.
-  table[data-be-header-rows="1"] tr:first-child > td,
-  table[data-be-header-columns="1"] tr > td:first-child {
+  // 우선순위가 높아 이 배경을 덮는다. data-geul-header-rows/columns는
+  // core(table-extension.ts)가 렌더하는 DOM 속성 계약이다(Issue #159
+  // RD-008로 data-geul- 접두사에서 개명).
+  table[data-geul-header-rows="1"] tr:first-child > td,
+  table[data-geul-header-columns="1"] tr > td:first-child {
     background-color: var(--geul-color-surface-muted, #f1f3f4);
     font-weight: 600;
   }
@@ -107,7 +106,7 @@
   // 확보하고 content는 남은 폭을 쓴다. content의 [data-placeholder]::before와
   // 서로 다른 pseudo-element라 빈 항목에서도 marker와 `List item`을 동시에
   // 표시한다. blockGroup은 content 열의 다음 행에서 기존 재귀 padding을 더한다.
-  [data-be-list-marker] {
+  [data-geul-list-marker] {
     position: relative;
     box-sizing: border-box;
     display: grid;
@@ -115,22 +114,22 @@
     column-gap: 0.5rem;
   }
 
-  [data-be-list-marker]::before {
-    content: attr(data-be-list-marker);
+  [data-geul-list-marker]::before {
+    content: attr(data-geul-list-marker);
     grid-column: 1;
     grid-row: 1;
     text-align: right;
     pointer-events: none;
   }
 
-  [data-be-list-marker] > [data-be-bullet-list-item],
-  [data-be-list-marker] > [data-be-numbered-list-item] {
+  [data-geul-list-marker] > [data-geul-bullet-list-item],
+  [data-geul-list-marker] > [data-geul-numbered-list-item] {
     grid-column: 2;
     grid-row: 1;
     min-width: 0;
   }
 
-  [data-be-list-marker] > [data-be-block-group] {
+  [data-geul-list-marker] > [data-geul-block-group] {
     grid-column: 2;
     grid-row: 2;
     min-width: 0;
@@ -140,48 +139,48 @@
   // 콘텐츠 시작에 꽂는 decoration widget, R-7 — 문구·클릭은 core, 표시는
   // CSS). bullet·numbered marker와 달리 별도 marker 열이 아니라 텍스트
   // 바로 앞 인라인 위치라 grid 레이아웃이 필요 없다.
-  [data-be-check-marker] {
+  [data-geul-check-marker] {
     display: inline-block;
     margin-right: 0.5rem;
     cursor: pointer;
     user-select: none;
   }
 
-  [data-be-check-marker][data-be-checked="true"]::before {
+  [data-geul-check-marker][data-geul-checked="true"]::before {
     content: "☑";
   }
 
-  [data-be-check-marker][data-be-checked="false"]::before {
+  [data-geul-check-marker][data-geul-checked="false"]::before {
     content: "☐";
   }
 
   // 접힘 트라이앵글 클릭 UI(toggle-collapse-marker-extension.ts가 isToggleable
   // heading·toggleListItem 콘텐츠 시작에 꽂는 decoration widget, RD-004
   // DELTA-03 — 문구·클릭은 core, 표시는 CSS, check-marker와 같은 원칙).
-  [data-be-toggle-marker] {
+  [data-geul-toggle-marker] {
     display: inline-block;
     margin-right: 0.5rem;
     cursor: pointer;
     user-select: none;
   }
 
-  [data-be-toggle-marker][data-be-collapsed="true"]::before {
+  [data-geul-toggle-marker][data-geul-collapsed="true"]::before {
     content: "▶";
   }
 
-  [data-be-toggle-marker][data-be-collapsed="false"]::before {
+  [data-geul-toggle-marker][data-geul-collapsed="false"]::before {
     content: "▼";
   }
 
   // 자식 블록 목록 wrapper(block-container-extension.ts의
-  // BlockGroupExtension이 렌더링하는 [data-be-block-group])에 좌측 padding을
+  // BlockGroupExtension이 렌더링하는 [data-geul-block-group])에 좌측 padding을
   // 준다. blockContainer 스키마가 자식 blockGroup을 구조적으로 자기 안에
   // 품어(DELTA-02, content "blockContent blockGroup?") DOM 자체가 이미
   // 중첩돼 있으므로 이 규칙 하나로 충분하다 — 손자 블록의 blockGroup도
   // 이 손자를 감싼 blockContainer 안에 있고 그 blockContainer는 이 규칙이
   // 적용된 그룹 안에 있어, 같은 padding이 깊이만큼 재귀 누적된다(DELTA-05,
   // D18 — flat 판의 depth 값 비례 오프셋 합성이 불필요해짐).
-  [data-be-block-group] {
+  [data-geul-block-group] {
     padding-left: 1.5rem;
   }
 }

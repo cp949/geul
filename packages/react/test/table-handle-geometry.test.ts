@@ -33,11 +33,11 @@ type CellSpec = { columnId: string; colspan?: number; rect: Rect };
 type RowSpec = { rowId: string; rect: Rect; cells: CellSpec[] };
 
 /**
- * readTableGeometry가 읽는 data-be-* 속성만 갖춘 표 DOM을 편집기 마운트
+ * readTableGeometry가 읽는 data-geul-* 속성만 갖춘 표 DOM을 편집기 마운트
  * 없이 직접 조립한다. innerHTML 파싱이 아니라 createElement/appendChild로
  * 만들어 브라우저의 암묵적 tbody 삽입을 거치지 않는다(G-TST-001과 같은
  * "손으로 만든 DOM은 프로덕션과 갈라진다" 위험은, 여기서는 프로덕션이
- * 실제로 읽는 속성 4종(data-be-block-id/columns/row-id/column-id)만
+ * 실제로 읽는 속성 4종(data-geul-block-id/columns/row-id/column-id)만
  * 최소로 다루므로 낮다 — 렌더링 자체는 검증 대상이 아니다).
  */
 const buildTable = (options: {
@@ -50,27 +50,30 @@ const buildTable = (options: {
 }): HTMLTableElement => {
   const table = document.createElement("table");
   if (options.blockId !== null) {
-    table.setAttribute("data-be-block-id", options.blockId);
+    table.setAttribute("data-geul-block-id", options.blockId);
   }
   table.setAttribute(
-    "data-be-columns",
+    "data-geul-columns",
     serializeTableColumns(options.columnIds.map((id) => ({ id, width: 100 }))),
   );
   if (options.headerRows !== undefined) {
-    table.setAttribute("data-be-header-rows", String(options.headerRows));
+    table.setAttribute("data-geul-header-rows", String(options.headerRows));
   }
   if (options.headerColumns !== undefined) {
-    table.setAttribute("data-be-header-columns", String(options.headerColumns));
+    table.setAttribute(
+      "data-geul-header-columns",
+      String(options.headerColumns),
+    );
   }
   stubRect(table, options.rect);
 
   for (const rowSpec of options.rows) {
     const row = document.createElement("tr");
-    row.setAttribute("data-be-row-id", rowSpec.rowId);
+    row.setAttribute("data-geul-row-id", rowSpec.rowId);
     stubRect(row, rowSpec.rect);
     for (const cellSpec of rowSpec.cells) {
       const cell = document.createElement("td");
-      cell.setAttribute("data-be-column-id", cellSpec.columnId);
+      cell.setAttribute("data-geul-column-id", cellSpec.columnId);
       if (cellSpec.colspan !== undefined) {
         cell.setAttribute("colspan", String(cellSpec.colspan));
       }
@@ -280,10 +283,10 @@ describe("readColumnBounds", () => {
 });
 
 describe("readTableColumnIds", () => {
-  it("data-be-columns 값을 순서대로 id 배열로 돌려준다", () => {
+  it("data-geul-columns 값을 순서대로 id 배열로 돌려준다", () => {
     const table = document.createElement("table");
     table.setAttribute(
-      "data-be-columns",
+      "data-geul-columns",
       serializeTableColumns([
         { id: "c1", width: 100 },
         { id: "c2", width: 120 },
@@ -301,14 +304,14 @@ describe("readTableColumnIds", () => {
 
   it("JSON이 깨졌으면 예외 대신 빈 배열로 접는다", () => {
     const table = document.createElement("table");
-    table.setAttribute("data-be-columns", "{not json");
+    table.setAttribute("data-geul-columns", "{not json");
 
     expect(readTableColumnIds(table)).toEqual([]);
   });
 });
 
 describe("readTableGeometry", () => {
-  it("data-be-block-id가 없으면 null을 반환한다", () => {
+  it("data-geul-block-id가 없으면 null을 반환한다", () => {
     const table = buildTable({
       blockId: null,
       columnIds: ["col-0", "col-1"],
@@ -319,7 +322,7 @@ describe("readTableGeometry", () => {
     expect(readTableGeometry(table)).toBeNull();
   });
 
-  it("표 경계·헤더 플래그를 표 rect와 data-be-header-* 속성에서 그대로 읽는다", () => {
+  it("표 경계·헤더 플래그를 표 rect와 data-geul-header-* 속성에서 그대로 읽는다", () => {
     const table = buildTable({
       blockId: "table-1",
       columnIds: ["col-0"],

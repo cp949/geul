@@ -45,16 +45,16 @@ const blockGutterButtonClassName = "geul-block-gutter__button";
 // 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다
 // 다시 붙인다.
 const BLOCK_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-be-block-menu]",
-  "[data-be-block-handle]",
+  "[data-geul-block-menu]",
+  "[data-geul-block-handle]",
 ] as const;
 
 // usePointerHoverTarget ignore-list. table-handles.tsx와 같은 이유로
 // 모듈 스코프 상수로 둔다.
 const BLOCK_HOVER_IGNORE_SELECTORS = [
-  "[data-be-add-block-button]",
-  "[data-be-block-handle]",
-  "[data-be-block-menu]",
+  "[data-geul-add-block-button]",
+  "[data-geul-block-handle]",
+  "[data-geul-block-menu]",
 ] as const;
 
 export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
@@ -77,7 +77,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   // 소유한다.
   const handleHoverCandidateChange = useCallback(
     (candidate: HTMLElement | null) => {
-      setHoverBlockId(candidate?.getAttribute("data-be-block-id") ?? null);
+      setHoverBlockId(candidate?.getAttribute("data-geul-block-id") ?? null);
     },
     [],
   );
@@ -87,7 +87,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     // table은 자체 행/열 핸들(table-handles.tsx)을 가지므로 이 거터
     // 대상에서 제외한다 — 제외하지 않으면 두 오버레이의 gutter가 표의
     // 왼쪽 부근에서 겹쳐 렌더된다.
-    entitySelector: "[data-be-block-id]:not(table)",
+    entitySelector: "[data-geul-block-id]:not(table)",
     onCandidateChange: handleHoverCandidateChange,
   });
 
@@ -263,7 +263,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         const blockElement = findElementByAttribute(
           element,
           null,
-          "data-be-block-id",
+          "data-geul-block-id",
           current.blockId,
         );
         if (blockElement === null) return current;
@@ -289,7 +289,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     const blockElement = findElementByAttribute(
       element,
       null,
-      "data-be-block-id",
+      "data-geul-block-id",
       hoverBlockId,
     );
     if (blockElement === null) return null;
@@ -403,7 +403,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         >
           <IconButton
             className={`${blockGutterButtonClassName} geul-block-gutter__button--drag`}
-            data-be-block-handle=""
+            data-geul-block-handle=""
             icon={dragHandleIcon}
             label={dragHandleLabel}
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
@@ -413,7 +413,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           />
           <IconButton
             className={`${blockGutterButtonClassName} geul-block-gutter__button--add`}
-            data-be-add-block-button=""
+            data-geul-add-block-button=""
             icon={addBlockIcon}
             label={addBlockLabel}
             onClick={handleAddBlockClick}
@@ -428,7 +428,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {dragState?.guide !== null && dragState?.guide !== undefined && (
         <div
           className="geul-block-insertion-guide"
-          data-be-block-insertion-guide=""
+          data-geul-block-insertion-guide=""
           style={{
             left: dragState.guide.left,
             top: dragState.guide.top,

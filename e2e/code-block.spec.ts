@@ -17,7 +17,7 @@ const insertCodeBlock = async (page: Page, editable: Locator) => {
   await editable.click();
   await page.keyboard.type("/code");
   await page.getByRole("option", { name: /Code/ }).click();
-  const codeBlock = editable.locator("pre[data-be-code-block]");
+  const codeBlock = editable.locator("pre[data-geul-code-block]");
   await expect(codeBlock).toBeVisible();
   return codeBlock;
 };
@@ -79,7 +79,7 @@ test("펜스 ```lang 입력은 production editor에서 codeBlock DOM으로 변�
   await editable.click();
   await page.keyboard.type("```js ");
 
-  const codeBlock = editable.locator("pre[data-be-code-block]");
+  const codeBlock = editable.locator("pre[data-geul-code-block]");
   await expect(codeBlock).toBeVisible();
   await expect(codeBlock.locator("code")).toHaveText("");
 
@@ -103,7 +103,7 @@ test("블록 메뉴의 Code는 기존 source를 표시한 채 DOM을 CodeBlock�
   await expect(menu.getByRole("menuitem", { name: "Code" })).toBeVisible();
   await menu.getByRole("menuitem", { name: "Code" }).click();
 
-  await expect(editable.locator("pre[data-be-code-block] code")).toHaveText(
+  await expect(editable.locator("pre[data-geul-code-block] code")).toHaveText(
     "const value = 1;",
   );
 });
@@ -123,7 +123,7 @@ test("활성 CodeBlock의 블록 메뉴 Text를 실제 클릭해 source를 보�
   const menu = page.getByRole("menu", { name: "Block menu" });
   await menu.getByRole("menuitem", { name: "Text" }).click();
 
-  await expect(editable.locator("pre[data-be-code-block]")).toHaveCount(0);
+  await expect(editable.locator("pre[data-geul-code-block]")).toHaveCount(0);
   await expect(editable.locator("p").first()).toHaveText("const answer = 42;");
 });
 
@@ -249,7 +249,7 @@ test("scroll과 viewport resize 뒤 language overlay가 활성 CodeBlock을 추�
   await page.keyboard.type("/code");
   await page.getByRole("option", { name: /Code/ }).click();
 
-  const codeBlock = editable.locator("pre[data-be-code-block]");
+  const codeBlock = editable.locator("pre[data-geul-code-block]");
   const overlay = page
     .getByRole("combobox", { name: "Code language" })
     .locator("xpath=../..");

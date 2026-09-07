@@ -27,7 +27,7 @@ const highlightClassName = "geul-block-selection-toolbar__highlight";
 // useDismissOnOutsideOrEscape allow-list. table-selection-toolbar.tsx,
 // block-side-menu.tsx와 같은 이유로 모듈 스코프 상수로 둔다 — 매 렌더 새
 // 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
-// `[data-be-block-handle]`을 여기 추가하지 않는다 — 이 handle은 블록마다
+// `[data-geul-block-handle]`을 여기 추가하지 않는다 — 이 handle은 블록마다
 // 있는 게 아니라 hover 중인 블록 하나에만 렌더되는 공용 버튼이라, 정적
 // 셀렉터로는 "범위 안 blockId 재드래그(range-move)"와 "범위 밖 blockId의
 // 평범한 재정렬 드래그"를 구분하지 못한다 — 넣으면 후자까지 "바깥"
@@ -36,7 +36,7 @@ const highlightClassName = "geul-block-selection-toolbar__highlight";
 // 전에 이벤트 전파를 끊는 쪽은 block-side-menu.tsx의
 // handlePointerDownOnHandle이 소유한다(호출부 쪽 stopPropagation).
 const BLOCK_SELECTION_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
-  "[data-be-block-selection-toolbar]",
+  "[data-geul-block-selection-toolbar]",
 ] as const;
 
 type StoredBlock = ReturnType<
@@ -85,7 +85,7 @@ const findBlockInTreeForSelection = (
  * blockSelection(같은 부모 형제 범위의 다중 블록 선택, DELTA-01)이 있을 때
  * 뜨는 플로팅 툴바. 삭제·위로 이동·아래로 이동 버튼을 노출하고, 선택 범위에
  * 속하는 각 블록 위에 이 컴포넌트가 소유하는 자체 하이라이트 오버레이를
- * 그린다 — PM이 렌더링한 `[data-be-block-id]` 노드 자체를 mutate하지
+ * 그린다 — PM이 렌더링한 `[data-geul-block-id]` 노드 자체를 mutate하지
  * 않는다(spec §5.3, DELTA-04 트랙-4 확인사항: PM 재조정 시 수동으로 붙인
  * class가 소리 없이 사라지는 회귀를 피한다). 배치·해제 원칙은
  * TableSelectionToolbar와 같다(spec 6.3). SlashMenu가 TableSelectionToolbar
@@ -113,14 +113,14 @@ export const BlockSelectionToolbar = () => {
       return;
     }
 
-    // 하이라이트 범위는 spec이 명시한 대로 DOM 순서([data-be-block-id]의
+    // 하이라이트 범위는 spec이 명시한 대로 DOM 순서([data-geul-block-id]의
     // querySelectorAll 순서) 기준이다 — 아래 위/아래 버튼 판정에 쓰는 문서
     // 트리 인덱스와는 별개다.
     const blockElements = Array.from(
-      element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+      element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
     );
     const domIds = blockElements.map((candidate) =>
-      candidate.getAttribute("data-be-block-id"),
+      candidate.getAttribute("data-geul-block-id"),
     );
     const fromDomIndex = domIds.indexOf(selection.fromBlockId);
     const toDomIndex = domIds.indexOf(selection.toBlockId);
@@ -143,7 +143,7 @@ export const BlockSelectionToolbar = () => {
       (candidate, index) => {
         const rect = rects[index];
         return {
-          blockId: candidate.getAttribute("data-be-block-id") ?? "",
+          blockId: candidate.getAttribute("data-geul-block-id") ?? "",
           left: rect?.left ?? 0,
           top: rect?.top ?? 0,
           width: rect?.width ?? 0,
@@ -302,8 +302,8 @@ export const BlockSelectionToolbar = () => {
       {toolbarState.highlights.map((highlight) => (
         <div
           className={highlightClassName}
-          data-be-block-selection-highlight=""
-          data-be-highlighted-block-id={highlight.blockId}
+          data-geul-block-selection-highlight=""
+          data-geul-highlighted-block-id={highlight.blockId}
           key={highlight.blockId}
           style={{
             left: highlight.left,
@@ -316,7 +316,7 @@ export const BlockSelectionToolbar = () => {
       <div
         aria-label="Block selection"
         className="geul-block-selection-toolbar"
-        data-be-block-selection-toolbar=""
+        data-geul-block-selection-toolbar=""
         ref={menuRef}
         role="toolbar"
         style={style}

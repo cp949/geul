@@ -1,5 +1,5 @@
 /**
- * HTML 체크 목록 import가 `data-be-checked` 속성으로 checkListItem을
+ * HTML 체크 목록 import가 `data-geul-checked` 속성으로 checkListItem을
  * 판정하고, own-format round-trip에서 raw warning 오탐을 내지 않는지
  * 검증한다.
  */
@@ -19,9 +19,9 @@ const importDocument = (html: string): Document => {
 };
 
 describe("체크 목록 HTML 가져오기", () => {
-  it("data-be-checked=true인 li를 checked: true인 checkListItem으로 만든다", () => {
+  it("data-geul-checked=true인 li를 checked: true인 checkListItem으로 만든다", () => {
     const document = importDocument(
-      '<ul><li data-be-block-id="c-1" data-be-checked="true">완료</li></ul>',
+      '<ul><li data-geul-block-id="c-1" data-geul-checked="true">완료</li></ul>',
     );
     expect(document.blocks).toEqual([
       {
@@ -33,9 +33,9 @@ describe("체크 목록 HTML 가져오기", () => {
     ]);
   });
 
-  it("data-be-checked=false인 li를 checked: false인 checkListItem으로 만든다", () => {
+  it("data-geul-checked=false인 li를 checked: false인 checkListItem으로 만든다", () => {
     const document = importDocument(
-      '<ul><li data-be-block-id="c-1" data-be-checked="false">미완료</li></ul>',
+      '<ul><li data-geul-block-id="c-1" data-geul-checked="false">미완료</li></ul>',
     );
     expect(document.blocks).toEqual([
       {
@@ -47,9 +47,9 @@ describe("체크 목록 HTML 가져오기", () => {
     ]);
   });
 
-  it("data-be-checked 값이 정확히 true가 아니면(임의 문자열) checked: false로 읽는다", () => {
+  it("data-geul-checked 값이 정확히 true가 아니면(임의 문자열) checked: false로 읽는다", () => {
     const document = importDocument(
-      '<ul><li data-be-block-id="c-1" data-be-checked="yes">모호</li></ul>',
+      '<ul><li data-geul-block-id="c-1" data-geul-checked="yes">모호</li></ul>',
     );
     expect(document.blocks).toEqual([
       {
@@ -61,10 +61,10 @@ describe("체크 목록 HTML 가져오기", () => {
     ]);
   });
 
-  it("data-be-checked가 없는 li는 기존과 동일하게 tag 기반으로 판정한다", () => {
+  it("data-geul-checked가 없는 li는 기존과 동일하게 tag 기반으로 판정한다", () => {
     const document = importDocument(
-      '<ul><li data-be-block-id="b-1">글머리</li></ul>' +
-        '<ol><li data-be-block-id="n-1">번호</li></ol>',
+      '<ul><li data-geul-block-id="b-1">글머리</li></ul>' +
+        '<ol><li data-geul-block-id="n-1">번호</li></ol>',
     );
     expect(document.blocks).toEqual([
       { id: "b-1", type: "bulletListItem", content: [{ text: "글머리" }] },
@@ -72,9 +72,9 @@ describe("체크 목록 HTML 가져오기", () => {
     ]);
   });
 
-  it("own-format round-trip에서 dataBeChecked에 대한 UNSAFE_ATTRIBUTE_REMOVED 오탐 경고를 내지 않는다", () => {
+  it("own-format round-trip에서 dataGeulChecked에 대한 UNSAFE_ATTRIBUTE_REMOVED 오탐 경고를 내지 않는다", () => {
     const result = importHtml(
-      '<ul><li data-be-block-id="c-1" data-be-checked="true">완료</li></ul>',
+      '<ul><li data-geul-block-id="c-1" data-geul-checked="true">완료</li></ul>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -83,8 +83,8 @@ describe("체크 목록 HTML 가져오기", () => {
 
   it("checkListItem도 다른 목록 항목처럼 재귀 children을 보존한다", () => {
     const document = importDocument(
-      '<ul><li data-be-block-id="c-1" data-be-checked="true"><p>부모</p>' +
-        '<p data-be-block-id="p-1">자식</p></li></ul>',
+      '<ul><li data-geul-block-id="c-1" data-geul-checked="true"><p>부모</p>' +
+        '<p data-geul-block-id="p-1">자식</p></li></ul>',
     );
     expect(document.blocks).toEqual([
       {

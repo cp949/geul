@@ -29,10 +29,10 @@ const Probe = ({
   });
   return (
     <div>
-      <button data-be-allowed="" type="button">
+      <button data-geul-allowed="" type="button">
         allowed target
       </button>
-      <button data-be-outside="" type="button">
+      <button data-geul-outside="" type="button">
         outside target
       </button>
     </div>
@@ -46,14 +46,14 @@ describe("useDismissOnOutsideOrEscape", () => {
     render(
       <Probe
         active
-        allowSelectors={["[data-be-allowed]"]}
+        allowSelectors={["[data-geul-allowed]"]}
         onOutsideDismiss={onOutsideDismiss}
         onEscapeDismiss={onEscapeDismiss}
       />,
     );
 
     document
-      .querySelector("[data-be-outside]")
+      .querySelector("[data-geul-outside]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
     expect(onOutsideDismiss).toHaveBeenCalledTimes(1);
@@ -65,14 +65,14 @@ describe("useDismissOnOutsideOrEscape", () => {
     render(
       <Probe
         active
-        allowSelectors={["[data-be-allowed]"]}
+        allowSelectors={["[data-geul-allowed]"]}
         onOutsideDismiss={onOutsideDismiss}
         onEscapeDismiss={vi.fn()}
       />,
     );
 
     document
-      .querySelector("[data-be-allowed]")
+      .querySelector("[data-geul-allowed]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
     expect(onOutsideDismiss).not.toHaveBeenCalled();
@@ -84,7 +84,7 @@ describe("useDismissOnOutsideOrEscape", () => {
     render(
       <Probe
         active
-        allowSelectors={["[data-be-allowed]"]}
+        allowSelectors={["[data-geul-allowed]"]}
         onOutsideDismiss={onOutsideDismiss}
         onEscapeDismiss={onEscapeDismiss}
       />,
@@ -107,7 +107,7 @@ describe("useDismissOnOutsideOrEscape", () => {
     render(
       <Probe
         active
-        allowSelectors={["[data-be-allowed]"]}
+        allowSelectors={["[data-geul-allowed]"]}
         onOutsideDismiss={vi.fn()}
         onEscapeDismiss={onEscapeDismiss}
       />,
@@ -129,14 +129,14 @@ describe("useDismissOnOutsideOrEscape", () => {
     render(
       <Probe
         active={false}
-        allowSelectors={["[data-be-allowed]"]}
+        allowSelectors={["[data-geul-allowed]"]}
         onOutsideDismiss={onOutsideDismiss}
         onEscapeDismiss={vi.fn()}
       />,
     );
 
     document
-      .querySelector("[data-be-outside]")
+      .querySelector("[data-geul-outside]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 
@@ -148,7 +148,7 @@ describe("useDismissOnOutsideOrEscape", () => {
     const { unmount } = render(
       <Probe
         active
-        allowSelectors={["[data-be-allowed]"]}
+        allowSelectors={["[data-geul-allowed]"]}
         onOutsideDismiss={onOutsideDismiss}
         onEscapeDismiss={vi.fn()}
       />,
@@ -156,7 +156,7 @@ describe("useDismissOnOutsideOrEscape", () => {
 
     unmount();
     document
-      .querySelector("[data-be-outside]")
+      .querySelector("[data-geul-outside]")
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
 
     expect(onOutsideDismiss).not.toHaveBeenCalled();

@@ -199,8 +199,10 @@ describe("placeholder 데코레이션", () => {
     const editor = createEditor({ initialDocument: codePlaceholderDocument() });
     const { editable, tiptap } = mountTiptapEditor(editor);
     const before = editor.getDocument();
-    const emptyCode = editable.querySelector("pre[data-be-code-block]");
-    const filledCode = editable.querySelectorAll("pre[data-be-code-block]")[1];
+    const emptyCode = editable.querySelector("pre[data-geul-code-block]");
+    const filledCode = editable.querySelectorAll(
+      "pre[data-geul-code-block]",
+    )[1];
 
     tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-end"));
     expect(emptyCode?.getAttribute("data-placeholder")).toBe(CODE_PLACEHOLDER);

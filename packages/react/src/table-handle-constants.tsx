@@ -43,21 +43,21 @@ export const HANDLE_HOVER_MARGIN = 28;
 // useDismissOnOutsideOrEscape에 넘기는 allow-list. 모듈 스코프 상수로 둔다 —
 // 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
 export const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-be-table-menu]",
-  "[data-be-table-row-handle]",
-  "[data-be-table-column-handle]",
+  "[data-geul-table-menu]",
+  "[data-geul-table-row-handle]",
+  "[data-geul-table-column-handle]",
 ] as const;
 
 // usePointerHoverTarget에 넘기는 ignore-list. 자기 자신의 오버레이(핸들·
 // 리사이즈 스트립·확장 버튼·메뉴) 위에서는 hover 대상을 다시 판정하지
 // 않는다. 모듈 스코프 상수로 두는 이유는 위와 같다.
 export const TABLE_HOVER_IGNORE_SELECTORS = [
-  "[data-be-table-row-handle]",
-  "[data-be-table-column-handle]",
-  "[data-be-table-resize-handle]",
-  "[data-be-table-expand-row]",
-  "[data-be-table-expand-column]",
-  "[data-be-table-menu]",
-  "[data-be-table-indent]",
-  "[data-be-table-outdent]",
+  "[data-geul-table-row-handle]",
+  "[data-geul-table-column-handle]",
+  "[data-geul-table-resize-handle]",
+  "[data-geul-table-expand-row]",
+  "[data-geul-table-expand-column]",
+  "[data-geul-table-menu]",
+  "[data-geul-table-indent]",
+  "[data-geul-table-outdent]",
 ] as const;

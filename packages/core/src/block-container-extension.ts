@@ -26,7 +26,7 @@ import { mergeAttributes, Node } from "@tiptap/core";
 // parseHTML(노드 단위 DOM 파싱 규칙)을 선언하지 않는다(D13 계승) — 외부
 // HTML의 중첩 div가 중첩 컨테이너로 파싱되지 않는다(table-extension.ts의
 // 표 parseHTML 미선언과 동형 근거: 규칙이 있으면 클립보드로 들어온 임의의
-// data-be-block-id div가 id 중복/미검증 컨테이너를 만든다). 붙여넣은
+// data-geul-block-id div가 id 중복/미검증 컨테이너를 만든다). 붙여넣은
 // <p>/<hN>은 PM slice-fitting(ContentMatch.findWrapping)이 스키마 group
 // 요구에 의해 새 blockContainer로 자동 wrap한다 — 별도 코드 불필요.
 export const BlockContainerExtension = Node.create({
@@ -43,7 +43,7 @@ export const BlockContainerExtension = Node.create({
         renderHTML: (attributes) => {
           const blockId = attributes.blockId;
           return typeof blockId === "string" && blockId.length > 0
-            ? { "data-be-block-id": blockId }
+            ? { "data-geul-block-id": blockId }
             : {};
         },
       },
@@ -66,8 +66,8 @@ export const BlockContainerExtension = Node.create({
 });
 
 // 자식 블록 목록의 wrapper. parseHTML 미선언 근거는 BlockContainerExtension과
-// 동일하다. DOM 표현은 data-be-block-group 불리언 속성으로 식별한다(표의
-// data-be-* 명명 관례를 따른다) — 렌더 전용이며 이 속성으로 파싱하지 않는다.
+// 동일하다. DOM 표현은 data-geul-block-group 불리언 속성으로 식별한다(표의
+// data-geul-* 명명 관례를 따른다) — 렌더 전용이며 이 속성으로 파싱하지 않는다.
 export const BlockGroupExtension = Node.create({
   name: "blockGroup",
   content: "block+",
@@ -75,7 +75,7 @@ export const BlockGroupExtension = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-be-block-group": "" }),
+      mergeAttributes(HTMLAttributes, { "data-geul-block-group": "" }),
       0,
     ];
   },

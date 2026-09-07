@@ -80,9 +80,9 @@ const blocksFromSegments = (
     if (segment.kind === "simpleBoundary") {
       // p 자신의 본문 — 기존 parseBlock 관례대로 실질 텍스트 여부와
       // 무관하게 항상 블록 하나를 낸다(빈 <p>도 빈 문단으로 보존).
-      // dataBeBlockId는 p 요소 자신의 속성이라 segment.node에서 읽는다.
+      // dataGeulBlockId는 p 요소 자신의 속성이라 segment.node에서 읽는다.
       blocks.push({
-        id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
+        id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "paragraph",
         content: paragraphContentFromNodes(segment.nodes),
         ...textBlockPropsFromElement(segment.node),
@@ -91,11 +91,11 @@ const blocksFromSegments = (
     }
     if (segment.kind === "heading") {
       // level은 headingLevelByTagName의 값 타입(HeadingBlock["level"])을
-      // 세그먼트가 그대로 실어 온다 — 캐스트도 재검증도 없다. dataBeBlockId는
+      // 세그먼트가 그대로 실어 온다 — 캐스트도 재검증도 없다. dataGeulBlockId는
       // heading 요소 자신의 속성이라 segment.node에서 읽는다(기존 parseBlock
       // 관례).
       blocks.push({
-        id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
+        id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "heading",
         level: segment.level,
         content: paragraphContentFromNodes(segment.nodes),
@@ -105,9 +105,12 @@ const blocksFromSegments = (
     }
     if (segment.kind === "hr") {
       // divider는 콘텐츠·children 없는 리프다(spec §4.2). 빈 <p>를 빈 문단으로
-      // 보존하는 관례처럼 hr 하나당 divider 하나를 항상 낸다.
+      // 보존하는 관례처럼 hr 하나당 divider 하나를 항상 낸다. own-export와
+      // 생산 편집기(divider-extension.ts) 둘 다 own-content 태그(hr) 자신에
+      // dataGeulBlockId를 직접 싣는다(blockContainer로 감싸지 않는 표·미디어와
+      // 같은 자체-identity 노드라 outerBlockId 보충 경로를 타지 않는다).
       blocks.push({
-        id: propertyString(segment.node, "dataBeBlockId") ?? createId(),
+        id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "divider",
       });
       continue;
@@ -132,7 +135,7 @@ const blocksFromSegments = (
       // 나왔을 때만(공백뿐이면 잃는 구조가 없다) NESTED_CHILDREN_FLATTENED를
       // 경고한다(Issue #132, G-CNV-002). 같은 depth 재귀는 HTML 트리 한 단계를
       // 소비하므로 MAX_HTML_TREE_DEPTH로 유계다.
-      const id = propertyString(segment.node, "dataBeBlockId") ?? createId();
+      const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
       const content = paragraphContentFromNodes(contentNodes);
       const quoteProps = textBlockPropsFromElement(segment.node);
@@ -170,7 +173,7 @@ const blocksFromSegments = (
     if (segment.kind === "list") continue;
     if (segment.kind === "codeBlock") {
       const source = textValue(segment.node.children);
-      const id = propertyString(segment.node, "dataBeBlockId") ?? createId();
+      const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const directCode = firstDirectCode(segment.node);
       const directCodeDataLanguage =
         directCode === undefined
@@ -244,7 +247,7 @@ const blocksFromListItem = (
   depth: number,
   warnings: HtmlImportWarning[],
 ): Block[] => {
-  const id = propertyString(node, "dataBeBlockId") ?? createId();
+  const id = propertyString(node, "dataGeulBlockId") ?? createId();
   const { contentNodes, childrenNodes } = splitListItemChildren(node);
   const content = paragraphContentFromNodes(contentNodes);
   const listItemProps = textBlockPropsFromElement(node);
@@ -262,7 +265,7 @@ const blocksFromListItem = (
             id,
             type: "checkListItem",
             content,
-            checked: propertyString(node, "dataBeChecked") === "true",
+            checked: propertyString(node, "dataGeulChecked") === "true",
             ...listItemProps,
           }
         : { id, type: "bulletListItem", content, ...listItemProps };
@@ -328,27 +331,31 @@ const blocksFromListElement = (
       continue;
     }
     flushNonItemRun();
-    if (propertyString(child, "dataBeBlockId") !== undefined) {
-      consumePreservedAttributeWarning(warnings, "li", "dataBeBlockId");
+    if (propertyString(child, "dataGeulBlockId") !== undefined) {
+      consumePreservedAttributeWarning(warnings, "li", "dataGeulBlockId");
     }
-    // TextBlockProps 3필드(RD-004 DELTA-02)도 li/dataBeBlockId와 같은 raw
+    // TextBlockProps 3필드(RD-004 DELTA-02)도 li/dataGeulBlockId와 같은 raw
     // 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
-    if (propertyString(child, "dataBeTextColor") !== undefined) {
-      consumePreservedAttributeWarning(warnings, "li", "dataBeTextColor");
+    if (propertyString(child, "dataGeulTextColor") !== undefined) {
+      consumePreservedAttributeWarning(warnings, "li", "dataGeulTextColor");
     }
-    if (propertyString(child, "dataBeBackgroundColor") !== undefined) {
-      consumePreservedAttributeWarning(warnings, "li", "dataBeBackgroundColor");
+    if (propertyString(child, "dataGeulBackgroundColor") !== undefined) {
+      consumePreservedAttributeWarning(
+        warnings,
+        "li",
+        "dataGeulBackgroundColor",
+      );
     }
-    if (propertyString(child, "dataBeTextAlignment") !== undefined) {
-      consumePreservedAttributeWarning(warnings, "li", "dataBeTextAlignment");
+    if (propertyString(child, "dataGeulTextAlignment") !== undefined) {
+      consumePreservedAttributeWarning(warnings, "li", "dataGeulTextAlignment");
     }
-    // data-be-checked 존재 여부가 tag보다 우선한다 — own export는 항상
+    // data-geul-checked 존재 여부가 tag보다 우선한다 — own export는 항상
     // <ul>에 checkListItem을 낸다(로드맵 D3). 속성이 있으면 own-format
     // 계약이라 raw 오탐 경고도 함께 억제한다.
     const isCheckListItem =
-      propertyString(child, "dataBeChecked") !== undefined;
+      propertyString(child, "dataGeulChecked") !== undefined;
     if (isCheckListItem) {
-      consumePreservedAttributeWarning(warnings, "li", "dataBeChecked");
+      consumePreservedAttributeWarning(warnings, "li", "dataGeulChecked");
     }
     if (
       node.tagName === "ol" &&
@@ -458,9 +465,17 @@ const blocksFromNodes = (
       // "details" 항목 자체가 없어 전부 raw 오탐 대상이다)를 보존한 이번
       // 결과에 대한 raw "제거됨" 오탐만 지운다(consumePreservedAttributeWarning,
       // li/ol과 동일 패턴).
-      consumePreservedAttributeWarning(warnings, "details", "dataBeBlockId");
-      consumePreservedAttributeWarning(warnings, "details", "dataBeToggleable");
-      consumePreservedAttributeWarning(warnings, "details", "dataBeCollapsed");
+      consumePreservedAttributeWarning(warnings, "details", "dataGeulBlockId");
+      consumePreservedAttributeWarning(
+        warnings,
+        "details",
+        "dataGeulToggleable",
+      );
+      consumePreservedAttributeWarning(
+        warnings,
+        "details",
+        "dataGeulCollapsed",
+      );
       consumePreservedAttributeWarning(warnings, "details", "open");
       const children = blocksFromNodes(
         details.childrenNodes,
@@ -498,41 +513,48 @@ const blocksFromNodes = (
         continue;
       }
 
-      if (propertyString(details.summaryNode, "dataBeBlockId") !== undefined) {
-        consumePreservedAttributeWarning(warnings, "summary", "dataBeBlockId");
-      }
-      // TextBlockProps 3필드(RD-004 DELTA-02)도 summary/dataBeBlockId와 같은
-      // raw 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
       if (
-        propertyString(details.summaryNode, "dataBeTextColor") !== undefined
+        propertyString(details.summaryNode, "dataGeulBlockId") !== undefined
       ) {
         consumePreservedAttributeWarning(
           warnings,
           "summary",
-          "dataBeTextColor",
+          "dataGeulBlockId",
+        );
+      }
+      // TextBlockProps 3필드(RD-004 DELTA-02)도 summary/dataGeulBlockId와 같은
+      // raw 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
+      if (
+        propertyString(details.summaryNode, "dataGeulTextColor") !== undefined
+      ) {
+        consumePreservedAttributeWarning(
+          warnings,
+          "summary",
+          "dataGeulTextColor",
         );
       }
       if (
-        propertyString(details.summaryNode, "dataBeBackgroundColor") !==
+        propertyString(details.summaryNode, "dataGeulBackgroundColor") !==
         undefined
       ) {
         consumePreservedAttributeWarning(
           warnings,
           "summary",
-          "dataBeBackgroundColor",
+          "dataGeulBackgroundColor",
         );
       }
       if (
-        propertyString(details.summaryNode, "dataBeTextAlignment") !== undefined
+        propertyString(details.summaryNode, "dataGeulTextAlignment") !==
+        undefined
       ) {
         consumePreservedAttributeWarning(
           warnings,
           "summary",
-          "dataBeTextAlignment",
+          "dataGeulTextAlignment",
         );
       }
       const id =
-        propertyString(details.summaryNode, "dataBeBlockId") ?? createId();
+        propertyString(details.summaryNode, "dataGeulBlockId") ?? createId();
       const content = paragraphContentFromNodes(details.summaryNode.children);
       blocks.push({
         id,
@@ -602,22 +624,24 @@ const blocksFromNodes = (
       continue;
     }
 
-    // own-export는 own-content 태그(p/hN 등) 자신에 dataBeBlockId를 싣고,
+    // own-export는 own-content 태그(p/hN 등) 자신에 dataGeulBlockId를 싣고,
     // 바깥 wrapper div의 같은 속성은 순전히 장식이다 — wrapper id는 항상
     // 버려지고 own-content 자신의 id(또는 없으면 새로 발급한 id)가
     // 이긴다(기존 계약, html-security-block-boundary.test.ts의 깊이-체인
     // 픽스처가 서로 다른 id로 이를 고정한다). 생산 편집기는 반대로
-    // own-content 태그 자신에 id를 싣지 않고 바깥 blockContainer div
-    // (RD-002)에만 싣는다 — ownNode 자신이 id가 없을 때만 바깥 id로
+    // own-content 태그 자신에 id를 싣지 않고 바깥 blockContainer div에
+    // 싣는다(RD-002) — 속성명은 Issue #159 개명 후 own-export와 같은
+    // dataGeulBlockId지만 싣는 DOM 노드가 다르므로, ownNode 자신이
+    // dataGeulBlockId를 갖지 않을 때만 바깥 wrapper의 dataGeulBlockId로
     // 보충해 두 계약을 함께 만족한다.
     const ownNodeHasOwnBlockId =
-      propertyString(wrapper.ownNode, "dataBeBlockId") !== undefined;
+      propertyString(wrapper.ownNode, "dataGeulBlockId") !== undefined;
     // findChildrenWrapper가 node를 div element로만 인정해 wrapper를
     // 반환했으므로 isElementNode는 항상 true다 — TS 좁히기 목적으로만
     // 확인한다.
     const outerBlockId =
       !ownNodeHasOwnBlockId && isElementNode(node)
-        ? propertyString(node, "dataBeBlockId")
+        ? propertyString(node, "dataGeulBlockId")
         : undefined;
     const ownBlock =
       outerBlockId === undefined

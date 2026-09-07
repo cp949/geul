@@ -53,10 +53,10 @@ describe("SCSS 빌드 파이프라인", () => {
   it("목록 marker를 blockContainer 앞에 그리고 콘텐츠 placeholder와 중첩 padding을 함께 컴파일한다", () => {
     const css = compileCss();
     const markerLayout =
-      /\.geul-editor \[data-be-list-marker\] \{(?<body>[^}]*)\}/.exec(css)
+      /\.geul-editor \[data-geul-list-marker\] \{(?<body>[^}]*)\}/.exec(css)
         ?.groups?.body;
     const marker =
-      /\.geul-editor \[data-be-list-marker\]::before \{(?<body>[^}]*)\}/.exec(
+      /\.geul-editor \[data-geul-list-marker\]::before \{(?<body>[^}]*)\}/.exec(
         css,
       )?.groups?.body;
 
@@ -65,30 +65,30 @@ describe("SCSS 빌드 파이프라인", () => {
       "grid-template-columns: max-content minmax(0, 1fr);",
     );
     expect(markerLayout).toContain("column-gap: 0.5rem;");
-    expect(marker).toContain("content: attr(data-be-list-marker);");
+    expect(marker).toContain("content: attr(data-geul-list-marker);");
     expect(marker).toContain("grid-column: 1;");
     expect(marker).toContain("grid-row: 1;");
     expect(marker).not.toContain("position: absolute;");
-    expect(css).toContain("[data-be-list-marker] > [data-be-block-group]");
+    expect(css).toContain("[data-geul-list-marker] > [data-geul-block-group]");
     expect(css).toContain("grid-column: 2;");
     expect(css).toContain("grid-row: 2;");
     expect(css).toContain("[data-placeholder]::before");
-    expect(css).toContain("[data-be-block-group] {");
+    expect(css).toContain("[data-geul-block-group] {");
     expect(css).toContain("padding-left: 1.5rem;");
   });
 
   it("CodeBlock을 plain monospace와 가로 overflow가 있는 코드 영역으로 컴파일한다", () => {
     const css = compileCss();
-    const rule = /\.geul-editor \[data-be-code-block\] \{(?<body>[^}]*)\}/.exec(
-      css,
-    )?.groups?.body;
+    const rule =
+      /\.geul-editor \[data-geul-code-block\] \{(?<body>[^}]*)\}/.exec(css)
+        ?.groups?.body;
 
     expect(rule).toContain("font-family: ui-monospace");
     expect(rule).toContain("padding: 0.75rem 1rem;");
     expect(rule).toContain("background:");
     expect(rule).toContain("border: 1px solid");
     expect(rule).toContain("overflow-x: auto;");
-    expect(css).not.toMatch(/\[data-be-code-block\].*(?:\.token|language-)/);
+    expect(css).not.toMatch(/\[data-geul-code-block\].*(?:\.token|language-)/);
   });
 
   it("CodeBlock language overlay의 최대 높이에 padding과 border를 포함한다", () => {
@@ -160,11 +160,11 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).not.toContain("@layer");
   });
 
-  it("data-be-* DOM attribute 셀렉터는 이름을 바꾸지 않는다(core/model 공유 계약, 이번 SCSS 전환 범위 밖)", () => {
+  it("data-geul-* DOM attribute 셀렉터는 이름을 바꾸지 않는다(core/model 공유 계약, 이번 SCSS 전환 범위 밖)", () => {
     const css = compileCss();
 
-    expect(css).toContain('table[data-be-header-rows="1"]');
-    expect(css).toContain('table[data-be-header-columns="1"]');
+    expect(css).toContain('table[data-geul-header-rows="1"]');
+    expect(css).toContain('table[data-geul-header-columns="1"]');
   });
 
   it("Chrome 75가 지원하지 않는 @container 컨테이너 쿼리를 사용하지 않는다(ADR 0008)", () => {

@@ -99,7 +99,7 @@ test("Caption을 추가하면 표시되고 undo 1회로 복원된다 @core", asy
 }) => {
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
-  const caption = editable.locator("[data-be-media-caption]");
+  const caption = editable.locator("[data-geul-media-caption]");
   await expect(caption).toHaveCount(0);
 
   await page.getByRole("button", { name: "Edit caption" }).click();
@@ -181,15 +181,15 @@ test("Preview를 끄면 img가 a 링크로 바뀌고 undo 1회로 복원된다 @
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
   // 문서에는 트리거였던 빈 문단·미디어 블록·trailing 문단 3개가 모두
-  // `[data-be-block-id]`를 갖는다(모든 block-level 노드의 공통 속성) —
+  // `[data-geul-block-id]`를 갖는다(모든 block-level 노드의 공통 속성) —
   // `.first()`는 미디어 블록이 아니라 그 앞 빈 문단을 집을 수 있다(실측).
   // toggle 이후 `img`가 사라져 `filter({ has: img })`로도 더는 못 좁히므로,
   // img가 아직 있는 지금 실제 blockId 값을 읽어 안정된 셀렉터로 고정한다.
   const mediaBlockId = await editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") })
-    .getAttribute("data-be-block-id");
-  const wrapper = editable.locator(`[data-be-block-id="${mediaBlockId}"]`);
+    .getAttribute("data-geul-block-id");
+  const wrapper = editable.locator(`[data-geul-block-id="${mediaBlockId}"]`);
 
   await page.getByRole("button", { name: "Preview" }).click();
 
@@ -255,7 +255,7 @@ test("showPreview:false가 Save/Load JSON round-trip 이후에도 유지된다 @
   await page.getByRole("button", { name: "Load JSON" }).click();
 
   await expect(editable.locator("img")).toHaveCount(0);
-  const restoredLink = editable.locator("[data-be-block-id] a");
+  const restoredLink = editable.locator("[data-geul-block-id] a");
   await expect(restoredLink).toHaveAttribute(
     "href",
     "https://example.com/dir/photo.png",
@@ -338,7 +338,7 @@ test("정렬 값이 Save/Load JSON round-trip 이후에도 유지된다(Issue #1
   // extension.ts 주석) 이미지를 다시 선택해 toolbar aria-pressed로 복원
   // 여부를 확인한다.
   const wrapper = editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") });
   await wrapper.click();
   await expect(
@@ -360,7 +360,7 @@ test("file 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-
   await page.keyboard.press("Escape");
 
   const wrapper = editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ has: page.locator("a") });
   await wrapper.click();
   await expect(
@@ -384,7 +384,7 @@ test("audio 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED
   await page.keyboard.press("Escape");
 
   const wrapper = editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ has: page.locator("audio") });
   await wrapper.click();
   await expect(

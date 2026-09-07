@@ -34,7 +34,7 @@ describe("CodeBlock importer와 production core 왕복", () => {
   it("HTML import 결과를 createEditor와 replaceDocument가 보정 없이 보존하고 HTML로 왕복한다", () => {
     const imported = importedDocument(
       importHtml(
-        '<pre data-be-block-id="html-code"><code data-language="unknown">line 1\n\tline 2</code></pre>',
+        '<pre data-geul-block-id="html-code"><code data-language="unknown">line 1\n\tline 2</code></pre>',
       ),
     );
     const expected = {

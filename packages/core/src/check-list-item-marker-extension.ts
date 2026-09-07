@@ -18,8 +18,8 @@ const createCheckMarkerElement = (
   onToggle: () => void,
 ): HTMLElement => {
   const marker = globalThis.document.createElement("span");
-  marker.setAttribute("data-be-check-marker", "");
-  marker.setAttribute("data-be-checked", String(checked));
+  marker.setAttribute("data-geul-check-marker", "");
+  marker.setAttribute("data-geul-checked", String(checked));
   marker.setAttribute("role", "checkbox");
   marker.setAttribute("aria-checked", String(checked));
   marker.contentEditable = "false";

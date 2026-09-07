@@ -233,14 +233,14 @@ describe("컨트롤러 표 fixture 계약", () => {
       // 3x2를 쓴다. 행 우선과 열 우선의 구분 자체는 2x2로도 되지만, 정사각은
       // rows와 columns 인자가 뒤바뀌어도 같은 모양이라 그 오류를 못 잡는다
       // (실측: 인자를 맞바꾸면 3x2에서는 지고 2x2에서는 통과한다).
-      // 셀 id는 tableCell의 cellId 속성이 data-be-cell-id로 렌더된다.
+      // 셀 id는 tableCell의 cellId 속성이 data-geul-cell-id로 렌더된다.
       const { editor, cellIds } = editorWithTable(3, 2);
       const { editable } = mountTiptapEditor(editor);
 
       const renderedByRow = Array.from(editable.querySelectorAll("tr")).map(
         (row) =>
           Array.from(row.querySelectorAll("td")).map((cell) =>
-            cell.getAttribute("data-be-cell-id"),
+            cell.getAttribute("data-geul-cell-id"),
           ),
       );
 

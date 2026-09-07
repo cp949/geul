@@ -305,7 +305,7 @@ test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한�
   const table = await insertTable(page, editable);
 
   await table.locator("tr").first().locator("td").first().hover();
-  const resizeHandle = page.locator("[data-be-table-resize-handle]").first();
+  const resizeHandle = page.locator("[data-geul-table-resize-handle]").first();
   await expect(resizeHandle).toBeVisible();
   const handleBox = await resizeHandle.boundingBox();
   if (handleBox === null) throw new Error("Bounding box was not available");
@@ -336,7 +336,7 @@ test("Escape로 리사이즈를 취소하면 너비가 원래대로 복원된다
   const table = await insertTable(page, editable);
 
   await table.locator("tr").first().locator("td").first().hover();
-  const resizeHandle = page.locator("[data-be-table-resize-handle]").first();
+  const resizeHandle = page.locator("[data-geul-table-resize-handle]").first();
   const handleBox = await resizeHandle.boundingBox();
   if (handleBox === null) throw new Error("Bounding box was not available");
 
@@ -361,7 +361,7 @@ test("열 너비가 저장 JSON에 보존되고 로드 후 복원된다", async 
   const table = await insertTable(page, editable);
 
   await table.locator("tr").first().locator("td").first().hover();
-  const resizeHandle = page.locator("[data-be-table-resize-handle]").first();
+  const resizeHandle = page.locator("[data-geul-table-resize-handle]").first();
   const handleBox = await resizeHandle.boundingBox();
   if (handleBox === null) throw new Error("Bounding box was not available");
 
@@ -564,15 +564,15 @@ test("최상위 표 hover 시 Indent 버튼이 앞 형제의 자식으로 표를
 
   await expect(
     editable.locator(
-      '[data-be-block-id="before"] > [data-be-block-group] > [data-be-block-id="table-1"]',
+      '[data-geul-block-id="before"] > [data-geul-block-group] > [data-geul-block-id="table-1"]',
     ),
   ).toHaveCount(1);
 
   await page.keyboard.press("Control+z");
 
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
   await expect(
-    editable.locator(':scope > [data-be-block-id="table-1"]'),
+    editable.locator(':scope > [data-geul-block-id="table-1"]'),
   ).toHaveCount(1);
 });
 
@@ -597,7 +597,7 @@ test("다른 블록의 자식인 표 hover 시 Outdent 버튼이 표를 형제�
 
   await expect(
     editable.locator(
-      '[data-be-block-id="toggle-1"] > [data-be-block-group] > [data-be-block-id="table-1"]',
+      '[data-geul-block-id="toggle-1"] > [data-geul-block-group] > [data-geul-block-id="table-1"]',
     ),
   ).toHaveCount(1);
 
@@ -617,15 +617,15 @@ test("다른 블록의 자식인 표 hover 시 Outdent 버튼이 표를 형제�
   await outdentButton.click();
 
   await expect(
-    editable.locator(':scope > [data-be-block-id="table-1"]'),
+    editable.locator(':scope > [data-geul-block-id="table-1"]'),
   ).toHaveCount(1);
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
 
   await page.keyboard.press("Control+z");
 
   await expect(
     editable.locator(
-      '[data-be-block-id="toggle-1"] > [data-be-block-group] > [data-be-block-id="table-1"]',
+      '[data-geul-block-id="toggle-1"] > [data-geul-block-group] > [data-geul-block-id="table-1"]',
     ),
   ).toHaveCount(1);
 });

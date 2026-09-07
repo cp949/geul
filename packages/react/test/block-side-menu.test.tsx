@@ -114,7 +114,7 @@ describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
     }
   });
 
-  it("메뉴 안(data-be-block-menu)을 클릭하면 닫히지 않는다", () => {
+  it("메뉴 안(data-geul-block-menu)을 클릭하면 닫히지 않는다", () => {
     openBlockMenu();
 
     const menu = screen.getByRole("menu", { name: "Block menu" });
@@ -198,10 +198,10 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     }
     const blocks = rendered.restubGeometry();
     const codeBlock = blocks.find(
-      (block) => block.getAttribute("data-be-block-id") === "code-source",
+      (block) => block.getAttribute("data-geul-block-id") === "code-source",
     );
     const nestedList = blocks.find(
-      (block) => block.getAttribute("data-be-block-id") === "nested-list",
+      (block) => block.getAttribute("data-geul-block-id") === "nested-list",
     );
     if (codeBlock === undefined || nestedList === undefined) {
       throw new Error("top-level·nested block 요소를 찾지 못했다");
@@ -598,7 +598,7 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: 35 });
 
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).not.toBeNull();
 
     fireEvent.pointerUp(handle, { pointerId: 1 });
@@ -640,7 +640,7 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
 
     const blocks = rendered.restubGeometry();
     const block1 = blocks.find(
-      (block) => block.getAttribute("data-be-block-id") === "block-1",
+      (block) => block.getAttribute("data-geul-block-id") === "block-1",
     );
     if (block1 === undefined) throw new Error("block-1 요소를 찾지 못했다");
 
@@ -673,7 +673,7 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     }
     const blocks = rendered.restubGeometry();
     const block3 = blocks.find(
-      (block) => block.getAttribute("data-be-block-id") === "block-3",
+      (block) => block.getAttribute("data-geul-block-id") === "block-3",
     );
     if (block3 === undefined) throw new Error("block-3 요소를 찾지 못했다");
 
@@ -764,7 +764,7 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: 65 });
 
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).toBeNull();
 
     fireEvent.pointerUp(handle, { pointerId: 1 });
@@ -812,10 +812,10 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
 
     const blocks = rendered.restubGeometry();
     const parentElement = blocks.find(
-      (block) => block.getAttribute("data-be-block-id") === "p",
+      (block) => block.getAttribute("data-geul-block-id") === "p",
     );
     const c1Element = blocks.find(
-      (block) => block.getAttribute("data-be-block-id") === "c1",
+      (block) => block.getAttribute("data-geul-block-id") === "c1",
     );
     if (parentElement === undefined || c1Element === undefined) {
       throw new Error("p·c1 요소를 찾지 못했다");
@@ -946,7 +946,7 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: 2 });
 
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).toBeNull();
 
     fireEvent.pointerUp(handle, { pointerId: 1 });

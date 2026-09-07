@@ -27,7 +27,7 @@ const importDocument = (html: string): Document => {
 const buildNestedListHtml = (levels: number): string => {
   let html = "";
   for (let level = levels; level >= 1; level -= 1) {
-    html = `<ul><li data-be-block-id="list-${level}">item-${level}${html}</li></ul>`;
+    html = `<ul><li data-geul-block-id="list-${level}">item-${level}${html}</li></ul>`;
   }
   return html;
 };
@@ -73,9 +73,9 @@ const measureListTree = (
 describe("HTML 목록 기본 의미", () => {
   it("li가 ID와 content를 소유하고 별도 ol의 명시·기본 시작점을 첫 번호 항목에 보존한다", () => {
     const document = importDocument(
-      '<ul><li data-be-block-id="bullet"><p data-be-block-id="inner">글머리</p></li></ul>' +
-        '<ol start="7"><li data-be-block-id="number-7">일곱</li><li data-be-block-id="number-8">여덟</li></ol>' +
-        '<ol><li data-be-block-id="number-default">기본</li></ol>',
+      '<ul><li data-geul-block-id="bullet"><p data-geul-block-id="inner">글머리</p></li></ul>' +
+        '<ol start="7"><li data-geul-block-id="number-7">일곱</li><li data-geul-block-id="number-8">여덟</li></ol>' +
+        '<ol><li data-geul-block-id="number-default">기본</li></ol>',
     );
 
     expect(document.blocks).toEqual([
@@ -106,17 +106,17 @@ describe("HTML 목록 기본 의미", () => {
 
   it("별도 기본 ol은 인접 번호 목록만 1로 재시작하고 root·nested sibling 경계에서 왕복한다", () => {
     const html =
-      '<ol><li data-be-block-id="first">문서 첫 목록</li></ol>' +
-      '<p data-be-block-id="root-break">루트 경계</p>' +
-      '<ol start="4"><li data-be-block-id="root-4">루트 넷</li></ol>' +
-      '<ol><li data-be-block-id="root-1">루트 하나</li><li data-be-block-id="root-2">루트 둘</li></ol>' +
-      '<ul><li data-be-block-id="root-bullet">루트 글머리</li></ul>' +
-      '<ol><li data-be-block-id="root-default">글머리 뒤 기본</li></ol>' +
-      '<ul><li data-be-block-id="bullet">글머리' +
-      '<ol start="6"><li data-be-block-id="nested-6">중첩 여섯</li></ol>' +
-      '<ol><li data-be-block-id="nested-1">중첩 하나</li></ol>' +
-      '<p data-be-block-id="nested-break">중첩 경계</p>' +
-      '<ol><li data-be-block-id="nested-default">중첩 기본</li></ol>' +
+      '<ol><li data-geul-block-id="first">문서 첫 목록</li></ol>' +
+      '<p data-geul-block-id="root-break">루트 경계</p>' +
+      '<ol start="4"><li data-geul-block-id="root-4">루트 넷</li></ol>' +
+      '<ol><li data-geul-block-id="root-1">루트 하나</li><li data-geul-block-id="root-2">루트 둘</li></ol>' +
+      '<ul><li data-geul-block-id="root-bullet">루트 글머리</li></ul>' +
+      '<ol><li data-geul-block-id="root-default">글머리 뒤 기본</li></ol>' +
+      '<ul><li data-geul-block-id="bullet">글머리' +
+      '<ol start="6"><li data-geul-block-id="nested-6">중첩 여섯</li></ol>' +
+      '<ol><li data-geul-block-id="nested-1">중첩 하나</li></ol>' +
+      '<p data-geul-block-id="nested-break">중첩 경계</p>' +
+      '<ol><li data-geul-block-id="nested-default">중첩 기본</li></ol>' +
       "</li></ul>";
     const document = importDocument(html);
 
@@ -193,7 +193,7 @@ describe("HTML 목록 기본 의미", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toContain(
-      '<ol start="4"><li data-be-block-id="root-4">루트 넷</li></ol><ol start="1"><li data-be-block-id="root-1">루트 하나</li><li data-be-block-id="root-2">루트 둘</li></ol>',
+      '<ol start="4"><li data-geul-block-id="root-4">루트 넷</li></ol><ol start="1"><li data-geul-block-id="root-1">루트 하나</li><li data-geul-block-id="root-2">루트 둘</li></ol>',
     );
     expect(importHtml(exported.value)).toMatchObject({
       ok: true,
@@ -203,8 +203,8 @@ describe("HTML 목록 기본 의미", () => {
 
   it("같은 ol의 direct 비-li 블록이 번호 항목 사이를 끊으면 후속 항목에 실제 HTML 서수를 명시한다", () => {
     const document = importDocument(
-      '<ol start="4"><li data-be-block-id="a">넷</li><p data-be-block-id="break">경계</p><li data-be-block-id="b">다섯</li></ol>' +
-        '<ol start="8"><li data-be-block-id="c">여덟</li><ul><li data-be-block-id="nested">중첩 글머리</li></ul><li data-be-block-id="d">아홉</li><li data-be-block-id="e">열</li></ol>',
+      '<ol start="4"><li data-geul-block-id="a">넷</li><p data-geul-block-id="break">경계</p><li data-geul-block-id="b">다섯</li></ol>' +
+        '<ol start="8"><li data-geul-block-id="c">여덟</li><ul><li data-geul-block-id="nested">중첩 글머리</li></ul><li data-geul-block-id="d">아홉</li><li data-geul-block-id="e">열</li></ol>',
     );
 
     expect(document.blocks).toEqual([
@@ -248,13 +248,13 @@ describe("HTML 목록 기본 의미", () => {
 
   it("인접 별도 ol의 비십진 start는 경고를 유지하고 기본 1 restart를 보존한다", () => {
     const result = importHtml(
-      '<ol start="4"><li data-be-block-id="a">넷</li></ol>' +
-        '<ol start="nope"><li data-be-block-id="b">하나</li></ol>' +
-        '<ol start="1.5"><li data-be-block-id="c">다시 하나</li></ol>' +
-        '<ol start=" "><li data-be-block-id="d">공백 뒤 하나</li></ol>' +
-        '<ol start="0x10"><li data-be-block-id="e">16진수 뒤 하나</li></ol>' +
-        '<ol start="+7"><li data-be-block-id="f">부호 있는 칠</li></ol>' +
-        '<ol start="007"><li data-be-block-id="g">앞자리 영 칠</li></ol>',
+      '<ol start="4"><li data-geul-block-id="a">넷</li></ol>' +
+        '<ol start="nope"><li data-geul-block-id="b">하나</li></ol>' +
+        '<ol start="1.5"><li data-geul-block-id="c">다시 하나</li></ol>' +
+        '<ol start=" "><li data-geul-block-id="d">공백 뒤 하나</li></ol>' +
+        '<ol start="0x10"><li data-geul-block-id="e">16진수 뒤 하나</li></ol>' +
+        '<ol start="+7"><li data-geul-block-id="f">부호 있는 칠</li></ol>' +
+        '<ol start="007"><li data-geul-block-id="g">앞자리 영 칠</li></ol>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -330,7 +330,7 @@ describe("HTML 목록 기본 의미", () => {
   it("제거될 template의 numeric 속성이 뒤의 유효 십진 ol과 잘못 대응되지 않는다", () => {
     const result = importHtml(
       '<template><ol start="0x10"><li>숨김</li></ol></template>' +
-        '<ol start="16"><li data-be-block-id="visible">표시</li></ol>',
+        '<ol start="16"><li data-geul-block-id="visible">표시</li></ol>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -353,7 +353,7 @@ describe("HTML 목록 기본 의미", () => {
   it("table의 implied·foster 구조 뒤 유효 십진 ol에 raw numeric 속성을 정확히 대응한다", () => {
     const result = importHtml(
       '앞<table><tr><td rowspan="0x10">셀</td></tr></table>' +
-        '<ol start="16"><li data-be-block-id="after-table">표 뒤</li></ol>',
+        '<ol start="16"><li data-geul-block-id="after-table">표 뒤</li></ol>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -370,14 +370,14 @@ describe("HTML 목록 기본 의미", () => {
 
   it("혼합 중첩 목록과 목록 항목의 모든 지원 블록 children이 계층·순서·ID를 보존한다", () => {
     const document = importDocument(`
-      <ul><li data-be-block-id="root">부모
-        <p data-be-block-id="paragraph">문단</p>
-        <h2 data-be-block-id="heading">제목</h2>
-        <blockquote data-be-block-id="quote"><p>인용</p></blockquote>
-        <hr data-be-block-id="divider">
-        <table data-be-block-id="table"><colgroup><col data-be-column-id="column" width="160"></colgroup><tbody><tr data-be-row-id="row"><td data-be-cell-id="cell" data-be-column-id="column">셀</td></tr></tbody></table>
-        <pre data-be-block-id="code"><code>코드</code></pre>
-        <ol start="4"><li data-be-block-id="nested">자식 번호</li></ol>
+      <ul><li data-geul-block-id="root">부모
+        <p data-geul-block-id="paragraph">문단</p>
+        <h2 data-geul-block-id="heading">제목</h2>
+        <blockquote data-geul-block-id="quote"><p>인용</p></blockquote>
+        <hr data-geul-block-id="divider">
+        <table data-geul-block-id="table"><colgroup><col data-geul-column-id="column" width="160"></colgroup><tbody><tr data-geul-row-id="row"><td data-geul-cell-id="cell" data-geul-column-id="column">셀</td></tr></tbody></table>
+        <pre data-geul-block-id="code"><code>코드</code></pre>
+        <ol start="4"><li data-geul-block-id="nested">자식 번호</li></ol>
       </li></ul>
     `);
 
@@ -433,7 +433,7 @@ describe("HTML 목록 기본 의미", () => {
 describe("HTML 목록 보안과 깊이 경계", () => {
   it("목록 의미로 변환되지 않는 li ID와 ol start는 속성 제거 경고를 유지한다", () => {
     const standaloneItem = importHtml(
-      '<li data-be-block-id="stable">독립 항목</li>',
+      '<li data-geul-block-id="stable">독립 항목</li>',
     );
     expect(standaloneItem.ok).toBe(true);
     if (!standaloneItem.ok) throw new Error(standaloneItem.error.message);
@@ -448,7 +448,7 @@ describe("HTML 목록 보안과 깊이 경계", () => {
       expect.objectContaining({
         kind: "UNSAFE_ATTRIBUTE_REMOVED",
         element: "li",
-        attribute: "dataBeBlockId",
+        attribute: "dataGeulBlockId",
       }),
     ]);
 
@@ -473,7 +473,7 @@ describe("HTML 목록 보안과 깊이 경계", () => {
 
   it("raw 목록 subtree의 unsafe 요소·속성·URL을 semantic content나 children으로 복원하지 않는다", () => {
     const result = importHtml(
-      '<ul><li data-be-block-id="safe" onclick="attack()">안전<script><ul><li data-be-block-id="evil">악성</li></ul></script><a href="javascript:attack()">링크</a></li></ul>',
+      '<ul><li data-geul-block-id="safe" onclick="attack()">안전<script><ul><li data-geul-block-id="evil">악성</li></ul></script><a href="javascript:attack()">링크</a></li></ul>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);

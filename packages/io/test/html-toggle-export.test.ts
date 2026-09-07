@@ -1,7 +1,7 @@
 /**
  * 토글 제목·토글 목록의 exportHtml 산출 형상을 고정한다(로드맵 D4,
- * RD-005-DELTA-01.md "착수 전 결정"). `<details data-be-toggleable="true"
- * open? data-be-collapsed?>` + `<summary>` + 선택적 `<div data-be-children>`.
+ * RD-005-DELTA-01.md "착수 전 결정"). `<details data-geul-toggleable="true"
+ * open? data-geul-collapsed?>` + `<summary>` + 선택적 `<div data-geul-children>`.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -31,11 +31,11 @@ describe("토글 제목 exportHtml 형상", () => {
       ],
     });
     expect(html).toBe(
-      '<details data-be-block-id="h-1" data-be-toggleable="true" open><summary><h2 data-be-block-id="h-1">제목</h2></summary></details>',
+      '<details data-geul-block-id="h-1" data-geul-toggleable="true" open><summary><h2 data-geul-block-id="h-1">제목</h2></summary></details>',
     );
   });
 
-  it('collapsed: true는 open이 빠지고 data-be-collapsed="true"가 붙는다', () => {
+  it('collapsed: true는 open이 빠지고 data-geul-collapsed="true"가 붙는다', () => {
     const html = exportOk({
       formatVersion: 1,
       revision: 0,
@@ -51,11 +51,11 @@ describe("토글 제목 exportHtml 형상", () => {
       ],
     });
     expect(html).toBe(
-      '<details data-be-block-id="h-1" data-be-toggleable="true" data-be-collapsed="true"><summary><h2 data-be-block-id="h-1">제목</h2></summary></details>',
+      '<details data-geul-block-id="h-1" data-geul-toggleable="true" data-geul-collapsed="true"><summary><h2 data-geul-block-id="h-1">제목</h2></summary></details>',
     );
   });
 
-  it('collapsed: false(명시)는 open과 data-be-collapsed="false"가 함께 붙는다', () => {
+  it('collapsed: false(명시)는 open과 data-geul-collapsed="false"가 함께 붙는다', () => {
     const html = exportOk({
       formatVersion: 1,
       revision: 0,
@@ -71,11 +71,11 @@ describe("토글 제목 exportHtml 형상", () => {
       ],
     });
     expect(html).toBe(
-      '<details data-be-block-id="h-1" data-be-toggleable="true" data-be-collapsed="false" open><summary><h2 data-be-block-id="h-1">제목</h2></summary></details>',
+      '<details data-geul-block-id="h-1" data-geul-toggleable="true" data-geul-collapsed="false" open><summary><h2 data-geul-block-id="h-1">제목</h2></summary></details>',
     );
   });
 
-  it("children이 있으면 <summary> 다음에 data-be-children 컨테이너가 온다", () => {
+  it("children이 있으면 <summary> 다음에 data-geul-children 컨테이너가 온다", () => {
     const html = exportOk({
       formatVersion: 1,
       revision: 0,
@@ -93,7 +93,7 @@ describe("토글 제목 exportHtml 형상", () => {
       ],
     });
     expect(html).toBe(
-      '<details data-be-block-id="h-1" data-be-toggleable="true" open><summary><h2 data-be-block-id="h-1">부모</h2></summary><div data-be-children="1"><p data-be-block-id="p-1">자식</p></div></details>',
+      '<details data-geul-block-id="h-1" data-geul-toggleable="true" open><summary><h2 data-geul-block-id="h-1">부모</h2></summary><div data-geul-children="1"><p data-geul-block-id="p-1">자식</p></div></details>',
     );
   });
 });
@@ -108,11 +108,11 @@ describe("토글 목록 exportHtml 형상", () => {
       ],
     });
     expect(html).toBe(
-      '<details data-be-block-id="t-1" data-be-toggleable="true" open><summary data-be-block-id="t-1">항목</summary></details>',
+      '<details data-geul-block-id="t-1" data-geul-toggleable="true" open><summary data-geul-block-id="t-1">항목</summary></details>',
     );
   });
 
-  it("children이 있으면 <summary> 다음에 data-be-children 컨테이너가 온다", () => {
+  it("children이 있으면 <summary> 다음에 data-geul-children 컨테이너가 온다", () => {
     const html = exportOk({
       formatVersion: 1,
       revision: 0,
@@ -129,7 +129,7 @@ describe("토글 목록 exportHtml 형상", () => {
       ],
     });
     expect(html).toBe(
-      '<details data-be-block-id="t-1" data-be-toggleable="true" data-be-collapsed="true"><summary data-be-block-id="t-1">부모</summary><div data-be-children="1"><p data-be-block-id="p-1">자식</p></div></details>',
+      '<details data-geul-block-id="t-1" data-geul-toggleable="true" data-geul-collapsed="true"><summary data-geul-block-id="t-1">부모</summary><div data-geul-children="1"><p data-geul-block-id="p-1">자식</p></div></details>',
     );
   });
 });

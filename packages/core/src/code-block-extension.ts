@@ -24,7 +24,7 @@ export const CodeBlockExtension = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       "pre",
-      mergeAttributes(HTMLAttributes, { "data-be-code-block": "" }),
+      mergeAttributes(HTMLAttributes, { "data-geul-code-block": "" }),
       ["code", 0],
     ];
   },

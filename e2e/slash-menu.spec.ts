@@ -79,12 +79,11 @@ test("글머리 목록 항목을 클릭하면 실제 목록으로 바꾸고 편�
   await menu.getByRole("option", { name: /Bulleted List/ }).click();
 
   await expect(menu).toHaveCount(0);
-  const listItem = editable.locator("[data-be-list-marker]").first();
-  await expect(listItem).toHaveAttribute("data-be-list-marker", "•");
-  await expect(listItem.locator("[data-be-bullet-list-item]")).toHaveAttribute(
-    "data-placeholder",
-    "List item",
-  );
+  const listItem = editable.locator("[data-geul-list-marker]").first();
+  await expect(listItem).toHaveAttribute("data-geul-list-marker", "•");
+  await expect(
+    listItem.locator("[data-geul-bullet-list-item]"),
+  ).toHaveAttribute("data-placeholder", "List item");
   await expect(editable).toBeFocused();
 
   await page.keyboard.type("첫 목록");
@@ -104,16 +103,16 @@ test("체크 목록 항목을 Slash로 만들고 마커 클릭으로 checked를 
   await menu.getByRole("option", { name: /Check List/ }).click();
 
   await expect(menu).toHaveCount(0);
-  const listItem = editable.locator("[data-be-check-list-item]").first();
+  const listItem = editable.locator("[data-geul-check-list-item]").first();
   await expect(editable).toBeFocused();
 
   await page.keyboard.type("할 일");
   await expect(listItem).toContainText("할 일");
 
-  const marker = listItem.locator("[data-be-check-marker]");
-  await expect(marker).toHaveAttribute("data-be-checked", "false");
+  const marker = listItem.locator("[data-geul-check-marker]");
+  await expect(marker).toHaveAttribute("data-geul-checked", "false");
   await marker.click();
-  await expect(marker).toHaveAttribute("data-be-checked", "true");
+  await expect(marker).toHaveAttribute("data-geul-checked", "true");
 });
 
 test("토글 목록 항목을 Slash로 만들고 마커 클릭으로 collapsed를 토글한다 (RD-004 DELTA-04)", async ({
@@ -129,16 +128,16 @@ test("토글 목록 항목을 Slash로 만들고 마커 클릭으로 collapsed�
   await menu.getByRole("option", { name: /Toggle List/ }).click();
 
   await expect(menu).toHaveCount(0);
-  const listItem = editable.locator("[data-be-toggle-list-item]").first();
+  const listItem = editable.locator("[data-geul-toggle-list-item]").first();
   await expect(editable).toBeFocused();
 
   await page.keyboard.type("할 일");
   await expect(listItem).toContainText("할 일");
 
-  const marker = listItem.locator("[data-be-toggle-marker]");
-  await expect(marker).toHaveAttribute("data-be-collapsed", "false");
+  const marker = listItem.locator("[data-geul-toggle-marker]");
+  await expect(marker).toHaveAttribute("data-geul-collapsed", "false");
   await marker.click();
-  await expect(marker).toHaveAttribute("data-be-collapsed", "true");
+  await expect(marker).toHaveAttribute("data-geul-collapsed", "true");
 });
 
 test("토글 제목을 Slash로 만들고 마커 클릭으로 collapsed를 토글한다 (RD-004 DELTA-04)", async ({
@@ -160,10 +159,10 @@ test("토글 제목을 Slash로 만들고 마커 클릭으로 collapsed를 토�
   await page.keyboard.type("토글 제목");
   await expect(heading).toContainText("토글 제목");
 
-  const marker = heading.locator("[data-be-toggle-marker]");
-  await expect(marker).toHaveAttribute("data-be-collapsed", "false");
+  const marker = heading.locator("[data-geul-toggle-marker]");
+  await expect(marker).toHaveAttribute("data-geul-collapsed", "false");
   await marker.click();
-  await expect(marker).toHaveAttribute("data-be-collapsed", "true");
+  await expect(marker).toHaveAttribute("data-geul-collapsed", "true");
 });
 
 test("Escape로 메뉴를 닫으면 블록은 그대로 둔다", async ({ page }) => {
@@ -283,7 +282,7 @@ test("문서 하단에서 슬래시 메뉴를 열어도 Audio 항목까지 뷰�
   // 빈 미디어 블록은 콘텐츠 없는 div라 화면 크기가 0이다(RD-002 core 렌더
   // 전용, react 빈 상태 CSS는 아직 없다) — toBeVisible()은 0x0 요소를
   // "hidden"으로 판정하므로 존재 여부만 본다.
-  await expect(editable.locator('[data-be-media-empty="audio"]')).toHaveCount(
+  await expect(editable.locator('[data-geul-media-empty="audio"]')).toHaveCount(
     1,
   );
 });
@@ -302,7 +301,7 @@ test("스크롤·뷰포트 변경 후 슬래시 메뉴가 caret을 따르고 마
     .fill(JSON.stringify({ formatVersion: 1, revision: 0, blocks }));
   await page.getByRole("button", { name: "Load JSON" }).click();
 
-  const target = editable.locator('[data-be-block-id="slash-15"] > p');
+  const target = editable.locator('[data-geul-block-id="slash-15"] > p');
   await target.evaluate((element) =>
     element.scrollIntoView({ block: "center" }),
   );
@@ -329,7 +328,7 @@ test("스크롤·뷰포트 변경 후 슬래시 메뉴가 caret을 따르고 마
   await menu.getByRole("option", { name: /Numbered List/ }).click();
 
   await expect(
-    editable.locator("[data-be-list-marker]").first(),
-  ).toHaveAttribute("data-be-list-marker", "1.");
+    editable.locator("[data-geul-list-marker]").first(),
+  ).toHaveAttribute("data-geul-list-marker", "1.");
   await expect(editable).toBeFocused();
 });

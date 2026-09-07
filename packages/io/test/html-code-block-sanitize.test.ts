@@ -20,7 +20,7 @@ function importWarningKinds(source: string): string[] {
 describe("HTML CodeBlock 입력 정제", () => {
   it("pre와 code의 CodeBlock metadata를 보존하고 미지원 속성은 경고한다", () => {
     const result = importHtml(
-      '<pre data-be-block-id="code-1" data-language="ts" class="language-ts" data-unknown="x"><code data-be-block-id="wrong" data-language="typescript" class="language-typescript" data-extra="y">const x = 1;</code></pre>',
+      '<pre data-geul-block-id="code-1" data-language="ts" class="language-ts" data-unknown="x"><code data-geul-block-id="wrong" data-language="typescript" class="language-typescript" data-extra="y">const x = 1;</code></pre>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -43,14 +43,14 @@ describe("HTML CodeBlock 입력 정제", () => {
       expect.objectContaining({
         kind: "UNSAFE_ATTRIBUTE_REMOVED",
         element: "pre",
-        attribute: "dataBeBlockId",
+        attribute: "dataGeulBlockId",
       }),
     );
     expect(result.value.warnings).toContainEqual(
       expect.objectContaining({
         kind: "UNSAFE_ATTRIBUTE_REMOVED",
         element: "code",
-        attribute: "dataBeBlockId",
+        attribute: "dataGeulBlockId",
       }),
     );
     expect(result.value.warnings).not.toContainEqual(

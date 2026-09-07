@@ -182,7 +182,7 @@ describe("Table/Row/Cell 노드 스키마", () => {
 });
 
 describe("표 셀 정렬 렌더링", () => {
-  it("align attr을 data-be-align과 인라인 text-align style로 렌더한다", () => {
+  it("align attr을 data-geul-align과 인라인 text-align style로 렌더한다", () => {
     const schema = emptyDocSchema();
     const cellType = schema.nodes.tableCell;
     if (cellType === undefined) throw new Error("tableCell node missing");
@@ -192,7 +192,7 @@ describe("표 셀 정렬 렌더링", () => {
       node,
     ) as HTMLElement;
 
-    expect(dom.getAttribute("data-be-align")).toBe("right");
+    expect(dom.getAttribute("data-geul-align")).toBe("right");
     expect(dom.style.textAlign).toBe("right");
   });
 });

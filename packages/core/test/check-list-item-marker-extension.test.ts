@@ -35,7 +35,7 @@ const checkListItemBlock = (
 /** blockId의 checkListItem marker 위젯 DOM을 찾는다. */
 const marker = (editable: HTMLElement, blockId: string): HTMLElement => {
   const found = editable.querySelector<HTMLElement>(
-    `[data-be-block-id="${blockId}"] [data-be-check-marker]`,
+    `[data-geul-block-id="${blockId}"] [data-geul-check-marker]`,
   );
   if (found === null) throw new Error(`${blockId} marker 조회 실패`);
   return found;
@@ -49,7 +49,7 @@ const clickMarker = (element: HTMLElement, button = 0): void => {
 };
 
 describe("체크박스 클릭 UI(checkListItemMarker)", () => {
-  it("checked: false/true 각각 marker를 렌더링하고 data-be-checked·aria-checked가 실제 값과 일치한다", () => {
+  it("checked: false/true 각각 marker를 렌더링하고 data-geul-checked·aria-checked가 실제 값과 일치한다", () => {
     const { editable } = mounted(
       documentOf(
         checkListItemBlock("unchecked", "할 일", false),
@@ -58,12 +58,12 @@ describe("체크박스 클릭 UI(checkListItemMarker)", () => {
     );
 
     const uncheckedMarker = marker(editable, "unchecked");
-    expect(uncheckedMarker.getAttribute("data-be-checked")).toBe("false");
+    expect(uncheckedMarker.getAttribute("data-geul-checked")).toBe("false");
     expect(uncheckedMarker.getAttribute("aria-checked")).toBe("false");
     expect(uncheckedMarker.getAttribute("role")).toBe("checkbox");
 
     const checkedMarker = marker(editable, "checked");
-    expect(checkedMarker.getAttribute("data-be-checked")).toBe("true");
+    expect(checkedMarker.getAttribute("data-geul-checked")).toBe("true");
     expect(checkedMarker.getAttribute("aria-checked")).toBe("true");
   });
 
@@ -72,7 +72,7 @@ describe("체크박스 클릭 UI(checkListItemMarker)", () => {
 
     expect(
       editable.querySelector(
-        `[data-be-block-id="para"] [data-be-check-marker]`,
+        `[data-geul-block-id="para"] [data-geul-check-marker]`,
       ),
     ).toBeNull();
   });

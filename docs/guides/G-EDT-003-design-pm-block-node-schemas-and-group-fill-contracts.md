@@ -16,7 +16,7 @@
 `table`·`divider`처럼 `blockContainer`로 감싸지 않고 직접 `group: "block"`에 참여하는 노드는 컨테이너가 제공하던 identity·DOM parse·명령 selection 계약을 직접 책임진다.
 
 - `blockId`는 삽입 명령과 model↔PM 변환기가 명시 배정한다. `BlockIdExtension`의 사후 배정 대상에 추가하지 않는다. 배정·중복 해소 경로를 둘로 만들지 않는다.
-- 자체 DOM은 `renderHTML`에서 `data-be-block-id`를 출력하되 `parseHTML`을 선언하지 않는다. 편집기 DOM을 다시 parse하면 id가 없거나 자기 복사로 중복된 id가 생긴다. 외부 HTML·clipboard 입력은 `io` 변환 경계가 별도로 소유한다.
+- 자체 DOM은 `renderHTML`에서 `data-geul-block-id`를 출력하되 `parseHTML`을 선언하지 않는다. 편집기 DOM을 다시 parse하면 id가 없거나 자기 복사로 중복된 id가 생긴다. 외부 HTML·clipboard 입력은 `io` 변환 경계가 별도로 소유한다.
 - 인접 Backspace/Delete는 `Selection.findFrom`만 사용하지 않는다. 이 탐색은 atom을 건너뛴다. 시각적으로 인접한 리프를 찾고 atom이면 해당 노드 위치에 `NodeSelection.create`를 직접 둔다. `selectNodeBackward`/`selectNodeForward`는 형제 인접에서는 쓸 수 있지만 중첩 위치에서 조상 컨테이너를 선택하므로 직접 위치를 계산한다. 표는 atom이 아니므로 table-cell 조상 판정을 별도로 유지한다.
 - 공개 block command 표면을 전수 대조한다. `afterBlockId` 삽입 명령, 복제·삭제·이동, 종류 변경, indent/outdent, caret API마다 `거절` 또는 `지원 + selection` 계약을 완료 조건으로 둔다. `nodeSize - 2` 같은 산술은 `blockContainer` 내부 text selection 전제이므로 비포장 노드에 재사용하지 않는다.
 

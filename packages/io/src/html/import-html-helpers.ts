@@ -20,7 +20,7 @@ import {
   inlineContentFromNodes,
 } from "./inline-content.js";
 
-// TextBlockProps(RD-001) 3필드를 data-be-*에서 읽는다. 표 셀 import의
+// TextBlockProps(RD-001) 3필드를 data-geul-*에서 읽는다. 표 셀 import의
 // textColor/backgroundColor/align 읽기(import-html-table.ts의 modelRows
 // 구성부)와 같은 전략 — 정규형 검증은 하지 않고 원시 문자열을 그대로
 // 통과시킨다. 최종 검증은 importHtml 끝의 parseDocument 한 곳(G-CNV-001)이
@@ -30,9 +30,9 @@ export const textBlockPropsFromElement = (
 ): Partial<
   Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">
 > => {
-  const textColor = propertyString(element, "dataBeTextColor");
-  const backgroundColor = propertyString(element, "dataBeBackgroundColor");
-  const textAlignment = propertyString(element, "dataBeTextAlignment") as
+  const textColor = propertyString(element, "dataGeulTextColor");
+  const backgroundColor = propertyString(element, "dataGeulBackgroundColor");
+  const textAlignment = propertyString(element, "dataGeulTextAlignment") as
     TextBlockProps["textAlignment"] | undefined;
   return {
     ...(textColor === undefined ? {} : { textColor }),
@@ -83,10 +83,10 @@ export const propertyHeaderFlag = (
 export const createDefaultIdFactory = (root: HtmlRoot): IdFactory => {
   const usedIds = new Set<string>();
   const idProperties = new Set([
-    "dataBeBlockId",
-    "dataBeColumnId",
-    "dataBeRowId",
-    "dataBeCellId",
+    "dataGeulBlockId",
+    "dataGeulColumnId",
+    "dataGeulRowId",
+    "dataGeulCellId",
   ]);
 
   const collectIds = (nodes: HtmlNode[]): void => {

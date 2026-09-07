@@ -25,9 +25,9 @@ const integerPropertyNameByAttributeName = new Map<string, string>([
   ["rowspan", "rowSpan"],
   ["colspan", "colSpan"],
   ["width", "width"],
-  ["data-be-width", "dataBeWidth"],
-  ["data-be-header-rows", "dataBeHeaderRows"],
-  ["data-be-header-columns", "dataBeHeaderColumns"],
+  ["data-geul-width", "dataGeulWidth"],
+  ["data-geul-header-rows", "dataGeulHeaderRows"],
+  ["data-geul-header-columns", "dataGeulHeaderColumns"],
 ]);
 
 export type ParsedHtmlFragment = {

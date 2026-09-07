@@ -26,7 +26,7 @@ describe("인라인 색상 mark HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<p data-be-block-id="paragraph-1"><span style="color:#FF0000">red</span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="color:#FF0000">red</span></p>',
     );
   });
 
@@ -52,7 +52,7 @@ describe("인라인 색상 mark HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<p data-be-block-id="paragraph-1"><span style="background-color:#FFFF00">highlighted</span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="background-color:#FFFF00">highlighted</span></p>',
     );
   });
 
@@ -81,7 +81,7 @@ describe("인라인 색상 mark HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<p data-be-block-id="paragraph-1"><span style="color:#112233"><span style="background-color:#AABBCC">both</span></span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="color:#112233"><span style="background-color:#AABBCC">both</span></span></p>',
     );
   });
 
@@ -131,7 +131,7 @@ describe("인라인 색상 mark HTML export", () => {
 describe("인라인 색상 mark HTML import", () => {
   it("span style=color를 textColor mark로 읽는다", () => {
     const result = importHtml(
-      '<p data-be-block-id="paragraph-1"><span style="color:#FF0000">red</span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="color:#FF0000">red</span></p>',
     );
     expect(result).toEqual({
       ok: true,
@@ -159,7 +159,7 @@ describe("인라인 색상 mark HTML import", () => {
 
   it("한 span에 color·background-color가 동시에 있으면 두 mark 모두 보존한다(외부 HTML 대비)", () => {
     const result = importHtml(
-      '<p data-be-block-id="paragraph-1"><span style="color:#112233;background-color:#AABBCC">both</span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="color:#112233;background-color:#AABBCC">both</span></p>',
     );
     expect(result).toEqual({
       ok: true,
@@ -190,7 +190,7 @@ describe("인라인 색상 mark HTML import", () => {
 
   it("소문자 hex 색상 값은 대문자로 정규화해 mark를 만든다(parseStyleDeclarations 재사용, 표 셀 색상과 동일 동작)", () => {
     const result = importHtml(
-      '<p data-be-block-id="paragraph-1"><span style="color:#ff0000">plain</span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="color:#ff0000">plain</span></p>',
     );
     expect(result).toEqual({
       ok: true,
@@ -218,7 +218,7 @@ describe("인라인 색상 mark HTML import", () => {
 
   it("named color·hsl() 같은 지원 밖 값도 mark 없이 무시한다(문서 전체를 거절하지 않음)", () => {
     const result = importHtml(
-      '<p data-be-block-id="paragraph-1"><span style="color:red">named</span></p>',
+      '<p data-geul-block-id="paragraph-1"><span style="color:red">named</span></p>',
     );
     expect(result).toEqual({
       ok: true,

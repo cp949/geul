@@ -1,6 +1,6 @@
 /**
  * HTML export/import의 h4~h6·hr 매핑(DELTA-06, spec §7.1)을 검증한다.
- * heading level 4~6은 <h4>~<h6>로, divider는 <hr data-be-block-id>로
+ * heading level 4~6은 <h4>~<h6>로, divider는 <hr data-geul-block-id>로
  * 왕복하고, 예전에 sanitize가 두 태그를 unwrap해 내던 거짓
  * SAFE_BLOCK_DOWNGRADED 경고는 더 이상 나지 않는다. 표 셀 안의 <hr>·<h4>가
  * 블록이 아니라 셀 인라인 텍스트로 남는 기존 경계는 회귀로 고정한다.
@@ -51,7 +51,7 @@ describe("h4-h6 HTML 왕복", () => {
         headingBlock("heading-5", 5, "다섯"),
         headingBlock("heading-6", 6, "여섯"),
       ]),
-      '<h4 data-be-block-id="heading-4">넷</h4><h5 data-be-block-id="heading-5">다섯</h5><h6 data-be-block-id="heading-6">여섯</h6>',
+      '<h4 data-geul-block-id="heading-4">넷</h4><h5 data-geul-block-id="heading-5">다섯</h5><h6 data-geul-block-id="heading-6">여섯</h6>',
     );
   });
 
@@ -93,20 +93,20 @@ describe("h4-h6 HTML 왕복", () => {
           paragraphBlock("paragraph-1", "문단"),
         ]),
       ]),
-      '<div data-be-block-id="heading-5"><h5 data-be-block-id="heading-5">부모</h5><div data-be-children="1"><h6 data-be-block-id="heading-6">자식</h6><p data-be-block-id="paragraph-1">문단</p></div></div>',
+      '<div data-geul-block-id="heading-5"><h5 data-geul-block-id="heading-5">부모</h5><div data-geul-children="1"><h6 data-geul-block-id="heading-6">자식</h6><p data-geul-block-id="paragraph-1">문단</p></div></div>',
     );
   });
 });
 
 describe("hr ↔ divider", () => {
-  it("divider가 <hr data-be-block-id>로 export되고 re-import에서 id·위치를 보존한다", () => {
+  it("divider가 <hr data-geul-block-id>로 export되고 re-import에서 id·위치를 보존한다", () => {
     expectRoundTrip(
       buildDocument([
         paragraphBlock("paragraph-1", "앞"),
         dividerBlock("divider-1"),
         paragraphBlock("paragraph-2", "뒤"),
       ]),
-      '<p data-be-block-id="paragraph-1">앞</p><hr data-be-block-id="divider-1"><p data-be-block-id="paragraph-2">뒤</p>',
+      '<p data-geul-block-id="paragraph-1">앞</p><hr data-geul-block-id="divider-1"><p data-geul-block-id="paragraph-2">뒤</p>',
     );
   });
 
@@ -144,7 +144,7 @@ describe("hr ↔ divider", () => {
           paragraphBlock("paragraph-2", "자식"),
         ]),
       ]),
-      '<div data-be-block-id="paragraph-1"><p data-be-block-id="paragraph-1">부모</p><div data-be-children="1"><hr data-be-block-id="divider-child"><p data-be-block-id="paragraph-2">자식</p></div></div>',
+      '<div data-geul-block-id="paragraph-1"><p data-geul-block-id="paragraph-1">부모</p><div data-geul-children="1"><hr data-geul-block-id="divider-child"><p data-geul-block-id="paragraph-2">자식</p></div></div>',
     );
   });
 });

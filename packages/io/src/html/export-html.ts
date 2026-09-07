@@ -49,20 +49,20 @@ export type ExportHtmlOptions = {
 };
 
 // TextBlockProps(RD-001)를 가진 7개 블록 타입(paragraph/heading/quote/목록
-// 4종)이 공유하는 data-be-* 매핑이다. 표 셀 색상·정렬(cellNode 아래)과 같은
+// 4종)이 공유하는 data-geul-* 매핑이다. 표 셀 색상·정렬(cellNode 아래)과 같은
 // 패턴이지만 필드명이 align이 아니라 textAlignment라 별도 속성명을 쓴다.
 const textBlockPropsAttributes = (
   block: TextBlockProps,
 ): HtmlElementNode["properties"] => ({
   ...(block.textColor === undefined
     ? {}
-    : { dataBeTextColor: block.textColor }),
+    : { dataGeulTextColor: block.textColor }),
   ...(block.backgroundColor === undefined
     ? {}
-    : { dataBeBackgroundColor: block.backgroundColor }),
+    : { dataGeulBackgroundColor: block.backgroundColor }),
   ...(block.textAlignment === undefined
     ? {}
-    : { dataBeTextAlignment: block.textAlignment }),
+    : { dataGeulTextAlignment: block.textAlignment }),
 });
 
 // 4종 leaf 미디어 블록 공통 판별 타입(spec §3.1) — url/name/caption/
@@ -74,31 +74,31 @@ type MediaBlock = Extract<
 >;
 
 // outer 요소(figure 있으면 figure, 없으면 bare 시각 태그/빈 div)가 항상 싣는
-// data-be-*(RD-001-DELTA-01.md "설계" 키 순서 고정). dataBeMediaType은
+// data-geul-*(RD-001-DELTA-01.md "설계" 키 순서 고정). dataGeulMediaType은
 // own-format 마커 겸 showPreview:false 강등 시 타입 판별자를 겸한다(RD-001.md
 // "결정" — file과 강등된 image/video/audio가 똑같이 <a>로 나오므로 태그명만
-// 으로 구분할 수 없다). dataBeName은 caption이 alt를 덮어써도(image) name이
+// 으로 구분할 수 없다). dataGeulName은 caption이 alt를 덮어써도(image) name이
 // 사라지지 않도록 4종 공통 단일 진실 공급원으로 별도로 싣는다 — alt·anchor
 // 텍스트는 표현용일 뿐 권위 있는 값이 아니다.
 const mediaDataAttributes = (
   block: MediaBlock,
 ): HtmlElementNode["properties"] => ({
-  dataBeBlockId: block.id,
-  dataBeMediaType: block.type,
-  ...(block.name === undefined ? {} : { dataBeName: block.name }),
+  dataGeulBlockId: block.id,
+  dataGeulMediaType: block.type,
+  ...(block.name === undefined ? {} : { dataGeulName: block.name }),
   ...(block.backgroundColor === undefined
     ? {}
-    : { dataBeBackgroundColor: block.backgroundColor }),
+    : { dataGeulBackgroundColor: block.backgroundColor }),
   ...(block.type !== "file" && block.showPreview !== undefined
-    ? { dataBeShowPreview: String(block.showPreview) }
+    ? { dataGeulShowPreview: String(block.showPreview) }
     : {}),
   ...((block.type === "image" || block.type === "video") &&
   block.previewWidth !== undefined
-    ? { dataBePreviewWidth: String(block.previewWidth) }
+    ? { dataGeulPreviewWidth: String(block.previewWidth) }
     : {}),
   ...((block.type === "image" || block.type === "video") &&
   block.textAlignment !== undefined
-    ? { dataBeTextAlignment: block.textAlignment }
+    ? { dataGeulTextAlignment: block.textAlignment }
     : {}),
 });
 
@@ -112,7 +112,7 @@ const mediaVisualTagName = (type: "image" | "video" | "audio"): string =>
 // mediaAnchorChildren 선례 재사용, 슬라이스5 RD-002.md "결정" 대응) —
 // io는 별도 계약이지만(ADR-0002) 같은 질문에 같은 답을 반복하지 않는다.
 // extraAttrs가 비어 있지 않으면 이 태그 자신이 outer(figure로 감싸지 않음)
-// 라는 뜻이다 — figure로 감쌀 때는 빈 객체를 넘긴다(data-be-*는 figure가
+// 라는 뜻이다 — figure로 감쌀 때는 빈 객체를 넘긴다(data-geul-*는 figure가
 // 갖는다).
 const mediaAnchorNode = (
   url: string,
@@ -151,7 +151,7 @@ const mediaVisualNode = (
 };
 
 // 4종 미디어 블록의 HTML export 전체(spec §7.1). url 없는 빈 블록은
-// 크래시 없이 data-be-*만 실은 <div>로 보존한다(문서에 실제로 존재할 수
+// 크래시 없이 data-geul-*만 실은 <div>로 보존한다(문서에 실제로 존재할 수
 // 있는 상태 — model이 url을 optional로 둔다, 시각 콘텐츠가 없을 뿐 name·
 // caption 등은 여전히 round-trip 대상이다).
 const mediaBlockNode = (block: MediaBlock): HtmlElementNode => {
@@ -194,21 +194,21 @@ const cellNode = (
     table.headerColumns === 1 &&
     cell.columnId === firstColumnId;
   const properties: HtmlElementNode["properties"] = {
-    dataBeCellId: cell.id,
-    dataBeColumnId: cell.columnId,
+    dataGeulCellId: cell.id,
+    dataGeulColumnId: cell.columnId,
     rowSpan: cell.rowSpan,
     colSpan: cell.columnSpan,
   };
 
   if (isRowHeader) properties.scope = "row";
   if (cell.textColor !== undefined) {
-    properties.dataBeTextColor = cell.textColor;
+    properties.dataGeulTextColor = cell.textColor;
   }
   if (cell.backgroundColor !== undefined) {
-    properties.dataBeBackgroundColor = cell.backgroundColor;
+    properties.dataGeulBackgroundColor = cell.backgroundColor;
   }
   if (cell.align !== undefined) {
-    properties.dataBeAlign = cell.align;
+    properties.dataGeulAlign = cell.align;
   }
 
   return htmlElement(
@@ -235,7 +235,7 @@ const rowNode = (table: TableBlock, rowIndex: number): HtmlElementNode => {
 
   return htmlElement(
     "tr",
-    { dataBeRowId: row.id },
+    { dataGeulRowId: row.id },
     cells.map((cell) => cellNode(table, rowIndex, cell)),
   );
 };
@@ -249,8 +249,8 @@ const tableNode = (table: TableBlock): HtmlElementNode => {
         htmlElement(
           "col",
           {
-            dataBeColumnId: column.id,
-            dataBeWidth: String(column.width),
+            dataGeulColumnId: column.id,
+            dataGeulWidth: String(column.width),
           },
           [],
         ),
@@ -281,9 +281,9 @@ const tableNode = (table: TableBlock): HtmlElementNode => {
   return htmlElement(
     "table",
     {
-      dataBeBlockId: table.id,
-      dataBeHeaderRows: String(table.headerRows),
-      dataBeHeaderColumns: String(table.headerColumns),
+      dataGeulBlockId: table.id,
+      dataGeulHeaderRows: String(table.headerRows),
+      dataGeulHeaderColumns: String(table.headerColumns),
     },
     children,
   );
@@ -306,7 +306,7 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   // inlineContentToTiptap과 동일 패턴).
   const source = block.content[0] as
     Extract<InlineContentItem, { text: string }> | undefined;
-  return htmlElement("pre", { dataBeBlockId: block.id }, [
+  return htmlElement("pre", { dataGeulBlockId: block.id }, [
     htmlElement("code", codeProperties, [
       { type: "text", value: source?.text ?? "" },
     ]),
@@ -317,9 +317,9 @@ const listItemNode = (block: ListItemBlock): HtmlElementNode =>
   htmlElement(
     "li",
     {
-      dataBeBlockId: block.id,
+      dataGeulBlockId: block.id,
       ...(block.type === "checkListItem"
-        ? { dataBeChecked: String(block.checked) }
+        ? { dataGeulChecked: String(block.checked) }
         : {}),
       ...textBlockPropsAttributes(block),
     },
@@ -337,8 +337,8 @@ const listItemNode = (block: ListItemBlock): HtmlElementNode =>
 // RD-005-DELTA-01.md "착수 전 결정"). collapsed는 3상태(undefined/true/false —
 // PM 반전 명령이 항상 boolean으로 고정하므로 세 상태 모두 실제로 나타난다)라
 // open(2상태뿐인 HTML boolean 속성, 브라우저 렌더링용 파생값)만으로는
-// undefined와 false를 구분 못 한다 — data-be-collapsed(정의된 경우만 출력,
-// data-be-checked와 동일한 문자열 패턴)를 round-trip의 단일 진실 공급원으로
+// undefined와 false를 구분 못 한다 — data-geul-collapsed(정의된 경우만 출력,
+// data-geul-checked와 동일한 문자열 패턴)를 round-trip의 단일 진실 공급원으로
 // 삼는다. summary는 호출자가 만든다 — heading은 기존 <hN>을 감싸고,
 // toggleListItem은 own id·content를 <summary> 자신이 직접 갖는다(<li>가
 // 아니라 여기서 처음 id가 등장하므로).
@@ -351,17 +351,17 @@ const detailsNode = (
   const detailsChildren: HtmlElementContent[] = [summary];
   if (children !== undefined && children.length > 0) {
     detailsChildren.push(
-      htmlElement("div", { dataBeChildren: "1" }, knownBlockNodes(children)),
+      htmlElement("div", { dataGeulChildren: "1" }, knownBlockNodes(children)),
     );
   }
   return htmlElement(
     "details",
     {
-      dataBeBlockId: id,
-      dataBeToggleable: "true",
+      dataGeulBlockId: id,
+      dataGeulToggleable: "true",
       ...(collapsed === undefined
         ? {}
-        : { dataBeCollapsed: String(collapsed) }),
+        : { dataGeulCollapsed: String(collapsed) }),
       open: collapsed !== true,
     },
     detailsChildren,
@@ -369,7 +369,7 @@ const detailsNode = (
 };
 
 // numberedListItem만 <ol>이다 — bulletListItem·checkListItem은 둘 다
-// 번호가 없는 <ul>이다(로드맵 D3, checkListItem은 data-be-checked로만
+// 번호가 없는 <ul>이다(로드맵 D3, checkListItem은 data-geul-checked로만
 // 구분한다).
 const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
   const first = blocks[0];
@@ -415,18 +415,18 @@ const knownBlockNodes = (blocks: Block[]): HtmlElementContent[] =>
   blockNodes(blocks) as HtmlElementContent[];
 
 // children이 있는 paragraph/heading은 자기 자신(children 없이, blockId
-// 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-be-block-id>
+// 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-geul-block-id>
 // wrapper 하나로 묶는다(트랙-2 라운드4 확정, 후보 A). <p>는 HTML5상 <div>를
 // 자식으로 가질 수 없어(https://html.spec.whatwg.org/#the-p-element,
 // "Content model: Phrasing content") 이 wrapper 없이는 children을 <p> 밑에
 // 직접 낼 수 없다. children이 없는 블록은 지금처럼 <p>/<hN>을 그대로
 // 낸다(diff 최소, 기존 문서 출력 불변 — 완료 조건 5). wrapper 자신은
-// dataBeBlockId를 그 블록과 같은 값으로 다시 얹는다(중복이지만 안쪽
+// dataGeulBlockId를 그 블록과 같은 값으로 다시 얹는다(중복이지만 안쪽
 // <p>/<hN>과 동일하므로 정보 손실이 없고, 사람이 HTML만 보고도 어느 블록의
-// wrapper인지 바로 알 수 있다). 두 번째 컨테이너는 dataBeChildren
+// wrapper인지 바로 알 수 있다). 두 번째 컨테이너는 dataGeulChildren
 // 마커만으로 "자기 콘텐츠"와 "children 묶음"을 구분한다 — import-html.ts의
 // findChildrenWrapper가 정확히 이 두 자리(자식 요소 2개: 첫째 p/h1~h6,
-// 둘째 dataBeChildren 있는 div)만 wrapper로 인식한다. divider는 children을
+// 둘째 dataGeulChildren 있는 div)만 wrapper로 인식한다. divider는 children을
 // 가질 수 없는 리프라(spec §4.2) 이 wrapper의 자기 콘텐츠 자리에 오지 않는다.
 // quote는 이 wrapper를 쓰지 않는다 — blockquote가 flow content를 담을 수
 // 있어 자기 콘텐츠 <p>와 children 컨테이너를 blockquote 안에 직접 둔다
@@ -445,16 +445,16 @@ const blockNode = (block: Block): HtmlElementNode => {
       block.collapsed,
       htmlElement(
         "summary",
-        { dataBeBlockId: block.id, ...textBlockPropsAttributes(block) },
+        { dataGeulBlockId: block.id, ...textBlockPropsAttributes(block) },
         inlineContentToNodes(block.content),
       ),
       block.children,
     );
   }
-  // divider → <hr data-be-block-id>(spec §7.1). 콘텐츠·children 없는 void
-  // 요소 하나다 — import-html.ts의 hr 세그먼트가 dataBeBlockId를 되읽는다.
+  // divider → <hr data-geul-block-id>(spec §7.1). 콘텐츠·children 없는 void
+  // 요소 하나다 — import-html.ts의 hr 세그먼트가 dataGeulBlockId를 되읽는다.
   if (block.type === "divider") {
-    return htmlElement("hr", { dataBeBlockId: block.id }, []);
+    return htmlElement("hr", { dataGeulBlockId: block.id }, []);
   }
   // 4종 미디어 블록(file/image/video/audio, spec §7.1) — RD-001-DELTA-01.
   if (
@@ -465,11 +465,11 @@ const blockNode = (block: Block): HtmlElementNode => {
   ) {
     return mediaBlockNode(block);
   }
-  // quote → <blockquote data-be-block-id><p>content</p>[<div
-  // data-be-children>children</div>]</blockquote>(spec §7.1 — children은
+  // quote → <blockquote data-geul-block-id><p>content</p>[<div
+  // data-geul-children>children</div>]</blockquote>(spec §7.1 — children은
   // blockquote 안에 중첩 HTML로, DELTA-06a). blockquote 자신이 id 소유자라
   // 안쪽 <p>에는 id를 얹지 않고, children 컨테이너는 paragraph/heading
-  // wrapper와 같은 dataBeChildren 마커를 쓴다. content가 비어도 <p></p>를
+  // wrapper와 같은 dataGeulChildren 마커를 쓴다. content가 비어도 <p></p>를
   // 낸다 — import-html.ts의 D6 규칙("첫 <p>가 content")의 역변환 대칭이다:
   // 빈 <p>를 생략하면 re-import가 첫 children 문단을 content로 승격한다.
   if (block.type === "quote") {
@@ -480,14 +480,14 @@ const blockNode = (block: Block): HtmlElementNode => {
       quoteChildren.push(
         htmlElement(
           "div",
-          { dataBeChildren: "1" },
+          { dataGeulChildren: "1" },
           knownBlockNodes(block.children),
         ),
       );
     }
     return htmlElement(
       "blockquote",
-      { dataBeBlockId: block.id, ...textBlockPropsAttributes(block) },
+      { dataGeulBlockId: block.id, ...textBlockPropsAttributes(block) },
       quoteChildren,
     );
   }
@@ -500,7 +500,7 @@ const blockNode = (block: Block): HtmlElementNode => {
     block.type === "paragraph" ? "p" : `h${(block as HeadingBlock).level}`;
   const ownNode = htmlElement(
     tagName,
-    { dataBeBlockId: block.id, ...textBlockPropsAttributes(block) },
+    { dataGeulBlockId: block.id, ...textBlockPropsAttributes(block) },
     inlineContentToNodes(block.content),
   );
 
@@ -523,11 +523,11 @@ const blockNode = (block: Block): HtmlElementNode => {
   // 자식 블록은 table을 포함해 blockNode를 그대로 재귀 호출한다(완료 조건
   // 6) — table 분기(tableNode)는 이 함수 맨 위에서 이미 처리하므로 별도
   // 분기를 추가하지 않는다.
-  return htmlElement("div", { dataBeBlockId: block.id }, [
+  return htmlElement("div", { dataGeulBlockId: block.id }, [
     ownNode,
     htmlElement(
       "div",
-      { dataBeChildren: "1" },
+      { dataGeulChildren: "1" },
       knownBlockNodes(block.children),
     ),
   ]);

@@ -1,5 +1,5 @@
 /**
- * data-be-columns 속성의 왕복 계약(serializeTableColumns ⇄ parseTableColumns).
+ * data-geul-columns 속성의 왕복 계약(serializeTableColumns ⇄ parseTableColumns).
  * 이 속성은 클립보드 HTML 등 외부에서 올 수 있으므로, 정상 왕복과 함께
  * 손상된 값을 Result 실패로 접는 경계를 고정한다.
  */
@@ -120,7 +120,7 @@ describe("표 열 목록 속성 파싱", () => {
     );
 
     if (parsed.ok) throw new Error("실패를 기대했다");
-    expect(parsed.error.message).toContain("data-be-columns[1]");
+    expect(parsed.error.message).toContain("data-geul-columns[1]");
   });
 
   it("id와 width 밖의 속성은 읽으면서 버린다", () => {

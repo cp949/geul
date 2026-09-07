@@ -33,8 +33,8 @@ const CELL_FORMAT_MENU_OFFSET = 32;
 // useDismissOnOutsideOrEscape allow-list. table-handles.tsx와 같은 이유로
 // 모듈 스코프 상수로 둔다.
 const CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-be-cell-format-menu]",
-  "[data-be-cell-format-trigger]",
+  "[data-geul-cell-format-menu]",
+  "[data-geul-cell-format-trigger]",
 ] as const;
 
 type ToolbarState = {
@@ -69,7 +69,7 @@ const cellSelectionBounds = (
   const cellElement = findElementByAttribute(
     table,
     null,
-    "data-be-cell-id",
+    "data-geul-cell-id",
     soleCellId,
   );
   if (cellElement === null) return null;
@@ -194,7 +194,7 @@ export const TableSelectionToolbar = () => {
         )}
         <IconButton
           className={buttonClassName}
-          data-be-cell-format-trigger=""
+          data-geul-cell-format-trigger=""
           icon={formatIcon}
           label={formatLabel}
           onClick={() => {

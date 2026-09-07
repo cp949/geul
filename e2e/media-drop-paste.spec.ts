@@ -48,7 +48,7 @@ const dispatchDrop = (
 
 /**
  * 두 문단 블록("one"·"two")을 만들고 "two" 블록의 blockContainer
- * (`[data-be-block-id]`) 실측 rect를 반환한다. F2 판정(production
+ * (`[data-geul-block-id]`) 실측 rect를 반환한다. F2 판정(production
  * `resolveDropTarget`)이 좌표와 비교하는 대상이 이 blockContainer 자신의
  * rect이지 안쪽 `<p>`가 아니라서, 두 drop 시나리오가 이 helper를 공유한다.
  */
@@ -62,7 +62,7 @@ const setupTwoParagraphsAndTargetBox = async (
   await page.keyboard.type("two");
 
   const targetBlock = editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .filter({ hasText: "two" });
   await expect(targetBlock).toBeVisible();
   const box = await targetBlock.boundingBox();
@@ -82,7 +82,7 @@ test("drop 좌표가 대상 블록 rect 실측 위쪽 절반이면 그 블록 �
     clientY: box.y + 2,
   });
 
-  const blocks = editable.locator("[data-be-block-id]");
+  const blocks = editable.locator("[data-geul-block-id]");
   await expect(blocks).toHaveCount(3);
   // 순서: one → media(앞에 삽입) → two.
   await expect(blocks.nth(0)).toContainText("one");
@@ -108,7 +108,7 @@ test("drop 좌표가 대상 블록 rect 실측 아래쪽 절반이면 그 블록
   // media 블록이 마지막이 되면 TrailingBlockExtension이 빈 paragraph를
   // 하나 더 붙인다(atom 뒤에는 항상 캐럿을 둘 자리가 필요하다) — "위쪽"
   // 시나리오는 media 뒤에 "two"가 남아 이 append가 필요 없다.
-  const blocks = editable.locator("[data-be-block-id]");
+  const blocks = editable.locator("[data-geul-block-id]");
   await expect(blocks).toHaveCount(4);
   // 순서: one → two → media(뒤에 삽입) → 빈 trailing paragraph.
   await expect(blocks.nth(0)).toContainText("one");

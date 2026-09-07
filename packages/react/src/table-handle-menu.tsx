@@ -92,7 +92,7 @@ export const TableHandleMenu = ({
     <div
       aria-label={isRow ? "Table row menu" : "Table column menu"}
       className="geul-menu-panel"
-      data-be-table-menu=""
+      data-geul-table-menu=""
       ref={menuRef}
       role="menu"
       style={style}

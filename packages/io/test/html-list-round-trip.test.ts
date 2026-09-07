@@ -65,13 +65,13 @@ describe("목록 HTML round-trip", () => {
     expect(exported).toEqual({
       ok: true,
       value:
-        '<ol start="7"><li data-be-block-id="n-1"><p>부모</p><p data-be-block-id="p-1">자식</p>' +
-        '<blockquote data-be-block-id="q-1"><p>인용</p></blockquote><hr data-be-block-id="d-1">' +
-        '<table data-be-block-id="t-1" data-be-header-rows="0" data-be-header-columns="0"><colgroup>' +
-        '<col data-be-column-id="col-1" data-be-width="160"></colgroup><tbody><tr data-be-row-id="row-1">' +
-        '<td data-be-cell-id="cell-1" data-be-column-id="col-1" rowspan="1" colspan="1">셀</td></tr></tbody></table>' +
-        '<pre data-be-block-id="c-1"><code>코드\n줄</code></pre>' +
-        '<ul><li data-be-block-id="b-1"><p>중첩</p><h2 data-be-block-id="h-1">깊이</h2></li></ul></li></ol>',
+        '<ol start="7"><li data-geul-block-id="n-1"><p>부모</p><p data-geul-block-id="p-1">자식</p>' +
+        '<blockquote data-geul-block-id="q-1"><p>인용</p></blockquote><hr data-geul-block-id="d-1">' +
+        '<table data-geul-block-id="t-1" data-geul-header-rows="0" data-geul-header-columns="0"><colgroup>' +
+        '<col data-geul-column-id="col-1" data-geul-width="160"></colgroup><tbody><tr data-geul-row-id="row-1">' +
+        '<td data-geul-cell-id="cell-1" data-geul-column-id="col-1" rowspan="1" colspan="1">셀</td></tr></tbody></table>' +
+        '<pre data-geul-block-id="c-1"><code>코드\n줄</code></pre>' +
+        '<ul><li data-geul-block-id="b-1"><p>중첩</p><h2 data-geul-block-id="h-1">깊이</h2></li></ul></li></ol>',
     });
     if (!exported.ok) return;
     expect(importHtml(exported.value)).toMatchObject({
@@ -90,7 +90,7 @@ describe("목록 HTML round-trip", () => {
     };
     expect(exportHtml(document)).toEqual({
       ok: true,
-      value: '<ol><li data-be-block-id="n-1">하나</li></ol>',
+      value: '<ol><li data-geul-block-id="n-1">하나</li></ol>',
     });
   });
 
@@ -113,7 +113,7 @@ describe("목록 HTML round-trip", () => {
     expect(exported).toEqual({
       ok: true,
       value:
-        '<ul><li data-be-block-id="empty"><p></p><p data-be-block-id="child">자식</p></li></ul>',
+        '<ul><li data-geul-block-id="empty"><p></p><p data-geul-block-id="child">자식</p></li></ul>',
     });
     if (!exported.ok) return;
     expect(importHtml(exported.value)).toMatchObject({
@@ -141,7 +141,7 @@ describe("목록 HTML round-trip", () => {
     expect(exported).toEqual({
       ok: true,
       value:
-        '<ol><li data-be-block-id="space"><p> </p><p data-be-block-id="child">자식</p></li></ol>',
+        '<ol><li data-geul-block-id="space"><p> </p><p data-geul-block-id="child">자식</p></li></ol>',
     });
     if (!exported.ok) return;
     expect(importHtml(exported.value)).toMatchObject({

@@ -59,7 +59,7 @@ const pressAndReadConsumption = async (
 
 /** blockContainer의 직접 목록 content locator를 찾는다. */
 const listContent = (editable: Locator, blockId: string): Locator =>
-  editable.locator(`[data-be-block-id="${blockId}"] > div`).first();
+  editable.locator(`[data-geul-block-id="${blockId}"] > div`).first();
 
 /** 키보드 구조 편집의 최소 번호 목록 fixture다. */
 const numberedDocument = () => ({
@@ -105,14 +105,14 @@ test("load된 목록은 명시·자동 marker와 빈 List item placeholder의 �
     ],
   });
 
-  const explicit = editable.locator('[data-be-block-id="numbered-7"]');
-  const automatic = editable.locator('[data-be-block-id="numbered-8"]');
-  const empty = editable.locator('[data-be-block-id="empty"]');
+  const explicit = editable.locator('[data-geul-block-id="numbered-7"]');
+  const automatic = editable.locator('[data-geul-block-id="numbered-8"]');
+  const empty = editable.locator('[data-geul-block-id="empty"]');
   const emptyContent = listContent(editable, "empty");
 
-  await expect(explicit).toHaveAttribute("data-be-list-marker", "7.");
-  await expect(automatic).toHaveAttribute("data-be-list-marker", "8.");
-  await expect(empty).toHaveAttribute("data-be-list-marker", "•");
+  await expect(explicit).toHaveAttribute("data-geul-list-marker", "7.");
+  await expect(automatic).toHaveAttribute("data-geul-list-marker", "8.");
+  await expect(empty).toHaveAttribute("data-geul-list-marker", "•");
   await expect(emptyContent).toHaveAttribute("data-placeholder", "List item");
 
   const style = await empty.evaluate((element) => {
@@ -155,8 +155,11 @@ test("최대 번호 marker는 컨테이너 안의 전용 track에 들어가 cont
     ],
   });
 
-  const container = editable.locator('[data-be-block-id="maximum"]');
-  await expect(container).toHaveAttribute("data-be-list-marker", "999999999.");
+  const container = editable.locator('[data-geul-block-id="maximum"]');
+  await expect(container).toHaveAttribute(
+    "data-geul-list-marker",
+    "999999999.",
+  );
 
   const geometry = await container.evaluate((element) => {
     const containerBox = element.getBoundingClientRect();
@@ -213,7 +216,7 @@ test("중첩 목록의 child marker와 content는 parent content보다 오른쪽
   });
 
   const parentContent = listContent(editable, "parent");
-  const childContainer = editable.locator('[data-be-block-id="child"]');
+  const childContainer = editable.locator('[data-geul-block-id="child"]');
   const childContent = listContent(editable, "child");
   const [parentBox, childContainerBox, childContentBox] = await Promise.all([
     parentContent.boundingBox(),
@@ -245,7 +248,7 @@ test("목록 중간 Enter는 native 폴스루 없이 소비되고 편집기 focu
   expect(await pressAndReadConsumption(page, "Enter")).toBe(true);
 
   await expect(editable).toBeFocused();
-  await expect(editable.locator("[data-be-list-marker]")).toHaveCount(3);
+  await expect(editable.locator("[data-geul-list-marker]")).toHaveCount(3);
 });
 
 test("목록 선두 Backspace와 끝 Delete join은 native 폴스루 없이 각각 소비된다", async ({
@@ -258,14 +261,14 @@ test("목록 선두 Backspace와 끝 Delete join은 native 폴스루 없이 각�
   await page.keyboard.press("Home");
   expect(await pressAndReadConsumption(page, "Backspace")).toBe(true);
   await expect(editable).toBeFocused();
-  await expect(editable.locator("[data-be-list-marker]")).toHaveCount(1);
+  await expect(editable.locator("[data-geul-list-marker]")).toHaveCount(1);
 
   await loadDocument(page, numberedDocument());
   await listContent(editable, "first").click();
   await page.keyboard.press("End");
   expect(await pressAndReadConsumption(page, "Delete")).toBe(true);
   await expect(editable).toBeFocused();
-  await expect(editable.locator("[data-be-list-marker]")).toHaveCount(1);
+  await expect(editable.locator("[data-geul-list-marker]")).toHaveCount(1);
 });
 
 test("빈 목록 Enter는 키를 소비하고 marker를 제거한 paragraph로 종료한다", async ({
@@ -284,8 +287,8 @@ test("빈 목록 Enter는 키를 소비하고 marker를 제거한 paragraph로 �
   await listContent(editable, "empty").click();
   expect(await pressAndReadConsumption(page, "Enter")).toBe(true);
 
-  const exited = editable.locator('[data-be-block-id="empty"]');
-  await expect(exited).not.toHaveAttribute("data-be-list-marker", /.+/);
+  const exited = editable.locator('[data-geul-block-id="empty"]');
+  await expect(exited).not.toHaveAttribute("data-geul-list-marker", /.+/);
   await expect(exited.locator("p")).toHaveCount(1);
   await expect(editable).toBeFocused();
 });
@@ -295,21 +298,21 @@ test("목록 Tab과 Shift+Tab은 순차 focus 이동을 억제하고 편집기 f
 }) => {
   const { editable } = await openDemo(page);
   await loadDocument(page, numberedDocument());
-  const second = editable.locator('[data-be-block-id="second"]');
+  const second = editable.locator('[data-geul-block-id="second"]');
 
   await listContent(editable, "second").click();
   expect(await pressAndReadConsumption(page, "Tab")).toBe(true);
   await expect(editable).toBeFocused();
-  await expect(second).toHaveAttribute("data-be-list-marker", "1.");
+  await expect(second).toHaveAttribute("data-geul-list-marker", "1.");
 
   expect(await pressAndReadConsumption(page, "Shift+Tab")).toBe(true);
   await expect(editable).toBeFocused();
-  await expect(second).toHaveAttribute("data-be-list-marker", "8.");
+  await expect(second).toHaveAttribute("data-geul-list-marker", "8.");
 });
 
 for (const [marker, type, contentAttribute, renderedMarker] of [
-  ["-", "bulletListItem", "data-be-bullet-list-item", "•"],
-  ["1.", "numberedListItem", "data-be-numbered-list-item", "1."],
+  ["-", "bulletListItem", "data-geul-bullet-list-item", "•"],
+  ["1.", "numberedListItem", "data-geul-numbered-list-item", "1."],
 ] as const) {
   test(`native ${marker} space 입력은 production editor에서 ${type} DOM으로 변환하고 focus를 유지한다`, async ({
     page,
@@ -324,11 +327,14 @@ for (const [marker, type, contentAttribute, renderedMarker] of [
       ],
     });
 
-    const target = editable.locator('[data-be-block-id="target"]');
+    const target = editable.locator('[data-geul-block-id="target"]');
     await target.locator("p").click();
     await page.keyboard.type(`${marker} `);
 
-    await expect(target).toHaveAttribute("data-be-list-marker", renderedMarker);
+    await expect(target).toHaveAttribute(
+      "data-geul-list-marker",
+      renderedMarker,
+    );
     await expect(target.locator(`[${contentAttribute}]`)).toHaveCount(1);
     await expect(editable).toBeFocused();
   });
@@ -347,11 +353,11 @@ test("native - 뒤 두 space는 첫 space에서 목록으로 변환하고 둘째
     ],
   });
 
-  const target = editable.locator('[data-be-block-id="target"]');
+  const target = editable.locator('[data-geul-block-id="target"]');
   await target.locator("p").click();
   await page.keyboard.type("-  ");
 
-  await expect(target).toHaveAttribute("data-be-list-marker", "•");
-  await expect(target.locator("[data-be-bullet-list-item]")).toHaveText(" ");
+  await expect(target).toHaveAttribute("data-geul-list-marker", "•");
+  await expect(target.locator("[data-geul-bullet-list-item]")).toHaveText(" ");
   await expect(editable).toBeFocused();
 });

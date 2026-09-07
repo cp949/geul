@@ -1,7 +1,7 @@
 /**
  * 4종 미디어 블록(file/image/video/audio)의 HTML inbound 의미를 검증한다
  * (spec §7.1). export-html.ts(RD-001-DELTA-01)가 낸 `<figure>`/`<img>`/
- * `<video>`/`<audio>`/`<a>` + `data-be-*`를 되읽어 원래 Document로 복원하는지,
+ * `<video>`/`<audio>`/`<a>` + `data-geul-*`를 되읽어 원래 Document로 복원하는지,
  * `<figure>` 중복 생성 방지 가드, own-format `<a>` 경계(마커 없는 외부 `<a>`는
  * link mark로 남음), 경고 정확성(G-CNV-002)을 다룬다. export는 DELTA-01,
  * round-trip 전체 조합·추가 회귀는 DELTA-03이 다룬다.
@@ -19,9 +19,9 @@ const documentOf = (block: Document["blocks"][number]): Document => ({
 
 describe("미디어 블록 HTML 가져오기", () => {
   describe("caption 없음 — bare 시각 태그에서 복원한다", () => {
-    it("file은 <a href>name</a> + data-be-*에서 FileBlock을 복원한다", () => {
+    it("file은 <a href>name</a> + data-geul-*에서 FileBlock을 복원한다", () => {
       const result = importHtml(
-        '<a href="https://example.com/doc.pdf" data-be-block-id="f-1" data-be-media-type="file" data-be-name="문서.pdf">문서.pdf</a>',
+        '<a href="https://example.com/doc.pdf" data-geul-block-id="f-1" data-geul-media-type="file" data-geul-name="문서.pdf">문서.pdf</a>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -36,9 +36,9 @@ describe("미디어 블록 HTML 가져오기", () => {
       expect(result.value.warnings).toEqual([]);
     });
 
-    it("image는 <img src alt data-be-*>에서 ImageBlock을 복원한다(alt는 읽지 않는다)", () => {
+    it("image는 <img src alt data-geul-*>에서 ImageBlock을 복원한다(alt는 읽지 않는다)", () => {
       const result = importHtml(
-        '<img src="https://example.com/a.png" alt="사진" data-be-block-id="i-1" data-be-media-type="image" data-be-name="사진">',
+        '<img src="https://example.com/a.png" alt="사진" data-geul-block-id="i-1" data-geul-media-type="image" data-geul-name="사진">',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -53,9 +53,9 @@ describe("미디어 블록 HTML 가져오기", () => {
       expect(result.value.warnings).toEqual([]);
     });
 
-    it("video는 <video src controls data-be-*>에서 VideoBlock을 복원한다", () => {
+    it("video는 <video src controls data-geul-*>에서 VideoBlock을 복원한다", () => {
       const result = importHtml(
-        '<video src="https://example.com/a.mp4" controls data-be-block-id="v-1" data-be-media-type="video" data-be-name="영상"></video>',
+        '<video src="https://example.com/a.mp4" controls data-geul-block-id="v-1" data-geul-media-type="video" data-geul-name="영상"></video>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -70,9 +70,9 @@ describe("미디어 블록 HTML 가져오기", () => {
       expect(result.value.warnings).toEqual([]);
     });
 
-    it("audio는 <audio src controls data-be-*>에서 AudioBlock을 복원한다", () => {
+    it("audio는 <audio src controls data-geul-*>에서 AudioBlock을 복원한다", () => {
       const result = importHtml(
-        '<audio src="https://example.com/a.mp3" controls data-be-block-id="au-1" data-be-media-type="audio" data-be-name="소리"></audio>',
+        '<audio src="https://example.com/a.mp3" controls data-geul-block-id="au-1" data-geul-media-type="audio" data-geul-name="소리"></audio>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -87,9 +87,9 @@ describe("미디어 블록 HTML 가져오기", () => {
       expect(result.value.warnings).toEqual([]);
     });
 
-    it("data-be-name이 없으면 name 없이 복원된다(file·image 둘 다)", () => {
+    it("data-geul-name이 없으면 name 없이 복원된다(file·image 둘 다)", () => {
       const fileResult = importHtml(
-        '<a href="https://example.com/x" data-be-block-id="f-2" data-be-media-type="file">https://example.com/x</a>',
+        '<a href="https://example.com/x" data-geul-block-id="f-2" data-geul-media-type="file">https://example.com/x</a>',
       );
       expect(fileResult.ok).toBe(true);
       if (!fileResult.ok) return;
@@ -98,7 +98,7 @@ describe("미디어 블록 HTML 가져오기", () => {
       );
 
       const imageResult = importHtml(
-        '<img src="https://example.com/y" alt="" data-be-block-id="i-2" data-be-media-type="image">',
+        '<img src="https://example.com/y" alt="" data-geul-block-id="i-2" data-geul-media-type="image">',
       );
       expect(imageResult.ok).toBe(true);
       if (!imageResult.ok) return;
@@ -109,9 +109,9 @@ describe("미디어 블록 HTML 가져오기", () => {
   });
 
   describe("caption 있음 — <figure>를 블록 1개로만 디코드한다(중복 생성 방지 가드)", () => {
-    it("image + caption + name: caption은 figcaption에서, name은 data-be-name에서 각각 복원한다(alt는 읽지 않는다)", () => {
+    it("image + caption + name: caption은 figcaption에서, name은 data-geul-name에서 각각 복원한다(alt는 읽지 않는다)", () => {
       const result = importHtml(
-        '<figure data-be-block-id="i-3" data-be-media-type="image" data-be-name="원본이름.png">' +
+        '<figure data-geul-block-id="i-3" data-geul-media-type="image" data-geul-name="원본이름.png">' +
           '<img src="https://example.com/a.png" alt="설명 캡션">' +
           "<figcaption>설명 캡션</figcaption></figure>",
       );
@@ -130,9 +130,9 @@ describe("미디어 블록 HTML 가져오기", () => {
       expect(result.value.warnings).toEqual([]);
     });
 
-    it("file + caption: <a>는 data-be-*가 없어도 figure의 data-be-*로 복원된다", () => {
+    it("file + caption: <a>는 data-geul-*가 없어도 figure의 data-geul-*로 복원된다", () => {
       const result = importHtml(
-        '<figure data-be-block-id="f-3" data-be-media-type="file" data-be-name="문서.pdf">' +
+        '<figure data-geul-block-id="f-3" data-geul-media-type="file" data-geul-name="문서.pdf">' +
           '<a href="https://example.com/doc.pdf">문서.pdf</a>' +
           "<figcaption>첨부 파일</figcaption></figure>",
       );
@@ -153,9 +153,9 @@ describe("미디어 블록 HTML 가져오기", () => {
   });
 
   describe("showPreview:false — <a>에서 강등 상태를 복원한다", () => {
-    it("image의 <a>+data-be-show-preview=false는 showPreview:false ImageBlock으로 복원된다", () => {
+    it("image의 <a>+data-geul-show-preview=false는 showPreview:false ImageBlock으로 복원된다", () => {
       const result = importHtml(
-        '<a href="https://example.com/a.png" data-be-block-id="i-4" data-be-media-type="image" data-be-name="사진" data-be-show-preview="false">사진</a>',
+        '<a href="https://example.com/a.png" data-geul-block-id="i-4" data-geul-media-type="image" data-geul-name="사진" data-geul-show-preview="false">사진</a>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -172,7 +172,7 @@ describe("미디어 블록 HTML 가져오기", () => {
 
     it("video의 figure+<a>+showPreview=false는 figure 안에서도 VideoBlock으로 복원된다", () => {
       const result = importHtml(
-        '<figure data-be-block-id="v-2" data-be-media-type="video" data-be-show-preview="false">' +
+        '<figure data-geul-block-id="v-2" data-geul-media-type="video" data-geul-show-preview="false">' +
           '<a href="https://example.com/a.mp4">https://example.com/a.mp4</a>' +
           "<figcaption>영상 설명</figcaption></figure>",
       );
@@ -192,7 +192,7 @@ describe("미디어 블록 HTML 가져오기", () => {
 
     it("audio의 <a>+showPreview=false도 AudioBlock으로 복원된다", () => {
       const result = importHtml(
-        '<a href="https://example.com/a.mp3" data-be-block-id="au-2" data-be-media-type="audio" data-be-show-preview="false">https://example.com/a.mp3</a>',
+        '<a href="https://example.com/a.mp3" data-geul-block-id="au-2" data-geul-media-type="audio" data-geul-show-preview="false">https://example.com/a.mp3</a>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -208,7 +208,7 @@ describe("미디어 블록 HTML 가져오기", () => {
 
     it("showPreview:true(명시)는 정상 시각 태그에서 그대로 복원된다", () => {
       const result = importHtml(
-        '<img src="https://example.com/a.png" alt="" data-be-block-id="i-5" data-be-media-type="image" data-be-show-preview="true">',
+        '<img src="https://example.com/a.png" alt="" data-geul-block-id="i-5" data-geul-media-type="image" data-geul-show-preview="true">',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -226,7 +226,7 @@ describe("미디어 블록 HTML 가져오기", () => {
   describe("타입별 속성 제약 — previewWidth/textAlignment는 image/video만 복원한다", () => {
     it("image의 previewWidth·textAlignment가 복원된다", () => {
       const result = importHtml(
-        '<img src="https://example.com/a.png" alt="" data-be-block-id="i-6" data-be-media-type="image" data-be-preview-width="320" data-be-text-alignment="center">',
+        '<img src="https://example.com/a.png" alt="" data-geul-block-id="i-6" data-geul-media-type="image" data-geul-preview-width="320" data-geul-text-alignment="center">',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -243,7 +243,7 @@ describe("미디어 블록 HTML 가져오기", () => {
 
     it("video의 previewWidth·textAlignment가 복원된다", () => {
       const result = importHtml(
-        '<video src="https://example.com/a.mp4" controls data-be-block-id="v-3" data-be-media-type="video" data-be-preview-width="480" data-be-text-alignment="right"></video>',
+        '<video src="https://example.com/a.mp4" controls data-geul-block-id="v-3" data-geul-media-type="video" data-geul-preview-width="480" data-geul-text-alignment="right"></video>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -260,7 +260,7 @@ describe("미디어 블록 HTML 가져오기", () => {
 
     it("audio는 showPreview만 복원되고 previewWidth/textAlignment 필드가 생기지 않는다", () => {
       const result = importHtml(
-        '<audio src="https://example.com/a.mp3" controls data-be-block-id="au-3" data-be-media-type="audio" data-be-show-preview="true"></audio>',
+        '<audio src="https://example.com/a.mp3" controls data-geul-block-id="au-3" data-geul-media-type="audio" data-geul-show-preview="true"></audio>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -279,26 +279,26 @@ describe("미디어 블록 HTML 가져오기", () => {
     it.each([
       [
         "file",
-        '<a href="https://example.com/x" data-be-block-id="f-4" data-be-media-type="file" data-be-background-color="#FF0000">https://example.com/x</a>',
+        '<a href="https://example.com/x" data-geul-block-id="f-4" data-geul-media-type="file" data-geul-background-color="#FF0000">https://example.com/x</a>',
         { id: "f-4", type: "file" as const, url: "https://example.com/x" },
       ],
       [
         "image",
-        '<img src="https://example.com/x" alt="" data-be-block-id="i-7" data-be-media-type="image" data-be-background-color="#FF0000">',
+        '<img src="https://example.com/x" alt="" data-geul-block-id="i-7" data-geul-media-type="image" data-geul-background-color="#FF0000">',
         { id: "i-7", type: "image" as const, url: "https://example.com/x" },
       ],
       [
         "video",
-        '<video src="https://example.com/x" controls data-be-block-id="v-4" data-be-media-type="video" data-be-background-color="#FF0000"></video>',
+        '<video src="https://example.com/x" controls data-geul-block-id="v-4" data-geul-media-type="video" data-geul-background-color="#FF0000"></video>',
         { id: "v-4", type: "video" as const, url: "https://example.com/x" },
       ],
       [
         "audio",
-        '<audio src="https://example.com/x" controls data-be-block-id="au-4" data-be-media-type="audio" data-be-background-color="#FF0000"></audio>',
+        '<audio src="https://example.com/x" controls data-geul-block-id="au-4" data-geul-media-type="audio" data-geul-background-color="#FF0000"></audio>',
         { id: "au-4", type: "audio" as const, url: "https://example.com/x" },
       ],
     ])(
-      "%s의 data-be-background-color가 backgroundColor로 복원된다",
+      "%s의 data-geul-background-color가 backgroundColor로 복원된다",
       (_label, html, block) => {
         const result = importHtml(html);
         expect(result.ok).toBe(true);
@@ -311,9 +311,9 @@ describe("미디어 블록 HTML 가져오기", () => {
   });
 
   describe("url 없는 빈 미디어 블록 — 크래시 없이 복원한다", () => {
-    it("caption 없는 빈 image는 <div data-be-block-id data-be-media-type>에서 복원된다", () => {
+    it("caption 없는 빈 image는 <div data-geul-block-id data-geul-media-type>에서 복원된다", () => {
       const result = importHtml(
-        '<div data-be-block-id="i-8" data-be-media-type="image"></div>',
+        '<div data-geul-block-id="i-8" data-geul-media-type="image"></div>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -325,7 +325,7 @@ describe("미디어 블록 HTML 가져오기", () => {
 
     it("caption 있는 빈 file은 <div>...<figcaption>에서 caption과 함께 복원된다", () => {
       const result = importHtml(
-        '<div data-be-block-id="f-5" data-be-media-type="file"><figcaption>예정된 첨부</figcaption></div>',
+        '<div data-geul-block-id="f-5" data-geul-media-type="file"><figcaption>예정된 첨부</figcaption></div>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -336,7 +336,7 @@ describe("미디어 블록 HTML 가져오기", () => {
     });
   });
 
-  describe("own-format 경계 — data-be-media-type 마커 없는 외부 <a>는 File로 승격되지 않는다", () => {
+  describe("own-format 경계 — data-geul-media-type 마커 없는 외부 <a>는 File로 승격되지 않는다", () => {
     it("문단 안 평범한 링크는 paragraph + link mark로 남는다(Issue #38 슬라이스10 원칙)", () => {
       const result = importHtml(
         '<p>See <a href="https://example.com">this</a> for details.</p>',
@@ -365,9 +365,9 @@ describe("미디어 블록 HTML 가져오기", () => {
       expect(blocks[0]?.type).toBe("paragraph");
     });
 
-    it("data-be-media-type 값이 4종 중 하나가 아니면(오타·garbage) File로 승격되지 않는다", () => {
+    it("data-geul-media-type 값이 4종 중 하나가 아니면(오타·garbage) File로 승격되지 않는다", () => {
       const result = importHtml(
-        '<a href="https://example.com" data-be-media-type="bogus">text</a>',
+        '<a href="https://example.com" data-geul-media-type="bogus">text</a>',
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -381,39 +381,39 @@ describe("미디어 블록 HTML 가져오기", () => {
     it.each([
       [
         "file(bare)",
-        '<a href="https://example.com/doc.pdf" data-be-block-id="f-1" data-be-media-type="file" data-be-name="문서.pdf">문서.pdf</a>',
+        '<a href="https://example.com/doc.pdf" data-geul-block-id="f-1" data-geul-media-type="file" data-geul-name="문서.pdf">문서.pdf</a>',
       ],
       [
         "image(bare)",
-        '<img src="https://example.com/a.png" alt="사진" data-be-block-id="i-1" data-be-media-type="image" data-be-name="사진">',
+        '<img src="https://example.com/a.png" alt="사진" data-geul-block-id="i-1" data-geul-media-type="image" data-geul-name="사진">',
       ],
       [
         "video(bare)",
-        '<video src="https://example.com/a.mp4" controls data-be-block-id="v-1" data-be-media-type="video" data-be-name="영상"></video>',
+        '<video src="https://example.com/a.mp4" controls data-geul-block-id="v-1" data-geul-media-type="video" data-geul-name="영상"></video>',
       ],
       [
         "audio(bare)",
-        '<audio src="https://example.com/a.mp3" controls data-be-block-id="au-1" data-be-media-type="audio" data-be-name="소리"></audio>',
+        '<audio src="https://example.com/a.mp3" controls data-geul-block-id="au-1" data-geul-media-type="audio" data-geul-name="소리"></audio>',
       ],
       [
         "image(figure)",
-        '<figure data-be-block-id="i-3" data-be-media-type="image" data-be-name="원본이름.png">' +
+        '<figure data-geul-block-id="i-3" data-geul-media-type="image" data-geul-name="원본이름.png">' +
           '<img src="https://example.com/a.png" alt="설명 캡션">' +
           "<figcaption>설명 캡션</figcaption></figure>",
       ],
       [
         "file(figure)",
-        '<figure data-be-block-id="f-3" data-be-media-type="file" data-be-name="문서.pdf">' +
+        '<figure data-geul-block-id="f-3" data-geul-media-type="file" data-geul-name="문서.pdf">' +
           '<a href="https://example.com/doc.pdf">문서.pdf</a>' +
           "<figcaption>첨부 파일</figcaption></figure>",
       ],
       [
         "image(showPreview:false anchor)",
-        '<a href="https://example.com/a.png" data-be-block-id="i-4" data-be-media-type="image" data-be-name="사진" data-be-show-preview="false">사진</a>',
+        '<a href="https://example.com/a.png" data-geul-block-id="i-4" data-geul-media-type="image" data-geul-name="사진" data-geul-show-preview="false">사진</a>',
       ],
       [
         "empty image placeholder",
-        '<div data-be-block-id="i-8" data-be-media-type="image"></div>',
+        '<div data-geul-block-id="i-8" data-geul-media-type="image"></div>',
       ],
     ])("%s는 warnings가 비어 있다", (_label, html) => {
       const result = importHtml(html);

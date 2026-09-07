@@ -57,7 +57,7 @@ const toggleListItemBlock = (
 /** blockId의 접힘 트라이앵글 marker 위젯 DOM을 찾는다. */
 const marker = (editable: HTMLElement, blockId: string): HTMLElement => {
   const found = editable.querySelector<HTMLElement>(
-    `[data-be-block-id="${blockId}"] [data-be-toggle-marker]`,
+    `[data-geul-block-id="${blockId}"] [data-geul-toggle-marker]`,
   );
   if (found === null) throw new Error(`${blockId} marker 조회 실패`);
   return found;
@@ -71,7 +71,7 @@ const clickMarker = (element: HTMLElement, button = 0): void => {
 };
 
 describe("접힘 트라이앵글 마커(toggleCollapseMarker)", () => {
-  it("isToggleable heading의 collapsed: false/true 각각 marker를 렌더링하고 data-be-collapsed·aria-expanded가 실제 값과 일치한다", () => {
+  it("isToggleable heading의 collapsed: false/true 각각 marker를 렌더링하고 data-geul-collapsed·aria-expanded가 실제 값과 일치한다", () => {
     const { editable } = mounted(
       documentOf(
         headingBlock("expanded", 2, "펼침", { isToggleable: true }),
@@ -83,16 +83,16 @@ describe("접힘 트라이앵글 마커(toggleCollapseMarker)", () => {
     );
 
     const expandedMarker = marker(editable, "expanded");
-    expect(expandedMarker.getAttribute("data-be-collapsed")).toBe("false");
+    expect(expandedMarker.getAttribute("data-geul-collapsed")).toBe("false");
     expect(expandedMarker.getAttribute("aria-expanded")).toBe("true");
     expect(expandedMarker.getAttribute("role")).toBe("button");
 
     const collapsedMarker = marker(editable, "collapsed");
-    expect(collapsedMarker.getAttribute("data-be-collapsed")).toBe("true");
+    expect(collapsedMarker.getAttribute("data-geul-collapsed")).toBe("true");
     expect(collapsedMarker.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("toggleListItem의 collapsed: false/true 각각 marker를 렌더링하고 data-be-collapsed·aria-expanded가 실제 값과 일치한다", () => {
+  it("toggleListItem의 collapsed: false/true 각각 marker를 렌더링하고 data-geul-collapsed·aria-expanded가 실제 값과 일치한다", () => {
     const { editable } = mounted(
       documentOf(
         toggleListItemBlock("expanded", "펼침"),
@@ -101,11 +101,11 @@ describe("접힘 트라이앵글 마커(toggleCollapseMarker)", () => {
     );
 
     const expandedMarker = marker(editable, "expanded");
-    expect(expandedMarker.getAttribute("data-be-collapsed")).toBe("false");
+    expect(expandedMarker.getAttribute("data-geul-collapsed")).toBe("false");
     expect(expandedMarker.getAttribute("aria-expanded")).toBe("true");
 
     const collapsedMarker = marker(editable, "collapsed");
-    expect(collapsedMarker.getAttribute("data-be-collapsed")).toBe("true");
+    expect(collapsedMarker.getAttribute("data-geul-collapsed")).toBe("true");
     expect(collapsedMarker.getAttribute("aria-expanded")).toBe("false");
   });
 
@@ -120,17 +120,17 @@ describe("접힘 트라이앵글 마커(toggleCollapseMarker)", () => {
 
     expect(
       editable.querySelector(
-        `[data-be-block-id="plain"] [data-be-toggle-marker]`,
+        `[data-geul-block-id="plain"] [data-geul-toggle-marker]`,
       ),
     ).toBeNull();
     expect(
       editable.querySelector(
-        `[data-be-block-id="off"] [data-be-toggle-marker]`,
+        `[data-geul-block-id="off"] [data-geul-toggle-marker]`,
       ),
     ).toBeNull();
     expect(
       editable.querySelector(
-        `[data-be-block-id="para"] [data-be-toggle-marker]`,
+        `[data-geul-block-id="para"] [data-geul-toggle-marker]`,
       ),
     ).toBeNull();
   });

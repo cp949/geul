@@ -28,7 +28,7 @@ const blockIdAttribute = () => ({
     default: null,
     renderHTML: (attributes: Record<string, unknown>) =>
       typeof attributes.blockId === "string" && attributes.blockId.length > 0
-        ? { "data-be-block-id": attributes.blockId }
+        ? { "data-geul-block-id": attributes.blockId }
         : {},
   },
 });
@@ -75,10 +75,10 @@ export const createCustomBlockExtension = (
         const { element } = definition.render({ block, editor });
         // identity 속성은 항상 컨테이너(여기서는 이 atom 노드 자신)가
         // 소유한다(G-EDT-003) — 소비자 render()가 직접 채우지 않아도
-        // block-side-menu 등 기존 [data-be-block-id] 조회 관례가 이
+        // block-side-menu 등 기존 [data-geul-block-id] 조회 관례가 이
         // 노드도 찾을 수 있어야 한다.
         if (blockId.length > 0) {
-          element.setAttribute("data-be-block-id", blockId);
+          element.setAttribute("data-geul-block-id", blockId);
         }
         return { dom: element };
       };

@@ -86,11 +86,11 @@ describe("createEditor round trip", () => {
       const { tiptap, editable } = mountTiptapEditor(editor);
 
       const container = editable.querySelector<HTMLElement>(
-        '[data-be-block-id="check-checked"]',
+        '[data-geul-block-id="check-checked"]',
       );
       if (container === null) throw new Error("check-checked 조회 실패");
       expect(
-        container.querySelector("[data-be-check-list-item]"),
+        container.querySelector("[data-geul-check-list-item]"),
       ).not.toBeNull();
 
       let checkedAttr: unknown;

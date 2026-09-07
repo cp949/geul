@@ -39,7 +39,7 @@ const collapsedGroupDecorations = (state: EditorState): DecorationSet => {
     decorations.push(
       Decoration.node(groupStart, groupStart + groupNode.nodeSize, {
         style: "display: none",
-        "data-be-collapsed-hidden": "",
+        "data-geul-collapsed-hidden": "",
       }),
     );
     return true;

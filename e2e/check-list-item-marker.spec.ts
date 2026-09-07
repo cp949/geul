@@ -33,15 +33,15 @@ test("체크박스를 클릭하면 checked 표시가 반전되고 저장 JSON에
   });
 
   const marker = editable.locator(
-    '[data-be-block-id="task-1"] [data-be-check-marker]',
+    '[data-geul-block-id="task-1"] [data-geul-check-marker]',
   );
-  await expect(marker).toHaveAttribute("data-be-checked", "false");
+  await expect(marker).toHaveAttribute("data-geul-checked", "false");
   await expect(marker).toHaveAttribute("aria-checked", "false");
   await expect(marker).toHaveAttribute("role", "checkbox");
 
   await marker.click();
 
-  await expect(marker).toHaveAttribute("data-be-checked", "true");
+  await expect(marker).toHaveAttribute("data-geul-checked", "true");
   await expect(marker).toHaveAttribute("aria-checked", "true");
 
   const source = page.getByLabel("Document source");

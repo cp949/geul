@@ -18,10 +18,10 @@ export const computeDragGuide = (
   current: DragState,
 ): InsertionGuide | null => {
   const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+    element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
   );
   const ids = blockElements.map((candidate) =>
-    candidate.getAttribute("data-be-block-id"),
+    candidate.getAttribute("data-geul-block-id"),
   );
   const targetIndex = blockElements.findIndex((candidate) => {
     const rect = candidate.getBoundingClientRect();
@@ -97,7 +97,7 @@ export const findOwnRectBlockId = (
   clientY: number,
 ): string | null => {
   const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+    element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
   );
   // 자식이 있는 블록은 자기 blockGroup을 DOM 안에 그대로 품는다
   // (blockContainer의 content hole, block-container-extension.ts) — 조상의
@@ -111,7 +111,7 @@ export const findOwnRectBlockId = (
   for (const candidate of blockElements) {
     const rect = candidate.getBoundingClientRect();
     if (clientY >= rect.top && clientY < rect.bottom) {
-      hitId = candidate.getAttribute("data-be-block-id");
+      hitId = candidate.getAttribute("data-geul-block-id");
     }
   }
   return hitId;
@@ -129,10 +129,10 @@ export const computeRangeMoveDragGuide = (
   toBlockId: string,
 ): InsertionGuide | null => {
   const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+    element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
   );
   const ids = blockElements.map((candidate) =>
-    candidate.getAttribute("data-be-block-id"),
+    candidate.getAttribute("data-geul-block-id"),
   );
   const targetIndex = blockElements.findIndex((candidate) => {
     const rect = candidate.getBoundingClientRect();

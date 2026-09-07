@@ -28,7 +28,7 @@ describe("CodeBlock HTML 내보내기", () => {
     expect(exportHtml(document)).toEqual({
       ok: true,
       value:
-        '<pre data-be-block-id="code-1"><code data-language="typescript" class="language-typescript">const value = \'&#x3C;tag>\';\n\treturn value;</code></pre>',
+        '<pre data-geul-block-id="code-1"><code data-language="typescript" class="language-typescript">const value = \'&#x3C;tag>\';\n\treturn value;</code></pre>',
     });
   });
 
@@ -49,7 +49,7 @@ describe("CodeBlock HTML 내보내기", () => {
     expect(exportHtml(document)).toEqual({
       ok: true,
       value:
-        '<pre data-be-block-id="code-unsafe-language"><code data-language="C# &#x22;Template&#x22;"></code></pre>',
+        '<pre data-geul-block-id="code-unsafe-language"><code data-language="C# &#x22;Template&#x22;"></code></pre>',
     });
   });
 
@@ -64,7 +64,7 @@ describe("CodeBlock HTML 내보내기", () => {
 
     expect(exportHtml(document)).toEqual({
       ok: true,
-      value: '<pre data-be-block-id="code-plain"><code>plain</code></pre>',
+      value: '<pre data-geul-block-id="code-plain"><code>plain</code></pre>',
     });
   });
 });
@@ -73,7 +73,7 @@ describe("CodeBlock HTML 가져오기", () => {
   it("pre·direct code의 sanitized text를 하나의 CodeBlock source로 가져온다", () => {
     expect(
       importHtml(
-        '<pre data-be-block-id="code-1"><code>one<strong>two</strong><br>three</code><em>four</em></pre><pre></pre>',
+        '<pre data-geul-block-id="code-1"><code>one<strong>two</strong><br>three</code><em>four</em></pre><pre></pre>',
       ),
     ).toEqual({
       ok: true,
@@ -175,7 +175,7 @@ describe("CodeBlock HTML 가져오기", () => {
 
   it("선택되지 않은 exact metadata가 충돌할 때만 최종 blockId로 경고한다", () => {
     const conflict = importHtml(
-      '<pre data-be-block-id="code-conflict" data-language="typescript" class="language-ts"><code data-language="ts" class="language-ts">source</code></pre>',
+      '<pre data-geul-block-id="code-conflict" data-language="typescript" class="language-ts"><code data-language="ts" class="language-ts">source</code></pre>',
     );
     expect(conflict).toEqual({
       ok: true,
@@ -214,7 +214,7 @@ describe("CodeBlock HTML 가져오기", () => {
   it("direct code의 두 번째 language class가 첫 선택값과 충돌하면 최종 blockId로 한 번 경고한다", () => {
     expect(
       importHtml(
-        '<pre data-be-block-id="direct-class-conflict"><code class="language-js language-ts">source</code></pre>',
+        '<pre data-geul-block-id="direct-class-conflict"><code class="language-js language-ts">source</code></pre>',
       ),
     ).toEqual({
       ok: true,
@@ -246,7 +246,7 @@ describe("CodeBlock HTML 가져오기", () => {
   it("pre의 두 번째 language class가 첫 선택값과 충돌하면 최종 blockId로 한 번 경고한다", () => {
     expect(
       importHtml(
-        '<pre data-be-block-id="pre-class-conflict" class="language-js language-ts">source</pre>',
+        '<pre data-geul-block-id="pre-class-conflict" class="language-js language-ts">source</pre>',
       ),
     ).toEqual({
       ok: true,
@@ -277,7 +277,7 @@ describe("CodeBlock HTML 가져오기", () => {
 
   it("같은 language class suffix가 중복되면 경고하지 않는다", () => {
     const result = importHtml(
-      '<pre data-be-block-id="same-class"><code class="language-js language-js">source</code></pre>',
+      '<pre data-geul-block-id="same-class"><code class="language-js language-js">source</code></pre>',
     );
 
     expect(result.ok).toBe(true);

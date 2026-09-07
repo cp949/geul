@@ -44,7 +44,7 @@ describe("toggleListItem 빈 블록 placeholder", () => {
     const { editable } = mounted(document);
 
     const container = editable.querySelector<HTMLElement>(
-      '[data-be-block-id="empty-toggle"]',
+      '[data-geul-block-id="empty-toggle"]',
     );
     if (container === null) throw new Error("empty-toggle 조회 실패");
     expect(container.firstElementChild?.getAttribute("data-placeholder")).toBe(
@@ -60,7 +60,7 @@ describe("toggleListItem 빈 블록 placeholder", () => {
     const { editable } = mounted(document);
 
     const container = editable.querySelector<HTMLElement>(
-      '[data-be-block-id="filled-toggle"]',
+      '[data-geul-block-id="filled-toggle"]',
     );
     if (container === null) throw new Error("filled-toggle 조회 실패");
     expect(container.firstElementChild?.hasAttribute("data-placeholder")).toBe(

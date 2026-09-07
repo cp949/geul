@@ -86,7 +86,7 @@ export const TableHandles = () => {
   const handleHoverCandidateChange = useCallback(
     (candidate: HTMLElement | null, event: PointerEvent) => {
       if (candidate !== null) {
-        updateHoverTableId(candidate.getAttribute("data-be-block-id"));
+        updateHoverTableId(candidate.getAttribute("data-geul-block-id"));
         return;
       }
 
@@ -118,7 +118,7 @@ export const TableHandles = () => {
   usePointerHoverTarget({
     element,
     ignoreSelectors: TABLE_HOVER_IGNORE_SELECTORS,
-    entitySelector: "table[data-be-block-id]",
+    entitySelector: "table[data-geul-block-id]",
     onCandidateChange: handleHoverCandidateChange,
   });
 
@@ -159,7 +159,7 @@ export const TableHandles = () => {
   // 경우, Issue #15)이 반영되기 전 레이아웃을 담는다 — React는 커밋을
   // 전부 적용한 뒤에야 브라우저가 레이아웃을 다시 계산하므로, 렌더 본문의
   // getBoundingClientRect는 항상 "이 렌더 이전" 위치다. 그 결과로 그려지는
-  // fixed 오버레이(특히 열 추가 버튼 data-be-table-expand-column, 재정렬
+  // fixed 오버레이(특히 열 추가 버튼 data-geul-table-expand-column, 재정렬
   // 핸들)가 표 실제 경계와 최대 한 렌더만큼 어긋나, 실제 마지막 열 셀
   // 클릭을 가로챌 수 있다. commit 직후(useLayoutEffect는 paint 전에
   // 동기로 flush된다)에 표의 실제 경계를 다시 재서 달라지면 한 번 더
@@ -403,11 +403,11 @@ export const TableHandles = () => {
       if (table === null) return false;
       // 유효성 판정에는 행/열 개수만 필요하다. readTableGeometry는 모든
       // 행·셀의 getBoundingClientRect를 도는데, NodeView가 갱신마다
-      // data-be-columns를 다시 써서 mutation이 자주 오므로 그때마다 강제
+      // data-geul-columns를 다시 써서 mutation이 자주 오므로 그때마다 강제
       // 레이아웃을 유발한다.
       const count =
         menuState.kind === "row"
-          ? table.querySelectorAll("[data-be-row-id]").length
+          ? table.querySelectorAll("[data-geul-row-id]").length
           : readTableColumnIds(table).length;
       return menuState.index < count;
     };
@@ -426,7 +426,7 @@ export const TableHandles = () => {
       if (!isMenuTargetValid()) closeMenu();
     });
     observer.observe(element, {
-      attributeFilter: ["data-be-columns"],
+      attributeFilter: ["data-geul-columns"],
       attributes: true,
       childList: true,
       subtree: true,

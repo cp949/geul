@@ -27,8 +27,8 @@ import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 // 다루던 시나리오(중첩·ol[start]·깊이 상한)를 io.importHtml이 이미
 // 동등하게 처리해 RD-005가 그 확장을 제거하고 이 확장 하나로 흡수했다.
 //
-// own export document HTML의 data-be-children wrapper와 생산 편집기
-// in-editor copy의 data-be-block-group wrapper(RD-002가 io.importHtml
+// own export document HTML의 data-geul-children wrapper와 생산 편집기
+// in-editor copy의 data-geul-block-group wrapper(RD-002가 io.importHtml
 // 에서 이미 동등하게 인식) 둘 다 이 확장을 거치지 않고 io.importHtml에
 // 원본 그대로 전달된다 — 이 확장은 두 형식을 구분하는 사전 정규화
 // 코드를 갖지 않는다(G-CNV-002, 의미는 sanitize 이후 HAST에서만 만든다).
@@ -88,7 +88,7 @@ const clampDepth = (
 };
 
 // 비표 블록의 id를 하위 트리 전체에서 전부 새로 발급한다(재귀). own HTML이
-// 대상 문서와 같은 data-be-block-id를 담고 있어도(RD-002가 원본 값을
+// 대상 문서와 같은 data-geul-block-id를 담고 있어도(RD-002가 원본 값을
 // 보존한다) 그 값을 대상 문서에 재사용하지 않는다 — 표 열·행·셀 id는 R1
 // 표 경로가 소유해 손대지 않는다. 코드베이스의 일반 블록 생성 명령
 // (divider-commands.ts 등)과 같은 관례로 createId()를 무조건 새로

@@ -231,7 +231,7 @@ describe("HTML 왕복 변환", () => {
     const exported = exportHtml(documentWithAlign);
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
-    expect(exported.value).toContain('data-be-align="center"');
+    expect(exported.value).toContain('data-geul-align="center"');
 
     expect(importHtml(exported.value)).toEqual({
       ok: true,
@@ -273,8 +273,8 @@ describe("HTML 왕복 변환", () => {
     const exported = exportHtml(documentWithAlignAndColor);
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
-    expect(exported.value).toContain('data-be-align="center"');
-    expect(exported.value).toContain('data-be-background-color="#AABBCC"');
+    expect(exported.value).toContain('data-geul-align="center"');
+    expect(exported.value).toContain('data-geul-background-color="#AABBCC"');
 
     expect(importHtml(exported.value)).toEqual({
       ok: true,
@@ -342,9 +342,9 @@ describe("HTML 왕복 변환", () => {
     expect(table?.type).toBe("table");
   });
 
-  it("허용 목록 밖 data-be-align 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
+  it("허용 목록 밖 data-geul-align 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
     const html =
-      '<table data-be-block-id="table-1"><colgroup><col data-be-column-id="column-1" data-be-width="160"></colgroup><tbody><tr data-be-row-id="row-1"><td data-be-cell-id="cell-1" data-be-column-id="column-1" rowspan="1" colspan="1" data-be-align="justify"></td></tr></tbody></table>';
+      '<table data-geul-block-id="table-1"><colgroup><col data-geul-column-id="column-1" data-geul-width="160"></colgroup><tbody><tr data-geul-row-id="row-1"><td data-geul-cell-id="cell-1" data-geul-column-id="column-1" rowspan="1" colspan="1" data-geul-align="justify"></td></tr></tbody></table>';
 
     const result = importHtml(html);
 

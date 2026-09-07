@@ -215,13 +215,13 @@ describe("ClipboardPasteExtension", () => {
   });
 
   // AGENTS.md 안정 id 불변식 — own HTML이 대상 문서와 같은
-  // data-be-block-id를 담고 있어도 삽입 하위 트리 id는 전부 새로 발급된다.
+  // data-geul-block-id를 담고 있어도 삽입 하위 트리 id는 전부 새로 발급된다.
   // 충돌하는 id("block-1")로만 검증하면 BlockIdExtension의 사후 중복
   // 보정(appendTransaction, block-id-extension.ts)이 이 확장의 재발급
   // 없이도 우연히 같은 결과를 낸다 — 이 확장 자신의 재발급을 직접
   // 검증하려면 대상 문서와 충돌하지 않는 리터럴 id를 써서, 보정이 아니라
   // 재발급 자체가 값을 바꿨는지 확인해야 한다.
-  it("own HTML의 원본 data-be-block-id는 대상 문서와 충돌하지 않아도 재발급된다", () => {
+  it("own HTML의 원본 data-geul-block-id는 대상 문서와 충돌하지 않아도 재발급된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),
       createId: sequentialIds("id"),
@@ -231,7 +231,7 @@ describe("ClipboardPasteExtension", () => {
     tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
 
     withUnhandledErrorTracking((errors) => {
-      pasteHtml(editable, '<p data-be-block-id="literal-custom-id">dup</p>');
+      pasteHtml(editable, '<p data-geul-block-id="literal-custom-id">dup</p>');
 
       const blocks = editor.getDocument().blocks;
       expect(blocks[1]?.id).not.toBe("literal-custom-id");

@@ -88,12 +88,12 @@ const FixtureHeadingExtension = Node.create({
 // FixtureParagraphExtension/FixtureHeadingExtension과 같은 이유). DOM에
 // 마운트되는 createTableFixtureEditor가 이 확장을 쓰므로(DELTA-02, Issue
 // #143 (b)) 최소 renderHTML만 이 파일이 독립 소유한다 — production과 같은
-// data-be-* 속성 모양을 그대로 따른다.
+// data-geul-* 속성 모양을 그대로 따른다.
 const FixtureBulletListItemExtension = BulletListItemExtension.extend({
   renderHTML({ HTMLAttributes }) {
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-be-bullet-list-item": "" }),
+      mergeAttributes(HTMLAttributes, { "data-geul-bullet-list-item": "" }),
       0,
     ];
   },
@@ -103,7 +103,7 @@ const FixtureNumberedListItemExtension = NumberedListItemExtension.extend({
   renderHTML({ HTMLAttributes }) {
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-be-numbered-list-item": "" }),
+      mergeAttributes(HTMLAttributes, { "data-geul-numbered-list-item": "" }),
       0,
     ];
   },

@@ -82,7 +82,7 @@ export const splitListItemChildren = (
 // D6(blockquote 분할 규칙, spec §7.1): blockquote의 자식을 quote content와
 // children으로 나눈다. 머리(공백뿐인 텍스트를 건너뛴 첫 실질 노드)가
 // <p>면 그 인라인이 content이고 나머지 자식이 children이다(export-html.ts가
-// 내는 <blockquote><p>content</p>[<div data-be-children>]> 형상의 역변환).
+// 내는 <blockquote><p>content</p>[<div data-geul-children>]> 형상의 역변환).
 // 머리가 h2·ul·중첩 blockquote처럼 비문단 블록이면 content는 비고 전부
 // children이다. 머리가 텍스트나 인라인 요소면(손으로 쓴 HTML에서만
 // 나타난다 — geul 자체 export는 own content를 항상 <p>로 감싼다)
@@ -93,7 +93,7 @@ export const splitListItemChildren = (
 // "승격하면 문서 순서가 어긋난다"는 실측에서 재현되지 않았다: content는
 // blockContainer 스키마상 children보다 항상 먼저 렌더링되므로 승격해도
 // 순서는 그대로 보존된다 — 차이는 순서가 아니라 구조적 귀속뿐이었다).
-// children 자리가 export가 낸 단일 data-be-children 컨테이너뿐이면 그 안의
+// children 자리가 export가 낸 단일 data-geul-children 컨테이너뿐이면 그 안의
 // 노드를 꺼낸다 — 컨테이너 div를 그대로 넘기면 segmentBlocks가 div를 문단
 // 경계로 걸어 들어가 그 안의 children wrapper를 평면 처리해 버린다(문단
 // head·비문단 블록 head 분기에서만 나타나는 형상이라 아래 두 분기에만
@@ -134,7 +134,7 @@ export const splitQuoteChildren = (
     restElements.length === 1 &&
     container !== undefined &&
     container.tagName === "div" &&
-    propertyString(container, "dataBeChildren") !== undefined &&
+    propertyString(container, "dataGeulChildren") !== undefined &&
     !rest.some(
       (child) =>
         !isElementNode(child) && hasSubstantialText(textValue([child])),
@@ -164,24 +164,24 @@ const isOwnBoundaryTag = (node: HtmlElementNode): boolean =>
   productionListItemType(node) !== undefined;
 
 // 컨테이너 div가 children 목록 wrapper임을 나타내는 두 마커 — own-export의
-// dataBeChildren(값 "1")과 생산 편집기 in-editor copy의 dataBeBlockGroup
+// dataGeulChildren(값 "1")과 생산 편집기 in-editor copy의 dataGeulBlockGroup
 // (BlockGroupExtension이 항상 빈 문자열로 낸다, block-container-extension.ts)
-// 은 alternate 표현일 뿐 의미가 같다(RD-002). dataBeBlockGroup은 값이 항상
+// 은 alternate 표현일 뿐 의미가 같다(RD-002). dataGeulBlockGroup은 값이 항상
 // 빈 문자열이라 propertyString(빈 문자열을 "없음"으로 접는다)로는 존재
 // 여부를 판정할 수 없어 raw property 존재만 직접 확인한다.
 const isChildrenContainerMarker = (node: HtmlElementNode): boolean =>
-  propertyString(node, "dataBeChildren") !== undefined ||
-  node.properties.dataBeBlockGroup !== undefined;
+  propertyString(node, "dataGeulChildren") !== undefined ||
+  node.properties.dataGeulBlockGroup !== undefined;
 
 // exportHtml(blockNode)이 낸 children wrapper를 구조로만 인식한다: div
 // 자식이 정확히 2개(실질 텍스트가 섞이지 않은 순수 2-element), 첫째는
 // p/h1~h6(그 블록 자신의 본문 — hr은 children을 가질 수 없는 divider라
-// export가 이 자리에 절대 내지 않으므로 보지 않는다), 둘째는 dataBeChildren이
+// export가 이 자리에 절대 내지 않으므로 보지 않는다), 둘째는 dataGeulChildren이
 // 있는 div(children 목록)다. 이 두 자리 중 하나라도 어긋나면 wrapper로 보지
 // 않고 undefined를 반환한다 — 호출자(blocksFromNodes)는 그 경우 원본 노드를 그대로
 // 평면 처리(segmentBlocks)로 넘긴다. 부분 일치를 관대하게 봐주지 않는 이유:
 // export가 절대 내지 않는 애매한 구조까지 wrapper로 오인하면 사용자가 직접
-// 쓴 임의의 div(예: <div>STRAY<p>a</p><div data-be-children>b</div></div>)가
+// 쓴 임의의 div(예: <div>STRAY<p>a</p><div data-geul-children>b</div></div>)가
 // 뜻하지 않게 중첩 구조로 해석되고, 그 사이·앞뒤에 낀 실질 텍스트("STRAY")가
 // 결과 어디에도 담기지 못한 채 조용히 사라진다(G-CNV-002 위반 — 트랙-2
 // 라운드5 리뷰가 실측한 결함, 즉시 정정). 그래서 두 element 자리를 확인하기
@@ -209,7 +209,7 @@ export const findChildrenWrapper = (
   // 감싼다(BlockContainerExtension) — own-export(children 있을 때만 감싼다)
   // 와 달리 "own-content 하나만" 형태가 나온다. 임의 외부 HTML(예:
   // `<div><p>...</p></div>` 같은 흔한 CMS 출력)까지 오인식하지 않도록
-  // 바깥 div 자신이 비어 있지 않은 dataBeBlockId를 가질 때만 인정한다 —
+  // 바깥 div 자신이 비어 있지 않은 dataGeulBlockId를 가질 때만 인정한다 —
   // own·생산 편집기 둘 다 이 마커를 실제로 싣지만, 임의 외부 HTML은
   // 이 저장소 전용 속성명을 우연히 쓸 가능성이 사실상 없다.
   if (elementChildren.length === 1) {
@@ -217,7 +217,7 @@ export const findChildrenWrapper = (
     if (soleChild === undefined || !isOwnBoundaryTag(soleChild)) {
       return undefined;
     }
-    if (propertyString(node, "dataBeBlockId") === undefined) {
+    if (propertyString(node, "dataGeulBlockId") === undefined) {
       return undefined;
     }
     return { ownNode: soleChild, childrenNodes: [] };
@@ -250,8 +250,8 @@ export const findChildrenWrapper = (
 // isToggleable heading·toggleListItem이 공유하는 <details> 표현을 구조로만
 // 인식한다(로드맵 D4, RD-005-DELTA-01.md "착수 전 결정" — findChildrenWrapper와
 // 같은 "부분 일치를 관대하게 봐주지 않는다" 원칙). own-format 마커
-// (data-be-toggleable="true")와 구조(첫 element 자식이 정확히 <summary>,
-// 있으면 둘째는 dataBeChildren 있는 <div>) 둘 다 확인한다 — 손으로 쓴
+// (data-geul-toggleable="true")와 구조(첫 element 자식이 정확히 <summary>,
+// 있으면 둘째는 dataGeulChildren 있는 <div>) 둘 다 확인한다 — 손으로 쓴
 // <details>(예: FAQ 아코디언)를 own-format으로 오인하지 않기 위해서다.
 // <summary>의 유일한 element 자식이 h1~h6고 다른 실질 텍스트가 없으면
 // heading(<summary>가 <hN>을 감싼 것), 아니면 toggleListItem(<summary>가
@@ -274,7 +274,7 @@ export const findDetailsWrapper = (
     }
   | undefined => {
   if (node.type !== "element" || node.tagName !== "details") return undefined;
-  if (propertyString(node, "dataBeToggleable") !== "true") return undefined;
+  if (propertyString(node, "dataGeulToggleable") !== "true") return undefined;
 
   const hasStrayText = node.children.some(
     (child) => !isElementNode(child) && hasSubstantialText(textValue([child])),
@@ -295,14 +295,14 @@ export const findDetailsWrapper = (
   if (containerNode !== undefined) {
     if (
       containerNode.tagName !== "div" ||
-      propertyString(containerNode, "dataBeChildren") === undefined
+      propertyString(containerNode, "dataGeulChildren") === undefined
     ) {
       return undefined;
     }
     childrenNodes = containerNode.children;
   }
 
-  const collapsedAttr = propertyString(node, "dataBeCollapsed");
+  const collapsedAttr = propertyString(node, "dataGeulCollapsed");
   const collapsed =
     collapsedAttr === undefined ? undefined : collapsedAttr === "true";
 

@@ -110,7 +110,7 @@ test("삽입을 undo 1회로 복원한다", async ({ page }) => {
   // 빈 미디어 블록은 콘텐츠가 없는 div라 화면 크기가 0이다(RD-002는
   // core 렌더만 다루고 react 빈 상태 CSS는 아직 없다) — toBeVisible()은
   // 0x0 요소를 "hidden"으로 판정하므로 존재 여부만 본다.
-  await expect(editable.locator('[data-be-media-empty="video"]')).toHaveCount(
+  await expect(editable.locator('[data-geul-media-empty="video"]')).toHaveCount(
     1,
   );
   // File Panel이 URL 입력에 초점을 가져가는 effect까지 끝난 뒤에
@@ -129,7 +129,7 @@ test("삽입을 undo 1회로 복원한다", async ({ page }) => {
 
   await page.keyboard.press("Control+z");
 
-  await expect(editable.locator('[data-be-media-empty="video"]')).toHaveCount(
+  await expect(editable.locator('[data-geul-media-empty="video"]')).toHaveCount(
     0,
   );
   await expect(editable.locator("p")).toHaveText("/video");

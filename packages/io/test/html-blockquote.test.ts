@@ -1,7 +1,7 @@
 /**
  * HTML export/import의 quote ↔ blockquote 매핑(DELTA-06a, spec §7.1)을
- * 검증한다. export는 quote를 <blockquote data-be-block-id><p>content</p>
- * [<div data-be-children>…]</blockquote>로 내고, import는 D6 분할 규칙 —
+ * 검증한다. export는 quote를 <blockquote data-geul-block-id><p>content</p>
+ * [<div data-geul-children>…]</blockquote>로 내고, import는 D6 분할 규칙 —
  * 첫 블록 자식이 <p>면 그 인라인이 content, 나머지는 children; 첫 자식이
  * h2 등 비문단 블록 요소면 content 빈 채 전부 children; 첫 자식이 태그 없는
  * 인라인이면 list item(splitListItemChildren)과 동일하게 블록 형제가
@@ -80,20 +80,20 @@ const expectedQuoteChain = (levels: number, leafBlocks: Block[]): Block[] => {
 };
 
 describe("quote ↔ blockquote 왕복(D6)", () => {
-  it("children 없는 quote가 <blockquote data-be-block-id><p>…</p></blockquote>로 export되고 re-import된다", () => {
+  it("children 없는 quote가 <blockquote data-geul-block-id><p>…</p></blockquote>로 export되고 re-import된다", () => {
     expectQuoteRoundTrip(
       buildDocument([
         paragraphBlock("paragraph-1", "앞"),
         quoteBlock("quote-1", "인용"),
       ]),
-      '<p data-be-block-id="paragraph-1">앞</p><blockquote data-be-block-id="quote-1"><p>인용</p></blockquote>',
+      '<p data-geul-block-id="paragraph-1">앞</p><blockquote data-geul-block-id="quote-1"><p>인용</p></blockquote>',
     );
   });
 
   // children에 paragraph(자기 children wrapper 포함)·heading·divider·quote를
-  // 섞는다 — data-be-children 컨테이너 안의 wrapper가 평면 처리로 풀리지
+  // 섞는다 — data-geul-children 컨테이너 안의 wrapper가 평면 처리로 풀리지
   // 않고 blocksFromNodes의 wrapper 인식을 그대로 받는지까지 고정한다.
-  it("children 있는 quote가 blockquote 안 <p> + data-be-children 컨테이너로 export되고 자기 출력 re-import로 원본이 복원된다", () => {
+  it("children 있는 quote가 blockquote 안 <p> + data-geul-children 컨테이너로 export되고 자기 출력 re-import로 원본이 복원된다", () => {
     expectQuoteRoundTrip(
       buildDocument([
         quoteBlock("quote-1", "부모", [
@@ -104,7 +104,7 @@ describe("quote ↔ blockquote 왕복(D6)", () => {
           dividerBlock("divider-1"),
         ]),
       ]),
-      '<blockquote data-be-block-id="quote-1"><p>부모</p><div data-be-children="1"><div data-be-block-id="paragraph-1"><p data-be-block-id="paragraph-1">문단</p><div data-be-children="1"><blockquote data-be-block-id="quote-2"><p>손자 인용</p></blockquote></div></div><h3 data-be-block-id="heading-1">제목</h3><hr data-be-block-id="divider-1"></div></blockquote>',
+      '<blockquote data-geul-block-id="quote-1"><p>부모</p><div data-geul-children="1"><div data-geul-block-id="paragraph-1"><p data-geul-block-id="paragraph-1">문단</p><div data-geul-children="1"><blockquote data-geul-block-id="quote-2"><p>손자 인용</p></blockquote></div></div><h3 data-geul-block-id="heading-1">제목</h3><hr data-geul-block-id="divider-1"></div></blockquote>',
     );
   });
 
@@ -121,7 +121,7 @@ describe("quote ↔ blockquote 왕복(D6)", () => {
           children: [paragraphBlock("paragraph-1", "본문")],
         },
       ]),
-      '<blockquote data-be-block-id="quote-1"><p></p><div data-be-children="1"><p data-be-block-id="paragraph-1">본문</p></div></blockquote>',
+      '<blockquote data-geul-block-id="quote-1"><p></p><div data-geul-children="1"><p data-geul-block-id="paragraph-1">본문</p></div></blockquote>',
     );
   });
 });

@@ -100,7 +100,7 @@ const fakeController = ({
     // 대상 미디어 블록의 렌더 DOM(RD-002 DELTA-01 계약) — MediaToolbar의
     // readBlockBounds가 이 selector로 앵커 좌표를 찾는다.
     const mediaBlockElement = document.createElement("div");
-    mediaBlockElement.setAttribute("data-be-block-id", "media-1");
+    mediaBlockElement.setAttribute("data-geul-block-id", "media-1");
     editable.append(mediaBlockElement);
     element.append(editable);
   }),
@@ -516,7 +516,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
     const blockElement = getEditable().querySelector(
-      '[data-be-block-id="media-1"]',
+      '[data-geul-block-id="media-1"]',
     );
     if (blockElement === null) throw new Error("media block DOM missing");
     const toolbar = () => screen.getByRole("toolbar");
@@ -670,7 +670,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
   it("리사이즈 핸들 pointerdown은 바깥 클릭으로 취급하지 않는다(RD-001 DELTA-02 회귀)", () => {
     // media-resize-handles.tsx의 MediaResizeHandles는 app.tsx에서
     // MediaToolbar와 형제로 마운트되고, 실제로 그리는 핸들은
-    // `[data-be-block-id]` 밖의 fixed 오버레이 div다(여기선 그 모양만
+    // `[data-geul-block-id]` 밖의 fixed 오버레이 div다(여기선 그 모양만
     // 재현한다) — 이 selector가 allow-list에 없으면 드래그 시작
     // pointerdown 자체가 "바깥 클릭"으로 오판정돼 toolbar가 닫히고,
     // 드래그 중 선택이 그대로 유지되는 한(resize는 selection을 바꾸지
@@ -682,7 +682,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     renderToolbar(controller);
 
     const handle = document.createElement("div");
-    handle.setAttribute("data-be-media-resize-handle", "right");
+    handle.setAttribute("data-geul-media-resize-handle", "right");
     document.body.append(handle);
 
     fireEvent.pointerDown(handle);
@@ -873,7 +873,7 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     });
     renderToolbar(controller);
     const blockElement = getEditable().querySelector(
-      '[data-be-block-id="media-1"]',
+      '[data-geul-block-id="media-1"]',
     );
     if (blockElement === null) throw new Error("media block DOM missing");
     const toolbar = () => screen.getByRole("toolbar");

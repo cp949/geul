@@ -44,7 +44,7 @@ test("화면의 가져오기·내보내기 컨트롤을 거쳐 위험한 HTML을
   const { editor } = await openDemo(page);
   const source = page.getByLabel("Document source");
   await source.fill(
-    '<p data-be-block-id="safe" onclick="alert(1)" style="position:fixed"><a href="javascript:alert(1)">Unsafe link</a><img src=x onerror="alert(1)">Visible text</p><script>alert(1)</script>',
+    '<p data-geul-block-id="safe" onclick="alert(1)" style="position:fixed"><a href="javascript:alert(1)">Unsafe link</a><img src=x onerror="alert(1)">Visible text</p><script>alert(1)</script>',
   );
 
   await page.getByRole("button", { name: "Import HTML" }).click();
@@ -67,7 +67,7 @@ test("화면의 가져오기·내보내기 컨트롤을 거쳐 위험한 HTML을
   // 사이에 안전한 <img>가 끼어든다 — 위험한 부분(onerror)만 제거 대상이다.
   expect(exported).toContain("Unsafe link");
   expect(exported).toContain("Visible text");
-  expect(exported).toMatch(/<img[^>]*data-be-media-type="image"/);
+  expect(exported).toMatch(/<img[^>]*data-geul-media-type="image"/);
   expect(exported).not.toMatch(
     /script|onclick|onerror|javascript:|position\s*:/i,
   );
@@ -80,7 +80,7 @@ test("병합된 표를 에디터에 로드하고 strict GFM은 거절, lossy GFM
   const source = page.getByLabel("Document source");
   const feedback = page.getByLabel("Conversion feedback");
   const tableHtml =
-    '<table data-be-block-id="table-e2e"><thead><tr data-be-row-id="row-head"><th data-be-cell-id="cell-head" colspan="2">Header</th></tr></thead><tbody><tr data-be-row-id="row-body"><td data-be-cell-id="cell-left">Left</td><td data-be-cell-id="cell-right">Right</td></tr></tbody></table>';
+    '<table data-geul-block-id="table-e2e"><thead><tr data-geul-row-id="row-head"><th data-geul-cell-id="cell-head" colspan="2">Header</th></tr></thead><tbody><tr data-geul-row-id="row-body"><td data-geul-cell-id="cell-left">Left</td><td data-geul-cell-id="cell-right">Right</td></tr></tbody></table>';
 
   await editable.fill("Editor stays intact");
   await source.fill(tableHtml);
@@ -176,8 +176,8 @@ test("순서가 뒤집힌 앵커도 브라우저 그리드 순서로 내보내�
     const table = template.content.querySelector("table");
     const firstRow = table?.rows[0];
     return {
-      headerRows: table?.getAttribute("data-be-header-rows"),
-      headerColumns: table?.getAttribute("data-be-header-columns"),
+      headerRows: table?.getAttribute("data-geul-header-rows"),
+      headerColumns: table?.getAttribute("data-geul-header-columns"),
       hasThead: table?.tHead !== null,
       bodyCount: table?.tBodies.length,
       firstRowCells: Array.from(firstRow?.cells ?? []).map((cell) => ({

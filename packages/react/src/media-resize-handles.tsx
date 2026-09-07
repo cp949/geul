@@ -51,14 +51,14 @@ const clampPreviewWidth = (width: number, maxWidth: number): number =>
 // 보간하면 따옴표·백슬래시에서 SyntaxError가 난다(find-by-attribute.ts 주석,
 // table-handles.tsx 세 파일이 이미 겪은 문제) — findElementByAttribute로
 // 우회한다. tagName을 "div"로 좁히는 것은 table-handles.tsx의 findTable이
-// "table"로 좁히는 것과 같은 이유(전체 문서의 `[data-be-block-id]` 스캔
+// "table"로 좁히는 것과 같은 이유(전체 문서의 `[data-geul-block-id]` 스캔
 // 범위를 줄인다) — 4종 미디어 블록의 래퍼는 항상 div다
 // (media-block-extension.ts).
 const findMediaWrapper = (
   element: HTMLElement,
   blockId: string,
 ): HTMLElement | null =>
-  findElementByAttribute(element, "div", "data-be-block-id", blockId);
+  findElementByAttribute(element, "div", "data-geul-block-id", blockId);
 
 // image/video만 previewWidth를 가지므로(media-block-extension.ts) 래퍼의
 // 직접 자식 img/video 하나만 찾으면 된다(caption div는 별도 형제라 여기
@@ -340,7 +340,7 @@ export const MediaResizeHandles = () => {
     <>
       <div
         className="geul-media-resize-handle"
-        data-be-media-resize-handle="left"
+        data-geul-media-resize-handle="left"
         onPointerDown={(event) =>
           handlePointerDownOnHandle(
             event,
@@ -358,7 +358,7 @@ export const MediaResizeHandles = () => {
       />
       <div
         className="geul-media-resize-handle"
-        data-be-media-resize-handle="right"
+        data-geul-media-resize-handle="right"
         onPointerDown={(event) =>
           handlePointerDownOnHandle(
             event,

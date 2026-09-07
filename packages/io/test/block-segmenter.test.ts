@@ -51,7 +51,7 @@ const textOf = (nodes: readonly HtmlNode[]): string =>
     .join("");
 
 describe("segmentBlocks", () => {
-  it("p 두 개를 각각 독립된 simpleBoundary 세그먼트로 낸다(요소 참조를 포함해 dataBeBlockId 등을 읽을 수 있게)", () => {
+  it("p 두 개를 각각 독립된 simpleBoundary 세그먼트로 낸다(요소 참조를 포함해 dataGeulBlockId 등을 읽을 수 있게)", () => {
     const segments = segment("<p>one</p><p>two</p>");
     expect(segments.map((s) => s.kind)).toEqual([
       "simpleBoundary",

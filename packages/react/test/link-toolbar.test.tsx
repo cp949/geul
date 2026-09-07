@@ -10,7 +10,11 @@ import type { EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EditorContent, LinkToolbar, type LinkToolbarProps } from "../src/index.js";
+import {
+  EditorContent,
+  LinkToolbar,
+  type LinkToolbarProps,
+} from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 import { collapseSelection, selectText } from "./selection-events.js";
@@ -368,10 +372,7 @@ describe("LinkToolbar 링크 툴바", () => {
     it("지정해도 표시 판정은 wrapper가 그대로 유지한다", () => {
       const controller = fakeController();
       render(
-        withProvider(
-          controller,
-          <LinkToolbar component={CustomLinkToolbar} />,
-        ),
+        withProvider(controller, <LinkToolbar component={CustomLinkToolbar} />),
       );
 
       expect(screen.queryByRole("toolbar")).toBeNull();

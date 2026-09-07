@@ -218,7 +218,7 @@ export const withUnhandledErrorTracking = (
  * 안쪽으로 갈수록 한 단씩 중첩된다(`html-depth-support.ts`의
  * buildNestedWrapperHtml과 같은 구조, io/core 패키지 경계 때문에 코드는
  * 독립 작성). 리프는 `t<depth>`, 나머지는 own-export의 두 own-content
- * 자리(자기 자신 + dataBeChildren 컨테이너) 형태를 그대로 쓴다.
+ * 자리(자기 자신 + dataGeulChildren 컨테이너) 형태를 그대로 쓴다.
  * clipboard-paste-extension.test.ts가 인라인으로 처음 썼고,
  * clipboard-paste-priority.test.ts(RD-006 DELTA-01)가 두 번째 소비 파일로
  * 등장해 여기로 승격했다(G-TST-002).
@@ -226,7 +226,7 @@ export const withUnhandledErrorTracking = (
 export const nestedParagraphWrapperHtml = (depth: number): string => {
   let html = "";
   for (let level = depth; level >= 1; level -= 1) {
-    html = `<div data-be-block-id="w${level}"><p data-be-block-id="p${level}">t${level}</p><div data-be-children="1">${html}</div></div>`;
+    html = `<div data-geul-block-id="w${level}"><p data-geul-block-id="p${level}">t${level}</p><div data-geul-children="1">${html}</div></div>`;
   }
   return html;
 };

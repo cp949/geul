@@ -124,7 +124,7 @@ export const BlockSideMenuMenu = ({
     <div
       aria-label="Block menu"
       className="geul-block-menu"
-      data-be-block-menu=""
+      data-geul-block-menu=""
       ref={menuRef}
       role="menu"
       style={style}

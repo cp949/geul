@@ -9,14 +9,14 @@ import { findElementByAttribute } from "./find-by-attribute.js";
 // 있다(readColumnBounds는 DOM조차 필요 없는 순수 함수다).
 
 // tableBlockId로 표 엘리먼트를 찾는 탐색 로직 자체는 find-by-attribute.ts가
-// 소유한다 — 여기서는 "table" + "data-be-block-id" 조합으로 커링해 표 도메인
+// 소유한다 — 여기서는 "table" + "data-geul-block-id" 조합으로 커링해 표 도메인
 // 개념 하나로 노출한다. table-handles.tsx(9곳)와 table-selection-toolbar.tsx
 // (1곳)가 공유한다 — 원래 각자 이 조합을 따로 호출했다(그릴링에서 확인).
 export const findTable = (
   element: HTMLElement,
   tableBlockId: string,
 ): HTMLElement | null =>
-  findElementByAttribute(element, "table", "data-be-block-id", tableBlockId);
+  findElementByAttribute(element, "table", "data-geul-block-id", tableBlockId);
 
 type RowGeometry = {
   rowId: string;
@@ -67,13 +67,13 @@ export type TableGeometry = {
   columns: ColumnGeometry[];
 };
 
-// G-TBL-001: 열 순서·개수의 권위는 표에 렌더된 data-be-columns(모델
+// G-TBL-001: 열 순서·개수의 권위는 표에 렌더된 data-geul-columns(모델
 // table.columns와 같은 순서)다. columnId 문자열만 뽑아 쓴다.
 // 속성 문자열의 해석은 model이 소유하고(Issue #75) DOM 접근만 여기 남는다.
 // 해석 불가는 열 없음으로 접는다 — 핸들을 그리지 않으면 그만이고, 이
 // 오버레이가 사용자에게 보고할 표면을 갖고 있지 않다.
 export const readTableColumnIds = (table: HTMLElement): string[] => {
-  const parsed = parseTableColumns(table.getAttribute("data-be-columns"));
+  const parsed = parseTableColumns(table.getAttribute("data-geul-columns"));
   return parsed.ok ? parsed.value.map((column) => column.id) : [];
 };
 
@@ -153,11 +153,11 @@ const readRowBoxes = (rowElements: HTMLElement[]): RowBox[] =>
   rowElements.map((rowElement) => {
     const rowRect = rowElement.getBoundingClientRect();
     const cells = Array.from(
-      rowElement.querySelectorAll<HTMLElement>("[data-be-column-id]"),
+      rowElement.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
     ).map((cellElement) => {
       const rect = cellElement.getBoundingClientRect();
       return {
-        columnId: cellElement.getAttribute("data-be-column-id") ?? "",
+        columnId: cellElement.getAttribute("data-geul-column-id") ?? "",
         spansColumns: cellElement.hasAttribute("colspan"),
         left: rect.left,
         right: rect.right,
@@ -165,7 +165,7 @@ const readRowBoxes = (rowElements: HTMLElement[]): RowBox[] =>
       };
     });
     return {
-      rowId: rowElement.getAttribute("data-be-row-id") ?? "",
+      rowId: rowElement.getAttribute("data-geul-row-id") ?? "",
       top: rowRect.top,
       height: rowRect.height,
       cells,
@@ -173,12 +173,12 @@ const readRowBoxes = (rowElements: HTMLElement[]): RowBox[] =>
   });
 
 export const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
-  const tableBlockId = table.getAttribute("data-be-block-id");
+  const tableBlockId = table.getAttribute("data-geul-block-id");
   if (tableBlockId === null) return null;
 
   const tableRect = table.getBoundingClientRect();
   const rowBoxes = readRowBoxes(
-    Array.from(table.querySelectorAll<HTMLElement>("[data-be-row-id]")),
+    Array.from(table.querySelectorAll<HTMLElement>("[data-geul-row-id]")),
   );
   const rows: RowGeometry[] = rowBoxes.map((rowBox, index) => ({
     rowId: rowBox.rowId,
@@ -202,8 +202,10 @@ export const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
 
   return {
     tableBlockId,
-    headerRows: Number(table.getAttribute("data-be-header-rows") ?? "0"),
-    headerColumns: Number(table.getAttribute("data-be-header-columns") ?? "0"),
+    headerRows: Number(table.getAttribute("data-geul-header-rows") ?? "0"),
+    headerColumns: Number(
+      table.getAttribute("data-geul-header-columns") ?? "0",
+    ),
     left: tableRect.left,
     top: tableRect.top,
     right: tableRect.right,

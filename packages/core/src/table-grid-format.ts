@@ -14,7 +14,7 @@ import {
 } from "./table-grid.js";
 
 // 헤더는 셀이 아니라 표 단위 플래그다(모델 headerRows/headerColumns: 0|1).
-// 편집기는 이 값을 data-be-header-* 속성으로 내보내고 CSS로 시각 구분한다.
+// 편집기는 이 값을 data-geul-header-* 속성으로 내보내고 CSS로 시각 구분한다.
 export const toggleHeaderRow = (
   table: TableBlock,
 ): Result<TableBlock, TableGridError> => ({

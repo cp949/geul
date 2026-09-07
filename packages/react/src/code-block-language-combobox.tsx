@@ -93,7 +93,7 @@ export const CodeBlockLanguageCombobox = () => {
       const block = findElementByAttribute(
         element,
         null,
-        "data-be-block-id",
+        "data-geul-block-id",
         blockId,
       );
       if (block === null) return;

@@ -1,15 +1,15 @@
 // TextBlockProps(textColor/backgroundColor/textAlignment)의 HTML
 // export/import 왕복 검증(Issue #38 슬라이스 8, RD-004 DELTA-02).
 // paragraph/heading/quote/목록 4종(bulletListItem/numberedListItem/
-// checkListItem/toggleListItem) 7개 블록 타입이 data-be-text-color/
-// data-be-background-color/data-be-text-alignment로 왕복하는지 고정한다.
+// checkListItem/toggleListItem) 7개 블록 타입이 data-geul-text-color/
+// data-geul-background-color/data-geul-text-alignment로 왕복하는지 고정한다.
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml } from "../src/index.js";
 
 describe("블록 props HTML export", () => {
-  it("paragraph의 textColor/backgroundColor/textAlignment를 data-be-*로 낸다", () => {
+  it("paragraph의 textColor/backgroundColor/textAlignment를 data-geul-*로 낸다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -29,7 +29,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<p data-be-block-id="paragraph-1" data-be-text-color="#FF0000" data-be-background-color="#FFFF00" data-be-text-alignment="center">styled</p>',
+      '<p data-geul-block-id="paragraph-1" data-geul-text-color="#FF0000" data-geul-background-color="#FFFF00" data-geul-text-alignment="center">styled</p>',
     );
   });
 
@@ -51,7 +51,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<blockquote data-be-block-id="quote-1" data-be-text-color="#112233"><p>quoted</p></blockquote>',
+      '<blockquote data-geul-block-id="quote-1" data-geul-text-color="#112233"><p>quoted</p></blockquote>',
     );
   });
 
@@ -73,7 +73,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<ul><li data-be-block-id="item-1" data-be-background-color="#AABBCC">item</li></ul>',
+      '<ul><li data-geul-block-id="item-1" data-geul-background-color="#AABBCC">item</li></ul>',
     );
   });
 
@@ -95,15 +95,15 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<details data-be-block-id="toggle-1" data-be-toggleable="true" open><summary data-be-block-id="toggle-1" data-be-text-alignment="right">toggle</summary></details>',
+      '<details data-geul-block-id="toggle-1" data-geul-toggleable="true" open><summary data-geul-block-id="toggle-1" data-geul-text-alignment="right">toggle</summary></details>',
     );
   });
 });
 
 describe("블록 props HTML import", () => {
-  it("paragraph의 data-be-*를 textColor/backgroundColor/textAlignment로 읽는다", () => {
+  it("paragraph의 data-geul-*를 textColor/backgroundColor/textAlignment로 읽는다", () => {
     const result = importHtml(
-      '<p data-be-block-id="paragraph-1" data-be-text-color="#FF0000" data-be-background-color="#FFFF00" data-be-text-alignment="center">styled</p>',
+      '<p data-geul-block-id="paragraph-1" data-geul-text-color="#FF0000" data-geul-background-color="#FFFF00" data-geul-text-alignment="center">styled</p>',
     );
     expect(result).toEqual({
       ok: true,
@@ -127,9 +127,9 @@ describe("블록 props HTML import", () => {
     });
   });
 
-  it("허용 목록 밖 data-be-text-alignment 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
+  it("허용 목록 밖 data-geul-text-alignment 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
     const result = importHtml(
-      '<p data-be-block-id="paragraph-1" data-be-text-alignment="justify">x</p>',
+      '<p data-geul-block-id="paragraph-1" data-geul-text-alignment="justify">x</p>',
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -291,8 +291,8 @@ describe("블록 props HTML 왕복", () => {
     const exported = exportHtml(document);
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
-    expect(exported.value).not.toContain("data-be-background-color");
-    expect(exported.value).not.toContain("data-be-text-alignment");
+    expect(exported.value).not.toContain("data-geul-background-color");
+    expect(exported.value).not.toContain("data-geul-text-alignment");
     expect(importHtml(exported.value)).toEqual({
       ok: true,
       value: { document, warnings: [] },

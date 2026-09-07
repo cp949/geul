@@ -759,7 +759,10 @@ describe("FormattingToolbar 서식 툴바", () => {
     it("지정해도 표시 판정(선택 없으면 렌더 안 함)은 wrapper가 그대로 유지한다", () => {
       const controller = fakeController();
       render(
-        withProvider(controller, <FormattingToolbar component={CustomToolbar} />),
+        withProvider(
+          controller,
+          <FormattingToolbar component={CustomToolbar} />,
+        ),
       );
 
       expect(screen.queryByRole("toolbar")).toBeNull();

@@ -35,10 +35,10 @@ describe("목록 HTML 내보내기", () => {
     expect(exportHtml(document)).toEqual({
       ok: true,
       value:
-        '<ul><li data-be-block-id="b-1">하나</li><li data-be-block-id="b-2">둘</li></ul>' +
-        '<ol start="0"><li data-be-block-id="n-1">영</li><li data-be-block-id="n-2">하나</li></ol>' +
-        '<ol start="9"><li data-be-block-id="n-9">아홉</li></ol>' +
-        '<p data-be-block-id="tail">끝</p>',
+        '<ul><li data-geul-block-id="b-1">하나</li><li data-geul-block-id="b-2">둘</li></ul>' +
+        '<ol start="0"><li data-geul-block-id="n-1">영</li><li data-geul-block-id="n-2">하나</li></ol>' +
+        '<ol start="9"><li data-geul-block-id="n-9">아홉</li></ol>' +
+        '<p data-geul-block-id="tail">끝</p>',
     });
   });
 });

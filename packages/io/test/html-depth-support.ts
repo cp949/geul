@@ -15,8 +15,8 @@ import {
 import type { HtmlNode, HtmlRoot } from "../src/html/inline-content.js";
 
 /**
- * exportHtml(blockNode)이 내는 children wrapper(<div data-be-block-id><p/>
- * <div data-be-children>...) 체인을 levels 단으로 만든다. exportHtml은
+ * exportHtml(blockNode)이 내는 children wrapper(<div data-geul-block-id><p/>
+ * <div data-geul-children>...) 체인을 levels 단으로 만든다. exportHtml은
  * parseDocument가 문서 생성 단계에서 깊이를 막아 65단 이상인 Document를
  * 애초에 만들 수 없으므로, 이 헬퍼는 손으로 조작한(정상 exportHtml로는
  * 나올 수 없는) 매우 깊은 wrapper 체인 HTML 문자열로 documentFromRoot를
@@ -27,7 +27,7 @@ import type { HtmlNode, HtmlRoot } from "../src/html/inline-content.js";
 export const buildNestedWrapperHtml = (levels: number): string => {
   let html = "";
   for (let level = levels; level >= 1; level -= 1) {
-    html = `<div data-be-block-id="b${level}"><p data-be-block-id="p${level}">t${level}</p><div data-be-children="1">${html}</div></div>`;
+    html = `<div data-geul-block-id="b${level}"><p data-geul-block-id="p${level}">t${level}</p><div data-geul-children="1">${html}</div></div>`;
   }
   return html;
 };

@@ -46,13 +46,13 @@ test("중첩 문서에서 side-menu 드래그 드롭이 cross-parent 이동으�
   // 최상위에 있다.
   await expect(
     editable.locator(
-      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="child-1"]',
+      '[data-geul-block-id="parent-1"] > [data-geul-block-group] > [data-geul-block-id="child-1"]',
     ),
   ).toHaveCount(1);
   await expect(editable.locator("p")).toHaveCount(3);
 
-  const topParagraph = editable.locator('[data-be-block-id="top-2"] > p');
-  const childParagraph = editable.locator('[data-be-block-id="child-1"] > p');
+  const topParagraph = editable.locator('[data-geul-block-id="top-2"] > p');
+  const childParagraph = editable.locator('[data-geul-block-id="child-1"] > p');
 
   await topParagraph.hover();
   const handle = page.getByRole("button", { name: "Drag to reorder" });
@@ -88,12 +88,12 @@ test("중첩 문서에서 side-menu 드래그 드롭이 cross-parent 이동으�
   await expect(editable.locator("p").nth(3)).toHaveText("");
   await expect(
     editable.locator(
-      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="top-2"]',
+      '[data-geul-block-id="parent-1"] > [data-geul-block-group] > [data-geul-block-id="top-2"]',
     ),
   ).toHaveCount(1);
   await expect(
     editable.locator(
-      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="child-1"]',
+      '[data-geul-block-id="parent-1"] > [data-geul-block-group] > [data-geul-block-id="child-1"]',
     ),
   ).toHaveCount(1);
 
@@ -107,12 +107,12 @@ test("중첩 문서에서 side-menu 드래그 드롭이 cross-parent 이동으�
   await expect(editable.locator("p").nth(2)).toHaveText("top block two");
   await expect(
     editable.locator(
-      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="child-1"]',
+      '[data-geul-block-id="parent-1"] > [data-geul-block-group] > [data-geul-block-id="child-1"]',
     ),
   ).toHaveCount(1);
   await expect(
     editable.locator(
-      '[data-be-block-id="parent-1"] [data-be-block-id="top-2"]',
+      '[data-geul-block-id="parent-1"] [data-geul-block-id="top-2"]',
     ),
   ).toHaveCount(0);
 
@@ -155,15 +155,15 @@ test("자식이 있는 블록 자신을 드래그하면 하위 트리 전체가 
 
   await expect(
     editable.locator(
-      '[data-be-block-id="group-1"] > [data-be-block-group] > [data-be-block-id="group-1-child"]',
+      '[data-geul-block-id="group-1"] > [data-geul-block-group] > [data-geul-block-id="group-1-child"]',
     ),
   ).toHaveCount(1);
   await expect(editable.locator("p")).toHaveCount(3);
 
   // group-1 "자신"(그 자식이 아니라)의 줄을 hover해 핸들을 그 블록에
   // 붙인다 — 하위 트리를 가진 블록을 직접 드래그하는 시나리오다.
-  const groupParagraph = editable.locator('[data-be-block-id="group-1"] > p');
-  const soloParagraph = editable.locator('[data-be-block-id="solo-1"] > p');
+  const groupParagraph = editable.locator('[data-geul-block-id="group-1"] > p');
+  const soloParagraph = editable.locator('[data-geul-block-id="solo-1"] > p');
   await groupParagraph.hover();
   const handle = page.getByRole("button", { name: "Drag to reorder" });
   await expect(handle).toBeVisible();
@@ -199,7 +199,7 @@ test("자식이 있는 블록 자신을 드래그하면 하위 트리 전체가 
   await expect(editable.locator("p").nth(3)).toHaveText("");
   await expect(
     editable.locator(
-      '[data-be-block-id="group-1"] > [data-be-block-group] > [data-be-block-id="group-1-child"]',
+      '[data-geul-block-id="group-1"] > [data-geul-block-group] > [data-geul-block-id="group-1-child"]',
     ),
   ).toHaveCount(1);
 
@@ -212,7 +212,7 @@ test("자식이 있는 블록 자신을 드래그하면 하위 트리 전체가 
   await expect(editable.locator("p").nth(2)).toHaveText("solo block");
   await expect(
     editable.locator(
-      '[data-be-block-id="group-1"] > [data-be-block-group] > [data-be-block-id="group-1-child"]',
+      '[data-geul-block-id="group-1"] > [data-geul-block-group] > [data-geul-block-id="group-1-child"]',
     ),
   ).toHaveCount(1);
 

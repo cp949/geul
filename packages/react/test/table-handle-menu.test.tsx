@@ -63,7 +63,7 @@ const renderRealTable = (options?: { rows?: number; columns?: number }) => {
  * 연다. 메뉴를 열기 전에 문서를 먼저 바꿔야 하는 테스트(예: "없음"이 지울
  * 색을 미리 칠해두는 경우)는 렌더까지 함께 묶인 openRowMenu를 쓸 수 없다.
  *
- * pointerMove를 표 노드 자체에 쏘면 target.closest("table[data-be-block-id]")가
+ * pointerMove를 표 노드 자체에 쏘면 target.closest("table[data-geul-block-id]")가
  * 매치돼 hover 여백 검사 전에 hoverTableId가 잡힌다 — 좌표가 없어도 된다.
  * 반면 `editable`에 쏠 때는 좌표를 반드시 준다: 생략하면 jsdom이 0으로 채우고
  * 그건 hover 여백(HANDLE_HOVER_MARGIN=28) 밖이라 핸들이 언마운트된다(Issue #62).
@@ -165,7 +165,7 @@ const replaceWithRowSpanMergedTable = (
   rendered.restubGeometry();
 
   const table = rendered.editable.querySelector<HTMLElement>(
-    `table[data-be-block-id="${rendered.tableBlockId}"]`,
+    `table[data-geul-block-id="${rendered.tableBlockId}"]`,
   );
   if (table === null) throw new Error("병합 표가 렌더되지 않았다");
   // 스텁이 문서에 붙어 있는 표에 씌워졌는지 고정한다. replaceDocument가
@@ -177,16 +177,16 @@ const replaceWithRowSpanMergedTable = (
   // 유일한 셀은 순번 0이지만 실제로는 둘째 열이다. 두 칸만 실제 좌표로
   // 덮어써 스텁 격자를 진짜 레이아웃과 맞춘다.
   const [mergedRow, remainderRow] = Array.from(
-    table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+    table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
   );
   if (mergedRow === undefined || remainderRow === undefined) {
     throw new Error("병합 표의 행이 없다");
   }
   const mergedCell = mergedRow.querySelector<HTMLElement>(
-    "[data-be-column-id]",
+    "[data-geul-column-id]",
   );
   const bottomRight = remainderRow.querySelector<HTMLElement>(
-    "[data-be-column-id]",
+    "[data-geul-column-id]",
   );
   if (mergedCell === null || bottomRight === null) {
     throw new Error("병합 표의 셀이 없다");
@@ -334,7 +334,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
     const menu = screen.getByRole("menu", { name: "Table row menu" });
     const topBeforeScroll = menu.style.top;
 
-    const row1 = table.querySelector(`[data-be-row-id="${rowIds[0]}"]`);
+    const row1 = table.querySelector(`[data-geul-row-id="${rowIds[0]}"]`);
     if (row1 === null) throw new Error("첫 행 없음");
     // 스크롤로 페이지가 위로 밀린 상황을 흉내낸다 — 행 rect의 top이 줄어든다.
     stubRect(row1, { left: 100, top: 0, width: 200, height: 30 });
@@ -378,7 +378,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
     }
   });
 
-  it("메뉴 안(data-be-table-menu)을 클릭하면 닫히지 않는다", () => {
+  it("메뉴 안(data-geul-table-menu)을 클릭하면 닫히지 않는다", () => {
     openRowMenu();
 
     const menu = screen.getByRole("menu", { name: "Table row menu" });
@@ -457,7 +457,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
   });
 
   it("실제 moveTableColumn으로 표 DOM이 재정렬돼도 뒤이은 click이 메뉴를 열지 않는다", () => {
-    // G-TBL-001: 열 순서·개수의 권위는 data-be-columns다. 실제 편집기 마운트라
+    // G-TBL-001: 열 순서·개수의 권위는 data-geul-columns다. 실제 편집기 마운트라
     // moveTableColumn이 그 속성을 진짜로 갱신해 Issue #17과 같은 재현 조건이
     // 그대로 만들어진다.
     const { columnIds, editable, editor, table } = renderRealTable();
@@ -570,7 +570,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
   });
 
   it("rowId가 빈 문자열이면 억제를 걸지 않는다", () => {
-    // rowId는 table-handles.tsx의 getAttribute("data-be-row-id") ?? ""
+    // rowId는 table-handles.tsx의 getAttribute("data-geul-row-id") ?? ""
     // 폴백으로 빈 문자열이 될 수 있다(Option A, Issue #63). 억제 키를
     // 안정 식별자(rowId)로 쓰므로, 빈 id를 그대로 키에 쓰면 빈 id를 가진
     // 서로 다른 행이 같은 "row-" 키로 충돌한다. 이 저장소는 그 경우
@@ -580,15 +580,15 @@ describe("행/열 핸들 클릭 메뉴", () => {
     // 우선한다.
     const { editable, editor, rowIds, table } = renderRealTable();
     const [row1] = Array.from(
-      table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+      table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
     );
     if (row1 === undefined) throw new Error("행 없음");
     // 모델은 빈 id를 허용하지 않아(model의 문자열 불변식) 실제 편집기로는 이
     // 상태를 만들 수 없다 — 렌더된 DOM의 속성만 비운다. table-handles가 값을
-    // 읽는 경로가 getAttribute("data-be-row-id") ?? ""라 이 조작만으로 폴백에
+    // 읽는 경로가 getAttribute("data-geul-row-id") ?? ""라 이 조작만으로 폴백에
     // 정확히 도달한다. hover 추적(pointerMove(table))이 geometry를 처음 읽기
     // 전에 비워야 이후 렌더가 전부 빈 rowId를 기준으로 handle을 만든다.
-    row1.setAttribute("data-be-row-id", "");
+    row1.setAttribute("data-geul-row-id", "");
     fireEvent.pointerMove(table);
     const [firstRowHandle] = screen.getAllByRole("button", {
       name: rowHandleLabel,
@@ -597,7 +597,7 @@ describe("행/열 핸들 클릭 메뉴", () => {
 
     fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
     // 제자리(첫 행 상반부, 105)에 놓는 드래그다. 실제 편집기에서는 재정렬이
-    // 일어나면 옮겨진 tr을 모델에서 다시 그려 비워둔 data-be-row-id가 곧바로
+    // 일어나면 옮겨진 tr을 모델에서 다시 그려 비워둔 data-geul-row-id가 곧바로
     // 복구되고, 그러면 핸들 버튼의 React key(`row-${rowId}`)가 바뀌어 버튼
     // 노드 자체가 교체된다 — 뒤이은 click이 사라진 노드를 때려 억제 로직과
     // 무관하게 실패한다(실측 확인). 검증 대상인 fail-open 분기는
@@ -851,7 +851,7 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
     expect(screen.queryByRole("menu")).not.toBeNull();
   });
 
-  it("메뉴가 가리키는 마지막 열이 data-be-columns에서 사라지면 메뉴가 자동으로 닫힌다", async () => {
+  it("메뉴가 가리키는 마지막 열이 data-geul-columns에서 사라지면 메뉴가 자동으로 닫힌다", async () => {
     const { editor, table, tableBlockId } = renderRealTable();
     fireEvent.pointerMove(table);
     const columnHandles = screen.getAllByRole("button", {
@@ -867,14 +867,14 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
     ).toBeTruthy();
 
     await act(async () => {
-      // data-be-columns를 손으로 setAttribute하던 자리 — 실제 deleteTableColumn을
+      // data-geul-columns를 손으로 setAttribute하던 자리 — 실제 deleteTableColumn을
       // 불러 serializeTableColumns가 그 속성을 다시 쓰게 한다.
       const deleted = editor.commands.deleteTableColumn(tableBlockId, 1);
       if (!deleted.ok) throw new Error("열 삭제 fixture 준비 실패");
       await Promise.resolve();
     });
 
-    // 메뉴가 가리키던 인덱스 1이 정말 data-be-columns에서 사라졌는지
+    // 메뉴가 가리키던 인덱스 1이 정말 data-geul-columns에서 사라졌는지
     // 고정한다 — ok만 보면 다른 열이 지워져도 통과한다.
     expect(tableBlockOf(editor).columns).toHaveLength(1);
     expect(screen.queryByRole("menu")).toBeNull();
@@ -895,7 +895,7 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
     if (!insertedSecondTable.ok) throw new Error("둘째 표 fixture 준비 실패");
     const secondTableBlockId = insertedSecondTable.value.blockId;
     const secondTable = editable.querySelector<HTMLElement>(
-      `table[data-be-block-id="${secondTableBlockId}"]`,
+      `table[data-geul-block-id="${secondTableBlockId}"]`,
     );
     if (secondTable === null) throw new Error("둘째 표가 렌더되지 않았다");
     // 둘째 표가 실제로 심어졌는지 고정한다 — 못 심었다면 뒤이은 삭제·복구
@@ -910,7 +910,7 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
     // 실제로 비워졌는지는 남은 표의 핸들 복구로 관찰한다.
     stubRect(secondTable, { left: 100, top: 300, width: 200, height: 60 });
     const [secondRow1, secondRow2] = Array.from(
-      secondTable.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+      secondTable.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
     );
     if (secondRow1 === undefined || secondRow2 === undefined) {
       throw new Error("둘째 표의 행이 없음");

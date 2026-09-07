@@ -88,7 +88,9 @@ const renderResizableTable = () => {
   expect(col?.style.width).toBe("120px");
   // 전제 2: 셀 rect는 100px 그대로다 — 두 값이 같아지면 이 fixture가
   // 만들려던 어긋남 자체가 사라진다.
-  const cell = rendered.table.querySelector<HTMLElement>("[data-be-column-id]");
+  const cell = rendered.table.querySelector<HTMLElement>(
+    "[data-geul-column-id]",
+  );
   expect(cell?.getBoundingClientRect().width).toBe(100);
   return rendered;
 };
@@ -145,20 +147,20 @@ const replaceWithColumnSpanMergedTable = (
   if (!replaced.ok) throw new Error("병합 문서 fixture 준비 실패");
 
   const table = rendered.host.querySelector<HTMLElement>(
-    `table[data-be-block-id="${rendered.tableBlockId}"]`,
+    `table[data-geul-block-id="${rendered.tableBlockId}"]`,
   );
   if (table === null) throw new Error("병합 표가 렌더되지 않았다");
   const [mergedRow, remainderRow] = Array.from(
-    table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+    table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
   );
   if (mergedRow === undefined || remainderRow === undefined) {
     throw new Error("병합 표의 행이 없다");
   }
   const mergedCell = mergedRow.querySelector<HTMLElement>(
-    "[data-be-column-id]",
+    "[data-geul-column-id]",
   );
   const [bottomLeft, bottomRight] = Array.from(
-    remainderRow.querySelectorAll<HTMLElement>("[data-be-column-id]"),
+    remainderRow.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
   );
   if (
     mergedCell === null ||
@@ -269,7 +271,7 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
     });
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
-    // G-TBL-001: 열 순서의 권위는 모델 columns(=data-be-columns)다.
+    // G-TBL-001: 열 순서의 권위는 모델 columns(=data-geul-columns)다.
     expect(columnsOf(editor).map((column) => column.id)).toEqual([
       columnIds[1],
       columnIds[0],
@@ -296,7 +298,7 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
     // 아래 "문서가 안 바뀐다"는 억제 로직과 무관하게 통과한다(Issue #62).
     // 재정렬 가이드는 hasDragged와 목표 인덱스가 모두 있을 때만 그려진다.
     expect(
-      document.querySelector("[data-be-table-reorder-guide]"),
+      document.querySelector("[data-geul-table-reorder-guide]"),
     ).not.toBeNull();
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
@@ -325,13 +327,15 @@ describe("행/열 핸들을 드래그해 재정렬한다", () => {
     });
     // 전제: 취소 전에는 실제로 드래그가 진행 중이고 목표 인덱스도 잡혔다.
     expect(
-      document.querySelector("[data-be-table-reorder-guide]"),
+      document.querySelector("[data-geul-table-reorder-guide]"),
     ).not.toBeNull();
 
     fireEvent.keyDown(document, { key: "Escape" });
     // Escape가 목표 인덱스를 지웠는지 가이드로 확인한다 — 지우지 못했다면
     // 아래 pointerUp이 재정렬을 커밋한다.
-    expect(document.querySelector("[data-be-table-reorder-guide]")).toBeNull();
+    expect(
+      document.querySelector("[data-geul-table-reorder-guide]"),
+    ).toBeNull();
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
     expect(editor.getDocument()).toEqual(documentBeforeDrag);
@@ -343,7 +347,7 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
     const { editable, editor, table } = renderResizableTable();
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
-      "[data-be-table-resize-handle]",
+      "[data-geul-table-resize-handle]",
     );
     if (resizeHandle === null) throw new Error("resize 핸들 없음");
 
@@ -376,7 +380,7 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
     const { editable, editor, table } = renderResizableTable();
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
-      "[data-be-table-resize-handle]",
+      "[data-geul-table-resize-handle]",
     );
     if (resizeHandle === null) throw new Error("resize 핸들 없음");
 
@@ -402,7 +406,7 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
     const { editable, editor, table } = renderResizableTable();
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
-      "[data-be-table-resize-handle]",
+      "[data-geul-table-resize-handle]",
     );
     if (resizeHandle === null) throw new Error("resize 핸들 없음");
 
@@ -430,7 +434,7 @@ describe("열 경계를 드래그해 너비를 조절한다", () => {
     const { editable, editor, table } = renderResizableTable();
     fireEvent.pointerMove(table);
     const resizeHandle = document.querySelector(
-      "[data-be-table-resize-handle]",
+      "[data-geul-table-resize-handle]",
     );
     if (resizeHandle === null) throw new Error("resize 핸들 없음");
 
@@ -474,7 +478,7 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
 });
 
 describe("첫 행이 병합된 표의 열 geometry", () => {
-  // 첫 행이 colspan=2로 병합되면 그 행에는 열마다 하나씩인 [data-be-column-id]
+  // 첫 행이 colspan=2로 병합되면 그 행에는 열마다 하나씩인 [data-geul-column-id]
   // 셀이 없다 — 첫 행만 보고 열 경계를 읽으면 두 번째 열 핸들이 사라진다.
   // 병합되지 않은 둘째 행의 셀 rect로 geometry를 복구해야 한다(G-TBL-001).
   //

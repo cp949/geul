@@ -245,7 +245,7 @@ const blockSequenceFromNodes = (
     for (const segment of segmentBlocks(nodeList, policy)) {
       // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
       // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
-      // dataBeBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
+      // dataGeulBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
       // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
       if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
         const content = normalizedInlineContent(segment.nodes);
@@ -311,8 +311,8 @@ const canonicalAlign = (
 ): "left" | "center" | "right" | undefined =>
   value !== undefined && isCanonicalCellAlign(value) ? value : undefined;
 
-// data-be-*(자기 복사)가 있으면 우선하고, 없으면 style에서 뽑는다(외부
-// Excel/Google Sheets는 data-be-*가 없으므로 항상 style로 떨어진다).
+// data-geul-*(자기 복사)가 있으면 우선하고, 없으면 style에서 뽑는다(외부
+// Excel/Google Sheets는 data-geul-*가 없으므로 항상 style로 떨어진다).
 const cellStyleFields = (
   element: HtmlElementNode,
 ): Pick<TabularCell, "textColor" | "backgroundColor" | "align"> => {
@@ -320,17 +320,18 @@ const cellStyleFields = (
   const parsedStyle =
     styleAttribute === undefined ? {} : parseStyleDeclarations(styleAttribute);
 
-  // data-be-*도 style과 똑같이 model의 정규 형식을 통과해야 한다. 그냥
+  // data-geul-*도 style과 똑같이 model의 정규 형식을 통과해야 한다. 그냥
   // 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 parseDocument가
   // 커밋 시점에 터진다(모델↔에디터 영구 desync).
   const textColor =
-    canonicalColor(propertyString(element, "dataBeTextColor")) ??
+    canonicalColor(propertyString(element, "dataGeulTextColor")) ??
     parsedStyle.color;
   const backgroundColor =
-    canonicalColor(propertyString(element, "dataBeBackgroundColor")) ??
+    canonicalColor(propertyString(element, "dataGeulBackgroundColor")) ??
     parsedStyle.backgroundColor;
   const align =
-    canonicalAlign(propertyString(element, "dataBeAlign")) ?? parsedStyle.align;
+    canonicalAlign(propertyString(element, "dataGeulAlign")) ??
+    parsedStyle.align;
 
   return {
     ...(textColor === undefined ? {} : { textColor }),

@@ -320,8 +320,8 @@ test("실제 범위 선택을 글머리 목록으로 바꾸면 현재 옵션과 
 
   await expect(toolbar).toBeVisible();
   await expect(blockTypeSelect).toHaveValue("bullet-list");
-  const listItem = editable.locator("[data-be-list-marker]").first();
-  await expect(listItem).toHaveAttribute("data-be-list-marker", "•");
+  const listItem = editable.locator("[data-geul-list-marker]").first();
+  await expect(listItem).toHaveAttribute("data-geul-list-marker", "•");
   await expect(listItem).toContainText("선택한 목록 내용");
 });
 
@@ -355,10 +355,10 @@ test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 
   await page.getByRole("button", { name: "Load JSON" }).click();
 
   const firstParagraph = editable.locator(
-    '[data-be-block-id="first-block"] > p',
+    '[data-geul-block-id="first-block"] > p',
   );
   const secondParagraph = editable.locator(
-    '[data-be-block-id="second-block"] > p',
+    '[data-geul-block-id="second-block"] > p',
   );
   const beforeIndentBox = await secondParagraph.boundingBox();
   if (beforeIndentBox === null) {
@@ -368,20 +368,20 @@ test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 
   await selectBlockTextAndNotify(secondParagraph, "second block");
   // 들여쓰기 전에는 blockGroup wrapper가 없다 — DELTA-02 컨테이너는 자식이
   // 있을 때만 그 노드를 만든다.
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Indent" }).click();
 
   // indentBlockCommand는 대상을 앞 형제(첫 블록)의 blockGroup 자식으로
   // 옮긴다(indent-commands.ts) — 옮겨진 즉시 DOM에 wrapper가 새로 생긴다.
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(1);
 
   const afterIndentBox = await secondParagraph.boundingBox();
   const firstBox = await firstParagraph.boundingBox();
   if (afterIndentBox === null || firstBox === null) {
     throw new Error("Bounding box was not available");
   }
-  // 변이 확인(RED): _editor.scss의 [data-be-block-group] padding-left
+  // 변이 확인(RED): _editor.scss의 [data-geul-block-group] padding-left
   // 규칙을 지우면 DOM은 중첩돼도 시각 오프셋이 없어 아래 두 assertion이
   // 실패한다 — 구현 중 직접 지워 재현했고(RED), 되돌린 뒤 이 커밋을 냈다.
   expect(afterIndentBox.x).toBeGreaterThan(firstBox.x);
@@ -389,7 +389,7 @@ test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 
 
   await page.keyboard.press("Control+z");
 
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
   const afterUndoBox = await secondParagraph.boundingBox();
   expect(Math.abs((afterUndoBox?.x ?? -1000) - beforeIndentBox.x)).toBeLessThan(
     2,
@@ -427,13 +427,13 @@ test("들여쓰기 버튼 클릭 후 자식 블록이 부모보다 좌측으로 
   await page.getByRole("button", { name: "Load JSON" }).click();
 
   const grandparentBox = await editable
-    .locator('[data-be-block-id="grandparent-1"] > p')
+    .locator('[data-geul-block-id="grandparent-1"] > p')
     .boundingBox();
   const parentBox = await editable
-    .locator('[data-be-block-id="parent-1"] > p')
+    .locator('[data-geul-block-id="parent-1"] > p')
     .boundingBox();
   const childBox = await editable
-    .locator('[data-be-block-id="child-1"] > p')
+    .locator('[data-geul-block-id="child-1"] > p')
     .boundingBox();
   if (grandparentBox === null || parentBox === null || childBox === null) {
     throw new Error("Bounding box was not available");
@@ -468,7 +468,7 @@ test("텍스트를 다시 선택하지 않고 두 단계 들여쓰기와 연속 
   await page.getByLabel("Document source").fill(JSON.stringify(sourceDocument));
   await page.getByRole("button", { name: "Load JSON" }).click();
 
-  const target = editable.locator('[data-be-block-id="target"] > p');
+  const target = editable.locator('[data-geul-block-id="target"] > p');
   await selectBlockTextAndNotify(target, "target text");
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
   const indent = page.getByRole("button", { name: "Indent" });
@@ -481,7 +481,7 @@ test("텍스트를 다시 선택하지 않고 두 단계 들여쓰기와 연속 
   await indent.click();
   await expect(
     editable.locator(
-      '[data-be-block-id="outer"] > [data-be-block-group] > [data-be-block-id="target"]',
+      '[data-geul-block-id="outer"] > [data-geul-block-group] > [data-geul-block-id="target"]',
     ),
   ).toHaveCount(1);
   await expect(toolbar).toBeVisible();
@@ -494,19 +494,19 @@ test("텍스트를 다시 선택하지 않고 두 단계 들여쓰기와 연속 
   await indent.click();
   await expect(
     editable.locator(
-      '[data-be-block-id="inner"] > [data-be-block-group] > [data-be-block-id="target"]',
+      '[data-geul-block-id="inner"] > [data-geul-block-group] > [data-geul-block-id="target"]',
     ),
   ).toHaveCount(1);
 
   await outdent.click();
   await expect(
     editable.locator(
-      '[data-be-block-id="outer"] > [data-be-block-group] > [data-be-block-id="target"]',
+      '[data-geul-block-id="outer"] > [data-geul-block-group] > [data-geul-block-id="target"]',
     ),
   ).toHaveCount(1);
   await outdent.click();
   await expect(
-    editable.locator(':scope > [data-be-block-id="target"]'),
+    editable.locator(':scope > [data-geul-block-id="target"]'),
   ).toHaveCount(1);
   await expect(toolbar).toBeVisible();
   await expect(outdent).toBeDisabled();

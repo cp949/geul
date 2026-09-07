@@ -87,7 +87,7 @@ describe("codeBlock 노드 스키마 계약", () => {
     ) as HTMLElement;
 
     expect(dom.outerHTML).toBe(
-      '<pre data-be-code-block=""><code>const x = 1;</code></pre>',
+      '<pre data-geul-code-block=""><code>const x = 1;</code></pre>',
     );
     expect(dom.querySelector("[data-language]")).toBeNull();
     expect(dom.querySelector('[class*="language-"]')).toBeNull();

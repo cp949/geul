@@ -1,7 +1,7 @@
 /**
  * file/image/video/audio PM 노드의 스키마 계약을 고정한다(RD-002
  * DELTA-01, spec §3.1) — content 없는 atom leaf, group "block" 직접
- * 멤버(blockContainer로 포장되지 않음), div 렌더링과 data-be-block-id
+ * 멤버(blockContainer로 포장되지 않음), div 렌더링과 data-geul-block-id
  * 출력, parseHTML 미선언(G-EDT-003), priority가 blockContainer보다
  * 엄격히 낮다는 채움 우선순위 계약, 그리고 타입별 attrs 집합(previewWidth/
  * textAlignment는 image/video만, showPreview는 file 제외 3종). divider와
@@ -53,7 +53,7 @@ describe.each(MEDIA_TYPES)("%s 노드 스키마 계약", (type) => {
     expect(blockContainer.contentMatch.matchType(node)).toBeNull();
   });
 
-  it("div로 렌더되고 data-be-block-id를 낸다", () => {
+  it("div로 렌더되고 data-geul-block-id를 낸다", () => {
     const schema = liveSchema();
     const node = requireNode(schema, type);
 
@@ -62,7 +62,7 @@ describe.each(MEDIA_TYPES)("%s 노드 스키마 계약", (type) => {
     ) as HTMLElement;
 
     expect(dom.tagName).toBe("DIV");
-    expect(dom.getAttribute("data-be-block-id")).toBe(`${type}-1`);
+    expect(dom.getAttribute("data-geul-block-id")).toBe(`${type}-1`);
   });
 
   it("노드 spec에 parseDOM이 없다", () => {

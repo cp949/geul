@@ -372,7 +372,7 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
 });
 
 describe("own-format 체크 목록 붙여넣기", () => {
-  it("data-be-checked가 붙은 li는 checkListItem으로 반영된다", () => {
+  it("data-geul-checked가 붙은 li는 checkListItem으로 반영된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),
       createId: sequentialIds("id"),
@@ -384,7 +384,7 @@ describe("own-format 체크 목록 붙여넣기", () => {
     withUnhandledErrorTracking((errors) => {
       pasteHtml(
         editable,
-        '<ul><li data-be-checked="true">done</li><li data-be-checked="false">todo</li></ul>',
+        '<ul><li data-geul-checked="true">done</li><li data-geul-checked="false">todo</li></ul>',
       );
 
       const blocks = editor.getDocument().blocks;

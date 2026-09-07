@@ -84,8 +84,8 @@ describe("SlashMenu 질의 팝업", () => {
     // D19(컨테이너 스키마)부터 blockId는 <p> 자신이 아니라 그 부모
     // <div>(blockContainer)에 있다 — 자손 selector로 실제 문단 요소를 찾는다
     // (DELTA-02e 정정).
-    const paragraph = host.querySelector<HTMLElement>("[data-be-block-id] p");
-    const cell = table.querySelector<HTMLElement>("[data-be-cell-id]");
+    const paragraph = host.querySelector<HTMLElement>("[data-geul-block-id] p");
+    const cell = table.querySelector<HTMLElement>("[data-geul-cell-id]");
     if (paragraph === null || cell === null) {
       throw new Error("문단 또는 표 셀을 찾지 못했다");
     }
@@ -370,19 +370,19 @@ describe("SlashMenu 질의 팝업", () => {
   it.each([
     {
       type: "bulletListItem" as const,
-      selector: "[data-be-bullet-list-item]",
+      selector: "[data-geul-bullet-list-item]",
     },
     {
       type: "numberedListItem" as const,
-      selector: "[data-be-numbered-list-item]",
+      selector: "[data-geul-numbered-list-item]",
     },
     {
       type: "checkListItem" as const,
-      selector: "[data-be-check-list-item]",
+      selector: "[data-geul-check-list-item]",
     },
     {
       type: "toggleListItem" as const,
-      selector: "[data-be-toggle-list-item]",
+      selector: "[data-geul-toggle-list-item]",
     },
   ])(
     "$type source의 Slash menu는 Code를 제외하고 네 목록·Table·Divider·media 4종을 유지한다",
@@ -428,7 +428,7 @@ describe("SlashMenu 질의 팝업", () => {
       });
       if (!converted.ok) throw new Error("코드 블록 fixture 준비 실패");
       const code = rendered.host.querySelector<HTMLElement>(
-        "[data-be-code-block] code",
+        "[data-geul-code-block] code",
       );
       if (code === null) throw new Error("코드 편집 DOM을 찾지 못했다");
 

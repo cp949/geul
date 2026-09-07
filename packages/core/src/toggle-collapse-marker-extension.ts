@@ -21,8 +21,8 @@ const createToggleMarkerElement = (
   onToggle: () => void,
 ): HTMLElement => {
   const marker = globalThis.document.createElement("span");
-  marker.setAttribute("data-be-toggle-marker", "");
-  marker.setAttribute("data-be-collapsed", String(collapsed));
+  marker.setAttribute("data-geul-toggle-marker", "");
+  marker.setAttribute("data-geul-collapsed", String(collapsed));
   marker.setAttribute("role", "button");
   marker.setAttribute("aria-expanded", String(!collapsed));
   marker.contentEditable = "false";

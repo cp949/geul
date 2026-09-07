@@ -52,16 +52,16 @@ const openWithFixture = async (page: Page): Promise<{ editable: Locator }> => {
     .fill(JSON.stringify(buildDocument()));
   await page.getByRole("button", { name: "Load JSON" }).click();
   await expect(editable.locator("p")).toHaveCount(6);
-  await editable.locator('[data-be-block-id="b1"] > p').click();
+  await editable.locator('[data-geul-block-id="b1"] > p').click();
   return { editable };
 };
 
 /** 현재 DOM에 렌더된 블록의 blockId를 document order(전위 순회) 그대로 뽑는다. */
 const domBlockIds = async (editable: Locator): Promise<(string | null)[]> =>
   editable
-    .locator("[data-be-block-id]")
+    .locator("[data-geul-block-id]")
     .evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute("data-be-block-id")),
+      elements.map((element) => element.getAttribute("data-geul-block-id")),
     );
 
 const centerOf = async (
@@ -93,7 +93,7 @@ const dragHandleTo = async (
   sourceBlockId: string,
   target: { x: number; y: number },
 ): Promise<void> => {
-  await page.locator(`[data-be-block-id="${sourceBlockId}"] > p`).hover();
+  await page.locator(`[data-geul-block-id="${sourceBlockId}"] > p`).hover();
   const handle = page.getByRole("button", { name: "Drag to reorder" });
   await expect(handle).toBeVisible();
   const handleBox = await handle.boundingBox();
@@ -120,7 +120,7 @@ test("핸들 드래그로 비인접 형제 범위를 선택하면 하이라이�
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
 
   await expect(
@@ -128,10 +128,10 @@ test("핸들 드래그로 비인접 형제 범위를 선택하면 하이라이�
   ).toBeVisible();
 
   const highlighted = await page
-    .locator("[data-be-block-selection-highlight]")
+    .locator("[data-geul-block-selection-highlight]")
     .evaluateAll((elements) =>
       elements.map((element) =>
-        element.getAttribute("data-be-highlighted-block-id"),
+        element.getAttribute("data-geul-highlighted-block-id"),
       ),
     );
   // b1~b3 DOM 순서 슬라이스에는 중간에 낀 b2의 children(b2-child)도
@@ -147,7 +147,7 @@ test("삭제 버튼을 클릭하면 선택 범위와 children이 함께 사라�
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
@@ -165,7 +165,7 @@ test("삭제 버튼을 클릭하면 선택 범위와 children이 함께 사라�
   expect(await domBlockIds(editable)).toEqual(ORIGINAL_DOM_ORDER);
   await expect(
     editable.locator(
-      '[data-be-block-id="b2"] > [data-be-block-group] > [data-be-block-id="b2-child"]',
+      '[data-geul-block-id="b2"] > [data-geul-block-group] > [data-geul-block-id="b2-child"]',
     ),
   ).toHaveCount(1);
 });
@@ -178,7 +178,7 @@ test("아래로 이동 버튼을 클릭하면 선택 범위와 children이 함�
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
@@ -215,7 +215,7 @@ test("이미 선택된 범위의 handle을 재드래그하면 범위 전체가 �
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
@@ -226,7 +226,7 @@ test("이미 선택된 범위의 handle을 재드래그하면 범위 전체가 �
   await dragHandleTo(
     page,
     "b2",
-    await belowBottomOf(page.locator('[data-be-block-id="b5"]')),
+    await belowBottomOf(page.locator('[data-geul-block-id="b5"]')),
   );
 
   expect(await domBlockIds(editable)).toEqual([
@@ -251,7 +251,7 @@ test("선택 범위와 무관한 blockId의 handle을 드래그해도 여전히 
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
@@ -262,7 +262,7 @@ test("선택 범위와 무관한 blockId의 handle을 드래그해도 여전히 
   // 선택은 "바깥 클릭"으로 즉시 해제돼야 한다(DELTA-04 완료 조건 8).
   // BlockSelectionToolbar의 dismiss allow-list를 handle 전체로 넓히는
   // 잘못된 수정은 이 케이스까지 함께 막아버린다(즉시 리뷰 MAJOR-1).
-  await page.locator('[data-be-block-id="b4"] > p').hover();
+  await page.locator('[data-geul-block-id="b4"] > p').hover();
   const handle = page.getByRole("button", { name: "Drag to reorder" });
   await expect(handle).toBeVisible();
   const handleBox = await handle.boundingBox();
@@ -278,12 +278,12 @@ test("선택 범위와 무관한 blockId의 handle을 드래그해도 여전히 
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
   ).toHaveCount(0);
-  await expect(page.locator("[data-be-block-selection-highlight]")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator("[data-geul-block-selection-highlight]"),
+  ).toHaveCount(0);
 
   // 드래그 자체는 정상적으로 이어져야 한다(이 회귀와 무관한 정상 경로).
-  const b5Center = await centerOf(page.locator('[data-be-block-id="b5"]'));
+  const b5Center = await centerOf(page.locator('[data-geul-block-id="b5"]'));
   await page.mouse.move(b5Center.x, b5Center.y, { steps: 5 });
   await page.mouse.up();
 });
@@ -296,7 +296,7 @@ test("선택 범위 밖을 클릭하면 하이라이트와 툴바가 사라진�
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
@@ -307,9 +307,9 @@ test("선택 범위 밖을 클릭하면 하이라이트와 툴바가 사라진�
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
   ).toHaveCount(0);
-  await expect(page.locator("[data-be-block-selection-highlight]")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator("[data-geul-block-selection-highlight]"),
+  ).toHaveCount(0);
 });
 
 test("Escape를 누르면 하이라이트와 툴바가 사라지고 편집기로 초점이 복귀해 다음 타이핑이 반영된다", async ({
@@ -320,13 +320,13 @@ test("Escape를 누르면 하이라이트와 툴바가 사라지고 편집기로
   // PM 커서를 b5 텍스트 끝에 미리 둔다 — clearBlockSelection은 PM
   // Selection과 독립이라(spec §5.3) 아래 드래그·Escape를 거쳐도 이 커서
   // 위치가 그대로 유지되는지까지 함께 확인한다.
-  await editable.locator('[data-be-block-id="b5"] > p').click();
+  await editable.locator('[data-geul-block-id="b5"] > p').click();
   await page.keyboard.press("End");
 
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
@@ -337,14 +337,14 @@ test("Escape를 누르면 하이라이트와 툴바가 사라지고 편집기로
   await expect(
     page.getByRole("toolbar", { name: "Block selection" }),
   ).toHaveCount(0);
-  await expect(page.locator("[data-be-block-selection-highlight]")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator("[data-geul-block-selection-highlight]"),
+  ).toHaveCount(0);
   await expect(editable).toBeFocused();
 
   await page.keyboard.type(" appended");
 
-  await expect(editable.locator('[data-be-block-id="b5"] > p')).toHaveText(
+  await expect(editable.locator('[data-geul-block-id="b5"] > p')).toHaveText(
     "block five appended",
   );
 });
@@ -357,7 +357,7 @@ test("선택 범위가 형제 목록 맨 앞/맨 뒤에 닿으면 해당 방향 
   await dragHandleTo(
     page,
     "b1",
-    await centerOf(page.locator('[data-be-block-id="b3"]')),
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
   );
   await expect(
     page.getByRole("button", { name: "Move selection up" }),
@@ -374,7 +374,7 @@ test("선택 범위가 형제 목록 맨 앞/맨 뒤에 닿으면 해당 방향 
   await dragHandleTo(
     page,
     "b3",
-    await centerOf(page.locator('[data-be-block-id="b5"]')),
+    await centerOf(page.locator('[data-geul-block-id="b5"]')),
   );
   await expect(
     page.getByRole("button", { name: "Move selection down" }),

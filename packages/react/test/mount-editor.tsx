@@ -282,7 +282,7 @@ export const mountBlockEditor = ({
    */
   const restubGeometry = () => {
     const blockElements = Array.from(
-      host.querySelectorAll<HTMLElement>("[data-be-block-id]"),
+      host.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
     );
     blockElements.forEach((block, index) => {
       stubRect(block, {
@@ -397,7 +397,7 @@ export const mountTableEditor = ({
   const host = screen.getByRole("textbox", { name: "Editor" });
   const editable = queryMountedEditable(host);
   const table = host.querySelector<HTMLElement>(
-    `table[data-be-block-id="${tableBlockId}"]`,
+    `table[data-geul-block-id="${tableBlockId}"]`,
   );
   if (table === null) throw new Error("표가 렌더되지 않았다");
 
@@ -433,7 +433,7 @@ export const mountTableEditor = ({
    */
   const restubGeometry = () => {
     const currentTable = host.querySelector<HTMLElement>(
-      `table[data-be-block-id="${tableBlockId}"]`,
+      `table[data-geul-block-id="${tableBlockId}"]`,
     );
     if (currentTable === null) throw new Error("표를 다시 찾지 못했다");
     const columnCount = currentTable.querySelectorAll("colgroup col").length;
@@ -456,7 +456,7 @@ export const mountTableEditor = ({
     }
     // 너비 재정렬이 표 DOM을 다시 만들 수 있으므로 행/셀은 그 뒤에 읽는다.
     const rowElements = Array.from(
-      currentTable.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+      currentTable.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
     );
     stubRect(currentTable, {
       left: layout.left,
@@ -472,7 +472,7 @@ export const mountTableEditor = ({
         height: layout.rowHeight,
       });
       row
-        .querySelectorAll<HTMLElement>("[data-be-column-id]")
+        .querySelectorAll<HTMLElement>("[data-geul-column-id]")
         .forEach((cell, cellIndex) => {
           stubRect(cell, {
             left: layout.left + cellIndex * layout.columnWidth,

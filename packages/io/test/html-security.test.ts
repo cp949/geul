@@ -116,7 +116,7 @@ describe("HTML 보안", () => {
 
   it("지원하는 링크와 상대 경로는 남기고 위험한 링크만 제거한다", () => {
     const result = importHtml(
-      '<p data-be-block-id="links"><a href="//evil.example">scheme-relative</a><a href="tel:+821012345678">phone</a><a href="/safe">relative</a></p>',
+      '<p data-geul-block-id="links"><a href="//evil.example">scheme-relative</a><a href="tel:+821012345678">phone</a><a href="/safe">relative</a></p>',
     );
 
     expect(result).toEqual({

@@ -22,7 +22,7 @@ const blockContainer = (
   blockId: string,
 ): HTMLElement => {
   const container = editable.querySelector<HTMLElement>(
-    `[data-be-block-id="${blockId}"]`,
+    `[data-geul-block-id="${blockId}"]`,
   );
   if (container === null)
     throw new Error(`${blockId} blockContainer 조회 실패`);
@@ -32,7 +32,7 @@ const blockContainer = (
 /** blockContainer decoration의 계산 marker를 문서 순서로 읽는다. */
 const markers = (editable: HTMLElement, ...blockIds: string[]) =>
   blockIds.map((blockId) =>
-    blockContainer(editable, blockId).getAttribute("data-be-list-marker"),
+    blockContainer(editable, blockId).getAttribute("data-geul-list-marker"),
   );
 
 /** 최상위와 중첩 형제 scope의 연속·reset 경계를 함께 포함한 목록 문서다. */
@@ -98,15 +98,15 @@ describe("목록 marker 표시", () => {
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
     const listContainers = editable.querySelectorAll<HTMLElement>(
-      "[data-be-list-marker]",
+      "[data-geul-list-marker]",
     );
     expect(
       Array.from(listContainers, (container) =>
-        container.getAttribute("data-be-list-marker"),
+        container.getAttribute("data-geul-list-marker"),
       ),
     ).toEqual(["9.", "10.", "11."]);
     expect(JSON.stringify(editor.getDocument())).not.toContain(
-      "data-be-list-marker",
+      "data-geul-list-marker",
     );
   });
 
@@ -163,7 +163,7 @@ describe("목록 marker 표시", () => {
 
     for (const id of ["empty-bullet", "empty-numbered"]) {
       const container = blockContainer(editable, id);
-      expect(container.getAttribute("data-be-list-marker")).not.toBeNull();
+      expect(container.getAttribute("data-geul-list-marker")).not.toBeNull();
       expect(
         container.firstElementChild?.getAttribute("data-placeholder"),
       ).toBe("List item");

@@ -4,124 +4,131 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   "*": [],
   a: ["href"],
   // blockquote(quote)는 블록 id를 자신이 갖는다(DELTA-06a — export-html.ts가
-  // <blockquote data-be-block-id><p>content</p>[<div data-be-children>]>로
+  // <blockquote data-geul-block-id><p>content</p>[<div data-geul-children>]>로
   // 낸다). 이 항목이 없으면 sanitize가 "*" 규칙으로 id를 지워 quote의 id가
   // 왕복에서 새로 발급된다. 안쪽 children 컨테이너 div는 아래 div 항목이
   // 그대로 받는다.
   // 뒤 세 속성(TextBlockProps, RD-004 DELTA-02)은 paragraph/heading/quote/
   // 목록 4종이 공유하는 블록 레벨 색상·정렬 매핑이다 — 표 셀과 이름은
-  // 같지만(dataBeTextColor/dataBeBackgroundColor) 값 의미가 블록 단위다.
-  // dataBeTextAlignment는 표 셀의 dataBeAlign과 별도 속성(필드명이 다르다,
+  // 같지만(dataGeulTextColor/dataGeulBackgroundColor) 값 의미가 블록 단위다.
+  // dataGeulTextAlignment는 표 셀의 dataGeulAlign과 별도 속성(필드명이 다르다,
   // export-html.ts의 textBlockPropsAttributes 참고).
   blockquote: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
-  col: ["width", "dataBeColumnId", "dataBeWidth"],
+  col: ["width", "dataGeulColumnId", "dataGeulWidth"],
   // DELTA-04(children 재귀 왕복): export-html.ts의 blockNode가 children 있는
   // paragraph/heading을 감싸는 wrapper(바깥 div, children 컨테이너 div)가
-  // 쓰는 두 속성이다. dataBeBlockId는 p/h1~h6/hr와 같은 이름을 재사용하고,
-  // dataBeChildren은 "이 div가 children 목록 컨테이너"라는 새 마커다(값은
+  // 쓰는 두 속성이다. dataGeulBlockId는 p/h1~h6/hr와 같은 이름을 재사용하고,
+  // dataGeulChildren은 "이 div가 children 목록 컨테이너"라는 새 마커다(값은
   // 항상 "1"). 이 목록에 없으면 sanitize가 div의 모든 속성을 지워
   // import-html.ts의 findChildrenWrapper가 children 컨테이너를 알아보지
   // 못하고 children이 조용히 사라진다(완료 조건 3의 변이 시나리오).
-  // dataBeBlockGroup은 own export가 아니라 생산 편집기 in-editor copy가
+  // dataGeulBlockGroup은 own export가 아니라 생산 편집기 in-editor copy가
   // 만드는 alternate children 컨테이너 마커다(BlockGroupExtension, 값은
-  // 항상 빈 문자열) — RD-002, findChildrenWrapper가 dataBeChildren과
+  // 항상 빈 문자열) — RD-002, findChildrenWrapper가 dataGeulChildren과
   // 동등하게 인식한다.
-  // 뒤 4개(dataBeBulletListItem 등)는 목록류 4종의 production own-content
+  // 뒤 4개(dataGeulBulletListItem 등)는 목록류 4종의 production own-content
   // 존재 마커(Production*ListItemExtension.renderHTML, 값은 항상 빈
-  // 문자열)고, 그 뒤 3개(dataBeChecked/dataBeStartNumber/dataBeCollapsed)는
-  // 상태 마커다 — RD-003, import-html.ts의 productionListItemType이
-  // 인식한다.
+  // 문자열)고, 그 뒤 3개(dataGeulChecked/dataGeulStartNumber/
+  // dataGeulCollapsed)는 상태 마커다 — RD-003, import-html.ts의
+  // productionListItemType이 인식한다. dataGeulBlockId는 own-export
+  // wrapper(위 주석)와 생산 편집기 blockContainer 두 경로가 같은 div
+  // 태그·같은 속성명을 공유한다(개명 전에는 서로 다른 이름(data-be-block-id/
+  // data-geul-block-id)이라 허용 목록에 두 항목이 필요했지만, Issue #159
+  // 개명 후에는 같은 이름이라 한 항목으로 충분하다).
   div: [
-    "dataBeBlockId",
-    "dataBeChildren",
-    "dataBeBlockGroup",
-    "dataBeBulletListItem",
-    "dataBeNumberedListItem",
-    "dataBeCheckListItem",
-    "dataBeToggleListItem",
-    "dataBeChecked",
-    "dataBeStartNumber",
-    "dataBeCollapsed",
+    "dataGeulBlockId",
+    "dataGeulChildren",
+    "dataGeulBlockGroup",
+    "dataGeulBulletListItem",
+    "dataGeulNumberedListItem",
+    "dataGeulCheckListItem",
+    "dataGeulToggleListItem",
+    "dataGeulChecked",
+    "dataGeulStartNumber",
+    "dataGeulCollapsed",
   ],
   h1: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   h2: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   h3: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   h4: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   h5: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   h6: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   // hr(divider)은 속성이 블록 id뿐이다 — 이 항목이 없으면 sanitize가 "*"
-  // 규칙으로 id를 지워 divider의 id가 왕복에서 새로 발급된다.
-  hr: ["dataBeBlockId"],
+  // 규칙으로 id를 지워 divider의 id가 왕복에서 새로 발급된다. own-export와
+  // 생산 편집기(divider-extension.ts) 둘 다 같은 dataGeulBlockId를 낸다
+  // (Issue #159 개명 후 한 이름으로 통일 — 개명 전에는 두 이름을 함께
+  // 허용해야 했다).
+  hr: ["dataGeulBlockId"],
   p: [
-    "dataBeBlockId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeTextAlignment",
+    "dataGeulBlockId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
-  pre: ["dataBeBlockId", "dataLanguage", "className"],
+  pre: ["dataGeulBlockId", "dataLanguage", "className"],
   // 인라인 textColor/backgroundColor mark의 HTML 매핑이다(spec §7.1, RD-004
-  // DELTA-01). 표 셀 색상(`data-be-*`)과 달리 실제 CSS `style` 속성을 쓴다 —
+  // DELTA-01). 표 셀 색상(`data-geul-*`)과 달리 실제 CSS `style` 속성을 쓴다 —
   // 문서 안에서 두 인코딩이 공존하는 것은 spec이 이미 결정했다
   // (inline-content.ts의 wrapMark 참고).
   span: ["style"],
   code: ["dataLanguage", "className"],
-  table: ["dataBeBlockId", "dataBeHeaderRows", "dataBeHeaderColumns"],
+  table: ["dataGeulBlockId", "dataGeulHeaderRows", "dataGeulHeaderColumns"],
   td: [
     "rowSpan",
     "colSpan",
     "scope",
-    "dataBeCellId",
-    "dataBeColumnId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeAlign",
+    "dataGeulCellId",
+    "dataGeulColumnId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulAlign",
   ],
   th: [
     "rowSpan",
     "colSpan",
     "scope",
-    "dataBeCellId",
-    "dataBeColumnId",
-    "dataBeTextColor",
-    "dataBeBackgroundColor",
-    "dataBeAlign",
+    "dataGeulCellId",
+    "dataGeulColumnId",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulAlign",
   ],
-  tr: ["dataBeRowId"],
+  tr: ["dataGeulRowId"],
 };
 
 export const htmlStrippedTagNames = [

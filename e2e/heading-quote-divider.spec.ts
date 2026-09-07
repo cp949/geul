@@ -149,17 +149,17 @@ test("native #/>/--- 입력은 production editor에서 heading/quote/divider DOM
   );
   await page.getByRole("button", { name: "Load JSON" }).click();
 
-  await editable.locator('[data-be-block-id="heading-target"] p').click();
+  await editable.locator('[data-geul-block-id="heading-target"] p').click();
   await page.keyboard.type("# ");
   await expect(editable.locator("h1")).toHaveCount(1);
   await expect(editable).toBeFocused();
 
-  await editable.locator('[data-be-block-id="quote-target"] p').click();
+  await editable.locator('[data-geul-block-id="quote-target"] p').click();
   await page.keyboard.type("> ");
   await expect(editable.locator("blockquote")).toHaveCount(1);
   await expect(editable).toBeFocused();
 
-  await editable.locator('[data-be-block-id="divider-target"] p').click();
+  await editable.locator('[data-geul-block-id="divider-target"] p').click();
   await page.keyboard.type("---");
   await expect(editable.locator("hr")).toHaveCount(1);
   await expect(editable).toBeFocused();

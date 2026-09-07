@@ -96,7 +96,7 @@ test("업로드 중 블록을 undo로 지우면 완료 결과를 무시한다(�
   await editable.click();
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).click();
-  await expect(editable.locator('[data-be-media-empty="image"]')).toHaveCount(
+  await expect(editable.locator('[data-geul-media-empty="image"]')).toHaveCount(
     1,
   );
 
@@ -112,7 +112,7 @@ test("업로드 중 블록을 undo로 지우면 완료 결과를 무시한다(�
   await page.keyboard.press("Escape");
   await expect(editable).toBeFocused();
   await page.keyboard.press("Control+z");
-  await expect(editable.locator('[data-be-media-empty="image"]')).toHaveCount(
+  await expect(editable.locator('[data-geul-media-empty="image"]')).toHaveCount(
     0,
   );
 

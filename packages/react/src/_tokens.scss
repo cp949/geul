@@ -8,7 +8,7 @@
 //
 // 2026-08-25 SCSS 전환(아키텍처 리뷰 03.html)으로 --be-color-*에서 이름을
 // 바꿨다 — "be"는 이 프로젝트 고유 명명이 아니라 다른 프로젝트에서 가져온
-// 이름이었다. data-be-* DOM attribute(core/model이 공유하는 표 직렬화
+// 이름이었다. data-geul-* DOM attribute(core/model이 공유하는 표 직렬화
 // 계약)는 이번 이름 변경 범위 밖이다.
 :root {
   --geul-color-text: #202124;

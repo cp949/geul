@@ -74,7 +74,7 @@ const fakeController = ({
     // 대상 미디어 블록의 렌더 DOM(RD-002 DELTA-01 계약) — FilePanel의
     // readBlockBounds가 이 selector로 앵커 좌표를 찾는다.
     const mediaBlockElement = document.createElement("div");
-    mediaBlockElement.setAttribute("data-be-block-id", "media-1");
+    mediaBlockElement.setAttribute("data-geul-block-id", "media-1");
     editable.append(mediaBlockElement);
     element.append(editable);
   }),
@@ -590,9 +590,7 @@ describe("FilePanel component override(슬라이스4 RD-001 DELTA-04)", () => {
 
   it("지정해도 표시 판정은 wrapper가 그대로 유지한다", () => {
     const controller = fakeController();
-    render(
-      withProvider(controller, <FilePanel component={CustomFilePanel} />),
-    );
+    render(withProvider(controller, <FilePanel component={CustomFilePanel} />));
 
     expect(screen.queryByRole("toolbar")).toBeNull();
     expect(screen.queryByRole("button", { name: "Custom save" })).toBeNull();

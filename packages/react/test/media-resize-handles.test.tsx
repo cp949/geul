@@ -72,7 +72,7 @@ type FakeControllerOptions = {
 /**
  * MediaResizeHandles가 읽는 최소 표면(getSelectionMediaBlock,
  * commands.setMediaPreviewWidth)만 채운 fake 컨트롤러를 만든다. `mount`는
- * `media-toolbar.test.tsx`처럼 실제 NodeSelection 없이 `data-be-block-id`
+ * `media-toolbar.test.tsx`처럼 실제 NodeSelection 없이 `data-geul-block-id`
  * 래퍼 div와 그 자식 미디어 엘리먼트만 손으로 조립한다 — jsdom은
  * 클릭→NodeSelection 변환을 지원하지 않아 이 컴포넌트가 실제로 읽는
  * `getSelectionMediaBlock()` 반환값을 직접 제어하는 편이 선택 메커니즘
@@ -89,7 +89,7 @@ const fakeController = ({
     const editable = document.createElement("div");
     editable.setAttribute("contenteditable", "true");
     const wrapper = document.createElement("div");
-    wrapper.setAttribute("data-be-block-id", "media-1");
+    wrapper.setAttribute("data-geul-block-id", "media-1");
     const media = document.createElement(mediaTag);
     wrapper.append(media);
     editable.append(wrapper);
@@ -123,7 +123,7 @@ const getEditable = () => {
 
 const getHandle = (side: "left" | "right"): HTMLElement => {
   const handle = document.querySelector<HTMLElement>(
-    `[data-be-media-resize-handle="${side}"]`,
+    `[data-geul-media-resize-handle="${side}"]`,
   );
   if (handle === null) throw new Error(`${side} 리사이즈 핸들 없음`);
   return handle;
@@ -131,7 +131,7 @@ const getHandle = (side: "left" | "right"): HTMLElement => {
 
 const getMediaElement = (): HTMLElement => {
   const media = document.querySelector<HTMLElement>(
-    '[data-be-block-id="media-1"] > img, [data-be-block-id="media-1"] > video',
+    '[data-geul-block-id="media-1"] > img, [data-geul-block-id="media-1"] > video',
   );
   if (media === null) throw new Error("미디어 엘리먼트 없음");
   return media;
@@ -145,7 +145,9 @@ describe("선택 상태에 따른 핸들 노출", () => {
   it("선택된 미디어 블록이 없으면 핸들을 렌더링하지 않는다", () => {
     renderHandles(fakeController());
 
-    expect(document.querySelector("[data-be-media-resize-handle]")).toBeNull();
+    expect(
+      document.querySelector("[data-geul-media-resize-handle]"),
+    ).toBeNull();
   });
 
   it("audio를 선택하면 핸들을 렌더링하지 않는다(image/video 전용)", () => {
@@ -158,7 +160,9 @@ describe("선택 상태에 따른 핸들 노출", () => {
       }),
     );
 
-    expect(document.querySelector("[data-be-media-resize-handle]")).toBeNull();
+    expect(
+      document.querySelector("[data-geul-media-resize-handle]"),
+    ).toBeNull();
   });
 
   it("url 없는 image를 선택하면 핸들을 렌더링하지 않는다(그릴 미디어가 없음)", () => {
@@ -168,7 +172,9 @@ describe("선택 상태에 따른 핸들 노출", () => {
       }),
     );
 
-    expect(document.querySelector("[data-be-media-resize-handle]")).toBeNull();
+    expect(
+      document.querySelector("[data-geul-media-resize-handle]"),
+    ).toBeNull();
   });
 
   it("url 있는 image를 선택하면 좌우 핸들 2개를 미디어 경계에 렌더링한다", () => {
@@ -211,7 +217,9 @@ describe("선택 상태에 따른 핸들 노출", () => {
     controller.getSelectionMediaBlock.mockReturnValue(null);
     fireEvent(document, new Event("selectionchange"));
 
-    expect(document.querySelector("[data-be-media-resize-handle]")).toBeNull();
+    expect(
+      document.querySelector("[data-geul-media-resize-handle]"),
+    ).toBeNull();
   });
 });
 

@@ -58,12 +58,13 @@ const inferHeaderColumns = (
   const firstColumnId = columns[0]?.id;
   for (const row of layouts.slice(headerRows)) {
     const hasCanonicalColumnIds = row.some(
-      ({ element }) => propertyString(element, "dataBeColumnId") !== undefined,
+      ({ element }) =>
+        propertyString(element, "dataGeulColumnId") !== undefined,
     );
     const firstColumnCell = hasCanonicalColumnIds
       ? row.find(
           ({ element }) =>
-            propertyString(element, "dataBeColumnId") === firstColumnId,
+            propertyString(element, "dataGeulColumnId") === firstColumnId,
         )
       : row.find(({ columnIndex }) => columnIndex === 0);
     if (
@@ -81,7 +82,7 @@ export const parseTable = (
   element: HtmlElementNode,
   createId: IdFactory,
 ): TableBlock => {
-  const tableId = propertyString(element, "dataBeBlockId") ?? createId();
+  const tableId = propertyString(element, "dataGeulBlockId") ?? createId();
   const cols = columnElements(element);
   if (cols.length > MAX_TABLE_COLUMNS) {
     throw new HtmlDocumentInvalidError(
@@ -139,15 +140,15 @@ export const parseTable = (
         col === undefined
           ? (propertyString(
               cellColumnId?.element ?? element,
-              "dataBeColumnId",
+              "dataGeulColumnId",
             ) ?? createId())
-          : (propertyString(col, "dataBeColumnId") ?? createId());
+          : (propertyString(col, "dataGeulColumnId") ?? createId());
       const width =
         col === undefined
           ? DEFAULT_COLUMN_WIDTH
           : propertyInteger(
               col,
-              "dataBeWidth",
+              "dataGeulWidth",
               propertyInteger(col, "width", DEFAULT_COLUMN_WIDTH),
             );
       return { id, width };
@@ -155,23 +156,23 @@ export const parseTable = (
   );
 
   const modelRows: TableBlock["rows"] = rows.map((row, rowIndex) => ({
-    id: propertyString(row.element, "dataBeRowId") ?? createId(),
+    id: propertyString(row.element, "dataGeulRowId") ?? createId(),
     cells: (layouts[rowIndex] ?? []).map((layout) => {
       const column = columns[layout.columnIndex];
       const columnId =
-        propertyString(layout.element, "dataBeColumnId") ??
+        propertyString(layout.element, "dataGeulColumnId") ??
         column?.id ??
         createId();
-      const textColor = propertyString(layout.element, "dataBeTextColor");
+      const textColor = propertyString(layout.element, "dataGeulTextColor");
       const backgroundColor = propertyString(
         layout.element,
-        "dataBeBackgroundColor",
+        "dataGeulBackgroundColor",
       );
-      const align = propertyString(layout.element, "dataBeAlign") as
+      const align = propertyString(layout.element, "dataGeulAlign") as
         TableBlock["rows"][number]["cells"][number]["align"] | undefined;
 
       return {
-        id: propertyString(layout.element, "dataBeCellId") ?? createId(),
+        id: propertyString(layout.element, "dataGeulCellId") ?? createId(),
         columnId,
         // rowSpan은 clipboard-table-parser.ts와 같은 seam(layoutRowSpan)으로
         // 보정한다 — 여기서 raw 값을 그대로 담으면 rowspan="0"·비정수
@@ -193,10 +194,10 @@ export const parseTable = (
     }),
   }));
   const headerRows =
-    propertyHeaderFlag(element, "dataBeHeaderRows") ??
+    propertyHeaderFlag(element, "dataGeulHeaderRows") ??
     inferHeaderRows(rows, layouts);
   const headerColumns =
-    propertyHeaderFlag(element, "dataBeHeaderColumns") ??
+    propertyHeaderFlag(element, "dataGeulHeaderColumns") ??
     inferHeaderColumns(layouts, headerRows, columns);
 
   return {

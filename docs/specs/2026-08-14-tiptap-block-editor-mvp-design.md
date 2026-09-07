@@ -253,11 +253,11 @@ React 오버레이는 좌표 계산과 표시에만 책임이 있다. 문서 변
 
 세 포맷의 역할을 구분한다.
 
-| 포맷 | 역할 | 보존 수준 |
-| --- | --- | --- |
-| 독자 JSON | 저장·복원 원본 | 모든 지원 기능 완전 보존 |
-| HTML | 외부 고충실도 교환 | 병합, 헤더, 색상과 열 너비 보존 |
-| GFM Markdown | 휴대 가능한 텍스트 교환 | 단순 표만 무손실 보존 |
+| 포맷         | 역할                    | 보존 수준                       |
+| ------------ | ----------------------- | ------------------------------- |
+| 독자 JSON    | 저장·복원 원본          | 모든 지원 기능 완전 보존        |
+| HTML         | 외부 고충실도 교환      | 병합, 헤더, 색상과 열 너비 보존 |
+| GFM Markdown | 휴대 가능한 텍스트 교환 | 단순 표만 무손실 보존           |
 
 HTML이나 Markdown을 내부 저장 원본으로 사용하지 않는다. 모든 import는 외부 입력을 `model.Document`로 정규화하고, 모든 export는 검증된 `model.Document`에서 생성한다.
 
@@ -400,7 +400,7 @@ React 언마운트는 코어 문서와 명령의 의미를 변경하지 않는�
 
 `ExportErrorCode`: `HTML_DOCUMENT_INVALID` | `HTML_SERIALIZE_FAILED` | `MARKDOWN_DOCUMENT_INVALID` | `MARKDOWN_SERIALIZE_FAILED`
 
-Markdown `strict` export가 GFM으로 표현 불가능한 요소를 만나면 `ExportError` 대신 `MarkdownLossNotAllowedError`(`{ code: "MARKDOWN_LOSS_NOT_ALLOWED"; losses: MarkdownLoss[] }`)를 반환한다. `MarkdownLoss.kind`는 `MERGED_CELL` | `COLUMN_WIDTH` | `COLUMN_ALIGN` | `CELL_COLOR` | `UNDERLINE` | `HEADER_ROW` | `HEADER_COLUMN` | `INLINE_CODE_NEWLINE`이며 각 항목은 `blockId`, `rowId?`, `cellId?`, `message`를 담는다. `lossy` export는 같은 손실 목록을 오류가 아닌 `warnings`로 반환한다. 이 코드는 Markdown 전용이다 — HTML export는 `data-be-*` 속성으로 병합·색상·정렬·열 너비를 무손실 보존해 대응하는 손실 코드가 없다.
+Markdown `strict` export가 GFM으로 표현 불가능한 요소를 만나면 `ExportError` 대신 `MarkdownLossNotAllowedError`(`{ code: "MARKDOWN_LOSS_NOT_ALLOWED"; losses: MarkdownLoss[] }`)를 반환한다. `MarkdownLoss.kind`는 `MERGED_CELL` | `COLUMN_WIDTH` | `COLUMN_ALIGN` | `CELL_COLOR` | `UNDERLINE` | `HEADER_ROW` | `HEADER_COLUMN` | `INLINE_CODE_NEWLINE`이며 각 항목은 `blockId`, `rowId?`, `cellId?`, `message`를 담는다. `lossy` export는 같은 손실 목록을 오류가 아닌 `warnings`로 반환한다. 이 코드는 Markdown 전용이다 — HTML export는 `data-geul-*` 속성으로 병합·색상·정렬·열 너비를 무손실 보존해 대응하는 손실 코드가 없다.
 
 `ClipboardParseErrorCode`: `NOT_TABULAR` | `CLIPBOARD_TABLE_INVALID`
 

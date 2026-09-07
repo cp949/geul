@@ -51,7 +51,7 @@ export const TableCellFormatMenu = ({
     <div
       aria-label="Cell formatting"
       className="geul-menu-panel"
-      data-be-cell-format-menu=""
+      data-geul-cell-format-menu=""
       ref={menuRef}
       role="menu"
       style={style}

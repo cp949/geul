@@ -8,20 +8,20 @@ import {
   htmlSanitizeSchema,
 } from "./sanitize-schema.js";
 
-// 4종 미디어 블록(file/image/video/audio, spec §7.1)이 공유하는 data-be-*
+// 4종 미디어 블록(file/image/video/audio, spec §7.1)이 공유하는 data-geul-*
 // 속성 전체(RD-001-DELTA-01 export 계약과 동일 집합) — 어느 태그가 어느
 // 서브셋만 실제로 쓰는지는 export 쪽 타입 제약(mediaDataAttributes)이 이미
 // 지키므로 여기서는 태그마다 7개 전부를 공통 허용한다(표 셀·목록 마커
 // allowlist의 기존 관례와 동일 — sanitize는 존재 여부만 검사하고 타입별
 // 제약은 parseDocument가 최종 판정).
 const mediaDataAttributeNames = [
-  "dataBeBlockId",
-  "dataBeMediaType",
-  "dataBeName",
-  "dataBeBackgroundColor",
-  "dataBeShowPreview",
-  "dataBePreviewWidth",
-  "dataBeTextAlignment",
+  "dataGeulBlockId",
+  "dataGeulMediaType",
+  "dataGeulName",
+  "dataGeulBackgroundColor",
+  "dataGeulShowPreview",
+  "dataGeulPreviewWidth",
+  "dataGeulTextAlignment",
 ];
 
 // 목록 import가 의미로 소비하는 속성을 sanitizer의 document-import 전용
@@ -59,22 +59,27 @@ export const htmlImportSanitizeSchema = {
     // 블록 레벨 색상·정렬 매핑이다 — 위 htmlAllowedAttributes의
     // p/h1~h6/blockquote와 같은 이름 규칙.
     li: [
-      "dataBeBlockId",
-      "dataBeChecked",
-      "dataBeTextColor",
-      "dataBeBackgroundColor",
-      "dataBeTextAlignment",
+      "dataGeulBlockId",
+      "dataGeulChecked",
+      "dataGeulTextColor",
+      "dataGeulBackgroundColor",
+      "dataGeulTextAlignment",
     ],
     ol: ["start"],
-    details: ["dataBeBlockId", "dataBeToggleable", "dataBeCollapsed", "open"],
+    details: [
+      "dataGeulBlockId",
+      "dataGeulToggleable",
+      "dataGeulCollapsed",
+      "open",
+    ],
     summary: [
-      "dataBeBlockId",
-      "dataBeTextColor",
-      "dataBeBackgroundColor",
-      "dataBeTextAlignment",
+      "dataGeulBlockId",
+      "dataGeulTextColor",
+      "dataGeulBackgroundColor",
+      "dataGeulTextAlignment",
     ],
     // file, 또는 showPreview:false로 강등된 image/video/audio가 bare 시각
-    // 태그일 때 data-be-*를 직접 갖는다(RD-001-DELTA-01 export 계약) — 기존
+    // 태그일 때 data-geul-*를 직접 갖는다(RD-001-DELTA-01 export 계약) — 기존
     // href는 공유 목록(htmlAllowedAttributes.a)에 이미 있어 스프레드로
     // 유지된다.
     a: [...(htmlAllowedAttributes.a ?? []), ...mediaDataAttributeNames],
@@ -83,12 +88,12 @@ export const htmlImportSanitizeSchema = {
     audio: ["src", "controls", ...mediaDataAttributeNames],
     figure: [...mediaDataAttributeNames],
     // div는 이미 children wrapper·목록류 마커를 갖는다(공유 목록) — url
-    // 없는 빈 미디어 블록(<div data-be-block-id data-be-media-type>)도
-    // 같은 태그를 재사용하므로 media 속성만 추가한다(dataBeBlockId는
+    // 없는 빈 미디어 블록(<div data-geul-block-id data-geul-media-type>)도
+    // 같은 태그를 재사용하므로 media 속성만 추가한다(dataGeulBlockId는
     // 이미 있어 제외).
     div: [
       ...(htmlAllowedAttributes.div ?? []),
-      ...mediaDataAttributeNames.filter((name) => name !== "dataBeBlockId"),
+      ...mediaDataAttributeNames.filter((name) => name !== "dataGeulBlockId"),
     ],
   },
 };

@@ -35,7 +35,7 @@ function withoutIds(value: unknown): unknown {
 
 /** HTML fixture가 nested list, 명시·부재 start, table child를 모두 표현한다. */
 function htmlFixture(): string {
-  return '<ol start="4"><li data-be-block-id="html-parent"><p>부모</p><ul><li data-be-block-id="html-child"><p>자식</p></li></ul><table data-be-block-id="html-table" data-be-header-rows="0" data-be-header-columns="0"><colgroup><col data-be-column-id="html-col" data-be-width="120"></colgroup><tbody><tr data-be-row-id="html-row"><td data-be-cell-id="html-cell" data-be-column-id="html-col" rowspan="1" colspan="1">셀</td></tr></tbody></table></li></ol><ul><li data-be-block-id="html-absent"><p>부재</p></li></ul><p data-be-block-id="html-tail">마지막 문단</p>';
+  return '<ol start="4"><li data-geul-block-id="html-parent"><p>부모</p><ul><li data-geul-block-id="html-child"><p>자식</p></li></ul><table data-geul-block-id="html-table" data-geul-header-rows="0" data-geul-header-columns="0"><colgroup><col data-geul-column-id="html-col" data-geul-width="120"></colgroup><tbody><tr data-geul-row-id="html-row"><td data-geul-cell-id="html-cell" data-geul-column-id="html-col" rowspan="1" colspan="1">셀</td></tr></tbody></table></li></ol><ul><li data-geul-block-id="html-absent"><p>부재</p></li></ul><p data-geul-block-id="html-tail">마지막 문단</p>';
 }
 
 /** strict GFM이 trailing 정규화를 추가하지 않도록 마지막에 일반 문단을 둔다. */
@@ -114,7 +114,7 @@ describe("목록 IO production 왕복", () => {
       expect(exported.ok).toBe(true);
       if (!exported.ok) throw new Error(exported.error.code);
       expect(exported.value).not.toMatch(
-        /data-be-(?:block|row|column|cell)-id/,
+        /data-geul-(?:block|row|column|cell)-id/,
       );
       const roundTripped = importedDocument(importMarkdown(exported.value));
       expect(withoutIds(roundTripped.blocks)).toEqual(

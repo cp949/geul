@@ -50,14 +50,14 @@ describe("4종 미디어 블록 렌더링 — 채워진 상태", () => {
       url: "https://example.com/doc.pdf",
       name: "doc.pdf",
     });
-    const link = dom.querySelector('[data-be-block-id="file-1"] a');
+    const link = dom.querySelector('[data-geul-block-id="file-1"] a');
     expect(link?.getAttribute("href")).toBe("https://example.com/doc.pdf");
     expect(link?.textContent).toBe("doc.pdf");
   });
 
   it("file은 name이 없으면 url을 링크 텍스트로 쓴다", () => {
     const dom = mountedDom("file", { url: "https://example.com/doc.pdf" });
-    const link = dom.querySelector('[data-be-block-id="file-1"] a');
+    const link = dom.querySelector('[data-geul-block-id="file-1"] a');
     expect(link?.textContent).toBe("https://example.com/doc.pdf");
   });
 
@@ -67,7 +67,7 @@ describe("4종 미디어 블록 렌더링 — 채워진 상태", () => {
       name: "pic.png",
       caption: "a cat",
     });
-    const img = dom.querySelector('[data-be-block-id="image-1"] img');
+    const img = dom.querySelector('[data-geul-block-id="image-1"] img');
     expect(img?.getAttribute("src")).toBe("https://example.com/pic.png");
     expect(img?.getAttribute("alt")).toBe("a cat");
   });
@@ -77,26 +77,26 @@ describe("4종 미디어 블록 렌더링 — 채워진 상태", () => {
       url: "https://example.com/pic.png",
       name: "pic.png",
     });
-    const img = dom.querySelector('[data-be-block-id="image-1"] img');
+    const img = dom.querySelector('[data-geul-block-id="image-1"] img');
     expect(img?.getAttribute("alt")).toBe("pic.png");
   });
 
   it("image는 caption·name 둘 다 없으면 alt를 빈 문자열로 낸다", () => {
     const dom = mountedDom("image", { url: "https://example.com/pic.png" });
-    const img = dom.querySelector('[data-be-block-id="image-1"] img');
+    const img = dom.querySelector('[data-geul-block-id="image-1"] img');
     expect(img?.getAttribute("alt")).toBe("");
   });
 
   it("video는 <video controls src>로 url을 반영한다", () => {
     const dom = mountedDom("video", { url: "https://example.com/v.mp4" });
-    const video = dom.querySelector('[data-be-block-id="video-1"] video');
+    const video = dom.querySelector('[data-geul-block-id="video-1"] video');
     expect(video?.getAttribute("src")).toBe("https://example.com/v.mp4");
     expect(video?.hasAttribute("controls")).toBe(true);
   });
 
   it("audio는 <audio controls src>로 url을 반영한다", () => {
     const dom = mountedDom("audio", { url: "https://example.com/a.mp3" });
-    const audio = dom.querySelector('[data-be-block-id="audio-1"] audio');
+    const audio = dom.querySelector('[data-geul-block-id="audio-1"] audio');
     expect(audio?.getAttribute("src")).toBe("https://example.com/a.mp3");
     expect(audio?.hasAttribute("controls")).toBe(true);
   });
@@ -111,7 +111,7 @@ describe("caption 렌더 — 4종 공통", () => {
         caption: "설명 텍스트",
       });
       const caption = dom.querySelector(
-        `[data-be-block-id="${kind}-1"] [data-be-media-caption]`,
+        `[data-geul-block-id="${kind}-1"] [data-geul-media-caption]`,
       );
       expect(caption?.textContent).toBe("설명 텍스트");
     },
@@ -122,7 +122,7 @@ describe("caption 렌더 — 4종 공통", () => {
     (kind) => {
       const dom = mountedDom(kind, { url: "https://example.com/x" });
       const caption = dom.querySelector(
-        `[data-be-block-id="${kind}-1"] [data-be-media-caption]`,
+        `[data-geul-block-id="${kind}-1"] [data-geul-media-caption]`,
       );
       expect(caption).toBeNull();
     },
@@ -134,9 +134,9 @@ describe("url 없는 빈 상태 — 4종 공통", () => {
     "%s는 url이 없어도 예외 없이 렌더되고 kind 표식을 가진다",
     (kind) => {
       const dom = mountedDom(kind);
-      const wrapper = dom.querySelector(`[data-be-block-id="${kind}-1"]`);
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
       expect(wrapper).not.toBeNull();
-      expect(wrapper?.getAttribute("data-be-media-empty")).toBe(kind);
+      expect(wrapper?.getAttribute("data-geul-media-empty")).toBe(kind);
       // 채워진 상태의 미디어 태그(a/img/video/audio)를 만들지 않는다.
       expect(wrapper?.children).toHaveLength(0);
     },
@@ -152,7 +152,7 @@ describe("previewWidth 렌더 — image/video(슬라이스5 RD-001 DELTA-01)", (
         previewWidth: 320,
       });
       const el = dom.querySelector<HTMLElement>(
-        `[data-be-block-id="${kind}-1"] ${kind === "image" ? "img" : "video"}`,
+        `[data-geul-block-id="${kind}-1"] ${kind === "image" ? "img" : "video"}`,
       );
       expect(el?.style.width).toBe("320px");
     },
@@ -163,7 +163,7 @@ describe("previewWidth 렌더 — image/video(슬라이스5 RD-001 DELTA-01)", (
     (kind) => {
       const dom = mountedDom(kind, { url: "https://example.com/x" });
       const el = dom.querySelector<HTMLElement>(
-        `[data-be-block-id="${kind}-1"] ${kind === "image" ? "img" : "video"}`,
+        `[data-geul-block-id="${kind}-1"] ${kind === "image" ? "img" : "video"}`,
       );
       expect(el?.style.width).toBe("");
     },
@@ -173,12 +173,13 @@ describe("previewWidth 렌더 — image/video(슬라이스5 RD-001 DELTA-01)", (
     const fileDom = mountedDom("file", { url: "https://example.com/x" });
     const audioDom = mountedDom("audio", { url: "https://example.com/x" });
     expect(
-      fileDom.querySelector<HTMLElement>('[data-be-block-id="file-1"] a')?.style
-        .width,
+      fileDom.querySelector<HTMLElement>('[data-geul-block-id="file-1"] a')
+        ?.style.width,
     ).toBe("");
     expect(
-      audioDom.querySelector<HTMLElement>('[data-be-block-id="audio-1"] audio')
-        ?.style.width,
+      audioDom.querySelector<HTMLElement>(
+        '[data-geul-block-id="audio-1"] audio',
+      )?.style.width,
     ).toBe("");
   });
 });
@@ -192,7 +193,7 @@ describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01
         name: "x.dat",
         showPreview: false,
       });
-      const wrapper = dom.querySelector(`[data-be-block-id="${kind}-1"]`);
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
       const tag = kind === "image" ? "img" : kind;
       expect(wrapper?.querySelector(tag)).toBeNull();
       const link = wrapper?.querySelector("a");
@@ -205,7 +206,7 @@ describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01
     "%s는 showPreview가 없거나 true면 기존 미디어 태그를 렌더한다(회귀)",
     (kind) => {
       const dom = mountedDom(kind, { url: "https://example.com/x" });
-      const wrapper = dom.querySelector(`[data-be-block-id="${kind}-1"]`);
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
       const tag = kind === "image" ? "img" : kind;
       expect(wrapper?.querySelector(tag)).not.toBeNull();
       expect(wrapper?.querySelector("a")).toBeNull();
@@ -221,7 +222,7 @@ describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01
         showPreview: false,
       });
       const caption = dom.querySelector(
-        `[data-be-block-id="${kind}-1"] [data-be-media-caption]`,
+        `[data-geul-block-id="${kind}-1"] [data-geul-media-caption]`,
       );
       expect(caption?.textContent).toBe("설명 텍스트");
     },
@@ -232,7 +233,7 @@ describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01
       url: "https://example.com/doc.pdf",
       name: "doc.pdf",
     });
-    const link = dom.querySelector('[data-be-block-id="file-1"] a');
+    const link = dom.querySelector('[data-geul-block-id="file-1"] a');
     expect(link?.getAttribute("href")).toBe("https://example.com/doc.pdf");
     expect(link?.textContent).toBe("doc.pdf");
   });
@@ -240,11 +241,11 @@ describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01
 
 describe("selector — RD-003·RD-004가 대상 블록을 찾는 최소 계약", () => {
   it.each(MEDIA_KINDS)(
-    "%s 블록을 data-be-block-id로 querySelector할 수 있다",
+    "%s 블록을 data-geul-block-id로 querySelector할 수 있다",
     (kind) => {
       const dom = mountedDom(kind, { url: "https://example.com/x" });
       expect(
-        dom.querySelector(`[data-be-block-id="${kind}-1"]`),
+        dom.querySelector(`[data-geul-block-id="${kind}-1"]`),
       ).not.toBeNull();
     },
   );

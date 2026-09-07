@@ -23,14 +23,14 @@ type ProductionListItemType =
   "bulletListItem" | "numberedListItem" | "checkListItem" | "toggleListItem";
 
 // 목록류 4종의 production own-content 존재 마커 — 값은 항상 빈 문자열이라
-// (dataBeBlockGroup과 같은 이유) propertyString이 아닌 raw property 존재만
+// (dataGeulBlockGroup과 같은 이유) propertyString이 아닌 raw property 존재만
 // 확인한다. RD-003.
 const productionListItemMarkerProperty: Record<ProductionListItemType, string> =
   {
-    bulletListItem: "dataBeBulletListItem",
-    numberedListItem: "dataBeNumberedListItem",
-    checkListItem: "dataBeCheckListItem",
-    toggleListItem: "dataBeToggleListItem",
+    bulletListItem: "dataGeulBulletListItem",
+    numberedListItem: "dataGeulNumberedListItem",
+    checkListItem: "dataGeulCheckListItem",
+    toggleListItem: "dataGeulToggleListItem",
   };
 
 // node가 목록류 production own-content div면 그 블록 타입을, 아니면
@@ -90,13 +90,13 @@ export const buildProductionListItemBlock = (
   // 범위가 아니다 — Production*ListItemExtension이 아직 이 속성을 DOM에
   // 노출하지 않는다(production-editor-assembly.ts). div 허용 목록에도
   // 올리지 않았으므로 sanitize가 어차피 지운다.
-  const id = propertyString(ownNode, "dataBeBlockId") ?? createId();
+  const id = propertyString(ownNode, "dataGeulBlockId") ?? createId();
   const content = paragraphContentFromNodes(ownNode.children);
   switch (type) {
     case "numberedListItem": {
       const startNumber = propertyInteger(
         ownNode,
-        "dataBeStartNumber",
+        "dataGeulStartNumber",
         Number.NaN,
       );
       return {
@@ -111,10 +111,10 @@ export const buildProductionListItemBlock = (
         id,
         type,
         content,
-        checked: propertyString(ownNode, "dataBeChecked") === "true",
+        checked: propertyString(ownNode, "dataGeulChecked") === "true",
       };
     case "toggleListItem": {
-      const collapsedAttr = propertyString(ownNode, "dataBeCollapsed");
+      const collapsedAttr = propertyString(ownNode, "dataGeulCollapsed");
       return {
         id,
         type,

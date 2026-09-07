@@ -5,7 +5,7 @@ import { hasSubstantialText } from "./table-layout.js";
 
 // clipboard-table-parser.ts가 kind: "list" 세그먼트(ul/ol 원본 노드)를
 // li마다 content/children으로 나눌 때 쓰는 독립 순수 helper 묶음이다.
-// import-html.ts의 HtmlImportWarning·dataBeBlockId·IdFactory 같은 import
+// import-html.ts의 HtmlImportWarning·dataGeulBlockId·IdFactory 같은 import
 // 전용 관심사는 담지 않는다 — 이 파일은 clipboard-table-parser.ts와도
 // import-html.ts와도 코드를 공유하지 않는 신규 모듈이다. 단
 // splitListItemChildren의 알고리즘 자체는 import-html.ts:438-475의

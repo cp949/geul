@@ -86,15 +86,15 @@ const fakeController = ({
     // 직접 세우지 않으면 초점 복구가 단위 테스트에서 조용히 no-op가 된다.
     editable.setAttribute("contenteditable", "true");
     const table = document.createElement("table");
-    table.setAttribute("data-be-block-id", "table-1");
+    table.setAttribute("data-geul-block-id", "table-1");
     const row = document.createElement("tr");
-    row.setAttribute("data-be-row-id", "row-1");
+    row.setAttribute("data-geul-row-id", "row-1");
     const cell1 = document.createElement("td");
-    cell1.setAttribute("data-be-cell-id", "cell-1");
-    cell1.setAttribute("data-be-column-id", "col-1");
+    cell1.setAttribute("data-geul-cell-id", "cell-1");
+    cell1.setAttribute("data-geul-column-id", "col-1");
     const cell2 = document.createElement("td");
-    cell2.setAttribute("data-be-cell-id", "cell-2");
-    cell2.setAttribute("data-be-column-id", "col-2");
+    cell2.setAttribute("data-geul-cell-id", "cell-2");
+    cell2.setAttribute("data-geul-column-id", "col-2");
     row.append(cell1, cell2);
     table.append(row);
     editable.append(table);
@@ -181,8 +181,8 @@ const renderTable = (controller: ReturnType<typeof fakeController>) => {
   );
   const host = screen.getByRole("textbox", { name: "Editor" });
   const table = host.querySelector("table");
-  const cell1 = host.querySelector('[data-be-cell-id="cell-1"]');
-  const cell2 = host.querySelector('[data-be-cell-id="cell-2"]');
+  const cell1 = host.querySelector('[data-geul-cell-id="cell-1"]');
+  const cell2 = host.querySelector('[data-geul-cell-id="cell-2"]');
   if (table === null || cell1 === null || cell2 === null) {
     throw new Error("Table fixture was not rendered");
   }
@@ -218,11 +218,11 @@ const renderRealToolbar = () => {
  */
 const stubMergedGeometry = (host: HTMLElement, tableBlockId: string) => {
   const table = host.querySelector<HTMLElement>(
-    `table[data-be-block-id="${tableBlockId}"]`,
+    `table[data-geul-block-id="${tableBlockId}"]`,
   );
   if (table === null) throw new Error("병합 표를 찾지 못했다");
   const cells = Array.from(
-    table.querySelectorAll<HTMLElement>("[data-be-cell-id]"),
+    table.querySelectorAll<HTMLElement>("[data-geul-cell-id]"),
   );
   stubRect(table, {
     left: MERGED_LAYOUT.left,
@@ -575,7 +575,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
     }
   });
 
-  it("서식 메뉴 안(data-be-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
+  it("서식 메뉴 안(data-geul-cell-format-menu)을 클릭하면 닫히지 않는다", () => {
     const { firstMergedCell } = renderMergedCellTable();
     placeCaret(firstMergedCell);
     fireSelectionChange();
@@ -600,7 +600,7 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
 
     // 실제 브라우저의 재클릭은 pointerdown이 먼저 온다. 이 순서를 재현해야
     // CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS의
-    // "[data-be-cell-format-trigger]" 항목까지 잠긴다 — 그 항목이 빠지면
+    // "[data-geul-cell-format-trigger]" 항목까지 잠긴다 — 그 항목이 빠지면
     // pointerdown이 onOutsideDismiss(초점 복구 없는 dismissFormatMenu)로 먼저
     // 닫고, 이어지는 click이 formatMenuOpen === false를 보고 메뉴를 다시 연다.
     // click만 쏘면 그 회귀가 이 테스트를 통과한다.

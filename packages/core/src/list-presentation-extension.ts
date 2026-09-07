@@ -33,7 +33,7 @@ const listPresentationDecorations = (state: EditorState): DecorationSet => {
       previousNumberByScope.delete(parent);
       decorations.push(
         Decoration.node(position, position + node.nodeSize, {
-          "data-be-list-marker": BULLET_MARKER,
+          "data-geul-list-marker": BULLET_MARKER,
         }),
       );
       return true;
@@ -48,7 +48,7 @@ const listPresentationDecorations = (state: EditorState): DecorationSet => {
       previousNumberByScope.set(parent, number);
       decorations.push(
         Decoration.node(position, position + node.nodeSize, {
-          "data-be-list-marker": `${String(number)}.`,
+          "data-geul-list-marker": `${String(number)}.`,
         }),
       );
       return true;

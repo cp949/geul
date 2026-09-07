@@ -58,7 +58,7 @@ describe("customBlocks registry(RD-002-DELTA-11)", () => {
     });
     const { editable } = mountTiptapEditor(editor);
 
-    const rendered = editable.querySelector('[data-be-block-id="widget-1"]');
+    const rendered = editable.querySelector('[data-geul-block-id="widget-1"]');
     expect(rendered).not.toBeNull();
     expect(rendered?.textContent).toBe("widget:widget-1");
     expect(renderCalls.at(-1)?.block).toEqual({
@@ -88,7 +88,7 @@ describe("customBlocks registry(RD-002-DELTA-11)", () => {
     if (!result.ok) return;
 
     const rendered = editable.querySelector(
-      `[data-be-block-id="${result.value.blockId}"]`,
+      `[data-geul-block-id="${result.value.blockId}"]`,
     );
     expect(rendered).not.toBeNull();
 

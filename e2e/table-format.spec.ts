@@ -48,7 +48,7 @@ test("행 핸들 메뉴에서 헤더 행을 켜고 undo 1회로 복원한다", a
 
   await page.getByRole("menuitemcheckbox", { name: "Header row" }).click();
 
-  await expect(table).toHaveAttribute("data-be-header-rows", "1");
+  await expect(table).toHaveAttribute("data-geul-header-rows", "1");
   // CSS가 실제로 연결됐는지 계산된 스타일로 확인한다 — 속성만 보면
   // styles.css 규칙이 빠져도 통과한다.
   const headerWeight = await table
@@ -60,7 +60,7 @@ test("행 핸들 메뉴에서 헤더 행을 켜고 undo 1회로 복원한다", a
   expect(headerWeight).toBe("600");
 
   await page.keyboard.press("Control+z");
-  await expect(table).toHaveAttribute("data-be-header-rows", "0");
+  await expect(table).toHaveAttribute("data-geul-header-rows", "0");
 });
 
 test("열 핸들 메뉴에서 헤더 열을 켠다", async ({ page }) => {
@@ -69,7 +69,7 @@ test("열 핸들 메뉴에서 헤더 열을 켠다", async ({ page }) => {
 
   await page.getByRole("menuitemcheckbox", { name: "Header column" }).click();
 
-  await expect(table).toHaveAttribute("data-be-header-columns", "1");
+  await expect(table).toHaveAttribute("data-geul-header-columns", "1");
 });
 
 test("행 핸들 메뉴에서 배경색을 고르면 그 행에만 색이 적용되고 undo 1회로 복원한다", async ({
@@ -83,17 +83,17 @@ test("행 핸들 메뉴에서 배경색을 고르면 그 행에만 색이 적용
   const firstRowCell = table.locator("tr").first().locator("td").first();
   const secondRowCell = table.locator("tr").nth(1).locator("td").first();
   await expect(firstRowCell).toHaveAttribute(
-    "data-be-background-color",
+    "data-geul-background-color",
     "#FEF7E0",
   );
   await expect(firstRowCell).toHaveCSS(
     "background-color",
     "rgb(254, 247, 224)",
   );
-  await expect(secondRowCell).not.toHaveAttribute("data-be-background-color");
+  await expect(secondRowCell).not.toHaveAttribute("data-geul-background-color");
 
   await page.keyboard.press("Control+z");
-  await expect(firstRowCell).not.toHaveAttribute("data-be-background-color");
+  await expect(firstRowCell).not.toHaveAttribute("data-geul-background-color");
 });
 
 test("행 핸들 메뉴에서 행을 삭제하고 undo 1회로 복원한다", async ({ page }) => {

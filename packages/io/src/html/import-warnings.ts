@@ -152,14 +152,14 @@ const supportedBlockNames = new Set([
   "figcaption",
 ]);
 
-// data-be-media-type 값 검사만으로 own-format File 앵커를 판정한다 — 정확한
+// data-geul-media-type 값 검사만으로 own-format File 앵커를 판정한다 — 정확한
 // 4종 판정(isMediaNode/mediaTypeFromNode)은 import-html.ts가 단독 소유하고
 // (sanitizer 결합 회피 원칙, 위 파일 헤더 주석), 이 파일은 독립적으로
 // 마커 유효성만 다시 확인한다. 마커 없는 임의 <a>는 여전히 top-level
 // downgrade 경고 대상이다(기존 동작 불변).
 const isOwnMediaAnchorElement = (node: HtmlElementNode): boolean => {
   if (node.tagName !== "a") return false;
-  const mediaType = node.properties.dataBeMediaType;
+  const mediaType = node.properties.dataGeulMediaType;
   return (
     mediaType === "file" ||
     mediaType === "image" ||
@@ -255,7 +255,7 @@ const collectFromNodes = (
     // id/language/class 의미를 갖지 않는다. sanitizer가 semantic importer
     // 입력 보존을 위해 남긴 속성이라도 이 문맥에서는 실제로 버려진다.
     if (insideTable && node.tagName === "pre") {
-      allowedAttributes.delete("dataBeBlockId");
+      allowedAttributes.delete("dataGeulBlockId");
       allowedAttributes.delete("dataLanguage");
       allowedAttributes.delete("className");
     }

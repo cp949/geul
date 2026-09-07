@@ -33,11 +33,11 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
         attributes: {
           blockId: {
             default: null,
-            parseHTML: (element) => element.getAttribute("data-be-block-id"),
+            parseHTML: (element) => element.getAttribute("data-geul-block-id"),
             renderHTML: (attributes) => {
               const blockId = attributes.blockId;
               return typeof blockId === "string" && blockId.length > 0
-                ? { "data-be-block-id": blockId }
+                ? { "data-geul-block-id": blockId }
                 : {};
             },
           },

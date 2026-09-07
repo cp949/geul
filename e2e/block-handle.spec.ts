@@ -44,7 +44,7 @@ test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복�
     { steps: 5 },
   );
 
-  await expect(page.locator("[data-be-block-insertion-guide]")).toBeVisible();
+  await expect(page.locator("[data-geul-block-insertion-guide]")).toBeVisible();
 
   await page.mouse.up();
 
@@ -136,7 +136,7 @@ test("블록 메뉴에서 Indent를 클릭하면 앞 형제의 자식으로 들�
   await page.keyboard.press("Enter");
   await page.keyboard.type("second block");
 
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
 
   const secondBlock = editable.locator("p").nth(1);
   await secondBlock.hover();
@@ -147,7 +147,7 @@ test("블록 메뉴에서 Indent를 클릭하면 앞 형제의 자식으로 들�
   await menu.getByRole("menuitem", { name: "Indent" }).click();
 
   await expect(menu).toHaveCount(0);
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(1);
   // trailing-block-extension.ts(UI-010): 최상위 마지막 블록이 더는
   // "자식 없는 paragraph"가 아니라, 같은 dispatch가 문서 끝에 새 빈
   // paragraph를 추가한다 — 그래서 "second block"은 더 이상 p.last()가
@@ -156,7 +156,7 @@ test("블록 메뉴에서 Indent를 클릭하면 앞 형제의 자식으로 들�
 
   await page.keyboard.press("Control+z");
 
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
   await expect(editable.locator("p")).toHaveCount(2);
 });
 
@@ -181,9 +181,9 @@ test("블록 메뉴에서 Outdent를 클릭하면 부모의 형제로 내어쓰�
   await page.getByLabel("Document source").fill(JSON.stringify(nestedDocument));
   await page.getByRole("button", { name: "Load JSON" }).click();
 
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(1);
 
-  const childBlock = editable.locator('[data-be-block-id="child-1"] > p');
+  const childBlock = editable.locator('[data-geul-block-id="child-1"] > p');
   await childBlock.hover();
   await page.getByRole("button", { name: "Drag to reorder" }).click();
 
@@ -192,19 +192,19 @@ test("블록 메뉴에서 Outdent를 클릭하면 부모의 형제로 내어쓰�
   await menu.getByRole("menuitem", { name: "Outdent" }).click();
 
   await expect(menu).toHaveCount(0);
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(0);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(0);
   await expect(
-    editable.locator(':scope > [data-be-block-id="child-1"]'),
+    editable.locator(':scope > [data-geul-block-id="child-1"]'),
   ).toHaveCount(1);
 
   await page.keyboard.press("Control+z");
 
-  await expect(page.locator("[data-be-block-group]")).toHaveCount(1);
+  await expect(page.locator("[data-geul-block-group]")).toHaveCount(1);
   // 개수뿐 아니라 재중첩 위치까지 확인한다(table-handle.spec.ts의
   // Indent/Outdent undo 검증과 같은 엄격도, qq-workflow 단계-3 MINOR).
   await expect(
     editable.locator(
-      '[data-be-block-id="parent-1"] > [data-be-block-group] > [data-be-block-id="child-1"]',
+      '[data-geul-block-id="parent-1"] > [data-geul-block-group] > [data-geul-block-id="child-1"]',
     ),
   ).toHaveCount(1);
 });
@@ -279,8 +279,8 @@ test("Turn into의 번호 목록을 클릭하면 내용을 보존하고 메뉴�
   await menu.getByRole("menuitem", { name: "Numbered List" }).click();
 
   await expect(menu).toHaveCount(0);
-  const listItem = editable.locator("[data-be-list-marker]").first();
-  await expect(listItem).toHaveAttribute("data-be-list-marker", "1.");
+  const listItem = editable.locator("[data-geul-list-marker]").first();
+  await expect(listItem).toHaveAttribute("data-geul-list-marker", "1.");
   await expect(listItem).toContainText("보존할 내용");
   await expect(editable).toBeFocused();
 });
@@ -300,14 +300,14 @@ test("Turn into의 체크 목록을 클릭하면 내용을 보존하고 클릭�
   await menu.getByRole("menuitem", { name: "Check List" }).click();
 
   await expect(menu).toHaveCount(0);
-  const listItem = editable.locator("[data-be-check-list-item]").first();
+  const listItem = editable.locator("[data-geul-check-list-item]").first();
   await expect(listItem).toContainText("보존할 내용");
   await expect(editable).toBeFocused();
 
-  const marker = listItem.locator("[data-be-check-marker]");
-  await expect(marker).toHaveAttribute("data-be-checked", "false");
+  const marker = listItem.locator("[data-geul-check-marker]");
+  await expect(marker).toHaveAttribute("data-geul-checked", "false");
   await marker.click();
-  await expect(marker).toHaveAttribute("data-be-checked", "true");
+  await expect(marker).toHaveAttribute("data-geul-checked", "true");
 });
 
 test("Turn into의 토글 목록을 클릭하면 내용을 보존하고 클릭으로 collapsed를 토글한다 (RD-004 DELTA-04)", async ({
@@ -325,14 +325,14 @@ test("Turn into의 토글 목록을 클릭하면 내용을 보존하고 클릭�
   await menu.getByRole("menuitem", { name: "Toggle List" }).click();
 
   await expect(menu).toHaveCount(0);
-  const listItem = editable.locator("[data-be-toggle-list-item]").first();
+  const listItem = editable.locator("[data-geul-toggle-list-item]").first();
   await expect(listItem).toContainText("보존할 내용");
   await expect(editable).toBeFocused();
 
-  const marker = listItem.locator("[data-be-toggle-marker]");
-  await expect(marker).toHaveAttribute("data-be-collapsed", "false");
+  const marker = listItem.locator("[data-geul-toggle-marker]");
+  await expect(marker).toHaveAttribute("data-geul-collapsed", "false");
   await marker.click();
-  await expect(marker).toHaveAttribute("data-be-collapsed", "true");
+  await expect(marker).toHaveAttribute("data-geul-collapsed", "true");
 });
 
 test("좁은 뷰포트에서도 드래그 핸들이 화면 안에서 클릭 가능하다 (PIT-0011)", async ({
@@ -416,13 +416,13 @@ test("스크롤·뷰포트 변경 후 블록 메뉴가 블록을 따르고 마�
     .fill(JSON.stringify({ formatVersion: 1, revision: 0, blocks }));
   await page.getByRole("button", { name: "Load JSON" }).click();
 
-  const target = editable.locator('[data-be-block-id="block-menu-15"] > p');
+  const target = editable.locator('[data-geul-block-id="block-menu-15"] > p');
   await target.evaluate((element) =>
     element.scrollIntoView({ block: "center" }),
   );
   await page.evaluate(() => {
     const target = document.querySelector<HTMLElement>(
-      '[data-be-block-id="block-menu-15"] > p',
+      '[data-geul-block-id="block-menu-15"] > p',
     );
     if (target === null) throw new Error("Block menu target was not found");
     window.scrollBy(0, target.getBoundingClientRect().y - 100);
@@ -450,8 +450,8 @@ test("스크롤·뷰포트 변경 후 블록 메뉴가 블록을 따르고 마�
   await menu.getByRole("menuitem", { name: "Numbered List" }).click();
 
   await expect(
-    editable.locator('[data-be-block-id="block-menu-15"]'),
-  ).toHaveAttribute("data-be-list-marker", "1.");
+    editable.locator('[data-geul-block-id="block-menu-15"]'),
+  ).toHaveAttribute("data-geul-list-marker", "1.");
   await expect(editable).toBeFocused();
 });
 
@@ -519,8 +519,9 @@ test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다
     .last()
     .evaluate(
       (node) =>
-        node.closest("[data-be-block-id]")?.getAttribute("data-be-block-id") ??
-        null,
+        node
+          .closest("[data-geul-block-id]")
+          ?.getAttribute("data-geul-block-id") ?? null,
     );
   expect(newBlockId).toMatch(uuidV4Pattern);
 

@@ -30,40 +30,45 @@ const appendElement = (
 describe("findElementByAttribute", () => {
   it("tagName을 지정하면 그 태그이면서 값이 일치하는 엘리먼트를 찾는다", () => {
     const root = document.createElement("div");
-    appendElement(root, "table", "data-be-block-id", "table-1");
-    const target = appendElement(root, "table", "data-be-block-id", "table-2");
+    appendElement(root, "table", "data-geul-block-id", "table-1");
+    const target = appendElement(
+      root,
+      "table",
+      "data-geul-block-id",
+      "table-2",
+    );
 
     expect(
-      findElementByAttribute(root, "table", "data-be-block-id", "table-2"),
+      findElementByAttribute(root, "table", "data-geul-block-id", "table-2"),
     ).toBe(target);
   });
 
   it("tagName이 null이면 태그와 무관하게 속성값만으로 찾는다", () => {
     const root = document.createElement("div");
-    appendElement(root, "span", "data-be-cell-id", "cell-1");
-    const target = appendElement(root, "td", "data-be-cell-id", "cell-2");
+    appendElement(root, "span", "data-geul-cell-id", "cell-1");
+    const target = appendElement(root, "td", "data-geul-cell-id", "cell-2");
 
     expect(
-      findElementByAttribute(root, null, "data-be-cell-id", "cell-2"),
+      findElementByAttribute(root, null, "data-geul-cell-id", "cell-2"),
     ).toBe(target);
   });
 
   it("일치하는 엘리먼트가 없으면 null을 반환한다", () => {
     const root = document.createElement("div");
-    appendElement(root, "table", "data-be-block-id", "table-1");
+    appendElement(root, "table", "data-geul-block-id", "table-1");
 
     expect(
-      findElementByAttribute(root, "table", "data-be-block-id", "missing"),
+      findElementByAttribute(root, "table", "data-geul-block-id", "missing"),
     ).toBeNull();
   });
 
   it("값에 따옴표나 백슬래시가 섞여도 SyntaxError 없이 값으로 비교해 찾는다", () => {
     const root = document.createElement("div");
     const weirdId = `id"with\\quote`;
-    const target = appendElement(root, "table", "data-be-block-id", weirdId);
+    const target = appendElement(root, "table", "data-geul-block-id", weirdId);
 
     expect(
-      findElementByAttribute(root, "table", "data-be-block-id", weirdId),
+      findElementByAttribute(root, "table", "data-geul-block-id", weirdId),
     ).toBe(target);
   });
 });

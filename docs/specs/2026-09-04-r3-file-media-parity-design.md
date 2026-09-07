@@ -93,7 +93,10 @@ export type UploadResult =
   | { status: "error"; code: string; message: string } // code는 소비자 정의(열린 문자열), geul이 닫힌 union을 강제하지 않음
   | { status: "cancelled" };
 
-export type UploadFile = (file: File, signal: AbortSignal) => Promise<UploadResult>;
+export type UploadFile = (
+  file: File,
+  signal: AbortSignal,
+) => Promise<UploadResult>;
 ```
 
 `AGENTS.md`의 "외부 입력 실패는 구조화된 `Result<T,E>`로 반환한다" 불변식을 따른다 — BlockNote의 `Promise<string>`(실패는 reject)보다 명시적이다. `progress` 인자는 두지 않는다(2.2).
@@ -169,15 +172,21 @@ URL이 있는 미디어 블록 선택 시 전용 toolbar를 표시한다 — rep
 
 ```html
 <!-- caption 있음 -->
-<figure data-be-background-color="..." data-be-show-preview="..." data-be-preview-width="..." data-be-text-alignment="...">
-  <img src="URL" alt="caption 또는 name" /> <!-- image -->
+<figure
+  data-geul-background-color="..."
+  data-geul-show-preview="..."
+  data-geul-preview-width="..."
+  data-geul-text-alignment="..."
+>
+  <img src="URL" alt="caption 또는 name" />
+  <!-- image -->
   <figcaption>caption</figcaption>
 </figure>
 <!-- caption 없음 -->
-<img src="URL" alt="name" data-be-...="..." />
+<img src="URL" alt="name" data-geul-...="..." />
 ```
 
-video/audio는 `<video>`/`<audio controls>`로, file은 `<a href="URL">name</a>`로 매핑한다. `showPreview:false`(image/video/audio)는 미디어 태그 대신 `<a>`로 출력한다. `previewWidth`/`showPreview`/`textAlignment`/`backgroundColor`는 `data-be-*` 속성(기존 표 셀 색상과 같은 패턴)으로 왕복한다.
+video/audio는 `<video>`/`<audio controls>`로, file은 `<a href="URL">name</a>`로 매핑한다. `showPreview:false`(image/video/audio)는 미디어 태그 대신 `<a>`로 출력한다. `previewWidth`/`showPreview`/`textAlignment`/`backgroundColor`는 `data-geul-*` 속성(기존 표 셀 색상과 같은 패턴)으로 왕복한다.
 
 Import는 `<figure>` 안의 media 요소 + `<figcaption>`을 **블록 1개**로만 디코드한다(figure와 media 요소를 별도 2개 블록으로 중복 생성하지 않는 가드).
 
@@ -191,7 +200,7 @@ Import는 `<figure>` 안의 media 요소 + `<figcaption>`을 **블록 1개**로�
 
 GFM import는 `![]()` 이미지 문법만 Image 블록으로 매핑한다. File/Video/Audio는 GFM import 경로 자체를 갖지 않는다(토글의 GFM import 부재 선례와 동일) — 일반 `[text](url.mp4)` 같은 평범한 마크다운 링크를 확장자만 보고 Video 블록으로 승격하지 않는다(오탐 시 정상 하이퍼링크 문서가 깨진다).
 
-HTML import에서 외부 `<a>`(geul 자체 export 형태가 아닌 임의 anchor)를 File 블록으로 승격하지 않는다 — Issue #38 슬라이스10이 확립한 "own export document HTML/production in-editor copy wrapper만 own 블록으로 인식" 원칙을 재사용한다. 일반 외부 `<a>`는 계속 `link` mark로 남는다. geul 자체 File 블록 export 형태(`data-be-type="file"`를 가진 `<figure>`/`<a>`)만 own-format round-trip으로 File 블록으로 되돌아온다.
+HTML import에서 외부 `<a>`(geul 자체 export 형태가 아닌 임의 anchor)를 File 블록으로 승격하지 않는다 — Issue #38 슬라이스10이 확립한 "own export document HTML/production in-editor copy wrapper만 own 블록으로 인식" 원칙을 재사용한다. 일반 외부 `<a>`는 계속 `link` mark로 남는다. geul 자체 File 블록 export 형태(`data-geul-type="file"`를 가진 `<figure>`/`<a>`)만 own-format round-trip으로 File 블록으로 되돌아온다.
 
 ## 8. 오류 계약
 

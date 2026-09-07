@@ -443,21 +443,21 @@ describe("에디터 컨트롤러 revision과 변경 이벤트", () => {
     const firstContainer = document.createElement("div");
     const secondContainer = document.createElement("div");
 
-    // data-be-block-id는 더 이상 <p> 자신의 attribute가 아니다(D19) — 그
+    // data-geul-block-id는 더 이상 <p> 자신의 attribute가 아니다(D19) — 그
     // 문단을 감싸는 blockContainer(<div>)가 렌더한다.
     editor.mount(firstContainer);
     expect(
       firstContainer
-        .querySelector("[data-be-block-id]")
-        ?.getAttribute("data-be-block-id"),
+        .querySelector("[data-geul-block-id]")
+        ?.getAttribute("data-geul-block-id"),
     ).toBe("block-1");
     editor.unmount();
     editor.mount(secondContainer);
 
     expect(
       secondContainer
-        .querySelector("[data-be-block-id]")
-        ?.getAttribute("data-be-block-id"),
+        .querySelector("[data-geul-block-id]")
+        ?.getAttribute("data-geul-block-id"),
     ).toBe("block-1");
     expect(editor.getDocument().blocks[0]?.id).toBe("block-1");
   });

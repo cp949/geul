@@ -117,7 +117,7 @@ describe("토글 제목 HTML round-trip", () => {
       ],
     };
     const result = roundTrip(document);
-    expect(result.html).toBe('<h2 data-be-block-id="h-1">일반</h2>');
+    expect(result.html).toBe('<h2 data-geul-block-id="h-1">일반</h2>');
     expect(result.document.blocks).toEqual(document.blocks);
     expect(result.warnings).toEqual([]);
   });
@@ -204,7 +204,7 @@ describe("토글 목록 HTML round-trip", () => {
 });
 
 describe("own-format이 아닌 <details> 방어", () => {
-  it("data-be-toggleable 없는 <details>는 own-format으로 인식하지 않고 평면 처리한다", () => {
+  it("data-geul-toggleable 없는 <details>는 own-format으로 인식하지 않고 평면 처리한다", () => {
     const result = importHtml(
       "<details><summary>FAQ</summary><p>답변</p></details>",
     );
@@ -222,7 +222,7 @@ describe("own-format이 아닌 <details> 방어", () => {
 
   it("summary가 첫 자식이 아닌 own-format 마커 <details>는 평면 처리한다(크래시 없음)", () => {
     const result = importHtml(
-      '<details data-be-toggleable="true"><p>본문</p><summary>제목</summary></details>',
+      '<details data-geul-toggleable="true"><p>본문</p><summary>제목</summary></details>',
     );
     expect(result.ok).toBe(true);
   });

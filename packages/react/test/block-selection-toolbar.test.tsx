@@ -50,8 +50,8 @@ const renderToolbar = (blockIds: readonly string[] = FIVE_BLOCK_IDS) =>
 /** 현재 DOM에 떠 있는 하이라이트 오버레이가 표시하는 blockId 목록(문서 순서 무관, 등장 순서). */
 const highlightedBlockIds = (): string[] =>
   Array.from(
-    document.querySelectorAll("[data-be-block-selection-highlight]"),
-  ).map((el) => el.getAttribute("data-be-highlighted-block-id") ?? "");
+    document.querySelectorAll("[data-geul-block-selection-highlight]"),
+  ).map((el) => el.getAttribute("data-geul-highlighted-block-id") ?? "");
 
 /** 이동 버튼(위/아래)의 disabled 여부를 native 속성으로 직접 읽는다. */
 const isMoveButtonDisabled = (label: string): boolean =>
@@ -91,12 +91,12 @@ describe("blockSelection이 있으면 툴바와 하이라이트를 렌더한다"
     ]);
     expect(
       document.querySelector(
-        '[data-be-block-selection-highlight][data-be-highlighted-block-id="block-1"]',
+        '[data-geul-block-selection-highlight][data-geul-highlighted-block-id="block-1"]',
       ),
     ).toBeNull();
     expect(
       document.querySelector(
-        '[data-be-block-selection-highlight][data-be-highlighted-block-id="block-5"]',
+        '[data-geul-block-selection-highlight][data-geul-highlighted-block-id="block-5"]',
       ),
     ).toBeNull();
   });

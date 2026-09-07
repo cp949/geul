@@ -145,17 +145,17 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       const { editable } = mountTiptapEditor(editor);
 
       const hiddenGroup = editable.querySelector(
-        '[data-be-block-id="h-collapsed"] > [data-be-block-group]',
+        '[data-geul-block-id="h-collapsed"] > [data-geul-block-group]',
       );
       expect(hiddenGroup).not.toBeNull();
       expect(getComputedStyle(hiddenGroup as Element).display).toBe("none");
       // DOM 존재 자체는 사라지지 않는다 — 표시 숨김이지 삭제가 아니다.
       expect(
-        editable.querySelector('[data-be-block-id="h-collapsed-child"]'),
+        editable.querySelector('[data-geul-block-id="h-collapsed-child"]'),
       ).not.toBeNull();
 
       const visibleGroup = editable.querySelector(
-        '[data-be-block-id="h-visible"] > [data-be-block-group]',
+        '[data-geul-block-id="h-visible"] > [data-geul-block-group]',
       );
       expect(visibleGroup).not.toBeNull();
       expect(getComputedStyle(visibleGroup as Element).display).not.toBe(
@@ -176,16 +176,16 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       const { editable } = mountTiptapEditor(editor);
 
       const hiddenGroup = editable.querySelector(
-        '[data-be-block-id="toggle-collapsed"] > [data-be-block-group]',
+        '[data-geul-block-id="toggle-collapsed"] > [data-geul-block-group]',
       );
       expect(hiddenGroup).not.toBeNull();
       expect(getComputedStyle(hiddenGroup as Element).display).toBe("none");
       expect(
-        editable.querySelector('[data-be-block-id="toggle-collapsed-child"]'),
+        editable.querySelector('[data-geul-block-id="toggle-collapsed-child"]'),
       ).not.toBeNull();
 
       const visibleGroup = editable.querySelector(
-        '[data-be-block-id="toggle-visible"] > [data-be-block-group]',
+        '[data-geul-block-id="toggle-visible"] > [data-geul-block-group]',
       );
       expect(visibleGroup).not.toBeNull();
       expect(getComputedStyle(visibleGroup as Element).display).not.toBe(
@@ -210,7 +210,7 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       const { editable } = mountTiptapEditor(editor);
 
       const hiddenGroup = editable.querySelector(
-        '[data-be-block-id="h-collapsed"] > [data-be-block-group]',
+        '[data-geul-block-id="h-collapsed"] > [data-geul-block-group]',
       );
       expect(getComputedStyle(hiddenGroup as Element).display).toBe("none");
 

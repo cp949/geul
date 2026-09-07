@@ -3,7 +3,13 @@ import type {
   EditorController,
   MediaBlockKind,
 } from "@cp949/geul-core";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
@@ -160,17 +166,15 @@ const getSlashMenuItems = (
   IMAGE_SLASH_ITEM,
   VIDEO_SLASH_ITEM,
   AUDIO_SLASH_ITEM,
-  ...customItems.map(
-    (custom): SlashMenuItem => ({
-      kind: "custom",
-      id: custom.id,
-      label: custom.label,
-      description: custom.description ?? "",
-      keywords: custom.keywords ?? [],
-      icon: custom.icon,
-      custom,
-    }),
-  ),
+  ...customItems.map((custom): SlashMenuItem => ({
+    kind: "custom",
+    id: custom.id,
+    label: custom.label,
+    description: custom.description ?? "",
+    keywords: custom.keywords ?? [],
+    icon: custom.icon,
+    custom,
+  })),
 ];
 
 const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
@@ -491,38 +495,39 @@ export const SlashMenu = ({
     return () => element.removeEventListener("keydown", handleKeyDown, true);
   }, [customItems, dismissMenuAndFocusEditor, element, selectItem]);
 
-  const menuContent = menuState === null ? null : (
-    <div
-      aria-label="Slash menu"
-      className="geul-slash-menu"
-      ref={menuRef}
-      role="listbox"
-      style={style}
-    >
-      {items.length === 0 && (
-        <p className="geul-slash-menu__empty">No matches</p>
-      )}
-      {items.map((item, index) => (
-        <button
-          aria-selected={index === menuState.highlightedIndex}
-          className="geul-slash-menu__item"
-          key={item.id}
-          onClick={() => selectItem(item)}
-          onPointerDown={(event) => event.preventDefault()}
-          role="option"
-          type="button"
-        >
-          {item.kind === "custom" && item.icon !== undefined && (
-            <span className="geul-slash-menu__item-icon">{item.icon}</span>
-          )}
-          <span className="geul-slash-menu__item-label">{item.label}</span>
-          <span className="geul-slash-menu__item-description">
-            {item.description}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
+  const menuContent =
+    menuState === null ? null : (
+      <div
+        aria-label="Slash menu"
+        className="geul-slash-menu"
+        ref={menuRef}
+        role="listbox"
+        style={style}
+      >
+        {items.length === 0 && (
+          <p className="geul-slash-menu__empty">No matches</p>
+        )}
+        {items.map((item, index) => (
+          <button
+            aria-selected={index === menuState.highlightedIndex}
+            className="geul-slash-menu__item"
+            key={item.id}
+            onClick={() => selectItem(item)}
+            onPointerDown={(event) => event.preventDefault()}
+            role="option"
+            type="button"
+          >
+            {item.kind === "custom" && item.icon !== undefined && (
+              <span className="geul-slash-menu__item-icon">{item.icon}</span>
+            )}
+            <span className="geul-slash-menu__item-label">{item.label}</span>
+            <span className="geul-slash-menu__item-description">
+              {item.description}
+            </span>
+          </button>
+        ))}
+      </div>
+    );
 
   return (
     <>

@@ -44,7 +44,7 @@ const blockIdAttribute = () => ({
     default: null,
     renderHTML: (attributes: Record<string, unknown>) =>
       typeof attributes.blockId === "string" && attributes.blockId.length > 0
-        ? { "data-be-block-id": attributes.blockId }
+        ? { "data-geul-block-id": attributes.blockId }
         : {},
   },
 });
@@ -65,7 +65,7 @@ const previewAttributes = () => ({
 
 // ---- renderHTML 공유 헬퍼(RD-002 DELTA-01) ----
 //
-// url 없는 빈 상태는 `data-be-media-empty`에 kind를 담아 표식한다(완료
+// url 없는 빈 상태는 `data-geul-media-empty`에 kind를 담아 표식한다(완료
 // 조건 3). heading/quote/code의 `data-placeholder`
 // (placeholder-extension.ts, R-4·R-7)를 그대로 재사용하지 않는다 —
 // `[data-placeholder]::before`(_editor.scss)는 텍스트 캐럿 오버레이용
@@ -98,7 +98,7 @@ const captionChildren = (attrs: Record<string, unknown>): DOMOutputSpec[] => {
   const caption = nonEmptyString(attrs.caption);
   return caption === null
     ? []
-    : [["div", { "data-be-media-caption": "" }, caption]];
+    : [["div", { "data-geul-media-caption": "" }, caption]];
 };
 
 // file의 항상-링크 표시와 image/video/audio의 showPreview:false(슬라이스5
@@ -136,7 +136,7 @@ export const FileBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-be-media-empty": "file" } : {},
+        url === null ? { "data-geul-media-empty": "file" } : {},
       ),
       ...children,
       ...captionChildren(node.attrs),
@@ -181,7 +181,7 @@ export const ImageBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-be-media-empty": "image" } : {},
+        url === null ? { "data-geul-media-empty": "image" } : {},
       ),
       ...children,
       ...captionChildren(node.attrs),
@@ -225,7 +225,7 @@ export const VideoBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-be-media-empty": "video" } : {},
+        url === null ? { "data-geul-media-empty": "video" } : {},
       ),
       ...children,
       ...captionChildren(node.attrs),
@@ -258,7 +258,7 @@ export const AudioBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-be-media-empty": "audio" } : {},
+        url === null ? { "data-geul-media-empty": "audio" } : {},
       ),
       ...children,
       ...captionChildren(node.attrs),

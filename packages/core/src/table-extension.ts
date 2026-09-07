@@ -28,22 +28,22 @@ const applyTableDomAttributes = (
 ): void => {
   const blockId = node.attrs.blockId;
   if (typeof blockId === "string" && blockId.length > 0) {
-    dom.setAttribute("data-be-block-id", blockId);
+    dom.setAttribute("data-geul-block-id", blockId);
   } else {
-    dom.removeAttribute("data-be-block-id");
+    dom.removeAttribute("data-geul-block-id");
   }
   dom.setAttribute(
-    "data-be-columns",
+    "data-geul-columns",
     serializeTableColumns((node.attrs.columns ?? []) as TableColumn[]),
   );
-  dom.setAttribute("data-be-header-rows", String(node.attrs.headerRows ?? 0));
+  dom.setAttribute("data-geul-header-rows", String(node.attrs.headerRows ?? 0));
   dom.setAttribute(
-    "data-be-header-columns",
+    "data-geul-header-columns",
     String(node.attrs.headerColumns ?? 0),
   );
 };
 
-// data-be-* 속성은 클립보드 등 외부에서 온 HTML일 수 있어 JSON.parse를
+// data-geul-* 속성은 클립보드 등 외부에서 온 HTML일 수 있어 JSON.parse를
 // 그대로 신뢰하면 붙여넣기 파서 안에서 예외가 던져진다.
 const parseJsonAttribute = (raw: string | null): unknown => {
   if (raw === null) return null;
@@ -71,11 +71,11 @@ export const TableExtension = Node.create({
     return {
       blockId: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-be-block-id"),
+        parseHTML: (element) => element.getAttribute("data-geul-block-id"),
         renderHTML: (attributes) =>
           typeof attributes.blockId === "string" &&
           attributes.blockId.length > 0
-            ? { "data-be-block-id": attributes.blockId }
+            ? { "data-geul-block-id": attributes.blockId }
             : {},
       },
       columns: {
@@ -84,12 +84,12 @@ export const TableExtension = Node.create({
           // Tiptap 속성 parseHTML은 값을 요구해 실패를 위로 전달할 수
           // 없다 — 해석 불가는 열 없음으로 접는다.
           const parsed = parseTableColumns(
-            element.getAttribute("data-be-columns"),
+            element.getAttribute("data-geul-columns"),
           );
           return parsed.ok ? parsed.value : [];
         },
         renderHTML: (attributes) => ({
-          "data-be-columns": serializeTableColumns(
+          "data-geul-columns": serializeTableColumns(
             (attributes.columns ?? []) as TableColumn[],
           ),
         }),
@@ -97,17 +97,17 @@ export const TableExtension = Node.create({
       headerRows: {
         default: 0,
         parseHTML: (element) =>
-          Number(element.getAttribute("data-be-header-rows") ?? "0"),
+          Number(element.getAttribute("data-geul-header-rows") ?? "0"),
         renderHTML: (attributes) => ({
-          "data-be-header-rows": String(attributes.headerRows ?? 0),
+          "data-geul-header-rows": String(attributes.headerRows ?? 0),
         }),
       },
       headerColumns: {
         default: 0,
         parseHTML: (element) =>
-          Number(element.getAttribute("data-be-header-columns") ?? "0"),
+          Number(element.getAttribute("data-geul-header-columns") ?? "0"),
         renderHTML: (attributes) => ({
-          "data-be-header-columns": String(attributes.headerColumns ?? 0),
+          "data-geul-header-columns": String(attributes.headerColumns ?? 0),
         }),
       },
     };
@@ -190,10 +190,10 @@ export const TableRowExtension = Node.create({
     return {
       rowId: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-be-row-id"),
+        parseHTML: (element) => element.getAttribute("data-geul-row-id"),
         renderHTML: (attributes) =>
           typeof attributes.rowId === "string" && attributes.rowId.length > 0
-            ? { "data-be-row-id": attributes.rowId }
+            ? { "data-geul-row-id": attributes.rowId }
             : {},
       },
     };
@@ -216,19 +216,19 @@ export const TableCellExtension = Node.create({
     return {
       cellId: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-be-cell-id"),
+        parseHTML: (element) => element.getAttribute("data-geul-cell-id"),
         renderHTML: (attributes) =>
           typeof attributes.cellId === "string" && attributes.cellId.length > 0
-            ? { "data-be-cell-id": attributes.cellId }
+            ? { "data-geul-cell-id": attributes.cellId }
             : {},
       },
       columnId: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-be-column-id"),
+        parseHTML: (element) => element.getAttribute("data-geul-column-id"),
         renderHTML: (attributes) =>
           typeof attributes.columnId === "string" &&
           attributes.columnId.length > 0
-            ? { "data-be-column-id": attributes.columnId }
+            ? { "data-geul-column-id": attributes.columnId }
             : {},
       },
       colspan: {
@@ -247,45 +247,45 @@ export const TableCellExtension = Node.create({
         default: null as number[] | null,
         parseHTML: (element) => {
           const parsed = parseJsonAttribute(
-            element.getAttribute("data-be-colwidth"),
+            element.getAttribute("data-geul-colwidth"),
           );
           return Array.isArray(parsed) ? (parsed as number[]) : null;
         },
         renderHTML: (attributes) =>
           attributes.colwidth === null || attributes.colwidth === undefined
             ? {}
-            : { "data-be-colwidth": JSON.stringify(attributes.colwidth) },
+            : { "data-geul-colwidth": JSON.stringify(attributes.colwidth) },
       },
       textColor: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-be-text-color"),
+        parseHTML: (element) => element.getAttribute("data-geul-text-color"),
         renderHTML: (attributes) =>
           typeof attributes.textColor === "string"
-            ? { "data-be-text-color": attributes.textColor }
+            ? { "data-geul-text-color": attributes.textColor }
             : {},
       },
       backgroundColor: {
         default: null,
         parseHTML: (element) =>
-          element.getAttribute("data-be-background-color"),
+          element.getAttribute("data-geul-background-color"),
         renderHTML: (attributes) =>
           typeof attributes.backgroundColor === "string"
-            ? { "data-be-background-color": attributes.backgroundColor }
+            ? { "data-geul-background-color": attributes.backgroundColor }
             : {},
       },
       align: {
         default: null,
-        parseHTML: (element) => element.getAttribute("data-be-align"),
+        parseHTML: (element) => element.getAttribute("data-geul-align"),
         renderHTML: (attributes) =>
           typeof attributes.align === "string"
-            ? { "data-be-align": attributes.align }
+            ? { "data-geul-align": attributes.align }
             : {},
       },
     };
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    // 색상·정렬은 data-be-* 속성이 저장 계약이고, 화면에는 인라인 스타일로
+    // 색상·정렬은 data-geul-* 속성이 저장 계약이고, 화면에는 인라인 스타일로
     // 그린다 — 색은 임의 hex라 CSS 클래스로 표현할 수 없고, 정렬은 색상과
     // 같은 렌더 경로를 공유한다.
     const declarations = [

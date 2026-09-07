@@ -1,7 +1,7 @@
 /**
  * `parseClipboardTable`가 셀의 서식 정보를 읽는 경로를 검증한다. style
- * 색상·정렬, Excel 대표 클립보드 구조, style보다 우선하는 data-be-* 자기복사
- * 속성, 정규 형식이 아닌 data-be-* 값의 무시, 링크 mark 보존과 미지원 href
+ * 색상·정렬, Excel 대표 클립보드 구조, style보다 우선하는 data-geul-* 자기복사
+ * 속성, 정규 형식이 아닌 data-geul-* 값의 무시, 링크 mark 보존과 미지원 href
  * 처리, script·이벤트 핸들러 제거를 함께 다룬다.
  */
 import { describe, expect, it } from "vitest";
@@ -69,9 +69,9 @@ describe("parseClipboardTable", () => {
     });
   });
 
-  it("data-be-* 자기복사 속성을 style보다 우선한다", () => {
+  it("data-geul-* 자기복사 속성을 style보다 우선한다", () => {
     const html =
-      '<table><tbody><tr><td data-be-background-color="#00FF00" style="background-color:#FF0000;">1</td></tr></tbody></table>';
+      '<table><tbody><tr><td data-geul-background-color="#00FF00" style="background-color:#FF0000;">1</td></tr></tbody></table>';
 
     const table = expectSingleTable(parseClipboardTable({ html }));
     expect(table.rows[0]?.cells[0]?.backgroundColor).toBe("#00FF00");
@@ -103,25 +103,25 @@ describe("parseClipboardTable", () => {
     ]);
   });
 
-  it("정규 형식이 아닌 data-be-text-color는 무시한다", () => {
+  it("정규 형식이 아닌 data-geul-text-color는 무시한다", () => {
     const html =
-      '<table><tbody><tr><td data-be-text-color="red">1</td></tr></tbody></table>';
+      '<table><tbody><tr><td data-geul-text-color="red">1</td></tr></tbody></table>';
 
     const table = expectSingleTable(parseClipboardTable({ html }));
     expect(table.rows[0]?.cells[0]?.textColor).toBeUndefined();
   });
 
-  it("정규 형식이 아닌 data-be-background-color는 무시한다", () => {
+  it("정규 형식이 아닌 data-geul-background-color는 무시한다", () => {
     const html =
-      '<table><tbody><tr><td data-be-background-color="#ff0000">1</td></tr></tbody></table>';
+      '<table><tbody><tr><td data-geul-background-color="#ff0000">1</td></tr></tbody></table>';
 
     const table = expectSingleTable(parseClipboardTable({ html }));
     expect(table.rows[0]?.cells[0]?.backgroundColor).toBeUndefined();
   });
 
-  it("정규 형식이 아닌 data-be-align은 무시한다", () => {
+  it("정규 형식이 아닌 data-geul-align은 무시한다", () => {
     const html =
-      '<table><tbody><tr><td data-be-align="justify">1</td></tr></tbody></table>';
+      '<table><tbody><tr><td data-geul-align="justify">1</td></tr></tbody></table>';
 
     const table = expectSingleTable(parseClipboardTable({ html }));
     expect(table.rows[0]?.cells[0]?.align).toBeUndefined();

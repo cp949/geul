@@ -154,7 +154,7 @@ describe("production 목록류 렌더 DOM ↔ io.importHtml 왕복", () => {
     ]);
   });
 
-  it("data-be-block-group 중첩 안의 목록류 부모+자식은 상태와 함께 왕복한다", () => {
+  it("data-geul-block-group 중첩 안의 목록류 부모+자식은 상태와 함께 왕복한다", () => {
     const html = productionHtml(
       documentOf({
         id: "P",

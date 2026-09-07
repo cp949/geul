@@ -81,7 +81,7 @@ describe("HTML 왕복 변환", () => {
       value: { document: documentWithMergedTable, warnings: [] },
     });
     expect(exported.value).toBe(
-      '<table data-be-block-id="table-1" data-be-header-rows="1" data-be-header-columns="1"><colgroup><col data-be-column-id="column-1" data-be-width="160"><col data-be-column-id="column-2" data-be-width="240"></colgroup><thead><tr data-be-row-id="row-1"><th data-be-cell-id="cell-1" data-be-column-id="column-1" rowspan="1" colspan="2" data-be-text-color="#112233" data-be-background-color="#AABBCC"><strong>Header</strong></th></tr></thead><tbody><tr data-be-row-id="row-2"><th data-be-cell-id="cell-2" data-be-column-id="column-1" rowspan="2" colspan="1" scope="row">Row header</th><td data-be-cell-id="cell-3" data-be-column-id="column-2" rowspan="1" colspan="1">Body</td></tr><tr data-be-row-id="row-3"><td data-be-cell-id="cell-4" data-be-column-id="column-2" rowspan="1" colspan="1"></td></tr></tbody></table>',
+      '<table data-geul-block-id="table-1" data-geul-header-rows="1" data-geul-header-columns="1"><colgroup><col data-geul-column-id="column-1" data-geul-width="160"><col data-geul-column-id="column-2" data-geul-width="240"></colgroup><thead><tr data-geul-row-id="row-1"><th data-geul-cell-id="cell-1" data-geul-column-id="column-1" rowspan="1" colspan="2" data-geul-text-color="#112233" data-geul-background-color="#AABBCC"><strong>Header</strong></th></tr></thead><tbody><tr data-geul-row-id="row-2"><th data-geul-cell-id="cell-2" data-geul-column-id="column-1" rowspan="2" colspan="1" scope="row">Row header</th><td data-geul-cell-id="cell-3" data-geul-column-id="column-2" rowspan="1" colspan="1">Body</td></tr><tr data-geul-row-id="row-3"><td data-geul-cell-id="cell-4" data-geul-column-id="column-2" rowspan="1" colspan="1"></td></tr></tbody></table>',
     );
   });
 
@@ -128,7 +128,7 @@ describe("HTML 왕복 변환", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toContain(
-      '<tr data-be-row-id="reversed-row-1"><th data-be-cell-id="reversed-cell-1"',
+      '<tr data-geul-row-id="reversed-row-1"><th data-geul-cell-id="reversed-cell-1"',
     );
     expect(exported.value.indexOf("reversed-cell-1")).toBeLessThan(
       exported.value.indexOf("reversed-cell-2"),
@@ -202,10 +202,10 @@ describe("HTML 왕복 변환", () => {
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).not.toContain("<thead>");
     expect(exported.value).toContain(
-      'data-be-header-rows="1" data-be-header-columns="1"',
+      'data-geul-header-rows="1" data-geul-header-columns="1"',
     );
     expect(exported.value).toContain(
-      '<tbody><tr data-be-row-id="cross-row-1"><th data-be-cell-id="cross-cell-1"',
+      '<tbody><tr data-geul-row-id="cross-row-1"><th data-geul-cell-id="cross-cell-1"',
     );
     expect(importHtml(exported.value)).toEqual({
       ok: true,
@@ -242,12 +242,12 @@ describe("HTML 왕복 변환", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<p data-be-block-id="paragraph-1"><a href="https://example.com"><strong><em><u><s><code>marked</code></s></u></em></strong></a></p>',
+      '<p data-geul-block-id="paragraph-1"><a href="https://example.com"><strong><em><u><s><code>marked</code></s></u></em></strong></a></p>',
     );
 
     expect(
       importHtml(
-        '<p data-be-block-id="paragraph-2"><strong>A</strong><strong>B</strong></p>',
+        '<p data-geul-block-id="paragraph-2"><strong>A</strong><strong>B</strong></p>',
       ),
     ).toEqual({
       ok: true,

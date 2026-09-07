@@ -24,18 +24,18 @@ describe("실제 편집기 마운트 헬퍼", () => {
     const { table, rowIds, columnIds } = mountTableEditor();
 
     expect(
-      Array.from(table.querySelectorAll("[data-be-row-id]")).map((row) =>
-        row.getAttribute("data-be-row-id"),
+      Array.from(table.querySelectorAll("[data-geul-row-id]")).map((row) =>
+        row.getAttribute("data-geul-row-id"),
       ),
     ).toEqual(rowIds);
     // colgroup의 col은 id를 갖지 않아 순서를 직접 확인할 수 없다. 첫 행 셀의
-    // data-be-column-id 순서로 대신 확인한다 — table-handles.test.tsx와
+    // data-geul-column-id 순서로 대신 확인한다 — table-handles.test.tsx와
     // table-handle-menu.test.tsx의 moveTableColumn 단언이 columnIds 순서가
     // DOM 열 순서와 같다는 전제에 기대므로 여기서 그 전제를 고정한다.
-    const firstRow = table.querySelector<HTMLElement>("[data-be-row-id]");
+    const firstRow = table.querySelector<HTMLElement>("[data-geul-row-id]");
     expect(
-      Array.from(firstRow?.querySelectorAll("[data-be-column-id]") ?? []).map(
-        (cell) => cell.getAttribute("data-be-column-id"),
+      Array.from(firstRow?.querySelectorAll("[data-geul-column-id]") ?? []).map(
+        (cell) => cell.getAttribute("data-geul-column-id"),
       ),
     ).toEqual(columnIds);
   });
@@ -68,7 +68,7 @@ describe("실제 편집기 마운트 헬퍼", () => {
 
     expect(rowIds).toHaveLength(1);
     expect(columnIds).toHaveLength(3);
-    expect(table.querySelectorAll("[data-be-column-id]")).toHaveLength(3);
+    expect(table.querySelectorAll("[data-geul-column-id]")).toHaveLength(3);
   });
 
   it("표 밖 오버레이도 같은 provider 아래에서 마운트한다", () => {
@@ -85,7 +85,7 @@ describe("실제 편집기 마운트 헬퍼", () => {
   it("두 번째 행의 rect를 격자 좌표대로 스텁한다", () => {
     const { table } = mountTableEditor();
     const rows = Array.from(
-      table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+      table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
     );
     const row1 = rows[1];
     if (row1 === undefined) throw new Error("둘째 행 없음");
@@ -103,12 +103,12 @@ describe("실제 편집기 마운트 헬퍼", () => {
   it("두 번째 행 두 번째 셀의 rect를 격자 좌표대로 스텁한다", () => {
     const { table } = mountTableEditor();
     const rows = Array.from(
-      table.querySelectorAll<HTMLElement>("[data-be-row-id]"),
+      table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
     );
     const row1 = rows[1];
     if (row1 === undefined) throw new Error("둘째 행 없음");
     const cells = Array.from(
-      row1.querySelectorAll<HTMLElement>("[data-be-column-id]"),
+      row1.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
     );
     const cell1 = cells[1];
     if (cell1 === undefined) throw new Error("둘째 셀 없음");
@@ -149,10 +149,10 @@ describe("문단 전용 실제 편집기 마운트 헬퍼", () => {
     });
 
     expect(
-      blocks.map((block) => block.getAttribute("data-be-block-id")),
+      blocks.map((block) => block.getAttribute("data-geul-block-id")),
     ).toEqual(["block-1", 'a"b\\c']);
     // D19(컨테이너 스키마)부터 blockId는 <p> 자신이 아니라 그 부모
-    // <div>(blockContainer)에 있다 — [data-be-block-id] 조회 결과는 이제
+    // <div>(blockContainer)에 있다 — [data-geul-block-id] 조회 결과는 이제
     // DIV다(DELTA-02e 정정).
     expect(blocks.map((block) => block.tagName)).toEqual(["DIV", "DIV"]);
     expect(editor.getDocument().blocks.map((block) => block.type)).toEqual([
@@ -193,7 +193,7 @@ describe("문단 전용 실제 편집기 마운트 헬퍼", () => {
     const blocks = restubGeometry();
 
     expect(blocks).toHaveLength(2);
-    expect(blocks[1]?.getAttribute("data-be-block-id")).toBe(
+    expect(blocks[1]?.getAttribute("data-geul-block-id")).toBe(
       inserted.value.blockId,
     );
     expect(blocks[1]?.getBoundingClientRect().top).toBe(20);
@@ -249,7 +249,7 @@ const gridBoxOf = (element: Element) => {
  */
 const currentTableOf = (host: HTMLElement, tableBlockId: string) => {
   const table = host.querySelector<HTMLElement>(
-    `table[data-be-block-id="${tableBlockId}"]`,
+    `table[data-geul-block-id="${tableBlockId}"]`,
   );
   if (table === null) throw new Error("갈아끼운 문서의 표를 찾지 못했다");
   return table;

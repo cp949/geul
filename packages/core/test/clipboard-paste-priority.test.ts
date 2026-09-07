@@ -122,7 +122,7 @@ describe("슬라이스 2~9 전체 블록 타입 fixture(완료 조건 3)", () =>
   // `io.exportHtml`을 소스로 쓴다 — roadmap.md "전체 결과
   // 경계"가 own export document HTML을 명시 대상으로 두는 반면, 생산
   // 편집기 in-editor copy의 상태 보존은 목록류 4종(RD-003)에만 범위가
-  // 있고 토글 heading에는 없다(own export만 `<details data-be-toggleable>`
+  // 있고 토글 heading에는 없다(own export만 `<details data-geul-toggleable>`
   // 로 isToggleable/collapsed를 표현한다, export-html.ts). 목록 4종은
   // clipboard-paste-list.test.ts가, 비목록 5종은 clipboard-paste-extension.
   // test.ts가 이미 개별로 검증했다 — 이 fixture의 새 가치는 11종 전체를
@@ -193,7 +193,7 @@ describe("슬라이스 2~9 전체 블록 타입 fixture(완료 조건 3)", () =>
 });
 
 describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
-  it("own-export data-be-children wrapper가 정상 깊이에서 비목록 부모+자식을 children으로 보존한다", () => {
+  it("own-export data-geul-children wrapper가 정상 깊이에서 비목록 부모+자식을 children으로 보존한다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),
       createId: sequentialIds("id"),
@@ -220,7 +220,7 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
     });
   });
 
-  it("생산 편집기 data-be-block-group wrapper가 비목록·목록 부모+자식을 함께 보존한다", () => {
+  it("생산 편집기 data-geul-block-group wrapper가 비목록·목록 부모+자식을 함께 보존한다", () => {
     const paragraphParent = paragraphBlock("np", "parent", [
       paragraphBlock("nc", "child"),
     ]);
@@ -275,7 +275,7 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
 });
 
 describe("id 유일성(비표 own HTML, 완료 조건 6)", () => {
-  it("대상 문서와 같은 data-be-block-id를 담은 own HTML을 붙여넣어도 id 유일성이 유지되고 undo 1회로 복원된다", () => {
+  it("대상 문서와 같은 data-geul-block-id를 담은 own HTML을 붙여넣어도 id 유일성이 유지되고 undo 1회로 복원된다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),
       createId: sequentialIds("id"),
@@ -289,7 +289,7 @@ describe("id 유일성(비표 own HTML, 완료 조건 6)", () => {
       // "block-1"은 paragraphDocument가 만드는 대상 문서의 실제 블록 id다
       // (editor-controller-support.ts) — 충돌하지 않는 임의 id가 아니라
       // 대상 문서와 실제로 같은 id를 쓴다.
-      pasteHtml(editable, '<p data-be-block-id="block-1">dup</p>');
+      pasteHtml(editable, '<p data-geul-block-id="block-1">dup</p>');
 
       const blocks = editor.getDocument().blocks;
       const ids = blocks.map((block) => block.id);

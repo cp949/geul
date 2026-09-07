@@ -46,10 +46,10 @@ describe("붙여넣기 평탄화(D13 계승)", () => {
 
     const container = globalThis.document.createElement("div");
     container.innerHTML = [
-      '<div data-be-block-id="outer">',
+      '<div data-geul-block-id="outer">',
       "<p>Outer text</p>",
       "<div>",
-      '<div data-be-block-id="inner">',
+      '<div data-geul-block-id="inner">',
       "<p>Inner text</p>",
       "</div>",
       "</div>",

@@ -1,7 +1,7 @@
 /**
  * divider PM 노드의 스키마 계약을 고정한다 — content 없는 atom leaf, group
  * "block" 직접 멤버(blockContainer로 포장되지 않음), hr 렌더링과
- * data-be-block-id 출력, parseHTML 미선언(spec §4.2, G-EDT-003), 그리고
+ * data-geul-block-id 출력, parseHTML 미선언(spec §4.2, G-EDT-003), 그리고
  * priority가 blockContainer보다 엄격히 낮다는 채움 우선순위 계약. 변환기가
  * 아직 divider를 거절해(DELTA-04 소관) 이 파일은 스키마·DOMSerializer
  * 레벨만 검증한다 — dispatch나 문서 삽입은 다루지 않는다.
@@ -47,7 +47,7 @@ describe("divider 노드 스키마 계약", () => {
     expect(() => divider.createChecked(null, [blockGroupNode])).toThrow();
   });
 
-  it("divider는 hr로 렌더되고 data-be-block-id를 낸다", () => {
+  it("divider는 hr로 렌더되고 data-geul-block-id를 낸다", () => {
     const schema = liveSchema();
     const divider = requireNode(schema, "divider");
 
@@ -56,7 +56,7 @@ describe("divider 노드 스키마 계약", () => {
     ) as HTMLElement;
 
     expect(dom.tagName).toBe("HR");
-    expect(dom.getAttribute("data-be-block-id")).toBe("d-1");
+    expect(dom.getAttribute("data-geul-block-id")).toBe("d-1");
   });
 
   it("divider 노드 spec에 parseDOM이 없다", () => {

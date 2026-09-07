@@ -1,5 +1,5 @@
 /**
- * 표 열 목록을 DOM 투영 속성(data-be-columns) 문자열로 쓰고 다시 읽는
+ * 표 열 목록을 DOM 투영 속성(data-geul-columns) 문자열로 쓰고 다시 읽는
  * 왕복 계약. 쓰는 쪽(core NodeView·renderHTML)과 읽는 쪽(core parseHTML,
  * react 핸들 geometry)이 서로 다른 방어 수준의 사본을 갖지 못하도록
  * 두 방향을 한 파일에 묶는다(Issue #75).
@@ -65,22 +65,22 @@ export const parseTableColumns = (
   try {
     parsed = JSON.parse(raw) as unknown;
   } catch {
-    return invalid("data-be-columns is not valid JSON");
+    return invalid("data-geul-columns is not valid JSON");
   }
 
   if (!Array.isArray(parsed)) {
-    return invalid("data-be-columns must be a JSON array");
+    return invalid("data-geul-columns must be a JSON array");
   }
 
   const columns: TableColumn[] = [];
   for (const [index, entry] of parsed.entries()) {
     if (typeof entry !== "object" || entry === null) {
-      return invalid(`data-be-columns[${index}] must be an object`);
+      return invalid(`data-geul-columns[${index}] must be an object`);
     }
     const { id, width } = entry as { id?: unknown; width?: unknown };
     if (typeof id !== "string" || typeof width !== "number") {
       return invalid(
-        `data-be-columns[${index}] must have a string id and a number width`,
+        `data-geul-columns[${index}] must have a string id and a number width`,
       );
     }
     columns.push({ id, width });

@@ -66,7 +66,7 @@ describe("SlashMenu 드래그 핸들", () => {
     if (block === undefined) throw new Error("블록 요소가 없다");
     // 전제: 특수문자 id가 실제로 DOM 속성까지 그대로 내려갔다 — 그래야 이
     // 테스트가 노리는 selector 위험이 존재한다.
-    expect(block.getAttribute("data-be-block-id")).toBe('a"b\\c');
+    expect(block.getAttribute("data-geul-block-id")).toBe('a"b\\c');
 
     fireEvent.pointerMove(block);
 
@@ -112,7 +112,7 @@ describe("SlashMenu 드래그 핸들", () => {
     fireEvent.pointerMove(editable, { pointerId: 1, clientY: 25 });
 
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).not.toBeNull();
 
     fireEvent.pointerUp(editable, { pointerId: 1 });
@@ -151,7 +151,7 @@ describe("SlashMenu 드래그 핸들", () => {
     // 이미 참이므로(hypot(0, 5) = 5 ≥ 4) 이 부재는 isNoop 분기만을 짚는다 —
     // "드래그가 시작조차 안 됐다"와 섞이지 않는다.
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).toBeNull();
     fireEvent.pointerUp(handle, { pointerId: 1 });
     expect(screen.getByRole("button", { name: dragHandleLabel })).toBe(handle);
@@ -178,13 +178,13 @@ describe("SlashMenu 드래그 핸들", () => {
     // 전제: 취소 전에는 드래그가 실제로 진행 중이고 삽입 지점도 잡혔다.
     // 이 단언이 없으면 아래 부재는 "드래그가 시작조차 안 됐다"로도 통과한다.
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).not.toBeNull();
 
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).toBeNull();
 
     fireEvent.pointerUp(handle, { pointerId: 1 });
@@ -213,7 +213,7 @@ describe("SlashMenu 드래그 핸들", () => {
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: 5 });
     // 전제: 취소 전에는 드래그가 실제로 진행 중이었다.
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).not.toBeNull();
     fireEvent.pointerCancel(handle, { pointerId: 1 });
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -247,7 +247,7 @@ describe("SlashMenu 드래그 핸들", () => {
     fireEvent.pointerUp(editable, { pointerId: 2 });
 
     expect(
-      document.querySelector("[data-be-block-insertion-guide]"),
+      document.querySelector("[data-geul-block-insertion-guide]"),
     ).toBeNull();
     expect(editor.getDocument()).toEqual(documentBeforeDrag);
 

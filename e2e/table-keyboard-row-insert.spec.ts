@@ -35,7 +35,7 @@ test("표의 마지막 셀에서 Tab은 새 행을 추가하고 createId()가 �
   const newRowId = await table
     .locator("tr")
     .last()
-    .getAttribute("data-be-row-id");
+    .getAttribute("data-geul-row-id");
   expect(newRowId).toMatch(uuidV4Pattern);
 
   expect(pageErrors).toHaveLength(0);
