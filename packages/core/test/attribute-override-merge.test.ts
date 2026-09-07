@@ -20,7 +20,9 @@ describe("mergeAttributeOverrides", () => {
 
   it("충돌 없는 키는 base에 그대로 추가된다", () => {
     const base = { "data-geul-block-id": "b-1" };
-    const merged = mergeAttributeOverrides(base, { "data-color-scheme": "dark" });
+    const merged = mergeAttributeOverrides(base, {
+      "data-color-scheme": "dark",
+    });
 
     expect(merged).toEqual({
       "data-geul-block-id": "b-1",
@@ -54,10 +56,7 @@ describe("mergeAttributeOverrides", () => {
 
   it("base에 없어도 data-geul- 접두 키는 예약이라 무시하고 경고한다", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const merged = mergeAttributeOverrides(
-      {},
-      { "data-geul-custom": "x" },
-    );
+    const merged = mergeAttributeOverrides({}, { "data-geul-custom": "x" });
 
     expect(merged["data-geul-custom"]).toBeUndefined();
     expect(warn).toHaveBeenCalledOnce();

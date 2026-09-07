@@ -416,7 +416,8 @@ export const createProductionEditor = (options: {
             BlockContainerExtension.extend({
               content: blockContainerContent,
             }).configure({
-              attributeOverrides: options.attributeOverrides?.blockContainer ?? {},
+              attributeOverrides:
+                options.attributeOverrides?.blockContainer ?? {},
             }),
           ]),
       BlockGroupExtension.configure({

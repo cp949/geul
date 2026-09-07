@@ -28,7 +28,9 @@ const injectStyle = (css: string): void => {
 };
 
 afterEach(() => {
-  for (const style of document.head.querySelectorAll("style[data-test-style]")) {
+  for (const style of document.head.querySelectorAll(
+    "style[data-test-style]",
+  )) {
     style.remove();
   }
   for (const container of document.body.querySelectorAll(

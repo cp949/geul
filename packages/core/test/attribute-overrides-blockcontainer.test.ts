@@ -30,7 +30,10 @@ describe("attributeOverrides.blockContainer", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("content"),
       attributeOverrides: {
-        blockContainer: { "data-color-scheme": "dark", class: "consumer-block" },
+        blockContainer: {
+          "data-color-scheme": "dark",
+          class: "consumer-block",
+        },
       },
     });
     const { editable } = mountTiptapEditor(editor);

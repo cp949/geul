@@ -76,7 +76,10 @@ export const BlockContainerExtension = Node.create<{
     return [
       "div",
       mergeAttributes(
-        mergeAttributeOverrides(HTMLAttributes, this.options.attributeOverrides),
+        mergeAttributeOverrides(
+          HTMLAttributes,
+          this.options.attributeOverrides,
+        ),
       ),
       0,
     ];
@@ -104,7 +107,9 @@ export const BlockGroupExtension = Node.create<{
     const base = { ...HTMLAttributes, "data-geul-block-group": "" };
     return [
       "div",
-      mergeAttributes(mergeAttributeOverrides(base, this.options.attributeOverrides)),
+      mergeAttributes(
+        mergeAttributeOverrides(base, this.options.attributeOverrides),
+      ),
       0,
     ];
   },

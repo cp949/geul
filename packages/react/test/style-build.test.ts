@@ -193,9 +193,9 @@ describe("SCSS 빌드 파이프라인", () => {
 
   it("선택 범위 하이라이트 배경을 --geul-color-accent-highlight override 가능한 var()로 컴파일한다(R4 슬라이스5 RD-001-DELTA-01)", () => {
     const css = compileCss();
-    const body = /\.geul-block-selection-toolbar__highlight \{(?<body>[^}]*)\}/.exec(
-      css,
-    )?.groups?.body;
+    const body =
+      /\.geul-block-selection-toolbar__highlight \{(?<body>[^}]*)\}/.exec(css)
+        ?.groups?.body;
 
     expect(body).toContain(
       "background: var(--geul-color-accent-highlight, rgba(26, 115, 232, 0.16));",
@@ -219,12 +219,12 @@ describe("SCSS 빌드 파이프라인", () => {
   it("border-radius 하드코딩 값을 --geul-radius-* override 가능한 var()로 컴파일한다(R4 슬라이스5 RD-001-DELTA-02)", () => {
     const css = compileCss();
 
-    const lg = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
-      ?.groups?.body;
+    const lg = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)?.groups
+      ?.body;
     expect(lg).toContain("border-radius: var(--geul-radius-lg, 0.5rem);");
 
-    const md = /\.geul-formatting-toolbar \{(?<body>[^}]*)\}/.exec(css)
-      ?.groups?.body;
+    const md = /\.geul-formatting-toolbar \{(?<body>[^}]*)\}/.exec(css)?.groups
+      ?.body;
     expect(md).toContain("border-radius: var(--geul-radius-md, 0.375rem);");
 
     const sm = /\.geul-table-menu__item \{(?<body>[^}]*)\}/.exec(css)?.groups
