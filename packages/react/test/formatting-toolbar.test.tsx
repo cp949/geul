@@ -228,6 +228,32 @@ describe("FormattingToolbar 서식 툴바", () => {
     expect(select.options[select.selectedIndex]?.textContent).toBe("본문");
   });
 
+  it("dictionary override 시 컨테이너 aria-label(Formatting)이 바뀐다(EXT-009)", () => {
+    const controller = fakeController();
+    controller.getDictionary = vi.fn(() => ({
+      ...DEFAULT_DICTIONARY,
+      toolbar: {
+        ...DEFAULT_DICTIONARY.toolbar,
+        formatting: { ariaLabel: "서식 툴바" },
+      },
+    }));
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(screen.getByRole("toolbar", { name: "서식 툴바" })).not.toBeNull();
+  });
+
   it.each([
     [
       "CodeBlock",

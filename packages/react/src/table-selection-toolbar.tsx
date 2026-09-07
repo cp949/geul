@@ -9,14 +9,10 @@ import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { findTable } from "./table-handle-geometry.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
-
-const mergeLabel = "Merge cells";
-const splitLabel = "Split cell";
-const formatLabel = "Cell formatting";
 
 const mergeIcon = <TableCellsMerge {...iconProps} />;
 const splitIcon = <TableCellsSplit {...iconProps} />;
@@ -86,6 +82,7 @@ const cellSelectionBounds = (
  */
 export const TableSelectionToolbar = () => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
@@ -160,7 +157,7 @@ export const TableSelectionToolbar = () => {
   return (
     <>
       <div
-        aria-label="Table selection"
+        aria-label={dictionary.toolbar.tableSelection.ariaLabel}
         className="geul-table-selection-toolbar"
         ref={menuRef}
         role="toolbar"
@@ -170,7 +167,7 @@ export const TableSelectionToolbar = () => {
           <IconButton
             className={buttonClassName}
             icon={mergeIcon}
-            label={mergeLabel}
+            label={dictionary.toolbar.tableSelection.mergeCells}
             onClick={() => {
               runCommand(() =>
                 editor.commands.mergeTableCells(toolbarState.tableBlockId),
@@ -182,7 +179,7 @@ export const TableSelectionToolbar = () => {
           <IconButton
             className={buttonClassName}
             icon={splitIcon}
-            label={splitLabel}
+            label={dictionary.toolbar.tableSelection.splitCell}
             onClick={() => {
               const { tableBlockId, splitCellId } = toolbarState;
               if (splitCellId === null) return;
@@ -196,7 +193,7 @@ export const TableSelectionToolbar = () => {
           className={buttonClassName}
           data-geul-cell-format-trigger=""
           icon={formatIcon}
-          label={formatLabel}
+          label={dictionary.menu.cellFormattingAriaLabel}
           onClick={() => {
             if (formatMenuOpen) {
               closeFormatMenu();

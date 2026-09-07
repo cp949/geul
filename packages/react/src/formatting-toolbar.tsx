@@ -322,7 +322,7 @@ export const FormattingToolbar = ({
   if (Component !== undefined) {
     const overridden = (
       <div
-        aria-label="Formatting"
+        aria-label={dictionary.toolbar.formatting.ariaLabel}
         className="geul-formatting-toolbar"
         ref={menuRef}
         role="toolbar"
@@ -339,7 +339,7 @@ export const FormattingToolbar = ({
   const content = (
     <>
       <div
-        aria-label="Formatting"
+        aria-label={dictionary.toolbar.formatting.ariaLabel}
         className="geul-formatting-toolbar"
         ref={menuRef}
         role="toolbar"

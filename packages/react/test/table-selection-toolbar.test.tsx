@@ -11,7 +11,12 @@
  * 남긴 이유는 fakeController 위 주석과 각 테스트의 잔여 주석에 있다.
  */
 
-import type { EditorController, TableCellSelection } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type Dictionary,
+  type EditorController,
+  type TableCellSelection,
+} from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -46,6 +51,7 @@ const formatLabel = "Cell formatting";
 type FakeControllerOptions = {
   getTableCellSelection?: () => TableCellSelection | null;
   mergeTableCells?: EditorController["commands"]["mergeTableCells"];
+  dictionary?: Dictionary;
 };
 
 /**
@@ -77,6 +83,7 @@ type FakeControllerOptions = {
 const fakeController = ({
   getTableCellSelection = () => null,
   mergeTableCells = () => ({ ok: true, value: undefined }),
+  dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -108,6 +115,7 @@ const fakeController = ({
   getCaretBlockContext: vi.fn(() => null),
   getSelectionBlockType: vi.fn(() => null),
   getTableCellSelection: vi.fn(getTableCellSelection),
+  getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
     setText: vi.fn(),
@@ -345,6 +353,37 @@ describe("셀 범위를 선택하면 병합·서식 툴바를 표시한다", () 
     expect(screen.getByRole("button", { name: mergeLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
     expect(screen.queryByRole("button", { name: splitLabel })).toBeNull();
+  });
+
+  it("dictionary override 시 컨테이너·Merge cells가 바뀌고 Cell formatting은 menu.cellFormattingAriaLabel 재사용을 따른다(EXT-009)", () => {
+    const controller = mergeableSelectionController({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        menu: {
+          ...DEFAULT_DICTIONARY.menu,
+          cellFormattingAriaLabel: "셀 서식 지정",
+        },
+        toolbar: {
+          ...DEFAULT_DICTIONARY.toolbar,
+          tableSelection: {
+            ...DEFAULT_DICTIONARY.toolbar.tableSelection,
+            ariaLabel: "표 선택 툴바",
+            mergeCells: "셀 병합",
+          },
+        },
+      },
+    });
+    const { cell1, cell2 } = renderTable(controller);
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+
+    fireSelectionChange();
+
+    expect(
+      screen.getByRole("toolbar", { name: "표 선택 툴바" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "셀 병합" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "셀 서식 지정" })).not.toBeNull();
   });
 
   // vi.fn() 레인에 남긴 이유: 실제 mergeTableCells는 현재 선택이

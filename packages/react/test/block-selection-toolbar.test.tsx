@@ -12,12 +12,17 @@
  * 컨트롤러가 필요 없다(CellSelection과 다른 점).
  */
 
+import { DEFAULT_DICTIONARY } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BlockSelectionToolbar } from "../src/block-selection-toolbar.js";
-import { focusOutsideEditor, mountBlockEditor } from "./mount-editor.js";
+import {
+  focusOutsideEditor,
+  mountBlockEditor,
+  type MountBlockEditorOptions,
+} from "./mount-editor.js";
 import { fireSelectionChange } from "./selection-events.js";
 
 // @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
@@ -44,8 +49,15 @@ const FIVE_BLOCK_IDS = [
  * 얹는다. 기본 5블록 픽스처는 완료 조건 2(중간 블록 누락 변이 검출)가
  * 요구하는 "최소 3블록 범위, 중간에 최소 1개 미선택 블록" 구성을 만족한다.
  */
-const renderToolbar = (blockIds: readonly string[] = FIVE_BLOCK_IDS) =>
-  mountBlockEditor({ blockIds, children: <BlockSelectionToolbar /> });
+const renderToolbar = (
+  blockIds: readonly string[] = FIVE_BLOCK_IDS,
+  dictionary?: MountBlockEditorOptions["dictionary"],
+) =>
+  mountBlockEditor({
+    blockIds,
+    children: <BlockSelectionToolbar />,
+    ...(dictionary === undefined ? {} : { dictionary }),
+  });
 
 /** 현재 DOM에 떠 있는 하이라이트 오버레이가 표시하는 blockId 목록(문서 순서 무관, 등장 순서). */
 const highlightedBlockIds = (): string[] =>
@@ -71,6 +83,37 @@ describe("blockSelection이 있으면 툴바와 하이라이트를 렌더한다"
     expect(screen.getByRole("button", { name: deleteLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: moveUpLabel })).not.toBeNull();
     expect(screen.getByRole("button", { name: moveDownLabel })).not.toBeNull();
+  });
+
+  it("dictionary override 시 컨테이너·3개 버튼이 바뀐다(EXT-009)", () => {
+    const { editor } = renderToolbar(FIVE_BLOCK_IDS, {
+      ...DEFAULT_DICTIONARY,
+      toolbar: {
+        ...DEFAULT_DICTIONARY.toolbar,
+        blockSelection: {
+          ...DEFAULT_DICTIONARY.toolbar.blockSelection,
+          ariaLabel: "블록 선택 툴바",
+          delete: "선택 블록 삭제",
+          moveUp: "위로 옮기기",
+          moveDown: "아래로 옮기기",
+        },
+      },
+    });
+
+    const selected = editor.commands.selectBlockRange("block-2", "block-4");
+    expect(selected.ok).toBe(true);
+    fireSelectionChange();
+
+    expect(
+      screen.getByRole("toolbar", { name: "블록 선택 툴바" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "선택 블록 삭제" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "위로 옮기기" })).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "아래로 옮기기" }),
+    ).not.toBeNull();
   });
 
   // 완료 조건 2 + 변이 검출: 끝점(block-2·block-4)만 강조하고 중간 블록

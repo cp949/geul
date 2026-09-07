@@ -3,7 +3,7 @@ import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
@@ -70,6 +70,7 @@ export const LinkToolbar = ({
   component: Component,
 }: LinkToolbarProps = {}) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState>({
     mode: "closed",
@@ -128,7 +129,7 @@ export const LinkToolbar = ({
   if (Component !== undefined) {
     const overridden = (
       <div
-        aria-label="Link"
+        aria-label={dictionary.toolbar.link.ariaLabel}
         className="geul-link-toolbar"
         ref={menuRef}
         role="toolbar"
@@ -186,7 +187,7 @@ export const LinkToolbar = ({
 
   const content = (
     <div
-      aria-label="Link"
+      aria-label={dictionary.toolbar.link.ariaLabel}
       className="geul-link-toolbar"
       ref={menuRef}
       role="toolbar"
@@ -194,51 +195,51 @@ export const LinkToolbar = ({
     >
       {toolbarState.mode === "view" && toolbarState.href === null && (
         <button
-          aria-label="Add link"
+          aria-label={dictionary.toolbar.link.addLink}
           className={linkToolbarButtonClassName}
           onClick={startEditing}
           onMouseDown={(event) => event.preventDefault()}
           type="button"
         >
-          Add link
+          {dictionary.toolbar.link.addLink}
         </button>
       )}
       {toolbarState.mode === "view" && toolbarState.href !== null && (
         <>
           <a
-            aria-label="Open link"
+            aria-label={dictionary.toolbar.link.openLink}
             className={linkToolbarButtonClassName}
             href={toolbarState.href}
             onMouseDown={(event) => event.preventDefault()}
             rel="noreferrer"
             target="_blank"
           >
-            Open link
+            {dictionary.toolbar.link.openLink}
           </a>
           <button
-            aria-label="Edit link"
+            aria-label={dictionary.toolbar.link.editLink}
             className={linkToolbarButtonClassName}
             onClick={startEditing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Edit link
+            {dictionary.toolbar.link.editLink}
           </button>
           <button
-            aria-label="Remove link"
+            aria-label={dictionary.toolbar.link.removeLink}
             className={linkToolbarButtonClassName}
             onClick={removeLink}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Remove link
+            {dictionary.toolbar.link.removeLink}
           </button>
         </>
       )}
       {toolbarState.mode === "editing" && (
         <>
           <input
-            aria-label="Link URL"
+            aria-label={dictionary.toolbar.link.urlInputAriaLabel}
             className="geul-link-toolbar__input"
             onChange={(event) => {
               if (toolbarState.mode !== "editing") return;
@@ -263,22 +264,22 @@ export const LinkToolbar = ({
             value={toolbarState.draft}
           />
           <button
-            aria-label="Save link"
+            aria-label={dictionary.toolbar.link.saveLink}
             className={linkToolbarButtonClassName}
             onClick={applyLink}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Save link
+            {dictionary.toolbar.link.saveLink}
           </button>
           <button
-            aria-label="Cancel link edit"
+            aria-label={dictionary.toolbar.link.cancelAriaLabel}
             className={linkToolbarButtonClassName}
             onClick={cancelEditing}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            Cancel
+            {dictionary.toolbar.link.cancel}
           </button>
           {toolbarState.rejected && (
             <span className="geul-link-toolbar__error" role="alert">

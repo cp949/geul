@@ -6,7 +6,11 @@
  * URL 입력에서 Escape 시 닫힘과 편집기로의 초점 복구를 검증한다.
  */
 
-import type { EditorController } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type Dictionary,
+  type EditorController,
+} from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,11 +35,13 @@ afterEach(cleanup);
 type FakeControllerOptions = {
   getSelectionLink?: () => { href: string } | null;
   setLink?: (href: string) => { ok: boolean; error?: { code: string } };
+  dictionary?: Dictionary;
 };
 
 const fakeController = ({
   getSelectionLink = () => null,
   setLink = () => ({ ok: true }),
+  dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -52,6 +58,7 @@ const fakeController = ({
   getDocument: vi.fn(),
   getSelectionMarks: vi.fn(() => [] as string[]),
   getSelectionLink: vi.fn(getSelectionLink),
+  getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
     setText: vi.fn(),
@@ -138,6 +145,42 @@ describe("LinkToolbar 링크 툴바", () => {
     ).toBe("https://example.com");
     expect(screen.getByRole("button", { name: "Edit link" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Remove link" })).not.toBeNull();
+  });
+
+  it("dictionary override 시 컨테이너·컨트롤·Cancel(aria-label≠텍스트)이 바뀐다(EXT-009)", () => {
+    const controller = fakeController({
+      getSelectionLink: () => ({ href: "https://example.com" }),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        toolbar: {
+          ...DEFAULT_DICTIONARY.toolbar,
+          link: {
+            ...DEFAULT_DICTIONARY.toolbar.link,
+            ariaLabel: "링크 툴바",
+            editLink: "링크 편집",
+            cancelAriaLabel: "링크 편집 취소",
+            cancel: "취소",
+          },
+        },
+      },
+    });
+    render(
+      withProvider(
+        controller,
+        <>
+          <LinkToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    collapseSelection();
+
+    expect(screen.getByRole("toolbar", { name: "링크 툴바" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "링크 편집" }));
+
+    const cancelButton = screen.getByRole("button", { name: "링크 편집 취소" });
+    expect(cancelButton).not.toBeNull();
+    expect(cancelButton.textContent).toBe("취소");
   });
 
   it("링크 추가 컨트롤로 링크를 만든다", () => {

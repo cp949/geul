@@ -6,13 +6,9 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
-
-const deleteLabel = "Delete selected blocks";
-const moveUpLabel = "Move selection up";
-const moveDownLabel = "Move selection down";
 
 const deleteIcon = <Trash2 {...iconProps} />;
 const moveUpIcon = <ArrowUp {...iconProps} />;
@@ -93,6 +89,7 @@ const findBlockInTreeForSelection = (
  */
 export const BlockSelectionToolbar = () => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const focusEditor = useFocusEditor(element);
@@ -330,7 +327,7 @@ export const BlockSelectionToolbar = () => {
         />
       ))}
       <div
-        aria-label="Block selection"
+        aria-label={dictionary.toolbar.blockSelection.ariaLabel}
         className="geul-block-selection-toolbar"
         data-geul-block-selection-toolbar=""
         ref={menuRef}
@@ -341,20 +338,20 @@ export const BlockSelectionToolbar = () => {
           className={buttonClassName}
           disabled={!toolbarState.canMoveUp}
           icon={moveUpIcon}
-          label={moveUpLabel}
+          label={dictionary.toolbar.blockSelection.moveUp}
           onClick={handleMoveUp}
         />
         <IconButton
           className={buttonClassName}
           disabled={!toolbarState.canMoveDown}
           icon={moveDownIcon}
-          label={moveDownLabel}
+          label={dictionary.toolbar.blockSelection.moveDown}
           onClick={handleMoveDown}
         />
         <IconButton
           className={dangerButtonClassName}
           icon={deleteIcon}
-          label={deleteLabel}
+          label={dictionary.toolbar.blockSelection.delete}
           onClick={handleDelete}
         />
         {actionError !== null && (

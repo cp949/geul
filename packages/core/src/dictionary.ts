@@ -169,6 +169,35 @@ export type Dictionary = {
       closeAriaLabel: string;
       close: string;
     };
+    // RD-002-DELTA-07 — `tableSelection`의 "Cell formatting"은 별도 key를
+    // 두지 않는다. `table-selection-toolbar.tsx`가 `Dictionary.menu.
+    // cellFormattingAriaLabel`(DELTA-04)을 그대로 재사용한다 — 실측 결과
+    // 완전히 같은 문구를 세 번째 파일이 독립적으로 하드코딩하고 있었다.
+    link: {
+      ariaLabel: string;
+      addLink: string;
+      openLink: string;
+      editLink: string;
+      removeLink: string;
+      urlInputAriaLabel: string;
+      saveLink: string;
+      cancelAriaLabel: string;
+      cancel: string;
+    };
+    tableSelection: {
+      ariaLabel: string;
+      mergeCells: string;
+      splitCell: string;
+    };
+    blockSelection: {
+      ariaLabel: string;
+      moveUp: string;
+      moveDown: string;
+      delete: string;
+    };
+    formatting: {
+      ariaLabel: string;
+    };
   };
 };
 
@@ -337,6 +366,31 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       retry: "Retry",
       closeAriaLabel: "Close file panel",
       close: "Close",
+    },
+    link: {
+      ariaLabel: "Link",
+      addLink: "Add link",
+      openLink: "Open link",
+      editLink: "Edit link",
+      removeLink: "Remove link",
+      urlInputAriaLabel: "Link URL",
+      saveLink: "Save link",
+      cancelAriaLabel: "Cancel link edit",
+      cancel: "Cancel",
+    },
+    tableSelection: {
+      ariaLabel: "Table selection",
+      mergeCells: "Merge cells",
+      splitCell: "Split cell",
+    },
+    blockSelection: {
+      ariaLabel: "Block selection",
+      moveUp: "Move selection up",
+      moveDown: "Move selection down",
+      delete: "Delete selected blocks",
+    },
+    formatting: {
+      ariaLabel: "Formatting",
     },
   },
 };
