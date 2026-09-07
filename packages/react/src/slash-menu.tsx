@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -243,6 +244,7 @@ export const SlashMenu = ({
 }: SlashMenuProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
+  const menuId = useId();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
   const { menuRef, style } = useClampedMenuPosition(
     menuState?.left ?? 0,
@@ -385,6 +387,32 @@ export const SlashMenu = ({
       ? []
       : filterItems(menuState.sourceBlockType, menuState.query, customItems);
 
+  // 강조된 옵션의 id. code-block-language-combobox.tsx와 동일 패턴
+  // (menuId + 옵션 고유 id) — 아래 aria-activedescendant effect와 옵션
+  // 버튼의 id 둘 다 이 값에서 파생해 접두사가 어긋나지 않는다.
+  const highlightedItem =
+    menuState === null ? undefined : items[menuState.highlightedIndex];
+  const activeOptionId =
+    highlightedItem === undefined
+      ? undefined
+      : `${menuId}-${highlightedItem.id}`;
+
+  // aria-activedescendant는 실제 포커스를 쥔 요소(호출부)에 설정해야 한다.
+  // 이 컴포넌트가 초점을 갖지 않으므로(캐럿은 계속 편집기에 머무름) 대상은
+  // menuRef가 아니라 element 안의 실제 contenteditable이다 — EditorContent의
+  // host div(role="textbox")는 그 자신이 아니라 PM이 만드는 자식이다
+  // (use-focus-editor.ts와 동일 조회, G-TST-001).
+  useEffect(() => {
+    const editable = element?.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (!editable || activeOptionId === undefined) return;
+    editable.setAttribute("aria-activedescendant", activeOptionId);
+    return () => {
+      editable.removeAttribute("aria-activedescendant");
+    };
+  }, [activeOptionId, element]);
+
   const selectItem = useCallback(
     (item: SlashMenuItem) => {
       const current = menuStateRef.current;
@@ -511,6 +539,7 @@ export const SlashMenu = ({
           <button
             aria-selected={index === menuState.highlightedIndex}
             className="geul-slash-menu__item"
+            id={`${menuId}-${item.id}`}
             key={item.id}
             onClick={() => selectItem(item)}
             onPointerDown={(event) => event.preventDefault()}

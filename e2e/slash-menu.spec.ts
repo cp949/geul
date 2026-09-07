@@ -66,6 +66,34 @@ test("키보드만으로 메뉴 항목을 이동하고 선택한다", async ({ p
   await expect(editable.locator("h1")).toHaveCount(1);
 });
 
+test("aria-activedescendant가 강조된 옵션을 가리키고 ArrowDown으로 갱신된다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/head");
+  await expect(menu).toBeVisible();
+
+  const firstOption = page.getByRole("option", { name: /^Heading 1/ });
+  await expect(editable).toHaveAttribute(
+    "aria-activedescendant",
+    await firstOption.evaluate((element) => element.id),
+  );
+
+  await page.keyboard.press("ArrowDown");
+  const secondOption = page.getByRole("option").nth(1);
+  await expect(editable).toHaveAttribute(
+    "aria-activedescendant",
+    await secondOption.evaluate((element) => element.id),
+  );
+
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+  await expect(editable).not.toHaveAttribute("aria-activedescendant", /.+/);
+});
+
 test("글머리 목록 항목을 클릭하면 실제 목록으로 바꾸고 편집기 초점을 복구한다", async ({
   page,
 }) => {

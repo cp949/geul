@@ -367,6 +367,31 @@ describe("SlashMenu 질의 팝업", () => {
     expect(document.activeElement).toBe(rendered.editable);
   });
 
+  it("aria-activedescendant가 강조된 옵션의 id를 편집 가능 요소에 알리고 닫히면 지운다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, 0, "/list");
+
+    const firstOption = screen.getByRole("option", { name: /Bulleted List/ });
+    expect(firstOption.id).not.toBe("");
+    expect(rendered.editable.getAttribute("aria-activedescendant")).toBe(
+      firstOption.id,
+    );
+
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowDown" })).toBe(
+      false,
+    );
+    const secondOption = screen.getByRole("option", { name: /Numbered List/ });
+    expect(secondOption.id).not.toBe(firstOption.id);
+    expect(rendered.editable.getAttribute("aria-activedescendant")).toBe(
+      secondOption.id,
+    );
+
+    expect(fireEvent.keyDown(rendered.host, { key: "Escape" })).toBe(false);
+    expect(
+      rendered.editable.hasAttribute("aria-activedescendant"),
+    ).toBe(false);
+  });
+
   it.each([
     {
       type: "bulletListItem" as const,
