@@ -8,7 +8,11 @@
  * retry·cancel(RD-003 DELTA-02)을 검증한다.
  */
 
-import type { EditorError, MediaBlockKind } from "@cp949/geul-core";
+import type {
+  EditorController,
+  EditorError,
+  MediaBlockKind,
+} from "@cp949/geul-core";
 import {
   cleanup,
   fireEvent,
@@ -547,5 +551,50 @@ describe("FilePanel portalTarget(슬라이스4 RD-003 DELTA-04)", () => {
 
     const panel = screen.getByRole("toolbar", { name: "File panel" });
     expect(container.contains(panel)).toBe(true);
+  });
+});
+
+describe("FilePanel component override(슬라이스4 RD-001 DELTA-04)", () => {
+  const CustomFilePanel = ({ editor }: { editor: EditorController }) => (
+    <button
+      onClick={() => editor.commands.setMediaBlockUrl("media-1", "https://x")}
+      type="button"
+    >
+      Custom save
+    </button>
+  );
+
+  it("지정하면 소비자 컴포넌트가 렌더되고 editor를 받는다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    render(
+      withProvider(
+        controller,
+        <>
+          <FilePanel component={CustomFilePanel} />
+          <EditorContent />
+        </>,
+      ),
+    );
+
+    const button = screen.getByRole("button", { name: "Custom save" });
+    fireEvent.click(button);
+
+    expect(controller.commands.setMediaBlockUrl).toHaveBeenCalledWith(
+      "media-1",
+      "https://x",
+    );
+    expect(screen.queryByRole("button", { name: "Save URL" })).toBeNull();
+  });
+
+  it("지정해도 표시 판정은 wrapper가 그대로 유지한다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(controller, <FilePanel component={CustomFilePanel} />),
+    );
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Custom save" })).toBeNull();
   });
 });

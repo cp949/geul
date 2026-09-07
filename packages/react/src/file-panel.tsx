@@ -1,5 +1,5 @@
-import type { MediaBlockKind } from "@cp949/geul-core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { extractNameFromUrl } from "./extract-name-from-url.js";
@@ -66,12 +66,19 @@ type PanelState =
  * 일어날 때마다 다시 읽을 뿐 별도 열림 상태를 직접 소유하지 않는다
  * (LinkToolbar와 같은 아키텍처).
  */
-/** DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고. */
+/**
+ * `formatting-toolbar.tsx`와 동일 계약 — `portalTarget`(RD-003 DELTA-04),
+ * `component`(RD-001 DELTA-04) 참고.
+ */
 export type FilePanelProps = {
   portalTarget?: HTMLElement | null;
+  component?: FC<{ editor: EditorController }>;
 };
 
-export const FilePanel = ({ portalTarget = null }: FilePanelProps = {}) => {
+export const FilePanel = ({
+  portalTarget = null,
+  component: Component,
+}: FilePanelProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [panelState, setPanelState] = useState<PanelState>({ mode: "closed" });
@@ -263,6 +270,23 @@ export const FilePanel = ({ portalTarget = null }: FilePanelProps = {}) => {
   });
 
   if (panelState.mode === "closed") return null;
+
+  if (Component !== undefined) {
+    const overridden = (
+      <div
+        aria-label="File panel"
+        className="geul-file-panel"
+        ref={menuRef}
+        role="toolbar"
+        style={style}
+      >
+        <Component editor={editor} />
+      </div>
+    );
+    return portalTarget === null
+      ? overridden
+      : createPortal(overridden, portalTarget);
+  }
 
   // 등록 여부는 마운트 시점에 고정된다(EditorProvider "결정") — 렌더마다
   // 다시 불러도 값은 안정적이다. 미등록이면 tablist 자체를 렌더링하지
