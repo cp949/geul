@@ -574,12 +574,24 @@ export const createProductionEditor = (options: {
       : { editorProps: { attributes: options.attributeOverrides.editor } }),
   });
 
-  loadNormalizing = true;
-  try {
-    editor.mount(globalThis.document.createElement("div"));
-    editor.unmount();
-  } finally {
-    loadNormalizing = false;
+  // spec §11.2(EXT-013, R4 슬라이스8 RD-001) — 이 self-mount/unmount
+  // round-trip은 로드 시점 trailing paragraph 정규화(onMount, 위 참고)를
+  // 동기적으로 끝내기 위한 수단이지 목적이 아니다(PM appendTransaction은
+  // 초기 state 생성에 실행되지 않고 Tiptap "create"는 비동기라 이 동기
+  // 훅이 필요했다 — trailing-block-extension.ts:37-44). `document` 전역이
+  // 없는 순수 Node/SSR 환경에서는 이 자기-mount 자체가 불가능하므로
+  // 건너뛴다 — 소비자가 나중에 실제 `.mount(element)`를 호출하면 같은
+  // `onMount` 훅이 그 시점에 다시 발화해 정규화를 적용한다. 그때까지는
+  // 반환된 controller의 문서가 아직 정규화 전 상태일 수 있다(알려진 제약,
+  // `production-editor-ssr-smoke.test.ts`).
+  if (typeof globalThis.document !== "undefined") {
+    loadNormalizing = true;
+    try {
+      editor.mount(globalThis.document.createElement("div"));
+      editor.unmount();
+    } finally {
+      loadNormalizing = false;
+    }
   }
   return editor;
 };
