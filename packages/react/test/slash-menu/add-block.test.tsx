@@ -12,9 +12,23 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { SlashMenu } from "../../src/index.js";
 import { expectIconOnlyButton } from "../expect-icon-button.js";
-import { focusOutsideEditor, type MountedBlockEditor, mountBlockEditor, mountTableEditor, placeCaret } from "../mount-editor.js";
+import {
+  focusOutsideEditor,
+  type MountedBlockEditor,
+  mountBlockEditor,
+  mountTableEditor,
+  placeCaret,
+} from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
-import { addBlockLabel, addRowLabel, blockIdsOf, dragHandleLabel, renderCaretBlocks, renderRealBlocks, typeIntoBlock } from "./slash-menu-test-support.js";
+import {
+  addBlockLabel,
+  addRowLabel,
+  blockIdsOf,
+  dragHandleLabel,
+  renderCaretBlocks,
+  renderRealBlocks,
+  typeIntoBlock,
+} from "./slash-menu-test-support.js";
 
 afterEach(cleanup);
 

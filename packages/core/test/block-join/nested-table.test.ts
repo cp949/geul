@@ -30,13 +30,32 @@ import { describe, expect, it, vi } from "vitest";
 import { BlockJoinExtension } from "../../src/block-join-extension.js";
 import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
 import {
-  dividerBetweenParagraphsDocument, dividerD1, documentOf, editorState,
-  expectDividerNodeSelection, firstParagraphBlock, mounted, nestedParagraphDocument,
-  notApplicable, okResult, oneCellTableBlock, paragraphBlock, restored,
-  secondParagraphBlock, tailParagraphBlock,
+  dividerBetweenParagraphsDocument,
+  dividerD1,
+  documentOf,
+  editorState,
+  expectDividerNodeSelection,
+  firstParagraphBlock,
+  mounted,
+  nestedParagraphDocument,
+  notApplicable,
+  okResult,
+  oneCellTableBlock,
+  paragraphBlock,
+  restored,
+  secondParagraphBlock,
+  tailParagraphBlock,
 } from "../editor-controller-support.js";
-import { cellJson, createTableFixtureEditor, placeCaretInCell } from "../table-test-support.js";
-import { countNodes, expectSchemaValid, mountDocument } from "./block-join-test-support.js";
+import {
+  cellJson,
+  createTableFixtureEditor,
+  placeCaretInCell,
+} from "../table-test-support.js";
+import {
+  countNodes,
+  expectSchemaValid,
+  mountDocument,
+} from "./block-join-test-support.js";
 
 /**
  * Issue #138의 Backspace/Delete 대칭 중첩 배치를 마운트하고 표에 인접한

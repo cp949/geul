@@ -28,7 +28,10 @@ import type { Editor as TiptapEditor } from "@tiptap/core";
 import { expect } from "vitest";
 
 import { createEditor } from "../../src/index.js";
-import { mountTiptapEditor, sequentialIds } from "../editor-controller-support.js";
+import {
+  mountTiptapEditor,
+  sequentialIds,
+} from "../editor-controller-support.js";
 
 /**
  * 문서를 EditorController로 마운트해 실 키맵 체인이 걸린 tiptap 에디터를

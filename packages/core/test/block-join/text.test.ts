@@ -30,13 +30,32 @@ import { describe, expect, it, vi } from "vitest";
 import { BlockJoinExtension } from "../../src/block-join-extension.js";
 import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
 import {
-  dividerBetweenParagraphsDocument, dividerD1, documentOf, editorState,
-  expectDividerNodeSelection, firstParagraphBlock, mounted, nestedParagraphDocument,
-  notApplicable, okResult, oneCellTableBlock, paragraphBlock, restored,
-  secondParagraphBlock, tailParagraphBlock,
+  dividerBetweenParagraphsDocument,
+  dividerD1,
+  documentOf,
+  editorState,
+  expectDividerNodeSelection,
+  firstParagraphBlock,
+  mounted,
+  nestedParagraphDocument,
+  notApplicable,
+  okResult,
+  oneCellTableBlock,
+  paragraphBlock,
+  restored,
+  secondParagraphBlock,
+  tailParagraphBlock,
 } from "../editor-controller-support.js";
-import { cellJson, createTableFixtureEditor, placeCaretInCell } from "../table-test-support.js";
-import { countNodes, expectSchemaValid, mountDocument } from "./block-join-test-support.js";
+import {
+  cellJson,
+  createTableFixtureEditor,
+  placeCaretInCell,
+} from "../table-test-support.js";
+import {
+  countNodes,
+  expectSchemaValid,
+  mountDocument,
+} from "./block-join-test-support.js";
 
 describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () => {
   it("평면 두 블록에서 뒤 블록 선두 Backspace는 자식화가 아니라 한 블록으로 병합한다", () => {

@@ -1,7 +1,11 @@
 import { expect } from "vitest";
 
 import { SlashMenu } from "../../src/index.js";
-import { type MountedBlockEditor, mountBlockEditor, placeCaret } from "../mount-editor.js";
+import {
+  type MountedBlockEditor,
+  mountBlockEditor,
+  placeCaret,
+} from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
 
 const dragHandleLabel = "Drag to reorder, click for options";
@@ -64,4 +68,12 @@ const typeIntoBlock = (
 const blockIdsOf = (rendered: MountedBlockEditor) =>
   rendered.editor.getDocument().blocks.map((block) => block.id);
 
-export { addBlockLabel, addRowLabel, blockIdsOf, dragHandleLabel, renderCaretBlocks, renderRealBlocks, typeIntoBlock };
+export {
+  addBlockLabel,
+  addRowLabel,
+  blockIdsOf,
+  dragHandleLabel,
+  renderCaretBlocks,
+  renderRealBlocks,
+  typeIntoBlock,
+};

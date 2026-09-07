@@ -12,9 +12,22 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { SlashMenu } from "../../src/index.js";
 import { expectIconOnlyButton } from "../expect-icon-button.js";
-import { focusOutsideEditor, type MountedBlockEditor, mountBlockEditor, mountTableEditor, placeCaret } from "../mount-editor.js";
+import {
+  focusOutsideEditor,
+  type MountedBlockEditor,
+  mountBlockEditor,
+  mountTableEditor,
+  placeCaret,
+} from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
-import { addBlockLabel, addRowLabel, dragHandleLabel, renderCaretBlocks, renderRealBlocks, typeIntoBlock } from "./slash-menu-test-support.js";
+import {
+  addBlockLabel,
+  addRowLabel,
+  dragHandleLabel,
+  renderCaretBlocks,
+  renderRealBlocks,
+  typeIntoBlock,
+} from "./slash-menu-test-support.js";
 
 afterEach(cleanup);
 
@@ -63,7 +76,6 @@ const EscapeOnSlashMenuCommit = ({
 
   return null;
 };
-
 
 describe("SlashMenu 질의 팝업", () => {
   it("캐럿이 블록 안에 없으면 렌더링하지 않는다", () => {
