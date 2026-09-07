@@ -24,7 +24,7 @@
   height: 1rem;
   width: 1rem;
   touch-action: none;
-  border-radius: 0.25rem;
+  border-radius: var(--geul-radius-sm, 0.25rem);
   border: 1px solid var(--geul-color-border, #dadce0);
   background: var(--geul-color-surface, #fff);
   // col-resize(표 전용 의미)가 아니라 ew-resize를 쓴다 — 표가 아닌 일반

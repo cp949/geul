@@ -12,7 +12,7 @@
   flex-direction: column;
   gap: 0.125rem;
   overflow-y: auto;
-  border-radius: 0.375rem;
+  border-radius: var(--geul-radius-md, 0.375rem);
   border: 1px solid var(--geul-color-border, #dadce0);
   background: var(--geul-color-surface, #fff);
   padding: 0.25rem;
@@ -23,7 +23,7 @@
   height: 1.25rem;
   width: 1.25rem;
   cursor: pointer;
-  border-radius: 0.25rem;
+  border-radius: var(--geul-radius-sm, 0.25rem);
   border: 1px solid var(--geul-color-border, #dadce0);
   padding: 0;
 }

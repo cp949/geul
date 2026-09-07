@@ -30,4 +30,12 @@
   // 링크·표선택 툴바)가 서로 다른 굵기를 쓴다.
   --geul-shadow-menu: 0 2px 8px rgba(0, 0, 0, 0.15);
   --geul-shadow-toolbar: 0 1px 4px rgba(0, 0, 0, 0.15);
+
+  // border-radius 3종(R4 슬라이스5 RD-001-DELTA-02) — 크기 스케일 이름을
+  // 쓴다. 같은 파일 안에서도 컨테이너(md)와 내부 버튼/항목(sm)이 섞여
+  // 쓰이고 lg는 코드블록 언어 콤보박스 컨테이너 1곳뿐이라 역할 이름을
+  // 붙이면 실제보다 세분화된 것처럼 오독된다.
+  --geul-radius-sm: 0.25rem;
+  --geul-radius-md: 0.375rem;
+  --geul-radius-lg: 0.5rem;
 }

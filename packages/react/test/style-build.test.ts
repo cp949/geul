@@ -2,6 +2,7 @@
  * React SCSS 진입점의 실제 컴파일 결과와 PostCSS 호환성 처리를 검증한다.
  * DOM 계약, 디자인 토큰, overlay viewport 제약을 함께 고정한다.
  */
+import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -199,6 +200,52 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(body).toContain(
       "background: var(--geul-color-accent-highlight, rgba(26, 115, 232, 0.16));",
     );
+  });
+
+  it(":root에 --geul-radius-* 디자인 토큰 3개의 기본값을 선언한다(R4 슬라이스5 RD-001-DELTA-02)", () => {
+    const css = compileCss();
+
+    const tokens = {
+      "--geul-radius-sm": "0.25rem",
+      "--geul-radius-md": "0.375rem",
+      "--geul-radius-lg": "0.5rem",
+    } as const;
+
+    for (const [name, value] of Object.entries(tokens)) {
+      expect(css).toContain(`${name}: ${value};`);
+    }
+  });
+
+  it("border-radius 하드코딩 값을 --geul-radius-* override 가능한 var()로 컴파일한다(R4 슬라이스5 RD-001-DELTA-02)", () => {
+    const css = compileCss();
+
+    const lg = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
+      ?.groups?.body;
+    expect(lg).toContain("border-radius: var(--geul-radius-lg, 0.5rem);");
+
+    const md = /\.geul-formatting-toolbar \{(?<body>[^}]*)\}/.exec(css)
+      ?.groups?.body;
+    expect(md).toContain("border-radius: var(--geul-radius-md, 0.375rem);");
+
+    const sm = /\.geul-table-menu__item \{(?<body>[^}]*)\}/.exec(css)?.groups
+      ?.body;
+    expect(sm).toContain("border-radius: var(--geul-radius-sm, 0.25rem);");
+  });
+
+  it("src SCSS에 border-radius 하드코딩 리터럴을 남기지 않는다(R4 슬라이스5 RD-001-DELTA-02, 29건 전수 승격 정적 확인)", () => {
+    const srcDir = join(packageRoot, "src");
+    const scssFiles = readdirSync(srcDir).filter((name) =>
+      name.endsWith(".scss"),
+    );
+    const literalPattern = /border-radius:\s*0\.(?:25|375|5)rem;/;
+
+    const offenders: string[] = [];
+    for (const file of scssFiles) {
+      const content = readFileSync(join(srcDir, file), "utf8");
+      if (literalPattern.test(content)) offenders.push(file);
+    }
+
+    expect(offenders).toEqual([]);
   });
 
   it("생성 CSS에 미해결 @use나 Sass 변수를 남기지 않는다", () => {
