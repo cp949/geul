@@ -1,0 +1,49 @@
+.geul-emoji-picker {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  width: 14rem;
+  max-height: 16rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+  border-radius: 0.375rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.geul-emoji-picker__empty {
+  margin: 0;
+  padding-inline: 0.5rem;
+  padding-block: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--geul-color-text-muted, #5f6368);
+}
+
+// 열 수는 emoji-picker.tsx의 EMOJI_GRID_COLUMNS(8)와 값이 같아야 한다 —
+// 어긋나면 방향키 이동과 실제 시각 배치가 안 맞는다.
+.geul-emoji-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.125rem;
+}
+
+.geul-emoji-picker__item {
+  display: flex;
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 1.125rem;
+  line-height: 1;
+
+  &[aria-selected="true"] {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+}

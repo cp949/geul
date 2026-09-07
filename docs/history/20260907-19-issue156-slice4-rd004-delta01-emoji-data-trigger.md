@@ -20,7 +20,7 @@ RD-004(emoji picker, `EXT-006`/`EXT-007`이 아닌 별개 결과 `UI-012`/`UI-01
 
 백그라운드 조사(`packages/core/src/editor-controller-types.ts`의 `commands` 계약 전체 대조) 결과: 캐럿 앞 트리거 부분 문자열만 골라 치환하는 오프셋 기반 공개 API(`insertText`/`replaceText`/오프셋 `deleteRange` 류)는 core에 없다. `setTextCursorPosition`도 `"start"/"end"` 두 값만 받는다. 남는 유일한 기존 계약은 `getCaretBlockContext().text`(블록 전체 텍스트)를 문자열 치환한 뒤 `commands.setText(blockId, replaced)`(블록 전체 재작성 API)로 다시 쓰는 것.
 
-해소: 트리거 감지를 `parseSlashQuery`와 동일하게 "블록 텍스트 전체가 트리거와 정확히 일치할 때만" 열리도록 제한했다(`parseEmojiQuery`, `/^:(\S*)$/` 전체 매치 — RD-004.md "포함 범위"가 이미 이 방식을 지목). 트리거가 블록 텍스트 전체와 같으면 "부분 치환"이 아니라 "블록 전체 재작성"이 되므로, DELTA-02는 `commands.setText(blockId, char)` + `commands.setTextCursorPosition(blockId, "end")`만으로 완결할 수 있다 — 오프셋 기반 신규 core API가 필요 없다. 근거·틀렸을 때 비용은 `result/RD-004-DELTA-01.md` "핵심 설계 결정" 참고.
+해소: 트리거 감지를 `parseSlashQuery`와 동일하게 "블록 텍스트 전체가 트리거와 정확히 일치할 때만" 열리도록 제한했다(`parseEmojiQuery`, `/^:(\S*)$/` 전체 매치 — RD-004.md "포함 범위"가 이미 이 방식을 지목). 트리거가 블록 텍스트 전체와 같으면 "부분 치환"이 아니라 "블록 전체 재작성"이 되므로, DELTA-02는 `commands.setText(blockId, char)` + `setTextCursorPosition(blockId, "end")`(controller 최상위 API, `commands` 아래가 아니다)만으로 완결할 수 있다 — 오프셋 기반 신규 core API가 필요 없다. 근거·틀렸을 때 비용은 `result/RD-004-DELTA-01.md` "핵심 설계 결정" 참고.
 
 ## 검증
 

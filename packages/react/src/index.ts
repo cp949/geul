@@ -7,6 +7,7 @@ export type {
 } from "@cp949/geul-core";
 export { EditorContent } from "./editor-content.js";
 export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
+export { EmojiPicker, type EmojiPickerProps } from "./emoji-picker.js";
 export { FilePanel, type FilePanelProps } from "./file-panel.js";
 export {
   FormattingToolbar,
