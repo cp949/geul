@@ -1,8 +1,50 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
+
+/**
+ * 실제 역방향 순차 포커스로 대상 버튼에 도달한다(formatting-toolbar.spec.ts와
+ * 동일 헬퍼, RD-002 DELTA-02 — 2번째 사용이라 아직 공용화 문턱이 아니다).
+ * programmatic focus가 숨기는 tabIndex·기본 동작 억제 회귀를 드러낸다.
+ */
+const focusWithShiftTab = async (page: Page, target: Locator) => {
+  for (let i = 0; i < 10; i += 1) {
+    await page.keyboard.press("Shift+Tab");
+    const focused = await target.evaluate(
+      (element) => element === element.ownerDocument.activeElement,
+    );
+    if (focused) break;
+  }
+  await expect(target).toBeFocused();
+};
+
+test("키보드만으로 Add link 버튼에 도달해 링크를 만들고 저장한다 @core", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+
+  const addLink = page.getByRole("button", { name: "Add link" });
+  await expect(addLink).toBeVisible();
+  await focusWithShiftTab(page, addLink);
+  await page.keyboard.press("Enter");
+
+  const linkInput = page.getByRole("textbox", { name: "Link URL" });
+  await expect(linkInput).toBeFocused();
+  await page.keyboard.type("https://example.com");
+  await page.keyboard.press("Enter");
+
+  await expect(editable).toBeFocused();
+  await expect(editable.locator("a")).toHaveAttribute(
+    "href",
+    "https://example.com",
+  );
+  await expect(editable.locator("a")).toHaveText("Hello R1");
+});
 
 test("선택 텍스트에 링크를 만들고 undo 1회로 복원한다 @core", async ({
   page,
