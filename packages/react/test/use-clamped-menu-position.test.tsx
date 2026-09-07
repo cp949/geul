@@ -315,7 +315,12 @@ describe("useClampedMenuPosition", () => {
 
   it("visualViewport가 뷰포트보다 작으면(가상 키보드) 그 경계 기준으로 클램프한다", () => {
     stubMenuRect(200, 100);
-    stubVisualViewport({ offsetLeft: 20, offsetTop: 50, width: 600, height: 300 });
+    stubVisualViewport({
+      offsetLeft: 20,
+      offsetTop: 50,
+      width: 600,
+      height: 300,
+    });
 
     const { getByTestId } = render(<Probe left={1000} top={1000} />);
     const probe = getByTestId("probe");

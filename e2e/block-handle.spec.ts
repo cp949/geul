@@ -87,13 +87,17 @@ test("드래그 핸들이 touch-action:none을 적용하고 pointerdown 기본 �
   // phase 시점의 값이라 false로 관찰된다).
   await handle.evaluate((element: HTMLButtonElement) => {
     (
-      window as typeof window & { __pointerdownEvent?: PointerEvent | undefined }
+      window as typeof window & {
+        __pointerdownEvent?: PointerEvent | undefined;
+      }
     ).__pointerdownEvent = undefined;
     element.addEventListener(
       "pointerdown",
       (event) => {
         (
-          window as typeof window & { __pointerdownEvent?: PointerEvent | undefined }
+          window as typeof window & {
+            __pointerdownEvent?: PointerEvent | undefined;
+          }
         ).__pointerdownEvent = event;
       },
       { once: true },
@@ -110,9 +114,8 @@ test("드래그 핸들이 touch-action:none을 적용하고 pointerdown 기본 �
 
   const defaultPrevented = await page.evaluate(
     () =>
-      (
-        window as typeof window & { __pointerdownEvent?: PointerEvent }
-      ).__pointerdownEvent?.defaultPrevented,
+      (window as typeof window & { __pointerdownEvent?: PointerEvent })
+        .__pointerdownEvent?.defaultPrevented,
   );
   expect(defaultPrevented).toBe(true);
 });

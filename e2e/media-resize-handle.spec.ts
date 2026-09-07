@@ -220,9 +220,7 @@ const insertFilledImageWithTap = async (
   await editable.tap();
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).tap();
-  await page
-    .getByRole("textbox", { name: "Image URL" })
-    .pressSequentially(url);
+  await page.getByRole("textbox", { name: "Image URL" }).pressSequentially(url);
   await page.getByRole("button", { name: "Save URL" }).tap();
   const image = editable.locator("img");
   await expect(image).toHaveAttribute("src", url);

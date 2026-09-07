@@ -377,9 +377,7 @@ describe("SlashMenu 질의 팝업", () => {
       firstOption.id,
     );
 
-    expect(fireEvent.keyDown(rendered.host, { key: "ArrowDown" })).toBe(
-      false,
-    );
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowDown" })).toBe(false);
     const secondOption = screen.getByRole("option", { name: /Numbered List/ });
     expect(secondOption.id).not.toBe(firstOption.id);
     expect(rendered.editable.getAttribute("aria-activedescendant")).toBe(
@@ -387,9 +385,7 @@ describe("SlashMenu 질의 팝업", () => {
     );
 
     expect(fireEvent.keyDown(rendered.host, { key: "Escape" })).toBe(false);
-    expect(
-      rendered.editable.hasAttribute("aria-activedescendant"),
-    ).toBe(false);
+    expect(rendered.editable.hasAttribute("aria-activedescendant")).toBe(false);
   });
 
   it.each([
