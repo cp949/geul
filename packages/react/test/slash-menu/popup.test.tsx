@@ -7,7 +7,7 @@
 import type { CodeBlock, HeadingBlock, TableBlock } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SlashMenu } from "../../src/index.js";
 import {
@@ -631,5 +631,82 @@ describe("SlashMenu portalTarget(슬라이스4 RD-003 DELTA-05)", () => {
     // portal이면 menu는 document.body 직속(별도 컨테이너)에 붙어 host와
     // 부모를 공유하지 않는다 — 형제 관계 확인으로 "옮기지 않았음"을 잠근다.
     expect(menu.parentElement).toBe(rendered.host.parentElement);
+  });
+});
+
+describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
+  it("기본 목록 뒤에 추가된다(대체 아님)", () => {
+    const onSelect = vi.fn();
+    const rendered = mountBlockEditor({
+      children: (
+        <SlashMenu
+          items={[{ id: "custom-1", label: "Custom Item", onSelect }]}
+        />
+      ),
+    });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/");
+
+    const options = screen.getAllByRole("option");
+    // 기본 25개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
+    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 26개, 마지막이 커스텀 아이템.
+    expect(options).toHaveLength(26);
+    expect(options.at(-1)?.textContent).toContain("Custom Item");
+  });
+
+  it("클릭하면 onSelect(editor)가 호출된다", () => {
+    const onSelect = vi.fn();
+    const rendered = mountBlockEditor({
+      children: (
+        <SlashMenu
+          items={[{ id: "custom-1", label: "Custom Item", onSelect }]}
+        />
+      ),
+    });
+    rendered.editable.focus();
+    typeIntoBlock(rendered, 0, "/");
+
+    fireEvent.click(screen.getByRole("option", { name: /Custom Item/ }));
+
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onSelect.mock.calls[0]?.[0]).toBe(rendered.editor);
+    // 선택 후 기본 아이템처럼 메뉴가 닫히고 편집기로 초점이 돌아간다.
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("쿼리로 커스텀 아이템도 label·keywords 기준으로 필터링된다", () => {
+    const onSelect = vi.fn();
+    const rendered = mountBlockEditor({
+      children: (
+        <SlashMenu
+          items={[
+            {
+              id: "custom-1",
+              label: "Custom Item",
+              keywords: ["zzzunique"],
+              onSelect,
+            },
+          ]}
+        />
+      ),
+    });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/zzzunique");
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(options[0]?.textContent).toContain("Custom Item");
+  });
+
+  it("지정하지 않으면(기본값) 기존 25개 기본 목록만 표시한다", () => {
+    const rendered = mountBlockEditor({ children: <SlashMenu /> });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/");
+
+    expect(screen.getAllByRole("option")).toHaveLength(25);
   });
 });

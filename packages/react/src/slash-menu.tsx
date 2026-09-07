@@ -1,5 +1,9 @@
-import type { BlockTypeDescriptor, MediaBlockKind } from "@cp949/geul-core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  BlockTypeDescriptor,
+  EditorController,
+  MediaBlockKind,
+} from "@cp949/geul-core";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
@@ -19,6 +23,11 @@ import { useFocusEditor } from "./use-focus-editor.js";
 const SLASH_MENU_DISMISS_ALLOW_SELECTORS = [".geul-slash-menu"] as const;
 // Escape는 effect 등록 race가 없는 상시 element keydown listener가 소유한다.
 const IGNORE_ESCAPE_DISMISS = () => {};
+// `items` prop 기본값. 매 렌더 새 배열 리터럴이면 그 배열을 참조하는 effect
+// 의존성 배열이 매 렌더 바뀐 걸로 보여 selectionchange 등 리스너를 매번
+// 떼었다 다시 붙인다(SLASH_MENU_DISMISS_ALLOW_SELECTORS와 같은 이유) — 모듈
+// 스코프 상수로 참조 안정성을 보장한다.
+const NO_CUSTOM_ITEMS: readonly SlashMenuCustomItem[] = [];
 
 const parseSlashQuery = (text: string): string | null => {
   const match = /^\/(\S*)$/.exec(text);
@@ -55,7 +64,37 @@ type SlashMenuItem =
       label: string;
       description: string;
       keywords: readonly string[];
+    }
+  // 소비자가 `items` prop으로 등록한 커스텀 아이템(RD-002 DELTA-01,
+  // EXT-006). 원본 `SlashMenuCustomItem`을 `custom`에 그대로 들고 있다가
+  // 선택 시 `onSelect`를 부른다 — `label`/`description`/`keywords`/`id`는
+  // 렌더·필터링이 다른 kind와 동일하게 다루도록 공통 필드로 승격한다.
+  | {
+      kind: "custom";
+      id: string;
+      label: string;
+      description: string;
+      keywords: readonly string[];
+      icon?: ReactNode;
+      custom: SlashMenuCustomItem;
     };
+
+/**
+ * 소비자가 `SlashMenu`의 `items` prop으로 등록하는 커스텀 슬래시 아이템
+ * (RD-002 DELTA-01, `EXT-006`). 기존 기본 목록 뒤에 추가만 되고 대체·제거는
+ * 안 된다(spec). `onSelect`는 등록형 `commands` API가 아니라 그 자리에서
+ * 실행되는 UI 클릭 핸들러라 `Result<T, EditorError>` 계약을 강제하지 않는다
+ * (그릴링 결정, `_works/roadmap/roadmap.md` "Emoji picker 데이터 소스·트리거·
+ * 컬럼 수" 절 참고 — 같은 세션에서 `SlashMenuItem`도 함께 확정).
+ */
+export type SlashMenuCustomItem = {
+  id: string;
+  label: string;
+  description?: string;
+  keywords?: string[];
+  icon?: ReactNode;
+  onSelect: (editor: EditorController) => void;
+};
 
 const TABLE_SLASH_ITEM: SlashMenuItem = {
   kind: "insertTable",
@@ -109,6 +148,7 @@ const AUDIO_SLASH_ITEM: SlashMenuItem = {
 
 const getSlashMenuItems = (
   source: BlockTypeDescriptor,
+  customItems: readonly SlashMenuCustomItem[],
 ): readonly SlashMenuItem[] => [
   ...getBlockTypeOptionsForSource(source).map((option) => ({
     kind: "blockType" as const,
@@ -120,6 +160,17 @@ const getSlashMenuItems = (
   IMAGE_SLASH_ITEM,
   VIDEO_SLASH_ITEM,
   AUDIO_SLASH_ITEM,
+  ...customItems.map(
+    (custom): SlashMenuItem => ({
+      kind: "custom",
+      id: custom.id,
+      label: custom.label,
+      description: custom.description ?? "",
+      keywords: custom.keywords ?? [],
+      icon: custom.icon,
+      custom,
+    }),
+  ),
 ];
 
 const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
@@ -134,8 +185,11 @@ const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
 const filterItems = (
   source: BlockTypeDescriptor,
   query: string,
+  customItems: readonly SlashMenuCustomItem[],
 ): SlashMenuItem[] =>
-  getSlashMenuItems(source).filter((item) => matchesQuery(item, query));
+  getSlashMenuItems(source, customItems).filter((item) =>
+    matchesQuery(item, query),
+  );
 
 type MenuPosition = { left: number; top: number };
 
@@ -170,12 +224,19 @@ const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
  * `TableHandles`/`TableSelectionToolbar`/`BlockSelectionToolbar`(중복 마운트
  * 방지, spec §6.1)는 각자 독립된 오버레이라 이 prop과 무관하다 — `portalTarget`은
  * 슬래시 명령 팝업 자신에만 적용한다(RD-003-DELTA-05.md "범위 판단").
+ *
+ * `items`는 소비자가 등록한 커스텀 아이템이다(RD-002 DELTA-01, `EXT-006`).
+ * 기존 기본 목록 뒤에 추가만 되고 대체·제거는 안 된다.
  */
 export type SlashMenuProps = {
   portalTarget?: HTMLElement | null;
+  items?: readonly SlashMenuCustomItem[];
 };
 
-export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
+export const SlashMenu = ({
+  portalTarget = null,
+  items: customItems = NO_CUSTOM_ITEMS,
+}: SlashMenuProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
@@ -289,7 +350,8 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
             ? Math.min(
                 current.highlightedIndex,
                 Math.max(
-                  filterItems(context.blockType, resolvedQuery).length - 1,
+                  filterItems(context.blockType, resolvedQuery, customItems)
+                    .length - 1,
                   0,
                 ),
               )
@@ -312,12 +374,12 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
       ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
       ownerWindow?.removeEventListener("resize", updateFromCaret);
     };
-  }, [editor, element]);
+  }, [customItems, editor, element]);
 
   const items =
     menuState === null
       ? []
-      : filterItems(menuState.sourceBlockType, menuState.query);
+      : filterItems(menuState.sourceBlockType, menuState.query, customItems);
 
   const selectItem = useCallback(
     (item: SlashMenuItem) => {
@@ -337,6 +399,8 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
         editor.commands.insertMediaBlock(current.blockId, item.mediaKind, {
           clearAfterBlockText: true,
         });
+      } else if (item.kind === "custom") {
+        item.custom.onSelect(editor);
       } else {
         editor.commands.insertDivider(current.blockId, {
           clearAfterBlockText: true,
@@ -375,8 +439,11 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
         setMenuState((currentState) => {
           if (currentState === null) return null;
           const count = Math.max(
-            filterItems(currentState.sourceBlockType, currentState.query)
-              .length,
+            filterItems(
+              currentState.sourceBlockType,
+              currentState.query,
+              customItems,
+            ).length,
             1,
           );
           return {
@@ -391,8 +458,11 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
         setMenuState((currentState) => {
           if (currentState === null) return null;
           const count = Math.max(
-            filterItems(currentState.sourceBlockType, currentState.query)
-              .length,
+            filterItems(
+              currentState.sourceBlockType,
+              currentState.query,
+              customItems,
+            ).length,
             1,
           );
           return {
@@ -407,6 +477,7 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
         const currentItems = filterItems(
           current.sourceBlockType,
           current.query,
+          customItems,
         );
         const item = currentItems[current.highlightedIndex];
         if (item !== undefined) {
@@ -418,7 +489,7 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
 
     element.addEventListener("keydown", handleKeyDown, true);
     return () => element.removeEventListener("keydown", handleKeyDown, true);
-  }, [dismissMenuAndFocusEditor, element, selectItem]);
+  }, [customItems, dismissMenuAndFocusEditor, element, selectItem]);
 
   const menuContent = menuState === null ? null : (
     <div
@@ -441,6 +512,9 @@ export const SlashMenu = ({ portalTarget = null }: SlashMenuProps = {}) => {
           role="option"
           type="button"
         >
+          {item.kind === "custom" && item.icon !== undefined && (
+            <span className="geul-slash-menu__item-icon">{item.icon}</span>
+          )}
           <span className="geul-slash-menu__item-label">{item.label}</span>
           <span className="geul-slash-menu__item-description">
             {item.description}
