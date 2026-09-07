@@ -582,7 +582,7 @@ describe("workspacePackageDirectories()(패키지 디렉터리 열거)", () => {
     expect(() => workspacePackageDirectories(repositoryRoot, [glob])).toThrow();
   });
 
-  it("매니페스트에서 파생한 열거와 리터럴에서 파생한 열거가 같고, 결과가 오늘의 6개다", () => {
+  it("매니페스트에서 파생한 열거와 리터럴에서 파생한 열거가 같고, 결과가 오늘의 7개다", () => {
     const expected = manifestPackageDirectories();
 
     // 빈 집합끼리의 비교는 열거가 통째로 죽어도 통과한다. 가드가 없으면 이
@@ -598,14 +598,15 @@ describe("workspacePackageDirectories()(패키지 디렉터리 열거)", () => {
     // 목록에서 파생되고 값이 오늘과 같다" 테스트가 `apps`·`fixtures`·
     // `packages` 3종을 배열 리터럴로 나란히 적지 않으려고 길이 가드 +
     // `toContain()`으로 푼 것과 같은 이유다. 그 기존 관례를 그대로 따른다 —
-    // 리터럴을 물리적으로 쪼개는 방식은 쓰지 않는다. 길이 6 + 서로 다른
-    // 이름 6개의 `toContain`이면 집합이 정확히 고정돼 판정 강도는
+    // 리터럴을 물리적으로 쪼개는 방식은 쓰지 않는다. 길이 7 + 서로 다른
+    // 이름 7개의 `toContain`이면 집합이 정확히 고정돼 판정 강도는
     // `toEqual(정렬된 배열)`과 같다.
     const names = expected.map((directory) =>
       relative(repositoryRoot, directory),
     );
-    expect(names.length).toBe(6);
+    expect(names.length).toBe(7);
     expect(names).toContain("apps/demo");
+    expect(names).toContain("apps/showcase");
     expect(names).toContain("fixtures/consumer");
     expect(names).toContain("packages/core");
     expect(names).toContain("packages/io");

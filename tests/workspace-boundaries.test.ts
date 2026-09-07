@@ -145,6 +145,22 @@ const allowedDependencies = {
     peerDependencies: {},
     optionalDependencies: {},
   },
+  "apps/showcase": {
+    dependencies: {
+      "@cp949/geul-model": "workspace:*",
+      "@cp949/geul-react": "workspace:*",
+      "prism-react-renderer": "2.4.1",
+      react: "19.2.8",
+      "react-dom": "19.2.8",
+      "react-router": "8.3.1",
+    },
+    devDependencies: {
+      "@testing-library/react": "16.3.0",
+      "@testing-library/user-event": "14.6.7",
+    },
+    peerDependencies: {},
+    optionalDependencies: {},
+  },
   "fixtures/consumer": {
     dependencies: {
       "@cp949/geul-core": "workspace:*",

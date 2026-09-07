@@ -22,6 +22,7 @@ demo  -> react, io, model
 - `packages/core` (`@cp949/geul-core`): Tiptap을 비공개 구현으로 감싼 headless editor controller
 - `packages/react` (`@cp949/geul-react`): React 어댑터. 허용 표면은 [ADR-0002](./docs/adr/0002-enforce-layered-package-boundaries.md) 참조
 - `apps/demo`: 배포된 패키지 공개 API를 사용하는 통합 데모
+- `apps/showcase`: react 어댑터 공개 표면 쇼케이스(디자인·UX 확인, 에이전트 주도 UX 결함 탐지)
 - `fixtures/consumer`: `dist`와 package exports만 사용하는 소비자 검증 fixture
 
 패키지 경계 불변식(비의존·타입 비노출 상세)은 [ADR-0002](./docs/adr/0002-enforce-layered-package-boundaries.md)가 소유한다.
