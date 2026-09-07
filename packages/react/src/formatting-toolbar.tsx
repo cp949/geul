@@ -21,6 +21,7 @@ import {
 import { createPortal } from "react-dom";
 
 import {
+  blockTypeText,
   blockTypeToOptionId,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
@@ -34,7 +35,7 @@ import {
 } from "./table-cell-colors.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
@@ -171,6 +172,7 @@ export const FormattingToolbar = ({
   component: Component,
 }: FormattingToolbarProps = {}) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(
@@ -370,7 +372,7 @@ export const FormattingToolbar = ({
               toolbarState.blockSelection.blockType,
             ).map((option) => (
               <option key={option.id} value={option.id}>
-                {option.label}
+                {blockTypeText(dictionary, option.id).label}
               </option>
             ))}
           </select>

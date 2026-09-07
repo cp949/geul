@@ -12,7 +12,12 @@
  * slash-menu/가 다룬다.
  */
 
-import type { CodeBlock, HeadingBlock, ParagraphBlock } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type CodeBlock,
+  type HeadingBlock,
+  type ParagraphBlock,
+} from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,7 +74,10 @@ const renderBlockMenu = (options?: Omit<MountBlockEditorOptions, "children">) =>
  * 세워지는데 초기값이 null이라 둘째 항도 거짓이다. 가드를 지나 click이
  * 곧바로 메뉴 열기로 처리된다.
  */
-const openBlockMenu = (options?: { blockIds?: readonly string[] }) => {
+const openBlockMenu = (options?: {
+  blockIds?: readonly string[];
+  dictionary?: MountBlockEditorOptions["dictionary"];
+}) => {
   const rendered = renderBlockMenu(options);
   const [block] = rendered.blocks;
   if (block === undefined) throw new Error("블록 요소가 없다");
@@ -384,6 +392,21 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     const restored = rendered.editor.getDocument().blocks[0];
     if (restored?.type !== "paragraph") throw new Error("문단이 아니다");
     expect(restored.id).toBe(before.id);
+  });
+
+  it("dictionary override 시 Turn into 항목 텍스트가 바뀐다(EXT-009)", () => {
+    openBlockMenu({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        blockType: {
+          ...DEFAULT_DICTIONARY.blockType,
+          paragraph: { label: "본문", description: "일반 문단" },
+        },
+      },
+    });
+
+    expect(screen.getByRole("menuitem", { name: "본문" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Text" })).toBeNull();
   });
 
   it("Code 종류 변경은 id와 source를 보존하고 mark를 제거하며 text 언어를 적용한다", () => {

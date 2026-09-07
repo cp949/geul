@@ -14,12 +14,13 @@
  * 혼합 패턴(key 집합 마운트 고정 + 함수 본체 latest-ref, 마운트 후 key
  * 집합 변경은 경고 없이 무시)을 회귀로 고정한다.
  */
-import type {
-  CreateEditorOptions,
-  CustomBlockDefinition,
-  CustomInlineContentDefinition,
-  CustomStyleDefinition,
-  EditorController,
+import {
+  DEFAULT_DICTIONARY,
+  type CreateEditorOptions,
+  type CustomBlockDefinition,
+  type CustomInlineContentDefinition,
+  type CustomStyleDefinition,
+  type EditorController,
 } from "@cp949/geul-core";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -491,13 +492,7 @@ describe("EditorProvider — dictionary(EXT-009)", () => {
       <EditorProvider
         initialDocument={paragraphDocument("seed")}
         dictionary={{
-          placeholder: {
-            paragraph: "Enter text or type '/' for commands",
-            heading: "Heading {level}",
-            quote: "Quote",
-            codeBlock: "Code",
-            listItem: "List item",
-          },
+          ...DEFAULT_DICTIONARY,
           editor: { ariaLabel: "편집기" },
         }}
       >

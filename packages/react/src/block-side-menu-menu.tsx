@@ -3,6 +3,7 @@ import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 
 import { findBlockTypeDescriptor } from "./block-side-menu-block-type.js";
 import {
+  blockTypeText,
   type BlockTypeOption,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
@@ -13,7 +14,7 @@ import {
   TABLE_TEXT_COLORS,
 } from "./table-cell-colors.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useEditor } from "./use-editor.js";
+import { useDictionary, useEditor } from "./use-editor.js";
 
 const blockMenuItemClassName = "geul-block-menu__item";
 
@@ -47,6 +48,7 @@ export const BlockSideMenuMenu = ({
   onClose,
 }: BlockSideMenuMenuProps) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { menuRef, style } = useClampedMenuPosition(left, top);
 
   // Turn into 옵션과 색상·정렬 섹션 게이트(RD-003 DELTA-02)가 같은 source
@@ -136,7 +138,7 @@ export const BlockSideMenuMenu = ({
           key={option.id}
           onClick={() => handleTurnInto(option)}
         >
-          {option.label}
+          {blockTypeText(dictionary, option.id).label}
         </MenuItemButton>
       ))}
       {/* mx-0(SCSS margin-inline: 0)에 대응: preflight 미포함이라 UA의

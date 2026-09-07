@@ -10,7 +10,11 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type BlockTypeDescriptor,
+  type EditorController,
+} from "@cp949/geul-core";
 import { LucideProvider } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -192,6 +196,36 @@ describe("FormattingToolbar 서식 툴바", () => {
         }) as HTMLSelectElement
       ).value,
     ).toBe("toggle-heading-2");
+  });
+
+  it("dictionary override 시 블록 종류 select의 표시 텍스트가 바뀐다(EXT-009)", () => {
+    const controller = fakeController();
+    controller.getDictionary = vi.fn(() => ({
+      ...DEFAULT_DICTIONARY,
+      blockType: {
+        ...DEFAULT_DICTIONARY.blockType,
+        paragraph: { label: "본문", description: "일반 문단" },
+      },
+    }));
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    const select = screen.getByRole("combobox", {
+      name: "Block type",
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("paragraph");
+    expect(select.options[select.selectedIndex]?.textContent).toBe("본문");
   });
 
   it.each([

@@ -4,7 +4,12 @@
  * SlashMenu의 슬래시 질의 팝업 트리거·필터링·항목 적용을 검증한다.
  */
 
-import type { CodeBlock, HeadingBlock, TableBlock } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type CodeBlock,
+  type HeadingBlock,
+  type TableBlock,
+} from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -160,6 +165,51 @@ describe("SlashMenu 질의 팝업", () => {
     ]);
     expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Heading 1/ })).not.toBeNull();
+  });
+
+  it("dictionary override 시 blockType 항목 label·description이 바뀐다(EXT-009)", () => {
+    const rendered = renderCaretBlocks({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        blockType: {
+          ...DEFAULT_DICTIONARY.blockType,
+          paragraph: { label: "본문", description: "일반 문단" },
+        },
+      },
+    });
+
+    typeIntoBlock(rendered, 0, "/");
+
+    const option = screen.getByRole("option", { name: /^본문/ });
+    expect(
+      option.querySelector(".geul-slash-menu__item-label")?.textContent,
+    ).toBe("본문");
+    expect(
+      option.querySelector(".geul-slash-menu__item-description")?.textContent,
+    ).toBe("일반 문단");
+  });
+
+  it("dictionary override 후에도 검색은 고정 영어 label·keywords로 매칭한다(EXT-009)", () => {
+    const rendered = renderCaretBlocks({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        blockType: {
+          ...DEFAULT_DICTIONARY.blockType,
+          paragraph: { label: "본문", description: "일반 문단" },
+        },
+      },
+    });
+
+    // "text"는 paragraph 옵션의 고정 keywords 중 하나다(block-type-options.ts).
+    // 렌더 텍스트는 "본문"으로 바뀌었어도 검색은 여전히 이 고정 영어로
+    // 매칭해야 한다(RD-002-DELTA-02.md "결정").
+    typeIntoBlock(rendered, 0, "/text");
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(
+      options[0]?.querySelector(".geul-slash-menu__item-label")?.textContent,
+    ).toBe("본문");
   });
 
   it("입력한 질의에 맞춰 항목을 걸러낸다", () => {

@@ -17,6 +17,7 @@ import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
 import { BlockSideMenu } from "./block-side-menu.js";
 import {
   BLOCK_TYPE_OPTIONS,
+  blockTypeText,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
@@ -24,7 +25,7 @@ import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 const SLASH_MENU_DISMISS_ALLOW_SELECTORS = [".geul-slash-menu"] as const;
@@ -243,6 +244,7 @@ export const SlashMenu = ({
   items: customItems = NO_CUSTOM_ITEMS,
 }: SlashMenuProps = {}) => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const menuId = useId();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
@@ -549,9 +551,15 @@ export const SlashMenu = ({
             {item.kind === "custom" && item.icon !== undefined && (
               <span className="geul-slash-menu__item-icon">{item.icon}</span>
             )}
-            <span className="geul-slash-menu__item-label">{item.label}</span>
+            <span className="geul-slash-menu__item-label">
+              {item.kind === "blockType"
+                ? blockTypeText(dictionary, item.id).label
+                : item.label}
+            </span>
             <span className="geul-slash-menu__item-description">
-              {item.description}
+              {item.kind === "blockType"
+                ? blockTypeText(dictionary, item.id).description
+                : item.description}
             </span>
           </button>
         ))}

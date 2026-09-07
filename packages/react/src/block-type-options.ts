@@ -1,6 +1,7 @@
 import {
   isListEntryBlockType,
   type BlockTypeDescriptor,
+  type Dictionary,
   type EditorController,
 } from "@cp949/geul-core";
 
@@ -181,6 +182,18 @@ export const getBlockTypeOptionsForSource = (
   }
   return BLOCK_TYPE_OPTIONS;
 };
+
+// spec §8(EXT-009), RD-002-DELTA-02 — `dictionary.blockType`에서 표시용
+// label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 19개
+// 리터럴 중 하나이므로(호출부가 그 배열에서 얻은 `option.id`만 넘긴다)
+// 이 cast 하나로 안전하다 — 호출부마다 반복하지 않는다. `BLOCK_TYPE_OPTIONS`
+// 자신의 `label`/`description`(검색 매칭 전용, dictionary와 무관)과는
+// 별개다.
+export const blockTypeText = (
+  dictionary: Dictionary,
+  id: string,
+): { label: string; description: string } =>
+  dictionary.blockType[id as keyof Dictionary["blockType"]];
 
 export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
   switch (blockType.type) {

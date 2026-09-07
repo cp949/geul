@@ -2,6 +2,7 @@ import { expect } from "vitest";
 
 import { SlashMenu } from "../../src/index.js";
 import {
+  type MountBlockEditorOptions,
   type MountedBlockEditor,
   mountBlockEditor,
   placeCaret,
@@ -17,15 +18,20 @@ const addRowLabel = "Add row";
  * TableHandles가 함께 살아나 hover 판정이 갈라지므로, 표가 필요한 테스트만
  * mountTableEditor를 따로 쓴다.
  */
-const renderRealBlocks = (options?: { blockIds?: readonly string[] }) =>
-  mountBlockEditor({ ...options, children: <SlashMenu /> });
+const renderRealBlocks = (options?: {
+  blockIds?: readonly string[];
+  dictionary?: MountBlockEditorOptions["dictionary"];
+}) => mountBlockEditor({ ...options, children: <SlashMenu /> });
 
 /**
  * 위와 같되 편집 영역에 미리 초점을 준다. ProseMirror는 초점이 없으면 DOM
  * 선택 변화를 무시하므로(hasFocusAndSelection) placeCaret이 조용히 no-op가
  * 된다. 캐럿을 놓는 테스트만 이쪽을 쓴다.
  */
-const renderCaretBlocks = (options?: { blockIds?: readonly string[] }) => {
+const renderCaretBlocks = (options?: {
+  blockIds?: readonly string[];
+  dictionary?: MountBlockEditorOptions["dictionary"];
+}) => {
   const rendered = renderRealBlocks(options);
   rendered.editable.focus();
   expect(document.activeElement).toBe(rendered.editable);

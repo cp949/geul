@@ -27,6 +27,35 @@ export type Dictionary = {
   editor: {
     ariaLabel: string;
   };
+  // RD-002-DELTA-02 — react `block-type-options.ts`의 `BLOCK_TYPE_OPTIONS`
+  // 19항목(label·description). key는 그 배열의 `id` 문자열을 그대로 쓴다
+  // (별도 camelCase 매핑 없음 — react `blockTypeText()` 헬퍼가
+  // `dictionary.blockType[id]`로 직접 인덱싱한다). `BLOCK_TYPE_OPTIONS`
+  // 자신의 `label`/`description`은 검색 매칭(`slash-menu.tsx`의
+  // `matchesQuery`) 전용으로 남고 dictionary와 무관하게 고정 영어를
+  // 유지한다 — 이 네임스페이스는 렌더 텍스트만 담당한다(RD-002-DELTA-02.md
+  // "결정").
+  blockType: {
+    paragraph: { label: string; description: string };
+    "heading-1": { label: string; description: string };
+    "heading-2": { label: string; description: string };
+    "heading-3": { label: string; description: string };
+    "heading-4": { label: string; description: string };
+    "heading-5": { label: string; description: string };
+    "heading-6": { label: string; description: string };
+    "toggle-heading-1": { label: string; description: string };
+    "toggle-heading-2": { label: string; description: string };
+    "toggle-heading-3": { label: string; description: string };
+    "toggle-heading-4": { label: string; description: string };
+    "toggle-heading-5": { label: string; description: string };
+    "toggle-heading-6": { label: string; description: string };
+    quote: { label: string; description: string };
+    code: { label: string; description: string };
+    "bullet-list": { label: string; description: string };
+    "numbered-list": { label: string; description: string };
+    "check-list": { label: string; description: string };
+    "toggle-list": { label: string; description: string };
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -42,5 +71,68 @@ export const DEFAULT_DICTIONARY: Dictionary = {
   },
   editor: {
     ariaLabel: "Editor",
+  },
+  blockType: {
+    paragraph: { label: "Text", description: "Plain paragraph text" },
+    "heading-1": { label: "Heading 1", description: "Large section heading" },
+    "heading-2": {
+      label: "Heading 2",
+      description: "Medium section heading",
+    },
+    "heading-3": { label: "Heading 3", description: "Small section heading" },
+    "heading-4": {
+      label: "Heading 4",
+      description: "Smaller section heading",
+    },
+    "heading-5": {
+      label: "Heading 5",
+      description: "Extra small section heading",
+    },
+    "heading-6": {
+      label: "Heading 6",
+      description: "Smallest section heading",
+    },
+    "toggle-heading-1": {
+      label: "Toggle Heading 1",
+      description: "Large collapsible heading",
+    },
+    "toggle-heading-2": {
+      label: "Toggle Heading 2",
+      description: "Medium collapsible heading",
+    },
+    "toggle-heading-3": {
+      label: "Toggle Heading 3",
+      description: "Small collapsible heading",
+    },
+    "toggle-heading-4": {
+      label: "Toggle Heading 4",
+      description: "Smaller collapsible heading",
+    },
+    "toggle-heading-5": {
+      label: "Toggle Heading 5",
+      description: "Extra small collapsible heading",
+    },
+    "toggle-heading-6": {
+      label: "Toggle Heading 6",
+      description: "Smallest collapsible heading",
+    },
+    quote: { label: "Quote", description: "Capture a quote" },
+    code: { label: "Code", description: "Write plain code" },
+    "bullet-list": {
+      label: "Bulleted List",
+      description: "Create a bulleted list",
+    },
+    "numbered-list": {
+      label: "Numbered List",
+      description: "Create a numbered list",
+    },
+    "check-list": {
+      label: "Check List",
+      description: "Track tasks with a checklist",
+    },
+    "toggle-list": {
+      label: "Toggle List",
+      description: "Create a collapsible toggle list",
+    },
   },
 };

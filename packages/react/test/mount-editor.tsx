@@ -206,6 +206,9 @@ export type MountBlockEditorOptions = {
   children?: ReactNode;
   layout?: BlockLayout;
   onChange?: CreateEditorOptions["onChange"];
+  // spec §8(EXT-009), RD-002-DELTA-02 — dictionary override 테스트가 공용으로
+  // 쓴다. 이후 DELTA(blockType 이후 네임스페이스)도 이 필드를 재사용한다.
+  dictionary?: CreateEditorOptions["dictionary"];
 };
 
 export type MountedBlockEditor = {
@@ -238,6 +241,7 @@ export const mountBlockEditor = ({
   children,
   layout = DEFAULT_BLOCK_LAYOUT,
   onChange,
+  dictionary,
 }: MountBlockEditorOptions = {}): MountedBlockEditor => {
   const resolvedBlocks =
     initialBlocks ??
@@ -257,6 +261,7 @@ export const mountBlockEditor = ({
     },
     createId: sequentialIds("id"),
     ...(onChange === undefined ? {} : { onChange }),
+    ...(dictionary === undefined ? {} : { dictionary }),
   });
   mountedEditors.add(editor);
 
@@ -315,6 +320,8 @@ export type MountTableEditorOptions = {
   columns?: number;
   children?: ReactNode;
   layout?: Layout;
+  // mountBlockEditor의 dictionary와 동일 근거(RD-002-DELTA-02).
+  dictionary?: CreateEditorOptions["dictionary"];
 };
 
 export type MountedTableEditor = {
@@ -359,6 +366,7 @@ export const mountTableEditor = ({
   columns = 2,
   children,
   layout = DEFAULT_LAYOUT,
+  dictionary,
 }: MountTableEditorOptions = {}): MountedTableEditor => {
   const editor = createEditor({
     initialDocument: {
@@ -369,6 +377,7 @@ export const mountTableEditor = ({
       ],
     },
     createId: sequentialIds("id"),
+    ...(dictionary === undefined ? {} : { dictionary }),
   });
   mountedEditors.add(editor);
 

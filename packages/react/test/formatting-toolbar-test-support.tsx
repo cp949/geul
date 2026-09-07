@@ -1,7 +1,11 @@
 /**
  * FormattingToolbar 테스트가 공유하는 최소 EditorController fake를 제공한다.
  */
-import type { BlockTypeDescriptor } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type BlockTypeDescriptor,
+  type Dictionary,
+} from "@cp949/geul-core";
 import { vi, type Mock } from "vitest";
 
 type SelectionBlockType = {
@@ -29,6 +33,7 @@ type FormattingToolbarFakeController = {
   getSelectionMarks: Mock;
   getSelectionBlockType: Mock;
   getBlockNestingActionState: Mock;
+  getDictionary: Mock;
   replaceDocument: Mock;
   commands: {
     setText: Mock;
@@ -73,6 +78,9 @@ export const fakeController = (
     canIndent: true,
     canOutdent: true,
   })),
+  // spec §8(EXT-009), RD-002-DELTA-02 — dictionary override 테스트 전용.
+  // 미지정이면 기본값(en)을 그대로 반환한다.
+  getDictionary: Mock = vi.fn((): Dictionary => DEFAULT_DICTIONARY),
 ): FormattingToolbarFakeController => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -90,6 +98,7 @@ export const fakeController = (
   getSelectionMarks,
   getSelectionBlockType,
   getBlockNestingActionState,
+  getDictionary,
   replaceDocument: vi.fn(),
   commands: {
     setText: vi.fn(),
