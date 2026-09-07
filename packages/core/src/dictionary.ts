@@ -213,6 +213,15 @@ export type Dictionary = {
     dragBlock: string;
     addBlock: string;
   };
+  // RD-002-DELTA-09 — `code-block-language-combobox.tsx`의 번역 대상
+  // 문구만 담는다. JavaScript/TypeScript/HTML/CSS/JSON/Bash/Python/Java/
+  // Kotlin/SQL/Markdown 11개 언어 고유명사는 대부분 로케일에서 번역하지
+  // 않는 관례로 판단해 하드코딩 유지한다(RD-002.md "결정").
+  codeLanguage: {
+    plainText: string;
+    label: string;
+    suggestionsAriaLabel: string;
+  };
 };
 
 // CreateEditorOptions.dictionary가 없을 때 쓰는 기본값(en)이자, override
@@ -416,5 +425,10 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     outdentTable: "Outdent table",
     dragBlock: "Drag to reorder, click for options",
     addBlock: "Add block",
+  },
+  codeLanguage: {
+    plainText: "Plain Text",
+    label: "Code language",
+    suggestionsAriaLabel: "Code language suggestions",
   },
 };

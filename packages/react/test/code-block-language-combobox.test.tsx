@@ -5,7 +5,7 @@
  * 블록 선택·초점·위치 변화 대응을 실제 EditorController 마운트로 검증한다.
  */
 
-import type { CodeBlock } from "@cp949/geul-core";
+import { DEFAULT_DICTIONARY, type CodeBlock } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +26,7 @@ type CodeFixtureOptions = {
   withParagraph?: boolean;
   secondCodeLanguage?: string;
   onChange?: MountBlockEditorOptions["onChange"];
+  dictionary?: MountBlockEditorOptions["dictionary"];
 };
 
 /** 실제 CodeBlock 저장 문서를 SlashMenu composite root와 함께 마운트한다. */
@@ -35,6 +36,7 @@ const mountCodeFixture = ({
   withParagraph = false,
   secondCodeLanguage,
   onChange,
+  dictionary,
 }: CodeFixtureOptions = {}): MountedBlockEditor => {
   const rendered = mountBlockEditor({
     initialBlocks: [
@@ -66,6 +68,7 @@ const mountCodeFixture = ({
     ],
     children: <SlashMenu />,
     onChange,
+    ...(dictionary === undefined ? {} : { dictionary }),
   });
   rendered.editable.focus();
   const code = rendered.host.querySelector<HTMLElement>("code");
@@ -228,6 +231,39 @@ describe("CodeBlock 언어 combobox suggestion과 ARIA", () => {
     expect(activeId).toBeTruthy();
     expect(document.getElementById(activeId ?? "")?.getAttribute("role")).toBe(
       "option",
+    );
+  });
+
+  it("dictionary override 시 입력 라벨·listbox aria-label·Plain Text가 바뀌고 검색은 고정 영어로 동작한다(EXT-009)", () => {
+    mountCodeFixture({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        codeLanguage: {
+          label: "코드 언어",
+          suggestionsAriaLabel: "코드 언어 제안",
+          plainText: "일반 텍스트",
+        },
+      },
+    });
+    const input = screen.getByRole<HTMLInputElement>("combobox", {
+      name: "코드 언어",
+    });
+    fireEvent.focus(input);
+
+    expect(
+      screen.getByRole("listbox", { name: "코드 언어 제안" }),
+    ).not.toBeNull();
+    fireEvent.change(input, { target: { value: "" } });
+    expect(screen.getAllByRole("option")[0]?.textContent).toBe(
+      "일반 텍스트text, plain text, none",
+    );
+
+    // 렌더 텍스트는 "일반 텍스트"로 바뀌었어도 검색은 여전히 고정 영어
+    // "plain text"로 매칭해야 한다(blockType.*/slashMenu.*와 동일 결정).
+    fireEvent.change(input, { target: { value: "plain text" } });
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.getByRole("option").textContent).toBe(
+      "일반 텍스트text, plain text, none",
     );
   });
 

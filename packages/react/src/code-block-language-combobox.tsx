@@ -11,7 +11,7 @@ import {
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useEditor, useEditorMount } from "./use-editor.js";
+import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 type LanguageOption = {
@@ -66,6 +66,7 @@ type AnchorPosition = { left: number; top: number };
 /** CodeBlock language 편집에 필요한 상태·명령·dismiss 동작을 한곳에 소유한다. */
 export const CodeBlockLanguageCombobox = () => {
   const editor = useEditor();
+  const dictionary = useDictionary();
   const { element } = useEditorMount();
   const focusEditor = useFocusEditor(element);
   const [languageState, setLanguageState] = useState<LanguageState | null>(
@@ -268,7 +269,7 @@ export const CodeBlockLanguageCombobox = () => {
       style={style}
     >
       <label className="geul-code-block-language__label">
-        <span>Code language</span>
+        <span>{dictionary.codeLanguage.label}</span>
         <input
           aria-activedescendant={activeOptionId}
           aria-autocomplete="list"
@@ -284,7 +285,7 @@ export const CodeBlockLanguageCombobox = () => {
       </label>
       {open && (
         <div
-          aria-label="Code language suggestions"
+          aria-label={dictionary.codeLanguage.suggestionsAriaLabel}
           className="geul-code-block-language__suggestions"
           id={listboxId}
           role="listbox"
@@ -300,7 +301,11 @@ export const CodeBlockLanguageCombobox = () => {
               role="option"
               type="button"
             >
-              <span>{option.label}</span>
+              <span>
+                {option.id === "text"
+                  ? dictionary.codeLanguage.plainText
+                  : option.label}
+              </span>
               <span className="geul-code-block-language__aliases">
                 {[option.language, ...option.aliases].join(", ")}
               </span>
