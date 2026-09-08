@@ -160,6 +160,8 @@ const allowedDependencies = {
       "@testing-library/user-event": "14.6.7",
       "highlight.js": "11.12.0",
       lowlight: "3.3.0",
+      prismjs: "1.30.0",
+      refractor: "5.0.0",
       shiki: "4.4.3",
     },
     peerDependencies: {},
