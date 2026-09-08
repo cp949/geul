@@ -1,13 +1,14 @@
 /**
  * `CreateEditorOptions.syntaxHighlighter` 배선 계약(spec §3,
- * RD-001-DELTA-01/02). 동기 `SyntaxHighlighter`를 연결하면 코드 블록에
+ * RD-001-DELTA-01/02/03). 동기 `SyntaxHighlighter`를 연결하면 코드 블록에
  * decoration이 그려지고, 연결하지 않으면 기존 동작(plain text)이 무회귀로
  * 유지됨을 고정한다(DELTA-01). 비동기 함수를 연결하면 resolve 후 반영되고,
  * 편집 중 오래된 Promise가 나중에 resolve해도 이미 바뀐 content를 덮지
- * 않는다(DELTA-02, spec §4 "비동기 최신 결과만 반영"). edge case(범위 밖·
- * 겹침·거절된 Promise·미지원 language)는 DELTA-03이 다룬다.
+ * 않는다(DELTA-02, spec §4 "비동기 최신 결과만 반영"). 범위 밖 token·
+ * 거절된 Promise·겹치는 token·미지원 language(빈 배열) 4종 edge case는
+ * DELTA-03이 다룬다(spec §4).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEditor } from "../src/index.js";
 import {
   codeBlockBlock,
@@ -130,5 +131,90 @@ describe("syntaxHighlighter", () => {
     expect(editable.querySelector("code span.tok-fresh")?.textContent).toBe(
       "let y = 2;",
     );
+  });
+
+  it("범위 밖 token은 clamp되고 console.warn을 낸다", () => {
+    // 호출 횟수를 정확히 1회로 고정하지 않는다 — Tiptap이 마운트
+    // 생명주기 동안(내부 dummy self-mount 왕복 포함) 이 어댑터 closure를
+    // 여러 차례 다시 만들 수 있어(DELTA-02에서 실측) 같은 content에 대해
+    // 2회 경고가 나는 것이 정상이다. "경고가 실제로 발생했는지"만
+    // 검증한다.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const editor = createEditor({
+      initialDocument: documentOf(
+        codeBlockBlock("cb-1", "const x = 1;", "typescript"),
+      ),
+      syntaxHighlighter: () => [{ from: -3, to: 100, className: "tok-oob" }],
+    });
+    const { editable } = mountTiptapEditor(editor);
+
+    const span = editable.querySelector("code span.tok-oob");
+    expect(span?.textContent).toBe("const x = 1;");
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("from > to인 token은 clamp되어 렌더가 깨지지 않고 console.warn을 낸다", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const editor = createEditor({
+      initialDocument: documentOf(
+        codeBlockBlock("cb-1", "const x = 1;", "typescript"),
+      ),
+      syntaxHighlighter: () => [{ from: 5, to: 2, className: "tok-reversed" }],
+    });
+    const { editable } = mountTiptapEditor(editor);
+
+    expect(editable.querySelector("code")?.textContent).toBe("const x = 1;");
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("거절된 Promise는 catch되고 console.warn으로 원인을 알리며 plain text를 유지한다", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cause = new Error("highlighter 로드 실패");
+    const editor = createEditor({
+      initialDocument: documentOf(
+        codeBlockBlock("cb-1", "const x = 1;", "typescript"),
+      ),
+      syntaxHighlighter: () => Promise.reject(cause),
+    });
+    const { editable } = mountTiptapEditor(editor);
+
+    await flushMicrotasks();
+
+    expect(editable.querySelector("code span")).toBeNull();
+    expect(editable.querySelector("code")?.textContent).toBe("const x = 1;");
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), cause);
+    warnSpy.mockRestore();
+  });
+
+  it("겹치는 token은 별도 병합·우선순위 로직 없이 PM이 그대로 렌더한다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        codeBlockBlock("cb-1", "const x = 1;", "typescript"),
+      ),
+      syntaxHighlighter: () => [
+        { from: 0, to: 5, className: "tok-a" },
+        { from: 2, to: 8, className: "tok-b" },
+      ],
+    });
+    const { editable } = mountTiptapEditor(editor);
+
+    const overlap = editable.querySelector("code span.tok-a.tok-b");
+    expect(overlap).not.toBeNull();
+  });
+
+  it("빈 배열을 반환하면(language 미지정 포함) plain text로 남는다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(codeBlockBlock("cb-1", "const x = 1;")),
+      syntaxHighlighter: ({ language }) => {
+        expect(language).toBeUndefined();
+        return [];
+      },
+    });
+    const { editable } = mountTiptapEditor(editor);
+
+    expect(editable.querySelector("code span")).toBeNull();
+    expect(editable.querySelector("code")?.textContent).toBe("const x = 1;");
   });
 });

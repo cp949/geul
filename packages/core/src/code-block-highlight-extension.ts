@@ -7,20 +7,40 @@ import type {
   SyntaxHighlightToken,
 } from "./syntax-highlight.js";
 
-// RD-001-DELTA-01/02(spec §3·§4). 범위 밖·겹침·거절된 Promise 시
-// console.warn·미지원 language 등 나머지 edge case(spec §4)는 DELTA-03이
-// 다룬다.
+// RD-001-DELTA-01/02/03(spec §3·§4). 겹치는 token은 별도 코드가
+// 없다(spec §4 — ProseMirror가 겹치는 inline decoration을 병합·우선순위
+// 없이 그대로 렌더한다). 미지원/빈 language도 별도 코드가 없다(빈
+// 배열이면 이 함수가 빈 배열을 그대로 돌려준다).
+const clampOffset = (value: number, sourceLength: number): number =>
+  Math.min(Math.max(value, 0), sourceLength);
+
+// spec §4 "범위 밖 token" — [0, sourceLength] 밖이거나 from > to인
+// token을 유효 범위로 clamp한다. from > to는 swap(순서를 뒤집어
+// 유효하게 만듦)하지 않고 zero-width로 만든다(RD-001-DELTA-03 "## 계획"의
+// 설계 결정) — swap은 소비자가 의도하지 않은 새 의미(반대 방향 강조)를
+// 만들어낼 수 있어, 정보를 새로 만들지 않는 zero-width가 더 보수적이다.
 const toDecorations = (
   tokens: readonly SyntaxHighlightToken[],
   contentStart: number,
+  sourceLength: number,
 ): Decoration[] =>
-  tokens.map((token) =>
-    Decoration.inline(
-      contentStart + token.from,
-      contentStart + token.to,
+  tokens.map((token) => {
+    const clampedFrom = clampOffset(token.from, sourceLength);
+    const clampedTo = Math.max(
+      clampOffset(token.to, sourceLength),
+      clampedFrom,
+    );
+    if (clampedFrom !== token.from || clampedTo !== token.to) {
+      console.warn(
+        `[geul] syntaxHighlighter: token 범위(${token.from}, ${token.to})가 source 길이(${sourceLength})를 벗어나거나 from > to라 (${clampedFrom}, ${clampedTo})로 clamp되었습니다.`,
+      );
+    }
+    return Decoration.inline(
+      contentStart + clampedFrom,
+      contentStart + clampedTo,
       token.className === undefined ? {} : { class: token.className },
-    ),
-  );
+    );
+  });
 
 // prosemirror-highlight의 Parser 계약(Decoration[] | Promise<void>, 실측
 // dist/types-*.d.ts)에서 Promise는 값을 실어 나르지 않는다 — resolve는
@@ -62,12 +82,14 @@ const createParserFromHighlighter = (
     const key = cacheKey(language, content);
     const cached = cache.get(key);
     if (cached?.status === "resolved") {
-      return toDecorations(cached.decorations, pos + 1);
+      return toDecorations(cached.decorations, pos + 1, content.length);
     }
     if (cached?.status === "pending") return cached.promise;
 
     const result = highlighter({ source: content, language });
-    if (!(result instanceof Promise)) return toDecorations(result, pos + 1);
+    if (!(result instanceof Promise)) {
+      return toDecorations(result, pos + 1, content.length);
+    }
 
     // prosemirror-highlight 자신의 pos 캐시가 동기 결과를 이미 저장하므로
     // (calculateDecoration의 cache.set(pos, ...)) 동기 분기는 여기서
@@ -77,10 +99,19 @@ const createParserFromHighlighter = (
       (tokens) => {
         cache.set(key, { status: "resolved", decorations: tokens });
       },
-      () => {
-        // DELTA-03이 console.warn·"이전 decoration 유지"를 다룬다. 지금은
-        // 재시도를 막지 않도록 항목만 지운다.
-        cache.delete(key);
+      (error: unknown) => {
+        // spec §4 "거절된 Promise" — 이 시도만 실패로 처리한다. 이
+        // content(키)는 "resolved, 빈 배열"로 확정해 plain text로
+        // 남긴다 — cache.delete로 다시 pending 만들지 않는다. 그렇게
+        // 하면 실패 → resolve(catch) → refresh → 재시도 → 실패 → ...가
+        // 같은 content에 대해 무한 반복된다(실측 — 회귀 테스트 작성
+        // 중 hang으로 발견). content가 바뀌면(=새 키) 여전히 새로
+        // 시도한다.
+        console.warn(
+          "[geul] syntaxHighlighter: 비동기 강조 요청이 거절되어 이번 시도만 실패로 처리합니다.",
+          error,
+        );
+        cache.set(key, { status: "resolved", decorations: [] });
       },
     );
     cache.set(key, { status: "pending", promise: pending });
