@@ -73,10 +73,10 @@
 
 | ID       | 확인 항목                                | 관련 기능        | 상태      | 발견 |
 | -------- | ------------------------------------------- | ----------------- | --------- | ---- |
-| `QA-034` | 굵게·기울임·밑줄·취소선·인라인 코드·링크    | `INL-001`~`007`   | `NOT_RUN` |      |
-| `QA-035` | 텍스트 글자색·배경색                       | `INL-008`~`009`   | `NOT_RUN` |      |
-| `QA-036` | 블록 글자색·배경색                          | `INL-010`         | `NOT_RUN` |      |
-| `QA-037` | 블록 텍스트 정렬                            | `INL-011`         | `NOT_RUN` |      |
+| `QA-034` | 굵게·기울임·밑줄·취소선·인라인 코드·링크    | `INL-001`~`007`   | `PASS` | 2026-09-08 실브라우저 확인(claude-in-chrome) — Formatting toolbar 예제: Bold(`<strong>`)·Italic(`<em>`)·Underline(`<u>`)·Strikethrough(`<s>`)이 `innerHTML` 실측으로 정상 중첩 적용됨(`<s><u>...`). Inline code(`<code>`) 적용 시 기존에 걸려있던 bold/italic/underline/strike가 전부 사라지는 걸 처음엔 결함으로 의심했으나, Tiptap 기본 `Code` 확장의 `excludes: "_"`(모든 다른 mark 배제, CommonMark 코드 스팬 규약과 동일) 확인 후 의도된 동작으로 판정 — 되돌리기(전체 undo) 후 밑줄·취소선만 독립적으로 재검증해 정상 동작 확인. Link toolbar 예제: 선택 텍스트에 링크 추가(`setLink`) 성공, 링크 클릭 시 뜨는 view 메뉴의 Edit link로 href 변경 성공(`href` 실측 갱신 확인), Remove link로 `<a>` 완전 제거 확인. **링크 click 정책**: 생성된 `<a>`가 `target="_blank"`·`rel="noopener noreferrer nofollow"`로 렌더돼 안전 정책 준수(실측). |
+| `QA-035` | 텍스트 글자색·배경색                       | `INL-008`~`009`   | `PASS` | 2026-09-08 실브라우저 확인(claude-in-chrome) — Formatting toolbar 예제에서 텍스트 선택 후 Text color/Background color 팔레트를 열어 각각 스와치 클릭 → `<span style="color:rgb(217,48,37)">`·`<span style="background-color:rgb(254,247,224)">` 2개 span이 마크당 1개씩 중첩 적용됨(`getAttribute('style')` 실측, 문서화된 "마크당 span 1개 중첩" 계약과 일치). 스크린샷으로 실제 빨간 글자색+연노랑 배경 렌더 시각 확인. |
+| `QA-036` | 블록 글자색·배경색                          | `INL-010`         | `PASS` | 2026-09-08 실브라우저 확인(claude-in-chrome, Kitchen sink 예제) — 블록 거터 핸들 클릭 → 블록 메뉴 스크롤 → Text color/Background color 스와치 클릭. DOM에는 스타일이 투영되지 않는 게 `current-status.md`에 이미 기록된 의도된 설계(`blockContainer` attrs `rendered:false`)라 스크린샷만으론 확인 불가 — 대신 React fiber를 순회해 `editor` 인스턴스를 찾아 `editor.getDocument()`로 직접 문서 모델을 실측, `textColor:"#D93025"`·`backgroundColor:"#FCE8E6"`가 블록에 정확히 반영됨을 확인. 이어서 `Ctrl+Z` 3회로 두 속성(및 QA-037의 정렬)이 각각 별도 undo step으로 순서대로 되돌아가고 `Ctrl+Shift+Z`로 재적용됨을 확인(undo/redo 정상). 콘솔 에러 없음. |
+| `QA-037` | 블록 텍스트 정렬                            | `INL-011`         | `PASS` | 2026-09-08 실브라우저 확인(claude-in-chrome, Kitchen sink 예제) — QA-036과 같은 블록 메뉴에서 Align center 클릭, `editor.getDocument()` 실측으로 `textAlignment:"center"` 확인(위와 같은 이유로 DOM 시각 렌더는 없음 — 의도된 범위, `MED-009`/`QA-033`과 같은 패턴). undo/redo 검증도 QA-036과 함께 확인. |
 
 ### 4.3 문서 조작·UI
 
