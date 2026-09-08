@@ -12,6 +12,13 @@
   background: var(--geul-color-surface, #fff);
   box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
   padding: 0.5rem;
+
+  // CodeBlock 바로 다음 블록(trailing 빈 문단 등)을 아래로 펼치면 덮을 때만
+  // 붙는다(code-block-language-combobox.tsx의 placeAbove) —
+  // use-clamped-menu-position.ts의 aboveLeft anchor와 짝을 이룬다.
+  &--above {
+    transform: translate(0, calc(-100% - 0.5rem));
+  }
 }
 
 .geul-code-block-language__label {

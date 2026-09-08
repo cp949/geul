@@ -15,6 +15,7 @@ import {
   type MountedBlockEditor,
   mountBlockEditor,
   placeCaret,
+  stubRect,
 } from "./mount-editor.js";
 import { fireSelectionChange, selectText } from "./selection-events.js";
 
@@ -76,6 +77,22 @@ const mountCodeFixture = ({
   placeCaret(code);
   fireSelectionChange();
   return rendered;
+};
+
+/**
+ * CodeBlock 하나만 넘기면 trailingBlock 불변식(trailing-block-extension.ts,
+ * UI-010)이 문서 끝에 빈 paragraph를 자동으로 붙인다 — CodeBlock 위치·
+ * 클램프 자체를 검증하는 테스트에서는 이 자동 추가분을 멀리 치워 겹침
+ * 뒤집기(placeAbove)가 끼어들지 않게 한다. 뒤집기 자체는 별도 describe가
+ * 검증한다.
+ */
+const pushAutoTrailingParagraphAway = (rendered: MountedBlockEditor): void => {
+  const blockElements = rendered.host.querySelectorAll<HTMLElement>(
+    "[data-geul-block-id]",
+  );
+  const trailing = blockElements[blockElements.length - 1];
+  if (trailing === undefined || blockElements.length < 2) return;
+  stubRect(trailing, { left: 0, top: 2000, width: 600, height: 20 });
 };
 
 /** 현재 language 입력을 accessible name으로 찾아 정확한 HTML 타입으로 좁힌다. */
@@ -146,7 +163,9 @@ describe("CodeBlock 언어 combobox 표시와 선택", () => {
   });
 
   it("따옴표와 백슬래시가 든 block id도 anchor로 찾아 위치를 계산한다", () => {
-    mountCodeFixture({ blockId: 'a"b\\c' });
+    const rendered = mountCodeFixture({ blockId: 'a"b\\c' });
+    pushAutoTrailingParagraphAway(rendered);
+    fireEvent.scroll(window);
 
     const root = languageInput().closest<HTMLElement>(
       ".geul-code-block-language",
@@ -158,6 +177,7 @@ describe("CodeBlock 언어 combobox 표시와 선택", () => {
 
   it("owner window scroll과 resize에서 활성 CodeBlock의 현재 rect로 anchor를 다시 계산한다", () => {
     const rendered = mountCodeFixture();
+    pushAutoTrailingParagraphAway(rendered);
     const codeBlock = rendered.blocks[0];
     const root = languageInput().closest<HTMLElement>(
       ".geul-code-block-language",
@@ -212,6 +232,62 @@ describe("CodeBlock 언어 combobox 표시와 선택", () => {
     for (const listener of [...scrollListeners, ...resizeListeners]) {
       expect(removeEventListener).toHaveBeenCalledWith(...listener);
     }
+  });
+});
+
+describe("CodeBlock 언어 combobox의 다음 블록 겹침 회피(overlap 회귀)", () => {
+  // combobox는 position: fixed로 CodeBlock 바로 아래 뜬다 — 문서 흐름에
+  // 자리를 차지하지 않는다. CodeBlock 바로 다음 블록(trailing 빈 문단 등,
+  // 항상 있을 수 있는 배치다)이 있으면 아래로 펼친 combobox가 그 블록을
+  // 그대로 덮어 가리고 클릭도 막는다(실사용 회귀). CodeBlock 자신에
+  // margin-bottom을 주는 방식은 시도하지 않는다 — PM이 관리하는 블록 DOM에
+  // 외부에서 style을 쓰면 PM의 DOMObserver가 그 노드를 다시 그려(교체)
+  // rect 측정도 margin도 사라진다(실측 확인). 대신 겹칠 때만 combobox를
+  // 위로 뒤집는다 — 읽기만 하고 PM DOM에는 쓰지 않는다.
+  //
+  // DEFAULT_BLOCK_LAYOUT(top 0/height 20)로 쌓인 fixture는 형제 블록 사이
+  // 간격이 0이라, combobox 실측 높이가 0인 jsdom에서도 GAP_PX(8)만으로
+  // 이미 다음 블록과 겹친다 — 뒤집기 조건을 안정적으로 재현한다.
+  it("바로 다음 블록이 있으면 combobox를 CodeBlock 위로 뒤집는다", () => {
+    mountCodeFixture({ withParagraph: true });
+
+    const root = screen
+      .getByRole("combobox", { name: "Code language" })
+      .closest(".geul-code-block-language");
+    expect(root?.classList.contains("geul-code-block-language--above")).toBe(
+      true,
+    );
+  });
+
+  // trailingBlock 불변식(UI-010) 때문에 CodeBlock 뒤에 "다음 블록이 아예
+  // 없는" 상태는 없다 — 명시한 블록이 없으면 항상 빈 trailing paragraph가
+  // 자동으로 붙는다. 그래서 "안 뒤집는다"의 실제 경계는 다음 블록이 멀리
+  // 있어 겹치지 않는 경우다.
+  it("다음 블록이 충분히 멀면 뒤집지 않는다", () => {
+    const rendered = mountCodeFixture();
+    pushAutoTrailingParagraphAway(rendered);
+    fireEvent.scroll(window);
+
+    const root = screen
+      .getByRole("combobox", { name: "Code language" })
+      .closest(".geul-code-block-language");
+    expect(root?.classList.contains("geul-code-block-language--above")).toBe(
+      false,
+    );
+  });
+
+  it("다른 블록으로 전환하면 combobox가 사라진다(뒤집기 상태가 새지 않는다)", () => {
+    const rendered = mountCodeFixture({ withParagraph: true });
+    const paragraph = rendered.host.querySelector<HTMLElement>("p");
+    if (paragraph === null) throw new Error("문단 DOM을 찾지 못했다");
+
+    rendered.editable.focus();
+    placeCaret(paragraph);
+    fireSelectionChange();
+
+    expect(
+      screen.queryByRole("combobox", { name: "Code language" }),
+    ).toBeNull();
   });
 });
 

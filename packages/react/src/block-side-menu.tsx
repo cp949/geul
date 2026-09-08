@@ -37,6 +37,13 @@ const addBlockIcon = <Plus {...iconProps} />;
 // flex 센터링은 IconButton이 공통으로 제공한다.
 const blockGutterButtonClassName = "geul-block-gutter__button";
 
+// 거터(드래그 핸들·add 버튼)는 _block-side-menu.scss의
+// `transform: translate(-3.5rem, 0)`로 블록 왼쪽 56px 바깥에 뜬다. 포인터가
+// 블록에서 거터로 이동하는 도중(둘 중 어느 쪽도 아닌 빈 공간)에는 hover를
+// 유지해야 한다 — 즉시 해제하면 이동 중에 거터가 먼저 사라져 클릭할 수
+// 없다. table-handles.tsx의 HANDLE_HOVER_MARGIN과 같은 이유·같은 패턴.
+const BLOCK_GUTTER_HOVER_MARGIN = 56;
+
 // useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
 // table-selection-toolbar.tsx와 같은 이유로 모듈 스코프 상수로 둔다 —
 // 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다
@@ -58,7 +65,8 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
   const { element } = useEditorMount();
-  const [hoverBlockId, setHoverBlockId] = useState<string | null>(null);
+  const [hoverBlockId, hoverBlockIdRef, updateHoverBlockId] =
+    useMirroredState<string | null>(null);
   const [dragState, dragStateRef, updateDragState] =
     useMirroredState<DragState | null>(null);
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState | null>(
@@ -74,10 +82,40 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   // 버튼으로 이동하는 순간 사라진다 — 등록/해제는 usePointerHoverTarget이
   // 소유한다.
   const handleHoverCandidateChange = useCallback(
-    (candidate: HTMLElement | null) => {
-      setHoverBlockId(candidate?.getAttribute("data-geul-block-id") ?? null);
+    (candidate: HTMLElement | null, event: PointerEvent) => {
+      if (candidate !== null) {
+        updateHoverBlockId(candidate.getAttribute("data-geul-block-id"));
+        return;
+      }
+
+      // 거터는 블록 바깥(BLOCK_GUTTER_HOVER_MARGIN)에 뜨므로, 그 여백을
+      // 벗어나기 전에는 hover를 유지한다 — table-handles.tsx의 hover
+      // 히스테리시스와 같은 이유(usePointerHoverTarget이 candidate만 알 뿐
+      // 이 판단은 모른다, 호출부 전용 판단이라 콜백 안에 남긴다).
+      const currentId = hoverBlockIdRef.current;
+      if (currentId !== null && element !== null) {
+        const blockElement = findElementByAttribute(
+          element,
+          null,
+          "data-geul-block-id",
+          currentId,
+        );
+        const rect = blockElement?.getBoundingClientRect();
+        if (
+          rect !== undefined &&
+          rect.width > 0 &&
+          rect.height > 0 &&
+          event.clientX >= rect.left - BLOCK_GUTTER_HOVER_MARGIN &&
+          event.clientX <= rect.right + BLOCK_GUTTER_HOVER_MARGIN &&
+          event.clientY >= rect.top - BLOCK_GUTTER_HOVER_MARGIN &&
+          event.clientY <= rect.bottom + BLOCK_GUTTER_HOVER_MARGIN
+        ) {
+          return;
+        }
+      }
+      updateHoverBlockId(null);
     },
-    [],
+    [element, hoverBlockIdRef, updateHoverBlockId],
   );
   usePointerHoverTarget({
     element,
@@ -304,7 +342,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
     const result = editor.commands.insertParagraphAfter(hoverBlockId);
-    setHoverBlockId(null);
+    updateHoverBlockId(null);
     if (result.ok) onBlockAdded(result.value.blockId);
   };
 

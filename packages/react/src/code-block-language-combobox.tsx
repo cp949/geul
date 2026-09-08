@@ -4,11 +4,11 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
-import { findElementByAttribute } from "./find-by-attribute.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -55,13 +55,30 @@ const LANGUAGE_COMBOBOX_ALLOW_SELECTORS = [
   ".geul-code-block-language",
 ] as const;
 
+// combobox는 CodeBlock 바로 아래(anchor.top = rect.bottom)에 `position: fixed`로
+// 뜬다 — 문서 흐름에 자리를 차지하지 않으므로, 다음 블록이 code block 바로
+// 뒤에 있으면(trailing 빈 문단 등, 항상 있을 수 있는 배치다) combobox가 그
+// 블록을 그대로 덮어 가리고 클릭도 막는다(실사용 회귀). CodeBlock 자신에
+// margin-bottom을 주는 방식은 시도하지 않는다 — PM이 관리하는 블록 DOM에
+// 외부에서 style을 직접 쓰면 PM의 DOMObserver가 "예상 밖 변경"으로 보고 그
+// 노드를 다시 그려(교체) rect 측정도 margin도 함께 사라진다(실측 확인,
+// jsdom 테스트에서 재현). 대신 아래로 펼치면 다음 블록을 덮을 때만 combobox
+// 자신을 code block 위로 뒤집는다 — 읽기만 하고 PM DOM에는 쓰지 않는다.
+const CODE_LANGUAGE_GAP_PX = 8;
+
 type LanguageState = {
   blockId: string;
   committed: string;
   draft: string;
 };
 
-type AnchorPosition = { left: number; top: number };
+type AnchorPosition = {
+  left: number;
+  top: number;
+  bottom: number;
+  /** 다음 형제 블록의 top. 없으면(마지막 블록) null — 뒤집기 판단에만 쓴다. */
+  nextTop: number | null;
+};
 
 /** CodeBlock language 편집에 필요한 상태·명령·dismiss 동작을 한곳에 소유한다. */
 export const CodeBlockLanguageCombobox = () => {
@@ -73,7 +90,13 @@ export const CodeBlockLanguageCombobox = () => {
     null,
   );
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<AnchorPosition>({ left: 0, top: 0 });
+  const [anchor, setAnchor] = useState<AnchorPosition>({
+    left: 0,
+    top: 0,
+    bottom: 0,
+    nextTop: null,
+  });
+  const [comboboxHeight, setComboboxHeight] = useState(0);
   const dirtyRef = useRef(false);
   const languageStateRef = useRef(languageState);
   languageStateRef.current = languageState;
@@ -91,18 +114,26 @@ export const CodeBlockLanguageCombobox = () => {
   const updateAnchor = useCallback(
     (blockId: string) => {
       if (element === null) return;
-      const block = findElementByAttribute(
-        element,
-        null,
-        "data-geul-block-id",
-        blockId,
+      const blockElements = Array.from(
+        element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
       );
-      if (block === null) return;
+      const index = blockElements.findIndex(
+        (candidate) => candidate.getAttribute("data-geul-block-id") === blockId,
+      );
+      const block = index === -1 ? null : blockElements[index];
+      if (block === undefined || block === null) return;
       const rect = block.getBoundingClientRect();
+      // 다음 형제 블록(예: trailing 빈 문단)의 top만 읽는다 — 뒤집을지
+      // 판단하는 데만 쓰고 그 블록에도 아무것도 쓰지 않는다.
+      const next = blockElements[index + 1];
+      const nextTop = next === undefined ? null : next.getBoundingClientRect().top;
       setAnchor((current) =>
-        current.left === rect.left && current.top === rect.bottom
+        current.left === rect.left &&
+        current.top === rect.top &&
+        current.bottom === rect.bottom &&
+        current.nextTop === nextTop
           ? current
-          : { left: rect.left, top: rect.bottom },
+          : { left: rect.left, top: rect.top, bottom: rect.bottom, nextTop },
       );
     },
     [element],
@@ -257,13 +288,57 @@ export const CodeBlockLanguageCombobox = () => {
     open && activeSuggestion !== undefined
       ? `${listboxId}-${activeSuggestion.id}`
       : undefined;
-  const { menuRef, style } = useClampedMenuPosition(anchor.left, anchor.top);
+  // 아래로 펼쳤을 때 다음 블록(trailing 빈 문단 등)을 combobox 높이가
+  // 덮으면 code block 위로 뒤집는다. comboboxHeight는 이전 렌더의 실측값이라
+  // 첫 렌더는 0(뒤집지 않음)으로 시작하고, 실측 뒤 필요하면 한 번 더 렌더해
+  // 뒤집는다 — useClampedMenuPosition의 "그리고 나서 보정" 패턴과 같다.
+  const placeAbove =
+    anchor.nextTop !== null &&
+    anchor.bottom + CODE_LANGUAGE_GAP_PX + comboboxHeight > anchor.nextTop;
+  const { menuRef, style } = useClampedMenuPosition(
+    anchor.left,
+    placeAbove ? anchor.top : anchor.bottom,
+    placeAbove ? "aboveLeft" : "topLeft",
+  );
+
+  // 높이 실측은 combobox 자신의 DOM만 읽는다 — PM이 관리하는 블록 DOM에는
+  // 아무것도 쓰지 않는다(위 CODE_LANGUAGE_GAP_PX 주석 참고). open·suggestions
+  // 의존성은 draft 입력으로 목록이 열리고 닫히며 높이가 바뀌는 경우를 잡는다
+  // (jsdom에는 ResizeObserver가 없어 단위 테스트는 이 의존성 재실행에
+  // 기댄다 — use-clamped-menu-position.ts와 같은 제약).
+  useLayoutEffect(() => {
+    const node = menuRef.current;
+    if (node === null) {
+      setComboboxHeight(0);
+      return;
+    }
+    const measure = () => {
+      const next = node.getBoundingClientRect().height;
+      setComboboxHeight((current) => (current === next ? current : next));
+    };
+    measure();
+
+    const ownerWindow = node.ownerDocument.defaultView;
+    if (
+      ownerWindow === null ||
+      typeof ownerWindow.ResizeObserver !== "function"
+    ) {
+      return;
+    }
+    const observer = new ownerWindow.ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [menuRef, languageState?.blockId, open, suggestions.length]);
 
   if (languageState === null) return null;
 
   return (
     <div
-      className="geul-code-block-language"
+      className={
+        placeAbove
+          ? "geul-code-block-language geul-code-block-language--above"
+          : "geul-code-block-language"
+      }
       data-block-id={languageState.blockId}
       ref={menuRef}
       style={style}

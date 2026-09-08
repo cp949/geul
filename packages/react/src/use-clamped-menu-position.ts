@@ -50,9 +50,17 @@ const LEFT_OF_ANCHOR_OFFSET_PX = LEFT_OF_ANCHOR_REM * ASSUMED_ROOT_FONT_SIZE_PX;
  *   `TableSelectionToolbar`가 쓴다.
  * - `centerBelow`: `translate(-50%, 0.5rem)`. `LinkToolbar`가 쓴다.
  * - `leftOfAnchor`: `translate(-3.5rem, 0)`. `BlockSideMenu` 사이드 버튼이 쓴다.
+ * - `aboveLeft`: `translate(0, calc(-100% - 0.5rem))`. `centerAbove`와 같은
+ *   위쪽 뒤집기지만 가로는 그대로 왼쪽 정렬을 유지한다.
+ *   `CodeBlockLanguageCombobox`가 아래로 펼치면 다음 블록을 덮을 때만
+ *   골라 쓴다.
  */
 export type ClampAnchor =
-  "topLeft" | "centerAbove" | "centerBelow" | "leftOfAnchor";
+  | "topLeft"
+  | "centerAbove"
+  | "centerBelow"
+  | "leftOfAnchor"
+  | "aboveLeft";
 
 type BoxOffset = { dx: number; dy: number };
 
@@ -67,6 +75,7 @@ const ANCHOR_OFFSETS: Record<
   }),
   centerBelow: (rect) => ({ dx: -rect.width / 2, dy: ANCHOR_BOX_GAP_PX }),
   leftOfAnchor: () => ({ dx: -LEFT_OF_ANCHOR_OFFSET_PX, dy: 0 }),
+  aboveLeft: (rect) => ({ dx: 0, dy: -rect.height - ANCHOR_BOX_GAP_PX }),
 };
 
 /**

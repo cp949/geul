@@ -87,6 +87,49 @@ const openBlockMenu = (options?: {
   return rendered;
 };
 
+describe("거터 hover 히스테리시스(dead-zone 회귀)", () => {
+  // 거터(드래그 핸들·add 버튼)는 block-side-menu.scss의
+  // `transform: translate(-3.5rem, 0)`로 블록 왼쪽 56px 바깥에 뜬다.
+  // hover 판정이 블록 자신의 rect(DEFAULT_BLOCK_LAYOUT: left 0, width 600,
+  // height 20)만 보고 즉시 clear하면, 포인터가 블록 왼쪽 바깥의 거터로
+  // 이동하는 도중(아직 거터에도, 블록에도 닿지 않은 구간) 거터가 먼저
+  // 사라진다 — table-handles.tsx가 HANDLE_HOVER_MARGIN으로 이미 막아둔
+  // 것과 같은 문제(usePointerHoverTarget의 "여백 히스테리시스" JSDoc이
+  // 예고한 케이스).
+  it("블록 왼쪽 여백(거터로 가는 길목)에서는 거터가 사라지지 않는다", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    expect(
+      screen.getByRole("button", { name: dragHandleLabel }),
+    ).toBeTruthy();
+
+    // 블록(rect left 0) 왼쪽 30px, 세로는 블록 범위(0~20) 안 — 거터
+    // 자체(entitySelector·ignoreSelectors 어느 쪽에도 안 걸림)로 가는
+    // 도중의 빈 공간이다.
+    fireEvent.pointerMove(document.body, { clientX: -30, clientY: 10 });
+
+    expect(
+      screen.getByRole("button", { name: dragHandleLabel }),
+    ).toBeTruthy();
+  });
+
+  it("여백을 완전히 벗어나면 거터가 사라진다(margin이 무한정은 아니다)", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    expect(
+      screen.getByRole("button", { name: dragHandleLabel }),
+    ).toBeTruthy();
+
+    fireEvent.pointerMove(document.body, { clientX: -500, clientY: 10 });
+
+    expect(screen.queryByRole("button", { name: dragHandleLabel })).toBeNull();
+  });
+});
+
 describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {
   it("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
     const rendered = openBlockMenu();
