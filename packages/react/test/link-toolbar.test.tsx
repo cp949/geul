@@ -333,6 +333,76 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
+  it("view 모드에서 Escape를 누르면 툴바를 닫고 편집기로 초점을 되돌린다(G-UI-001, QA-003/QA-015)", () => {
+    const controller = fakeController();
+    renderWithSelectedText(controller);
+    const editable = getEditable();
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("Escape로 닫은 뒤 같은 selection이 재관측돼도 다시 열리지 않는다(G-UI-001)", () => {
+    const controller = fakeController();
+    renderWithSelectedText(controller);
+    // jsdom(27.0.1) focus() selection-collapse 부작용을 스텁으로 배제한다 —
+    // 아래 "커서가 기존 링크 안(collapsed selection)에서도..." 테스트의 같은
+    // 주석 참고. 스텁이 없으면 closeViewOnEscape의 focusEditor()가 selection을
+    // collapse시켜 scroll 재관측이 "activeLink===null && !hasRange" 게이트
+    // 만으로 이미 닫혀, dismissSuppression은 검증되지 않는 vacuous pass가 된다.
+    const focusSpy = vi
+      .spyOn(getEditable(), "focus")
+      .mockImplementation(() => {});
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    fireEvent.scroll(document);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    focusSpy.mockRestore();
+  });
+
+  it("커서가 기존 링크 안(collapsed selection)에서도 Escape로 닫힌 뒤 재관측을 억제한다(G-UI-001)", () => {
+    const controller = fakeController({
+      getSelectionLink: () => ({ href: "https://example.com" }),
+    });
+    render(
+      withProvider(
+        controller,
+        <>
+          <LinkToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const textNode = host.firstChild?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    // focus() 스텁 이유는 위 "Escape로 닫은 뒤 같은 selection이..." 테스트의
+    // 주석 참고 — jsdom 전용 selection-collapse 부작용을 배제한다.
+    const contentEditable = queryMountedEditable(host);
+    const focusSpy = vi
+      .spyOn(contentEditable, "focus")
+      .mockImplementation(() => {});
+    // 진짜 "링크 안 caret"은 collapseSelection()(rangeCount 0)이 아니라 실제
+    // collapsed Range다 — start===end인 selectText가 그 Range를 만든다.
+    // rangeCount 0으로는 dismiss-suppression이 비교할 Range 자체가 없어
+    // 이 시나리오를 재현하지 못한다.
+    selectText(textNode, 2, 2);
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    fireEvent.scroll(document);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    focusSpy.mockRestore();
+  });
+
   it("편집 중 selectionchange가 발생해도 URL 입력을 열어 둔다", () => {
     const controller = fakeController();
     renderWithSelectedText(controller);

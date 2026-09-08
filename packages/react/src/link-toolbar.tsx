@@ -3,11 +3,20 @@ import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useRangeDismissSuppression } from "./use-range-dismiss-suppression.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 const linkToolbarButtonClassName = "geul-link-toolbar__button";
+
+// view 모드 툴바 자신을 allow-list에 넣는다 — 안 그러면 Open/Edit/Remove
+// 버튼 pointerdown이 "바깥 클릭"으로 잡혀 버튼 자신의 onClick보다 먼저
+// 툴바를 지운다(formatting-toolbar.tsx TOOLBAR_DISMISS_ALLOW_SELECTORS와
+// 같은 이유). editing 모드는 이 훅을 쓰지 않는다 — URL input이 자기
+// keydown에서 Escape를 이미 처리한다(cancelEditing).
+const LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS = [".geul-link-toolbar"] as const;
 
 type ToolbarPosition = { left: number; top: number };
 
@@ -29,7 +38,12 @@ type ToolbarState =
  */
 const UNREADABLE_SELECTION_POSITION: ToolbarPosition = { left: 96, top: 48 };
 
-const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
+/**
+ * 자기 에디터 안에 있는 selection의 Range를 읽는다. collapsed 여부는 묻지
+ * 않는다 — 링크 툴바는 collapsed caret(기존 링크 안)로도 뜨므로, 이 Range를
+ * dismiss-suppression 키(useRangeDismissSuppression)로도 재사용한다.
+ */
+const readSelectionRangeInElement = (element: HTMLElement): Range | null => {
   const selection = element.ownerDocument.getSelection();
   if (
     selection === null ||
@@ -41,8 +55,14 @@ const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
   ) {
     return null;
   }
+  return selection.getRangeAt(0);
+};
 
-  const bounds = selection.getRangeAt(0).getBoundingClientRect?.() ?? {
+const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
+  const range = readSelectionRangeInElement(element);
+  if (range === null) return null;
+
+  const bounds = range.getBoundingClientRect?.() ?? {
     left: 0,
     top: 0,
     width: 0,
@@ -77,29 +97,40 @@ export const LinkToolbar = ({
   });
   const editingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // view 모드는 selection·caret 관측만으로 뜬다 — Escape로 닫아도
+  // selectionchange/scroll/keyup 재관측이 같은 상태를 되살릴 수 있어
+  // dismiss-suppression이 필요하다(G-UI-001, formatting-toolbar.tsx와 같은
+  // 훅). 이 Range는 collapsed caret(기존 링크 안)도 포함한다 —
+  // readSelectionRangeInElement가 collapsed 여부를 묻지 않는 이유.
+  const currentRangeRef = useRef<Range | null>(null);
+  const dismissSuppression = useRangeDismissSuppression();
 
   const updateFromSelection = useCallback(() => {
     if (editingRef.current) return;
     if (element === null) {
       setToolbarState({ mode: "closed" });
+      dismissSuppression.clear();
       return;
     }
 
-    const selection = element.ownerDocument.getSelection();
-    const hasRange =
-      selection !== null &&
-      selection.rangeCount > 0 &&
-      !selection.isCollapsed &&
-      selection.anchorNode !== null &&
-      selection.focusNode !== null &&
-      element.contains(selection.anchorNode) &&
-      element.contains(selection.focusNode);
+    const currentRange = readSelectionRangeInElement(element);
+    const hasRange = currentRange !== null && !currentRange.collapsed;
     const activeLink = editor.getSelectionLink();
 
     if (!hasRange && activeLink === null) {
       setToolbarState({ mode: "closed" });
+      dismissSuppression.clear();
       return;
     }
+
+    if (
+      currentRange !== null &&
+      dismissSuppression.isSuppressed(currentRange)
+    ) {
+      return;
+    }
+    dismissSuppression.clear();
+    currentRangeRef.current = currentRange?.cloneRange() ?? null;
 
     const bounds =
       readSelectionBounds(element) ?? UNREADABLE_SELECTION_POSITION;
@@ -109,7 +140,7 @@ export const LinkToolbar = ({
       top: bounds.top,
       href: activeLink?.href ?? null,
     });
-  }, [editor, element]);
+  }, [editor, element, dismissSuppression]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
@@ -123,6 +154,29 @@ export const LinkToolbar = ({
     "centerBelow",
   );
   const focusEditor = useFocusEditor(element);
+
+  // view 모드도 G-UI-001을 따른다(formatting-toolbar.tsx와 같은 훅). 바깥
+  // pointerdown은 자연히 selection을 collapse해 updateFromSelection이 이미
+  // 닫아주는 경우가 많으므로 onOutsideDismiss는 방어적 안전망이고 초점은
+  // 옮기지 않는다. Escape는 돌아갈 selection이 없으니 초점을 편집기로
+  // 되돌리고 dismissSuppression에 기록해 재관측 재오픈을 막는다. editing
+  // 모드는 active에서 뺀다 — URL input이 자기 Escape를 이미 처리한다.
+  const closeViewOnEscape = useCallback(() => {
+    dismissSuppression.dismiss(currentRangeRef.current);
+    focusEditor();
+    setToolbarState({ mode: "closed" });
+  }, [dismissSuppression, focusEditor]);
+  const dismissViewOutside = useCallback(() => {
+    dismissSuppression.clear();
+    setToolbarState({ mode: "closed" });
+  }, [dismissSuppression]);
+  useDismissOnOutsideOrEscape({
+    active: toolbarState.mode === "view",
+    element,
+    allowSelectors: LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS,
+    onOutsideDismiss: dismissViewOutside,
+    onEscapeDismiss: closeViewOnEscape,
+  });
 
   if (toolbarState.mode === "closed") return null;
 

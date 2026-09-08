@@ -22,6 +22,7 @@ import { EditorContent, FormattingToolbar } from "../src/index.js";
 import { expectIconOnlyButton } from "./expect-icon-button.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { fakeController } from "./formatting-toolbar-test-support.js";
+import { queryMountedEditable } from "./query-mounted-editable.js";
 import { collapseSelection, selectText } from "./selection-events.js";
 
 afterEach(cleanup);
@@ -106,6 +107,73 @@ describe("FormattingToolbar 서식 툴바", () => {
     collapseSelection();
 
     expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("Escape로 닫고 편집기로 초점을 되돌린다(G-UI-001, QA-002/QA-015)", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const contentEditable = host.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    );
+    if (contentEditable === null)
+      throw new Error("Content editable was not rendered");
+    const textNode = host.firstChild?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    // 바깥 클릭과 달리 Escape는 돌아갈 클릭 대상이 없어 초점을 편집기로
+    // 되돌린다(G-UI-001, table-handle-menu.test.tsx와 같은 계약).
+    expect(document.activeElement).toBe(contentEditable);
+  });
+
+  it("Escape로 닫은 뒤 같은 selection이 재관측돼도 다시 열리지 않는다(G-UI-001)", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const editableHost = screen.getByRole("textbox", { name: "Editor" });
+    const textNode = editableHost.firstChild?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    // jsdom(27.0.1)은 focus()로 activeElement가 바뀌는 contenteditable에
+    // 기존 non-collapsed Selection이 있어도 그 selection을 (element, 0)
+    // collapsed로 되돌린다(link-toolbar.tsx 테스트에서 실측 확인 — 실제
+    // Chromium은 그러지 않는다). 스텁하지 않으면 closeToolbar의
+    // focusEditor() 호출이 selection을 collapse시켜, scroll 재관측이 이미
+    // "selection.isCollapsed" 게이트만으로 닫혀 dismissSuppression 자체는
+    // 한 번도 검증되지 않는 vacuous pass가 된다.
+    const contentEditable = queryMountedEditable(editableHost);
+    const focusSpy = vi
+      .spyOn(contentEditable, "focus")
+      .mockImplementation(() => {});
+    selectText(textNode, 0, 8);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    // scroll/keyup 등은 selection이 그대로여도 updateFromSelection을 다시
+    // 부른다 — 같은 Range 재관측만으로 되살아나면 Escape가 무의미해진다.
+    fireEvent.scroll(document);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    focusSpy.mockRestore();
   });
 
   it("현재 블록 종류를 반영한 블록 종류 select를 표시한다", () => {

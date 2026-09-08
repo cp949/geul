@@ -26,8 +26,8 @@
 | ID       | 확인 항목                                                    | 관련 기능      | 상태      | 발견                                                                                                        |
 | -------- | ------------------------------------------------------------- | -------------- | --------- | ------------------------------------------------------------------------------------------------------------- |
 | `QA-001` | SlashMenu가 다른 블록이나 화면 경계를 가리지 않는다            | `UI-001`       | `NOT_RUN` |                                                                                                                 |
-| `QA-002` | 서식(formatting) toolbar가 다른 콘텐츠를 가리지 않는다         | `UI-007`       | `NOT_RUN` |                                                                                                                 |
-| `QA-003` | 링크 toolbar가 다른 콘텐츠를 가리지 않는다                     | `UI-008`       | `NOT_RUN` |                                                                                                                 |
+| `QA-002` | 서식(formatting) toolbar가 다른 콘텐츠를 가리지 않는다         | `UI-007`       | `PASS` | 2026-09-08 실브라우저 확인(claude-in-chrome) — 텍스트 선택 위/아래에 정상 anchor, 다른 콘텐츠 겹침 없음. 같은 조사 중 Escape 미동작 결함을 발견·수정(`QA-089` 참고). |
+| `QA-003` | 링크 toolbar가 다른 콘텐츠를 가리지 않는다                     | `UI-008`       | `PASS` | 2026-09-08 실브라우저 확인(claude-in-chrome) — 링크 추가/보기 toolbar 정상 anchor, 겹침 없음. 같은 조사 중 Escape 미동작 결함을 발견·수정(`QA-089` 참고). |
 | `QA-004` | emoji picker가 다른 콘텐츠를 가리지 않는다                     | `UI-012`       | `NOT_RUN` |                                                                                                                 |
 | `QA-005` | 표 행/열 핸들 메뉴가 다른 콘텐츠를 가리지 않는다               | `TBL-002`      | `NOT_RUN` |                                                                                                                 |
 | `QA-006` | 셀 서식 메뉴가 다른 콘텐츠를 가리지 않는다                     | `TBL-007`      | `NOT_RUN` |                                                                                                                 |
@@ -45,6 +45,7 @@
 | `QA-017` | 터치로 드래그 핸들 재정렬이 동작한다                            | `UI-015`       | `NOT_RUN` |                                                                                                                 |
 | `QA-018` | 가상 키보드가 뜬 상태에서 메뉴 위치가 가려지지 않는다           | `UI-015`       | `NOT_RUN` |                                                                                                                 |
 | `QA-019` | 키보드만으로(Tab/화살표) 메뉴 탐색·선택이 가능하다              | `UI-016`       | `NOT_RUN` |                                                                                                                 |
+| `QA-089` | selection 관측만으로 뜨는 toolbar가 Escape로 닫히고, 닫힌 뒤 같은 selection이 재관측돼도 다시 열리지 않는다 | `UI-007`, `UI-008` | `PASS` | 2026-09-08 QA-002/003 조사 중 발견 — `FormattingToolbar`·`LinkToolbar`(view 모드) 둘 다 Escape를 눌러도 안 닫힘(바깥 클릭은 이미 정상 — selection이 자연히 collapse돼 닫힘). **근본 원인**: 두 컴포넌트 모두 `updateFromSelection`이 `selectionchange`/`scroll`/`keyup` 관측만으로 열고 닫혔고, `useDismissOnOutsideOrEscape`(G-UI-001의 표준 메커니즘)를 툴바 자신에는 배선하지 않았다(각자 내부 색상 팔레트/URL input에만 배선돼 있었음). 수정: 새 공유 훅 `use-range-dismiss-suppression.ts`(Escape 시점의 Range를 기록해 같은 Range 재관측을 무시, 실제로 selection이 바뀌면 자동 해제)를 두 컴포넌트에 배선하고 `useDismissOnOutsideOrEscape`를 툴바 루트에도 연결(색상 팔레트가 열려 있을 때는 `active`를 꺼 Escape 한 번이 팔레트만 먼저 닫게 함). 회귀 테스트: `formatting-toolbar.test.tsx`·`link-toolbar.test.tsx`(둘 다 jsdom `focus()`가 collapsed Selection을 강제로 되돌리는 부작용을 `vi.spyOn(...,'focus')`로 배제해 억제 로직 자체를 검증 — 스텁 없이는 기존 게이트만으로 우연히 통과하는 vacuous pass였음, 실측 확인). 실브라우저 시각 확인 완료(claude-in-chrome) — 두 toolbar 모두 Escape로 닫히고 초점이 편집기로 복귀, 같은 selection 재관측 시 안 열림, 새 selection이면 정상 재오픈. |
 
 ## 4. 기능별
 

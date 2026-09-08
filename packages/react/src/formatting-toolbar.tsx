@@ -37,6 +37,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useRangeDismissSuppression } from "./use-range-dismiss-suppression.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
@@ -105,6 +106,11 @@ const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-color-menu]",
   "[data-geul-color-trigger]",
 ] as const;
+
+// 툴바 자신도 allow-list에 넣는다 — 안 그러면 Bold 등 내부 버튼 pointerdown이
+// "바깥 클릭"으로 잡혀 트리거 클릭보다 먼저 툴바를 지운다(위 색상 팔레트
+// allow-list와 같은 이유).
+const TOOLBAR_DISMISS_ALLOW_SELECTORS = [".geul-formatting-toolbar"] as const;
 
 type ToolbarState = {
   activeMarks: SelectionMark[];
@@ -175,6 +181,7 @@ export const FormattingToolbar = ({
   );
   const trackedRange = useRef<Range | null>(null);
   const focusEditor = useFocusEditor(element);
+  const dismissSuppression = useRangeDismissSuppression();
 
   const updateFromSelection = useCallback(() => {
     const selection = element?.ownerDocument.getSelection();
@@ -194,10 +201,15 @@ export const FormattingToolbar = ({
       // 인스턴스에 그대로 남아, 다음에 새 선택으로 툴바가 다시 뜰 때 이전
       // 세션의 팔레트가 유령처럼 재등장한다.
       setColorMenuState(null);
+      // selection이 아예 사라졌다 — 다음에 뭘 선택하든 새 시작이라 억제도
+      // 함께 푼다.
+      dismissSuppression.clear();
       return;
     }
 
     const range = selection.getRangeAt(0);
+    if (dismissSuppression.isSuppressed(range)) return;
+    dismissSuppression.clear();
     trackedRange.current = range.cloneRange();
     const bounds = range.getBoundingClientRect?.() ?? {
       left: 0,
@@ -215,7 +227,7 @@ export const FormattingToolbar = ({
       left: bounds.left + bounds.width / 2,
       top: bounds.top,
     });
-  }, [editor, element]);
+  }, [editor, element, dismissSuppression]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
@@ -224,6 +236,33 @@ export const FormattingToolbar = ({
     toolbarState?.top ?? 0,
     "centerAbove",
   );
+
+  // 툴바 자신도 G-UI-001을 따른다(위 색상 팔레트와 같은 훅). 바깥
+  // pointerdown은 자연히 selection을 collapse해 updateFromSelection이 이미
+  // 닫아주므로 onOutsideDismiss는 방어적 안전망이다 — 초점은 옮기지 않는다.
+  // Escape는 돌아갈 selection이 없으니 초점을 편집기로 되돌리고, 같은
+  // selection이 재관측돼도 다시 안 열리게 dismissSuppression에 기록한다.
+  // colorMenuState가 열려 있는 동안은 active를 꺼서 Escape 한 번이 팔레트만
+  // 먼저 닫게 한다(안쪽 오버레이 우선 — 두 리스너가 같은 keydown에 동시
+  // 반응하면 팔레트와 툴바가 한 번에 다 닫힌다).
+  const dismissToolbar = useCallback(() => {
+    dismissSuppression.clear();
+    setToolbarState(null);
+    setColorMenuState(null);
+  }, [dismissSuppression]);
+  const closeToolbar = useCallback(() => {
+    dismissSuppression.dismiss(trackedRange.current);
+    setToolbarState(null);
+    setColorMenuState(null);
+    focusEditor();
+  }, [dismissSuppression, focusEditor]);
+  useDismissOnOutsideOrEscape({
+    active: toolbarState !== null && colorMenuState === null,
+    element,
+    allowSelectors: TOOLBAR_DISMISS_ALLOW_SELECTORS,
+    onOutsideDismiss: dismissToolbar,
+    onEscapeDismiss: closeToolbar,
+  });
 
   // 색상 팔레트는 G-UI-001을 그대로 따른다 — 바깥 클릭(초점 미이동)과
   // Escape(초점 복구)를 분리하고, 트리거 재클릭도 Escape와 같은 초점 복구
