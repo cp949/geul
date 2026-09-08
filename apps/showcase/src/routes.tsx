@@ -2,7 +2,9 @@ import type { ComponentType } from "react";
 
 import DocumentIoPage from "./examples/02-document-io/page.js";
 import FormattingToolbarPage from "./examples/03-formatting-toolbar/page.js";
+import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
+import SlashMenuPage from "./examples/05-slash-menu/page.js";
 
 export type ExampleRouteGroup =
   | "Basics"
@@ -36,5 +38,17 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Formatting toolbar",
     group: "Toolbars & Menus",
     Page: FormattingToolbarPage,
+  },
+  {
+    path: "link-toolbar",
+    label: "Link toolbar",
+    group: "Toolbars & Menus",
+    Page: LinkToolbarPage,
+  },
+  {
+    path: "slash-menu",
+    label: "Slash menu",
+    group: "Toolbars & Menus",
+    Page: SlashMenuPage,
   },
 ];
