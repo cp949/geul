@@ -452,16 +452,17 @@ test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 �
 });
 
 /**
- * Issue #163 RD-001 DELTA-01: `preserveFocusOnMouseDown`(icon-button.tsx)이
- * 마우스로는 오버레이 버튼에 초점을 주지 않으므로, 뷰포트 밖으로 밀려난
- * Add row 버튼(`[data-geul-table-expand-row]`, position: fixed)의 유일한
- * 정상 키보드 진입 경로는 Tab이다. 표를 뷰포트보다 키워 버튼을 화면 밖에
- * 둔 뒤 실제 `Tab` keydown 1회로 그 버튼 바로 앞 tab 순서 요소(마지막 열
- * 핸들)에서 이동시켜, 초점 이동·scrollY 변화·bounding box 위치를
- * 실측한다(가설이 아니라 재현 확인이 목적이라 assertion은 아래 실측값을
- * 그대로 고정한다).
+ * Issue #163 RD-001 DELTA-01은 이 테스트로 버그를 재현 확인했다(뷰포트
+ * 밖 Add row 버튼에 Tab 포커스가 이동해도 scrollY·bounding box가
+ * 그대로였다 — `position: fixed`가 네이티브 scroll-into-view를 no-op으로
+ * 만든 결과). RD-002 DELTA-01이 오버레이 6종을 `position: absolute` +
+ * page-relative 좌표로 전환한 뒤(G-UI-003/ADR-0012)로는 그 결함이
+ * 사라졌다 — 이 테스트는 그 수정을 고정하는 회귀 방지 테스트로 뒤집는다.
+ * `preserveFocusOnMouseDown`(icon-button.tsx)이 마우스로는 오버레이
+ * 버튼에 초점을 주지 않으므로, Add row 버튼(`[data-geul-table-expand-row]`)의
+ * 유일한 정상 키보드 진입 경로는 여전히 Tab이다.
  */
-test("뷰포트 밖으로 밀려난 표 확장 버튼은 키보드 Tab 포커스만으로 도달해도 화면 밖에 남는다 (Issue #163 RD-001 재현 확인)", async ({
+test("뷰포트 밖으로 밀려난 표 확장 버튼도 키보드 Tab 포커스만으로 뷰포트 안까지 스크롤된다 (Issue #163 RD-002 DELTA-01 수정 확인)", async ({
   page,
 }) => {
   const { table } = await openDemoWithTable(page);
@@ -502,16 +503,15 @@ test("뷰포트 밖으로 밀려난 표 확장 버튼은 키보드 Tab 포커스
   // 실측 1: 초점이 실제로 Add row 버튼까지 이동한다.
   await expect(addRowButton).toBeFocused();
 
-  // 실측 2: Tab 이후에도 scrollY는 바뀌지 않는다 — 브라우저가 fixed
-  // 요소를 스크롤로 뷰포트 안에 넣어주지 않는다(네이티브
-  // `Element.scrollIntoView()`가 fixed에 no-op이라는 기존 실측과 같은
-  // 결과).
+  // 실측 2: absolute + page-relative 좌표로는 브라우저가 네이티브
+  // scroll-into-view를 실제로 수행한다 — fixed일 때와 달리 scrollY가
+  // 움직인다.
   const scrollYAfter = await page.evaluate(() => window.scrollY);
-  expect(scrollYAfter).toBe(scrollYBefore);
+  expect(scrollYAfter).toBeGreaterThan(scrollYBefore);
 
-  // 실측 3: 버튼은 초점을 받은 뒤에도 여전히 뷰포트 밖에 남는다.
-  const boxAfter = await addRowButton.boundingBox();
-  expect(boxAfter === null || boxAfter.y >= (viewport?.height ?? 0)).toBe(true);
+  // 실측 3: 버튼이 초점을 받은 뒤에는 뷰포트 안에서 보인다(더 이상 화면
+  // 밖에 갇히지 않는다).
+  await expect(addRowButton).toBeInViewport();
 });
 
 test("표 상단 행에서 셀을 선택해도 Table selection 툴바가 화면 안에서 Cell formatting 버튼까지 클릭할 수 있다 (PIT-0011)", async ({
