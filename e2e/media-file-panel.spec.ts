@@ -69,6 +69,46 @@ test("허용되지 않는 URL이면 거부 메시지를 표시하고 문서를 �
   await expect(page.getByRole("textbox", { name: "Video URL" })).toBeVisible();
 });
 
+test("Close 버튼으로 URL 없이 패널을 닫아도 남은 빈 미디어 블록을 마우스로 다시 찾아 지울 수 있다(QA-090)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+  await expect(page.getByRole("toolbar", { name: "File panel" })).toBeVisible();
+
+  // Close는 패널만 닫고 블록은 의도적으로 남긴다(spec — 빈 미디어 블록은
+  // 삽입 즉시 이미 유효한 상태). 수정 전에는 이 시점부터 블록이 height:0
+  // ·자식 0개가 돼 마우스 클릭이 인접 블록을 대신 히트해 영원히 재접근할
+  // 수 없었다(실측 확인).
+  await page.getByRole("button", { name: "Close file panel" }).click();
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+
+  const emptyBlock = editable.locator('[data-geul-media-empty="image"]');
+  await expect(emptyBlock).toBeVisible();
+
+  // 마우스만으로 블록 거터 메뉴를 열어 삭제한다(block-handle.spec.ts와
+  // 같은 패턴) — hover가 실제로 이 블록 위에서 거터 아이콘을 띄우는지까지
+  // 검증한다(단순 locator 액션은 실제 hit-test 실패를 가려버릴 수 있다).
+  // **알려진 별도 결함(이 수정 범위 밖)**: 클릭으로 이 블록을 선택한 뒤
+  // Backspace/Delete 키를 누르는 경로는 여전히 안 먹는다 — 자식 0개인 atom
+  // 노드의 NodeSelection을 `resolveSelectionAwareState`(selection-aware-state.ts)
+  // 가 native DOM selection과 재동기화할 때 `view.posAtDOM` 결과가 live
+  // selection의 anchor/head와 어긋나 "stale"로 오판되고,
+  // `block-join-extension.ts`의 `joinBackwardAtBlockStart`가 방어적으로
+  // 키만 삼켜 삭제를 안 한다(실측 확인 — 채워진 미디어 블록은 자식이 있어
+  // 이 오판이 안 남). 거터 메뉴 Delete는 `blockId` 기반 커맨드라 이 경로를
+  // 타지 않아 정상 동작한다.
+  await emptyBlock.hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+
+  await expect(emptyBlock).toHaveCount(0);
+});
+
 test("Escape는 패널을 닫고 편집기로 초점을 되돌린다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
@@ -107,12 +147,12 @@ test("삽입을 undo 1회로 복원한다", async ({ page }) => {
   await editable.click();
   await page.keyboard.type("/video");
   await page.getByRole("option", { name: /^Video/ }).click();
-  // 빈 미디어 블록은 콘텐츠가 없는 div라 화면 크기가 0이다(RD-002는
-  // core 렌더만 다루고 react 빈 상태 CSS는 아직 없다) — toBeVisible()은
-  // 0x0 요소를 "hidden"으로 판정하므로 존재 여부만 본다.
-  await expect(editable.locator('[data-geul-media-empty="video"]')).toHaveCount(
-    1,
-  );
+  // QA-090 수정(_editor.scss `[data-geul-media-empty]`) 이후로는 빈
+  // 미디어 블록도 실제 높이를 가진 점선 슬롯이라 toBeVisible() 단언이
+  // 가능하다 — 존재 여부만 보던 이전 toHaveCount(1)보다 강한 계약이다.
+  await expect(
+    editable.locator('[data-geul-media-empty="video"]'),
+  ).toBeVisible();
   // File Panel이 URL 입력에 초점을 가져가는 effect까지 끝난 뒤에
   // Escape를 눌러야 한다 — media 블록 attach와 File Panel open은 서로
   // 다른 렌더 사이클이라, 이 대기 없이 곧바로 Escape를 누르면 아직

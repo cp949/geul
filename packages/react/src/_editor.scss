@@ -105,6 +105,27 @@
     font-weight: 600;
   }
 
+  // url 없는 media 블록(image/video/audio/file 공통, media-block-extension.ts)은
+  // core가 data-geul-media-empty만 표식하고 실제 시각 자리는 react가
+  // 책임진다(그 파일 주석 그대로). 이 규칙이 없으면 selection이 풀린 빈
+  // media 블록은 자식 0개·height:0이 돼 화면에서 완전히 사라지고 마우스로
+  // 다시 클릭할 수 없다(MED-001 자유 조작 QA 발견, QA-090). [data-placeholder]
+  // 를 재사용하지 않는 이유는 media-block-extension.ts 주석과 같다 — 캐럿
+  // 없는 atom 블록에 float+height:0 placeholder 레이아웃을 적용하면 의도치
+  // 않은 결과가 난다. 텍스트 라벨은 넣지 않는다(문구는 core→react 어디도
+  // Dictionary로 투영하지 않으므로 i18n 없이 하드코딩하면 새 미준수 문구가
+  // 생긴다) — 점선 테두리 슬롯만으로 "빈 자리가 존재하고 클릭 가능하다"는
+  // 시각·상호작용 계약을 지킨다.
+  [data-geul-media-empty] {
+    display: block;
+    box-sizing: border-box;
+    min-height: 3rem;
+    border: 1px dashed var(--geul-color-border, #dadce0);
+    border-radius: var(--geul-radius-md, 0.375rem);
+    background: var(--geul-color-surface-muted, #f1f3f4);
+    cursor: pointer;
+  }
+
   // 빈 블록 placeholder(UI-009). 문구는 core(placeholder-extension.ts)가
   // data-placeholder 데코레이션으로 소유하고 여기는 표시만 그린다(R-7).
   // float + height 0은 placeholder 텍스트가 레이아웃을 밀지 않고 캐럿과
