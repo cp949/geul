@@ -181,8 +181,8 @@
 
 | ID       | 확인 항목                                              | 관련 기능 | 상태      | 발견 |
 | -------- | ----------------------------------------------------------- | ---------- | --------- | ---- |
-| `QA-084` | 업로드 콜백이 실패(reject)하면 실패가 사용자에게 보이고 문서가 깨지지 않는다 | `MED-002`  | `NOT_RUN` |      |
-| `QA-085` | 업로드 도중 네트워크가 끊기거나 느려도 취소·재시도가 가능하다 | `MED-002`  | `NOT_RUN` |      |
+| `QA-084` | 업로드 콜백이 실패(reject)하면 실패가 사용자에게 보이고 문서가 깨지지 않는다 | `MED-002`  | `PASS` | 2026-09-08 — QA-079에서 이미 실브라우저로 "reject-test.png" 업로드가 `status:"error"`로 정상 실패해 인라인 에러 메시지·Retry·Close가 정상 동작함을 실측(중복 서술 안 함, QA-079 참고). 콜백이 `status:"error"`를 반환하지 않고 그냥 reject/throw하는 경로는 `editor-controller-media-upload.test.ts`("콜백이 reject하면 error 상태(UPLOAD_CALLBACK_THREW)로 흡수하고 문서를 바꾸지 않는다")가 별도로 결정론적 커버 — 두 실패 경로 모두 문서를 바꾸지 않고 안전하게 흡수됨을 확인. |
+| `QA-085` | 업로드 도중 네트워크가 끊기거나 느려도 취소·재시도가 가능하다 | `MED-002`  | `PASS` | 2026-09-08 — **함정**(QA-066과 같은 부류): kitchen sink의 `COMPOSITE_UPLOAD_DELAY_MS=300`이 "느린 네트워크"를 흉내내는 지점인데, 순차 tool call의 왕복 지연이 300ms를 웃돌아 "업로드 중" 상태에서 정확히 Cancel 버튼을 클릭하는 실측을 여러 번 시도했으나 매번 스크린샷 시점엔 이미 완료돼 있었다(자동화 타이밍 한계, 제품 결함 아님 — QA-066에서 이미 같은 결론). 대신 결정론적 근거로 확인: `cancelMediaUpload` 코어 명령 단위 테스트(`editor-controller-media-upload.test.ts` "등록된 AbortSignal을 abort하고, 이후 콜백이 cancelled로 resolve하면 pending 상태가 지워진다" — controllable promise로 타이밍 없이 재현) + `FilePanel`의 Cancel 버튼 배선 단위 테스트(`file-panel.test.tsx` "uploading 중 Cancel 클릭 시 cancelMediaUpload를 호출한다"). "재시도"는 QA-079에서 이미 Retry 버튼이 같은 파일로 재요청해 안정적으로 재현됨을 실측 확인. |
 
 ## 6. 항목 추가 절차
 
