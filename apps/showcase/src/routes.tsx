@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 
 import DocumentIoPage from "./examples/02-document-io/page.js";
+import DictionaryOverridePage from "./examples/09-dictionary-override/page.js";
+import EmojiPickerPage from "./examples/08-emoji-picker/page.js";
 import FilePanelPage from "./examples/06-file-panel/page.js";
 import FormattingToolbarPage from "./examples/03-formatting-toolbar/page.js";
 import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
@@ -64,5 +66,17 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Media",
     group: "Media & Extras",
     Page: MediaPage,
+  },
+  {
+    path: "emoji-picker",
+    label: "Emoji picker",
+    group: "Media & Extras",
+    Page: EmojiPickerPage,
+  },
+  {
+    path: "dictionary-override",
+    label: "Dictionary override",
+    group: "Media & Extras",
+    Page: DictionaryOverridePage,
   },
 ];
