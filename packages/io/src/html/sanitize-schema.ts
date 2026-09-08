@@ -160,6 +160,12 @@ export const htmlAllowedTagNames = [
   "hr",
   "strong",
   "em",
+  // b/i는 strong/em의 구식(semantic-light) 동의어다 — 워드·구형 웹페이지·
+  // 브라우저 `execCommand('bold'/'italic')`가 여전히 흔히 낸다. 없으면
+  // 클립보드 붙여넣기에서 서식이 조용히 사라진다(marksForElement가 같은
+  // bold/italic mark로 매핑, inline-content.ts).
+  "b",
+  "i",
   "u",
   "s",
   "code",

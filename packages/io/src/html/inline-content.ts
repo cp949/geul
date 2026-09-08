@@ -89,8 +89,10 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
       return typeof href === "string" ? [{ type: "link", href }] : [];
     }
     case "strong":
+    case "b":
       return [{ type: "bold" }];
     case "em":
+    case "i":
       return [{ type: "italic" }];
     case "u":
       return [{ type: "underline" }];

@@ -175,6 +175,8 @@ const isOwnMediaAnchorElement = (node: HtmlElementNode): boolean => {
 const supportedInlineNames = new Set([
   "strong",
   "em",
+  "b",
+  "i",
   "u",
   "s",
   "code",
