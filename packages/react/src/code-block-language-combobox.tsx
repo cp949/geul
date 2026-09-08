@@ -9,46 +9,33 @@ import {
   useState,
 } from "react";
 
+import {
+  type CodeBlockLanguageOption,
+  useCodeBlockLanguages,
+} from "./code-block-language-option.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
-type LanguageOption = {
-  id: string;
-  language: string;
-  label: string;
-  aliases: readonly string[];
-};
-
-const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
-  {
-    id: "text",
-    language: "text",
-    label: "Plain Text",
-    aliases: ["plain text", "none"],
-  },
-  {
-    id: "javascript",
-    language: "javascript",
-    label: "JavaScript",
-    aliases: ["js"],
-  },
-  {
-    id: "typescript",
-    language: "typescript",
-    label: "TypeScript",
-    aliases: ["ts"],
-  },
-  { id: "html", language: "html", label: "HTML", aliases: [] },
-  { id: "css", language: "css", label: "CSS", aliases: [] },
-  { id: "json", language: "json", label: "JSON", aliases: [] },
-  { id: "bash", language: "bash", label: "Bash", aliases: ["sh", "shell"] },
-  { id: "python", language: "python", label: "Python", aliases: ["py"] },
-  { id: "java", language: "java", label: "Java", aliases: [] },
-  { id: "kotlin", language: "kotlin", label: "Kotlin", aliases: [] },
-  { id: "sql", language: "sql", label: "SQL", aliases: [] },
-  { id: "markdown", language: "markdown", label: "Markdown", aliases: ["md"] },
+// spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — `codeBlockLanguages`
+// 미지정 시(`useCodeBlockLanguages()` === undefined) 쓰는 기본 12개.
+// `id`가 commit되는 실제 language 값을 겸한다(공개
+// `CodeBlockLanguageOption`과 동일 shape — 과거 내부 `language` 필드는
+// 모든 항목에서 `id`와 항상 같은 값이었다).
+const DEFAULT_LANGUAGE_OPTIONS: readonly CodeBlockLanguageOption[] = [
+  { id: "text", label: "Plain Text", aliases: ["plain text", "none"] },
+  { id: "javascript", label: "JavaScript", aliases: ["js"] },
+  { id: "typescript", label: "TypeScript", aliases: ["ts"] },
+  { id: "html", label: "HTML", aliases: [] },
+  { id: "css", label: "CSS", aliases: [] },
+  { id: "json", label: "JSON", aliases: [] },
+  { id: "bash", label: "Bash", aliases: ["sh", "shell"] },
+  { id: "python", label: "Python", aliases: ["py"] },
+  { id: "java", label: "Java", aliases: [] },
+  { id: "kotlin", label: "Kotlin", aliases: [] },
+  { id: "sql", label: "SQL", aliases: [] },
+  { id: "markdown", label: "Markdown", aliases: ["md"] },
 ];
 
 const LANGUAGE_COMBOBOX_ALLOW_SELECTORS = [
@@ -97,6 +84,10 @@ export const CodeBlockLanguageCombobox = () => {
     nextTop: null,
   });
   const [comboboxHeight, setComboboxHeight] = useState(0);
+  // spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — 지정하면 완전
+  // 교체(enabledBlockTypes와 동일 패턴), 안 하면 기본 12개.
+  const configuredLanguages = useCodeBlockLanguages();
+  const languageOptions = configuredLanguages ?? DEFAULT_LANGUAGE_OPTIONS;
   const dirtyRef = useRef(false);
   const languageStateRef = useRef(languageState);
   languageStateRef.current = languageState;
@@ -126,7 +117,8 @@ export const CodeBlockLanguageCombobox = () => {
       // 다음 형제 블록(예: trailing 빈 문단)의 top만 읽는다 — 뒤집을지
       // 판단하는 데만 쓰고 그 블록에도 아무것도 쓰지 않는다.
       const next = blockElements[index + 1];
-      const nextTop = next === undefined ? null : next.getBoundingClientRect().top;
+      const nextTop =
+        next === undefined ? null : next.getBoundingClientRect().top;
       setAnchor((current) =>
         current.left === rect.left &&
         current.top === rect.top &&
@@ -266,10 +258,10 @@ export const CodeBlockLanguageCombobox = () => {
 
   const draft = languageState?.draft ?? "";
   const needle = draft.toLocaleLowerCase();
-  const suggestions = LANGUAGE_OPTIONS.filter((option) =>
+  const suggestions = languageOptions.filter((option) =>
     needle.length === 0
       ? true
-      : [option.language, option.label, ...option.aliases].some((value) =>
+      : [option.id, option.label, ...(option.aliases ?? [])].some((value) =>
           value.toLocaleLowerCase().includes(needle),
         ),
   );
@@ -279,8 +271,8 @@ export const CodeBlockLanguageCombobox = () => {
   const normalizedDraft = draft.trim().toLocaleLowerCase();
   const activeSuggestion = suggestions.find(
     (option) =>
-      option.language === draft ||
-      option.aliases.some(
+      option.id === draft ||
+      (option.aliases ?? []).some(
         (alias) => alias.toLocaleLowerCase() === normalizedDraft,
       ),
   );
@@ -371,7 +363,7 @@ export const CodeBlockLanguageCombobox = () => {
               className="geul-code-block-language__option"
               id={`${listboxId}-${option.id}`}
               key={option.id}
-              onClick={() => commit(option.language)}
+              onClick={() => commit(option.id)}
               onMouseDown={(event) => event.preventDefault()}
               role="option"
               type="button"
@@ -382,7 +374,7 @@ export const CodeBlockLanguageCombobox = () => {
                   : option.label}
               </span>
               <span className="geul-code-block-language__aliases">
-                {[option.language, ...option.aliases].join(", ")}
+                {[option.id, ...(option.aliases ?? [])].join(", ")}
               </span>
             </button>
           ))}

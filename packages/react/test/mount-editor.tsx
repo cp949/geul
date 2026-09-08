@@ -22,7 +22,11 @@ import { render, screen } from "@testing-library/react";
 import { act, type ReactNode } from "react";
 import { afterEach, expect } from "vitest";
 
-import { EditorContent, EditorProvider } from "../src/index.js";
+import {
+  EditorContent,
+  EditorProvider,
+  type EditorProviderProps,
+} from "../src/index.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 
 // jsdom은 Range.getClientRects/getBoundingClientRect를 아예 구현하지 않는다.
@@ -209,6 +213,10 @@ export type MountBlockEditorOptions = {
   // spec §8(EXT-009), RD-002-DELTA-02 — dictionary override 테스트가 공용으로
   // 쓴다. 이후 DELTA(blockType 이후 네임스페이스)도 이 필드를 재사용한다.
   dictionary?: CreateEditorOptions["dictionary"];
+  // spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — codeBlockLanguages는
+  // core를 거치지 않는다(createEditor()에 없음) — dictionary와 달리
+  // EditorProvider prop으로 직접 threading한다(아래 render() 참고).
+  codeBlockLanguages?: EditorProviderProps["codeBlockLanguages"];
 };
 
 export type MountedBlockEditor = {
@@ -242,6 +250,7 @@ export const mountBlockEditor = ({
   layout = DEFAULT_BLOCK_LAYOUT,
   onChange,
   dictionary,
+  codeBlockLanguages,
 }: MountBlockEditorOptions = {}): MountedBlockEditor => {
   const resolvedBlocks =
     initialBlocks ??
@@ -266,7 +275,10 @@ export const mountBlockEditor = ({
   mountedEditors.add(editor);
 
   render(
-    <EditorProvider editor={editor}>
+    <EditorProvider
+      editor={editor}
+      {...(codeBlockLanguages === undefined ? {} : { codeBlockLanguages })}
+    >
       {children}
       <EditorContent />
     </EditorProvider>,

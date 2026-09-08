@@ -17,6 +17,7 @@ export type {
 // 패턴("DEFAULT_DICTIONARY를 스프레드해 필요한 key만 override")을 react
 // 표면만 쓰는 소비자도 실행할 수 있도록 값을 그대로 re-export한다.
 export { DEFAULT_DICTIONARY } from "@cp949/geul-core";
+export type { CodeBlockLanguageOption } from "./code-block-language-option.js";
 export { EditorContent } from "./editor-content.js";
 export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
 export { EmojiPicker, type EmojiPickerProps } from "./emoji-picker.js";

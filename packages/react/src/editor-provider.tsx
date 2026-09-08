@@ -2,6 +2,10 @@ import type { CreateEditorOptions, EditorController } from "@cp949/geul-core";
 import { createEditor } from "@cp949/geul-core";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import {
+  CodeBlockLanguagesProvider,
+  type CodeBlockLanguageOption,
+} from "./code-block-language-option.js";
 import { EditorContext, EditorMountContext } from "./use-editor.js";
 
 // commands/keyboardShortcuts 각각의 함수 값 타입(Record 값 하나) —
@@ -13,7 +17,16 @@ type CustomKeyboardShortcutFn = NonNullable<
   CreateEditorOptions["keyboardShortcuts"]
 >[string];
 
-export type EditorProviderProps =
+// spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — `codeBlockLanguages`는
+// 아래 discriminated union(editor 소유 여부)의 두 분기 모두에 공통으로
+// 붙는 필드다. 다른 8개 옵션과 달리 `editor` 외부소유 분기에서
+// `never`로 막지 않는다 — core 구성(`createEditor()`)에 전혀 관여하지
+// 않는 순수 렌더 목록이라 소유 방식과 무관하게 유효하고, 콤보박스의
+// 유일한 기존 test harness(`mount-editor.tsx`)도 예외 없이 외부소유
+// 분기로 마운트한다(`RD-002.md` "## 결정" 참고). `(A | B) & C`로
+// 구성해 `editor` discriminant로 좁히는 기존 narrowing은 그대로
+// 유지한다.
+export type EditorProviderProps = (
   | {
       children: ReactNode;
       editor: EditorController;
@@ -82,7 +95,14 @@ export type EditorProviderProps =
       // 래퍼가 없다) — customBlocks 등과 같은 이유로 마운트 시점 값만
       // 읽는다. `RD-002.md` "## 결정" 참고.
       syntaxHighlighter?: CreateEditorOptions["syntaxHighlighter"];
-    };
+    }
+) & {
+  // 위 주석 참고 — 두 분기 공통. reactive threading(마운트 고정 아님,
+  // `RD-002.md` "## 결정")이라 `configuration`을 거치지 않고
+  // `EditorProvider` 본문이 매 렌더 `props.codeBlockLanguages`를 직접
+  // 읽는다.
+  codeBlockLanguages?: readonly CodeBlockLanguageOption[];
+};
 
 export const EditorProvider = (props: EditorProviderProps) => {
   const latestOnChange = useRef<CreateEditorOptions["onChange"]>(undefined);
@@ -254,7 +274,9 @@ export const EditorProvider = (props: EditorProviderProps) => {
       <EditorMountContext.Provider
         value={{ element: mountElement, setElement: setMountElement }}
       >
-        {props.children}
+        <CodeBlockLanguagesProvider value={props.codeBlockLanguages}>
+          {props.children}
+        </CodeBlockLanguagesProvider>
       </EditorMountContext.Provider>
     </EditorContext.Provider>
   );

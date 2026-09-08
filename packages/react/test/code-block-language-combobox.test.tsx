@@ -28,6 +28,7 @@ type CodeFixtureOptions = {
   secondCodeLanguage?: string;
   onChange?: MountBlockEditorOptions["onChange"];
   dictionary?: MountBlockEditorOptions["dictionary"];
+  codeBlockLanguages?: MountBlockEditorOptions["codeBlockLanguages"];
 };
 
 /** 실제 CodeBlock 저장 문서를 SlashMenu composite root와 함께 마운트한다. */
@@ -38,6 +39,7 @@ const mountCodeFixture = ({
   secondCodeLanguage,
   onChange,
   dictionary,
+  codeBlockLanguages,
 }: CodeFixtureOptions = {}): MountedBlockEditor => {
   const rendered = mountBlockEditor({
     initialBlocks: [
@@ -70,6 +72,7 @@ const mountCodeFixture = ({
     children: <SlashMenu />,
     onChange,
     ...(dictionary === undefined ? {} : { dictionary }),
+    ...(codeBlockLanguages === undefined ? {} : { codeBlockLanguages }),
   });
   rendered.editable.focus();
   const code = rendered.host.querySelector<HTMLElement>("code");
@@ -597,5 +600,50 @@ describe("CodeBlock 언어 draft 취소와 selection 동기화", () => {
       languageInput().closest<HTMLElement>(".geul-code-block-language")?.dataset
         .blockId,
     ).toBe("code-2");
+  });
+});
+
+// codeBlockLanguages 배선 계약(spec §6, RD-002-DELTA-02, Issue #162).
+describe("CodeBlock 언어 combobox — codeBlockLanguages(BLK-017)", () => {
+  it("지정하면 후보 목록이 완전 교체되고 option.id가 그대로 commit된다", () => {
+    const rendered = mountCodeFixture({
+      codeBlockLanguages: [
+        { id: "rust", label: "Rust" },
+        { id: "go", label: "Go", aliases: ["golang"] },
+      ],
+    });
+    const input = languageInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "" } });
+
+    const options = screen.getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Rustrust",
+      "Gogo, golang",
+    ]);
+
+    fireEvent.click(screen.getByRole("option", { name: /Go/ }));
+    expect(storedLanguage(rendered)).toBe("go");
+  });
+
+  it("미지정 시 기존 기본 12개가 그대로 유지된다(무회귀)", () => {
+    mountCodeFixture();
+    const input = languageInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "" } });
+
+    expect(screen.getAllByRole("option")).toHaveLength(12);
+  });
+
+  it("codeBlockLanguages를 지정해도 목록에 없는 값 직접 입력은 그대로 commit된다(자유 입력 무회귀)", () => {
+    const rendered = mountCodeFixture({
+      codeBlockLanguages: [{ id: "rust", label: "Rust" }],
+    });
+    const input = languageInput();
+    fireEvent.change(input, { target: { value: "brainfuck" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(storedLanguage(rendered)).toBe("brainfuck");
+    expect(input.value).toBe("brainfuck");
   });
 });
