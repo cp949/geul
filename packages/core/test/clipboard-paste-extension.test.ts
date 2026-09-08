@@ -198,6 +198,52 @@ describe("ClipboardPasteExtension", () => {
     });
   });
 
+  it("plain 텍스트에 C0 제어문자가 섞여 있으면 제거한 뒤 삽입하고 크래시하지 않는다", () => {
+    // QA-078 회귀 테스트 — 감지되지 않는 단순 plain paste는 PM 네이티브
+    // 처리에 그대로 위임됐는데(위 테스트), 네이티브 경로는 model이 금지하는
+    // C0 제어문자(LF 제외)를 검증 없이 문서에 그대로 넣었다. 다음
+    // 트랜잭션에서 model 검증(document-structure-validation.ts)이 뒤늦게
+    // 거부하며 던진 TypeError가 어디서도 잡히지 않아(readEditorDocument →
+    // onTiptapUpdate) uncaught exception으로 새 나갔다(실브라우저 실측:
+    // "Inline text must use LF line breaks and contain no other C0
+    // controls..." — production-editor-session.js:readEditorDocument).
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      createId: sequentialIds("id"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+    withUnhandledErrorTracking((errors) => {
+      pasteData(editable, { "text/plain": "a\x00b\x07c" });
+
+      const blocks = editor.getDocument().blocks;
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toMatchObject({ content: [{ text: "seedabc" }] });
+      expect(errors).toEqual([]);
+    });
+  });
+
+  it("plain 텍스트가 전부 C0 제어문자뿐이면 아무것도 삽입하지 않고 크래시하지 않는다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      createId: sequentialIds("id"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+    withUnhandledErrorTracking((errors) => {
+      pasteData(editable, { "text/plain": "\x00\x07\x1f" });
+
+      const blocks = editor.getDocument().blocks;
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toMatchObject({ content: [{ text: "seed" }] });
+      expect(errors).toEqual([]);
+    });
+  });
+
   it("text/html과 text/plain이 모두 없으면 문서를 바꾸지 않는다", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),

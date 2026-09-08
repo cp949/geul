@@ -4,6 +4,7 @@ import {
   type DocumentBlock,
   type IdFactory,
   MAX_NESTING_DEPTH,
+  sanitizeInlineText,
 } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
@@ -143,11 +144,24 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     const createId = this.options.createId;
     const pasteHandler = this.options.pasteHandler;
     const controllerFacade = this.options.controllerFacade;
+    // view.pasteText(sanitized, event) 재진입 가드(아래 sanitize 분기
+    // 전용) — prosemirror-view의 doPaste가 자체적으로
+    // view.someProp("handlePaste", f => f(view, event, slice))를 한 번 더
+    // 호출한다(EditorView.pasteText → doPaste 내부, 이 플러그인 등록
+    // 시그니처와 별개 3-인자 호출). 그 재호출도 이 handlePaste로 들어와
+    // 같은 event.clipboardData를 다시 읽으면 sanitize 결과가 매번
+    // 원본과 달라 view.pasteText를 무한 재귀 호출한다(jsdom 테스트로
+    // 실측: RangeError: Maximum call stack size exceeded). 이 플래그가
+    // true인 동안은 즉시 false를 반환해 doPaste 내부 재호출을
+    // 사실상 무시한다 — doPaste 자신은 이미 계산해 둔 slice로 계속
+    // 진행하므로 삽입 자체는 그대로 된다.
+    let sanitizedPasteInFlight = false;
 
     return [
       new Plugin({
         props: {
           handlePaste: (view, event) => {
+            if (sanitizedPasteInFlight) return false;
             // 표 셀 안에서는 손대지 않는다(R1 계약 그대로) — pasteHandler도
             // 호출하지 않는다(roadmap.md "제외 범위", IO-008은 표·미디어
             // 붙여넣기를 대상으로 하지 않는다).
@@ -198,11 +212,34 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               if (text.length === 0) return false;
 
               const detection = detectMarkdownPaste(text, { createId });
-              if (!detection.detected) return false;
+              if (detection.detected) {
+                const encoded = modelToTiptap(detection.document);
+                if (!encoded.ok) return true;
+                insert(encoded.value.content ?? []);
+                return true;
+              }
 
-              const encoded = modelToTiptap(detection.document);
-              if (!encoded.ok) return true;
-              insert(encoded.value.content ?? []);
+              // 감지되지 않은 단순 plain text는 PM 기본 처리(paragraph
+              // 분리 등)에 그대로 위임해왔다. 하지만 model은 inline text에서
+              // LF를 제외한 C0 제어문자·DEL·짝 없는 surrogate를 금지하는데
+              // (document-structure-validation.ts), PM 기본 처리는 그
+              // 불변식을 모르고 원본 그대로 문서에 넣는다 — 다음
+              // onTiptapUpdate에서 model 검증이 뒤늦게 실패해 던지는
+              // TypeError가 어디서도 안 잡혀 uncaught exception이 된다(QA-078
+              // 회귀 발견). 원본이 이미 유효하면(가장 흔한 경우) 위임을
+              // 그대로 유지해 기존 단락 분리 동작을 안 건드리고, 무효
+              // 문자가 있을 때만 sanitize한 텍스트로 PM 자신의
+              // view.pasteText를 호출한다 — doPaste를 그대로 재사용해
+              // 네이티브와 같은 단락 분리를 유지하면서 무효 문자만 뺀다.
+              const sanitized = sanitizeInlineText(text);
+              if (sanitized === text) return false;
+              if (sanitized.length === 0) return true;
+              sanitizedPasteInFlight = true;
+              try {
+                view.pasteText(sanitized, event);
+              } finally {
+                sanitizedPasteInFlight = false;
+              }
               return true;
             };
 
