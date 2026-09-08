@@ -21,6 +21,7 @@
 | [`G-EDT-003`](./G-EDT-003-design-pm-block-node-schemas-and-group-fill-contracts.md) | PM 블록 노드 스키마·그룹 채움 계약 | PM 블록 노드 타입 신설, 비포장 그룹 멤버 추가, 스키마 그룹 참여 노드 추가·제거, 노드 priority 변경 |
 | [`G-UI-001`](./G-UI-001-build-dismissible-overlays.md) | dismissible overlay 구현 | 바깥 클릭·Escape로 닫는 UI 구현 |
 | [`G-UI-002`](./G-UI-002-key-reordered-ui-by-stable-id.md) | 재정렬 UI 식별자 | 안정 key를 가진 항목의 위치 변경·후속 이벤트 억제 |
+| [`G-UI-003`](./G-UI-003-make-anchor-overlays-natively-scrollable.md) | 앵커 오버레이 네이티브 스크롤 도달성 | hover·selection 기반 지속형 오버레이(앵커가 뷰포트 밖으로 나갈 수 있음) 구현·위치 계산 변경 |
 | [`G-CNV-001`](./G-CNV-001-centralize-canonicalization-and-validation.md) | 변환 경계 중앙화 | model·importer·core의 정규화·검증 변경 |
 | [`G-CNV-002`](./G-CNV-002-preserve-imported-meaning.md) | 외부 입력 의미 보존 | HTML·GFM importer·sanitize·warning 변경 |
 | [`G-TBL-001`](./G-TBL-001-use-logical-table-grid.md) | 논리 table 격자 | table model·변환·command·selection·overlay 변경 |

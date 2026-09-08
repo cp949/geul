@@ -19,3 +19,7 @@
 ## 검증
 
 [`G-TST-001`](./G-TST-001-test-overlays-and-keyboard-interactions.md)을 적용한다. 네 viewport 경계와 마지막 항목의 실제 클릭 가능성을 Chromium E2E에서 확인한다.
+
+## 경계
+
+이 가이드는 앵커(트리거)가 항상 뷰포트 안에 있다고 가정하는 dismissible overlay 전용이다. 앵커 자체가 뷰포트 밖으로 나갈 수 있는 hover·selection 기반 지속형 오버레이(표 핸들, 미디어 리사이즈 핸들 등)는 [`G-UI-003`](./G-UI-003-make-anchor-overlays-natively-scrollable.md)이 소유한다 — 이 가이드의 뷰포트 clamp를 그런 오버레이에 적용하지 않는다(앵커에서 분리돼 어떤 대상을 가리키는지 알 수 없어진다).
