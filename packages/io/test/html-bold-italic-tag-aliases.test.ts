@@ -19,10 +19,7 @@ describe("HTML b/i 태그의 bold/italic mark 인식", () => {
       {
         id: "html-1",
         type: "paragraph",
-        content: [
-          { text: "a " },
-          { text: "b", marks: [{ type: "bold" }] },
-        ],
+        content: [{ text: "a " }, { text: "b", marks: [{ type: "bold" }] }],
       },
     ]);
     expect(result.value.warnings).toEqual([]);
@@ -37,10 +34,7 @@ describe("HTML b/i 태그의 bold/italic mark 인식", () => {
       {
         id: "html-1",
         type: "paragraph",
-        content: [
-          { text: "a " },
-          { text: "b", marks: [{ type: "italic" }] },
-        ],
+        content: [{ text: "a " }, { text: "b", marks: [{ type: "italic" }] }],
       },
     ]);
     expect(result.value.warnings).toEqual([]);

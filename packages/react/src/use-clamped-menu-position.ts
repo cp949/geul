@@ -56,11 +56,7 @@ const LEFT_OF_ANCHOR_OFFSET_PX = LEFT_OF_ANCHOR_REM * ASSUMED_ROOT_FONT_SIZE_PX;
  *   골라 쓴다.
  */
 export type ClampAnchor =
-  | "topLeft"
-  | "centerAbove"
-  | "centerBelow"
-  | "leftOfAnchor"
-  | "aboveLeft";
+  "topLeft" | "centerAbove" | "centerBelow" | "leftOfAnchor" | "aboveLeft";
 
 type BoxOffset = { dx: number; dy: number };
 

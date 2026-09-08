@@ -105,9 +105,9 @@ describe("SCSS 빌드 파이프라인", () => {
 
   it("url 없는 media 블록에 실제 높이를 가진 빈 슬롯을 그린다(MED-001, QA-090 — 없으면 선택 해제 시 height:0으로 완전히 사라져 마우스로 재접근 불가)", () => {
     const css = compileCss();
-    const rule = /\.geul-editor \[data-geul-media-empty\] \{(?<body>[^}]*)\}/
-      .exec(css)
-      ?.groups?.body;
+    const rule =
+      /\.geul-editor \[data-geul-media-empty\] \{(?<body>[^}]*)\}/.exec(css)
+        ?.groups?.body;
 
     expect(rule).toBeDefined();
     expect(rule).toContain("box-sizing: border-box;");

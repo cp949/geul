@@ -101,18 +101,14 @@ describe("거터 hover 히스테리시스(dead-zone 회귀)", () => {
     const [block] = rendered.blocks;
     if (block === undefined) throw new Error("블록 요소가 없다");
     fireEvent.pointerMove(block);
-    expect(
-      screen.getByRole("button", { name: dragHandleLabel }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: dragHandleLabel })).toBeTruthy();
 
     // 블록(rect left 0) 왼쪽 30px, 세로는 블록 범위(0~20) 안 — 거터
     // 자체(entitySelector·ignoreSelectors 어느 쪽에도 안 걸림)로 가는
     // 도중의 빈 공간이다.
     fireEvent.pointerMove(document.body, { clientX: -30, clientY: 10 });
 
-    expect(
-      screen.getByRole("button", { name: dragHandleLabel }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: dragHandleLabel })).toBeTruthy();
   });
 
   it("여백을 완전히 벗어나면 거터가 사라진다(margin이 무한정은 아니다)", () => {
@@ -120,9 +116,7 @@ describe("거터 hover 히스테리시스(dead-zone 회귀)", () => {
     const [block] = rendered.blocks;
     if (block === undefined) throw new Error("블록 요소가 없다");
     fireEvent.pointerMove(block);
-    expect(
-      screen.getByRole("button", { name: dragHandleLabel }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: dragHandleLabel })).toBeTruthy();
 
     fireEvent.pointerMove(document.body, { clientX: -500, clientY: 10 });
 

@@ -121,9 +121,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
     // 아예 null이 되고 96/48 폴백 분기를 타 버려 실제 사용자가 겪는 경로(편집기에
     // 초점이 있는 채로 다른 블록의 + 버튼을 누르는 경우)를 재현하지 못한다.
     const original = HTMLElement.prototype.getBoundingClientRect;
-    HTMLElement.prototype.getBoundingClientRect = function (
-      this: HTMLElement,
-    ) {
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
       if (this.hasAttribute("data-placeholder")) {
         return {
           left: 42,

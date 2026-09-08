@@ -65,8 +65,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
   const { element } = useEditorMount();
-  const [hoverBlockId, hoverBlockIdRef, updateHoverBlockId] =
-    useMirroredState<string | null>(null);
+  const [hoverBlockId, hoverBlockIdRef, updateHoverBlockId] = useMirroredState<
+    string | null
+  >(null);
   const [dragState, dragStateRef, updateDragState] =
     useMirroredState<DragState | null>(null);
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState | null>(

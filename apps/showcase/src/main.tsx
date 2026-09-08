@@ -16,7 +16,9 @@ createRoot(root).render(
       <Routes>
         <Route element={<RootLayout routes={exampleRoutes} />} path="/">
           <Route
-            element={<Navigate replace to={`/examples/${defaultExamplePath}`} />}
+            element={
+              <Navigate replace to={`/examples/${defaultExamplePath}`} />
+            }
             index
           />
           {exampleRoutes.map(({ path, Page }) => (

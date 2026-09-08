@@ -189,9 +189,10 @@ describe("FilePanel 파일 패널", () => {
     });
     fireEvent.keyUp(document, { key: "o" });
 
-    expect(
-      screen.getByRole("textbox", { name: "Image URL" }),
-    ).toHaveProperty("value", "https://example.com/dir/photo.png");
+    expect(screen.getByRole("textbox", { name: "Image URL" })).toHaveProperty(
+      "value",
+      "https://example.com/dir/photo.png",
+    );
   });
 
   it("kind별로 URL 입력 라벨이 다르다", () => {
