@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 
+import CompositePage from "./examples/10-composite/page.js";
 import DocumentIoPage from "./examples/02-document-io/page.js";
 import DictionaryOverridePage from "./examples/09-dictionary-override/page.js";
 import EmojiPickerPage from "./examples/08-emoji-picker/page.js";
@@ -78,5 +79,11 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Dictionary override",
     group: "Media & Extras",
     Page: DictionaryOverridePage,
+  },
+  {
+    path: "composite",
+    label: "Kitchen sink",
+    group: "Composite",
+    Page: CompositePage,
   },
 ];
