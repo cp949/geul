@@ -32,11 +32,17 @@ export const setColumnStyleWidth = (
 // 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
 // useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프
 // 함수로 뽑았다 — 로직 자체는 그대로다.
+//
+// G-UI-003/ADR-0012: currentGeometry는 이제 page-relative다(readPageRect).
+// 호출부가 pointer 이벤트의 clientX/clientY(viewport-relative)를 그대로
+// 넘기면 스크롤된 페이지에서 좌표계가 어긋나 목표 인덱스가 틀린다 —
+// 파라미터명을 pageX/pageY로 못박아 호출부가 event.pageX/pageY(page-relative)를
+// 넘기게 강제한다.
 export const computeReorderTargetIndex = (
   element: HTMLElement,
   current: ReorderState,
-  clientX: number,
-  clientY: number,
+  pageX: number,
+  pageY: number,
 ): number | null => {
   const currentGeometry = readGeometryFor(element, current.tableBlockId);
   if (currentGeometry === null) return null;
@@ -44,13 +50,13 @@ export const computeReorderTargetIndex = (
   if (current.kind === "row") {
     const { rows } = currentGeometry;
     const targetIndex = rows.findIndex(
-      (row) => clientY < row.top + row.height / 2,
+      (row) => pageY < row.top + row.height / 2,
     );
     return targetIndex === -1 ? rows.length : targetIndex;
   }
   const { columns } = currentGeometry;
   const targetIndex = columns.findIndex(
-    (column) => clientX < column.left + column.width / 2,
+    (column) => pageX < column.left + column.width / 2,
   );
   return targetIndex === -1 ? columns.length : targetIndex;
 };
@@ -121,19 +127,35 @@ export type MenuPosition = {
 // 메뉴 좌표를 click 시점에 고정하지 않고 매 렌더 geometry에서 다시
 // 계산한다 — 열린 채로 스크롤/창 크기 변경이 일어나도 앵커(핸들)와
 // 어긋나지 않는다.
+//
+// G-UI-001과 G-UI-003의 경계: 이 메뉴(TableHandleMenu)는 오버레이 6종과
+// 달리 dismissible이라 G-UI-001 범위에 남는다 — position: fixed +
+// useClampedMenuPosition(뷰포트 기준 clamp)를 그대로 쓴다. 하지만
+// geometry는 이제 page-relative다(readPageRect) — fixed+clamp가 기대하는
+// viewport-relative로 되돌리려면 호출 시점 스크롤 오프셋을 다시 빼야
+// 한다. scrollOffset이 0,0(스크롤 없음)이면 기존 값과 동일하다.
 export const computeMenuPosition = (
   geometry: TableGeometry | null,
   menuState: HandleMenuState | null,
+  scrollOffset: { x: number; y: number },
 ): MenuPosition | null => {
   if (menuState === null || geometry === null) return null;
   if (menuState.kind === "row") {
     const row = geometry.rows.find((entry) => entry.index === menuState.index);
     return row === undefined
       ? null
-      : { left: geometry.left, top: row.top + row.height };
+      : {
+          left: geometry.left - scrollOffset.x,
+          top: row.top + row.height - scrollOffset.y,
+        };
   }
   const column = geometry.columns.find(
     (entry) => entry.index === menuState.index,
   );
-  return column === undefined ? null : { left: column.left, top: geometry.top };
+  return column === undefined
+    ? null
+    : {
+        left: column.left - scrollOffset.x,
+        top: geometry.top - scrollOffset.y,
+      };
 };

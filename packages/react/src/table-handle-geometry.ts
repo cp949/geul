@@ -18,6 +18,25 @@ export const findTable = (
 ): HTMLElement | null =>
   findElementByAttribute(element, "table", "data-geul-block-id", tableBlockId);
 
+// G-UI-003/ADR-0012: 오버레이 6종은 position: fixed(viewport-relative
+// getBoundingClientRect) 대신 absolute + page-relative 좌표를 쓴다 —
+// fixed는 앵커가 뷰포트 밖으로 나가면 네이티브 scrollIntoView·포커스
+// 스크롤·Playwright 자동스크롤을 전부 no-op으로 만든다(Issue #163). 이
+// 변환을 가장 낮은 판독 지점(getBoundingClientRect 호출부) 한 곳에 모아,
+// 그 위 레이어(readRowBoxes·readColumnBounds·readTableGeometry)는 좌표계를
+// 신경 쓰지 않고 "그 rect"를 그대로 쓰면 된다.
+export const readPageRect = (element: Element): DOMRect => {
+  const rect = element.getBoundingClientRect();
+  const view = element.ownerDocument.defaultView;
+  if (view === null) return rect;
+  return new DOMRect(
+    rect.x + view.scrollX,
+    rect.y + view.scrollY,
+    rect.width,
+    rect.height,
+  );
+};
+
 type RowGeometry = {
   rowId: string;
   index: number;
@@ -151,11 +170,11 @@ const readResizeSegments = (
 // 셀 수로 늘어나 10,000셀 표(spec 13)의 드래그 프레임을 잡아먹는다.
 const readRowBoxes = (rowElements: HTMLElement[]): RowBox[] =>
   rowElements.map((rowElement) => {
-    const rowRect = rowElement.getBoundingClientRect();
+    const rowRect = readPageRect(rowElement);
     const cells = Array.from(
       rowElement.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
     ).map((cellElement) => {
-      const rect = cellElement.getBoundingClientRect();
+      const rect = readPageRect(cellElement);
       return {
         columnId: cellElement.getAttribute("data-geul-column-id") ?? "",
         spansColumns: cellElement.hasAttribute("colspan"),
@@ -176,7 +195,7 @@ export const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
   const tableBlockId = table.getAttribute("data-geul-block-id");
   if (tableBlockId === null) return null;
 
-  const tableRect = table.getBoundingClientRect();
+  const tableRect = readPageRect(table);
   const rowBoxes = readRowBoxes(
     Array.from(table.querySelectorAll<HTMLElement>("[data-geul-row-id]")),
   );

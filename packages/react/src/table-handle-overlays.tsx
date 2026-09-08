@@ -94,7 +94,7 @@ export const TableHandleOverlays = ({
             )
           }
           style={{
-            position: "fixed",
+            position: "absolute",
             left: geometry.left - 24,
             top: row.top + row.height / 2 - 10,
           }}
@@ -126,7 +126,7 @@ export const TableHandleOverlays = ({
             )
           }
           style={{
-            position: "fixed",
+            position: "absolute",
             left: column.left + column.width / 2 - 10,
             top: geometry.top - 24,
           }}
@@ -161,7 +161,7 @@ export const TableHandleOverlays = ({
         label={dictionary.handle.addRow}
         onClick={onAddRow}
         style={{
-          position: "fixed",
+          position: "absolute",
           left: geometry.left + (geometry.right - geometry.left) / 2 - 10,
           top: geometry.bottom + 4,
         }}
@@ -173,7 +173,7 @@ export const TableHandleOverlays = ({
         label={dictionary.handle.addColumn}
         onClick={onAddColumn}
         style={{
-          position: "fixed",
+          position: "absolute",
           left: geometry.right + 4,
           top: geometry.top + (geometry.bottom - geometry.top) / 2 - 10,
         }}
@@ -181,8 +181,8 @@ export const TableHandleOverlays = ({
       {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
           row 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열
           중앙이라 더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md
-          "결정") — 새 clamp 로직 없이 기존 fixed 좌표 관용구를 그대로
-          쓴다(PIT-0011). */}
+          "결정") — 새 clamp 로직 없이 기존 absolute 좌표 관용구를 그대로
+          쓴다(PIT-0011, G-UI-003). */}
       <IconButton
         aria-disabled={canIndentTable ? "false" : "true"}
         className={nestingButtonClassName}
@@ -192,7 +192,7 @@ export const TableHandleOverlays = ({
         label={dictionary.handle.indentTable}
         onClick={onIndentTable}
         style={{
-          position: "fixed",
+          position: "absolute",
           left: geometry.left - 48,
           top: geometry.top - 24,
         }}
@@ -206,7 +206,7 @@ export const TableHandleOverlays = ({
         label={dictionary.handle.outdentTable}
         onClick={onOutdentTable}
         style={{
-          position: "fixed",
+          position: "absolute",
           left: geometry.left - 24,
           top: geometry.top - 24,
         }}

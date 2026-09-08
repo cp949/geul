@@ -17,7 +17,7 @@
  */
 
 import { serializeTableColumns } from "@cp949/geul-core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   readColumnBounds,
@@ -420,5 +420,66 @@ describe("readTableGeometry", () => {
       { rowId: "row-0", top: 100, height: 30 },
       { rowId: "row-1", top: 130, height: 30 },
     ]);
+  });
+
+  // G-UI-003/ADR-0012: 오버레이 6종이 position:fixed 대신 absolute +
+  // page-relative 좌표를 쓰려면, 이 계층(readTableGeometry)이 반환하는
+  // 좌표부터 getBoundingClientRect()(viewport-relative)가 아니라
+  // rect + window.scrollX/scrollY(page-relative)여야 한다. scrollX/Y를
+  // 되돌리지 않으면 다음 테스트가 오염되므로 afterEach로 0을 복원한다.
+  describe("페이지 스크롤 오프셋", () => {
+    afterEach(() => {
+      Object.defineProperty(window, "scrollX", {
+        configurable: true,
+        value: 0,
+      });
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        value: 0,
+      });
+    });
+
+    it("표·행·열 경계에 window.scrollX/scrollY를 더해 page-relative로 반환한다", () => {
+      Object.defineProperty(window, "scrollX", {
+        configurable: true,
+        value: 40,
+      });
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        value: 70,
+      });
+
+      const table = buildTable({
+        blockId: "table-1",
+        columnIds: ["col-0"],
+        rect: { left: 10, top: 20, width: 100, height: 30 },
+        rows: [
+          {
+            rowId: "row-0",
+            rect: { left: 10, top: 20, width: 100, height: 30 },
+            cells: [
+              {
+                columnId: "col-0",
+                rect: { left: 10, top: 20, width: 100, height: 30 },
+              },
+            ],
+          },
+        ],
+      });
+
+      const geometry = readTableGeometry(table);
+
+      // getBoundingClientRect 스텁은 그대로 (10, 20)이다 — scrollX/Y를
+      // 더하지 않는 원래 구현이면 아래 기대값(50, 90)이 아니라 (10, 20)이
+      // 나와 이 테스트가 실패한다.
+      expect(geometry).toMatchObject({
+        left: 50,
+        top: 90,
+        right: 150,
+        bottom: 120,
+      });
+      expect(geometry?.rows[0]).toMatchObject({ top: 90 });
+      expect(geometry?.columns[0]).toMatchObject({ left: 50 });
+    });
   });
 });

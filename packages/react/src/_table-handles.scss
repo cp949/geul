@@ -42,8 +42,11 @@
   }
 }
 
+// G-UI-003/ADR-0012: absolute + page-relative 좌표(table-handle-geometry.ts의
+// readPageRect) — fixed는 앵커가 뷰포트 밖으로 나가면 네이티브
+// scrollIntoView·포커스 스크롤을 no-op으로 만든다(Issue #163).
 .geul-table-resize-handle {
-  position: fixed;
+  position: absolute;
   z-index: 10;
   width: 0.25rem;
   touch-action: none;
@@ -52,7 +55,7 @@
 }
 
 .geul-table-reorder-guide {
-  position: fixed;
+  position: absolute;
   z-index: 10;
   background-color: var(--geul-color-accent, #1a73e8);
   pointer-events: none;

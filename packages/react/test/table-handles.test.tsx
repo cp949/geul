@@ -244,6 +244,29 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     expect(screen.queryByRole("button", { name: addRowLabel })).toBeNull();
   });
 
+  // G-UI-003/ADR-0012: 핸들 6종은 position: fixed를 쓰지 않는다 — fixed는
+  // 앵커가 뷰포트 밖으로 나가면 네이티브 scrollIntoView·Tab 포커스 스크롤을
+  // no-op으로 만든다(Issue #163). 여기서는 inline style로 뜨는 4종(행/열
+  // 핸들, Add row/column)만 확인한다 — 나머지 2종(resize-handle,
+  // reorder-guide)은 `_table-handles.scss` 클래스로 뜨는데 이 유닛 테스트
+  // 환경은 scss를 로드하지 않아 getComputedStyle로 못 잡는다(정적
+  // grep·e2e가 대신 확인, RD-002-DELTA-01.md 참고).
+  it("행/열 핸들과 Add row/column 버튼이 position: absolute로 뜬다", () => {
+    const { table } = renderRealTable();
+
+    fireEvent.pointerMove(table);
+
+    const positionOf = (selector: string) =>
+      document.querySelector<HTMLElement>(selector)?.style.position;
+
+    expect(positionOf("[data-geul-table-row-handle]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-column-handle]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-expand-row]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-expand-column]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-indent]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-outdent]")).toBe("absolute");
+  });
+
   it("표와 핸들 사이 여백으로 이동해도 핸들이 유지된다", () => {
     const { editable, table } = renderRealTable();
     fireEvent.pointerMove(table);

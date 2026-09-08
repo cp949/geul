@@ -9,6 +9,7 @@ import {
 import {
   findTable,
   readGeometryFor,
+  readPageRect,
   readTableColumnIds,
   type TableGeometry,
 } from "./table-handle-geometry.js";
@@ -138,28 +139,34 @@ export const TableHandles = () => {
       ? null
       : editor.getBlockNestingActionState(geometry.tableBlockId);
 
-  // 핸들은 position: fixed라 스크롤/창 크기 변경 시 pointermove 없이도
-  // 표와 어긋난다 — 재렌더를 강제해 geometry를 다시 읽는다.
+  // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
+  // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
+  // 없다. 창 크기 변경(반응형 레이아웃이 표 폭을 바꾸는 경우)만 geometry를
+  // 다시 읽어야 한다. 다만 행/열 메뉴(table-handle-menu.tsx)는 G-UI-001의
+  // position: fixed + 뷰포트 clamp를 그대로 쓰므로 스크롤할 때마다 다시
+  // 계산해야 앵커를 따라간다 — 메뉴가 열려 있을 때만 스크롤 리스너를 켠다.
   useEffect(() => {
     if (element === null || activeTableId === null) return;
     const ownerDocument = element.ownerDocument;
     const view = ownerDocument.defaultView;
     const refreshGeometry = () => setGeometryVersion((version) => version + 1);
 
-    ownerDocument.addEventListener("scroll", refreshGeometry, true);
     view?.addEventListener("resize", refreshGeometry);
+    if (menuState !== null) {
+      ownerDocument.addEventListener("scroll", refreshGeometry, true);
+    }
     return () => {
-      ownerDocument.removeEventListener("scroll", refreshGeometry, true);
       view?.removeEventListener("resize", refreshGeometry);
+      ownerDocument.removeEventListener("scroll", refreshGeometry, true);
     };
-  }, [element, activeTableId]);
+  }, [element, activeTableId, menuState]);
 
   // 위 geometry는 이 렌더 함수 본문에서 읽은 값이라, 같은 커밋에 딸려오는
   // DOM 변경(예: 표보다 앞선 형제가 줄바꿈으로 높이를 바꿔 표를 밀어내는
   // 경우, Issue #15)이 반영되기 전 레이아웃을 담는다 — React는 커밋을
   // 전부 적용한 뒤에야 브라우저가 레이아웃을 다시 계산하므로, 렌더 본문의
   // getBoundingClientRect는 항상 "이 렌더 이전" 위치다. 그 결과로 그려지는
-  // fixed 오버레이(특히 열 추가 버튼 data-geul-table-expand-column, 재정렬
+  // absolute 오버레이(특히 열 추가 버튼 data-geul-table-expand-column, 재정렬
   // 핸들)가 표 실제 경계와 최대 한 렌더만큼 어긋나, 실제 마지막 열 셀
   // 클릭을 가로챌 수 있다. commit 직후(useLayoutEffect는 paint 전에
   // 동기로 flush된다)에 표의 실제 경계를 다시 재서 달라지면 한 번 더
@@ -187,7 +194,11 @@ export const TableHandles = () => {
     }
     const table = findTable(element, activeTableId);
     if (table === null) return;
-    const rect = table.getBoundingClientRect();
+    // geometry는 이제 page-relative다(readPageRect) — 여기도 같은 변환을
+    // 거쳐야 두 값이 같은 좌표계에서 비교된다. getBoundingClientRect()를
+    // 그대로 비교하면 스크롤이 있는 페이지에서 항상 불일치로 판정돼 이
+    // 이펙트가 매 렌더마다 setGeometryVersion을 올리는 무한 재렌더가 된다.
+    const rect = readPageRect(table);
     if (
       rect.left === geometry.left &&
       rect.top === geometry.top &&
@@ -206,11 +217,14 @@ export const TableHandles = () => {
       if (element === null) return;
       const current = reorderStateRef.current;
       if (current === null) return;
+      // page-relative geometry와 같은 좌표계로 비교해야 한다(G-UI-003) —
+      // clientX/clientY(viewport-relative)를 넘기면 스크롤된 페이지에서
+      // 목표 인덱스가 어긋난다.
       const targetIndex = computeReorderTargetIndex(
         element,
         current,
-        event.clientX,
-        event.clientY,
+        event.pageX,
+        event.pageY,
       );
       updateReorderState({ ...current, hasDragged: true, targetIndex });
     },
@@ -557,8 +571,14 @@ export const TableHandles = () => {
 
   // 메뉴 좌표를 click 시점에 고정하면 연 채로 스크롤/창 크기 변경 시
   // 앵커(핸들)와 어긋난다 — 핸들 자신처럼 매 렌더마다 geometry에서 다시
-  // 계산한다(geometry는 scroll/resize 시 geometryVersion을 통해 갱신된다).
-  const menuPosition = computeMenuPosition(geometry, menuState);
+  // 계산한다(geometry는 resize·메뉴가 열린 동안의 scroll 시
+  // geometryVersion을 통해 갱신된다). 메뉴는 G-UI-001의 fixed+clamp를
+  // 그대로 쓰므로 page-relative geometry를 다시 viewport-relative로
+  // 되돌리는 스크롤 오프셋을 함께 넘긴다.
+  const menuPosition = computeMenuPosition(geometry, menuState, {
+    x: element?.ownerDocument.defaultView?.scrollX ?? 0,
+    y: element?.ownerDocument.defaultView?.scrollY ?? 0,
+  });
 
   return (
     <>
