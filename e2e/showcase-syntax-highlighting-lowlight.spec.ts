@@ -7,33 +7,25 @@
  * 라우팅(react-router `BrowserRouter`)이라 example별로 직접
  * `page.goto()`할 수 있다.
  *
- * 페이지 이동 helper를 이 파일에 인라인한다 — `G-TST-002`의 적용 조건(두
- * 번째 테스트 파일이 같은 helper를 씀)이 아직 성립하지 않는다(이 파일이
- * 최초의 example별 spec). 두 번째 example spec(RD-003 DELTA-02)이 생기면
- * 공용화 여부를 그때 판단한다.
+ * 페이지 이동 로직은 `e2e/support/showcase.ts`의 `openShowcaseExample`이
+ * 소유한다 — 이 파일이 처음 인라인으로 갖고 있었으나, 두 번째 example
+ * spec(shiki, RD-003-DELTA-02)이 추가되며 `G-TST-002` 적용 조건이
+ * 성립해 공용화됐다.
  */
 import { expect, test } from "@playwright/test";
 
-// `playwright.config.ts`의 `use.baseURL`은 apps/demo(5173) 고정이다.
-// showcase는 별도 포트(5174, apps/showcase/vite.config.ts)라 전체 URL을
-// 그대로 쓴다.
-const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
-
-const SAMPLE_SOURCE = `function greet(name) {
-  // Says hello
-  const greeting = \`Hello, \${name}!\`;
-  return greeting.toUpperCase();
-}
-
-console.log(greet("Geul"));`;
+import {
+  openShowcaseExample,
+  SYNTAX_HIGHLIGHTING_SAMPLE_SOURCE as SAMPLE_SOURCE,
+} from "./support/showcase.js";
 
 test("lowlight 예제는 코드 블록에 highlight.js token class를 렌더하고 source 텍스트를 바꾸지 않는다", async ({
   page,
 }) => {
-  await page.goto(`${SHOWCASE_BASE_URL}/examples/syntax-highlighting-lowlight`);
-
-  const code = page.locator("pre[data-geul-code-block] code");
-  await expect(code).toBeVisible();
+  const code = await openShowcaseExample(
+    page,
+    "/examples/syntax-highlighting-lowlight",
+  );
 
   // spec §4 — 강조는 텍스트를 바꾸지 않는다. 줄바꿈 렌더 차이를 피하려고
   // 공백을 정규화해 비교한다(ProseMirror가 텍스트 자체를 바꾸지 않는다는

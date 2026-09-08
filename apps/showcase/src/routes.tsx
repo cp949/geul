@@ -11,6 +11,7 @@ import MediaPage from "./examples/07-media/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 import SlashMenuPage from "./examples/05-slash-menu/page.js";
 import SyntaxHighlightingLowlightPage from "./examples/10-syntax-highlighting-lowlight/page.js";
+import SyntaxHighlightingShikiPage from "./examples/11-syntax-highlighting-shiki/page.js";
 
 export type ExampleRouteGroup =
   | "Basics"
@@ -94,6 +95,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Syntax highlighting (lowlight)",
     group: "Syntax Highlighting",
     Page: SyntaxHighlightingLowlightPage,
+  },
+  {
+    path: "syntax-highlighting-shiki",
+    label: "Syntax highlighting (shiki)",
+    group: "Syntax Highlighting",
+    Page: SyntaxHighlightingShikiPage,
   },
 ];
 
