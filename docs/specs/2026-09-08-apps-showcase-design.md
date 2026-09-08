@@ -48,7 +48,7 @@ apps/showcase/
       07-media/
       08-emoji-picker/
       09-dictionary-override/
-      10-composite/
+      00-composite/
   vite.config.ts
   package.json              # name: "@cp949/geul-showcase" (apps/demo의 "@cp949/geul-demo" 네이밍 패턴)
   tsconfig.json            # references: packages/react, packages/model. types: ["vite/client"](?raw 타입)
@@ -61,7 +61,7 @@ apps/showcase/
 
 ## 4. 예제 목록과 진행 순서
 
-`@cp949/geul-react` 공개 표면 10개 항목을 단순 -> 복잡 순으로 1:1 매핑한다. 각 단계는 그 단계가 보여주려는 표면에 실제로 필요한 컴포넌트만 장착한다 — 이전 단계의 컴포넌트는 지금 단계가 기능적으로 의존할 때만 유지한다(예: File panel은 SlashMenu로 미디어 placeholder 블록을 만들어야 열리므로 SlashMenu를 유지하지만, 관련 없는 FormattingToolbar/LinkToolbar까지 안고 갈 필요는 없다). 모든 표면을 한 번에 다 얹는 "전부 누적"은 10번 Kitchen sink 하나가 전담한다 — 그 앞 9개를 전부 이해하고 나서 봐야 이해되는 문서를 매 단계 반복하지 않기 위해서다(2026-09-08 구현 중 확정, 초안의 "각 단계는 이전 단계에 컴포넌트 하나만 더한다"는 이 의도를 정확히 담지 못해 정정).
+`@cp949/geul-react` 공개 표면 10개 항목을 단순 -> 복잡 순으로 1:1 매핑한다. 각 단계는 그 단계가 보여주려는 표면에 실제로 필요한 컴포넌트만 장착한다 — 이전 단계의 컴포넌트는 지금 단계가 기능적으로 의존할 때만 유지한다(예: File panel은 SlashMenu로 미디어 placeholder 블록을 만들어야 열리므로 SlashMenu를 유지하지만, 관련 없는 FormattingToolbar/LinkToolbar까지 안고 갈 필요는 없다). 모든 표면을 한 번에 다 얹는 "전부 누적"은 Example 0 Kitchen sink 하나가 전담한다 — 그 뒤 1~9번을 전부 이해하고 나서 봐야 이해되는 문서를 매 단계 반복하지 않기 위해서다. Kitchen sink는 대표 예제이므로 Example 0과 사이드바 최상단에 고정한다. 이후 개별 예제 추가는 Kitchen sink의 번호와 위치에 영향을 주지 않는다(2026-09-08 구현 중 확정, 초안의 "각 단계는 이전 단계에 컴포넌트 하나만 더한다"는 이 의도를 정확히 담지 못해 정정).
 
 | # | 예제 | 새로 추가되는 표면 | 비고 |
 |---|------|------|------|
@@ -74,9 +74,9 @@ apps/showcase/
 | 7 | Media | `MediaToolbar` + `MediaResizeHandles` | 업로드는 `apps/demo`의 `demoUploadFile`(app.tsx) mock 패턴 재사용 — 파일명 기반 성공/실패 결정적 분기 |
 | 8 | Emoji picker | `EmojiPicker` | |
 | 9 | Dictionary override | `useDictionary` | `color.*`/`menu.*`/`slashMenu.*`/`blockType.*` 네임스페이스(EXT-009) 실사용 예 |
-| 10 | 전체 조합(Kitchen sink) | 위 전부 동시 장착 | `apps/demo`의 현재 구성과 동급 |
+| 0 | 전체 조합(Kitchen sink) | 위 전부 동시 장착 | 대표 예제. `apps/demo`의 현재 구성과 동급 |
 
-사이드바는 이 순번을 4개 섹션으로 묶어 표시한다: **Basics**(1-2) / **Toolbars & Menus**(3-6) / **Media & Extras**(7-9) / **Composite**(10).
+사이드바는 이 순번을 4개 섹션으로 묶어 표시한다: **Composite**(0) / **Basics**(1-2) / **Toolbars & Menus**(3-6) / **Media & Extras**(7-9). Composite는 최상단에 고정한다.
 
 관찰 가능한 상태(문서 revision, 에러/경고, 사용자 조작의 성공·실패 결과 등)를 만들어내는 예제는 그 상태를 화면에 노출한다 — 에이전트가 상호작용 결과를 브라우저에서 관찰할 수 있어야 한다는 §1의 목적 3을 만족하기 위한 작성 규칙이다. `EditorProvider`+`EditorContent`만으로 끝나는 순수 렌더 예제(예: Minimal editor)처럼 애초에 노출할 상태가 없는 경우까지 인위적인 상태 표시를 얹지 않는다 — 이 규칙은 "상태가 있으면 숨기지 않는다"이지 "모든 예제에 상태 표시 UI를 붙인다"가 아니다(2026-09-08 구현 중 정정).
 

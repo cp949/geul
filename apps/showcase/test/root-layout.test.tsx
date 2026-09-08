@@ -14,11 +14,30 @@ import { RootLayout } from "../src/root-layout.js";
 afterEach(cleanup);
 
 const fixtureRoutes = [
+  { path: "composite", label: "Kitchen sink", group: "Composite" as const },
   { path: "alpha", label: "Alpha", group: "Basics" as const },
   { path: "beta", label: "Beta", group: "Toolbars & Menus" as const },
 ];
 
 describe("RootLayout", () => {
+  it("Composite 그룹을 사이드바 최상단에 배치한다", () => {
+    render(
+      <MemoryRouter initialEntries={["/examples/composite"]}>
+        <Routes>
+          <Route element={<RootLayout routes={fixtureRoutes} />} path="/">
+            <Route
+              element={<p>Kitchen sink content</p>}
+              path="examples/composite"
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole("heading")[0]?.textContent).toBe("Composite");
+    expect(screen.getByRole("link", { name: "Kitchen sink" })).toBeTruthy();
+  });
+
   it("그룹별로 사이드바 메뉴를 렌더링하고 현재 라우트 콘텐츠를 보여준다", () => {
     render(
       <MemoryRouter initialEntries={["/examples/alpha"]}>

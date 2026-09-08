@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import CompositePage from "./examples/10-composite/page.js";
+import CompositePage from "./examples/00-composite/page.js";
 import DocumentIoPage from "./examples/02-document-io/page.js";
 import DictionaryOverridePage from "./examples/09-dictionary-override/page.js";
 import EmojiPickerPage from "./examples/08-emoji-picker/page.js";
@@ -21,8 +21,15 @@ export type ExampleRoute = {
   Page: ComponentType;
 };
 
-// Task 4~13이 항목을 하나씩 append한다. 순서가 곧 사이드바 표시 순서다.
+// Kitchen sink는 Example 0 대표 예제다. 이후 개별 예제를 추가해도 첫 위치를 유지한다.
+// 순서가 곧 사이드바 표시 순서다.
 export const exampleRoutes: readonly ExampleRoute[] = [
+  {
+    path: "composite",
+    label: "Kitchen sink",
+    group: "Composite",
+    Page: CompositePage,
+  },
   {
     path: "minimal-editor",
     label: "Minimal editor",
@@ -76,12 +83,6 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Dictionary override",
     group: "Media & Extras",
     Page: DictionaryOverridePage,
-  },
-  {
-    path: "composite",
-    label: "Kitchen sink",
-    group: "Composite",
-    Page: CompositePage,
   },
 ];
 

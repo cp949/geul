@@ -4,10 +4,10 @@ import styles from "./root-layout.module.css";
 import type { ExampleRoute, ExampleRouteGroup } from "./routes.js";
 
 const GROUP_ORDER: readonly ExampleRouteGroup[] = [
+  "Composite",
   "Basics",
   "Toolbars & Menus",
   "Media & Extras",
-  "Composite",
 ];
 
 type RootLayoutRoute = Pick<ExampleRoute, "path" | "label" | "group">;

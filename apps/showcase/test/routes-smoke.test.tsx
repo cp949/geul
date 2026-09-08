@@ -22,9 +22,13 @@ describe("exampleRoutes 전체 스모크", () => {
   it("기본 화면 경로가 Kitchen sink(composite)를 가리킨다", () => {
     expect(defaultExamplePath).toBe("composite");
     expect(
-      exampleRoutes.find((route) => route.path === defaultExamplePath)
-        ?.label,
+      exampleRoutes.find((route) => route.path === defaultExamplePath)?.label,
     ).toBe("Kitchen sink");
+  });
+
+  it("Kitchen sink를 Example 0으로 첫 번째에 등록한다", () => {
+    expect(exampleRoutes[0]?.path).toBe("composite");
+    expect(exampleRoutes[0]?.label).toBe("Kitchen sink");
   });
 
   it("모든 예제 경로가 서로 다르다", () => {

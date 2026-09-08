@@ -7,7 +7,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import CompositePage from "../../src/examples/10-composite/page.js";
+import CompositePage from "../../src/examples/00-composite/page.js";
 
 afterEach(cleanup);
 
