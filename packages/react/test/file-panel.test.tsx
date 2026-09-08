@@ -154,6 +154,46 @@ describe("FilePanel 파일 패널", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("패널이 열린 뒤 대상 블록이 사라지면(undo 등) 다음 재관측에서 패널이 닫힌다", () => {
+    // QA-067 — undo로 빈 미디어 블록이 사라져 selection이 더 이상
+    // NodeSelection이 아니게 된 뒤에도(getSelectionMediaBlock이 null을
+    // 반환) 패널이 열린 채로 멈춰 있던 결함의 회귀 테스트. 키보드만으로
+    // undo하면 마우스 아웃사이드 클릭·Escape가 없어 editingRef가 영영
+    // true로 굳어버렸다 — keyup(예: ctrl+z의 keyup)만으로도 재관측이
+    // 실제로 갱신돼야 한다.
+    let selectionMediaBlock: SelectionMediaBlock | null = emptyImageBlock;
+    const controller = fakeController({
+      getSelectionMediaBlock: () => selectionMediaBlock,
+    });
+    renderPanel(controller);
+    expect(screen.getByRole("toolbar", { name: "File panel" })).not.toBeNull();
+
+    selectionMediaBlock = null;
+    fireEvent.keyUp(document, { key: "z", ctrlKey: true });
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("이미 같은 블록에 열려 있으면 재관측이 입력 중인 draft를 지우지 않는다", () => {
+    // 위 회귀 테스트의 반대편 계약 — 같은 블록에 대해 selection이 계속
+    // NodeSelection으로 재관측돼도(타이핑 중 keyup 등) 이미 입력 중인
+    // draft·activeTab 등 로컬 상태를 되돌리면 안 된다.
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+
+    const input = screen.getByRole("textbox", { name: "Image URL" });
+    fireEvent.change(input, {
+      target: { value: "https://example.com/dir/photo.png" },
+    });
+    fireEvent.keyUp(document, { key: "o" });
+
+    expect(
+      screen.getByRole("textbox", { name: "Image URL" }),
+    ).toHaveProperty("value", "https://example.com/dir/photo.png");
+  });
+
   it("kind별로 URL 입력 라벨이 다르다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => ({ ...emptyImageBlock, kind: "video" }),

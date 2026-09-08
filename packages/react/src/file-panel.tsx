@@ -80,10 +80,16 @@ export const FilePanel = ({
   const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [panelState, setPanelState] = useState<PanelState>({ mode: "closed" });
-  // 패널이 열려 있는 동안(항상 "입력 중" 상태다 — url 없는 블록에서만
-  // 열리므로 LinkToolbar의 "view" 모드에 해당하는 상태가 없다) 재유도를
-  // 막는다. 그러지 않으면 입력창에 타이핑하며 발생하는 selectionchange(초점
-  // 이동)가 draft를 지운다(link-toolbar.tsx의 editingRef와 같은 이유).
+  // dismissPanel 직후의 재오픈 경합(아래 dismissedBlockIdRef 주석)에서만
+  // 쓴다 — link-toolbar.tsx와 달리 이 컴포넌트는 "열려 있는 동안 전부
+  // 재관측을 억제"하지 않는다(예전엔 그렇게 했다가 QA-067에서 회귀로
+  // 드러났다: undo로 블록이 사라져도 재관측이 영영 억제돼 패널이 고아
+  // 상태로 남았다 — 키보드만 쓰는 undo에는 dismissPanel을 타는 outside-
+  // click/Escape가 없어 억제가 풀릴 계기가 없었다). 입력창 타이핑 중
+  // selectionchange가 draft를 지우는 문제는 아래 open 분기의 멱등성
+  // (같은 blockId면 상태를 새로 만들지 않고 그대로 반환)으로 대신
+  // 막는다 — 재관측 자체를 막지 않고, 관측 결과가 "달라지지 않았다"를
+  // 직접 판정한다.
   const editingRef = useRef(false);
   // dismissPanel이 방금 닫은 blockId를 적어 둔다. 닫는 시점엔 PM selection
   // 자체가 안 바뀌므로(핵심 core state가 아니라 이 컴포넌트의 로컬
@@ -104,7 +110,9 @@ export const FilePanel = ({
     if (element === null) {
       openBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
-      setPanelState({ mode: "closed" });
+      setPanelState((prev) =>
+        prev.mode === "closed" ? prev : { mode: "closed" },
+      );
       return;
     }
 
@@ -114,13 +122,14 @@ export const FilePanel = ({
       // 다음에 다시 이 blockId로 돌아오면 다시 열려야 하므로 잊는다.
       openBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
-      setPanelState({ mode: "closed" });
+      setPanelState((prev) =>
+        prev.mode === "closed" ? prev : { mode: "closed" },
+      );
       return;
     }
     if (dismissedBlockIdRef.current === media.blockId) return;
 
     openBlockIdRef.current = media.blockId;
-    editingRef.current = true;
     const bounds =
       readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
     // Upload 탭 초깃값 시딩(RD-003-DELTA-02.md "결정" 5) — 이전에 이
@@ -136,18 +145,26 @@ export const FilePanel = ({
         : pending === null
           ? { status: "idle" }
           : { status: "error", code: pending.code, message: pending.message };
-    setPanelState({
-      mode: "open",
-      blockId: media.blockId,
-      kind: media.kind,
-      draft: "",
-      rejected: false,
-      appliedName: null,
-      activeTab: "embed",
-      upload,
-      heldFile: null,
-      left: bounds.left,
-      top: bounds.top,
+    setPanelState((prev) => {
+      // 이미 같은 블록에 열려 있다 — draft/activeTab/heldFile 등 진행
+      // 중인 로컬 상태를 재관측이 되돌리면 안 된다(QA-067, 위 editingRef
+      // 주석 참고). bounds/upload는 이미 계산했지만 버린다 — 매 재관측마다
+      // 다시 구하는 비용은 다른 selection 기반 컴포넌트(formatting-
+      // toolbar.tsx 등)와 같은 수준이라 특별히 아끼지 않는다.
+      if (prev.mode === "open" && prev.blockId === media.blockId) return prev;
+      return {
+        mode: "open",
+        blockId: media.blockId,
+        kind: media.kind,
+        draft: "",
+        rejected: false,
+        appliedName: null,
+        activeTab: "embed",
+        upload,
+        heldFile: null,
+        left: bounds.left,
+        top: bounds.top,
+      };
     });
   }, [editor, element]);
 
