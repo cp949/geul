@@ -451,6 +451,69 @@ test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 �
   await expect(lastCell).not.toHaveCSS("text-align", "center");
 });
 
+/**
+ * Issue #163 RD-001 DELTA-01: `preserveFocusOnMouseDown`(icon-button.tsx)이
+ * 마우스로는 오버레이 버튼에 초점을 주지 않으므로, 뷰포트 밖으로 밀려난
+ * Add row 버튼(`[data-geul-table-expand-row]`, position: fixed)의 유일한
+ * 정상 키보드 진입 경로는 Tab이다. 표를 뷰포트보다 키워 버튼을 화면 밖에
+ * 둔 뒤 실제 `Tab` keydown 1회로 그 버튼 바로 앞 tab 순서 요소(마지막 열
+ * 핸들)에서 이동시켜, 초점 이동·scrollY 변화·bounding box 위치를
+ * 실측한다(가설이 아니라 재현 확인이 목적이라 assertion은 아래 실측값을
+ * 그대로 고정한다).
+ */
+test("뷰포트 밖으로 밀려난 표 확장 버튼은 키보드 Tab 포커스만으로 도달해도 화면 밖에 남는다 (Issue #163 RD-001 재현 확인)", async ({
+  page,
+}) => {
+  const { table } = await openDemoWithTable(page);
+  await growTableTo11Rows(page, table);
+
+  // growTableTo11Rows는 매 클릭 전 scrollIntoViewportBounds로 스크롤을
+  // 보정하며 진행하므로, 끝난 시점의 scrollY는 0이 아니다 — 맨 위로
+  // 되돌려야 Add row 버튼이 뷰포트 아래로 밀려난 상태를 만들 수 있다.
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  // 확장 버튼은 표 hover 중에만 렌더된다. 첫 셀은 맨 위라 스크롤 없이
+  // hover할 수 있어야 하지만, Playwright의 자동 스크롤이 개입할 수 있어
+  // hover 직후 다시 맨 위로 보정한다(실측: 이 보정이 실제로 필요했다 —
+  // hover 자체가 스크롤을 유발하지는 않았지만 방어적으로 유지한다).
+  await table.locator("td").first().hover();
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  const addRowButton = page.locator("[data-geul-table-expand-row]");
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+
+  // sanity check: setup이 의도대로 버튼을 뷰포트 밖에 뒀는지 사전 확인한다.
+  // 이게 깨지면 테스트 설계 자체가 틀린 것이다.
+  const initialBox = await addRowButton.boundingBox();
+  expect(initialBox === null || initialBox.y >= (viewport?.height ?? 0)).toBe(
+    true,
+  );
+
+  // Add row 버튼보다 DOM/tab 순서상 바로 앞에 오는 tabbable 요소(마지막
+  // 열 핸들)에 프로그래밍 방식으로 초점을 둔다 — 이 자체는 setup이지
+  // 검증 대상이 아니다.
+  await page.locator("[data-geul-table-column-handle]").last().focus();
+
+  const scrollYBefore = await page.evaluate(() => window.scrollY);
+
+  await page.keyboard.press("Tab");
+
+  // 실측 1: 초점이 실제로 Add row 버튼까지 이동한다.
+  await expect(addRowButton).toBeFocused();
+
+  // 실측 2: Tab 이후에도 scrollY는 바뀌지 않는다 — 브라우저가 fixed
+  // 요소를 스크롤로 뷰포트 안에 넣어주지 않는다(네이티브
+  // `Element.scrollIntoView()`가 fixed에 no-op이라는 기존 실측과 같은
+  // 결과).
+  const scrollYAfter = await page.evaluate(() => window.scrollY);
+  expect(scrollYAfter).toBe(scrollYBefore);
+
+  // 실측 3: 버튼은 초점을 받은 뒤에도 여전히 뷰포트 밖에 남는다.
+  const boxAfter = await addRowButton.boundingBox();
+  expect(boxAfter === null || boxAfter.y >= (viewport?.height ?? 0)).toBe(true);
+});
+
 test("표 상단 행에서 셀을 선택해도 Table selection 툴바가 화면 안에서 Cell formatting 버튼까지 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
