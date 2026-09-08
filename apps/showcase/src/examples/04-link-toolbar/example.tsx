@@ -24,7 +24,7 @@ const LinkToolbarPanel = () => {
 
   return (
     <div>
-      <div role="toolbar">
+      <div aria-label="Link actions" role="toolbar">
         <button onClick={addLink} type="button">
           선택한 텍스트에 링크 추가
         </button>

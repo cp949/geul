@@ -18,14 +18,14 @@ const DocumentPanel = () => {
   }, [editor]);
 
   const handleImport = useCallback(() => {
-    let document: unknown;
+    let parsedDocument: unknown;
     try {
-      document = JSON.parse(json);
+      parsedDocument = JSON.parse(json);
     } catch {
       setStatus("Invalid JSON.");
       return;
     }
-    const result = editor.replaceDocument(document);
+    const result = editor.replaceDocument(parsedDocument);
     setStatus(
       result.ok
         ? "Imported."
@@ -37,7 +37,7 @@ const DocumentPanel = () => {
 
   return (
     <div>
-      <div role="toolbar">
+      <div aria-label="Document actions" role="toolbar">
         <button onClick={handleExport} type="button">
           Export JSON
         </button>
@@ -61,9 +61,7 @@ const DocumentIoExample = () => {
     createEmptyDocument(() => "showcase-document-io-block-1"),
   );
   const [revision, setRevision] = useState(initialDocument.revision);
-  const [changedBlockIds, setChangedBlockIds] = useState<
-    readonly string[]
-  >([]);
+  const [changedBlockIds, setChangedBlockIds] = useState<readonly string[]>([]);
   const onChange = useCallback((event: DocumentChangeEvent) => {
     setRevision(event.revision);
     setChangedBlockIds(event.changedBlockIds);

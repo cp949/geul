@@ -11,8 +11,9 @@ import {
 import { useState } from "react";
 
 // showcase 전용 mock — apps/demo의 demoUploadFile과 같은 기법(파일명에
-// "reject" 포함 시 실패, 그 외 성공)을 독립적으로 재구현한다. 앱 간에는
-// 코드를 공유하지 않는다(ADR-0002, apps는 각자 react/model만 의존).
+// "reject" 포함 시 실패, 그 외 성공)을 독립적으로 재구현한다. 소스
+// 패널이 이 파일을 ?raw로 그대로 보여주므로(스펙 §5) 외부 헬퍼를 import
+// 하면 mock 로직 자체가 소스 패널에서 안 보인다 — 자기완결적이어야 한다.
 const SHOWCASE_UPLOAD_DELAY_MS = 300;
 
 const showcaseUploadFile: CreateEditorOptions["uploadFile"] = (

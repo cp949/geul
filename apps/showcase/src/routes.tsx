@@ -12,10 +12,7 @@ import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 import SlashMenuPage from "./examples/05-slash-menu/page.js";
 
 export type ExampleRouteGroup =
-  | "Basics"
-  | "Toolbars & Menus"
-  | "Media & Extras"
-  | "Composite";
+  "Basics" | "Toolbars & Menus" | "Media & Extras" | "Composite";
 
 export type ExampleRoute = {
   path: string;

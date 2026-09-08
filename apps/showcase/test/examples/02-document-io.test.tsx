@@ -20,10 +20,9 @@ describe("Document 읽기/쓰기 예제", () => {
     await user.click(screen.getByRole("button", { name: "Export JSON" }));
 
     await waitFor(() => {
-      const textarea = screen.getByLabelText<HTMLTextAreaElement>(
-        "Document JSON",
-      );
-      expect(textarea.value).toContain("\"revision\"");
+      const textarea =
+        screen.getByLabelText<HTMLTextAreaElement>("Document JSON");
+      expect(textarea.value).toContain('"revision"');
     });
   });
 });

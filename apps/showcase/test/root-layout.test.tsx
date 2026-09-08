@@ -31,9 +31,7 @@ describe("RootLayout", () => {
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByRole("heading", { name: "Basics" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Basics" })).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Toolbars & Menus" }),
     ).toBeTruthy();

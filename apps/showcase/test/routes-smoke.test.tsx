@@ -19,6 +19,10 @@ describe("exampleRoutes 전체 스모크", () => {
     expect(exampleRoutes).toHaveLength(10);
   });
 
+  it("모든 예제 경로가 서로 다르다", () => {
+    expect(new Set(exampleRoutes.map((route) => route.path)).size).toBe(10);
+  });
+
   it.each(exampleRoutes.map((route) => [route.path, route.Page] as const))(
     "%s 라우트가 크래시 없이 렌더링된다",
     async (path, Page) => {

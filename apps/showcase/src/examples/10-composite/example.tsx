@@ -13,6 +13,7 @@ import {
 } from "@cp949/geul-react";
 import { useState } from "react";
 
+// 07-media/example.tsx와 동일 이유 — 소스 패널 자기완결성(스펙 §5).
 const COMPOSITE_UPLOAD_DELAY_MS = 300;
 
 const compositeUploadFile: CreateEditorOptions["uploadFile"] = (

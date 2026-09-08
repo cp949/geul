@@ -41,7 +41,11 @@ export default [
     // ref-during-render·effect 내부 setState 패턴을 대량으로 어긋난 것으로
     // 표시하는데, 고치려면 컴포넌트 로직 자체를 바꿔야 해서 biome→eslint
     // 도구 교체 범위를 벗어난다. 전통적인 hooks 규칙 두 개만 켠다.
-    files: ["packages/react/**/*.{ts,tsx}", "apps/demo/**/*.{ts,tsx}"],
+    files: [
+      "packages/react/**/*.{ts,tsx}",
+      "apps/demo/**/*.{ts,tsx}",
+      "apps/showcase/**/*.{ts,tsx}",
+    ],
     plugins: {
       "react-hooks": reactHooks,
     },

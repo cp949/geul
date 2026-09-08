@@ -16,14 +16,16 @@ afterEach(cleanup);
 describe("ExamplePage", () => {
   it("제목·설명·라이브 데모·소스코드를 함께 렌더링한다", () => {
     render(
-      <ExamplePage description="설명 텍스트" source="const x = 1;" title="예제 제목">
+      <ExamplePage
+        description="설명 텍스트"
+        source="const x = 1;"
+        title="예제 제목"
+      >
         <p>라이브 데모 내용</p>
       </ExamplePage>,
     );
 
-    expect(
-      screen.getByRole("heading", { name: "예제 제목" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "예제 제목" })).toBeTruthy();
     expect(screen.getByText("설명 텍스트")).toBeTruthy();
     expect(screen.getByText("라이브 데모 내용")).toBeTruthy();
     expect(screen.getByLabelText("소스코드").textContent).toContain(

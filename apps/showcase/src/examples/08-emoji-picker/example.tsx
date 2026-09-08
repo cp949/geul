@@ -1,9 +1,5 @@
 import { createEmptyDocument } from "@cp949/geul-model";
-import {
-  EditorContent,
-  EditorProvider,
-  EmojiPicker,
-} from "@cp949/geul-react";
+import { EditorContent, EditorProvider, EmojiPicker } from "@cp949/geul-react";
 import { useState } from "react";
 
 const EmojiPickerExample = () => {
