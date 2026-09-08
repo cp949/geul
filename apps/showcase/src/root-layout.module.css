@@ -1,0 +1,56 @@
+.shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #111827;
+  color: #f9fafb;
+  padding: 1.5rem 1rem;
+  overflow-y: auto;
+}
+
+.brand {
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+}
+
+.group {
+  margin-bottom: 1.5rem;
+}
+
+.groupTitle {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  margin: 0 0 0.5rem;
+}
+
+.groupList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.link {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.linkActive {
+  composes: link;
+  background: #374151;
+  font-weight: 600;
+}
+
+.content {
+  overflow-y: auto;
+}
