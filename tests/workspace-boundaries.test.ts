@@ -106,6 +106,7 @@ const allowedDependencies = {
       "@tiptap/core": "3.30.1",
       "@tiptap/pm": "3.30.1",
       "@tiptap/starter-kit": "3.30.1",
+      "prosemirror-highlight": "0.16.0",
     },
     devDependencies: { "@types/node": "22.20.1" },
     peerDependencies: {},
