@@ -558,3 +558,50 @@ describe("EditorProvider — attributeOverrides(EXT-008)", () => {
     expect(group?.getAttribute("data-consumer-group")).toBe("yes");
   });
 });
+
+// syntaxHighlighter 배선 계약(spec §3, RD-002-DELTA-01). core 레벨
+// decoration 계산·캐시·edge case 자체는
+// `packages/core/test/code-block-highlight-extension.test.ts`(RD-001)가
+// 이미 고정한다 — 여기서는 "EditorProvider를 거쳐도 core까지 온전히
+// threading되는지"만 확인한다(다른 R4 옵션들과 같은 통합 테스트 성격).
+describe("EditorProvider — syntaxHighlighter(BLK-017)", () => {
+  const codeDocument: CreateEditorOptions["initialDocument"] = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "cb-1",
+        type: "codeBlock",
+        content: [{ text: "const x = 1;" }],
+        language: "typescript",
+      },
+    ],
+  };
+
+  it("연결하면 지정한 오프셋 범위에 강조 span이 렌더된다", () => {
+    render(
+      <EditorProvider
+        initialDocument={codeDocument}
+        syntaxHighlighter={() => [{ from: 0, to: 5, className: "tok-keyword" }]}
+      >
+        <EditorContent />
+      </EditorProvider>,
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+
+    const span = host.querySelector("code span.tok-keyword");
+    expect(span?.textContent).toBe("const");
+  });
+
+  it("연결하지 않으면 강조 span 없이 plain text로 렌더된다(무회귀)", () => {
+    render(
+      <EditorProvider initialDocument={codeDocument}>
+        <EditorContent />
+      </EditorProvider>,
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+
+    expect(host.querySelector("code span")).toBeNull();
+    expect(host.querySelector("code")?.textContent).toBe("const x = 1;");
+  });
+});

@@ -31,6 +31,7 @@ export type EditorProviderProps =
       keyboardShortcuts?: never;
       attributeOverrides?: never;
       dictionary?: never;
+      syntaxHighlighter?: never;
     }
   | {
       children: ReactNode;
@@ -75,6 +76,12 @@ export type EditorProviderProps =
       // 읽는다(dictionary는 core PM 스키마 급으로 생성 시점에 고정되는
       // 계약, RD-001.md "결정"). latest-ref 대상이 아니다.
       dictionary?: CreateEditorOptions["dictionary"];
+      // spec §3(BLK-017), RD-002-DELTA-01 — core의
+      // CodeBlockHighlightExtension이 이 함수를 addProseMirrorPlugins()
+      // 호출 시점에 한 번 캡처해 클로저에 담는다(코어 안에 latest-ref
+      // 래퍼가 없다) — customBlocks 등과 같은 이유로 마운트 시점 값만
+      // 읽는다. `RD-002.md` "## 결정" 참고.
+      syntaxHighlighter?: CreateEditorOptions["syntaxHighlighter"];
     };
 
 export const EditorProvider = (props: EditorProviderProps) => {
@@ -124,6 +131,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
       enabledBlockTypes: props.enabledBlockTypes,
       attributeOverrides: props.attributeOverrides,
       dictionary: props.dictionary,
+      syntaxHighlighter: props.syntaxHighlighter,
       // "## 결정" 1 — 등록 key 집합만 마운트 시 고정한다. 함수 본체는
       // latestCommands/latestKeyboardShortcuts를 거쳐 최신값으로 간다.
       commandKeys:
@@ -185,6 +193,9 @@ export const EditorProvider = (props: EditorProviderProps) => {
       ...(configuration.dictionary === undefined
         ? {}
         : { dictionary: configuration.dictionary }),
+      ...(configuration.syntaxHighlighter === undefined
+        ? {}
+        : { syntaxHighlighter: configuration.syntaxHighlighter }),
       ...(configuration.commandKeys === undefined
         ? {}
         : {
