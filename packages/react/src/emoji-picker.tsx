@@ -93,6 +93,23 @@ const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
     top: 0,
     height: 0,
   };
+  // 캐럿이 빈 블록(자식이 <br class="ProseMirror-trailingBreak"> 하나뿐인
+  // 문단) 안에 있으면 Range의 경계가 텍스트 노드가 아니라 엘리먼트+offset이라
+  // Chromium이 getBoundingClientRect()로 (0,0,0,0)을 돌려준다 — 실측 확인,
+  // QA-086(slash-menu.tsx의 동명 함수와 같은 수정, 이 파일은 `:` 트리거가
+  // 항상 실제 텍스트를 전제해 현재 도달 경로는 없지만 바이트 단위 동일성을
+  // 유지한다). 이때는 캐럿을 담은 엘리먼트 자신의 rect(항상 레이아웃된 실제
+  // 위치)로 대체한다.
+  if (bounds.height === 0) {
+    const anchorElement =
+      selection.anchorNode.nodeType === Node.ELEMENT_NODE
+        ? (selection.anchorNode as Element)
+        : selection.anchorNode.parentElement;
+    const elementRect = anchorElement?.getBoundingClientRect();
+    if (elementRect !== undefined && elementRect.height > 0) {
+      return { left: elementRect.left, top: elementRect.bottom };
+    }
+  }
   return { left: bounds.left, top: bounds.top + bounds.height };
 };
 

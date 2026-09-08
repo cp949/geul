@@ -11,6 +11,7 @@ import { fireSelectionChange } from "../selection-events.js";
 import {
   addBlockLabel,
   blockIdsOf,
+  renderCaretBlocks,
   renderRealBlocks,
 } from "./slash-menu-test-support.js";
 
@@ -102,5 +103,58 @@ describe("SlashMenu 블록 추가 버튼", () => {
     fireSelectionChange();
 
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("빈 블록에서 열리는 메뉴는 화면 구석(0,0)이 아니라 그 블록 위치에 뜬다(QA-086)", () => {
+    // 실브라우저(Chromium) 실측: 방금 삽입된 빈 문단(자식이
+    // <br class="ProseMirror-trailingBreak"> 하나뿐)에서 캐럿의 Range는
+    // "Element+offset" 경계라 getBoundingClientRect()가 (0,0,0,0)을 돌려준다
+    // — 텍스트 노드 안에 있을 때와 다른 별개의 DOM 동작이다. mount-editor.tsx는
+    // jsdom 한계로 Range.getBoundingClientRect를 이미 전부 0으로 폴리필해둬서
+    // (그 자체가 이 버그의 실제 원인은 아니다), 이 테스트가 검증하려는 "빈
+    // 블록 rect로 대체" 폴백은 엘리먼트 rect로만 관찰할 수 있다 — 그래서 새
+    // 블록에만(빈 블록의 표식인 data-placeholder 속성으로 식별) 실측값을
+    // 스텁한다.
+    //
+    // renderCaretBlocks(포커스 있음)를 쓴다 — renderRealBlocks(포커스 없음)로는
+    // ProseMirror가 DOM 선택 갱신을 건너뛰어(hasFocusAndSelection) bounds가
+    // 아예 null이 되고 96/48 폴백 분기를 타 버려 실제 사용자가 겪는 경로(편집기에
+    // 초점이 있는 채로 다른 블록의 + 버튼을 누르는 경우)를 재현하지 못한다.
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function (
+      this: HTMLElement,
+    ) {
+      if (this.hasAttribute("data-placeholder")) {
+        return {
+          left: 42,
+          top: 84,
+          right: 342,
+          bottom: 108,
+          width: 300,
+          height: 24,
+          x: 42,
+          y: 84,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      return original.call(this);
+    };
+
+    try {
+      const rendered = renderCaretBlocks();
+      const [block] = rendered.blocks;
+      if (block === undefined) throw new Error("블록 요소가 없다");
+      fireEvent.pointerMove(block);
+
+      fireEvent.click(screen.getByRole("button", { name: addBlockLabel }));
+
+      const menu = screen.getByRole("listbox", { name: "Slash menu" });
+      // 새 블록 rect(top 84, height 24)의 바로 아래·왼쪽 끝 — 화면 구석
+      // (0,0)이 아니다.
+      expect(menu.style.left).toBe("42px");
+      expect(menu.style.top).toBe("108px");
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+    }
   });
 });
