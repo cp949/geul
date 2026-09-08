@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
 
+import DocumentIoPage from "./examples/02-document-io/page.js";
+import FormattingToolbarPage from "./examples/03-formatting-toolbar/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 
 export type ExampleRouteGroup =
@@ -22,5 +24,17 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Minimal editor",
     group: "Basics",
     Page: MinimalEditorPage,
+  },
+  {
+    path: "document-io",
+    label: "Document read/write",
+    group: "Basics",
+    Page: DocumentIoPage,
+  },
+  {
+    path: "formatting-toolbar",
+    label: "Formatting toolbar",
+    group: "Toolbars & Menus",
+    Page: FormattingToolbarPage,
   },
 ];
