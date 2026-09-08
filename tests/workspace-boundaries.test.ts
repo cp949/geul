@@ -156,6 +156,8 @@ const allowedDependencies = {
       "react-router": "8.3.1",
     },
     devDependencies: {
+      "@lezer/highlight": "1.2.3",
+      "@lezer/javascript": "1.5.4",
       "@testing-library/react": "16.3.0",
       "@testing-library/user-event": "14.6.7",
       "highlight.js": "11.12.0",

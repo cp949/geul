@@ -13,6 +13,7 @@ import SlashMenuPage from "./examples/05-slash-menu/page.js";
 import SyntaxHighlightingLowlightPage from "./examples/10-syntax-highlighting-lowlight/page.js";
 import SyntaxHighlightingShikiPage from "./examples/11-syntax-highlighting-shiki/page.js";
 import SyntaxHighlightingRefractorPage from "./examples/12-syntax-highlighting-refractor/page.js";
+import SyntaxHighlightingLezerPage from "./examples/13-syntax-highlighting-lezer/page.js";
 
 export type ExampleRouteGroup =
   | "Basics"
@@ -108,6 +109,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Syntax highlighting (refractor)",
     group: "Syntax Highlighting",
     Page: SyntaxHighlightingRefractorPage,
+  },
+  {
+    path: "syntax-highlighting-lezer",
+    label: "Syntax highlighting (lezer)",
+    group: "Syntax Highlighting",
+    Page: SyntaxHighlightingLezerPage,
   },
 ];
 
