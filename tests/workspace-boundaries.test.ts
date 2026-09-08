@@ -165,6 +165,7 @@ const allowedDependencies = {
       prismjs: "1.30.0",
       refractor: "5.0.0",
       shiki: "4.4.3",
+      "sugar-high": "2.3.1",
     },
     peerDependencies: {},
     optionalDependencies: {},

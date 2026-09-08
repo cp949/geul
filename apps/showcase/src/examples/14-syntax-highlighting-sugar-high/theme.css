@@ -1,0 +1,36 @@
+/*
+ * sugar-high는 독립 배포 테마 CSS 자산을 제공하지 않는다(기본
+ * render()가 인라인 style="color:var(--sh-<type>)"만 준다) —
+ * RD-003-DELTA-05.md "결정" 3. 이 예제는 generate()의 className
+ * (sh__token--<type>)만 취하므로, SAMPLE_SOURCE(예제 소스)가 실제로
+ * 만드는 7종 class에만 색상을 매핑한다.
+ */
+.sh__token--keyword {
+  color: #cf222e;
+  font-weight: 600;
+}
+
+.sh__token--identifier {
+  color: #24292f;
+}
+
+.sh__token--string {
+  color: #0a3069;
+}
+
+.sh__token--property {
+  color: #953800;
+}
+
+.sh__token--comment {
+  color: #6e7781;
+  font-style: italic;
+}
+
+.sh__token--sign {
+  color: #24292f;
+}
+
+.sh__token--space {
+  color: inherit;
+}

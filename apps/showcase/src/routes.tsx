@@ -14,6 +14,7 @@ import SyntaxHighlightingLowlightPage from "./examples/10-syntax-highlighting-lo
 import SyntaxHighlightingShikiPage from "./examples/11-syntax-highlighting-shiki/page.js";
 import SyntaxHighlightingRefractorPage from "./examples/12-syntax-highlighting-refractor/page.js";
 import SyntaxHighlightingLezerPage from "./examples/13-syntax-highlighting-lezer/page.js";
+import SyntaxHighlightingSugarHighPage from "./examples/14-syntax-highlighting-sugar-high/page.js";
 
 export type ExampleRouteGroup =
   | "Basics"
@@ -115,6 +116,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Syntax highlighting (lezer)",
     group: "Syntax Highlighting",
     Page: SyntaxHighlightingLezerPage,
+  },
+  {
+    path: "syntax-highlighting-sugar-high",
+    label: "Syntax highlighting (sugar-high)",
+    group: "Syntax Highlighting",
+    Page: SyntaxHighlightingSugarHighPage,
   },
 ];
 
