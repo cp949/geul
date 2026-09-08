@@ -10,13 +10,21 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { exampleRoutes } from "../src/routes.js";
+import { defaultExamplePath, exampleRoutes } from "../src/routes.js";
 
 afterEach(cleanup);
 
 describe("exampleRoutes 전체 스모크", () => {
   it("정확히 10개 예제가 등록돼 있다", () => {
     expect(exampleRoutes).toHaveLength(10);
+  });
+
+  it("기본 화면 경로가 Kitchen sink(composite)를 가리킨다", () => {
+    expect(defaultExamplePath).toBe("composite");
+    expect(
+      exampleRoutes.find((route) => route.path === defaultExamplePath)
+        ?.label,
+    ).toBe("Kitchen sink");
   });
 
   it("모든 예제 경로가 서로 다르다", () => {

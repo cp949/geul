@@ -84,3 +84,7 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     Page: CompositePage,
   },
 ];
+
+// showcase 진입 시(index route) 리다이렉트할 기본 예제 경로.
+// 사이드바 표시 순서(exampleRoutes 배열 순서)와는 독립적으로 관리한다.
+export const defaultExamplePath = "composite";

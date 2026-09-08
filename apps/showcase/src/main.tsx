@@ -5,12 +5,10 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "@cp949/geul-react/styles.css";
 import "./global.css";
 import { RootLayout } from "./root-layout.js";
-import { exampleRoutes } from "./routes.js";
+import { defaultExamplePath, exampleRoutes } from "./routes.js";
 
 const root = document.getElementById("root");
 if (root === null) throw new Error("Showcase root element was not found.");
-
-const firstExamplePath = exampleRoutes[0]?.path ?? "";
 
 createRoot(root).render(
   <StrictMode>
@@ -18,7 +16,7 @@ createRoot(root).render(
       <Routes>
         <Route element={<RootLayout routes={exampleRoutes} />} path="/">
           <Route
-            element={<Navigate replace to={`/examples/${firstExamplePath}`} />}
+            element={<Navigate replace to={`/examples/${defaultExamplePath}`} />}
             index
           />
           {exampleRoutes.map(({ path, Page }) => (
