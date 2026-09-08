@@ -418,8 +418,12 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
    * 몇 배로 늘고 `it` 하나가 vitest 기본 5초 타임아웃에 닿을 수 있다.
    * 비용은 활성 `typescript` 컴파일러에 매인다 — 네이티브 Go 컴파일러(7.x)
    * 기준 실측은 총합 2초 미만이었지만, classic 컴파일러(6.0.3, 프로세스당
-   * tsc 시작 비용이 훨씬 큼)로 내려온 뒤 실측하면 `beforeAll` 포함 describe
-   * 전체가 약 8~9초까지 걸린다 — 그래서 `beforeAll`에 30초 타임아웃을 둔다.
+   * tsc 시작 비용이 훨씬 큼)로 내려온 뒤 단독 실행 실측하면 `beforeAll`
+   * 포함 describe 전체가 약 8~9초까지 걸린다. 전체 vitest 스위트(`pnpm
+   * test`, 313개 파일)를 병렬 실행하면 이 `beforeAll`의 `git ls-files`+
+   * `tsc` 서브프로세스 다수가 다른 워커의 CPU 경합에 걸려 30초를 넘기는
+   * 사례를 실측했다(2026-09-09, RD-003-DELTA-06) — 단독 실행 8~9초 대비
+   * 3배 이상 여유를 두고 `beforeAll`에 60초 타임아웃을 둔다.
    */
   let trackedFiles: string[];
   let chainProjects: string[];
@@ -436,7 +440,7 @@ describe("workspace 밖 소스 디렉터리의 typecheck 편입", () => {
       compiledByProject.set(project, await compiledFilePathsOrEmpty(project));
       checkJsByProject.set(project, await resolvedCheckJs(project));
     }
-  }, 30_000);
+  }, 60_000);
 
   /**
    * `chainProjects` 중 하나라도 `file`을 컴파일하고, JS 소스면 그 프로그램의
