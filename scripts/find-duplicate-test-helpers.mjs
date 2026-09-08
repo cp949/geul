@@ -112,6 +112,7 @@ export const DEFAULT_TARGET_DIRECTORIES = [
   "packages/io/test",
   "packages/core/test",
   "packages/react/test",
+  "apps/showcase/test",
   "e2e",
   "tests",
 ];

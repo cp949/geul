@@ -586,12 +586,13 @@ describe("알려진 사각지대: const 선언이 아닌 사본", () => {
 });
 
 describe("기본 대상 디렉터리", () => {
-  it("react와 core뿐 아니라 model·io·e2e·tests도 대상에 넣는다", () => {
+  it("react와 core뿐 아니라 model·io·showcase·e2e·tests도 대상에 넣는다", () => {
     expect(DEFAULT_TARGET_DIRECTORIES).toEqual([
       "packages/model/test",
       "packages/io/test",
       "packages/core/test",
       "packages/react/test",
+      "apps/showcase/test",
       "e2e",
       "tests",
     ]);
