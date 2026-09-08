@@ -65,6 +65,22 @@
     border-top: 1px solid var(--geul-color-border, #dadce0);
   }
 
+  // Table/TableCell 노드(table-extension.ts)는 구조만 렌더하고 시각 스타일을
+  // 그리지 않는다 — 기본 표에 grid 테두리가 없으면 표를 삽입해도 빈 문단과
+  // 구별되지 않는다(TBL-001 자유 조작 QA 발견, QA-088). box-sizing:
+  // border-box는 colgroup의 col이 지정한 픽셀 폭 계약(table-extension.ts
+  // syncColgroup)을 border·padding이 밀어내지 않도록 지킨다.
+  table {
+    border-collapse: collapse;
+  }
+
+  table td {
+    box-sizing: border-box;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--geul-color-border, #dadce0);
+    vertical-align: top;
+  }
+
   // tableEditing 플러그인(@tiptap/pm/tables)이 CellSelection에 속한 기준
   // 셀마다 이 클래스를 데코레이션으로 붙인다 — 드래그로 선택 중인 직사각형
   // 범위를 시각으로 드러낸다(spec 7.2). .selectedCell은 외부 플러그인이

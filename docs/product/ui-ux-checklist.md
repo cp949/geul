@@ -107,6 +107,7 @@
 | `QA-056` | 빠른 행·열 확장 버튼                                | `TBL-009`         | `NOT_RUN` |      |
 | `QA-057` | Tab/Shift+Tab 셀 탐색, 마지막 셀 Tab 새 행 생성      | `TBL-010`~`011`   | `NOT_RUN` |      |
 | `QA-058` | Excel/Google Sheets 붙여넣기, 기존 표 덮어쓰기       | `TBL-013`~`014`   | `NOT_RUN` |      |
+| `QA-088` | 슬래시 메뉴로 표를 삽입하면 실제로 grid(셀 테두리)가 보인다(그냥 빈 문단처럼 보이지 않는다) | `TBL-001`         | `PASS` | 2026-09-08 §3 점검 중 발견 — Slash menu 쇼케이스에서 `/table`로 표를 삽입하면 셀은 실제로 생성되는데(3x3 `<table><tbody><tr><td>`, 행/열 핸들도 정상 동작) 화면엔 아무것도 안 보임 — 빈 문단 placeholder만 그대로 보여 "명령이 아무 효과도 없다"로 오인하기 쉬움. **근본 원인**: `table-extension.ts`는 구조만 렌더하고, `_editor.scss`(`.geul-editor`)엔 blockquote·code block·hr 등 다른 모든 블록 종류와 달리 `table`/`td`에 border 규칙이 아예 없었다(`getComputedStyle(td).border` 실측 `"0px none"`) — 헤더 행/열 배경색 규칙만 있고 그 배경이 강조할 기본 grid 자체가 없었다. 수정: `.geul-editor table { border-collapse: collapse; }` / `table td { box-sizing: border-box; padding: 0.375rem 0.5rem; border: 1px solid var(--geul-color-border, #dadce0); vertical-align: top; }` 추가(box-sizing: border-box로 colgroup의 픽셀 폭 계약을 border·padding이 밀어내지 않게 함). 회귀 테스트: `style-build.test.ts`. 실브라우저 시각 확인 완료(claude-in-chrome) — grid 선 표시, 행/열 핸들·add row/column 버튼 정상 동작 유지. |
 
 ### 4.5 입출력
 

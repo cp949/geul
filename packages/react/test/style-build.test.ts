@@ -92,6 +92,17 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).not.toMatch(/\[data-geul-code-block\].*(?:\.token|language-)/);
   });
 
+  it("표 td에 기본 grid 테두리를 그린다(TBL-001, QA-088 — 없으면 표를 삽입해도 화면에서 안 보인다)", () => {
+    const css = compileCss();
+    const rule = /\.geul-editor table td \{(?<body>[^}]*)\}/.exec(css)?.groups
+      ?.body;
+
+    expect(rule).toContain("box-sizing: border-box;");
+    expect(rule).toContain(
+      "border: 1px solid var(--geul-color-border, #dadce0);",
+    );
+  });
+
   it("CodeBlock language overlay의 최대 높이에 padding과 border를 포함한다", () => {
     const css = compileCss();
     const rule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
