@@ -21,6 +21,7 @@ import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
 import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
+import { CodeBlockHighlightExtension } from "./code-block-highlight-extension.js";
 import { CodeBlockMarkGuardExtension } from "./code-block-mark-guard-extension.js";
 import { createCustomBlockExtension } from "./custom-block-extension.js";
 import { createCustomInlineContentExtension } from "./custom-inline-content-extension.js";
@@ -64,6 +65,7 @@ import {
 import { PlaceholderExtension } from "./placeholder-extension.js";
 import { QuoteExtension } from "./quote-extension.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
+import type { SyntaxHighlighter } from "./syntax-highlight.js";
 import {
   BackgroundColorMark,
   TextColorMark,
@@ -328,6 +330,11 @@ export const createProductionEditor = (options: {
   // spec §8(EXT-009), RD-001-DELTA-01 — PlaceholderExtension에
   // 그대로 넘긴다. 미지정이면 `DEFAULT_DICTIONARY`(en)를 쓴다.
   dictionary?: Dictionary;
+  // spec §3(BLK-017), RD-001-DELTA-01 — 지정된 경우에만
+  // CodeBlockHighlightExtension을 extensions 배열에 추가한다. 미지정이면
+  // 그 확장 자체가 스키마에 없어 모든 코드 블록이 plain text로 렌더된다
+  // (spec §5, 경고 없음 — customBlocks 등 다른 조건부 확장과 동일 패턴).
+  syntaxHighlighter?: SyntaxHighlighter;
 }): Editor => {
   const converted = modelToTiptap(options.document, {
     customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
@@ -425,6 +432,13 @@ export const createProductionEditor = (options: {
         : []),
       CodeBlockMarkGuardExtension,
       CodeBlockExitExtension,
+      ...(options.syntaxHighlighter === undefined
+        ? []
+        : [
+            CodeBlockHighlightExtension.configure({
+              syntaxHighlighter: options.syntaxHighlighter,
+            }),
+          ]),
       ...(blockContainerContent === undefined
         ? []
         : [

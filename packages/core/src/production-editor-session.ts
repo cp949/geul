@@ -30,6 +30,7 @@ import {
   type TiptapJsonNode,
 } from "./model-to-tiptap.js";
 import { MediaUploadTracker } from "./production-editor-media-upload.js";
+import type { SyntaxHighlighter } from "./syntax-highlight.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 import { createProductionEditor } from "./production-editor-assembly.js";
@@ -235,6 +236,9 @@ export class ProductionEditorSession {
       // spec §8(EXT-009), RD-001-DELTA-01 — attributeOverrides와 동일하게
       // createTiptapEditor가 매 재구성마다 그대로 전달한다.
       dictionary?: Dictionary;
+      // spec §3(BLK-017), RD-001-DELTA-01 — attributeOverrides/dictionary와
+      // 동일 패턴으로 createTiptapEditor가 매 재구성마다 그대로 전달한다.
+      syntaxHighlighter?: SyntaxHighlighter;
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
     // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
@@ -510,6 +514,12 @@ export class ProductionEditorSession {
       ...(this.options.dictionary === undefined
         ? {}
         : { dictionary: this.options.dictionary }),
+      // spec §3(BLK-017), RD-001-DELTA-01 — dictionary와 동일 근거로
+      // replaceDocument()가 재구성하는 매 Tiptap Editor 생성마다 다시
+      // 넘겨야 override가 유지된다.
+      ...(this.options.syntaxHighlighter === undefined
+        ? {}
+        : { syntaxHighlighter: this.options.syntaxHighlighter }),
       canApplyDocumentChange: (transaction, loadNormalizing) =>
         this.evaluateBeforeChange(transaction, loadNormalizing),
       // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한

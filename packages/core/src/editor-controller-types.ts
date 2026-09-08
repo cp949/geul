@@ -22,6 +22,7 @@ import type { EditorError } from "./errors.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import type { EnabledBlockTypes } from "./model-to-tiptap.js";
+import type { SyntaxHighlighter } from "./syntax-highlight.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import type { TableCellTarget } from "./table-grid.js";
 
@@ -570,4 +571,11 @@ export type CreateEditorOptions = {
   // 스프레드해 필요한 key만 override한다(dictionary.ts, spec §8.1
   // "단순함 우선").
   dictionary?: Dictionary;
+  // spec §3(BLK-017), RD-001-DELTA-01 — 코드 블록 구문 강조 seam(공개 계약은
+  // docs/specs/2026-09-08-blk-017-code-highlighting-seam-design.md 소유).
+  // 미지정이면 CodeBlockHighlightExtension 자체를 스키마에 추가하지 않아
+  // 모든 코드 블록이 조용히 plain text로 렌더된다(spec §5, 경고 없음).
+  // 이 DELTA는 동기 반환 경로만 처리한다 — 비동기 결과 반영(DELTA-02)과
+  // edge case 5종(DELTA-03)은 아직 없다.
+  syntaxHighlighter?: SyntaxHighlighter;
 };
