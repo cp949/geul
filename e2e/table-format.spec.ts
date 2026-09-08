@@ -2,7 +2,7 @@
  * 표 핸들 메뉴와 셀 선택 서식의 실제 브라우저 동작을 검증한다.
  * pointer 선택, undo, 메뉴 종료와 viewport 클램프를 함께 다룬다.
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { insertTable, openDemo } from "./support/demo.js";
@@ -170,17 +170,54 @@ test("메뉴를 연 채 스크롤해도 메뉴가 핸들 위치를 따라간다"
     .toBeLessThan((beforeBox?.y ?? Number.POSITIVE_INFINITY) - 150);
 });
 
-test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
-  page,
-}) => {
-  const { table } = await openDemoWithTable(page);
+/**
+ * "Add row" 버튼은 `position: fixed`로 표 바로 아래 뜨고, scroll 이벤트로만
+ * 위치를 다시 계산한다(table-handles.tsx) — 실제 마우스 휠 스크롤에는
+ * 정확히 따라오지만, 브라우저 네이티브 `scrollIntoView`(Playwright의
+ * 클릭 전 자동 스크롤이 여기 기댄다)는 fixed 요소를 움직이지 못한다(fixed는
+ * 정의상 스크롤에 영향받지 않으므로 스크롤할 필요가 없다고 판단해 실제로
+ * 0px만 스크롤한다 — 실측: `element.scrollIntoView()` 호출 뒤에도 scrollY
+ * 불변, `window.scrollBy`는 정상 추적). 표가 자라 버튼이 뷰포트 밖으로
+ * 나가면 그래서 Playwright의 자동 스크롤이 "element is outside of the
+ * viewport" 재시도만 반복하다 타임아웃한다. 실제 사용자가 마우스 휠로
+ * 스크롤해 버튼을 따라잡는 것과 같은 효과를 직접 낸다.
+ */
+const scrollIntoViewportBounds = async (page: Page, locator: Locator) => {
+  const viewport = page.viewportSize();
+  const box = await locator.boundingBox();
+  if (viewport === null || box === null) return;
+  const margin = 40;
+  if (box.y < margin) {
+    await page.evaluate((delta) => window.scrollBy(0, delta), box.y - margin);
+  } else if (box.y + box.height > viewport.height - margin) {
+    await page.evaluate(
+      (delta) => window.scrollBy(0, delta),
+      box.y + box.height - (viewport.height - margin),
+    );
+  }
+};
+
+/**
+ * "Add row"를 8번 눌러 표를 11행까지 늘린다. 버튼이 fixed라 표가 자라며
+ * 뷰포트 밖으로 나가면 매 클릭 전 `scrollIntoViewportBounds`로 따라간다
+ * (위 주석). 표 하단 행 시나리오(PIT-0011) 두 테스트가 공유하는 setup이다.
+ */
+const growTableTo11Rows = async (page: Page, table: Locator) => {
   // 확장 버튼은 표 hover 중에만 렌더된다.
   await table.locator("td").first().hover();
   const addRow = page.getByRole("button", { name: "Add row" });
   for (let index = 0; index < 8; index += 1) {
+    await scrollIntoViewportBounds(page, addRow);
     await addRow.click();
   }
   await expect(table.locator("tr")).toHaveCount(11);
+};
+
+test("표 하단 행에서 메뉴를 열어도 팔레트 마지막 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { table } = await openDemoWithTable(page);
+  await growTableTo11Rows(page, table);
 
   const lastRow = table.locator("tr").last();
   await lastRow.locator("td").first().hover();
@@ -382,13 +419,7 @@ test("표 하단 행에서 셀 서식 메뉴를 열어도 정렬 버튼까지 �
   page,
 }) => {
   const { table } = await openDemoWithTable(page);
-  // 확장 버튼은 표 hover 중에만 렌더된다.
-  await table.locator("td").first().hover();
-  const addRow = page.getByRole("button", { name: "Add row" });
-  for (let index = 0; index < 8; index += 1) {
-    await addRow.click();
-  }
-  await expect(table.locator("tr")).toHaveCount(11);
+  await growTableTo11Rows(page, table);
 
   const lastCell = table.locator("tr").last().locator("td").first();
   await lastCell.click({ clickCount: 3 });

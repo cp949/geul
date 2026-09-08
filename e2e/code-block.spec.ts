@@ -22,6 +22,37 @@ const insertCodeBlock = async (page: Page, editable: Locator) => {
   return codeBlock;
 };
 
+/**
+ * `code-block-language-combobox.tsx`의 `CODE_LANGUAGE_GAP_PX` 사본이다.
+ * 그 모듈은 값을 export하지 않으므로(공개 표면을 좁게 유지, clamp.ts의
+ * `CLAMP_VIEWPORT_MARGIN_PX`와 같은 관용구) e2e가 따로 적는다. 훅 쪽 값이
+ * 바뀌면 여기도 같이 바꾼다.
+ */
+const CODE_LANGUAGE_GAP_PX = 8;
+
+/**
+ * language overlay가 CodeBlock 바로 위(above)에 `CODE_LANGUAGE_GAP_PX`
+ * 간격으로 붙어 있는지 poll로 확인한다. 이 파일의 시나리오는 코드
+ * 블록 뒤에 항상 trailing 빈 문단이 자동으로 남아(에디터의 trailing-node
+ * 불변식), combobox 높이가 그 문단과 겹치는 조건(`placeAbove`,
+ * edbb6b3)이 항상 성립해 코드 블록 위로 뒤집힌다 — "아래" 배치를
+ * 가정한 예전 assertion(overlayBox.y === blockBox.y + blockBox.height)은
+ * 이 뒤집기 도입 이후로는 성립하지 않는다(실측 확인).
+ */
+const expectOverlayGluedAboveBlock = async (
+  codeBlock: Locator,
+  overlay: Locator,
+) => {
+  await expect
+    .poll(async () => {
+      const blockBox = await codeBlock.boundingBox();
+      const overlayBox = await overlay.boundingBox();
+      if (blockBox === null || overlayBox === null) return null;
+      return Math.round(blockBox.y - (overlayBox.y + overlayBox.height));
+    })
+    .toBe(CODE_LANGUAGE_GAP_PX);
+};
+
 /** fixed overlay가 네 viewport 경계의 공통 8px 여백 안에 있는지 확인한다. */
 const expectInsideViewport = async (page: Page, overlay: Locator) => {
   await expect
@@ -260,33 +291,12 @@ test("scroll과 viewport resize 뒤 language overlay가 활성 CodeBlock을 추�
     element.scrollIntoView({ block: "center" }),
   );
   await expectInsideViewport(page, overlay);
-  await expect
-    .poll(async () => {
-      const blockBox = await codeBlock.boundingBox();
-      const overlayBox = await overlay.boundingBox();
-      if (blockBox === null || overlayBox === null) return null;
-      return Math.round(overlayBox.y - (blockBox.y + blockBox.height));
-    })
-    .toBe(0);
+  await expectOverlayGluedAboveBlock(codeBlock, overlay);
 
   await page.evaluate(() => window.scrollBy(0, -40));
-  await expect
-    .poll(async () => {
-      const blockBox = await codeBlock.boundingBox();
-      const overlayBox = await overlay.boundingBox();
-      if (blockBox === null || overlayBox === null) return null;
-      return Math.round(overlayBox.y - (blockBox.y + blockBox.height));
-    })
-    .toBe(0);
+  await expectOverlayGluedAboveBlock(codeBlock, overlay);
 
   await page.setViewportSize({ width: 200, height: 480 });
   await expectInsideViewport(page, overlay);
-  await expect
-    .poll(async () => {
-      const blockBox = await codeBlock.boundingBox();
-      const overlayBox = await overlay.boundingBox();
-      if (blockBox === null || overlayBox === null) return null;
-      return Math.round(overlayBox.y - (blockBox.y + blockBox.height));
-    })
-    .toBe(0);
+  await expectOverlayGluedAboveBlock(codeBlock, overlay);
 });
