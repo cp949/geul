@@ -43,23 +43,28 @@ const importPlaywrightConfig = async () => {
 };
 
 describe("playwright.config.ts의 webServer 배열", () => {
-  it(`${ENV_KEY}가 없으면 기존 dev 서버 엔트리 하나만 포함한다`, async () => {
+  it(`${ENV_KEY}가 없으면 demo·showcase 서버 엔트리 두 개를 포함한다`, async () => {
     delete process.env[ENV_KEY];
 
     const config = await importPlaywrightConfig();
 
-    expect(config.webServer).toHaveLength(1);
+    // RD-003-DELTA-01(BLK-017, Issue #162)이 showcase(5174) 엔트리를
+    // demo(5173) 바로 뒤에 추가했다 — chrome83 엔트리는 여전히
+    // ENV_KEY로만 게이트된다.
+    expect(config.webServer).toHaveLength(2);
     expect(config.webServer[0]?.url).toBe("http://127.0.0.1:5173");
+    expect(config.webServer[1]?.url).toBe("http://127.0.0.1:5174");
   });
 
-  it(`${ENV_KEY}=1이면 chrome83 build+preview 서버까지 두 엔트리를 포함한다`, async () => {
+  it(`${ENV_KEY}=1이면 chrome83 build+preview 서버까지 세 엔트리를 포함한다`, async () => {
     process.env[ENV_KEY] = "1";
 
     const config = await importPlaywrightConfig();
 
-    expect(config.webServer).toHaveLength(2);
+    expect(config.webServer).toHaveLength(3);
     expect(config.webServer[0]?.url).toBe("http://127.0.0.1:5173");
-    expect(config.webServer[1]?.url).toBe("http://127.0.0.1:4174");
+    expect(config.webServer[1]?.url).toBe("http://127.0.0.1:5174");
+    expect(config.webServer[2]?.url).toBe("http://127.0.0.1:4174");
   });
 
   it("chrome83 build+preview 서버는 CI 여부와 무관하게 기존 서버를 재사용하지 않는다(Issue #123)", async () => {
@@ -67,6 +72,6 @@ describe("playwright.config.ts의 webServer 배열", () => {
 
     const config = await importPlaywrightConfig();
 
-    expect(config.webServer[1]?.reuseExistingServer).toBe(false);
+    expect(config.webServer[2]?.reuseExistingServer).toBe(false);
   });
 });

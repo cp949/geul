@@ -136,6 +136,24 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
+    {
+      // apps/showcase(RD-003, BLK-017 Issue #162) example별 e2e 대상.
+      // 자신은 `@cp949/geul-react`를 빌드하지 않는다 — 위 demo 항목과
+      // 동시에 `pnpm --filter @cp949/geul-react build`를 각자 실행하면
+      // 둘 다 `dist/_styles.raw.css`를 쓰고 지워 경합한다(실측: 별도 셸
+      // 두 개로 동시 실행 시 두 번째 프로세스가 `rm:
+      // dist/_styles.raw.css: 그런 파일이나 디렉터리가 없습니다`로
+      // exit 1). `styles.css`는 그 빌드 파이프라인의 마지막 산출물이라,
+      // 파일이 생길 때까지 기다리는 것으로 "react가 이 실행에서 이미
+      // 빌드됐다"를 확인한다 — Playwright는 모든 webServer 항목의
+      // setup이 끝난 뒤에만 테스트를 실행하므로, 실제 테스트 시점에는
+      // dist가 항상 최신이다.
+      command:
+        "until [ -f packages/react/dist/styles.css ]; do sleep 0.3; done; pnpm --filter @cp949/geul-showcase dev --host 127.0.0.1",
+      url: "http://127.0.0.1:5174",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
     ...chrome83WebServer,
   ],
 });

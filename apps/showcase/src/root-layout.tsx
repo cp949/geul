@@ -8,6 +8,7 @@ const GROUP_ORDER: readonly ExampleRouteGroup[] = [
   "Basics",
   "Toolbars & Menus",
   "Media & Extras",
+  "Syntax Highlighting",
 ];
 
 type RootLayoutRoute = Pick<ExampleRoute, "path" | "label" | "group">;

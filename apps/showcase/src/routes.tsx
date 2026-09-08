@@ -10,9 +10,14 @@ import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
 import MediaPage from "./examples/07-media/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 import SlashMenuPage from "./examples/05-slash-menu/page.js";
+import SyntaxHighlightingLowlightPage from "./examples/10-syntax-highlighting-lowlight/page.js";
 
 export type ExampleRouteGroup =
-  "Basics" | "Toolbars & Menus" | "Media & Extras" | "Composite";
+  | "Basics"
+  | "Toolbars & Menus"
+  | "Media & Extras"
+  | "Syntax Highlighting"
+  | "Composite";
 
 export type ExampleRoute = {
   path: string;
@@ -83,6 +88,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Dictionary override",
     group: "Media & Extras",
     Page: DictionaryOverridePage,
+  },
+  {
+    path: "syntax-highlighting-lowlight",
+    label: "Syntax highlighting (lowlight)",
+    group: "Syntax Highlighting",
+    Page: SyntaxHighlightingLowlightPage,
   },
 ];
 

@@ -157,6 +157,8 @@ const allowedDependencies = {
     devDependencies: {
       "@testing-library/react": "16.3.0",
       "@testing-library/user-event": "14.6.7",
+      "highlight.js": "11.12.0",
+      lowlight: "3.3.0",
     },
     peerDependencies: {},
     optionalDependencies: {},
