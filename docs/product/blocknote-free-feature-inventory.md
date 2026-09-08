@@ -223,9 +223,8 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 | --------- | ---------------------------------- | -------- | ---- | ------------- | -------------- |
 | `CUS-001` | 안전한 범용 iframe 블록            | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
 | `CUS-002` | iframe allow-origin과 sandbox 정책 | `CUSTOM` | R8   | `NOT_STARTED` | 제품 보안 요구 |
-| `CUS-003` | p5.js 실행·preview 통합            | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
-| `CUS-004` | iframe 크기 조절과 로딩 실패 UI    | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
-| `CUS-005` | iframe/p5.js JSON·HTML 직렬화      | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
+| `CUS-003` | iframe 크기 조절과 로딩 실패 UI    | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
+| `CUS-004` | iframe JSON·HTML 직렬화            | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
 
 ## 4. 명시적 제외 기능
 
