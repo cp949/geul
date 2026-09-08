@@ -365,7 +365,16 @@ export const FormattingToolbar = ({
               );
               updateFromSelection();
             }}
-            onMouseDown={(event) => event.preventDefault()}
+            // IconButton 형제들과 달리 onMouseDown={preventDefault}를 두지
+            // 않는다 — 네이티브 <select>는 mousedown의 기본 동작이 곧
+            // 드롭다운을 여는 것이라(Chromium 실측, QA-087) 막으면 드롭다운
+            // 자체가 안 열려 클릭으로 옵션을 고를 수 없다. 그 preventDefault는
+            // 애초에 "mousedown이 contenteditable 초점을 훔치지 않는다"는
+            // 불변식(icon-button.tsx 참고)을 위한 것인데, 이 select에 실제로
+            // 초점이 옮겨가도(document.activeElement가 select로 바뀌어도)
+            // 편집기의 window.getSelection()은 collapse되지 않는다(Chromium
+            // 실측) — 지킬 불변식이 애초에 깨지지 않으므로 이 select에는
+            // preventDefault가 필요 없다.
             value={blockTypeToOptionId(toolbarState.blockSelection.blockType)}
           >
             {getBlockTypeOptionsForSource(

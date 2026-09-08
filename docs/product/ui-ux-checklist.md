@@ -87,7 +87,7 @@
 | `QA-042` | 슬래시 메뉴 검색·필터링                                              | `UI-001`   | `NOT_RUN` |      |
 | `QA-043` | 블록 추가(+) 버튼                                                    | `UI-002`   | `NOT_RUN` |      |
 | `QA-044` | Turn into(블록 종류 변경) 동작                                       | `UI-005`   | `NOT_RUN` |      |
-| `QA-087` | 서식 toolbar의 블록 타입(Text ▾) select가 클릭·선택에 반응한다        | `UI-007`   | `FAIL`    | 2026-09-08 사용자 실사용 중 발견(스크린샷) — 텍스트 선택 시 뜨는 서식 toolbar의 블록 타입(Text) select를 클릭해도 옵션이 선택되지 않는다. `formatting-toolbar.tsx:349` 부근 `<select>`로 추정 — 근본 원인 미확인(조사 중 사용자 지시로 체크리스트 작업으로 전환, 아직 수정 안 함) |
+| `QA-087` | 서식 toolbar의 블록 타입(Text ▾) select가 클릭·선택에 반응한다        | `UI-007`   | `PASS`    | 2026-09-08 사용자 실사용 중 발견(스크린샷) — 텍스트 선택 시 뜨는 서식 toolbar의 블록 타입(Text) select를 클릭해도 옵션이 선택되지 않음. **근본 원인**: `formatting-toolbar.tsx:349` 부근 `<select>`가 `IconButton` 형제들과 같은 `onMouseDown={preventDefault}`를 그대로 복제해 갖고 있었다 — 네이티브 `<select>`는 mousedown의 기본 동작이 곧 드롭다운을 여는 것이라(Chromium 실측) 막으면 드롭다운 자체가 안 열린다. `IconButton`의 이 패턴은 "mousedown이 contenteditable 초점을 훔치지 않는다"는 불변식을 위한 것인데, 이 select에 실제로 초점이 옮겨가도 편집기의 `window.getSelection()`은 collapse되지 않아(Chromium 실측) 지킬 불변식이 없다. 수정: `onMouseDown` 제거. 회귀 테스트: `formatting-toolbar.test.tsx`(mousedown이 `preventDefault`되지 않는지 직접 확인). 실브라우저 시각 확인 완료(claude-in-chrome) — select 클릭 후 방향키+Enter로 Heading 1 선택 시 실제 변환됨. |
 | `QA-045` | 블록 중첩·중첩 해제 UI                                               | `UI-006`   | `NOT_RUN` |      |
 | `QA-046` | placeholder·빈 문서 안내 문구 표시                                   | `UI-009`   | `NOT_RUN` |      |
 | `QA-047` | emoji picker 삽입                                                    | `UI-012`   | `NOT_RUN` |      |

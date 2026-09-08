@@ -198,6 +198,41 @@ describe("FormattingToolbar 서식 툴바", () => {
     ).toBe("toggle-heading-2");
   });
 
+  // 실브라우저(Chromium) 실측: 네이티브 <select>는 mousedown의 기본 동작이
+  // 곧 드롭다운을 여는 것이라, IconButton이 초점 도난 방지에 쓰는
+  // onMouseDown={preventDefault} 패턴을 그대로 복제하면 드롭다운 자체가
+  // 안 열려 "클릭해도 옵션이 선택되지 않는다"가 된다(QA-087). preventDefault
+  // 호출 여부는 dispatchEvent의 반환값(취소되면 false)으로 직접 확인한다.
+  it("블록 종류 select에 mousedown해도 기본 동작(드롭다운 열기)을 막지 않는다(QA-087)", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    const notPrevented = fireEvent.mouseDown(
+      screen.getByRole("combobox", { name: "Block type" }),
+    );
+
+    expect(notPrevented).toBe(true);
+  });
+
+  // select에 실제로 초점이 옮겨가도 편집기의 window.getSelection()은
+  // collapse되지 않는다(Chromium 실측) — 즉 select가 초점을 가져가는 동안
+  // 텍스트 선택이 풀려 툴바가 통째로 사라지는 경로는 애초에 없다. 그래서
+  // 위 mousedown 테스트 하나로 QA-087의 근본 원인(드롭다운이 안 열림)을
+  // 충분히 고정한다 — "초점 도난 방지" 가드는 지킬 불변식이 없어 추가하지
+  // 않는다.
+
   it("dictionary override 시 블록 종류 select의 표시 텍스트가 바뀐다(EXT-009)", () => {
     const controller = fakeController();
     controller.getDictionary = vi.fn(() => ({
