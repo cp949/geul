@@ -1,8 +1,10 @@
 import type { ComponentType } from "react";
 
 import DocumentIoPage from "./examples/02-document-io/page.js";
+import FilePanelPage from "./examples/06-file-panel/page.js";
 import FormattingToolbarPage from "./examples/03-formatting-toolbar/page.js";
 import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
+import MediaPage from "./examples/07-media/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 import SlashMenuPage from "./examples/05-slash-menu/page.js";
 
@@ -50,5 +52,17 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Slash menu",
     group: "Toolbars & Menus",
     Page: SlashMenuPage,
+  },
+  {
+    path: "file-panel",
+    label: "File panel",
+    group: "Toolbars & Menus",
+    Page: FilePanelPage,
+  },
+  {
+    path: "media",
+    label: "Media",
+    group: "Media & Extras",
+    Page: MediaPage,
   },
 ];
