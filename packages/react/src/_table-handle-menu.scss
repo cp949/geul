@@ -15,8 +15,7 @@
   &--danger {
     color: var(--geul-color-danger, #d93025);
 
-    &:disabled {
-      pointer-events: none;
+    &[aria-disabled="true"] {
       cursor: not-allowed;
       opacity: 40%;
     }

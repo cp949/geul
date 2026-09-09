@@ -71,7 +71,10 @@ export const TableHandleMenu = ({
       onClose,
     );
 
-  const remove = () =>
+  const remove = () => {
+    // G-UI-004: aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다 —
+    // 명시적 가드로 비활성 상태의 클릭을 막는다.
+    if (!canDelete) return;
     runCommand(
       () =>
         isRow
@@ -79,6 +82,7 @@ export const TableHandleMenu = ({
           : editor.commands.deleteTableColumn(tableBlockId, index),
       onClose,
     );
+  };
 
   const toggleHeader = () =>
     runCommand(
@@ -114,9 +118,16 @@ export const TableHandleMenu = ({
             : dictionary.menu.insertColumnRight}
         </MenuItemButton>
         <MenuItemButton
+          aria-disabled={!canDelete}
           className={`${menuItemClassName} geul-table-menu__item--danger`}
-          disabled={!canDelete}
           onClick={remove}
+          title={
+            canDelete
+              ? undefined
+              : isRow
+                ? dictionary.error.lastRow
+                : dictionary.error.lastColumn
+          }
         >
           {isRow ? dictionary.menu.deleteRow : dictionary.menu.deleteColumn}
         </MenuItemButton>

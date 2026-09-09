@@ -844,14 +844,16 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     expect(rowsOf(editor)).toHaveLength(1);
 
     const deleteItem = screen.getByRole("menuitem", { name: "Delete row" });
-    expect((deleteItem as HTMLButtonElement).disabled).toBe(true);
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("true");
+    expect(deleteItem.getAttribute("title")).toBe("Can't delete the last row");
 
     fireEvent.click(deleteItem);
 
-    // disabled가 클릭 자체를 막았는지 문서로 본다. 막지 못했다면 실제
-    // deleteTableRow가 호출돼 LAST_ROW로 거절되고, 그러면 실패 alert가
-    // 뜬다 — 행 수만 보면 "막힘"과 "거절"을 구분하지 못한다(둘 다 1행으로
-    // 남는다).
+    // aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다(G-UI-004) —
+    // 핸들러 안 명시적 no-op 가드가 클릭을 막았는지 문서로 본다. 가드가
+    // 없으면 실제 deleteTableRow가 호출돼 LAST_ROW로 거절되고, 그러면
+    // 실패 alert가 뜬다 — 행 수만 보면 "막힘"과 "거절"을 구분하지
+    // 못한다(둘 다 1행으로 남는다).
     expect(screen.queryByRole("alert")).toBeNull();
     expect(rowsOf(editor).map((row) => row.id)).toEqual(rowIds);
   });
@@ -863,7 +865,10 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     const deleteItem = screen.getByRole("menuitem", {
       name: "Delete column",
     });
-    expect((deleteItem as HTMLButtonElement).disabled).toBe(true);
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("true");
+    expect(deleteItem.getAttribute("title")).toBe(
+      "Can't delete the last column",
+    );
 
     fireEvent.click(deleteItem);
 
@@ -871,6 +876,26 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     expect(tableBlockOf(editor).columns.map((column) => column.id)).toEqual(
       columnIds,
     );
+  });
+
+  it("행이 2개 이상이면 Delete row에 title 속성이 없다", () => {
+    const { editor } = openRowMenu();
+    expect(rowsOf(editor).length).toBeGreaterThan(1);
+
+    const deleteItem = screen.getByRole("menuitem", { name: "Delete row" });
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("false");
+    expect(deleteItem.getAttribute("title")).toBeNull();
+  });
+
+  it("열이 2개 이상이면 Delete column에 title 속성이 없다", () => {
+    const { editor } = openColumnMenu();
+    expect(tableBlockOf(editor).columns.length).toBeGreaterThan(1);
+
+    const deleteItem = screen.getByRole("menuitem", {
+      name: "Delete column",
+    });
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("false");
+    expect(deleteItem.getAttribute("title")).toBeNull();
   });
 
   it("메뉴가 열린 채 행이 늘어나면 재조준 없이도 Delete row가 재활성화된다(Issue #65 항목7)", async () => {
@@ -882,7 +907,7 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
       name: "Delete row",
     }) as HTMLButtonElement;
     // 전제: 아직 1행이라 비활성 상태다.
-    expect(deleteItem.disabled).toBe(true);
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("true");
 
     await act(async () => {
       // 메뉴 대상(index 0)은 그대로 두고 새 행을 뒤에 추가한다 — 재조준
@@ -897,7 +922,7 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     // 전제 재확인: 실제로 2행이 됐다.
     expect(rowsOf(editor)).toHaveLength(2);
     // 재조준 없이(같은 deleteItem 참조) 재활성화됐는지 본다.
-    expect(deleteItem.disabled).toBe(false);
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("false");
   });
 
   it("메뉴가 열린 채 열이 늘어나면 재조준 없이도 Delete column이 재활성화된다(Issue #65 항목7)", async () => {
@@ -908,7 +933,7 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     const deleteItem = screen.getByRole("menuitem", {
       name: "Delete column",
     }) as HTMLButtonElement;
-    expect(deleteItem.disabled).toBe(true);
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("true");
 
     await act(async () => {
       const inserted = editor.commands.insertTableColumn(tableBlockId, 1);
@@ -918,7 +943,7 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
     });
 
     expect(tableBlockOf(editor).columns).toHaveLength(2);
-    expect(deleteItem.disabled).toBe(false);
+    expect(deleteItem.getAttribute("aria-disabled")).toBe("false");
   });
 });
 
