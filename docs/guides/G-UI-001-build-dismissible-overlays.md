@@ -15,6 +15,7 @@
 - DOM rect를 anchor로 쓰는 fixed overlay는 owner window의 `scroll`(중첩 scroll container를 위한 capture)·`resize`에서 anchor rect를 다시 읽는다. unmount에서 같은 callback·capture 옵션으로 listener를 해제한다.
 - 고정 폭 overlay도 viewport가 더 좁을 수 있으므로 양쪽 clamp 여백을 뺀 `max-width`와 `box-sizing: border-box`를 같이 둔다.
 - viewport보다 큰 overlay는 `max-height`와 `overflow-y: auto`를 사용한다.
+- 스크롤되는 overlay 안에서 alert·상태 메시지 같은 보조 요소를 나머지 항목과 겹치지 않게 항상 보이려면 `position: sticky`로 스크롤 콘텐츠 위에 얹지 않는다 — 실제 오버플로가 일어나면 스크롤되는 콘텐츠 위에 그대로 겹쳐 그려져 그 지점의 포인터 이벤트를 가로챈다(`table-handle-menu.tsx`/`table-cell-format-menu.tsx`, Issue #65 항목3). 대신 overlay를 flex column 2단으로 나눈다 — 스크롤 컨테이너(`flex: 1 1 auto; min-height: 0; overflow-y: auto`)에 항목을 담고, 보조 요소는 그 밖 형제로 둬 배타적 공간을 갖게 한다. `.geul-menu-panel`/`.geul-menu-panel--with-footer`/`.geul-menu-panel__scroll`가 이 패턴의 예다.
 - geometry를 여러 기능이 공유하면 DOM rect를 한 번 읽어 파생한다. viewport 좌표를 React key로 쓰지 않는다.
 
 ## 검증
