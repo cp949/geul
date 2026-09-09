@@ -138,65 +138,41 @@ function listBlocksFromNode(
   return blocks;
 }
 
-// blockquote 안 문단마다 children 없는 형제 quote 블록을 만든다(D8) —
-// import 직후 quote가 children을 갖지 않아야 그 문서를 다시 strict
-// export했을 때 NESTED_CHILDREN으로 실패하는 비대칭이 생기지 않는다.
-// 비문단 자식(heading·list·table 등)은 인용 구조를 표현할 수 없으므로 일반
-// blocksFromNode 매핑으로 풀어내고 QUOTE_CHILD_DOWNGRADED로 경고하며,
-// 중첩 blockquote는 같은 규칙을 재귀 적용한 뒤 NESTED_QUOTE_FLATTENED로
-// 경고한다(G-CNV-002 — 구조 단순화를 조용히 버리지 않는다).
+// BLK-005 재평가(Issue #151, RD-001 DELTA-03) — listBlocksFromNode와 동일한
+// 패턴으로 mdast blockquote 하나를 quote Block 하나로 옮긴다. 첫 자식이
+// paragraph면 그 내용을 own content로 삼고(own content로 승격), 나머지
+// 자식(비문단·중첩 blockquote 포함 임의 block)은 blocksFromNodes로 재귀
+// 변환해 children에 둔다 — export-markdown.ts의 blockNode quote 분기(own
+// paragraph materialize 여부 판정)와 대칭이라 재import가 quote 구조를 그대로
+// 복원한다. 첫 자식이 paragraph가 아니면 own content는 빈 배열이고 첫
+// 자식부터 children이다(목록 항목의 hasAmbiguousLeadingListParagraph와 동일
+// 비대칭 없음 규칙).
 function blockquoteToBlocks(
   node: MarkdownNode,
   createId: IdFactory,
   warnings: ImportWarning[],
 ): Block[] {
-  const blocks: Block[] = [];
+  const id = createId();
+  const quoteChildren = node.children ?? [];
+  const contentNode =
+    quoteChildren[0]?.type === "paragraph" ? quoteChildren[0] : undefined;
+  const childNodes =
+    contentNode === undefined ? quoteChildren : quoteChildren.slice(1);
+  const children = blocksFromNodes(childNodes, createId, warnings);
+  const content: InlineContent = [];
+  readInlineNodes(contentNode?.children ?? [], [], content, warnings, {
+    blockId: id,
+    inTableCell: false,
+  });
 
-  for (const child of node.children ?? []) {
-    if (child.type === "paragraph") {
-      const id = createId();
-      blocks.push({
-        id,
-        type: "quote",
-        content: inlineContentFromNodes(child.children ?? [], warnings, {
-          blockId: id,
-          inTableCell: false,
-        }),
-      });
-      continue;
-    }
-
-    if (child.type === "blockquote") {
-      const nestedBlocks = blockquoteToBlocks(child, createId, warnings);
-      appendNodeBlocks(blocks, child, nestedBlocks);
-      const firstNestedBlock = nestedBlocks[0];
-      if (firstNestedBlock !== undefined) {
-        warnings.push({
-          kind: "NESTED_QUOTE_FLATTENED",
-          blockId: firstNestedBlock.id,
-          message: "Nested blockquote was flattened into sibling blocks",
-        });
-      }
-      continue;
-    }
-
-    const childBlocks = blocksFromNode(child, createId, warnings);
-    appendNodeBlocks(blocks, child, childBlocks);
-    const firstChildBlock = childBlocks[0];
-    if (firstChildBlock !== undefined) {
-      warnings.push({
-        kind: "QUOTE_CHILD_DOWNGRADED",
-        blockId: firstChildBlock.id,
-        message: `Blockquote child "${child.type}" was imported outside the quote structure`,
-      });
-    }
-  }
-
-  if (blocks.length === 0) {
-    blocks.push({ id: createId(), type: "quote", content: [] });
-  }
-
-  return blocks;
+  return [
+    {
+      id,
+      type: "quote",
+      content,
+      ...(children.length === 0 ? {} : { children }),
+    },
+  ];
 }
 
 const unsupportedBlockText = (node: MarkdownNode): string =>

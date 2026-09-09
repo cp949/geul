@@ -9,8 +9,6 @@ export type ImportWarning = {
     | "IMAGE_DOWNGRADED"
     | "UNSUPPORTED_BLOCK_DOWNGRADED"
     | "UNSUPPORTED_INLINE_DOWNGRADED"
-    | "QUOTE_CHILD_DOWNGRADED"
-    | "NESTED_QUOTE_FLATTENED"
     | "CODE_BLOCK_META_DROPPED";
   blockId: string;
   rowId?: string;
