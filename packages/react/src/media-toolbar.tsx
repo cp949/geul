@@ -184,6 +184,19 @@ export const MediaToolbar = ({
       setToolbarState({ mode: "closed" });
       return;
     }
+    // File Panel이 URL 적용 결과를 보여주는 동안 같은 블록의 toolbar를
+    // 활성화하면 Escape 하나가 두 overlay의 dismiss listener를 함께 태워
+    // dismissedBlockIdRef를 오염시킨다. File Panel이 닫힌 뒤 다음 selection
+    // refresh에서만 toolbar를 연다.
+    if (
+      element.getAttribute("data-geul-file-panel-block-id") === media.blockId
+    ) {
+      viewBlockIdRef.current = null;
+      setToolbarState((prev) =>
+        prev.mode === "closed" ? prev : { mode: "closed" },
+      );
+      return;
+    }
     if (dismissedBlockIdRef.current === media.blockId) return;
 
     viewBlockIdRef.current = media.blockId;

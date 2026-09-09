@@ -80,6 +80,8 @@ export const FilePanel = ({
   const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [panelState, setPanelState] = useState<PanelState>({ mode: "closed" });
+  const openPanelBlockId =
+    panelState.mode === "open" ? panelState.blockId : null;
   // dismissPanel 직후의 재오픈 경합(아래 dismissedBlockIdRef 주석)에서만
   // 쓴다 — link-toolbar.tsx와 달리 이 컴포넌트는 "열려 있는 동안 전부
   // 재관측을 억제"하지 않는다(예전엔 그렇게 했다가 QA-067에서 회귀로
@@ -117,9 +119,21 @@ export const FilePanel = ({
     }
 
     const media = editor.getSelectionMediaBlock();
-    if (media === null || media.url !== null) {
-      // 실제로 다른 블록(또는 url이 채워진 블록)으로 선택이 옮겨갔다 —
-      // 다음에 다시 이 blockId로 돌아오면 다시 열려야 하므로 잊는다.
+    if (media === null) {
+      openBlockIdRef.current = null;
+      dismissedBlockIdRef.current = null;
+      setPanelState((prev) =>
+        prev.mode === "closed" ? prev : { mode: "closed" },
+      );
+      return;
+    }
+    if (media.url !== null) {
+      // 이 panel이 소유한 블록에 URL을 적용한 경우 이름·업로드 결과를 계속
+      // 보여준다. URL 적용이 만든 selectionchange가 panel을 먼저 닫으면 같은
+      // 이벤트에서 MediaToolbar도 활성화돼 Escape 하나가 두 overlay를 함께
+      // dismiss하는 경합이 생긴다. 다른 채워진 블록으로 선택이 이동한 경우만
+      // 닫는다.
+      if (openBlockIdRef.current === media.blockId) return;
       openBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
       setPanelState((prev) =>
@@ -169,6 +183,16 @@ export const FilePanel = ({
   }, [editor, element]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
+
+  useEffect(() => {
+    if (element === null) return;
+    if (openPanelBlockId === null) {
+      element.removeAttribute("data-geul-file-panel-block-id");
+    } else {
+      element.setAttribute("data-geul-file-panel-block-id", openPanelBlockId);
+    }
+    return () => element.removeAttribute("data-geul-file-panel-block-id");
+  }, [element, openPanelBlockId]);
 
   useEffect(() => {
     if (panelState.mode === "open") inputRef.current?.focus();

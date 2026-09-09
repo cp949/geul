@@ -10,10 +10,12 @@
  * #154 MED-009)의 aria-pressed 반영·undo 1회 복원·audio/file 미노출도
  * 검증한다 — textAlignment는 아직 편집 DOM에 투영하지 않아(media-block-
  * extension.ts 주석) 시각 스타일이 아닌 aria-pressed로 "DOM 반영"을
- * 확인한다.
+ * 확인한다. fixed overlay viewport clamp(RD-002, PIT-0011)도 이 파일이
+ * 검증한다.
  */
 import { expect, test } from "@playwright/test";
 
+import { expectOverlayWithinViewport } from "./support/clamp.js";
 import { insertFilledImage, openDemo } from "./support/demo.js";
 
 test("url 있는 이미지를 선택하면 toolbar가 나타나고 4개 control이 보인다 @core", async ({
@@ -403,4 +405,45 @@ test("audio 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED
   // Preview 토글은 audio 대상이라 여전히 노출된다(슬라이스5 RD-002
   // DELTA-01) — 정렬 버튼만 image/video 전용으로 구분됨을 함께 확인한다.
   await expect(page.getByRole("button", { name: "Preview" })).toBeVisible();
+});
+
+// RD-002 DELTA-01: media-toolbar.tsx도 file-panel.tsx와 같은 결함(전용 scss
+// 부재로 position: static)을 공유해 뷰포트 clamp 대상 자체가 없었다
+// (media-file-panel.spec.ts의 "문서 하단에서..." 테스트와 같은 패턴,
+// PIT-0011).
+test("문서 하단에서 미디어를 선택해도 Media Toolbar가 뷰포트 안에서 보인다 (PIT-0011)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first");
+  for (let index = 0; index < 25; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+  await page
+    .getByRole("textbox", { name: "Image URL" })
+    .pressSequentially("https://example.com/dir/photo.png");
+  await page.getByRole("button", { name: "Save URL" }).click();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+
+  // insertFilledImage를 그대로 재사용하지 않는다 — 그 헬퍼의 첫 줄
+  // `editable.click()`이 문서 중간을 클릭해 캐럿이 하단에서 벗어난다(이
+  // 시나리오가 요구하는 "문서 하단" 전제가 깨진다). 여기서는 이미 하단에
+  // 캐럿이 있는 채로 이어서 조작한다.
+  const wrapper = editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("img") });
+  await wrapper.click();
+
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+  await expect(toolbar).toBeVisible();
+  await expect(toolbar).toHaveCSS("position", "fixed");
+  await expectOverlayWithinViewport(toolbar, page);
 });
