@@ -65,9 +65,14 @@ const highlightedBlockIds = (): string[] =>
     document.querySelectorAll("[data-geul-block-selection-highlight]"),
   ).map((el) => el.getAttribute("data-geul-highlighted-block-id") ?? "");
 
-/** 이동 버튼(위/아래)의 disabled 여부를 native 속성으로 직접 읽는다. */
+/** 이동 버튼(위/아래)의 aria-disabled 여부를 읽는다(G-UI-004, disabled 속성 없음). */
 const isMoveButtonDisabled = (label: string): boolean =>
-  (screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled;
+  screen.getByRole("button", { name: label }).getAttribute("aria-disabled") ===
+  "true";
+
+/** 이동 버튼의 title(G-UI-004: 비활성 사유 또는 기존 라벨)을 읽는다. */
+const titleOf = (label: string): string | null =>
+  screen.getByRole("button", { name: label }).getAttribute("title");
 
 describe("blockSelection이 있으면 툴바와 하이라이트를 렌더한다", () => {
   it("delete·위로 이동·아래로 이동 버튼을 가진 툴바가 뜬다", () => {
@@ -292,22 +297,63 @@ describe("아래로 이동 버튼", () => {
 });
 
 describe("형제 목록 경계에서 이동 버튼을 비활성화한다", () => {
-  it("선택 범위가 맨 앞이면 위로 이동 버튼이 비활성화된다", () => {
+  it("선택 범위가 맨 앞이면 위로 이동 버튼이 비활성화되고 title에 사유가 뜬다", () => {
     const { editor } = renderToolbar();
     editor.commands.selectBlockRange("block-1", "block-2");
     fireSelectionChange();
 
     expect(isMoveButtonDisabled(moveUpLabel)).toBe(true);
     expect(isMoveButtonDisabled(moveDownLabel)).toBe(false);
+    expect(titleOf(moveUpLabel)).toBe("Can't move up — already at the top");
+    expect(titleOf(moveDownLabel)).toBe(moveDownLabel);
   });
 
-  it("선택 범위가 맨 뒤이면 아래로 이동 버튼이 비활성화된다", () => {
+  it("선택 범위가 맨 앞이면 위로 이동 버튼 클릭이 명령을 호출하지 않는다", () => {
+    const { editor } = renderToolbar();
+    editor.commands.selectBlockRange("block-1", "block-2");
+    fireSelectionChange();
+
+    fireEvent.click(screen.getByRole("button", { name: moveUpLabel }));
+
+    // aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다(G-UI-004) —
+    // handleMoveUp의 기존 no-op 가드(if (!toolbarState.canMoveUp) return;)가
+    // 클릭을 막았는지 문서 순서 불변으로 본다.
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "block-1",
+      "block-2",
+      "block-3",
+      "block-4",
+      "block-5",
+    ]);
+  });
+
+  it("선택 범위가 맨 뒤이면 아래로 이동 버튼이 비활성화되고 title에 사유가 뜬다", () => {
     const { editor } = renderToolbar();
     editor.commands.selectBlockRange("block-4", "block-5");
     fireSelectionChange();
 
     expect(isMoveButtonDisabled(moveUpLabel)).toBe(false);
     expect(isMoveButtonDisabled(moveDownLabel)).toBe(true);
+    expect(titleOf(moveUpLabel)).toBe(moveUpLabel);
+    expect(titleOf(moveDownLabel)).toBe(
+      "Can't move down — already at the bottom",
+    );
+  });
+
+  it("선택 범위가 맨 뒤이면 아래로 이동 버튼 클릭이 명령을 호출하지 않는다", () => {
+    const { editor } = renderToolbar();
+    editor.commands.selectBlockRange("block-4", "block-5");
+    fireSelectionChange();
+
+    fireEvent.click(screen.getByRole("button", { name: moveDownLabel }));
+
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "block-1",
+      "block-2",
+      "block-3",
+      "block-4",
+      "block-5",
+    ]);
   });
 
   it("선택 범위가 문서 전체이면 위·아래 이동 버튼이 모두 비활성화된다", () => {

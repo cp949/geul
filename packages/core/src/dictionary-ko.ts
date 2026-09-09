@@ -190,6 +190,8 @@ export const KO_DICTIONARY: Dictionary = {
       moveUp: "선택 항목 위로 이동",
       moveDown: "선택 항목 아래로 이동",
       delete: "선택한 블록 삭제",
+      moveUpDisabledReason: "맨 위 항목이라 더 위로 이동할 수 없습니다",
+      moveDownDisabledReason: "맨 아래 항목이라 더 아래로 이동할 수 없습니다",
     },
     formatting: {
       ariaLabel: "서식",

@@ -9,7 +9,10 @@ import type {
  * icon-only 버튼의 공통 계약을 한곳에서 강제하는 내부 컴포넌트(index.ts 미수출).
  *
  * - accessible name(aria-label)과 tooltip(title)을 같은 label에서 파생해
- *   두 속성의 drift를 구조적으로 차단한다.
+ *   두 속성의 drift를 구조적으로 차단한다. 예외: 선택적 title prop을 주면
+ *   그 값으로 override한다(G-UI-004, RD-002) — aria-label은 override
+ *   대상이 아니고 항상 label 단일 소스로 남는다. 비활성 사유처럼 title만
+ *   달라져야 하는 경우를 위한 것이라 drift 차단 불변식을 깨지 않는다.
  * - 아이콘 svg를 flex 센터링한다(preflight 부재 환경에서 baseline 정렬로
  *   버튼 높이가 틀어지는 문제 방지).
  * - 빈 LucideProvider로 감싸 소비자 앱의 LucideProvider(className 주입 등)가
@@ -41,6 +44,8 @@ type IconButtonProps = {
   label: string;
   icon: ReactElement;
   className: string;
+  /** 생략하면 label을 그대로 쓴다(기존 동작). G-UI-004 비활성 사유 override 전용. */
+  title?: string | undefined;
 } & Omit<
   ComponentPropsWithoutRef<"button">,
   "aria-label" | "children" | "className" | "title" | "type"
@@ -50,6 +55,7 @@ export const IconButton = ({
   label,
   icon,
   className,
+  title,
   onMouseDown,
   ...rest
 }: IconButtonProps) => (
@@ -57,7 +63,7 @@ export const IconButton = ({
     aria-label={label}
     className={`${baseClassName} ${className}`}
     onMouseDown={preserveFocusOnMouseDown(onMouseDown)}
-    title={label}
+    title={title ?? label}
     type="button"
     {...rest}
   >

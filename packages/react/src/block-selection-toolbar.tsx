@@ -335,18 +335,28 @@ export const BlockSelectionToolbar = () => {
         style={style}
       >
         <IconButton
+          aria-disabled={!toolbarState.canMoveUp}
           className={buttonClassName}
-          disabled={!toolbarState.canMoveUp}
           icon={moveUpIcon}
           label={dictionary.toolbar.blockSelection.moveUp}
           onClick={handleMoveUp}
+          title={
+            toolbarState.canMoveUp
+              ? undefined
+              : dictionary.toolbar.blockSelection.moveUpDisabledReason
+          }
         />
         <IconButton
+          aria-disabled={!toolbarState.canMoveDown}
           className={buttonClassName}
-          disabled={!toolbarState.canMoveDown}
           icon={moveDownIcon}
           label={dictionary.toolbar.blockSelection.moveDown}
           onClick={handleMoveDown}
+          title={
+            toolbarState.canMoveDown
+              ? undefined
+              : dictionary.toolbar.blockSelection.moveDownDisabledReason
+          }
         />
         <IconButton
           className={dangerButtonClassName}

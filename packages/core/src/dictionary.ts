@@ -194,6 +194,10 @@ export type Dictionary = {
       moveUp: string;
       moveDown: string;
       delete: string;
+      // G-UI-004(RD-002) — 위/아래 이동 버튼이 형제 목록 경계에서
+      // aria-disabled일 때 title로 노출하는 비활성 사유.
+      moveUpDisabledReason: string;
+      moveDownDisabledReason: string;
     };
     formatting: {
       ariaLabel: string;
@@ -437,6 +441,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       moveUp: "Move selection up",
       moveDown: "Move selection down",
       delete: "Delete selected blocks",
+      moveUpDisabledReason: "Can't move up — already at the top",
+      moveDownDisabledReason: "Can't move down — already at the bottom",
     },
     formatting: {
       ariaLabel: "Formatting",
