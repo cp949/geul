@@ -38,7 +38,9 @@ describe("SCSS 빌드 파이프라인", () => {
     const css = compileCss();
 
     expect(css).toContain(".geul-icon-button {");
-    expect(css).toContain(".geul-table-menu__item--danger:disabled {");
+    expect(css).toContain(
+      '.geul-table-menu__item--danger[aria-disabled=true] {',
+    );
   });
 
   it("placeholder 표시 규칙을 data-placeholder 속성 선택자로 컴파일한다(UI-009)", () => {
