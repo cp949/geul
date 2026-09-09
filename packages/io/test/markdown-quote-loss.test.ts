@@ -13,6 +13,7 @@
  * 확인한다. toggleListItem처럼 quote 중첩과 무관하게 원래 손실인 카테고리는
  * (TOGGLE_STATE_LOST 등) 재import 결과가 원본과 달라지는 것이 기대 동작이다.
  */
+import type { DocumentBlock, QuoteBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { analyzeMarkdownLoss, exportMarkdown } from "../src/index.js";
@@ -24,6 +25,14 @@ import {
   quoteBlock,
 } from "./fixtures/quote-divider-document.js";
 import { importOk } from "./markdown-round-trip-support.js";
+
+// CustomBlock.type이 리터럴이 아닌 string이라(model/src/types.ts:199-201)
+// `block.type !== "quote"` 가드만으로는 판별 유니온이 CustomBlock 분기를
+// 배제하지 못한다 — 사용자 정의 type predicate로 직접 단언해 캐스트 없이
+// 좁힌다(Issue #166 결정 D1).
+function isQuoteBlock(block: DocumentBlock): block is QuoteBlock {
+  return block.type === "quote";
+}
 
 describe("quote children의 GFM round-trip(BLK-005)", () => {
   it("children 있는 quote의 strict export가 성공하고 중첩 blockquote(`>`/`>>`)를 낸다", () => {
@@ -545,8 +554,10 @@ describe("export→import round-trip(BLK-005 RD-001 DELTA-03)", () => {
     expect(reimported.blocks).toHaveLength(1);
     const quote = reimported.blocks[0];
     expect(quote?.type).toBe("quote");
-    expect(quote?.children).toHaveLength(1);
-    const table = quote?.children?.[0];
+    if (!quote || !isQuoteBlock(quote))
+      throw new Error("Expected a quote block");
+    expect(quote.children).toHaveLength(1);
+    const table = quote.children?.[0];
     expect(table).toMatchObject({
       type: "table",
       headerRows: 1,
