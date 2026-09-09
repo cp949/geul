@@ -439,13 +439,15 @@ export const FormattingToolbar = ({
                   : "true"
               }
               className="geul-formatting-toolbar__mark-button"
-              disabled={toolbarState.nestingActions?.canIndent !== true}
               icon={indentIcon}
               key="indent"
               label="Indent"
               onClick={() => {
                 const blockSelection = toolbarState.blockSelection;
                 if (blockSelection === null) return;
+                // G-UI-004: aria-disabled는 disabled와 달리 클릭 이벤트를
+                // 막지 않는다 — 명시적 가드로 비활성 상태의 클릭을 막는다.
+                if (toolbarState.nestingActions?.canIndent !== true) return;
                 // Result 실패(COMMAND_NOT_APPLICABLE 등)는 기존 mark
                 // 버튼과 같은 방식으로 조용히 버린다 — Tab 키 경로(D9)와
                 // 동일선상.
@@ -461,6 +463,11 @@ export const FormattingToolbar = ({
                       },
                 );
               }}
+              title={
+                toolbarState.nestingActions?.canIndent === true
+                  ? undefined
+                  : dictionary.nesting.indentDisabledReason
+              }
             />
             <IconButton
               aria-disabled={
@@ -469,13 +476,13 @@ export const FormattingToolbar = ({
                   : "true"
               }
               className="geul-formatting-toolbar__mark-button"
-              disabled={toolbarState.nestingActions?.canOutdent !== true}
               icon={outdentIcon}
               key="outdent"
               label="Outdent"
               onClick={() => {
                 const blockSelection = toolbarState.blockSelection;
                 if (blockSelection === null) return;
+                if (toolbarState.nestingActions?.canOutdent !== true) return;
                 editor.commands.outdentBlock(blockSelection.blockId);
                 setToolbarState((current) =>
                   current === null
@@ -488,6 +495,11 @@ export const FormattingToolbar = ({
                       },
                 );
               }}
+              title={
+                toolbarState.nestingActions?.canOutdent === true
+                  ? undefined
+                  : dictionary.nesting.outdentDisabledReason
+              }
             />
           </>
         )}

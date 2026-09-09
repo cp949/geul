@@ -17,7 +17,7 @@ import { selectText } from "./selection-events.js";
 afterEach(cleanup);
 
 describe("들여쓰기/내어쓰기 버튼", () => {
-  it("core query가 불가로 판정한 버튼만 disabled와 aria-disabled를 함께 표시한다", () => {
+  it("core query가 불가로 판정한 버튼만 aria-disabled와 title 사유를 표시한다(G-UI-004)", () => {
     const getBlockNestingActionState = vi.fn(() => ({
       canIndent: false,
       canOutdent: true,
@@ -46,11 +46,75 @@ describe("들여쓰기/내어쓰기 버튼", () => {
 
     const indent = screen.getByRole("button", { name: "Indent" });
     const outdent = screen.getByRole("button", { name: "Outdent" });
-    expect((indent as HTMLButtonElement).disabled).toBe(true);
     expect(indent.getAttribute("aria-disabled")).toBe("true");
-    expect((outdent as HTMLButtonElement).disabled).toBe(false);
+    expect(indent.getAttribute("title")).toBe("Can't indent further");
     expect(outdent.getAttribute("aria-disabled")).toBe("false");
+    expect(outdent.getAttribute("title")).toBe("Outdent");
     expect(getBlockNestingActionState).toHaveBeenCalledWith("block-1");
+  });
+
+  it("canIndent=false인 상태에서 클릭해도 indentBlock을 호출하지 않는다(신규 no-op 가드)", () => {
+    const getBlockNestingActionState = vi.fn(() => ({
+      canIndent: false,
+      canOutdent: true,
+    }));
+    const controller = fakeController(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      getBlockNestingActionState,
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    fireEvent.click(screen.getByRole("button", { name: "Indent" }));
+
+    expect(controller.commands.indentBlock).not.toHaveBeenCalled();
+  });
+
+  it("canOutdent=false인 상태에서 클릭해도 outdentBlock을 호출하지 않는다(신규 no-op 가드)", () => {
+    const getBlockNestingActionState = vi.fn(() => ({
+      canIndent: true,
+      canOutdent: false,
+    }));
+    const controller = fakeController(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      getBlockNestingActionState,
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    fireEvent.click(screen.getByRole("button", { name: "Outdent" }));
+
+    expect(controller.commands.outdentBlock).not.toHaveBeenCalled();
   });
 
   it("구조 변경 뒤 같은 블록의 action 상태를 다시 조회해 연속 클릭을 허용한다", () => {
@@ -81,16 +145,18 @@ describe("들여쓰기/내어쓰기 버튼", () => {
     selectText(textNode, 0, 8);
 
     expect(
-      (screen.getByRole("button", { name: "Outdent" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+      screen
+        .getByRole("button", { name: "Outdent" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Indent" }));
 
     expect(getBlockNestingActionState).toHaveBeenCalledTimes(2);
     expect(
-      (screen.getByRole("button", { name: "Outdent" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
+      screen
+        .getByRole("button", { name: "Outdent" })
+        .getAttribute("aria-disabled"),
+    ).toBe("false");
   });
 
   it("텍스트가 선택된 상태(blockSelection !== null)에서 들여쓰기 버튼 클릭 시 editor.commands.indentBlock이 해당 blockId로 호출된다", () => {
@@ -215,8 +281,9 @@ describe("들여쓰기/내어쓰기 버튼", () => {
     }).not.toThrow();
     expect(getBlockNestingActionState).toHaveBeenCalledTimes(3);
     expect(
-      (screen.getByRole("button", { name: "Indent" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+      screen
+        .getByRole("button", { name: "Indent" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 });

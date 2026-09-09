@@ -38,4 +38,9 @@
     background-color: var(--geul-color-accent-muted, #e8f0fe);
     color: var(--geul-color-accent, #1a73e8);
   }
+
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
 }
