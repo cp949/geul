@@ -620,14 +620,21 @@ test("표 상단 열 재정렬 핸들과 Add column 버튼도 스크롤로 지�
  * indent·outdent도 열 핸들·Add column과 같은 이유(표 위쪽 anchor)로
  * `scrollPastOverlay`가 필요하다. indent는 앞 형제 블록이 있어야
  * `canIndentTable`이 참이다(`indent-commands.ts`, `table-handle.spec.ts`
- * Issue #126 테스트와 같은 전제) — `.focus()`로 실제 초점 이동을
- * 확인하려면 버튼이 disabled가 아니어야 하므로 표 앞에 문단 하나를 둔다.
+ * Issue #126 테스트와 같은 전제) — 표 앞에 문단 하나를 둔다.
  * `HTMLElement.focus()`의 기본값(`preventScroll: false`)은 Tab과 같은
  * 네이티브 scroll-into-view를 호출한다(MDN, DELTA-01 테스트 주석이 이미
  * 인용) — Tab 키 시퀀스 대신 `.focus()`를 쓰는 이유는 이 표의 tab 순서를
  * 정확히 재현할 필요 없이 같은 API를 직접 검증할 수 있어서다.
+ *
+ * outdent 버튼은 Issue #65 항목8 RD-003이 네이티브 `disabled`를
+ * `aria-disabled`로 바꿨다 — tab 순서·`.focus()`를 막지 않는다("disabled라
+ * focus 불가"라는 전제 자체를 없애는 것이 그 수정 목표다). 그래서 초기
+ * 상태는 `toBeDisabled()`/`toBeEnabled()`(둘 다 `aria-disabled`도
+ * disabled로 인식해 이 전환으로는 깨지지 않는다) 대신 `aria-disabled`
+ * 속성으로 직접 확인하고, 도달성은 indent와 같은 `.focus()` 경로로
+ * 통일한다(`scrollIntoViewIfNeeded()` 특수 경로는 제거).
  */
-test("indent·outdent 버튼도 표를 지나쳐 스크롤한 뒤 포커스·명시적 scrollIntoView로 도달 가능하다 (Issue #163 RD-002 DELTA-02)", async ({
+test("indent·outdent 버튼도 표를 지나쳐 스크롤한 뒤 포커스로 도달 가능하다 (Issue #163 RD-002 DELTA-02, Issue #65 항목8 RD-006)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -648,25 +655,30 @@ test("indent·outdent 버튼도 표를 지나쳐 스크롤한 뒤 포커스·명
   const indentButton = page.getByRole("button", { name: "Indent table" });
   const outdentButton = page.getByRole("button", { name: "Outdent table" });
   // 앞에 문단이 있어 최상위 표라도 indent는 활성, outdent는 비활성이다.
-  await expect(indentButton).toBeEnabled();
-  await expect(outdentButton).toBeDisabled();
+  await expect(indentButton).toHaveAttribute("aria-disabled", "false");
+  await expect(outdentButton).toHaveAttribute("aria-disabled", "true");
 
   // 실측 1: indent는 활성 상태라 .focus()로 실제 초점 이동 + 네이티브
   // scroll-into-view를 함께 확인한다.
   await scrollPastOverlay(page, indentButton);
   await expect(indentButton).not.toBeInViewport();
-  const scrollYBeforeFocus = await page.evaluate(() => window.scrollY);
+  const scrollYBeforeIndentFocus = await page.evaluate(() => window.scrollY);
   await indentButton.focus();
   await expect(indentButton).toBeFocused();
-  const scrollYAfterFocus = await page.evaluate(() => window.scrollY);
-  expect(scrollYAfterFocus).not.toBe(scrollYBeforeFocus);
+  const scrollYAfterIndentFocus = await page.evaluate(() => window.scrollY);
+  expect(scrollYAfterIndentFocus).not.toBe(scrollYBeforeIndentFocus);
   await expect(indentButton).toBeInViewport();
 
-  // 실측 2: outdent는 disabled라 포커스를 받을 수 없다 — 명시적
-  // scrollIntoViewIfNeeded()로 같은 도달성을 확인한다.
+  // 실측 2: outdent는 aria-disabled라도 네이티브 disabled가 아니라 tab
+  // 순서·포커스를 그대로 유지한다 — indent와 같은 .focus() 경로로 초점
+  // 이동 + 네이티브 scroll-into-view를 함께 확인한다.
   await scrollPastOverlay(page, outdentButton);
   await expect(outdentButton).not.toBeInViewport();
-  await outdentButton.scrollIntoViewIfNeeded();
+  const scrollYBeforeOutdentFocus = await page.evaluate(() => window.scrollY);
+  await outdentButton.focus();
+  await expect(outdentButton).toBeFocused();
+  const scrollYAfterOutdentFocus = await page.evaluate(() => window.scrollY);
+  expect(scrollYAfterOutdentFocus).not.toBe(scrollYBeforeOutdentFocus);
   await expect(outdentButton).toBeInViewport();
 });
 
