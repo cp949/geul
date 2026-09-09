@@ -6,6 +6,13 @@
  */
 import { expect, test } from "@playwright/test";
 
+import {
+  blockOrder,
+  blockSelectionToolbar,
+  deleteSelectedBlocksButton,
+  moveSelectionDownButton,
+  moveSelectionUpButton,
+} from "./support/block-selection-toolbar.js";
 import { insertTable, openDemo } from "./support/demo.js";
 
 test("슬래시 메뉴에서 표를 삽입하고 undo 1회로 복원한다", async ({ page }) => {
@@ -663,4 +670,82 @@ test("다른 블록의 자식인 표 hover 시 Outdent 버튼이 표를 형제�
       '[data-geul-block-id="toggle-1"] > [data-geul-block-group] > [data-geul-block-id="table-1"]',
     ),
   ).toHaveCount(1);
+});
+
+// Issue #149 — 표 앞뒤에 형제 문단을 둔 문서. Delete(before/after만 남음)와
+// 위로 이동(table-1이 before 앞으로) 두 e2e가 같은 모양을 공유한다.
+const tableWithSiblingsDocument = () => ({
+  formatVersion: 1,
+  revision: 0,
+  blocks: [
+    { id: "before", type: "paragraph", content: [{ text: "before" }] },
+    minimalTableBlock("table-1"),
+    { id: "after", type: "paragraph", content: [{ text: "after" }] },
+  ],
+});
+
+// Issue #149 — BlockSelectionToolbar(Delete·위/아래 이동)를 표에도 여는
+// 유일한 진입점. table-handles.tsx의 Select table 버튼이
+// selectBlockRange(tableBlockId, tableBlockId)를 커밋하면, 표를 거절하지
+// 않는 기존 BlockSelectionToolbar(block-selection-toolbar.tsx)가 그대로
+// 뜬다 — 새 toolbar 컴포넌트는 만들지 않는다(01-계획.md "결정").
+test("표 선택 버튼을 클릭하면 Block selection 툴바가 뜨고 Delete로 표를 삭제한 뒤 undo 1회로 복원한다 (Issue #149)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await page
+    .getByLabel("Document source")
+    .fill(JSON.stringify(tableWithSiblingsDocument()));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const table = editable.locator("table");
+  await expect(table).toBeVisible();
+  // Load JSON 직후 포커스는 그 버튼에 있다 — Control+z가 ProseMirror
+  // history에 닿으려면 contenteditable을 먼저 클릭해야 한다(위 Indent/Outdent
+  // 테스트와 같은 이유).
+  await table.locator("td").first().click();
+  await table.locator("td").first().hover();
+
+  await page.getByRole("button", { name: "Select table" }).click();
+
+  await expect(blockSelectionToolbar(page)).toBeVisible();
+  await expect(deleteSelectedBlocksButton(page)).toBeVisible();
+  await expect(moveSelectionUpButton(page)).toBeVisible();
+  await expect(moveSelectionDownButton(page)).toBeVisible();
+
+  await deleteSelectedBlocksButton(page).click();
+
+  await expect(blockSelectionToolbar(page)).toHaveCount(0);
+  expect(await blockOrder(editable)).toEqual(["before", "after"]);
+
+  await page.keyboard.press("Control+z");
+
+  expect(await blockOrder(editable)).toEqual(["before", "table-1", "after"]);
+  await expect(editable.locator("table")).toBeVisible();
+});
+
+test("표 선택 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 형제 앞으로 이동하고 undo 1회로 복원된다 (Issue #149)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await page
+    .getByLabel("Document source")
+    .fill(JSON.stringify(tableWithSiblingsDocument()));
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const table = editable.locator("table");
+  await expect(table).toBeVisible();
+  await table.locator("td").first().click();
+  await table.locator("td").first().hover();
+
+  await page.getByRole("button", { name: "Select table" }).click();
+  await expect(blockSelectionToolbar(page)).toBeVisible();
+
+  await moveSelectionUpButton(page).click();
+
+  expect(await blockOrder(editable)).toEqual(["table-1", "before", "after"]);
+
+  await page.keyboard.press("Control+z");
+
+  expect(await blockOrder(editable)).toEqual(["before", "table-1", "after"]);
 });

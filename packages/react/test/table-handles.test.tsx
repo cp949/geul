@@ -35,6 +35,7 @@ const rowHandleLabel = "Drag to reorder row, click for options";
 const columnHandleLabel = "Drag to reorder column, click for options";
 const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
+const selectTableLabel = "Select table";
 
 if (typeof Element.prototype.setPointerCapture !== "function") {
   Element.prototype.setPointerCapture = () => {};
@@ -525,6 +526,41 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
     const ids = columnsOf(editor).map((column) => column.id);
     expect(ids).toHaveLength(3);
     expect(ids.slice(0, 2)).toEqual(columnIds);
+  });
+});
+
+describe("표 선택 버튼", () => {
+  // Issue #149 — Indent/Outdent와 같은 좌상단 여백 클러스터에 Select table
+  // 버튼을 추가한다. 이 버튼이 여는 BlockSelectionToolbar(Delete·위/아래
+  // 이동)의 조립은 e2e(table-handle.spec.ts)가 맡는다 — 여기서는
+  // handleSelectTable이 실제로 selectBlockRange(tableId, tableId)를
+  // 커밋하는지만 문서 결과(getBlockSelection)로 확인한다.
+  it("클릭하면 selectBlockRange(tableBlockId, tableBlockId)를 호출한다", () => {
+    const { editor, table, tableBlockId } = renderRealTable();
+    fireEvent.pointerMove(table);
+
+    fireEvent.click(screen.getByRole("button", { name: selectTableLabel }));
+
+    expect(editor.getBlockSelection()).toEqual({
+      fromBlockId: tableBlockId,
+      toBlockId: tableBlockId,
+    });
+  });
+
+  it("dictionary override 시 라벨이 바뀐다(EXT-009)", () => {
+    const { table } = renderRealTable({
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        handle: {
+          ...DEFAULT_DICTIONARY.handle,
+          selectTable: "표 선택",
+        },
+      },
+    });
+
+    fireEvent.pointerMove(table);
+
+    expect(screen.getByRole("button", { name: "표 선택" })).not.toBeNull();
   });
 });
 

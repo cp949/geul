@@ -202,6 +202,7 @@ export const KO_DICTIONARY: Dictionary = {
     addColumn: "열 추가",
     indentTable: "표 들여쓰기",
     outdentTable: "표 내어쓰기",
+    selectTable: "표 선택",
     dragBlock: "드래그해서 순서 변경, 클릭하면 옵션 표시",
     addBlock: "블록 추가",
   },

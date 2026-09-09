@@ -567,6 +567,16 @@ export const TableHandles = () => {
     editor.commands.outdentBlock(fresh.tableBlockId);
   };
 
+  // Issue #149 — 표 자신을 selectBlockRange(tableId, tableId)로 선택해
+  // BlockSelectionToolbar(Delete·위/아래 이동)를 연다. Indent/Outdent와 같은
+  // readFreshGeometry() → editor.commands.* 관용구를 그대로 따른다 — 표
+  // 직접 duplicate는 여전히 core가 거절한다(범위 밖, 01-계획.md "결정").
+  const handleSelectTable = () => {
+    const fresh = readFreshGeometry();
+    if (fresh === null) return;
+    editor.commands.selectBlockRange(fresh.tableBlockId, fresh.tableBlockId);
+  };
+
   const reorderGuideRect = computeReorderGuideRect(geometry, reorderState);
 
   // 메뉴 좌표를 click 시점에 고정하면 연 채로 스크롤/창 크기 변경 시
@@ -594,6 +604,7 @@ export const TableHandles = () => {
           onReorderHandleClick={handleReorderHandleClick}
           onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
           onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
+          onSelectTable={handleSelectTable}
           reorderGuideRect={reorderGuideRect}
         />
       )}

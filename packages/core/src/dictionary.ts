@@ -210,6 +210,9 @@ export type Dictionary = {
     addColumn: string;
     indentTable: string;
     outdentTable: string;
+    // Issue #149 — 표 자신을 selectBlockRange(tableId, tableId)로 선택하는
+    // 버튼. indentTable/outdentTable과 같은 자리에 둔다.
+    selectTable: string;
     dragBlock: string;
     addBlock: string;
   };
@@ -446,6 +449,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     addColumn: "Add column",
     indentTable: "Indent table",
     outdentTable: "Outdent table",
+    selectTable: "Select table",
     dragBlock: "Drag to reorder, click for options",
     addBlock: "Add block",
   },
