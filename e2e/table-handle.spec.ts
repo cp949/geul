@@ -724,6 +724,151 @@ test("표 선택 버튼을 클릭하면 Block selection 툴바가 뜨고 Delete�
   await expect(editable.locator("table")).toBeVisible();
 });
 
+// Issue #65 항목3 — actionError(alert)가 메뉴 항목보다 먼저 렌더되면, 실패
+// 직후 같은 화면 좌표를 재클릭할 때 알림이 밀어낸 다른 항목이 맞아떨어진다.
+// 실패는 disabled 가드가 없는 진짜 UI 클릭("Text color None"을 색 없는
+// 셀에 누르면 COMMAND_NOT_APPLICABLE)으로 유발한다(테스트 파일 상단의
+// 표 핸들 헬퍼 패턴을 그대로 따른다).
+//
+// 뷰포트를 넉넉히 키운다(기본 1280×720) — 표 행 메뉴는 항목·색상 팔레트
+// 둘 다 가진 가장 긴 메뉴라 기본 뷰포트에서는 알림이 추가하는 높이만으로도
+// useClampedMenuPosition의 ResizeObserver가 패널 전체를 위로 재클램프한다
+// (PIT-0011, 알림 위치와 무관하게 항상 있는 동작 — 계획의 "적용 함정" 절).
+// 그 재클램프는 패널 전체를 균일하게 밀어 항목 "사이" 상대 위치는 그대로
+// 두지만, 이 테스트가 재사용하는 절대 화면 좌표까지 함께 밀려 이 테스트가
+// 검증하려는 것(알림 앞/뒤 배치로 인한 상대 위치 이동)과 뒤섞인다. 뷰포트를
+// 키워 클램프가 아예 발동하지 않게 해 그 혼입을 제거한다. test.describe로
+// 감싸 이 뷰포트 override가 이 파일의 다른 테스트로 새지 않게 한다.
+test.describe("실패 알림 위치 재현(Issue #65)", () => {
+  test.use({ viewport: { width: 1280, height: 1400 } });
+
+  test("실패 알림이 뜬 뒤에도 다른 메뉴 항목의 좌표가 그대로 유지되고 재클릭이 그 항목에 맞아떨어진다", async ({
+    page,
+  }) => {
+    const { editable } = await openDemo(page);
+    const table = await insertTable(page, editable);
+
+    await table.locator("tr").first().locator("td").first().hover();
+    const rowHandle = page
+      .getByRole("button", { name: "Drag to reorder row" })
+      .first();
+    await expect(rowHandle).toBeVisible();
+    await rowHandle.click();
+
+    const menu = page.getByRole("menu", { name: "Table row menu" });
+    await expect(menu).toBeVisible();
+    const deleteRowItem = page.getByRole("menuitem", { name: "Delete row" });
+    await expect(deleteRowItem).toBeEnabled();
+    const boxBeforeFailure = await deleteRowItem.boundingBox();
+    if (boxBeforeFailure === null) {
+      throw new Error("Delete row 좌표를 읽지 못했다(실패 전)");
+    }
+
+    // 새로 삽입한 표라 첫 행에는 아직 글자색이 없다 — "None" 클릭은
+    // disabled 가드 없이 그냥 클릭돼 문서를 바꾸지 못한 채
+    // COMMAND_NOT_APPLICABLE로 거절된다.
+    await page.getByRole("menuitem", { name: "Text color None" }).click();
+    const alert = page.getByRole("alert");
+    await expect(alert).toBeVisible();
+    await expect(alert).toHaveText("Action failed");
+
+    const boxAfterFailure = await deleteRowItem.boundingBox();
+    if (boxAfterFailure === null) {
+      throw new Error("Delete row 좌표를 읽지 못했다(실패 후)");
+    }
+    // 완료 조건 1 — 알림이 뜨기 전/후로 다른 항목의 좌표가 바뀌지 않는다.
+    expect(boxAfterFailure).toEqual(boxBeforeFailure);
+
+    // 실패 전에 읽어둔 좌표를 그대로 재클릭한다 — 알림이 항목 앞으로
+    // 렌더돼 있었다면 이 좌표는 밀려난 다른 항목(예: Insert row below)을
+    // 맞히게 된다. Delete row가 여전히 그 자리에서 반응하는지는 성공적인
+    // 삭제(메뉴가 닫히고 행이 2개로 준다)로 확인한다 — 엉뚱한 항목이
+    // 반응했다면 메뉴가 열린 채로 남거나 행 수가 다르게 바뀐다.
+    await page.mouse.click(
+      boxBeforeFailure.x + boxBeforeFailure.width / 2,
+      boxBeforeFailure.y + boxBeforeFailure.height / 2,
+    );
+
+    await expect(menu).not.toBeVisible();
+    await expect(table.locator("tr")).toHaveCount(2);
+  });
+});
+
+// Issue #65 항목3 단계-3 결함 탐지에서 발견 — 위 describe의 sticky footer
+// 1차 구현은 alert 유무와 무관하게 항상 보이는 것은 맞았지만, 메뉴가 실제로
+// overflow-y: auto로 스크롤되는 상태에서는 sticky alert가 스크롤되는 마지막
+// 항목 위에 그대로 겹쳐 그려 그 항목의 클릭을 가로챘다(G-UI-001이 보장하는
+// "viewport보다 큰 overlay" 상황에서 정확히 재현). alert를
+// .geul-menu-panel__scroll 밖 고정 슬롯(별도 flex 자식)으로 옮겨 스크롤
+// 영역과 항상 배타적인 공간을 갖게 고쳤다 — 이 테스트는 그 겹침이 다시
+// 생기지 않는지를 실제 스크롤 상태에서 확인한다.
+test.describe("실패 알림이 스크롤 콘텐츠를 가리지 않는다(Issue #65)", () => {
+  // max-height: calc(100vh - 1rem) 안에 항목+색상 팔레트 2벌이 다 들어가지
+  // 못할 만큼 뷰포트를 낮춰 실제 오버플로(스크롤)를 강제한다(진단 확인:
+  // 이 크기에서 .geul-menu-panel__scroll의 scrollHeight가 clientHeight보다
+  // 64px 크다).
+  test.use({ viewport: { width: 1280, height: 320 } });
+
+  test("메뉴가 열리자마자(스크롤 전) 뷰포트 하단에 걸린 콘텐츠가 실패 알림에 가려지지 않는다", async ({
+    page,
+  }) => {
+    const { editable } = await openDemo(page);
+    const table = await insertTable(page, editable);
+
+    await table.locator("tr").first().locator("td").first().hover();
+    const rowHandle = page
+      .getByRole("button", { name: "Drag to reorder row" })
+      .first();
+    await expect(rowHandle).toBeVisible();
+    await rowHandle.click();
+
+    const menu = page.getByRole("menu", { name: "Table row menu" });
+    await expect(menu).toBeVisible();
+
+    // 새로 삽입한 표라 첫 행에는 아직 글자색이 없다 — "None" 클릭은
+    // disabled 가드 없이 그냥 클릭돼 COMMAND_NOT_APPLICABLE로 거절된다
+    // (위 describe와 같은 재현 패턴).
+    await page.getByRole("menuitem", { name: "Text color None" }).click();
+    const alert = page.getByRole("alert");
+    await expect(alert).toBeVisible();
+    await expect(alert).toHaveText("Action failed");
+
+    // 스크롤을 전혀 하지 않은 기본 상태(scrollTop 0)가 재현 조건의
+    // 핵심이다 — sticky footer 1차 구현(단계-3 결함 탐지에서 발견)은
+    // 스크롤이 실제로 필요한 상태가 되자마자, 사용자가 스크롤하지 않아도
+    // alert가 뷰포트 하단에 곧바로 겹쳐 그 지점의 콘텐츠를 가렸다. 맨
+    // 아래로 스크롤해버리면 sticky의 고정 오프셋과 자연 흐름 위치가
+    // 일치해 오히려 겹침이 사라지므로(재현 실패), 스크롤하지 않는다.
+    const scrollArea = menu.locator(".geul-menu-panel__scroll");
+    expect(await scrollArea.evaluate((el) => el.scrollTop)).toBe(0);
+    const overflowPx = await scrollArea.evaluate(
+      (el) => el.scrollHeight - el.clientHeight,
+    );
+    expect(overflowPx).toBeGreaterThan(0);
+
+    // 확인 지점은 .geul-menu-panel(바깥 패널)이 아니라 실제 스크롤
+    // 컨테이너(.geul-menu-panel__scroll) 기준이어야 한다 — 패널 자신의
+    // padding(0.25rem)만큼 바깥 패널의 하단 경계와 실제 콘텐츠(alert
+    // 포함) 하단 경계가 어긋난다.
+    const scrollBox = await scrollArea.boundingBox();
+    if (scrollBox === null) {
+      throw new Error("스크롤 영역 좌표를 읽지 못했다");
+    }
+    // 스크롤 영역 하단 경계 바로 위 지점 — 겹침이 있었다면 여기가 정확히
+    // alert가 그려지는 자리다(단계-3 결함 탐지의 elementFromPoint 재현과
+    // 같은 지점). 폭 방향으로 세 지점을 확인해 우연한 통과를 줄인다.
+    const probeY = scrollBox.y + scrollBox.height - 5;
+    for (const fraction of [0.2, 0.5, 0.8]) {
+      const probeX = scrollBox.x + scrollBox.width * fraction;
+      const roleAtProbe = await page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("role"),
+        { x: probeX, y: probeY },
+      );
+      expect(roleAtProbe).not.toBe("alert");
+    }
+  });
+});
+
 test("표 선택 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 형제 앞으로 이동하고 undo 1회로 복원된다 (Issue #149)", async ({
   page,
 }) => {

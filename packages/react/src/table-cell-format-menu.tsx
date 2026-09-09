@@ -51,55 +51,57 @@ export const TableCellFormatMenu = ({
   return (
     <div
       aria-label={dictionary.menu.cellFormattingAriaLabel}
-      className="geul-menu-panel"
+      className="geul-menu-panel geul-menu-panel--with-footer"
       data-geul-cell-format-menu=""
       ref={menuRef}
       role="menu"
       style={style}
     >
+      <div className="geul-menu-panel__scroll">
+        <TableCellColorPalettes
+          onApplied={onClose}
+          runCommand={runCommand}
+          tableBlockId={tableBlockId}
+          target={target}
+        />
+        <hr className={dividerClassName} />
+        <p className={sectionLabelClassName}>{dictionary.menu.align}</p>
+        <div className="geul-cell-format-menu__align-row">
+          <MenuItemButton
+            aria-label={dictionary.menu.alignLeft}
+            className={alignButtonClassName}
+            onClick={() => applyAlign("left")}
+          >
+            <AlignLeft {...iconProps} />
+          </MenuItemButton>
+          <MenuItemButton
+            aria-label={dictionary.menu.alignCenter}
+            className={alignButtonClassName}
+            onClick={() => applyAlign("center")}
+          >
+            <AlignCenter {...iconProps} />
+          </MenuItemButton>
+          <MenuItemButton
+            aria-label={dictionary.menu.alignRight}
+            className={alignButtonClassName}
+            onClick={() => applyAlign("right")}
+          >
+            <AlignRight {...iconProps} />
+          </MenuItemButton>
+          <MenuItemButton
+            aria-label={dictionary.menu.alignNone}
+            className={alignButtonClassName}
+            onClick={() => applyAlign(null)}
+          >
+            ×
+          </MenuItemButton>
+        </div>
+      </div>
       {actionError !== null && (
         <p className={actionErrorClassName} role="alert">
           {tableCommandErrorMessage(actionError, dictionary)}
         </p>
       )}
-      <TableCellColorPalettes
-        onApplied={onClose}
-        runCommand={runCommand}
-        tableBlockId={tableBlockId}
-        target={target}
-      />
-      <hr className={dividerClassName} />
-      <p className={sectionLabelClassName}>{dictionary.menu.align}</p>
-      <div className="geul-cell-format-menu__align-row">
-        <MenuItemButton
-          aria-label={dictionary.menu.alignLeft}
-          className={alignButtonClassName}
-          onClick={() => applyAlign("left")}
-        >
-          <AlignLeft {...iconProps} />
-        </MenuItemButton>
-        <MenuItemButton
-          aria-label={dictionary.menu.alignCenter}
-          className={alignButtonClassName}
-          onClick={() => applyAlign("center")}
-        >
-          <AlignCenter {...iconProps} />
-        </MenuItemButton>
-        <MenuItemButton
-          aria-label={dictionary.menu.alignRight}
-          className={alignButtonClassName}
-          onClick={() => applyAlign("right")}
-        >
-          <AlignRight {...iconProps} />
-        </MenuItemButton>
-        <MenuItemButton
-          aria-label={dictionary.menu.alignNone}
-          className={alignButtonClassName}
-          onClick={() => applyAlign(null)}
-        >
-          ×
-        </MenuItemButton>
-      </div>
     </div>
   );
 };

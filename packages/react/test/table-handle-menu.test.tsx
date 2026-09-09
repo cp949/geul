@@ -775,6 +775,37 @@ describe("메뉴 명령 실패 시 피드백", () => {
     expect(screen.getByRole("alert").textContent).toBe("Action failed");
   });
 
+  it("실패 알림이 메뉴 항목보다 DOM 순서상 뒤에 온다(Issue #65)", () => {
+    // 위 "그 외 실패..." 테스트와 같은 재현(색 없음 셀에 "없음" 클릭 →
+    // COMMAND_NOT_APPLICABLE)을 재사용한다. 알림이 항목 앞에 렌더되면
+    // 실패 직후 같은 화면 좌표를 재클릭했을 때 알림이 밀어낸 다른 항목이
+    // 맞아떨어진다 — 그 결함을 DOM 순서로 고정한다.
+    const { editor } = openRowMenu();
+    expect(rowsOf(editor)[0]?.cells.map((cell) => cell.textColor)).toEqual([
+      undefined,
+      undefined,
+    ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Action failed");
+
+    const menu = screen.getByRole("menu", { name: "Table row menu" });
+    const children = Array.from(menu.children);
+    // alert가 메뉴의 마지막 자식이어야 한다 — 항목·구분선·색상 팔레트
+    // 전부보다 뒤에 온다는 완료 조건 1의 직접 확인이다.
+    expect(children.at(-1)).toBe(alert);
+
+    // 버튼(메뉴 항목) 하나를 골라 정말 alert보다 앞선 문서 위치인지도
+    // compareDocumentPosition으로 다시 확인한다 — children 배열 순서만
+    // 보면 다른 wrapper 구조 변화로 우연히 통과할 여지가 있다.
+    const deleteButton = screen.getByRole("menuitem", { name: "Delete row" });
+    expect(
+      deleteButton.compareDocumentPosition(alert) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("다른 행으로 메뉴 대상을 바로 전환하면 이전 실패 메시지가 남지 않는다", () => {
     // 앞선 "그 외 실패"와 같은 실패(색 없음 상태에 "없음"을 눌러
     // COMMAND_NOT_APPLICABLE)를 재사용한다 — LAST_ROW 재사용은 표를 1행으로

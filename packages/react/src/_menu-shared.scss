@@ -42,9 +42,35 @@
   border-top: 1px solid var(--geul-color-border, #dadce0);
 }
 
+// table-handle-menu.tsx/table-cell-format-menu.tsx 전용(Issue #65 항목3).
+// 실패 알림을 스크롤 영역 밖 고정 슬롯으로 분리할 때 .geul-menu-panel과
+// 함께 붙인다 — 패널 자신의 스크롤을 .geul-menu-panel__scroll에 위임하고
+// 패널은 클립만 한다(max-height는 유지). 이 modifier가 없는 소비자
+// (formatting-toolbar.tsx)는 .geul-menu-panel의 기존 overflow-y: auto를
+// 그대로 쓴다 — 영향 없음.
+.geul-menu-panel--with-footer {
+  overflow-y: hidden;
+}
+
+// .geul-menu-panel--with-footer 안에서 항목·색상 팔레트를 감싸 실제
+// 스크롤을 담당한다. 알림(.geul-menu-error)은 이 wrapper 밖 형제로 둬서
+// 스크롤 영역이 넘쳐도 항상 자기 몫의 공간을 갖고 다른 항목을 가리지
+// 않는다 — sticky 방식(이전 시도)은 스크롤이 실제로 발생하면 alert가
+// 마지막 항목 위에 겹쳐 그리며 클릭을 가로챘다(단계-3 결함 탐지에서 발견).
+.geul-menu-panel__scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow-y: auto;
+}
+
 .geul-menu-error {
   margin-inline: 0.5rem;
   margin-block: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--geul-color-border, #dadce0);
   font-size: 0.75rem;
   color: var(--geul-color-danger, #d93025);
 }

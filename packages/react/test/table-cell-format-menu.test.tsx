@@ -300,4 +300,54 @@ describe("명령 실패 시 피드백", () => {
       "셀을 더 이상 찾을 수 없음",
     );
   });
+
+  it("실패 알림이 메뉴 항목보다 DOM 순서상 뒤에 온다(Issue #65)", () => {
+    // 위 CELL_NOT_FOUND 재현을 그대로 재사용한다. 알림이 항목 앞에 렌더되면
+    // 실패 직후 같은 화면 좌표를 재클릭했을 때 알림이 밀어낸 다른 항목이
+    // 맞아떨어진다 — 그 결함을 DOM 순서로 고정한다.
+    const base = fakeController();
+    const controller = {
+      ...base,
+      commands: {
+        ...base.commands,
+        setTableCellTextColor: vi.fn(
+          () =>
+            ({
+              ok: false,
+              error: { code: "CELL_NOT_FOUND", cellId: "cell-1" },
+            }) as ReturnType<
+              EditorController["commands"]["setTableCellTextColor"]
+            >,
+        ),
+      },
+    };
+
+    render(
+      withProvider(
+        controller,
+        <TableCellFormatMenu
+          cellIds={["cell-1"]}
+          left={100}
+          onClose={vi.fn()}
+          tableBlockId="table-1"
+          top={100}
+        />,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color Blue" }));
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Cell no longer exists");
+
+    const menu = screen.getByRole("menu", { name: "Cell formatting" });
+    const children = Array.from(menu.children);
+    // alert가 메뉴의 마지막 자식이어야 한다 — 완료 조건 1의 직접 확인이다.
+    expect(children.at(-1)).toBe(alert);
+
+    const alignButton = screen.getByRole("menuitem", { name: "Align center" });
+    expect(
+      alignButton.compareDocumentPosition(alert) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });

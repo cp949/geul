@@ -96,54 +96,56 @@ export const TableHandleMenu = ({
           ? dictionary.menu.tableRowMenuAriaLabel
           : dictionary.menu.tableColumnMenuAriaLabel
       }
-      className="geul-menu-panel"
+      className="geul-menu-panel geul-menu-panel--with-footer"
       data-geul-table-menu=""
       ref={menuRef}
       role="menu"
       style={style}
     >
+      <div className="geul-menu-panel__scroll">
+        <MenuItemButton className={menuItemClassName} onClick={insertBefore}>
+          {isRow
+            ? dictionary.menu.insertRowAbove
+            : dictionary.menu.insertColumnLeft}
+        </MenuItemButton>
+        <MenuItemButton className={menuItemClassName} onClick={insertAfter}>
+          {isRow
+            ? dictionary.menu.insertRowBelow
+            : dictionary.menu.insertColumnRight}
+        </MenuItemButton>
+        <MenuItemButton
+          className={`${menuItemClassName} geul-table-menu__item--danger`}
+          disabled={!canDelete}
+          onClick={remove}
+        >
+          {isRow ? dictionary.menu.deleteRow : dictionary.menu.deleteColumn}
+        </MenuItemButton>
+        {headerToggleAvailable && (
+          <>
+            <hr className={dividerClassName} />
+            <MenuItemButton
+              aria-checked={headerEnabled}
+              className={menuItemClassName}
+              onClick={toggleHeader}
+              role="menuitemcheckbox"
+            >
+              {isRow ? dictionary.menu.headerRow : dictionary.menu.headerColumn}
+            </MenuItemButton>
+          </>
+        )}
+        <hr className={dividerClassName} />
+        <TableCellColorPalettes
+          onApplied={onClose}
+          runCommand={runCommand}
+          tableBlockId={tableBlockId}
+          target={target}
+        />
+      </div>
       {actionError !== null && (
         <p className={actionErrorClassName} role="alert">
           {tableCommandErrorMessage(actionError, dictionary)}
         </p>
       )}
-      <MenuItemButton className={menuItemClassName} onClick={insertBefore}>
-        {isRow
-          ? dictionary.menu.insertRowAbove
-          : dictionary.menu.insertColumnLeft}
-      </MenuItemButton>
-      <MenuItemButton className={menuItemClassName} onClick={insertAfter}>
-        {isRow
-          ? dictionary.menu.insertRowBelow
-          : dictionary.menu.insertColumnRight}
-      </MenuItemButton>
-      <MenuItemButton
-        className={`${menuItemClassName} geul-table-menu__item--danger`}
-        disabled={!canDelete}
-        onClick={remove}
-      >
-        {isRow ? dictionary.menu.deleteRow : dictionary.menu.deleteColumn}
-      </MenuItemButton>
-      {headerToggleAvailable && (
-        <>
-          <hr className={dividerClassName} />
-          <MenuItemButton
-            aria-checked={headerEnabled}
-            className={menuItemClassName}
-            onClick={toggleHeader}
-            role="menuitemcheckbox"
-          >
-            {isRow ? dictionary.menu.headerRow : dictionary.menu.headerColumn}
-          </MenuItemButton>
-        </>
-      )}
-      <hr className={dividerClassName} />
-      <TableCellColorPalettes
-        onApplied={onClose}
-        runCommand={runCommand}
-        tableBlockId={tableBlockId}
-        target={target}
-      />
     </div>
   );
 };
