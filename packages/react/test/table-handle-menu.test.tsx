@@ -872,6 +872,54 @@ describe("마지막 행/열에서 삭제 비활성화", () => {
       columnIds,
     );
   });
+
+  it("메뉴가 열린 채 행이 늘어나면 재조준 없이도 Delete row가 재활성화된다(Issue #65 항목7)", async () => {
+    const { editor, restubGeometry, tableBlockId } = openRowMenu({
+      rows: 1,
+      columns: 2,
+    });
+    const deleteItem = screen.getByRole("menuitem", {
+      name: "Delete row",
+    }) as HTMLButtonElement;
+    // 전제: 아직 1행이라 비활성 상태다.
+    expect(deleteItem.disabled).toBe(true);
+
+    await act(async () => {
+      // 메뉴 대상(index 0)은 그대로 두고 새 행을 뒤에 추가한다 — 재조준
+      // (targetId 위치 변경)이 아니라 count 증가만으로 재활성화되는지
+      // 보려는 것이라, 대상 자신의 위치를 바꾸면 안 된다.
+      const inserted = editor.commands.insertTableRow(tableBlockId, 1);
+      if (!inserted.ok) throw new Error("행 추가 fixture 준비 실패");
+      restubGeometry();
+      await Promise.resolve();
+    });
+
+    // 전제 재확인: 실제로 2행이 됐다.
+    expect(rowsOf(editor)).toHaveLength(2);
+    // 재조준 없이(같은 deleteItem 참조) 재활성화됐는지 본다.
+    expect(deleteItem.disabled).toBe(false);
+  });
+
+  it("메뉴가 열린 채 열이 늘어나면 재조준 없이도 Delete column이 재활성화된다(Issue #65 항목7)", async () => {
+    const { editor, restubGeometry, tableBlockId } = openColumnMenu({
+      rows: 2,
+      columns: 1,
+    });
+    const deleteItem = screen.getByRole("menuitem", {
+      name: "Delete column",
+    }) as HTMLButtonElement;
+    expect(deleteItem.disabled).toBe(true);
+
+    await act(async () => {
+      const inserted = editor.commands.insertTableColumn(tableBlockId, 1);
+      if (!inserted.ok) throw new Error("열 추가 fixture 준비 실패");
+      restubGeometry();
+      await Promise.resolve();
+    });
+
+    expect(tableBlockOf(editor).columns).toHaveLength(2);
+    expect(deleteItem.disabled).toBe(false);
+  });
 });
 
 describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", () => {

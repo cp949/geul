@@ -49,22 +49,29 @@ import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 
 // Issue #65: menuState.index만으로는 대상보다 앞선 행/열이 사라져 인덱스가
 // 밀린 경우와 대상 자신이 사라진 경우를 구분할 수 없다. targetId(비어 있지
-// 않은 경우)로 현재 DOM에서 대상의 위치를 다시 찾는다 — 없으면 null(닫아야
-// 함), 있으면 그 위치를 돌려준다(같은 값이면 재렌더 없이 그대로 쓰인다).
-// 빈 targetId는 G-UI-002 fail-open이라 재조준을 시도하지 않고 기존
+// 않은 경우)로 현재 DOM에서 대상의 위치를 다시 찾는다 — 없으면 index
+// null(닫아야 함), 있으면 그 위치를 돌려준다(같은 값이면 재렌더 없이 그대로
+// 쓰인다). 빈 targetId는 G-UI-002 fail-open이라 재조준을 시도하지 않고 기존
 // 인덱스-범위 판정만 본다. 이 컴포넌트 밖에서 재사용하지 않아 모듈
 // 스코프에 둔다(computeReorderTargetIndex와 달리 useCallback 안정화가
 // 필요 없다 — effect 안에서 직접 부른다).
+//
+// Issue #65 항목7: 두 분기 모두 대상 판정에 readTableRowIds/readTableColumnIds로
+// ids 배열을 한 번 읽는다 — 그 김에 ids.length도 count로 같이 돌려준다(새
+// DOM 읽기를 추가하지 않는다). 호출부(reconcileMenuState)가 이 count로
+// "대상 index는 그대로인데 행/열 개수만 늘었다"를 구분해 canDelete 재활성화를
+// 트리거한다.
 const resolveMenuTargetIndex = (
   menuState: HandleMenuState,
   table: HTMLElement,
-): number | null => {
+): { index: number | null; count: number } => {
   if (menuState.targetId === "") {
-    const count =
+    const ids =
       menuState.kind === "row"
-        ? readTableRowIds(table).length
-        : readTableColumnIds(table).length;
-    return menuState.index < count ? menuState.index : null;
+        ? readTableRowIds(table)
+        : readTableColumnIds(table);
+    const count = ids.length;
+    return { index: menuState.index < count ? menuState.index : null, count };
   }
 
   const ids =
@@ -72,7 +79,7 @@ const resolveMenuTargetIndex = (
       ? readTableRowIds(table)
       : readTableColumnIds(table);
   const nextIndex = ids.indexOf(menuState.targetId);
-  return nextIndex === -1 ? null : nextIndex;
+  return { index: nextIndex === -1 ? null : nextIndex, count: ids.length };
 };
 
 export const TableHandles = () => {
@@ -469,8 +476,26 @@ export const TableHandles = () => {
   // 자신이 사라진 것이므로 닫고, 있고 위치가 바뀌었으면 인덱스만 갱신해
   // 재조준한다(닫지 않는다). targetId가 빈 문자열이면(fail-open, 서로 다른
   // 행/열이 같은 빈 id로 충돌할 수 있어) 기존처럼 인덱스 범위만 본다.
+  //
+  // Issue #65 항목7: 대상 index가 그대로인 채 행/열 개수만 늘어나는
+  // 경로(예: 외부 controller가 onChange 재렌더를 걸지 않는 구성에서 다른
+  // 코드가 행/열을 추가)는 위 두 분기 어디에도 안 걸린다 — 재조준할
+  // index도 없고 닫을 이유도 없다. 하지만 렌더마다 다시 읽는 geometry가
+  // canDelete(`geometry.rows.length > 1` 류, G-TBL-001)의 근거라, 이
+  // 컴포넌트를 재렌더시키는 주체가 없으면 count가 늘어도 canDelete는
+  // 낡은 값(false)에 머문다. count가 늘었을 때만(줄어드는 방향은 범위
+  // 밖 — 기존 무효화·실패 알림 흐름이 이미 다룬다) 기존
+  // setGeometryVersion 카운터를 올려 강제 재렌더시킨다 — geometry는 그
+  // 재렌더에서 다시 DOM을 읽으므로 canDelete가 최신값을 반영한다. count
+  // 비교 자체는 이 effect 인스턴스 안의 `knownCount` 클로저로만 하고
+  // geometry를 직접 다시 읽지 않는다(Issue #18 재리뷰 항목5 경량화 유지 —
+  // MutationObserver 콜백은 count만 본다).
   useEffect(() => {
     if (menuState === null || element === null) return;
+
+    // observer 부착 전 최초 호출에서 baseline만 세운다 — 그 전에는 "이전
+    // count"가 없어 비교 자체가 스퓨리어스 bump가 된다.
+    let knownCount: number | null = null;
 
     const reconcileMenuState = () => {
       // 대상 표를 매번 다시 찾는다. 표 노드가 재생성되면 effect 시점에
@@ -481,14 +506,24 @@ export const TableHandles = () => {
         return;
       }
 
-      const nextIndex = resolveMenuTargetIndex(menuState, table);
+      const { count, index: nextIndex } = resolveMenuTargetIndex(
+        menuState,
+        table,
+      );
       if (nextIndex === null) {
         closeMenuOnInvalidation();
         return;
       }
       if (nextIndex !== menuState.index) {
+        // 재조준 — menuState 참조가 바뀌어 이 effect가 새 baseline으로
+        // 다시 실행된다(knownCount도 자연히 리셋된다).
         setMenuState({ ...menuState, index: nextIndex });
+        return;
       }
+      if (knownCount !== null && count > knownCount) {
+        setGeometryVersion((version) => version + 1);
+      }
+      knownCount = count;
     };
 
     // 이 effect가 붙기 전에 이미 무효화·재조준됐을 수도 있다 — 최초
