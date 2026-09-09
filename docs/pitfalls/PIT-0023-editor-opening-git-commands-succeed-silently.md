@@ -2,7 +2,7 @@
 
 - 상태: `ACTIVE`
 - 적용 조건: commit·amend·merge·tag·rebase가 editor 입력을 요구
-- 지배 계약: [`AGENTS.md`](../../AGENTS.md)의 "공통 규칙", [`ff-workflow`](../agents/ff-workflow.md)의 "금지"
+- 지배 계약: [`AGENTS.md`](../../AGENTS.md)의 "공통 규칙", [`workflow-shared`](../agents/workflow-shared.md)의 "금지"
 - 반복 근거: 작업 branch workflow review — 저장소 커맨드 문서 자체가 `git rebase -i dev`를 지시할 만큼 기본 행동으로 반복됐고, 임시 저장소 실측으로 무변화 성공(exit 0)을 확인
 
 ## 오해하기 쉬운 신호

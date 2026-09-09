@@ -19,12 +19,12 @@
 
 쓰기에 해당하는 것: 이슈 생성, 댓글 작성, 이슈 수정, 이슈 종료, 라벨과 assignee 변경, sub-issue와 dependency 연결.
 
-- qq-workflow나 ff-workflow로 진행하면 등록하고 싶은 이슈와 댓글을 `_works/<작업 폴더>/pending-issues/NN.md`에 초안으로 남긴다(각각 [`docs/agents/qq-workflow.md`](./qq-workflow.md), [`docs/agents/ff-workflow.md`](./ff-workflow.md)의 "작업 폴더"). 기본 레인에는 작업 폴더가 없으므로 등록 대상을 사용자에게 보고하고 지시를 기다린다.
+- qq-workflow나 roadmap-workflow로 진행하면 등록하고 싶은 이슈와 댓글을 pending-issues/NN.md에 초안으로 남긴다(각각 [`docs/agents/qq-workflow.md`](./qq-workflow.md)의 "작업 폴더", [`docs/agents/roadmap-workflow.md`](./roadmap-workflow.md)의 "작업공간"). 기본 레인에는 작업 폴더가 없으므로 등록 대상을 사용자에게 보고하고 지시를 기다린다.
 - 사용자가 등록을 지시하면 초안을 그대로 게시하고 초안의 `상태`를 `등록됨 #<번호>`로 갱신한다. 초안 파일은 지우지 않는다.
 - 게시 직전에 등록 목록을 제시하고 확인을 받는다. 그 확인이 해당 실행의 등록 허가다. **이슈 종료는 별도 확인 대상이 아니다** — 등록 허가를 받은 같은 실행 안에서 아래 "종료 판단"의 기준으로 에이전트가 판정하고 수행한다. 닫지 않은 이슈는 미충족 기준과 다음 조치를 완료 댓글이나 보고에 남기고, 닫은 이슈 번호를 보고에 남긴다.
-- **workflow 완료.** qq-workflow 단계-4와 ff-workflow 트랙-8은 게이트 통과 후 에이전트가 게시·종료를 판단하고 사용자 확인 없이 수행한다. 기본 레인과 그 전 단계는 위 게시 승인을 따른다.
-- qq-workflow와 ff-workflow의 커밋 해시는 작업 브랜치가 `dev`로 이전된 뒤에만 초안과 게시물에 쓴다. 근거는 [`docs/agents/ff-workflow.md`](./ff-workflow.md)의 "커밋 해시 참조"다. 기본 레인은 `dev`에 직접 커밋하므로 해시가 처음부터 확정이다.
-- 게시는 초안에 없는 내용을 새로 만들어 올리지 않는다. 내용 생성은 ff-workflow의 트랙-0~7, qq-workflow의 단계-1~3이 하고 ff의 트랙-8, qq의 단계-4는 게시만 한다. 기본 레인도 같다 — 사용자에게 보고하고 받은 지시 범위를 벗어난 내용을 추가하지 않는다.
+- **workflow 완료.** qq-workflow 단계-4와 roadmap-workflow 경량 DELTA 사이클의 8단계(GitHub 게시·종료)는 게이트 통과 후 에이전트가 게시·종료를 판단하고 사용자 확인 없이 수행한다. 기본 레인과 그 전 단계는 위 게시 승인을 따른다.
+- qq-workflow와 roadmap-workflow의 커밋 해시는 작업 브랜치가 `dev`로 이전된 뒤에만 초안과 게시물에 쓴다. 근거는 [`docs/agents/workflow-shared.md`](./workflow-shared.md)의 "커밋 해시 참조"다. 기본 레인은 `dev`에 직접 커밋하므로 해시가 처음부터 확정이다.
+- 게시는 초안에 없는 내용을 새로 만들어 올리지 않는다. 내용 생성은 roadmap-workflow 경량 DELTA 사이클의 1~6단계, qq-workflow의 단계-1~3이 하고, roadmap의 8단계·qq의 단계-4는 게시만 한다. 기본 레인도 같다 — 사용자에게 보고하고 받은 지시 범위를 벗어난 내용을 추가하지 않는다.
 - 초안에서 API 키, 비밀번호, 개인정보를 제거한다. 게시는 초안을 그대로 올리므로 초안에 남은 것이 공개 저장소로 그대로 나간다.
 - 초안에서 `_works/...` 경로 참조를 제거한다. `_works`는 `.gitignore` 대상이라 저장소에 커밋되지 않으므로, 외부 독자는 그 경로를 확인할 수 없다.
 
@@ -65,7 +65,7 @@
 **모두 참이면 닫는다.**
 
 - 이 실행에서 그 이슈에 **완료 댓글**을 등록했다.
-- 완료 보고에 미충족 완료 기준이 없다. "실행하지 않음"으로 적힌 검증도 미충족으로 센다. ff-workflow에서 완료 보고는 `_works/<작업 폴더>/04-작업결과.md`고, qq-workflow에서는 완료 조건 판정을 담은 최신 `IMPL-REVIEW-NN.md`다.
+- 완료 보고에 미충족 완료 기준이 없다. "실행하지 않음"으로 적힌 검증도 미충족으로 센다. roadmap-workflow에서 완료 보고는 `RD-NNN.md`의 완료 조건 체크리스트와 각 `result/RD-NNN-DELTA-NN.md`의 "## 결과" 절이고, qq-workflow에서는 완료 조건 판정을 담은 최신 `IMPL-REVIEW-NN.md`다.
 - 그 이슈를 대상으로 하는 `상태: 미등록` 초안이 더 남아 있지 않다.
 - 이슈가 열려 있다.
 

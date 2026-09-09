@@ -2,17 +2,17 @@
 
 간단한 작업을 계획서 하나와 병합 전 리뷰 1회로 처리하는 경량 작업 흐름이다. 단계 4개와 작업 브랜치, `_works/` 작업공간을 쓴다. 슬래시 커맨드는 없다 — 이 문서 하나가 절차를 소유하고, 새 작업은 단계-1 승인 후 단계-4까지 자동 진행한다. 사용자는 중단 작업 재개나 완료 단계 재실행 때만 단계를 지시한다.
 
-ff-workflow에서 DELTA 분할(트랙-1), 계획서 리뷰(트랙-2), 테스트 계획·체크리스트(트랙-3), 누락 탐지 전담 트랙(트랙-5)을 제거하고 다음을 남긴 형태다.
+이 흐름은 다음을 지킨다.
 
 1. 계획서는 남긴다. 계획서의 **적용 계약과 가이드**·**적용 함정** 절은 필수다 — 구현이 정상 경로를 따르게 하는 입력이고, 리뷰 dispatch 프롬프트에 그대로 들어가는 입력이다.
 2. 리뷰 없이 `dev`에 병합하지 않는다. 병합 전에 완료 조건 대조와 결함 탐지를 묶은 리뷰 1회를 거친다.
-3. 재그룹화, ff-only 병합과 커밋 해시 참조는 ff-workflow와 같은 실행 계약을 참조한다. 복제하지 않는다.
+3. 재그룹화, ff-only 병합과 커밋 해시 참조는 [`./workflow-shared.md`](./workflow-shared.md)가 소유한 실행 계약을 참조한다. 복제하지 않는다.
 
 ## 언제 쓰나
 
 진입 규칙은 [`../../AGENTS.md`](../../AGENTS.md)의 "레인 선택 규칙"이 소유한다. 이 흐름으로 들어오는 경로는 둘이다 — 사용자가 `qq-workflow`를 지목했거나, 레인 명시 없는 이슈 작업에서 자동 선택이 qq를 골랐다. 자동 선택으로 들어왔으면 선택한 레인과 이유를 작업 시작 시 사용자에게 보고한다.
 
-적합한 크기는 ff-workflow의 DELTA 하나다 — 상한은 [`./ff-workflow.md`](./ff-workflow.md)의 "크기 규칙"을 그대로 차용한다. 계획 단계에서 상한을 넘을 것으로 보이거나 구현 중 넘게 되면 그 사실을 보고하고 판단은 사용자에게 남긴다. 에이전트는 스스로 ff-workflow로 승격하거나 레인을 바꾸지 않는다.
+적합한 크기는 DELTA 하나다 — 상한은 [`./workflow-shared.md`](./workflow-shared.md)의 "DELTA 크기 규칙"을 그대로 차용한다. 계획 단계에서 상한을 넘을 것으로 보이거나 구현 중 넘게 되면 그 사실을 보고하고 판단은 사용자에게 남긴다. 에이전트는 스스로 roadmap-workflow로 승격하거나 레인을 바꾸지 않는다.
 
 roadmap-workflow의 RD는 기본적으로 [`./roadmap-workflow.md`](./roadmap-workflow.md)의 "경량 DELTA 사이클"로 실행하고 이 qq-workflow에 위임하지 않는다. RD의 특정 DELTA가 그 문서 "승격 예외" 조건에 해당해 승격된 경우에만 이 qq-workflow가 그 DELTA의 구현·리뷰·병합을 소유한다.
 
@@ -23,9 +23,9 @@ qq-workflow로 진행: <작업 설명 또는 이슈 번호>
 qq-workflow의 단계-3을 진행 (_works/20260824-04)
 ```
 
-작업 폴더 인자의 접두 매칭 규칙은 [`./ff-workflow.md`](./ff-workflow.md)의 "언제 쓰나"와 같다 — `_works/` 아래에서 유일하게 매칭되면 그 폴더로 해석하고, 매칭이 없거나 둘 이상이면 후보를 출력하고 정지한다.
+작업 폴더 인자는 접두 매칭을 허용한다. `20260823-01`처럼 앞부분만 주어도 `_works/` 아래에서 유일하게 매칭되면 그 폴더로 해석한다. `_works/` 접두사는 붙여도 생략해도 된다. 매칭이 없거나 둘 이상이면 후보를 출력하고 정지한다.
 
-용어: 이 흐름은 **단계**만 쓴다. ff-workflow의 트랙·DELTA 용어를 쓰지 않는다.
+용어: 이 흐름은 **단계**만 쓴다. roadmap-workflow의 RD·DELTA 용어를 쓰지 않는다.
 
 ## 진행 방식
 
@@ -45,13 +45,13 @@ _works/<yyyyMMdd>-<NN>-<slug>/
   pending-issues/  pending-guides/  pending-pitfalls/   (필요 시)
 ```
 
-`NN`은 그날 순번이고 ff-workflow의 작업 폴더와 같은 시퀀스를 공유한다. 이슈가 있으면 slug 앞에 `issue<번호>-`를 붙인다(`20260824-04-issue26-editmap-perf`).
+`NN`은 그날 `_works/` 아래의 순번이다. 이슈가 있으면 slug 앞에 `issue<번호>-`를 붙인다(`20260824-04-issue26-editmap-perf`).
 
-pending 셋의 용도, 파일 형식과 추가 시점은 [`./ff-workflow.md`](./ff-workflow.md)의 "pending-issues, pending-guides와 pending-pitfalls"를 그대로 따른다. 어느 단계에서든 추가할 수 있다.
+pending 셋의 용도, 파일 형식과 추가 시점은 [`./workflow-shared.md`](./workflow-shared.md)의 "pending-issues, pending-guides와 pending-pitfalls"를 그대로 따른다. 어느 단계에서든 추가할 수 있다.
 
 ### `_meta.md`
 
-ff-workflow의 `_meta.md`와 같은 기본 3필드 manifest다.
+다음 기본 3필드를 두는 manifest다.
 
 ```markdown
 ---
@@ -77,7 +77,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 
 ### `01-계획.md` 형식
 
-필수 절은 일곱이다. ff-workflow DELTA 계약의 축약본이고 DELTA 분할은 없다.
+필수 절은 일곱이다. DELTA 분할은 없다.
 
 1. **목적** — 한 문장. 대상 이슈가 있으면 링크한다.
 2. **변경 대상** — 예상 파일 경로 목록.
@@ -131,7 +131,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 - 남은 위험과 범위 밖 발견
 ```
 
-subagent 협업은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 규칙"을 따른다. 별도 형식의 계획 사본이나 브리징 파일을 작업 폴더에 만들지 않는다.
+subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent 협업 규칙"을 따른다. 별도 형식의 계획 사본이나 브리징 파일을 작업 폴더에 만들지 않는다.
 
 ## 단계-3. 리뷰
 
@@ -140,9 +140,9 @@ subagent 협업은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 �
 - 검증: 단계-2의 focused 검증에 의존한다. `pnpm verify` 전량은 여기서 돌리지 않는다 — 단계-4 병합 직전에 1회만 돈다.
 - 절차: 두 부분을 한 산출물에 담는다.
   1. **완료 조건 대조** — 메인 세션이 계획서의 완료 조건을 실측 증거와 대조해 `PASS` / `FAIL`로 판정한다. 판정 근거는 재현 가능한 증거로 남긴다 — 테스트 제목, 명령과 출력, 파일 경로와 줄 번호.
-  2. **결함 탐지** — 읽기 전용 subagent에 dispatch한다. 프롬프트에 diff 범위, 계획서 6·7절의 가이드·함정 목록과 아키텍처 불변식을 옮겨 적는다. 계획서의 목적·완료 조건은 주지 않는다 — 계획의 사각지대를 물려받지 않기 위해서다. subagent 협업의 공통 규칙은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 규칙"을 따른다.
+  2. **결함 탐지** — 읽기 전용 subagent에 dispatch한다. 프롬프트에 diff 범위, 계획서 6·7절의 가이드·함정 목록과 아키텍처 불변식을 옮겨 적는다. 계획서의 목적·완료 조건은 주지 않는다 — 계획의 사각지대를 물려받지 않기 위해서다. subagent 협업의 공통 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent 협업 규칙"을 따른다.
 - 판정과 수정: 심각도는 [`../process/development-lifecycle.md`](../process/development-lifecycle.md)의 `BLOCKER` / `MAJOR` / `MINOR`를 그대로 쓴다. `FAIL`·`BLOCKER`·`MAJOR`는 수정하고 같은 범위를 다시 검증한다. 수정 규칙은 단계-2와 같다 — 회귀 테스트 RED 먼저, 기존 테스트 삭제·약화 금지. 수정하지 않는 `MINOR`는 근거와 함께 `pending-issues/`로 분리한다.
-- 형식: [`./ff-workflow.md`](./ff-workflow.md)의 "리뷰 산출물"을 따르되 머리말에 `- 트랙:` 대신 `- 단계: 3`을 쓰고, "## 발견" 앞에 완료 조건 판정 표를 둔다. `## 남은 위험`을 비워두지 않는 규칙도 같다.
+- 형식: [`./workflow-shared.md`](./workflow-shared.md)의 "리뷰 산출물 형식"을 따르되 머리말에 `- 단계: 3`을 쓰고, "## 발견" 앞에 완료 조건 판정 표를 둔다. `## 남은 위험`을 비워두지 않는 규칙도 같다.
 - 정지: 재그룹화, `dev` 병합, push, GitHub 쓰기를 하지 않는다. 수정 커밋은 작업 브랜치에 세분화된 채로 쌓는다.
 
 ## 단계-4. 병합과 등록
@@ -152,7 +152,7 @@ subagent 협업은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 �
 - 게이트: **리뷰를 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없거나 최신 리뷰에 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 남아 있으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `docs/history/`의 이력에 적는다.
 - 절차: 메인 세션이 단독으로 직렬 수행한다. subagent에 위임하지 않는다.
   1. `pnpm verify` 전량을 통과시킨다.
-  2. 작업 브랜치 커밋을 [`./ff-workflow.md`](./ff-workflow.md)의 "재그룹화 실행 명령" 절 그대로 재그룹화한다. 전제, 순서, 무결성 판정과 금지 목록도 같다.
+  2. 작업 브랜치 커밋을 [`./workflow-shared.md`](./workflow-shared.md)의 "재그룹화 실행 명령" 절 그대로 재그룹화한다. 전제, 순서, 무결성 판정과 금지 목록도 같다.
   3. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`. ff가 거절되면 현재 `dev` 기준으로 2단계를 다시 실행한다.
   4. `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
   5. `_meta.md`의 `상태`를 `완료`로 바꾼다. 확정 해시는 8단계의 이력이 기록한다.
@@ -170,7 +170,7 @@ subagent 협업은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 �
 4. 이전 후 브랜치를 삭제하고 백업 ref를 정리한다.
 5. 작업 브랜치는 push하지 않는다. push 대상은 `dev`뿐이고 명시적 지시를 기다린다.
 
-커밋 해시 참조 규칙은 [`./ff-workflow.md`](./ff-workflow.md)의 "커밋 해시 참조"를 그대로 따른다 — 이전 전에는 이슈, 댓글, 초안과 어느 산출물에도 해시를 쓰지 않는다.
+커밋 해시 참조 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "커밋 해시 참조"를 그대로 따른다 — 이전 전에는 이슈, 댓글, 초안과 어느 산출물에도 해시를 쓰지 않는다.
 
 ## 검증 게이트
 
@@ -189,9 +189,10 @@ subagent 협업은 [`./ff-workflow.md`](./ff-workflow.md)의 "subagent 협업 �
 | ------------------------------------------------ | ---------------------------------------------------------------------------- |
 | 어느 레인으로 작업하는가                         | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간"                      |
 | 단계 절차, 계획서 형식과 작업 폴더 구성          | 이 문서                                                                      |
-| 재그룹화 실행 명령·커밋 해시 참조·접두 매칭      | [`./ff-workflow.md`](./ff-workflow.md)                                       |
-| qq 적합 크기 판정에 차용하는 DELTA 크기 상한     | [`./ff-workflow.md`](./ff-workflow.md)의 "크기 규칙"                         |
-| 리뷰 산출물 형식과 pending 셋 계약               | [`./ff-workflow.md`](./ff-workflow.md)                                       |
+| 작업 폴더 인자의 접두 매칭                       | 이 문서의 "언제 쓰나"                                                        |
+| 재그룹화 실행 명령·커밋 해시 참조·브랜치 수명    | [`./workflow-shared.md`](./workflow-shared.md)                               |
+| qq 적합 크기 판정에 차용하는 DELTA 크기 상한     | [`./workflow-shared.md`](./workflow-shared.md)의 "DELTA 크기 규칙"           |
+| 리뷰 산출물 형식과 pending 셋 계약               | [`./workflow-shared.md`](./workflow-shared.md)                               |
 | 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |
 | 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md)                                   |
 | 저장소 이력 보관 정책과 내용 계약                | [`../history/README.md`](../history/README.md)                               |

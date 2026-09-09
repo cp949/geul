@@ -72,9 +72,9 @@ demo  -> react, io, model
 - 프로젝트 공통 언어: `CONTEXT.md`
 - 반복 작업의 정상 구현·검증 경로: `docs/guides/`
 - 가이드 미준수·모호한 해석으로 반복된 실수의 탐지: `docs/pitfalls/`
-- ff-workflow 절차와 `_works/` 작업공간: `docs/agents/ff-workflow.md`
 - qq-workflow 절차와 계획서 형식: `docs/agents/qq-workflow.md`
 - 큰 Issue·슬라이스의 RD 의존 DAG와 자동 재계획: `docs/agents/roadmap-workflow.md`
+- qq-workflow·roadmap-workflow 공유 실행 계약(DELTA 크기, 재그룹화, 커밋 해시 참조 등): `docs/agents/workflow-shared.md`
 
 같은 사실을 여러 문서에 원본처럼 복제하지 않는다. 문서 생성, 갱신과 종료 조건은 `docs/process/development-lifecycle.md`를 따른다.
 
@@ -105,25 +105,25 @@ git status --short
 
 ### 상위 roadmap-workflow
 
-하나의 qq-workflow나 ff-workflow로 끝까지 추적하기 큰 Issue·슬라이스는 [`docs/agents/roadmap-workflow.md`](./docs/agents/roadmap-workflow.md)에 따라 독립 완료 결과인 `RD-NNN` 의존 DAG로 나눈다. roadmap-workflow는 별도 레인이 아니다. 각 RD가 아래 세 레인 중 하나를 사용한다.
+하나의 qq-workflow로 끝까지 추적하기 큰 Issue·슬라이스는 [`docs/agents/roadmap-workflow.md`](./docs/agents/roadmap-workflow.md)에 따라 독립 완료 결과인 `RD-NNN` 의존 DAG로 나눈다. roadmap-workflow는 별도 레인이 아니다. 각 RD는 roadmap-workflow의 경량 DELTA 사이클로 실행하고, 승격 조건에 해당하는 DELTA만 qq-workflow 레인을 쓴다.
 
-### 세 가지 작업 레인
+### 두 가지 작업 레인
 
-|           | 기본                           | qq-workflow                                                  | ff-workflow                                                  |
-| --------- | ------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 진입      | 이슈 대상이 아닌 작업의 기본값 | 사용자 지시 또는 이슈 작업 자동 선택                         | 사용자 지시 또는 이슈 작업 자동 선택                         |
-| 커밋      | `dev` 직접                     | `dev`에서 분기한 작업 브랜치                                 | `dev`에서 분기한 작업 브랜치                                 |
-| 리뷰      | 없음                           | 병합 전 1회(단계-3)                                          | 트랙-2, 트랙-5, 트랙-6                                       |
-| 산출물    | 없음                           | `_works/<작업 폴더>/` 최소 구성                              | `_works/<작업 폴더>/`                                        |
-| 절차 원본 | 아래 "기본 레인"               | [`docs/agents/qq-workflow.md`](./docs/agents/qq-workflow.md) | [`docs/agents/ff-workflow.md`](./docs/agents/ff-workflow.md) |
+|           | 기본                           | qq-workflow                                                  |
+| --------- | ------------------------------ | -------------------------------------------------------------|
+| 진입      | 이슈 대상이 아닌 작업의 기본값 | 사용자 지시 또는 이슈 작업 자동 선택                         |
+| 커밋      | `dev` 직접                     | `dev`에서 분기한 작업 브랜치                                 |
+| 리뷰      | 없음                           | 병합 전 1회(단계-3)                                          |
+| 산출물    | 없음                           | `_works/<작업 폴더>/` 최소 구성                              |
+| 절차 원본 | 아래 "기본 레인"               | [`docs/agents/qq-workflow.md`](./docs/agents/qq-workflow.md) |
 
 **레인 선택 규칙.**
 
 - 사용자가 레인을 명시하면 그 레인으로 진행한다.
 - 사용자가 roadmap-workflow를 명시하면 그 흐름으로 진행한다.
-- 레인 명시 없이 GitHub 이슈를 지목해 구현·수정을 지시하면 먼저 roadmap-workflow 진입 여부를 판정한다. 독립 완료 결과가 둘 이상이거나 전체 범위가 ff-workflow 실행 DELTA 7개 상한을 넘거나 선행 순서가 불확실하면 roadmap-workflow를 선택한다. 그 외에는 ff-workflow의 "크기 규칙"으로 예상 변경이 DELTA 하나 크기에 들어오면 qq, 넘으면 ff를 선택한다. 선택한 흐름·레인과 이유 한두 문장을 작업 시작 시 사용자에게 보고한다.
-- 이슈 대상이 아닌 작업은 지시가 없으면 기본 레인으로 진행한다. 에이전트는 지시 없이 qq·ff로 들어가지 않는다.
-- 레인은 작업을 시작할 때 정해지고 중간에 바뀌지 않는다. 독립 qq·ff 작업이 예상보다 커져도 에이전트가 승격하지 않는다 — 커진 사실은 "완료 보고"의 남은 제한과 위험에 적고 판단은 사용자에게 남긴다. roadmap 하위 작업은 같은 레인을 유지한 채 roadmap-workflow의 자동 재계획을 적용한다.
+- 레인 명시 없이 GitHub 이슈를 지목해 구현·수정을 지시하면 [`docs/agents/workflow-shared.md`](./docs/agents/workflow-shared.md)의 "DELTA 크기 규칙"으로 예상 변경을 판정한다. DELTA 하나 크기에 들어오면 qq-workflow, 넘으면 roadmap-workflow를 선택한다. 선택한 흐름·레인과 이유 한두 문장을 작업 시작 시 사용자에게 보고한다.
+- 이슈 대상이 아닌 작업은 지시가 없으면 기본 레인으로 진행한다. 에이전트는 지시 없이 qq로 들어가지 않는다.
+- 레인은 작업을 시작할 때 정해지고 중간에 바뀌지 않는다. 독립 qq 작업이 예상보다 커져도 에이전트가 승격하지 않는다 — 커진 사실은 "완료 보고"의 남은 제한과 위험에 적고 판단은 사용자에게 남긴다. roadmap 하위 작업은 같은 레인을 유지한 채 roadmap-workflow의 자동 재계획을 적용한다.
 - roadmap-workflow의 RD·DELTA 순서 변경은 레인 변경이 아니다. readiness probe가 작업 브랜치 생성 전에 하위 레인 선택을 고치는 경우도 레인 중간 변경으로 보지 않는다.
 
 ### 기본 레인
@@ -138,13 +138,9 @@ git status --short
 
 단계 1~4의 절차, 계획서 형식과 `_works/` 작업 폴더 구성은 [`docs/agents/qq-workflow.md`](./docs/agents/qq-workflow.md)가 소유한다. 이 문서에 복제하지 않는다.
 
-### ff-workflow
-
-트랙 0~8의 절차, 작업 브랜치 수명, `_works/` 작업공간, 커밋 해시 참조와 재그룹화 실행 명령은 [`docs/agents/ff-workflow.md`](./docs/agents/ff-workflow.md)가 소유한다. 이 문서에 복제하지 않는다.
-
 ### roadmap-workflow
 
-RD 상태·의존 DAG, readiness probe, DELTA 계획 예산과 자동 재계획은 [`docs/agents/roadmap-workflow.md`](./docs/agents/roadmap-workflow.md)가 소유한다. 하위 RD의 커밋·merge·push 승인 경계는 선택한 qq·ff 레인을 그대로 따른다.
+RD 상태·의존 DAG, readiness probe, DELTA 계획 예산과 자동 재계획은 [`docs/agents/roadmap-workflow.md`](./docs/agents/roadmap-workflow.md)가 소유한다. 하위 RD의 커밋·merge·push 승인 경계는 선택한 qq 레인을 그대로 따른다.
 
 ### 공통 규칙
 
@@ -154,7 +150,7 @@ RD 상태·의존 DAG, readiness probe, DELTA 계획 예산과 자동 재계획�
 - 기존 modified, untracked와 ignored 파일은 사용자 작업으로 간주하고 보존한다.
 - 요청받지 않은 파일을 되돌리거나 광범위하게 정리하지 않는다.
 - worktree는 사용자가 그 세션에서 명시적으로 요청한 경우에만 만든다. 병렬 에이전트에도 worktree 격리를 기본으로 주지 않는다.
-- `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다. 예외: qq-workflow의 단계-1 계획 승인과 ff-workflow의 트랙-8 실행 지시는 작업 브랜치의 해당 종료 단계 `dev` fast-forward merge까지 허가한다. push, tag와 PR 생성은 두 레인에서도 별도 요청이 필요하다.
+- `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다. 예외: qq-workflow의 단계-1 계획 승인은 작업 브랜치의 해당 종료 단계 `dev` fast-forward merge까지 허가한다. push, tag와 PR 생성은 이 레인에서도 별도 요청이 필요하다.
 - push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다. "작업 후 한번에" 같은 유예 답변은 완료 판단 시 자동 실행해도 된다는 허가가 아니다.
 - 편집기를 여는 git 명령(`git rebase -i`, `-m` 없는 `git commit`·`git commit --amend`·`git tag -a`, `--no-edit` 없는 `git merge`)을 쓰지 않는다. 에이전트 세션은 `GIT_EDITOR=true`라 입력 없이 기본값으로 조용히 성공한다 — [`PIT-0023`](./docs/pitfalls/PIT-0023-editor-opening-git-commands-succeed-silently.md).
 - merge conflict는 양쪽 변경 의도를 확인해 해결하고 전체 병합 결과를 다시 검증한다.

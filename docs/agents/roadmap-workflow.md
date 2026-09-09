@@ -1,26 +1,24 @@
 # roadmap-workflow
 
-하나의 qq-workflow나 ff-workflow로 끝까지 추적하기 큰 Issue·슬라이스를 독립 완료 결과인 roadmap item(`RD-NNN`)으로 나누고, 준비된 RD부터 실행하는 상위 조정 흐름이다. roadmap-workflow 자체는 작업 레인이 아니다. 각 RD는 이 문서의 "경량 DELTA 사이클"로 실행하고, 특정 DELTA가 승격 조건에 해당할 때만 qq-workflow 또는 ff-workflow를 예외로 쓴다.
+하나의 qq-workflow로 끝까지 추적하기 큰 Issue·슬라이스를 독립 완료 결과인 roadmap item(`RD-NNN`)으로 나누고, 준비된 RD부터 실행하는 상위 조정 흐름이다. roadmap-workflow 자체는 작업 레인이 아니다. 각 RD는 이 문서의 "경량 DELTA 사이클"로 실행하고, 특정 DELTA가 승격 조건에 해당할 때만 qq-workflow를 예외로 쓴다.
 
 ## 언제 쓰나
 
 진입 규칙은 [`../../AGENTS.md`](../../AGENTS.md)의 "레인 선택 규칙"이 소유한다. 다음 중 하나면 roadmap-workflow를 쓴다.
 
 - 사용자가 roadmap-workflow를 지목한다.
-- 하나의 Issue·슬라이스가 독립적으로 완료·통합 검증할 수 있는 결과 둘 이상을 포함한다.
-- 전체 범위가 ff-workflow 실행 DELTA 7개 상한을 넘는다.
-- 선행 결과의 실행 순서가 불확실해 하나의 선형 DELTA 계획으로 확정할 수 없다.
+- 예상 변경이 [`./workflow-shared.md`](./workflow-shared.md)의 "DELTA 크기 규칙"이 정한 qq-workflow 적합 크기(DELTA 하나)를 넘는다.
 
-단일 결과가 qq-workflow나 ff-workflow 하나에 들어오면 이 흐름을 추가하지 않는다.
+독립 완료 결과가 둘 이상인지, 선행 순서가 불확실한지는 진입 시점에 미리 판정하지 않는다 — "roadmap 작성" 절에서 RD로 나누고, 실행 중 드러나면 "경량 DELTA 사이클"의 RD 분리 규칙을 따른다. 단일 결과가 qq-workflow 하나에 들어오면 이 흐름을 추가하지 않는다.
 
 ## 용어와 계층
 
 ```text
 Issue / Slice
   └─ roadmap
-      ├─ RD-001 → 경량 DELTA 사이클 (승격 시 qq·ff-workflow)
-      ├─ RD-002 → 경량 DELTA 사이클 (승격 시 qq·ff-workflow)
-      └─ RD-003 → 경량 DELTA 사이클 (승격 시 qq·ff-workflow)
+      ├─ RD-001 → 경량 DELTA 사이클 (승격 시 qq-workflow)
+      ├─ RD-002 → 경량 DELTA 사이클 (승격 시 qq-workflow)
+      └─ RD-003 → 경량 DELTA 사이클 (승격 시 qq-workflow)
 ```
 
 - `RD-NNN`: 독립 완료 조건과 통합 검증 결과를 가진 roadmap item이다.
@@ -49,7 +47,7 @@ active roadmap 작업공간은 `_works/roadmap/` 하나다. Issue·슬라이스�
 
 이 단계는 `_works/roadmap/`이 새 roadmap 파일만 포함할 때 완료다.
 
-`roadmap.md`는 전체 결과 경계, 상태와 의존 DAG를 소유한다. `RD-NNN.md`는 해당 결과의 진입 조건, 포함·제외 범위, 예상 DELTA 백로그, 완료 조건 체크리스트와 확정 결정을 소유한다. DELTA별 상세 계획·파일 목록·결과는 `result/RD-NNN-DELTA-NN.md`가 소유한다(승격된 DELTA는 예외로 해당 qq·ff 작업 폴더가 소유한다). `progress.md`는 readiness probe, RD 전환과 숨은 의존 발견 이력을 append한다.
+`roadmap.md`는 전체 결과 경계, 상태와 의존 DAG를 소유한다. `RD-NNN.md`는 해당 결과의 진입 조건, 포함·제외 범위, 예상 DELTA 백로그, 완료 조건 체크리스트와 확정 결정을 소유한다. DELTA별 상세 계획·파일 목록·결과는 `result/RD-NNN-DELTA-NN.md`가 소유한다(승격된 DELTA는 예외로 해당 qq-workflow 작업 폴더가 소유한다). `progress.md`는 readiness probe, RD 전환과 숨은 의존 발견 이력을 append한다.
 
 실행 계획과 제품 진행 상태의 원본은 GitHub Issue다. `_works/roadmap/`은 실행 중 조정 작업공간이며 승인된 제품 범위·spec·roadmap을 대신하지 않는다.
 
@@ -157,21 +155,21 @@ roadmap 승인 이후 사용자 승인 게이트 없이 자동 진행한다. 아
 4. 메인 세션이 직접 완료 조건 대조와 결함 탐지를 한 번에 수행한다 — subagent dispatch 없이 진행한다. DELTA 하나 크기에서는 별도 dispatch 비용이 검토 비용보다 크다.
 5. 발견을 수정한다. 회귀 테스트 RED를 먼저 확인하고 기존 테스트를 지우거나 약화해 통과시키지 않는다.
 6. `result/RD-NNN-DELTA-NN.md`의 "## 결과" 절(상태·검증·리뷰 발견과 처리·변경 파일·남은 위험)을 채운다.
-7. [`./ff-workflow.md`](./ff-workflow.md)의 "재그룹화 실행 명령"을 그대로 써서 재조립하고 `dev`에 ff-only 병합한다. 브랜치를 삭제하고 백업 ref를 정리한다.
+7. [`./workflow-shared.md`](./workflow-shared.md)의 "재그룹화 실행 명령"을 그대로 써서 재조립하고 `dev`에 ff-only 병합한다. 브랜치를 삭제하고 백업 ref를 정리한다.
 8. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단하고 `docs/history/`에 기록한다.
 9. `RD-NNN.md`의 "예상 DELTA" 체크박스와 "완료 조건" 체크리스트를 갱신한다 — 이 DELTA가 충족한 완료 조건이 있으면 체크하고 증거(테스트 제목·명령·`result/` 파일 경로)를 적는다. 남은 완료 조건과 이번 DELTA에서 드러난 사실을 바탕으로 다음에 예상되는 DELTA를 한 줄로 적어 백로그에 남긴다 — 확정이 아니라 다음 선택의 시작점이다.
 
-커밋 해시 참조, pending-issues·pending-guides·pending-pitfalls, subagent 협업 규칙은 모두 [`./ff-workflow.md`](./ff-workflow.md)를 참조한다 — 복제하지 않는다.
+커밋 해시 참조, pending-issues·pending-guides·pending-pitfalls, subagent 협업 규칙은 모두 [`./workflow-shared.md`](./workflow-shared.md)를 참조한다 — 복제하지 않는다.
 
 백로그(예상 DELTA)가 늘어나 RD 결과가 실제로는 여러 결과를 담고 있다고 판단되면(하드 상한 없음), 위 "roadmap 작성" 절의 원칙에 따라 RD를 나눈다.
 
 ### 승격 예외
 
-구현 중 다음 신호가 나타나면 이 사이클을 멈추고 사용자에게 qq-workflow 또는 ff-workflow로 독립 승격할지 묻는다. 에이전트가 스스로 승격하지 않는다.
+구현 중 다음 신호가 나타나면 이 사이클을 멈추고 사용자에게 qq-workflow로 독립 승격할지 묻는다. 에이전트가 스스로 승격하지 않는다.
 
 - 패키지 경계 또는 공개 API shape 변경, 신규 외부 의존성
 - DB migration·production config·credential·보안 경계 변경
-- 변경 diff가 [`./ff-workflow.md`](./ff-workflow.md) "크기 규칙"의 DELTA 크기 상한에 근접·초과
+- 변경 diff가 [`./workflow-shared.md`](./workflow-shared.md) "DELTA 크기 규칙"의 상한에 근접·초과
 
 승격한 하위 workflow의 `_meta.md`에는 다음 포인터를 추가한다.
 
@@ -207,7 +205,7 @@ DELTA 선택은 정상 동작이라 보고 사항이 아니다.
 
 다른 RD 결과가 실제 선행 조건이면 현재 RD를 `BLOCKED`로 바꾸고 DAG edge를 추가한다. 승인된 전체 범위와 RD 결과 의미가 유지되면 새로 READY가 된 선행 RD를 먼저 실행한다. 순환이 생기면 양쪽이 공유하는 선행 결과를 새 RD로 추출하고 readiness probe를 다시 실행한다.
 
-진행 중인 DELTA에 아직 완료하지 않은 변경이 있으면 그 DELTA를 완결한 뒤 전환한다. 별도 RD로 이동하는 재분할은 커밋된 DELTA 경계에서 수행한다. 브랜치 수명과 의존 branch는 [`./ff-workflow.md`](./ff-workflow.md) 계약을 따른다.
+진행 중인 DELTA에 아직 완료하지 않은 변경이 있으면 그 DELTA를 완결한 뒤 전환한다. 별도 RD로 이동하는 재분할은 커밋된 DELTA 경계에서 수행한다. 브랜치 수명과 의존 branch는 [`./workflow-shared.md`](./workflow-shared.md) 계약을 따른다.
 
 ### 사용자 결정 경계
 
@@ -263,8 +261,8 @@ _works/_completed/yyyyMMdd-NN-roadmap-<title>/
 | roadmap-workflow 진입 여부          | [`../../AGENTS.md`](../../AGENTS.md)의 "레인 선택 규칙"                      |
 | RD 결과·상태·의존 DAG·자동 재계획   | 이 문서                                                                      |
 | DELTA 사이클 절차·문서 형식         | 이 문서의 "경량 DELTA 사이클"                                                |
-| 재그룹화·커밋 해시 참조·pending 셋  | [`./ff-workflow.md`](./ff-workflow.md)(참조, 복제 없음)                      |
-| 승격된 DELTA의 워크플로 절차         | 승격 대상에 따라 [`./ff-workflow.md`](./ff-workflow.md) 또는 [`./qq-workflow.md`](./qq-workflow.md) |
+| 재그룹화·커밋 해시 참조·pending 셋  | [`./workflow-shared.md`](./workflow-shared.md)(참조, 복제 없음)              |
+| 승격된 DELTA의 워크플로 절차         | [`./qq-workflow.md`](./qq-workflow.md)                                       |
 | 제품 범위·릴리스 완료 조건          | [`../product/roadmap.md`](../product/roadmap.md)                             |
 | 실행 계획과 진행 상태 원본          | GitHub Issue                                                                 |
 | 문서 생성·갱신과 종료 조건          | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |

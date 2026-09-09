@@ -9,7 +9,7 @@
 | ID | 적용 조건 | 오해하기 쉬운 신호 | 지배 가이드·계약 |
 | --- | --- | --- | --- |
 | [`PIT-0011`](./PIT-0011-clamp-fixed-overlays-into-viewport.md) | 내용에 따라 fixed overlay 크기 변경 | 최초 clamp 뒤 mode 전환에서 이탈 | `G-UI-001` |
-| [`PIT-0023`](./PIT-0023-editor-opening-git-commands-succeed-silently.md) | editor 입력을 요구하는 Git 명령 | exit 0이지만 의도한 편집 미적용 | `AGENTS.md`, `ff-workflow` |
+| [`PIT-0023`](./PIT-0023-editor-opening-git-commands-succeed-silently.md) | editor 입력을 요구하는 Git 명령 | exit 0이지만 의도한 편집 미적용 | `AGENTS.md`, `workflow-shared` |
 | [`PIT-0027`](./PIT-0027-define-what-a-validator-accepts-not-what-it-rejects.md) | validator 뒤 관용적 skip 처리 | exit 0과 검사 대상 0건 | `G-WKS-004` |
 | [`PIT-0029`](./PIT-0029-verify-pnpm-passthrough-flags-reach-the-real-command.md) | pnpm script에 임시 flag 전달 | 명령 통과, flag 미적용 | `G-WKS-004` |
 | [`PIT-0032`](./PIT-0032-judge-typecheck-coverage-by-ownership-not-membership.md) | typecheck 커버리지를 멤버십·태스크 수로 판정 | 실행은 exit 0·태스크 수 감소, dry graph는 수 유지·command 누락 | `G-WKS-003` |
