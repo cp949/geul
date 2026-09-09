@@ -291,3 +291,97 @@ test("pointer-up 커밋은 undo 1회로 복원된다", async ({ page }) => {
 
   await expect(image).not.toHaveAttribute("style", /width/);
 });
+
+/**
+ * media-resize-handles.tsx가 `position: fixed`(viewport-relative
+ * `getBoundingClientRect()`)였을 때는, 이미지가 문서 하단에 있어 핸들이
+ * 뷰포트 밖으로 밀려나면 네이티브 scroll-into-view가 no-op이라(표 핸들의
+ * Issue #163과 같은 근본 원인) 명시적 `scrollIntoViewIfNeeded()`도 Playwright
+ * hover의 자동 스크롤도 핸들에 도달하지 못했다(Issue #164 본문이 실측한
+ * 재현 방법 그 자체). `G-UI-003`/`ADR-0012` 전환(absolute + page-relative
+ * 좌표, `table-handle-geometry.ts`의 `readPageRect` 재사용) 이후 두 핸들
+ * 모두 도달 가능함을 확인한다.
+ *
+ * 필러 문단 25개(`media-file-panel.spec.ts`의 PIT-0011 테스트와 같은
+ * 관용구)를 이미지보다 **앞에** 넣어, 맨 위로 스크롤했을 때 이미지(와 그
+ * 경계에 앵커된 핸들)가 뷰포트 아래로 밀려나게 만든다 — `insertFilledImage`가
+ * 자체적으로 `editable.click()`을 다시 호출해 캐럿 위치를 흩트리므로, 이
+ * 테스트는 그 헬퍼를 재사용하지 않고 같은 절차를 필러 입력 뒤 캐럿 위치에서
+ * 직접 수행한다.
+ */
+test("리사이즈 핸들이 뷰포트 밖으로 밀려난 뒤에도 스크롤로 도달 가능하다 (Issue #164)", async ({
+  page,
+}) => {
+  await routeResizeImage(page);
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("first");
+  for (let index = 0; index < 25; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+  await page
+    .getByRole("textbox", { name: "Image URL" })
+    .pressSequentially(RESIZE_IMAGE_URL);
+  await page.getByRole("button", { name: "Save URL" }).click();
+  const image = editable.locator("img");
+  await expect(image).toHaveAttribute("src", RESIZE_IMAGE_URL);
+
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+
+  const wrapper = editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("img") });
+  await wrapper.click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+
+  // 맨 위로 스크롤하면 필러 문단 뒤에 있는 이미지(와 핸들)는 뷰포트 밖(아래)에
+  // 남는다.
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  const leftHandle = page.locator('[data-geul-media-resize-handle="left"]');
+  const rightHandle = page.locator('[data-geul-media-resize-handle="right"]');
+
+  // sanity check: 둘 다 뷰포트 밖(아래)에서 시작해야 한다 — 깨지면 setup
+  // 자체가 틀린 것이다.
+  await expect(leftHandle).not.toBeInViewport();
+  await expect(rightHandle).not.toBeInViewport();
+
+  for (const handle of [leftHandle, rightHandle]) {
+    // 실측 1: 명시적 scrollIntoViewIfNeeded()로 도달한다 — position: fixed
+    // 였다면 네이티브 scroll-into-view가 no-op이라 window.scrollY가 그대로
+    // 였을 것이다(Issue #164 본문 실측, Issue #163과 같은 근본 원인).
+    const scrollYBefore = await page.evaluate(() => window.scrollY);
+    await handle.scrollIntoViewIfNeeded();
+    const scrollYAfter = await page.evaluate(() => window.scrollY);
+    expect(scrollYAfter).toBeGreaterThan(scrollYBefore);
+    await expect(handle).toBeInViewport();
+
+    // 다시 뷰포트 밖으로 되돌린다 — 다음 핸들(또는 아래 hover 실측)이
+    // 자기만의 스크롤 이동을 실제로 일으키는지 검증하려면 매번 원점에서
+    // 시작해야 한다.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(handle).not.toBeInViewport();
+  }
+
+  // 실측 2: hover의 자동 스크롤로도 도달해 실제 드래그 상호작용까지
+  // 성공한다(도달 확인보다 강한 증거) — 오른쪽 핸들로 중심 고정 대칭
+  // 리사이즈가 스크롤된 상태에서도 그대로 성립함을 함께 확인한다.
+  await rightHandle.hover();
+  await expect(rightHandle).toBeInViewport();
+
+  const start = await beginDrag(page, rightHandle);
+  await dragTo(page, start, 20);
+  await page.mouse.up();
+
+  await expect(image).toHaveAttribute("style", /width:\s*340px/);
+});

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { findElementByAttribute } from "./find-by-attribute.js";
+import { readPageRect } from "./table-handle-geometry.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
@@ -125,7 +126,12 @@ const resolveRenderTarget = (
   if (wrapper === null) return null;
   const mediaElement = findMediaElement(wrapper);
   if (mediaElement === null) return null;
-  const mediaRect = mediaElement.getBoundingClientRect();
+  // G-UI-003/ADR-0012: getBoundingClientRect()(viewport-relative) 대신
+  // readPageRect(page-relative, table-handle-geometry.ts 재사용)를 쓴다 —
+  // fixed는 앵커가 뷰포트 밖으로 나가면 네이티브 scrollIntoView·Playwright
+  // 자동 스크롤을 전부 no-op으로 만든다(Issue #163과 같은 근본 원인, Issue
+  // #164).
+  const mediaRect = readPageRect(mediaElement);
   const maxWidth = Math.round(wrapper.getBoundingClientRect().width);
   return { blockId: media.blockId, mediaRect, maxWidth };
 };
@@ -176,7 +182,9 @@ export const MediaResizeHandles = () => {
     ownerDocument?.addEventListener("selectionchange", bumpSelectionVersion);
     ownerDocument?.addEventListener("mouseup", bumpSelectionVersion);
     ownerDocument?.addEventListener("keyup", bumpSelectionVersion);
-    ownerWindow?.addEventListener("scroll", bumpSelectionVersion, true);
+    // G-UI-003: absolute 요소는 스크롤에 자동으로 따라오므로 scroll
+    // 리스너로 강제 재렌더할 필요가 없다(Issue #164) — resize·앵커 크기
+    // 변화만 재계산 대상이다.
     ownerWindow?.addEventListener("resize", bumpSelectionVersion);
     return () => {
       ownerDocument?.removeEventListener(
@@ -185,7 +193,6 @@ export const MediaResizeHandles = () => {
       );
       ownerDocument?.removeEventListener("mouseup", bumpSelectionVersion);
       ownerDocument?.removeEventListener("keyup", bumpSelectionVersion);
-      ownerWindow?.removeEventListener("scroll", bumpSelectionVersion, true);
       ownerWindow?.removeEventListener("resize", bumpSelectionVersion);
     };
   }, [bumpSelectionVersion, element]);
@@ -351,7 +358,7 @@ export const MediaResizeHandles = () => {
           )
         }
         style={{
-          position: "fixed",
+          position: "absolute",
           left: mediaRect.left - HANDLE_HALF,
           top: handleTop,
         }}
@@ -369,7 +376,7 @@ export const MediaResizeHandles = () => {
           )
         }
         style={{
-          position: "fixed",
+          position: "absolute",
           left: mediaRect.right - HANDLE_HALF,
           top: handleTop,
         }}

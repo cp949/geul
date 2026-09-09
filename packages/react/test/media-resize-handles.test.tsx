@@ -192,6 +192,18 @@ describe("선택 상태에 따른 핸들 노출", () => {
     expect(right.style.top).toBe("92px");
   });
 
+  // G-UI-003/ADR-0012(Issue #164): position: fixed는 앵커가 뷰포트 밖으로
+  // 나가면 네이티브 scrollIntoView·Playwright 자동 스크롤을 no-op으로
+  // 만든다(Issue #163과 같은 근본 원인) — 두 핸들 모두 absolute여야 한다.
+  it("두 핸들 모두 position: absolute를 쓴다(position: fixed 금지, G-UI-003)", () => {
+    renderHandles(
+      fakeController({ getSelectionMediaBlock: () => filledImageSelection }),
+    );
+
+    expect(getHandle("left").style.position).toBe("absolute");
+    expect(getHandle("right").style.position).toBe("absolute");
+  });
+
   it("url 있는 video를 선택해도 핸들을 렌더링한다", () => {
     renderHandles(
       fakeController({
@@ -220,6 +232,44 @@ describe("선택 상태에 따른 핸들 노출", () => {
     expect(
       document.querySelector("[data-geul-media-resize-handle]"),
     ).toBeNull();
+  });
+});
+
+// G-UI-003/ADR-0012(Issue #164): 핸들 좌표가 readPageRect(page-relative,
+// rect + window.scrollX/scrollY) 기반임을 고정한다 — table-handle-geometry.
+// test.ts "페이지 스크롤 오프셋" describe와 같은 패턴(Object.defineProperty로
+// scrollX/scrollY를 덮어쓰고 afterEach로 0 복원). getBoundingClientRect
+// 스텁(MEDIA_RECT)은 그대로인데 스크롤 오프셋만큼 좌표가 더해지면 이 계층이
+// readPageRect를 실제로 쓰고 있다는 뜻이다 — viewport-relative
+// getBoundingClientRect()로 되돌리면 이 테스트가 실패한다.
+describe("페이지 스크롤 오프셋", () => {
+  afterEach(() => {
+    Object.defineProperty(window, "scrollX", { configurable: true, value: 0 });
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+  });
+
+  it("핸들 좌표에 window.scrollX/scrollY를 더해 page-relative로 렌더한다", () => {
+    Object.defineProperty(window, "scrollX", {
+      configurable: true,
+      value: 40,
+    });
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 70,
+    });
+
+    renderHandles(
+      fakeController({ getSelectionMediaBlock: () => filledImageSelection }),
+    );
+
+    // 스크롤 없을 때 기대값(92px/92px, 292px/92px)에 scrollX(40)·scrollY(70)를
+    // 그대로 더한 값이다.
+    const left = getHandle("left");
+    const right = getHandle("right");
+    expect(left.style.left).toBe("132px");
+    expect(left.style.top).toBe("162px");
+    expect(right.style.left).toBe("332px");
+    expect(right.style.top).toBe("162px");
   });
 });
 

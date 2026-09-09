@@ -18,8 +18,13 @@
 // touch-action: none — table-handles.tsx의 geul-table-resize-handle과 같은
 // 이유(터치 드래그를 브라우저 스크롤 제스처에 뺏기면 pointercancel로
 // 드래그가 중단된다, setPointerCapture는 이를 막지 못한다).
+//
+// G-UI-003/ADR-0012: absolute + page-relative 좌표(media-resize-handles.tsx가
+// table-handle-geometry.ts의 readPageRect를 재사용) — fixed는 앵커가
+// 뷰포트 밖으로 나가면 네이티브 scrollIntoView·Playwright 자동 스크롤을
+// no-op으로 만든다(Issue #163과 같은 근본 원인, Issue #164).
 .geul-media-resize-handle {
-  position: fixed;
+  position: absolute;
   z-index: 10;
   height: 1rem;
   width: 1rem;
