@@ -973,3 +973,200 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
     ).toHaveLength(2);
   });
 });
+
+describe("메뉴 대상 정체성 추적(Issue #65)", () => {
+  it("대상보다 앞선 행이 사라지면 메뉴는 닫히지 않고 재조준돼 원래 대상 행이 삭제된다", async () => {
+    const { editor, rowIds, table, tableBlockId } = renderRealTable({
+      rows: 3,
+      columns: 2,
+    });
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    // 가운데 행(인덱스 1)에 메뉴를 연다 — 이 행보다 앞선 행이 사라지는
+    // 시나리오를 겨냥한다.
+    const middleRowHandle = rowHandles[1];
+    if (middleRowHandle === undefined) throw new Error("가운데 행 핸들 없음");
+    fireEvent.pointerDown(middleRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(middleRowHandle, { pointerId: 1 });
+    fireEvent.click(middleRowHandle);
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+
+    await act(async () => {
+      // 대상(rowIds[1])보다 앞선 행(인덱스 0, rowIds[0])을 지운다. 정체성
+      // 추적 없이 인덱스만 보면 대상은 이제 인덱스 0으로 밀렸는데도 메뉴는
+      // 계속 인덱스 1(밀려 들어온 rowIds[2])을 가리킨다.
+      const deleted = editor.commands.deleteTableRow(tableBlockId, 0);
+      if (!deleted.ok) throw new Error("앞선 행 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    // 대상 행이 삭제되지 않고 정말 앞선 행만 사라졌는지 문서로 고정한다.
+    expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[1], rowIds[2]]);
+    // 대상 자신은 살아있으므로 메뉴는 닫히지 않는다.
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete row" }));
+
+    // 재조준됐다면 이 클릭이 지우는 행은 사용자가 실제로 지목했던
+    // rowIds[1]이다 — 재조준하지 않고 낡은 인덱스 1을 그대로 썼다면
+    // 밀려 들어온 rowIds[2]가 대신 지워진다(엉뚱한 행 삭제).
+    expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[2]]);
+  });
+
+  it("대상보다 앞선 열이 사라지면 메뉴는 닫히지 않고 재조준돼 원래 대상 열이 삭제된다", async () => {
+    const { editor, columnIds, table, tableBlockId } = renderRealTable({
+      rows: 2,
+      columns: 3,
+    });
+    fireEvent.pointerMove(table);
+    const columnHandles = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    // 가운데 열(인덱스 1)에 메뉴를 연다.
+    const middleColumnHandle = columnHandles[1];
+    if (middleColumnHandle === undefined)
+      throw new Error("가운데 열 핸들 없음");
+    fireEvent.pointerDown(middleColumnHandle, { pointerId: 1, clientX: 250 });
+    fireEvent.pointerUp(middleColumnHandle, { pointerId: 1 });
+    fireEvent.click(middleColumnHandle);
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      // 대상(columnIds[1])보다 앞선 열(인덱스 0)을 지운다.
+      const deleted = editor.commands.deleteTableColumn(tableBlockId, 0);
+      if (!deleted.ok) throw new Error("앞선 열 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    expect(tableBlockOf(editor).columns.map((column) => column.id)).toEqual([
+      columnIds[1],
+      columnIds[2],
+    ]);
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete column" }));
+
+    // 재조준됐다면 지워지는 열은 columnIds[1]이다 — 낡은 인덱스 1을 그대로
+    // 썼다면 밀려 들어온 columnIds[2]가 대신 지워진다.
+    expect(tableBlockOf(editor).columns.map((column) => column.id)).toEqual([
+      columnIds[2],
+    ]);
+  });
+
+  it("메뉴가 가리키던 행 자신이 사라지면, 다른 행이 같은 인덱스를 이어받아도 메뉴가 닫힌다", async () => {
+    const { editor, rowIds, table, tableBlockId } = renderRealTable({
+      rows: 3,
+      columns: 2,
+    });
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const firstRowHandle = rowHandles[0];
+    if (firstRowHandle === undefined) throw new Error("첫 행 핸들 없음");
+    fireEvent.pointerDown(firstRowHandle, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(firstRowHandle, { pointerId: 1 });
+    fireEvent.click(firstRowHandle);
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+
+    await act(async () => {
+      // 대상 자신(인덱스 0, rowIds[0])을 지운다 — 남은 두 행이 한 칸씩
+      // 당겨져 원래 인덱스 1이던 행(rowIds[1])이 인덱스 0을 이어받는다.
+      // 인덱스 범위만 보면(0 < 2) 여전히 "유효"로 보인다.
+      const deleted = editor.commands.deleteTableRow(tableBlockId, 0);
+      if (!deleted.ok) throw new Error("대상 행 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    // 대상 행이 정말 사라지고 다른 행이 같은 인덱스로 밀렸는지 고정한다 —
+    // 이 전제가 없으면 아래 메뉴 닫힘 단언이 무엇을 증명하는지 알 수 없다.
+    expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[1], rowIds[2]]);
+    // id 비교 없이 인덱스 범위만 보면 "유효"로 남아 이 단언이 실패한다.
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("메뉴가 가리키던 열 자신이 사라지면, 다른 열이 같은 인덱스를 이어받아도 메뉴가 닫힌다", async () => {
+    const { editor, columnIds, table, tableBlockId } = renderRealTable({
+      rows: 2,
+      columns: 3,
+    });
+    fireEvent.pointerMove(table);
+    const columnHandles = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    const firstColumnHandle = columnHandles[0];
+    if (firstColumnHandle === undefined) throw new Error("첫 열 핸들 없음");
+    fireEvent.pointerDown(firstColumnHandle, { pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(firstColumnHandle, { pointerId: 1 });
+    fireEvent.click(firstColumnHandle);
+    expect(
+      screen.getByRole("menu", { name: "Table column menu" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      // 대상 자신(인덱스 0, columnIds[0])을 지운다 — 남은 두 열이 한 칸씩
+      // 당겨져 원래 인덱스 1이던 열(columnIds[1])이 인덱스 0을 이어받는다.
+      // 인덱스 범위만 보면(0 < 2) 여전히 "유효"로 보인다. 행 쪽 대칭
+      // 테스트(위)와 같은 시나리오를 열에도 적용한다 — resolveMenuTargetIndex는
+      // kind로 분기하는 한 함수라 행에서만 검증하면 열 경로(readTableColumnIds
+      // 분기)가 테스트 갭으로 남는다.
+      const deleted = editor.commands.deleteTableColumn(tableBlockId, 0);
+      if (!deleted.ok) throw new Error("대상 열 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    expect(tableBlockOf(editor).columns.map((column) => column.id)).toEqual([
+      columnIds[1],
+      columnIds[2],
+    ]);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("재조준되는 동안에도 이미 떠 있던 실패 메시지가 사라지지 않는다", async () => {
+    // TableHandleMenu는 key={tableBlockId-kind-index}로 마운트돼(당시엔
+    // 메뉴가 열린 채로 index가 바뀌는 경로가 없어 무해했다) 내부
+    // useTableCommandFeedback의 actionError를 로컬 state로 들고 있다. 이
+    // describe가 만드는 재조준(같은 대상, 다른 index)이 index를 key에
+    // 넣은 채로는 컴포넌트를 통째로 remount시켜, 방금 사용자에게 보여주던
+    // 실패 메시지를 조용히 지운다 — 메뉴는 안 닫혔으니 "닫힘" 계열
+    // 테스트로는 못 잡는다.
+    const { editor, rowIds, table, tableBlockId } = renderRealTable({
+      rows: 3,
+      columns: 2,
+    });
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const middleRowHandle = rowHandles[1];
+    if (middleRowHandle === undefined) throw new Error("가운데 행 핸들 없음");
+    fireEvent.pointerDown(middleRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(middleRowHandle, { pointerId: 1 });
+    fireEvent.click(middleRowHandle);
+    // 전제: 가운데 행에 아직 글자색이 없다 — "그 외 실패" 테스트와 같은
+    // 실패(COMMAND_NOT_APPLICABLE → "Action failed")를 재현하기 위해서다.
+    expect(rowsOf(editor)[1]?.cells.map((cell) => cell.textColor)).toEqual([
+      undefined,
+      undefined,
+    ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
+    expect(screen.getByRole("alert").textContent).toBe("Action failed");
+
+    await act(async () => {
+      // 대상(rowIds[1])보다 앞선 행(인덱스 0)을 지워 재조준을 유발한다 —
+      // 대상 자신은 살아있으므로 메뉴는 닫히지 않고 index만 갱신된다.
+      const deleted = editor.commands.deleteTableRow(tableBlockId, 0);
+      if (!deleted.ok) throw new Error("앞선 행 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    // 대상 행이 살아있고 재조준됐는지(닫히지 않았는지) 먼저 고정한다.
+    expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[1], rowIds[2]]);
+    expect(screen.getByRole("menu", { name: "Table row menu" })).toBeTruthy();
+    // key가 index를 물고 있으면 재조준이 컴포넌트를 remount시켜 이 alert가
+    // 사라진다 — 재조준은 "대상 전환"이 아니라 "같은 대상, 다른 위치"라
+    // 이전 실패 메시지가 남아 있어야 한다.
+    expect(screen.getByRole("alert").textContent).toBe("Action failed");
+  });
+});

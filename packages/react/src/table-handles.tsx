@@ -11,6 +11,7 @@ import {
   readGeometryFor,
   readPageRect,
   readTableColumnIds,
+  readTableRowIds,
   type TableGeometry,
 } from "./table-handle-geometry.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
@@ -44,6 +45,34 @@ import {
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
+
+// Issue #65: menuState.index만으로는 대상보다 앞선 행/열이 사라져 인덱스가
+// 밀린 경우와 대상 자신이 사라진 경우를 구분할 수 없다. targetId(비어 있지
+// 않은 경우)로 현재 DOM에서 대상의 위치를 다시 찾는다 — 없으면 null(닫아야
+// 함), 있으면 그 위치를 돌려준다(같은 값이면 재렌더 없이 그대로 쓰인다).
+// 빈 targetId는 G-UI-002 fail-open이라 재조준을 시도하지 않고 기존
+// 인덱스-범위 판정만 본다. 이 컴포넌트 밖에서 재사용하지 않아 모듈
+// 스코프에 둔다(computeReorderTargetIndex와 달리 useCallback 안정화가
+// 필요 없다 — effect 안에서 직접 부른다).
+const resolveMenuTargetIndex = (
+  menuState: HandleMenuState,
+  table: HTMLElement,
+): number | null => {
+  if (menuState.targetId === "") {
+    const count =
+      menuState.kind === "row"
+        ? readTableRowIds(table).length
+        : readTableColumnIds(table).length;
+    return menuState.index < count ? menuState.index : null;
+  }
+
+  const ids =
+    menuState.kind === "row"
+      ? readTableRowIds(table)
+      : readTableColumnIds(table);
+  const nextIndex = ids.indexOf(menuState.targetId);
+  return nextIndex === -1 ? null : nextIndex;
+};
 
 export const TableHandles = () => {
   const editor = useEditor();
@@ -400,45 +429,51 @@ export const TableHandles = () => {
     };
   }, [resizeActive, element]);
 
-  // 완료 조건 3(Issue #18): 메뉴가 열린 동안 대상 행/열이 undo 등으로
-  // 사라지면(인덱스가 더 이상 유효하지 않거나 표 블록 자체가 사라지면)
-  // 메뉴를 자동으로 닫는다. geometry는 render마다 다시 읽지만, 이
-  // 컴포넌트를 재렌더시키는 주체가 항상 있다는 보장이 없다(위
+  // 완료 조건 3(Issue #18, 재조준은 Issue #65): 메뉴가 열린 동안 대상
+  // 행/열이 undo 등으로 사라지면(대상 자신이 사라지거나 표 블록 자체가
+  // 사라지면) 메뉴를 자동으로 닫는다. geometry는 render마다 다시 읽지만,
+  // 이 컴포넌트를 재렌더시키는 주체가 항상 있다는 보장이 없다(위
   // readFreshGeometry 주석 참고) — 재렌더에 기대지 않고 DOM을 직접
-  // 관찰한다. 인덱스가 범위 안인지만 본다 — 범위 안에서 가리키는 행/열의
-  // 정체성이 바뀌는 경우는 다루지 않는다(범위 밖, Issue #65).
+  // 관찰한다.
+  //
+  // 인덱스 범위만 보면, 대상보다 앞선 행/열이 사라져 인덱스가 밀린
+  // 경우와 대상 자신이 사라진 경우를 구분하지 못한다(Issue #65 재리뷰 —
+  // 조용한 데이터 손실). menuState.targetId(G-UI-002, ReorderState.sourceId와
+  // 같은 결)로 대상을 재해석한다 — targetId가 현재 배열에 없으면 대상
+  // 자신이 사라진 것이므로 닫고, 있고 위치가 바뀌었으면 인덱스만 갱신해
+  // 재조준한다(닫지 않는다). targetId가 빈 문자열이면(fail-open, 서로 다른
+  // 행/열이 같은 빈 id로 충돌할 수 있어) 기존처럼 인덱스 범위만 본다.
   useEffect(() => {
     if (menuState === null || element === null) return;
 
-    const isMenuTargetValid = () => {
+    const reconcileMenuState = () => {
       // 대상 표를 매번 다시 찾는다. 표 노드가 재생성되면 effect 시점에
       // 해석한 엘리먼트는 문서에서 떨어져 나가 낡은 개수를 계속 돌려준다.
       const table = findTable(element, menuState.tableBlockId);
-      if (table === null) return false;
-      // 유효성 판정에는 행/열 개수만 필요하다. readTableGeometry는 모든
-      // 행·셀의 getBoundingClientRect를 도는데, NodeView가 갱신마다
-      // data-geul-columns를 다시 써서 mutation이 자주 오므로 그때마다 강제
-      // 레이아웃을 유발한다.
-      const count =
-        menuState.kind === "row"
-          ? table.querySelectorAll("[data-geul-row-id]").length
-          : readTableColumnIds(table).length;
-      return menuState.index < count;
+      if (table === null) {
+        closeMenu();
+        return;
+      }
+
+      const nextIndex = resolveMenuTargetIndex(menuState, table);
+      if (nextIndex === null) {
+        closeMenu();
+        return;
+      }
+      if (nextIndex !== menuState.index) {
+        setMenuState({ ...menuState, index: nextIndex });
+      }
     };
 
-    // 이 effect가 붙기 전에 이미 무효화됐을 수도 있다 — 최초 1회도 검사한다.
-    if (!isMenuTargetValid()) {
-      closeMenu();
-      return;
-    }
+    // 이 effect가 붙기 전에 이미 무효화·재조준됐을 수도 있다 — 최초
+    // 1회도 검사한다.
+    reconcileMenuState();
 
     // 표 엘리먼트가 아니라 편집기 루트를 관찰한다. <table>에 직접 걸면
     // 그 노드가 통째로 제거될 때(제거는 부모의 childList mutation이라
     // 제거되는 노드 자신의 observer에는 오지 않는다) 콜백이 오지 않아
     // 메뉴가 죽은 표를 가리킨 채 남는다.
-    const observer = new MutationObserver(() => {
-      if (!isMenuTargetValid()) closeMenu();
-    });
+    const observer = new MutationObserver(reconcileMenuState);
     observer.observe(element, {
       attributeFilter: ["data-geul-columns"],
       attributes: true,
@@ -471,7 +506,7 @@ export const TableHandles = () => {
           menuState.index === index,
       },
       {
-        onOpen: () => setMenuState({ kind, tableBlockId, index }),
+        onOpen: () => setMenuState({ kind, tableBlockId, index, targetId: id }),
         onClose: closeMenu,
       },
     );
@@ -610,7 +645,14 @@ export const TableHandles = () => {
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (
         <TableHandleMenu
-          key={`${menuState.tableBlockId}-${menuState.kind}-${menuState.index}`}
+          // Issue #65 재조준 발견: index를 key에 넣으면 재조준(같은 대상,
+          // 다른 index)마다 컴포넌트가 remount돼 useTableCommandFeedback의
+          // actionError(Issue #18 완료 조건 1)가 조용히 사라진다 — 대상
+          // 전환(다른 targetId)에서는 여전히 remount로 이전 실패를 지워야
+          // 하므로(위 "다른 행으로 메뉴 대상을 바로 전환하면..." 테스트)
+          // index 대신 targetId로 키를 세운다. 빈 targetId는 G-UI-002
+          // fail-open이라 이전과 같이 서로 다른 대상이 충돌할 수 있다.
+          key={`${menuState.tableBlockId}-${menuState.kind}-${menuState.targetId}`}
           canDelete={
             menuState.kind === "row"
               ? geometry.rows.length > 1

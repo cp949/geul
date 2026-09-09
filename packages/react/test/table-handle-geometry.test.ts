@@ -23,6 +23,7 @@ import {
   readColumnBounds,
   readTableColumnIds,
   readTableGeometry,
+  readTableRowIds,
   type RowBox,
 } from "../src/table-handle-geometry.js";
 import { stubRect } from "./mount-editor.js";
@@ -307,6 +308,42 @@ describe("readTableColumnIds", () => {
     table.setAttribute("data-geul-columns", "{not json");
 
     expect(readTableColumnIds(table)).toEqual([]);
+  });
+});
+
+describe("readTableRowIds", () => {
+  // G-TBL-001: 행의 권위 있는 DOM 순서는 data-geul-row-id다(열의
+  // data-geul-columns와 대칭). Issue #65의 메뉴 재조준 effect가 이 배열에서
+  // targetId의 현재 위치를 찾으므로, DOM 순서를 그대로 보존하는지가 핵심이다.
+  it("data-geul-row-id가 붙은 요소를 DOM 순서대로 id 배열로 돌려준다", () => {
+    const table = document.createElement("table");
+    const row1 = document.createElement("tr");
+    row1.setAttribute("data-geul-row-id", "row-1");
+    const row2 = document.createElement("tr");
+    row2.setAttribute("data-geul-row-id", "row-2");
+    table.appendChild(row2);
+    table.appendChild(row1);
+
+    // appendChild 순서(row2 먼저)가 아니라 DOM 트리 순서(row2가 앞)를
+    // 그대로 반영하는지 본다 — querySelectorAll은 항상 문서 순서다.
+    expect(readTableRowIds(table)).toEqual(["row-2", "row-1"]);
+  });
+
+  it("행이 없으면 빈 배열을 돌려준다", () => {
+    const table = document.createElement("table");
+
+    expect(readTableRowIds(table)).toEqual([]);
+  });
+
+  it("속성 값이 빈 문자열인 행도 그대로(빈 문자열로) 포함한다", () => {
+    // table-handles.tsx의 다른 getAttribute(...) ?? "" 폴백과 같은 결의
+    // fail-open이다 — 빈 rowId는 위 계층(재조준 effect)이 별도로 걸러낸다.
+    const table = document.createElement("table");
+    const row = document.createElement("tr");
+    row.setAttribute("data-geul-row-id", "");
+    table.appendChild(row);
+
+    expect(readTableRowIds(table)).toEqual([""]);
   });
 });
 

@@ -96,6 +96,15 @@ export const readTableColumnIds = (table: HTMLElement): string[] => {
   return parsed.ok ? parsed.value.map((column) => column.id) : [];
 };
 
+// G-TBL-001: 행의 권위 있는 DOM 순서는 data-geul-row-id가 붙은 요소들이다
+// (열의 data-geul-columns와 대칭). 열과 달리 행에는 별도의 순서 속성이
+// 없다 — DOM 자체가 이미 순서의 권위다. table-handles.tsx의 메뉴 무효화
+// effect(Issue #65)가 targetId의 현재 위치를 재해석하는 데 쓴다.
+export const readTableRowIds = (table: HTMLElement): string[] =>
+  Array.from(table.querySelectorAll<HTMLElement>("[data-geul-row-id]")).map(
+    (row) => row.getAttribute("data-geul-row-id") ?? "",
+  );
+
 export type ColumnBound = { left: number; width: number };
 
 // 첫 행만 보고 열 경계를 읽으면, 첫 행에 colspan>1 병합 셀이 있을 때
