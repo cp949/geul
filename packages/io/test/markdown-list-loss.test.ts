@@ -180,7 +180,11 @@ describe("GFM 목록 children 손실 분류", () => {
     });
   });
 
-  it("paragraph·heading·quote children만 strict export에서 NESTED_CHILDREN으로 거절한다", () => {
+  // quote는 BLK-005 재평가(Issue #151, roadmap-workflow RD-001 DELTA-02)로
+  // isGfmContainerLikeBlockType에 편입돼 더 이상 이 목록에 없다 —
+  // markdown-quote-loss.test.ts가 quote의 새 계약(컨테이너 유지, round-trip)을
+  // 전담한다.
+  it("paragraph·heading children만 strict export에서 NESTED_CHILDREN으로 거절한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
@@ -198,26 +202,6 @@ describe("GFM 목록 children 손실 분류", () => {
           content: [{ text: "제목" }],
           children: [{ id: "heading-child", type: "codeBlock", content: [] }],
         },
-        {
-          id: "quote-parent",
-          type: "quote",
-          content: [{ text: "인용" }],
-          children: [
-            {
-              id: "list-child",
-              type: "bulletListItem",
-              content: [{ text: "목록" }],
-              children: [
-                {
-                  id: "nested-list-child",
-                  type: "numberedListItem",
-                  startNumber: 3,
-                  content: [{ text: "하위 목록" }],
-                },
-              ],
-            },
-          ],
-        },
       ],
     };
 
@@ -232,11 +216,6 @@ describe("GFM 목록 children 손실 분류", () => {
         blockId: "heading-parent",
         message: expect.stringContaining("heading-parent"),
       },
-      {
-        kind: "NESTED_CHILDREN",
-        blockId: "quote-parent",
-        message: expect.stringContaining("quote-parent"),
-      },
     ];
 
     expect(analyzeMarkdownLoss(document)).toEqual(expectedLosses);
@@ -249,6 +228,9 @@ describe("GFM 목록 children 손실 분류", () => {
     });
   });
 
+  // quote는 BLK-005 재평가(Issue #151, roadmap-workflow RD-001 DELTA-02)로
+  // "표현 불가능한 부모"가 아니게 됐다 — markdown-quote-loss.test.ts가 quote를
+  // 목록 항목 children으로 담는 계약을 전담한다.
   it("lossy export는 표현 불가능한 부모만 형제로 평탄화하고 하위 목록 계층은 보존한다", () => {
     const document: Document = {
       formatVersion: 1,
@@ -286,18 +268,6 @@ describe("GFM 목록 children 손실 분류", () => {
               content: [{ text: "제목" }],
               children: [{ id: "divider-child", type: "divider" }],
             },
-            {
-              id: "quote-parent",
-              type: "quote",
-              content: [{ text: "인용" }],
-              children: [
-                {
-                  id: "code-child",
-                  type: "codeBlock",
-                  content: [{ text: "코드" }],
-                },
-              ],
-            },
           ],
         },
       ],
@@ -317,11 +287,6 @@ describe("GFM 목록 children 손실 분류", () => {
         blockId: "heading-parent",
         message: expect.stringContaining("heading-parent"),
       },
-      {
-        kind: "NESTED_CHILDREN",
-        blockId: "quote-parent",
-        message: expect.stringContaining("quote-parent"),
-      },
     ]);
     expect(exported.value.markdown).toBe(
       [
@@ -336,12 +301,6 @@ describe("GFM 목록 children 손실 분류", () => {
         "  ## 제목",
         "",
         "  ---",
-        "",
-        "  > 인용",
-        "",
-        "  ```",
-        "  코드",
-        "  ```",
         "",
       ].join("\n"),
     );
@@ -369,8 +328,6 @@ describe("GFM 목록 children 손실 분류", () => {
           },
           { type: "heading", level: 2, content: [{ text: "제목" }] },
           { type: "divider" },
-          { type: "quote", content: [{ text: "인용" }] },
-          { type: "codeBlock", content: [{ text: "코드" }] },
         ],
       },
     ]);

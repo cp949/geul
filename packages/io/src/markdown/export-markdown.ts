@@ -22,6 +22,7 @@ import { computeColumnAlignments } from "./column-align.js";
 import {
   analyzeMarkdownLoss,
   hasAmbiguousLeadingListParagraph,
+  isGfmContainerLikeBlockType,
   isGfmListLikeBlockType,
   type MarkdownLoss,
 } from "./loss-analysis.js";
@@ -179,13 +180,14 @@ const tableNode = (table: TableBlock): MarkdownOutputNode => {
   };
 };
 
-// children이 있는 paragraph/heading/quote를 부모 바로 뒤의 형제 블록으로
-// 평탄화한다(D5, lossy export 전용). 목록 항목(toggleListItem 포함,
-// isGfmListLikeBlockType)은 mdast listItem의 block children으로 계층을
-// 표현할 수 있으므로 컨테이너를 유지한 채 내부에서 표현 불가능한 자식만
-// 재귀적으로 평탄화한다. own content가 비고 첫 자식이 paragraph면 GFM이
-// 둘의 경계를 구분하지 못하므로 그 paragraph를 content로 승격하고 나머지
-// 목록 계층을 유지한다.
+// children이 있는 paragraph/heading을 부모 바로 뒤의 형제 블록으로
+// 평탄화한다(D5, lossy export 전용 — 이 둘은 확정 사항 9가 원천 불가능으로
+// 확정해 재평가 대상이 아니다). 목록 항목(toggleListItem 포함)과 quote
+// (isGfmContainerLikeBlockType, BLK-005 재평가로 편입)는 각각 mdast
+// listItem·blockquote의 block children으로 계층을 표현할 수 있으므로
+// 컨테이너를 유지한 채 내부에서 표현 불가능한 자식만 재귀적으로 평탄화한다.
+// own content가 비고 첫 자식이 paragraph면 GFM이 둘의 경계를 구분하지
+// 못하므로 그 paragraph를 content로 승격하고 나머지 계층을 유지한다.
 const flattenBlocks = (
   blocks: Block[],
   customBlockToMarkdown?: Record<string, (block: CustomBlock) => string>,
@@ -216,7 +218,7 @@ const flattenBlocks = (
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
-    if (isGfmListLikeBlockType(block.type)) {
+    if (isGfmContainerLikeBlockType(block.type)) {
       const { children, ...ownBlock } = block;
       const flattenedChildren = flattenBlocks(children);
       const firstChild = flattenedChildren[0];
@@ -383,11 +385,25 @@ const blockNode = (block: Block): MarkdownOutputNode => {
     return listNode([block as ListItemBlock | ToggleListItemBlock]);
   }
   if (block.type === "quote") {
+    // BLK-005 재평가(Issue #151) — GFM blockquote의 content model이 root와
+    // 같은 flow content라 children을 listNode의 own-paragraph 규칙과 동일하게
+    // 재귀 변환한다(loss-analysis.ts의 hasAmbiguousLeadingListParagraph 문서
+    // 참고, 세 곳이 같은 판정을 공유해야 함). own content가 비고 첫 child가
+    // paragraph면 GFM이 그 둘의 경계를 구분하지 못해 own paragraph를
+    // materialize하지 않는다 — flattenBlocks의 승격과 동일한 판정.
+    const childNodes = blockNodes(block.children ?? []);
+    const ownParagraph: MarkdownOutputNode = {
+      type: "paragraph",
+      children: inlineNodes(block.content, false),
+    };
     return {
       type: "blockquote",
-      children: [
-        { type: "paragraph", children: inlineNodes(block.content, false) },
-      ],
+      children:
+        block.content.length === 0 &&
+        childNodes.length > 0 &&
+        !hasAmbiguousLeadingListParagraph(block)
+          ? childNodes
+          : [ownParagraph, ...childNodes],
     };
   }
   if (block.type === "heading") {
