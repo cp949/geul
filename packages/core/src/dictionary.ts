@@ -220,6 +220,16 @@ export type Dictionary = {
     dragBlock: string;
     addBlock: string;
   };
+  // G-UI-004(RD-003) — Indent/Outdent가 형제 목록 경계에서 aria-disabled일
+  // 때 title로 노출하는 비활성 사유. table-handle-overlays.tsx,
+  // formatting-toolbar.tsx, block-side-menu-menu.tsx 셋 다
+  // editor.getBlockNestingActionState를 같은 의미로 써 하나의 사유를
+  // 공유한다(RD-003·004·005) — 컨트롤마다 다른 라벨 네임스페이스(handle/
+  // toolbar.formatting/menu)를 쓰므로 별도 최상위 네임스페이스로 둔다.
+  nesting: {
+    indentDisabledReason: string;
+    outdentDisabledReason: string;
+  };
   // RD-002-DELTA-09 — `code-block-language-combobox.tsx`의 번역 대상
   // 문구만 담는다. JavaScript/TypeScript/HTML/CSS/JSON/Bash/Python/Java/
   // Kotlin/SQL/Markdown 11개 언어 고유명사는 대부분 로케일에서 번역하지
@@ -458,6 +468,10 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     selectTable: "Select table",
     dragBlock: "Drag to reorder, click for options",
     addBlock: "Add block",
+  },
+  nesting: {
+    indentDisabledReason: "Can't indent further",
+    outdentDisabledReason: "Can't outdent further",
   },
   codeLanguage: {
     plainText: "Plain Text",

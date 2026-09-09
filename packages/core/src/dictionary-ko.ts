@@ -208,6 +208,10 @@ export const KO_DICTIONARY: Dictionary = {
     dragBlock: "드래그해서 순서 변경, 클릭하면 옵션 표시",
     addBlock: "블록 추가",
   },
+  nesting: {
+    indentDisabledReason: "더 들여쓸 수 없습니다",
+    outdentDisabledReason: "더 내어쓸 수 없습니다",
+  },
   codeLanguage: {
     plainText: "일반 텍스트",
     label: "코드 언어",

@@ -654,12 +654,26 @@ export const TableHandles = () => {
   const handleIndentTable = () => {
     const fresh = readFreshGeometry();
     if (fresh === null) return;
+    // G-UI-004: aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다 —
+    // 명시적 가드로 비활성 상태의 클릭을 막는다. canIndent는 fresh 기준으로
+    // 다시 계산한다(canIndentTable prop은 render 시점 geometry에서 나온 값이라
+    // readFreshGeometry와 같은 이유로 낡을 수 있다).
+    if (
+      editor.getBlockNestingActionState(fresh.tableBlockId).canIndent !== true
+    ) {
+      return;
+    }
     editor.commands.indentBlock(fresh.tableBlockId);
   };
 
   const handleOutdentTable = () => {
     const fresh = readFreshGeometry();
     if (fresh === null) return;
+    if (
+      editor.getBlockNestingActionState(fresh.tableBlockId).canOutdent !== true
+    ) {
+      return;
+    }
     editor.commands.outdentBlock(fresh.tableBlockId);
   };
 

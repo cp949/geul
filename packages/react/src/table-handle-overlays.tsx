@@ -207,7 +207,6 @@ export const TableHandleOverlays = ({
         aria-disabled={canIndentTable ? "false" : "true"}
         className={nestingButtonClassName}
         data-geul-table-indent=""
-        disabled={!canIndentTable}
         icon={indentTableIcon}
         label={dictionary.handle.indentTable}
         onClick={onIndentTable}
@@ -216,12 +215,14 @@ export const TableHandleOverlays = ({
           left: geometry.left - 48,
           top: geometry.top - 24,
         }}
+        title={
+          canIndentTable ? undefined : dictionary.nesting.indentDisabledReason
+        }
       />
       <IconButton
         aria-disabled={canOutdentTable ? "false" : "true"}
         className={nestingButtonClassName}
         data-geul-table-outdent=""
-        disabled={!canOutdentTable}
         icon={outdentTableIcon}
         label={dictionary.handle.outdentTable}
         onClick={onOutdentTable}
@@ -230,6 +231,9 @@ export const TableHandleOverlays = ({
           left: geometry.left - 24,
           top: geometry.top - 24,
         }}
+        title={
+          canOutdentTable ? undefined : dictionary.nesting.outdentDisabledReason
+        }
       />
       {reorderGuideRect !== null && (
         <div

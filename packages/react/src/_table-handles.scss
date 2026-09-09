@@ -36,7 +36,7 @@
   color: var(--geul-color-text, #202124);
   cursor: pointer;
 
-  &:disabled {
+  &[aria-disabled="true"] {
     cursor: not-allowed;
     opacity: 0.4;
   }
