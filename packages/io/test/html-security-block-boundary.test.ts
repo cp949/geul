@@ -245,6 +245,131 @@ describe("HTML 보안", () => {
     }
   });
 
+  // 표 내부는 조상 마크(링크 등)를 적용하지 않는다 — top-level 직접
+  // 중첩·blockquote 중첩·list 중첩 세 진입 경로 모두(docs/adr/0014). 위
+  // h4·blockquote·hr 사례와 대비된다: 저 셋은 조상 마크를 물려받지만 표는
+  // 내부에 도달하는 어떤 경로로도 물려받지 않는다.
+  it("표 내부는 진입 경로(top-level·blockquote·list) 무관하게 조상 마크를 적용하지 않는다", () => {
+    const cases = [
+      {
+        html: '<a href="https://example.com"><table><tbody><tr><td>c</td></tr></tbody></table></a>',
+        blocks: [
+          {
+            id: "html-1",
+            type: "table",
+            columns: [{ id: "html-2", width: 160 }],
+            rows: [
+              {
+                id: "html-3",
+                cells: [
+                  {
+                    id: "html-4",
+                    columnId: "html-2",
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    content: [{ text: "c" }],
+                  },
+                ],
+              },
+            ],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+        ],
+      },
+      {
+        html: '<a href="https://example.com"><blockquote><table><tbody><tr><td>c</td></tr></tbody></table></blockquote></a>',
+        blocks: [
+          {
+            id: "html-1",
+            type: "quote",
+            content: [],
+            children: [
+              {
+                id: "html-2",
+                type: "table",
+                columns: [{ id: "html-3", width: 160 }],
+                rows: [
+                  {
+                    id: "html-4",
+                    cells: [
+                      {
+                        id: "html-5",
+                        columnId: "html-3",
+                        rowSpan: 1,
+                        columnSpan: 1,
+                        content: [{ text: "c" }],
+                      },
+                    ],
+                  },
+                ],
+                headerRows: 0,
+                headerColumns: 0,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        // <a>가 <ul>을 직접 감싸면 SAFE_BLOCK_DOWNGRADED가 list item
+        // wrapper까지 평탄화한다(마크 상속과는 무관한 별도 구조 규칙,
+        // Issue #145 범위 밖) — 그 결과 li의 선두 텍스트("text")는 독립
+        // paragraph로 나와 <a> 마크를 그대로 물려받고, 뒤따르는 표는
+        // 별도 top-level 블록으로 나와 마크를 물려받지 않는다. 같은 조상
+        // 아래에서 텍스트는 상속하고 표는 상속하지 않는 대비를 한 번에
+        // 보여준다.
+        html: '<a href="https://example.com"><ul><li>text<table><tbody><tr><td>c</td></tr></tbody></table></li></ul></a>',
+        blocks: [
+          {
+            id: "html-1",
+            type: "paragraph",
+            content: [
+              {
+                text: "text",
+                marks: [{ type: "link", href: "https://example.com" }],
+              },
+            ],
+          },
+          {
+            id: "html-2",
+            type: "table",
+            columns: [{ id: "html-3", width: 160 }],
+            rows: [
+              {
+                id: "html-4",
+                cells: [
+                  {
+                    id: "html-5",
+                    columnId: "html-3",
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    content: [{ text: "c" }],
+                  },
+                ],
+              },
+            ],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+        ],
+      },
+    ];
+
+    for (const { html, blocks } of cases) {
+      const result = importHtml(html);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error.message);
+
+      expect(result.value.document.blocks).toEqual(blocks);
+      expect(result.value.warnings).toEqual([
+        expect.objectContaining({
+          kind: "SAFE_BLOCK_DOWNGRADED",
+          element: "a",
+        }),
+      ]);
+    }
+  });
+
   it("heading 안의 quote·divider 경계와 앞뒤 텍스트 순서를 보존한다", () => {
     const cases = [
       {

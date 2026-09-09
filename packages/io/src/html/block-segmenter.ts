@@ -191,7 +191,9 @@ const wrapInAncestors = (
 // li 안 중첩 표가 표로 인식되지 않고 인라인 텍스트로 뭉개진다(DELTA-01
 // 구현 중 RED로 실측). 표 내부는 어차피 조상 마크를 적용하지 않는다 —
 // walk의 kind: "table" 분기도 표 노드 자체는 wrapInAncestors 없이 그대로
-// 세그먼트에 넣는다(240행).
+// 세그먼트에 넣는다(240행). 이 미상속은 공식 계약이다 — 세 진입 경로
+// (top-level 직접 중첩·blockquote·list) 전부 동일함을 확정한 근거는
+// docs/adr/0014-table-content-ignores-ancestor-marks.md 참고.
 const wrapTextDescendantsInAncestors = (
   node: HtmlElementContent,
   ancestors: readonly HtmlElementNode[],
