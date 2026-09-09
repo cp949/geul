@@ -6,8 +6,8 @@
  */
 import { expect, test } from "@playwright/test";
 
+import { domBlockIds } from "./support/block-order.js";
 import {
-  blockOrder,
   blockSelectionToolbar,
   deleteSelectedBlocksButton,
   moveSelectionDownButton,
@@ -716,11 +716,11 @@ test("표 선택 버튼을 클릭하면 Block selection 툴바가 뜨고 Delete�
   await deleteSelectedBlocksButton(page).click();
 
   await expect(blockSelectionToolbar(page)).toHaveCount(0);
-  expect(await blockOrder(editable)).toEqual(["before", "after"]);
+  expect(await domBlockIds(editable)).toEqual(["before", "after"]);
 
   await page.keyboard.press("Control+z");
 
-  expect(await blockOrder(editable)).toEqual(["before", "table-1", "after"]);
+  expect(await domBlockIds(editable)).toEqual(["before", "table-1", "after"]);
   await expect(editable.locator("table")).toBeVisible();
 });
 
@@ -743,9 +743,9 @@ test("표 선택 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 �
 
   await moveSelectionUpButton(page).click();
 
-  expect(await blockOrder(editable)).toEqual(["table-1", "before", "after"]);
+  expect(await domBlockIds(editable)).toEqual(["table-1", "before", "after"]);
 
   await page.keyboard.press("Control+z");
 
-  expect(await blockOrder(editable)).toEqual(["before", "table-1", "after"]);
+  expect(await domBlockIds(editable)).toEqual(["before", "table-1", "after"]);
 });

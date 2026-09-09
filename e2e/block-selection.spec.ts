@@ -7,6 +7,7 @@
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { domBlockIds } from "./support/block-order.js";
 import { openDemo } from "./support/demo.js";
 
 // 5개 최상위 형제 + b2의 자식 b2-child. b2를 범위 중간에 끼워 넣어 "범위
@@ -55,14 +56,6 @@ const openWithFixture = async (page: Page): Promise<{ editable: Locator }> => {
   await editable.locator('[data-geul-block-id="b1"] > p').click();
   return { editable };
 };
-
-/** 현재 DOM에 렌더된 블록의 blockId를 document order(전위 순회) 그대로 뽑는다. */
-const domBlockIds = async (editable: Locator): Promise<(string | null)[]> =>
-  editable
-    .locator("[data-geul-block-id]")
-    .evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute("data-geul-block-id")),
-    );
 
 const centerOf = async (
   locator: Locator,
