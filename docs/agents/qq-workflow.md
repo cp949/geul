@@ -67,7 +67,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 상위 로드맵: _works/roadmap/roadmap.md#RD-NNN
 ```
 
-단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. 확정 커밋 해시는 Git과 `docs/history/`가, 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
+단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. 확정 커밋 해시와 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
 
 **단계 진입 가부는 선행 산출물 파일의 존재로 판정한다.** 필요한 파일이 없으면 추측해서 진행하지 않고 무엇이 없는지 보고하고 정지한다.
 
@@ -148,17 +148,16 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 ## 단계-4. 병합과 등록
 
 - 입력: 판정이 끝난 `IMPL-REVIEW-*.md` 최소 하나, `pending-issues/*`, `pending-guides/*`, `pending-pitfalls/*`
-- 출력: `dev`의 커밋, GitHub 이슈·댓글, `docs/history/<yyyyMMdd>-<NN>-<제목>.md`, `_meta.md`의 `상태: 완료`
-- 게이트: **리뷰를 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없거나 최신 리뷰에 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 남아 있으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `docs/history/`의 이력에 적는다.
+- 출력: `dev`의 커밋, GitHub 이슈·댓글, `_meta.md`의 `상태: 완료`
+- 게이트: **리뷰를 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없거나 최신 리뷰에 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 남아 있으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `01-계획.md`의 "## 결정" 절에 적는다.
 - 절차: 메인 세션이 단독으로 직렬 수행한다. subagent에 위임하지 않는다.
   1. `pnpm verify` 전량을 통과시킨다.
   2. 작업 브랜치 커밋을 [`./workflow-shared.md`](./workflow-shared.md)의 "재그룹화 실행 명령" 절 그대로 재그룹화한다. 전제, 순서, 무결성 판정과 금지 목록도 같다.
   3. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`. ff가 거절되면 현재 `dev` 기준으로 2단계를 다시 실행한다.
   4. `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
-  5. `_meta.md`의 `상태`를 `완료`로 바꾼다. 확정 해시는 8단계의 이력이 기록한다.
+  5. `_meta.md`의 `상태`를 `완료`로 바꾼다. 확정 해시는 `dev`의 커밋 로그가 기록한다.
   6. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단하고 사용자 확인 없이 수행한다.
   7. `pending-guides/*`·`pending-pitfalls/*`의 승격을 판단해 등록하고 해당 INDEX를 같은 변경에서 동기화한다.
-  8. `docs/history/<yyyyMMdd>-<NN>-<제목>.md`를 쓴다. 담는 내용과 보관 정책은 [`../history/README.md`](../history/README.md)가 소유한다.
 - 보고: `AGENTS.md`의 "완료 보고" 형식. 삭제한 브랜치명, 미푸시 커밋 수, 닫은 이슈 번호를 남긴다.
 - 정지: `dev`를 push하지 않고 `dev` → `main` 병합도 하지 않는다. 둘 다 사용자가 직접 지시하거나 수행한다.
 
@@ -195,6 +194,5 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 | 리뷰 산출물 형식과 pending 셋 계약               | [`./workflow-shared.md`](./workflow-shared.md)                               |
 | 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |
 | 초안 형식, 이슈 등록 기준, 게시 승인과 종료 판단 | [`./issue-tracker.md`](./issue-tracker.md)                                   |
-| 저장소 이력 보관 정책과 내용 계약                | [`../history/README.md`](../history/README.md)                               |
 | 아키텍처 불변식과 구현 규칙                      | [`../../AGENTS.md`](../../AGENTS.md)                                         |
 | roadmap 결과·상태·의존 DAG와 자동 재계획         | [`./roadmap-workflow.md`](./roadmap-workflow.md)                             |

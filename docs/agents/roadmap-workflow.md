@@ -156,7 +156,7 @@ roadmap 승인 이후 사용자 승인 게이트 없이 자동 진행한다. 아
 5. 발견을 수정한다. 회귀 테스트 RED를 먼저 확인하고 기존 테스트를 지우거나 약화해 통과시키지 않는다.
 6. `result/RD-NNN-DELTA-NN.md`의 "## 결과" 절(상태·검증·리뷰 발견과 처리·변경 파일·남은 위험)을 채운다.
 7. [`./workflow-shared.md`](./workflow-shared.md)의 "재그룹화 실행 명령"을 그대로 써서 재조립하고 `dev`에 ff-only 병합한다. 브랜치를 삭제하고 백업 ref를 정리한다.
-8. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단하고 `docs/history/`에 기록한다.
+8. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단한다.
 9. `RD-NNN.md`의 "예상 DELTA" 체크박스와 "완료 조건" 체크리스트를 갱신한다 — 이 DELTA가 충족한 완료 조건이 있으면 체크하고 증거(테스트 제목·명령·`result/` 파일 경로)를 적는다. 남은 완료 조건과 이번 DELTA에서 드러난 사실을 바탕으로 다음에 예상되는 DELTA를 한 줄로 적어 백로그에 남긴다 — 확정이 아니라 다음 선택의 시작점이다.
 
 커밋 해시 참조, pending-issues·pending-guides·pending-pitfalls, subagent 협업 규칙은 모두 [`./workflow-shared.md`](./workflow-shared.md)를 참조한다 — 복제하지 않는다.

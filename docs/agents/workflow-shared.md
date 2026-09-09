@@ -129,7 +129,7 @@ qq-workflow가 작업 적합성을 판정하고, roadmap-workflow가 RD 내 DELT
 
 ## 커밋 해시 참조
 
-해시는 작업 브랜치가 `dev`로 이전되는 순간에만 불변이 된다. 이전 전에는 이슈, 댓글, 초안과 어느 산출물에도 해시를 쓰지 않는다. 참조는 작업 브랜치명, 파일 경로와 줄 번호, 테스트 제목, 검증 명령 출력으로 한다. 이전 후 확정된 해시는 병합·등록 단계가 쓰는 `docs/history/` 이력이 기록한다 — `_meta.md`에는 쓰지 않는다.
+해시는 작업 브랜치가 `dev`로 이전되는 순간에만 불변이 된다. 이전 전에는 이슈, 댓글, 초안과 어느 산출물에도 해시를 쓰지 않는다. 참조는 작업 브랜치명, 파일 경로와 줄 번호, 테스트 제목, 검증 명령 출력으로 한다. 이전 후 확정된 해시는 `dev`의 커밋 로그가 기록한다 — 별도 산출물이나 `_meta.md`에 다시 적지 않는다.
 
 ## 브랜치 수명
 
@@ -210,4 +210,3 @@ qq-workflow가 작업 적합성을 판정하고, roadmap-workflow가 RD 내 DELT
 | subagent 협업 규칙                     | 이 문서                                                                      |
 | 리뷰 산출물(`IMPL-REVIEW-NN.md`) 형식  | 이 문서                                                                      |
 | 결함 심각도와 완료 판정 상태           | [`../process/development-lifecycle.md`](../process/development-lifecycle.md)|
-| 저장소 이력 보관 정책과 내용 계약      | [`../history/README.md`](../history/README.md)                              |
