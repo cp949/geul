@@ -1003,6 +1003,80 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
       screen.getAllByRole("button", { name: rowHandleLabel }),
     ).toHaveLength(2);
   });
+
+  it("초점이 메뉴 안에 있을 때 무효화로 자동 닫히면 편집기로 초점을 되돌린다(Issue #65 항목4)", async () => {
+    const { contentEditable, editor, rowIds, table, tableBlockId } =
+      renderRealTable();
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const secondRowHandle = rowHandles[1];
+    if (secondRowHandle === undefined) throw new Error("둘째 행 핸들 없음");
+    fireEvent.pointerDown(secondRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(secondRowHandle, { pointerId: 1 });
+    fireEvent.click(secondRowHandle);
+    screen.getByRole("menu", { name: "Table row menu" });
+
+    // 전제: 초점을 메뉴 안(삭제 항목 버튼)에 둔다 — G-UI-001의 Escape와
+    // 같은 판단 기준("돌아갈 자연스러운 초점 대상이 있는가")이 겨냥하는
+    // 조건이다.
+    const deleteItem = screen.getByRole("menuitem", { name: "Delete row" });
+    deleteItem.focus();
+    expect(document.activeElement).toBe(deleteItem);
+
+    await act(async () => {
+      // 메뉴가 가리키는 인덱스(1, 마지막 행) 자신을 지워 무효화 자동
+      // 닫힘을 유발한다("메뉴가 가리키는 마지막 행이 사라지면..." 테스트와
+      // 같은 재현).
+      const deleted = editor.commands.deleteTableRow(tableBlockId, 1);
+      if (!deleted.ok) throw new Error("행 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[0]]);
+    expect(screen.queryByRole("menu")).toBeNull();
+    // 메뉴가 사라지는 순간 초점이 갈 곳이 없어지므로(그대로 두면
+    // <body>로 떨어진다) Escape와 같은 이유로 편집기로 되돌린다.
+    expect(document.activeElement).toBe(contentEditable);
+  });
+
+  it("초점이 메뉴 밖에 있을 때 무효화로 자동 닫히면 초점을 옮기지 않는다(Issue #65 항목4)", async () => {
+    const { editor, rowIds, table, tableBlockId } = renderRealTable();
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const secondRowHandle = rowHandles[1];
+    if (secondRowHandle === undefined) throw new Error("둘째 행 핸들 없음");
+    fireEvent.pointerDown(secondRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(secondRowHandle, { pointerId: 1 });
+    fireEvent.click(secondRowHandle);
+    screen.getByRole("menu", { name: "Table row menu" });
+
+    // 전제: 초점을 메뉴 밖(편집기도 아닌 임의 엘리먼트)에 둔다 — 완료
+    // 조건 2가 겨냥하는 "메뉴 밖"의 가장 넓은 경우다. 바깥 클릭 닫힘
+    // 테스트("메뉴 바깥을 클릭하면...")와 같은 조립을 재사용한다.
+    const outsideButton = document.createElement("button");
+    outsideButton.textContent = "outside";
+    document.body.append(outsideButton);
+    outsideButton.focus();
+    expect(document.activeElement).toBe(outsideButton);
+
+    try {
+      await act(async () => {
+        // 메뉴가 가리키는 인덱스(1, 마지막 행) 자신을 지워 무효화 자동
+        // 닫힘을 유발한다(위 테스트와 같은 재현).
+        const deleted = editor.commands.deleteTableRow(tableBlockId, 1);
+        if (!deleted.ok) throw new Error("행 삭제 fixture 준비 실패");
+        await Promise.resolve();
+      });
+
+      expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[0]]);
+      expect(screen.queryByRole("menu")).toBeNull();
+      // 신규 동작(완료 조건 2): 메뉴가 초점을 갖고 있지 않았으므로 바깥
+      // 클릭과 같은 이유로 그 위치를 존중해 건드리지 않는다.
+      expect(document.activeElement).toBe(outsideButton);
+    } finally {
+      outsideButton.remove();
+    }
+  });
 });
 
 describe("메뉴 대상 정체성 추적(Issue #65)", () => {

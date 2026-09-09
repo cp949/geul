@@ -20,6 +20,7 @@ import {
   HANDLE_HOVER_MARGIN,
   TABLE_HOVER_IGNORE_SELECTORS,
   TABLE_MENU_DISMISS_ALLOW_SELECTORS,
+  TABLE_MENU_SELECTOR,
 } from "./table-handle-constants.js";
 import {
   clampWidth,
@@ -97,6 +98,31 @@ export const TableHandles = () => {
     setMenuState(null);
     focusEditor();
   }, [focusEditor]);
+
+  // Issue #65 항목4: 무효화 재조준(아래 reconcileMenuState)이 부르는 자동
+  // 닫힘 전용 콜백. 사용자의 물리적 클릭이 아니라는 점에서 바깥 클릭·Escape와
+  // 구별되는 셋째 범주다(G-UI-001) — 같은 판단 기준("돌아갈 자연스러운
+  // 초점 대상이 있는가")을 그대로 적용한다. 초점이 이미 메뉴 안에 있었다면
+  // 메뉴가 사라지는 순간 갈 곳이 없어지므로(그대로 두면 브라우저가 <body>로
+  // 떨어뜨린다) Escape처럼 편집기로 되돌리고, 메뉴 밖(편집기 포함, 다른
+  // 엘리먼트 포함)에 있었다면 바깥 클릭처럼 그 위치를 존중해 건드리지
+  // 않는다. onClose(메뉴 명령 성공 시 닫힘)는 이 조건부 없이 closeMenu를
+  // 그대로 쓴다 — 항목4는 자동 닫힘만 다룬다(01-계획.md "범위 밖"). 마우스
+  // 클릭 성공 경로는 preserveFocusOnMouseDown(icon-button.tsx)이 mousedown
+  // 기본 동작을 막아 클릭 이전 초점을 그대로 유지하므로 클릭 시점 초점이
+  // 항상 메뉴 안이라는 보장은 없다 — closeMenu가 무조건 focusEditor()를
+  // 부르는 동작은 이 diff 이전부터 있던 것이라(변경 대상 아님) 여기서
+  // 다시 판단하지 않는다.
+  const closeMenuOnInvalidation = useCallback(() => {
+    const activeElement = element?.ownerDocument.activeElement ?? null;
+    const focusWasInMenu =
+      activeElement instanceof Element &&
+      activeElement.closest(TABLE_MENU_SELECTOR) !== null;
+    setMenuState(null);
+    if (focusWasInMenu) {
+      focusEditor();
+    }
+  }, [element, focusEditor]);
 
   // 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로 닫는 UI는
   // 병렬 e2e로 검증한다). 실제 리스너 등록/해제는 useDismissOnOutsideOrEscape가
@@ -451,13 +477,13 @@ export const TableHandles = () => {
       // 해석한 엘리먼트는 문서에서 떨어져 나가 낡은 개수를 계속 돌려준다.
       const table = findTable(element, menuState.tableBlockId);
       if (table === null) {
-        closeMenu();
+        closeMenuOnInvalidation();
         return;
       }
 
       const nextIndex = resolveMenuTargetIndex(menuState, table);
       if (nextIndex === null) {
-        closeMenu();
+        closeMenuOnInvalidation();
         return;
       }
       if (nextIndex !== menuState.index) {
@@ -481,7 +507,7 @@ export const TableHandles = () => {
       subtree: true,
     });
     return () => observer.disconnect();
-  }, [menuState, element, closeMenu]);
+  }, [menuState, element, closeMenuOnInvalidation]);
 
   const handleReorderHandleClick = (
     event: React.MouseEvent<HTMLButtonElement>,

@@ -42,10 +42,15 @@ export const nestingButtonClassName = "geul-table-nesting-button";
 // 핸들로 이동하는 도중 핸들이 언마운트된다.
 export const HANDLE_HOVER_MARGIN = 28;
 
+// 메뉴 패널 루트(table-handle-menu.tsx)에 붙는 안정 셀렉터. 아래 두 배열과
+// table-handles.tsx의 초점 판정(Issue #65 항목4)이 모두 이 문자열을
+// 공유한다 — 세 번째 사용처를 리터럴로 또 추가하지 않는다.
+export const TABLE_MENU_SELECTOR = "[data-geul-table-menu]";
+
 // useDismissOnOutsideOrEscape에 넘기는 allow-list. 모듈 스코프 상수로 둔다 —
 // 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
 export const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-geul-table-menu]",
+  TABLE_MENU_SELECTOR,
   "[data-geul-table-row-handle]",
   "[data-geul-table-column-handle]",
 ] as const;
@@ -59,7 +64,7 @@ export const TABLE_HOVER_IGNORE_SELECTORS = [
   "[data-geul-table-resize-handle]",
   "[data-geul-table-expand-row]",
   "[data-geul-table-expand-column]",
-  "[data-geul-table-menu]",
+  TABLE_MENU_SELECTOR,
   "[data-geul-table-indent]",
   "[data-geul-table-outdent]",
   "[data-geul-table-select]",
