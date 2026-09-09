@@ -125,11 +125,16 @@ export const BlockSideMenuMenu = ({
   };
 
   const handleIndentBlock = () => {
+    // G-UI-004: aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다 —
+    // 명시적 가드로 비활성 상태의 클릭을 막는다. 가드가 없으면 명령이
+    // 거절돼도 onClose()가 무조건 불려 사유를 볼 틈 없이 메뉴가 닫힌다.
+    if (nestingActions?.canIndent !== true) return;
     editor.commands.indentBlock(blockId);
     onClose();
   };
 
   const handleOutdentBlock = () => {
+    if (nestingActions?.canOutdent !== true) return;
     editor.commands.outdentBlock(blockId);
     onClose();
   };
@@ -173,16 +178,26 @@ export const BlockSideMenuMenu = ({
           붕괴한다 */}
       <hr className="geul-block-menu__divider" />
       <MenuItemButton
+        aria-disabled={nestingActions?.canIndent !== true}
         className={blockMenuItemClassName}
-        disabled={nestingActions?.canIndent !== true}
         onClick={handleIndentBlock}
+        title={
+          nestingActions?.canIndent === true
+            ? undefined
+            : dictionary.nesting.indentDisabledReason
+        }
       >
         {dictionary.menu.indent}
       </MenuItemButton>
       <MenuItemButton
+        aria-disabled={nestingActions?.canOutdent !== true}
         className={blockMenuItemClassName}
-        disabled={nestingActions?.canOutdent !== true}
         onClick={handleOutdentBlock}
+        title={
+          nestingActions?.canOutdent === true
+            ? undefined
+            : dictionary.nesting.outdentDisabledReason
+        }
       >
         {dictionary.menu.outdent}
       </MenuItemButton>

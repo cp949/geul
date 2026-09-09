@@ -85,7 +85,7 @@
     background-color: var(--geul-color-accent-muted, #e8f0fe);
   }
 
-  &:disabled {
+  &[aria-disabled="true"] {
     cursor: not-allowed;
     opacity: 0.4;
   }

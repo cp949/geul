@@ -705,6 +705,89 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
   });
 });
 
+describe("Indent/Outdent 비활성화(G-UI-004, Issue #65 항목8 RD-005)", () => {
+  it("앞 형제가 없고 top-level이면 Indent/Outdent 모두 비활성이고 title에 사유가 뜬다", () => {
+    // 기본 fixture(블록 1개)는 previous sibling이 없고(canIndent=false)
+    // top-level이라(canOutdent=false) 별도 설정 없이 둘 다 비활성이다.
+    openBlockMenu();
+
+    const indentItem = screen.getByRole("menuitem", { name: "Indent" });
+    const outdentItem = screen.getByRole("menuitem", { name: "Outdent" });
+    expect(indentItem.getAttribute("aria-disabled")).toBe("true");
+    expect(indentItem.getAttribute("title")).toBe("Can't indent further");
+    expect(outdentItem.getAttribute("aria-disabled")).toBe("true");
+    expect(outdentItem.getAttribute("title")).toBe("Can't outdent further");
+  });
+
+  it("Indent가 비활성인 상태에서 클릭해도 indentBlock을 호출하지 않고 메뉴도 닫지 않는다", () => {
+    const rendered = openBlockMenu();
+    const before = rendered.editor.getDocument().blocks.map((b) => b.id);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Indent" }));
+
+    // 기존 handleIndentBlock은 Result를 버리고 무조건 onClose()를 불렀다
+    // (roadmap.md "결정") — 명령이 거절돼도 메뉴가 닫혀 사유를 볼 틈이
+    // 없었다. 신규 no-op 가드가 클릭 자체를 막았는지 "메뉴가 열린 채
+    // 남아 있다 + 문서가 안 바뀌었다"로 본다.
+    expect(rendered.editor.getDocument().blocks.map((b) => b.id)).toEqual(
+      before,
+    );
+    expect(screen.queryByRole("menu")).not.toBeNull();
+  });
+
+  it("Outdent가 비활성인 상태에서 클릭해도 outdentBlock을 호출하지 않고 메뉴도 닫지 않는다", () => {
+    const rendered = openBlockMenu();
+    const before = rendered.editor.getDocument().blocks.map((b) => b.id);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Outdent" }));
+
+    expect(rendered.editor.getDocument().blocks.map((b) => b.id)).toEqual(
+      before,
+    );
+    expect(screen.queryByRole("menu")).not.toBeNull();
+  });
+
+  it("앞에 들여쓸 수 있는 형제가 있으면 Indent는 활성(title 속성 없음)이다", () => {
+    // block-1(문단)이 nestable이라 block-2의 canIndent는 true다. block-2는
+    // 여전히 top-level이라 canOutdent는 false로 남는다(혼합 상태 확인).
+    const rendered = renderBlockMenu({ blockIds: ["block-1", "block-2"] });
+    const target = rendered.blocks[1];
+    if (target === undefined) throw new Error("block-2 요소가 없다");
+    fireEvent.pointerMove(target);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    const indentItem = screen.getByRole("menuitem", { name: "Indent" });
+    const outdentItem = screen.getByRole("menuitem", { name: "Outdent" });
+    expect(indentItem.getAttribute("aria-disabled")).toBe("false");
+    expect(indentItem.getAttribute("title")).toBeNull();
+    expect(outdentItem.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("자신이 다른 블록의 자식이면(depth>0) Outdent는 활성(title 속성 없음)이다", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2"],
+    });
+    const listResult = rendered.editor.commands.setBlockType("block-2", {
+      type: "bulletListItem",
+    });
+    const indentResult = rendered.editor.commands.indentBlock("block-2");
+    if (!listResult.ok || !indentResult.ok) {
+      throw new Error("nested fixture 준비 실패");
+    }
+    const blocks = rendered.restubGeometry();
+    const nested = blocks.find(
+      (candidate) => candidate.getAttribute("data-geul-block-id") === "block-2",
+    );
+    if (nested === undefined) throw new Error("block-2 요소를 찾지 못했다");
+    fireEvent.pointerMove(nested);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    const outdentItem = screen.getByRole("menuitem", { name: "Outdent" });
+    expect(outdentItem.getAttribute("aria-disabled")).toBe("false");
+    expect(outdentItem.getAttribute("title")).toBeNull();
+  });
+});
+
 describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
   it("paragraph 소스에서는 Text color/Background color/Align 섹션이 보인다", () => {
     openBlockMenu();
