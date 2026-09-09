@@ -39,7 +39,7 @@ describe("SCSS 빌드 파이프라인", () => {
 
     expect(css).toContain(".geul-icon-button {");
     expect(css).toContain(
-      '.geul-table-menu__item--danger[aria-disabled=true] {',
+      ".geul-table-menu__item--danger[aria-disabled=true] {",
     );
   });
 
