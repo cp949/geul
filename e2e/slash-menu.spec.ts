@@ -225,6 +225,32 @@ test("슬래시 메뉴 바깥을 클릭하면 메뉴를 닫고 클릭한 컨트�
   await expect(saveButton).toBeFocused();
 });
 
+// ADR-0013 회귀(Issue #155): useDismissOnOutsideOrEscape의 12개 소비처 중
+// 구조가 다른 대표 3곳 중 하나(트리거가 텍스트 커서고 앵커가 DOM 요소가
+// 아니다). Slash menu도 `position: fixed`로 올바르게 스타일돼 있어(다른
+// 대표 소비처 media-toolbar와 달리 페이지 layout에 영향을 주지 않는다)
+// 원인 수정을 되돌려도 이 e2e는 계속 GREEN이다(실측 확인) — Issue #155가
+// 실제로 재현되는 소비처는 아니지만, ADR-0013이 요구하는 "바깥 클릭은
+// 예외 없이 dismiss와 클릭 대상의 동작을 함께 실행한다" 계약을 이 구조에서도
+// 고정한다.
+test("슬래시 메뉴가 열린 채로 바깥의 Save JSON을 클릭하면 메뉴가 닫히고 Save JSON도 실행된다(ADR-0013)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  const source = page.getByLabel("Document source");
+  await expect(source).toHaveValue("");
+
+  await editable.click();
+  await page.keyboard.type("/head");
+  await expect(menu).toBeVisible();
+
+  await page.getByRole("button", { name: "Save JSON" }).click();
+
+  await expect(menu).toHaveCount(0);
+  await expect(source).not.toHaveValue("");
+});
+
 test("hover 시 나타나는 블록 추가 버튼으로 블록을 넣고 그 블록의 메뉴를 연다", async ({
   page,
 }) => {

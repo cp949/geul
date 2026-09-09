@@ -298,6 +298,41 @@ test("재정렬 뒤 브라우저가 click을 합성하지 않아도 다음 진�
   ).toBeVisible();
 });
 
+// ADR-0013 회귀(Issue #155): useDismissOnOutsideOrEscape의 12개 소비처 중
+// 구조가 다른 대표 3곳 중 하나. Table row menu는 이미 `position: fixed`로
+// 올바르게 스타일돼 있어(다른 대표 소비처 media-toolbar와 달리 페이지
+// layout에 영향을 주지 않는다) 원인 수정을 되돌려도 이 e2e는 계속
+// GREEN이다(실측 확인) — Issue #155가 실제로 재현되는 소비처는 아니지만,
+// ADR-0013이 요구하는 "바깥 클릭은 예외 없이 dismiss와 클릭 대상의 동작을
+// 함께 실행한다" 계약을 이 구조에서도 고정한다.
+test("표 행 메뉴가 열린 채로 바깥의 Save JSON을 클릭하면 메뉴가 닫히고 Save JSON도 실행된다(ADR-0013)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+  const source = page.getByLabel("Document source");
+  await expect(source).toHaveValue("");
+
+  await cell(0, 0).hover();
+  const rowHandle = page
+    .getByRole("button", { name: "Drag to reorder row" })
+    .first();
+  await expect(rowHandle).toBeVisible();
+  await rowHandle.click();
+  await expect(
+    page.getByRole("menu", { name: "Table row menu" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Save JSON" }).click();
+
+  await expect(
+    page.getByRole("menu", { name: "Table row menu" }),
+  ).not.toBeVisible();
+  await expect(source).not.toHaveValue("");
+});
+
 test("열 경계를 드래그해 너비를 조절하고 undo 1회로 복원한다", async ({
   page,
 }) => {

@@ -124,7 +124,15 @@ test("Escape는 패널을 닫고 편집기로 초점을 되돌린다", async ({ 
   await expect(editable).toBeFocused();
 });
 
-test("바깥 클릭은 패널을 닫되 클릭한 컨트롤로 초점을 옮긴다", async ({
+// ADR-0013 회귀(Issue #155): File panel도 media-toolbar와 같은 CSS 결함
+// (전용 scss 부재로 position: static)을 공유하지만, 이 시나리오(URL
+// 미제출 상태의 빈 패널)는 페이지가 스크롤을 필요로 할 만큼 콘텐츠가
+// 늘지 않아 dismiss로 인한 layout 변경이 hit-test를 어긋나게 하는 조건이
+// 성립하지 않는다 — 원인 수정을 되돌려도 이 e2e는 계속 GREEN이다(실측
+// 확인). Issue #155가 이 시나리오에서 재현되는 것은 아니지만, ADR-0013이
+// 요구하는 "바깥 클릭은 예외 없이 dismiss와 클릭 대상의 동작을 함께
+// 실행한다" 계약을 이 소비처에서도 고정한다.
+test("바깥 클릭은 패널을 닫되 클릭한 컨트롤로 초점을 옮기고 그 컨트롤 자신의 동작도 실행한다(ADR-0013)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -132,6 +140,8 @@ test("바깥 클릭은 패널을 닫되 클릭한 컨트롤로 초점을 옮긴�
   await page.keyboard.type("/file");
   await page.getByRole("option", { name: /^File/ }).click();
   await expect(page.getByRole("toolbar", { name: "File panel" })).toBeVisible();
+  const source = page.getByLabel("Document source");
+  await expect(source).toHaveValue("");
 
   const saveJsonButton = page.getByRole("button", { name: "Save JSON" });
   await saveJsonButton.click();
@@ -140,6 +150,7 @@ test("바깥 클릭은 패널을 닫되 클릭한 컨트롤로 초점을 옮긴�
     page.getByRole("toolbar", { name: "File panel" }),
   ).not.toBeVisible();
   await expect(saveJsonButton).toBeFocused();
+  await expect(source).not.toHaveValue("");
 });
 
 test("삽입을 undo 1회로 복원한다", async ({ page }) => {

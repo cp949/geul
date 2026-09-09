@@ -160,11 +160,13 @@ test("Escape는 toolbar를 닫고 편집기로 초점을 되돌린다", async ({
   await expect(editable).toBeFocused();
 });
 
-test("바깥 클릭은 toolbar를 닫되 클릭한 컨트롤로 초점을 옮긴다", async ({
+test("바깥 클릭은 toolbar를 닫되 클릭한 컨트롤로 초점을 옮기고 그 컨트롤 자신의 동작도 실행한다(Issue #155)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
+  const source = page.getByLabel("Document source");
+  await expect(source).toHaveValue("");
 
   const saveJsonButton = page.getByRole("button", { name: "Save JSON" });
   await saveJsonButton.click();
@@ -173,6 +175,12 @@ test("바깥 클릭은 toolbar를 닫되 클릭한 컨트롤로 초점을 옮긴
     page.getByRole("toolbar", { name: "Media toolbar" }),
   ).not.toBeVisible();
   await expect(saveJsonButton).toBeFocused();
+  // Issue #155 재현 절차 그대로: Media toolbar가 열린 채로 편집기 바깥의
+  // Save JSON을 클릭하면, 바깥 클릭의 dismiss뿐 아니라 그 클릭 자신의
+  // onClick(saveJson)도 실행돼 Document source가 문서 JSON으로 채워져야
+  // 한다 — 수정 전에는 dismiss만 실행되고 onClick이 조용히 무시돼 source가
+  // 빈 문자열로 남았다.
+  await expect(source).toContainText("https://example.com/dir/photo.png");
 });
 
 test("Preview를 끄면 img가 a 링크로 바뀌고 undo 1회로 복원된다 @core", async ({

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { startTransition, useEffect } from "react";
 
 type UseDismissOnOutsideOrEscapeOptions = {
   /** false면 리스너를 걸지 않는다(오버레이가 닫혀 있을 때 문서 리스너를 유지할 이유가 없다). */
@@ -42,7 +42,26 @@ export const useDismissOnOutsideOrEscape = ({
       ) {
         return;
       }
-      onOutsideDismiss();
+      // onOutsideDismiss()는 여기서 동기 호출한다(즉시성 계약 — unit test가
+      // 이 순서를 그대로 단언한다). 그 안에서 일어나는 state 갱신만
+      // `startTransition`으로 낮은 우선순위로 미룬다(Issue #155).
+      //
+      // 실측 근본 원인(계획의 "React 18 자동 배칭" 가설이 아니다): 바깥
+      // pointerdown이 dismiss state를 커밋하면 그 순간 페이지의 실제 layout이
+      // 바뀐다(예: media-toolbar.tsx가 `position: fixed` 대신 static으로
+      // 렌더돼 있어 닫히면 문서 scrollHeight가 줄고, 스크롤이 이미 바닥
+      // 근처였던 브라우저가 scrollTop을 즉시 clamp한다). 같은 물리적 클릭이
+      // 이어서 내는 mouseup/click은 pointerdown 시점 좌표를 그대로 재사용해
+      // "그 시점의" layout으로 다시 hit-test하므로, 그 사이에 내용이
+      // 스크롤돼 버리면 mouseup/click이 완전히 다른 엘리먼트(예: 바깥
+      // 액션 버튼이 아니라 그 위 헤더)로 떨어진다 — React 이벤트 위임이나
+      // fiber 참조 문제가 아니라 순수 브라우저 hit-test 재평가 문제다.
+      // `startTransition`은 dismiss가 만드는 커밋을 discrete 우선순위인
+      // click 처리 뒤로 미뤄, 그 물리적 클릭이 끝날 때까지 layout이 바뀌지
+      // 않게 한다.
+      startTransition(() => {
+        onOutsideDismiss();
+      });
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
