@@ -6,6 +6,7 @@ import {
   CodeBlockLanguagesProvider,
   type CodeBlockLanguageOption,
 } from "./code-block-language-option.js";
+import { EditorRevisionContext } from "./use-editor-revision.js";
 import { EditorContext, EditorMountContext } from "./use-editor.js";
 
 // commands/keyboardShortcuts 각각의 함수 값 타입(Record 값 하나) —
@@ -167,13 +168,22 @@ export const EditorProvider = (props: EditorProviderProps) => {
     null,
   );
   const [mountElement, setMountElement] = useState<HTMLElement | null>(null);
+  // Issue #141 — 내부 전용 document-change 알림(use-editor-revision.ts).
+  // "internal" ownership에서만 갱신된다("external"은 아래 useEffect가 즉시
+  // return해 이 state를 건드리지 않는다) — 그 경로는 EditorProvider가
+  // 애초에 컨트롤러를 만들지 않아 onChange를 배선할 수 없다(같은 파일
+  // 위 import 주석 참고).
+  const [documentRevision, setDocumentRevision] = useState(0);
 
   useEffect(() => {
     if (configuration.ownership === "external") return;
 
     const controller = createEditor({
       initialDocument: configuration.initialDocument,
-      onChange: (event) => latestOnChange.current?.(event),
+      onChange: (event) => {
+        latestOnChange.current?.(event);
+        setDocumentRevision(event.revision);
+      },
       onPasteRejected: (reason) => latestOnPasteRejected.current?.(reason),
       pasteHandler: (context) => latestPasteHandler.current?.(context),
       onUploadStateChange: (blockId, state) =>
@@ -271,13 +281,15 @@ export const EditorProvider = (props: EditorProviderProps) => {
 
   return (
     <EditorContext.Provider value={controller}>
-      <EditorMountContext.Provider
-        value={{ element: mountElement, setElement: setMountElement }}
-      >
-        <CodeBlockLanguagesProvider value={props.codeBlockLanguages}>
-          {props.children}
-        </CodeBlockLanguagesProvider>
-      </EditorMountContext.Provider>
+      <EditorRevisionContext.Provider value={documentRevision}>
+        <EditorMountContext.Provider
+          value={{ element: mountElement, setElement: setMountElement }}
+        >
+          <CodeBlockLanguagesProvider value={props.codeBlockLanguages}>
+            {props.children}
+          </CodeBlockLanguagesProvider>
+        </EditorMountContext.Provider>
+      </EditorRevisionContext.Provider>
     </EditorContext.Provider>
   );
 };

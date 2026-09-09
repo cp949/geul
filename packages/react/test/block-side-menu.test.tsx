@@ -15,13 +15,21 @@
 import {
   DEFAULT_DICTIONARY,
   type CodeBlock,
+  type EditorController,
   type HeadingBlock,
   type ParagraphBlock,
 } from "@cp949/geul-core";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSideMenu } from "../src/block-side-menu.js";
+import { EditorContent, EditorProvider, useEditor } from "../src/index.js";
 import {
   mountBlockEditor,
   stubRect,
@@ -86,6 +94,118 @@ const openBlockMenu = (options?: {
   fireEvent.click(handle);
   return rendered;
 };
+
+/**
+ * BlockSideMenuMenu의 revision 구독(Issue #141, use-editor-revision.ts)은
+ * EditorProvider가 내부에서 createEditor()를 호출하는 "internal ownership"
+ * 경로에서만 동작한다 — `editor` prop으로 컨트롤러를 직접 넘기는 "external
+ * ownership"(mountBlockEditor·renderBlockMenu가 쓰는 경로)은 EditorProvider가
+ * onChange 자체를 배선하지 않는다(editor-provider.tsx, EditorProviderProps의
+ * external 분기는 `onChange?: never`). 아래 두 회귀 테스트는 그 경로를
+ * 재현해야 하므로 mountBlockEditor 대신 `initialDocument`로 직접 마운트하고,
+ * EditorController 참조는 `useEditor()`를 호출하는 캡처 컴포넌트로 꺼낸다.
+ */
+const EditorRevisionTestCapture = ({
+  editorRef,
+}: {
+  editorRef: { current: EditorController | null };
+}) => {
+  editorRef.current = useEditor();
+  return null;
+};
+
+type MountedInternalBlockEditor = {
+  editor: EditorController;
+  blocks: HTMLElement[];
+};
+
+const mountInternalBlockEditor = (
+  blockIds: readonly string[] = ["block-1"],
+): MountedInternalBlockEditor => {
+  const editorRef: { current: EditorController | null } = { current: null };
+  render(
+    <EditorProvider
+      initialDocument={{
+        formatVersion: 1,
+        revision: 0,
+        blocks: blockIds.map((id) => ({
+          id,
+          type: "paragraph" as const,
+          content: [{ text: "본문" }],
+        })),
+      }}
+    >
+      <EditorRevisionTestCapture editorRef={editorRef} />
+      <BlockSideMenu onBlockAdded={vi.fn()} />
+      <EditorContent />
+    </EditorProvider>,
+  );
+  const editor = editorRef.current;
+  if (editor === null) throw new Error("internal editor를 capture하지 못했다");
+  const host = screen.getByRole("textbox", { name: "Editor" });
+  const blocks = Array.from(
+    host.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
+  );
+  blocks.forEach((block, index) => {
+    stubRect(block, { left: 0, top: index * 20, width: 600, height: 20 });
+  });
+  return { editor, blocks };
+};
+
+describe("블록 메뉴 외부 controller 변경 동기화(Issue #141)", () => {
+  it("메뉴가 가리키는 block의 type이 외부 controller command로 바뀌면 메뉴가 자동으로 닫힌다", async () => {
+    const rendered = mountInternalBlockEditor();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    const changed = rendered.editor.commands.setBlockType("block-1", {
+      type: "bulletListItem",
+    });
+    if (!changed.ok) throw new Error("외부 source 변경 fixture 준비 실패");
+
+    // close는 useEditorRevision을 거친 useEffect(post-commit)라 동기 단언이
+    // 아니라 waitFor로 수렴을 기다린다(G-TST-001).
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("메뉴가 가리키지 않는 다른 block의 외부 변경으로는 메뉴가 닫히지 않는다", async () => {
+    const rendered = mountInternalBlockEditor(["block-1", "block-2"]);
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block1);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    const changedOther = rendered.editor.commands.setBlockType("block-2", {
+      type: "bulletListItem",
+    });
+    if (!changedOther.ok) throw new Error("다른 block 변경 fixture 준비 실패");
+
+    // 비교 대상은 block-1(캡처한 target blockId) 하나뿐이다(01-계획.md
+    // "결정" 3) — block-2의 type 변경은 이 effect가 언제 돌든 결코 닫힘으로
+    // 이어지지 않는 결정적 결과라 즉시 단언한다.
+    expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
+
+    // 메커니즘 자체가 살아있음을 같은 테스트에서 재확인한다 — target인
+    // block-1을 마저 바꾸면 그때는 닫혀야 한다. 이 확인이 없으면 위 단언은
+    // "effect가 아예 안 돈다"는 거짓 통과와 "target만 무시한다"는 의도된
+    // 동작을 구분하지 못한다.
+    const changedTarget = rendered.editor.commands.setBlockType("block-1", {
+      type: "bulletListItem",
+    });
+    if (!changedTarget.ok) {
+      throw new Error("target block 변경 fixture 준비 실패");
+    }
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+});
 
 describe("거터 hover 히스테리시스(dead-zone 회귀)", () => {
   // 거터(드래그 핸들·add 버튼)는 block-side-menu.scss의

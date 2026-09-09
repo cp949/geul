@@ -1,5 +1,6 @@
 import { isNestableBlockType } from "@cp949/geul-core";
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { findBlockTypeDescriptor } from "./block-side-menu-block-type.js";
 import {
@@ -14,6 +15,7 @@ import {
   TABLE_TEXT_COLORS,
 } from "./table-cell-colors.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useEditorRevision } from "./use-editor-revision.js";
 import { useDictionary, useEditor } from "./use-editor.js";
 
 const blockMenuItemClassName = "geul-block-menu__item";
@@ -61,6 +63,31 @@ export const BlockSideMenuMenu = ({
     blockMenuSource === null
       ? []
       : getBlockTypeOptionsForSource(blockMenuSource);
+
+  // Issue #141 — 열려 있는 동안 외부 EditorController command가 이
+  // blockId의 type을 바꾸면 메뉴를 닫는다(옵션 재계산이 아니다 — 01-계획.md
+  // "결정" 1). open 시점 type을 한 번만 캡처하고(useState lazy init),
+  // 문서가 바뀔 때마다(useEditorRevision) 같은 blockId를 다시 조회해
+  // 비교한다 — 비교 대상은 이 blockId 하나뿐이라 다른 block의 외부 변경은
+  // 메뉴를 닫지 않는다("결정" 3). onClose는 latestOnClose ref로 최신값을
+  // 읽는다(editor-provider.tsx의 latestOnChange와 같은 패턴) — blockId·
+  // editor·openedBlockType은 메뉴 생애주기 동안 고정값이라 deps에 넣지
+  // 않는다. "internal" ownership에서만 editorRevision이 실제로 바뀐다
+  // (use-editor-revision.ts) — "external" ownership에서는 이 effect가 mount
+  // 이후 다시 돌지 않아(RD-005의 click 시점 guard가 그대로 방어선을 맡는다).
+  const editorRevision = useEditorRevision();
+  const [openedBlockType] = useState(() => blockMenuSource?.type ?? null);
+  const latestOnClose = useRef(onClose);
+  latestOnClose.current = onClose;
+  useEffect(() => {
+    const currentBlockType =
+      findBlockTypeDescriptor(editor.getDocument().blocks, blockId)?.type ??
+      null;
+    if (currentBlockType !== openedBlockType) latestOnClose.current();
+    // editorRevision만 재실행 트리거다 — 위 주석 참고.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorRevision]);
+
   // Indent/Outdent 비활성 판정은 core의 getBlockNestingActionState 한 곳을
   // 공유한다(formatting-toolbar.tsx와 같은 관용구, Issue #126) — 표는 이
   // gutter의 hover 대상에서 이미 제외돼 blockId가 표를 가리킬 일이 없다.
