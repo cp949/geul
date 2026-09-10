@@ -50,3 +50,29 @@ test("lowlight 예제는 코드 블록에 highlight.js token class를 렌더하�
     "function",
   );
 });
+
+test("lowlight 예제는 javascript 외 python·css 코드 블록도 각자 언어에 맞는 highlight.js token class를 렌더한다", async ({
+  page,
+}) => {
+  await openShowcaseExample(page, "/examples/syntax-highlighting-lowlight");
+
+  // openShowcaseExample()은 대표 javascript 블록(index 0)만 돌려준다 —
+  // 나머지 두 블록은 이 spec이 직접 index로 찾는다(3개 언어 블록이 문서
+  // 순서대로 렌더된다는 전제, example.tsx의 블록 배열 순서와 일치).
+  const codeBlocks = page.locator("pre[data-geul-code-block] code");
+  await expect(codeBlocks).toHaveCount(3);
+
+  const pythonCode = codeBlocks.nth(1);
+  await expect(
+    pythonCode.locator('span[class*="hljs-"]').first(),
+  ).toBeVisible();
+  await expect(pythonCode.locator("span.hljs-keyword").first()).toHaveText(
+    "def",
+  );
+
+  const cssCode = codeBlocks.nth(2);
+  await expect(cssCode.locator('span[class*="hljs-"]').first()).toBeVisible();
+  await expect(cssCode.locator("span.hljs-selector-class").first()).toHaveText(
+    ".greeting",
+  );
+});

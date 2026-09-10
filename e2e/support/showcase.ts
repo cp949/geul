@@ -16,12 +16,18 @@ const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
 
 /**
  * showcase의 `path`(예: `/examples/syntax-highlighting-lowlight`)를 열고
- * 코드 블록이 렌더될 때까지 기다린 뒤 그 `<code>` locator를 돌려준다.
- * 구문 강조 예제 spec들의 공통 첫 줄이다.
+ * 코드 블록이 렌더될 때까지 기다린 뒤 그 첫 번째 `<code>` locator를
+ * 돌려준다. 구문 강조 예제 spec들의 공통 첫 줄이다.
+ *
+ * `.first()`로 좁힌다 — 대부분의 예제는 코드 블록 1개뿐이라 영향이
+ * 없지만, lowlight 예제(javascript·python·css 3개 블록)처럼 여러 개인
+ * 페이지에서도 strict mode violation 없이 대표 블록(javascript, 여러
+ * 라이브러리가 공유하는 비교 기준)을 가리키게 한다. 나머지 블록은
+ * 필요한 spec이 `page.locator(...).nth(n)`으로 직접 찾는다.
  */
 export const openShowcaseExample = async (page: Page, path: string) => {
   await page.goto(`${SHOWCASE_BASE_URL}${path}`);
-  const code = page.locator("pre[data-geul-code-block] code");
+  const code = page.locator("pre[data-geul-code-block] code").first();
   await expect(code).toBeVisible();
   return code;
 };

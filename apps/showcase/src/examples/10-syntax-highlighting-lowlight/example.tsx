@@ -79,6 +79,21 @@ const SAMPLE_SOURCE = `function greet(name) {
 
 console.log(greet("Geul"));`;
 
+// lowlight의 `common` 번들이 지원하는 언어 중 javascript 외 2개를 더
+// 시연한다 — 3개 언어 각각 highlight.js token class가 실제로 다르게
+// 적용됨을 보여준다(단일 언어만 다루던 이전 범위 확장).
+const PYTHON_SAMPLE_SOURCE = `def greet(name):
+    # Says hello
+    greeting = f"Hello, {name}!"
+    return greeting.upper()
+
+print(greet("Geul"))`;
+
+const CSS_SAMPLE_SOURCE = `.greeting {
+  color: #ffffff;
+  font-weight: bold;
+}`;
+
 const SyntaxHighlightingLowlightExample = () => {
   const [initialDocument] = useState<Document>(() => ({
     formatVersion: 1,
@@ -89,6 +104,18 @@ const SyntaxHighlightingLowlightExample = () => {
         type: "codeBlock",
         language: "javascript",
         content: [{ text: SAMPLE_SOURCE }],
+      },
+      {
+        id: "showcase-syntax-highlighting-lowlight-block-2",
+        type: "codeBlock",
+        language: "python",
+        content: [{ text: PYTHON_SAMPLE_SOURCE }],
+      },
+      {
+        id: "showcase-syntax-highlighting-lowlight-block-3",
+        type: "codeBlock",
+        language: "css",
+        content: [{ text: CSS_SAMPLE_SOURCE }],
       },
     ],
   }));

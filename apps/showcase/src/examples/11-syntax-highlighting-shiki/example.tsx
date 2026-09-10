@@ -100,8 +100,9 @@ const getThemeCssSnapshot = (): string => themeCssSnapshot;
 type Token = { from: number; to: number; className?: string };
 
 // spec §4 "미지원/빈 language" — geul은 관여하지 않는다. 이 예제는 단일
-// 언어(javascript)만 시연한다(DELTA-01의 lowlight도 동일 범위 — RD-003
-// 완료 조건 1은 라이브러리당 예제 1개이지 언어 커버리지 전수가 아니다).
+// 언어(javascript)만 시연한다(RD-003 완료 조건 1은 라이브러리당 예제
+// 1개이지 언어 커버리지 전수가 아니다 — DELTA-01의 lowlight 예제는
+// 이후 3개 언어로 범위가 늘었다, 이 shiki 예제와는 무관한 변경).
 const shikiSyntaxHighlighter = async ({
   source,
   language,
