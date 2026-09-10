@@ -195,6 +195,59 @@ describe("CodeBlock HTML 내보내기", () => {
   });
 });
 
+describe("CodeBlock HTML 강조 export → import round-trip", () => {
+  it("강조 span이 포함된 export 결과를 다시 가져오면 원본 source·language·id가 복원된다(Issue #172)", () => {
+    // codeBlock 모델(content: text*, marks: "")은 문자 단위 스타일을 저장하지
+    // 않으므로 span의 class는 import sanitizer가 제거한다 — span 자체는
+    // 허용 태그라 텍스트는 그대로 보존된다. 이 제거는 일반 sanitize 경고
+    // 채널(UNSAFE_ATTRIBUTE_REMOVED)을 그대로 타므로, 강조 span 개수만큼
+    // 경고가 난다(spec §10 "import 쪽" — 조용하지 않다, 사용자 확정 결정).
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-roundtrip",
+          type: "codeBlock",
+          language: "typescript",
+          content: [{ text: "let x = 1;\nconst y = 2;" }],
+        },
+      ],
+    };
+
+    const exported = exportHtml(document, {
+      syntaxHighlighter: () => [
+        { from: 0, to: 3, className: "keyword" },
+        { from: 12, to: 17, className: "keyword" },
+      ],
+    });
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(exported.value).toContain('<span class="keyword">');
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: {
+        document,
+        warnings: [
+          {
+            kind: "UNSAFE_ATTRIBUTE_REMOVED",
+            element: "span",
+            attribute: "className",
+            message: "Unsupported className attribute was removed from span",
+          },
+          {
+            kind: "UNSAFE_ATTRIBUTE_REMOVED",
+            element: "span",
+            attribute: "className",
+            message: "Unsupported className attribute was removed from span",
+          },
+        ],
+      },
+    });
+  });
+});
+
 describe("CodeBlock HTML 가져오기", () => {
   it("pre·direct code의 sanitized text를 하나의 CodeBlock source로 가져온다", () => {
     expect(

@@ -36,6 +36,22 @@ exportHtml(document, {
 });
 ```
 
+`options.syntaxHighlighter`를 주면 codeBlock 텍스트를 `<span class="...">` 강조 마크업과 함께 내보낸다 — `@cp949/geul-core`의 `EditorProvider`가 받는 `syntaxHighlighter`와 같은 타입(`SyntaxHighlighter`, `@cp949/geul-model`에서 재수출)이라 라이브 에디터용으로 이미 만든 함수를 그대로 재사용할 수 있다.
+
+```ts
+exportHtml(document, {
+  syntaxHighlighter: ({ source, language }) => {
+    if (language !== "typescript") return [];
+    return [{ from: 0, to: 3, className: "keyword" }]; // 예: "let"만 강조
+  },
+});
+```
+
+- `syntaxHighlighter`가 주어지지 않으면 기존과 동일한 plain 출력이다(회귀 없음).
+- `exportHtml`은 완전 동기 함수다 — `syntaxHighlighter`가 Promise를 반환하면(예: 초기화가 비동기인 하이라이터) 그 결과를 기다리지 않고 해당 코드 블록만 강조 없이 plain으로 내보내며 `console.warn`을 낸다.
+- 강조 span의 `class`엔 색상이 없다(geul은 색상을 소유하지 않는다) — export 결과를 geul 밖에서 단독으로 열면 매칭되는 CSS 없이는 강조가 보이지 않는다. standalone 표시가 필요하면 소비자가 CSS를 직접 공급한다.
+- 강조 span 포함 HTML을 다시 `importHtml`로 가져오면 codeBlock의 source·language는 정확히 복원되지만, span의 `class`는 sanitizer가 제거하면서 `warnings`에 `UNSAFE_ATTRIBUTE_REMOVED`(`element: "span"`, `attribute: "className"`)를 강조 span 개수만큼 남긴다 — codeBlock 모델이 문자 단위 스타일을 저장하지 않으므로 이 경고는 오류가 아니다.
+
 ### `exportMarkdown` / `importMarkdown`
 
 ```ts

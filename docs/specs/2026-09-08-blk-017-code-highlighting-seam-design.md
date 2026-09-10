@@ -34,8 +34,7 @@ type SyntaxHighlighter = (input: {
   source: string;
   language: string | undefined;
 }) =>
-  | readonly SyntaxHighlightToken[]
-  | Promise<readonly SyntaxHighlightToken[]>;
+  readonly SyntaxHighlightToken[] | Promise<readonly SyntaxHighlightToken[]>;
 ```
 
 `from`/`to` 오프셋 방식을 택했다(연속 텍스트 조각 배열 방식 대신). 이유:
@@ -79,13 +78,13 @@ type EditorProviderProps = {
 
 라이브러리별 별도 example 폴더로 다음을 시연한다. 각 라이브러리는 `apps/showcase`에만 추가하는 devDependency다(exact version·license는 RD-003 착수 시점에 재확인 — 2026-09-08 조사 기준 아래 모두 permissive):
 
-| 라이브러리 | 역할 | 버전(조사 시점) | 라이선스 |
-| --- | --- | --- | --- |
-| `lowlight` (+ `highlight.js`) | 동기 대표, highlight.js 어댑터 | lowlight 3.3.0, highlight.js 11.12.0 | MIT / BSD-3-Clause |
-| `refractor` | 동기, Prism 어댑터 | 5.0.0 | MIT |
-| `shiki` | 비동기 대표, VS Code 문법 엔진 | 4.4.3 | MIT |
-| `@lezer/highlight` + 언어별 `@lezer/*` 패키지 | CodeMirror 문법 엔진 | @lezer/highlight 1.2.3 (언어별 패키지는 RD-003에서 개별 확인 필요 — 11개 언어만큼 패키지가 늘어날 수 있음) | MIT |
-| `sugar-high` | 경량 정규식 기반 하이라이터 | 2.3.1 | MIT (지원 언어 범위가 geul 11개 언어를 다 커버하는지는 RD-003 착수 전 확인 필요 — 미확인) |
+| 라이브러리                                    | 역할                           | 버전(조사 시점)                                                                                            | 라이선스                                                                                  |
+| --------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `lowlight` (+ `highlight.js`)                 | 동기 대표, highlight.js 어댑터 | lowlight 3.3.0, highlight.js 11.12.0                                                                       | MIT / BSD-3-Clause                                                                        |
+| `refractor`                                   | 동기, Prism 어댑터             | 5.0.0                                                                                                      | MIT                                                                                       |
+| `shiki`                                       | 비동기 대표, VS Code 문법 엔진 | 4.4.3                                                                                                      | MIT                                                                                       |
+| `@lezer/highlight` + 언어별 `@lezer/*` 패키지 | CodeMirror 문법 엔진           | @lezer/highlight 1.2.3 (언어별 패키지는 RD-003에서 개별 확인 필요 — 11개 언어만큼 패키지가 늘어날 수 있음) | MIT                                                                                       |
+| `sugar-high`                                  | 경량 정규식 기반 하이라이터    | 2.3.1                                                                                                      | MIT (지원 언어 범위가 geul 11개 언어를 다 커버하는지는 RD-003 착수 전 확인 필요 — 미확인) |
 
 `prosemirror-highlight`(core 의존, §2)는 이 표와 별개다 — 하이라이터가 아니라 배관이며 이미 §1에서 결정됐다.
 
@@ -111,5 +110,5 @@ Issue #162가 1차 릴리즈 제외로 남긴 범위(§9)를 여기서 확정한
 - **옵션**: `ExportHtmlOptions`에 `syntaxHighlighter?: SyntaxHighlighter`를 추가한다(`customBlockToHtml`과 동일한 선택적 확장 패턴). §3의 계약을 그대로 재사용한다 — io 전용 별도 타입을 만들지 않는다.
 - **동기 전용**: `exportHtml`은 `Result<string, ExportError>`를 즉시 반환하는 동기 함수로 남긴다. `syntaxHighlighter`가 Promise를 반환하면 해당 코드 블록만 강조 없이 plain으로 export하고 `console.warn`으로 알린다 — §4 "거절된 Promise"와 동일한 결의 처리이지만, 여기서는 관찰(resolve/reject 전) 자체가 export의 동기 반환 시점을 넘기므로 무조건 plain 처리한다(`docs/adr/0016-keep-exporthtml-synchronous-for-syntax-highlighting.md`).
 - **markup**: `<span class="...">`만 생성한다. `SyntaxHighlightToken.className`엔 색상이 없으므로(§3) export 결과를 geul 밖에서 단독으로 열면 CSS 없이는 강조가 안 보인다 — 이것도 `ADR-0005`가 이미 정한 "색상은 geul이 소유하지 않는다"의 자연스러운 결과다. standalone 표시가 필요하면 소비자가 CSS를 직접 공급한다.
-- **import 쪽 변경 없음**: `packages/io/src/html/sanitize-schema.ts`의 `span` 태그는 이미 허용 목록에 있다(`htmlAllowedTagNames`) — 강조 span의 `class` 속성만 조용히 제거되고 텍스트는 보존된다. codeBlock 모델(`content: text*, marks: ""`)이 애초에 문자 단위 스타일을 저장하지 않으므로 이게 정확한 동작이다. sanitizer 스키마를 바꾸지 않는다.
+- **import 쪽 변경 없음, 단 경고는 난다**: `packages/io/src/html/sanitize-schema.ts`의 `span` 태그는 이미 허용 목록에 있다(`htmlAllowedTagNames`) — 강조 span의 `class`는 제거되지만 텍스트는 보존된다. **제거는 조용하지 않다** — 일반 sanitize 경고 채널(`UNSAFE_ATTRIBUTE_REMOVED`, `element: "span"`, `attribute: "className"`)을 그대로 타므로, 강조 span 개수만큼 `importHtml` 결과의 `warnings`가 채워진다(RD-003 실측으로 정정 — 최초 설계 시 "조용히"라고 잘못 적었다). codeBlock 모델(`content: text*, marks: ""`)이 애초에 문자 단위 스타일을 저장하지 않으므로 class 제거 자체는 정확한 동작이고, geul 자신의 export를 되읽을 때도 나는 이 경고는 오류 신호가 아니다 — sanitizer 스키마를 바꾸지 않고 그대로 수용한다(사용자 결정, 2026-09-11).
 - **제외**: 클립보드 "복사" 경로 신설(현재 없음), 인라인 코드 강조, export 결과에 테마 CSS를 embed하는 것.
