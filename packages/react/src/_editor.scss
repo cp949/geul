@@ -126,6 +126,34 @@
     cursor: pointer;
   }
 
+  // 로컬 프리뷰 소스로 렌더 중인 media 블록(image/video/audio/file 공통,
+  // media-block-extension.ts의 data-geul-media-local-preview — url이 확정되면
+  // core가 이 속성 자체를 안 붙여 이 규칙도 함께 사라진다, RD-002 완료 조건
+  // 4)에 "저장되지 않음"을 알리는 코너 dot을 그린다(Issue #168 roadmap
+  // RD-002 DELTA-04). VSCode 탭의 unsaved 점과 같은 관례 — 이 마커는 core의
+  // 선언형 renderHTML이 내는 DOM 속성이라(React 컴포넌트가 아님) Dictionary
+  // 문자열을 투영할 경로가 없다. [data-geul-media-empty]가 문구 없이 점선
+  // 테두리만 쓴 것과 같은 이유로 텍스트 배지 대신 순수 시각 표식만 쓴다.
+  [data-geul-media-local-preview] {
+    position: relative;
+  }
+
+  // 좌상단 고정 — media-resize-handles.tsx의 핸들은 미디어 rect 세로 중앙의
+  // 좌우 끝에만 배치돼(handleTop = mediaRect.top + height/2 - HALF) 겹치지
+  // 않는다. pointer-events: none은 [data-geul-list-marker]::before와 같은
+  // 관례 — 없으면 블록 좌상단 몇 px 클릭이 dot에 막혀 선택 동작이 달라진다.
+  [data-geul-media-local-preview]::after {
+    content: "";
+    position: absolute;
+    top: 0.25rem;
+    left: 0.25rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--geul-color-accent, #1a73e8);
+    pointer-events: none;
+  }
+
   // 빈 블록 placeholder(UI-009). 문구는 core(placeholder-extension.ts)가
   // data-placeholder 데코레이션으로 소유하고 여기는 표시만 그린다(R-7).
   // float + height 0은 placeholder 텍스트가 레이아웃을 밀지 않고 캐럿과

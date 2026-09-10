@@ -119,6 +119,28 @@ describe("SCSS 빌드 파이프라인", () => {
     );
   });
 
+  it("로컬 프리뷰 미디어 블록에 저장되지 않음 코너 dot 배지를 그린다(Issue #168 roadmap RD-002 DELTA-04 — core가 붙이는 data-geul-media-local-preview 마커는 url이 확정되면 사라져 배지도 함께 사라진다)", () => {
+    const css = compileCss();
+    const containerRule =
+      /\.geul-editor \[data-geul-media-local-preview\] \{(?<body>[^}]*)\}/.exec(
+        css,
+      )?.groups?.body;
+    const dotRule =
+      /\.geul-editor \[data-geul-media-local-preview\]::after \{(?<body>[^}]*)\}/.exec(
+        css,
+      )?.groups?.body;
+
+    expect(containerRule).toBeDefined();
+    expect(containerRule).toContain("position: relative;");
+
+    expect(dotRule).toBeDefined();
+    expect(dotRule).toContain('content: "";');
+    expect(dotRule).toContain("position: absolute;");
+    expect(dotRule).toContain("border-radius: 50%;");
+    expect(dotRule).toContain("background: var(--geul-color-accent, #1a73e8);");
+    expect(dotRule).toContain("pointer-events: none;");
+  });
+
   it("CodeBlock language overlay의 최대 높이에 padding과 border를 포함한다", () => {
     const css = compileCss();
     const rule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
