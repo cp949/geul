@@ -23,6 +23,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
+import { collectLocalPreviewBlocks } from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import {
@@ -139,6 +140,14 @@ export class ProductionEditorSession {
   private tiptapEditor: Editor;
   private destroyed = false;
   private mountedElement: HTMLElement | null = null;
+  // Issue #168 roadmap RD-002 DELTA-03 — MediaLocalPreviewLifecycleExtension의
+  // `pending`(삭제됐지만 undo-불가 판정 전) 최신 스냅샷 미러. destroy()가
+  // doc 순회(collectLocalPreviewBlocks)만으로는 보지 못하는 이 블록들도
+  // 함께 정리 신호를 내기 위해 읽는다 — 그 외 용도로 쓰지 않는다.
+  private pendingUnreachableLocalPreviews: ReadonlyMap<
+    string,
+    LocalPreviewAttrs
+  > = new Map();
   private activeReason: ChangeReason | null = null;
   private pendingDocument: BlockDocument | null = null;
   private blockSelection: BlockSelectionRange | null = null;
@@ -329,6 +338,30 @@ export class ProductionEditorSession {
     if (this.destroyed) return;
     this.currentDocument = this.readEditorDocument(this.tiptapEditor);
     this.currentDocument.revision = this.sessionRevision;
+    // Issue #168 roadmap RD-002 DELTA-03 — 세션이 영구히 사라지기 직전, 아직
+    // 정리되지 않은 로컬 프리뷰(ADR 0015)가 남아 있으면 같은
+    // onLocalPreviewCleanup 채널로 알려 react(RD-002)가 남은 Blob URL을
+    // revoke할 기회를 준다. MediaLocalPreviewLifecycleExtension의 undo-불가
+    // 판정과 달리 재판정이 필요 없다 — 세션이 끝나면 그 뒤로는 undo도
+    // 불가능해지므로 doc에 남은 로컬 프리뷰는 전부 무조건 정리 대상이다.
+    // unmount()(재마운트 가능한 DOM 분리)가 아니라 destroy()에만 건다 —
+    // external ownership이 같은 컨트롤러를 유지한 채 EditorContent를 껐다
+    // 켤 수 있어(RD-002.md "결정"), unmount()마다 정리 신호를 내면 재마운트
+    // 시 이미 revoke된 Blob URL을 다시 그리려 해 이미지가 깨진다. doc은
+    // tiptapEditor.destroy() 이전 상태를 읽어야 하므로 반드시 그 호출보다
+    // 앞에 둔다.
+    for (const [blockId, attrs] of collectLocalPreviewBlocks(
+      this.tiptapEditor.state.doc,
+    )) {
+      this.notifyLocalPreviewCleared(blockId, attrs);
+    }
+    // 위 doc 순회는 삭제됐지만 undo-불가 판정 전이라 doc에 이미 없는
+    // 블록은 보지 못한다(구현 중 실측 — "삭제 직후 destroy()" 회귀) —
+    // MediaLocalPreviewLifecycleExtension의 pending 미러를 함께 훑는다.
+    // 두 순회는 겹치지 않는다: pending은 doc에서 사라진 블록만 담는다.
+    for (const [blockId, attrs] of this.pendingUnreachableLocalPreviews) {
+      this.notifyLocalPreviewCleared(blockId, attrs);
+    }
     this.tiptapEditor.destroy();
     this.mountedElement = null;
     this.destroyed = true;
@@ -569,6 +602,13 @@ export class ProductionEditorSession {
         cleared: LocalPreviewAttrs,
       ) => {
         this.notifyLocalPreviewCleared(blockId, cleared);
+      },
+      // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 그
+      // 확장의 `pending`(삭제됐지만 undo-불가 판정 전) 스냅샷을 세션
+      // 필드로 미러링해 둔다. destroy()가 doc 순회만으로는 보지 못하는 이
+      // 블록들을 세션 종료 시 함께 정리하기 위해서다(아래 destroy() 참고).
+      notifyLocalPreviewPendingChange: (pending) => {
+        this.pendingUnreachableLocalPreviews = pending;
       },
     });
   }

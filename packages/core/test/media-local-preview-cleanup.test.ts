@@ -189,3 +189,63 @@ describe("로컬 프리뷰 undo-불가 정리 신호(Issue #168 roadmap RD-002 D
     ]);
   });
 });
+
+describe("로컬 프리뷰 세션 종료 시 잔여 정리(Issue #168 roadmap RD-002 DELTA-03)", () => {
+  it("url 확정도 undo-불가 판정도 받지 않은 채 남은 로컬 프리뷰는 destroy() 시 정리 신호가 1회 발생한다", async () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
+      documentOf(
+        mediaBlock("image", "m-1"),
+        mediaBlock("image", "m-2", { url: "https://example.com/b.png" }),
+        tailParagraphBlock,
+      ),
+    );
+    await editor.commands.uploadMediaFile("m-1", testFile());
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    if (node === null) throw new Error("m-1 조회 실패");
+    const seededAttrs = {
+      localPreviewUrl: node.attrs.localPreviewUrl as string,
+      localPreviewFile: node.attrs.localPreviewFile as File,
+    };
+
+    editor.destroy();
+
+    // m-2는 이미 url이 확정돼 있어 대상이 아니다 — m-1만 정확히 1회.
+    expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
+  });
+
+  it("로컬 프리뷰가 전혀 없는 세션의 destroy()는 정리 신호를 내지 않는다", () => {
+    const { editor, localPreviewCleared } = mountedWithCleanup(
+      documentOf(paragraphBlock("p-1", "x"), tailParagraphBlock),
+    );
+
+    editor.destroy();
+
+    expect(localPreviewCleared).toEqual([]);
+  });
+
+  // 구현 중 발견 — doc 순회(collectLocalPreviewBlocks)만으로는 이 경우를
+  // 놓친다: 삭제된 로컬 프리뷰는 doc에서 이미 사라져 있고, undo-불가
+  // 판정은 아직 나지 않아 MediaLocalPreviewLifecycleExtension의 pending
+  // Map에만 남아 있다. destroy()가 그 pending도 함께 훑어야 한다.
+  it("로컬 프리뷰가 있는 블록을 삭제한 직후(undo-불가 판정 전) destroy()해도 정리 신호가 발생한다", async () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    await editor.commands.uploadMediaFile("m-1", testFile());
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    if (node === null) throw new Error("m-1 조회 실패");
+    const seededAttrs = {
+      localPreviewUrl: node.attrs.localPreviewUrl as string,
+      localPreviewFile: node.attrs.localPreviewFile as File,
+    };
+
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+    // depth(100)를 넘는 새 undo 이벤트를 쌓지 않는다 — undo-불가 판정이
+    // 아직 나지 않은 채로(WELL_UNDER_DEPTH만큼도 쌓지 않음) 즉시 destroy().
+    editor.destroy();
+
+    expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
+  });
+});

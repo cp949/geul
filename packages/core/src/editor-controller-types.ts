@@ -499,14 +499,23 @@ export type CreateEditorOptions = {
     blockId: string,
     state: MediaUploadState | null,
   ) => void;
-  // Issue #168 roadmap RD-001 DELTA-05 — 실제 url이 확정되는 두 지점
-  // (uploadMediaFile/replaceMediaBlockFile 성공, setMediaBlockUrl)에서
-  // 대상 블록에 로컬 프리뷰(ADR 0015)가 남아 있었으면 core가 attrs를
-  // null로 정리하고 이 옵션으로 정리된 값을 알린다. 실제
-  // URL.revokeObjectURL DOM 호출은 이 옵션의 소비자(RD-002) 몫이다 —
-  // core는 "언제 정리해야 하는지"만 판단해 신호로 넘긴다. onUploadStateChange
-  // 와 동일하게 문서 변경이 아니라 push 알림이다(로컬 프리뷰는 model에
-  // 왕복하지 않아 revision을 올리지 않는다).
+  // Issue #168 roadmap RD-001 DELTA-05, RD-002 DELTA-02·03 — 로컬 프리뷰
+  // (ADR 0015)가 정리돼도 안전하다고 core가 판단하는 세 시점 모두 이
+  // 채널 하나로 알린다(RD-002.md "결정" — 신호 채널 재사용, react 쪽 조치가
+  // 세 시점 전부 동일해 나눌 이유가 없다).
+  //   1. 실제 url이 확정되는 두 지점(uploadMediaFile/replaceMediaBlockFile
+  //      성공, setMediaBlockUrl) — core가 attrs를 null로 정리한 뒤 알린다.
+  //   2. 로컬 프리뷰가 있던 블록이 삭제된 뒤 undo로도 복구 불가능해지는
+  //      시점(RD-002 DELTA-02, `media-local-preview-reachability.ts`) —
+  //      attrs는 이미 doc에서 사라진 상태로 알린다.
+  //   3. 세션이 `destroy()`로 영구히 끝날 때, 그때까지 위 두 시점 중
+  //      어디에도 걸리지 않고 남아 있던 로컬 프리뷰 전부(RD-002 DELTA-03) —
+  //      `unmount()`(재마운트 가능한 DOM 분리)에는 걸지 않는다, `destroy()`
+  //      뒤에는 그 세션이 다시 살아나지 않기 때문이다.
+  // 실제 URL.revokeObjectURL DOM 호출은 이 옵션의 소비자(RD-002, react)
+  // 몫이다 — core는 "언제 정리해도 안전한지"만 판단해 신호로 넘긴다.
+  // onUploadStateChange와 동일하게 문서 변경이 아니라 push 알림이다(로컬
+  // 프리뷰는 model에 왕복하지 않아 revision을 올리지 않는다).
   onLocalPreviewCleanup?: (blockId: string, cleared: LocalPreviewAttrs) => void;
   // spec §3.3(DOC-009), RD-004-DELTA-01 — mount(element) 성공 직후 /
   // unmount() 직전 각각 무인자로 1회 발화한다. 세션 생성 시 내부

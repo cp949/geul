@@ -188,6 +188,17 @@ export const EditorProvider = (props: EditorProviderProps) => {
       pasteHandler: (context) => latestPasteHandler.current?.(context),
       onUploadStateChange: (blockId, state) =>
         latestOnUploadStateChange.current?.(blockId, state),
+      // Issue #168 roadmap RD-002 DELTA-03 — core가 정리해도 안전하다고
+      // 판단한 로컬 프리뷰(ADR 0015)를 실제로 revoke한다. url 확정·undo
+      // 불가·세션 destroy() 시 잔여 정리 세 트리거 모두 이 채널 하나로
+      // 온다(editor-controller-types.ts의 onLocalPreviewCleanup 주석 참고)
+      // — react는 트리거 종류를 구분할 필요 없이 항상 같은 조치만 한다.
+      // host에 노출하는 EditorProviderProps 옵션이 아니다 — onChange 등과
+      // 달리 사용자가 끄고 켤 대상이 아닌 내부 배선이라 latest-ref도 필요
+      // 없다.
+      onLocalPreviewCleanup: (_blockId, cleared) => {
+        URL.revokeObjectURL(cleared.localPreviewUrl);
+      },
       ...(configuration.uploadEnabled
         ? {
             uploadFile: (file: File, signal: AbortSignal) => {

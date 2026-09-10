@@ -16,6 +16,18 @@ export type MediaLocalPreviewLifecycleOptions = {
   // 연결한다. 미지정이면 no-op(MediaDropPasteExtension의 기본값과 동일
   // 근거 — production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
   notifyUnreachable: (blockId: string, cleared: LocalPreviewAttrs) => void;
+  // Issue #168 roadmap RD-002 DELTA-03 — 삭제됐지만 아직 undo-불가 판정을
+  // 받지 못해 `pending`에만 남아 있는 로컬 프리뷰 목록이 바뀔 때마다(추가·
+  // 재등장으로 제거·판정 확정으로 제거) 그 시점의 전체 스냅샷을 알린다.
+  // `production-editor-session.ts::destroy()`가 세션 종료 시 이 스냅샷을
+  // 함께 훑어야 한다 — `pending`은 doc에서 이미 사라진 블록만 담으므로
+  // `collectLocalPreviewBlocks(doc)`(현재 doc 순회)만으로는 이 블록들을
+  // 볼 수 없다(구현 중 실측 — "삭제 직후·undo-불가 판정 전 destroy()"
+  // 시나리오에서 정리 신호가 전혀 나가지 않는 회귀를 이 옵션으로 막는다).
+  // 미지정이면 no-op.
+  notifyPendingChange?: (
+    pending: ReadonlyMap<string, LocalPreviewAttrs>,
+  ) => void;
 };
 
 // doc에서 로컬 프리뷰(ADR 0015) attrs가 남은 미디어 블록을 전부 찾는다.
@@ -23,8 +35,12 @@ export type MediaLocalPreviewLifecycleOptions = {
 // media kind + blockId + localPreviewUrl 문자열)이지만, 이 파일은 "삭제
 // 감지" 전용이라 그 공개 API의 반환 shape({blockId, file})과는 독립적으로
 // 유지한다(호출부가 attrs 전체 — url까지 — 필요하다, 아래 appendTransaction
-// 참고).
-const collectLocalPreviewBlocks = (
+// 참고). Issue #168 roadmap RD-002 DELTA-03부터 두 번째 호출부가 생겼다 —
+// production-editor-session.ts::destroy()가 세션 영구 종료 시 남은 로컬
+// 프리뷰를 같은 기준으로 훑어 잔여 정리 신호를 낸다(RD-002.md "결정" —
+// getPendingLocalPreviews() shape 확장도 react DOM 직접 읽기도 아니라 이
+// 함수를 재사용).
+export const collectLocalPreviewBlocks = (
   doc: ProseMirrorNode,
 ): Map<string, LocalPreviewAttrs> => {
   const found = new Map<string, LocalPreviewAttrs>();
@@ -64,6 +80,7 @@ export const MediaLocalPreviewLifecycleExtension =
 
     addProseMirrorPlugins() {
       const notifyUnreachable = this.options.notifyUnreachable;
+      const notifyPendingChange = this.options.notifyPendingChange;
       // 삭제됐지만 아직 undo로 복구 가능한지 재판정 대기 중인 블록 —
       // 확장 인스턴스(= Tiptap Editor 인스턴스, 세션 재구성마다 새로
       // 만들어짐)당 하나. BlockIdExtension의 createId 클로저와 동일한
@@ -93,12 +110,15 @@ export const MediaLocalPreviewLifecycleExtension =
               return null;
             }
 
+            let changed = false;
+
             // 새로 사라진 로컬 프리뷰 블록을 재판정 대기열에 추가한다.
             for (const [blockId, attrs] of collectLocalPreviewBlocks(
               oldState.doc,
             )) {
               if (findBlockPosition(newState.doc, blockId) === null) {
                 pending.set(blockId, attrs);
+                changed = true;
               }
             }
 
@@ -108,10 +128,10 @@ export const MediaLocalPreviewLifecycleExtension =
             for (const blockId of pending.keys()) {
               if (findBlockPosition(newState.doc, blockId) !== null) {
                 pending.delete(blockId);
+                changed = true;
               }
             }
 
-            if (pending.size === 0) return null;
             // 성능 게이트 — `undoDepth`가 바뀌지 않은 트랜잭션은 done
             // 브랜치 eviction이 일어날 수 없다(eviction은 addTransform
             // 경로에서만 발생하고, 그 경로를 타지 않으면 eventCount가
@@ -120,19 +140,25 @@ export const MediaLocalPreviewLifecycleExtension =
             // 보장하면 되고, 과도하게 자주 통과해도(병합 편집이 아니라
             // 매번 새 그룹인 경우 등) 정확성에는 영향이 없다(성능
             // 손실뿐).
-            if (undoDepth(newState) === undoDepth(oldState)) return null;
-
-            simulating = true;
-            try {
-              for (const [blockId, attrs] of pending) {
-                if (!isLocalPreviewReachableViaUndo(newState, blockId)) {
-                  pending.delete(blockId);
-                  notifyUnreachable(blockId, attrs);
+            if (
+              pending.size > 0 &&
+              undoDepth(newState) !== undoDepth(oldState)
+            ) {
+              simulating = true;
+              try {
+                for (const [blockId, attrs] of pending) {
+                  if (!isLocalPreviewReachableViaUndo(newState, blockId)) {
+                    pending.delete(blockId);
+                    notifyUnreachable(blockId, attrs);
+                    changed = true;
+                  }
                 }
+              } finally {
+                simulating = false;
               }
-            } finally {
-              simulating = false;
             }
+
+            if (changed) notifyPendingChange?.(new Map(pending));
             return null;
           },
         }),
