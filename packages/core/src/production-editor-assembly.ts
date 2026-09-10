@@ -2,6 +2,7 @@ import type {
   Block,
   Document as BlockDocument,
   IdFactory,
+  SyntaxHighlighter,
 } from "@cp949/geul-model";
 import { isSupportedLinkHref } from "@cp949/geul-model";
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
@@ -66,7 +67,6 @@ import {
 import { PlaceholderExtension } from "./placeholder-extension.js";
 import { QuoteExtension } from "./quote-extension.js";
 import { RevisionGuardExtension } from "./revision-guard-extension.js";
-import type { SyntaxHighlighter } from "./syntax-highlight.js";
 import {
   BackgroundColorMark,
   TextColorMark,

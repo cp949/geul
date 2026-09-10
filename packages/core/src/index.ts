@@ -14,6 +14,8 @@ export type {
   NestableBlockType,
   ParagraphBlock,
   Result,
+  SyntaxHighlighter,
+  SyntaxHighlightToken,
   TableBlock,
   TableColumn,
   TableColumnsAttributeError,
@@ -75,8 +77,4 @@ export type {
   UploadResult,
 } from "./media-upload.js";
 export type { TableCellTarget } from "./table-grid.js";
-export type {
-  SyntaxHighlighter,
-  SyntaxHighlightToken,
-} from "./syntax-highlight.js";
 export type { PasteRejectedReason } from "./table-command-error.js";

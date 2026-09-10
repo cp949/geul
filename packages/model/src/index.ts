@@ -47,6 +47,10 @@ export {
   isValidInlineText,
   sanitizeInlineText,
 } from "./string-invariants.js";
+export type {
+  SyntaxHighlighter,
+  SyntaxHighlightToken,
+} from "./syntax-highlight.js";
 export type { TableColumnsAttributeError } from "./table-columns-attribute.js";
 export {
   parseTableColumns,

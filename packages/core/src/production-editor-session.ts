@@ -6,6 +6,7 @@ import {
   type IdFactory,
   parseDocument,
   type Result,
+  type SyntaxHighlighter,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -32,7 +33,6 @@ import {
   type TiptapJsonNode,
 } from "./model-to-tiptap.js";
 import { MediaUploadTracker } from "./production-editor-media-upload.js";
-import type { SyntaxHighlighter } from "./syntax-highlight.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { tiptapToModel } from "./tiptap-to-model.js";
 import { createProductionEditor } from "./production-editor-assembly.js";

@@ -5,6 +5,7 @@ import type {
   DocumentBlock,
   IdFactory,
   Result,
+  SyntaxHighlighter,
   TextMark,
 } from "@cp949/geul-model";
 
@@ -23,7 +24,6 @@ import type { MediaBlockKind } from "./media-block-kind.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import type { EnabledBlockTypes } from "./model-to-tiptap.js";
-import type { SyntaxHighlighter } from "./syntax-highlight.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import type { TableCellTarget } from "./table-grid.js";
 

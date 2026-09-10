@@ -1,11 +1,10 @@
-import { Extension } from "@tiptap/core";
-import { Decoration } from "@tiptap/pm/view";
-import { createHighlightPlugin, type Parser } from "prosemirror-highlight";
-
 import type {
   SyntaxHighlighter,
   SyntaxHighlightToken,
-} from "./syntax-highlight.js";
+} from "@cp949/geul-model";
+import { Extension } from "@tiptap/core";
+import { Decoration } from "@tiptap/pm/view";
+import { createHighlightPlugin, type Parser } from "prosemirror-highlight";
 
 // RD-001-DELTA-01/02/03(spec §3·§4). 겹치는 token은 별도 코드가
 // 없다(spec §4 — ProseMirror가 겹치는 inline decoration을 병합·우선순위
