@@ -560,6 +560,16 @@ export class ProductionEditorSession {
       triggerMediaUpload: (blockId: string, file: File) => {
         void this.uploadMediaFile("mediaDropPasteUpload", blockId, file);
       },
+      // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-02) — url
+      // 확정 정리(notifyLocalPreviewCleared, MediaUploadHost 구현)와 같은
+      // onLocalPreviewCleanup 채널을 그대로 재사용한다(RD-002.md "결정" —
+      // 신호 채널 재사용, 신규 공개 옵션 아님).
+      notifyLocalPreviewUnreachable: (
+        blockId: string,
+        cleared: LocalPreviewAttrs,
+      ) => {
+        this.notifyLocalPreviewCleared(blockId, cleared);
+      },
     });
   }
 

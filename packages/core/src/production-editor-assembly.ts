@@ -80,6 +80,8 @@ import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js"
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
 import { MediaDropPasteExtension } from "./media-drop-paste-extension.js";
+import { MediaLocalPreviewLifecycleExtension } from "./media-local-preview-lifecycle-extension.js";
+import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
@@ -310,6 +312,16 @@ export const createProductionEditor = (options: {
   // 같은 모양의 클로저다. drop/paste가 media 블록을 삽입한 직후 그 실제
   // 업로드를 트리거한다. 미지정이면 그 확장 자신의 기본값(no-op)을 쓴다.
   triggerMediaUpload?: (blockId: string, file: File) => void;
+  // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-02) —
+  // triggerMediaUpload와 같은 모양의 클로저다. 로컬 프리뷰(ADR 0015)가
+  // 남은 미디어 블록이 삭제된 뒤 undo로도 복구 불가라고 판정되면 호출한다
+  // (`RD-002.md` "결정" — url 확정 정리와 같은 `onLocalPreviewCleanup`
+  // 채널을 재사용, 신규 공개 옵션 아님). 미지정이면 그 확장 자신의
+  // 기본값(no-op)을 쓴다.
+  notifyLocalPreviewUnreachable?: (
+    blockId: string,
+    cleared: LocalPreviewAttrs,
+  ) => void;
   // spec §5(EXT-005), RD-002-DELTA-01 — CustomKeyboardShortcutsExtension에
   // 그대로 전달한다(keyboardShortcutsEditor는 customBlockEditor와 동일한
   // 지연 바인딩 Proxy — editor-controller.ts::createEditor 배선 참고).
@@ -555,6 +567,15 @@ export const createProductionEditor = (options: {
         ...(options.triggerMediaUpload === undefined
           ? {}
           : { triggerMediaUpload: options.triggerMediaUpload }),
+      }),
+      // uploadFile 등록 여부와 무관하게 항상 포함한다(RD-002-DELTA-02
+      // "## 계획" "적용 가이드") — 로컬 프리뷰는 콜백 미등록 경로뿐 아니라
+      // 다른 경로(테스트의 직접 attrs 세팅 등)로도 콜백 등록 상태에서
+      // 남을 수 있다.
+      MediaLocalPreviewLifecycleExtension.configure({
+        ...(options.notifyLocalPreviewUnreachable === undefined
+          ? {}
+          : { notifyUnreachable: options.notifyLocalPreviewUnreachable }),
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
