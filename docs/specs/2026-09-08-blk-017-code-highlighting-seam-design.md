@@ -6,13 +6,19 @@ geul은 구문 강조 라이브러리(highlight.js, Prism, Shiki 등)를 소유�
 
 이 설계는 [Issue #162](https://github.com/cp949/geul/issues/162)의 그릴링 세션 결과를 공식 계약으로 고정한다(`ADR-0002`의 공개 API ProseMirror/Tiptap 비노출 불변식, `ADR-0005`의 "이미 풀린 문제는 외부 라이브러리로" 원칙을 따른다).
 
+Issue #162가 1차 릴리즈 제외로 남긴 "io(HTML/GFM export) 강조 span 포함"은 [Issue #172](https://github.com/cp949/geul/issues/172)가 이어받는다 — §2·§10 참고. §9의 제외 bullet은 Issue #172 roadmap이 완료될 때까지 여전히 현재 동작을 뜻한다(§10은 확정된 설계이지 이미 shipping된 상태가 아니다).
+
 ## 2. 패키지 배치와 의존성
 
-- `packages/core`: `SyntaxHighlighter`/`SyntaxHighlightToken` 공개 타입 소유. `prosemirror-highlight`를 `dependencies`에 추가(exact version, 구현 시점에 최신 안정판 고정). 하이라이터 라이브러리(highlight.js 등)는 `packages/core`/`packages/react`에 전혀 의존하지 않는다.
-- `packages/react`: `EditorProvider`가 `syntaxHighlighter`·`codeBlockLanguages` 옵션을 core로 threading. `code-block-language-combobox.tsx`가 `codeBlockLanguages`를 소비.
+- `packages/model`: `SyntaxHighlighter`/`SyntaxHighlightToken` 공개 타입 소유(Issue #172로 `packages/core`에서 이동 — `io`가 `core`에 의존하지 않는 layering(`ADR-0002`)에서 `io`도 이 계약을 참조해야 했기 때문이다).
+- `packages/core`: `index.ts`가 위 두 타입을 `@cp949/geul-model`에서 re-export한다(`ADR-0002` §7의 model→core re-export 선례 — `serializeTableColumns`/`parseTableColumns`와 동일 패턴, §8 완료 기준을 그대로 유지). `prosemirror-highlight`를 `dependencies`에 추가(exact version, 구현 시점에 최신 안정판 고정). 하이라이터 라이브러리(highlight.js 등)는 `packages/core`/`packages/react`에 전혀 의존하지 않는다.
+- `packages/io`: `exportHtml`이 `ExportHtmlOptions.syntaxHighlighter?`로 같은 계약을 소비한다(§9, Issue #172).
+- `packages/react`: `EditorProvider`가 `syntaxHighlighter`·`codeBlockLanguages` 옵션을 core로 threading. `code-block-language-combobox.tsx`가 `codeBlockLanguages`를 소비. `CreateEditorOptions["syntaxHighlighter"]` 인덱스 참조만 쓰므로 타입 위치 이동의 영향을 받지 않는다.
 - `apps/showcase`: 예제별로 선택한 하이라이터 라이브러리를 devDependency로 추가(하이라이터별 exact version·license는 §7 참고, RD-003 착수 전 확정).
 
 ## 3. 공개 타입 — `SyntaxHighlighter`
+
+정의 위치는 `packages/model`이다(§2, Issue #172). `packages/core`가 그대로 re-export해 이 절의 shape·계약은 변경되지 않는다.
 
 ```ts
 type SyntaxHighlightToken = {
@@ -87,11 +93,23 @@ type EditorProviderProps = {
 
 ## 8. 완료 기준
 
-- [ ] `SyntaxHighlighter`/`SyntaxHighlightToken`/`CodeBlockLanguageOption` 타입이 `packages/core`/`packages/react`의 공개 export에 정확히 이 shape로 존재한다.
+- [ ] `SyntaxHighlighter`/`SyntaxHighlightToken`이 `packages/model`에 정의되고 `packages/core`의 공개 export가 이를 re-export하며, `CodeBlockLanguageOption`이 `packages/react`의 공개 export에 정확히 이 shape로 존재한다.
 - [ ] §4의 edge case 5개(범위 밖, 겹침, 거절된 Promise, 미지원/빈 language, stale 비동기) 각각 회귀 테스트로 고정된다.
 - [ ] 공개 API에 ProseMirror `Decoration`이나 `prosemirror-highlight`의 타입이 노출되지 않는다(package boundary 검증, `G-WKS-001`).
 
+§10의 io export 계약에 대한 완료 기준은 이 문서가 중복 보유하지 않는다 — Issue #172와 `_works/roadmap/RD-001.md`~`RD-003.md`가 소유한다.
+
 ## 9. 범위 밖
 
-- `io`(HTML/GFM export)의 강조 span 포함 — 1차 릴리즈 제외(Issue #162 "제외 범위").
+- `io`(HTML/GFM export)의 강조 span 포함 — 1차 릴리즈 제외(Issue #162 "제외 범위"). **Issue #172가 설계를 확정했다(§10)** — 이 bullet은 Issue #172의 roadmap이 완료돼 실제로 shipping되기 전까지 여전히 현재 동작을 뜻한다. roadmap 완료 시 이 bullet과 `docs/product/roadmap.md`·`docs/product/current-status.md`·`docs/product/blocknote-free-feature-inventory.md`의 관련 서술을 함께 갱신한다(roadmap-workflow "RD 완료와 roadmap 종료" 4번).
 - R5 나머지(`BLK-018`·`BLK-019`·`INL-012`·`EXT-011`).
+
+## 10. io export 구문 강조 계약 (Issue #172, 설계 확정 — 구현 진행 중)
+
+Issue #162가 1차 릴리즈 제외로 남긴 범위(§9)를 여기서 확정한다. 이 절은 **설계 계약**이다 — `packages/io`의 `exportHtml`/`importHtml`이 아직 이 계약대로 동작하지 않는다(진행 상황은 Issue #172·roadmap 참고). 구현이 완료되면 `packages/io`의 `exportHtml`이 codeBlock을 강조 span 포함 HTML로 내보내고, `importHtml`이 이를 다시 codeBlock으로 복원한다.
+
+- **옵션**: `ExportHtmlOptions`에 `syntaxHighlighter?: SyntaxHighlighter`를 추가한다(`customBlockToHtml`과 동일한 선택적 확장 패턴). §3의 계약을 그대로 재사용한다 — io 전용 별도 타입을 만들지 않는다.
+- **동기 전용**: `exportHtml`은 `Result<string, ExportError>`를 즉시 반환하는 동기 함수로 남긴다. `syntaxHighlighter`가 Promise를 반환하면 해당 코드 블록만 강조 없이 plain으로 export하고 `console.warn`으로 알린다 — §4 "거절된 Promise"와 동일한 결의 처리이지만, 여기서는 관찰(resolve/reject 전) 자체가 export의 동기 반환 시점을 넘기므로 무조건 plain 처리한다(`docs/adr/0016-keep-exporthtml-synchronous-for-syntax-highlighting.md`).
+- **markup**: `<span class="...">`만 생성한다. `SyntaxHighlightToken.className`엔 색상이 없으므로(§3) export 결과를 geul 밖에서 단독으로 열면 CSS 없이는 강조가 안 보인다 — 이것도 `ADR-0005`가 이미 정한 "색상은 geul이 소유하지 않는다"의 자연스러운 결과다. standalone 표시가 필요하면 소비자가 CSS를 직접 공급한다.
+- **import 쪽 변경 없음**: `packages/io/src/html/sanitize-schema.ts`의 `span` 태그는 이미 허용 목록에 있다(`htmlAllowedTagNames`) — 강조 span의 `class` 속성만 조용히 제거되고 텍스트는 보존된다. codeBlock 모델(`content: text*, marks: ""`)이 애초에 문자 단위 스타일을 저장하지 않으므로 이게 정확한 동작이다. sanitizer 스키마를 바꾸지 않는다.
+- **제외**: 클립보드 "복사" 경로 신설(현재 없음), 인라인 코드 강조, export 결과에 테마 CSS를 embed하는 것.
