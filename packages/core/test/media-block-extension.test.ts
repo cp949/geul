@@ -12,7 +12,9 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { findBlockPosition } from "../src/block-position.js";
 import { createEditor } from "../src/index.js";
+import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   documentOf,
   mediaBlock,
@@ -139,8 +141,87 @@ describe("url 없는 빈 상태 — 4종 공통", () => {
       expect(wrapper?.getAttribute("data-geul-media-empty")).toBe(kind);
       // 채워진 상태의 미디어 태그(a/img/video/audio)를 만들지 않는다.
       expect(wrapper?.children).toHaveLength(0);
+      // url도 로컬 프리뷰도 없으면 배지 마커도 없다(Issue #168 roadmap
+      // RD-002 DELTA-01, 완료 조건 4의 "업로드 대기 상태에서는 안 보임" 절반).
+      expect(wrapper?.hasAttribute("data-geul-media-local-preview")).toBe(
+        false,
+      );
     },
   );
+});
+
+/**
+ * url이 없고 `localPreviewUrl`만 있는 상태(Issue #168 roadmap ADR 0015, RD-001이
+ * 채우고 RD-002 DELTA-01이 소비)의 렌더링 우선순위를 고정한다. model에는 이
+ * attrs가 없어(ADR 0015) `mountedDom`(모델 경유)으로는 재현할 수 없다 —
+ * `uploadMediaFile`(콜백 미등록, RD-001 DELTA-04 폴백 경로)로 실제 프로덕션
+ * 경로를 거쳐 채운다.
+ */
+describe("로컬 프리뷰 렌더 — 4종 공통(RD-002 DELTA-01)", () => {
+  const mountedLocalPreviewDom = async (kind: (typeof MEDIA_KINDS)[number]) => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock(kind, `${kind}-1`),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const result = await editor.commands.uploadMediaFile(
+      `${kind}-1`,
+      new File(["x"], "x.bin"),
+    );
+    expect(result.ok).toBe(true);
+    return tiptap.view.dom;
+  };
+
+  it.each(MEDIA_KINDS)(
+    "%s는 url 없고 localPreviewUrl 있으면 그것을 소스로 렌더하고 배지 마커를 낸다",
+    async (kind) => {
+      const dom = await mountedLocalPreviewDom(kind);
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
+      expect(wrapper?.getAttribute("data-geul-media-local-preview")).toBe("");
+      expect(wrapper?.hasAttribute("data-geul-media-empty")).toBe(false);
+      const tag = kind === "file" ? "a" : kind === "image" ? "img" : kind;
+      const srcAttr = kind === "file" ? "href" : "src";
+      const src = wrapper?.querySelector(tag)?.getAttribute(srcAttr);
+      expect(src).toMatch(/^blob:/);
+    },
+  );
+
+  it("url이 이미 있으면 localPreviewUrl이 같이 있어도 url이 이긴다(방어적 우선순위, previewWidthStyleAttrs와 동일 태도로 production이 이 상태를 만들지 않아도 renderHTML 자체가 보장한다)", () => {
+    // RD-001 DELTA-05가 url 확정과 같은 트랜잭션에서 localPreviewUrl을 항상
+    // null로 정리해 production 경로로는 이 상태(둘 다 non-null)에 도달할 수
+    // 없다 — mediaSourceUrl은 그 보장에 기대지 않고 직접 PM 트랜잭션으로
+    // 재현한다.
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("image", "image-1"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const position = findBlockPosition(tiptap.state.doc, "image-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    if (position === null || node === null) {
+      throw new Error("image-1 블록을 찾지 못했다");
+    }
+    tiptap.view.dispatch(
+      tiptap.state.tr.setNodeMarkup(position, undefined, {
+        ...node.attrs,
+        url: "https://example.com/pic.png",
+        ...createLocalPreviewAttrs(new File(["x"], "x.bin")),
+      }),
+    );
+    const wrapper = tiptap.view.dom.querySelector(
+      '[data-geul-block-id="image-1"]',
+    );
+    expect(wrapper?.querySelector("img")?.getAttribute("src")).toBe(
+      "https://example.com/pic.png",
+    );
+    expect(wrapper?.hasAttribute("data-geul-media-local-preview")).toBe(false);
+  });
 });
 
 describe("previewWidth 렌더 — image/video(슬라이스5 RD-001 DELTA-01)", () => {

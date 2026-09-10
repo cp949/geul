@@ -95,6 +95,39 @@ const previewAttributes = () => ({
 const nonEmptyString = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
+// 렌더링 우선순위(Issue #168 roadmap RD-002 DELTA-01, spec 갱신 §4.1):
+// 실제 `url`이 있으면 그것을, 없고 `localPreviewUrl`(RD-001, ADR 0015)이
+// 있으면 그것을 소스로 쓴다. 둘 다 없으면 null(기존 빈 상태 placeholder).
+// production 경로는 `url`과 `localPreviewUrl`을 절대 동시에 채우지 않는다
+// (url 확정 트랜잭션이 항상 같은 스텝에서 localPreviewUrl을 정리한다,
+// RD-001 DELTA-05 applyUploadedMediaAttrs) — 그래도 이 함수는
+// previewWidthStyleAttrs와 같은 태도로 그 보장에 기대지 않고 `url`을
+// 방어적으로 우선한다.
+const mediaSourceUrl = (
+  attrs: Record<string, unknown>,
+): { url: string; isLocalPreview: boolean } | null => {
+  const url = nonEmptyString(attrs.url);
+  if (url !== null) {
+    return { url, isLocalPreview: false };
+  }
+  const localPreviewUrl = nonEmptyString(attrs.localPreviewUrl);
+  return localPreviewUrl === null
+    ? null
+    : { url: localPreviewUrl, isLocalPreview: true };
+};
+
+// 로컬 프리뷰 소스일 때만 붙는 배지 DOM 마커(RD-002 DELTA-01) — react
+// 뒤 DELTA(CSS 시각화)가 소비할 seam이다. `data-geul-media-caption`과 같은
+// 빈 문자열 값 컨벤션을 쓴다. `url`이 있으면(로컬 프리뷰 동시 존재 여부와
+// 무관) 붙지 않는다 — RD-002.md 완료 조건 4 "url 확정/업로드 대기 상태에서는
+// 안 보임"이 이 부재로 성립한다.
+const localPreviewBadgeAttrs = (
+  source: ReturnType<typeof mediaSourceUrl>,
+): Record<string, string> =>
+  source !== null && source.isLocalPreview
+    ? { "data-geul-media-local-preview": "" }
+    : {};
+
 // previewWidth 인라인 width 스타일 투영(슬라이스5 RD-001 DELTA-01, spec
 // §5.1 MED-007). 실제 clamp(64px~content 폭)는 react 리사이즈 핸들이
 // 담당하고(§6.3) 여기는 model이 이미 검증한 값을 그대로 옮기기만 한다 —
@@ -146,17 +179,20 @@ export const FileBlockExtension = Node.create({
   addAttributes: mediaBlockCommonAttributes,
 
   renderHTML({ HTMLAttributes, node }) {
-    const url = nonEmptyString(node.attrs.url);
+    const source = mediaSourceUrl(node.attrs);
     const name = nonEmptyString(node.attrs.name);
     // file은 <a href="url">name 또는 url</a>로 매핑한다(RD-002.md 포함
-    // 범위) — name이 없으면 url 자체를 링크 텍스트로 쓴다.
+    // 범위) — name이 없으면 소스 자체를 링크 텍스트로 쓴다. 소스는 url
+    // 우선, 없으면 로컬 프리뷰(Issue #168 roadmap RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
-      url === null ? [] : mediaAnchorChildren(url, name);
+      source === null ? [] : mediaAnchorChildren(source.url, name);
     return [
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-geul-media-empty": "file" } : {},
+        source === null
+          ? { "data-geul-media-empty": "file" }
+          : localPreviewBadgeAttrs(source),
       ),
       ...children,
       ...captionChildren(node.attrs),
@@ -176,22 +212,23 @@ export const ImageBlockExtension = Node.create({
   }),
 
   renderHTML({ HTMLAttributes, node }) {
-    const url = nonEmptyString(node.attrs.url);
+    const source = mediaSourceUrl(node.attrs);
     const name = nonEmptyString(node.attrs.name);
     const caption = nonEmptyString(node.attrs.caption);
     // alt는 caption이 있으면 caption, 없으면 name을 재사용한다(spec §6.3,
     // 별도 alt prop 신설 없음 — 2026-09-04 사용자 확정). showPreview:false면
-    // img 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01).
+    // img 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01). 소스는 url 우선, 없으면
+    // 로컬 프리뷰(Issue #168 roadmap RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
-      url === null
+      source === null
         ? []
         : isPreviewSuppressed(node.attrs)
-          ? mediaAnchorChildren(url, name)
+          ? mediaAnchorChildren(source.url, name)
           : [
               [
                 "img",
                 {
-                  src: url,
+                  src: source.url,
                   alt: caption ?? name ?? "",
                   ...previewWidthStyleAttrs(node.attrs),
                 },
@@ -201,7 +238,9 @@ export const ImageBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-geul-media-empty": "image" } : {},
+        source === null
+          ? { "data-geul-media-empty": "image" }
+          : localPreviewBadgeAttrs(source),
       ),
       ...children,
       ...captionChildren(node.attrs),
@@ -221,22 +260,23 @@ export const VideoBlockExtension = Node.create({
   }),
 
   renderHTML({ HTMLAttributes, node }) {
-    const url = nonEmptyString(node.attrs.url);
+    const source = mediaSourceUrl(node.attrs);
     const name = nonEmptyString(node.attrs.name);
     // 재생·일시정지·탐색·음량 이상의 신규 UI를 만들지 않는다(spec §2 제외
     // 범위) — 네이티브 <video controls>만 낸다. showPreview:false면 video
-    // 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01).
+    // 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01). 소스는 url 우선, 없으면
+    // 로컬 프리뷰(Issue #168 roadmap RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
-      url === null
+      source === null
         ? []
         : isPreviewSuppressed(node.attrs)
-          ? mediaAnchorChildren(url, name)
+          ? mediaAnchorChildren(source.url, name)
           : [
               [
                 "video",
                 {
                   controls: "",
-                  src: url,
+                  src: source.url,
                   ...previewWidthStyleAttrs(node.attrs),
                 },
               ],
@@ -245,7 +285,9 @@ export const VideoBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-geul-media-empty": "video" } : {},
+        source === null
+          ? { "data-geul-media-empty": "video" }
+          : localPreviewBadgeAttrs(source),
       ),
       ...children,
       ...captionChildren(node.attrs),
@@ -265,20 +307,23 @@ export const AudioBlockExtension = Node.create({
   }),
 
   renderHTML({ HTMLAttributes, node }) {
-    const url = nonEmptyString(node.attrs.url);
+    const source = mediaSourceUrl(node.attrs);
     const name = nonEmptyString(node.attrs.name);
     // showPreview:false면 audio 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01).
+    // 소스는 url 우선, 없으면 로컬 프리뷰(Issue #168 roadmap RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
-      url === null
+      source === null
         ? []
         : isPreviewSuppressed(node.attrs)
-          ? mediaAnchorChildren(url, name)
-          : [["audio", { controls: "", src: url }]];
+          ? mediaAnchorChildren(source.url, name)
+          : [["audio", { controls: "", src: source.url }]];
     return [
       "div",
       mergeAttributes(
         HTMLAttributes,
-        url === null ? { "data-geul-media-empty": "audio" } : {},
+        source === null
+          ? { "data-geul-media-empty": "audio" }
+          : localPreviewBadgeAttrs(source),
       ),
       ...children,
       ...captionChildren(node.attrs),
