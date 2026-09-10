@@ -72,7 +72,7 @@ type EditorProviderProps = {
 ```
 
 - 값을 주면 콤보박스 후보 목록을 그 값으로 **완전히 교체**한다(기존 `enabledBlockTypes`와 동일한 "안 주면 전체 기본값, 주면 그 값" 패턴).
-- 이 옵션은 콤보박스가 제안하는 후보 목록만 바꾼다. 현재 콤보박스는 자유 입력 필드라(`code-block-language-combobox.tsx`의 `draft`/`commit` 상태, 실측 확인) 사용자가 목록에 없는 문자열을 직접 타이핑하거나 import된 문서가 임의의 `language` 값을 가진 채로 로드되는 것을 막지 않는다 — `codeBlockLanguages`는 문서 검증 계약을 바꾸지 않는다.
+- 이 옵션은 팝오버가 제안하는 후보 목록만 바꾼다. 현재 팝오버의 검색 input은 자유 입력 필드라(`code-block-language-combobox.tsx`의 `search`/`commit` 상태, 실측 확인 — Issue #173 이전에는 `draft`였다) 사용자가 목록에 없는 문자열을 직접 타이핑하거나 import된 문서가 임의의 `language` 값을 가진 채로 로드되는 것을 막지 않는다 — `codeBlockLanguages`는 문서 검증 계약을 바꾸지 않는다.
 
 ## 7. showcase 예제 범위
 

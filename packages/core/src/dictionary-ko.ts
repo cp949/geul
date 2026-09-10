@@ -216,6 +216,7 @@ export const KO_DICTIONARY: Dictionary = {
     plainText: "일반 텍스트",
     label: "코드 언어",
     suggestionsAriaLabel: "코드 언어 제안",
+    searchPlaceholder: "언어를 검색하세요",
   },
   error: {
     lastRow: "마지막 행은 삭제할 수 없습니다",

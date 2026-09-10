@@ -1,11 +1,17 @@
 /**
  * Issue #38 슬라이스 4 RD-004 — CodeBlock의 demo 배선, plain source 스타일,
- * language combobox 실제 event·focus 순서와 Tab/Shift+Tab 브라우저 동작을
- * 검증한다. 저장형·revision·undo 계약은 core/react unit test가 소유한다.
+ * language 트리거·팝오버 실제 event·focus 순서와 Tab/Shift+Tab 브라우저
+ * 동작을 검증한다. 저장형·revision·undo 계약은 core/react unit test가
+ * 소유한다.
  * 슬라이스 9 RD-003 DELTA-01 — 펜스(```lang) native shorthand의 실제 브라우저
  * 타이핑 경로(keydown→composition→input→DOM mutation)도 이 파일이 검증한다
  * (ADR-0007, RD-003.md "결정" (c)). 입력 규칙 로직 자체는 core 유닛 테스트
  * (block-type-input-rule-extension.test.ts)가 소유한다.
+ * Issue #173(RD-002, roadmap "코드블록 언어 선택기 UX 개편") — language
+ * combobox(입력=표시값)를 트리거 button + 팝오버(검색 input 분리)로
+ * 바꿨다. 이전 "다음 블록 겹침 회피(뒤집기)" 동작은 폐기했다 — 트리거는
+ * 코드블록 자신의 우상단에 작게 앵커링돼 아래 블록을 덮지 않는다
+ * (RD-002.md "결정").
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -22,35 +28,35 @@ const insertCodeBlock = async (page: Page, editable: Locator) => {
   return codeBlock;
 };
 
-/**
- * `code-block-language-combobox.tsx`의 `CODE_LANGUAGE_GAP_PX` 사본이다.
- * 그 모듈은 값을 export하지 않으므로(공개 표면을 좁게 유지, clamp.ts의
- * `CLAMP_VIEWPORT_MARGIN_PX`와 같은 관용구) e2e가 따로 적는다. 훅 쪽 값이
- * 바뀌면 여기도 같이 바꾼다.
- */
-const CODE_LANGUAGE_GAP_PX = 8;
+/** language 검색 팝오버를 연다(트리거 클릭) 후 검색 input을 반환한다. */
+const openLanguagePopover = async (page: Page): Promise<Locator> => {
+  await page.getByRole("button", { name: "Code language" }).click();
+  return page.getByRole("combobox", { name: "Search for a language" });
+};
 
 /**
- * language overlay가 CodeBlock 바로 위(above)에 `CODE_LANGUAGE_GAP_PX`
- * 간격으로 붙어 있는지 poll로 확인한다. 이 파일의 시나리오는 코드
- * 블록 뒤에 항상 trailing 빈 문단이 자동으로 남아(에디터의 trailing-node
- * 불변식), combobox 높이가 그 문단과 겹치는 조건(`placeAbove`,
- * edbb6b3)이 항상 성립해 코드 블록 위로 뒤집힌다 — "아래" 배치를
- * 가정한 예전 assertion(overlayBox.y === blockBox.y + blockBox.height)은
- * 이 뒤집기 도입 이후로는 성립하지 않는다(실측 확인).
+ * 트리거가 활성 CodeBlock의 우상단 모서리에 붙어 있는지 poll로 확인한다
+ * (topRight anchor — use-clamped-menu-position.ts). 뷰포트 clamp가
+ * 개입하지 않는 범위(블록이 화면 가장자리에 바짝 붙지 않은 경우)에서만
+ * 정확히 0으로 맞는다 — clamp 경계 확인은 `expectInsideViewport`가 한다.
  */
-const expectOverlayGluedAboveBlock = async (
+const expectTriggerAtBlockTopRight = async (
   codeBlock: Locator,
-  overlay: Locator,
+  trigger: Locator,
 ) => {
   await expect
     .poll(async () => {
       const blockBox = await codeBlock.boundingBox();
-      const overlayBox = await overlay.boundingBox();
-      if (blockBox === null || overlayBox === null) return null;
-      return Math.round(blockBox.y - (overlayBox.y + overlayBox.height));
+      const triggerBox = await trigger.boundingBox();
+      if (blockBox === null || triggerBox === null) return null;
+      return {
+        right: Math.round(
+          blockBox.x + blockBox.width - (triggerBox.x + triggerBox.width),
+        ),
+        top: Math.round(blockBox.y - triggerBox.y),
+      };
     })
-    .toBe(CODE_LANGUAGE_GAP_PX);
+    .toEqual({ right: 0, top: 0 });
 };
 
 /** fixed overlay가 네 viewport 경계의 공통 8px 여백 안에 있는지 확인한다. */
@@ -114,8 +120,8 @@ test("펜스 ```lang 입력은 production editor에서 codeBlock DOM으로 변�
   await expect(codeBlock).toBeVisible();
   await expect(codeBlock.locator("code")).toHaveText("");
 
-  const input = page.getByRole("combobox", { name: "Code language" });
-  await expect(input).toHaveValue("javascript");
+  const trigger = page.getByRole("button", { name: "Code language" });
+  await expect(trigger).toHaveText("JavaScript");
   await expect(editable).toBeFocused();
 });
 
@@ -158,58 +164,62 @@ test("활성 CodeBlock의 블록 메뉴 Text를 실제 클릭해 source를 보�
   await expect(editable.locator("p").first()).toHaveText("const answer = 42;");
 });
 
-test("language Enter alias와 실제 option click은 표시값을 canonicalize하고 편집기로 초점을 복구한다", async ({
+test("language 검색 Enter alias와 실제 option click은 트리거 라벨을 canonicalize하고 편집기로 초점을 복구한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertCodeBlock(page, editable);
-  const input = page.getByRole("combobox", { name: "Code language" });
+  const trigger = page.getByRole("button", { name: "Code language" });
 
-  await input.fill("js");
-  await input.press("Enter");
-  await expect(input).toHaveValue("javascript");
+  let search = await openLanguagePopover(page);
+  await search.fill("js");
+  await search.press("Enter");
+  await expect(trigger).toHaveText("JavaScript");
   await expect(editable).toBeFocused();
 
-  await input.focus();
-  await input.fill("py");
+  search = await openLanguagePopover(page);
+  await search.fill("py");
   const python = page.getByRole("option", { name: /Python/ });
   await expect(python).toBeVisible();
   // locator.click()의 실제 pointerdown → mouseup → click 순서를 사용한다.
   await python.click();
-  await expect(input).toHaveValue("python");
+  await expect(trigger).toHaveText("Python");
   await expect(editable).toBeFocused();
 });
 
-test("Escape는 language draft를 취소하고 편집기로 초점을 복구한다", async ({
+test("Escape는 팝오버 검색을 취소하고 편집기로 초점을 복구한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertCodeBlock(page, editable);
-  const input = page.getByRole("combobox", { name: "Code language" });
+  const trigger = page.getByRole("button", { name: "Code language" });
+  const search = await openLanguagePopover(page);
 
-  await input.fill("typescript");
-  await input.press("Escape");
+  await search.fill("typescript");
+  await search.press("Escape");
 
-  await expect(input).toHaveValue("text");
+  await expect(trigger).toHaveText("Plain Text");
   await expect(
     page.getByRole("listbox", { name: "Code language suggestions" }),
   ).toHaveCount(0);
   await expect(editable).toBeFocused();
 });
 
-test("language draft에서 Save JSON을 클릭하면 commit 없이 취소하고 Save 초점을 유지한다", async ({
+test("팝오버 검색 중 Save JSON을 클릭하면 commit 없이 취소하고 Save 초점을 유지한다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertCodeBlock(page, editable);
-  const input = page.getByRole("combobox", { name: "Code language" });
+  const trigger = page.getByRole("button", { name: "Code language" });
+  const search = await openLanguagePopover(page);
   const save = page.getByRole("button", { name: "Save JSON" });
 
-  await input.fill("typescript");
+  await search.fill("typescript");
   await save.click();
 
-  await expect(input).toHaveValue("text");
+  await expect(trigger).toHaveText("Plain Text");
   await expect(save).toBeFocused();
+  await expect(search).toHaveCount(0);
 });
 
 test("CodeBlock의 Shift+Tab은 contenteditable 밖으로 순차 초점을 이동시킨다", async ({
@@ -233,7 +243,7 @@ test("CodeBlock의 Shift+Tab은 contenteditable 밖으로 순차 초점을 이�
   ).toBe(true);
 });
 
-test("짧은 뷰포트에서 language suggestion 크기가 바뀌어도 네 경계 안에서 Markdown을 클릭할 수 있다 (PIT-0011)", async ({
+test("짧은 뷰포트에서 팝오버 크기가 바뀌어도 네 경계 안에서 Markdown을 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 240 });
@@ -248,26 +258,27 @@ test("짧은 뷰포트에서 language suggestion 크기가 바뀌어도 네 경�
   await page.keyboard.type("/code");
   await page.getByRole("option", { name: /Code/ }).click();
 
-  const input = page.getByRole("combobox", { name: "Code language" });
-  const overlay = input.locator("xpath=../..");
+  const trigger = page.getByRole("button", { name: "Code language" });
+  const search = await openLanguagePopover(page);
+  const popover = page.locator(".geul-code-block-language-popover");
   const suggestions = page.getByRole("listbox", {
     name: "Code language suggestions",
   });
 
-  await input.fill("md");
+  await search.fill("md");
   await expect(suggestions.getByRole("option")).toHaveCount(1);
-  await expectInsideViewport(page, overlay);
+  await expectInsideViewport(page, popover);
 
-  await input.fill("");
+  await search.fill("");
   await expect(suggestions.getByRole("option")).toHaveCount(12);
-  await expectInsideViewport(page, overlay);
+  await expectInsideViewport(page, popover);
 
   await suggestions.getByRole("option", { name: /Markdown/ }).click();
-  await expect(input).toHaveValue("markdown");
+  await expect(trigger).toHaveText("Markdown");
   await expect(editable).toBeFocused();
 });
 
-test("scroll과 viewport resize 뒤 language overlay가 활성 CodeBlock을 추적하고 200px 폭의 네 경계 안에 머문다", async ({
+test("scroll과 viewport resize 뒤 language 트리거가 활성 CodeBlock 우상단을 추적하고 좁은 화면에서도 팝오버가 네 경계 안에 머문다", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 320 });
@@ -281,22 +292,22 @@ test("scroll과 viewport resize 뒤 language overlay가 활성 CodeBlock을 추�
   await page.getByRole("option", { name: /Code/ }).click();
 
   const codeBlock = editable.locator("pre[data-geul-code-block]");
-  const overlay = page
-    .getByRole("combobox", { name: "Code language" })
-    .locator("xpath=../..");
+  const trigger = page.getByRole("button", { name: "Code language" });
   await page.evaluate(() => {
     document.body.style.paddingBottom = "1000px";
   });
   await codeBlock.evaluate((element) =>
     element.scrollIntoView({ block: "center" }),
   );
-  await expectInsideViewport(page, overlay);
-  await expectOverlayGluedAboveBlock(codeBlock, overlay);
+  await expectTriggerAtBlockTopRight(codeBlock, trigger);
 
   await page.evaluate(() => window.scrollBy(0, -40));
-  await expectOverlayGluedAboveBlock(codeBlock, overlay);
+  await expectTriggerAtBlockTopRight(codeBlock, trigger);
 
   await page.setViewportSize({ width: 200, height: 480 });
-  await expectInsideViewport(page, overlay);
-  await expectOverlayGluedAboveBlock(codeBlock, overlay);
+  await expectInsideViewport(page, trigger);
+
+  await trigger.click();
+  const popover = page.locator(".geul-code-block-language-popover");
+  await expectInsideViewport(page, popover);
 });

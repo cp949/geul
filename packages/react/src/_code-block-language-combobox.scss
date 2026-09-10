@@ -1,7 +1,46 @@
-.geul-code-block-language {
+// 트리거는 코드블록 우상단에 앵커링된 순수 위치 shell(div, padding 없음) +
+// 그 안의 실제 버튼이다 — shell의 rect가 곧 버튼의 rect여야
+// popoverAnchor 실측이 어긋나지 않는다(code-block-language-combobox.tsx).
+// topRight anchor(use-clamped-menu-position.ts) — 렌더된 박스의 우상단이
+// 곧 (left, top) 스타일 좌표가 되도록 자신의 폭만큼 왼쪽으로 민다. 훅의
+// clamp 계산(ANCHOR_OFFSETS.topRight, dx=-width)은 "실제 렌더된 박스가 이
+// transform을 쓴다"고 가정할 뿐 transform 자체를 대신 적용해주지 않는다
+// — 두 anchor 소비자(트리거·팝오버) 모두 이 클래스가 transform을 갖춰야
+// clamp 좌표와 실제 렌더 위치가 일치한다(실측 확인, e2e로 회귀 고정).
+.geul-code-block-language-trigger {
+  position: fixed;
+  z-index: 20;
+  display: inline-flex;
+  transform: translateX(-100%);
+}
+
+.geul-code-block-language-trigger button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--geul-color-border, #dadce0);
+  border-radius: var(--geul-radius-md, 0.375rem);
+  background: var(--geul-color-surface, #fff);
+  color: var(--geul-color-text, #202124);
+  font: inherit;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.geul-code-block-language-trigger button:hover,
+.geul-code-block-language-trigger button[aria-expanded="true"] {
+  background: var(--geul-color-accent-muted, #e8f0fe);
+}
+
+// topRight anchor — 트리거와 같은 이유로 자신의 폭만큼 왼쪽으로 민다(위
+// .geul-code-block-language-trigger 주석 참고).
+.geul-code-block-language-popover {
   box-sizing: border-box;
   position: fixed;
   z-index: 30;
+  transform: translateX(-100%);
   display: flex;
   width: 14rem;
   max-width: calc(100vw - 1rem);
@@ -12,24 +51,9 @@
   background: var(--geul-color-surface, #fff);
   box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
   padding: 0.5rem;
-
-  // CodeBlock 바로 다음 블록(trailing 빈 문단 등)을 아래로 펼치면 덮을 때만
-  // 붙는다(code-block-language-combobox.tsx의 placeAbove) —
-  // use-clamped-menu-position.ts의 aboveLeft anchor와 짝을 이룬다.
-  &--above {
-    transform: translate(0, calc(-100% - 0.5rem));
-  }
 }
 
-.geul-code-block-language__label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--geul-color-text-muted, #5f6368);
-}
-
-.geul-code-block-language__input {
+.geul-code-block-language-popover__search {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--geul-color-border, #dadce0);
@@ -38,17 +62,16 @@
   background: var(--geul-color-surface, #fff);
   color: var(--geul-color-text, #202124);
   font: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.geul-code-block-language__suggestions {
+.geul-code-block-language-popover__suggestions {
   min-height: 0;
   max-height: 18rem;
   overflow-y: auto;
   margin-top: 0.375rem;
 }
 
-.geul-code-block-language__option {
+.geul-code-block-language-popover__option {
   display: flex;
   width: 100%;
   align-items: center;
@@ -64,12 +87,25 @@
   cursor: pointer;
 }
 
-.geul-code-block-language__option:hover,
-.geul-code-block-language__option[aria-selected="true"] {
+// 검색어와 정확히 일치하는 항목(키보드 활성 후보)만 hover와 같은 배경으로
+// 강조한다 — aria-selected(체크마크, 현재 committed 값)와는 다른 개념이다.
+.geul-code-block-language-popover__option:hover,
+.geul-code-block-language-popover__option[data-active] {
   background: var(--geul-color-accent-muted, #e8f0fe);
 }
 
-.geul-code-block-language__aliases {
+.geul-code-block-language-popover__option-label {
+  display: flex;
+  align-items: center;
+}
+
+.geul-code-block-language-popover__check {
+  display: inline-block;
+  width: 1.25rem;
+  color: var(--geul-color-accent, #1a73e8);
+}
+
+.geul-code-block-language-popover__aliases {
   color: var(--geul-color-text-muted, #5f6368);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.6875rem;

@@ -238,6 +238,7 @@ export type Dictionary = {
     plainText: string;
     label: string;
     suggestionsAriaLabel: string;
+    searchPlaceholder: string;
   };
   // RD-002-DELTA-10(RD-002 마지막) — 표 명령 실패 문구.
   // `table-command-error-messages.ts`의 `tableCommandErrorMessage`가 이
@@ -477,6 +478,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     plainText: "Plain Text",
     label: "Code language",
     suggestionsAriaLabel: "Code language suggestions",
+    searchPlaceholder: "Search for a language",
   },
   error: {
     lastRow: "Can't delete the last row",

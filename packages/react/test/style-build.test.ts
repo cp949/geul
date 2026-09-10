@@ -143,8 +143,9 @@ describe("SCSS 빌드 파이프라인", () => {
 
   it("CodeBlock language overlay의 최대 높이에 padding과 border를 포함한다", () => {
     const css = compileCss();
-    const rule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
-      ?.groups?.body;
+    const rule = /\.geul-code-block-language-popover \{(?<body>[^}]*)\}/.exec(
+      css,
+    )?.groups?.body;
 
     expect(rule).toContain("box-sizing: border-box;");
     expect(rule).toContain("max-height: calc(100vh - 1rem);");
@@ -152,8 +153,9 @@ describe("SCSS 빌드 파이프라인", () => {
 
   it("CodeBlock language overlay 폭을 좁은 viewport의 양쪽 8px 여백 안으로 제한한다", () => {
     const css = compileCss();
-    const rule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)
-      ?.groups?.body;
+    const rule = /\.geul-code-block-language-popover \{(?<body>[^}]*)\}/.exec(
+      css,
+    )?.groups?.body;
 
     expect(rule).toContain("width: 14rem;");
     expect(rule).toContain("max-width: calc(100vw - 1rem);");
@@ -162,9 +164,9 @@ describe("SCSS 빌드 파이프라인", () => {
 
   it("Block menu가 CodeBlock language overlay보다 높은 click 계층을 사용한다", () => {
     const css = compileCss();
-    const languageRule = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(
-      css,
-    )?.groups?.body;
+    const languageRule =
+      /\.geul-code-block-language-popover \{(?<body>[^}]*)\}/.exec(css)?.groups
+        ?.body;
     const blockMenuRule = /\.geul-block-menu \{(?<body>[^}]*)\}/.exec(css)
       ?.groups?.body;
 
@@ -214,7 +216,7 @@ describe("SCSS 빌드 파이프라인", () => {
     const css = compileCss();
 
     const menuRules = [
-      /\.geul-code-block-language \{(?<body>[^}]*)\}/,
+      /\.geul-code-block-language-popover \{(?<body>[^}]*)\}/,
       /\.geul-block-menu \{(?<body>[^}]*)\}/,
       /\.geul-slash-menu \{(?<body>[^}]*)\}/,
       /\.geul-emoji-picker \{(?<body>[^}]*)\}/,
@@ -268,8 +270,8 @@ describe("SCSS 빌드 파이프라인", () => {
   it("border-radius 하드코딩 값을 --geul-radius-* override 가능한 var()로 컴파일한다(R4 슬라이스5 RD-001-DELTA-02)", () => {
     const css = compileCss();
 
-    const lg = /\.geul-code-block-language \{(?<body>[^}]*)\}/.exec(css)?.groups
-      ?.body;
+    const lg = /\.geul-code-block-language-popover \{(?<body>[^}]*)\}/.exec(css)
+      ?.groups?.body;
     expect(lg).toContain("border-radius: var(--geul-radius-lg, 0.5rem);");
 
     const md = /\.geul-formatting-toolbar \{(?<body>[^}]*)\}/.exec(css)?.groups

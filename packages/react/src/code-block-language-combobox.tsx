@@ -38,34 +38,24 @@ const DEFAULT_LANGUAGE_OPTIONS: readonly CodeBlockLanguageOption[] = [
   { id: "markdown", label: "Markdown", aliases: ["md"] },
 ];
 
+// 트리거 버튼과 팝오버 둘 다 여기 포함한다 — 바깥 pointerdown 판정이
+// `.closest()`로 두 셀렉터 아무 쪽에나 걸리면 "바깥"으로 보지 않는다.
+// 트리거를 빼먹으면 팝오버가 열린 상태에서 트리거를 다시 클릭할 때
+// pointerdown이 먼저 "바깥 클릭"으로 처리돼 버리고, 뒤이은 click의 토글
+// 로직과 경합한다.
 const LANGUAGE_COMBOBOX_ALLOW_SELECTORS = [
-  ".geul-code-block-language",
+  ".geul-code-block-language-trigger",
+  ".geul-code-block-language-popover",
 ] as const;
-
-// combobox는 CodeBlock 바로 아래(anchor.top = rect.bottom)에 `position: fixed`로
-// 뜬다 — 문서 흐름에 자리를 차지하지 않으므로, 다음 블록이 code block 바로
-// 뒤에 있으면(trailing 빈 문단 등, 항상 있을 수 있는 배치다) combobox가 그
-// 블록을 그대로 덮어 가리고 클릭도 막는다(실사용 회귀). CodeBlock 자신에
-// margin-bottom을 주는 방식은 시도하지 않는다 — PM이 관리하는 블록 DOM에
-// 외부에서 style을 직접 쓰면 PM의 DOMObserver가 "예상 밖 변경"으로 보고 그
-// 노드를 다시 그려(교체) rect 측정도 margin도 함께 사라진다(실측 확인,
-// jsdom 테스트에서 재현). 대신 아래로 펼치면 다음 블록을 덮을 때만 combobox
-// 자신을 code block 위로 뒤집는다 — 읽기만 하고 PM DOM에는 쓰지 않는다.
-const CODE_LANGUAGE_GAP_PX = 8;
 
 type LanguageState = {
   blockId: string;
   committed: string;
-  draft: string;
 };
 
-type AnchorPosition = {
-  left: number;
-  top: number;
-  bottom: number;
-  /** 다음 형제 블록의 top. 없으면(마지막 블록) null — 뒤집기 판단에만 쓴다. */
-  nextTop: number | null;
-};
+type AnchorPosition = { left: number; top: number };
+
+const ZERO_ANCHOR: AnchorPosition = { left: 0, top: 0 };
 
 /** CodeBlock language 편집에 필요한 상태·명령·dismiss 동작을 한곳에 소유한다. */
 export const CodeBlockLanguageCombobox = () => {
@@ -77,21 +67,16 @@ export const CodeBlockLanguageCombobox = () => {
     null,
   );
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<AnchorPosition>({
-    left: 0,
-    top: 0,
-    bottom: 0,
-    nextTop: null,
-  });
-  const [comboboxHeight, setComboboxHeight] = useState(0);
+  const [search, setSearch] = useState("");
+  const [anchor, setAnchor] = useState<AnchorPosition>(ZERO_ANCHOR);
   // spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — 지정하면 완전
   // 교체(enabledBlockTypes와 동일 패턴), 안 하면 기본 12개.
   const configuredLanguages = useCodeBlockLanguages();
   const languageOptions = configuredLanguages ?? DEFAULT_LANGUAGE_OPTIONS;
-  const dirtyRef = useRef(false);
   const languageStateRef = useRef(languageState);
   languageStateRef.current = languageState;
   const listboxId = `${useId()}-code-language-listbox`;
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const readActiveCodeBlock = useCallback(() => {
     const selection = editor.getSelectionBlockType();
@@ -102,30 +87,27 @@ export const CodeBlockLanguageCombobox = () => {
     };
   }, [editor]);
 
+  // blockId는 따옴표·백슬래시를 포함할 수 있어(테스트로 고정) CSS
+  // attribute selector 문자열을 직접 조립하지 않는다 — 전부 순회하며
+  // `getAttribute` 동등 비교로만 찾는다.
   const updateAnchor = useCallback(
     (blockId: string) => {
       if (element === null) return;
       const blockElements = Array.from(
         element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
       );
-      const index = blockElements.findIndex(
+      const block = blockElements.find(
         (candidate) => candidate.getAttribute("data-geul-block-id") === blockId,
       );
-      const block = index === -1 ? null : blockElements[index];
-      if (block === undefined || block === null) return;
+      if (block === undefined) return;
       const rect = block.getBoundingClientRect();
-      // 다음 형제 블록(예: trailing 빈 문단)의 top만 읽는다 — 뒤집을지
-      // 판단하는 데만 쓰고 그 블록에도 아무것도 쓰지 않는다.
-      const next = blockElements[index + 1];
-      const nextTop =
-        next === undefined ? null : next.getBoundingClientRect().top;
+      // 트리거를 코드블록 우상단에 앵커링한다(topRight) — 코드블록 DOM
+      // 자체에는 아무것도 쓰지 않는다(PM DOMObserver가 예상 밖 변경으로
+      // 보고 노드를 재생성하는 걸 피한다).
       setAnchor((current) =>
-        current.left === rect.left &&
-        current.top === rect.top &&
-        current.bottom === rect.bottom &&
-        current.nextTop === nextTop
+        current.left === rect.right && current.top === rect.top
           ? current
-          : { left: rect.left, top: rect.top, bottom: rect.bottom, nextTop },
+          : { left: rect.right, top: rect.top },
       );
     },
     [element],
@@ -135,31 +117,26 @@ export const CodeBlockLanguageCombobox = () => {
     const updateFromSelection = () => {
       const active = readActiveCodeBlock();
       if (active === null) {
-        dirtyRef.current = false;
-        setOpen(false);
         setLanguageState(null);
+        setOpen(false);
+        setSearch("");
         return;
       }
 
       updateAnchor(active.blockId);
-      setLanguageState((current) => {
-        if (current?.blockId === active.blockId && dirtyRef.current) {
-          return current;
-        }
-        dirtyRef.current = false;
-        if (
-          current?.blockId === active.blockId &&
-          current.committed === active.value &&
-          current.draft === active.value
-        ) {
-          return current;
-        }
-        return {
-          blockId: active.blockId,
-          committed: active.value,
-          draft: active.value,
-        };
-      });
+      const previous = languageStateRef.current;
+      if (previous === null || previous.blockId !== active.blockId) {
+        // 새 블록으로 전환(또는 최초 진입) — 팝오버를 닫고 검색을 버린다.
+        setLanguageState({ blockId: active.blockId, committed: active.value });
+        setOpen(false);
+        setSearch("");
+        return;
+      }
+      if (previous.committed !== active.value) {
+        setLanguageState({ blockId: active.blockId, committed: active.value });
+      }
+      // 같은 블록이고 committed 값도 그대로면 아무 것도 바꾸지 않는다 —
+      // 팝오버가 열려 있었으면 열린 채, 검색어도 그대로 유지한다.
     };
 
     const ownerDocument = element?.ownerDocument;
@@ -195,69 +172,69 @@ export const CodeBlockLanguageCombobox = () => {
     };
   }, [element, updateAnchor]);
 
-  const cancelDraft = useCallback(() => {
-    dirtyRef.current = false;
-    setLanguageState((current) =>
-      current === null ? null : { ...current, draft: current.committed },
-    );
+  const cancel = useCallback(() => {
     setOpen(false);
+    setSearch("");
   }, []);
 
   const dismissWithFocus = useCallback(() => {
-    cancelDraft();
+    cancel();
     focusEditor();
-  }, [cancelDraft, focusEditor]);
+  }, [cancel, focusEditor]);
 
   useDismissOnOutsideOrEscape({
     active: open,
     element,
     allowSelectors: LANGUAGE_COMBOBOX_ALLOW_SELECTORS,
-    onOutsideDismiss: cancelDraft,
+    onOutsideDismiss: cancel,
     onEscapeDismiss: dismissWithFocus,
   });
 
   const commit = useCallback(
-    (draft: string) => {
+    (value: string) => {
       const current = languageStateRef.current;
       if (current === null) return;
       const result = editor.commands.setBlockType(current.blockId, {
         type: "codeBlock",
-        language: draft,
+        language: value,
       });
       if (!result.ok) return;
 
       const active = readActiveCodeBlock();
       if (active !== null && active.blockId === current.blockId) {
-        dirtyRef.current = false;
-        setLanguageState({
-          blockId: active.blockId,
-          committed: active.value,
-          draft: active.value,
-        });
+        setLanguageState({ blockId: active.blockId, committed: active.value });
       }
       setOpen(false);
+      setSearch("");
       focusEditor();
     },
     [editor, focusEditor, readActiveCodeBlock],
   );
 
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const draft = event.currentTarget.value;
-    dirtyRef.current = true;
-    setLanguageState((current) =>
-      current === null ? null : { ...current, draft },
-    );
+  const openPopover = () => {
+    setSearch("");
     setOpen(true);
   };
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+  const handleTriggerClick = () => {
+    if (open) {
+      cancel();
+      return;
+    }
+    openPopover();
+  };
+
+  const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.currentTarget.value);
+  };
+
+  const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
     commit(event.currentTarget.value);
   };
 
-  const draft = languageState?.draft ?? "";
-  const needle = draft.toLocaleLowerCase();
+  const needle = search.toLocaleLowerCase();
   const suggestions = languageOptions.filter((option) =>
     needle.length === 0
       ? true
@@ -265,121 +242,165 @@ export const CodeBlockLanguageCombobox = () => {
           value.toLocaleLowerCase().includes(needle),
         ),
   );
-  // 필터 결과의 첫 항목을 자동 활성화하면 unknown draft가 부분 일치한 known
-  // option으로 읽히지만 Enter는 raw draft를 commit하는 ARIA 불일치가 생긴다.
-  // canonical/display/alias가 정확히 일치할 때만 해당 option을 활성화한다.
-  const normalizedDraft = draft.trim().toLocaleLowerCase();
-  const activeSuggestion = suggestions.find(
-    (option) =>
-      option.id === draft ||
-      (option.aliases ?? []).some(
-        (alias) => alias.toLocaleLowerCase() === normalizedDraft,
-      ),
+  // 필터 결과의 첫 항목을 자동 활성화하면 unknown 검색어가 부분 일치한 known
+  // option으로 읽히지만 Enter는 raw 검색어를 commit하는 ARIA 불일치가 생긴다.
+  // canonical/label/alias가 정확히 일치할 때만 해당 option을 활성화한다.
+  // 검색어가 비어 있으면(팝오버를 막 연 상태) 현재 committed 언어를 기본
+  // 활성 항목으로 삼는다 — 네이티브 select가 현재 값을 미리 강조하는 것과
+  // 같은 관례다. 체크마크(aria-selected)와는 다른 신호라 서로 간섭하지
+  // 않는다.
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const activeSuggestion = suggestions.find((option) =>
+    search.length === 0
+      ? option.id === languageState?.committed
+      : option.id === search ||
+        (option.aliases ?? []).some(
+          (alias) => alias.toLocaleLowerCase() === normalizedSearch,
+        ),
   );
   const activeOptionId =
-    open && activeSuggestion !== undefined
+    activeSuggestion !== undefined
       ? `${listboxId}-${activeSuggestion.id}`
       : undefined;
-  // 아래로 펼쳤을 때 다음 블록(trailing 빈 문단 등)을 combobox 높이가
-  // 덮으면 code block 위로 뒤집는다. comboboxHeight는 이전 렌더의 실측값이라
-  // 첫 렌더는 0(뒤집지 않음)으로 시작하고, 실측 뒤 필요하면 한 번 더 렌더해
-  // 뒤집는다 — useClampedMenuPosition의 "그리고 나서 보정" 패턴과 같다.
-  const placeAbove =
-    anchor.nextTop !== null &&
-    anchor.bottom + CODE_LANGUAGE_GAP_PX + comboboxHeight > anchor.nextTop;
-  const { menuRef, style } = useClampedMenuPosition(
+
+  const matchOption = (value: string) =>
+    languageOptions.find((option) => option.id === value);
+
+  const displayLabel = (value: string): string => {
+    const match = matchOption(value);
+    if (match === undefined) return value;
+    return match.id === "text"
+      ? dictionary.codeLanguage.plainText
+      : match.label;
+  };
+
+  // 트리거 버튼을 코드블록 우상단에 앵커링한다(RD-001의 topRight variant).
+  const { menuRef: triggerRef, style: triggerStyle } = useClampedMenuPosition(
     anchor.left,
-    placeAbove ? anchor.top : anchor.bottom,
-    placeAbove ? "aboveLeft" : "topLeft",
+    anchor.top,
+    "topRight",
   );
 
-  // 높이 실측은 combobox 자신의 DOM만 읽는다 — PM이 관리하는 블록 DOM에는
-  // 아무것도 쓰지 않는다(위 CODE_LANGUAGE_GAP_PX 주석 참고). open·suggestions
-  // 의존성은 draft 입력으로 목록이 열리고 닫히며 높이가 바뀌는 경우를 잡는다
-  // (jsdom에는 ResizeObserver가 없어 단위 테스트는 이 의존성 재실행에
-  // 기댄다 — use-clamped-menu-position.ts와 같은 제약).
+  // 팝오버는 트리거 버튼 자신의 렌더된 rect를 앵커로 쓴다 — 코드블록이
+  // 아니라 트리거 아래로 펼친다. 트리거 위치(anchor)가 바뀌면(스크롤·리사이즈)
+  // 다시 실측한다. jsdom에는 ResizeObserver가 없어 단위 테스트는 이 재실행에
+  // 기댄다(use-clamped-menu-position.ts와 같은 제약).
+  const [popoverAnchor, setPopoverAnchor] = useState<AnchorPosition | null>(
+    null,
+  );
   useLayoutEffect(() => {
-    const node = menuRef.current;
-    if (node === null) {
-      setComboboxHeight(0);
+    if (!open) {
+      setPopoverAnchor(null);
       return;
     }
-    const measure = () => {
-      const next = node.getBoundingClientRect().height;
-      setComboboxHeight((current) => (current === next ? current : next));
-    };
-    measure();
+    const node = triggerRef.current;
+    if (node === null) return;
+    const rect = node.getBoundingClientRect();
+    setPopoverAnchor((current) =>
+      current !== null &&
+      current.left === rect.right &&
+      current.top === rect.bottom
+        ? current
+        : { left: rect.right, top: rect.bottom },
+    );
+  }, [open, triggerRef, anchor.left, anchor.top]);
 
-    const ownerWindow = node.ownerDocument.defaultView;
-    if (
-      ownerWindow === null ||
-      typeof ownerWindow.ResizeObserver !== "function"
-    ) {
-      return;
-    }
-    const observer = new ownerWindow.ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [menuRef, languageState?.blockId, open, suggestions.length]);
+  const { menuRef: popoverRef, style: popoverStyle } = useClampedMenuPosition(
+    popoverAnchor?.left ?? 0,
+    popoverAnchor?.top ?? 0,
+    "topRight",
+  );
+
+  useEffect(() => {
+    if (open) searchInputRef.current?.focus();
+  }, [open]);
 
   if (languageState === null) return null;
 
   return (
-    <div
-      className={
-        placeAbove
-          ? "geul-code-block-language geul-code-block-language--above"
-          : "geul-code-block-language"
-      }
-      data-block-id={languageState.blockId}
-      ref={menuRef}
-      style={style}
-    >
-      <label className="geul-code-block-language__label">
-        <span>{dictionary.codeLanguage.label}</span>
-        <input
-          aria-activedescendant={activeOptionId}
-          aria-autocomplete="list"
-          aria-controls={listboxId}
+    <>
+      {/* 위치 계산(useClampedMenuPosition)이 `menuRef`를 div 기준으로
+          잡는다 — 실제 버튼은 안쪽에 두고 이 div는 순수 위치 shell로만
+          쓴다(padding 없이 버튼 크기에 꼭 맞춘다, popoverAnchor 실측이
+          이 div의 rect를 그대로 버튼 경계로 쓴다). */}
+      <div
+        className="geul-code-block-language-trigger"
+        data-block-id={languageState.blockId}
+        ref={triggerRef}
+        style={triggerStyle}
+      >
+        <button
           aria-expanded={open}
-          className="geul-code-block-language__input"
-          onChange={handleChange}
-          onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-          role="combobox"
-          value={languageState.draft}
-        />
-      </label>
+          aria-haspopup="listbox"
+          aria-label={dictionary.codeLanguage.label}
+          onClick={handleTriggerClick}
+          type="button"
+        >
+          {displayLabel(languageState.committed)}
+        </button>
+      </div>
       {open && (
         <div
-          aria-label={dictionary.codeLanguage.suggestionsAriaLabel}
-          className="geul-code-block-language__suggestions"
-          id={listboxId}
-          role="listbox"
+          className="geul-code-block-language-popover"
+          data-block-id={languageState.blockId}
+          ref={popoverRef}
+          style={popoverStyle}
         >
-          {suggestions.map((option) => (
-            <button
-              aria-selected={activeOptionId === `${listboxId}-${option.id}`}
-              className="geul-code-block-language__option"
-              id={`${listboxId}-${option.id}`}
-              key={option.id}
-              onClick={() => commit(option.id)}
-              onMouseDown={(event) => event.preventDefault()}
-              role="option"
-              type="button"
-            >
-              <span>
-                {option.id === "text"
-                  ? dictionary.codeLanguage.plainText
-                  : option.label}
-              </span>
-              <span className="geul-code-block-language__aliases">
-                {[option.id, ...(option.aliases ?? [])].join(", ")}
-              </span>
-            </button>
-          ))}
+          <input
+            aria-activedescendant={activeOptionId}
+            aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-expanded={true}
+            aria-label={dictionary.codeLanguage.searchPlaceholder}
+            className="geul-code-block-language-popover__search"
+            onChange={handleSearchChange}
+            onKeyDown={handleSearchKeyDown}
+            placeholder={dictionary.codeLanguage.searchPlaceholder}
+            ref={searchInputRef}
+            role="combobox"
+            value={search}
+          />
+          <div
+            aria-label={dictionary.codeLanguage.suggestionsAriaLabel}
+            className="geul-code-block-language-popover__suggestions"
+            id={listboxId}
+            role="listbox"
+          >
+            {suggestions.map((option) => (
+              <button
+                aria-selected={option.id === languageState.committed}
+                className="geul-code-block-language-popover__option"
+                data-active={
+                  activeOptionId === `${listboxId}-${option.id}`
+                    ? ""
+                    : undefined
+                }
+                id={`${listboxId}-${option.id}`}
+                key={option.id}
+                onClick={() => commit(option.id)}
+                onMouseDown={(event) => event.preventDefault()}
+                role="option"
+                type="button"
+              >
+                <span className="geul-code-block-language-popover__option-label">
+                  <span
+                    aria-hidden="true"
+                    className="geul-code-block-language-popover__check"
+                  >
+                    {option.id === languageState.committed ? "✓" : ""}
+                  </span>
+                  {option.id === "text"
+                    ? dictionary.codeLanguage.plainText
+                    : option.label}
+                </span>
+                <span className="geul-code-block-language-popover__aliases">
+                  {[option.id, ...(option.aliases ?? [])].join(", ")}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
