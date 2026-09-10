@@ -100,12 +100,12 @@ type EditorProviderProps = {
 
 ## 9. 범위 밖
 
-- `io`(HTML/GFM export)의 강조 span 포함 — 1차 릴리즈 제외(Issue #162 "제외 범위"). **Issue #172가 설계를 확정했다(§10)** — 이 bullet은 Issue #172의 roadmap이 완료돼 실제로 shipping되기 전까지 여전히 현재 동작을 뜻한다. roadmap 완료 시 이 bullet과 `docs/product/roadmap.md`·`docs/product/current-status.md`·`docs/product/blocknote-free-feature-inventory.md`의 관련 서술을 함께 갱신한다(roadmap-workflow "RD 완료와 roadmap 종료" 4번).
+- ~~`io`(HTML/GFM export)의 강조 span 포함 — 1차 릴리즈 제외(Issue #162 "제외 범위").~~ Issue #172(2026-09-11, roadmap-workflow RD-001~003)가 §10대로 구현을 완료했다 — 더 이상 범위 밖이 아니다. `docs/product/roadmap.md`·`docs/product/current-status.md`·`docs/product/blocknote-free-feature-inventory.md`도 함께 갱신했다.
 - R5 나머지(`BLK-018`·`BLK-019`·`INL-012`·`EXT-011`).
 
-## 10. io export 구문 강조 계약 (Issue #172, 설계 확정 — 구현 진행 중)
+## 10. io export 구문 강조 계약 (Issue #172, 구현 완료)
 
-Issue #162가 1차 릴리즈 제외로 남긴 범위(§9)를 여기서 확정한다. 이 절은 **설계 계약**이다 — `packages/io`의 `exportHtml`/`importHtml`이 아직 이 계약대로 동작하지 않는다(진행 상황은 Issue #172·roadmap 참고). 구현이 완료되면 `packages/io`의 `exportHtml`이 codeBlock을 강조 span 포함 HTML로 내보내고, `importHtml`이 이를 다시 codeBlock으로 복원한다.
+Issue #162가 1차 릴리즈 제외로 남긴 범위(§9)를 여기서 확정하고, Issue #172(2026-09-11, roadmap-workflow RD-001~003)가 구현을 완료했다. `packages/io`의 `exportHtml`이 codeBlock을 강조 span 포함 HTML로 내보내고, `importHtml`이 이를 다시 codeBlock으로 복원한다.
 
 - **옵션**: `ExportHtmlOptions`에 `syntaxHighlighter?: SyntaxHighlighter`를 추가한다(`customBlockToHtml`과 동일한 선택적 확장 패턴). §3의 계약을 그대로 재사용한다 — io 전용 별도 타입을 만들지 않는다.
 - **동기 전용**: `exportHtml`은 `Result<string, ExportError>`를 즉시 반환하는 동기 함수로 남긴다. `syntaxHighlighter`가 Promise를 반환하면 해당 코드 블록만 강조 없이 plain으로 export하고 `console.warn`으로 알린다 — §4 "거절된 Promise"와 동일한 결의 처리이지만, 여기서는 관찰(resolve/reject 전) 자체가 export의 동기 반환 시점을 넘기므로 무조건 plain 처리한다(`docs/adr/0016-keep-exporthtml-synchronous-for-syntax-highlighting.md`).

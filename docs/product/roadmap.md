@@ -68,7 +68,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 
 기능 ID:
 
-`BLK-001`, `BLK-002`, `BLK-012`, `INL-001`~`INL-007`, `UI-001`~`UI-003`, `UI-005`, `UI-007`, `UI-008`, `UI-014`, `TBL-001`~`TBL-014`
+`BLK-001`, `BLK-002`, `BLK-012`, `INL-001`~~`INL-007`, `UI-001`~~`UI-003`, `UI-005`, `UI-007`, `UI-008`, `UI-014`, `TBL-001`~`TBL-014`
 
 완료 조건:
 
@@ -96,7 +96,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 
 기능 ID:
 
-`DOC-002`, `BLK-003`~`BLK-011`, `INL-008`~`INL-011`, `UI-004`, `UI-006`, `UI-009`~`UI-011`, `IO-007`
+`DOC-002`, `BLK-003`~~`BLK-011`, `INL-008`~~`INL-011`, `UI-004`, `UI-006`, `UI-009`~`UI-011`, `IO-007`
 
 완료 조건:
 
@@ -122,7 +122,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 
 기능 ID:
 
-`BLK-013`~`BLK-016`, `MED-001`~`MED-008`
+`BLK-013`~~`BLK-016`, `MED-001`~~`MED-008`
 
 완료 조건:
 
@@ -155,7 +155,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 
 기능 ID:
 
-`DOC-004`~`DOC-010`, `DOC-013`, `UI-012`, `UI-013`, `UI-015`, `UI-016`, `IO-008`, `IO-009`, `EXT-001`~`EXT-010`, `EXT-013`
+`DOC-004`~~`DOC-010`, `DOC-013`, `UI-012`, `UI-013`, `UI-015`, `UI-016`, `IO-008`, `IO-009`, `EXT-001`~~`EXT-010`, `EXT-013`
 
 완료 조건:
 
@@ -192,7 +192,7 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 - 잘못된 Mermaid/LaTeX 입력은 문서를 깨뜨리지 않고 오류 UI를 제공한다.
 - 코드, Mermaid와 수식의 HTML/GFM 계약이 fixture로 고정된다.
 
-`BLK-017`(코드 구문 강조)을 [Issue #162](https://github.com/cp949/geul/issues/162)로 완료했다(2026-09-09, roadmap-workflow RD-001~003, spec `docs/specs/2026-09-08-blk-017-code-highlighting-seam-design.md`). `packages/core`의 공개 `SyntaxHighlighter`/`SyntaxHighlightToken` seam 타입 + `prosemirror-highlight`(MIT) 내부 배관(RD-001), `packages/react`의 `syntaxHighlighter`/`codeBlockLanguages` threading(RD-002), `apps/showcase`의 라이브러리 5종(highlight.js/lowlight·Prism/refractor·Shiki·CodeMirror/lezer·sugar-high) 예제 + Playwright Chromium E2E 5건 + README 문서화(RD-003)로 구성된다 — 위 3개 완료 조건 중 "코드의 HTML/GFM 계약"은 spec §9가 1차 릴리즈 범위 밖으로 명시해 이 완료로 충족되지 않는다(io export 강조 span 미포함, 의도된 이월). R5 나머지(`BLK-018`·`BLK-019`·`INL-012`·`EXT-011`, source-with-preview 포함)는 미착수다 — R5 단계 자체는 여전히 완료가 아니다.
+`BLK-017`(코드 구문 강조)을 [Issue #162](https://github.com/cp949/geul/issues/162)로 완료했다(2026-09-09, roadmap-workflow RD-001~~003, spec `docs/specs/2026-09-08-blk-017-code-highlighting-seam-design.md`). `packages/core`의 공개 `SyntaxHighlighter`/`SyntaxHighlightToken` seam 타입 + `prosemirror-highlight`(MIT) 내부 배관(RD-001), `packages/react`의 `syntaxHighlighter`/`codeBlockLanguages` threading(RD-002), `apps/showcase`의 라이브러리 5종(highlight.js/lowlight·Prism/refractor·Shiki·CodeMirror/lezer·sugar-high) 예제 + Playwright Chromium E2E 5건 + README 문서화(RD-003)로 구성된다 — 위 3개 완료 조건 중 "코드의 HTML/GFM 계약"은 당시 spec §9가 1차 릴리즈 범위 밖으로 명시해 이 완료로 충족되지 않았다(io export 강조 span 미포함, 의도된 이월). [Issue #172](https://github.com/cp949/geul/issues/172)(2026-09-11, 별도 roadmap-workflow RD-001~~003 — Issue #162의 것과 번호만 같을 뿐 다른 실행)가 이 이월분을 마저 구현했다: `SyntaxHighlighter`/`SyntaxHighlightToken`을 `packages/model`로 옮겨 `io`도 참조하게 하고(RD-001), `packages/io`의 `exportHtml`에 `ExportHtmlOptions.syntaxHighlighter?`를 추가해 codeBlock을 강조 span 포함 HTML로 내보내며 비동기 결과는 plain+경고로 처리하고(RD-002, ADR-0016), 강조 export→import round-trip 회귀 테스트와 `packages/io/README.md` 문서화(RD-003)로 마무리했다(spec §10) — 이로써 "코드의 HTML/GFM 계약" 조건도 충족됐다. R5 나머지(`BLK-018`·`BLK-019`·`INL-012`·`EXT-011`, source-with-preview 포함)는 미착수다 — R5 단계 자체는 여전히 완료가 아니다.
 
 ### R6 — 공동 편집, 댓글과 버전 parity
 
@@ -296,4 +296,4 @@ BlockNote 기준 버전을 올릴 때 다음 순서로 갱신한다.
 
 - 로케일: en/ko만(`EXT-009` `VERIFIED`, `EXT-010` `PARTIAL`). 20개 로케일 실제 번역([Issue #161](https://github.com/cp949/geul/issues/161))은 1차 릴리즈 범위 밖이다.
 - `BLK-017`(코드 구문 강조)만 R5에서 먼저 구현한다(완료, 2026-09-09, [Issue #162](https://github.com/cp949/geul/issues/162)). `BLK-018`(Mermaid 다이어그램)·`BLK-019`(LaTeX 수식 블록)·`INL-012`(인라인 수식)·`EXT-011`(source-with-preview)은 R5 나머지로 후속 릴리즈에 남긴다.
-- 배포 표면 UI/UX 버그 수정: 1차 릴리즈에 포함되는 기능(R0~R4 완료분 + `BLK-017`)을 대상으로 에이전트가 실제 구동해 발견한 버그를 수정한다. 새 기능 인벤토리 항목이 아니라 릴리즈 게이트 활동이다 — 대상 범위 밖(R5 나머지·R6~R8) 화면은 훑지 않는다. 점검 항목과 진행 상태는 [UI/UX 점검 체크리스트](./ui-ux-checklist.md)가 소유한다.
+- 배포 표면 UI/UX 버그 수정: 1차 릴리즈에 포함되는 기능(R0~~R4 완료분 + `BLK-017`)을 대상으로 에이전트가 실제 구동해 발견한 버그를 수정한다. 새 기능 인벤토리 항목이 아니라 릴리즈 게이트 활동이다 — 대상 범위 밖(R5 나머지·R6~~R8) 화면은 훑지 않는다. 점검 항목과 진행 상태는 [UI/UX 점검 체크리스트](./ui-ux-checklist.md)가 소유한다.
