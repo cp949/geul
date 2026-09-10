@@ -13,6 +13,7 @@ import type {
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
+import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { modelToTiptap } from "../src/model-to-tiptap.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { sequentialIds } from "./list-item-block-type-support.js";
@@ -107,4 +108,45 @@ describe("4종 미디어 블록 codec 왕복", () => {
       ],
     });
   });
+});
+
+// ADR 0015 — 로컬 프리뷰는 저장 원본을 절대 왕복하지 않는다. modelToTiptap은
+// 애초에 이 attrs를 설정하지 않으므로(encode 방향은 자명), 여기서는 PM
+// 상태가 이미 채워져 있는 상황을 직접 시뮬레이션해 decode(tiptapToModel)
+// 방향의 제외를 고정한다 — paste/drop 등 실제 삽입 경로가 attrs를 채운
+// 뒤에도 저장 시점에는 반드시 사라짐을 보장하는 것이 이 테스트의 목적이다.
+// `toEqual`로 Block 전체를 정확히 비교해 두 attrs가 조금이라도 새어 나오면
+// 실패하게 한다(단순 `.not.toHaveProperty`보다 엄격 — 다른 필드 누락도
+// 같이 잡는다).
+describe("로컬 프리뷰 attrs — 모델 왕복 제외(RD-001 DELTA-01)", () => {
+  it.each(["file", "image", "video", "audio"] as const)(
+    "%s: localPreviewUrl·localPreviewFile이 채워져 있어도 디코드 결과 Block에 나타나지 않는다",
+    (type) => {
+      const json: TiptapJsonNode = {
+        type: "doc",
+        content: [
+          {
+            type,
+            attrs: {
+              blockId: `${type}-1`,
+              url: "https://example.com/x",
+              localPreviewUrl: "blob:http://localhost/preview",
+              localPreviewFile: new File(["x"], "x.bin"),
+            },
+          },
+        ],
+      };
+
+      const decoded = tiptapToModel(json, 0, sequentialIds("id"));
+
+      expect(decoded).toEqual({
+        ok: true,
+        value: {
+          formatVersion: 1,
+          revision: 0,
+          blocks: [{ id: `${type}-1`, type, url: "https://example.com/x" }],
+        },
+      });
+    },
+  );
 });

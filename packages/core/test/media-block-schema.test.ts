@@ -88,15 +88,39 @@ describe.each(MEDIA_TYPES)("%s 노드 스키마 계약", (type) => {
 });
 
 describe("타입별 attrs 집합", () => {
-  it("file은 previewWidth·textAlignment·showPreview attr을 갖지 않는다(공통 4개 + blockId만)", () => {
+  it("file은 previewWidth·textAlignment·showPreview attr을 갖지 않는다(공통 6개 + blockId만)", () => {
     const schema = liveSchema();
     const node = requireNode(schema, "file");
     const attrNames = Object.keys(node.create().attrs);
 
     expect(attrNames.sort()).toEqual(
-      ["backgroundColor", "blockId", "caption", "name", "url"].sort(),
+      [
+        "backgroundColor",
+        "blockId",
+        "caption",
+        "localPreviewFile",
+        "localPreviewUrl",
+        "name",
+        "url",
+      ].sort(),
     );
   });
+
+  // 로컬 프리뷰 attrs(ADR 0015, roadmap RD-001 결정) — 4종 공통이라 kind별
+  // 분기 없이 하나의 it.each로 4종 전부를 고정한다. 기본값이 null이라는
+  // 사실은 media-block-codec.test.ts의 왕복 테스트가 간접 보증하고, 여기는
+  // "attrs 자체가 존재한다"는 스키마 계약만 고정한다.
+  it.each(MEDIA_TYPES)(
+    "%s는 localPreviewUrl·localPreviewFile attr을 갖고 기본값이 null이다",
+    (type) => {
+      const schema = liveSchema();
+      const node = requireNode(schema, type);
+      const attrs = node.create().attrs;
+
+      expect(attrs.localPreviewUrl).toBeNull();
+      expect(attrs.localPreviewFile).toBeNull();
+    },
+  );
 
   it.each(PREVIEW_ATTR_TYPES)(
     "%s는 showPreview·previewWidth·textAlignment attr을 갖는다",

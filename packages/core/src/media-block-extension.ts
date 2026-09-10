@@ -55,6 +55,26 @@ const mediaBlockCommonAttributes = () => ({
   name: { default: null, renderHTML: () => ({}) },
   caption: { default: null, renderHTML: () => ({}) },
   backgroundColor: { default: null, renderHTML: () => ({}) },
+  ...localPreviewAttributes(),
+});
+
+// 로컬 프리뷰(ADR 0015, roadmap RD-001 "결정") — url attrs와 완전히 분리된
+// PM 전용 attrs다. tiptap-to-model.ts/model-to-tiptap.ts/packages/model의
+// zod .strict() 스키마 어디에도 이 두 키를 배선하지 않는다(각각 읽을 attrs
+// 키를 명시하는 allowlist 구조라 자동으로 제외된다, RD-001-DELTA-01.md
+// readiness probe) — 저장 원본(Document/Block)에는 절대 왕복하지 않는다.
+// 4종 미디어 블록 전체에 동일 적용(ADR 0015 "네 종류 모두에 동일하게
+// 적용한다") — kind별로 분기할 이유가 없어 공통 attrs 헬퍼에 둔다.
+//
+// localPreviewUrl: 화면 표시용 Blob URL(RD-002가 렌더링에서 소비).
+// localPreviewFile: pull 조회 API(`getPendingLocalPreviews()`, RD-001
+// DELTA-04 예정)가 반환할 원본 File 참조. 둘 다 paste/drop 등 실제 삽입
+// 경로가 배선되는 DELTA-02 이전까지는 항상 null이다(renderHTML 없음 —
+// RD-002가 React NodeView에서 attrs를 직접 읽어 렌더링할 대상이라 DOM에
+// 투영하지 않는다).
+const localPreviewAttributes = () => ({
+  localPreviewUrl: { default: null, renderHTML: () => ({}) },
+  localPreviewFile: { default: null, renderHTML: () => ({}) },
 });
 
 const previewAttributes = () => ({
