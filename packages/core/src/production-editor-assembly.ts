@@ -5,6 +5,7 @@ import type {
 } from "@cp949/geul-model";
 import { isSupportedLinkHref } from "@cp949/geul-model";
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 
@@ -298,6 +299,12 @@ export const createProductionEditor = (options: {
     transaction: Transaction,
     loadNormalizing: boolean,
   ) => boolean;
+  // Issue #167 roadmap RD-001-DELTA-01 — revisionGuard의 appendTransaction
+  // 훅 전용. canApplyDocumentChange(filterTransaction, root transaction만)와
+  // 달리 BlockIdExtension 등 모든 appendTransaction이 끝난 최종 문서를
+  // 받는다 — root 시점엔 무효여도 뒤이은 fixup으로 최종엔 유효해지는
+  // 경우(예: ID 충돌 재발급)를 오탐 거절하지 않기 위해서다.
+  validateDocumentStructure: (doc: ProseMirrorNode) => boolean;
   // BlockMoveKeyboardExtension 전용 — production-editor-session.ts의
   // ProductionEditorSession.getBlockSelection과 구조가 같지만 import하지
   // 않는다(그 파일의 순환 의존 회피 관례, block-move-keyboard-extension.ts
@@ -596,6 +603,10 @@ export const createProductionEditor = (options: {
       RevisionGuardExtension.configure({
         canApplyDocumentChange: (transaction) =>
           options.canApplyDocumentChange(transaction, loadNormalizing),
+        // Issue #167 roadmap RD-001-DELTA-01 — load-normalizing 내부
+        // transaction은 canApplyDocumentChange와 같은 이유로 제외한다.
+        validateDocument: (doc) =>
+          loadNormalizing || options.validateDocumentStructure(doc),
       }),
       // 배열 맨 끝(roadmap.md "결정") — 선언 역순 keymap 우선순위(위
       // ClipboardPasteExtension 주석 참고)로 등록된 keyboardShortcuts가

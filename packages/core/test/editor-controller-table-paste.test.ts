@@ -417,8 +417,14 @@ describe("에디터 컨트롤러 표", () => {
       editor.commands.insertTable("block-1", { rows: 1, columns: 1 }).ok,
     ).toBe(true);
 
-    // 셀의 columnId를 존재하지 않는 열로 바꿔 표를 손상시킨다 — 검증 훅이
-    // 던지지만 상태는 이미 손상된 채 남는다.
+    // 셀의 columnId를 존재하지 않는 열로 바꿔 표를 손상시킨다. dispatch를
+    // 거치면(Issue #167 roadmap RD-001-DELTA-01 이후) revisionGuard의
+    // appendTransaction이 최종 문서 무효를 감지해 batch를 되돌리므로 표가
+    // 손상되지 않는다 — 이 테스트가 원하는 "이미 손상된 표"를 만들 수
+    // 없다. Transform(`tr.doc`)으로 계산만 하고 `tiptap.state`의 doc을
+    // 직접 덮어써 dispatch·guard를 우회한다(pasteTabularData가 호출
+    // 시점의 tiptap.state.doc을 그대로 읽으므로 이 상태로도 대상 검증
+    // 경로는 동일하게 재현된다).
     // 최초 cellId 확보는 findCellBoundaryPosition으로 대체할 수 없다 —
     // findCellBoundaryPosition은 이미 아는 cellId로 셀을 찾는데, 여기서는
     // cellId 자체를 아직 모르는 상태에서 셀을 찾아야 한다(순환 의존). 이
@@ -439,14 +445,12 @@ describe("에디터 컨트롤러 표", () => {
 
     const corruptPos = findCellBoundaryPosition(tiptap, cellId);
     if (corruptPos === null) throw new Error("셀 fixture 준비 실패");
-    expect(() =>
-      tiptap.view.dispatch(
-        tiptap.state.tr.setNodeMarkup(corruptPos, undefined, {
-          ...attrs,
-          columnId: "ghost",
-        }),
-      ),
-    ).toThrow();
+    const corruptedDoc = tiptap.state.tr.setNodeMarkup(corruptPos, undefined, {
+      ...attrs,
+      columnId: "ghost",
+    }).doc;
+    (tiptap.state as unknown as { doc: typeof corruptedDoc }).doc =
+      corruptedDoc;
     placeCaretInCell(tiptap, cellId);
 
     const data: TabularData = {

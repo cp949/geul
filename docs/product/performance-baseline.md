@@ -37,6 +37,31 @@ spec 13(`docs/specs/2026-08-14-tiptap-block-editor-mvp-design.md`) "10,000셀 fi
 
 CI에서 이 기준선 대비 중앙값 20% 이상 악화를 회귀로 처리하는 자동 게이트는 슬라이스 13(Chromium/Firefox/WebKit 전체 게이트) 범위다. 이 문서는 측정치 기록까지만 다룬다.
 
+## Issue #167 roadmap RD-001-DELTA-01 영향 측정
+
+`revisionGuard`(revision-guard-extension.ts)의 appendTransaction 훅이 문서를
+바꾸는 모든 transaction마다 구조 검증(`tiptapToModel`)을 추가로 1회 더
+실행하도록 바뀌었다(이전에는 `onBeforeChange` 등록 세션만 이 비용을
+부담했다). 로드는 `loadNormalizing`일 때 이 검증을 건너뛰므로 영향이 없고,
+선택은 `docChanged`가 없는 transaction이라 역시 건너뛴다 — 붙여넣기·undo만
+실제로 이 경로를 탄다. 같은 `perf` 프로젝트로 2회 재측정했다(2026-09-10,
+작업 브랜치 `fix/167-invalid-transaction-guard`, `dev` 기준 위 표와 동일
+fixture).
+
+| 작업 | 1회차 중앙값(ms) | 2회차 중앙값(ms) | 기준선 대비 |
+| --- | --- | --- | --- |
+| 로드 | 416.1 | 352.1 | 두 값 모두 노이즈 범위(경로 미적용) |
+| 붙여넣기 | 349.5 | 351.4 | +6.4%, +6.9% |
+| 선택 | 16.8 | 16.1 | 두 값 모두 노이즈 범위(경로 미적용) |
+| undo | 15.7 | 20.0 | +6.1%, +35.1%(절대값이 작아(14.8ms) 노이즈 민감) |
+
+붙여넣기는 두 회차 모두 6~7%대로 일관되게 늘었다 — 회귀 게이트 기준(20%)
+안이고, 트랜잭션 하나당 추가 `tiptapToModel` 변환 1회라는 예상 비용과
+일치한다. undo는 절대값이 작아 회차 간 편차(6%→35%)가 크지만 로드·선택과
+같은 절대 ms 스케일의 노이즈로 보인다. 이 표는 참고 기록이며 위 "측정치"
+표(공식 기준선)는 갱신하지 않는다 — 단일 로컬 실행 2회는 기존 표의 5표본
+방법론을 대체할 근거로 부족하다.
+
 ## Issue #12와의 경계
 
 Issue #12(`packages/io/test/markdown-round-trip-limits.test.ts`의 10,000셀 markdown 파서 성능 테스트)의 완료 조건 3번("spec 13 기준선의 최초 측정치를 기록할 위치를 정한다")을 이 문서로 겸해서 해소한다 — io 파서 자체의 로드/파싱 성능은 여기 표에 포함하지 않고 Issue #12 자체 조사 결과(별도 커밋)로 남긴다.

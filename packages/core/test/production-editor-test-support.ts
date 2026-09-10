@@ -35,6 +35,7 @@ export function productionHtml(document: Document): string {
     },
     onUpdate: () => {},
     canApplyDocumentChange: () => true,
+    validateDocumentStructure: () => true,
   });
   try {
     return editor.getHTML();

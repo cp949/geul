@@ -592,6 +592,9 @@ export class ProductionEditorSession {
         : { syntaxHighlighter: this.options.syntaxHighlighter }),
       canApplyDocumentChange: (transaction, loadNormalizing) =>
         this.evaluateBeforeChange(transaction, loadNormalizing),
+      // Issue #167 roadmap RD-001-DELTA-01 — revisionGuard의
+      // appendTransaction 훅 전용(위 isDocumentStructurallyValid 주석).
+      validateDocumentStructure: (doc) => this.isDocumentStructurallyValid(doc),
       // BlockMoveKeyboardExtension이 활성 블록 선택 범위를 읽는 유일한
       // 경로다 — this.blockSelection은 이 생성자 실행 시점엔 아직
       // 초기화 전이어도 클로저 자체는 유효하고, 실제 호출(키보드
@@ -647,9 +650,17 @@ export class ProductionEditorSession {
   // `transaction.before`(이 transaction이 만들어질 때의 시작 문서)가
   // `this.tiptapEditor.state.doc`(전체 dispatch가 끝나기 전까지는
   // 갱신되지 않는, 이 batch 시작 시점의 문서)와 같은지로 판정한다 —
-  // root transaction만 이 값이 같다. (5) 실제 모델 블록 변경이 없으면
-  // 제외(commitDocument의 no-op 판정과 동일 기준), (6) 소비자
-  // onBeforeChange 호출 — false 반환 시에만 거절한다.
+  // root transaction만 이 값이 같다. (5) 구조 검증 실패(preview build
+  // 실패)면 onBeforeChange를 부르지 않고 통과시킨다 — 이 root transaction
+  // 시점엔 아직 유효하지 않아도 BlockIdExtension 같은 이어지는
+  // appendTransaction이 고쳐 최종적으로 유효해질 수 있다(Issue #167
+  // roadmap RD-001-DELTA-01 결함 탐지 — root 시점 preview로 거절하면
+  // ID 충돌 재발급(document-id-factory.test.ts) 같은 정상 fixup 경로가
+  // 막힌다). 최종 유효성 판정은 이 함수가 아니라
+  // `isDocumentStructurallyValid`(모든 appendTransaction이 끝난 뒤,
+  // `revisionGuard`의 appendTransaction 훅)가 전담한다. (6) 실제 모델
+  // 블록 변경이 없으면 제외(commitDocument의 no-op 판정과 동일 기준),
+  // (7) 소비자 onBeforeChange 호출 — false 반환 시에만 거절한다.
   private evaluateBeforeChange(
     transaction: Transaction,
     loadNormalizing: boolean,
@@ -659,10 +670,9 @@ export class ProductionEditorSession {
     const onBeforeChange = this.options.onBeforeChange;
     if (onBeforeChange === undefined) return true;
     if (transaction.before !== this.tiptapEditor.state.doc) return true;
-    const changedBlockIds = blockChanges(
-      this.currentDocument,
-      this.buildBeforeChangeDocument(transaction.doc),
-    );
+    const preview = this.buildBeforeChangeDocument(transaction.doc);
+    if (preview === null) return true;
+    const changedBlockIds = blockChanges(this.currentDocument, preview);
     if (changedBlockIds.length === 0) return true;
     return (
       onBeforeChange({
@@ -683,8 +693,14 @@ export class ProductionEditorSession {
   // id로 changedBlockIds에 나타날 수 있고, 실제 커밋 id와 다를 수
   // 있다(RD-004-DELTA-02 "## 계획"의 설계 결정, 새 블록을 만들지 않는
   // 대다수 편집은 기존 id를 그대로 읽어 이 placeholder가 관여하지
-  // 않는다).
-  private buildBeforeChangeDocument(doc: ProseMirrorNode): BlockDocument {
+  // 않는다). 검증 실패(`!converted.ok`)는 throw하지 않고 `null`을
+  // 반환한다 — 이 root transaction 시점의 실패가 곧 최종 실패를 뜻하지
+  // 않으므로(위 evaluateBeforeChange 주석), 여기서 거절을 확정하지
+  // 않는다(Issue #167 roadmap RD-001-DELTA-01). `isDocumentStructurallyValid`
+  // 도 이 메서드를 재사용한다 — 같은 변환, 다른 시점(전체 batch 완료 후).
+  private buildBeforeChangeDocument(
+    doc: ProseMirrorNode,
+  ): BlockDocument | null {
     let previewIdSeq = 0;
     const previewCreateId: IdFactory = () =>
       `__pending-block-${(previewIdSeq += 1)}__`;
@@ -698,14 +714,18 @@ export class ProductionEditorSession {
         customStyleTypes: this.customStyleTypes,
       },
     );
-    if (!converted.ok) {
-      throw new TypeError(
-        converted.error.code === "DOCUMENT_INVALID"
-          ? converted.error.message
-          : converted.error.code,
-      );
-    }
-    return converted.value;
+    return converted.ok ? converted.value : null;
+  }
+
+  // Issue #167 roadmap RD-001-DELTA-01 — `revisionGuard`의 appendTransaction
+  // 훅(production-editor-assembly.ts 배선)이 BlockIdExtension 등 모든
+  // appendTransaction이 끝난 뒤의 최종 문서를 이 메서드로 검증한다. 여기서
+  // false면 그 훅이 batch 전체를 되돌린다 — DOM-origin transaction이
+  // 저장 원본 검증을 위반한 채 commit되는 경로를 구조적으로 막는다
+  // (`onBeforeChange` 등록 여부와 무관하게 항상 실행— G-EDT-001 "DOM에서
+  // 직접 들어오는 transaction에도 command와 같은 guard를 적용한다").
+  private isDocumentStructurallyValid(doc: ProseMirrorNode): boolean {
+    return this.buildBeforeChangeDocument(doc) !== null;
   }
 
   private readEditorDocument(editor: Editor): BlockDocument {
