@@ -5,10 +5,15 @@
 import { parseDocument, type Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
-import { createEditor, type DocumentChangeEvent } from "../src/index.js";
+import {
+  createEditor,
+  type CustomBlockDefinition,
+  type DocumentChangeEvent,
+} from "../src/index.js";
 import {
   mountTiptapEditor,
   paragraphDocument,
+  sequentialIds,
 } from "./editor-controller-support.js";
 
 const allocationErrorMessage =
@@ -244,6 +249,38 @@ describe("문서 ID 발급", () => {
         { id: "cell-1", type: "heading" },
         { id: "trailing-1", type: "paragraph" },
       ]);
+      expect(parseDocument(editor.getDocument())).toMatchObject({ ok: true });
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("문서 교체 정규화는 top-level CustomBlock id를 점유 id로 인식해 trailing id와 충돌하지 않는다(Issue #170 RD-001 DELTA-03)", () => {
+    // replaceDocument()도 생성자(Issue #170 RD-001 DELTA-01)와 동일하게
+    // createTiptapEditor → createProductionEditor를 거쳐 BlockIdExtension의
+    // customBlockTypes 배선을 그대로 받는지 고정한다 — 두 호출부가 서로
+    // 다른 경로로 퇴행하지 않았는지 확인하는 회귀다.
+    const widgetDefinition: CustomBlockDefinition = {
+      render: () => ({ element: document.createElement("div") }),
+    };
+    const editor = createEditor({
+      initialDocument: documentWithEveryIdentity(),
+      createId: sequentialIds("id"),
+      customBlocks: { myWidget: widgetDefinition },
+    });
+
+    try {
+      expect(
+        editor.replaceDocument({
+          formatVersion: 1,
+          revision: 0,
+          blocks: [{ id: "id-1", type: "myWidget", content: "none" }],
+        }),
+      ).toEqual({ ok: true, value: undefined });
+
+      const ids = editor.getDocument().blocks.map((block) => block.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).toEqual(["id-1", "id-2"]);
       expect(parseDocument(editor.getDocument())).toMatchObject({ ok: true });
     } finally {
       editor.destroy();
