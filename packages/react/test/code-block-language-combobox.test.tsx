@@ -354,38 +354,34 @@ describe("CodeBlock 언어 팝오버 suggestion과 ARIA", () => {
     fireEvent.change(input, { target: { value: "" } });
     // fixture가 language를 지정하지 않아 committed가 기본값 "text" —
     // Plain Text 행에 체크마크가 붙는다.
-    expect(screen.getAllByRole("option")[0]?.textContent).toBe(
-      "✓일반 텍스트text, plain text, none",
-    );
+    expect(screen.getAllByRole("option")[0]?.textContent).toBe("✓일반 텍스트");
 
     // 렌더 텍스트는 "일반 텍스트"로 바뀌었어도 검색은 여전히 고정 영어
     // "plain text"로 매칭해야 한다(blockType.*/slashMenu.*와 동일 결정).
     fireEvent.change(input, { target: { value: "plain text" } });
     expect(screen.getAllByRole("option")).toHaveLength(1);
-    expect(screen.getByRole("option").textContent).toBe(
-      "✓일반 텍스트text, plain text, none",
-    );
+    expect(screen.getByRole("option").textContent).toBe("✓일반 텍스트");
   });
 
-  it("12개 옵션에 label·alias·현재 언어 체크마크를 모두 제공한다", () => {
+  it("12개 옵션에 label·현재 언어 체크마크를 제공한다(alias는 검색에만 쓰이고 표시하지 않는다)", () => {
     mountCodeFixture({ language: "javascript" });
     fireEvent.click(languageButton());
 
     const options = screen.getAllByRole("option");
     expect(options).toHaveLength(12);
     expect(options.map((option) => option.textContent)).toEqual([
-      "Plain Texttext, plain text, none",
-      "✓JavaScriptjavascript, js",
-      "TypeScripttypescript, ts",
-      "HTMLhtml",
-      "CSScss",
-      "JSONjson",
-      "Bashbash, sh, shell",
-      "Pythonpython, py",
-      "Javajava",
-      "Kotlinkotlin",
-      "SQLsql",
-      "Markdownmarkdown, md",
+      "Plain Text",
+      "✓JavaScript",
+      "TypeScript",
+      "HTML",
+      "CSS",
+      "JSON",
+      "Bash",
+      "Python",
+      "Java",
+      "Kotlin",
+      "SQL",
+      "Markdown",
     ]);
 
     const javascriptOption = screen.getByRole("option", { name: /JavaScript/ });
@@ -651,8 +647,8 @@ describe("CodeBlock 언어 팝오버 — codeBlockLanguages(BLK-017)", () => {
 
     const options = screen.getAllByRole("option");
     expect(options.map((option) => option.textContent)).toEqual([
-      "Rustrust",
-      "Gogo, golang",
+      "Rust",
+      "Go",
     ]);
 
     fireEvent.click(screen.getByRole("option", { name: /Go/ }));

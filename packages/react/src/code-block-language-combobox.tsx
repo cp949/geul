@@ -404,9 +404,6 @@ export const CodeBlockLanguageCombobox = () => {
                     ? dictionary.codeLanguage.plainText
                     : option.label}
                 </span>
-                <span className="geul-code-block-language-popover__aliases">
-                  {[option.id, ...(option.aliases ?? [])].join(", ")}
-                </span>
               </button>
             ))}
           </div>
