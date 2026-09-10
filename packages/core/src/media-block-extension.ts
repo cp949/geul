@@ -68,7 +68,7 @@ const mediaBlockCommonAttributes = () => ({
 //
 // localPreviewUrl: 화면 표시용 Blob URL(RD-002가 렌더링에서 소비).
 // localPreviewFile: pull 조회 API(`getPendingLocalPreviews()`, RD-001
-// DELTA-04 예정)가 반환할 원본 File 참조. 둘 다 paste/drop 등 실제 삽입
+// DELTA-05 예정)가 반환할 원본 File 참조. 둘 다 paste/drop 등 실제 삽입
 // 경로가 배선되는 DELTA-02 이전까지는 항상 null이다(renderHTML 없음 —
 // RD-002가 React NodeView에서 attrs를 직접 읽어 렌더링할 대상이라 DOM에
 // 투영하지 않는다).

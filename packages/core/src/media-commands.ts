@@ -5,6 +5,7 @@ import { NodeSelection } from "@tiptap/pm/state";
 import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
+import type { LocalPreviewAttrs } from "./media-local-preview.js";
 
 // 4종 미디어 블록(file/image/video/audio) 삽입 명령(삽입 전용 — setBlockType
 // 대상이 아니다, spec §2.2 Turn into 제외·§5.1). kind별로 스키마 노드
@@ -52,7 +53,16 @@ export const insertMediaBlock = (
   afterBlockId: string,
   kind: MediaBlockKind,
   createId: IdFactory,
-  options?: { clearAfterBlockText?: boolean },
+  // localPreview(Issue #168 roadmap RD-001 DELTA-03) — 내부 전용이다.
+  // `EditorController.insertMediaBlock`(공개 계약, editor-controller-
+  // types.ts:337)은 `clearAfterBlockText`만 노출하고 이 필드를 절대
+  // 전달하지 않는다(insert-block-commands.ts) — MediaDropPasteExtension의
+  // chainRemainingFiles(paste/drop 다중 파일)만 콜백 미등록일 때 이
+  // 필드로 로컬 프리뷰 attrs를 함께 싣는다.
+  options?: {
+    clearAfterBlockText?: boolean;
+    localPreview?: LocalPreviewAttrs | null;
+  },
 ): Result<{ blockId: string }, InsertMediaBlockError> => {
   const mediaType = editor.schema.nodes[kind];
   // createTiptapEditor(editor-controller.ts)가 4종 확장 등록을 보장하므로
@@ -71,7 +81,10 @@ export const insertMediaBlock = (
   const insertPosition = afterPosition + afterNode.nodeSize;
 
   const blockId = createId();
-  const mediaNode = mediaType.create({ blockId });
+  const mediaNode = mediaType.create({
+    blockId,
+    ...(options?.localPreview ?? {}),
+  });
 
   let transaction = editor.state.tr;
   const clearTarget =

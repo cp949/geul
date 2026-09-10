@@ -128,16 +128,20 @@ const insertMediaAtTarget = (
 
 // D2 다중 파일 체이닝 — 첫 파일 이후는 항상 "직전 반환 blockId 뒤에 삽입"만
 // 반복한다(기존 insertMediaBlock, session 무관). 앞선 삽입이 거절되면(희귀)
-// 더 이상 유효한 anchor가 없으므로 남은 파일을 조용히 포기한다. 삽입이
-// 성공한 파일마다(RD-002 DELTA-02) triggerUpload(blockId, file)을 그
-// 자리에서 바로 호출한다 — 다음 파일의 anchor 삽입 실패와 무관하게 이미
-// 성공한 블록은 업로드를 시작해야 한다.
+// 더 이상 유효한 anchor가 없으므로 남은 파일을 조용히 포기한다. 콜백이
+// 있으면(isUploadEnabled) 삽입이 성공한 파일마다(RD-002 DELTA-02)
+// triggerUpload(blockId, file)을 그 자리에서 바로 호출한다 — 다음 파일의
+// anchor 삽입 실패와 무관하게 이미 성공한 블록은 업로드를 시작해야 한다.
+// 콜백이 없으면(Issue #168 roadmap RD-001 DELTA-03) 각 파일을 독립적으로
+// 로컬 프리뷰 attrs와 함께 삽입한다 — 한 파일의 로컬 프리뷰 처리가 다른
+// 파일에 영향을 주지 않는다(항목별 독립 처리, roadmap.md 전체 포함 범위).
 const chainRemainingFiles = (
   editor: Editor,
   createId: IdFactory,
   files: readonly File[],
   first: InsertOutcome,
   triggerUpload: (blockId: string, file: File) => void,
+  isUploadEnabled: boolean,
 ): void => {
   let previous = first;
   for (let index = 1; index < files.length; index += 1) {
@@ -149,9 +153,12 @@ const chainRemainingFiles = (
       previous.blockId,
       detectMediaBlockKind(file),
       createId,
+      isUploadEnabled
+        ? undefined
+        : { localPreview: createLocalPreviewAttrs(file) },
     );
     previous = result.ok ? result.value : null;
-    if (result.ok) triggerUpload(result.value.blockId, file);
+    if (result.ok && isUploadEnabled) triggerUpload(result.value.blockId, file);
   }
 };
 
@@ -284,19 +291,17 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
     return [
       new Plugin({
         props: {
-          // 콜백이 있으면(isUploadEnabled) 항상 처리한다. 콜백이 없으면
-          // 파일 1개는 로컬 프리뷰로 처리하고(Issue #168 roadmap RD-001
-          // DELTA-02), 2개 이상은 아직 DELTA-03 범위 밖이라 R3 spec §4.1
-          // "drag/drop·paste의 파일 페이로드는 무시한다"(IO-007 own 경계,
-          // DELTA-02 이전 결정)를 그대로 유지한다 — false를 반환해 파일이
-          // 실제로 있어도 기존 Table/ClipboardPaste 확장이 파일이 아예
-          // 없었던 것처럼 나머지 clipboard 데이터를 그대로 처리하게 한다.
+          // 콜백이 있으면(isUploadEnabled) 항상 처리하고 업로드를
+          // 트리거한다(기존 동작 불변). 콜백이 없으면 Issue #168 roadmap
+          // RD-001 DELTA-02·03부터 파일 개수와 무관하게 항상 처리하고, 각
+          // 파일을 독립적으로 로컬 프리뷰(ADR 0015)로 채운다 — 더 이상
+          // "파일 페이로드는 무시한다"(R3 spec §4.1, IO-007 own 경계,
+          // DELTA-02 이전 결정)로 되돌아가지 않는다.
           handlePaste: (_view, event) => {
             const clipboardData = event.clipboardData;
             if (clipboardData === null) return false;
             const files = Array.from(clipboardData.files);
             if (files.length === 0) return false;
-            if (!isUploadEnabled && files.length > 1) return false;
 
             deleteNonEmptySelection(editor);
             const $pos = editor.state.selection.$from;
@@ -314,7 +319,14 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             if (first !== null && isUploadEnabled) {
               triggerUpload(first.blockId, firstFile);
             }
-            chainRemainingFiles(editor, createId, files, first, triggerUpload);
+            chainRemainingFiles(
+              editor,
+              createId,
+              files,
+              first,
+              triggerUpload,
+              isUploadEnabled,
+            );
             return true;
           },
           handleDrop: (view, event) => {
@@ -324,7 +336,6 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               collectDropEntries(dataTransfer),
             );
             if (files.length === 0) return false;
-            if (!isUploadEnabled && files.length > 1) return false;
 
             // D7은 paste 전용이다 — drop 대상은 좌표가 정하므로 현재
             // selection(드롭 지점과 무관한 곳에 있을 수 있다)을 건드리지
@@ -350,7 +361,14 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             if (first !== null && isUploadEnabled) {
               triggerUpload(first.blockId, firstFile);
             }
-            chainRemainingFiles(editor, createId, files, first, triggerUpload);
+            chainRemainingFiles(
+              editor,
+              createId,
+              files,
+              first,
+              triggerUpload,
+              isUploadEnabled,
+            );
             event.preventDefault();
             return true;
           },

@@ -438,9 +438,9 @@ describe("D4 — 우선순위(파일이 표·HTML보다 먼저)", () => {
 // 프리뷰(ADR 0015) 미디어 블록을 삽입한다 — 콜백이 있을 때와 똑같이 파일이
 // text/html보다 우선하고(D4 우선순위는 콜백 등록 여부와 무관하게 동일), 다만
 // triggerMediaUpload 대신 localPreviewUrl·localPreviewFile attrs를 채운다.
-// 파일 2개 이상은 이 DELTA 범위 밖이라(다중 파일 로컬 프리뷰는 DELTA-03) 기존
-// "완전히 무시" 동작을 그대로 유지한다.
-describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-001 DELTA-02)", () => {
+// 파일 2개 이상도 DELTA-03부터 각자 독립적으로 로컬 프리뷰가 채워진다(항목별
+// 독립 처리, roadmap.md 전체 포함 범위) — 더 이상 "완전히 무시"하지 않는다.
+describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-001 DELTA-02·03)", () => {
   it("파일 1개 paste는 로컬 프리뷰 미디어 블록을 삽입한다", () => {
     const editor = createEditor({
       initialDocument: documentOf(
@@ -562,7 +562,7 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     });
   });
 
-  it("파일 2개 이상은 콜백 미등록이면 여전히 완전히 무시한다(다중 파일 로컬 프리뷰는 DELTA-03 범위)", () => {
+  it("파일 2개 paste는 콜백 미등록이어도 각각 독립적으로 로컬 프리뷰 미디어 블록으로 삽입된다(Issue #168 roadmap RD-001 DELTA-03)", () => {
     const editor = createEditor({
       initialDocument: documentOf(
         paragraphBlock("p-1", "hello"),
@@ -573,7 +573,6 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
     placeCaretInBlock(tiptap, "p-1");
-    const before = editor.getDocument().blocks;
 
     withUnhandledErrorTracking((errors) => {
       pasteFiles(editable, [
@@ -581,8 +580,25 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
         fileOf("b.png", "image/png"),
       ]);
 
-      expect(editor.getDocument().blocks).toEqual(before);
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        mediaBlock("image", "id-1"),
+        mediaBlock("image", "id-2"),
+        tailParagraphBlock,
+      ]);
       expect(errors).toEqual([]);
     });
+
+    const attrsOf = (blockId: string) => {
+      const pos = findBlockPosition(tiptap.state.doc, blockId);
+      return pos === null ? null : tiptap.state.doc.nodeAt(pos)?.attrs;
+    };
+    const firstUrl = attrsOf("id-1")?.localPreviewUrl;
+    const secondUrl = attrsOf("id-2")?.localPreviewUrl;
+    expect(typeof firstUrl).toBe("string");
+    expect(typeof secondUrl).toBe("string");
+    // 항목별 독립 처리(roadmap.md 전체 포함 범위) — 각자 다른 File에서
+    // 만든 서로 다른 Blob URL이라 값이 같으면 안 된다.
+    expect(firstUrl).not.toBe(secondUrl);
   });
 });
