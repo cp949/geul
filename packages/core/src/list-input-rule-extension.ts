@@ -176,9 +176,15 @@ export const ListInputRuleExtension = Extension.create({
     const numbered = this.editor.schema.nodes.numberedListItem;
     if (bullet === undefined || numbered === undefined) return [];
 
+    // 트리거를 리터럴 " "이 아니라 `\s`로 잡는다(block-type-input-rule-
+    // extension.ts의 heading/quote/checkListItem과 같은 계약). 문단 끝(뒤에
+    // 다른 문자 없음)에서 스페이스를 치면 Chrome이 U+0020 대신 U+00A0
+    // (NBSP)를 그대로 넣는 경우가 있다(whitespace-collapsing 회피, 실측:
+    // showcase 프로덕션 에디터) — 리터럴 " "만 받으면 이 경우 조용히
+    // 변환되지 않는다.
     return [
-      createListInputRule("-", /^- $/, bullet),
-      createListInputRule("1.", /^1\. $/, numbered),
+      createListInputRule("-", /^-\s$/, bullet),
+      createListInputRule("1.", /^1\.\s$/, numbered),
     ];
   },
 });

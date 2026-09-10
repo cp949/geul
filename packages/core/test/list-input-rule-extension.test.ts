@@ -102,6 +102,39 @@ describe("목록 native shorthand exact 변환", () => {
     },
   );
 
+  // 실측(showcase Kitchen sink, 실제 Chrome): 문단 맨 끝(뒤에 다른 문자
+  // 없음)에서 스페이스를 타이핑하면 Chrome이 원문 U+0020 대신 U+00A0(NBSP)를
+  // contenteditable에 그대로 삽입하는 경우가 있다 — 잘 알려진 브라우저
+  // whitespace-collapsing 회피 동작이다. heading/quote/checkListItem/
+  // codeBlock(block-type-input-rule-extension.ts)은 트리거 정규식이 전부
+  // `\s`라 NBSP도 매치하지만, 이 파일의 bullet/numbered는 리터럴 " "만
+  // 요구해 NBSP 입력에서 조용히 변환되지 않았다(재현: dev 서버, 문단 끝
+  // "- " 타이핑).
+  it.each([
+    ["-", "bulletListItem"],
+    ["1.", "numberedListItem"],
+  ] as const)(
+    "exact %s 뒤 native NBSP(브라우저가 트레일링 space 대신 넣는 경우)도 %s으로 변환한다",
+    (marker, type) => {
+      const { editor, tiptap } = mounted(
+        documentOf(
+          paragraphBlock("target", marker),
+          paragraphBlock("tail", "꼬리"),
+        ),
+      );
+      tiptap.commands.setTextSelection(
+        contentTextStart(tiptap, "target") + marker.length,
+      );
+
+      expect(dispatchTextInput(tiptap, " ")).toBe(true);
+      expect(editor.getDocument().blocks[0]).toEqual({
+        id: "target",
+        type,
+        content: [],
+      });
+    },
+  );
+
   it.each([
     ["선행 공백", " -"],
     ["문장 중간", "문장-"],
