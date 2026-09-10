@@ -365,8 +365,12 @@ export const createProductionEditor = (options: {
   // (spec §5, 경고 없음 — customBlocks 등 다른 조건부 확장과 동일 패턴).
   syntaxHighlighter?: SyntaxHighlighter;
 }): Editor => {
+  // BlockIdExtension의 occupiedIds 수집(Issue #170 RD-001 DELTA-01)에도
+  // 같은 타입 집합을 배선해야 해 변수로 뽑는다 — modelToTiptap 호출부만
+  // 알던 것을 BlockIdExtension.configure에도 전달한다.
+  const customBlockTypes = new Set(Object.keys(options.customBlocks ?? {}));
   const converted = modelToTiptap(options.document, {
-    customBlockTypes: new Set(Object.keys(options.customBlocks ?? {})),
+    customBlockTypes,
     customInlineContentTypes: new Set(
       Object.keys(options.customInlineContent ?? {}),
     ),
@@ -481,7 +485,10 @@ export const createProductionEditor = (options: {
       BlockGroupExtension.configure({
         attributeOverrides: options.attributeOverrides?.blockGroup ?? {},
       }),
-      BlockIdExtension.configure({ createId: options.createId }),
+      BlockIdExtension.configure({
+        createId: options.createId,
+        customBlockTypes,
+      }),
       BlockSplitExtension,
       BlockJoinExtension,
       // table 3종 노드(table/tableRow/tableCell)는 표 기능 하나를

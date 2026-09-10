@@ -10,6 +10,10 @@ import { createUniqueDocumentId } from "./document-id-factory.js";
 
 type BlockIdOptions = {
   createId: IdFactory;
+  // top-level CustomBlock(RD-002-DELTA-11)의 PM 노드 타입명 집합 — divider·
+  // 미디어처럼 blockContainer로 포장되지 않는 자체-identity 노드라
+  // occupiedIds 수집에서 별도로 인식해야 한다(Issue #170 RD-001 DELTA-01).
+  customBlockTypes: Set<string>;
 };
 
 export const BlockIdExtension = Extension.create<BlockIdOptions>({
@@ -18,6 +22,7 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
   addOptions() {
     return {
       createId: createRandomDocumentId,
+      customBlockTypes: new Set<string>(),
     };
   },
 
@@ -48,6 +53,7 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
 
   addProseMirrorPlugins() {
     const createId = this.options.createId;
+    const customBlockTypes = this.options.customBlockTypes;
 
     return [
       new Plugin({
@@ -94,6 +100,14 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
               // 비포장 자체-identity 노드다 — blockContainer 자동 id
               // 발급이 이미 존재하는 미디어 블록 id와 충돌하지 않도록
               // 점유 id로 등록한다(spec §3.1, G-EDT-003).
+              addNonBlockContainerIdentity(node.attrs.blockId);
+            } else if (customBlockTypes.has(node.type.name)) {
+              // top-level CustomBlock도 divider·미디어와 같은 비포장
+              // 자체-identity 노드다 — 등록되지 않으면 트레일링 paragraph
+              // 정규화 등이 발급하는 새 id가 결정적 createId와 맞물려 기존
+              // CustomBlock id와 충돌할 수 있다(Issue #170 RD-001 DELTA-01,
+              // 생성자의 readEditorDocument 라운드트립에서 "Duplicate id"
+              // uncaught throw로 재현됨).
               addNonBlockContainerIdentity(node.attrs.blockId);
             }
             return true;
