@@ -18,9 +18,18 @@ import { queryMountedEditable } from "./query-mounted-editable.js";
 // (jsdom/jsdom#1568) — packages/core/test/editor-controller-table-paste.test.ts와
 // 같은 최소 폴리필을 여기서도 쓴다. 이후 jsdom이 네이티브로 지원하게 되면 이
 // 블록은 자동으로 건너뛴다.
+//
+// files는 실제 DataTransfer 인터페이스처럼 빈 배열을 기본값으로 둔다(Issue
+// #168 roadmap RD-001 DELTA-02) — MediaDropPasteExtension.handlePaste가
+// 이제 isUploadEnabled 여부와 무관하게 항상 clipboardData.files를 먼저
+// 읽으므로(파일 1개 로컬 프리뷰 판정), 필드 자체가 없어 undefined면
+// `Array.from(undefined)`가 TypeError를 던진다 —
+// packages/core/test/clipboard-test-support.ts의 같은 폴리필과 동일하게
+// 맞춘다.
 if (typeof globalThis.DataTransfer === "undefined") {
   class JsdomDataTransfer {
     private readonly store = new Map<string, string>();
+    files: File[] = [];
 
     setData(format: string, data: string): void {
       this.store.set(format, data);

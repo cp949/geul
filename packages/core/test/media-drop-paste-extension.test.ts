@@ -2,11 +2,16 @@
  * MediaDropPasteExtension(RD-002 DELTA-01, roadmap
  * `_works/roadmap/RD-002.md`)의 위치 판정(D1 표 바이패스, D5 CodeBlock
  * 일반 규칙, F2 drop 앞/뒤, paste 빈 paragraph 교체), 다중 파일 체이닝(D2),
- * range selection 삭제(D7), 우선순위 배선(D4), 콜백 미등록 no-op 회귀(spec
- * §4)를 검증한다. drop 좌표 판정은 jsdom이 실제 레이아웃(`posAtCoords`·
- * `getBoundingClientRect`)을 계산하지 못해 두 값을 테스트 안에서 직접
- * 주입한다 — 실제 브라우저 hit-testing 통합은 DELTA-03 Playwright e2e가
- * 검증한다(계획 문서 "범위 밖" 참고).
+ * range selection 삭제(D7), 우선순위 배선(D4)을 검증한다. drop 좌표 판정은
+ * jsdom이 실제 레이아웃(`posAtCoords`·`getBoundingClientRect`)을 계산하지
+ * 못해 두 값을 테스트 안에서 직접 주입한다 — 실제 브라우저 hit-testing
+ * 통합은 DELTA-03 Playwright e2e가 검증한다(계획 문서 "범위 밖" 참고).
+ *
+ * 업로드 콜백 미등록 시 파일 1개의 로컬 프리뷰 처리(Issue #168 roadmap
+ * RD-001 DELTA-02, ADR 0015)는 파일 하단 "업로드 콜백 미등록" describe가
+ * 별도로 소유한다 — 위 RD-002 DELTA-01 시점에는 콜백 미등록이면 파일
+ * 페이로드를 완전히 무시했으나(R3 spec §4.1, IO-007 own 경계) 그 결정은
+ * DELTA-02가 뒤집었다.
  */
 import type { InlineContentItem, ParagraphBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -426,8 +431,17 @@ describe("D4 — 우선순위(파일이 표·HTML보다 먼저)", () => {
   });
 });
 
-describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경계)", () => {
-  it("uploadFile 미등록이면 paste의 파일 페이로드는 완전히 무시된다(문서 불변)", () => {
+// Issue #168 roadmap RD-001 DELTA-02 전까지는 uploadFile 미등록 시
+// drag/drop·paste의 파일 페이로드를 완전히 무시했다(R3 spec §4.1, IO-007 own
+// 경계 — 이 문서 갱신은 RD-001 완료 동기화로 미룸, `_works/roadmap/RD-001.md`
+// "결정" 참고). DELTA-02부터 파일 1개는 더 이상 무시하지 않고 로컬
+// 프리뷰(ADR 0015) 미디어 블록을 삽입한다 — 콜백이 있을 때와 똑같이 파일이
+// text/html보다 우선하고(D4 우선순위는 콜백 등록 여부와 무관하게 동일), 다만
+// triggerMediaUpload 대신 localPreviewUrl·localPreviewFile attrs를 채운다.
+// 파일 2개 이상은 이 DELTA 범위 밖이라(다중 파일 로컬 프리뷰는 DELTA-03) 기존
+// "완전히 무시" 동작을 그대로 유지한다.
+describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-001 DELTA-02)", () => {
+  it("파일 1개 paste는 로컬 프리뷰 미디어 블록을 삽입한다", () => {
     const editor = createEditor({
       initialDocument: documentOf(
         paragraphBlock("p-1", "hello"),
@@ -438,17 +452,20 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
     placeCaretInBlock(tiptap, "p-1");
-    const before = editor.getDocument().blocks;
 
     withUnhandledErrorTracking((errors) => {
       pasteFiles(editable, [fileOf("photo.png", "image/png")]);
 
-      expect(editor.getDocument().blocks).toEqual(before);
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        mediaBlock("image", "id-1"),
+        tailParagraphBlock,
+      ]);
       expect(errors).toEqual([]);
     });
   });
 
-  it("uploadFile 미등록이면 drop의 파일 페이로드도 완전히 무시된다(문서 불변)", () => {
+  it("paste로 삽입한 노드의 PM attrs에 localPreviewUrl·localPreviewFile이 채워진다(모델에는 나타나지 않음)", () => {
     const editor = createEditor({
       initialDocument: documentOf(
         paragraphBlock("p-1", "hello"),
@@ -456,22 +473,59 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
       ),
       createId: sequentialIds("id"),
     });
-    const { editable } = mountTiptapEditor(editor);
+    const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
-    const before = editor.getDocument().blocks;
+    placeCaretInBlock(tiptap, "p-1");
+    const file = fileOf("photo.png", "image/png");
+
+    withUnhandledErrorTracking((errors) => {
+      pasteFiles(editable, [file]);
+      expect(errors).toEqual([]);
+    });
+
+    const pos = findBlockPosition(tiptap.state.doc, "id-1");
+    const node = pos === null ? null : tiptap.state.doc.nodeAt(pos);
+    expect(typeof node?.attrs.localPreviewUrl).toBe("string");
+    expect((node?.attrs.localPreviewUrl as string).startsWith("blob:")).toBe(
+      true,
+    );
+    expect(node?.attrs.localPreviewFile).toBe(file);
+    // RD-001 DELTA-01의 모델 왕복 제외 보증(media-block-codec.test.ts)이
+    // 실제 삽입 경로에서도 성립함을 여기서 다시 확인한다 — model에는
+    // url만 없는 평범한 image 블록만 남는다.
+    expect(editor.getDocument().blocks).toContainEqual(
+      mediaBlock("image", "id-1"),
+    );
+  });
+
+  it("파일 1개 drop도 로컬 프리뷰 미디어 블록을 삽입한다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    stubDropGeometry(tiptap, "p-1", { top: 100, height: 40 });
 
     withUnhandledErrorTracking((errors) => {
       dropFiles(editable, [fileOf("photo.png", "image/png")], {
         clientX: 0,
-        clientY: 0,
+        clientY: 130,
       });
 
-      expect(editor.getDocument().blocks).toEqual(before);
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        mediaBlock("image", "id-1"),
+        tailParagraphBlock,
+      ]);
       expect(errors).toEqual([]);
     });
   });
 
-  it("uploadFile 미등록이어도 같은 paste의 text/html은 기존 확장이 그대로 처리한다", () => {
+  it("파일과 text/html이 함께 있으면 콜백 미등록이어도 파일이 우선한다(html은 처리되지 않음, D4)", () => {
     const editor = createEditor({
       initialDocument: documentOf(
         paragraphBlock("p-1", "hello"),
@@ -493,7 +547,7 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
       const blocks = editor.getDocument().blocks;
       expect(
         blocks.some((block) => block.type === "file" || block.type === "image"),
-      ).toBe(false);
+      ).toBe(true);
       expect(
         blocks.some(
           (block) =>
@@ -503,7 +557,31 @@ describe("no-op 회귀 — 업로드 콜백 미등록(spec §4, IO-007 own 경�
                 Extract<InlineContentItem, { text: string }> | undefined
             )?.text === "world",
         ),
-      ).toBe(true);
+      ).toBe(false);
+      expect(errors).toEqual([]);
+    });
+  });
+
+  it("파일 2개 이상은 콜백 미등록이면 여전히 완전히 무시한다(다중 파일 로컬 프리뷰는 DELTA-03 범위)", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    placeCaretInBlock(tiptap, "p-1");
+    const before = editor.getDocument().blocks;
+
+    withUnhandledErrorTracking((errors) => {
+      pasteFiles(editable, [
+        fileOf("a.png", "image/png"),
+        fileOf("b.png", "image/png"),
+      ]);
+
+      expect(editor.getDocument().blocks).toEqual(before);
       expect(errors).toEqual([]);
     });
   });

@@ -11,6 +11,10 @@ import {
   filterUploadableFiles,
 } from "./media-drop-paste-detection.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
+import {
+  createLocalPreviewAttrs,
+  type LocalPreviewAttrs,
+} from "./media-local-preview.js";
 
 // spec §5.2 — File drop/paste가 media 블록을 만드는 신규 확장(RD-002
 // DELTA-01, roadmap `_works/roadmap/RD-002.md`). ClipboardPasteExtension·
@@ -19,7 +23,11 @@ import type { MediaBlockKind } from "./media-block-kind.js";
 // ProductionEditorSession.onTiptapUpdate의 activeReason===null 분기가
 // session 우회 dispatch도 "local" 변경으로 커밋한다(readiness probe 확인
 // 사실, RD-002.md "진입 조건"). 실제 업로드 콜백 호출은 이 확장의 책임이
-// 아니다(DELTA-02) — 여기서 만든 media 블록은 항상 url: null로 남는다.
+// 아니다(DELTA-02) — 콜백이 있으면 여기서 만든 media 블록은 항상
+// url: null로 남는다(uploadMediaFile이 비동기로 채운다). 콜백이 없으면
+// Issue #168 roadmap RD-001 DELTA-02부터 파일 1개는 로컬 프리뷰(ADR 0015)
+// attrs를 채운 채로 삽입한다 — 파일 2개 이상은 아직 DELTA-03 범위라 기존
+// "완전히 무시" 동작을 유지한다(아래 handlePaste/handleDrop 게이트).
 
 export type MediaDropPasteOptions = {
   createId: IdFactory;
@@ -79,11 +87,18 @@ const isEmptyParagraphContainer = (container: ProseMirrorNode): boolean => {
 // createId+NodeSelection+dispatch 10줄이 트랜잭션 생성 한 줄만 빼고 완전히
 // 동일해 병합했다. 거절되면(TRANSACTION_REJECTED, 희귀) null을 반환해
 // 체이닝을 멈추게 한다.
+//
+// localPreview(Issue #168 roadmap RD-001 DELTA-02) — null이면(콜백 있음)
+// 기존과 동일하게 blockId만 세팅한다. 값이 있으면(콜백 없음, 파일 1개)
+// 노드 생성과 같은 트랜잭션에 localPreviewUrl·localPreviewFile도 함께
+// 세팅한다 — 별도 후속 트랜잭션으로 나누면 삽입 직후 한 틱 동안 attrs
+// 없는 빈 미디어 블록이 화면에 보이는 깜빡임이 생긴다.
 const insertMediaAtTarget = (
   editor: Editor,
   target: MediaInsertTarget,
   kind: MediaBlockKind,
   createId: IdFactory,
+  localPreview: LocalPreviewAttrs | null,
 ): InsertOutcome => {
   const mediaType = editor.schema.nodes[kind];
   if (mediaType === undefined) {
@@ -92,7 +107,10 @@ const insertMediaAtTarget = (
     );
   }
   const blockId = createId();
-  const mediaNode = mediaType.create({ blockId });
+  const mediaNode = mediaType.create({
+    blockId,
+    ...(localPreview ?? {}),
+  });
   const transaction =
     target.mode === "replace"
       ? editor.state.tr.replaceWith(
@@ -266,17 +284,19 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
     return [
       new Plugin({
         props: {
-          // spec §4 "drag/drop·paste의 파일 페이로드는 무시한다"(IO-007 own
-          // 경계) — 업로드 콜백 미등록이면 파일 존재 여부조차 보기 전에
-          // false를 반환해, 파일이 실제로 있어도 기존 Table/ClipboardPaste
-          // 확장이 파일이 아예 없었던 것처럼 나머지 clipboard 데이터를
-          // 그대로 처리한다.
+          // 콜백이 있으면(isUploadEnabled) 항상 처리한다. 콜백이 없으면
+          // 파일 1개는 로컬 프리뷰로 처리하고(Issue #168 roadmap RD-001
+          // DELTA-02), 2개 이상은 아직 DELTA-03 범위 밖이라 R3 spec §4.1
+          // "drag/drop·paste의 파일 페이로드는 무시한다"(IO-007 own 경계,
+          // DELTA-02 이전 결정)를 그대로 유지한다 — false를 반환해 파일이
+          // 실제로 있어도 기존 Table/ClipboardPaste 확장이 파일이 아예
+          // 없었던 것처럼 나머지 clipboard 데이터를 그대로 처리하게 한다.
           handlePaste: (_view, event) => {
-            if (!isUploadEnabled) return false;
             const clipboardData = event.clipboardData;
             if (clipboardData === null) return false;
             const files = Array.from(clipboardData.files);
             if (files.length === 0) return false;
+            if (!isUploadEnabled && files.length > 1) return false;
 
             deleteNonEmptySelection(editor);
             const $pos = editor.state.selection.$from;
@@ -289,19 +309,22 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               target,
               firstKind,
               createId,
+              isUploadEnabled ? null : createLocalPreviewAttrs(firstFile),
             );
-            if (first !== null) triggerUpload(first.blockId, firstFile);
+            if (first !== null && isUploadEnabled) {
+              triggerUpload(first.blockId, firstFile);
+            }
             chainRemainingFiles(editor, createId, files, first, triggerUpload);
             return true;
           },
           handleDrop: (view, event) => {
-            if (!isUploadEnabled) return false;
             const dataTransfer = event.dataTransfer;
             if (dataTransfer === null) return false;
             const files = filterUploadableFiles(
               collectDropEntries(dataTransfer),
             );
             if (files.length === 0) return false;
+            if (!isUploadEnabled && files.length > 1) return false;
 
             // D7은 paste 전용이다 — drop 대상은 좌표가 정하므로 현재
             // selection(드롭 지점과 무관한 곳에 있을 수 있다)을 건드리지
@@ -322,8 +345,11 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               { mode: "insert", position: target.position },
               detectMediaBlockKind(firstFile),
               createId,
+              isUploadEnabled ? null : createLocalPreviewAttrs(firstFile),
             );
-            if (first !== null) triggerUpload(first.blockId, firstFile);
+            if (first !== null && isUploadEnabled) {
+              triggerUpload(first.blockId, firstFile);
+            }
             chainRemainingFiles(editor, createId, files, first, triggerUpload);
             event.preventDefault();
             return true;
