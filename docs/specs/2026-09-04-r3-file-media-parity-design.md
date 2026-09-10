@@ -103,8 +103,8 @@ export type UploadFile = (
 
 콜백은 core 편집기 생성 옵션으로 등록한다(ADR-0002 "react -> core" 방향 유지 — react는 이 옵션을 그대로 core에 전달만 한다). 콜백 미등록 시:
 
-- drag/drop·paste의 파일 페이로드는 무시한다(R2 결정 유지, IO-007 own 경계와 동일).
-- Slash 메뉴의 미디어 삽입은 File Panel의 URL 입력 경로만 노출한다(Upload 탭 없음).
+- drag/drop·paste의 파일 페이로드는 더 이상 무시하지 않는다(R2 결정 번복, Issue #168 roadmap RD-001) — 편집 세션 동안 화면에 보이는 로컬 프리뷰(`URL.createObjectURL` Blob URL)로 대체해 미디어 블록에 채운다. 로컬 프리뷰는 저장 원본(`url`)에 절대 왕복하지 않고(ADR-0015), 저장 후 재로드하면 업로드 대기 상태로 돌아간다. 라이브러리 소비자가 `EditorController.uploadMediaFile(blockId, file)`을 직접 호출하는 프로그래매틱 경로도 대상 블록에 `url`이 없으면 동일하게 로컬 프리뷰로 대체한다 — `url`이 이미 있는 교체 대상(`replaceMediaBlockFile`)은 여전히 거절한다.
+- Slash 메뉴의 미디어 삽입은 File Panel의 URL 입력 경로만 노출한다(Upload 탭 없음) — 이 분기는 바뀌지 않았다. Upload 탭은 `isUploadEnabled()===false`(콜백 미등록)면 UI에 렌더링되지 않으므로, File Panel 경유 로컬 프리뷰 대체 경로는 실질적으로 도달 불가능하다.
 
 ### 4.2 Pending 상태 — 비영속
 
