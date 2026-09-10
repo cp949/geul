@@ -9,9 +9,15 @@ import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
 import {
+  documentOf,
+  mediaBlock,
   mountTiptapEditor,
   sequentialIds,
+  tailParagraphBlock,
 } from "./editor-controller-support.js";
+
+const testFile = (name = "photo.png") =>
+  new File(["binary"], name, { type: "image/png" });
 
 // 마지막 top-level 블록을 자식 없는 빈 paragraph로 미리 둔다 — 아니면
 // TrailingBlockExtension이 로드 시 빈 paragraph를 자동 추가해(R2 슬라이스2
@@ -85,5 +91,51 @@ describe("production load/save — 4종 미디어 블록", () => {
 
     expect(result).toEqual({ ok: true, value: undefined });
     expect(editor.getDocument().blocks).toEqual(next.blocks);
+  });
+});
+
+// RD-002 완료 조건 5(Issue #168 roadmap DELTA-05) — 로컬 프리뷰(ADR 0015)는
+// getDocument()가 반환하는 저장 Document에 애초에 왕복하지 않는다(model
+// 스키마에 localPreviewUrl/localPreviewFile 필드 자체가 없다,
+// media-block-extension.ts "로컬 프리뷰" 주석) — 그래서 "저장 후 재로드"를
+// 새 createEditor() 인스턴스로 직접 재현해, 그 비영속이 실제로 화면
+// placeholder로 이어지는지까지 고정한다(codec 레벨 무손실 왕복만 보는
+// media-block-codec.test.ts와 다른 층위).
+describe("로컬 프리뷰 — 저장 후 재로드(Issue #168 roadmap RD-002 완료 조건 5)", () => {
+  it("로컬 프리뷰가 있는 이미지를 저장 후 재로드하면 로컬 프리뷰가 사라지고 업로드 대기 상태로 렌더된다", async () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("image", "image-1"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+      // uploadFile 콜백 미등록 — spec §4.1, 대상에 url이 없어 로컬 프리뷰로
+      // 대체되는 정상 경로(production-editor-media-upload.ts).
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+
+    expect(
+      await editor.commands.uploadMediaFile("image-1", testFile()),
+    ).toEqual({ ok: true, value: undefined });
+    // 저장 전 사전 조건: 로컬 프리뷰 배지 마커가 실제로 붙어 있다.
+    expect(
+      tiptap.view.dom
+        .querySelector('[data-geul-block-id="image-1"]')
+        ?.hasAttribute("data-geul-media-local-preview"),
+    ).toBe(true);
+
+    const saved = editor.getDocument();
+
+    const reloaded = createEditor({
+      initialDocument: saved,
+      createId: sequentialIds("id"),
+    });
+    const { tiptap: reloadedTiptap } = mountTiptapEditor(reloaded);
+    const wrapper = reloadedTiptap.view.dom.querySelector(
+      '[data-geul-block-id="image-1"]',
+    );
+
+    expect(wrapper?.hasAttribute("data-geul-media-local-preview")).toBe(false);
+    expect(wrapper?.getAttribute("data-geul-media-empty")).toBe("image");
   });
 });
