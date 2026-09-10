@@ -16,6 +16,7 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
+import { createDocumentIdAllocator } from "./document-id-factory.js";
 import type { EditorError } from "./errors.js";
 import type { TiptapJsonMark, TiptapJsonNode } from "./model-to-tiptap.js";
 import { tableCellFieldsFromAttrs } from "./table-model-codec.js";
@@ -174,10 +175,26 @@ const tableBlockFromTiptapJson = (
   return { ok: true, value: table };
 };
 
+// 문서에 이미 저장된 blockId를 전수 수집한다(Issue #171 RD-001-DELTA-01) —
+// tiptapToModel 진입부가 이 결과를 createDocumentIdAllocator의 occupiedIds
+// 씨앗으로 써서, resolveBlockId fallback이 새로 발급하는 id가 기존 id와도
+// 같은 변환 안에서 방금 발급한 id와도 충돌하지 않게 한다. blockId를 가질 수
+// 없는 노드(text 등)의 attrs.blockId는 항상 undefined라 안전하게 건너뛴다.
+const collectExistingBlockIds = (
+  node: TiptapJsonNode,
+  ids: Set<string>,
+): void => {
+  const blockId = node.attrs?.blockId;
+  if (typeof blockId === "string" && blockId.length > 0) ids.add(blockId);
+  for (const child of node.content ?? []) collectExistingBlockIds(child, ids);
+};
+
 // 저장된 blockId를 신뢰하고, 없거나 빈 문자열이면 createId로 새로 발급한다
 // (라이브 에디터가 BlockIdExtension의 appendTransaction으로 이미 채워
 // 넣지만, 이 디코더는 그 보장 없이 임의 JSON을 받는 경로에서도 안전해야
-// 한다).
+// 한다). 여기 넘어오는 createId는 tiptapToModel이 이미
+// createDocumentIdAllocator로 감싼 값이라(위 collectExistingBlockIds 참고)
+// 이 함수 자체는 유일성을 몰라도 된다.
 const resolveBlockId = (node: TiptapJsonNode, createId: IdFactory): string => {
   const savedId = node.attrs?.blockId;
   return typeof savedId === "string" && savedId.length > 0
@@ -582,11 +599,21 @@ export const tiptapToModel = (
   const customInlineContentTypes =
     options?.customInlineContentTypes ?? new Set<string>();
   const customStyleTypes = options?.customStyleTypes ?? new Set<string>();
+
+  // Issue #171 RD-001-DELTA-01 — resolveBlockId fallback이 발급하는 id가
+  // 문서 안 기존 blockId 및 같은 변환 안에서 방금 발급한 id와 충돌하지
+  // 않게, 재시도 안전한 allocator로 감싼 createId를 아래 재귀 전체에
+  // 넘긴다. decodeBlock/blockContainerToModel/resolveBlockId의 시그니처는
+  // 그대로다 — IdFactory 자리에 들어가는 값만 바뀐다.
+  const occupiedIds = new Set<string>();
+  collectExistingBlockIds(json, occupiedIds);
+  const idFactory = createDocumentIdAllocator(createId, occupiedIds);
+
   const blocks: Document["blocks"] = [];
   for (const node of json.content ?? []) {
     const decoded = decodeBlock(
       node,
-      createId,
+      idFactory,
       customBlockTypes,
       customInlineContentTypes,
       customStyleTypes,
