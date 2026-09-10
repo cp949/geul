@@ -336,8 +336,17 @@ export class ProductionEditorSession {
 
   destroy(): void {
     if (this.destroyed) return;
-    this.currentDocument = this.readEditorDocument(this.tiptapEditor);
-    this.currentDocument.revision = this.sessionRevision;
+    try {
+      this.currentDocument = this.readEditorDocument(this.tiptapEditor);
+      this.currentDocument.revision = this.sessionRevision;
+    } catch {
+      // Issue #170 roadmap RD-001 DELTA-02 — 이 라운드트립 재확인은
+      // 마지막으로 읽어둔 currentDocument를 최신화하려는 시도일 뿐이다.
+      // 실패해도(예: blockId 없는 자체-identity 노드가 세션 createId로
+      // 유일성 없이 채워져 충돌) 세션은 어차피 사라지는 중이므로 파괴
+      // 자체를 막을 이유가 없다 — currentDocument는 마지막으로 성공한
+      // 값을 유지한 채 나머지 파괴 절차를 계속한다.
+    }
     // Issue #168 roadmap RD-002 DELTA-03 — 세션이 영구히 사라지기 직전, 아직
     // 정리되지 않은 로컬 프리뷰(ADR 0015)가 남아 있으면 같은
     // onLocalPreviewCleanup 채널로 알려 react(RD-002)가 남은 Blob URL을
