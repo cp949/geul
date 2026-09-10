@@ -21,8 +21,12 @@
  * media-block-extension.test.ts가, react 소비는 RD-003/004·슬라이스5
  * DELTA-02가 소관이다.
  */
+import type { Document } from "@cp949/geul-model";
+import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
-import type { MediaBlockKind } from "../src/index.js";
+import { findBlockPosition } from "../src/block-position.js";
+import { createEditor, type MediaBlockKind } from "../src/index.js";
+import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   documentOf,
   editorState,
@@ -30,11 +34,13 @@ import {
   firstParagraphBlock,
   mediaBlock,
   mounted,
+  mountTiptapEditor,
   notApplicable,
   okResult,
   paragraphBlock,
   restored,
   secondParagraphBlock,
+  sequentialIds,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
 
@@ -46,6 +52,64 @@ const mediaKinds: readonly MediaBlockKind[] = [
 ];
 
 const twoBlocks = documentOf(firstParagraphBlock, secondParagraphBlock);
+
+/**
+ * `mounted()`와 같은 모양이되 `onLocalPreviewCleanup`을 추가로 배선한다
+ * (editor-controller-media-upload.test.ts::mountedWithUpload과 동일
+ * "로컬 override" 전례) — setMediaBlockUrl이 로컬 프리뷰를 정리하며 신호를
+ * 발생시키는지 검증할 때만 쓴다(Issue #168 roadmap RD-001 DELTA-05).
+ */
+const mountedWithLocalPreviewCleanup = (initialDocument: Document) => {
+  const changes: {
+    revision: number;
+    changedBlockIds: readonly string[];
+    reason: string;
+  }[] = [];
+  const localPreviewCleared: {
+    blockId: string;
+    localPreviewUrl: string;
+    localPreviewFile: File;
+  }[] = [];
+  const editor = createEditor({
+    initialDocument,
+    createId: sequentialIds("id"),
+    onChange: (event) => changes.push(event),
+    onLocalPreviewCleanup: (blockId, cleared) =>
+      localPreviewCleared.push({ blockId, ...cleared }),
+  });
+  return {
+    editor,
+    changes,
+    localPreviewCleared,
+    ...mountTiptapEditor(editor),
+  };
+};
+
+/**
+ * blockId 노드에 로컬 프리뷰(ADR 0015) attrs를 직접 채운다 —
+ * editor-controller-media-upload.test.ts::seedLocalPreview와 동일 근거
+ * (공개 명령 표면에는 "url도 있고 로컬 프리뷰도 있는 블록"을 만드는
+ * 경로가 없다).
+ */
+const seedLocalPreview = (
+  tiptap: TiptapEditor,
+  blockId: string,
+  file: File,
+): void => {
+  const position = findBlockPosition(tiptap.state.doc, blockId);
+  const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+  if (position === null || node === null) {
+    throw new Error(`블록 ${blockId} 조회 실패`);
+  }
+  const transaction = tiptap.state.tr.setNodeMarkup(position, undefined, {
+    ...node.attrs,
+    ...createLocalPreviewAttrs(file),
+  });
+  tiptap.view.dispatch(transaction);
+};
+
+const testFile = (name = "stale.png") =>
+  new File(["binary"], name, { type: "image/png" });
 
 /** 삽입 성공 Result 리터럴 — insertDivider 테스트와 같은 로컬 관례. */
 const inserted = (blockId: string) => ({ ok: true, value: { blockId } });
@@ -177,6 +241,46 @@ describe("setMediaBlockUrl", () => {
     ).toEqual(notApplicable("setMediaBlockUrl"));
     expect(editorState(editor, tiptap)).toEqual(before);
   });
+
+  // Issue #168 roadmap RD-001 DELTA-05 — url 확정 시 로컬 프리뷰(ADR 0015)
+  // 정리. runSetMediaBlockAttrCommand(공유 본체)가 localPreviewUrl 전환
+  // (문자열→null)을 감지해 신호를 발생시킨다 — command 문자열이 아니라
+  // attrs 상태로 판정하므로 아래 "다른 setter는 영향 없음" 테스트가 그
+  // 판정 방식 자체를 고정한다.
+  it("대상에 로컬 프리뷰가 있었으면 성공 시 attrs를 null로 정리하고 onLocalPreviewCleanup을 정리 전 값 그대로 1회 호출한다", () => {
+    const { editor, tiptap, localPreviewCleared } =
+      mountedWithLocalPreviewCleanup(documentOf(mediaBlock("image", "m-1")));
+    const staleFile = testFile();
+    seedLocalPreview(tiptap, "m-1", staleFile);
+
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "https://example.com/a.png"),
+    ).toEqual(okResult);
+
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    expect(node?.attrs.localPreviewUrl).toBeNull();
+    expect(node?.attrs.localPreviewFile).toBeNull();
+    expect(localPreviewCleared).toEqual([
+      {
+        blockId: "m-1",
+        localPreviewUrl: expect.stringContaining("blob:"),
+        localPreviewFile: staleFile,
+      },
+    ]);
+  });
+
+  it("대상에 로컬 프리뷰가 없었으면 성공해도 onLocalPreviewCleanup을 호출하지 않는다", () => {
+    const { editor, localPreviewCleared } = mountedWithLocalPreviewCleanup(
+      documentOf(mediaBlock("image", "m-1")),
+    );
+
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "https://example.com/a.png"),
+    ).toEqual(okResult);
+
+    expect(localPreviewCleared).toEqual([]);
+  });
 });
 
 describe("setMediaBlockName / setMediaBlockCaption", () => {
@@ -209,6 +313,28 @@ describe("setMediaBlockName / setMediaBlockCaption", () => {
       mediaBlock("file", "m-1"),
       tailParagraphBlock,
     ]);
+  });
+
+  // Issue #168 roadmap RD-001 DELTA-05 — setMediaBlockUrl과 같은 공유 본체
+  // (runSetMediaBlockAttrCommand)를 쓰지만 이 두 setter는 url을 세팅하지
+  // 않으므로 localPreviewUrl 전환(문자열→null) 자체가 일어나지 않는다.
+  // 공유 본체에 넣은 전환 감지가 이 두 setter를 오염시키지 않음을 고정한다.
+  it("로컬 프리뷰가 있어도 name/caption 세팅은 이를 건드리지 않고 onLocalPreviewCleanup을 호출하지 않는다", () => {
+    const { editor, tiptap, localPreviewCleared } =
+      mountedWithLocalPreviewCleanup(documentOf(mediaBlock("file", "m-1")));
+    seedLocalPreview(tiptap, "m-1", testFile());
+
+    expect(editor.commands.setMediaBlockName("m-1", "report.pdf")).toEqual(
+      okResult,
+    );
+    expect(editor.commands.setMediaBlockCaption("m-1", "분기 보고서")).toEqual(
+      okResult,
+    );
+
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    expect(typeof node?.attrs.localPreviewUrl).toBe("string");
+    expect(localPreviewCleared).toEqual([]);
   });
 });
 

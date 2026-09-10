@@ -20,6 +20,7 @@ import type {
 import type { Dictionary } from "./dictionary.js";
 import type { EditorError } from "./errors.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
+import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import type { EnabledBlockTypes } from "./model-to-tiptap.js";
 import type { SyntaxHighlighter } from "./syntax-highlight.js";
@@ -490,6 +491,15 @@ export type CreateEditorOptions = {
     blockId: string,
     state: MediaUploadState | null,
   ) => void;
+  // Issue #168 roadmap RD-001 DELTA-05 — 실제 url이 확정되는 두 지점
+  // (uploadMediaFile/replaceMediaBlockFile 성공, setMediaBlockUrl)에서
+  // 대상 블록에 로컬 프리뷰(ADR 0015)가 남아 있었으면 core가 attrs를
+  // null로 정리하고 이 옵션으로 정리된 값을 알린다. 실제
+  // URL.revokeObjectURL DOM 호출은 이 옵션의 소비자(RD-002) 몫이다 —
+  // core는 "언제 정리해야 하는지"만 판단해 신호로 넘긴다. onUploadStateChange
+  // 와 동일하게 문서 변경이 아니라 push 알림이다(로컬 프리뷰는 model에
+  // 왕복하지 않아 revision을 올리지 않는다).
+  onLocalPreviewCleanup?: (blockId: string, cleared: LocalPreviewAttrs) => void;
   // spec §3.3(DOC-009), RD-004-DELTA-01 — mount(element) 성공 직후 /
   // unmount() 직전 각각 무인자로 1회 발화한다. 세션 생성 시 내부
   // load-normalizing dummy mount/unmount(production-editor-assembly.ts)와

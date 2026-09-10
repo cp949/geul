@@ -12,8 +12,10 @@
  * 한다. react Upload UI(RD-003)는 이 DELTA 범위가 아니다.
  */
 import type { Document } from "@cp949/geul-model";
+import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
+import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import type { UploadFile, UploadResult } from "../src/index.js";
 import {
   createEditor,
@@ -58,15 +60,42 @@ const testFile = (name = "photo.png") =>
   new File(["binary"], name, { type: "image/png" });
 
 /**
+ * blockId 노드에 로컬 프리뷰(ADR 0015) attrs를 직접 채운다 — 공개 명령
+ * 표면에는 "이미 로컬 프리뷰가 있는 블록"을 만드는 경로가 없어(로컬
+ * 프리뷰는 콜백 부재를 전제하는데, 이 파일의 대상 블록은 콜백을 등록해
+ * 업로드 성공/정리를 검증해야 한다) `setBoldStoredMark`(list-item-
+ * block-type-support.ts)와 같은 방식으로 PM 트랜잭션을 직접 dispatch한다
+ * (RD-001 DELTA-05, 정리 신호 fixture 준비 전용).
+ */
+const seedLocalPreview = (
+  tiptap: TiptapEditor,
+  blockId: string,
+  file: File,
+): void => {
+  const position = findBlockPosition(tiptap.state.doc, blockId);
+  const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+  if (position === null || node === null) {
+    throw new Error(`블록 ${blockId} 조회 실패`);
+  }
+  const transaction = tiptap.state.tr.setNodeMarkup(position, undefined, {
+    ...node.attrs,
+    ...createLocalPreviewAttrs(file),
+  });
+  tiptap.view.dispatch(transaction);
+};
+
+/**
  * `mounted()`(list-item-block-type-support.ts)와 같은 모양이되 `uploadFile`/
- * `onUploadStateChange`를 추가로 배선한다(editor-controller-table-paste.test.ts의
- * 로컬 override 전례).
+ * `onUploadStateChange`/`onLocalPreviewCleanup`을 추가로 배선한다
+ * (editor-controller-table-paste.test.ts의 로컬 override 전례).
+ * `localPreviewCleared`는 RD-001 DELTA-05 전용 — override 없이도 항상
+ * 수집한다(changes/uploadStateChanges와 동일 패턴).
  */
 const mountedWithUpload = (
   initialDocument: Document,
   overrides: Pick<
     CreateEditorOptions,
-    "uploadFile" | "onUploadStateChange"
+    "uploadFile" | "onUploadStateChange" | "onLocalPreviewCleanup"
   > = {},
 ) => {
   const changes: {
@@ -78,15 +107,28 @@ const mountedWithUpload = (
     blockId: string;
     state: MediaUploadState | null;
   }[] = [];
+  const localPreviewCleared: {
+    blockId: string;
+    localPreviewUrl: string;
+    localPreviewFile: File;
+  }[] = [];
   const editor = createEditor({
     initialDocument,
     createId: sequentialIds("id"),
     onChange: (event) => changes.push(event),
     onUploadStateChange: (blockId, state) =>
       uploadStateChanges.push({ blockId, state }),
+    onLocalPreviewCleanup: (blockId, cleared) =>
+      localPreviewCleared.push({ blockId, ...cleared }),
     ...overrides,
   });
-  return { editor, changes, uploadStateChanges, ...mountTiptapEditor(editor) };
+  return {
+    editor,
+    changes,
+    uploadStateChanges,
+    localPreviewCleared,
+    ...mountTiptapEditor(editor),
+  };
 };
 
 describe("uploadMediaFile — 성공", () => {
@@ -180,6 +222,60 @@ describe("uploadMediaFile — 성공", () => {
   });
 });
 
+/**
+ * url이 확정되는 순간(성공) 남아 있던 로컬 프리뷰(ADR 0015) attrs를 core가
+ * 정리하고 `onLocalPreviewCleanup`으로 알린다(Issue #168 roadmap RD-001
+ * DELTA-05). 실제 `URL.revokeObjectURL` 호출은 이 신호의 소비자(RD-002)
+ * 몫이다.
+ */
+describe("uploadMediaFile — url 확정 시 로컬 프리뷰 정리(RD-001 DELTA-05)", () => {
+  it("대상에 로컬 프리뷰가 있었으면 성공 시 attrs를 null로 정리하고 onLocalPreviewCleanup을 정리 전 값 그대로 1회 호출한다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, localPreviewCleared } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+    const staleFile = testFile("stale.png");
+    seedLocalPreview(tiptap, "m-1", staleFile);
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/a.png",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    expect(node?.attrs.localPreviewUrl).toBeNull();
+    expect(node?.attrs.localPreviewFile).toBeNull();
+    expect(localPreviewCleared).toEqual([
+      {
+        blockId: "m-1",
+        localPreviewUrl: expect.stringContaining("blob:"),
+        localPreviewFile: staleFile,
+      },
+    ]);
+  });
+
+  it("대상에 로컬 프리뷰가 없었으면 성공해도 onLocalPreviewCleanup을 호출하지 않는다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, localPreviewCleared } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/a.png",
+    });
+    await uploadPromise;
+
+    expect(localPreviewCleared).toEqual([]);
+  });
+});
+
 describe("uploadMediaFile — 실패·취소", () => {
   it("status: error 결과는 문서 트랜잭션을 만들지 않고 pending 상태에만 code·message로 남는다", async () => {
     const { uploadFile, pending } = controllableUploadFile();
@@ -241,6 +337,33 @@ describe("uploadMediaFile — 실패·취소", () => {
       code: "UPLOAD_CALLBACK_THREW",
       message: expect.any(String),
     });
+  });
+
+  // RD-001 완료 조건 2 — 이 describe의 위 3개 테스트가 이미 editorState
+  // 전체 스냅샷 비교로 암묵적으로 고정하고 있었지만(로컬 프리뷰 attrs도
+  // 포함), 위 fixture들은 애초에 로컬 프리뷰가 없어 "건드릴 것 자체가
+  // 없는" 상태였다. 실제로 정리 대상이 있는데도 실패 시 건드리지 않음을
+  // 명시적으로 고정한다(다음 DELTA 선택 시점 재검토에서 발견 — 어느
+  // 예상 DELTA에도 배정되지 않은 채 남아 있던 조건).
+  it("대상에 로컬 프리뷰가 있어도 업로드가 실패하면 attrs를 건드리지 않고 onLocalPreviewCleanup도 호출하지 않는다(RD-001 조건 2)", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, localPreviewCleared } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+    seedLocalPreview(tiptap, "m-1", testFile("stale.png"));
+    const before = editorState(editor, tiptap);
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    pending[0]!.resolve({
+      status: "error",
+      code: "NETWORK_ERROR",
+      message: "업로드 실패",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(localPreviewCleared).toEqual([]);
   });
 });
 
@@ -510,6 +633,45 @@ describe("replaceMediaBlockFile — 성공", () => {
         name: "old.pdf",
       }),
       tailParagraphBlock,
+    ]);
+  });
+
+  // applyUploadedMediaAttrs는 uploadMediaFile과 완전히 같은 내부 메서드다
+  // (production-editor-media-upload.ts) — 위 "uploadMediaFile — url 확정
+  // 시 로컬 프리뷰 정리"가 이미 그 본체를 고정했으므로 여기서는 command가
+  // replaceMediaBlockFile이어도 같은 정리·신호가 그대로 동작함만 1개
+  // 테스트로 확인한다(RD-001 DELTA-05 완료 조건 C).
+  it("대상에 로컬 프리뷰가 있었으면 교체 성공 시에도 attrs를 정리하고 onLocalPreviewCleanup을 호출한다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, localPreviewCleared } = mountedWithUpload(
+      documentOf(
+        mediaBlock("image", "m-1", { url: "https://example.com/old.png" }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+    const staleFile = testFile("stale.png");
+    seedLocalPreview(tiptap, "m-1", staleFile);
+
+    const replacePromise = editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/new.png",
+    });
+    expect(await replacePromise).toEqual(okResult);
+
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    expect(node?.attrs.localPreviewUrl).toBeNull();
+    expect(localPreviewCleared).toEqual([
+      {
+        blockId: "m-1",
+        localPreviewUrl: expect.stringContaining("blob:"),
+        localPreviewFile: staleFile,
+      },
     ]);
   });
 });

@@ -23,6 +23,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
+import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import {
   type EnabledBlockTypes,
@@ -198,6 +199,13 @@ export class ProductionEditorSession {
       onUploadStateChange?: (
         blockId: string,
         state: MediaUploadState | null,
+      ) => void;
+      // Issue #168 roadmap RD-001 DELTA-05 — CreateEditorOptions와 동일
+      // 필드(editor-controller-types.ts 주석 참고). onUploadStateChange와
+      // 같은 자리에 둔다(둘 다 "문서 변경이 아닌 media 관련 push 알림").
+      onLocalPreviewCleanup?: (
+        blockId: string,
+        cleared: LocalPreviewAttrs,
       ) => void;
       onMount?: () => void;
       onUnmount?: () => void;
@@ -383,6 +391,15 @@ export class ProductionEditorSession {
     state: MediaUploadState | null,
   ): void {
     this.options.onUploadStateChange?.(blockId, state);
+  }
+
+  // MediaUploadHost 표면(production-editor-media-upload.ts::
+  // applyUploadedMediaAttrs)과 block-attribute-commands.ts::setMediaBlockUrl
+  // 공용 — url 확정 시 정리된 로컬 프리뷰를 알린다(Issue #168 roadmap
+  // RD-001 DELTA-05). notifyUploadStateChange와 동일한 "options private라
+  // 위임 메서드로 대신한다" 근거.
+  notifyLocalPreviewCleared(blockId: string, cleared: LocalPreviewAttrs): void {
+    this.options.onLocalPreviewCleanup?.(blockId, cleared);
   }
 
   // spec §4 — uploadMediaFile/replaceMediaBlockFile(editor-controller.ts)와

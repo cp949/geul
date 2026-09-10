@@ -91,6 +91,15 @@ export const createBlockAttributeCommands = (
   // "결정"). setNodeMarkup으로 attrs 일부만 바꿔도 나머지는 항상
   // node.attrs를 스프레드해 유지한다 — 부분 attrs를 넘기면 schema
   // default(null)로 리셋되는 함정을 그대로 피한다.
+  //
+  // Issue #168 roadmap RD-001 DELTA-05 — nextAttrs 적용 전후로
+  // localPreviewUrl 전환(문자열→null)을 감지해 커밋 성공 시
+  // session.notifyLocalPreviewCleared를 호출한다. 4개 호출자 중
+  // setMediaBlockUrl의 nextAttrs만 실제로 그 전환을 만든다(아래 참고) —
+  // Name/Caption/BackgroundColor는 localPreviewUrl을 전혀 건드리지 않아
+  // 이 감지가 자동으로 no-op이다. command 문자열 분기 대신 attrs 상태로
+  // 판정하므로 앞으로 url을 세팅하는 새 명령이 추가돼도 같은 정리가
+  // 자동으로 적용된다.
   const runSetMediaBlockAttrCommand = (
     command: string,
     blockId: string,
@@ -115,15 +124,28 @@ export const createBlockAttributeCommands = (
       const error = validate(value);
       if (error !== null) return { ok: false, error };
     }
-    return session.runDocumentCommand(command, "local", () => {
+    const updatedAttrs = nextAttrs(node.attrs, value);
+    const clearedLocalPreview =
+      typeof node.attrs.localPreviewUrl === "string" &&
+      updatedAttrs.localPreviewUrl === null
+        ? {
+            localPreviewUrl: node.attrs.localPreviewUrl,
+            localPreviewFile: node.attrs.localPreviewFile as File,
+          }
+        : null;
+    const result = session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        nextAttrs(node.attrs, value),
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });
+    if (result.ok && clearedLocalPreview !== null) {
+      session.notifyLocalPreviewCleared(blockId, clearedLocalPreview);
+    }
+    return result;
   };
 
   const isResizableMediaBlockKind = (name: string): name is "image" | "video" =>
@@ -307,7 +329,16 @@ export const createBlockAttributeCommands = (
         isSupportedLinkHref(value)
           ? null
           : { code: "LINK_HREF_REJECTED", href: value },
-      (attrs, value) => ({ ...attrs, url: value }),
+      // 로컬 프리뷰(ADR 0015)가 남아 있었으면 url 확정과 같은 트랜잭션에서
+      // 정리한다(RD-001 DELTA-05) — 신호 발생은 runSetMediaBlockAttrCommand가
+      // 이 전환(문자열→null) 자체를 감지해 담당한다.
+      (attrs, value) => ({
+        ...attrs,
+        url: value,
+        ...(attrs.localPreviewUrl === null
+          ? {}
+          : { localPreviewUrl: null, localPreviewFile: null }),
+      }),
     );
   const setMediaBlockName = (
     blockId: string,
