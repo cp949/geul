@@ -10,6 +10,7 @@ import {
   isSafeCodeBlockLanguageClassToken,
   type ListItemBlock,
   parseDocument,
+  type SyntaxHighlighter,
   type TableBlock,
   type TextBlockProps,
 } from "@cp949/geul-model";
@@ -20,6 +21,7 @@ import type { ExportError } from "../errors.js";
 import { blocksInlineContentViolation } from "../inline-content-violation.js";
 import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
+import { applyCodeBlockHighlighting } from "./code-block-highlight.js";
 import {
   type HtmlElementContent,
   type HtmlElementNode,
@@ -46,6 +48,10 @@ const stringifyProcessor = unified().use(rehypeStringify, {
 
 export type ExportHtmlOptions = {
   customBlockToHtml?: Record<string, (block: CustomBlock) => string>;
+  // spec §10(Issue #172) — codeBlock을 강조 span 포함 HTML로 내보낸다.
+  // exportHtml은 완전 동기라 Promise를 반환하는 결과는 기다리지 않고 해당
+  // 코드 블록만 plain으로 남긴다(ADR-0016, code-block-highlight.ts).
+  syntaxHighlighter?: SyntaxHighlighter;
 };
 
 // TextBlockProps(RD-001)를 가진 7개 블록 타입(paragraph/heading/quote/목록
@@ -597,6 +603,12 @@ export const exportHtml = (
         options?.customBlockToHtml,
       ),
     };
+    if (options?.syntaxHighlighter !== undefined) {
+      root.children = applyCodeBlockHighlighting(
+        root.children,
+        options.syntaxHighlighter,
+      );
+    }
     return {
       ok: true,
       // "raw" 노드는 hast-util-raw의 타입 확장 없이는 hast의 공식

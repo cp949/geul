@@ -6,7 +6,7 @@
  * public parser 결과로 고정한다.
  */
 import type { Document } from "@cp949/geul-model";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { exportHtml, importHtml, parseClipboardTable } from "../src/index.js";
 
@@ -66,6 +66,132 @@ describe("CodeBlock HTML 내보내기", () => {
       ok: true,
       value: '<pre data-geul-block-id="code-plain"><code>plain</code></pre>',
     });
+  });
+
+  it("syntaxHighlighter로 강조 span을 포함해 export한다(Issue #172, spec §10)", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-hl",
+          type: "codeBlock",
+          language: "typescript",
+          content: [{ text: "let x = 1;" }],
+        },
+      ],
+    };
+
+    expect(
+      exportHtml(document, {
+        syntaxHighlighter: () => [{ from: 0, to: 3, className: "keyword" }],
+      }),
+    ).toEqual({
+      ok: true,
+      value:
+        '<pre data-geul-block-id="code-hl"><code data-language="typescript" class="language-typescript"><span class="keyword">let</span> x = 1;</code></pre>',
+    });
+  });
+
+  it("syntaxHighlighter가 빈 배열을 반환하면(미지원 언어) plain과 동일하게 export한다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "code-empty", type: "codeBlock", content: [{ text: "plain" }] },
+      ],
+    };
+
+    expect(exportHtml(document, { syntaxHighlighter: () => [] })).toEqual({
+      ok: true,
+      value: '<pre data-geul-block-id="code-empty"><code>plain</code></pre>',
+    });
+  });
+
+  it("syntaxHighlighter가 Promise를 반환하면 해당 블록만 plain으로 export하고 console.warn을 낸다(ADR-0016)", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-async",
+          type: "codeBlock",
+          content: [{ text: "async source" }],
+        },
+      ],
+    };
+
+    const result = exportHtml(document, {
+      syntaxHighlighter: () =>
+        Promise.resolve([{ from: 0, to: 5, className: "keyword" }]),
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value:
+        '<pre data-geul-block-id="code-async"><code>async source</code></pre>',
+    });
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("겹치는 token은 먼저 온 token이 구간을 차지하고 크래시하지 않는다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-overlap",
+          type: "codeBlock",
+          content: [{ text: "abcdef" }],
+        },
+      ],
+    };
+
+    expect(
+      exportHtml(document, {
+        syntaxHighlighter: () => [
+          { from: 0, to: 4, className: "first" },
+          { from: 2, to: 6, className: "second" },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      value:
+        '<pre data-geul-block-id="code-overlap"><code><span class="first">abcd</span><span class="second">ef</span></code></pre>',
+    });
+  });
+
+  it("quote children 안에 중첩된 codeBlock도 강조한다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "quote-1",
+          type: "quote",
+          content: [],
+          children: [
+            {
+              id: "code-nested",
+              type: "codeBlock",
+              content: [{ text: "nested" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = exportHtml(document, {
+      syntaxHighlighter: () => [{ from: 0, to: 6, className: "tok" }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toContain(
+      '<pre data-geul-block-id="code-nested"><code><span class="tok">nested</span></code></pre>',
+    );
   });
 });
 
