@@ -468,6 +468,26 @@ export class ProductionEditorSession {
     }
 
     const replacement = this.createTiptapEditor(parsed.value);
+    // Issue #169 roadmap RD-001 DELTA-01 — 구 Editor를 폐기하기 직전, 그
+    // 상태에 남아 있던 로컬 프리뷰(ADR 0015) 전체를 destroy()(RD-002
+    // DELTA-03)와 동일한 패턴으로 onLocalPreviewCleanup에 통지한다. 새
+    // Editor(replacement)는 자신만의 빈 pending에서 시작하고
+    // EditorState.create()는 appendTransaction을 거치지 않아
+    // notifyLocalPreviewPendingChange가 생성 시점에 호출되지 않으므로,
+    // createTiptapEditor() 호출 뒤에도 this.pendingUnreachableLocalPreviews는
+    // 구 Editor 값 그대로다.
+    for (const [blockId, attrs] of collectLocalPreviewBlocks(
+      this.tiptapEditor.state.doc,
+    )) {
+      this.notifyLocalPreviewCleared(blockId, attrs);
+    }
+    for (const [blockId, attrs] of this.pendingUnreachableLocalPreviews) {
+      this.notifyLocalPreviewCleared(blockId, attrs);
+    }
+    // 위 스윕이 통지한 blockId를 리셋한다 — 리셋하지 않으면 이 세션 필드가
+    // 구 Editor의 blockId를 그대로 가리킨 채 남아, 이후 destroy()가 같은
+    // blockId를 다시 순회해 중복 통지한다("정확히 1회" 위반).
+    this.pendingUnreachableLocalPreviews = new Map();
     this.tiptapEditor.destroy();
     this.tiptapEditor = replacement;
     if (this.mountedElement !== null) {

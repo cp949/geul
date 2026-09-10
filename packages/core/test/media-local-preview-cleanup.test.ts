@@ -5,7 +5,11 @@
  * 방식은 `prosemirror-history` 공개 API(`undo`/`undoDepth`)만으로 실제
  * undo 스택을 시뮬레이션한다(비공개 상수 `DEPTH_OVERFLOW`에 의존하지
  * 않음). 정리 신호는 기존 `onLocalPreviewCleanup` 채널을 재사용한다(url
- * 확정 시 정리와 동일 채널 — RD-002.md "결정").
+ * 확정 시 정리와 동일 채널 — RD-002.md "결정"). Issue #169(roadmap RD-001
+ * DELTA-01, 상세 계획 `_works/roadmap/result/RD-001-DELTA-01.md`)부터
+ * `replaceDocument()`가 구 Editor를 폐기하기 직전 남은 로컬 프리뷰도 같은
+ * 채널로 통지한다 — `destroy()`(세션 영구 종료)와 동일한 패턴을 네 번째
+ * 트리거로 확장한다.
  */
 import type { Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -247,5 +251,131 @@ describe("로컬 프리뷰 세션 종료 시 잔여 정리(Issue #168 roadmap RD
     editor.destroy();
 
     expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
+  });
+});
+
+describe("로컬 프리뷰 replaceDocument() 교체 시 정리(Issue #169 roadmap RD-001 DELTA-01)", () => {
+  it("로컬 프리뷰가 있는 블록을 포함한 문서에서 replaceDocument()를 호출하면 그 로컬 프리뷰가 정확히 1회 통지된다", async () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
+      documentOf(
+        mediaBlock("image", "m-1"),
+        mediaBlock("image", "m-2", { url: "https://example.com/b.png" }),
+        tailParagraphBlock,
+      ),
+    );
+    await editor.commands.uploadMediaFile("m-1", testFile());
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    if (node === null) throw new Error("m-1 조회 실패");
+    const seededAttrs = {
+      localPreviewUrl: node.attrs.localPreviewUrl as string,
+      localPreviewFile: node.attrs.localPreviewFile as File,
+    };
+
+    expect(
+      editor.replaceDocument(
+        documentOf(paragraphBlock("p-1", "replaced"), tailParagraphBlock),
+      ),
+    ).toEqual(okResult);
+
+    // m-2는 이미 url이 확정돼 있어 대상이 아니다 — m-1만 정확히 1회.
+    expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
+  });
+
+  // doc 순회(collectLocalPreviewBlocks)만으로는 삭제된 뒤 undo-불가 판정
+  // 전이라 pending에만 남은 블록을 못 본다(DELTA-03과 동일 실측 근거) —
+  // replaceDocument()도 destroy()와 같은 두 번째 순회(pendingUnreachable
+  // LocalPreviews)가 필요하다는 것을 고정한다.
+  it("로컬 프리뷰가 있는 블록을 삭제한 직후(undo-불가 판정 전) replaceDocument()를 호출해도 정리 신호가 발생한다", async () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    await editor.commands.uploadMediaFile("m-1", testFile());
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    if (node === null) throw new Error("m-1 조회 실패");
+    const seededAttrs = {
+      localPreviewUrl: node.attrs.localPreviewUrl as string,
+      localPreviewFile: node.attrs.localPreviewFile as File,
+    };
+
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+    expect(
+      editor.replaceDocument(
+        documentOf(paragraphBlock("p-1", "replaced"), tailParagraphBlock),
+      ),
+    ).toEqual(okResult);
+
+    expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
+  });
+
+  it("로컬 프리뷰가 없는 문서에서 replaceDocument()를 호출해도 정리 신호가 발생하지 않는다", () => {
+    const { editor, localPreviewCleared } = mountedWithCleanup(
+      documentOf(
+        mediaBlock("image", "m-2", { url: "https://example.com/b.png" }),
+        tailParagraphBlock,
+      ),
+    );
+
+    expect(
+      editor.replaceDocument(
+        documentOf(paragraphBlock("p-1", "replaced"), tailParagraphBlock),
+      ),
+    ).toEqual(okResult);
+
+    expect(localPreviewCleared).toEqual([]);
+  });
+
+  // 완료 기준(후보) 3의 확인 항목(RD-001.md "결정") — 새 문서가 동일
+  // blockId로 블록을 유지해도 구 로컬 프리뷰는 정리 대상에서 배제되지
+  // 않는다. 로컬 프리뷰 attrs는 model에 왕복하지 않으므로(ADR 0015) 새
+  // m-1은 애초에 로컬 프리뷰를 이어받을 방법이 없다 — 스윕이 blockId
+  // 생존 여부로 배제하는 로직을 잘못 추가하면 이 테스트가 잡는다.
+  it("교체 후에도 동일 blockId로 블록이 남아도 구 로컬 프리뷰는 정리 대상에서 배제되지 않는다", async () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    await editor.commands.uploadMediaFile("m-1", testFile());
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    if (node === null) throw new Error("m-1 조회 실패");
+    const seededAttrs = {
+      localPreviewUrl: node.attrs.localPreviewUrl as string,
+      localPreviewFile: node.attrs.localPreviewFile as File,
+    };
+
+    expect(
+      editor.replaceDocument(
+        documentOf(
+          mediaBlock("image", "m-1", { caption: "replaced" }),
+          tailParagraphBlock,
+        ),
+      ),
+    ).toEqual(okResult);
+
+    expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
+  });
+
+  // 세션 필드(pendingUnreachableLocalPreviews)를 통해 통지한 blockId를
+  // replaceDocument()가 리셋하지 않으면, 뒤이은 destroy()가 같은 blockId를
+  // 다시 순회해 중복 통지한다 — "정확히 1회"(완료 조건 1)를 어기는 회귀를
+  // 고정한다.
+  it("replaceDocument()가 통지한 로컬 프리뷰는 뒤이은 destroy()에서 다시 통지되지 않는다", async () => {
+    const { editor, localPreviewCleared } = mountedWithCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    await editor.commands.uploadMediaFile("m-1", testFile());
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+
+    expect(
+      editor.replaceDocument(
+        documentOf(paragraphBlock("p-1", "replaced"), tailParagraphBlock),
+      ),
+    ).toEqual(okResult);
+    expect(localPreviewCleared).toHaveLength(1);
+
+    editor.destroy();
+
+    expect(localPreviewCleared).toHaveLength(1);
   });
 });

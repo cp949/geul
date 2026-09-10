@@ -512,6 +512,11 @@ export type CreateEditorOptions = {
   //      어디에도 걸리지 않고 남아 있던 로컬 프리뷰 전부(RD-002 DELTA-03) —
   //      `unmount()`(재마운트 가능한 DOM 분리)에는 걸지 않는다, `destroy()`
   //      뒤에는 그 세션이 다시 살아나지 않기 때문이다.
+  //   4. `replaceDocument()`로 문서를 교체해 구 Editor가 폐기되기 직전,
+  //      그때까지 위 시점들에 걸리지 않고 구 Editor에 남아 있던 로컬
+  //      프리뷰 전부(Issue #169 roadmap RD-001 DELTA-01) — 로컬 프리뷰는
+  //      model에 왕복하지 않아(ADR 0015) 새 문서가 같은 blockId를 쓰더라도
+  //      이어받지 않는다.
   // 실제 URL.revokeObjectURL DOM 호출은 이 옵션의 소비자(RD-002, react)
   // 몫이다 — core는 "언제 정리해도 안전한지"만 판단해 신호로 넘긴다.
   // onUploadStateChange와 동일하게 문서 변경이 아니라 push 알림이다(로컬
