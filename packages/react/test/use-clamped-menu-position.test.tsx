@@ -254,6 +254,30 @@ describe("useClampedMenuPosition", () => {
     expect(probe.dataset.top).toBe("684");
   });
 
+  it("topRight: 앵커가 박스 우상단이 되도록 정렬하면 좌표를 그대로 쓴다", () => {
+    stubMenuRect(200, 100);
+    // dx=-200, dy=0 → left=500이면 렌더 박스는 [300,500] 구간, 여백 안.
+    const { getByTestId } = render(
+      <Probe anchor="topRight" left={500} top={100} />,
+    );
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("500");
+    expect(probe.dataset.top).toBe("100");
+  });
+
+  it("topRight: 우상단 정렬로 박스가 뷰포트 왼쪽으로 넘치면 최소 여백까지 오른쪽으로 민다", () => {
+    stubMenuRect(300, 100);
+    // dx=-300 → minLeft = 8 - (-300) = 308.
+    const { getByTestId } = render(
+      <Probe anchor="topRight" left={100} top={100} />,
+    );
+    const probe = getByTestId("probe");
+
+    expect(probe.dataset.left).toBe("308");
+    expect(probe.dataset.top).toBe("100");
+  });
+
   it("leftOfAnchor: 고정 -56px 이동한 박스가 뷰포트 왼쪽으로 넘치면 최소 여백까지 오른쪽으로 민다", () => {
     stubMenuRect(60, 24);
     // dx=-56, dy=0 → minLeft = 8+56=64.

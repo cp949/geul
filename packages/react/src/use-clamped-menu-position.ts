@@ -54,9 +54,17 @@ const LEFT_OF_ANCHOR_OFFSET_PX = LEFT_OF_ANCHOR_REM * ASSUMED_ROOT_FONT_SIZE_PX;
  *   위쪽 뒤집기지만 가로는 그대로 왼쪽 정렬을 유지한다.
  *   `CodeBlockLanguageCombobox`가 아래로 펼치면 다음 블록을 덮을 때만
  *   골라 쓴다.
+ * - `topRight`: `translate(-100%, 0)` — `topLeft`의 좌우 대칭. 렌더된 박스의
+ *   우상단이 곧 (left, top)이다. 우상단에 배치된 트리거 아래로 오른쪽 정렬된
+ *   팝업을 펼칠 때 쓴다.
  */
 export type ClampAnchor =
-  "topLeft" | "centerAbove" | "centerBelow" | "leftOfAnchor" | "aboveLeft";
+  | "topLeft"
+  | "centerAbove"
+  | "centerBelow"
+  | "leftOfAnchor"
+  | "aboveLeft"
+  | "topRight";
 
 type BoxOffset = { dx: number; dy: number };
 
@@ -72,6 +80,7 @@ const ANCHOR_OFFSETS: Record<
   centerBelow: (rect) => ({ dx: -rect.width / 2, dy: ANCHOR_BOX_GAP_PX }),
   leftOfAnchor: () => ({ dx: -LEFT_OF_ANCHOR_OFFSET_PX, dy: 0 }),
   aboveLeft: (rect) => ({ dx: 0, dy: -rect.height - ANCHOR_BOX_GAP_PX }),
+  topRight: (rect) => ({ dx: -rect.width, dy: 0 }),
 };
 
 /**
