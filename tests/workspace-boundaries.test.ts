@@ -103,9 +103,9 @@ const allowedDependencies = {
     dependencies: {
       "@cp949/geul-io": "workspace:*",
       "@cp949/geul-model": "workspace:*",
-      "@tiptap/core": "3.30.1",
-      "@tiptap/pm": "3.30.1",
-      "@tiptap/starter-kit": "3.30.1",
+      "@tiptap/core": "3.31.3",
+      "@tiptap/pm": "3.31.3",
+      "@tiptap/starter-kit": "3.31.3",
       "prosemirror-highlight": "0.16.0",
     },
     devDependencies: { "@types/node": "22.20.1" },
