@@ -31,8 +31,11 @@
     font-size: 0.9rem;
   }
 
+  // margin: 0.75rem 0 — codeBlock과 같은 이유(아래 주석)로 바꿨다. 인접
+  // blockquote끼리도 이전엔 0이라 왼쪽 색상 테두리가 바로 맞닿아 시각적으로
+  // 붙어 보였다.
   blockquote {
-    margin: 0;
+    margin: 0.75rem 0;
     padding-left: 1rem;
     border-left: 3px solid var(--geul-color-accent, #1a73e8);
     color: var(--geul-color-text-muted, #5f6368);
