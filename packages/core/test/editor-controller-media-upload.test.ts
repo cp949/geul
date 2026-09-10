@@ -786,3 +786,73 @@ describe("isUploadEnabled", () => {
     expect(editor.isUploadEnabled()).toBe(false);
   });
 });
+
+/**
+ * 처리 안 된 로컬 프리뷰(ADR 0015)를 pull 방식으로 조회한다(Issue #168
+ * roadmap RD-001 DELTA-06, RD-001.md 완료 조건 6). push/이벤트가 아니다
+ * (RD-001.md "결정") — 매 호출마다 현재 PM 문서를 다시 훑는다.
+ */
+describe("getPendingLocalPreviews(RD-001 DELTA-06)", () => {
+  it("로컬 프리뷰가 없으면 빈 배열을 반환한다", () => {
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    expect(editor.getPendingLocalPreviews()).toEqual([]);
+  });
+
+  it("콜백 미등록 상태로 삽입된 로컬 프리뷰를 blockId+File로 반환한다", async () => {
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    const file = testFile();
+    await editor.commands.uploadMediaFile("m-1", file);
+
+    expect(editor.getPendingLocalPreviews()).toEqual([
+      { blockId: "m-1", file },
+    ]);
+  });
+
+  it("여러 블록에 로컬 프리뷰가 있으면 문서 순서대로 전부 반환한다", async () => {
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), mediaBlock("file", "m-2")),
+    );
+    const fileA = testFile("a.png");
+    const fileB = testFile("b.pdf");
+    await editor.commands.uploadMediaFile("m-1", fileA);
+    await editor.commands.uploadMediaFile("m-2", fileB);
+
+    expect(editor.getPendingLocalPreviews()).toEqual([
+      { blockId: "m-1", file: fileA },
+      { blockId: "m-2", file: fileB },
+    ]);
+  });
+
+  it("url이 확정돼 정리되면(RD-001 DELTA-05) 더 이상 반환하지 않는다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+    seedLocalPreview(tiptap, "m-1", testFile());
+    expect(editor.getPendingLocalPreviews()).toHaveLength(1);
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/a.png",
+    });
+    await uploadPromise;
+
+    expect(editor.getPendingLocalPreviews()).toEqual([]);
+  });
+
+  it("media가 아닌 블록과 url이 이미 있는 블록은 포함하지 않는다", () => {
+    const { editor } = mountedWithUpload(
+      documentOf(
+        paragraphBlock("p-1", "text"),
+        mediaBlock("image", "m-1", { url: "https://example.com/a.png" }),
+      ),
+    );
+    expect(editor.getPendingLocalPreviews()).toEqual([]);
+  });
+});

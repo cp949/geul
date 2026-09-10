@@ -183,6 +183,14 @@ export interface EditorController {
   // CreateEditorOptions.onUploadStateChange로 push 알림한다(commands.
   // uploadMediaFile/cancelMediaUpload 주석 참고).
   getMediaUploadState(blockId: string): MediaUploadState | null;
+  // Issue #168 roadmap RD-001 DELTA-06 — 처리 안 된 로컬 프리뷰(ADR 0015)를
+  // pull 방식으로 조회한다(RD-001.md "결정" — push/이벤트 없음. uploadFile
+  // 콜백을 쓰는 호스트는 이미 삽입 시점에 반응하므로 이벤트까지 추가하면
+  // 중복이다). 현재 문서 트리를 그때그때 훑어 반환한다 — 별도 캐시나
+  // 세션 상태를 두지 않아 undo/redo·블록 삭제·DELTA-05의 정리 신호로
+  // 대상이 사라지면 다음 호출에서 자동으로 빠진다. 반환 순서는 PM
+  // descendants 순회 순서(문서 순서)를 따르되 계약으로 고정하지 않는다.
+  getPendingLocalPreviews(): { blockId: string; file: File }[];
   // spec §4.1 — uploadFile 콜백이 등록됐는지 여부. react Upload UI(RD-003)가
   // File Panel Upload 탭 노출 여부를 결정하는 유일한 판정 지점이다(콜백
   // 등록 시에만 true, "탭 자체 미노출" 계약). 파괴된 세션은 어떤 명령도

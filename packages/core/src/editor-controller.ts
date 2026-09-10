@@ -278,6 +278,30 @@ export const createEditor = (
       if (session.isDestroyed) return null;
       return session.getMediaUploadState(blockId);
     },
+    // Issue #168 roadmap RD-001 DELTA-06 — 별도 추적 맵을 두지 않고 현재
+    // PM 문서를 descendants로 훑는다(findBlockPosition과 동일 전제 —
+    // blockId는 model 계층이 유일성을 보장한다). local preview attrs는
+    // model에 왕복하지 않아(ADR 0015) session.getDocument()/블록 트리
+    // 순회로는 찾을 수 없다 — 반드시 PM 노드를 직접 읽어야 한다.
+    getPendingLocalPreviews() {
+      if (session.isDestroyed) return [];
+      const pending: { blockId: string; file: File }[] = [];
+      session.editor.state.doc.descendants((node) => {
+        if (
+          isMediaBlockKind(node.type.name) &&
+          typeof node.attrs.blockId === "string" &&
+          node.attrs.blockId.length > 0 &&
+          typeof node.attrs.localPreviewUrl === "string"
+        ) {
+          pending.push({
+            blockId: node.attrs.blockId,
+            file: node.attrs.localPreviewFile as File,
+          });
+        }
+        return true;
+      });
+      return pending;
+    },
     isUploadEnabled() {
       if (session.isDestroyed) return false;
       return session.uploadFile !== undefined;
