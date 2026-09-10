@@ -4,14 +4,47 @@
  * 편집 경로(paste 등)가 아니라 appendTransaction 자체의 재귀 탐색만
  * 겨눈 최소 재현이다. tiptap-to-model.test.ts에서 책임별로 분리했다.
  */
+import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import { createEditor } from "../src/index.js";
+import { createEditor, type CustomBlockDefinition } from "../src/index.js";
 import {
   mountTiptapEditor,
   paragraphDocument,
   sequentialIds,
 } from "./editor-controller-support.js";
+
+describe("blockId 발급과 top-level CustomBlock(Issue #170 RD-001 DELTA-01)", () => {
+  const widgetDefinition: CustomBlockDefinition = {
+    render: () => ({ element: document.createElement("div") }),
+  };
+
+  it("트레일링 정규화가 발급하는 새 id가 기존 CustomBlock id와 충돌해도 세션 생성이 실패하지 않는다", () => {
+    // top-level CustomBlock 하나로 끝나는 문서 — "빈 자식 없는 paragraph"로
+    // 끝나지 않아 로드 시 트레일링 paragraph 정규화가 발동한다.
+    // sequentialIds("id")의 첫 호출은 "id-1"을 반환한다 — CustomBlock이 이미
+    // 그 id를 쓰고 있어, BlockIdExtension이 CustomBlock id를 점유 id로
+    // 인식하지 못하면 새 trailing paragraph에 같은 "id-1"이 재발급된다.
+    const initialDocument: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [{ id: "id-1", type: "myWidget", content: "none" }],
+    };
+
+    let editor: ReturnType<typeof createEditor> | undefined;
+    expect(() => {
+      editor = createEditor({
+        initialDocument,
+        createId: sequentialIds("id"),
+        customBlocks: { myWidget: widgetDefinition },
+      });
+    }).not.toThrow();
+
+    const ids = editor?.getDocument().blocks.map((block) => block.id) ?? [];
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain("id-1");
+  });
+});
 
 describe("blockId 발급 재귀(D19)", () => {
   it("중첩 자식으로 삽입된 id 없는 컨테이너에도 appendTransaction이 id를 채운다", () => {
