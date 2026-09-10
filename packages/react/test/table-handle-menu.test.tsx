@@ -1150,6 +1150,106 @@ describe("메뉴 대상 인덱스가 무효화되면 자동으로 닫힌다", ()
       outsideButton.remove();
     }
   });
+
+  it("실패 알림이 뜬 상태에서 대상 행 자신이 무효화되면 메뉴와 알림이 함께 사라진다(Issue #65 항목9)", async () => {
+    // 전제 재현은 1305행 테스트("재조준되는 동안에도...")와 동일하다 —
+    // 텍스트색 없는 셀에 "Text color None"을 클릭하면 setCellFormat이
+    // no-op으로 보고 COMMAND_NOT_APPLICABLE로 거절해 "Action failed"
+    // 알림이 뜬다. 1305행은 대상보다 앞선 행을 지워 재조준(알림 유지)을
+    // 검증하지만, 이 테스트는 반대로 대상 행 자신을 지워 무효화 자동
+    // 닫힘이 메뉴뿐 아니라 그 메뉴 안에 남아 있던 알림도 함께 지우는지
+    // 확인한다 — 서로 다른 경계라 한쪽이 GREEN이어도 다른 쪽 회귀를
+    // 잡지 못한다.
+    const { editor, rowIds, table, tableBlockId } = renderRealTable({
+      rows: 3,
+      columns: 2,
+    });
+    fireEvent.pointerMove(table);
+    const rowHandles = screen.getAllByRole("button", { name: rowHandleLabel });
+    const middleRowHandle = rowHandles[1];
+    if (middleRowHandle === undefined) throw new Error("가운데 행 핸들 없음");
+    fireEvent.pointerDown(middleRowHandle, { pointerId: 1, clientY: 130 });
+    fireEvent.pointerUp(middleRowHandle, { pointerId: 1 });
+    fireEvent.click(middleRowHandle);
+    // 전제: 대상 행(가운데 행)에 아직 글자색이 없다 — 이미 색이 있었다면
+    // "없음" 클릭이 진짜로 지우는 성공 경로가 되어 이 테스트가 노리는
+    // 실패를 만들지 못한다.
+    expect(rowsOf(editor)[1]?.cells.map((cell) => cell.textColor)).toEqual([
+      undefined,
+      undefined,
+    ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
+    // 실패가 정말 재현됐는지 먼저 고정한다 — 이 전제가 없으면 뒤이은
+    // "메뉴와 알림이 함께 사라진다" 단언이 애초에 알림이 없었던 우연으로도
+    // 통과할 수 있다.
+    expect(screen.getByRole("alert").textContent).toBe("Action failed");
+
+    await act(async () => {
+      // 1305행(대상보다 앞선 행 삭제 → 재조준)과 반대로 대상 자신
+      // (rowIds[1], 인덱스 1)을 지운다 — 정체성 추적이 "삭제됨"으로
+      // 판정해 closeMenuOnInvalidation이 setMenuState(null)을 태워야 하는
+      // 경로다.
+      const deleted = editor.commands.deleteTableRow(tableBlockId, 1);
+      if (!deleted.ok) throw new Error("대상 행 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    // 대상 행이 정말 삭제됐는지 문서로 먼저 고정한다 — ok만 보면 다른
+    // 행이 지워져도 통과해 "대상 자신이 무효화되면"이라는 전제를 잃는다.
+    expect(rowsOf(editor).map((row) => row.id)).toEqual([rowIds[0], rowIds[2]]);
+    // 메뉴가 자동으로 닫히면(setMenuState(null) → TableHandleMenu
+    // 언마운트) 그 안의 useTableCommandFeedback이 로컬 state로 들고 있던
+    // actionError도 컴포넌트와 함께 사라진다 — 메뉴만 닫히고 알림만
+    // 남는 반쪽 상태가 없는지 두 역할을 함께 확인한다.
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("실패 알림이 뜬 상태에서 대상 열 자신이 무효화되면 메뉴와 알림이 함께 사라진다(Issue #65 항목9)", async () => {
+    // 위 행 버전과 같은 재현·같은 이유를 대상만 열로 바꿔 대칭 반복한다 —
+    // resolveMenuTargetIndex와 closeMenuOnInvalidation은 kind로 분기하는
+    // 같은 경로라 행에서만 검증하면 열 경로가 테스트 갭으로 남는다.
+    const { editor, columnIds, table, tableBlockId } = renderRealTable({
+      rows: 2,
+      columns: 3,
+    });
+    fireEvent.pointerMove(table);
+    const columnHandles = screen.getAllByRole("button", {
+      name: columnHandleLabel,
+    });
+    const middleColumnHandle = columnHandles[1];
+    if (middleColumnHandle === undefined)
+      throw new Error("가운데 열 핸들 없음");
+    fireEvent.pointerDown(middleColumnHandle, { pointerId: 1, clientX: 250 });
+    fireEvent.pointerUp(middleColumnHandle, { pointerId: 1 });
+    fireEvent.click(middleColumnHandle);
+    // 전제: 대상 열(가운데 열)의 두 행 셀 모두 아직 글자색이 없다 — 행
+    // 버전과 같은 이유다.
+    expect(rowsOf(editor).map((row) => row.cells[1]?.textColor)).toEqual([
+      undefined,
+      undefined,
+    ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text color None" }));
+    expect(screen.getByRole("alert").textContent).toBe("Action failed");
+
+    await act(async () => {
+      // 대상 자신(columnIds[1], 인덱스 1)을 지운다 — 행 버전과 대칭인
+      // 무효화 재현이다.
+      const deleted = editor.commands.deleteTableColumn(tableBlockId, 1);
+      if (!deleted.ok) throw new Error("대상 열 삭제 fixture 준비 실패");
+      await Promise.resolve();
+    });
+
+    // 대상 열이 정말 삭제됐는지 문서로 먼저 고정한다.
+    expect(tableBlockOf(editor).columns.map((column) => column.id)).toEqual([
+      columnIds[0],
+      columnIds[2],
+    ]);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("메뉴 대상 정체성 추적(Issue #65)", () => {
