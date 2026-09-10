@@ -13,6 +13,7 @@
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
+import { findBlockPosition } from "../src/block-position.js";
 import type { UploadFile, UploadResult } from "../src/index.js";
 import {
   createEditor,
@@ -284,10 +285,46 @@ describe("uploadMediaFile — 경합 가드", () => {
   });
 });
 
-describe("uploadMediaFile — 사전 조건", () => {
-  it("uploadFile 미등록 시 문서를 바꾸지 않고 COMMAND_NOT_APPLICABLE을 반환한다", async () => {
+/**
+ * 콜백 미등록 시 항상 COMMAND_NOT_APPLICABLE이던 기존 계약을 대상 블록의
+ * `url` 유무로 다시 나눈다(Issue #168 roadmap RD-001 DELTA-04). `url`이
+ * 아직 없으면(빈 placeholder — 파일선택 패널·프로그래매틱 삽입 직후)
+ * 로컬 프리뷰(ADR 0015) attrs로 대체하고, 이미 있으면(`replaceMediaBlockFile`
+ * 대상) 기존 거절을 유지한다 — 아래 "replaceMediaBlockFile — 사전 조건"이
+ * 그 절반을 이미 고정하고 있다.
+ */
+describe("uploadMediaFile — 로컬 프리뷰 폴백(콜백 미등록, RD-001 DELTA-04)", () => {
+  it("대상 블록에 url이 없으면 로컬 프리뷰 attrs를 채우고 ok:true를 반환하며, model에는 나타나지 않고 revision·onChange도 건드리지 않는다", async () => {
     const { editor, tiptap, changes } = mountedWithUpload(
       documentOf(mediaBlock("file", "m-1"), tailParagraphBlock),
+    );
+    const beforeDocument = editor.getDocument();
+    const file = testFile();
+
+    const result = await editor.commands.uploadMediaFile("m-1", file);
+    expect(result).toEqual(okResult);
+
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    expect(typeof node?.attrs.localPreviewUrl).toBe("string");
+    expect((node?.attrs.localPreviewUrl as string).startsWith("blob:")).toBe(
+      true,
+    );
+    expect(node?.attrs.localPreviewFile).toBe(file);
+
+    // 로컬 프리뷰는 model에 왕복하지 않는다(RD-001 조건 4·ADR 0015).
+    expect(editor.getDocument()).toEqual(beforeDocument);
+    // model이 바뀌지 않으므로 revision도 onChange도 건드리지 않는다(조건 F).
+    expect(changes).toEqual([]);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  it("대상 블록에 이미 url이 있으면(교체 대상) 로컬 프리뷰를 적용하지 않고 COMMAND_NOT_APPLICABLE을 반환한다", async () => {
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("file", "m-1", { url: "https://example.com/old.pdf" }),
+        tailParagraphBlock,
+      ),
     );
     const before = editorState(editor, tiptap);
 
@@ -297,6 +334,34 @@ describe("uploadMediaFile — 사전 조건", () => {
     expect(changes).toEqual([]);
   });
 
+  it("존재하지 않는 blockId는 BLOCK_NOT_FOUND이고 문서를 바꾸지 않는다", async () => {
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(mediaBlock("file", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+
+    const result = await editor.commands.uploadMediaFile("missing", testFile());
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  it("media가 아닌 블록 대상은 COMMAND_NOT_APPLICABLE이고 문서를 바꾸지 않는다", async () => {
+    const { editor, tiptap } = mountedWithUpload(
+      documentOf(paragraphBlock("block-1", "text"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+
+    const result = await editor.commands.uploadMediaFile("block-1", testFile());
+    expect(result).toEqual(notApplicable("uploadMediaFile"));
+    expect(editorState(editor, tiptap)).toEqual(before);
+  });
+});
+
+describe("uploadMediaFile — 사전 조건", () => {
   it("존재하지 않는 blockId는 BLOCK_NOT_FOUND이고 문서를 바꾸지 않는다", async () => {
     const { uploadFile } = controllableUploadFile();
     const { editor, tiptap, changes } = mountedWithUpload(

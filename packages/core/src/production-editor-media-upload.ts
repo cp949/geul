@@ -1,10 +1,12 @@
 import { isSupportedLinkHref, type Result } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { isMediaBlockKind } from "./media-block-kind.js";
+import { createLocalPreviewAttrs } from "./media-local-preview.js";
 import type {
   MediaUploadState,
   UploadFile,
@@ -19,6 +21,13 @@ const commandNotApplicable = (command: string): Result<never, EditorError> => ({
   ok: false,
   error: { code: "COMMAND_NOT_APPLICABLE", command },
 });
+
+// media-block-extension.ts의 nonEmptyString과 동일 판정(스키마 기본값
+// null, 빈 문자열도 "url 없음"으로 취급)이다. 그 파일은 renderHTML 전용
+// leaf 모듈이라 이 파일이 import하지 않는 관례를 따라(위 commandNotApplicable
+// 로컬 사본과 같은 근거) 로컬로 다시 둔다.
+const hasStoredUrl = (attrs: Record<string, unknown>): boolean =>
+  typeof attrs.url === "string" && attrs.url.length > 0;
 
 // ProductionEditorSession이 구현해야 할 최소 표면 — MediaUploadTracker가
 // 세션 내부 상태(currentDocument 등)에 직접 접근하지 않고 이 구조적
@@ -130,6 +139,30 @@ export class MediaUploadTracker {
     }).ok;
   }
 
+  // 로컬 프리뷰(ADR 0015, Issue #168 roadmap RD-001 DELTA-04)로 대체하는
+  // 분기 전용 dispatch — applyUploadedMediaAttrs와 달리
+  // this.host.runDocumentCommand를 거치지 않는다. localPreviewUrl/
+  // localPreviewFile은 model에 왕복하지 않아(tiptapToModel이 무시) 이
+  // attrs만 바꾼 트랜잭션은 runDocumentCommand의 commitDocument가 보는
+  // model diff가 항상 빈 배열이다 — 그대로 거치면 실제로는 적용됐는데도
+  // commandNotApplicable로 오탐 보고된다. 세션의 "문서 비저장 세션 필드"
+  // 원칙(getBlockSelection 등, revision·onChange를 건드리지 않는 상태)과
+  // 같은 근거로 view에 직접 dispatch한다. PM 히스토리(undo)는
+  // applyUploadedMediaAttrs와 동일하게 closeHistory로 독립 스텝을 만든다.
+  private applyLocalPreviewFallback(
+    position: number,
+    node: ProseMirrorNode,
+    file: File,
+  ): void {
+    const nextAttrs = { ...node.attrs, ...createLocalPreviewAttrs(file) };
+    const transaction = this.host.editor.state.tr.setNodeMarkup(
+      position,
+      undefined,
+      nextAttrs,
+    );
+    this.host.editor.view.dispatch(closeHistory(transaction));
+  }
+
   // spec §4 — uploadMediaFile/replaceMediaBlockFile(editor-controller.ts)와
   // MediaDropPasteExtension의 drop/paste 트리거(RD-002 DELTA-02) 공용
   // 본체다. editor-controller.ts::createEditor()의 옛 `runMediaUpload`
@@ -137,9 +170,15 @@ export class MediaUploadTracker {
   // ProductionEditorSession(options)` 다음 줄부터 정의돼 세션 생성자 안의
   // createTiptapEditor()가 만드는 MediaDropPasteExtension 시점엔 존재하지
   // 않았다(RD-002-DELTA-02.md "배경"). 콜백 호출 → pending "uploading" →
-  // 완료 분기 순으로 진행한다. 사전 조건 실패(파괴됨·콜백 미등록·대상
-  // 없음·대상이 media 아님·이미 진행 중)만 즉시 ok:false로 알리고, 콜백이
-  // 실제로 정착한 뒤의 성공/실패/취소는 항상 ok:true로 해결된다 — 결과는
+  // 완료 분기 순으로 진행한다. 사전 조건 실패(파괴됨·대상 없음·대상이
+  // media 아님·이미 진행 중)와 "콜백 미등록 + 대상에 이미 url 있음"만
+  // 즉시 ok:false로 알린다. "콜백 미등록 + 대상에 url 없음"(빈
+  // placeholder)은 사전 조건 실패가 아니라 로컬 프리뷰(ADR 0015)로
+  // 대체하는 정상 경로다(Issue #168 roadmap RD-001 DELTA-04) — paste/drop은
+  // 삽입 시점에 직접 로컬 프리뷰를 배선하고(DELTA-02·03), 이 메서드는
+  // 이미 존재하는 blockId를 대상으로 하는 파일선택 패널·프로그래매틱
+  // 경로(uploadMediaFile)를 담당한다. 콜백이 실제로 정착한 뒤의
+  // 성공/실패/취소는 항상 ok:true로 해결된다 — 결과는
   // getMediaUploadState()/onUploadStateChange로만 관찰한다(pending 상태가
   // 유일한 진실 소스, Promise 값과 이중 소스로 나누지 않는다). drop/paste
   // 트리거는 이 Promise를 기다리지 않고 fire-and-forget으로 호출한다(RD-001
@@ -150,10 +189,6 @@ export class MediaUploadTracker {
     file: File,
   ): Promise<Result<void, EditorError>> {
     if (this.host.isDestroyed) return commandNotApplicable(command);
-    const { uploadFile } = this.host;
-    if (uploadFile === undefined) {
-      return commandNotApplicable(command);
-    }
     const { doc } = this.host.editor.state;
     const position = findBlockPosition(doc, blockId);
     const node = position === null ? null : doc.nodeAt(position);
@@ -162,6 +197,14 @@ export class MediaUploadTracker {
     }
     if (!isMediaBlockKind(node.type.name)) {
       return commandNotApplicable(command);
+    }
+    const { uploadFile } = this.host;
+    if (uploadFile === undefined) {
+      if (hasStoredUrl(node.attrs)) {
+        return commandNotApplicable(command);
+      }
+      this.applyLocalPreviewFallback(position, node, file);
+      return { ok: true, value: undefined };
     }
     if (this.getMediaUploadController(blockId) !== null) {
       return commandNotApplicable(command);

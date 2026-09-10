@@ -473,9 +473,13 @@ export type CreateEditorOptions = {
     editor: EditorController;
     defaultPasteHandler: () => boolean;
   }) => boolean | undefined;
-  // spec §4.1 — 미등록 시 uploadMediaFile은 COMMAND_NOT_APPLICABLE로
-  // 거절되고, drag/drop·paste 파일 페이로드는 무시된다(R2 결정 유지,
-  // 슬라이스4 몫).
+  // spec §4.1(갱신 예정 — RD-001 완료 동기화, `RD-001.md` "결정" 참고) —
+  // 미등록 시 drag/drop·paste·파일선택 패널·uploadMediaFile 모두 대상에
+  // 아직 url이 없으면(신규 삽입) 로컬 프리뷰(ADR 0015) attrs로 대체한다
+  // (Issue #168 roadmap RD-001 DELTA-02~04). uploadMediaFile/
+  // replaceMediaBlockFile이 이미 url이 있는 대상(교체)을 향하면 여전히
+  // COMMAND_NOT_APPLICABLE로 거절한다 — 로컬 프리뷰는 "새 미디어를 일단
+  // 보여준다"는 목적이지 이미 성공한 미디어를 대체하지 않는다.
   uploadFile?: UploadFile;
   // spec §4.2 — pending 업로드 상태(session 전용) 변경 push 알림. 문서
   // 변경이 아니므로 onChange와 분리한다(DocumentChangeEvent는
