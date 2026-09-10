@@ -17,6 +17,7 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — `codeBlockLanguages`
 // 미지정 시(`useCodeBlockLanguages()` === undefined) 쓰는 기본 12개.
@@ -113,64 +114,74 @@ export const CodeBlockLanguageCombobox = () => {
     [element],
   );
 
-  useEffect(() => {
-    const updateFromSelection = () => {
-      const active = readActiveCodeBlock();
-      if (active === null) {
-        setLanguageState(null);
-        setOpen(false);
-        setSearch("");
-        return;
-      }
+  const updateFromSelection = useCallback(() => {
+    const active = readActiveCodeBlock();
+    if (active === null) {
+      setLanguageState(null);
+      setOpen(false);
+      setSearch("");
+      return;
+    }
 
-      updateAnchor(active.blockId);
-      const previous = languageStateRef.current;
-      if (previous === null || previous.blockId !== active.blockId) {
-        // 새 블록으로 전환(또는 최초 진입) — 팝오버를 닫고 검색을 버린다.
-        setLanguageState({ blockId: active.blockId, committed: active.value });
-        setOpen(false);
-        setSearch("");
-        return;
-      }
-      if (previous.committed !== active.value) {
-        setLanguageState({ blockId: active.blockId, committed: active.value });
-      }
-      // 같은 블록이고 committed 값도 그대로면 아무 것도 바꾸지 않는다 —
-      // 팝오버가 열려 있었으면 열린 채, 검색어도 그대로 유지한다.
-    };
+    updateAnchor(active.blockId);
+    const previous = languageStateRef.current;
+    if (previous === null || previous.blockId !== active.blockId) {
+      // 새 블록으로 전환(또는 최초 진입) — 팝오버를 닫고 검색을 버린다.
+      setLanguageState({ blockId: active.blockId, committed: active.value });
+      setOpen(false);
+      setSearch("");
+      return;
+    }
+    if (previous.committed !== active.value) {
+      setLanguageState({ blockId: active.blockId, committed: active.value });
+    }
+    // 같은 블록이고 committed 값도 그대로면 아무 것도 바꾸지 않는다 —
+    // 팝오버가 열려 있었으면 열린 채, 검색어도 그대로 유지한다.
+  }, [readActiveCodeBlock, updateAnchor]);
 
-    const ownerDocument = element?.ownerDocument;
-    ownerDocument?.addEventListener("selectionchange", updateFromSelection);
-    ownerDocument?.addEventListener("input", updateFromSelection);
-    updateFromSelection();
-    return () => {
-      ownerDocument?.removeEventListener(
-        "selectionchange",
-        updateFromSelection,
-      );
-      ownerDocument?.removeEventListener("input", updateFromSelection);
-    };
-  }, [element, readActiveCodeBlock, updateAnchor]);
+  // (Issue #173 QA) selectionchange/mouseup/keyup 이벤트 안에서 이
+  // 컴포넌트의 리스너를 곧바로 실행하면 매번 한 상호작용 전 selection을
+  // 본다 — 원인은 리스너 "등록 순서"다. ProseMirror(DOMObserver)도 같은
+  // document에 자기 selectionchange 리스너를 걸어 그 안에서 동기로
+  // state.selection을 flush하는데, 그 리스너는 EditorProvider의 mount
+  // effect(부모)에서 등록되고 이 컴포넌트의 리스너는 자식 effect에서
+  // 등록된다 — React가 자식 effect를 부모보다 먼저 실행하므로 이
+  // 컴포넌트의 리스너가 매번 PM 것보다 앞선 순번으로 붙는다. 같은
+  // 이벤트를 동기로 처리하는 한 PM의 flush가 항상 이 컴포넌트의 읽기
+  // 다음에 일어나 한 박자 밀린 값을 읽는다(실측: 클릭 N번째의 읽기가
+  // N-1번째 클릭의 위치를 가리킴). 매크로태스크 하나만큼 읽기를
+  // 미루면 그 사이 이벤트의 나머지 리스너(PM 포함)가 전부 끝나 있어
+  // 최신 selection을 본다 — connect 순서를 바꾸는 대신(공유 훅·PM
+  // 내부에 손대지 않고) 이 컴포넌트만 방어한다. 상호작용마다 여러
+  // 이벤트(mousedown+mouseup+selectionchange 등)가 겹쳐 들어오므로
+  // 타이머를 매번 새로 잡아(직전 예약분 취소) 상호작용당 실제 갱신은
+  // 한 번만 나가게 한다.
+  const deferredUpdateTimeoutRef = useRef<number | null>(null);
+  const deferredUpdateFromSelection = useCallback(() => {
+    const ownerWindow = element?.ownerDocument.defaultView;
+    if (ownerWindow === undefined || ownerWindow === null) {
+      updateFromSelection();
+      return;
+    }
+    if (deferredUpdateTimeoutRef.current !== null) {
+      ownerWindow.clearTimeout(deferredUpdateTimeoutRef.current);
+    }
+    deferredUpdateTimeoutRef.current = ownerWindow.setTimeout(() => {
+      deferredUpdateTimeoutRef.current = null;
+      updateFromSelection();
+    }, 0);
+  }, [element, updateFromSelection]);
 
   useEffect(() => {
     const ownerWindow = element?.ownerDocument.defaultView;
-    if (ownerWindow === undefined || ownerWindow === null) return;
-    const updateAnchorFromCurrentBlock = () => {
-      const current = languageStateRef.current;
-      if (current !== null) updateAnchor(current.blockId);
-    };
-
-    ownerWindow.addEventListener("scroll", updateAnchorFromCurrentBlock, true);
-    ownerWindow.addEventListener("resize", updateAnchorFromCurrentBlock);
     return () => {
-      ownerWindow.removeEventListener(
-        "scroll",
-        updateAnchorFromCurrentBlock,
-        true,
-      );
-      ownerWindow.removeEventListener("resize", updateAnchorFromCurrentBlock);
+      if (deferredUpdateTimeoutRef.current !== null) {
+        ownerWindow?.clearTimeout(deferredUpdateTimeoutRef.current);
+      }
     };
-  }, [element, updateAnchor]);
+  }, [element]);
+
+  useSelectionRefresh({ element, onUpdate: deferredUpdateFromSelection });
 
   const cancel = useCallback(() => {
     setOpen(false);

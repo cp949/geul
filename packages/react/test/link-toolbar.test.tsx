@@ -58,6 +58,7 @@ const fakeController = ({
   getDocument: vi.fn(),
   getSelectionMarks: vi.fn(() => [] as string[]),
   getSelectionLink: vi.fn(getSelectionLink),
+  getSelectionBlockType: vi.fn(() => null),
   getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {

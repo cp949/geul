@@ -15,7 +15,13 @@
  */
 
 import { DEFAULT_DICTIONARY, type CodeBlock } from "@cp949/geul-core";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SlashMenu } from "../src/index.js";
@@ -28,7 +34,26 @@ import {
 } from "./mount-editor.js";
 import { fireSelectionChange, selectText } from "./selection-events.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // 아래 flushDeferredUpdate가 켠 fake timer를 다음 테스트로 새지 않게
+  // 매번 되돌린다 — 켜지 않은 테스트에서는 no-op이다.
+  vi.useRealTimers();
+});
+
+/**
+ * selectionchange/mouseup/keyup 재조회를 한 매크로태스크 미루는
+ * deferredUpdateFromSelection(code-block-language-combobox.tsx, Issue #173
+ * QA — ProseMirror 자신의 selectionchange 핸들러보다 이 컴포넌트의 리스너가
+ * 먼저 등록돼 한 박자 밀린 selection을 읽던 문제의 수정)을 흘려보낸다.
+ * 호출부가 미리 `vi.useFakeTimers()`를 켜 둬야 한다 — 그래야 지연 갱신이
+ * 예약될 때부터 fake timer로 잡혀 여기서 동기로 확정할 수 있다.
+ */
+const flushDeferredUpdate = () => {
+  act(() => {
+    vi.runOnlyPendingTimers();
+  });
+};
 
 type CodeFixtureOptions = {
   blockId?: string;
@@ -135,6 +160,7 @@ describe("CodeBlock 언어 트리거 표시", () => {
   });
 
   it("CodeBlock 내부 range에서는 표시하고 일반 블록과 교차한 range에서는 숨긴다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     const rendered = mountCodeFixture({ withParagraph: true });
     const codeText = rendered.host.querySelector("code")?.firstChild;
     const paragraphText = rendered.host.querySelector("p")?.firstChild;
@@ -144,6 +170,7 @@ describe("CodeBlock 언어 트리거 표시", () => {
 
     selectText(codeText, 0, 5);
     fireSelectionChange();
+    flushDeferredUpdate();
     expect(languageButton()).toBeTruthy();
 
     const range = document.createRange();
@@ -154,6 +181,7 @@ describe("CodeBlock 언어 트리거 표시", () => {
     selection?.addRange(range);
     fireSelectionChange();
     fireSelectionChange();
+    flushDeferredUpdate();
     expect(queryLanguageButton()).toBeNull();
   });
 
@@ -169,8 +197,11 @@ describe("CodeBlock 언어 트리거 표시", () => {
   });
 
   it("따옴표와 백슬래시가 든 block id도 anchor로 찾아 코드블록 우상단에 위치를 계산한다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     mountCodeFixture({ blockId: 'a"b\\c' });
+    flushDeferredUpdate();
     fireEvent.scroll(window);
+    flushDeferredUpdate();
 
     const root = languageButton().closest<HTMLElement>(
       ".geul-code-block-language-trigger",
@@ -185,7 +216,9 @@ describe("CodeBlock 언어 트리거 표시", () => {
   });
 
   it("owner window scroll과 resize에서 활성 CodeBlock의 현재 rect로 트리거 anchor를 다시 계산한다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     const rendered = mountCodeFixture();
+    flushDeferredUpdate();
     const codeBlock = rendered.blocks[0];
     const root = languageButton().closest<HTMLElement>(
       ".geul-code-block-language-trigger",
@@ -209,6 +242,7 @@ describe("CodeBlock 언어 트리거 표시", () => {
       }) as DOMRect;
 
     fireEvent.scroll(window);
+    flushDeferredUpdate();
     // anchor = rect.right(=160), rect.top(=50).
     expect(root.style.left).toBe("160px");
     expect(root.style.top).toBe("50px");
@@ -216,6 +250,7 @@ describe("CodeBlock 언어 트리거 표시", () => {
     left = 60;
     bottom = 100;
     fireEvent(window, new Event("resize"));
+    flushDeferredUpdate();
     // anchor = rect.right(=180), rect.top(=70).
     expect(root.style.left).toBe("180px");
     expect(root.style.top).toBe("70px");
@@ -557,6 +592,7 @@ describe("CodeBlock 언어 팝오버 취소와 selection 동기화", () => {
   });
 
   it("다른 블록으로 전환하면 팝오버를 닫고 트리거도 숨긴다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     const rendered = mountCodeFixture({
       language: "javascript",
       withParagraph: true,
@@ -569,6 +605,7 @@ describe("CodeBlock 언어 팝오버 취소와 selection 동기화", () => {
     rendered.editable.focus();
     placeCaret(paragraph);
     fireSelectionChange();
+    flushDeferredUpdate();
 
     expect(queryLanguageButton()).toBeNull();
     expect(querySearchInput()).toBeNull();
@@ -576,6 +613,7 @@ describe("CodeBlock 언어 팝오버 취소와 selection 동기화", () => {
   });
 
   it("다른 CodeBlock으로 전환하면 팝오버를 닫고 그 블록의 committed 값을 트리거에 표시한다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     const rendered = mountCodeFixture({
       language: "javascript",
       secondCodeLanguage: "css",
@@ -589,6 +627,7 @@ describe("CodeBlock 언어 팝오버 취소와 selection 동기화", () => {
     rendered.editable.focus();
     placeCaret(secondCode);
     fireSelectionChange();
+    flushDeferredUpdate();
 
     expect(languageButton().textContent).toBe("CSS");
     expect(

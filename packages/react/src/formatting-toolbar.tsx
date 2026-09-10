@@ -358,6 +358,14 @@ export const FormattingToolbar = ({
 
   if (toolbarState === null) return null;
 
+  // codeBlock의 schema는 marks: ""라 Bold 등 인라인 서식·링크·색상이 전부
+  // 적용 불가하다(code-block-extension.ts, code-block-mark-guard-extension.ts가
+  // 같은 이유로 단축키를 막는다) — 블록 타입 select·Indent/Outdent는
+  // codeBlock에도 유효하니 그대로 두고, 적용될 수 없는 mark 버튼만 뺀다
+  // (Issue #173 QA).
+  const isCodeBlockSelection =
+    toolbarState.blockSelection?.blockType.type === "codeBlock";
+
   if (Component !== undefined) {
     const overridden = (
       <div
@@ -503,46 +511,51 @@ export const FormattingToolbar = ({
             />
           </>
         )}
-        {toolbarButtons.map(({ mark, label, icon, toggle }) => (
-          <IconButton
-            aria-pressed={toolbarState.activeMarks.includes(mark)}
-            className="geul-formatting-toolbar__mark-button"
-            icon={icon}
-            key={mark}
-            label={label}
-            onClick={(event) => {
-              // 키보드로 활성화한 button click은 WebKit에서 편집기의 DOM
-              // selection을 잃을 수 있다. 툴바가 표시될 때 자기 에디터에서
-              // 추적한 Range만 command 전에 복원한다. 포인터 click(detail > 0)은
-              // IconButton의 mousedown 기본 동작 억제 계약을 그대로 사용한다.
-              if (event.detail === 0) {
-                restoreEditorSelection(element, trackedRange.current);
-              }
-              toggle(editor);
-              setToolbarState((current) =>
-                current === null
-                  ? null
-                  : { ...current, activeMarks: editor.getSelectionMarks() },
-              );
-            }}
-          />
-        ))}
-        <IconButton
-          className="geul-formatting-toolbar__mark-button"
-          data-geul-color-trigger=""
-          icon={textColorIcon}
-          key="text-color"
-          label={dictionary.color.textLabel}
-          onClick={(event) => handleColorTriggerClick("text", event)}
-        />
-        <IconButton
-          className="geul-formatting-toolbar__mark-button"
-          data-geul-color-trigger=""
-          icon={backgroundColorIcon}
-          key="background-color"
-          label={dictionary.color.backgroundLabel}
-          onClick={(event) => handleColorTriggerClick("background", event)}
-        />
+        {!isCodeBlockSelection &&
+          toolbarButtons.map(({ mark, label, icon, toggle }) => (
+            <IconButton
+              aria-pressed={toolbarState.activeMarks.includes(mark)}
+              className="geul-formatting-toolbar__mark-button"
+              icon={icon}
+              key={mark}
+              label={label}
+              onClick={(event) => {
+                // 키보드로 활성화한 button click은 WebKit에서 편집기의 DOM
+                // selection을 잃을 수 있다. 툴바가 표시될 때 자기 에디터에서
+                // 추적한 Range만 command 전에 복원한다. 포인터 click(detail > 0)은
+                // IconButton의 mousedown 기본 동작 억제 계약을 그대로 사용한다.
+                if (event.detail === 0) {
+                  restoreEditorSelection(element, trackedRange.current);
+                }
+                toggle(editor);
+                setToolbarState((current) =>
+                  current === null
+                    ? null
+                    : { ...current, activeMarks: editor.getSelectionMarks() },
+                );
+              }}
+            />
+          ))}
+        {!isCodeBlockSelection && (
+          <>
+            <IconButton
+              className="geul-formatting-toolbar__mark-button"
+              data-geul-color-trigger=""
+              icon={textColorIcon}
+              key="text-color"
+              label={dictionary.color.textLabel}
+              onClick={(event) => handleColorTriggerClick("text", event)}
+            />
+            <IconButton
+              className="geul-formatting-toolbar__mark-button"
+              data-geul-color-trigger=""
+              icon={backgroundColorIcon}
+              key="background-color"
+              label={dictionary.color.backgroundLabel}
+              onClick={(event) => handleColorTriggerClick("background", event)}
+            />
+          </>
+        )}
       </div>
       {colorMenuState !== null && (
         <div

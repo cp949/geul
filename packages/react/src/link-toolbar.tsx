@@ -123,6 +123,14 @@ export const LinkToolbar = ({
       return;
     }
 
+    // codeBlock의 schema는 marks: ""라 link도 적용 불가하다
+    // (formatting-toolbar.tsx의 같은 가드 참고, Issue #173 QA).
+    if (editor.getSelectionBlockType()?.blockType.type === "codeBlock") {
+      setToolbarState({ mode: "closed" });
+      dismissSuppression.clear();
+      return;
+    }
+
     if (
       currentRange !== null &&
       dismissSuppression.isSuppressed(currentRange)
