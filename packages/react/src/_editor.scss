@@ -40,8 +40,13 @@
 
   // CodeBlock은 language metadata와 무관한 plain source 영역이다. syntax token
   // selector 없이 읽기 쉬운 고정폭 글꼴과 긴 줄의 가로 스크롤만 제공한다.
+  // margin: 0.75rem 0 — 이전엔 0이라 연속된 codeBlock끼리 배경·테두리가
+  // 바로 맞닿아 시각적으로 붙어 보였다(showcase syntax-highlighting-lowlight
+  // 3블록 예제에서 사용자가 스크린샷으로 지적). 인접 codeBlock 사이에서는
+  // 위/아래 margin이 CSS 표준대로 collapse해 0.75rem 하나만 적용된다(위아래
+  // 합산 아님).
   [data-geul-code-block] {
-    margin: 0;
+    margin: 0.75rem 0;
     padding: 0.75rem 1rem;
     overflow-x: auto;
     border: 1px solid var(--geul-color-border, #dadce0);
