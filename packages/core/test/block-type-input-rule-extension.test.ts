@@ -210,40 +210,45 @@ describe("checkListItem native shorthand exact 변환", () => {
   );
 });
 
-describe("코드 블록 펜스 native shorthand exact 변환", () => {
-  it.each([
-    ["```js", "javascript"],
-    ["```ts", "typescript"],
-    ["```", "text"],
-  ] as const)(
-    "exact %s 뒤 native space는 안정 ID를 보존한 codeBlock(language=%s)으로 변환한다",
-    (marker, language) => {
-      const { editor, tiptap } = mounted(
-        documentOf(
-          paragraphBlock("target", marker),
-          paragraphBlock("tail", "꼬리"),
-        ),
-      );
-      tiptap.commands.setTextSelection(
-        contentTextStart(tiptap, "target") + marker.length,
-      );
+describe("코드 블록 펜스 native shorthand 즉시 변환(Notion 동일, 공백 불필요)", () => {
+  it("exact ``` 세 번째 백틱 입력은 스페이스 없이 안정 ID를 보존한 codeBlock(language=text)으로 즉시 변환한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("target", "``"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 2);
 
-      expect(dispatchTextInput(tiptap, " ")).toBe(true);
-      expect(editor.getDocument().blocks[0]).toEqual(
-        codeBlockBlock("target", "", language),
-      );
-      expect(tiptap.state.selection.from).toBe(
-        contentTextStart(tiptap, "target"),
-      );
-    },
-  );
+    expect(dispatchTextInput(tiptap, "`")).toBe(true);
+    expect(editor.getDocument().blocks[0]).toEqual(
+      codeBlockBlock("target", "", "text"),
+    );
+    expect(tiptap.state.selection.from).toBe(
+      contentTextStart(tiptap, "target"),
+    );
+  });
+
+  it("2개 백틱만 있는 상태에서 스페이스 입력은 codeBlock으로 변환하지 않는다(스페이스는 더 이상 트리거가 아니다)", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("target", "``"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 2);
+
+    expect(dispatchTextInput(tiptap, " ")).toBe(false);
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphBlock("target", "``"),
+    );
+  });
 
   it.each([
-    ["선행 공백", " ```"],
-    ["문장 중간", "x```"],
-    ["2개 백틱만", "``"],
+    ["선행 공백", " `"],
+    ["문장 중간", "x`"],
   ])(
-    "%s 텍스트 뒤 native space는 codeBlock으로 변환하지 않는다",
+    "%s 텍스트 뒤 세 번째 백틱 입력은 codeBlock으로 변환하지 않는다",
     (_label, text) => {
       const { editor, tiptap } = mounted(
         documentOf(
@@ -255,25 +260,38 @@ describe("코드 블록 펜스 native shorthand exact 변환", () => {
         contentTextStart(tiptap, "target") + text.length,
       );
 
-      expect(dispatchTextInput(tiptap, " ")).toBe(false);
+      expect(dispatchTextInput(tiptap, "`")).toBe(false);
       expect(editor.getDocument().blocks[0]).toEqual(
         paragraphBlock("target", text),
       );
     },
   );
 
+  it("4번째 백틱 입력은 이미 3개인 문단을 codeBlock으로 변환하지 않는다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("target", "```"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 3);
+
+    expect(typeNativeText(tiptap, "`")).toBe(false);
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphBlock("target", "````"),
+    );
+  });
+
   it("자식 블록이 있는 문단은 codeBlock으로 변환하지 않는다(leafBlockContent는 blockGroup과 공존 불가)", () => {
     const child = paragraphBlock("child-1", "child");
     const { editor, tiptap } = mounted(
-      documentOf(paragraphBlock("target", "```js", [child])),
+      documentOf(paragraphBlock("target", "``", [child])),
     );
-    tiptap.commands.setTextSelection(
-      contentTextStart(tiptap, "target") + "```js".length,
-    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 2);
 
-    expect(dispatchTextInput(tiptap, " ")).toBe(false);
+    expect(dispatchTextInput(tiptap, "`")).toBe(false);
     expect(editor.getDocument().blocks[0]).toEqual(
-      paragraphBlock("target", "```js", [child]),
+      paragraphBlock("target", "``", [child]),
     );
   });
 });
@@ -353,16 +371,14 @@ describe("새 블록 타입 native shorthand 즉시 Backspace 복원", () => {
 
   it("codeBlock 변환 직후 Backspace는 marker 문단으로 복원한다", () => {
     const { editor, tiptap } = mounted(
-      documentOf(paragraphBlock("target", "```js"), paragraphBlock("tail", "")),
+      documentOf(paragraphBlock("target", "``"), paragraphBlock("tail", "")),
     );
-    tiptap.commands.setTextSelection(
-      contentTextStart(tiptap, "target") + "```js".length,
-    );
-    expect(dispatchTextInput(tiptap, " ")).toBe(true);
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 2);
+    expect(dispatchTextInput(tiptap, "`")).toBe(true);
 
     expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
     expect(editor.getDocument().blocks).toEqual([
-      paragraphBlock("target", "```js "),
+      paragraphBlock("target", "```"),
       paragraphBlock("tail", ""),
     ]);
   });

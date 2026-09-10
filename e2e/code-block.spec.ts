@@ -3,9 +3,12 @@
  * language 트리거·팝오버 실제 event·focus 순서와 Tab/Shift+Tab 브라우저
  * 동작을 검증한다. 저장형·revision·undo 계약은 core/react unit test가
  * 소유한다.
- * 슬라이스 9 RD-003 DELTA-01 — 펜스(```lang) native shorthand의 실제 브라우저
+ * 슬라이스 9 RD-003 DELTA-01 — 펜스(```) native shorthand의 실제 브라우저
  * 타이핑 경로(keydown→composition→input→DOM mutation)도 이 파일이 검증한다
- * (ADR-0007, RD-003.md "결정" (c)). 입력 규칙 로직 자체는 core 유닛 테스트
+ * (ADR-0007, RD-003.md "결정" (c)). Notion 동일 UX 요청으로 트리거를 세 번째
+ * 백틱 입력 즉시(공백 불필요)로 바꿨다 — "```js " 언어 즉석 지정 단축
+ * 입력은 폐기했다(공존 불가능, block-type-input-rule-extension.ts 주석
+ * 참고). 입력 규칙 로직 자체는 core 유닛 테스트
  * (block-type-input-rule-extension.test.ts)가 소유한다.
  * Issue #173(RD-002, roadmap "코드블록 언어 선택기 UX 개편") — language
  * combobox(입력=표시값)를 트리거 button + 팝오버(검색 input 분리)로
@@ -109,19 +112,19 @@ test("Slash /code는 빈 CodeBlock과 Code placeholder, plain monospace 스타�
   expect(style.overflowX).toBe("auto");
 });
 
-test("펜스 ```lang 입력은 production editor에서 codeBlock DOM으로 변환하고 language를 canonicalize한다 @core", async ({
+test("펜스 ``` 입력은 스페이스 없이 production editor에서 즉시 codeBlock DOM으로 변환한다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await editable.click();
-  await page.keyboard.type("```js ");
+  await page.keyboard.type("```");
 
   const codeBlock = editable.locator("pre[data-geul-code-block]");
   await expect(codeBlock).toBeVisible();
   await expect(codeBlock.locator("code")).toHaveText("");
 
   const trigger = page.getByRole("button", { name: "Code language" });
-  await expect(trigger).toHaveText("JavaScript");
+  await expect(trigger).toHaveText("Plain Text");
   await expect(editable).toBeFocused();
 });
 

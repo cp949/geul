@@ -2,7 +2,6 @@ import { Extension, InputRule } from "@tiptap/core";
 import type { Mark, NodeType } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextSelection } from "@tiptap/pm/state";
-import { canonicalizeCodeBlockLanguage } from "@cp949/geul-model";
 
 // heading(1~6)·quote·checkListItem·codeBlock 입력 규칙. list-input-rule-
 // extension.ts의 createListInputRule과 같은 계약이다 — 빈 paragraph
@@ -171,16 +170,18 @@ export const BlockTypeInputRuleExtension = Extension.create({
         checked: true,
       })),
       // codeBlock은 leafBlockContent라 위 allowsChildren 가드가 적용된다
-      // (RD-003.md "결정" (a)). 빈 language 캡처는 spec 4.3·기존 setBlockType
-      // 커맨드(generic-block-commands.ts)와 같은 계약으로 "text"를 쓴다
-      // (RD-003.md "결정" (d)).
-      createBlockTypeInputRule(/^```(\S*)\s$/, codeBlock, (match) => {
-        const captured = match[1] as string;
-        return {
-          language:
-            captured === "" ? "text" : canonicalizeCodeBlockLanguage(captured),
-        };
-      }),
+      // (RD-003.md "결정" (a)). Notion 동일 UX 요청으로 트리거를 세 번째
+      // 백틱 입력 즉시로 바꿨다(공백 불필요) — divider(`---`)와 같은
+      // "트리거 문자 자체가 즉시 발동" 패턴. "```js "처럼 펜스에 언어를
+      // 같이 타이핑해 즉석 지정하던 옛 단축 입력은 이 즉시 트리거와
+      // 구조적으로 공존 불가능하다(``` 매치 시점에 이미 paragraph →
+      // codeBlock으로 바뀌어 그 뒤 "js"는 codeBlock 내부 텍스트가 된다) —
+      // 언어는 항상 "text"로 시작하고 이후 언어 트리거 버튼+팝오버로
+      // 고른다(기존 setBlockType 커맨드의 빈 language 계약과 동일,
+      // generic-block-commands.ts).
+      createBlockTypeInputRule(/^```$/, codeBlock, () => ({
+        language: "text",
+      })),
     ];
   },
 });
