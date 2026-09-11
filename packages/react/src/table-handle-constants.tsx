@@ -37,12 +37,17 @@ export const expandButtonClassName = "geul-table-expand-button";
 // 쓰되, 재정렬(cursor: grab)이 아니라 1회성 액션이라 별도 클래스로 둔다.
 export const nestingButtonClassName = "geul-table-nesting-button";
 
-// 열 그립 전용(Notion 참고). 평소엔 표 상단 border line에 겹친 얇은 바로만
-// 있다가, 근처에 hover하면 pill로 펼쳐진다 — 행 그립은 이 대상이 아니다
-// (여기 한정, 확대 여부는 별도 검토). 시각 바(idle 3px)보다 hit box가 훨씬
+// 행/열 그립 공통(Notion 참고, 사용자 요청으로 행도 열과 동등하게 맞춤).
+// 평소엔 표 border line(열은 상단, 행은 좌측)에 겹친 얇은 바로만 있다가,
+// 근처에 hover하면 pill로 펼쳐진다. 시각 바(idle 3px)보다 hit box가 훨씬
 // 커야 "정확히 바 위"가 아니라 "근처"만 가리켜도 반응한다 — 그래서 두
 // 클래스로 나눈다: hit box(이 자체는 투명, hover 판정만 담당)와 그 안의
 // 실제 버튼(handleButtonClassName과 함께 붙여 idle/hover 두 상태를 가진다).
+// 행은 열의 축을 90도 돌린 거울상이다 — 열은 top/height가 transition되고
+// left는 고정, 행은 left/width가 transition되고 top은 고정된다
+// (table-handle-overlays.tsx, _table-handles.scss 참고).
+export const rowHandleHitClassName = "geul-table-row-handle-hit";
+export const rowHandleBarClassName = "geul-table-row-handle-bar";
 export const columnHandleHitClassName = "geul-table-column-handle-hit";
 export const columnHandleBarClassName = "geul-table-column-handle-bar";
 
@@ -69,6 +74,7 @@ export const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
 // 않는다. 모듈 스코프 상수로 두는 이유는 위와 같다.
 export const TABLE_HOVER_IGNORE_SELECTORS = [
   "[data-geul-table-row-handle]",
+  "[data-geul-table-row-handle-hit]",
   "[data-geul-table-column-handle]",
   "[data-geul-table-column-handle-hit]",
   "[data-geul-table-resize-handle]",

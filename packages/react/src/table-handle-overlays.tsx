@@ -10,6 +10,8 @@ import {
   indentTableIcon,
   nestingButtonClassName,
   outdentTableIcon,
+  rowHandleBarClassName,
+  rowHandleHitClassName,
   rowHandleIcon,
   selectTableIcon,
 } from "./table-handle-constants.js";
@@ -81,37 +83,59 @@ export const TableHandleOverlays = ({
   const dictionary = useDictionary();
   return (
     <>
+      {/* 행 그립은 평소 표 좌측 border line에 겹친 얇은 바, hover 시 pill로
+          펼쳐진다(Notion 참고, 사용자 요청으로 열과 동등하게 맞춤). hit
+          box(rowHandleHitClassName, left: geometry.left-18, width:30)가
+          시각 바(idle 3px)보다 훨씬 커서 "근처"만 가리켜도 반응한다 — 열의
+          축을 90도 돌린 거울상이다(top/height ↔ left/width). 실제 idle/
+          hover 전환(left·width·배경·아이콘 opacity)은 _table-handles.scss의
+          .geul-table-row-handle-bar + hit box :hover가 전부 맡는다. 이
+          컴포넌트는 hit box·버튼의 page-relative 좌표만 계산한다(버튼
+          자신의 left는 SCSS 소유 — 아래 style 주석 참고). */}
       {geometry.rows.map((row) => (
-        <IconButton
-          className={handleButtonClassName}
-          data-geul-table-row-handle=""
-          icon={rowHandleIcon}
+        <div
+          className={rowHandleHitClassName}
+          data-geul-table-row-handle-hit=""
           key={`row-${row.rowId}`}
-          label={dictionary.handle.dragRow}
-          onClick={(event) =>
-            onReorderHandleClick(
-              event,
-              "row",
-              geometry.tableBlockId,
-              row.rowId,
-              row.index,
-            )
-          }
-          onPointerDown={(event) =>
-            onReorderHandlePointerDown(
-              event,
-              "row",
-              geometry.tableBlockId,
-              row.rowId,
-              row.index,
-            )
-          }
           style={{
             position: "absolute",
-            left: geometry.left - 24,
             top: row.top + row.height / 2 - 10,
+            left: geometry.left - 18,
+            width: 30,
+            height: 20,
           }}
-        />
+        >
+          <IconButton
+            className={`${handleButtonClassName} ${rowHandleBarClassName}`}
+            data-geul-table-row-handle=""
+            icon={rowHandleIcon}
+            label={dictionary.handle.dragRow}
+            onClick={(event) =>
+              onReorderHandleClick(
+                event,
+                "row",
+                geometry.tableBlockId,
+                row.rowId,
+                row.index,
+              )
+            }
+            onPointerDown={(event) =>
+              onReorderHandlePointerDown(
+                event,
+                "row",
+                geometry.tableBlockId,
+                row.rowId,
+                row.index,
+              )
+            }
+            // left는 idle/hover 두 값을 오가며 transition해야 해서 여기서
+            // inline으로 고정하지 않는다 — inline style은 어떤 CSS
+            // 셀렉터보다도 우선순위가 높아 :hover 규칙이 못 이긴다.
+            // idle(left:17)·hover(left:7) 모두 _table-handles.scss의
+            // .geul-table-row-handle-bar가 소유한다.
+            style={{ position: "absolute", top: 0 }}
+          />
+        </div>
       ))}
       {/* 열 그립은 평소 표 상단 border line에 겹친 얇은 바, hover 시 pill로
           펼쳐진다(Notion 참고). hit box(columnHandleHitClassName, top:
@@ -238,14 +262,14 @@ export const TableHandleOverlays = ({
           height: geometry.bottom - geometry.top,
         }}
       />
-      {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
-          row 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열
-          중앙이라 더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md
-          "결정") — 새 clamp 로직 없이 기존 absolute 좌표 관용구를 그대로
-          쓴다(PIT-0011, G-UI-003). Select table 버튼(Issue #149)은 같은
-          클러스터를 24px씩 더 왼쪽으로 확장한다(left - 72) — Indent/
-          Outdent와 같은 top(geometry.top - 24)에서 20px 버튼 + 4px 간격을
-          그대로 반복해 겹치지 않는다. */}
+      {/* 좌상단 여백(geometry.left - 24 부근)은 row handle hit box(y가 첫
+          행 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열 중앙이라
+          더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md "결정") — 새
+          clamp 로직 없이 기존 absolute 좌표 관용구를 그대로 쓴다(PIT-0011,
+          G-UI-003). Select table 버튼(Issue #149)은 같은 클러스터를 24px씩
+          더 왼쪽으로 확장한다(left - 72) — Indent/ Outdent와 같은
+          top(geometry.top - 24)에서 20px 버튼 + 4px 간격을 그대로 반복해
+          겹치지 않는다. */}
       <IconButton
         className={nestingButtonClassName}
         data-geul-table-select=""
