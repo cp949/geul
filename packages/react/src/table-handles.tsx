@@ -22,6 +22,7 @@ import {
   TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS,
   TABLE_GRIP_MENU_SELECTOR,
   TABLE_HOVER_IGNORE_SELECTORS,
+  TABLE_HOVER_MARGIN_LEFT_PX,
   TABLE_MENU_DISMISS_ALLOW_SELECTORS,
   TABLE_MENU_SELECTOR,
 } from "./table-handle-constants.js";
@@ -298,7 +299,11 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
       // 벗어나기 전에는 hover를 유지한다 — 즉시 해제하면 핸들로 이동하는
       // 도중 핸들이 사라진다. usePointerHoverTarget은 candidate만 알 뿐
       // 이 히스테리시스를 모른다 — table-handles.tsx 전용 판단이라 콜백
-      // 안에 남긴다.
+      // 안에 남긴다. 왼쪽만 TABLE_HOVER_MARGIN_LEFT_PX(코너 클러스터
+      // 전용, table-handle-constants.tsx 선언부 참고 — 표 그립 버튼이
+      // HANDLE_HOVER_MARGIN보다 훨씬 멀어 그 값만 쓰면 버튼으로 이동하는
+      // 도중 hover가 먼저 풀려 클릭할 수 없었다, 사용자 보고)을 쓰고
+      // 나머지 세 방향은 그대로 HANDLE_HOVER_MARGIN이다.
       const currentId = hoverTableIdRef.current;
       if (currentId !== null && element !== null) {
         const table = findTable(element, currentId);
@@ -307,7 +312,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
           rect !== undefined &&
           rect.width > 0 &&
           rect.height > 0 &&
-          event.clientX >= rect.left - HANDLE_HOVER_MARGIN &&
+          event.clientX >= rect.left - TABLE_HOVER_MARGIN_LEFT_PX &&
           event.clientX <= rect.right + HANDLE_HOVER_MARGIN &&
           event.clientY >= rect.top - HANDLE_HOVER_MARGIN &&
           event.clientY <= rect.bottom + HANDLE_HOVER_MARGIN

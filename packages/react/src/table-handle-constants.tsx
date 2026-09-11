@@ -97,6 +97,23 @@ export const tableCornerGripOffsetPx = -(
 export const tableCornerPlusOffsetPx =
   tableCornerGripOffsetPx + CORNER_BUTTON_WIDTH_PX + CORNER_BUTTON_GAP_PX;
 
+// 코너 클러스터(표 그립 버튼)로 포인터가 이동하는 동안 표 hover를 유지하는
+// 여백(왼쪽 전용, table-handles.tsx가 쓴다) — 사용자 보고: "표 그립
+// 버튼은 hover 상태에서 표시되는데, 마우스를 그립 버튼 가까이 가져가면
+// 사라져버려서 클릭할 수가 없다". table-handle-constants.tsx의
+// HANDLE_HOVER_MARGIN(28)은 행/열 그립·add row/column rail(표 바깥
+// 4~24px)용으로 맞춘 값이라 표 그립 버튼의 가까운 가장자리(왼쪽
+// -tableCornerGripOffsetPx - CORNER_BUTTON_WIDTH_PX, 즉 46px 바깥)보다도
+// 좁다 — 그립 버튼까지 이동하는 도중 그 여백을 벗어나며 hover가 먼저
+// 풀려 버튼이 사라진다. tableCornerGripOffsetPx(버튼의 먼 가장자리)까지
+// 정확히 닿도록 그 값의 절댓값을 그대로 쓴다 — 따로 숫자를 하드코딩하면
+// TABLE_INDENT_PX가 바뀔 때 조용히 어긋난다. 왼쪽에만 적용한다 — 표
+// 4면 전부에 이 넓은 여백을 쓰면 block-side-menu.tsx의
+// BLOCK_GUTTER_HOVER_MARGIN 선언부 주석과 같은 dead-zone 역전(표 hover가
+// 아래 다음 블록까지 번짐)이 난다. 블록은 좌우로 나란히 배치되지 않고
+// 세로로만 쌓이므로 왼쪽으로 넓히는 쪽은 그 위험이 없다.
+export const TABLE_HOVER_MARGIN_LEFT_PX = -tableCornerGripOffsetPx;
+
 // 메뉴 패널 루트(table-handle-menu.tsx)에 붙는 안정 셀렉터. 아래 두 배열과
 // table-handles.tsx의 초점 판정(Issue #65 항목4)이 모두 이 문자열을
 // 공유한다 — 세 번째 사용처를 리터럴로 또 추가하지 않는다.

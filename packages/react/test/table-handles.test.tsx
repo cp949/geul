@@ -792,6 +792,24 @@ describe("표 그립 버튼", () => {
     });
   });
 
+  // 사용자 보고 재현 — "표 그립 버튼은 hover 상태에서 표시되는데, 마우스를
+  // 그립 버튼 가까이 가져가면 사라져버려서 클릭할 수가 없다." 표 왼쪽
+  // 경계(100)와 그립 버튼의 가까운 가장자리(geometry.left +
+  // tableCornerGripOffsetPx + CORNER_BUTTON_WIDTH_PX = 100-70+24 = 54)
+  // 사이의 중간 지점(60)으로 옮긴다 — 기존 HANDLE_HOVER_MARGIN(28)만
+  // 썼다면 100-28=72보다 왼쪽이라 이 지점에서 이미 hover가 풀려 버튼이
+  // 사라졌다. TABLE_HOVER_MARGIN_LEFT_PX(70)로 넓힌 뒤에는 100-70=30보다
+  // 오른쪽이라 hover가 유지돼야 한다.
+  it("표 왼쪽 경계에서 그립 버튼 쪽으로 이동하는 도중에도 그립 버튼이 유지된다", () => {
+    const { editable, table } = renderRealTable();
+    fireEvent.pointerMove(table);
+    expect(screen.queryByRole("button", { name: tableMenuLabel })).not.toBeNull();
+
+    fireEvent.pointerMove(editable, { clientX: 60, clientY: 110 });
+
+    expect(screen.queryByRole("button", { name: tableMenuLabel })).not.toBeNull();
+  });
+
   // 사용자 스크린샷 버그 재현 — 표 안에 커서를 두고 마우스는 다음 블록
   // 위에 있으면, 표 코너 클러스터(표 그립·Plus)와 다음 블록의
   // block-side-menu gutter가 동시에 보였다. 행/열 grip 클러스터는
