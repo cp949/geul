@@ -16,6 +16,58 @@
   }
 }
 
+// 열 그립 hit box — 투명, hover 판정 전용(table-handle-overlays.tsx 참고).
+// 시각 바(idle 3px)보다 훨씬 커서 정확히 바 위가 아니라 "근처"만 가리켜도
+// 안의 버튼이 pill로 펼쳐진다.
+.geul-table-column-handle-hit {
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+// idle: 표 상단 border line(0~1px)에 겹친 얇은 바 — hit box 기준
+// top:17px(=1.0625rem)/height:3px, 즉 hit box 하단(top+height=20px)에서
+// 위로 3px만 차지한다. hover(hit box 기준 top:7px/height:13px)로 펼쳐질
+// 때도 같은 하단(20px)에서 자라 border에서 돋아난 것처럼 보인다 — 여백에
+// 새로 나타나는 게 아니다. 아이콘은 idle 3px 안에 들어가지 않아 opacity로
+// 같이 숨긴다.
+.geul-table-handle.geul-table-column-handle-bar {
+  top: 1.0625rem;
+  height: 0.1875rem;
+  overflow: hidden;
+  border-color: transparent;
+  border-radius: 0.125rem;
+  background: var(--geul-color-text-muted, #5f6368);
+  transition:
+    top 130ms ease,
+    height 130ms ease,
+    border-radius 130ms ease,
+    border-color 130ms ease,
+    background 130ms ease;
+
+  svg {
+    opacity: 0;
+    transition: opacity 100ms ease;
+  }
+}
+
+.geul-table-column-handle-hit:hover .geul-table-handle.geul-table-column-handle-bar,
+.geul-table-column-handle-hit:focus-within
+  .geul-table-handle.geul-table-column-handle-bar {
+  top: 0.4375rem;
+  height: 0.8125rem;
+  border-color: var(--geul-color-border, #dadce0);
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  background: var(--geul-color-surface, #fff);
+
+  svg {
+    opacity: 1;
+    transition-delay: 30ms;
+  }
+}
+
 .geul-table-expand-button {
   height: 1.25rem;
   width: 1.25rem;

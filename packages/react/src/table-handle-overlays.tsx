@@ -2,6 +2,8 @@ import { IconButton } from "./icon-button.js";
 import type { TableGeometry } from "./table-handle-geometry.js";
 import {
   addIcon,
+  columnHandleBarClassName,
+  columnHandleHitClassName,
   columnHandleIcon,
   expandButtonClassName,
   handleButtonClassName,
@@ -105,37 +107,58 @@ export const TableHandleOverlays = ({
           }}
         />
       ))}
+      {/* 열 그립은 평소 표 상단 border line에 겹친 얇은 바, hover 시 pill로
+          펼쳐진다(Notion 참고). hit box(columnHandleHitClassName, top:
+          geometry.top-18, height:30)가 시각 바(idle 3px)보다 훨씬 커서
+          "근처"만 가리켜도 반응한다 — 실제 idle/hover 전환(top·height·배경·
+          아이콘 opacity)은 _table-handles.scss의 .geul-table-column-handle-bar
+          + hit box :hover가 전부 맡는다. 이 컴포넌트는 hit box·버튼의
+          page-relative 좌표만 계산한다(버튼 자신의 top은 SCSS 소유 — 아래
+          style 주석 참고). */}
       {geometry.columns.map((column) => (
-        <IconButton
-          className={handleButtonClassName}
-          data-geul-table-column-handle=""
-          icon={columnHandleIcon}
+        <div
+          className={columnHandleHitClassName}
+          data-geul-table-column-handle-hit=""
           key={`column-${column.columnId}`}
-          label={dictionary.handle.dragColumn}
-          onClick={(event) =>
-            onReorderHandleClick(
-              event,
-              "column",
-              geometry.tableBlockId,
-              column.columnId,
-              column.index,
-            )
-          }
-          onPointerDown={(event) =>
-            onReorderHandlePointerDown(
-              event,
-              "column",
-              geometry.tableBlockId,
-              column.columnId,
-              column.index,
-            )
-          }
           style={{
             position: "absolute",
             left: column.left + column.width / 2 - 10,
-            top: geometry.top - 24,
+            top: geometry.top - 18,
+            width: 20,
+            height: 30,
           }}
-        />
+        >
+          <IconButton
+            className={`${handleButtonClassName} ${columnHandleBarClassName}`}
+            data-geul-table-column-handle=""
+            icon={columnHandleIcon}
+            label={dictionary.handle.dragColumn}
+            onClick={(event) =>
+              onReorderHandleClick(
+                event,
+                "column",
+                geometry.tableBlockId,
+                column.columnId,
+                column.index,
+              )
+            }
+            onPointerDown={(event) =>
+              onReorderHandlePointerDown(
+                event,
+                "column",
+                geometry.tableBlockId,
+                column.columnId,
+                column.index,
+              )
+            }
+            // top은 idle/hover 두 값을 오가며 transition해야 해서 여기서
+            // inline으로 고정하지 않는다 — inline style은 어떤 CSS
+            // 셀렉터보다도 우선순위가 높아 :hover 규칙이 못 이긴다.
+            // idle(top:17)·hover(top:7) 모두 _table-handles.scss의
+            // .geul-table-column-handle-bar가 소유한다.
+            style={{ position: "absolute", left: 0 }}
+          />
+        </div>
       ))}
       {geometry.columns.flatMap((column) =>
         column.resizeSegments.map((segment) => (
