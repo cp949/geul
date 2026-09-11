@@ -59,6 +59,9 @@ type FakeControllerOptions = {
     blockId: string,
     file: File,
   ) => Promise<UploadMediaFileResult>;
+  // 드래그·드롭/paste가 uploadFile 콜백 없이 만든 로컬 프리뷰(ADR 0015).
+  // 기본값 []는 "로컬 프리뷰 없음"(대부분의 테스트가 전제하는 상태)이다.
+  getPendingLocalPreviews?: () => { blockId: string; file: File }[];
   dictionary?: Dictionary;
 };
 
@@ -68,6 +71,7 @@ const fakeController = ({
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
   uploadMediaFile = () => Promise.resolve({ ok: true, value: undefined }),
+  getPendingLocalPreviews = () => [],
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -88,6 +92,7 @@ const fakeController = ({
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isUploadEnabled: vi.fn(isUploadEnabled),
   getMediaUploadState: vi.fn(getMediaUploadState),
+  getPendingLocalPreviews: vi.fn(getPendingLocalPreviews),
   getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
@@ -136,6 +141,23 @@ describe("FilePanel 파일 패널", () => {
         ...emptyImageBlock,
         url: "https://example.com/pic.png",
       }),
+    });
+    renderPanel(controller);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("url은 없어도 로컬 프리뷰가 있는 미디어 블록을 선택하면 렌더링하지 않는다(드래그·드롭 UI 겹침 회귀, 2026-09-11 사용자 보고)", () => {
+    // uploadFile 콜백 없이 드래그·드롭/paste로 삽입된 미디어는 url이
+    // 계속 null이지만 로컬 프리뷰(ADR 0015)로 이미 이미지가 보인다.
+    // url===null만 보고 패널을 열면 이미 보이는 이미지 위에 곧바로
+    // 겹쳐 뜬다 — getPendingLocalPreviews()로 이 블록을 알아채 url이
+    // 있는 경우와 동일하게 취급해야 한다.
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+      getPendingLocalPreviews: () => [
+        { blockId: emptyImageBlock.blockId, file: new File(["x"], "x.png") },
+      ],
     });
     renderPanel(controller);
 

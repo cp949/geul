@@ -127,7 +127,18 @@ export const FilePanel = ({
       );
       return;
     }
-    if (media.url !== null) {
+    // 드래그·드롭/paste가 uploadFile 콜백 없이 만든 로컬 프리뷰(ADR 0015)는
+    // url이 계속 null이지만 이미 화면에 이미지가 보인다 — url===null만으로
+    // "빈 블록"이라 판정하면(RD-003 DELTA-01은 로컬 프리뷰보다 먼저 나온
+    // 설계라 이 경우를 몰랐다) 이 panel이 방금 보인 이미지 위에 곧바로
+    // 열려 겹쳐 보인다(사용자 보고, 2026-09-11 — "드래그&드롭하면 UI가
+    // 깨진다"). getPendingLocalPreviews()(core, 이미 존재하는 pull API)로
+    // 이 블록이 로컬 프리뷰를 갖고 있는지 확인해 url이 있는 경우와 동일하게
+    // 취급한다.
+    const hasLocalPreview = editor
+      .getPendingLocalPreviews()
+      .some((preview) => preview.blockId === media.blockId);
+    if (media.url !== null || hasLocalPreview) {
       // 이 panel이 소유한 블록에 URL을 적용한 경우 이름·업로드 결과를 계속
       // 보여준다. URL 적용이 만든 selectionchange가 panel을 먼저 닫으면 같은
       // 이벤트에서 MediaToolbar도 활성화돼 Escape 하나가 두 overlay를 함께
