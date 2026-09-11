@@ -963,12 +963,13 @@ test("표 그립 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 �
   expect(await domBlockIds(editable)).toEqual(["before", "table-1", "after"]);
 });
 
-// Issue #174 RD-003 — 표 그립 메뉴(제목 행/열 토글, 표 복제, 너비에
-// 맞추기 placeholder)를 실제 브라우저 레이아웃 위에서 검증한다. 단위
-// 테스트(table-grip-menu.test.tsx)는 jsdom 스텁 geometry로 같은 항목을
-// 이미 검증했다 — 여기서는 실제 hover/클릭 좌표와 메뉴 clamp가 실제
-// 레이아웃에서도 항목을 가리는지만 추가로 확인한다.
-test("표 그립 메뉴로 제목 행을 토글하고 표를 복제하고 너비에 맞추기 placeholder가 console.log만 남긴다 (Issue #174)", async ({
+// Issue #174 RD-003 — 표 그립 메뉴(제목 행/열 토글, 표 복제)를 실제
+// 브라우저 레이아웃 위에서 검증한다. 단위 테스트(table-grip-menu.test.tsx)는
+// jsdom 스텁 geometry로 같은 항목을 이미 검증했다 — 여기서는 실제 hover/클릭
+// 좌표와 메뉴 clamp가 실제 레이아웃에서도 항목을 가리는지만 추가로
+// 확인한다. "너비에 맞추기"는 실제 레이아웃 폭이 있어야 의미 있는 검증이라
+// 아래 별도 테스트(Issue #176)로 뗀다.
+test("표 그립 메뉴로 제목 행을 토글하고 표를 복제한다 (Issue #174)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -990,16 +991,42 @@ test("표 그립 메뉴로 제목 행을 토글하고 표를 복제하고 너비
     "data-geul-header-rows",
     "1",
   );
+});
+
+// Issue #176 — jsdom은 레이아웃을 계산하지 않아 clientWidth가 항상 0이다
+// (table-grip-menu.test.tsx는 Object.defineProperty로 흉내만 낸다). 실제
+// 재분배가 실제 편집 영역 폭과 맞아떨어지는지는 진짜 레이아웃이 있는
+// 여기서만 검증할 수 있다.
+test("표 그립 메뉴의 너비에 맞추기가 컬럼 폭을 편집 영역 폭에 맞춰 재분배한다 (Issue #176)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
 
   await table.locator("td").first().hover();
   await page.getByRole("button", { name: "Table menu" }).click();
-  const [message] = await Promise.all([
-    page.waitForEvent("console", {
-      predicate: (msg) => msg.text().includes("너비에 맞추기"),
+  await page.getByRole("menuitem", { name: "Fit to width" }).click();
+
+  const containerWidth = await table.evaluate(
+    (el) => el.parentElement?.clientWidth ?? 0,
+  );
+  const columnWidths = await table.locator("colgroup col").evaluateAll((cols) =>
+    cols.map((col) => {
+      const match = /width:\s*(\d+)px/.exec(col.getAttribute("style") ?? "");
+      return match === null ? 0 : Number(match[1]);
     }),
-    page.getByRole("menuitem", { name: "Fit to width (coming soon)" }).click(),
-  ]);
-  expect(message.text()).toContain("[TODO][너비에 맞추기]");
-  // placeholder라 문서를 바꾸지 않는다 — 표 개수가 그대로다.
-  await expect(editable.locator("table")).toHaveCount(2);
+  );
+
+  expect(columnWidths.reduce((sum, width) => sum + width, 0)).toBe(
+    containerWidth,
+  );
+  // 기본 표(2열, 동일 비율 160px)를 맞추면 절반씩 똑같이 나뉜다.
+  expect(columnWidths[0]).toBe(columnWidths[1]);
+
+  await page.keyboard.press("Control+z");
+
+  await expect(table.locator("colgroup col").first()).toHaveAttribute(
+    "style",
+    /width:\s*160px/,
+  );
 });
