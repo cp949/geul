@@ -196,7 +196,18 @@ export const TableHandleOverlays = ({
           깨지지 않는다. 크기도 표 전체 폭/높이를 덮는 rail로 바꿨다 —
           Add row는 표 아래 가로 막대, Add column은 표 오른쪽 세로
           막대(둘 다 :focus로도 보인다, Tab 접근성은 DOM에 항상
-          존재한다는 사실만으로 이미 보장되고 opacity와 무관하다). */}
+          존재한다는 사실만으로 이미 보장되고 opacity와 무관하다).
+
+          Add row는 top:2/height:12로 작게 잡는다 — 표 바로 아래 블록과의
+          기본 간격이 16px 정도로 좁아(실측), 이전처럼 top:8/height:24로
+          두면 표시된 rail이 그 블록 내용과 겹쳐 보이는 버그가 났다(사용자
+          스크린샷). 겹침은 pointer-events를 바꾸지 않는 한(위 이유로
+          바꿀 수 없다) hover 판정으로는 못 막는다 — rail 자신이 그 지점의
+          pointermove를 항상 가로채 버려 "다른 블록으로 넘어갔다"는 신호
+          자체가 안 온다. 그래서 자리 자체를 좁혀 간격 안에 넣는 게 유일한
+          방법이다. 아이콘(16px)은 이 작은 박스보다 커서 약간 넘치지만,
+          박스 자체(Playwright가 클릭 좌표로 쓰는 중심점의 기준)는 겹치지
+          않는다. */}
       <IconButton
         className={expandButtonClassName}
         data-geul-table-expand-row=""
@@ -207,9 +218,9 @@ export const TableHandleOverlays = ({
         style={{
           position: "absolute",
           left: geometry.left,
-          top: geometry.bottom + 8,
+          top: geometry.bottom + 2,
           width: geometry.right - geometry.left,
-          height: 24,
+          height: 12,
         }}
       />
       <IconButton

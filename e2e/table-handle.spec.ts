@@ -520,6 +520,57 @@ test("빠른 확장 버튼으로 행과 열을 추가하고 undo 1회로 복원�
   await expect(table.locator("tr").first().locator("td")).toHaveCount(3);
 });
 
+test("표 바로 아래 블록으로 마우스가 넘어가면 Add row rail이 사라진다", async ({
+  page,
+}) => {
+  // 재현: HANDLE_HOVER_MARGIN(28px) 여백 안(표 바로 아래 블록 포함)에서
+  // hoverRowId가 얼어붙은 채면, 그 블록 위로 마우스가 넘어간 뒤에도 rail이
+  // 계속 떠서 그 블록과 겹쳐 보인다(사용자 스크린샷 재현). 문단의
+  // "맨 위"를 골라 hover한다 — 문단 중앙은 표 하단에서 28px보다 멀어
+  // hoverTableId 자체가 풀리며 클러스터 전체가 사라지므로, 이 테스트가
+  // 노리는 "여백 안이지만 다른 블록" 경로를 못 탄다.
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+  const addRowButton = page.getByRole("button", { name: "Add row" });
+
+  await cell(2, 0).hover();
+  await expect(addRowButton).toHaveCSS("opacity", "1");
+
+  await editable
+    .locator("p")
+    .last()
+    .hover({ position: { x: 10, y: 2 } });
+  await expect(addRowButton).toHaveCSS("opacity", "0");
+});
+
+test("Add row rail이 보일 때 표 바로 아래 블록과 겹치지 않는다", async ({
+  page,
+}) => {
+  // 실측 기반 회귀 방지 — 특정 픽셀값이 아니라 "겹치지 않는다"는
+  // 불변식을 직접 확인한다. 나중에 블록 간격(host CSS)이 바뀌어도 이
+  // 테스트가 그 변화를 잡아낸다.
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+  const addRowButton = page.getByRole("button", { name: "Add row" });
+  const nextBlock = editable.locator("p").last();
+
+  await cell(2, 0).hover();
+  await expect(addRowButton).toHaveCSS("opacity", "1");
+
+  const [buttonBox, nextBlockBox] = await Promise.all([
+    addRowButton.boundingBox(),
+    nextBlock.boundingBox(),
+  ]);
+  if (buttonBox === null || nextBlockBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+  expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(nextBlockBox.y);
+});
+
 test("표 셀 편집으로 레이아웃이 밀린 뒤에도 표 핸들 오버레이가 마지막 열 셀 클릭을 가로채지 않는다", async ({
   page,
 }) => {

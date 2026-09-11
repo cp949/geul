@@ -198,6 +198,33 @@ export const TableHandles = () => {
           event.clientY >= rect.top - HANDLE_HOVER_MARGIN &&
           event.clientY <= rect.bottom + HANDLE_HOVER_MARGIN
         ) {
+          // 표 안은 아니지만(candidate === null) 여백 안 — hoverTableId는
+          // 유지해야 그립으로 이동하는 도중 클러스터가 안 사라진다. 하지만
+          // Add row/column rail은 이제 표 폭·높이 전체를 덮어 표 바로
+          // 아래·오른쪽 여백에 다음 블록이 바짝 붙어 있으면 겹친다 — 그
+          // 다음 블록 위로 마우스가 넘어간 뒤에도 hoverRowId/hoverColumnId가
+          // 얼어붙은 채면 rail이 그 블록 위에 계속 떠 있는 것처럼 보인다
+          // (버그 재현 스크린샷). target이 "다른" 블록(data-geul-block-id가
+          // 있고 currentId와 다름)이면 여기서 지운다 — rail 자신(ignore
+          // selector라 이 콜백 자체가 안 불린다)이나 표-rail 사이의 진짜
+          // 빈 여백(어떤 블록에도 안 속함)은 여전히 유지돼 rail까지
+          // 마우스가 무사히 도달한다.
+          const target = event.target;
+          const targetBlock =
+            target instanceof Element
+              ? target.closest<HTMLElement>("[data-geul-block-id]")
+              : null;
+          const targetBlockId = targetBlock?.getAttribute(
+            "data-geul-block-id",
+          );
+          if (
+            targetBlockId !== undefined &&
+            targetBlockId !== null &&
+            targetBlockId !== currentId
+          ) {
+            setHoverRowId(null);
+            setHoverColumnId(null);
+          }
           return;
         }
       }
