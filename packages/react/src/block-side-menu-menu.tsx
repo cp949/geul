@@ -150,11 +150,12 @@ export const BlockSideMenuMenu = ({
   };
 
   return (
-    // max-h-[calc(100vh-1rem)] + overflow-y-auto: 클램프는 좌표만 접으므로
-    // 뷰포트보다 큰 메뉴는 아래쪽 항목에 닿을 수 없다(PIT-0011 예방 규칙).
-    // 1rem은 useClampedMenuPosition의 MENU_VIEWPORT_MARGIN 8px가 위·아래로
-    // 두 번 들어간 값이라 클램프 결과와 정확히 맞물린다. R2에서 블록 타입
-    // 목록이 늘면 일반 뷰포트에서도 넘친다.
+    // max-height: min(16rem, calc(100vh-1rem)) + overflow-y: auto
+    // (_block-side-menu.scss) — Turn into가 heading×toggle 12개를 평평한
+    // 목록으로 내다 보니 뷰포트가 넉넉해도 메뉴 하나가 화면을 거의 다
+    // 채우던 문제를 고정 상한으로 막는다(slash-menu·emoji-picker와 같은
+    // 관례). calc(100vh-1rem) 쪽은 PIT-0011 예방 규칙 그대로다 — 클램프는
+    // 좌표만 접으므로 뷰포트보다 큰 메뉴는 아래쪽 항목에 닿을 수 없다.
     <div
       aria-label={dictionary.menu.blockMenuAriaLabel}
       className="geul-block-menu"
