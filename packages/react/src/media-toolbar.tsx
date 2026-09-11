@@ -10,6 +10,7 @@ import {
   LucideProvider,
   PenLine,
   Replace as ReplaceIcon,
+  RotateCw,
   Trash2,
   X,
 } from "lucide-react";
@@ -47,6 +48,7 @@ const alignRightIcon = <AlignRight {...iconProps} />;
 const deleteIcon = <Trash2 {...iconProps} />;
 const saveIcon = <Check {...iconProps} />;
 const cancelIcon = <X {...iconProps} />;
+const retryIcon = <RotateCw {...iconProps} />;
 const downloadIcon = <DownloadIcon {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. FilePanel/SlashMenu와 같은 이유로
@@ -749,26 +751,21 @@ export const MediaToolbar = ({
                 {toolbarState.upload.message}
               </span>
               {toolbarState.heldFile !== null && (
-                <button
+                <IconButton
                   className={mediaToolbarButtonClassName}
+                  icon={retryIcon}
+                  label={dictionary.toolbar.media.retry}
                   onClick={handleReplaceRetry}
-                  onMouseDown={(event) => event.preventDefault()}
-                  type="button"
-                >
-                  {dictionary.toolbar.media.retry}
-                </button>
+                />
               )}
             </>
           )}
-          <button
-            aria-label={dictionary.toolbar.media.cancel}
+          <IconButton
             className={mediaToolbarButtonClassName}
+            icon={cancelIcon}
+            label={dictionary.toolbar.media.cancel}
             onClick={cancelReplacing}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.media.cancel}
-          </button>
+          />
         </>
       )}
       {actionError !== null && (
