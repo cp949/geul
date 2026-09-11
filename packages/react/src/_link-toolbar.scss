@@ -24,6 +24,17 @@
   color: var(--geul-color-text, #202124);
 }
 
+.geul-link-toolbar__icon-button {
+  min-width: 1.75rem;
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  border: none;
+  background: transparent;
+  padding-inline: 0.375rem;
+  padding-block: 0.25rem;
+  color: var(--geul-color-text, #202124);
+  cursor: pointer;
+}
+
 .geul-link-toolbar__input {
   min-width: 14rem;
   border-radius: var(--geul-radius-sm, 0.25rem);

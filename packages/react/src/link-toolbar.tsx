@@ -1,13 +1,21 @@
 import type { EditorController } from "@cp949/geul-core";
+import { Check, X } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { IconButton } from "./icon-button.js";
+import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useRangeDismissSuppression } from "./use-range-dismiss-suppression.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
+
+// formatting-toolbar.tsx의 indentIcon/outdentIcon과 같은 이유로 모듈
+// top-level에서 한 번만 만든다 — 매 렌더 새 ReactElement를 만들지 않는다.
+const saveLinkIcon = <Check {...iconProps} />;
+const cancelLinkIcon = <X {...iconProps} />;
 
 const linkToolbarButtonClassName = "geul-link-toolbar__button";
 
@@ -325,24 +333,18 @@ export const LinkToolbar = ({
             type="text"
             value={toolbarState.draft}
           />
-          <button
-            aria-label={dictionary.toolbar.link.saveLink}
-            className={linkToolbarButtonClassName}
+          <IconButton
+            className="geul-link-toolbar__icon-button"
+            icon={saveLinkIcon}
+            label={dictionary.toolbar.link.saveLink}
             onClick={applyLink}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.link.saveLink}
-          </button>
-          <button
-            aria-label={dictionary.toolbar.link.cancelAriaLabel}
-            className={linkToolbarButtonClassName}
+          />
+          <IconButton
+            className="geul-link-toolbar__icon-button"
+            icon={cancelLinkIcon}
+            label={dictionary.toolbar.link.cancelAriaLabel}
             onClick={cancelEditing}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.link.cancel}
-          </button>
+          />
           {toolbarState.rejected && (
             <span className="geul-link-toolbar__error" role="alert">
               {dictionary.status.unsupportedLinkUrl}

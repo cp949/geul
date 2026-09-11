@@ -148,7 +148,7 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.getByRole("button", { name: "Remove link" })).not.toBeNull();
   });
 
-  it("dictionary override 시 컨테이너·컨트롤·Cancel(aria-label≠텍스트)이 바뀐다(EXT-009)", () => {
+  it("dictionary override 시 컨테이너·컨트롤·Cancel(icon 버튼, aria-label만 override)이 바뀐다(EXT-009)", () => {
     const controller = fakeController({
       getSelectionLink: () => ({ href: "https://example.com" }),
       dictionary: {
@@ -160,7 +160,6 @@ describe("LinkToolbar 링크 툴바", () => {
             ariaLabel: "링크 툴바",
             editLink: "링크 편집",
             cancelAriaLabel: "링크 편집 취소",
-            cancel: "취소",
           },
         },
       },
@@ -179,9 +178,11 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.getByRole("toolbar", { name: "링크 툴바" })).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "링크 편집" }));
 
+    // Save/Cancel은 icon 버튼이라 visible text가 없다 — dictionary override는
+    // aria-label(cancelAriaLabel)에만 반영되고 textContent는 항상 빈 문자열이다.
     const cancelButton = screen.getByRole("button", { name: "링크 편집 취소" });
     expect(cancelButton).not.toBeNull();
-    expect(cancelButton.textContent).toBe("취소");
+    expect(cancelButton.textContent).toBe("");
   });
 
   it("링크 추가 컨트롤로 링크를 만든다", () => {
