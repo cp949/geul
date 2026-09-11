@@ -281,6 +281,28 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     expect(positionOf("[data-geul-table-quick-insert]")).toBe("absolute");
   });
 
+  // RD-004(Indent/Outdent 제거) 회귀 — 남은 두 버튼(Plus·표 그립)이 옛
+  // Indent/Outdent 자리(left - 96, left - 72)에 그대로 남아, 표(왼쪽 경계
+  // 100)와 코너 클러스터 사이에 빈 48px 간격이 생겼었다(사용자 스크린샷).
+  // 옛 Outdent/Indent가 쓰던 가장 가까운 두 자리(left - 24, left - 48)로
+  // 당겨 표와 거의 붙게 한다 — 순서는 그대로(왼쪽부터 Plus, 표에 가까운
+  // 쪽이 Grip).
+  it("코너 Plus·표 그립 버튼이 표 왼쪽 경계에 붙어 뜬다(간격 회귀)", () => {
+    const { table } = renderRealTable();
+
+    fireEvent.pointerMove(table);
+
+    const styleOf = (selector: string) =>
+      document.querySelector<HTMLElement>(selector)?.style;
+
+    // 표 왼쪽 경계는 100(DEFAULT_LAYOUT) — 그립(왼쪽 24)이 Plus(왼쪽 48)
+    // 보다 표에 가깝다.
+    expect(styleOf("[data-geul-table-grip]")?.left).toBe("76px");
+    expect(styleOf("[data-geul-table-quick-insert]")?.left).toBe("52px");
+    expect(styleOf("[data-geul-table-grip]")?.top).toBe("76px");
+    expect(styleOf("[data-geul-table-quick-insert]")?.top).toBe("76px");
+  });
+
   it("표와 핸들 사이 여백으로 이동해도 핸들이 유지된다", () => {
     const { editable, table } = renderRealTable();
     fireEvent.pointerMove(table);

@@ -287,15 +287,19 @@ export const TableHandleOverlays = ({
           clamp 로직 없이 기존 absolute 좌표 관용구를 그대로 쓴다(PIT-0011,
           G-UI-003). Plus+표 그립 버튼(Issue #174 RD-002) 둘뿐이다 —
           Indent/Outdent는 더 이상 이 코너에 없다(RD-004, TableGripMenu
-          항목으로 이전). 순서는 Notion 참고(왼쪽부터 Plus, 표에 가까운
-          쪽이 Grip) — Select table 버튼(Issue #149)을 표 그립 버튼이
-          대체한다. Plus는 일반 블록 gutter의 Plus 버튼과 동일한 패리티다
-          (Issue #175, roadmap RD-001) — 클릭하면 표 바로 뒤에 문단을
-          삽입하고(onAddBlock, table-handles.tsx의 handleAddBlockClick) 그
-          자리에서 블록타입 선택 메뉴가 열린다(block-side-menu.tsx의
-          handleAddBlockClick과 같은 계약). 라벨도 같은
-          dictionary.handle.addBlock을 재사용한다 — 별도 표 전용 문구를
-          만들지 않는다. */}
+          항목으로 이전). 좌표는 옛 Outdent/Indent가 쓰던 가장 가까운 두
+          자리(left - 24, left - 48)를 그대로 물려받는다 — RD-004에서
+          Indent/Outdent를 지우며 Plus/Grip을 옛 자기 자리(left - 96,
+          left - 72)에 남겨둔 채였다가, 표와 코너 클러스터 사이에 빈
+          48px 간격이 생기는 회귀를 냈다(사용자 스크린샷). 순서는 Notion
+          참고(왼쪽부터 Plus, 표에 가까운 쪽이 Grip) — Select table
+          버튼(Issue #149)을 표 그립 버튼이 대체한다. Plus는 일반 블록
+          gutter의 Plus 버튼과 동일한 패리티다(Issue #175, roadmap
+          RD-001) — 클릭하면 표 바로 뒤에 문단을 삽입하고(onAddBlock,
+          table-handles.tsx의 handleAddBlockClick) 그 자리에서 블록타입
+          선택 메뉴가 열린다(block-side-menu.tsx의 handleAddBlockClick과
+          같은 계약). 라벨도 같은 dictionary.handle.addBlock을
+          재사용한다 — 별도 표 전용 문구를 만들지 않는다. */}
       <IconButton
         className={nestingButtonClassName}
         data-geul-table-quick-insert=""
@@ -304,7 +308,7 @@ export const TableHandleOverlays = ({
         onClick={onAddBlock}
         style={{
           position: "absolute",
-          left: geometry.left - 96,
+          left: geometry.left - 48,
           top: geometry.top - 24,
         }}
       />
@@ -316,7 +320,7 @@ export const TableHandleOverlays = ({
         onClick={onTableGripClick}
         style={{
           position: "absolute",
-          left: geometry.left - 72,
+          left: geometry.left - 24,
           top: geometry.top - 24,
         }}
       />
