@@ -344,8 +344,8 @@ export const TableHandles = () => {
   // 여백(HANDLE_HOVER_MARGIN)을 완전히 벗어난 채 키보드만으로 커서가 표
   // 안에 남아 있을 때만 이 fallback이 클러스터를 계속 마운트시킨다(Notion
   // 참고, 사용자 요청) — 이 경로로 뜨면 행 그립뿐 아니라 열 그립·add row/
-  // column rail·indent/outdent/select 버튼도 함께 뜬다(단일 activeTableId
-  // 렌더 게이트를 공유하는 기존 구조 그대로, 새 게이트를 만들지 않는다).
+  // column rail·Plus·표 그립 버튼도 함께 뜬다(단일 activeTableId 렌더
+  // 게이트를 공유하는 기존 구조 그대로, 새 게이트를 만들지 않는다).
   const activeTableId =
     reorderState?.tableBlockId ??
     resizeState?.tableBlockId ??
@@ -357,12 +357,6 @@ export const TableHandles = () => {
     activeTableId === null || element === null
       ? null
       : readGeometryFor(element, activeTableId);
-  // Indent/Outdent 비활성 판정은 core의 getBlockNestingActionState 한 곳을
-  // 공유한다(formatting-toolbar.tsx와 같은 관용구, Issue #126).
-  const tableNestingActions =
-    geometry === null
-      ? null
-      : editor.getBlockNestingActionState(geometry.tableBlockId);
   const { showAddRow, showAddColumn } = computeExpandButtonVisibility(
     geometry,
     hoverRowId,
@@ -879,32 +873,6 @@ export const TableHandles = () => {
     editor.commands.insertTableColumn(fresh.tableBlockId, fresh.columns.length);
   };
 
-  const handleIndentTable = () => {
-    const fresh = readFreshGeometry();
-    if (fresh === null) return;
-    // G-UI-004: aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다 —
-    // 명시적 가드로 비활성 상태의 클릭을 막는다. canIndent는 fresh 기준으로
-    // 다시 계산한다(canIndentTable prop은 render 시점 geometry에서 나온 값이라
-    // readFreshGeometry와 같은 이유로 낡을 수 있다).
-    if (
-      editor.getBlockNestingActionState(fresh.tableBlockId).canIndent !== true
-    ) {
-      return;
-    }
-    editor.commands.indentBlock(fresh.tableBlockId);
-  };
-
-  const handleOutdentTable = () => {
-    const fresh = readFreshGeometry();
-    if (fresh === null) return;
-    if (
-      editor.getBlockNestingActionState(fresh.tableBlockId).canOutdent !== true
-    ) {
-      return;
-    }
-    editor.commands.outdentBlock(fresh.tableBlockId);
-  };
-
   // Issue #174 RD-002(Issue #149 확장)·RD-003 — 표 그립 버튼(CONTEXT.md)
   // 클릭 시 표 자신을 selectBlockRange(tableId, tableId)로 선택해
   // BlockSelectionToolbar(Delete·위/아래 이동)를 열고, TableGripMenu도
@@ -955,13 +923,9 @@ export const TableHandles = () => {
         <TableHandleOverlays
           activeColumnIds={activeColumnIds}
           activeRowIds={activeRowIds}
-          canIndentTable={tableNestingActions?.canIndent === true}
-          canOutdentTable={tableNestingActions?.canOutdent === true}
           geometry={geometry}
           onAddColumn={handleAddColumn}
           onAddRow={handleAddRow}
-          onIndentTable={handleIndentTable}
-          onOutdentTable={handleOutdentTable}
           onReorderHandleClick={handleReorderHandleClick}
           onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
           onResizeHandlePointerDown={handlePointerDownOnResizeHandle}

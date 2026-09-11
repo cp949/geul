@@ -627,24 +627,25 @@ test("표 상단 열 재정렬 핸들과 Add column 버튼도 스크롤로 지�
 });
 
 /**
- * indent·outdent도 열 핸들·Add column과 같은 이유(표 위쪽 anchor)로
- * `scrollPastOverlay`가 필요하다. indent는 앞 형제 블록이 있어야
- * `canIndentTable`이 참이다(`indent-commands.ts`, `table-handle.spec.ts`
- * Issue #126 테스트와 같은 전제) — 표 앞에 문단 하나를 둔다.
+ * 표 그립 버튼(Issue #174 RD-002)도 열 핸들·Add column과 같은 이유(표
+ * 위쪽 anchor)로 `scrollPastOverlay`가 필요하다 — position: absolute
+ * page-relative 좌표(G-UI-003)라 표가 뷰포트보다 커지면 스크롤이 표를
+ * 지나쳐도 이 버튼은 여전히 화면 밖에 남을 수 있다. 이 재현은 원래
+ * Indent/Outdent 버튼(Issue #163 RD-002 DELTA-02, Issue #65 항목8
+ * RD-006)이 맡고 있었다 — Issue #174 RD-004로 그 버튼들이 TableGripMenu
+ * 항목으로 옮겨가면서, 같은 코너 클러스터에 남은 그립 버튼이 이어받는다.
  * `HTMLElement.focus()`의 기본값(`preventScroll: false`)은 Tab과 같은
  * 네이티브 scroll-into-view를 호출한다(MDN, DELTA-01 테스트 주석이 이미
  * 인용) — Tab 키 시퀀스 대신 `.focus()`를 쓰는 이유는 이 표의 tab 순서를
  * 정확히 재현할 필요 없이 같은 API를 직접 검증할 수 있어서다.
  *
- * outdent 버튼은 Issue #65 항목8 RD-003이 네이티브 `disabled`를
- * `aria-disabled`로 바꿨다 — tab 순서·`.focus()`를 막지 않는다("disabled라
- * focus 불가"라는 전제 자체를 없애는 것이 그 수정 목표다). 그래서 초기
- * 상태는 `toBeDisabled()`/`toBeEnabled()`(둘 다 `aria-disabled`도
- * disabled로 인식해 이 전환으로는 깨지지 않는다) 대신 `aria-disabled`
- * 속성으로 직접 확인하고, 도달성은 indent와 같은 `.focus()` 경로로
- * 통일한다(`scrollIntoViewIfNeeded()` 특수 경로는 제거).
+ * 도달한 뒤에는 그립 버튼을 클릭해 메뉴를 열고, 들여쓰기(앞에 문단이 있어
+ * 활성)/내어쓰기(최상위라 비활성) 항목의 상태까지 확인해 옛
+ * indent·outdent 테스트가 검증하던 활성화 조건(`indent-commands.ts`,
+ * `table-handle.spec.ts` Issue #126 테스트와 같은 전제)도 그대로
+ * 유지한다.
  */
-test("indent·outdent 버튼도 표를 지나쳐 스크롤한 뒤 포커스로 도달 가능하다 (Issue #163 RD-002 DELTA-02, Issue #65 항목8 RD-006)", async ({
+test("표 그립 버튼도 표를 지나쳐 스크롤한 뒤 포커스로 도달 가능하고, 열면 들여쓰기/내어쓰기 항목이 보인다 (Issue #163 RD-002 DELTA-02, Issue #174 RD-004)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -662,34 +663,25 @@ test("indent·outdent 버튼도 표를 지나쳐 스크롤한 뒤 포커스로 �
   await table.locator("td").first().hover();
   await page.evaluate(() => window.scrollTo(0, 0));
 
-  const indentButton = page.getByRole("button", { name: "Indent table" });
-  const outdentButton = page.getByRole("button", { name: "Outdent table" });
-  // 앞에 문단이 있어 최상위 표라도 indent는 활성, outdent는 비활성이다.
-  await expect(indentButton).toHaveAttribute("aria-disabled", "false");
-  await expect(outdentButton).toHaveAttribute("aria-disabled", "true");
+  const gripButton = page.getByRole("button", { name: "Table menu" });
 
-  // 실측 1: indent는 활성 상태라 .focus()로 실제 초점 이동 + 네이티브
-  // scroll-into-view를 함께 확인한다.
-  await scrollPastOverlay(page, indentButton);
-  await expect(indentButton).not.toBeInViewport();
-  const scrollYBeforeIndentFocus = await page.evaluate(() => window.scrollY);
-  await indentButton.focus();
-  await expect(indentButton).toBeFocused();
-  const scrollYAfterIndentFocus = await page.evaluate(() => window.scrollY);
-  expect(scrollYAfterIndentFocus).not.toBe(scrollYBeforeIndentFocus);
-  await expect(indentButton).toBeInViewport();
+  // 실측: .focus()로 실제 초점 이동 + 네이티브 scroll-into-view를 함께
+  // 확인한다.
+  await scrollPastOverlay(page, gripButton);
+  await expect(gripButton).not.toBeInViewport();
+  const scrollYBeforeFocus = await page.evaluate(() => window.scrollY);
+  await gripButton.focus();
+  await expect(gripButton).toBeFocused();
+  const scrollYAfterFocus = await page.evaluate(() => window.scrollY);
+  expect(scrollYAfterFocus).not.toBe(scrollYBeforeFocus);
+  await expect(gripButton).toBeInViewport();
 
-  // 실측 2: outdent는 aria-disabled라도 네이티브 disabled가 아니라 tab
-  // 순서·포커스를 그대로 유지한다 — indent와 같은 .focus() 경로로 초점
-  // 이동 + 네이티브 scroll-into-view를 함께 확인한다.
-  await scrollPastOverlay(page, outdentButton);
-  await expect(outdentButton).not.toBeInViewport();
-  const scrollYBeforeOutdentFocus = await page.evaluate(() => window.scrollY);
-  await outdentButton.focus();
-  await expect(outdentButton).toBeFocused();
-  const scrollYAfterOutdentFocus = await page.evaluate(() => window.scrollY);
-  expect(scrollYAfterOutdentFocus).not.toBe(scrollYBeforeOutdentFocus);
-  await expect(outdentButton).toBeInViewport();
+  await gripButton.click();
+  const indentItem = page.getByRole("menuitem", { name: "Indent" });
+  const outdentItem = page.getByRole("menuitem", { name: "Outdent" });
+  // 앞에 문단이 있어 최상위 표라도 들여쓰기는 활성, 내어쓰기는 비활성이다.
+  await expect(indentItem).toHaveAttribute("aria-disabled", "false");
+  await expect(outdentItem).toHaveAttribute("aria-disabled", "true");
 });
 
 /**

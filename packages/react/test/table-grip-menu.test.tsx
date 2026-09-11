@@ -213,6 +213,87 @@ describe("표 그립 메뉴 항목", () => {
   });
 });
 
+// table-handles.test.tsx가 갖고 있던 "Indent/Outdent table 비활성화"
+// describe를 그립 메뉴 버전으로 옮긴 것이다(Issue #174 RD-004 — 좌상단
+// 아이콘 버튼 → 메뉴 항목).
+describe("들여쓰기/내어쓰기 항목(G-UI-004, Issue #174 RD-004)", () => {
+  it("앞에 들여쓸 수 있는 형제가 있으면 들여쓰기는 활성, 표는 top-level이라 내어쓰기는 비활성이다", () => {
+    openTableGripMenu();
+
+    const indentItem = screen.getByRole("menuitem", { name: "Indent" });
+    const outdentItem = screen.getByRole("menuitem", { name: "Outdent" });
+    expect(indentItem.getAttribute("aria-disabled")).toBe("false");
+    expect(indentItem.getAttribute("title")).toBeNull();
+    expect(outdentItem.getAttribute("aria-disabled")).toBe("true");
+    expect(outdentItem.getAttribute("title")).toBe("Can't outdent further");
+  });
+
+  it("내어쓰기가 비활성인 상태에서 클릭해도 outdentBlock을 호출하지 않고 메뉴를 닫지 않는다", () => {
+    const { editor } = openTableGripMenu();
+    const outdentSpy = vi.spyOn(editor.commands, "outdentBlock");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Outdent" }));
+
+    // aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다(G-UI-004) —
+    // 가드가 클릭을 막았는지 spy로 본다. block-side-menu-menu.tsx의
+    // handleOutdentBlock과 같은 규칙으로, 가드에 걸리면 onClose()도
+    // 호출되지 않아 메뉴가 열린 채로 남는다.
+    expect(outdentSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu", { name: "Table menu" })).toBeTruthy();
+  });
+
+  /**
+   * 표 바로 앞에 표를 하나 더 이어붙인다 — `table` 노드는 `group: "block"`뿐이라
+   * `isNestableBlockContainer`의 `node.type.name === "blockContainer"` 조건을
+   * 만족하지 못한다(실측). 둘째 표의 previous sibling이 첫째 표가 돼
+   * canIndent가 false가 된다.
+   */
+  const openTableGripMenuOnSecondTableWithNoNestableSibling = () => {
+    const rendered = renderRealTable();
+    const insertedSecond = rendered.editor.commands.insertTable(
+      rendered.tableBlockId,
+      { rows: 2, columns: 2 },
+    );
+    if (!insertedSecond.ok) throw new Error("둘째 표 fixture 준비 실패");
+    const secondTableId = insertedSecond.value.blockId;
+    const secondTable = rendered.host.querySelector<HTMLElement>(
+      `table[data-geul-block-id="${secondTableId}"]`,
+    );
+    if (secondTable === null) throw new Error("둘째 표가 렌더되지 않았다");
+    fireEvent.pointerMove(secondTable);
+    fireEvent.click(screen.getByRole("button", { name: tableGripLabel }));
+    return rendered;
+  };
+
+  it("앞 형제가 표(들여쓸 수 없는 컨테이너)면 들여쓰기가 비활성이다", () => {
+    openTableGripMenuOnSecondTableWithNoNestableSibling();
+
+    const indentItem = screen.getByRole("menuitem", { name: "Indent" });
+    expect(indentItem.getAttribute("aria-disabled")).toBe("true");
+    expect(indentItem.getAttribute("title")).toBe("Can't indent further");
+  });
+
+  it("들여쓰기가 비활성인 상태에서 클릭해도 indentBlock을 호출하지 않는다", () => {
+    const { editor } = openTableGripMenuOnSecondTableWithNoNestableSibling();
+    const indentSpy = vi.spyOn(editor.commands, "indentBlock");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Indent" }));
+
+    expect(indentSpy).not.toHaveBeenCalled();
+  });
+
+  it("들여쓰기를 클릭하면 표가 앞 형제의 자식이 되고 메뉴를 닫는다", () => {
+    const { editor, tableBlockId } = openTableGripMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Indent" }));
+
+    expect(editor.getBlockNestingActionState(tableBlockId).canOutdent).toBe(
+      true,
+    );
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
 describe("표 그립 메뉴 무효화", () => {
   it("메뉴가 열린 동안 표 블록이 통째로 사라지면 메뉴 상태도 함께 비워진다", async () => {
     const { editor, table, tableBlockId } = openTableGripMenu();

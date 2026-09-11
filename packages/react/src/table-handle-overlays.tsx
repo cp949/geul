@@ -7,9 +7,7 @@ import {
   columnHandleIcon,
   expandButtonClassName,
   handleButtonClassName,
-  indentTableIcon,
   nestingButtonClassName,
-  outdentTableIcon,
   rowHandleBarClassName,
   rowHandleHitClassName,
   rowHandleIcon,
@@ -22,8 +20,6 @@ import { useDictionary } from "./use-editor.js";
 export type TableHandleOverlaysProps = {
   geometry: TableGeometry;
   reorderGuideRect: ReorderGuideRect | null;
-  canIndentTable: boolean;
-  canOutdentTable: boolean;
   // "활성 바"(사용자 네이밍) 노출 대상 행/열 id 목록 — 커서가 있는 행/열과
   // 마우스가 지금 hover 중인 행/열이 서로 다를 수 있어 최대 2개다
   // (table-handles.tsx가 selection·hoverRowId/hoverColumnId에서 계산한다,
@@ -55,8 +51,6 @@ export type TableHandleOverlaysProps = {
   ) => void;
   onAddRow: () => void;
   onAddColumn: () => void;
-  onIndentTable: () => void;
-  onOutdentTable: () => void;
   onTableGripClick: () => void;
   // Notion 참고(사용자 요청) — 가장 아래 행/가장 오른쪽 열을 가리킬 때만
   // true. table-handles.tsx의 computeExpandButtonVisibility가 계산한다.
@@ -73,22 +67,19 @@ export type TableHandleOverlaysProps = {
  * 표 그립 버튼(CONTEXT.md, Issue #174 RD-002)은
  * editor.commands.selectBlockRange(tableId, tableId)를 커밋해 표를
  * 선택하고(BlockSelectionToolbar가 뜬다, Issue #149) TableGripMenu를
- * 여는 진입점이다(RD-003).
+ * 여는 진입점이다(RD-003). 들여쓰기/내어쓰기는 이제 이 코너에 별도
+ * 버튼으로 없다 — TableGripMenu 항목으로 이전했다(Issue #174 RD-004).
  */
 export const TableHandleOverlays = ({
   activeColumnIds,
   activeRowIds,
   geometry,
   reorderGuideRect,
-  canIndentTable,
-  canOutdentTable,
   onReorderHandleClick,
   onReorderHandlePointerDown,
   onResizeHandlePointerDown,
   onAddRow,
   onAddColumn,
-  onIndentTable,
-  onOutdentTable,
   onTableGripClick,
   showAddRow,
   showAddColumn,
@@ -292,14 +283,13 @@ export const TableHandleOverlays = ({
           행 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열 중앙이라
           더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md "결정") — 새
           clamp 로직 없이 기존 absolute 좌표 관용구를 그대로 쓴다(PIT-0011,
-          G-UI-003). Plus(placeholder)+표 그립 버튼(Issue #174 RD-002)은 같은
-          클러스터를 48px 더 왼쪽으로 확장한다(left - 96, left - 72) —
-          Indent/Outdent와 같은 top(geometry.top - 24)에서 20px 버튼 + 4px
-          간격을 그대로 반복해 겹치지 않는다. 순서는 Notion 참고(왼쪽부터
-          Plus, 표에 가까운 쪽이 Grip) — 이 RD에서 Select table 버튼(Issue
-          #149)을 표 그립 버튼이 대체한다. Plus는 이번엔 자리만이다: 클릭
-          핸들러가 없고(항상 aria-disabled) title로만 안내한다 — 실제 기능은
-          별도 Issue(#175)에서 연결한다. */}
+          G-UI-003). Plus(placeholder)+표 그립 버튼(Issue #174 RD-002) 둘뿐이다
+          — Indent/Outdent는 더 이상 이 코너에 없다(RD-004, TableGripMenu
+          항목으로 이전). 순서는 Notion 참고(왼쪽부터 Plus, 표에 가까운
+          쪽이 Grip) — Select table 버튼(Issue #149)을 표 그립 버튼이
+          대체한다. Plus는 이번엔 자리만이다: 클릭 핸들러가 없고(항상
+          aria-disabled) title로만 안내한다 — 실제 기능은 별도
+          Issue(#175)에서 연결한다. */}
       <IconButton
         aria-disabled="true"
         className={nestingButtonClassName}
@@ -323,38 +313,6 @@ export const TableHandleOverlays = ({
           left: geometry.left - 72,
           top: geometry.top - 24,
         }}
-      />
-      <IconButton
-        aria-disabled={canIndentTable ? "false" : "true"}
-        className={nestingButtonClassName}
-        data-geul-table-indent=""
-        icon={indentTableIcon}
-        label={dictionary.handle.indentTable}
-        onClick={onIndentTable}
-        style={{
-          position: "absolute",
-          left: geometry.left - 48,
-          top: geometry.top - 24,
-        }}
-        title={
-          canIndentTable ? undefined : dictionary.nesting.indentDisabledReason
-        }
-      />
-      <IconButton
-        aria-disabled={canOutdentTable ? "false" : "true"}
-        className={nestingButtonClassName}
-        data-geul-table-outdent=""
-        icon={outdentTableIcon}
-        label={dictionary.handle.outdentTable}
-        onClick={onOutdentTable}
-        style={{
-          position: "absolute",
-          left: geometry.left - 24,
-          top: geometry.top - 24,
-        }}
-        title={
-          canOutdentTable ? undefined : dictionary.nesting.outdentDisabledReason
-        }
       />
       {reorderGuideRect !== null && (
         <div

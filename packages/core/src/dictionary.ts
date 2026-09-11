@@ -217,16 +217,16 @@ export type Dictionary = {
     };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
-  // 추가·들여쓰기)와 `block-side-menu.tsx`(블록 드래그·추가)의 hover
+  // 추가·표 그립·Plus)와 `block-side-menu.tsx`(블록 드래그·추가)의 hover
   // 오버레이 아이콘 버튼 라벨. 둘 다 성격이 같아 하나의 네임스페이스로
-  // 묶는다.
+  // 묶는다. 들여쓰기/내어쓰기는 Issue #174 RD-004부터 이 네임스페이스에
+  // 없다 — 아이콘 버튼에서 TableGripMenu 항목(`menu.indent`/`menu.outdent`,
+  // block-side-menu-menu.tsx와 같은 키)으로 옮겨갔다.
   handle: {
     dragRow: string;
     dragColumn: string;
     addRow: string;
     addColumn: string;
-    indentTable: string;
-    outdentTable: string;
     // Issue #174 RD-002 — 표 코너의 "표 그립 버튼"(CONTEXT.md) 라벨. 클릭하면
     // selectBlockRange(tableId, tableId)를 커밋하고 TableGripMenu를 연다
     // (RD-003). Issue #149의 Select table 버튼을 대체한다 — 대체된 버튼의
@@ -486,8 +486,6 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     dragColumn: "Drag to reorder column, click for options",
     addRow: "Add row",
     addColumn: "Add column",
-    indentTable: "Indent table",
-    outdentTable: "Outdent table",
     tableMenu: "Table menu",
     tableQuickInsertPlaceholder: "Quick insert (coming soon)",
     dragBlock: "Drag to reorder, click for options",

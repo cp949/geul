@@ -12,7 +12,7 @@
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
 import {
@@ -38,8 +38,6 @@ const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
 const tableMenuLabel = "Table menu";
 const tableQuickInsertPlaceholderLabel = "Quick insert (coming soon)";
-const indentTableLabel = "Indent table";
-const outdentTableLabel = "Outdent table";
 
 if (typeof Element.prototype.setPointerCapture !== "function") {
   Element.prototype.setPointerCapture = () => {};
@@ -213,7 +211,7 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     expect(screen.getByRole("button", { name: addColumnLabel })).not.toBeNull();
   });
 
-  it("dictionary override 시 행/열 핸들·Add row/column·Indent/Outdent table이 바뀐다(EXT-009)", () => {
+  it("dictionary override 시 행/열 핸들·Add row/column이 바뀐다(EXT-009)", () => {
     const { table } = renderRealTable({
       dictionary: {
         ...DEFAULT_DICTIONARY,
@@ -221,7 +219,6 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
           ...DEFAULT_DICTIONARY.handle,
           dragRow: "행 드래그",
           addRow: "행 추가",
-          indentTable: "표 들여쓰기",
         },
       },
     });
@@ -232,7 +229,6 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
       2,
     );
     expect(screen.getByRole("button", { name: "행 추가" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "표 들여쓰기" })).not.toBeNull();
   });
 
   it("표 밖으로 나가면 핸들을 숨긴다", () => {
@@ -268,8 +264,8 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     expect(positionOf("[data-geul-table-column-handle]")).toBe("absolute");
     expect(positionOf("[data-geul-table-expand-row]")).toBe("absolute");
     expect(positionOf("[data-geul-table-expand-column]")).toBe("absolute");
-    expect(positionOf("[data-geul-table-indent]")).toBe("absolute");
-    expect(positionOf("[data-geul-table-outdent]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-grip]")).toBe("absolute");
+    expect(positionOf("[data-geul-table-quick-insert]")).toBe("absolute");
   });
 
   it("표와 핸들 사이 여백으로 이동해도 핸들이 유지된다", () => {
@@ -498,78 +494,6 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
         "data-geul-table-column-handle-active",
       ),
     ).toBe(true);
-  });
-});
-
-describe("Indent/Outdent table 비활성화(G-UI-004, Issue #65 항목8 RD-003)", () => {
-  it("앞에 들여쓸 수 있는 형제가 있으면 Indent는 활성, 표는 top-level이라 Outdent는 비활성이다", () => {
-    const { table } = renderRealTable();
-    fireEvent.pointerMove(table);
-
-    const indentItem = screen.getByRole("button", { name: indentTableLabel });
-    const outdentItem = screen.getByRole("button", {
-      name: outdentTableLabel,
-    });
-    expect(indentItem.getAttribute("aria-disabled")).toBe("false");
-    expect(indentItem.getAttribute("title")).toBe(indentTableLabel);
-    expect(outdentItem.getAttribute("aria-disabled")).toBe("true");
-    expect(outdentItem.getAttribute("title")).toBe("Can't outdent further");
-  });
-
-  it("Outdent가 비활성인 상태에서 클릭해도 outdentBlock을 호출하지 않는다", () => {
-    const { editor, table } = renderRealTable();
-    fireEvent.pointerMove(table);
-    const outdentSpy = vi.spyOn(editor.commands, "outdentBlock");
-
-    fireEvent.click(screen.getByRole("button", { name: outdentTableLabel }));
-
-    // aria-disabled는 disabled와 달리 클릭 이벤트를 막지 않는다(G-UI-004) —
-    // handleOutdentTable의 신규 no-op 가드가 클릭을 막았는지 spy로 본다.
-    // outdentBlock 자체도 canOutdent=false면 내부적으로 안전하게 거절하지만
-    // (모델 변형 없음), 이 사이트는 Result를 확인하지 않아 "호출됐는지"를
-    // 문서 상태만으로는 구분할 수 없다.
-    expect(outdentSpy).not.toHaveBeenCalled();
-  });
-
-  /**
-   * 표 바로 앞에 표를 하나 더 이어붙인다 — `table` 노드는 `group: "block"`뿐이라
-   * (`table-extension.ts`) `isNestableBlockContainer`의
-   * `node.type.name === "blockContainer"` 조건을 만족하지 못한다(실측). 둘째
-   * 표의 previous sibling이 첫째 표가 돼 canIndent가 false가 된다 — 문서
-   * 맨 앞에 표를 두면(간단해 보이지만) 에디터가 자동으로 빈 문단을 그 앞에
-   * 끼워 넣어(실측, canonicalization 불변식) 이 조건을 만들지 못한다.
-   */
-  const renderSecondTableWithNoNestableSibling = () => {
-    const rendered = renderRealTable();
-    const insertedSecond = rendered.editor.commands.insertTable(
-      rendered.tableBlockId,
-      { rows: 2, columns: 2 },
-    );
-    if (!insertedSecond.ok) throw new Error("둘째 표 fixture 준비 실패");
-    const secondTableId = insertedSecond.value.blockId;
-    const secondTable = rendered.host.querySelector<HTMLElement>(
-      `table[data-geul-block-id="${secondTableId}"]`,
-    );
-    if (secondTable === null) throw new Error("둘째 표가 렌더되지 않았다");
-    fireEvent.pointerMove(secondTable);
-    return rendered;
-  };
-
-  it("앞 형제가 표(들여쓸 수 없는 컨테이너)면 Indent가 비활성이다", () => {
-    renderSecondTableWithNoNestableSibling();
-
-    const indentItem = screen.getByRole("button", { name: indentTableLabel });
-    expect(indentItem.getAttribute("aria-disabled")).toBe("true");
-    expect(indentItem.getAttribute("title")).toBe("Can't indent further");
-  });
-
-  it("Indent가 비활성인 상태에서 클릭해도 indentBlock을 호출하지 않는다", () => {
-    const { editor } = renderSecondTableWithNoNestableSibling();
-    const indentSpy = vi.spyOn(editor.commands, "indentBlock");
-
-    fireEvent.click(screen.getByRole("button", { name: indentTableLabel }));
-
-    expect(indentSpy).not.toHaveBeenCalled();
   });
 });
 

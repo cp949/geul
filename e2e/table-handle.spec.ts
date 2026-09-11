@@ -638,7 +638,7 @@ const minimalTableBlock = (blockId: string) => ({
   headerColumns: 0,
 });
 
-test("최상위 표 hover 시 Indent 버튼이 앞 형제의 자식으로 표를 옮기고 undo 1회로 복원된다 (Issue #126)", async ({
+test("표 그립 메뉴의 들여쓰기가 앞 형제의 자식으로 표를 옮기고 undo 1회로 복원된다 (Issue #126, Issue #174 RD-004)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -660,14 +660,15 @@ test("최상위 표 hover 시 Indent 버튼이 앞 형제의 자식으로 표를
   // 않으면 view.dom 바깥 포커스라 keydown이 편집기에 닿지 않는다).
   await table.locator("td").first().click();
   await table.locator("td").first().hover();
+  await page.getByRole("button", { name: "Table menu" }).click();
 
-  const indentButton = page.getByRole("button", { name: "Indent table" });
-  const outdentButton = page.getByRole("button", { name: "Outdent table" });
-  await expect(indentButton).toBeEnabled();
+  const indentItem = page.getByRole("menuitem", { name: "Indent" });
+  const outdentItem = page.getByRole("menuitem", { name: "Outdent" });
+  await expect(indentItem).toBeEnabled();
   // 최상위(depth 0)라 canOutdent는 false다(indent-commands.ts).
-  await expect(outdentButton).toBeDisabled();
+  await expect(outdentItem).toBeDisabled();
 
-  await indentButton.click();
+  await indentItem.click();
 
   await expect(
     editable.locator(
@@ -683,7 +684,7 @@ test("최상위 표 hover 시 Indent 버튼이 앞 형제의 자식으로 표를
   ).toHaveCount(1);
 });
 
-test("다른 블록의 자식인 표 hover 시 Outdent 버튼이 표를 형제로 되돌리고 undo 1회로 복원된다 (Issue #126)", async ({
+test("표 그립 메뉴의 내어쓰기가 표를 형제로 되돌리고 undo 1회로 복원된다 (Issue #126, Issue #174 RD-004)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -714,14 +715,15 @@ test("다른 블록의 자식인 표 hover 시 Outdent 버튼이 표를 형제�
   // Control+z가 ProseMirror history에 닿게 한다.
   await table.locator("td").first().click();
   await table.locator("td").first().hover();
+  await page.getByRole("button", { name: "Table menu" }).click();
 
-  const indentButton = page.getByRole("button", { name: "Indent table" });
-  const outdentButton = page.getByRole("button", { name: "Outdent table" });
+  const indentItem = page.getByRole("menuitem", { name: "Indent" });
+  const outdentItem = page.getByRole("menuitem", { name: "Outdent" });
   // 앞 형제가 없는 유일한 자식이라 canIndent는 false다(indent-commands.ts).
-  await expect(indentButton).toBeDisabled();
-  await expect(outdentButton).toBeEnabled();
+  await expect(indentItem).toBeDisabled();
+  await expect(outdentItem).toBeEnabled();
 
-  await outdentButton.click();
+  await outdentItem.click();
 
   await expect(
     editable.locator(':scope > [data-geul-block-id="table-1"]'),

@@ -1,11 +1,4 @@
-import {
-  Grip,
-  GripHorizontal,
-  GripVertical,
-  IndentDecrease,
-  IndentIncrease,
-  Plus,
-} from "lucide-react";
+import { Grip, GripHorizontal, GripVertical, Plus } from "lucide-react";
 
 import { iconProps } from "./icon-props.js";
 
@@ -20,8 +13,6 @@ import { iconProps } from "./icon-props.js";
 export const rowHandleIcon = <GripVertical {...iconProps} />;
 export const columnHandleIcon = <GripHorizontal {...iconProps} />;
 export const addIcon = <Plus {...iconProps} />;
-export const indentTableIcon = <IndentIncrease {...iconProps} />;
-export const outdentTableIcon = <IndentDecrease {...iconProps} />;
 // Issue #174 RD-002 — 표 코너의 "표 그립 버튼"(CONTEXT.md). 클릭하면
 // selectBlockRange(tableId, tableId)로 표를 선택하고 TableGripMenu를
 // 연다(RD-003). Issue #149의 Select table 버튼(MousePointerSquareDashed)을
@@ -98,8 +89,6 @@ export const TABLE_HOVER_IGNORE_SELECTORS = [
   "[data-geul-table-expand-column]",
   TABLE_MENU_SELECTOR,
   TABLE_GRIP_MENU_SELECTOR,
-  "[data-geul-table-indent]",
-  "[data-geul-table-outdent]",
   "[data-geul-table-grip]",
   "[data-geul-table-quick-insert]",
 ] as const;
