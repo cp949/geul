@@ -281,13 +281,15 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     expect(positionOf("[data-geul-table-quick-insert]")).toBe("absolute");
   });
 
-  // RD-004(Indent/Outdent 제거) 회귀 — 남은 두 버튼(Plus·표 그립)이 옛
-  // Indent/Outdent 자리(left - 96, left - 72)에 그대로 남아, 표(왼쪽 경계
-  // 100)와 코너 클러스터 사이에 빈 48px 간격이 생겼었다(사용자 스크린샷).
-  // 옛 Outdent/Indent가 쓰던 가장 가까운 두 자리(left - 24, left - 48)로
-  // 당겨 표와 거의 붙게 한다 — 순서는 그대로(왼쪽부터 Plus, 표에 가까운
-  // 쪽이 Grip).
-  it("코너 Plus·표 그립 버튼이 표 왼쪽 경계에 붙어 뜬다(간격 회귀)", () => {
+  // 일반 블록 gutter 정렬(사용자 스크린샷 지적 — "hello 행과 표 행의
+  // Plus 좌우가 다르고 두 gutter가 정렬되지 않았다") — 코너 클러스터는
+  // 이제 일반 gutter와 같은 좌표계를 쓴다: gutter 오프셋 56px +
+  // 표 들여쓰기 48px(_editor.scss margin-left: 3rem) = 104px가 바깥쪽
+  // (Grip, 일반 gutter의 드래그 핸들 자리)이고, 거기서 버튼 폭 24 +
+  // 간격 2를 더한 78px이 안쪽(Plus, 일반 gutter의 Plus 자리)이다. top은
+  // 버튼이 1.25rem에서 1.5rem으로 커진 만큼 24 → 28로 늘어 바닥선(표
+  // 상단 - 4px)은 그대로다.
+  it("코너 Plus·표 그립 버튼이 일반 블록 gutter와 같은 좌표계로 뜬다(정렬 회귀)", () => {
     const { table } = renderRealTable();
 
     fireEvent.pointerMove(table);
@@ -295,12 +297,12 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     const styleOf = (selector: string) =>
       document.querySelector<HTMLElement>(selector)?.style;
 
-    // 표 왼쪽 경계는 100(DEFAULT_LAYOUT) — 그립(왼쪽 24)이 Plus(왼쪽 48)
-    // 보다 표에 가깝다.
-    expect(styleOf("[data-geul-table-grip]")?.left).toBe("76px");
-    expect(styleOf("[data-geul-table-quick-insert]")?.left).toBe("52px");
-    expect(styleOf("[data-geul-table-grip]")?.top).toBe("76px");
-    expect(styleOf("[data-geul-table-quick-insert]")?.top).toBe("76px");
+    // 표 왼쪽 경계는 100, 위쪽 경계는 100(DEFAULT_LAYOUT) — Grip(바깥,
+    // 왼쪽 104)이 Plus(안쪽, 왼쪽 78)보다 표에서 멀다.
+    expect(styleOf("[data-geul-table-grip]")?.left).toBe("-4px");
+    expect(styleOf("[data-geul-table-quick-insert]")?.left).toBe("22px");
+    expect(styleOf("[data-geul-table-grip]")?.top).toBe("72px");
+    expect(styleOf("[data-geul-table-quick-insert]")?.top).toBe("72px");
   });
 
   it("표와 핸들 사이 여백으로 이동해도 핸들이 유지된다", () => {

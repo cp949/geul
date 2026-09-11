@@ -164,9 +164,13 @@
   }
 }
 
+// 1.5rem — 일반 블록 gutter 버튼(.geul-block-gutter__button)과 같은 크기다.
+// Plus·표 그립 버튼(table-handle-overlays.tsx)이 이 클래스를 쓴다 —
+// 일반 gutter와 같은 좌표계로 자리 잡는 그 코너 클러스터라 크기도 같이
+// 맞춰야 시각적으로 같은 계열로 읽힌다(Notion 대비 사용자 지적).
 .geul-table-nesting-button {
-  height: 1.25rem;
-  width: 1.25rem;
+  height: 1.5rem;
+  width: 1.5rem;
   border-radius: var(--geul-radius-sm, 0.25rem);
   border: 1px solid var(--geul-color-border, #dadce0);
   background: var(--geul-color-surface, #fff);

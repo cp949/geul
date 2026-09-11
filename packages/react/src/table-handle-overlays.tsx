@@ -281,37 +281,32 @@ export const TableHandleOverlays = ({
           height: geometry.bottom - geometry.top,
         }}
       />
-      {/* 좌상단 여백(geometry.left - 24 부근)은 row handle hit box(y가 첫
-          행 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열 중앙이라
-          더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md "결정") — 새
-          clamp 로직 없이 기존 absolute 좌표 관용구를 그대로 쓴다(PIT-0011,
-          G-UI-003). Plus+표 그립 버튼(Issue #174 RD-002) 둘뿐이다 —
-          Indent/Outdent는 더 이상 이 코너에 없다(RD-004, TableGripMenu
-          항목으로 이전). 좌표는 옛 Outdent/Indent가 쓰던 가장 가까운 두
-          자리(left - 24, left - 48)를 그대로 물려받는다 — RD-004에서
-          Indent/Outdent를 지우며 Plus/Grip을 옛 자기 자리(left - 96,
-          left - 72)에 남겨둔 채였다가, 표와 코너 클러스터 사이에 빈
-          48px 간격이 생기는 회귀를 냈다(사용자 스크린샷). 순서는 Notion
-          참고(왼쪽부터 Plus, 표에 가까운 쪽이 Grip) — Select table
-          버튼(Issue #149)을 표 그립 버튼이 대체한다. Plus는 일반 블록
-          gutter의 Plus 버튼과 동일한 패리티다(Issue #175, roadmap
-          RD-001) — 클릭하면 표 바로 뒤에 문단을 삽입하고(onAddBlock,
-          table-handles.tsx의 handleAddBlockClick) 그 자리에서 블록타입
-          선택 메뉴가 열린다(block-side-menu.tsx의 handleAddBlockClick과
-          같은 계약). 라벨도 같은 dictionary.handle.addBlock을
-          재사용한다 — 별도 표 전용 문구를 만들지 않는다. */}
-      <IconButton
-        className={nestingButtonClassName}
-        data-geul-table-quick-insert=""
-        icon={addIcon}
-        label={dictionary.handle.addBlock}
-        onClick={onAddBlock}
-        style={{
-          position: "absolute",
-          left: geometry.left - 48,
-          top: geometry.top - 24,
-        }}
-      />
+      {/* 좌상단 클러스터(Plus+표 그립, Issue #174 RD-002) — 일반 블록
+          gutter(block-side-menu.tsx의 .geul-block-gutter)와 같은 크기
+          (1.5rem 버튼, 2px 간격)로, 같은 좌표계로 자리를 잡는다. 일반
+          gutter는 블록 왼쪽 56px(BLOCK_GUTTER_HOVER_MARGIN)에 [드래그
+          핸들, Plus] 순서로 뜬다 — 드래그(바깥)가 클릭하면 블록 메뉴를
+          열고, Plus(안쪽, 블록에 더 가까움)는 그 블록 뒤에 새 블록을
+          삽입한다. 표는 _editor.scss의 margin-left: 3rem(48px, Notion
+          대비 사용자 지적 — 표를 일반 문단보다 들여 이 클러스터 자리를
+          확보한다)만큼 이미 오른쪽으로 밀려 있어, geometry.left(표
+          getBoundingClientRect().left, 들여쓰기 반영값) 기준 오프셋에
+          그 48px를 더해야 두 gutter가 같은 절대좌표에 정렬된다: 56+48=
+          104. 표 그립(클릭하면 표를 선택하고 TableGripMenu를 연다,
+          RD-003 — Select table 버튼(Issue #149) 대체)이 드래그 핸들과
+          같은 "바깥" 자리(-104)를, Plus(클릭하면 표 바로 뒤에 문단을
+          삽입하고 블록타입 선택 메뉴를 연다, onAddBlock,
+          table-handles.tsx의 handleAddBlockClick — block-side-menu.tsx의
+          handleAddBlockClick과 같은 계약이라 라벨도 dictionary.handle.
+          addBlock을 재사용한다)가 같은 "안쪽" 자리(-104+24+2=-78)를
+          맡는다 — 옛 순서(Plus 바깥·Grip 안쪽, RD-004)는 일반 gutter와
+          반대였다(사용자 스크린샷 지적, "hello 행과 표 행의 Plus
+          좌우가 다르다"). top은 버튼 높이가 1.25rem(20px)에서 1.5rem
+          (24px)로 커진 만큼 4px 올려(-24 → -28) 버튼 아래쪽 끝을 표
+          상단에서 4px 위로 그대로 유지한다 — row handle hit box(y가 첫
+          행 중앙이라 더 아래)와 x축은 겹쳐도 세로가 갈려 겹치지 않는
+          기존 불변식(01-계획.md "결정")은 이 바닥선이 안 바뀌므로 그대로
+          유지된다. */}
       <IconButton
         className={nestingButtonClassName}
         data-geul-table-grip=""
@@ -320,8 +315,20 @@ export const TableHandleOverlays = ({
         onClick={onTableGripClick}
         style={{
           position: "absolute",
-          left: geometry.left - 24,
-          top: geometry.top - 24,
+          left: geometry.left - 104,
+          top: geometry.top - 28,
+        }}
+      />
+      <IconButton
+        className={nestingButtonClassName}
+        data-geul-table-quick-insert=""
+        icon={addIcon}
+        label={dictionary.handle.addBlock}
+        onClick={onAddBlock}
+        style={{
+          position: "absolute",
+          left: geometry.left - 78,
+          top: geometry.top - 28,
         }}
       />
       {reorderGuideRect !== null && (
