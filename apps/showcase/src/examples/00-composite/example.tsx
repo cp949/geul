@@ -203,7 +203,15 @@ const ResultPanel = ({ revision }: { revision: number }) => {
   const previewRef = useRef<HTMLDivElement>(null);
 
   const exported = useMemo(
-    () => exportHtml(editor.getDocument()),
+    () =>
+      // 라이브 에디터에 이미 배선한 compositeSyntaxHighlighter를 그대로
+      // 재사용한다 — exportHtml()이 codeBlock을 강조 span 포함 HTML로
+      // 내보내는 옵션을 지원해서(io/src/html/code-block-highlight.ts),
+      // 미리보기 전용 하이라이터를 새로 로딩할 필요가 없다(2026-09-11,
+      // 사용자 요청으로 "plain pre/code" 결정을 뒤집음).
+      exportHtml(editor.getDocument(), {
+        syntaxHighlighter: compositeSyntaxHighlighter,
+      }),
     // editor 인스턴스는 EditorProvider 마운트 동안 안정적이다 — revision이
     // 바뀔 때만 재계산하면 된다.
     // eslint-disable-next-line react-hooks/exhaustive-deps

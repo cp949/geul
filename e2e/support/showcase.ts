@@ -12,7 +12,16 @@
  */
 import { expect, type Page } from "@playwright/test";
 
-const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
+export const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
+
+/**
+ * showcase의 `path`를 연다. 초기 문서가 비어 있는 예제(Kitchen sink 등)는
+ * 열자마자 코드 블록이 없으므로, 아래 `openShowcaseExample`의 "첫 코드
+ * 블록이 보일 때까지 기다린다" 단계 없이 이 함수만 쓴다.
+ */
+export const openShowcasePage = async (page: Page, path: string) => {
+  await page.goto(`${SHOWCASE_BASE_URL}${path}`);
+};
 
 /**
  * showcase의 `path`(예: `/examples/syntax-highlighting-lowlight`)를 열고
@@ -26,7 +35,7 @@ const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
  * 필요한 spec이 `page.locator(...).nth(n)`으로 직접 찾는다.
  */
 export const openShowcaseExample = async (page: Page, path: string) => {
-  await page.goto(`${SHOWCASE_BASE_URL}${path}`);
+  await openShowcasePage(page, path);
   const code = page.locator("pre[data-geul-code-block] code").first();
   await expect(code).toBeVisible();
   return code;
