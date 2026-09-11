@@ -55,7 +55,11 @@ describe("SlashMenu 드래그 핸들", () => {
     // 통째로 죽었다"로도 통과한다(Issue #62).
     expect(screen.getByRole("button", { name: addRowLabel })).not.toBeNull();
     expect(screen.queryByRole("button", { name: dragHandleLabel })).toBeNull();
-    expect(screen.queryByRole("button", { name: addBlockLabel })).toBeNull();
+    // BlockSideMenu 자신의 add-block 버튼 부재를 본다. addBlockLabel로
+    // role+name을 찾으면 표 코너의 Plus 버튼과 라벨이 같아(Issue #175,
+    // roadmap RD-001 — 일반 블록 Plus와 완전 패리티) 걸린다 —
+    // data-geul-add-block-button으로 BlockSideMenu 것만 특정한다.
+    expect(document.querySelector("[data-geul-add-block-button]")).toBeNull();
   });
 
   it("따옴표·백슬래시가 든 블록 id에서도 hover 거터가 크래시 없이 표시된다", () => {

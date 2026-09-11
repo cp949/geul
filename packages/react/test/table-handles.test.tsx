@@ -12,7 +12,7 @@
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
 import {
@@ -37,7 +37,7 @@ const columnHandleLabel = "Drag to reorder column, click for options";
 const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
 const tableMenuLabel = "Table menu";
-const tableQuickInsertPlaceholderLabel = "Quick insert (coming soon)";
+const tableAddBlockLabel = "Add block";
 
 if (typeof Element.prototype.setPointerCapture !== "function") {
   Element.prototype.setPointerCapture = () => {};
@@ -53,8 +53,21 @@ if (typeof Element.prototype.releasePointerCapture !== "function") {
  * 조작이 조용히 편집 영역을 때린다.
  */
 const renderRealTable = (
-  options?: Pick<MountTableEditorOptions, "rows" | "columns" | "dictionary">,
-) => mountTableEditor({ ...options, children: <TableHandles /> });
+  options?: Pick<MountTableEditorOptions, "rows" | "columns" | "dictionary"> & {
+    onBlockAdded?: (blockId: string) => void;
+  },
+) => {
+  // exactOptionalPropertyTypes: true라 rows/columns/dictionary를
+  // `options?.rows` 식으로 꺼내면 없을 때도 명시적 undefined가 얹혀
+  // MountTableEditorOptions 타입과 어긋난다 — destructuring rest로
+  // 아예 키 자체를 없앤다(mount-editor.tsx의 dictionary 스프레드 조건부와
+  // 같은 이유).
+  const { onBlockAdded, ...tableOptions } = options ?? {};
+  return mountTableEditor({
+    ...tableOptions,
+    children: <TableHandles onBlockAdded={onBlockAdded ?? vi.fn()} />,
+  });
+};
 
 /**
  * 표 블록의 행 id 목록. 개수만 세면 어느 행이 움직였는지 구분하지 못하므로
@@ -765,24 +778,44 @@ describe("표 그립 버튼", () => {
   });
 });
 
-describe("표 Plus 버튼(placeholder)", () => {
-  // Issue #174 RD-002 — 이번엔 자리만이다(Q1 결정). 실제 기능은 Issue
-  // #175. 여기서는 (a) hover 시 노출되고 (b) 항상 aria-disabled이며 (c)
-  // 클릭해도 문서·selection이 바뀌지 않는다만 확인한다.
-  it("hover 시 노출되고 aria-disabled이며 클릭해도 아무 효과가 없다", () => {
-    const { editor, table } = renderRealTable();
+describe("표 Plus 버튼", () => {
+  // Issue #174 RD-002는 자리만 잡았다(placeholder, 항상 aria-disabled).
+  // Issue #175(roadmap RD-001)가 일반 블록 gutter의 Plus 버튼과 동일한
+  // 패리티로 실제 기능을 연결한다 — 표 바로 뒤에 빈 문단을 삽입하고
+  // onBlockAdded(새 blockId)를 호출한다(block-side-menu.tsx의
+  // handleAddBlockClick과 같은 계약). 메뉴가 실제로 열리는지는
+  // add-block.test.tsx의 표 케이스가 SlashMenu 전체 마운트로 검증한다 —
+  // 여기서는 TableHandles 단독 배선(문서 결과 + 콜백)만 본다.
+  it("hover 시 노출되고 클릭 가능하다(aria-disabled 없음)", () => {
+    const { table } = renderRealTable();
     fireEvent.pointerMove(table);
 
-    const button = screen.getByRole("button", {
-      name: tableQuickInsertPlaceholderLabel,
-    });
-    expect(button.getAttribute("aria-disabled")).toBe("true");
+    const button = screen.getByRole("button", { name: tableAddBlockLabel });
 
-    const before = editor.getDocument();
-    fireEvent.click(button);
+    expect(button.getAttribute("aria-disabled")).toBeNull();
+  });
 
-    expect(editor.getDocument()).toEqual(before);
-    expect(editor.getBlockSelection()).toBeNull();
+  it("클릭 시 표 바로 뒤에 빈 문단을 삽입하고 onBlockAdded를 그 블록 id로 호출한다", () => {
+    const onBlockAdded = vi.fn();
+    const { editor, table, tableBlockId } = renderRealTable({ onBlockAdded });
+    fireEvent.pointerMove(table);
+    // 전제: mountTableEditor 기본 문서는 [block-1, table, 자동 trailing
+    // 문단]이다(trailing-block-extension.ts) — 표가 마지막 블록이 아니라
+    // 인덱스로 앞뒤를 고정할 수 없다. tableIndex를 실제로 찾아 그 바로
+    // 뒤에 새 문단이 꽂혔는지로 판정한다.
+    const before = editor.getDocument().blocks;
+    const tableIndex = before.findIndex((block) => block.id === tableBlockId);
+    if (tableIndex === -1) throw new Error("표 블록을 찾지 못했다");
+
+    fireEvent.click(screen.getByRole("button", { name: tableAddBlockLabel }));
+
+    const after = editor.getDocument().blocks;
+    expect(after).toHaveLength(before.length + 1);
+    const inserted = after[tableIndex + 1];
+    if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
+    expect(inserted.content).toEqual([]);
+    expect(onBlockAdded).toHaveBeenCalledTimes(1);
+    expect(onBlockAdded).toHaveBeenCalledWith(inserted.id);
   });
 });
 

@@ -88,7 +88,16 @@ const resolveMenuTargetIndex = (
   return { index: nextIndex === -1 ? null : nextIndex, count: ids.length };
 };
 
-export const TableHandles = () => {
+type TableHandlesProps = {
+  // 표 Plus 버튼(table-handle-overlays.tsx)이 표 바로 뒤에 문단을 삽입한
+  // 뒤 호출한다 — BlockSideMenuProps의 onBlockAdded와 같은 계약(새
+  // blockId 전달, 호출부가 블록타입 선택 메뉴를 연다). BlockSideMenu와
+  // 달리 옵션이다 — TableHandles는 이 기능과 무관한 다른 테스트에서도
+  // 단독 마운트되므로 필수로 두면 그 테스트들까지 건드려야 한다.
+  onBlockAdded?: (blockId: string) => void;
+};
+
+export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [hoverTableId, hoverTableIdRef, updateHoverTableId] = useMirroredState<
@@ -868,6 +877,17 @@ export const TableHandles = () => {
     editor.commands.insertTableColumn(fresh.tableBlockId, fresh.columns.length);
   };
 
+  // Issue #175(roadmap RD-001) — Plus 버튼은 일반 블록 gutter의 Plus
+  // 버튼과 동일한 패리티다(block-side-menu.tsx의 handleAddBlockClick).
+  // 표 바로 뒤에 빈 문단을 삽입하고, 성공하면 onBlockAdded로 새 blockId를
+  // 알린다 — 호출부(slash-menu.tsx)가 그 블록에 타입 선택 메뉴를 연다.
+  const handleAddBlockClick = () => {
+    const fresh = readFreshGeometry();
+    if (fresh === null) return;
+    const result = editor.commands.insertParagraphAfter(fresh.tableBlockId);
+    if (result.ok) onBlockAdded?.(result.value.blockId);
+  };
+
   // Issue #174 RD-002(Issue #149 확장)·RD-003 — 표 그립 버튼(CONTEXT.md)
   // 클릭 시 표 자신을 selectBlockRange(tableId, tableId)로 선택해
   // BlockSelectionToolbar(Delete·위/아래 이동)를 열고, TableGripMenu도
@@ -919,6 +939,7 @@ export const TableHandles = () => {
           activeColumnIds={activeColumnIds}
           activeRowIds={activeRowIds}
           geometry={geometry}
+          onAddBlock={handleAddBlockClick}
           onAddColumn={handleAddColumn}
           onAddRow={handleAddRow}
           onReorderHandleClick={handleReorderHandleClick}

@@ -51,6 +51,7 @@ export type TableHandleOverlaysProps = {
   ) => void;
   onAddRow: () => void;
   onAddColumn: () => void;
+  onAddBlock: () => void;
   onTableGripClick: () => void;
   // Notion 참고(사용자 요청) — 가장 아래 행/가장 오른쪽 열을 가리킬 때만
   // true. table-handles.tsx의 computeExpandButtonVisibility가 계산한다.
@@ -80,6 +81,7 @@ export const TableHandleOverlays = ({
   onResizeHandlePointerDown,
   onAddRow,
   onAddColumn,
+  onAddBlock,
   onTableGripClick,
   showAddRow,
   showAddColumn,
@@ -283,19 +285,23 @@ export const TableHandleOverlays = ({
           행 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열 중앙이라
           더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md "결정") — 새
           clamp 로직 없이 기존 absolute 좌표 관용구를 그대로 쓴다(PIT-0011,
-          G-UI-003). Plus(placeholder)+표 그립 버튼(Issue #174 RD-002) 둘뿐이다
-          — Indent/Outdent는 더 이상 이 코너에 없다(RD-004, TableGripMenu
+          G-UI-003). Plus+표 그립 버튼(Issue #174 RD-002) 둘뿐이다 —
+          Indent/Outdent는 더 이상 이 코너에 없다(RD-004, TableGripMenu
           항목으로 이전). 순서는 Notion 참고(왼쪽부터 Plus, 표에 가까운
           쪽이 Grip) — Select table 버튼(Issue #149)을 표 그립 버튼이
-          대체한다. Plus는 이번엔 자리만이다: 클릭 핸들러가 없고(항상
-          aria-disabled) title로만 안내한다 — 실제 기능은 별도
-          Issue(#175)에서 연결한다. */}
+          대체한다. Plus는 일반 블록 gutter의 Plus 버튼과 동일한 패리티다
+          (Issue #175, roadmap RD-001) — 클릭하면 표 바로 뒤에 문단을
+          삽입하고(onAddBlock, table-handles.tsx의 handleAddBlockClick) 그
+          자리에서 블록타입 선택 메뉴가 열린다(block-side-menu.tsx의
+          handleAddBlockClick과 같은 계약). 라벨도 같은
+          dictionary.handle.addBlock을 재사용한다 — 별도 표 전용 문구를
+          만들지 않는다. */}
       <IconButton
-        aria-disabled="true"
         className={nestingButtonClassName}
         data-geul-table-quick-insert=""
         icon={addIcon}
-        label={dictionary.handle.tableQuickInsertPlaceholder}
+        label={dictionary.handle.addBlock}
+        onClick={onAddBlock}
         style={{
           position: "absolute",
           left: geometry.left - 96,

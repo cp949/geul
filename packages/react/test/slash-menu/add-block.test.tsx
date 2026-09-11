@@ -7,6 +7,8 @@
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { SlashMenu } from "../../src/index.js";
+import { mountTableEditor } from "../mount-editor.js";
 import { fireSelectionChange } from "../selection-events.js";
 import {
   addBlockLabel,
@@ -154,5 +156,37 @@ describe("SlashMenu 블록 추가 버튼", () => {
     } finally {
       HTMLElement.prototype.getBoundingClientRect = original;
     }
+  });
+});
+
+describe("SlashMenu 표 Plus 버튼", () => {
+  // TableHandles 단독 배선(문서 결과 + onBlockAdded 호출)은
+  // table-handles.test.tsx "표 Plus 버튼"이 검증한다. 여기서는 실제
+  // SlashMenu 마운트에서 표 Plus 클릭이 openMenuAt까지 이어지는지만
+  // 본다 — 표가 섞이면 TableHandles가 함께 살아나(slash-menu-test-support.tsx
+  // renderRealBlocks 주석과 같은 이유) mountTableEditor를 따로 쓴다.
+  const renderRealTable = () => mountTableEditor({ children: <SlashMenu /> });
+
+  it("표 Plus 버튼 클릭 시 표 바로 뒤에 문단을 삽입하고 블록타입 선택 메뉴를 연다", () => {
+    const rendered = renderRealTable();
+    fireEvent.pointerMove(rendered.table);
+    // 전제: mountTableEditor 기본 문서는 [block-1, table, 자동 trailing
+    // 문단]이다(trailing-block-extension.ts) — table-handles.test.tsx의
+    // 같은 전제 주석 참고. tableIndex를 실제로 찾아 그 바로 뒤를 본다.
+    const before = rendered.editor.getDocument().blocks;
+    const tableIndex = before.findIndex(
+      (block) => block.id === rendered.tableBlockId,
+    );
+    if (tableIndex === -1) throw new Error("표 블록을 찾지 못했다");
+
+    fireEvent.click(screen.getByRole("button", { name: addBlockLabel }));
+
+    const after = rendered.editor.getDocument().blocks;
+    expect(after).toHaveLength(before.length + 1);
+    const inserted = after[tableIndex + 1];
+    if (inserted?.type !== "paragraph") throw new Error("새 문단이 아니다");
+    expect(inserted.content).toEqual([]);
+    expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe(inserted.id);
   });
 });

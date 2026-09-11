@@ -610,7 +610,11 @@ export const SlashMenu = ({
         }
       />
       <CodeBlockLanguageCombobox />
-      <TableHandles />
+      <TableHandles
+        onBlockAdded={(blockId) =>
+          openMenuAt(blockId, { type: "paragraph" }, "")
+        }
+      />
       <TableSelectionToolbar />
       <BlockSelectionToolbar />
       {menuContent !== null &&
