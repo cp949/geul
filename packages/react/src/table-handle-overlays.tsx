@@ -87,6 +87,20 @@ export const TableHandleOverlays = ({
   showAddColumn,
 }: TableHandleOverlaysProps) => {
   const dictionary = useDictionary();
+  // 코너 클러스터(Plus·표 그립)의 세로 자리 — 표 상단이 아니라 첫 행의
+  // 세로 중앙에 맞춘다(사용자 스크린샷 지적: "세로 위치가 테이블
+  // 첫번째 행과 안 맞아" — 표 위 대각선 자리(top - 28)는 Notion과
+  // 달랐다). 행 그립 hit box의 세로 계산(아래 첫 주석, row.top +
+  // row.height/2 - 10)과 같은 공식이고 버튼 높이만 다르다(24px, 그
+  // hit box는 20px 버튼 기준). 표는 항상 행을 최소 1개 갖는 모델
+  // 불변식이라(model 계약) firstRow는 undefined가 아니지만, geometry
+  // 판독이 레이아웃 과도기에 빈 배열을 줄 가능성까지 방어적으로 표
+  // 상단(geometry.top) 기준으로 대체한다.
+  const firstRow = geometry.rows[0];
+  const cornerClusterTop =
+    firstRow !== undefined
+      ? firstRow.top + firstRow.height / 2 - 12
+      : geometry.top - 12;
   return (
     <>
       {/* 행 그립은 3단계다(Notion 참고, 사용자 요청): ① 평소 완전히 숨김,
@@ -301,12 +315,13 @@ export const TableHandleOverlays = ({
           addBlock을 재사용한다)가 같은 "안쪽" 자리(-104+24+2=-78)를
           맡는다 — 옛 순서(Plus 바깥·Grip 안쪽, RD-004)는 일반 gutter와
           반대였다(사용자 스크린샷 지적, "hello 행과 표 행의 Plus
-          좌우가 다르다"). top은 버튼 높이가 1.25rem(20px)에서 1.5rem
-          (24px)로 커진 만큼 4px 올려(-24 → -28) 버튼 아래쪽 끝을 표
-          상단에서 4px 위로 그대로 유지한다 — row handle hit box(y가 첫
-          행 중앙이라 더 아래)와 x축은 겹쳐도 세로가 갈려 겹치지 않는
-          기존 불변식(01-계획.md "결정")은 이 바닥선이 안 바뀌므로 그대로
-          유지된다. */}
+          좌우가 다르다"). top은 표 상단이 아니라 cornerClusterTop(첫 행
+          세로 중앙, 위 선언부 주석)을 쓴다 — 표 위 대각선 자리(이전
+          top - 28)는 Notion과 달랐다(사용자 스크린샷 지적, "세로 위치가
+          테이블 첫번째 행과 안 맞아"). 같은 높이가 된 row handle hit
+          box(아래 첫 주석, 왼쪽 -18~+12)와는 x축이 겹치지 않아(이 클러스터
+          오른쪽 끝은 -54) 여전히 서로 가리지 않는다 — 겹침 회피 축이
+          세로에서 가로로 바뀌었을 뿐이다. */}
       <IconButton
         className={nestingButtonClassName}
         data-geul-table-grip=""
@@ -316,7 +331,7 @@ export const TableHandleOverlays = ({
         style={{
           position: "absolute",
           left: geometry.left - 104,
-          top: geometry.top - 28,
+          top: cornerClusterTop,
         }}
       />
       <IconButton
@@ -328,7 +343,7 @@ export const TableHandleOverlays = ({
         style={{
           position: "absolute",
           left: geometry.left - 78,
-          top: geometry.top - 28,
+          top: cornerClusterTop,
         }}
       />
       {reorderGuideRect !== null && (
