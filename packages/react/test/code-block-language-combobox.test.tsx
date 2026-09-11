@@ -646,10 +646,7 @@ describe("CodeBlock 언어 팝오버 — codeBlockLanguages(BLK-017)", () => {
     fireEvent.click(languageButton());
 
     const options = screen.getAllByRole("option");
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Rust",
-      "Go",
-    ]);
+    expect(options.map((option) => option.textContent)).toEqual(["Rust", "Go"]);
 
     fireEvent.click(screen.getByRole("option", { name: /Go/ }));
     expect(storedLanguage(rendered)).toBe("go");
