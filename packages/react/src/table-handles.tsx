@@ -14,10 +14,13 @@ import {
   readTableRowIds,
   type TableGeometry,
 } from "./table-handle-geometry.js";
+import { TableGripMenu } from "./table-grip-menu.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
 import { TableHandleOverlays } from "./table-handle-overlays.js";
 import {
   HANDLE_HOVER_MARGIN,
+  TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS,
+  TABLE_GRIP_MENU_SELECTOR,
   TABLE_HOVER_IGNORE_SELECTORS,
   TABLE_MENU_DISMISS_ALLOW_SELECTORS,
   TABLE_MENU_SELECTOR,
@@ -28,6 +31,7 @@ import {
   computeMenuPosition,
   computeReorderGuideRect,
   computeReorderTargetIndex,
+  computeTableGripMenuPosition,
   readColumnStyleWidth,
   setColumnStyleWidth,
 } from "./table-handle-helpers.js";
@@ -150,6 +154,14 @@ export const TableHandles = () => {
   const [resizeState, resizeStateRef, updateResizeState] =
     useMirroredState<ResizeState | null>(null);
   const [menuState, setMenuState] = useState<HandleMenuState | null>(null);
+  // Issue #174 RD-003 — 표 그립 메뉴(표 전체 단위)는 행/열 grip
+  // 메뉴(menuState)와 별도 상태로 둔다. 대상이 index가 아니라 표 하나뿐이라
+  // Issue #65의 재조준(index 밀림) 문제 자체가 없다 — 무효화는 "이
+  // tableBlockId를 가리키는 geometry가 더는 없다"만 보면 된다(아래
+  // useEffect).
+  const [tableGripMenuTableId, setTableGripMenuTableId] = useState<
+    string | null
+  >(null);
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // block-side-menu.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
@@ -188,6 +200,20 @@ export const TableHandles = () => {
     }
   }, [element, focusEditor]);
 
+  // Issue #174 RD-003 — 표 그립 메뉴판 closeMenuOnInvalidation. 대상이 표
+  // 하나뿐이라 재조준(index 갱신) 분기가 없다 — 무효화 판정은 findTable
+  // 결과 하나(있다/없다)로 끝난다.
+  const closeTableGripMenuOnInvalidation = useCallback(() => {
+    const activeElement = element?.ownerDocument.activeElement ?? null;
+    const focusWasInMenu =
+      activeElement instanceof Element &&
+      activeElement.closest(TABLE_GRIP_MENU_SELECTOR) !== null;
+    setTableGripMenuTableId(null);
+    if (focusWasInMenu) {
+      focusEditor();
+    }
+  }, [element, focusEditor]);
+
   // 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로 닫는 UI는
   // 병렬 e2e로 검증한다). 실제 리스너 등록/해제는 useDismissOnOutsideOrEscape가
   // 소유한다 — table-selection-toolbar.tsx도 같은 훅을 쓴다(Issue #20).
@@ -198,6 +224,27 @@ export const TableHandles = () => {
     allowSelectors: TABLE_MENU_DISMISS_ALLOW_SELECTORS,
     onOutsideDismiss: dismissMenu,
     onEscapeDismiss: closeMenu,
+  });
+
+  // Issue #174 RD-003 — 표 그립 메뉴도 행/열 grip 메뉴와 같은 바깥
+  // pointerdown/Escape 규약을 따르되, 독립된 상태·allow-list로 관리한다
+  // (재조준 대상이 없어 closeMenuOnInvalidation 같은 초점 판단 분기는
+  // 불필요 — 표 자체가 사라지면 아래 무효화 effect가 초점 이동 없이 바로
+  // 닫는다).
+  const closeTableGripMenu = useCallback(() => {
+    setTableGripMenuTableId(null);
+    focusEditor();
+  }, [focusEditor]);
+  const dismissTableGripMenu = useCallback(
+    () => setTableGripMenuTableId(null),
+    [],
+  );
+  useDismissOnOutsideOrEscape({
+    active: tableGripMenuTableId !== null,
+    element,
+    allowSelectors: TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS,
+    onOutsideDismiss: dismissTableGripMenu,
+    onEscapeDismiss: closeTableGripMenu,
   });
 
   // gutter가 표 바깥 오버레이라서, hover 추적을 element 안쪽에만 걸면
@@ -303,6 +350,7 @@ export const TableHandles = () => {
     reorderState?.tableBlockId ??
     resizeState?.tableBlockId ??
     menuState?.tableBlockId ??
+    tableGripMenuTableId ??
     hoverTableId ??
     selectionTableId;
   const geometry =
@@ -353,9 +401,11 @@ export const TableHandles = () => {
   // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
   // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
   // 없다. 창 크기 변경(반응형 레이아웃이 표 폭을 바꾸는 경우)만 geometry를
-  // 다시 읽어야 한다. 다만 행/열 메뉴(table-handle-menu.tsx)는 G-UI-001의
+  // 다시 읽어야 한다. 다만 행/열 메뉴(table-handle-menu.tsx)와 표 그립
+  // 메뉴(table-grip-menu.tsx, Issue #174 RD-003)는 둘 다 G-UI-001의
   // position: fixed + 뷰포트 clamp를 그대로 쓰므로 스크롤할 때마다 다시
-  // 계산해야 앵커를 따라간다 — 메뉴가 열려 있을 때만 스크롤 리스너를 켠다.
+  // 계산해야 앵커를 따라간다 — 둘 중 하나라도 열려 있을 때만 스크롤
+  // 리스너를 켠다.
   useEffect(() => {
     if (element === null || activeTableId === null) return;
     const ownerDocument = element.ownerDocument;
@@ -363,14 +413,14 @@ export const TableHandles = () => {
     const refreshGeometry = () => setGeometryVersion((version) => version + 1);
 
     view?.addEventListener("resize", refreshGeometry);
-    if (menuState !== null) {
+    if (menuState !== null || tableGripMenuTableId !== null) {
       ownerDocument.addEventListener("scroll", refreshGeometry, true);
     }
     return () => {
       view?.removeEventListener("resize", refreshGeometry);
       ownerDocument.removeEventListener("scroll", refreshGeometry, true);
     };
-  }, [element, activeTableId, menuState]);
+  }, [element, activeTableId, menuState, tableGripMenuTableId]);
 
   // 위 geometry는 이 렌더 함수 본문에서 읽은 값이라, 같은 커밋에 딸려오는
   // DOM 변경(예: 표보다 앞선 형제가 줄바꿈으로 높이를 바꿔 표를 밀어내는
@@ -693,6 +743,29 @@ export const TableHandles = () => {
     return () => observer.disconnect();
   }, [menuState, element, closeMenuOnInvalidation]);
 
+  // Issue #174 RD-003 — 표 그립 메뉴도 DOM 변화를 MutationObserver로
+  // 직접 지켜본다. React state 변화만 지켜보는 effect로는 deleteBlock처럼
+  // 이 컴포넌트를 다시 렌더시키지 않는 문서 변경(위 reconcileMenuState와
+  // 같은 이유)을 놓친다 — geometry는 렌더 본문에서만 다시 읽히므로, 그
+  // 렌더를 일으키는 다른 원인이 없으면 표가 사라진 뒤에도 낡은 값에
+  // 머문다.
+  useEffect(() => {
+    if (tableGripMenuTableId === null || element === null) return;
+
+    const reconcileTableGripMenu = () => {
+      const table = findTable(element, tableGripMenuTableId);
+      if (table === null) {
+        closeTableGripMenuOnInvalidation();
+      }
+    };
+
+    reconcileTableGripMenu();
+
+    const observer = new MutationObserver(reconcileTableGripMenu);
+    observer.observe(element, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [tableGripMenuTableId, element, closeTableGripMenuOnInvalidation]);
+
   const handleReorderHandleClick = (
     event: React.MouseEvent<HTMLButtonElement>,
     kind: ReorderKind,
@@ -716,7 +789,13 @@ export const TableHandles = () => {
           menuState.index === index,
       },
       {
-        onOpen: () => setMenuState({ kind, tableBlockId, index, targetId: id }),
+        onOpen: () => {
+          // Issue #174 RD-003 — 두 메뉴(행/열 grip, 표 그립)는 동시에 열리지
+          // 않는다. 표 그립 메뉴가 열려 있었다면 여기서 닫는다(포커스는
+          // 곧바로 이 메뉴로 이동하므로 focusEditor는 부르지 않는다).
+          setTableGripMenuTableId(null);
+          setMenuState({ kind, tableBlockId, index, targetId: id });
+        },
         onClose: closeMenu,
       },
     );
@@ -826,17 +905,25 @@ export const TableHandles = () => {
     editor.commands.outdentBlock(fresh.tableBlockId);
   };
 
-  // Issue #174 RD-002(Issue #149 확장) — 표 그립 버튼(CONTEXT.md) 클릭 시
-  // 표 자신을 selectBlockRange(tableId, tableId)로 선택해
-  // BlockSelectionToolbar(Delete·위/아래 이동)를 연다(Notion처럼 그립 클릭이
-  // 곧 선택이다). Indent/Outdent와 같은 readFreshGeometry() →
-  // editor.commands.* 관용구를 그대로 따른다. 표 직접 duplicate는 이제
-  // core가 허용한다(Issue #174 RD-001) — 이 함수는 선택만 하고, 메뉴를 여는
-  // 것과 메뉴의 표 복제 항목 연결은 RD-003이 이어받는다.
+  // Issue #174 RD-002(Issue #149 확장)·RD-003 — 표 그립 버튼(CONTEXT.md)
+  // 클릭 시 표 자신을 selectBlockRange(tableId, tableId)로 선택해
+  // BlockSelectionToolbar(Delete·위/아래 이동)를 열고, TableGripMenu도
+  // 함께 연다(Notion처럼 그립 클릭이 곧 선택+메뉴다). 같은 표에서 다시
+  // 클릭하면 토글로 닫는다(행/열 grip 메뉴의 resolveReopenAwareClick과
+  // 달리 드래그가 없는 단순 클릭 버튼이라 재오픈 억제 상태 머신은 필요
+  // 없다). 행/열 grip 메뉴가 열려 있었다면 함께 닫는다(동시에 두 메뉴를
+  // 열지 않는다, handleReorderHandleClick의 반대 방향 정리와 대칭).
   const handleTableGripClick = () => {
     const fresh = readFreshGeometry();
     if (fresh === null) return;
+    if (tableGripMenuTableId === fresh.tableBlockId) {
+      setTableGripMenuTableId(null);
+      focusEditor();
+      return;
+    }
     editor.commands.selectBlockRange(fresh.tableBlockId, fresh.tableBlockId);
+    setMenuState(null);
+    setTableGripMenuTableId(fresh.tableBlockId);
   };
 
   const reorderGuideRect = computeReorderGuideRect(geometry, reorderState);
@@ -851,6 +938,16 @@ export const TableHandles = () => {
     x: element?.ownerDocument.defaultView?.scrollX ?? 0,
     y: element?.ownerDocument.defaultView?.scrollY ?? 0,
   });
+  // Issue #174 RD-003 — 표 그립 메뉴도 같은 스크롤 오프셋 규약(G-UI-001)을
+  // 따른다.
+  const tableGripMenuPosition = computeTableGripMenuPosition(
+    geometry,
+    tableGripMenuTableId,
+    {
+      x: element?.ownerDocument.defaultView?.scrollX ?? 0,
+      y: element?.ownerDocument.defaultView?.scrollY ?? 0,
+    },
+  );
 
   return (
     <>
@@ -903,6 +1000,19 @@ export const TableHandles = () => {
           top={menuPosition.top}
         />
       )}
+      {tableGripMenuTableId !== null &&
+        geometry !== null &&
+        tableGripMenuPosition !== null && (
+          <TableGripMenu
+            headerColumnEnabled={geometry.headerColumns === 1}
+            headerRowEnabled={geometry.headerRows === 1}
+            key={tableGripMenuTableId}
+            left={tableGripMenuPosition.left}
+            onClose={closeTableGripMenu}
+            tableBlockId={tableGripMenuTableId}
+            top={tableGripMenuPosition.top}
+          />
+        )}
     </>
   );
 };

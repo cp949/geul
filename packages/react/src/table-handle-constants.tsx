@@ -65,6 +65,10 @@ export const HANDLE_HOVER_MARGIN = 28;
 // table-handles.tsx의 초점 판정(Issue #65 항목4)이 모두 이 문자열을
 // 공유한다 — 세 번째 사용처를 리터럴로 또 추가하지 않는다.
 export const TABLE_MENU_SELECTOR = "[data-geul-table-menu]";
+// Issue #174 RD-003 — 표 그립 메뉴(table-grip-menu.tsx) 패널 루트. 행/열
+// grip 메뉴(TABLE_MENU_SELECTOR)와 별도 상태(tableGripMenuTableId)로
+// 관리해 독립된 셀렉터를 쓴다.
+export const TABLE_GRIP_MENU_SELECTOR = "[data-geul-table-grip-menu]";
 
 // useDismissOnOutsideOrEscape에 넘기는 allow-list. 모듈 스코프 상수로 둔다 —
 // 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
@@ -72,6 +76,13 @@ export const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
   TABLE_MENU_SELECTOR,
   "[data-geul-table-row-handle]",
   "[data-geul-table-column-handle]",
+] as const;
+// Issue #174 RD-003 — 표 그립 메뉴 전용 allow-list. 그립 버튼 자신을
+// 눌러 메뉴를 토글하는 클릭이 "바깥 클릭"으로 오판되지 않게 한다(행/열
+// grip 메뉴의 handle 셀렉터와 같은 이유).
+export const TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS = [
+  TABLE_GRIP_MENU_SELECTOR,
+  "[data-geul-table-grip]",
 ] as const;
 
 // usePointerHoverTarget에 넘기는 ignore-list. 자기 자신의 오버레이(핸들·
@@ -86,6 +97,7 @@ export const TABLE_HOVER_IGNORE_SELECTORS = [
   "[data-geul-table-expand-row]",
   "[data-geul-table-expand-column]",
   TABLE_MENU_SELECTOR,
+  TABLE_GRIP_MENU_SELECTOR,
   "[data-geul-table-indent]",
   "[data-geul-table-outdent]",
   "[data-geul-table-grip]",

@@ -100,6 +100,14 @@ export type Dictionary = {
     headerRow: string;
     headerColumn: string;
     cellFormattingAriaLabel: string;
+    // Issue #174 RD-003 — 표 그립 버튼 클릭 시 여는 TableGripMenu의
+    // aria-label. tableRowMenuAriaLabel/tableColumnMenuAriaLabel과 같은
+    // 자리다. duplicate/headerRow/headerColumn은 새로 만들지 않고 기존 키를
+    // 그대로 재사용한다(같은 커맨드, 같은 라벨).
+    tableGripMenuAriaLabel: string;
+    // Issue #174 RD-003 — 너비에 맞추기 placeholder 항목. 클릭하면
+    // console.log만 남긴다(실제 구현은 별도 Issue #176).
+    fitTableWidth: string;
   };
   // RD-002-DELTA-05 — 색상 이름 8종과 "Text color"/"Background color"
   // property 라벨. `names`의 key는 react `table-cell-colors.ts`의
@@ -386,6 +394,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     headerRow: "Header row",
     headerColumn: "Header column",
     cellFormattingAriaLabel: "Cell formatting",
+    tableGripMenuAriaLabel: "Table menu",
+    fitTableWidth: "Fit to width (coming soon)",
   },
   color: {
     textLabel: "Text color",

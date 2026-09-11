@@ -182,3 +182,21 @@ export const computeMenuPosition = (
         top: geometry.top - scrollOffset.y,
       };
 };
+
+// Issue #174 RD-003 — 표 그립 메뉴는 그립 버튼(table-handle-overlays.tsx,
+// left: geometry.left - 72, top: geometry.top - 24, height 20px)의 바로
+// 아래에 연다. geometry.tableBlockId가 tableGripMenuTableId와 다르면(다른
+// 표로 활성이 넘어갔거나 표가 사라진 경우) null을 돌려줘 호출부가 메뉴를
+// 렌더하지 않게 한다.
+export const computeTableGripMenuPosition = (
+  geometry: TableGeometry | null,
+  tableGripMenuTableId: string | null,
+  scrollOffset: { x: number; y: number },
+): MenuPosition | null => {
+  if (tableGripMenuTableId === null || geometry === null) return null;
+  if (geometry.tableBlockId !== tableGripMenuTableId) return null;
+  return {
+    left: geometry.left - 72 - scrollOffset.x,
+    top: geometry.top - 4 - scrollOffset.y,
+  };
+};
