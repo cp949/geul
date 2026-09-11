@@ -106,8 +106,23 @@
   // 에디터 대비 답답해 보였다(사용자 스크린샷 비교 지적). blockquote·
   // codeBlock의 0.75rem보다 크게 잡았다 — 표는 그 둘보다 시각적으로 무거운
   // 블록이라 더 넓은 여백을 쓴다(사용자 조정값).
+  //
+  // margin-left: 3rem — Notion은 표를 일반 문단보다 왼쪽으로 들여 첫 행
+  // 왼쪽의 Plus·그립 버튼 자리를 표 본문과 겹치지 않게 확보한다(사용자
+  // 스크린샷 비교 지적). table-handle-overlays.tsx가 그 버튼들을
+  // geometry.left(표 getBoundingClientRect().left, live DOM 측정)의
+  // -48px/-24px 절대좌표로 그리므로, margin-left를 주면 geometry.left가
+  // 그만큼 밀리며 버튼 좌표도 함께 따라온다 — 좌표 상수를 별도로 고칠
+  // 필요가 없다. 3rem(48px, 기본 16px 루트 기준)은 Plus 버튼 오프셋(-48)과
+  // 같은 값이라 Plus 버튼의 왼쪽 끝이 들여쓰기 전 표(=일반 문단) 왼쪽
+  // 끝과 정확히 맞아떨어진다. 행 그립 hit box(geometry.left-18~+12)는 이
+  // 코너 버튼 쌍(geometry.left-48~-4)과 x축이 겹치지만 세로가 표 위쪽
+  // (top-24)과 첫 행 중앙으로 갈려 겹치지 않는다(01-계획.md "결정") — 이
+  // 관계는 앵커(geometry.left/top) 이동에 불변이라 들여쓰기로 깨지지
+  // 않는다.
   table {
     margin: 1.4rem 0;
+    margin-left: 3rem;
     border-collapse: collapse;
   }
 

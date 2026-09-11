@@ -113,6 +113,20 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(rule).toContain("margin: 1.4rem 0;");
   });
 
+  it("표를 일반 문단보다 왼쪽으로 들여 표 코너 Plus·그립 버튼 자리를 확보한다(Notion 대비 사용자 지적, table-handle-overlays.tsx의 Plus 버튼 오프셋 -48px와 맞춘다)", () => {
+    const css = compileCss();
+    const rule = /\.geul-editor table \{(?<body>[^}]*)\}/.exec(css)?.groups
+      ?.body;
+
+    // table-handle-overlays.tsx가 Plus·표 그립 버튼을 geometry.left(=표
+    // getBoundingClientRect().left, live DOM 측정)의 -48px/-24px에 절대
+    // 좌표로 그린다 — margin-left를 주면 geometry.left가 그만큼 밀리며 그
+    // 오프셋도 그대로 따라와 별도 좌표 수정이 필요 없다. 3rem(48px, 기본
+    // 16px 루트 기준)은 Plus 버튼 오프셋과 같은 값이라 Plus 버튼의 왼쪽
+    // 끝이 들여쓰기 전 표(=일반 문단) 왼쪽 끝과 맞아떨어진다.
+    expect(rule).toContain("margin-left: 3rem;");
+  });
+
   it("url 없는 media 블록에 실제 높이를 가진 빈 슬롯을 그린다(MED-001, QA-090 — 없으면 선택 해제 시 height:0으로 완전히 사라져 마우스로 재접근 불가)", () => {
     const css = compileCss();
     const rule =
