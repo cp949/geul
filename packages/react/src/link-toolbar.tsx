@@ -164,6 +164,17 @@ export const LinkToolbar = ({
       return;
     }
 
+    // 표 CellSelection(여러 셀 드래그 선택)도 non-collapsed Range를 만들어
+    // 위 hasRange 판정을 통과한다 — table-selection-toolbar.tsx가 이미 같은
+    // 선택을 다루므로 여기서 또 열리면 두 툴바가 겹친다. 병합된 셀 안의
+    // 정상 텍스트 선택은 막지 않는다(formatting-toolbar.tsx의 같은 가드와
+    // 같은 이유, isCellRangeSelected() 주석 참고).
+    if (editor.isCellRangeSelected()) {
+      setToolbarState({ mode: "closed" });
+      dismissSuppression.clear();
+      return;
+    }
+
     if (
       currentRange !== null &&
       dismissSuppression.isSuppressed(currentRange)

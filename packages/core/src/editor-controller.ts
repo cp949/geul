@@ -270,6 +270,13 @@ export const createEditor = (
         splitCellId: cellId,
       };
     },
+    isCellRangeSelected() {
+      if (session.isDestroyed) return false;
+      // getTableCellSelection()과 달리 "캐럿이 병합된 셀 안"(선택 없음)
+      // 케이스를 포함하지 않는다 — instanceof 한 줄로 CellSelection만
+      // 가린다(editor-controller-types.ts의 isCellRangeSelected 주석 참고).
+      return session.editor.state.selection instanceof CellSelection;
+    },
     getBlockSelection() {
       if (session.isDestroyed) return null;
       return session.getBlockSelection();

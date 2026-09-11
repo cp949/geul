@@ -143,6 +143,31 @@ describe("FormattingToolbar 서식 툴바", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
+  it("표에서 여러 셀을 선택(CellSelection)하면 렌더링하지 않는다", () => {
+    // 표 드래그 다중 셀 선택도 DOM selection이 그 범위를 덮는 non-collapsed
+    // Range가 돼 위 미디어 가드와 같은 구멍이 있었다 —
+    // table-selection-toolbar.tsx가 이미 같은 선택에 서식 컨트롤을 띄우므로
+    // 여기서 또 뜨면 두 툴바가 겹친다(isCellRangeSelected() 가드).
+    const controller = fakeController();
+    controller.isCellRangeSelected.mockReturnValue(true);
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+
+    selectText(textNode, 0, 8);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
   it("Escape로 닫고 편집기로 초점을 되돌린다(G-UI-001, QA-002/QA-015)", () => {
     const controller = fakeController();
     render(

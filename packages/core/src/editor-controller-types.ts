@@ -177,6 +177,16 @@ export interface EditorController {
   } | null;
   getBlockNestingActionState(blockId: string): BlockNestingActionState;
   getTableCellSelection(): TableCellSelection | null;
+  // formatting-toolbar·link-toolbar(react)가 표 CellSelection(여러 셀에
+  // 걸친 선택)일 때 자신을 닫는 판정 전용 — getTableCellSelection()을
+  // 재사용하지 않는다. 그 함수는 "캐럿이 이미 병합된 셀 안"(선택 없이도)
+  // 케이스도 non-null을 돌려주는데, 이걸로 서식 툴바를 닫으면 병합된 셀
+  // 안에서 정상적으로 드래그한 텍스트 선택까지 같이 닫혀버린다(회귀).
+  // 여기는 오직 `state.selection instanceof CellSelection`만 본다 —
+  // getSelectionMediaBlock()이 NodeSelection 하나만 보는 것과 같은 결의
+  // 좁은 판정이다. media 쪽 가드는 91fcefa가 formatting-toolbar·
+  // link-toolbar에 이미 추가했고, CellSelection 쪽은 그 대응판이다.
+  isCellRangeSelected(): boolean;
   getBlockSelection(): BlockSelection | null;
   // spec §4.2 — 업로드 중(pending) 상태 읽기 전용 조회. 문서 round-trip
   // 대상이 아니다(session 전용, blockSelection과 같은 자리). 변경은

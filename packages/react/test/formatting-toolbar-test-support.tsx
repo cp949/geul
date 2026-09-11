@@ -47,6 +47,7 @@ type FormattingToolbarFakeController = {
   getSelectionMarks: Mock;
   getSelectionBlockType: Mock;
   getSelectionMediaBlock: Mock;
+  isCellRangeSelected: Mock;
   getBlockNestingActionState: Mock;
   getDictionary: Mock;
   replaceDocument: Mock;
@@ -100,6 +101,10 @@ export const fakeController = (
   // null(미디어 선택 아님)이면 기존 텍스트 선택 테스트 전부가 그대로
   // 통과한다.
   getSelectionMediaBlock: Mock = vi.fn((): SelectionMediaBlock => null),
+  // 표 CellSelection 게이트 테스트 전용 — 기본값 false(CellSelection
+  // 아님)면 기존 텍스트 선택 테스트 전부가 그대로 통과한다(위
+  // getSelectionMediaBlock과 같은 결).
+  isCellRangeSelected: Mock = vi.fn((): boolean => false),
 ): FormattingToolbarFakeController => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -117,6 +122,7 @@ export const fakeController = (
   getSelectionMarks,
   getSelectionBlockType,
   getSelectionMediaBlock,
+  isCellRangeSelected,
   getBlockNestingActionState,
   getDictionary,
   replaceDocument: vi.fn(),

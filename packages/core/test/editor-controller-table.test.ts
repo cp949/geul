@@ -253,6 +253,35 @@ describe("에디터 컨트롤러 표", () => {
       });
     });
 
+    it("셀 범위를 드래그 선택하면 isCellRangeSelected가 true를 보고한다", () => {
+      const { editor, cellIds } = editorWithTable(2, 2);
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      selectCellRange(tiptap, topLeft, bottomRight);
+
+      expect(editor.isCellRangeSelected()).toBe(true);
+    });
+
+    it("병합된 셀 안의 caret은 CellSelection이 아니라서 isCellRangeSelected가 false다", () => {
+      // getTableCellSelection()은 이 상태에서도 splitCellId를 보고하지만
+      // (바로 위 테스트), formatting-toolbar/link-toolbar가 그 값을 그대로
+      // 가져다 쓰면 병합 셀 안의 정상 텍스트 선택까지 닫혀버린다(회귀) —
+      // isCellRangeSelected는 `state.selection instanceof CellSelection`만
+      // 본다.
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      if (topLeft === undefined || bottomRight === undefined) {
+        throw new Error("셀 fixture 준비 실패");
+      }
+      selectCellRange(tiptap, topLeft, bottomRight);
+      editor.commands.mergeTableCells(tableBlockId);
+
+      placeCaretInCell(tiptap, topLeft);
+
+      expect(editor.isCellRangeSelected()).toBe(false);
+    });
+
     it("splitTableCell로 병합된 셀을 원래 셀 개수로 되돌린다", () => {
       const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);

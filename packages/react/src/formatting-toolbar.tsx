@@ -220,6 +220,20 @@ export const FormattingToolbar = ({
       return;
     }
 
+    // 표에서 여러 셀을 드래그로 선택(CellSelection)하면 DOM selection도
+    // 그 범위를 덮는 non-collapsed Range가 돼 위 가드를 통과한다 —
+    // table-selection-toolbar.tsx가 이미 같은 선택에 자신의 서식(정렬·
+    // 색상) 컨트롤을 띄우므로 여기서 또 뜨면 두 툴바가 겹친다. 병합된
+    // 셀 "안"의 정상 텍스트 선택(CellSelection 아님)은 막지 않는다 —
+    // isCellRangeSelected()가 그 둘을 구분한다(위 media 가드와 같은 결,
+    // 91fcefa의 CellSelection 대응판).
+    if (editor.isCellRangeSelected()) {
+      setToolbarState(null);
+      setColorMenuState(null);
+      dismissSuppression.clear();
+      return;
+    }
+
     const range = selection.getRangeAt(0);
     if (dismissSuppression.isSuppressed(range)) return;
     dismissSuppression.clear();

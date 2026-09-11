@@ -661,6 +661,11 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     // 열 핸들은 열 중앙(left + width/2 - 10)에 놓인다 — 둘째 열(둘째 행의
     // 오른쪽 셀: left 200, width 100)이면 240이어야 한다. 첫 행만 봤다면
     // 둘째 열 핸들 자체가 없어 이 값이 나올 수 없었다.
-    expect(columnHandles[1]?.style.left).toBe("240px");
+    //
+    // page-absolute left는 이제 버튼 자신이 아니라 감싸는 hit
+    // box(columnHandleHitClassName)가 갖는다 — 버튼은 hit box 안에서
+    // idle/hover를 오가는 top만 own(_table-handles.scss). 버튼의
+    // parentElement가 그 hit box다(table-handle-overlays.tsx 구조).
+    expect(columnHandles[1]?.parentElement?.style.left).toBe("240px");
   });
 });

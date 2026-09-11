@@ -34,6 +34,33 @@ test("셀 범위를 드래그 선택해 병합하고 undo 1회로 복원한다 @
   await expect(cell(0, 0)).not.toHaveAttribute("colspan");
 });
 
+test("셀 범위를 드래그 선택하면 서식·링크 툴바가 뜨지 않는다", async ({
+  page,
+}) => {
+  // CellSelection도 DOM selection을 그 범위를 덮는 non-collapsed Range로
+  // 만들어 formatting-toolbar·link-toolbar의 판정을 통과시켰다 — 두
+  // 텍스트 툴바가 Table selection 툴바와 겹쳐 떴다(isCellRangeSelected
+  // 가드 회귀 재현).
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+
+  await cell(0, 0).click();
+  await page.keyboard.type("132");
+  await dragSelectCells(page, cell(0, 0), cell(1, 1));
+
+  await expect(
+    page.getByRole("toolbar", { name: "Table selection" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("toolbar", { name: "Formatting" }),
+  ).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Add link" }),
+  ).not.toBeVisible();
+});
+
 test("병합 직후 분할 툴바가 뜨고 분할하면 undo 1회로 병합 상태가 복원된다", async ({
   page,
 }) => {

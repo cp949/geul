@@ -49,6 +49,10 @@ type FakeControllerOptions = {
   getSelectionLink?: () => { href: string } | null;
   setLink?: (href: string) => { ok: boolean; error?: { code: string } };
   getSelectionMediaBlock?: () => SelectionMediaBlock;
+  // 표 CellSelection 게이트 테스트 전용 — 기본값 false면 기존 텍스트
+  // 선택 테스트 전부가 그대로 통과한다(위 getSelectionMediaBlock과 같은
+  // 결).
+  isCellRangeSelected?: () => boolean;
   dictionary?: Dictionary;
 };
 
@@ -56,6 +60,7 @@ const fakeController = ({
   getSelectionLink = () => null,
   setLink = () => ({ ok: true }),
   getSelectionMediaBlock = () => null,
+  isCellRangeSelected = () => false,
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -75,6 +80,7 @@ const fakeController = ({
   getSelectionLink: vi.fn(getSelectionLink),
   getSelectionBlockType: vi.fn(() => null),
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
+  isCellRangeSelected: vi.fn(isCellRangeSelected),
   getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
@@ -155,6 +161,20 @@ describe("LinkToolbar 링크 툴바", () => {
         showPreview: true,
         textAlignment: null,
       }),
+    });
+    renderWithSelectedText(controller);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add link" })).toBeNull();
+  });
+
+  it("표에서 여러 셀을 선택(CellSelection)하면 Add link를 표시하지 않는다", () => {
+    // formatting-toolbar.test.tsx의 같은 가드와 같은 이유 — 표 드래그 다중
+    // 셀 선택도 non-collapsed Range를 만들어 hasRange 판정을 통과한다.
+    // table-selection-toolbar.tsx가 이미 같은 선택을 다루므로
+    // isCellRangeSelected()로 구별해 여기서는 닫는다.
+    const controller = fakeController({
+      isCellRangeSelected: () => true,
     });
     renderWithSelectedText(controller);
 
