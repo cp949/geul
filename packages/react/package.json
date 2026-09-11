@@ -22,6 +22,7 @@
   ],
   "scripts": {
     "build": "tsc -b && esbuild dist/*.js --outdir=dist --target=chrome75 --format=esm --allow-overwrite --sourcemap --sources-content=false && sass --no-source-map src/styles.scss dist/_styles.raw.css && postcss dist/_styles.raw.css -o dist/styles.css && rm dist/_styles.raw.css",
+    "dev": "sass --watch --no-source-map src/styles.scss dist/styles.css",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.configs.json --noEmit",
     "test": "vitest run --root ../.. packages/react/test"
   },
