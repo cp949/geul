@@ -4,12 +4,14 @@ import {
   AlignLeft,
   AlignRight,
   Captions,
+  Check,
   Download as DownloadIcon,
   Eye,
   LucideProvider,
   PenLine,
   Replace as ReplaceIcon,
   Trash2,
+  X,
 } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -43,6 +45,8 @@ const alignLeftIcon = <AlignLeft {...iconProps} />;
 const alignCenterIcon = <AlignCenter {...iconProps} />;
 const alignRightIcon = <AlignRight {...iconProps} />;
 const deleteIcon = <Trash2 {...iconProps} />;
+const saveIcon = <Check {...iconProps} />;
+const cancelIcon = <X {...iconProps} />;
 const downloadIcon = <DownloadIcon {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. FilePanel/SlashMenu와 같은 이유로
@@ -704,30 +708,24 @@ export const MediaToolbar = ({
             type="text"
             value={toolbarState.draft}
           />
-          <button
-            aria-label={
+          <IconButton
+            className={mediaToolbarButtonClassName}
+            icon={saveIcon}
+            label={
               toolbarState.mode === "editingName"
                 ? dictionary.toolbar.media.saveNameAriaLabel
                 : dictionary.toolbar.media.saveCaptionAriaLabel
             }
-            className={mediaToolbarButtonClassName}
             onClick={
               toolbarState.mode === "editingName" ? applyName : applyCaption
             }
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.media.save}
-          </button>
-          <button
-            aria-label={dictionary.toolbar.media.cancel}
+          />
+          <IconButton
             className={mediaToolbarButtonClassName}
+            icon={cancelIcon}
+            label={dictionary.toolbar.media.cancel}
             onClick={cancelEditing}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.media.cancel}
-          </button>
+          />
         </>
       )}
       {toolbarState.mode === "replacing" && (
