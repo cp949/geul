@@ -74,6 +74,26 @@ describe("독립 문서 모델 - 링크 정책", () => {
     expect(isSupportedLinkHref("https://example.com/raw space")).toBe(false);
   });
 
+  // media url 전용 isSupportedMediaUrl(ADR-0017, document-media-block.test.ts)이
+  // data:/blob:를 허용하도록 갈라져도 link mark href 정책은 그대로다 —
+  // 텍스트 링크에 data:/blob:를 허용할 이유가 없다(그릴링 결정 2026-09-11).
+  it.each([
+    "data:text/html,<script>alert(1)</script>",
+    "blob:https://evil.example/x",
+  ])(
+    "link href 정책은 isSupportedMediaUrl과 분리돼 %s를 여전히 거부한다",
+    (href) => {
+      expect(isSupportedLinkHref(href)).toBe(false);
+      expect(parseDocument(documentWithLink(href))).toMatchObject({
+        ok: false,
+        error: {
+          code: "DOCUMENT_INVALID",
+          path: ["blocks", 0, "content", 0, "marks", 0, "href"],
+        },
+      });
+    },
+  );
+
   it.each([
     "https://example.com/raw space",
     "/relative\tpath",

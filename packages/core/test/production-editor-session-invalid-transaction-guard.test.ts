@@ -1,6 +1,6 @@
 /**
  * Issue #167 roadmap RD-001-DELTA-01 — 미디어 블록 url attrs 등 저장 원본
- * 검증(`isSupportedLinkHref`, `validateBlocks`)을 위반하는 DOM-origin
+ * 검증(`isSupportedMediaUrl`, `validateBlocks`)을 위반하는 DOM-origin
  * transaction이 ProseMirror state에 최종 commit되지 않는지 고정한다.
  * 이전에는 이런 transaction이 일단 commit된 뒤 `onTiptapUpdate`의
  * `readEditorDocument`가 uncaught `TypeError`를 던져 model↔editor가 영구
@@ -46,8 +46,11 @@ describe("DOM-origin transaction의 최종 문서 구조 검증(Issue #167)", ()
     const before = editorState(editor, tiptap);
     const beforeDoc = tiptap.state.doc;
 
+    // blob:은 spec §3.2 2026-09-11 개정(ADR-0017)으로 media url에서
+    // 허용됐다 — 이 guard가 여전히 되돌리는 위반 예시는 javascript:로
+    // 바꾼다.
     expect(() =>
-      dispatchRawUrlAttribute(tiptap, "media-1", "blob:evil"),
+      dispatchRawUrlAttribute(tiptap, "media-1", "javascript:evil"),
     ).not.toThrow();
 
     expect(tiptap.state.doc.eq(beforeDoc)).toBe(true);
@@ -69,7 +72,7 @@ describe("DOM-origin transaction의 최종 문서 구조 검증(Issue #167)", ()
     const { tiptap } = mountTiptapEditor(editor);
     const beforeDoc = tiptap.state.doc;
 
-    dispatchRawUrlAttribute(tiptap, "media-1", "blob:evil");
+    dispatchRawUrlAttribute(tiptap, "media-1", "javascript:evil");
 
     expect(tiptap.state.doc.eq(beforeDoc)).toBe(true);
     expect(onBeforeChangeCalls).toEqual([]);

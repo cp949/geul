@@ -194,7 +194,7 @@ describe("insertMediaBlock(삽입 전용, G-EDT-001)", () => {
 });
 
 describe("setMediaBlockUrl", () => {
-  it("isSupportedLinkHref를 통과하는 URL을 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다", () => {
+  it("isSupportedMediaUrl을 통과하는 URL을 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다", () => {
     const { editor, tiptap, changes } = mounted(
       documentOf(
         firstParagraphBlock,
@@ -218,7 +218,7 @@ describe("setMediaBlockUrl", () => {
     expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
   });
 
-  it("isSupportedLinkHref 위반 URL은 LINK_HREF_REJECTED이고 문서를 바꾸지 않는다", () => {
+  it("isSupportedMediaUrl 위반 URL은 LINK_HREF_REJECTED이고 문서를 바꾸지 않는다", () => {
     const { editor, tiptap, changes } = mounted(
       documentOf(mediaBlock("file", "m-1")),
     );
@@ -231,6 +231,26 @@ describe("setMediaBlockUrl", () => {
     });
     expect(editorState(editor, tiptap)).toEqual(before);
     expect(changes).toEqual([]);
+  });
+
+  // spec §3.2 2026-09-11 개정(ADR-0017) — media url은 isSupportedMediaUrl
+  // 전용이라 data:/blob:도 성공으로 세팅된다. link mark href는 그대로
+  // 거부한다(document-link-policy.test.ts가 고정).
+  it.each([
+    "data:image/png;base64,QUJD",
+    "blob:https://example.com/9f1c9f4e-0000-0000-0000-000000000000",
+  ])("%s도 isSupportedMediaUrl을 통과해 세팅된다", (url) => {
+    const { editor, tiptap } = mounted(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setMediaBlockUrl("m-1", url)).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("image", "m-1", { url }),
+      tailParagraphBlock,
+    ]);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
   });
 
   it("media가 아닌 블록 대상은 COMMAND_NOT_APPLICABLE이고 문서를 바꾸지 않는다", () => {

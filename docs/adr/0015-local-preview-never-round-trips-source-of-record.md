@@ -2,6 +2,12 @@
 status: accepted
 ---
 
+> 2026-09-11 갱신(ADR-0017): 아래 본문의 "`url`은 `blob:`/`data:`를 명시적으로
+> 거부한다"는 media block url에는 더 이상 맞지 않는다 — `isSupportedMediaUrl`이
+> 이제 `data:`/`blob:`를 허용한다(link mark href는 안 바뀜). 이 문서의 결정
+> 자체(로컬 프리뷰는 `url`과 분리된 표현에만 존재)는 바뀌지 않는다 —
+> ADR-0017 Consequences 참고.
+
 # 로컬 프리뷰는 저장 원본을 왕복하지 않는다
 
 업로드 콜백(`uploadFile`) 없이 삽입된 미디어를 화면에 즉시 보여주기 위해 로컬 전용 표시 상태(로컬 프리뷰)를 도입하기로 했다. 이 표시를 기존 `url` 필드에 담는 안을 검토했으나 기각했다 — 저장 원본의 `url`은 `isSupportedLinkHref`(`packages/model/src/link-policy.ts:19-24`)로 `https?:`/`mailto:`/`tel:`/상대경로만 허용하고 `blob:`/`data:`는 명시적으로 거부하며, 이 검증은 저장을 시도하는 시점이 아니라 매 편집 트랜잭션마다(`production-editor-session.ts`의 `onUpdate` → `readEditorDocument` → `tiptapToModel` → `parseDocument`) 실행된다. `url`에 `blob:`을 직접 넣으면 그 다음 트랜잭션에서 잡히지 않는 예외가 던져져 모델↔에디터가 영구 desync된다 — 같은 실패 패턴이 이미 `table-paste-extension.ts:22-23`, `quote-extension.ts:16`, `table-paste-commands.ts:245-247`에 다른 원인(`DOCUMENT_LIMIT_EXCEEDED` 등)으로 기록돼 있다. 따라서 로컬 프리뷰는 `url`과 완전히 분리된 표현에만 존재하고, 저장 원본으로는 절대 왕복하지 않는다 — 저장하면 사라지고 업로드 대기로 되돌아간다.

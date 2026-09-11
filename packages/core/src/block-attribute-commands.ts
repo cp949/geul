@@ -2,7 +2,7 @@ import {
   isCanonicalCellAlign,
   isCanonicalCellColor,
   isNestableBlockType,
-  isSupportedLinkHref,
+  isSupportedMediaUrl,
   isValidMediaPreviewWidth,
   type Result,
 } from "@cp949/geul-model";
@@ -326,7 +326,9 @@ export const createBlockAttributeCommands = (
       blockId,
       url,
       (value) =>
-        isSupportedLinkHref(value)
+        // spec §3.2 2026-09-11 개정·ADR-0017 — 미디어 url은 isSupportedMediaUrl
+        // 전용(data:/blob:도 허용, link mark href와는 분리된 정책).
+        isSupportedMediaUrl(value)
           ? null
           : { code: "LINK_HREF_REJECTED", href: value },
       // 로컬 프리뷰(ADR 0015)가 남아 있었으면 url 확정과 같은 트랜잭션에서

@@ -67,8 +67,9 @@ const codeBlockSchema = z
 
 // 4종 leaf 미디어 블록(file/image/video/audio) 공통 shape다(spec §3.1).
 // url/backgroundColor는 여기서 타입만 확인하고, 정규 계약 판정
-// (isSupportedLinkHref/isCanonicalCellColor)은 divider/codeBlock과 같은
-// 자리(document-structure-validation.ts)에서 단독 수행한다(G-CNV-001).
+// (isSupportedMediaUrl/isCanonicalCellColor, spec §3.2 2026-09-11 개정 —
+// ADR-0017)은 divider/codeBlock과 같은 자리(document-structure-validation.ts)
+// 에서 단독 수행한다(G-CNV-001).
 // previewWidth도 같은 이유로 여기서는 느슨한 z.number()만 쓴다 — 표 열
 // 너비와 달리 정수·상한을 강제하지 않는다(media-block.ts, spec §5.3).
 const mediaBlockCommonShape = {

@@ -1,4 +1,4 @@
-import { isSupportedLinkHref, type Result } from "@cp949/geul-model";
+import { isSupportedMediaUrl, type Result } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -273,11 +273,11 @@ export class MediaUploadTracker {
     }
 
     // success — url이 기존 setMediaBlockUrl과 동일한 정책을 통과해야
-    // 한다(isSupportedLinkHref 재사용, 신규 URL 검증 코드 없음). 위반하면
-    // 업로드는 "콜백 성공"이었지만 geul은 문서를 바꾸지 않고 에러
-    // pending으로 흡수한다 — 업로드 성공이 URL 정책을 우회하는 구멍을
-    // 막는다.
-    if (!isSupportedLinkHref(result.url)) {
+    // 한다(isSupportedMediaUrl 재사용, spec §3.2 2026-09-11 개정·ADR-0017
+    // — data:/blob:도 허용). 위반하면 업로드는 "콜백 성공"이었지만 geul은
+    // 문서를 바꾸지 않고 에러 pending으로 흡수한다 — 업로드 성공이 URL
+    // 정책을 우회하는 구멍을 막는다.
+    if (!isSupportedMediaUrl(result.url)) {
       this.endMediaUpload(blockId, {
         status: "error",
         code: "LINK_HREF_REJECTED",

@@ -10,7 +10,7 @@
  * `use.baseURL`은 apps/demo(5173) 고정이라 showcase(5174)는 전체 URL을
  * 직접 써야 한다.
  */
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 export const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
 
@@ -56,3 +56,29 @@ export const SYNTAX_HIGHLIGHTING_SAMPLE_SOURCE = `function greet(name) {
 }
 
 console.log(greet("Geul"));`;
+
+/**
+ * `/image` 슬래시 명령 → Upload 탭 → 파일 선택까지 진행하고 업로드가
+ * 끝날 때까지 기다린 뒤 결과 `<img>` locator를 돌려준다. 00-composite와
+ * 07-media 두 예제의 mock uploadFile이 동일 패턴을 복제하고(소스 패널
+ * 자기완결성, 스펙 §5) 각 example.tsx 안에서 실제로 data url을
+ * 렌더하는지 확인하는 spec 2개(G-TST-002 — 두 번째 파일부터 공용화)가
+ * 공유한다.
+ */
+export const uploadImageViaFilePanel = async (
+  page: Page,
+  editable: Locator,
+  fixturePath = "e2e/fixtures/resize-photo.png",
+): Promise<Locator> => {
+  await editable.click();
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+
+  await page.getByRole("tab", { name: "Upload" }).click();
+  await page.getByLabel("Image file").setInputFiles(fixturePath);
+
+  await expect(page.getByRole("status")).toBeVisible();
+  await expect(page.getByRole("status")).not.toBeVisible();
+
+  return editable.locator("img");
+};

@@ -79,9 +79,11 @@ export type AudioBlock = {
 
 `Block` union에 4종을 추가한다. `caption`은 plain string이다(rich text 아님 — BlockNote와 동일, 색상 마크 적용 대상이 아니다).
 
-### 3.2 URL 검증 — 기존 계약 재사용
+### 3.2 URL 검증 — media 전용 정책(2026-09-11 개정, ADR-0017)
 
-4종의 `url` prop은 `packages/model/src/link-policy.ts`의 `isSupportedLinkHref`로 검증한다(새 정책을 만들지 않음). `link` mark의 `href`와 같은 계약(`https:`/`mailto:`/`tel:` 또는 상대 경로만 허용, `javascript:`/`data:` 등 실행 가능 scheme·제어 문자·역슬래시 거절)을 그대로 적용한다. 위반은 `DOCUMENT_INVALID`(로드 시점, 기존 코드 재사용)다.
+> 원안은 "새 정책을 만들지 않음"이라며 `link` mark href와 동일한 `isSupportedLinkHref`를 그대로 재사용했다. showcase kitchen sink의 업로드 mock이 실제로 이미지를 렌더하려면 `data:`/`blob:` url이 필요했는데 그 정책이 이를 막아, ADR-0017로 media 전용 정책을 새로 만드는 쪽으로 뒤집었다.
+
+4종의 `url` prop은 `packages/model/src/link-policy.ts`의 `isSupportedMediaUrl`로 검증한다. `link` mark의 `href`(`isSupportedLinkHref`, 안 바뀜)와 문자 검증 로직은 공유하되 허용 protocol만 다르다 — `https:`/`mailto:`/`tel:`/`data:`/`blob:` 또는 상대 경로를 허용하고, `javascript:` 등 그 외 실행 가능 scheme·제어 문자·역슬래시는 여전히 거절한다. 위반은 `DOCUMENT_INVALID`(로드 시점, 기존 코드 재사용)다. `blob:` url의 세션 스코프·revoke 수명 관리는 소비자 책임이다.
 
 ## 4. Upload 계약
 
@@ -212,7 +214,7 @@ HTML import에서 외부 `<a>`(geul 자체 export 형태가 아닌 임의 anchor
 
 `packages/model`의 `DOCUMENT_INVALID`를 재사용(전용 코드를 새로 만들지 않음):
 
-- `url` prop이 `isSupportedLinkHref`를 위반(§3.2)
+- `url` prop이 `isSupportedMediaUrl`을 위반(§3.2, 2026-09-11 개정)
 - `previewWidth`가 양의 유한수가 아님(audio/file에 존재하는 경우 포함 — 애초에 타입 shape 위반)
 
 `UploadResult`의 `status: "error"`는 `EditorError`가 아니다 — `code`는 소비자가 자유롭게 정하는 문자열이며 core가 닫힌 코드 체계를 강제하지 않는다.
@@ -221,7 +223,7 @@ HTML import에서 외부 `<a>`(geul 자체 export 형태가 아닌 임의 anchor
 
 R1/R2 명세의 전략을 R3 대상으로 확장한다 — 새 카테고리만 기록한다.
 
-- **모델 단위 테스트**: 4종 block 정규 저장형, `url` protocol 거절(`isSupportedLinkHref` 위반), `previewWidth` 양수 검증, audio/file에 `previewWidth`/`textAlignment` 부재 shape 고정.
+- **모델 단위 테스트**: 4종 block 정규 저장형, `url` protocol 거절/허용(`isSupportedMediaUrl` 위반·통과, `data:`/`blob:` 포함), `previewWidth` 양수 검증, audio/file에 `previewWidth`/`textAlignment` 부재 shape 고정.
 - **코어 단위 테스트**: mock `UploadFile`(success/error/cancelled 3분기), 업로드 중 블록 삭제·교체 경합 가드(오래된 결과 no-op), 교체 실패 시 기존 값 유지, 여러 파일 독립 성공/실패, 각 신규 명령의 단일 트랜잭션·undo, `MEDIA_RESIZE_NOT_SUPPORTED`/`MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED` 거절.
 - **입출력 단위 테스트**: HTML `<figure>`/`<img>`/`<video>`/`<audio>`/`<a>` round-trip(showPreview on/off 포함), figure+figcaption 중복 생성 방지, GFM strict/lossy 손실 카테고리 fixture, GFM import가 확장자 스니핑을 하지 않음을 고정하는 회귀 fixture, own-format 외부 `<a>` 비승격 회귀 fixture.
 - **Playwright**: 각 블록 타입 삽입·URL 삽입·drag/drop·paste 시나리오(Chromium 우선), resize 드래그, replace/delete/download 클릭 — roadmap 완료조건 "실제 브라우저 검증"의 직접 대상. R3 마지막 슬라이스에서 3-엔진 게이트 재확인.

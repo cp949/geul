@@ -23,7 +23,7 @@ export type { DocumentError, DocumentErrorCode } from "./errors.js";
 export { createRandomDocumentId } from "./id-factory.js";
 export { isTextRunItem } from "./inline-content-kind.js";
 export { appendOrMergeInlineItem } from "./inline-content-merge.js";
-export { isSupportedLinkHref } from "./link-policy.js";
+export { isSupportedLinkHref, isSupportedMediaUrl } from "./link-policy.js";
 export { isValidMediaPreviewWidth } from "./media-block.js";
 export {
   canonicalizeTextMarks,

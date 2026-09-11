@@ -9,7 +9,7 @@ import {
 import { invalid, type DocumentPath } from "./document-validation-helpers.js";
 import type { DocumentError } from "./errors.js";
 import { isTextRunItem } from "./inline-content-kind.js";
-import { isSupportedLinkHref } from "./link-policy.js";
+import { isSupportedLinkHref, isSupportedMediaUrl } from "./link-policy.js";
 import { firstNonCanonicalTextMarkIndex } from "./mark-canonicalization.js";
 import { isValidMediaPreviewWidth } from "./media-block.js";
 import type { Result } from "./result.js";
@@ -192,7 +192,7 @@ const validateBlocksAt = (
       known.type === "video" ||
       known.type === "audio"
     ) {
-      if (known.url !== undefined && !isSupportedLinkHref(known.url)) {
+      if (known.url !== undefined && !isSupportedMediaUrl(known.url)) {
         return invalid([...blockPath, "url"], "Unsupported media URL");
       }
       if (

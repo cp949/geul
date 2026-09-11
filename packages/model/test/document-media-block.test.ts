@@ -1,8 +1,10 @@
 /**
  * R3 슬라이스1(Issue #152, RD-001)이 저장 모델에 더하는 4종 leaf 미디어
  * 블록(file/image/video/audio, spec §3.1)의 파싱·검증 계약을 확인한다 —
- * 최소/전체 prop shape round-trip, `url`(`isSupportedLinkHref` 재사용,
- * spec §3.2), `backgroundColor`(`isCanonicalCellColor` 재사용),
+ * 최소/전체 prop shape round-trip, `url`(`isSupportedMediaUrl` 전용,
+ * spec §3.2 2026-09-11 개정·ADR-0017 — 이전엔 `isSupportedLinkHref`를
+ * 그대로 재사용했으나 media url만 `data:`/`blob:`도 허용하도록 갈라졌다),
+ * `backgroundColor`(`isCanonicalCellColor` 재사용),
  * `previewWidth`(image/video만, 양의 유한수, 상한 없음, spec §5.3),
  * `textAlignment`(image/video만, `isCanonicalCellAlign` 재사용), 그리고
  * audio/file의 타입별 필드 부재 shape가 zod `.strict()`로 고정됨을 검증한다.
@@ -92,7 +94,7 @@ describe("4종 미디어 블록 — 전체 prop shape round-trip", () => {
   });
 });
 
-describe("url 검증 — isSupportedLinkHref 재사용(spec §3.2)", () => {
+describe("url 검증 — isSupportedMediaUrl 전용(spec §3.2 2026-09-11 개정, ADR-0017)", () => {
   it.each(["file", "image", "video", "audio"])(
     "%s의 url이 javascript: 프로토콜이면 DOCUMENT_INVALID다",
     (type) => {
@@ -106,13 +108,21 @@ describe("url 검증 — isSupportedLinkHref 재사용(spec §3.2)", () => {
     },
   );
 
-  it.each(["https://example.com/a", "/relative/a", "#section"])(
-    "지원하는 url 형태 %s는 허용한다",
-    (url) => {
-      const input = documentOf([{ id: "file-1", type: "file", url }]);
-      expect(parseDocument(input)).toMatchObject({ ok: true });
-    },
-  );
+  it.each([
+    "https://example.com/a",
+    "/relative/a",
+    "#section",
+    // 업로드 콜백 없이도 파일 내용을 문서에 직접 담거나(data:) 브라우저
+    // 세션 내 임시 참조를 쓰는(blob:) 소비자를 막지 않는다 — link mark
+    // href/HTML import는 여전히 거부한다(isSupportedLinkHref는 안 바뀜,
+    // document-link-policy.test.ts가 고정). blob: url의 세션 스코프·revoke
+    // 수명 관리는 소비자 책임이다(그릴링 결정 2026-09-11).
+    "data:image/png;base64,QUJD",
+    "blob:https://example.com/9f1c9f4e-0000-0000-0000-000000000000",
+  ])("지원하는 url 형태 %s는 허용한다", (url) => {
+    const input = documentOf([{ id: "file-1", type: "file", url }]);
+    expect(parseDocument(input)).toMatchObject({ ok: true });
+  });
 });
 
 describe("backgroundColor 검증 — isCanonicalCellColor 재사용", () => {

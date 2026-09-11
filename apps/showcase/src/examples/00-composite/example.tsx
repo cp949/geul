@@ -23,6 +23,20 @@ import "./preview.css";
 // 07-media/example.tsx와 동일 이유 — 소스 패널 자기완결성(스펙 §5).
 const COMPOSITE_UPLOAD_DELAY_MS = 300;
 
+// 실존하지 않는 https://example.com/uploads/... url은 브라우저가 로드할 수
+// 없어 kitchen sink에 이미지가 안 보였다(2026-09-11 사용자 보고). media
+// url이 data:/blob:도 허용하도록 정책이 바뀌어서(spec §3.2 개정,
+// ADR-0017) 실제 네트워크 없이도 즉시 렌더되도록 파일을 data url로
+// 인코딩해 반환한다.
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error(`파일 읽기 실패: ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
 const compositeUploadFile: CreateEditorOptions["uploadFile"] = (
   file,
   signal,
@@ -35,18 +49,22 @@ const compositeUploadFile: CreateEditorOptions["uploadFile"] = (
     };
     const timer = setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
-      resolve(
-        file.name.includes("reject")
-          ? {
-              status: "error",
-              code: "SHOWCASE_UPLOAD_REJECTED",
-              message: `Showcase upload rejected: ${file.name}`,
-            }
-          : {
-              status: "success",
-              url: `https://example.com/uploads/${encodeURIComponent(file.name)}`,
-              name: file.name,
-            },
+      if (file.name.includes("reject")) {
+        resolve({
+          status: "error",
+          code: "SHOWCASE_UPLOAD_REJECTED",
+          message: `Showcase upload rejected: ${file.name}`,
+        });
+        return;
+      }
+      readFileAsDataUrl(file).then(
+        (url) => resolve({ status: "success", url, name: file.name }),
+        (error: unknown) =>
+          resolve({
+            status: "error",
+            code: "SHOWCASE_UPLOAD_READ_FAILED",
+            message: `Showcase upload failed to read file: ${file.name} (${String(error)})`,
+          }),
       );
     }, COMPOSITE_UPLOAD_DELAY_MS);
     signal.addEventListener("abort", onAbort);

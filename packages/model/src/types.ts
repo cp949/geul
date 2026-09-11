@@ -113,10 +113,11 @@ export type CodeBlock = {
 // §3.1). 콘텐츠가 rich text가 아니라 plain string prop(name/caption)이므로
 // TextBlockProps(textColor/backgroundColor/textAlignment)를 재사용하지
 // 않는다 — 대신 backgroundColor 하나만(블록 전체 배경) 공통으로 갖는다.
-// url은 packages/model/src/link-policy.ts의 isSupportedLinkHref로,
-// backgroundColor는 cell-color.ts의 isCanonicalCellColor로 검증한다(모두
-// 기존 계약 재사용, schema.ts가 검증). caption은 plain string이다(rich
-// text 아님 — BlockNote와 동일, 색상 마크 적용 대상이 아니다).
+// url은 packages/model/src/link-policy.ts의 isSupportedMediaUrl로(spec
+// §3.2 2026-09-11 개정, ADR-0017 — data:/blob:도 허용), backgroundColor는
+// cell-color.ts의 isCanonicalCellColor로 검증한다(schema.ts가 검증).
+// caption은 plain string이다(rich text 아님 — BlockNote와 동일, 색상
+// 마크 적용 대상이 아니다).
 export type MediaBlockCommon = {
   url?: string;
   name?: string;

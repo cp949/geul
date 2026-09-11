@@ -200,7 +200,31 @@ describe("uploadMediaFile — 성공", () => {
     ]);
   });
 
-  it("반환 url이 isSupportedLinkHref를 통과하지 못하면 문서를 바꾸지 않고 pending 상태를 LINK_HREF_REJECTED 에러로 남긴다", async () => {
+  // spec §3.2 2026-09-11 개정(ADR-0017) — 업로드 콜백이 data:/blob: url을
+  // 돌려줘도 isSupportedMediaUrl을 통과해 성공으로 세팅된다(콜백 없는
+  // 로컬 프리뷰(ADR 0015)와 별개 경로).
+  it.each([
+    "data:image/png;base64,QUJD",
+    "blob:https://example.com/9f1c9f4e-0000-0000-0000-000000000000",
+  ])("반환 url이 %s여도 isSupportedMediaUrl을 통과해 세팅된다", async (url) => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    pending[0]!.resolve({ status: "success", url });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("image", "m-1", { url }),
+      tailParagraphBlock,
+    ]);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  it("반환 url이 isSupportedMediaUrl을 통과하지 못하면 문서를 바꾸지 않고 pending 상태를 LINK_HREF_REJECTED 에러로 남긴다", async () => {
     const { uploadFile, pending } = controllableUploadFile();
     const { editor, tiptap, changes } = mountedWithUpload(
       documentOf(mediaBlock("file", "m-1"), tailParagraphBlock),
