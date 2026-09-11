@@ -3,7 +3,10 @@
  */
 import { describe, expect, it } from "vitest";
 
+import type { TableBlock } from "@cp949/geul-model";
+
 import {
+  fitColumnsToContainerWidth,
   resizeColumn,
   setCellAlign,
   setCellColor,
@@ -15,6 +18,16 @@ import { splitCell } from "../src/table-grid-merge.js";
 import { projectTableGrid } from "../src/table-grid.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import { cell, table } from "./table-grid-test-support.js";
+
+// 컬럼 폭을 임의로 지정해야 하는 재분배 테스트 전용 fixture 보정.
+// table()의 기본 폭(160)을 각 테스트가 필요한 값으로 덮어쓴다.
+const withColumnWidths = (t: TableBlock, widths: number[]): TableBlock => ({
+  ...t,
+  columns: t.columns.map((column, index) => ({
+    ...column,
+    width: widths[index]!,
+  })),
+});
 
 describe("헤더 행과 헤더 열을 토글한다", () => {
   it("headerRows 0을 1로 바꾼다", () => {
@@ -497,6 +510,136 @@ describe("열 너비를 조절한다", () => {
     if (!result.ok) return;
     // no-op 판별은 참조 동일성 계약이다 — table-commands가 이 참조로
     // 트랜잭션 생략 여부를 결정한다.
+    expect(result.value).toBe(t);
+  });
+});
+
+describe("표 너비를 컨테이너 폭에 맞춘다", () => {
+  it("기존 비율을 유지한 채 합계를 컨테이너 폭에 정확히 맞춘다", () => {
+    const t = withColumnWidths(
+      table(["a", "b"], [[cell("c1", "a"), cell("c2", "b")]]),
+      [100, 200],
+    );
+
+    const result = fitColumnsToContainerWidth(t, 450);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.columns.map((c) => c.width)).toEqual([150, 300]);
+  });
+
+  it("비율이 정수로 안 나뉘면 최대 잔여법으로 합계를 정확히 맞춘다", () => {
+    const t = withColumnWidths(
+      table(
+        ["a", "b", "c"],
+        [[cell("c1", "a"), cell("c2", "b"), cell("c3", "c")]],
+      ),
+      [100, 100, 100],
+    );
+
+    const result = fitColumnsToContainerWidth(t, 1000);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 1000/3 = 333.33...— 나머지가 가장 큰(동률이면 앞선) 컬럼이 334를 가져간다.
+    expect(result.value.columns.map((c) => c.width)).toEqual([334, 333, 333]);
+    expect(result.value.columns.reduce((sum, c) => sum + c.width, 0)).toBe(
+      1000,
+    );
+  });
+
+  it("목표 폭이 MIN_COLUMN_WIDTH 미만인 컬럼은 48로 클램프하고 남은 폭을 나머지에 재배분한다", () => {
+    const t = withColumnWidths(
+      table(
+        ["a", "b", "c"],
+        [[cell("c1", "a"), cell("c2", "b"), cell("c3", "c")]],
+      ),
+      // a는 비율상 목표가 48 미만이 되도록 아주 작게 잡는다.
+      [10, 500, 500],
+    );
+
+    const result = fitColumnsToContainerWidth(t, 1000);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const widths = result.value.columns.map((c) => c.width);
+    expect(widths[0]).toBe(48);
+    expect(widths[1]).toBe(widths[2]);
+    expect(widths.reduce((sum, w) => sum + w, 0)).toBe(1000);
+  });
+
+  it("목표 폭이 MAX_COLUMN_WIDTH를 넘는 컬럼은 1200으로 클램프하고 남은 폭을 나머지에 재배분한다", () => {
+    const t = withColumnWidths(
+      table(
+        ["a", "b", "c"],
+        [[cell("c1", "a"), cell("c2", "b"), cell("c3", "c")]],
+      ),
+      // a는 비율상 목표가 1200을 넘도록 아주 크게 잡는다.
+      [5000, 100, 100],
+    );
+
+    const result = fitColumnsToContainerWidth(t, 2000);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const widths = result.value.columns.map((c) => c.width);
+    expect(widths[0]).toBe(1200);
+    expect(widths[1]).toBe(widths[2]);
+    expect(widths.reduce((sum, w) => sum + w, 0)).toBe(2000);
+  });
+
+  it("컬럼 수 대비 컨테이너 폭이 너무 좁아도 각 컬럼은 48 미만으로 내려가지 않는다(합계 초과 허용)", () => {
+    const t = withColumnWidths(
+      table(
+        ["a", "b", "c"],
+        [[cell("c1", "a"), cell("c2", "b"), cell("c3", "c")]],
+      ),
+      [200, 200, 200],
+    );
+
+    // 3 * MIN_COLUMN_WIDTH(48) = 144 > 100 — 물리적으로 불가능한 목표.
+    const result = fitColumnsToContainerWidth(t, 100);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.columns.map((c) => c.width)).toEqual([48, 48, 48]);
+  });
+
+  it("컬럼 수 대비 컨테이너 폭이 너무 넓어도 각 컬럼은 1200을 넘지 않는다(합계 미달 허용)", () => {
+    const t = table(["a"], [[cell("c1", "a")]]);
+
+    const result = fitColumnsToContainerWidth(t, 2000);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.columns.map((c) => c.width)).toEqual([1200]);
+  });
+
+  it("컨테이너 폭이 정수가 아니거나 0 이하면 CONTAINER_WIDTH_INVALID로 거절하고 표를 바꾸지 않는다", () => {
+    const t = table(["a"], [[cell("c1", "a")]]);
+
+    expect(fitColumnsToContainerWidth(t, 0)).toEqual({
+      ok: false,
+      error: { code: "CONTAINER_WIDTH_INVALID", containerWidth: 0 },
+    });
+    expect(fitColumnsToContainerWidth(t, -10)).toEqual({
+      ok: false,
+      error: { code: "CONTAINER_WIDTH_INVALID", containerWidth: -10 },
+    });
+    expect(fitColumnsToContainerWidth(t, 100.5)).toEqual({
+      ok: false,
+      error: { code: "CONTAINER_WIDTH_INVALID", containerWidth: 100.5 },
+    });
+    expect(t.columns[0]?.width).toBe(160);
+  });
+
+  it("재분배 결과가 기존 폭과 같으면 입력 표를 참조 그대로 반환한다", () => {
+    const t = table(["a"], [[cell("c1", "a")]]);
+
+    const result = fitColumnsToContainerWidth(t, 160);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.value).toBe(t);
   });
 });

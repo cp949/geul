@@ -87,7 +87,7 @@ export const createTableCommands = (session: ProductionEditorSession) => {
         return { code: "COMMAND_NOT_APPLICABLE", command: "mergeTableCells" };
       case "TRANSACTION_REJECTED":
         return { code: "TRANSACTION_REJECTED" };
-      // 아래 두 case는 spec §11.3의 "core는 자체 TableGridError를 최상위
+      // 아래 세 case는 spec §11.3의 "core는 자체 TableGridError를 최상위
       // EditorError에 flatten만 한다"는 원칙에 따라 새 EditorError variant를
       // 만들지 않고 COMMAND_NOT_APPLICABLE로 흡수한다(MERGE_TARGET_NOT_FOUND와
       // 동형) — EditorError는 spec이 고정한 21개 코드 표면이라 TableCommandError
@@ -105,6 +105,11 @@ export const createTableCommands = (session: ProductionEditorSession) => {
         // load 경계 전용이고, 실행 중 grid 손상은 §11.3이 정의한
         // COMMAND_NOT_APPLICABLE("현재 상태에서 적용 불가능한 모든 명령이 공유")
         // 범주다.
+        return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
+      case "CONTAINER_WIDTH_INVALID":
+        // 오늘은 도달 불가 — fitColumnsToContainerWidth(table-grid-format.ts,
+        // Issue #176 RD-001-DELTA-01)는 아직 어떤 table-commands.ts 커맨드에도
+        // 연결되지 않았다. RD-001-DELTA-02가 연결하면 이 매핑을 재검토한다.
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
       default: {
         // TableCommandError에 새 variant가 추가되면 여기서 컴파일 실패한다 —

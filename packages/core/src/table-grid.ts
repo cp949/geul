@@ -36,6 +36,7 @@ export type TableGridError =
   | { code: "LAST_ROW" }
   | { code: "LAST_COLUMN" }
   | { code: "COLUMN_WIDTH_OUT_OF_RANGE"; width: number }
+  | { code: "CONTAINER_WIDTH_INVALID"; containerWidth: number }
   | { code: "INDEX_OUT_OF_RANGE" }
   | { code: "CELL_NOT_FOUND"; cellId: string }
   | { code: "INVALID_COLOR"; color: string }

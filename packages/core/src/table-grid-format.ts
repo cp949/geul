@@ -195,3 +195,110 @@ export const resizeColumn = (
   );
   return { ok: true, value: { ...table, columns } };
 };
+
+// 정수 budget을 weights 비율대로 나누되 합계가 정확히 budget과 일치하도록
+// 최대 잔여법(largest remainder)을 쓴다 — 단순 반올림은 합계가 어긋난다.
+const distributeIntegerBudget = (
+  weights: number[],
+  budget: number,
+): number[] => {
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
+  const raw = weights.map((weight) =>
+    weightSum === 0 ? budget / weights.length : (budget * weight) / weightSum,
+  );
+  const floors = raw.map((value) => Math.floor(value));
+  const allocated = floors.reduce((sum, value) => sum + value, 0);
+  const remainder = budget - allocated;
+
+  const order = raw
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction);
+
+  const result = [...floors];
+  for (let k = 0; k < remainder; k += 1) {
+    const target = order[k];
+    if (target === undefined) break;
+    result[target.index] = (result[target.index] ?? 0) + 1;
+  }
+  return result;
+};
+
+// 컨테이너 폭 하나에 맞춰 모든 컬럼 px 폭을 재분배한다. 기존 컬럼 간 비율을
+// 유지하는 비례 배분이 기본이고, MIN/MAX_COLUMN_WIDTH를 벗어나는 컬럼은
+// 클램프한 뒤 남은 폭을 나머지 컬럼에 반복 재배분한다(water-filling) —
+// 컬럼 수 대비 컨테이너 폭이 물리적으로 불가능한 값이어도 각 컬럼은 항상
+// 유효 범위 안에 머물고, 그 경우 합계가 컨테이너 폭과 어긋나는 것만 허용한다.
+export const fitColumnsToContainerWidth = (
+  table: TableBlock,
+  containerWidth: number,
+): Result<TableBlock, TableGridError> => {
+  if (!Number.isInteger(containerWidth) || containerWidth <= 0) {
+    return {
+      ok: false,
+      error: { code: "CONTAINER_WIDTH_INVALID", containerWidth },
+    };
+  }
+
+  const columns = table.columns;
+  if (columns.length === 0) {
+    return { ok: true, value: table };
+  }
+
+  // 한 pass에서 여러 컬럼을 한꺼번에 클램프하면 안 된다 — 예를 들어 MAX
+  // 초과 컬럼을 걷어내며 풀리는 여유폭이 동시에 평가 중인 MIN 미만 컬럼을
+  // 구제할 수 있어서, 같은 snapshot으로 배치 판정하면 그 구제를 놓친다.
+  // 매 반복마다 남은 컬럼만으로 비율·잔여폭을 새로 계산해 하나씩 클램프한다.
+  const fixedWidths = new Map<number, number>();
+  let unclamped = columns.map((_, index) => index);
+  let remainingBudget = containerWidth;
+
+  let progressed = true;
+  while (progressed && unclamped.length > 0) {
+    progressed = false;
+    const weightSum = unclamped.reduce(
+      (sum, index) => sum + columns[index]!.width,
+      0,
+    );
+
+    for (const index of unclamped) {
+      const weight = columns[index]!.width;
+      const share =
+        weightSum === 0
+          ? remainingBudget / unclamped.length
+          : (remainingBudget * weight) / weightSum;
+
+      if (share < MIN_COLUMN_WIDTH) {
+        fixedWidths.set(index, MIN_COLUMN_WIDTH);
+        remainingBudget -= MIN_COLUMN_WIDTH;
+        unclamped = unclamped.filter((i) => i !== index);
+        progressed = true;
+        break;
+      }
+      if (share > MAX_COLUMN_WIDTH) {
+        fixedWidths.set(index, MAX_COLUMN_WIDTH);
+        remainingBudget -= MAX_COLUMN_WIDTH;
+        unclamped = unclamped.filter((i) => i !== index);
+        progressed = true;
+        break;
+      }
+    }
+  }
+
+  if (unclamped.length > 0) {
+    const weights = unclamped.map((index) => columns[index]!.width);
+    const allocated = distributeIntegerBudget(weights, remainingBudget);
+    unclamped.forEach((index, k) => fixedWidths.set(index, allocated[k]!));
+  }
+
+  const nextColumns = columns.map((column, index) => ({
+    ...column,
+    width: fixedWidths.get(index) ?? column.width,
+  }));
+
+  const unchanged = nextColumns.every(
+    (column, index) => column.width === columns[index]!.width,
+  );
+  if (unchanged) return { ok: true, value: table };
+
+  return { ok: true, value: { ...table, columns: nextColumns } };
+};
