@@ -24,11 +24,12 @@ export type TableHandleOverlaysProps = {
   reorderGuideRect: ReorderGuideRect | null;
   canIndentTable: boolean;
   canOutdentTable: boolean;
-  // Notion 참고(사용자 요청) — 텍스트 커서가 있는 행의 id. hover 없이도 그
-  // 행의 그립을 pill로 노출한다(row-handle-bar의 :hover와 동급 트리거,
-  // table-handles.tsx가 selection에서 계산한다). geometry.tableBlockId와
-  // 다른 표의 커서는 이미 null로 걸러져 들어온다.
+  // Notion 참고(사용자 요청) — 텍스트 커서가 있는 행/열의 id. hover 없이도
+  // 그 행/열의 그립을 pill로 노출한다(row/column-handle-bar의 :hover와
+  // 동급 트리거, table-handles.tsx가 selection에서 계산한다).
+  // geometry.tableBlockId와 다른 표의 커서는 이미 null로 걸러져 들어온다.
   activeRowId: string | null;
+  activeColumnId: string | null;
   onReorderHandleClick: (
     event: React.MouseEvent<HTMLButtonElement>,
     kind: ReorderKind,
@@ -70,6 +71,7 @@ export type TableHandleOverlaysProps = {
  * BlockSelectionToolbar(Delete·위/아래 이동)를 여는 진입점이다(Issue #149).
  */
 export const TableHandleOverlays = ({
+  activeColumnId,
   activeRowId,
   geometry,
   reorderGuideRect,
@@ -89,17 +91,17 @@ export const TableHandleOverlays = ({
   const dictionary = useDictionary();
   return (
     <>
-      {/* 행 그립은 평소 완전히 숨겨져 있다가(Notion 참고, 사용자 요청) 두
-          조건 중 하나에서 pill로 뜬다: hit box(rowHandleHitClassName, left:
-          geometry.left-18, width:30) 근처 hover, 또는 그 행에 텍스트
-          커서가 있음(activeRowId 일치 — data-geul-table-row-handle-active로
-          표시). 열의 "평소 얇은 line" idle와 달리 행은 idle 자체가 없다 —
-          열 그립의 축을 90도 돌린 거울상(top/height ↔ left/width)인 건
-          같지만, 노출 트리거가 하나(hover) 더 늘어난 차이가 있다. 실제
-          hidden/노출 전환(opacity)은 _table-handles.scss의
-          .geul-table-row-handle-bar + hit box :hover/:focus-within/
-          [data-geul-table-row-handle-active]가 전부 맡는다. 이 컴포넌트는
-          hit box·버튼의 page-relative 좌표와 active 판정만 계산한다. */}
+      {/* 행 그립은 평소 완전히 숨겨져 있다가(Notion 참고, 사용자 요청 — 3개
+          다 동시에 보이면 안 되고 hover 또는 커서가 있는 행/열 하나만
+          보여야 한다) 두 조건 중 하나에서 pill로 뜬다: hit box
+          (rowHandleHitClassName, left: geometry.left-18, width:30) 근처
+          hover, 또는 그 행에 텍스트 커서가 있음(activeRowId 일치 —
+          data-geul-table-row-handle-active로 표시). 열 그립의 축을 90도
+          돌린 거울상(top/height ↔ left/width)이다. 실제 hidden/노출
+          전환(opacity)은 _table-handles.scss의 .geul-table-row-handle-bar
+          + hit box :hover/:focus-within/[data-geul-table-row-handle-active]가
+          전부 맡는다. 이 컴포넌트는 hit box·버튼의 page-relative 좌표와
+          active 판정만 계산한다. */}
       {geometry.rows.map((row) => (
         <div
           className={rowHandleHitClassName}
@@ -149,17 +151,21 @@ export const TableHandleOverlays = ({
           />
         </div>
       ))}
-      {/* 열 그립은 평소 표 상단 border line에 겹친 얇은 바, hover 시 pill로
-          펼쳐진다(Notion 참고). hit box(columnHandleHitClassName, top:
-          geometry.top-18, height:30)가 시각 바(idle 3px)보다 훨씬 커서
-          "근처"만 가리켜도 반응한다 — 실제 idle/hover 전환(top·height·배경·
-          아이콘 opacity)은 _table-handles.scss의 .geul-table-column-handle-bar
-          + hit box :hover가 전부 맡는다. 이 컴포넌트는 hit box·버튼의
-          page-relative 좌표만 계산한다(버튼 자신의 top은 SCSS 소유 — 아래
-          style 주석 참고). */}
+      {/* 열 그립은 행과 대칭이다 — 평소 완전히 숨겨져 있다가 hit box
+          (columnHandleHitClassName, top: geometry.top-18, height:30) 근처
+          hover 또는 그 열에 텍스트 커서가 있을 때(activeColumnId 일치 —
+          data-geul-table-column-handle-active로 표시)만 pill로 뜬다. 실제
+          hidden/노출 전환(opacity)은 _table-handles.scss의
+          .geul-table-column-handle-bar + hit box :hover/:focus-within/
+          [data-geul-table-column-handle-active]가 전부 맡는다. 이
+          컴포넌트는 hit box·버튼의 page-relative 좌표와 active 판정만
+          계산한다(버튼 자신의 top은 SCSS 소유 — 아래 style 주석 참고). */}
       {geometry.columns.map((column) => (
         <div
           className={columnHandleHitClassName}
+          data-geul-table-column-handle-active={
+            column.columnId === activeColumnId ? "" : undefined
+          }
           data-geul-table-column-handle-hit=""
           key={`column-${column.columnId}`}
           style={{
@@ -193,11 +199,13 @@ export const TableHandleOverlays = ({
                 column.index,
               )
             }
-            // top은 idle/hover 두 값을 오가며 transition해야 해서 여기서
-            // inline으로 고정하지 않는다 — inline style은 어떤 CSS
-            // 셀렉터보다도 우선순위가 높아 :hover 규칙이 못 이긴다.
-            // idle(top:17)·hover(top:7) 모두 _table-handles.scss의
-            // .geul-table-column-handle-bar가 소유한다.
+            // opacity는 hidden/노출 두 값을 오가며 transition해야 해서
+            // 여기서 inline으로 고정하지 않는다 — inline style은 어떤 CSS
+            // 셀렉터보다도 우선순위가 높아 :hover/:focus-within/
+            // [data-geul-table-column-handle-active] 규칙이 못 이긴다.
+            // 위치는(행과 마찬가지로) hidden과 노출 상태가 같은 pill
+            // 크기라 top/height도 _table-handles.scss가 고정값으로
+            // 소유한다.
             style={{ position: "absolute", left: 0 }}
           />
         </div>

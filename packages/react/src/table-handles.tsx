@@ -96,20 +96,23 @@ export const TableHandles = () => {
   const [hoverRowId, setHoverRowId] = useState<string | null>(null);
   const [hoverColumnId, setHoverColumnId] = useState<string | null>(null);
   // Notion 참고(사용자 요청) — 마우스가 표 근처를 벗어나도 텍스트 커서가
-  // 있는 행은 그립이 계속 보여야 한다(row-handle-bar의 hover-or-active
-  // 노출 조건). hoverRowId와 달리 이건 포인터가 아니라 에디터 selection을
-  // 따라간다 — Tiptap/ProseMirror가 없어도 읽을 수 있는 네이티브
-  // Selection.anchorNode에서 가장 가까운 [data-geul-row-id]/
-  // table[data-geul-block-id]를 찾는다(ADR-0002 경계 — react는
-  // @tiptap/pm에 의존할 수 없다, table-handle-geometry.ts가 이미 쓰는
-  // DOM-속성-읽기와 같은 방식). 다른 콜백이 동기적으로 최신값을 읽을
-  // 필요가 없어 ref 미러링 없이 plain state로 둔다(hoverRowId와 같은
-  // 이유).
+  // 있는 행/열은 그립이 계속 보여야 한다(row/column-handle-bar의
+  // hover-or-active 노출 조건, 둘 다 평소엔 완전히 숨겨져 있다). hoverRowId/
+  // hoverColumnId와 달리 이건 포인터가 아니라 에디터 selection을 따라간다 —
+  // Tiptap/ProseMirror가 없어도 읽을 수 있는 네이티브 Selection.anchorNode에서
+  // 가장 가까운 [data-geul-row-id]/[data-geul-column-id]/
+  // table[data-geul-block-id]를 찾는다(ADR-0002 경계 — react는 @tiptap/pm에
+  // 의존할 수 없다, table-handle-geometry.ts가 이미 쓰는 DOM-속성-읽기와
+  // 같은 방식). 다른 콜백이 동기적으로 최신값을 읽을 필요가 없어 ref
+  // 미러링 없이 plain state로 둔다(hoverRowId와 같은 이유).
   const [selectionRowId, setSelectionRowId] = useState<string | null>(null);
+  const [selectionColumnId, setSelectionColumnId] = useState<string | null>(
+    null,
+  );
   const [selectionTableId, setSelectionTableId] = useState<string | null>(
     null,
   );
-  const updateSelectionRowTarget = useCallback(() => {
+  const updateSelectionTarget = useCallback(() => {
     const anchorNode = element?.ownerDocument.getSelection()?.anchorNode;
     // formatting-toolbar.tsx의 updateFromSelection과 같은 가드 — 선택이
     // 편집기 바깥(다른 input, url bar 등)이면 표 밖 커서를 표 안 커서로
@@ -125,15 +128,23 @@ export const TableHandles = () => {
           : anchorNode.parentElement;
     const rowElement =
       anchorElement?.closest<HTMLElement>("[data-geul-row-id]") ?? null;
+    // data-geul-column-id는 셀(<td>) 자신에 붙는다 — cellElement.getAttribute
+    // 값이 곧 table-handle-geometry.ts의 column.columnId다(readColumnBounds가
+    // 같은 속성으로 cellBox.columnId를 읽는다).
+    const columnElement =
+      anchorElement?.closest<HTMLElement>("[data-geul-column-id]") ?? null;
     const tableElement =
       anchorElement?.closest<HTMLElement>("table[data-geul-block-id]") ??
       null;
     setSelectionRowId(rowElement?.getAttribute("data-geul-row-id") ?? null);
+    setSelectionColumnId(
+      columnElement?.getAttribute("data-geul-column-id") ?? null,
+    );
     setSelectionTableId(
       tableElement?.getAttribute("data-geul-block-id") ?? null,
     );
   }, [element]);
-  useSelectionRefresh({ element, onUpdate: updateSelectionRowTarget });
+  useSelectionRefresh({ element, onUpdate: updateSelectionTarget });
   const [reorderState, reorderStateRef, updateReorderState] =
     useMirroredState<ReorderState | null>(null);
   const [resizeState, resizeStateRef, updateResizeState] =
@@ -311,11 +322,11 @@ export const TableHandles = () => {
   );
   // 커서가 지금 그려지는 표(geometry.tableBlockId)와 다른 표에 있으면 무시한다
   // — hover가 다른 표를 가리키는 동안(위 activeTableId 우선순위) 그 표의
-  // selectionRowId를 이 표 행에 잘못 매칭하지 않는다.
-  const activeRowId =
-    geometry !== null && selectionTableId === geometry.tableBlockId
-      ? selectionRowId
-      : null;
+  // selectionRowId/selectionColumnId를 이 표 행/열에 잘못 매칭하지 않는다.
+  const isSelectionInRenderedTable =
+    geometry !== null && selectionTableId === geometry.tableBlockId;
+  const activeRowId = isSelectionInRenderedTable ? selectionRowId : null;
+  const activeColumnId = isSelectionInRenderedTable ? selectionColumnId : null;
 
   // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
   // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
@@ -820,6 +831,7 @@ export const TableHandles = () => {
     <>
       {geometry !== null && (
         <TableHandleOverlays
+          activeColumnId={activeColumnId}
           activeRowId={activeRowId}
           canIndentTable={tableNestingActions?.canIndent === true}
           canOutdentTable={tableNestingActions?.canOutdent === true}

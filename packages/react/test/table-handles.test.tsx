@@ -361,6 +361,76 @@ describe("텍스트 커서가 있는 행은 hover 없이도 그립을 노출한�
   });
 });
 
+// 위 행 describe와 같은 이유(_table-handles.scss의
+// .geul-table-column-handle-bar가 행과 대칭으로 평소 완전히 숨겨져 있다) —
+// 여기서도 커서 조건만 검증한다. 클러스터 전체가 사라지는 케이스는 행
+// describe의 세 번째 테스트가 이미 검증한다(activeTableId 게이트를
+// 공유한다).
+describe("텍스트 커서가 있는 열은 hover 없이도 그립을 노출한다", () => {
+  const cellAt = (
+    table: HTMLElement,
+    rowIndex: number,
+    columnIndex: number,
+  ): HTMLElement => {
+    const row = table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[
+      rowIndex
+    ];
+    const cell = row?.querySelectorAll<HTMLElement>(
+      "[data-geul-column-id]",
+    )[columnIndex];
+    if (cell === undefined) {
+      throw new Error(`${rowIndex}행 ${columnIndex}열의 셀을 찾지 못했다`);
+    }
+    return cell;
+  };
+  const columnHitBoxes = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "[data-geul-table-column-handle-hit]",
+      ),
+    );
+
+  it("마우스 hover 없이 커서만 표 안에 있어도 열 그립 클러스터가 뜬다", () => {
+    const { table } = renderRealTable();
+
+    placeCaret(cellAt(table, 0, 0));
+
+    expect(
+      screen.getAllByRole("button", { name: columnHandleLabel }),
+    ).toHaveLength(2);
+  });
+
+  it("커서가 있는 열의 hit box에만 active 속성이 붙고, 다른 열로 옮기면 같이 옮겨간다", () => {
+    const { table } = renderRealTable();
+
+    placeCaret(cellAt(table, 0, 0));
+
+    expect(
+      columnHitBoxes()[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(true);
+    expect(
+      columnHitBoxes()[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(false);
+
+    placeCaret(cellAt(table, 0, 1));
+
+    expect(
+      columnHitBoxes()[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(false);
+    expect(
+      columnHitBoxes()[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("Indent/Outdent table 비활성화(G-UI-004, Issue #65 항목8 RD-003)", () => {
   it("앞에 들여쓸 수 있는 형제가 있으면 Indent는 활성, 표는 top-level이라 Outdent는 비활성이다", () => {
     const { table } = renderRealTable();
