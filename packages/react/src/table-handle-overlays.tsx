@@ -59,6 +59,15 @@ export type TableHandleOverlaysProps = {
   // true. table-handles.tsx의 computeExpandButtonVisibility가 계산한다.
   showAddRow: boolean;
   showAddColumn: boolean;
+  // 좌상단 코너 클러스터(Plus·표 그립) 전용 게이트 — 일반 블록
+  // gutter(block-side-menu.tsx)와 동격이라 순수 hover(또는 그 버튼 자체와
+  // 상호작용 중인 드래그/리사이즈/메뉴)일 때만 true다. 이 컴포넌트 전체의
+  // 마운트 여부(geometry, 즉 activeTableId)와는 별도다 — activeTableId는
+  // selectionTableId(커서만 표 안, hover 없음) fallback을 포함해 행/열
+  // grip 클러스터를 계속 띄우지만, 코너 클러스터는 그 fallback을 타면
+  // 안 된다(table-handles.tsx의 activeTableId 선언부 주석 참고 — 사용자
+  // 스크린샷: 표 코너 클러스터와 다음 블록 gutter가 동시에 보이는 버그).
+  showCornerCluster: boolean;
 };
 
 /**
@@ -87,6 +96,7 @@ export const TableHandleOverlays = ({
   onTableGripClick,
   showAddRow,
   showAddColumn,
+  showCornerCluster,
 }: TableHandleOverlaysProps) => {
   const dictionary = useDictionary();
   // 코너 클러스터(Plus·표 그립)의 세로 자리 — 표 상단이 아니라 첫 행의
@@ -326,31 +336,42 @@ export const TableHandleOverlays = ({
           달랐다(사용자 스크린샷 지적, "세로 위치가 테이블 첫번째 행과
           안 맞아"). 같은 높이가 된 row handle hit box(아래 첫 주석, 왼쪽
           -18~+12)와 겹치지 않으려면 TABLE_INDENT_PX가 대략 12px 이상이어야
-          한다(table-handle-constants.tsx의 tableCornerPlusOffsetPx 주석). */}
-      <IconButton
-        className={nestingButtonClassName}
-        data-geul-table-grip=""
-        icon={tableGripIcon}
-        label={dictionary.handle.tableMenu}
-        onClick={onTableGripClick}
-        style={{
-          position: "absolute",
-          left: geometry.left + tableCornerGripOffsetPx,
-          top: cornerClusterTop,
-        }}
-      />
-      <IconButton
-        className={nestingButtonClassName}
-        data-geul-table-quick-insert=""
-        icon={addIcon}
-        label={dictionary.handle.addBlock}
-        onClick={onAddBlock}
-        style={{
-          position: "absolute",
-          left: geometry.left + tableCornerPlusOffsetPx,
-          top: cornerClusterTop,
-        }}
-      />
+          한다(table-handle-constants.tsx의 tableCornerPlusOffsetPx 주석).
+
+          showCornerCluster로 게이트한다 — 일반 gutter(block-side-menu.tsx)와
+          달리 이 컴포넌트 자체는 selectionTableId fallback으로도(hover
+          없이 커서만 표 안에 있어도) 마운트되지만(행/열 grip 클러스터는
+          그래야 한다), 이 코너 클러스터만은 그 fallback을 타면 안
+          된다 — 안 그러면 마우스가 표를 벗어나 다음 블록으로 가도 그
+          블록의 gutter와 동시에 떠 있게 된다(사용자 스크린샷). */}
+      {showCornerCluster && (
+        <>
+          <IconButton
+            className={nestingButtonClassName}
+            data-geul-table-grip=""
+            icon={tableGripIcon}
+            label={dictionary.handle.tableMenu}
+            onClick={onTableGripClick}
+            style={{
+              position: "absolute",
+              left: geometry.left + tableCornerGripOffsetPx,
+              top: cornerClusterTop,
+            }}
+          />
+          <IconButton
+            className={nestingButtonClassName}
+            data-geul-table-quick-insert=""
+            icon={addIcon}
+            label={dictionary.handle.addBlock}
+            onClick={onAddBlock}
+            style={{
+              position: "absolute",
+              left: geometry.left + tableCornerPlusOffsetPx,
+              top: cornerClusterTop,
+            }}
+          />
+        </>
+      )}
       {reorderGuideRect !== null && (
         <div
           className="geul-table-reorder-guide"

@@ -357,9 +357,18 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   // 드래그/리사이즈/메뉴가 진행 중이면) 그쪽이 우선한다. 마우스가 표
   // 여백(HANDLE_HOVER_MARGIN)을 완전히 벗어난 채 키보드만으로 커서가 표
   // 안에 남아 있을 때만 이 fallback이 클러스터를 계속 마운트시킨다(Notion
-  // 참고, 사용자 요청) — 이 경로로 뜨면 행 그립뿐 아니라 열 그립·add row/
-  // column rail·Plus·표 그립 버튼도 함께 뜬다(단일 activeTableId 렌더
-  // 게이트를 공유하는 기존 구조 그대로, 새 게이트를 만들지 않는다).
+  // 참고, 사용자 요청) — 행 그립·열 그립·add row/column rail은 이 경로로도
+  // 뜬다(단일 activeTableId 렌더 게이트를 공유).
+  //
+  // 좌상단 Plus·표 그립 버튼(코너 클러스터)은 예외다 — 일반 블록
+  // gutter(block-side-menu.tsx)와 동격이라 그쪽처럼 순수 hover(또는 그
+  // 버튼 자체와 상호작용 중인 드래그/리사이즈/메뉴)로만 떠야 한다.
+  // selectionTableId fallback을 그대로 태우면, 마우스가 표를 완전히
+  // 벗어나 다음 블록 위로 가도(그 블록의 gutter가 hover로 뜨는 동안) 표
+  // 코너 클러스터가 커서 fallback으로 계속 떠 있어 두 gutter가 동시에
+  // 보이는 버그가 났다(사용자 스크린샷). showCornerCluster로 따로
+  // 게이트한다 — geometry(및 행/열 클러스터)는 여전히 selectionTableId를
+  // 포함한 activeTableId를 쓴다.
   const activeTableId =
     reorderState?.tableBlockId ??
     resizeState?.tableBlockId ??
@@ -367,6 +376,12 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     tableGripMenuTableId ??
     hoverTableId ??
     selectionTableId;
+  const showCornerCluster =
+    reorderState !== null ||
+    resizeState !== null ||
+    menuState !== null ||
+    tableGripMenuTableId !== null ||
+    hoverTableId !== null;
   const geometry =
     activeTableId === null || element === null
       ? null
@@ -959,6 +974,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
           reorderGuideRect={reorderGuideRect}
           showAddColumn={showAddColumn}
           showAddRow={showAddRow}
+          showCornerCluster={showCornerCluster}
         />
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (

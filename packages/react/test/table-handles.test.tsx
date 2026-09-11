@@ -792,6 +792,26 @@ describe("표 그립 버튼", () => {
     });
   });
 
+  // 사용자 스크린샷 버그 재현 — 표 안에 커서를 두고 마우스는 다음 블록
+  // 위에 있으면, 표 코너 클러스터(표 그립·Plus)와 다음 블록의
+  // block-side-menu gutter가 동시에 보였다. 행/열 grip 클러스터는
+  // selectionTableId fallback(위 "텍스트 커서나 마우스 hover가 있는 행에
+  // 활성 바가 뜬다")으로 hover 없이도 떠야 정상이지만(Notion 참고), 코너
+  // 클러스터는 일반 블록 gutter(block-side-menu.tsx)와 동격이라 그 fallback을
+  // 타면 안 된다 — 순수 hover(또는 그 버튼 자체와 상호작용 중인 드래그/
+  // 리사이즈/메뉴)로만 떠야 다음 블록 gutter와 동시에 뜨지 않는다.
+  it("마우스 hover 없이 커서만 표 안에 있으면 뜨지 않는다(코너 클러스터는 selectionTableId fallback을 안 탄다)", () => {
+    const { table } = renderRealTable();
+    const cell = table.querySelector<HTMLElement>("td");
+    if (cell === null) throw new Error("표 셀을 찾지 못했다");
+
+    // fireEvent.pointerMove(table)를 전혀 부르지 않는다 — hover 없이 커서만
+    // 표 안에 있는 상태를 흉내낸다(행/열 grip 클러스터 테스트와 같은 설정).
+    placeCaret(cell);
+
+    expect(screen.queryByRole("button", { name: tableMenuLabel })).toBeNull();
+  });
+
   it("dictionary override 시 라벨이 바뀐다(EXT-009)", () => {
     const { table } = renderRealTable({
       dictionary: {
@@ -824,6 +844,22 @@ describe("표 Plus 버튼", () => {
     const button = screen.getByRole("button", { name: tableAddBlockLabel });
 
     expect(button.getAttribute("aria-disabled")).toBeNull();
+  });
+
+  // 위 "표 그립 버튼" describe의 커서-only 재현 테스트와 같은 버그, 같은
+  // 원인(activeTableId의 selectionTableId fallback을 코너 클러스터가 그대로
+  // 물려받았었다) — Plus 버튼도 표 그립 버튼과 같은 코너 클러스터라 함께
+  // 검증한다.
+  it("마우스 hover 없이 커서만 표 안에 있으면 뜨지 않는다", () => {
+    const { table } = renderRealTable();
+    const cell = table.querySelector<HTMLElement>("td");
+    if (cell === null) throw new Error("표 셀을 찾지 못했다");
+
+    placeCaret(cell);
+
+    expect(
+      screen.queryByRole("button", { name: tableAddBlockLabel }),
+    ).toBeNull();
   });
 
   it("클릭 시 표 바로 뒤에 빈 문단을 삽입하고 onBlockAdded를 그 블록 id로 호출한다", () => {
