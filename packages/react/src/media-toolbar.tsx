@@ -1,7 +1,21 @@
 import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Captions,
+  Download as DownloadIcon,
+  Eye,
+  LucideProvider,
+  PenLine,
+  Replace as ReplaceIcon,
+  Trash2,
+} from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { IconButton } from "./icon-button.js";
+import { iconProps } from "./icon-props.js";
 import {
   FALLBACK_BLOCK_POSITION,
   readBlockBounds,
@@ -16,6 +30,20 @@ import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 const mediaToolbarButtonClassName = "geul-media-toolbar__button";
 const dangerButtonClassName =
   "geul-media-toolbar__button geul-media-toolbar__button--danger";
+
+// link-toolbar.tsx의 saveLinkIcon 등과 같은 이유로 모듈 top-level에서 한 번만
+// 만든다 — 매 렌더 새 ReactElement를 만들지 않는다. Download만 icon import를
+// DownloadIcon으로 alias한다 — lucide-react의 Download와 이 파일 아래
+// `dictionary.toolbar.media.download`(문자열) 이름이 겹쳐서다.
+const replaceIcon = <ReplaceIcon {...iconProps} />;
+const renameIcon = <PenLine {...iconProps} />;
+const captionIcon = <Captions {...iconProps} />;
+const previewIcon = <Eye {...iconProps} />;
+const alignLeftIcon = <AlignLeft {...iconProps} />;
+const alignCenterIcon = <AlignCenter {...iconProps} />;
+const alignRightIcon = <AlignRight {...iconProps} />;
+const deleteIcon = <Trash2 {...iconProps} />;
+const downloadIcon = <DownloadIcon {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. FilePanel/SlashMenu와 같은 이유로
 // 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가 리스너를 매
@@ -550,101 +578,80 @@ export const MediaToolbar = ({
       {toolbarState.mode === "view" && (
         <>
           {editor.isUploadEnabled() && (
-            <button
-              aria-label={dictionary.toolbar.media.replaceAriaLabel}
+            <IconButton
               className={mediaToolbarButtonClassName}
+              icon={replaceIcon}
+              label={dictionary.toolbar.media.replaceAriaLabel}
               onClick={startReplacing}
-              onMouseDown={(event) => event.preventDefault()}
-              type="button"
-            >
-              {dictionary.toolbar.media.replace}
-            </button>
+            />
           )}
-          <button
-            aria-label={dictionary.toolbar.media.rename}
+          <IconButton
             className={mediaToolbarButtonClassName}
+            icon={renameIcon}
+            label={dictionary.toolbar.media.rename}
             onClick={startEditingName}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.media.rename}
-          </button>
-          <button
-            aria-label={dictionary.toolbar.media.editCaptionAriaLabel}
+          />
+          <IconButton
             className={mediaToolbarButtonClassName}
+            icon={captionIcon}
+            label={dictionary.toolbar.media.editCaptionAriaLabel}
             onClick={startEditingCaption}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.media.caption}
-          </button>
+          />
           {toolbarState.kind !== "file" && (
-            <button
-              aria-label={dictionary.toolbar.media.preview}
+            <IconButton
               aria-pressed={toolbarState.showPreview === true}
               className={mediaToolbarButtonClassName}
+              icon={previewIcon}
+              label={dictionary.toolbar.media.preview}
               onClick={toggleShowPreview}
-              onMouseDown={(event) => event.preventDefault()}
-              type="button"
-            >
-              {dictionary.toolbar.media.preview}
-            </button>
+            />
           )}
           {(toolbarState.kind === "image" || toolbarState.kind === "video") && (
             <>
-              <button
-                aria-label={dictionary.toolbar.media.alignLeft}
+              <IconButton
                 aria-pressed={toolbarState.textAlignment === "left"}
                 className={mediaToolbarButtonClassName}
+                icon={alignLeftIcon}
+                label={dictionary.toolbar.media.alignLeft}
                 onClick={() => setMediaAlignment("left")}
-                onMouseDown={(event) => event.preventDefault()}
-                type="button"
-              >
-                {dictionary.toolbar.media.alignLeft}
-              </button>
-              <button
-                aria-label={dictionary.toolbar.media.alignCenter}
+              />
+              <IconButton
                 aria-pressed={toolbarState.textAlignment === "center"}
                 className={mediaToolbarButtonClassName}
+                icon={alignCenterIcon}
+                label={dictionary.toolbar.media.alignCenter}
                 onClick={() => setMediaAlignment("center")}
-                onMouseDown={(event) => event.preventDefault()}
-                type="button"
-              >
-                {dictionary.toolbar.media.alignCenter}
-              </button>
-              <button
-                aria-label={dictionary.toolbar.media.alignRight}
+              />
+              <IconButton
                 aria-pressed={toolbarState.textAlignment === "right"}
                 className={mediaToolbarButtonClassName}
+                icon={alignRightIcon}
+                label={dictionary.toolbar.media.alignRight}
                 onClick={() => setMediaAlignment("right")}
-                onMouseDown={(event) => event.preventDefault()}
-                type="button"
-              >
-                {dictionary.toolbar.media.alignRight}
-              </button>
+              />
             </>
           )}
-          <button
-            aria-label={dictionary.toolbar.media.deleteAriaLabel}
+          <IconButton
             className={dangerButtonClassName}
+            icon={deleteIcon}
+            label={dictionary.toolbar.media.deleteAriaLabel}
             onClick={handleDelete}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.media.delete}
-          </button>
+          />
           {/* cross-origin url은 강제 다운로드를 보장하지 않는다(브라우저
               same-origin 정책, spec §6.3) — 링크가 열리기만 할 수도 있다.
               download 속성은 name이 없어도 항상 둔다 — 없으면 강제 다운로드
-              힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. */}
+              힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. Download는
+              `<a>`라 IconButton(<button> 전용) 대신 link-toolbar.tsx의 Open
+              link와 같은 방식으로 같은 시각 계약만 직접 조립한다. */}
           <a
             aria-label={dictionary.toolbar.media.download}
-            className={mediaToolbarButtonClassName}
+            className={`geul-icon-button ${mediaToolbarButtonClassName}`}
             download={toolbarState.name ?? ""}
             href={toolbarState.url}
             onMouseDown={(event) => event.preventDefault()}
+            title={dictionary.toolbar.media.download}
           >
-            {dictionary.toolbar.media.download}
+            <LucideProvider>{downloadIcon}</LucideProvider>
           </a>
         </>
       )}

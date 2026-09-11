@@ -193,7 +193,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
-  it("dictionary override 시 컨테이너·버튼(aria-label≠텍스트 포함)이 바뀐다(EXT-009)", () => {
+  it("dictionary override 시 컨테이너·버튼(icon 버튼, aria-label만 override)이 바뀐다(EXT-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
       dictionary: {
@@ -218,7 +218,10 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
       name: "미디어 블록 삭제하기",
     });
     expect(deleteButton).toBeTruthy();
-    expect(deleteButton.textContent).toBe("삭제");
+    // Delete는 icon 버튼이라 visible text가 없다 — dictionary override는
+    // aria-label(deleteAriaLabel)에만 반영되고 textContent는 항상 빈
+    // 문자열이다(link-toolbar.test.tsx의 Cancel과 같은 패턴).
+    expect(deleteButton.textContent).toBe("");
   });
 
   it("url 없는 미디어 블록을 선택하면 렌더링하지 않는다(FilePanel 담당)", () => {
