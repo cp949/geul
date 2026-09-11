@@ -512,6 +512,12 @@ test("뷰포트 밖으로 밀려난 표 확장 버튼도 키보드 Tab 포커스
   // 실측 3: 버튼이 초점을 받은 뒤에는 뷰포트 안에서 보인다(더 이상 화면
   // 밖에 갇히지 않는다).
   await expect(addRowButton).toBeInViewport();
+
+  // 실측 4: 이 표 hover는 첫 셀(맨 위)뿐이라 마우스로는 이 rail이 평소
+  // opacity:0(Notion 참고, 사용자 요청)이다 — 키보드 Tab만으로도
+  // :focus가 opacity:1로 보이게 하는지 확인한다(마우스 hover 없이도
+  // 키보드 사용자가 놓치지 않아야 한다).
+  await expect(addRowButton).toHaveCSS("opacity", "1");
 });
 
 /**
@@ -606,9 +612,13 @@ test("표 상단 열 재정렬 핸들과 Add column 버튼도 스크롤로 지�
   await expect(columnHandle).toBeInViewport();
 
   // 실측 2: Add column은 클릭까지 성공해 실제로 열이 늘어나는지 함께
-  // 확인한다(도달 확인보다 강한 증거).
-  await scrollPastOverlay(page, addColumnButton);
-  await expect(addColumnButton).not.toBeInViewport();
+  // 확인한다(도달 확인보다 강한 증거). Add column은 이제 표 전체
+  // 높이를 덮는 rail이라(Notion 참고, 사용자 요청) growTableTo11Rows로
+  // 키운 표에서는 뷰포트보다 커진다 — scrollPastOverlay로 "완전히
+  // 뷰포트 밖"을 만드는 전제 자체가 성립하지 않는다(항상 어딘가는
+  // 걸쳐 보인다). 페이지 맨 아래로 스크롤해 클릭 지점에서 멀어진 뒤에도
+  // Playwright의 자동 scroll-into-view로 클릭이 성공하는지만 본다.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   const columnsBefore = await table.locator("tr").first().locator("td").count();
   await addColumnButton.click();
   await expect(table.locator("tr").first().locator("td")).toHaveCount(

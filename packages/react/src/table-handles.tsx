@@ -24,6 +24,7 @@ import {
 } from "./table-handle-constants.js";
 import {
   clampWidth,
+  computeExpandButtonVisibility,
   computeMenuPosition,
   computeReorderGuideRect,
   computeReorderTargetIndex,
@@ -88,6 +89,11 @@ export const TableHandles = () => {
   const [hoverTableId, hoverTableIdRef, updateHoverTableId] = useMirroredState<
     string | null
   >(null);
+  // Notion 참고(사용자 요청) — Add row/column 버튼 노출 판정 전용. 다른
+  // 콜백이 동기적으로 최신값을 읽을 필요가 없어(hoverTableId와 달리 렌더
+  // 소비만 있다) ref 미러링 없이 plain state로 둔다.
+  const [hoverRowId, setHoverRowId] = useState<string | null>(null);
+  const [hoverColumnId, setHoverColumnId] = useState<string | null>(null);
   const [reorderState, reorderStateRef, updateReorderState] =
     useMirroredState<ReorderState | null>(null);
   const [resizeState, resizeStateRef, updateResizeState] =
@@ -150,6 +156,27 @@ export const TableHandles = () => {
     (candidate: HTMLElement | null, event: PointerEvent) => {
       if (candidate !== null) {
         updateHoverTableId(candidate.getAttribute("data-geul-block-id"));
+        // event.target은 실제로 커서 아래 있는 엘리먼트다(elementFromPoint
+        // 결과) — geometry의 page-relative 좌표와 pointermove의
+        // viewport-relative 좌표를 섞어 "이 좌표가 어느 행/열이냐"를 다시
+        // 계산할 필요가 없다. 핸들·리사이즈 strip 등 자기 자신의
+        // 오버레이 위에서는 이 분기 자체가 안 불린다(ignoreSelectors가
+        // 그 target들을 앞에서 걸러 onCandidateChange를 스킵한다) — 그
+        // 결과 Add row/column 버튼 위로 이동해도 직전 값이 그대로
+        // 유지된다(의도, computeExpandButtonVisibility 주석 참고).
+        const target = event.target;
+        const rowElement =
+          target instanceof Element
+            ? target.closest<HTMLElement>("[data-geul-row-id]")
+            : null;
+        const cellElement =
+          target instanceof Element
+            ? target.closest<HTMLElement>("[data-geul-column-id]")
+            : null;
+        setHoverRowId(rowElement?.getAttribute("data-geul-row-id") ?? null);
+        setHoverColumnId(
+          cellElement?.getAttribute("data-geul-column-id") ?? null,
+        );
         return;
       }
 
@@ -175,6 +202,8 @@ export const TableHandles = () => {
         }
       }
       updateHoverTableId(null);
+      setHoverRowId(null);
+      setHoverColumnId(null);
     },
     [element, hoverTableIdRef, updateHoverTableId],
   );
@@ -200,6 +229,11 @@ export const TableHandles = () => {
     geometry === null
       ? null
       : editor.getBlockNestingActionState(geometry.tableBlockId);
+  const { showAddRow, showAddColumn } = computeExpandButtonVisibility(
+    geometry,
+    hoverRowId,
+    hoverColumnId,
+  );
 
   // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
   // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
@@ -716,6 +750,8 @@ export const TableHandles = () => {
           onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
           onSelectTable={handleSelectTable}
           reorderGuideRect={reorderGuideRect}
+          showAddColumn={showAddColumn}
+          showAddRow={showAddRow}
         />
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (

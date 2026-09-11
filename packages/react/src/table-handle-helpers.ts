@@ -118,6 +118,29 @@ export const computeReorderGuideRect = (
   };
 };
 
+// Notion 참고(사용자 요청) — Add row/column 버튼은 표 전체가 아니라 가장
+// 아래 행/가장 오른쪽 열 위에 있을 때만 보인다. hoverRowId·hoverColumnId는
+// table-handles.tsx가 event.target에서 실제 가리키는 셀의 행·열 id를 그대로
+// 읽어 넘긴다(geometry의 page-relative 좌표와 pointermove의 viewport-relative
+// 좌표를 섞어 재계산할 필요가 없다). 병합 셀이 마지막 열/행을 덮으면 그
+// 셀의 id는 자기 자신(anchor)의 id라 이 비교를 못 맞힐 수 있다 — 알려진
+// 한계로 남긴다(별도 이슈 없음, 우선순위 낮음).
+export const computeExpandButtonVisibility = (
+  geometry: TableGeometry | null,
+  hoverRowId: string | null,
+  hoverColumnId: string | null,
+): { showAddRow: boolean; showAddColumn: boolean } => {
+  if (geometry === null) return { showAddRow: false, showAddColumn: false };
+  const { rows, columns } = geometry;
+  const lastRow = rows[rows.length - 1];
+  const lastColumn = columns[columns.length - 1];
+  return {
+    showAddRow: lastRow !== undefined && hoverRowId === lastRow.rowId,
+    showAddColumn:
+      lastColumn !== undefined && hoverColumnId === lastColumn.columnId,
+  };
+};
+
 export type MenuPosition = {
   left: number;
   top: number;

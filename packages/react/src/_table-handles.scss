@@ -68,14 +68,26 @@
   }
 }
 
+// Notion 참고(사용자 요청) — 가로/세로 크기는 이제 표 전체 폭/높이를 덮는
+// rail이라 고정 height/width를 안 둔다(table-handle-overlays.tsx가 inline
+// style로 계산). 평소엔 완전히 숨겨져 있다가(opacity:0) 가장 아래 행/가장
+// 오른쪽 열을 가리킬 때만(data-geul-table-expand-visible) 또는 키보드
+// Tab으로 초점이 왔을 때(:focus) 보인다 — pointer-events는 건드리지
+// 않는다, 숨겨진 동안에도 클릭 가능해야 하는 기존 e2e 계약을 그대로
+// 유지한다(위 table-handle-overlays.tsx 주석 참고).
 .geul-table-expand-button {
-  height: 1.25rem;
-  width: 1.25rem;
-  border-radius: var(--geul-radius-sm, 0.25rem);
+  border-radius: var(--geul-radius-lg, 0.5rem);
   border: 1px solid var(--geul-color-border, #dadce0);
-  background: var(--geul-color-surface, #fff);
+  background: var(--geul-color-surface-muted, #f1f3f4);
   padding: 0;
-  color: var(--geul-color-text, #202124);
+  color: var(--geul-color-text-muted, #5f6368);
+  opacity: 0;
+  transition: opacity 120ms ease;
+
+  &[data-geul-table-expand-visible],
+  &:focus {
+    opacity: 1;
+  }
 }
 
 .geul-table-nesting-button {

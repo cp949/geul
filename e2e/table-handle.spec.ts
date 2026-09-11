@@ -484,10 +484,23 @@ test("빠른 확장 버튼으로 행과 열을 추가하고 undo 1회로 복원�
 }) => {
   const { editable } = await openDemo(page);
   const table = await insertTable(page, editable);
-
-  await table.locator("tr").first().locator("td").first().hover();
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
   const addRowButton = page.getByRole("button", { name: "Add row" });
-  await expect(addRowButton).toBeVisible();
+  const addColumnButton = page.getByRole("button", { name: "Add column" });
+
+  // Notion 참고(사용자 요청) — 두 버튼 모두 평소엔 opacity:0이다. 표
+  // 가운데 셀에 hover해도 가장 아래 행도 가장 오른쪽 열도 아니라면
+  // 둘 다 가려져 있어야 한다(table-handle-helpers.ts
+  // computeExpandButtonVisibility).
+  await cell(0, 0).hover();
+  await expect(addRowButton).toHaveCSS("opacity", "0");
+  await expect(addColumnButton).toHaveCSS("opacity", "0");
+
+  // 가장 아래 행(마지막 tr)에 hover하면 Add row만 보인다.
+  await cell(2, 0).hover();
+  await expect(addRowButton).toHaveCSS("opacity", "1");
+  await expect(addColumnButton).toHaveCSS("opacity", "0");
   await addRowButton.click();
 
   await expect(table.locator("tr")).toHaveCount(4);
@@ -495,9 +508,10 @@ test("빠른 확장 버튼으로 행과 열을 추가하고 undo 1회로 복원�
   await page.keyboard.press("Control+z");
   await expect(table.locator("tr")).toHaveCount(3);
 
-  await table.locator("tr").first().locator("td").first().hover();
-  const addColumnButton = page.getByRole("button", { name: "Add column" });
-  await expect(addColumnButton).toBeVisible();
+  // 가장 오른쪽 열(마지막 td)에 hover하면 Add column만 보인다.
+  await cell(0, 2).hover();
+  await expect(addColumnButton).toHaveCSS("opacity", "1");
+  await expect(addRowButton).toHaveCSS("opacity", "0");
   await addColumnButton.click();
 
   await expect(table.locator("tr").first().locator("td")).toHaveCount(4);

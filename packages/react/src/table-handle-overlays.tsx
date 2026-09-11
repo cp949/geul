@@ -47,6 +47,10 @@ export type TableHandleOverlaysProps = {
   onIndentTable: () => void;
   onOutdentTable: () => void;
   onSelectTable: () => void;
+  // Notion 참고(사용자 요청) — 가장 아래 행/가장 오른쪽 열을 가리킬 때만
+  // true. table-handles.tsx의 computeExpandButtonVisibility가 계산한다.
+  showAddRow: boolean;
+  showAddColumn: boolean;
 };
 
 /**
@@ -71,6 +75,8 @@ export const TableHandleOverlays = ({
   onIndentTable,
   onOutdentTable,
   onSelectTable,
+  showAddRow,
+  showAddColumn,
 }: TableHandleOverlaysProps) => {
   const dictionary = useDictionary();
   return (
@@ -182,28 +188,43 @@ export const TableHandleOverlays = ({
           />
         )),
       )}
+      {/* Notion 참고 — 평소엔 opacity:0(_table-handles.scss)이고, 가장
+          아래 행/가장 오른쪽 열을 가리킬 때만(showAddRow/showAddColumn)
+          보인다. 클릭 가능 여부(pointer-events)는 건드리지 않는다 —
+          숨겨진 동안에도 항상 클릭 가능한 지금 동작을 그대로 유지해야
+          기존 e2e(빠른 확장 버튼 반복 클릭, Issue #163 스크롤 재검증)가
+          깨지지 않는다. 크기도 표 전체 폭/높이를 덮는 rail로 바꿨다 —
+          Add row는 표 아래 가로 막대, Add column은 표 오른쪽 세로
+          막대(둘 다 :focus로도 보인다, Tab 접근성은 DOM에 항상
+          존재한다는 사실만으로 이미 보장되고 opacity와 무관하다). */}
       <IconButton
         className={expandButtonClassName}
         data-geul-table-expand-row=""
+        data-geul-table-expand-visible={showAddRow ? "" : undefined}
         icon={addIcon}
         label={dictionary.handle.addRow}
         onClick={onAddRow}
         style={{
           position: "absolute",
-          left: geometry.left + (geometry.right - geometry.left) / 2 - 10,
-          top: geometry.bottom + 4,
+          left: geometry.left,
+          top: geometry.bottom + 8,
+          width: geometry.right - geometry.left,
+          height: 24,
         }}
       />
       <IconButton
         className={expandButtonClassName}
         data-geul-table-expand-column=""
+        data-geul-table-expand-visible={showAddColumn ? "" : undefined}
         icon={addIcon}
         label={dictionary.handle.addColumn}
         onClick={onAddColumn}
         style={{
           position: "absolute",
-          left: geometry.right + 4,
-          top: geometry.top + (geometry.bottom - geometry.top) / 2 - 10,
+          left: geometry.right + 8,
+          top: geometry.top,
+          width: 24,
+          height: geometry.bottom - geometry.top,
         }}
       />
       {/* 좌상단 여백(geometry.left - 24 부근)은 row handle(x는 같지만 y는
