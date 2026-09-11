@@ -37,17 +37,19 @@ export const expandButtonClassName = "geul-table-expand-button";
 // 쓰되, 재정렬(cursor: grab)이 아니라 1회성 액션이라 별도 클래스로 둔다.
 export const nestingButtonClassName = "geul-table-nesting-button";
 
-// 행/열 그립 공통(Notion 참고, 사용자 요청 — hover 또는 텍스트 커서가
-// 있는 행/열 하나만 보여야 하고, 나머지가 동시에 보이면 안 된다). 둘 다
-// 평소 완전히 숨겨져 있다가(opacity:0) 두 조건 중 하나에서만 pill로
-// 뜬다: hit box 근처 hover, 또는 그 행/열에 텍스트 커서가 있음
-// (table-handles.tsx가 selection에서 계산하는 activeRowId/activeColumnId).
-// 시각 바보다 hit box가 훨씬 커야 "정확히 바 위"가 아니라 "근처"만
-// 가리켜도 반응한다 — 그래서 두 클래스로 나눈다: hit box(이 자체는 투명,
-// hover 판정만 담당)와 그 안의 실제 버튼(handleButtonClassName과 함께
-// 붙는다). 행은 열의 축을 90도 돌린 거울상이다 — 열은 top/height가
-// 고정 pill 자리, left 고정(0)이고, 행은 left/width가 고정 pill 자리,
-// top 고정(0)이다(table-handle-overlays.tsx, _table-handles.scss 참고).
+// 행/열 그립 공통(Notion 참고, 사용자 요청·네이밍). 3단계다: ① 평소
+// 완전히 숨김. ② "활성 바" — 커서가 있거나 마우스가 그 행/열 위 어디든
+// hover 중이면(table-handles.tsx가 selection·hoverRowId/hoverColumnId에서
+// 계산하는 activeRowIds/activeColumnIds, 커서·hover가 서로 다른 행/열을
+// 가리킬 수 있어 최대 2개) 얇은 line으로 뜬다. ③ "grip 버튼" — 그 활성
+// 바 위에 마우스가 다시 hover(또는 키보드 focus)하면 실제 pill 버튼으로
+// 펼쳐진다(재정렬 드래그·클릭 메뉴가 이 상태에서 동작한다). 시각 바보다
+// hit box가 훨씬 커야 "정확히 바 위"가 아니라 "근처"만 가리켜도 반응한다
+// — 그래서 두 클래스로 나눈다: hit box(이 자체는 투명, hover 판정만
+// 담당)와 그 안의 실제 버튼(handleButtonClassName과 함께 붙는다). 행은
+// 열의 축을 90도 돌린 거울상이다 — 열은 top/height, 행은 left/width가
+// ②③ 두 자리를 오간다(table-handle-overlays.tsx, _table-handles.scss
+// 참고).
 export const rowHandleHitClassName = "geul-table-row-handle-hit";
 export const rowHandleBarClassName = "geul-table-row-handle-bar";
 export const columnHandleHitClassName = "geul-table-column-handle-hit";

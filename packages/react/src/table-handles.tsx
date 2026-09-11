@@ -320,13 +320,35 @@ export const TableHandles = () => {
     hoverRowId,
     hoverColumnId,
   );
-  // 커서가 지금 그려지는 표(geometry.tableBlockId)와 다른 표에 있으면 무시한다
-  // — hover가 다른 표를 가리키는 동안(위 activeTableId 우선순위) 그 표의
-  // selectionRowId/selectionColumnId를 이 표 행/열에 잘못 매칭하지 않는다.
+  // "활성 바"(사용자 네이밍) 노출 조건 — 커서가 있는 행/열, 또는 마우스가
+  // 지금 hover 중인 행/열(hoverRowId/hoverColumnId, 셀 어디를 hover해도
+  // 반응한다 — hit box 근처만 보는 grip 버튼의 :hover보다 넓은 범위다).
+  // 두 조건이 서로 다른 행/열을 가리킬 수 있어 배열이다(최대 2개, 사용자
+  // 요청 "행/열도 마찬가지로 최대 2개"). hoverRowId는 hoverTableId와 같은
+  // pointermove에서 함께 갱신돼(handleHoverCandidateChange) 항상
+  // hoverTableId 소속이다 — hoverTableId가 activeTableId 우선순위에서
+  // selectionTableId보다 앞서므로(위 activeTableId), hoverRowId가 non-null인
+  // 동안은 항상 geometry.tableBlockId와 같은 표를 가리킨다. 커서 쪽만
+  // 다른 표를 가리킬 수 있어(위 activeTableId 우선순위에서 hover가 다른
+  // 표를 가리키는 동안 selection은 그대로일 수 있다) 그쪽만 따로
+  // geometry.tableBlockId와 대조한다.
   const isSelectionInRenderedTable =
     geometry !== null && selectionTableId === geometry.tableBlockId;
-  const activeRowId = isSelectionInRenderedTable ? selectionRowId : null;
-  const activeColumnId = isSelectionInRenderedTable ? selectionColumnId : null;
+  const activeRowIds = Array.from(
+    new Set(
+      [isSelectionInRenderedTable ? selectionRowId : null, hoverRowId].filter(
+        (id): id is string => id !== null,
+      ),
+    ),
+  );
+  const activeColumnIds = Array.from(
+    new Set(
+      [
+        isSelectionInRenderedTable ? selectionColumnId : null,
+        hoverColumnId,
+      ].filter((id): id is string => id !== null),
+    ),
+  );
 
   // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
   // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
@@ -831,8 +853,8 @@ export const TableHandles = () => {
     <>
       {geometry !== null && (
         <TableHandleOverlays
-          activeColumnId={activeColumnId}
-          activeRowId={activeRowId}
+          activeColumnIds={activeColumnIds}
+          activeRowIds={activeRowIds}
           canIndentTable={tableNestingActions?.canIndent === true}
           canOutdentTable={tableNestingActions?.canOutdent === true}
           geometry={geometry}

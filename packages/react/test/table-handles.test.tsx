@@ -283,14 +283,14 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
   });
 });
 
-// Notion 참고(사용자 요청) — 행 그립은 평소 완전히 숨겨져 있다가 hover
-// 근처 또는 텍스트 커서가 그 행에 있을 때만 pill로 뜬다(_table-handles.scss의
-// .geul-table-row-handle-bar). 여기서는 커서 조건만 검증한다 — hover 조건은
-// CSS :hover라 jsdom에서 못 잡는다(위 "position: absolute" 테스트 주석과
-// 같은 이유, 정적 grep·e2e가 대신 확인). 커서 조건은 table-handles.tsx가
-// data-geul-table-row-handle-active 속성으로 노출해 jsdom에서도 단언할 수
-// 있다.
-describe("텍스트 커서가 있는 행은 hover 없이도 그립을 노출한다", () => {
+// Notion 참고(사용자 요청·네이밍) — 행 그립은 3단계다: 숨김 → "활성
+// 바"(커서가 있거나 마우스가 그 행 위 어디든 hover 중이면, 최대 2개
+// 행까지) → "grip 버튼"(활성 바 위에 마우스가 다시 hover/focus)
+// (_table-handles.scss의 .geul-table-row-handle-bar). 여기서는 숨김→
+// 활성 바 전환(data-geul-table-row-handle-active)만 검증한다 — 활성 바→
+// grip 버튼 전환은 CSS :hover라 jsdom에서 못 잡는다(위 "position:
+// absolute" 테스트 주석과 같은 이유, 정적 grep·e2e가 대신 확인).
+describe("텍스트 커서나 마우스 hover가 있는 행에 활성 바가 뜬다", () => {
   const firstCellOf = (table: HTMLElement, rowIndex: number): HTMLElement => {
     const row = table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[
       rowIndex
@@ -359,14 +359,46 @@ describe("텍스트 커서가 있는 행은 hover 없이도 그립을 노출한�
       screen.queryAllByRole("button", { name: rowHandleLabel }),
     ).toHaveLength(0);
   });
+
+  it("마우스가 hover 중인 행에도(커서 없이) 활성 바가 뜬다", () => {
+    const { table } = renderRealTable();
+
+    // 표 전체에 쏘면(위 "position: absolute" 테스트처럼) target이 table
+    // 자신이라 event.target.closest("[data-geul-row-id]")가 못 찾는다 —
+    // 특정 행의 셀에 쏴야 hoverRowId가 그 행으로 좁혀진다.
+    fireEvent.pointerMove(table);
+    fireEvent.pointerMove(firstCellOf(table, 1));
+
+    expect(
+      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(false);
+    expect(
+      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(true);
+  });
+
+  it("커서와 마우스 hover가 서로 다른 행을 가리키면 최대 2개 행에 동시에 활성 바가 뜬다", () => {
+    const { table } = renderRealTable();
+
+    placeCaret(firstCellOf(table, 0));
+    fireEvent.pointerMove(table);
+    fireEvent.pointerMove(firstCellOf(table, 1));
+
+    expect(
+      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(true);
+    expect(
+      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(true);
+  });
 });
 
 // 위 행 describe와 같은 이유(_table-handles.scss의
-// .geul-table-column-handle-bar가 행과 대칭으로 평소 완전히 숨겨져 있다) —
-// 여기서도 커서 조건만 검증한다. 클러스터 전체가 사라지는 케이스는 행
-// describe의 세 번째 테스트가 이미 검증한다(activeTableId 게이트를
-// 공유한다).
-describe("텍스트 커서가 있는 열은 hover 없이도 그립을 노출한다", () => {
+// .geul-table-column-handle-bar가 행과 대칭으로 숨김→활성 바→grip 버튼
+// 3단계를 그대로 반복한다) — 여기서도 숨김→활성 바 전환만 검증한다.
+// 클러스터 전체가 사라지는 케이스는 행 describe의 세 번째 테스트가 이미
+// 검증한다(activeTableId 게이트를 공유한다).
+describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬다", () => {
   const cellAt = (
     table: HTMLElement,
     rowIndex: number,
@@ -423,6 +455,43 @@ describe("텍스트 커서가 있는 열은 hover 없이도 그립을 노출한�
         "data-geul-table-column-handle-active",
       ),
     ).toBe(false);
+    expect(
+      columnHitBoxes()[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(true);
+  });
+
+  it("마우스가 hover 중인 열에도(커서 없이) 활성 바가 뜬다", () => {
+    const { table } = renderRealTable();
+
+    fireEvent.pointerMove(table);
+    fireEvent.pointerMove(cellAt(table, 0, 1));
+
+    expect(
+      columnHitBoxes()[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(false);
+    expect(
+      columnHitBoxes()[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(true);
+  });
+
+  it("커서와 마우스 hover가 서로 다른 열을 가리키면 최대 2개 열에 동시에 활성 바가 뜬다", () => {
+    const { table } = renderRealTable();
+
+    placeCaret(cellAt(table, 0, 0));
+    fireEvent.pointerMove(table);
+    fireEvent.pointerMove(cellAt(table, 0, 1));
+
+    expect(
+      columnHitBoxes()[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
+    ).toBe(true);
     expect(
       columnHitBoxes()[1]?.hasAttribute(
         "data-geul-table-column-handle-active",
