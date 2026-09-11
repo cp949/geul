@@ -13,7 +13,7 @@ import {
   rowHandleBarClassName,
   rowHandleHitClassName,
   rowHandleIcon,
-  selectTableIcon,
+  tableGripIcon,
 } from "./table-handle-constants.js";
 import type { ReorderGuideRect } from "./table-handle-helpers.js";
 import type { ReorderKind } from "./table-handle-types.js";
@@ -57,7 +57,7 @@ export type TableHandleOverlaysProps = {
   onAddColumn: () => void;
   onIndentTable: () => void;
   onOutdentTable: () => void;
-  onSelectTable: () => void;
+  onTableGripClick: () => void;
   // Notion 참고(사용자 요청) — 가장 아래 행/가장 오른쪽 열을 가리킬 때만
   // true. table-handles.tsx의 computeExpandButtonVisibility가 계산한다.
   showAddRow: boolean;
@@ -70,8 +70,10 @@ export type TableHandleOverlaysProps = {
  * 상태 계산은 모두 TableHandles가 하고(geometry, reorderGuideRect, 활성화
  * 플래그, 클릭/포인터 콜백) 이 컴포넌트는 표시와 이벤트 위임만
  * 한다(table-handle-menu.tsx와 같은 경계). select 버튼은
- * editor.commands.selectBlockRange(tableId, tableId)를 커밋해
- * BlockSelectionToolbar(Delete·위/아래 이동)를 여는 진입점이다(Issue #149).
+ * 표 그립 버튼(CONTEXT.md, Issue #174 RD-002)은
+ * editor.commands.selectBlockRange(tableId, tableId)를 커밋해 표를
+ * 선택하고(BlockSelectionToolbar가 뜬다, Issue #149) TableGripMenu를
+ * 여는 진입점이다(RD-003).
  */
 export const TableHandleOverlays = ({
   activeColumnIds,
@@ -87,7 +89,7 @@ export const TableHandleOverlays = ({
   onAddColumn,
   onIndentTable,
   onOutdentTable,
-  onSelectTable,
+  onTableGripClick,
   showAddRow,
   showAddColumn,
 }: TableHandleOverlaysProps) => {
@@ -290,16 +292,32 @@ export const TableHandleOverlays = ({
           행 중앙이라 더 아래)도 column handle(y는 같지만 x는 첫 열 중앙이라
           더 오른쪽)도 차지하지 않는 빈 자리다(01-계획.md "결정") — 새
           clamp 로직 없이 기존 absolute 좌표 관용구를 그대로 쓴다(PIT-0011,
-          G-UI-003). Select table 버튼(Issue #149)은 같은 클러스터를 24px씩
-          더 왼쪽으로 확장한다(left - 72) — Indent/ Outdent와 같은
-          top(geometry.top - 24)에서 20px 버튼 + 4px 간격을 그대로 반복해
-          겹치지 않는다. */}
+          G-UI-003). Plus(placeholder)+표 그립 버튼(Issue #174 RD-002)은 같은
+          클러스터를 48px 더 왼쪽으로 확장한다(left - 96, left - 72) —
+          Indent/Outdent와 같은 top(geometry.top - 24)에서 20px 버튼 + 4px
+          간격을 그대로 반복해 겹치지 않는다. 순서는 Notion 참고(왼쪽부터
+          Plus, 표에 가까운 쪽이 Grip) — 이 RD에서 Select table 버튼(Issue
+          #149)을 표 그립 버튼이 대체한다. Plus는 이번엔 자리만이다: 클릭
+          핸들러가 없고(항상 aria-disabled) title로만 안내한다 — 실제 기능은
+          별도 Issue(#175)에서 연결한다. */}
+      <IconButton
+        aria-disabled="true"
+        className={nestingButtonClassName}
+        data-geul-table-quick-insert=""
+        icon={addIcon}
+        label={dictionary.handle.tableQuickInsertPlaceholder}
+        style={{
+          position: "absolute",
+          left: geometry.left - 96,
+          top: geometry.top - 24,
+        }}
+      />
       <IconButton
         className={nestingButtonClassName}
-        data-geul-table-select=""
-        icon={selectTableIcon}
-        label={dictionary.handle.selectTable}
-        onClick={onSelectTable}
+        data-geul-table-grip=""
+        icon={tableGripIcon}
+        label={dictionary.handle.tableMenu}
+        onClick={onTableGripClick}
         style={{
           position: "absolute",
           left: geometry.left - 72,

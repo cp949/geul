@@ -36,7 +36,8 @@ const rowHandleLabel = "Drag to reorder row, click for options";
 const columnHandleLabel = "Drag to reorder column, click for options";
 const addRowLabel = "Add row";
 const addColumnLabel = "Add column";
-const selectTableLabel = "Select table";
+const tableMenuLabel = "Table menu";
+const tableQuickInsertPlaceholderLabel = "Quick insert (coming soon)";
 const indentTableLabel = "Indent table";
 const outdentTableLabel = "Outdent table";
 
@@ -821,17 +822,19 @@ describe("표 오른쪽/아래쪽 빠른 확장 컨트롤", () => {
   });
 });
 
-describe("표 선택 버튼", () => {
-  // Issue #149 — Indent/Outdent와 같은 좌상단 여백 클러스터에 Select table
-  // 버튼을 추가한다. 이 버튼이 여는 BlockSelectionToolbar(Delete·위/아래
-  // 이동)의 조립은 e2e(table-handle.spec.ts)가 맡는다 — 여기서는
-  // handleSelectTable이 실제로 selectBlockRange(tableId, tableId)를
-  // 커밋하는지만 문서 결과(getBlockSelection)로 확인한다.
+describe("표 그립 버튼", () => {
+  // Issue #174 RD-002(Issue #149 확장) — Indent/Outdent와 같은 좌상단 여백
+  // 클러스터에 표 그립 버튼(CONTEXT.md)을 추가한다(Select table 버튼을
+  // 대체). 이 버튼이 여는 BlockSelectionToolbar(Delete·위/아래 이동)의
+  // 조립은 e2e(table-handle.spec.ts)가 맡는다 — 여기서는
+  // handleTableGripClick이 실제로 selectBlockRange(tableId, tableId)를
+  // 커밋하는지만 문서 결과(getBlockSelection)로 확인한다. 메뉴를 여는 것은
+  // RD-003이 이어받는다.
   it("클릭하면 selectBlockRange(tableBlockId, tableBlockId)를 호출한다", () => {
     const { editor, table, tableBlockId } = renderRealTable();
     fireEvent.pointerMove(table);
 
-    fireEvent.click(screen.getByRole("button", { name: selectTableLabel }));
+    fireEvent.click(screen.getByRole("button", { name: tableMenuLabel }));
 
     expect(editor.getBlockSelection()).toEqual({
       fromBlockId: tableBlockId,
@@ -845,14 +848,35 @@ describe("표 선택 버튼", () => {
         ...DEFAULT_DICTIONARY,
         handle: {
           ...DEFAULT_DICTIONARY.handle,
-          selectTable: "표 선택",
+          tableMenu: "표 메뉴",
         },
       },
     });
 
     fireEvent.pointerMove(table);
 
-    expect(screen.getByRole("button", { name: "표 선택" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "표 메뉴" })).not.toBeNull();
+  });
+});
+
+describe("표 Plus 버튼(placeholder)", () => {
+  // Issue #174 RD-002 — 이번엔 자리만이다(Q1 결정). 실제 기능은 Issue
+  // #175. 여기서는 (a) hover 시 노출되고 (b) 항상 aria-disabled이며 (c)
+  // 클릭해도 문서·selection이 바뀌지 않는다만 확인한다.
+  it("hover 시 노출되고 aria-disabled이며 클릭해도 아무 효과가 없다", () => {
+    const { editor, table } = renderRealTable();
+    fireEvent.pointerMove(table);
+
+    const button = screen.getByRole("button", {
+      name: tableQuickInsertPlaceholderLabel,
+    });
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+
+    const before = editor.getDocument();
+    fireEvent.click(button);
+
+    expect(editor.getDocument()).toEqual(before);
+    expect(editor.getBlockSelection()).toBeNull();
   });
 });
 

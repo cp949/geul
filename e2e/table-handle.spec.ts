@@ -749,12 +749,13 @@ const tableWithSiblingsDocument = () => ({
   ],
 });
 
-// Issue #149 — BlockSelectionToolbar(Delete·위/아래 이동)를 표에도 여는
-// 유일한 진입점. table-handles.tsx의 Select table 버튼이
+// Issue #149, Issue #174 RD-002 — BlockSelectionToolbar(Delete·위/아래
+// 이동)를 표에도 여는 유일한 진입점. table-handles.tsx의 표 그립
+// 버튼(CONTEXT.md, 옛 Select table 버튼을 대체)이 클릭 시
 // selectBlockRange(tableBlockId, tableBlockId)를 커밋하면, 표를 거절하지
 // 않는 기존 BlockSelectionToolbar(block-selection-toolbar.tsx)가 그대로
 // 뜬다 — 새 toolbar 컴포넌트는 만들지 않는다(01-계획.md "결정").
-test("표 선택 버튼을 클릭하면 Block selection 툴바가 뜨고 Delete로 표를 삭제한 뒤 undo 1회로 복원한다 (Issue #149)", async ({
+test("표 그립 버튼을 클릭하면 Block selection 툴바가 뜨고 Delete로 표를 삭제한 뒤 undo 1회로 복원한다 (Issue #149)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -771,7 +772,7 @@ test("표 선택 버튼을 클릭하면 Block selection 툴바가 뜨고 Delete�
   await table.locator("td").first().click();
   await table.locator("td").first().hover();
 
-  await page.getByRole("button", { name: "Select table" }).click();
+  await page.getByRole("button", { name: "Table menu" }).click();
 
   await expect(blockSelectionToolbar(page)).toBeVisible();
   await expect(deleteSelectedBlocksButton(page)).toBeVisible();
@@ -934,7 +935,7 @@ test.describe("실패 알림이 스크롤 콘텐츠를 가리지 않는다(Issue
   });
 });
 
-test("표 선택 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 형제 앞으로 이동하고 undo 1회로 복원된다 (Issue #149)", async ({
+test("표 그립 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 형제 앞으로 이동하고 undo 1회로 복원된다 (Issue #149)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -948,7 +949,7 @@ test("표 선택 버튼을 클릭한 뒤 위로 이동 버튼으로 표가 앞 �
   await table.locator("td").first().click();
   await table.locator("td").first().hover();
 
-  await page.getByRole("button", { name: "Select table" }).click();
+  await page.getByRole("button", { name: "Table menu" }).click();
   await expect(blockSelectionToolbar(page)).toBeVisible();
 
   await moveSelectionUpButton(page).click();

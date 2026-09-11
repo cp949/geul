@@ -1,9 +1,9 @@
 import {
+  Grip,
   GripHorizontal,
   GripVertical,
   IndentDecrease,
   IndentIncrease,
-  MousePointerSquareDashed,
   Plus,
 } from "lucide-react";
 
@@ -15,19 +15,20 @@ import { iconProps } from "./icon-props.js";
 // 발견성을 가린다(block-side-menu와 같은 규칙). 표를 대상화할 팝업 메뉴는
 // 두지 않는다 — block-side-menu.tsx의 gutter가 <table>을 hover 대상에서
 // 제외해(entitySelector ":not(table)") 그 블록 메뉴가 표에 절대 열리지
-// 않으므로, 직접 IconButton 3개(Select/Indent/Outdent)가 표의 유일한
-// 진입점이다(01-계획.md "결정", Issue #126·#149).
+// 않으므로, 표 그립 버튼(아래, Issue #174 RD-002)이 표의 유일한 메뉴
+// 진입점이다.
 export const rowHandleIcon = <GripVertical {...iconProps} />;
 export const columnHandleIcon = <GripHorizontal {...iconProps} />;
 export const addIcon = <Plus {...iconProps} />;
 export const indentTableIcon = <IndentIncrease {...iconProps} />;
 export const outdentTableIcon = <IndentDecrease {...iconProps} />;
-// Issue #149 — 표 자신을 selectBlockRange(tableId, tableId)로 선택해
-// BlockSelectionToolbar(Delete·위/아래 이동)를 여는 유일한 진입점.
-// MousePointerSquareDashed(lucide-react 1.31.0)는 SquareDashedMousePointer의
-// 별칭이다 — 마퀴 선택 커서 모양이 "선택" 의미를 indent/outdent 아이콘과
-// 구분되게 전달한다.
-export const selectTableIcon = <MousePointerSquareDashed {...iconProps} />;
+// Issue #174 RD-002 — 표 코너의 "표 그립 버튼"(CONTEXT.md). 클릭하면
+// selectBlockRange(tableId, tableId)로 표를 선택하고 TableGripMenu를
+// 연다(RD-003). Issue #149의 Select table 버튼(MousePointerSquareDashed)을
+// 대체한다 — Grip(6-dot, lucide-react 1.31.0)은 행/열 grip(GripVertical/
+// GripHorizontal, 2-dot 막대)과 형태로 구분되면서도 같은 "grip" 계열이라
+// "이것도 grip이다(클릭하면 메뉴가 열린다)"는 인지를 돕는다.
+export const tableGripIcon = <Grip {...iconProps} />;
 
 // touch-action: none — 터치 드래그를 브라우저 스크롤 제스처에 뺏기면
 // pointercancel로 드래그가 중단된다(setPointerCapture는 이를 막지 못한다).
@@ -87,5 +88,6 @@ export const TABLE_HOVER_IGNORE_SELECTORS = [
   TABLE_MENU_SELECTOR,
   "[data-geul-table-indent]",
   "[data-geul-table-outdent]",
-  "[data-geul-table-select]",
+  "[data-geul-table-grip]",
+  "[data-geul-table-quick-insert]",
 ] as const;

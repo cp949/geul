@@ -826,11 +826,14 @@ export const TableHandles = () => {
     editor.commands.outdentBlock(fresh.tableBlockId);
   };
 
-  // Issue #149 — 표 자신을 selectBlockRange(tableId, tableId)로 선택해
-  // BlockSelectionToolbar(Delete·위/아래 이동)를 연다. Indent/Outdent와 같은
-  // readFreshGeometry() → editor.commands.* 관용구를 그대로 따른다 — 표
-  // 직접 duplicate는 여전히 core가 거절한다(범위 밖, 01-계획.md "결정").
-  const handleSelectTable = () => {
+  // Issue #174 RD-002(Issue #149 확장) — 표 그립 버튼(CONTEXT.md) 클릭 시
+  // 표 자신을 selectBlockRange(tableId, tableId)로 선택해
+  // BlockSelectionToolbar(Delete·위/아래 이동)를 연다(Notion처럼 그립 클릭이
+  // 곧 선택이다). Indent/Outdent와 같은 readFreshGeometry() →
+  // editor.commands.* 관용구를 그대로 따른다. 표 직접 duplicate는 이제
+  // core가 허용한다(Issue #174 RD-001) — 이 함수는 선택만 하고, 메뉴를 여는
+  // 것과 메뉴의 표 복제 항목 연결은 RD-003이 이어받는다.
+  const handleTableGripClick = () => {
     const fresh = readFreshGeometry();
     if (fresh === null) return;
     editor.commands.selectBlockRange(fresh.tableBlockId, fresh.tableBlockId);
@@ -865,7 +868,7 @@ export const TableHandles = () => {
           onReorderHandleClick={handleReorderHandleClick}
           onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
           onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
-          onSelectTable={handleSelectTable}
+          onTableGripClick={handleTableGripClick}
           reorderGuideRect={reorderGuideRect}
           showAddColumn={showAddColumn}
           showAddRow={showAddRow}

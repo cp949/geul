@@ -219,9 +219,15 @@ export type Dictionary = {
     addColumn: string;
     indentTable: string;
     outdentTable: string;
-    // Issue #149 — 표 자신을 selectBlockRange(tableId, tableId)로 선택하는
-    // 버튼. indentTable/outdentTable과 같은 자리에 둔다.
-    selectTable: string;
+    // Issue #174 RD-002 — 표 코너의 "표 그립 버튼"(CONTEXT.md) 라벨. 클릭하면
+    // selectBlockRange(tableId, tableId)를 커밋하고 TableGripMenu를 연다
+    // (RD-003). Issue #149의 Select table 버튼을 대체한다 — 대체된 버튼의
+    // selectTable 키는 제거했다.
+    tableMenu: string;
+    // Issue #174 RD-002 — 표 코너 Plus 버튼(자리만, 비활성) 라벨/title.
+    // 클릭 핸들러가 없어 title이 곧 유일한 안내다. 실제 기능은 별도
+    // Issue(#175)에서 연결한다.
+    tableQuickInsertPlaceholder: string;
     dragBlock: string;
     addBlock: string;
   };
@@ -472,7 +478,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     addColumn: "Add column",
     indentTable: "Indent table",
     outdentTable: "Outdent table",
-    selectTable: "Select table",
+    tableMenu: "Table menu",
+    tableQuickInsertPlaceholder: "Quick insert (coming soon)",
     dragBlock: "Drag to reorder, click for options",
     addBlock: "Add block",
   },
