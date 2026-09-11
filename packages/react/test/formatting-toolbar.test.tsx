@@ -109,6 +109,40 @@ describe("FormattingToolbar 서식 툴바", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
+  it("미디어 블록을 선택하면 렌더링하지 않는다", () => {
+    // 미디어 노드(NodeSelection) 선택도 DOM selection을 non-collapsed
+    // Range로 만든다 — Range 자체로는 텍스트 선택과 구별할 수 없으므로
+    // getSelectionMediaBlock()의 반환값으로 구별한다(formatting-toolbar.tsx
+    // 가드). Bold 등 mark·색상은 텍스트 없는 미디어 노드엔 적용 불가하고
+    // MediaToolbar가 전담한다(스크린샷 QA).
+    const controller = fakeController();
+    controller.getSelectionMediaBlock.mockReturnValue({
+      blockId: "media-1",
+      kind: "image",
+      url: "https://example.com/a.png",
+      name: null,
+      caption: null,
+      showPreview: true,
+      textAlignment: null,
+    });
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+
+    selectText(textNode, 0, 8);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
   it("Escape로 닫고 편집기로 초점을 되돌린다(G-UI-001, QA-002/QA-015)", () => {
     const controller = fakeController();
     render(

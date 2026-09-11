@@ -10,6 +10,7 @@ import {
   DEFAULT_DICTIONARY,
   type Dictionary,
   type EditorController,
+  type MediaBlockKind,
 } from "@cp949/geul-core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -32,15 +33,29 @@ import { collapseSelection, selectText } from "./selection-events.js";
 // "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
 
+// media-toolbar.test.tsx의 SelectionMediaBlock과 같은 shape — 이 파일은
+// 기본값(null, "미디어 선택 아님")만 쓰고 media 게이트 테스트만 override한다.
+type SelectionMediaBlock = {
+  blockId: string;
+  kind: MediaBlockKind;
+  url: string | null;
+  name: string | null;
+  caption: string | null;
+  showPreview: boolean | null;
+  textAlignment: "left" | "center" | "right" | null;
+} | null;
+
 type FakeControllerOptions = {
   getSelectionLink?: () => { href: string } | null;
   setLink?: (href: string) => { ok: boolean; error?: { code: string } };
+  getSelectionMediaBlock?: () => SelectionMediaBlock;
   dictionary?: Dictionary;
 };
 
 const fakeController = ({
   getSelectionLink = () => null,
   setLink = () => ({ ok: true }),
+  getSelectionMediaBlock = () => null,
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -59,6 +74,7 @@ const fakeController = ({
   getSelectionMarks: vi.fn(() => [] as string[]),
   getSelectionLink: vi.fn(getSelectionLink),
   getSelectionBlockType: vi.fn(() => null),
+  getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
@@ -123,6 +139,27 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.getByRole("toolbar", { name: "Link" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Add link" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Remove link" })).toBeNull();
+  });
+
+  it("미디어 블록을 선택하면 Add link를 표시하지 않는다", () => {
+    // formatting-toolbar.test.tsx의 같은 가드와 같은 이유 — 미디어 노드
+    // 선택도 non-collapsed Range를 만들어 hasRange 판정을 통과하므로
+    // getSelectionMediaBlock()의 반환값으로 텍스트 선택과 구별한다.
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        blockId: "media-1",
+        kind: "image",
+        url: "https://example.com/a.png",
+        name: null,
+        caption: null,
+        showPreview: true,
+        textAlignment: null,
+      }),
+    });
+    renderWithSelectedText(controller);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add link" })).toBeNull();
   });
 
   it("커서가 기존 링크 안에 있으면 열기·편집·제거 컨트롤을 표시한다", () => {

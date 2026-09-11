@@ -5,12 +5,26 @@ import {
   DEFAULT_DICTIONARY,
   type BlockTypeDescriptor,
   type Dictionary,
+  type MediaBlockKind,
 } from "@cp949/geul-core";
 import { vi, type Mock } from "vitest";
 
 type SelectionBlockType = {
   blockId: string;
   blockType: BlockTypeDescriptor;
+} | null;
+
+// media-toolbar.test.tsx의 SelectionMediaBlock과 같은 shape — 이 파일은
+// 기본값(null, "미디어 선택 아님")만 쓰고 media 선택 테스트는 개별
+// override로 이 shape을 채운다.
+type SelectionMediaBlock = {
+  blockId: string;
+  kind: MediaBlockKind;
+  url: string | null;
+  name: string | null;
+  caption: string | null;
+  showPreview: boolean | null;
+  textAlignment: "left" | "center" | "right" | null;
 } | null;
 
 // indentBlock/outdentBlock의 Result 반환 타입을 성공/실패 양쪽 다 받도록
@@ -32,6 +46,7 @@ type FormattingToolbarFakeController = {
   getDocument: Mock;
   getSelectionMarks: Mock;
   getSelectionBlockType: Mock;
+  getSelectionMediaBlock: Mock;
   getBlockNestingActionState: Mock;
   getDictionary: Mock;
   replaceDocument: Mock;
@@ -81,6 +96,10 @@ export const fakeController = (
   // spec §8(EXT-009), RD-002-DELTA-02 — dictionary override 테스트 전용.
   // 미지정이면 기본값(en)을 그대로 반환한다.
   getDictionary: Mock = vi.fn((): Dictionary => DEFAULT_DICTIONARY),
+  // 미디어 블록(image/video/audio/file) 선택 게이트 테스트 전용 — 기본값
+  // null(미디어 선택 아님)이면 기존 텍스트 선택 테스트 전부가 그대로
+  // 통과한다.
+  getSelectionMediaBlock: Mock = vi.fn((): SelectionMediaBlock => null),
 ): FormattingToolbarFakeController => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -97,6 +116,7 @@ export const fakeController = (
   getDocument: vi.fn(),
   getSelectionMarks,
   getSelectionBlockType,
+  getSelectionMediaBlock,
   getBlockNestingActionState,
   getDictionary,
   replaceDocument: vi.fn(),

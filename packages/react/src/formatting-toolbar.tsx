@@ -207,6 +207,19 @@ export const FormattingToolbar = ({
       return;
     }
 
+    // 미디어 블록(image/video/audio/file)을 고르면 DOM selection이 그
+    // 노드를 감싸는 non-collapsed Range가 돼 위 가드를 통과한다 — 하지만
+    // Bold 등 인라인 mark·색상·link는 텍스트가 없는 미디어 노드엔 애초에
+    // 적용 불가하다(MediaToolbar가 전담). blockSelection도 media는
+    // BlockTypeDescriptor에 없어 이미 null로 떨어지므로(block-type-
+    // descriptor.ts) 이 가드가 없으면 마크·색상 버튼만 덩그러니 뜬다.
+    if (editor.getSelectionMediaBlock() !== null) {
+      setToolbarState(null);
+      setColorMenuState(null);
+      dismissSuppression.clear();
+      return;
+    }
+
     const range = selection.getRangeAt(0);
     if (dismissSuppression.isSuppressed(range)) return;
     dismissSuppression.clear();

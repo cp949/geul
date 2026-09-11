@@ -155,6 +155,15 @@ export const LinkToolbar = ({
       return;
     }
 
+    // 미디어 블록 선택은 non-collapsed Range를 만들어 위 hasRange 판정을
+    // 통과한다 — 텍스트가 없는 노드라 link도 적용 불가하다(formatting-
+    // toolbar.tsx의 같은 가드와 같은 이유, MediaToolbar가 전담).
+    if (editor.getSelectionMediaBlock() !== null) {
+      setToolbarState({ mode: "closed" });
+      dismissSuppression.clear();
+      return;
+    }
+
     if (
       currentRange !== null &&
       dismissSuppression.isSuppressed(currentRange)
