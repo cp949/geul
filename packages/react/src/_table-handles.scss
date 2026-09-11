@@ -17,8 +17,8 @@
 }
 
 // 행/열 그립 hit box — 투명, hover 판정 전용(table-handle-overlays.tsx 참고).
-// 시각 바(idle 3px)보다 훨씬 커서 정확히 바 위가 아니라 "근처"만 가리켜도
-// 안의 버튼이 pill로 펼쳐진다.
+// 시각 바(행은 opacity:0, 열은 idle 3px)보다 훨씬 커서 정확히 바 위가
+// 아니라 "근처"만 가리켜도 안의 버튼이 pill로 뜬다.
 .geul-table-row-handle-hit,
 .geul-table-column-handle-hit {
   cursor: grab;
@@ -28,46 +28,26 @@
   }
 }
 
-// idle: 표 좌측 border line(0~1px)에 겹친 얇은 바 — hit box 기준
-// left:17px(=1.0625rem)/width:3px, 즉 hit box 우측단(left+width=20px)에서
-// 왼쪽으로 3px만 차지한다. hover(hit box 기준 left:7px/width:13px)로
-// 펼쳐질 때도 같은 우측단(20px)에서 자라 border에서 돋아난 것처럼
-// 보인다 — 여백에 새로 나타나는 게 아니다. 아이콘은 idle 3px 안에 들어가지
-// 않아 opacity로 같이 숨긴다. 열 그립(.geul-table-column-handle-bar)의
-// 축을 90도 돌린 거울상이다 — top/height 대신 left/width가 transition된다.
+// 행 그립은 열과 달리 idle 상태 자체가 없다(Notion 참고, 사용자 요청) —
+// 평소 완전히 숨겨져 있다가(opacity:0) hit box hover/focus-within 또는
+// 그 행에 텍스트 커서가 있을 때(data-geul-table-row-handle-active,
+// table-handles.tsx가 selection에서 계산) pill로 뜬다. 위치는 고정된
+// pill 크기(hit box 기준 left:7px=0.4375rem/width:13px=0.8125rem, 열의
+// hover pill과 같은 크기 — top/height 대신 left/width가 대응하는 90도
+// 거울상)라 opacity 하나만 transition하면 된다.
 .geul-table-handle.geul-table-row-handle-bar {
-  left: 1.0625rem;
-  width: 0.1875rem;
-  overflow: hidden;
-  border-color: transparent;
-  border-radius: 0.125rem;
-  background: var(--geul-color-text-muted, #5f6368);
-  transition:
-    left 130ms ease,
-    width 130ms ease,
-    border-radius 130ms ease,
-    border-color 130ms ease,
-    background 130ms ease;
-
-  svg {
-    opacity: 0;
-    transition: opacity 100ms ease;
-  }
+  left: 0.4375rem;
+  width: 0.8125rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
 .geul-table-row-handle-hit:hover .geul-table-handle.geul-table-row-handle-bar,
 .geul-table-row-handle-hit:focus-within
+  .geul-table-handle.geul-table-row-handle-bar,
+.geul-table-row-handle-hit[data-geul-table-row-handle-active]
   .geul-table-handle.geul-table-row-handle-bar {
-  left: 0.4375rem;
-  width: 0.8125rem;
-  border-color: var(--geul-color-border, #dadce0);
-  border-radius: var(--geul-radius-sm, 0.25rem);
-  background: var(--geul-color-surface, #fff);
-
-  svg {
-    opacity: 1;
-    transition-delay: 30ms;
-  }
+  opacity: 1;
 }
 
 // idle: 표 상단 border line(0~1px)에 겹친 얇은 바 — hit box 기준

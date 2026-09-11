@@ -37,15 +37,18 @@ export const expandButtonClassName = "geul-table-expand-button";
 // 쓰되, 재정렬(cursor: grab)이 아니라 1회성 액션이라 별도 클래스로 둔다.
 export const nestingButtonClassName = "geul-table-nesting-button";
 
-// 행/열 그립 공통(Notion 참고, 사용자 요청으로 행도 열과 동등하게 맞춤).
-// 평소엔 표 border line(열은 상단, 행은 좌측)에 겹친 얇은 바로만 있다가,
-// 근처에 hover하면 pill로 펼쳐진다. 시각 바(idle 3px)보다 hit box가 훨씬
-// 커야 "정확히 바 위"가 아니라 "근처"만 가리켜도 반응한다 — 그래서 두
-// 클래스로 나눈다: hit box(이 자체는 투명, hover 판정만 담당)와 그 안의
-// 실제 버튼(handleButtonClassName과 함께 붙여 idle/hover 두 상태를 가진다).
-// 행은 열의 축을 90도 돌린 거울상이다 — 열은 top/height가 transition되고
-// left는 고정, 행은 left/width가 transition되고 top은 고정된다
-// (table-handle-overlays.tsx, _table-handles.scss 참고).
+// 행/열 그립 공통(Notion 참고, 사용자 요청으로 행도 열과 동등한 hit
+// box+bar 2단 구조를 쓴다). 시각 바보다 hit box가 훨씬 커야 "정확히 바
+// 위"가 아니라 "근처"만 가리켜도 반응한다 — 그래서 두 클래스로 나눈다:
+// hit box(이 자체는 투명, hover 판정만 담당)와 그 안의 실제 버튼
+// (handleButtonClassName과 함께 붙는다). 열은 평소 표 상단 border line에
+// 겹친 얇은 바, hover 시 pill로 펼쳐진다(top/height가 transition, left
+// 고정). 행은 열의 축을 90도 돌린 자리(left/width가 열의 top/height에
+// 대응, top 고정)를 쓰지만 idle 상태 자체가 없다 — 평소 완전히
+// 숨겨져(opacity:0) 있다가 hover 또는 그 행에 텍스트 커서가 있을 때만
+// pill로 뜬다(Notion 참고, 사용자 요청) — table-handles.tsx의
+// activeRowId가 커서 조건을 계산한다(table-handle-overlays.tsx,
+// _table-handles.scss 참고).
 export const rowHandleHitClassName = "geul-table-row-handle-hit";
 export const rowHandleBarClassName = "geul-table-row-handle-bar";
 export const columnHandleHitClassName = "geul-table-column-handle-hit";

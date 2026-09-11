@@ -47,6 +47,7 @@ import {
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // Issue #65: menuState.index만으로는 대상보다 앞선 행/열이 사라져 인덱스가
 // 밀린 경우와 대상 자신이 사라진 경우를 구분할 수 없다. targetId(비어 있지
@@ -94,6 +95,45 @@ export const TableHandles = () => {
   // 소비만 있다) ref 미러링 없이 plain state로 둔다.
   const [hoverRowId, setHoverRowId] = useState<string | null>(null);
   const [hoverColumnId, setHoverColumnId] = useState<string | null>(null);
+  // Notion 참고(사용자 요청) — 마우스가 표 근처를 벗어나도 텍스트 커서가
+  // 있는 행은 그립이 계속 보여야 한다(row-handle-bar의 hover-or-active
+  // 노출 조건). hoverRowId와 달리 이건 포인터가 아니라 에디터 selection을
+  // 따라간다 — Tiptap/ProseMirror가 없어도 읽을 수 있는 네이티브
+  // Selection.anchorNode에서 가장 가까운 [data-geul-row-id]/
+  // table[data-geul-block-id]를 찾는다(ADR-0002 경계 — react는
+  // @tiptap/pm에 의존할 수 없다, table-handle-geometry.ts가 이미 쓰는
+  // DOM-속성-읽기와 같은 방식). 다른 콜백이 동기적으로 최신값을 읽을
+  // 필요가 없어 ref 미러링 없이 plain state로 둔다(hoverRowId와 같은
+  // 이유).
+  const [selectionRowId, setSelectionRowId] = useState<string | null>(null);
+  const [selectionTableId, setSelectionTableId] = useState<string | null>(
+    null,
+  );
+  const updateSelectionRowTarget = useCallback(() => {
+    const anchorNode = element?.ownerDocument.getSelection()?.anchorNode;
+    // formatting-toolbar.tsx의 updateFromSelection과 같은 가드 — 선택이
+    // 편집기 바깥(다른 input, url bar 등)이면 표 밖 커서를 표 안 커서로
+    // 오검출하지 않는다.
+    const anchorElement =
+      element === null ||
+      anchorNode === undefined ||
+      anchorNode === null ||
+      !element.contains(anchorNode)
+        ? null
+        : anchorNode instanceof Element
+          ? anchorNode
+          : anchorNode.parentElement;
+    const rowElement =
+      anchorElement?.closest<HTMLElement>("[data-geul-row-id]") ?? null;
+    const tableElement =
+      anchorElement?.closest<HTMLElement>("table[data-geul-block-id]") ??
+      null;
+    setSelectionRowId(rowElement?.getAttribute("data-geul-row-id") ?? null);
+    setSelectionTableId(
+      tableElement?.getAttribute("data-geul-block-id") ?? null,
+    );
+  }, [element]);
+  useSelectionRefresh({ element, onUpdate: updateSelectionRowTarget });
   const [reorderState, reorderStateRef, updateReorderState] =
     useMirroredState<ReorderState | null>(null);
   const [resizeState, resizeStateRef, updateResizeState] =
@@ -241,11 +281,19 @@ export const TableHandles = () => {
     onCandidateChange: handleHoverCandidateChange,
   });
 
+  // selectionTableId는 최후순위 fallback이다 — hover 중인 표가 있으면(또는
+  // 드래그/리사이즈/메뉴가 진행 중이면) 그쪽이 우선한다. 마우스가 표
+  // 여백(HANDLE_HOVER_MARGIN)을 완전히 벗어난 채 키보드만으로 커서가 표
+  // 안에 남아 있을 때만 이 fallback이 클러스터를 계속 마운트시킨다(Notion
+  // 참고, 사용자 요청) — 이 경로로 뜨면 행 그립뿐 아니라 열 그립·add row/
+  // column rail·indent/outdent/select 버튼도 함께 뜬다(단일 activeTableId
+  // 렌더 게이트를 공유하는 기존 구조 그대로, 새 게이트를 만들지 않는다).
   const activeTableId =
     reorderState?.tableBlockId ??
     resizeState?.tableBlockId ??
     menuState?.tableBlockId ??
-    hoverTableId;
+    hoverTableId ??
+    selectionTableId;
   const geometry =
     activeTableId === null || element === null
       ? null
@@ -261,6 +309,13 @@ export const TableHandles = () => {
     hoverRowId,
     hoverColumnId,
   );
+  // 커서가 지금 그려지는 표(geometry.tableBlockId)와 다른 표에 있으면 무시한다
+  // — hover가 다른 표를 가리키는 동안(위 activeTableId 우선순위) 그 표의
+  // selectionRowId를 이 표 행에 잘못 매칭하지 않는다.
+  const activeRowId =
+    geometry !== null && selectionTableId === geometry.tableBlockId
+      ? selectionRowId
+      : null;
 
   // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
   // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
@@ -765,6 +820,7 @@ export const TableHandles = () => {
     <>
       {geometry !== null && (
         <TableHandleOverlays
+          activeRowId={activeRowId}
           canIndentTable={tableNestingActions?.canIndent === true}
           canOutdentTable={tableNestingActions?.canOutdent === true}
           geometry={geometry}

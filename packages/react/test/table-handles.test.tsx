@@ -18,6 +18,7 @@ import { TableHandles } from "../src/table-handles.js";
 import {
   type MountTableEditorOptions,
   mountTableEditor,
+  placeCaret,
   stubRect,
   tableBlockOf,
 } from "./mount-editor.js";
@@ -279,6 +280,84 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
     fireEvent.pointerMove(editable, { clientX: 98, clientY: 110 });
 
     expect(screen.queryByRole("button", { name: addRowLabel })).not.toBeNull();
+  });
+});
+
+// Notion 참고(사용자 요청) — 행 그립은 평소 완전히 숨겨져 있다가 hover
+// 근처 또는 텍스트 커서가 그 행에 있을 때만 pill로 뜬다(_table-handles.scss의
+// .geul-table-row-handle-bar). 여기서는 커서 조건만 검증한다 — hover 조건은
+// CSS :hover라 jsdom에서 못 잡는다(위 "position: absolute" 테스트 주석과
+// 같은 이유, 정적 grep·e2e가 대신 확인). 커서 조건은 table-handles.tsx가
+// data-geul-table-row-handle-active 속성으로 노출해 jsdom에서도 단언할 수
+// 있다.
+describe("텍스트 커서가 있는 행은 hover 없이도 그립을 노출한다", () => {
+  const firstCellOf = (table: HTMLElement, rowIndex: number): HTMLElement => {
+    const row = table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[
+      rowIndex
+    ];
+    const cell = row?.querySelector<HTMLElement>("[data-geul-column-id]");
+    if (cell === undefined || cell === null) {
+      throw new Error(`${rowIndex}번 행의 셀을 찾지 못했다`);
+    }
+    return cell;
+  };
+  const rowHitBoxes = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "[data-geul-table-row-handle-hit]",
+      ),
+    );
+
+  it("마우스 hover 없이 커서만 표 안에 있어도 행 그립 클러스터가 뜬다", () => {
+    const { table } = renderRealTable();
+
+    // fireEvent.pointerMove(table)를 전혀 부르지 않는다 — hover가 아니라
+    // activeTableId의 selectionTableId fallback만으로 클러스터가
+    // 마운트되는지 검증한다.
+    placeCaret(firstCellOf(table, 0));
+
+    expect(
+      screen.getAllByRole("button", { name: rowHandleLabel }),
+    ).toHaveLength(2);
+  });
+
+  it("커서가 있는 행의 hit box에만 active 속성이 붙고, 다른 행으로 옮기면 같이 옮겨간다", () => {
+    const { table } = renderRealTable();
+
+    placeCaret(firstCellOf(table, 0));
+
+    expect(
+      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(true);
+    expect(
+      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(false);
+
+    placeCaret(firstCellOf(table, 1));
+
+    expect(
+      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(false);
+    expect(
+      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+    ).toBe(true);
+  });
+
+  it("hover도 커서도 없으면(커서가 표 밖으로 나가면) 그립 클러스터가 사라진다", () => {
+    const { editable, table } = renderRealTable();
+    placeCaret(firstCellOf(table, 0));
+    expect(
+      screen.getAllByRole("button", { name: rowHandleLabel }),
+    ).toHaveLength(2);
+
+    // editable은 표를 담는 바깥 contenteditable 루트다 — [data-geul-row-id]/
+    // table[data-geul-block-id] 어느 쪽 조상도 아니라 "표 밖" 커서를
+    // 흉내낸다.
+    placeCaret(editable);
+
+    expect(
+      screen.queryAllByRole("button", { name: rowHandleLabel }),
+    ).toHaveLength(0);
   });
 });
 
