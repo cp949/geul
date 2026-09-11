@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import {
   deleteTableColumn,
+  fitTableColumnsToContainer,
   getTableBlock,
   insertTableColumn,
   moveTableColumn,
@@ -256,6 +257,62 @@ describe("표의 열 너비를 조절한다", () => {
     expect(selection).toBeInstanceOf(TextSelection);
     expect(selection.from).toBe(before.from);
     expect(selection.to).toBe(before.to);
+  });
+});
+
+describe("표 너비를 컨테이너 폭에 맞춘다", () => {
+  it("컨테이너 폭에 맞춰 모든 열 너비를 재분배한다", () => {
+    // docWithTable은 두 열 모두 160(동일 비율)이라 500을 정확히 반씩 나눈다.
+    const editor = createTableFixtureEditor(docWithTable);
+
+    const result = fitTableColumnsToContainer(editor, "table-1", 500);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.columns).toEqual([
+      { id: "col-1", width: 250 },
+      { id: "col-2", width: 250 },
+    ]);
+  });
+
+  it("적용 직후 undo 1회로 복원된다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    fitTableColumnsToContainer(editor, "table-1", 500);
+    editor.commands.undo();
+
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("컨테이너 폭이 0 이하면 CONTAINER_WIDTH_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTable);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = fitTableColumnsToContainer(editor, "table-1", 0);
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "CONTAINER_WIDTH_INVALID", containerWidth: 0 },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("적용 후에도 두 셀에 걸친 CellSelection을 유지한다", () => {
+    // resizeTableColumn과 같은 이유(구조 불변, preserveSelection: true) —
+    // 재분배는 colwidth만 바꾸고 행·열·셀 id는 그대로다.
+    const editor = createTableFixtureEditor(docWithTable);
+    selectCellRange(editor, "cell-1", "cell-2");
+
+    const result = fitTableColumnsToContainer(editor, "table-1", 500);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(CellSelection);
+    const cellSelection = selection as CellSelection;
+    expect(cellSelection.$anchorCell.nodeAfter?.attrs.cellId).toBe("cell-1");
+    expect(cellSelection.$headCell.nodeAfter?.attrs.cellId).toBe("cell-2");
   });
 });
 

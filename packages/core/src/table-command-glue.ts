@@ -9,6 +9,7 @@ import {
 import {
   deleteTableColumn as deleteTableColumnCommand,
   deleteTableRow as deleteTableRowCommand,
+  fitTableColumnsToContainer as fitTableColumnsToContainerCommand,
   insertTableColumn as insertTableColumnCommand,
   insertTable as insertTableCommand,
   insertTableRow as insertTableRowCommand,
@@ -107,9 +108,10 @@ export const createTableCommands = (session: ProductionEditorSession) => {
         // 범주다.
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
       case "CONTAINER_WIDTH_INVALID":
-        // 오늘은 도달 불가 — fitColumnsToContainerWidth(table-grid-format.ts,
-        // Issue #176 RD-001-DELTA-01)는 아직 어떤 table-commands.ts 커맨드에도
-        // 연결되지 않았다. RD-001-DELTA-02가 연결하면 이 매핑을 재검토한다.
+        // 도달 가능(Issue #176 RD-001-DELTA-02) — fitTableColumnsToContainer가
+        // react에서 실측한 containerWidth를 그대로 받는다. 측정 시점에 표
+        // DOM이 아직 붙지 않았거나(clientWidth 0) 컨테이너가 숨겨진 경우
+        // 0 이하 값이 넘어올 수 있다.
         return { code: "COMMAND_NOT_APPLICABLE", command: "table" };
       default: {
         // TableCommandError에 새 variant가 추가되면 여기서 컴파일 실패한다 —
@@ -257,6 +259,17 @@ export const createTableCommands = (session: ProductionEditorSession) => {
     runTableCommand("resizeTableColumn", () =>
       resizeTableColumnCommand(session.editor, tableBlockId, index, width),
     );
+  const fitTableColumnsToContainer = (
+    tableBlockId: string,
+    containerWidth: number,
+  ): Result<void, EditorError> =>
+    runTableCommand("fitTableColumnsToContainer", () =>
+      fitTableColumnsToContainerCommand(
+        session.editor,
+        tableBlockId,
+        containerWidth,
+      ),
+    );
   const mergeTableCells = (tableBlockId: string): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("mergeTableCells");
     return runTableCommand("mergeTableCells", () =>
@@ -346,6 +359,7 @@ export const createTableCommands = (session: ProductionEditorSession) => {
     moveTableRow,
     moveTableColumn,
     resizeTableColumn,
+    fitTableColumnsToContainer,
     mergeTableCells,
     splitTableCell,
     deleteTableRow,

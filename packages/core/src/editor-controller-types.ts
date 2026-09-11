@@ -399,6 +399,12 @@ export interface EditorController {
       index: number,
       width: number,
     ): Result<void, EditorError>;
+    // Issue #176 — grip 메뉴 "너비에 맞추기". containerWidth는 호출자가
+    // 클릭 시점에 실측한 편집 영역 px 폭이다(정수, 0 이하는 거절).
+    fitTableColumnsToContainer(
+      tableBlockId: string,
+      containerWidth: number,
+    ): Result<void, EditorError>;
     mergeTableCells(tableBlockId: string): Result<void, EditorError>;
     splitTableCell(
       tableBlockId: string,

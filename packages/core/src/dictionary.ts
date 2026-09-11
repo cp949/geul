@@ -395,7 +395,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     headerColumn: "Header column",
     cellFormattingAriaLabel: "Cell formatting",
     tableGripMenuAriaLabel: "Table menu",
-    fitTableWidth: "Fit to width (coming soon)",
+    fitTableWidth: "Fit to width",
   },
   color: {
     textLabel: "Text color",

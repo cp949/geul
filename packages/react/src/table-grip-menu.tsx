@@ -15,12 +15,17 @@ export type TableGripMenuProps = {
   left: number;
   top: number;
   onClose: () => void;
+  // "너비에 맞추기" 클릭 시점에 편집 영역 px 폭을 실측해 돌려준다(TableHandles
+  // 소유 — DOM 조회는 그쪽이 이미 findTable/element로 갖고 있다). 측정
+  // 불가(표 DOM 미발견 등)면 0을 돌려주고, 0 이하는 fitTableColumnsToContainer가
+  // CONTAINER_WIDTH_INVALID로 거절한다.
+  getContainerWidth: () => number;
 };
 
 /**
  * 표 그립 버튼(CONTEXT.md, Issue #174 RD-003) 클릭 시 여는 표 전체 단위
  * 메뉴 — 제목 행/열 토글, 들여쓰기/내어쓰기, 표 복제, 너비에 맞추기
- * (placeholder). 행/열 grip 메뉴(table-handle-menu.tsx)와 같은
+ * (Issue #176). 행/열 grip 메뉴(table-handle-menu.tsx)와 같은
  * geul-menu-panel + MenuItemButton 관용구를 그대로 따른다. 좌표 계산은
  * TableHandles가 한다.
  *
@@ -41,6 +46,7 @@ export const TableGripMenu = ({
   left,
   top,
   onClose,
+  getContainerWidth,
 }: TableGripMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
@@ -83,13 +89,18 @@ export const TableGripMenu = ({
     onClose();
   };
 
-  // Issue #174 RD-003(Q8) — 실제 구현은 Issue #176. 클릭해도 문서를
-  // 바꾸지 않는다 — console.log만 남겨 후속 구현 시 이 진입점을 바로
-  // 찾을 수 있게 한다.
-  const fitTableWidthPlaceholder = () => {
-    console.log("[TODO][너비에 맞추기] 미구현 — Issue #176");
-    onClose();
-  };
+  // Issue #176 — 클릭 시점의 편집 영역 폭(getContainerWidth)으로 컬럼 폭을
+  // 재분배한다. 재분배 알고리즘의 권위는 core의
+  // fitColumnsToContainerWidth(table-grid-format.ts)에 있다.
+  const fitTableWidth = () =>
+    runCommand(
+      () =>
+        editor.commands.fitTableColumnsToContainer(
+          tableBlockId,
+          getContainerWidth(),
+        ),
+      onClose,
+    );
 
   return (
     <div
@@ -147,10 +158,7 @@ export const TableGripMenu = ({
           {dictionary.menu.duplicate}
         </MenuItemButton>
         <hr className={dividerClassName} />
-        <MenuItemButton
-          className={menuItemClassName}
-          onClick={fitTableWidthPlaceholder}
-        >
+        <MenuItemButton className={menuItemClassName} onClick={fitTableWidth}>
           {dictionary.menu.fitTableWidth}
         </MenuItemButton>
       </div>

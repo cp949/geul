@@ -109,7 +109,7 @@ export const KO_DICTIONARY: Dictionary = {
     headerColumn: "머리글 열",
     cellFormattingAriaLabel: "셀 서식",
     tableGripMenuAriaLabel: "표 메뉴",
-    fitTableWidth: "너비에 맞추기(준비 중)",
+    fitTableWidth: "너비에 맞추기",
   },
   color: {
     textLabel: "글자색",

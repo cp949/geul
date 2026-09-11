@@ -2,7 +2,7 @@
 
 /**
  * TableGripMenu 컴포넌트(Issue #174 RD-003): 표 그립 버튼 클릭으로 여는
- * 표 전체 단위 메뉴(제목 행/열 토글, 표 복제, 너비에 맞추기 placeholder)와
+ * 표 전체 단위 메뉴(제목 행/열 토글, 표 복제, 너비에 맞추기(Issue #176))와
  * 그 열기/닫기 상태 머신을 검증한다. TableHandles 안에서만 렌더되는 내부
  * 컴포넌트라 TableHandles를 합성 마운트해 구동한다(table-handle-menu.test.tsx와
  * 같은 방식).
@@ -199,19 +199,40 @@ describe("표 그립 메뉴 항목", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("너비에 맞추기 항목은 console.log만 남기고 문서를 바꾸지 않은 채 메뉴를 닫는다", () => {
+  it("너비에 맞추기 항목은 표의 부모 요소 폭(clientWidth)에 맞춰 컬럼 폭을 재분배하고 메뉴를 닫는다", () => {
+    // jsdom은 레이아웃을 계산하지 않아 clientWidth가 항상 0이다
+    // (mount-editor.tsx의 getBoundingClientRect 관례와 같은 이유) — 실제
+    // 컨테이너 폭을 흉내 내려면 명시적으로 덮어써야 한다.
+    const { editor, table } = openTableGripMenu();
+    if (table.parentElement === null) {
+      throw new Error("표의 부모 요소를 찾지 못했다");
+    }
+    Object.defineProperty(table.parentElement, "clientWidth", {
+      configurable: true,
+      value: 500,
+    });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Fit to width" }));
+
+    // 기본 fixture(2열, 각 160px 동일 비율)를 500px에 맞추면 250px씩 나뉜다.
+    expect(tableBlockOf(editor).columns.map((c) => c.width)).toEqual([
+      250, 250,
+    ]);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("너비에 맞추기 항목은 컨테이너 폭을 측정할 수 없으면(clientWidth 0) 문서를 바꾸지 않고 오류를 보여준다", () => {
+    // Object.defineProperty로 덮어쓰지 않으면 jsdom 기본값 0이 그대로
+    // 쓰인다 — CONTAINER_WIDTH_INVALID가 COMMAND_NOT_APPLICABLE로 흡수된다
+    // (table-command-glue.ts).
     const { editor } = openTableGripMenu();
     const before = editor.getDocument();
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: "Fit to width (coming soon)" }),
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Fit to width" }));
 
-    expect(logSpy).toHaveBeenCalledTimes(1);
     expect(editor.getDocument()).toEqual(before);
-    expect(screen.queryByRole("menu")).toBeNull();
-    logSpy.mockRestore();
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("menu", { name: "Table menu" })).toBeTruthy();
   });
 });
 

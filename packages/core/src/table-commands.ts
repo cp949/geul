@@ -12,6 +12,7 @@ import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
 import type { TableCommandError } from "./table-command-error.js";
 import {
+  fitColumnsToContainerWidth as fitGridColumnsToContainerWidth,
   resizeColumn as resizeGridColumn,
   setCellAlign as setGridCellAlign,
   setCellColor as setGridCellColor,
@@ -399,6 +400,22 @@ export const resizeTableColumn = (
     editor,
     tableBlockId,
     (table) => resizeGridColumn(table, index, width),
+    { preserveSelection: true },
+  );
+
+// Issue #176 — grip 메뉴 "너비에 맞추기". containerWidth는 호출자(react)가
+// 클릭 시점에 실측한 편집 영역 px 폭이다. 재분배 알고리즘(비례 배분+
+// min/max 클램프+water-filling+최대 잔여법)의 권위는 fitGridColumnsToContainerWidth
+// (table-grid-format.ts)에 있다 — 여기서는 그리드 연산으로 감싸기만 한다.
+export const fitTableColumnsToContainer = (
+  editor: Editor,
+  tableBlockId: string,
+  containerWidth: number,
+): Result<void, TableCommandError> =>
+  applyTableGridOperation(
+    editor,
+    tableBlockId,
+    (table) => fitGridColumnsToContainerWidth(table, containerWidth),
     { preserveSelection: true },
   );
 

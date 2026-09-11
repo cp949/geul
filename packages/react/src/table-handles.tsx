@@ -245,6 +245,16 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     () => setTableGripMenuTableId(null),
     [],
   );
+  // Issue #176 — "너비에 맞추기" 클릭 시점에 표의 실제 편집 영역 폭을
+  // 실측한다. NodeView가 <table> 자체를 dom으로 반환해(table-extension.ts)
+  // 감싸는 wrapper가 없으므로, 문서 흐름상 표가 차지할 수 있는 폭은 부모
+  // 요소의 clientWidth다(다른 블록이 채우는 폭과 동일). 표 DOM을 못 찾으면
+  // 0을 돌려주고 core의 CONTAINER_WIDTH_INVALID 거절에 맡긴다.
+  const getTableGripMenuContainerWidth = useCallback((): number => {
+    if (element === null || tableGripMenuTableId === null) return 0;
+    const table = findTable(element, tableGripMenuTableId);
+    return table?.parentElement?.clientWidth ?? 0;
+  }, [element, tableGripMenuTableId]);
   useDismissOnOutsideOrEscape({
     active: tableGripMenuTableId !== null,
     element,
@@ -984,6 +994,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
         geometry !== null &&
         tableGripMenuPosition !== null && (
           <TableGripMenu
+            getContainerWidth={getTableGripMenuContainerWidth}
             headerColumnEnabled={geometry.headerColumns === 1}
             headerRowEnabled={geometry.headerRows === 1}
             key={tableGripMenuTableId}
