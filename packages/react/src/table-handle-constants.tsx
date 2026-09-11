@@ -52,6 +52,51 @@ export const columnHandleBarClassName = "geul-table-column-handle-bar";
 // 핸들로 이동하는 도중 핸들이 언마운트된다.
 export const HANDLE_HOVER_MARGIN = 28;
 
+// 표 왼쪽 들여쓰기(_editor.scss의 table margin-left, px 환산값) — SCSS는
+// 사용자가 직접 rem 단위로 관리한다(이 상수화 범위 밖). 이 값을 바꾸면
+// _editor.scss의 margin-left도 같은 px로 손으로 맞춰야 한다(16px 루트
+// 기준 rem 환산 — 14px는 0.875rem). 아래 코너 클러스터 오프셋 두 개가
+// 이 상수 하나에서 파생되므로, 표 코너 Plus·그립 버튼을 일반 블록
+// gutter와 다시 정렬하려면 TS 쪽에서는 이 줄만 고치면 된다. 14는
+// 실제 Notion(사용자 워크스페이스)을 직접 열어 <table> 태그와 그 앞
+// 문단의 getBoundingClientRect().left 차이를 잰 값이다 — 이전 8/32/48은
+// 스크린샷을 눈대중한 추정값이었다.
+export const TABLE_INDENT_PX = 14;
+
+// 일반 블록 gutter(block-side-menu.tsx의 .geul-block-gutter)가 블록
+// 왼쪽에 뜨는 시각 오프셋 — _block-side-menu.scss의
+// `transform: translate(-3.5rem, 0)`와 같은 값(56px)이다.
+// block-side-menu.tsx의 BLOCK_GUTTER_HOVER_MARGIN은 이름이 비슷하지만
+// 포인터가 블록에서 얼마나 벗어나야 거터가 사라지는지를 정하는 hover
+// 유지 판정 전용 상수라 의미가 다르다 — 지금은 둘 다 56이지만 독립적으로
+// tuning되는 값이다(그 판정 상수를 24로 낮췄다가 표 들여쓰기와 무관한
+// hover 문제였음이 드러나 56으로 되돌린 이력이 있다). 이 상수를 쓰지
+// 않고 여기서 값을 다시 정의하는 이유가 그것이다 — 가져다 쓰면 그 판정
+// 상수가 또 바뀔 때마다 표 코너 정렬이 조용히 깨진다. 이 값을 바꾸려면
+// _block-side-menu.scss의 translate 값도 같이 손으로 맞춰야 한다.
+const BLOCK_GUTTER_VISUAL_OFFSET_PX = 56;
+
+// 표 코너 클러스터(Plus·표 그립, table-handle-overlays.tsx)의 버튼 크기·
+// 간격 — _table-handles.scss의 .geul-table-nesting-button(1.5rem) 크기,
+// .geul-block-gutter의 gap(0.125rem)과 같은 값이다. SCSS 쪽을 바꾸면
+// 이 두 상수도 같은 px로 맞춰야 한다.
+const CORNER_BUTTON_WIDTH_PX = 24;
+const CORNER_BUTTON_GAP_PX = 2;
+
+// 코너 클러스터를 일반 블록 gutter와 같은 절대좌표에 정렬하는 오프셋 —
+// geometry.left(표 getBoundingClientRect().left) 기준. 바깥쪽(표 그립,
+// 드래그 핸들 자리)은 gutter 시각 오프셋 + 표 들여쓰기다. 안쪽(Plus,
+// + 버튼 자리)은 거기서 버튼 폭 + 간격만큼 표에 더 가깝다. TABLE_INDENT_PX가
+// 작을수록(대략 12px 미만) tableCornerPlusOffsetPx가 행 그립 hit box의
+// 왼쪽 끝(geometry.left - 18, table-handle-overlays.tsx)과 겹치기
+// 시작한다 — 들여쓰기를 더 줄일 계획이면 그 hit box와 겹치는지 같이
+// 확인한다.
+export const tableCornerGripOffsetPx = -(
+  BLOCK_GUTTER_VISUAL_OFFSET_PX + TABLE_INDENT_PX
+);
+export const tableCornerPlusOffsetPx =
+  tableCornerGripOffsetPx + CORNER_BUTTON_WIDTH_PX + CORNER_BUTTON_GAP_PX;
+
 // 메뉴 패널 루트(table-handle-menu.tsx)에 붙는 안정 셀렉터. 아래 두 배열과
 // table-handles.tsx의 초점 판정(Issue #65 항목4)이 모두 이 문자열을
 // 공유한다 — 세 번째 사용처를 리터럴로 또 추가하지 않는다.

@@ -107,24 +107,22 @@
   // codeBlock의 0.75rem보다 크게 잡았다 — 표는 그 둘보다 시각적으로 무거운
   // 블록이라 더 넓은 여백을 쓴다(사용자 조정값).
   //
-  // margin-left: 2rem — Notion은 표를 일반 문단보다 왼쪽으로 들여 첫 행
+  // margin-left: 14px — Notion은 표를 일반 문단보다 왼쪽으로 들여 첫 행
   // 왼쪽의 Plus·그립 버튼 자리를 표 본문과 겹치지 않게 확보한다(사용자
   // 스크린샷 비교 지적). table-handle-overlays.tsx가 그 버튼들을
   // geometry.left(표 getBoundingClientRect().left, live DOM 측정) 기준
   // 절대좌표로 그리므로, margin-left를 주면 geometry.left가 그만큼
   // 밀리며 버튼 좌표도 함께 따라온다 — 좌표 상수를 별도로 고칠 필요가
-  // 없다. 처음엔 3rem(48px)을 썼는데 "들여쓰기가 너무 많다"는 스크린샷
-  // 비교 지적으로 2rem(32px)으로 줄였다 — table-handle-overlays.tsx의
-  // 코너 클러스터 오프셋(-88px/-62px)이 일반 블록 gutter 오프셋(56px,
-  // block-side-menu.tsx의 BLOCK_GUTTER_HOVER_MARGIN) + 이 들여쓰기라
-  // 값을 바꾸면 그쪽도 함께 맞춰야 한다(정확한 산출은 그 파일 주석과
-  // table-handles.test.tsx가 소유). 행 그립 hit box(geometry.left-18~+12)와
-  // 코너 클러스터 오른쪽 끝(geometry.left-38)은 20px 떨어져 있어(들여쓰기를
-  // 더 줄이면 12px 밑에서 겹친다, table-handle-overlays.tsx 주석 참고)
-  // 여전히 겹치지 않는다.
+  // 없다. 3rem(48px)→2rem(32px)까지는 스크린샷을 눈대중한 추정값이었고,
+  // 14px은 사용자의 실제 Notion 워크스페이스를 직접 열어 <table>과 그 앞
+  // 문단의 getBoundingClientRect().left 차이를 잰 실측값이다 — 그래서
+  // rem이 아니라 px로 적는다. 이 값은 table-handle-constants.tsx의
+  // TABLE_INDENT_PX와 같은 px로 손으로 맞춰야 한다(그 상수가 코너
+  // Plus·그립 버튼 오프셋의 유일한 원본이다) — 정확한 산출식과 겹침
+  // 한계값은 여기서 반복하지 않고 그 파일과 table-handle-overlays.tsx,
+  // table-handles.test.tsx가 소유한다.
   table {
-    margin: 1.4rem 0;
-    margin-left: 2rem;
+    margin: 1.4rem 0 1.4rem 14px;
     border-collapse: collapse;
   }
 

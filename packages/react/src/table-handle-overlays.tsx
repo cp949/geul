@@ -11,6 +11,8 @@ import {
   rowHandleBarClassName,
   rowHandleHitClassName,
   rowHandleIcon,
+  tableCornerGripOffsetPx,
+  tableCornerPlusOffsetPx,
   tableGripIcon,
 } from "./table-handle-constants.js";
 import type { ReorderGuideRect } from "./table-handle-helpers.js";
@@ -298,30 +300,33 @@ export const TableHandleOverlays = ({
       {/* 좌상단 클러스터(Plus+표 그립, Issue #174 RD-002) — 일반 블록
           gutter(block-side-menu.tsx의 .geul-block-gutter)와 같은 크기
           (1.5rem 버튼, 2px 간격)로, 같은 좌표계로 자리를 잡는다. 일반
-          gutter는 블록 왼쪽 56px(BLOCK_GUTTER_HOVER_MARGIN)에 [드래그
+          gutter는 블록 왼쪽 56px(table-handle-constants.tsx의
+          BLOCK_GUTTER_VISUAL_OFFSET_PX — block-side-menu.tsx의
+          BLOCK_GUTTER_HOVER_MARGIN과는 다른 상수다, 그 파일 주석 참고)에 [드래그
           핸들, Plus] 순서로 뜬다 — 드래그(바깥)가 클릭하면 블록 메뉴를
           열고, Plus(안쪽, 블록에 더 가까움)는 그 블록 뒤에 새 블록을
-          삽입한다. 표는 _editor.scss의 margin-left: 2rem(32px, "들여쓰기가
-          너무 많다"는 스크린샷 비교 지적으로 3rem에서 줄였다)만큼 이미
-          오른쪽으로 밀려 있어, geometry.left(표 getBoundingClientRect().
-          left, 들여쓰기 반영값) 기준 오프셋에 그 32px를 더해야 두 gutter가
-          같은 절대좌표에 정렬된다: 56+32=88. 표 그립(클릭하면 표를
-          선택하고 TableGripMenu를 연다, RD-003 — Select table 버튼(Issue
-          #149) 대체)이 드래그 핸들과 같은 "바깥" 자리(-88)를, Plus(클릭하면
-          표 바로 뒤에 문단을 삽입하고 블록타입 선택 메뉴를 연다,
-          onAddBlock, table-handles.tsx의 handleAddBlockClick —
-          block-side-menu.tsx의 handleAddBlockClick과 같은 계약이라 라벨도
-          dictionary.handle.addBlock을 재사용한다)가 같은 "안쪽" 자리
-          (-88+24+2=-62)를 맡는다 — 옛 순서(Plus 바깥·Grip 안쪽, RD-004)는
-          일반 gutter와 반대였다(사용자 스크린샷 지적, "hello 행과 표 행의
-          Plus 좌우가 다르다"). top은 표 상단이 아니라 cornerClusterTop(첫
-          행 세로 중앙, 위 선언부 주석)을 쓴다 — 표 위 대각선 자리(이전
-          top - 28)는 Notion과 달랐다(사용자 스크린샷 지적, "세로 위치가
-          테이블 첫번째 행과 안 맞아"). 같은 높이가 된 row handle hit
-          box(아래 첫 주석, 왼쪽 -18~+12)와는 x축이 겹치지 않아(이 클러스터
-          오른쪽 끝은 -38 — margin-left를 12px 밑으로 더 줄이면 이 20px
-          여백이 없어져 겹친다) 여전히 서로 가리지 않는다 — 겹침 회피
-          축이 세로에서 가로로 바뀌었을 뿐이다. */}
+          삽입한다. 표는 _editor.scss의 margin-left(TABLE_INDENT_PX,
+          table-handle-constants.tsx — SCSS 값을 바꾸면 그 상수도 같은 px로
+          손으로 맞춰야 한다)만큼 이미 오른쪽으로 밀려 있어, geometry.left
+          (표 getBoundingClientRect().left, 들여쓰기 반영값) 기준 오프셋에
+          그 들여쓰기를 더해야 두 gutter가 같은 절대좌표에 정렬된다 —
+          정확한 산출식과 값은 tableCornerGripOffsetPx/
+          tableCornerPlusOffsetPx(table-handle-constants.tsx)가 소유하고
+          여기 반복하지 않는다. 표 그립(클릭하면 표를 선택하고
+          TableGripMenu를 연다, RD-003 — Select table 버튼(Issue #149)
+          대체)이 드래그 핸들과 같은 "바깥" 자리를, Plus(클릭하면 표 바로
+          뒤에 문단을 삽입하고 블록타입 선택 메뉴를 연다, onAddBlock,
+          table-handles.tsx의 handleAddBlockClick — block-side-menu.tsx의
+          handleAddBlockClick과 같은 계약이라 라벨도 dictionary.handle.
+          addBlock을 재사용한다)가 같은 "안쪽" 자리를 맡는다 — 옛 순서
+          (Plus 바깥·Grip 안쪽, RD-004)는 일반 gutter와 반대였다(사용자
+          스크린샷 지적, "hello 행과 표 행의 Plus 좌우가 다르다"). top은
+          표 상단이 아니라 cornerClusterTop(첫 행 세로 중앙, 위 선언부
+          주석)을 쓴다 — 표 위 대각선 자리(이전 top - 28)는 Notion과
+          달랐다(사용자 스크린샷 지적, "세로 위치가 테이블 첫번째 행과
+          안 맞아"). 같은 높이가 된 row handle hit box(아래 첫 주석, 왼쪽
+          -18~+12)와 겹치지 않으려면 TABLE_INDENT_PX가 대략 12px 이상이어야
+          한다(table-handle-constants.tsx의 tableCornerPlusOffsetPx 주석). */}
       <IconButton
         className={nestingButtonClassName}
         data-geul-table-grip=""
@@ -330,7 +335,7 @@ export const TableHandleOverlays = ({
         onClick={onTableGripClick}
         style={{
           position: "absolute",
-          left: geometry.left - 88,
+          left: geometry.left + tableCornerGripOffsetPx,
           top: cornerClusterTop,
         }}
       />
@@ -342,7 +347,7 @@ export const TableHandleOverlays = ({
         onClick={onAddBlock}
         style={{
           position: "absolute",
-          left: geometry.left - 62,
+          left: geometry.left + tableCornerPlusOffsetPx,
           top: cornerClusterTop,
         }}
       />

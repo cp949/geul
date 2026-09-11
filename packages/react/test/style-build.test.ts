@@ -110,7 +110,12 @@ describe("SCSS 빌드 파이프라인", () => {
     const rule = /\.geul-editor table \{(?<body>[^}]*)\}/.exec(css)?.groups
       ?.body;
 
-    expect(rule).toContain("margin: 1.4rem 0;");
+    // 2값 shorthand("margin: 1.4rem 0;")든, 왼쪽 들여쓰기를 더한 4값
+    // shorthand("margin: 1.4rem 0 1.4rem 0.5rem;")든 top·bottom이 둘 다
+    // 1.4rem이면 통과한다 — 왼쪽 들여쓰기 값 자체는 사용자가 직접
+    // 조정하는 별도 값이라(아래 "표를 일반 문단보다 왼쪽으로 들여..."
+    // 테스트가 그쪽을 검증한다) 여기서는 고정하지 않는다.
+    expect(rule).toMatch(/margin:\s*1\.4rem\s+\S+(?:\s+1\.4rem\s+\S+)?;/);
   });
 
   it("표를 일반 문단보다 왼쪽으로 들여 표 코너 Plus·그립 버튼 자리를 확보한다(Notion 대비 사용자 지적)", () => {
@@ -121,12 +126,22 @@ describe("SCSS 빌드 파이프라인", () => {
     // table-handle-overlays.tsx가 Plus·표 그립 버튼을 geometry.left(=표
     // getBoundingClientRect().left, live DOM 측정) 기준 절대좌표로 그린다 —
     // margin-left를 주면 geometry.left가 그만큼 밀리며 그 오프셋도 그대로
-    // 따라와 별도 좌표 수정이 필요 없다. 2rem(32px, 처음 쓴 3rem은 "들여쓰기가
-    // 너무 많다"는 스크린샷 비교 지적으로 줄였다)은 일반 블록
-    // gutter(block-side-menu.tsx, BLOCK_GUTTER_HOVER_MARGIN=56px)와 코너
-    // 클러스터를 같은 절대좌표에 정렬하는 값이다 — 정확한 오프셋 산출은
-    // table-handle-overlays.tsx 주석과 table-handles.test.tsx가 소유한다.
-    expect(rule).toContain("margin-left: 2rem;");
+    // 따라와 별도 좌표 수정이 필요 없다. 정확한 들여쓰기 값은 사용자가
+    // Notion 스크린샷과 대조하며 SCSS에서 직접 조정하는 값이라(이 값을
+    // 바꾸면 table-handle-constants.tsx의 TABLE_INDENT_PX도 같은 px로
+    // 맞춰야 한다 — 정확한 오프셋 산출은 그 파일과 table-handles.test.tsx가
+    // 소유한다) 여기서 특정 rem 값을 고정하지 않는다. margin-left(단독
+    // 선언이든 margin shorthand 4번째 값이든) 자체가 0이 아님만 확인한다
+    // — 0으로 돌아가면 표가 일반 문단과 다시 나란히 붙어 코너 클러스터
+    // 자리가 사라진다.
+    const longhand = /margin-left:\s*([\d.]+)(?:rem|px);/.exec(rule ?? "");
+    const shorthand = /margin:\s*\S+\s+\S+\s+\S+\s+([\d.]+)(?:rem|px);/.exec(
+      rule ?? "",
+    );
+    const leftMargin = longhand ?? shorthand;
+
+    expect(leftMargin).not.toBeNull();
+    expect(Number(leftMargin?.[1])).toBeGreaterThan(0);
   });
 
   it("표 코너 Plus·그립 버튼을 일반 블록 gutter 버튼과 같은 크기로 그린다(Notion 대비 사용자 지적 — hello 행과 표 행의 버튼 크기가 달라 보였다)", () => {
