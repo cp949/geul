@@ -242,6 +242,27 @@ describe("거터 hover 히스테리시스(dead-zone 회귀)", () => {
 
     expect(screen.queryByRole("button", { name: dragHandleLabel })).toBeNull();
   });
+
+  // 거터는 블록 왼쪽에만 뜬다(dy 없음, useClampedMenuPosition의
+  // leftOfAnchor) — 아래쪽으로 여백을 늘려 유지할 이유가 없다.
+  // BLOCK_GUTTER_HOVER_MARGIN(56)을 위/아래에도 그대로 적용하면, 블록
+  // rect(top 0~20) 바로 밑(다음 블록·표 방향, 표는 entitySelector에서
+  // ":not(table)"로 제외돼 candidate가 null로 온다)으로 넘어가도 옛 블록의
+  // 거터가 안 사라진다 — 사용자가 표 바로 위 문단에서 표로 마우스를 옮겨도
+  // 문단의 거터가 그대로 남는 것으로 재현한 버그.
+  it("블록 아래(다음 블록·표 방향)로 벗어나면 거터가 곧바로 사라진다(수직 여백 과다 회귀)", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    expect(screen.getByRole("button", { name: dragHandleLabel })).toBeTruthy();
+
+    // 블록(top 0~20) 바로 아래, 가로는 블록 범위 안(x=300) — 옛 마진(56)
+    // 안에는 들지만 블록 자신의 세로 범위 밖이다.
+    fireEvent.pointerMove(document.body, { clientX: 300, clientY: 30 });
+
+    expect(screen.queryByRole("button", { name: dragHandleLabel })).toBeNull();
+  });
 });
 
 describe("블록 메뉴 바깥 클릭/Escape 닫기", () => {

@@ -38,10 +38,16 @@ const addBlockIcon = <Plus {...iconProps} />;
 const blockGutterButtonClassName = "geul-block-gutter__button";
 
 // 거터(드래그 핸들·add 버튼)는 _block-side-menu.scss의
-// `transform: translate(-3.5rem, 0)`로 블록 왼쪽 56px 바깥에 뜬다. 포인터가
-// 블록에서 거터로 이동하는 도중(둘 중 어느 쪽도 아닌 빈 공간)에는 hover를
-// 유지해야 한다 — 즉시 해제하면 이동 중에 거터가 먼저 사라져 클릭할 수
-// 없다. table-handles.tsx의 HANDLE_HOVER_MARGIN과 같은 이유·같은 패턴.
+// `transform: translate(-3.5rem, 0)`로 블록 왼쪽 56px 바깥에 뜬다(dy는
+// 0 — useClampedMenuPosition의 leftOfAnchor 참고). 포인터가 블록에서
+// 거터로 이동하는 도중(둘 중 어느 쪽도 아닌 빈 공간)에는 hover를 유지해야
+// 한다 — 즉시 해제하면 이동 중에 거터가 먼저 사라져 클릭할 수 없다. 이
+// 여백은 왼쪽 방향에만 쓴다(아래 판정) — table-handles.tsx의
+// HANDLE_HOVER_MARGIN은 표를 4면 모두 감싸는 오버레이(위 열 그립, 아래
+// add-row rail, 오른쪽 add-column rail)라 4방향 확장이 맞지만, 이 거터는
+// 왼쪽 한 방향에만 있어 위/아래/오른쪽까지 늘리면 다음 블록(표 포함)으로
+// 넘어간 뒤에도 이전 블록의 거터가 안 사라지는 dead-zone 역전 버그가
+// 난다(사용자 스크린샷, 표가 문단 바로 아래일 때 재현).
 const BLOCK_GUTTER_HOVER_MARGIN = 56;
 
 // useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
@@ -89,10 +95,13 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         return;
       }
 
-      // 거터는 블록 바깥(BLOCK_GUTTER_HOVER_MARGIN)에 뜨므로, 그 여백을
+      // 거터는 블록 왼쪽(BLOCK_GUTTER_HOVER_MARGIN)에만 뜨므로, 그 여백을
       // 벗어나기 전에는 hover를 유지한다 — table-handles.tsx의 hover
       // 히스테리시스와 같은 이유(usePointerHoverTarget이 candidate만 알 뿐
-      // 이 판단은 모른다, 호출부 전용 판단이라 콜백 안에 남긴다).
+      // 이 판단은 모른다, 호출부 전용 판단이라 콜백 안에 남긴다). 세로축은
+      // 블록 자신의 rect(top~bottom)를 그대로 쓴다 — 위/아래로도 여백을
+      // 주면 다음/이전 블록(표 포함) 쪽으로 넘어간 뒤에도 이 블록의 거터가
+      // 계속 떠 있는다(BLOCK_GUTTER_HOVER_MARGIN 선언부 주석 참고).
       const currentId = hoverBlockIdRef.current;
       if (currentId !== null && element !== null) {
         const blockElement = findElementByAttribute(
@@ -107,9 +116,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           rect.width > 0 &&
           rect.height > 0 &&
           event.clientX >= rect.left - BLOCK_GUTTER_HOVER_MARGIN &&
-          event.clientX <= rect.right + BLOCK_GUTTER_HOVER_MARGIN &&
-          event.clientY >= rect.top - BLOCK_GUTTER_HOVER_MARGIN &&
-          event.clientY <= rect.bottom + BLOCK_GUTTER_HOVER_MARGIN
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom
         ) {
           return;
         }
