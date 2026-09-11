@@ -101,8 +101,13 @@
   // 그리지 않는다 — 기본 표에 grid 테두리가 없으면 표를 삽입해도 빈 문단과
   // 구별되지 않는다(TBL-001 자유 조작 QA 발견, QA-088). box-sizing:
   // border-box는 colgroup의 col이 지정한 픽셀 폭 계약(table-extension.ts
-  // syncColgroup)을 border·padding이 밀어내지 않도록 지킨다.
+  // syncColgroup)을 border·padding이 밀어내지 않도록 지킨다. margin: 1.4rem
+  // 0 — 이전엔 여백이 0이라 표가 앞뒤 문단에 바로 붙어 Notion 등 참고
+  // 에디터 대비 답답해 보였다(사용자 스크린샷 비교 지적). blockquote·
+  // codeBlock의 0.75rem보다 크게 잡았다 — 표는 그 둘보다 시각적으로 무거운
+  // 블록이라 더 넓은 여백을 쓴다(사용자 조정값).
   table {
+    margin: 1.4rem 0;
     border-collapse: collapse;
   }
 

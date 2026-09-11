@@ -105,6 +105,14 @@ describe("SCSS 빌드 파이프라인", () => {
     );
   });
 
+  it("표 앞뒤에 blockquote·codeBlock보다 넓은 여백을 준다(Notion 대비 표가 인접 문단에 바로 붙어 보인다는 사용자 지적)", () => {
+    const css = compileCss();
+    const rule = /\.geul-editor table \{(?<body>[^}]*)\}/.exec(css)?.groups
+      ?.body;
+
+    expect(rule).toContain("margin: 1.4rem 0;");
+  });
+
   it("url 없는 media 블록에 실제 높이를 가진 빈 슬롯을 그린다(MED-001, QA-090 — 없으면 선택 해제 시 height:0으로 완전히 사라져 마우스로 재접근 불가)", () => {
     const css = compileCss();
     const rule =
