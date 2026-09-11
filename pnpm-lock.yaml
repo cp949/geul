@@ -92,6 +92,9 @@ importers:
 
   apps/showcase:
     dependencies:
+      '@cp949/geul-io':
+        specifier: workspace:*
+        version: link:../../packages/io
       '@cp949/geul-model':
         specifier: workspace:*
         version: link:../../packages/model

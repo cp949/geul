@@ -22,7 +22,7 @@
 
 ### 제외 (2026-09-08 브레인스토밍에서 합의)
 
-- `@cp949/geul-io`의 HTML/GFM/JSON 변환 예제 — react 어댑터 표면만 다룬다.
+- `@cp949/geul-io`의 HTML/GFM/JSON 변환 예제 — react 어댑터 표면만 다룬다(2026-09-11 정정 — Kitchen sink(Example 0)에 한해 `exportHtml()`로 미리보기/HTML 탭을 추가한다. react 표면 자체를 벗어나는 별도 io 변환 예제를 신설하는 것이 아니라, 대표 예제의 결과물을 확인하는 부속 기능이다. `showcase -> react, io, model`로 의존 방향 추가, ADR-0002 갱신).
 - 복합 실사용 시나리오(블로그 에디터, 댓글 등) — 기능 단위 데모 + 마지막 kitchen-sink 조합까지만.
 - SSR/Next.js 통합 예제(`EXT-013`) — react 표면 자체가 아니라 프레임워크 통합 주제라 범위 밖.
 - 자동 e2e 회귀 게이트 — 최초 도입 시점엔 포함하지 않는다(§7).
@@ -63,18 +63,18 @@ apps/showcase/
 
 `@cp949/geul-react` 공개 표면 10개 항목을 단순 -> 복잡 순으로 1:1 매핑한다. 각 단계는 그 단계가 보여주려는 표면에 실제로 필요한 컴포넌트만 장착한다 — 이전 단계의 컴포넌트는 지금 단계가 기능적으로 의존할 때만 유지한다(예: File panel은 SlashMenu로 미디어 placeholder 블록을 만들어야 열리므로 SlashMenu를 유지하지만, 관련 없는 FormattingToolbar/LinkToolbar까지 안고 갈 필요는 없다). 모든 표면을 한 번에 다 얹는 "전부 누적"은 Example 0 Kitchen sink 하나가 전담한다 — 그 뒤 1~9번을 전부 이해하고 나서 봐야 이해되는 문서를 매 단계 반복하지 않기 위해서다. Kitchen sink는 대표 예제이므로 Example 0과 사이드바 최상단에 고정한다. 이후 개별 예제 추가는 Kitchen sink의 번호와 위치에 영향을 주지 않는다(2026-09-08 구현 중 확정, 초안의 "각 단계는 이전 단계에 컴포넌트 하나만 더한다"는 이 의도를 정확히 담지 못해 정정).
 
-| # | 예제 | 새로 추가되는 표면 | 비고 |
-|---|------|------|------|
-| 1 | Minimal editor | `EditorProvider` + `EditorContent` | 툴바 없는 순수 에디터 |
-| 2 | Document 읽기/쓰기 | `useEditor`(`getDocument`/`replaceDocument`, `revision`/`changedBlockIds`) | JSON 왕복만, io 변환은 범위 밖 |
-| 3 | Formatting toolbar | `FormattingToolbar` | |
-| 4 | Link toolbar | `LinkToolbar` | |
-| 5 | Slash menu | `SlashMenu`(+ `SlashMenuCustomItem`) | 커스텀 아이템 등록 예제 포함 |
-| 6 | File panel | `FilePanel` | |
-| 7 | Media | `MediaToolbar` + `MediaResizeHandles` | 업로드는 `apps/demo`의 `demoUploadFile`(app.tsx) mock 패턴 재사용 — 파일명 기반 성공/실패 결정적 분기 |
-| 8 | Emoji picker | `EmojiPicker` | |
-| 9 | Dictionary override | `useDictionary` | `color.*`/`menu.*`/`slashMenu.*`/`blockType.*` 네임스페이스(EXT-009) 실사용 예 |
-| 0 | 전체 조합(Kitchen sink) | 위 전부 동시 장착 | 대표 예제. `apps/demo`의 현재 구성과 동급 |
+| #   | 예제                    | 새로 추가되는 표면                                                         | 비고                                                                                                  |
+| --- | ----------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 1   | Minimal editor          | `EditorProvider` + `EditorContent`                                         | 툴바 없는 순수 에디터                                                                                 |
+| 2   | Document 읽기/쓰기      | `useEditor`(`getDocument`/`replaceDocument`, `revision`/`changedBlockIds`) | JSON 왕복만, io 변환은 범위 밖                                                                        |
+| 3   | Formatting toolbar      | `FormattingToolbar`                                                        |                                                                                                       |
+| 4   | Link toolbar            | `LinkToolbar`                                                              |                                                                                                       |
+| 5   | Slash menu              | `SlashMenu`(+ `SlashMenuCustomItem`)                                       | 커스텀 아이템 등록 예제 포함                                                                          |
+| 6   | File panel              | `FilePanel`                                                                |                                                                                                       |
+| 7   | Media                   | `MediaToolbar` + `MediaResizeHandles`                                      | 업로드는 `apps/demo`의 `demoUploadFile`(app.tsx) mock 패턴 재사용 — 파일명 기반 성공/실패 결정적 분기 |
+| 8   | Emoji picker            | `EmojiPicker`                                                              |                                                                                                       |
+| 9   | Dictionary override     | `useDictionary`                                                            | `color.*`/`menu.*`/`slashMenu.*`/`blockType.*` 네임스페이스(EXT-009) 실사용 예                        |
+| 0   | 전체 조합(Kitchen sink) | 위 전부 동시 장착                                                          | 대표 예제. `apps/demo`의 현재 구성과 동급                                                             |
 
 사이드바는 이 순번을 4개 섹션으로 묶어 표시한다: **Composite**(0) / **Basics**(1-2) / **Toolbars & Menus**(3-6) / **Media & Extras**(7-9). Composite는 최상단에 고정한다.
 
@@ -85,8 +85,8 @@ apps/showcase/
 `page.tsx`가 같은 파일을 두 방식으로 import한다.
 
 ```ts
-import Example from "./example.tsx";           // 라이브 렌더용 — tsc/eslint 검증 대상
-import exampleSource from "./example.tsx?raw";  // 표시용 원문 문자열 — 별도 사본 아님
+import Example from "./example.tsx"; // 라이브 렌더용 — tsc/eslint 검증 대상
+import exampleSource from "./example.tsx?raw"; // 표시용 원문 문자열 — 별도 사본 아님
 ```
 
 `?raw`는 Vite 내장 기능. 별도 문자열 사본이 없으므로 `example.tsx`를 고치면 라이브 데모와 표시되는 소스가 항상 함께 바뀐다 — 드리프트가 구조적으로 불가능하다(2026-09-08 브레인스토밍에서 확인한 사용자 요구사항: "소스코드가 변경된 문법 체크가 가능하다면 추가").

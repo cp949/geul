@@ -11,6 +11,7 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
+    { "path": "../../packages/io" },
     { "path": "../../packages/model" },
     { "path": "../../packages/react" }
   ]

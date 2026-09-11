@@ -15,7 +15,7 @@ io       -> model
 core     -> model
 react    -> core
 demo     -> react, io, model
-showcase -> react, model
+showcase -> react, io, model
 ```
 
 - `packages/model` (`@cp949/geul-model`): 독자 문서 타입, shape·의미 검증, 표 논리 격자 검증

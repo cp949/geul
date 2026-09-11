@@ -148,6 +148,7 @@ const allowedDependencies = {
   },
   "apps/showcase": {
     dependencies: {
+      "@cp949/geul-io": "workspace:*",
       "@cp949/geul-model": "workspace:*",
       "@cp949/geul-react": "workspace:*",
       "prism-react-renderer": "2.4.1",
