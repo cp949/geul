@@ -6,6 +6,7 @@
  * editor-controller-table-load.test.ts, 붙여넣기는
  * editor-controller-table-paste.test.ts가 맡는다.
  */
+import type { TableBlock } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
@@ -147,15 +148,60 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getDocument()).toEqual(before);
     });
 
-    it("duplicateBlock은 표 블록을 거부하고 문서를 바꾸지 않는다", () => {
-      const { editor, tableBlockId } = editorWithTable();
-      const before = editor.getDocument();
+    it("duplicateBlock으로 표 블록을 복제하면 원본 바로 뒤에 새 표가 생기고 row/cell/column id가 전량 새로 발급된다", () => {
+      const { editor, tableBlockId } = editorWithTable(2, 2);
+      const before = tableBlockOf(editor);
 
-      expect(editor.commands.duplicateBlock(tableBlockId)).toEqual({
-        ok: false,
-        error: { code: "COMMAND_NOT_APPLICABLE", command: "duplicateBlock" },
+      const result = editor.commands.duplicateBlock(tableBlockId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const document = editor.getDocument();
+      const tableIndex = document.blocks.findIndex(
+        (block) => block.id === tableBlockId,
+      );
+      const duplicatedBlock = document.blocks[tableIndex + 1];
+      if (duplicatedBlock?.type !== "table") {
+        throw new Error("복제된 표가 원본 바로 뒤에 없다");
+      }
+      const duplicated = duplicatedBlock as TableBlock;
+      expect(duplicated.id).toBe(result.value.blockId);
+      expect(duplicated.id).not.toBe(before.id);
+      expect(duplicated.columns.map((c) => c.id)).not.toEqual(
+        before.columns.map((c) => c.id),
+      );
+      expect(duplicated.rows.map((r) => r.id)).not.toEqual(
+        before.rows.map((r) => r.id),
+      );
+      expect(
+        duplicated.rows.flatMap((r) => r.cells.map((c) => c.id)),
+      ).not.toEqual(before.rows.flatMap((r) => r.cells.map((c) => c.id)));
+    });
+
+    it("병합 셀이 있는 표를 duplicateBlock으로 복제해도 rowSpan/columnSpan이 보존된다", () => {
+      const { editor, tableBlockId, cellIds } = editorWithTable(2, 2);
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft, , , bottomRight] = cellIds;
+      selectCellRange(tiptap, topLeft, bottomRight);
+      editor.commands.mergeTableCells(tableBlockId);
+
+      const result = editor.commands.duplicateBlock(tableBlockId);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const document = editor.getDocument();
+      const duplicatedBlock = document.blocks.find(
+        (block) => block.id === result.value.blockId,
+      );
+      if (duplicatedBlock?.type !== "table") {
+        throw new Error("복제된 표를 찾지 못했다");
+      }
+      const duplicated = duplicatedBlock as TableBlock;
+      expect(duplicated.rows[0]?.cells).toHaveLength(1);
+      expect(duplicated.rows[0]?.cells[0]).toMatchObject({
+        rowSpan: 2,
+        columnSpan: 2,
       });
-      expect(editor.getDocument()).toEqual(before);
     });
 
     it("동일 인덱스 행 이동은 undo 단계를 만들지 않는다", () => {

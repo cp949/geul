@@ -18,11 +18,14 @@ import { cloneBlockSubtreeWithFreshIds } from "./generic-block-clone.js";
 export const createGenericBlockDuplicateCommands = (
   session: ProductionEditorSession,
 ) => {
-  // Issue #125 D6~D9 — 자식이 있는 블록을 대상으로 호출하면 하위 트리
-  // 전체(표가 자식으로 들어있다면 그 column/row/cell id까지, D7)를 복제하고
-  // 모든 id를 원본과 겹치지 않게 재귀 재발급한다. 표 자신이 직접 대상인
-  // 경우는 여전히 거절한다(D8 — clone이 표 row/cell/column id 중복을 낳는
-  // 문제는 전용 처리 없이는 위험하다는 판단을 그대로 유지).
+  // Issue #125 D6~D9, Issue #174 RD-001 — 자식이 있는 블록을 대상으로
+  // 호출하면 하위 트리 전체(표가 자식으로 들어있다면 그 column/row/cell
+  // id까지, D7)를 복제하고 모든 id를 원본과 겹치지 않게 재귀 재발급한다.
+  // 표 자신이 직접 대상인 경우도 같은 D7 분기를 타므로(cloneBlockSubtreeWithFreshIds의
+  // table 분기가 column/row/cell id를 전부 새로 발급한다) 더는 거절하지
+  // 않는다 — 예전에는 "clone이 표 id 중복을 낳는다"는 우려로 D8에서
+  // COMMAND_NOT_APPLICABLE을 반환했으나, 그 우려를 해소하는 처리가 D7에
+  // 이미 구현돼 있었다(Issue #174 RD-001).
   const duplicateBlock = (
     blockId: string,
   ): Result<{ blockId: string }, EditorError> => {
@@ -30,9 +33,6 @@ export const createGenericBlockDuplicateCommands = (
     const source = findBlockEntryInTree(session.document.blocks, blockId);
     if (source === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (source.block.type === "table") {
-      return commandNotApplicable("duplicateBlock");
     }
     if (session.revision >= Number.MAX_SAFE_INTEGER) {
       return commandNotApplicable("duplicateBlock");
