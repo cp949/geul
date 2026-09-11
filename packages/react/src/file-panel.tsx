@@ -417,6 +417,10 @@ export const FilePanel = ({
                 applyUrl();
               }
             }}
+            placeholder={dictionary.toolbar.filePanel.urlInputPlaceholder.replace(
+              "{kind}",
+              dictionary.toolbar.kindNames[panelState.kind],
+            )}
             ref={inputRef}
             type="text"
             value={panelState.draft}

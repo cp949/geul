@@ -160,6 +160,7 @@ export const KO_DICTIONARY: Dictionary = {
       embedTab: "삽입",
       uploadTab: "업로드",
       urlInputAriaLabel: "{kind} URL 입력",
+      urlInputPlaceholder: "{kind} URL 붙여넣기",
       saveUrl: "URL 저장",
       save: "저장",
       namePrefix: "이름: ",

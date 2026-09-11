@@ -204,6 +204,21 @@ describe("FilePanel 파일 패널", () => {
     expect(screen.getByRole("textbox", { name: "Video URL" })).not.toBeNull();
   });
 
+  // 2026-09-11 피드백 — 무엇을 입력해야 하는지 input만 보고는 알 수 없다는
+  // 사용자 confusion을 반영한다. urlInputAriaLabel과 같은 {kind} 토큰
+  // 치환 관용구를 쓴다(위 "kind별로 URL 입력 라벨이 다르다"와 같은 패턴).
+  it("URL 입력에 kind별 placeholder가 보인다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({ ...emptyImageBlock, kind: "video" }),
+    });
+    renderPanel(controller);
+
+    expect(screen.getByRole("textbox", { name: "Video URL" })).toHaveProperty(
+      "placeholder",
+      "Paste Video URL",
+    );
+  });
+
   it("dictionary override 시 컨테이너·탭·URL 라벨·Save URL(aria-label≠텍스트)·Close가 바뀐다(EXT-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,
@@ -219,6 +234,7 @@ describe("FilePanel 파일 패널", () => {
             embedTab: "삽입",
             uploadTab: "업로드",
             urlInputAriaLabel: "{kind} 링크",
+            urlInputPlaceholder: "{kind} 링크 붙여넣기",
             saveUrl: "URL 저장하기",
             save: "저장",
             closeAriaLabel: "파일 패널 닫기",
@@ -232,7 +248,9 @@ describe("FilePanel 파일 패널", () => {
     expect(screen.getByRole("toolbar", { name: "파일 패널" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "삽입" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "업로드" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "사진 링크" })).toBeTruthy();
+    const urlInput = screen.getByRole("textbox", { name: "사진 링크" });
+    expect(urlInput).toBeTruthy();
+    expect(urlInput).toHaveProperty("placeholder", "사진 링크 붙여넣기");
     const saveButton = screen.getByRole("button", { name: "URL 저장하기" });
     expect(saveButton.textContent).toBe("저장");
     const closeButton = screen.getByRole("button", { name: "파일 패널 닫기" });

@@ -160,6 +160,11 @@ export type Dictionary = {
       embedTab: string;
       uploadTab: string;
       urlInputAriaLabel: string;
+      // Embed URL input의 placeholder — Issue 피드백(2026-09-11) "밑에
+      // 입력하는게 무엇인지 모르겠다"를 반영해 무엇을 붙여넣어야 하는지
+      // input 안에서 바로 보여준다. urlInputAriaLabel과 같은 {kind} 토큰
+      // 치환 관용구를 쓴다.
+      urlInputPlaceholder: string;
       saveUrl: string;
       save: string;
       namePrefix: string;
@@ -422,6 +427,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       embedTab: "Embed",
       uploadTab: "Upload",
       urlInputAriaLabel: "{kind} URL",
+      urlInputPlaceholder: "Paste {kind} URL",
       saveUrl: "Save URL",
       save: "Save",
       namePrefix: "Name: ",
