@@ -204,7 +204,9 @@ describe("표 그립 메뉴 항목", () => {
     const before = editor.getDocument();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Fit to width (coming soon)" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Fit to width (coming soon)" }),
+    );
 
     expect(logSpy).toHaveBeenCalledTimes(1);
     expect(editor.getDocument()).toEqual(before);

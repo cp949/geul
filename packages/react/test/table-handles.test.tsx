@@ -289,9 +289,8 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
 // absolute" 테스트 주석과 같은 이유, 정적 grep·e2e가 대신 확인).
 describe("텍스트 커서나 마우스 hover가 있는 행에 활성 바가 뜬다", () => {
   const firstCellOf = (table: HTMLElement, rowIndex: number): HTMLElement => {
-    const row = table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[
-      rowIndex
-    ];
+    const row =
+      table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[rowIndex];
     const cell = row?.querySelector<HTMLElement>("[data-geul-column-id]");
     if (cell === undefined || cell === null) {
       throw new Error(`${rowIndex}번 행의 셀을 찾지 못했다`);
@@ -401,12 +400,11 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
     rowIndex: number,
     columnIndex: number,
   ): HTMLElement => {
-    const row = table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[
-      rowIndex
+    const row =
+      table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[rowIndex];
+    const cell = row?.querySelectorAll<HTMLElement>("[data-geul-column-id]")[
+      columnIndex
     ];
-    const cell = row?.querySelectorAll<HTMLElement>(
-      "[data-geul-column-id]",
-    )[columnIndex];
     if (cell === undefined) {
       throw new Error(`${rowIndex}행 ${columnIndex}열의 셀을 찾지 못했다`);
     }
@@ -435,27 +433,19 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
     placeCaret(cellAt(table, 0, 0));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(true);
     expect(
-      columnHitBoxes()[1]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(false);
 
     placeCaret(cellAt(table, 0, 1));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(false);
     expect(
-      columnHitBoxes()[1]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(true);
   });
 
@@ -466,14 +456,10 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
     fireEvent.pointerMove(cellAt(table, 0, 1));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(false);
     expect(
-      columnHitBoxes()[1]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(true);
   });
 
@@ -485,14 +471,10 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
     fireEvent.pointerMove(cellAt(table, 0, 1));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(true);
     expect(
-      columnHitBoxes()[1]?.hasAttribute(
-        "data-geul-table-column-handle-active",
-      ),
+      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
     ).toBe(true);
   });
 });

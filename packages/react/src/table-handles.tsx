@@ -113,9 +113,7 @@ export const TableHandles = () => {
   const [selectionColumnId, setSelectionColumnId] = useState<string | null>(
     null,
   );
-  const [selectionTableId, setSelectionTableId] = useState<string | null>(
-    null,
-  );
+  const [selectionTableId, setSelectionTableId] = useState<string | null>(null);
   const updateSelectionTarget = useCallback(() => {
     const anchorNode = element?.ownerDocument.getSelection()?.anchorNode;
     // formatting-toolbar.tsx의 updateFromSelection과 같은 가드 — 선택이
@@ -138,8 +136,7 @@ export const TableHandles = () => {
     const columnElement =
       anchorElement?.closest<HTMLElement>("[data-geul-column-id]") ?? null;
     const tableElement =
-      anchorElement?.closest<HTMLElement>("table[data-geul-block-id]") ??
-      null;
+      anchorElement?.closest<HTMLElement>("table[data-geul-block-id]") ?? null;
     setSelectionRowId(rowElement?.getAttribute("data-geul-row-id") ?? null);
     setSelectionColumnId(
       columnElement?.getAttribute("data-geul-column-id") ?? null,
@@ -312,9 +309,7 @@ export const TableHandles = () => {
             target instanceof Element
               ? target.closest<HTMLElement>("[data-geul-block-id]")
               : null;
-          const targetBlockId = targetBlock?.getAttribute(
-            "data-geul-block-id",
-          );
+          const targetBlockId = targetBlock?.getAttribute("data-geul-block-id");
           if (
             targetBlockId !== undefined &&
             targetBlockId !== null &&
