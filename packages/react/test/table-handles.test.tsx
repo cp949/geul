@@ -284,11 +284,12 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
   // 일반 블록 gutter 정렬(사용자 스크린샷 지적 — "hello 행과 표 행의
   // Plus 좌우가 다르고 두 gutter가 정렬되지 않았다") — 코너 클러스터는
   // 이제 일반 gutter와 같은 좌표계를 쓴다: gutter 오프셋 56px +
-  // 표 들여쓰기 48px(_editor.scss margin-left: 3rem) = 104px가 바깥쪽
-  // (Grip, 일반 gutter의 드래그 핸들 자리)이고, 거기서 버튼 폭 24 +
-  // 간격 2를 더한 78px이 안쪽(Plus, 일반 gutter의 Plus 자리)이다. top은
-  // 표 상단이 아니라 첫 행 세로 중앙이다(사용자 스크린샷 지적 — "세로
-  // 위치가 테이블 첫번째 행과 안 맞아", table-handle-overlays.tsx의
+  // 표 들여쓰기 32px(_editor.scss margin-left: 2rem — 처음 쓴 3rem은
+  // "들여쓰기가 너무 많다"는 스크린샷 비교 지적으로 줄였다) = 88px가
+  // 바깥쪽(Grip, 일반 gutter의 드래그 핸들 자리)이고, 거기서 버튼 폭
+  // 24 + 간격 2를 더한 62px이 안쪽(Plus, 일반 gutter의 Plus 자리)이다.
+  // top은 표 상단이 아니라 첫 행 세로 중앙이다(사용자 스크린샷 지적 —
+  // "세로 위치가 테이블 첫번째 행과 안 맞아", table-handle-overlays.tsx의
   // cornerClusterTop) — DEFAULT_LAYOUT(top:100, rowHeight:30)의 첫 행은
   // top:100~130이라 중앙은 115, 버튼 높이(24)의 절반(12)을 빼면 103이다.
   it("코너 Plus·표 그립 버튼이 일반 블록 gutter와 같은 좌표계로, 첫 행 세로 중앙에 뜬다(정렬 회귀)", () => {
@@ -300,9 +301,9 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
       document.querySelector<HTMLElement>(selector)?.style;
 
     // 표 왼쪽 경계는 100, 첫 행은 top:100~130(DEFAULT_LAYOUT) — Grip(바깥,
-    // 왼쪽 104)이 Plus(안쪽, 왼쪽 78)보다 표에서 멀다.
-    expect(styleOf("[data-geul-table-grip]")?.left).toBe("-4px");
-    expect(styleOf("[data-geul-table-quick-insert]")?.left).toBe("22px");
+    // 왼쪽 88)이 Plus(안쪽, 왼쪽 62)보다 표에서 멀다.
+    expect(styleOf("[data-geul-table-grip]")?.left).toBe("12px");
+    expect(styleOf("[data-geul-table-quick-insert]")?.left).toBe("38px");
     expect(styleOf("[data-geul-table-grip]")?.top).toBe("103px");
     expect(styleOf("[data-geul-table-quick-insert]")?.top).toBe("103px");
   });

@@ -301,27 +301,27 @@ export const TableHandleOverlays = ({
           gutter는 블록 왼쪽 56px(BLOCK_GUTTER_HOVER_MARGIN)에 [드래그
           핸들, Plus] 순서로 뜬다 — 드래그(바깥)가 클릭하면 블록 메뉴를
           열고, Plus(안쪽, 블록에 더 가까움)는 그 블록 뒤에 새 블록을
-          삽입한다. 표는 _editor.scss의 margin-left: 3rem(48px, Notion
-          대비 사용자 지적 — 표를 일반 문단보다 들여 이 클러스터 자리를
-          확보한다)만큼 이미 오른쪽으로 밀려 있어, geometry.left(표
-          getBoundingClientRect().left, 들여쓰기 반영값) 기준 오프셋에
-          그 48px를 더해야 두 gutter가 같은 절대좌표에 정렬된다: 56+48=
-          104. 표 그립(클릭하면 표를 선택하고 TableGripMenu를 연다,
-          RD-003 — Select table 버튼(Issue #149) 대체)이 드래그 핸들과
-          같은 "바깥" 자리(-104)를, Plus(클릭하면 표 바로 뒤에 문단을
-          삽입하고 블록타입 선택 메뉴를 연다, onAddBlock,
-          table-handles.tsx의 handleAddBlockClick — block-side-menu.tsx의
-          handleAddBlockClick과 같은 계약이라 라벨도 dictionary.handle.
-          addBlock을 재사용한다)가 같은 "안쪽" 자리(-104+24+2=-78)를
-          맡는다 — 옛 순서(Plus 바깥·Grip 안쪽, RD-004)는 일반 gutter와
-          반대였다(사용자 스크린샷 지적, "hello 행과 표 행의 Plus
-          좌우가 다르다"). top은 표 상단이 아니라 cornerClusterTop(첫 행
-          세로 중앙, 위 선언부 주석)을 쓴다 — 표 위 대각선 자리(이전
+          삽입한다. 표는 _editor.scss의 margin-left: 2rem(32px, "들여쓰기가
+          너무 많다"는 스크린샷 비교 지적으로 3rem에서 줄였다)만큼 이미
+          오른쪽으로 밀려 있어, geometry.left(표 getBoundingClientRect().
+          left, 들여쓰기 반영값) 기준 오프셋에 그 32px를 더해야 두 gutter가
+          같은 절대좌표에 정렬된다: 56+32=88. 표 그립(클릭하면 표를
+          선택하고 TableGripMenu를 연다, RD-003 — Select table 버튼(Issue
+          #149) 대체)이 드래그 핸들과 같은 "바깥" 자리(-88)를, Plus(클릭하면
+          표 바로 뒤에 문단을 삽입하고 블록타입 선택 메뉴를 연다,
+          onAddBlock, table-handles.tsx의 handleAddBlockClick —
+          block-side-menu.tsx의 handleAddBlockClick과 같은 계약이라 라벨도
+          dictionary.handle.addBlock을 재사용한다)가 같은 "안쪽" 자리
+          (-88+24+2=-62)를 맡는다 — 옛 순서(Plus 바깥·Grip 안쪽, RD-004)는
+          일반 gutter와 반대였다(사용자 스크린샷 지적, "hello 행과 표 행의
+          Plus 좌우가 다르다"). top은 표 상단이 아니라 cornerClusterTop(첫
+          행 세로 중앙, 위 선언부 주석)을 쓴다 — 표 위 대각선 자리(이전
           top - 28)는 Notion과 달랐다(사용자 스크린샷 지적, "세로 위치가
           테이블 첫번째 행과 안 맞아"). 같은 높이가 된 row handle hit
           box(아래 첫 주석, 왼쪽 -18~+12)와는 x축이 겹치지 않아(이 클러스터
-          오른쪽 끝은 -54) 여전히 서로 가리지 않는다 — 겹침 회피 축이
-          세로에서 가로로 바뀌었을 뿐이다. */}
+          오른쪽 끝은 -38 — margin-left를 12px 밑으로 더 줄이면 이 20px
+          여백이 없어져 겹친다) 여전히 서로 가리지 않는다 — 겹침 회피
+          축이 세로에서 가로로 바뀌었을 뿐이다. */}
       <IconButton
         className={nestingButtonClassName}
         data-geul-table-grip=""
@@ -330,7 +330,7 @@ export const TableHandleOverlays = ({
         onClick={onTableGripClick}
         style={{
           position: "absolute",
-          left: geometry.left - 104,
+          left: geometry.left - 88,
           top: cornerClusterTop,
         }}
       />
@@ -342,7 +342,7 @@ export const TableHandleOverlays = ({
         onClick={onAddBlock}
         style={{
           position: "absolute",
-          left: geometry.left - 78,
+          left: geometry.left - 62,
           top: cornerClusterTop,
         }}
       />

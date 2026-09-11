@@ -121,11 +121,12 @@ describe("SCSS 빌드 파이프라인", () => {
     // table-handle-overlays.tsx가 Plus·표 그립 버튼을 geometry.left(=표
     // getBoundingClientRect().left, live DOM 측정) 기준 절대좌표로 그린다 —
     // margin-left를 주면 geometry.left가 그만큼 밀리며 그 오프셋도 그대로
-    // 따라와 별도 좌표 수정이 필요 없다. 3rem(48px)은 일반 블록
+    // 따라와 별도 좌표 수정이 필요 없다. 2rem(32px, 처음 쓴 3rem은 "들여쓰기가
+    // 너무 많다"는 스크린샷 비교 지적으로 줄였다)은 일반 블록
     // gutter(block-side-menu.tsx, BLOCK_GUTTER_HOVER_MARGIN=56px)와 코너
     // 클러스터를 같은 절대좌표에 정렬하는 값이다 — 정확한 오프셋 산출은
     // table-handle-overlays.tsx 주석과 table-handles.test.tsx가 소유한다.
-    expect(rule).toContain("margin-left: 3rem;");
+    expect(rule).toContain("margin-left: 2rem;");
   });
 
   it("표 코너 Plus·그립 버튼을 일반 블록 gutter 버튼과 같은 크기로 그린다(Notion 대비 사용자 지적 — hello 행과 표 행의 버튼 크기가 달라 보였다)", () => {

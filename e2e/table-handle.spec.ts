@@ -530,11 +530,12 @@ test("표 바로 아래 블록으로 마우스가 넘어가면 Add row rail이 �
   // hoverTableId 자체가 풀리며 클러스터 전체가 사라지므로, 이 테스트가
   // 노리는 "여백 안이지만 다른 블록" 경로를 못 탄다.
   //
-  // x: 58 — 표는 margin-left: 3rem(48px, _editor.scss)만큼 문단보다
+  // x: 42 — 표는 margin-left: 2rem(32px, _editor.scss — 처음 쓴 3rem은
+  // "들여쓰기가 너무 많다"는 스크린샷 비교 지적으로 줄였다)만큼 문단보다
   // 오른쪽에서 시작한다(Notion 대비 사용자 지적, 표 코너 Plus·그립 버튼
   // 자리 확보). HANDLE_HOVER_MARGIN이 표의 실제 rect.left 기준이라, 표
-  // 들여쓰기 전 좌표였던 x:10은 이제 여백(rect.left-28=20) 밖으로 밀려나
-  // hoverTableId까지 통째로 풀린다(재현 대상 경로 자체를 못 탐). 48(표
+  // 들여쓰기 전 좌표였던 x:10은 여백(rect.left-28) 밖으로 밀려나
+  // hoverTableId까지 통째로 풀린다(재현 대상 경로 자체를 못 탐). 32(표
   // 왼쪽 끝) + 10으로 원래 좌표의 "10px 안쪽" 의도를 표의 새 왼쪽 끝
   // 기준으로 그대로 옮긴다.
   const { editable } = await openDemo(page);
@@ -549,7 +550,7 @@ test("표 바로 아래 블록으로 마우스가 넘어가면 Add row rail이 �
   await editable
     .locator("p")
     .last()
-    .hover({ position: { x: 58, y: 2 } });
+    .hover({ position: { x: 42, y: 2 } });
   await expect(addRowButton).toHaveCSS("opacity", "0");
 });
 
