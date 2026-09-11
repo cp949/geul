@@ -1,9 +1,9 @@
 /**
  * 표 키보드 확장의 핸들러 단위 계약을 검증한다. Tab/Shift+Tab 셀 탐색,
  * 셀 안 Enter의 아래 행 이동·마지막 행 no-op·무조건 소비, Shift+Enter
- * 소비와 stale DOM selection 재동기화(G-EDT-002)를 다룬다. 실 keymap 체인
- * 폴스루 회귀는 editor-controller-table.test.ts가 마운트 keydown으로
- * 고정한다.
+ * 소비와 stale DOM selection 재동기화(G-EDT-002), 화살표 단독 키의 표 안
+ * 캐럿 이동(경계 판정·셀 넘김·표 밖 탈출)을 다룬다. 실 keymap 체인 폴스루
+ * 회귀는 editor-controller-table.test.ts가 마운트 keydown으로 고정한다.
  */
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
@@ -13,11 +13,13 @@ import {
   goToNextTableCellOrInsertRow,
   goToPreviousTableCell,
   goToTableCellBelow,
+  moveTableCellCaret,
 } from "../src/table-keyboard-extension.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import { withNativeCaret } from "./native-selection-test-support.js";
 import {
   activeCellId,
+  cellJson,
   createTableFixtureEditor,
   docWithMergedTable,
   docWithParagraph,
@@ -40,6 +42,63 @@ const docWithTableAndParagraph = {
       type: "paragraph",
       attrs: { blockId: "para-1" },
       content: [{ type: "text", text: "after table" }],
+    },
+  ],
+};
+
+/**
+ * 표 앞뒤에 문단을 하나씩 둔 문서 — 화살표가 표 경계(첫 행 위/첫 열 왼쪽,
+ * 마지막 행 아래/마지막 열 오른쪽)에서 표 밖으로 캐럿을 내보내는지
+ * 재현한다.
+ */
+const docWithParagraphsAroundTable = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      attrs: { blockId: "para-before" },
+      content: [{ type: "text", text: "before table" }],
+    },
+    docWithTwoRowTable.content?.[0] as Record<string, unknown>,
+    {
+      type: "paragraph",
+      attrs: { blockId: "para-after" },
+      content: [{ type: "text", text: "after table" }],
+    },
+  ],
+};
+
+/** 셀 하나("cell-1")에 텍스트가 있는 1행 2열 표 — 셀 경계가 아닌 캐럿(줄
+ * 가운데) 판정과, 실제 텍스트가 있는 셀에서 세로 화살표가 레이아웃 계산
+ * 실패(jsdom) 시에도 예외 없이 처리되는지 재현한다.
+ */
+const docWithTextInCell = {
+  type: "doc",
+  content: [
+    {
+      type: "table",
+      attrs: {
+        blockId: "table-1",
+        columns: [
+          { id: "col-1", width: 160 },
+          { id: "col-2", width: 160 },
+        ],
+        headerRows: 0,
+        headerColumns: 0,
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: { rowId: "row-1" },
+          content: [
+            {
+              ...cellJson("cell-1", "col-1"),
+              content: [{ type: "text", text: "ab" }],
+            },
+            cellJson("cell-2", "col-2"),
+          ],
+        },
+      ],
     },
   ],
 };
@@ -409,5 +468,140 @@ describe("셀 Enter와 Shift+Enter", () => {
       },
       textNode,
     );
+  });
+});
+
+describe("화살표 키 표 안 이동", () => {
+  it("1행1열에서 ArrowDown은 같은 열 다음 행(2행1열)으로 이동한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+
+    expect(moveTableCellCaret(editor, "vert", 1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-3");
+  });
+
+  it("2행1열에서 ArrowUp은 같은 열 이전 행(1행1열)으로 이동한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-3");
+
+    expect(moveTableCellCaret(editor, "vert", -1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-1");
+  });
+
+  it("표의 첫 행에서 ArrowUp은 표 앞 문단으로 캐럿을 내보낸다", () => {
+    const editor = createTableFixtureEditor(docWithParagraphsAroundTable);
+    placeCaretInCell(editor, "cell-1");
+
+    expect(moveTableCellCaret(editor, "vert", -1)).toBe(true);
+    expect(activeCellId(editor)).toBeNull();
+    expect(editor.state.selection.$from.parent.textContent).toBe(
+      "before table",
+    );
+  });
+
+  it("표의 마지막 행에서 ArrowDown은 표 뒤 문단으로 캐럿을 내보낸다", () => {
+    const editor = createTableFixtureEditor(docWithParagraphsAroundTable);
+    placeCaretInCell(editor, "cell-4");
+
+    expect(moveTableCellCaret(editor, "vert", 1)).toBe(true);
+    expect(activeCellId(editor)).toBeNull();
+    expect(editor.state.selection.$from.parent.textContent).toBe("after table");
+  });
+
+  it("같은 행에서 ArrowRight/ArrowLeft는 인접 셀로 이동한다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+
+    expect(moveTableCellCaret(editor, "horiz", 1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-2");
+
+    expect(moveTableCellCaret(editor, "horiz", -1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-1");
+  });
+
+  it("행의 마지막 셀에서 ArrowRight는 다음 행 첫 셀로 넘어간다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-2");
+
+    expect(moveTableCellCaret(editor, "horiz", 1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-3");
+  });
+
+  it("행의 첫 셀에서 ArrowLeft는 이전 행 마지막 셀로 넘어간다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-3");
+
+    expect(moveTableCellCaret(editor, "horiz", -1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-2");
+  });
+
+  it("표의 첫 칸에서 ArrowLeft, 마지막 칸에서 ArrowRight는 표 밖으로 캐럿을 내보낸다", () => {
+    const editor = createTableFixtureEditor(docWithParagraphsAroundTable);
+    placeCaretInCell(editor, "cell-1");
+    expect(moveTableCellCaret(editor, "horiz", -1)).toBe(true);
+    expect(editor.state.selection.$from.parent.textContent).toBe(
+      "before table",
+    );
+
+    const editor2 = createTableFixtureEditor(docWithParagraphsAroundTable);
+    placeCaretInCell(editor2, "cell-4");
+    expect(moveTableCellCaret(editor2, "horiz", 1)).toBe(true);
+    expect(editor2.state.selection.$from.parent.textContent).toBe(
+      "after table",
+    );
+  });
+
+  it("캐럿이 셀 경계가 아니면(줄 가운데) 개입하지 않고 false를 반환한다", () => {
+    const editor = createTableFixtureEditor(docWithTextInCell);
+    const boundary = findCellBoundaryPosition(editor, "cell-1");
+    if (boundary === null) throw new Error("셀 fixture 준비 실패");
+    // "ab" 가운데(a와 b 사이) — 시작도 끝도 아니다.
+    editor.commands.setTextSelection(boundary + 2);
+    const dispatchSpy = vi.spyOn(editor.view, "dispatch");
+
+    expect(moveTableCellCaret(editor, "horiz", -1)).toBe(false);
+    expect(moveTableCellCaret(editor, "horiz", 1)).toBe(false);
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    dispatchSpy.mockRestore();
+  });
+
+  it("텍스트가 있는 셀에서 세로 화살표는 레이아웃 계산 실패(jsdom) 시에도 예외 없이 false를 반환한다", () => {
+    const editor = createTableFixtureEditor(docWithTextInCell);
+    const boundary = findCellBoundaryPosition(editor, "cell-1");
+    if (boundary === null) throw new Error("셀 fixture 준비 실패");
+    // 셀의 시작("ab" 앞) — 실제 브라우저라면 endOfTextblock("up")이 검사할
+    // 위치지만, jsdom은 Range.getClientRects가 없어 그 계산이 던진다
+    // (atEndOfTableCell이 잡아 null로 접는다).
+    editor.commands.setTextSelection(boundary + 1);
+    const dispatchSpy = vi.spyOn(editor.view, "dispatch");
+
+    expect(() => moveTableCellCaret(editor, "vert", -1)).not.toThrow();
+    expect(moveTableCellCaret(editor, "vert", -1)).toBe(false);
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    dispatchSpy.mockRestore();
+  });
+
+  it("CellSelection 위 화살표는 헤드 셀 기준으로 캐럿을 접는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    selectCellRange(editor, "cell-1", "cell-2");
+
+    expect(moveTableCellCaret(editor, "horiz", 1)).toBe(true);
+    expect(activeCellId(editor)).toBe("cell-2");
+  });
+
+  it("표 밖에서는 아무 것도 하지 않고 false를 반환한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const dispatchSpy = vi.spyOn(editor.view, "dispatch");
+
+    expect(moveTableCellCaret(editor, "vert", 1)).toBe(false);
+    expect(moveTableCellCaret(editor, "vert", -1)).toBe(false);
+    expect(moveTableCellCaret(editor, "horiz", 1)).toBe(false);
+    expect(moveTableCellCaret(editor, "horiz", -1)).toBe(false);
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    dispatchSpy.mockRestore();
   });
 });
