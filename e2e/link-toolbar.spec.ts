@@ -174,7 +174,7 @@ test("선택 영역이 뷰포트 하단에 붙어 있어도 Add link 버튼을 �
 test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오른쪽을 넘지 않는다 (PIT-0011)", async ({
   page,
 }) => {
-  // editing 모드 툴바(입력 224px + Save/Cancel, 약 350px)는 들어가되 본문
+  // editing 모드 툴바(입력 224px + Save/Cancel icon 버튼)는 들어가되 본문
   // 오른쪽 끝이 뷰포트 오른쪽 여백에 닿도록 뷰포트를 좁힌다.
   const viewportWidth = 900;
   await page.setViewportSize({ height: 720, width: viewportWidth });
@@ -230,7 +230,7 @@ test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오�
   const linkInput = page.getByRole("textbox", { name: "Link URL" });
   await expect(linkInput).toBeVisible();
 
-  // editing 모드로 박스가 약 80px -> 350px로 커진다. centerBelow 앵커라
+  // editing 모드로 박스 폭이 크게 커진다(입력 + Save/Cancel icon 버튼). centerBelow 앵커라
   // 증가폭의 절반이 오른쪽으로 밀리므로, 크기 변화를 다시 클램프하지 않으면
   // 뷰포트 오른쪽으로 넘쳐 나간다(PIT-0011).
   await expect

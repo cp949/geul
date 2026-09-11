@@ -1,5 +1,12 @@
 import type { EditorController } from "@cp949/geul-core";
-import { Check, X } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  LucideProvider,
+  Pencil,
+  Unlink,
+  X,
+} from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -16,8 +23,17 @@ import { useSelectionRefresh } from "./use-selection-refresh.js";
 // top-level에서 한 번만 만든다 — 매 렌더 새 ReactElement를 만들지 않는다.
 const saveLinkIcon = <Check {...iconProps} />;
 const cancelLinkIcon = <X {...iconProps} />;
+const openLinkIcon = <ExternalLink {...iconProps} />;
+const editLinkIcon = <Pencil {...iconProps} />;
+const removeLinkIcon = <Unlink {...iconProps} />;
 
 const linkToolbarButtonClassName = "geul-link-toolbar__button";
+// IconButton과 같은 시각 계약(icon-button.tsx)이지만 Open link는 `<a>`라
+// IconButton(<button> 전용) 대신 직접 조립한다 — href/target/rel로 실제
+// 새 탭 열기·우클릭 컨텍스트 메뉴(링크 복사 등)를 유지해야 해서 button+
+// window.open으로 대체할 수 없다.
+const linkToolbarIconButtonClassName =
+  "geul-icon-button geul-link-toolbar__icon-button";
 
 // view 모드 툴바 자신을 allow-list에 넣는다 — 안 그러면 Open/Edit/Remove
 // 버튼 pointerdown이 "바깥 클릭"으로 잡혀 버튼 자신의 onClick보다 먼저
@@ -278,32 +294,27 @@ export const LinkToolbar = ({
         <>
           <a
             aria-label={dictionary.toolbar.link.openLink}
-            className={linkToolbarButtonClassName}
+            className={linkToolbarIconButtonClassName}
             href={toolbarState.href}
             onMouseDown={(event) => event.preventDefault()}
             rel="noreferrer"
             target="_blank"
+            title={dictionary.toolbar.link.openLink}
           >
-            {dictionary.toolbar.link.openLink}
+            <LucideProvider>{openLinkIcon}</LucideProvider>
           </a>
-          <button
-            aria-label={dictionary.toolbar.link.editLink}
-            className={linkToolbarButtonClassName}
+          <IconButton
+            className="geul-link-toolbar__icon-button"
+            icon={editLinkIcon}
+            label={dictionary.toolbar.link.editLink}
             onClick={startEditing}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.link.editLink}
-          </button>
-          <button
-            aria-label={dictionary.toolbar.link.removeLink}
-            className={linkToolbarButtonClassName}
+          />
+          <IconButton
+            className="geul-link-toolbar__icon-button"
+            icon={removeLinkIcon}
+            label={dictionary.toolbar.link.removeLink}
             onClick={removeLink}
-            onMouseDown={(event) => event.preventDefault()}
-            type="button"
-          >
-            {dictionary.toolbar.link.removeLink}
-          </button>
+          />
         </>
       )}
       {toolbarState.mode === "editing" && (
