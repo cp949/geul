@@ -3,18 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/preview.css"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./preview.css": "./dist/preview.css"
   },
   "files": [
     "dist"
   ],
+  "browserslist": [
+    "Chrome >= 75"
+  ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && cp src/preview.css dist/preview.css",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run --root ../.. packages/io/test"
   },

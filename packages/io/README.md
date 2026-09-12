@@ -78,3 +78,19 @@ exportMarkdown(document, {
   },
 });
 ```
+
+## exportHtml() 출력 미리보기 CSS
+
+`exportHtml()`이 만드는 정적 HTML(semantic p/ul/li/pre/table/figure 등)은 스타일이 없는 순수 마크업이다. `@cp949/geul-react`의 `styles.css`는 라이브 에디터 DOM 전용이라 이 출력에는 적용되지 않는다 — `@cp949/geul-io`가 제공하는 `preview.css`를 별도로 import한다.
+
+```ts
+import "@cp949/geul-io/preview.css";
+```
+
+루트 요소에 `geul-preview` 클래스를 붙이면 헤딩·문단·blockquote·목록(체크리스트 포함)·코드블록·표·`<hr>`·링크·`<details>`/`<summary>`·미디어(기본 중앙 정렬, `data-geul-text-alignment` left/right override)까지 `exportHtml()` 출력 전체에 기본 톤이 적용된다.
+
+```tsx
+<div className="geul-preview" dangerouslySetInnerHTML={{ __html: html }} />
+```
+
+다크 모드는 아직 지원하지 않는다. 텍스트 블록(문단/헤딩/인용/목록) 단위 `textColor`/`backgroundColor`/`textAlignment` 인라인 커스터마이징은 `exportHtml()`이 `data-geul-*` 속성만 내보내고 인라인 style은 내보내지 않으므로(범위 밖, 별도 결정 필요) 이 CSS가 다루지 않는다 — 값을 직접 `style`로 투영하는 후처리가 필요하면 소비자가 구현한다.
