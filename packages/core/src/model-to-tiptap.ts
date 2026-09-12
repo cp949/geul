@@ -300,10 +300,27 @@ const markToTiptapAny = (mark: TextMark | CustomTextMark): TiptapJsonMark =>
         attrs: { props: (mark as CustomTextMark).props ?? null },
       };
 
+// CodeBlock 전용 — hardBreak로 나누지 않는다. codeBlock의 PM content
+// expression은 "text*"(code: true)라 hardBreak(inline 그룹)를 받지
+// 않는다 — 리터럴 `\n`을 text 노드 안에 그대로 두는 것 자체가 codeBlock의
+// 정규 표현이다(Tiptap 코어 keymap의 newlineInCode 폴백과 같은 표현,
+// RD-001 "결정"). CodeBlock.content는 항상 순수 텍스트 런이라 마크·커스텀
+// inline 원소를 다루지 않는다(codeBlockFromTiptap의 "text 아니면 거절"과
+// 대칭).
+const inlineContentToTiptapPlain = (content: InlineContent): TiptapJsonNode[] =>
+  content.map((item) => {
+    if (!isTextRunItem(item)) {
+      throw new TypeError(
+        `CodeBlock content must be plain text runs, got custom inline type "${item.customType}"`,
+      );
+    }
+    return { type: "text", text: item.text };
+  });
+
 export const inlineContentToTiptap = (
   content: InlineContent,
 ): TiptapJsonNode[] =>
-  content.map((item) => {
+  content.flatMap((item) => {
     // 계약: validateEditableContent(inlineContentViolation)가 이 시점
     // 이전에 이미 미등록 커스텀 inline 원소·CustomTextMark를
     // EDITOR_FEATURE_UNAVAILABLE로 거절했다는 전제 위에서 동작한다
@@ -317,19 +334,42 @@ export const inlineContentToTiptap = (
     // CustomBlock의 등록 여부를 modelToTiptap 앞단에만 맡기는 것과 같은
     // 설계(그 함수도 등록 여부를 재확인하지 않는다).
     if (!isTextRunItem(item)) {
-      return {
-        type: item.customType,
-        attrs: { props: item.props ?? null },
-      };
+      return [
+        {
+          type: item.customType,
+          attrs: { props: item.props ?? null },
+        },
+      ];
     }
     const run = item;
-    return {
-      type: "text",
-      text: run.text,
-      ...(run.marks === undefined
-        ? {}
-        : { marks: run.marks.map(markToTiptapAny) }),
-    };
+    const marks =
+      run.marks === undefined ? undefined : run.marks.map(markToTiptapAny);
+
+    // hardBreak(RD-001): model은 텍스트 런 안에 `\n`을 그대로 담지만 PM은
+    // hardBreak를 "text"와 별개인 노드로 요구한다(스키마 content
+    // expression이 리터럴 개행을 포함한 text 노드를 허용하지 않는다).
+    // `\n` 경계로 세그먼트를 나눠 그 사이에 hardBreak 노드를 끼워 넣는다
+    // — 빈 세그먼트(연속 `\n`)는 text 노드를 만들지 않고 건너뛴다. 마크는
+    // 원본 런의 것을 세그먼트 text 노드와 hardBreak 노드 모두에 적용해
+    // "굵게 처리된 줄바꿈"도 원본 그대로 되돌아오게 한다.
+    const segments = run.text.split("\n");
+    return segments.flatMap((segment, index) => {
+      const nodes: TiptapJsonNode[] = [];
+      if (segment.length > 0) {
+        nodes.push({
+          type: "text",
+          text: segment,
+          ...(marks === undefined ? {} : { marks }),
+        });
+      }
+      if (index < segments.length - 1) {
+        nodes.push({
+          type: "hardBreak",
+          ...(marks === undefined ? {} : { marks }),
+        });
+      }
+      return nodes;
+    });
   });
 
 // G-TBL-001: 저장 배열 순서는 논리 열 순서의 권위가 아니다. ProseMirror 표는
@@ -417,7 +457,7 @@ const blockContentToTiptapJson = (
 const codeBlockContentToTiptapJson = (block: CodeBlock): TiptapJsonNode => ({
   type: "codeBlock",
   attrs: { language: block.language ?? null },
-  content: inlineContentToTiptap(block.content),
+  content: inlineContentToTiptapPlain(block.content),
 });
 
 // 4종 미디어 블록(file/image/video/audio) 인코딩(RD-002 DELTA-01, spec

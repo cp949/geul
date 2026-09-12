@@ -9,8 +9,11 @@ import {
   type IdFactory,
   type InlineContent,
   type InlineContentItem,
+  isKnownTextMarkType,
+  isTextRunItem,
   parseDocument,
   type Result,
+  sameMarks,
   type TableBlock,
   type TextBlockProps,
   type TextMark,
@@ -62,7 +65,75 @@ const inlineContentFromTiptap = (
 ): Result<InlineContent, EditorError> => {
   const content: InlineContent = [];
 
+  // 등록된 커스텀 마크(RD-002-DELTA-19)는 canonicalizeTextMarks(model,
+  // TextMark 전용)를 거치지 않는다 — model의 schema.ts::validateContent가
+  // 이미 CustomTextMark를 canonical 순서 판정에서 제외해 저장 순서를
+  // 강제하지 않으므로(RD-002-DELTA-19 "결정" 2), 알려진 마크만 정규
+  // 순서로 만들고 커스텀 마크는 PM이 준 순서 그대로 뒤에 붙인다. "text"와
+  // "hardBreak"(RD-001) 두 노드 타입이 이 마크 디코드를 공유한다.
+  const decodeMarks = (
+    nodeMarks: TiptapJsonMark[] | undefined,
+  ): Result<{ known: TextMark[]; custom: CustomTextMark[] }, EditorError> => {
+    const marks: TextMark[] = [];
+    const customMarks: CustomTextMark[] = [];
+    for (const mark of nodeMarks ?? []) {
+      if (typeof mark.type === "string" && customStyleTypes.has(mark.type)) {
+        const props = mark.attrs?.props;
+        customMarks.push({
+          type: mark.type,
+          ...(props !== null && props !== undefined
+            ? { props: props as NonNullable<CustomTextMark["props"]> }
+            : {}),
+        });
+        continue;
+      }
+      const converted = markFromTiptap(mark);
+      if (!converted.ok) return converted;
+      marks.push(converted.value);
+    }
+    return { ok: true, value: { known: marks, custom: customMarks } };
+  };
+
+  // hardBreak(RD-001)는 PM에서 "text"와 별개 노드라 앞뒤 텍스트와 자동으로
+  // 합쳐지지 않는다(PM은 인접한 "text" 노드끼리만, 마크가 같을 때 자동
+  // 병합한다). model은 이 구분이 없어 하나의 텍스트 런 안에 `\n`을 담으므로,
+  // hardBreak를 만났을 때 직전 항목과 마크가 같으면 합쳐 원본 런 경계를
+  // 되살린다. 커스텀 마크가 한쪽에라도 있으면 합치지 않는다 — sameMarks는
+  // TextMark 전용이라 CustomTextMark 비교 계약이 없다(RD-001 "남은 위험":
+  // 커스텀 마크가 hardBreak에 걸쳐 있으면 병합되지 않은 채 유효하게
+  // 남는다, 왕복 등식은 깨지지만 스키마 위반은 아니다).
+  const pushRun = (
+    text: string,
+    known: TextMark[],
+    custom: CustomTextMark[],
+  ) => {
+    const previous = content[content.length - 1];
+    if (
+      custom.length === 0 &&
+      previous !== undefined &&
+      isTextRunItem(previous) &&
+      (previous.marks ?? []).every((mark) =>
+        isKnownTextMarkType(mark.type),
+      ) &&
+      sameMarks(previous.marks as TextMark[] | undefined, known)
+    ) {
+      previous.text += text;
+      return;
+    }
+    const allMarks: Array<TextMark | CustomTextMark> = [
+      ...canonicalizeTextMarks(known),
+      ...custom,
+    ];
+    content.push(allMarks.length === 0 ? { text } : { text, marks: allMarks });
+  };
+
   for (const node of nodes ?? []) {
+    if (node.type === "hardBreak") {
+      const decoded = decodeMarks(node.marks);
+      if (!decoded.ok) return decoded;
+      pushRun("\n", decoded.value.known, decoded.value.custom);
+      continue;
+    }
     if (node.type !== "text") {
       if (
         typeof node.type === "string" &&
@@ -88,37 +159,9 @@ const inlineContentFromTiptap = (
       return invalid(`Unsupported inline node: ${String(node.type)}`);
     }
 
-    // 등록된 커스텀 마크(RD-002-DELTA-19)는 canonicalizeTextMarks(model,
-    // TextMark 전용)를 거치지 않는다 — model의 schema.ts::validateContent가
-    // 이미 CustomTextMark를 canonical 순서 판정에서 제외해 저장 순서를
-    // 강제하지 않으므로(RD-002-DELTA-19 "결정" 2), 알려진 마크만 정규
-    // 순서로 만들고 커스텀 마크는 PM이 준 순서 그대로 뒤에 붙인다.
-    const marks: TextMark[] = [];
-    const customMarks: CustomTextMark[] = [];
-    for (const mark of node.marks ?? []) {
-      if (typeof mark.type === "string" && customStyleTypes.has(mark.type)) {
-        const props = mark.attrs?.props;
-        customMarks.push({
-          type: mark.type,
-          ...(props !== null && props !== undefined
-            ? { props: props as NonNullable<CustomTextMark["props"]> }
-            : {}),
-        });
-        continue;
-      }
-      const converted = markFromTiptap(mark);
-      if (!converted.ok) return converted;
-      marks.push(converted.value);
-    }
-
-    const allMarks: Array<TextMark | CustomTextMark> = [
-      ...canonicalizeTextMarks(marks),
-      ...customMarks,
-    ];
-    content.push({
-      text: node.text,
-      ...(allMarks.length === 0 ? {} : { marks: allMarks }),
-    });
+    const decoded = decodeMarks(node.marks);
+    if (!decoded.ok) return decoded;
+    pushRun(node.text, decoded.value.known, decoded.value.custom);
   }
 
   return { ok: true, value: content };

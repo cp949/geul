@@ -152,6 +152,25 @@ const HeadingExtension = Node.create({
   },
 });
 
+// hardBreak(RD-001) — StarterKit 기본 hardBreak는 자체 Shift-Enter/Mod-Enter
+// 키맵을 갖고 있어 블록별로 소유해야 할 계약(h1 예외, table cell 계약
+// 등, RD-002/RD-003)을 이 DELTA가 미리 침범하게 된다 — paragraph/heading과
+// 같은 이유로 최소 노드를 직접 둔다. addKeyboardShortcuts가 없어 이
+// DELTA는 어떤 키 입력도 새로 소비하지 않는다(behavior-neutral, 노드
+// 등록만 한다).
+const HardBreakExtension = Node.create({
+  name: "hardBreak",
+  group: "inline",
+  inline: true,
+  selectable: false,
+  parseHTML() {
+    return [{ tag: "br" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["br", mergeAttributes(HTMLAttributes)];
+  },
+});
+
 // 목록 content node의 내부 DOM은 공개 HTML 변환 계약이 아니다. production
 // EditorView가 inline content를 그릴 최소 div만 제공하고 parseHTML은 열지
 // 않는다. 상태(checked/startNumber/collapsed)는 rendered: false라 PM
@@ -431,6 +450,7 @@ export const createProductionEditor = (options: {
       }),
       TextColorMark,
       BackgroundColorMark,
+      HardBreakExtension,
       // enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12) — 각 block
       // type을 정의하는 "주 확장"만 조건부로 넣는다. input rule·keyboard·
       // marker 등 "보조 확장"(ListInputRuleExtension 등, 아래 그대로 무조건

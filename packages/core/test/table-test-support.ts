@@ -81,6 +81,25 @@ const FixtureHeadingExtension = Node.create({
   },
 });
 
+// hardBreak(RD-001) — production-editor-assembly.ts의 HardBreakExtension과
+// 같은 이유로 이 파일이 독립 소유한다(위 FixtureParagraphExtension/
+// FixtureHeadingExtension과 동일 근거: 모듈 비공개 const라 가져올 수 없다).
+// paste 병합(table-paste-sequence.ts)이 여러 문단 텍스트를 `\n`으로 합쳐
+// inlineContentToTiptap에 넘기므로 이 fixture 스키마도 hardBreak를 알아야
+// schema.nodeFromJSON이 던지지 않는다.
+const FixtureHardBreakExtension = Node.create({
+  name: "hardBreak",
+  group: "inline",
+  inline: true,
+  selectable: false,
+  parseHTML() {
+    return [{ tag: "br" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["br", mergeAttributes(HTMLAttributes)];
+  },
+});
+
 // list-item-extension.ts의 bulletListItem/numberedListItem은 DOM 표현
 // (renderHTML)이 없다 — production-editor-assembly.ts의
 // ProductionBulletListItemExtension/ProductionNumberedListItemExtension이
@@ -187,6 +206,7 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
   }),
   FixtureParagraphExtension,
   FixtureHeadingExtension,
+  FixtureHardBreakExtension,
   // 표 fixture 스키마가 production과 같은 인라인 mark 집합을 갖게 한다 —
   // table-model-codec.ts의 표 셀 라이브 PM 노드 경로(RD-001 DELTA-02)가
   // textColor/backgroundColor mark를 다루므로 이 스키마도 그 mark를 알아야

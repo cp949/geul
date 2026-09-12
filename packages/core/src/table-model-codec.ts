@@ -7,9 +7,11 @@ import type {
 import {
   canonicalizeTextMarks,
   decodeTextMark,
+  isTextRunItem,
   parseDocument,
+  sameMarks,
 } from "@cp949/geul-model";
-import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
+import type { Mark, Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
 import { TableMap } from "@tiptap/pm/tables";
 
 import { tableBlockToTiptapJson } from "./model-to-tiptap.js";
@@ -62,45 +64,71 @@ export const tableCellFieldsFromAttrs = (
     : {}),
 });
 
+const marksFromNode = (
+  pmMarks: readonly Mark[],
+): Result<TextMark[], TableCodecError> => {
+  const marks: TextMark[] = [];
+  for (const mark of pmMarks) {
+    const decoded = decodeTextMark({
+      type: mark.type.name,
+      href: mark.attrs.href,
+      color: mark.attrs.color,
+    });
+    if (!decoded.ok) {
+      return {
+        ok: false,
+        error: { code: "TABLE_NODE_INVALID", message: decoded.error },
+      };
+    }
+    marks.push(decoded.value);
+  }
+  return { ok: true, value: canonicalizeTextMarks(marks) };
+};
+
 const inlineContentFromNode = (
   cellNode: ProseMirrorNode,
 ): Result<InlineContent, TableCodecError> => {
   const content: InlineContent = [];
-  const textNodes: ProseMirrorNode[] = [];
-  cellNode.content.forEach((child) => textNodes.push(child));
+  const children: ProseMirrorNode[] = [];
+  cellNode.content.forEach((child) => children.push(child));
 
-  for (const textNode of textNodes) {
-    if (!textNode.isText || textNode.text === undefined) {
+  // hardBreak(RD-001)는 PM에서 "text"와 별개 노드라 인접 text와 자동
+  // 병합되지 않는다. 직전 항목과 마크가 같으면 합쳐 원본 텍스트 런
+  // 경계를 되살린다 — tiptap-to-model.ts::inlineContentFromTiptap의
+  // pushRun과 같은 계약(그쪽은 JSON, 이쪽은 라이브 PM 노드).
+  const pushRun = (text: string, marks: TextMark[]) => {
+    const previous = content[content.length - 1];
+    if (
+      previous !== undefined &&
+      isTextRunItem(previous) &&
+      sameMarks(previous.marks as TextMark[] | undefined, marks)
+    ) {
+      previous.text += text;
+      return;
+    }
+    content.push(marks.length === 0 ? { text } : { text, marks });
+  };
+
+  for (const child of children) {
+    if (child.type.name === "hardBreak") {
+      const decoded = marksFromNode(child.marks);
+      if (!decoded.ok) return decoded;
+      pushRun("\n", decoded.value);
+      continue;
+    }
+    if (!child.isText || child.text === undefined) {
       return {
         ok: false,
         error: {
           code: "TABLE_NODE_INVALID",
-          message: `Unsupported inline node: ${textNode.type.name}`,
+          message: `Unsupported inline node: ${child.type.name}`,
         },
       };
     }
 
-    const marks: TextMark[] = [];
-    for (const mark of textNode.marks) {
-      const decoded = decodeTextMark({
-        type: mark.type.name,
-        href: mark.attrs.href,
-        color: mark.attrs.color,
-      });
-      if (!decoded.ok) {
-        return {
-          ok: false,
-          error: { code: "TABLE_NODE_INVALID", message: decoded.error },
-        };
-      }
-      marks.push(decoded.value);
-    }
-
-    const canonicalMarks = canonicalizeTextMarks(marks);
-    content.push({
-      text: textNode.text,
-      ...(canonicalMarks.length === 0 ? {} : { marks: canonicalMarks }),
-    });
+    const decoded = marksFromNode(child.marks);
+    if (!decoded.ok) return decoded;
+    pushRun(child.text, decoded.value);
   }
   return { ok: true, value: content };
 };

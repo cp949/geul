@@ -378,3 +378,92 @@ describe("손상된 blockContainer content 방어(트랙-4 즉시 리뷰 발견)
     expect(result.ok).toBe(false);
   });
 });
+
+// hardBreak(RD-001) — inlineContentFromTiptap 단독 디코드 계약.
+// modelToTiptap 왕복 계약은 model-tiptap-round-trip.test.ts가 소유한다.
+describe("hardBreak 노드를 디코드한다(RD-001)", () => {
+  it("text-hardBreak-text를 직전 항목과 병합해 하나의 텍스트 런으로 되돌린다", () => {
+    const json: TiptapJsonNode = {
+      type: "doc",
+      content: [
+        {
+          type: "blockContainer",
+          attrs: { blockId: "p1" },
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                { type: "text", text: "line1" },
+                { type: "hardBreak" },
+                { type: "text", text: "line2" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tiptapToModel(json, 1, unusedIdFactory);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        formatVersion: 1,
+        revision: 1,
+        blocks: [
+          {
+            id: "p1",
+            type: "paragraph",
+            content: [{ text: "line1\nline2" }],
+          },
+        ],
+      },
+    });
+  });
+
+  it("마크가 다른 text와는 병합하지 않고 hardBreak 자체의 마크를 보존한다", () => {
+    const json: TiptapJsonNode = {
+      type: "doc",
+      content: [
+        {
+          type: "blockContainer",
+          attrs: { blockId: "p1" },
+          content: [
+            {
+              type: "paragraph",
+              content: [
+                { type: "text", text: "plain" },
+                {
+                  type: "hardBreak",
+                  marks: [{ type: "bold" }],
+                },
+                { type: "text", text: "also plain" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tiptapToModel(json, 1, unusedIdFactory);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        formatVersion: 1,
+        revision: 1,
+        blocks: [
+          {
+            id: "p1",
+            type: "paragraph",
+            content: [
+              { text: "plain" },
+              { text: "\n", marks: [{ type: "bold" }] },
+              { text: "also plain" },
+            ],
+          },
+        ],
+      },
+    });
+  });
+});
