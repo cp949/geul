@@ -220,6 +220,10 @@ const insertFilledImageWithTap = async (
   await editable.tap();
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).tap();
+  // 데모 앱은 uploadFile을 항상 등록해 기본 활성 탭이 Upload다(2026-09-12,
+  // Notion parity — insertFilledImage/insertFilledImageWithTap 공통 사정,
+  // e2e/support/demo.ts 주석 참고).
+  await page.getByRole("tab", { name: "Embed" }).tap();
   await page.getByRole("textbox", { name: "Image URL" }).pressSequentially(url);
   await page.getByRole("button", { name: "Save URL" }).tap();
   const image = editable.locator("img");
@@ -324,6 +328,7 @@ test("리사이즈 핸들이 뷰포트 밖으로 밀려난 뒤에도 스크롤�
   await page.keyboard.press("Enter");
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Image URL" })
     .pressSequentially(RESIZE_IMAGE_URL);

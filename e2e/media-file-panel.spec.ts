@@ -3,7 +3,10 @@
  * URL 제출 시 이름 초깃값(마지막 path segment) 추출·표시, 거부된 URL의
  * 인라인 메시지, Escape/바깥 클릭에 따른 닫힘과 focus 복원 차이, 삽입의
  * undo 1회 복원, Media Toolbar와의 상호 배타, fixed overlay viewport
- * clamp(PIT-0011)를 실제 Chromium event 순서로 검증한다.
+ * clamp(PIT-0011)를 실제 Chromium event 순서로 검증한다. 데모 앱은
+ * uploadFile을 항상 등록하므로(app.tsx demoUploadFile) 기본 활성 탭은
+ * Upload다(2026-09-12, Notion parity — RD-003-DELTA-02 "결정 2" 번복) —
+ * Embed(URL) 흐름을 검증하는 테스트는 먼저 Embed 탭으로 전환한다.
  */
 import { expect, test } from "@playwright/test";
 
@@ -20,6 +23,7 @@ test("Slash로 이미지를 삽입하면 File Panel이 자동으로 열리고 UR
 
   const panel = page.getByRole("toolbar", { name: "File panel" });
   await expect(panel).toBeVisible();
+  await page.getByRole("tab", { name: "Embed" }).click();
   const urlInput = page.getByRole("textbox", { name: "Image URL" });
   await expect(urlInput).toBeFocused();
 
@@ -33,12 +37,30 @@ test("Slash로 이미지를 삽입하면 File Panel이 자동으로 열리고 UR
   await expect(page.getByText("Name: photo.png")).toBeVisible();
 });
 
+test("Slash로 이미지를 삽입하면 File Panel이 기본으로 Upload 탭을 연다(Notion parity, 2026-09-12)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+
+  await expect(page.getByRole("toolbar", { name: "File panel" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Upload" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByLabel("Image file")).toBeFocused();
+  await expect(page.getByRole("button", { name: "Upload file" })).toBeVisible();
+});
+
 test("이름 추출에 실패하면 패널에 URL 자체를 표시한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("/file");
   await page.getByRole("option", { name: /^File/ }).click();
 
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "File URL" })
     .fill("https://example.com");
@@ -65,6 +87,7 @@ test("URL 제출 직후 File Panel을 닫아도 같은 블록의 Media Toolbar�
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).click();
 
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Image URL" })
     .pressSequentially("https://example.com/dir/photo.png");
@@ -95,6 +118,7 @@ test("허용되지 않는 URL이면 거부 메시지를 표시하고 문서를 �
   await page.keyboard.type("/video");
   await page.getByRole("option", { name: /^Video/ }).click();
 
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Video URL" })
     .fill("javascript:alert(1)");
@@ -241,5 +265,6 @@ test("문서 하단에서 미디어를 삽입해도 File Panel이 뷰포트 안�
   await expect(panel).toBeVisible();
   await expect(panel).toHaveCSS("position", "fixed");
   await expectOverlayWithinViewport(panel, page);
+  await page.getByRole("tab", { name: "Embed" }).click();
   await expect(page.getByRole("textbox", { name: "Image URL" })).toBeVisible();
 });

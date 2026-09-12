@@ -19,6 +19,10 @@ export type Dictionary = {
     quote: string;
     codeBlock: string;
     listItem: string;
+    // "{kind}" 토큰을 `toolbar.kindNames`로 치환한다(media-block-extension.ts
+    // MediaEmptyLabelExtension, 2026-09-12 — Notion 스타일 빈 이미지 블록
+    // UI parity). heading의 "{level}"과 같은 문자열 치환 관용구.
+    media: string;
   };
   // RD-002-DELTA-01 — react `EditorContent`의 contenteditable 호스트 aria-label.
   // 수십 개 react 테스트가 `getByRole("textbox", { name: "Editor" })`로 이
@@ -174,9 +178,20 @@ export type Dictionary = {
       // 치환 관용구를 쓴다.
       urlInputPlaceholder: string;
       saveUrl: string;
+      // "{kind}" 토큰 치환(2026-09-12, Notion parity) — 기본값이
+      // "Embed {kind}"로 바뀌었을 뿐 필드 자체는 그대로다. 토큰이 없는
+      // override 문자열은 `.replace`가 no-op이라 기존 override(EXT-009)를
+      // 깨지 않는다.
       save: string;
       namePrefix: string;
       fileInputAriaLabel: string;
+      // Upload 탭의 네이티브 file input을 대신 트리거하는 전체폭 버튼
+      // 라벨(2026-09-12, Notion parity) — input 자체는 시각적으로 숨긴다.
+      uploadButton: string;
+      // 링크(Embed) 탭 하단 안내문. "{kind}" 토큰 치환(2026-09-12, Notion
+      // parity) — Notion 원문("웹에 있는 모든 이미지와 호환됨")은 image
+      // 전용이라 이 컴포넌트가 다루는 4종 공통으로 일반화했다.
+      embedCaption: string;
       cancel: string;
       retry: string;
       closeAriaLabel: string;
@@ -294,6 +309,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     quote: "Quote",
     codeBlock: "Code",
     listItem: "List item",
+    media: "Add {kind}",
   },
   editor: {
     ariaLabel: "Editor",
@@ -445,9 +461,11 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       urlInputAriaLabel: "{kind} URL",
       urlInputPlaceholder: "Paste {kind} URL",
       saveUrl: "Save URL",
-      save: "Save",
+      save: "Embed {kind}",
       namePrefix: "Name: ",
       fileInputAriaLabel: "{kind} file",
+      uploadButton: "Upload file",
+      embedCaption: "Works with any {kind} link on the web",
       cancel: "Cancel",
       retry: "Retry",
       closeAriaLabel: "Close file panel",

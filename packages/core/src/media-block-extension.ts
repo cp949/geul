@@ -1,5 +1,10 @@
 import type { DOMOutputSpec } from "@tiptap/pm/model";
-import { mergeAttributes, Node } from "@tiptap/core";
+import { Extension, mergeAttributes, Node } from "@tiptap/core";
+import type { EditorState } from "@tiptap/pm/state";
+import { Plugin } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+
+import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 
 // 4종 leaf 미디어 블록(file/image/video/audio, spec §3.1)은 divider·table과
 // 같은 "group: block 직접 멤버, atom, blockId 자체 소유" 패턴을 쓴다(RD-002
@@ -91,7 +96,13 @@ const previewAttributes = () => ({
 // `[data-placeholder]::before`(_editor.scss)는 텍스트 캐럿 오버레이용
 // float 레이아웃이라 캐럿이 없는 atom 블록에 적용하면 의도치 않은 시각
 // 결과가 난다. 이 attribute는 별도 표식일 뿐이라 react가 실제 빈 상태
-// UI(RD-003 File Panel)를 붙이기 전까지 화면에 아무 영향이 없다.
+// UI(RD-003 File Panel)를 붙이기 전까지 화면에 아무 영향이 없다. 문구
+// 라벨(2026-09-12, Notion parity)은 이 renderHTML이 아니라 파일 하단
+// `MediaEmptyLabelExtension`이 별도 데코레이션으로 얹는다 — atom
+// renderHTML에 dictionary 텍스트를 직접 굽는 선례가 없고(당시엔 core→DOM
+// dictionary 투영 경로 자체가 없어 텍스트를 뺐다), `placeholder-extension.ts`가
+// 이미 쓰는 "데코레이션 + attr() CSS" 경로가 이 저장소의 유일한 선례라
+// 그대로 따른다.
 const nonEmptyString = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
@@ -330,3 +341,72 @@ export const AudioBlockExtension = Node.create({
     ];
   },
 });
+
+const MEDIA_EMPTY_KINDS = ["file", "image", "video", "audio"] as const;
+type MediaEmptyKind = (typeof MEDIA_EMPTY_KINDS)[number];
+
+const isMediaEmptyKind = (typeName: string): typeName is MediaEmptyKind =>
+  (MEDIA_EMPTY_KINDS as readonly string[]).includes(typeName);
+
+export type MediaEmptyLabelExtensionOptions = {
+  // placeholder-extension.ts와 동일 계약 — 항상 완전한 값이다(construction
+  // time에 production-editor-assembly.ts가 DEFAULT_DICTIONARY로 폴백해
+  // 넘긴다).
+  dictionary: Dictionary;
+};
+
+const mediaEmptyLabelDecorations = (
+  state: EditorState,
+  dictionary: Dictionary,
+): DecorationSet => {
+  const decorations: Decoration[] = [];
+  state.doc.descendants((node, position) => {
+    const typeName = node.type.name;
+    if (!isMediaEmptyKind(typeName)) return true;
+    // renderHTML의 `source === null` 판정과 정확히 같은 함수를 재사용한다
+    // — url과 로컬 프리뷰(ADR 0015) 둘 다 없을 때만 "빈 블록"이다. 이
+    // decoration은 항상 `data-geul-media-empty`(위 renderHTML)와 함께
+    // 붙거나 함께 빠진다.
+    if (mediaSourceUrl(node.attrs) !== null) return false;
+    const label = dictionary.placeholder.media.replace(
+      "{kind}",
+      dictionary.toolbar.kindNames[typeName],
+    );
+    decorations.push(
+      Decoration.node(position, position + node.nodeSize, {
+        "data-geul-media-empty-label": label,
+      }),
+    );
+    return false;
+  });
+  return DecorationSet.create(state.doc, decorations);
+};
+
+// 빈 media 블록(image/video/audio/file) placeholder 문구(2026-09-12,
+// Notion UI parity). `placeholder-extension.ts`와 같은 패턴(데코레이션 +
+// attr() CSS)이지만 그 확장의 `data-placeholder`는 재사용하지 않는다 —
+// 위 renderHTML 주석과 같은 이유로 캐럿용 float 레이아웃이 atom 블록엔
+// 안 맞아 별도 attribute(`data-geul-media-empty-label`)를 쓴다. 표시는
+// react `[data-geul-media-empty]::after`(_editor.scss)가 담당한다.
+// 데코레이션 전용이라 저장 문서에 흔적이 없다(placeholder-extension.ts와
+// 동일).
+export const MediaEmptyLabelExtension =
+  Extension.create<MediaEmptyLabelExtensionOptions>({
+    name: "mediaEmptyLabel",
+
+    addOptions() {
+      return { dictionary: DEFAULT_DICTIONARY };
+    },
+
+    addProseMirrorPlugins() {
+      const { dictionary } = this.options;
+      return [
+        new Plugin({
+          props: {
+            decorations: (state) =>
+              mediaEmptyLabelDecorations(state, dictionary),
+          },
+        }),
+      ];
+    },
+  });

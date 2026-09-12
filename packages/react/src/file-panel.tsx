@@ -161,7 +161,8 @@ export const FilePanel = ({
     // 블록에서 실패해 error pending이 남아 있으면 재오픈 즉시 그 에러를
     // 보여준다. uploadFile 미등록이면 pending 자체를 조회하지 않는다
     // (호출해도 항상 null이지만, 등록 여부와 무관한 호출을 피한다).
-    const pending = editor.isUploadEnabled()
+    const uploadEnabled = editor.isUploadEnabled();
+    const pending = uploadEnabled
       ? editor.getMediaUploadState(media.blockId)
       : null;
     const upload: UploadSubState =
@@ -184,7 +185,12 @@ export const FilePanel = ({
         draft: "",
         rejected: false,
         appliedName: null,
-        activeTab: "embed",
+        // 기본 활성 탭(2026-09-12, Notion parity) — Upload 옵션이 있으면
+        // Upload가 기본이다. RD-003-DELTA-02.md "결정 2"(항상 Embed
+        // 기본)를 사용자 지시로 번복한다 — uploadFile 등록 여부가 이제는
+        // "기본값 변경" 신호로 다뤄진다. 등록 안 됐으면(단일 Embed 모드)
+        // embed 외에 탭 자체가 없어 예전 동작 그대로다.
+        activeTab: uploadEnabled ? "upload" : "embed",
         upload,
         heldFile: null,
         left: bounds.left,
@@ -205,16 +211,16 @@ export const FilePanel = ({
     return () => element.removeAttribute("data-geul-file-panel-block-id");
   }, [element, openPanelBlockId]);
 
-  useEffect(() => {
-    if (panelState.mode === "open") inputRef.current?.focus();
-  }, [panelState.mode]);
-
-  // 탭 전환(Upload 클릭)으로만 발동한다 — 최초 열림은 위 effect가 이미
-  // 처리한다(기본 활성 탭은 항상 embed). panelState.mode 하나로는 탭
-  // 전환을 못 잡으므로 activeTab을 별도 원시값 의존성으로 뽑아 쓴다.
+  // 활성 탭이 정해질 때(최초 열림 포함, 탭 전환 클릭 포함) 그 탭의 입력에
+  // 초점을 준다. 기본 활성 탭(2026-09-12, Notion parity — RD-003-DELTA-02
+  // "결정 2" 번복)이 uploadEnabled 여부로 갈리므로(위 updateFromSelection)
+  // 최초 열림도 탭 전환과 같은 "activeTab이 정해짐" 사건이라 이 effect
+  // 하나로 둘 다 커버한다. panelState.mode만으로는 탭 전환을 못 잡으므로
+  // activeTab을 별도 원시값 의존성으로 뽑아 쓴다.
   const activeTab = panelState.mode === "open" ? panelState.activeTab : null;
   useEffect(() => {
     if (activeTab === "upload") fileInputRef.current?.focus();
+    else if (activeTab === "embed") inputRef.current?.focus();
   }, [activeTab]);
 
   // Upload/Embed 공용 — 파일 선택 직후와 retry 둘 다 이 함수로 들어온다
@@ -414,6 +420,7 @@ export const FilePanel = ({
               "{kind}",
               dictionary.toolbar.kindNames[panelState.kind],
             )}
+            className="geul-file-panel__url-input"
             onChange={(event) => {
               if (panelState.mode !== "open") return;
               setPanelState({
@@ -438,12 +445,15 @@ export const FilePanel = ({
           />
           <button
             aria-label={dictionary.toolbar.filePanel.saveUrl}
-            className={filePanelButtonClassName}
+            className={`${filePanelButtonClassName} geul-file-panel__primary-button`}
             onClick={applyUrl}
             onMouseDown={(event) => event.preventDefault()}
             type="button"
           >
-            {dictionary.toolbar.filePanel.save}
+            {dictionary.toolbar.filePanel.save.replace(
+              "{kind}",
+              dictionary.toolbar.kindNames[panelState.kind],
+            )}
           </button>
           {panelState.rejected && (
             <span className="geul-file-panel__error" role="alert">
@@ -456,20 +466,47 @@ export const FilePanel = ({
               {panelState.appliedName}
             </p>
           )}
+          {/* Notion parity(2026-09-12) 안내문 — 장식용, rejected/appliedName처럼
+              상태 전이를 만들지 않는다. */}
+          <p className="geul-file-panel__caption">
+            {dictionary.toolbar.filePanel.embedCaption.replace(
+              "{kind}",
+              dictionary.toolbar.kindNames[panelState.kind],
+            )}
+          </p>
         </>
       )}
       {showUploadTab && (
         <div className="geul-file-panel__upload">
+          {/* 네이티브 file input은 시각적으로만 숨긴다(display:none이
+              아니다 — Testing Library의 getByLabelText/role 쿼리와
+              스크린리더 접근 트리에 계속 남아야 한다). 실제 클릭은 아래
+              전체폭 버튼이 대신 트리거한다(Notion parity, 2026-09-12). */}
           <input
             aria-label={dictionary.toolbar.filePanel.fileInputAriaLabel.replace(
               "{kind}",
               dictionary.toolbar.kindNames[panelState.kind],
             )}
+            className="geul-file-panel__upload-input"
             disabled={panelState.upload.status === "uploading"}
             onChange={handleFileChange}
             ref={fileInputRef}
             type="file"
           />
+          {/* uploading 중엔 숨긴다 — 네이티브 input도 이 동안 disabled라
+              같은 조건을 쓴다. idle/error 둘 다 보여야 한다(error에서도
+              "새 파일 선택"이 가능해야 하는 기존 계약, RD-003-DELTA-02.md
+              "결정 5"). */}
+          {panelState.upload.status !== "uploading" && (
+            <button
+              className={`${filePanelButtonClassName} geul-file-panel__upload-trigger`}
+              onClick={() => fileInputRef.current?.click()}
+              onMouseDown={(event) => event.preventDefault()}
+              type="button"
+            >
+              {dictionary.toolbar.filePanel.uploadButton}
+            </button>
+          )}
           {panelState.upload.status === "uploading" && (
             <>
               <p role="status">{dictionary.status.uploading}</p>

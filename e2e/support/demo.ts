@@ -69,6 +69,10 @@ export const insertFilledImage = async (
   await editable.click();
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).click();
+  // 데모 앱은 uploadFile을 항상 등록해(app.tsx demoUploadFile) 기본
+  // 활성 탭이 Upload다(2026-09-12, Notion parity — RD-003-DELTA-02
+  // "결정 2" 번복). 이 helper는 URL 삽입 전제라 Embed로 전환한다.
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page.getByRole("textbox", { name: "Image URL" }).pressSequentially(url);
   await page.getByRole("button", { name: "Save URL" }).click();
   const image = editable.locator("img");

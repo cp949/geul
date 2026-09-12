@@ -51,6 +51,7 @@ import {
   AudioBlockExtension,
   FileBlockExtension,
   ImageBlockExtension,
+  MediaEmptyLabelExtension,
   VideoBlockExtension,
 } from "./media-block-extension.js";
 import {
@@ -574,6 +575,13 @@ export const createProductionEditor = (options: {
       ListPresentationExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension.configure({
+        dictionary: options.dictionary ?? DEFAULT_DICTIONARY,
+      }),
+      // 빈 media 블록(image/video/audio/file) placeholder 문구(2026-09-12,
+      // Notion UI parity) — PlaceholderExtension과 동일한 dictionary 배선
+      // 패턴. enabledBlockTypes로 gate하지 않는다 — 비활성 kind는 스키마
+      // 자체에 노드가 없어 순회 대상이 없다.
+      MediaEmptyLabelExtension.configure({
         dictionary: options.dictionary ?? DEFAULT_DICTIONARY,
       }),
       ToggleCollapseVisibilityExtension,

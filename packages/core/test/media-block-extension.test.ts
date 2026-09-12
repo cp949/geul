@@ -13,7 +13,7 @@
 import { describe, expect, it } from "vitest";
 
 import { findBlockPosition } from "../src/block-position.js";
-import { createEditor } from "../src/index.js";
+import { createEditor, DEFAULT_DICTIONARY } from "../src/index.js";
 import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   documentOf,
@@ -148,6 +148,91 @@ describe("url 없는 빈 상태 — 4종 공통", () => {
       );
     },
   );
+});
+
+/**
+ * 빈 media 블록의 placeholder 문구(2026-09-12, Notion UI parity —
+ * MediaEmptyLabelExtension). renderHTML의 `data-geul-media-empty`(kind
+ * 표식)와 별개로, 데코레이션이 얹는 `data-geul-media-empty-label`(실제
+ * 문구)을 검증한다. placeholder-extension.test.ts와 같은 관심사 분리 —
+ * "표식이 붙는다"는 위 describe, "문구 내용·override·소거 조건"은 여기.
+ */
+describe("빈 상태 placeholder 문구 — MediaEmptyLabelExtension(2026-09-12, Notion parity)", () => {
+  it.each(MEDIA_KINDS)(
+    "%s는 url이 없으면 kind별 기본(en) placeholder 문구를 받는다",
+    (kind) => {
+      const dom = mountedDom(kind);
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
+      const expected = DEFAULT_DICTIONARY.placeholder.media.replace(
+        "{kind}",
+        DEFAULT_DICTIONARY.toolbar.kindNames[kind],
+      );
+      expect(wrapper?.getAttribute("data-geul-media-empty-label")).toBe(
+        expected,
+      );
+    },
+  );
+
+  it("dictionary override 시 {kind} 토큰이 치환된 override 문구를 쓴다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("image", "image-1"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+      dictionary: {
+        ...DEFAULT_DICTIONARY,
+        placeholder: {
+          ...DEFAULT_DICTIONARY.placeholder,
+          media: "{kind} 없음",
+        },
+      },
+    });
+    const dom = mountTiptapEditor(editor).tiptap.view.dom;
+    const wrapper = dom.querySelector('[data-geul-block-id="image-1"]');
+    expect(wrapper?.getAttribute("data-geul-media-empty-label")).toBe(
+      "Image 없음",
+    );
+  });
+
+  it("url이 있으면 placeholder 문구를 붙이지 않는다", () => {
+    const dom = mountedDom("image", { url: "https://example.com/pic.png" });
+    const wrapper = dom.querySelector('[data-geul-block-id="image-1"]');
+    expect(wrapper?.hasAttribute("data-geul-media-empty-label")).toBe(false);
+  });
+
+  it("로컬 프리뷰만 있는 상태에도 placeholder 문구를 붙이지 않는다", async () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("image", "image-1"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const result = await editor.commands.uploadMediaFile(
+      "image-1",
+      new File(["x"], "x.png"),
+    );
+    expect(result.ok).toBe(true);
+    const wrapper = tiptap.view.dom.querySelector(
+      '[data-geul-block-id="image-1"]',
+    );
+    expect(wrapper?.hasAttribute("data-geul-media-empty-label")).toBe(false);
+  });
+
+  it("데코레이션 전용이라 저장 문서에 흔적을 남기지 않는다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("image", "image-1"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    const before = editor.getDocument();
+    mountTiptapEditor(editor);
+    expect(editor.getDocument()).toEqual(before);
+  });
 });
 
 /**

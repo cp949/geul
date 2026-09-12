@@ -363,6 +363,7 @@ test("file 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-
   await editable.click();
   await page.keyboard.type("/file");
   await page.getByRole("option", { name: /^File/ }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "File URL" })
     .fill("https://example.com/dir/doc.pdf");
@@ -387,6 +388,7 @@ test("audio 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED
   await editable.click();
   await page.keyboard.type("/audio");
   await page.getByRole("option", { name: /^Audio/ }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Audio URL" })
     .fill("https://example.com/dir/track.mp3");
@@ -424,6 +426,7 @@ test("문서 하단에서 미디어를 선택해도 Media Toolbar가 뷰포트 �
   await page.keyboard.press("Enter");
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Image URL" })
     .pressSequentially("https://example.com/dir/photo.png");

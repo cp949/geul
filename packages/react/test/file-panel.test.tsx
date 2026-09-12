@@ -241,6 +241,19 @@ describe("FilePanel 파일 패널", () => {
     );
   });
 
+  it("Embed 버튼 텍스트와 하단 안내 caption이 kind별로 치환된다(Notion parity, 2026-09-12)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({ ...emptyImageBlock, kind: "video" }),
+    });
+    renderPanel(controller);
+
+    const saveButton = screen.getByRole("button", { name: "Save URL" });
+    expect(saveButton.textContent).toBe("Embed Video");
+    expect(
+      screen.getByText("Works with any Video link on the web"),
+    ).not.toBeNull();
+  });
+
   it("dictionary override 시 컨테이너·탭·URL 라벨·Save URL(aria-label≠텍스트)·Close가 바뀐다(EXT-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,
@@ -270,6 +283,9 @@ describe("FilePanel 파일 패널", () => {
     expect(screen.getByRole("toolbar", { name: "파일 패널" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "삽입" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "업로드" })).toBeTruthy();
+    // 기본 활성 탭이 업로드다(Notion parity, 2026-09-12) — Embed 필드를
+    // 보려면 삽입 탭으로 전환해야 한다.
+    fireEvent.click(screen.getByRole("tab", { name: "삽입" }));
     const urlInput = screen.getByRole("textbox", { name: "사진 링크" });
     expect(urlInput).toBeTruthy();
     expect(urlInput).toHaveProperty("placeholder", "사진 링크 붙여넣기");
@@ -449,7 +465,7 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
     expect(screen.getByRole("textbox", { name: "Image URL" })).not.toBeNull();
   });
 
-  it("uploadFile 등록 시 Embed/Upload 탭이 보이고 기본 활성 탭은 Embed다", () => {
+  it("uploadFile 등록 시 Embed/Upload 탭이 보이고 기본 활성 탭은 Upload다(Notion parity, 2026-09-12 — RD-003-DELTA-02 기본 Embed 결정 번복)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,
       isUploadEnabled: () => true,
@@ -458,8 +474,18 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
 
     const embedTab = screen.getByRole("tab", { name: "Embed" });
     const uploadTab = screen.getByRole("tab", { name: "Upload" });
-    expect(embedTab.getAttribute("aria-selected")).toBe("true");
-    expect(uploadTab.getAttribute("aria-selected")).toBe("false");
+    expect(uploadTab.getAttribute("aria-selected")).toBe("true");
+    expect(embedTab.getAttribute("aria-selected")).toBe("false");
+    expect(document.activeElement).toBe(screen.getByLabelText("Image file"));
+  });
+
+  it("uploadFile 미등록 시(단일 Embed 모드)에는 여전히 URL 입력이 기본이고 초점을 받는다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+
+    expect(screen.queryByRole("tab")).toBeNull();
     expect(document.activeElement).toBe(
       screen.getByRole("textbox", { name: "Image URL" }),
     );
@@ -472,10 +498,42 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
     });
     renderPanel(controller);
 
+    // 기본 활성 탭이 이미 Upload라 전환을 실제로 검증하려면 Embed로
+    // 먼저 옮긴 뒤 되돌아와야 한다.
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
     fireEvent.click(screen.getByRole("tab", { name: "Upload" }));
 
     expect(screen.queryByRole("textbox", { name: "Image URL" })).toBeNull();
     expect(screen.getByLabelText("Image file")).not.toBeNull();
+  });
+
+  it("Embed 탭으로 전환하면 URL 입력에 초점이 간다(2026-09-12 — 기본 탭 Upload 전환에 맞춰 Embed 탭 초점도 전환 시 부여하도록 일반화)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderPanel(controller);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("textbox", { name: "Image URL" }),
+    );
+  });
+
+  it("파일 업로드 버튼 클릭 시 숨은 file input의 파일 선택 대화상자를 연다(Notion parity, 2026-09-12)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderPanel(controller);
+
+    const fileInput = screen.getByLabelText("Image file") as HTMLInputElement;
+    const clickSpy = vi.spyOn(fileInput, "click").mockImplementation(() => {});
+
+    fireEvent.click(screen.getByRole("button", { name: "Upload file" }));
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
   });
 
   it("파일을 선택하면 uploadMediaFile을 호출하고 loading 동안 input을 비활성화한다", () => {

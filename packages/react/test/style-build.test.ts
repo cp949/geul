@@ -162,9 +162,26 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(rule).toBeDefined();
     expect(rule).toContain("box-sizing: border-box;");
     expect(rule).toMatch(/min-height:\s*\S+;/);
+    // 2026-09-12(Notion parity) — 점선에서 실선으로 바꿨다(아이콘+문구가
+    // 생겨 "빈 자리" 신호를 border만으로 낼 필요가 줄었다).
     expect(rule).toContain(
-      "border: 1px dashed var(--geul-color-border, #dadce0);",
+      "border: 1px solid var(--geul-color-border, #dadce0);",
     );
+  });
+
+  it("url 없는 media 블록에 kind별 아이콘과 dictionary 문구를 그린다(2026-09-12, Notion parity)", () => {
+    const css = compileCss();
+    const labelRule =
+      /\.geul-editor \[data-geul-media-empty\]::after \{(?<body>[^}]*)\}/.exec(
+        css,
+      )?.groups?.body;
+    const imageIconRule =
+      /\.geul-editor \[data-geul-media-empty=image\]::before \{(?<body>[^}]*)\}/.exec(
+        css,
+      )?.groups?.body;
+
+    expect(labelRule).toContain("content: attr(data-geul-media-empty-label);");
+    expect(imageIconRule).toContain("mask-image: url(");
   });
 
   it("로컬 프리뷰 미디어 블록에 저장되지 않음 코너 dot 배지를 그린다(Issue #168 roadmap RD-002 DELTA-04 — core가 붙이는 data-geul-media-local-preview 마커는 url이 확정되면 사라져 배지도 함께 사라진다)", () => {

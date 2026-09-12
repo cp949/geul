@@ -164,18 +164,75 @@
   // 다시 클릭할 수 없다(MED-001 자유 조작 QA 발견, QA-090). [data-placeholder]
   // 를 재사용하지 않는 이유는 media-block-extension.ts 주석과 같다 — 캐럿
   // 없는 atom 블록에 float+height:0 placeholder 레이아웃을 적용하면 의도치
-  // 않은 결과가 난다. 텍스트 라벨은 넣지 않는다(문구는 core→react 어디도
-  // Dictionary로 투영하지 않으므로 i18n 없이 하드코딩하면 새 미준수 문구가
-  // 생긴다) — 점선 테두리 슬롯만으로 "빈 자리가 존재하고 클릭 가능하다"는
-  // 시각·상호작용 계약을 지킨다.
+  // 않은 결과가 난다. 문구는 이제 core `MediaEmptyLabelExtension`(2026-09-12,
+  // Notion UI parity)이 `data-geul-media-empty-label`로 투영하므로(당시
+  // 없었던 core→DOM dictionary 경로가 `placeholder-extension.ts` 선례로
+  // 생겼다) 아래 `::after`가 그대로 그린다 — 점선 대신 실선 테두리로 바꿔
+  // "빈 자리가 존재하고 클릭 가능하다"는 계약을 아이콘+문구로 더 분명히
+  // 전달한다(Notion 참고, 자산 복제 아님).
   [data-geul-media-empty] {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     box-sizing: border-box;
     min-height: 3rem;
-    border: 1px dashed var(--geul-color-border, #dadce0);
+    padding-inline: 0.75rem;
+    border: 1px solid var(--geul-color-border, #dadce0);
     border-radius: var(--geul-radius-md, 0.375rem);
     background: var(--geul-color-surface-muted, #f1f3f4);
     cursor: pointer;
+  }
+
+  // kind별 아이콘(2026-09-12) — data URI SVG를 CSS mask로 그려
+  // background-color(--geul-color-text-muted)를 그대로 물려받는다(다크모드
+  // 재정의가 아이콘 색에도 자동 적용됨). 어떤 아이콘 라이브러리에서도
+  // 복사하지 않고 직접 그린 범용 pictogram이다(AGENTS.md 아이콘 복제 금지
+  // 원칙과 별개로 안전).
+  [data-geul-media-empty]::before {
+    content: "";
+    flex: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    background-color: var(--geul-color-text-muted, #5f6368);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  }
+
+  [data-geul-media-empty="image"]::before {
+    $svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><path d='M21 15l-5-5L5 21'/></svg>";
+    -webkit-mask-image: url("data:image/svg+xml,#{$svg}");
+    mask-image: url("data:image/svg+xml,#{$svg}");
+  }
+
+  [data-geul-media-empty="video"]::before {
+    $svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='6' width='14' height='12' rx='2'/><path d='M16 10l6-3v10l-6-3z'/></svg>";
+    -webkit-mask-image: url("data:image/svg+xml,#{$svg}");
+    mask-image: url("data:image/svg+xml,#{$svg}");
+  }
+
+  [data-geul-media-empty="audio"]::before {
+    $svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l10-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='16' cy='16' r='3'/></svg>";
+    -webkit-mask-image: url("data:image/svg+xml,#{$svg}");
+    mask-image: url("data:image/svg+xml,#{$svg}");
+  }
+
+  [data-geul-media-empty="file"]::before {
+    $svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2h9l5 5v15H6z'/><path d='M15 2v5h5'/></svg>";
+    -webkit-mask-image: url("data:image/svg+xml,#{$svg}");
+    mask-image: url("data:image/svg+xml,#{$svg}");
+  }
+
+  // 문구 자체 — core가 `data-geul-media-empty-label`에 dictionary
+  // 문자열을 이미 완성해 담아 준다(media-block-extension.ts
+  // MediaEmptyLabelExtension). 여기는 표시만 한다(R-7과 동일 원칙).
+  [data-geul-media-empty]::after {
+    content: attr(data-geul-media-empty-label);
+    color: var(--geul-color-text-muted, #5f6368);
+    font-size: 0.875rem;
   }
 
   // 로컬 프리뷰 소스로 렌더 중인 media 블록(image/video/audio/file 공통,

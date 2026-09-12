@@ -71,5 +71,9 @@ describe("KO_DICTIONARY", () => {
     expect(KO_DICTIONARY.toolbar.filePanel.fileInputAriaLabel).toContain(
       "{kind}",
     );
+    // 2026-09-12(Notion parity) 추가분.
+    expect(KO_DICTIONARY.placeholder.media).toContain("{kind}");
+    expect(KO_DICTIONARY.toolbar.filePanel.save).toContain("{kind}");
+    expect(KO_DICTIONARY.toolbar.filePanel.embedCaption).toContain("{kind}");
   });
 });
