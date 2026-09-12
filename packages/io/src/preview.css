@@ -4,9 +4,11 @@
  * 타이포그래피다(Issue #178). `@cp949/geul-react`의 styles.css는 라이브
  * 에디터 DOM(data-geul-* 커스텀 마커 요소, 예: [data-geul-list-marker])
  * 전용이라 exportHtml() 출력에는 적용되지 않는다 — 이 파일이 그 공백을
- * 메운다. 승격 소스는
- * apps/showcase/src/examples/00-composite/preview.css(showcase 자체
- * UI 스타일은 제외하고 미리보기 타이포그래피만 옮김).
+ * 메운다. 승격 소스는 showcase Kitchen sink 로컬 preview.css(showcase 자체
+ * UI 스타일은 제외하고 미리보기 타이포그래피만 옮김)였다 — 승격 후 그
+ * 로컬 파일은 `apps/showcase/src/examples/00-composite/composite-result.css`
+ * 로 이름이 바뀌었다(RD-002 DELTA-01, 남은 내용이 셸 UI뿐이라 "preview"라는
+ * 이름이 더 이상 맞지 않았다).
  *
  * 빌드: sass/postcss 파이프라인을 쓰지 않는다. 이 파일은 순수 CSS이고
  * package.json의 build 스크립트가 dist/preview.css로 그대로 복사한다.

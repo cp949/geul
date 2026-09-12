@@ -18,7 +18,8 @@ import { common, createLowlight } from "lowlight";
 import { Highlight, themes } from "prism-react-renderer";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import "./preview.css";
+import "@cp949/geul-io/preview.css";
+import "./composite-result.css";
 
 // 07-media/example.tsx와 동일 이유 — 소스 패널 자기완결성(스펙 §5).
 const COMPOSITE_UPLOAD_DELAY_MS = 300;
@@ -283,7 +284,7 @@ const ResultPanel = ({ revision }: { revision: number }) => {
       <div hidden={activeTab !== "preview"}>
         <div
           aria-label="미리보기"
-          className="composite-result__preview"
+          className="geul-preview"
           // exportHtml()은 편집기 자신의 문서를 직렬화한 값이다 — 붙여넣기
           // 등 외부 HTML은 import 시점에 이미 sanitize되므로 여기서 다시
           // 신뢰 경계를 넘지 않는다.
