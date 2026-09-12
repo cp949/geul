@@ -29,6 +29,7 @@ import {
   htmlElement,
   inlineContentToNodes,
 } from "./inline-content.js";
+import { textBlockPropsStyle } from "./text-block-props-style.js";
 
 // exportHtml이 직접 구성하는 출력 트리 전용 루트다 — import·clipboard
 // 파싱 소비처가 공유하는 `HtmlRoot`(inline-content.ts, "raw"를 절대 만들지
@@ -57,19 +58,29 @@ export type ExportHtmlOptions = {
 // TextBlockProps(RD-001)를 가진 7개 블록 타입(paragraph/heading/quote/목록
 // 4종)이 공유하는 data-geul-* 매핑이다. 표 셀 색상·정렬(cellNode 아래)과 같은
 // 패턴이지만 필드명이 align이 아니라 textAlignment라 별도 속성명을 쓴다.
+// style(text-block-props-style.ts, Issue #179)은 이 세 data-geul-* 뒤에
+// 마지막으로 붙는다 — import 쪽은 문서 내용 생성에는 style을 읽지 않고
+// 항상 data-geul-*만 권위로 삼는다(G-CNV-001). 같은 직렬화 규칙을
+// import-warnings.ts가 재사용해 raw style이 이 함수가 낼 값과 정확히
+// 같을 때만 "제거됨" 경고를 억제한다 — 순서 자체는 그 비교의 일부라 여기서
+// 바꾸면 import-warnings.ts도 함께 바꿔야 한다.
 const textBlockPropsAttributes = (
   block: TextBlockProps,
-): HtmlElementNode["properties"] => ({
-  ...(block.textColor === undefined
-    ? {}
-    : { dataGeulTextColor: block.textColor }),
-  ...(block.backgroundColor === undefined
-    ? {}
-    : { dataGeulBackgroundColor: block.backgroundColor }),
-  ...(block.textAlignment === undefined
-    ? {}
-    : { dataGeulTextAlignment: block.textAlignment }),
-});
+): HtmlElementNode["properties"] => {
+  const style = textBlockPropsStyle(block);
+  return {
+    ...(block.textColor === undefined
+      ? {}
+      : { dataGeulTextColor: block.textColor }),
+    ...(block.backgroundColor === undefined
+      ? {}
+      : { dataGeulBackgroundColor: block.backgroundColor }),
+    ...(block.textAlignment === undefined
+      ? {}
+      : { dataGeulTextAlignment: block.textAlignment }),
+    ...(style === undefined ? {} : { style }),
+  };
+};
 
 // 4종 leaf 미디어 블록 공통 판별 타입(spec §3.1) — url/name/caption/
 // backgroundColor는 4종 공통, showPreview는 image/video/audio, previewWidth/

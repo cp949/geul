@@ -14,6 +14,7 @@ import {
   htmlAllowedAttributes,
   htmlStrippedTagNames,
 } from "./sanitize-schema.js";
+import { textBlockPropsStyle } from "./text-block-props-style.js";
 
 export type HtmlImportWarning =
   | {
@@ -184,6 +185,59 @@ const supportedInlineNames = new Set([
   "br",
 ]);
 
+// TextBlockProps(RD-001)를 가진 7개 블록 타입이 own-export에서 style을
+// 받는 5개 태그(Issue #179, export-html.ts의 textBlockPropsAttributes 호출부
+// p/h1-h6/blockquote/li/summary와 정확히 같은 집합). 아래 style 경고 정확도
+// 판정이 이 태그에서만 raw data-geul-* 3종과 raw style을 대조한다 — 그
+// 밖의 태그(표 셀 td/th 등)의 style은 이 판정 대상이 아니다.
+const TEXT_BLOCK_PROPS_OWN_TAG_NAMES = new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "blockquote",
+  "li",
+  "summary",
+]);
+
+// node.properties에서 문자열 값만 읽는다(hast Properties는 string 외에
+// number/boolean/array도 허용하지만, HTML 파싱이 만드는 data-geul-*·style
+// 값은 항상 순수 문자열이다 — 다른 타입이면 own-export가 낸 값이 아니므로
+// 아래 exactOwnStyleMatch가 안전하게 "다르다"로 처리한다).
+const propertyStringOrUndefined = (
+  node: HtmlElementNode,
+  key: string,
+): string | undefined => {
+  const value = node.properties[key];
+  return typeof value === "string" ? value : undefined;
+};
+
+// raw HAST의 style 제거 warning이 export-html.ts 자신이 낸 값의 정확한
+// 왕복인지 판정한다(Issue #179 리뷰 수정 — MAJOR). sanitize는 style을
+// TEXT_BLOCK_PROPS_OWN_TAG_NAMES 5개 태그 어디에도 허용하지 않으므로
+// (sanitize-schema.ts) 값이 있으면 항상 제거되는데, 그 raw "제거됨"
+// 경고를 data-geul-* 존재만으로 억제하면(이전 구현) data-geul-*가 설명하지
+// 못하는 추가 선언(예: font-weight)이 조용히 사라지거나, 서로 다른 두
+// 노드의 warning이 findIndex/splice로 뒤바뀔 수 있었다(리뷰에서 재현
+// 확인). textBlockPropsStyle이 같은 raw 노드의 data-geul-* 3종에서
+// 재구성한 값과 raw style 문자열이 "완전히 같을 때만" own-echo로 인정해
+// 경고를 생략한다 — 한 글자라도 다르면(추가 선언, 다른 값, 다른 순서
+// 전부 포함) 보수적으로 경고를 그대로 낸다. 이 판정은 같은 raw 노드
+// 하나만 보고 끝나 서로 다른 노드의 warning을 섞을 위험이 없다(fix 전
+// consumePreservedAttributeWarning 기반 억제와의 핵심 차이).
+const isOwnEchoStyle = (node: HtmlElementNode, rawStyle: string): boolean => {
+  if (!TEXT_BLOCK_PROPS_OWN_TAG_NAMES.has(node.tagName)) return false;
+  const expected = textBlockPropsStyle({
+    textColor: propertyStringOrUndefined(node, "dataGeulTextColor"),
+    backgroundColor: propertyStringOrUndefined(node, "dataGeulBackgroundColor"),
+    textAlignment: propertyStringOrUndefined(node, "dataGeulTextAlignment"),
+  });
+  return expected !== undefined && expected === rawStyle;
+};
+
 // div/li/blockquote/ul/ol은 block-segmenter.ts가 "경계를 통과해 더 깊은
 // 경계를 인식시키는" 투명 컨테이너로 취급한다(재귀 경계·wrapper 태그, 아키텍처
 // 리뷰 2차 후보 G). 이 파일의 topLevel 판정도 같은 취급이어야 한다 — 이
@@ -273,6 +327,17 @@ const collectFromNodes = (
           attribute: "href",
           message: "Unsafe link URL was removed",
         });
+        continue;
+      }
+      // Issue #179 — style은 TEXT_BLOCK_PROPS_OWN_TAG_NAMES 5개 태그의
+      // sanitize 허용 목록에 없어 항상 이 분기로 들어온다. export-html.ts
+      // 자신이 낸 값과 raw style이 완전히 같을 때만(isOwnEchoStyle) 경고를
+      // 생략한다 — 그 외에는(추가 선언 포함 전부) 그대로 경고한다.
+      if (
+        attribute === "style" &&
+        typeof value === "string" &&
+        isOwnEchoStyle(node, value)
+      ) {
         continue;
       }
       if (!allowedAttributes.has(attribute)) {

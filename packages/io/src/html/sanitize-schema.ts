@@ -105,6 +105,14 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // DELTA-01). 표 셀 색상(`data-geul-*`)과 달리 실제 CSS `style` 속성을 쓴다 —
   // 문서 안에서 두 인코딩이 공존하는 것은 spec이 이미 결정했다
   // (inline-content.ts의 wrapMark 참고).
+  // p/h1~h6/blockquote/li/summary(TextBlockProps, Issue #179)는 exportHtml이
+  // style도 함께 내지만(export-html.ts의 textBlockPropsAttributes) 이 허용
+  // 목록에는 의도적으로 올리지 않는다 — data-geul-* 3종이 이미 유일한 권위
+  // 값이라(G-CNV-001) import는 style을 다시 파싱·검증할 필요가 없고, span과
+  // 달리 이 다섯 태그는 값이 항상 data-geul-*로도 왕복하므로 style을 별도로
+  // 허용해도 얻는 정보가 없다. sanitize가 그대로 제거하고, 그 raw "제거됨"
+  // 경고는 data-geul-* 존재를 조건으로 import-html-blocks.ts가
+  // consumePreservedAttributeWarning으로 억제한다(계획서 "## 결정").
   span: ["style"],
   code: ["dataLanguage", "className"],
   table: ["dataGeulBlockId", "dataGeulHeaderRows", "dataGeulHeaderColumns"],

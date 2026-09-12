@@ -81,11 +81,16 @@ const blocksFromSegments = (
       // p 자신의 본문 — 기존 parseBlock 관례대로 실질 텍스트 여부와
       // 무관하게 항상 블록 하나를 낸다(빈 <p>도 빈 문단으로 보존).
       // dataGeulBlockId는 p 요소 자신의 속성이라 segment.node에서 읽는다.
+      // style의 raw "제거됨" 오탐 억제는 import-warnings.ts의
+      // isOwnEchoStyle이 raw 노드 하나만 보고 판정한다(Issue #179 리뷰
+      // 수정 — 여기서 존재 여부만으로 소비하면 서로 다른 노드의 warning이
+      // 뒤바뀔 수 있었다).
+      const paragraphProps = textBlockPropsFromElement(segment.node);
       blocks.push({
         id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "paragraph",
         content: paragraphContentFromNodes(segment.nodes),
-        ...textBlockPropsFromElement(segment.node),
+        ...paragraphProps,
       });
       continue;
     }
@@ -94,12 +99,15 @@ const blocksFromSegments = (
       // 세그먼트가 그대로 실어 온다 — 캐스트도 재검증도 없다. dataGeulBlockId는
       // heading 요소 자신의 속성이라 segment.node에서 읽는다(기존 parseBlock
       // 관례).
+      // style 오탐 억제는 위 paragraph와 동일하게 import-warnings.ts의
+      // isOwnEchoStyle이 raw 노드 단위로 판정한다(Issue #179 리뷰 수정).
+      const headingProps = textBlockPropsFromElement(segment.node);
       blocks.push({
         id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "heading",
         level: segment.level,
         content: paragraphContentFromNodes(segment.nodes),
-        ...textBlockPropsFromElement(segment.node),
+        ...headingProps,
       });
       continue;
     }
@@ -138,6 +146,9 @@ const blocksFromSegments = (
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
       const content = paragraphContentFromNodes(contentNodes);
+      // style 오탐 억제는 위 paragraph/heading과 동일하게
+      // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 판정한다
+      // (Issue #179 리뷰 수정).
       const quoteProps = textBlockPropsFromElement(segment.node);
       if (depth >= MAX_NESTING_DEPTH) {
         const flattened = blocksFromNodes(
@@ -336,19 +347,29 @@ const blocksFromListElement = (
     }
     // TextBlockProps 3필드(RD-004 DELTA-02)도 li/dataGeulBlockId와 같은 raw
     // 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
-    if (propertyString(child, "dataGeulTextColor") !== undefined) {
+    const hasTextColor =
+      propertyString(child, "dataGeulTextColor") !== undefined;
+    const hasBackgroundColor =
+      propertyString(child, "dataGeulBackgroundColor") !== undefined;
+    const hasTextAlignment =
+      propertyString(child, "dataGeulTextAlignment") !== undefined;
+    if (hasTextColor) {
       consumePreservedAttributeWarning(warnings, "li", "dataGeulTextColor");
     }
-    if (propertyString(child, "dataGeulBackgroundColor") !== undefined) {
+    if (hasBackgroundColor) {
       consumePreservedAttributeWarning(
         warnings,
         "li",
         "dataGeulBackgroundColor",
       );
     }
-    if (propertyString(child, "dataGeulTextAlignment") !== undefined) {
+    if (hasTextAlignment) {
       consumePreservedAttributeWarning(warnings, "li", "dataGeulTextAlignment");
     }
+    // style의 raw "제거됨" 오탐 억제는 import-warnings.ts의 isOwnEchoStyle이
+    // raw 노드 단위로 판정한다(Issue #179 리뷰 수정 — 위 세 data-geul-*와
+    // 달리 style은 존재 여부만으로 소비하면 서로 다른 li의 warning이 뒤바뀔
+    // 수 있었다).
     // data-geul-checked 존재 여부가 tag보다 우선한다 — own export는 항상
     // <ul>에 checkListItem을 낸다(로드맵 D3). 속성이 있으면 own-format
     // 계약이라 raw 오탐 경고도 함께 억제한다.
@@ -524,35 +545,39 @@ const blocksFromNodes = (
       }
       // TextBlockProps 3필드(RD-004 DELTA-02)도 summary/dataGeulBlockId와 같은
       // raw 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
-      if (
-        propertyString(details.summaryNode, "dataGeulTextColor") !== undefined
-      ) {
+      const summaryHasTextColor =
+        propertyString(details.summaryNode, "dataGeulTextColor") !== undefined;
+      const summaryHasBackgroundColor =
+        propertyString(details.summaryNode, "dataGeulBackgroundColor") !==
+        undefined;
+      const summaryHasTextAlignment =
+        propertyString(details.summaryNode, "dataGeulTextAlignment") !==
+        undefined;
+      if (summaryHasTextColor) {
         consumePreservedAttributeWarning(
           warnings,
           "summary",
           "dataGeulTextColor",
         );
       }
-      if (
-        propertyString(details.summaryNode, "dataGeulBackgroundColor") !==
-        undefined
-      ) {
+      if (summaryHasBackgroundColor) {
         consumePreservedAttributeWarning(
           warnings,
           "summary",
           "dataGeulBackgroundColor",
         );
       }
-      if (
-        propertyString(details.summaryNode, "dataGeulTextAlignment") !==
-        undefined
-      ) {
+      if (summaryHasTextAlignment) {
         consumePreservedAttributeWarning(
           warnings,
           "summary",
           "dataGeulTextAlignment",
         );
       }
+      // style의 raw "제거됨" 오탐 억제는 import-warnings.ts의
+      // isOwnEchoStyle이 raw 노드 단위로 판정한다(Issue #179 리뷰 수정 —
+      // 위 세 data-geul-*와 달리 존재 여부만으로 소비하면 서로 다른
+      // summary의 warning이 뒤바뀔 수 있었다).
       const id =
         propertyString(details.summaryNode, "dataGeulBlockId") ?? createId();
       const content = paragraphContentFromNodes(details.summaryNode.children);

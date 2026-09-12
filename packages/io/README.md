@@ -93,4 +93,4 @@ import "@cp949/geul-io/preview.css";
 <div className="geul-preview" dangerouslySetInnerHTML={{ __html: html }} />
 ```
 
-다크 모드는 아직 지원하지 않는다. 텍스트 블록(문단/헤딩/인용/목록) 단위 `textColor`/`backgroundColor`/`textAlignment` 인라인 커스터마이징은 `exportHtml()`이 `data-geul-*` 속성만 내보내고 인라인 style은 내보내지 않으므로(범위 밖, 별도 결정 필요) 이 CSS가 다루지 않는다 — 값을 직접 `style`로 투영하는 후처리가 필요하면 소비자가 구현한다.
+다크 모드는 아직 지원하지 않는다. 텍스트 블록(문단/헤딩/인용/목록 4종) 단위 `textColor`/`backgroundColor`/`textAlignment`는 `exportHtml()`이 `data-geul-*` 3종과 함께 인라인 `style`(`color`/`background-color`/`text-align`, 지정된 것만)도 함께 내보내므로(Issue #179) 이 CSS나 별도 후처리 없이 `exportHtml()` 출력 자체에서 이미 시각적으로 반영된다. 표 셀(`td`/`th`)의 `textColor`/`backgroundColor`/`align`은 별도 계약이라 아직 `data-geul-*`만 나가고 `style`은 나가지 않는다 — 표 셀 값을 시각적으로 반영하려면 소비자가 여전히 `style`로 직접 투영해야 한다.

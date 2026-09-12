@@ -29,7 +29,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<p data-geul-block-id="paragraph-1" data-geul-text-color="#FF0000" data-geul-background-color="#FFFF00" data-geul-text-alignment="center">styled</p>',
+      '<p data-geul-block-id="paragraph-1" data-geul-text-color="#FF0000" data-geul-background-color="#FFFF00" data-geul-text-alignment="center" style="color:#FF0000;background-color:#FFFF00;text-align:center">styled</p>',
     );
   });
 
@@ -51,7 +51,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<blockquote data-geul-block-id="quote-1" data-geul-text-color="#112233"><p>quoted</p></blockquote>',
+      '<blockquote data-geul-block-id="quote-1" data-geul-text-color="#112233" style="color:#112233"><p>quoted</p></blockquote>',
     );
   });
 
@@ -73,7 +73,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<ul><li data-geul-block-id="item-1" data-geul-background-color="#AABBCC">item</li></ul>',
+      '<ul><li data-geul-block-id="item-1" data-geul-background-color="#AABBCC" style="background-color:#AABBCC">item</li></ul>',
     );
   });
 
@@ -95,7 +95,7 @@ describe("블록 props HTML export", () => {
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);
     expect(exported.value).toBe(
-      '<details data-geul-block-id="toggle-1" data-geul-toggleable="true" open><summary data-geul-block-id="toggle-1" data-geul-text-alignment="right">toggle</summary></details>',
+      '<details data-geul-block-id="toggle-1" data-geul-toggleable="true" open><summary data-geul-block-id="toggle-1" data-geul-text-alignment="right" style="text-align:right">toggle</summary></details>',
     );
   });
 });
