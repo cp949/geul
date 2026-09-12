@@ -803,11 +803,15 @@ describe("표 그립 버튼", () => {
   it("표 왼쪽 경계에서 그립 버튼 쪽으로 이동하는 도중에도 그립 버튼이 유지된다", () => {
     const { editable, table } = renderRealTable();
     fireEvent.pointerMove(table);
-    expect(screen.queryByRole("button", { name: tableMenuLabel })).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: tableMenuLabel }),
+    ).not.toBeNull();
 
     fireEvent.pointerMove(editable, { clientX: 60, clientY: 110 });
 
-    expect(screen.queryByRole("button", { name: tableMenuLabel })).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: tableMenuLabel }),
+    ).not.toBeNull();
   });
 
   // 사용자 스크린샷 버그 재현 — 표 안에 커서를 두고 마우스는 다음 블록

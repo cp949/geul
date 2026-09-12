@@ -15,8 +15,7 @@ import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { liveSchema, unusedIdFactory } from "./editor-controller-support.js";
 
 const containsHardBreak = (node: TiptapJsonNode): boolean =>
-  node.type === "hardBreak" ||
-  (node.content?.some(containsHardBreak) ?? false);
+  node.type === "hardBreak" || (node.content?.some(containsHardBreak) ?? false);
 
 describe("컨테이너 구조 왕복(D19)", () => {
   it("children을 가진 Document를 modelToTiptap → tiptapToModel로 왕복하면 원본과 구조적으로 동일하다(id·타입·content·children)", () => {

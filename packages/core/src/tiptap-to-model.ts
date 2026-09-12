@@ -112,9 +112,7 @@ const inlineContentFromTiptap = (
       custom.length === 0 &&
       previous !== undefined &&
       isTextRunItem(previous) &&
-      (previous.marks ?? []).every((mark) =>
-        isKnownTextMarkType(mark.type),
-      ) &&
+      (previous.marks ?? []).every((mark) => isKnownTextMarkType(mark.type)) &&
       sameMarks(previous.marks as TextMark[] | undefined, known)
     ) {
       previous.text += text;
