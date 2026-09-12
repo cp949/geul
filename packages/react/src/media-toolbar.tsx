@@ -306,11 +306,7 @@ export const MediaToolbar = ({
         editingRef.current = false;
         if (element === null) return { mode: "closed" };
         const media = editor.getSelectionMediaBlock();
-        if (
-          media === null ||
-          media.url === null ||
-          media.blockId !== blockId
-        ) {
+        if (media === null || media.url === null || media.blockId !== blockId) {
           return { mode: "closed" };
         }
         const bounds =

@@ -8,7 +8,10 @@
  */
 import { expect, type Locator, test } from "@playwright/test";
 
-import { openShowcasePage, uploadImageViaFilePanel } from "./support/showcase.js";
+import {
+  openShowcasePage,
+  uploadImageViaFilePanel,
+} from "./support/showcase.js";
 
 /**
  * img 요소의 실제 계산된 marginLeft/marginRight를 px 숫자로 읽는다.
@@ -32,9 +35,7 @@ test("기본(정렬 미지정) 이미지는 편집기와 미리보기 양쪽에�
   await openShowcasePage(page, "/examples/composite");
   const editable = page.getByRole("textbox", { name: "Editor" });
   const editorImage = await uploadImageViaFilePanel(page, editable);
-  const previewImage = page
-    .locator('[aria-label="미리보기"]')
-    .locator("img");
+  const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
 
   const editorMargins = await readHorizontalMargins(editorImage);
   const previewMargins = await readHorizontalMargins(previewImage);
@@ -63,9 +64,7 @@ test("Align left를 누르면 편집기와 미리보기 양쪽에서 이미지�
   await wrapper.click();
   await page.getByRole("button", { name: "Align left" }).click();
 
-  const previewImage = page
-    .locator('[aria-label="미리보기"]')
-    .locator("img");
+  const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
   const editorMargins = await readHorizontalMargins(editorImage);
   const previewMargins = await readHorizontalMargins(previewImage);
 
@@ -88,9 +87,7 @@ test("Align right를 누르면 편집기와 미리보기 양쪽에서 이미지�
   await wrapper.click();
   await page.getByRole("button", { name: "Align right" }).click();
 
-  const previewImage = page
-    .locator('[aria-label="미리보기"]')
-    .locator("img");
+  const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
   const editorMargins = await readHorizontalMargins(editorImage);
   const previewMargins = await readHorizontalMargins(previewImage);
 

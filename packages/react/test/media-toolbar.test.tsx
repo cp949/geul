@@ -1144,7 +1144,10 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
       isUploadEnabled: () => true,
-      setMediaBlockUrl: () => ({ ok: false, error: { code: "LINK_HREF_REJECTED" } }),
+      setMediaBlockUrl: () => ({
+        ok: false,
+        error: { code: "LINK_HREF_REJECTED" },
+      }),
     });
     renderToolbar(controller);
     fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
