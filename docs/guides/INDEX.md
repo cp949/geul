@@ -21,6 +21,7 @@
 | [`G-EDT-001`](./G-EDT-001-keep-editor-commands-atomic.md) | 편집기 command 원자성 | document·selection·stored mark·revision 변경 command 구현 |
 | [`G-EDT-002`](./G-EDT-002-resync-selection-before-reading-stale-state.md) | 클릭 직후 stale selection 재동기화 | 클릭 직후 실행될 수 있는 키보드 핸들러가 editor.state.selection을 판정에 쓰는 경우 |
 | [`G-EDT-003`](./G-EDT-003-design-pm-block-node-schemas-and-group-fill-contracts.md) | PM 블록 노드 스키마·그룹 채움 계약 | PM 블록 노드 타입 신설, 비포장 그룹 멤버 추가, 스키마 그룹 참여 노드 추가·제거, 노드 priority 변경 |
+| [`G-EDT-004`](./G-EDT-004-route-native-undo-redo-by-selection-not-focus.md) | 네이티브 undo/redo는 selection 기준 라우팅 | native undo/redo(`beforeinput` historyUndo/historyRedo)에 의존하는 동작 구현·디버깅, 브라우저 엔진별 undo/redo 회귀 조사 |
 | [`G-UI-001`](./G-UI-001-build-dismissible-overlays.md) | dismissible overlay 구현 | 바깥 클릭·Escape로 닫는 UI 구현 |
 | [`G-UI-002`](./G-UI-002-key-reordered-ui-by-stable-id.md) | 재정렬 UI 식별자 | 안정 key를 가진 항목의 위치 변경·후속 이벤트 억제 |
 | [`G-UI-003`](./G-UI-003-make-anchor-overlays-natively-scrollable.md) | 앵커 오버레이 네이티브 스크롤 도달성 | hover·selection 기반 지속형 오버레이(앵커가 뷰포트 밖으로 나갈 수 있음) 구현·위치 계산 변경 |
