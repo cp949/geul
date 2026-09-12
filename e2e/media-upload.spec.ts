@@ -172,3 +172,61 @@ test("Replace 성공 시 url이 갱신되고 view로 돌아간다", async ({ pag
   );
   await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
 });
+
+test("Replace 클릭 시 Upload/Embed 탭 팝업이 열린다(2026-09-12, 사용자 지시)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+
+  await page.getByRole("button", { name: "Replace file" }).click();
+
+  // 기본 활성 탭은 Upload — file input이 탭 전환 없이 바로 보인다.
+  await expect(page.getByRole("tab", { name: "Upload" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByLabel("Image file")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Embed" })).toBeVisible();
+});
+
+test("Replace의 Embed 탭에서 URL을 저장하면 url/name이 갱신되고 view로 돌아간다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const image = await insertFilledImage(page, editable);
+
+  await page.getByRole("button", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page
+    .getByRole("textbox", { name: "Image URL" })
+    .pressSequentially("https://example.com/dir/new-name.png");
+  await page.getByRole("button", { name: "Save URL" }).click();
+
+  await expect(image).toHaveAttribute(
+    "src",
+    "https://example.com/dir/new-name.png",
+  );
+  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
+});
+
+test("Replace의 Embed 탭에서 허용되지 않는 URL이면 거부 메시지를 표시하고 기존 url을 유지한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const image = await insertFilledImage(page, editable);
+
+  await page.getByRole("button", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page
+    .getByRole("textbox", { name: "Image URL" })
+    .pressSequentially("javascript:alert(1)");
+  await page.getByRole("button", { name: "Save URL" }).click();
+
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(image).toHaveAttribute(
+    "src",
+    "https://example.com/dir/photo.png",
+  );
+  await expect(page.getByRole("button", { name: "Rename" })).toBeHidden();
+});

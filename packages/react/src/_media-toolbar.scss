@@ -33,6 +33,22 @@
   }
 }
 
+// Replace 클릭 시 Upload/Embed 탭 카드로 바뀐다(2026-09-12, 사용자 지시 —
+// "다시 업로드 및 Embed 탭이 있는 팝업"). file-panel.tsx 카드와 시각적으로
+// 맞추려고 그 카드 치수를 그대로 복제한다(media-toolbar.tsx ToolbarState
+// "replacing" 주석 참고 — 코드는 공유하지 않는다는 결정은 유지, 이 복제도
+// 같은 관례) — 안쪽 탭·버튼·입력은 `.geul-file-panel__*` 클래스를 그대로
+// 재사용해 별도 규칙을 새로 추가하지 않는다.
+.geul-media-toolbar--replacing {
+  flex-direction: column;
+  align-items: stretch;
+  width: 18rem;
+  gap: 0.5rem;
+  border-radius: var(--geul-radius-lg, 0.5rem);
+  padding: 0.75rem;
+  box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+
 .geul-media-toolbar__button--danger {
   color: var(--geul-color-danger, #d93025);
 }

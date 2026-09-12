@@ -81,6 +81,7 @@ type FakeControllerOptions = {
     blockId: string,
     file: File,
   ) => Promise<ReplaceMediaFileResult>;
+  setMediaBlockUrl?: (blockId: string, url: string) => CommandResult;
   dictionary?: Dictionary;
 };
 
@@ -94,6 +95,7 @@ const fakeController = ({
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
   replaceMediaBlockFile = () => Promise.resolve({ ok: true, value: undefined }),
+  setMediaBlockUrl = () => ({ ok: true }),
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -123,6 +125,7 @@ const fakeController = ({
     setMediaTextAlignment: vi.fn(setMediaTextAlignment),
     deleteBlock: vi.fn(deleteBlock),
     replaceMediaBlockFile: vi.fn(replaceMediaBlockFile),
+    setMediaBlockUrl: vi.fn(setMediaBlockUrl),
     cancelMediaUpload: vi.fn(() => ({ ok: true, value: undefined })),
   },
 });
@@ -1049,6 +1052,121 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).not.toBeNull();
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    const download = screen.getByRole("link", { name: "Download" });
+    expect(download.getAttribute("href")).toBe(
+      "https://example.com/dir/photo.png",
+    );
+  });
+});
+
+describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시 업로드 및 Embed 탭이 있는 팝업)", () => {
+  it("Replace 클릭 시 Upload가 기본 활성 탭이고 Embed 탭도 함께 보인다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    const uploadTab = screen.getByRole("tab", { name: "Upload" });
+    const embedTab = screen.getByRole("tab", { name: "Embed" });
+    expect(uploadTab.getAttribute("aria-selected")).toBe("true");
+    expect(embedTab.getAttribute("aria-selected")).toBe("false");
+    // 기본 탭이 Upload라 file input이 탭 전환 없이 바로 보인다.
+    expect(screen.getByLabelText("Image file")).not.toBeNull();
+  });
+
+  it("Embed 탭 클릭 시 URL 입력·저장 버튼이 보이고 file input은 사라진다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    expect(screen.getByRole("textbox", { name: "Image URL" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Save URL" })).not.toBeNull();
+    expect(screen.queryByLabelText("Image file")).toBeNull();
+  });
+
+  it("Embed 탭에서 URL을 저장하면 setMediaBlockUrl을 호출하고 view로 돌아가 갱신된 url/name을 반영한다", async () => {
+    let callCount = 0;
+    const setMediaBlockUrl = vi.fn(() => ({ ok: true }));
+    const setMediaBlockName = vi.fn(() => ({ ok: true }));
+    const controller = fakeController({
+      getSelectionMediaBlock: () => {
+        callCount += 1;
+        // 첫 조회(마운트)는 교체 전 값, 이후(URL 적용 성공 재조회)는 새 값
+        // — "교체 성공 시 view로 돌아가..." 테스트와 같은 패턴.
+        return callCount === 1
+          ? filledImageBlock
+          : {
+              ...filledImageBlock,
+              url: "https://example.com/dir/new-name.png",
+              name: "new-name.png",
+            };
+      },
+      isUploadEnabled: () => true,
+      setMediaBlockUrl,
+      setMediaBlockName,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: "https://example.com/dir/new-name.png" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(setMediaBlockUrl).toHaveBeenCalledWith(
+      "media-1",
+      "https://example.com/dir/new-name.png",
+    );
+    expect(setMediaBlockName).toHaveBeenCalledWith("media-1", "new-name.png");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    });
+    const download = screen.getByRole("link", { name: "Download" });
+    expect(download.getAttribute("href")).toBe(
+      "https://example.com/dir/new-name.png",
+    );
+  });
+
+  it("Embed 탭에서 거부된 URL이면 거부 메시지를 표시하고 view로 돌아가지 않는다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+      setMediaBlockUrl: () => ({ ok: false, error: { code: "LINK_HREF_REJECTED" } }),
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(screen.getByRole("alert")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+  });
+
+  it("Embed 탭에서도 Cancel(닫기) 클릭 시 교체 전 값 그대로 view로 돌아간다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 

@@ -10,13 +10,13 @@ import {
   LucideProvider,
   PenLine,
   Replace as ReplaceIcon,
-  RotateCw,
   Trash2,
   X,
 } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import {
@@ -33,6 +33,11 @@ import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 const mediaToolbarButtonClassName = "geul-media-toolbar__button";
 const dangerButtonClassName =
   "geul-media-toolbar__button geul-media-toolbar__button--danger";
+// Replace의 Upload/Embed 팝업 카드 안쪽 탭·버튼 전용 — file-panel.tsx의
+// filePanelButtonClassName과 같은 문자열이지만 코드는 공유하지 않는다(아래
+// ToolbarState "replacing" 주석 참고). mediaToolbarButtonClassName(아이콘
+// 버튼 전용, 1.75rem 정사각형 고정)과 달리 텍스트 버튼 크기를 그대로 쓴다.
+const filePanelButtonClassName = "geul-file-panel__button";
 
 // link-toolbar.tsx의 saveLinkIcon 등과 같은 이유로 모듈 top-level에서 한 번만
 // 만든다 — 매 렌더 새 ReactElement를 만들지 않는다. Download만 icon import를
@@ -48,7 +53,6 @@ const alignRightIcon = <AlignRight {...iconProps} />;
 const deleteIcon = <Trash2 {...iconProps} />;
 const saveIcon = <Check {...iconProps} />;
 const cancelIcon = <X {...iconProps} />;
-const retryIcon = <RotateCw {...iconProps} />;
 const downloadIcon = <DownloadIcon {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. FilePanel/SlashMenu와 같은 이유로
@@ -104,7 +108,16 @@ type MediaInfo = {
 // Upload 탭(file-panel.tsx, RD-003 DELTA-02)과 같은 모양이지만 코드는
 // 공유하지 않는다 — RD-003-DELTA-03.md "결정"(사용처 2곳뿐이라 훅 추출
 // 이득이 적다, 이 저장소의 두 파일이 이미 selection 상태 기계·kindLabel을
-// 각자 복제하는 관례와 일치).
+// 각자 복제하는 관례와 일치). Replace에 Embed 탭을 더한 지금(2026-09-12,
+// 사용자 지시 — "다시 업로드 및 Embed 탭이 있는 팝업")도 이 결정을
+// 유지한다 — 두 컴포넌트의 selection 상태 기계 자체가 이미 다르게 갈라져
+// 있어(이 컴포넌트는 url 있는 블록만, file-panel.tsx는 없는 블록만 연다)
+// 상태 기계를 공유 추출할 실이익은 여전히 적다. 대신 시각 요소만
+// 재사용한다 — 카드 CSS는 file-panel.tsx의 치수를 그대로 복제하고(아래
+// `.geul-media-toolbar--replacing`), 탭·입력·버튼은 `.geul-file-panel__*`
+// 클래스와 `dictionary.toolbar.filePanel.*` 문자열을 그대로 가져다 쓴다
+// (이름이 그 컴포넌트에 묶이지 않은 범용 selector/문자열이라 그대로 쓸 수
+// 있다).
 type UploadSubState =
   | { status: "idle" }
   | { status: "uploading" }
@@ -117,6 +130,14 @@ type ToolbarState =
       ToolbarPosition)
   | ({
       mode: "replacing";
+      /** 기본값은 upload — file-panel.tsx의 Notion parity(2026-09-12)
+       * 기본값과 맞춘다. */
+      activeTab: "embed" | "upload";
+      /** Embed 탭의 URL 입력 draft. */
+      draft: string;
+      /** Embed 탭에서 거부된 URL을 제출했는지(file-panel.tsx rejected와
+       * 같은 계약). */
+      rejected: boolean;
       upload: UploadSubState;
       /** retry가 파일 선택 대화상자를 다시 열지 않고 재사용할 원본 File. */
       heldFile: File | null;
@@ -199,6 +220,7 @@ export const MediaToolbar = ({
   const dismissedBlockIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const replaceUrlInputRef = useRef<HTMLInputElement>(null);
   const { actionError, runCommand, clearActionError } =
     useTableCommandFeedback();
 
@@ -261,9 +283,51 @@ export const MediaToolbar = ({
     }
   }, [toolbarState.mode]);
 
+  // 활성 탭이 정해질 때(최초 진입 포함, 탭 전환 클릭 포함) 그 탭의 입력에
+  // 초점을 준다 — file-panel.tsx의 같은 이름 effect와 같은 이유·같은 모양
+  // (2026-09-12, Embed 탭 추가).
+  const replaceActiveTab =
+    toolbarState.mode === "replacing" ? toolbarState.activeTab : null;
   useEffect(() => {
-    if (toolbarState.mode === "replacing") replaceFileInputRef.current?.focus();
-  }, [toolbarState.mode]);
+    if (replaceActiveTab === "upload") replaceFileInputRef.current?.focus();
+    else if (replaceActiveTab === "embed") replaceUrlInputRef.current?.focus();
+  }, [replaceActiveTab]);
+
+  // Upload 성공(pending null)·Embed URL 적용 성공 공용 — url/name이 실제로
+  // 바뀌었으므로 finishEditing처럼 로컬 캐시 값을 재사용하지 않고 core를
+  // 다시 조회해 "view"로 돌아간다(RD-003-DELTA-03.md "결정"). 대기 중 이미
+  // 다른 상태로 나갔으면(Cancel 등) 손대지 않는다 — updateFromSelection과
+  // 같은 판정을 여기 인라인한다(updateFromSelection을 setState 콜백 안에서
+  // 부르면 안 돼 직접 푼다).
+  const finishReplacing = useCallback(
+    (blockId: string) => {
+      setToolbarState((prev) => {
+        if (prev.mode !== "replacing" || prev.blockId !== blockId) return prev;
+        editingRef.current = false;
+        if (element === null) return { mode: "closed" };
+        const media = editor.getSelectionMediaBlock();
+        if (
+          media === null ||
+          media.url === null ||
+          media.blockId !== blockId
+        ) {
+          return { mode: "closed" };
+        }
+        const bounds =
+          readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+        // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
+        // 잉여 필드가 없는 fresh MediaInfo다.
+        return {
+          mode: "view",
+          ...media,
+          url: media.url,
+          left: bounds.left,
+          top: bounds.top,
+        };
+      });
+    },
+    [editor, element],
+  );
 
   // Upload/Replace 공용 — 파일 선택 직후와 retry 둘 다 이 함수로 들어온다
   // (RD-003.md "결정" 그대로 — Promise를 직접 await해 loading→성공/실패/
@@ -310,33 +374,9 @@ export const MediaToolbar = ({
         );
         return;
       }
-      // 성공 — url/name이 실제로 바뀌었으므로 finishEditing처럼 로컬 캐시
-      // 값을 재사용하지 않고 core를 다시 조회해 "view"로 돌아간다(RD-003-
-      // DELTA-03.md "결정"). 대기 중 이미 다른 상태로 나갔으면(Cancel 등)
-      // 손대지 않는다 — updateFromSelection과 같은 판정을 여기 인라인한다
-      // (updateFromSelection을 setState 콜백 안에서 부르면 안 돼 직접 푼다).
-      setToolbarState((prev) => {
-        if (prev.mode !== "replacing" || prev.blockId !== blockId) return prev;
-        editingRef.current = false;
-        if (element === null) return { mode: "closed" };
-        const media = editor.getSelectionMediaBlock();
-        if (media === null || media.url === null || media.blockId !== blockId) {
-          return { mode: "closed" };
-        }
-        const bounds =
-          readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
-        // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
-        // 잉여 필드가 없는 fresh MediaInfo다.
-        return {
-          mode: "view",
-          ...media,
-          url: media.url,
-          left: bounds.left,
-          top: bounds.top,
-        };
-      });
+      finishReplacing(blockId);
     },
-    [editor, element, dictionary.status.uploadCouldNotStart],
+    [editor, dictionary.status.uploadCouldNotStart, finishReplacing],
   );
 
   const startReplacing = () => {
@@ -353,6 +393,9 @@ export const MediaToolbar = ({
     setToolbarState({
       mode: "replacing",
       ...carryMediaInfo(toolbarState),
+      activeTab: "upload",
+      draft: "",
+      rejected: false,
       upload,
       heldFile: null,
     });
@@ -373,6 +416,33 @@ export const MediaToolbar = ({
       return;
     }
     void startReplaceUpload(toolbarState.blockId, toolbarState.heldFile);
+  };
+
+  const handleReplaceTabClick = (tab: "embed" | "upload") => {
+    setToolbarState((prev) =>
+      prev.mode === "replacing" ? { ...prev, activeTab: tab } : prev,
+    );
+  };
+
+  // file-panel.tsx applyUrl과 같은 관례 — 마지막 path segment로 이름을
+  // 추출해 저장한다(추출 실패는 setMediaBlockName을 호출하지 않는다).
+  // 성공하면 startReplaceUpload 성공 분기와 같은 finishReplacing으로
+  // view에 돌아간다.
+  const applyReplaceUrl = () => {
+    if (toolbarState.mode !== "replacing") return;
+    const { blockId, draft } = toolbarState;
+    const result = editor.commands.setMediaBlockUrl(blockId, draft);
+    if (!result.ok) {
+      setToolbarState((prev) =>
+        prev.mode === "replacing" ? { ...prev, rejected: true } : prev,
+      );
+      return;
+    }
+    const extractedName = extractNameFromUrl(draft);
+    if (extractedName !== null) {
+      editor.commands.setMediaBlockName(blockId, extractedName);
+    }
+    finishReplacing(blockId);
   };
 
   // uploading 중이면 먼저 abort하고, 상태와 무관하게 교체 전 값(로컬에
@@ -576,7 +646,11 @@ export const MediaToolbar = ({
   const content = (
     <div
       aria-label={dictionary.toolbar.media.ariaLabel}
-      className="geul-media-toolbar"
+      className={
+        toolbarState.mode === "replacing"
+          ? "geul-media-toolbar geul-media-toolbar--replacing"
+          : "geul-media-toolbar"
+      }
       ref={menuRef}
       role="toolbar"
       style={style}
@@ -732,40 +806,141 @@ export const MediaToolbar = ({
       )}
       {toolbarState.mode === "replacing" && (
         <>
-          <input
-            aria-label={dictionary.toolbar.media.replaceFileInputAriaLabel.replace(
-              "{kind}",
-              dictionary.toolbar.kindNames[toolbarState.kind],
-            )}
-            disabled={toolbarState.upload.status === "uploading"}
-            onChange={handleReplaceFileChange}
-            ref={replaceFileInputRef}
-            type="file"
-          />
-          {toolbarState.upload.status === "uploading" && (
-            <p role="status">{dictionary.status.uploading}</p>
-          )}
-          {toolbarState.upload.status === "error" && (
+          {/* Upload/Embed 탭 + 우측 상단 닫기(X) — file-panel.tsx 카드와
+              같은 구조(2026-09-12, 사용자 지시). 위 ToolbarState "replacing"
+              주석 참고 — 시각 요소만 재사용하고 상태 기계는 이 컴포넌트가
+              그대로 소유한다. */}
+          <div className="geul-file-panel__header">
+            <div
+              aria-label={dictionary.toolbar.filePanel.sourceAriaLabel}
+              className="geul-file-panel__tablist"
+              role="tablist"
+            >
+              <button
+                aria-selected={toolbarState.activeTab === "upload"}
+                className={filePanelButtonClassName}
+                onClick={() => handleReplaceTabClick("upload")}
+                onMouseDown={(event) => event.preventDefault()}
+                role="tab"
+                type="button"
+              >
+                {dictionary.toolbar.filePanel.uploadTab}
+              </button>
+              <button
+                aria-selected={toolbarState.activeTab === "embed"}
+                className={filePanelButtonClassName}
+                onClick={() => handleReplaceTabClick("embed")}
+                onMouseDown={(event) => event.preventDefault()}
+                role="tab"
+                type="button"
+              >
+                {dictionary.toolbar.filePanel.embedTab}
+              </button>
+            </div>
+            <IconButton
+              className={mediaToolbarButtonClassName}
+              icon={cancelIcon}
+              label={dictionary.toolbar.media.cancel}
+              onClick={cancelReplacing}
+            />
+          </div>
+          {toolbarState.activeTab === "embed" && (
             <>
-              <span className="geul-media-toolbar__error" role="alert">
-                {toolbarState.upload.message}
-              </span>
-              {toolbarState.heldFile !== null && (
-                <IconButton
-                  className={mediaToolbarButtonClassName}
-                  icon={retryIcon}
-                  label={dictionary.toolbar.media.retry}
-                  onClick={handleReplaceRetry}
-                />
+              <input
+                aria-label={dictionary.toolbar.filePanel.urlInputAriaLabel.replace(
+                  "{kind}",
+                  dictionary.toolbar.kindNames[toolbarState.kind],
+                )}
+                className="geul-file-panel__url-input"
+                onChange={(event) => {
+                  if (toolbarState.mode !== "replacing") return;
+                  setToolbarState({
+                    ...toolbarState,
+                    draft: event.currentTarget.value,
+                    rejected: false,
+                  });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    applyReplaceUrl();
+                  }
+                }}
+                placeholder={dictionary.toolbar.filePanel.urlInputPlaceholder.replace(
+                  "{kind}",
+                  dictionary.toolbar.kindNames[toolbarState.kind],
+                )}
+                ref={replaceUrlInputRef}
+                type="text"
+                value={toolbarState.draft}
+              />
+              <button
+                aria-label={dictionary.toolbar.filePanel.saveUrl}
+                className={`${filePanelButtonClassName} geul-file-panel__primary-button`}
+                onClick={applyReplaceUrl}
+                onMouseDown={(event) => event.preventDefault()}
+                type="button"
+              >
+                {dictionary.toolbar.filePanel.save.replace(
+                  "{kind}",
+                  dictionary.toolbar.kindNames[toolbarState.kind],
+                )}
+              </button>
+              {toolbarState.rejected && (
+                <span className="geul-media-toolbar__error" role="alert">
+                  {dictionary.status.unsupportedMediaUrl}
+                </span>
               )}
             </>
           )}
-          <IconButton
-            className={mediaToolbarButtonClassName}
-            icon={cancelIcon}
-            label={dictionary.toolbar.media.cancel}
-            onClick={cancelReplacing}
-          />
+          {toolbarState.activeTab === "upload" && (
+            <div className="geul-file-panel__upload">
+              {/* 네이티브 file input은 시각적으로만 숨긴다 — file-panel.tsx
+                  upload-input과 같은 이유(clip 기법, 접근성 트리 유지).
+                  실제 클릭은 아래 전체폭 버튼이 대신 트리거한다. */}
+              <input
+                aria-label={dictionary.toolbar.media.replaceFileInputAriaLabel.replace(
+                  "{kind}",
+                  dictionary.toolbar.kindNames[toolbarState.kind],
+                )}
+                className="geul-file-panel__upload-input"
+                disabled={toolbarState.upload.status === "uploading"}
+                onChange={handleReplaceFileChange}
+                ref={replaceFileInputRef}
+                type="file"
+              />
+              {toolbarState.upload.status !== "uploading" && (
+                <button
+                  className={`${filePanelButtonClassName} geul-file-panel__upload-trigger`}
+                  onClick={() => replaceFileInputRef.current?.click()}
+                  onMouseDown={(event) => event.preventDefault()}
+                  type="button"
+                >
+                  {dictionary.toolbar.filePanel.uploadButton}
+                </button>
+              )}
+              {toolbarState.upload.status === "uploading" && (
+                <p role="status">{dictionary.status.uploading}</p>
+              )}
+              {toolbarState.upload.status === "error" && (
+                <>
+                  <span className="geul-media-toolbar__error" role="alert">
+                    {toolbarState.upload.message}
+                  </span>
+                  {toolbarState.heldFile !== null && (
+                    <button
+                      className={filePanelButtonClassName}
+                      onClick={handleReplaceRetry}
+                      onMouseDown={(event) => event.preventDefault()}
+                      type="button"
+                    >
+                      {dictionary.toolbar.media.retry}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
       {actionError !== null && (
