@@ -17,6 +17,7 @@
 | [`G-WKS-004`](./G-WKS-004-verify-lint-and-gate-changes.md) | lint·gate 변경 검증 | lint autofix·validator·copy detection 변경 |
 | [`G-WKS-005`](./G-WKS-005-run-pnpm-inside-bind-mounted-containers.md) | 컨테이너 안 pnpm 실행 | 호스트 저장소를 bind-mount한 Docker 컨테이너 안에서 pnpm 명령 실행 |
 | [`G-WKS-006`](./G-WKS-006-replace-unsupported-web-apis-at-the-floor-browser.md) | floor 미지원 Web API 대체 구현 | Geul 자기 소스가 호출하는 Web API가 Chrome75 floor에서 미지원 |
+| [`G-WKS-007`](./G-WKS-007-check-adr-0009-before-adding-an-app-to-floor-browser-e2e.md) | floor 브라우저 e2e 편입 전 ADR-0009 확인 | 새 `apps/*` 앱을 chrome83 등 floor 브라우저 e2e project에 처음 연결 |
 | [`G-EDT-001`](./G-EDT-001-keep-editor-commands-atomic.md) | 편집기 command 원자성 | document·selection·stored mark·revision 변경 command 구현 |
 | [`G-EDT-002`](./G-EDT-002-resync-selection-before-reading-stale-state.md) | 클릭 직후 stale selection 재동기화 | 클릭 직후 실행될 수 있는 키보드 핸들러가 editor.state.selection을 판정에 쓰는 경우 |
 | [`G-EDT-003`](./G-EDT-003-design-pm-block-node-schemas-and-group-fill-contracts.md) | PM 블록 노드 스키마·그룹 채움 계약 | PM 블록 노드 타입 신설, 비포장 그룹 멤버 추가, 스키마 그룹 참여 노드 추가·제거, 노드 priority 변경 |
