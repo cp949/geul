@@ -44,6 +44,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
+import { HistoryNativeUndoFallbackExtension } from "./history-native-undo-fallback-extension.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
@@ -453,6 +454,7 @@ export const createProductionEditor = (options: {
       TextColorMark,
       BackgroundColorMark,
       HardBreakExtension,
+      HistoryNativeUndoFallbackExtension,
       // enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12) — 각 block
       // type을 정의하는 "주 확장"만 조건부로 넣는다. input rule·keyboard·
       // marker 등 "보조 확장"(ListInputRuleExtension 등, 아래 그대로 무조건
