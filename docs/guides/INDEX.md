@@ -10,6 +10,7 @@
 | [`G-TST-002`](./G-TST-002-own-shared-test-support.md) | 공용 test support 소유 | 두 번째 테스트 파일이 같은 fixture·helper·조립 지식을 사용 |
 | [`G-TST-003`](./G-TST-003-clean-up-test-resources.md) | 테스트 자원 정리 | DOM 노드·Editor·observer 등 명시적 수명 자원 생성 |
 | [`G-TST-004`](./G-TST-004-test-complexity-deterministically.md) | 복잡도 회귀 검증 | 성능 최적화 또는 성능 상한 테스트 변경 |
+| [`G-TST-005`](./G-TST-005-avoid-jsdom-relative-url-resolution.md) | jsdom 환경 상대 경로 해석 회피 | jsdom 환경 테스트에서 자기 파일 기준 상대 경로(fixture 등) 생성 |
 | [`G-WKS-001`](./G-WKS-001-prove-package-boundaries.md) | 패키지 경계 검증 | manifest·public type·package export·consumer 변경 |
 | [`G-WKS-002`](./G-WKS-002-build-before-distribution-verification.md) | 배포 소비 검증 | consumer fixture·E2E·package export 검증 |
 | [`G-WKS-003`](./G-WKS-003-typecheck-tests-and-non-package-sources.md) | TypeScript 소스 전량 typecheck | package test·config·e2e·script TS/JS 추가 |
