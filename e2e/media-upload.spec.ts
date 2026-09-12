@@ -43,6 +43,21 @@ test("Upload 탭에서 파일을 선택하면 성공 시 url이 반영된다 @co
   );
 });
 
+test("업로드가 성공하면 File Panel이 자동으로 닫힌다(2026-09-12, 사용자 지시 — 업로드된 이미지 위에 빈 패널이 계속 남아있던 문제)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+
+  await page.getByRole("tab", { name: "Upload" }).click();
+  await chooseFile(page.getByLabel("Image file"), "photo.png");
+
+  await expect(page.getByRole("toolbar", { name: "File panel" })).toBeHidden();
+  await expect(editable).toBeFocused();
+});
+
 test("업로드가 실패하면 에러와 Retry를 보여주고, Retry는 다시 로딩을 보여준다", async ({
   page,
 }) => {

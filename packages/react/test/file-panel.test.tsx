@@ -569,7 +569,7 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
     void resolveUpload!;
   });
 
-  it("업로드가 성공(pending null)하면 idle로 돌아가 파일 input이 다시 나타난다", async () => {
+  it("업로드가 성공(pending null)하면 패널이 자동으로 닫히고 편집기로 focus를 복원한다(2026-09-12, 사용자 지시 — RD-003-DELTA-02.md '결정' 3 번복)", async () => {
     const uploadMediaFile = vi.fn(() =>
       Promise.resolve<UploadMediaFileResult>({ ok: true, value: undefined }),
     );
@@ -580,6 +580,7 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
       getMediaUploadState: () => null,
     });
     renderPanel(controller);
+    const editable = getEditable();
     fireEvent.click(screen.getByRole("tab", { name: "Upload" }));
 
     const file = new File(["x"], "photo.png", { type: "image/png" });
@@ -587,13 +588,13 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
       target: { files: [file] },
     });
 
+    // 예전엔 idle로 돌아가 재업로드 가능 상태를 유지했지만, 성공한
+    // 이미지 위에 빈 Upload 패널이 계속 남는 문제가 실사용에서 보고돼
+    // Close 버튼·Escape와 같은 dismissPanel 경로로 자동으로 닫는다.
     await waitFor(() => {
-      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("toolbar")).toBeNull();
     });
-    expect(
-      (screen.getByLabelText("Image file") as HTMLInputElement).disabled,
-    ).toBe(false);
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.activeElement).toBe(editable);
   });
 
   it("업로드가 실패(pending error)하면 에러 메시지와 Retry 버튼을 보여준다", async () => {

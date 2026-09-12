@@ -227,6 +227,26 @@ export const FilePanel = ({
     else if (activeTab === "embed") inputRef.current?.focus();
   }, [activeTab]);
 
+  const focusEditor = useFocusEditor(element);
+
+  const dismissPanel = useCallback(() => {
+    dismissedBlockIdRef.current = openBlockIdRef.current;
+    editingRef.current = true;
+    setPanelState({ mode: "closed" });
+    element?.ownerDocument.defaultView?.setTimeout(() => {
+      editingRef.current = false;
+    });
+  }, [element]);
+  // link-toolbar.tsx의 closeAndRestoreFocus와 같은 순서(focus 먼저, close
+  // 나중) — 반대로 하면 실제 Chromium에서 초점이 편집기로 옮겨 붙지
+  // 않는다(e2e 실측: media-file-panel.spec.ts "Escape는 패널을 닫고
+  // 편집기로 초점을 되돌린다", jsdom 단위 테스트는 두 순서 다 통과해
+  // e2e 없이는 못 잡는 차이다).
+  const dismissPanelAndFocusEditor = useCallback(() => {
+    focusEditor();
+    dismissPanel();
+  }, [dismissPanel, focusEditor]);
+
   // Upload/Embed 공용 — 파일 선택 직후와 retry 둘 다 이 함수로 들어온다
   // (RD-003.md "결정" — Promise를 직접 await해 loading→성공/실패/취소를
   // 로컬 state로 반영, getMediaUploadState는 열릴 때 초깃값 시딩용으로만
@@ -239,37 +259,53 @@ export const FilePanel = ({
           : prev,
       );
       const result = await editor.commands.uploadMediaFile(blockId, file);
-      setPanelState((prev) => {
-        if (prev.mode !== "open" || prev.blockId !== blockId) return prev;
-        if (!result.ok) {
-          // 사전조건 실패(BLOCK_NOT_FOUND·COMMAND_NOT_APPLICABLE 등)만
-          // 여기로 온다 — 콜백이 실제 정착한 뒤의 성공/실패/취소는 항상
-          // ok:true라 아래 getMediaUploadState 분기가 담당한다.
-          return {
-            ...prev,
-            upload: {
-              status: "error",
-              code: result.error.code,
-              message: dictionary.status.uploadCouldNotStart,
-            },
-          };
-        }
-        const pending = editor.getMediaUploadState(blockId);
-        if (pending === "uploading") return prev;
-        if (pending === null) {
-          return { ...prev, upload: { status: "idle" }, heldFile: null };
-        }
-        return {
-          ...prev,
-          upload: {
-            status: "error",
-            code: pending.code,
-            message: pending.message,
-          },
-        };
-      });
+      if (!result.ok) {
+        // 사전조건 실패(BLOCK_NOT_FOUND·COMMAND_NOT_APPLICABLE 등)만
+        // 여기로 온다 — 콜백이 실제 정착한 뒤의 성공/실패/취소는 항상
+        // ok:true라 아래 getMediaUploadState 분기가 담당한다.
+        setPanelState((prev) =>
+          prev.mode === "open" && prev.blockId === blockId
+            ? {
+                ...prev,
+                upload: {
+                  status: "error",
+                  code: result.error.code,
+                  message: dictionary.status.uploadCouldNotStart,
+                },
+              }
+            : prev,
+        );
+        return;
+      }
+      const pending = editor.getMediaUploadState(blockId);
+      if (pending === "uploading") return;
+      if (pending === null) {
+        // 업로드 성공(취소 포함 — pending 둘 다 null이라 구분하지 않는다,
+        // 결정 3) — 패널을 자동으로 닫는다(2026-09-12, 사용자 지시). 예전엔
+        // idle로 돌아가 재업로드 가능 상태를 유지했지만(RD-003-DELTA-02.md
+        // "결정" 3 — 이번 지시로 번복한다), 성공한 이미지 위에 빈 Upload
+        // 패널이 계속 남는 문제가 실사용에서 보고됐다. Close 버튼·Escape와
+        // 같은 dismissPanel 경로를 그대로 타 MediaToolbar와의 dismiss
+        // 경합(Issue #165)을 새로 만들지 않는다. openBlockIdRef 불일치는
+        // 그사이 패널이 다른 블록으로 옮겨갔거나 이미 닫혔다는 뜻이라
+        // 손대지 않는다.
+        if (openBlockIdRef.current === blockId) dismissPanelAndFocusEditor();
+        return;
+      }
+      setPanelState((prev) =>
+        prev.mode === "open" && prev.blockId === blockId
+          ? {
+              ...prev,
+              upload: {
+                status: "error",
+                code: pending.code,
+                message: pending.message,
+              },
+            }
+          : prev,
+      );
     },
-    [editor, dictionary.status.uploadCouldNotStart],
+    [editor, dictionary.status.uploadCouldNotStart, dismissPanelAndFocusEditor],
   );
 
   const handleFileChange = (event: { currentTarget: HTMLInputElement }) => {
@@ -301,25 +337,6 @@ export const FilePanel = ({
     panelState.mode === "closed" ? 0 : panelState.top,
     "centerBelow",
   );
-  const focusEditor = useFocusEditor(element);
-
-  const dismissPanel = useCallback(() => {
-    dismissedBlockIdRef.current = openBlockIdRef.current;
-    editingRef.current = true;
-    setPanelState({ mode: "closed" });
-    element?.ownerDocument.defaultView?.setTimeout(() => {
-      editingRef.current = false;
-    });
-  }, [element]);
-  // link-toolbar.tsx의 closeAndRestoreFocus와 같은 순서(focus 먼저, close
-  // 나중) — 반대로 하면 실제 Chromium에서 초점이 편집기로 옮겨 붙지
-  // 않는다(e2e 실측: media-file-panel.spec.ts "Escape는 패널을 닫고
-  // 편집기로 초점을 되돌린다", jsdom 단위 테스트는 두 순서 다 통과해
-  // e2e 없이는 못 잡는 차이다).
-  const dismissPanelAndFocusEditor = useCallback(() => {
-    focusEditor();
-    dismissPanel();
-  }, [dismissPanel, focusEditor]);
 
   useDismissOnOutsideOrEscape({
     active: panelState.mode === "open",
