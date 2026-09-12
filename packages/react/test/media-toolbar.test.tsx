@@ -755,6 +755,61 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
   });
 });
 
+// 사용자 스크린샷 — 이미지를 리사이즈 핸들로 드래그하는 동안 toolbar가 옛
+// 위치에 그대로 떠 이미지를 가린다. media-resize-handles.tsx는 드래그
+// 중 element(host)에 `data-geul-media-resizing-block-id`를 쓴다
+// (media-resize-handles.test.tsx "리사이즈 중 element에 남기는..." 참고) —
+// 여기선 MediaToolbar가 그 속성을 관찰해 숨기고, 드래그가 끝나면 다시
+// 보여주는 쪽만 검증한다(속성을 쓰는 쪽 검증과 분리, 두 컴포넌트는 여전히
+// 서로를 모른다).
+describe("리사이즈 중 toolbar를 숨긴다(사용자 스크린샷)", () => {
+  const setResizing = (blockId: string | null) => {
+    const element = screen.getByRole("textbox", { name: "Editor" });
+    if (blockId === null) {
+      element.removeAttribute("data-geul-media-resizing-block-id");
+    } else {
+      element.setAttribute("data-geul-media-resizing-block-id", blockId);
+    }
+  };
+
+  it("현재 보이는 블록의 리사이즈가 시작되면 toolbar를 숨긴다", async () => {
+    renderToolbar(
+      fakeController({ getSelectionMediaBlock: () => filledImageBlock }),
+    );
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+
+    setResizing("media-1");
+
+    await waitFor(() => expect(screen.queryByRole("toolbar")).toBeNull());
+  });
+
+  it("드래그가 끝나면(속성 제거) toolbar를 다시 보여준다", async () => {
+    renderToolbar(
+      fakeController({ getSelectionMediaBlock: () => filledImageBlock }),
+    );
+    setResizing("media-1");
+    await waitFor(() => expect(screen.queryByRole("toolbar")).toBeNull());
+
+    setResizing(null);
+
+    await waitFor(() => expect(screen.queryByRole("toolbar")).not.toBeNull());
+  });
+
+  it("다른 블록의 리사이즈는 지금 보이는 toolbar에 영향을 주지 않는다", async () => {
+    renderToolbar(
+      fakeController({ getSelectionMediaBlock: () => filledImageBlock }),
+    );
+
+    setResizing("media-other");
+
+    // waitFor 없이 동기 단언 — 숨김이 아예 트리거되지 않아야 하므로 기다릴
+    // 대상 자체가 없다(다른 블록 id라 상태 갱신은 일어나되 hide 조건만
+    // 거짓이어야 한다).
+    await Promise.resolve();
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+  });
+});
+
 describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
   it("uploadFile 미등록 시 Replace 버튼이 보이지 않는다", () => {
     const controller = fakeController({

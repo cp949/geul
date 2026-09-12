@@ -493,3 +493,61 @@ describe("핸들 드래그로 폭을 조절한다", () => {
     expect(media.style.width).toBe("");
   });
 });
+
+// 사용자 스크린샷: 드래그 동안 MediaToolbar가 옛 위치에 그대로 떠 있어
+// 이미지를 가린다. media-toolbar.tsx는 이 속성을 MutationObserver로 지켜보고
+// 숨긴다(media-toolbar.test.tsx) — 여기선 MediaResizeHandles가 그 속성을
+// element에 정확히 쓰고 지우는 쪽만 검증한다.
+describe("리사이즈 중 element에 남기는 data-geul-media-resizing-block-id", () => {
+  it("pointerdown 시작 시 blockId를 element 속성으로 쓴다", () => {
+    renderHandles(
+      fakeController({ getSelectionMediaBlock: () => filledImageSelection }),
+    );
+    const editable = getEditable();
+    const element = editable.parentElement as HTMLElement;
+    expect(
+      element.getAttribute("data-geul-media-resizing-block-id"),
+    ).toBeNull();
+
+    fireEvent.pointerDown(getHandle("right"), { pointerId: 1, clientX: 300 });
+
+    expect(element.getAttribute("data-geul-media-resizing-block-id")).toBe(
+      "media-1",
+    );
+  });
+
+  it("pointer-up으로 드래그가 끝나면 속성을 지운다", () => {
+    renderHandles(
+      fakeController({ getSelectionMediaBlock: () => filledImageSelection }),
+    );
+    const editable = getEditable();
+    const element = editable.parentElement as HTMLElement;
+
+    fireEvent.pointerDown(getHandle("right"), { pointerId: 1, clientX: 300 });
+    expect(
+      element.getAttribute("data-geul-media-resizing-block-id"),
+    ).not.toBeNull();
+
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(
+      element.getAttribute("data-geul-media-resizing-block-id"),
+    ).toBeNull();
+  });
+
+  it("Escape 취소로 드래그가 끝나도 속성을 지운다", () => {
+    renderHandles(
+      fakeController({ getSelectionMediaBlock: () => filledImageSelection }),
+    );
+    const editable = getEditable();
+    const element = editable.parentElement as HTMLElement;
+
+    fireEvent.pointerDown(getHandle("right"), { pointerId: 1, clientX: 300 });
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerUp(editable, { pointerId: 1 });
+
+    expect(
+      element.getAttribute("data-geul-media-resizing-block-id"),
+    ).toBeNull();
+  });
+});

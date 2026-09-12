@@ -304,6 +304,32 @@ export const MediaResizeHandles = () => {
     };
   }, [resizeActive, element]);
 
+  // 리사이즈 중엔 MediaToolbar를 감춰야 한다(사용자 스크린샷 — 드래그
+  // 동안 toolbar가 드래그 시작 시점 위치에 그대로 떠 이미지를 가린다).
+  // MediaToolbar는 selectionchange/mouseup 등 네이티브 이벤트로만 갱신하는데
+  // (use-selection-refresh.ts), handlePointerDownOnHandle의 pointerdown
+  // preventDefault가 이 드래그 시퀀스의 호환 mousedown/mouseup을 통째로
+  // 없앤다(PointerEvent 스펙, 위 handlePointerDownOnHandle 주석과 같은
+  // 지점) — 그 이벤트에 얹으면 드래그 시작·종료 어느 쪽도 못 잡는다.
+  // file-panel.tsx가 `data-geul-file-panel-block-id`로 element(에디터 마운트
+  // 루트)에 상태를 남기는 것과 같은 계약을 재사용해 blockId를 직접 쓰고,
+  // media-toolbar.tsx는 MutationObserver로 그 속성만 지켜본다 — 새 이벤트
+  // 버스 없이 기존 data-geul-* 관례만 재사용한다(RD-001 DELTA-02.md
+  // "훅 추출 이득이 적다"와 같은 이유로, 이 파일과 media-toolbar.tsx는
+  // 여전히 서로의 존재를 모른 채 element만 공유한다).
+  useEffect(() => {
+    if (element === null) return;
+    const blockId = resizeState?.blockId ?? null;
+    if (blockId === null) {
+      element.removeAttribute("data-geul-media-resizing-block-id");
+      return;
+    }
+    element.setAttribute("data-geul-media-resizing-block-id", blockId);
+    return () => {
+      element.removeAttribute("data-geul-media-resizing-block-id");
+    };
+  }, [element, resizeState?.blockId]);
+
   const handlePointerDownOnHandle = (
     event: React.PointerEvent<HTMLDivElement>,
     side: Side,

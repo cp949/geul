@@ -274,6 +274,44 @@ export const MediaToolbar = ({
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
+  // 리사이즈 중 숨김(사용자 스크린샷 — 드래그 동안 toolbar가 드래그 시작
+  // 시점 위치에 그대로 떠 이미지를 가린다). media-resize-handles.tsx가
+  // element(에디터 마운트 루트, file-panel.tsx의 data-geul-file-panel-block-id
+  // 와 같은 계약)에 드래그 중 `data-geul-media-resizing-block-id`를 쓴다 —
+  // 그 컴포넌트의 pointerdown preventDefault가 이 드래그 시퀀스의 호환
+  // mousedown/mouseup을 없애 useSelectionRefresh(위)로는 드래그 시작·종료
+  // 어느 쪽도 못 잡으므로, 그 속성 변화만 MutationObserver로 직접
+  // 지켜본다(두 컴포넌트는 여전히 서로를 모른다, RD-001 DELTA-02.md와 같은
+  // 이유로 훅을 추출하지 않는다).
+  const [resizingBlockId, setResizingBlockId] = useState<string | null>(null);
+  useEffect(() => {
+    if (element === null) {
+      setResizingBlockId(null);
+      return;
+    }
+    const readResizingBlockId = () =>
+      element.getAttribute("data-geul-media-resizing-block-id");
+    setResizingBlockId(readResizingBlockId());
+    const observer = new MutationObserver(() => {
+      setResizingBlockId(readResizingBlockId());
+    });
+    observer.observe(element, {
+      attributeFilter: ["data-geul-media-resizing-block-id"],
+      attributes: true,
+    });
+    return () => observer.disconnect();
+  }, [element]);
+
+  // 드래그가 끝나면(속성이 사라지면) bounds를 다시 읽어야 한다 — 리사이즈로
+  // 미디어 폭이 바뀌면 중심 정렬 앵커(readBlockBounds)도 함께 움직여
+  // 드래그 시작 시점에 캐시해 둔 toolbarState.left/top이 더는 맞지 않는다.
+  const previousResizingBlockIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = previousResizingBlockIdRef.current;
+    previousResizingBlockIdRef.current = resizingBlockId;
+    if (previous !== null && resizingBlockId === null) updateFromSelection();
+  }, [resizingBlockId, updateFromSelection]);
+
   useEffect(() => {
     if (
       toolbarState.mode === "editingName" ||
@@ -490,6 +528,10 @@ export const MediaToolbar = ({
   });
 
   if (toolbarState.mode === "closed") return null;
+  // 지금 보여주는 바로 그 블록이 리사이즈 중이면 감춘다 — 다른 블록의
+  // 리사이즈(예: 다른 미디어를 방금까지 드래그하던 잔여 상태)는 이
+  // toolbar와 무관하다.
+  if (toolbarState.blockId === resizingBlockId) return null;
 
   if (Component !== undefined) {
     const overridden = (
