@@ -96,3 +96,30 @@ export const uploadImageViaFilePanel = async (
 
   return editable.locator("img");
 };
+
+/**
+ * `/video` 슬래시 명령 → Upload 탭 → 파일 선택까지 진행하고 업로드가
+ * 끝날 때까지 기다린 뒤 결과 `<video>` locator를 돌려준다.
+ * `uploadImageViaFilePanel`과 대칭 구조다. mock uploadFile
+ * (`compositeUploadFile`)이 `FileReader.readAsDataURL`로 바이트를 그대로
+ * 감싸 data URL을 만들 뿐 디코딩하지 않아 재생 가능 여부가 이 테스트의
+ * 단언(margin)에 영향을 주지 않는다 — 다른 fixture(`photo.png` 등)와 같은
+ * "내용 무관 placeholder" 관례를 그대로 따른다.
+ */
+export const uploadVideoViaFilePanel = async (
+  page: Page,
+  editable: Locator,
+  fixturePath = "e2e/fixtures/sample-video.mp4",
+): Promise<Locator> => {
+  await editable.click();
+  await page.keyboard.type("/video");
+  await page.getByRole("option", { name: /^Video/ }).click();
+
+  await page.getByRole("tab", { name: "Upload" }).click();
+  await page.getByLabel("Video file").setInputFiles(fixturePath);
+
+  await expect(page.getByRole("status")).toBeVisible();
+  await expect(page.getByRole("status")).not.toBeVisible();
+
+  return editable.locator("video");
+};
