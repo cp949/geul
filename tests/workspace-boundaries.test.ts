@@ -151,6 +151,9 @@ const allowedDependencies = {
       "@cp949/geul-io": "workspace:*",
       "@cp949/geul-model": "workspace:*",
       "@cp949/geul-react": "workspace:*",
+      // Chrome 75 사용처 재현용 런타임 polyfill(ADR-0009, cp949/geul#182).
+      // showcase(사용처 역할)에만 허용하고 packages/*에는 추가하지 않는다.
+      "core-js": "3.50.0",
       "prism-react-renderer": "2.4.1",
       react: "19.2.8",
       "react-dom": "19.2.8",

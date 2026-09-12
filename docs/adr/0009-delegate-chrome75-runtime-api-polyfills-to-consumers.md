@@ -15,9 +15,9 @@ Geul의 공식 browser floor는 Chrome 75다(ADR 0008). 이 floor를 지키는 �
 
 ## Consequences
 
-- Chrome 75 지원이 필요한 사용처는 엔트리 첫 import로 `import "core-js/stable"`을 넣고 번들러 target을 `chrome75`로 둔다. `apps/demo`가 이 사용처 조건의 재현 예시이고 `pnpm test:e2e:chrome83`이 실검증한다. 최신 Chrome만 지원하는 사용처는 아무 조치도 필요 없다 — polyfill 없이 그대로 동작한다.
+- Chrome 75 지원이 필요한 사용처는 엔트리 첫 import로 `import "core-js/stable"`을 넣고 번들러 target을 `chrome75`로 둔다. `apps/demo`가 최초 사용처 조건의 재현 예시고(Issue #122), `apps/showcase`가 두 번째 사용처다(Issue #182) — `pnpm test:e2e:chrome83`이 둘 다 실검증한다. 최신 Chrome만 지원하는 사용처는 아무 조치도 필요 없다 — polyfill 없이 그대로 동작한다.
 - ADR 0006과의 경계: 출력이 동일한 성능 패치(micromark-extension-gfm-table, Issue #26)는 0006이 계속 소유한다. 브라우저 호환성 패치는 이 ADR이 금지하고 사용처에 위임한다 — 최초 사례가 이번에 제거한 tiptap findLast 패치(Issue #120 도입, #122 제거)다.
 - ADR 0008을 승계한다: Chrome 75 floor 선언은 그대로이고, 이 ADR은 그 floor를 지키는 책임의 배분만 정한다. Safari/Firefox 구형 지원은 여전히 범위 밖이다.
 - `check:escompat`은 Geul 자기 소스 게이트다 — `packages/*`의 dist JS 전량(목록은 workspace 열거에서 파생)이 대상이고 `verify:packages`의 build 뒤에 돈다. 디펜던시 코드는 이 게이트의 대상이 아니다(사용처 책임이므로).
-- core-js는 사용처 역할인 `apps/demo`에만 추가한다. `packages/*`에 추가하지 않는다 — 라이브러리가 전역 polyfill을 로드하면 사용처의 전역 상태를 무단으로 바꾸게 된다.
+- core-js는 사용처 역할의 앱(`apps/demo`, `apps/showcase`)에만 추가한다. `packages/*`에 추가하지 않는다 — 라이브러리가 전역 polyfill을 로드하면 사용처의 전역 상태를 무단으로 바꾸게 된다.
 - Web API 격차(`crypto.randomUUID` 등)는 core-js 범위 밖이고 Issue #121이 소유한다.
