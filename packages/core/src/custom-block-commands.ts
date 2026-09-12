@@ -4,10 +4,14 @@ import { NodeSelection } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
+import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 
 // insertMediaBlock(media-commands.ts)과 동일 골격이다 — afterBlockId 뒤에
 // 삽입, 삽입한 블록 자신을 NodeSelection으로 선택(atom은 캐럿을 둘 안쪽이
-// 없다), clearAfterBlockText로 트리거 문단을 같은 트랜잭션에서 비운다.
+// 없다), clearAfterBlockText로 트리거 블록 처리를 같은 트랜잭션에 담는다
+// (divider·table·media와 판단 공유, trigger-block-insert.ts) — 중첩 자식이
+// 없으면 트리거 컨테이너 자체를 지우고 그 자리에 커스텀 블록을 넣고
+// (치환), 있으면 텍스트만 지운다.
 //
 // insertMediaBlock과 다른 점 하나: 스키마 노드 부재가 도달 불가 방어선이
 // 아니라 소비자가 실제로 만날 수 있는 오류다(등록하지 않은 type 이름을
@@ -46,7 +50,6 @@ export const insertCustomBlock = (
   if (afterPosition === null) return blockNotFound(afterBlockId);
   const afterNode = editor.state.doc.nodeAt(afterPosition);
   if (afterNode === null) return blockNotFound(afterBlockId);
-  const insertPosition = afterPosition + afterNode.nodeSize;
 
   const blockId = createId();
   const customNode = customType.create({
@@ -55,28 +58,16 @@ export const insertCustomBlock = (
     props: props ?? null,
   });
 
-  let transaction = editor.state.tr;
-  const clearTarget =
-    afterNode.type.name === "blockContainer" ? afterNode.firstChild : afterNode;
-  const clearPosition =
-    afterNode.type.name === "blockContainer"
-      ? afterPosition + 1
-      : afterPosition;
-  if (
-    options?.clearAfterBlockText === true &&
-    clearTarget !== null &&
-    clearTarget.isTextblock &&
-    clearTarget.content.size > 0
-  ) {
-    transaction = transaction.delete(
-      clearPosition + 1,
-      clearPosition + 1 + clearTarget.content.size,
-    );
-  }
-  const customPosition = transaction.mapping.map(insertPosition);
-  transaction = transaction.insert(customPosition, customNode);
+  const plan = planTriggerBlockInsert(
+    editor.state.tr,
+    afterNode,
+    afterPosition,
+    customNode,
+    options?.clearAfterBlockText,
+  );
+  const transaction = plan.transaction;
   transaction.setSelection(
-    NodeSelection.create(transaction.doc, customPosition),
+    NodeSelection.create(transaction.doc, plan.insertPosition),
   );
 
   const dispatched = finalizeAndDispatch(editor, transaction);

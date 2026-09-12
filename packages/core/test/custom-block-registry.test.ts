@@ -10,6 +10,7 @@
  * 않는다.
  */
 import type { Document } from "@cp949/geul-model";
+import { NodeSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -19,8 +20,15 @@ import {
   type EditorController,
 } from "../src/index.js";
 import {
+  childParagraphBlock,
+  documentOf,
+  editorState,
   mountTiptapEditor,
+  okResult,
+  paragraphBlock,
   paragraphDocument,
+  restored,
+  secondParagraphBlock,
   sequentialIds,
 } from "./editor-controller-support.js";
 
@@ -151,6 +159,82 @@ describe("customBlocks registry(RD-002-DELTA-11)", () => {
       },
     });
     expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("clearAfterBlockText가 트리거 컨테이너를 커스텀 블록으로 치환하고 한 undo 단위로 묶는다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)", () => {
+    const slash = paragraphBlock("block-1", "/widget");
+    const editor = createEditor({
+      initialDocument: documentOf(slash, secondParagraphBlock),
+      createId: sequentialIds("id"),
+      customBlocks: { myWidget: widgetDefinition },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const before = editorState(editor, tiptap);
+
+    const result = editor.commands.insertCustomBlock(
+      "block-1",
+      "myWidget",
+      "none",
+      { count: 1 },
+      { clearAfterBlockText: true },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // block-1은 완전히 사라지고 커스텀 블록이 그 자리를 대신한다.
+    expect(editor.getDocument().blocks).toEqual([
+      {
+        id: result.value.blockId,
+        type: "myWidget",
+        content: "none",
+        props: { count: 1 },
+      },
+      secondParagraphBlock,
+    ]);
+    const { selection } = tiptap.state;
+    expect(selection).toBeInstanceOf(NodeSelection);
+    const { node } = selection as NodeSelection;
+    expect(node.type.name).toBe("myWidget");
+    expect(node.attrs.blockId).toBe(result.value.blockId);
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("트리거 블록에 중첩 자식이 있으면 컨테이너를 보존하고 텍스트만 지운다(하위 트리 보존 우선)", () => {
+    const nestedSlash = documentOf(
+      paragraphBlock("block-1", "/widget", [childParagraphBlock]),
+    );
+    const editor = createEditor({
+      initialDocument: nestedSlash,
+      createId: sequentialIds("id"),
+      customBlocks: { myWidget: widgetDefinition },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    // block-1이 자식을 가져 로드 시 trailing paragraph(id-1)가 붙는다 —
+    // media 전례(editor-controller-media-commands.test.ts)와 동일.
+    const loaded = editor.getDocument().blocks;
+
+    const result = editor.commands.insertCustomBlock(
+      "block-1",
+      "myWidget",
+      "none",
+      undefined,
+      { clearAfterBlockText: true },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("block-1", "", [childParagraphBlock]),
+      { id: result.value.blockId, type: "myWidget", content: "none" },
+      loaded[1],
+    ]);
+    const { selection } = tiptap.state;
+    expect(selection).toBeInstanceOf(NodeSelection);
+    const { node } = selection as NodeSelection;
+    expect(node.type.name).toBe("myWidget");
+    expect(node.attrs.blockId).toBe(result.value.blockId);
   });
 
   it("실사용 mount 이후에는 render()가 캡처한 editor 참조로 실제 명령을 호출할 수 있다(지연 바인딩 Proxy 해소)", () => {
