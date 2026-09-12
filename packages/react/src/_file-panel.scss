@@ -23,11 +23,32 @@
   transform: translate(-50%, 0.5rem);
 }
 
+// 탭 목록 + 닫기 아이콘 버튼의 공통 상단 행. 닫기는 항상 우측에
+// 붙인다(justify-content: flex-end) — 탭이 없는 단일 Embed 모드(업로드
+// 미등록)에서도 이 규칙 하나로 동일하게 동작한다(2026-09-12, 사용자 지시).
+.geul-file-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .geul-file-panel__tablist {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 1rem;
   border-bottom: 1px solid var(--geul-color-border, #dadce0);
+}
+
+// 닫기 아이콘 버튼(2026-09-12, 사용자 지시 — 기존 하단 텍스트 버튼
+// 대체). 크기는 다른 icon-only 버튼(media-toolbar 등)과 동일하게
+// 맞춘다.
+.geul-file-panel__close-button {
+  flex: 0 0 auto;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  color: var(--geul-color-text-muted, #5f6368);
 }
 
 .geul-file-panel__upload {
@@ -91,12 +112,24 @@
 }
 
 // 전체폭 아웃라인 버튼(업로드 탭의 "파일 업로드") — Notion 원본은 이
-// 버튼만 흰 배경 + 테두리라 강조 버튼과 구분한다.
+// 버튼만 흰 배경 + 테두리라 강조 버튼과 구분한다. hover/active는
+// 다른 곳(table-menu 등)의 accent-muted 관용구를 재사용한다
+// (2026-09-12, 사용자 지시 — 클릭 가능함을 시각으로도 드러낸다).
 .geul-file-panel__upload-trigger {
   border: 1px solid var(--geul-color-border, #dadce0);
   border-radius: var(--geul-radius-sm, 0.25rem);
   padding-block: 0.5rem;
   text-align: center;
+  transition: background-color 0.1s ease;
+
+  &:hover {
+    background: var(--geul-color-surface-muted, #f1f3f4);
+  }
+
+  &:active {
+    background: var(--geul-color-accent-muted, #e8f0fe);
+    color: var(--geul-color-accent, #1a73e8);
+  }
 }
 
 // 네이티브 file input은 시각적으로만 숨긴다 — display:none이면

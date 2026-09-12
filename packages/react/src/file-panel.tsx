@@ -1,8 +1,11 @@
 import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import { X } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { extractNameFromUrl } from "./extract-name-from-url.js";
+import { IconButton } from "./icon-button.js";
+import { iconProps } from "./icon-props.js";
 import {
   FALLBACK_BLOCK_POSITION,
   readBlockBounds,
@@ -14,6 +17,7 @@ import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 const filePanelButtonClassName = "geul-file-panel__button";
+const closeIcon = <X {...iconProps} />;
 
 // useDismissOnOutsideOrEscape allow-list. SlashMenu/BlockSelectionToolbar와
 // 같은 이유로 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가
@@ -385,34 +389,50 @@ export const FilePanel = ({
       role="toolbar"
       style={style}
     >
-      {uploadEnabled && (
-        <div
-          aria-label={dictionary.toolbar.filePanel.sourceAriaLabel}
-          className="geul-file-panel__tablist"
-          role="tablist"
-        >
-          <button
-            aria-selected={panelState.activeTab === "embed"}
-            className={filePanelButtonClassName}
-            onClick={() => handleTabClick("embed")}
-            onMouseDown={(event) => event.preventDefault()}
-            role="tab"
-            type="button"
+      <div className="geul-file-panel__header">
+        {uploadEnabled && (
+          <div
+            aria-label={dictionary.toolbar.filePanel.sourceAriaLabel}
+            className="geul-file-panel__tablist"
+            role="tablist"
           >
-            {dictionary.toolbar.filePanel.embedTab}
-          </button>
-          <button
-            aria-selected={panelState.activeTab === "upload"}
-            className={filePanelButtonClassName}
-            onClick={() => handleTabClick("upload")}
-            onMouseDown={(event) => event.preventDefault()}
-            role="tab"
-            type="button"
-          >
-            {dictionary.toolbar.filePanel.uploadTab}
-          </button>
-        </div>
-      )}
+            {/* Upload가 첫 번째 탭(2026-09-12, 사용자 지시) — 기본
+                활성 탭(activeTab 초깃값, 위 updateFromSelection)과 탭
+                순서를 일치시킨다. */}
+            <button
+              aria-selected={panelState.activeTab === "upload"}
+              className={filePanelButtonClassName}
+              onClick={() => handleTabClick("upload")}
+              onMouseDown={(event) => event.preventDefault()}
+              role="tab"
+              type="button"
+            >
+              {dictionary.toolbar.filePanel.uploadTab}
+            </button>
+            <button
+              aria-selected={panelState.activeTab === "embed"}
+              className={filePanelButtonClassName}
+              onClick={() => handleTabClick("embed")}
+              onMouseDown={(event) => event.preventDefault()}
+              role="tab"
+              type="button"
+            >
+              {dictionary.toolbar.filePanel.embedTab}
+            </button>
+          </div>
+        )}
+        {/* 닫기는 아이콘 전용 버튼으로 패널 우측 상단에 고정한다
+            (2026-09-12, 사용자 지시 — 기존 하단 텍스트 버튼 대체).
+            aria-label은 기존 closeAriaLabel을 그대로 쓰고(테스트
+            계약 유지), close 문구는 title(hover tooltip)로 재사용한다. */}
+        <IconButton
+          className={`${filePanelButtonClassName} geul-file-panel__close-button`}
+          icon={closeIcon}
+          label={dictionary.toolbar.filePanel.closeAriaLabel}
+          onClick={dismissPanelAndFocusEditor}
+          title={dictionary.toolbar.filePanel.close}
+        />
+      </div>
       {showEmbedTab && (
         <>
           <input
@@ -539,15 +559,6 @@ export const FilePanel = ({
           )}
         </div>
       )}
-      <button
-        aria-label={dictionary.toolbar.filePanel.closeAriaLabel}
-        className={filePanelButtonClassName}
-        onClick={dismissPanelAndFocusEditor}
-        onMouseDown={(event) => event.preventDefault()}
-        type="button"
-      >
-        {dictionary.toolbar.filePanel.close}
-      </button>
     </div>
   );
 

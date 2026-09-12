@@ -291,8 +291,12 @@ describe("FilePanel 파일 패널", () => {
     expect(urlInput).toHaveProperty("placeholder", "사진 링크 붙여넣기");
     const saveButton = screen.getByRole("button", { name: "URL 저장하기" });
     expect(saveButton.textContent).toBe("저장");
+    // 닫기는 아이콘 전용 버튼(2026-09-12, 사용자 지시)이라 close 문구는
+    // 화면에 보이는 textContent가 아니라 title(hover tooltip)로 반영된다
+    // — aria-label(accessible name)은 closeAriaLabel 단일 소스로 남는다.
     const closeButton = screen.getByRole("button", { name: "파일 패널 닫기" });
-    expect(closeButton.textContent).toBe("닫기");
+    expect(closeButton.textContent).toBe("");
+    expect(closeButton.getAttribute("title")).toBe("닫기");
   });
 
   it("URL을 입력해 저장하면 setMediaBlockUrl을 호출한다", () => {
