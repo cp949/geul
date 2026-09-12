@@ -119,8 +119,14 @@
   background: #f1f3f4;
 }
 
+/* 기본(textAlignment 미설정)은 중앙 정렬 — 라이브 에디터
+   (@cp949/geul-react _media-resize-handles.scss)의 기본값과 맞춘다(둘 다
+   "중심 고정 대칭 리사이즈" 전제). display:block 없이는 margin:auto가
+   img/video에 안 먹는다. */
 .composite-result__preview img,
 .composite-result__preview video {
+  display: block;
+  margin: 0 auto;
   max-width: 100%;
   border-radius: 6px;
 }
@@ -132,6 +138,41 @@
 .composite-result__preview figcaption {
   color: #5f6368;
   font-size: 0.875em;
+  text-align: center;
+}
+
+/* textAlignment="left"/"right"(core data-geul-text-alignment, 2026-09-12)
+   가 기본 중앙 정렬을 덮어쓴다. exportHtml()은 caption이 없으면 이
+   attribute를 img/video 태그 자신에, caption이 있으면 감싸는 <figure>에
+   싣는다(packages/io export-html.ts mediaBlockNode) — 두 모양 다
+   커버한다. applyDataGeulStyles(위)가 같은 attribute로 text-align 인라인
+   style도 얹지만, img/video가 이미 display:block이라 그 자신의 위치에는
+   영향이 없다(text-align은 인라인 자식에만 작용) — 실제 이동은 아래
+   margin 규칙이 전담한다. */
+.composite-result__preview img[data-geul-text-alignment="left"],
+.composite-result__preview video[data-geul-text-alignment="left"],
+.composite-result__preview figure[data-geul-text-alignment="left"] > img,
+.composite-result__preview figure[data-geul-text-alignment="left"] > video {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.composite-result__preview img[data-geul-text-alignment="right"],
+.composite-result__preview video[data-geul-text-alignment="right"],
+.composite-result__preview figure[data-geul-text-alignment="right"] > img,
+.composite-result__preview figure[data-geul-text-alignment="right"] > video {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.composite-result__preview figure[data-geul-text-alignment="left"]
+  figcaption {
+  text-align: left;
+}
+
+.composite-result__preview figure[data-geul-text-alignment="right"]
+  figcaption {
+  text-align: right;
 }
 
 .composite-result__preview hr {
