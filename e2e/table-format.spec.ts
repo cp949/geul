@@ -156,6 +156,14 @@ test("메뉴를 연 채 스크롤해도 메뉴가 핸들 위치를 따라간다"
   await page.keyboard.press("Enter");
   const table = editable.locator("table");
   await expect(table).toBeVisible();
+  // 표 삽입 직후 캐럿이 표 첫 셀로 들어가며 PM이 그 위치로 scrollIntoView한다
+  // (2026-09-12 버그 리포트 수정 — "/table" 트리거 줄이 표로 바로 치환돼
+  // 캐럿이 표 안에 남는다). 그 결과 핸들 행(1행)이 뷰포트 하단에 걸려
+  // beforeBox가 이미 clamp된 채로 잡히면, 뒤이은 300px 스크롤이 clamp
+  // 해제만 하고 화면상 이동폭은 실제보다 작게 잡힌다 — 맨 위로 되돌려
+  // openHandleMenu의 hover/click 자동 스크롤이 첫 행을 최소한만 보이게
+  // 스크롤하도록 정규화한다.
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   const menu = await openHandleMenu(page, "row");
   const beforeBox = await menu.boundingBox();

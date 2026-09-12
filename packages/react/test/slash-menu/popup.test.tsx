@@ -542,7 +542,7 @@ describe("SlashMenu 질의 팝업", () => {
     },
   );
 
-  it("Divider 항목을 클릭하면 트리거 블록 텍스트를 지우며 divider를 삽입하고 편집기로 초점을 되돌린다", () => {
+  it("Divider 항목을 클릭하면 트리거 블록을 divider로 치환하고 편집기로 초점을 되돌린다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)", () => {
     const rendered = renderCaretBlocks();
     const blockId = typeIntoBlock(rendered, 0, "/divider");
     // 전제: 아직 divider가 없다. 있었다면 아래 "divider가 생겼다"는 삽입과
@@ -551,18 +551,16 @@ describe("SlashMenu 질의 팝업", () => {
 
     fireEvent.click(screen.getByRole("option", { name: /Divider/ }));
 
-    // blocks 3개 = 트리거 문단 + divider + trailing paragraph(문서 끝에
-    // divider가 놓이면 같은 dispatch에서 빈 문단이 뒤따른다, divider-commands.ts).
+    // blocks 2개 = divider + trailing paragraph(문서 끝에 divider가 놓이면
+    // 같은 dispatch에서 빈 문단이 뒤따른다, divider-commands.ts). "/divider"를
+    // 입력한 트리거 문단(blockId) 자체는 사라진다 — divider가 그 자리를
+    // 대신한다.
     const blocks = rendered.editor.getDocument().blocks;
-    expect(blocks).toHaveLength(3);
-    const trigger = blocks[0];
-    if (trigger?.type !== "paragraph") throw new Error("트리거 문단이 아니다");
-    expect(trigger.id).toBe(blockId);
-    // clearAfterBlockText: true — 트리거 블록의 "/divider"가 지워진다.
-    expect(trigger.content).toEqual([]);
-    const divider = blocks[1];
+    expect(blocks).toHaveLength(2);
+    expect(blocks.some((block) => block.id === blockId)).toBe(false);
+    const divider = blocks[0];
     if (divider?.type !== "divider") throw new Error("divider 블록이 아니다");
-    const trailing = blocks[2];
+    const trailing = blocks[1];
     if (trailing?.type !== "paragraph")
       throw new Error("trailing 문단이 아니다");
     expect(trailing.content).toEqual([]);
@@ -576,7 +574,7 @@ describe("SlashMenu 질의 팝업", () => {
     { mediaKind: "video" as const, optionName: /^Video/ },
     { mediaKind: "audio" as const, optionName: /^Audio/ },
   ])(
-    "$mediaKind 항목을 클릭하면 트리거 블록 텍스트를 지우며 빈 미디어 블록을 삽입하고 그 블록을 NodeSelection으로 선택한다",
+    "$mediaKind 항목을 클릭하면 트리거 블록을 빈 미디어 블록으로 치환하고 그 블록을 NodeSelection으로 선택한다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)",
     ({ mediaKind, optionName }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, `/${mediaKind}`);
@@ -585,20 +583,16 @@ describe("SlashMenu 질의 팝업", () => {
 
       fireEvent.click(screen.getByRole("option", { name: optionName }));
 
-      // blocks 3개 = 트리거 문단 + media + trailing paragraph(문서 끝에
-      // media가 놓이면 divider·table과 같은 이유로 같은 dispatch에서 빈
-      // 문단이 뒤따른다, media-commands.ts).
+      // blocks 2개 = media + trailing paragraph(문서 끝에 media가 놓이면
+      // divider·table과 같은 이유로 같은 dispatch에서 빈 문단이 뒤따른다,
+      // media-commands.ts). "/$mediaKind"를 입력한 트리거 문단(blockId)
+      // 자체는 사라진다 — media가 그 자리를 대신한다.
       const blocks = rendered.editor.getDocument().blocks;
-      expect(blocks).toHaveLength(3);
-      const trigger = blocks[0];
-      if (trigger?.type !== "paragraph")
-        throw new Error("트리거 문단이 아니다");
-      expect(trigger.id).toBe(blockId);
-      // clearAfterBlockText: true — 트리거 블록의 "/$mediaKind"가 지워진다.
-      expect(trigger.content).toEqual([]);
-      const media = blocks[1];
+      expect(blocks).toHaveLength(2);
+      expect(blocks.some((block) => block.id === blockId)).toBe(false);
+      const media = blocks[0];
       if (media?.type !== mediaKind) throw new Error("미디어 블록이 아니다");
-      const trailing = blocks[2];
+      const trailing = blocks[1];
       if (trailing?.type !== "paragraph")
         throw new Error("trailing 문단이 아니다");
       expect(trailing.content).toEqual([]);
@@ -620,7 +614,7 @@ describe("SlashMenu 질의 팝업", () => {
     },
   );
 
-  it("표 항목을 클릭하면 트리거 블록 텍스트를 지우며 3x3 표를 삽입한다", () => {
+  it("표 항목을 클릭하면 트리거 블록을 3x3 표로 치환한다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)", () => {
     const rendered = renderCaretBlocks();
     const blockId = typeIntoBlock(rendered, 0, "/table");
     // 전제: 아직 표가 없다. 있었다면 아래 "표가 생겼다"는 삽입과 무관하다.
@@ -628,16 +622,14 @@ describe("SlashMenu 질의 팝업", () => {
 
     fireEvent.click(screen.getByRole("option", { name: /Table/ }));
 
-    // blocks 3개 = 트리거 문단 + 표 + trailing paragraph(UI-010, 표 삽입이
-    // 문서를 표로 끝나게 해 같은 dispatch에서 빈 문단이 추가된다).
+    // blocks 2개 = 표 + trailing paragraph(UI-010, 표 삽입이 문서를 표로
+    // 끝나게 해 같은 dispatch에서 빈 문단이 추가된다). "/table"을 입력한
+    // 트리거 문단(blockId) 자체는 사라진다 — 표가 그 자리를 대신해, 매번
+    // 빈 줄을 지워야 했던 문제(버그 리포트 원문)가 없어진다.
     const blocks = rendered.editor.getDocument().blocks;
-    expect(blocks).toHaveLength(3);
-    const trigger = blocks[0];
-    if (trigger?.type !== "paragraph") throw new Error("트리거 문단이 아니다");
-    expect(trigger.id).toBe(blockId);
-    // clearAfterBlockText: true — 트리거 블록의 "/table"이 지워진다.
-    expect(trigger.content).toEqual([]);
-    const rawTable = blocks[1];
+    expect(blocks).toHaveLength(2);
+    expect(blocks.some((block) => block.id === blockId)).toBe(false);
+    const rawTable = blocks[0];
     if (rawTable?.type !== "table") throw new Error("표 블록이 아니다");
     // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
     const table = rawTable as TableBlock;

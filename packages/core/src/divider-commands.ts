@@ -4,6 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
+import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 
 // divider 삽입 명령(삽입 전용 — setBlockType 대상이 아니다, spec §4.2·§5.1).
 //
@@ -29,10 +30,13 @@ import { finalizeAndDispatch } from "./dispatch.js";
 //   dispatch에서 id를 배정한다(insertParagraphAfter 전례). 문서 끝이면
 //   TrailingBlockExtension의 판정 술어가 이미 참이라 trailing 확장은
 //   no-op이다(spec §6.4).
-// - clearAfterBlockText: 슬래시 메뉴 경로의 "/divider" 트리거 문단 비우기를
-//   같은 트랜잭션에 담아 undo 1회로 텍스트·divider가 함께 복원되게 한다
-//   (insertTable과 동일 규칙 — 대상이 blockContainer면 내부 blockContent의
-//   텍스트만 지운다).
+// - clearAfterBlockText: 슬래시 메뉴 경로의 "/divider" 트리거 블록 처리를
+//   같은 트랜잭션에 담아 undo 1회로 함께 복원되게 한다 — 중첩 자식이 없는
+//   블록이면 트리거 컨테이너 자체를 지우고 그 자리에 divider를 넣어(치환),
+//   중첩 자식이 있으면 텍스트만 지우고 컨테이너는 보존한다(insertTable·
+//   insertMediaBlock과 판단을 공유, trigger-block-insert.ts). 어느 분기든
+//   nextSibling·afterDivider 계산은 트리거 컨테이너 존재 여부와 무관하다 —
+//   "다음 형제"는 항상 트리거 블록 뒤에 있던 노드를 가리킨다.
 // - 마무리는 dispatch.ts의 finalizeAndDispatch를 재사용한다 —
 //   closeHistory(scrollIntoView) + "doc 참조 동일성 = 필터 거절" 판정을 한
 //   곳에 두기 위해서다. 그 오류(TRANSACTION_REJECTED)는 DividerCommandError의
@@ -80,27 +84,15 @@ export const insertDivider = (
   const blockId = createId();
   const dividerNode = dividerType.create({ blockId });
 
-  let transaction = editor.state.tr;
-  const clearTarget =
-    afterNode.type.name === "blockContainer" ? afterNode.firstChild : afterNode;
-  const clearPosition =
-    afterNode.type.name === "blockContainer"
-      ? afterPosition + 1
-      : afterPosition;
-  if (
-    options?.clearAfterBlockText === true &&
-    clearTarget !== null &&
-    clearTarget.isTextblock &&
-    clearTarget.content.size > 0
-  ) {
-    transaction = transaction.delete(
-      clearPosition + 1,
-      clearPosition + 1 + clearTarget.content.size,
-    );
-  }
-  const dividerPosition = transaction.mapping.map(insertPosition);
-  transaction = transaction.insert(dividerPosition, dividerNode);
-  const afterDivider = dividerPosition + dividerNode.nodeSize;
+  const plan = planTriggerBlockInsert(
+    editor.state.tr,
+    afterNode,
+    afterPosition,
+    dividerNode,
+    options?.clearAfterBlockText,
+  );
+  let transaction = plan.transaction;
+  const afterDivider = plan.insertPosition + dividerNode.nodeSize;
 
   if (nextSibling === null || nextSibling.type.name !== "blockContainer") {
     transaction = transaction.insert(afterDivider, paragraphType.create());

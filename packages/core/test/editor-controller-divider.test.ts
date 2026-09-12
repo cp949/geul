@@ -177,7 +177,7 @@ describe("insertDivider(삽입 전용, G-EDT-001)", () => {
     expect(editor.commands.undo()).toEqual(notApplicable("undo"));
   });
 
-  it("clearAfterBlockText가 트리거 텍스트 삭제와 divider 삽입을 한 undo 단위로 묶는다", () => {
+  it("clearAfterBlockText가 트리거 컨테이너를 divider로 치환하고 한 undo 단위로 묶는다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)", () => {
     const slash = paragraphBlock("block-1", "/divider");
     const { editor, tiptap, changes } = mounted(
       documentOf(slash, secondParagraphBlock),
@@ -187,36 +187,26 @@ describe("insertDivider(삽입 전용, G-EDT-001)", () => {
       editor.commands.insertDivider("block-1", { clearAfterBlockText: true }),
     ).toEqual(inserted("id-1"));
     const after = editor.getDocument().blocks;
-    expect(after).toEqual([
-      paragraphBlock("block-1", ""),
-      dividerBlock("id-1"),
-      secondParagraphBlock,
-    ]);
+    // block-1은 완전히 사라지고 divider가 그 자리를 대신한다.
+    expect(after).toEqual([dividerBlock("id-1"), secondParagraphBlock]);
     expect(changes).toHaveLength(1);
     expect(editor.commands.undo()).toEqual(okResult);
     expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+    // block-2는 divider가 block-1 자리를 그대로 대신해 인덱스가 안 바뀌므로
+    // changedBlockIds에 없다(중간 삽입이던 예전과 다른 점).
     expect(changes).toEqual([
-      {
-        revision: 1,
-        changedBlockIds: ["block-1", "block-2", "id-1"],
-        reason: "local",
-      },
-      {
-        revision: 2,
-        changedBlockIds: ["block-1", "id-1", "block-2"],
-        reason: "undo",
-      },
+      { revision: 1, changedBlockIds: ["block-1", "id-1"], reason: "local" },
+      { revision: 2, changedBlockIds: ["id-1", "block-1"], reason: "undo" },
     ]);
   });
 
-  it("문서 끝 트리거 문단에서 clearAfterBlockText로 삽입하면 빈 문단·divider·빈 paragraph가 한 undo 단위다", () => {
+  it("문서 끝 트리거 문단에서 clearAfterBlockText로 삽입하면 divider·빈 paragraph가 한 undo 단위다(트리거 컨테이너 자체가 사라진다)", () => {
     const slash = paragraphBlock("block-1", "/divider");
     const { editor, tiptap, changes } = mounted(documentOf(slash));
     expect(
       editor.commands.insertDivider("block-1", { clearAfterBlockText: true }),
     ).toEqual(inserted("id-1"));
     expect(editor.getDocument().blocks).toEqual([
-      paragraphBlock("block-1", ""),
       dividerBlock("id-1"),
       paragraphBlock("id-2", ""),
     ]);
@@ -231,6 +221,29 @@ describe("insertDivider(삽입 전용, G-EDT-001)", () => {
     expect(editor.commands.undo()).toEqual(okResult);
     expect(editor.getDocument().blocks).toEqual([slash]);
     expect(changes).toHaveLength(2);
+  });
+
+  it("트리거 블록에 중첩 자식이 있으면 컨테이너를 보존하고 텍스트만 지운다(하위 트리 보존 우선)", () => {
+    const nestedSlash = documentOf(
+      paragraphBlock("block-1", "/divider", [childParagraphBlock]),
+    );
+    const { editor } = mounted(nestedSlash);
+    // block-1이 자식을 가져 로드 시 trailing paragraph(id-1)가 붙는다 —
+    // nestedParagraphDocument 전례와 동일(로드 직후를 기준으로 본다).
+    const loaded = editor.getDocument().blocks;
+    expect(
+      editor.commands.insertDivider("block-1", { clearAfterBlockText: true }),
+    ).toEqual(inserted("id-2"));
+    // block-1과 그 자식 child-1은 그대로 남는다 — 컨테이너를 통째로
+    // 지우면 자식 하위 트리도 함께 사라지므로 텍스트만 지우고, divider는
+    // 그 하위 트리 전체 뒤(D19·D20)에 들어간다. 다음 형제(로드 시 붙은
+    // trailing paragraph id-1)가 이미 텍스트 블록이라 새 빈 문단을 더
+    // 만들지 않고 그대로 재사용한다.
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("block-1", "", [childParagraphBlock]),
+      dividerBlock("id-2"),
+      loaded[1],
+    ]);
   });
 });
 

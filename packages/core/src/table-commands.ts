@@ -11,6 +11,7 @@ import { CellSelection, selectedRect } from "@tiptap/pm/tables";
 import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
 import type { TableCommandError } from "./table-command-error.js";
+import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 import {
   fitColumnsToContainerWidth as fitGridColumnsToContainerWidth,
   resizeColumn as resizeGridColumn,
@@ -546,37 +547,28 @@ export const insertTable = (
   if (afterPosition === null) return blockNotFound(afterBlockId);
   const afterNode = editor.state.doc.nodeAt(afterPosition);
   if (afterNode === null) return blockNotFound(afterBlockId);
-  const insertPosition = afterPosition + afterNode.nodeSize;
 
   const table = buildInitialTable(size, createId);
   const tableNode = tableBlockToTiptapNode(editor.schema, table);
 
-  let transaction = editor.state.tr;
-  // content 삭제는 textblock에만 안전하다 — 표 같은 구조 노드의 content를
-  // 지우면 노드 자체가 스키마에 맞지 않아 통째로 사라진다. afterNode가
-  // blockContainer면 blockId는 컨테이너 attrs 소유라(D19) 지울 텍스트는
-  // 컨테이너 자신이 아니라 내부 blockContent(문단/제목) 노드에 있다.
-  const clearTarget =
-    afterNode.type.name === "blockContainer" ? afterNode.firstChild : afterNode;
-  const clearPosition =
-    afterNode.type.name === "blockContainer"
-      ? afterPosition + 1
-      : afterPosition;
-  if (
-    options?.clearAfterBlockText === true &&
-    clearTarget !== null &&
-    clearTarget.isTextblock &&
-    clearTarget.content.size > 0
-  ) {
-    transaction = transaction.delete(
-      clearPosition + 1,
-      clearPosition + 1 + clearTarget.content.size,
-    );
-  }
-  transaction = transaction.insert(
-    transaction.mapping.map(insertPosition),
+  // 트리거 컨테이너 처리(치환 vs 텍스트만 비우고 보존)는 divider·media와
+  // 공유하는 판단이라 trigger-block-insert.ts로 뽑았다(2026-09-12 버그
+  // 리포트 — "/table" 입력 줄이 항상 빈 문단으로 남던 문제). 컨테이너를
+  // 치환하면 옛 캐럿 자리가 사라져 PM 기본 매핑(Selection.near)이 표 첫
+  // 셀 안으로 캐럿을 옮긴다 — 별도 셀 이동 코드를 얹지 않는다: 명시로
+  // 셀·형제 문단·표 자신 중 어디로 옮기든 표 grip/행렬 메뉴가 열린 채로
+  // 스크롤을 따라가는 로직과 부딪혀 메뉴가 앵커를 놓치는 걸 실측했다
+  // (2026-09-12, table-format.spec.ts "메뉴를 연 채 스크롤" 케이스 —
+  // 원인은 그 메뉴의 fixed+clamp 위치 계산 쪽에 있고 이 명령의 범위
+  // 밖이다, 후속 이슈로 분리).
+  const plan = planTriggerBlockInsert(
+    editor.state.tr,
+    afterNode,
+    afterPosition,
     tableNode,
+    options?.clearAfterBlockText,
   );
+  const transaction = plan.transaction;
   const dispatched = finalizeAndDispatch(editor, transaction);
   if (!dispatched.ok) return dispatched;
 

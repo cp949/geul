@@ -6,6 +6,7 @@ import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
+import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 
 // 4종 미디어 블록(file/image/video/audio) 삽입 명령(삽입 전용 — setBlockType
 // 대상이 아니다, spec §2.2 Turn into 제외·§5.1). kind별로 스키마 노드
@@ -32,8 +33,9 @@ import type { LocalPreviewAttrs } from "./media-local-preview.js";
 //   는 이 append로 다시 매핑될 필요가 없다(같은 파일 주석 — "삽입 위치가
 //   문서 끝이라 기존 selection은 움직이지 않는다").
 // - clearAfterBlockText: 슬래시 메뉴 "/file"·"/image"·"/video"·"/audio"
-//   트리거 문단 비우기를 같은 트랜잭션에 담는다(divider·table과 동일
-//   규칙 — 대상이 blockContainer면 내부 blockContent의 텍스트만 지운다).
+//   트리거 블록 처리를 같은 트랜잭션에 담는다(divider·table과 판단 공유,
+//   trigger-block-insert.ts) — 중첩 자식이 없으면 트리거 컨테이너 자체를
+//   지우고 그 자리에 미디어 블록을 넣고(치환), 있으면 텍스트만 지운다.
 // - 마무리는 dispatch.ts의 finalizeAndDispatch를 재사용한다(divider·table과
 //   동일 근거 — closeHistory + "doc 참조 동일성 = 필터 거절" 판정).
 
@@ -78,7 +80,6 @@ export const insertMediaBlock = (
   if (afterPosition === null) return blockNotFound(afterBlockId);
   const afterNode = editor.state.doc.nodeAt(afterPosition);
   if (afterNode === null) return blockNotFound(afterBlockId);
-  const insertPosition = afterPosition + afterNode.nodeSize;
 
   const blockId = createId();
   const mediaNode = mediaType.create({
@@ -86,28 +87,16 @@ export const insertMediaBlock = (
     ...(options?.localPreview ?? {}),
   });
 
-  let transaction = editor.state.tr;
-  const clearTarget =
-    afterNode.type.name === "blockContainer" ? afterNode.firstChild : afterNode;
-  const clearPosition =
-    afterNode.type.name === "blockContainer"
-      ? afterPosition + 1
-      : afterPosition;
-  if (
-    options?.clearAfterBlockText === true &&
-    clearTarget !== null &&
-    clearTarget.isTextblock &&
-    clearTarget.content.size > 0
-  ) {
-    transaction = transaction.delete(
-      clearPosition + 1,
-      clearPosition + 1 + clearTarget.content.size,
-    );
-  }
-  const mediaPosition = transaction.mapping.map(insertPosition);
-  transaction = transaction.insert(mediaPosition, mediaNode);
+  const plan = planTriggerBlockInsert(
+    editor.state.tr,
+    afterNode,
+    afterPosition,
+    mediaNode,
+    options?.clearAfterBlockText,
+  );
+  const transaction = plan.transaction;
   transaction.setSelection(
-    NodeSelection.create(transaction.doc, mediaPosition),
+    NodeSelection.create(transaction.doc, plan.insertPosition),
   );
 
   const dispatched = finalizeAndDispatch(editor, transaction);

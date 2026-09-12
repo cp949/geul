@@ -28,6 +28,7 @@ import { findBlockPosition } from "../src/block-position.js";
 import { createEditor, type MediaBlockKind } from "../src/index.js";
 import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
+  childParagraphBlock,
   documentOf,
   editorState,
   expectMediaBlockNodeSelection,
@@ -159,7 +160,7 @@ describe("insertMediaBlock(삽입 전용, G-EDT-001)", () => {
     expect(editor.getDocument().blocks).toEqual([firstParagraphBlock]);
   });
 
-  it("clearAfterBlockText가 트리거 텍스트 삭제와 삽입을 한 undo 단위로 묶는다", () => {
+  it("clearAfterBlockText가 트리거 컨테이너를 미디어 블록으로 치환하고 한 undo 단위로 묶는다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)", () => {
     const slash = paragraphBlock("block-1", "/image");
     const { editor, tiptap, changes } = mounted(
       documentOf(slash, secondParagraphBlock),
@@ -170,14 +171,36 @@ describe("insertMediaBlock(삽입 전용, G-EDT-001)", () => {
         clearAfterBlockText: true,
       }),
     ).toEqual(inserted("id-1"));
+    // block-1은 완전히 사라지고 미디어 블록이 그 자리를 대신한다.
     expect(editor.getDocument().blocks).toEqual([
-      paragraphBlock("block-1", ""),
       mediaBlock("image", "id-1"),
       secondParagraphBlock,
     ]);
+    expectMediaBlockNodeSelection(tiptap, "id-1", "image");
     expect(changes).toHaveLength(1);
     expect(editor.commands.undo()).toEqual(okResult);
     expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("트리거 블록에 중첩 자식이 있으면 컨테이너를 보존하고 텍스트만 지운다(하위 트리 보존 우선)", () => {
+    const nestedSlash = documentOf(
+      paragraphBlock("block-1", "/image", [childParagraphBlock]),
+    );
+    const { editor, tiptap } = mounted(nestedSlash);
+    // block-1이 자식을 가져 로드 시 trailing paragraph(id-1)가 붙는다 —
+    // divider 전례(editor-controller-divider.test.ts)와 동일.
+    const loaded = editor.getDocument().blocks;
+    expect(
+      editor.commands.insertMediaBlock("block-1", "image", {
+        clearAfterBlockText: true,
+      }),
+    ).toEqual(inserted("id-2"));
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("block-1", "", [childParagraphBlock]),
+      mediaBlock("image", "id-2"),
+      loaded[1],
+    ]);
+    expectMediaBlockNodeSelection(tiptap, "id-2", "image");
   });
 
   it("알 수 없는 afterBlockId는 BLOCK_NOT_FOUND이고 문서·selection이 무변경이다", () => {
