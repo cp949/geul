@@ -456,6 +456,63 @@ describe("FilePanel 파일 패널", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
     expect(document.activeElement).toBe(editable);
   });
+
+  // 2026-09-13 사용자 보고 — Close로 닫은 뒤 남은 빈 미디어 블록(회색
+  // 영역)을 다시 클릭해도 패널이 다시 열리지 않던 회귀. dismissedBlockIdRef
+  // 가 "같은 이벤트의 지연된 잔여물"과 "새 클릭·재진입"을 구분 못 해
+  // 생겼다(gestureSeqRef 주석 참고, file-panel.tsx).
+  it("Close 직후 새 pointerdown 없이 도착하는 지연 이벤트는 재오픈시키지 않는다(기존 레이스 방지 유지)", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close file panel" }));
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    // editingRef의 setTimeout(0) 창이 끝난 뒤에도, 새 pointerdown·keydown
+    // 없이 도착하는 mouseup(지연된 잔여 이벤트를 흉내낸다)은 여전히
+    // 막아야 한다 — 이게 dismissedBlockIdRef의 원래 목적이다.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fireEvent.mouseUp(document);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("Close 직후 같은 빈 블록(회색 영역)을 다시 클릭하면 패널이 재오픈된다(2026-09-13 버그 수정)", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close file panel" }));
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // 회색 영역 재클릭 — pointerdown이 뒤따르는 mouseup보다 먼저 온다.
+    fireEvent.pointerDown(document.body);
+    fireEvent.mouseUp(document);
+
+    expect(screen.getByRole("toolbar", { name: "File panel" })).not.toBeNull();
+  });
+
+  it("Close 직후 키보드로 같은 빈 블록에 재진입해도 패널이 재오픈된다(2026-09-13 버그 수정)", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close file panel" }));
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // 화살표 키로 같은 블록에 재진입 — keydown이 뒤따르는 keyup보다
+    // 먼저 온다.
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    fireEvent.keyUp(document, { key: "ArrowRight" });
+
+    expect(screen.getByRole("toolbar", { name: "File panel" })).not.toBeNull();
+  });
 });
 
 describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {

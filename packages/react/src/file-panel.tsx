@@ -107,6 +107,19 @@ export const FilePanel = ({
   // blockId면 재오픈하지 않는다"를 시간이 아니라 상태로 고정한다 —
   // slash-menu.tsx의 dismissedQueryRef와 같은 해법이다.
   const dismissedBlockIdRef = useRef<string | null>(null);
+  // dismissedBlockIdRef가 "같은 이벤트의 지연된 잔여물"과 "사용자의 새
+  // 제스처(같은 빈 블록을 다시 클릭/키보드로 재진입)"를 구분하지 못해
+  // 생긴 회귀(2026-09-13, 사용자 보고 — Close로 닫은 뒤 회색 영역을 다시
+  // 클릭해도 패널이 재오픈되지 않음)를 고친다. pointerdown·keydown은 항상
+  // 그 제스처가 만드는 mouseup/keyup/selectionchange보다 먼저 일어나므로,
+  // "이 dismiss 이후 새 pointerdown·keydown이 한 번이라도 있었는가"를
+  // 세면 두 경우를 구분할 수 있다 — 지연된 잔여 이벤트는 새 pointerdown·
+  // keydown을 동반하지 않지만, 진짜 재클릭·재진입은 반드시 동반한다.
+  // mouseup/keyup 자체는 세지 않는다 — dismiss를 일으킨 바로 그 키(Escape)·
+  // 클릭의 트레일링 mouseup/keyup까지 "새 제스처"로 오판하면 dismiss
+  // 직후 즉시 재오픈되어 기존 레이스 방지가 무너진다.
+  const gestureSeqRef = useRef(0);
+  const dismissedAtSeqRef = useRef(0);
   const openBlockIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -156,7 +169,15 @@ export const FilePanel = ({
       );
       return;
     }
-    if (dismissedBlockIdRef.current === media.blockId) return;
+    // 같은 블록이라도 dismiss 이후 새 pointerdown·keydown이 있었으면(위
+    // gestureSeqRef 주석) 지연된 잔여 이벤트가 아니라 사용자의 새
+    // 제스처다 — 재오픈을 허용한다.
+    if (
+      dismissedBlockIdRef.current === media.blockId &&
+      dismissedAtSeqRef.current === gestureSeqRef.current
+    ) {
+      return;
+    }
 
     openBlockIdRef.current = media.blockId;
     const bounds =
@@ -205,6 +226,23 @@ export const FilePanel = ({
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
+  // gestureSeqRef 카운터 — 패널이 닫혀 있어도(위 주석 참고) 항상
+  // 켜둔다. useSelectionRefresh와 달리 mouseup/keyup이 아니라
+  // pointerdown/keydown에만 반응한다.
+  useEffect(() => {
+    if (element === null) return;
+    const ownerDocument = element.ownerDocument;
+    const bumpGestureSeq = () => {
+      gestureSeqRef.current += 1;
+    };
+    ownerDocument.addEventListener("pointerdown", bumpGestureSeq);
+    ownerDocument.addEventListener("keydown", bumpGestureSeq);
+    return () => {
+      ownerDocument.removeEventListener("pointerdown", bumpGestureSeq);
+      ownerDocument.removeEventListener("keydown", bumpGestureSeq);
+    };
+  }, [element]);
+
   useEffect(() => {
     if (element === null) return;
     if (openPanelBlockId === null) {
@@ -231,6 +269,7 @@ export const FilePanel = ({
 
   const dismissPanel = useCallback(() => {
     dismissedBlockIdRef.current = openBlockIdRef.current;
+    dismissedAtSeqRef.current = gestureSeqRef.current;
     editingRef.current = true;
     setPanelState({ mode: "closed" });
     element?.ownerDocument.defaultView?.setTimeout(() => {

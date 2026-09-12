@@ -169,6 +169,32 @@ test("Close 버튼으로 URL 없이 패널을 닫아도 남은 빈 미디어 블
   await expect(emptyBlock).toHaveCount(0);
 });
 
+// 2026-09-13 사용자 보고 — Close로 닫은 뒤 남은 빈 미디어 블록(회색 영역)을
+// 다시 클릭해도 File Panel이 다시 열리지 않던 회귀. dismissedBlockIdRef가
+// "같은 이벤트의 지연된 잔여물"과 "새 클릭"을 구분하지 못해 생겼다
+// (file-panel.tsx gestureSeqRef 주석). QA-090은 블록이 남는다는 계약만
+// 검증하고 재클릭 시 재오픈 여부는 검증하지 않아 이 회귀를 못 잡았다.
+test("Close로 닫은 뒤 회색 영역(빈 미디어 블록)을 다시 클릭하면 File Panel이 재오픈된다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+  await expect(page.getByRole("toolbar", { name: "File panel" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Close file panel" }).click();
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+
+  const emptyBlock = editable.locator('[data-geul-media-empty="image"]');
+  await expect(emptyBlock).toBeVisible();
+  await emptyBlock.click();
+
+  await expect(page.getByRole("toolbar", { name: "File panel" })).toBeVisible();
+});
+
 test("Escape는 패널을 닫고 편집기로 초점을 되돌린다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
