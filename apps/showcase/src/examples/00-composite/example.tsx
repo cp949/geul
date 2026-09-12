@@ -130,11 +130,16 @@ const compositeSyntaxHighlighter: CreateEditorOptions["syntaxHighlighter"] = ({
 // 내보내(io/src/html/export-html.ts textBlockPropsAttributes) 마찬가지로
 // CSS만으로 충분해졌다 — 이 다섯 태그는 TEXT_BLOCK_PROPS_OWN_TAGS로 각
 // 루프에서 제외해 이미 붙은 style을 중복 대입하지 않는다.
-// 남은 두 표면은 exportHtml()이 아직 style을 내지 않는다: 표 셀(`td`/`th`)의
+// 남은 세 표면은 exportHtml()이 아직 style을 내지 않는다: 표 셀(`td`/`th`)의
 // data-geul-text-color/data-geul-background-color/data-geul-align(cellNode,
-// 이번 변경이 손대지 않는 별도 계약 — TextBlockProps가 아니다)과 미디어
+// 이번 변경이 손대지 않는 별도 계약 — TextBlockProps가 아니다), 미디어
 // (image/video)의 data-geul-text-alignment(mediaDataAttributes, Issue
-// #178의 media 정렬 처리와 동일 표면) — 이 둘은 그대로 남긴다.
+// #178의 media 정렬 처리와 동일 표면), data-geul-preview-width(리사이즈
+// 폭, 같은 mediaDataAttributes)다. 앞 둘은 그대로 남긴다. previewWidth는
+// textAlignment와 달리 preview.css의 CSS 속성 선택자로 다룰 수 없다 —
+// left/right 같은 유한 enum이 아니라 임의 px 값이라 아래에서 style.width로
+// 직접 옮긴다(미등록 버그 — 편집기에서 리사이즈해도 미리보기에 반영되지
+// 않았다).
 const TEXT_BLOCK_PROPS_OWN_TAGS =
   ":not(p):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6):not(blockquote):not(li):not(summary)";
 
@@ -154,6 +159,21 @@ const applyDataGeulStyles = (root: HTMLElement) => {
   )) {
     el.style.textAlign =
       el.dataset.geulTextAlignment ?? el.dataset.geulAlign ?? "";
+  }
+  // caption 있는 이미지/비디오는 data-geul-preview-width가 <img>/<video>가
+  // 아니라 그걸 감싼 <figure>에 실린다(export-html.ts mediaBlockNode) —
+  // figure 자신에 width를 주면 시각적으로 아무 효과가 없으므로 자식
+  // img/video를 찾아 적용한다.
+  for (const el of root.querySelectorAll<HTMLElement>(
+    "[data-geul-preview-width]",
+  )) {
+    const width = el.dataset.geulPreviewWidth;
+    const target = el.matches("img, video")
+      ? el
+      : el.querySelector<HTMLElement>("img, video");
+    if (target !== null && width !== undefined) {
+      target.style.width = `${width}px`;
+    }
   }
 };
 

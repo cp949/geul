@@ -16,6 +16,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { insertFilledImage, openDemo } from "./support/demo.js";
+import { beginDrag, dragTo } from "./support/media-resize.js";
 
 const RESIZE_IMAGE_URL = "https://example.com/dir/resize-photo.png";
 
@@ -24,26 +25,6 @@ const routeResizeImage = (page: Page) =>
   page.route(RESIZE_IMAGE_URL, (route) =>
     route.fulfill({ path: "e2e/fixtures/resize-photo.png" }),
   );
-
-type Point = { x: number; y: number };
-
-/**
- * 핸들 중심으로 마우스를 옮기고 누른다 — 이후 `dragTo`가 이 중심 좌표
- * 기준으로 상대 이동한다(핸들 박스의 좌측 상단이 아니라 실제로 누른
- * 지점에서부터 움직여야 포인터 이동량 dx가 정확하다).
- */
-const beginDrag = async (page: Page, handle: Locator): Promise<Point> => {
-  const box = await handle.boundingBox();
-  if (box === null) throw new Error("핸들 bounding box 없음");
-  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  await page.mouse.move(center.x, center.y);
-  await page.mouse.down();
-  return center;
-};
-
-/** `beginDrag`가 누른 지점에서 x축으로 dx만큼(y 고정) 옮긴다. */
-const dragTo = (page: Page, start: Point, dx: number): Promise<void> =>
-  page.mouse.move(start.x + dx, start.y, { steps: 5 });
 
 /** 이미지·래퍼의 현재 bounding box로 좌우 여백(래퍼 경계까지 거리)을 계산한다. */
 const readMargins = async (image: Locator, wrapper: Locator) => {
