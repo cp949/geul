@@ -39,8 +39,12 @@ import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 // previewWidthStyleAttrs). image/video/audio의 showPreview:false는
 // 슬라이스5 RD-002 DELTA-01이 미디어 태그 대신 <a> 링크로 투영을
 // 완성했다(아래 mediaAnchorChildren, FileBlock과 동일 패턴 재사용).
-// textAlignment/backgroundColor는 아직 DOM에 투영하지 않는다(textAlignment는
-// roadmap.md "결과 경계" 제외 범위 — pending-issue로 이월).
+// textAlignment는 image/video만 `data-geul-text-alignment`로 투영한다
+// (2026-09-12, 사용자 지시로 pending-issue 이월 해제 — 아래
+// previewAttributes textAlignment renderHTML). null(미설정)은 attribute
+// 자체를 생략한다 — react CSS의 기본 중앙 정렬(margin:0 auto)이 이미
+// "center"와 같은 결과라 별도 분기가 필요 없다. backgroundColor는 여전히
+// DOM에 투영하지 않는다(범위 밖 유지).
 // io HTML export/import의 <figure> 계약(packages/io, 슬라이스6)과는
 // 별개다 — 여기 DOM 모양이 그 계약을 구속하지 않는다(ADR-0002 — io는 PM
 // DOM이 아니라 저장 Document를 직접 읽고 쓴다).
@@ -82,10 +86,27 @@ const localPreviewAttributes = () => ({
   localPreviewFile: { default: null, renderHTML: () => ({}) },
 });
 
+// 값 검증(left/center/right만 유효)은 model parseDocument·
+// runSetMediaTextAlignmentCommand(block-attribute-commands.ts,
+// isCanonicalCellAlign)가 이미 권위를 갖는다(위 mediaBlockCommonAttributes
+// 주석과 같은 "구조만 담는다" 원칙) — 여기는 문자열 3종만 방어적으로
+// 다시 좁혀 그 외 값(레거시 데이터·수동 setNodeMarkup 등)이 알 수 없는
+// data-geul-text-alignment="..." 값으로 새지 않게 한다.
+const isMediaTextAlignment = (
+  value: unknown,
+): value is "left" | "center" | "right" =>
+  value === "left" || value === "center" || value === "right";
+
 const previewAttributes = () => ({
   showPreview: { default: null, renderHTML: () => ({}) },
   previewWidth: { default: null, renderHTML: () => ({}) },
-  textAlignment: { default: null, renderHTML: () => ({}) },
+  textAlignment: {
+    default: null,
+    renderHTML: (attributes: Record<string, unknown>) =>
+      isMediaTextAlignment(attributes.textAlignment)
+        ? { "data-geul-text-alignment": attributes.textAlignment }
+        : {},
+  },
 });
 
 // ---- renderHTML 공유 헬퍼(RD-002 DELTA-01) ----

@@ -405,6 +405,59 @@ describe("showPreview 렌더 — image/video/audio(슬라이스5 RD-002 DELTA-01
   });
 });
 
+describe("textAlignment 렌더 — image/video(2026-09-12, pending-issue 이월 해제)", () => {
+  it.each(["image", "video"] as const)(
+    "%s는 textAlignment가 left/right면 data-geul-text-alignment를 낸다",
+    (kind) => {
+      const leftDom = mountedDom(kind, {
+        url: "https://example.com/x",
+        textAlignment: "left",
+      });
+      const rightDom = mountedDom(kind, {
+        url: "https://example.com/x",
+        textAlignment: "right",
+      });
+      expect(
+        leftDom
+          .querySelector(`[data-geul-block-id="${kind}-1"]`)
+          ?.getAttribute("data-geul-text-alignment"),
+      ).toBe("left");
+      expect(
+        rightDom
+          .querySelector(`[data-geul-block-id="${kind}-1"]`)
+          ?.getAttribute("data-geul-text-alignment"),
+      ).toBe("right");
+    },
+  );
+
+  it.each(["image", "video"] as const)(
+    "%s는 textAlignment가 없으면 data-geul-text-alignment를 내지 않는다(기본 중앙 정렬, 회귀)",
+    (kind) => {
+      const dom = mountedDom(kind, { url: "https://example.com/x" });
+      expect(
+        dom
+          .querySelector(`[data-geul-block-id="${kind}-1"]`)
+          ?.hasAttribute("data-geul-text-alignment"),
+      ).toBe(false);
+    },
+  );
+
+  it("file/audio는 textAlignment attrs 자체가 없어 data-geul-text-alignment가 없다(회귀)", () => {
+    const fileDom = mountedDom("file", { url: "https://example.com/x" });
+    const audioDom = mountedDom("audio", { url: "https://example.com/x" });
+    expect(
+      fileDom
+        .querySelector('[data-geul-block-id="file-1"]')
+        ?.hasAttribute("data-geul-text-alignment"),
+    ).toBe(false);
+    expect(
+      audioDom
+        .querySelector('[data-geul-block-id="audio-1"]')
+        ?.hasAttribute("data-geul-text-alignment"),
+    ).toBe(false);
+  });
+});
+
 describe("selector — RD-003·RD-004가 대상 블록을 찾는 최소 계약", () => {
   it.each(MEDIA_KINDS)(
     "%s 블록을 data-geul-block-id로 querySelector할 수 있다",
