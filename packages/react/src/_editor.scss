@@ -263,6 +263,22 @@
     pointer-events: none;
   }
 
+  // caption(4종 공통, core captionChildren·media-block-extension.ts)은
+  // 지금까지 어떤 CSS도 받지 못해 브라우저 기본 div로 렌더돼 본문 텍스트와
+  // 구분이 안 됐다(사용자 보고, 2026-09-12). exportHtml() 기반 미리보기의
+  // <figcaption> 톤을 그대로 따른다 — 색·크기는
+  // `[data-geul-media-empty]::after`(위)가 이미 쓰는 값(--geul-color-text-muted,
+  // 0.875rem)과 같다. 정렬은 여기서 건드리지 않는다 — image/video만
+  // 중앙 정렬 대상이라(media-resize-handles.tsx) 그 text-align:center는
+  // _media-resize-handles.scss가 img/video 형제로 스코프해 따로 낸다.
+  // file/audio는 좌측 정렬 콘텐츠(<a>/<audio>)를 그대로 따라가 이 규칙만
+  // 받는다.
+  [data-geul-media-caption] {
+    margin-top: 0.25rem;
+    color: var(--geul-color-text-muted, #5f6368);
+    font-size: 0.875rem;
+  }
+
   // 빈 블록 placeholder(UI-009). 문구는 core(placeholder-extension.ts)가
   // data-placeholder 데코레이션으로 소유하고 여기는 표시만 그린다(R-7).
   // float + height 0은 placeholder 텍스트가 레이아웃을 밀지 않고 캐럿과

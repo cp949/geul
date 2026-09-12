@@ -13,6 +13,19 @@
     margin: 0 auto;
     max-width: 100%;
   }
+
+  // caption 톤(색·크기·margin-top)은 4종 공통이라 _editor.scss
+  // `[data-geul-media-caption]`이 낸다 — 여기서는 img/video만 겪는 어긋남만
+  // 고친다. img/video는 margin:0 auto로 중앙 정렬되는데 caption(기본 div)은
+  // 좌측 정렬로 남아 편집 영역에서 이미지와 caption 위치가 어긋나 보였다
+  // (사용자 보고, 2026-09-12: "caption 위치가 엉망"). img/video 바로 다음
+  // 형제로만 스코프한다(인접 형제 결합자) — file/audio의 <a>/<audio>는
+  // 중앙 정렬을 받지 않으므로(위 규칙이 img/video만 선택) 그 caption도
+  // 좌측 정렬을 유지해 불일치를 새로 만들지 않는다.
+  > img + [data-geul-media-caption],
+  > video + [data-geul-media-caption] {
+    text-align: center;
+  }
 }
 
 // touch-action: none — table-handles.tsx의 geul-table-resize-handle과 같은
