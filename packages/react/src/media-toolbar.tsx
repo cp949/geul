@@ -13,7 +13,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { type FC, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type FC,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { extractNameFromUrl } from "./extract-name-from-url.js";
@@ -305,8 +312,16 @@ export const MediaToolbar = ({
   // 드래그가 끝나면(속성이 사라지면) bounds를 다시 읽어야 한다 — 리사이즈로
   // 미디어 폭이 바뀌면 중심 정렬 앵커(readBlockBounds)도 함께 움직여
   // 드래그 시작 시점에 캐시해 둔 toolbarState.left/top이 더는 맞지 않는다.
+  // useLayoutEffect여야 한다(사용자 스크린샷 — useEffect였을 때 재표시
+  // 순간 옛 위치가 한 프레임 보였다가 새 위치로 튀었다): resizingBlockId가
+  // null로 바뀐 렌더는 아직 옛 toolbarState.left/top으로 커밋·페인트되고,
+  // 그 다음에야 일반 useEffect(페인트 이후 실행)가 새 bounds로 다시 렌더해
+  // 두 번째 페인트가 뒤따른다. useLayoutEffect는 커밋 직후·페인트 전에
+  // 동기로 flush되므로 이 setState가 같은 페인트에 합쳐진다(브라우저가
+  // 옛 위치를 그리지 않는다) — table-handles.tsx가 표 경계 재측정에 쓰는
+  // 것과 같은 이유·같은 관례.
   const previousResizingBlockIdRef = useRef<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = previousResizingBlockIdRef.current;
     previousResizingBlockIdRef.current = resizingBlockId;
     if (previous !== null && resizingBlockId === null) updateFromSelection();
