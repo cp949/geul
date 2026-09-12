@@ -12,7 +12,21 @@
  */
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export const SHOWCASE_BASE_URL = "http://127.0.0.1:5174";
+// e2e/tsconfig.json의 `types: []`(Issue #57)가 @types/node 앰비언트 타입을
+// 막아 `process`가 전역으로 잡히지 않는다 — 필요한 최소 형태만 이 파일
+// 안에서 로컬로 선언한다(module-scope, 다른 e2e 파일에는 영향 없음).
+declare const process: { env: Record<string, string | undefined> };
+
+// GEUL_CHROME83_WEBSERVER가 설정된 실행(`test:e2e:chrome83`)에서는
+// chrome83 project가 dev 서버가 아니라 build+preview 산출물(4175)을
+// 요구한다(playwright.config.ts D7) — vite dev는 build.target을 적용하지
+// 않아 downlevel 결과가 반영되지 않기 때문이다. 이 파일 상단 주석의
+// 절대경로 하드코딩 관례(project별 `use.baseURL`을 원래 우회함)를 그대로
+// 두면 chrome83에서도 dev 서버(5174)로 붙어버리므로, 같은 관례를
+// env-gated로 한 단계 넓혀 분기한다(Issue #180, 01-계획.md "## 결정").
+export const SHOWCASE_BASE_URL = process.env.GEUL_CHROME83_WEBSERVER
+  ? "http://127.0.0.1:4175"
+  : "http://127.0.0.1:5174";
 
 /**
  * showcase의 `path`를 연다. 초기 문서가 비어 있는 예제(Kitchen sink 등)는

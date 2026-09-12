@@ -1,9 +1,10 @@
 /**
  * `playwright.config.ts`의 `webServer` 배열이 chrome83 전용 build+preview
- * 서버(포트 4174)를 `GEUL_CHROME83_WEBSERVER` 환경변수가 설정된 실행에서만
- * 포함하는지 검증한다(Issue #120 트랙-6 발견 F1). 그 서버 엔트리가
- * `reuseExistingServer: false`를 써서 host에 남은 stale preview 프로세스를
- * 재사용하지 않는지도 함께 검증한다(Issue #123).
+ * 서버(demo 4174, showcase 4175 — Issue #180)를 `GEUL_CHROME83_WEBSERVER`
+ * 환경변수가 설정된 실행에서만 포함하는지 검증한다(Issue #120 트랙-6
+ * 발견 F1). 그 서버 엔트리들이 `reuseExistingServer: false`를 써서 host에
+ * 남은 stale preview 프로세스를 재사용하지 않는지도 함께 검증한다(Issue
+ * #123).
  *
  * Playwright는 `--project` 필터와 무관하게 `webServer` 배열 전체를 항상
  * 띄운다 — 환경변수 게이트 없이 두 엔트리를 그대로 두면 `pnpm
@@ -56,22 +57,26 @@ describe("playwright.config.ts의 webServer 배열", () => {
     expect(config.webServer[1]?.url).toBe("http://127.0.0.1:5174");
   });
 
-  it(`${ENV_KEY}=1이면 chrome83 build+preview 서버까지 세 엔트리를 포함한다`, async () => {
+  it(`${ENV_KEY}=1이면 chrome83 build+preview 서버(demo·showcase)까지 네 엔트리를 포함한다`, async () => {
     process.env[ENV_KEY] = "1";
 
     const config = await importPlaywrightConfig();
 
-    expect(config.webServer).toHaveLength(3);
+    // Issue #180이 showcase(4175) chrome83 엔트리를 demo(4174) 엔트리
+    // 뒤에 추가했다 — 순서는 chrome83WebServer 배열 정의 순서 그대로다.
+    expect(config.webServer).toHaveLength(4);
     expect(config.webServer[0]?.url).toBe("http://127.0.0.1:5173");
     expect(config.webServer[1]?.url).toBe("http://127.0.0.1:5174");
     expect(config.webServer[2]?.url).toBe("http://127.0.0.1:4174");
+    expect(config.webServer[3]?.url).toBe("http://127.0.0.1:4175");
   });
 
-  it("chrome83 build+preview 서버는 CI 여부와 무관하게 기존 서버를 재사용하지 않는다(Issue #123)", async () => {
+  it("chrome83 build+preview 서버 둘 다 CI 여부와 무관하게 기존 서버를 재사용하지 않는다(Issue #123, #180)", async () => {
     process.env[ENV_KEY] = "1";
 
     const config = await importPlaywrightConfig();
 
     expect(config.webServer[2]?.reuseExistingServer).toBe(false);
+    expect(config.webServer[3]?.reuseExistingServer).toBe(false);
   });
 });

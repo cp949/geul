@@ -5,6 +5,13 @@
  * 달라 절대 픽셀 위치를 서로 비교하지 않는다 — 각 쪽에서 독립적으로
  * `getComputedStyle().marginLeft`/`marginRight`를 읽어 정렬 CSS 규칙 자체가
  * 적용됐는지 확인한다.
+ *
+ * test 3개 전부에 `@core`를 붙여 Issue #180으로 chrome83 project에
+ * 편입했다. 파일당 `@core` 1개 원칙(Issue #124)의 의도적 예외다 — 3개는
+ * 같은 정렬 시나리오의 변형(기본/left/right)이라 Issue #124가 막으려던
+ * "서로 무관한 test가 파일 단위 testMatch에 편입되는 문제"에 해당하지
+ * 않는다. 오히려 3개 모두 이 파일이 증명하는 완료 조건을 함께
+ * 이룬다(01-계획.md "## 결정").
  */
 import { expect, type Locator, test } from "@playwright/test";
 
@@ -29,7 +36,7 @@ const readHorizontalMargins = (
     };
   });
 
-test("기본(정렬 미지정) 이미지는 편집기와 미리보기 양쪽에서 중앙 정렬된다", async ({
+test("기본(정렬 미지정) 이미지는 편집기와 미리보기 양쪽에서 중앙 정렬된다 @core", async ({
   page,
 }) => {
   await openShowcasePage(page, "/examples/composite");
@@ -49,7 +56,7 @@ test("기본(정렬 미지정) 이미지는 편집기와 미리보기 양쪽에�
   expect(previewMargins.left).toBeCloseTo(previewMargins.right, 0);
 });
 
-test("Align left를 누르면 편집기와 미리보기 양쪽에서 이미지가 왼쪽에 붙는다", async ({
+test("Align left를 누르면 편집기와 미리보기 양쪽에서 이미지가 왼쪽에 붙는다 @core", async ({
   page,
 }) => {
   await openShowcasePage(page, "/examples/composite");
@@ -74,7 +81,7 @@ test("Align left를 누르면 편집기와 미리보기 양쪽에서 이미지�
   expect(previewMargins.right).toBeGreaterThan(0);
 });
 
-test("Align right를 누르면 편집기와 미리보기 양쪽에서 이미지가 오른쪽에 붙는다", async ({
+test("Align right를 누르면 편집기와 미리보기 양쪽에서 이미지가 오른쪽에 붙는다 @core", async ({
   page,
 }) => {
   await openShowcasePage(page, "/examples/composite");
