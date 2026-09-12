@@ -43,6 +43,7 @@ import type {
 } from "./custom-extension-definitions.js";
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
+import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
@@ -511,6 +512,7 @@ export const createProductionEditor = (options: {
       }),
       BlockSplitExtension,
       BlockJoinExtension,
+      HardBreakKeyboardExtension,
       // table 3종 노드(table/tableRow/tableCell)는 표 기능 하나를
       // 이루는 묶음이라 한 조건으로 함께 켜고 끈다.
       ...(isBlockTypeEnabled("table", options.enabledBlockTypes)
