@@ -1,18 +1,19 @@
 /**
  * 표 키보드 확장의 핸들러 단위 계약을 검증한다. Tab/Shift+Tab 셀 탐색,
- * 셀 안 Enter의 아래 행 이동·마지막 행 no-op·무조건 소비, Shift+Enter
- * 소비와 stale DOM selection 재동기화(G-EDT-002), 화살표 단독 키의 표 안
- * 캐럿 이동(경계 판정·셀 넘김·표 밖 탈출)을 다룬다. 실 keymap 체인 폴스루
- * 회귀는 editor-controller-table.test.ts가 마운트 keydown으로 고정한다.
+ * 셀 안 Enter의 아래 행 이동·마지막 행 no-op·무조건 소비, Shift+Enter의
+ * hardBreak 삽입·CellSelection 중 no-op(RD-003, #134 계약 전환)과 stale DOM
+ * selection 재동기화(G-EDT-002), 화살표 단독 키의 표 안 캐럿 이동(경계
+ * 판정·셀 넘김·표 밖 탈출)을 다룬다. 실 keymap 체인 폴스루 회귀는
+ * editor-controller-table.test.ts가 마운트 keydown으로 고정한다.
  */
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import {
-  consumeKeyInsideTable,
   goToNextTableCellOrInsertRow,
   goToPreviousTableCell,
   goToTableCellBelow,
+  insertHardBreakInsideTable,
   moveTableCellCaret,
 } from "../src/table-keyboard-extension.js";
 import { sequentialIds } from "./editor-controller-support.js";
@@ -361,17 +362,43 @@ describe("셀 Enter와 Shift+Enter", () => {
     dispatchSpy.mockRestore();
   });
 
-  it("Shift+Enter는 표 안이면 dispatch 없이 소비하고 표 밖이면 false를 반환한다", () => {
-    const tableEditor = createTableFixtureEditor(docWithTwoRowTable);
-    placeCaretInCell(tableEditor, "cell-1");
+  it("Shift+Enter는 표 안이면 캐럿 위치에 hardBreak를 삽입하고 표 밖이면 false를 반환한다", () => {
+    const tableEditor = createTableFixtureEditor(docWithTextInCell);
+    const boundary = findCellBoundaryPosition(tableEditor, "cell-1");
+    if (boundary === null) throw new Error("셀 fixture 준비 실패");
+    // "a|b" — 텍스트 중간 캐럿.
+    tableEditor.commands.setTextSelection(boundary + 2);
     const dispatchSpy = vi.spyOn(tableEditor.view, "dispatch");
-    expect(consumeKeyInsideTable(tableEditor)).toBe(true);
-    expect(dispatchSpy).not.toHaveBeenCalled();
+
+    expect(insertHardBreakInsideTable(tableEditor)).toBe(true);
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1);
+    let hardBreakFound = false;
+    let textOrder = "";
+    tableEditor.state.doc.descendants((node) => {
+      if (node.type.name === "hardBreak") hardBreakFound = true;
+      if (node.isText) textOrder += node.text ?? "";
+    });
+    expect(hardBreakFound).toBe(true);
+    expect(textOrder).toBe("ab");
     dispatchSpy.mockRestore();
 
     const paragraphEditor = createTableFixtureEditor(docWithParagraph);
     paragraphEditor.commands.setTextSelection(1);
-    expect(consumeKeyInsideTable(paragraphEditor)).toBe(false);
+    expect(insertHardBreakInsideTable(paragraphEditor)).toBe(false);
+  });
+
+  it("CellSelection 중 Shift+Enter는 소비하고 문서를 바꾸지 않는다(#134 재발 방지)", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    selectCellRange(editor, "cell-1", "cell-2");
+    const docBefore = editor.getJSON();
+    const dispatchSpy = vi.spyOn(editor.view, "dispatch");
+
+    expect(insertHardBreakInsideTable(editor)).toBe(true);
+
+    expect(dispatchSpy).not.toHaveBeenCalled();
+    expect(editor.getJSON()).toEqual(docBefore);
+    dispatchSpy.mockRestore();
   });
 
   it("Enter는 stale editor.state를 무시하고 실제 DOM selection을 따른다", () => {
@@ -447,7 +474,7 @@ describe("셀 Enter와 Shift+Enter", () => {
     );
   });
 
-  it("Shift+Enter도 DOM 캐럿이 표 밖이어도 live selection이 셀 안이면 소비한다", () => {
+  it("Shift+Enter는 DOM 캐럿이 표 밖이면 live selection이 셀 안이어도 삽입하지 않고 소비만 한다", () => {
     const editor = createTableFixtureEditor(docWithTableAndParagraph);
     placeCaretInCell(editor, "cell-1");
 
@@ -461,7 +488,10 @@ describe("셀 Enter와 Shift+Enter", () => {
       () => {
         const dispatchSpy = vi.spyOn(editor.view, "dispatch");
 
-        expect(consumeKeyInsideTable(editor)).toBe(true);
+        // DOM 캐럿(표 밖)이 신뢰 기준이다 — live selection(표 안, stale)에
+        // hardBreak를 잘못 삽입하지 않고 소비만 한다(goToTableCellBelow의
+        // 역방향 stale 방어와 같은 정책).
+        expect(insertHardBreakInsideTable(editor)).toBe(true);
 
         expect(dispatchSpy).not.toHaveBeenCalled();
         dispatchSpy.mockRestore();

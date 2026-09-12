@@ -27,4 +27,4 @@ Chromium은 클릭 뒤 native `selectionchange` DOM 이벤트를 비동기로 �
 
 ## 참고 구현
 
-`packages/core/src/table-keyboard-extension.ts`의 `resolveSelectionAwareState`(Issue #118)와 live state 폴백 소비를 포함한 `goToTableCellBelow`/`consumeKeyInsideTable`(Issue #134).
+`packages/core/src/table-keyboard-extension.ts`의 `resolveSelectionAwareState`(Issue #118)와 live state 폴백 소비를 포함한 `goToTableCellBelow`(Issue #134)/`insertHardBreakInsideTable`(Issue #177, RD-003).

@@ -101,12 +101,31 @@ export const goToTableCellBelow = (editor: Editor): boolean => {
   return true;
 };
 
-// 셀 안 Shift+Enter(spec 7.2). 스키마에 hardBreak가 없어 폴스루 결과가
-// 비결정적이므로 표 안에서는 무조건 소비해 no-op으로 만든다(transaction
-// 0개, G-EDT-001). 표 밖은 기존 동작에 맡긴다. live state 검사는
-// goToTableCellBelow와 같은 역방향 stale 방어다.
-export const consumeKeyInsideTable = (editor: Editor): boolean =>
-  isInTable(resolveSelectionAwareState(editor)) || isInTable(editor.view.state);
+// 셀 안 Shift+Enter(spec 7.2, RD-003 — #134가 확정한 no-op 계약을
+// 의도적으로 뒤집는다). 캐럿·텍스트 범위 선택(TextSelection)이면 셀 안에
+// hardBreak(줄바꿈)를 삽입한다 — table cell content(inline*)가 이미
+// hardBreak를 받고(RD-001), 라이브 PM 노드 읽기 경로(table-model-codec.ts)도
+// 디코드를 갖추고 있다. CellSelection(셀 범위 선택, 서로 다른 셀 여러 개를
+// 덮는 드래그 선택)이면 여전히 dispatch 없이 소비만 한다 — 기준 셀을 임의로
+// 정해 그 셀에만 삽입하면 "선택한 셀 중 하나만 바뀐다"는 사용자 기대와
+// 어긋나고, #134가 막던 셀 분할류 문서 손상 재발 경로를 새로 열 이유가
+// 없다. live state 검사는 goToTableCellBelow와 같은 역방향 stale
+// 방어다 — DOM 캐럿이 표 밖이면(derived state가 표 밖) 실제 삽입은 하지
+// 않고, live selection만 표 안이면 소비만 해 코어 Enter 체인 폴스루로 인한
+// 손상을 막는다(선택 자체가 stale이라 어느 셀에 넣어야 할지 신뢰할 수
+// 없다).
+export const insertHardBreakInsideTable = (editor: Editor): boolean => {
+  const state = resolveSelectionAwareState(editor);
+  if (!isInTable(state)) return isInTable(editor.view.state);
+  if (state.selection instanceof CellSelection) return true;
+
+  editor.view.dispatch(
+    state.tr
+      .replaceSelectionWith(state.schema.nodes.hardBreak!.create())
+      .scrollIntoView(),
+  );
+  return true;
+};
 
 // prosemirror-tables의 tableEditing()이 등록하는 기본 ArrowLeft/Right/Up/Down
 // 처리(내부 함수 arrow(), atEndOfCell() — 둘 다 export되지 않는다)는 셀
@@ -235,7 +254,7 @@ export const TableKeyboardNavigationExtension =
           goToNextTableCellOrInsertRow(this.editor, this.options.createId),
         "Shift-Tab": () => goToPreviousTableCell(this.editor),
         Enter: () => goToTableCellBelow(this.editor),
-        "Shift-Enter": () => consumeKeyInsideTable(this.editor),
+        "Shift-Enter": () => insertHardBreakInsideTable(this.editor),
         ArrowLeft: () => moveTableCellCaret(this.editor, "horiz", -1),
         ArrowRight: () => moveTableCellCaret(this.editor, "horiz", 1),
         ArrowUp: () => moveTableCellCaret(this.editor, "vert", -1),

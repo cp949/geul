@@ -1,8 +1,9 @@
 /**
  * 에디터 컨트롤러의 표 조작 명령을 검증한다. 행·열 삽입과 이동, 열 너비
  * 조절, 표 블록을 거부해야 하는 일반 블록 명령, 셀 병합·분할과 선택 보고,
- * Tab/Shift+Tab 셀 탐색, 셀 안 Enter/Shift+Enter 소비 계약과 undo 단계를
- * 만들지 않아야 하는 no-op 방어 동작을 다룬다. 문서 로드와 표 삽입은
+ * Tab/Shift+Tab 셀 탐색, 셀 안 Enter 소비 계약과 Shift+Enter의 hardBreak
+ * 삽입(RD-003, #134 no-op 계약 전환 — CellSelection 중에는 여전히 no-op),
+ * undo 단계를 만들지 않아야 하는 no-op 방어 동작을 다룬다. 문서 로드와 표 삽입은
  * editor-controller-table-load.test.ts, 붙여넣기는
  * editor-controller-table-paste.test.ts가 맡는다.
  */
@@ -569,19 +570,38 @@ describe("에디터 컨트롤러 표", () => {
       expect(editor.getDocument()).toEqual(before);
     });
 
-    it("셀 안 Shift+Enter 키 입력은 소비되고 문서와 캐럿을 그대로 둔다", () => {
+    it("셀 안 Shift+Enter 키 입력은 캐럿 위치에 줄바꿈을 삽입한다(RD-003, #134 no-op 계약 전환)", () => {
       const { editor, cellIds } = editorWithTable(2, 2);
       const { tiptap } = mountTiptapEditor(editor);
       const [topLeft] = cellIds;
       if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
       placeCaretInCell(tiptap, topLeft);
-      const before = editor.getDocument();
-      const selectionBefore = tiptap.state.selection.toJSON();
+      expect(tiptap.commands.insertContent("가나다라")).toBe(true);
+      const boundary = findCellBoundaryPosition(tiptap, topLeft);
+      if (boundary === null) throw new Error("셀 fixture 준비 실패");
+      // "가나|다라" — 텍스트 중간 캐럿.
+      tiptap.commands.setTextSelection(boundary + 3);
 
       const consumed = dispatchCellKeydown(tiptap, "Enter", true);
 
       expect(consumed).toBe(true);
-      expect(tiptap.state.selection.toJSON()).toEqual(selectionBefore);
+      // 셀·행 이동 없이 같은 셀 안에 머무른다(일반 Enter의 아래 행 이동과
+      // 구분).
+      expect(activeCellId(tiptap)).toBe(topLeft);
+      const cell = tableBlockOf(editor).rows[0]?.cells[0];
+      expect(cell?.content).toEqual([{ text: "가나\n다라" }]);
+    });
+
+    it("셀 범위 선택 중 Shift+Enter 키 입력은 소비되고 문서를 바꾸지 않는다(#134 재발 방지)", () => {
+      const { editor, cellIds } = editorWithTable(2, 2);
+      const { tiptap } = mountTiptapEditor(editor);
+      const [topLeft] = cellIds;
+      selectSingleCell(tiptap, topLeft);
+      const before = editor.getDocument();
+
+      const consumed = dispatchCellKeydown(tiptap, "Enter", true);
+
+      expect(consumed).toBe(true);
       expect(editor.getDocument()).toEqual(before);
     });
 
