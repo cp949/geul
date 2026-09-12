@@ -124,26 +124,33 @@ const compositeSyntaxHighlighter: CreateEditorOptions["syntaxHighlighter"] = ({
 // exportHtml()의 라운드트립 전용 속성(data-geul-text-color 등) 중 시각
 // 표현이 없는 것만 골라 미리보기에 반영한다. 인라인 mark(textColor,
 // backgroundColor)는 exportHtml()이 이미 <span style="..."> 로 내보내
-// CSS만으로 충분하지만, 블록 단위 속성(문단/헤딩/인용/목록의
-// textColor·backgroundColor·textAlignment, 표 셀의 align)은 속성값만 남고
-// style이 없다(io/src/html/export-html.ts textBlockPropsAttributes,
-// cellNode) — 라이브 에디터는 이 값을 Tiptap이 별도로 렌더링하지만,
-// 정적 HTML은 그 렌더러가 없다. FormattingToolbar가 바로 이 세 속성을
-// 조작하는 대표 표면이라 미리보기에서 비워두면 Kitchen sink의 취지와
-// 어긋난다.
+// CSS만으로 충분하고, Issue #179부터는 문단/헤딩/인용/목록(TextBlockProps,
+// p/h1~h6/blockquote/li/toggle summary)의 블록 레벨 textColor·
+// backgroundColor·textAlignment도 exportHtml()이 같은 값을 style로 함께
+// 내보내(io/src/html/export-html.ts textBlockPropsAttributes) 마찬가지로
+// CSS만으로 충분해졌다 — 이 다섯 태그는 TEXT_BLOCK_PROPS_OWN_TAGS로 각
+// 루프에서 제외해 이미 붙은 style을 중복 대입하지 않는다.
+// 남은 두 표면은 exportHtml()이 아직 style을 내지 않는다: 표 셀(`td`/`th`)의
+// data-geul-text-color/data-geul-background-color/data-geul-align(cellNode,
+// 이번 변경이 손대지 않는 별도 계약 — TextBlockProps가 아니다)과 미디어
+// (image/video)의 data-geul-text-alignment(mediaDataAttributes, Issue
+// #178의 media 정렬 처리와 동일 표면) — 이 둘은 그대로 남긴다.
+const TEXT_BLOCK_PROPS_OWN_TAGS =
+  ":not(p):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6):not(blockquote):not(li):not(summary)";
+
 const applyDataGeulStyles = (root: HTMLElement) => {
   for (const el of root.querySelectorAll<HTMLElement>(
-    "[data-geul-text-color]",
+    `[data-geul-text-color]${TEXT_BLOCK_PROPS_OWN_TAGS}`,
   )) {
     el.style.color = el.dataset.geulTextColor ?? "";
   }
   for (const el of root.querySelectorAll<HTMLElement>(
-    "[data-geul-background-color]",
+    `[data-geul-background-color]${TEXT_BLOCK_PROPS_OWN_TAGS}`,
   )) {
     el.style.backgroundColor = el.dataset.geulBackgroundColor ?? "";
   }
   for (const el of root.querySelectorAll<HTMLElement>(
-    "[data-geul-text-alignment], [data-geul-align]",
+    `[data-geul-text-alignment]${TEXT_BLOCK_PROPS_OWN_TAGS}, [data-geul-align]`,
   )) {
     el.style.textAlign =
       el.dataset.geulTextAlignment ?? el.dataset.geulAlign ?? "";
