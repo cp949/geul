@@ -12,15 +12,16 @@
 # 스냅샷엔 82.x가 없어 83.x가 실제 시험 가능한 최소 후보다.
 FROM debian:buster-slim
 
-# 과거 pnpm@11.21.0의 engines.node 최소값(>=22.13)을 만족하려 그 시점 저장소
-# CI 핀(22.12.0)보다 패치 한 단계 위로 골랐던 값이 남아 있다. pnpm@10.34.5는
-# >=18.12만 요구해 이 여유가 더는 필요 없다. 저장소 CI/루트 engines는 이후
-# Node >=24.18.0·pnpm@11.25.0(cp949/geul#157)으로 다시 올라갔지만, 이
-# 컨테이너는 host mount된 node_modules의 playwright 바이너리를 pnpm 경유
-# 없이 직접 실행하는 e2e 실행 전용 이미지라(`./node_modules/.bin/playwright`
-# 직접 호출, pnpm install을 컨테이너 안에서 돌리지 않음) 그 계약과 계속
-# 무관하다 — 맞춰 올리거나 낮출 이유가 없다.
-ARG NODE_VERSION=22.13.0
+# NODE_VERSION은 저장소 CI/루트 engines와 무관하지 않다. playwright.config.ts의
+# chrome83WebServer가 이 컨테이너 안에서 `pnpm --filter @cp949/geul-react build`
+# 등 실제 build 커맨드를 실행하므로(단순 `./node_modules/.bin/playwright` 직접
+# 호출이 아니다), 루트 engines.node(">=24.18.0", .npmrc의 engine-strict=true)와
+# CI Node 핀(.github/workflows/ci.yml → 24.18.1)을 그대로 따라야
+# ERR_PNPM_UNSUPPORTED_ENGINE 없이 그 build 커맨드가 실행된다. 과거
+# pnpm@11.21.0의 engines.node 최소값(>=22.13)에 맞춰 그 시점 저장소 CI 핀
+# (22.12.0)보다 패치 한 단계 위로 골랐던 22.13.0 값은 이제 폐기하고, CI Node
+# 핀과 동일한 값으로 맞춘다(cp949/geul#157, cp949/geul#182).
+ARG NODE_VERSION=24.18.1
 ARG PNPM_VERSION=10.34.5
 
 RUN set -eux; \
