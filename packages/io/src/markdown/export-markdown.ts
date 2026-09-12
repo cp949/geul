@@ -91,18 +91,31 @@ const wrapNodes = (
   }
 };
 
+// table 밖 블록(inTableCell: false)의 `\n`도 table cell과 대칭으로
+// 하드브레이크 노드를 삽입한다(RD-004, #177). table cell은 GFM 표 구문이
+// 셀 안 개행을 허용하지 않아 mdast `break`가 공백 하나로 뭉개진다(실측,
+// mdast-util-to-markdown의 기본 break 핸들러 — 개행이 허용되지 않는
+// scope에서는 space로 폴백) — 그래서 계속 `<br>` HTML 노드로 우회한다.
+// table 밖은 그 제약이 없어 `break`가 `\\\n`(백슬래시+개행)으로 정상
+// 직렬화되고, import 쪽(`import-markdown-inline.ts`의 `case "break"`)은
+// 이미 위치와 무관하게 `\n`으로 디코드해 대칭이 갖춰져 있었다 — export
+// 쪽만 이 DELTA가 채운다.
 const textNodes = (
   text: string,
   inTableCell: boolean,
 ): MarkdownOutputNode[] => {
-  if (!inTableCell) return [{ type: "text", value: text }];
+  if (!inTableCell && !text.includes("\n")) {
+    return [{ type: "text", value: text }];
+  }
 
   const parts = text.split("\n");
   const nodes: MarkdownOutputNode[] = [];
   for (const [index, part] of parts.entries()) {
     if (part.length > 0) nodes.push({ type: "text", value: part });
     if (index < parts.length - 1) {
-      nodes.push({ type: "html", value: "<br>" });
+      nodes.push(
+        inTableCell ? { type: "html", value: "<br>" } : { type: "break" },
+      );
     }
   }
   return nodes;

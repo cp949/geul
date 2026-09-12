@@ -228,6 +228,11 @@ describe("Markdown 왕복 변환", () => {
     const exported = exportMarkdown(safe, { mode: "strict" });
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.code);
+    // table 밖 블록의 `\n`은 리터럴 개행이 아니라 mdast 하드브레이크(백슬래시+개행)로
+    // 직렬화된다(RD-004) — CommonMark soft break는 렌더러마다 줄바꿈 보존 여부가
+    // 다르다(비결정적). 리터럴 개행만 있고 백슬래시가 없으면 옛 비대칭 버그로
+    // 되돌아간 것이다.
+    expect(exported.value).toContain("line 1\\\nline 2");
     expect(
       importMarkdown(exported.value, { createId: () => "safe-lf" }),
     ).toEqual({
