@@ -230,6 +230,14 @@ export type Dictionary = {
     formatting: {
       ariaLabel: string;
     };
+    // Issue #184 RD-001-DELTA-02 — react `StaticToolbar`(선택 트리거 없이
+    // 상시 렌더되는 옵트인 툴바)의 aria-label. `formatting`과 다른
+    // 네임스페이스를 쓰는 이유: 두 컴포넌트를 같은 페이지에 동시에 마운트할
+    // 수 있어(옵트인이라 배타적이지 않음) accessible name이 같으면
+    // 스크린리더 사용자가 둘을 구분할 수 없다.
+    static: {
+      ariaLabel: string;
+    };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
   // 추가·표 그립·Plus)와 `block-side-menu.tsx`(블록 드래그·추가)의 hover
@@ -497,6 +505,9 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     },
     formatting: {
       ariaLabel: "Formatting",
+    },
+    static: {
+      ariaLabel: "Toolbar",
     },
   },
   handle: {

@@ -1,6 +1,6 @@
 # @cp949/geul-react
 
-`@cp949/geul-core` 위에 구현한 React 바인딩과 UI 컴포넌트다. `EditorProvider`/`EditorContent`로 에디터를 렌더링하고, `FormattingToolbar`/`LinkToolbar`/`MediaToolbar`/`FilePanel`/`SlashMenu`/`EmojiPicker` 등 보조 UI를 함께 제공한다.
+`@cp949/geul-core` 위에 구현한 React 바인딩과 UI 컴포넌트다. `EditorProvider`/`EditorContent`로 에디터를 렌더링하고, `FormattingToolbar`/`LinkToolbar`/`MediaToolbar`/`FilePanel`/`SlashMenu`/`EmojiPicker`/`StaticToolbar` 등 보조 UI를 함께 제공한다. `FormattingToolbar`는 텍스트 선택 시에만 뜨는 반면 `StaticToolbar`는 선택과 무관하게 항상 렌더되는 옵트인 툴바다 — 위치(예: 상단 고정)는 강제하지 않으므로 `className`으로 소비 앱이 직접 CSS(`position: sticky` 등)를 붙인다.
 
 ## 최소 사용 예
 

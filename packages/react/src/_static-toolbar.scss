@@ -1,0 +1,15 @@
+// StaticToolbar 컨테이너. FormattingToolbar와 달리 위치를 geul이 강제하지
+// 않는다 — position/z-index/transform이 없는 순수 in-flow 요소다("상단
+// 고정"은 소비자가 직접 CSS로 붙인다, RD-001 "결정" 참고). 버튼/select/색상
+// 팔레트는 _formatting-toolbar.scss·_menu-shared.scss의 기존 클래스를 그대로
+// 재사용한다(위치 가정이 없는 순수 시각 스타일이라 복제 불필요).
+.geul-static-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  gap: 0.125rem;
+  border-radius: var(--geul-radius-md, 0.375rem);
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+}

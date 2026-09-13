@@ -1,4 +1,4 @@
-import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
+import type { EditorController } from "@cp949/geul-core";
 import {
   Baseline,
   Bold,
@@ -25,6 +25,11 @@ import {
   blockTypeToOptionId,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
+import {
+  computeFormattingToolbarState,
+  type FormattingToolbarState,
+  type SelectionMark,
+} from "./formatting-toolbar-state.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
@@ -39,8 +44,6 @@ import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useRangeDismissSuppression } from "./use-range-dismiss-suppression.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
-
-type SelectionMark = ReturnType<EditorController["getSelectionMarks"]>[number];
 
 // 아이콘 element를 모듈 레벨 상수로 만들어 두면 매 렌더에서 같은 참조가
 // 재사용되어 React가 아이콘 subtree 재렌더를 통째로 건너뛴다. 툴바는 표시 중
@@ -112,10 +115,10 @@ const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
 // allow-list와 같은 이유).
 const TOOLBAR_DISMISS_ALLOW_SELECTORS = [".geul-formatting-toolbar"] as const;
 
-type ToolbarState = {
-  activeMarks: SelectionMark[];
-  blockSelection: { blockId: string; blockType: BlockTypeDescriptor } | null;
-  nestingActions: { canIndent: boolean; canOutdent: boolean } | null;
+type ToolbarState = Omit<
+  FormattingToolbarState,
+  "isCellRangeSelected" | "isMediaBlockSelected"
+> & {
   left: number;
   top: number;
 };
@@ -207,13 +210,20 @@ export const FormattingToolbar = ({
       return;
     }
 
+    // formatting-toolbar-state.js가 activeMarks/blockSelection/
+    // nestingActions와 media·cell 판정을 함께 계산한다(RD-001-DELTA-01,
+    // StaticToolbar와 공유). 아래 두 가드는 그중 media·cell 플래그만
+    // 골라 쓴다 — 계산 자체는 순수 함수라 여기서 hide로 이어지든 말든
+    // 부수효과가 없다.
+    const computedState = computeFormattingToolbarState(editor);
+
     // 미디어 블록(image/video/audio/file)을 고르면 DOM selection이 그
     // 노드를 감싸는 non-collapsed Range가 돼 위 가드를 통과한다 — 하지만
     // Bold 등 인라인 mark·색상·link는 텍스트가 없는 미디어 노드엔 애초에
     // 적용 불가하다(MediaToolbar가 전담). blockSelection도 media는
     // BlockTypeDescriptor에 없어 이미 null로 떨어지므로(block-type-
     // descriptor.ts) 이 가드가 없으면 마크·색상 버튼만 덩그러니 뜬다.
-    if (editor.getSelectionMediaBlock() !== null) {
+    if (computedState.isMediaBlockSelected) {
       setToolbarState(null);
       setColorMenuState(null);
       dismissSuppression.clear();
@@ -227,7 +237,7 @@ export const FormattingToolbar = ({
     // 셀 "안"의 정상 텍스트 선택(CellSelection 아님)은 막지 않는다 —
     // isCellRangeSelected()가 그 둘을 구분한다(위 media 가드와 같은 결,
     // 91fcefa의 CellSelection 대응판).
-    if (editor.isCellRangeSelected()) {
+    if (computedState.isCellRangeSelected) {
       setToolbarState(null);
       setColorMenuState(null);
       dismissSuppression.clear();
@@ -243,14 +253,10 @@ export const FormattingToolbar = ({
       top: 0,
       width: 0,
     };
-    const blockSelection = editor.getSelectionBlockType();
     setToolbarState({
-      activeMarks: editor.getSelectionMarks(),
-      blockSelection,
-      nestingActions:
-        blockSelection === null
-          ? null
-          : editor.getBlockNestingActionState(blockSelection.blockId),
+      activeMarks: computedState.activeMarks,
+      blockSelection: computedState.blockSelection,
+      nestingActions: computedState.nestingActions,
       left: bounds.left + bounds.width / 2,
       top: bounds.top,
     });

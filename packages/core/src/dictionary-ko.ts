@@ -202,6 +202,9 @@ export const KO_DICTIONARY: Dictionary = {
     formatting: {
       ariaLabel: "서식",
     },
+    static: {
+      ariaLabel: "툴바",
+    },
   },
   handle: {
     dragRow: "드래그해서 행 순서 변경, 클릭하면 옵션 표시",

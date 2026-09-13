@@ -1,0 +1,17 @@
+/* "상단 고정"은 geul이 강제하지 않고 소비 앱이 직접 붙인다(RD-001 "결정")
+   — 이 예제가 그 몫을 맡는다. scrollArea에 명시적 높이 상한을 둬 내부
+   스크롤이 실제로 일어나게 하고(ExamplePage의 .demoPane은 콘텐츠에 맞춰
+   커지므로 그것만으로는 스크롤이 안 생긴다), stickyToolbar가 그 스크롤
+   컨테이너 기준으로 상단에 붙는다. */
+.scrollArea {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.stickyToolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}

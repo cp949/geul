@@ -10,6 +10,7 @@ import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
 import MediaPage from "./examples/07-media/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 import SlashMenuPage from "./examples/05-slash-menu/page.js";
+import StaticToolbarPage from "./examples/15-static-toolbar/page.js";
 import SyntaxHighlightingLowlightPage from "./examples/10-syntax-highlighting-lowlight/page.js";
 import SyntaxHighlightingShikiPage from "./examples/11-syntax-highlighting-shiki/page.js";
 import SyntaxHighlightingRefractorPage from "./examples/12-syntax-highlighting-refractor/page.js";
@@ -74,6 +75,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "File panel",
     group: "Toolbars & Menus",
     Page: FilePanelPage,
+  },
+  {
+    path: "static-toolbar",
+    label: "Static toolbar",
+    group: "Toolbars & Menus",
+    Page: StaticToolbarPage,
   },
   {
     path: "media",
