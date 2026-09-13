@@ -134,9 +134,12 @@ test("Escape로 취소하면 원래 폭으로 복원되고 Media Toolbar가 닫�
   await dragTo(page, start, 40);
 
   await expect(image).toHaveAttribute("style", /width:\s*380px/);
-  // 드래그가 진행 중인 동안에도 toolbar가 살아 있어야 한다 — F5(핸들
-  // pointerdown이 "바깥 클릭"으로 오판정돼 즉시 닫히는 회귀)는 여기서 잡힌다.
-  await expect(toolbar).toBeVisible();
+  // 드래그 중엔 692c650 계약대로 toolbar가 숨는다(data-geul-media-resizing-block-id
+  // 를 media-toolbar.tsx가 지켜봐 DOM에서 사라지게 한다) — toolbarState 자체가
+  // "closed"로 전환되는 것과는 다른 메커니즘이다. F5가 막던 회귀(포인터다운이
+  // "바깥 클릭"으로 오판정돼 toolbarState가 closed로 굳어 드래그 종료 후에도
+  // 다시 뜨지 않는 것)는 아래(148행) "종료 후 재표시" 단언이 잡는다.
+  await expect(toolbar).toBeHidden();
 
   await page.keyboard.press("Escape");
   await page.mouse.up();
@@ -145,6 +148,7 @@ test("Escape로 취소하면 원래 폭으로 복원되고 Media Toolbar가 닫�
   // 없어야 한다(F6 — 취소 후 시작 rect 폭을 재조립해 fluid 이미지를
   // 고정폭으로 굳히는 회귀).
   await expect(image).not.toHaveAttribute("style", /width/);
+  // 드래그가 끝나면 다시 떠야 한다 — F5 가드 본체(영구 닫힘 방지).
   await expect(toolbar).toBeVisible();
 });
 
