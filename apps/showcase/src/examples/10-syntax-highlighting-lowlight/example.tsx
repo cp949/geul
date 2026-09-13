@@ -1,5 +1,5 @@
 import type { Document } from "@cp949/geul-model";
-import { EditorContent, EditorProvider } from "@cp949/geul-react";
+import { EditorContent, EditorProvider, SlashMenu } from "@cp949/geul-react";
 import "highlight.js/styles/github.css";
 import { common, createLowlight } from "lowlight";
 import { useState } from "react";
@@ -125,6 +125,10 @@ const SyntaxHighlightingLowlightExample = () => {
       initialDocument={initialDocument}
       syntaxHighlighter={lowlightSyntaxHighlighter}
     >
+      {/* 코드블록에 커서를 두면 SlashMenu가 내부 마운트하는
+          CodeBlockLanguageCombobox(언어 선택 버튼+드롭다운)가 떠 언어를
+          실시간 전환할 수 있다 — 05-slash-menu/00-composite와 동일 관례. */}
+      <SlashMenu />
       <EditorContent />
     </EditorProvider>
   );
