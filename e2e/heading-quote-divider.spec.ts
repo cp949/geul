@@ -130,6 +130,48 @@ test("h4-h6 폰트 크기가 단조 감소하고 blockquote·hr에 콘텐츠 스
   await expect(editable.locator("hr")).toHaveCSS("border-top-width", "1px");
 });
 
+test("h1 hover 시 드래그 핸들·add 버튼이 첫 줄의 세로 중앙에 맞춰진다(사용자 스크린샷, line-height가 버튼보다 큰 heading 회귀)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const source = page.getByLabel("Document source");
+
+  await source.fill(
+    JSON.stringify({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "h1-1",
+          type: "heading",
+          level: 1,
+          content: [{ text: "sample" }],
+        },
+      ],
+    }),
+  );
+  await page.getByRole("button", { name: "Load JSON" }).click();
+
+  const heading = editable.locator("h1");
+  await heading.hover();
+
+  const handle = page.getByRole("button", { name: "Drag to reorder" });
+  await expect(handle).toBeVisible();
+
+  const headingBox = await heading.boundingBox();
+  const handleBox = await handle.boundingBox();
+  if (headingBox === null || handleBox === null) {
+    throw new Error("Bounding boxes were not available");
+  }
+
+  const headingCenterY = headingBox.y + headingBox.height / 2;
+  const handleCenterY = handleBox.y + handleBox.height / 2;
+  // 고정 top-align(dy=0)이면 h1의 line-height(51.2px)가 버튼(24px)보다
+  // 훨씬 커 두 중심이 약 13.6px 벌어진다 — 중앙 정렬이면 그 차이가
+  // 1px 미만이어야 한다(block-side-menu-geometry.ts computeGutterTopOffset).
+  expect(Math.abs(handleCenterY - headingCenterY)).toBeLessThan(1);
+});
+
 test("native #/>/--- 입력은 production editor에서 heading/quote/divider DOM으로 변환하고 focus를 유지한다 @core", async ({
   page,
 }) => {

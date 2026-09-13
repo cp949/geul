@@ -8,6 +8,32 @@ import type {
 // HTMLElement/tree 인자만 받고 React·에디터 마운트에는 의존하지 않는다 —
 // table-handle-geometry.ts와 같은 층위 분리(01-계획.md).
 
+// 거터 버튼(.geul-block-gutter__button)의 높이(px) — 1.5rem,
+// _block-side-menu.scss와 동기화. use-clamped-menu-position.ts의
+// ASSUMED_ROOT_FONT_SIZE_PX(16)와 같은 전제(루트 폰트 16px)를 쓴다.
+const GUTTER_BUTTON_HEIGHT_PX = 24;
+
+// block-side-menu.tsx가 거터 top 앵커(useClampedMenuPosition의
+// leftOfAnchor, dy=0)에 더하는 오프셋. 문단·인용·목록 항목처럼 첫 줄
+// line-height가 버튼과 비슷한 블록은 rect.top 그대로도 얼추 중앙처럼
+// 보이지만, heading(h1~h6)은 font-size가 커 첫 줄 line-height가 버튼보다
+// 훨씬 커 버튼이 줄 위쪽으로 쏠린다(사용자 스크린샷, h1: line-height
+// 51.2px vs 버튼 24px). blockContainer는 항상 inline 콘텐츠를 첫
+// 자식(h1~h6/p/blockquote/목록 항목 div)에 직접 담으므로
+// (block-container-extension.ts) 그 자식이 heading일 때만 line-height
+// 차이의 절반만큼 내린다 — 사용자 보고가 h1 한정이라 다른 블록 종류는
+// 이 DELTA 범위 밖으로 남기고 오프셋 0(기존 top-align 그대로)을 유지한다.
+// line-height를 유한수로 못 읽으면(atom 블록 등, computed style 부재)도
+// 마찬가지로 0 — 차이가 음수(heading 폰트가 버튼보다 작은 h5·h6 조합)면
+// 버튼이 줄 위로 넘치므로 0에서 클램프한다.
+export const computeGutterTopOffset = (blockElement: HTMLElement): number => {
+  const heading = blockElement.firstElementChild;
+  if (heading === null || !/^H[1-6]$/.test(heading.tagName)) return 0;
+  const lineHeightPx = parseFloat(getComputedStyle(heading).lineHeight);
+  if (!Number.isFinite(lineHeightPx)) return 0;
+  return Math.max(0, (lineHeightPx - GUTTER_BUTTON_HEIGHT_PX) / 2);
+};
+
 // usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
 // 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
 // useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   computeDragGuide,
+  computeGutterTopOffset,
   computeRangeMoveDragGuide,
   findBlockInTreeForDrag,
   findOwnRectBlockId,
@@ -315,7 +316,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
         if (blockElement === null) return current;
         const rect = blockElement.getBoundingClientRect();
         const left = rect.left;
-        const top = rect.top + 28;
+        const top = rect.top + computeGutterTopOffset(blockElement) + 28;
         return current.left === left && current.top === top
           ? current
           : { ...current, left, top };
@@ -340,7 +341,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     );
     if (blockElement === null) return null;
     const rect = blockElement.getBoundingClientRect();
-    return { left: rect.left, top: rect.top };
+    // heading은 line-height가 버튼보다 커 top 그대로면 버튼이 첫 줄
+    // 위쪽으로 쏠린다 — computeGutterTopOffset 참고(block-side-menu-geometry.ts).
+    return {
+      left: rect.left,
+      top: rect.top + computeGutterTopOffset(blockElement),
+    };
   })();
 
   const gutterClamp = useClampedMenuPosition(
