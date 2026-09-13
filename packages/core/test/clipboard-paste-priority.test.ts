@@ -117,17 +117,16 @@ describe("우선순위 교차(다중 MIME 동시 존재)", () => {
 });
 
 describe("슬라이스 2~9 전체 블록 타입 fixture(완료 조건 3)", () => {
-  // 슬라이스 2~9가 추가한 11종 대표 1건씩 — own export document HTML
+  // 슬라이스 2~9가 추가한 10종 대표 1건씩 — own export document HTML
   // 왕복으로 타입·상태·content가 정확히 반영되는지 한 번에 고정한다.
   // `io.exportHtml`을 소스로 쓴다 — roadmap.md "전체 결과
   // 경계"가 own export document HTML을 명시 대상으로 두는 반면, 생산
   // 편집기 in-editor copy의 상태 보존은 목록류 4종(RD-003)에만 범위가
-  // 있고 토글 heading에는 없다(own export만 `<details data-geul-toggleable>`
-  // 로 isToggleable/collapsed를 표현한다, export-html.ts). 목록 4종은
-  // clipboard-paste-list.test.ts가, 비목록 5종은 clipboard-paste-extension.
-  // test.ts가 이미 개별로 검증했다 — 이 fixture의 새 가치는 11종 전체를
-  // 하나의 문서·paste로 교차 확인하는 것과, 토글 heading·인라인/블록
-  // 색상·정렬(어느 기존 clipboard 테스트도 다루지 않았던 3종)이다.
+  // 있다. 목록 4종은 clipboard-paste-list.test.ts가, 비목록 5종은
+  // clipboard-paste-extension.test.ts가 이미 개별로 검증했다 — 이
+  // fixture의 새 가치는 10종 전체를 하나의 문서·paste로 교차 확인하는
+  // 것과, 인라인/블록 색상·정렬(어느 기존 clipboard 테스트도 다루지 않았던
+  // 2종)이다.
   const blockTypeFixtures: Block[] = [
     headingBlock("hd", 2, "heading text"),
     quoteBlock("qt", "quote text"),
@@ -147,10 +146,6 @@ describe("슬라이스 2~9 전체 블록 타입 fixture(완료 조건 3)", () =>
       content: [{ text: "toggle text" }],
       collapsed: true,
     },
-    headingBlock("th", 3, "toggle heading text", {
-      isToggleable: true,
-      collapsed: false,
-    }),
     {
       id: "ic",
       type: "paragraph",
@@ -167,7 +162,7 @@ describe("슬라이스 2~9 전체 블록 타입 fixture(완료 조건 3)", () =>
     },
   ];
 
-  it("11종 모두 own export document HTML 붙여넣기로 타입·상태·content가 정확히 반영된다", () => {
+  it("10종 모두 own export document HTML 붙여넣기로 타입·상태·content가 정확히 반영된다", () => {
     const exported = exportHtml(documentOf(...blockTypeFixtures));
     expect(exported.ok).toBe(true);
     if (!exported.ok) throw new Error(exported.error.message);

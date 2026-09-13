@@ -3,26 +3,19 @@ import type { EditorState } from "@tiptap/pm/state";
 import { Plugin } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-// collapsed: true인 heading·toggleListItem의 blockGroup(자식 children
-// 컨테이너)을 편집기 DOM에서만 숨긴다(spec §4.1, §4.4) — 저장 문서의
-// children은 그대로 남는다(표시 숨김이지 데이터 삭제가 아니다). React
-// 컴포넌트·사용자 커맨드(toggleHeadingCollapse 등)는 이 확장의 책임이
-// 아니다(RD-004) — placeholder-extension.ts와 같은 순수 core decoration
-// 패턴으로, react는 표시 로직에 관여하지 않는다.
-//
-// heading은 collapsed가 있으면 항상 isToggleable: true다(model
-// parseDocument가 그 불변식을 이미 거절하므로 여기서 isToggleable을 다시
-// 확인하지 않는다 — G-CNV-001). toggleListItem은 타입 자체가 토글 여부를
-// 뜻하므로 collapsed만 본다.
+// collapsed: true인 toggleListItem의 blockGroup(자식 children 컨테이너)을
+// 편집기 DOM에서만 숨긴다(spec §4.4) — 저장 문서의 children은 그대로
+// 남는다(표시 숨김이지 데이터 삭제가 아니다). React 컴포넌트·사용자
+// 커맨드(toggleListItemCollapse 등)는 이 확장의 책임이 아니다(RD-004) —
+// placeholder-extension.ts와 같은 순수 core decoration 패턴으로, react는
+// 표시 로직에 관여하지 않는다. 타입 자체가 토글 여부를 뜻하므로 collapsed만
+// 본다.
 const collapsedGroupDecorations = (state: EditorState): DecorationSet => {
   const decorations: Decoration[] = [];
 
   state.doc.descendants((node, position) => {
     const typeName = node.type.name;
-    if (
-      (typeName !== "heading" && typeName !== "toggleListItem") ||
-      node.attrs.collapsed !== true
-    ) {
+    if (typeName !== "toggleListItem" || node.attrs.collapsed !== true) {
       return true;
     }
 

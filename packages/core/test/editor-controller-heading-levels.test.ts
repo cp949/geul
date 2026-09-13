@@ -75,9 +75,6 @@ describe("setBlockType heading level 4-6", () => {
           content: expect.arrayContaining([
             expect.objectContaining({
               type: "heading",
-              // RD-003이 HeadingExtension에 isToggleable/collapsed(기본값
-              // null) attrs를 추가해 level 외 키가 실려 온다 — 이 테스트는
-              // level 보존만 본다.
               attrs: expect.objectContaining({ level }),
             }),
           ]),
@@ -176,61 +173,5 @@ describe("HeadingExtension DOM 계약", () => {
     });
 
     expect(levels).toEqual([4, 5, 6]);
-  });
-
-  // RD-003 트랙-3 결함 탐지 F1: setNodeMarkup에 { level }만 넘기면 PM이
-  // heading의 나머지 attrs(isToggleable/collapsed)를 schema default(null)로
-  // 되돌려 기존 토글 상태를 지웠다. level만 바뀌는 호출도 두 값을
-  // 캐리포워드해야 한다(numberedListItem.startNumber와 같은 원칙).
-  it("토글 제목의 level만 바꿔도 isToggleable·collapsed가 유실되지 않는다", () => {
-    const editor = createEditor({
-      initialDocument: documentOf(
-        {
-          id: "block-1",
-          type: "heading",
-          level: 2,
-          isToggleable: true,
-          collapsed: true,
-          content: [{ text: "title" }],
-          children: [
-            { id: "child-1", type: "paragraph", content: [{ text: "child" }] },
-          ],
-        },
-        { id: "block-2", type: "paragraph", content: [{ text: "next" }] },
-      ),
-    });
-
-    expect(
-      editor.commands.setBlockType("block-1", { type: "heading", level: 4 }),
-    ).toEqual({ ok: true, value: undefined });
-
-    expect(editor.getDocument().blocks[0]).toEqual({
-      id: "block-1",
-      type: "heading",
-      level: 4,
-      isToggleable: true,
-      collapsed: true,
-      content: [{ text: "title" }],
-      children: [
-        { id: "child-1", type: "paragraph", content: [{ text: "child" }] },
-      ],
-    });
-  });
-
-  it("paragraph를 heading으로 새로 바꾸면 isToggleable·collapsed가 없다(캐리포워드할 원본이 없다)", () => {
-    const editor = createEditor({
-      initialDocument: documentOf(
-        { id: "block-1", type: "paragraph", content: [{ text: "content" }] },
-        { id: "block-2", type: "paragraph", content: [{ text: "next" }] },
-      ),
-    });
-
-    expect(
-      editor.commands.setBlockType("block-1", { type: "heading", level: 2 }),
-    ).toEqual({ ok: true, value: undefined });
-
-    const heading = editor.getDocument().blocks[0];
-    expect(heading).not.toHaveProperty("isToggleable");
-    expect(heading).not.toHaveProperty("collapsed");
   });
 });

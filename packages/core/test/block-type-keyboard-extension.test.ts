@@ -1,9 +1,9 @@
 /**
  * BlockTypeKeyboardExtension이 캐럿이 속한 blockContainer를 12개 단축키로
- * 즉시 해당 블록 타입으로 변환하는지 검증한다. heading isToggleable/
- * collapsed 캐리포워드, 하위 blockGroup 보존, table/codeBlock/divider
- * no-op, 동일 타입 재적용 no-op(dispatch 0회), undo 원자성, 실제 keymap
- * 등록(Mod-Alt-N/Mod-Alt-q/Mod-Shift-6~9)까지 고정한다.
+ * 즉시 해당 블록 타입으로 변환하는지 검증한다. 하위 blockGroup 보존,
+ * table/codeBlock/divider no-op, 동일 타입 재적용 no-op(dispatch 0회),
+ * undo 원자성, 실제 keymap 등록(Mod-Alt-N/Mod-Alt-q/Mod-Shift-6~9)까지
+ * 고정한다.
  *
  * 대부분의 it은 exported 순수 함수(setBlockTypeShortcut)를 직접 호출해
  * Tiptap의 keymap 플러그인 체인을 우회한다 — indent-keyboard-extension.test.ts와
@@ -90,15 +90,9 @@ describe("변환 라우팅", () => {
     });
   });
 
-  it("heading→heading level 변경은 isToggleable/collapsed를 그대로 유지한다(캐리포워드)", () => {
+  it("heading→heading level 변경은 level만 바꾼다", () => {
     const { editor, tiptap } = mounted(
-      documentOf(
-        headingBlock("target", 1, "제목", {
-          isToggleable: true,
-          collapsed: true,
-        }),
-        tailParagraphBlock,
-      ),
+      documentOf(headingBlock("target", 1, "제목"), tailParagraphBlock),
     );
 
     const consumed = setBlockTypeShortcut(tiptap, {
@@ -108,23 +102,7 @@ describe("변환 라우팅", () => {
 
     expect(consumed).toBe(true);
     expect(editor.getDocument().blocks).toEqual([
-      headingBlock("target", 3, "제목", {
-        isToggleable: true,
-        collapsed: true,
-      }),
-      tailParagraphBlock,
-    ]);
-  });
-
-  it("일반 heading(isToggleable 없음)의 level 변경은 isToggleable/collapsed를 null로 유지한다", () => {
-    const { editor, tiptap } = mounted(
-      documentOf(headingBlock("target", 1, "제목"), tailParagraphBlock),
-    );
-
-    setBlockTypeShortcut(tiptap, { type: "heading", level: 2 });
-
-    expect(editor.getDocument().blocks).toEqual([
-      headingBlock("target", 2, "제목"),
+      headingBlock("target", 3, "제목"),
       tailParagraphBlock,
     ]);
   });

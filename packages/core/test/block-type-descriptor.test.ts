@@ -26,23 +26,6 @@ describe("blockTypeDescriptorFromBlock", () => {
     );
   });
 
-  // isToggleable은 RD-004 DELTA-04부터 조회 방향(BlockTypeSource/
-  // BlockTypeDescriptor)에도 생긴 옵셔널 pass-through 필드다(Turn into UI가
-  // 명령 입력(SetBlockTypeDescriptor, DELTA-02)과 대칭으로 현재 상태를
-  // 읽을 수 있어야 한다) — 있으면 그대로 옮기고 없으면(undefined) 생략한다.
-  it("heading의 isToggleable을 있으면 그대로 보존하고 없으면 생략한다", () => {
-    expect(
-      blockTypeDescriptorFromBlock({
-        type: "heading",
-        level: 2,
-        isToggleable: true,
-      }),
-    ).toEqual({ type: "heading", level: 2, isToggleable: true });
-    expect(blockTypeDescriptorFromBlock({ type: "heading", level: 2 })).toEqual(
-      { type: "heading", level: 2 },
-    );
-  });
-
   it("codeBlock은 language가 있으면 포함하고 없으면 생략한다", () => {
     expect(
       blockTypeDescriptorFromBlock({ type: "codeBlock", language: "ts" }),

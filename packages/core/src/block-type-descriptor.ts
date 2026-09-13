@@ -10,11 +10,7 @@ export type HeadingLevel = HeadingBlock["level"];
 
 export type SetBlockTypeDescriptor =
   | { type: "paragraph" }
-  // isToggleable은 numberedListItem.startNumber와 같은 캐리포워드 패턴이다
-  // (RD-004 DELTA-02) — 생략하면 heading→heading 재호출일 때만 현재 값을
-  // 캐리포워드하고, 명시하면 그 값을 쓴다. boolean이 on/off를 다
-  // 표현하므로 startNumber류의 명시적 해제용 `| null`이 필요 없다.
-  | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
+  | { type: "heading"; level: HeadingLevel }
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
@@ -24,12 +20,7 @@ export type SetBlockTypeDescriptor =
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }
-  // isToggleable은 SetBlockTypeDescriptor.heading(DELTA-02, 명령 입력)과
-  // 대칭인 조회 방향 필드다(RD-004 DELTA-04) — 있으면 현재 heading이 토글
-  // 제목이라는 뜻이고, 없으면(undefined) 일반 heading이다. numberedListItem
-  // startNumber와 같은 옵셔널 pass-through 패턴(생략 가능한 캐리포워드
-  // 대상이 아니라 "있는 그대로 보고").
-  | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
+  | { type: "heading"; level: HeadingLevel }
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }
@@ -58,7 +49,7 @@ export type BlockTypeDescriptor =
 // 확정했다(새 제품 결정 아님, 실측 tsc로 이 결합을 확인한 뒤 반영).
 export type BlockTypeSource =
   | { type: "paragraph" }
-  | { type: "heading"; level: HeadingLevel; isToggleable?: boolean }
+  | { type: "heading"; level: HeadingLevel }
   | { type: "quote" }
   | { type: "codeBlock"; language?: string }
   | { type: "bulletListItem" }

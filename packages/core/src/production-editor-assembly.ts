@@ -137,11 +137,6 @@ const HeadingExtension = Node.create({
   addAttributes() {
     return {
       level: { default: 1, rendered: false },
-      // null은 model의 isToggleable/collapsed 필드 부재와 직대응한다
-      // (numberedListItem.startNumber와 같은 패턴). 값 자체의 유효성(collapsed엔
-      // isToggleable: true 필요)은 model parseDocument가 단독 판정한다.
-      isToggleable: { default: null, rendered: false },
-      collapsed: { default: null, rendered: false },
     };
   },
   parseHTML() {
@@ -241,8 +236,8 @@ const ProductionCheckListItemExtension = CheckListItemExtension.extend({
   },
 });
 
-// collapsed는 heading의 isToggleable/collapsed와 같은 optional 패턴(부재
-// =null) — numberedListItem.startNumber와 동일하게 정의된 경우만 낸다.
+// collapsed는 numberedListItem.startNumber와 같은 optional 패턴(부재
+// =null) — 정의된 경우만 낸다.
 const ProductionToggleListItemExtension = ToggleListItemExtension.extend({
   renderHTML({ node, HTMLAttributes }) {
     return [

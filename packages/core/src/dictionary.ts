@@ -47,12 +47,6 @@ export type Dictionary = {
     "heading-4": { label: string; description: string };
     "heading-5": { label: string; description: string };
     "heading-6": { label: string; description: string };
-    "toggle-heading-1": { label: string; description: string };
-    "toggle-heading-2": { label: string; description: string };
-    "toggle-heading-3": { label: string; description: string };
-    "toggle-heading-4": { label: string; description: string };
-    "toggle-heading-5": { label: string; description: string };
-    "toggle-heading-6": { label: string; description: string };
     quote: { label: string; description: string };
     code: { label: string; description: string };
     "bullet-list": { label: string; description: string };
@@ -341,30 +335,6 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     "heading-6": {
       label: "Heading 6",
       description: "Smallest section heading",
-    },
-    "toggle-heading-1": {
-      label: "Toggle Heading 1",
-      description: "Large collapsible heading",
-    },
-    "toggle-heading-2": {
-      label: "Toggle Heading 2",
-      description: "Medium collapsible heading",
-    },
-    "toggle-heading-3": {
-      label: "Toggle Heading 3",
-      description: "Small collapsible heading",
-    },
-    "toggle-heading-4": {
-      label: "Toggle Heading 4",
-      description: "Smaller collapsible heading",
-    },
-    "toggle-heading-5": {
-      label: "Toggle Heading 5",
-      description: "Extra small collapsible heading",
-    },
-    "toggle-heading-6": {
-      label: "Toggle Heading 6",
-      description: "Smallest collapsible heading",
     },
     quote: { label: "Quote", description: "Capture a quote" },
     code: { label: "Code", description: "Write plain code" },

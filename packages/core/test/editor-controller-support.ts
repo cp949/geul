@@ -270,25 +270,19 @@ export const requireNode = (schema: Schema, name: string): NodeType => {
 };
 
 /**
- * heading 블록 리터럴 — isToggleable/collapsed는 지정할 때만 채운다(둘 다
- * model 필드 부재를 null로 표현). block-type-keyboard-extension.test.ts(RD-001
- * 캐럿 단축키)와 block-type-input-rule-extension.test.ts(RD-002 native
+ * heading 블록 리터럴. block-type-keyboard-extension.test.ts(RD-001 캐럿
+ * 단축키)와 block-type-input-rule-extension.test.ts(RD-002 native
  * shorthand)가 같은 heading 리터럴을 필요로 해 공유 위치로 옮겼다(G-TST-002).
  */
 export const headingBlock = (
   id: string,
   level: 1 | 2 | 3 | 4 | 5 | 6,
   text: string,
-  options?: { isToggleable?: boolean; collapsed?: boolean },
 ): Block => ({
   id,
   type: "heading",
   level,
   content: text === "" ? [] : [{ text }],
-  ...(options?.isToggleable === undefined
-    ? {}
-    : { isToggleable: options.isToggleable }),
-  ...(options?.collapsed === undefined ? {} : { collapsed: options.collapsed }),
 });
 
 /**

@@ -3,10 +3,7 @@ import type { EditorState } from "@tiptap/pm/state";
 import { Plugin } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-import {
-  toggleHeadingCollapseCommand,
-  toggleListItemCollapseCommand,
-} from "./toggle-collapse-commands.js";
+import { toggleListItemCollapseCommand } from "./toggle-collapse-commands.js";
 
 /**
  * 클릭 가능한 접힘 트라이앵글 marker DOM을 만든다(RD-004 DELTA-03).
@@ -34,36 +31,28 @@ const createToggleMarkerElement = (
   return marker;
 };
 
-// isToggleable heading·toggleListItem은 bulletListItem/numberedListItem의
-// 번호 marker(형제 scope 의존, list-presentation-extension.ts)와 달리 자기
-// attrs(isToggleable/collapsed)만으로 완결되는 표시라 그 파일과 분리한다
-// (check-list-item-marker-extension.ts와 같은 원칙). heading·toggleListItem의
-// PM 부모는 항상 blockContainer다(D19) — descendants의 parent 인자에서 바로
-// blockId를 얻는다. heading은 isToggleable === true인 경우만 marker를 꽂고
-// (일반 heading은 접을 수 없다), toggleListItem은 타입 자체가 토글
+// toggleListItem은 bulletListItem/numberedListItem의 번호 marker(형제
+// scope 의존, list-presentation-extension.ts)와 달리 자기 attrs(collapsed)
+// 만으로 완결되는 표시라 그 파일과 분리한다(check-list-item-marker-extension.ts와
+// 같은 원칙). toggleListItem의 PM 부모는 항상 blockContainer다(D19) —
+// descendants의 parent 인자에서 바로 blockId를 얻는다. 타입 자체가 토글
 // 여부를 뜻하므로 전부 marker를 꽂는다(toggle-collapse-visibility-extension.ts와
 // 동일 판정 기준).
 const toggleCollapseMarkerDecorations = (
   state: EditorState,
-  toggleHeading: (blockId: string) => void,
   toggleListItem: (blockId: string) => void,
 ): DecorationSet => {
   const decorations: Decoration[] = [];
 
   state.doc.descendants((node, position, parent) => {
     const typeName = node.type.name;
-    const isToggleableHeading =
-      typeName === "heading" && node.attrs.isToggleable === true;
-    const isToggleListItem = typeName === "toggleListItem";
-    if ((!isToggleableHeading && !isToggleListItem) || parent === null) {
+    if (typeName !== "toggleListItem" || parent === null) {
       return true;
     }
 
     const blockId = parent.attrs.blockId as string;
     const collapsed = node.attrs.collapsed === true;
-    const onToggle = isToggleableHeading
-      ? () => toggleHeading(blockId)
-      : () => toggleListItem(blockId);
+    const onToggle = () => toggleListItem(blockId);
     decorations.push(
       Decoration.widget(
         position + 1,
@@ -98,15 +87,9 @@ export const ToggleCollapseMarkerExtension = Extension.create({
       new Plugin({
         props: {
           decorations: (state) =>
-            toggleCollapseMarkerDecorations(
-              state,
-              (blockId) => {
-                toggleHeadingCollapseCommand(editor, blockId);
-              },
-              (blockId) => {
-                toggleListItemCollapseCommand(editor, blockId);
-              },
-            ),
+            toggleCollapseMarkerDecorations(state, (blockId) => {
+              toggleListItemCollapseCommand(editor, blockId);
+            }),
         },
       }),
     ];

@@ -251,7 +251,6 @@ export interface EditorController {
     indentBlock(blockId: string): Result<void, EditorError>;
     outdentBlock(blockId: string): Result<void, EditorError>;
     toggleCheckListItemChecked(blockId: string): Result<void, EditorError>;
-    toggleHeadingCollapse(blockId: string): Result<void, EditorError>;
     toggleListItemCollapse(blockId: string): Result<void, EditorError>;
     toggleBold(): Result<void, EditorError>;
     toggleItalic(): Result<void, EditorError>;

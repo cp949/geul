@@ -1,11 +1,10 @@
 /**
- * heading의 isToggleable/collapsed와 toggleListItem의 collapsed가 production
- * 편집기 경로(등록·load/save round trip·DOM 표시 숨김)에서 어떤 계약을
- * 받는지 검증한다(spec §4.1·§4.4, Issue #38 슬라이스 6 RD-003 완료 조건
- * 5-7). collapsed: true인 두 블록 타입의 자식은 편집기 DOM에서만 숨겨지고
- * 저장 문서의 children은 그대로 남는다 — 표시 숨김이지 데이터 삭제가
- * 아니다. React 컴포넌트·사용자 커맨드는 이 파일이 다루는 범위가
- * 아니다(RD-004).
+ * toggleListItem의 collapsed가 production 편집기 경로(등록·load/save round
+ * trip·DOM 표시 숨김)에서 어떤 계약을 받는지 검증한다(spec §4.4, Issue #38
+ * 슬라이스 6 RD-003 완료 조건 5-7). collapsed: true인 블록의 자식은 편집기
+ * DOM에서만 숨겨지고 저장 문서의 children은 그대로 남는다 — 표시 숨김이지
+ * 데이터 삭제가 아니다. React 컴포넌트·사용자 커맨드는 이 파일이 다루는
+ * 범위가 아니다(RD-004).
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -20,46 +19,9 @@ import {
 } from "./editor-controller-support.js";
 
 /**
- * collapsed heading·visible heading·tail 문단을 나란히 둔 문서. collapsed
- * 항목만 자식이 숨겨지는지를 같은 문서 안에서 대조한다. tail은 heading으로
- * 문서가 끝날 때 trailing paragraph(UI-010)가 배치를 흔드는 것을 막는다.
+ * collapsed toggleListItem·visible toggleListItem·tail 문단을 나란히 둔
+ * 문서. collapsed 항목만 자식이 숨겨지는지를 같은 문서 안에서 대조한다.
  */
-const headingToggleDocument = (): Document =>
-  documentOf(
-    {
-      id: "h-collapsed",
-      type: "heading",
-      level: 2,
-      isToggleable: true,
-      collapsed: true,
-      content: [{ text: "collapsed heading" }],
-      children: [
-        {
-          id: "h-collapsed-child",
-          type: "paragraph",
-          content: [{ text: "hidden child" }],
-        },
-      ],
-    },
-    {
-      id: "h-visible",
-      type: "heading",
-      level: 2,
-      isToggleable: true,
-      collapsed: false,
-      content: [{ text: "visible heading" }],
-      children: [
-        {
-          id: "h-visible-child",
-          type: "paragraph",
-          content: [{ text: "visible child" }],
-        },
-      ],
-    },
-    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
-  );
-
-/** headingToggleDocument와 같은 배치의 toggleListItem 버전. */
 const toggleListItemDocument = (): Document =>
   documentOf(
     {
@@ -91,20 +53,6 @@ const toggleListItemDocument = (): Document =>
   );
 
 describe("production 스키마 등록", () => {
-  it("heading node는 isToggleable/collapsed 속성을 갖는다", () => {
-    const schema = liveSchema();
-    const heading = schema.nodes.heading;
-    if (heading === undefined) throw new Error("heading node가 없다");
-
-    expect(Object.keys(heading.spec.attrs ?? {})).toEqual(
-      expect.arrayContaining(["level", "isToggleable", "collapsed"]),
-    );
-    expect(heading.create().attrs).toMatchObject({
-      isToggleable: null,
-      collapsed: null,
-    });
-  });
-
   it("toggleListItem node가 collapsed 속성과 함께 등록되고 외부 parse는 열지 않는다", () => {
     const schema = liveSchema();
     const toggle = schema.nodes.toggleListItem;
@@ -117,15 +65,6 @@ describe("production 스키마 등록", () => {
 });
 
 describe("createEditor round trip", () => {
-  it("heading의 isToggleable/collapsed가 getDocument()에 그대로 보존된다", () => {
-    const editor = createEditor({ initialDocument: headingToggleDocument() });
-    try {
-      expect(editor.getDocument()).toEqual(headingToggleDocument());
-    } finally {
-      editor.destroy();
-    }
-  });
-
   it("toggleListItem의 collapsed·content·children이 getDocument()에 그대로 보존된다", () => {
     const editor = createEditor({
       initialDocument: toggleListItemDocument(),
@@ -139,35 +78,6 @@ describe("createEditor round trip", () => {
 });
 
 describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
-  it("collapsed: true인 heading의 자식 blockGroup만 DOM에서 숨겨지고 저장 children은 유지된다", () => {
-    const editor = createEditor({ initialDocument: headingToggleDocument() });
-    try {
-      const { editable } = mountTiptapEditor(editor);
-
-      const hiddenGroup = editable.querySelector(
-        '[data-geul-block-id="h-collapsed"] > [data-geul-block-group]',
-      );
-      expect(hiddenGroup).not.toBeNull();
-      expect(getComputedStyle(hiddenGroup as Element).display).toBe("none");
-      // DOM 존재 자체는 사라지지 않는다 — 표시 숨김이지 삭제가 아니다.
-      expect(
-        editable.querySelector('[data-geul-block-id="h-collapsed-child"]'),
-      ).not.toBeNull();
-
-      const visibleGroup = editable.querySelector(
-        '[data-geul-block-id="h-visible"] > [data-geul-block-group]',
-      );
-      expect(visibleGroup).not.toBeNull();
-      expect(getComputedStyle(visibleGroup as Element).display).not.toBe(
-        "none",
-      );
-
-      expect(editor.getDocument()).toEqual(headingToggleDocument());
-    } finally {
-      editor.destroy();
-    }
-  });
-
   it("collapsed: true인 toggleListItem의 자식 blockGroup만 DOM에서 숨겨지고 저장 children은 유지된다", () => {
     const editor = createEditor({
       initialDocument: toggleListItemDocument(),
@@ -203,19 +113,19 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       initialDocument: paragraphDocument("이전"),
     });
     try {
-      expect(editor.replaceDocument(headingToggleDocument())).toEqual({
+      expect(editor.replaceDocument(toggleListItemDocument())).toEqual({
         ok: true,
         value: undefined,
       });
       const { editable } = mountTiptapEditor(editor);
 
       const hiddenGroup = editable.querySelector(
-        '[data-geul-block-id="h-collapsed"] > [data-geul-block-group]',
+        '[data-geul-block-id="toggle-collapsed"] > [data-geul-block-group]',
       );
       expect(getComputedStyle(hiddenGroup as Element).display).toBe("none");
 
       expect(editor.getDocument()).toEqual({
-        ...headingToggleDocument(),
+        ...toggleListItemDocument(),
         revision: 1,
       });
     } finally {

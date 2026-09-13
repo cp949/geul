@@ -33,30 +33,6 @@ export const KO_DICTIONARY: Dictionary = {
     "heading-4": { label: "제목 4", description: "더 작은 섹션 제목" },
     "heading-5": { label: "제목 5", description: "매우 작은 섹션 제목" },
     "heading-6": { label: "제목 6", description: "가장 작은 섹션 제목" },
-    "toggle-heading-1": {
-      label: "접이식 제목 1",
-      description: "접을 수 있는 큰 제목",
-    },
-    "toggle-heading-2": {
-      label: "접이식 제목 2",
-      description: "접을 수 있는 중간 제목",
-    },
-    "toggle-heading-3": {
-      label: "접이식 제목 3",
-      description: "접을 수 있는 작은 제목",
-    },
-    "toggle-heading-4": {
-      label: "접이식 제목 4",
-      description: "접을 수 있는 더 작은 제목",
-    },
-    "toggle-heading-5": {
-      label: "접이식 제목 5",
-      description: "접을 수 있는 매우 작은 제목",
-    },
-    "toggle-heading-6": {
-      label: "접이식 제목 6",
-      description: "접을 수 있는 가장 작은 제목",
-    },
     quote: { label: "인용구", description: "인용문 삽입" },
     code: { label: "코드", description: "일반 코드 작성" },
     "bullet-list": {

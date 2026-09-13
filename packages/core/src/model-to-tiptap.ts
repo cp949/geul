@@ -431,16 +431,7 @@ const blockContentToTiptapJson = (
 ): TiptapJsonNode => ({
   type: block.type,
   ...(block.type === "heading"
-    ? {
-        attrs: {
-          level: block.level,
-          // null은 model 필드 부재와 직대응한다(numberedListItem.startNumber와
-          // 같은 패턴) — isToggleable/collapsed 값 자체의 유효성은 model
-          // parseDocument가 단독 판정한다(G-CNV-001).
-          isToggleable: block.isToggleable ?? null,
-          collapsed: block.collapsed ?? null,
-        },
-      }
+    ? { attrs: { level: block.level } }
     : block.type === "numberedListItem"
       ? { attrs: { startNumber: block.startNumber ?? null } }
       : block.type === "checkListItem"

@@ -1,10 +1,7 @@
 import type { Result } from "@cp949/geul-model";
 
 import { toggleCheckListItemCheckedCommand } from "./check-list-item-commands.js";
-import {
-  toggleHeadingCollapseCommand,
-  toggleListItemCollapseCommand,
-} from "./toggle-collapse-commands.js";
+import { toggleListItemCollapseCommand } from "./toggle-collapse-commands.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
 import type { EditorError } from "./errors.js";
 import {
@@ -59,25 +56,6 @@ export const createGenericBlockNestingCommands = (
     );
   };
 
-  const toggleHeadingCollapse = (
-    blockId: string,
-  ): Result<void, EditorError> => {
-    if (session.isDestroyed) {
-      return commandNotApplicable("toggleHeadingCollapse");
-    }
-    // runDocumentCommand의 run()은 boolean만 돌려받아 BLOCK_NOT_FOUND와
-    // COMMAND_NOT_APPLICABLE을 구분하지 못한다 — toggleCheckListItemChecked와
-    // 같은 이유로 모델 트리 조회를 여기서 먼저 해 정확한 오류 코드를 낸다.
-    if (findBlockEntryInTree(session.document.blocks, blockId) === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    return session.runDocumentCommand(
-      "toggleHeadingCollapse",
-      "local",
-      () => toggleHeadingCollapseCommand(session.editor, blockId).ok,
-    );
-  };
-
   const toggleListItemCollapse = (
     blockId: string,
   ): Result<void, EditorError> => {
@@ -98,7 +76,6 @@ export const createGenericBlockNestingCommands = (
     indentBlock,
     outdentBlock,
     toggleCheckListItemChecked,
-    toggleHeadingCollapse,
     toggleListItemCollapse,
   };
 };

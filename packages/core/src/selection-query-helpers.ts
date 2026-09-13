@@ -22,12 +22,6 @@ const blockTypeSourceFromNode = (
       return {
         type: "heading",
         level: node.attrs.level as HeadingLevel,
-        // PM은 isToggleable을 true 또는 null로만 저장한다(headingIsToggleable
-        // ? true : null, generic-block-commands.ts) — 이 typeof 가드가
-        // 정확히 true일 때만 필드를 채운다.
-        ...(typeof node.attrs.isToggleable === "boolean"
-          ? { isToggleable: node.attrs.isToggleable }
-          : {}),
       };
     case "quote":
       return { type: "quote" };
