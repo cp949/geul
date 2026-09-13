@@ -104,6 +104,34 @@ describe("4종 미디어 블록 렌더링 — 채워진 상태", () => {
   });
 });
 
+/**
+ * `data-geul-media-kind`(roadmap Issue #187 RD-001 DELTA-01)는
+ * `data-geul-media-empty`(빈 상태에만 붙는 kind 표식)와 달리 empty·filled
+ * 상태 무관하게 항상 붙는다 — react가 hover 감지(entitySelector)로 media
+ * 블록을 다른 블록과 구분할 안정적인 DOM 표식이 필요해서다(media 4종의 DOM
+ * 루트가 전부 `<div data-geul-block-id>`로, table의 `<table>` 태그와 달리
+ * 태그명으로는 구분할 수 없다).
+ */
+describe("data-geul-media-kind 표식 — 4종 공통(Issue #187 RD-001 DELTA-01)", () => {
+  it.each(MEDIA_KINDS)(
+    "%s는 채워진 상태에서도 data-geul-media-kind를 kind로 낸다",
+    (kind) => {
+      const dom = mountedDom(kind, { url: "https://example.com/x" });
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
+      expect(wrapper?.getAttribute("data-geul-media-kind")).toBe(kind);
+    },
+  );
+
+  it.each(MEDIA_KINDS)(
+    "%s는 빈 상태에서도 data-geul-media-kind를 kind로 낸다",
+    (kind) => {
+      const dom = mountedDom(kind);
+      const wrapper = dom.querySelector(`[data-geul-block-id="${kind}-1"]`);
+      expect(wrapper?.getAttribute("data-geul-media-kind")).toBe(kind);
+    },
+  );
+});
+
 describe("caption 렌더 — 4종 공통", () => {
   it.each(MEDIA_KINDS)(
     "%s는 caption이 있으면 캡션 텍스트를 렌더한다",

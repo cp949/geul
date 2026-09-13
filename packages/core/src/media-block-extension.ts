@@ -48,6 +48,13 @@ import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 // io HTML export/import의 <figure> 계약(packages/io, 슬라이스6)과는
 // 별개다 — 여기 DOM 모양이 그 계약을 구속하지 않는다(ADR-0002 — io는 PM
 // DOM이 아니라 저장 Document를 직접 읽고 쓴다).
+// `data-geul-media-kind`(roadmap Issue #187 RD-001 DELTA-01)는 4종 모두
+// empty·filled 상태 무관하게 항상 붙는다 — `data-geul-media-empty`(빈
+// 상태 전용 kind 표식)와 별개다. media 4종은 table·divider와 같은 "group:
+// block 직접 멤버" 패턴이라 DOM 루트가 전부 `<div data-geul-block-id>`이고
+// table의 `<table>` 태그와 달리 태그명으로 구분할 수 없다 — react의 hover
+// 감지(usePointerHoverTarget entitySelector)가 media를 다른 블록과 구분할
+// 안정적인 DOM 표식이 필요해서 추가했다.
 const blockIdAttribute = () => ({
   blockId: {
     default: null,
@@ -222,6 +229,7 @@ export const FileBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
+        { "data-geul-media-kind": "file" },
         source === null
           ? { "data-geul-media-empty": "file" }
           : localPreviewBadgeAttrs(source),
@@ -270,6 +278,7 @@ export const ImageBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
+        { "data-geul-media-kind": "image" },
         source === null
           ? { "data-geul-media-empty": "image" }
           : localPreviewBadgeAttrs(source),
@@ -317,6 +326,7 @@ export const VideoBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
+        { "data-geul-media-kind": "video" },
         source === null
           ? { "data-geul-media-empty": "video" }
           : localPreviewBadgeAttrs(source),
@@ -353,6 +363,7 @@ export const AudioBlockExtension = Node.create({
       "div",
       mergeAttributes(
         HTMLAttributes,
+        { "data-geul-media-kind": "audio" },
         source === null
           ? { "data-geul-media-empty": "audio" }
           : localPreviewBadgeAttrs(source),
