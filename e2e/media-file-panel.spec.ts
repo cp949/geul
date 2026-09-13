@@ -153,20 +153,43 @@ test("Close 버튼으로 URL 없이 패널을 닫아도 남은 빈 미디어 블
   // 마우스만으로 블록 거터 메뉴를 열어 삭제한다(block-handle.spec.ts와
   // 같은 패턴) — hover가 실제로 이 블록 위에서 거터 아이콘을 띄우는지까지
   // 검증한다(단순 locator 액션은 실제 hit-test 실패를 가려버릴 수 있다).
-  // **알려진 별도 결함(이 수정 범위 밖)**: 클릭으로 이 블록을 선택한 뒤
-  // Backspace/Delete 키를 누르는 경로는 여전히 안 먹는다 — 자식 0개인 atom
-  // 노드의 NodeSelection을 `resolveSelectionAwareState`(selection-aware-state.ts)
-  // 가 native DOM selection과 재동기화할 때 `view.posAtDOM` 결과가 live
-  // selection의 anchor/head와 어긋나 "stale"로 오판되고,
-  // `block-join-extension.ts`의 `joinBackwardAtBlockStart`가 방어적으로
-  // 키만 삼켜 삭제를 안 한다(실측 확인 — 채워진 미디어 블록은 자식이 있어
-  // 이 오판이 안 남). 거터 메뉴 Delete는 `blockId` 기반 커맨드라 이 경로를
-  // 타지 않아 정상 동작한다.
   await emptyBlock.hover();
   await page.getByRole("button", { name: "Drag to reorder" }).click();
   await page.getByRole("menuitem", { name: "Delete" }).click();
 
   await expect(emptyBlock).toHaveCount(0);
+});
+
+// 이 커밋 이전엔 여기서 "클릭으로 이 블록을 선택한 뒤 Backspace/Delete
+// 키를 누르는 경로는 안 먹는다"는 결함을 기록했었다(QA-090 커밋 6552c4a,
+// 2026-09-08) — resolveSelectionAwareState가 자식 0개 atom의 NodeSelection을
+// native DOM selection과 재동기화할 때 posAtDOM이 어긋나 stale로 오판한다는
+// 진단이었지만, 그 커밋 자체가 "소스 추적 확인(코드 수정 안 함)"이라 실측
+// 재현은 없었다. 2026-09-13 재조사 — 아래 케이스를 포함해 실 Chromium
+// 4가지 변형(문서 유일 블록·앞뒤 블록 있음·Delete 키·CDP 무지연 클릭+
+// keydown)과 claude-in-chrome 실 Chrome(NodeSelection의
+// `class="ProseMirror-selectednode"` 부여를 DOM으로 직접 확인 후 Backspace)
+// 전부에서 정상 삭제됐다. 오판 자체가 재현되지 않아 정정한다.
+// packages/core/test/block-join/media-atom.test.ts가 같은 정상 동작을
+// core 레벨에서 회귀로 고정한다.
+test("빈 미디어 블록을 클릭 선택한 뒤 Backspace를 누르면 실제로 지워진다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("before");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+  await page.getByRole("button", { name: "Close file panel" }).click();
+
+  const emptyBlock = editable.locator('[data-geul-media-empty="image"]');
+  await expect(emptyBlock).toBeVisible();
+  await emptyBlock.click();
+  await page.keyboard.press("Backspace");
+
+  await expect(emptyBlock).toHaveCount(0);
+  await expect(editable.locator("p").first()).toHaveText("before");
 });
 
 // 2026-09-13 사용자 보고 — Close로 닫은 뒤 남은 빈 미디어 블록(회색 영역)을
