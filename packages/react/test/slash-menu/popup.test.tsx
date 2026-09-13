@@ -130,7 +130,7 @@ describe("SlashMenu 질의 팝업", () => {
     // Table·Divider·File·Image·Video·Audio가 이어진다(RD-003 DELTA-01,
     // spec §3.1 file/image/video/audio 순서).
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(25);
+    expect(options).toHaveLength(19);
     expect(
       options.map(
         (option) =>
@@ -144,12 +144,6 @@ describe("SlashMenu 질의 팝업", () => {
       "Heading 4",
       "Heading 5",
       "Heading 6",
-      "Toggle Heading 1",
-      "Toggle Heading 2",
-      "Toggle Heading 3",
-      "Toggle Heading 4",
-      "Toggle Heading 5",
-      "Toggle Heading 6",
       "Quote",
       "Code",
       "Bulleted List",
@@ -244,18 +238,14 @@ describe("SlashMenu 질의 팝업", () => {
 
     typeIntoBlock(rendered, 0, "/head");
 
-    // "head"는 label·keyword 부분 일치로 heading 1-6과 toggle heading
-    // 1-6을 모두 매치한다(RD-004 DELTA-04, toggle-heading의 keywords에도
-    // "heading"이 있다) — 6 + 6 = 12.
-    expect(screen.getAllByRole("option")).toHaveLength(12);
+    // "head"는 label·keyword 부분 일치로 heading 1-6을 매치한다.
+    expect(screen.getAllByRole("option")).toHaveLength(6);
     expect(screen.queryByRole("option", { name: /^Text/ })).toBeNull();
   });
 
   it("항목을 클릭하면 clearContent와 함께 setBlockType을 호출하고 편집기로 초점을 되돌린다", () => {
     const rendered = renderCaretBlocks();
     const blockId = typeIntoBlock(rendered, 0, "/h1");
-    // "/h1"은 keyword 부분 일치로 Toggle Heading 1도 함께 매치한다(RD-004
-    // DELTA-04) — 앵커로 Heading 1만 정확히 좁힌다.
     const option = screen.getByRole("option", { name: /^Heading 1/ });
     focusOutsideEditor(option);
 
@@ -279,8 +269,6 @@ describe("SlashMenu 질의 팝업", () => {
     (level) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, `/h${level}`);
-      // 앵커로 Toggle Heading %i(같은 키워드 "h%i"를 공유, RD-004
-      // DELTA-04)와 구분한다.
       const option = screen.getByRole("option", {
         name: new RegExp(`^Heading ${level}`),
       });
@@ -301,30 +289,6 @@ describe("SlashMenu 질의 팝업", () => {
       expect(document.activeElement).toBe(rendered.editable);
     },
   );
-
-  it("Toggle Heading 1 항목 클릭이 clearContent와 함께 isToggleable:true heading을 만든다(RD-004 DELTA-04)", () => {
-    const rendered = renderCaretBlocks();
-    // "/toggle"은 Toggle List·Toggle Heading 1-6 전부를 매치한다 — accessible
-    // name은 라벨+설명 텍스트가 이어붙어 "Toggle Heading 1Large collapsible
-    // heading"이 되므로(다른 Heading 테스트와 동일 이유) 왼쪽 앵커만 쓴다.
-    // "Toggle Heading 1"과 겹치는 다른 접두어는 없다(레벨이 1-6뿐).
-    const blockId = typeIntoBlock(rendered, 0, "/toggle");
-    const option = screen.getByRole("option", { name: /^Toggle Heading 1/ });
-    focusOutsideEditor(option);
-
-    fireEvent.click(option);
-
-    const rawBlock = rendered.editor.getDocument().blocks[0];
-    if (rawBlock?.type !== "heading") throw new Error("제목 블록이 아니다");
-    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
-    const block = rawBlock as HeadingBlock;
-    expect(block.id).toBe(blockId);
-    expect(block.level).toBe(1);
-    expect(block.isToggleable).toBe(true);
-    // clearContent: true — 트리거로 쓴 질의가 본문에 남지 않는다.
-    expect(block.content).toEqual([]);
-    expect(document.activeElement).toBe(rendered.editable);
-  });
 
   it("Quote 항목 클릭이 clearContent와 함께 setBlockType(quote)을 호출한다", () => {
     const rendered = renderCaretBlocks();
@@ -387,8 +351,7 @@ describe("SlashMenu 질의 팝업", () => {
     ({ query, label, type }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, query);
-      // label 정규식은 앵커 없이도 유일하게 매치한다 — "Toggle List"는
-      // "Toggle Heading N"(RD-004 DELTA-04)과 공통 접두어를 공유하지 않는다.
+      // label 정규식은 앵커 없이도 유일하게 매치한다.
       const option = screen.getByRole("option", { name: new RegExp(label) });
       focusOutsideEditor(option);
 
@@ -512,7 +475,7 @@ describe("SlashMenu 질의 팝업", () => {
       expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Image/ })).not.toBeNull();
-      expect(screen.getAllByRole("option")).toHaveLength(24);
+      expect(screen.getAllByRole("option")).toHaveLength(18);
     },
   );
 
@@ -739,9 +702,9 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     typeIntoBlock(rendered, 0, "/");
 
     const options = screen.getAllByRole("option");
-    // 기본 25개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
-    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 26개, 마지막이 커스텀 아이템.
-    expect(options).toHaveLength(26);
+    // 기본 19개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
+    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 20개, 마지막이 커스텀 아이템.
+    expect(options).toHaveLength(20);
     expect(options.at(-1)?.textContent).toContain("Custom Item");
   });
 
@@ -791,12 +754,12 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     expect(options[0]?.textContent).toContain("Custom Item");
   });
 
-  it("지정하지 않으면(기본값) 기존 25개 기본 목록만 표시한다", () => {
+  it("지정하지 않으면(기본값) 기존 19개 기본 목록만 표시한다", () => {
     const rendered = mountBlockEditor({ children: <SlashMenu /> });
     rendered.editable.focus();
 
     typeIntoBlock(rendered, 0, "/");
 
-    expect(screen.getAllByRole("option")).toHaveLength(25);
+    expect(screen.getAllByRole("option")).toHaveLength(19);
   });
 });

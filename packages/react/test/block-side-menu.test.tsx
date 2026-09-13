@@ -496,11 +496,6 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
       label: "Text",
       expectedType: "paragraph",
     },
-    {
-      source: "paragraph" as const,
-      label: "Toggle Heading 1",
-      expectedType: "heading",
-    },
   ])(
     "$source에서 $label 선택은 pointerdown→click 동안 content·ID를 보존하고 메뉴를 닫는다",
     ({ source, label, expectedType }) => {
@@ -540,37 +535,6 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
       expect(document.activeElement).toBe(rendered.editable);
     },
   );
-
-  it("Turn into의 Toggle Heading 1은 isToggleable:true를 설정하고, 다시 Text를 선택하면 해제된다(RD-004 DELTA-04)", () => {
-    const rendered = renderBlockMenu();
-    const [blockElement] = rendered.restubGeometry();
-    if (blockElement === undefined) throw new Error("블록 요소가 없다");
-    const before = rendered.editor.getDocument().blocks[0];
-    if (before === undefined) throw new Error("본문 fixture가 없다");
-
-    rendered.editable.focus();
-    fireEvent.pointerMove(blockElement);
-    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Toggle Heading 1" }));
-
-    const rawToggled = rendered.editor.getDocument().blocks[0];
-    if (rawToggled?.type !== "heading") throw new Error("제목 블록이 아니다");
-    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
-    const toggled = rawToggled as HeadingBlock;
-    expect(toggled.id).toBe(before.id);
-    expect(toggled.level).toBe(1);
-    expect(toggled.isToggleable).toBe(true);
-
-    const [headingElement] = rendered.restubGeometry();
-    if (headingElement === undefined) throw new Error("블록 요소가 없다");
-    fireEvent.pointerMove(headingElement);
-    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Text" }));
-
-    const restored = rendered.editor.getDocument().blocks[0];
-    if (restored?.type !== "paragraph") throw new Error("문단이 아니다");
-    expect(restored.id).toBe(before.id);
-  });
 
   it("dictionary override 시 Turn into 항목 텍스트가 바뀐다(EXT-009)", () => {
     openBlockMenu({

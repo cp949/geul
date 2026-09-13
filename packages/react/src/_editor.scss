@@ -344,9 +344,9 @@
     content: "☐";
   }
 
-  // 접힘 트라이앵글 클릭 UI(toggle-collapse-marker-extension.ts가 isToggleable
-  // heading·toggleListItem 콘텐츠 시작에 꽂는 decoration widget, RD-004
-  // DELTA-03 — 문구·클릭은 core, 표시는 CSS, check-marker와 같은 원칙).
+  // 접힘 트라이앵글 클릭 UI(toggle-collapse-marker-extension.ts가
+  // toggleListItem 콘텐츠 시작에 꽂는 decoration widget, RD-004 DELTA-03 —
+  // 문구·클릭은 core, 표시는 CSS, check-marker와 같은 원칙).
   [data-geul-toggle-marker] {
     display: inline-block;
     margin-right: 0.5rem;

@@ -68,51 +68,6 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
     keywords: ["heading", "h6"],
     blockType: { type: "heading", level: 6 },
   },
-  // isToggleable(RD-004 DELTA-04)은 heading level과 같은 성격의 직교
-  // 축이다 — 이 저장소가 이미 레벨을 콤보박스 없이 6개 독립 항목으로 내는
-  // 관례를 그대로 연장한다(RD-004.md "DELTA-04 착수 전 결정").
-  {
-    id: "toggle-heading-1",
-    label: "Toggle Heading 1",
-    description: "Large collapsible heading",
-    keywords: ["heading", "h1", "toggle", "collapsible", "expand", "collapse"],
-    blockType: { type: "heading", level: 1, isToggleable: true },
-  },
-  {
-    id: "toggle-heading-2",
-    label: "Toggle Heading 2",
-    description: "Medium collapsible heading",
-    keywords: ["heading", "h2", "toggle", "collapsible", "expand", "collapse"],
-    blockType: { type: "heading", level: 2, isToggleable: true },
-  },
-  {
-    id: "toggle-heading-3",
-    label: "Toggle Heading 3",
-    description: "Small collapsible heading",
-    keywords: ["heading", "h3", "toggle", "collapsible", "expand", "collapse"],
-    blockType: { type: "heading", level: 3, isToggleable: true },
-  },
-  {
-    id: "toggle-heading-4",
-    label: "Toggle Heading 4",
-    description: "Smaller collapsible heading",
-    keywords: ["heading", "h4", "toggle", "collapsible", "expand", "collapse"],
-    blockType: { type: "heading", level: 4, isToggleable: true },
-  },
-  {
-    id: "toggle-heading-5",
-    label: "Toggle Heading 5",
-    description: "Extra small collapsible heading",
-    keywords: ["heading", "h5", "toggle", "collapsible", "expand", "collapse"],
-    blockType: { type: "heading", level: 5, isToggleable: true },
-  },
-  {
-    id: "toggle-heading-6",
-    label: "Toggle Heading 6",
-    description: "Smallest collapsible heading",
-    keywords: ["heading", "h6", "toggle", "collapsible", "expand", "collapse"],
-    blockType: { type: "heading", level: 6, isToggleable: true },
-  },
   {
     id: "quote",
     label: "Quote",
@@ -161,10 +116,10 @@ export const getBlockTypeOptionsForSource = (
   source: BlockTypeDescriptor,
 ): readonly BlockTypeOption[] => {
   if (source.type === "codeBlock") {
-    // codeBlock↔heading 전환은 isToggleable 값과 무관하게 항상 허용된다
-    // (DELTA-02 changesCodeBlockBoundary) — toggle-heading-*는 제외하지
-    // 않는다. codeBlock↔목록류만 command guard(isListEntryBlockType,
-    // generic-block-commands.ts의 currentIsList/targetIsList)가 거절한다.
+    // codeBlock↔heading 전환은 항상 허용된다(DELTA-02
+    // changesCodeBlockBoundary). codeBlock↔목록류만 command
+    // guard(isListEntryBlockType, generic-block-commands.ts의
+    // currentIsList/targetIsList)가 거절한다.
     return BLOCK_TYPE_OPTIONS.filter(
       ({ id }) =>
         id !== "bullet-list" &&
@@ -184,7 +139,7 @@ export const getBlockTypeOptionsForSource = (
 };
 
 // spec §8(EXT-009), RD-002-DELTA-02 — `dictionary.blockType`에서 표시용
-// label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 19개
+// label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 13개
 // 리터럴 중 하나이므로(호출부가 그 배열에서 얻은 `option.id`만 넘긴다)
 // 이 cast 하나로 안전하다 — 호출부마다 반복하지 않는다. `BLOCK_TYPE_OPTIONS`
 // 자신의 `label`/`description`(검색 매칭 전용, dictionary와 무관)과는
@@ -200,9 +155,7 @@ export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
     case "paragraph":
       return "paragraph";
     case "heading":
-      return blockType.isToggleable === true
-        ? `toggle-heading-${blockType.level}`
-        : `heading-${blockType.level}`;
+      return `heading-${blockType.level}`;
     case "quote":
       return "quote";
     case "codeBlock":

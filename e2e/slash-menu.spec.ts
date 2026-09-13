@@ -20,11 +20,9 @@ test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록
   await page.keyboard.type("/head");
 
   await expect(menu).toBeVisible();
-  // "head"는 label 부분 일치로 heading 1-6과 toggle heading 1-6을 모두
-  // 매치한다(RD-004 DELTA-04) — 6 + 6 = 12.
-  await expect(page.getByRole("option")).toHaveCount(12);
+  // "head"는 label 부분 일치로 heading 1-6을 매치한다.
+  await expect(page.getByRole("option")).toHaveCount(6);
 
-  // 앵커로 Toggle Heading 1(같은 키워드 "h1"을 공유)과 구분한다.
   await page.getByRole("option", { name: /^Heading 1/ }).click();
 
   await expect(menu).not.toBeVisible();
@@ -40,8 +38,6 @@ test("슬래시 메뉴 선택을 undo 1회로 복원한다", async ({ page }) =>
 
   await editable.click();
   await page.keyboard.type("/h2");
-  // 앵커로 Toggle Heading 2(같은 키워드 "h2"를 공유, RD-004 DELTA-04)와
-  // 구분한다.
   await page.getByRole("option", { name: /^Heading 2/ }).click();
   await expect(editable.locator("h2")).toHaveCount(1);
 
@@ -163,31 +159,6 @@ test("토글 목록 항목을 Slash로 만들고 마커 클릭으로 collapsed�
   await expect(listItem).toContainText("할 일");
 
   const marker = listItem.locator("[data-geul-toggle-marker]");
-  await expect(marker).toHaveAttribute("data-geul-collapsed", "false");
-  await marker.click();
-  await expect(marker).toHaveAttribute("data-geul-collapsed", "true");
-});
-
-test("토글 제목을 Slash로 만들고 마커 클릭으로 collapsed를 토글한다 (RD-004 DELTA-04)", async ({
-  page,
-}) => {
-  const { editable } = await openDemo(page);
-  const menu = page.getByRole("listbox", { name: "Slash menu" });
-
-  await editable.click();
-  await page.keyboard.type("/toggle");
-  await expect(menu).toBeVisible();
-
-  await menu.getByRole("option", { name: /^Toggle Heading 1/ }).click();
-
-  await expect(menu).toHaveCount(0);
-  const heading = editable.locator("h1").first();
-  await expect(editable).toBeFocused();
-
-  await page.keyboard.type("토글 제목");
-  await expect(heading).toContainText("토글 제목");
-
-  const marker = heading.locator("[data-geul-toggle-marker]");
   await expect(marker).toHaveAttribute("data-geul-collapsed", "false");
   await marker.click();
   await expect(marker).toHaveAttribute("data-geul-collapsed", "true");
