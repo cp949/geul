@@ -518,7 +518,10 @@ export const indentBlockRangeCommand = (
 
     const previousSibling = tr.doc.resolve(targetPosition).nodeBefore;
     const previousSiblingId = previousSibling?.attrs.blockId;
-    if (typeof previousSiblingId !== "string" || previousSiblingId.length === 0) {
+    if (
+      typeof previousSiblingId !== "string" ||
+      previousSiblingId.length === 0
+    ) {
       return commandNotApplicable("indentBlockRange");
     }
 
@@ -533,7 +536,9 @@ export const indentBlockRangeCommand = (
     tr = nextTr;
   }
 
-  editor.view.dispatch(closeHistory(placeRangeSelection(tr, selectionBookmark)));
+  editor.view.dispatch(
+    closeHistory(placeRangeSelection(tr, selectionBookmark)),
+  );
   return { ok: true, value: undefined };
 };
 
@@ -576,6 +581,8 @@ export const outdentBlockRangeCommand = (
     tr = nextTr;
   }
 
-  editor.view.dispatch(closeHistory(placeRangeSelection(tr, selectionBookmark)));
+  editor.view.dispatch(
+    closeHistory(placeRangeSelection(tr, selectionBookmark)),
+  );
   return { ok: true, value: undefined };
 };

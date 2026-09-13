@@ -429,7 +429,11 @@ describe("여러 블록에 걸친 선택의 Tab/Shift+Tab", () => {
     }
     tiptap.view.dispatch(
       tiptap.state.tr.setSelection(
-        TextSelection.create(tiptap.state.doc, child1Start + 1, child2Start + 1),
+        TextSelection.create(
+          tiptap.state.doc,
+          child1Start + 1,
+          child2Start + 1,
+        ),
       ),
     );
 
