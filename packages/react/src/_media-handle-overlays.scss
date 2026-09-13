@@ -1,0 +1,14 @@
+// media(image/video/audio/file) 그립·plus 오버레이(Issue #187 RD-001
+// DELTA-01). 버튼 자체는 새로 만들지 않는다 — block-side-menu.tsx의
+// .geul-block-gutter__button과 --drag/--add modifier를 그대로 재사용한다.
+// 이 컨테이너만 공용 gutter(.geul-block-gutter, position: fixed)와 달리
+// position: absolute + page-relative 좌표(readPageRect)를 쓴다 — 들여쓰기
+// depth가 쌓여도 실측 rect를 그대로 따라가 화면 밖으로 밀리지 않는다
+// (G-UI-003/ADR-0012, media-resize-handles.tsx·table-handle-overlays.tsx와
+// 같은 근거).
+.geul-media-handle-overlay {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  gap: 0.125rem;
+}
