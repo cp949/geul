@@ -22,6 +22,7 @@ import {
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
+import { MediaHandleOverlays } from "./media-handle-overlays.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -611,6 +612,11 @@ export const SlashMenu = ({
       />
       <CodeBlockLanguageCombobox />
       <TableHandles
+        onBlockAdded={(blockId) =>
+          openMenuAt(blockId, { type: "paragraph" }, "")
+        }
+      />
+      <MediaHandleOverlays
         onBlockAdded={(blockId) =>
           openMenuAt(blockId, { type: "paragraph" }, "")
         }

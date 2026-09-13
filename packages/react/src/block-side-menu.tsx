@@ -131,10 +131,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   usePointerHoverTarget({
     element,
     ignoreSelectors: BLOCK_HOVER_IGNORE_SELECTORS,
-    // table은 자체 행/열 핸들(table-handles.tsx)을 가지므로 이 거터
-    // 대상에서 제외한다 — 제외하지 않으면 두 오버레이의 gutter가 표의
-    // 왼쪽 부근에서 겹쳐 렌더된다.
-    entitySelector: "[data-geul-block-id]:not(table)",
+    // table은 자체 행/열 핸들(table-handles.tsx)을, media는 전용
+    // 오버레이(media-handle-overlays.tsx, Issue #187 RD-001 DELTA-02)를
+    // 가지므로 이 거터 대상에서 제외한다 — 제외하지 않으면 두 오버레이의
+    // gutter가 왼쪽 부근에서 겹쳐 렌더된다.
+    entitySelector:
+      "[data-geul-block-id]:not(table):not([data-geul-media-kind])",
     onCandidateChange: handleHoverCandidateChange,
   });
 
