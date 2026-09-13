@@ -1,5 +1,5 @@
 /**
- * 토글 제목·토글 목록의 GFM 손실 분석(analyzeMarkdownLoss)을 직접 호출해
+ * 토글 목록의 GFM 손실 분석(analyzeMarkdownLoss)을 직접 호출해
  * TOGGLE_STATE_LOST 판정을 검증한다(spec §7.2, RD-005 완료 조건 2번).
  * 손실 형상(strict 거절 shape·lossy 경고 배열)은 markdown-toggle-export.test.ts가
  * exportMarkdown을 통해 이미 검증한다 — 이 파일은 analyzeMarkdownLoss
@@ -11,29 +11,17 @@ import { describe, expect, it } from "vitest";
 import { analyzeMarkdownLoss } from "../src/index.js";
 
 describe("토글 GFM 손실 분석(TOGGLE_STATE_LOST)", () => {
-  it("toggle heading과 toggleListItem이 섞인 문서에서 순서대로 각각 손실을 보고한다", () => {
+  it("toggleListItem이 섞인 문서에서 그 블록만 손실을 보고한다", () => {
     const document: Document = {
       formatVersion: 1,
       revision: 0,
       blocks: [
-        {
-          id: "h-1",
-          type: "heading",
-          level: 2,
-          content: [{ text: "제목" }],
-          isToggleable: true,
-        },
         { id: "p-1", type: "paragraph", content: [{ text: "일반 문단" }] },
         { id: "t-1", type: "toggleListItem", content: [{ text: "토글 목록" }] },
       ],
     };
 
     expect(analyzeMarkdownLoss(document)).toEqual([
-      {
-        kind: "TOGGLE_STATE_LOST",
-        blockId: "h-1",
-        message: expect.stringContaining("h-1"),
-      },
       {
         kind: "TOGGLE_STATE_LOST",
         blockId: "t-1",

@@ -350,15 +350,14 @@ const listItemNode = (block: ListItemBlock): HtmlElementNode =>
     ],
   );
 
-// isToggleable heading·toggleListItem이 공유하는 <details> 표현(로드맵 D4,
-// RD-005-DELTA-01.md "착수 전 결정"). collapsed는 3상태(undefined/true/false —
-// PM 반전 명령이 항상 boolean으로 고정하므로 세 상태 모두 실제로 나타난다)라
-// open(2상태뿐인 HTML boolean 속성, 브라우저 렌더링용 파생값)만으로는
-// undefined와 false를 구분 못 한다 — data-geul-collapsed(정의된 경우만 출력,
-// data-geul-checked와 동일한 문자열 패턴)를 round-trip의 단일 진실 공급원으로
-// 삼는다. summary는 호출자가 만든다 — heading은 기존 <hN>을 감싸고,
-// toggleListItem은 own id·content를 <summary> 자신이 직접 갖는다(<li>가
-// 아니라 여기서 처음 id가 등장하므로).
+// toggleListItem의 <details> 표현(로드맵 D4, RD-005-DELTA-01.md "착수 전
+// 결정"). collapsed는 3상태(undefined/true/false — PM 반전 명령이 항상
+// boolean으로 고정하므로 세 상태 모두 실제로 나타난다)라 open(2상태뿐인
+// HTML boolean 속성, 브라우저 렌더링용 파생값)만으로는 undefined와 false를
+// 구분 못 한다 — data-geul-collapsed(정의된 경우만 출력, data-geul-checked와
+// 동일한 문자열 패턴)를 round-trip의 단일 진실 공급원으로 삼는다.
+// summary는 호출자가 만든다 — toggleListItem은 own id·content를 <summary>
+// 자신이 직접 갖는다(<li>가 아니라 여기서 처음 id가 등장하므로).
 const detailsNode = (
   id: string,
   collapsed: boolean | undefined,
@@ -455,7 +454,7 @@ const blockNode = (block: Block): HtmlElementNode => {
     return listNode([block as ListItemBlock]);
   }
   // toggleListItem은 ListItemBlockType이 아니다(로드맵 D2 — <li>/<ul> 표현이
-  // 없다). heading과 동형으로 독립 <details>를 낸다(로드맵 D4).
+  // 없다). 독립 <details>를 낸다(로드맵 D4).
   if (block.type === "toggleListItem") {
     return detailsNode(
       block.id,
@@ -520,18 +519,6 @@ const blockNode = (block: Block): HtmlElementNode => {
     { dataGeulBlockId: block.id, ...textBlockPropsAttributes(block) },
     inlineContentToNodes(block.content),
   );
-
-  // isToggleable heading은 children-wrapper(<div>) 대신 <details>로 감싼다
-  // (로드맵 D4) — children 유무와 무관하게 항상 감싼다. isToggleable 자체가
-  // 보존 대상이라 children이 없어도 <details> 없이는 그 사실이 사라진다.
-  if (block.type === "heading" && block.isToggleable === true) {
-    return detailsNode(
-      block.id,
-      block.collapsed,
-      htmlElement("summary", {}, [ownNode]),
-      block.children,
-    );
-  }
 
   if (block.children === undefined || block.children.length === 0) {
     return ownNode;

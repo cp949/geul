@@ -247,25 +247,19 @@ export const findChildrenWrapper = (
   return { ownNode, childrenNodes: containerNode.children };
 };
 
-// isToggleable heading·toggleListItem이 공유하는 <details> 표현을 구조로만
-// 인식한다(로드맵 D4, RD-005-DELTA-01.md "착수 전 결정" — findChildrenWrapper와
-// 같은 "부분 일치를 관대하게 봐주지 않는다" 원칙). own-format 마커
+// toggleListItem의 <details> 표현을 구조로만 인식한다(로드맵 D4,
+// RD-005-DELTA-01.md "착수 전 결정" — findChildrenWrapper와 같은 "부분
+// 일치를 관대하게 봐주지 않는다" 원칙). own-format 마커
 // (data-geul-toggleable="true")와 구조(첫 element 자식이 정확히 <summary>,
 // 있으면 둘째는 dataGeulChildren 있는 <div>) 둘 다 확인한다 — 손으로 쓴
 // <details>(예: FAQ 아코디언)를 own-format으로 오인하지 않기 위해서다.
-// <summary>의 유일한 element 자식이 h1~h6고 다른 실질 텍스트가 없으면
-// heading(<summary>가 <hN>을 감싼 것), 아니면 toggleListItem(<summary>가
-// own content를 직접 담음, <li>가 없는 목록 항목이라 여기서 처음 id가
-// 등장한다)이다.
+// (2026-09-13: heading 토글 제거 이전에는 <summary>가 h1~h6 하나만 감싼
+// 경우를 "heading" 변형으로 별도 인식했다 — 그 변형은 폐기됐다. own-export가
+// 더 이상 만들지 않는 구조라 옛 export를 다시 들여올 때만 toggleListItem으로
+// 낮춰 인식된다.)
 export const findDetailsWrapper = (
   node: HtmlNode,
 ):
-  | {
-      kind: "heading";
-      ownNode: HtmlElementNode;
-      collapsed: boolean | undefined;
-      childrenNodes: HtmlElementContent[];
-    }
   | {
       kind: "toggleListItem";
       summaryNode: HtmlElementNode;
@@ -305,21 +299,6 @@ export const findDetailsWrapper = (
   const collapsedAttr = propertyString(node, "dataGeulCollapsed");
   const collapsed =
     collapsedAttr === undefined ? undefined : collapsedAttr === "true";
-
-  const summaryHasStrayText = summaryNode.children.some(
-    (child) => !isElementNode(child) && hasSubstantialText(textValue([child])),
-  );
-  const summaryElementChildren = summaryNode.children.filter(isElementNode);
-  const headingChild = summaryElementChildren[0];
-  if (
-    !summaryHasStrayText &&
-    summaryElementChildren.length === 1 &&
-    summaryNode.children.length === 1 &&
-    headingChild !== undefined &&
-    headingLevelByTagName.has(headingChild.tagName)
-  ) {
-    return { kind: "heading", ownNode: headingChild, collapsed, childrenNodes };
-  }
 
   return { kind: "toggleListItem", summaryNode, collapsed, childrenNodes };
 };

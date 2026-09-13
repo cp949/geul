@@ -1,7 +1,7 @@
 /**
- * 토글 제목·토글 목록의 GFM lossy export→import 왕복이 콘텐츠와 구조를
- * 보존하고(RD-005 완료 조건 3번), 인접한 bulletListItem·toggleListItem이
- * 별도 mdast list로 나뉘어도 재병합되지 않음을 검증한다.
+ * 토글 목록의 GFM lossy export→import 왕복이 콘텐츠와 구조를 보존하고
+ * (RD-005 완료 조건 3번), 인접한 bulletListItem·toggleListItem이 별도
+ * mdast list로 나뉘어도 재병합되지 않음을 검증한다.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -110,51 +110,6 @@ describe("토글 GFM lossy round-trip", () => {
           { type: "bulletListItem", content: [{ text: "손자 글머리" }] },
         ],
       },
-    ]);
-  });
-
-  it("toggle heading은 lossy export→import 후 일반 heading·children으로 콘텐츠를 보존한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "h-1",
-          type: "heading",
-          level: 3,
-          content: [{ text: "제목" }],
-          isToggleable: true,
-          collapsed: false,
-          children: [
-            { id: "p-1", type: "paragraph", content: [{ text: "본문" }] },
-          ],
-        },
-      ],
-    };
-
-    const exported = exportMarkdown(document, { mode: "lossy" });
-    expect(exported.ok).toBe(true);
-    if (!exported.ok) throw new Error(exported.error.message);
-    expect(exported.value.warnings).toEqual([
-      {
-        kind: "NESTED_CHILDREN",
-        blockId: "h-1",
-        message: expect.stringContaining("h-1"),
-      },
-      {
-        kind: "TOGGLE_STATE_LOST",
-        blockId: "h-1",
-        message: expect.stringContaining("h-1"),
-      },
-    ]);
-
-    const imported = importMarkdown(exported.value.markdown);
-    expect(imported.ok).toBe(true);
-    if (!imported.ok) throw new Error(imported.error.message);
-    expect(imported.value.warnings).toEqual([]);
-    expect(imported.value.document.blocks.map(blockMeaning)).toEqual([
-      { type: "heading", level: 3, content: [{ text: "제목" }] },
-      { type: "paragraph", content: [{ text: "본문" }] },
     ]);
   });
 });

@@ -1,10 +1,8 @@
 /**
- * GFM import가 어떤 입력에서도 toggle heading(isToggleable)이나
- * toggleListItem을 만들지 않음을 고정한다(spec §7.2 — GFM에는 토글 문법
- * 자체가 없다, RD-005 완료 조건 4번). importer 코드 변경이 없는 회귀 고정
- * 테스트다.
+ * GFM import가 어떤 입력에서도 toggleListItem을 만들지 않음을 고정한다
+ * (spec §7.2 — GFM에는 토글 문법 자체가 없다, RD-005 완료 조건 4번).
+ * importer 코드 변경이 없는 회귀 고정 테스트다.
  */
-import type { HeadingBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { importMarkdown } from "../src/index.js";
@@ -63,12 +61,8 @@ describe("GFM import는 토글을 만들지 않는다", () => {
       "<details><summary>제목</summary>\n\n내용\n\n</details>\n",
     );
 
-    // "heading"은 예약 리터럴이라 CustomBlock일 수 없다.
     const hasToggle = document.blocks.some(
-      (block) =>
-        block.type === "toggleListItem" ||
-        (block.type === "heading" &&
-          (block as HeadingBlock).isToggleable === true),
+      (block) => block.type === "toggleListItem",
     );
     expect(hasToggle).toBe(false);
   });

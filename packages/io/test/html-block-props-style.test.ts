@@ -276,31 +276,6 @@ describe("완료 조건 3 — style이 재-import 경고를 만들지 않는다(
     },
   );
 
-  it("heading이 isToggleable이어도(summary가 hN을 감싸는 경로) style 경고 없이 왕복한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "b1",
-          type: "heading",
-          level: 3,
-          content: [{ text: "x" }],
-          isToggleable: true,
-          collapsed: false,
-          ...propsAllThree,
-        },
-      ],
-    };
-    const exported = exportHtml(document);
-    expect(exported.ok).toBe(true);
-    if (!exported.ok) throw new Error(exported.error.message);
-    expect(importHtml(exported.value)).toEqual({
-      ok: true,
-      value: { document, warnings: [] },
-    });
-  });
-
   it("직접 작성한 data-geul-*+style p 태그를 import해도 style 경고가 없다", () => {
     const result = importHtml(
       '<p data-geul-block-id="p1" data-geul-text-color="#FF0000" style="color:#FF0000">x</p>',

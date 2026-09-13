@@ -371,12 +371,9 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
 
   // "토글이라는 사실 자체"는 GFM이 표현할 수 없는 상태라 children 유무와
   // 무관하게 항상 보고한다(spec §7.2) — CHECKED_STATE_LOST처럼 특정 구조
-  // 조합에서만 나는 손실과 다르다. heading에 children이 있으면 위
-  // NESTED_CHILDREN과 함께 보고된다(서로 억제하지 않음).
-  if (
-    (block.type === "heading" && block.isToggleable === true) ||
-    block.type === "toggleListItem"
-  ) {
+  // 조합에서만 나는 손실과 다르다. children이 있으면 위 NESTED_CHILDREN과
+  // 함께 보고된다(서로 억제하지 않음).
+  if (block.type === "toggleListItem") {
     losses.push({
       kind: "TOGGLE_STATE_LOST",
       blockId: block.id,

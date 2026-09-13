@@ -505,35 +505,6 @@ const blocksFromNodes = (
         warnings,
       );
 
-      if (details.kind === "heading") {
-        const headingBlocks = blocksFromSegments(
-          [details.ownNode],
-          createId,
-          depth,
-          warnings,
-        );
-        const headingBlock = headingBlocks[0];
-        if (
-          headingBlocks.length !== 1 ||
-          headingBlock === undefined ||
-          headingBlock.type !== "heading"
-        ) {
-          // findDetailsWrapper가 ownNode를 h1~h6로만 걸렀으므로 정상 입력에서
-          // 도달하지 않는다(findChildrenWrapper의 동일 방어 분기와 같은 이유).
-          plainRun.push(node);
-          continue;
-        }
-        blocks.push({
-          ...headingBlock,
-          isToggleable: true,
-          ...(details.collapsed === undefined
-            ? {}
-            : { collapsed: details.collapsed }),
-          ...(children.length > 0 ? { children } : {}),
-        });
-        continue;
-      }
-
       if (
         propertyString(details.summaryNode, "dataGeulBlockId") !== undefined
       ) {

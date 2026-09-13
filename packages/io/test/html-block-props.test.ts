@@ -247,33 +247,6 @@ describe("블록 props HTML 왕복", () => {
     });
   });
 
-  it("isToggleable heading의 props가 <details> 래핑 경로를 통해 왕복한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "heading-1",
-          type: "heading",
-          level: 3,
-          content: [{ text: "title" }],
-          isToggleable: true,
-          collapsed: false,
-          textColor: "#00FF00",
-          textAlignment: "right",
-        },
-      ],
-    };
-
-    const exported = exportHtml(document);
-    expect(exported.ok).toBe(true);
-    if (!exported.ok) throw new Error(exported.error.message);
-    expect(importHtml(exported.value)).toEqual({
-      ok: true,
-      value: { document, warnings: [] },
-    });
-  });
-
   it("props 중 하나만 있어도 그것만 왕복한다(전부-아니면-전무 아님)", () => {
     const document: Document = {
       formatVersion: 1,

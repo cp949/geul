@@ -1,9 +1,8 @@
 /**
- * 토글 제목(HeadingBlock.isToggleable/collapsed)과 토글 목록
- * (ToggleListItemBlock)이 own HTML export→import round-trip에서
- * isToggleable·collapsed·콘텐츠·children을 보존하는지 검증한다(RD-005
- * 완료 조건 1번). collapsed는 undefined/true/false 3상태를 모두 구분해
- * 보존해야 한다(RD-005-DELTA-01.md "착수 전 결정" 참고).
+ * 토글 목록(ToggleListItemBlock)이 own HTML export→import round-trip에서
+ * collapsed·콘텐츠·children을 보존하는지 검증한다(RD-005 완료 조건 1번).
+ * collapsed는 undefined/true/false 3상태를 모두 구분해 보존해야 한다
+ * (RD-005-DELTA-01.md "착수 전 결정" 참고).
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -23,105 +22,6 @@ const roundTrip = (document: Document) => {
     warnings: imported.value.warnings,
   };
 };
-
-describe("토글 제목 HTML round-trip", () => {
-  it("collapsed 미설정 heading을 무손실 왕복한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "h-1",
-          type: "heading",
-          level: 2,
-          content: [{ text: "제목" }],
-          isToggleable: true,
-        },
-      ],
-    };
-    const result = roundTrip(document);
-    expect(result.document.blocks).toEqual(document.blocks);
-    expect(result.warnings).toEqual([]);
-  });
-
-  it("collapsed: true heading을 무손실 왕복한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "h-1",
-          type: "heading",
-          level: 3,
-          content: [{ text: "제목" }],
-          isToggleable: true,
-          collapsed: true,
-        },
-      ],
-    };
-    const result = roundTrip(document);
-    expect(result.document.blocks).toEqual(document.blocks);
-    expect(result.warnings).toEqual([]);
-  });
-
-  it("collapsed: false(명시) heading을 collapsed 미설정과 구분해 왕복한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "h-1",
-          type: "heading",
-          level: 3,
-          content: [{ text: "제목" }],
-          isToggleable: true,
-          collapsed: false,
-        },
-      ],
-    };
-    const result = roundTrip(document);
-    expect(result.document.blocks).toEqual(document.blocks);
-    expect(result.document.blocks[0]).toHaveProperty("collapsed", false);
-    expect(result.warnings).toEqual([]);
-  });
-
-  it("children이 있는 toggle heading이 children을 보존한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        {
-          id: "h-1",
-          type: "heading",
-          level: 2,
-          content: [{ text: "부모" }],
-          isToggleable: true,
-          collapsed: true,
-          children: [
-            { id: "p-1", type: "paragraph", content: [{ text: "자식" }] },
-          ],
-        },
-      ],
-    };
-    const result = roundTrip(document);
-    expect(result.document.blocks).toEqual(document.blocks);
-    expect(result.warnings).toEqual([]);
-  });
-
-  it("isToggleable이 아닌 heading은 기존과 동일하게 <details> 없이 왕복한다", () => {
-    const document: Document = {
-      formatVersion: 1,
-      revision: 0,
-      blocks: [
-        { id: "h-1", type: "heading", level: 2, content: [{ text: "일반" }] },
-      ],
-    };
-    const result = roundTrip(document);
-    expect(result.html).toBe('<h2 data-geul-block-id="h-1">일반</h2>');
-    expect(result.document.blocks).toEqual(document.blocks);
-    expect(result.warnings).toEqual([]);
-  });
-});
 
 describe("토글 목록 HTML round-trip", () => {
   it("collapsed 미설정 toggleListItem을 무손실 왕복한다", () => {

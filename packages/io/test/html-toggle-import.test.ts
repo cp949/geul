@@ -9,27 +9,9 @@ import { describe, expect, it } from "vitest";
 import { importHtml } from "../src/index.js";
 
 describe("<details> import(own-format)", () => {
-  it("<summary><hN>...가 toggle heading을 만들고 오탐 경고가 없다", () => {
-    const result = importHtml(
-      '<details data-geul-toggleable="true" open><summary><h3 data-geul-block-id="h-1">제목</h3></summary></details>',
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error(result.error.message);
-    expect(result.value.document.blocks).toEqual([
-      {
-        id: "h-1",
-        type: "heading",
-        level: 3,
-        content: [{ text: "제목" }],
-        isToggleable: true,
-      },
-    ]);
-    expect(result.value.warnings).toEqual([]);
-  });
-
   it('data-geul-collapsed="true"는 collapsed: true를 만든다', () => {
     const result = importHtml(
-      '<details data-geul-toggleable="true" data-geul-collapsed="true"><summary><h3 data-geul-block-id="h-1">제목</h3></summary></details>',
+      '<details data-geul-toggleable="true" data-geul-collapsed="true"><summary data-geul-block-id="t-1">제목</summary></details>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -38,7 +20,7 @@ describe("<details> import(own-format)", () => {
 
   it("data-geul-collapsed 없음은 collapsed 필드 자체가 없다(undefined와 false를 구분)", () => {
     const result = importHtml(
-      '<details data-geul-toggleable="true" open><summary><h3 data-geul-block-id="h-1">제목</h3></summary></details>',
+      '<details data-geul-toggleable="true" open><summary data-geul-block-id="t-1">제목</summary></details>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
