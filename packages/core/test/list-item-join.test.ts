@@ -148,6 +148,76 @@ describe("목록 선두 Backspace exit·join", () => {
   );
 });
 
+// 2026-09-13 정정(사용자 결정): 빈 목록 항목은 앞에 병합할 형제가 있어도
+// Enter(splitAtCaret)와 대칭으로 병합 대신 종료한다 — 위
+// "목록 선두 Backspace exit·join"이 검증하는 문서 최선두 케이스와 달리
+// 이 블록은 "최선두가 아니어도 비어 있으면 종료한다"는 추가 조건만 다룬다.
+describe("목록 중간(최선두 아님) 빈 항목 Backspace exit", () => {
+  it.each(["bulletListItem", "toggleListItem"] as const)(
+    "빈 %s 앞에 형제가 있어도 병합 대신 ID·children·깊이를 보존한 paragraph로 단일 transaction 전환한다",
+    (type) => {
+      const children = [paragraphBlock("child-1", "자식")];
+      const source = listItemBlock("list-1", type, "", { children });
+      const { editor, tiptap, changes } = mounted(
+        documentOf(paragraphBlock("lead", "앞"), source, tailParagraphBlock),
+      );
+      tiptap.commands.setTextSelection(contentTextStart(tiptap, source.id));
+      const before = editorState(editor, tiptap);
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+      expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(editor.getDocument()).toEqual({
+        ...documentOf(
+          paragraphBlock("lead", "앞"),
+          paragraphBlock("list-1", "", children),
+          tailParagraphBlock,
+        ),
+        revision: 1,
+      });
+      expect(tiptap.state.doc.child(1).firstChild?.type.name).toBe("paragraph");
+      expect(tiptap.state.doc.child(1).attrs.blockId).toBe("list-1");
+      expect(tiptap.state.selection.toJSON()).toEqual(
+        caretAt(tiptap, "list-1"),
+      );
+      expect(changes).toHaveLength(1);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+      expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+    },
+  );
+
+  it("빈 번호 목록 앞에 형제가 있어도 병합 대신 startNumber를 제거한 paragraph로 전환한다", () => {
+    const source = listItemBlock("list-1", "numberedListItem", "", {
+      startNumber: 7,
+    });
+    const { editor, tiptap, changes } = mounted(
+      documentOf(paragraphBlock("lead", "앞"), source, tailParagraphBlock),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, source.id));
+    const before = editorState(editor, tiptap);
+    const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(editor.getDocument()).toEqual({
+      ...documentOf(
+        paragraphBlock("lead", "앞"),
+        paragraphBlock("list-1", ""),
+        tailParagraphBlock,
+      ),
+      revision: 1,
+    });
+    expect(changes).toHaveLength(1);
+
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+});
+
 describe("목록 끝 Delete join", () => {
   it("중첩 목록 끝 Delete는 시각적 다음 이종 목록을 대상 타입으로 합치고 그 children을 부모의 같은 자리에 승격한다", () => {
     const promoted = [

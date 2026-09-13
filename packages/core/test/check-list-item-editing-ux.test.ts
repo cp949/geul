@@ -105,6 +105,29 @@ describe("문서 최선두 checkListItem Backspace exit", () => {
   });
 });
 
+// 2026-09-13 정정(사용자 결정): 빈 checkListItem은 최선두가 아니어도 Enter
+// (block-split-extension.ts splitAtCaret)와 대칭으로 병합 대신 종료한다.
+describe("빈 checkListItem 중간(최선두 아님) Backspace exit", () => {
+  it("앞에 형제가 있어도 빈 checkListItem은 병합 대신 같은 ID의 paragraph로 전환한다", () => {
+    const source = checkListItemBlock("check-1", "", false);
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("lead", "앞"), source, tailParagraph),
+    );
+    tiptap.commands.setTextSelection(caretAt(tiptap, source.id).anchor);
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    expect(editor.getDocument()).toEqual({
+      ...documentOf(
+        paragraphBlock("lead", "앞"),
+        paragraphBlock("check-1", ""),
+        tailParagraph,
+      ),
+      revision: 1,
+    });
+  });
+});
+
 describe("비어있지 않은 checkListItem 중간 Enter split", () => {
   it("checked: true인 항목을 split해도 새로 생긴 뒤쪽 항목은 checked: false로 리셋된다", () => {
     const source = checkListItemBlock("check-1", "앞뒤", true);

@@ -378,8 +378,20 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   // 시각적으로 바로 앞 노드가 atom(divider)이면 병합 대신 선택으로 끝난다
   // — 아래 findFrom은 커서 위치만 찾아 atom을 건너뛰므로 먼저 판정한다.
   const adjacent = leafBefore(state.doc, containerStart);
-  if (adjacent === null && isListItemContent($from.parent)) {
-    return exitLeadingListItem(view, liveState, {
+  // 병합 대상이 없는(adjacent===null) 목록 항목은 내용 유무와 무관하게
+  // 종료한다 — 병합할 데가 없어서다. 병합 대상이 있어도 항목이
+  // 비어 있으면(content.size===0) 병합 대신 종료를 우선한다 — Enter의
+  // "빈 목록 항목은 위치와 무관하게 paragraph로 전환한다" 규칙
+  // (block-split-extension.ts splitAtCaret의 동일 분기)과 대칭을 맞춘다
+  // (사용자 결정). 앞에 병합할 형제가 있다는 사실이 "보여줄 내용이
+  // 없다"는 사실을 바꾸지 않는다.
+  const isEmptyListItem =
+    isListItemContent($from.parent) && $from.parent.content.size === 0;
+  if (
+    isListItemContent($from.parent) &&
+    (adjacent === null || isEmptyListItem)
+  ) {
+    return exitListItem(view, liveState, {
       contentPosition: $from.before($from.depth),
     });
   }
@@ -488,12 +500,12 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   return true;
 }
 
-// 문서 최선두 목록 항목은 병합 대상이 없으므로 그 자리에서
-// paragraph로 바꿔 목록을 종료한다. 콘테이너를 재구성하지 않아
-// blockId·blockGroup(children)·깊이를 그대로 보존한다. DOM-derived
-// state는 판정·위치 계산에만 쓰고 문서 transaction은 유효한 live
-// state에서 만든다(G-EDT-002).
-function exitLeadingListItem(
+// 목록 항목을 그 자리에서 paragraph로 바꿔 목록을 종료한다 — 병합 대상이
+// 없거나(문서 최선두) 항목이 비어 있을 때 호출부가 고른다. 컨테이너를
+// 재구성하지 않아 blockId·blockGroup(children)·깊이를 그대로 보존한다.
+// DOM-derived state는 판정·위치 계산에만 쓰고 문서 transaction은 유효한
+// live state에서 만든다(G-EDT-002).
+function exitListItem(
   view: EditorView,
   state: EditorState,
   exit: { contentPosition: number },

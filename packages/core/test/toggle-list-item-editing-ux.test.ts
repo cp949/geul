@@ -98,3 +98,26 @@ describe("문서 최선두 toggleListItem Backspace exit", () => {
     });
   });
 });
+
+// 2026-09-13 정정(사용자 결정): 빈 toggleListItem은 최선두가 아니어도 Enter
+// (block-split-extension.ts splitAtCaret)와 대칭으로 병합 대신 종료한다.
+describe("빈 toggleListItem 중간(최선두 아님) Backspace exit", () => {
+  it("앞에 형제가 있어도 빈 toggleListItem은 병합 대신 같은 ID의 paragraph로 전환한다", () => {
+    const source = toggleListItemBlock("toggle-1", "");
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("lead", "앞"), source, tailParagraph),
+    );
+    tiptap.commands.setTextSelection(caretAt(tiptap, source.id).anchor);
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    expect(editor.getDocument()).toEqual({
+      ...documentOf(
+        paragraphBlock("lead", "앞"),
+        paragraphBlock("toggle-1", ""),
+        tailParagraph,
+      ),
+      revision: 1,
+    });
+  });
+});
