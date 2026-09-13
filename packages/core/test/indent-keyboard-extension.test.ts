@@ -139,7 +139,9 @@ const nestedMediaWithPrecedingSiblingDoc = (): JSONContent => ({
 /** 이미 중첩된 media(media-1, parent-1의 유일한 자식) — Shift-Tab outdent 검증용. */
 const nestedMediaDoc = (): JSONContent => ({
   type: "doc",
-  content: [containerWithGroupJson("parent-1", "parent", [imageJson("media-1")])],
+  content: [
+    containerWithGroupJson("parent-1", "parent", [imageJson("media-1")]),
+  ],
 });
 
 /**
