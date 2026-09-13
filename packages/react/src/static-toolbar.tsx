@@ -6,7 +6,13 @@ import {
   IndentDecrease,
   IndentIncrease,
   Italic,
+  List,
+  ListChecks,
+  ListCollapse,
+  ListOrdered,
   PaintBucket,
+  Quote,
+  SquareCode,
   Strikethrough,
   Underline,
 } from "lucide-react";
@@ -21,6 +27,7 @@ import {
 import { createPortal } from "react-dom";
 
 import {
+  BLOCK_TYPE_OPTIONS,
   blockTypeText,
   blockTypeToOptionId,
   getBlockTypeOptionsForSource,
@@ -89,6 +96,51 @@ const indentIcon = <IndentIncrease {...iconProps} />;
 const outdentIcon = <IndentDecrease {...iconProps} />;
 const textColorIcon = <Baseline {...iconProps} />;
 const backgroundColorIcon = <PaintBucket {...iconProps} />;
+
+// 블록 타입 select를 Text/Heading 1~6로만 줄인다(일반적인 에디터 관례 —
+// Quote·Code·목록 4종은 아래 BLOCK_TYPE_ICON_OPTIONS로 뺀다). paragraph와
+// heading은 getBlockTypeOptionsForSource의 어떤 source 필터에도 제외되지
+// 않으므로(block-type-options.ts 참고 — codeBlock source는 목록만, 목록
+// source는 code만 제외) source와 무관한 고정 목록으로 둬도 안전하다.
+const TEXT_STYLE_OPTION_IDS = new Set<string>([
+  "paragraph",
+  "heading-1",
+  "heading-2",
+  "heading-3",
+  "heading-4",
+  "heading-5",
+  "heading-6",
+]);
+
+const TEXT_STYLE_OPTIONS = BLOCK_TYPE_OPTIONS.filter((option) =>
+  TEXT_STYLE_OPTION_IDS.has(option.id),
+);
+
+// select 밖으로 뺀 나머지 6개 — BLOCK_TYPE_OPTIONS 선언 순서를 그대로
+// 유지해 "Turn into" 메뉴(block-side-menu-menu.tsx)와 순서가 어긋나지
+// 않는다.
+const BLOCK_TYPE_ICON_OPTIONS = BLOCK_TYPE_OPTIONS.filter(
+  (option) => !TEXT_STYLE_OPTION_IDS.has(option.id),
+);
+
+type BlockTypeIconId =
+  | "quote"
+  | "code"
+  | "bullet-list"
+  | "numbered-list"
+  | "check-list"
+  | "toggle-list";
+
+// BLOCK_TYPE_ICON_OPTIONS는 위 필터로 항상 이 6개 id로만 구성됨이 보장된다
+// — block-type-options.ts의 blockTypeText cast와 같은 근거의 단일 cast다.
+const BLOCK_TYPE_ICONS: Record<BlockTypeIconId, ReactElement> = {
+  quote: <Quote {...iconProps} />,
+  code: <SquareCode {...iconProps} />,
+  "bullet-list": <List {...iconProps} />,
+  "numbered-list": <ListOrdered {...iconProps} />,
+  "check-list": <ListChecks {...iconProps} />,
+  "toggle-list": <ListCollapse {...iconProps} />,
+};
 
 const colorMenuSectionLabelClassName = "geul-menu-section-label";
 const colorMenuSwatchClassName = "geul-menu-swatch";
@@ -310,6 +362,22 @@ export const StaticToolbar = ({
       : createPortal(overridden, portalTarget);
   }
 
+  // select와 블록 타입 아이콘 버튼이 공유하는 파생값 — 둘 다 state.blockSelection
+  // 하나에서 나오므로 여기서 한 번만 계산한다(중복 계산 방지, 아래 두
+  // 렌더 지점의 aria-pressed/aria-disabled/select value가 항상 일치).
+  const activeBlockTypeId =
+    state.blockSelection === null
+      ? null
+      : blockTypeToOptionId(state.blockSelection.blockType);
+  const allowedBlockTypeIds =
+    state.blockSelection === null
+      ? null
+      : new Set(
+          getBlockTypeOptionsForSource(state.blockSelection.blockType).map(
+            (option) => option.id,
+          ),
+        );
+
   const content = (
     <>
       <div
@@ -337,16 +405,55 @@ export const StaticToolbar = ({
               );
               setState(computeFormattingToolbarState(editor));
             }}
-            value={blockTypeToOptionId(state.blockSelection.blockType)}
+            // 현재 블록 타입이 Quote·Code·목록 등 select 밖으로 뺀
+            // 타입이면(activeBlockTypeId가 TEXT_STYLE_OPTION_IDS 밖) "Text"
+            // 등 잘못된 값을 보여주지 않고 빈 값으로 둔다 — 아래 숨김
+            // placeholder <option>이 그 값을 받아준다.
+            value={
+              activeBlockTypeId !== null &&
+              TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId)
+                ? activeBlockTypeId
+                : ""
+            }
           >
-            {getBlockTypeOptionsForSource(state.blockSelection.blockType).map(
-              (option) => (
-                <option key={option.id} value={option.id}>
-                  {blockTypeText(dictionary, option.id).label}
-                </option>
-              ),
-            )}
+            {activeBlockTypeId !== null &&
+              !TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId) && (
+                <option hidden value="" />
+              )}
+            {TEXT_STYLE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {blockTypeText(dictionary, option.id).label}
+              </option>
+            ))}
           </select>
+        )}
+        {state.blockSelection !== null && (
+          <>
+            {BLOCK_TYPE_ICON_OPTIONS.map((option) => (
+              <IconButton
+                aria-disabled={
+                  allowedBlockTypeIds?.has(option.id) === true
+                    ? "false"
+                    : "true"
+                }
+                aria-pressed={activeBlockTypeId === option.id}
+                className="geul-formatting-toolbar__mark-button"
+                icon={BLOCK_TYPE_ICONS[option.id as BlockTypeIconId]}
+                key={option.id}
+                label={blockTypeText(dictionary, option.id).label}
+                onClick={() => {
+                  const blockSelection = state.blockSelection;
+                  if (blockSelection === null) return;
+                  if (allowedBlockTypeIds?.has(option.id) !== true) return;
+                  editor.commands.setBlockType(
+                    blockSelection.blockId,
+                    option.blockType,
+                  );
+                  setState(computeFormattingToolbarState(editor));
+                }}
+              />
+            ))}
+          </>
         )}
         {state.blockSelection !== null && (
           <>

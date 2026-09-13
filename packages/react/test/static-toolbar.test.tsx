@@ -120,6 +120,148 @@ describe("StaticToolbar 상단 고정 툴바", () => {
     ).not.toBeNull();
   });
 
+  describe("블록 타입 select 축소와 아이콘 버튼", () => {
+    it("블록타입 select에는 Text와 Heading 1~6만 노출된다", () => {
+      const controller = fakeController();
+      render(withProvider(controller, <StaticToolbar />));
+
+      const select = screen.getByRole("combobox", { name: "Block type" });
+      const optionLabels = Array.from(select.querySelectorAll("option")).map(
+        (option) => option.textContent,
+      );
+
+      expect(optionLabels).toEqual([
+        "Text",
+        "Heading 1",
+        "Heading 2",
+        "Heading 3",
+        "Heading 4",
+        "Heading 5",
+        "Heading 6",
+      ]);
+    });
+
+    it("Quote·Code·목록 4종은 select가 아니라 아이콘 버튼으로 제공된다", () => {
+      const controller = fakeController();
+      render(withProvider(controller, <StaticToolbar />));
+
+      for (const name of [
+        "Quote",
+        "Code",
+        "Bulleted List",
+        "Numbered List",
+        "Check List",
+        "Toggle List",
+      ]) {
+        expect(screen.getByRole("button", { name })).not.toBeNull();
+      }
+    });
+
+    it("블록 타입 아이콘 버튼을 클릭하면 해당 타입으로 setBlockType을 호출한다", () => {
+      const controller = fakeController();
+      render(withProvider(controller, <StaticToolbar />));
+
+      fireEvent.click(screen.getByRole("button", { name: "Quote" }));
+
+      expect(controller.commands.setBlockType).toHaveBeenCalledWith("block-1", {
+        type: "quote",
+      });
+    });
+
+    it("현재 블록 타입과 일치하는 아이콘 버튼만 aria-pressed=true다", () => {
+      const controller = fakeController(
+        undefined,
+        vi.fn(() => ({
+          blockId: "block-1",
+          blockType: { type: "quote" } satisfies BlockTypeDescriptor,
+        })),
+      );
+      render(withProvider(controller, <StaticToolbar />));
+
+      expect(
+        screen
+          .getByRole("button", { name: "Quote" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(
+        screen
+          .getByRole("button", { name: "Bulleted List" })
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
+    });
+
+    it("현재 블록 타입이 select 목록 밖(Quote 등)이면 select는 빈 값으로 표시한다", () => {
+      const controller = fakeController(
+        undefined,
+        vi.fn(() => ({
+          blockId: "block-1",
+          blockType: { type: "quote" } satisfies BlockTypeDescriptor,
+        })),
+      );
+      render(withProvider(controller, <StaticToolbar />));
+
+      const select = screen.getByRole("combobox", {
+        name: "Block type",
+      }) as HTMLSelectElement;
+      expect(select.value).toBe("");
+    });
+
+    it("codeBlock 선택에서는 목록 아이콘 버튼 4종만 disable되고 Quote·Code는 유지된다", () => {
+      const codeBlockType: BlockTypeDescriptor = { type: "codeBlock" };
+      const controller = fakeController(
+        undefined,
+        vi.fn(() => ({ blockId: "block-1", blockType: codeBlockType })),
+      );
+      render(withProvider(controller, <StaticToolbar />));
+
+      for (const name of [
+        "Bulleted List",
+        "Numbered List",
+        "Check List",
+        "Toggle List",
+      ]) {
+        expect(
+          screen.getByRole("button", { name }).getAttribute("aria-disabled"),
+        ).toBe("true");
+      }
+      for (const name of ["Quote", "Code"]) {
+        expect(
+          screen.getByRole("button", { name }).getAttribute("aria-disabled"),
+        ).toBe("false");
+      }
+    });
+
+    it("목록 블록 선택에서는 Code 아이콘 버튼만 disable된다", () => {
+      const bulletListType: BlockTypeDescriptor = { type: "bulletListItem" };
+      const controller = fakeController(
+        undefined,
+        vi.fn(() => ({ blockId: "block-1", blockType: bulletListType })),
+      );
+      render(withProvider(controller, <StaticToolbar />));
+
+      expect(
+        screen
+          .getByRole("button", { name: "Code" })
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+      expect(
+        screen
+          .getByRole("button", { name: "Quote" })
+          .getAttribute("aria-disabled"),
+      ).toBe("false");
+    });
+
+    it("blockSelection이 null이면 블록 타입 아이콘 버튼도 렌더하지 않는다", () => {
+      const controller = fakeController(
+        undefined,
+        vi.fn(() => null),
+      );
+      render(withProvider(controller, <StaticToolbar />));
+
+      expect(screen.queryByRole("button", { name: "Quote" })).toBeNull();
+    });
+  });
+
   describe("portalTarget", () => {
     it("지정하면 그 요소 하위에 렌더한다", () => {
       const portalTarget = document.createElement("div");
