@@ -91,8 +91,27 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   // 소유한다.
   const handleHoverCandidateChange = useCallback(
     (candidate: HTMLElement | null, event: PointerEvent) => {
-      if (candidate !== null) {
-        updateHoverBlockId(candidate.getAttribute("data-geul-block-id"));
+      // table은 자체 행/열 핸들(table-handles.tsx)을, media는 전용
+      // 오버레이(media-handle-overlays.tsx, Issue #187 RD-001 DELTA-03)를
+      // 가지므로 이 거터 대상에서 제외한다. entitySelector의 `.closest()`가
+      // 아니라 여기서 거른다 — `:not(table):not([data-geul-media-kind])`를
+      // entitySelector에 넣으면(DELTA-02가 그렇게 했었다) 중첩된(들여쓴)
+      // table·media 위에서 `.closest()`가 그 블록 자신은 건너뛰고 조상
+      // 블록까지 타고 올라가 버린다(실측 발견: 들여쓴 media를 hover하면
+      // 조상 블록의 거터가 media 옆에 함께 떠 그립 버튼이 2개로 보였다) —
+      // 최근접 블록을 먼저 찾은 뒤(entitySelector는 `[data-geul-block-id]`만
+      // 본다) 여기서 "그 블록 자체가 제외 대상인가"만 판정해야 조상으로
+      // 새지 않는다.
+      const eligibleCandidate =
+        candidate !== null &&
+        candidate.tagName !== "TABLE" &&
+        !candidate.hasAttribute("data-geul-media-kind")
+          ? candidate
+          : null;
+      if (eligibleCandidate !== null) {
+        updateHoverBlockId(
+          eligibleCandidate.getAttribute("data-geul-block-id"),
+        );
         return;
       }
 
@@ -131,12 +150,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   usePointerHoverTarget({
     element,
     ignoreSelectors: BLOCK_HOVER_IGNORE_SELECTORS,
-    // table은 자체 행/열 핸들(table-handles.tsx)을, media는 전용
-    // 오버레이(media-handle-overlays.tsx, Issue #187 RD-001 DELTA-02)를
-    // 가지므로 이 거터 대상에서 제외한다 — 제외하지 않으면 두 오버레이의
-    // gutter가 왼쪽 부근에서 겹쳐 렌더된다.
-    entitySelector:
-      "[data-geul-block-id]:not(table):not([data-geul-media-kind])",
+    // table·media 제외는 여기(CSS selector)가 아니라
+    // handleHoverCandidateChange가 판정한다 — 위 주석 참고.
+    entitySelector: "[data-geul-block-id]",
     onCandidateChange: handleHoverCandidateChange,
   });
 

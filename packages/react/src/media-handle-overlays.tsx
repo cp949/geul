@@ -1,5 +1,5 @@
 import { GripVertical, Plus } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { computeDragGuide } from "./block-side-menu-geometry.js";
 import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
@@ -221,6 +221,47 @@ export const MediaHandleOverlays = ({
     onEscapeDismiss: closeMenu,
     onOutsideDismiss: dismissMenu,
   });
+
+  // block-side-menu.tsx의 refreshBlockMenuGeometry와 같은 이유·같은 패턴
+  // (Issue #187 RD-001 DELTA-03) — 열린 메뉴가 스크롤·리사이즈 중에도
+  // media 블록을 따라가게 한다. DELTA-01은 열 때만 위치를 계산하고 이
+  // 리스너를 이식하지 않아 스크롤하면 메뉴가 클릭 시점 좌표에 멈춰
+  // 있었다(e2e 실측 발견). top 공식(rect.top + 28)은 handleHandleClick의
+  // open 계산과 반드시 같아야 한다 — computeGutterTopOffset은 쓰지 않는다
+  // (media의 첫 자식은 heading이 될 수 없어 항상 0을 반환, block-side-menu
+  // 쪽과 결과가 같지만 media는 애초에 그 개념이 없어 직접 호출하지
+  // 않는다).
+  useEffect(() => {
+    if (element === null) return;
+    const ownerWindow = element.ownerDocument.defaultView;
+    if (ownerWindow === null) return;
+
+    const refreshMenuGeometry = () => {
+      setMenuState((current) => {
+        if (current === null) return null;
+        const blockElement = findElementByAttribute(
+          element,
+          null,
+          "data-geul-block-id",
+          current.blockId,
+        );
+        if (blockElement === null) return current;
+        const rect = blockElement.getBoundingClientRect();
+        const left = rect.left;
+        const top = rect.top + 28;
+        return current.left === left && current.top === top
+          ? current
+          : { ...current, left, top };
+      });
+    };
+
+    ownerWindow.addEventListener("scroll", refreshMenuGeometry, true);
+    ownerWindow.addEventListener("resize", refreshMenuGeometry);
+    return () => {
+      ownerWindow.removeEventListener("scroll", refreshMenuGeometry, true);
+      ownerWindow.removeEventListener("resize", refreshMenuGeometry);
+    };
+  }, [element]);
 
   const hoverElement =
     hoverBlockId === null || element === null
