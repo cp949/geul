@@ -15,10 +15,14 @@
  */
 import type { InlineContentItem, ParagraphBlock } from "@cp949/geul-model";
 import { NodeSelection } from "@tiptap/pm/state";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { findBlockPosition } from "../src/block-position.js";
-import { createEditor, type UploadFile } from "../src/index.js";
+import {
+  createEditor,
+  type MediaBlockKind,
+  type UploadFile,
+} from "../src/index.js";
 import {
   dropEntries,
   dropFiles,
@@ -667,5 +671,107 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     // 항목별 독립 처리(roadmap.md 전체 포함 범위) — 각자 다른 File에서
     // 만든 서로 다른 Blob URL이라 값이 같으면 안 된다.
     expect(firstUrl).not.toBe(secondUrl);
+  });
+});
+
+/** mountedWithUploadEnabled에 enabledBlockTypes deny를 얹은 변형. */
+const mountedWithDeniedKinds = (
+  initialDocument: ReturnType<typeof documentOf>,
+  deniedTypes: readonly MediaBlockKind[],
+) => {
+  const editor = createEditor({
+    initialDocument,
+    createId: sequentialIds("id"),
+    uploadFile: noopUploadFile,
+    enabledBlockTypes: { mode: "deny", types: deniedTypes },
+  });
+  return { editor, ...mountTiptapEditor(editor) };
+};
+
+// 그릴링 2026-09-14 발견 — enabledBlockTypes(RD-002-DELTA-12)를 이 확장이
+// 전혀 조회하지 않아, deny한 kind의 파일을 drop/paste하면
+// insertMediaAtTarget이 "createProductionEditor가 4종 등록을 보장한다"는
+// (enabledBlockTypes 도입으로 깨진) 전제 위에서 TypeError를 던졌다. HTML
+// 붙여넣기가 비활성 타입을 조용히 무시하는 기존 정책(enabled-block-
+// types.test.ts characterization)과 같은 선상에서, 파일 drop/paste도
+// 비활성 kind만 조용히 걸러야 한다 — 나머지 활성 kind 파일은 영향받지
+// 않아야 한다(아래 "뒤섞인" 테스트).
+describe("enabledBlockTypes로 비활성화된 kind(RD-002-DELTA-12 상호작용)", () => {
+  it("video가 deny면 video 파일 paste는 삽입되지 않고 크래시하지 않는다", () => {
+    const { editor, editable, tiptap } = mountedWithDeniedKinds(
+      documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      ["video"],
+    );
+    editable.focus();
+    placeCaretInBlock(tiptap, "p-1");
+
+    // 필터링으로 files가 빈 배열이 되면 handlePaste가 false를 반환한다 —
+    // ProseMirror는 이를 "아무도 처리 안 함"으로 보고 native paste
+    // capture 폴백(prosemirror-view capturePaste, 실제 브라우저에서도
+    // 동일하게 일어나는 정상 동작)을 50ms 뒤로 예약한다. 숨은 target에는
+    // 텍스트가 들어오지 않아 결국 no-op이지만, 이 타이머를 테스트 안에서
+    // 직접 흘려보내지 않으면 jsdom teardown 이후 fire돼
+    // "document is not defined"로 샌다 — 실제 결함이 아니라 이 테스트가
+    // 만든 타이밍이므로 fake timer로 결정론적으로 흡수한다.
+    vi.useFakeTimers();
+    try {
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(editable, [fileOf("a.mp4", "video/mp4")]);
+        vi.runAllTimers();
+
+        expect(editor.getDocument().blocks).toEqual([
+          paragraphBlock("p-1", "hello"),
+          tailParagraphBlock,
+        ]);
+        expect(errors).toEqual([]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("video가 deny여도 뒤섞인 image 파일은 정상 삽입된다(비활성 kind만 건너뛴다)", () => {
+    const { editor, editable, tiptap } = mountedWithDeniedKinds(
+      documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      ["video"],
+    );
+    editable.focus();
+    placeCaretInBlock(tiptap, "p-1");
+
+    withUnhandledErrorTracking((errors) => {
+      pasteFiles(editable, [
+        fileOf("a.mp4", "video/mp4"),
+        fileOf("b.png", "image/png"),
+      ]);
+
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        mediaBlock("image", "id-1"),
+        tailParagraphBlock,
+      ]);
+      expect(errors).toEqual([]);
+    });
+  });
+
+  it("video가 deny면 video 파일 drop도 삽입되지 않고 크래시하지 않는다", () => {
+    const { editor, editable, tiptap } = mountedWithDeniedKinds(
+      documentOf(paragraphBlock("p-1", "hello"), tailParagraphBlock),
+      ["video"],
+    );
+    editable.focus();
+    stubDropGeometry(tiptap, "p-1", { top: 100, height: 40 });
+
+    withUnhandledErrorTracking((errors) => {
+      dropFiles(editable, [fileOf("a.mp4", "video/mp4")], {
+        clientX: 0,
+        clientY: 130,
+      });
+
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ]);
+      expect(errors).toEqual([]);
+    });
   });
 });

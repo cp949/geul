@@ -358,8 +358,9 @@ export interface EditorController {
       options?: { clearAfterBlockText?: boolean },
     ): Result<{ blockId: string }, EditorError>;
     // spec §4.4, RD-002-DELTA-11 — 등록되지 않은 type은
-    // CUSTOM_BLOCK_TYPE_NOT_REGISTERED로 거절한다(insertMediaBlock의 스키마
-    // 부재 throw와 달리 이건 소비자가 실제로 만날 수 있는 오류).
+    // CUSTOM_BLOCK_TYPE_NOT_REGISTERED로 거절한다(insertMediaBlock의
+    // EDITOR_FEATURE_UNAVAILABLE과 같은 층위 — 둘 다 소비자가 실제로 만날
+    // 수 있는 오류다, media-commands.ts 참고).
     insertCustomBlock(
       afterBlockId: string,
       type: string,

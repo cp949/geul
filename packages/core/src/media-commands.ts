@@ -41,7 +41,12 @@ import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 
 export type InsertMediaBlockError =
   | { code: "BLOCK_NOT_FOUND"; blockId: string }
-  | { code: "TRANSACTION_REJECTED" };
+  | { code: "TRANSACTION_REJECTED" }
+  // enabledBlockTypes(CreateEditorOptions, model-to-tiptap.ts)로 kind가
+  // deny되면 실제로 도달한다(그릴링 2026-09-14) — SlashMenu "/video" 클릭,
+  // EditorController.insertMediaBlock 직접 호출 둘 다 이 경로를 탄다.
+  // 문서 로드 거절(model-to-tiptap.ts)과 같은 코드를 재사용한다.
+  | { code: "EDITOR_FEATURE_UNAVAILABLE"; message: string };
 
 const blockNotFound = (
   blockId: string,
@@ -67,13 +72,18 @@ export const insertMediaBlock = (
   },
 ): Result<{ blockId: string }, InsertMediaBlockError> => {
   const mediaType = editor.schema.nodes[kind];
-  // createTiptapEditor(editor-controller.ts)가 4종 확장 등록을 보장하므로
-  // 이 부재는 도달 불가 방어선이다 — 명령 결과로 위장하지 않고 던진다
-  // (insertDivider와 동일 근거).
+  // enabledBlockTypes로 kind가 deny되면 스키마에 이 노드가 없다 — 도달
+  // 가능한 경로다(위 InsertMediaBlockError 주석). 문서 로드 거절
+  // (model-to-tiptap.ts findDisabledBlock)과 동일한 EDITOR_FEATURE_
+  // UNAVAILABLE 코드로 명령 결과 거절한다.
   if (mediaType === undefined) {
-    throw new TypeError(
-      `${kind} 노드 타입이 스키마에 없다 — createTiptapEditor가 확장 등록을 보장한다`,
-    );
+    return {
+      ok: false,
+      error: {
+        code: "EDITOR_FEATURE_UNAVAILABLE",
+        message: `Media type "${kind}" is disabled via CreateEditorOptions.enabledBlockTypes`,
+      },
+    };
   }
 
   const afterPosition = findBlockPosition(editor.state.doc, afterBlockId);

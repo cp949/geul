@@ -78,6 +78,16 @@ const isEmptyParagraphContainer = (container: ProseMirrorNode): boolean => {
   );
 };
 
+// enabledBlockTypes(CreateEditorOptions, model-to-tiptap.ts)로 kind가
+// deny되면 스키마에 이 노드가 없다 — 그릴링 2026-09-14 발견. HTML
+// 붙여넣기가 비활성 타입을 조용히 무시하는 기존 정책(enabled-block-
+// types.test.ts characterization)과 같은 선상에서, handlePaste·handleDrop이
+// 파일 목록을 처리하기 전에 이 함수로 미리 걸러 "존재하지 않는 파일"처럼
+// 조용히 무시한다 — insertMediaAtTarget/insertMediaBlockCommand에 도달할
+// 때는 이미 항상 스키마에 있는 kind만 남아 있어야 한다.
+const isMediaKindAvailable = (editor: Editor, file: File): boolean =>
+  editor.schema.nodes[detectMediaBlockKind(file)] !== undefined;
+
 // media 노드를 target 위치에 넣는다 — "insert"면 raw position에 그대로
 // 끼우고(table 뒤·blockContainer 앞/뒤 모두 이 한 분기로 표현된다), "replace"면
 // 대상 range(빈 paragraph 컨테이너)를 지우고 그 자리에 넣는다. insertMediaBlock
@@ -102,8 +112,12 @@ const insertMediaAtTarget = (
 ): InsertOutcome => {
   const mediaType = editor.schema.nodes[kind];
   if (mediaType === undefined) {
+    // enabledBlockTypes(그릴링 2026-09-14)로 kind가 deny되면 이 부재가
+    // 실제로 일어난다 — 호출부(handlePaste/handleDrop)가 isMediaKindAvailable로
+    // 파일 목록을 먼저 걸러 이 지점에 도달하지 않게 한다. 그 가드가
+    // 깨졌다는 뜻이라 명령 결과로 위장하지 않고 던진다.
     throw new TypeError(
-      `${kind} 노드 타입이 스키마에 없다 — createProductionEditor가 확장 등록을 보장한다`,
+      `${kind} 노드 타입이 스키마에 없다 — 호출부가 isMediaKindAvailable로 미리 걸렀어야 한다`,
     );
   }
   const blockId = createId();
@@ -300,7 +314,12 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
           handlePaste: (_view, event) => {
             const clipboardData = event.clipboardData;
             if (clipboardData === null) return false;
-            const files = Array.from(clipboardData.files);
+            // enabledBlockTypes로 deny된 kind는 존재하지 않는 파일처럼
+            // 조용히 걸러낸다(isMediaKindAvailable 주석) — 나머지 활성
+            // kind 파일은 정상 처리된다.
+            const files = Array.from(clipboardData.files).filter((file) =>
+              isMediaKindAvailable(editor, file),
+            );
             if (files.length === 0) return false;
 
             deleteNonEmptySelection(editor);
@@ -345,9 +364,12 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
 
             const dataTransfer = event.dataTransfer;
             if (dataTransfer === null) return false;
+            // enabledBlockTypes로 deny된 kind는 존재하지 않는 파일처럼
+            // 조용히 걸러낸다(isMediaKindAvailable 주석) — 나머지 활성
+            // kind 파일은 정상 처리된다.
             const files = filterUploadableFiles(
               collectDropEntries(dataTransfer),
-            );
+            ).filter((file) => isMediaKindAvailable(editor, file));
             if (files.length === 0) return false;
 
             // D7은 paste 전용이다 — drop 대상은 좌표가 정하므로 현재

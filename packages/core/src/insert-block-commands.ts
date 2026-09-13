@@ -86,8 +86,11 @@ export const createInsertBlockCommands = (session: ProductionEditorSession) => {
 
   // insertDivider 래퍼와 동일 구조(media-commands.ts::insertMediaBlock의
   // Result를 session.runDocumentCommand의 boolean 위에서 꺼낸다) — kind만
-  // 추가로 그대로 전달한다. 오류가 BLOCK_NOT_FOUND·TRANSACTION_REJECTED
-  // 둘뿐인 것도 divider와 같다(InsertMediaBlockError).
+  // 추가로 그대로 전달한다. 오류가 BLOCK_NOT_FOUND·TRANSACTION_REJECTED·
+  // EDITOR_FEATURE_UNAVAILABLE 셋이라 divider(둘뿐)와 다르다 — 그릴링
+  // 2026-09-14, enabledBlockTypes로 kind가 deny된 경우가 실제로
+  // 도달한다. EDITOR_FEATURE_UNAVAILABLE만 message를 그대로 통과시킨다
+  // (captured에 code만이 아니라 error 전체를 담아야 하는 이유).
   const insertMediaBlock = (
     afterBlockId: string,
     kind: MediaBlockKind,
@@ -95,9 +98,9 @@ export const createInsertBlockCommands = (session: ProductionEditorSession) => {
   ): Result<{ blockId: string }, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("insertMediaBlock");
     const captured: {
-      code: InsertMediaBlockError["code"] | null;
+      error: InsertMediaBlockError | null;
       blockId: string | null;
-    } = { code: null, blockId: null };
+    } = { error: null, blockId: null };
 
     const result = session.runDocumentCommand(
       "insertMediaBlock",
@@ -111,7 +114,7 @@ export const createInsertBlockCommands = (session: ProductionEditorSession) => {
           options,
         );
         if (!outcome.ok) {
-          captured.code = outcome.error.code;
+          captured.error = outcome.error;
           return false;
         }
         captured.blockId = outcome.value.blockId;
@@ -119,13 +122,18 @@ export const createInsertBlockCommands = (session: ProductionEditorSession) => {
       },
     );
 
-    if (captured.code !== null) {
-      return captured.code === "BLOCK_NOT_FOUND"
-        ? {
-            ok: false,
-            error: { code: "BLOCK_NOT_FOUND", blockId: afterBlockId },
-          }
-        : { ok: false, error: { code: "TRANSACTION_REJECTED" } };
+    if (captured.error !== null) {
+      const error = captured.error;
+      if (error.code === "BLOCK_NOT_FOUND") {
+        return {
+          ok: false,
+          error: { code: "BLOCK_NOT_FOUND", blockId: afterBlockId },
+        };
+      }
+      if (error.code === "EDITOR_FEATURE_UNAVAILABLE") {
+        return { ok: false, error };
+      }
+      return { ok: false, error: { code: "TRANSACTION_REJECTED" } };
     }
     if (!result.ok) return result;
     if (captured.blockId === null) {

@@ -214,6 +214,53 @@ describe("insertMediaBlock(삽입 전용, G-EDT-001)", () => {
     expect(changes).toEqual([]);
     expect(editor.commands.undo()).toEqual(notApplicable("undo"));
   });
+
+  // 그릴링 2026-09-14 발견 — enabledBlockTypes(RD-002-DELTA-12)로 kind를
+  // deny하면 스키마에 해당 노드가 없다. 기존 코드는 이 부재를 "도달
+  // 불가 방어선"으로 보고 TypeError를 던졌는데, enabledBlockTypes가 그
+  // 전제를 깬다 — SlashMenu "/video" 클릭이나 이 명령 직접 호출로 실제
+  // 도달 가능해져 크래시로 이어졌다. 문서 로드 거절(model-to-tiptap.ts)과
+  // 같은 EDITOR_FEATURE_UNAVAILABLE Result로 거절해야 한다. enabled-block-
+  // types.test.ts는 allow/deny 자체의 스키마·문서 로드 상호작용을
+  // 소유하고, 이 테스트는 insertMediaBlock 명령 고유의 거절 계약만 본다.
+  it("enabledBlockTypes로 kind가 비활성화되면 EDITOR_FEATURE_UNAVAILABLE이고 문서·selection이 무변경이다(크래시 아님)", () => {
+    const editor = createEditor({
+      initialDocument: twoBlocks,
+      createId: sequentialIds("id"),
+      enabledBlockTypes: { mode: "deny", types: ["video", "file"] },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    const before = editorState(editor, tiptap);
+
+    expect(editor.commands.insertMediaBlock("block-1", "video")).toEqual({
+      ok: false,
+      error: {
+        code: "EDITOR_FEATURE_UNAVAILABLE",
+        message: expect.stringContaining("video"),
+      },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  it("video·file을 deny해도 image는 그대로 정상 삽입된다(kind별 독립 제어)", () => {
+    const editor = createEditor({
+      initialDocument: twoBlocks,
+      createId: sequentialIds("id"),
+      enabledBlockTypes: { mode: "deny", types: ["video", "file"] },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+
+    expect(editor.commands.insertMediaBlock("block-1", "image")).toEqual(
+      inserted("id-1"),
+    );
+    expect(editor.getDocument().blocks).toEqual([
+      firstParagraphBlock,
+      mediaBlock("image", "id-1"),
+      secondParagraphBlock,
+    ]);
+    expectMediaBlockNodeSelection(tiptap, "id-1", "image");
+  });
 });
 
 describe("setMediaBlockUrl", () => {
