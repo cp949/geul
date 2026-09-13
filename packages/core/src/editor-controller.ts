@@ -316,6 +316,9 @@ export const createEditor = (
     getDictionary() {
       return session.getDictionary();
     },
+    isBlockTypeEnabled(type) {
+      return session.isBlockTypeEnabled(type);
+    },
     replaceDocument(next) {
       return session.replaceDocument(next);
     },

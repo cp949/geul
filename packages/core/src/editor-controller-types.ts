@@ -213,6 +213,11 @@ export interface EditorController {
   // "## 결정" — 별도 React Context를 두지 않는 이유). 미지정으로
   // 생성했으면 `DEFAULT_DICTIONARY`(en)를 반환한다.
   getDictionary(): Dictionary;
+  // spec §4.4(EXT-004), RD-001-DELTA-01(Issue #189) — construction-time
+  // `enabledBlockTypes` readback(`isUploadEnabled()`/`getDictionary()`와
+  // 동일 자리). 옵션 미지정이면 모든 타입에 대해 true(회귀 없음). react
+  // 소비처(SlashMenu 등)가 비활성 타입 UI를 숨기는 유일한 판정 지점이다.
+  isBlockTypeEnabled(type: Block["type"]): boolean;
   replaceDocument(next: unknown): Result<void, EditorError>;
   // spec §3.4(DOC-013), RD-005-DELTA-01 — `false`는 ProseMirror
   // `editable` prop을 통해 사용자 DOM 입력(타이핑·클릭 편집)만

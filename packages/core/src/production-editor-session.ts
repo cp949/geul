@@ -29,6 +29,7 @@ import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import {
   type EnabledBlockTypes,
+  isBlockTypeEnabled,
   modelToTiptap,
   type TiptapJsonNode,
 } from "./model-to-tiptap.js";
@@ -401,6 +402,15 @@ export class ProductionEditorSession {
   // 불변이라(재설정 API 없음) 매 호출마다 다시 읽어도 항상 같은 값이다.
   getDictionary(): Dictionary {
     return this.options.dictionary ?? DEFAULT_DICTIONARY;
+  }
+
+  // spec §4.4(EXT-004), RD-001-DELTA-01(Issue #189) — construction-time
+  // enabledBlockTypes readback, getDictionary()와 동일 자리·근거.
+  // model-to-tiptap.ts가 정의한 동명 순수 함수(모듈 스코프 import, 이
+  // 메서드와는 별개 바인딩이다)를 그대로 위임 호출해 판정 로직을
+  // 중복하지 않는다.
+  isBlockTypeEnabled(type: Block["type"]): boolean {
+    return isBlockTypeEnabled(type, this.options.enabledBlockTypes);
   }
 
   getMediaUploadState(blockId: string): MediaUploadState | null {

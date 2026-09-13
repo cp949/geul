@@ -133,3 +133,43 @@ describe("enabledBlockTypes(RD-002-DELTA-12)", () => {
     });
   });
 });
+
+/**
+ * `isBlockTypeEnabled(type)`(spec §4.4 EXT-004, RD-001-DELTA-01) —
+ * `enabledBlockTypes` 생성 옵션을 읽기 전용으로 되비추는 공개 API(
+ * `isUploadEnabled()`/`getDictionary()`와 동일 자리). Issue #189 — react
+ * SlashMenu 등 소비처가 비활성 타입 UI를 숨기는 유일한 판정 지점이다.
+ */
+describe("isBlockTypeEnabled(RD-001-DELTA-01)", () => {
+  it("media 타입(image)이 deny 목록에 있으면 false를 반환한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      enabledBlockTypes: { mode: "deny", types: ["image"] },
+    });
+    expect(editor.isBlockTypeEnabled("image")).toBe(false);
+  });
+
+  it("media 타입(image)이 deny 목록에 없으면 true를 반환한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      enabledBlockTypes: { mode: "deny", types: ["video"] },
+    });
+    expect(editor.isBlockTypeEnabled("image")).toBe(true);
+  });
+
+  it("non-media 타입(heading)이 deny 목록에 있으면 false를 반환한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      enabledBlockTypes: { mode: "deny", types: ["heading"] },
+    });
+    expect(editor.isBlockTypeEnabled("heading")).toBe(false);
+  });
+
+  it("enabledBlockTypes 옵션이 없으면 모든 타입에 true를 반환한다", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+    });
+    expect(editor.isBlockTypeEnabled("heading")).toBe(true);
+    expect(editor.isBlockTypeEnabled("image")).toBe(true);
+  });
+});

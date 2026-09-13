@@ -212,6 +212,8 @@ enabledBlockTypes?: { mode: "allow" | "deny"; types: Block["type"][] };
 
 등록된 타입마다 PM 스키마에 atom 노드 1개(Divider/Table형 — 비포장 `group: "block"` 직접 멤버, `blockId` 자체 소유, 참고: `packages/core/src/table-extension.ts`의 기존 패턴)를 `createEditor(options)` 호출 시점에 조건부로 추가한다 — PM 스키마는 여전히 에디터 생성 시점에 정적으로 결정되고, "마운트 이후 동적 스키마 변경"은 시도하지 않는다.
 
+**`isBlockTypeEnabled(type)` — 판정 조회 API(Issue #189, RD-001-DELTA-01).** `enabledBlockTypes`는 PM 스키마 구성에만 쓰이고 그 판정 결과를 읽는 공개 API가 없었다 — `EditorController`에 `isBlockTypeEnabled(type: Block["type"]): boolean`을 추가해 `isUploadEnabled()`/`getDictionary()`와 동일하게 construction-time 옵션을 읽기 전용으로 되비춘다. 옵션 미지정이면 모든 타입에 대해 `true`(회귀 없음). react SlashMenu(`packages/react/src/slash-menu.tsx`)가 이 API로 비활성 타입 항목을 필터링해 숨긴다(15절의 "Slash 메뉴 기본 항목 제거·전체 교체"와는 다른 주제다 — 그쪽은 소비자가 항목 자체를 커스터마이즈하는 후속 기능이고, 이 계약은 생성 시점 `enabledBlockTypes`를 기존 기본 항목 목록에 그대로 반영하는 것뿐이다).
+
 ### 4.5 HTML/GFM 손실 정책
 
 `io`의 `exportHtml`/`exportMarkdown`은 등록된 커스텀 타입을 모른다(패키지 경계상 `core`에 의존하지 않는다) — 대신 두 함수 모두 선택적 파라미터로 렌더러를 직접 받는다(`io`는 여전히 순수 함수, `core`의 registry를 몰라도 됨):
@@ -377,7 +379,7 @@ Next.js 공식 패턴(`"use client"` + `next/dynamic({ssr:false})`, 2026-09-06 B
 
 - 커스텀 블록/인라인 콘텐츠의 자식 중첩과 완전한 텍스트-급 편집 UX.
 - `Components` context 계층(프리미티브 단위 UI 교체).
-- Slash 메뉴 기본 항목 제거·전체 교체.
+- Slash 메뉴 기본 항목 제거·전체 교체(소비자 커스터마이즈 — `enabledBlockTypes` 기반 항목 숨김은 4.4의 `isBlockTypeEnabled` 계약으로 이미 다룬다).
 - 번들 dark theme 팔레트.
 - 20개 비영어·비한국어 로케일 번역.
 - 블록 드래그 재정렬의 완전한 터치 UX 재설계(hover 게이팅 대체).
