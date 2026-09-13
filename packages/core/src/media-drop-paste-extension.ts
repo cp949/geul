@@ -330,6 +330,19 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
             return true;
           },
           handleDrop: (view, event) => {
+            // 버그: 문서 내부 media 블록(<img>/파일 <a>)을 그립이 아니라
+            // 콘텐츠 자체로 직접 드래그하면 Chromium 계열 브라우저가
+            // dataTransfer.files에 그 이미지를 File로 채워 넣는다(웹페이지
+            // 이미지를 끌어 저장하는 기능과 같은 메커니즘) — 이 File 존재만
+            // 보고 "OS에서 새 파일이 왔다"고 오판해 새 blockId로 media
+            // 블록을 삽입만 하면(원본 삭제 없음) 이동이 복제가 된다.
+            // view.dragging은 ProseMirror가 "에디터 콘텐츠가 드래그
+            // 중"(dragstart가 이 view 안에서 시작된 내부 드래그)일 때만
+            // 채우는 공식 필드라(prosemirror-view EditorView.dragging) 이
+            // 값이 있으면 내부 이동으로 보고 PM 기본 drop 처리(같은
+            // 트랜잭션에서 원본 delete + 대상 insert)에 넘긴다.
+            if (view.dragging) return false;
+
             const dataTransfer = event.dataTransfer;
             if (dataTransfer === null) return false;
             const files = filterUploadableFiles(

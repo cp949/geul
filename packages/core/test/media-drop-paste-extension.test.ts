@@ -14,6 +14,7 @@
  * DELTA-02가 뒤집었다.
  */
 import type { InlineContentItem, ParagraphBlock } from "@cp949/geul-model";
+import { NodeSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
 import { findBlockPosition } from "../src/block-position.js";
@@ -424,6 +425,68 @@ describe("D4 — 우선순위(파일이 표·HTML보다 먼저)", () => {
       expect(blocks).toEqual([
         paragraphBlock("p-1", "hello"),
         mediaBlock("image", "id-1"),
+        tailParagraphBlock,
+      ]);
+      expect(errors).toEqual([]);
+    });
+  });
+});
+
+// 버그 재현 — image 블록을 콘텐츠 자체(그립이 아니라 <img>)로 잡고 드래그해
+// 아래로 옮기면 이동이 아니라 복제가 됐다. 원인: Chromium 계열 브라우저는
+// 문서 내부 <img>(atom media 블록, RD-002 handleDrop 재구현 함정 문서 참고)
+// 를 드래그하면 dataTransfer.files에 그 이미지를 File로 채워 넣는다(웹페이지
+// 이미지를 끌어 저장하는 기능과 같은 메커니즘) — handleDrop은 그 File
+// 존재만 보고 "OS에서 새 파일이 왔다"고 오판해 새 blockId로 media 블록을
+// insert만 하고(원본 삭제 없음) preventDefault로 PM 기본 처리(이동)까지
+// 막아버렸다. view.dragging은 ProseMirror가 "에디터 콘텐츠가 드래그
+// 중"(즉 dragstart가 이 view 안에서 시작된 내부 드래그)일 때만 채우는
+// 공식 필드라(prosemirror-view EditorView.dragging 문서) 내부 드래그와
+// 외부 OS 드롭을 구분하는 신호로 쓴다.
+describe("내부 media 드래그(이동) vs 외부 OS 파일 드롭(신규 삽입) 구분", () => {
+  it("media 블록이 이미 드래그 중(view.dragging 존재)인 상태의 drop은 새 블록을 만들지 않고 PM 기본 처리(delete+insert 이동)에 맡긴다", () => {
+    const { editor, editable, tiptap } = mountedWithUploadEnabled(
+      documentOf(
+        mediaBlock("image", "img-1"),
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
+    );
+    editable.focus();
+    const sourcePos = findBlockPosition(tiptap.state.doc, "img-1");
+    if (sourcePos === null) throw new Error("fixture 준비 실패");
+    const draggedNode = NodeSelection.create(tiptap.state.doc, sourcePos);
+    const p1Pos = findBlockPosition(tiptap.state.doc, "p-1");
+    const p1Node = p1Pos === null ? null : tiptap.state.doc.nodeAt(p1Pos);
+    if (p1Pos === null || p1Node === null) throw new Error("fixture 준비 실패");
+    // 우리 확장의 F2 half-rect 판정(resolveDropTarget)은 이 경로에서 아예
+    // 호출되지 않는다 — 아래 view.dragging 주입 이후에는 PM 자체 기본 drop
+    // 처리(handleDrop 내부 dropPoint)가 문서 좌표만으로 삽입 지점을 정하고
+    // DOM rect·clientY는 보지 않는다. p-1 바로 뒤 경계를 가리키도록
+    // posAtCoords를 직접 주입한다(jsdom이 실제 레이아웃을 계산 못 하는 F2
+    // 좌표 테스트들과 같은 이유로 stubDropGeometry가 하는 것과 동형).
+    tiptap.view.posAtCoords = () => ({
+      pos: p1Pos + p1Node.nodeSize,
+      inside: -1,
+    });
+    // 실제 브라우저의 dragstart(handlers.dragstart)가 채우는 view.dragging을
+    // 그대로 흉내낸다 — jsdom은 네이티브 HTML5 drag 파이프라인 전체를
+    // 재현하지 못해 그 결과 상태만 직접 주입한다.
+    (
+      tiptap.view as unknown as {
+        dragging: { slice: unknown; move: boolean; node: unknown } | null;
+      }
+    ).dragging = { slice: draggedNode.content(), move: true, node: draggedNode };
+
+    withUnhandledErrorTracking((errors) => {
+      dropFiles(editable, [fileOf("photo.png", "image/png")], {
+        clientX: 0,
+        clientY: 0,
+      });
+
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        mediaBlock("image", "img-1"),
         tailParagraphBlock,
       ]);
       expect(errors).toEqual([]);
