@@ -103,6 +103,37 @@ test("선택 텍스트의 취소선과 인라인 코드를 토글한다", async 
   ).toHaveAttribute("aria-pressed", "true");
 });
 
+// 사용자 스크린샷 지적 — 편집기 인라인 code가 미리보기(`.geul-preview
+// :not(pre) > code`, packages/io/src/preview.css)와 달리 배경·모노스페이스
+// 없이 브라우저 기본 렌더로 나왔다. StarterKit 기본 Code mark는
+// HTMLAttributes를 비워 렌더하고(@tiptap/extension-code) _editor.scss엔
+// `[data-geul-code-block]`(코드블록) 규칙만 있어 인라인 code는 대응 규칙이
+// 없었다.
+test("인라인 코드는 미리보기와 같은 배경·모노스페이스 스타일로 렌더된다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+
+  await page.getByRole("button", { name: "Inline code" }).click();
+  const code = editable.locator("code");
+  await expect(code).toHaveText("Hello R1");
+
+  const style = await code.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return {
+      backgroundColor: computed.backgroundColor,
+      fontFamily: computed.fontFamily,
+      paddingLeft: computed.paddingLeft,
+    };
+  });
+  expect(style.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(style.fontFamily.toLowerCase()).toContain("mono");
+  expect(Number.parseFloat(style.paddingLeft)).toBeGreaterThan(0);
+});
+
 test("키보드만으로 굵게 버튼에 도달해 토글한다 @core", async ({ page }) => {
   const { bold, editable } = await focusBoldFromEditorWithShiftTab(page);
   await page.keyboard.press("Enter");

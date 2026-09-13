@@ -85,6 +85,22 @@
     white-space: pre;
   }
 
+  // 인라인 code mark(StarterKit 기본 Code, HTMLAttributes 커스터마이즈 없음
+  // — @tiptap/extension-code)는 지금까지 이 파일에 대응 규칙이 없어
+  // 브라우저 기본 렌더(배경 없음)로 나왔다 — 배경·패딩까지 넣는
+  // packages/io/src/preview.css `.geul-preview :not(pre) > code`와
+  // 어긋나 편집기·미리보기 화면이 갈렸다(사용자 스크린샷 지적). 같은
+  // `:not(pre) > code` selector로 codeBlock 안의 code(부모가 pre)는
+  // 제외해 위 규칙과 겹치지 않는다.
+  :not(pre) > code {
+    background: var(--geul-color-surface-muted, #f1f3f4);
+    border-radius: 3px;
+    padding: 0.1em 0.3em;
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+  }
+
   // 시각적으로는 얇은 구분선이지만, block-side-menu.tsx의 hover 위치 계산은
   // 이 블록 요소의 getBoundingClientRect()에 기대므로(pointermove 추적) 기본
   // 두께(1px 안팎)만으로는 포인터가 실제로 머무르기 어렵다. padding-block으로
