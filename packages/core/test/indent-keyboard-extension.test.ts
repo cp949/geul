@@ -381,6 +381,92 @@ describe("목록 Tab/Shift+Tab 원자성", () => {
   );
 });
 
+describe("여러 블록에 걸친 선택의 Tab/Shift+Tab", () => {
+  it("Tab은 selection이 걸친 연속 형제 범위 전체를 바로 앞 형제의 자식으로 순서대로 중첩한다", () => {
+    const first = listItemBlock("first", "bulletListItem", "첫줄");
+    const second = listItemBlock("second", "bulletListItem", "둘째줄");
+    const third = listItemBlock("third", "bulletListItem", "셋째줄");
+    const { editor, tiptap } = mounted(
+      documentOf(first, second, third, tailParagraphBlock),
+    );
+    const secondStart = findBlockContentPosition(tiptap, "second");
+    const thirdStart = findBlockContentPosition(tiptap, "third");
+    if (secondStart === null || thirdStart === null) {
+      throw new Error("fixture 준비 실패");
+    }
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(tiptap.state.doc, secondStart + 1, thirdStart + 1),
+      ),
+    );
+
+    const consumed = indentBlockShortcut(tiptap);
+
+    expect(consumed).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      listItemBlock("first", "bulletListItem", "첫줄", {
+        children: [second, third],
+      }),
+      tailParagraphBlock,
+    ]);
+  });
+
+  it("Shift+Tab은 selection이 걸친 연속 형제 범위 전체를 부모의 다음 형제로 순서대로 lift한다", () => {
+    const child1 = listItemBlock("child-1", "bulletListItem", "하나");
+    const child2 = listItemBlock("child-2", "bulletListItem", "둘");
+    const { editor, tiptap } = mounted(
+      documentOf(
+        listItemBlock("parent", "bulletListItem", "부모", {
+          children: [child1, child2],
+        }),
+        tailParagraphBlock,
+      ),
+    );
+    const child1Start = findBlockContentPosition(tiptap, "child-1");
+    const child2Start = findBlockContentPosition(tiptap, "child-2");
+    if (child1Start === null || child2Start === null) {
+      throw new Error("fixture 준비 실패");
+    }
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(tiptap.state.doc, child1Start + 1, child2Start + 1),
+      ),
+    );
+
+    const consumed = outdentBlockShortcut(tiptap);
+
+    expect(consumed).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      listItemBlock("parent", "bulletListItem", "부모"),
+      child1,
+      child2,
+      tailParagraphBlock,
+    ]);
+  });
+
+  it("범위가 같은 부모의 형제가 아니면 소비하지 않고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "one", [containerJson("c1", "child")]),
+        containerJson("p2", "two"),
+      ],
+    });
+    const c1Start = findBlockContentPosition(editor, "c1");
+    const p2Start = findBlockContentPosition(editor, "p2");
+    if (c1Start === null || p2Start === null) {
+      throw new Error("fixture 준비 실패");
+    }
+    editor.commands.setTextSelection({ from: c1Start, to: p2Start });
+    const before = editor.getJSON();
+
+    const consumed = indentBlockShortcut(editor);
+
+    expect(consumed).toBe(false);
+    expect(editor.getJSON()).toEqual(before);
+  });
+});
+
 describe("CodeBlock과 일반 블록 Tab 우선순위", () => {
   it("CodeBlock caret의 Tab은 일반 블록 중첩 대신 공백 2개를 한 transaction으로 삽입한다", () => {
     const { editor, tiptap, changes } = mounted(

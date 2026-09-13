@@ -16,8 +16,12 @@ import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import {
   getBlockNestingActionState,
+  getBlockRangeNestingActionState,
   indentBlockCommand,
+  indentBlockRangeCommand,
   outdentBlockCommand,
+  outdentBlockRangeCommand,
+  resolveBlockRangeInDoc,
 } from "../src/indent-commands.js";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
@@ -498,5 +502,310 @@ describe("outdentBlock", () => {
     // 직접 증명한다.
     const converted = tiptapToModel(doc, 0, sequentialIds("id"));
     expect(converted.ok).toBe(true);
+  });
+});
+
+describe("resolveBlockRangeInDoc", () => {
+  it("형제인 두 blockId 사이 범위를 항상 문서 순서로 반환한다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerJson("p1", "one"),
+        containerJson("p2", "two"),
+        containerJson("p3", "three"),
+        containerJson("p4", "four"),
+      ],
+    });
+
+    expect(resolveBlockRangeInDoc(editor.state.doc, "p2", "p3")).toEqual([
+      "p2",
+      "p3",
+    ]);
+    // 역방향으로 지정해도(뒤 blockId → 앞 blockId) 문서 순서로 나온다 —
+    // selection 방향과 무관하게 range를 확정해야 하기 때문이다.
+    expect(resolveBlockRangeInDoc(editor.state.doc, "p3", "p2")).toEqual([
+      "p2",
+      "p3",
+    ]);
+  });
+
+  it("부모가 다르면(중첩 레벨이 다르면) null이다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "one", [containerJson("c1", "child")]),
+        containerJson("p2", "two"),
+      ],
+    });
+
+    expect(resolveBlockRangeInDoc(editor.state.doc, "c1", "p2")).toBeNull();
+  });
+
+  it("존재하지 않는 blockId가 섞이면 null이다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+
+    expect(
+      resolveBlockRangeInDoc(editor.state.doc, "para-1", "no-such-block"),
+    ).toBeNull();
+  });
+});
+
+describe("getBlockRangeNestingActionState", () => {
+  it("범위 시작의 바로 앞 형제 유무·공유 부모 깊이로 canIndent/canOutdent를 판정한다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerJson("anchor", "anchor"),
+        containerJson("r1", "r1"),
+        containerJson("r2", "r2"),
+      ],
+    });
+
+    expect(
+      getBlockRangeNestingActionState(editor.state.doc, "r1", "r2"),
+    ).toEqual({ canIndent: true, canOutdent: false });
+  });
+
+  it("범위가 형제가 아니면 canIndent/canOutdent 모두 false다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "one", [containerJson("c1", "child")]),
+        containerJson("p2", "two"),
+      ],
+    });
+
+    expect(
+      getBlockRangeNestingActionState(editor.state.doc, "c1", "p2"),
+    ).toEqual({ canIndent: false, canOutdent: false });
+  });
+});
+
+describe("indentBlockRangeCommand", () => {
+  it("연속 형제 범위를 바로 앞 형제의 blockGroup에 순서대로 중첩한다 — 하위 트리 동반, undo 1회로 복원", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerJson("anchor", "anchor"),
+        containerJson("r1", "r1"),
+        containerWithGroupJson("r2", "r2", [containerJson("r2child", "child")]),
+        containerJson("r3", "r3"),
+        containerJson("after", "after"),
+      ],
+    });
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = indentBlockRangeCommand(editor, "r1", "r3");
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content).toHaveLength(2);
+    const anchor = childAt(doc, 0);
+    expect(blockIdOf(anchor)).toBe("anchor");
+    const group = childAt(anchor, 1);
+    expect(group.type).toBe("blockGroup");
+    expect(group.content).toHaveLength(3);
+    expect(blockIdOf(childAt(group, 0))).toBe("r1");
+    expect(blockIdOf(childAt(group, 1))).toBe("r2");
+    expect(blockIdOf(childAt(group, 2))).toBe("r3");
+    // r2 자신의 자식(r2child)이 하위 트리째 따라왔다.
+    const r2Group = childAt(childAt(group, 1), 1);
+    expect(blockIdOf(childAt(r2Group, 0))).toBe("r2child");
+    // 범위 밖 뒤 형제(after)는 그대로 top-level에 남는다.
+    expect(blockIdOf(childAt(doc, 1))).toBe("after");
+
+    editor.commands.undo();
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("범위 시작에 바로 앞 형제가 없으면(최상위 첫 블록) COMMAND_NOT_APPLICABLE, 문서 무변경", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerJson("p1", "one"),
+        containerJson("p2", "two"),
+        containerJson("p3", "three"),
+      ],
+    });
+    const before = editor.getJSON();
+
+    const result = indentBlockRangeCommand(editor, "p1", "p2");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "indentBlockRange" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+  });
+
+  it("범위가 같은 부모의 형제가 아니면 COMMAND_NOT_APPLICABLE, 문서 무변경", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "one", [containerJson("c1", "child")]),
+        containerJson("p2", "two"),
+      ],
+    });
+    const before = editor.getJSON();
+
+    const result = indentBlockRangeCommand(editor, "c1", "p2");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "indentBlockRange" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+  });
+
+  it("범위 내 한 블록만 깊이 상한을 넘어도 범위 전체를 거절한다, 문서 무변경", () => {
+    // r1(leaf)만 있으면 결과 깊이가 상한과 같아 통과하지만, 같은 범위의
+    // r2는 자식(r2child)이 있어 결과 깊이가 상한을 1 넘는다 — 범위 하나가
+    // 개별로는 통과해도 다른 하나가 거절하면 전체가 거절돼야 한다.
+    const chainLevels = MAX_NESTING_DEPTH - 2;
+    const doc = {
+      type: "doc",
+      content: [
+        buildDeepChainDoc(chainLevels, [
+          containerJson("anchor", "anchor"),
+          containerJson("r1", "r1"),
+          containerWithGroupJson("r2", "r2", [
+            containerJson("r2child", "child"),
+          ]),
+        ]),
+      ],
+    };
+    const editor = createTableFixtureEditor(doc);
+    const before = editor.getJSON();
+
+    const result = indentBlockRangeCommand(editor, "r1", "r2");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "indentBlockRange" },
+    });
+    expect(editor.getJSON()).toEqual(before);
+  });
+
+  it("비축약 역방향 선택의 anchor·head를 각자 이동한 블록 기준으로 복원한다", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerJson("anchor", "anchor"),
+        containerJson("r1", "one text"),
+        containerJson("r2", "two text"),
+      ],
+    });
+    const r1Position = findBlockPosition(editor.state.doc, "r1");
+    const r2Position = findBlockPosition(editor.state.doc, "r2");
+    if (r1Position === null || r2Position === null) {
+      throw new Error("fixture 준비 실패");
+    }
+    // head가 r1(앞 블록) 안, anchor가 r2(뒤 블록) 안 — 역방향 선택.
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, r2Position + 3, r1Position + 2),
+      ),
+    );
+    const beforeAnchorOffset = editor.state.selection.anchor - r2Position;
+    const beforeHeadOffset = editor.state.selection.head - r1Position;
+
+    const result = indentBlockRangeCommand(editor, "r1", "r2");
+
+    expect(result.ok).toBe(true);
+    const afterR1Position = findBlockPosition(editor.state.doc, "r1");
+    const afterR2Position = findBlockPosition(editor.state.doc, "r2");
+    if (afterR1Position === null || afterR2Position === null) {
+      throw new Error("이동한 블록 조회 실패");
+    }
+    expect(editor.state.selection.anchor - afterR2Position).toBe(
+      beforeAnchorOffset,
+    );
+    expect(editor.state.selection.head - afterR1Position).toBe(
+      beforeHeadOffset,
+    );
+    expect(editor.state.selection.anchor).toBeGreaterThan(
+      editor.state.selection.head,
+    );
+  });
+});
+
+describe("outdentBlockRangeCommand", () => {
+  it("연속 형제 범위를 부모의 다음 형제로 순서대로 lift한다 — 앞뒤 남은 형제는 원 부모에 남는다, undo 1회로 복원", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "parent", [
+          containerJson("c0", "zero"),
+          containerJson("c1", "one"),
+          containerJson("c2", "two"),
+          containerJson("c3", "three"),
+          containerJson("c4", "four"),
+        ]),
+      ],
+    });
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = outdentBlockRangeCommand(editor, "c1", "c3");
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content).toHaveLength(4);
+
+    const p1 = childAt(doc, 0);
+    expect(blockIdOf(p1)).toBe("p1");
+    const p1Group = childAt(p1, 1);
+    expect(p1Group.content).toHaveLength(2);
+    expect(blockIdOf(childAt(p1Group, 0))).toBe("c0");
+    expect(blockIdOf(childAt(p1Group, 1))).toBe("c4");
+
+    // 범위(c1,c2,c3)는 p1의 다음 형제로, 원래 순서 그대로 나온다.
+    expect(blockIdOf(childAt(doc, 1))).toBe("c1");
+    expect(blockIdOf(childAt(doc, 2))).toBe("c2");
+    expect(blockIdOf(childAt(doc, 3))).toBe("c3");
+
+    editor.commands.undo();
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("범위가 그룹 전체면 그룹 노드 자체를 제거한다(빈 blockGroup 금지)", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerWithGroupJson("p1", "parent", [
+          containerJson("c1", "one"),
+          containerJson("c2", "two"),
+        ]),
+      ],
+    });
+
+    const result = outdentBlockRangeCommand(editor, "c1", "c2");
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content).toHaveLength(3);
+    const p1 = childAt(doc, 0);
+    expect(p1.content).toHaveLength(1);
+    expect(blockIdOf(childAt(doc, 1))).toBe("c1");
+    expect(blockIdOf(childAt(doc, 2))).toBe("c2");
+  });
+
+  it("최상위(부모 없는) 범위는 COMMAND_NOT_APPLICABLE, 문서 무변경", () => {
+    const editor = createTableFixtureEditor({
+      type: "doc",
+      content: [
+        containerJson("p1", "one"),
+        containerJson("p2", "two"),
+        containerJson("p3", "three"),
+      ],
+    });
+    const before = editor.getJSON();
+
+    const result = outdentBlockRangeCommand(editor, "p1", "p2");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "outdentBlockRange" },
+    });
+    expect(editor.getJSON()).toEqual(before);
   });
 });

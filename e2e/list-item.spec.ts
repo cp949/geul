@@ -310,6 +310,44 @@ test("목록 Tab과 Shift+Tab은 순차 focus 이동을 억제하고 편집기 f
   await expect(second).toHaveAttribute("data-geul-list-marker", "8.");
 });
 
+test("여러 목록 항목에 걸친 선택의 Tab과 Shift+Tab은 범위 전체를 순서대로 중첩·복귀시킨다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await loadDocument(page, {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      { id: "first", type: "numberedListItem", content: [{ text: "하나" }] },
+      { id: "second", type: "numberedListItem", content: [{ text: "둘" }] },
+      { id: "third", type: "numberedListItem", content: [{ text: "셋" }] },
+      { id: "tail", type: "paragraph", content: [{ text: "꼬리" }] },
+    ],
+  });
+  const second = editable.locator('[data-geul-block-id="second"]');
+  const third = editable.locator('[data-geul-block-id="third"]');
+
+  // second 시작에 캐럿을 두고 third를 shift-click해 second~third에 걸친
+  // TextSelection을 만든다(마우스로 여러 줄을 드래그해 선택하는 것과 같은
+  // 결과).
+  await listContent(editable, "second").click();
+  await page.keyboard.press("Home");
+  await listContent(editable, "third").click({ modifiers: ["Shift"] });
+
+  expect(await pressAndReadConsumption(page, "Tab")).toBe(true);
+  await expect(editable).toBeFocused();
+  // second·third가 first의 자식으로 순서대로 중첩됐다 — 중첩 레벨의 번호는
+  // 1부터 다시 센다.
+  await expect(second).toHaveAttribute("data-geul-list-marker", "1.");
+  await expect(third).toHaveAttribute("data-geul-list-marker", "2.");
+
+  expect(await pressAndReadConsumption(page, "Shift+Tab")).toBe(true);
+  await expect(editable).toBeFocused();
+  // 최상위로 되돌아와 원래 순서와 번호를 회복한다.
+  await expect(second).toHaveAttribute("data-geul-list-marker", "2.");
+  await expect(third).toHaveAttribute("data-geul-list-marker", "3.");
+});
+
 for (const [marker, type, contentAttribute, renderedMarker] of [
   ["-", "bulletListItem", "data-geul-bullet-list-item", "•"],
   ["1.", "numberedListItem", "data-geul-numbered-list-item", "1."],

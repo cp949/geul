@@ -10,6 +10,7 @@ import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
+import { nearestBlockContainerId } from "./selection-query-helpers.js";
 
 // D2: 신규 EditorError 코드를 만들지 않는다 — 이 파일의 모든 실패는
 // BLOCK_NOT_FOUND 또는 COMMAND_NOT_APPLICABLE로만 수렴한다.
@@ -182,6 +183,50 @@ const placeSelectionInMovedBlock = (
   return tr.setSelection(TextSelection.near(resolved));
 };
 
+// indentBlockCommand·indentBlockRangeCommand가 공유하는 한 스텝 분량의 tr
+// 이어붙이기다 — 대상의 바로 앞 형제(previousSiblingId)의 blockGroup
+// 마지막 자식으로 대상(하위 트리째)을 옮긴다(blockGroup이 없으면 새로
+// 만든다). tr을 받아 이어붙인 새 tr을 돌려주므로 여러 스텝을 하나의
+// transaction·undo 단위로 누적할 수 있다(범위 indent가 이 성질에 기댄다).
+// mappedPrevious* 조회 실패(정상 경로에서는 도달하지 않는다 — 호출부가
+// 이미 previousSiblingId를 같은 tr.doc에서 확인했다)는 방어적으로 null.
+const appendIndentStep = (
+  editor: Editor,
+  tr: Transaction,
+  targetPosition: number,
+  targetNode: ProseMirrorNode,
+  previousSiblingId: string,
+): Transaction | null => {
+  const nextTr = tr.delete(
+    targetPosition,
+    targetPosition + targetNode.nodeSize,
+  );
+
+  const mappedPreviousPosition = findBlockPosition(
+    nextTr.doc,
+    previousSiblingId,
+  );
+  if (mappedPreviousPosition === null) return null;
+  const mappedPreviousNode = nextTr.doc.nodeAt(mappedPreviousPosition);
+  if (mappedPreviousNode === null) return null;
+
+  const firstChild = mappedPreviousNode.child(0);
+  const groupSlotStart = mappedPreviousPosition + 1 + firstChild.nodeSize;
+
+  if (mappedPreviousNode.childCount > 1) {
+    // 앞 형제에 이미 blockGroup이 있다 — 그 마지막 자식으로 끼운다.
+    const group = mappedPreviousNode.child(1);
+    const insertPosition = groupSlotStart + group.nodeSize - 1;
+    return nextTr.insert(insertPosition, targetNode);
+  }
+  // 앞 형제에 blockGroup이 없다 — 새로 만들어 두 번째 자식으로 붙인다.
+  const newGroupNode = editor.schema.nodes.blockGroup!.create(
+    null,
+    Fragment.from(targetNode),
+  );
+  return nextTr.insert(groupSlotStart, newGroupNode);
+};
+
 // 형제 → 자식(들여쓰기). 대상의 바로 앞 형제가 nestableBlockContent를 가진
 // blockContainer면 그 형제의 blockGroup 마지막 자식으로 대상(하위 트리째)을
 // 옮긴다 — blockGroup이 없으면 새로 만든다. 바로 앞 형제가 없거나(첫 자식),
@@ -215,41 +260,53 @@ export const indentBlockCommand = (
     targetNode,
   );
 
-  let tr = editor.state.tr.delete(
+  const tr = appendIndentStep(
+    editor,
+    editor.state.tr,
     targetPosition,
-    targetPosition + targetNode.nodeSize,
+    targetNode,
+    previousSiblingId,
   );
+  if (tr === null) return commandNotApplicable("indentBlock");
 
-  const mappedPreviousPosition = findBlockPosition(tr.doc, previousSiblingId);
-  if (mappedPreviousPosition === null) {
-    return commandNotApplicable("indentBlock");
-  }
-  const mappedPreviousNode = tr.doc.nodeAt(mappedPreviousPosition);
-  if (mappedPreviousNode === null) {
-    return commandNotApplicable("indentBlock");
-  }
-
-  const firstChild = mappedPreviousNode.child(0);
-  const groupSlotStart = mappedPreviousPosition + 1 + firstChild.nodeSize;
-
-  if (mappedPreviousNode.childCount > 1) {
-    // 앞 형제에 이미 blockGroup이 있다 — 그 마지막 자식으로 끼운다.
-    const group = mappedPreviousNode.child(1);
-    const insertPosition = groupSlotStart + group.nodeSize - 1;
-    tr = tr.insert(insertPosition, targetNode);
-  } else {
-    // 앞 형제에 blockGroup이 없다 — 새로 만들어 두 번째 자식으로 붙인다.
-    const newGroupNode = editor.schema.nodes.blockGroup!.create(
-      null,
-      Fragment.from(targetNode),
-    );
-    tr = tr.insert(groupSlotStart, newGroupNode);
-  }
-
-  tr = placeSelectionInMovedBlock(tr, blockId, selectionBookmark);
-
-  editor.view.dispatch(closeHistory(tr));
+  editor.view.dispatch(
+    closeHistory(placeSelectionInMovedBlock(tr, blockId, selectionBookmark)),
+  );
   return { ok: true, value: undefined };
+};
+
+// outdentBlockCommand·outdentBlockRangeCommand가 공유하는 한 스텝 분량의 tr
+// 이어붙이기다 — appendIndentStep의 outdent 대응. 대상을 부모 컨테이너의
+// 다음 형제로 lift하고, 그룹이 비면 그룹 노드 자체를 제거한다. 부모
+// blockId를 못 찾으면(정상 경로에서는 도달하지 않는다) 방어적으로 null.
+const appendOutdentStep = (
+  tr: Transaction,
+  targetPosition: number,
+  targetNode: ProseMirrorNode,
+): Transaction | null => {
+  const $target = tr.doc.resolve(targetPosition);
+  const groupDepth = $target.depth;
+  const groupNode = $target.node(groupDepth);
+  const parentContainer = $target.node(groupDepth - 1);
+  const parentBlockId = parentContainer.attrs.blockId;
+  if (typeof parentBlockId !== "string" || parentBlockId.length === 0) {
+    return null;
+  }
+
+  const nextTr =
+    groupNode.childCount === 1
+      ? // 대상이 그룹의 유일한 자식 — 대상만 지우면 "block+"를 위반하는 빈
+        // 그룹이 남는다. 그룹 노드 자체를 제거한다.
+        tr.delete($target.before(groupDepth), $target.after(groupDepth))
+      : tr.delete(targetPosition, targetPosition + targetNode.nodeSize);
+
+  const mappedParentPosition = findBlockPosition(nextTr.doc, parentBlockId);
+  if (mappedParentPosition === null) return null;
+  const mappedParentNode = nextTr.doc.nodeAt(mappedParentPosition);
+  if (mappedParentNode === null) return null;
+
+  const insertPosition = mappedParentPosition + mappedParentNode.nodeSize;
+  return nextTr.insert(insertPosition, targetNode);
 };
 
 // 자식 → 형제(내어쓰기). 대상의 부모 컨테이너가 없으면(최상위)
@@ -271,46 +328,254 @@ export const outdentBlockCommand = (
   const actionState = getBlockNestingActionState(doc, blockId);
   if (!actionState.canOutdent) return commandNotApplicable("outdentBlock");
 
-  const $target = doc.resolve(targetPosition);
   const selectionBookmark = captureTextSelection(
     editor,
     targetPosition,
     targetNode,
   );
 
-  const groupDepth = $target.depth;
-  const groupNode = $target.node(groupDepth);
-  const parentContainer = $target.node(groupDepth - 1);
-  const parentBlockId = parentContainer.attrs.blockId;
-  if (typeof parentBlockId !== "string" || parentBlockId.length === 0) {
-    return commandNotApplicable("outdentBlock");
+  const tr = appendOutdentStep(editor.state.tr, targetPosition, targetNode);
+  if (tr === null) return commandNotApplicable("outdentBlock");
+
+  editor.view.dispatch(
+    closeHistory(placeSelectionInMovedBlock(tr, blockId, selectionBookmark)),
+  );
+  return { ok: true, value: undefined };
+};
+
+// parent(blockGroup 또는 doc)의 직계 자식 중 blockId를 가진 것만 문서 순서
+// 그대로 모은다. divider·table처럼 blockContainer가 아닌 형제도 blockId를
+// 붙여 나란히 들어올 수 있어(D19) container 종류를 가리지 않는다.
+const collectSiblingIds = (parent: ProseMirrorNode): string[] => {
+  const ids: string[] = [];
+  parent.forEach((child) => {
+    const id = child.attrs.blockId;
+    if (typeof id === "string" && id.length > 0) ids.push(id);
+  });
+  return ids;
+};
+
+// fromBlockId·toBlockId가 같은 부모의 형제인지 doc에서 직접 확인하고, 그
+// 사이 범위(양끝 포함, 선택 방향과 무관하게 항상 문서 순서)의 blockId
+// 배열을 돌려준다. 부모가 다르면(다른 중첩 레벨 포함) null — model Block
+// 트리 기반인 resolveBlockSelectionRange(generic-block-tree-lookup.ts)의
+// PM doc 버전이다: Tab 라우팅은 session.document.blocks에 접근하지 않는
+// Editor 전용 경로라 그 함수를 재사용하지 않는다.
+export const resolveBlockRangeInDoc = (
+  doc: ProseMirrorNode,
+  fromBlockId: string,
+  toBlockId: string,
+): readonly string[] | null => {
+  const fromPosition = findBlockPosition(doc, fromBlockId);
+  const toPosition = findBlockPosition(doc, toBlockId);
+  if (fromPosition === null || toPosition === null) return null;
+
+  const fromParent = doc.resolve(fromPosition).parent;
+  const toParent = doc.resolve(toPosition).parent;
+  if (fromParent !== toParent) return null;
+
+  const siblingIds = collectSiblingIds(fromParent);
+  const startIndex = siblingIds.indexOf(fromBlockId);
+  const endIndex = siblingIds.indexOf(toBlockId);
+  if (startIndex === -1 || endIndex === -1) return null;
+
+  const [lo, hi] =
+    startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+  return siblingIds.slice(lo, hi + 1);
+};
+
+// getBlockNestingActionState의 범위 버전. indent는 범위 시작 블록의 판정과
+// 같은 조건(바로 앞 형제가 nestable)에 더해 범위 내 모든 블록이 들여쓰기
+// 후에도 MAX_NESTING_DEPTH를 넘지 않아야 한다(형제라 결과 깊이는 모두
+// 같지만 하위 트리 높이는 블록마다 달라 개별 확인이 필요하다). outdent는
+// 범위 내 블록이 전부 같은 부모의 형제이므로(resolveBlockRangeInDoc이 이미
+// 보장) 그 공유 깊이 하나만 확인하면 충분하다.
+export const getBlockRangeNestingActionState = (
+  doc: ProseMirrorNode,
+  fromBlockId: string,
+  toBlockId: string,
+): BlockNestingActionState => {
+  const rangeIds = resolveBlockRangeInDoc(doc, fromBlockId, toBlockId);
+  if (rangeIds === null || rangeIds.length === 0) {
+    return { canIndent: false, canOutdent: false };
   }
+  const firstId = rangeIds[0];
+  if (firstId === undefined) return { canIndent: false, canOutdent: false };
+  if (rangeIds.length === 1) return getBlockNestingActionState(doc, firstId);
+
+  const firstPosition = findBlockPosition(doc, firstId);
+  if (firstPosition === null) return { canIndent: false, canOutdent: false };
+  const $first = doc.resolve(firstPosition);
+
+  const previousSibling = $first.nodeBefore;
+  const previousSiblingNestable =
+    previousSibling !== null &&
+    isNestableBlockContainer(previousSibling) &&
+    typeof previousSibling.attrs.blockId === "string" &&
+    previousSibling.attrs.blockId.length > 0;
+
+  const resultDepth = modelDepthAt($first) + 1;
+  const canIndent =
+    previousSiblingNestable &&
+    rangeIds.every((blockId) => {
+      const position = findBlockPosition(doc, blockId);
+      if (position === null) return false;
+      const node = doc.nodeAt(position);
+      if (node === null) return false;
+      return resultDepth + subtreeHeight(node) <= MAX_NESTING_DEPTH;
+    });
+
+  return { canIndent, canOutdent: $first.depth > 0 };
+};
+
+type RangeSelectionBookmark = {
+  anchorBlockId: string;
+  anchorOffset: number;
+  headBlockId: string;
+  headOffset: number;
+};
+
+// captureTextSelection의 범위 버전 — anchor·head가 서로 다른 블록에 있을 수
+// 있어 각자 자기 블록 시작 기준 상대 오프셋으로 따로 담는다. collapsed
+// selection·NodeSelection은 기존 캐럿 배치 계약을 쓴다(null).
+const captureRangeTextSelection = (
+  editor: Editor,
+): RangeSelectionBookmark | null => {
+  const { selection } = editor.state;
+  if (!(selection instanceof TextSelection) || selection.empty) return null;
+
+  const anchorBlockId = nearestBlockContainerId(selection.$anchor);
+  const headBlockId = nearestBlockContainerId(selection.$head);
+  if (anchorBlockId === null || headBlockId === null) return null;
+
+  const anchorBlockPosition = findBlockPosition(
+    editor.state.doc,
+    anchorBlockId,
+  );
+  const headBlockPosition = findBlockPosition(editor.state.doc, headBlockId);
+  if (anchorBlockPosition === null || headBlockPosition === null) return null;
+
+  return {
+    anchorBlockId,
+    anchorOffset: selection.anchor - anchorBlockPosition,
+    headBlockId,
+    headOffset: selection.head - headBlockPosition,
+  };
+};
+
+// placeSelectionInMovedBlock의 범위 버전 — anchor·head를 각자의 블록으로
+// (이동 후 안정 ID로 재조회해) 독립적으로 복원한다. bookmark가 없으면 tr을
+// 그대로 돌려준다(호출부가 이미 캐럿을 원하는 자리에 둔 뒤다).
+const placeRangeSelection = (
+  tr: Transaction,
+  bookmark: RangeSelectionBookmark | null,
+): Transaction => {
+  if (bookmark === null) return tr;
+  const anchorPosition = findBlockPosition(tr.doc, bookmark.anchorBlockId);
+  const headPosition = findBlockPosition(tr.doc, bookmark.headBlockId);
+  if (anchorPosition === null || headPosition === null) return tr;
+  return tr.setSelection(
+    TextSelection.create(
+      tr.doc,
+      anchorPosition + bookmark.anchorOffset,
+      headPosition + bookmark.headOffset,
+    ),
+  );
+};
+
+// 범위 들여쓰기 — 같은 부모의 연속 형제 범위를 하나의 transaction·undo
+// 1회로 들여쓴다. 범위를 앞→뒤 순서로 반복 적용해야 한다: 첫 스텝이 대상을
+// 바로 앞 형제의 자식으로 옮기면, 다음 스텝의 "바로 앞 형제"는 doc
+// 순서상 그 형제 자신이 되어(방금 옮겨간 블록은 이미 최상위에서 빠졌다)
+// 같은 부모의 blockGroup에 순서대로 쌓인다 — 반대 순서로 하면 형제 관계가
+// 성립하지 않아 매 스텝 COMMAND_NOT_APPLICABLE이다.
+export const indentBlockRangeCommand = (
+  editor: Editor,
+  fromBlockId: string,
+  toBlockId: string,
+): Result<void, EditorError> => {
+  const { doc } = editor.state;
+  const rangeIds = resolveBlockRangeInDoc(doc, fromBlockId, toBlockId);
+  if (rangeIds === null) return commandNotApplicable("indentBlockRange");
+
+  const actionState = getBlockRangeNestingActionState(
+    doc,
+    fromBlockId,
+    toBlockId,
+  );
+  if (!actionState.canIndent) return commandNotApplicable("indentBlockRange");
+
+  const selectionBookmark = captureRangeTextSelection(editor);
 
   let tr = editor.state.tr;
-  if (groupNode.childCount === 1) {
-    // 대상이 그룹의 유일한 자식 — 대상만 지우면 "block+"를 위반하는 빈
-    // 그룹이 남는다. 그룹 노드 자체를 제거한다.
-    const groupStart = $target.before(groupDepth);
-    const groupEnd = $target.after(groupDepth);
-    tr = tr.delete(groupStart, groupEnd);
-  } else {
-    tr = tr.delete(targetPosition, targetPosition + targetNode.nodeSize);
+  for (const blockId of rangeIds) {
+    const targetPosition = findBlockPosition(tr.doc, blockId);
+    if (targetPosition === null) {
+      return commandNotApplicable("indentBlockRange");
+    }
+    const targetNode = tr.doc.nodeAt(targetPosition);
+    if (targetNode === null) return commandNotApplicable("indentBlockRange");
+
+    const previousSibling = tr.doc.resolve(targetPosition).nodeBefore;
+    const previousSiblingId = previousSibling?.attrs.blockId;
+    if (typeof previousSiblingId !== "string" || previousSiblingId.length === 0) {
+      return commandNotApplicable("indentBlockRange");
+    }
+
+    const nextTr = appendIndentStep(
+      editor,
+      tr,
+      targetPosition,
+      targetNode,
+      previousSiblingId,
+    );
+    if (nextTr === null) return commandNotApplicable("indentBlockRange");
+    tr = nextTr;
   }
 
-  const mappedParentPosition = findBlockPosition(tr.doc, parentBlockId);
-  if (mappedParentPosition === null) {
-    return commandNotApplicable("outdentBlock");
+  editor.view.dispatch(closeHistory(placeRangeSelection(tr, selectionBookmark)));
+  return { ok: true, value: undefined };
+};
+
+// 범위 내어쓰기 — 같은 부모의 연속 형제 범위를 하나의 transaction·undo
+// 1회로 내어쓴다. 범위를 뒤→앞 순서로 반복 적용해야 한다: 각 스텝이 대상을
+// 항상 "부모 바로 다음"에 삽입하므로, 정방향으로 하면 나중에 옮긴 블록이
+// 앞선 블록보다 부모에 더 가까이 꽂혀 순서가 뒤집힌다 — 역방향으로 하면
+// 나중 스텝일수록 더 앞자리에 꽂혀 원래 순서가 복원된다.
+export const outdentBlockRangeCommand = (
+  editor: Editor,
+  fromBlockId: string,
+  toBlockId: string,
+): Result<void, EditorError> => {
+  const { doc } = editor.state;
+  const rangeIds = resolveBlockRangeInDoc(doc, fromBlockId, toBlockId);
+  if (rangeIds === null) return commandNotApplicable("outdentBlockRange");
+
+  const actionState = getBlockRangeNestingActionState(
+    doc,
+    fromBlockId,
+    toBlockId,
+  );
+  if (!actionState.canOutdent) return commandNotApplicable("outdentBlockRange");
+
+  const selectionBookmark = captureRangeTextSelection(editor);
+
+  let tr = editor.state.tr;
+  for (let i = rangeIds.length - 1; i >= 0; i -= 1) {
+    const blockId = rangeIds[i];
+    if (blockId === undefined) return commandNotApplicable("outdentBlockRange");
+    const targetPosition = findBlockPosition(tr.doc, blockId);
+    if (targetPosition === null) {
+      return commandNotApplicable("outdentBlockRange");
+    }
+    const targetNode = tr.doc.nodeAt(targetPosition);
+    if (targetNode === null) return commandNotApplicable("outdentBlockRange");
+
+    const nextTr = appendOutdentStep(tr, targetPosition, targetNode);
+    if (nextTr === null) return commandNotApplicable("outdentBlockRange");
+    tr = nextTr;
   }
-  const mappedParentNode = tr.doc.nodeAt(mappedParentPosition);
-  if (mappedParentNode === null) {
-    return commandNotApplicable("outdentBlock");
-  }
 
-  const insertPosition = mappedParentPosition + mappedParentNode.nodeSize;
-  tr = tr.insert(insertPosition, targetNode);
-
-  tr = placeSelectionInMovedBlock(tr, blockId, selectionBookmark);
-
-  editor.view.dispatch(closeHistory(tr));
+  editor.view.dispatch(closeHistory(placeRangeSelection(tr, selectionBookmark)));
   return { ok: true, value: undefined };
 };
