@@ -156,30 +156,55 @@ const AUDIO_SLASH_ITEM: SlashMenuItem = {
   keywords: ["audio", "sound", "music"],
 };
 
+// spec §4.4(EXT-004), RD-002-DELTA-01(Issue #189) — enabledBlockTypes로
+// deny된 타입은 SlashMenu 목록에서도 사라진다. "custom"(소비자 등록 항목,
+// EXT-006)은 enabledBlockTypes가 다루는 기존 14종과 무관해 항상 활성이다.
+const isSlashMenuItemEnabled = (
+  item: SlashMenuItem,
+  editor: EditorController,
+): boolean => {
+  switch (item.kind) {
+    case "blockType":
+      return editor.isBlockTypeEnabled(item.blockType.type);
+    case "insertTable":
+      return editor.isBlockTypeEnabled("table");
+    case "insertDivider":
+      return editor.isBlockTypeEnabled("divider");
+    case "insertMedia":
+      return editor.isBlockTypeEnabled(item.mediaKind);
+    case "custom":
+      return true;
+  }
+};
+
 const getSlashMenuItems = (
   source: BlockTypeDescriptor,
   customItems: readonly SlashMenuCustomItem[],
-): readonly SlashMenuItem[] => [
-  ...getBlockTypeOptionsForSource(source).map((option) => ({
-    kind: "blockType" as const,
-    ...option,
-  })),
-  TABLE_SLASH_ITEM,
-  DIVIDER_SLASH_ITEM,
-  FILE_SLASH_ITEM,
-  IMAGE_SLASH_ITEM,
-  VIDEO_SLASH_ITEM,
-  AUDIO_SLASH_ITEM,
-  ...customItems.map((custom): SlashMenuItem => ({
-    kind: "custom",
-    id: custom.id,
-    label: custom.label,
-    description: custom.description ?? "",
-    keywords: custom.keywords ?? [],
-    icon: custom.icon,
-    custom,
-  })),
-];
+  editor: EditorController,
+): readonly SlashMenuItem[] =>
+  (
+    [
+      ...getBlockTypeOptionsForSource(source).map((option) => ({
+        kind: "blockType" as const,
+        ...option,
+      })),
+      TABLE_SLASH_ITEM,
+      DIVIDER_SLASH_ITEM,
+      FILE_SLASH_ITEM,
+      IMAGE_SLASH_ITEM,
+      VIDEO_SLASH_ITEM,
+      AUDIO_SLASH_ITEM,
+      ...customItems.map((custom): SlashMenuItem => ({
+        kind: "custom",
+        id: custom.id,
+        label: custom.label,
+        description: custom.description ?? "",
+        keywords: custom.keywords ?? [],
+        icon: custom.icon,
+        custom,
+      })),
+    ] satisfies SlashMenuItem[]
+  ).filter((item) => isSlashMenuItemEnabled(item, editor));
 
 const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
   if (query.length === 0) return true;
@@ -194,8 +219,9 @@ const filterItems = (
   source: BlockTypeDescriptor,
   query: string,
   customItems: readonly SlashMenuCustomItem[],
+  editor: EditorController,
 ): SlashMenuItem[] =>
-  getSlashMenuItems(source, customItems).filter((item) =>
+  getSlashMenuItems(source, customItems, editor).filter((item) =>
     matchesQuery(item, query),
   );
 
@@ -396,8 +422,12 @@ export const SlashMenu = ({
             ? Math.min(
                 current.highlightedIndex,
                 Math.max(
-                  filterItems(context.blockType, resolvedQuery, customItems)
-                    .length - 1,
+                  filterItems(
+                    context.blockType,
+                    resolvedQuery,
+                    customItems,
+                    editor,
+                  ).length - 1,
                   0,
                 ),
               )
@@ -425,7 +455,12 @@ export const SlashMenu = ({
   const items =
     menuState === null
       ? []
-      : filterItems(menuState.sourceBlockType, menuState.query, customItems);
+      : filterItems(
+          menuState.sourceBlockType,
+          menuState.query,
+          customItems,
+          editor,
+        );
 
   // 강조된 옵션의 id. code-block-language-combobox.tsx와 동일 패턴
   // (menuId + 옵션 고유 id) — 아래 aria-activedescendant effect와 옵션
@@ -515,6 +550,7 @@ export const SlashMenu = ({
               currentState.sourceBlockType,
               currentState.query,
               customItems,
+              editor,
             ).length,
             1,
           );
@@ -534,6 +570,7 @@ export const SlashMenu = ({
               currentState.sourceBlockType,
               currentState.query,
               customItems,
+              editor,
             ).length,
             1,
           );
@@ -550,6 +587,7 @@ export const SlashMenu = ({
           current.sourceBlockType,
           current.query,
           customItems,
+          editor,
         );
         const item = currentItems[current.highlightedIndex];
         if (item !== undefined) {
@@ -561,7 +599,7 @@ export const SlashMenu = ({
 
     element.addEventListener("keydown", handleKeyDown, true);
     return () => element.removeEventListener("keydown", handleKeyDown, true);
-  }, [customItems, dismissMenuAndFocusEditor, element, selectItem]);
+  }, [customItems, dismissMenuAndFocusEditor, editor, element, selectItem]);
 
   const menuContent =
     menuState === null ? null : (

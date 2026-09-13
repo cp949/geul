@@ -217,6 +217,9 @@ export type MountBlockEditorOptions = {
   // core를 거치지 않는다(createEditor()에 없음) — dictionary와 달리
   // EditorProvider prop으로 직접 threading한다(아래 render() 참고).
   codeBlockLanguages?: EditorProviderProps["codeBlockLanguages"];
+  // Issue #189, RD-002-DELTA-01 — SlashMenu의 enabledBlockTypes 필터링
+  // 테스트가 공용으로 쓴다(dictionary와 동일 threading 패턴).
+  enabledBlockTypes?: CreateEditorOptions["enabledBlockTypes"];
 };
 
 export type MountedBlockEditor = {
@@ -251,6 +254,7 @@ export const mountBlockEditor = ({
   onChange,
   dictionary,
   codeBlockLanguages,
+  enabledBlockTypes,
 }: MountBlockEditorOptions = {}): MountedBlockEditor => {
   const resolvedBlocks =
     initialBlocks ??
@@ -271,6 +275,7 @@ export const mountBlockEditor = ({
     createId: sequentialIds("id"),
     ...(onChange === undefined ? {} : { onChange }),
     ...(dictionary === undefined ? {} : { dictionary }),
+    ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
   });
   mountedEditors.add(editor);
 

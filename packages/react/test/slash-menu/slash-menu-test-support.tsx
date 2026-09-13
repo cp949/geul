@@ -21,6 +21,8 @@ const addRowLabel = "Add row";
 const renderRealBlocks = (options?: {
   blockIds?: readonly string[];
   dictionary?: MountBlockEditorOptions["dictionary"];
+  // Issue #189, RD-002-DELTA-01 — enabledBlockTypes 필터링 테스트가 쓴다.
+  enabledBlockTypes?: MountBlockEditorOptions["enabledBlockTypes"];
 }) => mountBlockEditor({ ...options, children: <SlashMenu /> });
 
 /**
@@ -31,6 +33,7 @@ const renderRealBlocks = (options?: {
 const renderCaretBlocks = (options?: {
   blockIds?: readonly string[];
   dictionary?: MountBlockEditorOptions["dictionary"];
+  enabledBlockTypes?: MountBlockEditorOptions["enabledBlockTypes"];
 }) => {
   const rendered = renderRealBlocks(options);
   rendered.editable.focus();

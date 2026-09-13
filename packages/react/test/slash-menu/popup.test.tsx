@@ -763,3 +763,45 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     expect(screen.getAllByRole("option")).toHaveLength(19);
   });
 });
+
+/**
+ * `enabledBlockTypes`(deny)로 끈 타입이 SlashMenu 목록에서도 사라지는지
+ * 검증한다(spec §4.4 EXT-004, RD-002-DELTA-01, Issue #189) —
+ * `EditorController.isBlockTypeEnabled`(RD-001)를 SlashMenu가 실제로
+ * 조회하는지의 회귀 테스트다.
+ */
+describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
+  it("media 타입(image)을 deny하면 Image 옵션이 사라지고 다른 media 3종은 남는다", () => {
+    const rendered = mountBlockEditor({
+      children: <SlashMenu />,
+      enabledBlockTypes: { mode: "deny", types: ["image"] },
+    });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/");
+
+    expect(screen.queryByRole("option", { name: /^Image/ })).toBeNull();
+    expect(screen.getByRole("option", { name: /^File/ })).not.toBeNull();
+    expect(screen.getByRole("option", { name: /^Video/ })).not.toBeNull();
+    expect(screen.getByRole("option", { name: /^Audio/ })).not.toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(18);
+  });
+
+  it("non-media 타입(heading)을 deny하면 Heading 1~6 옵션 6개가 모두 사라지고 나머지는 남는다", () => {
+    const rendered = mountBlockEditor({
+      children: <SlashMenu />,
+      enabledBlockTypes: { mode: "deny", types: ["heading"] },
+    });
+    rendered.editable.focus();
+
+    typeIntoBlock(rendered, 0, "/");
+
+    for (let level = 1; level <= 6; level += 1) {
+      expect(
+        screen.queryByRole("option", { name: new RegExp(`^Heading ${level}`) }),
+      ).toBeNull();
+    }
+    expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(13);
+  });
+});
