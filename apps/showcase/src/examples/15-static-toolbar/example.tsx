@@ -34,7 +34,9 @@ const StaticToolbarExample = () => {
           scrollArea를 앵커로 삼아 상단에 고정한다. */}
       <div className={styles.scrollArea}>
         <StaticToolbar className={styles.stickyToolbar} />
-        <EditorContent />
+        <div className={styles.content}>
+          <EditorContent />
+        </div>
       </div>
     </EditorProvider>
   );

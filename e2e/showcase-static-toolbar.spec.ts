@@ -102,3 +102,30 @@ test("블록 타입 아이콘 버튼 연속 클릭이 항상 같은 블록에 �
     page.getByRole("button", { name: "Code", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
 });
+
+test("본문 텍스트가 scrollArea 테두리에 딱 붙지 않고 여백을 갖는다", async ({
+  page,
+}) => {
+  // geul-editor는 padding을 강제하지 않는다(headless) — 이 예제의
+  // scrollArea가 자체 padding 없이 StaticToolbar·EditorContent를 감싸는
+  // 구조라, 콘텐츠 wrapper에 padding을 안 주면 본문이 border에 딱
+  // 붙어(0 padding) StaticToolbar(자체 padding 0.25rem+border가 있어 버튼은
+  // 안쪽으로 들어와 있다)보다 왼쪽으로 더 나와 보인다(사용자 스크린샷
+  // 지적). example.module.css의 .content가 이 여백을 준다.
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const scrollArea = page
+    .getByRole("toolbar", { name: "Toolbar" })
+    .locator("..");
+  const firstParagraph = page
+    .getByRole("textbox", { name: "Editor" })
+    .locator("p")
+    .first();
+
+  const scrollAreaBox = await scrollArea.boundingBox();
+  const paragraphBox = await firstParagraph.boundingBox();
+  if (scrollAreaBox === null || paragraphBox === null) {
+    throw new Error("scrollArea 또는 첫 문단의 bounding box를 얻지 못했다");
+  }
+
+  expect(paragraphBox.x - scrollAreaBox.x).toBeGreaterThanOrEqual(8);
+});

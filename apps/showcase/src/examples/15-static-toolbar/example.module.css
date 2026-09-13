@@ -15,3 +15,12 @@
   top: 0;
   z-index: 1;
 }
+
+/* geul-editor는 padding을 강제하지 않는다(headless) — 소비 앱이 직접
+   붙인다. StaticToolbar는 자체 padding(0.25rem)+border가 있어 이 여백이
+   없으면 본문 텍스트가 툴바 버튼보다 왼쪽으로 붙어 보인다(사용자 스크린샷
+   지적). codeBlock·quote와 같은 0.75rem 1rem을 써 나머지 라이브러리
+   기본값과 통일한다. */
+.content {
+  padding: 0.75rem 1rem;
+}
