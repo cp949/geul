@@ -36,6 +36,23 @@ const mediaGutterButtonClassName = "geul-block-gutter__button";
 // 이유가 동일해서다.
 const MEDIA_HANDLE_OFFSET_PX = 56;
 
+// `readPageRect(hoverElement)`가 읽던 hoverElement는 `data-geul-media-kind`
+// div, 즉 항상 블록 전체 폭(예: paragraph와 같은 content 폭)인 래퍼다.
+// image/video는 기본이 가운데 정렬(`margin: 0 auto`, _media-resize-handles.scss)
+// 이라 실제 렌더된 <img>/<video>는 그 래퍼 안에서 안쪽으로 들어와 있다 —
+// 래퍼 rect를 그대로 쓰면 그립·plus가 이미지 실제 왼쪽 모서리에서 수십~
+// 수백 px 떨어진 자리(래퍼의 왼쪽 끝)에 뜬다(Notion 캡처 대조로 발견,
+// 2026-09-13). media-resize-handles.tsx의 findMediaElement와 같은 이유로
+// 래퍼가 아니라 실제 시각 요소를 찾아야 한다 — 다만 그 함수는 리사이즈
+// 대상인 img/video만 찾고, 여기는 4종 전부(+ showPreview:false·file의
+// <a>)를 찾아야 해서 별도로 둔다. 빈 media(source 없음)는 시각 자식이
+// 없으므로(media-block-extension.ts) null이면 호출부가 래퍼로 폴백한다 —
+// 빈 상태의 래퍼 자체가 보이는 placeholder 카드라 그 폴백이 곧 정답이다.
+const findMediaVisualElement = (wrapper: HTMLElement): HTMLElement | null =>
+  wrapper.querySelector<HTMLElement>(
+    ":scope > img, :scope > video, :scope > audio, :scope > a",
+  );
+
 // usePointerHoverTarget ignore-list. block-side-menu.tsx의
 // BLOCK_HOVER_IGNORE_SELECTORS와 같은 값 — 같은 속성을 재사용하는 버튼이라
 // (data-geul-block-handle 등) 그 파일의 이유가 그대로 적용된다. 모듈 스코프
@@ -246,7 +263,11 @@ export const MediaHandleOverlays = ({
           current.blockId,
         );
         if (blockElement === null) return current;
-        const rect = blockElement.getBoundingClientRect();
+        // overlayRect·onOpen과 같은 이유로 래퍼가 아니라 실제 시각 요소를
+        // 앵커로 쓴다.
+        const anchorElement =
+          findMediaVisualElement(blockElement) ?? blockElement;
+        const rect = anchorElement.getBoundingClientRect();
         const left = rect.left;
         const top = rect.top + 28;
         return current.left === left && current.top === top
@@ -272,7 +293,10 @@ export const MediaHandleOverlays = ({
           "data-geul-block-id",
           hoverBlockId,
         );
-  const overlayRect = hoverElement === null ? null : readPageRect(hoverElement);
+  const overlayRect =
+    hoverElement === null
+      ? null
+      : readPageRect(findMediaVisualElement(hoverElement) ?? hoverElement);
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
@@ -327,7 +351,12 @@ export const MediaHandleOverlays = ({
           // readPageRect(page-relative, absolute용)를 그대로 넘기면 스크롤된
           // 문서에서 엉뚱한 위치에 뜬다. 클릭 시점에 getBoundingClientRect()를
           // 별도로 다시 읽는다(block-side-menu.tsx의 hoverBounds와 동일 계산).
-          const rect = hoverElement.getBoundingClientRect();
+          // overlayRect와 같은 이유로 래퍼가 아니라 실제 시각 요소를 앵커로
+          // 쓴다 — 그립이 이미지 옆에 뜨는데 메뉴만 래퍼 왼쪽에서 열리면
+          // 버튼과 메뉴가 서로 멀어진다.
+          const anchorElement =
+            findMediaVisualElement(hoverElement) ?? hoverElement;
+          const rect = anchorElement.getBoundingClientRect();
           setMenuState({ blockId, left: rect.left, top: rect.top + 28 });
         },
       },
