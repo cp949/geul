@@ -100,6 +100,7 @@ export type Block =
 - `HeadingBlock.level`을 `1|2|3|4|5|6`으로 확장한다.
 - `isToggleable: true`인 heading만 `collapsed`를 가질 수 있다 — `collapsed`가 존재하는데 `isToggleable`이 `true`가 아니면 `DOCUMENT_INVALID`.
 - `collapsed: true`인 토글 제목은 `children`을 갖되 편집기 렌더링에서 자식을 숨긴다. 저장 JSON에는 `children`이 항상 온전히 남는다(접힘은 표시 상태이지 데이터 삭제가 아니다).
+- 정정(2026-09-13, roadmap-workflow RD-001~004): 위 토글 제목(`isToggleable`/`collapsed`) 계약은 전량 폐기됐다 — Notion parity가 아니라 이 문서 자체가 근거였던 BlockNote 무료 기능 parity 체크리스트만으로 구현됐고 실사용 근거·배포 이력이 없어 사용자 판단으로 제거했다(`docs/product/blocknote-free-feature-inventory.md` `BLK-004`). `HeadingBlock`에는 이제 `isToggleable`/`collapsed` 필드가 없다. 같은 절의 `toggleListItem`(4.4, `BLK-010`)은 별개 블록 타입이라 이 정정과 무관하게 유지된다.
 
 ### 4.2 인용문과 구분선
 
