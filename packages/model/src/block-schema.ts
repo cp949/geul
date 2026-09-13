@@ -162,8 +162,6 @@ type HeadingBlockNode = {
   type: "heading";
   level: 1 | 2 | 3 | 4 | 5 | 6;
   content: z.infer<typeof inlineContentSchema>;
-  isToggleable?: boolean | undefined;
-  collapsed?: boolean | undefined;
   children?: BlockNode[] | undefined;
 } & TextBlockPropsNode;
 
@@ -262,8 +260,6 @@ const headingBlockSchema = z.object({
     z.literal(6),
   ]),
   content: inlineContentSchema,
-  isToggleable: z.boolean().optional(),
-  collapsed: z.boolean().optional(),
   children: z
     .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
     .optional(),
@@ -327,8 +323,10 @@ const checkListItemBlockSchema = z
 
 // toggleListItem은 bulletListItem/numberedListItem과 같은 목록 항목 shape
 // (content + 재귀 children) 위에 collapsed 하나만 얹는다. collapsed 값 자체는
-// heading의 isToggleable 같은 선행 조건이 없다 — 타입 자체가 토글 여부를
-// 뜻한다(spec §4.4).
+// 선행 조건이 없다 — 타입 자체가 토글 여부를 뜻한다(spec §4.4). (2026-09-13:
+// heading에도 같은 collapsed를 얹는 isToggleable 축이 있었으나, 실사용 근거
+// 없이 BlockNote parity만으로 구현된 기능이라 제거했다 — toggleListItem은
+// 대상이 아니다.)
 const toggleListItemBlockSchema = z
   .object({
     id: z.string(),

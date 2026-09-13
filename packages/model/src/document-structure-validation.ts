@@ -227,23 +227,6 @@ const validateBlocksAt = (
       continue;
     }
 
-    // heading 전용 불변식(spec §4.1): collapsed가 있는데 isToggleable이
-    // true가 아니면 거절한다. codeBlock과 같은 구조 — nestable 공통 처리
-    // (content·children 재귀) 전에 타입 전용 검증을 먼저 건다. 이 판정을
-    // 다른 곳(core codec 등)에 복제하지 않는다(G-CNV-001) — heading의
-    // collapsed·isToggleable은 여기서만 유효성을 판정하고 나머지 계층은
-    // 값을 그대로 직대응한다.
-    if (
-      known.type === "heading" &&
-      known.collapsed !== undefined &&
-      known.isToggleable !== true
-    ) {
-      return invalid(
-        [...blockPath, "collapsed"],
-        "Heading collapsed requires isToggleable: true",
-      );
-    }
-
     if (isNestableBlockType(known.type)) {
       // isNestableBlockType은 model 밖(core의 PM node.type.name 등)에서도
       // 쓰는 문자열 predicate라 discriminated union인 known은 좁히지

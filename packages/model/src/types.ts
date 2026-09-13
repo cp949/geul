@@ -53,11 +53,6 @@ export type HeadingBlock = {
   type: "heading";
   level: 1 | 2 | 3 | 4 | 5 | 6;
   content: InlineContent;
-  // isToggleable이 true인 heading만 collapsed를 가질 수 있다 — collapsed가
-  // 있는데 isToggleable이 true가 아니면 DOCUMENT_INVALID다(spec §4.1). 이
-  // 불변식은 schema.ts의 validateBlocksAt 한 곳에서만 판정한다(G-CNV-001).
-  isToggleable?: boolean;
-  collapsed?: boolean;
   children?: Block[];
 } & TextBlockProps;
 export type QuoteBlock = {
@@ -79,8 +74,8 @@ export type NumberedListItemBlock = {
   startNumber?: number;
   children?: Block[];
 } & TextBlockProps;
-// checked는 선행 조건 없는 단일 필드다 — heading의 isToggleable+collapsed
-// 같은 교차 필드 불변식이 없어 필수(optional 아님)로 둔다. 생성 시 기본값
+// checked는 선행 조건 없는 단일 필드다 — toggleListItem의 collapsed 같은
+// 교차 필드 불변식이 없어 필수(optional 아님)로 둔다. 생성 시 기본값
 // false는 command 계층(Issue #38 슬라이스 6 RD-001 후속 DELTA)이 정한다.
 export type CheckListItemBlock = {
   id: string;
@@ -92,9 +87,8 @@ export type CheckListItemBlock = {
 // toggleListItem은 block-kind.ts의 NestableBlockType에 ListItemBlockType과
 // 별도로 직접 추가된다 — <ul>/<ol> 표현을 갖는 bulletListItem/
 // numberedListItem과 달리 자체 HTML 요소 계열이 없어 ListItemBlock 부분
-// 유니온(목록 형제 직렬화용)에 포함하지 않는다. collapsed 규칙은 heading의
-// isToggleable+collapsed와 동일한 의미다(spec §4.4) — 다만 toggleListItem은
-// 타입 자체가 토글 여부를 뜻하므로 별도 isToggleable 필드가 없다.
+// 유니온(목록 형제 직렬화용)에 포함하지 않는다. 타입 자체가 토글 여부를
+// 뜻하므로 별도 isToggleable 필드 없이 collapsed만 갖는다(spec §4.4).
 export type ToggleListItemBlock = {
   id: string;
   type: "toggleListItem";

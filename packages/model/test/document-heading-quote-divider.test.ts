@@ -53,6 +53,34 @@ describe("heading level 1-6", () => {
       });
     }
   });
+
+  it("collapsed·isToggleable(2026-09-13 제거된 토글 제목 필드)을 실어도 거절되지 않고 조용히 제거된다", () => {
+    // 토글 제목(BLK-004)은 실사용 근거 없이 BlockNote parity만으로 구현돼
+    // 제거됐다 — heading은 strict() 스키마가 아니라서 미선언 키를 에러 없이
+    // 벗겨(strip) 낸다. DOCUMENT_INVALID가 아니라는 것과 결과에 두 필드가
+    // 남지 않는다는 것을 함께 확인한다.
+    const input = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "heading-1",
+          type: "heading",
+          level: 1,
+          content: [{ text: "제목" }],
+          isToggleable: true,
+          collapsed: true,
+        },
+      ],
+    };
+
+    const result = parseDocument(input);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.blocks[0]).not.toHaveProperty("isToggleable");
+      expect(result.value.blocks[0]).not.toHaveProperty("collapsed");
+    }
+  });
 });
 
 describe("quote 블록", () => {
