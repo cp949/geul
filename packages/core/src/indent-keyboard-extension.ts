@@ -1,7 +1,7 @@
 import type { Result } from "@cp949/geul-model";
 import { type Editor, Extension } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type { EditorState } from "@tiptap/pm/state";
+import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
 import { nearestBlockContainerId } from "./block-position.js";
@@ -33,12 +33,20 @@ const insertCodeBlockIndent = (editor: Editor, state: EditorState): boolean => {
 
 // 표 셀 안이면 표 셀 탐색(TableKeyboardNavigationExtension)에 양보하고
 // (false), 표 밖이면 캐럿이 속한 blockContainer를 대상으로 command를
-// 호출한다. selection이 축약되지 않고 $from·$to가 서로 다른 blockContainer에
-// 있으면(여러 줄 선택) range command로 라우팅한다 — 같은 부모의 연속 형제가
-// 아니면 range command 자신이 COMMAND_NOT_APPLICABLE로 거절하므로 여기서는
-// 미리 걸러내지 않는다. command가 성공한 경우에만 true를 반환해 키 이벤트를
-// 소비한다. 적용할 block이 없거나 command가 COMMAND_NOT_APPLICABLE 등으로
-// 실패하면 false를 반환해 브라우저 기본 순차 포커스 이동을 허용한다.
+// 호출한다. selection이 TextSelection이고 축약되지 않아 $from·$to가 서로
+// 다른 blockContainer에 있으면(여러 줄 선택) range command로 라우팅한다 —
+// 같은 부모의 연속 형제가 아니면 range command 자신이 COMMAND_NOT_APPLICABLE로
+// 거절하므로 여기서는 미리 걸러내지 않는다. TextSelection으로 좁히는 이유
+// (Issue #188): NodeSelection은 `empty`가 항상 false라(anchor≠head) 이
+// 분기를 원래 의도(여러 줄 텍스트 선택)와 무관하게 항상 통과한다 — media처럼
+// blockContainer로 감싸이지 않는 atom을 NodeSelection하면 $to가 부모
+// blockContainer로 잘못 climbing돼(nearestBlockContainerIdAtPos는 이 함수
+// 전용 NodeSelection 분기가 없다) `range(fromBlockId=media, toBlockId=부모)`로
+// 잘못 라우팅되고, media·부모는 형제가 아니므로 range command가
+// COMMAND_NOT_APPLICABLE로 거절해 Tab 자체가 조용히 no-op된다. command가
+// 성공한 경우에만 true를 반환해 키 이벤트를 소비한다. 적용할 block이 없거나
+// command가 COMMAND_NOT_APPLICABLE 등으로 실패하면 false를 반환해 브라우저
+// 기본 순차 포커스 이동을 허용한다.
 const routeToBlockCommand = (
   editor: Editor,
   single: (editor: Editor, blockId: string) => Result<void, EditorError>,
@@ -62,7 +70,7 @@ const routeToBlockCommand = (
   const fromBlockId = nearestBlockContainerId(state);
   if (fromBlockId === null) return false;
 
-  if (!state.selection.empty) {
+  if (state.selection instanceof TextSelection && !state.selection.empty) {
     const toBlockId = nearestBlockContainerIdAtPos(state.selection.$to);
     if (toBlockId !== null && toBlockId !== fromBlockId) {
       return range(editor, fromBlockId, toBlockId).ok;

@@ -16,11 +16,13 @@ import type { Editor, JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
+import { findBlockPosition } from "../src/block-position.js";
 import {
   IndentKeyboardExtension,
   indentBlockShortcut,
   outdentBlockShortcut,
 } from "../src/indent-keyboard-extension.js";
+import { ImageBlockExtension } from "../src/media-block-extension.js";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { TableKeyboardNavigationExtension } from "../src/table-keyboard-extension.js";
 import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
@@ -104,6 +106,51 @@ const parentWithChildDoc = (): JSONContent => ({
     ]),
   ],
 });
+
+/** blockId를 가진 image 블록 하나의 tiptap JSON(atom, content 없음). */
+const imageJson = (blockId: string): JSONContent => ({
+  type: "image",
+  attrs: { blockId },
+});
+
+/** 문단(p1) 뒤에 top-level media(media-1)를 둔다 — top-level media Tab indent 검증용. */
+const paragraphThenMediaDoc = (): JSONContent => ({
+  type: "doc",
+  content: [containerJson("p1", "one"), imageJson("media-1")],
+});
+
+/**
+ * top-level 문단(before-parent) 뒤에 문단(parent-1, 자식 sibling-1과 media-1을
+ * 가짐)을 둔다. media-1의 NodeSelection에서 Tab이 media-1이 아니라 parent-1을
+ * 잘못 대상으로 삼으면(Issue #188 가설) parent-1 전체가 before-parent 밑으로
+ * 잘못 들여쓰기돼 이 fixture가 그 차이를 구분해 검출한다.
+ */
+const nestedMediaWithPrecedingSiblingDoc = (): JSONContent => ({
+  type: "doc",
+  content: [
+    containerJson("before-parent", "before"),
+    containerWithGroupJson("parent-1", "parent", [
+      containerJson("sibling-1", "sibling"),
+      imageJson("media-1"),
+    ]),
+  ],
+});
+
+/** 이미 중첩된 media(media-1, parent-1의 유일한 자식) — Shift-Tab outdent 검증용. */
+const nestedMediaDoc = (): JSONContent => ({
+  type: "doc",
+  content: [containerWithGroupJson("parent-1", "parent", [imageJson("media-1")])],
+});
+
+/**
+ * blockId를 가진 임의 노드(blockContainer로 감싸이지 않는 media atom 포함)
+ * 위치에 NodeSelection을 만든다 — 클릭으로 media를 선택한 상태를 흉내낸다.
+ */
+const selectNode = (editor: Editor, blockId: string): void => {
+  const position = findBlockPosition(editor.state.doc, blockId);
+  if (position === null) throw new Error("fixture 준비 실패");
+  editor.commands.setNodeSelection(position);
+};
 
 /**
  * blockId를 가진 blockContainer를 찾아 그 콘텐츠 안 가장 가까운 텍스트
@@ -217,6 +264,68 @@ describe("Tab/Shift+Tab 라우팅", () => {
     expect(indentConsumed).toBe(false);
     expect(outdentConsumed).toBe(false);
     expect(editor.getJSON()).toEqual(before);
+  });
+});
+
+describe("media NodeSelection Tab/Shift+Tab(Issue #188)", () => {
+  it("top-level media를 NodeSelection한 상태에서 Tab이 앞 문단의 자식으로 들여쓰기한다", () => {
+    const editor = createTableFixtureEditor(paragraphThenMediaDoc(), [
+      ImageBlockExtension,
+    ]);
+    selectNode(editor, "media-1");
+
+    const consumed = indentBlockShortcut(editor);
+
+    expect(consumed).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content).toHaveLength(1);
+    const p1 = doc.content?.[0];
+    expect(p1?.attrs?.blockId).toBe("p1");
+    const p1Group = p1?.content?.[1];
+    expect(p1Group?.type).toBe("blockGroup");
+    expect(p1Group?.content?.[0]?.attrs?.blockId).toBe("media-1");
+  });
+
+  it("이미 중첩된 media를 NodeSelection한 상태에서 Tab이 media 자신을 들여쓰기하고 조부모를 잘못 대상으로 삼지 않는다", () => {
+    const editor = createTableFixtureEditor(
+      nestedMediaWithPrecedingSiblingDoc(),
+      [ImageBlockExtension],
+    );
+    selectNode(editor, "media-1");
+
+    const consumed = indentBlockShortcut(editor);
+
+    expect(consumed).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    // 최상위는 여전히 before-parent, parent-1 둘뿐이다 — parent-1 전체가
+    // before-parent의 자식으로 잘못 들여쓰기되지 않았다.
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.attrs?.blockId).toBe("before-parent");
+    const parent1 = doc.content?.[1];
+    expect(parent1?.attrs?.blockId).toBe("parent-1");
+    const parent1Group = parent1?.content?.[1];
+    expect(parent1Group?.type).toBe("blockGroup");
+    expect(parent1Group?.content).toHaveLength(1);
+    const sibling1 = parent1Group?.content?.[0];
+    expect(sibling1?.attrs?.blockId).toBe("sibling-1");
+    const sibling1Group = sibling1?.content?.[1];
+    expect(sibling1Group?.type).toBe("blockGroup");
+    expect(sibling1Group?.content?.[0]?.attrs?.blockId).toBe("media-1");
+  });
+
+  it("이미 중첩된 media를 NodeSelection한 상태에서 Shift-Tab이 media 자신을 top-level로 내어쓰기한다", () => {
+    const editor = createTableFixtureEditor(nestedMediaDoc(), [
+      ImageBlockExtension,
+    ]);
+    selectNode(editor, "media-1");
+
+    const consumed = outdentBlockShortcut(editor);
+
+    expect(consumed).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content).toHaveLength(2);
+    expect(doc.content?.[0]?.attrs?.blockId).toBe("parent-1");
+    expect(doc.content?.[1]?.attrs?.blockId).toBe("media-1");
   });
 });
 

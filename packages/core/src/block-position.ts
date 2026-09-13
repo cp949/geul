@@ -1,5 +1,6 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
+import { NodeSelection } from "@tiptap/pm/state";
 
 // blockId를 가진 블록 노드의 문서 내 위치를 임의 깊이에서 찾는다(D19 —
 // 컨테이너 도입으로 블록이 blockGroup 안에 중첩될 수 있다). table-commands.ts와
@@ -54,10 +55,29 @@ export const findEditableBlockContent = (
 // blockId를 찾는다. depth 역순으로 올라가며 첫 blockContainer를 찾으면 그
 // attrs.blockId를 반환한다 — 스키마상 blockContainer는 항상 유효한
 // blockId를 갖지만 방어적으로 없으면 null이다. indent-keyboard-extension.ts와
-// block-type-keyboard-extension.ts 둘 다 필요로 해(RD-001 DELTA-01)
-// findBlockPosition·findEditableBlockContent와 같은 이유로 여기서 공유한다.
+// block-type-keyboard-extension.ts, block-move-keyboard-extension.ts 모두
+// 필요로 해(RD-001 DELTA-01) findBlockPosition·findEditableBlockContent와
+// 같은 이유로 여기서 공유한다.
+//
+// NodeSelection 우선 분기(Issue #188): media 4종·divider·table은
+// blockContainer로 감싸이지 않고 "group: block 직접 멤버, blockId 자체
+// 소유" atom이다. NodeSelection의 $from은 선택된 노드 **앞** 위치를 가리켜
+// 아래 climbing이 그 노드의 조상만 훑고 노드 자신은 건너뛴다 — top-level이면
+// climbing이 blockContainer를 하나도 못 찾아 null을 반환하고, 중첩돼 있으면
+// 노드 자신이 아니라 부모 blockContainer를 잘못 반환한다. NodeSelection이고
+// 선택된 노드가 blockContainer가 아니면 그 노드 자신의 blockId를 climbing보다
+// 먼저 반환해 이 오판을 막는다.
 export const nearestBlockContainerId = (state: EditorState): string | null => {
-  const { $from } = state.selection;
+  const { selection } = state;
+  if (
+    selection instanceof NodeSelection &&
+    selection.node.type.name !== "blockContainer"
+  ) {
+    const blockId = selection.node.attrs.blockId;
+    return typeof blockId === "string" && blockId.length > 0 ? blockId : null;
+  }
+
+  const { $from } = selection;
   for (let depth = $from.depth; depth >= 0; depth -= 1) {
     const node = $from.node(depth);
     if (node.type.name === "blockContainer") {
