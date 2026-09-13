@@ -327,11 +327,23 @@
 
   // 체크박스 클릭 UI(check-list-item-marker-extension.ts가 checkListItem
   // 콘텐츠 시작에 꽂는 decoration widget, R-7 — 문구·클릭은 core, 표시는
-  // CSS). bullet·numbered marker와 달리 별도 marker 열이 아니라 텍스트
-  // 바로 앞 인라인 위치라 grid 레이아웃이 필요 없다.
+  // CSS). checkListItem div 자체가 contentDOM이라(production-editor-
+  // assembly.ts) 이 위젯은 [data-placeholder]::before(빈 항목에서 항상
+  // 붙는 float 텍스트, 위 UI-009 규칙)와 같은 줄 상자를 공유한다. float는
+  // height:0이라 뒤따르는 인라인 콘텐츠를 오른쪽으로 밀어내지 못해(float가
+  // 차지하는 세로 범위가 0이라 line box shift 대상이 안 됨), 위젯을 그냥
+  // inline-block으로 두면 placeholder 문구·캐럿과 같은 시작점에서 겹친다.
+  // padding-left로 마커 폭만큼 미리 비워두고 위젯을 absolute로 그 안에
+  // 앉혀 float의 line box 계산에서 완전히 빼는 방식으로 겹침을 없앤다.
+  [data-geul-check-list-item] {
+    position: relative;
+    padding-left: 1.5rem;
+  }
+
   [data-geul-check-marker] {
-    display: inline-block;
-    margin-right: 0.5rem;
+    position: absolute;
+    left: 0;
+    top: 0;
     cursor: pointer;
     user-select: none;
   }
@@ -346,10 +358,18 @@
 
   // 접힘 트라이앵글 클릭 UI(toggle-collapse-marker-extension.ts가
   // toggleListItem 콘텐츠 시작에 꽂는 decoration widget, RD-004 DELTA-03 —
-  // 문구·클릭은 core, 표시는 CSS, check-marker와 같은 원칙).
+  // 문구·클릭은 core, 표시는 CSS, check-marker와 같은 원칙 — 겹침 방지도
+  // 같은 이유·같은 해법이라 check-list-item 규칙과 동일하게 padding-left
+  // + absolute로 처리한다).
+  [data-geul-toggle-list-item] {
+    position: relative;
+    padding-left: 1.5rem;
+  }
+
   [data-geul-toggle-marker] {
-    display: inline-block;
-    margin-right: 0.5rem;
+    position: absolute;
+    left: 0;
+    top: 0;
     cursor: pointer;
     user-select: none;
   }
