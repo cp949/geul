@@ -21,6 +21,13 @@
   min-height: 320px;
 }
 
+/* 데모 자체가 넓은 가로 폭을 필요로 하는 예제(예: static-toolbar — 아이콘
+   버튼이 많아 50/50split에서 줄바꿈된다) 전용. 기본 50/50 대신 데모 쪽에
+   더 준다 — 다른 예제의 레이아웃은 건드리지 않는다. */
+.panesWide {
+  grid-template-columns: 2fr 1fr;
+}
+
 .demoPane {
   border: 1px solid #e5e7eb;
   border-radius: 8px;

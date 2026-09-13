@@ -57,3 +57,48 @@ test("텍스트를 선택하고 Bold를 누르면 실제로 굵게 적용된다"
     "true",
   );
 });
+
+test("블록 타입 컨트롤이 늘어나도 데모 패널 폭 안에서 한 줄로 보인다", async ({
+  page,
+}) => {
+  // 블록 타입 select를 Text/Heading으로 줄이고 Quote·Code·목록 4종을
+  // 아이콘 버튼으로 뺀 뒤(회귀 확인) 툴바 컨트롤 수가 10개에서 16개로
+  // 늘었다 — ExamplePage의 50/50 split 폭(그대로 두면 553px 안팎)에서는
+  // 마지막 컨트롤(Background color) 하나만 둘째 줄로 밀려나는 모양이
+  // 났다. 이 예제만 `wide` 데모 패널을 써 한 줄에 들어가야 한다.
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const toolbar = page.getByRole("toolbar", { name: "Toolbar" });
+  await expect(toolbar).toBeVisible();
+
+  const rowTops = await toolbar.evaluate((element) =>
+    Array.from(element.children).map(
+      (child) => Math.round(child.getBoundingClientRect().y * 100) / 100,
+    ),
+  );
+  const uniqueRows = new Set(rowTops);
+  expect(uniqueRows.size).toBe(1);
+});
+
+test("블록 타입 아이콘 버튼 연속 클릭이 항상 같은 블록에 적용된다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editable = page.getByRole("textbox", { name: "Editor" });
+  const block1 = editable.locator('[data-geul-block-id$="block-1"]');
+
+  await editable.locator("p").first().click();
+  await page.getByRole("button", { name: "Quote" }).click();
+  await expect(block1.locator("blockquote")).toHaveCount(1);
+  await expect(editable.locator("blockquote")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Code", exact: true }).click();
+  await expect(block1.locator("pre[data-geul-code-block]")).toHaveCount(1);
+  await expect(editable.locator("pre[data-geul-code-block]")).toHaveCount(1);
+
+  await expect(page.getByRole("combobox", { name: "Block type" })).toHaveValue(
+    "",
+  );
+  await expect(
+    page.getByRole("button", { name: "Code", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
