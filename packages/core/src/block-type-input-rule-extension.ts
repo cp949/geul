@@ -29,6 +29,12 @@ const createBlockTypeInputRule = (
   attrsFromMatch: (
     match: RegExpMatchArray,
   ) => Record<string, unknown> | undefined,
+  // heading 전용 옵션(기본 false) — heading은 레벨이 여럿이라 "이미 같은
+  // 타입 블록 안에서 marker를 다시 겹쳐 써 레벨만 바꾼다"가 의미 있다(Notion
+  // 동일 UX, 사용자 요청). quote·checkListItem·codeBlock은 마커가 하나뿐이라
+  // 같은 타입으로 재발동해도 레벨 개념이 없어 이 옵션을 켜지 않는다 —
+  // 현재 범위 밖 확장이다.
+  allowSameTypeRetrigger = false,
 ): InputRule => {
   // 타입명을 하드코딩하지 않고 그룹으로 판정한다 — 현재는 codeBlock만
   // leafBlockContent라 이 가드가 실제로 걸리지만, 향후 다른 leafBlockContent
@@ -47,6 +53,25 @@ const createBlockTypeInputRule = (
       // 이유와 동일). 그래서 현재 paragraph 전체 텍스트는 트리거 문자를
       // 제외한 match[0]와 같아야 exact 일치다.
       const marker = match[0].slice(0, -1);
+      const sourceTypeName = $from.parent.type.name;
+      // heading 안에서 marker를 겹쳐 쓰는 재발동(allowSameTypeRetrigger)만
+      // 캐럿 뒤 기존 텍스트 보존을 허용한다 — beforeCaret(캐럿 앞 텍스트만)을
+      // marker와 비교해 뒤 텍스트는 setBlockType이 그대로 유지하게 둔다.
+      // 그 외(기존 paragraph 기점 변환)는 계속 전체 textContent가 marker와
+      // 정확히 같아야 한다(정확 일치 불변식 유지, 아래 두 case 모두).
+      const isSameTypeRetrigger =
+        allowSameTypeRetrigger && sourceTypeName === type.name;
+      // $from은 range.from(매치 시작 = marker 선두)에서 resolve했으므로
+      // $from.parentOffset은 항상 0이다 — 캐럿(트리거 직전 위치)은 range.to라
+      // range.to - $from.start()로 노드 안 오프셋을 구한다.
+      const beforeCaret = isSameTypeRetrigger
+        ? $from.parent.textBetween(
+            0,
+            range.to - $from.start(),
+            undefined,
+            "\ufffc",
+          )
+        : $from.parent.textContent;
       // Tiptap matcher는 캐럿 앞 텍스트만 읽는다. 전체 pre-input paragraph와
       // selection을 별도로 확인해야 suffix·선택 대체·simulated input을
       // 막는다(list-input-rule-extension.ts와 동일 근거). childCount > 1은
@@ -54,9 +79,9 @@ const createBlockTypeInputRule = (
       // 있다는 뜻 — leafBlockContent 대상은 이 상태와 공존할 수 없다.
       if (
         !state.selection.empty ||
-        $from.parent.type.name !== "paragraph" ||
+        (sourceTypeName !== "paragraph" && !isSameTypeRetrigger) ||
         container.type.name !== "blockContainer" ||
-        $from.parent.textContent !== marker ||
+        beforeCaret !== marker ||
         (!allowsChildren && container.childCount > 1)
       ) {
         return null;
@@ -156,9 +181,17 @@ export const BlockTypeInputRuleExtension = Extension.create({
     }
 
     return [
-      createBlockTypeInputRule(/^(#{1,6})\s$/, heading, (match) => ({
-        level: (match[1] as string).length,
-      })),
+      // allowSameTypeRetrigger: true — 이미 heading인 블록 선두에 marker를
+      // 다시 겹쳐 써도(레벨 무관) 뒤 텍스트를 보존한 채 레벨만 바꾼다(Notion
+      // 동일 UX, 사용자 요청).
+      createBlockTypeInputRule(
+        /^(#{1,6})\s$/,
+        heading,
+        (match) => ({
+          level: (match[1] as string).length,
+        }),
+        true,
+      ),
       createBlockTypeInputRule(/^>\s$/, quote, () => undefined),
       createDividerInputRule(),
       // checkListItem은 heading/quote와 같은 nestableBlockContent라 divider

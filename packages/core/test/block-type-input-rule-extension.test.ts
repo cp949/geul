@@ -91,6 +91,35 @@ describe("heading/quote native shorthand exact 변환", () => {
     },
   );
 
+  it.each([
+    [1, 2],
+    [2, 1],
+    [1, 6],
+    [6, 1],
+  ] as const)(
+    "기존 heading(h%i) 선두에 marker를 겹쳐 쓰고 native space를 입력하면 뒤 텍스트를 보존한 채 h%i로 레벨만 바꾼다(Notion 동일 UX)",
+    (fromLevel, toLevel) => {
+      const marker = "#".repeat(toLevel);
+      const { editor, tiptap } = mounted(
+        documentOf(
+          headingBlock("target", fromLevel, `${marker}sample`),
+          paragraphBlock("tail", "꼬리"),
+        ),
+      );
+      tiptap.commands.setTextSelection(
+        contentTextStart(tiptap, "target") + marker.length,
+      );
+
+      expect(dispatchTextInput(tiptap, " ")).toBe(true);
+      expect(editor.getDocument().blocks[0]).toEqual(
+        headingBlock("target", toLevel, "sample"),
+      );
+      expect(tiptap.state.selection.from).toBe(
+        contentTextStart(tiptap, "target"),
+      );
+    },
+  );
+
   it("문장 중간 > 뒤 native space는 quote로 변환하지 않는다", () => {
     const { editor, tiptap } = mounted(
       documentOf(
@@ -365,6 +394,23 @@ describe("새 블록 타입 native shorthand 즉시 Backspace 복원", () => {
     expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
     expect(editor.getDocument().blocks).toEqual([
       paragraphBlock("target", "[x] "),
+      paragraphBlock("tail", ""),
+    ]);
+  });
+
+  it("heading 레벨 변환(기존 heading 선두 marker 겹쳐 쓰기) 직후 Backspace는 marker+뒤 텍스트 상태의 원래 레벨로 복원한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        headingBlock("target", 1, "##sample"),
+        paragraphBlock("tail", ""),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 2);
+    expect(dispatchTextInput(tiptap, " ")).toBe(true);
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      headingBlock("target", 1, "## sample"),
       paragraphBlock("tail", ""),
     ]);
   });
