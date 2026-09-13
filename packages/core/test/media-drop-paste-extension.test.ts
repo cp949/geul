@@ -476,7 +476,11 @@ describe("내부 media 드래그(이동) vs 외부 OS 파일 드롭(신규 삽�
       tiptap.view as unknown as {
         dragging: { slice: unknown; move: boolean; node: unknown } | null;
       }
-    ).dragging = { slice: draggedNode.content(), move: true, node: draggedNode };
+    ).dragging = {
+      slice: draggedNode.content(),
+      move: true,
+      node: draggedNode,
+    };
 
     withUnhandledErrorTracking((errors) => {
       dropFiles(editable, [fileOf("photo.png", "image/png")], {
