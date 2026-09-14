@@ -38,25 +38,29 @@ const openLanguagePopover = async (page: Page): Promise<Locator> => {
 };
 
 /**
- * 트리거가 활성 CodeBlock의 우상단 모서리에 붙어 있는지 poll로 확인한다
- * (topRight anchor — use-clamped-menu-position.ts). 뷰포트 clamp가
- * 개입하지 않는 범위(블록이 화면 가장자리에 바짝 붙지 않은 경우)에서만
- * 정확히 0으로 맞는다 — clamp 경계 확인은 `expectInsideViewport`가 한다.
+ * outer toolbar(`.geul-code-block-toolbar`)가 활성 CodeBlock의 우상단
+ * 모서리에 붙어 있는지 poll로 확인한다(topRight anchor —
+ * use-clamped-menu-position.ts). RD-001-DELTA-01(Issue #193)부터 위치
+ * anchor를 갖는 쪽이 언어 trigger(inner button)가 아니라 outer toolbar
+ * 전체다 — trigger는 그 안의 첫 자식일 뿐이라 복사·삭제 버튼이 뒤에
+ * 붙으면서 더는 toolbar 우측 끝이 아니다. 뷰포트 clamp가 개입하지 않는
+ * 범위(블록이 화면 가장자리에 바짝 붙지 않은 경우)에서만 정확히 0으로
+ * 맞는다 — clamp 경계 확인은 `expectInsideViewport`가 한다.
  */
 const expectTriggerAtBlockTopRight = async (
   codeBlock: Locator,
-  trigger: Locator,
+  toolbar: Locator,
 ) => {
   await expect
     .poll(async () => {
       const blockBox = await codeBlock.boundingBox();
-      const triggerBox = await trigger.boundingBox();
-      if (blockBox === null || triggerBox === null) return null;
+      const toolbarBox = await toolbar.boundingBox();
+      if (blockBox === null || toolbarBox === null) return null;
       return {
         right: Math.round(
-          blockBox.x + blockBox.width - (triggerBox.x + triggerBox.width),
+          blockBox.x + blockBox.width - (toolbarBox.x + toolbarBox.width),
         ),
-        top: Math.round(blockBox.y - triggerBox.y),
+        top: Math.round(blockBox.y - toolbarBox.y),
       };
     })
     .toEqual({ right: 0, top: 0 });
@@ -296,19 +300,23 @@ test("scroll과 viewport resize 뒤 language 트리거가 활성 CodeBlock 우�
 
   const codeBlock = editable.locator("pre[data-geul-code-block]");
   const trigger = page.getByRole("button", { name: "Code language" });
+  // RD-001-DELTA-01(Issue #193) — 위치 anchor는 outer toolbar가 갖는다
+  // (위 expectTriggerAtBlockTopRight 주석 참고). trigger는 클릭 등 버튼
+  // 자체 동작에만 쓴다.
+  const toolbar = page.locator(".geul-code-block-toolbar");
   await page.evaluate(() => {
     document.body.style.paddingBottom = "1000px";
   });
   await codeBlock.evaluate((element) =>
     element.scrollIntoView({ block: "center" }),
   );
-  await expectTriggerAtBlockTopRight(codeBlock, trigger);
+  await expectTriggerAtBlockTopRight(codeBlock, toolbar);
 
   await page.evaluate(() => window.scrollBy(0, -40));
-  await expectTriggerAtBlockTopRight(codeBlock, trigger);
+  await expectTriggerAtBlockTopRight(codeBlock, toolbar);
 
   await page.setViewportSize({ width: 200, height: 480 });
-  await expectInsideViewport(page, trigger);
+  await expectInsideViewport(page, toolbar);
 
   await trigger.click();
   const popover = page.locator(".geul-code-block-language-popover");
