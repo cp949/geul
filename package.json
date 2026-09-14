@@ -17,6 +17,9 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "pnpm build && changeset publish",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
     "check:escompat": "node scripts/check-escompat.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
@@ -41,6 +44,7 @@
     "verify": "pnpm verify:packages && pnpm test:e2e"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.2",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",
     "@types/node": "22.20.1",

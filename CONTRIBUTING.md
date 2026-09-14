@@ -38,6 +38,36 @@ pnpm --filter @cp949/geul-react typecheck
 pnpm --filter consumer-fixture typecheck
 ```
 
+## 릴리스
+
+`model`/`io`/`core`/`react` 4개는 [ADR-0018](./docs/adr/0018-lockstep-version-and-publish-four-npm-packages-together.md)에 따라 [Changesets](https://github.com/changesets/changesets) `fixed` 모드로 lockstep 배포한다 — 하나라도 bump가 필요하면 4개 전부 같은 버전으로 함께 오르고 함께 배포된다.
+
+1. 변경에 changeset을 추가한다(대화형 — patch/minor/major와 변경 요약을 묻는다).
+
+   ```bash
+   pnpm changeset
+   ```
+
+2. 배포 시점에 버전을 반영한다 — `package.json` 버전과 `CHANGELOG.md`를 갱신하고 소비한 changeset 파일을 지운다. 결과를 커밋한다.
+
+   ```bash
+   pnpm changeset:version
+   ```
+
+3. 배포한다 — `pnpm build` 후 로컬 버전이 npm 배포 버전보다 높은 패키지만 배포하고 git 태그를 만든다.
+
+   ```bash
+   pnpm changeset:publish
+   ```
+
+4. 태그를 push한다.
+
+   ```bash
+   git push --follow-tags
+   ```
+
+`pnpm changeset status`가 "일부 패키지가 바뀌었는데 changeset이 없다"고 실패할 수 있다 — `baseBranch: main` 기준 비교라 `dev`가 `main`보다 앞서 있는 동안은 정상이고, `main` 병합 뒤 해소된다.
+
 ## 아키텍처
 
 ```text

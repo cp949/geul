@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@cp949/geul-model",
+      "@cp949/geul-io",
+      "@cp949/geul-core",
+      "@cp949/geul-react"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": ["@cp949/geul-demo", "@cp949/geul-showcase", "consumer-fixture"]
+}

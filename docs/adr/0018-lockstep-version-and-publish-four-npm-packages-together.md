@@ -13,5 +13,9 @@ ADR-0002가 이 4개를 하나의 npm 패키지로 합치는 안을 이미 기�
 - 4개 `package.json`의 `"version"` 필드는 항상 동일한 값을 가진다. 하나라도 어긋나면 사고이지 의도가 아니다.
 - 배포는 4개를 한 커맨드(`pnpm -r publish` 계열)로 같은 실행 안에서 수행한다. 하나만 배포하고 나머지를 나중에 배포하지 않는다.
 - 어떤 변경이 major/minor/patch를 유발하는지 정하는 버전 증가 규칙은 이 ADR의 범위 밖이다 — 필요해지면 별도로 정한다.
-- 최초 배포 버전 번호(예: `0.1.0`) 자체는 이 ADR이 정하지 않는다 — 배포 시점에 확정한다.
+- 최초 배포 버전 번호는 `0.1.0`으로 확정했다(사용자 지시, 2026-09-14) — 4개 `package.json`에 반영, `private: true` 제거, 스코프 패키지용 `publishConfig.access: public` 추가 완료.
 - `apps/demo`·`apps/showcase`·`fixtures/consumer`는 `"private": true`로 이 lockstep 대상이 아니다.
+
+## 구현 도구
+
+2026-09-14, 사용자 지시로 [Changesets](https://github.com/changesets/changesets)의 `fixed` 모드로 구현한다(release-it 검토 후 채택 — release-it 공식 monorepo 레시피는 npm workspaces 전제라 `npm publish`를 쓰고, 이 저장소의 `workspace:*` pnpm 프로토콜을 치환하지 못한다). `.changeset/config.json`의 `fixed` 배열에 4개 패키지를 한 그룹으로 묶어 하나라도 bump가 필요하면 4개 전부 같은 버전으로 함께 오르고 함께 배포되게 한다. `ignore`에 `apps/demo`·`apps/showcase`·`fixtures/consumer`를 등록해 lockstep 대상에서 제외한다. `baseBranch`는 `main`(GitHub 기본 브랜치)이다.
