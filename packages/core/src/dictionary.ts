@@ -241,6 +241,12 @@ export type Dictionary = {
     codeBlock: {
       ariaLabel: string;
       deleteAriaLabel: string;
+      // Issue #193 RD-001-DELTA-02 — 복사 버튼 aria-label(고정)과 복사
+      // 성공 후 2초간 보이는 title(아이콘도 함께 전환). copiedTitle은
+      // IconButton의 title override 전용이고 aria-label(copyAriaLabel)은
+      // 성공 여부와 무관하게 항상 같다(G-UI-004 drift 차단 불변식).
+      copyAriaLabel: string;
+      copiedTitle: string;
     };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
@@ -492,6 +498,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     codeBlock: {
       ariaLabel: "Code block toolbar",
       deleteAriaLabel: "Delete code block",
+      copyAriaLabel: "Copy code",
+      copiedTitle: "Copied",
     },
   },
   handle: {

@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { Check, Copy, Trash2 } from "lucide-react";
 import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -61,6 +61,12 @@ const codeBlockToolbarDangerButtonClassName = `${codeBlockToolbarButtonClassName
 // media-toolbar.tsx의 deleteIcon 등과 같은 이유로 모듈 top-level에서 한
 // 번만 만든다 — 매 렌더 새 ReactElement를 만들지 않는다.
 const deleteIcon = <Trash2 {...iconProps} />;
+// RD-001-DELTA-02(Issue #193) — 복사 버튼 기본 아이콘과 복사 성공 2초간의
+// 대체 아이콘(같은 이유로 top-level에서 한 번만 만든다).
+const copyIcon = <Copy {...iconProps} />;
+const copiedIcon = <Check {...iconProps} />;
+// 복사 성공 title이 몇 ms 유지되는지(RD-001.md "결정" — 짧은 시각 피드백).
+const COPIED_FEEDBACK_MS = 2000;
 
 type LanguageState = {
   blockId: string;
@@ -94,6 +100,11 @@ export const CodeBlockLanguageCombobox = () => {
   // RD-001-DELTA-01(Issue #193) — 삭제 버튼의 Result 실패를
   // actionError로 표시한다(media-toolbar.tsx handleDelete와 동일 패턴).
   const { actionError, runCommand } = useTableCommandFeedback();
+  // RD-001-DELTA-02(Issue #193) — 복사 성공 뒤 2초간 title/아이콘을
+  // "복사됨" 상태로 전환한다. deferredUpdateTimeoutRef와 같은 관례로
+  // owner window의 setTimeout/clearTimeout을 쓴다.
+  const [copied, setCopied] = useState(false);
+  const copiedTimeoutRef = useRef<number | null>(null);
 
   const readActiveCodeBlock = useCallback(() => {
     const selection = editor.getSelectionBlockType();
@@ -106,16 +117,24 @@ export const CodeBlockLanguageCombobox = () => {
 
   // blockId는 따옴표·백슬래시를 포함할 수 있어(테스트로 고정) CSS
   // attribute selector 문자열을 직접 조립하지 않는다 — 전부 순회하며
-  // `getAttribute` 동등 비교로만 찾는다.
-  const updateAnchor = useCallback(
-    (blockId: string) => {
-      if (element === null) return;
+  // `getAttribute` 동등 비교로만 찾는다. updateAnchor(위치 계산)와
+  // handleCopy(RD-001-DELTA-02, 텍스트 추출)가 함께 쓴다.
+  const findBlockElement = useCallback(
+    (blockId: string): HTMLElement | undefined => {
+      if (element === null) return undefined;
       const blockElements = Array.from(
         element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
       );
-      const block = blockElements.find(
+      return blockElements.find(
         (candidate) => candidate.getAttribute("data-geul-block-id") === blockId,
       );
+    },
+    [element],
+  );
+
+  const updateAnchor = useCallback(
+    (blockId: string) => {
+      const block = findBlockElement(blockId);
       if (block === undefined) return;
       const rect = block.getBoundingClientRect();
       // 트리거를 코드블록 우상단에 앵커링한다(topRight) — 코드블록 DOM
@@ -127,7 +146,7 @@ export const CodeBlockLanguageCombobox = () => {
           : { left: rect.right, top: rect.top },
       );
     },
-    [element],
+    [findBlockElement],
   );
 
   const updateFromSelection = useCallback(() => {
@@ -363,6 +382,58 @@ export const CodeBlockLanguageCombobox = () => {
     );
   };
 
+  const clearCopiedTimeout = useCallback(() => {
+    if (copiedTimeoutRef.current === null) return;
+    element?.ownerDocument.defaultView?.clearTimeout(copiedTimeoutRef.current);
+    copiedTimeoutRef.current = null;
+  }, [element]);
+
+  // RD-001-DELTA-02(Issue #193) — codeBlock의 [data-geul-block-id] 자신(=
+  // <pre>)의 textContent를 그대로 복사한다. 하이라이트 decoration은
+  // Decoration.inline + class만 적용해 텍스트를 삽입하지 않으므로(RD-001.md
+  // "결정" 근거) 개행 포함 raw source가 그대로 나온다. 실패(권한 거부 등)는
+  // 흔치 않은 경로라 신규 에러 UI 없이 console.warn만 남긴다(RD-001.md
+  // "결정").
+  const handleCopy = () => {
+    const current = languageStateRef.current;
+    if (current === null) return;
+    const blockElement = findBlockElement(current.blockId);
+    if (blockElement === undefined) return;
+    // non-secure context 등에서는 navigator.clipboard 자체가 없다(spec —
+    // Clipboard API는 secure context 전용). writeText를 바로 호출하면 동기
+    // TypeError라 reject로 잡히지 않는다 — RD-001.md "결정"의 실패 정책
+    // (console.warn) 대상에 이 경로도 포함된다.
+    if (navigator.clipboard === undefined) {
+      console.warn("[geul] code block 복사 실패: clipboard API 없음");
+      return;
+    }
+    const text = blockElement.textContent ?? "";
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        clearCopiedTimeout();
+        copiedTimeoutRef.current =
+          element?.ownerDocument.defaultView?.setTimeout(() => {
+            copiedTimeoutRef.current = null;
+            setCopied(false);
+          }, COPIED_FEEDBACK_MS) ?? null;
+      },
+      (error: unknown) => {
+        console.warn("[geul] code block 복사 실패", error);
+      },
+    );
+  };
+
+  // 다른 코드블록으로 전환하면(languageState.blockId 변경) 이전 블록에서
+  // 켜진 "복사됨" 상태를 새 블록에 이어가지 않는다 — 그러지 않으면 블록
+  // A 복사 직후 2초 안에 블록 B로 옮겼을 때 B의 복사 버튼이 잘못
+  // "복사됨"으로 보인다. cleanup에서 대기 중인 timeout도 함께 정리한다
+  // (블록 전환뿐 아니라 unmount에도 적용).
+  useEffect(() => {
+    setCopied(false);
+    return clearCopiedTimeout;
+  }, [languageState?.blockId, clearCopiedTimeout]);
+
   if (languageState === null) return null;
 
   return (
@@ -395,6 +466,13 @@ export const CodeBlockLanguageCombobox = () => {
             {displayLabel(languageState.committed)}
           </button>
         </div>
+        <IconButton
+          className={codeBlockToolbarButtonClassName}
+          icon={copied ? copiedIcon : copyIcon}
+          label={dictionary.toolbar.codeBlock.copyAriaLabel}
+          onClick={handleCopy}
+          title={copied ? dictionary.toolbar.codeBlock.copiedTitle : undefined}
+        />
         <IconButton
           className={codeBlockToolbarDangerButtonClassName}
           icon={deleteIcon}

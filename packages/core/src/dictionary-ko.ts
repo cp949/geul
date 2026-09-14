@@ -184,6 +184,8 @@ export const KO_DICTIONARY: Dictionary = {
     codeBlock: {
       ariaLabel: "코드 블록 툴바",
       deleteAriaLabel: "코드 블록 삭제",
+      copyAriaLabel: "코드 블록 복사",
+      copiedTitle: "복사됨",
     },
   },
   handle: {

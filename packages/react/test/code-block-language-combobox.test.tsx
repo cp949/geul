@@ -39,7 +39,28 @@ afterEach(() => {
   // 아래 flushDeferredUpdate가 켠 fake timer를 다음 테스트로 새지 않게
   // 매번 되돌린다 — 켜지 않은 테스트에서는 no-op이다.
   vi.useRealTimers();
+  // stubClipboardWriteText가 얹었을 수 있는 navigator.clipboard를
+  // 제거한다 — 스텁하지 않은 테스트에서는 원래 없는 property라 no-op.
+  Reflect.deleteProperty(navigator, "clipboard");
 });
+
+/**
+ * navigator.clipboard.writeText를 jsdom(30.x) 미구현 표면에 로컬로
+ * 스텁한다(RD-001-DELTA-02, Issue #193). `packages/core/test/
+ * clipboard-test-support.ts`는 DataTransfer/ClipboardEvent(붙여넣기용)만
+ * 폴리필해 이 표면과 무관하고, 패키지 경계상 packages/react에서 import할
+ * 수도 없다 — `vi.spyOn`은 대상 property 자체가 없으면 쓸 수 없어
+ * `Object.defineProperty`로 직접 얹는다. 위 top-level `afterEach`가 매
+ * 테스트 뒤 제거한다.
+ */
+const stubClipboardWriteText = (writeText: (text: string) => Promise<void>) => {
+  const mock = vi.fn(writeText);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText: mock },
+    configurable: true,
+  });
+  return mock;
+};
 
 /**
  * selectionchange/mouseup/keyup 재조회를 한 매크로태스크 미루는
@@ -58,6 +79,9 @@ const flushDeferredUpdate = () => {
 type CodeFixtureOptions = {
   blockId?: string;
   language?: string;
+  // RD-001-DELTA-02(Issue #193) — 복사 버튼이 개행 포함 raw source를
+  // 그대로 옮기는지 검증하려면 멀티라인 텍스트 fixture가 필요하다.
+  text?: string;
   withParagraph?: boolean;
   secondCodeLanguage?: string;
   onChange?: MountBlockEditorOptions["onChange"];
@@ -69,6 +93,7 @@ type CodeFixtureOptions = {
 const mountCodeFixture = ({
   blockId = "code-1",
   language,
+  text = "const value = 1",
   withParagraph = false,
   secondCodeLanguage,
   onChange,
@@ -81,7 +106,7 @@ const mountCodeFixture = ({
         id: blockId,
         type: "codeBlock",
         ...(language === undefined ? {} : { language }),
-        content: [{ text: "const value = 1" }],
+        content: [{ text }],
       },
       ...(withParagraph
         ? [
@@ -361,6 +386,107 @@ describe("CodeBlock toolbar와 삭제 버튼", () => {
     // languageState가 null로 전환되지 않는다.
     expect(queryLanguageButton()).not.toBeNull();
     deleteSpy.mockRestore();
+  });
+});
+
+// RD-001-DELTA-02(Issue #193) — 복사 버튼(DOM textContent 추출 +
+// navigator.clipboard.writeText, 성공 2초 시각 피드백, 실패 console.warn).
+describe("CodeBlock toolbar 복사 버튼", () => {
+  const copyButton = (name = "Copy code"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  it("활성 CodeBlock caret에서 toolbar가 복사 버튼을 언어 trigger·삭제 버튼과 함께 노출한다", () => {
+    stubClipboardWriteText(() => Promise.resolve());
+    mountCodeFixture();
+
+    const toolbar = screen.getByRole("toolbar", { name: "Code block toolbar" });
+    expect(
+      within(toolbar).getByRole("button", { name: "Copy code" }),
+    ).toBeTruthy();
+  });
+
+  it("복사 버튼 클릭은 코드 블록의 raw source(개행 포함)를 클립보드에 복사한다", async () => {
+    const writeText = stubClipboardWriteText(() => Promise.resolve());
+    mountCodeFixture({ text: "const a = 1\nconst b = 2" });
+
+    await act(async () => {
+      fireEvent.click(copyButton());
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith("const a = 1\nconst b = 2");
+  });
+
+  it('복사 성공 시 버튼 title이 2초간 "Copied"로 바뀌고 이후 "Copy code"로 복귀한다(aria-label은 유지)', async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    stubClipboardWriteText(() => Promise.resolve());
+    mountCodeFixture();
+
+    await act(async () => {
+      fireEvent.click(copyButton());
+      await Promise.resolve();
+    });
+
+    expect(copyButton().title).toBe("Copied");
+    expect(copyButton().getAttribute("aria-label")).toBe("Copy code");
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(copyButton().title).toBe("Copy code");
+  });
+
+  it("복사 실패(Promise reject)는 console.warn만 남기고 title을 바꾸지 않으며 예외를 던지지 않는다", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubClipboardWriteText(() => Promise.reject(new Error("denied")));
+    mountCodeFixture();
+
+    await act(async () => {
+      fireEvent.click(copyButton());
+      await Promise.resolve();
+    });
+
+    expect(warn).toHaveBeenCalled();
+    expect(copyButton().title).toBe("Copy code");
+    warn.mockRestore();
+  });
+
+  it('다른 CodeBlock으로 전환하면 이전 블록에서 켜졌던 "복사됨" 상태를 새 블록에 이어가지 않는다', async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    stubClipboardWriteText(() => Promise.resolve());
+    const rendered = mountCodeFixture({ secondCodeLanguage: "css" });
+
+    await act(async () => {
+      fireEvent.click(copyButton());
+      await Promise.resolve();
+    });
+    expect(copyButton().title).toBe("Copied");
+
+    const secondCode = rendered.host.querySelectorAll<HTMLElement>("code")[1];
+    if (secondCode === undefined) {
+      throw new Error("두 번째 CodeBlock을 찾지 못했다");
+    }
+    rendered.editable.focus();
+    placeCaret(secondCode);
+    fireSelectionChange();
+    flushDeferredUpdate();
+
+    expect(copyButton().title).toBe("Copy code");
+  });
+
+  it("navigator.clipboard 자체가 없는 환경(non-secure context)에서도 예외 없이 console.warn만 남긴다", async () => {
+    // 이 테스트는 일부러 stubClipboardWriteText를 호출하지 않는다 —
+    // jsdom(30.x) 기본 상태 자체가 navigator.clipboard 미구현이라 실제
+    // non-secure context와 동형이다(RD-001.md "결정"의 실패 정책 대상).
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mountCodeFixture();
+
+    expect(() => fireEvent.click(copyButton())).not.toThrow();
+
+    expect(warn).toHaveBeenCalled();
+    expect(copyButton().title).toBe("Copy code");
+    warn.mockRestore();
   });
 });
 
