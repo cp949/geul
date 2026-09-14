@@ -457,13 +457,17 @@ export const FormattingToolbar = ({
             // preventDefault가 필요 없다.
             value={blockTypeToOptionId(toolbarState.blockSelection.blockType)}
           >
-            {getBlockTypeOptionsForSource(
-              toolbarState.blockSelection.blockType,
-            ).map((option) => (
-              <option key={option.id} value={option.id}>
-                {blockTypeText(dictionary, option.id).label}
-              </option>
-            ))}
+            {getBlockTypeOptionsForSource(toolbarState.blockSelection.blockType)
+              // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다
+              // (Issue #190) — 선례: slash-menu.tsx의 isSlashMenuItemEnabled.
+              .filter((option) =>
+                editor.isBlockTypeEnabled(option.blockType.type),
+              )
+              .map((option) => (
+                <option key={option.id} value={option.id}>
+                  {blockTypeText(dictionary, option.id).label}
+                </option>
+              ))}
           </select>
         )}
         {toolbarState.blockSelection !== null && (

@@ -50,6 +50,7 @@ type FormattingToolbarFakeController = {
   isCellRangeSelected: Mock;
   getBlockNestingActionState: Mock;
   getDictionary: Mock;
+  isBlockTypeEnabled: Mock;
   replaceDocument: Mock;
   commands: {
     setText: Mock;
@@ -105,6 +106,9 @@ export const fakeController = (
   // 아님)면 기존 텍스트 선택 테스트 전부가 그대로 통과한다(위
   // getSelectionMediaBlock과 같은 결).
   isCellRangeSelected: Mock = vi.fn((): boolean => false),
+  // enabledBlockTypes 판정 조회 전용(Issue #190) — 기본값 true(모든 타입
+  // 허용)면 기존 블록 종류 select 테스트 전부가 그대로 통과한다.
+  isBlockTypeEnabled: Mock = vi.fn((): boolean => true),
 ): FormattingToolbarFakeController => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -123,6 +127,7 @@ export const fakeController = (
   getSelectionBlockType,
   getSelectionMediaBlock,
   isCellRangeSelected,
+  isBlockTypeEnabled,
   getBlockNestingActionState,
   getDictionary,
   replaceDocument: vi.fn(),

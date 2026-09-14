@@ -291,6 +291,47 @@ describe("FormattingToolbar 서식 툴바", () => {
     ).toBe("heading-2");
   });
 
+  it("enabledBlockTypes로 deny된 블록 타입이 select에서 사라진다(Issue #190)", () => {
+    const controller = fakeController();
+    controller.isBlockTypeEnabled = vi.fn((type: string) => type !== "quote");
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(screen.queryByRole("option", { name: "Quote" })).toBeNull();
+    expect(screen.getByRole("option", { name: "Text" })).not.toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(12);
+  });
+
+  it("enabledBlockTypes 미지정 시(기본 true) 블록 종류 select 옵션 목록이 그대로 유지된다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(screen.getAllByRole("option")).toHaveLength(13);
+  });
+
   // 실브라우저(Chromium) 실측: 네이티브 <select>는 mousedown의 기본 동작이
   // 곧 드롭다운을 여는 것이라, IconButton이 초점 도난 방지에 쓰는
   // onMouseDown={preventDefault} 패턴을 그대로 복제하면 드롭다운 자체가
