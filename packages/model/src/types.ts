@@ -101,6 +101,7 @@ export type CodeBlock = {
   id: string;
   type: "codeBlock";
   language?: string;
+  wrap?: boolean;
   content: InlineContent;
 };
 // 4종 leaf 미디어 블록(file/image/video/audio) 공통 optional 필드다(spec

@@ -271,6 +271,11 @@ const codeBlockFromTiptap = (
     return invalid("CodeBlock language attr must be a string or null");
   }
 
+  const wrap = node.attrs?.wrap;
+  if (wrap !== undefined && wrap !== null && typeof wrap !== "boolean") {
+    return invalid("CodeBlock wrap attr must be a boolean or null");
+  }
+
   return {
     ok: true,
     value: {
@@ -278,6 +283,7 @@ const codeBlockFromTiptap = (
       type: "codeBlock",
       content: source === "" ? [] : [{ text: source }],
       ...(typeof language === "string" ? { language } : {}),
+      ...(typeof wrap === "boolean" ? { wrap } : {}),
     },
   };
 };

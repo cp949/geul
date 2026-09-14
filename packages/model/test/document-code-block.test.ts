@@ -260,6 +260,33 @@ describe("CodeBlock language 검증", () => {
   });
 });
 
+describe("CodeBlock wrap 검증", () => {
+  it("wrap 미지정은 property 부재를 유지한다", () => {
+    const input = documentOf(codeBlock({ content: [{ text: "source" }] }));
+
+    expect(parseDocument(input)).toEqual({ ok: true, value: input });
+  });
+
+  it.each([true, false])("wrap %s를 그대로 보존한다", (wrap) => {
+    const input = documentOf(codeBlock({ wrap }));
+
+    expect(parseDocument(input)).toEqual({ ok: true, value: input });
+  });
+
+  it.each([["문자열", "yes"], ["숫자", 1], ["배열", []], ["객체", {}]])(
+    "%s wrap을 DOCUMENT_INVALID로 거절한다",
+    (_name, wrap) => {
+      expect(parseDocument(documentOf(codeBlock({ wrap })))).toMatchObject({
+        ok: false,
+        error: {
+          code: "DOCUMENT_INVALID",
+          path: ["blocks", 0, "wrap"],
+        },
+      });
+    },
+  );
+});
+
 describe("중첩된 CodeBlock 검증", () => {
   it.each<ParentBlockType>(["paragraph", "heading", "quote"])(
     "%s children의 known alias를 canonical ID로 정규화한다",

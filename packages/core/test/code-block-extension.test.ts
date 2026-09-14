@@ -66,15 +66,30 @@ describe("codeBlock 노드 스키마 계약", () => {
 
     expect(codeBlock.create().toJSON()).toEqual({
       type: "codeBlock",
-      attrs: { language: null },
+      attrs: { language: null, wrap: null },
     });
     expect(codeBlock.create({ language: null }).attrs).toEqual({
       language: null,
+      wrap: null,
     });
     expect(codeBlock.create({ language: "TypeScript" }).attrs).toEqual({
       language: "TypeScript",
+      wrap: null,
     });
-    expect(Object.keys(codeBlock.spec.attrs ?? {})).toEqual(["language"]);
+    expect(Object.keys(codeBlock.spec.attrs ?? {})).toEqual([
+      "language",
+      "wrap",
+    ]);
+  });
+
+  it("wrap 기본값은 null이고 null과 boolean을 PM attrs에 그대로 보존한다", () => {
+    const codeBlock = codeBlockSchema().nodes.codeBlock;
+    if (codeBlock === undefined) throw new Error("codeBlock node is missing");
+
+    expect(codeBlock.create().attrs.wrap).toBeNull();
+    expect(codeBlock.create({ wrap: null }).attrs.wrap).toBeNull();
+    expect(codeBlock.create({ wrap: true }).attrs.wrap).toBe(true);
+    expect(codeBlock.create({ wrap: false }).attrs.wrap).toBe(false);
   });
 
   it("codeBlock은 language metadata 없이 정확한 내부 DOM으로 렌더된다", () => {
@@ -91,6 +106,29 @@ describe("codeBlock 노드 스키마 계약", () => {
     );
     expect(dom.querySelector("[data-language]")).toBeNull();
     expect(dom.querySelector('[class*="language-"]')).toBeNull();
+  });
+
+  it("wrap:true인 codeBlock만 data-geul-code-wrap DOM attribute를 갖는다", () => {
+    const schema = codeBlockSchema();
+    const codeBlock = schema.nodes.codeBlock;
+    if (codeBlock === undefined) throw new Error("codeBlock node is missing");
+    const serializer = DOMSerializer.fromSchema(schema);
+
+    const wrapped = serializer.serializeNode(
+      codeBlock.create({ wrap: true }, schema.text("x")),
+    ) as HTMLElement;
+    const unwrapped = serializer.serializeNode(
+      codeBlock.create({ wrap: false }, schema.text("x")),
+    ) as HTMLElement;
+    const unset = serializer.serializeNode(
+      codeBlock.create({ wrap: null }, schema.text("x")),
+    ) as HTMLElement;
+
+    expect(wrapped.outerHTML).toBe(
+      '<pre data-geul-code-wrap="" data-geul-code-block=""><code>x</code></pre>',
+    );
+    expect(unwrapped.hasAttribute("data-geul-code-wrap")).toBe(false);
+    expect(unset.hasAttribute("data-geul-code-wrap")).toBe(false);
   });
 
   it("codeBlock은 leafBlockContent에만 속하고 DOM parse 규칙이 없다", () => {
