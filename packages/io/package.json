@@ -17,7 +17,8 @@
     "./preview.css": "./dist/preview.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/tsconfig.tsbuildinfo"
   ],
   "browserslist": [
     "Chrome >= 75"
