@@ -1,5 +1,5 @@
 import type { CodeBlock } from "@cp949/geul-core";
-import { Check, Copy, MoreHorizontal, WrapText } from "lucide-react";
+import { Captions, Check, Copy, MoreHorizontal, WrapText } from "lucide-react";
 import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { setCodeBlockCaptionEditing } from "./code-block-caption-editing-store.js";
 import {
   type CodeBlockLanguageOption,
   useCodeBlockLanguages,
@@ -79,6 +80,11 @@ const moreIcon = <MoreHorizontal {...iconProps} />;
 // RD-001-DELTA-02(Issue #194) — wrap on/off 토글 버튼 아이콘. copyIcon 등과
 // 같은 이유로 top-level에서 한 번만 만든다.
 const wrapIcon = <WrapText {...iconProps} />;
+// Issue #196 — toolbar caption 버튼 아이콘. media-toolbar.tsx의 captionIcon과
+// 같은 lucide 아이콘(Captions)을 재사용해 두 caption 진입점의 시각 어휘를
+// 맞춘다(코드는 공유하지 않는다 — 이 저장소 관례, media-toolbar.tsx 자체는
+// 수정하지 않는다).
+const captionIcon = <Captions {...iconProps} />;
 // 복사 성공 title이 몇 ms 유지되는지(RD-001.md "결정" — 짧은 시각 피드백).
 const COPIED_FEEDBACK_MS = 2000;
 
@@ -610,6 +616,32 @@ export const CodeBlockLanguageCombobox = () => {
     );
   };
 
+  // Issue #196 — toolbar caption 버튼·more 메뉴 caption 항목 공용 진입점.
+  // 이 컴포넌트는 caption 입력 자체를 렌더하지 않는다(그 상태 기계는
+  // code-block-captions.tsx가 계속 전담한다, code-block-caption-editing-
+  // store.ts 문서 주석 참고) — 여기서는 활성 codeBlock의 현재 caption을
+  // core에서 읽어 그 store에 "편집 시작"만 기록한다. committedCaption을
+  // 여기서 다시 읽는 이유: languageState는 language/wrap만 caching하고
+  // caption은 갖지 않는다(readActiveCodeBlock과 같은 이유 — 이 컴포넌트가
+  // 필요로 하지 않던 필드를 이 진입점 하나를 위해 languageState 전체에
+  // 추가하면 language/wrap 동기화 조건(updateFromSelection)까지 caption을
+  // 함께 비교해야 해 불필요하게 넓어진다).
+  const handleEditCaption = () => {
+    const current = languageStateRef.current;
+    if (current === null) return;
+    const block = editor.getBlock(current.blockId);
+    const caption =
+      block?.type === "codeBlock" ? ((block as CodeBlock).caption ?? "") : "";
+    setCodeBlockCaptionEditing({ blockId: current.blockId, draft: caption });
+  };
+
+  // more 메뉴 항목 전용 — handleDelete와 같은 이유로 클릭 즉시 메뉴부터
+  // 닫는다(다시 열릴 대상을 가리키는 메뉴를 열어 두지 않는다, G-TST-001).
+  const handleEditCaptionFromMenu = () => {
+    updateMoreMenuOpen(false);
+    handleEditCaption();
+  };
+
   const clearCopiedTimeout = useCallback(() => {
     if (copiedTimeoutRef.current === null) return;
     element?.ownerDocument.defaultView?.clearTimeout(copiedTimeoutRef.current);
@@ -719,6 +751,17 @@ export const CodeBlockLanguageCombobox = () => {
           onClick={handleCopy}
           title={copied ? dictionary.toolbar.codeBlock.copiedTitle : undefined}
         />
+        {/* Issue #196 — 복사 버튼 옆 caption 진입점(사용자 요청, more 메뉴
+            항목과 기능 중복이지만 계획대로 둘 다 둔다, 01-계획.md "범위
+            밖"). 클릭하면 code-block-captions.tsx의 편집 input으로 진입한다
+            (handleEditCaption 주석 참고) — 이 toolbar 자신은 입력을 렌더하지
+            않는다. */}
+        <IconButton
+          className={codeBlockToolbarButtonClassName}
+          icon={captionIcon}
+          label={dictionary.toolbar.codeBlock.captionButtonAriaLabel}
+          onClick={handleEditCaption}
+        />
         <div
           className="geul-code-block-toolbar__more-trigger"
           ref={moreTriggerRef}
@@ -805,6 +848,17 @@ export const CodeBlockLanguageCombobox = () => {
           role="menu"
           style={moreMenuStyle}
         >
+          {/* Issue #196 — toolbar 버튼과 기능이 중복되지만 계획대로 둘 다
+              둔다(01-계획.md "범위 밖" — 재설계하지 않는다). 삭제보다 위에
+              둔다: 파괴적이지 않은 항목을 danger 항목 위에 두는 게 일반
+              관례고, 이 메뉴가 갖는 유일한 다른 항목(삭제)도 그 관례를
+              따른다. */}
+          <MenuItemButton
+            className={codeBlockToolbarMoreMenuItemClassName}
+            onClick={handleEditCaptionFromMenu}
+          >
+            {dictionary.toolbar.codeBlock.captionMenuLabel}
+          </MenuItemButton>
           <MenuItemButton
             className={`${codeBlockToolbarMoreMenuItemClassName} geul-code-block-toolbar__more-menu-item--danger`}
             onClick={handleDelete}

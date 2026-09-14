@@ -735,6 +735,139 @@ describe("CodeBlock toolbar wrap 토글(RD-001 DELTA-02, Issue #194)", () => {
   });
 });
 
+// Issue #196 — caption 진입점 2곳(toolbar 버튼, more 메뉴 항목) 모두
+// code-block-captions.tsx의 편집 input을 여는지 검증한다. 두 컴포넌트가
+// code-block-caption-editing-store.ts(모듈 store)를 공유하므로, SlashMenu가
+// 내부에서 함께 마운트하는 CodeBlockCaptions(mountCodeFixture 참고)가 실제로
+// 그 store를 구독해 반응하는지까지 확인해야 진입점이 실제로 동작함을
+// 증명한다 — 버튼 존재만 보면 store 배선 누락(클릭해도 아무 일도 안 일어남)
+// 회귀를 못 잡는다.
+describe("CodeBlock toolbar caption 진입점(RD-002 DELTA-02 확장, Issue #196)", () => {
+  const captionButton = (name = "Edit caption"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const moreButton = (name = "More code block options"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const captionMenuItem = (name = "Add caption"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("menuitem", { name });
+
+  const captionInput = (name = "Code block caption"): HTMLInputElement | null =>
+    screen.queryByRole<HTMLInputElement>("textbox", { name });
+
+  it("toolbar가 복사 버튼과 함께 caption 버튼을 노출한다", () => {
+    mountCodeFixture();
+
+    const toolbar = screen.getByRole("toolbar", { name: "Code block toolbar" });
+    expect(
+      within(toolbar).getByRole("button", { name: "Copy code" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Edit caption" }),
+    ).toBeTruthy();
+  });
+
+  it("toolbar caption 버튼 클릭은 기존 caption 값을 draft로 한 편집 input을 열고 그 input에 초점을 준다", () => {
+    mountCodeFixture({ caption: "설명 캡션" });
+    expect(captionInput()).toBeNull();
+
+    fireEvent.click(captionButton());
+
+    const input = captionInput();
+    expect(input).not.toBeNull();
+    expect(input?.value).toBe("설명 캡션");
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("caption이 비어 있으면 toolbar caption 버튼 클릭이 빈 draft로 편집 input을 연다", () => {
+    mountCodeFixture();
+
+    fireEvent.click(captionButton());
+
+    expect(captionInput()?.value).toBe("");
+  });
+
+  it("더보기 메뉴에 caption 항목이 delete보다 위에 있고, 클릭하면 메뉴를 닫고 caption 편집 input을 연다", () => {
+    mountCodeFixture({ caption: "설명 캡션" });
+    fireEvent.click(moreButton());
+    const menu = screen.getByRole("menu");
+    const menuItemNames = within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent);
+    expect(menuItemNames).toEqual(["Add caption", "Delete"]);
+
+    fireEvent.click(captionMenuItem());
+
+    // G-TST-001 — 닫힘은 하위 요소가 아니라 role="menu" 컨테이너 부재로
+    // 단언한다.
+    expect(screen.queryByRole("menu")).toBeNull();
+    const input = captionInput();
+    expect(input).not.toBeNull();
+    expect(input?.value).toBe("설명 캡션");
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("toolbar caption 버튼으로 연 편집을 Enter로 커밋하면 문서에 반영되고 toolbar caption 버튼은 그대로 남는다", () => {
+    const rendered = mountCodeFixture();
+    fireEvent.click(captionButton());
+    const input = captionInput();
+    if (input === null) throw new Error("caption input을 찾지 못했다");
+
+    fireEvent.change(input, { target: { value: "새 캡션" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
+      caption: "새 캡션",
+    });
+    expect(captionInput()).toBeNull();
+    expect(captionButton()).toBeTruthy();
+  });
+});
+
+// 단계-3 리뷰 MAJOR — code-block-captions.tsx의 Escape 취소가 input.blur()만
+// 호출하면 document.activeElement가 body로 떨어진다(code-block-language-
+// combobox.tsx의 dismissWithFocus/closeMoreMenuWithFocus와 다른 계약).
+// toolbar caption 버튼·more 메뉴 2곳으로 진입점이 늘어 이 gap의 도달 빈도가
+// 커졌다(G-TST-001).
+describe("CodeBlock caption 편집 Escape 취소 시 초점 복원(단계-3 리뷰 MAJOR)", () => {
+  const captionButton = (name = "Edit caption"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const moreButton = (name = "More code block options"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const captionMenuItem = (name = "Add caption"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("menuitem", { name });
+
+  const captionInput = (name = "Code block caption"): HTMLInputElement | null =>
+    screen.queryByRole<HTMLInputElement>("textbox", { name });
+
+  it("toolbar caption 버튼으로 연 편집에서 Escape를 누르면 편집기 본문으로 초점이 돌아온다", () => {
+    const rendered = mountCodeFixture({ caption: "설명" });
+    fireEvent.click(captionButton());
+    const input = captionInput();
+    if (input === null) throw new Error("caption input을 찾지 못했다");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(captionInput()).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("more 메뉴 caption 항목으로 연 편집에서 Escape를 누르면 편집기 본문으로 초점이 돌아온다", () => {
+    const rendered = mountCodeFixture({ caption: "설명" });
+    fireEvent.click(moreButton());
+    fireEvent.click(captionMenuItem());
+    const input = captionInput();
+    if (input === null) throw new Error("caption input을 찾지 못했다");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(captionInput()).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
 describe("CodeBlock 언어 팝오버 suggestion과 ARIA", () => {
   it("트리거 클릭이 팝오버를 열고 검색 combobox·listbox를 stable id로 연결한다", () => {
     mountCodeFixture();

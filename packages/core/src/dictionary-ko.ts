@@ -191,6 +191,11 @@ export const KO_DICTIONARY: Dictionary = {
       // 검토 결과 같은 개념이라 새 번역을 짓지 않는다).
       captionPlaceholder: "캡션",
       captionAriaLabel: "코드 블록 캡션",
+      // Issue #196 — toolbar caption 아이콘 버튼은 media.editCaptionAriaLabel과
+      // 같은 값("캡션 편집")을 쓴다. more 메뉴 항목은 계획서·완료 조건이 쓰는
+      // 문구를 그대로 옮긴다.
+      captionButtonAriaLabel: "캡션 편집",
+      captionMenuLabel: "캡션 입력",
     },
   },
   handle: {

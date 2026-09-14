@@ -262,6 +262,12 @@ export type Dictionary = {
       // 아니다).
       captionPlaceholder: string;
       captionAriaLabel: string;
+      // Issue #196 — toolbar caption 아이콘 버튼(복사 버튼 옆)의 aria-label과
+      // 더보기 메뉴 caption 항목의 표시 문구. `captionAriaLabel`(오버레이
+      // 입력 자신의 aria-label, 위)과는 다른 엘리먼트를 가리키는 별개
+      // 값이다 — media의 `editCaptionAriaLabel`/`caption` 쌍과 같은 구도.
+      captionButtonAriaLabel: string;
+      captionMenuLabel: string;
     };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
@@ -518,6 +524,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       wrapAriaLabel: "Toggle line wrap",
       captionPlaceholder: "caption",
       captionAriaLabel: "Code block caption",
+      captionButtonAriaLabel: "Edit caption",
+      captionMenuLabel: "Add caption",
     },
   },
   handle: {

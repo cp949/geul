@@ -1,7 +1,7 @@
-// 코드블록 하단 always-visible caption 오버레이(RD-002 DELTA-02, Issue #194).
-// .geul-media-handle-overlay와 같은 이유로 position: absolute + page-relative
-// 좌표(readPageRect)를 쓴다 — 들여쓰기 depth가 쌓여도 실측 rect를 그대로
-// 따라간다(G-UI-003/ADR-0012).
+// 코드블록 좌상단 always-visible caption 오버레이(RD-002 DELTA-02, Issue #194;
+// 좌상단 위치는 Issue #196). .geul-media-handle-overlay와 같은 이유로
+// position: absolute + page-relative 좌표(readPageRect)를 쓴다 — 들여쓰기
+// depth가 쌓여도 실측 rect를 그대로 따라간다(G-UI-003/ADR-0012).
 .geul-code-block-caption {
   position: absolute;
   z-index: 5;

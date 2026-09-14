@@ -3,24 +3,29 @@ import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
 
+import {
+  getCodeBlockCaptionEditingSnapshot,
+  setCodeBlockCaptionEditing,
+  useCodeBlockCaptionEditing,
+} from "./code-block-caption-editing-store.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
-import { useMirroredState } from "./use-mirrored-state.js";
+import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
-
-type EditingState = { blockId: string; draft: string };
 
 type CodeBlockInstance = { blockId: string; rect: DOMRect };
 
 /**
- * 코드블록 하단 always-visible caption 오버레이(RD-002 DELTA-02, Issue #194).
- * `TableHandles`/`MediaHandleOverlays`와 달리 hover/selection으로 뽑은 단일
- * 대상 하나만 렌더하지 않는다 — 문서 안 **모든** codeBlock 인스턴스를
- * 동시에, hover 게이트 없이 렌더한다(RD-002.md "포함 범위" — Notion 스타일
+ * 코드블록 좌상단 always-visible caption 오버레이(RD-002 DELTA-02, Issue #194;
+ * 좌상단 위치와 toolbar·more 메뉴 진입점은 Issue #196). `TableHandles`/
+ * `MediaHandleOverlays`와 달리 hover/selection으로 뽑은 단일 대상 하나만
+ * 렌더하지 않는다 — 문서 안 **모든** codeBlock 인스턴스를 동시에, hover
+ * 게이트 없이 렌더한다(RD-002.md "포함 범위" — Notion 스타일
  * always-visible). 이 저장소 최초의 "단일 대상이 아니라 전체 인스턴스"
  * 오버레이다(RD-002-DELTA-02.md "완료 조건과 검출 변이" 10).
  *
@@ -39,28 +44,57 @@ type CodeBlockInstance = { blockId: string; rect: DOMRect };
  * `useLayoutEffect` 커밋-후 diff 재확인은 드래그 프레임 정확도 전용이라
  * caption엔 과잉이다(`media-handle-overlays.tsx`도 안 쓴다).
  *
+ * `top`은 wrapper rect의 상단 그대로가 아니라 `transform:
+ * translateY(-100%)`로 자기 높이만큼 위로 밀어 올린다(단계-3 리뷰 BLOCKER —
+ * `<pre>`의 padding-top 아래에서 시작하는 코드 첫 줄과 `top: rect.top`
+ * 그대로가 겹쳐 `z-index: 5`인 caption이 그 위에 그려지고, `width:
+ * rect.width` 버튼/입력이 코드 첫 줄 클릭을 가로챈다). 이전 하단 배치(`top:
+ * rect.bottom`, gap 없이 접함)와 대칭이 되도록 코드블록 바깥 위에 gap 없이
+ * 붙는다 — `_formatting-toolbar.scss`/`_block-selection-toolbar.scss`/
+ * `_table-selection-toolbar.scss`의 "앵커 위로 뒤집기" 관례와 같은 방향이지만,
+ * 그쪽은 가운데 정렬이라 `-50%`도 함께 쓰는 반면 caption은 `left: rect.left`
+ * 좌측 정렬·전체 너비라 y축 `-100%`만 쓴다.
+ *
  * 편집 상태는 전체 문서에서 동시에 하나(`{ blockId, draft } | null`) —
  * media-toolbar의 단일 편집 모드와 동일 가정이다(다중 동시 편집은 이
- * 인터랙션의 요구사항이 아니다). `useMirroredState`로 관리해 blur
- * 핸들러가 최신 draft를 stale closure 없이 읽는다.
+ * 인터랙션의 요구사항이 아니다). Issue #196부터 이 상태를 컴포넌트 로컬이
+ * 아니라 `code-block-caption-editing-store.ts`(useSyncExternalStore 모듈
+ * store)로 소유한다 — `CodeBlockLanguageCombobox`의 toolbar 버튼·more 메뉴
+ * 항목이 이 컴포넌트의 props/context 없이 같은 편집 상태를 시작할 수 있어야
+ * 해서다(그 파일 상단 문서 주석 참고). commit 핸들러는 그 store의
+ * `getCodeBlockCaptionEditingSnapshot()`을 직접 읽어 최신 draft를 stale
+ * closure 없이 얻는다 — 모듈 변수 자체가 항상 최신값이라 이전의
+ * `useMirroredState` ref와 동등한 역할을 대신한다.
  *
  * Enter/blur 커밋, Escape 취소는 이 저장소 첫 blur-commit 패턴이다(조사
  * 확인 — media/link toolbar는 전부 Enter+Save버튼/Escape뿐, onBlur 선례
  * 0건). Escape가 `input.blur()`를 직접 호출해 onBlur가 뒤이어 실행되므로
  * `cancelledRef`로 "Escape가 트리거한 blur"와 "포커스 이동으로 인한 blur"를
- * 구분한다.
+ * 구분한다. Escape 분기는 `blur()` 뒤 `useFocusEditor`로 편집기 본문에
+ * 초점을 명시적으로 복원한다(단계-3 리뷰 MAJOR — `blur()`만 호출하면
+ * `document.activeElement`가 `body`로 떨어진다). `code-block-language-
+ * combobox.tsx`의 `dismissWithFocus`/`closeMoreMenuWithFocus`와 같은 계약 —
+ * Escape에만 좁게 적용하고, 클릭 등으로 인한 일반 blur(자연스러운 포커스
+ * 이동)는 그대로 둔다.
  */
 export const CodeBlockCaptions = () => {
   const editor = useEditor();
   const dictionary = useDictionary();
   const { element } = useEditorMount();
-  const [editing, editingRef, updateEditing] =
-    useMirroredState<EditingState | null>(null);
+  const focusEditor = useFocusEditor(element);
+  const editing = useCodeBlockCaptionEditing();
   const [, setTick] = useState(0);
   const cancelledRef = useRef(false);
 
   const refresh = useCallback(() => setTick((tick) => tick + 1), []);
   useSelectionRefresh({ element, onUpdate: refresh });
+
+  // unmount 시 공유 store를 비운다 — 다음 마운트(다음 테스트, 다음 editor)가
+  // 이 인스턴스가 열어 둔 편집 상태를 이어받지 않는다(code-block-caption-
+  // editing-store.ts 문서 주석의 "알려진 단순화" 참고).
+  useEffect(() => {
+    return () => setCodeBlockCaptionEditing(null);
+  }, []);
 
   // Escape로 취소했으면 onBlur가 이어서 실행되더라도 커밋하지 않는다.
   // media-toolbar의 applyCaption과 같은 이유로 draft가 committed 값과
@@ -69,10 +103,10 @@ export const CodeBlockCaptions = () => {
     (blockId: string, committedCaption: string) => {
       if (cancelledRef.current) {
         cancelledRef.current = false;
-        updateEditing(null);
+        setCodeBlockCaptionEditing(null);
         return;
       }
-      const current = editingRef.current;
+      const current = getCodeBlockCaptionEditingSnapshot();
       if (
         current !== null &&
         current.blockId === blockId &&
@@ -80,9 +114,9 @@ export const CodeBlockCaptions = () => {
       ) {
         editor.commands.setCodeBlockCaption(blockId, current.draft);
       }
-      updateEditing(null);
+      setCodeBlockCaptionEditing(null);
     },
-    [editor, editingRef, updateEditing],
+    [editor],
   );
 
   if (element === null) return null;
@@ -131,10 +165,11 @@ export const CodeBlockCaptions = () => {
           } else if (event.key === "Escape") {
             cancelledRef.current = true;
             event.currentTarget.blur();
+            focusEditor();
           }
         };
         const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-          updateEditing({ blockId, draft: event.target.value });
+          setCodeBlockCaptionEditing({ blockId, draft: event.target.value });
         };
 
         return (
@@ -143,9 +178,10 @@ export const CodeBlockCaptions = () => {
             className="geul-code-block-caption"
             style={{
               position: "absolute",
-              top: rect.bottom,
+              top: rect.top,
               left: rect.left,
               width: rect.width,
+              transform: "translateY(-100%)",
             }}
           >
             {isEditing ? (
@@ -165,7 +201,10 @@ export const CodeBlockCaptions = () => {
                 className="geul-code-block-caption__display"
                 data-geul-media-caption=""
                 onClick={() =>
-                  updateEditing({ blockId, draft: committedCaption })
+                  setCodeBlockCaptionEditing({
+                    blockId,
+                    draft: committedCaption,
+                  })
                 }
               >
                 {committedCaption === ""

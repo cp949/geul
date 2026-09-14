@@ -31,6 +31,45 @@ const renderCaptions = (
 const captionInput = (): HTMLInputElement =>
   screen.getByRole<HTMLInputElement>("textbox", { name: inputLabel });
 
+describe("caption 오버레이 위치(좌상단, Issue #196 완료 조건 1)", () => {
+  it("오버레이 top이 코드블록의 상단(rect.top)이다(이전: 하단 rect.bottom)", () => {
+    renderCaptions({
+      initialBlocks: [
+        { id: "code-1", type: "codeBlock", content: [{ text: "a" }] },
+      ],
+    });
+    // mountBlockEditor의 restubGeometry()는 render() 완료 뒤에 rect를
+    // 스텁한다 — 위 "두 오버레이가 서로 다른 top 위치" 테스트와 같은 이유로
+    // resize 이벤트를 한 번 더 쏴 스텁된 rect를 반영한다.
+    fireEvent(window, new Event("resize"));
+
+    // DEFAULT_BLOCK_LAYOUT(mount-editor.tsx)의 첫 블록은 top=0/height=20 —
+    // rect.top=0, rect.bottom=20. 좌상단이면 "0px", 하단이었다면 "20px".
+    const overlay = document.querySelector<HTMLElement>(
+      ".geul-code-block-caption",
+    );
+    expect(overlay?.style.top).toBe("0px");
+  });
+
+  it("오버레이가 transform: translateY(-100%)로 코드블록 바깥 위쪽에 붙어 코드 첫 줄과 겹치지 않는다(단계-3 리뷰 BLOCKER)", () => {
+    // top: rect.top 그대로면 <pre>의 padding-top 아래에서 시작하는 코드
+    // 첫 줄과 z-index: 5인 caption이 겹친다(실측: <pre> padding-top 0.75rem
+    // vs caption 높이 약 26.4px). 자기 높이만큼 위로 밀어 올려야 이전
+    // 하단 배치(top: rect.bottom, gap 없이 접함)와 대칭으로 겹치지 않는다.
+    renderCaptions({
+      initialBlocks: [
+        { id: "code-1", type: "codeBlock", content: [{ text: "a" }] },
+      ],
+    });
+    fireEvent(window, new Event("resize"));
+
+    const overlay = document.querySelector<HTMLElement>(
+      ".geul-code-block-caption",
+    );
+    expect(overlay?.style.transform).toBe("translateY(-100%)");
+  });
+});
+
 describe("codeBlock이 없으면 오버레이가 렌더되지 않는다(완료 조건 5)", () => {
   it("문단만 있는 문서에는 caption 오버레이가 없다", () => {
     renderCaptions();
