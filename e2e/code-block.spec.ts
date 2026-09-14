@@ -404,3 +404,38 @@ test("caption이 있는 CodeBlock과 앞 CodeBlock 사이에 실제 여백이 �
     })
     .toBeGreaterThanOrEqual(8);
 });
+
+// CodeBlockExitExtension의 Shift-Enter(사용자 요청 20260915) — core
+// 유닛(code-block-exit-extension.test.ts)이 PM 문서 계약을 고정하고, 여기서는
+// 실제 브라우저 keydown→분할→caret 이동이 눈에 보이는 DOM으로 이어지는지만
+// 확인한다.
+test("Shift+Enter는 캐럿 위치에서 CodeBlock을 분할해 다음 블록으로 탈출한다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const codeBlock = await insertCodeBlock(page, editable);
+  await codeBlock.click();
+  await page.keyboard.type("const a = 1;");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("const b = 2;");
+  await page.keyboard.press("Home");
+
+  await page.keyboard.press("Shift+Enter");
+
+  // 캐럿 앞부분만 codeBlock에 남는다 — 개행 문자까지 그대로 유지한다.
+  const code = codeBlock.locator("code");
+  await expect
+    .poll(() => code.evaluate((element) => element.textContent))
+    .toBe("const a = 1;\n");
+  await expect(editable.locator("pre[data-geul-code-block]")).toHaveCount(1);
+
+  // 캐럿 뒷부분은 더 이상 codeBlock이 아닌 새 문단으로 옮겨간다.
+  const nextBlock = editable.locator("p", { hasText: "const b = 2;" });
+  await expect(nextBlock).toBeVisible();
+  await expect(nextBlock).toHaveText("const b = 2;");
+
+  // 캐럿이 그 문단으로 이동했다 — 이어서 입력하면 codeBlock이 아니라 그
+  // 문단에 반영된다.
+  await page.keyboard.type("X");
+  await expect(nextBlock).toHaveText("Xconst b = 2;");
+});

@@ -3,7 +3,11 @@
  * hardBreak를 삽입하는 HardBreakKeyboardExtension의 계약을 확인한다
  * (RD-002). h1 예외(그릴링 결정 Q2)도 이 파일이 소유한다. table 안 계약
  * (RD-003)은 table-keyboard-extension.test.ts/editor-controller-table.test.ts가
- * 소유 — 여기서는 "관여하지 않는다"만 codeBlock과 함께 확인한다.
+ * 소유 — 여기서는 이 확장 자신이 "관여하지 않는다"만 codeBlock과 함께
+ * 확인한다. codeBlock 안 Shift+Enter가 실제로 어떻게 되는지(캐럿 위치에서
+ * codeBlock을 분할해 탈출)는 이 확장보다 먼저 실행되는
+ * CodeBlockExitExtension(priority 1_100)의 계약이다 —
+ * code-block-exit-extension.test.ts가 소유(2026-09-15 사용자 요청).
  *
  * 키 소비는 real DOM KeyboardEvent(pressShiftEnter)로 시뮬레이션한다 —
  * addKeyboardShortcuts로만 등록돼 editor.commands로 노출되지 않는다
@@ -152,8 +156,12 @@ describe("codeBlock 안 Shift+Enter는 이 확장이 관여하지 않는다", ()
     tiptap.commands.setTextSelection(caretBetweenAB(tiptap.state.doc));
 
     // codeBlock content(`"text*"`)는 hardBreak(inline 그룹)를 받지 않는다 —
-    // insertContent가 스키마 검증에 실패해 트랜잭션 없이 조용히 실패해야
-    // 한다(RD-001 DELTA-01과 같은 이유). 던지면 실패.
+    // 이 확장 자신의 allow-list(HARD_BREAK_TARGET_NODE_TYPES)가 codeBlock을
+    // 걸러 insertContent를 아예 시도하지 않는다. 2026-09-15부터는 그
+    // 이전에 우선순위가 더 높은 CodeBlockExitExtension이 Shift-Enter를
+    // 먼저 소비해(캐럿 위치에서 codeBlock을 분할) 이 확장의 핸들러 자체가
+    // 호출되지 않는다 — 어느 경로든 이 확장이 hardBreak를 넣는 일은 없다.
+    // 던지면 실패.
     expect(() => pressShiftEnter(editable)).not.toThrow();
 
     let hardBreakFound = false;

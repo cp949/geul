@@ -117,6 +117,109 @@ describe("codeBlock Enter double 개행 종료", () => {
   });
 });
 
+describe("codeBlock Shift-Enter 캐럿 분할 종료(2026-09-15 사용자 요청)", () => {
+  it("codeBlock 끝에서 Shift-Enter는 새 빈 paragraph를 형제로 만들고 그 선두로 캐럿을 옮긴다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        codeBlockBlock("target", "code"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    tiptap.commands.setTextSelection(
+      contentTextStart(tiptap, "target") + "code".length,
+    );
+
+    expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("target", "code"),
+      paragraphBlock("id-1", ""),
+      paragraphBlock("tail", "꼬리"),
+    ]);
+    expect(tiptap.state.selection.$from.parent.type.name).toBe("paragraph");
+  });
+
+  it("codeBlock 맨 앞에서 Shift-Enter는 빈 codeBlock을 남기고 전체 텍스트를 새 paragraph로 옮긴다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        codeBlockBlock("target", "code"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target"));
+
+    expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("target", ""),
+      paragraphBlock("id-1", "code"),
+      paragraphBlock("tail", "꼬리"),
+    ]);
+  });
+
+  it("코드 중간(개행 포함)에서 Shift-Enter는 캐럿 앞만 codeBlock으로 남기고 뒤는 줄바꿈을 보존한 paragraph가 된다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        codeBlockBlock("target", "a\nb\nc"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    // "a\n" 뒤, "b" 앞.
+    tiptap.commands.setTextSelection(
+      contentTextStart(tiptap, "target") + "a\n".length,
+    );
+
+    expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("target", "a\n"),
+      paragraphBlock("id-1", "b\nc"),
+      paragraphBlock("tail", "꼬리"),
+    ]);
+  });
+
+  it("완전히 빈 codeBlock에서도 Shift-Enter는 새 빈 paragraph로 탈출한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(codeBlockBlock("target", ""), paragraphBlock("tail", "꼬리")),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target"));
+
+    expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("target", ""),
+      paragraphBlock("id-1", ""),
+      paragraphBlock("tail", "꼬리"),
+    ]);
+  });
+
+  it("범위 선택 중 Shift-Enter는 선택 영역을 먼저 지우고 그 지점에서 분할한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        codeBlockBlock("target", "abcdef"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    const start = contentTextStart(tiptap, "target");
+    tiptap.commands.setTextSelection({ from: start + 2, to: start + 4 });
+
+    expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("target", "ab"),
+      paragraphBlock("id-1", "ef"),
+      paragraphBlock("tail", "꼬리"),
+    ]);
+  });
+
+  it("codeBlock이 아니면 이 확장은 물러나고 HardBreakKeyboardExtension의 Shift-Enter가 대신 소비한다(회귀 없음)", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("target", "ab")),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "target") + 1);
+
+    expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("target", "a\nb"),
+    ]);
+  });
+});
+
 describe("빈 codeBlock Delete 삭제", () => {
   it("빈 codeBlock 전체를 삭제한다", () => {
     const { editor, tiptap } = mounted(
