@@ -322,6 +322,13 @@ export interface EditorController {
       blockId: string,
       alignment: "left" | "center" | "right" | null,
     ): Result<void, EditorError>;
+    // RD-001 DELTA-02, Issue #194 — codeBlock 전용(spec 없음, roadmap
+    // 결정). 대상이 codeBlock이 아니면 COMMAND_NOT_APPLICABLE로 거절한다
+    // (media 계열처럼 kind별 전용 코드를 따로 두지 않는다 — codeBlock은
+    // 하나의 타입뿐이다). false면 렌더 DOM에서 `data-geul-code-wrap`
+    // attribute가 사라지고 react가 `white-space: pre`(가로 스크롤형)로
+    // 되돌린다(code-block-extension.ts).
+    setCodeBlockWrap(blockId: string, wrap: boolean): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
     // 사전 조건 실패(BLOCK_NOT_FOUND·미등록·이미 진행 중 등)만 ok:false로

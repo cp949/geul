@@ -8,7 +8,10 @@ import {
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 
-import { findBlockPosition } from "./block-position.js";
+import {
+  findBlockPosition,
+  findEditableBlockContent,
+} from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { type MediaBlockKind } from "./media-block-kind.js";
 import {
@@ -233,6 +236,43 @@ export const createBlockAttributeCommands = (
     });
   };
 
+  // setCodeBlockWrap 전용 본체(RD-001 DELTA-02, Issue #194). media 계열과
+  // 달리 `wrap`은 blockContainer가 아니라 codeBlock 콘텐츠 노드 자신의
+  // attrs다(language와 같은 자리, code-block-extension.ts) — findBlockPosition
+  // (blockContainer 위치)이 아니라 findEditableBlockContent(콘텐츠 노드
+  // 자신의 위치, generic-block-type-commands.ts의 setBlockType이 language를
+  // 읽고 쓸 때 쓰는 것과 동일 프리미티브)로 찾는다. 가드는 kind 부분집합이
+  // 아니라 단일 타입 — codeBlock은 media 4종처럼 서로 다른 kind로 나뉘지
+  // 않는다. 불일치는 media처럼 전용 에러 코드를 새로 만들지 않고
+  // commandNotApplicable을 쓴다(runSetBlockTextPropCommand의 블록타입
+  // 불일치 분기와 동일 근거 — "대상이 codeBlock 자체가 아니다"는 kind 세부
+  // 정책이 아니라 명령 부적합이다). 값이 boolean 타입 자체로 이미 값공간
+  // 전체를 강제하므로 runSetMediaShowPreviewCommand와 같은 이유로 별도 값
+  // 검증이 없다.
+  const runSetCodeBlockWrapCommand = (
+    blockId: string,
+    wrap: boolean,
+  ): Result<void, EditorError> => {
+    const command = "setCodeBlockWrap";
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const target = findEditableBlockContent(session.editor.state.doc, blockId);
+    if (target === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (target.node.type.name !== "codeBlock") {
+      return commandNotApplicable(command);
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        target.position,
+        undefined,
+        { ...target.node.attrs, wrap },
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // setMediaTextAlignment 전용 본체(Issue #154, MED-009). 위
   // runSetMediaPreviewWidthCommand·runSetMediaShowPreviewCommand와 같은
   // "찾기→가드→검증→setNodeMarkup 1회" 골격이지만, kind 가드 집합이
@@ -392,6 +432,10 @@ export const createBlockAttributeCommands = (
     alignment: "left" | "center" | "right" | null,
   ): Result<void, EditorError> =>
     runSetMediaTextAlignmentCommand(blockId, alignment);
+  const setCodeBlockWrap = (
+    blockId: string,
+    wrap: boolean,
+  ): Result<void, EditorError> => runSetCodeBlockWrapCommand(blockId, wrap);
   // RD-002 DELTA-02 — 오케스트레이션 본체(session.uploadMediaFile)를
   // 세션으로 이동했다. 여기는 command 이름만 매개변수화해 위임하는
   // 얇은 wrapper다(공개 시그니처·Result/Promise 계약은 그대로).
@@ -425,6 +469,7 @@ export const createBlockAttributeCommands = (
     setMediaPreviewWidth,
     setMediaShowPreview,
     setMediaTextAlignment,
+    setCodeBlockWrap,
     uploadMediaFile,
     replaceMediaBlockFile,
     cancelMediaUpload,

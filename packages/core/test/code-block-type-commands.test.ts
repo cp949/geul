@@ -323,6 +323,35 @@ describe("CodeBlock language 변경", () => {
     },
   );
 
+  it("language 변경은 기존 wrap 값을 보존한다(RD-001 DELTA-02, Issue #194)", () => {
+    const { editor } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "source" }],
+          language: "typescript",
+          wrap: true,
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+
+    expect(
+      editor.commands.setBlockType("code", {
+        type: "codeBlock",
+        language: "javascript",
+      }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "code",
+      type: "codeBlock",
+      content: [{ text: "source" }],
+      language: "javascript",
+      wrap: true,
+    });
+  });
+
   it("현재 저장형과 같은 canonical language는 dispatch와 history가 없는 성공 no-op이다", () => {
     const { editor, tiptap, changes } = mounted(
       documentOf(

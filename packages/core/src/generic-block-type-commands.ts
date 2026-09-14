@@ -141,11 +141,23 @@ export const createGenericBlockTypeCommands = (
         const source = clearContent ? "" : target.node.textContent;
         const content =
           source === "" ? undefined : session.editor.schema.text(source);
+        // codeBlock→codeBlock(언어만 변경)은 replaceWith가 노드를 통째로
+        // 새로 만들어 언급하지 않은 attrs가 schema default로 리셋된다 —
+        // wrap(RD-001 DELTA-02, Issue #194)을 명시적으로 옮겨 싣지 않으면
+        // 언어를 바꿀 때마다 wrap 설정이 조용히 사라진다. 다른 타입에서
+        // codeBlock으로 갓 전환하는 경우는 이전 attrs가 의미 없어 null
+        // (미설정)이 맞다.
         const attrs =
           blockType.type === "heading"
             ? { level: blockType.level }
             : blockType.type === "codeBlock"
-              ? { language: codeBlockLanguage }
+              ? {
+                  language: codeBlockLanguage,
+                  wrap:
+                    currentTypeName === "codeBlock"
+                      ? (target.node.attrs.wrap ?? null)
+                      : null,
+                }
               : {};
         const replacement = nodeType.create(attrs, content);
         const transaction = session.editor.state.tr.replaceWith(
