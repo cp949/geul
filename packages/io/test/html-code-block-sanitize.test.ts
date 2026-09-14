@@ -68,6 +68,14 @@ describe("HTML CodeBlock 입력 정제", () => {
     );
   });
 
+  it("figure로 감싼 codeBlock(caption)은 SAFE_BLOCK_DOWNGRADED를 만들지 않는다", () => {
+    expect(
+      importWarningKinds(
+        "<figure><pre><code>source</code></pre><figcaption>cap</figcaption></figure>",
+      ),
+    ).not.toContain("SAFE_BLOCK_DOWNGRADED");
+  });
+
   it("pre 내부 literal Tab은 코드포인트 경고를 만들지 않는다", () => {
     expect(
       importWarningKinds("<pre><code>one\ttwo</code></pre>"),

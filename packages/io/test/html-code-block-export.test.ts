@@ -296,6 +296,198 @@ describe("CodeBlock HTML 강조 export → import round-trip", () => {
   });
 });
 
+describe("CodeBlock caption HTML export", () => {
+  it("caption이 있으면 figure/figcaption으로 감싼다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption",
+          type: "codeBlock",
+          caption: "설명",
+          content: [{ text: "const x = 1;" }],
+        },
+      ],
+    };
+
+    expect(exportHtml(document)).toEqual({
+      ok: true,
+      value:
+        "<figure>" +
+        '<pre data-geul-block-id="code-caption"><code>const x = 1;</code></pre>' +
+        "<figcaption>설명</figcaption>" +
+        "</figure>",
+    });
+  });
+
+  it("caption 미설정과 빈 문자열은 figure 래핑 없이 기존과 동일하게 export한다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption-undefined",
+          type: "codeBlock",
+          content: [{ text: "a" }],
+        },
+        {
+          id: "code-caption-empty",
+          type: "codeBlock",
+          caption: "",
+          content: [{ text: "b" }],
+        },
+      ],
+    };
+
+    expect(exportHtml(document)).toEqual({
+      ok: true,
+      value:
+        '<pre data-geul-block-id="code-caption-undefined"><code>a</code></pre>' +
+        '<pre data-geul-block-id="code-caption-empty"><code>b</code></pre>',
+    });
+  });
+
+  it("wrap: true와 caption을 함께 가진 codeBlock은 pre에 marker를, figure로 감싼다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-wrap-caption",
+          type: "codeBlock",
+          wrap: true,
+          caption: "설명",
+          content: [{ text: "x" }],
+        },
+      ],
+    };
+
+    expect(exportHtml(document)).toEqual({
+      ok: true,
+      value:
+        "<figure>" +
+        '<pre data-geul-block-id="code-wrap-caption" data-geul-code-wrap=""><code>x</code></pre>' +
+        "<figcaption>설명</figcaption>" +
+        "</figure>",
+    });
+  });
+});
+
+describe("CodeBlock caption HTML round-trip", () => {
+  it("caption이 있는 codeBlock을 export→import 왕복해도 caption이 유지된다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption-roundtrip",
+          type: "codeBlock",
+          language: "typescript",
+          caption: "설명 캡션",
+          content: [{ text: "const x = 1;" }],
+        },
+      ],
+    };
+
+    const exported = exportHtml(document);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: { document, warnings: [] },
+    });
+  });
+
+  it("wrap과 caption을 함께 가진 codeBlock도 둘 다 왕복된다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-wrap-caption-roundtrip",
+          type: "codeBlock",
+          wrap: true,
+          caption: "설명",
+          content: [{ text: "const x = 1;" }],
+        },
+      ],
+    };
+
+    const exported = exportHtml(document);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: { document, warnings: [] },
+    });
+  });
+
+  it("caption이 빈 문자열인 codeBlock은 왕복 후 caption 필드가 생략된다(값 없음으로 수렴)", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption-empty-roundtrip",
+          type: "codeBlock",
+          caption: "",
+          content: [{ text: "plain" }],
+        },
+      ],
+    };
+
+    const exported = exportHtml(document);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: {
+        document: {
+          ...document,
+          blocks: [
+            {
+              id: "code-caption-empty-roundtrip",
+              type: "codeBlock",
+              content: [{ text: "plain" }],
+            },
+          ],
+        },
+        warnings: [],
+      },
+    });
+  });
+
+  it("blockquote 안 caption 있는 codeBlock도 인접 문단과 분리된 경계로 보존된다", () => {
+    const result = importHtml(
+      "<blockquote><p>quote</p>" +
+        "<figure><pre><code>nested</code></pre><figcaption>안내</figcaption></figure>" +
+        "</blockquote>",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "quote",
+        content: [{ text: "quote" }],
+        children: [
+          {
+            id: "html-2",
+            type: "codeBlock",
+            content: [{ text: "nested" }],
+            caption: "안내",
+          },
+        ],
+      },
+    ]);
+  });
+});
+
 describe("CodeBlock wrap HTML round-trip", () => {
   it("wrap: true인 codeBlock을 export→import 왕복해도 wrap: true가 유지된다", () => {
     const document: Document = {
@@ -645,6 +837,47 @@ describe("CodeBlock HTML 가져오기", () => {
           revision: 0,
           blocks: [
             { id: "code-no-wrap", type: "codeBlock", content: [{ text: "a" }] },
+          ],
+        },
+        warnings: [],
+      },
+    });
+  });
+
+  it("figure로 감싼 pre+figcaption을 caption 있는 CodeBlock으로 가져온다", () => {
+    expect(
+      importHtml(
+        '<figure><pre data-geul-block-id="code-figure"><code>x</code></pre><figcaption>hi</figcaption></figure>',
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        document: {
+          formatVersion: 1,
+          revision: 0,
+          blocks: [
+            {
+              id: "code-figure",
+              type: "codeBlock",
+              content: [{ text: "x" }],
+              caption: "hi",
+            },
+          ],
+        },
+        warnings: [],
+      },
+    });
+  });
+
+  it("figcaption 없는 figure(pre만 감쌈)는 caption 필드 없이 가져온다", () => {
+    expect(importHtml("<figure><pre><code>x</code></pre></figure>")).toEqual({
+      ok: true,
+      value: {
+        document: {
+          formatVersion: 1,
+          revision: 0,
+          blocks: [
+            { id: "html-1", type: "codeBlock", content: [{ text: "x" }] },
           ],
         },
         warnings: [],

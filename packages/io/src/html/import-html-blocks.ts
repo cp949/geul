@@ -10,6 +10,7 @@ import {
   type IdFactory,
   type ListItemBlock,
   MAX_NESTING_DEPTH,
+  sanitizeInlineText,
 } from "@cp949/geul-model";
 
 import { segmentBlocks } from "./block-segmenter.js";
@@ -183,17 +184,47 @@ const blocksFromSegments = (
     // 매핑은 이 파일의 blocksFromListElement가 이미 따로 담당한다.
     if (segment.kind === "list") continue;
     if (segment.kind === "codeBlock") {
-      const source = textValue(segment.node.children);
-      const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
-      const directCode = firstDirectCode(segment.node);
+      // caption이 있으면 export-html.ts가
+      // <figure><pre>…</pre><figcaption>…</figcaption></figure>로 감싼다
+      // (RD-002-DELTA-03). pre 자신은 bare/figure 두 형태에서 완전히 같은
+      // 속성 계약(dataGeulBlockId·language·wrap)을 갖는다 — figure는 아무
+      // data-geul-*도 갖지 않는 순수 wrapper다. block-segmenter.ts의
+      // isCodeBlockFigureNode predicate(import-html-segment-policy.ts)가
+      // 이미 pre 자식 존재를 보장하므로 `?? segment.node` fallback은 실제로는
+      // 도달하지 않는다 — non-null assertion 대신 타입만 좁히는 안전한 형태로
+      // 둔다.
+      const isFigure = segment.node.tagName === "figure";
+      const preNode = isFigure
+        ? (segment.node.children.find(
+            (child): child is HtmlElementNode =>
+              isElementNode(child) && child.tagName === "pre",
+          ) ?? segment.node)
+        : segment.node;
+      const figcaptionNode = isFigure
+        ? segment.node.children.find(
+            (child): child is HtmlElementNode =>
+              isElementNode(child) && child.tagName === "figcaption",
+          )
+        : undefined;
+      // caption은 plain string이다(rich text 아님, model CodeBlock.caption).
+      // media caption 디코드(import-html-media.ts)와 동일하게 textValue로
+      // 평탄화 후 sanitizeInlineText로 정규화한다.
+      const caption =
+        figcaptionNode === undefined
+          ? undefined
+          : sanitizeInlineText(textValue(figcaptionNode.children));
+
+      const source = textValue(preNode.children);
+      const id = propertyString(preNode, "dataGeulBlockId") ?? createId();
+      const directCode = firstDirectCode(preNode);
       const directCodeDataLanguage =
         directCode === undefined
           ? undefined
           : propertyString(directCode, "dataLanguage");
-      const preDataLanguage = propertyString(segment.node, "dataLanguage");
+      const preDataLanguage = propertyString(preNode, "dataLanguage");
       const directCodeClassLanguages =
         directCode === undefined ? [] : classLanguages(directCode);
-      const preClassLanguages = classLanguages(segment.node);
+      const preClassLanguages = classLanguages(preNode);
       const selectionCandidates = [
         directCodeDataLanguage,
         preDataLanguage,
@@ -216,13 +247,14 @@ const blocksFromSegments = (
       // marker 패턴 — 값 내용은 보지 않고 존재만 본다(export-html.ts의
       // codeBlockNode와 동일 관례, import-html-wrappers.ts의
       // isChildrenContainerMarker와 동일 "presence만" 판정).
-      const wrap = segment.node.properties.dataGeulCodeWrap !== undefined;
+      const wrap = preNode.properties.dataGeulCodeWrap !== undefined;
       blocks.push({
         id,
         type: "codeBlock",
         content: source.length === 0 ? [] : [{ text: source }],
         ...(language === undefined ? {} : { language }),
         ...(wrap ? { wrap: true } : {}),
+        ...(caption === undefined ? {} : { caption }),
       });
       continue;
     }

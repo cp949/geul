@@ -31,6 +31,7 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
   importBlockSegmentPolicy.isDividerTag?.(node.tagName) === true ||
   importBlockSegmentPolicy.isQuoteTag?.(node.tagName) === true ||
   importBlockSegmentPolicy.isCodeBlockTag?.(node.tagName) === true ||
+  importBlockSegmentPolicy.isCodeBlockFigureNode?.(node) === true ||
   importBlockSegmentPolicy.isNestedBoundary(node.tagName) ||
   importBlockSegmentPolicy.isTransparent(node.tagName) ||
   importBlockSegmentPolicy.isTableNode(node) ||

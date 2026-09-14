@@ -10,7 +10,9 @@ import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
+import { isElementNode } from "./import-html-helpers.js";
 import { isMediaNode } from "./import-html-media.js";
+import type { HtmlElementNode } from "./inline-content.js";
 
 // heading 태그명 → model HeadingBlock["level"]. h1~h6 전부가 heading이다
 // (DELTA-06, Issue #38 — model이 level 1~6을 허용하고 sanitize도 h4~h6를
@@ -29,6 +31,18 @@ export const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
   ["h5", 5],
   ["h6", 6],
 ]);
+
+// 코드블록 caption(RD-002-DELTA-03)의 <figure><pre>…</pre>
+// <figcaption>…</figcaption></figure> 래핑 판별. isMediaNode(import-html-
+// media.ts)와 마찬가지로 figure가 media caption과 codeBlock caption 두 의미를
+// 겸하는 태그라 태그명만으로는 판정할 수 없다 — 자식에 <pre>가 있을 때만
+// codeBlock figure로 승격한다. media figure(자식이 img/video/audio/a)는
+// pre 자식을 갖지 않으므로 두 predicate가 동시에 true가 되는 입력은 없다.
+const isCodeBlockFigureNode = (node: HtmlElementNode): boolean =>
+  node.tagName === "figure" &&
+  node.children.some(
+    (child) => isElementNode(child) && child.tagName === "pre",
+  );
 
 // documentFromRoot의 재귀 경계 판정(문단/헤딩/구분선/표 시퀀스로 쪼개기)은
 // clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
@@ -54,5 +68,6 @@ export const importBlockSegmentPolicy: BlockSegmentPolicy<
   isDividerTag: (tagName) => tagName === "hr",
   isQuoteTag: (tagName) => tagName === "blockquote",
   isCodeBlockTag: (tagName) => tagName === "pre",
+  isCodeBlockFigureNode,
   isMediaNode,
 };

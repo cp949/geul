@@ -323,7 +323,7 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   // inlineContentToTiptap과 동일 패턴).
   const source = block.content[0] as
     Extract<InlineContentItem, { text: string }> | undefined;
-  return htmlElement(
+  const preNode = htmlElement(
     "pre",
     {
       dataGeulBlockId: block.id,
@@ -339,6 +339,24 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
       ]),
     ],
   );
+
+  // caption이 있으면 media caption(mediaBlockNode)과 같은
+  // <figure>…<figcaption>…</figcaption></figure> 구조로 감싼다(RD-002 그릴링
+  // #4). pre 자신이 own identity(dataGeulBlockId·language·wrap)를 그대로
+  // 갖는다 — figure는 아무 data-geul-*도 싣지 않는 순수 wrapper다(media와
+  // 달리 codeBlock은 pre가 이미 outer 역할을 하므로 id를 옮길 필요가 없다).
+  // 빈 문자열("")은 caption 없음과 동일하게 취급한다 — codeBlock caption은
+  // always-visible UI가 빈 값에 placeholder를 보여주는 별도 패턴이라(media와
+  // 다른 인터랙션, roadmap.md 그릴링 #2) "값 없음"과 "빈 문자열"을 시각적으로
+  // 구분하지 않는다. 이 판정은 RD-002-DELTA-01이 core DOM 투영에 이미 쓴
+  // 것과 동일하다(code-block-extension.ts, `length > 0`).
+  if (block.caption === undefined || block.caption.length === 0) {
+    return preNode;
+  }
+  return htmlElement("figure", {}, [
+    preNode,
+    htmlElement("figcaption", {}, [{ type: "text", value: block.caption }]),
+  ]);
 };
 
 const listItemNode = (block: ListItemBlock): HtmlElementNode =>

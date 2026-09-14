@@ -161,6 +161,13 @@ export type BlockSegmentPolicy<
   // 구분하려면 태그명만으로는 부족하다(위 BlockSegment의 media variant
   // 주석 참고).
   isMediaNode?: (node: HtmlElementNode) => boolean;
+  // 코드블록 caption(RD-002-DELTA-03)의 <figure><pre>…</pre>
+  // <figcaption>…</figcaption></figure> 래핑 판별. isMediaNode와 같은 이유로
+  // (figure가 여러 의미를 겸하는 태그라) 태그명만으로는 판정할 수 없어 노드
+  // 전체 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 소비자
+  // (clipboard-table-parser.ts)에서는 이 kind가 나오지 않고, figure는
+  // isMediaNode 판정만 받는다(media 마커가 없으면 그대로 문단 경계다).
+  isCodeBlockFigureNode?: (node: HtmlElementNode) => boolean;
 } & (IncludeCodeBlock extends true
   ? { isCodeBlockTag: (tagName: string) => boolean }
   : { isCodeBlockTag?: undefined });
@@ -248,6 +255,7 @@ export function segmentBlocks<Level extends number = number>(
         policy.isQuoteTag?.(node.tagName) === true ||
         policy.isListTag?.(node.tagName) === true ||
         policy.isCodeBlockTag?.(node.tagName) === true ||
+        policy.isCodeBlockFigureNode?.(node) === true ||
         policy.isMediaNode?.(node) === true ||
         policy.isNestedBoundary(node.tagName)
       ) {
@@ -337,6 +345,17 @@ export function segmentBlocks<Level extends number = number>(
       // pre는 자식의 code·br·wrapper를 다른 블록 경계로 해석하지
       // 않고 sanitized 서브트리 전체를 semantic caller에 넘긴다.
       if (policy.isCodeBlockTag?.(node.tagName) === true) {
+        flush();
+        segments.push({ kind: "codeBlock", node });
+        continue;
+      }
+      // 코드블록 caption figure(RD-002-DELTA-03) — hr/quote/list/media와 같은
+      // 이유로 안쪽(pre+figcaption)을 재귀하지 않는다. 디코드는
+      // import-html-blocks.ts가 segment.node를 직접 들여다봐서 한다 — bare
+      // pre와 같은 "codeBlock" kind를 재사용한다(새 kind를 추가하면
+      // clipboard-table-parser.ts의 exhaustiveness도 건드려야 하지만, 그
+      // 소비자는 isCodeBlockFigureNode를 넘기지 않아 이 분기가 나오지 않는다).
+      if (policy.isCodeBlockFigureNode?.(node) === true) {
         flush();
         segments.push({ kind: "codeBlock", node });
         continue;
