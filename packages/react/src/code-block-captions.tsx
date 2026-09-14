@@ -21,12 +21,15 @@ import { useSelectionRefresh } from "./use-selection-refresh.js";
 type CodeBlockInstance = { blockId: string; rect: DOMRect };
 
 /**
- * 코드블록 좌상단 always-visible caption 오버레이(RD-002 DELTA-02, Issue #194;
- * 좌상단 위치와 toolbar·more 메뉴 진입점은 Issue #196). `TableHandles`/
- * `MediaHandleOverlays`와 달리 hover/selection으로 뽑은 단일 대상 하나만
- * 렌더하지 않는다 — 문서 안 **모든** codeBlock 인스턴스를 동시에, hover
- * 게이트 없이 렌더한다(RD-002.md "포함 범위" — Notion 스타일
- * always-visible). 이 저장소 최초의 "단일 대상이 아니라 전체 인스턴스"
+ * 코드블록 좌상단 caption 오버레이(RD-002 DELTA-02, Issue #194; 좌상단 위치와
+ * toolbar·more 메뉴 진입점은 Issue #196). 도입 당시(#194)는 Notion 스타일
+ * always-visible(빈 값이어도 항상 렌더)이었으나, Issue #195가 값이 있거나
+ * 편집 중일 때만 렌더하도록 조건부로 재검토했다(아래 `!isEditing &&
+ * committedCaption === ""` 게이트). `TableHandles`/`MediaHandleOverlays`와
+ * 달리 hover/selection으로 뽑은 단일 대상 하나만 렌더하지 않는다 — 문서 안
+ * **모든** codeBlock 인스턴스를 동시에, hover 게이트 없이 렌더 대상으로
+ * 삼는다(RD-002.md "포함 범위"; 이 게이트는 hover 게이트가 아니라 caption
+ * 값·편집 상태 게이트다). 이 저장소 최초의 "단일 대상이 아니라 전체 인스턴스"
  * 오버레이다(RD-002-DELTA-02.md "완료 조건과 검출 변이" 10).
  *
  * codeBlock은 `data-geul-block-id`를 `<pre>` 자신이 아니라 그 부모
@@ -159,6 +162,15 @@ export const CodeBlockCaptions = () => {
             : "";
         const isEditing = editing?.blockId === blockId;
 
+        // caption이 빈 값이고 편집 중이 아니면 오버레이 자체를 렌더하지
+        // 않는다(Issue #195 — #194의 always-visible 설계를 조건부로
+        // 재검토). `!isEditing &&`로 좁혀서 #196의 toolbar 버튼·more 메뉴가
+        // `setCodeBlockCaptionEditing({ blockId, draft: "" })`로 편집을 열
+        // 때는(완료 조건 3) committedCaption이 빈 값이어도 항상 렌더한다.
+        if (!isEditing && committedCaption === "") {
+          return null;
+        }
+
         const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
           if (event.key === "Enter") {
             event.currentTarget.blur();
@@ -189,6 +201,7 @@ export const CodeBlockCaptions = () => {
                 className="geul-code-block-caption__input"
                 data-geul-media-caption=""
                 aria-label={dictionary.toolbar.codeBlock.captionAriaLabel}
+                placeholder={dictionary.toolbar.codeBlock.captionPlaceholder}
                 value={editing.draft}
                 autoFocus
                 onChange={handleChange}
@@ -207,9 +220,14 @@ export const CodeBlockCaptions = () => {
                   })
                 }
               >
-                {committedCaption === ""
-                  ? dictionary.toolbar.codeBlock.captionPlaceholder
-                  : committedCaption}
+                {/* Issue #195 게이트(위 `if (!isEditing && committedCaption
+                    === "") return null;`)가 이 분기에 도달할 때는
+                    `!isEditing`이 항상 참이므로 게이트를 통과하려면
+                    committedCaption이 반드시 비어있지 않다 — 즉 여기선
+                    committedCaption이 항상 값을 갖는다. placeholder 문구는
+                    이제 이 버튼이 아니라 위 input의 HTML placeholder
+                    attribute(최초 caption 입력 시 힌트)가 담당한다. */}
+                {committedCaption}
               </button>
             )}
           </div>

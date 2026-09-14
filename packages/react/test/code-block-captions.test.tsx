@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 
 /**
- * CodeBlockCaptions 컴포넌트(RD-002 DELTA-02, Issue #194): 코드블록 하단에
- * always-visible caption 오버레이가 codeBlock 인스턴스마다 각자의 실측
- * 위치(readPageRect)에 뜨고, 빈 값이면 placeholder를 보이며, 클릭→입력→
- * Enter/blur로 커밋하고 Escape로 취소함을 검증한다. media/table 계열
- * 오버레이(TableHandles/MediaHandleOverlays)와 달리 hover로 뽑은 단일
- * 대상이 아니라 문서 안 모든 codeBlock을 동시에 렌더한다
- * (RD-002-DELTA-02.md "완료 조건과 검출 변이" 10).
+ * CodeBlockCaptions 컴포넌트(RD-002 DELTA-02, Issue #194; 좌상단 위치·toolbar·
+ * more 메뉴 진입점은 Issue #196; 조건부 표시는 Issue #195): 코드블록
+ * 좌상단에 caption 오버레이가 codeBlock 인스턴스마다 각자의 실측
+ * 위치(readPageRect)에 뜨되, 값이 있거나 편집 중일 때만 렌더된다(빈 값+
+ * 비편집이면 렌더 자체가 없음 — placeholder "caption" 문구는 이제 빈 값
+ * 비편집 버튼이 아니라 편집 input의 HTML placeholder attribute가 담당하고,
+ * draft가 빈 문자열일 때만 보인다). 클릭→입력→Enter/blur로 커밋하고 Escape로
+ * 취소함을 검증한다. media/table 계열 오버레이(TableHandles/
+ * MediaHandleOverlays)와 달리 hover로 뽑은 단일 대상이 아니라 문서 안 모든
+ * codeBlock을 동시에 렌더 대상으로 삼는다(RD-002-DELTA-02.md "완료 조건과
+ * 검출 변이" 10).
  */
 import { DEFAULT_DICTIONARY, type DocumentChangeEvent } from "@cp949/geul-core";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { setCodeBlockCaptionEditing } from "../src/code-block-caption-editing-store.js";
 import { CodeBlockCaptions } from "../src/code-block-captions.js";
 import {
   mountBlockEditor,
@@ -33,9 +38,17 @@ const captionInput = (): HTMLInputElement =>
 
 describe("caption 오버레이 위치(좌상단, Issue #196 완료 조건 1)", () => {
   it("오버레이 top이 코드블록의 상단(rect.top)이다(이전: 하단 rect.bottom)", () => {
+    // Issue #195 게이트(완료 조건 1)로 caption이 빈 값+비편집이면 오버레이가
+    // 아예 렌더되지 않는다 — 위치 계산 자체를 검증하려면 오버레이가 있어야
+    // 하므로 caption 값을 채워 완료 조건 2 경로(비어있지 않으면 표시)를 탄다.
     renderCaptions({
       initialBlocks: [
-        { id: "code-1", type: "codeBlock", content: [{ text: "a" }] },
+        {
+          id: "code-1",
+          type: "codeBlock",
+          content: [{ text: "a" }],
+          caption: "설명",
+        },
       ],
     });
     // mountBlockEditor의 restubGeometry()는 render() 완료 뒤에 rect를
@@ -56,9 +69,16 @@ describe("caption 오버레이 위치(좌상단, Issue #196 완료 조건 1)", (
     // 첫 줄과 z-index: 5인 caption이 겹친다(실측: <pre> padding-top 0.75rem
     // vs caption 높이 약 26.4px). 자기 높이만큼 위로 밀어 올려야 이전
     // 하단 배치(top: rect.bottom, gap 없이 접함)와 대칭으로 겹치지 않는다.
+    // Issue #195 게이트(완료 조건 1) 때문에 caption 값을 채워 오버레이를
+    // 표시시킨다(위 top 테스트와 같은 이유).
     renderCaptions({
       initialBlocks: [
-        { id: "code-1", type: "codeBlock", content: [{ text: "a" }] },
+        {
+          id: "code-1",
+          type: "codeBlock",
+          content: [{ text: "a" }],
+          caption: "설명",
+        },
       ],
     });
     fireEvent(window, new Event("resize"));
@@ -79,9 +99,9 @@ describe("codeBlock이 없으면 오버레이가 렌더되지 않는다(완료 �
   });
 });
 
-describe("빈 caption은 placeholder를 보인다(완료 조건 6)", () => {
+describe("빈 caption 비편집 상태는 오버레이를 렌더하지 않는다(완료 조건 1, 구 완료 조건 6 재작성 — Issue #195)", () => {
   it.each([undefined, ""])(
-    "caption이 %s이면 placeholder를 보인다",
+    "caption이 %s이고 편집 중이 아니면 .geul-code-block-caption과 placeholder 버튼이 DOM에 없다",
     (caption) => {
       renderCaptions({
         initialBlocks: [
@@ -94,9 +114,39 @@ describe("빈 caption은 placeholder를 보인다(완료 조건 6)", () => {
         ],
       });
 
-      expect(screen.getByRole("button", { name: placeholder })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: placeholder })).toBeNull();
+      expect(document.querySelector(".geul-code-block-caption")).toBeNull();
     },
   );
+});
+
+describe("편집 중이면 빈 caption이어도 오버레이가 표시된다(완료 조건 3, Issue #195)", () => {
+  it("caption이 빈 값인 codeBlock을 setCodeBlockCaptionEditing으로 직접 편집 상태로 만들면 input이 뜬다", () => {
+    // #196의 toolbar 버튼·more 메뉴는 이 store의 setter를 호출해 편집을
+    // 연다 — 여기서도 toolbar를 거치지 않고 store를 직접 호출해 같은
+    // 경로를 시뮬레이션한다(code-block-language-combobox.test.tsx와 달리
+    // 이 파일은 toolbar를 마운트하지 않는다).
+    renderCaptions({
+      initialBlocks: [
+        { id: "code-1", type: "codeBlock", content: [{ text: "a" }] },
+      ],
+    });
+
+    // 편집 중이 아니므로 아직 오버레이가 없다(완료 조건 1과 같은 전제).
+    expect(document.querySelector(".geul-code-block-caption")).toBeNull();
+
+    act(() => {
+      setCodeBlockCaptionEditing({ blockId: "code-1", draft: "" });
+    });
+
+    const input = captionInput();
+    expect(input).toBeTruthy();
+    expect(input.value).toBe("");
+    // 버튼이 더는 렌더되지 않아(완료 조건 1) placeholder "caption" 문구를
+    // 보여줄 곳이 없어졌다 — input의 HTML placeholder attribute가 그
+    // 역할을 대신한다(draft가 빈 문자열일 때만 브라우저가 표시).
+    expect(input.placeholder).toBe(placeholder);
+  });
 });
 
 describe("설정된 caption과 클릭 편집 진입(완료 조건 7)", () => {
@@ -126,7 +176,12 @@ describe("Enter·blur 커밋(완료 조건 8)", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: placeholder }));
+    // caption이 빈 값이라 Issue #195 게이트로 placeholder 버튼 자체가 없다
+    // (완료 조건 1) — #196의 toolbar·more 메뉴와 같은 경로(store setter
+    // 직접 호출)로 편집을 연다.
+    act(() => {
+      setCodeBlockCaptionEditing({ blockId: "code-1", draft: "" });
+    });
     fireEvent.change(captionInput(), { target: { value: "새 캡션" } });
     fireEvent.keyDown(captionInput(), { key: "Enter" });
 
@@ -144,7 +199,10 @@ describe("Enter·blur 커밋(완료 조건 8)", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: placeholder }));
+    // 위 Enter 커밋 테스트와 같은 이유로 store setter로 편집을 연다.
+    act(() => {
+      setCodeBlockCaptionEditing({ blockId: "code-1", draft: "" });
+    });
     fireEvent.change(captionInput(), { target: { value: "blur 커밋" } });
     fireEvent.blur(captionInput());
 
@@ -232,10 +290,24 @@ describe("여러 codeBlock의 독립 오버레이(완료 조건 10)", () => {
   });
 
   it("두 오버레이가 서로 다른 top 위치(실측 rect)에 뜬다", () => {
+    // Issue #195 게이트(완료 조건 1)로 caption이 빈 값+비편집이면 오버레이가
+    // 렌더되지 않는다 — 위치 계산 자체를 검증하려면 두 오버레이 모두
+    // 있어야 하므로 caption 값을 채운다(위 "각 codeBlock마다 독립된
+    // 오버레이" 테스트와 같은 fixture).
     renderCaptions({
       initialBlocks: [
-        { id: "code-1", type: "codeBlock", content: [{ text: "a" }] },
-        { id: "code-2", type: "codeBlock", content: [{ text: "b" }] },
+        {
+          id: "code-1",
+          type: "codeBlock",
+          content: [{ text: "a" }],
+          caption: "첫째",
+        },
+        {
+          id: "code-2",
+          type: "codeBlock",
+          content: [{ text: "b" }],
+          caption: "둘째",
+        },
       ],
     });
     // mountBlockEditor의 restubGeometry()는 render() 완료 뒤에(mount-editor.tsx

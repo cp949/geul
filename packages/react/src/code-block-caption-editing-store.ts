@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * `CodeBlockCaptions`(오버레이, 전체 codeBlock 인스턴스를 always-visible로
- * 렌더)와 `CodeBlockLanguageCombobox`(toolbar 버튼·more 메뉴, hover 단일
- * 인스턴스만 렌더)가 공유하는 "지금 편집 중인 caption" 상태다(Issue #196).
+ * `CodeBlockCaptions`(오버레이, hover 게이트 없이 전체 codeBlock 인스턴스를
+ * 렌더 대상으로 삼음 — 값이 있거나 편집 중일 때만 실제로 렌더하는 조건은
+ * Issue #195)와 `CodeBlockLanguageCombobox`(toolbar 버튼·more 메뉴, hover
+ * 단일 인스턴스만 렌더)가 공유하는 "지금 편집 중인 caption" 상태다(Issue
+ * #196).
  *
  * 두 컴포넌트는 렌더 대상 자체가 다르다(hover 단일 vs 전체 인스턴스) —
  * `media-toolbar.tsx`처럼 toolbar 버튼과 편집 입력의 상태 기계를 한
