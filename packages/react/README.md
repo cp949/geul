@@ -7,9 +7,11 @@
 ```tsx
 import { EditorContent, EditorProvider } from "@cp949/geul-react";
 import "@cp949/geul-react/styles.css";
-import { createEmptyDocument } from "@cp949/geul-model";
+import { createEmptyDocument, createRandomDocumentId } from "@cp949/geul-model";
 
-const initialDocument = createEmptyDocument(() => crypto.randomUUID());
+// 인자는 블록 id를 만드는 함수다.
+// createRandomDocumentId는 Chrome75 호환 UUID v4 생성기다.
+const initialDocument = createEmptyDocument(createRandomDocumentId);
 
 function Editor() {
   return (
@@ -22,9 +24,47 @@ function Editor() {
 
 ## 기능 구성과 업로드
 
-- **블록 타입 on/off**: `createEditor()`/`EditorProvider`에 `enabledBlockTypes: { mode: "allow" | "deny", types: Block["type"][] }`를 넘기면 지정한 블록만 허용하거나 차단한다. 마운트 시점에 고정되고(런타임 토글 불가), SlashMenu·toolbar 등 UI가 비활성 블록 항목을 자동으로 숨긴다.
-- **이미지 업로드**: `EditorProvider`의 `uploadFile: (file, signal) => Promise<UploadResult>` 콜백이 이미지·비디오·오디오·파일 블록의 업로드를 전부 처리한다 — 성공 시 `{ status: "success", url }`, 실패 시 에러 코드, 취소 시 `{ status: "cancelled" }`를 돌려준다. 실제 연결 예는 `apps/showcase`의 `src/examples/07-media`를 참고한다.
-- **파일 업로드**: 이미지와 동일한 `uploadFile` 콜백을 쓴다 — 별도 콜백은 없다. `FilePanel` UI 자체는 `apps/showcase`의 `src/examples/06-file-panel`, 업로드까지 연결된 예는 `07-media`에 있다.
+### 블록 타입 on/off
+
+`createEditor()`/`EditorProvider`에 `enabledBlockTypes: { mode: "allow" | "deny", types: Block["type"][] }`를 넘기면 지정한 블록만 허용하거나 차단한다. 마운트 시점에 고정되고(런타임 토글 불가), SlashMenu·toolbar 등 UI가 비활성 블록 항목을 자동으로 숨긴다.
+
+```tsx
+<EditorProvider
+  initialDocument={initialDocument}
+  enabledBlockTypes={{ mode: "deny", types: ["table"] }}
+>
+  <EditorContent />
+</EditorProvider>
+```
+
+### 이미지 업로드
+
+`EditorProvider`의 `uploadFile: (file, signal) => Promise<UploadResult>` 콜백이 이미지·비디오·오디오·파일 블록의 업로드를 전부 처리한다 — 성공 시 `{ status: "success", url }`, 실패 시 에러 코드, 취소 시 `{ status: "cancelled" }`를 돌려준다. 실제 연결 예는 `apps/showcase`의 `src/examples/07-media`를 참고한다.
+
+```tsx
+<EditorProvider
+  initialDocument={initialDocument}
+  uploadFile={async (file, signal) => {
+    const res = await fetch("/api/upload", { method: "POST", body: file, signal });
+    if (!res.ok) return { status: "error", code: String(res.status), message: res.statusText };
+    const { url } = await res.json();
+    return { status: "success", url };
+  }}
+>
+  <EditorContent />
+</EditorProvider>
+```
+
+### 파일 업로드
+
+이미지와 동일한 `uploadFile` 콜백을 쓴다 — 별도 콜백은 없다. `FilePanel` UI 자체는 `apps/showcase`의 `src/examples/06-file-panel`, 업로드까지 연결된 예는 `07-media`에 있다.
+
+```tsx
+<EditorProvider initialDocument={initialDocument} uploadFile={uploadFile}>
+  <EditorContent />
+  <FilePanel />
+</EditorProvider>
+```
 
 ## 코드 구문 강조 연결
 
@@ -50,7 +90,7 @@ type SyntaxHighlighter = (input: {
 
 ```tsx
 import { EditorContent, EditorProvider } from "@cp949/geul-react";
-import { createEmptyDocument } from "@cp949/geul-model";
+import { createEmptyDocument, createRandomDocumentId } from "@cp949/geul-model";
 import "highlight.js/styles/github.css";
 import { common, createLowlight } from "lowlight";
 
@@ -102,7 +142,9 @@ function lowlightSyntaxHighlighter({
   return tokens;
 }
 
-const initialDocument = createEmptyDocument(() => crypto.randomUUID());
+// 인자는 블록 id를 만드는 함수다.
+// createRandomDocumentId는 Chrome75 호환 UUID v4 생성기다.
+const initialDocument = createEmptyDocument(createRandomDocumentId);
 
 function Editor() {
   return (

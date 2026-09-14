@@ -11,9 +11,12 @@ geul 문서의 독자 JSON 스키마와 검증을 담당하는 패키지다. 프
 ## 최소 사용 예
 
 ```ts
-import { createEmptyDocument, parseDocument } from "@cp949/geul-model";
+import { createEmptyDocument, createRandomDocumentId, parseDocument } from "@cp949/geul-model";
 
-const emptyDocument = createEmptyDocument(() => crypto.randomUUID());
+// 인자는 블록 id를 만드는 함수다.
+// createRandomDocumentId는 Chrome75 호환 UUID v4 생성기이자 createEmptyDocument의
+// 기본값이다 — 인자를 생략해도 같지만, 여기서는 명시했다.
+const emptyDocument = createEmptyDocument(createRandomDocumentId);
 
 // 외부(저장소, API 요청 body 등)에서 받은 값은 신뢰하지 않고 재검증한다.
 const result = parseDocument(rawJsonFromStorage);

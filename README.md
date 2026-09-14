@@ -13,9 +13,11 @@ npm install @cp949/geul-react @cp949/geul-model
 ```tsx
 import { EditorContent, EditorProvider } from "@cp949/geul-react";
 import "@cp949/geul-react/styles.css";
-import { createEmptyDocument } from "@cp949/geul-model";
+import { createEmptyDocument, createRandomDocumentId } from "@cp949/geul-model";
 
-const initialDocument = createEmptyDocument(() => crypto.randomUUID());
+// 인자는 블록 id를 만드는 함수다.
+// createRandomDocumentId는 Chrome75 호환 UUID v4 생성기다.
+const initialDocument = createEmptyDocument(createRandomDocumentId);
 
 function Editor() {
   return (
