@@ -10,6 +10,7 @@ import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
+import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
@@ -171,6 +172,34 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
             // defaultPasteHandler로 노출한다. pasteHandler가 undefined를
             // 반환(기본 동작 위임)하면 이 함수를 그대로 호출한다.
             const defaultHandlePaste = (): boolean => {
+              // 코드블록 안에서는 이 기본 처리만 손대지 않는다(Issue #198)
+              // — 표·미디어와 달리 codeBlock은 pasteHandler 범위 밖이
+              // 아니다(roadmap.md "제외 범위" — pasteHandler는 표·미디어만
+              // 제외하고 ClipboardPasteExtension이 처리하는 own HTML/
+              // Markdown/plain text 전부를 감싼다). 그래서 이 가드를
+              // isInTable처럼 pasteHandler 호출 앞에 두지 않고, defaultHandlePaste
+              // 자신의 첫 문장에 둔다 — pasteHandler는 항상 정상 호출되고,
+              // pasteHandler가 없거나 defaultPasteHandler()로 위임할 때만
+              // 이 return false가 적용된다.
+              //
+              // 이 return false가 없으면 아래 html-import 분기가
+              // clipboardData의 text/html을 codeBlock 렌더 구조(<pre
+              // data-geul-code-block><code>)로 오인해 importHtml로 새
+              // codeBlock을 만들어 기존 codeBlock 한복판에 구조적으로
+              // 삽입해버린다. codeBlock spec의 code: true 덕분에 PM의
+              // parseFromClipboard(prosemirror-view)가 caret이 code 안에
+              // 있으면 이미 text/html을 무시하고 text/plain만으로 순수
+              // 텍스트 slice를 만들어두므로, 여기서 조기 반환해 그 PM 기본
+              // 처리를 그대로 살린다 — 별도로 "text/plain 우선" 로직을 새로
+              // 만들 필요가 없다.
+              if (
+                selectionIntersectsCodeBlock(
+                  view.state.doc,
+                  view.state.selection,
+                )
+              )
+                return false;
+
               const clipboardData = event.clipboardData;
               if (clipboardData === null) return false;
 

@@ -10,6 +10,7 @@ import { MAX_NESTING_DEPTH, type Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
+import { contentTextStart } from "./block-test-support.js";
 import {
   nestedParagraphWrapperHtml,
   pasteData,
@@ -17,6 +18,7 @@ import {
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
+  codeBlockBlock,
   documentOf,
   editorWithTable,
   maxBlockDepth,
@@ -99,6 +101,41 @@ describe("ClipboardPasteExtension", () => {
         type: "codeBlock",
         content: [{ text: "c" }],
       });
+      expect(errors).toEqual([]);
+    });
+  });
+
+  // Issue #198 재현 — 코드블록 내부에서 텍스트를 선택해 복사한 뒤 같은(또는
+  // 다른) 코드블록 안에 붙여넣으면 클립보드의 text/html이 codeBlock 렌더
+  // 구조(code-block-extension.ts:49~55 `<pre data-geul-code-block=""><code>`)
+  // 그대로라 importHtml이 이를 새 codeBlock으로 해석해 insertContent가
+  // 기존 codeBlock 한복판에 구조적으로 삽입한다 — 코드블록이 2개로 늘어난다.
+  // PM은 caret 부모가 code:true(codeBlock)면 parseFromClipboard가 애초에
+  // text/html을 무시하고 text/plain만으로 순수 텍스트 slice를 만드므로,
+  // handlePaste가 그 앞을 가로채지만 않으면 이 기본 처리가 그대로 적용된다.
+  it("코드블록 내부에 캐럿을 두고 코드블록 HTML을 붙여넣어도 새 codeBlock이 생기지 않는다(Issue #198)", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        paragraphBlock("head", "head"),
+        codeBlockBlock("code-1", "existing"),
+        paragraphBlock("tail", "tail"),
+      ),
+      createId: sequentialIds("id"),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "code-1") + 1);
+
+    withUnhandledErrorTracking((errors) => {
+      pasteHtml(
+        editable,
+        '<pre data-geul-code-block=""><code>pasted</code></pre>',
+      );
+
+      const blocks = editor.getDocument().blocks;
+      expect(blocks.filter((block) => block.type === "codeBlock")).toHaveLength(
+        1,
+      );
       expect(errors).toEqual([]);
     });
   });
@@ -455,6 +492,42 @@ describe("ClipboardPasteExtension", () => {
         pasteHtml(editable, "<blockquote>q</blockquote>");
 
         expect(called).toBe(false);
+        expect(errors).toEqual([]);
+      });
+    });
+
+    // 표·미디어만 pasteHandler 범위 밖이다(roadmap.md "제외 범위",
+    // _works/_completed/20260907-06-roadmap-issue156-slice7-custom-paste-handler
+    // — "ClipboardPasteExtension이 처리하는 비표·비미디어 콘텐츠(own HTML/
+    // Markdown/plain text)만 감싼다"). codeBlock은 own HTML 범주라
+    // pasteHandler 대상에서 빠지면 안 된다 — Issue #198 게이트가 isInTable과
+    // 똑같이 pasteHandler 호출 앞에서 조기 반환하면 이 계약이 조용히
+    // 깨진다.
+    it("코드블록 내부에서도 pasteHandler가 호출된다(IO-008, 표·미디어만 범위 밖)", () => {
+      let called = false;
+      const editor = createEditor({
+        initialDocument: documentOf(
+          paragraphBlock("head", "head"),
+          codeBlockBlock("code-1", "existing"),
+          paragraphBlock("tail", "tail"),
+        ),
+        createId: sequentialIds("id"),
+        pasteHandler: () => {
+          called = true;
+          return true;
+        },
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(contentTextStart(tiptap, "code-1") + 1);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(
+          editable,
+          '<pre data-geul-code-block=""><code>pasted</code></pre>',
+        );
+
+        expect(called).toBe(true);
         expect(errors).toEqual([]);
       });
     });
