@@ -322,3 +322,33 @@ test("scroll과 viewport resize 뒤 language 트리거가 활성 CodeBlock 우�
   const popover = page.locator(".geul-code-block-language-popover");
   await expectInsideViewport(page, popover);
 });
+
+// outer toolbar는 position: fixed로 블록 우상단(topRight anchor, dy=0)에
+// 뜬다 — 코드 컨테이너의 padding-top이 toolbar 높이보다 작으면 toolbar가
+// 첫 줄 텍스트를 덮는다(사용자 스크린샷, Notion 대비 여백 부재 지적).
+// pre의 padding-top이 toolbar 전체 높이(버튼 1.75rem + 컨테이너 상하
+// padding 0.25rem*2)를 커버하는지 실측으로 고정한다.
+test("outer toolbar는 코드 첫 줄 텍스트와 세로로 겹치지 않는다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const codeBlock = await insertCodeBlock(page, editable);
+  await codeBlock.click();
+  await page.keyboard.type('const hello: String = "world";');
+
+  const toolbar = page.locator(".geul-code-block-toolbar");
+  await expect(toolbar).toBeVisible();
+  const code = codeBlock.locator("code");
+
+  await expect
+    .poll(async () => {
+      const toolbarBox = await toolbar.boundingBox();
+      const firstLineTop = await code.evaluate((element) => {
+        const rect = element.getClientRects()[0];
+        return rect === undefined ? null : rect.top;
+      });
+      if (toolbarBox === null || firstLineTop === null) return null;
+      return toolbarBox.y + toolbarBox.height <= firstLineTop;
+    })
+    .toBe(true);
+});

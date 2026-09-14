@@ -74,7 +74,14 @@
   // 합산 아님).
   [data-geul-code-block] {
     margin: 0.75rem 0;
-    padding: 0.75rem 1rem;
+    // top만 outer toolbar(.geul-code-block-toolbar, RD-001-DELTA-01
+    // Issue #193) 높이만큼 늘린다. 그 toolbar는 position: fixed로 블록
+    // 우상단에 dy=0으로 앵커링돼(use-clamped-menu-position.ts topRight)
+    // 코드 컨테이너의 border-box 상단과 정확히 겹친다 — padding-top이
+    // 부족하면 첫 줄 텍스트를 덮는다(사용자 스크린샷, Notion 대비 상단
+    // 여백 부재 지적). 툴바 높이 = 버튼 1.75rem + 컨테이너 상하 padding
+    // 0.25rem*2 ≈ 2.25rem, 여유를 더해 2.75rem으로 고정한다.
+    padding: 2.75rem 1rem 0.75rem;
     overflow-x: auto;
     border: 1px solid var(--geul-color-border, #dadce0);
     border-radius: var(--geul-radius-md, 0.375rem);

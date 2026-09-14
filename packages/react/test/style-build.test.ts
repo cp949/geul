@@ -87,7 +87,9 @@ describe("SCSS 빌드 파이프라인", () => {
         ?.groups?.body;
 
     expect(rule).toContain("font-family: ui-monospace");
-    expect(rule).toContain("padding: 0.75rem 1rem;");
+    // top만 outer toolbar(.geul-code-block-toolbar) 높이만큼 늘려
+    // 겹침을 막는다(_editor.scss 주석, 사용자 스크린샷).
+    expect(rule).toContain("padding: 2.75rem 1rem 0.75rem;");
     expect(rule).toContain("background:");
     expect(rule).toContain("border: 1px solid");
     expect(rule).toContain("overflow-x: auto;");
