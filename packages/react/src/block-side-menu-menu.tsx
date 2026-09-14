@@ -59,10 +59,18 @@ export const BlockSideMenuMenu = ({
     editor.getDocument().blocks,
     blockId,
   );
+  // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다(Issue
+  // #190) — 선례: formatting-toolbar.tsx/static-toolbar.tsx(RD-001
+  // DELTA-01·02). handleTurnInto의 클릭 시점 재검증(아래, Issue #141)에는
+  // 같은 필터를 넣지 않는다 — enabledBlockTypes는 construction-time
+  // 상수라 메뉴가 열려 있는 동안 바뀌지 않고, 이미 숨겨진 옵션은 렌더에
+  // 없어 클릭 자체가 불가능하다.
   const blockTypeOptions =
     blockMenuSource === null
       ? []
-      : getBlockTypeOptionsForSource(blockMenuSource);
+      : getBlockTypeOptionsForSource(blockMenuSource).filter((option) =>
+          editor.isBlockTypeEnabled(option.blockType.type),
+        );
 
   // Issue #141 — 열려 있는 동안 외부 EditorController command가 이
   // blockId의 type을 바꾸면 메뉴를 닫는다(옵션 재계산이 아니다 — 01-계획.md

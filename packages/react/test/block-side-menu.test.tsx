@@ -85,6 +85,7 @@ const renderBlockMenu = (options?: Omit<MountBlockEditorOptions, "children">) =>
 const openBlockMenu = (options?: {
   blockIds?: readonly string[];
   dictionary?: MountBlockEditorOptions["dictionary"];
+  enabledBlockTypes?: MountBlockEditorOptions["enabledBlockTypes"];
 }) => {
   const rendered = renderBlockMenu(options);
   const [block] = rendered.blocks;
@@ -366,6 +367,20 @@ describe("블록 메뉴 열기/토글과 항목 액션(종류 변경/복제/삭�
     expect(after.content).toEqual(before.content);
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("enabledBlockTypes로 deny된 타입이 Turn into 목록에서 사라진다(Issue #190)", () => {
+    openBlockMenu({ enabledBlockTypes: { mode: "deny", types: ["quote"] } });
+
+    expect(screen.queryByRole("menuitem", { name: "Quote" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Text" })).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Heading 1" })).not.toBeNull();
+  });
+
+  it("enabledBlockTypes 미지정 시(기본 true) Turn into 목록이 그대로 유지된다", () => {
+    openBlockMenu();
+
+    expect(screen.getByRole("menuitem", { name: "Quote" })).not.toBeNull();
   });
 
   it("Turn into는 최신 top-level·nested block source에 공용 Code/list filter를 적용한다", () => {
