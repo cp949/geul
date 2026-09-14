@@ -32,10 +32,13 @@ export const CodeBlockExtension = Node.create({
           attributes.wrap === true ? { "data-geul-code-wrap": "" } : {},
       },
       // caption은 media 4종과 같은 plain string 공통 필드다(model
-      // CodeBlock.caption, RD-002 DELTA-01). media caption attr
-      // (media-block-extension.ts:72)과 동일하게 attr-level renderHTML은
-      // 아무것도 emit하지 않는다 — 실제 DOM 투영은 아래 node-level
-      // renderHTML의 조건부 자식으로 한다.
+      // CodeBlock.caption, RD-002 DELTA-01). DOM에는 투영하지 않는다 —
+      // always-visible caption UI는 react CodeBlockCaptions 오버레이가
+      // 유일한 시각 표현이다(RD-002-DELTA-02.md "DELTA-01이 남긴 설계
+      // 결함" — <pre> 안에 조건부로 자식을 emit하면 오버레이와 caption
+      // 텍스트가 동시에 두 번 보이고, 코드 복사 버튼의 pre.textContent에도
+      // caption이 섞여 들어간다). attr 선언 자체는 PM node.attrs
+      // 왕복(model↔PM↔model)에 필요해 유지한다.
       caption: {
         default: null,
         renderHTML: () => ({}),
@@ -43,29 +46,11 @@ export const CodeBlockExtension = Node.create({
     };
   },
 
-  renderHTML({ HTMLAttributes, node }) {
-    // media captionChildren(media-block-extension.ts)과 동일 판정 — 빈
-    // 문자열도 "caption 없음"으로 취급해 DOM에 아무 것도 남기지 않는다. 그
-    // 파일은 leaf 전용 모듈이라 import하지 않는 기존 관례를 따라(예:
-    // production-editor-media-upload.ts의 hasStoredUrl) 로컬로 다시
-    // 판정한다. always-visible caption UI(placeholder 포함)는 이 DELTA
-    // 범위 밖이다 — react DELTA-02가 담당한다(RD-002.md "포함 범위").
-    const caption =
-      typeof node.attrs.caption === "string" && node.attrs.caption.length > 0
-        ? node.attrs.caption
-        : null;
+  renderHTML({ HTMLAttributes }) {
     return [
       "pre",
       mergeAttributes(HTMLAttributes, { "data-geul-code-block": "" }),
       ["code", 0],
-      // 시각 톤을 media caption과 공유하려고 같은 마커를 재사용한다
-      // (roadmap.md 그릴링 #2 "시각 톤만 media caption
-      // ([data-geul-media-caption])을 따른다" — 새 data-geul-code-caption
-      // 마커를 쓰면 _editor.scss에 codeBlock 전용 규칙을 중복 추가해야
-      // 한다).
-      ...(caption === null
-        ? []
-        : [["div", { "data-geul-media-caption": "" }, caption]]),
     ];
   },
 });

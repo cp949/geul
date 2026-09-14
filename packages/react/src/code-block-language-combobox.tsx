@@ -616,12 +616,15 @@ export const CodeBlockLanguageCombobox = () => {
     copiedTimeoutRef.current = null;
   }, [element]);
 
-  // RD-001-DELTA-02(Issue #193) — codeBlock의 [data-geul-block-id] 자신(=
-  // <pre>)의 textContent를 그대로 복사한다. 하이라이트 decoration은
-  // Decoration.inline + class만 적용해 텍스트를 삽입하지 않으므로(RD-001.md
-  // "결정" 근거) 개행 포함 raw source가 그대로 나온다. 실패(권한 거부 등)는
-  // 흔치 않은 경로라 신규 에러 UI 없이 console.warn만 남긴다(RD-001.md
-  // "결정").
+  // RD-001-DELTA-02(Issue #193) — codeBlock의 [data-geul-block-id] div(그
+  // 안의 <pre>를 감싸는 부모, "= <pre>"가 아니다 — RD-002-DELTA-02가 바로잡음:
+  // data-geul-block-id는 <pre> 자신이 아니라 부모 blockContainer div의
+  // attribute다) 안 code 자식의 textContent만 복사한다(RD-002-DELTA-02 —
+  // pre.textContent를 쓰면 <pre>에 caption 등 code 아닌 형제가 늘어날 때
+  // 섞여 들어간다). 하이라이트 decoration은 Decoration.inline + class만
+  // 적용해 텍스트를 삽입하지 않으므로(RD-001.md "결정" 근거) 개행 포함 raw
+  // source가 그대로 나온다. 실패(권한 거부 등)는 흔치 않은 경로라 신규
+  // 에러 UI 없이 console.warn만 남긴다(RD-001.md "결정").
   const handleCopy = () => {
     const current = languageStateRef.current;
     if (current === null) return;
@@ -635,7 +638,10 @@ export const CodeBlockLanguageCombobox = () => {
       console.warn("[geul] code block 복사 실패: clipboard API 없음");
       return;
     }
-    const text = blockElement.textContent ?? "";
+    // pre.textContent가 아니라 code 자식만 읽는다(RD-002-DELTA-02) —
+    // <pre>가 앞으로 code 외 형제 DOM(예: 과거 caption emit 시도)을 갖게
+    // 되어도 "코드 복사"가 그 텍스트까지 섞지 않도록 미리 막는다.
+    const text = blockElement.querySelector("code")?.textContent ?? "";
     navigator.clipboard.writeText(text).then(
       () => {
         setCopied(true);

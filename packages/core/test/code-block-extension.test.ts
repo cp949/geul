@@ -144,7 +144,16 @@ describe("codeBlock 노드 스키마 계약", () => {
     expect(unset.hasAttribute("data-geul-code-wrap")).toBe(false);
   });
 
-  it("caption이 비어 있지 않을 때만 data-geul-media-caption 자식 DOM을 갖는다", () => {
+  it("caption 값과 무관하게 codeBlock DOM에는 caption 관련 자식·attribute가 전혀 없다", () => {
+    // RD-002-DELTA-02 회귀 가드 — DELTA-01은 media captionChildren 패턴을
+    // 그대로 재사용해 caption이 비어 있지 않을 때 <pre> 안에
+    // data-geul-media-caption 자식을 조건부로 emit했다. DELTA-02가
+    // always-visible React 오버레이(CodeBlockCaptions)를 caption의 유일한
+    // 시각 표현으로 도입하면서 그 자식을 제거했다 — 남겨두면 코드 박스 안
+    // 정적 텍스트와 오버레이가 caption을 동시에 두 번 보여주고, "코드 복사"
+    // 버튼(handleCopy)의 pre.textContent에도 caption이 섞여 들어간다
+    // (RD-002-DELTA-02.md "DELTA-01이 남긴 설계 결함" 참고). caption attr
+    // 자체(PM node.attrs 왕복)는 유지한다 — 사라지는 건 DOM 투영뿐이다.
     const schema = codeBlockSchema();
     const codeBlock = schema.nodes.codeBlock;
     if (codeBlock === undefined) throw new Error("codeBlock node is missing");
@@ -161,8 +170,9 @@ describe("codeBlock 노드 스키마 계약", () => {
     ) as HTMLElement;
 
     expect(captioned.outerHTML).toBe(
-      '<pre data-geul-code-wrap="" data-geul-code-block=""><code>x</code><div data-geul-media-caption="">설명</div></pre>',
+      '<pre data-geul-code-wrap="" data-geul-code-block=""><code>x</code></pre>',
     );
+    expect(captioned.querySelector("[data-geul-media-caption]")).toBeNull();
     expect(emptyCaption.querySelector("[data-geul-media-caption]")).toBeNull();
     expect(unsetCaption.querySelector("[data-geul-media-caption]")).toBeNull();
   });

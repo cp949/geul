@@ -89,6 +89,9 @@ type CodeFixtureOptions = {
   // 지정할 수 있어야 한다.
   wrap?: boolean;
   secondCodeWrap?: boolean;
+  // RD-002-DELTA-02(Issue #194) — handleCopy가 caption을 코드 텍스트에
+  // 섞지 않는지 검증하려면 caption이 있는 CodeBlock fixture가 필요하다.
+  caption?: string;
   onChange?: MountBlockEditorOptions["onChange"];
   dictionary?: MountBlockEditorOptions["dictionary"];
   codeBlockLanguages?: MountBlockEditorOptions["codeBlockLanguages"];
@@ -103,6 +106,7 @@ const mountCodeFixture = ({
   secondCodeLanguage,
   wrap,
   secondCodeWrap,
+  caption,
   onChange,
   dictionary,
   codeBlockLanguages,
@@ -114,6 +118,7 @@ const mountCodeFixture = ({
         type: "codeBlock",
         ...(language === undefined ? {} : { language }),
         ...(wrap === undefined ? {} : { wrap }),
+        ...(caption === undefined ? {} : { caption }),
         content: [{ text }],
       },
       ...(withParagraph
@@ -619,6 +624,25 @@ describe("CodeBlock toolbar 복사 버튼", () => {
     flushDeferredUpdate();
 
     expect(copyButton().title).toBe("Copy code");
+  });
+
+  it("caption이 있는 CodeBlock을 복사해도 caption 텍스트가 섞이지 않는다(RD-002-DELTA-02 회귀 가드)", async () => {
+    // DELTA-01은 한때 caption을 <pre> 안 자식 DOM으로 emit했다(같은 DELTA-02가
+    // 그 emit 자체를 제거했다 — code-block-extension.test.ts "caption 값과
+    // 무관하게..." 참고) — 그 설계였다면 handleCopy의 pre.textContent가
+    // caption까지 그대로 복사해 이 테스트가 RED였을 것이다. 지금은 <pre> 안에
+    // caption DOM이 아예 없어 이 테스트만으로는 무너지지 않지만, handleCopy를
+    // pre.textContent 대신 code 자식 전용으로 바꿔(아래) <pre>에 다시 어떤
+    // 형제 DOM이 늘어나도 "코드 복사" 결과가 오염되지 않도록 미리 막는다.
+    const writeText = stubClipboardWriteText(() => Promise.resolve());
+    mountCodeFixture({ text: "const a = 1", caption: "설명 캡션" });
+
+    await act(async () => {
+      fireEvent.click(copyButton());
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith("const a = 1");
   });
 
   it("navigator.clipboard 자체가 없는 환경(non-secure context)에서도 예외 없이 console.warn만 남긴다", async () => {
