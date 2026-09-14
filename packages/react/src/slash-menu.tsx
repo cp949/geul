@@ -21,6 +21,7 @@ import {
   blockTypeText,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
+import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
 import { TableHandles } from "./table-handles.js";
@@ -291,7 +292,8 @@ const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
 /**
  * DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고.
  * 이 컴포넌트가 내부 자동 마운트하는 `BlockSideMenu`/`CodeBlockLanguageCombobox`/
- * `TableHandles`/`TableSelectionToolbar`/`BlockSelectionToolbar`(중복 마운트
+ * `CodeBlockCaptions`/`TableHandles`/`TableSelectionToolbar`/
+ * `BlockSelectionToolbar`(중복 마운트
  * 방지, spec §6.1)는 각자 독립된 오버레이라 이 prop과 무관하다 — `portalTarget`은
  * 슬래시 명령 팝업 자신에만 적용한다(RD-003-DELTA-05.md "범위 판단").
  *
@@ -649,6 +651,7 @@ export const SlashMenu = ({
         }
       />
       <CodeBlockLanguageCombobox />
+      <CodeBlockCaptions />
       <TableHandles
         onBlockAdded={(blockId) =>
           openMenuAt(blockId, { type: "paragraph" }, "")

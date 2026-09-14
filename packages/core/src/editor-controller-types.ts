@@ -329,6 +329,14 @@ export interface EditorController {
     // attribute가 사라지고 react가 `white-space: pre`(가로 스크롤형)로
     // 되돌린다(code-block-extension.ts).
     setCodeBlockWrap(blockId: string, wrap: boolean): Result<void, EditorError>;
+    // RD-002 DELTA-02, Issue #194 — codeBlock 전용(spec 없음, roadmap
+    // 결정). 대상이 codeBlock이 아니면 COMMAND_NOT_APPLICABLE로 거절한다
+    // (setCodeBlockWrap과 동일 근거). setMediaBlockCaption과 같은 이유로
+    // 별도 형식 검증이 없다 — 빈 문자열도 유효하다(caption 지우기).
+    setCodeBlockCaption(
+      blockId: string,
+      caption: string,
+    ): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
     // 사전 조건 실패(BLOCK_NOT_FOUND·미등록·이미 진행 중 등)만 ok:false로

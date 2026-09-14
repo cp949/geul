@@ -273,6 +273,39 @@ export const createBlockAttributeCommands = (
     });
   };
 
+  // setCodeBlockCaption 전용 본체(RD-002 DELTA-02, Issue #194).
+  // runSetCodeBlockWrapCommand와 완전히 같은 "찾기(findEditableBlockContent)
+  // →가드(단일 타입)→setNodeMarkup 1회" 골격이다 — caption은 codeBlock
+  // 콘텐츠 노드 자신의 attrs이지 blockContainer attrs가 아니다(model
+  // CodeBlock.caption, code-block-extension.ts). wrap과 다른 점은 값이
+  // boolean이 아니라 string이라 타입 자체로 값공간이 닫히지 않는다는
+  // 것인데, `setMediaBlockCaption`(media 자유 텍스트 caption)도 같은 이유로
+  // 별도 형식 검증이 없다 — 그 선례를 따라 여기도 길이 상한 등 정책 판단을
+  // 추가하지 않는다(G-CNV-001, model이 유일 검증 권위).
+  const runSetCodeBlockCaptionCommand = (
+    blockId: string,
+    caption: string,
+  ): Result<void, EditorError> => {
+    const command = "setCodeBlockCaption";
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const target = findEditableBlockContent(session.editor.state.doc, blockId);
+    if (target === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (target.node.type.name !== "codeBlock") {
+      return commandNotApplicable(command);
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        target.position,
+        undefined,
+        { ...target.node.attrs, caption },
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   // setMediaTextAlignment 전용 본체(Issue #154, MED-009). 위
   // runSetMediaPreviewWidthCommand·runSetMediaShowPreviewCommand와 같은
   // "찾기→가드→검증→setNodeMarkup 1회" 골격이지만, kind 가드 집합이
@@ -436,6 +469,11 @@ export const createBlockAttributeCommands = (
     blockId: string,
     wrap: boolean,
   ): Result<void, EditorError> => runSetCodeBlockWrapCommand(blockId, wrap);
+  const setCodeBlockCaption = (
+    blockId: string,
+    caption: string,
+  ): Result<void, EditorError> =>
+    runSetCodeBlockCaptionCommand(blockId, caption);
   // RD-002 DELTA-02 — 오케스트레이션 본체(session.uploadMediaFile)를
   // 세션으로 이동했다. 여기는 command 이름만 매개변수화해 위임하는
   // 얇은 wrapper다(공개 시그니처·Result/Promise 계약은 그대로).
@@ -470,6 +508,7 @@ export const createBlockAttributeCommands = (
     setMediaShowPreview,
     setMediaTextAlignment,
     setCodeBlockWrap,
+    setCodeBlockCaption,
     uploadMediaFile,
     replaceMediaBlockFile,
     cancelMediaUpload,

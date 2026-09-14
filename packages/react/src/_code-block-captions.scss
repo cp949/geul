@@ -1,0 +1,27 @@
+// 코드블록 하단 always-visible caption 오버레이(RD-002 DELTA-02, Issue #194).
+// .geul-media-handle-overlay와 같은 이유로 position: absolute + page-relative
+// 좌표(readPageRect)를 쓴다 — 들여쓰기 depth가 쌓여도 실측 rect를 그대로
+// 따라간다(G-UI-003/ADR-0012).
+.geul-code-block-caption {
+  position: absolute;
+  z-index: 5;
+}
+
+// 브라우저 기본 button/input 테두리·배경·여백만 없앤다. 색·크기·상단 여백은
+// 여기서 새로 정의하지 않는다 — 두 엘리먼트 모두 data-geul-media-caption
+// attribute를 달아 _editor.scss의 기존 규칙(margin-top·color·font-size)을
+// 그대로 상속한다(roadmap.md 그릴링 #2 "시각 톤만 media caption을 따른다" —
+// "그대로 재사용", 새 규칙을 중복 추가하지 않는다).
+.geul-code-block-caption__display,
+.geul-code-block-caption__input {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.geul-code-block-caption__display {
+  text-align: left;
+  cursor: pointer;
+}

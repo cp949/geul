@@ -187,6 +187,10 @@ export const KO_DICTIONARY: Dictionary = {
       copyAriaLabel: "코드 블록 복사",
       copiedTitle: "복사됨",
       wrapAriaLabel: "줄바꿈 토글",
+      // 기존 toolbar.media.caption과 같은 값이다(RD-002.md "재사용 검토" —
+      // 검토 결과 같은 개념이라 새 번역을 짓지 않는다).
+      captionPlaceholder: "캡션",
+      captionAriaLabel: "코드 블록 캡션",
     },
   },
   handle: {

@@ -255,6 +255,13 @@ export type Dictionary = {
       // aria-pressed만으로 전달한다(media toolbar의 Preview 버튼과 동일
       // 관례, 별도 title 없음).
       wrapAriaLabel: string;
+      // Issue #194 RD-002 DELTA-02 — always-visible caption 오버레이
+      // (CodeBlockCaptions)의 빈 값 placeholder 문구와 편집 input의
+      // aria-label. toolbar 버튼 계열이 아니라 오버레이 전용이지만 같은
+      // codeBlock 네임스페이스에 둔다(신규 섹션을 만들 만큼 다른 개념이
+      // 아니다).
+      captionPlaceholder: string;
+      captionAriaLabel: string;
     };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
@@ -509,6 +516,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       copyAriaLabel: "Copy code",
       copiedTitle: "Copied",
       wrapAriaLabel: "Toggle line wrap",
+      captionPlaceholder: "caption",
+      captionAriaLabel: "Code block caption",
     },
   },
   handle: {
