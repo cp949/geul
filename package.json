@@ -1,6 +1,7 @@
 {
   "name": "@cp949/geul",
   "private": true,
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cp949/geul.git"

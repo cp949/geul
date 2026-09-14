@@ -1,99 +1,67 @@
 # Geul
 
-독자 JSON 문서 모델과 HTML/GFM 상호운용을 제공하는 TypeScript 블록 에디터다. Tiptap은 비공개 편집 엔진으로만 사용하며 공개 API와 저장 형식은 특정 에디터 구현에 의존하지 않는다.
+독자 JSON 문서 모델과 안전한 HTML/GFM 상호운용을 제공하는 TypeScript 블록 에디터다. 헤드리스 코어 위에 React 바인딩을 제공하며, 저장 형식과 공개 API는 특정 에디터 구현에 의존하지 않는다.
 
-## 현재 상태
+## 설치
 
-현재 단계와 바로 다음 작업은 [현재 프로젝트 상태](./docs/product/current-status.md)를 기준으로 한다.
-
-기능별 목표와 검증 상태는 [무료 기능 인벤토리](./docs/product/blocknote-free-feature-inventory.md), 릴리스별 구현 순서는 [제품 로드맵](./docs/product/roadmap.md)을 참고한다.
-
-## 아키텍처
-
-```text
-io       -> model
-core     -> model
-react    -> core
-demo     -> react, io, model
-showcase -> react, io, model
+```bash
+npm install @cp949/geul-react @cp949/geul-model
 ```
 
-- `packages/model` (`@cp949/geul-model`): 독자 문서 타입, shape·의미 검증, 표 논리 격자 검증
-- `packages/io` (`@cp949/geul-io`): model과 HTML/GFM 사이의 변환 및 HTML sanitize
-- `packages/core` (`@cp949/geul-core`): Tiptap을 비공개 구현으로 감싼 headless editor controller
-- `packages/react` (`@cp949/geul-react`): React 어댑터. 허용 표면은 [ADR-0002](./docs/adr/0002-enforce-layered-package-boundaries.md) 참조
-- `apps/demo`: 배포된 패키지 공개 API를 사용하는 통합 데모
-- `apps/showcase`: react 어댑터 공개 표면 쇼케이스(디자인·UX 확인, 에이전트 주도 UX 결함 탐지)
-- `fixtures/consumer`: `dist`와 package exports만 사용하는 소비자 검증 fixture
+## 빠른 시작
 
-패키지 경계 불변식(비의존·타입 비노출 상세)은 [ADR-0002](./docs/adr/0002-enforce-layered-package-boundaries.md)가 소유한다.
+```tsx
+import { EditorContent, EditorProvider } from "@cp949/geul-react";
+import "@cp949/geul-react/styles.css";
+import { createEmptyDocument } from "@cp949/geul-model";
+
+const initialDocument = createEmptyDocument(() => crypto.randomUUID());
+
+function Editor() {
+  return (
+    <EditorProvider initialDocument={initialDocument}>
+      <EditorContent />
+    </EditorProvider>
+  );
+}
+```
+
+Next.js 통합, 구문 강조 연결 같은 상세 사용법은 [`@cp949/geul-react`](./packages/react)를 본다. React 없이 저수준 API로 직접 제어하려면 [`@cp949/geul-core`](./packages/core), 서버에서 문서를 HTML/Markdown으로 변환하려면 [`@cp949/geul-io`](./packages/io)를 본다.
+
+## 패키지
+
+| 패키지                                  | 역할                                                          |
+| --------------------------------------- | ------------------------------------------------------------- |
+| [`@cp949/geul-model`](./packages/model) | 독자 문서 타입, shape·의미 검증, 표 논리 격자 검증            |
+| [`@cp949/geul-io`](./packages/io)       | model과 HTML/GFM 사이의 변환, HTML sanitize                   |
+| [`@cp949/geul-core`](./packages/core)   | Tiptap을 비공개 구현으로 감싼 headless editor controller      |
+| [`@cp949/geul-react`](./packages/react) | React 바인딩과 UI 컴포넌트(툴바, 슬래시 메뉴, 이모지 피커 등) |
+
+```text
+io   -> model
+core -> model
+react -> core
+```
 
 ## 브라우저 지원
 
-공식 browser floor는 Chrome 75다([ADR-0008](./docs/adr/0008-target-chrome-75-as-official-browser-floor.md)). Geul 패키지 자체는 Chrome 75 문법으로 빌드되고 자기 소스의 런타임 API는 `pnpm check:escompat` 게이트가 막는다(ES 표준 API 기준 — `crypto.randomUUID` 같은 Web API 격차는 게이트 밖이고 Issue #121이 소유한다). 디펜던시가 쓰는 최신 런타임 API의 polyfill은 사용처 책임이다([ADR-0009](./docs/adr/0009-delegate-chrome75-runtime-api-polyfills-to-consumers.md)).
+공식 browser floor는 Chrome 75다. Geul 패키지 자체는 Chrome 75 문법으로 빌드되고, 자기 소스가 쓰는 런타임 API는 ES 표준 기준으로 검증된다 — 의존성이 쓰는 최신 런타임 API의 polyfill은 사용처 책임이다.
 
-Chrome 75를 지원해야 하는 사용처는 두 가지를 설정한다.
+Chrome 75를 지원해야 하면 두 가지를 설정한다.
 
-1. 앱 엔트리의 첫 import로 `import "core-js/stable";`을 넣는다 — 디펜던시의 런타임 API 격차(예: `Array.prototype.findLast`)를 채운다.
-2. 번들러 target을 Chrome 75로 둔다(Vite: `build.target: 'chrome75'`) — 디펜던시의 문법을 downlevel한다.
+1. 앱 엔트리의 첫 import로 `import "core-js/stable";`을 넣는다.
+2. 번들러 target을 Chrome 75로 둔다(Vite: `build.target: 'chrome75'`).
 
-`apps/demo`가 이 설정의 재현 예시이고 `pnpm test:e2e:chrome83`이 실제 Chrome 83에서 검증한다. 최신 Chrome만 지원하는 사용처는 아무 조치도 필요 없다.
+최신 Chrome만 지원하는 사용처는 아무 조치도 필요 없다.
 
-## 개발 환경
+## 상태
 
-- Node.js 24.18 이상
-- pnpm 12.4.1
+R0~R4(저장 모델, 표, 기본 블록 parity, 파일·미디어, 확장성) 완료, 1차 릴리즈를 준비 중이다. 최신 진행 상황은 [현재 프로젝트 상태](./docs/product/current-status.md)를 참고한다.
 
-```bash
-pnpm install
-pnpm dev
-```
+## 라이선스
 
-## 검증 명령
+[MIT](./LICENSE)
 
-```bash
-pnpm lint
-pnpm build
-pnpm check:escompat
-pnpm typecheck
-pnpm test
-pnpm test:e2e
-pnpm check:boundaries
-pnpm check:licenses
-pnpm verify
-```
+## 기여
 
-`pnpm verify`는 lint, build, dist ES 호환성(check:escompat), typecheck, unit test, package boundary, license, Chromium E2E를 순서대로 실행하는 최종 게이트다.
-
-단일 패키지는 filter로 검증할 수 있다.
-
-```bash
-pnpm --filter @cp949/geul-model test
-pnpm --filter @cp949/geul-io test
-pnpm --filter @cp949/geul-core test
-pnpm --filter @cp949/geul-react typecheck
-pnpm --filter consumer-fixture typecheck
-```
-
-## 제품 문서
-
-- [현재 프로젝트 상태](./docs/product/current-status.md): 현재 단계와 바로 다음 작업
-- [GitHub Issues](https://github.com/cp949/geul/issues): 발견 작업, 실행 계획, 체크리스트와 진행 상태
-- [프로젝트 공통 언어](./CONTEXT.md): 저장·변환·완료 계약의 표준 용어
-- [무료 기능 인벤토리](./docs/product/blocknote-free-feature-inventory.md): 기능 범위와 검증 상태의 단일 기준
-- [제품 로드맵](./docs/product/roadmap.md): R0-R8 구현 순서와 단계별 완료 조건
-- [개발 문서 생명주기](./docs/process/development-lifecycle.md): 설계, 구현, 리뷰와 완료 판정 절차
-- [이슈 트래커 계약](./docs/agents/issue-tracker.md): Matt Pocock 스킬의 GitHub Issue 소비 규칙
-- [도메인 문서 계약](./docs/agents/domain.md): single-context 공통 언어와 ADR 소비 규칙
-- [아키텍처 결정](./docs/adr/): 장기 결정과 선택 이유
-- [반복 함정](./docs/pitfalls/INDEX.md): 재발 방지 규칙과 검증 방법
-- [R0 완료 판정](./docs/reviews/r0-project-foundation-completion.md): R0 체크리스트와 소급 검증 증거
-- [MVP 설계](./docs/specs/2026-08-14-tiptap-block-editor-mvp-design.md): R0/R1 설계 계약
-- [에이전트 문서 체계 설계](./docs/specs/2026-08-14-agent-documentation-system-design.md): 작업 상태와 영구 문서의 책임 경계
-- [의존성 라이선스](./docs/product/dependency-licenses.md): 외부 런타임 의존성 라이선스 목록
-
-## 독자 구현 원칙
-
-[BlockNote](https://github.com/TypeCellOS/BlockNote) v0.54.0의 공개 문서와 동작을 제품 기능 기준선으로 참고한다. BlockNote의 소스 코드, 컴포넌트, 스타일, 아이콘은 복사하지 않는다. 공개 API, 저장 모델, 패키지 경계와 시각 디자인은 독자적으로 설계한다.
-
-프로젝트 자체 배포 라이선스는 아직 결정하지 않았다. 공개 배포 전 [GitHub Issue #2](https://github.com/cp949/geul/issues/2)를 완료하고 저장소 루트에 `LICENSE`를 추가해 이 문서와 동기화한다.
+개발 환경, 검증 명령과 내부 문서 지도는 [CONTRIBUTING.md](./CONTRIBUTING.md)를 본다. 버그·기능 요청은 [GitHub Issues](https://github.com/cp949/geul/issues)에 남긴다.
