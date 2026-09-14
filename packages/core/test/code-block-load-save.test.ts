@@ -36,12 +36,14 @@ const codeBlock = (
   source: string,
   language?: string,
   wrap?: boolean,
+  caption?: string,
 ): CodeBlock => ({
   id,
   type: "codeBlock",
   content: source === "" ? [] : [{ text: source }],
   ...(language === undefined ? {} : { language }),
   ...(wrap === undefined ? {} : { wrap }),
+  ...(caption === undefined ? {} : { caption }),
 });
 
 /**
@@ -124,12 +126,18 @@ const expectKeyboardBoundary = (
 };
 
 describe("CodeBlock production load와 저장", () => {
-  it("createEditor와 replaceDocument가 top-level과 nested CodeBlock의 id·source·language·wrap을 보존한다", () => {
+  it("createEditor와 replaceDocument가 top-level과 nested CodeBlock의 id·source·language·wrap·caption을 보존한다", () => {
     const initial = documentOf(
       codeBlock("top-empty", ""),
-      codeBlock("top-known", "const x = 1;\n\treturn x;", " JS ", true),
+      codeBlock("top-known", "const x = 1;\n\treturn x;", " JS ", true, "설명"),
       paragraphBlock("parent", "parent", [
-        codeBlock("nested-unknown", "alpha\n\tbeta", " Exact Unknown ", false),
+        codeBlock(
+          "nested-unknown",
+          "alpha\n\tbeta",
+          " Exact Unknown ",
+          false,
+          "",
+        ),
         codeBlock("nested-none", "plain"),
       ]),
       paragraphBlock("tail", "tail"),
@@ -145,6 +153,7 @@ describe("CodeBlock production load와 저장", () => {
             "const x = 1;\n\treturn x;",
             "javascript",
             true,
+            "설명",
           ),
           paragraphBlock("parent", "parent", [
             codeBlock(
@@ -152,6 +161,7 @@ describe("CodeBlock production load와 저장", () => {
               "alpha\n\tbeta",
               " Exact Unknown ",
               false,
+              "",
             ),
             codeBlock("nested-none", "plain"),
           ]),
@@ -161,7 +171,13 @@ describe("CodeBlock production load와 저장", () => {
 
       const replacement = documentOf(
         paragraphBlock("replacement-parent", "parent", [
-          codeBlock("replacement-nested", "nested\n\tsource", " TS ", true),
+          codeBlock(
+            "replacement-nested",
+            "nested\n\tsource",
+            " TS ",
+            true,
+            "new caption",
+          ),
         ]),
         codeBlock("replacement-top", "top", " Custom Lang "),
         paragraphBlock("replacement-tail", "tail"),
@@ -180,6 +196,7 @@ describe("CodeBlock production load와 저장", () => {
               "nested\n\tsource",
               "typescript",
               true,
+              "new caption",
             ),
           ]),
           codeBlock("replacement-top", "top", " Custom Lang "),

@@ -276,6 +276,15 @@ const codeBlockFromTiptap = (
     return invalid("CodeBlock wrap attr must be a boolean or null");
   }
 
+  const caption = node.attrs?.caption;
+  if (
+    caption !== undefined &&
+    caption !== null &&
+    typeof caption !== "string"
+  ) {
+    return invalid("CodeBlock caption attr must be a string or null");
+  }
+
   return {
     ok: true,
     value: {
@@ -284,6 +293,7 @@ const codeBlockFromTiptap = (
       content: source === "" ? [] : [{ text: source }],
       ...(typeof language === "string" ? { language } : {}),
       ...(typeof wrap === "boolean" ? { wrap } : {}),
+      ...(typeof caption === "string" ? { caption } : {}),
     },
   };
 };

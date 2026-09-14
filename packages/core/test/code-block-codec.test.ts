@@ -108,7 +108,7 @@ describe("CodeBlock codec 왕복", () => {
             content: [
               {
                 type: "codeBlock",
-                attrs: { language: null, wrap: null },
+                attrs: { language: null, wrap: null, caption: null },
                 content: [],
               },
             ],
@@ -119,7 +119,7 @@ describe("CodeBlock codec 왕복", () => {
             content: [
               {
                 type: "codeBlock",
-                attrs: { language: "javascript", wrap: null },
+                attrs: { language: "javascript", wrap: null, caption: null },
                 content: [{ type: "text", text: "first\n\tsecond" }],
               },
             ],
@@ -143,7 +143,11 @@ describe("CodeBlock codec 왕복", () => {
                     content: [
                       {
                         type: "codeBlock",
-                        attrs: { language: " Exact Unknown ", wrap: null },
+                        attrs: {
+                          language: " Exact Unknown ",
+                          wrap: null,
+                          caption: null,
+                        },
                         content: [{ type: "text", text: "nested" }],
                       },
                     ],
@@ -243,7 +247,7 @@ describe("CodeBlock codec 왕복", () => {
 
     expect(encoded.value.content?.[0]?.content?.[0]).toEqual({
       type: "codeBlock",
-      attrs: { language: " Unknown Language ", wrap: null },
+      attrs: { language: " Unknown Language ", wrap: null, caption: null },
       content: [{ type: "text", text: "\talpha\n\tbeta" }],
     });
     expect(tiptapToModel(encoded.value, 0, sequentialIds("gen"))).toEqual({

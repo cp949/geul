@@ -443,12 +443,16 @@ const blockContentToTiptapJson = (
 });
 
 // CodeBlock은 source run 경계를 저장하지 않는 model 정규형을 그대로 PM의
-// text* content로 옮긴다. language·wrap 부재는 CodeBlockExtension attr
-// 기본값과 같은 null로 명시한다. source·language 보정은 model 권위라
+// text* content로 옮긴다. language·wrap·caption 부재는 CodeBlockExtension
+// attr 기본값과 같은 null로 명시한다. source·language 보정은 model 권위라
 // 여기서 하지 않는다.
 const codeBlockContentToTiptapJson = (block: CodeBlock): TiptapJsonNode => ({
   type: "codeBlock",
-  attrs: { language: block.language ?? null, wrap: block.wrap ?? null },
+  attrs: {
+    language: block.language ?? null,
+    wrap: block.wrap ?? null,
+    caption: block.caption ?? null,
+  },
   content: inlineContentToTiptapPlain(block.content),
 });
 

@@ -62,6 +62,7 @@ const codeBlockSchema = z
     type: z.literal("codeBlock"),
     language: z.string().optional(),
     wrap: z.boolean().optional(),
+    caption: z.string().optional(),
     content: codeBlockContentSchema,
   })
   .strict();

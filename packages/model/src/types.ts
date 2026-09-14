@@ -102,6 +102,9 @@ export type CodeBlock = {
   type: "codeBlock";
   language?: string;
   wrap?: boolean;
+  // media MediaBlockCommon.caption과 같은 plain string이다(rich text 아님,
+  // RD-002 DELTA-01, Issue #194).
+  caption?: string;
   content: InlineContent;
 };
 // 4종 leaf 미디어 블록(file/image/video/audio) 공통 optional 필드다(spec

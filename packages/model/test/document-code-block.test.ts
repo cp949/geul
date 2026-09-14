@@ -287,6 +287,35 @@ describe("CodeBlock wrap 검증", () => {
   );
 });
 
+describe("CodeBlock caption 검증", () => {
+  it("caption 미지정은 property 부재를 유지한다", () => {
+    const input = documentOf(codeBlock({ content: [{ text: "source" }] }));
+
+    expect(parseDocument(input)).toEqual({ ok: true, value: input });
+  });
+
+  it.each(["", "설명"])("caption %s를 그대로 보존한다", (caption) => {
+    const input = documentOf(codeBlock({ caption }));
+
+    expect(parseDocument(input)).toEqual({ ok: true, value: input });
+  });
+
+  it.each([
+    ["숫자", 1],
+    ["boolean", true],
+    ["배열", []],
+    ["객체", {}],
+  ])("%s caption을 DOCUMENT_INVALID로 거절한다", (_name, caption) => {
+    expect(parseDocument(documentOf(codeBlock({ caption })))).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "caption"],
+      },
+    });
+  });
+});
+
 describe("중첩된 CodeBlock 검증", () => {
   it.each<ParentBlockType>(["paragraph", "heading", "quote"])(
     "%s children의 known alias를 canonical ID로 정규화한다",

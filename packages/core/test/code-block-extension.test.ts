@@ -66,19 +66,22 @@ describe("codeBlock 노드 스키마 계약", () => {
 
     expect(codeBlock.create().toJSON()).toEqual({
       type: "codeBlock",
-      attrs: { language: null, wrap: null },
+      attrs: { language: null, wrap: null, caption: null },
     });
     expect(codeBlock.create({ language: null }).attrs).toEqual({
       language: null,
       wrap: null,
+      caption: null,
     });
     expect(codeBlock.create({ language: "TypeScript" }).attrs).toEqual({
       language: "TypeScript",
       wrap: null,
+      caption: null,
     });
     expect(Object.keys(codeBlock.spec.attrs ?? {})).toEqual([
       "language",
       "wrap",
+      "caption",
     ]);
   });
 
@@ -90,6 +93,16 @@ describe("codeBlock 노드 스키마 계약", () => {
     expect(codeBlock.create({ wrap: null }).attrs.wrap).toBeNull();
     expect(codeBlock.create({ wrap: true }).attrs.wrap).toBe(true);
     expect(codeBlock.create({ wrap: false }).attrs.wrap).toBe(false);
+  });
+
+  it("caption 기본값은 null이고 null과 문자열을 PM attrs에 그대로 보존한다", () => {
+    const codeBlock = codeBlockSchema().nodes.codeBlock;
+    if (codeBlock === undefined) throw new Error("codeBlock node is missing");
+
+    expect(codeBlock.create().attrs.caption).toBeNull();
+    expect(codeBlock.create({ caption: null }).attrs.caption).toBeNull();
+    expect(codeBlock.create({ caption: "" }).attrs.caption).toBe("");
+    expect(codeBlock.create({ caption: "설명" }).attrs.caption).toBe("설명");
   });
 
   it("codeBlock은 language metadata 없이 정확한 내부 DOM으로 렌더된다", () => {
@@ -129,6 +142,29 @@ describe("codeBlock 노드 스키마 계약", () => {
     );
     expect(unwrapped.hasAttribute("data-geul-code-wrap")).toBe(false);
     expect(unset.hasAttribute("data-geul-code-wrap")).toBe(false);
+  });
+
+  it("caption이 비어 있지 않을 때만 data-geul-media-caption 자식 DOM을 갖는다", () => {
+    const schema = codeBlockSchema();
+    const codeBlock = schema.nodes.codeBlock;
+    if (codeBlock === undefined) throw new Error("codeBlock node is missing");
+    const serializer = DOMSerializer.fromSchema(schema);
+
+    const captioned = serializer.serializeNode(
+      codeBlock.create({ caption: "설명", wrap: true }, schema.text("x")),
+    ) as HTMLElement;
+    const emptyCaption = serializer.serializeNode(
+      codeBlock.create({ caption: "" }, schema.text("x")),
+    ) as HTMLElement;
+    const unsetCaption = serializer.serializeNode(
+      codeBlock.create({ caption: null }, schema.text("x")),
+    ) as HTMLElement;
+
+    expect(captioned.outerHTML).toBe(
+      '<pre data-geul-code-wrap="" data-geul-code-block=""><code>x</code><div data-geul-media-caption="">설명</div></pre>',
+    );
+    expect(emptyCaption.querySelector("[data-geul-media-caption]")).toBeNull();
+    expect(unsetCaption.querySelector("[data-geul-media-caption]")).toBeNull();
   });
 
   it("codeBlock은 leafBlockContent에만 속하고 DOM parse 규칙이 없다", () => {
