@@ -273,18 +273,20 @@ describe("CodeBlock wrap 검증", () => {
     expect(parseDocument(input)).toEqual({ ok: true, value: input });
   });
 
-  it.each([["문자열", "yes"], ["숫자", 1], ["배열", []], ["객체", {}]])(
-    "%s wrap을 DOCUMENT_INVALID로 거절한다",
-    (_name, wrap) => {
-      expect(parseDocument(documentOf(codeBlock({ wrap })))).toMatchObject({
-        ok: false,
-        error: {
-          code: "DOCUMENT_INVALID",
-          path: ["blocks", 0, "wrap"],
-        },
-      });
-    },
-  );
+  it.each([
+    ["문자열", "yes"],
+    ["숫자", 1],
+    ["배열", []],
+    ["객체", {}],
+  ])("%s wrap을 DOCUMENT_INVALID로 거절한다", (_name, wrap) => {
+    expect(parseDocument(documentOf(codeBlock({ wrap })))).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "wrap"],
+      },
+    });
+  });
 });
 
 describe("CodeBlock caption 검증", () => {
