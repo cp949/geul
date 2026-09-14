@@ -203,8 +203,12 @@ describe("CodeBlock 언어 트리거 표시", () => {
     fireEvent.scroll(window);
     flushDeferredUpdate();
 
+    // position anchoring과 data-block-id는 outer toolbar(RD-001-DELTA-01,
+    // Issue #193)가 갖는다 — inner .geul-code-block-language-trigger는
+    // 더는 위치를 갖지 않는다(아래 "팝오버는 트리거 버튼 자신의 우하단을
+    // anchor로 삼는다" 테스트가 그 inner rect 용도를 따로 검증한다).
     const root = languageButton().closest<HTMLElement>(
-      ".geul-code-block-language-trigger",
+      ".geul-code-block-toolbar",
     );
     // 기본 레이아웃(left 0/top 0/width 600/height 20) → anchor = rect.right,
     // rect.top = (600, 0). 트리거 자신은 jsdom에서 0x0으로 측정돼(rect
@@ -221,10 +225,10 @@ describe("CodeBlock 언어 트리거 표시", () => {
     flushDeferredUpdate();
     const codeBlock = rendered.blocks[0];
     const root = languageButton().closest<HTMLElement>(
-      ".geul-code-block-language-trigger",
+      ".geul-code-block-toolbar",
     );
     if (codeBlock === undefined || root === null) {
-      throw new Error("CodeBlock 또는 language trigger를 찾지 못했다");
+      throw new Error("CodeBlock 또는 toolbar를 찾지 못했다");
     }
     let left = 40;
     let bottom = 80;
@@ -295,6 +299,68 @@ describe("CodeBlock 언어 트리거 표시", () => {
     for (const listener of [...scrollListeners, ...resizeListeners]) {
       expect(removeEventListener).toHaveBeenCalledWith(...listener);
     }
+  });
+});
+
+// RD-001-DELTA-01(Issue #193) — 언어 trigger를 감싸는 outer
+// `role="toolbar"` 컨테이너와 삭제 버튼(media-toolbar.tsx 패턴 재사용:
+// deleteBlock + useTableCommandFeedback의 actionError 표시).
+describe("CodeBlock toolbar와 삭제 버튼", () => {
+  const deleteButton = (name = "Delete code block"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  it('활성 CodeBlock caret에서 role="toolbar" 컨테이너가 언어 trigger·삭제 버튼을 함께 노출한다', () => {
+    mountCodeFixture();
+
+    const toolbar = screen.getByRole("toolbar", { name: "Code block toolbar" });
+    expect(
+      within(toolbar).getByRole("button", { name: "Code language" }),
+    ).toBeTruthy();
+    expect(
+      within(toolbar).getByRole("button", { name: "Delete code block" }),
+    ).toBeTruthy();
+  });
+
+  it("형제 블록이 있는 CodeBlock에서 삭제 버튼 클릭은 deleteBlock으로 블록을 지우고 toolbar도 함께 사라진다", () => {
+    const rendered = mountCodeFixture({ withParagraph: true });
+
+    fireEvent.click(deleteButton());
+
+    expect(
+      rendered.editor
+        .getDocument()
+        .blocks.some((block) => block.id === "code-1"),
+    ).toBe(false);
+    expect(rendered.editor.getDocument().blocks).toHaveLength(1);
+    expect(queryLanguageButton()).toBeNull();
+  });
+
+  it('deleteBlock이 실패(Result ok:false)로 응답하면 문서를 보존하고 actionError를 role="alert"로 노출한다', () => {
+    // TrailingBlockExtension(spec §6.4, UI-010)이 doc 끝에 빈 paragraph를
+    // 항상 유지하는 live invariant라(appendTransaction, load 시점 1회가
+    // 아니다) codeBlock은 절대 "최상위 유일 블록"이 될 수 없다 — 그 가드
+    // 경로를 실제로 트리거할 수 없으므로 deleteBlock을 직접 spy해 Result
+    // 실패를 강제하고 actionError 배선만 검증한다(핵심 가드 로직 자체는
+    // generic-block-delete-commands.ts가 core 단위 테스트로 소유).
+    const rendered = mountCodeFixture();
+    const deleteSpy = vi
+      .spyOn(rendered.editor.commands, "deleteBlock")
+      .mockReturnValueOnce({
+        ok: false,
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "deleteBlock" },
+      });
+
+    fireEvent.click(deleteButton());
+
+    expect(deleteSpy).toHaveBeenCalledWith("code-1");
+    expect(rendered.editor.getDocument().blocks).toHaveLength(2);
+    expect(screen.getByRole("alert").textContent).toBe(
+      "COMMAND_NOT_APPLICABLE",
+    );
+    // toolbar 자신은 그대로 남는다 — 실패는 문서를 바꾸지 않으므로
+    // languageState가 null로 전환되지 않는다.
+    expect(queryLanguageButton()).not.toBeNull();
+    deleteSpy.mockRestore();
   });
 });
 
@@ -627,8 +693,8 @@ describe("CodeBlock 언어 팝오버 취소와 selection 동기화", () => {
 
     expect(languageButton().textContent).toBe("CSS");
     expect(
-      languageButton().closest<HTMLElement>(".geul-code-block-language-trigger")
-        ?.dataset.blockId,
+      languageButton().closest<HTMLElement>(".geul-code-block-toolbar")?.dataset
+        .blockId,
     ).toBe("code-2");
     expect(querySearchInput()).toBeNull();
   });

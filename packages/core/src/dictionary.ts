@@ -232,6 +232,16 @@ export type Dictionary = {
     static: {
       ariaLabel: string;
     };
+    // Issue #193 RD-001-DELTA-01 — code-block-language-combobox.tsx의
+    // outer `role="toolbar"` 컨테이너(언어 trigger + 삭제 버튼, DELTA-02가
+    // 복사 버튼 라벨을 추가한다) aria-label과 삭제 버튼 라벨. `media`와
+    // 같은 이유로 별도 네임스페이스 — codeLanguage는 언어 선택 자체(트리거
+    // 라벨·검색·suggestion)만 담당하고 이 toolbar의 컨테이너·삭제 라벨은
+    // toolbar.media/blockSelection과 같은 결의 "toolbar 조작" 문구다.
+    codeBlock: {
+      ariaLabel: string;
+      deleteAriaLabel: string;
+    };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
   // 추가·표 그립·Plus)와 `block-side-menu.tsx`(블록 드래그·추가)의 hover
@@ -478,6 +488,10 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     },
     static: {
       ariaLabel: "Toolbar",
+    },
+    codeBlock: {
+      ariaLabel: "Code block toolbar",
+      deleteAriaLabel: "Delete code block",
     },
   },
   handle: {

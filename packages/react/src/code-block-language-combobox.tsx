@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -13,11 +14,14 @@ import {
   type CodeBlockLanguageOption,
   useCodeBlockLanguages,
 } from "./code-block-language-option.js";
+import { IconButton } from "./icon-button.js";
+import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
+import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 // spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — `codeBlockLanguages`
 // 미지정 시(`useCodeBlockLanguages()` === undefined) 쓰는 기본 12개.
@@ -39,15 +43,24 @@ const DEFAULT_LANGUAGE_OPTIONS: readonly CodeBlockLanguageOption[] = [
   { id: "markdown", label: "Markdown", aliases: ["md"] },
 ];
 
-// 트리거 버튼과 팝오버 둘 다 여기 포함한다 — 바깥 pointerdown 판정이
-// `.closest()`로 두 셀렉터 아무 쪽에나 걸리면 "바깥"으로 보지 않는다.
-// 트리거를 빼먹으면 팝오버가 열린 상태에서 트리거를 다시 클릭할 때
-// pointerdown이 먼저 "바깥 클릭"으로 처리돼 버리고, 뒤이은 click의 토글
-// 로직과 경합한다.
+// outer toolbar(언어 trigger + 삭제 버튼, RD-001-DELTA-01 Issue #193)와
+// 팝오버 둘 다 여기 포함한다 — 바깥 pointerdown 판정이 `.closest()`로 두
+// 셀렉터 아무 쪽에나 걸리면 "바깥"으로 보지 않는다. `.geul-code-block-
+// -language-trigger`는 이제 toolbar 안에 항상 nest돼 별도로 나열할
+// 필요가 없다(media-toolbar.tsx가 `.geul-media-toolbar` 하나로 내부 버튼
+// 전부를 커버하는 것과 같은 이유). toolbar를 빼먹으면 팝오버가 열린
+// 상태에서 트리거를 다시 클릭할 때 pointerdown이 먼저 "바깥 클릭"으로
+// 처리돼 버리고, 뒤이은 click의 토글 로직과 경합한다.
 const LANGUAGE_COMBOBOX_ALLOW_SELECTORS = [
-  ".geul-code-block-language-trigger",
+  ".geul-code-block-toolbar",
   ".geul-code-block-language-popover",
 ] as const;
+
+const codeBlockToolbarButtonClassName = "geul-code-block-toolbar__button";
+const codeBlockToolbarDangerButtonClassName = `${codeBlockToolbarButtonClassName} geul-code-block-toolbar__button--danger`;
+// media-toolbar.tsx의 deleteIcon 등과 같은 이유로 모듈 top-level에서 한
+// 번만 만든다 — 매 렌더 새 ReactElement를 만들지 않는다.
+const deleteIcon = <Trash2 {...iconProps} />;
 
 type LanguageState = {
   blockId: string;
@@ -78,6 +91,9 @@ export const CodeBlockLanguageCombobox = () => {
   languageStateRef.current = languageState;
   const listboxId = `${useId()}-code-language-listbox`;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // RD-001-DELTA-01(Issue #193) — 삭제 버튼의 Result 실패를
+  // actionError로 표시한다(media-toolbar.tsx handleDelete와 동일 패턴).
+  const { actionError, runCommand } = useTableCommandFeedback();
 
   const readActiveCodeBlock = useCallback(() => {
     const selection = editor.getSelectionBlockType();
@@ -285,17 +301,25 @@ export const CodeBlockLanguageCombobox = () => {
       : match.label;
   };
 
-  // 트리거 버튼을 코드블록 우상단에 앵커링한다(RD-001의 topRight variant).
-  const { menuRef: triggerRef, style: triggerStyle } = useClampedMenuPosition(
+  // outer toolbar(언어 trigger + 삭제 버튼)를 코드블록 우상단에
+  // 앵커링한다(RD-001의 topRight variant, RD-001-DELTA-01(Issue #193)에서
+  // 단일 트리거 대신 toolbar 전체로 확장).
+  const { menuRef: toolbarRef, style: toolbarStyle } = useClampedMenuPosition(
     anchor.left,
     anchor.top,
     "topRight",
   );
+  // 언어 trigger 자신의 div — 더는 독립 위치를 갖지 않는다(위치는 outer
+  // toolbar가 소유). `.geul-code-block-language-trigger`의 SCSS 주석대로
+  // "shell rect == 버튼 rect"만 유지해 popoverAnchor 실측 기준으로 쓴다.
+  const languageTriggerRef = useRef<HTMLDivElement | null>(null);
 
-  // 팝오버는 트리거 버튼 자신의 렌더된 rect를 앵커로 쓴다 — 코드블록이
-  // 아니라 트리거 아래로 펼친다. 트리거 위치(anchor)가 바뀌면(스크롤·리사이즈)
-  // 다시 실측한다. jsdom에는 ResizeObserver가 없어 단위 테스트는 이 재실행에
-  // 기댄다(use-clamped-menu-position.ts와 같은 제약).
+  // 팝오버는 언어 trigger 자신의 렌더된 rect를 앵커로 쓴다 — 코드블록이나
+  // toolbar 전체가 아니라 trigger 버튼 바로 아래로 펼친다(삭제 버튼이
+  // 옆에 추가돼도 팝오버 위치가 밀리지 않는다). 트리거 위치(anchor)가
+  // 바뀌면(스크롤·리사이즈) 다시 실측한다. jsdom에는 ResizeObserver가
+  // 없어 단위 테스트는 이 재실행에 기댄다(use-clamped-menu-position.ts와
+  // 같은 제약).
   const [popoverAnchor, setPopoverAnchor] = useState<AnchorPosition | null>(
     null,
   );
@@ -304,7 +328,7 @@ export const CodeBlockLanguageCombobox = () => {
       setPopoverAnchor(null);
       return;
     }
-    const node = triggerRef.current;
+    const node = languageTriggerRef.current;
     if (node === null) return;
     const rect = node.getBoundingClientRect();
     setPopoverAnchor((current) =>
@@ -314,7 +338,7 @@ export const CodeBlockLanguageCombobox = () => {
         ? current
         : { left: rect.right, top: rect.bottom },
     );
-  }, [open, triggerRef, anchor.left, anchor.top]);
+  }, [open, languageTriggerRef, anchor.left, anchor.top]);
 
   const { menuRef: popoverRef, style: popoverStyle } = useClampedMenuPosition(
     popoverAnchor?.left ?? 0,
@@ -326,29 +350,62 @@ export const CodeBlockLanguageCombobox = () => {
     if (open) searchInputRef.current?.focus();
   }, [open]);
 
+  // RD-001-DELTA-01(Issue #193) — media-toolbar.tsx handleDelete와 동일
+  // 패턴: Result 실패는 runCommand가 actionError에 남기고, 성공하면
+  // updateFromSelection이 languageState를 null로 되돌려 toolbar 전체가
+  // 사라진다(readActiveCodeBlock이 삭제된 블록을 더는 찾지 못한다).
+  const handleDelete = () => {
+    const current = languageStateRef.current;
+    if (current === null) return;
+    runCommand(
+      () => editor.commands.deleteBlock(current.blockId),
+      updateFromSelection,
+    );
+  };
+
   if (languageState === null) return null;
 
   return (
     <>
       {/* 위치 계산(useClampedMenuPosition)이 `menuRef`를 div 기준으로
-          잡는다 — 실제 버튼은 안쪽에 두고 이 div는 순수 위치 shell로만
-          쓴다(padding 없이 버튼 크기에 꼭 맞춘다, popoverAnchor 실측이
-          이 div의 rect를 그대로 버튼 경계로 쓴다). */}
+          잡는다 — outer toolbar가 코드블록 우상단 position shell이다
+          (RD-001-DELTA-01, Issue #193). 언어 trigger 자신의 div는 더는
+          위치를 갖지 않는 평범한 자식이지만 padding 없이 버튼 크기에
+          그대로 맞춘다 — popoverAnchor 실측이 이 div의 rect를 버튼
+          경계로 그대로 쓴다(아래 languageTriggerRef). */}
       <div
-        className="geul-code-block-language-trigger"
+        aria-label={dictionary.toolbar.codeBlock.ariaLabel}
+        className="geul-code-block-toolbar"
         data-block-id={languageState.blockId}
-        ref={triggerRef}
-        style={triggerStyle}
+        ref={toolbarRef}
+        role="toolbar"
+        style={toolbarStyle}
       >
-        <button
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          aria-label={dictionary.codeLanguage.label}
-          onClick={handleTriggerClick}
-          type="button"
+        <div
+          className="geul-code-block-language-trigger"
+          ref={languageTriggerRef}
         >
-          {displayLabel(languageState.committed)}
-        </button>
+          <button
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            aria-label={dictionary.codeLanguage.label}
+            onClick={handleTriggerClick}
+            type="button"
+          >
+            {displayLabel(languageState.committed)}
+          </button>
+        </div>
+        <IconButton
+          className={codeBlockToolbarDangerButtonClassName}
+          icon={deleteIcon}
+          label={dictionary.toolbar.codeBlock.deleteAriaLabel}
+          onClick={handleDelete}
+        />
+        {actionError !== null && (
+          <span className="geul-code-block-toolbar__error" role="alert">
+            {actionError.code}
+          </span>
+        )}
       </div>
       {open && (
         <div
