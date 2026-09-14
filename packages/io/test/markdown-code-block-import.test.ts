@@ -215,6 +215,37 @@ describe("CodeBlock GFM 가져오기", () => {
     });
   });
 
+  it("meta에 caption처럼 보이는 문구가 있어도 CodeBlock에 caption 필드를 세팅하지 않는다(항상 기본값)", () => {
+    expect(
+      importMarkdown('```ts caption="example"\nsource\n```', {
+        createId: () => "code-caption-meta",
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        document: {
+          formatVersion: 1,
+          revision: 0,
+          blocks: [
+            {
+              id: "code-caption-meta",
+              type: "codeBlock",
+              language: "typescript",
+              content: [{ text: "source" }],
+            },
+          ],
+        },
+        warnings: [
+          {
+            kind: "CODE_BLOCK_META_DROPPED",
+            blockId: "code-caption-meta",
+            message: "Code block meta was dropped during import",
+          },
+        ],
+      },
+    });
+  });
+
   it("parser가 변형하는 NUL CodeBlock source를 MARKDOWN_DOCUMENT_INVALID로 거절한다", () => {
     expect(importMarkdown("```\nbefore\u0000after\n```")).toEqual({
       ok: false,

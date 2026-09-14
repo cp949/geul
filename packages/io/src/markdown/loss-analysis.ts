@@ -51,6 +51,11 @@ export type MarkdownLoss = {
     // RD-001-DELTA-03(Issue #194). GFM code fence에는 wrap(줄바꿈 on/off)을
     // 실을 필드가 없다 — MEDIA_CAPTION과 동일하게 값이 있을 때만(true) 보고.
     | "CODE_BLOCK_WRAP"
+    // RD-002-DELTA-04(Issue #194). GFM code fence에는 caption을 실을 필드가
+    // 없다 — 비어 있지 않은 문자열일 때만 보고한다(MEDIA_CAPTION의 `!==
+    // undefined`와 다르게 non-empty 조건, RD-002-DELTA-04.md "목적" 근거 —
+    // caption을 입력했다가 지운 뒤 blur하면 model에 caption: ""가 남는다).
+    | "CODE_BLOCK_CAPTION"
     // RD-003. top-level CustomBlock(model, RD-002-DELTA-01) 중
     // customBlockToMarkdown에 등록되지 않은 타입(spec §4.5) — 등록된
     // 타입은 이 kind를 갖지 않는다(정상 렌더).
@@ -241,6 +246,13 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
         kind: "CODE_BLOCK_WRAP",
         blockId: block.id,
         message: `Block ${block.id} has line wrap enabled`,
+      });
+    }
+    if (block.caption !== undefined && block.caption.length > 0) {
+      losses.push({
+        kind: "CODE_BLOCK_CAPTION",
+        blockId: block.id,
+        message: `Block ${block.id} has a caption`,
       });
     }
     return;

@@ -117,6 +117,79 @@ describe("CodeBlock GFM 내보내기", () => {
     });
   });
 
+  it("caption이 있는 codeBlock을 CODE_BLOCK_CAPTION 손실로 보고하고 strict export를 거절한다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption",
+          type: "codeBlock",
+          caption: "예제 출력",
+          content: [{ text: "source" }],
+        },
+      ],
+    };
+
+    expect(analyzeMarkdownLoss(document)).toEqual([
+      {
+        kind: "CODE_BLOCK_CAPTION",
+        blockId: "code-caption",
+        message: "Block code-caption has a caption",
+      },
+    ]);
+    expect(exportMarkdown(document, { mode: "strict" })).toEqual({
+      ok: false,
+      error: {
+        code: "MARKDOWN_LOSS_NOT_ALLOWED",
+        losses: [
+          {
+            kind: "CODE_BLOCK_CAPTION",
+            blockId: "code-caption",
+            message: "Block code-caption has a caption",
+          },
+        ],
+      },
+    });
+  });
+
+  it("caption 미설정과 빈 문자열은 손실이 없고 value/lang만 GFM에 실린다(caption 흔적 없음)", () => {
+    const unset: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption-unset",
+          type: "codeBlock",
+          content: [{ text: "a" }],
+        },
+      ],
+    };
+    const empty: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-caption-empty",
+          type: "codeBlock",
+          caption: "",
+          content: [{ text: "a" }],
+        },
+      ],
+    };
+
+    expect(analyzeMarkdownLoss(unset)).toEqual([]);
+    expect(analyzeMarkdownLoss(empty)).toEqual([]);
+    expect(exportMarkdown(unset, { mode: "strict" })).toEqual({
+      ok: true,
+      value: "```\na\n```\n",
+    });
+    expect(exportMarkdown(empty, { mode: "strict" })).toEqual({
+      ok: true,
+      value: "```\na\n```\n",
+    });
+  });
+
   it("HTML entity 형태의 unknown language를 ampersand escape해 exact 보존한다", () => {
     const document: Document = {
       formatVersion: 1,
