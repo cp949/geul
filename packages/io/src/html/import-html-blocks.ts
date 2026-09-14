@@ -213,11 +213,16 @@ const blocksFromSegments = (
       ) {
         warnings.push(codeBlockLanguageMetadataIgnoredWarning(id));
       }
+      // marker 패턴 — 값 내용은 보지 않고 존재만 본다(export-html.ts의
+      // codeBlockNode와 동일 관례, import-html-wrappers.ts의
+      // isChildrenContainerMarker와 동일 "presence만" 판정).
+      const wrap = segment.node.properties.dataGeulCodeWrap !== undefined;
       blocks.push({
         id,
         type: "codeBlock",
         content: source.length === 0 ? [] : [{ text: source }],
         ...(language === undefined ? {} : { language }),
+        ...(wrap ? { wrap: true } : {}),
       });
       continue;
     }

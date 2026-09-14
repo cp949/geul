@@ -323,11 +323,22 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   // inlineContentToTiptap과 동일 패턴).
   const source = block.content[0] as
     Extract<InlineContentItem, { text: string }> | undefined;
-  return htmlElement("pre", { dataGeulBlockId: block.id }, [
-    htmlElement("code", codeProperties, [
-      { type: "text", value: source?.text ?? "" },
-    ]),
-  ]);
+  return htmlElement(
+    "pre",
+    {
+      dataGeulBlockId: block.id,
+      // marker 패턴(값은 항상 빈 문자열, 존재 자체가 true) — core의 라이브
+      // 에디터(code-block-extension.ts)가 이미 같은 attribute 이름으로
+      // 쓰는 관례를 그대로 따른다. io 자신의 다른 boolean(showPreview 등)의
+      // String(bool) 값-문자열화 패턴과는 다르다(RD-001-DELTA-03.md "결정").
+      ...(block.wrap === true ? { dataGeulCodeWrap: "" } : {}),
+    },
+    [
+      htmlElement("code", codeProperties, [
+        { type: "text", value: source?.text ?? "" },
+      ]),
+    ],
+  );
 };
 
 const listItemNode = (block: ListItemBlock): HtmlElementNode =>

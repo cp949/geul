@@ -48,6 +48,9 @@ export type MarkdownLoss = {
     // 동일 논리, RD-002-DELTA-01.md "결정"). Image는 이 kind를 절대 갖지
     // 않는다.
     | "MEDIA_TYPE_LOST"
+    // RD-001-DELTA-03(Issue #194). GFM code fence에는 wrap(줄바꿈 on/off)을
+    // 실을 필드가 없다 — MEDIA_CAPTION과 동일하게 값이 있을 때만(true) 보고.
+    | "CODE_BLOCK_WRAP"
     // RD-003. top-level CustomBlock(model, RD-002-DELTA-01) 중
     // customBlockToMarkdown에 등록되지 않은 타입(spec §4.5) — 등록된
     // 타입은 이 kind를 갖지 않는다(정상 렌더).
@@ -231,7 +234,17 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     collectTableLosses(block, losses);
     return;
   }
-  if (block.type === "divider" || block.type === "codeBlock") return;
+  if (block.type === "divider") return;
+  if (block.type === "codeBlock") {
+    if (block.wrap === true) {
+      losses.push({
+        kind: "CODE_BLOCK_WRAP",
+        blockId: block.id,
+        message: `Block ${block.id} has line wrap enabled`,
+      });
+    }
+    return;
+  }
   // 4종 미디어 블록(Issue #152 슬라이스6, RD-002 DELTA-01, spec §7.2).
   // Image만 GFM 고유 표현 수단(`![name](url)`)이 있어 MEDIA_TYPE_LOST를
   // 갖지 않는다 — 나머지 prop(previewWidth/showPreview/textAlignment/

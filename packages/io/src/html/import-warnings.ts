@@ -314,6 +314,7 @@ const collectFromNodes = (
       allowedAttributes.delete("dataGeulBlockId");
       allowedAttributes.delete("dataLanguage");
       allowedAttributes.delete("className");
+      allowedAttributes.delete("dataGeulCodeWrap");
     }
     for (const [attribute, value] of Object.entries(node.properties)) {
       if (

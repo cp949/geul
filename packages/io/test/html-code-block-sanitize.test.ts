@@ -82,7 +82,7 @@ describe("HTML CodeBlock 입력 정제", () => {
 
   it("table cell의 pre에서 제거되는 Tab과 metadata를 경고한다", () => {
     const result = importHtml(
-      '<table><tr><td><pre data-language="ts"><code class="language-js">one\ttwo</code></pre></td></tr></table>',
+      '<table><tr><td><pre data-language="ts" data-geul-code-wrap=""><code class="language-js">one\ttwo</code></pre></td></tr></table>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
@@ -101,6 +101,11 @@ describe("HTML CodeBlock 입력 정제", () => {
           kind: "UNSAFE_ATTRIBUTE_REMOVED",
           element: "pre",
           attribute: "dataLanguage",
+        }),
+        expect.objectContaining({
+          kind: "UNSAFE_ATTRIBUTE_REMOVED",
+          element: "pre",
+          attribute: "dataGeulCodeWrap",
         }),
         expect.objectContaining({
           kind: "UNSAFE_ATTRIBUTE_REMOVED",

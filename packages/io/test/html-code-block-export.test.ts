@@ -68,6 +68,54 @@ describe("CodeBlock HTML 내보내기", () => {
     });
   });
 
+  it("wrap: true는 pre에 data-geul-code-wrap marker를 붙인다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-wrap-on",
+          type: "codeBlock",
+          wrap: true,
+          content: [{ text: "wrapped" }],
+        },
+      ],
+    };
+
+    expect(exportHtml(document)).toEqual({
+      ok: true,
+      value:
+        '<pre data-geul-block-id="code-wrap-on" data-geul-code-wrap=""><code>wrapped</code></pre>',
+    });
+  });
+
+  it("wrap: false와 미설정은 data-geul-code-wrap을 생략한다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-wrap-off",
+          type: "codeBlock",
+          wrap: false,
+          content: [{ text: "a" }],
+        },
+        {
+          id: "code-wrap-undefined",
+          type: "codeBlock",
+          content: [{ text: "b" }],
+        },
+      ],
+    };
+
+    expect(exportHtml(document)).toEqual({
+      ok: true,
+      value:
+        '<pre data-geul-block-id="code-wrap-off"><code>a</code></pre>' +
+        '<pre data-geul-block-id="code-wrap-undefined"><code>b</code></pre>',
+    });
+  });
+
   it("syntaxHighlighter로 강조 span을 포함해 export한다(Issue #172, spec §10)", () => {
     const document: Document = {
       formatVersion: 1,
@@ -244,6 +292,56 @@ describe("CodeBlock HTML 강조 export → import round-trip", () => {
           },
         ],
       },
+    });
+  });
+});
+
+describe("CodeBlock wrap HTML round-trip", () => {
+  it("wrap: true인 codeBlock을 export→import 왕복해도 wrap: true가 유지된다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-wrap-roundtrip",
+          type: "codeBlock",
+          language: "typescript",
+          wrap: true,
+          content: [{ text: "const x = 1;" }],
+        },
+      ],
+    };
+
+    const exported = exportHtml(document);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: { document, warnings: [] },
+    });
+  });
+
+  it("wrap 미설정인 codeBlock을 export→import 왕복해도 wrap 필드가 생기지 않는다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "code-no-wrap-roundtrip",
+          type: "codeBlock",
+          content: [{ text: "plain" }],
+        },
+      ],
+    };
+
+    const exported = exportHtml(document);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    expect(importHtml(exported.value)).toEqual({
+      ok: true,
+      value: { document, warnings: [] },
     });
   });
 });
@@ -509,6 +607,49 @@ describe("CodeBlock HTML 가져오기", () => {
         }),
       ]),
     );
+  });
+
+  it("data-geul-code-wrap이 있으면(값 무관) wrap: true로 복원한다", () => {
+    expect(
+      importHtml(
+        '<pre data-geul-block-id="code-wrap-marker" data-geul-code-wrap=""><code>a</code></pre>',
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        document: {
+          formatVersion: 1,
+          revision: 0,
+          blocks: [
+            {
+              id: "code-wrap-marker",
+              type: "codeBlock",
+              wrap: true,
+              content: [{ text: "a" }],
+            },
+          ],
+        },
+        warnings: [],
+      },
+    });
+  });
+
+  it("data-geul-code-wrap이 없으면 wrap 필드를 생략한다", () => {
+    expect(
+      importHtml('<pre data-geul-block-id="code-no-wrap"><code>a</code></pre>'),
+    ).toEqual({
+      ok: true,
+      value: {
+        document: {
+          formatVersion: 1,
+          revision: 0,
+          blocks: [
+            { id: "code-no-wrap", type: "codeBlock", content: [{ text: "a" }] },
+          ],
+        },
+        warnings: [],
+      },
+    });
   });
 
   it("table cell의 pre는 document CodeBlock으로 승격하지 않는다", () => {

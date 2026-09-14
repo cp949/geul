@@ -50,6 +50,7 @@ describe("preview.css export", () => {
       ".geul-preview blockquote {",
       'li[data-geul-checked="true"]::before',
       ".geul-preview pre {",
+      "pre[data-geul-code-wrap]",
       ".geul-preview :not(pre) > code {",
       ".geul-preview table {",
       ".geul-preview hr {",

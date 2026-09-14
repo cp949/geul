@@ -78,6 +78,14 @@
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
+/* wrap: true인 codeBlock(export-html.ts codeBlockNode가 data-geul-code-wrap
+   marker를 emit) — 라이브 에디터(@cp949/geul-react _editor.scss의
+   [data-geul-code-block][data-geul-code-wrap])와 동일 attribute-presence
+   셀렉터 관례, 값은 보지 않는다. */
+.geul-preview pre[data-geul-code-wrap] {
+  white-space: pre-wrap;
+}
+
 .geul-preview :not(pre) > code {
   background: #f1f3f4;
   border-radius: 3px;

@@ -100,7 +100,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
     "dataGeulBackgroundColor",
     "dataGeulTextAlignment",
   ],
-  pre: ["dataGeulBlockId", "dataLanguage", "className"],
+  pre: ["dataGeulBlockId", "dataLanguage", "className", "dataGeulCodeWrap"],
   // 인라인 textColor/backgroundColor mark의 HTML 매핑이다(spec §7.1, RD-004
   // DELTA-01). 표 셀 색상(`data-geul-*`)과 달리 실제 CSS `style` 속성을 쓴다 —
   // 문서 안에서 두 인코딩이 공존하는 것은 spec이 이미 결정했다
