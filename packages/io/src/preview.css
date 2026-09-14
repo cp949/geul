@@ -130,6 +130,21 @@
   text-align: center;
 }
 
+/* codeBlock caption 전용 override — 편집모드(_code-block-captions.scss의
+   .geul-code-block-caption__display, _editor.scss의
+   [data-geul-media-caption])는 text-align: left, font-size: 0.875rem이지만
+   preview는 media 4종과 공유하는 위 기본 규칙(center, em) 때문에 codeBlock에서도
+   중앙 정렬·em 크기가 적용돼 편집모드와 어긋났다(Issue #197). `data-geul-code-block`은
+   라이브 에디터 DOM 전용 marker(core/code-block-extension.ts)이고
+   exportHtml()의 codeBlockNode(export-html.ts)는 <pre>에 그 속성을 싣지 않는다 —
+   대신 export-html.ts에서 "pre" element를 emit하는 곳이 codeBlockNode 하나뿐이라
+   순수 태그 인접 형제 셀렉터만으로 media(그 어떤 4종도 <pre>를 쓰지 않음)와
+   겹치지 않게 codeBlock의 figcaption만 고를 수 있다. */
+.geul-preview pre + figcaption {
+  text-align: left;
+  font-size: 0.875rem;
+}
+
 /* textAlignment="left"/"right"(core data-geul-text-alignment)가 기본
    중앙 정렬을 덮어쓴다. exportHtml()은 caption이 없으면 이 attribute를
    img/video 태그 자신에, caption이 있으면 감싸는 <figure>에 싣는다

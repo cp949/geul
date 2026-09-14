@@ -60,6 +60,7 @@ describe("preview.css export", () => {
       'img[data-geul-text-alignment="left"]',
       'img[data-geul-text-alignment="right"]',
       ".geul-preview figcaption {",
+      "pre + figcaption",
     ]) {
       expect(css).toContain(selectorFragment);
     }
