@@ -84,6 +84,11 @@ type CodeFixtureOptions = {
   text?: string;
   withParagraph?: boolean;
   secondCodeLanguage?: string;
+  // RD-001-DELTA-02(Issue #194) — wrap 토글 버튼의 aria-pressed 초기값·
+  // 블록 전환 sync를 검증하려면 첫/두 번째 CodeBlock 각각의 wrap을 독립
+  // 지정할 수 있어야 한다.
+  wrap?: boolean;
+  secondCodeWrap?: boolean;
   onChange?: MountBlockEditorOptions["onChange"];
   dictionary?: MountBlockEditorOptions["dictionary"];
   codeBlockLanguages?: MountBlockEditorOptions["codeBlockLanguages"];
@@ -96,6 +101,8 @@ const mountCodeFixture = ({
   text = "const value = 1",
   withParagraph = false,
   secondCodeLanguage,
+  wrap,
+  secondCodeWrap,
   onChange,
   dictionary,
   codeBlockLanguages,
@@ -106,6 +113,7 @@ const mountCodeFixture = ({
         id: blockId,
         type: "codeBlock",
         ...(language === undefined ? {} : { language }),
+        ...(wrap === undefined ? {} : { wrap }),
         content: [{ text }],
       },
       ...(withParagraph
@@ -124,6 +132,7 @@ const mountCodeFixture = ({
               id: "code-2",
               type: "codeBlock" as const,
               language: secondCodeLanguage,
+              ...(secondCodeWrap === undefined ? {} : { wrap: secondCodeWrap }),
               content: [{ text: "body {}" }],
             },
           ]),
@@ -624,6 +633,81 @@ describe("CodeBlock toolbar 복사 버튼", () => {
     expect(warn).toHaveBeenCalled();
     expect(copyButton().title).toBe("Copy code");
     warn.mockRestore();
+  });
+});
+
+describe("CodeBlock toolbar wrap 토글(RD-001 DELTA-02, Issue #194)", () => {
+  const wrapButton = (name = "Toggle line wrap"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const preElement = (rendered: MountedBlockEditor): HTMLElement => {
+    const pre = rendered.host.querySelector<HTMLElement>(
+      "pre[data-geul-code-block]",
+    );
+    if (pre === null) throw new Error("CodeBlock pre DOM을 찾지 못했다");
+    return pre;
+  };
+
+  it("wrap 토글 버튼이 toolbar에 언어 trigger·복사 버튼과 함께 노출되고 wrap 미지정은 aria-pressed=false다", () => {
+    mountCodeFixture();
+
+    const toolbar = screen.getByRole("toolbar", { name: "Code block toolbar" });
+    expect(
+      within(toolbar).getByRole("button", { name: "Toggle line wrap" }),
+    ).toBeTruthy();
+    expect(wrapButton().getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("wrap:true인 CodeBlock은 aria-pressed=true로 마운트된다", () => {
+    mountCodeFixture({ wrap: true });
+
+    expect(wrapButton().getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("wrap 버튼 클릭은 setCodeBlockWrap을 반대 값으로 호출하고 aria-pressed·편집기 DOM이 함께 갱신된다(재클릭으로 원복)", () => {
+    const rendered = mountCodeFixture();
+    expect(preElement(rendered).hasAttribute("data-geul-code-wrap")).toBe(
+      false,
+    );
+
+    fireEvent.click(wrapButton());
+
+    expect(wrapButton().getAttribute("aria-pressed")).toBe("true");
+    expect(preElement(rendered).hasAttribute("data-geul-code-wrap")).toBe(true);
+    expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
+      wrap: true,
+    });
+
+    fireEvent.click(wrapButton());
+
+    expect(wrapButton().getAttribute("aria-pressed")).toBe("false");
+    expect(preElement(rendered).hasAttribute("data-geul-code-wrap")).toBe(
+      false,
+    );
+    expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
+      wrap: false,
+    });
+  });
+
+  it("다른 CodeBlock으로 전환하면 그 블록의 wrap 값으로 aria-pressed가 갱신된다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const rendered = mountCodeFixture({
+      wrap: true,
+      secondCodeLanguage: "css",
+      secondCodeWrap: false,
+    });
+    expect(wrapButton().getAttribute("aria-pressed")).toBe("true");
+
+    const secondCode = rendered.host.querySelectorAll<HTMLElement>("code")[1];
+    if (secondCode === undefined) {
+      throw new Error("두 번째 CodeBlock을 찾지 못했다");
+    }
+    rendered.editable.focus();
+    placeCaret(secondCode);
+    fireSelectionChange();
+    flushDeferredUpdate();
+
+    expect(wrapButton().getAttribute("aria-pressed")).toBe("false");
   });
 });
 

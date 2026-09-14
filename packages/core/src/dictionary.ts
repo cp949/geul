@@ -250,6 +250,11 @@ export type Dictionary = {
       // 성공 여부와 무관하게 항상 같다(G-UI-004 drift 차단 불변식).
       copyAriaLabel: string;
       copiedTitle: string;
+      // Issue #194 RD-001 DELTA-02 — wrap on/off 토글 버튼 aria-label.
+      // copyAriaLabel과 달리 상태별 title override가 없다 — 눌림 여부는
+      // aria-pressed만으로 전달한다(media toolbar의 Preview 버튼과 동일
+      // 관례, 별도 title 없음).
+      wrapAriaLabel: string;
     };
   };
   // RD-002-DELTA-08 — `table-handle-constants.tsx`(표 행/열 드래그 핸들·
@@ -503,6 +508,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       moreAriaLabel: "More code block options",
       copyAriaLabel: "Copy code",
       copiedTitle: "Copied",
+      wrapAriaLabel: "Toggle line wrap",
     },
   },
   handle: {

@@ -186,6 +186,7 @@ export const KO_DICTIONARY: Dictionary = {
       moreAriaLabel: "코드 블록 옵션 더보기",
       copyAriaLabel: "코드 블록 복사",
       copiedTitle: "복사됨",
+      wrapAriaLabel: "줄바꿈 토글",
     },
   },
   handle: {

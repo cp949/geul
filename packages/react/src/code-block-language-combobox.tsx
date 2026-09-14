@@ -1,5 +1,5 @@
 import type { CodeBlock } from "@cp949/geul-core";
-import { Check, Copy, MoreHorizontal } from "lucide-react";
+import { Check, Copy, MoreHorizontal, WrapText } from "lucide-react";
 import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -76,12 +76,20 @@ const codeBlockToolbarMoreMenuItemClassName =
 const copyIcon = <Copy {...iconProps} />;
 const copiedIcon = <Check {...iconProps} />;
 const moreIcon = <MoreHorizontal {...iconProps} />;
+// RD-001-DELTA-02(Issue #194) — wrap on/off 토글 버튼 아이콘. copyIcon 등과
+// 같은 이유로 top-level에서 한 번만 만든다.
+const wrapIcon = <WrapText {...iconProps} />;
 // 복사 성공 title이 몇 ms 유지되는지(RD-001.md "결정" — 짧은 시각 피드백).
 const COPIED_FEEDBACK_MS = 2000;
 
 type LanguageState = {
   blockId: string;
   committed: string;
+  // RD-001-DELTA-02(Issue #194) — wrap 토글 버튼의 aria-pressed 소스.
+  // committed(language)와 같은 자리에 둔다 — 둘 다 "현재 active
+  // CodeBlock의 committed 문서 상태"라 별도 state로 쪼개면 두 값이
+  // 서로 다른 시점을 가리킬 위험이 생긴다.
+  wrap: boolean;
 };
 
 type AnchorPosition = { left: number; top: number };
@@ -179,14 +187,29 @@ export const CodeBlockLanguageCombobox = () => {
         // 미지 블록 전용 escape hatch, 실제로 "codeBlock" 타입일 수
         // 없다) — 알려진 CodeBlock으로 단언한다.
         const codeBlock = block as CodeBlock;
-        return { blockId: hoverId, value: codeBlock.language ?? "text" };
+        return {
+          blockId: hoverId,
+          value: codeBlock.language ?? "text",
+          wrap: codeBlock.wrap === true,
+        };
       }
     }
     const selection = editor.getSelectionBlockType();
     if (selection?.blockType.type !== "codeBlock") return null;
+    // getSelectionBlockType()의 BlockTypeDescriptor는 language만 담고
+    // wrap이 없다(Turn into 판별용 유니온이라 언어 이후 추가된 attr까지
+    // 따라가지 않는다) — hover 경로와 동일하게 getBlock으로 다시 조회한다.
+    // hover·selection이 서로 다른 blockId를 가리킬 수 있어 hover 결과를
+    // 재사용할 수 없다.
+    const selectionBlock = editor.getBlock(selection.blockId);
+    const wrap =
+      selectionBlock?.type === "codeBlock"
+        ? (selectionBlock as CodeBlock).wrap === true
+        : false;
     return {
       blockId: selection.blockId,
       value: selection.blockType.language ?? "text",
+      wrap,
     };
   }, [editor, hoverBlockIdRef]);
 
@@ -248,16 +271,28 @@ export const CodeBlockLanguageCombobox = () => {
     if (previous === null || previous.blockId !== active.blockId) {
       // 새 블록으로 전환(또는 최초 진입) — 열려 있던 팝오버·메뉴는 이전
       // 블록 것이라 함께 닫는다.
-      setLanguageState({ blockId: active.blockId, committed: active.value });
+      setLanguageState({
+        blockId: active.blockId,
+        committed: active.value,
+        wrap: active.wrap,
+      });
       updateOpen(false);
       setSearch("");
       updateMoreMenuOpen(false);
       return;
     }
-    if (previous.committed !== active.value) {
-      setLanguageState({ blockId: active.blockId, committed: active.value });
+    // language뿐 아니라 wrap도 비교한다 — handleToggleWrap의 낙관적 갱신
+    // 경로를 안 거치는 변경(undo/redo, 협업 동기화, 호스트 앱의 직접
+    // commands.setCodeBlockWrap 호출)도 여기로 들어와야 aria-pressed가
+    // 실제 문서 상태와 어긋나지 않는다.
+    if (previous.committed !== active.value || previous.wrap !== active.wrap) {
+      setLanguageState({
+        blockId: active.blockId,
+        committed: active.value,
+        wrap: active.wrap,
+      });
     }
-    // 같은 블록이고 committed 값도 그대로면 아무 것도 바꾸지 않는다 —
+    // 같은 블록이고 committed·wrap 모두 그대로면 아무 것도 바꾸지 않는다 —
     // 팝오버가 열려 있었으면 열린 채, 검색어도 그대로 유지한다.
   }, [readActiveCodeBlock, updateAnchor, updateOpen, updateMoreMenuOpen]);
 
@@ -353,7 +388,11 @@ export const CodeBlockLanguageCombobox = () => {
 
       const active = readActiveCodeBlock();
       if (active !== null && active.blockId === current.blockId) {
-        setLanguageState({ blockId: active.blockId, committed: active.value });
+        setLanguageState({
+          blockId: active.blockId,
+          committed: active.value,
+          wrap: active.wrap,
+        });
       }
       updateOpen(false);
       setSearch("");
@@ -552,6 +591,25 @@ export const CodeBlockLanguageCombobox = () => {
     );
   };
 
+  // RD-001-DELTA-02(Issue #194) — media toggleShowPreview(media-toolbar.tsx)
+  // 와 동일 패턴이다: 성공하면 core를 다시 조회하지 않고 반전값을 로컬
+  // languageState에 바로 반영한다 — 실패하면 로컬 state를 건드리지 않아
+  // aria-pressed가 실제 문서 상태와 어긋나지 않는다.
+  const handleToggleWrap = () => {
+    const current = languageStateRef.current;
+    if (current === null) return;
+    const next = !current.wrap;
+    runCommand(
+      () => editor.commands.setCodeBlockWrap(current.blockId, next),
+      () =>
+        setLanguageState((prev) =>
+          prev !== null && prev.blockId === current.blockId
+            ? { ...prev, wrap: next }
+            : prev,
+        ),
+    );
+  };
+
   const clearCopiedTimeout = useCallback(() => {
     if (copiedTimeoutRef.current === null) return;
     element?.ownerDocument.defaultView?.clearTimeout(copiedTimeoutRef.current);
@@ -636,6 +694,18 @@ export const CodeBlockLanguageCombobox = () => {
             {displayLabel(languageState.committed)}
           </button>
         </div>
+        {/* RD-001-DELTA-02(Issue #194) — 더보기 메뉴가 아닌 상시 노출
+            아이콘(RD-001.md "결정" — wrap은 파괴적이지 않고 사용 빈도가
+            높아 삭제류의 "실수 방지로 더보기 이동" 기준에 해당하지
+            않는다). media Preview 토글(media-toolbar.tsx)과 동일하게
+            aria-pressed만으로 상태를 전달하고 title override는 없다. */}
+        <IconButton
+          aria-pressed={languageState.wrap}
+          className={codeBlockToolbarButtonClassName}
+          icon={wrapIcon}
+          label={dictionary.toolbar.codeBlock.wrapAriaLabel}
+          onClick={handleToggleWrap}
+        />
         <IconButton
           className={codeBlockToolbarButtonClassName}
           icon={copied ? copiedIcon : copyIcon}

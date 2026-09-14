@@ -85,6 +85,14 @@
     white-space: pre;
   }
 
+  // wrap:true(RD-001-DELTA-02, Issue #194)일 때만 줄바꿈한다 — 미설정·
+  // false는 위 기본 규칙(white-space: pre, 가로 스크롤형)을 그대로
+  // 유지한다(무회귀). attribute selector를 더해 명시도를 기본 규칙보다
+  // 높인다(선언 순서에 기대지 않는다).
+  [data-geul-code-block][data-geul-code-wrap] {
+    white-space: pre-wrap;
+  }
+
   // 인라인 code mark(StarterKit 기본 Code, HTMLAttributes 커스터마이즈 없음
   // — @tiptap/extension-code)는 지금까지 이 파일에 대응 규칙이 없어
   // 브라우저 기본 렌더(배경 없음)로 나왔다 — 배경·패딩까지 넣는

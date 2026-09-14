@@ -38,6 +38,14 @@
   padding-block: 0.25rem;
   color: var(--geul-color-text, #202124);
   cursor: pointer;
+
+  // wrap 토글(RD-001-DELTA-02, Issue #194)의 눌림 상태 — media
+  // `.geul-media-toolbar__button[aria-pressed="true"]`와 동일 규칙을
+  // 그대로 옮긴다(이 저장소 관례상 코드는 공유하지 않고 값만 맞춘다).
+  &[aria-pressed="true"] {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+    color: var(--geul-color-accent, #1a73e8);
+  }
 }
 
 .geul-code-block-toolbar__button--danger {
