@@ -420,16 +420,24 @@ export const StaticToolbar = ({
               !TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId) && (
                 <option hidden value="" />
               )}
-            {TEXT_STYLE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {blockTypeText(dictionary, option.id).label}
-              </option>
-            ))}
+            {TEXT_STYLE_OPTIONS
+              // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다
+              // (Issue #190) — 선례: formatting-toolbar.tsx(RD-001-DELTA-01).
+              .filter((option) =>
+                editor.isBlockTypeEnabled(option.blockType.type),
+              )
+              .map((option) => (
+                <option key={option.id} value={option.id}>
+                  {blockTypeText(dictionary, option.id).label}
+                </option>
+              ))}
           </select>
         )}
         {state.blockSelection !== null && (
           <>
-            {BLOCK_TYPE_ICON_OPTIONS.map((option) => (
+            {BLOCK_TYPE_ICON_OPTIONS.filter((option) =>
+              editor.isBlockTypeEnabled(option.blockType.type),
+            ).map((option) => (
               <IconButton
                 aria-disabled={
                   allowedBlockTypeIds?.has(option.id) === true

@@ -251,6 +251,30 @@ describe("StaticToolbar 상단 고정 툴바", () => {
       ).toBe("false");
     });
 
+    it("enabledBlockTypes로 deny된 타입이 select에서 사라진다(Issue #190)", () => {
+      const controller = fakeController();
+      controller.isBlockTypeEnabled = vi.fn(
+        (type: string) => type !== "heading",
+      );
+      render(withProvider(controller, <StaticToolbar />));
+
+      const select = screen.getByRole("combobox", { name: "Block type" });
+      const optionLabels = Array.from(select.querySelectorAll("option")).map(
+        (option) => option.textContent,
+      );
+
+      expect(optionLabels).toEqual(["Text"]);
+    });
+
+    it("enabledBlockTypes로 deny된 타입이 아이콘 버튼에서 사라진다(Issue #190)", () => {
+      const controller = fakeController();
+      controller.isBlockTypeEnabled = vi.fn((type: string) => type !== "quote");
+      render(withProvider(controller, <StaticToolbar />));
+
+      expect(screen.queryByRole("button", { name: "Quote" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Code" })).not.toBeNull();
+    });
+
     it("blockSelection이 null이면 블록 타입 아이콘 버튼도 렌더하지 않는다", () => {
       const controller = fakeController(
         undefined,
