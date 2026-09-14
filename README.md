@@ -26,7 +26,7 @@ function Editor() {
 }
 ```
 
-Next.js 통합, 구문 강조 연결 같은 상세 사용법은 [`@cp949/geul-react`](./packages/react)를 본다. React 없이 저수준 API로 직접 제어하려면 [`@cp949/geul-core`](./packages/core), 서버에서 문서를 HTML/Markdown으로 변환하려면 [`@cp949/geul-io`](./packages/io)를 본다.
+기능 구성, 업로드, 구문 강조 연결 같은 상세 사용법은 [`@cp949/geul-react`](./packages/react)를 본다. React 없이 저수준 API로 직접 제어하려면 [`@cp949/geul-core`](./packages/core), 서버에서 문서를 HTML/Markdown으로 변환하려면 [`@cp949/geul-io`](./packages/io)를 본다.
 
 ## 패키지
 
@@ -45,23 +45,26 @@ react -> core
 
 ## 브라우저 지원
 
-공식 browser floor는 Chrome 75다. Geul 패키지 자체는 Chrome 75 문법으로 빌드되고, 자기 소스가 쓰는 런타임 API는 ES 표준 기준으로 검증된다 — 의존성이 쓰는 최신 런타임 API의 polyfill은 사용처 책임이다.
-
-Chrome 75를 지원해야 하면 두 가지를 설정한다.
-
-1. 앱 엔트리의 첫 import로 `import "core-js/stable";`을 넣는다.
-2. 번들러 target을 Chrome 75로 둔다(Vite: `build.target: 'chrome75'`).
-
-최신 Chrome만 지원하는 사용처는 아무 조치도 필요 없다.
+공식 browser floor는 Chrome 75다. Geul 자체는 Chrome 75 문법으로 빌드되지만, 참조하는 라이브러리는 그렇지 않아 polyfill이 필요하다 — 설정 예시는 [`apps/demo`](./apps/demo)를 참고한다.
 
 ## 상태
 
-R0~R4(저장 모델, 표, 기본 블록 parity, 파일·미디어, 확장성) 완료, 1차 릴리즈를 준비 중이다. 최신 진행 상황은 [현재 프로젝트 상태](./docs/product/current-status.md)를 참고한다.
+R0~R4(저장 모델, 표, 기본 블록 parity, 파일·미디어, 확장성) 완료. 최신 진행 상황은 [현재 프로젝트 상태](./docs/product/current-status.md)를 참고한다.
 
 ## 라이선스
 
 [MIT](./LICENSE)
 
 ## 기여
+
+저장소를 clone했다면 다음으로 전체 컴포넌트 showcase를 띄운다.
+
+```bash
+pnpm install
+pnpm build
+pnpm showcase
+```
+
+`apps/showcase`는 빌드된 패키지(dist)를 소비한다 — `pnpm build` 없이 실행하면 오래된 dist가 뜬다.
 
 개발 환경, 검증 명령과 내부 문서 지도는 [CONTRIBUTING.md](./CONTRIBUTING.md)를 본다. 버그·기능 요청은 [GitHub Issues](https://github.com/cp949/geul/issues)에 남긴다.

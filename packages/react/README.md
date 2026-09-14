@@ -20,46 +20,11 @@ function Editor() {
 }
 ```
 
-## Next.js(SSR) 통합
+## 기능 구성과 업로드
 
-패키지 진입점(`@cp949/geul-react`)에는 이미 `"use client"` 지시어가 포함돼 있다 — App Router의 Server Component 트리에서 별도 wrapper 없이 바로 import할 수 있다.
-
-**추가 client-only guard 코드가 필요 없다.** `EditorProvider`는 실제 편집기 생성(`createEditor()`, `@cp949/geul-core`)을 렌더 중이 아니라 `useEffect` 안에서만 호출한다. `useEffect`는 서버 렌더(`react-dom/server`의 `renderToString`을 포함해 Next.js가 내부에서 쓰는 모든 SSR 경로)에서 절대 실행되지 않으므로, `EditorProvider`는 서버에서 항상 `null`을 렌더한다 — editor DOM도, `createEditor()` 호출도 서버 단계에서는 아예 일어나지 않는다. 위 "최소 사용 예"를 그대로 Client Component 안에 두면 SSR에서 안전하게 빈 결과를 내고, client에서 mount된 뒤에만 실제 에디터가 나타난다.
-
-```tsx
-"use client";
-
-import { EditorContent, EditorProvider } from "@cp949/geul-react";
-import { createEmptyDocument } from "@cp949/geul-model";
-
-const initialDocument = createEmptyDocument(() => crypto.randomUUID());
-
-export default function Page() {
-  return (
-    <EditorProvider initialDocument={initialDocument}>
-      <EditorContent />
-    </EditorProvider>
-  );
-}
-```
-
-### 선택 사항 — `next/dynamic({ ssr: false })`
-
-정확성을 위해 필요하지는 않지만(`EditorProvider`가 이미 서버에서 no-op이다), Next.js가 서버에서 이 컴포넌트 트리를 아예 평가하지 않게 해 그만큼의 서버 렌더 비용을 아끼고 싶다면 공식 client-only 패턴을 그대로 쓸 수 있다.
-
-```tsx
-"use client";
-
-import dynamic from "next/dynamic";
-
-const Editor = dynamic(() => import("./editor"), { ssr: false });
-
-export default function Page() {
-  return <Editor />;
-}
-```
-
-`./editor.tsx`에는 위 "최소 사용 예"의 `Editor` 컴포넌트를 그대로 둔다.
+- **블록 타입 on/off**: `createEditor()`/`EditorProvider`에 `enabledBlockTypes: { mode: "allow" | "deny", types: Block["type"][] }`를 넘기면 지정한 블록만 허용하거나 차단한다. 마운트 시점에 고정되고(런타임 토글 불가), SlashMenu·toolbar 등 UI가 비활성 블록 항목을 자동으로 숨긴다.
+- **이미지 업로드**: `EditorProvider`의 `uploadFile: (file, signal) => Promise<UploadResult>` 콜백이 이미지·비디오·오디오·파일 블록의 업로드를 전부 처리한다 — 성공 시 `{ status: "success", url }`, 실패 시 에러 코드, 취소 시 `{ status: "cancelled" }`를 돌려준다. 실제 연결 예는 `apps/showcase`의 `src/examples/07-media`를 참고한다.
+- **파일 업로드**: 이미지와 동일한 `uploadFile` 콜백을 쓴다 — 별도 콜백은 없다. `FilePanel` UI 자체는 `apps/showcase`의 `src/examples/06-file-panel`, 업로드까지 연결된 예는 `07-media`에 있다.
 
 ## 코드 구문 강조 연결
 
@@ -170,5 +135,5 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 
 ## 알려진 제약
 
-- `"use client"`는 다른 번들러·런타임(Vite, CRA 등)에서는 무해한 문자열 리터럴이다 — Next.js가 아닌 프로젝트에도 그대로 쓸 수 있다.
-- 위 self-guard는 `EditorProvider`/`EditorContent` 경로에만 적용된다. `@cp949/geul-core`의 `createEditor()`를 직접(`EditorProvider` 없이) 호출하는 저수준 사용은 서버 환경에서도 크래시하지 않지만(`EXT-013`), 반환된 controller의 문서는 로드 시점 정규화가 실제 client mount 시점까지 지연된 상태일 수 있다.
+- `EditorProvider`/`EditorContent`는 서버 렌더 환경에서 `null`을 렌더하고, 실제 편집기 생성(`createEditor()`, `@cp949/geul-core`)은 `useEffect` 안에서만 호출한다. `createEditor()`를 이 경로 없이 직접 호출하는 저수준 사용은 서버 환경에서도 크래시하지 않지만(`EXT-013`), 반환된 controller의 문서는 로드 시점 정규화가 실제 client mount 시점까지 지연된 상태일 수 있다.
+- `StaticToolbar`는 아직 안정성이 부족하다. 보완 예정이다.
