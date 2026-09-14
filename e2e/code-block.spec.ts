@@ -352,3 +352,55 @@ test("outer toolbar는 코드 첫 줄 텍스트와 세로로 겹치지 않는다
     })
     .toBe(true);
 });
+
+// caption(.geul-code-block-caption)은 자기 블록의 wrapper rect.top에
+// translateY(-100%)로 앵커링돼 그 블록 "바깥 위"에 gap 없이 붙는다
+// (code-block-captions.tsx 문서 주석) — 즉 두 번째 codeBlock에 caption을
+// 달면 caption은 첫 번째 codeBlock과 두 번째 codeBlock 사이 margin 안에
+// 렌더된다. 그 margin이 caption 높이보다 작으면 caption이 첫 번째
+// codeBlock과 맞닿거나 겹쳐 "두 블록 사이에 여백이 없다"로 보인다(사용자
+// 스크린샷 지적). caption은 position: absolute라 문서 흐름에 자기 공간을
+// 확보하지 않으므로, [data-geul-code-block]의 margin-top 자체를 caption
+// 높이보다 크게 잡아야 한다.
+test("caption이 있는 CodeBlock과 앞 CodeBlock 사이에 실제 여백이 보인다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const firstBlockOnly = await insertCodeBlock(page, editable);
+  await firstBlockOnly.click();
+  await page.keyboard.type("test");
+  // codeBlock 안 캐럿 끝에서 Enter 두 번(codeBlockExit-extension.ts
+  // "double 개행 종료")이 새 문단으로 빠져나가는 유일한 키보드 경로다.
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/code");
+  await page.getByRole("option", { name: /Code/ }).click();
+  // codeBlock이 둘로 늘어나 insertCodeBlock이 반환한 unscoped locator(0개
+  // 인자 pre[data-geul-code-block])는 더는 단일 요소로 좁혀지지 않는다 —
+  // 여기서부터 순서 기반 nth()로 다시 잡는다.
+  const firstBlock = editable.locator("pre[data-geul-code-block]").nth(0);
+  const secondBlock = editable.locator("pre[data-geul-code-block]").nth(1);
+  await expect(secondBlock).toBeVisible();
+  await secondBlock.click();
+  await page.keyboard.type("test");
+
+  await page.getByRole("button", { name: "Edit caption" }).click();
+  const captionInput = page.getByRole("textbox", {
+    name: "Code block caption",
+  });
+  await captionInput.fill("caption");
+  await captionInput.press("Enter");
+
+  const caption = page.locator(".geul-code-block-caption");
+  await expect(caption).toBeVisible();
+  await expect(caption).toHaveText("caption");
+
+  await expect
+    .poll(async () => {
+      const firstBox = await firstBlock.boundingBox();
+      const captionBox = await caption.boundingBox();
+      if (firstBox === null || captionBox === null) return null;
+      return captionBox.y - (firstBox.y + firstBox.height);
+    })
+    .toBeGreaterThanOrEqual(8);
+});

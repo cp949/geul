@@ -67,13 +67,28 @@
 
   // CodeBlock은 language metadata와 무관한 plain source 영역이다. syntax token
   // selector 없이 읽기 쉬운 고정폭 글꼴과 긴 줄의 가로 스크롤만 제공한다.
-  // margin: 0.75rem 0 — 이전엔 0이라 연속된 codeBlock끼리 배경·테두리가
+  // margin-bottom: 0.75rem — 이전엔 0이라 연속된 codeBlock끼리 배경·테두리가
   // 바로 맞닿아 시각적으로 붙어 보였다(showcase syntax-highlighting-lowlight
-  // 3블록 예제에서 사용자가 스크린샷으로 지적). 인접 codeBlock 사이에서는
-  // 위/아래 margin이 CSS 표준대로 collapse해 0.75rem 하나만 적용된다(위아래
-  // 합산 아님).
+  // 3블록 예제에서 사용자가 스크린샷으로 지적).
+  //
+  // margin-top: 2.25rem — caption(.geul-code-block-caption,
+  // code-block-captions.tsx)은 자기 블록의 wrapper rect.top에
+  // translateY(-100%)로 앵커링돼 그 블록 "바깥 위"에 gap 없이 붙는다.
+  // position: absolute라 문서 흐름에 자기 공간을 확보하지 않으므로, 이
+  // margin이 caption 높이(실측 약 1.5rem)보다 작으면 caption이 앞
+  // codeBlock과 맞닿거나 겹친다(사용자 스크린샷 — "두 코드 블록 사이에
+  // 여백이 없다"). caption 유무로 margin을 조건부로 나누려면 core가
+  // caption 존재 여부를 DOM에 투영해야 하는데, 그건 RD-002-DELTA-02
+  // 회귀 가드(packages/core/test/code-block-extension.test.ts "caption
+  // 값과 무관하게 codeBlock DOM에는 caption 관련 자식·attribute가 전혀
+  // 없다")가 명시적으로 금지한다 — caption의 유일한 시각 표현은 react
+  // 오버레이뿐이어야 한다. 그래서 toolbar clearance(padding-top, 위
+  // 주석)와 같은 방식으로 caption 유무와 무관하게 항상 넉넉한 top
+  // margin을 예약한다(Notion류 상시 여백과 같은 절충). 위/아래 margin이
+  // 다르므로 인접 codeBlock 사이에서도 CSS 표준대로 큰 값(2.25rem)이
+  // 이긴다(collapse, 합산 아님).
   [data-geul-code-block] {
-    margin: 0.75rem 0;
+    margin: 2.25rem 0 0.75rem;
     // top만 outer toolbar(.geul-code-block-toolbar, RD-001-DELTA-01
     // Issue #193) 높이만큼 늘린다. 그 toolbar는 position: fixed로 블록
     // 우상단에 dy=0으로 앵커링돼(use-clamped-menu-position.ts topRight)
