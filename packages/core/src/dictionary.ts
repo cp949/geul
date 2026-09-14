@@ -233,14 +233,17 @@ export type Dictionary = {
       ariaLabel: string;
     };
     // Issue #193 RD-001-DELTA-01 — code-block-language-combobox.tsx의
-    // outer `role="toolbar"` 컨테이너(언어 trigger + 삭제 버튼, DELTA-02가
-    // 복사 버튼 라벨을 추가한다) aria-label과 삭제 버튼 라벨. `media`와
+    // outer `role="toolbar"` 컨테이너(언어 trigger + 복사 + 더보기, DELTA-02가
+    // 복사 버튼 라벨을 추가한다) aria-label과 더보기(⋯) 버튼 라벨. `media`와
     // 같은 이유로 별도 네임스페이스 — codeLanguage는 언어 선택 자체(트리거
-    // 라벨·검색·suggestion)만 담당하고 이 toolbar의 컨테이너·삭제 라벨은
-    // toolbar.media/blockSelection과 같은 결의 "toolbar 조작" 문구다.
+    // 라벨·검색·suggestion)만 담당하고 이 toolbar의 컨테이너·더보기 라벨은
+    // toolbar.media/blockSelection과 같은 결의 "toolbar 조작" 문구다. 삭제는
+    // 더보기 메뉴 안 항목이라 전용 aria-label이 없다 — 메뉴 항목은 아이콘
+    // 없는 텍스트 버튼이라 `menu.delete`(block-side-menu-menu.tsx,
+    // table-handle-menu.tsx와 같은 공용 키)를 그대로 표시 문구로 쓴다.
     codeBlock: {
       ariaLabel: string;
-      deleteAriaLabel: string;
+      moreAriaLabel: string;
       // Issue #193 RD-001-DELTA-02 — 복사 버튼 aria-label(고정)과 복사
       // 성공 후 2초간 보이는 title(아이콘도 함께 전환). copiedTitle은
       // IconButton의 title override 전용이고 aria-label(copyAriaLabel)은
@@ -497,7 +500,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     },
     codeBlock: {
       ariaLabel: "Code block toolbar",
-      deleteAriaLabel: "Delete code block",
+      moreAriaLabel: "More code block options",
       copyAriaLabel: "Copy code",
       copiedTitle: "Copied",
     },

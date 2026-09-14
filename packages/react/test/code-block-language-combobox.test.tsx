@@ -327,14 +327,123 @@ describe("CodeBlock 언어 트리거 표시", () => {
   });
 });
 
-// RD-001-DELTA-01(Issue #193) — 언어 trigger를 감싸는 outer
-// `role="toolbar"` 컨테이너와 삭제 버튼(media-toolbar.tsx 패턴 재사용:
-// deleteBlock + useTableCommandFeedback의 actionError 표시).
-describe("CodeBlock toolbar와 삭제 버튼", () => {
-  const deleteButton = (name = "Delete code block"): HTMLButtonElement =>
+// 사용자 요청(Notion 참고) — 코드블록에 마우스 hover일 때만 toolbar를
+// 노출한다. hover는 selection보다 우선하고, hover가 코드블록을 안 가리키면
+// selection으로 fallback한다(table-handles.tsx의
+// activeTableId = hoverTableId ?? selectionTableId와 동일 판단) — 마우스가
+// 코드블록을 완전히 벗어난 채 키보드만으로 커서가 블록 안에 남아 있어도
+// 계속 접근할 수 있어야 한다. usePointerHoverTarget은 pointermove
+// 기반이라 이 describe의 hover 시나리오는 모두 `fireEvent.pointerMove`로
+// 시뮬레이션한다(table-handles.test.tsx와 같은 관례).
+describe("CodeBlock toolbar hover 노출", () => {
+  it("선택이 일반 블록에 있어도 코드블록에 hover하면 그 코드블록의 toolbar를 연다", () => {
+    const rendered = mountBlockEditor({
+      initialBlocks: [
+        { id: "paragraph-1", type: "paragraph", content: [{ text: "문단" }] },
+        {
+          id: "code-1",
+          type: "codeBlock",
+          language: "css",
+          content: [{ text: "body {}" }],
+        },
+      ],
+      children: <SlashMenu />,
+    });
+    rendered.editable.focus();
+    const paragraph = rendered.host.querySelector<HTMLElement>("p");
+    const code = rendered.host.querySelector<HTMLElement>("code");
+    if (paragraph === null || code === null) {
+      throw new Error("문단 또는 CodeBlock DOM을 찾지 못했다");
+    }
+    placeCaret(paragraph);
+    fireSelectionChange();
+    expect(queryLanguageButton()).toBeNull();
+
+    fireEvent.pointerMove(code);
+
+    expect(languageButton().textContent).toBe("CSS");
+    expect(
+      languageButton().closest<HTMLElement>(".geul-code-block-toolbar")?.dataset
+        .blockId,
+    ).toBe("code-1");
+  });
+
+  it("hover가 코드블록을 벗어나고 selection도 코드블록 밖이면 toolbar가 사라진다", () => {
+    const rendered = mountBlockEditor({
+      initialBlocks: [
+        { id: "paragraph-1", type: "paragraph", content: [{ text: "문단" }] },
+        {
+          id: "code-1",
+          type: "codeBlock",
+          language: "css",
+          content: [{ text: "body {}" }],
+        },
+      ],
+      children: <SlashMenu />,
+    });
+    rendered.editable.focus();
+    const paragraph = rendered.host.querySelector<HTMLElement>("p");
+    const code = rendered.host.querySelector<HTMLElement>("code");
+    if (paragraph === null || code === null) {
+      throw new Error("문단 또는 CodeBlock DOM을 찾지 못했다");
+    }
+    placeCaret(paragraph);
+    fireSelectionChange();
+    fireEvent.pointerMove(code);
+    expect(queryLanguageButton()).not.toBeNull();
+
+    fireEvent.pointerMove(paragraph);
+
+    expect(queryLanguageButton()).toBeNull();
+  });
+
+  it("언어 팝오버가 열린 채 마우스가 코드블록을 완전히 벗어나도(selection도 코드블록 밖) toolbar와 팝오버를 계속 보여준다", () => {
+    const rendered = mountBlockEditor({
+      initialBlocks: [
+        { id: "paragraph-1", type: "paragraph", content: [{ text: "문단" }] },
+        {
+          id: "code-1",
+          type: "codeBlock",
+          language: "css",
+          content: [{ text: "body {}" }],
+        },
+      ],
+      children: <SlashMenu />,
+    });
+    rendered.editable.focus();
+    const paragraph = rendered.host.querySelector<HTMLElement>("p");
+    const code = rendered.host.querySelector<HTMLElement>("code");
+    if (paragraph === null || code === null) {
+      throw new Error("문단 또는 CodeBlock DOM을 찾지 못했다");
+    }
+    placeCaret(paragraph);
+    fireSelectionChange();
+    fireEvent.pointerMove(code);
+    expect(languageButton()).toBeTruthy();
+
+    fireEvent.click(languageButton());
+    expect(querySearchInput()).not.toBeNull();
+
+    fireEvent.pointerMove(paragraph);
+
+    expect(languageButton()).toBeTruthy();
+    expect(querySearchInput()).not.toBeNull();
+  });
+});
+
+// RD-001-DELTA-01(Issue #193), 더보기(⋯) 메뉴로 이전(사용자 요청 — 실수
+// 방지를 위해 삭제를 toolbar 최상위 아이콘 버튼에서 더보기 메뉴 안 텍스트
+// 항목으로 옮겼다) — 언어 trigger를 감싸는 outer `role="toolbar"` 컨테이너와
+// 더보기 메뉴의 삭제 항목(media-toolbar.tsx 패턴 재사용: deleteBlock +
+// useTableCommandFeedback의 actionError 표시).
+describe("CodeBlock toolbar와 더보기 메뉴의 삭제", () => {
+  const moreButton = (name = "More code block options"): HTMLButtonElement =>
     screen.getByRole<HTMLButtonElement>("button", { name });
 
-  it('활성 CodeBlock caret에서 role="toolbar" 컨테이너가 언어 trigger·삭제 버튼을 함께 노출한다', () => {
+  const deleteMenuItem = (name = "Delete"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("menuitem", { name });
+
+  it('활성 CodeBlock caret에서 role="toolbar" 컨테이너가 언어 trigger·더보기 버튼을 함께 노출한다', () => {
     mountCodeFixture();
 
     const toolbar = screen.getByRole("toolbar", { name: "Code block toolbar" });
@@ -342,14 +451,38 @@ describe("CodeBlock toolbar와 삭제 버튼", () => {
       within(toolbar).getByRole("button", { name: "Code language" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete code block" }),
+      within(toolbar).getByRole("button", {
+        name: "More code block options",
+      }),
     ).toBeTruthy();
   });
 
-  it("형제 블록이 있는 CodeBlock에서 삭제 버튼 클릭은 deleteBlock으로 블록을 지우고 toolbar도 함께 사라진다", () => {
+  it("더보기 버튼 클릭은 삭제 항목 하나짜리 메뉴를 열고, 다시 클릭하면 닫는다", () => {
+    mountCodeFixture();
+
+    fireEvent.click(moreButton());
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(deleteMenuItem()).toBeTruthy();
+
+    fireEvent.click(moreButton());
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("Escape는 더보기 메뉴를 닫고 편집기로 초점을 복원한다", () => {
+    const rendered = mountCodeFixture();
+    fireEvent.click(moreButton());
+
+    fireEvent.keyDown(deleteMenuItem(), { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("형제 블록이 있는 CodeBlock에서 더보기 메뉴의 삭제 클릭은 deleteBlock으로 블록을 지우고 toolbar도 함께 사라진다", () => {
     const rendered = mountCodeFixture({ withParagraph: true });
 
-    fireEvent.click(deleteButton());
+    fireEvent.click(moreButton());
+    fireEvent.click(deleteMenuItem());
 
     expect(
       rendered.editor
@@ -358,6 +491,7 @@ describe("CodeBlock toolbar와 삭제 버튼", () => {
     ).toBe(false);
     expect(rendered.editor.getDocument().blocks).toHaveLength(1);
     expect(queryLanguageButton()).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it('deleteBlock이 실패(Result ok:false)로 응답하면 문서를 보존하고 actionError를 role="alert"로 노출한다', () => {
@@ -375,7 +509,8 @@ describe("CodeBlock toolbar와 삭제 버튼", () => {
         error: { code: "COMMAND_NOT_APPLICABLE", command: "deleteBlock" },
       });
 
-    fireEvent.click(deleteButton());
+    fireEvent.click(moreButton());
+    fireEvent.click(deleteMenuItem());
 
     expect(deleteSpy).toHaveBeenCalledWith("code-1");
     expect(rendered.editor.getDocument().blocks).toHaveLength(2);
@@ -383,8 +518,10 @@ describe("CodeBlock toolbar와 삭제 버튼", () => {
       "COMMAND_NOT_APPLICABLE",
     );
     // toolbar 자신은 그대로 남는다 — 실패는 문서를 바꾸지 않으므로
-    // languageState가 null로 전환되지 않는다.
+    // languageState가 null로 전환되지 않는다. 메뉴는 클릭 즉시(성공/실패와
+    // 무관하게) 닫힌다.
     expect(queryLanguageButton()).not.toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
     deleteSpy.mockRestore();
   });
 });

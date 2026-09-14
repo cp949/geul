@@ -1,17 +1,29 @@
-// outer toolbar(언어 trigger + 삭제 버튼, RD-001-DELTA-01 Issue #193)가
-// 코드블록 우상단에 앵커링된 순수 위치 shell이다. topRight anchor
+// outer toolbar(언어 trigger + 복사 + 더보기, RD-001-DELTA-01 Issue #193)가
+// 코드블록 우상단에 앵커링된 위치 shell이다. topRight anchor
 // (use-clamped-menu-position.ts) — 렌더된 박스의 우상단이 곧 (left, top)
 // 스타일 좌표가 되도록 자신의 폭만큼 왼쪽으로 민다. 훅의 clamp 계산
 // (ANCHOR_OFFSETS.topRight, dx=-width)은 "실제 렌더된 박스가 이 transform을
 // 쓴다"고 가정할 뿐 transform 자체를 대신 적용해주지 않는다 — 두 anchor
 // 소비자(toolbar·팝오버) 모두 이 클래스가 transform을 갖춰야 clamp 좌표와
 // 실제 렌더 위치가 일치한다(실측 확인, e2e로 회귀 고정).
+//
+// border/background/box-shadow/padding은 media-toolbar.tsx,
+// table-selection-toolbar.tsx, block-selection-toolbar.tsx의
+// `.geul-*-toolbar` container chrome을 그대로 따른다 — 이전에는 이
+// container가 비어 있고 언어 trigger 버튼 혼자 자기 border를 가져
+// (아래 `.geul-code-block-language-trigger button`) 복사·더보기 버튼과
+// 시각적으로 붙지 않고 독립된 칩처럼 떠 보였다(사용자 스크린샷).
 .geul-code-block-toolbar {
   position: fixed;
   z-index: 20;
   display: flex;
   align-items: center;
   gap: 0.125rem;
+  border-radius: var(--geul-radius-md, 0.375rem);
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: var(--geul-shadow-toolbar, 0 1px 4px rgba(0, 0, 0, 0.15));
   transform: translateX(-100%);
 }
 
@@ -46,24 +58,77 @@
   display: inline-flex;
 }
 
+// outer toolbar가 이제 container chrome(border/background/shadow)을
+// 가지므로, 이 버튼 자신은 아이콘 버튼(`.geul-code-block-toolbar__button`)과
+// 같은 높이·radius-sm·투명 배경으로 통일한다 — 더는 독립된 칩처럼 보이지
+// 않고 toolbar 안 첫 segment로 읽힌다.
 .geul-code-block-language-trigger button {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  border: 1px solid var(--geul-color-border, #dadce0);
-  border-radius: var(--geul-radius-md, 0.375rem);
-  background: var(--geul-color-surface, #fff);
+  height: 1.75rem;
+  border: none;
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  background: transparent;
   color: var(--geul-color-text, #202124);
   font: inherit;
   font-size: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  padding: 0.25rem 0.5rem;
+  padding-inline: 0.375rem;
+  padding-block: 0.25rem;
   cursor: pointer;
 }
 
 .geul-code-block-language-trigger button:hover,
 .geul-code-block-language-trigger button[aria-expanded="true"] {
   background: var(--geul-color-accent-muted, #e8f0fe);
+}
+
+// 더보기(⋯) 트리거 자신의 div — 언어 trigger shell과 같은 이유(IconButton은
+// forwardRef가 아니라 ref를 버튼 DOM에 곧바로 붙일 수 없다)로 padding
+// 없는 shell을 둔다. shell의 rect가 곧 버튼의 rect여야 더보기 메뉴의
+// anchor 실측이 어긋나지 않는다(code-block-language-combobox.tsx
+// moreTriggerRef).
+.geul-code-block-toolbar__more-trigger {
+  display: inline-flex;
+}
+
+// 더보기 메뉴 팝오버 — table-handle-menu.tsx/block-side-menu-menu.tsx의
+// `.geul-block-menu` container chrome을 그대로 따른다(이 저장소 관례상
+// 코드는 공유하지 않고 클래스만 이 컴포넌트 전용으로 복제한다). topRight
+// anchor라 언어 팝오버와 같은 이유로 자신의 폭만큼 왼쪽으로 민다.
+.geul-code-block-toolbar__more-menu {
+  position: fixed;
+  z-index: 30;
+  transform: translateX(-100%);
+  display: flex;
+  min-width: 8rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  border-radius: var(--geul-radius-md, 0.375rem);
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+
+.geul-code-block-toolbar__more-menu-item {
+  cursor: pointer;
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  border: none;
+  background: transparent;
+  padding-inline: 0.5rem;
+  padding-block: 0.375rem;
+  text-align: left;
+  color: var(--geul-color-text, #202124);
+
+  &:hover {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+
+  &--danger {
+    color: var(--geul-color-danger, #d93025);
+  }
 }
 
 // topRight anchor — 트리거와 같은 이유로 자신의 폭만큼 왼쪽으로 민다(위
