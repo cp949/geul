@@ -407,7 +407,11 @@ export const CodeBlockLanguageCombobox = () => {
     [editor, focusEditor, readActiveCodeBlock, updateOpen],
   );
 
+  // Issue #199 — caption 편집·더보기 메뉴와 이 toolbar를 공유하므로, 팝오버를
+  // 열 때 나머지 둘을 먼저 닫는다.
   const openPopover = () => {
+    updateMoreMenuOpen(false);
+    setCodeBlockCaptionEditing(null);
     setSearch("");
     updateOpen(true);
   };
@@ -541,11 +545,15 @@ export const CodeBlockLanguageCombobox = () => {
     onEscapeDismiss: closeMoreMenuWithFocus,
   });
 
+  // Issue #199 — 언어 팝오버·caption 편집과 이 toolbar를 공유하므로, 메뉴를
+  // 열 때 나머지 둘을 먼저 닫는다.
   const handleMoreClick = () => {
     if (moreMenuOpen) {
       dismissMoreMenu();
       return;
     }
+    updateOpen(false);
+    setCodeBlockCaptionEditing(null);
     updateMoreMenuOpen(true);
   };
 
@@ -626,20 +634,19 @@ export const CodeBlockLanguageCombobox = () => {
   // 필요로 하지 않던 필드를 이 진입점 하나를 위해 languageState 전체에
   // 추가하면 language/wrap 동기화 조건(updateFromSelection)까지 caption을
   // 함께 비교해야 해 불필요하게 넓어진다).
+  // Issue #199 — 언어 팝오버·더보기 메뉴와 이 toolbar를 공유하므로, caption
+  // 편집을 열 때 나머지 둘을 먼저 닫는다(다시 열릴 대상을 가리키는 메뉴를
+  // 열어 두지 않는다, G-TST-001과 같은 이유). more 메뉴 항목 경로도 이
+  // 함수 하나로 들어오므로 더는 별도 wrapper가 필요 없다.
   const handleEditCaption = () => {
     const current = languageStateRef.current;
     if (current === null) return;
+    updateOpen(false);
+    updateMoreMenuOpen(false);
     const block = editor.getBlock(current.blockId);
     const caption =
       block?.type === "codeBlock" ? ((block as CodeBlock).caption ?? "") : "";
     setCodeBlockCaptionEditing({ blockId: current.blockId, draft: caption });
-  };
-
-  // more 메뉴 항목 전용 — handleDelete와 같은 이유로 클릭 즉시 메뉴부터
-  // 닫는다(다시 열릴 대상을 가리키는 메뉴를 열어 두지 않는다, G-TST-001).
-  const handleEditCaptionFromMenu = () => {
-    updateMoreMenuOpen(false);
-    handleEditCaption();
   };
 
   const clearCopiedTimeout = useCallback(() => {
@@ -855,7 +862,7 @@ export const CodeBlockLanguageCombobox = () => {
               따른다. */}
           <MenuItemButton
             className={codeBlockToolbarMoreMenuItemClassName}
-            onClick={handleEditCaptionFromMenu}
+            onClick={handleEditCaption}
           >
             {dictionary.toolbar.codeBlock.captionMenuLabel}
           </MenuItemButton>

@@ -1242,3 +1242,83 @@ describe("CodeBlock 언어 팝오버 — codeBlockLanguages(BLK-017)", () => {
     expect(languageButton().textContent).toBe("brainfuck");
   });
 });
+
+// RD-001(roadmap: CodeBlock toolbar 오버레이 상호 배타성), Issue #199 — 언어
+// 팝오버·caption 편집·더보기 메뉴 중 하나를 toolbar 버튼으로 열면 나머지
+// 둘이 항상 닫힌다. 3쌍 × 2방향의 회귀 테스트.
+describe("CodeBlock toolbar 오버레이 상호 배타(Issue #199)", () => {
+  const captionButton = (name = "Edit caption"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const moreButton = (name = "More code block options"): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", { name });
+
+  const captionInput = (name = "Code block caption"): HTMLInputElement | null =>
+    screen.queryByRole<HTMLInputElement>("textbox", { name });
+
+  it("언어 팝오버가 열린 채 caption 버튼을 클릭하면 팝오버를 닫고 caption 편집만 남긴다", () => {
+    mountCodeFixture();
+    fireEvent.click(languageButton());
+    expect(querySearchInput()).not.toBeNull();
+
+    fireEvent.click(captionButton());
+
+    expect(querySearchInput()).toBeNull();
+    expect(captionInput()).not.toBeNull();
+  });
+
+  it("caption 편집 중 언어 트리거를 클릭하면 caption 편집을 닫고 팝오버만 남긴다", () => {
+    mountCodeFixture();
+    fireEvent.click(captionButton());
+    expect(captionInput()).not.toBeNull();
+
+    fireEvent.click(languageButton());
+
+    expect(captionInput()).toBeNull();
+    expect(querySearchInput()).not.toBeNull();
+  });
+
+  it("언어 팝오버가 열린 채 더보기 버튼을 클릭하면 팝오버를 닫고 더보기 메뉴만 남긴다", () => {
+    mountCodeFixture();
+    fireEvent.click(languageButton());
+    expect(querySearchInput()).not.toBeNull();
+
+    fireEvent.click(moreButton());
+
+    expect(querySearchInput()).toBeNull();
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
+  it("더보기 메뉴가 열린 채 언어 트리거를 클릭하면 메뉴를 닫고 팝오버만 남긴다", () => {
+    mountCodeFixture();
+    fireEvent.click(moreButton());
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    fireEvent.click(languageButton());
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(querySearchInput()).not.toBeNull();
+  });
+
+  it("caption 편집 중 더보기 버튼을 클릭하면 caption 편집을 닫고 더보기 메뉴만 남긴다", () => {
+    mountCodeFixture();
+    fireEvent.click(captionButton());
+    expect(captionInput()).not.toBeNull();
+
+    fireEvent.click(moreButton());
+
+    expect(captionInput()).toBeNull();
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
+  it("더보기 메뉴가 열린 채 caption 버튼을 클릭하면 메뉴를 닫고 caption 편집만 남긴다", () => {
+    mountCodeFixture();
+    fireEvent.click(moreButton());
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    fireEvent.click(captionButton());
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(captionInput()).not.toBeNull();
+  });
+});
