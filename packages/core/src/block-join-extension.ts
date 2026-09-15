@@ -6,11 +6,7 @@ import {
   type ResolvedPos,
   type Schema,
 } from "@tiptap/pm/model";
-import {
-  Selection,
-  TextSelection,
-  type EditorState,
-} from "@tiptap/pm/state";
+import { Selection, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
@@ -146,7 +142,11 @@ function tableBoundaryPos($pos: ResolvedPos, dir: -1 | 1): number | null {
 // 닿는다 — 닿을 때마다 tableBoundaryPos로 표 경계 밖에서 다시 던져
 // findFrom을 반복한다. divider/media와 table이 섞여 연속돼도 이 루프
 // 하나로 전부 넘어간다.
-function findMergeTarget(doc: Node, pos: number, dir: -1 | 1): Selection | null {
+function findMergeTarget(
+  doc: Node,
+  pos: number,
+  dir: -1 | 1,
+): Selection | null {
   let current = Selection.findFrom(doc.resolve(pos), dir, true);
   while (current !== null) {
     const boundary = tableBoundaryPos(current.$head, dir);
