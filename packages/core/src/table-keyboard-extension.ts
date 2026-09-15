@@ -174,7 +174,9 @@ const atEndOfTableCell = (
     // 레이아웃이 없는 환경은 세로(up/down) 판정에 필요한
     // Range.getClientRects를 구현하지 않아 던진다(실측, table-selection-toolbar.test.tsx의
     // Shift+Arrow 주석과 같은 한계). 판정 불가로 보고 개입하지 않는다.
-    return view.endOfTextblock(dirName, state) ? $head.before($head.depth) : null;
+    return view.endOfTextblock(dirName, state)
+      ? $head.before($head.depth)
+      : null;
   } catch {
     return null;
   }
