@@ -1,5 +1,6 @@
 import { exportHtml } from "@cp949/geul-io";
 import { createEmptyDocument } from "@cp949/geul-model";
+import type { Document } from "@cp949/geul-model";
 import {
   type CreateEditorOptions,
   EditorContent,
@@ -235,6 +236,260 @@ const prettyPrintHtml = (html: string): string => {
     .trimEnd();
 };
 
+// "샘플 불러오기" 전용 media url. image/file은 data: url로 인코딩해 네트워크
+// 없이도 즉시 렌더되게 한다(25-31행 compositeUploadFile 주석과 동일 이유 —
+// 실존하지 않는 url은 kitchen sink에서 안 보인다). video/audio는 바이트를
+// 직접 손으로 짜 넣을 수 없어 대신 실제로 열리는 공개 샘플 url을 쓴다 —
+// 흔히 예시로 쓰이는 storage.googleapis.com/gtv-videos-bucket 경로는 지금
+// 403을 반환해(2026-09-15 확인) 대신 test-videos.co.uk(Big Buck Bunny
+// 샘플)를, audio는 SoundHelix를 쓴다. 둘 다 data:/blob:와 마찬가지로
+// isSupportedMediaUrl(https:)이 허용한다(model/src/link-policy.ts).
+const SAMPLE_IMAGE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240">' +
+  '<rect width="480" height="240" fill="#eef2ff"/>' +
+  '<rect x="1" y="1" width="478" height="238" fill="none" stroke="#4f46e5" stroke-width="2"/>' +
+  '<text x="240" y="128" font-family="sans-serif" font-size="28" fill="#4f46e5" text-anchor="middle">이미지 블록 샘플</text>' +
+  "</svg>";
+const SAMPLE_IMAGE_URL = `data:image/svg+xml;utf8,${encodeURIComponent(SAMPLE_IMAGE_SVG)}`;
+
+const SAMPLE_FILE_TEXT =
+  "이것은 file 블록 샘플이 가리키는 텍스트 파일이다.\ngeul 예제 문서에서 생성했다.";
+const SAMPLE_FILE_URL = `data:text/plain;charset=utf-8,${encodeURIComponent(SAMPLE_FILE_TEXT)}`;
+
+const SAMPLE_VIDEO_URL =
+  "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4";
+const SAMPLE_AUDIO_URL =
+  "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+
+// "샘플 불러오기" 버튼이 로드하는 kitchen sink 문서. geul이 지원하는 14종
+// 블록(model/src/types.ts Block 유니온)을 한 번씩 담아 편집·HTML 출력
+// 테스트를 바로 해볼 수 있게 한다(그릴링 결정 2026-09-15). id는
+// 10-syntax-highlighting-lowlight/example.tsx와 동일하게 고정 문자열을
+// 직접 부여한다 — 버튼을 다시 눌러도 항상 같은 문서로 리셋된다.
+const SAMPLE_DOCUMENT: Document = {
+  formatVersion: 1,
+  revision: 0,
+  blocks: [
+    {
+      id: "showcase-composite-sample-block-1",
+      type: "heading",
+      level: 1,
+      content: [{ text: "샘플 문서 — geul 블록 둘러보기" }],
+    },
+    {
+      id: "showcase-composite-sample-block-2",
+      type: "paragraph",
+      content: [
+        {
+          text: "아래 문서는 geul이 지원하는 14종 블록을 한 번씩 담았다. 자유롭게 편집하며 HTML 출력을 확인해보자.",
+        },
+      ],
+    },
+    {
+      id: "showcase-composite-sample-block-3",
+      type: "heading",
+      level: 2,
+      content: [{ text: "텍스트 블록" }],
+    },
+    {
+      id: "showcase-composite-sample-block-4",
+      type: "quote",
+      content: [{ text: "인용 블록은 이렇게 표시된다." }],
+    },
+    {
+      id: "showcase-composite-sample-block-5",
+      type: "heading",
+      level: 2,
+      content: [{ text: "목록" }],
+    },
+    {
+      id: "showcase-composite-sample-block-6",
+      type: "bulletListItem",
+      content: [{ text: "글머리 목록 항목" }],
+    },
+    {
+      id: "showcase-composite-sample-block-7",
+      type: "numberedListItem",
+      startNumber: 1,
+      content: [{ text: "번호 매기기 항목" }],
+    },
+    {
+      id: "showcase-composite-sample-block-8",
+      type: "checkListItem",
+      checked: false,
+      content: [{ text: "체크되지 않은 항목" }],
+    },
+    {
+      id: "showcase-composite-sample-block-9",
+      type: "checkListItem",
+      checked: true,
+      content: [{ text: "체크된 항목" }],
+    },
+    {
+      id: "showcase-composite-sample-block-10",
+      type: "toggleListItem",
+      collapsed: false,
+      content: [{ text: "펼쳐서 보는 토글 항목" }],
+      children: [
+        {
+          id: "showcase-composite-sample-block-11",
+          type: "paragraph",
+          content: [{ text: "토글 안에 중첩된 문단이다." }],
+        },
+      ],
+    },
+    {
+      id: "showcase-composite-sample-block-12",
+      type: "heading",
+      level: 2,
+      content: [{ text: "코드" }],
+    },
+    {
+      id: "showcase-composite-sample-block-13",
+      type: "codeBlock",
+      language: "typescript",
+      caption: "타입스크립트 예시",
+      content: [{ text: "const greet = (name: string) => `Hello, ${name}!`;" }],
+    },
+    {
+      id: "showcase-composite-sample-block-14",
+      type: "heading",
+      level: 2,
+      content: [{ text: "표" }],
+    },
+    {
+      id: "showcase-composite-sample-block-15",
+      type: "table",
+      columns: [
+        { id: "showcase-composite-sample-col-1", width: 160 },
+        { id: "showcase-composite-sample-col-2", width: 160 },
+        { id: "showcase-composite-sample-col-3", width: 240 },
+      ],
+      headerRows: 1,
+      headerColumns: 0,
+      rows: [
+        {
+          id: "showcase-composite-sample-row-1",
+          cells: [
+            {
+              id: "showcase-composite-sample-cell-1-1",
+              columnId: "showcase-composite-sample-col-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "블록" }],
+            },
+            {
+              id: "showcase-composite-sample-cell-1-2",
+              columnId: "showcase-composite-sample-col-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "타입" }],
+            },
+            {
+              id: "showcase-composite-sample-cell-1-3",
+              columnId: "showcase-composite-sample-col-3",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "설명" }],
+            },
+          ],
+        },
+        {
+          id: "showcase-composite-sample-row-2",
+          cells: [
+            {
+              id: "showcase-composite-sample-cell-2-1",
+              columnId: "showcase-composite-sample-col-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "paragraph" }],
+            },
+            {
+              id: "showcase-composite-sample-cell-2-2",
+              columnId: "showcase-composite-sample-col-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "텍스트" }],
+            },
+            {
+              id: "showcase-composite-sample-cell-2-3",
+              columnId: "showcase-composite-sample-col-3",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "일반 문단" }],
+            },
+          ],
+        },
+        {
+          id: "showcase-composite-sample-row-3",
+          cells: [
+            {
+              id: "showcase-composite-sample-cell-3-1",
+              columnId: "showcase-composite-sample-col-1",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "table" }],
+            },
+            {
+              id: "showcase-composite-sample-cell-3-2",
+              columnId: "showcase-composite-sample-col-2",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "구조" }],
+            },
+            {
+              id: "showcase-composite-sample-cell-3-3",
+              columnId: "showcase-composite-sample-col-3",
+              rowSpan: 1,
+              columnSpan: 1,
+              content: [{ text: "지금 보고 있는 이 표" }],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "showcase-composite-sample-block-16",
+      type: "heading",
+      level: 2,
+      content: [{ text: "구분선" }],
+    },
+    { id: "showcase-composite-sample-block-17", type: "divider" },
+    {
+      id: "showcase-composite-sample-block-18",
+      type: "heading",
+      level: 2,
+      content: [{ text: "미디어" }],
+    },
+    {
+      id: "showcase-composite-sample-block-19",
+      type: "image",
+      url: SAMPLE_IMAGE_URL,
+      caption: "이미지 블록 샘플",
+      showPreview: true,
+    },
+    {
+      id: "showcase-composite-sample-block-20",
+      type: "video",
+      url: SAMPLE_VIDEO_URL,
+      caption: "비디오 블록 샘플",
+    },
+    {
+      id: "showcase-composite-sample-block-21",
+      type: "audio",
+      url: SAMPLE_AUDIO_URL,
+      caption: "오디오 블록 샘플",
+    },
+    {
+      id: "showcase-composite-sample-block-22",
+      type: "file",
+      url: SAMPLE_FILE_URL,
+      name: "샘플.txt",
+      caption: "파일 블록 샘플",
+    },
+  ],
+};
+
 type ResultTab = "preview" | "html";
 
 // 에디터 아래 고정 배치되는 [미리보기 | HTML] 결과 패널. `useEditor()` +
@@ -246,6 +501,7 @@ type ResultTab = "preview" | "html";
 const ResultPanel = ({ revision }: { revision: number }) => {
   const editor = useEditor();
   const [activeTab, setActiveTab] = useState<ResultTab>("preview");
+  const [sampleLoadError, setSampleLoadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const exported = useMemo(
@@ -279,8 +535,33 @@ const ResultPanel = ({ revision }: { revision: number }) => {
     void navigator.clipboard.writeText(pretty);
   };
 
+  // SAMPLE_DOCUMENT는 이 파일 안에서 고정 구성된 값이라 항상 유효하지만,
+  // replaceDocument()는 Result<T, E>를 돌려주는 공개 계약이라(AGENTS.md
+  // "구현 규칙") 02-document-io/example.tsx의 handleImport와 동일하게
+  // 실패 분기를 무시하지 않는다.
+  const handleLoadSample = () => {
+    const result = editor.replaceDocument(SAMPLE_DOCUMENT);
+    setSampleLoadError(
+      result.ok
+        ? null
+        : "message" in result.error
+          ? result.error.message
+          : result.error.code,
+    );
+  };
+
   return (
     <div className="composite-result">
+      <div className="composite-result__toolbar">
+        <button onClick={handleLoadSample} type="button">
+          샘플 불러오기
+        </button>
+        {sampleLoadError !== null && (
+          <p className="composite-result__error" role="alert">
+            샘플 로드 실패: {sampleLoadError}
+          </p>
+        )}
+      </div>
       <div
         aria-label="결과"
         className="composite-result__tablist"
