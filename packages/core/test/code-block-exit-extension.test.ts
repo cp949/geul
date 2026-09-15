@@ -4,9 +4,10 @@
  * 아니면 이 확장은 `false`로 물러난다 — Enter는 Tiptap 코어 내장
  * `Keymap` 확장의 `newlineInCode` 폴백(구현 조사로 확정, RD-003-DELTA-02.md
  * "배경" 참고)이, 비어 있지 않은 codeBlock의 경계 Delete는
- * block-join-extension.ts의 기존 경계 no-op이 대신 처리한다 — 둘 다
- * jsdom에서 실제 커맨드 실행으로 완전히 재현되므로(네이티브 브라우저
- * 폴백 아님) 여기서 함께 고정한다.
+ * block-join-extension.ts가 다음 블록을 codeBlock에 흡수한다(#202 스펙 표
+ * 행3, RD-001-DELTA-02 — 이전에는 기존 경계 no-op이었다) — 둘 다 jsdom에서
+ * 실제 커맨드 실행으로 완전히 재현되므로(네이티브 브라우저 폴백 아님)
+ * 여기서 함께 고정한다.
  *
  * codeBlock이 문서 최상위 "마지막 블록"이면 TrailingBlockExtension이 항상
  * 그 뒤에 맨몸 paragraph(첫 자동 id "id-1")를 붙인다(codeBlock은
@@ -254,7 +255,7 @@ describe("빈 codeBlock Delete 삭제", () => {
     ]);
   });
 
-  it("codeBlock이 비어 있지 않으면 이 확장은 물러나고 기존 경계 no-op이 대신 소비한다(회귀 없음)", () => {
+  it("codeBlock이 비어 있지 않으면 이 확장은 물러나고 block-join-extension.ts가 다음 블록을 흡수한다(RD-001-DELTA-02)", () => {
     const { editor, tiptap } = mounted(
       documentOf(codeBlockBlock("target", "code"), paragraphBlock("tail", "")),
     );
@@ -263,9 +264,12 @@ describe("빈 codeBlock Delete 삭제", () => {
     );
 
     expect(dispatchKeydown(tiptap, "Delete")).toBe(true);
+    // "tail"(빈 paragraph)이 codeBlock에 흡수돼 소멸하고, codeBlock이 문서
+    // 최상위 마지막 블록이 돼 TrailingBlockExtension이 새 맨몸 paragraph를
+    // 자동으로 붙인다(위 파일 머리말 참고).
     expect(editor.getDocument().blocks).toEqual([
       codeBlockBlock("target", "code"),
-      paragraphBlock("tail", ""),
+      paragraphBlock("id-1", ""),
     ]);
   });
 });

@@ -1,6 +1,11 @@
 import { isListEntryBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
-import { Fragment, type Node, type ResolvedPos } from "@tiptap/pm/model";
+import {
+  Fragment,
+  type Node,
+  type ResolvedPos,
+  type Schema,
+} from "@tiptap/pm/model";
 import {
   NodeSelection,
   Selection,
@@ -86,11 +91,15 @@ function isJoinBoundary(
     : context.$from.parentOffset === context.$from.parent.content.size;
 }
 
-// RD-004 전 CodeBlock 선두 Backspace와 끝 Delete는 브라우저/StarterKit의
-// 일반 textblock join으로 흘려보내지 않는다. 그 경로는 인접 문단과 source를
-// 병합해 CodeBlock을 강등하거나 문단을 제거한다. 경계 키만 소비하고 내부
-// 문자 삭제는 기존 keymap에 맡긴다.
-function consumeCodeBlockBoundary(
+// CodeBlock 선두 Backspace와 끝 Delete는 브라우저/StarterKit의 일반
+// textblock join으로 흘려보내지 않는다. 그 경로는 인접 문단과 source를
+// 병합해 CodeBlock을 강등하거나 문단을 제거한다. 여기서는 캐럿이 그
+// 경계에 있는지만 판정한다 — backward는 호출부가 그대로 no-op으로 키만
+// 소비한다(#202 스펙 표 "항상 무동작", 변경 없음). forward는 호출부
+// (`handleCodeBlockBoundary`)가 이 판정이 true일 때 `mergeNextBlockIntoCodeBlock`로
+// 다음 블록 흡수를 시도한다(#202 스펙 표 행3, RD-001-DELTA-02) — 흡수할
+// 대상이 없으면 그 함수 안에서 기존과 같은 no-op으로 물러난다.
+function isCodeBlockOwnBoundary(
   state: EditorState,
   direction: "backward" | "forward",
 ): boolean {
@@ -240,12 +249,15 @@ function selectAdjacentAtom(
   return true;
 }
 
-// leafBefore/leafAfter가 돌려주는 adjacent.pos는 CodeBlock 노드 자신의
-// 시작 위치다. 그 blockContainer는 한 단계 바깥이다 — CodeBlock은
-// leafBlockContent라 blockGroup을 가질 수 없어(block-container-
-// extension.ts content expression, D19) 언제나 이 한 단계로 충분하다.
-// caretContext의 containerDepth 산출과 같은 패턴이다(depth-1).
-function codeBlockContainerAt(
+// leafBefore/leafAfter가 돌려주는 adjacent.pos는 그 leaf 노드 자신의 시작
+// 위치다. blockContainer는 한 단계 바깥이다 — leafBlockContent(CodeBlock
+// 등)는 blockGroup을 가질 수 없고 nestableBlockContent(paragraph 등)도
+// caretContext와 같은 depth 관계라(block-container-extension.ts content
+// expression, D19) 언제나 이 한 단계로 충분하다. 다만 leafAfter가 표
+// 내부까지 드릴다운했을 때는(표 셀 content가 "inline*"라 tableCell
+// 자체가 textblock) 이 한 단계가 blockContainer가 아니라 tableCell 등을
+// 가리킬 수 있다 — 호출부가 `container.type.name`을 확인해야 한다.
+function leafBlockContainerAt(
   doc: Node,
   adjacent: { node: Node; pos: number },
 ): { container: Node; containerStart: number } {
@@ -281,7 +293,7 @@ function mergeCodeBlockIntoText(
 ): boolean {
   const context = caretContext(selectionState);
   if (context === null) return false;
-  const { container, containerStart } = codeBlockContainerAt(
+  const { container, containerStart } = leafBlockContainerAt(
     liveState.doc,
     adjacent,
   );
@@ -291,6 +303,72 @@ function mergeCodeBlockIntoText(
     mergePos: context.$from.pos,
     inline: adjacent.node.content,
     caretAt: direction === "backward" ? "after" : "before",
+  });
+  return true;
+}
+
+// 다음 블록의 inline 콘텐츠를 CodeBlock이 받을 수 있는 순수 텍스트로
+// 평탄화한다(#202 스펙 표 행3, RD-001-DELTA-02 — mergeCodeBlockIntoText의
+// 반대 방향). CodeBlock은 marks: ""라(code-block-extension.ts) 모든 mark를
+// 잃고, hardBreak(inline 그룹, CodeBlock의 content: "text*"에 담길 수 없는
+// 노드)는 model-to-tiptap.ts의 "\n"↔hardBreak 관례를 역으로 적용해 리터럴
+// "\n" 문자로 치환한다. 그 외 inline 원소(예: 미등록 커스텀 inline)는
+// 텍스트 표현이 없어 빈 문자열로 건너뛴다.
+function toCodeBlockInline(schema: Schema, content: Fragment): Fragment {
+  const text = content.textBetween(0, content.size, "", (leaf: Node) =>
+    leaf.type.name === "hardBreak" ? "\n" : "",
+  );
+  return text.length > 0 ? Fragment.from(schema.text(text)) : Fragment.empty;
+}
+
+// CodeBlock 끝 Delete가 인접한 다음 블록을 CodeBlock에 흡수한다(#202 스펙
+// 표 행3, RD-001-DELTA-02) — mergeCodeBlockIntoText와 반대로 CodeBlock이
+// 항상 살아남는 쪽이고 다음 블록이 소멸한다. 병합 대상은 codeBlock 또는
+// isNestableBlockType(paragraph/heading/quote/리스트 항목 4종)뿐이다 —
+// atom(image/video/audio/file/divider)과 표는 이 판정에 걸리지 않아
+// 자동으로 제외된다(atom skip-and-merge는 RD-002/003 소관, roadmap.md).
+// leafAfter가 표 내부까지 드릴다운했을 때(표 셀 content가 "inline*"라
+// tableCell 자체가 textblock) container가 blockContainer가 아닐 수 있어
+// 그 경우도 병합하지 않는다. 두 경우 모두 false를 돌려줘 호출부가 기존
+// no-op 계약(#202 "코드블록 첫 위치 Backspace는 항상 무동작"의 forward
+// 대응, 변경 없음)을 그대로 유지하게 한다.
+//
+// 리스트 항목은 DELTA-01의 backward 2단계 규칙과 달리 특별 취급하지
+// 않는다 — forward는 이미 "현재 블록(여기서는 CodeBlock)이 살아남는 쪽이라
+// 타입을 유지한 채 바로 병합한다"로 결정돼 있고(RD-001.md "결정"), 그
+// 대칭을 그대로 쓴다. 기존 joinForwardAtTextEnd(일반 forward join)도 다음이
+// 리스트 항목이어도 특별 취급 없이 바로 병합해 온 선례와 일치한다.
+//
+// mergePos는 CodeBlock 자신의 끝 위치이고 삽입 방향은 기존 3개 호출부와
+// 같은 "append"라 caretAt 기본값("before")을 그대로 쓴다 — 새 파라미터가
+// 필요 없다.
+function mergeNextBlockIntoCodeBlock(
+  view: EditorView,
+  liveState: EditorState,
+  codeBlockFrom: ResolvedPos,
+): boolean {
+  const adjacent = leafAfter(codeBlockFrom.doc, codeBlockFrom.after());
+  if (adjacent === null) return false;
+  const isMergeable =
+    adjacent.node.type.name === "codeBlock" ||
+    isNestableBlockType(adjacent.node.type.name);
+  if (!isMergeable) return false;
+
+  const { container, containerStart } = leafBlockContainerAt(
+    codeBlockFrom.doc,
+    adjacent,
+  );
+  if (container.type.name !== "blockContainer") return false;
+
+  const inline = toCodeBlockInline(
+    codeBlockFrom.parent.type.schema,
+    adjacent.node.content,
+  );
+  mergeContainers(view, liveState, {
+    removed: container,
+    removedStart: containerStart,
+    mergePos: codeBlockFrom.pos,
+    inline,
   });
   return true;
 }
@@ -334,10 +412,12 @@ function isLiveCodeRelatedBoundary(
   return adjacentCodeBlockAtTextBoundary(state, direction) !== null;
 }
 
-// DOM 기준 파생 state에서는 Code 관련 경계만 판정한다. CodeBlock 자체의
-// 경계는 완전한 no-op으로 소비하고, 일반 text block→CodeBlock은 실제
-// 병합을 live state의 transaction으로 적용한다. 파생 state로 document
-// transaction을 만들지 않는다(G-EDT-002).
+// DOM 기준 파생 state에서는 Code 관련 경계만 판정한다. CodeBlock 자신의
+// 경계는 backward가 완전한 no-op, forward가 mergeNextBlockIntoCodeBlock
+// 시도(대상이 없으면 그 안에서 다시 no-op)이고, 일반 text block→CodeBlock은
+// 실제 병합을 live state의 transaction으로 적용한다. 파생 state로 document
+// transaction을 만들지 않는다(G-EDT-002) — forward merge도 위치 판정은
+// selectionState에서, dispatch는 항상 liveState에서 한다.
 //
 // 리스트 항목(backward만, 사용자 결정 2026-09-15)은 예외다 — 내용이 있어도
 // CodeBlock과 바로 병합하지 않고 먼저 paragraph로 전환한다. 이어지는
@@ -351,7 +431,16 @@ function handleCodeBlockBoundary(
   direction: "backward" | "forward",
   selectionState = resolveSelectionAwareState(editor),
 ): boolean {
-  if (consumeCodeBlockBoundary(selectionState, direction)) return true;
+  if (isCodeBlockOwnBoundary(selectionState, direction)) {
+    if (direction === "forward") {
+      mergeNextBlockIntoCodeBlock(
+        editor.view,
+        editor.state,
+        selectionState.selection.$from,
+      );
+    }
+    return true;
+  }
 
   const liveState = editor.state;
   const selectionIsStale = !selectionState.selection.eq(liveState.selection);

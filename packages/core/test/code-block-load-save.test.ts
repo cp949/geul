@@ -685,36 +685,55 @@ describe("CodeBlock과 일반 text block의 Backspace/Delete 경계", () => {
       },
     },
   ])(
-    "top-level CodeBlock 끝 Delete는 다음 $name와 병합하지 않고 완전한 no-op이다",
+    // #202 RD-001-DELTA-02 — 이전에는 CodeBlock 끝에서 완전한 no-op이었다
+    // (행3, DELTA-01 범위 밖). 이제 다음 블록을 흡수하고 제거한다 —
+    // DELTA-01(행2, 위 테스트)의 반대 방향이라 CodeBlock이 살아남는다.
+    "top-level CodeBlock 끝 Delete는 다음 $name을 흡수하고 $name을 제거한다",
     ({ block }) => {
       const { editor, tiptap, changes } = mountedCodeEditor(
-        documentOf(codeBlock("code", "source", "javascript"), block),
+        documentOf(
+          codeBlock("code", "source", "javascript"),
+          block,
+          paragraphBlock("tail", "tail"),
+        ),
       );
-      tiptap.commands.setTextSelection(
-        contentTextStart(tiptap, "code") + "source".length,
-      );
-      setBoldStoredMark(tiptap);
-      const before = expectKeyboardBoundary(
-        editor,
-        tiptap,
-        changes,
-        () => dispatchKeydown(tiptap, "Delete"),
-        0,
-      );
-      expect(editorState(editor, tiptap)).toEqual(before);
+      const codeEnd = contentTextStart(tiptap, "code") + "source".length;
+      tiptap.commands.setTextSelection(codeEnd);
+
+      expect(dispatchKeydown(tiptap, "Delete")).toBe(true);
+
+      expect(editor.getDocument()).toEqual({
+        formatVersion: 1,
+        revision: 1,
+        blocks: [
+          codeBlock("code", "sourceafter", "javascript"),
+          paragraphBlock("tail", "tail"),
+        ],
+      });
+      expect(changes).toEqual([
+        {
+          revision: 1,
+          // tail은 내용은 그대로지만 text가 사라지며 index가 한 칸
+          // 앞당겨져 changedBlockIds에 포함된다(blockChanges의 index 비교,
+          // 위 반대 방향 테스트와 같은 이유).
+          changedBlockIds: ["code", "text", "tail"],
+          reason: "local",
+        },
+      ]);
+      // append 방향 — 캐럿은 원래 위치(CodeBlock "source" 끝)에 그대로
+      // 남는다.
+      expect(tiptap.state.selection.toJSON()).toEqual({
+        type: "text",
+        anchor: codeEnd,
+        head: codeEnd,
+      });
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
     },
   );
 
-  it.each([
-    { key: "Backspace", sourceOffset: 0, staleOffset: 0 },
-    {
-      key: "Delete",
-      sourceOffset: "source".length,
-      staleOffset: "stale".length,
-    },
-  ])(
-    "native CodeBlock 경계의 stale $key은 destructive join 없이 완전한 no-op이다",
-    ({ key, sourceOffset, staleOffset }) => {
+  it(
+    "native CodeBlock 경계의 stale Backspace는 destructive join 없이 완전한 no-op이다",
+    () => {
       const { editor, tiptap, changes } = mountedCodeEditor(
         documentOf(
           paragraphBlock("stale", "stale"),
@@ -730,11 +749,9 @@ describe("CodeBlock과 일반 text block의 Backspace/Delete 경계", () => {
         () => {
           tiptap.view.dispatch(
             tiptap.state.tr.setSelection(
-              TextSelection.near(
-                tiptap.state.doc.resolve(
-                  contentTextStart(tiptap, "stale") + staleOffset,
-                ),
-              ),
+              TextSelection.near(tiptap.state.doc.resolve(
+                contentTextStart(tiptap, "stale") + 0,
+              )),
             ),
           );
           setBoldStoredMark(tiptap);
@@ -742,17 +759,80 @@ describe("CodeBlock과 일반 text block의 Backspace/Delete 경계", () => {
             editor,
             tiptap,
             changes,
-            () => dispatchKeydown(tiptap, key),
+            () => dispatchKeydown(tiptap, "Backspace"),
             0,
           );
           expect(editorState(editor, tiptap)).toEqual(before);
           observed = true;
         },
-        sourceOffset,
+        0,
       );
       expect(observed).toBe(true);
     },
   );
+
+  it("native CodeBlock 경계의 stale Delete는 DOM 기준 위치에서 다음 블록을 흡수한다(RD-001-DELTA-02)", () => {
+    // #202 RD-001-DELTA-02 — native(DOM) 캐럿이 CodeBlock 끝이고 live(stale)
+    // selection이 "stale" 문단에 남아 있어도, 판정과 병합은 DOM 기준
+    // 파생 state("code" 끝)로 한다 — mergeNextBlockIntoCodeBlock이 live
+    // state의 공유 doc 위에서 dispatch하므로 stale selection은 병합
+    // 결과의 caret으로 그대로 대체된다.
+    const { editor, tiptap, changes } = mountedCodeEditor(
+      documentOf(
+        paragraphBlock("stale", "stale"),
+        codeBlock("code", "source", "javascript"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const codeEnd = contentTextStart(tiptap, "code") + "source".length;
+    let observed = false;
+    withStaleBlockCaret(
+      tiptap,
+      "code",
+      "stale",
+      () => {
+        tiptap.view.dispatch(
+          tiptap.state.tr.setSelection(
+            TextSelection.near(
+              tiptap.state.doc.resolve(
+                contentTextStart(tiptap, "stale") + "stale".length,
+              ),
+            ),
+          ),
+        );
+        setBoldStoredMark(tiptap);
+
+        expect(dispatchKeydown(tiptap, "Delete")).toBe(true);
+
+        // "tail"이 codeBlock에 흡수돼 소멸하고, codeBlock이 문서 최상위
+        // 마지막 블록이 돼 TrailingBlockExtension이 새 맨몸 paragraph를
+        // 자동으로 붙인다(mountedCodeEditor의 sequentialIds("generated")
+        // 첫 자동 id).
+        expect(editor.getDocument().blocks).toEqual([
+          paragraphBlock("stale", "stale"),
+          codeBlock("code", "sourcetail", "javascript"),
+          paragraphBlock("generated-1", ""),
+        ]);
+        expect(changes).toHaveLength(1);
+        expect(changes[0]?.reason).toBe("local");
+        // append 방향 — 캐럿은 CodeBlock의 원래 끝("source" 뒤)에 있다.
+        expect(tiptap.state.selection.toJSON()).toEqual({
+          type: "text",
+          anchor: codeEnd,
+          head: codeEnd,
+        });
+        withoutScrollCrash(tiptap, () => {
+          expect(editor.commands.undo()).toEqual({
+            ok: true,
+            value: undefined,
+          });
+        });
+        observed = true;
+      },
+      "source".length,
+    );
+    expect(observed).toBe(true);
+  });
 
   it("native paragraph→CodeBlock 경계의 stale Delete도 destructive join으로 CodeBlock을 흡수한다", () => {
     // #202 RD-001-DELTA-01 — stale 경로(handleCodeBlockBoundary)도 live
