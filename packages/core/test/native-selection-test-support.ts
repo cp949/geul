@@ -92,7 +92,10 @@ export const withNativeSelection = (
  * 우회한다 — 두 번째 소비 파일(list-item-join.test.ts)이 생긴 시점에
  * code-block-load-save.test.ts의 사본 대신 이 모듈로 올렸다(G-TST-002).
  */
-export const withoutScrollCrash = (tiptap: TiptapEditor, fn: () => void): void => {
+export const withoutScrollCrash = (
+  tiptap: TiptapEditor,
+  fn: () => void,
+): void => {
   const viewWithScroll = tiptap.view as typeof tiptap.view & {
     scrollToSelection(): void;
   };

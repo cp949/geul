@@ -177,10 +177,7 @@ describe("divider 인접 Backspace/Delete(skip-and-merge, Issue #202 RD-002)", (
 
     expect(handled).toBe(true);
     expect(editor.getDocument().blocks).toEqual([
-      paragraphBlock("p-1", "one", [
-        paragraphBlock("c-1", "ctwo"),
-        dividerD1,
-      ]),
+      paragraphBlock("p-1", "one", [paragraphBlock("c-1", "ctwo"), dividerD1]),
       paragraphBlock("tail", ""),
     ]);
     expect(countNodes(tiptap, "divider")).toBe(1);

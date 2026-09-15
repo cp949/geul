@@ -40,7 +40,10 @@ import {
 describe("Text 시작 Backspace, 이전 블록=CodeBlock", () => {
   it("CodeBlock 내용이 paragraph 앞에 붙고 CodeBlock은 소멸한다", () => {
     const { tiptap } = mountDocument(
-      documentOf(codeBlockBlock("code-1", "foo"), paragraphBlock("para-1", "bar")),
+      documentOf(
+        codeBlockBlock("code-1", "foo"),
+        paragraphBlock("para-1", "bar"),
+      ),
     );
     const beforeJson = tiptap.state.doc.toJSON();
 

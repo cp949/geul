@@ -731,45 +731,42 @@ describe("CodeBlock과 일반 text block의 Backspace/Delete 경계", () => {
     },
   );
 
-  it(
-    "native CodeBlock 경계의 stale Backspace는 destructive join 없이 완전한 no-op이다",
-    () => {
-      const { editor, tiptap, changes } = mountedCodeEditor(
-        documentOf(
-          paragraphBlock("stale", "stale"),
-          codeBlock("code", "source", "javascript"),
-          paragraphBlock("tail", "tail"),
-        ),
-      );
-      let observed = false;
-      withStaleBlockCaret(
-        tiptap,
-        "code",
-        "stale",
-        () => {
-          tiptap.view.dispatch(
-            tiptap.state.tr.setSelection(
-              TextSelection.near(tiptap.state.doc.resolve(
-                contentTextStart(tiptap, "stale") + 0,
-              )),
+  it("native CodeBlock 경계의 stale Backspace는 destructive join 없이 완전한 no-op이다", () => {
+    const { editor, tiptap, changes } = mountedCodeEditor(
+      documentOf(
+        paragraphBlock("stale", "stale"),
+        codeBlock("code", "source", "javascript"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    let observed = false;
+    withStaleBlockCaret(
+      tiptap,
+      "code",
+      "stale",
+      () => {
+        tiptap.view.dispatch(
+          tiptap.state.tr.setSelection(
+            TextSelection.near(
+              tiptap.state.doc.resolve(contentTextStart(tiptap, "stale") + 0),
             ),
-          );
-          setBoldStoredMark(tiptap);
-          const before = expectKeyboardBoundary(
-            editor,
-            tiptap,
-            changes,
-            () => dispatchKeydown(tiptap, "Backspace"),
-            0,
-          );
-          expect(editorState(editor, tiptap)).toEqual(before);
-          observed = true;
-        },
-        0,
-      );
-      expect(observed).toBe(true);
-    },
-  );
+          ),
+        );
+        setBoldStoredMark(tiptap);
+        const before = expectKeyboardBoundary(
+          editor,
+          tiptap,
+          changes,
+          () => dispatchKeydown(tiptap, "Backspace"),
+          0,
+        );
+        expect(editorState(editor, tiptap)).toEqual(before);
+        observed = true;
+      },
+      0,
+    );
+    expect(observed).toBe(true);
+  });
 
   it("native CodeBlock 경계의 stale Delete는 DOM 기준 위치에서 다음 블록을 흡수한다(RD-001-DELTA-02)", () => {
     // #202 RD-001-DELTA-02 — native(DOM) 캐럿이 CodeBlock 끝이고 live(stale)
