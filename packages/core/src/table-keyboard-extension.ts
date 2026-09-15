@@ -140,12 +140,24 @@ export const insertHardBreakInsideTable = (editor: Editor): boolean => {
 // ArrowDown이 2행1열로 가지 않는 등 부자연스러운 이동의 원인이다. 셀 깊이를
 // $head.depth로 직접 잡아 같은 계약(레이아웃상 셀의 시작/끝일 때만 개입)을
 // 이 스키마에 맞게 다시 구현한다.
+//
+// state는 호출부가 resolveSelectionAwareState로 이미 재동기화한 것을 받는다
+// — view.state를 직접 읽지 않는다(Issue #200 회귀). 클릭 직후 곧바로
+// 화살표 키가 눌리면 view.state.selection은 아직 클릭 이전 값을 들고
+// 있을 수 있다(파일 상단 resolveSelectionAwareState 주석의 Issue #118과
+// 같은 종류의 비동기 selectionchange 지연). 그 stale selection으로 셀
+// 경계를 판정하면 엉뚱한 셀을 기준으로 nextCell을 찾아 표 밖으로 캐럿이
+// 새고, 그 자리에 입력한 문자가 사라진다(실측). endOfTextblock도 두 번째
+// 인자로 state를 받아(prosemirror-view EditorView.endOfTextblock(dir,
+// state?)) 같은 재동기화 selection 기준으로 레이아웃 경계를 판정하게
+// 한다.
 const atEndOfTableCell = (
   view: EditorView,
+  state: EditorState,
   axis: "horiz" | "vert",
   dir: -1 | 1,
 ): number | null => {
-  const { selection } = view.state;
+  const { selection } = state;
   if (!(selection instanceof TextSelection)) return null;
   const { $head } = selection;
   const cell = $head.node($head.depth);
@@ -162,7 +174,7 @@ const atEndOfTableCell = (
     // 레이아웃이 없는 환경은 세로(up/down) 판정에 필요한
     // Range.getClientRects를 구현하지 않아 던진다(실측, table-selection-toolbar.test.tsx의
     // Shift+Arrow 주석과 같은 한계). 판정 불가로 보고 개입하지 않는다.
-    return view.endOfTextblock(dirName) ? $head.before($head.depth) : null;
+    return view.endOfTextblock(dirName, state) ? $head.before($head.depth) : null;
   } catch {
     return null;
   }
@@ -208,7 +220,7 @@ export const moveTableCellCaret = (
   // 화살표는 기본 동작(선택 해제 등)에 맡긴다.
   if (axis === "vert" && !selection.empty) return false;
 
-  const end = atEndOfTableCell(editor.view, axis, dir);
+  const end = atEndOfTableCell(editor.view, state, axis, dir);
   if (end === null) return false;
 
   if (axis === "horiz") {

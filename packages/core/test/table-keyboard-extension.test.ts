@@ -634,4 +634,45 @@ describe("화살표 키 표 안 이동", () => {
     expect(dispatchSpy).not.toHaveBeenCalled();
     dispatchSpy.mockRestore();
   });
+
+  it("ArrowDown은 stale editor.state.selection이 아니라 실제 DOM 캐럿을 따른다(Issue #200)", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+
+    // cell-1 안에 실제 PM 캐럿을 둬 그 DOM 노드를 얻는다(네이티브 caret의
+    // source, Shift+Tab stale 테스트와 같은 방식).
+    const cell1Boundary = findCellBoundaryPosition(editor, "cell-1");
+    if (cell1Boundary === null) throw new Error("셀 fixture 준비 실패");
+    editor.commands.setTextSelection(cell1Boundary + 1);
+    const { node: nodeAtCell1 } = editor.view.domAtPos(cell1Boundary + 1);
+
+    const editable = editor.view.dom as HTMLElement;
+    withNativeCaret(
+      editable,
+      () => {
+        // editor.state.selection만 의도적으로 stale하게 cell-4(2행2열,
+        // 표의 마지막 셀)로 옮긴다. 실제 DOM 캐럿은 여전히 cell-1이다 —
+        // 클릭 직후 곧바로 ArrowDown이 눌려 PM 내부 selection이 아직
+        // 클릭을 따라잡지 못한 상황을 재현한다(RD-001, Issue #200).
+        const cell4Boundary = findCellBoundaryPosition(editor, "cell-4");
+        if (cell4Boundary === null) throw new Error("셀 fixture 준비 실패");
+        editor.view.dispatch(
+          editor.state.tr.setSelection(
+            TextSelection.near(editor.state.doc.resolve(cell4Boundary + 1)),
+          ),
+        );
+        expect(activeCellId(editor)).toBe("cell-4"); // stale 확인
+
+        const moved = moveTableCellCaret(editor, "vert", 1);
+
+        // 이 단언이 RED다. 수정 전 atEndOfTableCell은
+        // view.state.selection(cell-4, 표의 마지막 행)을 직접 읽어 "표
+        // 바닥"으로 오판하고 표 밖으로 캐럿을 내보낸다(moved는 true지만
+        // activeCellId는 null이 된다). 수정 후는 실제 DOM 캐럿(cell-1)을
+        // 기준으로 같은 열 다음 행(cell-3)으로 이동한다.
+        expect(moved).toBe(true);
+        expect(activeCellId(editor)).toBe("cell-3");
+      },
+      nodeAtCell1.childNodes[0] || nodeAtCell1,
+    );
+  });
 });
