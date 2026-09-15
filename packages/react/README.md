@@ -37,6 +37,8 @@ function Editor() {
 </EditorProvider>
 ```
 
+실제 연결 예는 `apps/showcase`의 `src/examples/16-enabled-block-types`를 참고한다.
+
 ### 이미지 업로드
 
 `EditorProvider`의 `uploadFile: (file, signal) => Promise<UploadResult>` 콜백이 이미지·비디오·오디오·파일 블록의 업로드를 전부 처리한다 — 성공 시 `{ status: "success", url }`, 실패 시 에러 코드, 취소 시 `{ status: "cancelled" }`를 돌려준다. 실제 연결 예는 `apps/showcase`의 `src/examples/07-media`를 참고한다.
