@@ -4,6 +4,7 @@ import CompositePage from "./examples/00-composite/page.js";
 import DocumentIoPage from "./examples/02-document-io/page.js";
 import DictionaryOverridePage from "./examples/09-dictionary-override/page.js";
 import EmojiPickerPage from "./examples/08-emoji-picker/page.js";
+import EnabledBlockTypesPage from "./examples/16-enabled-block-types/page.js";
 import FilePanelPage from "./examples/06-file-panel/page.js";
 import FormattingToolbarPage from "./examples/03-formatting-toolbar/page.js";
 import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
@@ -81,6 +82,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Static toolbar",
     group: "Toolbars & Menus",
     Page: StaticToolbarPage,
+  },
+  {
+    path: "enabled-block-types",
+    label: "Enabled block types",
+    group: "Toolbars & Menus",
+    Page: EnabledBlockTypesPage,
   },
   {
     path: "media",
