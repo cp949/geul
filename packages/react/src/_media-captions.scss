@@ -1,0 +1,83 @@
+// media(image/video/audio/file) 캡션 클릭-즉시-편집 오버레이(2026-09-16,
+// Notion 스타일 요청). MediaCaptions(media-captions.tsx)가 렌더한다.
+//
+// core가 그리는 실제 caption DOM([data-geul-media-caption], media-block-
+// extension.ts captionChildren)은 이 오버레이가 표시·편집을 전담하므로
+// 에디터에서는 숨긴다 — codeBlock caption(_code-block-captions.scss)과
+// 달리 media는 core가 실제로 이 DOM을 낸다(codeBlock은 애초에 안 낸다).
+// export/미리보기(packages/io)는 이 규칙과 무관한 별도 경로다(ADR-0002).
+.geul-editor [data-geul-media-kind] > [data-geul-media-caption] {
+  display: none;
+}
+
+.geul-media-caption {
+  position: absolute;
+  z-index: 5;
+}
+
+// 브라우저 기본 button/textarea 테두리·배경·여백·글꼴만 없앤다. 색·크기
+// (font-size)·상단 여백·개행 표시(white-space: pre-line)는 세 엘리먼트
+// 모두 data-geul-media-caption을 달아 _editor.scss의 기존 규칙을 그대로
+// 상속한다(code-block-captions.tsx와 같은 재사용 관례 — 새 규칙을
+// 중복 추가하지 않는다). font-family만 inherit한다 — `font: inherit`
+// shorthand를 썼다가 실측에서 font-size까지 body 기본값(16px)으로 되돌려
+// _editor.scss의 0.875rem을 덮어쓰는 걸 확인했다(2026-09-16).
+.geul-media-caption__display,
+.geul-media-caption__textarea,
+.geul-media-caption__add {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+}
+
+.geul-media-caption__display,
+.geul-media-caption__add {
+  cursor: pointer;
+}
+
+// 빈 캡션 + hover 전용 진입점(Q2) — 값이 있는 캡션과 톤을 맞추면서도
+// 미묘하게 옅게 둬 "아직 채워지지 않았다"는 상태를 구분한다.
+.geul-media-caption__add {
+  opacity: 0.7;
+}
+
+.geul-media-caption__add:hover {
+  opacity: 1;
+}
+
+.geul-media-caption__textarea {
+  resize: none;
+  overflow: hidden;
+}
+
+// textAlignment 동기화 — 원래 _media-resize-handles.scss의
+// `> img + [data-geul-media-caption]` 형제 셀렉터가 이미지 정렬을 따라
+// caption 텍스트도 정렬시켰으나, 이 오버레이는 media wrapper 밖의 별도
+// React 서브트리라 그 셀렉터가 닿지 않는다 — 같은 의미를
+// data-geul-text-alignment로 다시 낸다(media-captions.tsx가 컨테이너에
+// 싣는다).
+.geul-media-caption__display,
+.geul-media-caption__textarea,
+.geul-media-caption__add {
+  text-align: center;
+}
+
+.geul-media-caption[data-geul-text-alignment="left"]
+  .geul-media-caption__display,
+.geul-media-caption[data-geul-text-alignment="left"]
+  .geul-media-caption__textarea,
+.geul-media-caption[data-geul-text-alignment="left"] .geul-media-caption__add {
+  text-align: left;
+}
+
+.geul-media-caption[data-geul-text-alignment="right"]
+  .geul-media-caption__display,
+.geul-media-caption[data-geul-text-alignment="right"]
+  .geul-media-caption__textarea,
+.geul-media-caption[data-geul-text-alignment="right"]
+  .geul-media-caption__add {
+  text-align: right;
+}

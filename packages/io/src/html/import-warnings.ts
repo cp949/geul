@@ -9,6 +9,7 @@ import {
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
 import type { HtmlElementNode, HtmlNode, HtmlRoot } from "./inline-content.js";
+import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
   htmlAllowedAttributes,
@@ -203,6 +204,14 @@ const TEXT_BLOCK_PROPS_OWN_TAG_NAMES = new Set([
   "summary",
 ]);
 
+// export-html.ts의 previewWidthStyleAttrs가 style을 내는 3개 태그(2026-09-16
+// media caption 폭 맞춤 그릴링 Q7) — image/video 자신(bare 또는 figure 안
+// 시각 태그)과 caption이 있을 때 그 둘을 감싸는 figure. TEXT_BLOCK_PROPS_
+// OWN_TAG_NAMES와 같은 이유로 별도 집합을 둔다 — 두 규칙(text 색상·정렬,
+// media 폭)이 서로 다른 데이터에서 style을 재구성하므로 판정 함수도
+// isOwnEchoStyle 안에서 분기한다.
+const MEDIA_PREVIEW_WIDTH_OWN_TAG_NAMES = new Set(["img", "video", "figure"]);
+
 // node.properties에서 문자열 값만 읽는다(hast Properties는 string 외에
 // number/boolean/array도 허용하지만, HTML 파싱이 만드는 data-geul-*·style
 // 값은 항상 순수 문자열이다 — 다른 타입이면 own-export가 낸 값이 아니므로
@@ -228,14 +237,47 @@ const propertyStringOrUndefined = (
 // 전부 포함) 보수적으로 경고를 그대로 낸다. 이 판정은 같은 raw 노드
 // 하나만 보고 끝나 서로 다른 노드의 warning을 섞을 위험이 없다(fix 전
 // consumePreservedAttributeWarning 기반 억제와의 핵심 차이).
-const isOwnEchoStyle = (node: HtmlElementNode, rawStyle: string): boolean => {
-  if (!TEXT_BLOCK_PROPS_OWN_TAG_NAMES.has(node.tagName)) return false;
-  const expected = textBlockPropsStyle({
-    textColor: propertyStringOrUndefined(node, "dataGeulTextColor"),
-    backgroundColor: propertyStringOrUndefined(node, "dataGeulBackgroundColor"),
-    textAlignment: propertyStringOrUndefined(node, "dataGeulTextAlignment"),
-  });
-  return expected !== undefined && expected === rawStyle;
+const expectedMediaPreviewWidthStyle = (
+  node: HtmlElementNode,
+): string | undefined => {
+  const rawWidth = propertyStringOrUndefined(node, "dataGeulPreviewWidth");
+  const width = rawWidth === undefined ? Number.NaN : Number(rawWidth);
+  return Number.isNaN(width) ? undefined : mediaPreviewWidthStyle(width);
+};
+
+// caption이 있으면 export-html.ts가 data-geul-preview-width를 감싸는
+// figure에만 싣는다(시각 태그 자신은 안 가짐, "설계" 참고) — 그런데 style은
+// figure와 안쪽 시각 태그(img/video) 둘 다에 낸다(에디터 리사이즈와 대칭
+// 렌더). 그래서 시각 태그 자신에게 data-geul-preview-width가 없을 때는
+// 부모 figure가 넘겨준 기대값(parentFigurePreviewWidthStyle)으로 대신
+// 판정한다 — collectFromNodes가 figure로 내려갈 때만 이 값을 계산해
+// 넘기고, 그 밖의 모든 부모는 undefined를 넘겨(한 단계만 유효, 조부모까지
+// 새지 않음) 다른 media와 뒤섞이지 않는다.
+const isOwnEchoStyle = (
+  node: HtmlElementNode,
+  rawStyle: string,
+  parentFigurePreviewWidthStyle: string | undefined,
+): boolean => {
+  if (TEXT_BLOCK_PROPS_OWN_TAG_NAMES.has(node.tagName)) {
+    const expected = textBlockPropsStyle({
+      textColor: propertyStringOrUndefined(node, "dataGeulTextColor"),
+      backgroundColor: propertyStringOrUndefined(
+        node,
+        "dataGeulBackgroundColor",
+      ),
+      textAlignment: propertyStringOrUndefined(node, "dataGeulTextAlignment"),
+    });
+    return expected !== undefined && expected === rawStyle;
+  }
+  if (MEDIA_PREVIEW_WIDTH_OWN_TAG_NAMES.has(node.tagName)) {
+    const ownExpected = expectedMediaPreviewWidthStyle(node);
+    if (ownExpected !== undefined && ownExpected === rawStyle) return true;
+    return (
+      parentFigurePreviewWidthStyle !== undefined &&
+      parentFigurePreviewWidthStyle === rawStyle
+    );
+  }
+  return false;
 };
 
 // div/li/blockquote/ul/ol은 block-segmenter.ts가 "경계를 통과해 더 깊은
@@ -257,6 +299,7 @@ const collectFromNodes = (
   parentElement: string,
   insideCodeBlockPre: boolean,
   insideTable: boolean,
+  parentFigurePreviewWidthStyle: string | undefined,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
@@ -337,7 +380,7 @@ const collectFromNodes = (
       if (
         attribute === "style" &&
         typeof value === "string" &&
-        isOwnEchoStyle(node, value)
+        isOwnEchoStyle(node, value, parentFigurePreviewWidthStyle)
       ) {
         continue;
       }
@@ -361,6 +404,9 @@ const collectFromNodes = (
       node.tagName,
       insideCodeBlockPre || (node.tagName === "pre" && !insideTable),
       insideTable || node.tagName === "table",
+      node.tagName === "figure"
+        ? expectedMediaPreviewWidthStyle(node)
+        : undefined,
     );
   }
 };
@@ -372,6 +418,15 @@ export const collectHtmlImportWarnings = (
   // 최상위 loose 텍스트(문서 어떤 요소로도 감싸이지 않은 텍스트, 예:
   // documentFromRoot의 flushInlineNodes가 문단으로 승격하는 텍스트)에는
   // 감싸는 태그가 없으므로 "text" sentinel을 element로 쓴다.
-  collectFromNodes(root.children, warnings, true, false, "text", false, false);
+  collectFromNodes(
+    root.children,
+    warnings,
+    true,
+    false,
+    "text",
+    false,
+    false,
+    undefined,
+  );
   return warnings;
 };

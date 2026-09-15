@@ -23,6 +23,7 @@ import {
 } from "./block-type-options.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
+import { MediaCaptions } from "./media-captions.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
@@ -662,6 +663,7 @@ export const SlashMenu = ({
           openMenuAt(blockId, { type: "paragraph" }, "")
         }
       />
+      <MediaCaptions />
       <TableSelectionToolbar />
       <BlockSelectionToolbar />
       {menuContent !== null &&

@@ -68,6 +68,8 @@ describe("preview.css export", () => {
       "pre + figcaption",
       ".geul-preview [data-geul-media-type] {",
       ".geul-preview a[data-geul-media-type] {",
+      'figure[data-geul-text-alignment="left"]',
+      'figure[data-geul-text-alignment="right"]',
     ]) {
       expect(css).toContain(selectorFragment);
     }
@@ -353,6 +355,37 @@ describe("실제 export DOM에 승격 대상 규칙이 매치한다(Issue #201)"
     ).toBeDefined();
     expect(
       select('img[data-geul-text-alignment="right"]', tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it('caption 있는 textAlignment="left"/"right" image는 figure 자신에 그 속성 셀렉터가 실제 매치한다(2026-09-16 media caption 폭 맞춤 — figure 자체 정렬)', () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "i-left-cap",
+            type: "image",
+            url: "https://example.com/l2.png",
+            caption: "왼쪽",
+            textAlignment: "left",
+          },
+          {
+            id: "i-right-cap",
+            type: "image",
+            url: "https://example.com/r2.png",
+            caption: "오른쪽",
+            textAlignment: "right",
+          },
+        ],
+      }),
+    );
+    expect(
+      select('figure[data-geul-text-alignment="left"]', tree as SelectTree),
+    ).toBeDefined();
+    expect(
+      select('figure[data-geul-text-alignment="right"]', tree as SelectTree),
     ).toBeDefined();
   });
 

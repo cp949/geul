@@ -319,10 +319,29 @@
   // _media-resize-handles.scss가 img/video 형제로 스코프해 따로 낸다.
   // file/audio는 좌측 정렬 콘텐츠(<a>/<audio>)를 그대로 따라가 이 규칙만
   // 받는다.
-  [data-geul-media-caption] {
+  // white-space: pre-line(2026-09-16, MediaCaptions Shift+Enter 멀티라인
+  // 지원) — caption 문자열에 담긴 개행을 화면에도 살린다. 이 attribute를
+  // 공유하는 codeBlock caption(code-block-captions.tsx)에도 적용된다.
+  //
+  // @at-root(2026-09-16 실측 발견, 버그) — 이 파일 전체가 `.geul-editor {
+  // }` 안에 중첩돼 있어 컴파일된 셀렉터는 원래 `.geul-editor
+  // [data-geul-media-caption]`였다. 그런데 이 attribute를 실제로 쓰는
+  // 엘리먼트(code-block-captions.tsx의 button/input, media-captions.tsx의
+  // button/textarea)는 전부 SlashMenu가 마운트하는 오버레이라 `.geul-editor`
+  // 바깥의 형제 서브트리에 뜬다(core가 렌더하는 진짜 media caption div만
+  // `.geul-editor` 안에 있다) — `.contains()` 실측 확인. 즉 이 규칙은
+  // "media-block-extension.ts가 낸 진짜 caption div"에만 우연히 맞았을 뿐,
+  // 두 오버레이의 caption 버튼/입력에는 애초에 한 번도 적용된 적이
+  // 없었다(codeBlock caption은 Issue #194 이후 계속 기본 검정·margin 0
+  // 이었다는 뜻 — 이번 feature 작업 중 발견). `@at-root`로 이 규칙만
+  // `.geul-editor` 밖으로 빼 순수 `[data-geul-media-caption]`로 컴파일되게
+  // 한다 — data-geul- 접두사가 이미 충분히 특정적이라 전역 셀렉터로 둬도
+  // 다른 페이지 요소와 충돌할 위험이 낮다.
+  @at-root [data-geul-media-caption] {
     margin-top: 0.25rem;
     color: var(--geul-color-text-muted, #5f6368);
     font-size: 0.875rem;
+    white-space: pre-line;
   }
 
   // 빈 블록 placeholder(UI-009). 문구는 core(placeholder-extension.ts)가

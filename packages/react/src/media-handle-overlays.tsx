@@ -48,7 +48,9 @@ const MEDIA_HANDLE_OFFSET_PX = 56;
 // <a>)를 찾아야 해서 별도로 둔다. 빈 media(source 없음)는 시각 자식이
 // 없으므로(media-block-extension.ts) null이면 호출부가 래퍼로 폴백한다 —
 // 빈 상태의 래퍼 자체가 보이는 placeholder 카드라 그 폴백이 곧 정답이다.
-const findMediaVisualElement = (wrapper: HTMLElement): HTMLElement | null =>
+export const findMediaVisualElement = (
+  wrapper: HTMLElement,
+): HTMLElement | null =>
   wrapper.querySelector<HTMLElement>(
     ":scope > img, :scope > video, :scope > audio, :scope > a",
   );

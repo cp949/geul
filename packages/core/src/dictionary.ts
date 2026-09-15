@@ -159,6 +159,15 @@ export type Dictionary = {
       cancel: string;
       replaceFileInputAriaLabel: string;
       retry: string;
+      // 2026-09-16 — 이미지/비디오/오디오/파일 블록 바로 아래(Notion 스타일
+      // 클릭-즉시-편집) caption 오버레이(MediaCaptions) 전용. 캡션이 빈
+      // 값일 때 hover로만 뜨는 추가 버튼의 aria-label과, 편집 textarea가
+      // 빈 draft일 때 보이는 placeholder — 툴바 입력의 captionInputAriaLabel
+      // (편집 aria-label 자신은 그대로 재사용, 별도 값 아님)과는 다른
+      // 엘리먼트를 가리키는 별개 값이다 — codeBlock의 captionButtonAriaLabel/
+      // captionPlaceholder와 같은 구도.
+      addCaptionAriaLabel: string;
+      captionOverlayPlaceholder: string;
     };
     filePanel: {
       ariaLabel: string;
@@ -467,6 +476,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       cancel: "Cancel",
       replaceFileInputAriaLabel: "{kind} file",
       retry: "Retry",
+      addCaptionAriaLabel: "Add caption",
+      captionOverlayPlaceholder: "Add a caption",
     },
     filePanel: {
       ariaLabel: "File panel",

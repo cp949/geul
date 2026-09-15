@@ -218,7 +218,7 @@ describe("미디어 블록 HTML 내보내기", () => {
   });
 
   describe("타입별 속성 제약 — previewWidth/textAlignment는 image/video만, showPreview는 file 제외", () => {
-    it("image의 previewWidth·textAlignment가 data-geul-*로 나온다", () => {
+    it("image의 previewWidth·textAlignment가 data-geul-*로 나오고 previewWidth는 style width로도 반영된다(2026-09-16 media caption 폭 맞춤)", () => {
       const result = exportHtml(
         documentOf({
           id: "i-6",
@@ -231,11 +231,11 @@ describe("미디어 블록 HTML 내보내기", () => {
       expect(result).toEqual({
         ok: true,
         value:
-          '<img src="https://example.com/a.png" alt="" data-geul-block-id="i-6" data-geul-media-type="image" data-geul-preview-width="320" data-geul-text-alignment="center">',
+          '<img src="https://example.com/a.png" alt="" style="width: 320px" data-geul-block-id="i-6" data-geul-media-type="image" data-geul-preview-width="320" data-geul-text-alignment="center">',
       });
     });
 
-    it("video의 previewWidth·textAlignment가 data-geul-*로 나온다", () => {
+    it("video의 previewWidth·textAlignment가 data-geul-*로 나오고 previewWidth는 style width로도 반영된다(2026-09-16 media caption 폭 맞춤)", () => {
       const result = exportHtml(
         documentOf({
           id: "v-3",
@@ -248,7 +248,7 @@ describe("미디어 블록 HTML 내보내기", () => {
       expect(result).toEqual({
         ok: true,
         value:
-          '<video src="https://example.com/a.mp4" controls data-geul-block-id="v-3" data-geul-media-type="video" data-geul-preview-width="480" data-geul-text-alignment="right"></video>',
+          '<video src="https://example.com/a.mp4" controls style="width: 480px" data-geul-block-id="v-3" data-geul-media-type="video" data-geul-preview-width="480" data-geul-text-alignment="right"></video>',
       });
     });
 

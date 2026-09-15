@@ -120,8 +120,27 @@
   border-radius: 6px;
 }
 
+/* margin-left/right: auto(2026-09-16, media caption 폭 맞춤 그릴링 Q7) —
+   previewWidth가 있으면 export-html.ts가 그 값을 style width로도 내므로
+   (previewWidthStyleAttrs) figure가 컬럼보다 좁아질 수 있다. top/bottom은
+   여전히 아래 [data-geul-media-type] 규칙(0.75rem, 특이도가 더 높음)이
+   맡고, 여기 auto는 남는 left/right만 img/video 자신의 margin:0 auto
+   중앙 정렬과 대칭으로 가운데 정렬한다 — 아래 textAlignment override가
+   왼쪽/오른쪽 정렬로 덮어쓴다. min-width(8rem/128px, Q8)는 caption이 한
+   글자씩 줄줄이 끊기지 않을 하한선이다. */
 .geul-preview figure {
-  margin: 0.5em 0;
+  margin: 0.5em auto;
+  min-width: 8rem;
+}
+
+.geul-preview figure[data-geul-text-alignment="left"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.geul-preview figure[data-geul-text-alignment="right"] {
+  margin-left: auto;
+  margin-right: 0;
 }
 
 /* media 4종(image/video/audio/file) 블록 사이 기본 여백 — 라이브 에디터
@@ -149,10 +168,15 @@
   display: block;
 }
 
+/* white-space: pre-line(2026-09-16, MediaCaptions Shift+Enter 멀티라인
+   지원) — caption 문자열에 담긴 개행을 발행 결과에도 살린다. codeBlock
+   caption(아래 pre + figcaption)은 개행이 생길 수 없는 단일행이라 영향
+   없다. */
 .geul-preview figcaption {
   color: #5f6368;
   font-size: 0.875em;
   text-align: center;
+  white-space: pre-line;
 }
 
 /* codeBlock caption 전용 override — 편집모드(_code-block-captions.scss의

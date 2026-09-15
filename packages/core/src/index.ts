@@ -4,10 +4,13 @@ export type { TabularCell, TabularData } from "@cp949/geul-io";
 // tableBlockOf 등)가 top-level CustomBlock(DELTA-01) 위젠 이후 "이 literal은
 // 예약값이라 CustomBlock일 수 없다" 캐스트(`as TableBlock` 등)에 쓴다.
 export type {
+  AudioBlock,
   Block,
   CodeBlock,
   CustomBlock,
+  FileBlock,
   HeadingBlock,
+  ImageBlock,
   InlineContentBlockType,
   ListItemBlock,
   ListItemBlockType,
@@ -19,6 +22,7 @@ export type {
   TableBlock,
   TableColumn,
   TableColumnsAttributeError,
+  VideoBlock,
 } from "@cp949/geul-model";
 // data-geul-columns 왕복은 model이 단독으로 소유한다(Issue #75). react는
 // model에 직접 의존하지 않으므로 core가 통과시킨다 — 선례는 아래 열 너비

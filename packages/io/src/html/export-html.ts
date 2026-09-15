@@ -29,6 +29,7 @@ import {
   htmlElement,
   inlineContentToNodes,
 } from "./inline-content.js";
+import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { textBlockPropsStyle } from "./text-block-props-style.js";
 
 // exportHtml이 직접 구성하는 출력 트리 전용 루트다 — import·clipboard
@@ -140,6 +141,26 @@ const mediaAnchorNode = (
     { type: "text", value: name ?? url },
   ]);
 
+// previewWidth 인라인 width 스타일 투영(2026-09-16, media caption 폭 맞춤
+// 그릴링 Q7 — core media-block-extension.ts previewWidthStyleAttrs와 동일
+// 공식). 지금까지 export는 data-geul-preview-width만 냈다(round-trip 값
+// 보존, html-media-export.test.ts가 이 계약을 고정) — 실제 시각 폭에는
+// 전혀 반영되지 않아 에디터에서 리사이즈해 발행해도 발행 결과에서는
+// 리사이즈 이전 크기(또는 원본 크기)로 보였다. media caption을 이미지
+// 실제 폭에 맞추려면 먼저 img/video 자신이 그 폭으로 보여야 앞뒤가
+// 맞는다 — figure에도 같은 스타일을 낸다(아래 mediaBlockNode). image/
+// video만 previewWidth attrs를 갖는다(file/audio는 model 자체에 필드가
+// 없다).
+const previewWidthStyleAttrs = (
+  block: MediaBlock,
+): HtmlElementNode["properties"] => {
+  if (block.type !== "image" && block.type !== "video") return {};
+  const width = block.previewWidth;
+  if (typeof width !== "number") return {};
+  const style = mediaPreviewWidthStyle(width);
+  return style === undefined ? {} : { style };
+};
+
 // image/video/audio의 정상(showPreview !== false) 시각 태그. alt는 spec
 // §2.2·§7.1대로 caption이 있으면 caption, 없으면 name을 재사용한다(별도 alt
 // prop 신설 없음 — 2026-09-04 사용자 확정, core ImageBlockExtension과 동일
@@ -149,12 +170,14 @@ const mediaVisualNode = (
   url: string,
   extraAttrs: HtmlElementNode["properties"],
 ): HtmlElementNode => {
+  const widthStyle = previewWidthStyleAttrs(block);
   if (block.type === "image") {
     return htmlElement(
       "img",
       {
         src: url,
         alt: block.caption ?? block.name ?? "",
+        ...widthStyle,
         ...extraAttrs,
       },
       [],
@@ -162,7 +185,7 @@ const mediaVisualNode = (
   }
   return htmlElement(
     mediaVisualTagName(block.type),
-    { src: url, controls: true, ...extraAttrs },
+    { src: url, controls: true, ...widthStyle, ...extraAttrs },
     [],
   );
 };
@@ -193,10 +216,11 @@ const mediaBlockNode = (block: MediaBlock): HtmlElementNode => {
 
   if (caption === undefined) return visual;
 
-  return htmlElement("figure", dataAttrs, [
-    visual,
-    htmlElement("figcaption", {}, [{ type: "text", value: caption }]),
-  ]);
+  return htmlElement(
+    "figure",
+    { ...dataAttrs, ...previewWidthStyleAttrs(block) },
+    [visual, htmlElement("figcaption", {}, [{ type: "text", value: caption }])],
+  );
 };
 
 const cellNode = (

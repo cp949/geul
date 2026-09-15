@@ -132,6 +132,8 @@ export const KO_DICTIONARY: Dictionary = {
       cancel: "취소",
       replaceFileInputAriaLabel: "{kind} 파일",
       retry: "재시도",
+      addCaptionAriaLabel: "캡션 추가",
+      captionOverlayPlaceholder: "캡션 입력",
     },
     filePanel: {
       ariaLabel: "파일 패널",
