@@ -240,26 +240,58 @@ function selectAdjacentAtom(
   return true;
 }
 
-// 일반 text block 쪽에서 인접 CodeBlock으로 join하려는 첫 키는 source를
-// 옮기지 않고 CodeBlock 경계로 caret만 이동한다. selection-only transaction은
-// history에 명시적으로 넣지 않는다(G-EDT-001).
-function selectAdjacentCodeBlock(
+// leafBefore/leafAfter가 돌려주는 adjacent.pos는 CodeBlock 노드 자신의
+// 시작 위치다. 그 blockContainer는 한 단계 바깥이다 — CodeBlock은
+// leafBlockContent라 blockGroup을 가질 수 없어(block-container-
+// extension.ts content expression, D19) 언제나 이 한 단계로 충분하다.
+// caretContext의 containerDepth 산출과 같은 패턴이다(depth-1).
+function codeBlockContainerAt(
+  doc: Node,
+  adjacent: { node: Node; pos: number },
+): { container: Node; containerStart: number } {
+  const $inside = doc.resolve(adjacent.pos + 1);
+  const containerDepth = $inside.depth - 1;
+  return {
+    container: $inside.node(containerDepth),
+    containerStart: $inside.before(containerDepth),
+  };
+}
+
+// Text 블록 경계에 인접한 CodeBlock을 Text에 흡수한다(#202 스펙 표
+// 행1·2, RD-001-DELTA-01) — CodeBlock이 항상 소멸하는 쪽이고 Text가
+// 살아남는다. CodeBlock은 marks:""라(code-block-extension.ts) 옮기는
+// 인라인 콘텐츠에 애초 서식이 없어 별도 stripMarks가 필요 없다.
+//
+// backward(행1, Backspace)는 mergeContainers의 기존 호출부와 순서가
+// 반대다 — 제거 대상(CodeBlock)이 대상(Text)보다 문서 앞이라 mergePos가
+// 제거 범위보다 뒤에 있다. CodeBlock 콘텐츠는 Text 앞에 prepend되므로
+// caret은 삽입된 콘텐츠 뒤(경계)에 둔다("after"). forward(행2, Delete)는
+// 기존 append 방향과 같아 기본값("before")을 그대로 쓴다.
+//
+// adjacent(및 caret 위치 계산에 쓰는 $from)는 selection-aware derived
+// state에서 구하고 dispatch는 항상 live state에서 한다(G-EDT-002) — 두
+// state는 selection만 다를 뿐 같은 doc을 공유해(resolveSelectionAwareState,
+// selection-only apply) 위치 숫자를 그대로 섞어 써도 안전하다.
+function mergeCodeBlockIntoText(
   view: EditorView,
-  state: EditorState,
-  adjacent: { node: Node; pos: number } | null,
-  edge: "start" | "end",
+  liveState: EditorState,
+  selectionState: EditorState,
+  adjacent: { node: Node; pos: number },
+  direction: "backward" | "forward",
 ): boolean {
-  if (adjacent === null || adjacent.node.type.name !== "codeBlock") {
-    return false;
-  }
-  const position =
-    adjacent.pos + 1 + (edge === "end" ? adjacent.node.content.size : 0);
-  view.dispatch(
-    state.tr
-      .setSelection(TextSelection.create(state.doc, position))
-      .setStoredMarks(state.storedMarks)
-      .setMeta("addToHistory", false),
+  const context = caretContext(selectionState);
+  if (context === null) return false;
+  const { container, containerStart } = codeBlockContainerAt(
+    liveState.doc,
+    adjacent,
   );
+  mergeContainers(view, liveState, {
+    removed: container,
+    removedStart: containerStart,
+    mergePos: context.$from.pos,
+    inline: adjacent.node.content,
+    caretAt: direction === "backward" ? "after" : "before",
+  });
   return true;
 }
 
@@ -303,9 +335,17 @@ function isLiveCodeRelatedBoundary(
 }
 
 // DOM 기준 파생 state에서는 Code 관련 경계만 판정한다. CodeBlock 자체의
-// 경계는 완전한 no-op으로 소비하고, 일반 text block→CodeBlock은 계산한
-// 위치만 live state의 selection-only transaction에 적용한다. 파생 state로
-// document transaction을 만들지 않는다(G-EDT-002).
+// 경계는 완전한 no-op으로 소비하고, 일반 text block→CodeBlock은 실제
+// 병합을 live state의 transaction으로 적용한다. 파생 state로 document
+// transaction을 만들지 않는다(G-EDT-002).
+//
+// 리스트 항목(backward만, 사용자 결정 2026-09-15)은 예외다 — 내용이 있어도
+// CodeBlock과 바로 병합하지 않고 먼저 paragraph로 전환한다. 이어지는
+// Backspace가 그 paragraph에서 다시 이 함수를 만나 이번에는 병합한다(2단계
+// — divider·표의 "선택 먼저, 삭제는 다음 키" 전례와 같은 결의 안전장치).
+// forward(Delete)는 대상 없이 대칭을 맞출 이유가 없다 — 현재 블록은
+// 살아남는 쪽이라 리스트 항목이어도 heading·quote처럼 타입을 유지한 채
+// 바로 병합한다.
 function handleCodeBlockBoundary(
   editor: Editor,
   direction: "backward" | "forward",
@@ -325,11 +365,20 @@ function handleCodeBlockBoundary(
 
   const adjacent = adjacentCodeBlockAtTextBoundary(selectionState, direction);
   if (adjacent !== null) {
-    return selectAdjacentCodeBlock(
+    if (direction === "backward") {
+      const context = caretContext(selectionState);
+      if (context !== null && isListItemContent(context.$from.parent)) {
+        return exitListItem(editor.view, liveState, {
+          contentPosition: context.$from.before(context.$from.depth),
+        });
+      }
+    }
+    return mergeCodeBlockIntoText(
       editor.view,
       editor.state,
+      selectionState,
       adjacent,
-      direction === "backward" ? "end" : "start",
+      direction,
     );
   }
 
@@ -531,10 +580,19 @@ function exitListItem(
 // 채워 유령 빈 블록이 새 id로 나타난다(editor-controller.ts deleteBlock의
 // removesWholeGroup과 같은 규칙).
 //
-// 모든 위치는 원본 doc 기준이다 — mergePos는 항상 제거 범위보다 앞이라
-// (Backspace의 대상은 자기보다 앞, Delete의 제거 대상은 자기 텍스트 끝보다
-// 뒤) 첫 replace의 영향을 받지 않는다. replace·insert·selection을 단일
-// tr·단일 dispatch로 쌓아 undo 1회 단위를 만든다(G-EDT-001).
+// 대부분의 호출부에서 mergePos는 제거 범위보다 앞이다(Backspace의 대상은
+// 자기보다 앞, Delete의 제거 대상은 자기 텍스트 끝보다 뒤) — 이때는 첫
+// replace가 mergePos를 옮기지 않는다. CodeBlock→Text 흡수(행1,
+// mergeCodeBlockIntoText backward)처럼 제거 대상이 mergePos보다 앞인
+// 호출부도 있어 `tr.mapping`으로 항상 현재 tr.doc 기준 위치를 다시 구한다
+// — 순서가 기존과 같으면 mapping이 항등이라 회귀가 없다.
+//
+// caretAt은 삽입된 inline 콘텐츠에 대해 caret을 어디에 두는지를 고른다.
+// "before"(append, 기본값)는 대상 콘텐츠 끝에 붙일 때 — 재계산한 mergePos
+// 자체가 이미 경계다. "after"(prepend)는 대상 콘텐츠 시작에 붙일 때 —
+// 삽입한 콘텐츠 뒤가 경계라 mergePos + inline.size를 쓴다.
+// replace·insert·selection을 단일 tr·단일 dispatch로 쌓아 undo 1회
+// 단위를 만든다(G-EDT-001).
 function mergeContainers(
   view: EditorView,
   state: EditorState,
@@ -543,9 +601,10 @@ function mergeContainers(
     removedStart: number;
     mergePos: number;
     inline: Fragment;
+    caretAt?: "before" | "after";
   },
 ): void {
-  const { removed, removedStart, mergePos, inline } = join;
+  const { removed, removedStart, mergePos, inline, caretAt = "before" } = join;
   const removedEnd = removedStart + removed.nodeSize;
   const promoted =
     removed.childCount > 1 ? removed.child(1).content : Fragment.empty;
@@ -562,9 +621,12 @@ function mergeContainers(
   } else {
     tr.replaceWith(removedStart, removedEnd, promoted);
   }
+  const mappedMergePos = tr.mapping.map(mergePos);
   if (inline.size > 0) {
-    tr.insert(mergePos, inline);
+    tr.insert(mappedMergePos, inline);
   }
-  tr.setSelection(TextSelection.create(tr.doc, mergePos));
+  const caretPos =
+    caretAt === "after" ? mappedMergePos + inline.size : mappedMergePos;
+  tr.setSelection(TextSelection.create(tr.doc, caretPos));
   view.dispatch(tr);
 }

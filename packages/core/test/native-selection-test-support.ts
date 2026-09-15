@@ -6,7 +6,8 @@
  * table-test-support.ts(표 전용 fixture)를 확장하지 않고 이 파일이 단독
  * 소유한다.
  */
-import { expect } from "vitest";
+import type { Editor as TiptapEditor } from "@tiptap/core";
+import { expect, vi } from "vitest";
 
 /**
  * attachNode를 document.body에 붙이고 rangeStartNode(생략 시 attachNode
@@ -80,5 +81,27 @@ export const withNativeSelection = (
   } finally {
     ownerDocument.getSelection()?.removeAllRanges();
     attachNode.remove();
+  }
+};
+
+/**
+ * jsdom Range에는 geometry API(getClientRects)가 없어, 네이티브 caret이
+ * 조립된 상태에서 문서를 실제로 바꾸는 transaction(구조 변경·undo/redo)이
+ * ProseMirror의 scrollToSelection을 실행하면 테스트 환경에서만 TypeError를
+ * 던진다. fn 동안 scrollToSelection을 no-op으로 바꿔 이 환경 한계를
+ * 우회한다 — 두 번째 소비 파일(list-item-join.test.ts)이 생긴 시점에
+ * code-block-load-save.test.ts의 사본 대신 이 모듈로 올렸다(G-TST-002).
+ */
+export const withoutScrollCrash = (tiptap: TiptapEditor, fn: () => void): void => {
+  const viewWithScroll = tiptap.view as typeof tiptap.view & {
+    scrollToSelection(): void;
+  };
+  const scrollSpy = vi
+    .spyOn(viewWithScroll, "scrollToSelection")
+    .mockImplementation(() => {});
+  try {
+    fn();
+  } finally {
+    scrollSpy.mockRestore();
   }
 };

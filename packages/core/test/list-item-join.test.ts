@@ -25,7 +25,10 @@ import {
   setBoldStoredMark,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
-import { withNativeCaret } from "./native-selection-test-support.js";
+import {
+  withNativeCaret,
+  withoutScrollCrash,
+} from "./native-selection-test-support.js";
 import { selectSingleCell } from "./table-test-support.js";
 
 describe("목록 선두 Backspace exit·join", () => {
@@ -272,65 +275,119 @@ describe("목록 끝 Delete join", () => {
 });
 
 describe("목록 join 거절·no-op", () => {
-  it.each([
-    {
-      key: "Backspace",
-      blocks: (table: Block, list: Block, code: Block) => [table, code, list],
-      nativeOffset: 0,
-      expectedCodeOffset: 2,
-    },
-    {
-      key: "Delete",
-      blocks: (table: Block, list: Block, code: Block) => [table, list, code],
-      nativeOffset: 2,
-      expectedCodeOffset: 0,
-    },
-  ] as const)(
-    "live 표 전체 CellSelection에서 native 목록 $key 경계와 인접한 CodeBlock으로 selection-only 이동한다",
-    ({ key, blocks, nativeOffset, expectedCodeOffset }) => {
-      const table = oneCellTableBlock("table");
-      const list = listItemBlock("list", "bulletListItem", "가나");
-      const code = {
-        id: "code",
-        type: "codeBlock",
-        content: [{ text: "XY" }],
-      } satisfies Block;
-      const { editor, tiptap, changes } = mounted(
-        documentOf(...blocks(table, list, code), tailParagraphBlock),
-      );
-      const nativePosition = contentTextStart(tiptap, list.id) + nativeOffset;
-      tiptap.commands.setTextSelection(nativePosition);
-      const targetDom = tiptap.view.domAtPos(nativePosition);
-      const beforeDocument = editor.getDocument();
-      const beforeTiptapDocument = tiptap.state.doc.toJSON();
+  // #202 RD-001-DELTA-01(2026-09-15 사용자 결정) — 리스트 항목은
+  // CodeBlock과 바로 병합하지 않는다. Backspace는 항상 먼저 paragraph로
+  // 전환하고(divider·표의 "선택 먼저" 전례와 같은 결의 안전장치), 그
+  // paragraph에서 다시 Backspace를 눌러야 비로소 병합된다. Delete는 현재
+  // 블록(list)이 살아남는 쪽이라 전환 없이 바로 흡수한다(heading·quote와
+  // 같은 규칙). live CellSelection stale 경로도 같은 처리를 탄다
+  // (handleCodeBlockBoundary가 stale·live 양쪽에서 호출된다).
+  it("live 표 전체 CellSelection에서 native 목록 Backspace 경계는 CodeBlock과 병합하지 않고 먼저 paragraph로 전환한다", () => {
+    const table = oneCellTableBlock("table");
+    const list = listItemBlock("list", "bulletListItem", "가나");
+    const code = {
+      id: "code",
+      type: "codeBlock",
+      content: [{ text: "XY" }],
+    } satisfies Block;
+    const { editor, tiptap, changes } = mounted(
+      documentOf(table, code, list, tailParagraphBlock),
+    );
+    const nativePosition = contentTextStart(tiptap, list.id);
+    tiptap.commands.setTextSelection(nativePosition);
+    const targetDom = tiptap.view.domAtPos(nativePosition);
 
-      withNativeCaret(
-        tiptap.view.dom as HTMLElement,
-        () => {
-          selectSingleCell(tiptap, "cell-1");
-          expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
-          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+    withNativeCaret(
+      tiptap.view.dom as HTMLElement,
+      () => {
+        selectSingleCell(tiptap, "cell-1");
+        expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
 
-          expect(dispatchKeydown(tiptap, key)).toBe(true);
+        expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
 
-          expect(dispatch).toHaveBeenCalledTimes(1);
-          const expectedPosition =
-            contentTextStart(tiptap, code.id) + expectedCodeOffset;
-          expect(tiptap.state.selection.toJSON()).toEqual({
-            type: "text",
-            anchor: expectedPosition,
-            head: expectedPosition,
+        // list만 paragraph로 전환된다 — code·table·tail은 그대로다.
+        expect(editor.getDocument().blocks).toEqual([
+          table,
+          code,
+          paragraphBlock("list", "가나"),
+          tailParagraphBlock,
+        ]);
+        const listStart = contentTextStart(tiptap, "list");
+        expect(tiptap.state.selection.toJSON()).toEqual({
+          type: "text",
+          anchor: listStart,
+          head: listStart,
+        });
+        expect(changes).toEqual([
+          { revision: 1, changedBlockIds: ["list"], reason: "local" },
+        ]);
+        withoutScrollCrash(tiptap, () => {
+          expect(editor.commands.undo()).toEqual({
+            ok: true,
+            value: undefined,
           });
-          expect(editor.getDocument()).toEqual(beforeDocument);
-          expect(tiptap.state.doc.toJSON()).toEqual(beforeTiptapDocument);
-          expect(changes).toEqual([]);
-          expect(editor.commands.undo()).toEqual(notApplicable("undo"));
-        },
-        targetDom.node,
-        targetDom.offset,
-      );
-    },
-  );
+        });
+      },
+      targetDom.node,
+      targetDom.offset,
+    );
+  });
+
+  it("live 표 전체 CellSelection에서 native 목록 Delete 경계는 인접 CodeBlock을 흡수하고 목록 타입을 유지한다", () => {
+    const table = oneCellTableBlock("table");
+    const list = listItemBlock("list", "bulletListItem", "가나");
+    const code = {
+      id: "code",
+      type: "codeBlock",
+      content: [{ text: "XY" }],
+    } satisfies Block;
+    const { editor, tiptap, changes } = mounted(
+      documentOf(table, list, code, tailParagraphBlock),
+    );
+    const nativePosition = contentTextStart(tiptap, list.id) + "가나".length;
+    tiptap.commands.setTextSelection(nativePosition);
+    const targetDom = tiptap.view.domAtPos(nativePosition);
+
+    withNativeCaret(
+      tiptap.view.dom as HTMLElement,
+      () => {
+        selectSingleCell(tiptap, "cell-1");
+        expect(tiptap.state.selection).toBeInstanceOf(CellSelection);
+
+        expect(dispatchKeydown(tiptap, "Delete")).toBe(true);
+
+        // list는 bulletListItem 타입을 유지한 채 code의 내용을 흡수한다.
+        expect(editor.getDocument().blocks).toEqual([
+          table,
+          listItemBlock("list", "bulletListItem", "가나XY"),
+          tailParagraphBlock,
+        ]);
+        // append 방향 — 캐럿은 원래 위치("가나" 끝)에 그대로 남는다.
+        expect(tiptap.state.selection.toJSON()).toEqual({
+          type: "text",
+          anchor: nativePosition,
+          head: nativePosition,
+        });
+        expect(changes).toEqual([
+          {
+            revision: 1,
+            // tail은 내용은 그대로지만 code가 사라지며 index가 한 칸
+            // 앞당겨져 changedBlockIds에 포함된다.
+            changedBlockIds: ["list", "code", "tail"],
+            reason: "local",
+          },
+        ]);
+        withoutScrollCrash(tiptap, () => {
+          expect(editor.commands.undo()).toEqual({
+            ok: true,
+            value: undefined,
+          });
+        });
+      },
+      targetDom.node,
+      targetDom.offset,
+    );
+  });
 
   it.each(["Backspace", "Delete"] as const)(
     "live 표 전체 CellSelection과 native 문단 중간 caret이 다른 $key은 키만 소비하고 상태·history를 보존한다",
