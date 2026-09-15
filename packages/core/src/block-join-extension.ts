@@ -33,9 +33,19 @@ import { resolveSelectionAwareState } from "./selection-aware-state.js";
 // `Backspace`는 앞 블록과 병합하거나 제목을 문단으로 바꾼다").
 //
 // Issue #38 슬라이스 3: quote(문단 동형 blockContent)가 같은 병합 규칙에
-// 들어오고, divider(비포장 atom)가 인접하면 텍스트를 그 너머로 병합하지
-// 않고 divider를 NodeSelection으로 선택한다 — 표 인접과 같은 "선택만"
-// 전례다(아래 selectAdjacentAtom).
+// 들어온다.
+//
+// Issue #202 RD-002: atom(divider·image/video/audio/file)은 병합 대상에서
+// 제외한다 — 그 자리에 그대로 두고 건너뛰어 그 너머의 병합 가능한 블록과
+// 결합한다(연속된 atom도 재귀적으로 전부 건너뛴다). 별도 재귀 코드가 필요
+// 없다 — 아래 joinBackwardAtBlockStart/joinForwardAtTextEnd가 병합 대상을
+// 찾는 `Selection.findFrom(pos, dir, /* textOnly */ true)` 호출이 이미
+// atom 자식을 무조건 skip한다(prosemirror-state의 findSelectionIn, `!text &&
+// NodeSelection.isSelectable` 분기라 textOnly에서는 절대 선택되지 않고 계속
+// 다음 형제로 넘어간다). table은 atom이 아니라(`isAtom: false`) 이 skip에
+// 걸리지 않고 컨테이너로 재귀되므로, 셀 안 위치에 닿으면 기존
+// hasTableCellAncestor 가드가 표 전체 선택으로 계속 가로챈다 — 표 전례는
+// 그대로 유지된다.
 export const BlockJoinExtension = Extension.create({
   name: "blockJoin",
   // 표 전체 CellSelection의 두 번째 Backspace/Delete를 tableEditing보다 먼저
@@ -216,37 +226,6 @@ function leafAfter(doc: Node, pos: number): { node: Node; pos: number } | null {
     node = node.firstChild;
   }
   return { node, pos: nodePos };
-}
-
-// 인접 리프가 atom(divider — 이름 열거 없이 node.isAtom으로 판정)이면
-// 텍스트를 그 너머로 병합하지 않고 그 노드를 NodeSelection으로 선택하는
-// selection-only 트랜잭션을 dispatch하고 true를 돌려준다(doc 무변경 —
-// G-EDT-001의 tr.docChanged 기준, 히스토리 항목 없음). 이어지는
-// Backspace/Delete는 PM 기본 deleteSelection이 divider를 지우고 그 삭제만이
-// undo 1회 단위다. 표(atom 아님)는 이 판정에 걸리지 않고 기존
-// hasTableCellAncestor 경로가 그대로 맡는다.
-//
-// 표 전례의 selectNodeBackward/selectNodeForward(prosemirror-commands)를
-// divider에 쓰지 않는 이유: 그 커맨드는 캐럿 컨테이너의 바로 앞/뒤 **형제**
-// 노드를 선택하므로 divider가 앞 형제 컨테이너의 blockGroup 마지막 자식인
-// 중첩 위치에서는 divider가 아니라 앞 형제 컨테이너 전체(자식 포함)가
-// 선택되고, 두 번째 키가 그 컨테이너를 통째로 지우는 파괴 경로가 된다.
-// 형제 인접·중첩 인접 모두 시각적으로 인접한 리프 위치에 직접
-// NodeSelection을 두는 이 한 경로로 처리한다.
-function selectAdjacentAtom(
-  view: EditorView,
-  state: EditorState,
-  adjacent: { node: Node; pos: number } | null,
-): boolean {
-  if (adjacent === null || !adjacent.node.isAtom) return false;
-  // 표 전례(selectNodeBackward·table-keyboard-extension.ts)와 일관되게
-  // selection-only tr도 scrollIntoView한다.
-  view.dispatch(
-    state.tr
-      .setSelection(NodeSelection.create(state.doc, adjacent.pos))
-      .scrollIntoView(),
-  );
-  return true;
 }
 
 // leafBefore/leafAfter가 돌려주는 adjacent.pos는 그 leaf 노드 자신의 시작
@@ -513,8 +492,9 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   const { view } = editor;
   const containerStart = $from.before(containerDepth);
 
-  // 시각적으로 바로 앞 노드가 atom(divider)이면 병합 대신 선택으로 끝난다
-  // — 아래 findFrom은 커서 위치만 찾아 atom을 건너뛰므로 먼저 판정한다.
+  // adjacent는 시각적으로 바로 앞 노드다 — atom 여부와 무관하게 "병합할
+  // 무언가가 있는가"만 목록 항목 판정에 쓴다(atom 스킵은 아래 findFrom이
+  // 한다, Issue #202 RD-002).
   const adjacent = leafBefore(state.doc, containerStart);
   // 병합 대상이 없는(adjacent===null) 목록 항목은 내용 유무와 무관하게
   // 종료한다 — 병합할 데가 없어서다. 병합 대상이 있어도 항목이
@@ -533,12 +513,13 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
       contentPosition: $from.before($from.depth),
     });
   }
-  if (selectAdjacentAtom(view, liveState, adjacent)) {
-    return true;
-  }
   // 자기 컨테이너 시작 앞에서 역방향으로 첫 커서 위치를 찾는다 — 앞
   // 형제의 마지막 자손 텍스트블록 끝, 자식 없는 앞 형제나 부모의
-  // 콘텐츠 노드 끝에 닿는다. 없으면 문서 최선두다.
+  // 콘텐츠 노드 끝에 닿는다. 없으면 문서 최선두다. textOnly=true라 atom
+  // (divider·media)은 무조건 건너뛴다(findSelectionIn, Issue #202 RD-002) —
+  // 연속된 atom도 재귀적으로 전부 건너뛰어 그 너머에 닿는다. table은
+  // isAtom:false라 건너뛰지 않고 안으로 들어가므로 아래
+  // hasTableCellAncestor 가드가 표 전례를 그대로 지킨다.
   const previous = Selection.findFrom(
     state.doc.resolve(containerStart),
     -1,
@@ -599,15 +580,13 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
 
   const { view } = editor;
 
-  // Backspace 쪽과 대칭 — 시각적으로 바로 다음 노드(자기 blockGroup의 첫
-  // 자식 또는 다음 형제)가 atom이면 선택으로 끝난다.
-  const adjacent = leafAfter(state.doc, $from.after());
-  if (selectAdjacentAtom(view, liveState, adjacent)) {
-    return true;
-  }
-  // 자기 콘텐츠 노드 끝 뒤에서 정방향으로 첫 커서 위치를 찾는다 — 자기
-  // 컨테이너에 자식이 있으면 첫 자식의 텍스트블록, 없으면 다음
-  // 형제/조상의 다음에 닿는다. 없으면 문서 끝이다.
+  // Backspace 쪽과 대칭 — 자기 콘텐츠 노드 끝 뒤에서 정방향으로 첫 커서
+  // 위치를 찾는다. 자기 컨테이너에 자식이 있으면 첫 자식의 텍스트블록,
+  // 없으면 다음 형제/조상의 다음에 닿는다. 없으면 문서 끝이다. textOnly=true라
+  // atom(divider·media)은 무조건 건너뛴다(findSelectionIn, Issue #202
+  // RD-002) — 연속된 atom도 재귀적으로 전부 건너뛰어 그 너머에 닿는다.
+  // table은 isAtom:false라 건너뛰지 않고 안으로 들어가므로 아래
+  // hasTableCellAncestor 가드가 표 전례를 그대로 지킨다.
   const next = Selection.findFrom(state.doc.resolve($from.after()), 1, true);
   if (next === null) {
     return selectionIsStale && isJoinBoundary(liveState, "forward");

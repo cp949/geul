@@ -12,9 +12,9 @@
  *
  * Issue #38 슬라이스 3(DELTA-05)이 더한 축: quote 블록의 Backspace join이
  * paragraph|heading 규칙을 그대로 따르고(05-C2), divider(비포장 atom)
- * 인접 Backspace/Delete가 텍스트를 divider 너머로 병합하지 않고 divider를
- * NodeSelection으로 선택한다(05-C5 — 첫 키는 selection-only, 이어지는 키가
- * divider를 지우고 그 삭제가 undo 1회 단위다).
+ * 인접 Backspace/Delete가 divider를 그 자리에 그대로 두고 건너뛰어 그 너머의
+ * 병합 가능한 블록과 현재 블록을 결합한다(Issue #202 RD-002 — 05-C5의
+ * selection-only 2단계 삭제를 대체, atom 연속 시 재귀적으로 전부 건너뛴다).
  *
  * Issue #138이 더한 축: 표가 인접한 중첩 위치에서도 첫 키는 표 전체
  * CellSelection만 만들고, 이어지는 키는 표만 삭제해 undo 1회로 복원한다.
