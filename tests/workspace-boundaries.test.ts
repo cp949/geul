@@ -95,7 +95,10 @@ const allowedDependencies = {
       "remark-stringify": "11.0.0",
       unified: "11.0.5",
     },
-    devDependencies: { "@types/node": "22.20.1" },
+    devDependencies: {
+      "@types/node": "22.20.1",
+      "hast-util-select": "6.0.4",
+    },
     peerDependencies: {},
     optionalDependencies: {},
   },

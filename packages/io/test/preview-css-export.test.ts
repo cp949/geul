@@ -8,7 +8,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { Document } from "@cp949/geul-model";
+import { select, selectAll } from "hast-util-select";
 import { describe, expect, it } from "vitest";
+
+import { parseHtmlFragment } from "../src/html/parse-html.js";
+import { exportHtml } from "../src/index.js";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -64,5 +69,346 @@ describe("preview.css export", () => {
     ]) {
       expect(css).toContain(selectorFragment);
     }
+  });
+});
+
+/**
+ * exportHtml() 실제 출력 기반 셀렉터 매치 검증(Issue #201). 위
+ * "소스가 승격 대상 규칙을 전부 유지한다" 테스트는 CSS 소스 텍스트에
+ * 셀렉터 문자열이 남아 있는지만 본다 — 그 셀렉터가 실제 export DOM에
+ * 매치하는지는 별개다(Issue #197: export DOM에 없는 속성을 겨냥한
+ * 셀렉터를 추가해도 문자열 검사만으로는 통과했다). 이 describe는
+ * exportHtml()이 실제로 만드는 HTML을 preview.css 소비 방식 그대로
+ * `.geul-preview` 컨테이너로 감싸 파싱하고, 각 셀렉터가 의도한 노드에
+ * 실제로 매치하는지 확인한다.
+ */
+const previewRoot = (innerHtml: string) => {
+  const parsed = parseHtmlFragment(
+    `<div class="geul-preview">${innerHtml}</div>`,
+  );
+  if (parsed === undefined) throw new Error("preview HTML 파싱 실패");
+  return parsed.root;
+};
+
+const exportOk = (document: Document): string => {
+  const result = exportHtml(document);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.error.message);
+  return result.value;
+};
+
+// parseHtmlFragment가 반환하는 io 자체 HtmlRoot/HtmlElementNode는
+// hast-util-select가 기대하는 hast 트리와 구조적으로 동형(type/tagName/
+// properties/children)이지만 명목 타입은 다르다 — export-html.ts의
+// stringifyProcessor 캐스트 선례와 같은 이유로 타입만 단언한다.
+type SelectTree = Parameters<typeof select>[1];
+
+describe("실제 export DOM에 승격 대상 규칙이 매치한다(Issue #201)", () => {
+  it("heading(h1·h6)이 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "h-1",
+            type: "heading",
+            level: 1,
+            content: [{ text: "제목1" }],
+          },
+          {
+            id: "h-6",
+            type: "heading",
+            level: 6,
+            content: [{ text: "제목6" }],
+          },
+        ],
+      }),
+    );
+    expect(select(".geul-preview h1", tree as SelectTree)).toBeDefined();
+    expect(select(".geul-preview h6", tree as SelectTree)).toBeDefined();
+  });
+
+  it("paragraph가 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "p-1", type: "paragraph", content: [{ text: "문단" }] }],
+      }),
+    );
+    expect(select(".geul-preview p", tree as SelectTree)).toBeDefined();
+  });
+
+  it("blockquote(quote)가 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "q-1", type: "quote", content: [{ text: "인용" }] }],
+      }),
+    );
+    expect(
+      select(".geul-preview blockquote", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it('checkListItem이 li[data-geul-checked="true"]에 실제 매치한다(의사요소 ::before는 제외)', () => {
+    // ::before는 hast-util-select가 지원하지 않는다(실측: `Invalid
+    // selector` 예외) — 부모 요소 매치까지만 실제 DOM으로 검증하고,
+    // 의사요소가 만드는 content("☑"/"☐")는 위 문자열 확인 테스트가
+    // 계속 담당한다(완료 조건의 "등가 표현").
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "c-1",
+            type: "checkListItem",
+            checked: true,
+            content: [{ text: "완료" }],
+          },
+        ],
+      }),
+    );
+    expect(
+      select('li[data-geul-checked="true"]', tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("codeBlock(plain)이 pre에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "cb-1", type: "codeBlock", content: [{ text: "x" }] }],
+      }),
+    );
+    expect(select(".geul-preview pre", tree as SelectTree)).toBeDefined();
+  });
+
+  it("wrap:true codeBlock이 pre[data-geul-code-wrap]에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "cb-2",
+            type: "codeBlock",
+            wrap: true,
+            content: [{ text: "y" }],
+          },
+        ],
+      }),
+    );
+    expect(
+      select(".geul-preview pre[data-geul-code-wrap]", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("인라인 code mark가 pre 밖 code에 실제 매치한다(.geul-preview :not(pre) > code 등가 검증)", () => {
+    // hast-util-select는 combinator 뒤 :not()에서 거짓 음성을 낸다(실측:
+    // ".geul-preview :not(pre) > code"가 실제 매치 대상이 있어도 0건
+    // 반환 — ":not(pre) > code" 단독으로는 정상 매치). 셀렉터 문자열을
+    // 그대로 넘기지 않고 "전체 code 개수 > pre 안 code 개수"로 같은
+    // 의미(pre 밖에 있는 code가 존재한다)를 확인한다.
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "p-code",
+            type: "paragraph",
+            content: [{ text: "인라인", marks: [{ type: "code" }] }],
+          },
+          { id: "cb-plain2", type: "codeBlock", content: [{ text: "block" }] },
+        ],
+      }),
+    );
+    const allCode = selectAll(".geul-preview code", tree as SelectTree);
+    const codeInPre = selectAll(".geul-preview pre code", tree as SelectTree);
+    expect(allCode.length).toBeGreaterThan(codeInPre.length);
+  });
+
+  it("table이 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "t-1",
+            type: "table",
+            columns: [{ id: "col-1", width: 200 }],
+            rows: [
+              {
+                id: "row-1",
+                cells: [
+                  {
+                    id: "cell-1",
+                    columnId: "col-1",
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    content: [{ text: "a" }],
+                  },
+                ],
+              },
+            ],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+        ],
+      }),
+    );
+    expect(select(".geul-preview table", tree as SelectTree)).toBeDefined();
+  });
+
+  it("divider가 hr에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "d-1", type: "divider" }],
+      }),
+    );
+    expect(select(".geul-preview hr", tree as SelectTree)).toBeDefined();
+  });
+
+  it("link mark가 a에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "p-link",
+            type: "paragraph",
+            content: [
+              {
+                text: "링크",
+                marks: [{ type: "link", href: "https://example.com" }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(select(".geul-preview a", tree as SelectTree)).toBeDefined();
+  });
+
+  it("toggleListItem이 summary에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "tg-1", type: "toggleListItem", content: [{ text: "토글" }] },
+        ],
+      }),
+    );
+    expect(select(".geul-preview summary", tree as SelectTree)).toBeDefined();
+  });
+
+  it("caption 없는 image가 img에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "i-1", type: "image", url: "https://example.com/a.png" },
+        ],
+      }),
+    );
+    expect(select(".geul-preview img", tree as SelectTree)).toBeDefined();
+  });
+
+  it('textAlignment="left"/"right" image가 각 속성 셀렉터에 실제 매치한다', () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "i-left",
+            type: "image",
+            url: "https://example.com/l.png",
+            textAlignment: "left",
+          },
+          {
+            id: "i-right",
+            type: "image",
+            url: "https://example.com/r.png",
+            textAlignment: "right",
+          },
+        ],
+      }),
+    );
+    expect(
+      select('img[data-geul-text-alignment="left"]', tree as SelectTree),
+    ).toBeDefined();
+    expect(
+      select('img[data-geul-text-alignment="right"]', tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("caption 있는 media가 figcaption에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "i-cap",
+            type: "image",
+            url: "https://example.com/c.png",
+            caption: "설명",
+          },
+        ],
+      }),
+    );
+    expect(
+      select(".geul-preview figcaption", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("caption 있는 codeBlock이 pre + figcaption(인접 형제)에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "cb-cap",
+            type: "codeBlock",
+            caption: "코드 설명",
+            content: [{ text: "z" }],
+          },
+        ],
+      }),
+    );
+    expect(
+      select(".geul-preview pre + figcaption", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("Issue #197 재현 — export DOM에 없는 속성을 겨냥한 셀렉터는 매치하지 않는다(검출 변이)", () => {
+    // pre[data-geul-code-block]은 라이브 에디터 DOM 전용 marker다(core
+    // code-block-extension.ts) — exportHtml()의 codeBlockNode는 이 속성을
+    // 내지 않는다. 옛 문자열 확인 테스트라면 이 문구가 CSS 소스에 있기만
+    // 하면 통과했다(Issue #197에서 실제로 벌어진 일) — 이 테스트는 새
+    // 방식이 같은 실수를 RED로 잡는다는 것을 보인다.
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "cb-3", type: "codeBlock", content: [{ text: "w" }] }],
+      }),
+    );
+    expect(
+      select(".geul-preview pre[data-geul-code-block]", tree as SelectTree),
+    ).toBeUndefined();
   });
 });
