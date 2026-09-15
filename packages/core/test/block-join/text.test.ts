@@ -16,8 +16,13 @@
  * 병합 가능한 블록과 현재 블록을 결합한다(Issue #202 RD-002 — 05-C5의
  * selection-only 2단계 삭제를 대체, atom 연속 시 재귀적으로 전부 건너뛴다).
  *
- * Issue #138이 더한 축: 표가 인접한 중첩 위치에서도 첫 키는 표 전체
- * CellSelection만 만들고, 이어지는 키는 표만 삭제해 undo 1회로 복원한다.
+ * Issue #202 RD-003이 더한 축: table도 divider·media(RD-002)와 같은 규칙으로
+ * 편입됐다 — 인접 Backspace/Delete는 table을 그 자리에 두고 건너뛰어 그
+ * 너머의 병합 가능한 블록과 결합한다. table이 문서 절대 경계(그 너머에
+ * 병합 대상이 전혀 없음)에 있을 때만 이 확장이 false를 반환하고 PM 기본
+ * keymap의 native 폴백이 table을 NodeSelection으로 선택한다 —
+ * tableEditing({ allowTableNodeSelection: false })의 normalizeSelection이
+ * 같은 dispatch 안에서 표 전체 CellSelection으로 정규화한다.
  *
  * 키 소비(반환 true)는 view.someProp("handleKeyDown", ...) 실 디스패치로
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
@@ -302,7 +307,7 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
   });
 
-  it("앞이 표면 병합하지 않고 표를 NodeSelection으로 선택한다", () => {
+  it("table이 문서 최선두면 Backspace는 그 너머가 없어 table을 NodeSelection으로 선택한다", () => {
     const { tiptap } = mountDocument(
       documentOf(oneCellTableBlock("table-1"), paragraphBlock("block-p", "P")),
     );
@@ -311,12 +316,11 @@ describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () =>
     tiptap.commands.setTextSelection(contentTextStart(tiptap, "block-p"));
     const handled = dispatchKeydown(tiptap, "Backspace");
 
-    // dev parity: 표 뒤 블록 선두 Backspace는 표를 선택할 뿐 문서를 바꾸지
-    // 않는다(셀 병합·자식화 없음). 직접 세운 표 NodeSelection은
-    // tableEditing({ allowTableNodeSelection: false },
-    // table-extension.ts)의 normalizeSelection이 같은 dispatch 안에서 표
-    // 전체 CellSelection으로 정규화한다 — 이 에디터에서 "표가 선택된"
-    // 상태의 관측 가능한 형태다.
+    // table 앞에 병합 대상이 전혀 없다(문서 절대 시작) — findMergeTarget이
+    // null을 돌려줘 이 확장은 false로 물러나고, PM 기본 keymap의 native
+    // 폴백(selectNodeBackward류)이 table을 NodeSelection으로 선택한다.
+    // tableEditing의 normalizeSelection이 같은 dispatch 안에서 표 전체
+    // CellSelection으로 정규화한다.
     expect(handled).toBe(true);
     expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
     const { selection } = tiptap.state;
@@ -408,25 +412,41 @@ describe("텍스트 끝 Delete는 다음 텍스트블록을 끌어와 병합한�
     expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
   });
 
-  it("다음이 표면 병합하지 않고 표를 NodeSelection으로 선택한다", () => {
+  it("다음이 표면 건너뛰어 그 다음 텍스트블록과 결합한다(Issue #202 RD-003)", () => {
+    // 뒤에 실 paragraph(tail)를 둔다 — 병합 뒤 table이 최상위 마지막
+    // 블록이 되면 trailing-block-extension.ts(UI-010)의 trailing paragraph
+    // 불변식이 자동으로 새 paragraph를 추가해 기대값이 그 auto-fill에
+    // 흔들린다(divider.test.ts와 같은 관례).
     const { tiptap } = mountDocument(
-      documentOf(paragraphBlock("block-p", "P"), oneCellTableBlock("table-1")),
+      documentOf(
+        paragraphBlock("block-p", "P"),
+        oneCellTableBlock("table-1"),
+        paragraphBlock("block-q", "Q"),
+        paragraphBlock("tail", ""),
+      ),
     );
     const beforeJson = tiptap.state.doc.toJSON();
 
     tiptap.commands.setTextSelection(contentTextStart(tiptap, "block-p") + 1);
     const handled = dispatchKeydown(tiptap, "Delete");
 
-    // dev parity: 표 앞 블록 끝 Delete는 표를 선택할 뿐 문서를 바꾸지
-    // 않는다. NodeSelection이 CellSelection으로 관측되는 이유는 위
-    // Backspace 표 케이스와 같다(tableEditing normalizeSelection).
     expect(handled).toBe(true);
-    expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+    expectSchemaValid(tiptap);
+
+    // table은 지워지지 않고 그대로 남는다 — block-q가 소멸해 그 내용만
+    // block-p에 흡수된다.
+    expect(tiptap.state.doc.childCount).toBe(3);
+    const container = tiptap.state.doc.child(0);
+    expect(container.attrs.blockId).toBe("block-p");
+    expect(container.firstChild?.textContent).toBe("PQ");
+    expect(tiptap.state.doc.child(1).type.name).toBe("table");
+    expect(countNodes(tiptap, "table")).toBe(1);
+
     const { selection } = tiptap.state;
-    expect(selection).toBeInstanceOf(CellSelection);
-    expect(
-      (selection as CellSelection).$anchorCell.node(-1).attrs.blockId,
-    ).toBe("table-1");
+    expect(selection.empty).toBe(true);
+
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
   });
 });
 

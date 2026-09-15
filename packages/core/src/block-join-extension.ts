@@ -7,7 +7,6 @@ import {
   type Schema,
 } from "@tiptap/pm/model";
 import {
-  NodeSelection,
   Selection,
   TextSelection,
   type EditorState,
@@ -35,17 +34,23 @@ import { resolveSelectionAwareState } from "./selection-aware-state.js";
 // Issue #38 슬라이스 3: quote(문단 동형 blockContent)가 같은 병합 규칙에
 // 들어온다.
 //
-// Issue #202 RD-002: atom(divider·image/video/audio/file)은 병합 대상에서
-// 제외한다 — 그 자리에 그대로 두고 건너뛰어 그 너머의 병합 가능한 블록과
-// 결합한다(연속된 atom도 재귀적으로 전부 건너뛴다). 별도 재귀 코드가 필요
-// 없다 — 아래 joinBackwardAtBlockStart/joinForwardAtTextEnd가 병합 대상을
-// 찾는 `Selection.findFrom(pos, dir, /* textOnly */ true)` 호출이 이미
-// atom 자식을 무조건 skip한다(prosemirror-state의 findSelectionIn, `!text &&
+// Issue #202 RD-002·RD-003: atom(divider·image/video/audio/file·table)은
+// 병합 대상에서 제외한다 — 그 자리에 그대로 두고 건너뛰어 그 너머의 병합
+// 가능한 블록과 결합한다(연속된 atom도 재귀적으로 전부 건너뛴다). 아래
+// joinBackwardAtBlockStart/joinForwardAtTextEnd가 병합 대상을 찾는
+// `Selection.findFrom(pos, dir, /* textOnly */ true)` 호출이 이미 atom
+// 자식을 무조건 skip한다(prosemirror-state의 findSelectionIn, `!text &&
 // NodeSelection.isSelectable` 분기라 textOnly에서는 절대 선택되지 않고 계속
 // 다음 형제로 넘어간다). table은 atom이 아니라(`isAtom: false`) 이 skip에
-// 걸리지 않고 컨테이너로 재귀되므로, 셀 안 위치에 닿으면 기존
-// hasTableCellAncestor 가드가 표 전체 선택으로 계속 가로챈다 — 표 전례는
-// 그대로 유지된다.
+// 걸리지 않고 컨테이너로 재귀돼 셀 안 위치에 닿는다 — `findMergeTarget`
+// (RD-003)이 그 위치를 표 경계 밖으로 다시 던져 `findFrom`을 반복해서
+// table도 같은 재귀에 편입한다. 표 셀 content가 "inline*"라 table은
+// nesting되지 않으므로 이 반복은 무한 루프에 빠지지 않는다.
+//
+// 사용자가 직접 만든(드래그 등) 전체 표 `CellSelection`에서 Backspace/Delete
+// 로 표를 지우는 경로(deleteSelectedTable)는 이 재귀 스킵과 무관하게
+// 유지된다 — 아래 findMergeTarget/findFrom은 caret(empty selection)에서만
+// 관여한다(caretContext 가드).
 export const BlockJoinExtension = Extension.create({
   name: "blockJoin",
   // 표 전체 CellSelection의 두 번째 Backspace/Delete를 tableEditing보다 먼저
@@ -122,38 +127,33 @@ function isCodeBlockOwnBoundary(
     : selection.$from.parentOffset === selection.$from.parent.content.size;
 }
 
-// $pos 자신의 textblock부터 조상까지에 tableCell이 있는지 — 셀 content가
-// "inline*"라 셀 안 커서는 $pos.parent 자체가 tableCell이다(depth 자신부터
-// 검사하는 이유).
-function hasTableCellAncestor($pos: ResolvedPos): boolean {
+// $pos가 table 안(셀 콘텐츠, content가 "inline*"라 $pos.parent 자체가
+// tableCell)이면 그 table의 dir 방향 경계 위치(표 시작 앞·표 끝 뒤)를
+// 돌려준다. table은 nesting되지 않으므로(표 셀 안에 표를 넣지 않는다,
+// 3.1) 이 순회는 최대 한 번만 table을 만난다.
+function tableBoundaryPos($pos: ResolvedPos, dir: -1 | 1): number | null {
   for (let depth = $pos.depth; depth > 0; depth -= 1) {
-    if ($pos.node(depth).type.name === "tableCell") return true;
+    if ($pos.node(depth).type.name === "table") {
+      return dir === -1 ? $pos.before(depth) : $pos.after(depth);
+    }
   }
-  return false;
+  return null;
 }
 
-// 표 셀 안의 커서 위치에서 table 조상 시작 위치를 구해 그 표를 직접
-// NodeSelection으로 선택한다. selectNodeBackward/selectNodeForward는 캐럿
-// 컨테이너의 형제를 선택하므로 중첩 표에서는 조상 blockContainer를 잘못
-// 선택한다. tableEditing의 normalizeSelection이 이 dispatch를 표 전체
-// CellSelection으로 정규화한다.
-function selectTableAncestor(
-  view: EditorView,
-  state: EditorState,
-  $insideTable: ResolvedPos,
-): boolean {
-  for (let depth = $insideTable.depth; depth > 0; depth -= 1) {
-    if ($insideTable.node(depth).type.name !== "table") continue;
-    view.dispatch(
-      state.tr
-        .setSelection(
-          NodeSelection.create(state.doc, $insideTable.before(depth)),
-        )
-        .scrollIntoView(),
-    );
-    return true;
+// Selection.findFrom(pos, dir, textOnly)을 감싸 table도 atom처럼 재귀
+// 스킵에 편입한다(Issue #202 RD-003). findFrom은 atom 자식은 무조건
+// 건너뛰지만 table은 isAtom:false라 컨테이너로 재귀해 셀 안 위치에
+// 닿는다 — 닿을 때마다 tableBoundaryPos로 표 경계 밖에서 다시 던져
+// findFrom을 반복한다. divider/media와 table이 섞여 연속돼도 이 루프
+// 하나로 전부 넘어간다.
+function findMergeTarget(doc: Node, pos: number, dir: -1 | 1): Selection | null {
+  let current = Selection.findFrom(doc.resolve(pos), dir, true);
+  while (current !== null) {
+    const boundary = tableBoundaryPos(current.$head, dir);
+    if (boundary === null) return current;
+    current = Selection.findFrom(doc.resolve(boundary), dir, true);
   }
-  return false;
+  return null;
 }
 
 // 첫 인접 키가 만든 표 전체 CellSelection에서 같은 키가 다시 들어오면 표
@@ -516,27 +516,15 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   // 자기 컨테이너 시작 앞에서 역방향으로 첫 커서 위치를 찾는다 — 앞
   // 형제의 마지막 자손 텍스트블록 끝, 자식 없는 앞 형제나 부모의
   // 콘텐츠 노드 끝에 닿는다. 없으면 문서 최선두다. textOnly=true라 atom
-  // (divider·media)은 무조건 건너뛴다(findSelectionIn, Issue #202 RD-002) —
-  // 연속된 atom도 재귀적으로 전부 건너뛰어 그 너머에 닿는다. table은
-  // isAtom:false라 건너뛰지 않고 안으로 들어가므로 아래
-  // hasTableCellAncestor 가드가 표 전례를 그대로 지킨다.
-  const previous = Selection.findFrom(
-    state.doc.resolve(containerStart),
-    -1,
-    true,
-  );
+  // (divider·media)은 무조건 건너뛴다(findSelectionIn, Issue #202 RD-002).
+  // table도 findMergeTarget이 표 경계 밖으로 재귀해 같은 재귀에 편입한다
+  // (RD-003) — 연속·혼합된 atom·table 전부 그 너머에 닿을 때까지 건너뛴다.
+  const previous = findMergeTarget(state.doc, containerStart, -1);
   if (previous === null) {
     return selectionIsStale && isJoinBoundary(liveState, "backward");
   }
 
   const $target = previous.$head;
-  if (hasTableCellAncestor($target)) {
-    // 표 안으로는 병합하지 않는다. 시각적으로 인접한 표 시작 위치에 직접
-    // NodeSelection을 두면 tableEditing의 normalizeSelection이 같은 dispatch
-    // 안에서 표 전체 CellSelection으로 정규화한다.
-    return selectTableAncestor(view, liveState, $target);
-  }
-
   mergeContainers(view, liveState, {
     removed: $from.node(containerDepth),
     removedStart: containerStart,
@@ -584,21 +572,14 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   // 위치를 찾는다. 자기 컨테이너에 자식이 있으면 첫 자식의 텍스트블록,
   // 없으면 다음 형제/조상의 다음에 닿는다. 없으면 문서 끝이다. textOnly=true라
   // atom(divider·media)은 무조건 건너뛴다(findSelectionIn, Issue #202
-  // RD-002) — 연속된 atom도 재귀적으로 전부 건너뛰어 그 너머에 닿는다.
-  // table은 isAtom:false라 건너뛰지 않고 안으로 들어가므로 아래
-  // hasTableCellAncestor 가드가 표 전례를 그대로 지킨다.
-  const next = Selection.findFrom(state.doc.resolve($from.after()), 1, true);
+  // RD-002). table도 findMergeTarget이 표 경계 밖으로 재귀해 같은 재귀에
+  // 편입한다(RD-003).
+  const next = findMergeTarget(state.doc, $from.after(), 1);
   if (next === null) {
     return selectionIsStale && isJoinBoundary(liveState, "forward");
   }
 
   const $next = next.$head;
-  if (hasTableCellAncestor($next)) {
-    // Backspace 쪽과 대칭 — 표 콘텐츠를 끌어오지 않고 시각적으로 인접한
-    // 표 조상 시작 위치를 직접 선택한다.
-    return selectTableAncestor(view, liveState, $next);
-  }
-
   const nextContainerDepth = $next.depth - 1;
   if (nextContainerDepth < 1) {
     return selectionIsStale && isJoinBoundary(liveState, "forward");
