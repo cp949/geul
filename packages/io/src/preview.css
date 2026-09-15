@@ -124,6 +124,31 @@
   margin: 0.5em 0;
 }
 
+/* media 4종(image/video/audio/file) 블록 사이 기본 여백 — 라이브 에디터
+   (_media-resize-handles.scss [data-geul-media-kind])와 동일하게
+   blockquote margin(0.75rem 0)에 맞춘다(2026-09-16 사용자 요청). outer
+   요소(export-html.ts mediaBlockNode)는 caption 없으면 시각 태그 자신,
+   있으면 <figure>가 data-geul-media-type을 싣는다 — 이 속성 셀렉터
+   하나로 div(빈 블록)/figure(캡션 있음)/bare img·video·audio·a(캡션
+   없음) 4가지 outer 모양을 중복 없이 정확히 한 번씩만 고른다(캡션이
+   있을 때 안쪽 시각 태그는 이 속성을 갖지 않는다). margin-top/bottom만
+   longhand로 얹어 img/video의 margin:0 auto(가운데 정렬)와 공존시킨다
+   — margin-left/right는 이 규칙이 건드리지 않는다. */
+.geul-preview [data-geul-media-type] {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* file 블록(및 showPreview:false로 강등된 image/video/audio)은 <a> 텍스트
+   링크로 나온다 — inline, non-replaced 요소라 위 margin-top/bottom이
+   시각적으로 적용되지 않는다(브라우저가 인라인 비교체 요소의 수직
+   margin을 라인박스 높이에 반영하지 않음). block으로 바꿔야 여백이
+   실제로 보인다(2026-09-16 사용자 확인 — 발행 문서에서 file 링크가 한
+   줄 전체를 차지하는 모양으로 바뀜). */
+.geul-preview a[data-geul-media-type] {
+  display: block;
+}
+
 .geul-preview figcaption {
   color: #5f6368;
   font-size: 0.875em;

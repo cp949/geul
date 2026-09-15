@@ -66,6 +66,8 @@ describe("preview.css export", () => {
       'img[data-geul-text-alignment="right"]',
       ".geul-preview figcaption {",
       "pre + figcaption",
+      ".geul-preview [data-geul-media-type] {",
+      ".geul-preview a[data-geul-media-type] {",
     ]) {
       expect(css).toContain(selectorFragment);
     }
@@ -371,6 +373,80 @@ describe("실제 export DOM에 승격 대상 규칙이 매치한다(Issue #201)"
     );
     expect(
       select(".geul-preview figcaption", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("caption 없는 audio/file이 [data-geul-media-type]에 실제 매치한다(2026-09-16 media margin)", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "au-1", type: "audio", url: "https://example.com/a.mp3" },
+          { id: "fi-1", type: "file", url: "https://example.com/a.pdf" },
+        ],
+      }),
+    );
+    expect(
+      selectAll(".geul-preview [data-geul-media-type]", tree as SelectTree),
+    ).toHaveLength(2);
+  });
+
+  it("caption 있는 image는 figure 하나에만 [data-geul-media-type]이 매치한다(안쪽 img는 중복 없음)", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "i-cap2",
+            type: "image",
+            url: "https://example.com/c2.png",
+            caption: "설명2",
+          },
+        ],
+      }),
+    );
+    const matches = selectAll(
+      ".geul-preview [data-geul-media-type]",
+      tree as SelectTree,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.tagName).toBe("figure");
+  });
+
+  it("file 블록이 a[data-geul-media-type]에 실제 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "fi-2", type: "file", url: "https://example.com/b.pdf" },
+        ],
+      }),
+    );
+    expect(
+      select(".geul-preview a[data-geul-media-type]", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("showPreview:false로 강등된 image도 a[data-geul-media-type]에 매치한다", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "i-suppressed",
+            type: "image",
+            url: "https://example.com/s.png",
+            showPreview: false,
+          },
+        ],
+      }),
+    );
+    expect(
+      select(".geul-preview a[data-geul-media-type]", tree as SelectTree),
     ).toBeDefined();
   });
 
