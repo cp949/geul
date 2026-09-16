@@ -188,8 +188,39 @@
    exportHtml()의 codeBlockNode(export-html.ts)는 <pre>에 그 속성을 싣지 않는다 —
    대신 export-html.ts에서 "pre" element를 emit하는 곳이 codeBlockNode 하나뿐이라
    순수 태그 인접 형제 셀렉터만으로 media(그 어떤 4종도 <pre>를 쓰지 않음)와
-   겹치지 않게 codeBlock의 figcaption만 고를 수 있다. */
+   겹치지 않게 codeBlock의 figcaption만 고를 수 있다.
+
+   order: -1 + margin(2026-09-17 사용자 보고) — 편집모드(code-block-captions.tsx)는
+   caption을 코드블록 "위"에 그리는데 여기 DOM 순서는 export-html.ts 계약대로
+   pre 다음 figcaption(Issue #194 RD-002, round-trip 대상이라 안 건드린다)이라
+   미리보기가 기본 순서 그대로면 caption이 코드 "아래"에 그려져 편집모드와
+   어긋났다. exportHtml() 산출물 자체는 그대로 두고 여기 preview 전용 CSS에서만
+   flex order로 시각 순서만 뒤집는다 — 아래 `figure:not([data-geul-media-type])`
+   규칙이 이 figure를 flex column으로 바꿔야 order가 먹는다.
+
+   `pre`의 margin도 여기서 0으로 리셋한다 — UA 기본값(`margin: 1em 0`,
+   16px)이 figcaption의 margin-bottom(0.5rem, 8px)에 그대로 더해져
+   간격이 24px로 두 배 가까이 벌어졌다(2026-09-17 사용자 보고 — 편집기는
+   8px인데 미리보기만 넓어 보임). flex는 부모-자식 margin collapse를 안
+   하므로 이 16px이 안 사라지고 고스란히 보인다. codeBlock 자체 스타일
+   (`.geul-preview pre`, 위)은 건드리지 않는다 — caption 없는 codeBlock은
+   여전히 이 UA 기본 margin으로 앞뒤 블록과 간격을 낸다(RD-002 이전부터의
+   기존 동작, 이번 범위 밖). caption 있는 codeBlock만 이 더 구체적인
+   셀렉터로 margin을 0으로 바꾸고, figure 자신의 outer margin(`margin:
+   0.5em auto`, 위 공통 규칙)이 앞뒤 블록 간격을 대신 맡는다 — 다른
+   caption 있는 figure(media 4종)와 같은 방식이다. */
+.geul-preview figure:not([data-geul-media-type]) {
+  display: flex;
+  flex-direction: column;
+}
+
+.geul-preview figure:not([data-geul-media-type]) pre {
+  margin: 0;
+}
+
 .geul-preview pre + figcaption {
+  order: -1;
+  margin: 0 0 0.5rem;
   text-align: left;
   font-size: 0.875rem;
 }

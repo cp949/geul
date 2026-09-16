@@ -64,11 +64,13 @@ describe("caption 오버레이 위치(좌상단, Issue #196 완료 조건 1)", (
     expect(overlay?.style.top).toBe("0px");
   });
 
-  it("오버레이가 transform: translateY(-100%)로 코드블록 바깥 위쪽에 붙어 코드 첫 줄과 겹치지 않는다(단계-3 리뷰 BLOCKER)", () => {
+  it("오버레이가 transform: translateY(calc(-100% - 0.5rem))로 코드블록 바깥 위쪽에 gap을 두고 붙어 코드 첫 줄과 겹치지 않는다(단계-3 리뷰 BLOCKER, 2026-09-17 gap 추가)", () => {
     // top: rect.top 그대로면 <pre>의 padding-top 아래에서 시작하는 코드
     // 첫 줄과 z-index: 5인 caption이 겹친다(실측: <pre> padding-top 0.75rem
     // vs caption 높이 약 26.4px). 자기 높이만큼 위로 밀어 올려야 이전
     // 하단 배치(top: rect.bottom, gap 없이 접함)와 대칭으로 겹치지 않는다.
+    // 추가 -0.5rem은 caption과 코드블록 사이 시각적 gap이다(2026-09-17
+    // 사용자 보고 — 최초 구현은 gap이 없어 캡션과 코드가 거의 붙어 보였다).
     // Issue #195 게이트(완료 조건 1) 때문에 caption 값을 채워 오버레이를
     // 표시시킨다(위 top 테스트와 같은 이유).
     renderCaptions({
@@ -86,7 +88,9 @@ describe("caption 오버레이 위치(좌상단, Issue #196 완료 조건 1)", (
     const overlay = document.querySelector<HTMLElement>(
       ".geul-code-block-caption",
     );
-    expect(overlay?.style.transform).toBe("translateY(-100%)");
+    expect(overlay?.style.transform).toBe(
+      "translateY(calc(-100% - 0.5rem))",
+    );
   });
 });
 

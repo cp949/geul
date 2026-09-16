@@ -48,15 +48,17 @@ type CodeBlockInstance = { blockId: string; rect: DOMRect };
  * caption엔 과잉이다(`media-handle-overlays.tsx`도 안 쓴다).
  *
  * `top`은 wrapper rect의 상단 그대로가 아니라 `transform:
- * translateY(-100%)`로 자기 높이만큼 위로 밀어 올린다(단계-3 리뷰 BLOCKER —
- * `<pre>`의 padding-top 아래에서 시작하는 코드 첫 줄과 `top: rect.top`
- * 그대로가 겹쳐 `z-index: 5`인 caption이 그 위에 그려지고, `width:
- * rect.width` 버튼/입력이 코드 첫 줄 클릭을 가로챈다). 이전 하단 배치(`top:
- * rect.bottom`, gap 없이 접함)와 대칭이 되도록 코드블록 바깥 위에 gap 없이
- * 붙는다 — `_formatting-toolbar.scss`/`_block-selection-toolbar.scss`/
+ * translateY(calc(-100% - 0.5rem))`로 자기 높이 + 0.5rem만큼 위로 밀어
+ * 올린다(단계-3 리뷰 BLOCKER — `<pre>`의 padding-top 아래에서 시작하는 코드
+ * 첫 줄과 `top: rect.top` 그대로가 겹쳐 `z-index: 5`인 caption이 그 위에
+ * 그려지고, `width: rect.width` 버튼/입력이 코드 첫 줄 클릭을 가로챈다).
+ * `-0.5rem`은 코드블록과 caption 사이 여백이다(2026-09-17 사용자 보고 —
+ * 최초 구현은 gap 없이 접해 캡션과 코드가 거의 붙어 보였다). 이전 하단
+ * 배치(`top: rect.bottom`, gap 없음)와 대칭이었던 최초 설계와 달리 이제는
+ * gap을 둔다 — `_formatting-toolbar.scss`/`_block-selection-toolbar.scss`/
  * `_table-selection-toolbar.scss`의 "앵커 위로 뒤집기" 관례와 같은 방향이지만,
  * 그쪽은 가운데 정렬이라 `-50%`도 함께 쓰는 반면 caption은 `left: rect.left`
- * 좌측 정렬·전체 너비라 y축 `-100%`만 쓴다.
+ * 좌측 정렬·전체 너비라 y축 오프셋만 쓴다.
  *
  * 편집 상태는 전체 문서에서 동시에 하나(`{ blockId, draft } | null`) —
  * media-toolbar의 단일 편집 모드와 동일 가정이다(다중 동시 편집은 이
@@ -193,7 +195,7 @@ export const CodeBlockCaptions = () => {
               top: rect.top,
               left: rect.left,
               width: rect.width,
-              transform: "translateY(-100%)",
+              transform: "translateY(calc(-100% - 0.5rem))",
             }}
           >
             {isEditing ? (
