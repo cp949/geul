@@ -9,9 +9,9 @@
  * 속성, selectionchange에 따른 표시·숨김 전환, Escape/바깥 클릭에 따른
  * 닫힘과 focus 복원 차이(RD-004 DELTA-01), Replace 트리거의 파일 선택·
  * loading/에러·retry·cancel(RD-003 DELTA-03), preview 토글의 노출 조건·
- * aria-pressed·명령 호출과 실패 처리(슬라이스5 RD-002 DELTA-02)를 검증한다.
+ * aria-checked·명령 호출과 실패 처리(슬라이스5 RD-002 DELTA-02)를 검증한다.
  * image/video 전용 정렬 버튼 3개(좌/중/우)의 노출 조건(audio/file 제외)·
- * aria-pressed·클릭(같은 값 재클릭 시 null 해제)·실패 처리도 검증한다
+ * aria-checked·클릭(같은 값 재클릭 시 null 해제)·실패 처리도 검증한다
  * (Issue #154, MED-009).
  */
 
@@ -189,6 +189,17 @@ const getEditable = () => {
   return queryMountedEditable(host);
 };
 
+// Issue #203 RD-004 DELTA-02 — view 모드의 옛 개별 control(rename/caption/
+// preview/align/replace/download/delete)이 전부 `⋯` more 메뉴 항목으로
+// 옮겨갔다. 이 헬퍼로 메뉴를 먼저 열고, 그 뒤 각 항목을
+// `getByRole("menuitem", { name: ... })`(align은 아이콘 전용이라 여전히
+// aria-label로 찾는다)로 찾아 클릭한다 — dictionary override와 무관하게
+// moreAriaLabel은 이 파일의 어떤 테스트도 override하지 않아 항상
+// "More media options"로 고정돼 있다.
+const openMoreMenu = () => {
+  fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+};
+
 describe("MediaToolbar 미디어 편집 toolbar", () => {
   it("선택된 미디어 블록이 없으면 렌더링하지 않는다", () => {
     renderToolbar(fakeController());
@@ -196,7 +207,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
-  it("dictionary override 시 컨테이너·버튼(icon 버튼, aria-label만 override)이 바뀐다(EXT-009)", () => {
+  it("dictionary override 시 컨테이너·more 메뉴 항목(텍스트 노출, EXT-009)이 바뀐다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
       dictionary: {
@@ -217,14 +228,16 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     renderToolbar(controller);
 
     expect(screen.getByRole("toolbar", { name: "미디어 툴바" })).toBeTruthy();
-    const deleteButton = screen.getByRole("button", {
+    openMoreMenu();
+    const deleteItem = screen.getByRole("menuitem", {
       name: "미디어 블록 삭제하기",
     });
-    expect(deleteButton).toBeTruthy();
-    // Delete는 icon 버튼이라 visible text가 없다 — dictionary override는
-    // aria-label(deleteAriaLabel)에만 반영되고 textContent는 항상 빈
-    // 문자열이다(link-toolbar.test.tsx의 Cancel과 같은 패턴).
-    expect(deleteButton.textContent).toBe("");
+    expect(deleteItem).toBeTruthy();
+    // Issue #203 RD-004 DELTA-02 이후 Delete는 more 메뉴의 텍스트 항목이라
+    // dictionary override(deleteAriaLabel)가 accessible name과 visible
+    // text 둘 다에 반영된다 — 과거 icon 버튼이었을 때는 aria-label에만
+    // 반영되고 textContent는 항상 빈 문자열이었다.
+    expect(deleteItem.textContent).toBe("미디어 블록 삭제하기");
   });
 
   it("url 없는 미디어 블록을 선택하면 렌더링하지 않는다(FilePanel 담당)", () => {
@@ -236,7 +249,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
-  it("url 있는 미디어 블록을 선택하면 5개 control이 보인다(image/video/audio, 슬라이스5 RD-002 DELTA-02)", () => {
+  it("url 있는 미디어 블록을 선택하면 more 메뉴에 5개 control이 보인다(image/video/audio, 슬라이스5 RD-002 DELTA-02)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
@@ -245,31 +258,41 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(
       screen.getByRole("toolbar", { name: "Media toolbar" }),
     ).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Edit caption" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Preview" })).not.toBeNull();
+    openMoreMenu();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: "Delete media block" }),
+      screen.getByRole("menuitem", { name: "Edit caption" }),
     ).not.toBeNull();
-    expect(screen.getByRole("link", { name: "Download" })).not.toBeNull();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Preview" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete media block" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Download" })).not.toBeNull();
   });
 
-  it("file 대상은 Preview 토글 버튼이 없다(4개 control, 슬라이스5 RD-002 DELTA-02)", () => {
+  it("file 대상은 more 메뉴에 Preview 토글 항목이 없다(4개 control, 슬라이스5 RD-002 DELTA-02)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledFileBlock,
     });
     renderToolbar(controller);
 
-    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Edit caption" })).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+    openMoreMenu();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: "Delete media block" }),
+      screen.getByRole("menuitem", { name: "Edit caption" }),
     ).not.toBeNull();
-    expect(screen.getByRole("link", { name: "Download" })).not.toBeNull();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: "Preview" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "Delete media block" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Download" })).not.toBeNull();
   });
 
-  it("Preview 버튼은 현재 showPreview 값을 aria-pressed로 반영한다(슬라이스5 RD-002 DELTA-02)", () => {
+  it("Preview 메뉴 항목은 현재 showPreview 값을 aria-checked로 반영한다(슬라이스5 RD-002 DELTA-02)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => ({
         ...filledImageBlock,
@@ -278,33 +301,38 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
+    openMoreMenu();
     expect(
       screen
-        .getByRole("button", { name: "Preview" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Preview" })
+        .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
-  it("Preview 클릭 시 setMediaShowPreview를 반대 값으로 호출하고 aria-pressed가 갱신된다(슬라이스5 RD-002 DELTA-02)", () => {
+  it("Preview 클릭 시 setMediaShowPreview를 반대 값으로 호출하고 aria-checked가 갱신된다(슬라이스5 RD-002 DELTA-02)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Preview" }));
 
     expect(controller.commands.setMediaShowPreview).toHaveBeenCalledWith(
       "media-1",
       false,
     );
+    // Issue #203 RD-004 DELTA-02 — Preview는 토글 항목이라 클릭해도 메뉴를
+    // 닫지 않는다(01-계획.md "범위 밖" — 여러 상태를 이어서 확인할 수
+    // 있어야 한다). 메뉴가 계속 열려 있으므로 재조회 없이 바로 확인한다.
     expect(
       screen
-        .getByRole("button", { name: "Preview" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Preview" })
+        .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
-  it("Preview 토글이 거부되면 aria-pressed를 바꾸지 않고 에러를 표시한다(슬라이스5 RD-002 DELTA-02)", () => {
+  it("Preview 토글이 거부되면 aria-checked를 바꾸지 않고 에러를 표시한다(슬라이스5 RD-002 DELTA-02)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
       setMediaShowPreview: () => ({
@@ -314,43 +342,57 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Preview" }));
 
     expect(screen.getByRole("alert")).not.toBeNull();
     expect(
       screen
-        .getByRole("button", { name: "Preview" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Preview" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
   });
 
-  it("url 있는 image/video 블록을 선택하면 정렬 버튼 3개가 보인다(Issue #154, MED-009)", () => {
+  it("url 있는 image/video 블록을 선택하면 more 메뉴에 정렬 항목 3개가 보인다(Issue #154, MED-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
     renderToolbar(controller);
 
-    expect(screen.getByRole("button", { name: "Align left" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Align center" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Align right" })).not.toBeNull();
+    openMoreMenu();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Align left" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Align center" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Align right" }),
+    ).not.toBeNull();
   });
 
-  it("file/audio 대상은 정렬 버튼이 없다(Issue #154, MED-009)", () => {
+  it("file/audio 대상은 more 메뉴에 정렬 항목이 없다(Issue #154, MED-009)", () => {
     const fileController = fakeController({
       getSelectionMediaBlock: () => filledFileBlock,
     });
     renderToolbar(fileController);
-    expect(screen.queryByRole("button", { name: "Align left" })).toBeNull();
+    openMoreMenu();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: "Align left" }),
+    ).toBeNull();
     cleanup();
 
     const audioController = fakeController({
       getSelectionMediaBlock: () => filledAudioBlock,
     });
     renderToolbar(audioController);
-    expect(screen.queryByRole("button", { name: "Align left" })).toBeNull();
+    openMoreMenu();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: "Align left" }),
+    ).toBeNull();
   });
 
-  it("정렬 버튼은 현재 textAlignment 값을 aria-pressed로 반영한다(Issue #154, MED-009)", () => {
+  it("정렬 항목은 현재 textAlignment 값을 aria-checked로 반영한다(Issue #154, MED-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => ({
         ...filledImageBlock,
@@ -359,43 +401,49 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
+    openMoreMenu();
     expect(
       screen
-        .getByRole("button", { name: "Align left" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align left" })
+        .getAttribute("aria-checked"),
     ).toBe("false");
     expect(
       screen
-        .getByRole("button", { name: "Align center" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align center" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen
-        .getByRole("button", { name: "Align right" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align right" })
+        .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
-  it("정렬 버튼 클릭 시 setMediaTextAlignment를 호출하고 aria-pressed가 갱신된다(Issue #154, MED-009)", () => {
+  it("정렬 항목 클릭 시 setMediaTextAlignment를 호출하고 aria-checked가 갱신된다(Issue #154, MED-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Align right" }));
+    openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Align right" }),
+    );
 
     expect(controller.commands.setMediaTextAlignment).toHaveBeenCalledWith(
       "media-1",
       "right",
     );
+    // Align도 Preview와 같은 이유로 클릭해도 메뉴가 열린 채 남는다 —
+    // 재조회 없이 바로 확인한다.
     expect(
       screen
-        .getByRole("button", { name: "Align right" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align right" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
   });
 
-  it("이미 활성인 정렬 버튼을 다시 클릭하면 null로 해제한다(Issue #154, MED-009)", () => {
+  it("이미 활성인 정렬 항목을 다시 클릭하면 null로 해제한다(Issue #154, MED-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => ({
         ...filledImageBlock,
@@ -404,7 +452,10 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Align right" }));
+    openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Align right" }),
+    );
 
     expect(controller.commands.setMediaTextAlignment).toHaveBeenCalledWith(
       "media-1",
@@ -412,12 +463,12 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     );
     expect(
       screen
-        .getByRole("button", { name: "Align right" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align right" })
+        .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
-  it("정렬 변경이 거부되면 aria-pressed를 바꾸지 않고 에러를 표시한다(Issue #154, MED-009)", () => {
+  it("정렬 변경이 거부되면 aria-checked를 바꾸지 않고 에러를 표시한다(Issue #154, MED-009)", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
       setMediaTextAlignment: () => ({
@@ -427,13 +478,16 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Align left" }));
+    openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Align left" }),
+    );
 
     expect(screen.getByRole("alert")).not.toBeNull();
     expect(
       screen
-        .getByRole("button", { name: "Align left" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align left" })
+        .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
@@ -443,7 +497,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
 
     const input = screen.getByRole("textbox", {
       name: "Image name",
@@ -458,7 +513,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Image name" }), {
       target: { value: "renamed.png" },
     });
@@ -469,7 +525,13 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
       "renamed.png",
     );
     expect(screen.queryByRole("textbox", { name: "Image name" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    // Issue #203 RD-004 DELTA-02 — 저장 완료 후 view로 돌아가면 more
+    // 메뉴는 닫힌 채 `⋯` 트리거만 남는다(finishEditing이 명시적으로
+    // moreMenuOpen을 false로 되돌린다) — Rename 항목을 다시 보려면 메뉴를
+    // 새로 열어야 한다.
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    openMoreMenu();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).not.toBeNull();
   });
 
   it("dictionary override 시 {kind} 템플릿과 Save name aria-label이 바뀐다(EXT-009)", () => {
@@ -490,7 +552,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
 
     expect(screen.getByRole("textbox", { name: "사진 이름" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "이름 저장" })).not.toBeNull();
@@ -502,7 +565,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     const input = screen.getByRole("textbox", { name: "Image name" });
     fireEvent.change(input, { target: { value: "renamed.png" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -519,11 +583,13 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.click(screen.getByRole("button", { name: "Save name" }));
 
     expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+    openMoreMenu();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).not.toBeNull();
   });
 
   it("이름 저장이 거부되면 편집 모드를 유지하고 에러를 표시한다", () => {
@@ -536,7 +602,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Image name" }), {
       target: { value: "renamed.png" },
     });
@@ -553,7 +620,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     renderToolbar(controller);
     const editable = getEditable();
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Image name" }), {
       target: { value: "discarded.png" },
     });
@@ -568,7 +636,7 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
 
   it("이름 편집을 마치면 위치·Preview·정렬 상태가 편집 전 값 그대로 유지된다(그릴링 C4 안전망)", () => {
     // showPreview는 filledImageBlock 기본값(true)을 그대로 쓴다 —
-    // aria-pressed={showPreview === true}라 false/null 회귀 둘 다
+    // aria-checked={showPreview === true}라 false/null 회귀 둘 다
     // "false"로 렌더돼 구분이 안 된다. true로 시작해야 회귀 시 "false"로
     // 갈라져 실제로 검증력이 있다.
     const controller = fakeController({
@@ -601,20 +669,24 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
       toJSON: () => ({}),
     } as DOMRect);
 
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.click(screen.getByRole("button", { name: "Save name" }));
 
     expect(toolbar().style.left).toBe(initialLeft);
     expect(toolbar().style.top).toBe(initialTop);
+    // finishEditing이 view로 돌아오며 메뉴를 닫으므로(moreMenuOpen 초기화)
+    // Preview·정렬 상태를 다시 보려면 메뉴를 새로 연다.
+    openMoreMenu();
     expect(
       screen
-        .getByRole("button", { name: "Preview" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Preview" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen
-        .getByRole("button", { name: "Align center" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align center" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
   });
 
@@ -627,7 +699,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit caption" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit caption" }));
 
     const input = screen.getByRole("textbox", {
       name: "Image caption",
@@ -642,7 +715,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit caption" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit caption" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Image caption" }), {
       target: { value: "새 caption" },
     });
@@ -660,7 +734,10 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete media block" }));
+    openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Delete media block" }),
+    );
 
     expect(controller.commands.deleteBlock).toHaveBeenCalledWith("media-1");
   });
@@ -672,18 +749,25 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete media block" }));
+    openMoreMenu();
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Delete media block" }),
+    );
 
     expect(screen.getByRole("alert")).not.toBeNull();
   });
 
-  it("Download 링크가 href와 download 속성을 렌더한다", () => {
+  it("Download 항목이 href와 download 속성을 렌더한다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
     renderToolbar(controller);
 
-    const download = screen.getByRole("link", { name: "Download" });
+    openMoreMenu();
+    // Issue #203 RD-004 DELTA-02 — Download는 more 메뉴 안 `<a role="menuitem">`
+    // 항목이다(role="menu" 자식은 링크가 아니라 menuitem이어야 하는 ARIA
+    // 계약, media-toolbar.tsx 주석 참고) — 과거의 role="link"가 아니다.
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/photo.png",
     );
@@ -696,7 +780,8 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     });
     renderToolbar(controller);
 
-    const download = screen.getByRole("link", { name: "Download" });
+    openMoreMenu();
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("download")).toBe("");
   });
 
@@ -811,26 +896,28 @@ describe("리사이즈 중 toolbar를 숨긴다(사용자 스크린샷)", () => 
 });
 
 describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
-  it("uploadFile 미등록 시 Replace 버튼이 보이지 않는다", () => {
+  it("uploadFile 미등록 시 more 메뉴에 Replace 항목이 보이지 않는다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
     });
     renderToolbar(controller);
 
-    expect(screen.queryByRole("button", { name: "Replace file" })).toBeNull();
+    openMoreMenu();
+    expect(screen.queryByRole("menuitem", { name: "Replace file" })).toBeNull();
   });
 
-  it("uploadFile 등록 시 Replace 버튼이 보이고 클릭하면 file input이 나타난다", () => {
+  it("uploadFile 등록 시 more 메뉴에 Replace 항목이 보이고 클릭하면 file input이 나타난다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
       isUploadEnabled: () => true,
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     expect(screen.getByLabelText("Image file")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
   });
 
   it("파일을 선택하면 replaceMediaBlockFile을 호출하고 loading을 보여준다", () => {
@@ -841,7 +928,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       replaceMediaBlockFile,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -864,7 +952,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       },
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -894,17 +983,25 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       getMediaUploadState: () => null,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
       target: { files: [file] },
     });
 
+    // Issue #203 RD-004 DELTA-02 — finishReplacing이 view로 돌아오며 more
+    // 메뉴를 닫으므로(startReplacing이 이미 moreMenuOpen을 false로 되돌린
+    // 채였다) "view로 돌아갔다"는 신호를 옛 Rename 버튼 대신 `⋯` 트리거
+    // 재등장으로 확인한다.
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "More media options" }),
+      ).not.toBeNull();
     });
-    const download = screen.getByRole("link", { name: "Download" });
+    openMoreMenu();
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/new.png",
     );
@@ -924,7 +1021,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       }),
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -935,7 +1033,10 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       expect(screen.getByRole("alert").textContent).toBe("교체 실패");
     });
     expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+    // view로 돌아가지 않았으므로 `⋯` 트리거(view 모드 전용)가 없다.
+    expect(
+      screen.queryByRole("button", { name: "More media options" }),
+    ).toBeNull();
   });
 
   it("dictionary override 시 사전조건 실패 메시지(Upload could not start.)가 바뀐다(EXT-009)", async () => {
@@ -956,7 +1057,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       },
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -989,7 +1091,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
           : null,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -1016,7 +1119,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       replaceMediaBlockFile,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -1027,7 +1131,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     expect(controller.commands.cancelMediaUpload).toHaveBeenCalledWith(
       "media-1",
     );
-    const download = screen.getByRole("link", { name: "Download" });
+    openMoreMenu();
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/photo.png",
     );
@@ -1035,7 +1140,7 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
 
   it("Replace를 취소하면 위치·Preview·정렬 상태가 교체 전 값 그대로 유지된다(그릴링 C4 안전망)", () => {
     // showPreview는 filledImageBlock 기본값(true)을 그대로 쓴다 — 위 rename
-    // 테스트와 같은 이유(false/null 회귀가 aria-pressed="false"로 뭉개진다).
+    // 테스트와 같은 이유(false/null 회귀가 aria-checked="false"로 뭉개진다).
     const controller = fakeController({
       getSelectionMediaBlock: () => ({
         ...filledImageBlock,
@@ -1052,11 +1157,13 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     const initialLeft = toolbar().style.left;
     const initialTop = toolbar().style.top;
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
-    // cancelReplacing이 carryMediaInfo 대신 readBlockBounds를 다시 부르면
-    // 이 새 rect가 반영된다 — 지금은 replacing 진입 시 캐리해 둔 값을 그대로
-    // 되돌려야 한다(core를 다시 조회하지 않는다, cancelReplacing 주석 참고).
+    // cancelReplacing이 carryMediaInfo 대신 readBlockTopRightBounds를 다시
+    // 부르면 이 새 rect가 반영된다 — 지금은 replacing 진입 시 캐리해 둔
+    // 값을 그대로 되돌려야 한다(core를 다시 조회하지 않는다,
+    // cancelReplacing 주석 참고).
     vi.spyOn(blockElement, "getBoundingClientRect").mockReturnValue({
       left: 400,
       top: 300,
@@ -1073,15 +1180,18 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
 
     expect(toolbar().style.left).toBe(initialLeft);
     expect(toolbar().style.top).toBe(initialTop);
+    // cancelReplacing도 view로 돌아오며 메뉴를 닫으므로(startReplacing이
+    // 이미 moreMenuOpen을 false로 되돌린 채였다) 다시 연다.
+    openMoreMenu();
     expect(
       screen
-        .getByRole("button", { name: "Preview" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Preview" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen
-        .getByRole("button", { name: "Align center" })
-        .getAttribute("aria-pressed"),
+        .getByRole("menuitemcheckbox", { name: "Align center" })
+        .getAttribute("aria-checked"),
     ).toBe("true");
   });
 
@@ -1098,7 +1208,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       }),
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const file = new File(["x"], "new.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Image file"), {
@@ -1110,8 +1221,11 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
-    const download = screen.getByRole("link", { name: "Download" });
+    expect(
+      screen.getByRole("button", { name: "More media options" }),
+    ).not.toBeNull();
+    openMoreMenu();
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/photo.png",
     );
@@ -1126,7 +1240,8 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     });
     renderToolbar(controller);
 
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     const uploadTab = screen.getByRole("tab", { name: "Upload" });
     const embedTab = screen.getByRole("tab", { name: "Embed" });
@@ -1142,7 +1257,8 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
       isUploadEnabled: () => true,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
     fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
 
@@ -1173,7 +1289,8 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
       setMediaBlockName,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
     fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
 
     fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
@@ -1187,9 +1304,12 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     );
     expect(setMediaBlockName).toHaveBeenCalledWith("media-1", "new-name.png");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "More media options" }),
+      ).not.toBeNull();
     });
-    const download = screen.getByRole("link", { name: "Download" });
+    openMoreMenu();
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/new-name.png",
     );
@@ -1205,7 +1325,8 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
       }),
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
     fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
 
     fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
@@ -1214,7 +1335,9 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
 
     expect(screen.getByRole("alert")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "More media options" }),
+    ).toBeNull();
   });
 
   it("Embed 탭에서도 Cancel(닫기) 클릭 시 교체 전 값 그대로 view로 돌아간다", () => {
@@ -1223,13 +1346,17 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
       isUploadEnabled: () => true,
     });
     renderToolbar(controller);
-    fireEvent.click(screen.getByRole("button", { name: "Replace file" }));
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
     fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("button", { name: "Rename" })).not.toBeNull();
-    const download = screen.getByRole("link", { name: "Download" });
+    expect(
+      screen.getByRole("button", { name: "More media options" }),
+    ).not.toBeNull();
+    openMoreMenu();
+    const download = screen.getByRole("menuitem", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/photo.png",
     );

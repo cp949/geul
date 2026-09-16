@@ -112,6 +112,7 @@ export const KO_DICTIONARY: Dictionary = {
     },
     media: {
       ariaLabel: "미디어 툴바",
+      moreAriaLabel: "미디어 옵션 더보기",
       replaceAriaLabel: "파일 교체",
       replace: "교체",
       rename: "이름 변경",

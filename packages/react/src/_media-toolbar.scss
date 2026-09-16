@@ -1,3 +1,9 @@
+// topRight anchor(use-clamped-menu-position.ts, Issue #203 RD-004 DELTA-02) —
+// 렌더된 박스의 우상단이 곧 (left, top) 스타일 좌표가 되도록 자신의 폭만큼
+// 왼쪽으로 민다. code-block-language-combobox.tsx outer toolbar의
+// `.geul-code-block-toolbar`와 같은 이유 — 훅의 clamp 계산(dx=-width)이
+// "실제 렌더된 박스가 이 transform을 쓴다"고 가정할 뿐 transform 자체를
+// 대신 적용해주지 않는다.
 .geul-media-toolbar {
   position: fixed;
   z-index: 10;
@@ -12,7 +18,58 @@
   background: var(--geul-color-surface, #fff);
   padding: 0.25rem;
   box-shadow: var(--geul-shadow-toolbar, 0 1px 4px rgba(0, 0, 0, 0.15));
-  transform: translate(-50%, 0.5rem);
+  transform: translateX(-100%);
+}
+
+// `⋯` 트리거 자신의 div — code-block-language-combobox.tsx
+// `.geul-code-block-toolbar__more-trigger`와 같은 이유(IconButton은
+// forwardRef가 아니라 ref를 버튼 DOM에 곧바로 붙일 수 없다). shell의
+// rect가 곧 버튼의 rect여야 more-menu anchor 실측이 어긋나지 않는다
+// (media-toolbar.tsx moreTriggerRef).
+.geul-media-toolbar__more-trigger {
+  display: inline-flex;
+}
+
+// more 메뉴 팝오버 — code-block-language-combobox.tsx
+// `.geul-code-block-toolbar__more-menu`를 media 쪽 이름만 바꿔 복제한다
+// (01-계획.md 6절 "선례 패턴"). topRight anchor라 트리거와 같은 이유로
+// 자신의 폭만큼 왼쪽으로 민다. min-width는 "Delete media block"처럼
+// 가장 긴 항목 텍스트가 줄바꿈 없이 들어가도록 코드블록(8rem)보다 조금
+// 넓게 잡는다.
+.geul-media-toolbar__more-menu {
+  position: fixed;
+  z-index: 30;
+  transform: translateX(-100%);
+  display: flex;
+  min-width: 11rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  border-radius: var(--geul-radius-md, 0.375rem);
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: var(--geul-color-surface, #fff);
+  padding: 0.25rem;
+  box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+
+.geul-media-toolbar__more-menu-item {
+  cursor: pointer;
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  border: none;
+  background: transparent;
+  padding-inline: 0.5rem;
+  padding-block: 0.375rem;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--geul-color-text, #202124);
+  text-decoration: none;
+
+  &:hover {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+
+  &--danger {
+    color: var(--geul-color-danger, #d93025);
+  }
 }
 
 .geul-media-toolbar__button {
@@ -47,10 +104,6 @@
   border-radius: var(--geul-radius-lg, 0.5rem);
   padding: 0.75rem;
   box-shadow: var(--geul-shadow-menu, 0 2px 8px rgba(0, 0, 0, 0.15));
-}
-
-.geul-media-toolbar__button--danger {
-  color: var(--geul-color-danger, #d93025);
 }
 
 .geul-media-toolbar__error {

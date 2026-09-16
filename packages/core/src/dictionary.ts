@@ -139,6 +139,11 @@ export type Dictionary = {
     kindNames: { file: string; image: string; video: string; audio: string };
     media: {
       ariaLabel: string;
+      // Issue #203 RD-004 DELTA-02 — view 모드의 개별 버튼(rename/caption/
+      // preview/align/replace/download/delete)을 `⋯` more 트리거 하나로
+      // 모으면서 추가한 트리거 aria-label. `toolbar.codeBlock.moreAriaLabel`
+      // ("More code block options")과 같은 어투다.
+      moreAriaLabel: string;
       replaceAriaLabel: string;
       replace: string;
       rename: string;
@@ -456,6 +461,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     kindNames: { file: "File", image: "Image", video: "Video", audio: "Audio" },
     media: {
       ariaLabel: "Media toolbar",
+      moreAriaLabel: "More media options",
       replaceAriaLabel: "Replace file",
       replace: "Replace",
       rename: "Rename",

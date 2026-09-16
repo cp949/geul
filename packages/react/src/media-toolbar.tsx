@@ -3,14 +3,8 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  Captions,
   Check,
-  Download as DownloadIcon,
-  Eye,
-  LucideProvider,
-  PenLine,
-  Replace as ReplaceIcon,
-  Trash2,
+  MoreHorizontal,
   X,
 } from "lucide-react";
 import {
@@ -26,9 +20,10 @@ import { createPortal } from "react-dom";
 import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { MenuItemButton } from "./menu-item-button.js";
 import {
   FALLBACK_BLOCK_POSITION,
-  readBlockBounds,
+  readBlockTopRightBounds,
 } from "./read-block-bounds.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
@@ -38,8 +33,6 @@ import { useSelectionRefresh } from "./use-selection-refresh.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const mediaToolbarButtonClassName = "geul-media-toolbar__button";
-const dangerButtonClassName =
-  "geul-media-toolbar__button geul-media-toolbar__button--danger";
 // Replace의 Upload/Embed 팝업 카드 안쪽 탭·버튼 전용 — file-panel.tsx의
 // filePanelButtonClassName과 같은 문자열이지만 코드는 공유하지 않는다(아래
 // ToolbarState "replacing" 주석 참고). mediaToolbarButtonClassName(아이콘
@@ -47,20 +40,26 @@ const dangerButtonClassName =
 const filePanelButtonClassName = "geul-file-panel__button";
 
 // link-toolbar.tsx의 saveLinkIcon 등과 같은 이유로 모듈 top-level에서 한 번만
-// 만든다 — 매 렌더 새 ReactElement를 만들지 않는다. Download만 icon import를
-// DownloadIcon으로 alias한다 — lucide-react의 Download와 이 파일 아래
-// `dictionary.toolbar.media.download`(문자열) 이름이 겹쳐서다.
-const replaceIcon = <ReplaceIcon {...iconProps} />;
-const renameIcon = <PenLine {...iconProps} />;
-const captionIcon = <Captions {...iconProps} />;
-const previewIcon = <Eye {...iconProps} />;
+// 만든다 — 매 렌더 새 ReactElement를 만들지 않는다. Issue #203 RD-004
+// DELTA-02 이후 view 모드 개별 버튼(rename/caption/preview/align/replace/
+// download/delete)은 more 메뉴 안 텍스트 항목으로 옮겨 아이콘을 더는 쓰지
+// 않는다(code-block-language-combobox.tsx의 more-menu 항목·
+// block-side-menu-menu.tsx의 turn-into/delete 등과 같은 관례 — 메뉴 항목은
+// 텍스트, 아이콘은 상시 노출 버튼 전용) — align row만 예외로 아이콘을 그대로
+// 유지한다(block-side-menu-menu.tsx 정렬 행 선례, alignLeftIcon 등 참고).
 const alignLeftIcon = <AlignLeft {...iconProps} />;
 const alignCenterIcon = <AlignCenter {...iconProps} />;
 const alignRightIcon = <AlignRight {...iconProps} />;
-const deleteIcon = <Trash2 {...iconProps} />;
 const saveIcon = <Check {...iconProps} />;
 const cancelIcon = <X {...iconProps} />;
-const downloadIcon = <DownloadIcon {...iconProps} />;
+const moreIcon = <MoreHorizontal {...iconProps} />;
+
+// more 메뉴 항목 공용 클래스(code-block-language-combobox.tsx
+// codeBlockToolbarMoreMenuItemClassName과 같은 shape, media 쪽 이름만
+// 바꿔 복제 — 01-계획.md 6절). align row는 이 클래스를 쓰지 않는다 — 그
+// 항목만 block-side-menu-menu.tsx의 `.geul-cell-format-menu__align-row`/
+// `__align-button`을 코드 복제 없이 그대로 재사용한다(같은 절 "결정").
+const mediaToolbarMoreMenuItemClassName = "geul-media-toolbar__more-menu-item";
 
 // useDismissOnOutsideOrEscape allow-list. FilePanel/SlashMenu와 같은 이유로
 // 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가 리스너를 매
@@ -89,8 +88,15 @@ const downloadIcon = <DownloadIcon {...iconProps} />;
 // 재오픈이 막힌다(코드리뷰 발견, RD-001 DELTA-02 회귀 — data-geul-* 속성
 // 컨벤션을 쓴다, CSS 클래스명이 아니라 — `[data-geul-block-id]`와 같은 이유로
 // 스타일링과 무관한 구조 계약이다).
+// `.geul-media-toolbar__more-menu`(Issue #203 RD-004 DELTA-02)도 같은
+// 이유로 포함한다 — more-menu는 `.geul-media-toolbar` 안에 nest되지 않고
+// 형제 오버레이로 렌더된다(code-block-language-combobox.tsx의
+// CODE_BLOCK_TOOLBAR_ALLOW_SELECTORS가 `.geul-code-block-toolbar__more-menu`
+// 를 포함하는 것과 같은 이유) — 빠뜨리면 more 트리거 재클릭이 자기 메뉴를
+// "바깥 클릭"으로 오판정해 닫는다.
 const MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   ".geul-media-toolbar",
+  ".geul-media-toolbar__more-menu",
   "[data-geul-block-id]",
   "[data-geul-media-resize-handle]",
 ] as const;
@@ -213,6 +219,26 @@ export const MediaToolbar = ({
   const [toolbarState, setToolbarState] = useState<ToolbarState>({
     mode: "closed",
   });
+  // Issue #203 RD-004 DELTA-02 — view 모드 개별 버튼을 모은 `⋯` more
+  // 메뉴의 열림 상태. `toolbarState.mode`와 별도로 둔다 — view 모드 자체는
+  // 유지한 채(리사이즈·selection 재조회는 계속 진행) 메뉴만 여닫는다
+  // (code-block-language-combobox.tsx moreMenuOpen과 같은 이유). view가
+  // 아닌 다른 mode로 전환하는 모든 지점(rename/caption/replacing 진입,
+  // delete, dismissToolbar, updateFromSelection의 블록 전환)에서 명시적으로
+  // false로 되돌린다 — 그러지 않으면 다음에 view로 돌아올 때(다른 블록
+  // 선택 포함) 메뉴가 stale true로 즉시 재오픈된다.
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  // more 트리거 자신의 div — code-block-language-combobox.tsx
+  // moreTriggerRef와 같은 이유(IconButton은 forwardRef가 아니라 ref를
+  // 버튼 DOM에 곧바로 붙일 수 없다). shell의 rect가 곧 버튼의 rect여야
+  // 아래 moreMenuAnchor 실측이 어긋나지 않는다.
+  const moreTriggerRef = useRef<HTMLDivElement | null>(null);
+  // more-menu는 outer 컨테이너(topRight, 블록 우상단)와 별도로 트리거
+  // 자신의 렌더된 rect를 앵커로 쓴다(code-block-language-combobox.tsx
+  // moreMenuAnchor와 같은 구조, 01-계획.md 6절 "선례 패턴").
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<ToolbarPosition | null>(
+    null,
+  );
   // 편집(rename/caption) 중 selectionchange 등에 의한 재조회를 막는다 —
   // 그러지 않으면 입력 중 발생하는 selectionchange가 draft를 지운다
   // (link-toolbar.tsx/file-panel.tsx와 같은 이유).
@@ -236,6 +262,7 @@ export const MediaToolbar = ({
     if (element === null) {
       viewBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
+      setMoreMenuOpen(false);
       setToolbarState({ mode: "closed" });
       return;
     }
@@ -244,6 +271,7 @@ export const MediaToolbar = ({
     if (media === null || media.url === null) {
       viewBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
+      setMoreMenuOpen(false);
       setToolbarState({ mode: "closed" });
       return;
     }
@@ -255,6 +283,7 @@ export const MediaToolbar = ({
       element.getAttribute("data-geul-file-panel-block-id") === media.blockId
     ) {
       viewBlockIdRef.current = null;
+      setMoreMenuOpen(false);
       setToolbarState((prev) =>
         prev.mode === "closed" ? prev : { mode: "closed" },
       );
@@ -262,9 +291,14 @@ export const MediaToolbar = ({
     }
     if (dismissedBlockIdRef.current === media.blockId) return;
 
+    // 다른 블록으로 전환됐으면 이전 블록에서 열려 있던 more 메뉴를 새
+    // 블록까지 들고 오지 않는다 — 같은 블록을 계속 보고 있을 때는(재조회가
+    // showPreview/textAlignment 등만 갱신) 열려 있던 메뉴를 그대로 둔다.
+    if (viewBlockIdRef.current !== media.blockId) setMoreMenuOpen(false);
     viewBlockIdRef.current = media.blockId;
     const bounds =
-      readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+      readBlockTopRightBounds(element, media.blockId) ??
+      FALLBACK_BLOCK_POSITION;
     // media는 core 재조회 결과라 prev를 캐리하는 게 아니다 — carryMediaInfo의
     // 화이트리스트가 막으려는 "잉여 mode 필드 누출"이 애초에 없어(media는
     // 정확히 MediaInfo 7필드 shape) 단순 spread로 충분하다. url은 spread가
@@ -310,8 +344,9 @@ export const MediaToolbar = ({
   }, [element]);
 
   // 드래그가 끝나면(속성이 사라지면) bounds를 다시 읽어야 한다 — 리사이즈로
-  // 미디어 폭이 바뀌면 중심 정렬 앵커(readBlockBounds)도 함께 움직여
-  // 드래그 시작 시점에 캐시해 둔 toolbarState.left/top이 더는 맞지 않는다.
+  // 미디어 크기가 바뀌면 topRight 앵커(readBlockTopRightBounds)도 함께
+  // 움직여 드래그 시작 시점에 캐시해 둔 toolbarState.left/top이 더는 맞지
+  // 않는다.
   // useLayoutEffect여야 한다(사용자 스크린샷 — useEffect였을 때 재표시
   // 순간 옛 위치가 한 프레임 보였다가 새 위치로 튀었다): resizingBlockId가
   // null로 바뀐 렌더는 아직 옛 toolbarState.left/top으로 커밋·페인트되고,
@@ -363,7 +398,8 @@ export const MediaToolbar = ({
           return { mode: "closed" };
         }
         const bounds =
-          readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
+          readBlockTopRightBounds(element, media.blockId) ??
+          FALLBACK_BLOCK_POSITION;
         // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
         // 잉여 필드가 없는 fresh MediaInfo다.
         return {
@@ -432,6 +468,10 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
+    // more 메뉴 항목에서 진입한다(Issue #203 RD-004 DELTA-02) — 곧 mode가
+    // "replacing"으로 바뀌어 더는 렌더되지 않겠지만, 취소로 view에 돌아왔을
+    // 때 stale true로 즉시 재오픈되지 않도록 미리 닫는다.
+    setMoreMenuOpen(false);
     const pending = editor.getMediaUploadState(toolbarState.blockId);
     const upload: UploadSubState =
       pending === "uploading"
@@ -503,23 +543,95 @@ export const MediaToolbar = ({
       editor.commands.cancelMediaUpload(toolbarState.blockId);
     }
     editingRef.current = true;
+    setMoreMenuOpen(false);
     setToolbarState({ mode: "view", ...carryMediaInfo(toolbarState) });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
     });
   };
 
+  // outer 컨테이너(rename/caption/replacing이 view와 같은 코너에서 그대로
+  // 펼치는 shell)를 블록 우상단에 앵커링한다(Issue #203 RD-004 DELTA-02,
+  // 01-계획.md 6절 "선례 패턴" — code-block-language-combobox.tsx outer
+  // toolbar의 topRight variant). `_media-toolbar.scss`의
+  // `transform: translateX(-100%)`가 렌더된 박스를 왼쪽으로 밀어 우상단이
+  // 이 좌표와 일치하게 만든다.
   const { menuRef, style } = useClampedMenuPosition(
     toolbarState.mode === "closed" ? 0 : toolbarState.left,
     toolbarState.mode === "closed" ? 0 : toolbarState.top,
-    "centerBelow",
+    "topRight",
   );
   const focusEditor = useFocusEditor(element);
+
+  // more-menu는 outer 컨테이너와 독립된 앵커를 쓴다 — view 모드에서 outer
+  // 컨테이너 자체가 `⋯` 트리거 하나뿐이라 그 트리거의 렌더된 rect가 곧
+  // 컨테이너 rect이지만, code-block-language-combobox.tsx와 같은 구조를
+  // 그대로 유지해 트리거가 나중에 다른 버튼과 나란히 놓여도 깨지지 않게
+  // 한다. PIT-0011 — 여기서는 앵커 좌표만 실측하고, 뷰포트 clamp 자체는
+  // 아래 useClampedMenuPosition의 기존 ResizeObserver 재계산에 맡긴다(별도
+  // 수동 재계산 로직을 새로 만들지 않는다).
+  const viewLeft = toolbarState.mode === "view" ? toolbarState.left : null;
+  const viewTop = toolbarState.mode === "view" ? toolbarState.top : null;
+  // 트리거의 현재 rect를 다시 읽어 anchor에 반영한다 — moreMenuOpen/뷰
+  // 전환 시의 초기 계산(아래 첫 useLayoutEffect)과 컨테이너 리사이즈 보강
+  // (그 다음 useLayoutEffect, 리뷰 결함 2) 둘 다 이 함수 하나를 공유해
+  // "트리거 rect -> anchor" 계산 로직이 두 곳에 따로 살지 않게 한다.
+  const recomputeMoreMenuAnchor = useCallback(() => {
+    const node = moreTriggerRef.current;
+    if (node === null) return;
+    const rect = node.getBoundingClientRect();
+    setMoreMenuAnchor((current) =>
+      current !== null &&
+      current.left === rect.right &&
+      current.top === rect.bottom
+        ? current
+        : { left: rect.right, top: rect.bottom },
+    );
+  }, []);
+  useLayoutEffect(() => {
+    if (!moreMenuOpen) {
+      setMoreMenuAnchor(null);
+      return;
+    }
+    recomputeMoreMenuAnchor();
+  }, [moreMenuOpen, viewLeft, viewTop, recomputeMoreMenuAnchor]);
+  // 리뷰 결함 2 — outer 컨테이너(`menuRef`가 가리키는 `.geul-media-toolbar`,
+  // `transform: translateX(-100%)`) 폭이 트리거 자신의 리사이즈가 아닌
+  // 형제 노드 삽입(예: actionError span, toggleShowPreview/setMediaAlignment
+  // 실패 시 메뉴를 안 닫은 채로 추가된다)으로 바뀌면 topRight anchor가
+  // 우측 끝을 고정하려 컨테이너 자체 좌표를 다시 계산해(useClampedMenuPosition
+  // 내부 ResizeObserver) 트리거의 화면 위치가 좌우로 밀린다. 그 변화는 위
+  // effect의 [moreMenuOpen, viewLeft, viewTop] deps로는 감지되지 않는다
+  // (viewLeft/Top은 selection 재조회로 얻는 bounds일 뿐 이 리클램프 결과를
+  // 반영하지 않는다) — G-UI-001 "크기 변경은 ResizeObserver로 다시
+  // 계산한다" 원칙대로 컨테이너 크기 변화를 직접 관찰해 트리거 rect를 다시
+  // 읽는다(PIT-0011 위반 회귀, 실측: 트리거 119px 이동, 메뉴는 그대로).
+  // moreMenuOpen이 아니면 관찰하지 않는다(리소스 누수 방지) — 메뉴가
+  // 닫히는 순간 클린업이 disconnect한다.
+  useLayoutEffect(() => {
+    if (!moreMenuOpen) return;
+    const container = menuRef.current;
+    const view = container?.ownerDocument.defaultView ?? null;
+    if (container === null || view === null) return;
+    // jsdom에는 ResizeObserver가 없다(useClampedMenuPosition과 같은 이유) —
+    // 이 보강은 실 레이아웃 엔진이 있는 e2e(Chromium)에서만 검증한다.
+    if (typeof view.ResizeObserver !== "function") return;
+    const observer = new view.ResizeObserver(recomputeMoreMenuAnchor);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [moreMenuOpen, recomputeMoreMenuAnchor, menuRef]);
+
+  const { menuRef: moreMenuRef, style: moreMenuStyle } = useClampedMenuPosition(
+    moreMenuAnchor?.left ?? 0,
+    moreMenuAnchor?.top ?? 0,
+    "topRight",
+  );
 
   const dismissToolbar = useCallback(() => {
     dismissedBlockIdRef.current = viewBlockIdRef.current;
     editingRef.current = true;
     clearActionError();
+    setMoreMenuOpen(false);
     setToolbarState({ mode: "closed" });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
@@ -534,6 +646,17 @@ export const MediaToolbar = ({
     dismissToolbar();
   }, [dismissToolbar, focusEditor]);
 
+  // more 메뉴는 outer 컨테이너와 같은 dismiss 하나를 공유한다 — 별도
+  // useDismissOnOutsideOrEscape 인스턴스를 두지 않는다. 처음엔 메뉴만
+  // 닫는 계층적(nested) dismiss를 시도했으나, 실 Chromium 대상 e2e 다수가
+  // "Escape/바깥 클릭 한 번이 view 모드 전체를 곧바로 닫는다"는 기존
+  // 계약(01-계획.md 완료 조건 2)에 의존해 그 계약을 유지해야 했다 — 메뉴가
+  // 열려 있어도 Escape/바깥 클릭 한 번으로 메뉴와 toolbar 전체가 함께
+  // 닫힌다(아래 dismissToolbar가 setMoreMenuOpen(false)도 함께 호출).
+  // `.geul-media-toolbar__more-menu`를 MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS
+  // 에 포함해 두는 이유는 여전히 유효하다 — 메뉴 항목 클릭 자체(Preview/
+  // 정렬처럼 메뉴를 안 닫는 토글 포함)가 "바깥 클릭"으로 오판정되는 것만
+  // 막는다.
   useDismissOnOutsideOrEscape({
     active: toolbarState.mode === "view",
     element,
@@ -541,6 +664,10 @@ export const MediaToolbar = ({
     onOutsideDismiss: dismissToolbar,
     onEscapeDismiss: dismissToolbarAndFocusEditor,
   });
+
+  const handleMoreClick = () => {
+    setMoreMenuOpen((prev) => !prev);
+  };
 
   if (toolbarState.mode === "closed") return null;
   // 지금 보여주는 바로 그 블록이 리사이즈 중이면 감춘다 — 다른 블록의
@@ -581,6 +708,7 @@ export const MediaToolbar = ({
     editingRef.current = true;
     focusEditor();
     viewBlockIdRef.current = toolbarState.blockId;
+    setMoreMenuOpen(false);
     setToolbarState({
       mode: "view",
       ...carryMediaInfo(toolbarState, { name, caption }),
@@ -605,6 +733,9 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
+    // more 메뉴 항목에서 진입한다(startReplacing과 같은 이유) — 취소로
+    // view에 돌아왔을 때 메뉴가 stale true로 재오픈되지 않도록 미리 닫는다.
+    setMoreMenuOpen(false);
     setToolbarState({
       mode: "editingName",
       ...carryMediaInfo(toolbarState),
@@ -615,6 +746,7 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
+    setMoreMenuOpen(false);
     setToolbarState({
       mode: "editingCaption",
       ...carryMediaInfo(toolbarState),
@@ -649,7 +781,7 @@ export const MediaToolbar = ({
   // image/video/audio 전용(kind !== "file"일 때만 렌더되는 버튼에서만
   // 호출된다, 아래 JSX 게이트). 성공하면 core를 다시 조회하지 않고
   // 반전값을 로컬 state에 바로 반영한다(applyName/applyCaption과 같은
-  // 패턴) — 실패하면 로컬 state를 건드리지 않아 aria-pressed가 실제
+  // 패턴) — 실패하면 로컬 state를 건드리지 않아 aria-checked가 실제
   // 문서 상태와 어긋나지 않는다(슬라이스5 RD-002 DELTA-02).
   const toggleShowPreview = () => {
     if (toolbarState.mode !== "view" || toolbarState.showPreview === null) {
@@ -673,7 +805,7 @@ export const MediaToolbar = ({
   // 재적용 시 해제" 관례와 동일(runInlineColorCommand 주석 참고). 성공하면
   // core를 다시 조회하지 않고 반영값을 로컬 state에 바로 넣는다
   // (toggleShowPreview와 같은 패턴) — 실패하면 로컬 state를 건드리지 않아
-  // aria-pressed가 실제 문서 상태와 어긋나지 않는다.
+  // aria-checked가 실제 문서 상태와 어긋나지 않는다.
   const setMediaAlignment = (align: "left" | "center" | "right") => {
     if (toolbarState.mode !== "view") return;
     const { blockId, textAlignment } = toolbarState;
@@ -690,6 +822,10 @@ export const MediaToolbar = ({
   };
   const handleDelete = () => {
     if (toolbarState.mode !== "view") return;
+    // code-block-language-combobox.tsx handleDelete와 같은 이유로 결과와
+    // 무관하게 메뉴부터 닫는다 — 곧 사라질(성공 시) 또는 그대로 남을(실패
+    // 시) 블록을 가리키는 메뉴를 열어 두지 않는다.
+    setMoreMenuOpen(false);
     runCommand(
       () => editor.commands.deleteBlock(toolbarState.blockId),
       updateFromSelection,
@@ -708,85 +844,22 @@ export const MediaToolbar = ({
       role="toolbar"
       style={style}
     >
+      {/* Issue #203 RD-004 DELTA-02 — view 모드는 이제 `⋯` more 트리거
+          하나뿐이다(과거 8개 control이 전부 아래 more-menu 항목으로
+          옮겨갔다). 이 shell 자체가 outer 컨테이너(topRight)의 렌더된
+          박스라 리사이즈로 블록이 아무리 좁아져도 트리거 하나 폭만
+          차지한다 — 다음 블록과 겹치지 않는다(01-계획.md 완료 조건 1). */}
       {toolbarState.mode === "view" && (
-        <>
-          {editor.isUploadEnabled() && (
-            <IconButton
-              className={mediaToolbarButtonClassName}
-              icon={replaceIcon}
-              label={dictionary.toolbar.media.replaceAriaLabel}
-              onClick={startReplacing}
-            />
-          )}
+        <div className="geul-media-toolbar__more-trigger" ref={moreTriggerRef}>
           <IconButton
+            aria-expanded={moreMenuOpen}
+            aria-haspopup="menu"
             className={mediaToolbarButtonClassName}
-            icon={renameIcon}
-            label={dictionary.toolbar.media.rename}
-            onClick={startEditingName}
+            icon={moreIcon}
+            label={dictionary.toolbar.media.moreAriaLabel}
+            onClick={handleMoreClick}
           />
-          <IconButton
-            className={mediaToolbarButtonClassName}
-            icon={captionIcon}
-            label={dictionary.toolbar.media.editCaptionAriaLabel}
-            onClick={startEditingCaption}
-          />
-          {toolbarState.kind !== "file" && (
-            <IconButton
-              aria-pressed={toolbarState.showPreview === true}
-              className={mediaToolbarButtonClassName}
-              icon={previewIcon}
-              label={dictionary.toolbar.media.preview}
-              onClick={toggleShowPreview}
-            />
-          )}
-          {(toolbarState.kind === "image" || toolbarState.kind === "video") && (
-            <>
-              <IconButton
-                aria-pressed={toolbarState.textAlignment === "left"}
-                className={mediaToolbarButtonClassName}
-                icon={alignLeftIcon}
-                label={dictionary.toolbar.media.alignLeft}
-                onClick={() => setMediaAlignment("left")}
-              />
-              <IconButton
-                aria-pressed={toolbarState.textAlignment === "center"}
-                className={mediaToolbarButtonClassName}
-                icon={alignCenterIcon}
-                label={dictionary.toolbar.media.alignCenter}
-                onClick={() => setMediaAlignment("center")}
-              />
-              <IconButton
-                aria-pressed={toolbarState.textAlignment === "right"}
-                className={mediaToolbarButtonClassName}
-                icon={alignRightIcon}
-                label={dictionary.toolbar.media.alignRight}
-                onClick={() => setMediaAlignment("right")}
-              />
-            </>
-          )}
-          <IconButton
-            className={dangerButtonClassName}
-            icon={deleteIcon}
-            label={dictionary.toolbar.media.deleteAriaLabel}
-            onClick={handleDelete}
-          />
-          {/* cross-origin url은 강제 다운로드를 보장하지 않는다(브라우저
-              same-origin 정책, spec §6.3) — 링크가 열리기만 할 수도 있다.
-              download 속성은 name이 없어도 항상 둔다 — 없으면 강제 다운로드
-              힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. Download는
-              `<a>`라 IconButton(<button> 전용) 대신 link-toolbar.tsx의 Open
-              link와 같은 방식으로 같은 시각 계약만 직접 조립한다. */}
-          <a
-            aria-label={dictionary.toolbar.media.download}
-            className={`geul-icon-button ${mediaToolbarButtonClassName}`}
-            download={toolbarState.name ?? ""}
-            href={toolbarState.url}
-            onMouseDown={(event) => event.preventDefault()}
-            title={dictionary.toolbar.media.download}
-          >
-            <LucideProvider>{downloadIcon}</LucideProvider>
-          </a>
-        </>
+        </div>
       )}
       {(toolbarState.mode === "editingName" ||
         toolbarState.mode === "editingCaption") && (
@@ -1004,5 +1077,126 @@ export const MediaToolbar = ({
     </div>
   );
 
-  return portalTarget === null ? content : createPortal(content, portalTarget);
+  // Issue #203 RD-004 DELTA-02 — view 모드의 옛 8개 control이 이 메뉴 안
+  // 텍스트 항목으로 옮겨왔다(code-block-language-combobox.tsx more-menu와
+  // 같은 구조). Replace/Rename/Caption 항목은 클릭하면 outer 컨테이너
+  // 자신을 다른 mode로 전환할 뿐 이 메뉴를 직접 렌더하지 않는다 — mode가
+  // "view"를 벗어나는 순간 아래 조건이 거짓이 돼 자연히 사라진다(각
+  // start* 핸들러가 미리 moreMenuOpen도 false로 되돌려 stale 재오픈을
+  // 막는다, 위 주석 참고). Preview·정렬 항목은 클릭해도 메뉴를 닫지
+  // 않는다 — 여러 상태를 이어서 토글할 수 있어야 한다(view 모드였을 때의
+  // 기존 계약과 동일, 01-계획.md "범위 밖" — 새 시각 강조 CSS는 추가하지
+  // 않는다). role="menuitemcheckbox" + aria-checked로 상태를 알린다 —
+  // role="menuitem"은 aria-pressed를 지원하지 않는 role="button" 전용
+  // 속성이라(WAI-ARIA 계약 위반, 리뷰 결함 1) menu-item-button.tsx 문서
+  // 주석·table-handle-menu.tsx 헤더 토글과 같은 관례를 따른다.
+  const moreMenu = toolbarState.mode === "view" && moreMenuOpen && (
+    <div
+      className="geul-media-toolbar__more-menu"
+      data-block-id={toolbarState.blockId}
+      ref={moreMenuRef}
+      role="menu"
+      style={moreMenuStyle}
+    >
+      {editor.isUploadEnabled() && (
+        <MenuItemButton
+          className={mediaToolbarMoreMenuItemClassName}
+          onClick={startReplacing}
+        >
+          {dictionary.toolbar.media.replaceAriaLabel}
+        </MenuItemButton>
+      )}
+      <MenuItemButton
+        className={mediaToolbarMoreMenuItemClassName}
+        onClick={startEditingName}
+      >
+        {dictionary.toolbar.media.rename}
+      </MenuItemButton>
+      <MenuItemButton
+        className={mediaToolbarMoreMenuItemClassName}
+        onClick={startEditingCaption}
+      >
+        {dictionary.toolbar.media.editCaptionAriaLabel}
+      </MenuItemButton>
+      {toolbarState.kind !== "file" && (
+        <MenuItemButton
+          aria-checked={toolbarState.showPreview === true}
+          className={mediaToolbarMoreMenuItemClassName}
+          onClick={toggleShowPreview}
+          role="menuitemcheckbox"
+        >
+          {dictionary.toolbar.media.preview}
+        </MenuItemButton>
+      )}
+      {(toolbarState.kind === "image" || toolbarState.kind === "video") && (
+        // block-side-menu-menu.tsx 정렬 행 클래스를 코드 복제 없이 그대로
+        // 재사용한다(01-계획.md 6절 "결정") — 4번째 해제(×) 버튼은 추가하지
+        // 않는다: media는 같은 값 재클릭 시 해제하는 기존 setMediaAlignment
+        // 시맨틱을 그대로 유지한다(계약 변경 없음).
+        <div className="geul-cell-format-menu__align-row">
+          <MenuItemButton
+            aria-checked={toolbarState.textAlignment === "left"}
+            aria-label={dictionary.toolbar.media.alignLeft}
+            className="geul-cell-format-menu__align-button"
+            onClick={() => setMediaAlignment("left")}
+            role="menuitemcheckbox"
+          >
+            {alignLeftIcon}
+          </MenuItemButton>
+          <MenuItemButton
+            aria-checked={toolbarState.textAlignment === "center"}
+            aria-label={dictionary.toolbar.media.alignCenter}
+            className="geul-cell-format-menu__align-button"
+            onClick={() => setMediaAlignment("center")}
+            role="menuitemcheckbox"
+          >
+            {alignCenterIcon}
+          </MenuItemButton>
+          <MenuItemButton
+            aria-checked={toolbarState.textAlignment === "right"}
+            aria-label={dictionary.toolbar.media.alignRight}
+            className="geul-cell-format-menu__align-button"
+            onClick={() => setMediaAlignment("right")}
+            role="menuitemcheckbox"
+          >
+            {alignRightIcon}
+          </MenuItemButton>
+        </div>
+      )}
+      <MenuItemButton
+        className={`${mediaToolbarMoreMenuItemClassName} geul-media-toolbar__more-menu-item--danger`}
+        onClick={handleDelete}
+      >
+        {dictionary.toolbar.media.deleteAriaLabel}
+      </MenuItemButton>
+      {/* cross-origin url은 강제 다운로드를 보장하지 않는다(브라우저
+          same-origin 정책, spec §6.3) — 링크가 열리기만 할 수도 있다.
+          download 속성은 name이 없어도 항상 둔다 — 없으면 강제 다운로드
+          힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. Download는
+          `<a>`라 MenuItemButton(<button> 전용) 대신 이 항목만 같은 시각
+          계약을 직접 조립한다(role="menuitem" 명시 — role="menu" 안
+          자식은 링크가 아니라 menuitem이어야 하는 ARIA 계약, 다른 항목들과
+          같은 이유). */}
+      <a
+        className={mediaToolbarMoreMenuItemClassName}
+        download={toolbarState.name ?? ""}
+        href={toolbarState.url}
+        onMouseDown={(event) => event.preventDefault()}
+        role="menuitem"
+      >
+        {dictionary.toolbar.media.download}
+      </a>
+    </div>
+  );
+
+  const rendered = (
+    <>
+      {content}
+      {moreMenu}
+    </>
+  );
+
+  return portalTarget === null
+    ? rendered
+    : createPortal(rendered, portalTarget);
 };

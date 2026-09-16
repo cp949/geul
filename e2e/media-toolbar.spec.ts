@@ -1,37 +1,60 @@
 /**
- * Media toolbar(RD-004 DELTA-01): `url` 있는 미디어 블록을 선택하면
- * rename/caption/delete/download 4개 control을 가진 toolbar가 나타나고,
- * 빈 블록에는 나타나지 않는다(File Panel과 상호 배타). rename/caption
- * 편집과 delete의 undo 1회 복원, download 링크의 href/download 속성,
+ * Media toolbar(RD-004 DELTA-01, Issue #203 RD-004 DELTA-02): `url` 있는
+ * 미디어 블록을 선택하면 `⋯` more 트리거가 블록 우상단(topRight)에
+ * 나타나고, 빈 블록에는 나타나지 않는다(File Panel과 상호 배타). 트리거를
+ * 열면 rename/caption/preview/align/delete/download/replace 항목을 가진
+ * more 메뉴가 펼쳐진다 — view 모드의 옛 인라인 control들이 전부 이 메뉴
+ * 뒤로 옮겨간 것은 리사이즈로 블록이 아주 작아져도(64px 이미지) toolbar가
+ * 다음 블록과 겹치지 않게 하기 위해서다(아래 마지막 테스트). rename/caption
+ * 편집과 delete의 undo 1회 복원, download 항목의 href/download 속성,
  * Escape/바깥 클릭에 따른 닫힘과 focus 복원 차이를 실제 Chromium event
- * 순서로 검증한다. Preview 토글(image/video/audio 전용, 슬라이스5 RD-002
- * DELTA-03)의 `<img>`↔`<a>` 실제 DOM 교체·undo·aria-pressed·JSON
- * round-trip도 이 파일이 검증한다. 정렬 버튼 3개(image/video 전용, Issue
- * #154 MED-009)의 aria-pressed 반영·undo 1회 복원·audio/file 미노출도
+ * 순서로 검증한다 — Escape/바깥 클릭 한 번은 메뉴가 열려 있어도 메뉴와
+ * toolbar 전체를 함께 닫는다(계층적 dismiss를 두지 않는다, media-toolbar.tsx
+ * 주석 참고). Preview 토글(image/video/audio 전용, 슬라이스5 RD-002
+ * DELTA-03)의 `<img>`↔`<a>` 실제 DOM 교체·undo·aria-checked·JSON
+ * round-trip도 이 파일이 검증한다. 정렬 항목 3개(image/video 전용, Issue
+ * #154 MED-009)의 aria-checked 반영·undo 1회 복원·audio/file 미노출도
  * 검증한다 — textAlignment는 아직 편집 DOM에 투영하지 않아(media-block-
- * extension.ts 주석) 시각 스타일이 아닌 aria-pressed로 "DOM 반영"을
- * 확인한다. fixed overlay viewport clamp(RD-002, PIT-0011)도 이 파일이
- * 검증한다.
+ * extension.ts 주석) 시각 스타일이 아닌 aria-checked로 "DOM 반영"을
+ * 확인한다. Preview·정렬 항목은 클릭해도 메뉴를 닫지 않는다(여러 상태를
+ * 이어서 확인할 수 있어야 한다) — Rename/Caption/Replace/Delete는 각각
+ * mode 전환·블록 삭제로 메뉴가 자연히 닫힌다. fixed overlay viewport
+ * clamp(RD-002, PIT-0011)도 이 파일이 검증한다.
  */
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { expectOverlayWithinViewport } from "./support/clamp.js";
 import { insertFilledImage, openDemo } from "./support/demo.js";
+import { beginDrag, dragTo } from "./support/media-resize.js";
 
-test("url 있는 이미지를 선택하면 toolbar가 나타나고 4개 control이 보인다 @core", async ({
+/**
+ * `⋯` more 트리거를 열어 view 모드의 개별 항목(rename/caption/preview/
+ * align/delete/download/replace)에 접근한다(Issue #203 RD-004 DELTA-02).
+ * align 항목만 아이콘 전용이라 `getByRole("menuitem", { name: ... })`의
+ * name이 여전히 "Align left" 같은 aria-label이다 — 다른 항목은 visible
+ * text가 곧 accessible name이다.
+ */
+const openMoreMenu = (page: Page) =>
+  page.getByRole("button", { name: "More media options" }).click();
+
+test("url 있는 이미지를 선택하면 more 트리거가 나타나고 메뉴에 4개 control이 보인다 @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
 
-  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Edit caption" }),
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
+  await openMoreMenu(page);
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Edit caption" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Delete media block" }),
+    page.getByRole("menuitem", { name: "Delete media block" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Download" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Download" })).toBeVisible();
 });
 
 test("빈 미디어 블록을 선택하면 toolbar가 나타나지 않는다(File Panel 담당)", async ({
@@ -55,7 +78,8 @@ test("Rename으로 이름을 바꾸면 alt에 반영되고 undo 1회로 복원�
   const image = await insertFilledImage(page, editable);
   await expect(image).toHaveAttribute("alt", "photo.png");
 
-  await page.getByRole("button", { name: "Rename" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
   const nameInput = page.getByRole("textbox", { name: "Image name" });
   await expect(nameInput).toBeFocused();
   await nameInput.fill("renamed.png");
@@ -73,7 +97,8 @@ test("Enter로도 이름을 제출한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Rename" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
   const nameInput = page.getByRole("textbox", { name: "Image name" });
   await nameInput.fill("renamed.png");
   await nameInput.press("Enter");
@@ -87,12 +112,18 @@ test("Escape로 이름 편집을 취소하면 원래 값을 유지한 채 toolba
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Rename" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
   await page.getByRole("textbox", { name: "Image name" }).fill("discarded.png");
   await page.keyboard.press("Escape");
 
   await expect(image).toHaveAttribute("alt", "photo.png");
-  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
+  // Issue #203 RD-004 DELTA-02 — 편집 취소는 view로 돌아갈 뿐 toolbar
+  // 자체를 닫지 않는다. view 모드의 신호는 이제 `⋯` 트리거다(Rename은 그
+  // 메뉴 뒤에 있어 재확인하려면 메뉴를 다시 열어야 한다).
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
   await expect(editable).toBeFocused();
 });
 
@@ -104,7 +135,8 @@ test("Caption을 추가하면 표시되고 undo 1회로 복원된다 @core", asy
   const caption = editable.locator("[data-geul-media-caption]");
   await expect(caption).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Edit caption" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Edit caption" }).click();
   await page.getByRole("textbox", { name: "Image caption" }).fill("풍경 사진");
   await page.getByRole("button", { name: "Save caption" }).click();
 
@@ -126,7 +158,8 @@ test("Delete하면 블록이 사라지고 undo 1회로 복원된다 @core", asyn
   await insertFilledImage(page, editable);
   await expect(editable.locator("img")).toHaveCount(1);
 
-  await page.getByRole("button", { name: "Delete media block" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Delete media block" }).click();
 
   await expect(editable.locator("img")).toHaveCount(0);
   await expect(
@@ -138,11 +171,15 @@ test("Delete하면 블록이 사라지고 undo 1회로 복원된다 @core", asyn
   await expect(editable.locator("img")).toHaveCount(1);
 });
 
-test("Download 링크가 href와 download 속성을 렌더한다", async ({ page }) => {
+test("Download 항목이 href와 download 속성을 렌더한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
 
-  const download = page.getByRole("link", { name: "Download" });
+  await openMoreMenu(page);
+  // Issue #203 RD-004 DELTA-02 — Download는 more 메뉴 안 `role="menuitem"`
+  // 항목이다(role="menu" 자식은 링크가 아니라 menuitem이어야 하는 ARIA
+  // 계약) — 과거의 role="link"가 아니다.
+  const download = page.getByRole("menuitem", { name: "Download" });
   await expect(download).toHaveAttribute(
     "href",
     "https://example.com/dir/photo.png",
@@ -201,7 +238,8 @@ test("Preview를 끄면 img가 a 링크로 바뀌고 undo 1회로 복원된다 @
     .getAttribute("data-geul-block-id");
   const wrapper = editable.locator(`[data-geul-block-id="${mediaBlockId}"]`);
 
-  await page.getByRole("button", { name: "Preview" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitemcheckbox", { name: "Preview" }).click();
 
   await expect(editable.locator("img")).toHaveCount(0);
   const link = wrapper.locator("a");
@@ -220,17 +258,20 @@ test("Preview를 끄면 img가 a 링크로 바뀌고 undo 1회로 복원된다 @
   );
 });
 
-test("Preview 버튼의 aria-pressed가 클릭마다 반전된다", async ({ page }) => {
+test("Preview 항목의 aria-checked가 클릭마다 반전된다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
-  const previewButton = page.getByRole("button", { name: "Preview" });
-  await expect(previewButton).toHaveAttribute("aria-pressed", "true");
+  await openMoreMenu(page);
+  const previewItem = page.getByRole("menuitemcheckbox", { name: "Preview" });
+  await expect(previewItem).toHaveAttribute("aria-checked", "true");
 
-  await previewButton.click();
-  await expect(previewButton).toHaveAttribute("aria-pressed", "false");
+  // Preview는 토글 항목이라 클릭해도 메뉴가 열린 채 남는다(01-계획.md
+  // "범위 밖") — 재조회 없이 이어서 클릭한다.
+  await previewItem.click();
+  await expect(previewItem).toHaveAttribute("aria-checked", "false");
 
-  await previewButton.click();
-  await expect(previewButton).toHaveAttribute("aria-pressed", "true");
+  await previewItem.click();
+  await expect(previewItem).toHaveAttribute("aria-checked", "true");
 });
 
 test("showPreview:false가 Save/Load JSON round-trip 이후에도 유지된다 @core", async ({
@@ -240,7 +281,8 @@ test("showPreview:false가 Save/Load JSON round-trip 이후에도 유지된다 @
   const source = page.getByLabel("Document source");
   await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Preview" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitemcheckbox", { name: "Preview" }).click();
   await expect(editable.locator("img")).toHaveCount(0);
 
   // Media toolbar가 열린 채로 "Save JSON"(편집기 바깥 버튼)을 바로 클릭하지
@@ -272,47 +314,53 @@ test("showPreview:false가 Save/Load JSON round-trip 이후에도 유지된다 @
   );
 });
 
-test("정렬 버튼 클릭 시 aria-pressed가 반영되고 undo 1회로 복원된다(Issue #154, MED-009) @core", async ({
+test("정렬 항목 클릭 시 aria-checked가 반영되고 undo 1회로 복원된다(Issue #154, MED-009) @core", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
 
-  const leftButton = page.getByRole("button", { name: "Align left" });
-  const centerButton = page.getByRole("button", { name: "Align center" });
-  const rightButton = page.getByRole("button", { name: "Align right" });
-  await expect(leftButton).toHaveAttribute("aria-pressed", "false");
-  await expect(centerButton).toHaveAttribute("aria-pressed", "false");
-  await expect(rightButton).toHaveAttribute("aria-pressed", "false");
+  await openMoreMenu(page);
+  const leftItem = page.getByRole("menuitemcheckbox", { name: "Align left" });
+  const centerItem = page.getByRole("menuitemcheckbox", {
+    name: "Align center",
+  });
+  const rightItem = page.getByRole("menuitemcheckbox", { name: "Align right" });
+  await expect(leftItem).toHaveAttribute("aria-checked", "false");
+  await expect(centerItem).toHaveAttribute("aria-checked", "false");
+  await expect(rightItem).toHaveAttribute("aria-checked", "false");
 
-  await centerButton.click();
+  await centerItem.click();
 
-  await expect(centerButton).toHaveAttribute("aria-pressed", "true");
-  await expect(leftButton).toHaveAttribute("aria-pressed", "false");
-  await expect(rightButton).toHaveAttribute("aria-pressed", "false");
+  // 정렬도 Preview와 같은 이유로 클릭해도 메뉴가 열린 채 남는다 —
+  // 재조회 없이 이어서 확인한다.
+  await expect(centerItem).toHaveAttribute("aria-checked", "true");
+  await expect(leftItem).toHaveAttribute("aria-checked", "false");
+  await expect(rightItem).toHaveAttribute("aria-checked", "false");
 
   await page.keyboard.press("Control+z");
 
-  await expect(centerButton).toHaveAttribute("aria-pressed", "false");
+  await expect(centerItem).toHaveAttribute("aria-checked", "false");
 });
 
-test("이미 활성인 정렬 버튼을 다시 클릭하면 해제되고 undo 1회로 복원된다(Issue #154, MED-009)", async ({
+test("이미 활성인 정렬 항목을 다시 클릭하면 해제되고 undo 1회로 복원된다(Issue #154, MED-009)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
-  const rightButton = page.getByRole("button", { name: "Align right" });
+  await openMoreMenu(page);
+  const rightItem = page.getByRole("menuitemcheckbox", { name: "Align right" });
 
-  await rightButton.click();
-  await expect(rightButton).toHaveAttribute("aria-pressed", "true");
+  await rightItem.click();
+  await expect(rightItem).toHaveAttribute("aria-checked", "true");
 
-  await rightButton.click();
+  await rightItem.click();
 
-  await expect(rightButton).toHaveAttribute("aria-pressed", "false");
+  await expect(rightItem).toHaveAttribute("aria-checked", "false");
 
   await page.keyboard.press("Control+z");
 
-  await expect(rightButton).toHaveAttribute("aria-pressed", "true");
+  await expect(rightItem).toHaveAttribute("aria-checked", "true");
 });
 
 test("정렬 값이 Save/Load JSON round-trip 이후에도 유지된다(Issue #154, MED-009) @core", async ({
@@ -322,15 +370,17 @@ test("정렬 값이 Save/Load JSON round-trip 이후에도 유지된다(Issue #1
   const source = page.getByLabel("Document source");
   await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Align center" }).click();
+  await openMoreMenu(page);
+  await page.getByRole("menuitemcheckbox", { name: "Align center" }).click();
   await expect(
-    page.getByRole("button", { name: "Align center" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page.getByRole("menuitemcheckbox", { name: "Align center" }),
+  ).toHaveAttribute("aria-checked", "true");
 
   // Media toolbar가 열린 채로 "Save JSON"(편집기 바깥 버튼)을 바로 클릭하지
   // 않는다 — 위 showPreview round-trip 테스트와 같은 이유(바깥-클릭 dismiss와
   // Save JSON 자신의 onClick이 동시에 수행돼야 하는 조합의 기존 결함,
-  // `pending-issues/02.md`). Escape로 먼저 닫는다.
+  // `pending-issues/02.md`). Escape로 먼저 닫는다(메뉴가 열려 있어도
+  // Escape 한 번으로 메뉴와 toolbar 전체가 함께 닫힌다).
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("toolbar", { name: "Media toolbar" }),
@@ -345,18 +395,19 @@ test("정렬 값이 Save/Load JSON round-trip 이후에도 유지된다(Issue #1
   await page.getByRole("button", { name: "Load JSON" }).click();
 
   // textAlignment는 편집 DOM에 시각 투영되지 않으므로(media-block-
-  // extension.ts 주석) 이미지를 다시 선택해 toolbar aria-pressed로 복원
-  // 여부를 확인한다.
+  // extension.ts 주석) 이미지를 다시 선택해 more 메뉴의 aria-checked로
+  // 복원 여부를 확인한다.
   const wrapper = editable
     .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") });
   await wrapper.click();
+  await openMoreMenu(page);
   await expect(
-    page.getByRole("button", { name: "Align center" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page.getByRole("menuitemcheckbox", { name: "Align center" }),
+  ).toHaveAttribute("aria-checked", "true");
 });
 
-test("file 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-009)", async ({
+test("file 블록에는 more 메뉴에 정렬 항목이 노출되지 않는다(Issue #154, MED-009)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -378,10 +429,13 @@ test("file 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-
     page.getByRole("toolbar", { name: "Media toolbar" }),
   ).toBeVisible();
 
-  await expect(page.getByRole("button", { name: "Align left" })).toHaveCount(0);
+  await openMoreMenu(page);
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Align left" }),
+  ).toHaveCount(0);
 });
 
-test("audio 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED-009)", async ({
+test("audio 블록에는 more 메뉴에 정렬 항목이 노출되지 않는다(Issue #154, MED-009)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -403,10 +457,15 @@ test("audio 블록에는 정렬 버튼이 노출되지 않는다(Issue #154, MED
     page.getByRole("toolbar", { name: "Media toolbar" }),
   ).toBeVisible();
 
-  await expect(page.getByRole("button", { name: "Align left" })).toHaveCount(0);
+  await openMoreMenu(page);
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Align left" }),
+  ).toHaveCount(0);
   // Preview 토글은 audio 대상이라 여전히 노출된다(슬라이스5 RD-002
-  // DELTA-01) — 정렬 버튼만 image/video 전용으로 구분됨을 함께 확인한다.
-  await expect(page.getByRole("button", { name: "Preview" })).toBeVisible();
+  // DELTA-01) — 정렬 항목만 image/video 전용으로 구분됨을 함께 확인한다.
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Preview" }),
+  ).toBeVisible();
 });
 
 // RD-002 DELTA-01: media-toolbar.tsx도 file-panel.tsx와 같은 결함(전용 scss
@@ -449,4 +508,134 @@ test("문서 하단에서 미디어를 선택해도 Media Toolbar가 뷰포트 �
   await expect(toolbar).toBeVisible();
   await expect(toolbar).toHaveCSS("position", "fixed");
   await expectOverlayWithinViewport(toolbar, page);
+});
+
+// Issue #203 — 이 fix 전 media-toolbar.tsx의 anchor는 centerBelow(이미지
+// 하단 중앙 + 0.5rem 간격)였다. 이미지를 64px까지 좁히면 원본 비율
+// (300×180)을 유지한 채 세로 높이도 같이 줄어(64 * 180/300 ≈ 38px) 미디어
+// 블록 자체의 세로 공간이 아주 작아진다 — 그 결과 블록 사이 여백만으로는
+// toolbar(버튼 8개 한 줄, 세로로 약 36~40px + 0.5rem 간격)를 다음 블록
+// 위쪽 밖으로 밀어내지 못하고 다음 블록의 렌더 영역과 실제로 겹쳤다(RED
+// 재현). 지금은 anchor를 topRight로 바꾸고 view 모드를 `⋯` 트리거 하나로
+// 압축해(01-계획.md) 이 시나리오에서도 겹치지 않아야 한다(완료 조건 1).
+// 회귀 픽스처는 media-resize-handle.spec.ts와 동일하게 실제 300×180
+// PNG(`resize-photo.png`)를 fulfill해 진짜 픽셀 크기로 리사이즈되게 한다.
+test("64px로 리사이즈한 이미지에서 Media toolbar가 다음 블록과 겹치지 않는다(Issue #203)", async ({
+  page,
+}) => {
+  const resizeImageUrl = "https://example.com/dir/resize-photo.png";
+  await page.route(resizeImageUrl, (route) =>
+    route.fulfill({ path: "e2e/fixtures/resize-photo.png" }),
+  );
+  const { editable } = await openDemo(page);
+  const image = await insertFilledImage(page, editable, resizeImageUrl);
+
+  const start = await beginDrag(
+    page,
+    page.locator('[data-geul-media-resize-handle="right"]'),
+  );
+  await dragTo(page, start, -9999);
+  await page.mouse.up();
+  await expect(image).toHaveAttribute("style", /width:\s*64px/);
+
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+  await expect(toolbar).toBeVisible();
+
+  // insertFilledImage는 슬래시 명령이 캐럿이 있던 그 문단 자체를 미디어
+  // 블록으로 바꾼다(별도 빈 문단을 남기지 않는다, 실측) — 문서에는 미디어
+  // 블록과 그 바로 다음 trailing 빈 문단 2개만 남는다. 그 다음 블록을
+  // "다음 블록"으로 잡는다.
+  const blocks = editable.locator("[data-geul-block-id]");
+  await expect(blocks).toHaveCount(2);
+  const nextBlock = blocks.nth(1);
+
+  // React render·useClampedMenuPosition의 비동기 재계산에 기대 최종
+  // geometry로 수렴할 때까지 poll한다(G-TST-001) — 두 사각형이 어느
+  // 축으로든 완전히 분리돼 있어야("분리축 정리") 안 겹친 것이다.
+  await expect
+    .poll(async () => {
+      const toolbarBox = await toolbar.boundingBox();
+      const nextBox = await nextBlock.boundingBox();
+      if (toolbarBox === null || nextBox === null) return null;
+      return (
+        toolbarBox.y + toolbarBox.height <= nextBox.y ||
+        nextBox.y + nextBox.height <= toolbarBox.y ||
+        toolbarBox.x + toolbarBox.width <= nextBox.x ||
+        nextBox.x + nextBox.width <= toolbarBox.x
+      );
+    })
+    .toBe(true);
+});
+
+// 코드리뷰 결함 2 회귀 — `.geul-media-toolbar`(outer 컨테이너)는
+// `transform: translateX(-100%)`로 자기 폭만큼 왼쪽으로 밀려 렌더된다(topRight
+// anchor). `⋯` 트리거는 이 컨테이너의 첫(왼쪽) 자식이라, 컨테이너 폭이
+// 늘어나면 컨테이너의 화면상 우측 끝(anchor 좌표)은 그대로인 채 좌측 끝만
+// 더 밀려나 트리거 자신이 화면에서 이동한다 — 트리거의 리사이즈가 아니라
+// 형제 노드 삽입이 원인이다. 실제 코드에서는 view 모드에서 more-menu를 연
+// 채로 Preview/정렬 커맨드가 실패하면(menu를 안 닫는 의도된 동작)
+// `actionError` span이 이 컨테이너 안, 트리거 뒤에 추가돼 폭이 늘어난다
+// (실측: 트리거 119px 이동). 이 테스트는 실 Result 실패까지 재현하지
+// 않고, 그 span과 완전히 같은 DOM(`<span class="geul-media-toolbar__error">`)
+// 을 직접 주입해 같은 조건(컨테이너 폭 변화)을 결정론적으로 만든다.
+// moreMenuAnchor가 이 변화를 관측하지 못하면(수정 전) more-menu가 트리거의
+// 새 위치를 따라가지 못하고 어긋난 채 남는다(PIT-0011 위반) — 수정
+// 후에는 outer 컨테이너의 ResizeObserver가 트리거 rect를 다시 읽어
+// more-menu를 재정렬한다(G-UI-001).
+test("outer 컨테이너 폭이 늘어나면 more-menu가 트리거의 새 위치로 재정렬된다(코드리뷰 결함 2)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+
+  await openMoreMenu(page);
+  const trigger = page.getByRole("button", { name: "More media options" });
+  const menu = page.locator(".geul-media-toolbar__more-menu");
+  await expect(menu).toBeVisible();
+
+  const triggerBefore = await trigger.boundingBox();
+  const menuBefore = await menu.boundingBox();
+  if (triggerBefore === null || menuBefore === null) {
+    throw new Error("trigger/menu boundingBox missing");
+  }
+  // topRight anchor라 열린 직후엔 메뉴 우측 끝이 트리거 우측 끝과
+  // 일치한다 — 아래 "재정렬" 검증의 전제(둘이 애초에 정렬돼 있었다)를
+  // 먼저 확인한다.
+  expect(
+    Math.abs(
+      menuBefore.x + menuBefore.width - (triggerBefore.x + triggerBefore.width),
+    ),
+  ).toBeLessThanOrEqual(1);
+
+  await page.evaluate(() => {
+    const container = document.querySelector(".geul-media-toolbar");
+    if (container === null) throw new Error("outer container missing");
+    const span = document.createElement("span");
+    span.className = "geul-media-toolbar__error";
+    span.setAttribute("role", "alert");
+    span.textContent =
+      "폭을 크게 늘리기 위한 매우 긴 에러 메시지 텍스트 자리 표시자 문자열입니다";
+    container.appendChild(span);
+  });
+
+  // 전제 조건 — 주입한 span이 실제로 트리거를 화면상 옮겼는지 먼저
+  // 확인한다(이게 안 움직이면 아래 재정렬 검증 자체가 무의미하다).
+  await expect
+    .poll(async () => {
+      const box = await trigger.boundingBox();
+      return box === null ? null : box.x;
+    })
+    .not.toBe(triggerBefore.x);
+
+  // 수정 검증 — more-menu가 트리거의 새 위치를 따라간다(우측 끝 좌표 실측).
+  await expect
+    .poll(async () => {
+      const triggerAfter = await trigger.boundingBox();
+      const menuAfter = await menu.boundingBox();
+      if (triggerAfter === null || menuAfter === null) return null;
+      return Math.abs(
+        menuAfter.x + menuAfter.width - (triggerAfter.x + triggerAfter.width),
+      );
+    })
+    .toBeLessThanOrEqual(1);
 });

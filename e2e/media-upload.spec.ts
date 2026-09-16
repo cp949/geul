@@ -147,7 +147,11 @@ test("Replace 실패 시 alert를 보여주고 기존 url을 유지한다 @core"
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Replace file" }).click();
+  // Issue #203 RD-004 DELTA-02 — Replace는 view 모드 직접 노출 버튼이
+  // 아니라 `⋯` more 메뉴 안 항목이다(media-toolbar.spec.ts와 같은 클릭
+  // 경로).
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
   await chooseFile(page.getByLabel("Image file"), "reject-me.png");
 
   await expect(page.getByRole("alert")).toHaveText(
@@ -163,14 +167,19 @@ test("Replace 성공 시 url이 갱신되고 view로 돌아간다", async ({ pag
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Replace file" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
   await chooseFile(page.getByLabel("Image file"), "new.png");
 
   await expect(image).toHaveAttribute(
     "src",
     "https://example.com/uploads/new.png",
   );
-  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
+  // view로 돌아갔는지는 `⋯` 트리거(view 모드 전용) 재등장으로 확인한다 —
+  // Rename은 이제 그 메뉴 안 항목이라 트리거를 다시 열어야 보인다.
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
 });
 
 test("Replace 클릭 시 Upload/Embed 탭 팝업이 열린다(2026-09-12, 사용자 지시)", async ({
@@ -179,7 +188,8 @@ test("Replace 클릭 시 Upload/Embed 탭 팝업이 열린다(2026-09-12, 사용
   const { editable } = await openDemo(page);
   await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Replace file" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
 
   // 기본 활성 탭은 Upload — file input이 탭 전환 없이 바로 보인다.
   await expect(page.getByRole("tab", { name: "Upload" })).toHaveAttribute(
@@ -196,7 +206,8 @@ test("Replace의 Embed 탭에서 URL을 저장하면 url/name이 갱신되고 vi
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Replace file" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
   await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Image URL" })
@@ -207,7 +218,9 @@ test("Replace의 Embed 탭에서 URL을 저장하면 url/name이 갱신되고 vi
     "src",
     "https://example.com/dir/new-name.png",
   );
-  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
 });
 
 test("Replace의 Embed 탭에서 허용되지 않는 URL이면 거부 메시지를 표시하고 기존 url을 유지한다", async ({
@@ -216,7 +229,8 @@ test("Replace의 Embed 탭에서 허용되지 않는 URL이면 거부 메시지�
   const { editable } = await openDemo(page);
   const image = await insertFilledImage(page, editable);
 
-  await page.getByRole("button", { name: "Replace file" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
   await page.getByRole("tab", { name: "Embed" }).click();
   await page
     .getByRole("textbox", { name: "Image URL" })
@@ -228,5 +242,9 @@ test("Replace의 Embed 탭에서 허용되지 않는 URL이면 거부 메시지�
     "src",
     "https://example.com/dir/photo.png",
   );
-  await expect(page.getByRole("button", { name: "Rename" })).toBeHidden();
+  // 거부됐으므로 replacing 카드에 그대로 남아 있다 — `⋯` 트리거(view 모드
+  // 전용)는 아직 보이지 않는다.
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeHidden();
 });

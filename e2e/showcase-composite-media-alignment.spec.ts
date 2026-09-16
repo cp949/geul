@@ -78,7 +78,10 @@ test("Align left를 누르면 편집기와 미리보기 양쪽에서 이미지�
     .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") });
   await wrapper.click();
-  await page.getByRole("button", { name: "Align left" }).click();
+  // Issue #203 RD-004 DELTA-02 — align은 view 모드 직접 노출 버튼이 아니라
+  // `⋯` more 메뉴 안 항목이다(media-toolbar.spec.ts와 같은 클릭 경로).
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Align left" }).click();
 
   const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
   const editorMargins = await readHorizontalMargins(editorImage);
@@ -101,7 +104,8 @@ test("Align right를 누르면 편집기와 미리보기 양쪽에서 이미지�
     .locator("[data-geul-block-id]")
     .filter({ has: page.locator("img") });
   await wrapper.click();
-  await page.getByRole("button", { name: "Align right" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Align right" }).click();
 
   const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
   const editorMargins = await readHorizontalMargins(editorImage);
@@ -146,7 +150,8 @@ test("Align left를 누르면 편집기와 미리보기 양쪽에서 video가 �
     .locator("[data-geul-block-id]")
     .filter({ has: page.locator("video") });
   await wrapper.click();
-  await page.getByRole("button", { name: "Align left" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Align left" }).click();
 
   const previewVideo = page.locator('[aria-label="미리보기"]').locator("video");
   const editorMargins = await readHorizontalMargins(editorVideo);
@@ -169,7 +174,8 @@ test("Align right를 누르면 편집기와 미리보기 양쪽에서 video가 �
     .locator("[data-geul-block-id]")
     .filter({ has: page.locator("video") });
   await wrapper.click();
-  await page.getByRole("button", { name: "Align right" }).click();
+  await page.getByRole("button", { name: "More media options" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Align right" }).click();
 
   const previewVideo = page.locator('[aria-label="미리보기"]').locator("video");
   const editorMargins = await readHorizontalMargins(editorVideo);
