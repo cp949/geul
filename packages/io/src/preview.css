@@ -225,6 +225,20 @@
   font-size: 0.875rem;
 }
 
+/* file/audio 전용 override — 이 둘은 model에 textAlignment 필드가 없어
+   exportHtml()이 <figure>에 data-geul-text-alignment를 싣지 않는다(아래
+   left/right 규칙이 안 걸림). 그런데 위 기본 규칙(center)을 그대로 두면
+   <a>/<audio>는 좌측 정렬 콘텐츠인데 caption만 가운데로 떠 라이브 에디터
+   (_editor.scss [data-geul-media-caption] 주석 — "file/audio는 좌측 정렬
+   콘텐츠를 그대로 따라간다", media-captions.tsx 동일 결정)와 어긋난다
+   (2026-09-17 사용자 보고). data-geul-media-type은 caption이 있으면 항상
+   <figure>가 싣는다(export-html.ts mediaDataAttributes) — file/audio에
+   한해 unconditional 셀렉터로 충분하다. */
+.geul-preview figure[data-geul-media-type="file"] figcaption,
+.geul-preview figure[data-geul-media-type="audio"] figcaption {
+  text-align: left;
+}
+
 /* textAlignment="left"/"right"(core data-geul-text-alignment)가 기본
    중앙 정렬을 덮어쓴다. exportHtml()은 caption이 없으면 이 attribute를
    img/video 태그 자신에, caption이 있으면 감싸는 <figure>에 싣는다

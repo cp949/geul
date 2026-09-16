@@ -193,8 +193,19 @@ export const MediaCaptions = () => {
         blockId,
         kind,
         rect: readPageRect(findMediaVisualElement(wrapper) ?? wrapper),
+        // file/audio는 model에 textAlignment 필드가 없어 이 attribute가 항상
+        // null이다 — 아래 기본 분기를 타면 (width - rect.width)/2로 가운데
+        // 정렬돼 좁은 <a>/<audio> 콘텐츠 기준 좌우로 균등히 삐져나온다.
+        // _editor.scss(core가 내는 real caption div의 [data-geul-media-caption]
+        // 규칙 주석)의 설계 그대로 "좌측 정렬 콘텐츠를 따라간다"를 지키려면
+        // file/audio는 항상 left로 고정해야 한다(2026-09-17 사용자 보고 —
+        // 파일 블록 캡션이 왼쪽 여백 없이 붙어 보임).
         textAlignment:
-          alignment === "left" || alignment === "right" ? alignment : null,
+          kind === "file" || kind === "audio"
+            ? "left"
+            : alignment === "left" || alignment === "right"
+              ? alignment
+              : null,
       };
     })
     .filter((instance): instance is MediaCaptionInstance => instance !== null);
