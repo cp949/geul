@@ -6,6 +6,10 @@ import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { importMarkdown } from "../src/index.js";
+import {
+  documentNestingDepth,
+  documentVisibleText,
+} from "./markdown-depth-support.js";
 
 /**
  * 성공한 Markdown import 결과를 반환한다. 실패 메시지를 그대로 노출해
@@ -284,17 +288,25 @@ describe("GFM 목록 기본 의미", () => {
 });
 
 describe("GFM 목록 깊이 경계", () => {
-  it(`model 깊이 상한 ${MAX_NESTING_DEPTH}을 넘는 목록을 MARKDOWN_DOCUMENT_INVALID로 거절한다`, () => {
-    expect(
-      importMarkdown(buildNestedListMarkdown(MAX_NESTING_DEPTH + 1)),
-    ).toEqual({
-      ok: false,
-      error: {
-        code: "MARKDOWN_DOCUMENT_INVALID",
-        message: expect.stringContaining(
-          `Nesting depth exceeds ${MAX_NESTING_DEPTH}`,
-        ),
-      },
-    });
+  // Issue #135 이전 계약: model 깊이 상한을 넘는 목록은 own-traversal이
+  // 캡 없이 실제 depth 그대로(65) children을 쌓아 parseDocument의
+  // DOCUMENT_LIMIT_EXCEEDED 검증에서 전면 거절됐다(MARKDOWN_DOCUMENT_INVALID).
+  // own-traversal에 own-cap(MAX_NESTING_DEPTH)이 생긴 뒤에는 만들어지는 blocks
+  // 트리가 애초에 상한을 넘지 않으므로 이 전면 거절 자체가 발생하지 않는다 —
+  // 대신 상한 도달 항목의 초과 자식이 형제로 평탄화되고
+  // NESTED_BLOCKS_FLATTENED를 경고하며 ok:true를 반환한다(HTML의 동일 계약
+  // 변경, html-security-block-boundary.test.ts 참고).
+  it(`model 깊이 상한 ${MAX_NESTING_DEPTH}을 넘는 목록은 더 이상 전면 거절하지 않고 초과 항목을 형제로 평탄화하며 NESTED_BLOCKS_FLATTENED를 경고한다(Issue #135)`, () => {
+    const imported = importDocument(
+      buildNestedListMarkdown(MAX_NESTING_DEPTH + 1),
+    );
+
+    expect(documentNestingDepth(imported.document)).toBe(MAX_NESTING_DEPTH);
+    expect(documentVisibleText(imported.document)).toContain(
+      `항목-${MAX_NESTING_DEPTH + 1}`,
+    );
+    expect(imported.warnings).toEqual([
+      expect.objectContaining({ kind: "NESTED_BLOCKS_FLATTENED" }),
+    ]);
   });
 });

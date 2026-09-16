@@ -10,6 +10,7 @@ import {
   type HeadingBlock,
   type IdFactory,
   type InlineContent,
+  MAX_NESTING_DEPTH,
 } from "@cp949/geul-model";
 
 import type { MarkdownNode, MarkdownRoot } from "./import-markdown-helpers.js";
@@ -23,7 +24,10 @@ import {
   paragraphFromText,
 } from "./import-markdown-paragraph.js";
 import { tableFromNode } from "./import-markdown-table.js";
-import type { ImportWarning } from "./import-markdown-warnings.js";
+import {
+  type ImportWarning,
+  nestedBlocksFlattenedWarning,
+} from "./import-markdown-warnings.js";
 
 // remark-parse는 heading depth로 1-6만 생성한다(mdast 계약) — 리터럴
 // 유니온을 여기서 다시 쓰지 않고 model의 HeadingBlock에서 파생한다.
@@ -66,25 +70,56 @@ const appendNodeBlocks = (
 function blocksFromNodes(
   nodes: MarkdownNode[],
   createId: IdFactory,
+  depth: number,
   warnings: ImportWarning[],
 ): Block[] {
   const blocks: Block[] = [];
   for (const node of nodes) {
-    appendNodeBlocks(blocks, node, blocksFromNode(node, createId, warnings));
+    appendNodeBlocks(
+      blocks,
+      node,
+      blocksFromNode(node, createId, depth, warnings),
+    );
   }
   return blocks;
 }
 
+// 캡 도달 여부에 따라 item/quote 자신 바로 뒤에 형제로 이어붙일 nested
+// block들을 계산한다 — 캡 미만이면 depth + 1에서 재귀해 진짜 children이 될
+// 결과를, 캡 이상이면 같은 depth에서 flatten한 결과를 반환한다(둘 다
+// 반환값의 "형태"는 Block[]로 같다 — 호출부가 children으로 감쌀지 형제로
+// 풀어놓을지만 다르게 처리한다). 호출부가 캡 도달 시에만 경고를 push한다
+// (여기서 push하면 quote·list item 세 분기 모두가 각자 push해야 해
+// 중복된다).
+const nestedBlocksAtDepth = (
+  childNodes: MarkdownNode[],
+  createId: IdFactory,
+  depth: number,
+  warnings: ImportWarning[],
+): { atCap: boolean; blocks: Block[] } => {
+  const atCap = depth >= MAX_NESTING_DEPTH;
+  return {
+    atCap,
+    blocks: blocksFromNodes(
+      childNodes,
+      createId,
+      atCap ? depth : depth + 1,
+      warnings,
+    ),
+  };
+};
+
 function listBlocksFromNode(
   node: MarkdownNode,
   createId: IdFactory,
+  depth: number,
   warnings: ImportWarning[],
 ): Block[] {
   const blocks: Block[] = [];
 
   for (const [itemIndex, item] of (node.children ?? []).entries()) {
     if (item.type !== "listItem") {
-      blocks.push(...blocksFromNode(item, createId, warnings));
+      blocks.push(...blocksFromNode(item, createId, depth, warnings));
       continue;
     }
 
@@ -94,26 +129,30 @@ function listBlocksFromNode(
       itemChildren[0]?.type === "paragraph" ? itemChildren[0] : undefined;
     const childNodes =
       contentNode === undefined ? itemChildren : itemChildren.slice(1);
-    const children = blocksFromNodes(childNodes, createId, warnings);
+    const { atCap, blocks: nestedBlocks } = nestedBlocksAtDepth(
+      childNodes,
+      createId,
+      depth,
+      warnings,
+    );
     const content: InlineContent = [];
     readInlineNodes(contentNode?.children ?? [], [], content, warnings, {
       blockId: id,
       inTableCell: false,
     });
+    const children = atCap ? [] : nestedBlocks;
 
+    let itemBlock: Block;
     if (item.checked === true || item.checked === false) {
-      blocks.push({
+      itemBlock = {
         id,
         type: "checkListItem",
         checked: item.checked,
         content,
         ...(children.length === 0 ? {} : { children }),
-      });
-      continue;
-    }
-
-    if (node.ordered === true) {
-      blocks.push({
+      };
+    } else if (node.ordered === true) {
+      itemBlock = {
         id,
         type: "numberedListItem",
         ...(itemIndex === 0 &&
@@ -124,15 +163,20 @@ function listBlocksFromNode(
           : {}),
         content,
         ...(children.length === 0 ? {} : { children }),
-      });
+      };
     } else {
-      blocks.push({
+      itemBlock = {
         id,
         type: "bulletListItem",
         content,
         ...(children.length === 0 ? {} : { children }),
-      });
+      };
     }
+
+    if (atCap && nestedBlocks.length > 0) {
+      warnings.push(nestedBlocksFlattenedWarning(id));
+    }
+    blocks.push(itemBlock, ...(atCap ? nestedBlocks : []));
   }
 
   return blocks;
@@ -150,6 +194,7 @@ function listBlocksFromNode(
 function blockquoteToBlocks(
   node: MarkdownNode,
   createId: IdFactory,
+  depth: number,
   warnings: ImportWarning[],
 ): Block[] {
   const id = createId();
@@ -158,19 +203,31 @@ function blockquoteToBlocks(
     quoteChildren[0]?.type === "paragraph" ? quoteChildren[0] : undefined;
   const childNodes =
     contentNode === undefined ? quoteChildren : quoteChildren.slice(1);
-  const children = blocksFromNodes(childNodes, createId, warnings);
+  const { atCap, blocks: nestedBlocks } = nestedBlocksAtDepth(
+    childNodes,
+    createId,
+    depth,
+    warnings,
+  );
   const content: InlineContent = [];
   readInlineNodes(contentNode?.children ?? [], [], content, warnings, {
     blockId: id,
     inTableCell: false,
   });
 
+  if (atCap) {
+    if (nestedBlocks.length > 0) {
+      warnings.push(nestedBlocksFlattenedWarning(id));
+    }
+    return [{ id, type: "quote", content }, ...nestedBlocks];
+  }
+
   return [
     {
       id,
       type: "quote",
       content,
-      ...(children.length === 0 ? {} : { children }),
+      ...(nestedBlocks.length === 0 ? {} : { children: nestedBlocks }),
     },
   ];
 }
@@ -181,12 +238,13 @@ const unsupportedBlockText = (node: MarkdownNode): string =>
 function unsupportedBlocksFromNode(
   node: MarkdownNode,
   createId: IdFactory,
+  depth: number,
   warnings: ImportWarning[],
 ): Block[] {
   const hasBlockChildren =
     node.children?.some((child) => blockNodeTypes.has(child.type)) === true;
   const blocks = hasBlockChildren
-    ? blocksFromNodes(node.children ?? [], createId, warnings)
+    ? blocksFromNodes(node.children ?? [], createId, depth, warnings)
     : [
         node.children !== undefined && node.children.length > 0
           ? paragraphFromNodes(node.children, createId, warnings)
@@ -209,6 +267,7 @@ function unsupportedBlocksFromNode(
 function blocksFromNode(
   node: MarkdownNode,
   createId: IdFactory,
+  depth: number,
   warnings: ImportWarning[],
 ): Block[] {
   if (node.type === "definition") return [];
@@ -216,7 +275,7 @@ function blocksFromNode(
     return [tableFromNode(node, createId, warnings)];
   }
   if (node.type === "list") {
-    return listBlocksFromNode(node, createId, warnings);
+    return listBlocksFromNode(node, createId, depth, warnings);
   }
   if (node.type === "paragraph") {
     const children = node.children ?? [];
@@ -257,12 +316,12 @@ function blocksFromNode(
       blockId: id,
       inTableCell: false,
     });
-    const depth = (node.depth ?? 1) as HeadingLevel;
+    const level = (node.depth ?? 1) as HeadingLevel;
     return [
       {
         id,
         type: "heading",
-        level: depth,
+        level,
         content,
       },
     ];
@@ -273,13 +332,13 @@ function blocksFromNode(
   }
 
   if (node.type === "blockquote") {
-    return blockquoteToBlocks(node, createId, warnings);
+    return blockquoteToBlocks(node, createId, depth, warnings);
   }
 
   if (node.type === "html") {
     return [paragraphFromNodes([node], createId, warnings)];
   }
-  return unsupportedBlocksFromNode(node, createId, warnings);
+  return unsupportedBlocksFromNode(node, createId, depth, warnings);
 }
 
 export const documentFromRoot = (
@@ -287,7 +346,7 @@ export const documentFromRoot = (
   createId: IdFactory,
   warnings: ImportWarning[],
 ): Document => {
-  const blocks = blocksFromNodes(root.children, createId, warnings);
+  const blocks = blocksFromNodes(root.children, createId, 1, warnings);
 
   return { formatVersion: 1, revision: 0, blocks };
 };

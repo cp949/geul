@@ -12,6 +12,7 @@
  * 손실(strict 거절 대상, own-empty 모호성)과 export→import 전체 round-trip은
  * markdown-quote-loss.test.ts가 담당한다.
  */
+import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportMarkdown } from "../src/index.js";
@@ -19,6 +20,11 @@ import {
   buildDocument,
   quoteBlock,
 } from "./fixtures/quote-divider-document.js";
+import {
+  buildNestedBlockquoteMarkdown,
+  documentNestingDepth,
+  documentVisibleText,
+} from "./markdown-depth-support.js";
 import { expectRoundTrip, importOk } from "./markdown-round-trip-support.js";
 
 describe("quote ↔ blockquote 왕복", () => {
@@ -169,5 +175,19 @@ describe("GFM 폐쇄성", () => {
 
     const exported = exportMarkdown(document, { mode: "strict" });
     expect(exported.ok).toBe(true);
+  });
+});
+
+describe("blockquote 깊이 캡(Issue #135)", () => {
+  it(`중첩이 MAX_NESTING_DEPTH+1(${MAX_NESTING_DEPTH + 1})을 넘으면 더 이상 MARKDOWN_DOCUMENT_INVALID로 전면 거절하지 않고 초과분을 형제로 평탄화하며 NESTED_BLOCKS_FLATTENED를 경고한다`, () => {
+    const { document, warnings } = importOk(
+      buildNestedBlockquoteMarkdown(MAX_NESTING_DEPTH + 1),
+    );
+
+    expect(documentNestingDepth(document)).toBe(MAX_NESTING_DEPTH);
+    expect(documentVisibleText(document)).toContain("leaf");
+    expect(warnings).toEqual([
+      expect.objectContaining({ kind: "NESTED_BLOCKS_FLATTENED" }),
+    ]);
   });
 });

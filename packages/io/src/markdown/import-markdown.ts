@@ -23,9 +23,11 @@ import {
   expandImageReferencesFromText,
   resolveReferences,
 } from "./import-markdown-references.js";
-import type {
-  ImportSuccess,
-  ImportWarning,
+import { capMarkdownTreeDepth } from "./import-markdown-tree-depth.js";
+import {
+  deepTreeFlattenedWarning,
+  type ImportSuccess,
+  type ImportWarning,
 } from "./import-markdown-warnings.js";
 
 export type {
@@ -70,6 +72,14 @@ export const importMarkdown = (
     }
 
     const warnings: ImportWarning[] = [];
+    // own-traversal(blocksFromNodes 등)의 own-cap(64, ee9b9c6)만으로는
+    // 캡 도달 후 남은 서브트리의 재귀 호출 자체를 막지 못한다(depth 1370+
+    // 에서 여전히 RangeError) — 이 사전 캡이 own-traversal에 도달하는
+    // mdast 트리 깊이 자체를 256으로 묶어 재귀 호출 횟수를 유계로 만든다
+    // (Issue #135 §9, import-markdown-tree-depth.ts 헤더 주석 참고).
+    if (capMarkdownTreeDepth(root)) {
+      warnings.push(deepTreeFlattenedWarning());
+    }
     const definitions = definitionLookup(root);
     expandImageReferencesFromText(root, source);
     resolveReferences(root, definitions);
