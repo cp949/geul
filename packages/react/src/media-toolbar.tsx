@@ -665,6 +665,34 @@ export const MediaToolbar = ({
     onEscapeDismiss: dismissToolbarAndFocusEditor,
   });
 
+  // more 메뉴가 열린 채로 같은 블록의 캔버스(이미지 본문 등)를 다시
+  // 클릭하면 메뉴가 영영 안 닫히던 버그(사용자 보고, 2026-09-16) 수정.
+  // 위 useDismissOnOutsideOrEscape는 `[data-geul-block-id]`를 allow-list에
+  // 둬 그 클릭을 "바깥 클릭 아님"으로 넘기고, 뒤이은 updateFromSelection도
+  // 같은 blockId 재관측이라 moreMenuOpen을 그대로 둔다(메뉴 안 Preview/정렬
+  // 버튼 클릭이 만드는 같은 blockId 재관측과 구분할 수 없어 그대로 둬야
+  // 했다 — 위 274/297행 주석 참고). 이 효과는 그 두 경로와 별개로 pointerdown
+  // 대상만 보고, 메뉴 자기 자신(트리거·항목) 이외의 모든 곳을 "메뉴만 닫는"
+  // 신호로 취급한다 — toolbar 전체 dismiss(dismissToolbar)는 건드리지 않는다.
+  useEffect(() => {
+    if (!moreMenuOpen || element === null) return;
+    const ownerDocument = element.ownerDocument;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(".geul-media-toolbar") !== null ||
+        target.closest(".geul-media-toolbar__more-menu") !== null
+      ) {
+        return;
+      }
+      setMoreMenuOpen(false);
+    };
+    ownerDocument.addEventListener("pointerdown", handlePointerDown);
+    return () =>
+      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
+  }, [moreMenuOpen, element]);
+
   const handleMoreClick = () => {
     setMoreMenuOpen((prev) => !prev);
   };

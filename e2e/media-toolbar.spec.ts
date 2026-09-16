@@ -222,6 +222,32 @@ test("바깥 클릭은 toolbar를 닫되 클릭한 컨트롤로 초점을 옮기
   await expect(source).toContainText("https://example.com/dir/photo.png");
 });
 
+test("more 메뉴가 열린 채로 같은 미디어 블록을 다시 클릭하면 메뉴만 닫히고 toolbar는 유지된다(사용자 보고, 2026-09-16)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  const wrapper = editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("img") });
+
+  await openMoreMenu(page);
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+
+  // 수정 전에는 이 재클릭이 useDismissOnOutsideOrEscape의 allow-list
+  // (`[data-geul-block-id]`)에 걸려 "바깥 클릭"으로 처리되지 않고, 뒤이은
+  // updateFromSelection도 같은 blockId 재관측이라 moreMenuOpen을 그대로
+  // 둬 메뉴가 영영 안 닫혔다.
+  await wrapper.click();
+
+  await expect(
+    page.getByRole("menuitem", { name: "Rename" }),
+  ).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
+});
+
 test("Preview를 끄면 img가 a 링크로 바뀌고 undo 1회로 복원된다 @core", async ({
   page,
 }) => {
