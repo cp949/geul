@@ -26,8 +26,8 @@ let state: MediaCaptionEditingState = null;
 const listeners = new Set<() => void>();
 
 /** 최신 상태를 동기로 읽는다 — commit 핸들러가 stale closure 없이 쓴다. */
-export const getMediaCaptionEditingSnapshot =
-  (): MediaCaptionEditingState => state;
+export const getMediaCaptionEditingSnapshot = (): MediaCaptionEditingState =>
+  state;
 
 /** 편집 시작(hover 버튼·캡션 클릭)·커밋·취소 모두 이 setter 하나로 간다. */
 export const setMediaCaptionEditing = (

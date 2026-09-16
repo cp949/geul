@@ -34,7 +34,9 @@ const renderCaptions = (
 const captionTextarea = (
   kind: "image" | "video" | "audio" | "file" = "image",
 ): HTMLTextAreaElement =>
-  screen.getByRole<HTMLTextAreaElement>("textbox", { name: inputLabelFor(kind) });
+  screen.getByRole<HTMLTextAreaElement>("textbox", {
+    name: inputLabelFor(kind),
+  });
 
 describe("캡션 표시(완료 조건 — 값이 있으면 hover와 무관하게 항상 보인다)", () => {
   it("caption이 있으면 hover 없이도 표시 버튼이 뜬다", () => {
@@ -224,9 +226,7 @@ describe("Shift+Enter 멀티라인(Q3)", () => {
         { id: "image-1", type: "image", url: "https://example.com/a.png" },
       ],
     });
-    const media = document.querySelector<HTMLElement>(
-      "[data-geul-media-kind]",
-    );
+    const media = document.querySelector<HTMLElement>("[data-geul-media-kind]");
     if (media === null) throw new Error("media 요소가 없다");
     fireEvent.pointerMove(media);
     fireEvent.click(screen.getByText(addCaptionLabel));
