@@ -1,9 +1,15 @@
-import type { AudioBlock, FileBlock, ImageBlock, VideoBlock } from "@cp949/geul-core";
+import type {
+  AudioBlock,
+  FileBlock,
+  ImageBlock,
+  VideoBlock,
+} from "@cp949/geul-core";
 import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -24,7 +30,10 @@ import { useSelectionRefresh } from "./use-selection-refresh.js";
 type MediaKind = "file" | "image" | "video" | "audio";
 
 const isMediaKind = (value: string | null): value is MediaKind =>
-  value === "file" || value === "image" || value === "video" || value === "audio";
+  value === "file" ||
+  value === "image" ||
+  value === "video" ||
+  value === "audio";
 
 type MediaCaptionInstance = {
   blockId: string;
@@ -40,7 +49,9 @@ const MEDIA_CAPTION_MIN_WIDTH_PX = 128;
 // 이 오버레이 자신(표시 버튼·편집 textarea·빈 캡션 추가 버튼)이 전부
 // data-geul-media-caption을 공유한다(_editor.scss 톤 규칙 재사용, 아래
 // import 참고) — pointermove가 이 위로 올라가도 hover가 풀리면 안 된다.
-const MEDIA_CAPTION_HOVER_IGNORE_SELECTORS = ["[data-geul-media-caption]"] as const;
+const MEDIA_CAPTION_HOVER_IGNORE_SELECTORS = [
+  "[data-geul-media-caption]",
+] as const;
 
 /**
  * media(image/video/audio/file) 캡션 클릭-즉시-편집 오버레이(2026-09-16,
@@ -86,12 +97,43 @@ export const MediaCaptions = () => {
   const editing = useMediaCaptionEditing();
   const [, setTick] = useState(0);
   const cancelledRef = useRef(false);
-  const [hoverBlockId, , updateHoverBlockId] = useMirroredState<
-    string | null
-  >(null);
+  const [hoverBlockId, , updateHoverBlockId] = useMirroredState<string | null>(
+    null,
+  );
+  // blockId -> 이 컴포넌트가 렌더한 오버레이(.geul-media-caption) DOM.
+  // 아래 useLayoutEffect가 이 실측 높이를 core의 real caption DOM(spacer,
+  // _media-captions.scss 참고)에 되먹여 문서 flow가 caption 자리를
+  // 예약하게 한다.
+  const overlayNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const refresh = useCallback(() => setTick((tick) => tick + 1), []);
   useSelectionRefresh({ element, onUpdate: refresh });
+
+  // caption 오버레이는 core의 real caption DOM 밖(별도 서브트리)에 그려져
+  // 문서 flow에 자기 높이를 반영하지 못한다(2026-09-16, 버그 수정 — 캡션이
+  // 길어져도 블록 사이 간격이 안 늘고 다음 블록과 겹쳤다는 사용자 보고).
+  // core가 hidden(visibility:hidden)으로 남겨 둔 real caption DOM을
+  // spacer로 재사용해 이 오버레이의 실측 높이를 매 렌더 직후 되먹인다 —
+  // display 상태뿐 아니라 편집 중 textarea가 자라나는 경우도 같은 경로로
+  // 반영된다(autoResizeTextarea가 오버레이 높이를 바꾸면 다음 렌더에서 이
+  // effect가 다시 돈다). committedCaption이 애초에 빈 값이면 core가 real
+  // caption DOM 자체를 안 내므로(captionChildren) spacer가 없다 — 그 경우는
+  // 되먹일 대상이 없어 건너뛴다(Q2: 빈 캡션은 hover-add 버튼뿐, 애초에
+  // 공간을 예약하지 않는 설계 그대로).
+  useLayoutEffect(() => {
+    if (element === null) return;
+    for (const [blockId, overlayNode] of overlayNodesRef.current) {
+      const wrapper = element.querySelector<HTMLElement>(
+        `[data-geul-media-kind][data-geul-block-id="${blockId}"]`,
+      );
+      const spacer =
+        wrapper?.querySelector<HTMLElement>(
+          ":scope > [data-geul-media-caption]",
+        ) ?? null;
+      if (spacer === null) continue;
+      spacer.style.height = `${overlayNode.offsetHeight}px`;
+    }
+  });
 
   const handleHoverCandidateChange = useCallback(
     (candidate: HTMLElement | null) => {
@@ -155,9 +197,7 @@ export const MediaCaptions = () => {
           alignment === "left" || alignment === "right" ? alignment : null,
       };
     })
-    .filter(
-      (instance): instance is MediaCaptionInstance => instance !== null,
-    );
+    .filter((instance): instance is MediaCaptionInstance => instance !== null);
 
   return (
     <>
@@ -219,6 +259,13 @@ export const MediaCaptions = () => {
         return (
           <div
             key={blockId}
+            ref={(node) => {
+              if (node === null) {
+                overlayNodesRef.current.delete(blockId);
+              } else {
+                overlayNodesRef.current.set(blockId, node);
+              }
+            }}
             className="geul-media-caption"
             data-geul-text-alignment={textAlignment ?? undefined}
             style={{
