@@ -86,6 +86,7 @@ import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
 import { MediaDropPasteExtension } from "./media-drop-paste-extension.js";
 import { MediaLocalPreviewLifecycleExtension } from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
+import { NearestBlockClickExtension } from "./nearest-block-click-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
@@ -619,6 +620,11 @@ export const createProductionEditor = (options: {
           ? {}
           : { triggerMediaUpload: options.triggerMediaUpload }),
       }),
+      // 그릴링 2026-09-17 — posAtCoords가 실패하는 클릭(빈 에디터 min-height
+      // 여백, 마지막 블록 아래 등)을 가장 가까운 블록으로 스냅한다. 옵션이
+      // 없는 독립 mousedown 핸들러라 다른 확장의 handleDOMEvents와 순서
+      // 경쟁이 없다.
+      NearestBlockClickExtension,
       // uploadFile 등록 여부와 무관하게 항상 포함한다(RD-002-DELTA-02
       // "## 계획" "적용 가이드") — 로컬 프리뷰는 콜백 미등록 경로뿐 아니라
       // 다른 경로(테스트의 직접 attrs 세팅 등)로도 콜백 등록 상태에서
