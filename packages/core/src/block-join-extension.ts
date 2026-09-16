@@ -10,6 +10,7 @@ import { Selection, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
+import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
@@ -86,6 +87,29 @@ function caretContext(
 
 function isListItemContent(node: Node): boolean {
   return isListEntryBlockType(node.type.name);
+}
+
+// $from이 toggleListItem의 blockGroup(펼쳐진 영역) 안에 있고, 그 blockGroup의
+// 첫 자식이 아니면 그 블록의 blockId를 돌려준다 — 그 외(첫 자식이거나 toggle
+// 자식이 아니면) null. containerDepth는 caretContext가 이미 $from.node
+// (containerDepth).type.name==="blockContainer"임을 보장한 값이다.
+function nonFirstToggleChildBlockId(
+  $from: ResolvedPos,
+  containerDepth: number,
+): string | null {
+  const groupDepth = containerDepth - 1;
+  if (groupDepth < 1) return null;
+  if ($from.node(groupDepth).type.name !== "blockGroup") return null;
+  const parentContainer = $from.node(groupDepth - 1);
+  if (
+    parentContainer.type.name !== "blockContainer" ||
+    parentContainer.child(0).type.name !== "toggleListItem"
+  ) {
+    return null;
+  }
+  if ($from.index(groupDepth) === 0) return null;
+  const blockId = $from.node(containerDepth).attrs.blockId;
+  return typeof blockId === "string" && blockId.length > 0 ? blockId : null;
 }
 
 // DOM-derived selection이 해당 경계 밖이어도 live selection이 병합
@@ -505,13 +529,31 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   // 없다"는 사실을 바꾸지 않는다.
   const isEmptyListItem =
     isListItemContent($from.parent) && $from.parent.content.size === 0;
+  // toggleListItem 헤더는 병합 대상 유무·내용 유무와 무관하게 항상
+  // 종료한다(사용자 결정 2026-09-17) — bulletListItem·numberedListItem은 이
+  // 예외 대상이 아니다(그 둘은 기존대로 adjacent===null·빈 항목일 때만
+  // 종료하고, 그 외엔 앞 블록과 병합하며 children을 승격한다 —
+  // list-item-join.test.ts "목록 선두 Backspace exit·join"). 토글만 항상
+  // 종료해 children을 승격 없이 제자리(그 컨테이너 자신)에 유지한다.
+  const isToggleHeader = $from.parent.type.name === "toggleListItem";
   if (
     isListItemContent($from.parent) &&
-    (adjacent === null || isEmptyListItem)
+    (isToggleHeader || adjacent === null || isEmptyListItem)
   ) {
     return exitListItem(view, liveState, {
       contentPosition: $from.before($from.depth),
     });
+  }
+  // 토글의 펼쳐진 영역에서 첫 자식이 아닌 행은 이전 형제와 병합하지 않고
+  // 토글 밖으로 나가 토글과 같은 레벨의 형제 블록이 된다(사용자 결정
+  // 2026-09-17). 첫 자식은 이 분기에 걸리지 않아 기존대로 아래
+  // findMergeTarget 경로를 타 헤더에 병합된다. outdentBlockCommand
+  // (indent-commands.ts)를 그대로 재사용해 "후행 형제는 입양하지 않고 원
+  // 부모의 blockGroup에 남는다"는 기존 아웃라이너 규칙을 그대로 물려받는다.
+  const toggleChildBlockId = nonFirstToggleChildBlockId($from, containerDepth);
+  if (toggleChildBlockId !== null) {
+    const outdented = outdentBlockCommand(editor, toggleChildBlockId);
+    if (outdented.ok) return true;
   }
   // 자기 컨테이너 시작 앞에서 역방향으로 첫 커서 위치를 찾는다 — 앞
   // 형제의 마지막 자손 텍스트블록 끝, 자식 없는 앞 형제나 부모의

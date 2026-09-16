@@ -88,9 +88,7 @@ describe("caption 오버레이 위치(좌상단, Issue #196 완료 조건 1)", (
     const overlay = document.querySelector<HTMLElement>(
       ".geul-code-block-caption",
     );
-    expect(overlay?.style.transform).toBe(
-      "translateY(calc(-100% - 0.5rem))",
-    );
+    expect(overlay?.style.transform).toBe("translateY(calc(-100% - 0.5rem))");
   });
 });
 
