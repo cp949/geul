@@ -19,6 +19,10 @@ import {
   type MarkdownRoot,
 } from "./import-markdown-helpers.js";
 import {
+  MAX_MARKDOWN_LIST_NESTING_DEPTH,
+  markdownListNestingTooDeep,
+} from "./import-markdown-list-nesting-guard.js";
+import {
   definitionLookup,
   expandImageReferencesFromText,
   resolveReferences,
@@ -56,6 +60,23 @@ export const importMarkdown = (
   options?: { createId?: IdFactory },
 ): Result<ImportSuccess, ImportError> => {
   try {
+    // remark-gfm의 list 파싱이 중첩 단수에 초선형(대략 3차)으로 느려져
+    // depth 500부터 수 초, depth 1000은 30초 내 미종료로 CPU를 소진한다
+    // (Issue #206). capMarkdownTreeDepth(아래)와 달리 손상이
+    // parseProcessor.parse() 호출 *내부*에서 이미 일어나 그 호출이 끝난
+    // 뒤에야 실행되는 post-parse 방어로는 막을 수 없다 — 파서를 호출하기
+    // 전에 원본 텍스트만 사전 스캔해 구조적으로 거절한다
+    // (import-markdown-list-nesting-guard.ts).
+    if (markdownListNestingTooDeep(source)) {
+      return {
+        ok: false,
+        error: {
+          code: "MARKDOWN_LIST_NESTING_TOO_DEEP",
+          message: `Markdown list nesting exceeds the maximum supported depth of ${MAX_MARKDOWN_LIST_NESTING_DEPTH}`,
+        },
+      };
+    }
+
     // remark는 U+0000을 U+FFFD로 바꿔 CodeBlock source 위반을 숨긴다.
     // 같은 길이의 다른 금지 C0로 치환해 model validation까지 보존한다.
     const root = asMarkdownRoot(

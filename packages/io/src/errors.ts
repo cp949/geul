@@ -2,7 +2,8 @@ export type ImportErrorCode =
   | "HTML_PARSE_FAILED"
   | "HTML_DOCUMENT_INVALID"
   | "MARKDOWN_PARSE_FAILED"
-  | "MARKDOWN_DOCUMENT_INVALID";
+  | "MARKDOWN_DOCUMENT_INVALID"
+  | "MARKDOWN_LIST_NESTING_TOO_DEEP";
 
 export type ImportError = {
   code: ImportErrorCode;
