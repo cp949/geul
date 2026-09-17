@@ -11,7 +11,10 @@ import {
   useState,
 } from "react";
 
-import { setCodeBlockCaptionEditing } from "./code-block-caption-editing-store.js";
+import {
+  setCodeBlockCaptionEditing,
+  useCodeBlockCaptionEditing,
+} from "./code-block-caption-editing-store.js";
 import {
   type CodeBlockLanguageOption,
   useCodeBlockLanguages,
@@ -22,6 +25,7 @@ import { MenuItemButton } from "./menu-item-button.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
+import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
@@ -111,6 +115,16 @@ export const CodeBlockLanguageCombobox = () => {
   const [languageState, setLanguageState] = useState<LanguageState | null>(
     null,
   );
+  // 단계-3 리뷰 MAJOR(20260918-01-toolbar-exclusive-overlay/01-계획.md) —
+  // code-block-captions.tsx의 caption "표시" 버튼(committedCaption이 있을 때
+  // 렌더)은 이 컴포넌트의 codeBlockOverlay를 거치지 않고 이 store에
+  // setCodeBlockCaptionEditing을 직접 호출한다. `CodeBlockCaptions`와 이
+  // 컴포넌트는 slash-menu.tsx가 나란히 마운트하는 완전히 독립된 형제라
+  // local state나 prop을 공유할 방법이 없고, 공유하는 유일한 통로가 이
+  // store다(code-block-caption-editing-store.ts 문서 주석). 아래 effect가
+  // 이 store를 직접 구독해 "누가 열었든" caption 편집이 자신의 활성
+  // codeBlock을 가리키면 codeBlockOverlay의 activeId를 동기화한다.
+  const captionEditing = useCodeBlockCaptionEditing();
   // open/moreMenuOpen 둘 다 ref를 함께 갖는다 — updateFromSelection의 가드
   // (아래)가 이 값을 읽는데, setState 직후 같은 핸들러 안에서 곧바로 다시
   // 읽으면(예: cancel()) state는 아직 이전 렌더 값이라 stale closure가
@@ -120,6 +134,36 @@ export const CodeBlockLanguageCombobox = () => {
   const [open, openRef, updateOpen] = useMirroredState(false);
   const [moreMenuOpen, moreMenuOpenRef, updateMoreMenuOpen] =
     useMirroredState(false);
+  // Issue #199 — 언어 팝오버/caption 편집/더보기 메뉴 3-peer 상호배제를
+  // 손으로 짝짓던 코드(openPopover/handleMoreClick/handleEditCaption이 서로
+  // 나머지 둘을 직접 닫던 조합)를 공유 훅으로 옮긴다(01-계획.md
+  // "20260918-01-toolbar-exclusive-overlay"). 각 id의 onClose는 그 오버레이를
+  // 실제로 닫는 기존 동작 그대로다 — 이 훅은 "어느 형제를 닫을지"만
+  // 판정하고, 각 오버레이 자신의 열림 상태(open/moreMenuOpen, caption
+  // editing store)는 계속 이 컴포넌트가 소유한다.
+  const codeBlockOverlay = useExclusiveOverlay({
+    language: { onClose: () => updateOpen(false) },
+    caption: { onClose: () => setCodeBlockCaptionEditing(null) },
+    more: { onClose: () => updateMoreMenuOpen(false) },
+  });
+  // 위 captionEditing 주석 — caption 편집이 caption 표시 버튼(외부 경로)으로
+  // 열려도 codeBlockOverlay의 activeId를 "caption"으로 동기화해, 이어서
+  // 언어 팝오버·더보기를 열 때 open()의 `previous !== null` 가드가 정상
+  // 작동해 caption의 onClose(setCodeBlockCaptionEditing(null))가 호출되게
+  // 한다(수정 전에는 activeIdRef가 null로 남아 이 가드를 통과하지 못해
+  // caption 편집과 새로 연 오버레이가 동시에 남았다). scope 조건
+  // (captionEditing.blockId === languageState.blockId)이 핵심이다 — 이
+  // toolbar가 지금 보여주는 codeBlock이 아닌 **다른** codeBlock에 대해
+  // caption 편집이 열렸을 때는(문서에 codeBlock이 여럿일 때) 아무 것도
+  // 하지 않는다. handleEditCaption(아래)이 이미 codeBlockOverlay.
+  // open("caption")을 직접 호출하지만 그대로 둔다 — 같은 id를 다시
+  // open해도 use-exclusive-overlay.ts open()의 `previous !== id` 가드가
+  // no-op으로 흡수해 무해하다.
+  useEffect(() => {
+    if (captionEditing === null || languageState === null) return;
+    if (captionEditing.blockId !== languageState.blockId) return;
+    codeBlockOverlay.open("caption");
+  }, [captionEditing, languageState, codeBlockOverlay]);
   const [search, setSearch] = useState("");
   const [anchor, setAnchor] = useState<AnchorPosition>(ZERO_ANCHOR);
   // spec §6(BLK-017), RD-002-DELTA-02(Issue #162) — 지정하면 완전
@@ -407,11 +451,10 @@ export const CodeBlockLanguageCombobox = () => {
     [editor, focusEditor, readActiveCodeBlock, updateOpen],
   );
 
-  // Issue #199 — caption 편집·더보기 메뉴와 이 toolbar를 공유하므로, 팝오버를
-  // 열 때 나머지 둘을 먼저 닫는다.
+  // Issue #199 — caption 편집·더보기 메뉴와 이 toolbar를 공유하므로,
+  // 팝오버를 열 때 codeBlockOverlay가 나머지 둘을 먼저 닫는다.
   const openPopover = () => {
-    updateMoreMenuOpen(false);
-    setCodeBlockCaptionEditing(null);
+    codeBlockOverlay.open("language");
     setSearch("");
     updateOpen(true);
   };
@@ -545,15 +588,14 @@ export const CodeBlockLanguageCombobox = () => {
     onEscapeDismiss: closeMoreMenuWithFocus,
   });
 
-  // Issue #199 — 언어 팝오버·caption 편집과 이 toolbar를 공유하므로, 메뉴를
-  // 열 때 나머지 둘을 먼저 닫는다.
+  // Issue #199 — 언어 팝오버·caption 편집과 이 toolbar를 공유하므로,
+  // 메뉴를 열 때 codeBlockOverlay가 나머지 둘을 먼저 닫는다.
   const handleMoreClick = () => {
     if (moreMenuOpen) {
       dismissMoreMenu();
       return;
     }
-    updateOpen(false);
-    setCodeBlockCaptionEditing(null);
+    codeBlockOverlay.open("more");
     updateMoreMenuOpen(true);
   };
 
@@ -635,14 +677,14 @@ export const CodeBlockLanguageCombobox = () => {
   // 추가하면 language/wrap 동기화 조건(updateFromSelection)까지 caption을
   // 함께 비교해야 해 불필요하게 넓어진다).
   // Issue #199 — 언어 팝오버·더보기 메뉴와 이 toolbar를 공유하므로, caption
-  // 편집을 열 때 나머지 둘을 먼저 닫는다(다시 열릴 대상을 가리키는 메뉴를
-  // 열어 두지 않는다, G-TST-001과 같은 이유). more 메뉴 항목 경로도 이
-  // 함수 하나로 들어오므로 더는 별도 wrapper가 필요 없다.
+  // 편집을 열 때 codeBlockOverlay가 나머지 둘을 먼저 닫는다(다시 열릴
+  // 대상을 가리키는 메뉴를 열어 두지 않는다, G-TST-001과 같은 이유). more
+  // 메뉴 항목 경로도 이 함수 하나로 들어오므로 더는 별도 wrapper가 필요
+  // 없다.
   const handleEditCaption = () => {
     const current = languageStateRef.current;
     if (current === null) return;
-    updateOpen(false);
-    updateMoreMenuOpen(false);
+    codeBlockOverlay.open("caption");
     const block = editor.getBlock(current.blockId);
     const caption =
       block?.type === "codeBlock" ? ((block as CodeBlock).caption ?? "") : "";

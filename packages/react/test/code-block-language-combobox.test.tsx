@@ -1321,4 +1321,28 @@ describe("CodeBlock toolbar 오버레이 상호 배타(Issue #199)", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     expect(captionInput()).not.toBeNull();
   });
+
+  // 단계-3 리뷰 MAJOR — code-block-captions.tsx의 caption "표시" 버튼
+  // (committedCaption이 있을 때만 렌더)은 codeBlockOverlay를 전혀 거치지
+  // 않고 setCodeBlockCaptionEditing을 직접 호출한다. 이 경로로 연 caption
+  // 편집은 activeIdRef가 갱신된 적이 없어, 이어서 더보기를 열어도
+  // use-exclusive-overlay.ts open()의 `previous !== null` 가드에 막혀
+  // caption의 onClose가 호출되지 않고 caption 편집·더보기 메뉴가 동시에
+  // 남는다(리팩터 전에는 handleMoreClick이 조건 없이
+  // setCodeBlockCaptionEditing(null)을 호출해 이 버그가 없었다). 이 파일이
+  // SlashMenu를 통해 CodeBlockCaptions도 함께 렌더하므로(captionInput 위
+  // 테스트들이 이미 그 사실에 기댄다) 실제 caption 표시 버튼을 직접
+  // 클릭해 그 외부 진입을 재현한다 — 표시 버튼은 committedCaption을
+  // accessible name으로 쓰므로(code-block-captions.tsx, aria-label 없음)
+  // caption fixture 값으로 그대로 찾는다.
+  it("caption 표시 버튼으로 caption 편집을 연 뒤 더보기 버튼을 클릭하면 caption 편집을 닫고 더보기 메뉴만 남긴다", () => {
+    mountCodeFixture({ caption: "seed caption" });
+    fireEvent.click(screen.getByRole("button", { name: "seed caption" }));
+    expect(captionInput()).not.toBeNull();
+
+    fireEvent.click(moreButton());
+
+    expect(captionInput()).toBeNull();
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
 });
