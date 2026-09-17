@@ -1345,4 +1345,31 @@ describe("CodeBlock toolbar 오버레이 상호 배타(Issue #199)", () => {
     expect(captionInput()).toBeNull();
     expect(screen.getByRole("menu")).toBeTruthy();
   });
+
+  // Issue #208 — 위 케이스의 반대 방향(더보기 메뉴가 먼저 열려 있고,
+  // caption 표시 버튼으로 뒤이어 진입)도 같은 captionEditing 구독 effect
+  // (code-block-language-combobox.tsx line 162-166)가 방향과 무관하게
+  // codeBlockOverlay.open("caption")을 호출해 처리한다 — 자매 케이스로
+  // 고정한다.
+  it("더보기 메뉴가 열린 상태에서 caption 표시 버튼을 클릭하면 더보기 메뉴가 닫히고 caption 편집만 남는다", () => {
+    mountCodeFixture({ caption: "seed caption" });
+    fireEvent.click(moreButton());
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "seed caption" }));
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(captionInput()).not.toBeNull();
+  });
+
+  it("언어 팝오버가 열린 상태에서 caption 표시 버튼을 클릭하면 팝오버가 닫히고 caption 편집만 남는다", () => {
+    mountCodeFixture({ caption: "seed caption" });
+    fireEvent.click(languageButton());
+    expect(querySearchInput()).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "seed caption" }));
+
+    expect(querySearchInput()).toBeNull();
+    expect(captionInput()).not.toBeNull();
+  });
 });
