@@ -840,6 +840,54 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
   });
 });
 
+// 01-계획.md(20260918-01-toolbar-exclusive-overlay) — moreMenuOpen을 닫던
+// 산발적 12개 호출을 (a) toolbarState.mode 감시 useEffect 1개와 (b)
+// useMediaToolbarMoreMenu 로컬 훅 1개로 정리했다(순수 리팩터, media-toolbar.tsx
+// 참고). 두 지점 각각을 회귀로 고정한다 — (a)는 mode가 view를 벗어나는
+// 어떤 진입점에서도 메뉴가 즉시 닫히는지, (b)는 ceb86ab의 pointerdown-
+// outside-menu 효과가 로컬 훅으로 옮긴 뒤에도 그대로인지 확인한다.
+describe("MediaToolbar moreMenu 정리(01-계획.md 20260918-01, 순수 리팩터 회귀)", () => {
+  it("more 메뉴가 열린 채로 Rename을 클릭하면 mode 이탈과 함께 메뉴가 즉시 닫힌다(모드 감시 effect)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+
+    // G-TST-001 — 닫힘은 하위 요소가 아니라 role="menu" 컨테이너 부재로
+    // 단언한다. mode가 "editingName"으로 바뀌는 이 클릭 자체가 메뉴를
+    // 닫는다 — finishEditing/cancelEditing까지 기다리지 않는다.
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("more 메뉴가 열린 채로 같은 블록의 캔버스를 다시 클릭하면 메뉴만 닫히고 toolbar는 남는다(ceb86ab)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+    const blockElement = getEditable().querySelector(
+      '[data-geul-block-id="media-1"]',
+    );
+    if (blockElement === null) throw new Error("media block DOM missing");
+
+    openMoreMenu();
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    fireEvent.pointerDown(blockElement);
+
+    // useMediaToolbarMoreMenu의 pointerdown 감시(옛 컴포넌트 인라인
+    // useEffect)가 메뉴만 닫는다 — MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS가
+    // `[data-geul-block-id]`를 허용해 이 클릭을 "바깥 클릭"으로 보지
+    // 않으므로 toolbar 전체(dismissToolbar)는 그대로 남는다.
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("toolbar")).toBeTruthy();
+  });
+});
+
 // 사용자 스크린샷 — 이미지를 리사이즈 핸들로 드래그하는 동안 toolbar가 옛
 // 위치에 그대로 떠 이미지를 가린다. media-resize-handles.tsx는 드래그
 // 중 element(host)에 `data-geul-media-resizing-block-id`를 쓴다

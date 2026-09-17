@@ -180,6 +180,65 @@ const carryMediaInfo = (
   ...patch,
 });
 
+type MediaToolbarMoreMenu = {
+  moreMenuOpen: boolean;
+  toggleMoreMenu: () => void;
+  closeMoreMenu: () => void;
+};
+
+// Issue #203 RD-004 DELTA-02(more 메뉴 도입) 이후 늘어난 12개의 산발적
+// `setMoreMenuOpen(false)` 호출(01-계획.md "20260918-01-toolbar-exclusive-
+// overlay")을 2곳으로 정리한다 — mode 자체가 view를 벗어나는 자동 close는
+// MediaToolbar 본문의 `toolbarState.mode` 감시 useEffect(아래)가 전담하고,
+// 같은 view 모드 안에서 메뉴 "자신"이 열고 닫히는 나머지 경로(블록 전환,
+// 삭제, ceb86ab의 캔버스 재클릭)는 이 훅 하나에 모은다. 단일 소비처라
+// (media-toolbar.tsx 안에서만 쓴다) 별도 파일로 추출하지 않는다
+// (RD-003-DELTA-03.md와 같은 근거).
+const useMediaToolbarMoreMenu = (
+  element: HTMLElement | null,
+): MediaToolbarMoreMenu => {
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
+  const toggleMoreMenu = useCallback(() => {
+    setMoreMenuOpen((prev) => !prev);
+  }, []);
+  const closeMoreMenu = useCallback(() => {
+    setMoreMenuOpen(false);
+  }, []);
+
+  // ceb86ab — more 메뉴가 열린 채로 같은 미디어 블록의 캔버스(이미지 본문
+  // 등)를 다시 클릭해도 안 닫히던 버그(사용자 보고, 2026-09-16) 수정.
+  // MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS 기반 useDismissOnOutsideOrEscape는
+  // `[data-geul-block-id]`를 allow-list에 둬 그 클릭을 "바깥 클릭 아님"으로
+  // 넘기고, 뒤이은 updateFromSelection도 같은 blockId 재관측이라
+  // moreMenuOpen을 그대로 두는 규칙(메뉴 안 Preview/정렬 버튼 클릭 재조회를
+  // 지키기 위한 설계)이 있어, 두 경로가 겹치면 열린 메뉴가 있는 상태에서
+  // 같은 블록의 캔버스를 다시 클릭해도 아무 효과가 없었다. 이 효과는 그
+  // 두 경로와 별개로 pointerdown 대상만 보고, 메뉴 자기 자신(트리거·항목)
+  // 이외의 모든 곳을 "메뉴만 닫는" 신호로 취급한다 — toolbar 전체
+  // dismiss(dismissToolbar)는 건드리지 않는다.
+  useEffect(() => {
+    if (!moreMenuOpen || element === null) return;
+    const ownerDocument = element.ownerDocument;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(".geul-media-toolbar") !== null ||
+        target.closest(".geul-media-toolbar__more-menu") !== null
+      ) {
+        return;
+      }
+      setMoreMenuOpen(false);
+    };
+    ownerDocument.addEventListener("pointerdown", handlePointerDown);
+    return () =>
+      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
+  }, [moreMenuOpen, element]);
+
+  return { moreMenuOpen, toggleMoreMenu, closeMoreMenu };
+};
+
 /**
  * `url`이 있는 미디어 블록을 선택하면 나타나는 편집 toolbar(spec §6.2,
  * §6.3 다운로드 부분, RD-004 DELTA-01). `url` 없는 블록은 `FilePanel`이
@@ -222,12 +281,22 @@ export const MediaToolbar = ({
   // Issue #203 RD-004 DELTA-02 — view 모드 개별 버튼을 모은 `⋯` more
   // 메뉴의 열림 상태. `toolbarState.mode`와 별도로 둔다 — view 모드 자체는
   // 유지한 채(리사이즈·selection 재조회는 계속 진행) 메뉴만 여닫는다
-  // (code-block-language-combobox.tsx moreMenuOpen과 같은 이유). view가
-  // 아닌 다른 mode로 전환하는 모든 지점(rename/caption/replacing 진입,
-  // delete, dismissToolbar, updateFromSelection의 블록 전환)에서 명시적으로
-  // false로 되돌린다 — 그러지 않으면 다음에 view로 돌아올 때(다른 블록
-  // 선택 포함) 메뉴가 stale true로 즉시 재오픈된다.
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  // (code-block-language-combobox.tsx moreMenuOpen과 같은 이유). 20260918-01
+  // 리팩터(01-계획.md) 이후 close 결정은 useMediaToolbarMoreMenu(위)와 아래
+  // toolbarState.mode 감시 useEffect 둘로만 모인다 — 그 외 지점은 이 훅이
+  // 반환한 closeMoreMenu()만 호출한다.
+  const { moreMenuOpen, toggleMoreMenu, closeMoreMenu } =
+    useMediaToolbarMoreMenu(element);
+  // 01-계획.md(20260918-01) — mode가 view를 벗어나는 모든 지점(rename/
+  // caption/replacing 진입, dismissToolbar·updateFromSelection이 만드는
+  // closed 포함)에서 메뉴를 닫는다. 각 전이 지점이 개별로
+  // `setMoreMenuOpen(false)`를 부르던 것을 이 useEffect 하나로 모았다 —
+  // 다시 view로 돌아올 때(cancelReplacing/finishEditing)는 mode가
+  // non-view였던 동안 이미 false로 고정돼 있어(더보기 트리거 자체가 view
+  // 모드에서만 렌더돼 그 사이 true로 바뀔 수 없다) 별도 처리가 필요 없다.
+  useEffect(() => {
+    if (toolbarState.mode !== "view") closeMoreMenu();
+  }, [toolbarState.mode, closeMoreMenu]);
   // more 트리거 자신의 div — code-block-language-combobox.tsx
   // moreTriggerRef와 같은 이유(IconButton은 forwardRef가 아니라 ref를
   // 버튼 DOM에 곧바로 붙일 수 없다). shell의 rect가 곧 버튼의 rect여야
@@ -262,7 +331,8 @@ export const MediaToolbar = ({
     if (element === null) {
       viewBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
-      setMoreMenuOpen(false);
+      // mode가 "closed"로 바뀌면 위 toolbarState.mode 감시 useEffect가
+      // moreMenu를 닫는다 — 여기서 직접 부르지 않는다(01-계획.md).
       setToolbarState({ mode: "closed" });
       return;
     }
@@ -271,7 +341,6 @@ export const MediaToolbar = ({
     if (media === null || media.url === null) {
       viewBlockIdRef.current = null;
       dismissedBlockIdRef.current = null;
-      setMoreMenuOpen(false);
       setToolbarState({ mode: "closed" });
       return;
     }
@@ -283,7 +352,6 @@ export const MediaToolbar = ({
       element.getAttribute("data-geul-file-panel-block-id") === media.blockId
     ) {
       viewBlockIdRef.current = null;
-      setMoreMenuOpen(false);
       setToolbarState((prev) =>
         prev.mode === "closed" ? prev : { mode: "closed" },
       );
@@ -294,7 +362,10 @@ export const MediaToolbar = ({
     // 다른 블록으로 전환됐으면 이전 블록에서 열려 있던 more 메뉴를 새
     // 블록까지 들고 오지 않는다 — 같은 블록을 계속 보고 있을 때는(재조회가
     // showPreview/textAlignment 등만 갱신) 열려 있던 메뉴를 그대로 둔다.
-    if (viewBlockIdRef.current !== media.blockId) setMoreMenuOpen(false);
+    // mode는 이 분기 전체에서 "view"로 유지되므로(또는 최초 진입) 위
+    // 감시 useEffect가 반응하지 않는다 — 같은 view 모드 안에서 메뉴만
+    // 닫는 경로라 useMediaToolbarMoreMenu의 closeMoreMenu를 직접 부른다.
+    if (viewBlockIdRef.current !== media.blockId) closeMoreMenu();
     viewBlockIdRef.current = media.blockId;
     const bounds =
       readBlockTopRightBounds(element, media.blockId) ??
@@ -311,7 +382,7 @@ export const MediaToolbar = ({
       left: bounds.left,
       top: bounds.top,
     });
-  }, [editor, element]);
+  }, [editor, element, closeMoreMenu]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
@@ -468,10 +539,9 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    // more 메뉴 항목에서 진입한다(Issue #203 RD-004 DELTA-02) — 곧 mode가
-    // "replacing"으로 바뀌어 더는 렌더되지 않겠지만, 취소로 view에 돌아왔을
-    // 때 stale true로 즉시 재오픈되지 않도록 미리 닫는다.
-    setMoreMenuOpen(false);
+    // more 메뉴 항목에서 진입한다(Issue #203 RD-004 DELTA-02) — mode가
+    // "replacing"으로 바뀌면 위 toolbarState.mode 감시 useEffect가 메뉴를
+    // 닫는다(01-계획.md, 여기서 직접 부르지 않는다).
     const pending = editor.getMediaUploadState(toolbarState.blockId);
     const upload: UploadSubState =
       pending === "uploading"
@@ -543,7 +613,9 @@ export const MediaToolbar = ({
       editor.commands.cancelMediaUpload(toolbarState.blockId);
     }
     editingRef.current = true;
-    setMoreMenuOpen(false);
+    // moreMenu는 "replacing" 진입 시점에 이미 위 감시 useEffect로 닫혀
+    // 있었고(더보기 트리거가 view 모드에서만 렌더돼 그 사이 다시 열릴 수
+    // 없다) view로 돌아오는 지금 다시 부를 필요가 없다(01-계획.md).
     setToolbarState({ mode: "view", ...carryMediaInfo(toolbarState) });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
@@ -631,7 +703,8 @@ export const MediaToolbar = ({
     dismissedBlockIdRef.current = viewBlockIdRef.current;
     editingRef.current = true;
     clearActionError();
-    setMoreMenuOpen(false);
+    // mode가 "closed"로 바뀌면 위 toolbarState.mode 감시 useEffect가
+    // moreMenu를 닫는다 — 여기서 직접 부르지 않는다(01-계획.md).
     setToolbarState({ mode: "closed" });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
@@ -652,7 +725,8 @@ export const MediaToolbar = ({
   // "Escape/바깥 클릭 한 번이 view 모드 전체를 곧바로 닫는다"는 기존
   // 계약(01-계획.md 완료 조건 2)에 의존해 그 계약을 유지해야 했다 — 메뉴가
   // 열려 있어도 Escape/바깥 클릭 한 번으로 메뉴와 toolbar 전체가 함께
-  // 닫힌다(아래 dismissToolbar가 setMoreMenuOpen(false)도 함께 호출).
+  // 닫힌다(dismissToolbar가 mode를 closed로 바꾸고, 위 toolbarState.mode
+  // 감시 useEffect가 그 전이에 반응해 moreMenu도 함께 닫는다).
   // `.geul-media-toolbar__more-menu`를 MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS
   // 에 포함해 두는 이유는 여전히 유효하다 — 메뉴 항목 클릭 자체(Preview/
   // 정렬처럼 메뉴를 안 닫는 토글 포함)가 "바깥 클릭"으로 오판정되는 것만
@@ -665,37 +739,11 @@ export const MediaToolbar = ({
     onEscapeDismiss: dismissToolbarAndFocusEditor,
   });
 
-  // more 메뉴가 열린 채로 같은 블록의 캔버스(이미지 본문 등)를 다시
-  // 클릭하면 메뉴가 영영 안 닫히던 버그(사용자 보고, 2026-09-16) 수정.
-  // 위 useDismissOnOutsideOrEscape는 `[data-geul-block-id]`를 allow-list에
-  // 둬 그 클릭을 "바깥 클릭 아님"으로 넘기고, 뒤이은 updateFromSelection도
-  // 같은 blockId 재관측이라 moreMenuOpen을 그대로 둔다(메뉴 안 Preview/정렬
-  // 버튼 클릭이 만드는 같은 blockId 재관측과 구분할 수 없어 그대로 둬야
-  // 했다 — 위 274/297행 주석 참고). 이 효과는 그 두 경로와 별개로 pointerdown
-  // 대상만 보고, 메뉴 자기 자신(트리거·항목) 이외의 모든 곳을 "메뉴만 닫는"
-  // 신호로 취급한다 — toolbar 전체 dismiss(dismissToolbar)는 건드리지 않는다.
-  useEffect(() => {
-    if (!moreMenuOpen || element === null) return;
-    const ownerDocument = element.ownerDocument;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest(".geul-media-toolbar") !== null ||
-        target.closest(".geul-media-toolbar__more-menu") !== null
-      ) {
-        return;
-      }
-      setMoreMenuOpen(false);
-    };
-    ownerDocument.addEventListener("pointerdown", handlePointerDown);
-    return () =>
-      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
-  }, [moreMenuOpen, element]);
-
-  const handleMoreClick = () => {
-    setMoreMenuOpen((prev) => !prev);
-  };
+  // more 메뉴가 열린 채로 같은 블록의 캔버스를 다시 클릭해도 안 닫히던
+  // 버그(ceb86ab, 사용자 보고 2026-09-16)의 재현 pointerdown 감시는
+  // useMediaToolbarMoreMenu(위)로 옮겼다 — moreMenuOpen과 별개로 이
+  // toolbar 전체를 닫는 dismissToolbar는 여전히 여기 useDismissOnOutsideOrEscape가
+  // 전담한다.
 
   if (toolbarState.mode === "closed") return null;
   // 지금 보여주는 바로 그 블록이 리사이즈 중이면 감춘다 — 다른 블록의
@@ -736,7 +784,9 @@ export const MediaToolbar = ({
     editingRef.current = true;
     focusEditor();
     viewBlockIdRef.current = toolbarState.blockId;
-    setMoreMenuOpen(false);
+    // moreMenu는 editingName/editingCaption 진입 시점에 이미 위 감시
+    // useEffect로 닫혀 있었다 — view로 돌아오는 지금 다시 부를 필요가
+    // 없다(01-계획.md, startEditingName/startEditingCaption 주석 참고).
     setToolbarState({
       mode: "view",
       ...carryMediaInfo(toolbarState, { name, caption }),
@@ -761,9 +811,9 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    // more 메뉴 항목에서 진입한다(startReplacing과 같은 이유) — 취소로
-    // view에 돌아왔을 때 메뉴가 stale true로 재오픈되지 않도록 미리 닫는다.
-    setMoreMenuOpen(false);
+    // more 메뉴 항목에서 진입한다(startReplacing과 같은 이유) — mode가
+    // "editingName"으로 바뀌면 위 toolbarState.mode 감시 useEffect가 메뉴를
+    // 닫는다(01-계획.md, 여기서 직접 부르지 않는다).
     setToolbarState({
       mode: "editingName",
       ...carryMediaInfo(toolbarState),
@@ -774,7 +824,6 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     clearActionError();
     editingRef.current = true;
-    setMoreMenuOpen(false);
     setToolbarState({
       mode: "editingCaption",
       ...carryMediaInfo(toolbarState),
@@ -852,8 +901,11 @@ export const MediaToolbar = ({
     if (toolbarState.mode !== "view") return;
     // code-block-language-combobox.tsx handleDelete와 같은 이유로 결과와
     // 무관하게 메뉴부터 닫는다 — 곧 사라질(성공 시) 또는 그대로 남을(실패
-    // 시) 블록을 가리키는 메뉴를 열어 두지 않는다.
-    setMoreMenuOpen(false);
+    // 시) 블록을 가리키는 메뉴를 열어 두지 않는다. mode는 이 호출 시점에
+    // 여전히 "view"라(성공 시 updateFromSelection이 나중에 closed로
+    // 바꾼다) 위 감시 useEffect가 반응하지 않는다 — 같은 view 모드 안에서
+    // 메뉴만 닫는 경로라 closeMoreMenu를 직접 부른다.
+    closeMoreMenu();
     runCommand(
       () => editor.commands.deleteBlock(toolbarState.blockId),
       updateFromSelection,
@@ -885,7 +937,7 @@ export const MediaToolbar = ({
             className={mediaToolbarButtonClassName}
             icon={moreIcon}
             label={dictionary.toolbar.media.moreAriaLabel}
-            onClick={handleMoreClick}
+            onClick={toggleMoreMenu}
           />
         </div>
       )}
@@ -1109,9 +1161,9 @@ export const MediaToolbar = ({
   // 텍스트 항목으로 옮겨왔다(code-block-language-combobox.tsx more-menu와
   // 같은 구조). Replace/Rename/Caption 항목은 클릭하면 outer 컨테이너
   // 자신을 다른 mode로 전환할 뿐 이 메뉴를 직접 렌더하지 않는다 — mode가
-  // "view"를 벗어나는 순간 아래 조건이 거짓이 돼 자연히 사라진다(각
-  // start* 핸들러가 미리 moreMenuOpen도 false로 되돌려 stale 재오픈을
-  // 막는다, 위 주석 참고). Preview·정렬 항목은 클릭해도 메뉴를 닫지
+  // "view"를 벗어나는 순간 아래 조건이 거짓이 돼 자연히 사라진다(위
+  // toolbarState.mode 감시 useEffect가 moreMenuOpen도 false로 되돌려 stale
+  // 재오픈을 막는다, 위 주석 참고). Preview·정렬 항목은 클릭해도 메뉴를 닫지
   // 않는다 — 여러 상태를 이어서 토글할 수 있어야 한다(view 모드였을 때의
   // 기존 계약과 동일, 01-계획.md "범위 밖" — 새 시각 강조 CSS는 추가하지
   // 않는다). role="menuitemcheckbox" + aria-checked로 상태를 알린다 —
