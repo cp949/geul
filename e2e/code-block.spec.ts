@@ -439,3 +439,79 @@ test("Shift+Enter는 캐럿 위치에서 CodeBlock을 분할해 다음 블록으
   await page.keyboard.type("X");
   await expect(nextBlock).toHaveText("Xconst b = 2;");
 });
+
+// 코드리뷰 결함 2 회귀(code-block 쪽) — `.geul-code-block-toolbar`(outer
+// 컨테이너)는 `transform: translateX(-100%)`로 자기 폭만큼 왼쪽으로 밀려
+// 렌더된다(topRight anchor, media-toolbar.tsx e2e "outer 컨테이너 폭이
+// 늘어나면 more-menu가 트리거의 새 위치로 재정렬된다"와 동일 메커니즘).
+// `⋯` 트리거는 이 컨테이너의 자식이라, 컨테이너 폭이 늘어나면 컨테이너의
+// 화면상 좌측 끝만 더 밀려나 트리거 자신이 화면에서 이동한다 — 트리거의
+// 리사이즈가 아니라 형제 노드 삽입이 원인이다. 실제 코드에서는 더보기
+// 메뉴를 연 채로 runCommand가 실패하면(메뉴를 안 닫는 의도된 동작)
+// `actionError` span이 이 컨테이너 안, 트리거 뒤에 추가돼 폭이 늘어난다.
+// 이 테스트는 그 span과 완전히 같은 DOM
+// (`<span class="geul-code-block-toolbar__error">`)을 직접 주입해 같은
+// 조건(컨테이너 폭 변화)을 결정론적으로 만든다. media-toolbar.tsx와
+// code-block-language-combobox.tsx가 공유하는 useAnchoredSubmenu가 outer
+// 컨테이너 ResizeObserver로 트리거 rect를 다시 읽어 more-menu를
+// 재정렬한다.
+test("outer 컨테이너 폭이 늘어나면 code-block more-menu가 트리거의 새 위치로 재정렬된다(코드리뷰 결함 2)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const codeBlock = await insertCodeBlock(page, editable);
+  await codeBlock.click();
+
+  const trigger = page.getByRole("button", {
+    name: "More code block options",
+  });
+  await trigger.click();
+  const menu = page.locator(".geul-code-block-toolbar__more-menu");
+  await expect(menu).toBeVisible();
+
+  const triggerBefore = await trigger.boundingBox();
+  const menuBefore = await menu.boundingBox();
+  if (triggerBefore === null || menuBefore === null) {
+    throw new Error("trigger/menu boundingBox missing");
+  }
+  // topRight anchor라 열린 직후엔 메뉴 우측 끝이 트리거 우측 끝과
+  // 일치한다 — 아래 "재정렬" 검증의 전제(둘이 애초에 정렬돼 있었다)를
+  // 먼저 확인한다.
+  expect(
+    Math.abs(
+      menuBefore.x + menuBefore.width - (triggerBefore.x + triggerBefore.width),
+    ),
+  ).toBeLessThanOrEqual(1);
+
+  await page.evaluate(() => {
+    const container = document.querySelector(".geul-code-block-toolbar");
+    if (container === null) throw new Error("outer container missing");
+    const span = document.createElement("span");
+    span.className = "geul-code-block-toolbar__error";
+    span.setAttribute("role", "alert");
+    span.textContent =
+      "폭을 크게 늘리기 위한 매우 긴 에러 메시지 텍스트 자리 표시자 문자열입니다";
+    container.appendChild(span);
+  });
+
+  // 전제 조건 — 주입한 span이 실제로 트리거를 화면상 옮겼는지 먼저
+  // 확인한다(이게 안 움직이면 아래 재정렬 검증 자체가 무의미하다).
+  await expect
+    .poll(async () => {
+      const box = await trigger.boundingBox();
+      return box === null ? null : box.x;
+    })
+    .not.toBe(triggerBefore.x);
+
+  // 수정 검증 — more-menu가 트리거의 새 위치를 따라간다(우측 끝 좌표 실측).
+  await expect
+    .poll(async () => {
+      const triggerAfter = await trigger.boundingBox();
+      const menuAfter = await menu.boundingBox();
+      if (triggerAfter === null || menuAfter === null) return null;
+      return Math.abs(
+        menuAfter.x + menuAfter.width - (triggerAfter.x + triggerAfter.width),
+      );
+    })
+    .toBeLessThanOrEqual(1);
+});

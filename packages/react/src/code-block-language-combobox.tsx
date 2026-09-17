@@ -22,6 +22,7 @@ import {
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
+import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -604,25 +605,17 @@ export const CodeBlockLanguageCombobox = () => {
   // ref를 곧바로 버튼 DOM에 붙일 수 없어, 이 shell의 rect를 버튼 경계로
   // 대신 쓴다.
   const moreTriggerRef = useRef<HTMLDivElement | null>(null);
-  const [moreMenuAnchor, setMoreMenuAnchor] = useState<AnchorPosition | null>(
-    null,
-  );
+  // 트리거 rect 실측 + outer 컨테이너(toolbarRef) 리사이즈 보강(코드리뷰
+  // 결함 2, media-toolbar.tsx moreMenuAnchor와 동일 버그)은
+  // useAnchoredSubmenu가 공유한다.
+  const { anchor: moreMenuAnchor, recompute: recomputeMoreMenuAnchor } =
+    useAnchoredSubmenu(moreTriggerRef, toolbarRef, moreMenuOpen);
+  // 훅이 못 보는 재배치만 여기서 다시 잰다 — outer 컨테이너 크기 변화가
+  // 아니라 이 toolbar 자신의 anchor(선택 재조회)가 옮겨가는 경우다.
   useLayoutEffect(() => {
-    if (!moreMenuOpen) {
-      setMoreMenuAnchor(null);
-      return;
-    }
-    const node = moreTriggerRef.current;
-    if (node === null) return;
-    const rect = node.getBoundingClientRect();
-    setMoreMenuAnchor((current) =>
-      current !== null &&
-      current.left === rect.right &&
-      current.top === rect.bottom
-        ? current
-        : { left: rect.right, top: rect.bottom },
-    );
-  }, [moreMenuOpen, anchor.left, anchor.top]);
+    if (!moreMenuOpen) return;
+    recomputeMoreMenuAnchor();
+  }, [moreMenuOpen, anchor.left, anchor.top, recomputeMoreMenuAnchor]);
 
   const { menuRef: moreMenuRef, style: moreMenuStyle } = useClampedMenuPosition(
     moreMenuAnchor?.left ?? 0,

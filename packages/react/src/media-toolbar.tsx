@@ -25,6 +25,7 @@ import {
   FALLBACK_BLOCK_POSITION,
   readBlockTopRightBounds,
 } from "./read-block-bounds.js";
+import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -302,12 +303,6 @@ export const MediaToolbar = ({
   // 버튼 DOM에 곧바로 붙일 수 없다). shell의 rect가 곧 버튼의 rect여야
   // 아래 moreMenuAnchor 실측이 어긋나지 않는다.
   const moreTriggerRef = useRef<HTMLDivElement | null>(null);
-  // more-menu는 outer 컨테이너(topRight, 블록 우상단)와 별도로 트리거
-  // 자신의 렌더된 rect를 앵커로 쓴다(code-block-language-combobox.tsx
-  // moreMenuAnchor와 같은 구조, 01-계획.md 6절 "선례 패턴").
-  const [moreMenuAnchor, setMoreMenuAnchor] = useState<ToolbarPosition | null>(
-    null,
-  );
   // 편집(rename/caption) 중 selectionchange 등에 의한 재조회를 막는다 —
   // 그러지 않으면 입력 중 발생하는 selectionchange가 draft를 지운다
   // (link-toolbar.tsx/file-panel.tsx와 같은 이유).
@@ -644,54 +639,19 @@ export const MediaToolbar = ({
   // 수동 재계산 로직을 새로 만들지 않는다).
   const viewLeft = toolbarState.mode === "view" ? toolbarState.left : null;
   const viewTop = toolbarState.mode === "view" ? toolbarState.top : null;
-  // 트리거의 현재 rect를 다시 읽어 anchor에 반영한다 — moreMenuOpen/뷰
-  // 전환 시의 초기 계산(아래 첫 useLayoutEffect)과 컨테이너 리사이즈 보강
-  // (그 다음 useLayoutEffect, 리뷰 결함 2) 둘 다 이 함수 하나를 공유해
-  // "트리거 rect -> anchor" 계산 로직이 두 곳에 따로 살지 않게 한다.
-  const recomputeMoreMenuAnchor = useCallback(() => {
-    const node = moreTriggerRef.current;
-    if (node === null) return;
-    const rect = node.getBoundingClientRect();
-    setMoreMenuAnchor((current) =>
-      current !== null &&
-      current.left === rect.right &&
-      current.top === rect.bottom
-        ? current
-        : { left: rect.right, top: rect.bottom },
-    );
-  }, []);
-  useLayoutEffect(() => {
-    if (!moreMenuOpen) {
-      setMoreMenuAnchor(null);
-      return;
-    }
-    recomputeMoreMenuAnchor();
-  }, [moreMenuOpen, viewLeft, viewTop, recomputeMoreMenuAnchor]);
-  // 리뷰 결함 2 — outer 컨테이너(`menuRef`가 가리키는 `.geul-media-toolbar`,
-  // `transform: translateX(-100%)`) 폭이 트리거 자신의 리사이즈가 아닌
-  // 형제 노드 삽입(예: actionError span, toggleShowPreview/setMediaAlignment
-  // 실패 시 메뉴를 안 닫은 채로 추가된다)으로 바뀌면 topRight anchor가
-  // 우측 끝을 고정하려 컨테이너 자체 좌표를 다시 계산해(useClampedMenuPosition
-  // 내부 ResizeObserver) 트리거의 화면 위치가 좌우로 밀린다. 그 변화는 위
-  // effect의 [moreMenuOpen, viewLeft, viewTop] deps로는 감지되지 않는다
-  // (viewLeft/Top은 selection 재조회로 얻는 bounds일 뿐 이 리클램프 결과를
-  // 반영하지 않는다) — G-UI-001 "크기 변경은 ResizeObserver로 다시
-  // 계산한다" 원칙대로 컨테이너 크기 변화를 직접 관찰해 트리거 rect를 다시
-  // 읽는다(PIT-0011 위반 회귀, 실측: 트리거 119px 이동, 메뉴는 그대로).
-  // moreMenuOpen이 아니면 관찰하지 않는다(리소스 누수 방지) — 메뉴가
-  // 닫히는 순간 클린업이 disconnect한다.
+  // 트리거 rect 실측 + outer 컨테이너(menuRef) 리사이즈 보강(코드리뷰
+  // 결함 2)은 useAnchoredSubmenu가 code-block-language-combobox.tsx와
+  // 공유한다.
+  const { anchor: moreMenuAnchor, recompute: recomputeMoreMenuAnchor } =
+    useAnchoredSubmenu(moreTriggerRef, menuRef, moreMenuOpen);
+  // 훅이 못 보는 재배치만 여기서 다시 잰다 — outer 컨테이너 크기 변화가
+  // 아니라 selection 재조회로 toolbarState 자체(viewLeft/viewTop)가
+  // 옮겨가는 경우다. 이 값의 이름·의미는 소비처마다 달라 훅 인자로 묶을 수
+  // 없다.
   useLayoutEffect(() => {
     if (!moreMenuOpen) return;
-    const container = menuRef.current;
-    const view = container?.ownerDocument.defaultView ?? null;
-    if (container === null || view === null) return;
-    // jsdom에는 ResizeObserver가 없다(useClampedMenuPosition과 같은 이유) —
-    // 이 보강은 실 레이아웃 엔진이 있는 e2e(Chromium)에서만 검증한다.
-    if (typeof view.ResizeObserver !== "function") return;
-    const observer = new view.ResizeObserver(recomputeMoreMenuAnchor);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [moreMenuOpen, recomputeMoreMenuAnchor, menuRef]);
+    recomputeMoreMenuAnchor();
+  }, [moreMenuOpen, viewLeft, viewTop, recomputeMoreMenuAnchor]);
 
   const { menuRef: moreMenuRef, style: moreMenuStyle } = useClampedMenuPosition(
     moreMenuAnchor?.left ?? 0,
