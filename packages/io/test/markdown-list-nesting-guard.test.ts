@@ -193,6 +193,161 @@ describe("scanMarkdownListNesting 단위 판정", () => {
 });
 
 /**
+ * 한 줄 안에서 list 마커가 곧바로 이어지는 연쇄(`- - - x`)의 깊이 가산을
+ * 검증한다(Issue #207). 기존 구현은 그 줄이 위치한 들여쓰기 스택 깊이만
+ * 세고 같은 줄의 마커 연쇄 개수는 전혀 세지 않아, 압축 없이 임의로 길게
+ * 만들 수 있는 `"- ".repeat(N) + "x"` 입력이 N과 무관하게 항상 depth 1로
+ * 측정됐다(미탐 — Issue #206이 막으려던 초선형 파싱 비용이 그대로
+ * 재발한다). 이 describe는 "한 줄 순수 연쇄"와 "다중 줄 중첩 + 마지막
+ * 한 줄만의 연쇄" 형태만 검증한다 — 여러 줄이 각각 들여쓰기 증가와
+ * 자체 연쇄를 반복하는 입력의 depth 누적은 아래
+ * "반복 합성(들여쓰기 증가 + 각 줄 자체 연쇄) depth 누적" describe가
+ * 별도로 검증한다(단계-3 결함 탐지 리뷰, IMPL-REVIEW-01 F1). 두 축의
+ * 정확한 결합 방식(부모 프레임 depth + 그 줄의 연쇄 개수)은
+ * scanMarkdownListNesting 함수 docstring 참고.
+ */
+describe("한 줄 마커 연쇄(chain) depth 가산 — Issue #207", () => {
+  it("들여쓰기 없이 한 줄에 마커가 N개 연쇄되면(`- - ... x`) maxDepth가 정확히 N이다", () => {
+    for (const chainLength of [1, 2, 7, 50]) {
+      const source = `${"- ".repeat(chainLength)}x`;
+
+      expect(scanMarkdownListNesting(source).maxDepth).toBe(chainLength);
+    }
+  });
+
+  it("다중 줄 들여쓰기 중첩(깊이 M)에 마지막 줄 마커 연쇄(K개)가 더해지면 maxDepth가 M+K-1이다", () => {
+    const linesToDepth = 5; // M
+    const chainLength = 4; // K
+    const nestedLines = Array.from(
+      { length: linesToDepth - 1 },
+      (_, index) => `${"  ".repeat(index)}- item-${index + 1}`,
+    );
+    const lastLine = `${"  ".repeat(linesToDepth - 1)}${"- ".repeat(chainLength)}x`;
+    const source = [...nestedLines, lastLine].join("\n");
+
+    expect(scanMarkdownListNesting(source).maxDepth).toBe(
+      linesToDepth + chainLength - 1,
+    );
+  });
+
+  it(`한 줄 마커 연쇄만으로 정확히 MAX_MARKDOWN_LIST_NESTING_DEPTH(${MAX_MARKDOWN_LIST_NESTING_DEPTH})에 도달하면 임계값을 넘지 않는다 — 기존 상수를 그대로 재사용한다(새 임계값 상수 없음)`, () => {
+    const source = `${"- ".repeat(MAX_MARKDOWN_LIST_NESTING_DEPTH)}x`;
+
+    expect(scanMarkdownListNesting(source).maxDepth).toBe(
+      MAX_MARKDOWN_LIST_NESTING_DEPTH,
+    );
+    expect(markdownListNestingTooDeep(source)).toBe(false);
+  });
+
+  it(`한 줄 마커 연쇄가 MAX_MARKDOWN_LIST_NESTING_DEPTH+1(${MAX_MARKDOWN_LIST_NESTING_DEPTH + 1})이면 임계값을 넘는다`, () => {
+    const source = `${"- ".repeat(MAX_MARKDOWN_LIST_NESTING_DEPTH + 1)}x`;
+
+    expect(scanMarkdownListNesting(source).maxDepth).toBe(
+      MAX_MARKDOWN_LIST_NESTING_DEPTH + 1,
+    );
+    expect(markdownListNestingTooDeep(source)).toBe(true);
+  });
+
+  // wall-clock이 아닌 결정적 계측으로 검증한다(G-TST-004/PIT-0034) — 연쇄
+  // 스캔이 만드는 작업량을 새 계측 축(chainCharsVisited)의 증가율로
+  // 확인한다. 시간 상한 assertion은 쓰지 않는다.
+  it("chainCharsVisited는 연쇄 길이를 10배 늘리면 약 10배로 늘어나는 결정적 계측이다(G-TST-004)", () => {
+    const small = `${"- ".repeat(2_000)}x`;
+    const large = `${"- ".repeat(20_000)}x`;
+
+    const smallScan = scanMarkdownListNesting(small);
+    const largeScan = scanMarkdownListNesting(large);
+
+    expect(smallScan.maxDepth).toBe(2_000);
+    expect(largeScan.maxDepth).toBe(20_000);
+
+    const ratio = largeScan.chainCharsVisited / smallScan.chainCharsVisited;
+    expect(ratio).toBeGreaterThan(8);
+    expect(ratio).toBeLessThan(12);
+  });
+});
+
+/**
+ * 단계-3 결함 탐지 리뷰(2026-09-17, IMPL-REVIEW-01 F1 — BLOCKER)가 찾은
+ * 반복 합성(들여쓰기 증가 + 각 줄 자체 마커 연쇄) 미탐을 검증한다.
+ *
+ * 위 "한 줄 마커 연쇄 depth 가산" describe의 수정(스택 위치 + 그 줄의
+ * 연쇄 개수 - 1)은 "다중 줄 중첩 + 마지막 한 줄만의 연쇄" 형태만 맞게
+ * 셌다. 여러 줄이 각각 (들여쓰기 증가 + 자체 연쇄)를 반복하면 실제
+ * CommonMark 중첩 깊이는 각 줄의 연쇄 개수의 합(곱셈적으로 커짐 —
+ * 블록 수 × 블록당 연쇄 길이)인데, 옛 계산은 "스택에 쌓인 프레임 수(줄
+ * 수만큼만 +1씩 증가) + 마지막 줄 연쇄 - 1"만 봐서 덧셈적으로만
+ * 커졌다 — 이전 줄의 연쇄가 다음 줄의 들여쓰기 폭을 만들어도 그 폭
+ * 자체가 몇 단을 표현하는지 스택에 전혀 반영되지 않았기 때문이다.
+ *
+ * 실제 remark-gfm 파서로 대조 확인(리뷰 subagent, 2026-09-17): 각 블록의
+ * 들여쓰기가 이전 블록의 연쇄가 만든 컬럼에 정확히 맞춰지면(각 블록 i의
+ * 들여쓰기 = 2 * C * i, marker+공백 폭 2를 가정) 실제 중첩 깊이는
+ * B*C(블록 수 × 블록당 연쇄 길이)와 정확히 일치한다 — B=2,C=3→6,
+ * B=3,C=3→9을 mdast list 노드 깊이로 직접 확인했다.
+ *
+ * 수정: 스택 프레임마다 폭(width)뿐 아니라 그 프레임에서 도달한 누적
+ * depth를 함께 저장한다 — 새 프레임의 depth = 부모 프레임의 depth(스택이
+ * 비었으면 0, 형제면 그 아래 프레임의 depth) + 그 줄의 연쇄 개수. 이러면
+ * 이전 줄의 연쇄가 만든 깊이가 다음 줄의 "부모 depth"로 그대로 전달된다.
+ */
+const buildChainedNestingAttack = (blockCount: number, chainPerBlock: number) =>
+  Array.from(
+    { length: blockCount },
+    (_, blockIndex) =>
+      `${" ".repeat(2 * chainPerBlock * blockIndex)}${"- ".repeat(chainPerBlock)}y`,
+  ).join("\n");
+
+describe("반복 합성(들여쓰기 증가 + 각 줄 자체 연쇄) depth 누적 — 단계-3 결함 탐지(IMPL-REVIEW-01 F1)", () => {
+  it("B=3,C=3(블록 3개, 블록당 연쇄 3개) — maxDepth가 B*C=9다(실제 mdast 중첩 깊이와 일치, 리뷰에서 실제 파서로 대조 확인)", () => {
+    const source = buildChainedNestingAttack(3, 3);
+
+    expect(scanMarkdownListNesting(source).maxDepth).toBe(9);
+  });
+
+  it("B=2,C=250 — 옛 계산은 251(=B+C-1)로 과소측정해 임계값 300 미만으로 통과시켰다. 실제 깊이는 B*C=500이라 임계값을 넘어야 한다", () => {
+    const source = buildChainedNestingAttack(2, 250);
+
+    expect(scanMarkdownListNesting(source).maxDepth).toBe(500);
+    expect(markdownListNestingTooDeep(source)).toBe(true);
+  });
+
+  it(`경계 — 블록별 연쇄가 누적돼 정확히 MAX_MARKDOWN_LIST_NESTING_DEPTH(${MAX_MARKDOWN_LIST_NESTING_DEPTH})에 도달하면 임계값을 넘지 않고, 1을 더 넘으면 넘는다`, () => {
+    const atThreshold = buildChainedNestingAttack(
+      2,
+      MAX_MARKDOWN_LIST_NESTING_DEPTH / 2,
+    );
+    const overThreshold = [
+      buildChainedNestingAttack(1, MAX_MARKDOWN_LIST_NESTING_DEPTH / 2),
+      `${" ".repeat(MAX_MARKDOWN_LIST_NESTING_DEPTH)}${"- ".repeat(MAX_MARKDOWN_LIST_NESTING_DEPTH / 2 + 1)}y`,
+    ].join("\n");
+
+    expect(scanMarkdownListNesting(atThreshold).maxDepth).toBe(
+      MAX_MARKDOWN_LIST_NESTING_DEPTH,
+    );
+    expect(markdownListNestingTooDeep(atThreshold)).toBe(false);
+
+    expect(scanMarkdownListNesting(overThreshold).maxDepth).toBe(
+      MAX_MARKDOWN_LIST_NESTING_DEPTH + 1,
+    );
+    expect(markdownListNestingTooDeep(overThreshold)).toBe(true);
+  });
+
+  it("형제 항목(같은 들여쓰기 폭의 반복 줄)은 depth를 누적하지 않고 매번 같은 부모 기준으로 재계산한다 — 형제 여러 개가 depth를 잘못 합산하지 않는다", () => {
+    const parent = "- - - y"; // depth 3
+    const siblings = Array.from(
+      { length: 20 },
+      () => `${" ".repeat(6)}- z`, // parent와 같은 컬럼(6)의 형제, 각자 chainCount=1
+    ).join("\n");
+    const source = `${parent}\n${siblings}`;
+
+    // 형제가 20개 반복돼도 각 형제의 depth는 parent(3) + 1 = 4로 고정이지,
+    // 형제 수만큼 늘어나지 않는다.
+    expect(scanMarkdownListNesting(source).maxDepth).toBe(4);
+  });
+});
+
+/**
  * 가드 자신의 작업량이 입력 길이에 선형인지를 결정적으로 잰다
  * (G-TST-004) — wall-clock 대신 scanMarkdownListNesting이 반환하는 계측
  * 값(스캔한 줄 수, 들여쓰기 문자 수, 스택 push/pop 횟수)의 증가율을
@@ -336,6 +491,25 @@ describe("importMarkdown 통합 — 초과 시 파서를 호출하지 않고 결
 
     expect(result.ok).toBe(true);
     expect(parseInvocationCount).toBe(1);
+  });
+
+  // 계획서 "범위 밖" — 한 줄 마커 연쇄 shape의 실제 파싱 wall-clock은
+  // 실측하지 않기로 확정했다. 그래서 이 테스트는 정확히 threshold인
+  // 연쇄가 "정상 파싱된다"는 실측성 주장은 하지 않고, threshold 초과
+  // 연쇄가 사전 가드에서 걸려 parseProcessor.parse()에 아예 도달하지
+  // 않는다(=실제 파싱 비용을 지불하지 않는다)는 결정적 사실만 검증한다.
+  it(`한 줄 마커 연쇄가 MAX_MARKDOWN_LIST_NESTING_DEPTH+1(${MAX_MARKDOWN_LIST_NESTING_DEPTH + 1})이면 parseProcessor.parse()를 호출하지 않고 MARKDOWN_LIST_NESTING_TOO_DEEP을 반환한다(Issue #207)`, () => {
+    parseInvocationCount = 0;
+
+    const result = importMarkdown(
+      `${"- ".repeat(MAX_MARKDOWN_LIST_NESTING_DEPTH + 1)}x`,
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "MARKDOWN_LIST_NESTING_TOO_DEEP" },
+    });
+    expect(parseInvocationCount).toBe(0);
   });
 });
 

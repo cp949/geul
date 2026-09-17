@@ -29,6 +29,30 @@
 // 전체 스캔은 소스 문자열을 한 번만 순회한다(각 줄의 들여쓰기 폭 계산과
 // 중첩 스택 push/pop 모두 상환(amortized) O(n)) — 가드 자신이 새로운
 // 비선형 비용을 만들면 가드의 목적과 상충한다.
+//
+// [Issue #207, 2026-09-17] 위 근사는 원래 "그 줄이 위치한 들여쓰기 폭"만
+// depth로 셌다. CommonMark는 한 줄 안에서 list 마커가 공백 없이 또는
+// 마커 뒤 공백을 두고 곧바로 이어지는 연쇄(`- - - x`)도 마커 개수만큼
+// 중첩된 list로 파싱한다 — 들여쓰기 폭은 그대로(0)인데 실제 중첩은 마커
+// 개수만큼 깊다. 원래 구현은 이 축을 전혀 세지 않아 `"- ".repeat(N) + "x"`
+// 처럼 압축 없이 임의로 길게 만들 수 있는 입력을 depth 1로 오판했다(미탐 —
+// Issue #206이 막으려던 초선형 파싱 비용이 그대로 재발한다). 그래서 각
+// 마커 줄마다 같은 줄에서 이어지는 마커 연쇄 개수를 별도로 세는
+// countMarkerChain을 추가했다.
+//
+// 첫 수정(qq-workflow 계획 20260917-03 "## 결정")은 "그 줄의 들여쓰기
+// 스택 위치(indentStack.length) + 그 줄의 연쇄 개수 - 1"로 depth를
+// 셌는데, 단계-3 결함 탐지 리뷰(2026-09-17, IMPL-REVIEW-01 F1 — BLOCKER)가
+// 이것도 미탐임을 실제 remark-gfm 파서 대조로 확인했다 — 여러 줄이 각각
+// (들여쓰기 증가 + 자체 연쇄)를 반복하면 실제 중첩 깊이는 각 줄의 연쇄
+// 개수의 합(예: 블록 2개, 블록당 연쇄 250개 → 실제 500단, 실제 파서로
+// 확인)인데, "스택 위치"는 줄 수만큼만 +1씩 늘어 251로 과소측정했다.
+// 이전 줄의 연쇄가 다음 줄의 들여쓰기 "폭"을 만들어도 그 폭이 몇 단을
+// 표현하는지가 스택에 전혀 전달되지 않았기 때문이다. 그래서 스택 프레임에
+// 폭뿐 아니라 그 프레임까지의 누적 depth(부모 depth + 그 줄의 연쇄 개수)를
+// 함께 저장하도록 다시 고쳤다 — 상세 근거는 scanMarkdownListNesting
+// 함수 docstring 참고. 새 임계값 상수는 추가하지 않는다 — 기존
+// MAX_MARKDOWN_LIST_NESTING_DEPTH(300)를 그대로 재사용한다.
 
 /**
  * list 마커 뒤에 공백이 오거나 줄이 그대로 끝나야 한다 — marker 뒤에 다른
@@ -37,6 +61,18 @@
  * break류도 이 조건으로 자연히 제외된다.
  */
 const LIST_MARKER_PATTERN = /^(?:[-*+]|\d{1,9}[.)])(?:\s|$)/;
+
+/**
+ * LIST_MARKER_PATTERN과 같은 마커 문법이지만 `^` 앵커 대신 sticky(`y`)
+ * 플래그를 쓴다 — countMarkerChain이 줄 중간의 임의 위치(index)에서 다음
+ * 마커를 반복해서 검사해야 하는데, 매 반복마다 `rest.slice(index)`로 새
+ * substring을 만들면 반복마다 남은 길이에 비례하는 복사 비용이 누적돼
+ * 마커 연쇄 개수에 제곱으로 커진다(Issue #207). sticky 플래그는
+ * `lastIndex`에 매치를 강제해 substring 복사 없이 같은 문자열에 대해
+ * index만 전진시킬 수 있다 — stripBlockquoteMarkers가 반복마다 slice하지
+ * 않는 것과 같은 이유다.
+ */
+const LIST_MARKER_PATTERN_STICKY = /(?:[-*+]|\d{1,9}[.)])(?:\s|$)/y;
 
 /**
  * 들여쓰기를 뗀 나머지 문자열의 시작이 코드펜스 마커(백틱 또는 물결 3개
@@ -155,8 +191,48 @@ const stripBlockquoteMarkers = (
   return { rest: line.slice(offset), charsVisited: offset };
 };
 
+/**
+ * 한 줄 안에서 list 마커가 곧바로 이어지는 연쇄 개수를 센다(`- - - x`류 —
+ * Issue #207). CommonMark는 list item 내용이 같은 줄에서 곧바로 또 다른
+ * list 마커로 시작하면 그 마커 개수만큼 중첩된 list로 파싱한다. 호출부
+ * (scanMarkdownListNesting)는 이 줄이 속한 부모 프레임의 누적 depth에
+ * chainCount를 그대로 더해 그 줄의 depth로 쓴다(부모가 없으면 depth는
+ * chainCount 자체) — 계산 방식은 scanMarkdownListNesting 함수 docstring
+ * 참고.
+ *
+ * 재귀 없이 while 루프로 반복한다(파일 상단 불변식). 각 반복은 마커
+ * 매치가 있어야만 진행되고 매치 길이(최소 1자, 마커 문자 자체)만큼
+ * index를 전진시키므로 무한 루프가 되지 않는다. LIST_MARKER_PATTERN_STICKY
+ * 로 substring을 만들지 않고 lastIndex만 전진시켜, 반복 횟수와 무관하게
+ * 각 반복 비용이 매치 길이에만 비례한다 — 총 비용은 rest의 길이에
+ * 선형이다. 마커 뒤 남은 공백(`-  - x`처럼 마커당 공백이 2칸 이상인
+ * 경우)도 추가로 건너뛰어 다음 마커를 계속 인식한다 — 안 그러면 공백 폭만
+ * 다른 동일한 연쇄가 미탐(가드 우회)으로 샐 수 있다(파일 상단 불변식 —
+ * 과탐지는 허용, 미탐은 금지).
+ */
+const countMarkerChain = (
+  rest: string,
+): { chainCount: number; charsVisited: number } => {
+  let chainCount = 0;
+  let index = 0;
+  for (;;) {
+    LIST_MARKER_PATTERN_STICKY.lastIndex = index;
+    const match = LIST_MARKER_PATTERN_STICKY.exec(rest);
+    if (match === null) break;
+    chainCount += 1;
+    index += match[0].length;
+    while (index < rest.length) {
+      const code = rest.charCodeAt(index);
+      if (code !== 32 && code !== 9) break;
+      index += 1;
+    }
+  }
+  return { chainCount, charsVisited: index };
+};
+
 export type MarkdownListNestingScan = {
-  /** 감지된 list 항목의 최대 중첩 깊이 근사치(최상위 항목이 깊이 1). */
+  /** 감지된 list 항목의 최대 중첩 깊이 근사치(최상위 항목이 깊이 1, 같은
+   * 줄의 마커 연쇄가 있으면 그만큼 가산된다 — Issue #207). */
   maxDepth: number;
   /** 스캔한 총 줄 수 — G-TST-004 결정적 작업량 계측 축 1. */
   linesScanned: number;
@@ -170,6 +246,11 @@ export type MarkdownListNestingScan = {
    * 를 본다(순수 증가 패턴은 줄마다 push 1회, sawtooth는 줄마다 pop 여러
    * 번이지만 전체 pop 횟수 총합은 전체 push 총합을 넘지 않는다). */
   stackOps: number;
+  /** 같은 줄의 마커 연쇄(countMarkerChain)를 세기 위해 방문한 총 문자 수 —
+   * 계측 축 4(Issue #207). indentCharsVisited와 별개 축이다 — 들여쓰기
+   * 계산이 아니라 마커 연쇄 스캔 자체가 방문한 문자 수만 담아, 연쇄
+   * 스캔이 만드는 작업량을 독립적으로 드러낸다(G-TST-004). */
+  chainCharsVisited: number;
 };
 
 /**
@@ -187,15 +268,31 @@ export type MarkdownListNestingScan = {
  * 없는 줄(blockquote marker를 벗겨낸 뒤에도 마커가 없는 일반 들여쓰기
  * 텍스트 등)은 스택에 영향을 주지 않는다 — 그래서 list 마커가 전혀 없는
  * 문서는 항상 maxDepth 0을 반환한다.
+ *
+ * 스택 프레임마다 그 줄의 들여쓰기 폭(width)뿐 아니라 그 프레임에서 도달한
+ * 누적 depth를 함께 저장한다(Issue #207, 단계-3 결함 탐지 리뷰
+ * 2026-09-17 IMPL-REVIEW-01 F1 수정). 처음에는 "스택 위치(indentStack
+ * .length) + 그 줄의 마커 연쇄 개수 - 1"로 depth를 셌는데, 이는 "다중 줄
+ * 중첩 + 마지막 한 줄만의 연쇄" 형태에서는 맞지만, 여러 줄이 각각
+ * (들여쓰기 증가 + 자체 연쇄)를 반복하는 입력에서 미탐이 났다 — 한 줄의
+ * 마커 연쇄는 그 줄 자체에서 여러 단을 실제로 여는데(각 마커가 다음
+ * 마커를 유일한 자식으로 감싼다), 그 연쇄가 만든 들여쓰기 "폭"만 다음
+ * 줄의 스택 비교에 쓰이고 그 폭이 몇 단을 표현하는지는 스택에 전혀
+ * 전달되지 않아, 다음 줄이 그 폭에 맞춰 들어와도 "한 단 늘었다"로만
+ * 세었기 때문이다(실제로는 이전 줄의 연쇄 단수만큼 늘어야 한다). 그래서
+ * 새 프레임의 depth를 "부모 프레임의 depth(스택이 비었으면 0, 형제면 그
+ * 아래 프레임의 depth) + 그 줄의 연쇄 개수"로 계산해, 이전 줄의 연쇄가
+ * 만든 깊이가 다음 줄에도 부모 depth로 그대로 전달되게 한다.
  */
 export const scanMarkdownListNesting = (
   source: string,
 ): MarkdownListNestingScan => {
-  const indentStack: number[] = [];
+  const indentStack: { width: number; depth: number }[] = [];
   let maxDepth = 0;
   let linesScanned = 0;
   let indentCharsVisited = 0;
   let stackOps = 0;
+  let chainCharsVisited = 0;
   let inFence = false;
   let fenceChar = "";
 
@@ -232,22 +329,41 @@ export const scanMarkdownListNesting = (
 
     for (
       let top = indentStack[indentStack.length - 1];
-      top !== undefined && indent < top;
+      top !== undefined && indent < top.width;
       top = indentStack[indentStack.length - 1]
     ) {
       indentStack.pop();
       stackOps += 1;
     }
+
+    const { chainCount, charsVisited: chainCharsVisitedThisLine } =
+      countMarkerChain(rest);
+    chainCharsVisited += chainCharsVisitedThisLine;
+
     const top = indentStack[indentStack.length - 1];
-    if (top === undefined || indent > top) {
-      indentStack.push(indent);
+    const isSibling = top !== undefined && indent === top.width;
+    const parentDepth = isSibling
+      ? (indentStack[indentStack.length - 2]?.depth ?? 0)
+      : (top?.depth ?? 0);
+    const lineDepth = parentDepth + chainCount;
+
+    if (isSibling) {
+      indentStack[indentStack.length - 1] = { width: indent, depth: lineDepth };
+    } else {
+      indentStack.push({ width: indent, depth: lineDepth });
       stackOps += 1;
     }
 
-    if (indentStack.length > maxDepth) maxDepth = indentStack.length;
+    if (lineDepth > maxDepth) maxDepth = lineDepth;
   }
 
-  return { maxDepth, linesScanned, indentCharsVisited, stackOps };
+  return {
+    maxDepth,
+    linesScanned,
+    indentCharsVisited,
+    stackOps,
+    chainCharsVisited,
+  };
 };
 
 /**
