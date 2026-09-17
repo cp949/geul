@@ -1,7 +1,17 @@
 {
   "name": "@cp949/geul-model",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "description": "geul 에디터의 독자 문서 JSON 스키마와 검증 — 프레임워크·DOM 비의존",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cp949/geul.git",
+    "directory": "packages/model"
+  },
+  "homepage": "https://github.com/cp949/geul/tree/main/packages/model#readme",
+  "bugs": {
+    "url": "https://github.com/cp949/geul/issues"
+  },
   "publishConfig": {
     "access": "public"
   },

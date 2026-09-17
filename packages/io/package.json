@@ -1,7 +1,17 @@
 {
   "name": "@cp949/geul-io",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "description": "geul 문서와 HTML/Markdown(GFM) 간 변환 — exportHtml/importHtml/exportMarkdown/importMarkdown",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cp949/geul.git",
+    "directory": "packages/io"
+  },
+  "homepage": "https://github.com/cp949/geul/tree/main/packages/io#readme",
+  "bugs": {
+    "url": "https://github.com/cp949/geul/issues"
+  },
   "publishConfig": {
     "access": "public"
   },

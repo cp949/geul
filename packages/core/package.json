@@ -1,7 +1,17 @@
 {
   "name": "@cp949/geul-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "description": "Tiptap을 감싼 프레임워크 비의존 headless 블록 에디터 코어",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cp949/geul.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/cp949/geul/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/cp949/geul/issues"
+  },
   "publishConfig": {
     "access": "public"
   },

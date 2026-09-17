@@ -1,5 +1,14 @@
 # @cp949/geul-core
 
+## 0.1.2
+
+### Patch Changes
+
+- npm 패키지 메타데이터(description, repository, homepage, bugs)를 추가한다. 0.1.1까지는 4개 패키지 모두 이 필드가 없어 npm 패키지 페이지에 홈페이지·이슈 링크·설명이 표시되지 않았다.
+- Updated dependencies
+  - @cp949/geul-model@0.1.2
+  - @cp949/geul-io@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes
