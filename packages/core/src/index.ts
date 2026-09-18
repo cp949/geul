@@ -73,6 +73,21 @@ export type {
   PartialBlock,
   TableCellSelection,
 } from "./editor-controller-types.js";
+// EditorController(위)를 구성하는 facet 10개 — 아키텍처 리뷰 02차 C5.
+// 소비처가 EditorController 전체 대신 자신이 실제로 쓰는 facet만 타입으로
+// 받고 싶을 때 쓴다(예: media-toolbar류가 MediaCommands만 인자로 받기).
+export type {
+  BlockCommands,
+  BlockMutation,
+  CodeBlockAndCustomCommands,
+  DocumentQuery,
+  EditorLifecycle,
+  InlineFormattingCommands,
+  MediaCommands,
+  SelectionMutation,
+  SelectionQuery,
+  TableCommands,
+} from "./editor-controller-facets.js";
 export type { EditorError } from "./errors.js";
 export type { MediaBlockKind } from "./media-block-kind.js";
 export type {
