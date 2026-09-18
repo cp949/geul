@@ -1,7 +1,8 @@
 /**
- * heading(level 2~6)/paragraph/quote/list-item(4종)에서 Shift+Enter로
- * hardBreak를 삽입하는 HardBreakKeyboardExtension의 계약을 확인한다
- * (RD-002). h1 예외(그릴링 결정 Q2)도 이 파일이 소유한다. table 안 계약
+ * heading(level 2~6)/paragraph/quote/list-item(4종)/callout(Issue #209
+ * BLK-020)에서 Shift+Enter로 hardBreak를 삽입하는
+ * HardBreakKeyboardExtension의 계약을 확인한다(RD-002). h1 예외(그릴링
+ * 결정 Q2)도 이 파일이 소유한다. table 안 계약
  * (RD-003)은 table-keyboard-extension.test.ts/editor-controller-table.test.ts가
  * 소유 — 여기서는 이 확장 자신이 "관여하지 않는다"만 codeBlock과 함께
  * 확인한다. codeBlock 안 Shift+Enter가 실제로 어떻게 되는지(캐럿 위치에서
@@ -89,6 +90,7 @@ describe("Shift+Enter로 hardBreak를 삽입한다(RD-002)", () => {
       "toggleListItem",
       { id: "b1", type: "toggleListItem", content: [{ text: "ab" }] },
     ],
+    ["callout", { id: "b1", type: "callout", content: [{ text: "ab" }] }],
   ])(
     "%s 블록의 텍스트 중간에서 Shift+Enter를 누르면 hardBreak가 삽입되고 텍스트 순서는 보존된다",
     (_label, block) => {

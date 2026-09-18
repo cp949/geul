@@ -2,7 +2,8 @@ import { Extension } from "@tiptap/core";
 import { isInTable } from "@tiptap/pm/tables";
 
 // heading(level 2~6)/paragraph/quote/list-item(bullet/numbered/check/toggle
-// 4종)에서 Shift+Enter로 같은 블록 안에 hardBreak(줄바꿈)를 삽입한다(RD-002,
+// 4종)/callout(Issue #209 BLK-020)에서 Shift+Enter로 같은 블록 안에
+// hardBreak(줄바꿈)를 삽입한다(RD-002,
 // 그릴링 결정 Q3 — soft line break, 새 블록/셀 생성 아님). heading level
 // 1(h1)은 완전히 무시한다(그릴링 결정 Q2 — 여러 줄 입력 대상이 아니다).
 //
@@ -21,6 +22,7 @@ const HARD_BREAK_TARGET_NODE_TYPES: ReadonlySet<string> = new Set([
   "numberedListItem",
   "checkListItem",
   "toggleListItem",
+  "callout",
 ]);
 
 export const HardBreakKeyboardExtension = Extension.create({
