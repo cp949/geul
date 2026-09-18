@@ -47,13 +47,15 @@ const placeholderDecorations = (
           )
         : typeName === "quote"
           ? placeholder.quote
-          : typeName === "codeBlock"
-            ? placeholder.codeBlock
-            : isListEntryBlockType(typeName)
-              ? placeholder.listItem
-              : anchor === position + 1
-                ? placeholder.paragraph
-                : null;
+          : typeName === "callout"
+            ? placeholder.callout
+            : typeName === "codeBlock"
+              ? placeholder.codeBlock
+              : isListEntryBlockType(typeName)
+                ? placeholder.listItem
+                : anchor === position + 1
+                  ? placeholder.paragraph
+                  : null;
     if (text !== null) {
       decorations.push(
         Decoration.node(position, position + node.nodeSize, {

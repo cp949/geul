@@ -18,6 +18,7 @@ export const KO_DICTIONARY: Dictionary = {
     paragraph: "텍스트를 입력하거나 '/'를 입력해 명령을 실행하세요",
     heading: "제목 {level}",
     quote: "인용구",
+    callout: "콜아웃",
     codeBlock: "코드",
     listItem: "목록 항목",
     media: "{kind} 추가",

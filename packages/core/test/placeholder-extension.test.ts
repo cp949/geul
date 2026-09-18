@@ -20,6 +20,7 @@ import {
 
 const PARAGRAPH_PLACEHOLDER = "Enter text or type '/' for commands";
 const QUOTE_PLACEHOLDER = "Quote";
+const CALLOUT_PLACEHOLDER = "Callout";
 const CODE_PLACEHOLDER = "Code";
 
 /**
@@ -58,6 +59,18 @@ const emptyHeadingsDocument = (): Document => ({
 const emptyQuoteDocument = (): Document =>
   documentOf(
     { id: "q-empty", type: "quote", content: [] },
+    { id: "p-end", type: "paragraph", content: [{ text: "end" }] },
+  );
+
+/**
+ * 빈 callout 하나 뒤에 내용 있는 paragraph를 둔 문서 — quote와 같은 "상시"
+ * 조건 관찰용. callout은 parseHTML/renderHTML을 선언하지 않아 quote처럼
+ * 고정 태그(blockquote)로 조회할 수 없다 — data-geul-block-id로 컨테이너를
+ * 찾고 그 첫 자식에서 data-placeholder를 읽는다(toggleListItem 선례와 동일).
+ */
+const emptyCalloutDocument = (): Document =>
+  documentOf(
+    { id: "c-empty", type: "callout", content: [] },
     { id: "p-end", type: "paragraph", content: [{ text: "end" }] },
   );
 
@@ -191,6 +204,37 @@ describe("placeholder 데코레이션", () => {
     expect(editor.getDocument().blocks[0]).toEqual({
       id: "q-empty",
       type: "quote",
+      content: [],
+    });
+  });
+
+  it("빈 callout은 캐럿 위치와 무관하게 Callout placeholder가 붙고 저장 문서에 흔적이 없다", () => {
+    const editor = createEditor({ initialDocument: emptyCalloutDocument() });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    const before = editor.getDocument();
+
+    const container = editable.querySelector<HTMLElement>(
+      '[data-geul-block-id="c-empty"]',
+    );
+    if (container === null) throw new Error("c-empty 조회 실패");
+
+    // 캐럿이 callout 밖(p-end)에 있어도 붙는다 — quote와 같은 상시 조건.
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "p-end"));
+    expect(container.firstElementChild?.getAttribute("data-placeholder")).toBe(
+      CALLOUT_PLACEHOLDER,
+    );
+
+    // 캐럿이 callout 안에 있어도 같은 문구다.
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "c-empty"));
+    expect(container.firstElementChild?.getAttribute("data-placeholder")).toBe(
+      CALLOUT_PLACEHOLDER,
+    );
+
+    // 데코레이션일 뿐 저장 문서는 로드 그대로다.
+    expect(editor.getDocument()).toEqual(before);
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "c-empty",
+      type: "callout",
       content: [],
     });
   });

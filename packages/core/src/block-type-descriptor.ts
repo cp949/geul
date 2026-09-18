@@ -16,7 +16,8 @@ export type SetBlockTypeDescriptor =
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number | null }
   | { type: "checkListItem" }
-  | { type: "toggleListItem" };
+  | { type: "toggleListItem" }
+  | { type: "callout" };
 
 export type BlockTypeDescriptor =
   | { type: "paragraph" }
@@ -26,7 +27,8 @@ export type BlockTypeDescriptor =
   | { type: "bulletListItem" }
   | { type: "numberedListItem"; startNumber?: number }
   | { type: "checkListItem" }
-  | { type: "toggleListItem" };
+  | { type: "toggleListItem" }
+  | { type: "callout" };
 
 // react/block-side-menu.tsx의 findBlockTypeDescriptor가 저장 Block에서
 // 재구현하던 것과 같은 leaf 매핑이다(아키텍처 리뷰 6차 후보 L3). 입력은
@@ -56,6 +58,7 @@ export type BlockTypeSource =
   | { type: "numberedListItem"; startNumber?: number }
   | { type: "checkListItem" }
   | { type: "toggleListItem" }
+  | { type: "callout" }
   | { type: "divider" }
   | { type: "table" }
   | { type: "file" }

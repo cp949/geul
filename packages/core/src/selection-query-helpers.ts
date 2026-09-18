@@ -45,6 +45,8 @@ const blockTypeSourceFromNode = (
       return { type: "checkListItem" };
     case "toggleListItem":
       return { type: "toggleListItem" };
+    case "callout":
+      return { type: "callout" };
     case "divider":
       return { type: "divider" };
     case "table":

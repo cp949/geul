@@ -2,6 +2,7 @@ import {
   type AudioBlock,
   type Block,
   type BulletListItemBlock,
+  type CalloutBlock,
   type CheckListItemBlock,
   type CodeBlock,
   type CustomBlock,
@@ -427,7 +428,8 @@ const blockContentToTiptapJson = (
     | BulletListItemBlock
     | NumberedListItemBlock
     | CheckListItemBlock
-    | ToggleListItemBlock,
+    | ToggleListItemBlock
+    | CalloutBlock,
 ): TiptapJsonNode => ({
   type: block.type,
   ...(block.type === "heading"
@@ -438,7 +440,9 @@ const blockContentToTiptapJson = (
         ? { attrs: { checked: block.checked } }
         : block.type === "toggleListItem"
           ? { attrs: { collapsed: block.collapsed ?? null } }
-          : {}),
+          : block.type === "callout"
+            ? { attrs: { icon: block.icon ?? null } }
+            : {}),
   content: inlineContentToTiptap(block.content),
 });
 

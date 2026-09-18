@@ -20,6 +20,7 @@ import { BlockMoveKeyboardExtension } from "./block-move-keyboard-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
 import { BlockTypeInputRuleExtension } from "./block-type-input-rule-extension.js";
 import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
+import { CalloutExtension } from "./callout-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
 import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
@@ -254,6 +255,27 @@ const ProductionToggleListItemExtension = ToggleListItemExtension.extend({
   },
 });
 
+// icon은 numberedListItem.startNumber/toggleListItem.collapsed와 같은
+// optional 패턴(부재=null) — 정의된 경우만 낸다. HTML export(io 계층)의
+// data-geul-callout/data-geul-icon과 별개로 이 렌더링은 편집기 내부 DOM
+// 전용이다(placeholder 데코레이션 등 core 자체 소비, 실측 발견 — quote는
+// 자체 renderHTML이 있어 이 Production 확장이 필요 없지만 callout은
+// bulletListItem처럼 own renderHTML이 없다).
+const ProductionCalloutExtension = CalloutExtension.extend({
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, {
+        "data-geul-callout": "",
+        ...(node.attrs.icon === null
+          ? {}
+          : { "data-geul-icon": String(node.attrs.icon) }),
+      }),
+      0,
+    ];
+  },
+});
+
 export const createProductionEditor = (options: {
   document: BlockDocument;
   createId: IdFactory;
@@ -479,6 +501,9 @@ export const createProductionEditor = (options: {
       BlockTypeInputRuleExtension,
       ...(isBlockTypeEnabled("quote", options.enabledBlockTypes)
         ? [QuoteExtension]
+        : []),
+      ...(isBlockTypeEnabled("callout", options.enabledBlockTypes)
+        ? [ProductionCalloutExtension]
         : []),
       ...(isBlockTypeEnabled("codeBlock", options.enabledBlockTypes)
         ? [CodeBlockExtension]

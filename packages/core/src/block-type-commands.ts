@@ -28,7 +28,8 @@ export type BlockTypeConversionDescriptor =
   | { type: "bulletListItem" }
   | { type: "numberedListItem" }
   | { type: "checkListItem" }
-  | { type: "toggleListItem" };
+  | { type: "toggleListItem" }
+  | { type: "callout" };
 
 // blockId가 가리키는 콘텐츠 노드를 descriptor 타입으로 바꾼다.
 // generic-block-commands.ts의 setBlockType과 같은 계약을 쓰지만,

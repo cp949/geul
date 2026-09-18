@@ -550,6 +550,26 @@ const blockContainerToModel = (
     };
   }
 
+  if (contentNode.type === "callout") {
+    // JSON attr은 unknown이지만 값 정책을 여기서 재구현하지 않는다. null은
+    // model icon 필드 부재와 직대응하고(toggleListItem.collapsed와 같은
+    // 패턴), 그 외 값(빈 문자열 포함)은 마지막 parseDocument가 검증한다.
+    const icon = contentNode.attrs?.icon;
+    return {
+      ok: true,
+      value: {
+        id,
+        type: "callout",
+        content: inlineContent.value,
+        ...(icon === undefined || icon === null
+          ? {}
+          : { icon: icon as string }),
+        ...textBlockProps,
+        ...(children === undefined ? {} : { children }),
+      },
+    };
+  }
+
   return invalid(
     `Unsupported blockContent inside blockContainer: ${String(contentNode.type)}`,
   );

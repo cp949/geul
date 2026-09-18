@@ -150,6 +150,12 @@ export const blockTypeText = (
 ): { label: string; description: string } =>
   dictionary.blockType[id as keyof Dictionary["blockType"]];
 
+// "callout"은 RD-002-DELTA-01(Issue #209)이 `BlockTypeDescriptor` exhaustive
+// switch를 컴파일시키려고 먼저 배선한 케이스다 — `BLOCK_TYPE_OPTIONS`에는
+// 아직 대응 항목이 없다(RD-004가 Slash·Turn into UI와 함께 추가한다). 이
+// 함수가 "callout"을 반환하는 경로(caret이 callout 블록 안에 있을 때)는
+// react UI로 callout을 만드는 방법이 아직 없어 이 DELTA 시점엔 도달하지
+// 않는다.
 export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
   switch (blockType.type) {
     case "paragraph":
@@ -168,5 +174,7 @@ export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
       return "check-list";
     case "toggleListItem":
       return "toggle-list";
+    case "callout":
+      return "callout";
   }
 };

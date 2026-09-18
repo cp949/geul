@@ -305,6 +305,24 @@ export const quoteBlock = (
 });
 
 /**
+ * callout 블록 리터럴 — quoteBlock과 같은 이유(callout/codec 왕복·명령
+ * fixture, G-TST-002)로 여기 둔다. icon은 model에서 optional이라 인자로
+ * 안 주면 필드 자체를 생략한다(quoteBlock의 children과 같은 패턴).
+ */
+export const calloutBlock = (
+  id: string,
+  text: string,
+  icon?: string,
+  children?: Block[],
+): Block => ({
+  id,
+  type: "callout",
+  content: text === "" ? [] : [{ text }],
+  ...(icon === undefined ? {} : { icon }),
+  ...(children === undefined ? {} : { children }),
+});
+
+/**
  * divider 블록 리터럴 — content도 children도 없는 리프. quote와 마찬가지로
  * quote/divider 왕복·명령 fixture로 쓴다.
  */

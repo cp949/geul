@@ -17,6 +17,7 @@ export type Dictionary = {
     // 평범한 객체 literal로 남게 하기 위해서다.
     heading: string;
     quote: string;
+    callout: string;
     codeBlock: string;
     listItem: string;
     // "{kind}" 토큰을 `toolbar.kindNames`로 치환한다(media-block-extension.ts
@@ -360,6 +361,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     paragraph: "Enter text or type '/' for commands",
     heading: "Heading {level}",
     quote: "Quote",
+    callout: "Callout",
     codeBlock: "Code",
     listItem: "List item",
     media: "Add {kind}",
