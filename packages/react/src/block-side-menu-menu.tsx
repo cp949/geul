@@ -31,6 +31,18 @@ const alignLeftIcon = <AlignLeft {...iconProps} />;
 const alignCenterIcon = <AlignCenter {...iconProps} />;
 const alignRightIcon = <AlignRight {...iconProps} />;
 
+// callout 색상 프리셋(Issue #209 RD-004 DELTA-03, 설계 §5). 값은
+// table-cell-colors.ts의 TABLE_BACKGROUND_COLORS를 그대로 재사용한다(신규
+// hex 없음) — colorId로 그 배열에서 조회한다. 아이콘은 자유 이모지
+// 문자열이라 model 검증(isValidInlineText) 대상이지만 이 4개는 이미
+// 유효한 단일 이모지다.
+const CALLOUT_PRESETS = [
+  { id: "info", icon: "ℹ️", colorId: "blue" },
+  { id: "warning", icon: "⚠️", colorId: "yellow" },
+  { id: "error", icon: "🚫", colorId: "red" },
+  { id: "success", icon: "✅", colorId: "green" },
+] as const;
+
 export type BlockSideMenuMenuProps = {
   blockId: string;
   left: number;
@@ -114,6 +126,20 @@ export const BlockSideMenuMenu = ({
     align: "left" | "center" | "right" | null,
   ) => {
     editor.commands.setBlockTextAlignment(blockId, align);
+  };
+  // icon+backgroundColor를 updateBlock 단일 호출로 원자적으로 세팅한다
+  // (undo 1회) — setCalloutIcon과 setBlockBackgroundColor를 순차 호출하면
+  // undo가 2단계로 쪼개진다(설계 §5, block-crud-commands.ts의 updateBlock이
+  // 이미 단일 트랜잭션+closeHistory로 보장함을 실측 확인).
+  const applyCalloutPreset = (icon: string, backgroundColor: string) => {
+    // updateBlock은 BlockMutation facet 소속이라 editor.commands가 아니라
+    // editor 최상위에 노출된다(insertBlocks/replaceBlocks와 같은 자리) —
+    // 설계 문서의 "editor.commands.updateBlock" 표기는 오기였다(실측 확인).
+    editor.updateBlock(blockId, {
+      type: "callout",
+      icon,
+      backgroundColor,
+    });
   };
 
   const handleTurnInto = (item: BlockTypeOption) => {
@@ -231,6 +257,34 @@ export const BlockSideMenuMenu = ({
                 gutter hover 대상에서 이미 제외돼 blockMenuSource.type이
                 "table"일 일이 없다(위 nestingActions 주석과 같은 불변식). */}
             <hr className="geul-block-menu__divider" />
+            {blockMenuSource.type === "callout" && (
+              <>
+                <p className={colorSectionLabelClassName}>
+                  {dictionary.color.calloutPresetsLabel}
+                </p>
+                <div className="geul-menu-palette">
+                  {CALLOUT_PRESETS.map((preset) => {
+                    const color = TABLE_BACKGROUND_COLORS.find(
+                      (candidate) => candidate.id === preset.colorId,
+                    );
+                    if (color === undefined) return null;
+                    return (
+                      <MenuItemButton
+                        aria-label={dictionary.color.calloutPresets[preset.id]}
+                        className={colorSwatchClassName}
+                        key={preset.id}
+                        onClick={() =>
+                          applyCalloutPreset(preset.icon, color.value)
+                        }
+                        style={{ backgroundColor: color.value }}
+                      >
+                        {preset.icon}
+                      </MenuItemButton>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <p className={colorSectionLabelClassName}>
               {dictionary.color.textLabel}
             </p>

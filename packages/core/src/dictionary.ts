@@ -129,6 +129,16 @@ export type Dictionary = {
       purple: string;
       pink: string;
     };
+    // Issue #209(BLK-020) RD-004 DELTA-03 — callout 블록 메뉴의 빠른 색상
+    // 프리셋 4개. icon+backgroundColor를 함께 세팅하므로 개별 색상 이름
+    // (위 names)과 별도 라벨이 필요하다.
+    calloutPresetsLabel: string;
+    calloutPresets: {
+      info: string;
+      warning: string;
+      error: string;
+      success: string;
+    };
   };
   // RD-002-DELTA-06 — `toolbar.kindNames`는 react `media-toolbar.tsx`/
   // `file-panel.tsx`가 지금 각자 복제해 갖고 있던 `kindLabel(kind)`(첫
@@ -462,6 +472,13 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       blue: "Blue",
       purple: "Purple",
       pink: "Pink",
+    },
+    calloutPresetsLabel: "Callout style",
+    calloutPresets: {
+      info: "Info",
+      warning: "Warning",
+      error: "Error",
+      success: "Success",
     },
   },
   toolbar: {

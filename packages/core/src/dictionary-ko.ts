@@ -104,6 +104,13 @@ export const KO_DICTIONARY: Dictionary = {
       purple: "보라",
       pink: "분홍",
     },
+    calloutPresetsLabel: "콜아웃 스타일",
+    calloutPresets: {
+      info: "정보",
+      warning: "경고",
+      error: "오류",
+      success: "완료",
+    },
   },
   toolbar: {
     kindNames: {

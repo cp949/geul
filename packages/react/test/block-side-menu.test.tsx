@@ -907,6 +907,59 @@ describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
   });
 });
 
+describe("callout 색상 프리셋(Issue #209 RD-004 DELTA-03)", () => {
+  const openCalloutMenu = () => {
+    const rendered = renderBlockMenu({
+      initialBlocks: [{ id: "block-1", type: "callout", content: [] }],
+    });
+    const [blockElement] = rendered.blocks;
+    if (blockElement === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(blockElement);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    return rendered;
+  };
+
+  it("callout 소스에서는 프리셋 4개가 보이고, 다른 타입에는 보이지 않는다", () => {
+    openCalloutMenu();
+
+    expect(screen.getByText("Callout style")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Info" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Warning" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Error" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Success" })).toBeTruthy();
+  });
+
+  it("paragraph 소스에서는 프리셋 섹션이 보이지 않는다", () => {
+    openBlockMenu();
+
+    expect(screen.queryByText("Callout style")).toBeNull();
+  });
+
+  it("프리셋 클릭이 icon+backgroundColor를 원자적으로 세팅하고 undo 1회로 복원된다", () => {
+    const rendered = openCalloutMenu();
+    const before = rendered.editor.getDocument();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Warning" }));
+
+    expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
+      id: "block-1",
+      type: "callout",
+      icon: "⚠️",
+      backgroundColor: "#FEF7E0",
+    });
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    expect(rendered.editor.commands.undo()).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(rendered.editor.getDocument()).toEqual({
+      ...before,
+      revision: before.revision + 2,
+    });
+  });
+});
+
 describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이동(Issue #38 슬라이스7 DELTA-03)", () => {
   it("인접 형제 own rect 위로 드래그하면 기존 단일 재정렬 guide만 쓰고 selectBlockRange를 호출하지 않는다(조건1, characterization)", () => {
     const rendered = renderBlockMenu({
