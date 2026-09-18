@@ -19,6 +19,8 @@ import {
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
+  calloutBlock,
+  codeBlockBlock,
   documentOf,
   mountTiptapEditor,
   paragraphBlock,
@@ -131,6 +133,40 @@ describe("enabledBlockTypes(RD-002-DELTA-12)", () => {
       );
       expect(errors).toEqual([]);
     });
+  });
+
+  it("allow로 callout만 허용해도 스키마 생성이 크래시하지 않고 callout 노드가 등록된다(Issue #209 BLK-020 회귀 — NESTABLE_BLOCK_CONTENT_TYPES 누락)", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(calloutBlock("c1", "hi")),
+      enabledBlockTypes: { mode: "allow", types: ["callout"] },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+
+    expect(tiptap.schema.nodes.callout).toBeDefined();
+    expect(tiptap.schema.nodes.paragraph).toBeUndefined();
+  });
+
+  it("기존 7종 nestable을 전부 deny하고 codeBlock만 남겨도 callout으로 turn into가 성공한다(Issue #209 BLK-020 회귀)", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(codeBlockBlock("cb1", "x")),
+      enabledBlockTypes: {
+        mode: "deny",
+        types: [
+          "paragraph",
+          "heading",
+          "quote",
+          "bulletListItem",
+          "numberedListItem",
+          "checkListItem",
+          "toggleListItem",
+        ],
+      },
+    });
+
+    const result = editor.commands.setBlockType("cb1", { type: "callout" });
+
+    expect(result.ok).toBe(true);
+    expect(editor.getDocument().blocks[0]?.type).toBe("callout");
   });
 });
 

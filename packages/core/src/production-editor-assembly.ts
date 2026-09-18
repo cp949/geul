@@ -95,16 +95,17 @@ import {
   TrailingBlockExtension,
 } from "./trailing-block-extension.js";
 
-// enabledBlockTypes(RD-002-DELTA-12)로 group "nestableBlockContent"(7종)나
-// "leafBlockContent"(codeBlock 단독)의 멤버가 전부 사라지면
-// BlockContainerExtension.content(block-container-extension.ts, 고정
+// enabledBlockTypes(RD-002-DELTA-12)로 group "nestableBlockContent"(8종,
+// Issue #209 BLK-020 편입 후)나 "leafBlockContent"(codeBlock 단독)의
+// 멤버가 전부 사라지면 BlockContainerExtension.content
+// (block-container-extension.ts, 고정
 // "(nestableBlockContent blockGroup?) | leafBlockContent")가 존재하지 않는
 // 그룹 이름을 참조하게 돼 `new Schema(...)`가 즉시
 // `SyntaxError: No node type or group 'X' found`를 던진다(착수 중 실측
-// 발견 — allow:["paragraph"]로 codeBlock을 포함한 나머지 6+1종을 모두
+// 발견 — allow:["paragraph"]로 codeBlock을 포함한 나머지 7+1종을 모두
 // 끄면 leafBlockContent 그룹이 비어 재현됨). 두 그룹 각각의 생존 여부에
 // 따라 content 표현식을 동적으로 좁혀 존재하지 않는 그룹을 참조하지
-// 않게 한다. 두 그룹이 전부 비면(예: enabledBlockTypes가 8종 전부를
+// 않게 한다. 두 그룹이 전부 비면(예: enabledBlockTypes가 9종 전부를
 // 끄는 극단적 구성) blockContainer 자체를 스키마에서 뺀다 — 이 경우는
 // spec이 명시적으로 다루지 않는 극단값이라 "남은 위험"에 남긴다.
 const NESTABLE_BLOCK_CONTENT_TYPES: readonly Block["type"][] = [
@@ -115,6 +116,7 @@ const NESTABLE_BLOCK_CONTENT_TYPES: readonly Block["type"][] = [
   "numberedListItem",
   "checkListItem",
   "toggleListItem",
+  "callout",
 ];
 
 // D19: paragraph/heading identity는 blockContainer가 소유한다. StarterKit의
