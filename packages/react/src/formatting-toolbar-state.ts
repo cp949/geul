@@ -1,7 +1,7 @@
-import type { BlockTypeDescriptor, EditorController } from "@cp949/geul-core";
+import type { BlockTypeDescriptor, SelectionQuery } from "@cp949/geul-core";
 
 export type SelectionMark = ReturnType<
-  EditorController["getSelectionMarks"]
+  SelectionQuery["getSelectionMarks"]
 >[number];
 
 export type FormattingToolbarState = {
@@ -21,7 +21,7 @@ export type FormattingToolbarState = {
  * 서로 다른 표시 정책을 가질 수 있는 이유다(RD-001-DELTA-01).
  */
 export const computeFormattingToolbarState = (
-  editor: EditorController,
+  editor: SelectionQuery,
 ): FormattingToolbarState => {
   const blockSelection = editor.getSelectionBlockType();
   return {

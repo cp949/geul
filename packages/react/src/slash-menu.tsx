@@ -2,6 +2,7 @@ import type {
   BlockTypeDescriptor,
   Dictionary,
   EditorController,
+  EditorLifecycle,
   MediaBlockKind,
 } from "@cp949/geul-core";
 import {
@@ -163,7 +164,7 @@ const AUDIO_SLASH_ITEM: SlashMenuItem = {
 // EXT-006)은 enabledBlockTypes가 다루는 기존 14종과 무관해 항상 활성이다.
 const isSlashMenuItemEnabled = (
   item: SlashMenuItem,
-  editor: EditorController,
+  editor: EditorLifecycle,
 ): boolean => {
   switch (item.kind) {
     case "blockType":
@@ -182,7 +183,7 @@ const isSlashMenuItemEnabled = (
 const getSlashMenuItems = (
   source: BlockTypeDescriptor,
   customItems: readonly SlashMenuCustomItem[],
-  editor: EditorController,
+  editor: EditorLifecycle,
 ): readonly SlashMenuItem[] =>
   (
     [
@@ -221,7 +222,7 @@ const filterItems = (
   source: BlockTypeDescriptor,
   query: string,
   customItems: readonly SlashMenuCustomItem[],
-  editor: EditorController,
+  editor: EditorLifecycle,
 ): SlashMenuItem[] =>
   getSlashMenuItems(source, customItems, editor).filter((item) =>
     matchesQuery(item, query),

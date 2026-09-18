@@ -1,4 +1,7 @@
-import type { EditorController } from "@cp949/geul-core";
+import type {
+  EditorController,
+  InlineFormattingCommands,
+} from "@cp949/geul-core";
 import {
   Baseline,
   Bold,
@@ -58,7 +61,7 @@ const toolbarButtons: ReadonlyArray<{
   mark: FormattingToolbarState["activeMarks"][number];
   label: string;
   icon: ReactElement;
-  toggle: (editor: EditorController) => void;
+  toggle: (editor: InlineFormattingCommands) => void;
 }> = [
   {
     mark: "bold",

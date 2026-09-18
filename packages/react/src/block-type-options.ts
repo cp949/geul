@@ -1,12 +1,12 @@
 import {
   isListEntryBlockType,
+  type BlockCommands,
   type BlockTypeDescriptor,
   type Dictionary,
-  type EditorController,
 } from "@cp949/geul-core";
 
 type SetBlockTypeInput = Parameters<
-  EditorController["commands"]["setBlockType"]
+  BlockCommands["commands"]["setBlockType"]
 >[1];
 type SupportedBlockTypeInput = SetBlockTypeInput & BlockTypeDescriptor;
 

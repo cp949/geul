@@ -1,4 +1,4 @@
-import type { EditorController } from "@cp949/geul-core";
+import type { DocumentQuery } from "@cp949/geul-core";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -35,9 +35,7 @@ const BLOCK_SELECTION_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-block-selection-toolbar]",
 ] as const;
 
-type StoredBlock = ReturnType<
-  EditorController["getDocument"]
->["blocks"][number];
+type StoredBlock = ReturnType<DocumentQuery["getDocument"]>["blocks"][number];
 
 type SelectionHighlight = {
   blockId: string;

@@ -1,4 +1,4 @@
-import type { EditorController } from "@cp949/geul-core";
+import type { DocumentQuery } from "@cp949/geul-core";
 
 // block-side-menu.tsx(진입점)와 그 형제 파일(block-side-menu-geometry.ts,
 // block-side-menu-block-type.ts)이 공유하는 module-private 타입 모음이다.
@@ -48,5 +48,5 @@ export type BlockSideMenuProps = {
 };
 
 export type StoredBlock = ReturnType<
-  EditorController["getDocument"]
+  DocumentQuery["getDocument"]
 >["blocks"][number];
