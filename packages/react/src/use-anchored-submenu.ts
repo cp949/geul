@@ -1,9 +1,4 @@
-import {
-  type RefObject,
-  useCallback,
-  useLayoutEffect,
-  useState,
-} from "react";
+import { type RefObject, useCallback, useLayoutEffect, useState } from "react";
 
 type AnchoredSubmenuPosition = { left: number; top: number };
 
