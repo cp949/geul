@@ -28,6 +28,12 @@ export type MarkdownLoss = {
     | "NESTED_CHILDREN"
     | "CHECKED_STATE_LOST"
     | "TOGGLE_STATE_LOST"
+    // Issue #209(BLK-020) RD-003 DELTA-02. callout은 icon 유무·children
+    // 유무와 무관하게 GFM에 표현 수단이 없다(TOGGLE_STATE_LOST와 동일
+    // 논리) — 설계 §4. children이 있으면 NESTED_CHILDREN도 함께 보고된다
+    // (isGfmContainerLikeBlockType에 callout을 넣지 않아 paragraph/heading과
+    // 같은 취급을 받는다 — quote/목록류와 다른 지점).
+    | "CALLOUT_STATE_LOST"
     // RD-004 DELTA-03. INLINE_COLOR는 인라인 textColor/backgroundColor
     // mark(DELTA-01, CELL_COLOR와 달리 셀 자체가 아니라 콘텐츠 안 mark).
     // BLOCK_COLOR/BLOCK_ALIGN은 블록 레벨 TextBlockProps(DELTA-02).
@@ -403,6 +409,19 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       kind: "TOGGLE_STATE_LOST",
       blockId: block.id,
       message: `Block ${block.id} is a toggle; GFM export does not preserve the collapsed state`,
+    });
+  }
+
+  // "callout이라는 사실 자체"는 GFM이 표현할 수 없는 상태라 icon·children
+  // 유무와 무관하게 항상 보고한다(Issue #209, 설계 §4) — TOGGLE_STATE_LOST와
+  // 동일 논리. children이 있으면 위 NESTED_CHILDREN과 함께 보고된다(서로
+  // 억제하지 않음, callout은 isGfmContainerLikeBlockType 밖이라 quote/
+  // 목록류와 달리 항상 그렇다).
+  if (block.type === "callout") {
+    losses.push({
+      kind: "CALLOUT_STATE_LOST",
+      blockId: block.id,
+      message: `Block ${block.id} is a callout; GFM export does not preserve the icon or callout type`,
     });
   }
 
