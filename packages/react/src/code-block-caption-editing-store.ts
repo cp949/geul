@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createEditingStore } from "./create-editing-store.js";
 
 /**
  * `CodeBlockCaptions`(오버레이, hover 게이트 없이 전체 codeBlock 인스턴스를
@@ -18,9 +18,10 @@ import { useSyncExternalStore } from "react";
  * 입력의 상태 기계도 소유한다 — 책임 분리는 유지, 상태 저장 위치만
  * 컴포넌트 트리 바깥으로 옮긴다).
  *
- * `useSyncExternalStore` 기반 모듈 싱글톤이다(RD-002.md "적용 계약과
- * 가이드" (a) — 이 저장소 첫 cross-component UI 상태 공유 패턴). 문서
- * 전체에서 동시에 편집 가능한 caption은 기존 가정대로 하나뿐이다.
+ * `createEditingStore`(C4, 두 caption store 공통 메커니즘) 기반 모듈
+ * 싱글톤이다(RD-002.md "적용 계약과 가이드" (a) — 이 저장소 첫
+ * cross-component UI 상태 공유 패턴). 문서 전체에서 동시에 편집 가능한
+ * caption은 기존 가정대로 하나뿐이다.
  *
  * 알려진 단순화: 모듈 스코프 싱글톤이라 한 페이지에 `EditorProvider`가
  * 둘 이상 동시에 마운트되면 이 상태가 editor 인스턴스 경계를 넘어
@@ -32,38 +33,20 @@ import { useSyncExternalStore } from "react";
  * 단순화다(재사용 가치가 있으면 `pending-guides/`에 별도 카테고리로
  * 남긴다).
  */
-export type CodeBlockCaptionEditingState = {
+type CodeBlockCaptionEditingPayload = {
   blockId: string;
   draft: string;
-} | null;
+};
+export type CodeBlockCaptionEditingState =
+  CodeBlockCaptionEditingPayload | null;
 
-let state: CodeBlockCaptionEditingState = null;
-const listeners = new Set<() => void>();
+const store = createEditingStore<CodeBlockCaptionEditingPayload>();
 
 /** 최신 상태를 동기로 읽는다 — commit 핸들러가 stale closure 없이 쓴다. */
-export const getCodeBlockCaptionEditingSnapshot =
-  (): CodeBlockCaptionEditingState => state;
+export const getCodeBlockCaptionEditingSnapshot = store.getSnapshot;
 
 /** 편집 시작(toolbar·more 메뉴·오버레이 클릭)·커밋·취소 모두 이 setter 하나로 간다. */
-export const setCodeBlockCaptionEditing = (
-  next: CodeBlockCaptionEditingState,
-): void => {
-  state = next;
-  for (const listener of listeners) listener();
-};
-
-const subscribeCodeBlockCaptionEditing = (
-  listener: () => void,
-): (() => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
+export const setCodeBlockCaptionEditing = store.setState;
 
 /** `CodeBlockCaptions`가 렌더에 구독한다. */
-export const useCodeBlockCaptionEditing = (): CodeBlockCaptionEditingState =>
-  useSyncExternalStore(
-    subscribeCodeBlockCaptionEditing,
-    getCodeBlockCaptionEditingSnapshot,
-  );
+export const useCodeBlockCaptionEditing = store.useEditingState;
