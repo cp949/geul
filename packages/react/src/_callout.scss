@@ -1,0 +1,26 @@
+// callout(Issue #209, BLK-020) 기본 카드형 레이아웃. 좌측 아이콘(::before,
+// data-geul-icon 값을 그대로 표시) + 본문 flex — quote(_editor.scss 61-66)
+// 의 여백 관례, toggle 마커(_editor.scss 448-454)의 attr() 기반 ::before
+// 표시 패턴을 함께 참고했다. ProductionCalloutExtension(core)이 콘텐츠를
+// <div data-geul-callout> 자신에 직접 담아 own-content wrapper(<p> 등)가
+// 없다 — quote(<blockquote>)와 같은 구조라 자식 셀렉터가 아니라 flex
+// 컨테이너 자신에 아이콘을 얹는다. backgroundColor 지정 시 인라인
+// style(model-to-tiptap.ts가 아니라 core의 attributeOverride 경로, 기존
+// TextBlockProps 계약과 동일)이 이 기본 배경을 덮어쓴다.
+.geul-editor {
+  [data-geul-callout] {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0.75rem 0;
+    padding: 0.75rem 1rem;
+    border-radius: var(--geul-radius-lg, 0.5rem);
+    background-color: var(--geul-color-surface-muted, #f1f3f4);
+  }
+
+  [data-geul-callout]::before {
+    content: attr(data-geul-icon);
+    flex: 0 0 auto;
+    line-height: 1.6;
+  }
+}

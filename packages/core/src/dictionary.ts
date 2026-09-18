@@ -49,6 +49,7 @@ export type Dictionary = {
     "heading-5": { label: string; description: string };
     "heading-6": { label: string; description: string };
     quote: { label: string; description: string };
+    callout: { label: string; description: string };
     code: { label: string; description: string };
     "bullet-list": { label: string; description: string };
     "numbered-list": { label: string; description: string };
@@ -390,6 +391,10 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       description: "Smallest section heading",
     },
     quote: { label: "Quote", description: "Capture a quote" },
+    callout: {
+      label: "Callout",
+      description: "Highlight important information",
+    },
     code: { label: "Code", description: "Write plain code" },
     "bullet-list": {
       label: "Bulleted List",

@@ -32,6 +32,19 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("callout 옵션이 공용 id·검색어·command descriptor를 제공하고 blockTypeToOptionId가 이를 역해석한다(Issue #209)", () => {
+    const option = BLOCK_TYPE_OPTIONS.find(({ id }) => id === "callout");
+
+    expect(option).toEqual({
+      id: "callout",
+      label: "Callout",
+      description: "Highlight important information",
+      keywords: expect.arrayContaining(["callout", "notice"]),
+      blockType: { type: "callout" },
+    });
+    expect(blockTypeToOptionId({ type: "callout" })).toBe("callout");
+  });
+
   it("blockTypeToOptionId가 quote와 heading level 4-6 블록을 해당 옵션 id로 해석한다", () => {
     expect(blockTypeToOptionId({ type: "quote" })).toBe("quote");
     expect(blockTypeToOptionId({ type: "heading", level: 4 })).toBe(
@@ -135,6 +148,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "heading-5",
       "heading-6",
       "quote",
+      "callout",
       "code",
     ]);
   });
@@ -156,6 +170,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "heading-5",
       "heading-6",
       "quote",
+      "callout",
       "bullet-list",
       "numbered-list",
       "check-list",
@@ -179,6 +194,7 @@ describe("BLOCK_TYPE_OPTIONS(Turn into·툴바 select 공급원)", () => {
       "heading-5",
       "heading-6",
       "quote",
+      "callout",
       "code",
       "bullet-list",
       "numbered-list",

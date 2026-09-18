@@ -130,7 +130,7 @@ describe("SlashMenu 질의 팝업", () => {
     // Table·Divider·File·Image·Video·Audio가 이어진다(RD-003 DELTA-01,
     // spec §3.1 file/image/video/audio 순서).
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(19);
+    expect(options).toHaveLength(20);
     expect(
       options.map(
         (option) =>
@@ -145,6 +145,7 @@ describe("SlashMenu 질의 팝업", () => {
       "Heading 5",
       "Heading 6",
       "Quote",
+      "Callout",
       "Code",
       "Bulleted List",
       "Numbered List",
@@ -475,7 +476,7 @@ describe("SlashMenu 질의 팝업", () => {
       expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Image/ })).not.toBeNull();
-      expect(screen.getAllByRole("option")).toHaveLength(18);
+      expect(screen.getAllByRole("option")).toHaveLength(19);
     },
   );
 
@@ -702,9 +703,9 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     typeIntoBlock(rendered, 0, "/");
 
     const options = screen.getAllByRole("option");
-    // 기본 19개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
-    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 20개, 마지막이 커스텀 아이템.
-    expect(options).toHaveLength(20);
+    // 기본 20개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
+    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 21개, 마지막이 커스텀 아이템.
+    expect(options).toHaveLength(21);
     expect(options.at(-1)?.textContent).toContain("Custom Item");
   });
 
@@ -754,13 +755,13 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     expect(options[0]?.textContent).toContain("Custom Item");
   });
 
-  it("지정하지 않으면(기본값) 기존 19개 기본 목록만 표시한다", () => {
+  it("지정하지 않으면(기본값) 기존 20개 기본 목록만 표시한다", () => {
     const rendered = mountBlockEditor({ children: <SlashMenu /> });
     rendered.editable.focus();
 
     typeIntoBlock(rendered, 0, "/");
 
-    expect(screen.getAllByRole("option")).toHaveLength(19);
+    expect(screen.getAllByRole("option")).toHaveLength(20);
   });
 });
 
@@ -784,7 +785,7 @@ describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
     expect(screen.getByRole("option", { name: /^File/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Video/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Audio/ })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(18);
+    expect(screen.getAllByRole("option")).toHaveLength(19);
   });
 
   it("non-media 타입(heading)을 deny하면 Heading 1~6 옵션 6개가 모두 사라지고 나머지는 남는다", () => {
@@ -802,6 +803,6 @@ describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
       ).toBeNull();
     }
     expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(13);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
   });
 });

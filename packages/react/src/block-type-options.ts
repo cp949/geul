@@ -76,6 +76,13 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
     blockType: { type: "quote" },
   },
   {
+    id: "callout",
+    label: "Callout",
+    description: "Highlight important information",
+    keywords: ["callout", "notice", "alert", "highlight"],
+    blockType: { type: "callout" },
+  },
+  {
     id: "code",
     label: "Code",
     description: "Write plain code",
@@ -139,7 +146,7 @@ export const getBlockTypeOptionsForSource = (
 };
 
 // spec §8(EXT-009), RD-002-DELTA-02 — `dictionary.blockType`에서 표시용
-// label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 13개
+// label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 14개
 // 리터럴 중 하나이므로(호출부가 그 배열에서 얻은 `option.id`만 넘긴다)
 // 이 cast 하나로 안전하다 — 호출부마다 반복하지 않는다. `BLOCK_TYPE_OPTIONS`
 // 자신의 `label`/`description`(검색 매칭 전용, dictionary와 무관)과는
@@ -150,12 +157,6 @@ export const blockTypeText = (
 ): { label: string; description: string } =>
   dictionary.blockType[id as keyof Dictionary["blockType"]];
 
-// "callout"은 RD-002-DELTA-01(Issue #209)이 `BlockTypeDescriptor` exhaustive
-// switch를 컴파일시키려고 먼저 배선한 케이스다 — `BLOCK_TYPE_OPTIONS`에는
-// 아직 대응 항목이 없다(RD-004가 Slash·Turn into UI와 함께 추가한다). 이
-// 함수가 "callout"을 반환하는 경로(caret이 callout 블록 안에 있을 때)는
-// react UI로 callout을 만드는 방법이 아직 없어 이 DELTA 시점엔 도달하지
-// 않는다.
 export const blockTypeToOptionId = (blockType: BlockTypeDescriptor): string => {
   switch (blockType.type) {
     case "paragraph":

@@ -310,7 +310,7 @@ describe("FormattingToolbar 서식 툴바", () => {
 
     expect(screen.queryByRole("option", { name: "Quote" })).toBeNull();
     expect(screen.getByRole("option", { name: "Text" })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(12);
+    expect(screen.getAllByRole("option")).toHaveLength(13);
   });
 
   it("enabledBlockTypes 미지정 시(기본 true) 블록 종류 select 옵션 목록이 그대로 유지된다", () => {
@@ -329,7 +329,7 @@ describe("FormattingToolbar 서식 툴바", () => {
     if (!textNode) throw new Error("Text node was not rendered");
     selectText(textNode, 0, 8);
 
-    expect(screen.getAllByRole("option")).toHaveLength(13);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
   });
 
   // 실브라우저(Chromium) 실측: 네이티브 <select>는 mousedown의 기본 동작이
@@ -436,6 +436,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-5",
         "heading-6",
         "quote",
+        "callout",
         "code",
       ],
     ],
@@ -451,6 +452,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-5",
         "heading-6",
         "quote",
+        "callout",
         "bullet-list",
         "numbered-list",
         "check-list",
@@ -469,6 +471,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-5",
         "heading-6",
         "quote",
+        "callout",
         "bullet-list",
         "numbered-list",
         "check-list",
@@ -487,6 +490,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-5",
         "heading-6",
         "quote",
+        "callout",
         "bullet-list",
         "numbered-list",
         "check-list",
@@ -505,6 +509,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-5",
         "heading-6",
         "quote",
+        "callout",
         "bullet-list",
         "numbered-list",
         "check-list",
@@ -523,6 +528,7 @@ describe("FormattingToolbar 서식 툴바", () => {
         "heading-5",
         "heading-6",
         "quote",
+        "callout",
         "code",
         "bullet-list",
         "numbered-list",

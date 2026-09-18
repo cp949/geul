@@ -35,6 +35,7 @@ export const KO_DICTIONARY: Dictionary = {
     "heading-5": { label: "제목 5", description: "매우 작은 섹션 제목" },
     "heading-6": { label: "제목 6", description: "가장 작은 섹션 제목" },
     quote: { label: "인용구", description: "인용문 삽입" },
+    callout: { label: "콜아웃", description: "중요한 내용을 강조합니다" },
     code: { label: "코드", description: "일반 코드 작성" },
     "bullet-list": {
       label: "글머리 기호 목록",
