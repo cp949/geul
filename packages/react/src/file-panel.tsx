@@ -12,6 +12,7 @@ import {
 } from "./read-block-bounds.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -86,7 +87,7 @@ export const FilePanel = ({
   const [panelState, setPanelState] = useState<PanelState>({ mode: "closed" });
   const openPanelBlockId =
     panelState.mode === "open" ? panelState.blockId : null;
-  // dismissPanel 직후의 재오픈 경합(아래 dismissedBlockIdRef 주석)에서만
+  // dismissPanel 직후의 재오픈 경합(아래 dismissSuppression 주석)에서만
   // 쓴다 — link-toolbar.tsx와 달리 이 컴포넌트는 "열려 있는 동안 전부
   // 재관측을 억제"하지 않는다(예전엔 그렇게 했다가 QA-067에서 회귀로
   // 드러났다: undo로 블록이 사라져도 재관측이 영영 억제돼 패널이 고아
@@ -105,10 +106,11 @@ export const FilePanel = ({
   // 여전히 "같은 빈 블록"을 봐서 패널을 곧바로 재오픈시킨다(e2e 실측:
   // "바깥 클릭은 패널을 닫되..." 병렬 반복에서 재현). 이 ref로 "같은
   // blockId면 재오픈하지 않는다"를 시간이 아니라 상태로 고정한다 —
-  // slash-menu.tsx의 dismissedQueryRef와 같은 해법이다.
-  const dismissedBlockIdRef = useRef<string | null>(null);
-  // dismissedBlockIdRef가 "같은 이벤트의 지연된 잔여물"과 "사용자의 새
-  // 제스처(같은 빈 블록을 다시 클릭/키보드로 재진입)"를 구분하지 못해
+  // slash-menu.tsx의 dismissedQueryRef와 같은 해법이다(media-toolbar.tsx도
+  // 같은 훅을 쓴다).
+  const dismissSuppression = useDismissSuppression<string>();
+  // dismissSuppression 하나만으로는 "같은 이벤트의 지연된 잔여물"과 "사용자의
+  // 새 제스처(같은 빈 블록을 다시 클릭/키보드로 재진입)"를 구분하지 못해
   // 생긴 회귀(2026-09-13, 사용자 보고 — Close로 닫은 뒤 회색 영역을 다시
   // 클릭해도 패널이 재오픈되지 않음)를 고친다. pointerdown·keydown은 항상
   // 그 제스처가 만드는 mouseup/keyup/selectionchange보다 먼저 일어나므로,
@@ -128,7 +130,7 @@ export const FilePanel = ({
     if (editingRef.current) return;
     if (element === null) {
       openBlockIdRef.current = null;
-      dismissedBlockIdRef.current = null;
+      dismissSuppression.clear();
       setPanelState((prev) =>
         prev.mode === "closed" ? prev : { mode: "closed" },
       );
@@ -138,7 +140,7 @@ export const FilePanel = ({
     const media = editor.getSelectionMediaBlock();
     if (media === null) {
       openBlockIdRef.current = null;
-      dismissedBlockIdRef.current = null;
+      dismissSuppression.clear();
       setPanelState((prev) =>
         prev.mode === "closed" ? prev : { mode: "closed" },
       );
@@ -163,7 +165,7 @@ export const FilePanel = ({
       // 닫는다.
       if (openBlockIdRef.current === media.blockId) return;
       openBlockIdRef.current = null;
-      dismissedBlockIdRef.current = null;
+      dismissSuppression.clear();
       setPanelState((prev) =>
         prev.mode === "closed" ? prev : { mode: "closed" },
       );
@@ -173,7 +175,7 @@ export const FilePanel = ({
     // gestureSeqRef 주석) 지연된 잔여 이벤트가 아니라 사용자의 새
     // 제스처다 — 재오픈을 허용한다.
     if (
-      dismissedBlockIdRef.current === media.blockId &&
+      dismissSuppression.isSuppressed(media.blockId) &&
       dismissedAtSeqRef.current === gestureSeqRef.current
     ) {
       return;
@@ -222,7 +224,7 @@ export const FilePanel = ({
         top: bounds.top,
       };
     });
-  }, [editor, element]);
+  }, [editor, element, dismissSuppression]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
@@ -268,14 +270,14 @@ export const FilePanel = ({
   const focusEditor = useFocusEditor(element);
 
   const dismissPanel = useCallback(() => {
-    dismissedBlockIdRef.current = openBlockIdRef.current;
+    dismissSuppression.dismiss(openBlockIdRef.current);
     dismissedAtSeqRef.current = gestureSeqRef.current;
     editingRef.current = true;
     setPanelState({ mode: "closed" });
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
     });
-  }, [element]);
+  }, [element, dismissSuppression]);
   // link-toolbar.tsx의 closeAndRestoreFocus와 같은 순서(focus 먼저, close
   // 나중) — 반대로 하면 실제 Chromium에서 초점이 편집기로 옮겨 붙지
   // 않는다(e2e 실측: media-file-panel.spec.ts "Escape는 패널을 닫고

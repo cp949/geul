@@ -14,9 +14,12 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import {
+  rangeBoundariesEqual,
+  useDismissSuppression,
+} from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
-import { useRangeDismissSuppression } from "./use-range-dismiss-suppression.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // formatting-toolbar.tsx의 indentIcon/outdentIcon과 같은 이유로 모듈
@@ -65,7 +68,7 @@ const UNREADABLE_SELECTION_POSITION: ToolbarPosition = { left: 96, top: 48 };
 /**
  * 자기 에디터 안에 있는 selection의 Range를 읽는다. collapsed 여부는 묻지
  * 않는다 — 링크 툴바는 collapsed caret(기존 링크 안)로도 뜨므로, 이 Range를
- * dismiss-suppression 키(useRangeDismissSuppression)로도 재사용한다.
+ * dismiss-suppression 키(useDismissSuppression<Range>)로도 재사용한다.
  */
 const readSelectionRangeInElement = (element: HTMLElement): Range | null => {
   const selection = element.ownerDocument.getSelection();
@@ -127,7 +130,7 @@ export const LinkToolbar = ({
   // 훅). 이 Range는 collapsed caret(기존 링크 안)도 포함한다 —
   // readSelectionRangeInElement가 collapsed 여부를 묻지 않는 이유.
   const currentRangeRef = useRef<Range | null>(null);
-  const dismissSuppression = useRangeDismissSuppression();
+  const dismissSuppression = useDismissSuppression<Range>(rangeBoundariesEqual);
 
   const updateFromSelection = useCallback(() => {
     if (editingRef.current) return;

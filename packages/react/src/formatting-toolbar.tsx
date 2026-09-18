@@ -40,9 +40,12 @@ import {
 } from "./table-cell-colors.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import {
+  rangeBoundariesEqual,
+  useDismissSuppression,
+} from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
-import { useRangeDismissSuppression } from "./use-range-dismiss-suppression.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // 아이콘 element를 모듈 레벨 상수로 만들어 두면 매 렌더에서 같은 참조가
@@ -184,7 +187,7 @@ export const FormattingToolbar = ({
   );
   const trackedRange = useRef<Range | null>(null);
   const focusEditor = useFocusEditor(element);
-  const dismissSuppression = useRangeDismissSuppression();
+  const dismissSuppression = useDismissSuppression<Range>(rangeBoundariesEqual);
 
   const updateFromSelection = useCallback(() => {
     const selection = element?.ownerDocument.getSelection();

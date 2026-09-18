@@ -28,6 +28,7 @@ import {
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -71,10 +72,10 @@ const mediaToolbarMoreMenuItemClassName = "geul-media-toolbar__more-menu-item";
 // 이 selector가 없으면 지금 toolbar가 표시 중인 바로 그 미디어 블록을 다시
 // 클릭하는 것조차 "바깥 클릭"으로 오판정된다. pointerdown 시점엔 아직 그
 // 클릭이 PM selection을 다시 그 블록으로 확정하기 전이라, dismissToolbar가
-// 먼저 실행돼 dismissedBlockIdRef를 그 blockId로 세팅한다. 뒤이은 클릭의
+// 먼저 실행돼 dismissSuppression이 그 blockId를 기억한다. 뒤이은 클릭의
 // mouseup/selectionchange가 (선택이 실제로는 그대로거나 다시 같은 블록으로
-// 온) media를 재조회해도 dismissedBlockIdRef가 같은 blockId라 재오픈이
-// 막힌다 — 실측: 같은 블록 재클릭이 toolbar를 영영 못 여는 회귀(e2e
+// 온) media를 재조회해도 같은 blockId라 재오픈이 막힌다 — 실측: 같은 블록
+// 재클릭이 toolbar를 영영 못 여는 회귀(e2e
 // --repeat-each 없이도 재현). 편집기 내부 클릭(다른 블록 포함)은 이
 // selector로 전부 "바깥 아님" 처리하고, 그 뒤 실제 상태 반영은
 // updateFromSelection(selectionchange/mouseup)에 맡긴다 — 편집기 완전
@@ -85,7 +86,7 @@ const mediaToolbarMoreMenuItemClassName = "geul-media-toolbar__more-menu-item";
 // 시각 좌표만 필요할 뿐 셀 텍스트처럼 편집기 DOM 안에 있을 이유가 없다).
 // 이 selector가 없으면 핸들 드래그 시작 pointerdown 자체가 "바깥 클릭"으로
 // 오판정돼 toolbar가 닫히고, 리사이즈가 selection을 바꾸지 않는 한
-// dismissedBlockIdRef가 계속 같은 blockId를 가리켜 드래그가 끝난 뒤에도
+// dismissSuppression이 계속 같은 blockId를 가리켜 드래그가 끝난 뒤에도
 // 재오픈이 막힌다(코드리뷰 발견, RD-001 DELTA-02 회귀 — data-geul-* 속성
 // 컨벤션을 쓴다, CSS 클래스명이 아니라 — `[data-geul-block-id]`와 같은 이유로
 // 스타일링과 무관한 구조 계약이다).
@@ -248,7 +249,7 @@ const useMediaToolbarMoreMenu = (
  *
  * `file-panel.tsx`와 같은 selection 기반 상태 기계(`getSelectionMediaBlock()`
  * 이 core 진실 원본, 로컬 상태는 selectionchange 등 네이티브 이벤트마다
- * 다시 검증), 같은 `dismissedBlockIdRef` 재오픈 방지(G-UI-001 — "닫은
+ * 다시 검증), 같은 `useDismissSuppression` 재오픈 방지(G-UI-001 — "닫은
  * 상태의 안정 key를 ref에 기록하고 같은 상태의 재관측만 무시한다"), 같은
  * focus-then-close 순서를 그대로 재사용한다. rename/caption 편집 입력은
  * `link-toolbar.tsx`의 draft/Save/Cancel 상태 기계(값이 바뀌지 않았으면
@@ -313,8 +314,8 @@ export const MediaToolbar = ({
   const viewBlockIdRef = useRef<string | null>(null);
   // dismissToolbar가 방금 닫은 blockId. 같은 blockId의 재관측을 무시해
   // Escape/바깥 클릭 직후 뒤늦게 도착하는 이벤트의 재오픈을 막는다
-  // (G-UI-001, file-panel.tsx dismissedBlockIdRef와 같은 문제·같은 해법).
-  const dismissedBlockIdRef = useRef<string | null>(null);
+  // (G-UI-001, file-panel.tsx의 같은 훅 사용과 같은 문제·같은 해법).
+  const dismissSuppression = useDismissSuppression<string>();
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const replaceUrlInputRef = useRef<HTMLInputElement>(null);
@@ -325,7 +326,7 @@ export const MediaToolbar = ({
     if (editingRef.current) return;
     if (element === null) {
       viewBlockIdRef.current = null;
-      dismissedBlockIdRef.current = null;
+      dismissSuppression.clear();
       // mode가 "closed"로 바뀌면 위 toolbarState.mode 감시 useEffect가
       // moreMenu를 닫는다 — 여기서 직접 부르지 않는다(01-계획.md).
       setToolbarState({ mode: "closed" });
@@ -335,14 +336,14 @@ export const MediaToolbar = ({
     const media = editor.getSelectionMediaBlock();
     if (media === null || media.url === null) {
       viewBlockIdRef.current = null;
-      dismissedBlockIdRef.current = null;
+      dismissSuppression.clear();
       setToolbarState({ mode: "closed" });
       return;
     }
     // File Panel이 URL 적용 결과를 보여주는 동안 같은 블록의 toolbar를
     // 활성화하면 Escape 하나가 두 overlay의 dismiss listener를 함께 태워
-    // dismissedBlockIdRef를 오염시킨다. File Panel이 닫힌 뒤 다음 selection
-    // refresh에서만 toolbar를 연다.
+    // dismiss-suppression 상태를 오염시킨다. File Panel이 닫힌 뒤 다음
+    // selection refresh에서만 toolbar를 연다.
     if (
       element.getAttribute("data-geul-file-panel-block-id") === media.blockId
     ) {
@@ -352,7 +353,7 @@ export const MediaToolbar = ({
       );
       return;
     }
-    if (dismissedBlockIdRef.current === media.blockId) return;
+    if (dismissSuppression.isSuppressed(media.blockId)) return;
 
     // 다른 블록으로 전환됐으면 이전 블록에서 열려 있던 more 메뉴를 새
     // 블록까지 들고 오지 않는다 — 같은 블록을 계속 보고 있을 때는(재조회가
@@ -377,7 +378,7 @@ export const MediaToolbar = ({
       left: bounds.left,
       top: bounds.top,
     });
-  }, [editor, element, closeMoreMenu]);
+  }, [editor, element, closeMoreMenu, dismissSuppression]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
@@ -660,7 +661,7 @@ export const MediaToolbar = ({
   );
 
   const dismissToolbar = useCallback(() => {
-    dismissedBlockIdRef.current = viewBlockIdRef.current;
+    dismissSuppression.dismiss(viewBlockIdRef.current);
     editingRef.current = true;
     clearActionError();
     // mode가 "closed"로 바뀌면 위 toolbarState.mode 감시 useEffect가
@@ -669,7 +670,7 @@ export const MediaToolbar = ({
     element?.ownerDocument.defaultView?.setTimeout(() => {
       editingRef.current = false;
     });
-  }, [element, clearActionError]);
+  }, [element, clearActionError, dismissSuppression]);
   // file-panel.tsx dismissPanelAndFocusEditor와 같은 순서(focus 먼저,
   // close 나중) — 반대로 하면 실제 Chromium에서 Escape 뒤 초점 복원이
   // 실패한다(RD-003 e2e 실측, 같은 원인이라 이 컴포넌트도 미리 같은 순서를
