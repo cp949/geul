@@ -205,6 +205,14 @@ type ToggleListItemBlockNode = {
   children?: BlockNode[] | undefined;
 } & TextBlockPropsNode;
 
+type CalloutBlockNode = {
+  id: string;
+  type: "callout";
+  content: z.infer<typeof inlineContentSchema>;
+  icon?: string | undefined;
+  children?: BlockNode[] | undefined;
+} & TextBlockPropsNode;
+
 type DividerBlockNode = z.infer<typeof dividerBlockSchema>;
 type CodeBlockNode = z.infer<typeof codeBlockSchema>;
 type FileBlockNode = z.infer<typeof fileBlockSchema>;
@@ -221,6 +229,7 @@ type BlockNode =
   | NumberedListItemBlockNode
   | CheckListItemBlockNode
   | ToggleListItemBlockNode
+  | CalloutBlockNode
   | DividerBlockNode
   | CodeBlockNode
   | FileBlockNode
@@ -342,6 +351,24 @@ const toggleListItemBlockSchema = z
   })
   .strict();
 
+// callout은 toggleListItem과 같은 nestable shape(content + 재귀 children) 위에
+// icon 하나만 얹는다. icon 값 정규형(빈 문자열·제어문자 거부)은 textColor 등과
+// 같은 이유로 여기서 판정하지 않는다 — zod는 타입만 확인하고
+// document-structure-validation.ts가 parseDocument 조립 시점에
+// isValidInlineText로 단독 판정한다(G-CNV-001).
+const calloutBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("callout"),
+    content: inlineContentSchema,
+    icon: z.string().optional(),
+    children: z
+      .lazy((): z.ZodType<BlockNode[]> => z.array(blockSchema))
+      .optional(),
+    ...textBlockPropsShape,
+  })
+  .strict();
+
 const blockSchema = z.discriminatedUnion("type", [
   paragraphBlockSchema,
   headingBlockSchema,
@@ -351,6 +378,7 @@ const blockSchema = z.discriminatedUnion("type", [
   numberedListItemBlockSchema,
   checkListItemBlockSchema,
   toggleListItemBlockSchema,
+  calloutBlockSchema,
   dividerBlockSchema,
   codeBlockSchema,
   fileBlockSchema,
@@ -372,9 +400,9 @@ const customBlockSchema = z
   })
   .strict();
 
-// 알려진 14종 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을
+// 알려진 15종 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을
 // 이 목록과 대조해 blockSchema/customBlockSchema로 라우팅한다(spec §4.3).
-// Block 유니온에 15번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
+// Block 유니온에 16번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
 // blockSchema 배열 자체도 수동 갱신 대상이라 같은 지점에 한 줄이 늘 뿐이다.
 const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
   "paragraph",
@@ -385,6 +413,7 @@ const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
   "numberedListItem",
   "checkListItem",
   "toggleListItem",
+  "callout",
   "divider",
   "codeBlock",
   "file",

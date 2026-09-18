@@ -237,6 +237,20 @@ const validateBlocksAt = (
         "content",
       ]);
       if (!content.ok) return content;
+      // callout 전용 필드다. media 4종의 url/backgroundColor 검증(189-227)과
+      // 같은 자리에서 타입 전용 값 정규형을 판정한다 — zod는 타입만 확인하고
+      // (block-schema.ts의 calloutBlockSchema), 빈 문자열·제어문자 거부는
+      // 여기서 isValidInlineText로 판정한다(G-CNV-001, RD-001-DELTA-01).
+      if (
+        nestable.type === "callout" &&
+        nestable.icon !== undefined &&
+        (nestable.icon.length === 0 || !isValidInlineText(nestable.icon))
+      ) {
+        return invalid(
+          [...blockPath, "icon"],
+          "Callout icon must be non-empty and contain no control characters or invalid surrogate code units",
+        );
+      }
       if (nestable.children !== undefined) {
         const children = validateBlocksAt(
           nestable.children,

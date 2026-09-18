@@ -76,6 +76,7 @@ export type {
   AudioBlock,
   Block,
   BulletListItemBlock,
+  CalloutBlock,
   CheckListItemBlock,
   CodeBlock,
   CustomBlock,

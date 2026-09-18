@@ -96,6 +96,17 @@ export type ToggleListItemBlock = {
   collapsed?: boolean;
   children?: Block[];
 } & TextBlockProps;
+// callout도 toggleListItem과 같은 이유로 block-kind.ts의 NestableBlockType에
+// 직접 추가된다(목록 항목이 아니다). icon은 자유 이모지 문자열이고 warning/
+// error/info/success 같은 variant 저장 필드는 두지 않는다 — react UI
+// 프리셋이 icon+backgroundColor를 원자적으로 세팅한다(spec BLK-020 §1).
+export type CalloutBlock = {
+  id: string;
+  type: "callout";
+  content: InlineContent;
+  icon?: string;
+  children?: Block[];
+} & TextBlockProps;
 export type DividerBlock = { id: string; type: "divider" };
 export type CodeBlock = {
   id: string;
@@ -179,6 +190,7 @@ export type Block =
   | NumberedListItemBlock
   | CheckListItemBlock
   | ToggleListItemBlock
+  | CalloutBlock
   | FileBlock
   | ImageBlock
   | VideoBlock
