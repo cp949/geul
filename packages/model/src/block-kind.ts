@@ -43,7 +43,12 @@ export const isListEntryBlockType = (
 // isNestableBlockType이 toggleListItem을 표(table) 전용 분기로 잘못
 // 떨어뜨린다(model/src/schema.ts의 validateBlocksAt).
 export type NestableBlockType =
-  "paragraph" | "heading" | "quote" | ListItemBlockType | "toggleListItem" | "callout";
+  | "paragraph"
+  | "heading"
+  | "quote"
+  | ListItemBlockType
+  | "toggleListItem"
+  | "callout";
 
 export const isNestableBlockType = (type: string): type is NestableBlockType =>
   type === "paragraph" ||

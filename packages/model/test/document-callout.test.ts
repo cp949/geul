@@ -7,11 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  type Block,
-  type CalloutBlock,
-  parseDocument,
-} from "../src/index.js";
+import { type Block, type CalloutBlock, parseDocument } from "../src/index.js";
 
 /** 블록 배열 하나를 formatVersion 1·revision 0 문서로 감싼다. */
 const documentOf = (blocks: unknown[]) => ({
@@ -68,7 +64,9 @@ describe("callout strict 형상과 인라인 검증", () => {
     for (const extra of [{ startNumber: 1 }, { unexpected: true }]) {
       expect(
         parseDocument(
-          documentOf([{ id: "callout-1", type: "callout", content: [], ...extra }]),
+          documentOf([
+            { id: "callout-1", type: "callout", content: [], ...extra },
+          ]),
         ),
       ).toMatchObject({
         ok: false,
