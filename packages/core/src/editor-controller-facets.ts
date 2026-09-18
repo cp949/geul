@@ -230,6 +230,7 @@ export interface BlockCommands {
     outdentBlock(blockId: string): Result<void, EditorError>;
     toggleCheckListItemChecked(blockId: string): Result<void, EditorError>;
     toggleListItemCollapse(blockId: string): Result<void, EditorError>;
+    setCalloutIcon(blockId: string, icon: string): Result<void, EditorError>;
     setBlockTextColor(
       blockId: string,
       color: string | null,

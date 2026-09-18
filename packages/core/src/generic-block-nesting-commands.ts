@@ -1,5 +1,6 @@
 import type { Result } from "@cp949/geul-model";
 
+import { setCalloutIconCommand } from "./callout-commands.js";
 import { toggleCheckListItemCheckedCommand } from "./check-list-item-commands.js";
 import { toggleListItemCollapseCommand } from "./toggle-collapse-commands.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
@@ -72,10 +73,26 @@ export const createGenericBlockNestingCommands = (
     );
   };
 
+  const setCalloutIcon = (
+    blockId: string,
+    icon: string,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("setCalloutIcon");
+    if (findBlockEntryInTree(session.document.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    return session.runDocumentCommand(
+      "setCalloutIcon",
+      "local",
+      () => setCalloutIconCommand(session.editor, blockId, icon).ok,
+    );
+  };
+
   return {
     indentBlock,
     outdentBlock,
     toggleCheckListItemChecked,
     toggleListItemCollapse,
+    setCalloutIcon,
   };
 };
