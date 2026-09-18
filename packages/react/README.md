@@ -39,6 +39,67 @@ function Editor() {
 
 실제 연결 예는 `apps/showcase`의 `src/examples/16-enabled-block-types`를 참고한다.
 
+### 사용자 정의 블록(customBlocks)
+
+`customBlocks: Record<string, CustomBlockDefinition>`를 등록하면 geul 기본 14종 밖의 블록 타입을 문서에 추가할 수 있다. `initialDocument`와 같은 마운트 시점 옵션이라 등록 후 런타임에 추가·해제할 수 없다. `CustomBlockDefinition.render({ block, editor })`는 raw `HTMLElement`만 반환한다 — geul 공개 API에는 Tiptap/ProseMirror 타입이 노출되지 않는다.
+
+```tsx
+import { EditorContent, EditorProvider, useEditor } from "@cp949/geul-react";
+import type { CustomBlockDefinition } from "@cp949/geul-core";
+import type { Document } from "@cp949/geul-model";
+
+const counterWidget: CustomBlockDefinition = {
+  render: ({ block }) => {
+    const element = document.createElement("div");
+    element.className = "counter-widget";
+    const count = typeof block.props?.count === "number" ? block.props.count : 0;
+    element.textContent = `count: ${count}`;
+    return { element };
+  },
+};
+
+// customBlocks에 등록한 타입은 initialDocument에 직접 심을 수 있다 —
+// 문서 blocks 원소 타입은 Block(기본 14종) | CustomBlock 유니온이다.
+const initialDocument: Document = {
+  formatVersion: 1,
+  revision: 0,
+  blocks: [
+    { id: "para-1", type: "paragraph", content: [{ text: "본문" }] },
+    { id: "widget-1", type: "counter", content: "none", props: { count: 3 } },
+  ],
+};
+
+// 새 인스턴스는 editor.commands.insertCustomBlock(afterBlockId, type, content, props?)로 추가한다.
+function InsertCounterButton() {
+  const editor = useEditor();
+  return (
+    <button
+      onClick={() => {
+        const result = editor.commands.insertCustomBlock("para-1", "counter", "none", {
+          count: 0,
+        });
+        if (!result.ok) console.error(result.error); // 미등록 type이면 CUSTOM_BLOCK_TYPE_NOT_REGISTERED
+      }}
+    >
+      카운터 블록 추가
+    </button>
+  );
+}
+
+function Editor() {
+  return (
+    <EditorProvider initialDocument={initialDocument} customBlocks={{ counter: counterWidget }}>
+      <InsertCounterButton />
+      <EditorContent />
+    </EditorProvider>
+  );
+}
+```
+
+**알려진 제약**: `insertCustomBlock`으로 새 인스턴스를 넣을 수만 있다 — 이미 삽입된 커스텀 블록의 `props`를 바꾸는 공개 명령은 없다. `commands.updateBlock`/`insertBlocks`/`replaceBlocks`는 기본 14종 블록 타입만 대상으로 하고 커스텀 블록은 제외한다(`PartialBlock`이 `Block["type"]` 기준으로만 정의됨). 위젯을 상호작용시키려면 `render()`가 반환한 `element` 안에서 자체 DOM 이벤트로 상태를 관리해야 한다 — 문서 모델을 거쳐 왕복 저장되지 않는다. `content: "inline"`은 model 계약상 값만 존재하고 실제 편집 가능한 내부 콘텐츠는 아직 core가 연결하지 않았다 — atom이고 자식 없는 `"none"`만 실제로 동작한다.
+
+같은 방식으로 `customInlineContent`(인라인 원소)·`customStyles`(mark)도 등록할 수 있다 — 각각 `CustomInlineContentDefinition`/`CustomStyleDefinition`(`@cp949/geul-core`)을 쓴다.
+
 ### 이미지 업로드
 
 `EditorProvider`의 `uploadFile: (file, signal) => Promise<UploadResult>` 콜백이 이미지·비디오·오디오·파일 블록의 업로드를 전부 처리한다 — 성공 시 `{ status: "success", url }`, 실패 시 에러 코드, 취소 시 `{ status: "cancelled" }`를 돌려준다. 실제 연결 예는 `apps/showcase`의 `src/examples/07-media`를 참고한다.
