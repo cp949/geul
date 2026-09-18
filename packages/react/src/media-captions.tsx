@@ -8,7 +8,6 @@ import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -21,6 +20,7 @@ import {
 } from "./media-caption-editing-store.js";
 import { findMediaVisualElement } from "./media-handle-overlays.js";
 import { readPageRect } from "./table-handle-geometry.js";
+import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useMirroredState } from "./use-mirrored-state.js";
@@ -96,7 +96,6 @@ export const MediaCaptions = () => {
   const focusEditor = useFocusEditor(element);
   const editing = useMediaCaptionEditing();
   const [, setTick] = useState(0);
-  const cancelledRef = useRef(false);
   const [hoverBlockId, , updateHoverBlockId] = useMirroredState<string | null>(
     null,
   );
@@ -149,35 +148,16 @@ export const MediaCaptions = () => {
     onCandidateChange: handleHoverCandidateChange,
   });
 
-  // unmount 시 공유 store를 비운다 — code-block-caption-editing-store.ts와
-  // 같은 이유(다음 마운트가 이 인스턴스가 열어 둔 편집 상태를 이어받지
-  // 않는다).
-  useEffect(() => {
-    return () => setMediaCaptionEditing(null);
-  }, []);
-
-  // Escape로 취소했으면 onBlur가 이어서 실행되더라도 커밋하지 않는다.
-  // draft가 committed 값과 같으면 명령을 호출하지 않는다(불필요한 history
-  // 항목 방지) — code-block-captions.tsx의 commit과 동일 이유.
-  const commit = useCallback(
-    (blockId: string, committedCaption: string) => {
-      if (cancelledRef.current) {
-        cancelledRef.current = false;
-        setMediaCaptionEditing(null);
-        return;
-      }
-      const current = getMediaCaptionEditingSnapshot();
-      if (
-        current !== null &&
-        current.blockId === blockId &&
-        current.draft !== committedCaption
-      ) {
-        editor.commands.setMediaBlockCaption(blockId, current.draft);
-      }
-      setMediaCaptionEditing(null);
-    },
-    [editor],
-  );
+  // commit/cancel/unmount cleanup은 code-block-captions.tsx와 동형인
+  // 상태 머신이라 use-caption-editing-lifecycle.ts로 통합했다(01-계획.md
+  // "20260918-03-caption-editing-lifecycle").
+  const { commit, cancel } = useCaptionEditingLifecycle({
+    getSnapshot: getMediaCaptionEditingSnapshot,
+    setEditing: setMediaCaptionEditing,
+    applyCommand: (blockId, draft) =>
+      editor.commands.setMediaBlockCaption(blockId, draft),
+    focusEditor,
+  });
 
   if (element === null) return null;
 
@@ -257,9 +237,7 @@ export const MediaCaptions = () => {
             event.preventDefault();
             event.currentTarget.blur();
           } else if (event.key === "Escape") {
-            cancelledRef.current = true;
-            event.currentTarget.blur();
-            focusEditor();
+            cancel(event.currentTarget);
           }
         };
         const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {

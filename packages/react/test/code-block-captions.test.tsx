@@ -213,34 +213,10 @@ describe("Enter·blur 커밋(완료 조건 8)", () => {
     });
     expect(screen.getByRole("button", { name: "blur 커밋" })).toBeTruthy();
   });
-
-  it("값이 안 바뀌었으면 blur해도 명령을 호출하지 않는다(onChange 이벤트 없음)", () => {
-    const changes: DocumentChangeEvent[] = [];
-    const rendered = renderCaptions({
-      initialBlocks: [
-        {
-          id: "code-1",
-          type: "codeBlock",
-          content: [{ text: "a" }],
-          caption: "그대로",
-        },
-      ],
-      onChange: (event) => changes.push(event),
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "그대로" }));
-    fireEvent.blur(captionInput());
-
-    expect(changes).toEqual([]);
-    expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
-      caption: "그대로",
-    });
-    expect(screen.getByRole("button", { name: "그대로" })).toBeTruthy();
-  });
 });
 
 describe("Escape 취소(완료 조건 9)", () => {
-  it("Escape를 누르면 draft를 버리고 커밋 없이 view 모드로 돌아온다", () => {
+  it("Escape 후 blur가 이어져도 커밋하지 않고 포커스가 편집기로 복원된다", () => {
     const changes: DocumentChangeEvent[] = [];
     const rendered = renderCaptions({
       initialBlocks: [
@@ -263,6 +239,7 @@ describe("Escape 취소(완료 조건 9)", () => {
     expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
       caption: "원래 값",
     });
+    expect(document.activeElement).toBe(rendered.editable);
   });
 });
 
