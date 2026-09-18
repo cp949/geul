@@ -24,6 +24,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { computeLanguageSuggestions } from "../src/code-block-language-combobox.js";
 import { SlashMenu } from "../src/index.js";
 import {
   type MountBlockEditorOptions,
@@ -180,6 +181,73 @@ const storedLanguage = (rendered: MountedBlockEditor): string | undefined => {
   // "codeBlock"은 예약 리터럴이라 CustomBlock일 수 없다.
   return (block as CodeBlock).language;
 };
+
+const LANGUAGE_OPTIONS_FIXTURE = [
+  { id: "text", label: "Plain Text", aliases: ["plain text", "none"] },
+  { id: "javascript", label: "JavaScript", aliases: ["js"] },
+  { id: "bash", label: "Bash", aliases: ["sh", "shell"] },
+];
+
+describe("computeLanguageSuggestions", () => {
+  it("빈 검색어는 전체 옵션을 반환하고 committed와 id가 같은 옵션을 활성화한다", () => {
+    const result = computeLanguageSuggestions(
+      LANGUAGE_OPTIONS_FIXTURE,
+      "",
+      "javascript",
+    );
+
+    expect(result.suggestions).toEqual(LANGUAGE_OPTIONS_FIXTURE);
+    expect(result.activeSuggestion?.id).toBe("javascript");
+  });
+
+  it("빈 검색어에 committed가 없으면 활성 옵션도 없다", () => {
+    const result = computeLanguageSuggestions(
+      LANGUAGE_OPTIONS_FIXTURE,
+      "",
+      undefined,
+    );
+
+    expect(result.activeSuggestion).toBeUndefined();
+  });
+
+  it("id·label·alias 부분 일치로 대소문자 구분 없이 필터링한다", () => {
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "SHELL", "text")
+        .suggestions,
+    ).toEqual([LANGUAGE_OPTIONS_FIXTURE[2]]);
+
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "plain", "text")
+        .suggestions,
+    ).toEqual([LANGUAGE_OPTIONS_FIXTURE[0]]);
+  });
+
+  it("일치하는 옵션이 없으면 suggestions가 빈 배열이다", () => {
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "rust", "text")
+        .suggestions,
+    ).toEqual([]);
+  });
+
+  it("검색어가 id나 alias와 정확히 일치할 때만 활성화하고, 부분 일치는 활성화하지 않는다", () => {
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "js", "text")
+        .activeSuggestion?.id,
+    ).toBe("javascript");
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "shell", "text")
+        .activeSuggestion?.id,
+    ).toBe("bash");
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "JavaScript", "text")
+        .activeSuggestion,
+    ).toBeUndefined();
+    expect(
+      computeLanguageSuggestions(LANGUAGE_OPTIONS_FIXTURE, "java", "text")
+        .activeSuggestion,
+    ).toBeUndefined();
+  });
+});
 
 describe("CodeBlock 언어 트리거 표시", () => {
   it("활성 CodeBlock caret에서 미지정 언어를 Plain Text로 표시하되 문서를 바꾸지 않는다", () => {
@@ -960,20 +1028,6 @@ describe("CodeBlock 언어 팝오버 suggestion과 ARIA", () => {
 
     const cssOption = screen.getByRole("option", { name: /^CSS/ });
     expect(cssOption.getAttribute("aria-selected")).toBe("false");
-  });
-
-  it("display name과 alias로 suggestion을 검색한다", () => {
-    mountCodeFixture();
-    fireEvent.click(languageButton());
-    const input = searchInput();
-
-    fireEvent.change(input, { target: { value: "plain text" } });
-    expect(screen.getAllByRole("option")).toHaveLength(1);
-    expect(screen.getByRole("option").textContent).toContain("Plain Text");
-
-    fireEvent.change(input, { target: { value: "shell" } });
-    expect(screen.getAllByRole("option")).toHaveLength(1);
-    expect(screen.getByRole("option").textContent).toContain("Bash");
   });
 });
 

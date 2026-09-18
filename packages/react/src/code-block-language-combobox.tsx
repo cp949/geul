@@ -107,6 +107,43 @@ type AnchorPosition = { left: number; top: number };
 
 const ZERO_ANCHOR: AnchorPosition = { left: 0, top: 0 };
 
+type LanguageSuggestions = {
+  suggestions: readonly CodeBlockLanguageOption[];
+  activeSuggestion: CodeBlockLanguageOption | undefined;
+};
+
+// 필터 결과의 첫 항목을 자동 활성화하면 unknown 검색어가 부분 일치한 known
+// option으로 읽히지만 Enter는 raw 검색어를 commit하는 ARIA 불일치가 생긴다.
+// canonical/label/alias가 정확히 일치할 때만 해당 option을 활성화한다.
+// 검색어가 비어 있으면(팝오버를 막 연 상태) 현재 committed 언어를 기본
+// 활성 항목으로 삼는다 — 네이티브 select가 현재 값을 미리 강조하는 것과
+// 같은 관례다. 체크마크(aria-selected)와는 다른 신호라 서로 간섭하지
+// 않는다.
+export const computeLanguageSuggestions = (
+  languageOptions: readonly CodeBlockLanguageOption[],
+  search: string,
+  committedId: string | undefined,
+): LanguageSuggestions => {
+  const needle = search.toLocaleLowerCase();
+  const suggestions = languageOptions.filter((option) =>
+    needle.length === 0
+      ? true
+      : [option.id, option.label, ...(option.aliases ?? [])].some((value) =>
+          value.toLocaleLowerCase().includes(needle),
+        ),
+  );
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const activeSuggestion = suggestions.find((option) =>
+    search.length === 0
+      ? option.id === committedId
+      : option.id === search ||
+        (option.aliases ?? []).some(
+          (alias) => alias.toLocaleLowerCase() === normalizedSearch,
+        ),
+  );
+  return { suggestions, activeSuggestion };
+};
+
 /** CodeBlock language 편집에 필요한 상태·명령·dismiss 동작을 한곳에 소유한다. */
 export const CodeBlockLanguageCombobox = () => {
   const editor = useEditor();
@@ -478,29 +515,10 @@ export const CodeBlockLanguageCombobox = () => {
     commit(event.currentTarget.value);
   };
 
-  const needle = search.toLocaleLowerCase();
-  const suggestions = languageOptions.filter((option) =>
-    needle.length === 0
-      ? true
-      : [option.id, option.label, ...(option.aliases ?? [])].some((value) =>
-          value.toLocaleLowerCase().includes(needle),
-        ),
-  );
-  // 필터 결과의 첫 항목을 자동 활성화하면 unknown 검색어가 부분 일치한 known
-  // option으로 읽히지만 Enter는 raw 검색어를 commit하는 ARIA 불일치가 생긴다.
-  // canonical/label/alias가 정확히 일치할 때만 해당 option을 활성화한다.
-  // 검색어가 비어 있으면(팝오버를 막 연 상태) 현재 committed 언어를 기본
-  // 활성 항목으로 삼는다 — 네이티브 select가 현재 값을 미리 강조하는 것과
-  // 같은 관례다. 체크마크(aria-selected)와는 다른 신호라 서로 간섭하지
-  // 않는다.
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  const activeSuggestion = suggestions.find((option) =>
-    search.length === 0
-      ? option.id === languageState?.committed
-      : option.id === search ||
-        (option.aliases ?? []).some(
-          (alias) => alias.toLocaleLowerCase() === normalizedSearch,
-        ),
+  const { suggestions, activeSuggestion } = computeLanguageSuggestions(
+    languageOptions,
+    search,
+    languageState?.committed,
   );
   const activeOptionId =
     activeSuggestion !== undefined
