@@ -274,6 +274,10 @@ const blockSequenceFromNodes = (
       // File[] 추출 경로(spec §5.2)가 담당하고 이 HTML fragment 경로와
       // 무관하다.
       if (segment.kind === "media") continue;
+      // 클립보드 정책은 isCalloutNode를 넘기지 않아 도달하지 않는다 — 공유
+      // union의 exhaustiveness 반영(Issue #209 RD-003 DELTA-01). callout div도
+      // blockquote(위)와 동일하게 클립보드에서는 그냥 문단 경계로 남는다.
+      if (segment.kind === "callout") continue;
       if (segment.kind === "list") {
         const listResult = blocksFromListNode(segment.node);
         if (!listResult.ok) return listResult;

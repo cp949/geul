@@ -198,6 +198,14 @@ export const findChildrenWrapper = (
   | { ownNode: HtmlElementNode; childrenNodes: HtmlElementContent[] }
   | undefined => {
   if (node.type !== "element" || node.tagName !== "div") return undefined;
+  // callout(Issue #209 RD-003 DELTA-01) — own-content <p> + 선택적
+  // data-geul-children 컨테이너라는 구조가 paragraph/heading wrapper와
+  // 우연히 동일해 이 함수가 먼저 걸리면 callout div가 "children 없는
+  // paragraph wrapper"로 오인된다(own-content가 그대로 paragraph가 됨).
+  // segmentBlocks의 isCalloutNode 판정에 넘겨야 하므로 여기서 배제한다.
+  if (importBlockSegmentPolicy.isCalloutNode?.(node) === true) {
+    return undefined;
+  }
 
   const hasStrayText = node.children.some(
     (child) => !isElementNode(child) && hasSubstantialText(textValue([child])),

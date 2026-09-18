@@ -258,7 +258,16 @@ const isOwnEchoStyle = (
   rawStyle: string,
   parentFigurePreviewWidthStyle: string | undefined,
 ): boolean => {
-  if (TEXT_BLOCK_PROPS_OWN_TAG_NAMES.has(node.tagName)) {
+  // callout(Issue #209 RD-003 DELTA-01) — div가 own-export에서 style을 받는
+  // 첫 케이스라 TEXT_BLOCK_PROPS_OWN_TAG_NAMES(고정 태그명 집합)에 그냥
+  // "div"를 추가하지 않는다 — children wrapper·목록류 등 TextBlockProps가
+  // 없는 다른 div까지 이 판정을 타게 하는 대신, dataGeulCallout 마커가
+  // 있는 div만 좁혀서 인정한다.
+  if (
+    TEXT_BLOCK_PROPS_OWN_TAG_NAMES.has(node.tagName) ||
+    (node.tagName === "div" &&
+      propertyStringOrUndefined(node, "dataGeulCallout") === "true")
+  ) {
     const expected = textBlockPropsStyle({
       textColor: propertyStringOrUndefined(node, "dataGeulTextColor"),
       backgroundColor: propertyStringOrUndefined(

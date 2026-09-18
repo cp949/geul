@@ -8,6 +8,7 @@
  */
 import type {
   Block,
+  CalloutBlock,
   DividerBlock,
   Document,
   HeadingBlock,
@@ -27,6 +28,23 @@ export const quoteBlock = (
   children === undefined
     ? { id, type: "quote", content: [{ text }] }
     : { id, type: "quote", content: [{ text }], children };
+
+/**
+ * 텍스트 한 조각을 content로 갖는 callout 블록을 만든다(quoteBlock과 같은
+ * children 규약). icon은 optional — 주지 않으면 필드 자체를 생략한다.
+ */
+export const calloutBlock = (
+  id: string,
+  text: string,
+  icon?: string,
+  children?: Block[],
+): CalloutBlock => ({
+  id,
+  type: "callout",
+  content: [{ text }],
+  ...(icon === undefined ? {} : { icon }),
+  ...(children === undefined ? {} : { children }),
+});
 
 /**
  * content도 children도 없는 divider 리프 블록을 만든다.

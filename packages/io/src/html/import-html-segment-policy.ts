@@ -10,6 +10,7 @@ import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
+import { propertyString } from "./hast-properties.js";
 import { isElementNode } from "./import-html-helpers.js";
 import { isMediaNode } from "./import-html-media.js";
 import type { HtmlElementNode } from "./inline-content.js";
@@ -44,6 +45,14 @@ const isCodeBlockFigureNode = (node: HtmlElementNode): boolean =>
     (child) => isElementNode(child) && child.tagName === "pre",
   );
 
+// callout(Issue #209 RD-003 DELTA-01) — div가 own-content 블록(quote의
+// blockquote와 동형)을 겸하는 첫 사례라 isMediaNode/isCodeBlockFigureNode와
+// 같은 이유로 태그명만으로는 판정할 수 없다. dataGeulCallout 마커가 있는
+// div만 승격하고, 마커 없는 일반 div는 그대로 isNestedBoundary(문단 경계)로
+// 남는다.
+const isCalloutNode = (node: HtmlElementNode): boolean =>
+  node.tagName === "div" && propertyString(node, "dataGeulCallout") === "true";
+
 // documentFromRoot의 재귀 경계 판정(문단/헤딩/구분선/표 시퀀스로 쪼개기)은
 // clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
 // 공유한다(아키텍처 리뷰 2차 후보 G) — p/h1~h3/table만 보던 예전 documentFromRoot
@@ -70,4 +79,5 @@ export const importBlockSegmentPolicy: BlockSegmentPolicy<
   isCodeBlockTag: (tagName) => tagName === "pre",
   isCodeBlockFigureNode,
   isMediaNode,
+  isCalloutNode,
 };

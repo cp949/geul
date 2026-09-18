@@ -51,6 +51,17 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
     "dataGeulChecked",
     "dataGeulStartNumber",
     "dataGeulCollapsed",
+    // callout(Issue #209 RD-003 DELTA-01) — div가 own-content 블록(quote의
+    // blockquote와 동형)을 겸하는 첫 사례다. dataGeulCallout이 존재 마커,
+    // dataGeulIcon은 "정의된 경우만"(collapsed와 동일 패턴). TextBlockProps
+    // 3종은 blockquote 항목과 같은 이름 규칙 — clipboard는 isCalloutNode를
+    // 넘기지 않아 sanitize가 속성을 보존해도 clipboard-table-parser.ts가
+    // 여전히 문단 경계로 처리한다(quote의 TextBlockProps 3종과 동일 근거).
+    "dataGeulCallout",
+    "dataGeulIcon",
+    "dataGeulTextColor",
+    "dataGeulBackgroundColor",
+    "dataGeulTextAlignment",
   ],
   h1: [
     "dataGeulBlockId",

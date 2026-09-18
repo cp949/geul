@@ -179,6 +179,64 @@ const blocksFromSegments = (
       );
       continue;
     }
+    if (segment.kind === "callout") {
+      // callout(Issue #209 RD-003 DELTA-01) — quote(위)와 완전히 동일한
+      // D6 분할 규칙(splitQuoteChildren 재사용, 함수명과 달리 quote 전용
+      // 아님)을 쓴다. icon은 toggleListItem.collapsed·numberedListItem.
+      // startNumber와 같은 "정의된 경우만" 패턴 — HTML에 속성이 없으면
+      // propertyString이 undefined를 돌려줘 필드 자체가 생략된다.
+      const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
+      const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
+      const content = paragraphContentFromNodes(contentNodes);
+      const calloutProps = textBlockPropsFromElement(segment.node);
+      const icon = propertyString(segment.node, "dataGeulIcon");
+      if (depth >= MAX_NESTING_DEPTH) {
+        const flattened = blocksFromNodes(
+          childrenNodes,
+          createId,
+          depth,
+          warnings,
+        );
+        if (flattened.length > 0)
+          warnings.push(nestedChildrenFlattenedWarning());
+        blocks.push(
+          {
+            id,
+            type: "callout",
+            content,
+            ...(icon === undefined ? {} : { icon }),
+            ...calloutProps,
+          },
+          ...flattened,
+        );
+        continue;
+      }
+      const children = blocksFromNodes(
+        childrenNodes,
+        createId,
+        depth + 1,
+        warnings,
+      );
+      blocks.push(
+        children.length > 0
+          ? {
+              id,
+              type: "callout",
+              content,
+              ...(icon === undefined ? {} : { icon }),
+              ...calloutProps,
+              children,
+            }
+          : {
+              id,
+              type: "callout",
+              content,
+              ...(icon === undefined ? {} : { icon }),
+              ...calloutProps,
+            },
+      );
+      continue;
+    }
     // document import 정책은 isListTag를 넘기지 않아 도달하지 않는다 —
     // 공유 union의 exhaustiveness 반영(DELTA-01, Issue #143 (b)), ul/ol
     // 매핑은 이 파일의 blocksFromListElement가 이미 따로 담당한다.

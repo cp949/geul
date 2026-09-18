@@ -561,6 +561,38 @@ const blockNode = (block: Block): HtmlElementNode => {
     );
   }
 
+  // callout → <div data-geul-block-id data-geul-callout="true"
+  // [data-geul-icon]><p>content</p>[<div data-geul-children>children</div>]
+  // </div>(Issue #209 RD-003 DELTA-01, 설계 §4). quote와 완전히 동일한
+  // wrapper-불필요 패턴이다 — div도 blockquote처럼 flow content를 담을 수
+  // 있어 자기 콘텐츠 <p>와 children 컨테이너를 직접 둔다. icon은
+  // toggleListItem.collapsed와 같은 "정의된 경우만" 패턴(own-export
+  // 관례) — undefined면 data-geul-icon 자체를 생략한다.
+  if (block.type === "callout") {
+    const calloutChildren: HtmlElementContent[] = [
+      htmlElement("p", {}, inlineContentToNodes(block.content)),
+    ];
+    if (block.children !== undefined && block.children.length > 0) {
+      calloutChildren.push(
+        htmlElement(
+          "div",
+          { dataGeulChildren: "1" },
+          knownBlockNodes(block.children),
+        ),
+      );
+    }
+    return htmlElement(
+      "div",
+      {
+        dataGeulBlockId: block.id,
+        dataGeulCallout: "true",
+        ...(block.icon === undefined ? {} : { dataGeulIcon: block.icon }),
+        ...textBlockPropsAttributes(block),
+      },
+      calloutChildren,
+    );
+  }
+
   // heading은 model HeadingBlock.level(1~6)을 그대로 h1~h6 태그명으로 쓴다.
   // isListItemBlockType(위)이 discriminated union인 block 자체는 좁히지
   // 못해, table/codeBlock/목록/divider/quote를 모두 걸러낸 이 지점이

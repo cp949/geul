@@ -106,7 +106,14 @@ export type BlockSegment<
   // 이 kind가 런타임에 나오지 않는다 — 다만 union 자체는 hr/blockquote/list와
   // 같이 무조건 포함이라 그 소비자도 dead-branch를 명시해야 한다(그 파일의
   // 주석 참고).
-  | { kind: "media"; node: HtmlElementNode };
+  | { kind: "media"; node: HtmlElementNode }
+  // callout(Issue #209 RD-003 DELTA-01) — blockquote와 같은 이유로 안쪽을
+  // 재귀하지 않는다(D6 분할은 호출자가 splitQuoteChildren 재사용으로 한다).
+  // div가 own-content 블록을 겸하는 첫 사례라 isMediaNode와 같은 노드 전체
+  // 검사 시그니처(isCalloutNode)를 쓴다. isCalloutNode를 넘기지 않는
+  // 소비자(clipboard-table-parser.ts)에서는 이 kind가 런타임에 나오지
+  // 않지만 union 자체는 무조건 포함이라 dead-branch를 명시해야 한다.
+  | { kind: "callout"; node: HtmlElementNode };
 
 export type BlockSegmentPolicy<
   Level extends number = number,
@@ -168,6 +175,11 @@ export type BlockSegmentPolicy<
   // (clipboard-table-parser.ts)에서는 이 kind가 나오지 않고, figure는
   // isMediaNode 판정만 받는다(media 마커가 없으면 그대로 문단 경계다).
   isCodeBlockFigureNode?: (node: HtmlElementNode) => boolean;
+  // callout(Issue #209 RD-003 DELTA-01) 태그 자신 판정 — isMediaNode와 같은
+  // 이유(div가 own-content 블록을 겸해 태그명만으로 판정 불가)로 노드 전체
+  // 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 소비자
+  // (clipboard-table-parser.ts)에서는 이 kind가 나오지 않는다.
+  isCalloutNode?: (node: HtmlElementNode) => boolean;
 } & (IncludeCodeBlock extends true
   ? { isCodeBlockTag: (tagName: string) => boolean }
   : { isCodeBlockTag?: undefined });
@@ -257,6 +269,7 @@ export function segmentBlocks<Level extends number = number>(
         policy.isCodeBlockTag?.(node.tagName) === true ||
         policy.isCodeBlockFigureNode?.(node) === true ||
         policy.isMediaNode?.(node) === true ||
+        policy.isCalloutNode?.(node) === true ||
         policy.isNestedBoundary(node.tagName)
       ) {
         return true;
@@ -368,6 +381,27 @@ export function segmentBlocks<Level extends number = number>(
       if (policy.isMediaNode?.(node) === true) {
         flush();
         segments.push({ kind: "media", node });
+        continue;
+      }
+      // callout(Issue #209 RD-003 DELTA-01) — blockquote와 같은 이유로
+      // 안쪽을 통째로 호출자에 넘긴다. isNestedBoundary(div 포함)보다
+      // 먼저 와야 마커 없는 일반 div와 섞이지 않는다.
+      if (policy.isCalloutNode?.(node) === true) {
+        flush();
+        segments.push({
+          kind: "callout",
+          node: htmlElement(
+            node.tagName,
+            node.properties,
+            node.children.map((child) =>
+              wrapTextDescendantsInAncestors(
+                child,
+                ancestors,
+                policy.isTableNode,
+              ),
+            ),
+          ),
+        });
         continue;
       }
 
