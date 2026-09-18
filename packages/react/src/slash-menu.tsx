@@ -22,6 +22,7 @@ import {
   blockTypeText,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
+import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
 import { MediaCaptions } from "./media-captions.js";
@@ -664,6 +665,7 @@ export const SlashMenu = ({
           openMenuAt(blockId, { type: "paragraph" }, "")
         }
       />
+      <CalloutIconPicker />
       <MediaCaptions />
       <TableSelectionToolbar />
       <BlockSelectionToolbar />

@@ -24,3 +24,20 @@
     line-height: 1.6;
   }
 }
+
+// callout 아이콘 클릭 트리거(callout-icon-picker.tsx, RD-004 DELTA-02).
+// media-handle-overlays.tsx(.geul-media-handle-overlay)와 같은 이유로
+// position: absolute + page-relative 좌표(readPageRect)를 쓴다 — 들여쓰기
+// depth가 쌓여도 실측 rect를 그대로 따라간다. 아이콘 시각 표시는 위
+// [data-geul-callout]::before가 그대로 담당하고, 이 버튼은 그 자리 위에
+// 투명 클릭 영역만 겹친다(own 아이콘 문자를 다시 그리지 않는다).
+.geul-callout-icon-trigger {
+  position: absolute;
+  z-index: 10;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}

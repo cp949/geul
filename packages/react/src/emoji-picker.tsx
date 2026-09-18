@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
@@ -324,33 +325,15 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
 
   const menuContent =
     menuState === null ? null : (
-      <div
-        aria-label="Emoji picker"
-        className="geul-emoji-picker"
-        ref={menuRef}
-        role="listbox"
+      <EmojiGrid
+        ariaLabel="Emoji picker"
+        emptyMessage="No matches"
+        highlightedIndex={menuState.highlightedIndex}
+        items={items}
+        menuRef={menuRef}
+        onSelect={selectItem}
         style={style}
-      >
-        {items.length === 0 && (
-          <p className="geul-emoji-picker__empty">No matches</p>
-        )}
-        <div className="geul-emoji-picker__grid">
-          {items.map((item, index) => (
-            <button
-              aria-label={item.label}
-              aria-selected={index === menuState.highlightedIndex}
-              className="geul-emoji-picker__item"
-              key={item.id}
-              onClick={() => selectItem(item)}
-              onPointerDown={(event) => event.preventDefault()}
-              role="option"
-              type="button"
-            >
-              {item.char}
-            </button>
-          ))}
-        </div>
-      </div>
+      />
     );
 
   if (menuContent === null) return null;
