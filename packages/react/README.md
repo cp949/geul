@@ -98,7 +98,61 @@ function Editor() {
 
 **알려진 제약**: `insertCustomBlock`으로 새 인스턴스를 넣을 수만 있다 — 이미 삽입된 커스텀 블록의 `props`를 바꾸는 공개 명령은 없다. `commands.updateBlock`/`insertBlocks`/`replaceBlocks`는 기본 14종 블록 타입만 대상으로 하고 커스텀 블록은 제외한다(`PartialBlock`이 `Block["type"]` 기준으로만 정의됨). 위젯을 상호작용시키려면 `render()`가 반환한 `element` 안에서 자체 DOM 이벤트로 상태를 관리해야 한다 — 문서 모델을 거쳐 왕복 저장되지 않는다. `content: "inline"`은 model 계약상 값만 존재하고 실제 편집 가능한 내부 콘텐츠는 아직 core가 연결하지 않았다 — atom이고 자식 없는 `"none"`만 실제로 동작한다.
 
-같은 방식으로 `customInlineContent`(인라인 원소)·`customStyles`(mark)도 등록할 수 있다 — 각각 `CustomInlineContentDefinition`/`CustomStyleDefinition`(`@cp949/geul-core`)을 쓴다.
+`customStyles`(mark)도 같은 방식으로 등록할 수 있다 — `CustomStyleDefinition`(`@cp949/geul-core`)을 쓴다.
+
+### 사용자 정의 인라인 콘텐츠(customInlineContent)
+
+`customInlineContent: Record<string, CustomInlineContentDefinition>`를 등록하면 geul 기본 텍스트 런 옆에 커스텀 인라인 원소(mention, 인라인 배지 등)를 문서에 추가할 수 있다. `customBlocks`와 같은 마운트 시점 옵션이라 등록 후 런타임에 추가·해제할 수 없다. `CustomInlineContentDefinition.render({ item, editor })`는 raw `HTMLElement`를 직접 반환한다 — `CustomBlockDefinition`과 달리 `{ element }`로 감싸지 않는다(atom·leaf 노드라 자식 콘텐츠 개념이 없다).
+
+```tsx
+import { EditorContent, EditorProvider, useEditor } from "@cp949/geul-react";
+import type { CustomInlineContentDefinition } from "@cp949/geul-core";
+
+const mentionDefinition: CustomInlineContentDefinition = {
+  render: ({ item }) => {
+    const element = document.createElement("span");
+    const label = typeof item.props?.label === "string" ? item.props.label : "";
+    element.textContent = `@${label}`;
+    element.className = "mention-chip";
+    return element;
+  },
+};
+
+// insertCustomBlock과 달리 afterBlockId를 받지 않는다 — 현재 selection
+// (caret)에 삽입한다(inline 원소는 model에 id가 없어 block처럼 위치를
+// 식별할 identity가 없다).
+function InsertMentionButton() {
+  const editor = useEditor();
+  return (
+    <button
+      onClick={() => {
+        const result = editor.commands.insertCustomInlineContent("mention", {
+          targetType: "user",
+          targetId: "user-1",
+          label: "Ada Lovelace",
+        });
+        if (!result.ok) console.error(result.error); // 미등록 type이면 CUSTOM_INLINE_CONTENT_TYPE_NOT_REGISTERED
+      }}
+    >
+      멘션 삽입
+    </button>
+  );
+}
+
+function Editor() {
+  return (
+    <EditorProvider
+      initialDocument={initialDocument}
+      customInlineContent={{ mention: mentionDefinition }}
+    >
+      <InsertMentionButton />
+      <EditorContent />
+    </EditorProvider>
+  );
+}
+```
+
+**알려진 제약**: `insertCustomInlineContent`는 caret 앞 텍스트를 지우고 그 자리를 대체하는 offset 기반 API가 아니다 — 현재 selection에 원소를 끼워 넣기만 한다. `@query`처럼 텍스트 트리거로 popup을 여는 UI(mention 등)를 만들려면 소비자가 직접 트리거 감지·팝업·후보 필터링·키보드 네비게이션을 구현해야 한다 — 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss까지 포함한 실행 가능한 전체 예제는 `apps/showcase`의 `src/examples/17-mention`을 참고한다(`useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/`useDismissOnOutsideOrEscape`를 그 예제가 그대로 재사용한다). `customInlineContent`의 `toHtml`은 저장만 될 뿐 `io`(HTML/GFM export)에는 아직 연결돼 있지 않다 — 등록해도 HTML/GFM 내보내기에서는 그 원소가 사라진다(기존 갭, 이 문서가 메우지 않는다).
 
 ### 이미지 업로드
 
