@@ -48,6 +48,17 @@ const errorMessage = (error: unknown, fallback: string): string =>
 // 통과해야 하므로 https 스킴을 쓴다.
 const DEMO_UPLOAD_DELAY_MS = 300;
 
+// e2e(roadmap Issue #212 RD-004 DELTA-06)가 iframe 삽입/거절 흐름을
+// 결정적으로 재현하기 위한 데모 전용 whitelist. providers 밖 URL은
+// allowCustomUrl 미설정(기본 false)이라 그대로 NOT_WHITELISTED_AND_
+// CUSTOM_DISABLED로 거절된다 — 거절 UI e2e는 별도 config 분기 없이 이
+// 화이트리스트 밖 도메인만 쓰면 된다.
+const DEMO_IFRAME_EMBED: CreateEditorOptions["iframeEmbed"] = {
+  providers: [
+    { name: "Example", match: { type: "exact", pattern: "example.com" } },
+  ],
+};
+
 const demoUploadFile: CreateEditorOptions["uploadFile"] = (file, signal) => {
   if (signal.aborted) return Promise.resolve({ status: "cancelled" });
   return new Promise((resolve) => {
@@ -291,6 +302,7 @@ export const App = () => {
 
   return (
     <EditorProvider
+      iframeEmbed={DEMO_IFRAME_EMBED}
       initialDocument={initialDocument}
       onChange={onChange}
       uploadFile={demoUploadFile}

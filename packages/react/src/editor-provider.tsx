@@ -46,6 +46,7 @@ export type EditorProviderProps = (
       attributeOverrides?: never;
       dictionary?: never;
       syntaxHighlighter?: never;
+      iframeEmbed?: never;
     }
   | {
       children: ReactNode;
@@ -96,6 +97,13 @@ export type EditorProviderProps = (
       // 래퍼가 없다) — customBlocks 등과 같은 이유로 마운트 시점 값만
       // 읽는다. `RD-002.md` "## 결정" 참고.
       syntaxHighlighter?: CreateEditorOptions["syntaxHighlighter"];
+      // CUS-001~004(roadmap Issue #212 RD-004 DELTA-06) — customBlocks 등과
+      // 같은 이유로 마운트 시점 값만 읽는다(host URL 정책은 core
+      // createEditor() 호출 시점에 IframeBlockExtension.configure()로
+      // 고정된다, RD-002 DELTA-02). 위 15개 옵션과 짝을 맞춰 threading하는
+      // 것으로, 이미 확정된 core 공개 계약을 EditorProvider 소비 경로에도
+      // 도달시킬 뿐 새 계약을 만들지 않는다.
+      iframeEmbed?: CreateEditorOptions["iframeEmbed"];
     }
 ) & {
   // 위 주석 참고 — 두 분기 공통. reactive threading(마운트 고정 아님,
@@ -153,6 +161,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
       attributeOverrides: props.attributeOverrides,
       dictionary: props.dictionary,
       syntaxHighlighter: props.syntaxHighlighter,
+      iframeEmbed: props.iframeEmbed,
       // "## 결정" 1 — 등록 key 집합만 마운트 시 고정한다. 함수 본체는
       // latestCommands/latestKeyboardShortcuts를 거쳐 최신값으로 간다.
       commandKeys:
@@ -237,6 +246,9 @@ export const EditorProvider = (props: EditorProviderProps) => {
       ...(configuration.syntaxHighlighter === undefined
         ? {}
         : { syntaxHighlighter: configuration.syntaxHighlighter }),
+      ...(configuration.iframeEmbed === undefined
+        ? {}
+        : { iframeEmbed: configuration.iframeEmbed }),
       ...(configuration.commandKeys === undefined
         ? {}
         : {

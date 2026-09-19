@@ -605,3 +605,71 @@ describe("EditorProvider — syntaxHighlighter(BLK-017)", () => {
     expect(host.querySelector("code")?.textContent).toBe("const x = 1;");
   });
 });
+
+// CUS-001~004(roadmap Issue #212 RD-004 DELTA-06 readiness) — `iframeEmbed`는
+// core.createEditor()의 이미 확정된 옵션(RD-002 DELTA-02, host URL 정책)이지만
+// 위 15개 옵션과 달리 EditorProviderProps에 threading되지 않고 있었다 —
+// 이 describe가 그 결함(react 소비자는 EditorProvider의 내부소유 경로로는
+// 이 옵션에 도달할 수 없었다)을 회귀로 고정한다.
+describe("EditorProvider — iframeEmbed(CUS-001~004, RD-004 DELTA-06)", () => {
+  const iframeDocument: CreateEditorOptions["initialDocument"] = {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [{ id: "block-1", type: "iframe" }],
+  };
+
+  it("화이트리스트에 매치하는 URL은 setIframeSrc가 허용하고, 밖은 거절한다", () => {
+    let controller: EditorController | undefined;
+
+    render(
+      <EditorProvider
+        initialDocument={iframeDocument}
+        iframeEmbed={{
+          providers: [
+            {
+              name: "Example",
+              match: { type: "exact", pattern: "example.com" },
+            },
+          ],
+        }}
+      >
+        <CaptureEditor onCapture={(editor) => (controller = editor)} />
+        <EditorContent />
+      </EditorProvider>,
+    );
+    if (controller === undefined) throw new Error("컨트롤러 캡처 실패");
+
+    const allowed = controller.commands.setIframeSrc(
+      "block-1",
+      "https://example.com/embed",
+    );
+    expect(allowed.ok).toBe(true);
+    expect(
+      controller.getDocument().blocks.find((block) => block.id === "block-1"),
+    ).toMatchObject({ url: "https://example.com/embed" });
+
+    const rejected = controller.commands.setIframeSrc(
+      "block-1",
+      "https://not-whitelisted.example.org",
+    );
+    expect(rejected.ok).toBe(false);
+  });
+
+  it("연결하지 않으면 기본 정책대로 어떤 URL도 거절한다(무회귀)", () => {
+    let controller: EditorController | undefined;
+
+    render(
+      <EditorProvider initialDocument={iframeDocument}>
+        <CaptureEditor onCapture={(editor) => (controller = editor)} />
+        <EditorContent />
+      </EditorProvider>,
+    );
+    if (controller === undefined) throw new Error("컨트롤러 캡처 실패");
+
+    const result = controller.commands.setIframeSrc(
+      "block-1",
+      "https://example.com/embed",
+    );
+    expect(result.ok).toBe(false);
+  });
+});
