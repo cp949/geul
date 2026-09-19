@@ -3,7 +3,8 @@
  * 상태 맵과 경합 가드(RD-001, Issue #152 슬라이스3 `MED-002` 일부, spec §4)와
  * `replaceMediaBlockFile`의 교체 유지 정책(RD-002, `MED-005`, spec §4.2)과
  * `isUploadEnabled()`(RD-003 DELTA-01, react Upload 탭 노출 판정 지점, spec
- * §6.1)를 고정한다.
+ * §6.1)와 iframe 대상 거절(`MEDIA_UPLOAD_NOT_SUPPORTED`, Issue #216)을
+ * 고정한다.
  *
  * mock `UploadFile`은 즉시 resolve하지 않고 `pending` 배열에 resolver를
  * 쌓아 두는 controllable 형태다 — `uploadMediaFile`/`replaceMediaBlockFile`이

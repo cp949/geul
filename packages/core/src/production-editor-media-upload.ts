@@ -196,8 +196,8 @@ export class MediaUploadTracker {
   // createTiptapEditor()가 만드는 MediaDropPasteExtension 시점엔 존재하지
   // 않았다(RD-002-DELTA-02.md "배경"). 콜백 호출 → pending "uploading" →
   // 완료 분기 순으로 진행한다. 사전 조건 실패(파괴됨·대상 없음·대상이
-  // media 아님·이미 진행 중)와 "콜백 미등록 + 대상에 이미 url 있음"만
-  // 즉시 ok:false로 알린다. "콜백 미등록 + 대상에 url 없음"(빈
+  // media 아님·대상이 iframe(Issue #216)·이미 진행 중)와 "콜백 미등록 +
+  // 대상에 이미 url 있음"만 즉시 ok:false로 알린다. "콜백 미등록 + 대상에 url 없음"(빈
   // placeholder)은 사전 조건 실패가 아니라 로컬 프리뷰(ADR 0015)로
   // 대체하는 정상 경로다(Issue #168 roadmap RD-001 DELTA-04) — paste/drop은
   // 삽입 시점에 직접 로컬 프리뷰를 배선하고(DELTA-02·03), 이 메서드는
