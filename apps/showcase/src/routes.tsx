@@ -9,6 +9,7 @@ import FilePanelPage from "./examples/06-file-panel/page.js";
 import FormattingToolbarPage from "./examples/03-formatting-toolbar/page.js";
 import LinkToolbarPage from "./examples/04-link-toolbar/page.js";
 import MediaPage from "./examples/07-media/page.js";
+import MentionPage from "./examples/17-mention/page.js";
 import MinimalEditorPage from "./examples/01-minimal-editor/page.js";
 import SlashMenuPage from "./examples/05-slash-menu/page.js";
 import StaticToolbarPage from "./examples/15-static-toolbar/page.js";
@@ -100,6 +101,12 @@ export const exampleRoutes: readonly ExampleRoute[] = [
     label: "Emoji picker",
     group: "Media & Extras",
     Page: EmojiPickerPage,
+  },
+  {
+    path: "mention",
+    label: "Mention",
+    group: "Media & Extras",
+    Page: MentionPage,
   },
   {
     path: "dictionary-override",
