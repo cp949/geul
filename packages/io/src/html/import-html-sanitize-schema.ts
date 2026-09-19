@@ -22,6 +22,13 @@ const mediaDataAttributeNames = [
   "dataGeulShowPreview",
   "dataGeulPreviewWidth",
   "dataGeulTextAlignment",
+  // iframe(CUS-001~004)만 쓰는 2개(RD-003 DELTA-01) — src는 export가
+  // 이미 dataGeulSrc로 방출 중이라(RD-001-DELTA-01) 이 allowlist에 없으면
+  // re-import 시 sanitize가 조용히 제거한다. 접근성 title은 4종과 공유하는
+  // dataGeulName을 그대로 재사용한다(별도 속성 없음, spec §2 "name = 접근성
+  // title").
+  "dataGeulSrc",
+  "dataGeulAspectRatio",
 ];
 
 // 목록 import가 의미로 소비하는 속성을 sanitizer의 document-import 전용
