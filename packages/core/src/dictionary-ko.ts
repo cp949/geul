@@ -253,5 +253,6 @@ export const KO_DICTIONARY: Dictionary = {
       privateNetworkBlocked: "사설 네트워크 주소는 허용되지 않습니다",
       notWhitelisted: "허용 목록에 없는 URL입니다",
     },
+    iframeLoadTimeout: "로드 실패 또는 이 사이트가 삽입을 차단했을 수 있습니다",
   },
 };

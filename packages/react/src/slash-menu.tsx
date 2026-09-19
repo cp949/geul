@@ -25,6 +25,7 @@ import {
 import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
+import { IframeLoadStatus } from "./iframe-load-status.js";
 import { MediaCaptions } from "./media-captions.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
 import { TableHandles } from "./table-handles.js";
@@ -682,6 +683,7 @@ export const SlashMenu = ({
           openMenuAt(blockId, { type: "paragraph" }, "")
         }
       />
+      <IframeLoadStatus />
       <CalloutIconPicker />
       <MediaCaptions />
       <TableSelectionToolbar />

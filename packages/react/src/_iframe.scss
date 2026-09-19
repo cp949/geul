@@ -20,3 +20,29 @@
   background-color: var(--geul-color-accent-muted, #e8f0fe);
   color: var(--geul-color-accent, #1a73e8);
 }
+
+// 로딩 타임아웃 휴리스틱 문구(roadmap Issue #212 RD-004 DELTA-05, spec §5
+// "로딩/차단 상태") — react iframe-load-status.tsx가 wrapper에
+// data-geul-iframe-load-status(-label)를 직접 세팅한다(모델/데코레이션 관여
+// 없음, 타이머 기반 휘발 상태). 표시 기법은 `[data-geul-media-empty]::after`
+// (_editor.scss)와 같다(`content: attr()`) — iframe은 그 자리에 이미
+// 콘텐츠(성공/실패 여부와 무관하게 렌더된 프레임)가 있어 `position:relative`
+// wrapper 위에 `inset:0`로 완전히 덮어 그린다는 점만 다르다.
+.geul-editor [data-geul-media-kind="iframe"] {
+  position: relative;
+
+  &[data-geul-iframe-load-status="timeout"]::after {
+    content: attr(data-geul-iframe-load-status-label);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.75rem;
+    text-align: center;
+    background: var(--geul-color-surface-muted, #f1f3f4);
+    color: var(--geul-color-text-muted, #5f6368);
+    font-size: 0.875rem;
+    pointer-events: none;
+  }
+}

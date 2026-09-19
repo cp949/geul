@@ -393,6 +393,13 @@ export type Dictionary = {
       privateNetworkBlocked: string;
       notWhitelisted: string;
     };
+    // CUS-001~004(roadmap Issue #212 RD-004 DELTA-05) — iframe onLoad 미발생
+    // 타임아웃 휴리스틱(react iframe-load-status.tsx)이 wrapper의
+    // data-geul-iframe-load-status-label에 이 값을 그대로 세팅한다(CSS
+    // `content: attr()`로 표시, data-geul-media-empty-label과 같은 기법).
+    // 로드 실패와 삽입 차단(X-Frame-Options 등)을 구분할 방법이 없어(브라우저가
+    // 둘 다 같은 방식으로 조용히 실패시킨다) 의도적으로 모호한 문구다(spec §5).
+    iframeLoadTimeout: string;
   };
 };
 
@@ -649,5 +656,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       privateNetworkBlocked: "Private network addresses aren't allowed",
       notWhitelisted: "This URL isn't on the allowed list",
     },
+    iframeLoadTimeout:
+      "This may have failed to load, or the site may have blocked embedding.",
   },
 };
