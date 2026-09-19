@@ -15,9 +15,16 @@
   }
 
   // 기본(textAlignment 미설정=null, core media-block-extension.ts가
-  // attribute 자체를 생략)은 중앙 정렬 — 지금까지 유일한 동작이었다.
+  // attribute 자체를 생략)은 중앙 정렬 — 지금까지 유일한 동작이었다. iframe
+  // (roadmap Issue #212 RD-004 DELTA-01)도 같은 계약을 따른다 — core의
+  // iframe-block-extension.ts renderHTML은 `<iframe>` 자신에 width/aspect-ratio
+  // 인라인 스타일만 싣고 margin은 안 실어(그 값은 react 전용 UI 계약이라
+  // core가 export하지 않는다, spec §5) 이 규칙이 여전히 유일한 중앙정렬
+  // 공급원이다 — media-resize-handles.tsx의 "중심 고정 대칭 리사이즈" 산술이
+  // margin:0 auto 전제에 의존한다.
   > img,
-  > video {
+  > video,
+  > iframe {
     display: block;
     margin: 0 auto;
     max-width: 100%;
@@ -29,13 +36,15 @@
   // 실제 렌더된 rect를 읽어 좌표를 잡으므로(margin 값을 가정하지 않음)
   // 이 재정렬과 무관하게 그대로 동작한다.
   &[data-geul-text-alignment="left"] > img,
-  &[data-geul-text-alignment="left"] > video {
+  &[data-geul-text-alignment="left"] > video,
+  &[data-geul-text-alignment="left"] > iframe {
     margin-left: 0;
     margin-right: auto;
   }
 
   &[data-geul-text-alignment="right"] > img,
-  &[data-geul-text-alignment="right"] > video {
+  &[data-geul-text-alignment="right"] > video,
+  &[data-geul-text-alignment="right"] > iframe {
     margin-left: auto;
     margin-right: 0;
   }

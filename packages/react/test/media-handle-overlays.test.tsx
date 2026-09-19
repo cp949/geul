@@ -19,7 +19,10 @@ import { DEFAULT_DICTIONARY } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MediaHandleOverlays } from "../src/media-handle-overlays.js";
+import {
+  findMediaVisualElement,
+  MediaHandleOverlays,
+} from "../src/media-handle-overlays.js";
 import {
   mountBlockEditor,
   type MountBlockEditorOptions,
@@ -105,6 +108,46 @@ describe("hover 시 그립·plus 위치 — readPageRect 실측(완료 조건 1,
       throw new Error("오버레이 left를 읽지 못했다");
     }
     expect(parseFloat(secondLeft) - parseFloat(firstLeft)).toBeCloseTo(124);
+  });
+});
+
+// roadmap Issue #212 RD-004 DELTA-01 — iframe(media 5번째 kind)도 그립·plus
+// 오버레이 대상이다(spec §5). 이 파일의 wrapper/visual rect는 항상 같은 값으로
+// 스텁되므로(mount-editor.tsx restubGeometry 주석 참고) 좌표 비교로는
+// "wrapper 폴백"과 "iframe 발견"을 구분할 수 없다 — findMediaVisualElement를
+// 직접 단위 테스트해 셀렉터 자체를 고정하고, 통합 테스트는 image와 동일한
+// hover→오버레이 패리티만 확인한다.
+describe("iframe 지원(roadmap Issue #212 RD-004 DELTA-01)", () => {
+  it("findMediaVisualElement가 wrapper의 직접 자식 iframe을 찾는다", () => {
+    const wrapper = document.createElement("div");
+    const iframe = document.createElement("iframe");
+    wrapper.append(iframe);
+
+    expect(findMediaVisualElement(wrapper)).toBe(iframe);
+  });
+
+  // top=0이면 findMediaVisualElement가 iframe을 못 찾아 wrapper로 폴백해도
+  // (스텁된 wrapper rect) 우연히 같은 값이 나와 이 회귀를 못 잡는다 — 0이
+  // 아닌 좌표를 써서 "실제 iframe 요소(mount-editor.tsx가 스텁)를 찾았는지"와
+  // "wrapper로 조용히 폴백했는지(그러면 iframe 자체는 jsdom 기본 rect 0이라
+  // top이 어긋난다)"를 구분한다.
+  it("iframe 블록도 image와 동일하게 hover 시 오버레이가 media rect에 뜬다", () => {
+    renderMediaOverlays({
+      initialBlocks: [
+        { id: "iframe-1", type: "iframe", url: "https://example.com/embed" },
+      ],
+      layout: { left: 124, top: 200, width: 600, height: 20 },
+    });
+
+    const [media] = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelectorAll<HTMLElement>("[data-geul-block-id]");
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+
+    const overlay = document.querySelector<HTMLElement>(overlaySelector);
+    expect(overlay).not.toBeNull();
+    expect(overlay?.style.top).toBe("200px");
   });
 });
 

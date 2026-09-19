@@ -53,28 +53,31 @@ const clampPreviewWidth = (width: number, maxWidth: number): number =>
 // table-handles.tsx 세 파일이 이미 겪은 문제) — findElementByAttribute로
 // 우회한다. tagName을 "div"로 좁히는 것은 table-handles.tsx의 findTable이
 // "table"로 좁히는 것과 같은 이유(전체 문서의 `[data-geul-block-id]` 스캔
-// 범위를 줄인다) — 4종 미디어 블록의 래퍼는 항상 div다
-// (media-block-extension.ts).
+// 범위를 줄인다) — 5종 미디어 블록의 래퍼는 항상 div다
+// (media-block-extension.ts, iframe-block-extension.ts).
 const findMediaWrapper = (
   element: HTMLElement,
   blockId: string,
 ): HTMLElement | null =>
   findElementByAttribute(element, "div", "data-geul-block-id", blockId);
 
-// image/video만 previewWidth를 가지므로(media-block-extension.ts) 래퍼의
-// 직접 자식 img/video 하나만 찾으면 된다(caption div는 별도 형제라 여기
-// 걸리지 않는다).
+// image/video/iframe만 previewWidth를 가지므로(media-block-extension.ts,
+// iframe-block-extension.ts) 래퍼의 직접 자식 img/video/iframe 하나만 찾으면
+// 된다(caption div는 별도 형제라 여기 걸리지 않는다). iframe은 image/video와
+// 달리 intrinsic 크기가 없어 previewWidth 미설정 시에도 core가 항상 명시적
+// width를 렌더한다(roadmap Issue #212 RD-002 DELTA-01 DEFAULT_IFRAME_WIDTH_PX)
+// — 리사이즈 대상 판정 자체는 동일하다.
 const findMediaElement = (
   wrapper: HTMLElement,
-): HTMLImageElement | HTMLVideoElement | null =>
-  wrapper.querySelector<HTMLImageElement | HTMLVideoElement>(
-    ":scope > img, :scope > video",
-  );
+): HTMLImageElement | HTMLVideoElement | HTMLIFrameElement | null =>
+  wrapper.querySelector<
+    HTMLImageElement | HTMLVideoElement | HTMLIFrameElement
+  >(":scope > img, :scope > video, :scope > iframe");
 
 const findResizableMedia = (
   element: HTMLElement,
   blockId: string,
-): HTMLImageElement | HTMLVideoElement | null => {
+): HTMLImageElement | HTMLVideoElement | HTMLIFrameElement | null => {
   const wrapper = findMediaWrapper(element, blockId);
   return wrapper === null ? null : findMediaElement(wrapper);
 };
@@ -121,7 +124,13 @@ const resolveRenderTarget = (
   if (element === null) return null;
   const media = editor.getSelectionMediaBlock();
   if (media === null || media.url === null) return null;
-  if (media.kind !== "image" && media.kind !== "video") return null;
+  if (
+    media.kind !== "image" &&
+    media.kind !== "video" &&
+    media.kind !== "iframe"
+  ) {
+    return null;
+  }
   const wrapper = findMediaWrapper(element, media.blockId);
   if (wrapper === null) return null;
   const mediaElement = findMediaElement(wrapper);

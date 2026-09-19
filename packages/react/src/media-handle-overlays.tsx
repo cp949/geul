@@ -38,21 +38,22 @@ const MEDIA_HANDLE_OFFSET_PX = 56;
 
 // `readPageRect(hoverElement)`가 읽던 hoverElement는 `data-geul-media-kind`
 // div, 즉 항상 블록 전체 폭(예: paragraph와 같은 content 폭)인 래퍼다.
-// image/video는 기본이 가운데 정렬(`margin: 0 auto`, _media-resize-handles.scss)
-// 이라 실제 렌더된 <img>/<video>는 그 래퍼 안에서 안쪽으로 들어와 있다 —
-// 래퍼 rect를 그대로 쓰면 그립·plus가 이미지 실제 왼쪽 모서리에서 수십~
-// 수백 px 떨어진 자리(래퍼의 왼쪽 끝)에 뜬다(Notion 캡처 대조로 발견,
-// 2026-09-13). media-resize-handles.tsx의 findMediaElement와 같은 이유로
-// 래퍼가 아니라 실제 시각 요소를 찾아야 한다 — 다만 그 함수는 리사이즈
-// 대상인 img/video만 찾고, 여기는 4종 전부(+ showPreview:false·file의
-// <a>)를 찾아야 해서 별도로 둔다. 빈 media(source 없음)는 시각 자식이
-// 없으므로(media-block-extension.ts) null이면 호출부가 래퍼로 폴백한다 —
-// 빈 상태의 래퍼 자체가 보이는 placeholder 카드라 그 폴백이 곧 정답이다.
+// image/video/iframe은 기본이 가운데 정렬(`margin: 0 auto`,
+// _media-resize-handles.scss)이라 실제 렌더된 <img>/<video>/<iframe>은 그
+// 래퍼 안에서 안쪽으로 들어와 있다 — 래퍼 rect를 그대로 쓰면 그립·plus가
+// 이미지 실제 왼쪽 모서리에서 수십~수백 px 떨어진 자리(래퍼의 왼쪽 끝)에
+// 뜬다(Notion 캡처 대조로 발견, 2026-09-13). media-resize-handles.tsx의
+// findMediaElement와 같은 이유로 래퍼가 아니라 실제 시각 요소를 찾아야
+// 한다 — 다만 그 함수는 리사이즈 대상인 img/video/iframe만 찾고, 여기는
+// 5종 전부(+ showPreview:false·file의 <a>)를 찾아야 해서 별도로 둔다. 빈
+// media(source 없음)는 시각 자식이 없으므로(media-block-extension.ts,
+// iframe-block-extension.ts) null이면 호출부가 래퍼로 폴백한다 — 빈 상태의
+// 래퍼 자체가 보이는 placeholder 카드라 그 폴백이 곧 정답이다.
 export const findMediaVisualElement = (
   wrapper: HTMLElement,
 ): HTMLElement | null =>
   wrapper.querySelector<HTMLElement>(
-    ":scope > img, :scope > video, :scope > audio, :scope > a",
+    ":scope > img, :scope > video, :scope > audio, :scope > a, :scope > iframe",
   );
 
 // usePointerHoverTarget ignore-list. block-side-menu.tsx의
@@ -78,8 +79,9 @@ export type MediaHandleOverlaysProps = {
 };
 
 /**
- * media(image/video/audio/file) 전용 그립·plus 오버레이(Issue #187 RD-001
- * DELTA-01). block-side-menu.tsx의 공용 gutter와 달리 `position: fixed` +
+ * media(image/video/audio/file/iframe) 전용 그립·plus 오버레이(Issue #187
+ * RD-001 DELTA-01, iframe은 roadmap Issue #212 RD-004 DELTA-01).
+ * block-side-menu.tsx의 공용 gutter와 달리 `position: fixed` +
  * 고정 오프셋이 아니라 `readPageRect(mediaElement)`로 실측한 위치에
  * `position: absolute`로 뜬다 — 들여쓰기 depth가 쌓여도 버튼이 화면 밖으로
  * 밀리지 않는다(table-handles.tsx·media-resize-handles.tsx와 같은 근거,

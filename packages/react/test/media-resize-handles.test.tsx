@@ -65,7 +65,7 @@ const WRAPPER_WIDTH = 400;
 type FakeControllerOptions = {
   getSelectionMediaBlock?: () => SelectionMediaBlock | null;
   setMediaPreviewWidth?: (blockId: string, width: number) => { ok: boolean };
-  mediaTag?: "img" | "video";
+  mediaTag?: "img" | "video" | "iframe";
   wrapperWidth?: number;
 };
 
@@ -131,7 +131,7 @@ const getHandle = (side: "left" | "right"): HTMLElement => {
 
 const getMediaElement = (): HTMLElement => {
   const media = document.querySelector<HTMLElement>(
-    '[data-geul-block-id="media-1"] > img, [data-geul-block-id="media-1"] > video',
+    '[data-geul-block-id="media-1"] > img, [data-geul-block-id="media-1"] > video, [data-geul-block-id="media-1"] > iframe',
   );
   if (media === null) throw new Error("미디어 엘리먼트 없음");
   return media;
@@ -150,7 +150,7 @@ describe("선택 상태에 따른 핸들 노출", () => {
     ).toBeNull();
   });
 
-  it("audio를 선택하면 핸들을 렌더링하지 않는다(image/video 전용)", () => {
+  it("audio를 선택하면 핸들을 렌더링하지 않는다(image/video/iframe 전용)", () => {
     renderHandles(
       fakeController({
         getSelectionMediaBlock: () => ({
@@ -212,6 +212,24 @@ describe("선택 상태에 따른 핸들 노출", () => {
           kind: "video",
         }),
         mediaTag: "video",
+      }),
+    );
+
+    expect(getHandle("left")).not.toBeNull();
+    expect(getHandle("right")).not.toBeNull();
+  });
+
+  // roadmap Issue #212 RD-004 DELTA-01 — iframe(media 5번째 kind)도
+  // previewWidth를 갖고 명시적 width 없이는 브라우저 기본값(300x150)으로
+  // 찌그러져 image/video와 동일하게 리사이즈가 필요하다(spec §5).
+  it("url 있는 iframe을 선택해도 핸들을 렌더링한다", () => {
+    renderHandles(
+      fakeController({
+        getSelectionMediaBlock: () => ({
+          ...filledImageSelection,
+          kind: "iframe",
+        }),
+        mediaTag: "iframe",
       }),
     );
 
@@ -293,6 +311,31 @@ describe("핸들 드래그로 폭을 조절한다", () => {
     fireEvent.pointerUp(editable, { pointerId: 1 });
 
     expect(controller.commands.setMediaPreviewWidth).toHaveBeenCalledTimes(1);
+    expect(controller.commands.setMediaPreviewWidth).toHaveBeenCalledWith(
+      "media-1",
+      240,
+    );
+  });
+
+  it("iframe도 오른쪽 핸들 드래그로 실제 iframe 요소의 폭을 갱신하고 setMediaPreviewWidth를 커밋한다", async () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({
+        ...filledImageSelection,
+        kind: "iframe",
+      }),
+      mediaTag: "iframe",
+    });
+    renderHandles(controller);
+    const editable = getEditable();
+    const media = getMediaElement();
+
+    fireEvent.pointerDown(getHandle("right"), { pointerId: 1, clientX: 300 });
+    fireEvent.pointerMove(editable, { pointerId: 1, clientX: 320 });
+    await awaitAnimationFrame();
+    expect(media.tagName).toBe("IFRAME");
+    expect(media.style.width).toBe("240px");
+
+    fireEvent.pointerUp(editable, { pointerId: 1 });
     expect(controller.commands.setMediaPreviewWidth).toHaveBeenCalledWith(
       "media-1",
       240,

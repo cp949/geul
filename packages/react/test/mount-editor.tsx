@@ -315,15 +315,15 @@ export const mountBlockEditor = ({
       };
       stubRect(block, rect);
       // media-handle-overlays.tsx의 findMediaVisualElement가 래퍼가 아니라
-      // 실제 시각 요소(img/video/audio/a)의 rect를 읽는다(2026-09-13,
-      // Notion 캡처 대조 발견 — 래퍼는 가운데 정렬된 image/video를 감싸는
-      // content 폭 전체라 시각 요소와 왼쪽이 다르다). 실제 마운트라 이
-      // 자식도 진짜 DOM에 있으므로, 스텁도 같이 씌우지 않으면 jsdom
-      // 기본값(전부 0)을 읽어 오버레이가 항상 원점에 뜬다. 래퍼와 같은
-      // rect로 스텁해(가운데 정렬 없이 왼쪽이 일치한다고 가정) 기존
-      // 테스트의 좌표 계산을 그대로 보존한다.
+      // 실제 시각 요소(img/video/audio/a/iframe, iframe은 roadmap Issue #212
+      // RD-004 DELTA-01)의 rect를 읽는다(2026-09-13, Notion 캡처 대조 발견 —
+      // 래퍼는 가운데 정렬된 image/video를 감싸는 content 폭 전체라 시각
+      // 요소와 왼쪽이 다르다). 실제 마운트라 이 자식도 진짜 DOM에 있으므로,
+      // 스텁도 같이 씌우지 않으면 jsdom 기본값(전부 0)을 읽어 오버레이가
+      // 항상 원점에 뜬다. 래퍼와 같은 rect로 스텁해(가운데 정렬 없이 왼쪽이
+      // 일치한다고 가정) 기존 테스트의 좌표 계산을 그대로 보존한다.
       const visual = block.querySelector<HTMLElement>(
-        ":scope > img, :scope > video, :scope > audio, :scope > a",
+        ":scope > img, :scope > video, :scope > audio, :scope > a, :scope > iframe",
       );
       if (visual !== null) stubRect(visual, rect);
     });
