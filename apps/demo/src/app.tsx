@@ -53,10 +53,31 @@ const DEMO_UPLOAD_DELAY_MS = 300;
 // allowCustomUrl 미설정(기본 false)이라 그대로 NOT_WHITELISTED_AND_
 // CUSTOM_DISABLED로 거절된다 — 거절 UI e2e는 별도 config 분기 없이 이
 // 화이트리스트 밖 도메인만 쓰면 된다.
+//
+// "DemoHostOrigin"(Issue #214 격리 e2e, `e2e/iframe-block-isolation.spec.ts`)
+// — 데모 자신의 origin(playwright baseURL, `http://127.0.0.1:5173`)을
+// hostname("127.0.0.1")으로 화이트리스트에 추가한다. sandbox의
+// `allow-same-origin` 제외가 host document 접근을 막는지를 실측으로
+// 검증하려면 cross-origin(example.com)이 아니라 host와 진짜 같은
+// origin(scheme·host·port 전부 일치)인 iframe이 필요하다(단계-2 subagent
+// 실측, 01-계획.md "## 결정" 참고) — cross-origin 구성은 sandbox 설정과
+// 무관하게 일반 Same-Origin Policy가 이미 항상 차단해 회귀를 못 잡는다.
+//
+// `allowedProtocols`도 데모 전용으로 "http:"를 추가했다(기본 "https:"만
+// 허용). 데모는 실제로 http로 서빙되므로(vite dev server) same-origin
+// iframe src는 반드시 "http:" scheme 절대 URL이어야 한다 — scheme을 뺀
+// protocol-relative URL("//127.0.0.1:5173/...")로 protocol 검사만 우회하는
+// 방안도 시도했으나, model의 `isSupportedLinkHref`(iframe url 전용 정적
+// 불변식, host 설정과 무관하게 항상 적용)가 "//" 접두 url을 구조적으로
+// 거절해 실패했다(실측). 이 필드 추가가 기존 iframe e2e(iframe-block/
+// iframe-block-toolbar/iframe-block-load-status, 14개)에 영향 없음을
+// 재실행으로 확인했다.
 const DEMO_IFRAME_EMBED: CreateEditorOptions["iframeEmbed"] = {
   providers: [
     { name: "Example", match: { type: "exact", pattern: "example.com" } },
+    { name: "DemoHostOrigin", match: { type: "exact", pattern: "127.0.0.1" } },
   ],
+  allowedProtocols: ["https:", "http:"],
 };
 
 const demoUploadFile: CreateEditorOptions["uploadFile"] = (file, signal) => {
