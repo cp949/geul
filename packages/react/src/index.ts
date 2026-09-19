@@ -38,3 +38,25 @@ export { StaticToolbar, type StaticToolbarProps } from "./static-toolbar.js";
 // TableHandles는 BlockSideMenu처럼 SlashMenu가 자동 마운트한다 — 공개
 // export하면 소비자가 중복 마운트해 핸들 오버레이가 두 벌 겹친다.
 export { useDictionary, useEditor } from "./use-editor.js";
+// EmojiPicker/SlashMenu가 내부에서만 쓰던 오버레이 인프라 4종을 공개한다
+// (Issue #210 "## 결정" D4) — mention처럼 소비자 앱이 직접 만드는 커스텀
+// 트리거 popup(`apps/showcase`의 `17-mention` 예제)이 캐럿-폴링·클램프
+// 위치·바깥클릭/Escape dismiss·포커스 복구를 새로 구현하지 않고 그대로
+// 재사용하게 한다. `useEditorMount` 자체와 그 `setElement`(내부 전용
+// mutator)는 노출하지 않는다 — `useEditorElement`가 `element`만 읽기
+// 전용으로 감싼다(`use-editor-element.ts`).
+export {
+  type ClampAnchor,
+  useClampedMenuPosition,
+} from "./use-clamped-menu-position.js";
+export { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+// use-dismiss-on-outside-or-escape.ts는 옵션 타입(`UseDismissOnOutsideOrEscapeOptions`
+// 상당)을 그 파일 밖으로 export하지 않는다(내부 전용 관례) — 이번 변경의
+// 편집 허용 범위가 그 파일을 포함하지 않아 새로 export를 추가하는 대신
+// 훅 시그니처에서 그대로 파생한다(구현이 바뀌면 이 타입도 함께 갱신됨).
+import type { useDismissOnOutsideOrEscape as _useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+export type UseDismissOnOutsideOrEscapeOptions = Parameters<
+  typeof _useDismissOnOutsideOrEscape
+>[0];
+export { useEditorElement } from "./use-editor-element.js";
+export { useFocusEditor } from "./use-focus-editor.js";
