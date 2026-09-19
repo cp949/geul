@@ -95,3 +95,48 @@ export const insertFilledImage = async (
   ).toBeVisible();
   return image;
 };
+
+/**
+ * Slash로 iframe을 삽입하고 화이트리스트 URL을 채운다(roadmap Issue #212
+ * RD-004 DELTA-07). `app.tsx`의 `DEMO_IFRAME_EMBED`가 "example.com"을
+ * 화이트리스트에 등록해 두어 기본값이 실제로 허용된다.
+ *
+ * `insertFilledImage`와 달리 File Panel이 Embed 입력 하나만 낸다 — iframe은
+ * `uploadEnabled`를 kind로 항상 꺼서(file-panel.tsx, RD-004 DELTA-04) 탭
+ * 전환이 필요 없다. `<iframe>`은 core가 항상 명시적 width/aspect-ratio를
+ * 인라인 스타일로 실어(iframe-block-extension.ts DEFAULT_IFRAME_WIDTH_PX)
+ * 로드 성패와 무관하게 실제 bounding box를 갖는다 — `insertFilledImage`가
+ * 깨진 `<img>`의 0×0 bounding box를 피하려고 wrapper를 클릭하는 것과 달리
+ * 여기서는 그 문제가 없지만, `_iframe.scss`의 기본 `pointer-events:none`이
+ * iframe 자신을 hit-test에서 제외해 클릭이 항상 wrapper(NodeSelection)로
+ * 간다 — 같은 wrapper 클릭 패턴을 그대로 재사용한다.
+ */
+export const insertFilledIframe = async (
+  page: Page,
+  editable: Locator,
+  url = "https://example.com/embed",
+): Promise<Locator> => {
+  await editable.click();
+  await page.keyboard.type("/iframe");
+  await page.getByRole("option", { name: /^Iframe/ }).click();
+  await page
+    .getByRole("textbox", { name: "Iframe URL" })
+    .pressSequentially(url);
+  await page.getByRole("button", { name: "Save URL" }).click();
+  const iframe = editable.locator("iframe");
+  await expect(iframe).toHaveAttribute("src", url);
+
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+
+  const wrapper = editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("iframe") });
+  await wrapper.click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  return iframe;
+};
