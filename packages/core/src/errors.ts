@@ -24,6 +24,13 @@ export type EditorError =
   | { code: "MEDIA_RESIZE_NOT_SUPPORTED" }
   | { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" }
   | { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" }
+  // uploadMediaFile/replaceMediaBlockFile(production-editor-media-upload.ts)
+  // 전용 — 대상이 isMediaBlockKind는 통과하지만(media 계열) iframe이면 이
+  // 코드로 거절한다. 업로드 콜백이 돌려준 url을 그대로 커밋하는 경로라
+  // iframe URL 정책(화이트리스트·protocol·private-network,
+  // resolveIframeEmbedDecision)을 재검증 없이 우회할 수 있어(#216) 업로드
+  // 자체를 거절한다.
+  | { code: "MEDIA_UPLOAD_NOT_SUPPORTED" }
   // setIframeSrc(CUS-001~004, RD-002 DELTA-02) 전용 — model
   // resolveIframeEmbedDecision(iframe-embed-policy.ts)의 거절 사유를 그대로
   // 옮긴다. reason 리터럴 3종은 model IframeEmbedDecision["reason"]과 값으로

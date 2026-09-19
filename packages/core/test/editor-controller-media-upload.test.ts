@@ -538,6 +538,27 @@ describe("uploadMediaFile — 사전 조건", () => {
     expect(result).toEqual(notApplicable("uploadMediaFile"));
     expect(editorState(editor, tiptap)).toEqual(before);
   });
+
+  // Issue #216 — iframe은 isMediaBlockKind를 통과하는 media 계열이지만
+  // uploadMediaFile로 얻은 url을 재검증 없이 커밋하면 iframe URL 정책
+  // (화이트리스트·protocol·private-network)을 우회하는 경로가 된다.
+  // 콜백 등록 여부와 무관하게 즉시 거절해야 한다.
+  it("iframe 대상은 MEDIA_UPLOAD_NOT_SUPPORTED이고 문서를 바꾸지 않는다", async () => {
+    const { uploadFile } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+    const before = editorState(editor, tiptap);
+
+    const result = await editor.commands.uploadMediaFile("m-1", testFile());
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "MEDIA_UPLOAD_NOT_SUPPORTED" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
 });
 
 describe("cancelMediaUpload", () => {
@@ -782,6 +803,31 @@ describe("replaceMediaBlockFile — 사전 조건", () => {
     // 재사용해도 이 command 이름은 uploadMediaFile로 새지 않아야 한다
     // (RD-002-DELTA-01.md 완료 조건 4).
     expect(result).toEqual(notApplicable("replaceMediaBlockFile"));
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  // Issue #216 — uploadMediaFile과 같은 본체(MediaUploadTracker.uploadMediaFile)를
+  // command만 다르게 공유하므로 iframe 거절도 동일하게 적용돼야 한다.
+  it("iframe 대상은 MEDIA_UPLOAD_NOT_SUPPORTED이고 문서를 바꾸지 않는다", async () => {
+    const { uploadFile } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("iframe", "m-1", { url: "https://example.com/embed" }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+    const before = editorState(editor, tiptap);
+
+    const result = await editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile(),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "MEDIA_UPLOAD_NOT_SUPPORTED" },
+    });
     expect(editorState(editor, tiptap)).toEqual(before);
     expect(changes).toEqual([]);
   });

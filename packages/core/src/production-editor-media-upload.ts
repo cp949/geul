@@ -223,6 +223,17 @@ export class MediaUploadTracker {
     if (!isMediaBlockKind(node.type.name)) {
       return commandNotApplicable(command);
     }
+    // Issue #216 — 이 메서드는 아래 success 분기에서 업로드 콜백이 돌려준
+    // url을 isSupportedMediaUrl만 거쳐 그대로 커밋한다(범용 URL 정책).
+    // setIframeSrc/HTML import와 달리 iframe 전용 정책
+    // (resolveIframeEmbedDecision — 화이트리스트·protocol·private-network)을
+    // 거치지 않아, iframe 대상에 이 경로를 허용하면 그 정책을 우회하는
+    // 구멍이 된다. 재검증을 통합하지 않고(범위 밖, 01-계획 "범위 밖")
+    // iframe 대상 업로드 자체를 거절한다 — uploadFile 콜백 등록 여부·
+    // 기존 url 유무와 무관하게 이 시점에서 즉시 흡수한다.
+    if (node.type.name === "iframe") {
+      return { ok: false, error: { code: "MEDIA_UPLOAD_NOT_SUPPORTED" } };
+    }
     const { uploadFile } = this.host;
     if (uploadFile === undefined) {
       if (hasStoredUrl(node.attrs)) {
