@@ -336,6 +336,10 @@ export type Dictionary = {
     tableQuickInsertPlaceholder: string;
     dragBlock: string;
     addBlock: string;
+    // CUS-001~004(RD-004 DELTA-03) — iframe 전용 그립·plus 옆 세 번째 버튼.
+    // 클릭하면 `<iframe>`이 pointer-events:auto로 전환돼 내부 콘텐츠와
+    // 직접 상호작용할 수 있다(모델/커맨드에 없는 순수 UI 상태, spec §5).
+    interactWithIframe: string;
   };
   // G-UI-004(RD-003) — Indent/Outdent가 형제 목록 경계에서 aria-disabled일
   // 때 title로 노출하는 비활성 사유. table-handle-overlays.tsx,
@@ -614,6 +618,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     tableQuickInsertPlaceholder: "Quick insert (coming soon)",
     dragBlock: "Drag to reorder, click for options",
     addBlock: "Add block",
+    interactWithIframe: "Interact with embedded content",
   },
   nesting: {
     indentDisabledReason: "Can't indent further",

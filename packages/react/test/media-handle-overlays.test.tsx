@@ -235,6 +235,145 @@ describe("그립 클릭(완료 조건 2·5)", () => {
   });
 });
 
+// roadmap Issue #212 RD-004 DELTA-03 — iframe 전용 Interact 토글. 모델/커맨드에
+// 없는 순수 UI 상태라 DOM 속성(`data-geul-iframe-interactive`)과 `aria-pressed`만
+// 단언한다(spec §5 142행).
+describe("Interact 토글(RD-004 DELTA-03)", () => {
+  const interactButtonLabel = DEFAULT_DICTIONARY.handle.interactWithIframe;
+
+  it("Interact 버튼은 iframe 블록에서만 보이고 image 블록에서는 보이지 않는다", () => {
+    renderMediaOverlays({
+      initialBlocks: [
+        { id: "image-1", type: "image", url: "https://example.com/x.png" },
+      ],
+    });
+    const [media] = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelectorAll<HTMLElement>("[data-geul-block-id]");
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+
+    expect(
+      screen.queryByRole("button", { name: interactButtonLabel }),
+    ).toBeNull();
+  });
+
+  it("Interact 클릭 시 iframe에 상호작용 속성이 세팅되고 버튼이 aria-pressed=true가 된다", () => {
+    renderMediaOverlays({
+      initialBlocks: [
+        { id: "iframe-1", type: "iframe", url: "https://example.com/embed" },
+      ],
+    });
+    const [media] = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelectorAll<HTMLElement>("[data-geul-block-id]");
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+
+    const interactButton = screen.getByRole("button", {
+      name: interactButtonLabel,
+    });
+    expect(interactButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(interactButton);
+
+    const iframe = media.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute("data-geul-iframe-interactive")).toBe("true");
+    expect(interactButton.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("같은 버튼을 다시 클릭하면 해제된다", () => {
+    renderMediaOverlays({
+      initialBlocks: [
+        { id: "iframe-1", type: "iframe", url: "https://example.com/embed" },
+      ],
+    });
+    const [media] = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelectorAll<HTMLElement>("[data-geul-block-id]");
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+
+    const interactButton = screen.getByRole("button", {
+      name: interactButtonLabel,
+    });
+    fireEvent.click(interactButton);
+    fireEvent.click(interactButton);
+
+    const iframe = media.querySelector("iframe");
+    expect(iframe?.getAttribute("data-geul-iframe-interactive")).toBeNull();
+    expect(interactButton.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("문서의 다른 곳을 클릭하면(중간 요소가 bubble에서 stopPropagation을 호출해도) 자동으로 해제된다 — 검출 변이: capture 대신 bubble로 등록하면 이 테스트가 RED", () => {
+    renderMediaOverlays({
+      initialBlocks: [
+        { id: "iframe-1", type: "iframe", url: "https://example.com/embed" },
+      ],
+    });
+    const [media] = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelectorAll<HTMLElement>("[data-geul-block-id]");
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+
+    const interactButton = screen.getByRole("button", {
+      name: interactButtonLabel,
+    });
+    fireEvent.click(interactButton);
+
+    // 클릭 대상과 document 사이에 bubble-phase stopPropagation을 거는
+    // 중간 요소를 둔다 — 해제 리스너가 capture-phase가 아니라면 이
+    // stopPropagation에 막혀 document까지 도달하지 못한다.
+    const middle = document.createElement("div");
+    const target = document.createElement("button");
+    middle.append(target);
+    document.body.append(middle);
+    middle.addEventListener("click", (event) => event.stopPropagation());
+
+    fireEvent.click(target);
+
+    const iframe = media.querySelector("iframe");
+    expect(iframe?.getAttribute("data-geul-iframe-interactive")).toBeNull();
+    expect(interactButton.getAttribute("aria-pressed")).toBe("false");
+
+    middle.remove();
+  });
+
+  it("해제 후 다시 클릭하면 다시 켤 수 있다(리스너가 활성화마다 새로 걸린다)", () => {
+    renderMediaOverlays({
+      initialBlocks: [
+        { id: "iframe-1", type: "iframe", url: "https://example.com/embed" },
+      ],
+    });
+    const [media] = screen
+      .getByRole("textbox", { name: "Editor" })
+      .querySelectorAll<HTMLElement>("[data-geul-block-id]");
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+
+    const interactButton = screen.getByRole("button", {
+      name: interactButtonLabel,
+    });
+    fireEvent.click(interactButton);
+    fireEvent.click(document.body);
+    expect(
+      media
+        .querySelector("iframe")
+        ?.getAttribute("data-geul-iframe-interactive"),
+    ).toBeNull();
+
+    fireEvent.click(interactButton);
+    fireEvent.click(document.body);
+    expect(
+      media
+        .querySelector("iframe")
+        ?.getAttribute("data-geul-iframe-interactive"),
+    ).toBeNull();
+  });
+});
+
 describe("그립 드래그 재정렬(완료 조건 6, 그릴링 결정 — 클릭+드래그 모두 이식)", () => {
   it("아래로 드래그하면 media 블록이 뒤 형제 뒤로 재정렬된다", () => {
     const rendered = renderMediaOverlays({

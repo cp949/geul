@@ -222,6 +222,7 @@ export const KO_DICTIONARY: Dictionary = {
     tableQuickInsertPlaceholder: "빠른 삽입(준비 중)",
     dragBlock: "드래그해서 순서 변경, 클릭하면 옵션 표시",
     addBlock: "블록 추가",
+    interactWithIframe: "삽입된 콘텐츠와 상호작용",
   },
   nesting: {
     indentDisabledReason: "더 들여쓸 수 없습니다",

@@ -1,4 +1,4 @@
-import { GripVertical, Plus } from "lucide-react";
+import { GripVertical, MousePointerClick, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { computeDragGuide } from "./block-side-menu-geometry.js";
@@ -25,7 +25,12 @@ import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 // (_media-handle-overlays.scss).
 const dragHandleIcon = <GripVertical {...iconProps} />;
 const addBlockIcon = <Plus {...iconProps} />;
+const interactIcon = <MousePointerClick {...iconProps} />;
 const mediaGutterButtonClassName = "geul-block-gutter__button";
+// 바깥 클릭 해제 리스너가 이 버튼 자신의 클릭을 "바깥"으로 오인하지 않도록
+// 거르는 마커(아래 useEffect의 handleOutsideClick 참고) — 버튼 자체의
+// onClick(토글)이 유일한 처리자가 된다.
+const interactButtonSelector = "[data-geul-iframe-interact-button]";
 
 // media rect(readPageRect) 왼쪽에서 이만큼 뺀 자리에 그립·plus를 띄운다.
 // block-side-menu.tsx의 BLOCK_GUTTER_HOVER_MARGIN(56px, 고정 gutter의
@@ -95,6 +100,11 @@ export type MediaHandleOverlaysProps = {
  *
  * `slash-menu.tsx` 마운트(SlashMenu가 BlockSideMenu/TableHandles처럼 자동
  * 마운트)와 공용 gutter의 media 제외는 DELTA-02, e2e는 DELTA-03이 잇는다.
+ *
+ * iframe 전용 "Interact" 버튼(roadmap Issue #212 RD-004 DELTA-03)은 같은
+ * 그립·plus 컨테이너에 세 번째 버튼으로 추가된다 — 모델/커맨드에 저장하지
+ * 않는 순수 UI 상태로, 클릭 시 `<iframe>`에 `data-geul-iframe-interactive`를
+ * 직접 mutate하고 바깥 클릭(capture-phase, 1회성)으로 되돌린다(spec §5).
  */
 export const MediaHandleOverlays = ({
   onBlockAdded,
@@ -108,6 +118,13 @@ export const MediaHandleOverlays = ({
   const [dragState, dragStateRef, updateDragState] =
     useMirroredState<DragState | null>(null);
   const [menuState, setMenuState] = useState<BlockMenuState | null>(null);
+  // iframe 전용 interaction 토글(CUS-001~004, RD-004 DELTA-03) — 모델/커맨드에
+  // 저장하지 않는 순수 UI 상태다(spec §3 "모델/커맨드에 없다" 결정). 현재
+  // interact 모드인 블록 id 하나만 추적한다 — 다른 블록에서 Interact를 누르면
+  // 아래 effect의 cleanup이 이전 블록을 자동으로 원복한다.
+  const [interactingBlockId, setInteractingBlockId] = useState<string | null>(
+    null,
+  );
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // block-side-menu.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
@@ -288,6 +305,55 @@ export const MediaHandleOverlays = ({
     };
   }, [element]);
 
+  // interact 모드 진입·해제를 한 effect로 묶는다 — mount(속성 세팅 + 리스너
+  // 등록)와 해제(속성 제거 + 리스너 해제)가 대칭이라 cleanup 함수 하나가
+  // "다른 블록으로 전환"과 "명시적 해제" 두 경로를 모두 커버한다.
+  useEffect(() => {
+    if (interactingBlockId === null || element === null) return;
+    const blockElement = findElementByAttribute(
+      element,
+      null,
+      "data-geul-block-id",
+      interactingBlockId,
+    );
+    const iframeElement =
+      blockElement === null ? null : findMediaVisualElement(blockElement);
+    if (!(iframeElement instanceof HTMLIFrameElement)) {
+      setInteractingBlockId(null);
+      return;
+    }
+
+    iframeElement.setAttribute("data-geul-iframe-interactive", "true");
+
+    const ownerDocument = element.ownerDocument;
+    const handleOutsideClick = (event: MouseEvent) => {
+      // 이 버튼 자신의 클릭은 버튼의 onClick(명시적 토글)이 처리한다 — 여기서
+      // 같이 반응하면 capture가 target보다 먼저 실행돼 버튼의 토글-off 판정이
+      // "이미 꺼진 상태에서 다시 켜기"로 뒤집힌다.
+      if (
+        event.target instanceof Element &&
+        event.target.closest(interactButtonSelector) !== null
+      ) {
+        return;
+      }
+      setInteractingBlockId(null);
+    };
+    // capture-phase + 1회성(spec §5) — bubble 리스너는 중간 요소의
+    // stopPropagation()에 막혀 document까지 도달하지 못할 수 있다.
+    ownerDocument.addEventListener("click", handleOutsideClick, {
+      capture: true,
+      once: true,
+    });
+    return () => {
+      ownerDocument.removeEventListener("click", handleOutsideClick, true);
+      iframeElement.removeAttribute("data-geul-iframe-interactive");
+    };
+  }, [interactingBlockId, element]);
+
+  const handleInteractClick = (blockId: string) => {
+    setInteractingBlockId((prev) => (prev === blockId ? null : blockId));
+  };
+
   const hoverElement =
     hoverBlockId === null || element === null
       ? null
@@ -394,6 +460,16 @@ export const MediaHandleOverlays = ({
             label={dictionary.handle.addBlock}
             onClick={handleAddBlockClick}
           />
+          {hoverElement?.getAttribute("data-geul-media-kind") === "iframe" && (
+            <IconButton
+              aria-pressed={interactingBlockId === hoverBlockId}
+              className={`${mediaGutterButtonClassName} geul-block-gutter__button--interact`}
+              data-geul-iframe-interact-button=""
+              icon={interactIcon}
+              label={dictionary.handle.interactWithIframe}
+              onClick={() => handleInteractClick(hoverBlockId)}
+            />
+          )}
         </div>
       )}
       {/* block-side-menu.tsx가 쓰는 것과 같은 클래스 — 드래그 중인 블록이

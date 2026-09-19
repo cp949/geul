@@ -1,0 +1,22 @@
+// iframe 블록 전용 편집 스타일시트(CUS-001~004, RD-004 DELTA-03). 읽기
+// 전용 뷰(io/preview.css)와 달리 편집 중인 iframe은 기본적으로 포인터
+// 이벤트를 받지 않는다 — 그대로 두면 클릭이 iframe 내부 콘텐츠로 전달돼
+// 블록 선택(NodeSelection) 대신 iframe 페이지 자체와 상호작용하게 된다.
+// media-handle-overlays.tsx의 "Interact" 버튼을 눌러야만 명시적으로
+// pointer-events:auto로 전환된다(spec §5). preview.css(io, 읽기 전용
+// 뷰)에는 넣지 않는다 — 그쪽은 ProseMirror 선택 처리와 경합하지 않으므로
+// 항상 pointer-events:auto다.
+.geul-editor [data-geul-media-kind="iframe"] iframe {
+  pointer-events: none;
+
+  &[data-geul-iframe-interactive="true"] {
+    pointer-events: auto;
+  }
+}
+
+// Interact 버튼 활성 상태 강조 — _media-toolbar.scss의
+// `&[aria-pressed="true"]` accent 관례와 같은 값을 재사용한다.
+.geul-block-gutter__button--interact[aria-pressed="true"] {
+  background-color: var(--geul-color-accent-muted, #e8f0fe);
+  color: var(--geul-color-accent, #1a73e8);
+}
