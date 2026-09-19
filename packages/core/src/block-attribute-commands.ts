@@ -89,6 +89,19 @@ export const createBlockAttributeCommands = (
   const isMediaBlockNodeName = (name: string): name is MediaBlockKind =>
     name === "file" || name === "image" || name === "video" || name === "audio";
 
+  // setMediaBlockName 전용 확장 — iframe(CUS-001~004, roadmap Issue #212
+  // RD-004 DELTA-02 readiness 발견)의 name은 다른 4종처럼 구조만 있고 의미
+  // 없는 필드가 아니라 iframe-block-extension.ts의 renderHTML이 실제
+  // `<iframe title="...">` 접근성 속성으로 렌더링한다 — 세팅 경로가 있어야
+  // 한다. setMediaBlockUrl/Caption/BackgroundColor는 그대로 기본
+  // isMediaBlockNodeName(4종)을 쓴다 — 특히 setMediaBlockUrl을 넓히면
+  // resolveIframeEmbedDecision(화이트리스트·private network 정책)을 모르는
+  // 이 명령으로 iframe url을 세팅할 수 있게 돼 setIframeSrc가 강제하는
+  // 보안 경계를 우회하는 회귀가 생긴다 — 그래서 이 predicate는
+  // setMediaBlockName 호출부에서만 명시로 넘긴다.
+  const isMediaOrIframeBlockNodeName = (name: string): name is MediaBlockKind =>
+    isMediaBlockNodeName(name) || name === "iframe";
+
   // setMediaBlockUrl/Name/Caption/BackgroundColor가 공유하는 본체.
   // runSetBlockTextPropCommand와 같은 모양(찾기→가드→검증→setNodeMarkup 1회)
   // 이지만 가드가 다르다 — media 4종은 divider·table처럼 blockContainer로
@@ -115,6 +128,7 @@ export const createBlockAttributeCommands = (
       attrs: Record<string, unknown>,
       value: string | null,
     ) => Record<string, unknown>,
+    isApplicableNodeName: (name: string) => boolean = isMediaBlockNodeName,
   ): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable(command);
     const { doc } = session.editor.state;
@@ -123,7 +137,7 @@ export const createBlockAttributeCommands = (
     if (position === null || node === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
-    if (!isMediaBlockNodeName(node.type.name)) {
+    if (!isApplicableNodeName(node.type.name)) {
       return commandNotApplicable(command);
     }
     if (value !== null) {
@@ -478,6 +492,7 @@ export const createBlockAttributeCommands = (
       name,
       () => null,
       (attrs, value) => ({ ...attrs, name: value }),
+      isMediaOrIframeBlockNodeName,
     );
   const setMediaBlockCaption = (
     blockId: string,

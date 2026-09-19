@@ -181,6 +181,11 @@ export type Dictionary = {
       deleteAriaLabel: string;
       delete: string;
       download: string;
+      // CUS-001~004(roadmap Issue #212 RD-004 DELTA-02) — iframe 대상은
+      // 강제 다운로드 의미가 없어(embed URL이지 파일이 아니다) Download
+      // 항목 대신 이 문구로 "새 창에서 열기"(target=_blank,
+      // rel=noopener noreferrer, download 속성 없음)를 노출한다.
+      openInNewTab: string;
       nameInputAriaLabel: string;
       captionInputAriaLabel: string;
       saveNameAriaLabel: string;
@@ -374,6 +379,16 @@ export type Dictionary = {
     uploadCouldNotStart: string;
     unsupportedLinkUrl: string;
     unsupportedMediaUrl: string;
+    // CUS-001~004(roadmap Issue #212 RD-004 DELTA-02) — model
+    // resolveIframeEmbedDecision(iframe-embed-policy.ts)의 거절 사유 3종을
+    // 그대로 옮긴다(errors.ts EditorError["IFRAME_URL_NOT_ALLOWED"]["reason"]과
+    // 값으로 동일). media-toolbar.tsx가 setIframeSrc 실패 시 이 사유별
+    // 문구로 unsupportedMediaUrl의 generic 문구를 대체한다.
+    iframeUrlRejected: {
+      protocolNotAllowed: string;
+      privateNetworkBlocked: string;
+      notWhitelisted: string;
+    };
   };
 };
 
@@ -518,6 +533,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       deleteAriaLabel: "Delete media block",
       delete: "Delete",
       download: "Download",
+      openInNewTab: "Open in new tab",
       nameInputAriaLabel: "{kind} name",
       captionInputAriaLabel: "{kind} caption",
       saveNameAriaLabel: "Save name",
@@ -623,5 +639,10 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     uploadCouldNotStart: "Upload could not start.",
     unsupportedLinkUrl: "Unsupported link URL",
     unsupportedMediaUrl: "Unsupported media URL",
+    iframeUrlRejected: {
+      protocolNotAllowed: "This protocol isn't allowed",
+      privateNetworkBlocked: "Private network addresses aren't allowed",
+      notWhitelisted: "This URL isn't on the allowed list",
+    },
   },
 };

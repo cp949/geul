@@ -136,6 +136,7 @@ export const KO_DICTIONARY: Dictionary = {
       deleteAriaLabel: "미디어 블록 삭제",
       delete: "삭제",
       download: "다운로드",
+      openInNewTab: "새 창에서 열기",
       nameInputAriaLabel: "{kind} 이름",
       captionInputAriaLabel: "{kind} 캡션",
       saveNameAriaLabel: "이름 저장",
@@ -246,5 +247,10 @@ export const KO_DICTIONARY: Dictionary = {
     uploadCouldNotStart: "업로드를 시작할 수 없습니다.",
     unsupportedLinkUrl: "지원하지 않는 링크 URL입니다",
     unsupportedMediaUrl: "지원하지 않는 미디어 URL입니다",
+    iframeUrlRejected: {
+      protocolNotAllowed: "허용되지 않는 프로토콜입니다",
+      privateNetworkBlocked: "사설 네트워크 주소는 허용되지 않습니다",
+      notWhitelisted: "허용 목록에 없는 URL입니다",
+    },
   },
 };

@@ -57,7 +57,12 @@ type SelectionMediaBlock = {
   textAlignment: "left" | "center" | "right" | null;
 };
 
-type CommandResult = { ok: boolean; error?: { code: string } };
+// reason은 setIframeSrc(IFRAME_URL_NOT_ALLOWED) 전용이라 다른 setter는
+// 계속 생략한다(optional).
+type CommandResult = {
+  ok: boolean;
+  error?: { code: string; reason?: string };
+};
 
 type ReplaceMediaFileResult =
   { ok: true; value: undefined } | { ok: false; error: EditorError };
@@ -82,6 +87,7 @@ type FakeControllerOptions = {
     file: File,
   ) => Promise<ReplaceMediaFileResult>;
   setMediaBlockUrl?: (blockId: string, url: string) => CommandResult;
+  setIframeSrc?: (blockId: string, url: string) => CommandResult;
   dictionary?: Dictionary;
 };
 
@@ -96,6 +102,7 @@ const fakeController = ({
   getMediaUploadState = () => null,
   replaceMediaBlockFile = () => Promise.resolve({ ok: true, value: undefined }),
   setMediaBlockUrl = () => ({ ok: true }),
+  setIframeSrc = () => ({ ok: true }),
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -126,6 +133,7 @@ const fakeController = ({
     deleteBlock: vi.fn(deleteBlock),
     replaceMediaBlockFile: vi.fn(replaceMediaBlockFile),
     setMediaBlockUrl: vi.fn(setMediaBlockUrl),
+    setIframeSrc: vi.fn(setIframeSrc),
     cancelMediaUpload: vi.fn(() => ({ ok: true, value: undefined })),
   },
 });
@@ -168,6 +176,20 @@ const filledAudioBlock: SelectionMediaBlock = {
   kind: "audio",
   url: "https://example.com/dir/track.mp3",
   name: "track.mp3",
+  caption: null,
+  showPreview: true,
+  textAlignment: null,
+};
+
+// CUS-001~004(roadmap Issue #212 RD-004 DELTA-02) — iframe은
+// getSelectionMediaBlock() 실제 계약대로 showPreview가 항상 의미 없는
+// true를 보고한다(RD-002 DELTA-03이 고정한 동작, react 쪽에서만
+// Preview 게이트로 숨긴다).
+const filledIframeBlock: SelectionMediaBlock = {
+  blockId: "media-1",
+  kind: "iframe",
+  url: "https://www.youtube.com/embed/x",
+  name: "임베드",
   caption: null,
   showPreview: true,
   textAlignment: null,
@@ -1409,6 +1431,127 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
       "https://example.com/dir/photo.png",
     );
   });
+});
+
+describe("MediaToolbar iframe 전용 액션(CUS-001~004, roadmap Issue #212 RD-004 DELTA-02)", () => {
+  it("url 있는 iframe 블록을 선택하면 more 메뉴에 Preview·Edit caption 항목이 없다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: "Preview" }),
+    ).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Edit caption" })).toBeNull();
+  });
+
+  it("url 있는 iframe 블록을 선택하면 more 메뉴에 정렬 항목 3개가 보인다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Align left" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Align center" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Align right" }),
+    ).not.toBeNull();
+  });
+
+  it("iframe 대상은 Download 대신 새 창에서 열기 항목을 렌더한다(target=_blank, rel=noopener noreferrer, download 속성 없음)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    expect(screen.queryByRole("menuitem", { name: "Download" })).toBeNull();
+    const openLink = screen.getByRole("menuitem", {
+      name: "Open in new tab",
+    });
+    expect(openLink.getAttribute("href")).toBe(
+      "https://www.youtube.com/embed/x",
+    );
+    expect(openLink.getAttribute("target")).toBe("_blank");
+    expect(openLink.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(openLink.hasAttribute("download")).toBe(false);
+  });
+
+  it("Replace의 Embed 탭에서 iframe URL을 저장하면 setMediaBlockUrl이 아니라 setIframeSrc를 호출한다", async () => {
+    let callCount = 0;
+    const setIframeSrc = vi.fn(() => ({ ok: true }));
+    const setMediaBlockUrl = vi.fn(() => ({ ok: true }));
+    const controller = fakeController({
+      getSelectionMediaBlock: () => {
+        callCount += 1;
+        return callCount === 1
+          ? filledIframeBlock
+          : { ...filledIframeBlock, url: "https://www.youtube.com/embed/y" };
+      },
+      isUploadEnabled: () => true,
+      setIframeSrc,
+      setMediaBlockUrl,
+    });
+    renderToolbar(controller);
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Iframe URL" }), {
+      target: { value: "https://www.youtube.com/embed/y" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(setIframeSrc).toHaveBeenCalledWith(
+      "media-1",
+      "https://www.youtube.com/embed/y",
+    );
+    expect(setMediaBlockUrl).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "More media options" }),
+      ).not.toBeNull();
+    });
+  });
+
+  it.each([
+    ["PROTOCOL_NOT_ALLOWED", "This protocol isn't allowed"],
+    ["PRIVATE_NETWORK_BLOCKED", "Private network addresses aren't allowed"],
+    [
+      "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+      "This URL isn't on the allowed list",
+    ],
+  ] as const)(
+    "iframe URL이 %s로 거부되면 해당 사유 문구를 보여준다(generic unsupportedMediaUrl이 아니다)",
+    (reason, message) => {
+      const controller = fakeController({
+        getSelectionMediaBlock: () => filledIframeBlock,
+        isUploadEnabled: () => true,
+        setIframeSrc: () => ({
+          ok: false,
+          error: { code: "IFRAME_URL_NOT_ALLOWED", reason },
+        }),
+      });
+      renderToolbar(controller);
+      openMoreMenu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Iframe URL" }), {
+        target: { value: "https://evil.example.com" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+      expect(screen.getByRole("alert").textContent).toBe(message);
+    },
+  );
 });
 
 describe("MediaToolbar portalTarget(슬라이스4 RD-003 DELTA-03)", () => {

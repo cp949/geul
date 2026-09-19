@@ -334,6 +334,26 @@ describe("setMediaBlockUrl", () => {
     expect(editorState(editor, tiptap)).toEqual(before);
   });
 
+  // 보안 경계 회귀(RD-004 DELTA-02 "readiness 재확인") — setMediaBlockName이
+  // iframe을 받아들이도록 게이트를 넓힌 뒤에도(위 "iframe 블록도 name을
+  // 세팅한다" 테스트) setMediaBlockUrl은 그대로 iframe을 거절해야 한다.
+  // 이 명령은 resolveIframeEmbedDecision(화이트리스트·private network 정책)을
+  // 모르는 isSupportedMediaUrl만 쓰므로, iframe을 받아들이면 setIframeSrc가
+  // 강제하는 정책을 우회하는 경로가 생긴다.
+  it("iframe 블록 대상은 COMMAND_NOT_APPLICABLE이고 문서를 바꾸지 않는다(보안 경계 — setIframeSrc만 iframe url을 세팅한다)", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setMediaBlockUrl(
+        "m-1",
+        "https://evil.example.com/not-whitelisted",
+      ),
+    ).toEqual(notApplicable("setMediaBlockUrl"));
+    expect(editorState(editor, tiptap)).toEqual(before);
+  });
+
   // Issue #168 roadmap RD-001 DELTA-05 — url 확정 시 로컬 프리뷰(ADR 0015)
   // 정리. runSetMediaBlockAttrCommand(공유 본체)가 localPreviewUrl 전환
   // (문자열→null)을 감지해 신호를 발생시킨다 — command 문자열이 아니라
@@ -427,6 +447,34 @@ describe("setMediaBlockName / setMediaBlockCaption", () => {
     const node = position === null ? null : tiptap.state.doc.nodeAt(position);
     expect(typeof node?.attrs.localPreviewUrl).toBe("string");
     expect(localPreviewCleared).toEqual([]);
+  });
+
+  // CUS-001~004 roadmap Issue #212 RD-004 DELTA-02 readiness 발견 — iframe의
+  // name은 다른 4종처럼 구조만 있고 의미 없는 필드가 아니라
+  // iframe-block-extension.ts의 renderHTML이 실제 `<iframe title="...">`
+  // 접근성 속성으로 렌더링한다. 그런데도 setMediaBlockName은
+  // isMediaBlockNodeName(4종만) 게이트에 막혀 iframe에서 항상
+  // COMMAND_NOT_APPLICABLE이었다 — 이 테스트가 그 수정을 고정한다.
+  // setMediaBlockCaption은 대상에서 뺀다 — media-captions.tsx가 이미 iframe을
+  // caption 렌더링에서 배제해(spec §1 "caption v1 비노출") 세팅해도 아무
+  // 곳에도 반영되지 않는 진짜 무의미 케이스이기 때문이다.
+  it("iframe 블록도 name을 세팅한다(접근성 title, RD-004 DELTA-02)", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setMediaBlockName("m-1", "Vimeo 임베드")).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { name: "Vimeo 임베드" }),
+      tailParagraphBlock,
+    ]);
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+    ]);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
   });
 });
 

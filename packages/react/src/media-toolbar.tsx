@@ -1,4 +1,9 @@
-import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import type {
+  Dictionary,
+  EditorController,
+  EditorError,
+  MediaBlockKind,
+} from "@cp949/geul-core";
 import {
   AlignCenter,
   AlignLeft,
@@ -103,6 +108,30 @@ const MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-media-resize-handle]",
 ] as const;
 
+// CUS-001~004(roadmap Issue #212 RD-004 DELTA-02) — Embed 탭 URL 저장 거절
+// 문구. 단일 소비처(applyReplaceUrl)라 table-command-error-messages.ts처럼
+// 별도 파일로 추출하지 않는다(RD-003-DELTA-03.md와 같은 근거). iframe +
+// IFRAME_URL_NOT_ALLOWED만 model resolveIframeEmbedDecision의 거절 사유별
+// 문구로 대체하고, 나머지(다른 kind의 LINK_HREF_REJECTED 등)는 기존
+// generic unsupportedMediaUrl을 그대로 쓴다.
+const replaceUrlRejectionMessage = (
+  kind: MediaBlockKind,
+  error: EditorError,
+  dictionary: Dictionary,
+): string => {
+  if (kind === "iframe" && error.code === "IFRAME_URL_NOT_ALLOWED") {
+    switch (error.reason) {
+      case "PROTOCOL_NOT_ALLOWED":
+        return dictionary.status.iframeUrlRejected.protocolNotAllowed;
+      case "PRIVATE_NETWORK_BLOCKED":
+        return dictionary.status.iframeUrlRejected.privateNetworkBlocked;
+      case "NOT_WHITELISTED_AND_CUSTOM_DISABLED":
+        return dictionary.status.iframeUrlRejected.notWhitelisted;
+    }
+  }
+  return dictionary.status.unsupportedMediaUrl;
+};
+
 type ToolbarPosition = { left: number; top: number };
 
 type MediaInfo = {
@@ -150,9 +179,10 @@ type ToolbarState =
       activeTab: "embed" | "upload";
       /** Embed 탭의 URL 입력 draft. */
       draft: string;
-      /** Embed 탭에서 거부된 URL을 제출했는지(file-panel.tsx rejected와
-       * 같은 계약). */
-      rejected: boolean;
+      /** Embed 탭에서 거부된 URL을 제출했을 때 보여줄 문구, 없으면 null
+       * (file-panel.tsx rejected boolean과 달리 문구를 직접 담는다 —
+       * RD-004 DELTA-02, iframe은 거절 사유별로 문구가 달라진다). */
+      rejectedMessage: string | null;
       upload: UploadSubState;
       /** retry가 파일 선택 대화상자를 다시 열지 않고 재사용할 원본 File. */
       heldFile: File | null;
@@ -550,7 +580,7 @@ export const MediaToolbar = ({
       ...carryMediaInfo(toolbarState),
       activeTab: "upload",
       draft: "",
-      rejected: false,
+      rejectedMessage: null,
       upload,
       heldFile: null,
     });
@@ -582,14 +612,25 @@ export const MediaToolbar = ({
   // file-panel.tsx applyUrl과 같은 관례 — 마지막 path segment로 이름을
   // 추출해 저장한다(추출 실패는 setMediaBlockName을 호출하지 않는다).
   // 성공하면 startReplaceUpload 성공 분기와 같은 finishReplacing으로
-  // view에 돌아간다.
+  // view에 돌아간다. iframe은 setMediaBlockUrl이 아니라 setIframeSrc로
+  // 라우팅한다(CUS-001~004, RD-004 DELTA-02) — setMediaBlockUrl은
+  // resolveIframeEmbedDecision(화이트리스트·private network 정책)을 몰라
+  // iframe을 애초에 거절한다(core 보안 경계, block-attribute-commands.ts).
   const applyReplaceUrl = () => {
     if (toolbarState.mode !== "replacing") return;
-    const { blockId, draft } = toolbarState;
-    const result = editor.commands.setMediaBlockUrl(blockId, draft);
+    const { blockId, draft, kind } = toolbarState;
+    const result =
+      kind === "iframe"
+        ? editor.commands.setIframeSrc(blockId, draft)
+        : editor.commands.setMediaBlockUrl(blockId, draft);
     if (!result.ok) {
+      const rejectedMessage = replaceUrlRejectionMessage(
+        kind,
+        result.error,
+        dictionary,
+      );
       setToolbarState((prev) =>
-        prev.mode === "replacing" ? { ...prev, rejected: true } : prev,
+        prev.mode === "replacing" ? { ...prev, rejectedMessage } : prev,
       );
       return;
     }
@@ -1024,7 +1065,7 @@ export const MediaToolbar = ({
                   setToolbarState({
                     ...toolbarState,
                     draft: event.currentTarget.value,
-                    rejected: false,
+                    rejectedMessage: null,
                   });
                 }}
                 onKeyDown={(event) => {
@@ -1053,9 +1094,9 @@ export const MediaToolbar = ({
                   dictionary.toolbar.kindNames[toolbarState.kind],
                 )}
               </button>
-              {toolbarState.rejected && (
+              {toolbarState.rejectedMessage !== null && (
                 <span className="geul-media-toolbar__error" role="alert">
-                  {dictionary.status.unsupportedMediaUrl}
+                  {toolbarState.rejectedMessage}
                 </span>
               )}
             </>
@@ -1153,13 +1194,22 @@ export const MediaToolbar = ({
       >
         {dictionary.toolbar.media.rename}
       </MenuItemButton>
-      <MenuItemButton
-        className={mediaToolbarMoreMenuItemClassName}
-        onClick={startEditingCaption}
-      >
-        {dictionary.toolbar.media.editCaptionAriaLabel}
-      </MenuItemButton>
-      {toolbarState.kind !== "file" && (
+      {/* iframe은 caption을 노출하지 않는다(spec §1 "v1 비노출" 결정,
+          CUS-001~004 RD-004 DELTA-02) — media-captions.tsx가 이미 자체
+          kind 목록으로 iframe caption 렌더링 자체를 배제하고 있어(RD-004
+          DELTA-01 확인) 세팅해도 어디에도 반영되지 않는다. */}
+      {toolbarState.kind !== "iframe" && (
+        <MenuItemButton
+          className={mediaToolbarMoreMenuItemClassName}
+          onClick={startEditingCaption}
+        >
+          {dictionary.toolbar.media.editCaptionAriaLabel}
+        </MenuItemButton>
+      )}
+      {/* iframe도 제외한다 — getSelectionMediaBlock().showPreview가 iframe에
+          대해 의미 없는 true를 항상 보고한다(RD-002 DELTA-03이 고정한 core
+          동작, core는 고치지 않는다 — RD-004 DELTA-01 결정과 같은 근거). */}
+      {toolbarState.kind !== "file" && toolbarState.kind !== "iframe" && (
         <MenuItemButton
           aria-checked={toolbarState.showPreview === true}
           className={mediaToolbarMoreMenuItemClassName}
@@ -1169,7 +1219,12 @@ export const MediaToolbar = ({
           {dictionary.toolbar.media.preview}
         </MenuItemButton>
       )}
-      {(toolbarState.kind === "image" || toolbarState.kind === "video") && (
+      {(toolbarState.kind === "image" ||
+        toolbarState.kind === "video" ||
+        // iframe(CUS-001~004, RD-004 DELTA-02) — core
+        // isTextAlignableMediaBlockKind(block-attribute-commands.ts)가 이미
+        // image/video/iframe 3종을 정렬 가능으로 취급한다.
+        toolbarState.kind === "iframe") && (
         // block-side-menu-menu.tsx 정렬 행 클래스를 코드 복제 없이 그대로
         // 재사용한다(01-계획.md 6절 "결정") — 4번째 해제(×) 버튼은 추가하지
         // 않는다: media는 같은 값 재클릭 시 해제하는 기존 setMediaAlignment
@@ -1210,23 +1265,41 @@ export const MediaToolbar = ({
       >
         {dictionary.toolbar.media.deleteAriaLabel}
       </MenuItemButton>
-      {/* cross-origin url은 강제 다운로드를 보장하지 않는다(브라우저
-          same-origin 정책, spec §6.3) — 링크가 열리기만 할 수도 있다.
-          download 속성은 name이 없어도 항상 둔다 — 없으면 강제 다운로드
-          힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. Download는
-          `<a>`라 MenuItemButton(<button> 전용) 대신 이 항목만 같은 시각
-          계약을 직접 조립한다(role="menuitem" 명시 — role="menu" 안
-          자식은 링크가 아니라 menuitem이어야 하는 ARIA 계약, 다른 항목들과
-          같은 이유). */}
-      <a
-        className={mediaToolbarMoreMenuItemClassName}
-        download={toolbarState.name ?? ""}
-        href={toolbarState.url}
-        onMouseDown={(event) => event.preventDefault()}
-        role="menuitem"
-      >
-        {dictionary.toolbar.media.download}
-      </a>
+      {/* iframe은 파일이 아니라 embed URL이라 강제 다운로드 의미가 없다
+          (CUS-001~004, RD-004 DELTA-02) — 대신 새 창에서 연다.
+          rel="noopener noreferrer"로 새 탭이 window.opener를 통해 이
+          문서를 조작하지 못하게 막는다(spec §5). download 속성은 두지
+          않는다 — 있으면 브라우저가 새 창 대신 다운로드를 시도한다. */}
+      {toolbarState.kind === "iframe" ? (
+        <a
+          className={mediaToolbarMoreMenuItemClassName}
+          href={toolbarState.url}
+          onMouseDown={(event) => event.preventDefault()}
+          rel="noopener noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          {dictionary.toolbar.media.openInNewTab}
+        </a>
+      ) : (
+        // cross-origin url은 강제 다운로드를 보장하지 않는다(브라우저
+        // same-origin 정책, spec §6.3) — 링크가 열리기만 할 수도 있다.
+        // download 속성은 name이 없어도 항상 둔다 — 없으면 강제 다운로드
+        // 힌트 자체가 사라져 평범한 네비게이션으로 바뀐다. Download는
+        // `<a>`라 MenuItemButton(<button> 전용) 대신 이 항목만 같은 시각
+        // 계약을 직접 조립한다(role="menuitem" 명시 — role="menu" 안
+        // 자식은 링크가 아니라 menuitem이어야 하는 ARIA 계약, 다른
+        // 항목들과 같은 이유).
+        <a
+          className={mediaToolbarMoreMenuItemClassName}
+          download={toolbarState.name ?? ""}
+          href={toolbarState.url}
+          onMouseDown={(event) => event.preventDefault()}
+          role="menuitem"
+        >
+          {dictionary.toolbar.media.download}
+        </a>
+      )}
     </div>
   );
 
