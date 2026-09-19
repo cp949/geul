@@ -299,11 +299,21 @@ export const MentionPicker = () => {
       // 그 자리에 남아 있어야 한다.
       editor.commands.setText(current.blockId, "");
       editor.setTextCursorPosition(current.blockId, "end");
-      editor.commands.insertCustomInlineContent("mention", {
+      const inserted = editor.commands.insertCustomInlineContent("mention", {
         targetType: item.targetType,
         targetId: item.targetId,
         label: item.label,
       });
+      // insertCustomInlineContent는 Result<void, EditorError>를 반환한다
+      // (packages/react/README.md의 InsertMentionButton 예제와 동일 계약).
+      // 실패하면 위에서 이미 비운 블록 텍스트("@query")를 그대로 되돌린다
+      // — 그러지 않으면 트랜잭션 거절 시 사용자 입력이 조용히 사라진다
+      // (IMPL-REVIEW-01 F1).
+      if (!inserted.ok) {
+        console.error(inserted.error);
+        editor.commands.setText(current.blockId, `@${current.query}`);
+        editor.setTextCursorPosition(current.blockId, "end");
+      }
       dismissedQueryRef.current = null;
       setMenuState(null);
       focusEditor();
