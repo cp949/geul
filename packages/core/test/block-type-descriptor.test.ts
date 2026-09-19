@@ -64,6 +64,15 @@ describe("blockTypeDescriptorFromBlock", () => {
     expect(blockTypeDescriptorFromBlock({ type: "audio" })).toBeNull();
   });
 
+  // RD-002 DELTA-03(roadmap Issue #212) — iframe도 media 4종과 같은 자리(atom,
+  // Turn into 배제)다. spec §3은 이 함수가 media처럼 "자연 배제"될 것으로
+  // 예상했지만 실측 결과 결함이었다 — 이 함수는 kind를 명시 리터럴로
+  // 나열하는 방식이라(위 media 4종도 RD-002 DELTA-01에서 각각 추가됐다),
+  // 새 kind는 자동으로 배제되지 않는다.
+  it("iframe은 Turn into 대상이 아니라 null이다", () => {
+    expect(blockTypeDescriptorFromBlock({ type: "iframe" })).toBeNull();
+  });
+
   // toggleListItem은 RD-003(Issue #38 슬라이스 6)에서 model Block에
   // 추가됐고 RD-004 DELTA-04부터 Turn into 대상이다 — divider·table과
   // 달리 attrs 없는 descriptor를 그대로 낸다(checkListItem과 동일 자리,

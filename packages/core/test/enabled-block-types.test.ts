@@ -53,6 +53,17 @@ describe("enabledBlockTypes(RD-002-DELTA-12)", () => {
     expect(tiptap.schema.nodes.divider).toBeUndefined();
   });
 
+  it("deny로 iframe을 끄면 스키마에 iframe 노드가 없고 paragraph는 그대로 있다(RD-002 DELTA-03, roadmap Issue #212)", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      enabledBlockTypes: { mode: "deny", types: ["iframe"] },
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+
+    expect(tiptap.schema.nodes.iframe).toBeUndefined();
+    expect(tiptap.schema.nodes.paragraph).toBeDefined();
+  });
+
   it("deny로 table을 끄면 table/tableRow/tableCell 세 노드가 모두 사라진다(묶음 제거)", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("seed"),
@@ -183,6 +194,14 @@ describe("isBlockTypeEnabled(RD-001-DELTA-01)", () => {
       enabledBlockTypes: { mode: "deny", types: ["image"] },
     });
     expect(editor.isBlockTypeEnabled("image")).toBe(false);
+  });
+
+  it("media 타입(iframe)이 deny 목록에 있으면 false를 반환한다(RD-002 DELTA-03, roadmap Issue #212)", () => {
+    const editor = createEditor({
+      initialDocument: paragraphDocument("seed"),
+      enabledBlockTypes: { mode: "deny", types: ["iframe"] },
+    });
+    expect(editor.isBlockTypeEnabled("iframe")).toBe(false);
   });
 
   it("media 타입(image)이 deny 목록에 없으면 true를 반환한다", () => {

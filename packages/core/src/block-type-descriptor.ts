@@ -48,7 +48,10 @@ export type BlockTypeDescriptor =
 // BlockTypeDescriptor에 포함돼 이 null 분기에서 빠졌다. file/image/video/
 // audio는 RD-002 DELTA-01(R3 슬라이스1)부터 반대로 divider/table과 같은
 // null 자리에 추가됐다 — spec §2.2가 이미 "media Turn into 제외"를
-// 확정했다(새 제품 결정 아님, 실측 tsc로 이 결합을 확인한 뒤 반영).
+// 확정했다(새 제품 결정 아님, 실측 tsc로 이 결합을 확인한 뒤 반영). iframe은
+// RD-002 DELTA-03(roadmap Issue #212)부터 같은 자리다 — spec §3은 이 함수가
+// media처럼 "자연 배제"될 것으로 예상했지만, 이 함수는 kind를 명시 리터럴로
+// 나열하는 방식이라 실측 결과 결함이었다(각 kind를 직접 추가해야 배제된다).
 export type BlockTypeSource =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
@@ -64,7 +67,8 @@ export type BlockTypeSource =
   | { type: "file" }
   | { type: "image" }
   | { type: "video" }
-  | { type: "audio" };
+  | { type: "audio" }
+  | { type: "iframe" };
 
 export const blockTypeDescriptorFromBlock = (
   source: BlockTypeSource,
@@ -74,6 +78,7 @@ export const blockTypeDescriptorFromBlock = (
   source.type === "file" ||
   source.type === "image" ||
   source.type === "video" ||
-  source.type === "audio"
+  source.type === "audio" ||
+  source.type === "iframe"
     ? null
     : source;

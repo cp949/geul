@@ -819,3 +819,72 @@ describe("알 수 없는 blockId — setter 8개 공통", () => {
     },
   );
 });
+
+/**
+ * RD-002 DELTA-03(roadmap Issue #212, 완료 조건 4) — 삭제/복제/이동과
+ * Turn into 배제가 iframe에도 media와 동일하게 동작함을 고정한다. 실측
+ * 결과 generic 커맨드(삭제/복제/이동)와 setBlockType 실제 게이트
+ * (isInlineContentBlockType)는 이미 spec 예상대로 정상 동작했다 — 여기
+ * 4건은 코드 변경 없는 순수 회귀 고정이다. blockTypeDescriptorFromBlock의
+ * 결함(각주만 있고 실제로는 iframe을 배제하지 않던 문제)은 이 파일이 아니라
+ * block-type-descriptor.test.ts가 고정한다(RD-002-DELTA-03.md "실측" 참고).
+ */
+describe("iframe 삭제/복제/이동/Turn into 배제(RD-002 DELTA-03, 완료 조건 4)", () => {
+  it("duplicateBlock이 iframe 블록을 원본 바로 다음에 복제한다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("iframe", "m-1", { url: "https://example.com" }),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+    });
+    mountTiptapEditor(editor);
+    expect(editor.commands.duplicateBlock("m-1")).toEqual({
+      ok: true,
+      value: { blockId: "id-1" },
+    });
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { url: "https://example.com" }),
+      mediaBlock("iframe", "id-1", { url: "https://example.com" }),
+      tailParagraphBlock,
+    ]);
+  });
+
+  it("deleteBlock이 iframe 블록을 삭제하고 undo 1회로 복원한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([tailParagraphBlock]);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("moveBlockBefore가 iframe 블록을 다른 형제 앞으로 이동한다", () => {
+    const { editor } = mounted(
+      documentOf(
+        firstParagraphBlock,
+        mediaBlock("iframe", "m-1"),
+        tailParagraphBlock,
+      ),
+    );
+    expect(editor.commands.moveBlockBefore("m-1", "block-1")).toEqual(okResult);
+    expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+      "m-1",
+      "block-1",
+      "tail",
+    ]);
+  });
+
+  it("iframe 대상 setBlockType(paragraph)은 COMMAND_NOT_APPLICABLE이고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setBlockType("m-1", { type: "paragraph" })).toEqual(
+      notApplicable("setBlockType"),
+    );
+    expect(editorState(editor, tiptap)).toEqual(before);
+  });
+});

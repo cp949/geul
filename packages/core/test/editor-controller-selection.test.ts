@@ -15,7 +15,10 @@ import {
   tailParagraphBlock,
 } from "./editor-controller-support.js";
 
-const MEDIA_KINDS = ["file", "image", "video", "audio"] as const;
+// iframe은 RD-002 DELTA-03(roadmap Issue #212)부터 포함한다 —
+// isMediaBlockKind가 이미 iframe을 포함해 getSelectionMediaBlock()이
+// 수정 없이 동작함을 이 배열 확장만으로 고정한다.
+const MEDIA_KINDS = ["file", "image", "video", "audio", "iframe"] as const;
 
 describe("에디터 컨트롤러 선택 영역 조회", () => {
   it("블록별 들여쓰기와 내어쓰기 가능 상태를 core 판정에서 보고한다", () => {
