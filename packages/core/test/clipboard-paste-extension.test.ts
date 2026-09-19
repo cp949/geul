@@ -550,4 +550,57 @@ describe("ClipboardPasteExtension", () => {
       });
     });
   });
+
+  describe("iframe HTML 붙여넣기가 host의 iframeEmbed 정책을 재검증한다(Issue #215 RD-002)", () => {
+    const ifr = (src: string): string =>
+      `<div data-geul-block-id="ifr-1" data-geul-media-type="iframe" data-geul-src="${src}"></div>`;
+
+    it("iframeEmbed 미설정 — private-network src를 붙여넣으면 url 없이 삽입된다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, ifr("https://169.254.169.254/latest/meta-data"));
+
+        const inserted = editor.getDocument().blocks[1];
+        expect(inserted).toMatchObject({ type: "iframe" });
+        expect(inserted).not.toHaveProperty("url");
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("iframeEmbed의 whitelist에 있는 src는 붙여넣기에서도 보존된다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        iframeEmbed: {
+          providers: [
+            {
+              name: "youtube",
+              match: { type: "wildcard", pattern: "*.youtube.com" },
+            },
+          ],
+        },
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteHtml(editable, ifr("https://www.youtube.com/embed/xyz"));
+
+        const inserted = editor.getDocument().blocks[1];
+        expect(inserted).toMatchObject({
+          type: "iframe",
+          url: "https://www.youtube.com/embed/xyz",
+        });
+        expect(errors).toEqual([]);
+      });
+    });
+  });
 });

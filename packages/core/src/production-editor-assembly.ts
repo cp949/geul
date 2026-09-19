@@ -412,9 +412,11 @@ export const createProductionEditor = (options: {
   // spec §3, roadmap Issue #212 RD-002 DELTA-02 — sandbox/allow/
   // referrerPolicy 중 하나라도 있으면 IframeBlockExtension을
   // `.configure()`로 override한다(아래 iframe 등록 지점). URL 허용 정책
-  // 4필드(providers 등)는 이 함수가 소비하지 않는다 — setIframeSrc
-  // 커맨드(block-attribute-commands.ts)가 session.getIframeEmbedConfig()로
-  // 별도 readback한다.
+  // 4필드(providers 등)는 이 함수가 직접 구조분해하지 않는다 —
+  // setIframeSrc 커맨드(block-attribute-commands.ts)가
+  // session.getIframeEmbedConfig()로 별도 readback하고, ClipboardPasteExtension
+  // (Issue #215 RD-002)은 이 옵션을 통째로 전달받아 io.importHtml에
+  // 그대로 넘긴다.
   iframeEmbed?: IframeEmbedConfig;
 }): Editor => {
   // BlockIdExtension의 occupiedIds 수집(Issue #170 RD-001 DELTA-01)에도
@@ -670,6 +672,14 @@ export const createProductionEditor = (options: {
               pasteHandler: options.pasteHandler,
               controllerFacade: options.pasteHandlerEditor,
             }),
+        // Issue #215 RD-002 — 붙여넣기 HTML import도 setIframeSrc·render와
+        // 같은 host 설정(options.iframeEmbed)으로 정책을 재검증한다. 위
+        // iframeRenderOptions와 같은 소스이고, 이 함수는 URL 정책 4필드를
+        // 직접 소비하지 않으므로 통째로 넘겨 io.importHtml이 필요한 부분만
+        // 읽게 한다.
+        ...(options.iframeEmbed === undefined
+          ? {}
+          : { iframeEmbed: options.iframeEmbed }),
       }),
       TablePasteExtension.configure({
         createId: options.createId,

@@ -12,6 +12,7 @@ import { isInTable } from "@tiptap/pm/tables";
 
 import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
 import type { EditorController } from "./editor-controller-types.js";
+import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
 
@@ -58,6 +59,12 @@ export type ClipboardPasteOptions = {
     defaultPasteHandler: () => boolean;
   }) => boolean | undefined;
   controllerFacade?: EditorController;
+  // Issue #215 RD-002 — host의 iframe URL 정책(whitelist·protocol·
+  // private-network)이다. production-editor-assembly.ts가 construction-time
+  // `options.iframeEmbed`를 그대로 전달한다(render 옵션 3필드 추출에 쓰는
+  // 것과 같은 소스). 미지정이면 io.importHtml 자체 기본값(가장 보수적)이
+  // 적용된다.
+  iframeEmbed?: IframeEmbedConfig;
 };
 
 // 이미 조립된 blockContainer JSON 배열의 절대 깊이가 MAX_NESTING_DEPTH를
@@ -145,6 +152,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     const createId = this.options.createId;
     const pasteHandler = this.options.pasteHandler;
     const controllerFacade = this.options.controllerFacade;
+    const iframeEmbed = this.options.iframeEmbed;
     // view.pasteText(sanitized, event) 재진입 가드(아래 sanitize 분기
     // 전용) — prosemirror-view의 doPaste가 자체적으로
     // view.someProp("handlePaste", f => f(view, event, slice))를 한 번 더
@@ -223,7 +231,10 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                 // 어차피 아래에서 전부 재발급되므로, importHtml 내부가 임시로
                 // 발급하는 기본 id(own 마커가 없는 블록에만 해당)까지 editor의
                 // createId로 낭비하지 않는다.
-                const imported = importHtml(html);
+                const imported = importHtml(
+                  html,
+                  iframeEmbed === undefined ? undefined : { iframeEmbed },
+                );
                 if (!imported.ok) return true;
                 const document = {
                   ...imported.value.document,
