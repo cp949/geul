@@ -433,9 +433,7 @@ export const MentionPicker = () => {
             border: "none",
             borderRadius: "0.25rem",
             background:
-              index === menuState.highlightedIndex
-                ? "#eef2ff"
-                : "transparent",
+              index === menuState.highlightedIndex ? "#eef2ff" : "transparent",
             cursor: "pointer",
             textAlign: "left",
           }}
