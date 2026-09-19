@@ -146,8 +146,9 @@ type ToolbarState =
       ToolbarPosition)
   | ({
       mode: "replacing";
-      /** 기본값은 upload — file-panel.tsx의 Notion parity(2026-09-12)
-       * 기본값과 맞춘다. */
+      /** 기본값은 upload(file-panel.tsx의 Notion parity, 2026-09-12) —
+       * 단 uploadEnabled가 false(Upload 탭 자체가 없음, iframe 포함)면
+       * embed로 시딩한다(Issue #213). */
       activeTab: "embed" | "upload";
       /** Embed 탭의 URL 입력 draft. */
       draft: string;
@@ -450,6 +451,18 @@ export const MediaToolbar = ({
     else if (replaceActiveTab === "embed") replaceUrlInputRef.current?.focus();
   }, [replaceActiveTab]);
 
+  // Replace 팝업의 Upload 탭 노출 여부(Issue #213) — file-panel.tsx의
+  // `uploadEnabled = editor.isUploadEnabled() && kind !== "iframe"`와 같은
+  // 게이트(spec §5 "iframe은 업로드 탭 개념이 없어 URL 입력 단일 흐름").
+  // more-menu의 "Replace" 항목 자체는 kind와 무관하게 isUploadEnabled()만
+  // 본다(아래 moreMenu) — 팝업이 열린 뒤 탭 렌더링에서 kind를 한 번 더
+  // 걸러야 한다. Embed 탭은 이 값과 무관하게 항상 보인다(iframe 필수
+  // 흐름) — 게이트 대상은 Upload 탭/콘텐츠뿐이다.
+  const replaceUploadEnabled =
+    toolbarState.mode === "replacing"
+      ? editor.isUploadEnabled() && toolbarState.kind !== "iframe"
+      : false;
+
   // Upload 성공(pending null)·Embed URL 적용 성공 공용 — url/name이 실제로
   // 바뀌었으므로 finishEditing처럼 로컬 캐시 값을 재사용하지 않고 core를
   // 다시 조회해 "view"로 돌아간다(RD-003-DELTA-03.md "결정"). 대기 중 이미
@@ -547,10 +560,16 @@ export const MediaToolbar = ({
         : pending === null
           ? { status: "idle" }
           : { status: "error", code: pending.code, message: pending.message };
+    // iframe은 Upload 탭이 없다(Issue #213, 위 replaceUploadEnabled와 같은
+    // 게이트) — 기본 활성 탭을 upload로 열면 사라진 탭 콘텐츠 대신 빈
+    // 화면이 뜬다(file-panel.tsx updateFromSelection의 activeTab 시딩과
+    // 같은 처리).
+    const uploadEnabled =
+      editor.isUploadEnabled() && toolbarState.kind !== "iframe";
     setToolbarState({
       mode: "replacing",
       ...carryMediaInfo(toolbarState),
-      activeTab: "upload",
+      activeTab: uploadEnabled ? "upload" : "embed",
       draft: "",
       rejectedMessage: null,
       upload,
@@ -996,16 +1015,18 @@ export const MediaToolbar = ({
               className="geul-file-panel__tablist"
               role="tablist"
             >
-              <button
-                aria-selected={toolbarState.activeTab === "upload"}
-                className={filePanelButtonClassName}
-                onClick={() => handleReplaceTabClick("upload")}
-                onMouseDown={(event) => event.preventDefault()}
-                role="tab"
-                type="button"
-              >
-                {dictionary.toolbar.filePanel.uploadTab}
-              </button>
+              {replaceUploadEnabled && (
+                <button
+                  aria-selected={toolbarState.activeTab === "upload"}
+                  className={filePanelButtonClassName}
+                  onClick={() => handleReplaceTabClick("upload")}
+                  onMouseDown={(event) => event.preventDefault()}
+                  role="tab"
+                  type="button"
+                >
+                  {dictionary.toolbar.filePanel.uploadTab}
+                </button>
+              )}
               <button
                 aria-selected={toolbarState.activeTab === "embed"}
                 className={filePanelButtonClassName}
@@ -1073,7 +1094,7 @@ export const MediaToolbar = ({
               )}
             </>
           )}
-          {toolbarState.activeTab === "upload" && (
+          {replaceUploadEnabled && toolbarState.activeTab === "upload" && (
             <div className="geul-file-panel__upload">
               {/* 네이티브 file input은 시각적으로만 숨긴다 — file-panel.tsx
                   upload-input과 같은 이유(clip 기법, 접근성 트리 유지).

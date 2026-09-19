@@ -1484,6 +1484,20 @@ describe("MediaToolbar iframe 전용 액션(CUS-001~004, roadmap Issue #212 RD-0
     expect(openLink.hasAttribute("download")).toBe(false);
   });
 
+  it("iframe 블록의 Replace 팝업은 Upload 탭 없이 Embed 입력만 보인다(Issue #213)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+
+    expect(screen.queryByRole("tab", { name: "Upload" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Iframe URL" })).not.toBeNull();
+  });
+
   it("Replace의 Embed 탭에서 iframe URL을 저장하면 setMediaBlockUrl이 아니라 setIframeSrc를 호출한다", async () => {
     let callCount = 0;
     const setIframeSrc = vi.fn(() => ({ ok: true }));
