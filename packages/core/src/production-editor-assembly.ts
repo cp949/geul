@@ -20,6 +20,7 @@ import { BlockMoveKeyboardExtension } from "./block-move-keyboard-extension.js";
 import { BlockSplitExtension } from "./block-split-extension.js";
 import { BlockTypeInputRuleExtension } from "./block-type-input-rule-extension.js";
 import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
+import { CalloutBackgroundPresentationExtension } from "./callout-background-presentation-extension.js";
 import { CalloutExtension } from "./callout-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
 import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
@@ -598,6 +599,7 @@ export const createProductionEditor = (options: {
           : { getBlockSelection: options.getBlockSelection },
       ),
       ListPresentationExtension,
+      CalloutBackgroundPresentationExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension.configure({
         dictionary: options.dictionary ?? DEFAULT_DICTIONARY,

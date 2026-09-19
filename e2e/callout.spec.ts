@@ -1,8 +1,13 @@
 /**
  * Callout 블록(Issue #209, BLK-020)의 색상 프리셋 원자적 세팅과 아이콘
- * 클릭 교체를 실제 Chromium 레이아웃으로 검증한다. 블록 레벨 backgroundColor
- * 반영은 block-handle.spec.ts와 같은 이유로 "Save JSON"으로 읽은 문서
- * 값을 단언한다(편집 화면에 시각 렌더 확인은 별도 수동 QA 영역).
+ * 클릭 교체를 실제 Chromium 레이아웃으로 검증한다. 모델 반영은
+ * block-handle.spec.ts와 같은 이유로 "Save JSON"으로 읽은 문서 값을
+ * 단언한다. backgroundColor의 편집 화면 시각 렌더는 일반 텍스트 블록
+ * 7종과 달리(RD-003 D5, block-handle.spec.ts:596-598 — 그쪽은 여전히
+ * 수동 QA 영역) callout만 CalloutBackgroundPresentationExtension이
+ * decoration으로 얹는다(2026-09-19 사용자 보고로 발견한 결함 수정,
+ * packages/core/test/callout-background-presentation.test.ts가 unit
+ * 계약을 고정) — 여기서는 실제 Chromium computed style로 이중 확인한다.
  */
 import { expect, test } from "@playwright/test";
 
@@ -39,7 +44,12 @@ test("블록 메뉴의 색상 프리셋이 icon+backgroundColor를 원자적으�
   await editable.locator("[data-geul-callout]").click();
   await page.keyboard.type("주의하세요");
 
-  await editable.locator("[data-geul-callout]").hover();
+  // 기본 카드 배경(_callout.scss --geul-color-surface-muted 대체값
+  // #f1f3f4)이 backgroundColor 미설정 상태의 기준값이다 — 투명이 아니다.
+  const callout = editable.locator("[data-geul-callout]");
+  await expect(callout).toHaveCSS("background-color", "rgb(241, 243, 244)");
+
+  await callout.hover();
   await page.getByRole("button", { name: "Drag to reorder" }).click();
   await page.getByRole("menuitem", { name: "Warning" }).click();
 
@@ -49,11 +59,13 @@ test("블록 메뉴의 색상 프리셋이 icon+backgroundColor를 원자적으�
     icon: "⚠️",
     backgroundColor: "#FEF7E0",
   });
+  await expect(callout).toHaveCSS("background-color", "rgb(254, 247, 224)");
 
   await page.keyboard.press("Control+z");
   const reverted = await readSavedDocument(page);
   expect(reverted.blocks[0]?.icon).toBeUndefined();
   expect(reverted.blocks[0]?.backgroundColor).toBeUndefined();
+  await expect(callout).toHaveCSS("background-color", "rgb(241, 243, 244)");
 });
 
 test("아이콘 클릭으로 임의 이모지를 교체한다", async ({ page }) => {
