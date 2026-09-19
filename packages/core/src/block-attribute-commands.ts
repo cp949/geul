@@ -89,16 +89,20 @@ export const createBlockAttributeCommands = (
   const isMediaBlockNodeName = (name: string): name is MediaBlockKind =>
     name === "file" || name === "image" || name === "video" || name === "audio";
 
-  // setMediaBlockName 전용 확장 — iframe(CUS-001~004, roadmap Issue #212
-  // RD-004 DELTA-02 readiness 발견)의 name은 다른 4종처럼 구조만 있고 의미
-  // 없는 필드가 아니라 iframe-block-extension.ts의 renderHTML이 실제
-  // `<iframe title="...">` 접근성 속성으로 렌더링한다 — 세팅 경로가 있어야
-  // 한다. setMediaBlockUrl/Caption/BackgroundColor는 그대로 기본
-  // isMediaBlockNodeName(4종)을 쓴다 — 특히 setMediaBlockUrl을 넓히면
+  // setMediaBlockName/BackgroundColor 전용 확장 — iframe(CUS-001~004, roadmap
+  // Issue #212 RD-004 DELTA-02 readiness 발견)의 name은 다른 4종처럼 구조만
+  // 있고 의미 없는 필드가 아니라 iframe-block-extension.ts의 renderHTML이
+  // 실제 `<iframe title="...">` 접근성 속성으로 렌더링한다 — 세팅 경로가
+  // 있어야 한다. backgroundColor도 model IframeBlock이 MediaBlockCommon을
+  // 통해 그대로 허용하는 순수 스타일 필드라 같이 넓힌다. setMediaBlockUrl은
+  // 예외로 그대로 기본 isMediaBlockNodeName(4종)을 쓴다 — 넓히면
   // resolveIframeEmbedDecision(화이트리스트·private network 정책)을 모르는
   // 이 명령으로 iframe url을 세팅할 수 있게 돼 setIframeSrc가 강제하는
-  // 보안 경계를 우회하는 회귀가 생긴다 — 그래서 이 predicate는
-  // setMediaBlockName 호출부에서만 명시로 넘긴다.
+  // 보안 경계를 우회하는 회귀가 생긴다. setMediaBlockCaption은 v1에서 iframe
+  // caption 자체를 노출하지 않기로 한 별도 스펙 결정이라(media-toolbar.tsx
+  // "iframe은 caption을 노출하지 않는다" 참고) 4종 그대로 둔다 — 그래서 이
+  // predicate는 setMediaBlockName/BackgroundColor 호출부에서만 명시로
+  // 넘긴다.
   const isMediaOrIframeBlockNodeName = (name: string): name is MediaBlockKind =>
     isMediaBlockNodeName(name) || name === "iframe";
 
@@ -518,6 +522,12 @@ export const createBlockAttributeCommands = (
           ? null
           : { code: "INVALID_COLOR", color: value },
       (attrs, value) => ({ ...attrs, backgroundColor: value }),
+      // backgroundColor는 url 검증과 무관한 순수 스타일 필드다 — setMediaBlockUrl과
+      // 달리 resolveIframeEmbedDecision 우회 위험이 없고, model IframeBlock도
+      // MediaBlockCommon을 통해 backgroundColor를 그대로 허용한다(spec §2).
+      // 기본 4종 predicate로 두면 model이 허용하는 필드를 커맨드 계층이
+      // 이유 없이 iframe에서만 COMMAND_NOT_APPLICABLE로 거절하게 된다.
+      isMediaOrIframeBlockNodeName,
     );
   const setMediaPreviewWidth = (
     blockId: string,

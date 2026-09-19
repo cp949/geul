@@ -1,9 +1,4 @@
-import type {
-  Dictionary,
-  EditorController,
-  EditorError,
-  MediaBlockKind,
-} from "@cp949/geul-core";
+import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
 import { X } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -11,6 +6,7 @@ import { createPortal } from "react-dom";
 import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import {
   FALLBACK_BLOCK_POSITION,
   readBlockBounds,
@@ -29,32 +25,6 @@ const closeIcon = <X {...iconProps} />;
 // 같은 이유로 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가
 // 리스너를 매 렌더 떼었다 다시 붙인다).
 const FILE_PANEL_DISMISS_ALLOW_SELECTORS = [".geul-file-panel"] as const;
-
-// CUS-001~004(roadmap Issue #212 RD-004 DELTA-04) — Embed 탭 URL 저장 거절
-// 문구. media-toolbar.tsx의 replaceUrlRejectionMessage와 같은 모양이지만
-// 코드를 공유하지 않는다(RD-003-DELTA-03.md "결정"과 동일 근거 — 두
-// 컴포넌트가 이미 독립된 selection 상태 기계를 각자 갖고, 시각 요소만
-// 재사용하는 기존 관례). iframe + IFRAME_URL_NOT_ALLOWED만 model
-// resolveIframeEmbedDecision의 거절 사유별 문구로 대체하고, 나머지(다른
-// kind의 LINK_HREF_REJECTED 등)는 기존 generic unsupportedMediaUrl을
-// 그대로 쓴다.
-const embedUrlRejectionMessage = (
-  kind: MediaBlockKind,
-  error: EditorError,
-  dictionary: Dictionary,
-): string => {
-  if (kind === "iframe" && error.code === "IFRAME_URL_NOT_ALLOWED") {
-    switch (error.reason) {
-      case "PROTOCOL_NOT_ALLOWED":
-        return dictionary.status.iframeUrlRejected.protocolNotAllowed;
-      case "PRIVATE_NETWORK_BLOCKED":
-        return dictionary.status.iframeUrlRejected.privateNetworkBlocked;
-      case "NOT_WHITELISTED_AND_CUSTOM_DISABLED":
-        return dictionary.status.iframeUrlRejected.notWhitelisted;
-    }
-  }
-  return dictionary.status.unsupportedMediaUrl;
-};
 
 type PanelPosition = { left: number; top: number };
 
@@ -469,7 +439,7 @@ export const FilePanel = ({
             panelState.draft,
           );
     if (!result.ok) {
-      const rejectedMessage = embedUrlRejectionMessage(
+      const rejectedMessage = iframeUrlRejectionMessage(
         panelState.kind,
         result.error,
         dictionary,

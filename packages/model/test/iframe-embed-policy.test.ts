@@ -90,6 +90,33 @@ describe("화이트리스트 매칭", () => {
       }),
     ).toEqual({ allowed: true });
   });
+
+  it("wildcard 패턴에 '*.' 접두가 빠져 있어도 접미사만 같은 다른 호스트(hostname suffix spoofing)와 매치하지 않는다", () => {
+    const noPrefixWildcard: IframeEmbedConfig["providers"] = [
+      { name: "YouTube", match: { type: "wildcard", pattern: "youtube.com" } },
+    ];
+    expect(
+      resolveIframeEmbedDecision("https://evilyoutube.com/embed/x", {
+        providers: noPrefixWildcard,
+      }),
+    ).toMatchObject({ allowed: false });
+    expect(
+      resolveIframeEmbedDecision("https://notyoutube.com/embed/x", {
+        providers: noPrefixWildcard,
+      }),
+    ).toMatchObject({ allowed: false });
+    // 접두 없는 패턴도 apex·서브도메인 자체와는 여전히 매치해야 한다.
+    expect(
+      resolveIframeEmbedDecision("https://youtube.com/embed/x", {
+        providers: noPrefixWildcard,
+      }),
+    ).toEqual({ allowed: true, provider: "YouTube" });
+    expect(
+      resolveIframeEmbedDecision("https://www.youtube.com/embed/x", {
+        providers: noPrefixWildcard,
+      }),
+    ).toEqual({ allowed: true, provider: "YouTube" });
+  });
 });
 
 describe("private network 차단 — custom URL opt-in 상태에서만 적용", () => {
@@ -156,5 +183,43 @@ describe("스킴 없는 상대 URL — 항상 같은 origin이라 protocol·화�
     expect(
       resolveIframeEmbedDecision("#section", { allowCustomUrl: true }),
     ).toEqual({ allowed: true });
+  });
+});
+
+describe("protocol-relative URL(//host) — authority가 있어 스킴 없는 상대 URL과 다르게 취급한다", () => {
+  it("private network 호스트를 가리키면 custom URL opt-in 상태에서도 PRIVATE_NETWORK_BLOCKED다", () => {
+    expect(
+      resolveIframeEmbedDecision("//169.254.169.254/latest/meta-data", {
+        allowCustomUrl: true,
+      }),
+    ).toEqual({ allowed: false, reason: "PRIVATE_NETWORK_BLOCKED" });
+    expect(
+      resolveIframeEmbedDecision("//localhost/admin", {
+        allowCustomUrl: true,
+      }),
+    ).toEqual({ allowed: false, reason: "PRIVATE_NETWORK_BLOCKED" });
+  });
+
+  it("화이트리스트 밖 + custom URL 비활성이면 NOT_WHITELISTED_AND_CUSTOM_DISABLED다", () => {
+    expect(resolveIframeEmbedDecision("//evil.com/x", {})).toEqual({
+      allowed: false,
+      reason: "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+    });
+  });
+
+  it("공인 호스트는 custom URL opt-in 상태에서 허용한다", () => {
+    expect(
+      resolveIframeEmbedDecision("//example.com/page", {
+        allowCustomUrl: true,
+      }),
+    ).toEqual({ allowed: true });
+  });
+
+  it("화이트리스트에 매치하면 provider로 허용한다", () => {
+    expect(
+      resolveIframeEmbedDecision("//www.youtube.com/embed/x", {
+        providers: YOUTUBE_WHITELIST,
+      }),
+    ).toEqual({ allowed: true, provider: "YouTube" });
   });
 });

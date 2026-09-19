@@ -111,15 +111,23 @@ const matchesWhitelistEntry = (
   const host = hostname.toLowerCase();
   const pattern = entry.match.pattern.toLowerCase();
   if (entry.match.type === "exact") return host === pattern;
-  const suffix = pattern.startsWith("*.") ? pattern.slice(1) : pattern;
-  const bareDomain = suffix.startsWith(".") ? suffix.slice(1) : suffix;
-  return host === bareDomain || host.endsWith(suffix);
+  // pattern이 "*." 접두를 빠뜨려도("youtube.com"처럼) 항상 "."로 경계를
+  // 앵커한다 — endsWith(suffix)를 접두 유무에 따라 그대로 쓰면
+  // "evilyoutube.com"처럼 접두 없는 접미사 일치만으로 화이트리스트를
+  // 우회하는 hostname suffix spoofing이 가능해진다.
+  const bareDomain = pattern.startsWith("*.") ? pattern.slice(2) : pattern;
+  return host === bareDomain || host.endsWith(`.${bareDomain}`);
 };
 
 // 스킴 없는 상대 URL(예: "/relative/embed", "#section")은 항상 같은
 // origin을 가리킨다 — protocol 제한·화이트리스트 매칭·private network
 // 차단이 막으려는 위협(임의 외부 origin)이 원천적으로 적용되지 않는다.
-// custom URL opt-in 게이트만 통과하면 허용한다.
+// custom URL opt-in 게이트만 통과하면 허용한다. protocol-relative URL(예:
+// "//evil.com/x")은 다르다 — authority는 있지만 scheme이 없을 뿐이라
+// 브라우저는 현재 페이지의 protocol을 그대로 붙여 외부 origin으로
+// 해석한다. authority가 없는 진짜 상대 URL과 달리 hostname을 추출해
+// 화이트리스트·private network 검사를 그대로 적용한다(protocol 자체는
+// 알 수 없으니 protocol 검사만 생략).
 export const resolveIframeEmbedDecision = (
   url: string,
   config: IframeEmbedConfig,
@@ -141,9 +149,11 @@ export const resolveIframeEmbedDecision = (
   }
 
   const authority =
-    schemeMatch === null
-      ? undefined
-      : extractAuthority(url, schemeMatch[0].length);
+    schemeMatch !== null
+      ? extractAuthority(url, schemeMatch[0].length)
+      : url.startsWith("//")
+        ? extractAuthority(url, 0)
+        : undefined;
   const hostname =
     authority === undefined ? undefined : extractHostname(authority);
 

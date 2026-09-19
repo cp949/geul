@@ -1,9 +1,4 @@
-import type {
-  Dictionary,
-  EditorController,
-  EditorError,
-  MediaBlockKind,
-} from "@cp949/geul-core";
+import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
 import {
   AlignCenter,
   AlignLeft,
@@ -25,6 +20,7 @@ import { createPortal } from "react-dom";
 import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import {
   FALLBACK_BLOCK_POSITION,
@@ -107,30 +103,6 @@ const MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-block-id]",
   "[data-geul-media-resize-handle]",
 ] as const;
-
-// CUS-001~004(roadmap Issue #212 RD-004 DELTA-02) — Embed 탭 URL 저장 거절
-// 문구. 단일 소비처(applyReplaceUrl)라 table-command-error-messages.ts처럼
-// 별도 파일로 추출하지 않는다(RD-003-DELTA-03.md와 같은 근거). iframe +
-// IFRAME_URL_NOT_ALLOWED만 model resolveIframeEmbedDecision의 거절 사유별
-// 문구로 대체하고, 나머지(다른 kind의 LINK_HREF_REJECTED 등)는 기존
-// generic unsupportedMediaUrl을 그대로 쓴다.
-const replaceUrlRejectionMessage = (
-  kind: MediaBlockKind,
-  error: EditorError,
-  dictionary: Dictionary,
-): string => {
-  if (kind === "iframe" && error.code === "IFRAME_URL_NOT_ALLOWED") {
-    switch (error.reason) {
-      case "PROTOCOL_NOT_ALLOWED":
-        return dictionary.status.iframeUrlRejected.protocolNotAllowed;
-      case "PRIVATE_NETWORK_BLOCKED":
-        return dictionary.status.iframeUrlRejected.privateNetworkBlocked;
-      case "NOT_WHITELISTED_AND_CUSTOM_DISABLED":
-        return dictionary.status.iframeUrlRejected.notWhitelisted;
-    }
-  }
-  return dictionary.status.unsupportedMediaUrl;
-};
 
 type ToolbarPosition = { left: number; top: number };
 
@@ -624,7 +596,7 @@ export const MediaToolbar = ({
         ? editor.commands.setIframeSrc(blockId, draft)
         : editor.commands.setMediaBlockUrl(blockId, draft);
     if (!result.ok) {
-      const rejectedMessage = replaceUrlRejectionMessage(
+      const rejectedMessage = iframeUrlRejectionMessage(
         kind,
         result.error,
         dictionary,

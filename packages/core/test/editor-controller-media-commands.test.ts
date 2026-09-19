@@ -525,6 +525,24 @@ describe("setMediaBlockBackgroundColor", () => {
       tailParagraphBlock,
     ]);
   });
+
+  // model IframeBlock도 MediaBlockCommon을 통해 backgroundColor를 그대로
+  // 허용한다(spec §2) — setMediaBlockUrl과 달리 url 검증을 우회할 위험이
+  // 없는 순수 스타일 필드라 다른 4종과 동일하게 지원해야 한다(회귀 —
+  // 기본 predicate가 iframe을 빠뜨려 COMMAND_NOT_APPLICABLE로 거절하던
+  // 버그).
+  it("iframe도 다른 media 4종과 동일하게 배경색을 지원한다", () => {
+    const { editor } = mounted(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+    );
+    expect(
+      editor.commands.setMediaBlockBackgroundColor("m-1", "#AABBCC"),
+    ).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { backgroundColor: "#AABBCC" }),
+      tailParagraphBlock,
+    ]);
+  });
 });
 
 describe("setMediaPreviewWidth", () => {

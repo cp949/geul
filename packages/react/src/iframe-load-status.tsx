@@ -20,7 +20,14 @@ type TrackedIframe = {
   // URL에 잘못 이어질 수 있다 — 매 스캔마다 이 값과 비교해 달라지면
   // 무조건 재시작한다.
   src: string;
-  timer: number;
+  // load 완료(또는 뒤늦은 late-load) 후에는 null이다 — 그래도 Map에서
+  // 엔트리 자체를 지우지 않는다. observer는 subtree 전체의 childList
+  // mutation마다 scan()을 다시 돌리는데(이 iframe과 무관한 편집이어도
+  // 트리거된다), 그때 track()이 "같은 src로 이미 처리됨"을 이 엔트리로
+  // 판별하지 못하면 이미 끝난 로드를 새 iframe으로 오인해 타이머를
+  // 재시작시킨다 — 정상 로드된 iframe이 몇 초 뒤 오탐 timeout으로
+  // 잘못 표시되는 버그였다.
+  timer: number | null;
   onLoad: () => void;
 };
 
@@ -63,7 +70,7 @@ export const IframeLoadStatus = () => {
     const untrack = (iframe: HTMLIFrameElement): void => {
       const entry = tracked.get(iframe);
       if (entry === undefined) return;
-      ownerWindow.clearTimeout(entry.timer);
+      if (entry.timer !== null) ownerWindow.clearTimeout(entry.timer);
       iframe.removeEventListener("load", entry.onLoad);
       tracked.delete(iframe);
     };
@@ -78,11 +85,19 @@ export const IframeLoadStatus = () => {
 
       const onLoad = () => {
         untrack(iframe);
+        // 완전히 지우지 않고 같은 src의 "완료" 자리표시자를 남긴다(위
+        // TrackedIframe.timer 주석) — 무관한 mutation으로 인한 재-scan이
+        // 이 iframe을 새로 트래킹하며 타이머를 재시작하는 것을 막는다.
+        tracked.set(iframe, { src, timer: null, onLoad });
         clearTimedOutMarker(wrapper);
       };
       iframe.addEventListener("load", onLoad);
       const timer = ownerWindow.setTimeout(() => {
-        tracked.delete(iframe);
+        // 여기서도 완전히 지우지 않고 같은 src의 "timeout 확정" 자리표시자를
+        // 남긴다 — 지우면 이 iframe과 무관한 다음 mutation의 재-scan이
+        // 다시 "새 iframe"으로 오인해 timeout 문구를 껐다가 5초 뒤 다시
+        // 켜는 깜빡임을 만든다.
+        tracked.set(iframe, { src, timer: null, onLoad });
         wrapper.setAttribute(LOAD_STATUS_ATTR, "timeout");
         wrapper.setAttribute(
           LOAD_STATUS_LABEL_ATTR,

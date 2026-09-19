@@ -56,6 +56,37 @@ describe("iframe onLoad 미발생 타임아웃 휴리스틱(완료 조건, roadm
     expect(wrapper.getAttribute("data-geul-iframe-load-status")).toBeNull();
   });
 
+  it("load 완료 후 이 iframe과 무관한 DOM 변경이 있어도 timeout으로 재표시되지 않는다(회귀)", () => {
+    const rendered = renderIframeStatus("https://example.com/embed");
+    const iframe = rendered.blocks[0]?.querySelector("iframe");
+    if (iframe === null || iframe === undefined)
+      throw new Error("iframe 요소가 없다");
+    const wrapper = rendered.blocks[0] as HTMLElement;
+
+    act(() => {
+      iframe.dispatchEvent(new Event("load"));
+    });
+    expect(wrapper.getAttribute("data-geul-iframe-load-status")).toBeNull();
+
+    // 이 iframe과 무관한 childList mutation(관찰 대상 서브트리 다른
+    // 위치에 노드 삽입/삭제)이 MutationObserver의 scan()을 다시
+    // 트리거한다 — 편집기 커맨드를 거치지 않고 DOM만 직접 바꿔 이
+    // 컴포넌트가 실제로 관찰하는 신호만 격리해 검증한다. scan()이 이미
+    // load된 iframe을 "새 iframe"으로 오인하면 타이머가 재시작돼 5초
+    // 뒤 timeout이 잘못 뜬다.
+    act(() => {
+      const unrelated = document.createElement("span");
+      rendered.host.appendChild(unrelated);
+      rendered.host.removeChild(unrelated);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(IFRAME_LOAD_TIMEOUT_MS);
+    });
+
+    expect(wrapper.getAttribute("data-geul-iframe-load-status")).toBeNull();
+  });
+
   it("load 없이 타임아웃이 지나면 wrapper에 사유 문구가 붙는다", () => {
     const rendered = renderIframeStatus("https://example.com/embed");
 
