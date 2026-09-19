@@ -261,7 +261,7 @@ const SAMPLE_VIDEO_URL =
 const SAMPLE_AUDIO_URL =
   "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
 
-// "샘플 불러오기" 버튼이 로드하는 kitchen sink 문서. geul이 지원하는 14종
+// "샘플 불러오기" 버튼이 로드하는 kitchen sink 문서. geul이 지원하는 15종
 // 블록(model/src/types.ts Block 유니온)을 한 번씩 담아 편집·HTML 출력
 // 테스트를 바로 해볼 수 있게 한다(그릴링 결정 2026-09-15). id는
 // 10-syntax-highlighting-lowlight/example.tsx와 동일하게 고정 문자열을
@@ -281,7 +281,7 @@ const SAMPLE_DOCUMENT: Document = {
       type: "paragraph",
       content: [
         {
-          text: "아래 문서는 geul이 지원하는 14종 블록을 한 번씩 담았다. 자유롭게 편집하며 HTML 출력을 확인해보자.",
+          text: "아래 문서는 geul이 지원하는 15종 블록을 한 번씩 담았다. 자유롭게 편집하며 HTML 출력을 확인해보자.",
         },
       ],
     },
@@ -486,6 +486,19 @@ const SAMPLE_DOCUMENT: Document = {
       url: SAMPLE_FILE_URL,
       name: "샘플.txt",
       caption: "파일 블록 샘플",
+    },
+    {
+      id: "showcase-composite-sample-block-23",
+      type: "heading",
+      level: 2,
+      content: [{ text: "콜아웃" }],
+    },
+    {
+      id: "showcase-composite-sample-block-24",
+      type: "callout",
+      icon: "ℹ️",
+      backgroundColor: "#E8F0FE",
+      content: [{ text: "콜아웃 블록은 아이콘과 배경색으로 강조된다." }],
     },
   ],
 };
