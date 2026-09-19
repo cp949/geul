@@ -14,5 +14,13 @@ import { useCallback } from "react";
  */
 export const useFocusEditor = (element: HTMLElement | null): (() => void) =>
   useCallback(() => {
-    element?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+    // contenteditable 루트는 문서 전체를 감싸는 큰 요소라, 스크롤이 이미
+    // 아래로 내려간 상태에서 preventScroll 없이 focus()를 호출하면
+    // 브라우저가 그 요소의 상단(문서 맨 위)을 뷰포트에 맞추려 페이지를
+    // 맨 위로 스크롤한다(실측: link-toolbar의 링크 확인 버튼 클릭 시
+    // 재현). 캐럿 위치는 ProseMirror가 자신의 selection 상태로 복원하므로
+    // preventScroll은 스크롤 부작용만 막는다.
+    element
+      ?.querySelector<HTMLElement>('[contenteditable="true"]')
+      ?.focus({ preventScroll: true });
   }, [element]);
