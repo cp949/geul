@@ -68,7 +68,7 @@ describe("목록 HTML round-trip", () => {
         '<ol start="7"><li data-geul-block-id="n-1"><p>부모</p><p data-geul-block-id="p-1">자식</p>' +
         '<blockquote data-geul-block-id="q-1"><p>인용</p></blockquote><hr data-geul-block-id="d-1">' +
         '<table data-geul-block-id="t-1" data-geul-header-rows="0" data-geul-header-columns="0"><colgroup>' +
-        '<col data-geul-column-id="col-1" data-geul-width="160"></colgroup><tbody><tr data-geul-row-id="row-1">' +
+        '<col data-geul-column-id="col-1" data-geul-width="160" style="width: 160px"></colgroup><tbody><tr data-geul-row-id="row-1">' +
         '<td data-geul-cell-id="cell-1" data-geul-column-id="col-1" rowspan="1" colspan="1">셀</td></tr></tbody></table>' +
         '<pre data-geul-block-id="c-1"><code>코드\n줄</code></pre>' +
         '<ul><li data-geul-block-id="b-1"><p>중첩</p><h2 data-geul-block-id="h-1">깊이</h2></li></ul></li></ol>',

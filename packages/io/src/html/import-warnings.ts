@@ -15,6 +15,7 @@ import {
   htmlAllowedAttributes,
   htmlStrippedTagNames,
 } from "./sanitize-schema.js";
+import { tableColumnWidthStyle } from "./table-column-width-style.js";
 import { textBlockPropsStyle } from "./text-block-props-style.js";
 
 export type HtmlImportWarning =
@@ -212,6 +213,13 @@ const TEXT_BLOCK_PROPS_OWN_TAG_NAMES = new Set([
 // isOwnEchoStyle 안에서 분기한다.
 const MEDIA_PREVIEW_WIDTH_OWN_TAG_NAMES = new Set(["img", "video", "figure"]);
 
+// export-html.ts의 tableNode가 <col>에 항상 내는 width style(2026-09-19,
+// showcase 미리보기에 표 컬럼 폭이 반영되지 않는 버그 수정 — 라이브 에디터의
+// col style width와 짝을 맞춘다). previewWidth와 달리 TableColumn.width는
+// model 필수 필드라 "값이 있을 때만" 분기가 없다 — data-geul-width가 항상
+// 함께 나오므로 그 값으로 기대 style을 재구성해 비교한다.
+const TABLE_COLUMN_WIDTH_OWN_TAG_NAMES = new Set(["col"]);
+
 // node.properties에서 문자열 값만 읽는다(hast Properties는 string 외에
 // number/boolean/array도 허용하지만, HTML 파싱이 만드는 data-geul-*·style
 // 값은 항상 순수 문자열이다 — 다른 타입이면 own-export가 낸 값이 아니므로
@@ -285,6 +293,11 @@ const isOwnEchoStyle = (
       parentFigurePreviewWidthStyle !== undefined &&
       parentFigurePreviewWidthStyle === rawStyle
     );
+  }
+  if (TABLE_COLUMN_WIDTH_OWN_TAG_NAMES.has(node.tagName)) {
+    const rawWidth = propertyStringOrUndefined(node, "dataGeulWidth");
+    const width = rawWidth === undefined ? Number.NaN : Number(rawWidth);
+    return !Number.isNaN(width) && tableColumnWidthStyle(width) === rawStyle;
   }
   return false;
 };

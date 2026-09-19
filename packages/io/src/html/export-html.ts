@@ -30,6 +30,7 @@ import {
   inlineContentToNodes,
 } from "./inline-content.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
+import { tableColumnWidthStyle } from "./table-column-width-style.js";
 import { textBlockPropsStyle } from "./text-block-props-style.js";
 
 // exportHtml이 직접 구성하는 출력 트리 전용 루트다 — import·clipboard
@@ -292,6 +293,7 @@ const tableNode = (table: TableBlock): HtmlElementNode => {
           {
             dataGeulColumnId: column.id,
             dataGeulWidth: String(column.width),
+            style: tableColumnWidthStyle(column.width),
           },
           [],
         ),
