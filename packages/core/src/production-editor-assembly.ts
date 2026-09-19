@@ -48,6 +48,7 @@ import type { EditorController } from "./editor-controller-types.js";
 import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
 import { HistoryNativeUndoFallbackExtension } from "./history-native-undo-fallback-extension.js";
 import { IframeBlockExtension } from "./iframe-block-extension.js";
+import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
@@ -408,6 +409,13 @@ export const createProductionEditor = (options: {
   // 그 확장 자체가 스키마에 없어 모든 코드 블록이 plain text로 렌더된다
   // (spec §5, 경고 없음 — customBlocks 등 다른 조건부 확장과 동일 패턴).
   syntaxHighlighter?: SyntaxHighlighter;
+  // spec §3, roadmap Issue #212 RD-002 DELTA-02 — sandbox/allow/
+  // referrerPolicy 중 하나라도 있으면 IframeBlockExtension을
+  // `.configure()`로 override한다(아래 iframe 등록 지점). URL 허용 정책
+  // 4필드(providers 등)는 이 함수가 소비하지 않는다 — setIframeSrc
+  // 커맨드(block-attribute-commands.ts)가 session.getIframeEmbedConfig()로
+  // 별도 readback한다.
+  iframeEmbed?: IframeEmbedConfig;
 }): Editor => {
   // BlockIdExtension의 occupiedIds 수집(Issue #170 RD-001 DELTA-01)에도
   // 같은 타입 집합을 배선해야 해 변수로 뽑는다 — modelToTiptap 호출부만
@@ -448,6 +456,25 @@ export const createProductionEditor = (options: {
         : hasLeafBlockContent
           ? "leafBlockContent"
           : undefined;
+
+  // options.iframeEmbed(RD-002 DELTA-02)의 렌더링 3필드(sandbox/allow/
+  // referrerPolicy)만 뽑는다 — URL 정책 4필드는 이 함수가 소비하지 않는다
+  // (위 옵션 주석 참고). 단일 `options.iframeEmbed === undefined` 체크로
+  // narrowing해 아래 조건부 스프레드에서 undefined 접근을 피한다.
+  const iframeRenderOptions =
+    options.iframeEmbed === undefined
+      ? undefined
+      : {
+          ...(options.iframeEmbed.sandbox === undefined
+            ? {}
+            : { sandbox: options.iframeEmbed.sandbox }),
+          ...(options.iframeEmbed.allow === undefined
+            ? {}
+            : { allow: options.iframeEmbed.allow }),
+          ...(options.iframeEmbed.referrerPolicy === undefined
+            ? {}
+            : { referrerPolicy: options.iframeEmbed.referrerPolicy }),
+        };
 
   let loadNormalizing = false;
   const editor = new Editor({
@@ -562,11 +589,15 @@ export const createProductionEditor = (options: {
         ? [AudioBlockExtension]
         : []),
       // 5번째 media kind(CUS-001~004, roadmap Issue #212 RD-002 DELTA-01) —
-      // host override(`iframeEmbed` EditorController 옵션 → `.configure()`)는
-      // 아직 배선 전이라 addOptions() 기본값(iframe-block-extension.ts)만
-      // 적용된다(후속 DELTA가 배선한다).
+      // host override(위 iframeRenderOptions, RD-002 DELTA-02)가 있으면
+      // `.configure()`로 addOptions() 기본값(iframe-block-extension.ts)을
+      // 덮는다.
       ...(isBlockTypeEnabled("iframe", options.enabledBlockTypes)
-        ? [IframeBlockExtension]
+        ? [
+            iframeRenderOptions === undefined
+              ? IframeBlockExtension
+              : IframeBlockExtension.configure(iframeRenderOptions),
+          ]
         : []),
       // registry(RD-002-DELTA-11, CreateEditorOptions.customBlocks)에
       // 등록된 타입마다 PM atom 노드 하나씩(customBlockEditor는 customBlocks가

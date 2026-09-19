@@ -3,8 +3,10 @@
  * RD-002 DELTA-01, spec docs/specs/2026-09-19-iframe-block-design.md §3).
  * media-block-extension.test.ts와 같은 방식으로 model 문서를 직접 구성해
  * production `createEditor()`에 로드하고 `editor.view.dom` 렌더 결과를
- * 단언한다. `setIframeSrc` 명령(RD-002 DELTA-02 예정)을 거치지 않고도
- * 검증 가능하다.
+ * 단언한다. `setIframeSrc` 명령을 거치지 않고도 검증 가능하다 —
+ * `CreateEditorOptions.iframeEmbed`(host override, RD-002 DELTA-02) 배선은
+ * 이 파일 마지막 describe가 다루고, `setIframeSrc`의 URL 허용 판정 자체는
+ * editor-controller-media-commands.test.ts가 소유한다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -107,5 +109,45 @@ describe("iframe 렌더링 — 채워진 상태(src 있음)", () => {
       '[data-geul-block-id="iframe-1"] iframe',
     );
     expect(iframe?.style.aspectRatio).toBe("16/9");
+  });
+});
+
+describe("iframe 렌더링 — host override(RD-002 DELTA-02, CreateEditorOptions.iframeEmbed)", () => {
+  const mountedDomWithIframeEmbed = (
+    iframeEmbed: Parameters<typeof createEditor>[0]["iframeEmbed"],
+  ) => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        mediaBlock("iframe", "iframe-1", {
+          url: "https://www.youtube.com/embed/x",
+        }),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+      ...(iframeEmbed === undefined ? {} : { iframeEmbed }),
+    });
+    return mountTiptapEditor(editor).tiptap.view.dom;
+  };
+
+  it("iframeEmbed.sandbox/allow/referrerPolicy를 주입하면 렌더 DOM이 기본값 대신 그 값을 쓴다", () => {
+    const dom = mountedDomWithIframeEmbed({
+      sandbox: "allow-scripts",
+      allow: "fullscreen",
+      referrerPolicy: "no-referrer",
+    });
+    const iframe = dom.querySelector('[data-geul-block-id="iframe-1"] iframe');
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(iframe?.getAttribute("allow")).toBe("fullscreen");
+    expect(iframe?.getAttribute("referrerpolicy")).toBe("no-referrer");
+  });
+
+  it("iframeEmbed에 렌더링 필드를 하나도 주지 않으면(URL 정책만) 기존 DEFAULT_IFRAME_* 상수를 그대로 쓴다", () => {
+    const dom = mountedDomWithIframeEmbed({ allowCustomUrl: true });
+    const iframe = dom.querySelector('[data-geul-block-id="iframe-1"] iframe');
+    expect(iframe?.getAttribute("sandbox")).toBe(DEFAULT_IFRAME_SANDBOX);
+    expect(iframe?.getAttribute("allow")).toBe(DEFAULT_IFRAME_ALLOW);
+    expect(iframe?.getAttribute("referrerpolicy")).toBe(
+      DEFAULT_IFRAME_REFERRER_POLICY,
+    );
   });
 });

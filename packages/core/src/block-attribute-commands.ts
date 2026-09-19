@@ -4,6 +4,7 @@ import {
   isNestableBlockType,
   isSupportedMediaUrl,
   isValidMediaPreviewWidth,
+  resolveIframeEmbedDecision,
   type Result,
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
@@ -20,12 +21,14 @@ import {
 } from "./production-editor-session.js";
 
 // setMediaTextAlignment/getSelectionMediaBlock이 공유하는 kind 가드 —
-// media 4종 중 image/video만 정렬을 지원한다(Issue #154, MED-009).
-// getSelectionMediaBlock(editor-controller.ts)이 textAlignment 필드
-// 유효성 판정에도 재사용하므로 factory 밖 module-level export로 둔다.
+// media 5종 중 image/video/iframe만 정렬을 지원한다(Issue #154, MED-009;
+// iframe은 roadmap Issue #212 RD-002 DELTA-02, spec §3 previewAttributes
+// 재사용). getSelectionMediaBlock(editor-controller.ts)이 textAlignment
+// 필드 유효성 판정에도 재사용하므로 factory 밖 module-level export로 둔다.
 export const isTextAlignableMediaBlockKind = (
   name: string,
-): name is "image" | "video" => name === "image" || name === "video";
+): name is "image" | "video" | "iframe" =>
+  name === "image" || name === "video" || name === "iframe";
 
 // 기존 블록·미디어 블록의 attrs를 blockId로 찾아 바꾸는 명령 묶음
 // (setBlockTextColor 등 + setMediaBlockUrl 등 + 업로드 래퍼).
@@ -151,8 +154,14 @@ export const createBlockAttributeCommands = (
     return result;
   };
 
-  const isResizableMediaBlockKind = (name: string): name is "image" | "video" =>
-    name === "image" || name === "video";
+  // media 5종 중 image/video/iframe만 리사이즈를 지원한다(spec §3 —
+  // iframe은 explicit width 없이는 브라우저 기본값(300x150)으로
+  // 찌그러져 image/video와 동일하게 setMediaPreviewWidth 대상이다,
+  // roadmap Issue #212 RD-002 DELTA-02).
+  const isResizableMediaBlockKind = (
+    name: string,
+  ): name is "image" | "video" | "iframe" =>
+    name === "image" || name === "video" || name === "iframe";
 
   // setMediaPreviewWidth 전용 본체. runSetMediaBlockAttrCommand를 재사용하지
   // 않는다 — 값 타입이 string이 아니라 number이고, kind 가드도 4종 전체가
@@ -348,6 +357,50 @@ export const createBlockAttributeCommands = (
     });
   };
 
+  // setIframeSrc 전용 본체(CUS-001~004, roadmap Issue #212 RD-002 DELTA-02,
+  // spec §3). runSetMediaPreviewWidthCommand와 같은 "찾기→가드→검증→
+  // setNodeMarkup 1회" 골격이지만 검증이 model isValidMediaPreviewWidth가
+  // 아니라 model resolveIframeEmbedDecision(URL 허용 정책, host가 주입한
+  // session.getIframeEmbedConfig())이다. runSetMediaBlockAttrCommand(file/
+  // image/video/audio 전용)를 재사용하지 않는다 — 대상 kind가 "iframe"
+  // 단일 타입이고(4종 전체가 아님), 로컬 프리뷰 정리 감지도 필요 없다
+  // (iframe은 업로드 플로우가 없어 localPreviewUrl이 항상 null).
+  const runSetIframeSrcCommand = (
+    blockId: string,
+    url: string,
+  ): Result<void, EditorError> => {
+    const command = "setIframeSrc";
+    if (session.isDestroyed) return commandNotApplicable(command);
+    const { doc } = session.editor.state;
+    const position = findBlockPosition(doc, blockId);
+    const node = position === null ? null : doc.nodeAt(position);
+    if (position === null || node === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    if (node.type.name !== "iframe") {
+      return commandNotApplicable(command);
+    }
+    const decision = resolveIframeEmbedDecision(
+      url,
+      session.getIframeEmbedConfig(),
+    );
+    if (!decision.allowed) {
+      return {
+        ok: false,
+        error: { code: "IFRAME_URL_NOT_ALLOWED", reason: decision.reason },
+      };
+    }
+    return session.runDocumentCommand(command, "local", () => {
+      const transaction = session.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        { ...node.attrs, url },
+      );
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
   const setBlockTextColor = (
     blockId: string,
     color: string | null,
@@ -465,6 +518,10 @@ export const createBlockAttributeCommands = (
     alignment: "left" | "center" | "right" | null,
   ): Result<void, EditorError> =>
     runSetMediaTextAlignmentCommand(blockId, alignment);
+  const setIframeSrc = (
+    blockId: string,
+    url: string,
+  ): Result<void, EditorError> => runSetIframeSrcCommand(blockId, url);
   const setCodeBlockWrap = (
     blockId: string,
     wrap: boolean,
@@ -507,6 +564,7 @@ export const createBlockAttributeCommands = (
     setMediaPreviewWidth,
     setMediaShowPreview,
     setMediaTextAlignment,
+    setIframeSrc,
     setCodeBlockWrap,
     setCodeBlockCaption,
     uploadMediaFile,

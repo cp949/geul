@@ -24,6 +24,18 @@ export type EditorError =
   | { code: "MEDIA_RESIZE_NOT_SUPPORTED" }
   | { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" }
   | { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" }
+  // setIframeSrc(CUS-001~004, RD-002 DELTA-02) 전용 — model
+  // resolveIframeEmbedDecision(iframe-embed-policy.ts)의 거절 사유를 그대로
+  // 옮긴다. reason 리터럴 3종은 model IframeEmbedDecision["reason"]과 값으로
+  // 동일하다(errors.ts는 이 파일 전체가 어떤 것도 import하지 않는 자족
+  // 관례라 model import 대신 리터럴을 복제한다).
+  | {
+      code: "IFRAME_URL_NOT_ALLOWED";
+      reason:
+        | "PROTOCOL_NOT_ALLOWED"
+        | "PRIVATE_NETWORK_BLOCKED"
+        | "NOT_WHITELISTED_AND_CUSTOM_DISABLED";
+    }
   // top-level CustomBlock(model, RD-002-DELTA-01)은 저장 계약상 유효하지만
   // PM atom 노드가 등록돼 있지 않으면(registry는 RD-002-DELTA-11,
   // CreateEditorOptions.customBlocks) 이 에디터가 로드할 수 없다 — 조용히

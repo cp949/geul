@@ -12,6 +12,7 @@ import type {
   CustomStyleDefinition,
 } from "./custom-extension-definitions.js";
 import type { Dictionary } from "./dictionary.js";
+import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import type {
   BlockCommands,
   BlockMutation,
@@ -189,6 +190,13 @@ export type CreateEditorOptions = {
   // PM 스키마는 여전히 에디터 생성 시점에 정적으로 결정된다 — 마운트
   // 이후 동적 스키마 변경은 시도하지 않는다(spec §4.4 명시).
   customBlocks?: Record<string, CustomBlockDefinition>;
+  // CUS-001~004, roadmap Issue #212 RD-002 DELTA-02, spec §3 — host의 iframe
+  // 설정 전체(URL 허용 정책 4필드 + 렌더링 sandbox/allow/referrerPolicy
+  // 3필드, iframe-block-extension.ts의 IframeEmbedConfig 주석 참고). 미지정
+  // 시 URL 정책은 model 기본값(빈 화이트리스트·custom URL 비활성)이,
+  // 렌더링 옵션은 IframeBlockExtension.addOptions() 기본값이 그대로
+  // 적용된다.
+  iframeEmbed?: IframeEmbedConfig;
   // spec §4.4(EXT-002), RD-002-DELTA-18 — 등록된 타입마다 PM inline atom
   // 노드를 조건부로 추가한다(customBlocks와 동일 시점·동일 정적 스키마
   // 제약). 등록되지 않은 커스텀 inline 타입은 여전히

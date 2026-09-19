@@ -322,6 +322,15 @@ export interface MediaCommands {
       blockId: string,
       alignment: "left" | "center" | "right" | null,
     ): Result<void, EditorError>;
+    // iframe 전용(CUS-001~004, roadmap Issue #212 RD-002 DELTA-02, spec §3).
+    // iframe이 아닌 블록 대상은 COMMAND_NOT_APPLICABLE(§8, 다른 kind
+    // 전용 커맨드는 전용 NOT_SUPPORTED 코드를 쓰지만 이 커맨드는 "대상이
+    // iframe 자체가 아니다"는 kind 세부 정책이 아니라 명령 부적합이라
+    // runSetCodeBlockWrapCommand와 같은 근거로 commandNotApplicable을
+    // 쓴다). URL 검증은 model resolveIframeEmbedDecision(host가 주입한
+    // CreateEditorOptions.iframeEmbed)이 전담하고, 거절 시
+    // IFRAME_URL_NOT_ALLOWED(reason 포함)를 반환한다.
+    setIframeSrc(blockId: string, url: string): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
     // 사전 조건 실패(BLOCK_NOT_FOUND·미등록·이미 진행 중 등)만 ok:false로

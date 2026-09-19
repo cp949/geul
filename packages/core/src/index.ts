@@ -89,6 +89,7 @@ export type {
   TableCommands,
 } from "./editor-controller-facets.js";
 export type { EditorError } from "./errors.js";
+export type { IframeEmbedConfig } from "./iframe-embed-config.js";
 export type { MediaBlockKind } from "./media-block-kind.js";
 export type {
   MediaUploadState,

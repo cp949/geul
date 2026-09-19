@@ -24,6 +24,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
+import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { collectLocalPreviewBlocks } from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
@@ -257,6 +258,13 @@ export class ProductionEditorSession {
       // spec §3(BLK-017), RD-001-DELTA-01 — attributeOverrides/dictionary와
       // 동일 패턴으로 createTiptapEditor가 매 재구성마다 그대로 전달한다.
       syntaxHighlighter?: SyntaxHighlighter;
+      // spec §3, roadmap Issue #212 RD-002 DELTA-02 — dictionary와 동일
+      // "construction-time 옵션, 세션 생애주기 동안 불변" 패턴. host의 URL
+      // 정책(model IframeEmbedConfig)은 setIframeSrc가
+      // getIframeEmbedConfig()로 readback하고, 렌더링 옵션(sandbox/allow/
+      // referrerPolicy)은 dictionary처럼 createTiptapEditor가 매 재구성마다
+      // 그대로 전달한다.
+      iframeEmbed?: IframeEmbedConfig;
     },
     // createEditor(editor-controller.ts)가 세션 생성 전에 미리 만들어 둔
     // 지연 바인딩 참조다 — 이 세션 생성이 끝나기 전(생성자 안에서
@@ -402,6 +410,18 @@ export class ProductionEditorSession {
   // 불변이라(재설정 API 없음) 매 호출마다 다시 읽어도 항상 같은 값이다.
   getDictionary(): Dictionary {
     return this.options.dictionary ?? DEFAULT_DICTIONARY;
+  }
+
+  // spec §3, roadmap Issue #212 RD-002 DELTA-02 — construction-time 옵션
+  // readback, getDictionary()와 동일 자리·근거. setIframeSrc
+  // (block-attribute-commands.ts)가 model resolveIframeEmbedDecision 호출
+  // 직전에 읽는다. 미지정이면 빈 객체를 준다 — model 쪽 각 필드 기본값
+  // (providers 빈 배열, allowCustomUrl/allowPrivateNetwork false,
+  // allowedProtocols ["https:"])이 그대로 적용돼 화이트리스트 없는 https도
+  // NOT_WHITELISTED_AND_CUSTOM_DISABLED로 거절된다(host가 아무것도
+  // 허용하지 않은 상태가 안전한 기본값).
+  getIframeEmbedConfig(): IframeEmbedConfig {
+    return this.options.iframeEmbed ?? {};
   }
 
   // spec §4.4(EXT-004), RD-001-DELTA-01(Issue #189) — construction-time
@@ -609,6 +629,13 @@ export class ProductionEditorSession {
       ...(this.options.syntaxHighlighter === undefined
         ? {}
         : { syntaxHighlighter: this.options.syntaxHighlighter }),
+      // spec §3, roadmap Issue #212 RD-002 DELTA-02 — dictionary/
+      // syntaxHighlighter와 동일 근거로 매 Tiptap Editor 생성마다 다시
+      // 넘겨야 sandbox/allow/referrerPolicy override(IframeBlockExtension
+      // .configure(), production-editor-assembly.ts)가 유지된다.
+      ...(this.options.iframeEmbed === undefined
+        ? {}
+        : { iframeEmbed: this.options.iframeEmbed }),
       canApplyDocumentChange: (transaction, loadNormalizing) =>
         this.evaluateBeforeChange(transaction, loadNormalizing),
       // Issue #167 roadmap RD-001-DELTA-01 — revisionGuard의

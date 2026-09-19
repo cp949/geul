@@ -1,6 +1,7 @@
 import type { DOMOutputSpec } from "@tiptap/pm/model";
 import { mergeAttributes, Node } from "@tiptap/core";
 
+import type { IframeBlockExtensionOptions } from "./iframe-embed-config.js";
 import {
   mediaBlockCommonAttributes,
   nonEmptyString,
@@ -19,14 +20,12 @@ import {
 // sandbox/allow/referrerPolicy는 per-block 저장 필드가 아니라 extension
 // options다(spec §1 "그릴링 원안에서 코드 조사로 정정된 지점", §3) — model의
 // `IframeEmbedConfig`(iframe-embed-policy.ts)는 URL 허용 여부만 알고 이
-// 렌더링 옵션은 모른다. host override 배선(EditorController의 `iframeEmbed`
-// 옵션 → `.configure()`)은 아직이라 지금은 addOptions() 기본값만 적용된다
-// (RD-002 후속 DELTA가 배선한다).
-export type IframeBlockExtensionOptions = {
-  sandbox: string;
-  allow: string;
-  referrerPolicy: string;
-};
+// 렌더링 옵션은 모른다. `IframeBlockExtensionOptions` 타입 선언 자체는
+// iframe-embed-config.ts로 옮겼다(그 파일 상단 주석 — index.ts가 재노출하는
+// `IframeEmbedConfig`가 Tiptap import 없는 파일에 있어야 ADR-0002 공개
+// 타입 비노출 계약을 지킨다, public-types.test.ts 실측). host override
+// 배선(`iframeEmbed` `EditorController` 옵션 → `.configure()`)은
+// production-editor-assembly.ts가 담당한다(RD-002 DELTA-02).
 
 export const DEFAULT_IFRAME_SANDBOX =
   "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";

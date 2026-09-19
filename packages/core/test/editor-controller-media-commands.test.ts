@@ -480,7 +480,7 @@ describe("setMediaBlockBackgroundColor", () => {
 });
 
 describe("setMediaPreviewWidth", () => {
-  it.each(["image", "video"] as const)(
+  it.each(["image", "video", "iframe"] as const)(
     "%s: 양의 유한수를 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다",
     (kind) => {
       const { editor, tiptap, changes } = mounted(
@@ -573,7 +573,7 @@ describe("setMediaShowPreview", () => {
 });
 
 describe("setMediaTextAlignment(Issue #154, MED-009)", () => {
-  it.each(["image", "video"] as const)(
+  it.each(["image", "video", "iframe"] as const)(
     "%s: left/center/right 값을 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다",
     (kind) => {
       const { editor, tiptap, changes } = mounted(
@@ -628,7 +628,138 @@ describe("setMediaTextAlignment(Issue #154, MED-009)", () => {
   );
 });
 
-describe("알 수 없는 blockId — setter 7개 공통", () => {
+/**
+ * setIframeSrc 전용 fixture — `mounted()`와 같은 모양이되 `iframeEmbed`
+ * (host URL 정책 + sandbox/allow/referrerPolicy)를 추가로 배선한다
+ * (mountedWithLocalPreviewCleanup과 동일 "로컬 override" 전례).
+ */
+const mountedWithIframeEmbed = (
+  initialDocument: Document,
+  iframeEmbed?: Parameters<typeof createEditor>[0]["iframeEmbed"],
+) => {
+  const changes: {
+    revision: number;
+    changedBlockIds: readonly string[];
+    reason: string;
+  }[] = [];
+  const editor = createEditor({
+    initialDocument,
+    createId: sequentialIds("id"),
+    onChange: (event) => changes.push(event),
+    ...(iframeEmbed === undefined ? {} : { iframeEmbed }),
+  });
+  return { editor, changes, ...mountTiptapEditor(editor) };
+};
+
+const YOUTUBE_WHITELIST = [
+  {
+    name: "YouTube",
+    match: { type: "wildcard" as const, pattern: "*.youtube.com" },
+  },
+];
+
+describe("setIframeSrc(CUS-001~004, RD-002 DELTA-02)", () => {
+  it("화이트리스트에 매치하는 URL은 단일 트랜잭션으로 세팅하고 undo 1회로 복원한다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+      { providers: YOUTUBE_WHITELIST },
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setIframeSrc("m-1", "https://www.youtube.com/embed/x"),
+    ).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { url: "https://www.youtube.com/embed/x" }),
+      tailParagraphBlock,
+    ]);
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+    ]);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("화이트리스트 밖 + custom URL 비활성이면 IFRAME_URL_NOT_ALLOWED(NOT_WHITELISTED_AND_CUSTOM_DISABLED)이고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      documentOf(mediaBlock("iframe", "m-1")),
+      { providers: YOUTUBE_WHITELIST },
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setIframeSrc("m-1", "https://vimeo.com/embed/x"),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "IFRAME_URL_NOT_ALLOWED",
+        reason: "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+      },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  it("화이트리스트 밖이어도 custom URL opt-in이면 허용한다", () => {
+    const { editor } = mountedWithIframeEmbed(
+      documentOf(mediaBlock("iframe", "m-1"), tailParagraphBlock),
+      { providers: YOUTUBE_WHITELIST, allowCustomUrl: true },
+    );
+    expect(
+      editor.commands.setIframeSrc("m-1", "https://vimeo.com/embed/x"),
+    ).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { url: "https://vimeo.com/embed/x" }),
+      tailParagraphBlock,
+    ]);
+  });
+
+  it("custom URL opt-in 상태에서 private network host는 IFRAME_URL_NOT_ALLOWED(PRIVATE_NETWORK_BLOCKED)이고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      documentOf(mediaBlock("iframe", "m-1")),
+      { allowCustomUrl: true },
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setIframeSrc("m-1", "https://localhost/admin"),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "IFRAME_URL_NOT_ALLOWED",
+        reason: "PRIVATE_NETWORK_BLOCKED",
+      },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  it("iframeEmbed 미지정이면 기본 정책(빈 화이트리스트·custom 비활성)이 적용돼 https도 NOT_WHITELISTED_AND_CUSTOM_DISABLED로 거절한다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(mediaBlock("iframe", "m-1")),
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setIframeSrc("m-1", "https://example.com/embed"),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "IFRAME_URL_NOT_ALLOWED",
+        reason: "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+      },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  it("iframe이 아닌 블록 대상은 COMMAND_NOT_APPLICABLE이고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap } = mounted(twoBlocks);
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setIframeSrc("block-1", "https://example.com"),
+    ).toEqual(notApplicable("setIframeSrc"));
+    expect(editorState(editor, tiptap)).toEqual(before);
+  });
+});
+
+describe("알 수 없는 blockId — setter 8개 공통", () => {
   const missingBlockCases = [
     {
       command: "setMediaBlockUrl",
@@ -664,6 +795,11 @@ describe("알 수 없는 blockId — setter 7개 공통", () => {
       command: "setMediaTextAlignment",
       call: (editor: ReturnType<typeof mounted>["editor"]) =>
         editor.commands.setMediaTextAlignment("missing", "left"),
+    },
+    {
+      command: "setIframeSrc",
+      call: (editor: ReturnType<typeof mounted>["editor"]) =>
+        editor.commands.setIframeSrc("missing", "https://example.com"),
     },
   ] as const;
 
