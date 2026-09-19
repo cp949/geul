@@ -265,6 +265,8 @@ BlockNote v0.54.0의 MPL-2.0 제품 기능
 - resize, reload, error recovery와 저장·복원이 검증된다.
 - iframe lifecycle이 block 이동·삭제·undo에서 자원을 남기지 않는다.
 
+**이월 승인**(2026-09-20, 사용자 지시, RD-004 DELTA-09 재대조): `CUS-001`(범용 iframe 블록)·`CUS-003`(크기 조절·로딩 실패 UI)·`CUS-004`(JSON·HTML 직렬화)는 `docs/specs/2026-09-19-iframe-block-design.md`([Issue #212](https://github.com/cp949/geul/issues/212), roadmap-workflow RD-001~004)로 완료해 `VERIFIED`다. `CUS-002`(allow-origin과 sandbox 정책)는 URL 화이트리스트·protocol·private-network 정책과 고정 sandbox/allow/referrerPolicy까지만 구현했고, 이 절의 "CSP, 메시지 통신과 브라우저 격리 테스트"는 범위에 없었다(spec §8 "범위 밖"에도 명시적 이월 기록이 없던 간극, Issue #212 자체의 "완료 기준"에도 이 항목이 없었다) — postMessage 통신 설계 여부와 CSP 책임 소재 확인, 격리 e2e는 [Issue #214](https://github.com/cp949/geul/issues/214)로 이월한다. `CUS-002`는 이월 조건이 기록된 채 `PARTIAL`로 R8 완료 판정에 참여한다.
+
 ## 4. 릴리스 판정
 
 각 단계는 다음 조건을 모두 만족해야 완료된다.

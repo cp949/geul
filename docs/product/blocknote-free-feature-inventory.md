@@ -222,10 +222,10 @@ R0 기능 ID는 모델·입출력·코어·React·브라우저 및 배포 검증
 
 | ID        | 기능                               | 목표     | 단계 | 상태          | 근거           |
 | --------- | ---------------------------------- | -------- | ---- | ------------- | -------------- |
-| `CUS-001` | 안전한 범용 iframe 블록            | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
-| `CUS-002` | iframe allow-origin과 sandbox 정책 | `CUSTOM` | R8   | `NOT_STARTED` | 제품 보안 요구 |
-| `CUS-003` | iframe 크기 조절과 로딩 실패 UI    | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
-| `CUS-004` | iframe JSON·HTML 직렬화            | `CUSTOM` | R8   | `NOT_STARTED` | 제품 목표      |
+| `CUS-001` | 안전한 범용 iframe 블록            | `CUSTOM` | R8   | `VERIFIED` | [Issue #212](https://github.com/cp949/geul/issues/212)(`docs/specs/2026-09-19-iframe-block-design.md`) — roadmap-workflow RD-001(model `IframeBlock`)~RD-004(react 삽입·리사이즈·toolbar), Chromium e2e로 삽입·resize·정렬·Interact·lifecycle 검증 |
+| `CUS-002` | iframe allow-origin과 sandbox 정책 | `CUSTOM` | R8   | `PARTIAL`  | URL 화이트리스트·protocol·private-network 정책(model `resolveIframeEmbedDecision`)과 고정 `sandbox`/`allow`/`referrerPolicy`(core, host override 가능)는 [Issue #212](https://github.com/cp949/geul/issues/212)로 완료. CSP 책임 소재 확인·postMessage 통신·브라우저 격리 e2e는 [Issue #214](https://github.com/cp949/geul/issues/214)로 이월(2026-09-20 사용자 지시, `docs/product/roadmap.md` R8 "이월 승인") |
+| `CUS-003` | iframe 크기 조절과 로딩 실패 UI    | `CUSTOM` | R8   | `VERIFIED` | [Issue #212](https://github.com/cp949/geul/issues/212) — 좌우 리사이즈(64px~content 폭 clamp)와 5초 로딩 타임아웃 휴리스틱(`IframeLoadStatus`)을 Chromium e2e로 검증 |
+| `CUS-004` | iframe JSON·HTML 직렬화            | `CUSTOM` | R8   | `VERIFIED` | [Issue #212](https://github.com/cp949/geul/issues/212) — model JSON round-trip, io HTML export(실제 `<iframe>` 태그)/import(자체 export만 인식, 외부 raw iframe strip 유지), GFM lossy export 전부 검증 |
 
 ## 4. 명시적 제외 기능
 
