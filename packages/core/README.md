@@ -37,3 +37,13 @@ controller.destroy(); // 세션 영구 종료
 
 - DOM에 의존한다(`tsconfig.json`의 `lib`에 `DOM` 포함) — 브라우저 또는 jsdom 같은 DOM 환경이 필요하다. 서버에서 문서만 다루려면 DOM-free인 [`@cp949/geul-model`](../model)/[`@cp949/geul-io`](../io)를 쓴다.
 - Tiptap·ProseMirror의 raw 타입(`Editor`, PM 노드 등)은 공개 표면에 없다 — 패키지 경계 밖으로 노출하지 않는다.
+
+## iframe 블록과 CSP
+
+geul은 iframe 블록을 렌더링할 때 `sandbox`/`allow`/`referrerPolicy`를 `<iframe>` 태그 속성으로 적용한다(`IframeBlockExtension` 옵션, host가 `iframeEmbed`로 오버라이드 가능). 이 속성은 그 `<iframe>` 엘리먼트 하나에만 적용되는 브라우저 정책이고, host 페이지 전체에 적용되는 `Content-Security-Policy`(HTTP 응답 헤더 또는 `<meta>` 태그)와는 별개다 — geul은 host 페이지에 삽입되는 클라이언트 라이브러리라 host의 응답 헤더를 제어할 수 없고, host 문서에 CSP `<meta>` 태그를 주입하지도 않는다(host의 기존 정책과 충돌할 위험이 있어 채택하지 않았다).
+
+iframe 임베드를 안전하게 쓰려는 host는 자체적으로 `iframeEmbed.providers` 화이트리스트와 정합하는 `frame-src` directive를 CSP에 설정하길 권장한다. 예:
+
+```
+Content-Security-Policy: frame-src https://example.com https://www.youtube.com
+```
