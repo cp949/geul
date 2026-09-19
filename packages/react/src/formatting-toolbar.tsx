@@ -404,6 +404,13 @@ export const FormattingToolbar = ({
   // (Issue #173 QA).
   const isCodeBlockSelection =
     toolbarState.blockSelection?.blockType.type === "codeBlock";
+  // callout은 아이콘·배경색이 블록 전체에 걸린 컨테이너라, 본문 텍스트
+  // 일부만 선택한 채로 이 select로 다른 타입으로 바꾸면 그 맥락을 잃기
+  // 쉽다(QA 피드백, 스크린샷). Turn into는 block-side-menu(블록 핸들)로도
+  // 여전히 가능하므로 BLOCK_TYPE_OPTIONS·slash 메뉴는 그대로 두고 이 select
+  // 렌더만 막는다.
+  const isCalloutSelection =
+    toolbarState.blockSelection?.blockType.type === "callout";
 
   if (Component !== undefined) {
     const overridden = (
@@ -431,7 +438,7 @@ export const FormattingToolbar = ({
         role="toolbar"
         style={style}
       >
-        {toolbarState.blockSelection !== null && (
+        {toolbarState.blockSelection !== null && !isCalloutSelection && (
           <select
             aria-label="Block type"
             className="geul-formatting-toolbar__select"

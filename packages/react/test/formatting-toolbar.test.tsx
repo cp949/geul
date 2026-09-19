@@ -260,6 +260,33 @@ describe("FormattingToolbar 서식 툴바", () => {
     ).toBe("paragraph");
   });
 
+  it("callout 블록 선택에서는 블록 종류 select를 감춘다", () => {
+    const controller = fakeController(
+      vi.fn(() => []),
+      vi.fn(() => ({
+        blockId: "block-1",
+        blockType: { type: "callout" },
+      })),
+    );
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(screen.queryByRole("combobox", { name: "Block type" })).toBeNull();
+    // select만 감추고 나머지(mark 버튼)는 그대로 남는다.
+    expect(screen.getByRole("button", { name: "Bold" })).not.toBeNull();
+  });
+
   it("블록 종류 select에 제목 레벨을 표시한다", () => {
     const controller = fakeController(
       vi.fn(() => []),
