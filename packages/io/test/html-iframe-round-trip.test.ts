@@ -21,6 +21,13 @@
  * document 동등성 + "iframe 태그가 제거됐다" 신호 하나만 확인한다(완료
  * 조건 1 테스트와 동일 판단으로 toContainEqual을 쓴다). 호스트 설정이
  * 없거나 src가 정책에 막히면 실제 태그 자체가 없어 경고도 전혀 없다.
+ *
+ * Issue #215 RD-001 — import도 이제 host 설정(iframeEmbed)을 재검증한다.
+ * export가 host 설정을 몰라 wrapper에 data-geul-src만 써 둬도, re-import
+ * 시점에 그 host 설정으로 정책을 통과하지 못하면 url은 빈 상태로 강등된다
+ * (own-export 여부와 무관, 신뢰 예외 없음). "호스트 설정 없음" 그룹은 이제
+ * url이 살아남지 않음을 확인한다 — roundTrip 헬퍼가 export에 쓴 것과 같은
+ * iframeEmbed config를 import에도 그대로 전달한다.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -43,7 +50,17 @@ const roundTrip = (
   if (!exported.ok) {
     throw new Error(`export 실패: ${exported.error.message}`);
   }
-  const imported = importHtml(exported.value);
+  // Issue #215 RD-001 — 진짜 round-trip이라면 host 설정이 export·import
+  // 양쪽에 같아야 한다. import는 export 전용 필드(sandbox/allow/
+  // referrerPolicy)를 모르지만 구조적으로 IframeEmbedConfig의 상위집합이라
+  // 그대로 넘겨도 잉여 필드는 무시된다. exactOptionalPropertyTypes라
+  // options?.iframeEmbed가 undefined일 때는 키 자체를 생략한다.
+  const imported = importHtml(
+    exported.value,
+    options?.iframeEmbed === undefined
+      ? undefined
+      : { iframeEmbed: options.iframeEmbed },
+  );
   if (!imported.ok) {
     throw new Error(`import 실패: ${imported.error.message}`);
   }
@@ -66,7 +83,7 @@ const YOUTUBE_CONFIG: IframeEmbedExportConfig = {
 };
 
 describe("iframe 블록 HTML round-trip(export→import 연결, RD-003 DELTA-03)", () => {
-  describe("호스트 설정 없음 — 안전 wrapper만 남고 실제 태그가 없어 경고도 없다", () => {
+  describe("호스트 설정 없음/정책 미허용 — url은 빈 상태로 강등되고 나머지 prop만 round-trip한다(Issue #215)", () => {
     it("빈 블록이 그대로 round-trip한다", () => {
       const original = documentOf({ id: "ifr-empty", type: "iframe" });
       const result = roundTrip(original);
@@ -74,7 +91,7 @@ describe("iframe 블록 HTML round-trip(export→import 연결, RD-003 DELTA-03)
       expect(result.warnings).toEqual([]);
     });
 
-    it("caption 없이 전체 공통 prop(url/name/backgroundColor/previewWidth/textAlignment/aspectRatio)이 round-trip한다", () => {
+    it("url을 제외한 공통 prop(name/backgroundColor/previewWidth/textAlignment/aspectRatio)만 round-trip한다", () => {
       const original = documentOf({
         id: "ifr-full",
         type: "iframe",
@@ -86,11 +103,21 @@ describe("iframe 블록 HTML round-trip(export→import 연결, RD-003 DELTA-03)
         aspectRatio: "16:9",
       });
       const result = roundTrip(original);
-      expect(result.document).toEqual(original);
+      expect(result.document).toEqual(
+        documentOf({
+          id: "ifr-full",
+          type: "iframe",
+          name: "영상",
+          backgroundColor: "#FF0000",
+          previewWidth: 480,
+          textAlignment: "center",
+          aspectRatio: "16:9",
+        }),
+      );
       expect(result.warnings).toEqual([]);
     });
 
-    it("caption 있는 전체 prop 조합(figure)이 round-trip한다", () => {
+    it("url을 제외한 caption 포함 prop 조합(figure)만 round-trip한다", () => {
       const original = documentOf({
         id: "ifr-caption",
         type: "iframe",
@@ -103,18 +130,31 @@ describe("iframe 블록 HTML round-trip(export→import 연결, RD-003 DELTA-03)
         aspectRatio: "16:9",
       });
       const result = roundTrip(original);
-      expect(result.document).toEqual(original);
+      expect(result.document).toEqual(
+        documentOf({
+          id: "ifr-caption",
+          type: "iframe",
+          name: "영상",
+          caption: "설명",
+          backgroundColor: "#00FF00",
+          previewWidth: 800,
+          textAlignment: "right",
+          aspectRatio: "16:9",
+        }),
+      );
       expect(result.warnings).toEqual([]);
     });
 
-    it("whitelist 밖 src(정책 미허용)도 실제 태그 없이 round-trip한다", () => {
+    it("whitelist 밖 src(정책 미허용)는 재import 시 url이 사라진다", () => {
       const original = documentOf({
         id: "ifr-rejected",
         type: "iframe",
         url: "https://evil.example.com/embed",
       });
       const result = roundTrip(original, { iframeEmbed: YOUTUBE_CONFIG });
-      expect(result.document).toEqual(original);
+      expect(result.document).toEqual(
+        documentOf({ id: "ifr-rejected", type: "iframe" }),
+      );
       expect(result.warnings).toEqual([]);
     });
   });

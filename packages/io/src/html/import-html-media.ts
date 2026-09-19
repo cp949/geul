@@ -6,6 +6,8 @@
 import {
   type Document,
   type IdFactory,
+  type IframeEmbedConfig,
+  resolveIframeEmbedDecision,
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
@@ -134,6 +136,7 @@ export const mediaBlockFromNode = (
   node: HtmlElementNode,
   createId: IdFactory,
   warnings: HtmlImportWarning[],
+  iframeEmbedConfig: IframeEmbedConfig,
 ): MediaBlock => {
   const isFigure = node.tagName === "figure";
   const isEmptyPlaceholder = node.tagName === "div";
@@ -191,12 +194,21 @@ export const mediaBlockFromNode = (
       ? undefined
       : sanitizeInlineText(textValue(figcaptionNode.children));
   // iframe(CUS-001~004)은 내부 <iframe> 태그가 sanitize에서 항상 제거되므로
-  // (spec §4 "resolveIframeEmbedDecision을 import 경로에 적용하지 않는다")
   // visualNode를 거치지 않고 wrapper(node) 자신의 data-geul-src를 유일한
-  // src 공급원으로 신뢰한다 — 4종처럼 시각 태그 자신의 src/href를 읽지 않는다.
+  // src 공급원으로 읽는다 — 4종처럼 시각 태그 자신의 src/href를 읽지 않는다.
+  // Issue #215 — own-export 여부와 무관하게 항상 resolveIframeEmbedDecision을
+  // 재검증한다(신뢰 예외 없음, RD-001 "결정"). 정책을 통과하지 못하면 url을
+  // 비운 빈 상태로 강등한다 — export-html.ts의 기존 정책(iframeEmbed 미지정
+  // 시 모든 src를 정책 미허용으로 판정, 경고 없이 조용히 wrapper만 유지)과
+  // 대칭이라 이쪽도 경고를 내지 않는다.
+  const rawIframeSrc =
+    mediaType === "iframe" ? propertyString(node, "dataGeulSrc") : undefined;
   const url =
     mediaType === "iframe"
-      ? propertyString(node, "dataGeulSrc")
+      ? rawIframeSrc !== undefined &&
+        resolveIframeEmbedDecision(rawIframeSrc, iframeEmbedConfig).allowed
+        ? rawIframeSrc
+        : undefined
       : visualNode === undefined
         ? undefined
         : visualNode.tagName === "a"

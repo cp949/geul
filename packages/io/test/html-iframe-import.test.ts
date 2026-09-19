@@ -6,7 +6,7 @@
  * 재구성하는지를 다룬다. export→import 연결 전체 round-trip은
  * html-iframe-round-trip.test.ts가 다룬다.
  */
-import type { Document } from "@cp949/geul-model";
+import type { Document, IframeEmbedConfig } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { importHtml } from "../src/index.js";
@@ -17,11 +17,17 @@ const documentOf = (block: Document["blocks"][number]): Document => ({
   blocks: [block],
 });
 
+// 이 파일은 wrapper 재구성 로직 자체를 다룬다 — 정책 재검증(Issue #215)은
+// html-iframe-policy.test.ts가 별도로 다루므로, 여기서는 permissive config로
+// 정책을 항상 통과시켜 관심사를 분리한다.
+const PERMISSIVE: IframeEmbedConfig = { allowCustomUrl: true };
+
 describe("iframe 블록 HTML 가져오기(RD-003 DELTA-03)", () => {
   describe("caption 없음 — div wrapper에서 복원한다", () => {
     it("data-geul-src만 있으면 url만 채운 IframeBlock을 복원한다", () => {
       const result = importHtml(
         '<div data-geul-block-id="ifr-1" data-geul-media-type="iframe" data-geul-src="https://example.com/embed"></div>',
+        { iframeEmbed: PERMISSIVE },
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -38,6 +44,7 @@ describe("iframe 블록 HTML 가져오기(RD-003 DELTA-03)", () => {
     it("name/previewWidth/textAlignment/aspectRatio 전체 조합을 복원한다", () => {
       const result = importHtml(
         '<div data-geul-block-id="ifr-2" data-geul-media-type="iframe" data-geul-name="영상" data-geul-src="https://example.com/embed" data-geul-aspect-ratio="16:9" data-geul-preview-width="480" data-geul-text-alignment="center"></div>',
+        { iframeEmbed: PERMISSIVE },
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -70,6 +77,7 @@ describe("iframe 블록 HTML 가져오기(RD-003 DELTA-03)", () => {
     it("dataGeulShowPreview가 섞여 있어도 IframeBlock에는 showPreview 필드가 생기지 않는다", () => {
       const result = importHtml(
         '<div data-geul-block-id="ifr-4" data-geul-media-type="iframe" data-geul-src="https://example.com/embed" data-geul-show-preview="false"></div>',
+        { iframeEmbed: PERMISSIVE },
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -87,6 +95,7 @@ describe("iframe 블록 HTML 가져오기(RD-003 DELTA-03)", () => {
     it("figcaption을 caption으로, 내부 <iframe> 태그 없이도 wrapper 속성만으로 복원한다", () => {
       const result = importHtml(
         '<figure data-geul-block-id="ifr-5" data-geul-media-type="iframe" data-geul-src="https://example.com/embed" data-geul-aspect-ratio="16:9"><figcaption>설명</figcaption></figure>',
+        { iframeEmbed: PERMISSIVE },
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
@@ -107,6 +116,7 @@ describe("iframe 블록 HTML 가져오기(RD-003 DELTA-03)", () => {
         '<figure data-geul-block-id="ifr-6" data-geul-media-type="iframe" data-geul-src="https://example.com/embed">' +
           '<iframe src="https://attacker.example.com" sandbox="allow-scripts"></iframe>' +
           "<figcaption>설명</figcaption></figure>",
+        { iframeEmbed: PERMISSIVE },
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;

@@ -8,6 +8,7 @@ import {
   type Block,
   type Document,
   type IdFactory,
+  type IframeEmbedConfig,
   type ListItemBlock,
   MAX_NESTING_DEPTH,
   sanitizeInlineText,
@@ -59,6 +60,7 @@ const blocksFromSegments = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
+  iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const blocks: Block[] = [];
 
@@ -130,7 +132,9 @@ const blocksFromSegments = (
       // 여기서 재귀하지 않는다(segment.node 자체가 이미 완결된 leaf다) —
       // 중복 생성 방지 가드는 block-segmenter.ts의 media 세그먼트가 안쪽을
       // 재귀하지 않는다는 사실과 대칭이다.
-      blocks.push(mediaBlockFromNode(segment.node, createId, warnings));
+      blocks.push(
+        mediaBlockFromNode(segment.node, createId, warnings, iframeEmbedConfig),
+      );
       continue;
     }
     if (segment.kind === "blockquote") {
@@ -157,6 +161,7 @@ const blocksFromSegments = (
           createId,
           depth,
           warnings,
+          iframeEmbedConfig,
         );
         if (flattened.length > 0)
           warnings.push(nestedChildrenFlattenedWarning());
@@ -171,6 +176,7 @@ const blocksFromSegments = (
         createId,
         depth + 1,
         warnings,
+        iframeEmbedConfig,
       );
       blocks.push(
         children.length > 0
@@ -196,6 +202,7 @@ const blocksFromSegments = (
           createId,
           depth,
           warnings,
+          iframeEmbedConfig,
         );
         if (flattened.length > 0)
           warnings.push(nestedChildrenFlattenedWarning());
@@ -216,6 +223,7 @@ const blocksFromSegments = (
         createId,
         depth + 1,
         warnings,
+        iframeEmbedConfig,
       );
       blocks.push(
         children.length > 0
@@ -352,6 +360,7 @@ const blocksFromListItem = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
+  iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
   const { contentNodes, childrenNodes } = splitListItemChildren(node);
@@ -377,7 +386,13 @@ const blocksFromListItem = (
         : { id, type: "bulletListItem", content, ...listItemProps };
 
   if (depth >= MAX_NESTING_DEPTH) {
-    const flattened = blocksFromNodes(childrenNodes, createId, depth, warnings);
+    const flattened = blocksFromNodes(
+      childrenNodes,
+      createId,
+      depth,
+      warnings,
+      iframeEmbedConfig,
+    );
     if (flattened.length > 0) {
       warnings.push(nestedChildrenFlattenedWarning());
     }
@@ -389,6 +404,7 @@ const blocksFromListItem = (
     createId,
     depth + 1,
     warnings,
+    iframeEmbedConfig,
   );
   return children.length > 0 ? [{ ...ownBlock, children }] : [ownBlock];
 };
@@ -408,6 +424,7 @@ const blocksFromListElement = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
+  iframeEmbedConfig: IframeEmbedConfig,
   restartDefaultOrderedList: boolean,
 ): Block[] => {
   const blocks: Block[] = [];
@@ -424,7 +441,15 @@ const blocksFromListElement = (
   const flushNonItemRun = (): void => {
     if (nonItemRun.length === 0) return;
     const previousLength = blocks.length;
-    blocks.push(...blocksFromNodes(nonItemRun, createId, depth, warnings));
+    blocks.push(
+      ...blocksFromNodes(
+        nonItemRun,
+        createId,
+        depth,
+        warnings,
+        iframeEmbedConfig,
+      ),
+    );
     if (itemIndex > 0 && blocks.length > previousLength) {
       flowInterruptedSinceItem = true;
     }
@@ -503,6 +528,7 @@ const blocksFromListElement = (
         createId,
         depth,
         warnings,
+        iframeEmbedConfig,
       ),
     );
     itemIndex += 1;
@@ -538,13 +564,22 @@ const blocksFromNodes = (
   createId: IdFactory,
   depth: number,
   warnings: HtmlImportWarning[],
+  iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const blocks: Block[] = [];
   let plainRun: HtmlNode[] = [];
 
   const flushPlainRun = (): void => {
     if (plainRun.length === 0) return;
-    blocks.push(...blocksFromSegments(plainRun, createId, depth, warnings));
+    blocks.push(
+      ...blocksFromSegments(
+        plainRun,
+        createId,
+        depth,
+        warnings,
+        iframeEmbedConfig,
+      ),
+    );
     plainRun = [];
   };
 
@@ -558,6 +593,7 @@ const blocksFromNodes = (
           createId,
           depth,
           warnings,
+          iframeEmbedConfig,
           node.tagName === "ol" && previousBlock?.type === "numberedListItem",
         ),
       );
@@ -598,6 +634,7 @@ const blocksFromNodes = (
         createId,
         depth + 1,
         warnings,
+        iframeEmbedConfig,
       );
 
       if (
@@ -690,6 +727,7 @@ const blocksFromNodes = (
               createId,
               depth,
               warnings,
+              iframeEmbedConfig,
             );
             const candidate = ownBlocks[0];
             return ownBlocks.length === 1 &&
@@ -744,6 +782,7 @@ const blocksFromNodes = (
       createId,
       depth + 1,
       warnings,
+      iframeEmbedConfig,
     );
     // codeBlock(model CodeBlock)엔 children 필드가 없다 — findChildrenWrapper
     // 가 이미 pre를 2-child(children 컨테이너 형제 있음) 분기에서 거절해
@@ -765,7 +804,14 @@ export const documentFromRoot = (
   root: HtmlRoot,
   createId: IdFactory,
   warnings: HtmlImportWarning[],
+  iframeEmbedConfig: IframeEmbedConfig,
 ): Document => {
-  const blocks = blocksFromNodes(root.children, createId, 1, warnings);
+  const blocks = blocksFromNodes(
+    root.children,
+    createId,
+    1,
+    warnings,
+    iframeEmbedConfig,
+  );
   return { formatVersion: 1, revision: 0, blocks };
 };

@@ -7,6 +7,7 @@
 import {
   type Document,
   type IdFactory,
+  type IframeEmbedConfig,
   parseDocument,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
@@ -29,7 +30,13 @@ import { asRoot, parseHtmlFragment } from "./parse-html.js";
 
 export const importHtml = (
   source: string,
-  options?: { createId?: IdFactory },
+  // iframeEmbed(Issue #215) — 생략 시 가장 보수적인 기본값(빈 config)으로
+  // 판정한다. resolveIframeEmbedDecision 자체 기본값(allowCustomUrl 미지정
+  // 시 거부, https만 허용, private network 차단)이 그대로 적용돼 host가
+  // 명시적으로 허용하지 않은 iframe src는 import되지 않는다 — 이 함수를
+  // 직접 호출하는 host 통합(예: 서버 사이드 parse/render, IO-009)도 이
+  // 파라미터로만 whitelist·private-network 정책의 보호를 받는다.
+  options?: { createId?: IdFactory; iframeEmbed?: IframeEmbedConfig },
 ): Result<
   { document: Document; warnings: HtmlImportWarning[] },
   ImportError
@@ -71,6 +78,7 @@ export const importHtml = (
       safeRoot,
       options?.createId ?? createDefaultIdFactory(safeRoot),
       warnings,
+      options?.iframeEmbed ?? {},
     );
     const parsed = parseDocument(document);
     if (!parsed.ok) {
