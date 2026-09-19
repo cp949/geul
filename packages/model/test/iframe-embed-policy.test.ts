@@ -20,9 +20,10 @@ const YOUTUBE_WHITELIST: IframeEmbedConfig["providers"] = [
 
 describe("protocol 제한", () => {
   it("기본값(https:만 허용) 상태에서 http:는 PROTOCOL_NOT_ALLOWED다", () => {
-    expect(
-      resolveIframeEmbedDecision("http://example.com/embed", {}),
-    ).toEqual({ allowed: false, reason: "PROTOCOL_NOT_ALLOWED" });
+    expect(resolveIframeEmbedDecision("http://example.com/embed", {})).toEqual({
+      allowed: false,
+      reason: "PROTOCOL_NOT_ALLOWED",
+    });
   });
 
   it("javascript:는 화이트리스트·custom 설정과 무관하게 PROTOCOL_NOT_ALLOWED다", () => {
@@ -103,9 +104,10 @@ describe("private network 차단 — custom URL opt-in 상태에서만 적용", 
     "https://[::1]/admin",
     "https://[fd00::1]/admin",
   ])("%s는 custom URL opt-in 상태에서 PRIVATE_NETWORK_BLOCKED다", (url) => {
-    expect(
-      resolveIframeEmbedDecision(url, { allowCustomUrl: true }),
-    ).toEqual({ allowed: false, reason: "PRIVATE_NETWORK_BLOCKED" });
+    expect(resolveIframeEmbedDecision(url, { allowCustomUrl: true })).toEqual({
+      allowed: false,
+      reason: "PRIVATE_NETWORK_BLOCKED",
+    });
   });
 
   it("allowPrivateNetwork opt-in이면 private 호스트도 허용한다", () => {

@@ -54,6 +54,18 @@ describe("KO_DICTIONARY", () => {
     expect(KO_DICTIONARY.menu.delete).toBe("삭제");
     expect(KO_DICTIONARY.color.names.blue).toBe("파랑");
     expect(KO_DICTIONARY.error.actionFailed).toBe("작업에 실패했습니다");
+    // CUS-001~004(roadmap Issue #212 RD-004 DELTA-09) — iframe 전용 신규
+    // 네임스페이스도 같은 스팟체크에 포함한다.
+    expect(KO_DICTIONARY.slashMenu.iframe.description).toBe(
+      "외부 페이지 임베드",
+    );
+    expect(KO_DICTIONARY.toolbar.kindNames.iframe).toBe("iframe");
+    expect(KO_DICTIONARY.handle.interactWithIframe).toBe(
+      "삽입된 콘텐츠와 상호작용",
+    );
+    expect(KO_DICTIONARY.status.iframeLoadTimeout).toBe(
+      "로드 실패 또는 이 사이트가 삽입을 차단했을 수 있습니다",
+    );
   });
 
   it("{level}/{kind} 토큰을 그대로 보존한다(치환 관용구는 소비처가 담당)", () => {

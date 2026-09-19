@@ -42,7 +42,10 @@ const DEFAULT_ALLOWED_PROTOCOLS = ["https:"];
 const SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z\d+.-]*):/;
 
 // scheme "//" 뒤, 다음 "/"·"?"·"#" 앞까지가 authority(userinfo@host:port)다.
-const extractAuthority = (url: string, schemeLength: number): string | undefined => {
+const extractAuthority = (
+  url: string,
+  schemeLength: number,
+): string | undefined => {
   const afterScheme = url.slice(schemeLength);
   if (!afterScheme.startsWith("//")) return undefined;
   const rest = afterScheme.slice(2);
@@ -61,7 +64,9 @@ const extractHostname = (authority: string): string => {
   const hostAndPort = atIndex === -1 ? authority : authority.slice(atIndex + 1);
   if (hostAndPort.startsWith("[")) {
     const closeIndex = hostAndPort.indexOf("]");
-    return closeIndex === -1 ? hostAndPort : hostAndPort.slice(0, closeIndex + 1);
+    return closeIndex === -1
+      ? hostAndPort
+      : hostAndPort.slice(0, closeIndex + 1);
   }
   const colonIndex = hostAndPort.indexOf(":");
   return colonIndex === -1 ? hostAndPort : hostAndPort.slice(0, colonIndex);
@@ -123,7 +128,8 @@ export const resolveIframeEmbedDecision = (
   // schemeMatch[0](전체 매치, "https:"처럼 콜론 포함)을 쓴다 —
   // schemeMatch[1](캡처 그룹)은 noUncheckedIndexedAccess 아래서
   // string | undefined로 잡혀 불필요한 널 체크가 필요해진다.
-  const protocol = schemeMatch === null ? undefined : schemeMatch[0].toLowerCase();
+  const protocol =
+    schemeMatch === null ? undefined : schemeMatch[0].toLowerCase();
 
   if (protocol !== undefined) {
     const allowedProtocols = (

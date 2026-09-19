@@ -87,7 +87,10 @@ describe("backgroundColor 검증 — isCanonicalCellColor 재사용", () => {
     ]);
     expect(parseDocument(input)).toMatchObject({
       ok: false,
-      error: { code: "DOCUMENT_INVALID", path: ["blocks", 0, "backgroundColor"] },
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "backgroundColor"],
+      },
     });
   });
 });
@@ -95,10 +98,15 @@ describe("backgroundColor 검증 — isCanonicalCellColor 재사용", () => {
 describe("previewWidth 검증 — image/video와 동일 정책(양의 유한수, 상한 없음)", () => {
   it("0이거나 음수면 DOCUMENT_INVALID다", () => {
     for (const previewWidth of [0, -1, -0.5]) {
-      const input = documentOf([{ id: "iframe-1", type: "iframe", previewWidth }]);
+      const input = documentOf([
+        { id: "iframe-1", type: "iframe", previewWidth },
+      ]);
       expect(parseDocument(input)).toMatchObject({
         ok: false,
-        error: { code: "DOCUMENT_INVALID", path: ["blocks", 0, "previewWidth"] },
+        error: {
+          code: "DOCUMENT_INVALID",
+          path: ["blocks", 0, "previewWidth"],
+        },
       });
     }
   });
@@ -109,7 +117,9 @@ describe("previewWidth 검증 — image/video와 동일 정책(양의 유한수,
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
     ]) {
-      const input = documentOf([{ id: "iframe-1", type: "iframe", previewWidth }]);
+      const input = documentOf([
+        { id: "iframe-1", type: "iframe", previewWidth },
+      ]);
       expect(parseDocument(input)).toMatchObject({ ok: false });
     }
   });
@@ -134,8 +144,8 @@ describe("textAlignment 검증 — isCanonicalCellAlign 재사용", () => {
   });
 });
 
-describe("aspectRatio 검증 — v1은 zod literal로 \"16:9\" 하나만 허용", () => {
-  it("\"16:9\"는 허용한다", () => {
+describe('aspectRatio 검증 — v1은 zod literal로 "16:9" 하나만 허용', () => {
+  it('"16:9"는 허용한다', () => {
     const input = documentOf([
       { id: "iframe-1", type: "iframe", aspectRatio: "16:9" },
     ]);
