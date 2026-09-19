@@ -598,6 +598,8 @@ export const SlashMenu = ({
         if (item !== undefined) {
           event.preventDefault();
           selectItem(item);
+        } else {
+          event.preventDefault();
         }
       }
     };

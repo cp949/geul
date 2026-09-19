@@ -392,6 +392,8 @@ export const MentionPicker = () => {
         if (item !== undefined) {
           event.preventDefault();
           selectItem(item);
+        } else {
+          event.preventDefault();
         }
       }
     };

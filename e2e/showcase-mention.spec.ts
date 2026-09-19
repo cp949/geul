@@ -129,6 +129,27 @@ test("Escape는 목록만 닫고 입력한 '@query' 텍스트는 보존한다", 
   await expect(editable).toBeFocused();
 });
 
+// Issue #211: 후보 0건 상태에서 Enter를 누르면 mention picker의 keydown
+// 핸들러가 event.preventDefault()를 호출하지 않아 ProseMirror 기본
+// Enter(블록 분할)로 폴스루했다. 팝업은 열린 채 유지되고 블록은 분할되지
+// 않아야 한다.
+test("후보가 없을 때 Enter를 눌러도 블록이 분할되지 않는다 (Issue #211)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openMentionExample(page);
+
+  await editable.click();
+  await page.keyboard.type("@zzzznomatch");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("option")).toHaveCount(0);
+
+  await page.keyboard.press("Enter");
+
+  await expect(menu).toBeVisible();
+  await expect(editable.locator("p")).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveText("@zzzznomatch");
+});
+
 test("mention 팝업 바깥을 클릭하면 팝업을 닫고 클릭한 컨트롤로 초점을 옮긴다(ADR-0013)", async ({
   page,
 }) => {

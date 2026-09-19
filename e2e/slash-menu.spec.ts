@@ -164,6 +164,27 @@ test("토글 목록 항목을 Slash로 만들고 마커 클릭으로 collapsed�
   await expect(marker).toHaveAttribute("data-geul-collapsed", "true");
 });
 
+// Issue #211: 후보 0건 상태에서 Enter를 누르면 SlashMenu의 keydown 핸들러가
+// event.preventDefault()를 호출하지 않아 ProseMirror 기본 Enter(블록 분할)로
+// 폴스루했다. 메뉴는 열린 채 유지되고 블록은 분할되지 않아야 한다.
+test("후보가 없을 때 Enter를 눌러도 블록이 분할되지 않는다 (Issue #211)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/zzzznomatch");
+  await expect(menu).toBeVisible();
+  await expect(page.getByRole("option")).toHaveCount(0);
+
+  await page.keyboard.press("Enter");
+
+  await expect(menu).toBeVisible();
+  await expect(editable.locator("p")).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveText("/zzzznomatch");
+});
+
 test("Escape로 메뉴를 닫으면 블록은 그대로 둔다", async ({ page }) => {
   const { editable } = await openDemo(page);
   const menu = page.getByRole("listbox", { name: "Slash menu" });

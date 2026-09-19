@@ -315,6 +315,8 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
         if (item !== undefined) {
           event.preventDefault();
           selectItem(item);
+        } else {
+          event.preventDefault();
         }
       }
     };

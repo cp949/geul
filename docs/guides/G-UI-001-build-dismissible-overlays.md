@@ -1,7 +1,7 @@
 # G-UI-001 dismissible overlay는 공용 hook과 render 후 geometry로 구현한다
 
 - 상태: `ACTIVE`
-- 적용 조건: menu·toolbar·popover의 바깥 클릭, Escape, 위치 계산 또는 focus 처리
+- 적용 조건: menu·toolbar·popover의 바깥 클릭, Escape, keydown 처리, 위치 계산 또는 focus 처리
 
 ## 구현 규칙
 
@@ -18,6 +18,7 @@
 - viewport보다 큰 overlay는 `max-height`와 `overflow-y: auto`를 사용한다.
 - 스크롤되는 overlay 안에서 alert·상태 메시지 같은 보조 요소를 나머지 항목과 겹치지 않게 항상 보이려면 `position: sticky`로 스크롤 콘텐츠 위에 얹지 않는다 — 실제 오버플로가 일어나면 스크롤되는 콘텐츠 위에 그대로 겹쳐 그려져 그 지점의 포인터 이벤트를 가로챈다(`table-handle-menu.tsx`/`table-cell-format-menu.tsx`, Issue #65 항목3). 대신 overlay를 flex column 2단으로 나눈다 — 스크롤 컨테이너(`flex: 1 1 auto; min-height: 0; overflow-y: auto`)에 항목을 담고, 보조 요소는 그 밖 형제로 둬 배타적 공간을 갖게 한다. `.geul-menu-panel`/`.geul-menu-panel--with-footer`/`.geul-menu-panel__scroll`가 이 패턴의 예다.
 - geometry를 여러 기능이 공유하면 DOM rect를 한 번 읽어 파생한다. viewport 좌표를 React key로 쓰지 않는다.
+- 트리거 popup의 keydown 핸들러가 어떤 키를 자신이 처리한다고 판단했으면, 그 처리 결과가 무효(예: 강조된 후보가 없음)여도 `event.preventDefault()`는 호출한다. 호출을 후보가 있는 분기 안에서만 하면 무효 입력이 상위(ProseMirror 등) 기본 동작으로 폴스루한다 — 예: 후보 0건 상태의 Enter가 기본 Enter(블록 분할)로 새는 결함(Issue #211). `if (item !== undefined) { ...; selectItem(item); }` 패턴에 `else { event.preventDefault(); }`를 대칭으로 둔다.
 
 ## 검증
 
