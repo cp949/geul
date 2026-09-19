@@ -45,6 +45,32 @@
   color: #5f6368;
 }
 
+/* callout(Issue #209, BLK-020) 카드형 레이아웃 — 라이브 에디터
+   (@cp949/geul-react `_callout.scss`)와 동일한 값(패딩·gap·기본 배경)을
+   미리보기에도 맞춘다. backgroundColor가 있으면 exportHtml()이 이미
+   인라인 style로 싣는다(export-html.ts) — 여기 기본 배경은 그 인라인
+   style이 없을 때만 보인다. 아이콘은 대응하는 data-geul-icon 값을
+   ::before로 그대로 표시한다(라이브 에디터와 동일 패턴). */
+.geul-preview [data-geul-callout] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  margin: 0.5em 0;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  background: #f1f3f4;
+}
+
+.geul-preview [data-geul-callout] p {
+  margin: 0;
+}
+
+.geul-preview [data-geul-callout]::before {
+  content: attr(data-geul-icon);
+  flex: 0 0 auto;
+  line-height: 1.6;
+}
+
 .geul-preview ul,
 .geul-preview ol {
   margin: 0.5em 0;

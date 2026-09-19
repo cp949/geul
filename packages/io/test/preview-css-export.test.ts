@@ -46,13 +46,15 @@ describe("preview.css export", () => {
     expect(withoutComments).not.toContain(":is(");
   });
 
-  it("소스가 승격 대상 규칙을 전부 유지한다(헤딩/문단/blockquote/목록/코드/표/hr/링크/details/미디어)", () => {
+  it("소스가 승격 대상 규칙을 전부 유지한다(헤딩/문단/blockquote/콜아웃/목록/코드/표/hr/링크/details/미디어)", () => {
     const css = readFileSync(join(packageRoot, "src/preview.css"), "utf8");
     for (const selectorFragment of [
       ".geul-preview h1,",
       ".geul-preview h6 {",
       ".geul-preview p {",
       ".geul-preview blockquote {",
+      ".geul-preview [data-geul-callout] {",
+      "[data-geul-callout]::before",
       'li[data-geul-checked="true"]::before',
       ".geul-preview pre {",
       "pre[data-geul-code-wrap]",
@@ -154,6 +156,27 @@ describe("실제 export DOM에 승격 대상 규칙이 매치한다(Issue #201)"
     );
     expect(
       select(".geul-preview blockquote", tree as SelectTree),
+    ).toBeDefined();
+  });
+
+  it("callout이 [data-geul-callout]에 실제 매치한다(Issue #209)", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "co-1",
+            type: "callout",
+            icon: "ℹ️",
+            backgroundColor: "#E8F0FE",
+            content: [{ text: "콜아웃" }],
+          },
+        ],
+      }),
+    );
+    expect(
+      select(".geul-preview [data-geul-callout]", tree as SelectTree),
     ).toBeDefined();
   });
 
