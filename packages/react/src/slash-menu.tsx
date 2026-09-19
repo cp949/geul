@@ -159,6 +159,20 @@ const AUDIO_SLASH_ITEM: SlashMenuItem = {
   description: "Insert an audio file",
   keywords: ["audio", "sound", "music"],
 };
+// iframe(CUS-001~004, spec docs/specs/2026-09-19-iframe-block-design.md §5)은
+// media 5번째 kind다. spec 144행의 별도 `{kind:"insertIframe", ...}` 태그는
+// 쓰지 않는다 — 슬래시커맨드 자체가 어느 kind든 URL을 묻지 않고 빈 블록만
+// 만드는 selectItem()의 기존 동작(RD-004 DELTA-04 readiness 재확인)이라
+// `insertMedia`에 `mediaKind:"iframe"`을 추가하는 것으로 다른 media 4종과
+// 완전히 같은 경로를 그대로 탄다.
+const IFRAME_SLASH_ITEM: SlashMenuItem = {
+  kind: "insertMedia",
+  mediaKind: "iframe",
+  id: "iframe",
+  label: "Iframe",
+  description: "Embed an external page",
+  keywords: ["iframe", "embed", "website", "page"],
+};
 
 // spec §4.4(EXT-004), RD-002-DELTA-01(Issue #189) — enabledBlockTypes로
 // deny된 타입은 SlashMenu 목록에서도 사라진다. "custom"(소비자 등록 항목,
@@ -198,6 +212,7 @@ const getSlashMenuItems = (
       IMAGE_SLASH_ITEM,
       VIDEO_SLASH_ITEM,
       AUDIO_SLASH_ITEM,
+      IFRAME_SLASH_ITEM,
       ...customItems.map((custom): SlashMenuItem => ({
         kind: "custom",
         id: custom.id,

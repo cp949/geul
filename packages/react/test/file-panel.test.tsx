@@ -53,6 +53,12 @@ type FakeControllerOptions = {
     blockId: string,
     url: string,
   ) => { ok: boolean; error?: { code: string } };
+  // reason은 setIframeSrc(IFRAME_URL_NOT_ALLOWED) 전용이라 setMediaBlockUrl과
+  // 달리 optional로 둔다(media-toolbar.test.tsx CommandResult와 동형).
+  setIframeSrc?: (
+    blockId: string,
+    url: string,
+  ) => { ok: boolean; error?: { code: string; reason?: string } };
   isUploadEnabled?: () => boolean;
   getMediaUploadState?: (blockId: string) => MediaUploadState;
   uploadMediaFile?: (
@@ -68,6 +74,7 @@ type FakeControllerOptions = {
 const fakeController = ({
   getSelectionMediaBlock = () => null,
   setMediaBlockUrl = () => ({ ok: true }),
+  setIframeSrc = () => ({ ok: true }),
   isUploadEnabled = () => false,
   getMediaUploadState = () => null,
   uploadMediaFile = () => Promise.resolve({ ok: true, value: undefined }),
@@ -97,6 +104,7 @@ const fakeController = ({
   replaceDocument: vi.fn(),
   commands: {
     setMediaBlockUrl: vi.fn(setMediaBlockUrl),
+    setIframeSrc: vi.fn(setIframeSrc),
     setMediaBlockName: vi.fn(() => ({ ok: true, value: undefined })),
     uploadMediaFile: vi.fn(uploadMediaFile),
     cancelMediaUpload: vi.fn(() => ({ ok: true, value: undefined })),
@@ -106,6 +114,14 @@ const fakeController = ({
 const emptyImageBlock: SelectionMediaBlock = {
   blockId: "media-1",
   kind: "image",
+  url: null,
+  name: null,
+  caption: null,
+};
+
+const emptyIframeBlock: SelectionMediaBlock = {
+  blockId: "media-1",
+  kind: "iframe",
   url: null,
   name: null,
   caption: null,
@@ -785,6 +801,86 @@ describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
 
     expect(screen.getByRole("alert").textContent).toBe("이전 시도 실패");
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+});
+
+describe("FilePanel iframe 전용(CUS-001~004, roadmap Issue #212 RD-004 DELTA-04)", () => {
+  it("빈 iframe 블록을 선택하면 Upload 탭 없이 Embed 입력만 보인다(isUploadEnabled가 true여도)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyIframeBlock,
+      isUploadEnabled: () => true,
+    });
+    renderPanel(controller);
+
+    expect(screen.queryByRole("tab", { name: "Upload" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Embed" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Iframe URL" })).not.toBeNull();
+  });
+
+  it("Embed URL을 저장하면 setMediaBlockUrl이 아니라 setIframeSrc를 호출한다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyIframeBlock,
+      isUploadEnabled: () => true,
+    });
+    renderPanel(controller);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Iframe URL" }), {
+      target: { value: "https://www.youtube.com/embed/y" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(controller.commands.setIframeSrc).toHaveBeenCalledWith(
+      "media-1",
+      "https://www.youtube.com/embed/y",
+    );
+    expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["PROTOCOL_NOT_ALLOWED", "This protocol isn't allowed"],
+    ["PRIVATE_NETWORK_BLOCKED", "Private network addresses aren't allowed"],
+    [
+      "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+      "This URL isn't on the allowed list",
+    ],
+  ] as const)(
+    "iframe URL이 %s로 거부되면 해당 사유 문구를 보여준다(generic unsupportedMediaUrl이 아니다)",
+    (reason, message) => {
+      const controller = fakeController({
+        getSelectionMediaBlock: () => emptyIframeBlock,
+        setIframeSrc: () => ({
+          ok: false,
+          error: { code: "IFRAME_URL_NOT_ALLOWED", reason },
+        }),
+      });
+      renderPanel(controller);
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Iframe URL" }), {
+        target: { value: "https://evil.example.com" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
+    },
+  );
+
+  it("다른 kind의 거절은 여전히 generic unsupportedMediaUrl을 보여준다(회귀 없음)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+      setMediaBlockUrl: () => ({
+        ok: false,
+        error: { code: "LINK_HREF_REJECTED" },
+      }),
+    });
+    renderPanel(controller);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: "javascript:alert(1)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(screen.getByRole("alert").textContent).toBe("Unsupported media URL");
   });
 });
 

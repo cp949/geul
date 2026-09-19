@@ -127,10 +127,11 @@ describe("SlashMenu 질의 팝업", () => {
 
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
     // 기존 option 순서 뒤에 목록 넷(toggle-list 포함), 삽입 전용
-    // Table·Divider·File·Image·Video·Audio가 이어진다(RD-003 DELTA-01,
-    // spec §3.1 file/image/video/audio 순서).
+    // Table·Divider·File·Image·Video·Audio·Iframe이 이어진다(RD-003
+    // DELTA-01, spec §3.1 file/image/video/audio 순서 + RD-004 DELTA-04
+    // iframe 5번째).
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(20);
+    expect(options).toHaveLength(21);
     expect(
       options.map(
         (option) =>
@@ -157,6 +158,7 @@ describe("SlashMenu 질의 팝업", () => {
       "Image",
       "Video",
       "Audio",
+      "Iframe",
     ]);
     expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Heading 1/ })).not.toBeNull();
@@ -447,7 +449,7 @@ describe("SlashMenu 질의 팝업", () => {
       selector: "[data-geul-toggle-list-item]",
     },
   ])(
-    "$type source의 Slash menu는 Code를 제외하고 네 목록·Table·Divider·media 4종을 유지한다",
+    "$type source의 Slash menu는 Code를 제외하고 네 목록·Table·Divider·media 5종을 유지한다",
     ({ type, selector }) => {
       const rendered = renderCaretBlocks();
       const blockId = typeIntoBlock(rendered, 0, "/");
@@ -476,7 +478,8 @@ describe("SlashMenu 질의 팝업", () => {
       expect(screen.getByRole("option", { name: /Table/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Divider/ })).not.toBeNull();
       expect(screen.getByRole("option", { name: /Image/ })).not.toBeNull();
-      expect(screen.getAllByRole("option")).toHaveLength(19);
+      expect(screen.getByRole("option", { name: /Iframe/ })).not.toBeNull();
+      expect(screen.getAllByRole("option")).toHaveLength(20);
     },
   );
 
@@ -537,6 +540,7 @@ describe("SlashMenu 질의 팝업", () => {
     { mediaKind: "image" as const, optionName: /^Image/ },
     { mediaKind: "video" as const, optionName: /^Video/ },
     { mediaKind: "audio" as const, optionName: /^Audio/ },
+    { mediaKind: "iframe" as const, optionName: /^Iframe/ },
   ])(
     "$mediaKind 항목을 클릭하면 트리거 블록을 빈 미디어 블록으로 치환하고 그 블록을 NodeSelection으로 선택한다(2026-09-12 버그 리포트 — 트리거 줄이 빈 문단으로 안 남는다)",
     ({ mediaKind, optionName }) => {
@@ -703,9 +707,9 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     typeIntoBlock(rendered, 0, "/");
 
     const options = screen.getAllByRole("option");
-    // 기본 20개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
-    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 21개, 마지막이 커스텀 아이템.
-    expect(options).toHaveLength(21);
+    // 기본 21개(popup.test.tsx의 "블록 텍스트가 슬래시 하나뿐이면..."과 동일
+    // 전제) 뒤에 커스텀 1개가 이어진다 — 총 22개, 마지막이 커스텀 아이템.
+    expect(options).toHaveLength(22);
     expect(options.at(-1)?.textContent).toContain("Custom Item");
   });
 
@@ -755,13 +759,13 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
     expect(options[0]?.textContent).toContain("Custom Item");
   });
 
-  it("지정하지 않으면(기본값) 기존 20개 기본 목록만 표시한다", () => {
+  it("지정하지 않으면(기본값) 기존 21개 기본 목록만 표시한다", () => {
     const rendered = mountBlockEditor({ children: <SlashMenu /> });
     rendered.editable.focus();
 
     typeIntoBlock(rendered, 0, "/");
 
-    expect(screen.getAllByRole("option")).toHaveLength(20);
+    expect(screen.getAllByRole("option")).toHaveLength(21);
   });
 });
 
@@ -772,7 +776,7 @@ describe("SlashMenu 커스텀 아이템(슬라이스4 RD-002 DELTA-01)", () => {
  * 조회하는지의 회귀 테스트다.
  */
 describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
-  it("media 타입(image)을 deny하면 Image 옵션이 사라지고 다른 media 3종은 남는다", () => {
+  it("media 타입(image)을 deny하면 Image 옵션이 사라지고 다른 media 4종은 남는다", () => {
     const rendered = mountBlockEditor({
       children: <SlashMenu />,
       enabledBlockTypes: { mode: "deny", types: ["image"] },
@@ -785,7 +789,8 @@ describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
     expect(screen.getByRole("option", { name: /^File/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Video/ })).not.toBeNull();
     expect(screen.getByRole("option", { name: /^Audio/ })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(19);
+    expect(screen.getByRole("option", { name: /^Iframe/ })).not.toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(20);
   });
 
   it("non-media 타입(heading)을 deny하면 Heading 1~6 옵션 6개가 모두 사라지고 나머지는 남는다", () => {
@@ -803,6 +808,6 @@ describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
       ).toBeNull();
     }
     expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(14);
+    expect(screen.getAllByRole("option")).toHaveLength(15);
   });
 });

@@ -1,4 +1,9 @@
-import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import type {
+  Dictionary,
+  EditorController,
+  EditorError,
+  MediaBlockKind,
+} from "@cp949/geul-core";
 import { X } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -25,6 +30,32 @@ const closeIcon = <X {...iconProps} />;
 // 리스너를 매 렌더 떼었다 다시 붙인다).
 const FILE_PANEL_DISMISS_ALLOW_SELECTORS = [".geul-file-panel"] as const;
 
+// CUS-001~004(roadmap Issue #212 RD-004 DELTA-04) — Embed 탭 URL 저장 거절
+// 문구. media-toolbar.tsx의 replaceUrlRejectionMessage와 같은 모양이지만
+// 코드를 공유하지 않는다(RD-003-DELTA-03.md "결정"과 동일 근거 — 두
+// 컴포넌트가 이미 독립된 selection 상태 기계를 각자 갖고, 시각 요소만
+// 재사용하는 기존 관례). iframe + IFRAME_URL_NOT_ALLOWED만 model
+// resolveIframeEmbedDecision의 거절 사유별 문구로 대체하고, 나머지(다른
+// kind의 LINK_HREF_REJECTED 등)는 기존 generic unsupportedMediaUrl을
+// 그대로 쓴다.
+const embedUrlRejectionMessage = (
+  kind: MediaBlockKind,
+  error: EditorError,
+  dictionary: Dictionary,
+): string => {
+  if (kind === "iframe" && error.code === "IFRAME_URL_NOT_ALLOWED") {
+    switch (error.reason) {
+      case "PROTOCOL_NOT_ALLOWED":
+        return dictionary.status.iframeUrlRejected.protocolNotAllowed;
+      case "PRIVATE_NETWORK_BLOCKED":
+        return dictionary.status.iframeUrlRejected.privateNetworkBlocked;
+      case "NOT_WHITELISTED_AND_CUSTOM_DISABLED":
+        return dictionary.status.iframeUrlRejected.notWhitelisted;
+    }
+  }
+  return dictionary.status.unsupportedMediaUrl;
+};
+
 type PanelPosition = { left: number; top: number };
 
 // Upload 탭의 서브 상태(RD-003 DELTA-02). success/cancelled는 core pending
@@ -42,7 +73,10 @@ type PanelState =
       blockId: string;
       kind: MediaBlockKind;
       draft: string;
-      rejected: boolean;
+      /** Embed 탭에서 거부된 URL을 제출했을 때 보여줄 문구, 없으면 null
+       * (media-toolbar.tsx ToolbarState.rejectedMessage와 같은 모양 —
+       * RD-004 DELTA-04, iframe은 거절 사유별로 문구가 달라진다). */
+      rejectedMessage: string | null;
       /** 마지막으로 성공 적용된 이름 초깃값(추출 실패 시 URL 자체). 아직 제출 전이면 null. */
       appliedName: string | null;
       /** 기본값은 항상 "embed" — uploadFile 등록 여부가 기본 활성 탭을
@@ -188,7 +222,11 @@ export const FilePanel = ({
     // 블록에서 실패해 error pending이 남아 있으면 재오픈 즉시 그 에러를
     // 보여준다. uploadFile 미등록이면 pending 자체를 조회하지 않는다
     // (호출해도 항상 null이지만, 등록 여부와 무관한 호출을 피한다).
-    const uploadEnabled = editor.isUploadEnabled();
+    // iframe은 업로드 탭 개념이 없다(spec §5, RD-004 DELTA-04 readiness —
+    // uploadMediaFile 성공 경로가 resolveIframeEmbedDecision을 거치지 않고
+    // url을 직접 세팅해, UI로 노출하면 보안 경계를 우회하는 두 번째 경로가
+    // 된다) — kind로 추가 게이트한다.
+    const uploadEnabled = editor.isUploadEnabled() && media.kind !== "iframe";
     const pending = uploadEnabled
       ? editor.getMediaUploadState(media.blockId)
       : null;
@@ -210,7 +248,7 @@ export const FilePanel = ({
         blockId: media.blockId,
         kind: media.kind,
         draft: "",
-        rejected: false,
+        rejectedMessage: null,
         appliedName: null,
         // 기본 활성 탭(2026-09-12, Notion parity) — Upload 옵션이 있으면
         // Upload가 기본이다. RD-003-DELTA-02.md "결정 2"(항상 Embed
@@ -409,19 +447,34 @@ export const FilePanel = ({
   // 등록 여부는 마운트 시점에 고정된다(EditorProvider "결정") — 렌더마다
   // 다시 불러도 값은 안정적이다. 미등록이면 tablist 자체를 렌더링하지
   // 않는다(RD-003-DELTA-02.md "결정" 1) — 기존 13개 단일 모드 테스트가
-  // 그대로 통과해야 한다.
-  const uploadEnabled = editor.isUploadEnabled();
+  // 그대로 통과해야 한다. iframe은 kind로 추가 게이트한다(위
+  // updateFromSelection과 같은 이유, RD-004 DELTA-04).
+  const uploadEnabled =
+    editor.isUploadEnabled() && panelState.kind !== "iframe";
   const showEmbedTab = !uploadEnabled || panelState.activeTab === "embed";
   const showUploadTab = uploadEnabled && panelState.activeTab === "upload";
 
+  // iframe은 setMediaBlockUrl이 아니라 setIframeSrc로 라우팅한다
+  // (CUS-001~004, RD-004 DELTA-04) — setMediaBlockUrl은
+  // resolveIframeEmbedDecision(화이트리스트·private network 정책)을 몰라
+  // iframe을 애초에 거절한다(core 보안 경계, block-attribute-commands.ts).
+  // media-toolbar.tsx applyReplaceUrl과 같은 분기.
   const applyUrl = () => {
     if (panelState.mode !== "open") return;
-    const result = editor.commands.setMediaBlockUrl(
-      panelState.blockId,
-      panelState.draft,
-    );
+    const result =
+      panelState.kind === "iframe"
+        ? editor.commands.setIframeSrc(panelState.blockId, panelState.draft)
+        : editor.commands.setMediaBlockUrl(
+            panelState.blockId,
+            panelState.draft,
+          );
     if (!result.ok) {
-      setPanelState({ ...panelState, rejected: true });
+      const rejectedMessage = embedUrlRejectionMessage(
+        panelState.kind,
+        result.error,
+        dictionary,
+      );
+      setPanelState({ ...panelState, rejectedMessage });
       return;
     }
     // name 초깃값은 마지막 path segment에서 추출한다(spec §6.1). 추출
@@ -434,7 +487,7 @@ export const FilePanel = ({
     }
     setPanelState({
       ...panelState,
-      rejected: false,
+      rejectedMessage: null,
       appliedName: extractedName ?? panelState.draft,
     });
   };
@@ -504,7 +557,7 @@ export const FilePanel = ({
               setPanelState({
                 ...panelState,
                 draft: event.currentTarget.value,
-                rejected: false,
+                rejectedMessage: null,
               });
             }}
             onKeyDown={(event) => {
@@ -533,9 +586,9 @@ export const FilePanel = ({
               dictionary.toolbar.kindNames[panelState.kind],
             )}
           </button>
-          {panelState.rejected && (
+          {panelState.rejectedMessage !== null && (
             <span className="geul-file-panel__error" role="alert">
-              {dictionary.status.unsupportedMediaUrl}
+              {panelState.rejectedMessage}
             </span>
           )}
           {panelState.appliedName !== null && (
@@ -544,7 +597,7 @@ export const FilePanel = ({
               {panelState.appliedName}
             </p>
           )}
-          {/* Notion parity(2026-09-12) 안내문 — 장식용, rejected/appliedName처럼
+          {/* Notion parity(2026-09-12) 안내문 — 장식용, rejectedMessage/appliedName처럼
               상태 전이를 만들지 않는다. */}
           <p className="geul-file-panel__caption">
             {dictionary.toolbar.filePanel.embedCaption.replace(
