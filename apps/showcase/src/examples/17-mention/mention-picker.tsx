@@ -311,10 +311,21 @@ export const MentionPicker = () => {
       // (IMPL-REVIEW-01 F1).
       if (!inserted.ok) {
         console.error(inserted.error);
-        editor.commands.setText(current.blockId, `@${current.query}`);
+        // 복원된 "@query" 텍스트를 곧바로 새 트리거로 재인식해 메뉴가
+        // 재오픈되지 않도록 dismissMenu()와 동일한 가드를 남긴다(위
+        // updateFromCaret의 dismissedQueryRef 대조 로직 — G-UI-001).
+        const restoredText = `@${current.query}`;
+        editor.commands.setText(current.blockId, restoredText);
         editor.setTextCursorPosition(current.blockId, "end");
+        dismissedQueryRef.current = {
+          blockId: current.blockId,
+          text: restoredText,
+        };
+      } else {
+        // 삽입 성공 시 블록 텍스트가 mention atom으로 바뀌므로 dismiss
+        // 가드가 필요 없다(기존과 동일).
+        dismissedQueryRef.current = null;
       }
-      dismissedQueryRef.current = null;
       setMenuState(null);
       focusEditor();
     },
