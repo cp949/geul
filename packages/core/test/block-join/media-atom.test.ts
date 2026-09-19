@@ -36,7 +36,14 @@ import {
 } from "../editor-controller-support.js";
 import { countNodes } from "./block-join-test-support.js";
 
-const kinds: MediaBlockKind[] = ["file", "image", "video", "audio"];
+// "iframe"(CUS-001~004)은 core에 IframeBlockExtension이 아직 없어 제외한다
+// — RD-002가 자체 join/backspace 회귀 테스트를 추가할 때까지.
+const kinds: Exclude<MediaBlockKind, "iframe">[] = [
+  "file",
+  "image",
+  "video",
+  "audio",
+];
 
 describe.each(kinds)(
   "빈 %s 블록 NodeSelection에서 Backspace/Delete",

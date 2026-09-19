@@ -214,18 +214,19 @@ const flattenBlocks = (
       return customBlockToMarkdown?.[block.type] !== undefined ? [block] : [];
     }
     if (block.type === "table") return [block];
-    // divider·CodeBlock·4종 미디어 블록은 children 필드 자체가 없어(옵셔널이
-    // 아니라 부재, leaf 블록) 아래 block.children 접근 전에 좁힌다 — 이
-    // early return 자체는 RD-002(GFM 계약 구현)가 와도 바뀌지 않는다,
-    // 애초에 flatten할 children이 없다. quote는 children이 옵셔널이라 아래
-    // 범용 분기로 자연스럽게 통과한다(07a).
+    // divider·CodeBlock·5종 미디어 블록(iframe 포함, CUS-001~004)은 children
+    // 필드 자체가 없어(옵셔널이 아니라 부재, leaf 블록) 아래 block.children
+    // 접근 전에 좁힌다 — 이 early return 자체는 RD-002(GFM 계약 구현)가
+    // 와도 바뀌지 않는다, 애초에 flatten할 children이 없다. quote는
+    // children이 옵셔널이라 아래 범용 분기로 자연스럽게 통과한다(07a).
     if (
       block.type === "divider" ||
       block.type === "codeBlock" ||
       block.type === "file" ||
       block.type === "image" ||
       block.type === "video" ||
-      block.type === "audio"
+      block.type === "audio" ||
+      block.type === "iframe"
     )
       return [block];
     if (block.children === undefined || block.children.length === 0) {
@@ -345,9 +346,11 @@ const blockNodes = (
 const blockNode = (block: Block): MarkdownOutputNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "divider") return { type: "thematicBreak" };
-  // 4종 미디어 블록(file/image/video/audio) — Issue #152 슬라이스6, RD-002
-  // DELTA-01(spec §7.2). previewWidth/showPreview/textAlignment/caption/
-  // backgroundColor는 어느 조합이든 이 함수가 그냥 버린다 — strict export는
+  // 5종 미디어 블록(file/image/video/audio/iframe) — Issue #152 슬라이스6,
+  // RD-002 DELTA-01(spec §7.2), iframe은 CUS-001~004(2026-09-19-iframe-
+  // block-design.md §4 — 항상 링크로 강등, video/audio/file과 동일 논리).
+  // previewWidth/showPreview/textAlignment/caption/backgroundColor/
+  // aspectRatio는 어느 조합이든 이 함수가 그냥 버린다 — strict export는
   // loss-analysis.ts가 이미 그 값들을 거절했으므로 이 함수에 도달하는 시점엔
   // 값이 있어도(lossy) 안전하게 폐기할 수 있다(폐기 자체는 경고로 이미
   // 보고됨, G-CNV-002). name이 없으면 url을 텍스트로 쓴다(mediaAnchorNode,
@@ -356,15 +359,17 @@ const blockNode = (block: Block): MarkdownOutputNode => {
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
-    block.type === "audio"
+    block.type === "audio" ||
+    block.type === "iframe"
   ) {
     const url = block.url ?? "";
     const text = block.name ?? url;
     // Image는 showPreview:false일 때만 링크로 강등한다(html export의
     // `block.type !== "file" && block.showPreview === false`와 동일 조건 —
     // 재import가 `![]()`만 Image로 인식하므로(spec §7.3) 강등된 이미지도
-    // 이미 손실이라 링크로 낸다). Video/Audio/File은 GFM 표현 수단이
-    // 아예 없어 showPreview와 무관하게 항상 링크다.
+    // 이미 손실이라 링크로 낸다). Video/Audio/File/iframe은 GFM 표현 수단이
+    // 아예 없어 showPreview와 무관하게(iframe은 애초에 그 필드가 없다)
+    // 항상 링크다.
     if (block.type === "image" && block.showPreview !== false) {
       return {
         type: "paragraph",

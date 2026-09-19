@@ -21,6 +21,12 @@ export {
 export { createEmptyDocument } from "./create-document.js";
 export type { DocumentError, DocumentErrorCode } from "./errors.js";
 export { createRandomDocumentId } from "./id-factory.js";
+export type {
+  IframeEmbedConfig,
+  IframeEmbedDecision,
+  IframeProviderWhitelistEntry,
+} from "./iframe-embed-policy.js";
+export { resolveIframeEmbedDecision } from "./iframe-embed-policy.js";
 export { isTextRunItem } from "./inline-content-kind.js";
 export { appendOrMergeInlineItem } from "./inline-content-merge.js";
 export { isSupportedLinkHref, isSupportedMediaUrl } from "./link-policy.js";
@@ -87,6 +93,7 @@ export type {
   FileBlock,
   HeadingBlock,
   IdFactory,
+  IframeBlock,
   ImageBlock,
   InlineContent,
   InlineContentItem,

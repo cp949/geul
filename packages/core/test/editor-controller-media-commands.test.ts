@@ -45,7 +45,9 @@ import {
   tailParagraphBlock,
 } from "./editor-controller-support.js";
 
-const mediaKinds: readonly MediaBlockKind[] = [
+// "iframe"(CUS-001~004)은 core에 IframeBlockExtension이 아직 없어 제외한다
+// — RD-002가 자체 명령 테스트를 추가할 때까지.
+const mediaKinds: readonly Exclude<MediaBlockKind, "iframe">[] = [
   "file",
   "image",
   "video",

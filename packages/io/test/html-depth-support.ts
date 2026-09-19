@@ -125,13 +125,14 @@ export const documentVisibleText = (document: Document): string => {
       }
       // DividerBlock에는 content·children이 없다(리프 블록).
       if (block.type === "divider") continue;
-      // 4종 미디어 블록(RD-003)도 content가 없다 — plain string
-      // prop(name/caption)뿐이라 인라인 텍스트 수집 대상이 아니다.
+      // 5종 미디어 블록(iframe 포함, CUS-001~004)도 content가 없다 — plain
+      // string prop(name/caption)뿐이라 인라인 텍스트 수집 대상이 아니다.
       if (
         block.type === "file" ||
         block.type === "image" ||
         block.type === "video" ||
-        block.type === "audio"
+        block.type === "audio" ||
+        block.type === "iframe"
       )
         continue;
       // 계약 전제 캐스트 — 같은 이유(위 table 분기 주석 참고).

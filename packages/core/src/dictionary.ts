@@ -70,6 +70,11 @@ export type Dictionary = {
     image: { label: string; description: string };
     video: { label: string; description: string };
     audio: { label: string; description: string };
+    // CUS-001~004(iframe, spec docs/specs/2026-09-19-iframe-block-design.md
+    // §5) — media 4종과 달리 별도 `kind: "insertIframe"` 태그를 쓰지만
+    // (업로드 탭 개념이 없어 URL 입력 단일 흐름), 문구 네임스페이스는 같은
+    // slashMenu 자리에 둔다.
+    iframe: { label: string; description: string };
   };
   // RD-002-DELTA-04 — `block-side-menu-menu.tsx`/`table-handle-menu.tsx`/
   // `table-cell-format-menu.tsx`의 색상 무관 문구. `align*`/`cellFormattingAriaLabel`
@@ -148,7 +153,15 @@ export type Dictionary = {
   // `toolbar.tableSelection`/`toolbar.blockSelection`/`toolbar.formatting`은
   // DELTA-07이 추가한다.
   toolbar: {
-    kindNames: { file: string; image: string; video: string; audio: string };
+    // iframe(CUS-001~004)이 5번째 key다 — MediaBlockKind 확장과 짝을
+    // 맞춘다(spec §5).
+    kindNames: {
+      file: string;
+      image: string;
+      video: string;
+      audio: string;
+      iframe: string;
+    };
     media: {
       ariaLabel: string;
       // Issue #203 RD-004 DELTA-02 — view 모드의 개별 버튼(rename/caption/
@@ -432,6 +445,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     image: { label: "Image", description: "Insert an image" },
     video: { label: "Video", description: "Insert a video" },
     audio: { label: "Audio", description: "Insert an audio file" },
+    iframe: { label: "Iframe", description: "Embed an external page" },
   },
   menu: {
     blockMenuAriaLabel: "Block menu",
@@ -482,7 +496,13 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     },
   },
   toolbar: {
-    kindNames: { file: "File", image: "Image", video: "Video", audio: "Audio" },
+    kindNames: {
+      file: "File",
+      image: "Image",
+      video: "Video",
+      audio: "Audio",
+      iframe: "Iframe",
+    },
     media: {
       ariaLabel: "Media toolbar",
       moreAriaLabel: "More media options",

@@ -386,7 +386,9 @@ export const dividerBetweenParagraphsDocument = () =>
  * 값이 있을 때만 넣는다)을 따른다.
  */
 export const mediaBlock = (
-  kind: MediaBlockKind,
+  // "iframe"은 아직 core에 IframeBlockExtension이 없어 이 헬퍼가 구성할 수
+  // 없다(CUS-001~004, RD-002가 자체 test support를 추가할 때까지 제외).
+  kind: Exclude<MediaBlockKind, "iframe">,
   id: string,
   props?: {
     url?: string;

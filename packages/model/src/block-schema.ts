@@ -129,6 +129,23 @@ const audioBlockSchema = z
   })
   .strict();
 
+// .strict() — IframeBlock(MediaBlockKind 5번째 kind, CUS-001~004, spec
+// docs/specs/2026-09-19-iframe-block-design.md §2)은 image/video와 동일한
+// previewWidth/textAlignment shape에 aspectRatio 하나를 더 갖는다.
+// showPreview는 없다 — iframe에는 로컬 파일 미리보기 토글 개념이 없다
+// (항상 라이브 임베드). aspectRatio는 v1에서 "16:9" 리터럴 하나만 허용한다
+// (v2에서 유니온으로 확장 예정, 지금은 z.literal로 좁게 고정).
+const iframeBlockSchema = z
+  .object({
+    id: z.string(),
+    type: z.literal("iframe"),
+    previewWidth: z.number().optional(),
+    textAlignment: z.string().optional(),
+    aspectRatio: z.literal("16:9").optional(),
+    ...mediaBlockCommonShape,
+  })
+  .strict();
+
 // paragraph/heading/quoteBlockSchema는 children으로 blockSchema를 재귀 참조한다.
 // discriminatedUnion이 멤버 스키마의 구체 ZodObject 모양(리터럴 판별 필드)을
 // 직접 봐야 하므로 paragraph/heading/quoteBlockSchema 자체는 z.ZodType<T>로
@@ -219,6 +236,7 @@ type FileBlockNode = z.infer<typeof fileBlockSchema>;
 type ImageBlockNode = z.infer<typeof imageBlockSchema>;
 type VideoBlockNode = z.infer<typeof videoBlockSchema>;
 type AudioBlockNode = z.infer<typeof audioBlockSchema>;
+type IframeBlockNode = z.infer<typeof iframeBlockSchema>;
 
 type BlockNode =
   | ParagraphBlockNode
@@ -235,7 +253,8 @@ type BlockNode =
   | FileBlockNode
   | ImageBlockNode
   | VideoBlockNode
-  | AudioBlockNode;
+  | AudioBlockNode
+  | IframeBlockNode;
 
 // TextBlockProps 3필드(model 손글씨 타입과 동일 optional shape) — 콘텐츠를
 // 갖는 nestable 블록 7종 스키마가 공통으로 spread한다. 정규형(색상
@@ -385,6 +404,7 @@ const blockSchema = z.discriminatedUnion("type", [
   imageBlockSchema,
   videoBlockSchema,
   audioBlockSchema,
+  iframeBlockSchema,
 ]);
 
 // CustomBlock(EXT-001)의 envelope(구조) 검증이다. 타입별 props 의미는
@@ -400,9 +420,9 @@ const customBlockSchema = z
   })
   .strict();
 
-// 알려진 15종 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을
+// 알려진 16종 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을
 // 이 목록과 대조해 blockSchema/customBlockSchema로 라우팅한다(spec §4.3).
-// Block 유니온에 16번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
+// Block 유니온에 17번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
 // blockSchema 배열 자체도 수동 갱신 대상이라 같은 지점에 한 줄이 늘 뿐이다.
 const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
   "paragraph",
@@ -420,6 +440,7 @@ const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
   "image",
   "video",
   "audio",
+  "iframe",
 ]);
 
 // core/io(RD-002 DELTA-02~04)가 document.blocks 원소를 알려진 Block과

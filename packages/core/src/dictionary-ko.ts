@@ -63,6 +63,7 @@ export const KO_DICTIONARY: Dictionary = {
     image: { label: "이미지", description: "이미지 삽입" },
     video: { label: "비디오", description: "비디오 삽입" },
     audio: { label: "오디오", description: "오디오 파일 삽입" },
+    iframe: { label: "iframe", description: "외부 페이지 임베드" },
   },
   menu: {
     blockMenuAriaLabel: "블록 메뉴",
@@ -118,6 +119,7 @@ export const KO_DICTIONARY: Dictionary = {
       image: "이미지",
       video: "비디오",
       audio: "오디오",
+      iframe: "iframe",
     },
     media: {
       ariaLabel: "미디어 툴바",

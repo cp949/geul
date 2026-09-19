@@ -29,15 +29,17 @@ export const visitTableBlocks = (
       if (!result.ok) return result;
       continue;
     }
-    // divider·codeBlock·4종 미디어 블록은 children 필드가 없는 리프다 —
-    // 나머지(paragraph/heading/quote/목록 항목)만 children으로 내려간다.
+    // divider·codeBlock·5종 미디어 블록(iframe 포함, CUS-001~004)은 children
+    // 필드가 없는 리프다 — 나머지(paragraph/heading/quote/목록 항목)만
+    // children으로 내려간다.
     if (
       known.type === "divider" ||
       known.type === "codeBlock" ||
       known.type === "file" ||
       known.type === "image" ||
       known.type === "video" ||
-      known.type === "audio"
+      known.type === "audio" ||
+      known.type === "iframe"
     )
       continue;
     if (known.children !== undefined) {

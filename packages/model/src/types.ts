@@ -158,6 +158,24 @@ export type AudioBlock = {
   type: "audio";
   showPreview?: boolean;
 } & MediaBlockCommon;
+// MediaBlockKind의 5번째 kind다(CUS-001~004, spec
+// docs/specs/2026-09-19-iframe-block-design.md §2). image/video와 동일하게
+// previewWidth(양의 유한수, isValidMediaPreviewWidth)·textAlignment를
+// 공유한다 — width preset(v2)이 오기 전까지 별도 객체 스키마를 새로
+// 만들지 않는다(media 4종과의 비일관을 피하기 위한 결정, spec §1).
+// aspectRatio는 image/video에 없는 iframe 전용 필드다 — 고정 크기가 없는
+// iframe이 resize 없이도 height를 가지려면 필요하다. v1은 "16:9" 리터럴
+// 하나만 허용하고(고정, react UI로 노출하지 않음), v2에서 프리셋
+// 유니온으로 확장한다. url은 MediaBlockCommon.url을 iframe src로 쓰되
+// isSupportedMediaUrl(data:/blob: 허용)을 재사용하지 않는다 — iframe은
+// https:만 기본 허용하는 별도 정책(iframe-embed-policy.ts)이 필요하다.
+export type IframeBlock = {
+  id: string;
+  type: "iframe";
+  previewWidth?: number;
+  textAlignment?: "left" | "center" | "right";
+  aspectRatio?: "16:9";
+} & MediaBlockCommon;
 export type TableColumn = { id: string; width: number };
 export type TableBlock = {
   id: string;
@@ -194,7 +212,8 @@ export type Block =
   | FileBlock
   | ImageBlock
   | VideoBlock
-  | AudioBlock;
+  | AudioBlock
+  | IframeBlock;
 
 // 닫힌 14종 Block 유니온 옆에 두는 열린 catch-all 변형이다(EXT-001, spec
 // §4.1~§4.2). leaf 전용이라 children이 없다 — 커스텀 block의 자식 중첩은

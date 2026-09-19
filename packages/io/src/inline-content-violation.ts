@@ -51,7 +51,8 @@ export const blocksInlineContentViolation = (
       block.type === "file" ||
       block.type === "image" ||
       block.type === "video" ||
-      block.type === "audio"
+      block.type === "audio" ||
+      block.type === "iframe"
     )
       continue;
 

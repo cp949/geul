@@ -79,7 +79,8 @@ const childrenOf = (block: Block): Block[] | undefined => {
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
-    block.type === "audio"
+    block.type === "audio" ||
+    block.type === "iframe"
   ) {
     return undefined;
   }
@@ -124,7 +125,8 @@ export const documentVisibleText = (document: Document): string => {
         block.type !== "file" &&
         block.type !== "image" &&
         block.type !== "video" &&
-        block.type !== "audio"
+        block.type !== "audio" &&
+        block.type !== "iframe"
       ) {
         for (const item of block.content) {
           if ("text" in item) parts.push(item.text);

@@ -178,21 +178,37 @@ const validateBlocksAt = (
       continue;
     }
 
-    // 4종 leaf 미디어 블록(spec §3.1) — divider/codeBlock과 같은 자리에서
-    // 타입 전용 검증을 마치고 continue한다. known.type 판별자 비교 3개를
-    // 겹쳐 쓰면 discriminated union인 known이 좁혀진다(codeBlock처럼
-    // 별도 as 캐스트가 필요 없다). url/backgroundColor는 4종 공통,
-    // previewWidth/textAlignment는 image/video만 존재한다 — audio/file은
-    // zod .strict() shape 자체가 이 필드를 거절하므로 여기서 다시 확인하지
-    // 않는다(완료 조건 5는 스키마 계층이 담당, G-CNV-001 — 같은 불변식을
-    // 두 계층에서 판정하지 않는다).
+    // 4종 leaf 미디어 블록 + iframe(MediaBlockKind 5번째 kind, CUS-001~004,
+    // spec docs/specs/2026-09-19-iframe-block-design.md §2) — divider/
+    // codeBlock과 같은 자리에서 타입 전용 검증을 마치고 continue한다.
+    // known.type 판별자 비교를 겹쳐 쓰면 discriminated union인 known이
+    // 좁혀진다(codeBlock처럼 별도 as 캐스트가 필요 없다). url/
+    // backgroundColor는 5종 공통, previewWidth/textAlignment는
+    // image/video/iframe만 존재한다 — audio/file은 zod .strict() shape
+    // 자체가 이 필드를 거절하므로 여기서 다시 확인하지 않는다(완료 조건 5는
+    // 스키마 계층이 담당, G-CNV-001 — 같은 불변식을 두 계층에서 판정하지
+    // 않는다).
+    //
+    // iframe의 url은 isSupportedMediaUrl이 아니라 isSupportedLinkHref로
+    // 검증한다 — media(data:/blob: 허용, ADR-0017)와 달리 iframe은 원격
+    // 콘텐츠를 실행 가능한 형태로 로드하므로 그 허용이 부적절하다.
+    // https-only 강제나 provider 화이트리스트 매칭·custom URL opt-in·
+    // private network 차단은 여기서 하지 않는다 — 그건 host가 설정하는
+    // 런타임 정책(iframe-embed-policy.ts의 resolveIframeEmbedDecision, RD-001
+    // 후속 DELTA)이라 EditorController 설정에 접근할 수 없는 순수 문서
+    // parse 시점에는 적용할 수 없다. 저장된 문서는 host 정책이 바뀌어도
+    // 계속 load돼야 한다 — 여기서는 isSupportedLinkHref가 이미 막는
+    // javascript:/제어문자 같은 정적·설정 무관 불변식만 확인한다.
     if (
       known.type === "file" ||
       known.type === "image" ||
       known.type === "video" ||
-      known.type === "audio"
+      known.type === "audio" ||
+      known.type === "iframe"
     ) {
-      if (known.url !== undefined && !isSupportedMediaUrl(known.url)) {
+      const urlValidator =
+        known.type === "iframe" ? isSupportedLinkHref : isSupportedMediaUrl;
+      if (known.url !== undefined && !urlValidator(known.url)) {
         return invalid([...blockPath, "url"], "Unsupported media URL");
       }
       if (
@@ -204,7 +220,11 @@ const validateBlocksAt = (
           "backgroundColor must be an uppercase #RRGGBB color",
         );
       }
-      if (known.type === "image" || known.type === "video") {
+      if (
+        known.type === "image" ||
+        known.type === "video" ||
+        known.type === "iframe"
+      ) {
         if (
           known.previewWidth !== undefined &&
           !isValidMediaPreviewWidth(known.previewWidth)

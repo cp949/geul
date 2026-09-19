@@ -10,7 +10,11 @@
 // 끌려 들어와 insertMediaBlock(editor: Editor, ...)의 Tiptap Editor 타입이
 // 함께 노출된다(실측: public-types.test.ts RED). tiptap import가 전혀 없는
 // 이 파일로 분리해 reachable해도 안전하게 한다.
-export type MediaBlockKind = "file" | "image" | "video" | "audio";
+// iframe(CUS-001~004, spec docs/specs/2026-09-19-iframe-block-design.md)이
+// 5번째 kind다 — resize/align/toolbar/오버레이 인프라를 media 4종과 공유한다
+// (spec §1 "MediaBlockKind 확장" 결정). "Media"라는 이름이 iframe엔 다소
+// 부정확하지만 전면 rename은 범위 밖이다(spec §8).
+export type MediaBlockKind = "file" | "image" | "video" | "audio" | "iframe";
 
 // editor-controller.ts::getSelectionMediaBlock(RD-003 DELTA-01)이 PM
 // NodeSelection의 node.type.name(런타임엔 평범한 string)을 MediaBlockKind로
@@ -21,4 +25,5 @@ export const isMediaBlockKind = (value: string): value is MediaBlockKind =>
   value === "file" ||
   value === "image" ||
   value === "video" ||
-  value === "audio";
+  value === "audio" ||
+  value === "iframe";

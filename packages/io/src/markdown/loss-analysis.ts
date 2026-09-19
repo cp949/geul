@@ -276,7 +276,8 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
-    block.type === "audio"
+    block.type === "audio" ||
+    block.type === "iframe"
   ) {
     if (block.backgroundColor !== undefined) {
       losses.push({
@@ -293,7 +294,9 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       });
     }
     if (
-      (block.type === "image" || block.type === "video") &&
+      (block.type === "image" ||
+        block.type === "video" ||
+        block.type === "iframe") &&
       block.previewWidth !== undefined
     ) {
       losses.push({
@@ -303,7 +306,8 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       });
     }
     if (
-      block.type !== "file" && // file은 showPreview 자체가 없다(mediaVisualNode 전례와 동일 조건)
+      block.type !== "file" &&
+      block.type !== "iframe" && // file·iframe은 showPreview 자체가 없다(mediaVisualNode 전례와 동일 조건)
       block.showPreview === false
     ) {
       losses.push({
@@ -313,7 +317,9 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       });
     }
     if (
-      (block.type === "image" || block.type === "video") &&
+      (block.type === "image" ||
+        block.type === "video" ||
+        block.type === "iframe") &&
       block.textAlignment !== undefined
     ) {
       losses.push({

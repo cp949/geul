@@ -10,6 +10,7 @@ import {
   type Document,
   type FileBlock,
   type HeadingBlock,
+  type IframeBlock,
   type ImageBlock,
   type InlineContent,
   isCanonicalTextMarks,
@@ -221,13 +222,14 @@ const validateEditableContent = (
     // core는 여기서 일반 inline validator를 중복 적용하지 않는다(G-CNV-001).
     if (block.type === "codeBlock") continue;
 
-    // 4종 미디어 블록(RD-002 DELTA-01)도 divider와 같은 leaf라 content·
-    // children이 없어 검사 대상이 없다(spec §3.1).
+    // 5종 미디어 블록(iframe 포함, CUS-001~004)도 divider와 같은 leaf라
+    // content·children이 없어 검사 대상이 없다(spec §3.1).
     if (
       block.type === "file" ||
       block.type === "image" ||
       block.type === "video" ||
-      block.type === "audio"
+      block.type === "audio" ||
+      block.type === "iframe"
     )
       continue;
 
@@ -460,13 +462,15 @@ const codeBlockContentToTiptapJson = (block: CodeBlock): TiptapJsonNode => ({
   content: inlineContentToTiptapPlain(block.content),
 });
 
-// 4종 미디어 블록(file/image/video/audio) 인코딩(RD-002 DELTA-01, spec
-// §3.1) — divider와 같은 패턴으로 컨테이너 없이 attrs에 전체 prop을 직접
+// 5종 미디어 블록(file/image/video/audio/iframe, iframe은 CUS-001~004) 인코딩
+// (RD-002 DELTA-01, spec §3.1/docs/specs/2026-09-19-iframe-block-design.md
+// §3) — divider와 같은 패턴으로 컨테이너 없이 attrs에 전체 prop을 직접
 // 배정한다. 값 검증(previewWidth 양수 등)은 model parseDocument 권위라
 // 여기서는 null 승격(필드 부재 ↔ PM attr 기본값)만 한다(numberedListItem.
-// startNumber와 같은 패턴).
+// startNumber와 같은 패턴). iframe은 showPreview가 없다(로컬 미리보기
+// 토글 개념이 없다, 항상 라이브 임베드) — 대신 aspectRatio를 갖는다.
 const mediaBlockToTiptapJson = (
-  block: FileBlock | ImageBlock | VideoBlock | AudioBlock,
+  block: FileBlock | ImageBlock | VideoBlock | AudioBlock | IframeBlock,
 ): TiptapJsonNode => ({
   type: block.type,
   attrs: {
@@ -479,11 +483,17 @@ const mediaBlockToTiptapJson = (
       ? {}
       : block.type === "audio"
         ? { showPreview: block.showPreview ?? null }
-        : {
-            showPreview: block.showPreview ?? null,
-            previewWidth: block.previewWidth ?? null,
-            textAlignment: block.textAlignment ?? null,
-          }),
+        : block.type === "iframe"
+          ? {
+              previewWidth: block.previewWidth ?? null,
+              textAlignment: block.textAlignment ?? null,
+              aspectRatio: block.aspectRatio ?? null,
+            }
+          : {
+              showPreview: block.showPreview ?? null,
+              previewWidth: block.previewWidth ?? null,
+              textAlignment: block.textAlignment ?? null,
+            }),
   },
 });
 
@@ -511,7 +521,8 @@ export const blockToTiptapJson = (block: Block): TiptapJsonNode => {
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
-    block.type === "audio"
+    block.type === "audio" ||
+    block.type === "iframe"
   ) {
     return mediaBlockToTiptapJson(block);
   }

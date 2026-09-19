@@ -61,6 +61,7 @@ const measureListTree = (
         block.type !== "image" &&
         block.type !== "video" &&
         block.type !== "audio" &&
+        block.type !== "iframe" &&
         block.children !== undefined
       ) {
         stack.push({ blocks: block.children, depth: frame.depth + 1 });

@@ -84,12 +84,13 @@ const textBlockPropsAttributes = (
   };
 };
 
-// 4종 leaf 미디어 블록 공통 판별 타입(spec §3.1) — url/name/caption/
-// backgroundColor는 4종 공통, showPreview는 image/video/audio, previewWidth/
-// textAlignment는 image/video만 갖는다(model MediaBlockCommon과 동형).
+// 5종 leaf 미디어 블록 공통 판별 타입(spec §3.1, iframe은 CUS-001~004) —
+// url/name/caption/backgroundColor는 5종 공통, showPreview는 image/video/
+// audio만, previewWidth/textAlignment는 image/video/iframe만 갖는다(model
+// MediaBlockCommon과 동형).
 type MediaBlock = Extract<
   Document["blocks"][number],
-  { type: "file" | "image" | "video" | "audio" }
+  { type: "file" | "image" | "video" | "audio" | "iframe" }
 >;
 
 // outer 요소(figure 있으면 figure, 없으면 bare 시각 태그/빈 div)가 항상 싣는
@@ -108,16 +109,32 @@ const mediaDataAttributes = (
   ...(block.backgroundColor === undefined
     ? {}
     : { dataGeulBackgroundColor: block.backgroundColor }),
-  ...(block.type !== "file" && block.showPreview !== undefined
+  ...(block.type !== "file" &&
+  block.type !== "iframe" &&
+  block.showPreview !== undefined
     ? { dataGeulShowPreview: String(block.showPreview) }
     : {}),
-  ...((block.type === "image" || block.type === "video") &&
+  ...((block.type === "image" ||
+    block.type === "video" ||
+    block.type === "iframe") &&
   block.previewWidth !== undefined
     ? { dataGeulPreviewWidth: String(block.previewWidth) }
     : {}),
-  ...((block.type === "image" || block.type === "video") &&
+  ...((block.type === "image" ||
+    block.type === "video" ||
+    block.type === "iframe") &&
   block.textAlignment !== undefined
     ? { dataGeulTextAlignment: block.textAlignment }
+    : {}),
+  // iframe(CUS-001~004)은 이번 패스에서 실제 <iframe> 태그를 방출하지
+  // 않는다(아래 mediaBlockNode) — url을 보존할 시각 태그 자체가 없으므로
+  // data 속성으로 직접 싣는다. host EditorController 설정을 export
+  // 파이프라인에 실어 실제 태그를 방출하는 설계는 RD-003 본설계로 미룬다.
+  ...(block.type === "iframe" && block.url !== undefined
+    ? { dataGeulSrc: block.url }
+    : {}),
+  ...(block.type === "iframe" && block.aspectRatio !== undefined
+    ? { dataGeulAspectRatio: block.aspectRatio }
     : {}),
 });
 
@@ -198,6 +215,20 @@ const mediaVisualNode = (
 const mediaBlockNode = (block: MediaBlock): HtmlElementNode => {
   const dataAttrs = mediaDataAttributes(block);
   const { url, caption } = block;
+
+  // iframe(CUS-001~004)은 url 유무와 무관하게 항상 데이터 속성 전용
+  // wrapper로 나간다(위 mediaDataAttributes 주석 참고) — image/video/audio
+  // 처럼 실제 시각 태그(<img>/<video>/<audio>)로 승격하는 분기를 타지
+  // 않는다.
+  if (block.type === "iframe") {
+    return htmlElement(
+      "div",
+      dataAttrs,
+      caption === undefined
+        ? []
+        : [htmlElement("figcaption", {}, [{ type: "text", value: caption }])],
+    );
+  }
 
   if (url === undefined) {
     return htmlElement(
@@ -527,12 +558,14 @@ const blockNode = (block: Block): HtmlElementNode => {
   if (block.type === "divider") {
     return htmlElement("hr", { dataGeulBlockId: block.id }, []);
   }
-  // 4종 미디어 블록(file/image/video/audio, spec §7.1) — RD-001-DELTA-01.
+  // 5종 미디어 블록(file/image/video/audio/iframe, spec §7.1) —
+  // RD-001-DELTA-01, iframe은 CUS-001~004.
   if (
     block.type === "file" ||
     block.type === "image" ||
     block.type === "video" ||
-    block.type === "audio"
+    block.type === "audio" ||
+    block.type === "iframe"
   ) {
     return mediaBlockNode(block);
   }
