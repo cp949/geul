@@ -8,7 +8,7 @@
 
 **customBlocks(EXT-001) 경로는 채택하지 않는다**(그릴링 라운드1 Q5) — `CustomBlockDefinition`(`packages/core/src/custom-extension-definitions.ts:15-24`)은 소비자가 런타임에 등록하는 임의 블록 레지스트리이고 `Block` 유니온 멤버가 아니다(`DocumentBlock = Block | CustomBlock`, `types.ts:221`). iframe은 model/core/io/react 4계층 전부에 걸친 네이티브 15→16번째 `Block` 타입으로 간다 — 인벤토리가 이미 이를 `EXT-001`의 `PARITY` 목표와 다른 `CUSTOM` 카테고리로 구분해 두었다.
 
-**media 블록(`file`/`image`/`video`/`audio`, `MediaBlockKind`)을 5번째 kind로 확장한다** — 별도 병렬 인프라(독립 kind 유니온, 독립 리사이즈 핸들, 독립 toolbar)를 새로 만들지 않는다. resize(`setMediaPreviewWidth`)/정렬(`setMediaTextAlignment`)/선택 판정(`getSelectionMediaBlock`)/오버레이(`media-resize-handles.tsx`, `media-handle-overlays.tsx`)/toolbar(`media-toolbar.tsx`)/sanitize·export·import(`data-geul-media-kind` 마커 관례)/GFM loss(`MEDIA_TYPE_LOST` 등)를 전부 재사용한다. "Media"라는 이름이 iframe엔 다소 부정확하지만 전면 rename은 이번 범위 밖이다(§8). ADR-0002의 "동일 불변식을 여러 패키지가 다시 구현하지 않는다"는 원칙과 `docs/agents/workflow-shared.md`의 DELTA 크기 규칙(서로 다른 패키지 3개 이상을 동시에 건드리면 경계 신호) 둘 다 이 재사용 방향을 가리킨다.
+**media 블록(`file`/`image`/`video`/`audio`, `MediaBlockKind`)을 5번째 kind로 확장한다** — 별도 병렬 인프라(독립 kind 유니온, 독립 리사이즈 핸들, 독립 toolbar)를 새로 만들지 않는다. resize(`setMediaPreviewWidth`)/정렬(`setMediaTextAlignment`)/선택 판정(`getSelectionMediaBlock`)/오버레이(`media-resize-handles.tsx`, `media-handle-overlays.tsx`)/toolbar(`media-toolbar.tsx`)/sanitize·export·import(`data-geul-media-type` 마커 관례)/GFM loss(`MEDIA_TYPE_LOST` 등)를 전부 재사용한다. "Media"라는 이름이 iframe엔 다소 부정확하지만 전면 rename은 이번 범위 밖이다(§8). ADR-0002의 "동일 불변식을 여러 패키지가 다시 구현하지 않는다"는 원칙과 `docs/agents/workflow-shared.md`의 DELTA 크기 규칙(서로 다른 패키지 3개 이상을 동시에 건드리면 경계 신호) 둘 다 이 재사용 방향을 가리킨다.
 
 **그릴링 원안에서 코드 조사로 정정된 두 지점**(둘 다 사용자에게 별도 재확인 없이 media 선례에 맞춰 이 문서에서 확정 — 아래 §2, §3, §4에 반영):
 
@@ -104,7 +104,7 @@ export type IframeBlock = {
 - `import-html-sanitize-schema.ts`의 `mediaDataAttributeNames`(17-25행)에 `dataGeulSrc`, `dataGeulTitle`, `dataGeulAspectRatio` 3개 추가. `div`/`figure` 허용 속성 목록(45-98행)에도 반영.
 - **export**(`export-html.ts:198-225`의 `mediaBlockNode` 패턴 재사용): `previewWidth` 있고 `src`가 검증을 통과했으면
   ```html
-  <figure data-geul-block-id="..." data-geul-media-kind="iframe"
+  <figure data-geul-block-id="..." data-geul-media-type="iframe"
           data-geul-src="https://..." data-geul-title="..." data-geul-aspect-ratio="16:9"
           data-geul-preview-width="640" data-geul-text-alignment="center"
           style="width: 640px">
@@ -114,8 +114,8 @@ export type IframeBlock = {
   </figure>
   ```
   `src`가 없으면 media의 빈 상태(202-209행)와 동일하게 `<div {...dataAttrs}>`만 방출. sandbox/allow/referrerPolicy는 export를 수행한 `EditorController`의 `iframeEmbed` 설정값(또는 미지정 시 CUS-002 기본값)을 그 시점에 굳혀 넣는다(§1 정정).
-- **import**(`import-html-media.ts`의 `isMediaNode`/`mediaBlockFromNode` 확장): outer `data-geul-media-kind="iframe"` 마커가 있는 `div`/`figure`를 발견하면 **wrapper의 `data-geul-src`/`data-geul-title`/`data-geul-aspect-ratio`/`data-geul-preview-width`/`data-geul-text-alignment` 속성만으로 블록을 재구성**한다 — 내부 `<iframe>` 태그는 sanitize 단계에서 이미 제거됐으므로 참조하지 않는다(media가 `<img>`/`<video>` 태그 자체에서 `src`를 읽는 것과 달리, iframe은 태그가 사라지므로 wrapper 속성이 유일한 소스).
-- `resolveIframeEmbedDecision`을 import 경로에도 적용할지: **적용한다(정정, Issue #215, RD-001~002).** 위 "적용하지 않는다" 결정은 sanitize의 태그 strip이 iframe wrapper 위조까지 막아준다고 잘못 가정했다 — sanitize는 raw `<iframe>` 태그만 제거할 뿐, own-format wrapper(`data-geul-media-kind="iframe"` + `data-geul-src`)의 `data-geul-src` 속성 자체는 media 5종 공통 허용 목록에 있어 조작된 값도 그대로 통과시킨다. `<div data-geul-media-kind="iframe" data-geul-src="https://169.254.169.254/...">` 같은 위조 wrapper가 whitelist·private-network 정책 없이 살아있는 iframe으로 복원되는 결함이 있었다.
+- **import**(`import-html-media.ts`의 `isMediaNode`/`mediaBlockFromNode` 확장): outer `data-geul-media-type="iframe"` 마커가 있는 `div`/`figure`를 발견하면 **wrapper의 `data-geul-src`/`data-geul-title`/`data-geul-aspect-ratio`/`data-geul-preview-width`/`data-geul-text-alignment` 속성만으로 블록을 재구성**한다 — 내부 `<iframe>` 태그는 sanitize 단계에서 이미 제거됐으므로 참조하지 않는다(media가 `<img>`/`<video>` 태그 자체에서 `src`를 읽는 것과 달리, iframe은 태그가 사라지므로 wrapper 속성이 유일한 소스).
+- `resolveIframeEmbedDecision`을 import 경로에도 적용할지: **적용한다(정정, Issue #215, RD-001~002).** 위 "적용하지 않는다" 결정은 sanitize의 태그 strip이 iframe wrapper 위조까지 막아준다고 잘못 가정했다 — sanitize는 raw `<iframe>` 태그만 제거할 뿐, own-format wrapper(`data-geul-media-type="iframe"` + `data-geul-src`)의 `data-geul-src` 속성 자체는 media 5종 공통 허용 목록에 있어 조작된 값도 그대로 통과시킨다. `<div data-geul-media-type="iframe" data-geul-src="https://169.254.169.254/...">` 같은 위조 wrapper가 whitelist·private-network 정책 없이 살아있는 iframe으로 복원되는 결함이 있었다.
   - `importHtml`(`packages/io`)에 선택적 `iframeEmbed?: IframeEmbedConfig` 파라미터를 추가했다. 생략 시 `resolveIframeEmbedDecision`의 함수 기본값(whitelist 없음·custom URL 비허용·private network 차단·https만 허용)이 그대로 적용된다 — host가 `importHtml`을 직접 호출하는 통합(서버 사이드 parse/render, `IO-009`)도 이 파라미터로만 보호받는다.
   - **own-export 라운드트립도 예외 없이 재검증한다** — 신뢰 판별 마커가 없고, HTML은 저장 원본(JSON)이 아니라 `iframe-embed-policy.ts`의 "저장된 문서는 host 설정이 바뀌어도 계속 load돼야 한다" 불변식과 무관하다(그 불변식은 `parseDocument`가 다루는 JSON 문서 로드 경로 전용이다).
   - 정책 거부는 경고를 내지 않는다 — export 쪽의 기존 정책(host 설정 미지정 시 조용히 빈 wrapper만 유지)과 대칭이다.
@@ -133,7 +133,7 @@ export type IframeBlock = {
 ### preview.css
 
 ```css
-[data-geul-media-kind="iframe"] iframe { display: block; width: 100%; max-width: 100%; border: 0; }
+[data-geul-media-type="iframe"] iframe { display: block; width: 100%; max-width: 100%; border: 0; }
 ```
 정렬 규칙(`figure[data-geul-text-alignment="left"|"right"]`, `preview.css:162-170`, `275-289`)은 기존 규칙을 그대로 상속 — 신규 CSS 불필요.
 

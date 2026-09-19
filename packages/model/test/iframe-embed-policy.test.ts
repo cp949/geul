@@ -154,6 +154,55 @@ describe("private network 차단 — custom URL opt-in 상태에서만 적용", 
     ).toEqual({ allowed: true });
   });
 
+  it.each([
+    "https://0177.0.0.1/admin", // 8진수 표기(127.0.0.1)
+    "https://0x7f.0.0.1/admin", // 16진수 표기(127)
+    "https://0x7f000001/admin", // 16진수 표기(127.0.0.1 전체, 32bit 단일 숫자)
+    "https://127.1/admin", // 축약 표기(127.0.0.1)
+    "https://127.0.1/admin", // 축약 표기(127.0.0.1)
+    "https://2130706433/admin", // 10진수 표기(127.0.0.1 전체, 32bit 단일 숫자)
+  ])(
+    "%s는 브라우저가 loopback으로 해석하는 비표준 IPv4 표기라도 PRIVATE_NETWORK_BLOCKED다(Issue #215)",
+    (url) => {
+      expect(resolveIframeEmbedDecision(url, { allowCustomUrl: true })).toEqual(
+        { allowed: false, reason: "PRIVATE_NETWORK_BLOCKED" },
+      );
+    },
+  );
+
+  it.each([
+    "https://[::ffff:127.0.0.1]/admin", // IPv4-mapped IPv6(loopback)
+    "https://[::ffff:169.254.169.254]/admin", // IPv4-mapped IPv6(link-local metadata)
+    "https://[0:0:0:0:0:0:0:1]/admin", // 압축하지 않은 ::1
+    "https://[fe80::1]/admin", // link-local
+  ])(
+    "%s는 IPv4-mapped·압축 해제·link-local IPv6 표기라도 PRIVATE_NETWORK_BLOCKED다(Issue #215)",
+    (url) => {
+      expect(resolveIframeEmbedDecision(url, { allowCustomUrl: true })).toEqual(
+        { allowed: false, reason: "PRIVATE_NETWORK_BLOCKED" },
+      );
+    },
+  );
+
+  it("공인 IPv4 리터럴(점 표기)은 사설망 범위 밖이면 허용한다 — 새 파서가 공인 IP를 오탐하지 않는다", () => {
+    expect(
+      resolveIframeEmbedDecision("https://8.8.8.8/admin", {
+        allowCustomUrl: true,
+      }),
+    ).toEqual({ allowed: true });
+  });
+
+  it("점이 없는 숫자 단일 라벨은(예: '8.8.8.8'의 32bit 표기 '134744072') 공인 IP 값이어도 단일 라벨 호스트명 규칙으로 차단한다", () => {
+    // 134744072 === 8.8.8.8이지만 "."가 없어 isPrivateNetworkHostname의
+    // 단일 라벨 호스트명(예: "intranet") 휴리스틱에 먼저 걸린다 — 오탐
+    // 방향이 안전(차단)하므로 기존 동작을 유지한다.
+    expect(
+      resolveIframeEmbedDecision("https://134744072/admin", {
+        allowCustomUrl: true,
+      }),
+    ).toEqual({ allowed: false, reason: "PRIVATE_NETWORK_BLOCKED" });
+  });
+
   it("화이트리스트 매칭 항목은 private network 검사 대상이 아니다(host가 이미 vetting했다고 본다)", () => {
     expect(
       resolveIframeEmbedDecision("https://internal.example.com/embed", {

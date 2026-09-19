@@ -72,11 +72,71 @@ const extractHostname = (authority: string): string => {
   return colonIndex === -1 ? hostAndPort : hostAndPort.slice(0, colonIndex);
 };
 
-const isIPv4PrivateOrLoopback = (host: string): boolean => {
-  const match = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
-  if (!match) return false;
-  const a = Number(match[1]);
-  const b = Number(match[2]);
+// WHATWG URL "IPv4 number parser" — 8진수("0" 접두)·16진수("0x"/"0X"
+// 접두) 표기를 허용한다. 브라우저가 "0177"을 127로, "0x7f"를 127로
+// 해석하는 표기를 우리도 같이 인식해야 host 문자열 검사가 실제 브라우저
+// 동작과 어긋나지 않는다 — 그렇지 않으면 "0177.0.0.1"처럼 정규식
+// \d{1,3}에는 안 걸리지만 브라우저는 127.0.0.1로 로드하는 표기로
+// private-network 차단을 우회할 수 있다.
+const parseIPv4Number = (input: string): number | undefined => {
+  if (input === "") return undefined;
+  let radix = 10;
+  let digits = input;
+  if (digits.length > 1 && /^0[xX]/.test(digits)) {
+    radix = 16;
+    digits = digits.slice(2);
+  } else if (digits.length > 1 && digits.startsWith("0")) {
+    radix = 8;
+    digits = digits.slice(1);
+  }
+  if (digits === "") return 0;
+  const validDigits =
+    radix === 16 ? /^[0-9a-fA-F]+$/ : radix === 8 ? /^[0-7]+$/ : /^[0-9]+$/;
+  if (!validDigits.test(digits)) return undefined;
+  return parseInt(digits, radix);
+};
+
+// WHATWG URL "IPv4 parser" — 4개보다 적은 "."-분리 파트("127.1")도
+// 허용한다. 마지막 파트가 남은 바이트를 모두 흡수한다("127.1" ==
+// "127.0.0.1"). 파트 하나가 숫자로 해석되지 않으면(도메인 이름이면
+// 항상 이 경우다) undefined를 반환한다 — 그러면 호출부는 도메인
+// 이름으로 취급하고 IPv4 사설망 검사를 건너뛴다.
+const parseIPv4 = (host: string): number | undefined => {
+  const rawParts = host.split(".");
+  const parts =
+    rawParts.length > 1 && rawParts[rawParts.length - 1] === ""
+      ? rawParts.slice(0, -1) // 끝에 붙은 "."(trailing dot)는 무시한다
+      : rawParts;
+  if (parts.length === 0 || parts.length > 4) return undefined;
+
+  const numbers: number[] = [];
+  for (const part of parts) {
+    const value = parseIPv4Number(part);
+    if (value === undefined || !Number.isFinite(value)) return undefined;
+    numbers.push(value);
+  }
+
+  for (let i = 0; i < numbers.length - 1; i += 1) {
+    const value = numbers[i];
+    if (value === undefined || value > 255) return undefined;
+  }
+  const last = numbers[numbers.length - 1];
+  if (last === undefined) return undefined;
+  const maxLast = 256 ** (5 - numbers.length) - 1;
+  if (last > maxLast) return undefined;
+
+  let ipv4 = last;
+  for (let i = 0; i < numbers.length - 1; i += 1) {
+    const value = numbers[i];
+    if (value === undefined) return undefined;
+    ipv4 += value * 256 ** (3 - i);
+  }
+  return ipv4 >>> 0;
+};
+
+const isPrivateIPv4Number = (ipv4: number): boolean => {
+  const a = (ipv4 >>> 24) & 0xff;
+  const b = (ipv4 >>> 16) & 0xff;
   return (
     a === 127 || // loopback
     a === 10 || // 10.0.0.0/8
@@ -87,11 +147,110 @@ const isIPv4PrivateOrLoopback = (host: string): boolean => {
   );
 };
 
+const isIPv4PrivateOrLoopback = (host: string): boolean => {
+  const ipv4 = parseIPv4(host);
+  return ipv4 !== undefined && isPrivateIPv4Number(ipv4);
+};
+
+// "::"(zero-run 압축)을 8개 16bit group으로 펼친다. 마지막 group이
+// dotted-decimal("127.0.0.1")이면 IPv4-mapped/compat 표기("::ffff:a.b.c.d")로
+// 보고 두 16bit group으로 변환한다. 유효하지 않으면 undefined다.
+const expandIPv6Groups = (address: string): string[] | undefined => {
+  const sides = address.split("::");
+  if (sides.length > 2) return undefined; // "::"는 주소당 최대 1번만 허용된다
+
+  const withIPv4Tail = (groups: string[]): string[] | undefined => {
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup === undefined || !lastGroup.includes(".")) return groups;
+    const ipv4 = parseIPv4(lastGroup);
+    if (ipv4 === undefined) return undefined;
+    return [
+      ...groups.slice(0, -1),
+      (((ipv4 >>> 16) & 0xffff) >>> 0).toString(16),
+      ((ipv4 & 0xffff) >>> 0).toString(16),
+    ];
+  };
+
+  if (sides.length === 1) {
+    const single = sides[0];
+    if (single === undefined) return undefined;
+    const groups = withIPv4Tail(single === "" ? [] : single.split(":"));
+    return groups !== undefined && groups.length === 8 ? groups : undefined;
+  }
+
+  const headRaw = sides[0];
+  const tailRaw = sides[1];
+  if (headRaw === undefined || tailRaw === undefined) return undefined;
+  const head = headRaw === "" ? [] : headRaw.split(":");
+  const tailParts = tailRaw === "" ? [] : tailRaw.split(":");
+  const tail = withIPv4Tail(tailParts);
+  if (tail === undefined) return undefined;
+  const missing = 8 - head.length - tail.length;
+  if (missing < 0) return undefined;
+  return [...head, ...Array<string>(missing).fill("0"), ...tail];
+};
+
+const toIPv6GroupNumbers = (groups: string[]): number[] | undefined => {
+  const numbers: number[] = [];
+  for (const group of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(group)) return undefined;
+    numbers.push(parseInt(group, 16));
+  }
+  return numbers;
+};
+
 // bracketed는 URL.hostname이 IPv6 리터럴일 때의 형태("[::1]" 등, 대괄호
-// 포함)다.
+// 포함)다. 압축("::")과 IPv4-mapped 표기("[::ffff:127.0.0.1]")까지
+// 정규화한 뒤 검사한다 — 그렇지 않으면 "[::1]"만 걸리고
+// "[0:0:0:0:0:0:0:1]"이나 "[::ffff:127.0.0.1]"(사설 IPv4를 IPv6로 감싼
+// 표기, 브라우저는 실제로 127.0.0.1로 접속한다)은 정규식을 통과해
+// private-network 차단을 우회한다.
 const isIPv6PrivateOrLoopback = (bracketed: string): boolean => {
   const inner = bracketed.slice(1, -1).toLowerCase();
-  return inner === "::1" || /^f[cd][0-9a-f]{2}:/.test(inner);
+  const groups = expandIPv6Groups(inner);
+  if (groups === undefined) return false;
+  const numbers = toIPv6GroupNumbers(groups);
+  if (numbers === undefined || numbers.length !== 8) return false;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = numbers;
+  if (
+    g0 === undefined ||
+    g1 === undefined ||
+    g2 === undefined ||
+    g3 === undefined ||
+    g4 === undefined ||
+    g5 === undefined ||
+    g6 === undefined ||
+    g7 === undefined
+  ) {
+    return false;
+  }
+
+  if (
+    g0 === 0 &&
+    g1 === 0 &&
+    g2 === 0 &&
+    g3 === 0 &&
+    g4 === 0 &&
+    g5 === 0 &&
+    g6 === 0 &&
+    g7 === 1
+  ) {
+    return true; // ::1 loopback
+  }
+  if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
+  if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if (
+    g0 === 0 &&
+    g1 === 0 &&
+    g2 === 0 &&
+    g3 === 0 &&
+    g4 === 0 &&
+    g5 === 0xffff
+  ) {
+    // ::ffff:0:0/96 IPv4-mapped — 내장된 IPv4가 사설망인지 재검사한다.
+    return isPrivateIPv4Number(((g6 << 16) | g7) >>> 0);
+  }
+  return false;
 };
 
 const isPrivateNetworkHostname = (hostname: string): boolean => {

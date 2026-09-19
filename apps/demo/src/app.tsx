@@ -150,7 +150,7 @@ const EditorWorkspace = ({
   };
 
   const loadHtml = () => {
-    const result = importHtml(source);
+    const result = importHtml(source, { iframeEmbed: DEMO_IFRAME_EMBED });
     if (!result.ok) {
       setErrors([result.error]);
       setWarnings([]);

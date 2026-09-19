@@ -120,6 +120,18 @@ const consumeMediaVisualAttributeWarnings = (
   // 않는다 — 소비할 것이 없다.
 };
 
+// wrapper의 data-geul-src를 resolveIframeEmbedDecision으로 재검증한다
+// (Issue #215) — 거부되면 조용히 undefined로 강등한다(위 mediaBlockFromNode
+// 주석의 대칭 정책 참고).
+const resolvedIframeUrl = (
+  rawSrc: string | undefined,
+  iframeEmbedConfig: IframeEmbedConfig,
+): string | undefined =>
+  rawSrc !== undefined &&
+  resolveIframeEmbedDecision(rawSrc, iframeEmbedConfig).allowed
+    ? rawSrc
+    : undefined;
+
 // segmentBlocks가 낸 kind:"media" 세그먼트 하나를 5종 Block으로 디코드한다.
 // data-geul-*는 항상 node(세그먼트 자신) 속성이고, src/href는 visualNode(시각
 // 태그) 속성이다 — figure/div/bare 시각 태그 세 형태 중 figure만 이 둘이
@@ -205,10 +217,7 @@ export const mediaBlockFromNode = (
     mediaType === "iframe" ? propertyString(node, "dataGeulSrc") : undefined;
   const url =
     mediaType === "iframe"
-      ? rawIframeSrc !== undefined &&
-        resolveIframeEmbedDecision(rawIframeSrc, iframeEmbedConfig).allowed
-        ? rawIframeSrc
-        : undefined
+      ? resolvedIframeUrl(rawIframeSrc, iframeEmbedConfig)
       : visualNode === undefined
         ? undefined
         : visualNode.tagName === "a"
