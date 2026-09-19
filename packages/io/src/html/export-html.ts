@@ -4,12 +4,14 @@ import {
   type CustomBlock,
   type Document,
   type HeadingBlock,
+  type IframeEmbedConfig as IframeUrlPolicy,
   type InlineContentItem,
   isKnownBlockType,
   isListItemBlockType,
   isSafeCodeBlockLanguageClassToken,
   type ListItemBlock,
   parseDocument,
+  resolveIframeEmbedDecision,
   type SyntaxHighlighter,
   type TableBlock,
   type TextBlockProps,
@@ -49,12 +51,42 @@ const stringifyProcessor = unified().use(rehypeStringify, {
   allowDangerousHtml: true,
 });
 
+// iframe(CUS-001~004) export 전용 host 설정이다. model의
+// IframeEmbedConfig(iframe-embed-policy.ts)는 URL 허용 정책 4필드만 안다 —
+// sandbox/allow/referrerPolicy는 렌더링 옵션이라 core의 EditorController
+// 전용 옵션(IframeBlockExtension.options)이 별도로 갖는다(spec §3). io는
+// core를 참조할 수 없으므로(AGENTS.md 아키텍처 불변식 `io -> model`) core의
+// `iframe-embed-config.ts`(IframeUrlPolicy & Partial<IframeBlockExtensionOptions>)와
+// 정확히 같은 합성을 이 계층에서 독립적으로 반복한다 — model이 URL 정책만
+// 아는 것과 동일한 계층 경계 이유다(RD-003-DELTA-02.md "readiness" 참고).
+export type IframeEmbedExportConfig = IframeUrlPolicy & {
+  sandbox?: string;
+  allow?: string;
+  referrerPolicy?: string;
+};
+
+// core(iframe-block-extension.ts)와 문자열 그대로 일치시킨다 — 라이브
+// 에디터와 정적 export가 같은 시각·보안 결과를 내야 한다(spec §1). 공유
+// 소스가 아니라 층별 독립 복제다(io는 core를 참조할 수 없다).
+const DEFAULT_IFRAME_SANDBOX =
+  "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms";
+const DEFAULT_IFRAME_ALLOW = "";
+const DEFAULT_IFRAME_REFERRER_POLICY = "strict-origin-when-cross-origin";
+// previewWidth 미설정 시 iframe 기본 너비(px) — core DEFAULT_IFRAME_WIDTH_PX와
+// 동일 값(iframe-block-extension.ts). image/video와 달리 iframe은 intrinsic
+// 크기가 없어 명시적 width 없이는 브라우저 기본값(300x150)으로 찌그러진다.
+const DEFAULT_IFRAME_EXPORT_WIDTH_PX = 640;
+
 export type ExportHtmlOptions = {
   customBlockToHtml?: Record<string, (block: CustomBlock) => string>;
   // spec §10(Issue #172) — codeBlock을 강조 span 포함 HTML로 내보낸다.
   // exportHtml은 완전 동기라 Promise를 반환하는 결과는 기다리지 않고 해당
   // 코드 블록만 plain으로 남긴다(ADR-0016, code-block-highlight.ts).
   syntaxHighlighter?: SyntaxHighlighter;
+  // RD-003 DELTA-02 — export를 수행하는 host의 iframe 설정. 미지정이면
+  // 모든 src가 정책 미허용(NOT_WHITELISTED_AND_CUSTOM_DISABLED)으로
+  // 판정돼 DELTA-00b와 동일한 데이터 속성 전용 wrapper를 유지한다.
+  iframeEmbed?: IframeEmbedExportConfig;
 };
 
 // TextBlockProps(RD-001)를 가진 7개 블록 타입(paragraph/heading/quote/목록
@@ -126,10 +158,10 @@ const mediaDataAttributes = (
   block.textAlignment !== undefined
     ? { dataGeulTextAlignment: block.textAlignment }
     : {}),
-  // iframe(CUS-001~004)은 이번 패스에서 실제 <iframe> 태그를 방출하지
-  // 않는다(아래 mediaBlockNode) — url을 보존할 시각 태그 자체가 없으므로
-  // data 속성으로 직접 싣는다. host EditorController 설정을 export
-  // 파이프라인에 실어 실제 태그를 방출하는 설계는 RD-003 본설계로 미룬다.
+  // iframe(CUS-001~004)의 src/aspectRatio는 실제 <iframe> 태그를 낼 때도
+  // (아래 mediaBlockNode/iframeVisualNode, RD-003 DELTA-02) wrapper 자신에
+  // round-trip 진실 공급원으로 항상 함께 싣는다 — src가 host 정책 미허용으로
+  // 실제 태그를 못 내는 경우엔 이 data 속성이 유일한 보존 수단이 된다.
   ...(block.type === "iframe" && block.url !== undefined
     ? { dataGeulSrc: block.url }
     : {}),
@@ -208,19 +240,88 @@ const mediaVisualNode = (
   );
 };
 
-// 4종 미디어 블록의 HTML export 전체(spec §7.1). url 없는 빈 블록은
-// 크래시 없이 data-geul-*만 실은 <div>로 보존한다(문서에 실제로 존재할 수
-// 있는 상태 — model이 url을 optional로 둔다, 시각 콘텐츠가 없을 뿐 name·
-// caption 등은 여전히 round-trip 대상이다).
-const mediaBlockNode = (block: MediaBlock): HtmlElementNode => {
+// iframe(CUS-001~004)의 <iframe> 태그 인라인 style이다. core
+// (iframe-block-extension.ts previewWidthOrDefault + renderHTML)와 정확히
+// 같은 공식이다 — image/video와 달리 iframe은 intrinsic 크기가 없어 항상
+// 값을 낸다(previewWidth 미설정이면 DEFAULT_IFRAME_EXPORT_WIDTH_PX).
+const iframeInlineStyle = (previewWidth: number | undefined): string => {
+  const width =
+    typeof previewWidth === "number" &&
+    Number.isFinite(previewWidth) &&
+    previewWidth > 0
+      ? previewWidth
+      : DEFAULT_IFRAME_EXPORT_WIDTH_PX;
+  return `width:${width}px;max-width:100%;aspect-ratio:16/9`;
+};
+
+// 검증 통과 src를 가진 iframe의 실제 <iframe> 태그(spec §1/§4 "그릴링
+// 원안에서 코드 조사로 정정된 지점" — export 방향만 media 선례를 따라
+// 실제 태그를 방출한다). sandbox/allow/referrerPolicy는 per-block 필드가
+// 아니라 host `iframeEmbed` 설정값을 그 시점에 굳혀 넣는다(core
+// `IframeBlockExtension.options`와 동형 계약). title은 접근성 title
+// 전용 필드가 아니라 4종과 공유하는 name을 재사용한다(DELTA-01 정정).
+const iframeVisualNode = (
+  block: Extract<MediaBlock, { type: "iframe" }>,
+  url: string,
+  iframeEmbed: IframeEmbedExportConfig | undefined,
+  extraAttrs: HtmlElementNode["properties"],
+): HtmlElementNode =>
+  htmlElement(
+    "iframe",
+    {
+      src: url,
+      sandbox: iframeEmbed?.sandbox ?? DEFAULT_IFRAME_SANDBOX,
+      allow: iframeEmbed?.allow ?? DEFAULT_IFRAME_ALLOW,
+      referrerpolicy:
+        iframeEmbed?.referrerPolicy ?? DEFAULT_IFRAME_REFERRER_POLICY,
+      loading: "lazy",
+      title: block.name ?? "",
+      style: iframeInlineStyle(block.previewWidth),
+      ...extraAttrs,
+    },
+    [],
+  );
+
+// 4종 미디어 블록 + iframe의 HTML export 전체(spec §7.1). url 없는 빈
+// 블록은 크래시 없이 data-geul-*만 실은 <div>로 보존한다(문서에 실제로
+// 존재할 수 있는 상태 — model이 url을 optional로 둔다, 시각 콘텐츠가 없을
+// 뿐 name·caption 등은 여전히 round-trip 대상이다).
+const mediaBlockNode = (
+  block: MediaBlock,
+  iframeEmbed?: IframeEmbedExportConfig,
+): HtmlElementNode => {
   const dataAttrs = mediaDataAttributes(block);
   const { url, caption } = block;
 
-  // iframe(CUS-001~004)은 url 유무와 무관하게 항상 데이터 속성 전용
-  // wrapper로 나간다(위 mediaDataAttributes 주석 참고) — image/video/audio
-  // 처럼 실제 시각 태그(<img>/<video>/<audio>)로 승격하는 분기를 타지
-  // 않는다.
+  // iframe(CUS-001~004)은 host 설정으로 검증을 통과한 src에 한해 실제
+  // <iframe> 태그를 낸다(RD-003 DELTA-02) — 그 외(url 없음/정책 미허용)는
+  // DELTA-00b의 안전한 데이터 속성 전용 wrapper를 그대로 유지한다. 이
+  // 재검증은 core의 setIframeSrc 커맨드가 이미 한 번 검증한 값을 신뢰하는
+  // 것과 별개다 — exportHtml은 임의로 구성된 Document를 받을 수 있는
+  // 독립 정적 함수라 스스로 다시 검증한다(core의 라이브 렌더링은 반대로
+  // "이미 검증된 상태만 저장된다"를 신뢰해 재검증하지 않는다).
   if (block.type === "iframe") {
+    const decision =
+      url === undefined
+        ? undefined
+        : resolveIframeEmbedDecision(url, iframeEmbed ?? {});
+    if (url !== undefined && decision !== undefined && decision.allowed) {
+      const visual = iframeVisualNode(
+        block,
+        url,
+        iframeEmbed,
+        caption === undefined ? dataAttrs : {},
+      );
+      if (caption === undefined) return visual;
+      return htmlElement(
+        "figure",
+        { ...dataAttrs, style: iframeInlineStyle(block.previewWidth) },
+        [
+          visual,
+          htmlElement("figcaption", {}, [{ type: "text", value: caption }]),
+        ],
+      );
+    }
     return htmlElement(
       "div",
       dataAttrs,
@@ -416,7 +517,10 @@ const codeBlockNode = (block: CodeBlock): HtmlElementNode => {
   ]);
 };
 
-const listItemNode = (block: ListItemBlock): HtmlElementNode =>
+const listItemNode = (
+  block: ListItemBlock,
+  iframeEmbed?: IframeEmbedExportConfig,
+): HtmlElementNode =>
   htmlElement(
     "li",
     {
@@ -431,7 +535,7 @@ const listItemNode = (block: ListItemBlock): HtmlElementNode =>
         ? inlineContentToNodes(block.content)
         : [
             htmlElement("p", {}, inlineContentToNodes(block.content)),
-            ...knownBlockNodes(block.children),
+            ...knownBlockNodes(block.children, iframeEmbed),
           ]),
     ],
   );
@@ -449,11 +553,16 @@ const detailsNode = (
   collapsed: boolean | undefined,
   summary: HtmlElementNode,
   children: Block[] | undefined,
+  iframeEmbed?: IframeEmbedExportConfig,
 ): HtmlElementNode => {
   const detailsChildren: HtmlElementContent[] = [summary];
   if (children !== undefined && children.length > 0) {
     detailsChildren.push(
-      htmlElement("div", { dataGeulChildren: "1" }, knownBlockNodes(children)),
+      htmlElement(
+        "div",
+        { dataGeulChildren: "1" },
+        knownBlockNodes(children, iframeEmbed),
+      ),
     );
   }
   return htmlElement(
@@ -473,7 +582,10 @@ const detailsNode = (
 // numberedListItem만 <ol>이다 — bulletListItem·checkListItem은 둘 다
 // 번호가 없는 <ul>이다(로드맵 D3, checkListItem은 data-geul-checked로만
 // 구분한다).
-const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
+const listNode = (
+  blocks: ListItemBlock[],
+  iframeEmbed?: IframeEmbedExportConfig,
+): HtmlElementNode => {
   const first = blocks[0];
   if (first === undefined) throw new Error("Cannot serialize an empty list");
   return htmlElement(
@@ -481,7 +593,7 @@ const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
     first.type === "numberedListItem" && first.startNumber !== undefined
       ? { start: first.startNumber }
       : {},
-    blocks.map(listItemNode),
+    blocks.map((block) => listItemNode(block, iframeEmbed)),
   );
 };
 
@@ -491,30 +603,40 @@ const listNode = (blocks: ListItemBlock[]): HtmlElementNode => {
 const blockNodes = (
   blocks: Block[],
   customBlockToHtml?: Record<string, (block: CustomBlock) => string>,
+  iframeEmbed?: IframeEmbedExportConfig,
 ): Array<HtmlElementContent | HtmlRawNode> =>
-  groupListItemRuns(blocks, listNode).map((entry) => {
-    if (entry.kind !== "block") return entry.node;
-    // top-level 전용 CustomBlock(model, RD-002)이 Block[]로 캐스트된 채
-    // 여기 도달할 수 있다 — exportHtml 진입점이 등록된 타입만 통과시켰다는
-    // 계약 위에서 렌더러를 바로 호출한다(RD-003). 렌더러가 반환한 문자열은
-    // 구조화된 트리로 재파싱하지 않고 raw 노드로 그대로 삽입한다.
-    if (!isKnownBlockType(entry.block.type)) {
-      const renderer = customBlockToHtml?.[entry.block.type];
-      return {
-        type: "raw" as const,
-        value: renderer!(entry.block as unknown as CustomBlock),
-      };
-    }
-    return blockNode(entry.block);
-  });
+  groupListItemRuns(blocks, (group) => listNode(group, iframeEmbed)).map(
+    (entry) => {
+      if (entry.kind !== "block") return entry.node;
+      // top-level 전용 CustomBlock(model, RD-002)이 Block[]로 캐스트된 채
+      // 여기 도달할 수 있다 — exportHtml 진입점이 등록된 타입만 통과시켰다는
+      // 계약 위에서 렌더러를 바로 호출한다(RD-003). 렌더러가 반환한 문자열은
+      // 구조화된 트리로 재파싱하지 않고 raw 노드로 그대로 삽입한다.
+      if (!isKnownBlockType(entry.block.type)) {
+        const renderer = customBlockToHtml?.[entry.block.type];
+        return {
+          type: "raw" as const,
+          value: renderer!(entry.block as unknown as CustomBlock),
+        };
+      }
+      return blockNode(entry.block, iframeEmbed);
+    },
+  );
 
 // CustomBlock은 top-level 전용 leaf라(model, RD-002) 어떤 블록의 children
 // 자리에도 나타나지 않는다 — 이 불변식 위에서 재귀 호출 자리는 raw 노드가
 // 섞이지 않은 blockNodes 결과만 받는다고 좁혀 쓴다(customBlockToHtml을
 // threading하지 않는 이유이기도 하다). 최상위 호출(exportHtml 본문)만
-// customBlockToHtml을 직접 전달하고 이 헬퍼를 거치지 않는다.
-const knownBlockNodes = (blocks: Block[]): HtmlElementContent[] =>
-  blockNodes(blocks) as HtmlElementContent[];
+// customBlockToHtml을 직접 전달하고 이 헬퍼를 거치지 않는다. iframeEmbed는
+// 반대로 재귀에도 threading한다 — media(iframe 포함)는 CustomBlock과 달리
+// quote/callout/paragraph·heading-with-children/list item의 children에
+// 중첩될 수 있어(model `children?: Block[]`, atom 배제 없음), 중첩된
+// iframe도 같은 host 설정을 적용받아야 한다(RD-003 DELTA-02).
+const knownBlockNodes = (
+  blocks: Block[],
+  iframeEmbed?: IframeEmbedExportConfig,
+): HtmlElementContent[] =>
+  blockNodes(blocks, undefined, iframeEmbed) as HtmlElementContent[];
 
 // children이 있는 paragraph/heading은 자기 자신(children 없이, blockId
 // 그대로)과 children을 감싼 두 번째 컨테이너를 <div data-geul-block-id>
@@ -533,11 +655,14 @@ const knownBlockNodes = (blocks: Block[]): HtmlElementContent[] =>
 // quote는 이 wrapper를 쓰지 않는다 — blockquote가 flow content를 담을 수
 // 있어 자기 콘텐츠 <p>와 children 컨테이너를 blockquote 안에 직접 둔다
 // (아래 quote 분기).
-const blockNode = (block: Block): HtmlElementNode => {
+const blockNode = (
+  block: Block,
+  iframeEmbed?: IframeEmbedExportConfig,
+): HtmlElementNode => {
   if (block.type === "table") return tableNode(block);
   if (block.type === "codeBlock") return codeBlockNode(block);
   if (isListItemBlockType(block.type)) {
-    return listNode([block as ListItemBlock]);
+    return listNode([block as ListItemBlock], iframeEmbed);
   }
   // toggleListItem은 ListItemBlockType이 아니다(로드맵 D2 — <li>/<ul> 표현이
   // 없다). 독립 <details>를 낸다(로드맵 D4).
@@ -551,6 +676,7 @@ const blockNode = (block: Block): HtmlElementNode => {
         inlineContentToNodes(block.content),
       ),
       block.children,
+      iframeEmbed,
     );
   }
   // divider → <hr data-geul-block-id>(spec §7.1). 콘텐츠·children 없는 void
@@ -567,7 +693,7 @@ const blockNode = (block: Block): HtmlElementNode => {
     block.type === "audio" ||
     block.type === "iframe"
   ) {
-    return mediaBlockNode(block);
+    return mediaBlockNode(block, iframeEmbed);
   }
   // quote → <blockquote data-geul-block-id><p>content</p>[<div
   // data-geul-children>children</div>]</blockquote>(spec §7.1 — children은
@@ -585,7 +711,7 @@ const blockNode = (block: Block): HtmlElementNode => {
         htmlElement(
           "div",
           { dataGeulChildren: "1" },
-          knownBlockNodes(block.children),
+          knownBlockNodes(block.children, iframeEmbed),
         ),
       );
     }
@@ -612,7 +738,7 @@ const blockNode = (block: Block): HtmlElementNode => {
         htmlElement(
           "div",
           { dataGeulChildren: "1" },
-          knownBlockNodes(block.children),
+          knownBlockNodes(block.children, iframeEmbed),
         ),
       );
     }
@@ -652,7 +778,7 @@ const blockNode = (block: Block): HtmlElementNode => {
     htmlElement(
       "div",
       { dataGeulChildren: "1" },
-      knownBlockNodes(block.children),
+      knownBlockNodes(block.children, iframeEmbed),
     ),
   ]);
 };
@@ -719,6 +845,7 @@ export const exportHtml = (
       children: blockNodes(
         parsed.value.blocks as Block[],
         options?.customBlockToHtml,
+        options?.iframeEmbed,
       ),
     };
     if (options?.syntaxHighlighter !== undefined) {
