@@ -306,19 +306,27 @@ const mediaBlockNode = (
         ? undefined
         : resolveIframeEmbedDecision(url, iframeEmbed ?? {});
     if (url !== undefined && decision !== undefined && decision.allowed) {
-      const visual = iframeVisualNode(
-        block,
-        url,
-        iframeEmbed,
-        caption === undefined ? dataAttrs : {},
-      );
-      if (caption === undefined) return visual;
+      // caption 유무와 무관하게 항상 wrapper(div/figure)로 감싸고
+      // data-geul-*는 wrapper에만 싣는다(RD-003 DELTA-03 정정) — <iframe>은
+      // sanitize가 태그명만으로 무조건 strip하므로(ADR-0003, 완료 조건 1)
+      // caption 없을 때 dataAttrs를 <iframe> 태그 자신에 실으면(DELTA-02
+      // 원안) re-import 시 태그 전체가 통째로 사라져 라운드트립이 깨진다
+      // (자식 없는 self-closing 태그라 strip의 언랩도 보존할 게 없다).
+      // 4종 media의 bare 시각 태그(img/video/audio/a)는 sanitize가 태그명
+      // 자체를 허용해 살아남으므로 이 문제가 없다 — iframe만 겪는 문제다.
+      const visual = iframeVisualNode(block, url, iframeEmbed, {});
       return htmlElement(
-        "figure",
+        caption === undefined ? "div" : "figure",
         { ...dataAttrs, style: iframeInlineStyle(block.previewWidth) },
         [
           visual,
-          htmlElement("figcaption", {}, [{ type: "text", value: caption }]),
+          ...(caption === undefined
+            ? []
+            : [
+                htmlElement("figcaption", {}, [
+                  { type: "text", value: caption },
+                ]),
+              ]),
         ],
       );
     }

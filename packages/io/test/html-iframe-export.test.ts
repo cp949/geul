@@ -48,6 +48,10 @@ describe("iframe HTML 내보내기(RD-003 DELTA-02)", () => {
   });
 
   describe("host가 whitelist provider를 설정하면 실제 <iframe> 태그를 방출한다(완료 조건 2)", () => {
+    // caption 없어도 wrapper(div)로 감싸고 그 안에 실제 <iframe>을 담는다
+    // (RD-003 DELTA-03 정정) — <iframe>은 sanitize가 태그명만으로 무조건
+    // strip하므로(ADR-0003) data-geul-*를 <iframe> 태그 자신에 실으면(DELTA-02
+    // 원안) re-import 시 통째로 사라져 라운드트립이 깨진다.
     it("provider가 매치하면 CUS-002 기본 sandbox/allow/referrerPolicy로 태그를 낸다", () => {
       const result = exportHtml(
         documentOf({
@@ -60,7 +64,10 @@ describe("iframe HTML 내보내기(RD-003 DELTA-02)", () => {
       );
       expect(result).toEqual({
         ok: true,
-        value: `<iframe src="https://www.youtube.com/embed/xyz" ${DEFAULT_IFRAME_ATTRS} loading="lazy" title="영상" style="width:640px;max-width:100%;aspect-ratio:16/9" data-geul-block-id="ifr-2" data-geul-media-type="iframe" data-geul-name="영상" data-geul-src="https://www.youtube.com/embed/xyz"></iframe>`,
+        value:
+          `<div data-geul-block-id="ifr-2" data-geul-media-type="iframe" data-geul-name="영상" data-geul-src="https://www.youtube.com/embed/xyz" style="width:640px;max-width:100%;aspect-ratio:16/9">` +
+          `<iframe src="https://www.youtube.com/embed/xyz" ${DEFAULT_IFRAME_ATTRS} loading="lazy" title="영상" style="width:640px;max-width:100%;aspect-ratio:16/9">` +
+          `</iframe></div>`,
       });
     });
 
