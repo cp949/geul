@@ -65,7 +65,9 @@ const blockIdAttribute = () => ({
   },
 });
 
-const mediaBlockCommonAttributes = () => ({
+// iframe-block-extension.ts가 재사용한다(spec §3 "media-block-extension.ts:
+// 107-117 재사용" — 5번째 media kind가 4종과 동일 attrs 구조를 공유한다).
+export const mediaBlockCommonAttributes = () => ({
   ...blockIdAttribute(),
   url: { default: null, renderHTML: () => ({}) },
   name: { default: null, renderHTML: () => ({}) },
@@ -104,7 +106,9 @@ const isMediaTextAlignment = (
 ): value is "left" | "center" | "right" =>
   value === "left" || value === "center" || value === "right";
 
-const previewAttributes = () => ({
+// iframe-block-extension.ts가 재사용한다(showPreview 포함 전체 재사용 —
+// iframe model 타입엔 없는 필드지만 항상 null로 비활성 상태다, spec §3).
+export const previewAttributes = () => ({
   showPreview: { default: null, renderHTML: () => ({}) },
   previewWidth: { default: null, renderHTML: () => ({}) },
   textAlignment: {
@@ -131,7 +135,8 @@ const previewAttributes = () => ({
 // dictionary 투영 경로 자체가 없어 텍스트를 뺐다), `placeholder-extension.ts`가
 // 이미 쓰는 "데코레이션 + attr() CSS" 경로가 이 저장소의 유일한 선례라
 // 그대로 따른다.
-const nonEmptyString = (value: unknown): string | null =>
+// iframe-block-extension.ts가 재사용한다(src/title 추출).
+export const nonEmptyString = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
 // 렌더링 우선순위(Issue #168 roadmap RD-002 DELTA-01, spec 갱신 §4.1):

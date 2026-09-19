@@ -47,6 +47,7 @@ import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
 import { HistoryNativeUndoFallbackExtension } from "./history-native-undo-fallback-extension.js";
+import { IframeBlockExtension } from "./iframe-block-extension.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
 import { LinkPolicyExtension } from "./link-policy-extension.js";
 import { ListPresentationExtension } from "./list-presentation-extension.js";
@@ -559,6 +560,13 @@ export const createProductionEditor = (options: {
         : []),
       ...(isBlockTypeEnabled("audio", options.enabledBlockTypes)
         ? [AudioBlockExtension]
+        : []),
+      // 5번째 media kind(CUS-001~004, roadmap Issue #212 RD-002 DELTA-01) —
+      // host override(`iframeEmbed` EditorController 옵션 → `.configure()`)는
+      // 아직 배선 전이라 addOptions() 기본값(iframe-block-extension.ts)만
+      // 적용된다(후속 DELTA가 배선한다).
+      ...(isBlockTypeEnabled("iframe", options.enabledBlockTypes)
+        ? [IframeBlockExtension]
         : []),
       // registry(RD-002-DELTA-11, CreateEditorOptions.customBlocks)에
       // 등록된 타입마다 PM atom 노드 하나씩(customBlockEditor는 customBlocks가

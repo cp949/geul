@@ -298,11 +298,14 @@ const codeBlockFromTiptap = (
   };
 };
 
-// 4종 미디어 블록(file/image/video/audio) 디코드(RD-002 DELTA-01, spec
-// §3.1) — divider와 같은 자리에서 저장 attrs를 model prop으로 직대응한다.
-// 실패 경로가 없다(모든 값이 optional이고 형식 검증은 마지막
-// parseDocument가 담당, G-CNV-001). null/undefined는 필드 부재로
-// 접는다(다른 optional prop들과 같은 패턴).
+// 5종 미디어 블록(file/image/video/audio/iframe, iframe은 CUS-001~004
+// roadmap Issue #212 RD-002 DELTA-01) 디코드(RD-002 DELTA-01, spec §3.1) —
+// divider와 같은 자리에서 저장 attrs를 model prop으로 직대응한다. 실패
+// 경로가 없다(모든 값이 optional이고 형식 검증은 마지막 parseDocument가
+// 담당, G-CNV-001). null/undefined는 필드 부재로 접는다(다른 optional
+// prop들과 같은 패턴). iframe은 showPreview가 없고(로컬 미리보기 토글
+// 개념이 없다) 대신 aspectRatio를 갖는다 — image/video와 previewWidth/
+// textAlignment만 공유한다.
 const mediaBlockFromTiptapJson = (node: TiptapJsonNode, id: string): Block => {
   const attrs = node.attrs ?? {};
   const url = attrs.url;
@@ -330,13 +333,25 @@ const mediaBlockFromTiptapJson = (node: TiptapJsonNode, id: string): Block => {
 
   const previewWidth = attrs.previewWidth;
   const textAlignment = attrs.textAlignment;
-  const imageOrVideoProps = {
-    ...showPreviewProp,
+  const previewProps = {
     ...(typeof previewWidth === "number" ? { previewWidth } : {}),
     ...(typeof textAlignment === "string"
       ? { textAlignment: textAlignment as "left" | "center" | "right" }
       : {}),
   };
+
+  if (node.type === "iframe") {
+    const aspectRatio = attrs.aspectRatio;
+    return {
+      id,
+      type: "iframe",
+      ...common,
+      ...previewProps,
+      ...(aspectRatio === "16:9" ? { aspectRatio } : {}),
+    };
+  }
+
+  const imageOrVideoProps = { ...showPreviewProp, ...previewProps };
 
   return node.type === "video"
     ? { id, type: "video", ...common, ...imageOrVideoProps }
@@ -625,7 +640,8 @@ const decodeBlock = (
     node.type === "file" ||
     node.type === "image" ||
     node.type === "video" ||
-    node.type === "audio"
+    node.type === "audio" ||
+    node.type === "iframe"
   ) {
     return {
       ok: true,

@@ -376,19 +376,19 @@ export const dividerBetweenParagraphsDocument = () =>
   documentOf(firstParagraphBlock, dividerD1, secondParagraphBlock);
 
 /**
- * 4종 미디어 블록(file/image/video/audio) 리터럴 — insertMediaBlock·
+ * 5종 미디어 블록(file/image/video/audio/iframe) 리터럴 — insertMediaBlock·
  * setMediaBlockUrl/Name/Caption/BackgroundColor·setMediaPreviewWidth·
  * setMediaShowPreview·setMediaTextAlignment 명령 테스트
  * (editor-controller-media-commands.test.ts)가 공유한다. previewWidth·
- * textAlignment는 image/video만(RD-001 DELTA-01, Issue #154), showPreview는
- * image/video/audio만(RD-002 DELTA-01) 갖는 kind 전용 prop이라 호출부가 그
- * kind에만 넘긴다. quote·divider와 같은 저장 정규형 원칙(생략 가능한 필드는
- * 값이 있을 때만 넣는다)을 따른다.
+ * textAlignment는 image/video/iframe만(RD-001 DELTA-01, Issue #154; iframe은
+ * roadmap Issue #212 RD-002 DELTA-01), showPreview는 image/video/audio만
+ * (RD-002 DELTA-01, iframe은 갖지 않는다 — 로컬 미리보기 토글 개념이
+ * 없다), aspectRatio는 iframe만(spec §2, v1 "16:9" 고정) 갖는 kind 전용
+ * prop이라 호출부가 그 kind에만 넘긴다. quote·divider와 같은 저장 정규형
+ * 원칙(생략 가능한 필드는 값이 있을 때만 넣는다)을 따른다.
  */
 export const mediaBlock = (
-  // "iframe"은 아직 core에 IframeBlockExtension이 없어 이 헬퍼가 구성할 수
-  // 없다(CUS-001~004, RD-002가 자체 test support를 추가할 때까지 제외).
-  kind: Exclude<MediaBlockKind, "iframe">,
+  kind: MediaBlockKind,
   id: string,
   props?: {
     url?: string;
@@ -398,6 +398,7 @@ export const mediaBlock = (
     previewWidth?: number;
     showPreview?: boolean;
     textAlignment?: "left" | "center" | "right";
+    aspectRatio?: "16:9";
   },
 ): Block => {
   const common = {
@@ -419,6 +420,8 @@ export const mediaBlock = (
       : { textAlignment: props.textAlignment };
   const show =
     props?.showPreview === undefined ? {} : { showPreview: props.showPreview };
+  const aspect =
+    props?.aspectRatio === undefined ? {} : { aspectRatio: props.aspectRatio };
   switch (kind) {
     case "file":
       return { ...common, type: "file" };
@@ -428,6 +431,8 @@ export const mediaBlock = (
       return { ...common, ...preview, ...align, ...show, type: "video" };
     case "audio":
       return { ...common, ...show, type: "audio" };
+    case "iframe":
+      return { ...common, ...preview, ...align, ...aspect, type: "iframe" };
   }
 };
 
