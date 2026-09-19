@@ -115,7 +115,11 @@ export type IframeBlock = {
   ```
   `src`가 없으면 media의 빈 상태(202-209행)와 동일하게 `<div {...dataAttrs}>`만 방출. sandbox/allow/referrerPolicy는 export를 수행한 `EditorController`의 `iframeEmbed` 설정값(또는 미지정 시 CUS-002 기본값)을 그 시점에 굳혀 넣는다(§1 정정).
 - **import**(`import-html-media.ts`의 `isMediaNode`/`mediaBlockFromNode` 확장): outer `data-geul-media-kind="iframe"` 마커가 있는 `div`/`figure`를 발견하면 **wrapper의 `data-geul-src`/`data-geul-title`/`data-geul-aspect-ratio`/`data-geul-preview-width`/`data-geul-text-alignment` 속성만으로 블록을 재구성**한다 — 내부 `<iframe>` 태그는 sanitize 단계에서 이미 제거됐으므로 참조하지 않는다(media가 `<img>`/`<video>` 태그 자체에서 `src`를 읽는 것과 달리, iframe은 태그가 사라지므로 wrapper 속성이 유일한 소스).
-- `resolveIframeEmbedDecision`을 import 경로에도 적용할지: **적용하지 않는다** — geul 자체 export를 다시 import하는 라운드트립은 이미 한 번 검증된 src를 신뢰한다. 외부에서 조작된 HTML을 import하는 시나리오의 방어는 sanitize의 태그 strip(위)이 이미 담당한다.
+- `resolveIframeEmbedDecision`을 import 경로에도 적용할지: **적용한다(정정, Issue #215, RD-001~002).** 위 "적용하지 않는다" 결정은 sanitize의 태그 strip이 iframe wrapper 위조까지 막아준다고 잘못 가정했다 — sanitize는 raw `<iframe>` 태그만 제거할 뿐, own-format wrapper(`data-geul-media-kind="iframe"` + `data-geul-src`)의 `data-geul-src` 속성 자체는 media 5종 공통 허용 목록에 있어 조작된 값도 그대로 통과시킨다. `<div data-geul-media-kind="iframe" data-geul-src="https://169.254.169.254/...">` 같은 위조 wrapper가 whitelist·private-network 정책 없이 살아있는 iframe으로 복원되는 결함이 있었다.
+  - `importHtml`(`packages/io`)에 선택적 `iframeEmbed?: IframeEmbedConfig` 파라미터를 추가했다. 생략 시 `resolveIframeEmbedDecision`의 함수 기본값(whitelist 없음·custom URL 비허용·private network 차단·https만 허용)이 그대로 적용된다 — host가 `importHtml`을 직접 호출하는 통합(서버 사이드 parse/render, `IO-009`)도 이 파라미터로만 보호받는다.
+  - **own-export 라운드트립도 예외 없이 재검증한다** — 신뢰 판별 마커가 없고, HTML은 저장 원본(JSON)이 아니라 `iframe-embed-policy.ts`의 "저장된 문서는 host 설정이 바뀌어도 계속 load돼야 한다" 불변식과 무관하다(그 불변식은 `parseDocument`가 다루는 JSON 문서 로드 경로 전용이다).
+  - 정책 거부는 경고를 내지 않는다 — export 쪽의 기존 정책(host 설정 미지정 시 조용히 빈 wrapper만 유지)과 대칭이다.
+  - 라이브 에디터의 클립보드 붙여넣기(`ClipboardPasteExtension`, `packages/core`)는 host의 실제 `iframeEmbed` 설정(construction-time, `setIframeSrc`·render와 같은 소스)을 이 새 파라미터에 그대로 전달한다.
 
 ### Markdown(GFM)
 
