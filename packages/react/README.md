@@ -307,7 +307,11 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
   - 블록 타입 트리거, 블록 타입 아이콘 버튼 7개, 들여쓰기·내어쓰기, mark 버튼 5개, 색상 버튼 2개다.
   - 쓸 수 없는 컨트롤은 `aria-disabled="true"`로 표시한다. 네이티브 `disabled`가 아니라 포커스를 받는다.
   - 대상 블록이 없으면(여러 블록 선택 포함) 블록 컨트롤 전부가 사유 `title`을 가진다. 들여쓰기·내어쓰기가 불가능하면 nesting 사유를 가진다.
-  - mark·색상 버튼(코드 블록·미디어 블록·표 셀 범위)과 변환 불가 블록 타입 버튼은 `aria-disabled`만 표시한다. `title`은 라벨 그대로다.
+  - 코드 블록·미디어 블록·표 셀 범위에서는 mark 버튼 5개와 색상 버튼 2개가 서식 불가 사유 `title`을 가진다.
+  - 현재 블록이 변환을 허용하지 않는 블록 타입 아이콘 버튼은 변환 불가 사유 `title`을 가진다. 예: 코드 블록 안의 목록 4종, 목록 안의 Code.
+  - 블록 타입 아이콘 버튼의 사유 우선순위는 대상 블록 없음, 변환 불가 순이다.
+  - 활성 컨트롤의 `title`은 라벨 그대로다.
+  - 사유 문구는 `dictionary.toolbar.static`의 `markingDisabledReason`, `blockTypeDisabledReason`으로 바꾼다.
 - 표시 상태는 `controller.subscribe()`로 갱신한다. 마우스·키보드·명령 호출·undo 모두 같은 경로다.
 - 접힌 캐럿에서 mark·색상 버튼은 이어 입력할 텍스트에 서식을 건다(stored mark). 문서와 undo 스택은 바뀌지 않는다.
 

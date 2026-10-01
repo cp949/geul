@@ -153,6 +153,9 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 - 블록 타입 컨트롤과 Indent/Outdent를 항상 렌더한다.
 - 대상 블록이 없으면 `aria-disabled`와 사유 `title`로 표시한다(`G-UI-004`).
 - 여러 블록 선택도 같은 방식으로 disable한다.
+- 코드 블록·미디어 블록·표 셀 범위에서는 mark 5개·색상 2개를 `aria-disabled`와 사유 `title`로 표시한다. 세 경우가 문구 하나(`markingDisabledReason`)를 공유한다.
+- 현재 블록이 변환을 허용하지 않는 블록 타입 아이콘 버튼도 사유 `title`로 표시한다. 소스 블록별로 나누지 않고 문구 하나(`blockTypeDisabledReason`)를 공유한다.
+- 블록 타입 아이콘 버튼의 사유 우선순위는 대상 블록 없음, 타입 불허, 활성 순이다. 활성이면 `title`을 생략하고 라벨로 폴백한다.
 - 여러 블록 타입 변환은 하지 않는다(§1 제외).
 - 근거: 컨트롤 수가 selection에 따라 바뀌면 툴바 폭이 흔들리고 키보드 탐색 순서가 불안정해진다.
 
