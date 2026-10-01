@@ -113,11 +113,14 @@ test("FormattingToolbar 버튼에 포커스가 있어도 Control+Shift+z가 redo
 
   await page.keyboard.press("Control+Shift+z");
 
-  // redo 뒤 포커스는 단언하지 않는다. 서식 툴바는 DOM selection이 범위일
-  // 때만 열린다. 에디터가 포커스를 갖지 않으면 ProseMirror가 redo 뒤
-  // selection을 DOM에 반영하지 않고, 갱신된 문서의 DOM에서 기존 범위가
-  // 접혀 툴바가 닫히면서 버튼과 포커스가 함께 사라진다(실측). 이 경로는
-  // 이번 변경의 범위 밖이다.
+  // redo는 undo 시점의 caret을 복원한다. 서식 툴바는 DOM selection이 접히면
+  // 닫히고, 이는 에디터 포커스에서 redo한 결과와 같다. 포커스된 Bold가
+  // unmount돼도 포커스는 `BODY`가 아니라 에디터로 간다(Issue #221,
+  // toolbar-focus-undo-redo.spec.ts가 툴바별 계약을 소유한다).
+  await expect(page.getByRole("toolbar", { name: "Formatting" })).toHaveCount(
+    0,
+  );
+  await expect(editable).toBeFocused();
   await expect(paragraph).toHaveText(`Hello${TYPED}`);
 });
 

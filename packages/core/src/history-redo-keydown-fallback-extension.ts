@@ -67,7 +67,7 @@ export const isHistoryRedoShortcut = (
 };
 
 /** keydown target이 자기 selection·undo 스택을 가진 입력 대상인지 본다. */
-const isInputTarget = (target: Element): boolean => {
+export const isInputTarget = (target: Element): boolean => {
   const tag = target.tagName;
   return (
     tag === "INPUT" ||
