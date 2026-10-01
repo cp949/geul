@@ -39,7 +39,7 @@
 - 편집기에서 툴바로 포커스를 옮기는 단축키. 편집기 안 Shift+Tab은 outdent가 가로챈다.
 - 색상 메뉴 내부의 화살표 탐색.
 - 새 런타임 의존성. 메뉴 라이브러리를 추가하지 않는다.
-- firefox·webkit 전용 검증. chromium 게이트만 쓴다.
+- firefox·webkit 전용 검증. chromium 게이트만 쓴다. 예외는 Issue #222의 `@core` e2e 2건이다. mark 버튼 키보드 활성화 뒤 포커스와 선택 범위 유지만 확인한다.
 
 ## 2. `EditorController.subscribe`
 
