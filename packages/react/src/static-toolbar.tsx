@@ -226,6 +226,10 @@ type BlockTypeMenuState = {
  * 마지막으로 관측한 Range를 되돌린다. StaticToolbar는 hide되지 않으므로
  * "마지막 관측 Range"는 한 번 캡처한 값이 아니라 매 refresh tick마다
  * 갱신되는 값이다(아래 updateFromSelection).
+ *
+ * 색상 스와치(applyInlineColor)만 쓴다. `addRange`는 포커스를 편집기로
+ * 옮긴다. 스와치는 메뉴를 닫고 포커스를 편집기로 돌리므로 계약과 맞는다.
+ * mark 버튼은 포커스를 버튼에 남겨야 해서 쓰지 않는다(Issue #222).
  */
 const restoreEditorSelection = (
   element: HTMLElement | null,
@@ -245,6 +249,19 @@ const restoreEditorSelection = (
 
   selection.removeAllRanges();
   selection.addRange(range);
+};
+
+/**
+ * 툴바 컨테이너 자신을 누른 mousedown의 기본 동작을 막는다(Issue #222).
+ * - 빈 영역이나 컨트롤 사이 틈을 눌러도 편집기 포커스와 selection이 남는다
+ *   (G-UI-001).
+ * - 자식이 target이면 건드리지 않는다. `component` override 안의 입력
+ *   요소는 그대로 포커스를 받는다.
+ */
+const preserveFocusOnToolbarMouseDown = (
+  event: ReactMouseEvent<HTMLDivElement>,
+) => {
+  if (event.target === event.currentTarget) event.preventDefault();
 };
 
 /**
@@ -567,6 +584,7 @@ export const StaticToolbar = ({
       <div
         aria-label={dictionary.toolbar.static.ariaLabel}
         className={containerClassName}
+        onMouseDown={preserveFocusOnToolbarMouseDown}
         role="toolbar"
       >
         <Component editor={editor} />
@@ -621,6 +639,7 @@ export const StaticToolbar = ({
         className={containerClassName}
         onFocus={handleToolbarFocus}
         onKeyDown={handleToolbarKeyDown}
+        onMouseDown={preserveFocusOnToolbarMouseDown}
         ref={toolbarRef}
         role="toolbar"
       >
@@ -739,11 +758,11 @@ export const StaticToolbar = ({
             icon={icon}
             key={mark}
             label={label}
-            onClick={(event) => {
+            onClick={() => {
               if (isMarkingDisabled) return;
-              if (event.detail === 0) {
-                restoreEditorSelection(element, trackedRange.current);
-              }
+              // 키보드 활성화에서도 DOM selection을 다시 쓰지 않는다.
+              // 명령은 편집기 상태의 selection을 읽는다. 포커스는 버튼에
+              // 남는다(Issue #222).
               toggle(editor);
             }}
             tabIndex={rovingTabIndex()}

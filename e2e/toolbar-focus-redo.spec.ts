@@ -7,7 +7,7 @@
  *   보내는지(keydown은 오고 `beforeinput(historyRedo)`는 오지 않는다)는
  *   jsdom이 재현하지 못한다.
  * - 키 판별·가로채기 조건·다중 인스턴스 비침해는 단위 테스트
- *   (history-redo-keydown-fallback-extension.test.ts)가 소유한다.
+ *   (history-keydown-fallback-extension.test.ts)가 소유한다.
  *
  * Chromium 전용이다. 다른 엔진은 이 증상을 검증하지 않아 `@core`를 붙이지
  * 않는다.
@@ -17,21 +17,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { openDemo } from "./support/demo.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
 import { openShowcasePage } from "./support/showcase.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 /** 입력 직후 redo가 되돌릴 텍스트. */
 const TYPED = "ABC";
-
-/**
- * 한 프레임과 한 macrotask를 양보한다. ProseMirror는 selection 변경을
- * `selectionchange` 뒤 비동기로 반영한다.
- */
-const yieldFrame = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => setTimeout(resolve, 0)),
-      ),
-  );
 
 /**
  * StaticToolbar 예제를 열고 첫 문단 끝에 TYPED를 입력한 뒤 에디터 포커스에서

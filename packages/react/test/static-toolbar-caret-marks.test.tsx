@@ -3,9 +3,12 @@
 /**
  * StaticToolbar가 접힌 캐럿 명령을 먼저 호출하고, 적용할 수 없을 때만 기존
  * 선택 영역 명령으로 넘어가는 배선을 확인한다(RD-002-DELTA-02, Issue #218).
- * fake로는 호출 순서와 폴백 조건을, 실제 편집기로는 WebKit 키보드 클릭
- * 방어(selection 복원)가 캐럿 명령보다 먼저 실행되는 순서를 본다.
- * 브라우저에서 stored mark가 입력까지 살아남는지는 e2e가 소유한다.
+ * fake로는 호출 순서와 폴백 조건을, 실제 편집기로는 키보드 클릭이 DOM
+ * selection을 다시 쓰지 않는지 본다(Issue #222).
+ * - DOM selection을 다시 쓰면 포커스가 버튼에서 편집기로 옮겨진다.
+ * - 브라우저에서 포커스와 선택 범위가 유지되는지는
+ *   e2e(showcase-static-toolbar-focus.spec.ts)가 소유한다.
+ * - 브라우저에서 stored mark가 입력까지 살아남는지도 e2e가 소유한다.
  */
 import {
   act,
@@ -170,8 +173,8 @@ describe.each(COLOR_CASES)(
   },
 );
 
-describe("StaticToolbar 실제 편집기의 selection 복원 순서", () => {
-  it("키보드 클릭(detail 0)이면 selection을 복원한 뒤에 캐럿 명령을 호출한다", () => {
+describe("StaticToolbar 실제 편집기의 키보드 클릭", () => {
+  it("키보드 클릭(detail 0)은 DOM selection을 다시 쓰지 않고 캐럿 명령을 호출한다", () => {
     const { editor, blocks } = mountBlockEditor({
       blockIds: ["block-1"],
       children: <StaticToolbar />,
@@ -188,16 +191,20 @@ describe("StaticToolbar 실제 편집기의 selection 복원 순서", () => {
     const selection = document.getSelection();
     if (selection === null) throw new Error("DOM 선택을 얻지 못했다");
     const addRange = vi.spyOn(selection, "addRange");
+    const removeAllRanges = vi.spyOn(selection, "removeAllRanges");
     const caret = vi.spyOn(editor.commands, "toggleCaretMark");
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Bold" }), {
+        detail: 0,
+      });
 
-    fireEvent.click(screen.getByRole("button", { name: "Bold" }), {
-      detail: 0,
-    });
-
-    expect(addRange).toHaveBeenCalled();
-    expect(caret).toHaveBeenCalledWith("bold");
-    expect(addRange.mock.invocationCallOrder[0]).toBeLessThan(
-      caret.mock.invocationCallOrder[0] ?? 0,
-    );
+      expect(caret).toHaveBeenCalledWith("bold");
+      expect(addRange).not.toHaveBeenCalled();
+      expect(removeAllRanges).not.toHaveBeenCalled();
+    } finally {
+      // Selection 객체는 문서가 소유해 테스트 사이에 남는다(G-TST-003).
+      addRange.mockRestore();
+      removeAllRanges.mockRestore();
+    }
   });
 });

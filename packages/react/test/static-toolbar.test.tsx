@@ -8,9 +8,13 @@
  * 정확성 자체는 formatting-toolbar.test.tsx 계열이 이미 검증한다.
  * 블록 타입 컨트롤은 RD-003에서 select가 트리거 버튼과 listbox로 바뀌었다.
  * 메뉴 동작 자체는 static-toolbar-block-type-menu.test.tsx가 소유한다.
+ * 컨테이너 mousedown이 편집기 포커스를 훔치지 않는 계약도 여기서 본다
+ * (Issue #222). 실제 포커스와 selection 유지는
+ * e2e(showcase-static-toolbar-focus.spec.ts)가 소유한다.
  */
 import {
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -35,6 +39,13 @@ const openBlockTypeMenu = () => {
     detail: 1,
   });
   return screen.getByRole("listbox", { name: "Block type" });
+};
+
+/** `target`에 mousedown을 보내고 기본 동작이 막혔는지 돌려준다. */
+const isMouseDownPrevented = (target: Element) => {
+  const event = createEvent.mouseDown(target);
+  fireEvent(target, event);
+  return event.defaultPrevented;
 };
 
 describe("StaticToolbar 상단 고정 툴바", () => {
@@ -339,6 +350,45 @@ describe("StaticToolbar 상단 고정 툴바", () => {
 
       expect(screen.getByRole("toolbar", { name: "Toolbar" })).not.toBeNull();
       expect(screen.getByText("custom")).not.toBeNull();
+    });
+  });
+
+  describe("컨테이너 mousedown", () => {
+    it("툴바 컨테이너 자신이 target인 mousedown은 기본 동작을 막는다", () => {
+      const controller = fakeController();
+      render(withProvider(controller, <StaticToolbar />));
+
+      const toolbar = screen.getByRole("toolbar", { name: "Toolbar" });
+
+      expect(isMouseDownPrevented(toolbar)).toBe(true);
+    });
+
+    it("component override 컨테이너 자신이 target인 mousedown도 기본 동작을 막는다", () => {
+      const controller = fakeController();
+      render(
+        withProvider(
+          controller,
+          <StaticToolbar component={() => <input aria-label="custom" />} />,
+        ),
+      );
+
+      const toolbar = screen.getByRole("toolbar", { name: "Toolbar" });
+
+      expect(isMouseDownPrevented(toolbar)).toBe(true);
+    });
+
+    it("component override 안 input이 target인 mousedown은 기본 동작을 막지 않는다", () => {
+      const controller = fakeController();
+      render(
+        withProvider(
+          controller,
+          <StaticToolbar component={() => <input aria-label="custom" />} />,
+        ),
+      );
+
+      const input = screen.getByRole("textbox", { name: "custom" });
+
+      expect(isMouseDownPrevented(input)).toBe(false);
     });
   });
 
