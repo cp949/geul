@@ -292,7 +292,45 @@ function Editor() {
 
 highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki, CodeMirror/lezer, sugar-high)로 만든 동작 예제는 `apps/showcase`의 `src/examples/10-syntax-highlighting-lowlight`~`14-syntax-highlighting-sugar-high` 5개 폴더가 각각 자기완결적으로 담고 있다 — 라이브러리마다 hast 트리(lowlight·refractor), 콜백 기반 flat 구간(lezer), 오프셋 없는 줄→토큰 트리(sugar-high), 이미 오프셋을 가진 토큰(Shiki)처럼 출력 모양이 달라 어댑터 구현이 서로 다르다.
 
+## StaticToolbar
+
+선택과 무관하게 항상 렌더되는 옵트인 툴바다. 위치는 강제하지 않는다. `className`으로 직접 배치한다.
+
+```tsx
+<EditorProvider>
+  <StaticToolbar className="my-toolbar" />
+  <EditorContent />
+</EditorProvider>
+```
+
+- 컨트롤 17개를 항상 렌더한다. selection에 따라 폭이 바뀌지 않는다.
+  - 블록 타입 트리거, 블록 타입 아이콘 버튼 7개, 들여쓰기·내어쓰기, mark 버튼 5개, 색상 버튼 2개다.
+  - 쓸 수 없는 컨트롤은 `aria-disabled="true"`와 사유 `title`로 표시한다. 네이티브 `disabled`가 아니라 포커스를 받는다.
+- 표시 상태는 `controller.subscribe()`로 갱신한다. 마우스·키보드·명령 호출·undo 모두 같은 경로다.
+- 접힌 캐럿에서 mark·색상 버튼은 이어 입력할 텍스트에 서식을 건다(stored mark). 문서와 undo 스택은 바뀌지 않는다.
+
+### 키보드
+
+- Tab 정지점은 1개다(roving tabindex). 포커스가 들어온 컨트롤이 정지점이 된다.
+- ArrowRight/ArrowLeft는 컨트롤 사이를 순환 이동한다.
+- Home/End는 처음·끝 컨트롤로 이동한다.
+- Escape는 포커스를 편집기로 돌린다.
+- Shift·Ctrl·Alt·Meta를 함께 누르면 이동하지 않는다.
+
+블록 타입 컨트롤은 트리거 버튼과 `role="listbox"` 메뉴다.
+
+- 트리거는 `aria-haspopup="listbox"`와 `aria-expanded`를 가진다.
+- Enter·Space·ArrowDown·ArrowUp으로 연다. 키보드로 열면 현재 타입 옵션으로 포커스가 간다. 마우스로 열면 편집기 포커스를 유지한다.
+- ArrowUp/ArrowDown은 옵션 사이를 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 옵션이다. 이동만 하고 변환하지 않는다.
+- Enter·Space·클릭이 변환을 확정하고 포커스를 편집기로 돌린다.
+- Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab은 메뉴를 닫고 트리거로 돌린다.
+- 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.
+
+`component` prop으로 툴바를 통째로 교체하면 위 키보드 계약은 적용하지 않는다. 교체한 컴포넌트가 소유한다.
+
 ## 알려진 제약
 
 - `EditorProvider`/`EditorContent`는 서버 렌더 환경에서 `null`을 렌더하고, 실제 편집기 생성(`createEditor()`, `@cp949/geul-core`)은 `useEffect` 안에서만 호출한다. `createEditor()`를 이 경로 없이 직접 호출하는 저수준 사용은 서버 환경에서도 크래시하지 않지만(`EXT-013`), 반환된 controller의 문서는 로드 시점 정규화가 실제 client mount 시점까지 지연된 상태일 수 있다.
-- `StaticToolbar`는 아직 안정성이 부족하다. 보완 예정이다.
+- `StaticToolbar`의 키보드·상태 계약은 Chromium에서만 검증했다. Firefox·WebKit은 확인하지 않았다.
+- `StaticToolbar` 컨트롤에 포커스가 있으면 Ctrl+Z는 되돌리지만 Ctrl+Shift+Z·Ctrl+Y는 다시 실행하지 않는다. 편집기에 포커스가 있으면 모두 동작한다.
+- `StaticToolbar`는 여러 블록을 선택하면 블록 타입 변환을 비활성으로 표시한다. 여러 블록의 타입을 한 번에 바꾸는 기능은 없다.

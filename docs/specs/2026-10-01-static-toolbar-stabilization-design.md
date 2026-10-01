@@ -2,7 +2,7 @@
 
 ## 1. 배경과 범위
 
-`StaticToolbar`(Issue #184)는 README가 "아직 안정성이 부족하다"고 적은 상태다. Issue #218이 이를 실사용 가능한 수준으로 올린다.
+`StaticToolbar`(Issue #184)는 README가 "아직 안정성이 부족하다"고 적었던 상태다(Issue #218 이전). Issue #218이 이를 실사용 가능한 수준으로 올린다.
 
 ### 확인된 결함 (2026-10-01, chromium)
 
@@ -165,14 +165,21 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 - Home/End로 처음·끝으로 이동한다.
 - `aria-disabled` 컨트롤도 포커스를 받는다.
 - 툴바 컨트롤에서 Escape를 누르면 편집기로 포커스가 돌아간다.
+- Shift·Ctrl·Alt·Meta를 함께 누르면 이동하지 않는다.
+- `component` override에는 적용하지 않는다. 교체한 컴포넌트가 소유한다.
 
 ### 블록 타입 컨트롤
 
 - 트리거 버튼은 `aria-haspopup="listbox"`와 `aria-expanded`를 가진다.
+- 트리거는 Enter·Space·ArrowDown·ArrowUp으로 연다.
+- 키보드로 열면 현재 타입 옵션으로 포커스가 간다. 마우스로 열면 편집기 포커스를 유지한다.
 - 메뉴는 `role="listbox"`다. 항목은 `role="option"`이다.
-- 화살표는 이동만 한다.
-- Enter와 클릭이 변환을 확정한다.
-- 확정과 Escape는 편집기로 포커스를 돌린다.
+- ArrowUp/ArrowDown은 옵션 사이를 이동한다. 양 끝에서 멈춘다(순환하지 않는다).
+- Home/End는 처음·끝 옵션으로 이동한다.
+- 이동은 변환하지 않는다.
+- Enter·Space·클릭이 변환을 확정한다. 확정은 포커스를 편집기로 돌린다.
+- Escape는 메뉴를 닫고 포커스를 편집기로 돌린다.
+- Tab은 메뉴를 닫고 포커스를 트리거로 돌린다.
 - 바깥 클릭은 포커스를 옮기지 않는다(`G-UI-001`).
 - 선례: `code-block-language-combobox.tsx`의 `listbox`/`option` 패턴.
 
