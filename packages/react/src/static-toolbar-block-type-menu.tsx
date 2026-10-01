@@ -5,12 +5,15 @@ import { preserveFocusOnMouseDown } from "./icon-button.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 
+// 메뉴 패널 루트의 셀렉터. 자동 닫힘 때 초점이 메뉴 안에 있었는지 판정한다.
+export const BLOCK_TYPE_MENU_SELECTOR = "[data-geul-block-type-menu]";
+
 // 바깥 pointerdown 판정에서 제외할 영역. 트리거를 빼면 열린 상태에서 트리거를
 // 다시 누를 때 pointerdown이 먼저 "바깥 클릭"으로 닫아 버리고, 뒤이은 click의
 // 토글이 메뉴를 다시 연다(G-UI-001). 모듈 상수로 둔다 — 매 렌더 새 배열을
 // 넘기면 훅이 리스너를 매번 다시 건다.
 const BLOCK_TYPE_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-geul-block-type-menu]",
+  BLOCK_TYPE_MENU_SELECTOR,
   "[data-geul-block-type-trigger]",
 ] as const;
 

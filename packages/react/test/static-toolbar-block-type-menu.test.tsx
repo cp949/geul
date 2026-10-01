@@ -9,6 +9,7 @@
  * 확인되어 e2e가 소유한다.
  */
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -338,14 +339,71 @@ describe("StaticToolbar 블록 타입 메뉴의 확정과 닫기", () => {
     mountToolbarWithEditor();
     const outside = document.createElement("button");
     document.body.append(outside);
-    outside.focus();
-    openByMouse();
+    try {
+      outside.focus();
+      openByMouse();
 
-    fireEvent.pointerDown(outside);
+      fireEvent.pointerDown(outside);
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+});
+
+describe("StaticToolbar 블록 타입 메뉴의 자동 닫힘 포커스(G-UI-001)", () => {
+  /**
+   * 대상 블록이 사라진 상황을 만든다. 조회를 null로 고정한 뒤 다른 블록의
+   * 타입을 바꿔 상태 변경 통지를 일으킨다.
+   */
+  const invalidateTarget = (mounted: ReturnType<typeof mountTwoBlocks>) => {
+    vi.spyOn(mounted.editor, "getSelectionBlockType").mockReturnValue(null);
+    act(() => {
+      mounted.editor.commands.setBlockType(mounted.blockIds[1] ?? "", {
+        type: "quote",
+      });
+    });
+  };
+
+  const mountTwoBlocks = () => {
+    const mounted = mountBlockEditor({
+      blockIds: ["block-1", "block-2"],
+      children: <StaticToolbar />,
+    });
+    const first = mounted.blocks[0]?.querySelector("p") ?? mounted.blocks[0];
+    if (first === undefined) throw new Error("첫 문단을 찾지 못했다");
+    placeCaret(first);
+    return mounted;
+  };
+
+  it("포커스가 메뉴 옵션에 있을 때 자동으로 닫히면 포커스를 편집기로 돌린다", () => {
+    const mounted = mountTwoBlocks();
+    openByKeyboard();
+    expect(document.activeElement?.getAttribute("role")).toBe("option");
+
+    invalidateTarget(mounted);
 
     expect(screen.queryByRole("listbox")).toBeNull();
-    expect(document.activeElement).toBe(outside);
-    outside.remove();
+    expect(document.activeElement).toBe(mounted.editable);
+  });
+
+  it("포커스가 메뉴 밖에 있을 때 자동으로 닫혀도 포커스를 옮기지 않는다", () => {
+    const mounted = mountTwoBlocks();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      openByMouse();
+      outside.focus();
+
+      invalidateTarget(mounted);
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
   });
 });
 

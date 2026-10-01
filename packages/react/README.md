@@ -303,7 +303,7 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 </EditorProvider>
 ```
 
-- 컨트롤 17개를 항상 렌더한다. selection에 따라 폭이 바뀌지 않는다.
+- 컨트롤을 항상 렌더한다(기본 17개). selection에 따라 폭이 바뀌지 않는다.
   - 블록 타입 트리거, 블록 타입 아이콘 버튼 7개, 들여쓰기·내어쓰기, mark 버튼 5개, 색상 버튼 2개다.
   - 쓸 수 없는 컨트롤은 `aria-disabled="true"`와 사유 `title`로 표시한다. 네이티브 `disabled`가 아니라 포커스를 받는다.
 - 표시 상태는 `controller.subscribe()`로 갱신한다. 마우스·키보드·명령 호출·undo 모두 같은 경로다.

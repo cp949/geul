@@ -28,7 +28,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -48,7 +48,10 @@ import {
 import { IconButton, preserveFocusOnMouseDown } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
-import { StaticToolbarBlockTypeMenu } from "./static-toolbar-block-type-menu.js";
+import {
+  BLOCK_TYPE_MENU_SELECTOR,
+  StaticToolbarBlockTypeMenu,
+} from "./static-toolbar-block-type-menu.js";
 import { useStaticToolbarState } from "./static-toolbar-state.js";
 import {
   TABLE_BACKGROUND_COLORS,
@@ -292,10 +295,19 @@ export const StaticToolbar = ({
   const focusEditor = useFocusEditor(element);
 
   // 메뉴가 열린 채 대상 블록이 사라지면 상태까지 비운다. 렌더 조건만 막으면
-  // 대상이 돌아왔을 때 닫힌 메뉴가 되살아난다. 포커스는 옮기지 않는다.
-  useEffect(() => {
-    if (isBlockControlsDisabled) setBlockTypeMenuState(null);
-  }, [isBlockControlsDisabled]);
+  // 대상이 돌아왔을 때 닫힌 메뉴가 되살아난다. 초점이 메뉴 안에 있었으면
+  // 편집기로 돌린다(G-UI-001 자동 닫힘). 메뉴를 렌더에서 먼저 빼면 초점이
+  // `<body>`로 떨어진 뒤라 판정할 수 없으므로, 메뉴는 이 effect가 닫을 때까지
+  // 그대로 렌더한다. layout effect라 그려지기 전에 닫힌다.
+  useLayoutEffect(() => {
+    if (!isBlockControlsDisabled) return;
+    const activeElement = element?.ownerDocument.activeElement ?? null;
+    const focusWasInMenu =
+      activeElement instanceof Element &&
+      activeElement.closest(BLOCK_TYPE_MENU_SELECTOR) !== null;
+    setBlockTypeMenuState(null);
+    if (focusWasInMenu) focusEditor();
+  }, [element, focusEditor, isBlockControlsDisabled]);
 
   const { menuRef: colorMenuRef, style: colorMenuStyle } =
     useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
@@ -725,7 +737,7 @@ export const StaticToolbar = ({
           tabIndex={rovingTabIndex()}
         />
       </div>
-      {blockTypeMenuState !== null && !isBlockControlsDisabled && (
+      {blockTypeMenuState !== null && (
         <StaticToolbarBlockTypeMenu
           activeOptionId={activeBlockTypeId}
           element={element}
