@@ -195,6 +195,8 @@ export const KO_DICTIONARY: Dictionary = {
     },
     static: {
       ariaLabel: "툴바",
+      blockTypeAriaLabel: "블록 타입",
+      blockTypeNeutralLabel: "기타",
     },
     codeBlock: {
       ariaLabel: "코드 블록 툴바",

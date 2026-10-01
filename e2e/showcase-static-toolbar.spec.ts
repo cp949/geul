@@ -95,8 +95,9 @@ test("블록 타입 아이콘 버튼 연속 클릭이 항상 같은 블록에 �
   await expect(block1.locator("pre[data-geul-code-block]")).toHaveCount(1);
   await expect(editable.locator("pre[data-geul-code-block]")).toHaveCount(1);
 
-  await expect(page.getByRole("combobox", { name: "Block type" })).toHaveValue(
-    "",
+  // Code는 블록 타입 메뉴 목록 밖이라 트리거가 중립 라벨을 보인다.
+  await expect(page.getByRole("button", { name: "Block type" })).toHaveText(
+    "Other",
   );
   await expect(
     page.getByRole("button", { name: "Code", exact: true }),

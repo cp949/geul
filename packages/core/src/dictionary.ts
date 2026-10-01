@@ -275,6 +275,12 @@ export type Dictionary = {
     // 스크린리더 사용자가 둘을 구분할 수 없다.
     static: {
       ariaLabel: string;
+      // RD-003-DELTA-01(Issue #218) — 블록 타입 트리거 버튼과 listbox의
+      // aria-label.
+      blockTypeAriaLabel: string;
+      // 현재 블록 타입이 Text·Heading 밖(Quote 등)일 때 트리거가 보이는
+      // 중립 라벨. 빈 값이나 "Text" 같은 잘못된 값을 보이지 않으려고 둔다.
+      blockTypeNeutralLabel: string;
     };
     // Issue #193 RD-001-DELTA-01 — code-block-language-combobox.tsx의
     // outer `role="toolbar"` 컨테이너(언어 trigger + 복사 + 더보기, DELTA-02가
@@ -603,6 +609,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
     },
     static: {
       ariaLabel: "Toolbar",
+      blockTypeAriaLabel: "Block type",
+      blockTypeNeutralLabel: "Other",
     },
     codeBlock: {
       ariaLabel: "Code block toolbar",

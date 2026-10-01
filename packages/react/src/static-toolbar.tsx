@@ -5,6 +5,7 @@ import type {
 import {
   Baseline,
   Bold,
+  ChevronDown,
   Code,
   IndentDecrease,
   IndentIncrease,
@@ -23,13 +24,16 @@ import {
 import {
   type FC,
   type ReactElement,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
 
 import {
+  type BlockTypeOption,
   BLOCK_TYPE_OPTIONS,
   blockTypeText,
   blockTypeToOptionId,
@@ -39,9 +43,10 @@ import {
   computeFormattingToolbarState,
   type FormattingToolbarState,
 } from "./formatting-toolbar-state.js";
-import { IconButton } from "./icon-button.js";
+import { IconButton, preserveFocusOnMouseDown } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
+import { StaticToolbarBlockTypeMenu } from "./static-toolbar-block-type-menu.js";
 import { useStaticToolbarState } from "./static-toolbar-state.js";
 import {
   TABLE_BACKGROUND_COLORS,
@@ -51,6 +56,7 @@ import {
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
+import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 /**
@@ -133,7 +139,7 @@ const outdentIcon = <IndentDecrease {...iconProps} />;
 const textColorIcon = <Baseline {...iconProps} />;
 const backgroundColorIcon = <PaintBucket {...iconProps} />;
 
-// 블록 타입 select를 Text/Heading 1~6로만 줄인다(일반적인 에디터 관례 —
+// 블록 타입 메뉴를 Text/Heading 1~6로만 줄인다(일반적인 에디터 관례 —
 // Quote·Code·목록 4종은 아래 BLOCK_TYPE_ICON_OPTIONS로 뺀다). paragraph와
 // heading은 getBlockTypeOptionsForSource의 어떤 source 필터에도 제외되지
 // 않으므로(block-type-options.ts 참고 — codeBlock source는 목록만, 목록
@@ -152,7 +158,7 @@ const TEXT_STYLE_OPTIONS = BLOCK_TYPE_OPTIONS.filter((option) =>
   TEXT_STYLE_OPTION_IDS.has(option.id),
 );
 
-// select 밖으로 뺀 나머지 7개 — BLOCK_TYPE_OPTIONS 선언 순서를 그대로
+// 블록 타입 메뉴 밖으로 뺀 나머지 7개 — BLOCK_TYPE_OPTIONS 선언 순서를 그대로
 // 유지해 "Turn into" 메뉴(block-side-menu-menu.tsx)와 순서가 어긋나지
 // 않는다.
 const BLOCK_TYPE_ICON_OPTIONS = BLOCK_TYPE_OPTIONS.filter(
@@ -195,6 +201,13 @@ type ColorMenuState = {
   property: "text" | "background";
   left: number;
   top: number;
+};
+
+type BlockTypeMenuState = {
+  left: number;
+  top: number;
+  // 키보드로 연 메뉴만 옵션으로 포커스를 옮긴다(RD-003 결정).
+  focusSelected: boolean;
 };
 
 /**
@@ -260,12 +273,35 @@ export const StaticToolbar = ({
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(
     null,
   );
+  const [blockTypeMenuState, setBlockTypeMenuState] =
+    useState<BlockTypeMenuState | null>(null);
+  const blockTypeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const focusEditor = useFocusEditor(element);
 
   const { menuRef: colorMenuRef, style: colorMenuStyle } =
     useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
 
   const dismissColorMenu = useCallback(() => setColorMenuState(null), []);
+  const dismissBlockTypeMenu = useCallback(
+    () => setBlockTypeMenuState(null),
+    [],
+  );
+  // 색상 메뉴와 블록 타입 메뉴는 동시에 열리지 않는다. 각 `onClose`는
+  // 멱등이라 이미 닫힌 메뉴에 불려도 해롭지 않다.
+  const overlay = useExclusiveOverlay({
+    color: { onClose: dismissColorMenu },
+    blockType: { onClose: dismissBlockTypeMenu },
+  });
+  const closeBlockTypeMenu = useCallback(() => {
+    setBlockTypeMenuState(null);
+    focusEditor();
+  }, [focusEditor]);
+  // Tab은 편집기가 아니라 트리거로 돌아간다. 키보드 사용자가 툴바 안에서
+  // 위치를 잃지 않게 한다.
+  const closeBlockTypeMenuToTrigger = useCallback(() => {
+    setBlockTypeMenuState(null);
+    blockTypeTriggerRef.current?.focus({ preventScroll: true });
+  }, []);
   const closeColorMenu = useCallback(() => {
     setColorMenuState(null);
     focusEditor();
@@ -287,7 +323,59 @@ export const StaticToolbar = ({
       return;
     }
     const rect = event.currentTarget.getBoundingClientRect();
+    overlay.open("color");
     setColorMenuState({ property, left: rect.left, top: rect.bottom + 4 });
+  };
+
+  const openBlockTypeMenu = (
+    trigger: HTMLButtonElement,
+    focusSelected: boolean,
+  ) => {
+    const rect = trigger.getBoundingClientRect();
+    overlay.open("blockType");
+    setBlockTypeMenuState({
+      left: rect.left,
+      top: rect.bottom + 4,
+      focusSelected,
+    });
+  };
+
+  // `event.detail === 0`이면 키보드 활성화(Enter·Space)다. 마우스로 열면
+  // 편집기 포커스를 유지하고, 키보드로 열면 화살표 이동을 위해 메뉴 안으로
+  // 포커스를 옮긴다.
+  const handleBlockTypeTriggerClick = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) => {
+    if (blockTypeMenuState !== null) {
+      closeBlockTypeMenu();
+      return;
+    }
+    openBlockTypeMenu(event.currentTarget, event.detail === 0);
+  };
+
+  const handleBlockTypeTriggerKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (blockTypeMenuState === null) {
+      openBlockTypeMenu(event.currentTarget, true);
+    }
+  };
+
+  // 클릭 시점의 현재 블록을 다시 읽는다. 메뉴가 열려 있는 동안 선택이
+  // 옮겨 갔을 수 있어 렌더 시점 상태를 믿지 않는다.
+  const confirmBlockType = (option: BlockTypeOption) => {
+    const { blockSelection } = computeFormattingToolbarState(editor);
+    if (blockSelection !== null) {
+      const allowed = getBlockTypeOptionsForSource(
+        blockSelection.blockType,
+      ).find((candidate) => candidate.id === option.id);
+      if (allowed !== undefined) {
+        editor.commands.setBlockType(blockSelection.blockId, option.blockType);
+      }
+    }
+    closeBlockTypeMenu();
   };
 
   const applyInlineColor = (
@@ -378,9 +466,9 @@ export const StaticToolbar = ({
       : createPortal(overridden, portalTarget);
   }
 
-  // select와 블록 타입 아이콘 버튼이 공유하는 파생값 — 둘 다 state.blockSelection
-  // 하나에서 나오므로 여기서 한 번만 계산한다(중복 계산 방지, 아래 두
-  // 렌더 지점의 aria-pressed/aria-disabled/select value가 항상 일치).
+  // 블록 타입 트리거·메뉴와 아이콘 버튼이 공유하는 파생값 — 모두
+  // state.blockSelection 하나에서 나오므로 여기서 한 번만 계산한다(중복 계산
+  // 방지, 렌더 지점의 aria-pressed/aria-disabled/aria-selected가 항상 일치).
   const activeBlockTypeId =
     state.blockSelection === null
       ? null
@@ -394,6 +482,12 @@ export const StaticToolbar = ({
           ),
         );
 
+  // enabledBlockTypes(mode: "deny")로 끈 타입은 목록에서 뺀다(Issue #190,
+  // 선례: formatting-toolbar.tsx).
+  const blockTypeMenuOptions = TEXT_STYLE_OPTIONS.filter((option) =>
+    editor.isBlockTypeEnabled(option.blockType.type),
+  );
+
   const content = (
     <>
       <div
@@ -402,51 +496,28 @@ export const StaticToolbar = ({
         role="toolbar"
       >
         {state.blockSelection !== null && (
-          <select
-            aria-label="Block type"
-            className="geul-formatting-toolbar__select"
-            onChange={(event) => {
-              const { blockSelection } = computeFormattingToolbarState(editor);
-              if (blockSelection === null) return;
-              const options = getBlockTypeOptionsForSource(
-                blockSelection.blockType,
-              );
-              const option = options.find(
-                (candidate) => candidate.id === event.currentTarget.value,
-              );
-              if (option === undefined) return;
-              editor.commands.setBlockType(
-                blockSelection.blockId,
-                option.blockType,
-              );
-            }}
-            // 현재 블록 타입이 Quote·Code·목록 등 select 밖으로 뺀
-            // 타입이면(activeBlockTypeId가 TEXT_STYLE_OPTION_IDS 밖) "Text"
-            // 등 잘못된 값을 보여주지 않고 빈 값으로 둔다 — 아래 숨김
-            // placeholder <option>이 그 값을 받아준다.
-            value={
-              activeBlockTypeId !== null &&
-              TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId)
-                ? activeBlockTypeId
-                : ""
-            }
+          <button
+            aria-expanded={blockTypeMenuState !== null}
+            aria-haspopup="listbox"
+            aria-label={dictionary.toolbar.static.blockTypeAriaLabel}
+            className="geul-static-toolbar__block-type-trigger"
+            data-geul-block-type-trigger=""
+            onClick={handleBlockTypeTriggerClick}
+            onKeyDown={handleBlockTypeTriggerKeyDown}
+            onMouseDown={preserveFocusOnMouseDown()}
+            ref={blockTypeTriggerRef}
+            type="button"
           >
-            {activeBlockTypeId !== null &&
-              !TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId) && (
-                <option hidden value="" />
-              )}
-            {TEXT_STYLE_OPTIONS
-              // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다
-              // (Issue #190) — 선례: formatting-toolbar.tsx(RD-001-DELTA-01).
-              .filter((option) =>
-                editor.isBlockTypeEnabled(option.blockType.type),
-              )
-              .map((option) => (
-                <option key={option.id} value={option.id}>
-                  {blockTypeText(dictionary, option.id).label}
-                </option>
-              ))}
-          </select>
+            {/* 현재 타입이 Text·Heading 밖(Quote 등)이면 잘못된 값을 보이지
+                않고 중립 라벨을 보인다. */}
+            <span>
+              {activeBlockTypeId !== null &&
+              TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId)
+                ? blockTypeText(dictionary, activeBlockTypeId).label
+                : dictionary.toolbar.static.blockTypeNeutralLabel}
+            </span>
+            <ChevronDown {...iconProps} />
+          </button>
         )}
         {state.blockSelection !== null && (
           <>
@@ -566,6 +637,22 @@ export const StaticToolbar = ({
           }}
         />
       </div>
+      {blockTypeMenuState !== null && (
+        <StaticToolbarBlockTypeMenu
+          activeOptionId={activeBlockTypeId}
+          element={element}
+          focusSelected={blockTypeMenuState.focusSelected}
+          label={dictionary.toolbar.static.blockTypeAriaLabel}
+          left={blockTypeMenuState.left}
+          onConfirm={confirmBlockType}
+          onEscapeDismiss={closeBlockTypeMenu}
+          onOutsideDismiss={dismissBlockTypeMenu}
+          onTabDismiss={closeBlockTypeMenuToTrigger}
+          optionLabel={(option) => blockTypeText(dictionary, option.id).label}
+          options={blockTypeMenuOptions}
+          top={blockTypeMenuState.top}
+        />
+      )}
       {colorMenuState !== null && (
         <div
           aria-label={colorPropertyLabel(colorMenuState.property)}

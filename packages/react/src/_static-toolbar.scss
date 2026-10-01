@@ -13,3 +13,49 @@
   background: var(--geul-color-surface, #fff);
   padding: 0.25rem;
 }
+
+// 블록 타입 트리거. 현재 라벨이 바뀌어도(Text ↔ Heading 6 ↔ 중립 라벨)
+// 툴바 폭이 흔들리지 않도록 폭을 고정한다(RD-003).
+.geul-static-toolbar__block-type-trigger {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: 6.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  margin-right: 0.25rem;
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  border: 1px solid var(--geul-color-border, #dadce0);
+  background: transparent;
+  padding-inline: 0.375rem;
+  padding-block: 0.25rem;
+  color: var(--geul-color-text, #202124);
+  cursor: pointer;
+}
+
+// 블록 타입 listbox 옵션. 포커스 이동이 화살표 키로만 일어나므로
+// 포커스 표시를 hover와 구분해 둔다.
+.geul-static-toolbar__block-type-option {
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  border: none;
+  background: transparent;
+  padding-inline: 0.5rem;
+  padding-block: 0.375rem;
+  color: var(--geul-color-text, #202124);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--geul-color-accent, #1a73e8);
+    outline-offset: -2px;
+  }
+
+  &[aria-selected="true"] {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+    color: var(--geul-color-accent, #1a73e8);
+  }
+}

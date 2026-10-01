@@ -6,8 +6,16 @@
  * 같지만 표시 정책이 다르다(RD-001-DELTA-02) — 그 차이만 별도로 검증하고,
  * 공유 계산(activeMarks/blockSelection/nestingActions/media·cell 판정)의
  * 정확성 자체는 formatting-toolbar.test.tsx 계열이 이미 검증한다.
+ * 블록 타입 컨트롤은 RD-003에서 select가 트리거 버튼과 listbox로 바뀌었다.
+ * 메뉴 동작 자체는 static-toolbar-block-type-menu.test.tsx가 소유한다.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { BlockTypeDescriptor } from "@cp949/geul-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +24,18 @@ import { withProvider } from "./fake-editor-provider.js";
 import { fakeStaticToolbarController as fakeController } from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
+
+/**
+ * 블록 타입 트리거를 눌러 listbox 메뉴를 연다. select는 RD-003에서 트리거
+ * 버튼과 listbox로 바뀌었다(roadmap D4). 메뉴를 여는 동작이 필요한 테스트가
+ * 공용으로 쓴다.
+ */
+const openBlockTypeMenu = () => {
+  fireEvent.click(screen.getByRole("button", { name: "Block type" }), {
+    detail: 1,
+  });
+  return screen.getByRole("listbox", { name: "Block type" });
+};
 
 describe("StaticToolbar 상단 고정 툴바", () => {
   it("선택이 전혀 없어도 항상 렌더되고 커서 위치의 활성 mark를 반영한다", () => {
@@ -43,13 +63,12 @@ describe("StaticToolbar 상단 고정 툴바", () => {
     expect(controller.commands.toggleBold).toHaveBeenCalledOnce();
   });
 
-  it("블록타입 select를 바꾸면 setBlockType을 호출한다", () => {
+  it("블록타입 메뉴에서 옵션을 고르면 setBlockType을 호출한다", () => {
     const controller = fakeController();
     render(withProvider(controller, <StaticToolbar />));
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Block type" }), {
-      target: { value: "heading-1" },
-    });
+    openBlockTypeMenu();
+    fireEvent.click(screen.getByRole("option", { name: "Heading 1" }));
 
     expect(controller.commands.setBlockType).toHaveBeenCalledOnce();
   });
@@ -61,7 +80,7 @@ describe("StaticToolbar 상단 고정 툴바", () => {
     );
     render(withProvider(controller, <StaticToolbar />));
 
-    expect(screen.queryByRole("combobox", { name: "Block type" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Block type" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Indent" })).toBeNull();
   });
 
@@ -102,7 +121,7 @@ describe("StaticToolbar 상단 고정 툴바", () => {
     ).toBe("true");
   });
 
-  it("codeBlock 선택에서는 mark 버튼만 disable되고 블록타입 select는 그대로 남는다", () => {
+  it("codeBlock 선택에서는 mark 버튼만 disable되고 블록타입 트리거는 그대로 남는다", () => {
     const codeBlockType: BlockTypeDescriptor = { type: "codeBlock" };
     const controller = fakeController(
       undefined,
@@ -116,19 +135,21 @@ describe("StaticToolbar 상단 고정 툴바", () => {
         .getAttribute("aria-disabled"),
     ).toBe("true");
     expect(
-      screen.queryByRole("combobox", { name: "Block type" }),
-    ).not.toBeNull();
+      screen
+        .getByRole("button", { name: "Block type" })
+        .getAttribute("aria-haspopup"),
+    ).toBe("listbox");
   });
 
-  describe("블록 타입 select 축소와 아이콘 버튼", () => {
-    it("블록타입 select에는 Text와 Heading 1~6만 노출된다", () => {
+  describe("블록 타입 메뉴 축소와 아이콘 버튼", () => {
+    it("블록타입 메뉴에는 Text와 Heading 1~6만 노출된다", () => {
       const controller = fakeController();
       render(withProvider(controller, <StaticToolbar />));
 
-      const select = screen.getByRole("combobox", { name: "Block type" });
-      const optionLabels = Array.from(select.querySelectorAll("option")).map(
-        (option) => option.textContent,
-      );
+      const listbox = openBlockTypeMenu();
+      const optionLabels = within(listbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent);
 
       expect(optionLabels).toEqual([
         "Text",
@@ -141,7 +162,7 @@ describe("StaticToolbar 상단 고정 툴바", () => {
       ]);
     });
 
-    it("Quote·Code·목록 4종은 select가 아니라 아이콘 버튼으로 제공된다", () => {
+    it("Quote·Code·목록 4종은 블록타입 메뉴가 아니라 아이콘 버튼으로 제공된다", () => {
       const controller = fakeController();
       render(withProvider(controller, <StaticToolbar />));
 
@@ -190,7 +211,7 @@ describe("StaticToolbar 상단 고정 툴바", () => {
       ).toBe("false");
     });
 
-    it("현재 블록 타입이 select 목록 밖(Quote 등)이면 select는 빈 값으로 표시한다", () => {
+    it("현재 블록 타입이 메뉴 목록 밖(Quote 등)이면 트리거는 Text 대신 중립 라벨을 보인다", () => {
       const controller = fakeController(
         undefined,
         vi.fn(() => ({
@@ -200,10 +221,9 @@ describe("StaticToolbar 상단 고정 툴바", () => {
       );
       render(withProvider(controller, <StaticToolbar />));
 
-      const select = screen.getByRole("combobox", {
-        name: "Block type",
-      }) as HTMLSelectElement;
-      expect(select.value).toBe("");
+      const trigger = screen.getByRole("button", { name: "Block type" });
+      expect(trigger.textContent).toContain("Other");
+      expect(trigger.textContent).not.toContain("Text");
     });
 
     it("codeBlock 선택에서는 목록 아이콘 버튼 4종만 disable되고 Quote·Code는 유지된다", () => {
@@ -251,17 +271,17 @@ describe("StaticToolbar 상단 고정 툴바", () => {
       ).toBe("false");
     });
 
-    it("enabledBlockTypes로 deny된 타입이 select에서 사라진다(Issue #190)", () => {
+    it("enabledBlockTypes로 deny된 타입이 블록타입 메뉴에서 사라진다(Issue #190)", () => {
       const controller = fakeController();
       controller.isBlockTypeEnabled = vi.fn(
         (type: string) => type !== "heading",
       );
       render(withProvider(controller, <StaticToolbar />));
 
-      const select = screen.getByRole("combobox", { name: "Block type" });
-      const optionLabels = Array.from(select.querySelectorAll("option")).map(
-        (option) => option.textContent,
-      );
+      const listbox = openBlockTypeMenu();
+      const optionLabels = within(listbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent);
 
       expect(optionLabels).toEqual(["Text"]);
     });

@@ -31,7 +31,7 @@ test("빠른 클릭으로 Quote 블록에서 다른 문단으로 옮기면 Quote
   await expect(quoteButton).toHaveAttribute("aria-pressed", "false");
 });
 
-test("빠른 클릭 직후 블록 타입 select로 변환하면 클릭한 문단이 바뀐다", async ({
+test("빠른 클릭 직후 블록 타입 메뉴로 변환하면 클릭한 문단이 바뀐다", async ({
   page,
 }) => {
   await openShowcasePage(page, "/examples/static-toolbar");
@@ -45,10 +45,13 @@ test("빠른 클릭 직후 블록 타입 select로 변환하면 클릭한 문단
   await page.evaluate(
     () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
   );
-  // selectOption은 마우스 이벤트 없이 값을 바꾼다 — 결함 1a의 재현 조건이다.
+  // 트리거와 옵션 클릭은 화면에 보이는 현재 블록이 아니라 클릭 시점의
+  // 편집기 상태를 읽어 변환해야 한다 — 결함 1a의 재현 조건이다.
+  await page.getByRole("button", { name: "Block type" }).click();
   await page
-    .getByRole("combobox", { name: "Block type" })
-    .selectOption("heading-1");
+    .getByRole("listbox", { name: "Block type" })
+    .getByRole("option", { name: "Heading 1" })
+    .click();
 
   await expect(
     editable.locator('[data-geul-block-id$="block-4"] h1'),
