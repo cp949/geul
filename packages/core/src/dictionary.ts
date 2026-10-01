@@ -285,6 +285,13 @@ export type Dictionary = {
       // 아이콘 버튼, Indent/Outdent)의 비활성 사유 title. 미디어·표 셀·여러
       // 블록 선택을 가리지 않고 하나의 문구를 공유한다.
       blockControlsDisabledReason: string;
+      // Issue #220 — codeBlock·미디어 블록·표 셀 범위 선택에서 mark·색상
+      // 버튼(7개)의 비활성 사유 title. 세 경우가 하나의 문구를 공유한다.
+      markingDisabledReason: string;
+      // Issue #220 — 현재 블록이 변환을 허용하지 않는 블록 타입 아이콘
+      // 버튼(예: codeBlock 안의 목록 4종, 목록 안의 Code)의 비활성 사유
+      // title. 소스 블록별로 문구를 나누지 않고 하나를 공유한다.
+      blockTypeDisabledReason: string;
     };
     // Issue #193 RD-001-DELTA-01 — code-block-language-combobox.tsx의
     // outer `role="toolbar"` 컨테이너(언어 trigger + 복사 + 더보기, DELTA-02가
@@ -617,6 +624,9 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       blockTypeNeutralLabel: "Other",
       blockControlsDisabledReason:
         "Available when the cursor is in a single block",
+      markingDisabledReason:
+        "Formatting isn't available in code blocks, media blocks, or table cell ranges",
+      blockTypeDisabledReason: "Can't convert this block to that type",
     },
     codeBlock: {
       ariaLabel: "Code block toolbar",

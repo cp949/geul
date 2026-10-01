@@ -199,6 +199,9 @@ export const KO_DICTIONARY: Dictionary = {
       blockTypeNeutralLabel: "기타",
       blockControlsDisabledReason:
         "커서가 블록 하나 안에 있을 때 사용할 수 있습니다",
+      markingDisabledReason:
+        "코드 블록, 미디어 블록, 표 셀 범위에서는 서식을 적용할 수 없습니다",
+      blockTypeDisabledReason: "이 블록은 해당 타입으로 변환할 수 없습니다",
     },
     codeBlock: {
       ariaLabel: "코드 블록 툴바",

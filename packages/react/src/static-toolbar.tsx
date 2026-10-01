@@ -602,6 +602,11 @@ export const StaticToolbar = ({
   const blockControlsDisabledReason = isBlockControlsDisabled
     ? dictionary.toolbar.static.blockControlsDisabledReason
     : undefined;
+  // mark·색상 버튼의 비활성 사유(Issue #220). 활성이면 undefined를 넘겨
+  // IconButton이 title을 label로 폴백하게 한다(G-UI-004).
+  const markingDisabledReason = isMarkingDisabled
+    ? dictionary.toolbar.static.markingDisabledReason
+    : undefined;
 
   // 컨트롤(기본 17개)의 `tabIndex`를 JSX 순서대로 매긴다. 컨트롤 수는
   // `enabledBlockTypes`에 따라 줄 수 있지만 selection에 따라 바뀌지 않으므로
@@ -669,7 +674,13 @@ export const StaticToolbar = ({
               );
             }}
             tabIndex={rovingTabIndex()}
-            title={blockControlsDisabledReason}
+            title={
+              isBlockControlsDisabled
+                ? blockControlsDisabledReason
+                : allowedBlockTypeIds?.has(option.id) !== true
+                  ? dictionary.toolbar.static.blockTypeDisabledReason
+                  : undefined
+            }
           />
         ))}
         <IconButton
@@ -736,6 +747,7 @@ export const StaticToolbar = ({
               toggle(editor);
             }}
             tabIndex={rovingTabIndex()}
+            title={markingDisabledReason}
           />
         ))}
         <IconButton
@@ -750,6 +762,7 @@ export const StaticToolbar = ({
             handleColorTriggerClick("text", event);
           }}
           tabIndex={rovingTabIndex()}
+          title={markingDisabledReason}
         />
         <IconButton
           aria-disabled={isMarkingDisabled ? "true" : "false"}
@@ -763,6 +776,7 @@ export const StaticToolbar = ({
             handleColorTriggerClick("background", event);
           }}
           tabIndex={rovingTabIndex()}
+          title={markingDisabledReason}
         />
       </div>
       {blockTypeMenuState !== null && (
