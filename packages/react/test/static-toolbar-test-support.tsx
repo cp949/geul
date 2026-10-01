@@ -2,11 +2,18 @@
  * StaticToolbar 테스트가 공유하는 fake EditorController를 제공한다.
  * `formatting-toolbar-test-support.tsx`의 `fakeController`에 `subscribe`를
  * 얹는다. 기존 fake는 FormattingToolbar가 소유하므로 고치지 않는다.
+ * 접힌 캐럿 명령 3개의 mock도 여기서 더한다.
  */
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { fakeController } from "./formatting-toolbar-test-support.js";
+
+// 캐럿 명령 mock이 성공과 거절 양쪽을 받도록 반환 타입을 미리 넓혀 둔다.
+// 좁게 추론되면 테스트가 다른 결과를 `mockReturnValue`로 넘길 때 타입 에러가 난다.
+type CaretCommandResult =
+  | { ok: true; value: undefined }
+  | { ok: false; error: { code: string; command?: string } };
 
 /**
  * `subscribe`를 가진 fake controller를 만든다. 인자는 `fakeController`와 같다.
@@ -14,6 +21,11 @@ import { fakeController } from "./formatting-toolbar-test-support.js";
  * 실제 편집기는 상태가 바뀔 때 listener를 부른다. fake는 그 시점을 테스트가
  * 정하도록 `emit()`을 노출한다 — `emit()`을 부르기 전에 조회 mock의 반환값을
  * 바꿔 두면 "상태가 바뀐 뒤 통지"를 재현한다.
+ *
+ * 캐럿 명령 mock의 기본 반환은 `COMMAND_NOT_APPLICABLE`이다. 범위 선택에서
+ * 툴바가 기존 선택 영역 명령으로 넘어가는 경로가 기본값이라, 캐럿을 다루지
+ * 않는 테스트는 기존 명령 호출을 그대로 본다. 캐럿 성공이 필요한 테스트는
+ * `mockReturnValue`로 바꾼다.
  *
  * - `listenerCount()`: 현재 등록된 listener 수. 해제 단언에 쓴다.
  * - `emit()`: 등록된 listener를 모두 부른다. React 갱신을 `act`로 감싼다.
@@ -29,7 +41,20 @@ export const fakeStaticToolbarController = (
       listeners.delete(listener);
     };
   });
+  const notApplicable = (): CaretCommandResult => ({
+    ok: false,
+    error: { code: "COMMAND_NOT_APPLICABLE", command: "caret" },
+  });
+  const commands = Object.assign(controller.commands, {
+    toggleCaretMark:
+      vi.fn<(argument?: unknown) => CaretCommandResult>(notApplicable),
+    toggleCaretTextColor:
+      vi.fn<(argument?: unknown) => CaretCommandResult>(notApplicable),
+    toggleCaretBackgroundColor:
+      vi.fn<(argument?: unknown) => CaretCommandResult>(notApplicable),
+  });
   return Object.assign(controller, {
+    commands,
     subscribe,
     listenerCount: () => listeners.size,
     emit: () => {

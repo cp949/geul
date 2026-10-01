@@ -53,6 +53,24 @@ import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
+/**
+ * 접힌 캐럿 명령을 먼저 부르고, `COMMAND_NOT_APPLICABLE`이면 기존 선택 영역
+ * 명령으로 넘어간다(RD-002 결정).
+ * - 이 코드는 범위 선택, `code` 배제, 색 없음 해제를 덮는다.
+ * - 기존 명령이 그 경우를 이어받는다.
+ * - `CODE_BLOCK_MARK_NOT_ALLOWED`와 `INVALID_COLOR`는 넘기지 않는다. 기존 명령도 같은 이유로 거절한다.
+ */
+const toggleCaretFirst = (
+  caretResult: ReturnType<
+    InlineFormattingCommands["commands"]["toggleCaretMark"]
+  >,
+  selectionCommand: () => unknown,
+) => {
+  if (!caretResult.ok && caretResult.error.code === "COMMAND_NOT_APPLICABLE") {
+    selectionCommand();
+  }
+};
+
 // FormattingToolbar(formatting-toolbar.tsx)와 같은 정의다 — 버튼 세트가
 // 동일하다는 RD-001 결정 그대로다. 모듈 상수로 두는 이유도 같다(재렌더 시
 // 아이콘 참조 안정, 스크롤·selectionchange·keyup마다 재렌더되는 툴바에서
@@ -67,31 +85,46 @@ const toolbarButtons: ReadonlyArray<{
     mark: "bold",
     label: "Bold",
     icon: <Bold {...iconProps} />,
-    toggle: (editor) => void editor.commands.toggleBold(),
+    toggle: (editor) =>
+      toggleCaretFirst(editor.commands.toggleCaretMark("bold"), () =>
+        editor.commands.toggleBold(),
+      ),
   },
   {
     mark: "italic",
     label: "Italic",
     icon: <Italic {...iconProps} />,
-    toggle: (editor) => void editor.commands.toggleItalic(),
+    toggle: (editor) =>
+      toggleCaretFirst(editor.commands.toggleCaretMark("italic"), () =>
+        editor.commands.toggleItalic(),
+      ),
   },
   {
     mark: "underline",
     label: "Underline",
     icon: <Underline {...iconProps} />,
-    toggle: (editor) => void editor.commands.toggleUnderline(),
+    toggle: (editor) =>
+      toggleCaretFirst(editor.commands.toggleCaretMark("underline"), () =>
+        editor.commands.toggleUnderline(),
+      ),
   },
   {
     mark: "strike",
     label: "Strikethrough",
     icon: <Strikethrough {...iconProps} />,
-    toggle: (editor) => void editor.commands.toggleStrike(),
+    toggle: (editor) =>
+      toggleCaretFirst(editor.commands.toggleCaretMark("strike"), () =>
+        editor.commands.toggleStrike(),
+      ),
   },
   {
     mark: "code",
     label: "Inline code",
     icon: <Code {...iconProps} />,
-    toggle: (editor) => void editor.commands.toggleCode(),
+    toggle: (editor) =>
+      toggleCaretFirst(editor.commands.toggleCaretMark("code"), () =>
+        editor.commands.toggleCode(),
+      ),
   },
 ];
 
@@ -266,9 +299,13 @@ export const StaticToolbar = ({
       restoreEditorSelection(element, trackedRange.current);
     }
     if (property === "text") {
-      editor.commands.toggleInlineTextColor(color);
+      toggleCaretFirst(editor.commands.toggleCaretTextColor(color), () =>
+        editor.commands.toggleInlineTextColor(color),
+      );
     } else {
-      editor.commands.toggleInlineBackgroundColor(color);
+      toggleCaretFirst(editor.commands.toggleCaretBackgroundColor(color), () =>
+        editor.commands.toggleInlineBackgroundColor(color),
+      );
     }
     closeColorMenu();
   };
