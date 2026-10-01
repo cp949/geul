@@ -57,7 +57,9 @@ subscribe(listener: () => void): () => void;
 ### 미발화
 
 - `createEditor()` 내부 load-normalizing 구간.
-- 거절된 변경.
+- 거절된 변경. 단, 거절 뒤 selection이 바뀌었으면 상태가 바뀐 것이므로 발화한다.
+  - 예: 구조 검증 실패로 문서를 되돌릴 때 selection은 문서 끝으로 이동한다.
+  - 문서·selection·stored mark가 모두 변경 전과 같으면 발화하지 않는다.
 - 구독 해제 뒤.
 - `destroy()` 뒤.
 
