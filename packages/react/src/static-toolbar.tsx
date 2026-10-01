@@ -28,6 +28,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -333,6 +334,32 @@ export const StaticToolbar = ({
     setBlockTypeMenuState(null);
     blockTypeTriggerRef.current?.focus({ preventScroll: true });
   }, []);
+  // 열린 블록 타입 메뉴는 트리거를 따라간다(G-UI-001). 메뉴는 열릴 때의
+  // viewport 좌표에 fixed로 그려지므로 스크롤·리사이즈 때 트리거 rect를 다시
+  // 읽는다. 중첩 스크롤 컨테이너를 위해 scroll은 capture로 건다.
+  const isBlockTypeMenuOpen = blockTypeMenuState !== null;
+  useEffect(() => {
+    if (!isBlockTypeMenuOpen) return;
+    const ownerWindow = blockTypeTriggerRef.current?.ownerDocument.defaultView;
+    if (ownerWindow === null || ownerWindow === undefined) return;
+    const reanchor = () => {
+      const trigger = blockTypeTriggerRef.current;
+      if (trigger === null) return;
+      const rect = trigger.getBoundingClientRect();
+      const top = rect.bottom + 4;
+      setBlockTypeMenuState((current) =>
+        current === null || (current.left === rect.left && current.top === top)
+          ? current
+          : { ...current, left: rect.left, top },
+      );
+    };
+    ownerWindow.addEventListener("scroll", reanchor, true);
+    ownerWindow.addEventListener("resize", reanchor);
+    return () => {
+      ownerWindow.removeEventListener("scroll", reanchor, true);
+      ownerWindow.removeEventListener("resize", reanchor);
+    };
+  }, [isBlockTypeMenuOpen]);
   const closeColorMenu = useCallback(() => {
     setColorMenuState(null);
     focusEditor();

@@ -428,3 +428,86 @@ describe("StaticToolbar 블록 타입 메뉴와 색상 메뉴의 상호배제", 
     expect(screen.getByRole("listbox", { name: "Block type" })).not.toBeNull();
   });
 });
+
+describe("StaticToolbar 블록 타입 트리거의 방향키 열기", () => {
+  it.each(["ArrowDown", "ArrowUp"])(
+    "트리거에서 %s를 누르면 메뉴가 열리고 현재 타입 옵션으로 포커스가 간다",
+    (key) => {
+      render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+
+      fireEvent.keyDown(blockTypeTrigger(), { key });
+
+      expect(blockTypeTrigger().getAttribute("aria-expanded")).toBe("true");
+      expect(document.activeElement).toBe(
+        screen.getByRole("option", { name: "Text" }),
+      );
+    },
+  );
+});
+
+describe("StaticToolbar 블록 타입 메뉴의 Tab 기본 동작", () => {
+  it("Tab은 브라우저 기본 이동을 막는다", () => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    openByKeyboard();
+
+    // fireEvent는 preventDefault가 불렸으면 false를 돌려준다. 막지 않으면
+    // 트리거로 돌린 포커스가 기본 Tab 이동으로 툴바 밖까지 밀려난다.
+    const notPrevented = fireEvent.keyDown(document.activeElement as Element, {
+      key: "Tab",
+    });
+
+    expect(notPrevented).toBe(false);
+  });
+});
+
+describe("StaticToolbar 블록 타입 메뉴의 트리거 추적", () => {
+  /** 트리거의 viewport 좌표를 바꾼다. 스크롤을 흉내 낸다. */
+  const moveTrigger = (left: number, bottom: number) => {
+    vi.spyOn(blockTypeTrigger(), "getBoundingClientRect").mockReturnValue({
+      left,
+      bottom,
+      top: bottom - 26,
+      right: left + 104,
+      width: 104,
+      height: 26,
+      x: left,
+      y: bottom - 26,
+      toJSON: () => ({}),
+    });
+  };
+
+  const menuStyle = () => {
+    const { left, top } = screen.getByRole("listbox", {
+      name: "Block type",
+    }).style;
+    return { left, top };
+  };
+
+  it.each([
+    ["scroll", () => fireEvent.scroll(window)],
+    ["resize", () => fireEvent(window, new Event("resize"))],
+  ])("%s가 일어나면 열린 메뉴가 트리거 아래로 따라간다", (_name, trigger) => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    moveTrigger(10, 100);
+    openByMouse();
+    expect(menuStyle()).toEqual({ left: "10px", top: "104px" });
+
+    moveTrigger(30, 60);
+    act(() => {
+      trigger();
+    });
+
+    expect(menuStyle()).toEqual({ left: "30px", top: "64px" });
+  });
+
+  it("메뉴를 닫은 뒤에는 window 리스너가 남지 않는다", () => {
+    const remove = vi.spyOn(window, "removeEventListener");
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    openByMouse();
+    fireEvent.click(blockTypeTrigger());
+
+    const removed = remove.mock.calls.map(([type]) => type);
+    expect(removed).toEqual(expect.arrayContaining(["scroll", "resize"]));
+    remove.mockRestore();
+  });
+});
