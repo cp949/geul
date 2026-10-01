@@ -13,6 +13,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 /** 예제를 열고 툴바 직계 컨트롤을 돌려준다. */
 const openToolbar = async (page: Page) => {
@@ -90,12 +91,7 @@ test("대상 블록이 없을 때 aria-disabled 컨트롤도 화살표로 포커
   // 그 전에 Shift+ArrowDown을 보내면 이전 selection에서 확장된다. 한 프레임과
   // 한 macrotask를 양보한다(showcase-static-toolbar-block-controls.spec.ts와
   // 같은 패턴).
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => setTimeout(resolve, 0)),
-      ),
-  );
+  await yieldFrame(page);
   await page.keyboard.press("Shift+ArrowDown");
   await expect(first).toHaveAttribute("aria-disabled", "true");
 

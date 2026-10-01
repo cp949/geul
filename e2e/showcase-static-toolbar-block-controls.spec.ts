@@ -18,6 +18,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 const DISABLED_REASON = "Available when the cursor is in a single block";
 
@@ -36,12 +37,7 @@ const openWithCaretInFirstBlock = async (page: Page) => {
   // ProseMirror는 End가 옮긴 selection도 selectionchange 뒤 비동기로
   // 반영한다. 그 전에 다음 키를 보내면 이전 selection에서 확장된다. 한
   // 프레임과 한 macrotask를 양보한다.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => setTimeout(resolve, 0)),
-      ),
-  );
+  await yieldFrame(page);
   return {
     editable,
     toolbar: page.getByRole("toolbar", { name: "Toolbar" }),

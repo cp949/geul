@@ -16,6 +16,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 const TYPED = "XYZ";
 
@@ -30,12 +31,7 @@ const openWithCaret = async (page: Page) => {
   // 그 전에 포커스가 툴바로 넘어가면 이전 블록(block-1)이 변환 대상으로
   // 남는다(RD-001-DELTA-03 "발견"). 사람이 만드는 간격(수십 ms)보다 훨씬
   // 짧은 경합이라 테스트가 한 프레임과 한 macrotask를 양보한다.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => setTimeout(resolve, 0)),
-      ),
-  );
+  await yieldFrame(page);
   return {
     editable,
     block,
