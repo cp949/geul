@@ -125,9 +125,20 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 |---|---|
 | 범위 선택 | `COMMAND_NOT_APPLICABLE` |
 | 파괴된 세션 | `COMMAND_NOT_APPLICABLE` |
+| `toggleCaretMark`의 `type`이 5종 밖(JS 호출) | `COMMAND_NOT_APPLICABLE` |
 | codeBlock 안 캐럿 | `CODE_BLOCK_MARK_NOT_ALLOWED` |
 | 색상 값이 canonical이 아님 | `INVALID_COLOR` |
+| 색상 해제(`null`)인데 캐럿 위치에 그 색이 없음 | `COMMAND_NOT_APPLICABLE` |
+| `code`가 걸린 캐럿에서 다른 mark나 색을 켬 | `COMMAND_NOT_APPLICABLE` |
 
+- 판정 순서는 `type`(`toggleCaretMark`만), 파괴된 세션, 범위 선택, codeBlock, 색상 값 순이다. 변경 없음과 `code` 배제는 적용 단계에서 판정한다.
+- 범위 선택이 codeBlock과 겹쳐도 `COMMAND_NOT_APPLICABLE`이 우선한다.
+  - 툴바가 이 코드를 보고 기존 선택 영역 명령으로 넘어간다.
+  - 기존 명령이 그 경우 `CODE_BLOCK_MARK_NOT_ALLOWED`를 반환한다.
+- 변경이 없는 호출은 거절이다. 기존 명령의 규약과 같다.
+- `code`는 다른 mark와 함께 걸 수 없다(편집기 mark 배제 규칙).
+  - `code`를 켜면 앞서 설정한 stored mark를 대체한다.
+  - 색상 mark도 같다.
 - 거절 시 상태는 바뀌지 않는다.
 
 ### 기존 명령과의 관계

@@ -27,6 +27,9 @@ controller.destroy(); // 세션 영구 종료
 ## 담고 있는 것
 
 - **명령**: `controller.commands.*`(서식 토글·블록 타입 변경·들여쓰기 등 타입별 명령)와 `insertBlocks`/`updateBlock`/`removeBlocks` 등 임의 `Block` 형태를 받는 범용 조작 API
+  - `toggleCaretMark(type)`: 접힌 캐럿에서 mark를 켜고 끈다. 이어 입력하는 텍스트에 적용된다.
+  - `toggleCaretTextColor(color)`: 접힌 캐럿에서 텍스트 색을 설정, 교체, 해제한다. `null`은 해제다.
+  - `toggleCaretBackgroundColor(color)`: 접힌 캐럿에서 배경색을 설정, 교체, 해제한다. `null`은 해제다.
 - **조회**: `getDocument`/`getBlock`/`getPrevBlock`/`getNextBlock`/`forEachBlock`으로 저장 `Block` 트리를 순회
 - **확장 지점**: `customBlocks`/`customInlineContent`(커스텀 블록·인라인 타입 등록), `enabledBlockTypes`(`{ mode: "allow" | "deny", types }`로 타입 제한 — `isBlockTypeEnabled(type)`으로 조회), `uploadFile`(미디어 업로드 콜백), `pasteHandler`
 - **이벤트**: `onChange`/`onBeforeChange`/`onSelectionChange`/`onMount`/`onUnmount`

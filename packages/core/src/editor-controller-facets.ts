@@ -291,6 +291,36 @@ export interface InlineFormattingCommands {
     toggleInlineBackgroundColor(
       color: string | null,
     ): Result<void, EditorError>;
+    /**
+     * 접힌 캐럿에서 mark를 켜거나 끈다. 이어 입력하는 텍스트에 적용된다.
+     * 문서, `revision`, `onChange`, undo 스택, `onBeforeChange`를 바꾸지 않는다.
+     * 성공하면 `subscribe` listener를 호출한다.
+     *
+     * 이미 mark가 걸린 텍스트 안 캐럿에서 호출하면 해제한다.
+     * `code`는 다른 mark와 함께 걸 수 없다. `code`를 켜면 다른 stored mark를 대체한다.
+     * `code`가 걸린 캐럿에서 다른 mark나 색을 켜면 `COMMAND_NOT_APPLICABLE`이다.
+     * 범위 선택, 파괴된 편집기, 5종 밖의 `type`은 `COMMAND_NOT_APPLICABLE`로 거절한다.
+     * 범위 선택이 codeBlock과 겹쳐도 `COMMAND_NOT_APPLICABLE`이 우선한다.
+     * codeBlock 안 캐럿은 `CODE_BLOCK_MARK_NOT_ALLOWED`로 거절한다.
+     * 거절은 상태를 바꾸지 않는다.
+     * 범위 선택에는 `toggleBold()` 등 기존 명령을 쓴다.
+     */
+    toggleCaretMark(
+      type: "bold" | "italic" | "underline" | "strike" | "code",
+    ): Result<void, EditorError>;
+    /**
+     * 접힌 캐럿에서 텍스트 색을 설정, 교체, 해제한다. 이어 입력하는 텍스트에 적용된다.
+     * 같은 색을 다시 호출하면 해제한다. 다른 색은 교체한다. `null`은 해제다.
+     * 해제할 색이 캐럿 위치에 없으면 `COMMAND_NOT_APPLICABLE`이다.
+     * canonical(`#RRGGBB` 대문자)이 아닌 값은 `INVALID_COLOR`다.
+     * 그 밖의 계약은 `toggleCaretMark`와 같다. 배경색 stored mark와 독립이다.
+     */
+    toggleCaretTextColor(color: string | null): Result<void, EditorError>;
+    /**
+     * 접힌 캐럿에서 배경색을 설정, 교체, 해제한다.
+     * 계약은 `toggleCaretTextColor`와 같다. 텍스트 색 stored mark와 독립이다.
+     */
+    toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
   };
 }
 

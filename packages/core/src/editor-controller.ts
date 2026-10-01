@@ -13,6 +13,7 @@ import {
   findParentInTree,
   walkBlockTree,
 } from "./block-tree.js";
+import { createCaretMarkCommands } from "./caret-mark-commands.js";
 import { createDeferredControllerFacade } from "./deferred-controller-facade.js";
 import type {
   CreateEditorOptions,
@@ -98,6 +99,7 @@ export const createEditor = (
   }
   const genericBlockCommands = createGenericBlockCommands(session);
   const inlineMarkCommands = createInlineMarkCommands(session);
+  const caretMarkCommands = createCaretMarkCommands(session);
   const blockAttributeCommands = createBlockAttributeCommands(session);
   const tableCommands = createTableCommands(session);
   const insertBlockCommands = createInsertBlockCommands(session);
@@ -334,6 +336,7 @@ export const createEditor = (
     commands: {
       ...genericBlockCommands,
       ...inlineMarkCommands,
+      ...caretMarkCommands,
       ...blockAttributeCommands,
       ...tableCommands,
       ...insertBlockCommands,

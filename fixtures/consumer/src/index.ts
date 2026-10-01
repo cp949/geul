@@ -99,6 +99,12 @@ void pasted;
 void editor;
 const unsubscribe: () => void = editor.subscribe(() => {});
 void unsubscribe;
+const caretResults = [
+  editor.commands.toggleCaretMark("bold"),
+  editor.commands.toggleCaretTextColor("#FF0000"),
+  editor.commands.toggleCaretBackgroundColor(null),
+];
+void caretResults;
 const event: DocumentChangeEvent = {
   revision: 0,
   changedBlockIds: [],
