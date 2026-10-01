@@ -186,11 +186,24 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 - 바깥 클릭은 포커스를 옮기지 않는다(`G-UI-001`).
 - 선례: `code-block-language-combobox.tsx`의 `listbox`/`option` 패턴.
 
+### 활성화 뒤 포커스와 컨테이너 mousedown
+
+Issue #222가 추가했다.
+
+- 변환·서식을 바로 적용하는 컨트롤은 Enter·Space로 활성화해도 포커스가 그 컨트롤에 남는다. 블록 타입 아이콘 버튼, 들여쓰기·내어쓰기, mark 버튼이 해당한다.
+- 메뉴를 여는 컨트롤과 메뉴 항목은 각 메뉴 계약을 따른다.
+- mark 버튼을 키보드로 활성화해도 편집기의 선택 범위가 유지된다. 같은 버튼을 다시 누르면 서식이 꺼진다. Escape로 돌아와 입력하면 그 범위를 대체한다.
+- 툴바 컨테이너 자신을 누른 mousedown은 편집기 포커스와 selection을 옮기지 않는다(`G-UI-001`). 빈 영역과 컨트롤 사이 틈이 해당한다.
+- 컨테이너 mousedown 계약은 `component` override 컨테이너에도 적용한다. 포인터 계약이라 위 "`component` override에는 적용하지 않는다"와 충돌하지 않는다.
+- 자식이 mousedown target이면 건드리지 않는다. `component` override 안의 입력 요소는 포커스를 받는다.
+
 ### 근거
 
 - 네이티브 `<select>`는 닫힌 상태에서 ArrowDown만으로 변환한다(결함 5).
 - 포커스가 select에 남아 이어 입력이 유실된다.
 - roving tabindex가 없으면 Tab 정지점이 컨트롤 수와 같다(결함 6).
+- 버튼 포커스에서 DOM selection을 다시 쓰면 브라우저가 포커스를 편집기로 옮긴다. 이어 누른 Enter가 선택 범위를 줄바꿈으로 대체한다(Issue #222 F1).
+- 컨테이너 mousedown을 막지 않으면 포커스가 `BODY`로 가고 DOM selection이 편집기 밖으로 나간다(Issue #222 F3).
 
 ## 6. 기존 계약과의 관계
 

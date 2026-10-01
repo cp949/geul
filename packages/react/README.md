@@ -322,6 +322,8 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - Home/End는 처음·끝 컨트롤로 이동한다.
 - Escape는 포커스를 편집기로 돌린다.
 - Shift·Ctrl·Alt·Meta를 함께 누르면 이동하지 않는다.
+- 블록 타입 아이콘 버튼, 들여쓰기·내어쓰기, mark 버튼은 Enter·Space로 눌러도 포커스가 그 버튼에 남는다. mark 버튼은 편집기의 선택 범위도 유지한다.
+- 툴바의 빈 영역이나 컨트롤 사이 틈을 눌러도 편집기 포커스와 선택 범위가 유지된다.
 
 블록 타입 컨트롤은 트리거 버튼과 `role="listbox"` 메뉴다.
 
@@ -332,11 +334,10 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab은 메뉴를 닫고 트리거로 돌린다.
 - 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.
 
-`component` prop으로 툴바를 통째로 교체하면 위 키보드 계약은 적용하지 않는다. 교체한 컴포넌트가 소유한다.
+`component` prop으로 툴바를 통째로 교체하면 위 키보드 계약은 적용하지 않는다. 교체한 컴포넌트가 소유한다. 툴바 컨테이너 자신을 누른 mousedown이 편집기 포커스를 옮기지 않는 계약만 유지한다. 교체한 컴포넌트 안의 입력 요소는 그대로 포커스를 받는다.
 
 ## 알려진 제약
 
 - `EditorProvider`/`EditorContent`는 서버 렌더 환경에서 `null`을 렌더하고, 실제 편집기 생성(`createEditor()`, `@cp949/geul-core`)은 `useEffect` 안에서만 호출한다. `createEditor()`를 이 경로 없이 직접 호출하는 저수준 사용은 서버 환경에서도 크래시하지 않지만(`EXT-013`), 반환된 controller의 문서는 로드 시점 정규화가 실제 client mount 시점까지 지연된 상태일 수 있다.
-- `StaticToolbar`의 키보드·상태 계약은 Chromium에서만 검증했다. Firefox·WebKit은 확인하지 않았다.
-- `StaticToolbar` 컨트롤에 포커스가 있으면 Ctrl+Z는 되돌리지만 Ctrl+Shift+Z·Ctrl+Y는 다시 실행하지 않는다. 편집기에 포커스가 있으면 모두 동작한다.
+- `StaticToolbar`의 키보드·상태 계약은 Chromium에서 검증했다. Firefox·WebKit은 mark 버튼 키보드 활성화 뒤의 포커스와 선택 범위 유지만 확인했다.
 - `StaticToolbar`는 여러 블록을 선택하면 블록 타입 변환을 비활성으로 표시한다. 여러 블록의 타입을 한 번에 바꾸는 기능은 없다.
