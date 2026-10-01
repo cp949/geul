@@ -48,8 +48,8 @@ import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
 import { HistoryFocusSyncExtension } from "./history-focus-sync-extension.js";
+import { HistoryKeydownFallbackExtension } from "./history-keydown-fallback-extension.js";
 import { HistoryNativeUndoFallbackExtension } from "./history-native-undo-fallback-extension.js";
-import { HistoryRedoKeydownFallbackExtension } from "./history-redo-keydown-fallback-extension.js";
 import { IframeBlockExtension } from "./iframe-block-extension.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { IndentKeyboardExtension } from "./indent-keyboard-extension.js";
@@ -541,7 +541,7 @@ export const createProductionEditor = (options: {
       BackgroundColorMark,
       HardBreakExtension,
       HistoryNativeUndoFallbackExtension,
-      HistoryRedoKeydownFallbackExtension,
+      HistoryKeydownFallbackExtension,
       HistoryFocusSyncExtension,
       // enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12) — 각 block
       // type을 정의하는 "주 확장"만 조건부로 넣는다. input rule·keyboard·

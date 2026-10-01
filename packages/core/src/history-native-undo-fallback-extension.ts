@@ -40,6 +40,14 @@ import { Plugin } from "@tiptap/pm/state";
 // 가로채지 않기 위한 유일한 신뢰 가능한 신호다(input/textarea에 focus가
 // 있으면 그 컨트롤 자신의 selection 개념이 따로 있어 DOM Selection이 이
 // view.dom을 가리키지 않는다 — 실측).
+//
+// Issue #222 뒤의 역할:
+// - 에디터 밖 비편집 요소 포커스의 `Mod-z` keydown은
+//   HistoryKeydownFallbackExtension이 먼저 가로채고 `preventDefault`한다.
+//   그 경로에서는 `beforeinput`이 오지 않아 이 shim이 실행되지 않는다.
+// - 이 shim은 keydown을 거치지 않는 native undo·redo를 계속 맡는다.
+//   브라우저 편집 메뉴·컨텍스트 메뉴의 실행 취소가 그 예다.
+// - 구형 엔진의 target 계산 차이는 그 경로에서도 같다.
 export const HistoryNativeUndoFallbackExtension = Extension.create({
   name: "historyNativeUndoFallback",
 

@@ -2,7 +2,7 @@ import { Extension } from "@tiptap/core";
 import { isHistoryTransaction } from "@tiptap/pm/history";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import { isInputTarget } from "./history-redo-keydown-fallback-extension.js";
+import { isInputTarget } from "./history-keydown-fallback-extension.js";
 
 // Issue #221 — 툴바 버튼처럼 에디터 밖 요소에 포커스가 있을 때 undo·redo하면
 // `document.activeElement`가 `BODY`로 유실되던 결함.
