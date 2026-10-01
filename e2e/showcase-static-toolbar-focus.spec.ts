@@ -19,6 +19,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import {
+  editorSelectionText,
+  placeCaretAtEnd,
+  selectRange,
+} from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 /** 3번 문단의 초기 텍스트. */
@@ -44,87 +49,12 @@ const openExample = async (page: Page) => {
   };
 };
 
-/** DOM selection의 텍스트를 읽는다. selection이 편집기 밖이면 null이다. */
-const editorSelectionText = (editorInput: Locator) =>
-  editorInput.evaluate((element) => {
-    const selection = element.ownerDocument.getSelection();
-    const anchor = selection?.anchorNode ?? null;
-    if (selection === null || anchor === null || !element.contains(anchor)) {
-      return null;
-    }
-    return selection.toString();
-  });
-
-/**
- * DOM 캐럿 앞쪽의 문단 텍스트를 읽는다. selection이 범위이거나 문단 밖이면
- * null이다.
- */
-const textBeforeCaret = (block: Locator) =>
-  block.evaluate((element) => {
-    const selection = element.ownerDocument.getSelection();
-    if (selection === null || selection.rangeCount === 0) return null;
-    const caret = selection.getRangeAt(0);
-    if (!caret.collapsed || !element.contains(caret.startContainer)) {
-      return null;
-    }
-    const before = element.ownerDocument.createRange();
-    before.selectNodeContents(element);
-    before.setEnd(caret.startContainer, caret.startOffset);
-    return before.toString();
-  });
-
-/**
- * 문단을 클릭하고 캐럿을 문단 끝에 둔다.
- *
- * 클릭 직후 바로 키를 보내지 않는다(G-EDT-002). 프레임 양보만으로는
- * 부족하다.
- * - 병렬 부하(`--repeat-each=10 --workers=5`)에서 Home·End 이동이 사라지고
- *   캐럿이 클릭 위치에 남는 실행이 있었다(120회 중 4회).
- * - 가설: ProseMirror의 focus 핸들러가 원인이다. 첫 포커스 20ms 뒤 DOM
- *   selection이 자기 기록과 다르면 편집기 상태의 selection을 DOM에 다시
- *   쓴다(prosemirror-view 1.42.3). 키가 옮긴 selection을 편집기가 읽기
- *   전에 그 타이머가 돌면 이동이 사라진다.
- * - 고정 대기 대신 캐럿 위치를 확인하고 다시 시도한다. 양보 뒤 확인이라
- *   통과 시점에는 편집기 상태도 같은 selection이다.
- */
-const placeCaretAtEnd = async (page: Page, block: Locator) => {
-  await block.click();
-  await yieldFrame(page);
-  await expect(async () => {
-    await page.keyboard.press("End");
-    await yieldFrame(page);
-    expect(await textBeforeCaret(block)).toBe(BLOCK_TEXT);
-  }).toPass();
-};
-
-/**
- * 문단 앞 3글자를 범위로 잡는다. `placeCaretAtEnd`와 같은 이유로 DOM
- * selection을 확인하고 다시 시도한다. Home이 범위를 접어 재시도가 안전하다.
- */
-const selectRange = async (
-  page: Page,
-  block: Locator,
-  editorInput: Locator,
-) => {
-  await block.click();
-  await yieldFrame(page);
-  await expect(async () => {
-    await page.keyboard.press("Home");
-    await yieldFrame(page);
-    for (let i = 0; i < 3; i += 1) {
-      await page.keyboard.press("Shift+ArrowRight");
-    }
-    await yieldFrame(page);
-    expect(await editorSelectionText(editorInput)).toBe(RANGE_TEXT);
-  }).toPass();
-};
-
 test("범위 선택 뒤 키보드로 Bold를 켜고 꺼도 Bold가 포커스를 유지한다 @core", async ({
   page,
 }) => {
   const { editorInput, block, blocks, control } = await openExample(page);
   const blockCount = await blocks.count();
-  await selectRange(page, block, editorInput);
+  await selectRange(page, block, editorInput, RANGE_TEXT);
   const bold = control("Bold");
   await bold.focus();
   await expect(bold).toBeFocused();
@@ -146,7 +76,7 @@ test("키보드로 Bold를 켠 뒤 Escape로 돌아와 입력하면 원래 범�
   page,
 }) => {
   const { editorInput, block, control } = await openExample(page);
-  await selectRange(page, block, editorInput);
+  await selectRange(page, block, editorInput, RANGE_TEXT);
   const bold = control("Bold");
   await bold.focus();
   await expect(bold).toBeFocused();
@@ -175,7 +105,7 @@ for (const [label, markSelector] of [
     page,
   }) => {
     const { editorInput, block, control } = await openExample(page);
-    await selectRange(page, block, editorInput);
+    await selectRange(page, block, editorInput, RANGE_TEXT);
     const button = control(label);
     await button.focus();
     await expect(button).toBeFocused();
@@ -199,7 +129,7 @@ test("Shift+Tab과 화살표로 Bold에 가서 Enter를 두 번 눌러도 블록
   const { editorInput, block, blocks, toolbar, control } =
     await openExample(page);
   const blockCount = await blocks.count();
-  await selectRange(page, block, editorInput);
+  await selectRange(page, block, editorInput, RANGE_TEXT);
   const bold = control("Bold");
   // Shift+Tab은 툴바의 Tab 정지점(첫 컨트롤)으로 간다. Bold까지 화살표로
   // 이동할 횟수를 컨트롤 순서에서 읽는다.
@@ -234,7 +164,7 @@ test("키보드로 적용한 Quote를 툴바 포커스의 Control+z가 되돌리
   page,
 }) => {
   const { block, control } = await openExample(page);
-  await placeCaretAtEnd(page, block);
+  await placeCaretAtEnd(page, block, BLOCK_TEXT);
   const quote = control("Quote");
   await quote.focus();
   await expect(quote).toBeFocused();
@@ -254,7 +184,7 @@ test("마우스로 적용한 Quote를 툴바 포커스의 Control+z가 되돌린
   page,
 }) => {
   const { block, control } = await openExample(page);
-  await placeCaretAtEnd(page, block);
+  await placeCaretAtEnd(page, block, BLOCK_TEXT);
   const quote = control("Quote");
   await quote.click();
   await expect(block.locator("blockquote")).toHaveText(BLOCK_TEXT);
@@ -272,7 +202,7 @@ test("입력 뒤 적용한 Quote를 툴바 포커스의 Control+z가 한 번에 
   page,
 }) => {
   const { block, control } = await openExample(page);
-  await placeCaretAtEnd(page, block);
+  await placeCaretAtEnd(page, block, BLOCK_TEXT);
   await page.keyboard.type(TYPED);
   await expect(block).toHaveText(BLOCK_TEXT + TYPED);
   // 입력과 Quote 적용은 newGroupDelay 안에 이어져도 다른 history 이벤트다
@@ -339,7 +269,7 @@ for (const [label, pointKey] of [
     page,
   }) => {
     const { editorInput, block, toolbar, control } = await openExample(page);
-    await selectRange(page, block, editorInput);
+    await selectRange(page, block, editorInput, RANGE_TEXT);
     const point = (await bareToolbarPoints(toolbar))[pointKey];
     expect(point.hitsToolbar).toBe(true);
 
