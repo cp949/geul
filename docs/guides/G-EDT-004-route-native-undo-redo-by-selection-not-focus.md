@@ -1,7 +1,7 @@
 # G-EDT-004 네이티브 undo/redo는 focus가 아니라 selection 기준으로 라우팅한다
 
 - 상태: `ACTIVE`
-- 적용 조건: `Mod-z`/`Mod-y` 키맵이 아니라 브라우저 native undo/redo(`beforeinput` `historyUndo`/`historyRedo`)에 의존하는 동작을 구현·디버깅할 때, 또는 여러 브라우저 엔진에서 undo/redo 동작이 갈리는 회귀를 조사할 때
+- 적용 조건: `Mod-z`/`Mod-y` 키맵이 아니라 브라우저 native undo/redo(`beforeinput` `historyUndo`/`historyRedo`)에 의존하는 동작을 구현·디버깅할 때, 또는 여러 브라우저 엔진에서 undo/redo 동작이 갈리는 회귀를 조사할 때, 또는 에디터 밖 비편집 요소(툴바 버튼 등)에 포커스가 있을 때 redo(`Mod-Shift-z`·`Mod-y`)가 동작하지 않는 증상을 조사할 때
 
 ## 구현 규칙
 
@@ -12,7 +12,26 @@
 - "이 historyUndo가 내 editor 것인가"의 유일하게 신뢰 가능한 신호는 `event.target`이 아니라 `document.getSelection()`이 여전히 이 editor의 `view.dom` 안에 있는가다. `document.activeElement`가 옮겨져도 selection은 이전 editing host를 그대로 가리킬 수 있다(입력 컨트롤에 focus가 있으면 그 컨트롤은 별도 selection 개념을 쓰므로 DOM Selection이 그 컨트롤을 가리키지 않는다).
 - 호환 shim이 필요하면 `document`(`view.dom`의 owner document) 레벨에서 같은 `beforeinput` 가로채기를 한 번 더 등록한다. `event.defaultPrevented`로 정상 엔진 경로와의 중복 실행을 막고, selection이 `view.dom.contains(...)`인지로 대상 editor를 판정한다. 참고 구현: `packages/core/src/history-native-undo-fallback-extension.ts`(Issue #183).
 
+### redo는 keydown 단계에서 라우팅한다
+
+- Chromium은 undo를 `preventDefault()`하면 이후 `historyRedo`를 보내지 않는다. 포커스가 에디터 밖이면 `beforeinput`으로 redo를 라우팅할 수 없다.
+- 이때 keydown은 `document`에 도달한다. target은 포커스된 요소다. selection은 `view.dom` 안에 남는다.
+- redo는 `document` keydown(bubble 단계)에서 `Mod-Shift-z`·`Mod-y`를 가로채 `redo` command를 직접 호출한다.
+- 가로채기 조건은 모두 만족해야 한다.
+  1. `event.defaultPrevented`가 아니다. 툴바 자체 핸들러에 양보한다.
+  2. `view.editable`이다.
+  3. `event.isComposing`이 아니다.
+  4. 키가 정확히 `Mod-Shift-z` 또는 `Mod-y`다. 잉여 modifier는 거절한다.
+  5. target이 `view.dom` 밖의 Node다. 안쪽은 keymap이 처리한다.
+  6. target이 `input`·`textarea`·`select`·편집 영역이 아니다.
+  7. `document.getSelection()`의 `focusNode ?? anchorNode`가 `view.dom` 안이다.
+  8. 실행은 `preventDefault()` 뒤 `redo(view.state, view.dispatch)`다. redo할 것이 없어도 막는다.
+- 키 판별은 순수 함수로 분리해 비Apple(Ctrl)·Apple(Meta) 분기를 단위 테스트로 고정한다. `event.key`가 비ASCII(한글 두벌식 등)이면 `event.code`로 폴백한다.
+- undo는 `beforeinput` 경로를 유지한다. undo와 redo의 경로는 비대칭이다.
+- 참고 구현: `packages/core/src/history-redo-keydown-fallback-extension.ts`(Issue #219).
+
 ## 완료 기준
 
 - native undo/redo에 의존하는 core 확장이 "focus가 아니라 selection이 라우팅 기준"이라는 전제를 지키는지 확인한다.
 - 한 페이지에 편집기 인스턴스가 여러 개 있을 때 각 인스턴스가 자신의 `view.dom` 소유 selection만 가로채고 다른 인스턴스·무관한 `input`/`textarea`의 `historyUndo`를 훔치지 않는지 확인한다.
+- redo 라우팅이 target 가드(조건 6)와 selection 가드(조건 7)를 모두 가지는지 확인한다. 둘 중 하나만 지워도 단위 테스트가 RED여야 한다. Chromium은 입력 컨트롤에 포커스가 가면 DOM selection이 컨트롤로 옮겨져 e2e는 selection 가드로도 통과한다 — 두 가드를 모두 지워야 e2e가 RED가 된다.
