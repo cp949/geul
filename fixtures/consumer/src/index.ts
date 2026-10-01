@@ -97,6 +97,8 @@ void [EditorProvider, EditorContent, LinkToolbar, SlashMenu];
 const pasted = editor.commands.pasteTabularData({ columnCount: 1, rows: [] });
 void pasted;
 void editor;
+const unsubscribe: () => void = editor.subscribe(() => {});
+void unsubscribe;
 const event: DocumentChangeEvent = {
   revision: 0,
   changedBlockIds: [],

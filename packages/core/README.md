@@ -30,6 +30,7 @@ controller.destroy(); // 세션 영구 종료
 - **조회**: `getDocument`/`getBlock`/`getPrevBlock`/`getNextBlock`/`forEachBlock`으로 저장 `Block` 트리를 순회
 - **확장 지점**: `customBlocks`/`customInlineContent`(커스텀 블록·인라인 타입 등록), `enabledBlockTypes`(`{ mode: "allow" | "deny", types }`로 타입 제한 — `isBlockTypeEnabled(type)`으로 조회), `uploadFile`(미디어 업로드 콜백), `pasteHandler`
 - **이벤트**: `onChange`/`onBeforeChange`/`onSelectionChange`/`onMount`/`onUnmount`
+- **구독**: `subscribe(listener)`로 문서·selection·stored mark 변경을 알림받는다. 반환값은 해제 함수다. 문서 내용이 필요하면 `onChange`를 쓴다.
 
 전체 옵션은 `CreateEditorOptions`, 전체 컨트롤러 표면은 `EditorController` 타입을 본다.
 

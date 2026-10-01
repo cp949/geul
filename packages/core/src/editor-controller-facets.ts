@@ -33,6 +33,32 @@ export interface EditorLifecycle {
   mount(element: HTMLElement): void;
   unmount(): void;
   destroy(): void;
+  /**
+   * 편집기 내부 상태가 바뀐 뒤 listener를 호출한다.
+   * 문서 변경, selection 변경, stored mark 변경, `replaceDocument()` 성공이 대상이다.
+   *
+   * 호출 시점에 `getSelectionMarks()`, `getSelectionBlockType()` 등
+   * 선택 조회는 새 상태를 반환한다.
+   * `getDocument()`의 최신 여부와 `onChange`와의 호출 순서는 보장하지 않는다.
+   * 문서 내용이 필요하면 `onChange`를 쓴다.
+   *
+   * 다음에는 호출하지 않는다.
+   * - 해제 함수 호출 뒤
+   * - `destroy()` 뒤. 파괴된 편집기의 `subscribe`는 등록하지 않는다.
+   * - 상태가 바뀌지 않은 거절된 변경. 거절 뒤 selection이 이동하면 호출한다.
+   * - `createEditor()` 내부 로드 정규화 구간
+   *
+   * 같은 함수를 중복 등록하면 1개로 취급한다.
+   * listener는 등록 순서로 호출한다.
+   * listener 안에서 해제해도 된다. 해제된 listener는 같은 라운드에서도 호출하지 않는다.
+   * listener 예외는 감싸지 않는다.
+   * listener 안에서 편집 명령을 호출하지 않는다. 변경을 처리하는 도중에 호출되므로
+   * 바깥 명령의 결과와 `onChange` 내용이 어긋날 수 있다. 조회만 한다.
+   *
+   * @param listener 인자 없는 함수
+   * @returns 구독 해제 함수
+   */
+  subscribe(listener: () => void): () => void;
   // spec §8(EXT-009), RD-002-DELTA-01 — construction-time `dictionary`
   // readback(`isUploadEnabled()`와 동일 자리). react가 `EditorProvider`의
   // "external"(이미 만들어진 editor를 그대로 전달)/"internal" 모드 어느

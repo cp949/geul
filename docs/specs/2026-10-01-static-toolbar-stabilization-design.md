@@ -80,6 +80,10 @@ subscribe(listener: () => void): () => void;
 - 같은 함수의 중복 등록은 1개로 취급한다.
 - listener는 무인자다.
 - listener 예외는 감싸지 않는다. 기존 `onSelectionChange`와 같다.
+- listener 안에서는 조회만 한다. 편집 명령을 호출하지 않는다.
+  - 통지는 변경을 처리하는 도중에 일어난다.
+  - 명령을 호출하면 바깥 명령의 결과와 `onChange` 내용이 어긋날 수 있다.
+  - 기존 `onSelectionChange`에도 같은 제약이 있다.
 
 ### 근거
 

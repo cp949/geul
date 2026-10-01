@@ -8,6 +8,7 @@ import { isSupportedLinkHref } from "@cp949/geul-model";
 import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
+import { Mark } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 
 import {
@@ -281,6 +282,27 @@ const ProductionCalloutExtension = CalloutExtension.extend({
   },
 });
 
+// Issue #218 — subscribe 통지 판정. 문서·selection·stored mark가 모두 같으면
+// 같은 상태로 본다. 세 값이 subscribe 발화 대상과 같다(spec §2).
+// stored mark의 `null`은 "캐럿 위치의 mark를 쓴다"이고 `[]`는 "mark 없음을
+// 명시한다"라 서로 다른 상태다. bold 끝 캐럿에서 서식을 끄면 `null`에서
+// `[]`로 바뀌어 선택 조회 결과가 달라진다.
+const isSameStoredMarks = (
+  before: Editor["state"]["storedMarks"],
+  after: Editor["state"]["storedMarks"],
+): boolean =>
+  before === null || after === null
+    ? before === after
+    : Mark.sameSet(before, after);
+
+const isSameEditorState = (
+  before: Editor["state"],
+  after: Editor["state"],
+): boolean =>
+  before.doc.eq(after.doc) &&
+  before.selection.eq(after.selection) &&
+  isSameStoredMarks(before.storedMarks, after.storedMarks);
+
 export const createProductionEditor = (options: {
   document: BlockDocument;
   createId: IdFactory;
@@ -331,6 +353,17 @@ export const createProductionEditor = (options: {
   // (RD-004-DELTA-01 "## 계획"의 설계 결정, 실측:
   // @tiptap/core/dist/index.js:7033-7058). 미지정이면 등록하지 않는다.
   onSelectionChange?: () => void;
+  // Issue #218 — EditorController.subscribe의 통지 원천. Tiptap
+  // `transaction` 이벤트는 view.updateState 뒤에 발화해 이 시점의 조회가
+  // 새 상태를 읽는다. 이 이벤트는 root transaction이 filterTransaction을
+  // 통과했을 때만 발화하므로 onBeforeChange 거절은 여기서 걸러진다. 반면
+  // RevisionGuardExtension의 appendTransaction 되돌림은 root가 통과한 뒤라
+  // 이벤트가 발화한다. 되돌림은 문서만 복원하고 selection은 문서 끝으로
+  // 옮긴다(실측). 그래서 `beforeTransaction`에서 잡은 변경 전 상태와
+  // 비교해 문서·selection·stored mark가 모두 같을 때만 통지하지 않는다.
+  // selection이 이동했으면 통지한다. load-normalizing 구간은 통지하지
+  // 않는다. 미지정이면 등록하지 않는다.
+  onStateChange?: () => void;
   // RD-004-DELTA-02 — canApplyDocumentChange가 두 번째 인자로
   // loadNormalizing을 받는다. 이 함수 자신의 아래 내부
   // load-normalizing dummy mount/unmount 구간에서만 `true`다 —
@@ -758,6 +791,29 @@ export const createProductionEditor = (options: {
       ? {}
       : { editorProps: { attributes: options.attributeOverrides.editor } }),
   });
+
+  // Issue #218 — Tiptap은 beforeTransaction용 생성 옵션을 두지 않아
+  // 생성 직후 editor.on으로 등록한다. dummy mount(아래) 전에 등록해도
+  // loadNormalizing 가드가 그 구간의 통지를 막는다. beforeTransaction은
+  // filterTransaction이 거절한 transaction에도 발화하지만, 다음
+  // beforeTransaction이 덮어쓰고 transaction 이벤트는 거절 시 발화하지
+  // 않아 잘못된 비교로 이어지지 않는다.
+  if (options.onStateChange !== undefined) {
+    const notifyStateChange = options.onStateChange;
+    let stateBeforeTransaction: Editor["state"] | null = null;
+    editor.on("beforeTransaction", ({ editor: sourceEditor }) => {
+      stateBeforeTransaction = sourceEditor.state;
+    });
+    editor.on("transaction", ({ editor: sourceEditor }) => {
+      const before = stateBeforeTransaction;
+      stateBeforeTransaction = null;
+      if (loadNormalizing) return;
+      if (before !== null && isSameEditorState(before, sourceEditor.state)) {
+        return;
+      }
+      notifyStateChange();
+    });
+  }
 
   // spec §11.2(EXT-013, R4 슬라이스8 RD-001) — 이 self-mount/unmount
   // round-trip은 로드 시점 trailing paragraph 정규화(onMount, 위 참고)를

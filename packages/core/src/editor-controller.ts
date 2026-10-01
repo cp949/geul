@@ -114,6 +114,9 @@ export const createEditor = (
     destroy() {
       session.destroy();
     },
+    subscribe(listener) {
+      return session.subscribe(listener);
+    },
     getDocument() {
       return session.getDocument();
     },

@@ -166,6 +166,11 @@ export class ProductionEditorSession {
   // Editor.isEditable/options.editable에만 맡기면 재구성마다 Tiptap
   // 기본값(true)으로 리셋된다.
   private editableState = true;
+  // Issue #218 — subscribe() listener 집합. blockSelection/editableState와
+  // 같은 이유로 세션이 소유한다. replaceDocument()가 tiptap Editor를 새로
+  // 만들어도 listener는 이 집합에 남는다. Set이라 같은 함수의 중복 등록은
+  // 1개다. destroy()가 비운다.
+  private readonly stateListeners = new Set<() => void>();
 
   // registry(RD-002-DELTA-11)에 등록된 커스텀 block type 이름 집합 —
   // modelToTiptap/tiptapToModel의 top-level 거절·복원 분기가 소비한다.
@@ -343,6 +348,17 @@ export class ProductionEditorSession {
     this.mountedElement = null;
   }
 
+  // Issue #218 — 파괴된 세션은 listener를 등록하지 않고 아무 일도 하지 않는
+  // 해제 함수를 돌려준다(다른 isDestroyed 가드와 동일 원칙). mount()/
+  // unmount()는 이 집합에 영향을 주지 않는다.
+  subscribe(listener: () => void): () => void {
+    if (this.destroyed) return () => {};
+    this.stateListeners.add(listener);
+    return () => {
+      this.stateListeners.delete(listener);
+    };
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     try {
@@ -383,6 +399,7 @@ export class ProductionEditorSession {
     this.tiptapEditor.destroy();
     this.mountedElement = null;
     this.destroyed = true;
+    this.stateListeners.clear();
   }
 
   getDocument(): BlockDocument {
@@ -533,6 +550,11 @@ export class ProductionEditorSession {
       this.tiptapEditor.mount(this.mountedElement);
     }
     this.commitDocument(this.readEditorDocument(this.tiptapEditor), "replace");
+    // Issue #218 — 새 Editor에는 이전 상태와 비교할 기준이 없다. 그래서
+    // 교체 성공 뒤 상태 변경을 여기서 한 번 더 알린다. 계약은 "1회 이상"이다.
+    // 새 Editor의 mount가 만드는 transaction이 상태를 바꾸면 더 늘 수 있다.
+    // 마운트된 교체의 실측은 1회다.
+    this.notifyStateChange();
     return { ok: true, value: undefined };
   }
 
@@ -566,6 +588,9 @@ export class ProductionEditorSession {
       document,
       createId: this.createId,
       onUpdate: (editor) => this.onTiptapUpdate(editor),
+      // Issue #218 — replaceDocument()가 재구성하는 매 Tiptap Editor 생성마다
+      // 다시 넘겨야 교체 뒤 편집 통지가 이어진다.
+      onStateChange: () => this.notifyStateChange(),
       editable: this.editableState,
       ...(this.options.customBlocks === undefined
         ? {}
@@ -810,6 +835,16 @@ export class ProductionEditorSession {
       reason,
     });
     return true;
+  }
+
+  // Issue #218 — 등록 순서로 호출한다. 순회는 스냅샷으로 하고 호출 직전에
+  // 집합에 아직 있는지 확인한다. listener 안에서 해제한 listener는 이번
+  // 라운드에서도 호출되지 않고, 새로 등록한 listener는 다음 변경부터
+  // 호출된다. 예외는 감싸지 않는다(onSelectionChange와 같다).
+  private notifyStateChange(): void {
+    for (const listener of Array.from(this.stateListeners)) {
+      if (this.stateListeners.has(listener)) listener();
+    }
   }
 
   private onTiptapUpdate(editor: Editor): void {
