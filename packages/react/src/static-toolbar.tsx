@@ -9,6 +9,7 @@ import {
   IndentDecrease,
   IndentIncrease,
   Italic,
+  Lightbulb,
   List,
   ListChecks,
   ListCollapse,
@@ -24,7 +25,6 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   useCallback,
-  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -42,6 +42,7 @@ import {
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
+import { useStaticToolbarState } from "./static-toolbar-state.js";
 import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
@@ -51,7 +52,6 @@ import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
-import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // FormattingToolbar(formatting-toolbar.tsx)와 같은 정의다 — 버튼 세트가
 // 동일하다는 RD-001 결정 그대로다. 모듈 상수로 두는 이유도 같다(재렌더 시
@@ -119,7 +119,7 @@ const TEXT_STYLE_OPTIONS = BLOCK_TYPE_OPTIONS.filter((option) =>
   TEXT_STYLE_OPTION_IDS.has(option.id),
 );
 
-// select 밖으로 뺀 나머지 6개 — BLOCK_TYPE_OPTIONS 선언 순서를 그대로
+// select 밖으로 뺀 나머지 7개 — BLOCK_TYPE_OPTIONS 선언 순서를 그대로
 // 유지해 "Turn into" 메뉴(block-side-menu-menu.tsx)와 순서가 어긋나지
 // 않는다.
 const BLOCK_TYPE_ICON_OPTIONS = BLOCK_TYPE_OPTIONS.filter(
@@ -128,16 +128,19 @@ const BLOCK_TYPE_ICON_OPTIONS = BLOCK_TYPE_OPTIONS.filter(
 
 type BlockTypeIconId =
   | "quote"
+  | "callout"
   | "code"
   | "bullet-list"
   | "numbered-list"
   | "check-list"
   | "toggle-list";
 
-// BLOCK_TYPE_ICON_OPTIONS는 위 필터로 항상 이 6개 id로만 구성됨이 보장된다
+// BLOCK_TYPE_ICON_OPTIONS는 위 필터로 항상 이 7개 id로만 구성됨이 보장된다
 // — block-type-options.ts의 blockTypeText cast와 같은 근거의 단일 cast다.
 const BLOCK_TYPE_ICONS: Record<BlockTypeIconId, ReactElement> = {
   quote: <Quote {...iconProps} />,
+  // callout 기본 아이콘이 💡라 같은 의미의 Lightbulb를 쓴다.
+  callout: <Lightbulb {...iconProps} />,
   code: <SquareCode {...iconProps} />,
   "bullet-list": <List {...iconProps} />,
   "numbered-list": <ListOrdered {...iconProps} />,
@@ -220,38 +223,11 @@ export const StaticToolbar = ({
   const editor = useEditor();
   const dictionary = useDictionary();
   const { element } = useEditorMount();
-  const [state, setState] = useState<FormattingToolbarState>(() =>
-    computeFormattingToolbarState(editor),
-  );
+  const { state, trackedRange } = useStaticToolbarState(editor, element);
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(
     null,
   );
-  const trackedRange = useRef<Range | null>(null);
   const focusEditor = useFocusEditor(element);
-
-  const updateFromSelection = useCallback(() => {
-    setState(computeFormattingToolbarState(editor));
-
-    // 아래는 오직 WebKit 키보드 클릭 방어용 trackedRange 갱신이다 — 선택이
-    // 에디터 밖에 있으면(포커스 이동 등) 갱신하지 않고 마지막 값을 유지한다.
-    // 툴바 자체의 표시 여부와는 무관하다(상시 렌더).
-    const selection = element?.ownerDocument.getSelection();
-    if (
-      element === null ||
-      selection === undefined ||
-      selection === null ||
-      selection.rangeCount === 0 ||
-      selection.anchorNode === null ||
-      selection.focusNode === null ||
-      !element.contains(selection.anchorNode) ||
-      !element.contains(selection.focusNode)
-    ) {
-      return;
-    }
-    trackedRange.current = selection.getRangeAt(0).cloneRange();
-  }, [editor, element]);
-
-  useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   const { menuRef: colorMenuRef, style: colorMenuStyle } =
     useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
@@ -393,7 +369,7 @@ export const StaticToolbar = ({
             aria-label="Block type"
             className="geul-formatting-toolbar__select"
             onChange={(event) => {
-              const blockSelection = state.blockSelection;
+              const { blockSelection } = computeFormattingToolbarState(editor);
               if (blockSelection === null) return;
               const options = getBlockTypeOptionsForSource(
                 blockSelection.blockType,
@@ -406,7 +382,6 @@ export const StaticToolbar = ({
                 blockSelection.blockId,
                 option.blockType,
               );
-              setState(computeFormattingToolbarState(editor));
             }}
             // 현재 블록 타입이 Quote·Code·목록 등 select 밖으로 뺀
             // 타입이면(activeBlockTypeId가 TEXT_STYLE_OPTION_IDS 밖) "Text"
@@ -453,14 +428,14 @@ export const StaticToolbar = ({
                 key={option.id}
                 label={blockTypeText(dictionary, option.id).label}
                 onClick={() => {
-                  const blockSelection = state.blockSelection;
+                  const { blockSelection } =
+                    computeFormattingToolbarState(editor);
                   if (blockSelection === null) return;
                   if (allowedBlockTypeIds?.has(option.id) !== true) return;
                   editor.commands.setBlockType(
                     blockSelection.blockId,
                     option.blockType,
                   );
-                  setState(computeFormattingToolbarState(editor));
                 }}
               />
             ))}
@@ -477,11 +452,11 @@ export const StaticToolbar = ({
               key="indent"
               label="Indent"
               onClick={() => {
-                const blockSelection = state.blockSelection;
+                const { blockSelection, nestingActions } =
+                  computeFormattingToolbarState(editor);
                 if (blockSelection === null) return;
-                if (state.nestingActions?.canIndent !== true) return;
+                if (nestingActions?.canIndent !== true) return;
                 editor.commands.indentBlock(blockSelection.blockId);
-                setState(computeFormattingToolbarState(editor));
               }}
               title={
                 state.nestingActions?.canIndent === true
@@ -498,11 +473,11 @@ export const StaticToolbar = ({
               key="outdent"
               label="Outdent"
               onClick={() => {
-                const blockSelection = state.blockSelection;
+                const { blockSelection, nestingActions } =
+                  computeFormattingToolbarState(editor);
                 if (blockSelection === null) return;
-                if (state.nestingActions?.canOutdent !== true) return;
+                if (nestingActions?.canOutdent !== true) return;
                 editor.commands.outdentBlock(blockSelection.blockId);
-                setState(computeFormattingToolbarState(editor));
               }}
               title={
                 state.nestingActions?.canOutdent === true
@@ -526,7 +501,6 @@ export const StaticToolbar = ({
                 restoreEditorSelection(element, trackedRange.current);
               }
               toggle(editor);
-              setState(computeFormattingToolbarState(editor));
             }}
           />
         ))}

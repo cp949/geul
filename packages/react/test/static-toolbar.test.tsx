@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StaticToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
-import { fakeController } from "./formatting-toolbar-test-support.js";
+import { fakeStaticToolbarController as fakeController } from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
 
