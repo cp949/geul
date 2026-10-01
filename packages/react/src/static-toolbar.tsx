@@ -27,6 +27,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -187,6 +188,10 @@ const BLOCK_TYPE_ICONS: Record<BlockTypeIconId, ReactElement> = {
   "toggle-list": <ListCollapse {...iconProps} />,
 };
 
+// mark·블록·색상 버튼이 공유하는 클래스. FormattingToolbar의 클래스를
+// 빌려 쓰지 않는다(RD-003 조건 11).
+const buttonClassName = "geul-static-toolbar__button";
+
 const colorMenuSectionLabelClassName = "geul-menu-section-label";
 const colorMenuSwatchClassName = "geul-menu-swatch";
 
@@ -270,6 +275,10 @@ export const StaticToolbar = ({
   const dictionary = useDictionary();
   const { element } = useEditorMount();
   const { state, trackedRange } = useStaticToolbarState(editor, element);
+  // 블록 컨트롤(트리거, 아이콘 버튼 7종, Indent/Outdent)은 항상 렌더하고
+  // 대상 블록이 없으면 disable로 표시한다. 세 군데의 표시와 가드가 이 값
+  // 하나를 공유한다.
+  const isBlockControlsDisabled = state.blockSelection === null;
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(
     null,
   );
@@ -277,6 +286,12 @@ export const StaticToolbar = ({
     useState<BlockTypeMenuState | null>(null);
   const blockTypeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const focusEditor = useFocusEditor(element);
+
+  // 메뉴가 열린 채 대상 블록이 사라지면 상태까지 비운다. 렌더 조건만 막으면
+  // 대상이 돌아왔을 때 닫힌 메뉴가 되살아난다. 포커스는 옮기지 않는다.
+  useEffect(() => {
+    if (isBlockControlsDisabled) setBlockTypeMenuState(null);
+  }, [isBlockControlsDisabled]);
 
   const { menuRef: colorMenuRef, style: colorMenuStyle } =
     useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
@@ -346,6 +361,7 @@ export const StaticToolbar = ({
   const handleBlockTypeTriggerClick = (
     event: ReactMouseEvent<HTMLButtonElement>,
   ) => {
+    if (isBlockControlsDisabled) return;
     if (blockTypeMenuState !== null) {
       closeBlockTypeMenu();
       return;
@@ -356,6 +372,7 @@ export const StaticToolbar = ({
   const handleBlockTypeTriggerKeyDown = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
+    if (isBlockControlsDisabled) return;
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     event.preventDefault();
     if (blockTypeMenuState === null) {
@@ -488,6 +505,10 @@ export const StaticToolbar = ({
     editor.isBlockTypeEnabled(option.blockType.type),
   );
 
+  const blockControlsDisabledReason = isBlockControlsDisabled
+    ? dictionary.toolbar.static.blockControlsDisabledReason
+    : undefined;
+
   const content = (
     <>
       <div
@@ -495,111 +516,108 @@ export const StaticToolbar = ({
         className={containerClassName}
         role="toolbar"
       >
-        {state.blockSelection !== null && (
-          <button
-            aria-expanded={blockTypeMenuState !== null}
-            aria-haspopup="listbox"
-            aria-label={dictionary.toolbar.static.blockTypeAriaLabel}
-            className="geul-static-toolbar__block-type-trigger"
-            data-geul-block-type-trigger=""
-            onClick={handleBlockTypeTriggerClick}
-            onKeyDown={handleBlockTypeTriggerKeyDown}
-            onMouseDown={preserveFocusOnMouseDown()}
-            ref={blockTypeTriggerRef}
-            type="button"
-          >
-            {/* 현재 타입이 Text·Heading 밖(Quote 등)이면 잘못된 값을 보이지
-                않고 중립 라벨을 보인다. */}
-            <span>
-              {activeBlockTypeId !== null &&
-              TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId)
-                ? blockTypeText(dictionary, activeBlockTypeId).label
-                : dictionary.toolbar.static.blockTypeNeutralLabel}
-            </span>
-            <ChevronDown {...iconProps} />
-          </button>
-        )}
-        {state.blockSelection !== null && (
-          <>
-            {BLOCK_TYPE_ICON_OPTIONS.filter((option) =>
-              editor.isBlockTypeEnabled(option.blockType.type),
-            ).map((option) => (
-              <IconButton
-                aria-disabled={
-                  allowedBlockTypeIds?.has(option.id) === true
-                    ? "false"
-                    : "true"
-                }
-                aria-pressed={activeBlockTypeId === option.id}
-                className="geul-formatting-toolbar__mark-button"
-                icon={BLOCK_TYPE_ICONS[option.id as BlockTypeIconId]}
-                key={option.id}
-                label={blockTypeText(dictionary, option.id).label}
-                onClick={() => {
-                  const { blockSelection } =
-                    computeFormattingToolbarState(editor);
-                  if (blockSelection === null) return;
-                  if (allowedBlockTypeIds?.has(option.id) !== true) return;
-                  editor.commands.setBlockType(
-                    blockSelection.blockId,
-                    option.blockType,
-                  );
-                }}
-              />
-            ))}
-          </>
-        )}
-        {state.blockSelection !== null && (
-          <>
-            <IconButton
-              aria-disabled={
-                state.nestingActions?.canIndent === true ? "false" : "true"
-              }
-              className="geul-formatting-toolbar__mark-button"
-              icon={indentIcon}
-              key="indent"
-              label="Indent"
-              onClick={() => {
-                const { blockSelection, nestingActions } =
-                  computeFormattingToolbarState(editor);
-                if (blockSelection === null) return;
-                if (nestingActions?.canIndent !== true) return;
-                editor.commands.indentBlock(blockSelection.blockId);
-              }}
-              title={
-                state.nestingActions?.canIndent === true
-                  ? undefined
-                  : dictionary.nesting.indentDisabledReason
-              }
-            />
-            <IconButton
-              aria-disabled={
-                state.nestingActions?.canOutdent === true ? "false" : "true"
-              }
-              className="geul-formatting-toolbar__mark-button"
-              icon={outdentIcon}
-              key="outdent"
-              label="Outdent"
-              onClick={() => {
-                const { blockSelection, nestingActions } =
-                  computeFormattingToolbarState(editor);
-                if (blockSelection === null) return;
-                if (nestingActions?.canOutdent !== true) return;
-                editor.commands.outdentBlock(blockSelection.blockId);
-              }}
-              title={
-                state.nestingActions?.canOutdent === true
-                  ? undefined
-                  : dictionary.nesting.outdentDisabledReason
-              }
-            />
-          </>
-        )}
+        <button
+          aria-disabled={isBlockControlsDisabled ? "true" : "false"}
+          aria-expanded={blockTypeMenuState !== null}
+          aria-haspopup="listbox"
+          aria-label={dictionary.toolbar.static.blockTypeAriaLabel}
+          className="geul-static-toolbar__block-type-trigger"
+          data-geul-block-type-trigger=""
+          onClick={handleBlockTypeTriggerClick}
+          onKeyDown={handleBlockTypeTriggerKeyDown}
+          onMouseDown={preserveFocusOnMouseDown()}
+          ref={blockTypeTriggerRef}
+          title={blockControlsDisabledReason}
+          type="button"
+        >
+          {/* 현재 타입이 Text·Heading 밖(Quote 등)이거나 대상이 없으면 잘못된
+              값을 보이지 않고 중립 라벨을 보인다. */}
+          <span>
+            {activeBlockTypeId !== null &&
+            TEXT_STYLE_OPTION_IDS.has(activeBlockTypeId)
+              ? blockTypeText(dictionary, activeBlockTypeId).label
+              : dictionary.toolbar.static.blockTypeNeutralLabel}
+          </span>
+          <ChevronDown {...iconProps} />
+        </button>
+        {BLOCK_TYPE_ICON_OPTIONS.filter((option) =>
+          editor.isBlockTypeEnabled(option.blockType.type),
+        ).map((option) => (
+          <IconButton
+            aria-disabled={
+              !isBlockControlsDisabled &&
+              allowedBlockTypeIds?.has(option.id) === true
+                ? "false"
+                : "true"
+            }
+            aria-pressed={activeBlockTypeId === option.id}
+            className={buttonClassName}
+            icon={BLOCK_TYPE_ICONS[option.id as BlockTypeIconId]}
+            key={option.id}
+            label={blockTypeText(dictionary, option.id).label}
+            onClick={() => {
+              const { blockSelection } = computeFormattingToolbarState(editor);
+              if (blockSelection === null) return;
+              if (allowedBlockTypeIds?.has(option.id) !== true) return;
+              editor.commands.setBlockType(
+                blockSelection.blockId,
+                option.blockType,
+              );
+            }}
+            title={blockControlsDisabledReason}
+          />
+        ))}
+        <IconButton
+          aria-disabled={
+            state.nestingActions?.canIndent === true ? "false" : "true"
+          }
+          className={buttonClassName}
+          icon={indentIcon}
+          key="indent"
+          label="Indent"
+          onClick={() => {
+            const { blockSelection, nestingActions } =
+              computeFormattingToolbarState(editor);
+            if (blockSelection === null) return;
+            if (nestingActions?.canIndent !== true) return;
+            editor.commands.indentBlock(blockSelection.blockId);
+          }}
+          title={
+            isBlockControlsDisabled
+              ? blockControlsDisabledReason
+              : state.nestingActions?.canIndent === true
+                ? undefined
+                : dictionary.nesting.indentDisabledReason
+          }
+        />
+        <IconButton
+          aria-disabled={
+            state.nestingActions?.canOutdent === true ? "false" : "true"
+          }
+          className={buttonClassName}
+          icon={outdentIcon}
+          key="outdent"
+          label="Outdent"
+          onClick={() => {
+            const { blockSelection, nestingActions } =
+              computeFormattingToolbarState(editor);
+            if (blockSelection === null) return;
+            if (nestingActions?.canOutdent !== true) return;
+            editor.commands.outdentBlock(blockSelection.blockId);
+          }}
+          title={
+            isBlockControlsDisabled
+              ? blockControlsDisabledReason
+              : state.nestingActions?.canOutdent === true
+                ? undefined
+                : dictionary.nesting.outdentDisabledReason
+          }
+        />
         {toolbarButtons.map(({ mark, label, icon, toggle }) => (
           <IconButton
             aria-disabled={isMarkingDisabled ? "true" : "false"}
             aria-pressed={state.activeMarks.includes(mark)}
-            className="geul-formatting-toolbar__mark-button"
+            className={buttonClassName}
             icon={icon}
             key={mark}
             label={label}
@@ -614,7 +632,7 @@ export const StaticToolbar = ({
         ))}
         <IconButton
           aria-disabled={isMarkingDisabled ? "true" : "false"}
-          className="geul-formatting-toolbar__mark-button"
+          className={buttonClassName}
           data-geul-color-trigger=""
           icon={textColorIcon}
           key="text-color"
@@ -626,7 +644,7 @@ export const StaticToolbar = ({
         />
         <IconButton
           aria-disabled={isMarkingDisabled ? "true" : "false"}
-          className="geul-formatting-toolbar__mark-button"
+          className={buttonClassName}
           data-geul-color-trigger=""
           icon={backgroundColorIcon}
           key="background-color"
@@ -637,7 +655,7 @@ export const StaticToolbar = ({
           }}
         />
       </div>
-      {blockTypeMenuState !== null && (
+      {blockTypeMenuState !== null && !isBlockControlsDisabled && (
         <StaticToolbarBlockTypeMenu
           activeOptionId={activeBlockTypeId}
           element={element}

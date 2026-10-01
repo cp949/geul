@@ -1,8 +1,7 @@
 // StaticToolbar 컨테이너. FormattingToolbar와 달리 위치를 geul이 강제하지
 // 않는다 — position/z-index/transform이 없는 순수 in-flow 요소다("상단
-// 고정"은 소비자가 직접 CSS로 붙인다, RD-001 "결정" 참고). 버튼/select/색상
-// 팔레트는 _formatting-toolbar.scss·_menu-shared.scss의 기존 클래스를 그대로
-// 재사용한다(위치 가정이 없는 순수 시각 스타일이라 복제 불필요).
+// 고정"은 소비자가 직접 CSS로 붙인다, RD-001 "결정" 참고). 색상 팔레트는
+// _menu-shared.scss의 클래스를 재사용한다. 버튼은 이 파일의 클래스를 쓴다.
 .geul-static-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -12,6 +11,37 @@
   border: 1px solid var(--geul-color-border, #dadce0);
   background: var(--geul-color-surface, #fff);
   padding: 0.25rem;
+}
+
+// mark·블록·색상 버튼. 규칙은 _formatting-toolbar.scss의 mark 버튼과 같은
+// 값이다(min-width를 바꾸면 e2e 한 줄 단언이 깨진다). 클래스를 분리한 뒤
+// 두 툴바가 서로의 스타일 변경에 영향받지 않는다. roving tabindex 전에도
+// 키보드 포커스가 보이도록 :focus-visible을 둔다.
+.geul-static-toolbar__button {
+  min-width: 1.75rem;
+  border-radius: var(--geul-radius-sm, 0.25rem);
+  border: none;
+  background: transparent;
+  padding-inline: 0.375rem;
+  padding-block: 0.25rem;
+  color: var(--geul-color-text, #202124);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--geul-color-accent, #1a73e8);
+    outline-offset: -2px;
+  }
+
+  &[aria-pressed="true"] {
+    background-color: var(--geul-color-accent-muted, #e8f0fe);
+    color: var(--geul-color-accent, #1a73e8);
+  }
+
+  // 대상이 없어도 포커스는 받는다. pointer-events를 끄지 않는다.
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
 }
 
 // 블록 타입 트리거. 현재 라벨이 바뀌어도(Text ↔ Heading 6 ↔ 중립 라벨)
@@ -31,6 +61,16 @@
   padding-block: 0.25rem;
   color: var(--geul-color-text, #202124);
   cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--geul-color-accent, #1a73e8);
+    outline-offset: -2px;
+  }
+
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
 }
 
 // 블록 타입 listbox 옵션. 포커스 이동이 화살표 키로만 일어나므로

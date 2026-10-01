@@ -1,0 +1,107 @@
+/**
+ * StaticToolbar 블록 컨트롤이 selection에 따라 사라지거나 움직이지 않는지
+ * 실제 브라우저에서 확인한다(RD-003-DELTA-02, Issue #218 결함 1).
+ *
+ * 브라우저가 최하위 증명 계층인 이유(ADR-0007):
+ * - 네이티브 입력의 기본 동작. `Shift+ArrowDown`이 만드는 실제 다중 블록
+ *   selection에서 `getSelectionBlockType()`이 `null`이 되는지는 jsdom이
+ *   키 입력으로 selection을 확장하지 않아 볼 수 없다.
+ * - 실제 레이아웃. 컨트롤의 x 좌표와 툴바 폭이 같은지는 jsdom이 레이아웃을
+ *   계산하지 못해 볼 수 없다.
+ * 컨트롤 수·`aria-disabled`·`title`·클릭 가드 계약은 단위 테스트
+ * (static-toolbar-block-controls.test.tsx)가 소유한다.
+ *
+ * 캐럿 배치 헬퍼는 showcase-static-toolbar-block-menu.spec.ts의
+ * `openWithCaret`와 같은 패턴이다. 공용 `e2e/support/`로 올리면 기존 spec과
+ * 변경 범위 밖 파일을 건드리므로 이 DELTA에서는 복제로 두고 결과에 적는다.
+ */
+import { expect, test, type Page } from "@playwright/test";
+
+import { openShowcasePage } from "./support/showcase.js";
+
+const DISABLED_REASON = "Available when the cursor is in a single block";
+
+/** 예제를 열고 첫 문단에 캐럿을 둔다. */
+const openWithCaretInFirstBlock = async (page: Page) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editable = page.getByRole("textbox", { name: "Editor" });
+  await editable.locator("p").first().click();
+  await page.keyboard.press("End");
+  // ProseMirror는 클릭한 selection을 selectionchange 뒤 비동기로 반영한다.
+  // 그 전에 다음 키를 보내면 이전 selection에서 확장된다. 한 프레임과 한
+  // macrotask를 양보한다.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => setTimeout(resolve, 0)),
+      ),
+  );
+  return {
+    editable,
+    toolbar: page.getByRole("toolbar", { name: "Toolbar" }),
+    trigger: page.getByRole("button", { name: "Block type" }),
+    quote: page.getByRole("button", { name: "Quote" }),
+  };
+};
+
+type ToolbarLayout = { count: number; xs: number[]; width: number };
+
+/** 툴바 직계 컨트롤 수, 각 컨트롤의 x 좌표와 툴바 폭을 기록한다. */
+const measureToolbar = (toolbar: ReturnType<Page["getByRole"]>) =>
+  toolbar.evaluate((element): ToolbarLayout => {
+    const round = (value: number) => Math.round(value * 100) / 100;
+    return {
+      count: element.children.length,
+      xs: Array.from(element.children).map((child) =>
+        round(child.getBoundingClientRect().x),
+      ),
+      width: round(element.getBoundingClientRect().width),
+    };
+  });
+
+test("여러 블록을 선택해도 블록 컨트롤의 수와 좌표와 툴바 폭이 같다", async ({
+  page,
+}) => {
+  const { toolbar, trigger, quote } = await openWithCaretInFirstBlock(page);
+  await expect(trigger).toHaveAttribute("aria-disabled", "false");
+  const before = await measureToolbar(toolbar);
+
+  await page.keyboard.press("Shift+ArrowDown");
+
+  // 상태 갱신은 subscribe 통지 뒤 렌더에서 일어난다. 단언이 재시도한다.
+  await expect(trigger).toHaveAttribute("aria-disabled", "true");
+  await expect(quote).toHaveAttribute("aria-disabled", "true");
+  await expect(trigger).toHaveAttribute("title", DISABLED_REASON);
+  await expect(quote).toHaveAttribute("title", DISABLED_REASON);
+  const after = await measureToolbar(toolbar);
+  expect(after).toEqual(before);
+});
+
+test("대상 블록이 없을 때 비활성 트리거와 아이콘 버튼을 눌러도 블록이 바뀌지 않는다", async ({
+  page,
+}) => {
+  const { editable, trigger, quote } = await openWithCaretInFirstBlock(page);
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(trigger).toHaveAttribute("aria-disabled", "true");
+
+  // Playwright는 aria-disabled 컨트롤을 "enabled 아님"으로 보고 클릭을
+  // 막는다. 사용자가 누르는 상황을 만들려고 force로 우회한다.
+  await trigger.click({ force: true });
+  await quote.click({ force: true });
+
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(editable.locator("blockquote")).toHaveCount(0);
+});
+
+test("대상 블록이 없을 때도 비활성 컨트롤이 키보드 포커스를 받는다", async ({
+  page,
+}) => {
+  const { trigger, quote } = await openWithCaretInFirstBlock(page);
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(quote).toHaveAttribute("aria-disabled", "true");
+
+  await trigger.focus();
+  await expect(trigger).toBeFocused();
+  await quote.focus();
+  await expect(quote).toBeFocused();
+});

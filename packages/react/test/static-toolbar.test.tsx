@@ -73,18 +73,23 @@ describe("StaticToolbar 상단 고정 툴바", () => {
     expect(controller.commands.setBlockType).toHaveBeenCalledOnce();
   });
 
-  it("blockSelection이 null이면(표 셀 안 등) 블록타입 select와 들여쓰기 버튼을 렌더하지 않는다", () => {
+  it("blockSelection이 null이면(표 셀 안 등) 블록타입 트리거와 들여쓰기 버튼을 렌더하되 disable한다", () => {
     const controller = fakeController(
       undefined,
       vi.fn(() => null),
     );
     render(withProvider(controller, <StaticToolbar />));
 
-    expect(screen.queryByRole("button", { name: "Block type" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Indent" })).toBeNull();
+    for (const name of ["Block type", "Indent"]) {
+      const control = screen.getByRole("button", { name });
+      expect(control.getAttribute("aria-disabled")).toBe("true");
+      expect(control.getAttribute("title")).toBe(
+        "Available when the cursor is in a single block",
+      );
+    }
   });
 
-  it("미디어 블록이 선택돼도 툴바는 유지되고 mark·색상 버튼만 disable된다", () => {
+  it("미디어 블록이 선택돼도 툴바는 유지되고 mark·색상 버튼도 disable된다", () => {
     const controller = fakeController(
       undefined,
       vi.fn(() => null),
@@ -295,14 +300,18 @@ describe("StaticToolbar 상단 고정 툴바", () => {
       expect(screen.getByRole("button", { name: "Code" })).not.toBeNull();
     });
 
-    it("blockSelection이 null이면 블록 타입 아이콘 버튼도 렌더하지 않는다", () => {
+    it("blockSelection이 null이면 블록 타입 아이콘 버튼도 렌더하되 disable한다", () => {
       const controller = fakeController(
         undefined,
         vi.fn(() => null),
       );
       render(withProvider(controller, <StaticToolbar />));
 
-      expect(screen.queryByRole("button", { name: "Quote" })).toBeNull();
+      const quote = screen.getByRole("button", { name: "Quote" });
+      expect(quote.getAttribute("aria-disabled")).toBe("true");
+      expect(quote.getAttribute("title")).toBe(
+        "Available when the cursor is in a single block",
+      );
     });
   });
 

@@ -281,6 +281,10 @@ export type Dictionary = {
       // 현재 블록 타입이 Text·Heading 밖(Quote 등)일 때 트리거가 보이는
       // 중립 라벨. 빈 값이나 "Text" 같은 잘못된 값을 보이지 않으려고 둔다.
       blockTypeNeutralLabel: string;
+      // RD-003-DELTA-02(Issue #218) — 대상 블록이 없을 때 블록 컨트롤(트리거,
+      // 아이콘 버튼, Indent/Outdent)의 비활성 사유 title. 미디어·표 셀·여러
+      // 블록 선택을 가리지 않고 하나의 문구를 공유한다.
+      blockControlsDisabledReason: string;
     };
     // Issue #193 RD-001-DELTA-01 — code-block-language-combobox.tsx의
     // outer `role="toolbar"` 컨테이너(언어 trigger + 복사 + 더보기, DELTA-02가
@@ -611,6 +615,8 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       ariaLabel: "Toolbar",
       blockTypeAriaLabel: "Block type",
       blockTypeNeutralLabel: "Other",
+      blockControlsDisabledReason:
+        "Available when the cursor is in a single block",
     },
     codeBlock: {
       ariaLabel: "Code block toolbar",

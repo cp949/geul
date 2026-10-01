@@ -197,6 +197,8 @@ export const KO_DICTIONARY: Dictionary = {
       ariaLabel: "툴바",
       blockTypeAriaLabel: "블록 타입",
       blockTypeNeutralLabel: "기타",
+      blockControlsDisabledReason:
+        "커서가 블록 하나 안에 있을 때 사용할 수 있습니다",
     },
     codeBlock: {
       ariaLabel: "코드 블록 툴바",
