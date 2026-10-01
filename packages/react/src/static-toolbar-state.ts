@@ -1,5 +1,5 @@
 import type { EditorController } from "@cp949/geul-core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   computeFormattingToolbarState,
@@ -52,43 +52,18 @@ export const isSameStaticToolbarState = (
  *
  * listener 안에서는 조회만 한다 — 통지가 변경 처리 도중에 일어나므로
  * 편집 명령을 부르면 바깥 명령의 결과와 `onChange`가 어긋난다.
- *
- * `trackedRange`는 색상 스와치 전용이다(static-toolbar.tsx의
- * `restoreEditorSelection`). mark 버튼의 키보드 활성화는 쓰지 않는다
- * (Issue #222). 편집기 안 selection을 마지막으로 관측한
- * Range이며 같은 listener가 갱신한다. 선택이 편집기 밖이면 갱신하지 않고
- * 마지막 값을 유지한다.
  */
-export const useStaticToolbarState = (
-  editor: EditorController,
-  element: HTMLElement | null,
-) => {
+export const useStaticToolbarState = (editor: EditorController) => {
   const [state, setState] = useState<FormattingToolbarState>(() =>
     computeFormattingToolbarState(editor),
   );
-  const trackedRange = useRef<Range | null>(null);
 
   const refresh = useCallback(() => {
     const next = computeFormattingToolbarState(editor);
     setState((previous) =>
       isSameStaticToolbarState(previous, next) ? previous : next,
     );
-
-    const selection = element?.ownerDocument.getSelection();
-    if (
-      element === null ||
-      selection === undefined ||
-      selection === null ||
-      selection.rangeCount === 0 ||
-      selection.anchorNode === null ||
-      selection.focusNode === null ||
-      !element.contains(selection.anchorNode) ||
-      !element.contains(selection.focusNode)
-    ) {
-      return;
-    }
-    trackedRange.current = selection.getRangeAt(0).cloneRange();
-  }, [editor, element]);
+  }, [editor]);
 
   useEffect(() => {
     const unsubscribe = editor.subscribe(refresh);
@@ -97,5 +72,5 @@ export const useStaticToolbarState = (
     return unsubscribe;
   }, [editor, refresh]);
 
-  return { state, trackedRange };
+  return { state };
 };

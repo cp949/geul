@@ -22,7 +22,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { StaticToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { mountBlockEditor, placeCaret } from "./mount-editor.js";
-import { fakeStaticToolbarController } from "./static-toolbar-test-support.js";
+import {
+  fakeStaticToolbarController,
+  mountToolbarWithEditor,
+} from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
 
@@ -48,23 +51,6 @@ const openByMouse = () => fireEvent.click(blockTypeTrigger(), { detail: 1 });
 
 /** 키보드 활성화(Enter·Space)로 메뉴를 연다. 이때 `detail`은 0이다. */
 const openByKeyboard = () => fireEvent.click(blockTypeTrigger(), { detail: 0 });
-
-/**
- * 실제 편집기와 StaticToolbar를 마운트하고 첫 문단에 캐럿을 놓는다.
- * 편집 영역에 포커스를 둔 채로 돌려준다. 포커스가 처음부터 편집기에 있으면
- * "편집기로 되돌렸다"는 단언이 공허해지므로 호출부가 `focusOutsideEditor`를
- * 쓸지 정한다.
- */
-const mountToolbarWithEditor = () => {
-  const mounted = mountBlockEditor({
-    blockIds: ["block-1"],
-    children: <StaticToolbar />,
-  });
-  const paragraph = mounted.blocks[0]?.querySelector("p") ?? mounted.blocks[0];
-  if (paragraph === undefined) throw new Error("문단을 찾지 못했다");
-  placeCaret(paragraph);
-  return mounted;
-};
 
 describe("StaticToolbar 블록 타입 트리거와 메뉴 열기", () => {
   it("블록 타입 컨트롤은 네이티브 select가 아니라 listbox 팝업 버튼이다", () => {

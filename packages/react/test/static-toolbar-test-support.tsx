@@ -3,11 +3,14 @@
  * `formatting-toolbar-test-support.tsx`의 `fakeController`에 `subscribe`를
  * 얹는다. 기존 fake는 FormattingToolbar가 소유하므로 고치지 않는다.
  * 접힌 캐럿 명령 3개의 mock도 여기서 더한다.
+ * 실제 편집기에 StaticToolbar를 올리는 `mountToolbarWithEditor`도 둔다.
  */
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 
+import { StaticToolbar } from "../src/index.js";
 import { fakeController } from "./formatting-toolbar-test-support.js";
+import { mountBlockEditor, placeCaret } from "./mount-editor.js";
 
 // 캐럿 명령 mock이 성공과 거절 양쪽을 받도록 반환 타입을 미리 넓혀 둔다.
 // 좁게 추론되면 테스트가 다른 결과를 `mockReturnValue`로 넘길 때 타입 에러가 난다.
@@ -63,4 +66,21 @@ export const fakeStaticToolbarController = (
       });
     },
   });
+};
+
+/**
+ * 실제 편집기와 StaticToolbar를 마운트하고 첫 문단에 캐럿을 놓는다.
+ * 편집 영역에 포커스를 둔 채로 돌려준다. 포커스가 처음부터 편집기에 있으면
+ * "편집기로 되돌렸다"는 단언이 공허해지므로 호출부가 포커스를 메뉴로 옮긴
+ * 뒤 단언한다. 블록 타입 메뉴와 색상 메뉴 테스트가 공유한다.
+ */
+export const mountToolbarWithEditor = () => {
+  const mounted = mountBlockEditor({
+    blockIds: ["block-1"],
+    children: <StaticToolbar />,
+  });
+  const paragraph = mounted.blocks[0]?.querySelector("p") ?? mounted.blocks[0];
+  if (paragraph === undefined) throw new Error("문단을 찾지 못했다");
+  placeCaret(paragraph);
+  return mounted;
 };

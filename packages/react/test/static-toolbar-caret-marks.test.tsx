@@ -4,7 +4,7 @@
  * StaticToolbar가 접힌 캐럿 명령을 먼저 호출하고, 적용할 수 없을 때만 기존
  * 선택 영역 명령으로 넘어가는 배선을 확인한다(RD-002-DELTA-02, Issue #218).
  * fake로는 호출 순서와 폴백 조건을, 실제 편집기로는 키보드 클릭이 DOM
- * selection을 다시 쓰지 않는지 본다(Issue #222).
+ * selection을 다시 쓰지 않는지 본다(Issue #222, 색상 스와치는 Issue #224).
  * - DOM selection을 다시 쓰면 포커스가 버튼에서 편집기로 옮겨진다.
  * - 브라우저에서 포커스와 선택 범위가 유지되는지는
  *   e2e(showcase-static-toolbar-focus.spec.ts)가 소유한다.
@@ -207,4 +207,48 @@ describe("StaticToolbar 실제 편집기의 키보드 클릭", () => {
       removeAllRanges.mockRestore();
     }
   });
+
+  it.each([
+    ["글자색", "Text color", "toggleCaretTextColor"],
+    ["배경색", "Background color", "toggleCaretBackgroundColor"],
+  ] as const)(
+    "%s 스와치의 키보드 클릭(detail 0)은 DOM selection을 다시 쓰지 않고 캐럿 명령을 호출한다",
+    (_name, triggerLabel, caretCommand) => {
+      const { editor, blocks } = mountBlockEditor({
+        blockIds: ["block-1"],
+        children: <StaticToolbar />,
+      });
+      const paragraph = blocks[0]?.querySelector("p") ?? blocks[0];
+      if (paragraph === undefined) throw new Error("문단을 찾지 못했다");
+      placeCaret(paragraph);
+      // 위 케이스와 같다. 통지를 일으켜 툴바가 편집기 안의 Range를 관측하게
+      // 한다. 관측한 Range가 있어야 복원 경로가 살아 있을 때 이 테스트가
+      // 실패한다.
+      act(() => {
+        editor.commands.toggleCaretMark("italic");
+      });
+      fireEvent.click(screen.getByRole("button", { name: triggerLabel }), {
+        detail: 0,
+      });
+      const swatch = screen.getByRole("menu").querySelector("button");
+      if (swatch === null) throw new Error("색상 스와치를 찾지 못했다");
+
+      const selection = document.getSelection();
+      if (selection === null) throw new Error("DOM 선택을 얻지 못했다");
+      const addRange = vi.spyOn(selection, "addRange");
+      const removeAllRanges = vi.spyOn(selection, "removeAllRanges");
+      const caret = vi.spyOn(editor.commands, caretCommand);
+      try {
+        fireEvent.click(swatch, { detail: 0 });
+
+        expect(caret).toHaveBeenCalledOnce();
+        expect(addRange).not.toHaveBeenCalled();
+        expect(removeAllRanges).not.toHaveBeenCalled();
+      } finally {
+        // Selection 객체는 문서가 소유해 테스트 사이에 남는다(G-TST-003).
+        addRange.mockRestore();
+        removeAllRanges.mockRestore();
+      }
+    },
+  );
 });

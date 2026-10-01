@@ -48,19 +48,16 @@ import {
 } from "./formatting-toolbar-state.js";
 import { IconButton, preserveFocusOnMouseDown } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
-import { MenuItemButton } from "./menu-item-button.js";
 import {
   BLOCK_TYPE_MENU_SELECTOR,
   StaticToolbarBlockTypeMenu,
 } from "./static-toolbar-block-type-menu.js";
-import { useStaticToolbarState } from "./static-toolbar-state.js";
 import {
-  TABLE_BACKGROUND_COLORS,
-  TABLE_TEXT_COLORS,
-  type TableCellColor,
-} from "./table-cell-colors.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+  COLOR_MENU_SELECTOR,
+  type ColorMenuProperty,
+  StaticToolbarColorMenu,
+} from "./static-toolbar-color-menu.js";
+import { useStaticToolbarState } from "./static-toolbar-state.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -197,20 +194,12 @@ const BLOCK_TYPE_ICONS: Record<BlockTypeIconId, ReactElement> = {
 // 빌려 쓰지 않는다(RD-003 조건 11).
 const buttonClassName = "geul-static-toolbar__button";
 
-const colorMenuSectionLabelClassName = "geul-menu-section-label";
-const colorMenuSwatchClassName = "geul-menu-swatch";
-
-// formatting-toolbar.tsx의 COLOR_MENU_DISMISS_ALLOW_SELECTORS와 같은 이유
-// (트리거 재클릭이 "바깥 클릭"으로 먼저 안 닫히게).
-const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
-  "[data-geul-color-menu]",
-  "[data-geul-color-trigger]",
-] as const;
-
 type ColorMenuState = {
-  property: "text" | "background";
+  property: ColorMenuProperty;
   left: number;
   top: number;
+  // 키보드로 연 메뉴만 첫 스와치로 포커스를 옮긴다(Issue #224).
+  focusFirst: boolean;
 };
 
 type BlockTypeMenuState = {
@@ -218,37 +207,6 @@ type BlockTypeMenuState = {
   top: number;
   // 키보드로 연 메뉴만 옵션으로 포커스를 옮긴다(RD-003 결정).
   focusSelected: boolean;
-};
-
-/**
- * formatting-toolbar.tsx의 restoreEditorSelection과 동일 — WebKit에서
- * 키보드로 활성화한 button click이 편집기의 DOM selection을 잃을 수 있어
- * 마지막으로 관측한 Range를 되돌린다. StaticToolbar는 hide되지 않으므로
- * "마지막 관측 Range"는 한 번 캡처한 값이 아니라 매 refresh tick마다
- * 갱신되는 값이다(아래 updateFromSelection).
- *
- * 색상 스와치(applyInlineColor)만 쓴다. `addRange`는 포커스를 편집기로
- * 옮긴다. 스와치는 메뉴를 닫고 포커스를 편집기로 돌리므로 계약과 맞는다.
- * mark 버튼은 포커스를 버튼에 남겨야 해서 쓰지 않는다(Issue #222).
- */
-const restoreEditorSelection = (
-  element: HTMLElement | null,
-  range: Range | null,
-) => {
-  const selection = element?.ownerDocument.getSelection();
-  if (
-    element === null ||
-    range === null ||
-    selection === undefined ||
-    selection === null ||
-    !element.contains(range.startContainer) ||
-    !element.contains(range.endContainer)
-  ) {
-    return;
-  }
-
-  selection.removeAllRanges();
-  selection.addRange(range);
 };
 
 /**
@@ -296,7 +254,7 @@ export const StaticToolbar = ({
   const editor = useEditor();
   const dictionary = useDictionary();
   const { element } = useEditorMount();
-  const { state, trackedRange } = useStaticToolbarState(editor, element);
+  const { state } = useStaticToolbarState(editor);
   // 블록 컨트롤(트리거, 아이콘 버튼 7종, Indent/Outdent)은 항상 렌더하고
   // 대상 블록이 없으면 disable로 표시한다. 세 군데의 표시와 가드가 이 값
   // 하나를 공유한다.
@@ -327,10 +285,23 @@ export const StaticToolbar = ({
     if (focusWasInMenu) focusEditor();
   }, [element, focusEditor, isBlockControlsDisabled]);
 
-  const { menuRef: colorMenuRef, style: colorMenuStyle } =
-    useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
-
-  const dismissColorMenu = useCallback(() => setColorMenuState(null), []);
+  // 메뉴가 닫히거나 다른 속성의 메뉴로 바뀔 때 초점이 스와치에 있었으면
+  // 편집기로 돌린다. 트리거·툴바 버튼의 mousedown은 `preventDefault`라 초점이
+  // 스와치에 남는다. 그대로 언마운트하면 초점이 `<body>`로 떨어진다
+  // (G-UI-001 자동 닫힘). 초점이 메뉴 밖이면 건드리지 않는다.
+  const focusEditorIfFocusInColorMenu = useCallback(() => {
+    const activeElement = element?.ownerDocument.activeElement ?? null;
+    if (
+      activeElement instanceof Element &&
+      activeElement.closest(COLOR_MENU_SELECTOR) !== null
+    ) {
+      focusEditor();
+    }
+  }, [element, focusEditor]);
+  const dismissColorMenu = useCallback(() => {
+    focusEditorIfFocusInColorMenu();
+    setColorMenuState(null);
+  }, [focusEditorIfFocusInColorMenu]);
   const dismissBlockTypeMenu = useCallback(
     () => setBlockTypeMenuState(null),
     [],
@@ -381,13 +352,14 @@ export const StaticToolbar = ({
     setColorMenuState(null);
     focusEditor();
   }, [focusEditor]);
-  useDismissOnOutsideOrEscape({
-    active: colorMenuState !== null,
-    element,
-    allowSelectors: COLOR_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissColorMenu,
-    onEscapeDismiss: closeColorMenu,
-  });
+  // Tab은 편집기가 아니라 해당 속성의 트리거로 돌아간다. 블록 타입 메뉴와
+  // 같다.
+  const closeColorMenuToTrigger = useCallback((property: ColorMenuProperty) => {
+    setColorMenuState(null);
+    toolbarRef.current
+      ?.querySelector<HTMLElement>(`[data-geul-color-trigger="${property}"]`)
+      ?.focus({ preventScroll: true });
+  }, []);
 
   // 툴바 직계 컨트롤. 메뉴(listbox, 색상)는 툴바 밖 형제라 포함되지 않는다.
   const toolbarControls = () =>
@@ -440,17 +412,46 @@ export const StaticToolbar = ({
     controls[next]?.focus({ preventScroll: true });
   };
 
+  const openColorMenu = (
+    property: ColorMenuProperty,
+    trigger: HTMLButtonElement,
+    focusFirst: boolean,
+  ) => {
+    const rect = trigger.getBoundingClientRect();
+    focusEditorIfFocusInColorMenu();
+    overlay.open("color");
+    setColorMenuState({
+      property,
+      left: rect.left,
+      top: rect.bottom + 4,
+      focusFirst,
+    });
+  };
+
+  // `event.detail === 0`이면 키보드 활성화(Enter·Space)다. 마우스로 열면
+  // 편집기 포커스를 유지하고, 키보드로 열면 화살표 이동을 위해 메뉴 안으로
+  // 포커스를 옮긴다.
   const handleColorTriggerClick = (
-    property: "text" | "background",
+    property: ColorMenuProperty,
     event: ReactMouseEvent<HTMLButtonElement>,
   ) => {
     if (colorMenuState !== null && colorMenuState.property === property) {
       closeColorMenu();
       return;
     }
-    const rect = event.currentTarget.getBoundingClientRect();
-    overlay.open("color");
-    setColorMenuState({ property, left: rect.left, top: rect.bottom + 4 });
+    openColorMenu(property, event.currentTarget, event.detail === 0);
+  };
+
+  // 같은 속성의 메뉴가 이미 열려 있으면 키만 소비한다. 처리한 키는 항상
+  // `preventDefault`한다(G-UI-001).
+  const handleColorTriggerKeyDown = (
+    property: ColorMenuProperty,
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    if (colorMenuState?.property === property) return;
+    openColorMenu(property, event.currentTarget, true);
   };
 
   const openBlockTypeMenu = (
@@ -506,14 +507,18 @@ export const StaticToolbar = ({
     closeBlockTypeMenu();
   };
 
+  // 키보드 활성화에서도 DOM selection을 다시 쓰지 않는다. 명령은 편집기
+  // 상태의 selection을 읽는다(Issue #224).
+  // 메뉴를 닫고 편집기로 포커스를 돌린 뒤 명령을 부른다. 포커스가 스와치에
+  // 있는 채로 명령을 부르면 DOM 갱신이 DOM selection을 접고, 뒤이은
+  // 포커스 복귀가 그 접힌 selection을 편집기 상태로 읽어 범위가 사라진다
+  // (Chromium 실측). 포커스가 편집기에 있으면 ProseMirror가 명령 뒤에
+  // 상태의 selection을 DOM에 다시 쓴다.
   const applyInlineColor = (
-    event: ReactMouseEvent<HTMLButtonElement>,
-    property: "text" | "background",
+    property: ColorMenuProperty,
     color: string | null,
   ) => {
-    if (event.detail === 0) {
-      restoreEditorSelection(element, trackedRange.current);
-    }
+    closeColorMenu();
     if (property === "text") {
       toggleCaretFirst(editor.commands.toggleCaretTextColor(color), () =>
         editor.commands.toggleInlineTextColor(color),
@@ -523,46 +528,12 @@ export const StaticToolbar = ({
         editor.commands.toggleInlineBackgroundColor(color),
       );
     }
-    closeColorMenu();
   };
 
-  const colorPropertyLabel = (property: "text" | "background") =>
+  const colorPropertyLabel = (property: ColorMenuProperty) =>
     property === "text"
       ? dictionary.color.textLabel
       : dictionary.color.backgroundLabel;
-
-  const renderColorSwatches = (
-    property: "text" | "background",
-    colors: TableCellColor[],
-  ) => {
-    const label = colorPropertyLabel(property);
-    return (
-      <div className="geul-menu-palette">
-        {colors.map((color) => (
-          <MenuItemButton
-            aria-label={`${label} ${dictionary.color.names[color.id]}`}
-            className={colorMenuSwatchClassName}
-            key={color.value}
-            onClick={(event) => applyInlineColor(event, property, color.value)}
-            style={
-              property === "background"
-                ? { backgroundColor: color.value }
-                : { backgroundColor: "transparent", color: color.value }
-            }
-          >
-            {property === "text" ? "A" : ""}
-          </MenuItemButton>
-        ))}
-        <MenuItemButton
-          aria-label={`${label} ${dictionary.color.none}`}
-          className={colorMenuSwatchClassName}
-          onClick={(event) => applyInlineColor(event, property, null)}
-        >
-          ×
-        </MenuItemButton>
-      </div>
-    );
-  };
 
   const containerClassName =
     className === undefined
@@ -771,8 +742,10 @@ export const StaticToolbar = ({
         ))}
         <IconButton
           aria-disabled={isMarkingDisabled ? "true" : "false"}
+          aria-expanded={colorMenuState?.property === "text"}
+          aria-haspopup="menu"
           className={buttonClassName}
-          data-geul-color-trigger=""
+          data-geul-color-trigger="text"
           icon={textColorIcon}
           key="text-color"
           label={dictionary.color.textLabel}
@@ -780,19 +753,29 @@ export const StaticToolbar = ({
             if (isMarkingDisabled) return;
             handleColorTriggerClick("text", event);
           }}
+          onKeyDown={(event) => {
+            if (isMarkingDisabled) return;
+            handleColorTriggerKeyDown("text", event);
+          }}
           tabIndex={rovingTabIndex()}
           title={markingDisabledReason}
         />
         <IconButton
           aria-disabled={isMarkingDisabled ? "true" : "false"}
+          aria-expanded={colorMenuState?.property === "background"}
+          aria-haspopup="menu"
           className={buttonClassName}
-          data-geul-color-trigger=""
+          data-geul-color-trigger="background"
           icon={backgroundColorIcon}
           key="background-color"
           label={dictionary.color.backgroundLabel}
           onClick={(event) => {
             if (isMarkingDisabled) return;
             handleColorTriggerClick("background", event);
+          }}
+          onKeyDown={(event) => {
+            if (isMarkingDisabled) return;
+            handleColorTriggerKeyDown("background", event);
           }}
           tabIndex={rovingTabIndex()}
           title={markingDisabledReason}
@@ -815,24 +798,21 @@ export const StaticToolbar = ({
         />
       )}
       {colorMenuState !== null && (
-        <div
-          aria-label={colorPropertyLabel(colorMenuState.property)}
-          className="geul-menu-panel"
-          data-geul-color-menu=""
-          ref={colorMenuRef}
-          role="menu"
-          style={colorMenuStyle}
-        >
-          <p className={colorMenuSectionLabelClassName}>
-            {colorPropertyLabel(colorMenuState.property)}
-          </p>
-          {renderColorSwatches(
-            colorMenuState.property,
-            colorMenuState.property === "text"
-              ? TABLE_TEXT_COLORS
-              : TABLE_BACKGROUND_COLORS,
-          )}
-        </div>
+        <StaticToolbarColorMenu
+          colorName={(color) => dictionary.color.names[color.id]}
+          element={element}
+          focusFirst={colorMenuState.focusFirst}
+          key={colorMenuState.property}
+          label={colorPropertyLabel(colorMenuState.property)}
+          left={colorMenuState.left}
+          noneLabel={dictionary.color.none}
+          onApply={(color) => applyInlineColor(colorMenuState.property, color)}
+          onEscapeDismiss={closeColorMenu}
+          onOutsideDismiss={dismissColorMenu}
+          onTabDismiss={() => closeColorMenuToTrigger(colorMenuState.property)}
+          property={colorMenuState.property}
+          top={colorMenuState.top}
+        />
       )}
     </>
   );
