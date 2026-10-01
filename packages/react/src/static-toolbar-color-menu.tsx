@@ -109,6 +109,13 @@ export const StaticToolbarColorMenu = ({
   // 메뉴 폭에 따라 달라지므로 2차원 이동은 하지 않는다. 포커스 자체가 현재
   // 위치다.
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // 버튼은 keydown Enter마다 click을 낸다. 트리거에서 Enter를 누른 채 있으면
+    // 반복이 첫 스와치를 확정한다. 이어지는 반복은 편집기로 가서 선택 범위를
+    // 줄바꿈으로 바꾼다. 반복은 막는다.
+    if (event.key === "Enter" && event.repeat) {
+      event.preventDefault();
+      return;
+    }
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLElement>(SWATCH_SELECTOR),
     );

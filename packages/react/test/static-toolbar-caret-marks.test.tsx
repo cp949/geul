@@ -183,7 +183,7 @@ describe("StaticToolbar 실제 편집기의 키보드 클릭", () => {
     if (paragraph === undefined) throw new Error("문단을 찾지 못했다");
     placeCaret(paragraph);
     // jsdom에서는 selection 이동만으로 통지가 오지 않는다. 캐럿 명령 하나로
-    // 통지를 일으켜 툴바가 편집기 안의 Range를 관측하게 한다.
+    // 통지를 일으켜 툴바 상태를 한 번 갱신한 뒤 클릭한다.
     act(() => {
       editor.commands.toggleCaretMark("italic");
     });
@@ -221,9 +221,7 @@ describe("StaticToolbar 실제 편집기의 키보드 클릭", () => {
       const paragraph = blocks[0]?.querySelector("p") ?? blocks[0];
       if (paragraph === undefined) throw new Error("문단을 찾지 못했다");
       placeCaret(paragraph);
-      // 위 케이스와 같다. 통지를 일으켜 툴바가 편집기 안의 Range를 관측하게
-      // 한다. 관측한 Range가 있어야 복원 경로가 살아 있을 때 이 테스트가
-      // 실패한다.
+      // 위 케이스와 같다. 통지로 툴바 상태를 한 번 갱신한 뒤 클릭한다.
       act(() => {
         editor.commands.toggleCaretMark("italic");
       });

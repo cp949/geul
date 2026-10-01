@@ -22,7 +22,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { StaticToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { mountBlockEditor, placeCaret } from "./mount-editor.js";
-import { fakeStaticToolbarController } from "./static-toolbar-test-support.js";
+import {
+  fakeStaticToolbarController,
+  press,
+} from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
 
@@ -41,10 +44,6 @@ const noTargetController = () =>
     undefined,
     vi.fn(() => null),
   );
-
-/** 포커스가 있는 요소에 키를 보낸다. */
-const press = (key: string, init: KeyboardEventInit = {}) =>
-  fireEvent.keyDown(document.activeElement as Element, { key, ...init });
 
 describe("StaticToolbar roving tabindex", () => {
   it("Tab 정지점은 첫 컨트롤 하나뿐이다", () => {

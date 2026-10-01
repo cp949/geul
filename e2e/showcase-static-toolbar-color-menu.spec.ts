@@ -24,6 +24,7 @@ import {
   placeCaretAtEnd,
   selectRange,
 } from "./support/static-toolbar-selection.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 /** 3번 문단의 초기 텍스트. */
 const BLOCK_TEXT = "문단 3. 아래로 스크롤해도 위 툴바는 그대로 보인다.";
@@ -177,6 +178,29 @@ test("배경색 메뉴에서 Space가 색을 입히고 색 없음 스와치의 E
   await expect(block.locator("span[style]")).toHaveCount(0);
   await expect(backgroundMenu).toHaveCount(0);
   await expect(block).toHaveText(BLOCK_TEXT);
+});
+
+test("트리거에서 Enter를 길게 눌러도 반복이 첫 스와치를 확정하거나 선택 범위를 줄바꿈으로 바꾸지 않는다", async ({
+  page,
+}) => {
+  const { block, editorInput, textTrigger, textMenu } = await openExample(page);
+  await selectRange(page, block, editorInput, RANGE_TEXT);
+  const items = textMenu.getByRole("menuitem");
+  await textTrigger.focus();
+
+  await page.keyboard.down("Enter");
+  await expect(items.first()).toBeFocused();
+  // 같은 키를 떼지 않고 다시 누르면 `repeat`이 true인 keydown이 간다.
+  for (let i = 0; i < 3; i += 1) {
+    await page.keyboard.down("Enter");
+    await yieldFrame(page);
+  }
+  await page.keyboard.up("Enter");
+
+  await expect(textMenu).toBeVisible();
+  await expect(items.first()).toBeFocused();
+  await expect(block).toHaveText(BLOCK_TEXT);
+  await expect(block.locator("span[style]")).toHaveCount(0);
 });
 
 test("키보드로 연 메뉴에서 Tab은 메뉴를 닫고 그 트리거로 돌아가며 이어 Tab은 툴바 밖으로 간다", async ({

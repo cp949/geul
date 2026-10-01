@@ -3,9 +3,10 @@
  * `formatting-toolbar-test-support.tsx`의 `fakeController`에 `subscribe`를
  * 얹는다. 기존 fake는 FormattingToolbar가 소유하므로 고치지 않는다.
  * 접힌 캐럿 명령 3개의 mock도 여기서 더한다.
- * 실제 편집기에 StaticToolbar를 올리는 `mountToolbarWithEditor`도 둔다.
+ * 실제 편집기에 StaticToolbar를 올리는 `mountToolbarWithEditor`와 포커스된
+ * 요소에 키를 보내는 `press`도 둔다.
  */
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { StaticToolbar } from "../src/index.js";
@@ -84,3 +85,11 @@ export const mountToolbarWithEditor = () => {
   placeCaret(paragraph);
   return mounted;
 };
+
+/**
+ * 포커스된 요소에 keydown을 보내고 `fireEvent`의 반환값을 돌려준다.
+ * 핸들러가 `preventDefault`하면 `false`다. `init`으로 `repeat`·`shiftKey`를
+ * 넘긴다.
+ */
+export const press = (key: string, init: KeyboardEventInit = {}) =>
+  fireEvent.keyDown(document.activeElement as Element, { key, ...init });

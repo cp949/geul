@@ -23,11 +23,12 @@ import { withProvider } from "./fake-editor-provider.js";
 import {
   fakeStaticToolbarController,
   mountToolbarWithEditor,
+  press,
 } from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
 
-/** 색상 트리거 두 종류. 속성 이름, 트리거 라벨, 메뉴 라벨을 함께 둔다. */
+/** 색상 트리거 두 종류. 속성 이름과 트리거 라벨을 함께 둔다. 메뉴 라벨은 트리거 라벨과 같다. */
 const TRIGGERS = [
   ["글자색", "Text color"],
   ["배경색", "Background color"],
@@ -198,10 +199,6 @@ describe("StaticToolbar 색상 메뉴의 키보드 이동", () => {
   const focusedIndex = (label: string) =>
     swatches(label).indexOf(document.activeElement as HTMLElement);
 
-  /** 현재 포커스된 요소에 keydown을 보내고 `preventDefault` 여부를 돌려준다. */
-  const press = (key: string) =>
-    fireEvent.keyDown(document.activeElement as Element, { key });
-
   it.each(TRIGGERS)(
     "%s 메뉴는 스와치가 색 8개와 색 없음 1개다",
     (_name, label) => {
@@ -283,6 +280,17 @@ describe("StaticToolbar 색상 메뉴의 키보드 이동", () => {
     expect(press("a")).toBe(true);
     expect(focusedIndex("Text color")).toBe(0);
   });
+
+  it("스와치의 Enter 자동 반복은 기본 동작을 막고 첫 Enter는 막지 않는다", () => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    openByKeyboard("Text color");
+
+    // 버튼은 keydown Enter마다 click을 낸다. 트리거를 Enter로 열고 계속
+    // 누르면 반복이 첫 스와치를 확정하고 편집기에서 이어진다.
+    expect(press("Enter", { repeat: true })).toBe(false);
+    expect(press("Enter")).toBe(true);
+    expect(focusedIndex("Text color")).toBe(0);
+  });
 });
 
 describe("StaticToolbar 색상 메뉴의 Tab 정지점", () => {
@@ -357,6 +365,31 @@ describe("StaticToolbar 색상 메뉴의 닫기와 포커스(실제 편집기)",
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(editable);
   });
+
+  it.each([
+    ["글자색", "Text color", "toggleCaretTextColor"],
+    ["배경색", "Background color", "toggleCaretBackgroundColor"],
+  ] as const)(
+    "%s 스와치를 확정하면 포커스를 편집기로 돌린 뒤 캐럿 명령을 부른다",
+    (_name, label, caretCommand) => {
+      const { editor, editable } = mountToolbarWithEditor();
+      openByKeyboard(label);
+      const swatch = swatches(label)[0] as HTMLElement;
+      expect(document.activeElement).toBe(swatch);
+      // 포커스가 스와치에 있는 채로 명령을 부르면 DOM 갱신이 selection을
+      // 접는다. 순서는 명령이 불리는 순간의 포커스로 본다.
+      const original = editor.commands[caretCommand].bind(editor.commands);
+      const focusAtCommand: Array<Element | null> = [];
+      vi.spyOn(editor.commands, caretCommand).mockImplementation((color) => {
+        focusAtCommand.push(document.activeElement);
+        return original(color);
+      });
+
+      fireEvent.click(swatch, { detail: 0 });
+
+      expect(focusAtCommand).toEqual([editable]);
+    },
+  );
 
   it("바깥 pointerdown은 메뉴를 닫지만 포커스를 옮기지 않는다", () => {
     mountToolbarWithEditor();

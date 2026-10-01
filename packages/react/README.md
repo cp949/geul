@@ -339,7 +339,7 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - 트리거는 `aria-haspopup="menu"`와 `aria-expanded`를 가진다.
 - Enter·Space·ArrowDown·ArrowUp으로 연다. 키보드로 열면 첫 스와치로 포커스가 간다. 마우스로 열면 편집기 포커스를 유지한다.
 - 스와치는 색 8개와 색 없음 1개다. 메뉴는 Tab 정지점을 더하지 않는다.
-- ArrowRight/ArrowDown은 다음, ArrowLeft/ArrowUp은 이전 스와치로 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 스와치다. 이동만 하고 색을 입히지 않는다.
+- ArrowRight/ArrowDown은 다음, ArrowLeft/ArrowUp은 이전 스와치로 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 스와치다. 이동만 하고 색을 입히지 않는다. Enter를 누른 채 있어도 반복은 무시한다.
 - Enter·Space·클릭이 색을 입히고 포커스를 편집기로 돌린다. 선택 범위는 유지된다.
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab·Shift+Tab은 메뉴를 닫고 해당 트리거로 돌린다.
 - 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.
