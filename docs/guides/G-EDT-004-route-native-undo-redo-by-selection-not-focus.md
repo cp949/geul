@@ -1,7 +1,7 @@
 # G-EDT-004 네이티브 undo/redo는 focus가 아니라 selection 기준으로 라우팅한다
 
 - 상태: `ACTIVE`
-- 적용 조건: `Mod-z`/`Mod-y` 키맵이 아니라 브라우저 native undo/redo(`beforeinput` `historyUndo`/`historyRedo`)에 의존하는 동작을 구현·디버깅할 때, 또는 여러 브라우저 엔진에서 undo/redo 동작이 갈리는 회귀를 조사할 때, 또는 에디터 밖 비편집 요소(툴바 버튼 등)에 포커스가 있을 때 redo(`Mod-Shift-z`·`Mod-y`)가 동작하지 않는 증상을 조사할 때
+- 적용 조건: `Mod-z`/`Mod-y` 키맵이 아니라 브라우저 native undo/redo(`beforeinput` `historyUndo`/`historyRedo`)에 의존하는 동작을 구현·디버깅할 때, 또는 여러 브라우저 엔진에서 undo/redo 동작이 갈리는 회귀를 조사할 때, 또는 에디터 밖 비편집 요소(툴바 버튼 등)에 포커스가 있을 때 redo(`Mod-Shift-z`·`Mod-y`)가 동작하지 않는 증상을 조사할 때, 또는 같은 상황에서 undo·redo 뒤 포커스가 `BODY`로 유실되는 증상을 조사할 때
 
 ## 구현 규칙
 
@@ -30,8 +30,29 @@
 - undo는 `beforeinput` 경로를 유지한다. undo와 redo의 경로는 비대칭이다.
 - 참고 구현: `packages/core/src/history-redo-keydown-fallback-extension.ts`(Issue #219).
 
+### undo·redo 뒤 DOM selection을 재동기화하고 포커스 유실을 복구한다
+
+- 에디터가 포커스를 갖지 않으면 ProseMirror가 history가 복원한 selection을 DOM에 반영하지 않는다(`editorOwnsSelection`).
+- 문서 DOM이 바뀌면 텍스트 노드에 앵커된 DOM selection이 접힌다.
+- Formatting·Link 툴바는 DOM selection이 접히면 닫힌다. Table `Split cell`↔`Merge cells`처럼 버튼만 교체되는 경우도 있다.
+- 포커스된 버튼이 unmount되면 `document.activeElement`가 `BODY`가 된다. unmount는 `selectionchange`나 `keyup`에서 일어난다. 프레임·타이머 대기로 덮지 않는다.
+- history transaction을 `isHistoryTransaction(tr)`로 센다. 핸들러 경로(`beforeinput`·redo keydown)와 무관하게 plugin view `update`에서 처리한다.
+- 가드는 모두 만족해야 한다.
+  1. `view.editable`이다.
+  2. `view.hasFocus()`가 거짓이다.
+  3. `document.getSelection()`의 `focusNode ?? anchorNode`가 `view.dom` 안이다.
+  4. `document.activeElement`가 입력 컨트롤(`input`·`textarea`·`select`·편집 영역)이 아니다.
+- 재동기화는 복원된 selection이 `TextSelection`일 때만 한다. `view.domAtPos`로 `setBaseAndExtent`를 호출한다. `NodeSelection`·`CellSelection`은 건드리지 않는다.
+- Chromium은 편집 영역 안 selection을 바꾸면 포커스를 editing host로 옮긴다. 호출 동안 `view.dom`의 `contenteditable`을 끄고 `finally`에서 호출 전 값으로 되돌린다. 포커스·blur 이벤트가 생기지 않는다.
+- 포커스 복구는 가드를 통과했을 때 포커스된 `view.dom` 밖 요소를 기억하고 `MutationObserver`로 제거를 감시한다. 기억한 요소가 제거되고 `activeElement`가 `BODY`·null이면 `view.focus()`를 호출한다.
+- 감시는 복구, 다른 요소로의 `focusin`, 포인터 누름(`pointerdown`), 다음 history transaction의 재무장, view destroy에서 끝난다.
+- 비포커스 영역 클릭은 포커스를 `BODY`로 옮기지만 `focusin`이 없다. `pointerdown`으로 감시를 끝내지 않으면 이어진 툴바 닫힘에서 에디터가 포커스를 되가져온다.
+- 포커스 유실 때만 에디터로 돌려준다. caret 복원으로 툴바가 닫히면 에디터 포커스에서 undo·redo한 결과와 같아진다.
+- 참고 구현: `packages/core/src/history-focus-sync-extension.ts`(Issue #221).
+
 ## 완료 기준
 
 - native undo/redo에 의존하는 core 확장이 "focus가 아니라 selection이 라우팅 기준"이라는 전제를 지키는지 확인한다.
 - 한 페이지에 편집기 인스턴스가 여러 개 있을 때 각 인스턴스가 자신의 `view.dom` 소유 selection만 가로채고 다른 인스턴스·무관한 `input`/`textarea`의 `historyUndo`를 훔치지 않는지 확인한다.
 - redo 라우팅이 target 가드(조건 6)와 selection 가드(조건 7)를 모두 가지는지 확인한다. 둘 중 하나만 지워도 단위 테스트가 RED여야 한다. Chromium은 입력 컨트롤에 포커스가 가면 DOM selection이 컨트롤로 옮겨져 e2e는 selection 가드로도 통과한다 — 두 가드를 모두 지워야 e2e가 RED가 된다.
+- undo·redo 뒤 포커스 복구는 jsdom 단위 테스트와 Chromium e2e를 함께 갖는지 확인한다. 단위 테스트는 가드·감시 해제·정리를 하나씩 깨뜨려 RED여야 한다. e2e는 `toolbar-focus-undo-redo.spec.ts`가 툴바별로 소유하고 `--repeat-each=10 --workers=5`로 타이밍 경합을 확인한다.
