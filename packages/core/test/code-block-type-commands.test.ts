@@ -1,9 +1,11 @@
 /**
  * setBlockType이 일반 텍스트 블록과 CodeBlock 사이의 무손실 변환 및
  * CodeBlock language 갱신을 한 transaction과 한 undo 단위로 처리하는지
- * 검증한다. CodeBlock에서 지원하지 않는 setText 거절 계약도 함께 고정한다.
+ * 검증한다. CodeBlock에서 지원하지 않는 setText 거절 계약과, 종류 변경 뒤
+ * 캐럿·범위 선택이 같은 텍스트 offset에 남는 계약(Issue #223)도 함께 고정한다.
  */
 import type { Block, Document } from "@cp949/geul-model";
+import { TextSelection } from "@tiptap/pm/state";
 import type { EditorController } from "../src/index.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,6 +20,20 @@ import {
   restored,
   setBoldStoredMark,
 } from "./editor-controller-support.js";
+
+/**
+ * blockId 블록의 텍스트 시작에서 anchor·head offset만큼 떨어진 TextSelection
+ * JSON을 만든다. head를 생략하면 빈 캐럿(anchor와 같은 위치)이다.
+ */
+const textSelectionAt = (
+  tiptap: Parameters<typeof contentTextStart>[0],
+  blockId: string,
+  anchor: number,
+  head: number = anchor,
+) => {
+  const start = contentTextStart(tiptap, blockId);
+  return { type: "text", anchor: start + anchor, head: start + head };
+};
 
 describe("CodeBlock 종류 변경", () => {
   it("mark가 있는 문단을 기본 language text인 CodeBlock으로 바꾸며 id와 plain source를 보존한다", () => {
@@ -245,6 +261,238 @@ describe("CodeBlock 종류 변경", () => {
       type: "paragraph",
       content: [],
     });
+  });
+});
+
+describe("CodeBlock 종류 변경 뒤 캐럿 offset 유지(Issue #223)", () => {
+  it("문단의 4번째 글자 뒤 캐럿은 CodeBlock 변환 뒤에도 offset 4이고 undo 1회로 복원된다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "abcdefgh"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "source") + 4);
+    const before = editorState(editor, tiptap);
+
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "source",
+      type: "codeBlock",
+      content: [{ text: "abcdefgh" }],
+      language: "text",
+    });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 4),
+    );
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("CodeBlock을 문단으로 되돌려도 캐럿은 offset 4로 유지된다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "abcdefgh" }],
+          language: "typescript",
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "code") + 4);
+
+    expect(editor.commands.setBlockType("code", { type: "paragraph" })).toEqual(
+      { ok: true, value: undefined },
+    );
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphBlock("code", "abcdefgh"),
+    );
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "code", 4),
+    );
+  });
+
+  it("블록 안 범위 선택 offset 2–5는 변환 뒤에도 offset 2–5로 남는다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "abcdefgh"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const start = contentTextStart(tiptap, "source");
+    tiptap.commands.setTextSelection({ from: start + 2, to: start + 5 });
+
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 2, 5),
+    );
+  });
+
+  it("mark가 섞인 문단의 offset 4는 CodeBlock 변환 뒤 텍스트 offset 4다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        {
+          id: "source",
+          type: "paragraph",
+          content: [
+            { text: "ab", marks: [{ type: "bold" }] },
+            { text: "cdef" },
+          ],
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "source") + 4);
+
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "source",
+      type: "codeBlock",
+      content: [{ text: "abcdef" }],
+      language: "text",
+    });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 4),
+    );
+  });
+
+  it("hardBreak로 텍스트가 PM 내용보다 짧은 문단은 PM 위치가 아니라 텍스트 offset으로 옮기고 끝을 넘지 않는다", () => {
+    // PM 내용: "ab" hardBreak "cdef"(크기 7). 변환 뒤 텍스트는 "abcdef"(길이 6)다.
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "ab\ncdef"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const start = contentTextStart(tiptap, "source");
+    // hardBreak 뒤 "c" 다음(PM 상대 위치 4)은 텍스트 offset 3이다.
+    tiptap.commands.setTextSelection(start + 4);
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 3),
+    );
+
+    // 코드 블록에서 문단으로 되돌린 뒤 PM 끝(상대 위치 6)에 둔다.
+    // 문단은 내용이 "abcdef"뿐이라 끝은 텍스트 길이 6이다.
+    tiptap.commands.setTextSelection(start + 6);
+    expect(
+      editor.commands.setBlockType("source", { type: "paragraph" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 6),
+    );
+
+    // 원래 hardBreak 문단의 PM 끝(상대 위치 7)은 새 내용 끝(6)으로 간다.
+    const { editor: second, tiptap: secondTiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "ab\ncdef"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    secondTiptap.commands.setTextSelection(
+      contentTextStart(secondTiptap, "source") + 7,
+    );
+    expect(
+      second.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(secondTiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(secondTiptap, "source", 6),
+    );
+  });
+
+  it("clearContent 변환은 캐럿이 어디 있었든 변환 뒤 offset 0이다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "/code"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "source") + 3);
+
+    expect(
+      editor.commands.setBlockType(
+        "source",
+        { type: "codeBlock" },
+        { clearContent: true },
+      ),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 0),
+    );
+  });
+
+  it("selection이 대상 블록 밖이면 변환 뒤 대상 블록 처음에 놓인다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "abcdefgh"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "tail") + 2);
+
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 0),
+    );
+  });
+
+  it("역방향 범위 선택(anchor 5, head 2)은 변환 뒤에도 방향을 유지한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "abcdefgh"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const start = contentTextStart(tiptap, "source");
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(tiptap.state.doc, start + 5, start + 2),
+      ),
+    );
+
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 5, 2),
+    );
+  });
+
+  it("anchor만 대상 블록 안이고 head가 밖인 범위 선택은 대상 블록 처음에 놓인다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "abcdefgh"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(
+          tiptap.state.doc,
+          contentTextStart(tiptap, "source") + 3,
+          contentTextStart(tiptap, "tail") + 2,
+        ),
+      ),
+    );
+
+    expect(
+      editor.commands.setBlockType("source", { type: "codeBlock" }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.selection.toJSON()).toEqual(
+      textSelectionAt(tiptap, "source", 0),
+    );
   });
 });
 

@@ -166,8 +166,31 @@ export const createGenericBlockTypeCommands = (
           replacement,
         );
         if (currentTypeName !== blockType.type || clearContent) {
+          // replaceWith가 옛 selection을 지우므로 직접 옮긴다. 블록 안
+          // selection은 텍스트 offset으로 매핑하고(Issue #223), 블록 밖이거나
+          // clearContent면 블록 처음에 둔다. PM 위치 대신 텍스트 offset을 쓰는
+          // 이유는 새 노드가 textContent로 만들어져 hardBreak 같은 leaf가
+          // 빠지기 때문이다.
+          const contentStart = target.position + 1;
+          const contentEnd = contentStart + currentContentSize;
+          const { anchor, head } = session.editor.state.selection;
+          const isInsideTarget =
+            !clearContent &&
+            anchor >= contentStart &&
+            anchor <= contentEnd &&
+            head >= contentStart &&
+            head <= contentEnd;
+          const toOffset = (position: number): number =>
+            Math.min(
+              target.node.textBetween(0, position - contentStart).length,
+              source.length,
+            );
           transaction.setSelection(
-            TextSelection.create(transaction.doc, target.position + 1),
+            TextSelection.create(
+              transaction.doc,
+              isInsideTarget ? contentStart + toOffset(anchor) : contentStart,
+              isInsideTarget ? contentStart + toOffset(head) : contentStart,
+            ),
           );
         } else {
           transaction.setSelection(
