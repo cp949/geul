@@ -26,10 +26,16 @@ const openWithCaretInFirstBlock = async (page: Page) => {
   await openShowcasePage(page, "/examples/static-toolbar");
   const editable = page.getByRole("textbox", { name: "Editor" });
   await editable.locator("p").first().click();
+  // 클릭한 selection이 편집기 상태에 반영돼 툴바가 대상 블록을 잡을 때까지
+  // 기다린다. 시간 양보만으로는 부하에서 클릭 반영이 뒤처져 뒤따르는
+  // Shift+ArrowDown이 낡은 selection에서 확장되지 않는 경합이 남는다.
+  await expect(
+    page.getByRole("button", { name: "Block type" }),
+  ).toHaveAttribute("aria-disabled", "false");
   await page.keyboard.press("End");
-  // ProseMirror는 클릭한 selection을 selectionchange 뒤 비동기로 반영한다.
-  // 그 전에 다음 키를 보내면 이전 selection에서 확장된다. 한 프레임과 한
-  // macrotask를 양보한다.
+  // ProseMirror는 End가 옮긴 selection도 selectionchange 뒤 비동기로
+  // 반영한다. 그 전에 다음 키를 보내면 이전 selection에서 확장된다. 한
+  // 프레임과 한 macrotask를 양보한다.
   await page.evaluate(
     () =>
       new Promise<void>((resolve) =>
