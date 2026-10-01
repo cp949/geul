@@ -603,8 +603,9 @@ export const StaticToolbar = ({
     ? dictionary.toolbar.static.blockControlsDisabledReason
     : undefined;
 
-  // 컨트롤 17개의 `tabIndex`를 JSX 순서대로 매긴다. 컨트롤 수는 selection에
-  // 따라 바뀌지 않으므로 인덱스가 안정적이다(RD-003-DELTA-02).
+  // 컨트롤(기본 17개)의 `tabIndex`를 JSX 순서대로 매긴다. 컨트롤 수는
+  // `enabledBlockTypes`에 따라 줄 수 있지만 selection에 따라 바뀌지 않으므로
+  // 인덱스가 안정적이다(RD-003-DELTA-02).
   let controlOrder = 0;
   const rovingTabIndex = () => (controlOrder++ === rovingIndex ? 0 : -1);
 
