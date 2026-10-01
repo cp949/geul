@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import {
   type FC,
+  type FocusEvent as ReactFocusEvent,
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -285,6 +286,9 @@ export const StaticToolbar = ({
   const [blockTypeMenuState, setBlockTypeMenuState] =
     useState<BlockTypeMenuState | null>(null);
   const blockTypeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  // roving tabindex의 Tab 정지점. 포커스가 간 컨트롤을 따라간다.
+  const [rovingIndex, setRovingIndex] = useState(0);
   const focusEditor = useFocusEditor(element);
 
   // 메뉴가 열린 채 대상 블록이 사라지면 상태까지 비운다. 렌더 조건만 막으면
@@ -328,6 +332,57 @@ export const StaticToolbar = ({
     onOutsideDismiss: dismissColorMenu,
     onEscapeDismiss: closeColorMenu,
   });
+
+  // 툴바 직계 컨트롤. 메뉴(listbox, 색상)는 툴바 밖 형제라 포함되지 않는다.
+  const toolbarControls = () =>
+    Array.from(toolbarRef.current?.children ?? []).filter(
+      (child): child is HTMLButtonElement => child instanceof HTMLButtonElement,
+    );
+
+  // `event.target`은 이벤트가 걸린 요소(div)로 좁혀 추론되므로 비교 대상을
+  // `EventTarget`으로 넓혀 받는다.
+  const indexOfControl = (controls: HTMLButtonElement[], target: EventTarget) =>
+    controls.findIndex((control) => control === target);
+
+  const handleToolbarFocus = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const index = indexOfControl(toolbarControls(), event.target);
+    if (index >= 0) setRovingIndex(index);
+  };
+
+  // 화살표 순환·Home/End 이동과 Escape(spec §5). ArrowUp/ArrowDown은 트리거의
+  // 메뉴 열기 핸들러가 소유하므로 건드리지 않는다. 수식 키가 있으면 브라우저·
+  // 보조기술 단축키와 겹치지 않도록 물러난다.
+  const handleToolbarKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+    if (event.key === "Escape") {
+      focusEditor();
+      return;
+    }
+    const controls = toolbarControls();
+    const current = indexOfControl(controls, event.target);
+    if (current < 0) return;
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = (current + 1) % controls.length;
+        break;
+      case "ArrowLeft":
+        next = (current - 1 + controls.length) % controls.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = controls.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    controls[next]?.focus({ preventScroll: true });
+  };
 
   const handleColorTriggerClick = (
     property: "text" | "background",
@@ -509,11 +564,19 @@ export const StaticToolbar = ({
     ? dictionary.toolbar.static.blockControlsDisabledReason
     : undefined;
 
+  // 컨트롤 17개의 `tabIndex`를 JSX 순서대로 매긴다. 컨트롤 수는 selection에
+  // 따라 바뀌지 않으므로 인덱스가 안정적이다(RD-003-DELTA-02).
+  let controlOrder = 0;
+  const rovingTabIndex = () => (controlOrder++ === rovingIndex ? 0 : -1);
+
   const content = (
     <>
       <div
         aria-label={dictionary.toolbar.static.ariaLabel}
         className={containerClassName}
+        onFocus={handleToolbarFocus}
+        onKeyDown={handleToolbarKeyDown}
+        ref={toolbarRef}
         role="toolbar"
       >
         <button
@@ -527,6 +590,7 @@ export const StaticToolbar = ({
           onKeyDown={handleBlockTypeTriggerKeyDown}
           onMouseDown={preserveFocusOnMouseDown()}
           ref={blockTypeTriggerRef}
+          tabIndex={rovingTabIndex()}
           title={blockControlsDisabledReason}
           type="button"
         >
@@ -564,6 +628,7 @@ export const StaticToolbar = ({
                 option.blockType,
               );
             }}
+            tabIndex={rovingTabIndex()}
             title={blockControlsDisabledReason}
           />
         ))}
@@ -582,6 +647,7 @@ export const StaticToolbar = ({
             if (nestingActions?.canIndent !== true) return;
             editor.commands.indentBlock(blockSelection.blockId);
           }}
+          tabIndex={rovingTabIndex()}
           title={
             isBlockControlsDisabled
               ? blockControlsDisabledReason
@@ -605,6 +671,7 @@ export const StaticToolbar = ({
             if (nestingActions?.canOutdent !== true) return;
             editor.commands.outdentBlock(blockSelection.blockId);
           }}
+          tabIndex={rovingTabIndex()}
           title={
             isBlockControlsDisabled
               ? blockControlsDisabledReason
@@ -628,6 +695,7 @@ export const StaticToolbar = ({
               }
               toggle(editor);
             }}
+            tabIndex={rovingTabIndex()}
           />
         ))}
         <IconButton
@@ -641,6 +709,7 @@ export const StaticToolbar = ({
             if (isMarkingDisabled) return;
             handleColorTriggerClick("text", event);
           }}
+          tabIndex={rovingTabIndex()}
         />
         <IconButton
           aria-disabled={isMarkingDisabled ? "true" : "false"}
@@ -653,6 +722,7 @@ export const StaticToolbar = ({
             if (isMarkingDisabled) return;
             handleColorTriggerClick("background", event);
           }}
+          tabIndex={rovingTabIndex()}
         />
       </div>
       {blockTypeMenuState !== null && !isBlockControlsDisabled && (

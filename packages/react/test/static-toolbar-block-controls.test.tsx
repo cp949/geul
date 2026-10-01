@@ -154,16 +154,19 @@ describe("StaticToolbar 블록 컨트롤 클릭 가드", () => {
     expect(controller.commands.outdentBlock).not.toHaveBeenCalled();
   });
 
-  it("비활성 컨트롤은 네이티브 disabled가 없고 포커스를 받는다", () => {
+  it("비활성 컨트롤은 네이티브 disabled가 없고 focus()를 받는다", () => {
     render(withProvider(noTargetController(), <StaticToolbar />));
 
+    // roving tabindex(RD-003-DELTA-03)로 Tab 정지점은 하나지만 화살표와
+    // focus()로는 모든 컨트롤이 포커스를 받는다.
     for (const name of BLOCK_CONTROL_NAMES) {
       const control = screen.getByRole("button", {
         name,
       }) as HTMLButtonElement;
       expect(control.disabled, name).toBe(false);
       expect(control.hasAttribute("disabled"), name).toBe(false);
-      expect(control.tabIndex, name).toBe(0);
+      control.focus();
+      expect(document.activeElement, name).toBe(control);
     }
   });
 });
