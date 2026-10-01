@@ -834,6 +834,15 @@ describe("historyKeydownFallback undo — 마운트 편집기 라우팅", () => 
     });
   });
 
+  it("target이 BODY여도 selection이 view.dom 안이면 undo한다", () => {
+    withUndoScenario(({ tiptap }) => {
+      const event = pressUndo(document.body);
+
+      expect(tiptap.state.doc.textContent).toBe(BASE_TEXT);
+      expect(event.defaultPrevented).toBe(true);
+    });
+  });
+
   it("한글 두벌식 ㅋ(KeyZ)로 눌러도 undo한다", () => {
     withUndoScenario(({ tiptap, button }) => {
       pressUndo(button, { key: "ㅋ", code: "KeyZ" });
