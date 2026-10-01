@@ -20,16 +20,14 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
 import {
+  BLOCK_TEXT,
   editorSelectionText,
   placeCaretAtEnd,
+  RANGE_TEXT,
   selectRange,
 } from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
-/** 3번 문단의 초기 텍스트. */
-const BLOCK_TEXT = "문단 3. 아래로 스크롤해도 위 툴바는 그대로 보인다.";
-/** `selectRange`가 잡는 3번 문단 앞 3글자. */
-const RANGE_TEXT = BLOCK_TEXT.slice(0, 3);
 /** F2에서 Quote 적용 전에 입력하는 텍스트. */
 const TYPED = "XYZ";
 

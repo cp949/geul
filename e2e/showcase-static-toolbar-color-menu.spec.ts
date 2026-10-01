@@ -20,16 +20,14 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
 import {
+  BLOCK_TEXT,
   editorSelectionText,
   placeCaretAtEnd,
+  RANGE_TEXT,
   selectRange,
 } from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
-/** 3번 문단의 초기 텍스트. */
-const BLOCK_TEXT = "문단 3. 아래로 스크롤해도 위 툴바는 그대로 보인다.";
-/** `selectRange`가 잡는 3번 문단 앞 3글자. */
-const RANGE_TEXT = BLOCK_TEXT.slice(0, 3);
 /** 글자색 팔레트의 둘째 색(red, `#D93025`)이 계산된 값. */
 const SECOND_TEXT_COLOR = "rgb(217, 48, 37)";
 /** 배경색 팔레트의 첫째 색(gray, `#F1F3F4`)이 계산된 값. */
@@ -201,6 +199,32 @@ test("트리거에서 Enter를 길게 눌러도 반복이 첫 스와치를 확�
   await expect(items.first()).toBeFocused();
   await expect(block).toHaveText(BLOCK_TEXT);
   await expect(block.locator("span[style]")).toHaveCount(0);
+});
+
+test("스와치에서 Enter를 길게 눌러도 확정 뒤 반복이 선택 범위를 줄바꿈으로 바꾸지 않는다", async ({
+  page,
+}) => {
+  const { block, editorInput, textTrigger, textMenu } = await openExample(page);
+  await selectRange(page, block, editorInput, RANGE_TEXT);
+  await textTrigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(textMenu.getByRole("menuitem").first()).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+
+  await page.keyboard.down("Enter");
+  // 확정으로 메뉴가 닫히고 포커스가 편집기로 돌아간다.
+  await expect(textMenu).toHaveCount(0);
+  await expect(editorInput).toBeFocused();
+  // 같은 키를 떼지 않고 다시 누르면 `repeat`이 true인 keydown이 편집기로 간다.
+  for (let i = 0; i < 3; i += 1) {
+    await page.keyboard.down("Enter");
+    await yieldFrame(page);
+  }
+  await page.keyboard.up("Enter");
+
+  await expect(block).toContainText(BLOCK_TEXT.slice(RANGE_TEXT.length));
+  await expect(block).toHaveText(BLOCK_TEXT);
+  await expect(block.locator("span[style]")).toHaveText(RANGE_TEXT);
 });
 
 test("키보드로 연 메뉴에서 Tab은 메뉴를 닫고 그 트리거로 돌아가며 이어 Tab은 툴바 밖으로 간다", async ({

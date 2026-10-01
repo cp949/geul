@@ -332,14 +332,15 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - ArrowUp/ArrowDown은 옵션 사이를 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 옵션이다. 이동만 하고 변환하지 않는다.
 - Enter·Space·클릭이 변환을 확정하고 포커스를 편집기로 돌린다.
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab은 메뉴를 닫고 트리거로 돌린다.
-- 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.
+- 바깥 클릭은 메뉴를 닫는다. 포커스가 메뉴 밖이면 옮기지 않는다. 메뉴 안이었으면 편집기로 돌린다.
 
 글자색·배경색 컨트롤은 트리거 버튼 2개와 `role="menu"` 메뉴다. 블록 타입 컨트롤과 같은 키보드 계약이다.
 
 - 트리거는 `aria-haspopup="menu"`와 `aria-expanded`를 가진다.
 - Enter·Space·ArrowDown·ArrowUp으로 연다. 키보드로 열면 첫 스와치로 포커스가 간다. 마우스로 열면 편집기 포커스를 유지한다.
 - 스와치는 색 8개와 색 없음 1개다. 메뉴는 Tab 정지점을 더하지 않는다.
-- ArrowRight/ArrowDown은 다음, ArrowLeft/ArrowUp은 이전 스와치로 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 스와치다. 이동만 하고 색을 입히지 않는다. Enter를 누른 채 있어도 반복은 무시한다.
+- ArrowRight/ArrowDown은 다음, ArrowLeft/ArrowUp은 이전 스와치로 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 스와치다. 이동만 하고 색을 입히지 않는다.
+- Enter를 누른 채 있어도 반복은 무시한다. 확정 뒤 편집기로 간 반복도 막는다.
 - Enter·Space·클릭이 색을 입히고 포커스를 편집기로 돌린다. 선택 범위는 유지된다.
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab·Shift+Tab은 메뉴를 닫고 해당 트리거로 돌린다.
 - 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.

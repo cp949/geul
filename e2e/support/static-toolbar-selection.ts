@@ -8,6 +8,11 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 import { yieldFrame } from "./yield-frame.js";
 
+/** showcase `/examples/static-toolbar`의 3번 문단 초기 텍스트. */
+export const BLOCK_TEXT = "문단 3. 아래로 스크롤해도 위 툴바는 그대로 보인다.";
+/** `selectRange`가 잡는 3번 문단 앞 3글자. */
+export const RANGE_TEXT = BLOCK_TEXT.slice(0, 3);
+
 /** DOM selection의 텍스트를 읽는다. selection이 편집기 밖이면 null이다. */
 export const editorSelectionText = (editorInput: Locator) =>
   editorInput.evaluate((element) => {

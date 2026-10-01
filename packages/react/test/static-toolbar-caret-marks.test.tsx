@@ -221,10 +221,6 @@ describe("StaticToolbar 실제 편집기의 키보드 클릭", () => {
       const paragraph = blocks[0]?.querySelector("p") ?? blocks[0];
       if (paragraph === undefined) throw new Error("문단을 찾지 못했다");
       placeCaret(paragraph);
-      // 위 케이스와 같다. 통지로 툴바 상태를 한 번 갱신한 뒤 클릭한다.
-      act(() => {
-        editor.commands.toggleCaretMark("italic");
-      });
       fireEvent.click(screen.getByRole("button", { name: triggerLabel }), {
         detail: 0,
       });

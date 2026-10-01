@@ -58,6 +58,7 @@ import {
   StaticToolbarColorMenu,
 } from "./static-toolbar-color-menu.js";
 import { useStaticToolbarState } from "./static-toolbar-state.js";
+import { suppressEnterRepeat } from "./suppress-enter-repeat.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -448,6 +449,16 @@ export const StaticToolbar = ({
     property: ColorMenuProperty,
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
+    // 같은 속성의 메뉴가 열려 있으면 Enter의 click이 메뉴를 닫고 포커스를
+    // 편집기로 돌린다. 그 뒤의 반복 Enter는 편집기에 닿지 않게 한다.
+    if (
+      event.key === "Enter" &&
+      !event.repeat &&
+      colorMenuState?.property === property
+    ) {
+      suppressEnterRepeat(event.currentTarget.ownerDocument);
+      return;
+    }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     event.preventDefault();
     if (colorMenuState?.property === property) return;
