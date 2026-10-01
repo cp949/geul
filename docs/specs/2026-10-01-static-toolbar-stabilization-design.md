@@ -37,9 +37,10 @@
 - 여러 블록 타입 변환(`setBlockTypes`). 기능 추가다. 변환 불가 블록이 섞인 경우의 계약이 새로 필요하다.
 - FormattingToolbar와 다른 컴포넌트의 구독 방식 이전. `use-selection-refresh.ts`는 바꾸지 않는다.
 - 편집기에서 툴바로 포커스를 옮기는 단축키. 편집기 안 Shift+Tab은 outdent가 가로챈다.
-- 색상 메뉴 내부의 화살표 탐색.
 - 새 런타임 의존성. 메뉴 라이브러리를 추가하지 않는다.
-- firefox·webkit 전용 검증. chromium 게이트만 쓴다. 예외는 Issue #222의 `@core` e2e 2건이다. mark 버튼 키보드 활성화 뒤 포커스와 선택 범위 유지만 확인한다.
+- firefox·webkit 전용 검증. chromium 게이트만 쓴다. 예외는 `@core` e2e 3건이다.
+  - Issue #222 2건: mark 버튼 키보드 활성화 뒤 포커스와 선택 범위 유지.
+  - Issue #224 1건: 키보드로 연 색상 메뉴의 이동과 Enter 확정.
 
 ## 2. `EditorController.subscribe`
 
@@ -186,6 +187,25 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 - 바깥 클릭은 포커스를 옮기지 않는다(`G-UI-001`).
 - 선례: `code-block-language-combobox.tsx`의 `listbox`/`option` 패턴.
 
+### 색상 컨트롤
+
+Issue #224가 추가했다. 블록 타입 컨트롤과 같은 키보드 계약이다.
+
+- 글자색·배경색 트리거는 `aria-haspopup="menu"`와 `aria-expanded`를 가진다.
+- 트리거는 Enter·Space·ArrowDown·ArrowUp으로 연다. 같은 속성의 메뉴가 이미 열려 있으면 ArrowDown·ArrowUp은 아무것도 하지 않는다.
+- 키보드로 열면 첫 스와치로 포커스가 간다. 마우스로 열면 편집기 포커스를 유지한다.
+- 메뉴는 `role="menu"`다. 항목은 `role="menuitem"`이다. 항목은 선택 상태 없는 명령이라 `menuitem`을 쓴다.
+- 스와치는 색 8개와 "색 없음" 1개다. 모두 `tabIndex=-1`이다. 메뉴는 Tab 정지점을 더하지 않는다.
+- ArrowRight·ArrowDown은 다음, ArrowLeft·ArrowUp은 이전 스와치로 이동한다. DOM 순서 기준이다. 양 끝에서 멈춘다(순환하지 않는다).
+- Home/End는 처음·끝 스와치로 이동한다.
+- 이동은 색을 입히지 않는다.
+- Enter·Space·클릭이 색을 입힌다. 확정은 포커스를 편집기로 돌린다. 선택 범위는 유지된다.
+- Escape는 메뉴를 닫고 포커스를 편집기로 돌린다.
+- Tab·Shift+Tab은 메뉴를 닫고 포커스를 해당 속성의 트리거로 돌린다.
+- 바깥 클릭은 포커스를 옮기지 않는다(`G-UI-001`).
+- 한 속성의 메뉴가 열린 채 다른 속성 트리거를 키보드로 열면 메뉴가 바뀌고 첫 스와치가 포커스를 받는다.
+- 스와치 확정은 DOM selection을 다시 쓰지 않는다. 명령은 편집기 상태의 selection을 읽는다.
+
 ### 활성화 뒤 포커스와 컨테이너 mousedown
 
 Issue #222가 추가했다.
@@ -203,6 +223,11 @@ Issue #222가 추가했다.
 - 포커스가 select에 남아 이어 입력이 유실된다.
 - roving tabindex가 없으면 Tab 정지점이 컨트롤 수와 같다(결함 6).
 - 버튼 포커스에서 DOM selection을 다시 쓰면 브라우저가 포커스를 편집기로 옮긴다. 이어 누른 Enter가 선택 범위를 줄바꿈으로 대체한다(Issue #222 F1).
+- 색상 메뉴는 스와치 9개가 각각 Tab 정지점이었다. 키보드 사용자는 Tab으로만 스와치에 닿았고 화살표는 툴바 컨트롤 사이를 움직였다(Issue #224).
+- 색상 트리거에 `aria-haspopup`·`aria-expanded`가 없어 스크린리더 사용자가 메뉴 존재와 열림 여부를 알 수 없었다(Issue #224).
+- 항목이 명령이라 색상 메뉴는 `menu`/`menuitem` role을 유지한다. 블록 타입 메뉴의 `listbox`/`option`은 선택 상태가 있는 항목용이다.
+- 팔레트가 줄바꿈되는 칸 수는 메뉴 폭에 따라 달라 2차원 이동을 하지 않는다. 블록 타입 메뉴처럼 양 끝에서 멈추는 선형 이동이다.
+- 스와치로 포커스가 가기 전에 DOM selection이 편집기 안에 그대로 있다. 확정 때 `addRange`로 되돌릴 대상이 없고, 되돌리면 포커스가 편집기로 먼저 옮겨져 이동 중 포커스 계약과 어긋난다(Issue #224 실측).
 - 컨테이너 mousedown을 막지 않으면 포커스가 `BODY`로 가고 DOM selection이 편집기 밖으로 나간다(Issue #222 F3).
 
 ## 6. 기존 계약과의 관계

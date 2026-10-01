@@ -334,10 +334,20 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab은 메뉴를 닫고 트리거로 돌린다.
 - 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.
 
+글자색·배경색 컨트롤은 트리거 버튼 2개와 `role="menu"` 메뉴다. 블록 타입 컨트롤과 같은 키보드 계약이다.
+
+- 트리거는 `aria-haspopup="menu"`와 `aria-expanded`를 가진다.
+- Enter·Space·ArrowDown·ArrowUp으로 연다. 키보드로 열면 첫 스와치로 포커스가 간다. 마우스로 열면 편집기 포커스를 유지한다.
+- 스와치는 색 8개와 색 없음 1개다. 메뉴는 Tab 정지점을 더하지 않는다.
+- ArrowRight/ArrowDown은 다음, ArrowLeft/ArrowUp은 이전 스와치로 이동한다. 양 끝에서 멈춘다. Home/End는 처음·끝 스와치다. 이동만 하고 색을 입히지 않는다.
+- Enter·Space·클릭이 색을 입히고 포커스를 편집기로 돌린다. 선택 범위는 유지된다.
+- Escape는 메뉴를 닫고 포커스를 편집기로 돌린다. Tab·Shift+Tab은 메뉴를 닫고 해당 트리거로 돌린다.
+- 바깥 클릭은 메뉴를 닫고 포커스를 옮기지 않는다.
+
 `component` prop으로 툴바를 통째로 교체하면 위 키보드 계약은 적용하지 않는다. 교체한 컴포넌트가 소유한다. 툴바 컨테이너 자신을 누른 mousedown이 편집기 포커스를 옮기지 않는 계약만 유지한다. 교체한 컴포넌트 안의 입력 요소는 그대로 포커스를 받는다.
 
 ## 알려진 제약
 
 - `EditorProvider`/`EditorContent`는 서버 렌더 환경에서 `null`을 렌더하고, 실제 편집기 생성(`createEditor()`, `@cp949/geul-core`)은 `useEffect` 안에서만 호출한다. `createEditor()`를 이 경로 없이 직접 호출하는 저수준 사용은 서버 환경에서도 크래시하지 않지만(`EXT-013`), 반환된 controller의 문서는 로드 시점 정규화가 실제 client mount 시점까지 지연된 상태일 수 있다.
-- `StaticToolbar`의 키보드·상태 계약은 Chromium에서 검증했다. Firefox·WebKit은 mark 버튼 키보드 활성화 뒤의 포커스와 선택 범위 유지만 확인했다.
+- `StaticToolbar`의 키보드·상태 계약은 Chromium에서 검증했다. Firefox·WebKit은 mark 버튼 키보드 활성화 뒤의 포커스와 선택 범위 유지, 색상 메뉴의 키보드 이동과 Enter 확정만 확인했다.
 - `StaticToolbar`는 여러 블록을 선택하면 블록 타입 변환을 비활성으로 표시한다. 여러 블록의 타입을 한 번에 바꾸는 기능은 없다.
