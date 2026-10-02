@@ -12,6 +12,7 @@
 - 사용자의 물리적 클릭·키 입력이 아니라 데이터 무효화(대상 삭제, undo 등) 때문에 프로그램이 스스로 닫는 자동 닫힘은 바깥 클릭·Escape와 다른 셋째 범주다 — 같은 판단 기준("돌아갈 자연스러운 초점 대상이 있는가")을 적용한다. 닫히는 순간 `document.activeElement`가 그 overlay 안에 있었으면(그대로 두면 브라우저가 focus를 잃어 `<body>`로 떨어뜨린다) Escape처럼 초점을 복구하고, overlay 밖(편집기 포함)에 있었으면 바깥 클릭처럼 건드리지 않는다. overlay 패널 루트에 이미 있는 안정 셀렉터로 `activeElement.closest(...)`를 검사한다 — 판정을 위해 별도 ref를 새로 끌어올릴 필요는 없다(`table-handles.tsx`의 `closeMenuOnInvalidation`, `TABLE_MENU_SELECTOR`, Issue #65 항목4).
 - 트리거 재클릭(같은 버튼을 다시 눌러 닫는 제스처)은 Escape와 같은 그룹(초점 복구)으로 다룬다 — 트리거가 `onMouseDown` `preventDefault`라 버튼 자신도 초점을 받지 않으므로 바깥 클릭과 달리 "돌아갈 다른 목적지"가 없다.
 - selection·input 관측으로 열리는 overlay는 닫은 상태의 안정 key를 ref에 기록하고 같은 상태의 재관측만 무시한다 — Escape 직후 같은 selection이 다시 관측되어 재오픈할 수 있다. 실제 text나 caret이 바뀌면 다시 열리게 하고, listener는 mount 동안 유지하며 최신 상태는 ref로 읽는다.
+- `selectionchange`로 `editor.state`를 읽는 overlay는 이벤트 안에서 한 번 읽고 매크로태스크 뒤에 한 번 더 읽는다. ProseMirror는 selection이나 문서를 바꾸는 state 갱신마다 자기 `selectionchange` 리스너를 떼었다 다시 붙여 overlay 리스너보다 뒤에 호출된다. 이벤트 안의 읽기는 이동 직전 selection을 보고, 캐럿이 대상 블록을 벗어난 이동은 재통지가 없어 overlay가 열린 채 남는다(Issue #229).
 - `position: fixed` overlay는 `useLayoutEffect`에서 렌더된 크기를 재고 viewport 안으로 clamp한다.
 - CSS transform offset을 clamp 입력에 포함하고, 크기 변경은 `ResizeObserver`로 다시 계산한다.
 - DOM rect를 anchor로 쓰는 fixed overlay는 owner window의 `scroll`(중첩 scroll container를 위한 capture)·`resize`에서 anchor rect를 다시 읽는다. unmount에서 같은 callback·capture 옵션으로 listener를 해제한다.
