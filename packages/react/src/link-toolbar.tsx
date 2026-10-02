@@ -19,6 +19,7 @@ import { createPortal } from "react-dom";
 
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import {
   readScrollClipBoxes,
   syncAnchorClipVisibility,
@@ -381,14 +382,13 @@ export const LinkToolbar = ({
               });
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                applyLink();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                cancelEditing();
-              }
+              // IME 가드·Escape·Enter 반복 억제·preventDefault는
+              // handleMenuKeyDown이 소유한다(Issue #230). 조합 중 Escape는
+              // module이 건너뛰어 편집을 취소하지 않는다.
+              handleMenuKeyDown(event, {
+                activate: applyLink,
+                escape: cancelEditing,
+              });
             }}
             ref={inputRef}
             type="text"

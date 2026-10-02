@@ -1,9 +1,8 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from "react";
 
 import type { BlockTypeOption } from "./block-type-options.js";
-import { hasCommandModifier } from "./has-command-modifier.js";
 import { preserveFocusOnMouseDown } from "./icon-button.js";
-import { handleMenuEnterKeyDown } from "./suppress-enter-repeat.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 
@@ -105,30 +104,28 @@ export const StaticToolbarBlockTypeMenu = ({
   }, []);
 
   // 옵션 사이 이동은 DOM 순서를 그대로 쓴다. 옵션이 7개뿐이라 별도 상태 없이
-  // 포커스 자체가 현재 위치다. Enter 반복은 수식 키 가드보다 앞서 막는다
-  // (Issue #228). 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지
-  // 않고 물러난다(Issue #225).
+  // 포커스 자체가 현재 위치다. Enter 반복·수식 키·Tab·`preventDefault`의
+  // 순서는 handleMenuKeyDown이 소유한다(Issue #225, #228, #230).
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (handleMenuEnterKeyDown(event)) return;
-    if (hasCommandModifier(event)) return;
-    const items = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]'),
-    );
-    const current = items.indexOf(document.activeElement as HTMLElement);
-    const last = items.length - 1;
-    let next: number | null = null;
-    if (event.key === "ArrowDown") next = Math.min(current + 1, last);
-    else if (event.key === "ArrowUp") next = Math.max(current - 1, 0);
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    else if (event.key === "Tab") {
-      event.preventDefault();
-      onTabDismiss();
-      return;
-    }
-    if (next === null) return;
-    event.preventDefault();
-    items[next]?.focus({ preventScroll: true });
+    const container = event.currentTarget;
+    handleMenuKeyDown(event, {
+      tab: onTabDismiss,
+      navigate: (key) => {
+        const items = Array.from(
+          container.querySelectorAll<HTMLElement>('[role="option"]'),
+        );
+        const current = items.indexOf(document.activeElement as HTMLElement);
+        const last = items.length - 1;
+        let next: number | null = null;
+        if (key === "ArrowDown") next = Math.min(current + 1, last);
+        else if (key === "ArrowUp") next = Math.max(current - 1, 0);
+        else if (key === "Home") next = 0;
+        else if (key === "End") next = last;
+        if (next === null) return false;
+        items[next]?.focus({ preventScroll: true });
+        return true;
+      },
+    });
   };
 
   return (

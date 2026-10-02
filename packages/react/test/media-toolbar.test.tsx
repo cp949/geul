@@ -600,6 +600,25 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     );
   });
 
+  it("IME 조합 중 Enter는 이름을 제출하지 않고 preventDefault하지 않는다(Issue #230)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByRole("textbox", { name: "Image name" });
+    fireEvent.change(input, { target: { value: "renamed.png" } });
+    const notPrevented = fireEvent.keyDown(input, {
+      key: "Enter",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
+  });
+
   it("이름이 바뀌지 않았으면 저장해도 setMediaBlockName을 호출하지 않는다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => filledImageBlock,
@@ -655,6 +674,26 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: "Image name" })).toBeNull();
     expect(document.activeElement).toBe(editable);
+  });
+
+  it("IME 조합 중 Escape는 이름 편집을 취소하지 않고 preventDefault하지 않는다(Issue #230)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByRole("textbox", { name: "Image name" });
+    fireEvent.change(input, { target: { value: "kept.png" } });
+    const notPrevented = fireEvent.keyDown(input, {
+      key: "Escape",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Image name" })).not.toBeNull();
+    expect((input as HTMLInputElement).value).toBe("kept.png");
   });
 
   it("이름 편집을 마치면 위치·Preview·정렬 상태가 편집 전 값 그대로 유지된다(그릴링 C4 안전망)", () => {

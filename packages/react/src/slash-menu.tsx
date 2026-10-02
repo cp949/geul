@@ -25,10 +25,10 @@ import {
 import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
-import { hasCommandModifier } from "./has-command-modifier.js";
 import { IframeLoadStatus } from "./iframe-load-status.js";
 import { MediaCaptions } from "./media-captions.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -579,71 +579,43 @@ export const SlashMenu = ({
       const current = menuStateRef.current;
       if (current === null) return;
 
-      if (event.key === "Escape") {
-        event.preventDefault();
-        dismissMenuAndFocusEditor();
-        return;
-      }
-      // Ctrl·Alt·Meta 조합은 처리하지 않은 키다. `preventDefault`하지 않고
-      // 물러나 브라우저·OS 단축키를 막지 않는다(Issue #227). Escape는 위에서
-      // 이미 처리했다. 공용 훅의 Escape도 수식 키에서 물러나지 않는다.
-      if (hasCommandModifier(event)) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setMenuState((currentState) => {
-          if (currentState === null) return null;
-          const count = Math.max(
-            filterItems(
-              currentState.sourceBlockType,
-              currentState.query,
-              customItems,
-              editor,
-            ).length,
-            1,
-          );
-          return {
-            ...currentState,
-            highlightedIndex: (currentState.highlightedIndex + 1) % count,
-          };
-        });
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setMenuState((currentState) => {
-          if (currentState === null) return null;
-          const count = Math.max(
-            filterItems(
-              currentState.sourceBlockType,
-              currentState.query,
-              customItems,
-              editor,
-            ).length,
-            1,
-          );
-          return {
-            ...currentState,
-            highlightedIndex:
-              (currentState.highlightedIndex - 1 + count) % count,
-          };
-        });
-        return;
-      }
-      if (event.key === "Enter") {
-        const currentItems = filterItems(
-          current.sourceBlockType,
-          current.query,
-          customItems,
-          editor,
-        );
-        const item = currentItems[current.highlightedIndex];
-        if (item !== undefined) {
-          event.preventDefault();
-          selectItem(item);
-        } else {
-          event.preventDefault();
-        }
-      }
+      // IME → Escape → Enter 반복 → 수식 키 → 이동·확정 순서와 `preventDefault`는
+      // handleMenuKeyDown이 소유한다(Issue #211, #227, #230). 후보가 0건인
+      // Enter도 module이 막고 확정만 건너뛴다.
+      handleMenuKeyDown(event, {
+        escape: dismissMenuAndFocusEditor,
+        navigate: (key) => {
+          if (key !== "ArrowDown" && key !== "ArrowUp") return false;
+          const step = key === "ArrowDown" ? 1 : -1;
+          setMenuState((currentState) => {
+            if (currentState === null) return null;
+            const count = Math.max(
+              filterItems(
+                currentState.sourceBlockType,
+                currentState.query,
+                customItems,
+                editor,
+              ).length,
+              1,
+            );
+            return {
+              ...currentState,
+              highlightedIndex:
+                (currentState.highlightedIndex + step + count) % count,
+            };
+          });
+          return true;
+        },
+        activate: () => {
+          const item = filterItems(
+            current.sourceBlockType,
+            current.query,
+            customItems,
+            editor,
+          )[current.highlightedIndex];
+          if (item !== undefined) selectItem(item);
+        },
+      });
     };
 
     element.addEventListener("keydown", handleKeyDown, true);

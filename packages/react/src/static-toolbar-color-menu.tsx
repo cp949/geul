@@ -1,8 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from "react";
 
-import { hasCommandModifier } from "./has-command-modifier.js";
 import { MenuItemButton } from "./menu-item-button.js";
-import { handleMenuEnterKeyDown } from "./suppress-enter-repeat.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
@@ -113,34 +112,32 @@ export const StaticToolbarColorMenu = ({
 
   // 스와치 사이 이동은 DOM 순서를 그대로 쓴다. 팔레트가 줄바꿈되는 칸 수는
   // 메뉴 폭에 따라 달라지므로 2차원 이동은 하지 않는다. 포커스 자체가 현재
-  // 위치다.
+  // 위치다. Enter 반복·수식 키·Tab·`preventDefault`의 순서는
+  // handleMenuKeyDown이 소유한다(Issue #225, #230).
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (handleMenuEnterKeyDown(event)) return;
-    // 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지 않고
-    // 물러난다(Issue #225). Enter 반복은 위에서 먼저 막는다.
-    if (hasCommandModifier(event)) return;
-    const items = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>(SWATCH_SELECTOR),
-    );
-    const current = items.indexOf(
-      event.currentTarget.ownerDocument.activeElement as HTMLElement,
-    );
-    const last = items.length - 1;
-    let next: number | null = null;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      next = Math.min(current + 1, last);
-    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-      next = Math.max(current - 1, 0);
-    } else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    else if (event.key === "Tab") {
-      event.preventDefault();
-      onTabDismiss();
-      return;
-    }
-    if (next === null) return;
-    event.preventDefault();
-    items[next]?.focus({ preventScroll: true });
+    const container = event.currentTarget;
+    handleMenuKeyDown(event, {
+      tab: onTabDismiss,
+      navigate: (key) => {
+        const items = Array.from(
+          container.querySelectorAll<HTMLElement>(SWATCH_SELECTOR),
+        );
+        const current = items.indexOf(
+          container.ownerDocument.activeElement as HTMLElement,
+        );
+        const last = items.length - 1;
+        let next: number | null = null;
+        if (key === "ArrowRight" || key === "ArrowDown") {
+          next = Math.min(current + 1, last);
+        } else if (key === "ArrowLeft" || key === "ArrowUp") {
+          next = Math.max(current - 1, 0);
+        } else if (key === "Home") next = 0;
+        else if (key === "End") next = last;
+        if (next === null) return false;
+        items[next]?.focus({ preventScroll: true });
+        return true;
+      },
+    });
   };
 
   const colors =

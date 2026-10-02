@@ -1,6 +1,7 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { preserveFocusOnMouseDown } from "./icon-button.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 
 /**
  * 메뉴 항목 버튼의 공통 계약을 한곳에서 강제하는 내부 컴포넌트(index.ts
@@ -19,6 +20,10 @@ import { preserveFocusOnMouseDown } from "./icon-button.js";
  * preserveFocusOnMouseDown 헬퍼를 공유한다 — 두 컴포넌트가 각자 재구현하면
  * 22곳의 중복을 2곳의 중복으로 줄이는 것일 뿐, 카드가 주장하는 "규칙이 한
  * 곳에 산다"가 성립하지 않는다(그릴링 Q5).
+ *
+ * 키보드 계약은 menu-keyboard.ts가 소유한다. 위 "얕은 계약" 결정은 라벨·title에
+ * 관한 것이라 충돌하지 않는다. 내장 keydown이 module을 먼저 부르고 호출부
+ * onKeyDown을 잇는다(Issue #230).
  */
 type MenuItemButtonProps = {
   children: ReactNode;
@@ -33,11 +38,16 @@ export const MenuItemButton = ({
   children,
   className,
   role = "menuitem",
+  onKeyDown,
   onMouseDown,
   ...rest
 }: MenuItemButtonProps) => (
   <button
     className={className}
+    onKeyDown={(event) => {
+      handleMenuKeyDown(event, {});
+      onKeyDown?.(event);
+    }}
     onMouseDown={preserveFocusOnMouseDown(onMouseDown)}
     role={role}
     type="button"

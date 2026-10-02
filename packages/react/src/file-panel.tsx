@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import {
   FALLBACK_BLOCK_POSITION,
@@ -531,10 +532,9 @@ export const FilePanel = ({
               });
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                applyUrl();
-              }
+              // Enter의 IME 가드·반복 억제·preventDefault는 handleMenuKeyDown이
+              // 소유한다(Issue #230).
+              handleMenuKeyDown(event, { activate: applyUrl });
             }}
             placeholder={dictionary.toolbar.filePanel.urlInputPlaceholder.replace(
               "{kind}",

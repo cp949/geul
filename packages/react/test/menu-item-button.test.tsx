@@ -11,12 +11,17 @@
  * mousedown 계약을 event.defaultPrevented(fireEvent 반환값)로 관찰하는
  * 이유는 icon-button.test.tsx와 같다 — jsdom은 mousedown의 실제 초점 이동
  * 기본 동작을 구현하지 않는다(실측 확인).
+ *
+ * 내장 keydown 계약(Issue #230)도 여기서 고정한다. Enter 자동 반복은 막고
+ * 처음 Enter는 막지 않는다. 호출부 onKeyDown은 그 뒤에 이어 호출된다.
+ * 순서 계약 자체는 menu-keyboard.test.ts가 소유한다.
  */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MenuItemButton } from "../src/menu-item-button.js";
+import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
 
 afterEach(cleanup);
 
@@ -93,5 +98,66 @@ describe("MenuItemButton", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+  });
+});
+
+describe("MenuItemButton 내장 keydown(Issue #230)", () => {
+  // 처음 Enter가 문서에 건 반복 억제를 다음 테스트로 넘기지 않는다. 남아 있으면
+  // 반복 Enter가 문서 capture에서 삼켜져 defaultPrevented가 가짜로 참이 된다.
+  afterEach(releaseEnterRepeatSuppression);
+
+  it("반복 Enter keydown은 막아 click이 나지 않게 한다", () => {
+    render(<MenuItemButton className="x">항목</MenuItemButton>);
+
+    const notCanceled = fireEvent.keyDown(screen.getByRole("menuitem"), {
+      key: "Enter",
+      repeat: true,
+    });
+
+    expect(notCanceled).toBe(false);
+  });
+
+  it("처음 Enter keydown은 막지 않아 네이티브 click 경로가 열려 있다", () => {
+    render(<MenuItemButton className="x">항목</MenuItemButton>);
+
+    const notCanceled = fireEvent.keyDown(screen.getByRole("menuitem"), {
+      key: "Enter",
+    });
+
+    expect(notCanceled).toBe(true);
+  });
+
+  it("호출부 onKeyDown은 module 처리 뒤에도 호출된다", () => {
+    const seenPrevented: boolean[] = [];
+    const onKeyDown = vi.fn((event: { defaultPrevented: boolean }) => {
+      seenPrevented.push(event.defaultPrevented);
+    });
+    render(
+      <MenuItemButton className="x" onKeyDown={onKeyDown}>
+        항목
+      </MenuItemButton>,
+    );
+
+    fireEvent.keyDown(screen.getByRole("menuitem"), {
+      key: "Enter",
+      repeat: true,
+    });
+
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    // module이 먼저 막았으므로 호출부는 이미 막힌 이벤트를 받는다.
+    expect(seenPrevented).toEqual([true]);
+  });
+
+  it("호출부 onKeyDown은 처음 Enter에서도 호출된다", () => {
+    const onKeyDown = vi.fn();
+    render(
+      <MenuItemButton className="x" onKeyDown={onKeyDown}>
+        항목
+      </MenuItemButton>,
+    );
+
+    fireEvent.keyDown(screen.getByRole("menuitem"), { key: "Enter" });
+
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 });

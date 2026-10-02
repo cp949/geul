@@ -350,6 +350,25 @@ describe("FilePanel 파일 패널", () => {
     );
   });
 
+  it("IME 조합 중 Enter는 URL을 제출하지 않고 preventDefault하지 않는다(Issue #230)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+
+    const input = screen.getByRole("textbox", { name: "Image URL" });
+    fireEvent.change(input, {
+      target: { value: "https://example.com/dir/photo.png" },
+    });
+    const notPrevented = fireEvent.keyDown(input, {
+      key: "Enter",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
+  });
+
   it("제출 성공 시 마지막 path segment로 이름을 추출해 저장하고 패널에 표시한다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,

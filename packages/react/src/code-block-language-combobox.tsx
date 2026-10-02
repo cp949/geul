@@ -21,6 +21,7 @@ import {
 } from "./code-block-language-option.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
@@ -510,9 +511,10 @@ export const CodeBlockLanguageCombobox = () => {
   };
 
   const handleSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    commit(event.currentTarget.value);
+    // Enter의 IME 가드·반복 억제·preventDefault는 handleMenuKeyDown이
+    // 소유한다(Issue #230). 값은 호출 전에 잡는다.
+    const value = event.currentTarget.value;
+    handleMenuKeyDown(event, { activate: () => commit(value) });
   };
 
   const { suggestions, activeSuggestion } = computeLanguageSuggestions(

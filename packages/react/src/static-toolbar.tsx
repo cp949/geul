@@ -46,9 +46,9 @@ import {
   computeFormattingToolbarState,
   type FormattingToolbarState,
 } from "./formatting-toolbar-state.js";
-import { hasCommandModifier } from "./has-command-modifier.js";
 import { IconButton, preserveFocusOnMouseDown } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import {
   BLOCK_TYPE_MENU_SELECTOR,
   StaticToolbarBlockTypeMenu,
@@ -59,7 +59,6 @@ import {
   StaticToolbarColorMenu,
 } from "./static-toolbar-color-menu.js";
 import { useStaticToolbarState } from "./static-toolbar-state.js";
-import { suppressEnterRepeat } from "./suppress-enter-repeat.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -464,29 +463,24 @@ export const StaticToolbar = ({
     openColorMenu(property, event.currentTarget, event.detail === 0);
   };
 
-  // 같은 속성의 메뉴가 이미 열려 있으면 키만 소비한다. 처리한 키는 항상
-  // `preventDefault`한다(G-UI-001).
+  // 같은 속성의 메뉴가 이미 열려 있으면 키만 소비한다. Enter 반복·수식 키·
+  // `preventDefault`의 순서는 handleMenuKeyDown이 소유한다(G-UI-001).
+  // 메뉴가 닫혀 있을 때의 Enter는 메뉴를 여는 일반 활성화다. 억제를 걸면 뒤이은
+  // 편집기의 Enter 반복이 삼켜지므로 module을 거치지 않는다(Issue #228).
   const handleColorTriggerKeyDown = (
     property: ColorMenuProperty,
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
-    // 같은 속성의 메뉴가 열려 있으면 Enter의 click이 메뉴를 닫고 포커스를
-    // 편집기로 돌린다. 그 뒤의 반복 Enter는 편집기에 닿지 않게 한다.
-    if (
-      event.key === "Enter" &&
-      !event.repeat &&
-      colorMenuState?.property === property
-    ) {
-      suppressEnterRepeat(event.currentTarget.ownerDocument);
-      return;
-    }
-    // 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지 않고
-    // 물러난다(Issue #225).
-    if (hasCommandModifier(event)) return;
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    if (colorMenuState?.property === property) return;
-    openColorMenu(property, event.currentTarget, true);
+    const isOpen = colorMenuState?.property === property;
+    if (event.key === "Enter" && !isOpen) return;
+    const trigger = event.currentTarget;
+    handleMenuKeyDown(event, {
+      navigate: (key) => {
+        if (key !== "ArrowDown" && key !== "ArrowUp") return false;
+        if (!isOpen) openColorMenu(property, trigger, true);
+        return true;
+      },
+    });
   };
 
   const openBlockTypeMenu = (
@@ -516,24 +510,23 @@ export const StaticToolbar = ({
     openBlockTypeMenu(event.currentTarget, event.detail === 0);
   };
 
+  // Enter 반복·수식 키·`preventDefault`의 순서는 handleMenuKeyDown이 소유한다
+  // (Issue #225, #228, #230). 블록 컨트롤이 비활성이면 화살표를 처리하지 않는다.
+  // 메뉴가 닫혀 있을 때의 Enter는 메뉴를 여는 일반 활성화다. 억제를 걸면 뒤이은
+  // 편집기의 Enter 반복이 삼켜지므로 module을 거치지 않는다.
   const handleBlockTypeTriggerKeyDown = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
-    // 메뉴가 열려 있으면 Enter의 click이 메뉴를 닫고 포커스를 편집기로
-    // 돌린다. 그 뒤의 반복 Enter는 편집기에 닿지 않게 한다(Issue #228).
-    if (event.key === "Enter" && !event.repeat && blockTypeMenuState !== null) {
-      suppressEnterRepeat(event.currentTarget.ownerDocument);
-      return;
-    }
-    // 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지 않고
-    // 물러난다(Issue #225).
-    if (hasCommandModifier(event)) return;
-    if (isBlockControlsDisabled) return;
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    if (blockTypeMenuState === null) {
-      openBlockTypeMenu(event.currentTarget, true);
-    }
+    if (event.key === "Enter" && blockTypeMenuState === null) return;
+    const trigger = event.currentTarget;
+    handleMenuKeyDown(event, {
+      navigate: (key) => {
+        if (isBlockControlsDisabled) return false;
+        if (key !== "ArrowDown" && key !== "ArrowUp") return false;
+        if (blockTypeMenuState === null) openBlockTypeMenu(trigger, true);
+        return true;
+      },
+    });
   };
 
   // 클릭 시점의 현재 블록을 다시 읽는다. 메뉴가 열려 있는 동안 선택이

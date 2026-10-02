@@ -22,6 +22,7 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import { MenuItemButton } from "./menu-item-button.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import {
   FALLBACK_BLOCK_POSITION,
   readBlockTopRightBounds,
@@ -972,22 +973,25 @@ export const MediaToolbar = ({
               });
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                if (toolbarState.mode === "editingName") applyName();
-                else applyCaption();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                // 이 입력의 Escape는 편집만 취소하고 view로 돌아간다 — 전파를
-                // 막지 않으면 같은 물리 키 이벤트가 document까지 올라가
-                // `useDismissOnOutsideOrEscape`(view 모드에서만 active)의
-                // keydown 리스너에 닿는다. cancelEditing이 이미 view로
-                // 전환해 그 훅이 재활성화된 상태라 같은 이벤트가 toolbar
-                // 전체를 곧바로 닫혀버리게 만든다(실측).
-                event.stopPropagation();
-                cancelEditing();
-              }
+              // IME 가드·Escape·Enter 반복 억제·preventDefault는
+              // handleMenuKeyDown이 소유한다(Issue #230). 조합 중 Escape는
+              // module이 건너뛰어 편집을 취소하지 않는다.
+              handleMenuKeyDown(event, {
+                activate: () => {
+                  if (toolbarState.mode === "editingName") applyName();
+                  else applyCaption();
+                },
+                escape: () => {
+                  // 이 입력의 Escape는 편집만 취소하고 view로 돌아간다 — 전파를
+                  // 막지 않으면 같은 물리 키 이벤트가 document까지 올라가
+                  // `useDismissOnOutsideOrEscape`(view 모드에서만 active)의
+                  // keydown 리스너에 닿는다. cancelEditing이 이미 view로
+                  // 전환해 그 훅이 재활성화된 상태라 같은 이벤트가 toolbar
+                  // 전체를 곧바로 닫혀버리게 만든다(실측).
+                  event.stopPropagation();
+                  cancelEditing();
+                },
+              });
             }}
             ref={inputRef}
             type="text"
@@ -1072,10 +1076,9 @@ export const MediaToolbar = ({
                   });
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    applyReplaceUrl();
-                  }
+                  // Enter의 IME 가드·반복 억제·preventDefault는
+                  // handleMenuKeyDown이 소유한다(Issue #230).
+                  handleMenuKeyDown(event, { activate: applyReplaceUrl });
                 }}
                 placeholder={dictionary.toolbar.filePanel.urlInputPlaceholder.replace(
                   "{kind}",

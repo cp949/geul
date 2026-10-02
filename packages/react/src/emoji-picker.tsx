@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
-import { hasCommandModifier } from "./has-command-modifier.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -294,57 +294,52 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
       const current = menuStateRef.current;
       if (current === null) return;
 
-      if (event.key === "Escape") {
-        event.preventDefault();
-        dismissMenuAndFocusEditor();
-        return;
-      }
-      // Ctrl·Alt·Meta 조합은 처리하지 않은 키다. `preventDefault`하지 않고
-      // 물러나 브라우저·OS 단축키를 막지 않는다(Issue #227). Escape는 위에서
-      // 이미 처리했다. 공용 훅의 Escape도 수식 키에서 물러나지 않는다.
-      if (hasCommandModifier(event)) return;
-      if (
-        event.key === "ArrowRight" ||
-        event.key === "ArrowLeft" ||
-        event.key === "ArrowDown" ||
-        event.key === "ArrowUp"
-      ) {
-        event.preventDefault();
-        const delta =
-          event.key === "ArrowRight"
-            ? 1
-            : event.key === "ArrowLeft"
-              ? -1
-              : event.key === "ArrowDown"
-                ? EMOJI_GRID_COLUMNS
-                : -EMOJI_GRID_COLUMNS;
-        setMenuState((currentState) => {
-          if (currentState === null) return null;
-          const count = filterEmojiOptions(
-            EMOJI_OPTIONS,
-            currentState.query,
-          ).length;
-          return {
-            ...currentState,
-            highlightedIndex: moveHighlight(
-              currentState.highlightedIndex,
-              delta,
-              count,
-            ),
-          };
-        });
-        return;
-      }
-      if (event.key === "Enter") {
-        const currentItems = filterEmojiOptions(EMOJI_OPTIONS, current.query);
-        const item = currentItems[current.highlightedIndex];
-        if (item !== undefined) {
-          event.preventDefault();
-          selectItem(item);
-        } else {
-          event.preventDefault();
-        }
-      }
+      // IME → Escape → Enter 반복 → 수식 키 → 이동·확정 순서와 `preventDefault`는
+      // handleMenuKeyDown이 소유한다(Issue #211, #227, #230). 후보가 0건인
+      // Enter도 module이 막고 확정만 건너뛴다.
+      handleMenuKeyDown(event, {
+        escape: dismissMenuAndFocusEditor,
+        navigate: (key) => {
+          if (
+            key !== "ArrowRight" &&
+            key !== "ArrowLeft" &&
+            key !== "ArrowDown" &&
+            key !== "ArrowUp"
+          ) {
+            return false;
+          }
+          const delta =
+            key === "ArrowRight"
+              ? 1
+              : key === "ArrowLeft"
+                ? -1
+                : key === "ArrowDown"
+                  ? EMOJI_GRID_COLUMNS
+                  : -EMOJI_GRID_COLUMNS;
+          setMenuState((currentState) => {
+            if (currentState === null) return null;
+            const count = filterEmojiOptions(
+              EMOJI_OPTIONS,
+              currentState.query,
+            ).length;
+            return {
+              ...currentState,
+              highlightedIndex: moveHighlight(
+                currentState.highlightedIndex,
+                delta,
+                count,
+              ),
+            };
+          });
+          return true;
+        },
+        activate: () => {
+          const item = filterEmojiOptions(EMOJI_OPTIONS, current.query)[
+            current.highlightedIndex
+          ];
+          if (item !== undefined) selectItem(item);
+        },
+      });
     };
 
     element.addEventListener("keydown", handleKeyDown, true);

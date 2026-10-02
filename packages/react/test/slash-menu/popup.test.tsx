@@ -26,6 +26,7 @@ import {
   placeCaret,
 } from "../mount-editor.js";
 import { COMMAND_MODIFIERS } from "../command-modifiers-test-support.js";
+import { releaseEnterRepeatSuppression } from "../menu-keyboard-test-support.js";
 import { fireSelectionChange } from "../selection-events.js";
 import {
   dragHandleLabel,
@@ -974,5 +975,61 @@ describe("SlashMenu 수식 키(Issue #227)", () => {
 
     expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
     expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
+  });
+});
+
+describe("SlashMenu Enter 키 순서(Issue #230)", () => {
+  // 확정한 Enter가 문서에 건 반복 억제를 다음 테스트로 넘기지 않는다.
+  afterEach(releaseEnterRepeatSuppression);
+
+  it("IME 조합 중 Enter는 항목을 확정하지 않고 preventDefault하지 않는다", () => {
+    const rendered = renderCaretBlocks();
+    const blockId = typeIntoBlock(rendered, 0, "/head");
+
+    const notPrevented = fireEvent.keyDown(rendered.host, {
+      key: "Enter",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
+    expect(rendered.editor.getCaretBlockContext()).toEqual({
+      blockId,
+      blockType: { type: "paragraph" },
+      text: "/head",
+    });
+  });
+
+  it("Enter로 확정한 뒤의 반복 Enter는 문서 capture에서 삼켜져 편집기에 닿지 않는다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, 0, "/head");
+    const reachedEditable = vi.fn();
+    rendered.editable.addEventListener("keydown", reachedEditable);
+
+    expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
+    expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
+    reachedEditable.mockClear();
+
+    const notPrevented = fireEvent.keyDown(rendered.editable, {
+      key: "Enter",
+      repeat: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(reachedEditable).not.toHaveBeenCalled();
+  });
+
+  it("Enter를 떼면 다음 Enter는 다시 편집기에 닿는다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, 0, "/head");
+    const reachedEditable = vi.fn();
+    rendered.editable.addEventListener("keydown", reachedEditable);
+    fireEvent.keyDown(rendered.host, { key: "Enter" });
+
+    fireEvent.keyUp(rendered.editable, { key: "Enter" });
+    reachedEditable.mockClear();
+    fireEvent.keyDown(rendered.editable, { key: "Enter", repeat: true });
+
+    expect(reachedEditable).toHaveBeenCalledTimes(1);
   });
 });

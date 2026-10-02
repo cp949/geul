@@ -10,6 +10,7 @@ import {
 } from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 import { trackPageErrors, uuidV4Pattern } from "./support/ids.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 test("핸들을 드래그해 블록 순서를 재정렬하고 undo 1회로 복원한다", async ({
   page,
@@ -162,6 +163,42 @@ test("블록을 복제하면 편집 포커스가 복제본으로 이동한다", 
   await expect(editable.locator("p").last()).toHaveText(
     "duplicate me typed after",
   );
+});
+
+// ADR 0007 "네이티브 입력의 기본 동작": 네이티브 Enter→click은 jsdom이 구현하지
+// 않아 Chromium이 가장 낮은 증명 계층이다(Issue #230).
+test("블록 메뉴 Duplicate에서 Enter를 길게 눌러도 복제는 한 번만 일어난다 (Issue #230)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+
+  await editable.click();
+  await page.keyboard.type("first block");
+
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Drag to reorder" }).click();
+  await expect(page.getByRole("menu", { name: "Block menu" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Duplicate" }).focus();
+
+  // 처음 Enter 뒤 반복 Enter를 프레임 사이를 두고 보낸다. 반복이 편집기에
+  // 닿으면 복제본 뒤에 빈 문단이 생긴다.
+  await page.keyboard.down("Enter");
+  await yieldFrame(page);
+  for (let repeat = 0; repeat < 3; repeat += 1) {
+    await page.keyboard.down("Enter");
+    await yieldFrame(page);
+  }
+  await page.keyboard.up("Enter");
+  await yieldFrame(page);
+
+  await expect(
+    page.getByRole("menu", { name: "Block menu" }),
+  ).not.toBeVisible();
+  await expect(editable.locator("p")).toHaveCount(2);
+  expect(await editable.locator("p").allTextContents()).toEqual([
+    "first block",
+    "first block",
+  ]);
 });
 
 test("블록 메뉴에서 삭제하면 블록이 사라지고 undo 1회로 복원된다", async ({
