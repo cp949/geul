@@ -20,6 +20,7 @@ import {
   LinkToolbar,
   type LinkToolbarProps,
 } from "../src/index.js";
+import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
 import { stubRect } from "./mount-editor.js";
@@ -622,6 +623,22 @@ describe("LinkToolbar URL 입력 Enter 키보드(Issue #230)", () => {
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
   });
 
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`${name} + Enter는 링크를 적용하지 않고 preventDefault하지 않는다`, () => {
+      const controller = fakeController();
+      renderWithSelectedText(controller);
+
+      fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+      const input = screen.getByRole("textbox", { name: "Link URL" });
+      fireEvent.change(input, { target: { value: "https://example.com" } });
+      const notPrevented = fireEvent.keyDown(input, { key: "Enter", ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(controller.commands.setLink).not.toHaveBeenCalled();
+      expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
+    });
+  }
+
   it("Enter로 적용한 뒤의 반복 Enter는 문서 capture에서 삼켜져 편집기에 닿지 않는다", () => {
     const controller = fakeController();
     renderWithSelectedText(controller);
@@ -634,7 +651,6 @@ describe("LinkToolbar URL 입력 Enter 키보드(Issue #230)", () => {
     fireEvent.change(input, { target: { value: "https://example.com" } });
     expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
     expect(controller.commands.setLink).toHaveBeenCalledTimes(1);
-    reachedEditable.mockClear();
 
     const notPrevented = fireEvent.keyDown(editable, {
       key: "Enter",

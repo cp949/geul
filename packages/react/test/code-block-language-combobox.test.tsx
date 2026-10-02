@@ -26,6 +26,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { computeLanguageSuggestions } from "../src/code-block-language-combobox.js";
 import { SlashMenu } from "../src/index.js";
+import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
+import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
 import {
   type MountBlockEditorOptions,
   type MountedBlockEditor,
@@ -1146,6 +1148,62 @@ describe("CodeBlock 언어 검색과 commit", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(storedLanguage(rendered)).toBe("text");
     expect(input.value).toBe("python");
+  });
+
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`${name} + Enter는 commit하지 않고 preventDefault하지 않는다(Issue #230)`, () => {
+      const rendered = mountCodeFixture({ language: "text" });
+      fireEvent.click(languageButton());
+      const input = searchInput();
+      fireEvent.change(input, { target: { value: "python" } });
+
+      const notPrevented = fireEvent.keyDown(input, { key: "Enter", ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(storedLanguage(rendered)).toBe("text");
+      expect(input.value).toBe("python");
+    });
+  }
+
+  it("반복 Enter는 commit하지 않고 preventDefault한다(Issue #230)", () => {
+    const rendered = mountCodeFixture({ language: "text" });
+    fireEvent.click(languageButton());
+    const input = searchInput();
+    fireEvent.change(input, { target: { value: "python" } });
+
+    const notPrevented = fireEvent.keyDown(input, {
+      key: "Enter",
+      repeat: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(storedLanguage(rendered)).toBe("text");
+    expect(input.value).toBe("python");
+  });
+
+  it("Enter로 commit한 뒤의 반복 Enter는 문서 capture에서 삼켜진다(Issue #230)", () => {
+    mountCodeFixture({ language: "text" });
+    fireEvent.click(languageButton());
+    const input = searchInput();
+    fireEvent.change(input, { target: { value: "python" } });
+    const reachedBody = vi.fn();
+
+    try {
+      expect(fireEvent.keyDown(input, { key: "Enter" })).toBe(false);
+      // 처음 Enter는 input에서 body로 버블된다. 그 호출을 세지 않도록
+      // 확정한 뒤에 건다.
+      document.body.addEventListener("keydown", reachedBody);
+      const notPrevented = fireEvent.keyDown(document.body, {
+        key: "Enter",
+        repeat: true,
+      });
+
+      expect(notPrevented).toBe(false);
+      expect(reachedBody).not.toHaveBeenCalled();
+    } finally {
+      document.body.removeEventListener("keydown", reachedBody);
+      releaseEnterRepeatSuppression();
+    }
   });
 
   it.each(["bad\u0000lang", "\tjs\t"])(

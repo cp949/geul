@@ -32,6 +32,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, MediaToolbar } from "../src/index.js";
+import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
@@ -618,6 +619,24 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     expect(notPrevented).toBe(true);
     expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
   });
+
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`${name} + Enter는 이름을 제출하지 않고 preventDefault하지 않는다(Issue #230)`, () => {
+      const controller = fakeController({
+        getSelectionMediaBlock: () => filledImageBlock,
+      });
+      renderToolbar(controller);
+
+      openMoreMenu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+      const input = screen.getByRole("textbox", { name: "Image name" });
+      fireEvent.change(input, { target: { value: "renamed.png" } });
+      const notPrevented = fireEvent.keyDown(input, { key: "Enter", ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
+    });
+  }
 
   it("이름이 바뀌지 않았으면 저장해도 setMediaBlockName을 호출하지 않는다", () => {
     const controller = fakeController({
@@ -1424,6 +1443,51 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
       "https://example.com/dir/new-name.png",
     );
   });
+
+  it("Embed 탭의 URL 입력에서 IME 조합 중 Enter는 URL을 저장하지 않고 preventDefault하지 않는다(Issue #230)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    const input = screen.getByRole("textbox", { name: "Image URL" });
+    fireEvent.change(input, {
+      target: { value: "https://example.com/dir/new-name.png" },
+    });
+    const notPrevented = fireEvent.keyDown(input, {
+      key: "Enter",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
+  });
+
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`Embed 탭의 URL 입력에서 ${name} + Enter는 URL을 저장하지 않고 preventDefault하지 않는다(Issue #230)`, () => {
+      const controller = fakeController({
+        getSelectionMediaBlock: () => filledImageBlock,
+        isUploadEnabled: () => true,
+      });
+      renderToolbar(controller);
+      openMoreMenu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+      const input = screen.getByRole("textbox", { name: "Image URL" });
+      fireEvent.change(input, {
+        target: { value: "https://example.com/dir/new-name.png" },
+      });
+      const notPrevented = fireEvent.keyDown(input, { key: "Enter", ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
+    });
+  }
 
   it("Embed 탭에서 거부된 URL이면 거부 메시지를 표시하고 view로 돌아가지 않는다", () => {
     const controller = fakeController({

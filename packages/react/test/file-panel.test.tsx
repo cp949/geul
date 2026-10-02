@@ -25,6 +25,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, FilePanel } from "../src/index.js";
+import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 
@@ -368,6 +369,24 @@ describe("FilePanel 파일 패널", () => {
     expect(notPrevented).toBe(true);
     expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
   });
+
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`${name} + Enter는 URL을 제출하지 않고 preventDefault하지 않는다(Issue #230)`, () => {
+      const controller = fakeController({
+        getSelectionMediaBlock: () => emptyImageBlock,
+      });
+      renderPanel(controller);
+
+      const input = screen.getByRole("textbox", { name: "Image URL" });
+      fireEvent.change(input, {
+        target: { value: "https://example.com/dir/photo.png" },
+      });
+      const notPrevented = fireEvent.keyDown(input, { key: "Enter", ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
+    });
+  }
 
   it("제출 성공 시 마지막 path segment로 이름을 추출해 저장하고 패널에 표시한다", () => {
     const controller = fakeController({

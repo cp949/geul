@@ -1008,7 +1008,6 @@ describe("SlashMenu Enter 키 순서(Issue #230)", () => {
 
     expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
     expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
-    reachedEditable.mockClear();
 
     const notPrevented = fireEvent.keyDown(rendered.editable, {
       key: "Enter",
@@ -1027,7 +1026,6 @@ describe("SlashMenu Enter 키 순서(Issue #230)", () => {
     fireEvent.keyDown(rendered.host, { key: "Enter" });
 
     fireEvent.keyUp(rendered.editable, { key: "Enter" });
-    reachedEditable.mockClear();
     fireEvent.keyDown(rendered.editable, { key: "Enter", repeat: true });
 
     expect(reachedEditable).toHaveBeenCalledTimes(1);
