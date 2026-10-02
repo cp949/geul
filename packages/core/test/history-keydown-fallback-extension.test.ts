@@ -24,7 +24,11 @@ import {
   mounted,
   paragraphBlock,
 } from "./editor-controller-support.js";
-import { withoutScrollCrash } from "./native-selection-test-support.js";
+import {
+  placeDomSelectionInFirstParagraph,
+  runCleanups,
+  withoutScrollCrash,
+} from "./native-selection-test-support.js";
 
 /** 키 판별 함수에 넘길 최소 keydown 필드를 KeyboardEvent로 만든다. */
 const keydown = (init: KeyboardEventInit): KeyboardEvent =>
@@ -275,39 +279,9 @@ const mountRedoableEditor = (blockId: string) => {
   return { ...mount, container };
 };
 
-/**
- * 편집기 첫 문단의 텍스트 노드 끝에 DOM selection을 둔다. jsdom은
- * ProseMirror selection을 DOM selection에 동기화하지 않으므로(편집기에
- * 포커스가 없다) 직접 만든다. 실제 브라우저에서 툴바 버튼에 포커스가 가도
- * selection이 편집기에 남는 상태를 재현한다.
- */
-const placeDomSelectionIn = (editable: HTMLElement) => {
-  const paragraph = editable.querySelector("p");
-  const text = paragraph?.firstChild;
-  if (text === null || text === undefined) {
-    throw new Error("편집기 문단 텍스트 노드 조회 실패");
-  }
-  const selection = document.getSelection();
-  expect(selection).not.toBeNull();
-  selection?.setBaseAndExtent(text, BASE_TEXT.length, text, BASE_TEXT.length);
-  expect(editable.contains(selection?.focusNode ?? null)).toBe(true);
-};
-
-/**
- * 정리 함수를 모두 실행한다. 하나가 던져도 나머지를 막지 않고 실패를
- * 모아 AggregateError로 던진다(G-TST-003).
- */
-const runCleanups = (cleanups: readonly (() => void)[], message: string) => {
-  const errors: unknown[] = [];
-  for (const cleanup of cleanups) {
-    try {
-      cleanup();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length > 0) throw new AggregateError(errors, message);
-};
+/** 편집기 첫 문단 텍스트 끝에 DOM selection을 둔다. */
+const placeDomSelectionIn = (editable: HTMLElement) =>
+  placeDomSelectionInFirstParagraph(editable, BASE_TEXT.length);
 
 /**
  * 시나리오를 만들고 fn을 실행한 뒤 DOM과 selection과 Editor를 항상 정리한다

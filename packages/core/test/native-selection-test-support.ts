@@ -108,3 +108,45 @@ export const withoutScrollCrash = (
     scrollSpy.mockRestore();
   }
 };
+
+/**
+ * 정리 함수를 모두 실행한다. 하나가 던져도 나머지를 막지 않고 실패를
+ * 모아 AggregateError로 던진다(G-TST-003). 시나리오가 붙인 DOM 노드와
+ * selection과 Editor를 한 번에 해제할 때 쓴다.
+ */
+export const runCleanups = (
+  cleanups: readonly (() => void)[],
+  message: string,
+): void => {
+  const errors: unknown[] = [];
+  for (const cleanup of cleanups) {
+    try {
+      cleanup();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw new AggregateError(errors, message);
+};
+
+/**
+ * 편집기 첫 문단의 텍스트 노드 offset 위치에 DOM selection을 둔다. jsdom은
+ * ProseMirror selection을 DOM selection에 동기화하지 않으므로(편집기에
+ * 포커스가 없다) 직접 만든다. 실제 브라우저에서 툴바 버튼에 포커스가 가도
+ * selection이 편집기에 남는 상태를 재현한다. editable은 문서에 붙어 있어야
+ * 한다.
+ */
+export const placeDomSelectionInFirstParagraph = (
+  editable: HTMLElement,
+  offset: number,
+): void => {
+  const paragraph = editable.querySelector("p");
+  const text = paragraph?.firstChild;
+  if (text === null || text === undefined) {
+    throw new Error("편집기 문단 텍스트 노드 조회 실패");
+  }
+  const selection = document.getSelection();
+  expect(selection).not.toBeNull();
+  selection?.setBaseAndExtent(text, offset, text, offset);
+  expect(editable.contains(selection?.focusNode ?? null)).toBe(true);
+};

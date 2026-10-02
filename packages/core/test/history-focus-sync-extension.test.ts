@@ -27,7 +27,10 @@ import {
   paragraphBlock,
   selectBlockNode,
 } from "./editor-controller-support.js";
-import { withoutScrollCrash } from "./native-selection-test-support.js";
+import {
+  runCleanups,
+  withoutScrollCrash,
+} from "./native-selection-test-support.js";
 
 const BASE_TEXT = "abc";
 const REPLACEMENT = "X";
@@ -46,22 +49,6 @@ const flushObservers = () =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
-
-/**
- * 정리 함수를 모두 실행한다. 하나가 던져도 나머지를 막지 않고 실패를
- * 모아 AggregateError로 던진다(G-TST-003).
- */
-const runCleanups = (cleanups: readonly (() => void)[], message: string) => {
-  const errors: unknown[] = [];
-  for (const cleanup of cleanups) {
-    try {
-      cleanup();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length > 0) throw new AggregateError(errors, message);
-};
 
 /** 편집기 컨테이너를 문서에 붙이고 컨테이너를 돌려준다. */
 const attachContainer = (mount: Mounted): HTMLElement => {
