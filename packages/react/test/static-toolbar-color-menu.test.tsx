@@ -456,6 +456,24 @@ describe("StaticToolbar 색상 메뉴의 닫기와 포커스(실제 편집기)",
       expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(false);
       fireEvent.keyUp(editable, { key: "Enter" });
     });
+
+    it("트리거의 Control+Enter로 메뉴를 닫아도 편집기로 간 Enter 반복은 닿지 않는다", () => {
+      const { editable } = mountToolbarWithEditor();
+      openByMouse("Text color");
+      colorTrigger("Text color").focus();
+
+      // 수식 키 가드가 Enter 반복 억제보다 앞서면 억제가 걸리지 않아
+      // 반복이 편집기에 닿는다.
+      press("Enter", { ctrlKey: true });
+      fireEvent.click(colorTrigger("Text color"), { detail: 0 });
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(editable);
+
+      expect(
+        reachesEditor(editable, "Enter", { repeat: true, ctrlKey: true }),
+      ).toBe(false);
+      fireEvent.keyUp(editable, { key: "Enter" });
+    });
   });
 
   it("바깥 pointerdown은 메뉴를 닫지만 포커스를 옮기지 않는다", () => {
@@ -679,6 +697,23 @@ describe("StaticToolbar 색상 메뉴가 열린 채 mark 적용이 불가능해�
       );
     },
   );
+
+  it("포커스가 메뉴·편집기 밖의 다른 요소에 있으면 메뉴만 닫고 포커스를 옮기지 않는다", () => {
+    const mounted = mountToolbarWithEditor();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      openByMouse("Text color");
+      outside.focus();
+
+      convertToCodeBlock(mounted);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
 
   it("mark 적용이 가능한 상태가 유지되면 열린 메뉴와 스와치 포커스를 건드리지 않는다", () => {
     const mounted = mountToolbarWithEditor();
