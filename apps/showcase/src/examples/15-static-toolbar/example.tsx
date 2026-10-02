@@ -1,8 +1,13 @@
 import { exportHtml } from "@cp949/geul-io";
 import type { Document } from "@cp949/geul-model";
 import {
+  type CreateEditorOptions,
   EditorContent,
   EditorProvider,
+  FilePanel,
+  MediaResizeHandles,
+  MediaToolbar,
+  SlashMenu,
   StaticToolbar,
   useEditor,
 } from "@cp949/geul-react";
@@ -525,6 +530,15 @@ const ResultPanel = ({ revision }: { revision: number }) => {
   );
 };
 
+// iframe 블록은 host가 허용 도메인을 `iframeEmbed.providers`로 지정해야
+// URL을 받는다(기본값은 비어 있어 전부 거절한다). 이 예제는 apps/demo와
+// 같이 example.com만 허용한다.
+const STATIC_TOOLBAR_IFRAME_EMBED: CreateEditorOptions["iframeEmbed"] = {
+  providers: [
+    { name: "Example", match: { type: "exact", pattern: "example.com" } },
+  ],
+};
+
 // 스크롤이 실제로 일어나도록 충분히 긴 문서를 채운다 — "상단 고정"을
 // 실제로 시연하려면 스크롤 중에도 툴바가 그대로 보여야 한다(RD-001 완료
 // 조건 6). 문단 수는 .scrollArea의 max-height(600px)를 넉넉히 넘긴다.
@@ -549,6 +563,7 @@ const StaticToolbarExample = () => {
   return (
     <EditorProvider
       initialDocument={initialDocument}
+      iframeEmbed={STATIC_TOOLBAR_IFRAME_EMBED}
       onChange={(event) => setRevision(event.revision)}
     >
       {/* StaticToolbar 자체는 위치 CSS가 없다 — stickyToolbar가 이 예제의
@@ -559,6 +574,13 @@ const StaticToolbarExample = () => {
           <EditorContent />
         </div>
       </div>
+      {/* StaticToolbar는 블록 변환·서식만 맡는다. 표 핸들·셀 서식, 미디어
+          툴바·리사이즈, 캡션, iframe 로딩 표시는 SlashMenu가 함께 마운트하고,
+          URL 입력 패널(FilePanel)·미디어 툴바·리사이즈 핸들은 따로 마운트한다. */}
+      <SlashMenu />
+      <FilePanel />
+      <MediaToolbar />
+      <MediaResizeHandles />
       <ResultPanel revision={revision} />
     </EditorProvider>
   );

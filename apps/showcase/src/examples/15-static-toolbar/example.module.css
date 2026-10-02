@@ -10,10 +10,14 @@
   border-radius: 6px;
 }
 
+/* z-index 11: SlashMenu·MediaToolbar 등 오버레이(z-index 5~10)는 스크롤
+   영역 바깥에 그려져, 스크롤 영역 맨 위 띠로 올라오면 툴바 위에 덧그려진다.
+   그 오버레이보다 위에 두어 일반 sticky 헤더처럼 콘텐츠가 밑으로 지나가게
+   한다. 메뉴(z-index 30 이상)보다는 아래다. */
 .stickyToolbar {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 11;
 }
 
 /* geul-editor는 padding을 강제하지 않는다(headless) — 소비 앱이 직접
