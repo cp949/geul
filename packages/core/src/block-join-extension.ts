@@ -1,15 +1,11 @@
 import { isListEntryBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
-import {
-  Fragment,
-  type Node,
-  type ResolvedPos,
-  type Schema,
-} from "@tiptap/pm/model";
+import { Fragment, type Node, type ResolvedPos } from "@tiptap/pm/model";
 import { Selection, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
+import { inlineToCodeSource } from "./code-block-inline-text.js";
 import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 
@@ -310,20 +306,6 @@ function mergeCodeBlockIntoText(
   return true;
 }
 
-// 다음 블록의 inline 콘텐츠를 CodeBlock이 받을 수 있는 순수 텍스트로
-// 평탄화한다(#202 스펙 표 행3, RD-001-DELTA-02 — mergeCodeBlockIntoText의
-// 반대 방향). CodeBlock은 marks: ""라(code-block-extension.ts) 모든 mark를
-// 잃고, hardBreak(inline 그룹, CodeBlock의 content: "text*"에 담길 수 없는
-// 노드)는 model-to-tiptap.ts의 "\n"↔hardBreak 관례를 역으로 적용해 리터럴
-// "\n" 문자로 치환한다. 그 외 inline 원소(예: 미등록 커스텀 inline)는
-// 텍스트 표현이 없어 빈 문자열로 건너뛴다.
-function toCodeBlockInline(schema: Schema, content: Fragment): Fragment {
-  const text = content.textBetween(0, content.size, "", (leaf: Node) =>
-    leaf.type.name === "hardBreak" ? "\n" : "",
-  );
-  return text.length > 0 ? Fragment.from(schema.text(text)) : Fragment.empty;
-}
-
 // CodeBlock 끝 Delete가 인접한 다음 블록을 CodeBlock에 흡수한다(#202 스펙
 // 표 행3, RD-001-DELTA-02) — mergeCodeBlockIntoText와 반대로 CodeBlock이
 // 항상 살아남는 쪽이고 다음 블록이 소멸한다. 병합 대상은 codeBlock 또는
@@ -363,7 +345,7 @@ function mergeNextBlockIntoCodeBlock(
   );
   if (container.type.name !== "blockContainer") return false;
 
-  const inline = toCodeBlockInline(
+  const inline = inlineToCodeSource(
     codeBlockFrom.parent.type.schema,
     adjacent.node.content,
   );

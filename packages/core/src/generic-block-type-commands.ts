@@ -8,10 +8,16 @@ import {
 } from "@cp949/geul-model";
 import type { Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
+import { Fragment } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 
 import { findEditableBlockContent } from "./block-position.js";
 import type { SetBlockTypeDescriptor } from "./block-type-descriptor.js";
+import {
+  codeSourceLeafText,
+  codeSourceToInline,
+  inlineToCodeSource,
+} from "./code-block-inline-text.js";
 import type { EditorError } from "./errors.js";
 import {
   commandNotApplicable,
@@ -138,9 +144,17 @@ export const createGenericBlockTypeCommands = (
       const nodeType = session.editor.schema.nodes[blockType.type];
       if (nodeType === undefined) return false;
       if (changesCodeBlockBoundary) {
-        const source = clearContent ? "" : target.node.textContent;
-        const content =
-          source === "" ? undefined : session.editor.schema.text(source);
+        // 비Code → Code는 hardBreak를 개행으로 옮기고, Code → 비Code는 개행을
+        // hardBreak로 되돌린다(Issue #226). Code → Code(언어만 변경)는
+        // content를 그대로 둔다.
+        const { schema } = session.editor;
+        const content = clearContent
+          ? Fragment.empty
+          : currentTypeName === "codeBlock" && blockType.type === "codeBlock"
+            ? target.node.content
+            : blockType.type === "codeBlock"
+              ? inlineToCodeSource(schema, target.node.content)
+              : codeSourceToInline(schema, target.node.content);
         // codeBlock→codeBlock(언어만 변경)은 replaceWith가 노드를 통째로
         // 새로 만들어 언급하지 않은 attrs가 schema default로 리셋된다 —
         // wrap(RD-001 DELTA-02, Issue #194)을 명시적으로 옮겨 싣지 않으면
@@ -168,9 +182,9 @@ export const createGenericBlockTypeCommands = (
         if (currentTypeName !== blockType.type || clearContent) {
           // replaceWith가 옛 selection을 지우므로 직접 옮긴다. 블록 안
           // selection은 텍스트 offset으로 매핑하고(Issue #223), 블록 밖이거나
-          // clearContent면 블록 처음에 둔다. PM 위치 대신 텍스트 offset을 쓰는
-          // 이유는 새 노드가 textContent로 만들어져 hardBreak 같은 leaf가
-          // 빠지기 때문이다.
+          // clearContent면 블록 처음에 둔다. 텍스트 offset은 hardBreak를
+          // 개행 하나로 센다. 새 content가 같은 규칙으로 만들어져 PM 위치와
+          // 크기가 맞는다(Issue #226).
           const contentStart = target.position + 1;
           const contentEnd = contentStart + currentContentSize;
           const { anchor, head } = session.editor.state.selection;
@@ -182,8 +196,13 @@ export const createGenericBlockTypeCommands = (
             head <= contentEnd;
           const toOffset = (position: number): number =>
             Math.min(
-              target.node.textBetween(0, position - contentStart).length,
-              source.length,
+              target.node.textBetween(
+                0,
+                position - contentStart,
+                "",
+                codeSourceLeafText,
+              ).length,
+              content.size,
             );
           transaction.setSelection(
             TextSelection.create(

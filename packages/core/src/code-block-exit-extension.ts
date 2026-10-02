@@ -1,12 +1,13 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import { Fragment, type Node, type Schema } from "@tiptap/pm/model";
+import { Fragment } from "@tiptap/pm/model";
 import {
   TextSelection,
   type EditorState,
   type Transaction,
 } from "@tiptap/pm/state";
 
+import { codeSourceToInline } from "./code-block-inline-text.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 
 // codeBlock에서만 반응하는 Enter(double 개행 종료)·Shift-Enter(캐럿 위치
@@ -163,7 +164,7 @@ function splitCodeBlockAtCaret(tr: Transaction): boolean {
   );
   const newContentNode = paragraphType.create(
     null,
-    codeContentToInlineContent(schema, afterContent),
+    codeSourceToInline(schema, afterContent),
   );
 
   // 새 컨테이너는 blockId를 주지 않는다(null/미지정) — BlockIdExtension의
@@ -194,30 +195,6 @@ function splitCodeBlockAtCaret(tr: Transaction): boolean {
   tr.setSelection(TextSelection.near(resolvedCaret));
 
   return true;
-}
-
-// codeBlock 텍스트 조각(리터럴 `\n` 포함 가능, marks 없음 — schema
-// `marks: ""`)을 paragraph가 받는 inline 콘텐츠로 변환한다.
-// model-to-tiptap.ts의 inlineContentToTiptap이 저장 모델 JSON 위에서 하는
-// `\n→hardBreak` 분할과 같은 규칙을 살아있는 PM Fragment 위에서
-// 재구현한다(paragraph content: "inline*"라 리터럴 개행을 담은 text
-// 노드를 허용하지 않는다). 빈 세그먼트(연속 `\n`)는 text 노드를 만들지
-// 않고 건너뛴다 — 원본 규칙과 동일.
-function codeContentToInlineContent(schema: Schema, content: Fragment) {
-  const hardBreakType = schema.nodes.hardBreak;
-  let result = Fragment.empty;
-  content.forEach((child: Node) => {
-    const segments = (child.text ?? "").split("\n");
-    segments.forEach((segment, index) => {
-      if (segment.length > 0) {
-        result = result.append(Fragment.from(schema.text(segment)));
-      }
-      if (index < segments.length - 1 && hardBreakType !== undefined) {
-        result = result.append(Fragment.from(hardBreakType.create()));
-      }
-    });
-  });
-  return result;
 }
 
 function isEmptyCodeBlockCaret(state: EditorState): boolean {
