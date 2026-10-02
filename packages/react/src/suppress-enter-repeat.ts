@@ -30,3 +30,36 @@ export const suppressEnterRepeat = (ownerDocument: Document): void => {
   ownerDocument.addEventListener("keydown", onKeyDown, true);
   ownerDocument.addEventListener("keyup", onKeyUp, true);
 };
+
+/** `handleMenuEnterKeyDown`이 읽는 keydown의 최소 구조. React·DOM 이벤트가 모두 맞는다. */
+type MenuEnterKeyDownEvent = {
+  key: string;
+  repeat: boolean;
+  preventDefault(): void;
+  currentTarget: { ownerDocument: Document };
+};
+
+/**
+ * 메뉴 안 keydown의 Enter를 처리한다. 처리했으면 `true`다.
+ * Enter가 아니면 `false`다. 호출부가 나머지 키 처리를 이어 간다.
+ *
+ * 옵션·스와치 버튼은 keydown Enter마다 click을 낸다.
+ * - 반복 Enter: 트리거에서 Enter를 누른 채 있으면 반복이 첫 항목을 확정한다.
+ *   `preventDefault`로 click을 막는다.
+ * - 처음 Enter: 확정이 포커스를 편집기로 돌린다. 그 뒤의 반복이 편집기에
+ *   닿지 않게 `suppressEnterRepeat`를 건다. 처음 Enter는 막지 않는다.
+ *   막으면 click이 나지 않아 확정되지 않는다.
+ *
+ * 수식 키 가드보다 앞서 부른다. 뒤에 두면 `Ctrl+Enter` 반복이 새어 나간다.
+ */
+export const handleMenuEnterKeyDown = (
+  event: MenuEnterKeyDownEvent,
+): boolean => {
+  if (event.key !== "Enter") return false;
+  if (event.repeat) {
+    event.preventDefault();
+    return true;
+  }
+  suppressEnterRepeat(event.currentTarget.ownerDocument);
+  return true;
+};
