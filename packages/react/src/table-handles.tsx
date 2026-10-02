@@ -52,6 +52,7 @@ import {
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
+import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // Issue #65: menuState.index만으로는 대상보다 앞선 행/열이 사라져 인덱스가
@@ -426,14 +427,14 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     ),
   );
 
-  // 핸들 6종은 이제 position: absolute + page-relative 좌표라(G-UI-003)
-  // 일반 페이지 스크롤에는 브라우저가 자동으로 따라와 재렌더가 필요
-  // 없다. 창 크기 변경(반응형 레이아웃이 표 폭을 바꾸는 경우)만 geometry를
-  // 다시 읽어야 한다. 다만 행/열 메뉴(table-handle-menu.tsx)와 표 그립
-  // 메뉴(table-grip-menu.tsx, Issue #174 RD-003)는 둘 다 G-UI-001의
-  // position: fixed + 뷰포트 clamp를 그대로 쓰므로 스크롤할 때마다 다시
-  // 계산해야 앵커를 따라간다 — 둘 중 하나라도 열려 있을 때만 스크롤
-  // 리스너를 켠다.
+  // 핸들 6종은 position: absolute + page-relative 좌표라(G-UI-003) 창
+  // 스크롤에는 브라우저가 자동으로 따라온다. 하지만 에디터가 안쪽 스크롤
+  // 컨테이너 안에 있으면 그 스크롤은 표의 page 좌표를 바꾸는데도 핸들은
+  // 제자리에 남는다 — scroll(capture)을 표가 활성인 동안 항상 구독해 다시
+  // 읽는다. 행/열 메뉴(table-handle-menu.tsx)와 표 그립 메뉴
+  // (table-grip-menu.tsx, Issue #174 RD-003)는 G-UI-001의 position: fixed +
+  // 뷰포트 clamp라 같은 구독이 앵커도 따라가게 한다. 창 크기 변경(반응형
+  // 레이아웃이 표 폭을 바꾸는 경우)도 geometry를 다시 읽는다.
   useEffect(() => {
     if (element === null || activeTableId === null) return;
     const ownerDocument = element.ownerDocument;
@@ -441,14 +442,12 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     const refreshGeometry = () => setGeometryVersion((version) => version + 1);
 
     view?.addEventListener("resize", refreshGeometry);
-    if (menuState !== null || tableGripMenuTableId !== null) {
-      ownerDocument.addEventListener("scroll", refreshGeometry, true);
-    }
+    ownerDocument.addEventListener("scroll", refreshGeometry, true);
     return () => {
       view?.removeEventListener("resize", refreshGeometry);
       ownerDocument.removeEventListener("scroll", refreshGeometry, true);
     };
-  }, [element, activeTableId, menuState, tableGripMenuTableId]);
+  }, [element, activeTableId]);
 
   // 위 geometry는 이 렌더 함수 본문에서 읽은 값이라, 같은 커밋에 딸려오는
   // DOM 변경(예: 표보다 앞선 형제가 줄바꿈으로 높이를 바꿔 표를 밀어내는
@@ -497,6 +496,28 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
       return;
     }
     setGeometryVersion((version) => version + 1);
+  });
+
+  // 오버레이 최상위 요소(행·열 hit box, 그립, 추가 버튼, 가이드)를 담는 층.
+  // display: contents라 박스가 없어 레이아웃과 absolute 앵커에 영향이 없다.
+  const overlayLayerRef = useRef<HTMLDivElement>(null);
+
+  // 에디터가 안쪽 스크롤 컨테이너 안에 있으면 핸들은 그 바깥에 그려져
+  // 컨테이너가 잘라내지 못한다 — 핸들 자신의 박스가 컨테이너의 보이는 영역
+  // 안에 완전히 들어올 때만 보인다. 렌더마다(스크롤은 위 구독이 렌더를
+  // 일으킨다) 레이아웃 직후 최상위 요소의 `visibility`만 갱신한다. 드래그
+  // 중에는 건너뛰고 전부 보이게 둔다(pointer capture를 쥔 핸들이 사라지면
+  // 드래그가 끊긴다).
+  useLayoutEffect(() => {
+    const layer = overlayLayerRef.current;
+    if (layer === null || element === null) return;
+    const clipBoxes = readScrollClipBoxes(element);
+    const dragging = reorderState !== null || resizeState !== null;
+    for (const child of layer.children) {
+      if (child instanceof HTMLElement) {
+        syncClipVisibility(child, clipBoxes, dragging);
+      }
+    }
   });
 
   const reorderActive = reorderState !== null;
@@ -965,22 +986,28 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   return (
     <>
       {geometry !== null && (
-        <TableHandleOverlays
-          activeColumnIds={activeColumnIds}
-          activeRowIds={activeRowIds}
-          geometry={geometry}
-          onAddBlock={handleAddBlockClick}
-          onAddColumn={handleAddColumn}
-          onAddRow={handleAddRow}
-          onReorderHandleClick={handleReorderHandleClick}
-          onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
-          onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
-          onTableGripClick={handleTableGripClick}
-          reorderGuideRect={reorderGuideRect}
-          showAddColumn={showAddColumn}
-          showAddRow={showAddRow}
-          showCornerCluster={showCornerCluster}
-        />
+        <div
+          data-geul-table-overlay-layer=""
+          ref={overlayLayerRef}
+          style={{ display: "contents" }}
+        >
+          <TableHandleOverlays
+            activeColumnIds={activeColumnIds}
+            activeRowIds={activeRowIds}
+            geometry={geometry}
+            onAddBlock={handleAddBlockClick}
+            onAddColumn={handleAddColumn}
+            onAddRow={handleAddRow}
+            onReorderHandleClick={handleReorderHandleClick}
+            onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
+            onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
+            onTableGripClick={handleTableGripClick}
+            reorderGuideRect={reorderGuideRect}
+            showAddColumn={showAddColumn}
+            showAddRow={showAddRow}
+            showCornerCluster={showCornerCluster}
+          />
+        </div>
       )}
       {menuState !== null && geometry !== null && menuPosition !== null && (
         <TableHandleMenu

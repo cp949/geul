@@ -939,3 +939,65 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
     expect(columnHandles[1]?.parentElement?.style.left).toBe("240px");
   });
 });
+
+describe("안쪽 스크롤 컨테이너 스크롤", () => {
+  // 핸들은 page-relative absolute라 창 스크롤은 브라우저가 따라가지만, 안쪽
+  // 스크롤 컨테이너가 움직이면 표의 page 좌표가 바뀌는데도 메뉴가 닫혀
+  // 있으면 아무도 다시 계산하지 않아 핸들이 제자리에 남았다. 그리고 핸들은
+  // 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다.
+  const firstRowCell = (table: HTMLElement): HTMLElement => {
+    const cell = table.querySelector<HTMLElement>(
+      "[data-geul-row-id] [data-geul-column-id]",
+    );
+    if (cell === null) throw new Error("첫 셀을 찾지 못했다");
+    return cell;
+  };
+  const rowHitBoxes = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "[data-geul-table-row-handle-hit]",
+      ),
+    );
+
+  it("스크롤하면 표를 따라 핸들 위치를 다시 계산한다(메뉴가 닫혀 있어도)", () => {
+    const { host, table } = renderRealTable();
+    placeCaret(firstRowCell(table));
+    const before = rowHitBoxes()[0]?.style.top;
+    expect(before).toBeDefined();
+
+    // 핸들 좌표는 표와 각 행·셀 rect에서 나온다 — 스크롤로 전부 같이 움직인다.
+    for (const element of [
+      table,
+      ...table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
+      ...table.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
+    ]) {
+      const rect = element.getBoundingClientRect();
+      stubRect(element, {
+        left: rect.left,
+        top: rect.top - 30,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+    fireEvent.scroll(host);
+
+    const after = rowHitBoxes()[0]?.style.top;
+    expect(Number.parseFloat(after ?? "NaN")).toBe(
+      Number.parseFloat(before ?? "NaN") - 30,
+    );
+  });
+
+  it("핸들 박스가 컨테이너 보이는 영역 밖이면 숨기고 안이면 보인다", () => {
+    const { host, table } = renderRealTable();
+    placeCaret(firstRowCell(table));
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    const [first, second] = rowHitBoxes();
+    stubRect(first!, { left: 0, top: 10, width: 20, height: 30 });
+    stubRect(second!, { left: 0, top: 300, width: 20, height: 30 });
+    fireEvent.scroll(host);
+
+    expect(first!.style.visibility).toBe("");
+    expect(second!.style.visibility).toBe("hidden");
+  });
+});

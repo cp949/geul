@@ -8,7 +8,13 @@
 - `position: fixed`를 쓰지 않는다 — 앵커가 뷰포트 밖으로 완전히 나가면 네이티브 `Element.scrollIntoView()`·포커스 시 자동 스크롤·Playwright `.click()`의 자동 스크롤이 전부 no-op이다(`fixed`는 정의상 스크롤에 영향받지 않는 위치라 브라우저가 스크롤 자체를 생략한다, Issue #163).
 - 대신 `position: absolute`를 쓰고 positioned ancestor를 두지 않는다(오버레이 트리와 실제 대상 DOM 사이 어떤 조상에도 `position`/`transform`/`filter`/`perspective`를 걸지 않는다) — 초기 containing block(문서 좌표계)에서 렌더시킨다.
 - 좌표는 `getBoundingClientRect()`(viewport-relative)가 아니라 `rect.left/top + window.scrollX/scrollY`(page-relative)로 계산한다.
-- 일반 페이지 스크롤로는 재계산하지 않는다 — absolute 요소는 스크롤에 자동으로 따라오므로 스크롤 이벤트 리스너로 강제 재렌더할 필요가 없다. resize나 앵커 자체의 크기·위치 변화(레이아웃을 바꾸는 DOM mutation 등)에서만 재계산한다.
+- 창 스크롤로는 재계산하지 않는다 — absolute 요소는 창 스크롤에 자동으로 따라오므로 스크롤 이벤트 리스너로 강제 재렌더할 필요가 없다. resize나 앵커 자체의 크기·위치 변화(레이아웃을 바꾸는 DOM mutation 등)에서 재계산한다.
+- 안쪽 스크롤 컨테이너(소비 앱이 에디터를 `overflow: auto` 영역에 두는 경우)는 다르다. 그 스크롤은 앵커의 page 좌표를 바꾸는데 absolute 요소는 제자리에 남는다. `window`에 `scroll`을 capture로 구독해 다시 읽는다(`useSelectionRefresh`가 이미 그렇게 한다).
+- 오버레이는 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다. 오버레이 자신의 박스가 그 컨테이너의 보이는 영역 안에 있을 때만 보이게 한다 — `scroll-clip.ts`의 `readScrollClipBoxes`로 영역을 읽고 `syncClipVisibility`로 `visibility`를 갱신한다.
+  - 세로는 오버레이 박스가 완전히 안쪽일 때만 보인다. 경계에 걸쳐 잘린 채 떠 있지 않게 한다. 가로는 겹치기만 하면 보인다.
+  - `unmount`나 `display: none`이 아니라 `visibility`를 쓴다. 레이아웃 박스와 실측 높이가 남는다. 미디어 캡션은 그 높이를 문서 flow에 되먹인다.
+  - 편집 중인 입력과 드래그 중인 핸들은 숨기지 않는다. 숨기면 포커스·draft·pointer capture를 잃는다.
+  - 오버레이의 `style` prop에 `visibility`를 직접 두지 않는다. 다음 렌더가 덮어쓴다.
 - 뷰포트 clamp를 하지 않는다 — `G-UI-001`의 dismissible overlay와 달리, 이 카테고리는 앵커에서 분리되면 어떤 대상(행·열·경계)을 가리키는지 사용자가 알 수 없어진다. 도달성은 "핸들을 사용자 쪽으로 당겨오기"가 아니라 "네이티브 스크롤이 앵커를 뷰포트로 데려오게 두기"로 확보한다.
 - pointer 이벤트 기반 드래그·히트테스트(재정렬 대상 판정, 리사이즈 delta 계산 등)는 `event.clientX/clientY`(viewport-relative)와 이 규칙의 geometry(page-relative)를 섞어 비교하지 않는다 — 좌표계를 명시적으로 통일한다.
 - 이 접근은 오버레이 트리와 대상 DOM 사이에 `transform`/`filter`를 건 조상이 없다는 전제에 기댄다. 소비자 앱이 그런 조상을 두면 깨진다 — 패키지가 소비자 CSS까지 통제할 수 없으므로 강제하지 않는다.
@@ -20,3 +26,5 @@
 ## 검증
 
 [`G-TST-001`](./G-TST-001-test-overlays-and-keyboard-interactions.md)을 적용하되, fixed overlay의 clamp 검증 대신 앵커가 뷰포트 밖으로 나간 뒤 네이티브 `scrollIntoView()`·Tab 포커스·Playwright 클릭 각각이 실제로 앵커를 뷰포트 안으로 데려오는지 Chromium E2E로 확인한다.
+
+안쪽 스크롤 컨테이너 대응은 jsdom으로 재현하지 못한다(레이아웃이 없다). 단위 테스트는 `stubRect`로 rect를 주입해 판정 로직을 보고, 실제 위치는 Chromium E2E로 확인한다. 예: `e2e/showcase-static-toolbar-overlays.spec.ts`.

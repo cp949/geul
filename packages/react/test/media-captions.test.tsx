@@ -9,13 +9,15 @@
  * Shift+Enter로 실제 줄바꿈을 넣을 수 있다(Q3, `<textarea>`).
  */
 import { DEFAULT_DICTIONARY, type DocumentChangeEvent } from "@cp949/geul-core";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { setMediaCaptionEditing } from "../src/media-caption-editing-store.js";
 import { MediaCaptions } from "../src/media-captions.js";
 import {
   mountBlockEditor,
   type MountBlockEditorOptions,
+  stubRect,
 } from "./mount-editor.js";
 
 afterEach(cleanup);
@@ -268,5 +270,69 @@ describe("캡션 폭 — 이미지 실측 폭에 맞추고 하한(8rem/128px)을
     // 원래 이미지 중심(100 + 40/2 = 120)을 기준으로 128px 폭이 양쪽 절반씩
     // 늘어난다 — left = 120 - 128/2 = 56.
     expect(container?.style.left).toBe("56px");
+  });
+});
+
+describe("스크롤 컨테이너 clip", () => {
+  // 에디터 host를 overflow 컨테이너로 보고 y 0~100만 보이게 한다. 캡션은
+  // 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못하므로, 오버레이 자신의
+  // 박스가 그 영역 안에 완전히 들어올 때만 보이게 한다. unmount하지 않고
+  // visibility로 숨긴다 — 오버레이의 실측 높이가 core spacer DOM에 되먹여
+  // 문서 flow의 자리를 예약하므로(media-captions.tsx), 빼면 스크롤 중
+  // 레이아웃이 밀린다.
+  const twoImages = [0, 1].map((index) => ({
+    id: `image-${index + 1}`,
+    type: "image" as const,
+    url: "https://example.com/a.png",
+    caption: `설명 ${index + 1}`,
+  }));
+
+  const setup = () => {
+    const { host } = renderCaptions({ initialBlocks: twoImages });
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    const overlays = Array.from(
+      document.querySelectorAll<HTMLElement>(".geul-media-caption"),
+    );
+    return { host, first: overlays[0]!, second: overlays[1]! };
+  };
+
+  it("오버레이 박스가 영역 안이면 보이고 밖이면 숨긴다", () => {
+    const { host, first, second } = setup();
+    stubRect(first, { left: 0, top: 10, width: 200, height: 24 });
+    stubRect(second, { left: 0, top: 300, width: 200, height: 24 });
+    fireEvent.scroll(host);
+
+    expect(first.style.visibility).toBe("");
+    expect(second.style.visibility).toBe("hidden");
+  });
+
+  it("경계에 걸쳐 일부만 보이는 캡션도 숨긴다", () => {
+    const { host, first, second } = setup();
+    stubRect(first, { left: 0, top: -10, width: 200, height: 24 });
+    stubRect(second, { left: 0, top: 90, width: 200, height: 24 });
+    fireEvent.scroll(host);
+
+    expect(first.style.visibility).toBe("hidden");
+    expect(second.style.visibility).toBe("hidden");
+  });
+
+  it("스크롤해서 영역 안으로 들어오면 다시 보인다", () => {
+    const { host, first, second } = setup();
+    stubRect(first, { left: 0, top: -50, width: 200, height: 24 });
+    stubRect(second, { left: 0, top: 10, width: 200, height: 24 });
+    fireEvent.scroll(host);
+
+    expect(first.style.visibility).toBe("hidden");
+    expect(second.style.visibility).toBe("");
+  });
+
+  it("편집 중인 캡션은 영역 밖이어도 숨기지 않는다", () => {
+    const { host, second } = setup();
+    stubRect(second, { left: 0, top: 300, width: 200, height: 24 });
+    act(() => setMediaCaptionEditing({ blockId: "image-2", draft: "초안" }));
+    fireEvent.scroll(host);
+
+    expect(second.style.visibility).toBe("");
   });
 });

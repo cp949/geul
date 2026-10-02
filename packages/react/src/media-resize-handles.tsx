@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { findElementByAttribute } from "./find-by-attribute.js";
+import { isRectInClipBoxes, readScrollClipBoxes } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useMirroredState } from "./use-mirrored-state.js";
@@ -120,6 +121,7 @@ type RenderTarget = {
 const resolveRenderTarget = (
   editor: ReturnType<typeof useEditor>,
   element: HTMLElement | null,
+  resizing: boolean,
 ): RenderTarget | null => {
   if (element === null) return null;
   const media = editor.getSelectionMediaBlock();
@@ -141,6 +143,24 @@ const resolveRenderTarget = (
   // 자동 스크롤을 전부 no-op으로 만든다(Issue #163과 같은 근본 원인, Issue
   // #164).
   const mediaRect = readPageRect(mediaElement);
+  // 핸들은 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
+  // 핸들 자신의 박스(미디어 좌우 가장자리, 세로 중앙)가 컨테이너의 보이는
+  // 영역 안에 들어올 때만 그린다. 미디어가 커서 일부만 보여도 중앙이 영역
+  // 밖이면 핸들이 경계 밖에 떠 있게 되므로 미디어 rect가 아니라 핸들 박스를
+  // 잰다. 드래그 중에는 숨기지 않는다(pointer capture를 쥔 핸들이 사라지면
+  // 드래그가 끊긴다).
+  if (!resizing) {
+    const viewportRect = mediaElement.getBoundingClientRect();
+    const handleBox = new DOMRect(
+      viewportRect.left - HANDLE_HALF,
+      viewportRect.top + viewportRect.height / 2 - HANDLE_HALF,
+      HANDLE_HALF * 2,
+      HANDLE_HALF * 2,
+    );
+    if (!isRectInClipBoxes(handleBox, readScrollClipBoxes(element))) {
+      return null;
+    }
+  }
   const maxWidth = Math.round(wrapper.getBoundingClientRect().width);
   return { blockId: media.blockId, mediaRect, maxWidth };
 };
@@ -191,9 +211,12 @@ export const MediaResizeHandles = () => {
     ownerDocument?.addEventListener("selectionchange", bumpSelectionVersion);
     ownerDocument?.addEventListener("mouseup", bumpSelectionVersion);
     ownerDocument?.addEventListener("keyup", bumpSelectionVersion);
-    // G-UI-003: absolute 요소는 스크롤에 자동으로 따라오므로 scroll
-    // 리스너로 강제 재렌더할 필요가 없다(Issue #164) — resize·앵커 크기
-    // 변화만 재계산 대상이다.
+    // G-UI-003: absolute 요소는 창 스크롤에 자동으로 따라오므로(Issue #164)
+    // 창 스크롤만으로는 재렌더가 필요 없다. 하지만 안쪽 스크롤 컨테이너가
+    // 움직이면 미디어의 page 좌표가 바뀌는데 핸들은 제자리에 남는다 —
+    // scroll(capture)을 구독해 다시 읽는다. 창 스크롤에도 한 번 더 렌더되지만
+    // 선택 중인 미디어 하나만 읽는 값싼 렌더다.
+    ownerWindow?.addEventListener("scroll", bumpSelectionVersion, true);
     ownerWindow?.addEventListener("resize", bumpSelectionVersion);
     return () => {
       ownerDocument?.removeEventListener(
@@ -202,6 +225,7 @@ export const MediaResizeHandles = () => {
       );
       ownerDocument?.removeEventListener("mouseup", bumpSelectionVersion);
       ownerDocument?.removeEventListener("keyup", bumpSelectionVersion);
+      ownerWindow?.removeEventListener("scroll", bumpSelectionVersion, true);
       ownerWindow?.removeEventListener("resize", bumpSelectionVersion);
     };
   }, [bumpSelectionVersion, element]);
@@ -371,7 +395,7 @@ export const MediaResizeHandles = () => {
     });
   };
 
-  const target = resolveRenderTarget(editor, element);
+  const target = resolveRenderTarget(editor, element, resizeActive);
   if (target === null) return null;
 
   const { blockId, mediaRect, maxWidth } = target;

@@ -33,6 +33,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, MediaToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
+import { stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 
 // link-toolbar.test.tsx/file-panel.test.tsx와 같은 이유(@testing-library/react가
@@ -1641,5 +1642,53 @@ describe("MediaToolbar component override(슬라이스4 RD-001 DELTA-03)", () =>
 
     expect(screen.queryByRole("toolbar")).toBeNull();
     expect(screen.queryByRole("button", { name: "Custom delete" })).toBeNull();
+  });
+});
+
+describe("MediaToolbar 스크롤 컨테이너 clip", () => {
+  // 툴바는 컨테이너 바깥(position: fixed)에 그려져 컨테이너가 잘라내지
+  // 못한다. 에디터 host를 overflow 컨테이너로 보고, 툴바 자신의 박스가 그
+  // 보이는 영역 안에 완전히 들어올 때만 보이게 한다. 선택은 유지되므로
+  // 되돌아오면 다시 보인다. visibility: hidden은 접근성 트리에서도 빠지므로
+  // 숨은 툴바는 `{ hidden: true }`로 찾는다.
+  const setup = () => {
+    renderToolbar(
+      fakeController({ getSelectionMediaBlock: () => filledImageBlock }),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    return { host, toolbar: screen.getByRole("toolbar") };
+  };
+
+  it("툴바 박스가 보이는 영역 안이면 보인다", () => {
+    const { toolbar } = setup();
+    stubRect(toolbar, { left: 500, top: 10, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("스크롤로 영역 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    const { toolbar } = setup();
+    stubRect(toolbar, { left: 500, top: 300, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("hidden");
+    expect(screen.queryByRole("toolbar")).toBeNull();
+
+    stubRect(toolbar, { left: 500, top: 10, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("");
+    expect(screen.getByRole("toolbar")).toBeTruthy();
+  });
+
+  it("경계에 걸쳐 일부만 보이면 숨긴다", () => {
+    const { toolbar } = setup();
+    stubRect(toolbar, { left: 500, top: 80, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("hidden");
   });
 });

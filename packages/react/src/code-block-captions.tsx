@@ -3,6 +3,8 @@ import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -11,6 +13,7 @@ import {
   setCodeBlockCaptionEditing,
   useCodeBlockCaptionEditing,
 } from "./code-block-caption-editing-store.js";
+import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -106,6 +109,24 @@ export const CodeBlockCaptions = () => {
     focusEditor,
   });
 
+  // blockId -> 이 컴포넌트가 렌더한 오버레이(.geul-code-block-caption) DOM.
+  const overlayNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // 에디터가 안쪽 스크롤 컨테이너 안에 있으면 이 오버레이는 그 바깥에 그려져
+  // 컨테이너가 잘라내지 못한다 — 오버레이 자신의 박스가 컨테이너의 보이는
+  // 영역 안에 완전히 들어올 때만 보인다. 블록 rect가 아니라 오버레이 박스를
+  // 재는 이유는 caption이 블록 위쪽에 붙어(translateY) 블록이 일부 보여도
+  // 경계 밖에 걸칠 수 있어서다. 렌더마다(스크롤은 useSelectionRefresh가
+  // 렌더를 일으킨다) 레이아웃 직후 `visibility`만 갱신한다. 편집 중인
+  // caption은 예외다(입력이 숨겨지면 포커스를 잃는다).
+  useLayoutEffect(() => {
+    if (element === null) return;
+    const clipBoxes = readScrollClipBoxes(element);
+    for (const [blockId, node] of overlayNodesRef.current) {
+      syncClipVisibility(node, clipBoxes, blockId === editing?.blockId);
+    }
+  });
+
   if (element === null) return null;
 
   // data-geul-block-id는 <pre> 자신이 아니라 그 부모 blockContainer div가
@@ -169,6 +190,13 @@ export const CodeBlockCaptions = () => {
         return (
           <div
             key={blockId}
+            ref={(node) => {
+              if (node === null) {
+                overlayNodesRef.current.delete(blockId);
+              } else {
+                overlayNodesRef.current.set(blockId, node);
+              }
+            }}
             className="geul-code-block-caption"
             style={{
               position: "absolute",

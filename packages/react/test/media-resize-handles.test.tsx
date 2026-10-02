@@ -594,3 +594,68 @@ describe("리사이즈 중 element에 남기는 data-geul-media-resizing-block-i
     ).toBeNull();
   });
 });
+
+describe("안쪽 스크롤 컨테이너 스크롤", () => {
+  // 핸들은 page-relative absolute라 창 스크롤은 브라우저가 따라가지만, 안쪽
+  // 스크롤 컨테이너가 움직이면 미디어의 page 좌표가 바뀌는데도 아무도 다시
+  // 계산하지 않아 핸들이 제자리에 남았다. scroll(capture)을 구독해 다시 읽는다.
+  const imageSelected = () =>
+    renderHandles(
+      fakeController({
+        getSelectionMediaBlock: () => filledImageSelection,
+      }),
+    );
+
+  const container = (): HTMLElement => {
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    host.style.overflowY = "auto";
+    return host;
+  };
+
+  it("스크롤하면 미디어를 따라 핸들 위치를 다시 계산한다", () => {
+    imageSelected();
+    // jsdom 기본 rect는 0×0이라 컨테이너 영역을 크게 지정해야 미디어가 보인다.
+    stubRect(container(), { left: 0, top: 0, width: 600, height: 300 });
+    // MEDIA_RECT: top 50, 높이 100 → 핸들 중심 y=100.
+    const before = Number.parseFloat(getHandle("left").style.top);
+
+    stubRect(getMediaElement(), { ...MEDIA_RECT, top: MEDIA_RECT.top - 30 });
+    fireEvent.scroll(container());
+
+    expect(Number.parseFloat(getHandle("left").style.top)).toBe(before - 30);
+  });
+
+  it("미디어가 컨테이너 보이는 영역 밖으로 나가면 핸들을 그리지 않고 돌아오면 다시 그린다", () => {
+    imageSelected();
+    stubRect(container(), { left: 0, top: 0, width: 600, height: 300 });
+
+    stubRect(getMediaElement(), { ...MEDIA_RECT, top: 500 });
+    fireEvent.scroll(container());
+    expect(
+      document.querySelector("[data-geul-media-resize-handle]"),
+    ).toBeNull();
+
+    stubRect(getMediaElement(), MEDIA_RECT);
+    fireEvent.scroll(container());
+    expect(getHandle("left")).toBeTruthy();
+    expect(getHandle("right")).toBeTruthy();
+  });
+});
+
+describe("안쪽 스크롤 컨테이너 경계", () => {
+  it("미디어 일부가 보여도 핸들(세로 중앙)이 영역 밖이면 그리지 않는다", () => {
+    renderHandles(
+      fakeController({ getSelectionMediaBlock: () => filledImageSelection }),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    host.style.overflowY = "auto";
+    // 영역 y 0~300. 미디어 top 250/높이 200 → 위쪽 50px만 보이고 중앙(350)은 밖이다.
+    stubRect(host, { left: 0, top: 0, width: 600, height: 300 });
+    stubRect(getMediaElement(), { ...MEDIA_RECT, top: 250, height: 200 });
+    fireEvent.scroll(host);
+
+    expect(
+      document.querySelector("[data-geul-media-resize-handle]"),
+    ).toBeNull();
+  });
+});

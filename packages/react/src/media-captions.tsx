@@ -19,6 +19,7 @@ import {
   useMediaCaptionEditing,
 } from "./media-caption-editing-store.js";
 import { findMediaVisualElement } from "./media-handle-overlays.js";
+import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -131,6 +132,21 @@ export const MediaCaptions = () => {
         ) ?? null;
       if (spacer === null) continue;
       spacer.style.height = `${overlayNode.offsetHeight}px`;
+    }
+  });
+
+  // 에디터가 안쪽 스크롤 컨테이너 안에 있으면 이 오버레이는 그 바깥에 그려져
+  // 컨테이너가 잘라내지 못한다 — 오버레이 자신의 박스가 컨테이너의 보이는
+  // 영역 안에 완전히 들어올 때만 보인다(code-block-captions.tsx와 같은
+  // 규칙). unmount가 아니라 `visibility`다 — 위 spacer 되먹임이 이
+  // 오버레이의 실측 높이를 쓰므로, 빼면 spacer 높이가 틀어져 스크롤 중
+  // 레이아웃이 밀린다. 편집 중인 caption은 예외다(입력이 숨겨지면 포커스를
+  // 잃는다).
+  useLayoutEffect(() => {
+    if (element === null) return;
+    const clipBoxes = readScrollClipBoxes(element);
+    for (const [blockId, node] of overlayNodesRef.current) {
+      syncClipVisibility(node, clipBoxes, blockId === editing?.blockId);
     }
   });
 

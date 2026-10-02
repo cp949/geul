@@ -27,6 +27,7 @@ import {
   readBlockTopRightBounds,
 } from "./read-block-bounds.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
+import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
@@ -661,6 +662,15 @@ export const MediaToolbar = ({
     toolbarState.mode === "closed" ? 0 : toolbarState.top,
     "topRight",
   );
+  // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
+  // 잘라내지 못한다 — 툴바 자신의 박스가 컨테이너의 보이는 영역 안에 완전히
+  // 들어올 때만 보인다. mode·입력 상태는 건드리지 않고 `visibility`만
+  // 갱신한다(편집 중 입력의 포커스와 draft를 잃지 않는다). 스크롤마다
+  // updateFromSelection이 새 toolbarState를 만들어 이 렌더가 다시 돈다.
+  useLayoutEffect(() => {
+    if (element === null || menuRef.current === null) return;
+    syncClipVisibility(menuRef.current, readScrollClipBoxes(element), false);
+  });
   const focusEditor = useFocusEditor(element);
 
   // more-menu는 outer 컨테이너와 독립된 앵커를 쓴다 — view 모드에서 outer

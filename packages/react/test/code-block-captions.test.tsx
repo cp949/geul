@@ -22,6 +22,7 @@ import { CodeBlockCaptions } from "../src/code-block-captions.js";
 import {
   mountBlockEditor,
   type MountBlockEditorOptions,
+  stubRect,
 } from "./mount-editor.js";
 
 afterEach(cleanup);
@@ -301,5 +302,69 @@ describe("여러 codeBlock의 독립 오버레이(완료 조건 10)", () => {
     );
     expect(overlays).toHaveLength(2);
     expect(overlays[0]?.style.top).not.toBe(overlays[1]?.style.top);
+  });
+});
+
+describe("스크롤 컨테이너 clip", () => {
+  // 에디터 host를 overflow 컨테이너로 보고 y 0~100만 보이게 한다. 캡션은
+  // 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못하므로, 오버레이 자신의
+  // 박스가 그 영역 안에 완전히 들어올 때만 보이게 한다(블록이 일부만 보여도
+  // 블록 위쪽에 붙는 캡션은 경계 밖에 걸칠 수 있다). 숨김은 unmount가 아니라
+  // visibility다.
+  const twoCodeBlocks = [0, 1].map((index) => ({
+    id: `code-${index + 1}`,
+    type: "codeBlock" as const,
+    content: [{ text: "a" }],
+    caption: `설명 ${index + 1}`,
+  }));
+
+  const setup = () => {
+    const { host } = renderCaptions({ initialBlocks: twoCodeBlocks });
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    const overlays = Array.from(
+      document.querySelectorAll<HTMLElement>(".geul-code-block-caption"),
+    );
+    return { host, first: overlays[0]!, second: overlays[1]! };
+  };
+
+  it("오버레이 박스가 영역 안이면 보이고 밖이면 숨긴다", () => {
+    const { host, first, second } = setup();
+    stubRect(first, { left: 0, top: 10, width: 600, height: 24 });
+    stubRect(second, { left: 0, top: 300, width: 600, height: 24 });
+    fireEvent.scroll(host);
+
+    expect(first.style.visibility).toBe("");
+    expect(second.style.visibility).toBe("hidden");
+  });
+
+  it("경계에 걸쳐 일부만 보이는 캡션도 숨긴다", () => {
+    const { host, first, second } = setup();
+    stubRect(first, { left: 0, top: -10, width: 600, height: 24 });
+    stubRect(second, { left: 0, top: 90, width: 600, height: 24 });
+    fireEvent.scroll(host);
+
+    expect(first.style.visibility).toBe("hidden");
+    expect(second.style.visibility).toBe("hidden");
+  });
+
+  it("스크롤해서 영역 안으로 들어오면 다시 보인다", () => {
+    const { host, first, second } = setup();
+    stubRect(first, { left: 0, top: -50, width: 600, height: 24 });
+    stubRect(second, { left: 0, top: 10, width: 600, height: 24 });
+    fireEvent.scroll(host);
+
+    expect(first.style.visibility).toBe("hidden");
+    expect(second.style.visibility).toBe("");
+  });
+
+  it("편집 중인 캡션은 영역 밖이어도 숨기지 않는다(입력 포커스를 잃지 않는다)", () => {
+    const { host, second } = setup();
+    stubRect(second, { left: 0, top: 300, width: 600, height: 24 });
+    act(() => setCodeBlockCaptionEditing({ blockId: "code-2", draft: "초안" }));
+    fireEvent.scroll(host);
+
+    expect(second.style.visibility).toBe("");
+    expect(captionInput().value).toBe("초안");
   });
 });
