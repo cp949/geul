@@ -24,7 +24,7 @@ test("스크롤해도 툴바가 상단에 고정된 채로 유지된다", async 
     throw new Error("스크롤 전 toolbar bounding box를 얻지 못했다");
 
   // toolbar의 부모(example.module.css의 .scrollArea)를 끝까지 스크롤한다.
-  // 예제가 20개 문단을 넣어 스크롤이 실제로 일어나도록 만들었다(RD-001
+  // 예제가 40개 문단을 넣어 스크롤이 실제로 일어나도록 만들었다(RD-001
   // 완료 조건 6, example.tsx PARAGRAPH_COUNT 참고).
   const scrollArea = toolbar.locator("..");
   await scrollArea.evaluate((element) => {
