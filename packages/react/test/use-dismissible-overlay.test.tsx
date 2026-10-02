@@ -6,7 +6,7 @@
  * - 문서별 Escape LIFO: 한 번에 가장 나중에 열린 오버레이 하나만 닫는다.
  * - 이미 `preventDefault`된 keydown과 IME 조합 중 Escape 건너뛰기,
  *   modifier+Escape 닫힘 parity.
- * - `focusOnOpen`의 첫 활성 항목 탐색.
+ * - `focusOnOpen`의 첫 활성 항목 탐색과 `focusKey` 재실행.
  * - 바깥 pointerdown의 즉시성(ADR 0013)과 `startTransition` 계약(Issue #155).
  * - 공개 전환 전이라 `index.ts`가 module을 내보내지 않는다(RD-006에서 뒤집는다).
  */
@@ -43,6 +43,7 @@ type ItemSpec = {
 type ProbeProps = {
   open: boolean;
   focusOnOpen?: boolean;
+  focusKey?: unknown;
   items?: readonly ItemSpec[];
   onClose: (reason: DismissReason) => void;
   /** 훅이 돌려준 `close`를 테스트로 흘려보낸다. */
@@ -58,6 +59,7 @@ type ProbeProps = {
 const Probe = ({
   open,
   focusOnOpen = false,
+  focusKey,
   items = [{ role: "menuitem" }],
   onClose,
   onReady,
@@ -69,6 +71,7 @@ const Probe = ({
     allowSelectors: ALLOW_SELECTORS,
     onClose,
     focusOnOpen,
+    focusKey,
   });
   onReady?.(close);
   return (
@@ -378,6 +381,7 @@ describe("useDismissibleOverlay Escape", () => {
 
 type StackApi = {
   setOpen: (name: string, open: boolean) => void;
+  setFocusKey: (name: string, focusKey: string) => void;
   closed: string[];
   rerender: () => void;
 };
@@ -386,6 +390,7 @@ type StackOverlayProps = {
   name: string;
   host: HTMLElement | null;
   open: boolean;
+  focusKey: string | undefined;
   onClose: () => void;
 };
 
@@ -393,12 +398,13 @@ type StackOverlayProps = {
 let stackLog: string[] = [];
 
 /** 스택 테스트용 오버레이 하나. 이름만 다르고 훅 설정은 같다. */
-const StackOverlay = ({ host, open, onClose }: StackOverlayProps) => {
+const StackOverlay = ({ host, open, focusKey, onClose }: StackOverlayProps) => {
   useDismissibleOverlay({
     open,
     element: host,
     allowSelectors: ALLOW_SELECTORS,
     onClose,
+    focusKey,
   });
   return null;
 };
@@ -417,10 +423,15 @@ const StackHarness = ({
 }) => {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [openByName, setOpenByName] = useState<Record<string, boolean>>({});
+  const [focusKeyByName, setFocusKeyByName] = useState<Record<string, string>>(
+    {},
+  );
   const [, setTick] = useState(0);
   onReady({
     setOpen: (name, open) =>
       setOpenByName((prev) => ({ ...prev, [name]: open })),
+    setFocusKey: (name, focusKey) =>
+      setFocusKeyByName((prev) => ({ ...prev, [name]: focusKey })),
     closed: stackLog,
     rerender: () => setTick((tick) => tick + 1),
   });
@@ -432,6 +443,7 @@ const StackHarness = ({
           name={name}
           host={host}
           open={openByName[name] ?? false}
+          focusKey={focusKeyByName[name]}
           onClose={() => {
             stackLog.push(name);
             setOpenByName((prev) => ({ ...prev, [name]: false }));
@@ -514,6 +526,20 @@ describe("useDismissibleOverlay Escape LIFO", () => {
   });
 });
 
+describe("useDismissibleOverlay focusKey와 Escape LIFO", () => {
+  it("focusKey가 바뀌어도 열린 순서가 바뀌지 않는다", () => {
+    const stack = renderStack(["A", "B"]);
+    act(() => stack.setOpen("A", true));
+    act(() => stack.setOpen("B", true));
+
+    act(() => stack.setFocusKey("A", "next"));
+    pressEscape();
+
+    // 스택 항목이 다시 push되면 A가 맨 위로 올라 A가 먼저 닫힌다.
+    expect(stack.closed).toEqual(["B"]);
+  });
+});
+
 describe("useDismissibleOverlay focusOnOpen", () => {
   const roles = ["menuitem", "menuitemcheckbox", "menuitemradio", "option"];
   for (const role of roles) {
@@ -592,6 +618,50 @@ describe("useDismissibleOverlay focusOnOpen", () => {
     rerender(<Probe open focusOnOpen items={items} onClose={onClose} />);
 
     expect(document.activeElement).toBe(byId(container, "item-1"));
+  });
+});
+
+describe("useDismissibleOverlay focusKey", () => {
+  const items: ItemSpec[] = [{ role: "menuitem" }, { role: "menuitem" }];
+
+  it("focusKey가 바뀌면 열린 채로도 첫 항목에 다시 초점을 준다", () => {
+    const onClose = vi.fn();
+    const { container, rerender } = render(
+      <Probe open focusOnOpen focusKey="a" items={items} onClose={onClose} />,
+    );
+    byId(container, "item-1").focus();
+
+    rerender(
+      <Probe open focusOnOpen focusKey="b" items={items} onClose={onClose} />,
+    );
+
+    expect(document.activeElement).toBe(byId(container, "item-0"));
+  });
+
+  it("focusKey가 같으면 다시 렌더돼도 초점을 다시 주지 않는다", () => {
+    const onClose = vi.fn();
+    const { container, rerender } = render(
+      <Probe open focusOnOpen focusKey="a" items={items} onClose={onClose} />,
+    );
+    byId(container, "item-1").focus();
+
+    rerender(
+      <Probe open focusOnOpen focusKey="a" items={items} onClose={onClose} />,
+    );
+
+    expect(document.activeElement).toBe(byId(container, "item-1"));
+  });
+
+  it("focusOnOpen이 false면 focusKey가 바뀌어도 초점을 옮기지 않는다", () => {
+    const onClose = vi.fn();
+    const { container, rerender } = render(
+      <Probe open focusKey="a" items={items} onClose={onClose} />,
+    );
+    byId(container, "outside").focus();
+
+    rerender(<Probe open focusKey="b" items={items} onClose={onClose} />);
+
+    expect(document.activeElement).toBe(byId(container, "outside"));
   });
 });
 

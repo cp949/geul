@@ -39,6 +39,13 @@ type UseDismissibleOverlayOptions = {
   onClose: (reason: DismissReason) => void;
   /** true면 열릴 때 첫 활성 항목에 초점을 준다. 키보드로 열린 경우에만 true로 넘긴다. */
   focusOnOpen?: boolean;
+  /**
+   * 바뀌면 `focusOnOpen`의 첫 항목 초점을 다시 준다. `open`이 true인 채
+   * payload만 바뀌는 재열림용이다. 예: 열린 메뉴를 다른 대상의 핸들로 다시
+   * 여는 경우. 스택 항목과 리스너는 다시 만들지 않는다.
+   * `Object.is`로 비교한다.
+   */
+  focusKey?: unknown;
 };
 
 /**
@@ -154,6 +161,7 @@ export const useDismissibleOverlay = ({
   allowSelectors,
   onClose,
   focusOnOpen = false,
+  focusKey,
 }: UseDismissibleOverlayOptions): ((reason: DismissReason) => void) => {
   const focusEditor = useFocusEditor(element);
 
@@ -217,7 +225,7 @@ export const useDismissibleOverlay = ({
   useEffect(() => {
     if (!open || !focusOnOpen || element === null) return;
     focusFirstItem(element.ownerDocument, latest.current.allowSelectors);
-  }, [open, focusOnOpen, element]);
+  }, [open, focusOnOpen, focusKey, element]);
 
   return close;
 };
