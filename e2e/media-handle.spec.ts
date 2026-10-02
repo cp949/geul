@@ -20,10 +20,17 @@
  * 자체에는 depth 분기가 없어(table-handle-geometry.ts) 40단계에서 성립하면
  * 그 위의 depth에서도 같은 공식이 그대로 성립한다 — RD-001.md 완료 조건
  * 1의 증거를 이 depth로 갱신했다(RD-001-DELTA-03.md "## 결과" 참고).
+ *
+ * Issue #233 RD-002 DELTA-02: media 메뉴가 useDismissibleOverlay를 거친다.
+ * 편집기 초점의 Escape(ProseMirror가 preventDefault)와 핸들 Enter 열림의 초점은
+ * jsdom이 재현하지 못해 이 spec이 Chromium으로 확인한다. G-TST-001: Escape로
+ * 닫는 UI는 `--workers` 병렬로도 반복한다. `fullyParallel: false`라
+ * `--fully-parallel`을 함께 준다.
  */
 import { expect, type Page, test } from "@playwright/test";
 
 import { openDemo } from "./support/demo.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 const DEPTH_TEST_IMAGE_URL = "https://example.com/dir/depth-test.png";
 
@@ -257,4 +264,110 @@ test("그립 클릭으로 연 Block menu가 스크롤 중에도 media를 따라�
       return Math.abs(menuBox.y - (mediaBox.y + 28));
     })
     .toBeLessThan(24);
+});
+
+/**
+ * media와 꼬리 문단뿐인 문서를 올리고 꼬리 문단을 클릭해 편집기에 초점을 둔 뒤
+ * media를 hover해 핸들을 띄운다. 핸들은 hover 중인 블록에만 뜨므로 메뉴를 열기 전에
+ * hover가 필요하다.
+ * media를 클릭하지 않는 이유: NodeSelection이 서면 media toolbar(옛 훅)가 함께 열려
+ * Escape를 먼저 소비한다. 그 과도기 동작은 이 spec의 대상이 아니다(RD-003).
+ */
+const openWithMediaHandle = async (page: Page) => {
+  await routeDepthTestImage(page);
+  const { editable } = await openDemo(page);
+  await loadDocument(page, buildMediaDepthDocument(0));
+  await editable.locator('[data-geul-block-id="tail-1"]').click();
+  // ProseMirror는 클릭한 selection을 selectionchange 뒤 비동기로 반영한다.
+  await yieldFrame(page);
+  const media = editable.locator('[data-geul-block-id="media-leaf"]');
+  await media.hover();
+  const handle = page.getByRole("button", { name: "Drag to reorder" });
+  await expect(handle).toBeVisible();
+  return {
+    handle,
+    menu: page.getByRole("menu", { name: "Block menu" }),
+    editable,
+  };
+};
+
+test("마우스로 연 media 메뉴는 초점이 편집기에 있어도 Escape로 닫히고 초점이 편집기에 남는다", async ({
+  page,
+}) => {
+  // ProseMirror는 편집기 안의 Escape를 preventDefault한다. 마우스로 연 메뉴는
+  // 초점이 편집기에 남으므로 이 Escape가 module까지 닿아야 닫힌다.
+  const { handle, menu, editable } = await openWithMediaHandle(page);
+  await expect(editable).toBeFocused();
+
+  await handle.click();
+  await expect(menu).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(menu).toHaveCount(0);
+  await expect(editable).toBeFocused();
+});
+
+test("핸들에서 Enter로 연 media 메뉴는 첫 항목에 초점을 두고 Escape는 편집기로 초점을 돌린다", async ({
+  page,
+}) => {
+  const { handle, menu, editable } = await openWithMediaHandle(page);
+
+  await handle.focus();
+  await page.keyboard.press("Enter");
+
+  await expect(menu).toBeVisible();
+  // 첫 블록의 Indent는 aria-disabled라 초점 대상이 아니다(G-UI-004).
+  await expect(
+    menu.getByRole("menuitem", { disabled: false }).first(),
+  ).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(menu).toHaveCount(0);
+  await expect(editable).toBeFocused();
+});
+
+test("블록 메뉴가 열린 채 media 핸들을 Enter로 열면 초점이 media 메뉴의 첫 활성 항목에 간다", async ({
+  page,
+}) => {
+  // 두 메뉴는 `data-geul-block-menu`를 공유한다. 문서 순서상 첫 표면은 블록 메뉴라서
+  // 소유자 셀렉터가 없으면 초점이 블록 메뉴의 첫 항목으로 간다(Issue #233).
+  await routeDepthTestImage(page);
+  const { editable } = await openDemo(page);
+  await loadDocument(page, {
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      { id: "p1", type: "paragraph", content: [{ text: "첫 문단" }] },
+      { id: "media-leaf", type: "image", url: DEPTH_TEST_IMAGE_URL },
+      { id: "tail-1", type: "paragraph", content: [] },
+    ],
+  });
+  await editable.locator('[data-geul-block-id="tail-1"]').click();
+  await yieldFrame(page);
+
+  await editable.locator('[data-geul-block-id="p1"]').hover();
+  await page
+    .locator(".geul-block-gutter")
+    .getByRole("button", { name: "Drag to reorder" })
+    .click();
+  const blockMenu = page.locator('[data-geul-menu-owner="block"]');
+  await expect(blockMenu).toBeVisible();
+
+  await editable.locator('[data-geul-block-id="media-leaf"]').hover();
+  const mediaHandle = page
+    .locator(".geul-media-handle-overlay")
+    .getByRole("button", { name: "Drag to reorder" });
+  await expect(mediaHandle).toBeVisible();
+  await mediaHandle.focus();
+  await page.keyboard.press("Enter");
+
+  const mediaMenu = page.locator('[data-geul-menu-owner="media"]');
+  await expect(mediaMenu).toBeVisible();
+  await expect(
+    mediaMenu.locator('[role="menuitem"]:not([aria-disabled="true"])').first(),
+  ).toBeFocused();
+  await expect(blockMenu.locator(":focus")).toHaveCount(0);
 });

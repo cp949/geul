@@ -13,12 +13,28 @@
  * DELTA-02) — 이 테스트도 `../src/media-handle-overlays.js`에서 직접
  * import한다. `slash-menu.tsx` 마운트·공용 gutter의 media 제외는 DELTA-02,
  * e2e는 DELTA-03(RD-001-DELTA-01.md).
+ *
+ * 추가 주제(Issue #233, RD-002 DELTA-02): 메뉴가 useDismissibleOverlay를 거친다.
+ * - 핸들 keydown(Enter·Space)으로 연 메뉴의 첫 항목 초점과 신호 소비.
+ * - 키보드로 연 메뉴에서 다른 media 핸들을 다시 열 때의 재초점과 대상 전환 재마운트.
+ * - 대상 블록 삭제 시 닫힘(internal·external), 열자마자의 삭제, 닫힐 때 초점 규칙.
+ * - Escape(편집기가 먼저 막은 키 포함)·바깥 클릭·핸들 재클릭·항목 클릭 닫힘의 초점.
+ * - 블록 사이드 메뉴와 함께 열렸을 때의 키보드 초점 소유자와 Escape LIFO.
  */
 
-import { DEFAULT_DICTIONARY } from "@cp949/geul-core";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BlockSideMenu } from "../src/block-side-menu.js";
+import { EditorContent, EditorProvider, useEditor } from "../src/index.js";
 import {
   findMediaVisualElement,
   MediaHandleOverlays,
@@ -26,6 +42,7 @@ import {
 import {
   mountBlockEditor,
   type MountBlockEditorOptions,
+  stubRect,
 } from "./mount-editor.js";
 
 // jsdom은 setPointerCapture를 구현하지 않는다(block-side-menu.test.tsx와
@@ -431,5 +448,681 @@ describe("그립 드래그 재정렬(완료 조건 6, 그릴링 결정 — 클�
     expect(
       rendered.editor.getDocument().blocks.map((block) => block.id),
     ).toEqual(before);
+  });
+});
+
+const MEDIA_URL = "https://example.com/x.png";
+
+/** `MEDIA_URL`을 가리키는 image 블록 fixture. id만 테스트마다 다르다. */
+const imageBlock = (id: string) => ({
+  id,
+  type: "image" as const,
+  url: MEDIA_URL,
+});
+// TrailingBlockExtension 함정(위 plus 버튼 테스트와 같은 이유) — 명시 문단으로 닫는다.
+const tailBlock = {
+  id: "tail-1",
+  type: "paragraph" as const,
+  content: [],
+};
+
+/**
+ * 삭제 테스트용 media 문서. 블록이 최소 하나 남아야 해서 media 둘과 꼬리 문단을 둔다.
+ * `image-1`이 메뉴 대상이고 `image-2`는 다른 블록이다.
+ */
+const twoImageBlocks = () => [
+  imageBlock("image-1"),
+  imageBlock("image-2"),
+  tailBlock,
+];
+
+/**
+ * 첫 번째 media 핸들을 hover -> click해 메뉴를 연다. 초점은 편집기에 둔 채로 둬서
+ * "초점이 메뉴로 옮겨졌는가"를 판정할 수 있게 한다. fireEvent.click의 기본 detail은
+ * 0이라 재오픈 억제 가드를 타지 않는다(위 그립 클릭 테스트와 같은 근거).
+ */
+const openMediaMenu = (
+  initialBlocks: MountBlockEditorOptions["initialBlocks"] = twoImageBlocks(),
+) => {
+  const rendered = renderMediaOverlays({ initialBlocks });
+  const [media] = rendered.blocks;
+  if (media === undefined) throw new Error("media 요소가 없다");
+  rendered.editable.focus();
+  fireEvent.pointerMove(media);
+  fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+  return rendered;
+};
+
+/**
+ * 첫 번째 media 핸들에 키보드 열림 신호(keydown)를 보낸 뒤 click한다.
+ * 브라우저는 핸들에 초점이 있을 때 Enter·Space를 keydown 뒤 click으로 바꾼다.
+ * keydown 없이 click만 쏘는 jsdom 기본 호출과 이 경로를 구분하는 데 쓴다.
+ */
+const openMediaMenuViaKeyboard = (key: "Enter" | " ") => {
+  const rendered = renderMediaOverlays({ initialBlocks: twoImageBlocks() });
+  const [media] = rendered.blocks;
+  if (media === undefined) throw new Error("media 요소가 없다");
+  rendered.editable.focus();
+  fireEvent.pointerMove(media);
+  const handle = screen.getByRole("button", { name: dragHandleLabel });
+  fireEvent.keyDown(handle, { key });
+  fireEvent.click(handle);
+  return rendered;
+};
+
+/**
+ * 메뉴의 첫 활성 항목. 비활성 항목은 `aria-disabled="true"`로 표시된다(G-UI-004).
+ * media 메뉴는 Turn into 목록이 없고 첫 블록의 Indent가 비활성이라 첫 `menuitem`이
+ * 초점 대상이 아닐 수 있다.
+ */
+const firstActiveMenuItem = (): HTMLElement => {
+  const item = screen
+    .getAllByRole("menuitem")
+    .find((candidate) => candidate.getAttribute("aria-disabled") !== "true");
+  if (item === undefined) throw new Error("활성 메뉴 항목이 없다");
+  return item;
+};
+
+/**
+ * `useEditor()`로 얻은 컨트롤러를 ref에 담는 렌더 없는 컴포넌트.
+ * internal ownership 마운트는 컨트롤러를 호출부가 만들지 않아 이렇게 꺼낸다.
+ */
+const EditorCapture = ({
+  editorRef,
+}: {
+  editorRef: { current: EditorController | null };
+}) => {
+  editorRef.current = useEditor();
+  return null;
+};
+
+/**
+ * EditorProvider가 createEditor()를 직접 만드는 internal ownership 마운트.
+ * 삭제 닫힘이 external·internal 양쪽에서 같은지 보는 데 쓴다. 컨트롤러는
+ * `useEditor()`를 호출하는 캡처 컴포넌트로 꺼낸다.
+ */
+const mountInternalMediaEditor = (
+  blocks: MountBlockEditorOptions["initialBlocks"] = twoImageBlocks(),
+) => {
+  const editorRef: { current: EditorController | null } = { current: null };
+  render(
+    <EditorProvider
+      initialDocument={{
+        formatVersion: 1,
+        revision: 0,
+        blocks: blocks ?? [],
+      }}
+    >
+      <EditorCapture editorRef={editorRef} />
+      <MediaHandleOverlays onBlockAdded={vi.fn()} />
+      <EditorContent />
+    </EditorProvider>,
+  );
+  const editor = editorRef.current;
+  if (editor === null) throw new Error("internal editor를 capture하지 못했다");
+  const host = screen.getByRole("textbox", { name: "Editor" });
+  const blockElements = Array.from(
+    host.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
+  );
+  blockElements.forEach((block, index) => {
+    const rect = { left: 0, top: index * 20, width: 600, height: 20 };
+    stubRect(block, rect);
+    const visual = findMediaVisualElement(block);
+    if (visual !== null) stubRect(visual, rect);
+  });
+  return { editor, blocks: blockElements, host };
+};
+
+const openInternalMediaMenu = (
+  blocks?: MountBlockEditorOptions["initialBlocks"],
+) => {
+  const rendered = mountInternalMediaEditor(blocks);
+  const [media] = rendered.blocks;
+  if (media === undefined) throw new Error("media 요소가 없다");
+  fireEvent.pointerMove(media);
+  fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+  return rendered;
+};
+
+describe("media 메뉴 키보드 열림 초점(Issue #233 RD-002 DELTA-02)", () => {
+  it("핸들에서 Enter keydown 뒤 click으로 열면 첫 활성 항목에 초점을 준다", () => {
+    openMediaMenuViaKeyboard("Enter");
+
+    const menu = screen.getByRole("menu", { name: "Block menu" });
+    expect(document.activeElement).toBe(firstActiveMenuItem());
+    expect(menu.contains(document.activeElement)).toBe(true);
+  });
+
+  it("핸들에서 Space keydown 뒤 click으로 열어도 첫 활성 항목에 초점을 준다", () => {
+    openMediaMenuViaKeyboard(" ");
+
+    expect(document.activeElement).toBe(firstActiveMenuItem());
+  });
+
+  it("keydown 없이 click만 오면 초점을 옮기지 않는다", () => {
+    const rendered = openMediaMenu();
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("남아 있던 keydown 신호는 마우스 pointerdown이 지워 그 뒤 click은 초점을 옮기지 않는다", () => {
+    const rendered = renderMediaOverlays({ initialBlocks: twoImageBlocks() });
+    const [media] = rendered.blocks;
+    if (media === undefined) throw new Error("media 요소가 없다");
+    rendered.editable.focus();
+    fireEvent.pointerMove(media);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    // 키로 눌렀지만 click이 오지 않은 신호가 남은 상태를 만든다.
+    fireEvent.keyDown(handle, { key: "Enter" });
+
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    fireEvent.click(handle, { detail: 1 });
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("다른 키의 keydown은 키보드 열림 신호가 아니다", () => {
+    const rendered = renderMediaOverlays({ initialBlocks: twoImageBlocks() });
+    const [media] = rendered.blocks;
+    if (media === undefined) throw new Error("media 요소가 없다");
+    rendered.editable.focus();
+    fireEvent.pointerMove(media);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+
+    fireEvent.keyDown(handle, { key: "a" });
+    fireEvent.click(handle);
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("Enter로 연 뒤 닫고 keydown 없이 click만 보내면 초점이 메뉴로 가지 않는다(click이 신호를 소비한다)", () => {
+    const rendered = openMediaMenuViaKeyboard("Enter");
+    expect(document.activeElement).toBe(firstActiveMenuItem());
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+
+    // 앞선 keydown 신호가 click에서 소비됐다면 이번 click은 키보드 열림이 아니다.
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("메뉴 패널은 tabIndex -1을 가져 활성 항목이 없을 때 초점을 받을 수 있다", () => {
+    openMediaMenu();
+
+    expect(
+      screen.getByRole("menu", { name: "Block menu" }).getAttribute("tabindex"),
+    ).toBe("-1");
+  });
+});
+
+describe("media 메뉴 키보드 연속 열림(Issue #233 RD-002 DELTA-02)", () => {
+  it("키보드로 연 메뉴에서 다른 media 핸들을 키보드로 다시 열면 새 메뉴의 첫 항목에 초점을 준다", () => {
+    const rendered = renderMediaOverlays({ initialBlocks: twoImageBlocks() });
+    const [media1, media2] = rendered.blocks;
+    if (media1 === undefined || media2 === undefined) {
+      throw new Error("media 요소가 없다");
+    }
+    rendered.editable.focus();
+    fireEvent.pointerMove(media1);
+    let handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+    expect(document.activeElement).toBe(firstActiveMenuItem());
+
+    // 메뉴를 닫지 않은 채 image-2의 핸들을 다시 키보드로 연다. 메뉴가 key로
+    // 재마운트되면 초점을 가진 이전 항목이 지워지므로 focusKey가 새 메뉴에
+    // 초점을 다시 줘야 한다.
+    fireEvent.pointerMove(media2);
+    handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+
+    const menu = screen.getByRole("menu", { name: "Block menu" });
+    expect(menu.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(firstActiveMenuItem());
+    expect(document.activeElement?.tagName).not.toBe("BODY");
+  });
+});
+
+describe("media 메뉴 대상 전환 재마운트(Issue #233 RD-002 DELTA-02)", () => {
+  it("메뉴가 열린 채 다른 media 핸들로 다시 열면 메뉴를 새로 마운트한다", () => {
+    const rendered = renderMediaOverlays({ initialBlocks: twoImageBlocks() });
+    const [media1, media2] = rendered.blocks;
+    if (media1 === undefined || media2 === undefined) {
+      throw new Error("media 요소가 없다");
+    }
+    fireEvent.pointerMove(media1);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    const firstMenu = screen.getByRole("menu", { name: "Block menu" });
+
+    fireEvent.pointerMove(media2);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    // 메뉴는 열 때의 block type을 lazy init으로 붙든다. 재마운트하지 않으면
+    // 이전 대상의 상태가 새 대상에 남는다. media는 type descriptor가 null이라
+    // 지금은 DOM 노드가 바뀌는지로만 관측된다.
+    const secondMenu = screen.getByRole("menu", { name: "Block menu" });
+    expect(secondMenu).not.toBe(firstMenu);
+  });
+});
+
+describe("media 메뉴 대상 블록 삭제 시 닫힘(Issue #233 RD-002 DELTA-02)", () => {
+  it("external 마운트에서 메뉴가 연 블록을 deleteBlock하면 메뉴가 닫힌다", async () => {
+    const rendered = openMediaMenu();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    const deleted = rendered.editor.commands.deleteBlock("image-1");
+    if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+    // 구독 통지는 커밋 뒤 effect가 판정한다. 동기 단언이 아니라 수렴을 기다린다.
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("internal 마운트에서도 메뉴가 연 블록을 deleteBlock하면 메뉴가 닫힌다", async () => {
+    const rendered = openInternalMediaMenu();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    const deleted = rendered.editor.commands.deleteBlock("image-1");
+    if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("메뉴가 연 블록이 아닌 다른 블록을 삭제하면 메뉴가 닫히지 않는다", async () => {
+    const rendered = openMediaMenu();
+
+    const deletedOther = rendered.editor.commands.deleteBlock("image-2");
+    if (!deletedOther.ok) throw new Error("다른 블록 삭제 fixture 준비 실패");
+
+    // 구독 통지와 커밋 뒤 판정이 끝나도록 flush한 다음에 단언한다. 삭제 직후의
+    // 동기 단언은 판정이 돌기 전이라 어떤 구현에서도 통과한다.
+    await act(async () => {});
+    expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
+
+    // 판정이 살아 있음을 같은 테스트에서 확인한다. 대상 블록을 삭제하면 닫힌다.
+    // 이 확인이 없으면 위 단언은 "삭제를 아예 감지하지 않는다"와 구분되지 않는다.
+    const deletedTarget = rendered.editor.commands.deleteBlock("image-1");
+    if (!deletedTarget.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("초점이 메뉴 안에 있을 때 대상 블록이 삭제돼 닫히면 초점을 편집기로 돌린다", async () => {
+    const rendered = openMediaMenu();
+    screen.getByRole("menuitem", { name: "Duplicate" }).focus();
+    expect(screen.getByRole("menu").contains(document.activeElement)).toBe(
+      true,
+    );
+
+    const deleted = rendered.editor.commands.deleteBlock("image-1");
+    if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+/**
+ * 편집기 밖에 `<input>`을 만들어 초점을 준다. 편집기 밖 입력에 초점이 있을 때
+ * 메뉴가 닫혀도 초점을 가져가지 않는지 판정하는 데 쓴다. 정리 함수를 돌려준다.
+ */
+const focusOutsideInput = (): {
+  input: HTMLInputElement;
+  remove: () => void;
+} => {
+  const input = document.createElement("input");
+  document.body.append(input);
+  input.focus();
+  return { input, remove: () => input.remove() };
+};
+
+describe("media 메뉴 삭제 닫힘의 초점 규칙(Issue #233 RD-002 DELTA-02)", () => {
+  it("internal 마운트에서 편집기 밖 입력에 초점이 있으면 대상 블록 삭제로 닫혀도 초점을 가져가지 않는다", async () => {
+    const rendered = openInternalMediaMenu();
+    const { input, remove } = focusOutsideInput();
+    try {
+      const deleted = rendered.editor.commands.deleteBlock("image-1");
+      if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).toBeNull();
+      });
+      expect(document.activeElement).toBe(input);
+    } finally {
+      remove();
+    }
+  });
+
+  it("external 마운트에서도 편집기 밖 입력의 초점을 가져가지 않는다", async () => {
+    const rendered = openMediaMenu();
+    const { input, remove } = focusOutsideInput();
+    try {
+      const deleted = rendered.editor.commands.deleteBlock("image-1");
+      if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).toBeNull();
+      });
+      expect(document.activeElement).toBe(input);
+    } finally {
+      remove();
+    }
+  });
+});
+
+describe("media 메뉴 대상 type 변경 시 닫힘의 초점 규칙(Issue #233 RD-002 DELTA-02)", () => {
+  it("internal 마운트에서 대상 블록이 같은 id의 다른 type으로 바뀌어 닫혀도 편집기 밖 입력의 초점을 가져가지 않는다", async () => {
+    const rendered = openInternalMediaMenu();
+    const { input, remove } = focusOutsideInput();
+    try {
+      // BlockSideMenuMenu는 열 때의 block type을 붙들고 있다가 같은 id의 type이
+      // 달라지면 `onInvalidated`로 닫는다. media는 descriptor가 null이라 같은 id가
+      // 문단이 되면 type이 달라진다.
+      const replaced = rendered.editor.replaceDocument({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "image-1", type: "paragraph", content: [] },
+          imageBlock("image-2"),
+          tailBlock,
+        ],
+      });
+      if (!replaced.ok) throw new Error("문서 교체 fixture 준비 실패");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).toBeNull();
+      });
+      expect(document.activeElement).toBe(input);
+    } finally {
+      remove();
+    }
+  });
+});
+
+describe("media 메뉴를 연 직후 같은 batch의 삭제(Issue #233 RD-002 DELTA-02)", () => {
+  it("external 마운트에서 열자마자 같은 act에서 대상을 삭제하면 메뉴가 닫힌다", async () => {
+    const rendered = renderMediaOverlays({ initialBlocks: twoImageBlocks() });
+    const [media] = rendered.blocks;
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+
+    act(() => {
+      fireEvent.click(handle);
+      rendered.editor.commands.deleteBlock("image-1");
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("internal 마운트에서도 열자마자 같은 act에서 대상을 삭제하면 메뉴가 닫힌다", async () => {
+    const rendered = mountInternalMediaEditor();
+    const [media] = rendered.blocks;
+    if (media === undefined) throw new Error("media 요소가 없다");
+    fireEvent.pointerMove(media);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+
+    act(() => {
+      fireEvent.click(handle);
+      rendered.editor.commands.deleteBlock("image-1");
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+});
+
+describe("media 메뉴 Escape·바깥 클릭·재클릭·항목 클릭의 초점(Issue #233 RD-002 DELTA-02)", () => {
+  it("Escape로 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
+    const rendered = openMediaMenu();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    // 초점이 편집기에 있으면 `escape` 규칙이 없어도 결과가 같아 단언이 공허하다.
+    // 편집기 밖 입력에 초점을 둬서 `escape` 규칙만 편집기로 돌리게 한다.
+    const { remove } = focusOutsideInput();
+
+    try {
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    } finally {
+      remove();
+    }
+  });
+
+  it("편집기가 Escape를 먼저 preventDefault해도 마우스로 연 메뉴가 닫히고 초점이 편집기에 남는다", () => {
+    const rendered = openMediaMenu();
+    rendered.editable.focus();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    // ProseMirror editHandlers.keydown이 편집기 안의 Escape를 막는 것을 흉내 낸다.
+    const consume = (event: Event) => event.preventDefault();
+    rendered.editable.addEventListener("keydown", consume);
+    try {
+      fireEvent.keyDown(rendered.editable, { key: "Escape" });
+    } finally {
+      rendered.editable.removeEventListener("keydown", consume);
+    }
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("메뉴 바깥 컨트롤을 누르면 초점을 그 컨트롤에 둔 채 메뉴만 닫는다", () => {
+    openMediaMenu();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    // 편집기 바깥 요소는 편집기가 만들지 않는다 — 실제 마운트로도 대신할
+    // 수 없는 유일한 조립이라 여기서 직접 만든다.
+    const outsideButton = document.createElement("button");
+    outsideButton.textContent = "outside";
+    document.body.append(outsideButton);
+    outsideButton.focus();
+
+    try {
+      fireEvent.pointerDown(outsideButton);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(outsideButton);
+    } finally {
+      outsideButton.remove();
+    }
+  });
+
+  it("메뉴 안(data-geul-block-menu)을 누르면 닫히지 않는다", () => {
+    openMediaMenu();
+
+    fireEvent.pointerDown(screen.getByRole("menu", { name: "Block menu" }));
+
+    expect(screen.queryByRole("menu")).not.toBeNull();
+  });
+
+  it("메뉴 항목에 초점이 있을 때 바깥 컨트롤을 누르면 초점을 편집기로 돌린다", () => {
+    const rendered = openMediaMenu();
+    screen.getByRole("menuitem", { name: "Duplicate" }).focus();
+    const outsideButton = document.createElement("button");
+    document.body.append(outsideButton);
+
+    try {
+      fireEvent.pointerDown(outsideButton);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      // 메뉴가 언마운트되며 초점이 BODY로 떨어지면 안 된다.
+      expect(document.activeElement).toBe(rendered.editable);
+    } finally {
+      outsideButton.remove();
+    }
+  });
+
+  it("같은 핸들 재클릭이 닫는 분기를 타면 메뉴를 닫고 편집기로 초점을 되돌린다", () => {
+    const rendered = openMediaMenu();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    // 초점이 편집기에 있으면 `outside` 규칙으로 닫아도 같은 결과라 단언이 공허하다.
+    // 편집기 밖 입력에 초점을 둬서 `trigger` 규칙만 편집기로 돌리게 한다.
+    const { remove } = focusOutsideInput();
+
+    try {
+      // 실제 마우스 재클릭은 pointerdown -> pointerup -> click 순서로 온다
+      // (G-TST-001). click만 쏘면 pointerdown의 메뉴 해제를 거치지 않는다.
+      const handle = screen.getByRole("button", { name: dragHandleLabel });
+      fireEvent.pointerDown(handle, { pointerId: 1 });
+      fireEvent.pointerUp(handle, { pointerId: 1 });
+      fireEvent.click(handle, { detail: 1 });
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    } finally {
+      remove();
+    }
+  });
+
+  it("항목 클릭으로 닫히면 편집기로 초점을 돌린다", () => {
+    const rendered = openMediaMenu();
+    // 위 재클릭 테스트와 같은 이유로 초점을 편집기 밖 입력에 둔다.
+    const { remove } = focusOutsideInput();
+
+    try {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    } finally {
+      remove();
+    }
+  });
+});
+
+/**
+ * 블록 사이드 메뉴와 media 핸들 오버레이를 production 마운트 순서(slash-menu.tsx:
+ * BlockSideMenu가 먼저)로 함께 마운트한다. 두 메뉴가 같은 allow 셀렉터를 공유해서
+ * 동시에 열렸을 때의 키보드 초점과 Escape 순서를 보는 데 쓴다.
+ */
+const renderBlockAndMediaOverlays = () =>
+  mountBlockEditor({
+    initialBlocks: [
+      { id: "para-1", type: "paragraph" as const, content: [{ text: "본문" }] },
+      imageBlock("image-1"),
+      tailBlock,
+    ],
+    children: (
+      <>
+        <BlockSideMenu onBlockAdded={vi.fn()} />
+        <MediaHandleOverlays onBlockAdded={vi.fn()} />
+      </>
+    ),
+  });
+
+/**
+ * 소유자(`data-geul-menu-owner`)별 메뉴 패널. 두 메뉴가 같은 `data-geul-block-menu`를
+ * 공유해서 `role="menu"` 조회로는 둘을 구분할 수 없다.
+ */
+const menuOwnedBy = (owner: "block" | "media"): HTMLElement | null =>
+  document.querySelector<HTMLElement>(`[data-geul-menu-owner="${owner}"]`);
+
+/**
+ * 소유자별 핸들. 블록 gutter와 media 오버레이가 둘 다 같은 접근성 이름의 핸들을
+ * 렌더해서 컨테이너로 구분한다.
+ */
+const handleOwnedBy = (owner: "block" | "media"): HTMLElement => {
+  const container =
+    owner === "block" ? ".geul-block-gutter" : ".geul-media-handle-overlay";
+  const handle = document.querySelector<HTMLElement>(
+    `${container} [data-geul-block-handle]`,
+  );
+  if (handle === null) throw new Error(`${owner} 핸들이 없다`);
+  return handle;
+};
+
+/** 메뉴 안의 첫 활성 항목. 비활성은 `aria-disabled="true"`다(G-UI-004). */
+const firstActiveItemOf = (menu: HTMLElement): HTMLElement => {
+  const item = Array.from(
+    menu.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+  ).find((candidate) => candidate.getAttribute("aria-disabled") !== "true");
+  if (item === undefined) throw new Error("활성 메뉴 항목이 없다");
+  return item;
+};
+
+describe("블록 메뉴와 media 메뉴가 함께 열릴 때(Issue #233 RD-002 DELTA-02 실측 위험)", () => {
+  it("블록 메뉴가 열린 채 media 핸들을 키보드로 열면 초점이 media 메뉴의 첫 활성 항목으로 간다", () => {
+    const rendered = renderBlockAndMediaOverlays();
+    const [paragraph, media] = rendered.blocks;
+    if (paragraph === undefined || media === undefined) {
+      throw new Error("블록 요소가 없다");
+    }
+    fireEvent.pointerMove(paragraph);
+    fireEvent.click(handleOwnedBy("block"));
+    expect(menuOwnedBy("block")).not.toBeNull();
+
+    fireEvent.pointerMove(media);
+    const mediaHandle = handleOwnedBy("media");
+    fireEvent.keyDown(mediaHandle, { key: "Enter" });
+    fireEvent.click(mediaHandle);
+
+    const mediaMenu = menuOwnedBy("media");
+    if (mediaMenu === null) throw new Error("media 메뉴가 열리지 않았다");
+    // 두 메뉴가 같은 `data-geul-block-menu`를 공유한다. 문서 순서상 첫 표면은
+    // 블록 메뉴라서 소유자 셀렉터가 없으면 초점이 그쪽으로 간다.
+    expect(mediaMenu.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(firstActiveItemOf(mediaMenu));
+  });
+
+  it("media 메뉴가 열린 채 블록 핸들을 키보드로 열면 초점이 블록 메뉴의 첫 활성 항목으로 간다", () => {
+    const rendered = renderBlockAndMediaOverlays();
+    const [paragraph, media] = rendered.blocks;
+    if (paragraph === undefined || media === undefined) {
+      throw new Error("블록 요소가 없다");
+    }
+    fireEvent.pointerMove(media);
+    fireEvent.click(handleOwnedBy("media"));
+    expect(menuOwnedBy("media")).not.toBeNull();
+
+    fireEvent.pointerMove(paragraph);
+    const blockHandle = handleOwnedBy("block");
+    fireEvent.keyDown(blockHandle, { key: "Enter" });
+    fireEvent.click(blockHandle);
+
+    const blockMenu = menuOwnedBy("block");
+    if (blockMenu === null) throw new Error("블록 메뉴가 열리지 않았다");
+    expect(blockMenu.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(firstActiveItemOf(blockMenu));
+  });
+
+  it("두 메뉴가 열린 채 Escape를 누르면 가장 나중에 연 media 메뉴가 먼저 닫히고 블록 메뉴가 남는다", () => {
+    const rendered = renderBlockAndMediaOverlays();
+    const [paragraph, media] = rendered.blocks;
+    if (paragraph === undefined || media === undefined) {
+      throw new Error("블록 요소가 없다");
+    }
+    fireEvent.pointerMove(paragraph);
+    fireEvent.click(handleOwnedBy("block"));
+    fireEvent.pointerMove(media);
+    fireEvent.click(handleOwnedBy("media"));
+    expect(menuOwnedBy("block")).not.toBeNull();
+    expect(menuOwnedBy("media")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    // 개수만 보면 FIFO(먼저 연 메뉴가 먼저 닫힘)와 구분되지 않는다. 남은 메뉴의
+    // 소유자로 순서를 본다.
+    expect(menuOwnedBy("media")).toBeNull();
+    expect(menuOwnedBy("block")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

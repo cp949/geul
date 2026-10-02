@@ -1,16 +1,19 @@
 import { GripVertical, MousePointerClick, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { computeDragGuide } from "./block-side-menu-geometry.js";
+import {
+  computeDragGuide,
+  findBlockInTreeForDrag,
+} from "./block-side-menu-geometry.js";
 import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
 import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { readPageRect } from "./table-handle-geometry.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-import { useFocusEditor } from "./use-focus-editor.js";
+import { useHandleKeyboardActivation } from "./use-handle-keyboard-activation.js";
 import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
@@ -72,12 +75,22 @@ const MEDIA_HOVER_IGNORE_SELECTORS = [
   "[data-geul-block-menu]",
 ] as const;
 
-// useDismissOnOutsideOrEscape allow-list. block-side-menu.tsx의
+// useDismissibleOverlay allow-list. block-side-menu.tsx의
 // BLOCK_MENU_DISMISS_ALLOW_SELECTORS와 같은 이유로 모듈 스코프 상수로 둔다.
+// 소유자 셀렉터를 맨 앞에 둔다. 블록 메뉴와 media 메뉴가 같은
+// `[data-geul-block-menu]`를 공유해서, focusOnOpen이 문서 순서상 첫 표면을
+// 고르면 남의 메뉴일 수 있다. 소유자 셀렉터가 앞이면 자기 메뉴를 먼저 찾는다.
+// 활성 항목이 없을 때는 그 첫 표면(패널)에 초점을 준다. 핸들이 앞이면 초점이
+// 핸들에 남는다. 아래 두 셀렉터는 바깥 클릭 판정용이다.
 const MEDIA_MENU_DISMISS_ALLOW_SELECTORS = [
+  '[data-geul-block-menu][data-geul-menu-owner="media"]',
   "[data-geul-block-menu]",
   "[data-geul-block-handle]",
 ] as const;
+
+// 열린 메뉴 상태. `viaKeyboard`는 `focusOnOpen`으로 module에 넘기는 값이다.
+// block-side-menu.tsx와 같은 모양이다.
+type OpenMediaMenuState = BlockMenuState & { viaKeyboard: boolean };
 
 export type MediaHandleOverlaysProps = {
   onBlockAdded: (blockId: string) => void;
@@ -117,7 +130,9 @@ export const MediaHandleOverlays = ({
   >(null);
   const [dragState, dragStateRef, updateDragState] =
     useMirroredState<DragState | null>(null);
-  const [menuState, setMenuState] = useState<BlockMenuState | null>(null);
+  const [menuState, setMenuState] = useState<OpenMediaMenuState | null>(null);
+  // 핸들 keydown이 세우고 click(onOpen 판정 전)이나 pointerdown이 지운다.
+  const keyboardActivation = useHandleKeyboardActivation();
   // iframe 전용 interaction 토글(CUS-001~004, RD-004 DELTA-03) — 모델/커맨드에
   // 저장하지 않는 순수 UI 상태다(spec §3 "모델/커맨드에 없다" 결정). 현재
   // interact 모드인 블록 id 하나만 추적한다 — 다른 블록에서 Interact를 누르면
@@ -128,7 +143,6 @@ export const MediaHandleOverlays = ({
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // block-side-menu.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
-  const focusEditor = useFocusEditor(element);
 
   // 리스너를 element가 아닌 document에 둔다 — 오버레이가 contenteditable
   // 바깥이라 element 안쪽에서만 hover를 추적하면 포인터가 버튼으로 이동하는
@@ -247,18 +261,44 @@ export const MediaHandleOverlays = ({
     onEscape: handleDragEscape,
   });
 
-  const dismissMenu = useCallback(() => setMenuState(null), []);
-  const closeMenu = useCallback(() => {
-    setMenuState(null);
-    focusEditor();
-  }, [focusEditor]);
-  useDismissOnOutsideOrEscape({
-    active: menuState !== null,
-    allowSelectors: MEDIA_MENU_DISMISS_ALLOW_SELECTORS,
+  // 리스너, reason별 초점 복귀, Escape LIFO, 키보드 열림 초점은
+  // useDismissibleOverlay가 소유한다(Issue #233). 항목 클릭·트리거 재클릭
+  // 닫힘은 `close("trigger")`로 편집기에 초점을 돌린다.
+  const close = useDismissibleOverlay({
+    open: menuState !== null,
     element,
-    onEscapeDismiss: closeMenu,
-    onOutsideDismiss: dismissMenu,
+    allowSelectors: MEDIA_MENU_DISMISS_ALLOW_SELECTORS,
+    onClose: () => setMenuState(null),
+    focusOnOpen: menuState?.viaKeyboard ?? false,
+    // 열린 채 다른 media 핸들로 다시 열면 payload만 바뀐다. 메뉴가 key로
+    // 재마운트돼 초점을 잃으므로 대상이 바뀔 때 초점을 다시 준다.
+    focusKey: menuState?.blockId,
   });
+  const closeFromTrigger = useCallback(() => close("trigger"), [close]);
+  const closeFromInvalidated = useCallback(() => close("invalidated"), [close]);
+
+  // 대상 블록이 사라지면 닫는다(`invalidated`). block-side-menu.tsx와 같은
+  // 규칙이다. 외부 controller command의 삭제는 internal·external 마운트
+  // 모두에서 `editor.subscribe`로만 알 수 있다. listener는 틱만 올린다 —
+  // Tiptap `transaction` emit이 세션 문서 갱신보다 앞서 listener 안의
+  // `getDocument()`는 한 단계 낡은 문서를 읽는다. 존재 판정은 커밋 뒤 effect가
+  // 한다.
+  const openBlockId = menuState?.blockId ?? null;
+  const [documentTick, setDocumentTick] = useState(0);
+  useEffect(() => {
+    if (openBlockId === null) return;
+    return editor.subscribe(() => setDocumentTick((tick) => tick + 1));
+  }, [editor, openBlockId]);
+  useEffect(() => {
+    if (openBlockId === null) return;
+    if (findBlockInTreeForDrag(editor.getDocument().blocks, openBlockId)) {
+      return;
+    }
+    close("invalidated");
+    // documentTick은 값을 읽지 않는 재실행 트리거다. openBlockId는 열자마자
+    // 같은 batch에서 삭제된 대상을 열린 직후 한 번 확인한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentTick, openBlockId]);
 
   // block-side-menu.tsx의 refreshBlockMenuGeometry와 같은 이유·같은 패턴
   // (Issue #187 RD-001 DELTA-03) — 열린 메뉴가 스크롤·리사이즈 중에도
@@ -381,6 +421,7 @@ export const MediaHandleOverlays = ({
   ) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    keyboardActivation.reset();
     reopenSuppression.onPointerDown(
       menuState !== null && menuState.blockId === blockId ? blockId : null,
     );
@@ -404,6 +445,8 @@ export const MediaHandleOverlays = ({
     event: React.MouseEvent<HTMLButtonElement>,
     blockId: string,
   ) => {
+    // hoverElement가 없어 onOpen이 아무것도 안 해도 신호는 이 click이 소비한다.
+    const viaKeyboard = keyboardActivation.consume();
     resolveReopenAwareClick(
       reopenSuppression,
       event,
@@ -413,7 +456,7 @@ export const MediaHandleOverlays = ({
         isCurrentlyOpen: menuState !== null && menuState.blockId === blockId,
       },
       {
-        onClose: closeMenu,
+        onClose: closeFromTrigger,
         onOpen: () => {
           if (hoverElement === null) return;
           // 메뉴(BlockSideMenuMenu)는 useClampedMenuPosition을 통해
@@ -427,7 +470,12 @@ export const MediaHandleOverlays = ({
           const anchorElement =
             findMediaVisualElement(hoverElement) ?? hoverElement;
           const rect = anchorElement.getBoundingClientRect();
-          setMenuState({ blockId, left: rect.left, top: rect.top + 28 });
+          setMenuState({
+            blockId,
+            left: rect.left,
+            top: rect.top + 28,
+            viaKeyboard,
+          });
         },
       },
     );
@@ -449,6 +497,7 @@ export const MediaHandleOverlays = ({
             icon={dragHandleIcon}
             label={dictionary.handle.dragBlock}
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
+            onKeyDown={keyboardActivation.onKeyDown}
             onPointerDown={(event) =>
               handlePointerDownOnHandle(event, hoverBlockId)
             }
@@ -490,8 +539,14 @@ export const MediaHandleOverlays = ({
       {menuState !== null && (
         <BlockSideMenuMenu
           blockId={menuState.blockId}
+          // block-side-menu.tsx와 같은 규칙이다. 메뉴는 열 때의 block type을
+          // lazy init으로 붙들어 두므로 대상이 바뀌면 다시 마운트한다. media는
+          // 지금 type descriptor가 null이라 관측 효과가 없다.
+          key={menuState.blockId}
           left={menuState.left}
-          onClose={closeMenu}
+          onClose={closeFromTrigger}
+          onInvalidated={closeFromInvalidated}
+          owner="media"
           top={menuState.top}
         />
       )}

@@ -54,6 +54,13 @@ export type BlockSideMenuMenuProps = {
    * `invalidated` 규칙으로 닫는 콜백을 넘긴다.
    */
   onInvalidated?: () => void;
+  /**
+   * 이 메뉴를 연 오버레이. 패널에 `data-geul-menu-owner`로 노출한다. 블록 메뉴와
+   * media 메뉴가 `data-geul-block-menu`를 공유해서, 호출부가 자기 소유자
+   * 셀렉터를 allow 목록 맨 앞에 두면 `focusOnOpen`이 자기 메뉴를 먼저 찾는다.
+   * 기본값은 `"block"`이다.
+   */
+  owner?: "block" | "media";
 };
 
 /**
@@ -67,6 +74,7 @@ export const BlockSideMenuMenu = ({
   top,
   onClose,
   onInvalidated,
+  owner = "block",
 }: BlockSideMenuMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
@@ -201,6 +209,7 @@ export const BlockSideMenuMenu = ({
       aria-label={dictionary.menu.blockMenuAriaLabel}
       className="geul-block-menu"
       data-geul-block-menu=""
+      data-geul-menu-owner={owner}
       ref={menuRef}
       role="menu"
       style={style}
