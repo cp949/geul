@@ -34,6 +34,13 @@ import type { PasteRejectedReason } from "./table-command-error.js";
 export type DocumentChangeEvent = {
   revision: number;
   changedBlockIds: readonly string[];
+  /**
+   * 변경의 원인.
+   * - `local`: 사용자 입력이나 `commands`의 문서 변경 command.
+   * - `replace`: `replaceDocument()`가 문서를 통째로 바꿨다.
+   * - `undo`: undo. 키보드, 브라우저 실행 취소, `commands.undo()` 모두 포함한다.
+   * - `redo`: redo. 진입점은 `undo`와 같다.
+   */
   reason: "local" | "replace" | "undo" | "redo";
 };
 

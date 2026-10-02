@@ -308,7 +308,9 @@ const isSameEditorState = (
 export const createProductionEditor = (options: {
   document: BlockDocument;
   createId: IdFactory;
-  onUpdate: (editor: Editor) => void;
+  // Issue #231 — transaction은 Tiptap `update` 이벤트의 root transaction
+  // 이다. 세션이 history meta로 reason을 도출한다.
+  onUpdate: (editor: Editor, transaction: Transaction) => void;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
   // spec §10(IO-008), RD-001-DELTA-01 — ClipboardPasteExtension의 override
   // hook. pasteHandlerEditor는 customBlockEditor와 동일 근거(호출 시점엔
@@ -777,8 +779,8 @@ export const createProductionEditor = (options: {
             }),
           ]),
     ],
-    onUpdate: ({ editor: updatedEditor }) => {
-      if (!loadNormalizing) options.onUpdate(updatedEditor);
+    onUpdate: ({ editor: updatedEditor, transaction }) => {
+      if (!loadNormalizing) options.onUpdate(updatedEditor, transaction);
     },
     onMount: ({ editor: mountedEditor }) =>
       ensureTrailingParagraphOnLoad(mountedEditor),

@@ -24,6 +24,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
+import { historyReasonOf } from "./history-change-reason.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { collectLocalPreviewBlocks } from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
@@ -587,7 +588,8 @@ export class ProductionEditorSession {
     return createProductionEditor({
       document,
       createId: this.createId,
-      onUpdate: (editor) => this.onTiptapUpdate(editor),
+      onUpdate: (editor, transaction) =>
+        this.onTiptapUpdate(editor, transaction),
       // Issue #218 — replaceDocument()가 재구성하는 매 Tiptap Editor 생성마다
       // 다시 넘겨야 교체 뒤 편집 통지가 이어진다.
       onStateChange: () => this.notifyStateChange(),
@@ -750,7 +752,7 @@ export class ProductionEditorSession {
         changes: {
           revision: this.sessionRevision + 1,
           changedBlockIds,
-          reason: this.activeReason ?? "local",
+          reason: this.activeReason ?? historyReasonOf(transaction) ?? "local",
         },
       }) !== false
     );
@@ -847,10 +849,16 @@ export class ProductionEditorSession {
     }
   }
 
-  private onTiptapUpdate(editor: Editor): void {
+  private onTiptapUpdate(editor: Editor, transaction: Transaction): void {
     const nextDocument = this.readEditorDocument(editor);
     if (this.activeReason === null) {
-      this.commitDocument(nextDocument, "local");
+      // Issue #231 — 진입점은 reason을 모른다. 키보드·폴백 undo·redo는
+      // runDocumentCommand를 거치지 않으므로 root transaction의 history
+      // meta로 판정한다.
+      this.commitDocument(
+        nextDocument,
+        historyReasonOf(transaction) ?? "local",
+      );
       return;
     }
     this.pendingDocument = nextDocument;

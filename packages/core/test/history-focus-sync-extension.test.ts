@@ -28,6 +28,7 @@ import {
   selectBlockNode,
 } from "./editor-controller-support.js";
 import {
+  placeDomSelectionInFirstParagraph,
   runCleanups,
   withoutScrollCrash,
 } from "./native-selection-test-support.js";
@@ -56,23 +57,6 @@ const attachContainer = (mount: Mounted): HTMLElement => {
   if (container === null) throw new Error("편집기 컨테이너 조회 실패");
   document.body.append(container);
   return container;
-};
-
-/**
- * 첫 문단 텍스트 노드의 offset에 접힌 DOM selection을 둔다. jsdom은
- * ProseMirror selection을 DOM selection에 동기화하지 않으므로(편집기에
- * 포커스가 없다) 직접 만든다. 실제 브라우저에서 툴바 버튼에 포커스가 가도
- * selection이 편집기에 남는 상태를 재현한다.
- */
-const placeDomCaret = (editable: HTMLElement, offset: number) => {
-  const text = editable.querySelector("p")?.firstChild;
-  if (text === null || text === undefined) {
-    throw new Error("편집기 문단 텍스트 노드 조회 실패");
-  }
-  const selection = document.getSelection();
-  expect(selection).not.toBeNull();
-  selection?.setBaseAndExtent(text, offset, text, offset);
-  expect(editable.contains(selection?.focusNode ?? null)).toBe(true);
 };
 
 /** 정리 대상이 없을 때도 안전하게 DOM selection을 비운다. */
@@ -111,7 +95,7 @@ const withReplacedTextScenario = async (
     expect(tiptap.state.doc.textContent).toBe(`a${REPLACEMENT}`);
     button.focus();
     expect(document.activeElement).toBe(button);
-    placeDomCaret(mount.editable, 0);
+    placeDomSelectionInFirstParagraph(mount.editable, 0);
     // fn이 비동기라 withoutScrollCrash(동기 범위)를 쓰지 않고 fn 전체 동안
     // scrollToSelection을 막는다.
     scrollSpy = vi
@@ -195,7 +179,7 @@ describe("historyFocusSync — 재동기화", () => {
     await withReplacedTextScenario((scenario) => {
       dispatchUndo(scenario);
       document.getSelection()?.removeAllRanges();
-      placeDomCaret(scenario.editable, 0);
+      placeDomSelectionInFirstParagraph(scenario.editable, 0);
 
       dispatchRedo(scenario);
 
@@ -385,7 +369,7 @@ describe("historyFocusSync — 재동기화", () => {
       tiptap.view.dispatch(tiptap.state.tr.insertText(REPLACEMENT, at, at));
       expect(tiptap.state.selection).toBeInstanceOf(NodeSelection);
       button.focus();
-      placeDomCaret(mount.editable, 0);
+      placeDomSelectionInFirstParagraph(mount.editable, 0);
       watch.toggleCount();
 
       withoutScrollCrash(tiptap, () => dispatchUndo({ tiptap }));
@@ -424,7 +408,7 @@ describe("historyFocusSync — 재동기화", () => {
           // 브라우저와 jsdom은 입력 컨트롤 포커스 때 DOM selection을 컨트롤로
           // 옮긴다. 컨트롤 가드를 selection 가드와 따로 검증하도록 selection을
           // 편집기 안으로 되돌린다.
-          placeDomCaret(scenario.editable, 0);
+          placeDomSelectionInFirstParagraph(scenario.editable, 0);
 
           dispatchUndo(scenario);
 
@@ -451,7 +435,7 @@ describe("historyFocusSync — 재동기화", () => {
       try {
         other.focus();
         expect(document.activeElement).toBe(other);
-        placeDomCaret(scenario.editable, 0);
+        placeDomSelectionInFirstParagraph(scenario.editable, 0);
 
         dispatchUndo(scenario);
 
@@ -627,7 +611,7 @@ describe("historyFocusSync — 포커스 복구", () => {
         second.focus();
         expect(document.activeElement).toBe(second);
         document.getSelection()?.removeAllRanges();
-        placeDomCaret(scenario.editable, 0);
+        placeDomSelectionInFirstParagraph(scenario.editable, 0);
 
         dispatchRedo(scenario);
         second.remove();
@@ -647,7 +631,7 @@ describe("historyFocusSync — 포커스 복구", () => {
         .mockImplementation(() => {});
       dispatchUndo(scenario);
       document.getSelection()?.removeAllRanges();
-      placeDomCaret(scenario.editable, 0);
+      placeDomSelectionInFirstParagraph(scenario.editable, 0);
       dispatchRedo(scenario);
 
       scenario.button.remove();
@@ -696,7 +680,7 @@ describe("historyFocusSync — 포커스 복구", () => {
       const at = contentTextStart(tiptap, "block-1");
       tiptap.view.dispatch(tiptap.state.tr.insertText(REPLACEMENT, at, at));
       button.focus();
-      placeDomCaret(mount.editable, 0);
+      placeDomSelectionInFirstParagraph(mount.editable, 0);
       const focus = vi.spyOn(tiptap.view, "focus");
 
       withoutScrollCrash(tiptap, () => dispatchUndo({ tiptap }));
@@ -783,7 +767,7 @@ describe("historyFocusSync — 포커스 복구", () => {
         document.body.append(control);
         try {
           control.focus();
-          placeDomCaret(scenario.editable, 0);
+          placeDomSelectionInFirstParagraph(scenario.editable, 0);
           dispatchUndo(scenario);
 
           expect(

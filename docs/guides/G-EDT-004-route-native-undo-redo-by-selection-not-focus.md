@@ -1,7 +1,7 @@
 # G-EDT-004 네이티브 undo/redo는 focus가 아니라 selection 기준으로 라우팅한다
 
 - 상태: `ACTIVE`
-- 적용 조건: `Mod-z`/`Mod-y` 키맵이 아니라 브라우저 native undo/redo(`beforeinput` `historyUndo`/`historyRedo`)에 의존하는 동작을 구현·디버깅할 때, 또는 여러 브라우저 엔진에서 undo/redo 동작이 갈리는 회귀를 조사할 때, 또는 에디터 밖 비편집 요소(툴바 버튼 등)에 포커스가 있을 때 undo(`Mod-z`)·redo(`Mod-Shift-z`·`Mod-y`)가 동작하지 않는 증상을 조사할 때, 또는 같은 상황에서 undo·redo 뒤 포커스가 `BODY`로 유실되는 증상을 조사할 때
+- 적용 조건: `Mod-z`/`Mod-y` 키맵이 아니라 브라우저 native undo/redo(`beforeinput` `historyUndo`/`historyRedo`)에 의존하는 동작을 구현·디버깅할 때, 또는 여러 브라우저 엔진에서 undo/redo 동작이 갈리는 회귀를 조사할 때, 또는 에디터 밖 비편집 요소(툴바 버튼 등)에 포커스가 있을 때 undo(`Mod-z`)·redo(`Mod-Shift-z`·`Mod-y`)가 동작하지 않는 증상을 조사할 때, 또는 같은 상황에서 undo·redo 뒤 포커스가 `BODY`로 유실되는 증상을 조사할 때, 또는 undo·redo가 `DocumentChangeEvent.reason`에 `"local"`로 보고되는 증상을 조사할 때
 
 ## 구현 규칙
 
@@ -32,6 +32,39 @@
 - 키 판별은 순수 함수(`isHistoryUndoShortcut`·`isHistoryRedoShortcut`)로 분리해 비Apple(Ctrl)·Apple(Meta) 분기를 단위 테스트로 고정한다. `event.key`가 비ASCII(한글 두벌식 등)이면 `event.code`로 폴백한다.
 - 참고 구현: `packages/core/src/history-keydown-fallback-extension.ts`(Issue #219, Issue #222).
 
+### undo·redo의 `DocumentChangeEvent.reason`은 세션이 transaction meta로 판정한다
+
+- 판정은 세션이 한다. 진입점은 reason을 알지 못한다.
+- 진입점 코드에 reason 인자나 플래그를 추가하지 않는다.
+- 세션은 `onChange`와 `onBeforeChange` 둘 다 같은 규칙으로 reason을 정한다.
+- 규칙은 root transaction의 history meta다. `prosemirror-history`가 undo·redo transaction에 붙인다.
+  - history transaction이 아니면 도출값이 없다.
+  - meta의 `redo`가 `true`이면 `"redo"`다.
+  - 그 밖의 history transaction은 `"undo"`다.
+- 우선순위는 `activeReason ?? 도출값 ?? "local"`이다.
+  - `activeReason`은 `runDocumentCommand`가 명시한 reason이다.
+  - 도출값은 `activeReason`을 덮지 않는다.
+- Tiptap `update` 이벤트의 `transaction`은 root transaction이다. 세션이 이것을 받아 판정한다.
+- 진입점별 결과는 아래와 같다.
+
+| 진입점 | 동작 | reason |
+| --- | --- | --- |
+| StarterKit keymap | `view.dom` 안 `Mod-z` | `undo` |
+| StarterKit keymap | `view.dom` 안 `Mod-Shift-z`·`Mod-y` | `redo` |
+| keydown 폴백 | `view.dom` 밖 요소의 `Mod-z` | `undo` |
+| keydown 폴백 | `view.dom` 밖 요소의 `Mod-Shift-z`·`Mod-y` | `redo` |
+| beforeinput 폴백 | `historyUndo` | `undo` |
+| beforeinput 폴백 | `historyRedo` | `redo` |
+| `prosemirror-history` | `view.dom` 안 `historyUndo`·`historyRedo` | `undo`·`redo` |
+| 공개 command | `commands.undo()`·`commands.redo()` | `undo`·`redo` |
+| 네이티브 글자 입력 | `view.dom` 안 입력 | `local` |
+
+- `"history$"`는 `prosemirror-history`의 `PluginKey("history")`가 만든 meta 키다. 공개 API가 이 키 객체를 내보내지 않아 문자열로 읽는다.
+- 키 문자열은 로드 순서가 정한다. 같은 `prosemirror-state` 인스턴스에서 `PluginKey("history")`를 먼저 만들면 history 플러그인의 키가 `"history$1"`이 된다.
+- 키 문자열이 코드와 다르면 redo가 조용히 `"undo"`로 보고된다. 이 저장소의 진입점 표 테스트는 저장소 안의 `prosemirror-history` 버전 변경만 감시한다.
+- 새 undo·redo 진입점을 더하면 표에 행을 추가한다. 세션 판정 코드는 바꾸지 않는다.
+- 참고 구현: `packages/core/src/history-change-reason.ts`(Issue #231), 테스트 `packages/core/test/history-change-reason.test.ts`.
+
 ### undo·redo 뒤 DOM selection을 재동기화하고 포커스 유실을 복구한다
 
 - 에디터가 포커스를 갖지 않으면 ProseMirror가 history가 복원한 selection을 DOM에 반영하지 않는다(`editorOwnsSelection`).
@@ -58,4 +91,5 @@
 - 한 페이지에 편집기 인스턴스가 여러 개 있을 때 각 인스턴스가 자신의 `view.dom` 소유 selection만 가로채고 다른 인스턴스·무관한 `input`/`textarea`의 `historyUndo`를 훔치지 않는지 확인한다.
 - undo·redo 라우팅이 target 가드(조건 6)와 selection 가드(조건 7)를 모두 가지는지 확인한다. 둘 중 하나만 지워도 단위 테스트가 RED여야 한다. Chromium은 입력 컨트롤에 포커스가 가면 DOM selection이 컨트롤로 옮겨져 e2e는 selection 가드로도 통과한다 — redo e2e(`toolbar-focus-redo.spec.ts`)는 두 가드를 모두 지워야 RED가 된다. undo의 입력 컨트롤 비침해는 단위 테스트만 소유한다.
 - undo keydown 라우팅이 `beforeinput` 경로와 이중 실행되지 않는지 Chromium e2e로 확인한다. 글자 입력 뒤 툴바 명령을 적용하고 버튼 포커스의 `Mod-z` 1회가 한 단계만 되돌리는지 본다. `showcase-static-toolbar-focus.spec.ts`가 소유한다.
+- undo·redo의 reason이 진입점마다 같은지 확인한다. 위 표의 모든 행이 `onChange`와 `onBeforeChange` 둘 다 같은 reason을 내야 한다.
 - undo·redo 뒤 포커스 복구는 jsdom 단위 테스트와 Chromium e2e를 함께 갖는지 확인한다. 단위 테스트는 가드·감시 해제·정리를 하나씩 깨뜨려 RED여야 한다. e2e는 `toolbar-focus-undo-redo.spec.ts`가 툴바별로 소유하고 `--repeat-each=10 --workers=5`로 타이밍 경합을 확인한다.

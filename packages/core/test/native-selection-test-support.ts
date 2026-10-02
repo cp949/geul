@@ -1,7 +1,9 @@
 /**
  * 네이티브 DOM Range/Selection을 조립해 노드에 caret을 두고, 콜백 실행 후
- * 정리하는 공용 헬퍼. table-keyboard-extension.test.ts와
- * indent-keyboard-extension.test.ts가 함께 쓴다(G-TST-002) — 이 로직은
+ * 정리하는 공용 헬퍼. table-keyboard-extension.test.ts,
+ * indent-keyboard-extension.test.ts와 history 계열 테스트
+ * (history-keydown-fallback·history-focus-sync·history-change-reason)가
+ * 함께 쓴다(G-TST-002) — 이 로직은
  * TableExtension에 의존하지 않는 순수 Editor/DOM 로직이라
  * table-test-support.ts(표 전용 fixture)를 확장하지 않고 이 파일이 단독
  * 소유한다.
