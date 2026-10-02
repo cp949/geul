@@ -4,7 +4,8 @@
  * useDismissibleOverlay의 닫힘 계약을 검증한다.
  * - reason 4종(outside, escape, invalidated, trigger)의 초점 복귀 표.
  * - 문서별 Escape LIFO: 한 번에 가장 나중에 열린 오버레이 하나만 닫는다.
- * - 이미 `preventDefault`된 keydown 건너뛰기, modifier+Escape 닫힘 parity.
+ * - 이미 `preventDefault`된 keydown과 IME 조합 중 Escape 건너뛰기,
+ *   modifier+Escape 닫힘 parity.
  * - `focusOnOpen`의 첫 활성 항목 탐색.
  * - 바깥 pointerdown의 즉시성(ADR 0013)과 `startTransition` 계약(Issue #155).
  * - 공개 전환 전이라 `index.ts`가 module을 내보내지 않는다(RD-006에서 뒤집는다).
@@ -231,13 +232,22 @@ describe("useDismissibleOverlay reason별 초점", () => {
   });
 
   it("바깥 클릭은 onClose를 startTransition 안에서 동기로 부른다", () => {
-    const onClose = vi.fn();
+    let insideTransition = false;
+    vi.mocked(startTransition).mockImplementationOnce((callback) => {
+      insideTransition = true;
+      callback();
+      insideTransition = false;
+    });
+    const calledInside: boolean[] = [];
+    const onClose = vi.fn(() => {
+      calledInside.push(insideTransition);
+    });
     const { container } = render(<Probe open onClose={onClose} />);
 
     pointerDown(byId(container, "outside"));
 
     expect(startTransition).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(calledInside).toEqual([true]);
   });
 
   it("바깥 클릭이 아닌 reason은 startTransition을 쓰지 않는다", () => {
@@ -321,6 +331,18 @@ describe("useDismissibleOverlay Escape", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("IME 조합 중 Escape는 닫지 않고 preventDefault하지 않는다", () => {
+    // 조합 취소용 Escape다. handleMenuKeyDown도 건너뛰므로 입력 모드가 있는
+    // 오버레이(링크·미디어 편집, 슬래시·이모지)가 이 키로 닫히면 안 된다.
+    const onClose = vi.fn();
+    render(<Probe open onClose={onClose} />);
+
+    const event = pressEscape({ isComposing: true });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it("Escape가 아닌 키는 무시한다", () => {

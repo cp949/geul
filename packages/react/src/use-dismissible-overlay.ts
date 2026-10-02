@@ -26,6 +26,10 @@ type UseDismissibleOverlayOptions = {
    * 오버레이 자신의 표면(패널, 트리거 등). pointerdown 대상이나 초점이 이
    * 셀렉터 중 하나에 `closest()`로 걸리면 "오버레이 안"으로 본다. 호출부의
    * 모듈 스코프 상수로 넘긴다.
+   * `focusOnOpen`을 쓰면 패널 셀렉터를 맨 앞에 둔다. 활성 항목이 없을 때 첫
+   * 셀렉터의 표면에 초점을 주므로, 트리거가 앞이면 초점이 트리거에 남는다.
+   * 중첩된 자식 오버레이가 이 오버레이 밖에 그려지면 자식 셀렉터도 넣는다.
+   * 넣지 않으면 자식 안의 클릭이 이 오버레이의 바깥 클릭이 된다.
    */
   allowSelectors: readonly string[];
   /**
@@ -134,7 +138,9 @@ const focusFirstItem = (
  * 바깥 클릭은 오버레이마다 독립이다. LIFO는 Escape에만 적용한다.
  * `defaultPrevented`인 keydown은 건너뛴다. 오버레이 안의 모드 취소(입력창
  * Escape)가 `handleMenuKeyDown`으로 먼저 소비하면 오버레이는 닫히지 않는다.
- * modifier가 눌린 Escape도 닫는다(Issue #227). IME 조합 중 가드는 없다.
+ * IME 조합 중 Escape도 건너뛴다. `handleMenuKeyDown`이 조합 중 키를 소비하지
+ * 않으므로 여기서 막지 않으면 입력 모드가 있는 오버레이가 조합 취소로 닫힌다.
+ * modifier가 눌린 Escape도 닫는다(Issue #227).
  *
  * `onClose`·`allowSelectors`는 ref로 읽는다. effect 의존이 바뀌면 스택 항목이
  * 맨 위로 다시 올라가 열린 순서가 깨지기 때문이다.
@@ -192,6 +198,8 @@ export const useDismissibleOverlay = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (event.defaultPrevented) return;
+      // 조합 취소용 Escape다. handleMenuKeyDown과 같은 기준으로 건너뛴다.
+      if (event.isComposing) return;
       if (!isTopEntry(ownerDocument, entry)) return;
       event.preventDefault();
       close("escape");
