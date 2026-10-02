@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
+import { hasCommandModifier } from "./has-command-modifier.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -277,6 +278,10 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
         dismissMenuAndFocusEditor();
         return;
       }
+      // Ctrl·Alt·Meta 조합은 처리하지 않은 키다. `preventDefault`하지 않고
+      // 물러나 브라우저·OS 단축키를 막지 않는다(Issue #227). Escape는 위에서
+      // 이미 처리했다. 공용 훅의 Escape도 수식 키에서 물러나지 않는다.
+      if (hasCommandModifier(event)) return;
       if (
         event.key === "ArrowRight" ||
         event.key === "ArrowLeft" ||

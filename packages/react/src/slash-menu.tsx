@@ -25,6 +25,7 @@ import {
 import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
+import { hasCommandModifier } from "./has-command-modifier.js";
 import { IframeLoadStatus } from "./iframe-load-status.js";
 import { MediaCaptions } from "./media-captions.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
@@ -562,6 +563,10 @@ export const SlashMenu = ({
         dismissMenuAndFocusEditor();
         return;
       }
+      // Ctrl·Alt·Meta 조합은 처리하지 않은 키다. `preventDefault`하지 않고
+      // 물러나 브라우저·OS 단축키를 막지 않는다(Issue #227). Escape는 위에서
+      // 이미 처리했다. 공용 훅의 Escape도 수식 키에서 물러나지 않는다.
+      if (hasCommandModifier(event)) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         setMenuState((currentState) => {
