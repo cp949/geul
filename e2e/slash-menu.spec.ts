@@ -9,6 +9,11 @@ import {
   expectOverlayWithinViewport,
 } from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
+import {
+  lastKeydownPrevented,
+  recordKeydownPrevented,
+} from "./support/keydown-prevented.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다 @core", async ({
   page,
@@ -377,4 +382,37 @@ test("스크롤·뷰포트 변경 후 슬래시 메뉴가 caret을 따르고 마
     editable.locator("[data-geul-list-marker]").first(),
   ).toHaveAttribute("data-geul-list-marker", "1.");
   await expect(editable).toBeFocused();
+});
+
+// Issue #227: Alt+ArrowDown은 브라우저·OS 단축키 조합이다. 열린 메뉴는
+// preventDefault로 삼키거나 하이라이트를 옮기지 않는다.
+test("수식 키 + 방향키는 하이라이트를 옮기지 않고 기본 동작을 막지 않는다 (Issue #227)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  const highlighted = menu.locator('[role="option"][aria-selected="true"]');
+
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type("/");
+  await expect(menu).toBeVisible();
+  // 수식 키 없는 ArrowDown으로 강조를 첫 항목 밖으로 옮겨 기준값을 만든다.
+  await page.keyboard.press("ArrowDown");
+  const before = await highlighted.getAttribute("id");
+  expect(before).not.toBeNull();
+  expect(before).not.toBe(
+    await menu.getByRole("option").first().getAttribute("id"),
+  );
+  await expect(editable).toHaveAttribute("aria-activedescendant", before ?? "");
+  await recordKeydownPrevented(page);
+
+  await page.keyboard.press("Alt+ArrowDown");
+
+  expect(await lastKeydownPrevented(page)).toEqual({
+    key: "ArrowDown",
+    prevented: false,
+  });
+  await expect(highlighted).toHaveAttribute("id", before ?? "");
+  await expect(menu).toBeVisible();
 });

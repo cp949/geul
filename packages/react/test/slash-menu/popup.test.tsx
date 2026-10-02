@@ -2,6 +2,7 @@
 
 /**
  * SlashMenu의 슬래시 질의 팝업 트리거·필터링·항목 적용을 검증한다.
+ * Ctrl·Alt·Meta 조합 키를 가로채지 않는 계약도 여기서 고정한다(Issue #227).
  */
 
 import {
@@ -21,6 +22,7 @@ import {
   mountTableEditor,
   placeCaret,
 } from "../mount-editor.js";
+import { COMMAND_MODIFIERS } from "../command-modifiers-test-support.js";
 import { fireSelectionChange } from "../selection-events.js";
 import {
   dragHandleLabel,
@@ -809,5 +811,116 @@ describe("SlashMenu enabledBlockTypes 필터링(RD-002-DELTA-01)", () => {
     }
     expect(screen.getByRole("option", { name: /^Text/ })).not.toBeNull();
     expect(screen.getAllByRole("option")).toHaveLength(15);
+  });
+});
+
+/** 강조된(`aria-selected="true"`) 옵션의 목록 내 위치를 돌려준다. 없으면 -1이다. */
+const highlightedIndex = (): number =>
+  screen
+    .getAllByRole("option")
+    .findIndex((option) => option.getAttribute("aria-selected") === "true");
+
+/**
+ * `/` 전체 목록을 열고 ArrowDown 두 번으로 강조를 2번 항목에 둔다.
+ * 아래 이동은 3, 위 이동은 1이 되어 두 방향 모두 "움직이지 않았다"를
+ * 구분할 수 있다.
+ */
+const openWithMiddleHighlight = () => {
+  const rendered = renderCaretBlocks();
+  typeIntoBlock(rendered, 0, "/");
+  fireEvent.keyDown(rendered.host, { key: "ArrowDown" });
+  fireEvent.keyDown(rendered.host, { key: "ArrowDown" });
+  expect(highlightedIndex()).toBe(2);
+  return rendered;
+};
+
+describe("SlashMenu 수식 키(Issue #227)", () => {
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`${name} + ArrowDown·ArrowUp은 하이라이트를 옮기지 않고 preventDefault하지 않는다`, () => {
+      const rendered = openWithMiddleHighlight();
+
+      for (const key of ["ArrowDown", "ArrowUp"] as const) {
+        const notPrevented = fireEvent.keyDown(rendered.host, { key, ...init });
+
+        expect(notPrevented, `${name}+${key}`).toBe(true);
+        expect(highlightedIndex(), `${name}+${key}`).toBe(2);
+      }
+    });
+
+    it(`${name} + Enter는 항목을 적용하지 않고 preventDefault하지 않는다`, () => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, 0, "/head");
+
+      const notPrevented = fireEvent.keyDown(rendered.host, {
+        key: "Enter",
+        ...init,
+      });
+
+      expect(notPrevented).toBe(true);
+      expect(
+        screen.getByRole("listbox", { name: "Slash menu" }),
+      ).not.toBeNull();
+      expect(rendered.editor.getCaretBlockContext()).toEqual({
+        blockId,
+        blockType: { type: "paragraph" },
+        text: "/head",
+      });
+    });
+
+    it(`${name} + Enter는 후보가 0건이어도 preventDefault하지 않는다`, () => {
+      const rendered = renderCaretBlocks();
+      typeIntoBlock(rendered, 0, "/zzzznomatch");
+
+      const notPrevented = fireEvent.keyDown(rendered.host, {
+        key: "Enter",
+        ...init,
+      });
+
+      expect(notPrevented).toBe(true);
+    });
+
+    it(`${name} + Escape는 기존대로 메뉴를 닫고 preventDefault한다`, () => {
+      const rendered = renderCaretBlocks();
+      typeIntoBlock(rendered, 0, "/head");
+
+      const notPrevented = fireEvent.keyDown(rendered.host, {
+        key: "Escape",
+        ...init,
+      });
+
+      expect(notPrevented).toBe(false);
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    });
+  }
+
+  it("수식 키 없는 ArrowDown·ArrowUp은 기존대로 하이라이트를 옮기고 preventDefault한다", () => {
+    const rendered = openWithMiddleHighlight();
+
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowDown" })).toBe(false);
+    expect(highlightedIndex()).toBe(3);
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowUp" })).toBe(false);
+    expect(highlightedIndex()).toBe(2);
+  });
+
+  it("Shift + ArrowDown·ArrowUp은 수식 키가 아니므로 기존대로 하이라이트를 옮긴다", () => {
+    const rendered = openWithMiddleHighlight();
+
+    expect(
+      fireEvent.keyDown(rendered.host, { key: "ArrowDown", shiftKey: true }),
+    ).toBe(false);
+    expect(highlightedIndex()).toBe(3);
+    expect(
+      fireEvent.keyDown(rendered.host, { key: "ArrowUp", shiftKey: true }),
+    ).toBe(false);
+    expect(highlightedIndex()).toBe(2);
+  });
+
+  it("수식 키 없는 Enter는 후보가 0건이면 선택 없이 preventDefault만 한다(Issue #211)", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, 0, "/zzzznomatch");
+
+    expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
+    expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
   });
 });

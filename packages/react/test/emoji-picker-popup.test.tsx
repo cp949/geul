@@ -2,7 +2,8 @@
 
 /**
  * EmojiPicker의 `:` 트리거 팝업 - 열기/keyword 필터링/키보드 네비게이션/선택
- * 삽입/portalTarget을 검증한다.
+ * 삽입/portalTarget을 검증한다. Ctrl·Alt·Meta 조합 키를 가로채지 않는 계약도
+ * 여기서 고정한다(Issue #227).
  */
 
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
@@ -16,6 +17,7 @@ import {
   mountBlockEditor,
   placeCaret,
 } from "./mount-editor.js";
+import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { fireSelectionChange } from "./selection-events.js";
 
 afterEach(cleanup);
@@ -198,5 +200,127 @@ describe("EmojiPicker(`:` 트리거 팝업)", () => {
     const listbox = screen.getByRole("listbox", { name: listboxName });
     expect(portalTarget.contains(listbox)).toBe(true);
     portalTarget.remove();
+  });
+});
+
+/** 강조된(`aria-selected="true"`) 옵션의 label을 돌려준다. 없으면 null이다. */
+const highlightedLabel = (): string | null =>
+  screen
+    .getAllByRole("option")
+    .find((option) => option.getAttribute("aria-selected") === "true")
+    ?.getAttribute("aria-label") ?? null;
+
+/**
+ * `:` 전체 목록을 열고 강조를 한가운데(9번째 항목, 8열 grid의 둘째 줄)로
+ * 옮긴다. 네 방향 어디로 움직여도 clamp에 걸리지 않아 "움직이지 않았다"를
+ * 단언할 수 있다. 옮긴 뒤의 강조 label을 함께 돌려준다.
+ */
+const openWithMiddleHighlight = () => {
+  const rendered = renderCaretBlocks();
+  typeIntoBlock(rendered, ":");
+  fireEvent.keyDown(rendered.host, { key: "ArrowDown" });
+  fireEvent.keyDown(rendered.host, { key: "ArrowRight" });
+  const label = highlightedLabel();
+  expect(label).toBe(EMOJI_OPTIONS[9]?.label);
+  return { rendered, label };
+};
+
+describe("EmojiPicker 수식 키(Issue #227)", () => {
+  const arrowKeys = [
+    "ArrowRight",
+    "ArrowLeft",
+    "ArrowDown",
+    "ArrowUp",
+  ] as const;
+
+  for (const { name, init } of COMMAND_MODIFIERS) {
+    it(`${name} + 방향키는 하이라이트를 옮기지 않고 preventDefault하지 않는다`, () => {
+      const { rendered, label } = openWithMiddleHighlight();
+
+      for (const key of arrowKeys) {
+        const notPrevented = fireEvent.keyDown(rendered.host, { key, ...init });
+
+        expect(notPrevented, `${name}+${key}`).toBe(true);
+        expect(highlightedLabel(), `${name}+${key}`).toBe(label);
+      }
+    });
+
+    it(`${name} + Enter는 항목을 선택하지 않고 preventDefault하지 않는다`, () => {
+      const rendered = renderCaretBlocks();
+      const blockId = typeIntoBlock(rendered, ":grinning");
+
+      const notPrevented = fireEvent.keyDown(rendered.host, {
+        key: "Enter",
+        ...init,
+      });
+
+      expect(notPrevented).toBe(true);
+      expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+      expect(rendered.editor.getCaretBlockContext()).toEqual({
+        blockId,
+        blockType: { type: "paragraph" },
+        text: ":grinning",
+      });
+    });
+
+    it(`${name} + Enter는 후보가 0건이어도 preventDefault하지 않는다`, () => {
+      const rendered = renderCaretBlocks();
+      typeIntoBlock(rendered, ":zzzznomatch");
+
+      const notPrevented = fireEvent.keyDown(rendered.host, {
+        key: "Enter",
+        ...init,
+      });
+
+      expect(notPrevented).toBe(true);
+    });
+
+    it(`${name} + Escape는 기존대로 메뉴를 닫고 preventDefault한다`, () => {
+      const rendered = renderCaretBlocks();
+      typeIntoBlock(rendered, ":grinning");
+
+      const notPrevented = fireEvent.keyDown(rendered.host, {
+        key: "Escape",
+        ...init,
+      });
+
+      expect(notPrevented).toBe(false);
+      expect(screen.queryByRole("listbox", { name: listboxName })).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    });
+  }
+
+  it("수식 키 없는 방향키는 기존대로 하이라이트를 옮기고 preventDefault한다", () => {
+    const { rendered } = openWithMiddleHighlight();
+    const expectedIndexes = [10, 9, 17, 9];
+
+    arrowKeys.forEach((key, position) => {
+      const notPrevented = fireEvent.keyDown(rendered.host, { key });
+
+      expect(notPrevented, key).toBe(false);
+      expect(highlightedLabel(), key).toBe(
+        EMOJI_OPTIONS[expectedIndexes[position] ?? -1]?.label,
+      );
+    });
+  });
+
+  it("Shift + 방향키는 수식 키가 아니므로 기존대로 하이라이트를 옮긴다", () => {
+    const { rendered } = openWithMiddleHighlight();
+
+    const notPrevented = fireEvent.keyDown(rendered.host, {
+      key: "ArrowRight",
+      shiftKey: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(highlightedLabel()).toBe(EMOJI_OPTIONS[10]?.label);
+  });
+
+  it("수식 키 없는 Enter는 후보가 0건이면 선택 없이 preventDefault만 한다(Issue #211)", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":zzzznomatch");
+
+    expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
+    expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
   });
 });

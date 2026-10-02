@@ -5,9 +5,14 @@
  * 같은 "popup 1개당 파일 1개" 관례로 신규 파일을 추가한다(Issue #211
  * 01-계획.md "## 결정").
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import {
+  lastKeydownPrevented,
+  recordKeydownPrevented,
+} from "./support/keydown-prevented.js";
 import { openShowcasePage } from "./support/showcase.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 /**
  * `openMentionExample`(`showcase-mention.spec.ts`)과 동일 이유로 분리 —
@@ -42,4 +47,42 @@ test("후보가 없을 때 Enter를 눌러도 블록이 분할되지 않는다 (
   await expect(menu).toBeVisible();
   await expect(editable.locator("p")).toHaveCount(1);
   await expect(editable.locator("p")).toHaveText(":zzzznomatch");
+});
+
+/** 강조된(`aria-selected="true"`) 옵션의 label을 읽는다. */
+const highlightedLabel = (menu: Locator) =>
+  menu
+    .locator('[role="option"][aria-selected="true"]')
+    .getAttribute("aria-label");
+
+// Issue #227: Alt+ArrowDown은 브라우저·OS 단축키 조합이다. 열린 메뉴는
+// preventDefault로 삼키거나 하이라이트를 옮기지 않는다.
+test("수식 키 + 방향키는 하이라이트를 옮기지 않고 기본 동작을 막지 않는다 (Issue #227)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openEmojiPickerExample(page);
+
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type(":");
+  await expect(menu).toBeVisible();
+  // 수식 키 없는 ArrowDown으로 강조를 첫 줄 밖으로 옮겨 기준값을 만든다.
+  await page.keyboard.press("ArrowDown");
+  const before = await highlightedLabel(menu);
+  expect(before).not.toBeNull();
+  const firstLabel = await menu
+    .getByRole("option")
+    .first()
+    .getAttribute("aria-label");
+  expect(before).not.toBe(firstLabel);
+  await recordKeydownPrevented(page);
+
+  await page.keyboard.press("Alt+ArrowDown");
+
+  expect(await lastKeydownPrevented(page)).toEqual({
+    key: "ArrowDown",
+    prevented: false,
+  });
+  expect(await highlightedLabel(menu)).toBe(before);
+  await expect(menu).toBeVisible();
 });

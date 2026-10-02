@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 
+/**
+ * useDismissOnOutsideOrEscape 훅의 바깥 pointerdown·Escape 닫기 계약을
+ * 검증한다. Ctrl·Alt·Meta가 눌린 Escape도 닫는 계약(Issue #227)을 포함한다.
+ */
+
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +20,10 @@ type ProbeProps = {
   onOutsideTargetClick?: () => void;
 };
 
+/**
+ * 훅을 `document.body`에 건 최소 컴포넌트. 허용 대상 버튼과 바깥 대상 버튼을
+ * 함께 그려 pointerdown 분기를 각각 쏠 수 있게 한다.
+ */
 const Probe = ({
   active,
   allowSelectors,
@@ -143,6 +152,36 @@ describe("useDismissOnOutsideOrEscape", () => {
     expect(onOutsideDismiss).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(true);
   });
+
+  // Issue #227 계약 테스트. 훅의 Escape 리스너는 "수식 키에서 물러난다"는
+  // G-UI-001 규칙 밖이다. Ctrl·Alt·Meta가 눌려도 닫고 preventDefault한다.
+  // 두 popup(EmojiPicker·SlashMenu)이 자체 Escape 분기에 가드를 두지 않는
+  // 근거가 이 동작이다 — 훅에 수식 키 가드를 넣으면 이 테스트가 RED가 된다.
+  // 이 테스트는 현재 코드에서 이미 GREEN이다(계약 고정용, RED 재현용 아님).
+  for (const modifier of ["ctrlKey", "altKey", "metaKey"] as const) {
+    it(`${modifier}가 눌린 Escape도 preventDefault 후 onEscapeDismiss를 호출한다(Issue #227)`, () => {
+      const onEscapeDismiss = vi.fn();
+      render(
+        <Probe
+          active
+          allowSelectors={["[data-geul-allowed]"]}
+          onOutsideDismiss={vi.fn()}
+          onEscapeDismiss={onEscapeDismiss}
+        />,
+      );
+
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        [modifier]: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(event);
+
+      expect(onEscapeDismiss).toHaveBeenCalledTimes(1);
+      expect(event.defaultPrevented).toBe(true);
+    });
+  }
 
   it("Escape가 아닌 키는 무시하고 preventDefault하지 않는다", () => {
     const onEscapeDismiss = vi.fn();
