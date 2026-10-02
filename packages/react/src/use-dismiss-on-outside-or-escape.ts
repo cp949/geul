@@ -10,7 +10,11 @@ type UseDismissOnOutsideOrEscapeOptions = {
    * 넘기면 이 훅의 effect가 매 렌더 리스너를 떼었다 다시 붙인다.
    */
   allowSelectors: readonly string[];
-  /** 바깥 pointerdown. 클릭 대상이 자연히 초점을 받으므로 여기서 초점을 옮기지 않는다. */
+  /**
+   * 바깥 pointerdown. 클릭 대상이 자연히 초점을 받으므로 여기서 초점을 옮기지
+   * 않는다. 클릭 대상이 초점을 받지 않는 툴바 버튼이면 초점이 overlay 안에
+   * 남으므로 호출부가 편집기로 돌린다.
+   */
   onOutsideDismiss: () => void;
   /** Escape. 돌아갈 클릭 대상이 없으므로 보통 편집기로 초점을 되돌린다(호출부 책임). */
   onEscapeDismiss: () => void;

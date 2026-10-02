@@ -46,7 +46,7 @@ type StaticToolbarBlockTypeMenuProps = {
 
   /**
    * 바깥 클릭. 이 컴포넌트는 포커스를 옮기지 않는다. 호출부가 포커스가 메뉴 안에
-   * 있었으면 편집기로 돌린다(G-UI-001 자동 닫힘). 호출부가 `useCallback`으로
+   * 있었으면 편집기로 돌린다(G-UI-001 바깥 클릭). 호출부가 `useCallback`으로
    * 안정시킨다.
    */
   onOutsideDismiss: () => void;
