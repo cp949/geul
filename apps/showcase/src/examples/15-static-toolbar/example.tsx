@@ -4,14 +4,18 @@ import {
   type CreateEditorOptions,
   EditorContent,
   EditorProvider,
+  EmojiPicker,
   FilePanel,
   FormattingToolbar,
+  LinkToolbar,
   MediaResizeHandles,
   MediaToolbar,
   SlashMenu,
   StaticToolbar,
   useEditor,
 } from "@cp949/geul-react";
+import "highlight.js/styles/github.css";
+import { common, createLowlight } from "lowlight";
 import { Highlight, themes } from "prism-react-renderer";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -19,9 +23,107 @@ import "@cp949/geul-io/preview.css";
 import styles from "./example.module.css";
 
 // 00-composite/example.tsx와 동일 이유 — 소스 패널 자기완결성(스펙 §5).
-// 결과 패널(미리보기/HTML/샘플 불러오기) 코드를 공용 모듈로 뽑지 않고 그대로
-// 복제한다. 이 예제는 syntaxHighlighter를 배선하지 않으므로 exportHtml()의
-// 코드 블록은 강조 없는 plain pre/code로 나온다.
+// 업로드·구문 강조 어댑터와 결과 패널(미리보기/HTML/샘플 불러오기) 코드를
+// 공용 모듈로 뽑지 않고 그대로 복제한다. 이 예제는 Kitchen sink의 표면을
+// 전부 갖추고, 거기에 항상 보이는 StaticToolbar를 더한 것이다.
+
+// 07-media/example.tsx와 동일 이유 — 소스 패널 자기완결성(스펙 §5).
+const STATIC_TOOLBAR_UPLOAD_DELAY_MS = 300;
+
+// 실존하지 않는 https://example.com/uploads/... url은 브라우저가 로드할 수
+// 없어 kitchen sink에 이미지가 안 보였다(2026-09-11 사용자 보고). media
+// url이 data:/blob:도 허용하도록 정책이 바뀌어서(spec §3.2 개정,
+// ADR-0017) 실제 네트워크 없이도 즉시 렌더되도록 파일을 data url로
+// 인코딩해 반환한다.
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error(`파일 읽기 실패: ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
+const staticToolbarUploadFile: CreateEditorOptions["uploadFile"] = (
+  file,
+  signal,
+) => {
+  if (signal.aborted) return Promise.resolve({ status: "cancelled" });
+  return new Promise((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve({ status: "cancelled" });
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      if (file.name.includes("reject")) {
+        resolve({
+          status: "error",
+          code: "SHOWCASE_UPLOAD_REJECTED",
+          message: `Showcase upload rejected: ${file.name}`,
+        });
+        return;
+      }
+      readFileAsDataUrl(file).then(
+        (url) => resolve({ status: "success", url, name: file.name }),
+        (error: unknown) =>
+          resolve({
+            status: "error",
+            code: "SHOWCASE_UPLOAD_READ_FAILED",
+            message: `Showcase upload failed to read file: ${file.name} (${String(error)})`,
+          }),
+      );
+    }, STATIC_TOOLBAR_UPLOAD_DELAY_MS);
+    signal.addEventListener("abort", onAbort);
+  });
+};
+
+// 10-syntax-highlighting-lowlight/example.tsx와 동일 이유 — 소스 패널
+// 자기완결성(스펙 §5). 어댑터를 공용 모듈로 뽑지 않고 그대로 복제한다.
+const lowlight = createLowlight(common);
+
+type HastRoot = ReturnType<typeof lowlight.highlight>;
+type HastNode = HastRoot["children"][number];
+type Token = { from: number; to: number; className?: string };
+
+const flattenHastToTokens = (
+  nodes: readonly HastNode[],
+  offset: number,
+  tokens: Token[],
+): number => {
+  let cursor = offset;
+  for (const node of nodes) {
+    if (node.type === "text") {
+      cursor += node.value.length;
+      continue;
+    }
+    if (node.type === "element") {
+      const from = cursor;
+      cursor = flattenHastToTokens(node.children, cursor, tokens);
+      const classNameProp = node.properties?.className;
+      const className = Array.isArray(classNameProp)
+        ? classNameProp.join(" ")
+        : typeof classNameProp === "string"
+          ? classNameProp
+          : undefined;
+      tokens.push({
+        from,
+        to: cursor,
+        ...(className === undefined ? {} : { className }),
+      });
+    }
+  }
+  return cursor;
+};
+
+const staticToolbarSyntaxHighlighter: CreateEditorOptions["syntaxHighlighter"] =
+  ({ source, language }) => {
+    if (language === undefined || !lowlight.registered(language)) return [];
+    const tree = lowlight.highlight(language, source);
+    const tokens: Token[] = [];
+    flattenHastToTokens(tree.children, 0, tokens);
+    return tokens;
+  };
 
 // exportHtml()의 라운드트립 전용 속성(data-geul-text-color 등) 중 시각
 // 표현이 없는 것만 골라 미리보기에 반영한다. 인라인 mark(textColor,
@@ -416,7 +518,12 @@ const ResultPanel = ({ revision }: { revision: number }) => {
   const previewRef = useRef<HTMLDivElement>(null);
 
   const exported = useMemo(
-    () => exportHtml(editor.getDocument()),
+    () =>
+      // 라이브 에디터에 배선한 어댑터를 그대로 재사용해 미리보기의 코드
+      // 블록도 강조한다(00-composite와 동일).
+      exportHtml(editor.getDocument(), {
+        syntaxHighlighter: staticToolbarSyntaxHighlighter,
+      }),
     // editor 인스턴스는 EditorProvider 마운트 동안 안정적이다 — revision이
     // 바뀔 때만 재계산하면 된다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -566,6 +673,8 @@ const StaticToolbarExample = () => {
       initialDocument={initialDocument}
       iframeEmbed={STATIC_TOOLBAR_IFRAME_EMBED}
       onChange={(event) => setRevision(event.revision)}
+      syntaxHighlighter={staticToolbarSyntaxHighlighter}
+      uploadFile={staticToolbarUploadFile}
     >
       {/* StaticToolbar 자체는 위치 CSS가 없다 — stickyToolbar가 이 예제의
           scrollArea를 앵커로 삼아 상단에 고정한다. */}
@@ -581,10 +690,12 @@ const StaticToolbarExample = () => {
           캡션, iframe 로딩 표시는 SlashMenu가 함께 마운트하고, URL 입력
           패널(FilePanel)·미디어 툴바·리사이즈 핸들은 따로 마운트한다. */}
       <FormattingToolbar />
+      <LinkToolbar />
       <SlashMenu />
       <FilePanel />
       <MediaToolbar />
       <MediaResizeHandles />
+      <EmojiPicker />
       <ResultPanel revision={revision} />
     </EditorProvider>
   );
