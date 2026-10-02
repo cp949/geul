@@ -5,11 +5,14 @@
  * 접힌 캐럿 명령 3개의 mock도 여기서 더한다.
  * 실제 편집기에 StaticToolbar를 올리는 `mountToolbarWithEditor`와 포커스된
  * 요소에 키를 보내는 `press`도 둔다.
+ * 메뉴와 같은 Escape 스택에 오르는 `ProbeOverlay`와 `openProbe`도 둔다.
  */
-import { act, fireEvent } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { useState } from "react";
 import { vi } from "vitest";
 
 import { StaticToolbar } from "../src/index.js";
+import { useDismissibleOverlay } from "../src/use-dismissible-overlay.js";
 import { fakeController } from "./formatting-toolbar-test-support.js";
 import { mountBlockEditor, placeCaret } from "./mount-editor.js";
 
@@ -114,3 +117,35 @@ export const reachesEditor = (
   }
   return received.mock.calls.length > 0;
 };
+
+/**
+ * StaticToolbar 메뉴와 같은 문서 Escape 스택에 오르는 두 번째 module 오버레이.
+ * 버튼을 눌러 열고 Escape로 닫힌다. Escape LIFO 순서를 보는 데 쓴다.
+ * 편집기 host 대신 `document.body`를 `element`로 넘긴다. 스택 키가
+ * `element.ownerDocument`라서 host 없이도 메뉴와 같은 스택에 오른다.
+ * 편집기 context가 없어도 `render(<ProbeOverlay />)`로 따로 그릴 수 있다.
+ */
+export const ProbeOverlay = () => {
+  const [open, setOpen] = useState(false);
+  useDismissibleOverlay({
+    open,
+    element: document.body,
+    allowSelectors: ["[data-test-probe]"],
+    onClose: () => setOpen(false),
+  });
+  return (
+    <>
+      <button data-test-probe="" onClick={() => setOpen(true)} type="button">
+        Probe open
+      </button>
+      {open && <div aria-label="Probe" data-test-probe="" role="dialog" />}
+    </>
+  );
+};
+
+/**
+ * `ProbeOverlay`를 연다. `fireEvent.click`은 pointerdown을 보내지 않아
+ * 이미 열린 메뉴를 바깥 클릭으로 닫지 않는다.
+ */
+export const openProbe = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Probe open" }));

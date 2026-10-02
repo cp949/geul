@@ -8,6 +8,12 @@
  * 포커스 위치를 본다.
  * 키보드 입력이 실제로 어느 글자에 색을 입히는지는 브라우저에서만 확인되어
  * e2e(showcase-static-toolbar-color-menu.spec.ts)가 소유한다.
+ * 추가 주제(Issue #233, RD-002 DELTA-03): 바깥 클릭·Escape 닫힘이
+ * useDismissibleOverlay를 거친다.
+ * - 다른 module 오버레이와 함께 열렸을 때 Escape LIFO.
+ * - 편집기가 먼저 막은 Escape와 IME 조합 중 Escape.
+ * - 글자색과 배경색 전환(재마운트) 뒤에도 Escape 한 번에 닫힌다.
+ * 바깥 클릭과 Escape 뒤 초점은 기존 단언이 이전 전후로 그대로 고정한다.
  */
 import {
   act,
@@ -24,7 +30,9 @@ import { withProvider } from "./fake-editor-provider.js";
 import {
   fakeStaticToolbarController,
   mountToolbarWithEditor,
+  openProbe,
   press,
+  ProbeOverlay,
   reachesEditor,
 } from "./static-toolbar-test-support.js";
 
@@ -712,5 +720,86 @@ describe("StaticToolbar 색상 메뉴가 열린 채 mark 적용이 불가능해�
 
     expect(screen.getByRole("menu", { name: "Text color" })).not.toBeNull();
     expect(document.activeElement).toBe(swatch);
+  });
+});
+
+describe("StaticToolbar 색상 메뉴의 Escape가 useDismissibleOverlay를 거친다(Issue #233 RD-002 DELTA-03)", () => {
+  it("메뉴를 연 뒤 다른 오버레이를 열고 Escape를 누르면 나중에 연 오버레이만 닫히고 메뉴가 남는다", () => {
+    mountToolbarWithEditor();
+    render(<ProbeOverlay />);
+    openByMouse("Text color");
+    openProbe();
+    expect(screen.getByRole("menu", { name: "Text color" })).not.toBeNull();
+    expect(screen.getByRole("dialog", { name: "Probe" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // 개수만 보면 FIFO와 구분되지 않는다. 남은 쪽이 메뉴임을 단언한다.
+    expect(screen.queryByRole("dialog", { name: "Probe" })).toBeNull();
+    expect(screen.getByRole("menu", { name: "Text color" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("다른 오버레이를 연 뒤 메뉴를 열고 Escape를 누르면 메뉴만 먼저 닫히고 오버레이가 남는다", () => {
+    mountToolbarWithEditor();
+    render(<ProbeOverlay />);
+    openProbe();
+    openByMouse("Text color");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Probe" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Probe" })).toBeNull();
+  });
+
+  it("편집기가 Escape를 먼저 preventDefault해도 마우스로 연 메뉴가 닫히고 초점이 편집기에 남는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    editable.focus();
+    openByMouse("Text color");
+    expect(screen.getByRole("menu", { name: "Text color" })).not.toBeNull();
+    // ProseMirror editHandlers.keydown이 편집기 안의 Escape를 막는 것을 흉내 낸다.
+    const consume = (event: Event) => event.preventDefault();
+    editable.addEventListener("keydown", consume);
+    try {
+      fireEvent.keyDown(editable, { key: "Escape" });
+    } finally {
+      editable.removeEventListener("keydown", consume);
+    }
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("IME 조합 중 Escape는 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    mountToolbarWithEditor();
+    openByMouse("Text color");
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(screen.getByRole("menu", { name: "Text color" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("글자색 메뉴에서 배경색 메뉴로 바뀐 뒤에도 Escape 한 번에 닫힌다", () => {
+    mountToolbarWithEditor();
+    openByMouse("Text color");
+    // 속성이 바뀐 뒤에도 Escape 한 번에 닫히는 결과만 단언한다. 재마운트는
+    // 위의 "배경색을 키보드로 열면 첫 스와치" 테스트가 `key` 제거 변이로 잡는다.
+    openByMouse("Background color");
+    expect(
+      screen.getByRole("menu", { name: "Background color" }),
+    ).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

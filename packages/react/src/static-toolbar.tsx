@@ -319,6 +319,8 @@ export const StaticToolbar = ({
     setColorMenuState(null);
   }, [focusEditorIfFocusIn, isMarkingDisabled]);
 
+  // 바깥 클릭·Escape 닫힘은 메뉴 안의 `useDismissibleOverlay`가 소유한다.
+  // 이 둘은 상호배제(`useExclusiveOverlay`)가 한쪽 메뉴를 닫을 때만 쓴다.
   const dismissColorMenu = useCallback(() => {
     focusEditorIfFocusIn(COLOR_MENU_SELECTOR);
     setColorMenuState(null);
@@ -816,8 +818,7 @@ export const StaticToolbar = ({
           label={dictionary.toolbar.static.blockTypeAriaLabel}
           left={blockTypeMenuState.left}
           onConfirm={confirmBlockType}
-          onEscapeDismiss={closeBlockTypeMenu}
-          onOutsideDismiss={dismissBlockTypeMenu}
+          onClose={() => setBlockTypeMenuState(null)}
           onTabDismiss={closeBlockTypeMenuToTrigger}
           optionLabel={(option) => blockTypeText(dictionary, option.id).label}
           options={blockTypeMenuOptions}
@@ -834,8 +835,7 @@ export const StaticToolbar = ({
           left={colorMenuState.left}
           noneLabel={dictionary.color.none}
           onApply={(color) => applyInlineColor(colorMenuState.property, color)}
-          onEscapeDismiss={closeColorMenu}
-          onOutsideDismiss={dismissColorMenu}
+          onClose={() => setColorMenuState(null)}
           onTabDismiss={() => closeColorMenuToTrigger(colorMenuState.property)}
           property={colorMenuState.property}
           top={colorMenuState.top}

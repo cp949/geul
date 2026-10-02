@@ -8,6 +8,11 @@
  * Enter를 누른 채 있을 때의 자동 반복(Issue #228)도 실제 편집기로 본다.
  * 실제 입력이 어느 블록에 들어가는지와 viewport 클램프는 브라우저에서만
  * 확인되어 e2e가 소유한다.
+ * 추가 주제(Issue #233, RD-002 DELTA-03): 바깥 클릭·Escape 닫힘이
+ * useDismissibleOverlay를 거친다.
+ * - 다른 module 오버레이와 함께 열렸을 때 Escape LIFO.
+ * - 편집기가 먼저 막은 Escape와 IME 조합 중 Escape.
+ * 바깥 클릭과 Escape 뒤 초점은 기존 단언이 이전 전후로 그대로 고정한다.
  */
 import {
   act,
@@ -26,7 +31,9 @@ import { mountBlockEditor, placeCaret } from "./mount-editor.js";
 import {
   fakeStaticToolbarController,
   mountToolbarWithEditor,
+  openProbe,
   press,
+  ProbeOverlay,
   reachesEditor,
 } from "./static-toolbar-test-support.js";
 
@@ -748,5 +755,71 @@ describe("StaticToolbar 블록 타입 메뉴에서 Enter를 누른 채 있을 �
     editable.focus();
 
     expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(true);
+  });
+});
+
+describe("StaticToolbar 블록 타입 메뉴의 Escape가 useDismissibleOverlay를 거친다(Issue #233 RD-002 DELTA-03)", () => {
+  it("메뉴를 연 뒤 다른 오버레이를 열고 Escape를 누르면 나중에 연 오버레이만 닫히고 메뉴가 남는다", () => {
+    mountToolbarWithEditor();
+    render(<ProbeOverlay />);
+    openByMouse();
+    openProbe();
+    expect(screen.getByRole("listbox", { name: "Block type" })).not.toBeNull();
+    expect(screen.getByRole("dialog", { name: "Probe" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // 개수만 보면 FIFO와 구분되지 않는다. 남은 쪽이 메뉴임을 단언한다.
+    expect(screen.queryByRole("dialog", { name: "Probe" })).toBeNull();
+    expect(screen.getByRole("listbox", { name: "Block type" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("다른 오버레이를 연 뒤 메뉴를 열고 Escape를 누르면 메뉴만 먼저 닫히고 오버레이가 남는다", () => {
+    mountToolbarWithEditor();
+    render(<ProbeOverlay />);
+    openProbe();
+    openByMouse();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Probe" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Probe" })).toBeNull();
+  });
+
+  it("편집기가 Escape를 먼저 preventDefault해도 마우스로 연 메뉴가 닫히고 초점이 편집기에 남는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    editable.focus();
+    openByMouse();
+    expect(screen.getByRole("listbox", { name: "Block type" })).not.toBeNull();
+    // ProseMirror editHandlers.keydown이 편집기 안의 Escape를 막는 것을 흉내 낸다.
+    const consume = (event: Event) => event.preventDefault();
+    editable.addEventListener("keydown", consume);
+    try {
+      fireEvent.keyDown(editable, { key: "Escape" });
+    } finally {
+      editable.removeEventListener("keydown", consume);
+    }
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("IME 조합 중 Escape는 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    mountToolbarWithEditor();
+    openByMouse();
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(screen.getByRole("listbox", { name: "Block type" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

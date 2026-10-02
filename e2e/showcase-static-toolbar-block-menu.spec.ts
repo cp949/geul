@@ -127,6 +127,24 @@ test("Escape는 메뉴를 닫고 포커스를 편집기로 돌린다", async ({ 
   await expect(editorInput).toBeFocused();
 });
 
+test("마우스로 연 메뉴에서 편집기 포커스의 Escape가 메뉴를 닫고 포커스가 편집기에 남는다", async ({
+  page,
+}) => {
+  // Issue #233 RD-002 DELTA-03. 마우스로 열면 포커스가 편집기에 남는다.
+  // ProseMirror가 편집기 안의 Escape를 `preventDefault`하므로 useDismissibleOverlay의
+  // "편집기가 막은 Escape" 예외가 없으면 메뉴가 닫히지 않는다.
+  // 옛 훅에서도 통과하는 회귀 가드다. module의 그 예외를 지킨다.
+  const { trigger, listbox, editorInput } = await openWithCaret(page);
+
+  await trigger.click();
+  await expect(listbox).toBeVisible();
+  await expect(editorInput).toBeFocused();
+  await page.keyboard.press("Escape");
+
+  await expect(listbox).toHaveCount(0);
+  await expect(editorInput).toBeFocused();
+});
+
 test("키보드로 연 메뉴에서 툴바 Bold를 마우스로 누르면 메뉴가 닫히고 포커스가 BODY로 떨어지지 않는다", async ({
   page,
 }) => {

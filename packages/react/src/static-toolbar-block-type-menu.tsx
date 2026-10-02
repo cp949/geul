@@ -4,15 +4,15 @@ import type { BlockTypeOption } from "./block-type-options.js";
 import { preserveFocusOnMouseDown } from "./icon-button.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 
 // 메뉴 패널 루트의 셀렉터. 자동 닫힘 때 초점이 메뉴 안에 있었는지 판정한다.
 export const BLOCK_TYPE_MENU_SELECTOR = "[data-geul-block-type-menu]";
 
 // 바깥 pointerdown 판정에서 제외할 영역. 트리거를 빼면 열린 상태에서 트리거를
 // 다시 누를 때 pointerdown이 먼저 "바깥 클릭"으로 닫아 버리고, 뒤이은 click의
-// 토글이 메뉴를 다시 연다(G-UI-001). 모듈 상수로 둔다 — 매 렌더 새 배열을
-// 넘기면 훅이 리스너를 매번 다시 건다.
+// 토글이 메뉴를 다시 연다(G-UI-001). 모듈 상수로 둔다.
+// `useDismissibleOverlay`는 초점이 이 표면 안이면 닫힐 때 편집기로 돌린다.
 const BLOCK_TYPE_MENU_DISMISS_ALLOW_SELECTORS = [
   BLOCK_TYPE_MENU_SELECTOR,
   "[data-geul-block-type-trigger]",
@@ -38,21 +38,18 @@ type StaticToolbarBlockTypeMenuProps = {
   /** 열린 직후 선택된 옵션(없으면 첫 옵션)으로 포커스를 옮길지. 키보드로 열 때만 `true`다. */
   focusSelected: boolean;
 
-  /** `useDismissOnOutsideOrEscape`가 쓰는 편집기 마운트 요소. */
+  /** `useDismissibleOverlay`가 쓰는 편집기 마운트 요소. */
   element: HTMLElement | null;
 
   /** 옵션 확정(클릭, Enter, Space). */
   onConfirm: (option: BlockTypeOption) => void;
 
   /**
-   * 바깥 클릭. 이 컴포넌트는 포커스를 옮기지 않는다. 호출부가 포커스가 메뉴 안에
-   * 있었으면 편집기로 돌린다(G-UI-001 바깥 클릭). 호출부가 `useCallback`으로
-   * 안정시킨다.
+   * 바깥 클릭이나 Escape로 닫을 때 부른다. 호출부는 열림 상태만 비운다.
+   * 초점은 `useDismissibleOverlay`가 먼저 옮긴다. 바깥 클릭은 초점이 메뉴나
+   * 트리거 안일 때만, Escape는 항상 편집기로 돌린다.
    */
-  onOutsideDismiss: () => void;
-
-  /** Escape. 호출부가 편집기로 포커스를 돌린다. 호출부가 `useCallback`으로 안정시킨다. */
-  onEscapeDismiss: () => void;
+  onClose: () => void;
 
   /** Tab. 호출부가 메뉴를 닫고 트리거로 포커스를 돌린다. */
   onTabDismiss: () => void;
@@ -75,18 +72,19 @@ export const StaticToolbarBlockTypeMenu = ({
   focusSelected,
   element,
   onConfirm,
-  onOutsideDismiss,
-  onEscapeDismiss,
+  onClose,
   onTabDismiss,
 }: StaticToolbarBlockTypeMenuProps) => {
   const { menuRef, style } = useClampedMenuPosition(left, top);
 
-  useDismissOnOutsideOrEscape({
-    active: true,
+  // 열려 있을 때만 마운트하므로 `open`은 고정이다. 열림 초점은 아래 로컬
+  // effect가 맡고 `focusOnOpen`은 쓰지 않는다. `aria-selected` 옵션을
+  // 먼저 찾아야 하기 때문이다.
+  useDismissibleOverlay({
+    open: true,
     element,
     allowSelectors: BLOCK_TYPE_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss,
-    onEscapeDismiss,
+    onClose,
   });
 
   // 키보드로 열었을 때만 메뉴 안으로 포커스를 옮긴다. 마우스로 열면 편집기
