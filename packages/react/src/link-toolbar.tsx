@@ -25,11 +25,11 @@ import {
   syncAnchorClipVisibility,
 } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import {
   rangeBoundariesEqual,
   useDismissSuppression,
 } from "./use-dismiss-suppression.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -50,11 +50,13 @@ const linkToolbarButtonClassName = "geul-link-toolbar__button";
 const linkToolbarIconButtonClassName =
   "geul-icon-button geul-link-toolbar__icon-button";
 
-// view 모드 툴바 자신을 allow-list에 넣는다 — 안 그러면 Open/Edit/Remove
-// 버튼 pointerdown이 "바깥 클릭"으로 잡혀 버튼 자신의 onClick보다 먼저
-// 툴바를 지운다(formatting-toolbar.tsx TOOLBAR_DISMISS_ALLOW_SELECTORS와
-// 같은 이유). editing 모드는 이 훅을 쓰지 않는다 — URL input이 자기
-// keydown에서 Escape를 이미 처리한다(cancelEditing).
+// useDismissibleOverlay allow-list. 툴바 자신을 넣는다 — 안 그러면
+// Open/Edit/Remove·Save/Cancel 버튼 pointerdown이 "바깥 클릭"으로 잡혀 버튼
+// 자신의 onClick보다 먼저 툴바를 지운다(formatting-toolbar.tsx
+// TOOLBAR_DISMISS_ALLOW_SELECTORS와 같은 이유). view와 editing 모드가 같은
+// 셀렉터를 쓴다. URL input의 Escape는 입력이 툴바 안이라 module이 건너뛰고
+// input 자신의 keydown(handleMenuKeyDown → cancelEditing)이 처리한다
+// (Issue #233 RD-003 DELTA-02).
 const LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS = [".geul-link-toolbar"] as const;
 
 type ToolbarPosition = { left: number; top: number };
@@ -238,27 +240,54 @@ export const LinkToolbar = ({
   });
   const focusEditor = useFocusEditor(element);
 
-  // view 모드도 G-UI-001을 따른다(formatting-toolbar.tsx와 같은 훅). 바깥
-  // pointerdown은 자연히 selection을 collapse해 updateFromSelection이 이미
-  // 닫아주는 경우가 많으므로 onOutsideDismiss는 방어적 안전망이고 초점은
-  // 옮기지 않는다. Escape는 돌아갈 selection이 없으니 초점을 편집기로
-  // 되돌리고 dismissSuppression에 기록해 재관측 재오픈을 막는다. editing
-  // 모드는 active에서 뺀다 — URL input이 자기 Escape를 이미 처리한다.
-  const closeViewOnEscape = useCallback(() => {
-    dismissSuppression.dismiss(currentRangeRef.current);
-    focusEditor();
-    setToolbarState({ mode: "closed" });
-  }, [dismissSuppression, focusEditor]);
-  const dismissViewOutside = useCallback(() => {
-    dismissSuppression.clear();
-    setToolbarState({ mode: "closed" });
-  }, [dismissSuppression]);
-  useDismissOnOutsideOrEscape({
-    active: toolbarState.mode === "view",
+  // 편집 모드를 닫는다. editingRef를 true로 세워 닫힌 직후 selectionchange가
+  // updateFromSelection으로 view를 되살리지 못하게 하고, 다음 매크로태스크에
+  // 푼다. 풀지 않으면 updateFromSelection이 영구히 막힌다. `restoreFocus`가
+  // false면 초점은 건드리지 않는다. useDismissibleOverlay가 이미 정리했다.
+  // closeAndRestoreFocus·onClose가 쓰므로 훅 호출 앞에 둔다.
+  const closeEditingMode = useCallback(
+    (restoreFocus: boolean) => {
+      editingRef.current = true;
+      if (restoreFocus) focusEditor();
+      setToolbarState({ mode: "closed" });
+      element?.ownerDocument.defaultView?.setTimeout(() => {
+        editingRef.current = false;
+      });
+    },
+    [element, focusEditor],
+  );
+
+  // 링크 툴바의 view와 편집 모드 닫힘은 useDismissibleOverlay가 소유한다
+  // (G-UI-001, Issue #233 RD-003 DELTA-02). 열림은 view와 편집 모드 모두다.
+  // view↔편집 전환은 `open`이 true로 유지돼 스택 위치가 바뀌지 않는다.
+  // `onClose`는 현재 mode와 reason으로 가른다. module이 최신 `onClose`를 ref로
+  // 읽으므로 렌더마다 새 함수여도 된다.
+  // - view·escape: 같은 selection의 재관측 재오픈을 막으려 억제를 기록한다.
+  //   초점은 module이 편집기로 되돌린다.
+  // - view·outside: 편집기 안 클릭은 selection을 collapse해 updateFromSelection이
+  //   먼저 닫는 경우가 많다. 서식 툴바 버튼 클릭처럼 selection이 유지되는
+  //   바깥 pointerdown도 이 경로로 닫는다. 옛 훅도 같았다. 억제는 기록하지
+  //   않는다.
+  // - editing: 초안을 버리고 닫는다. 억제는 기록하지 않는다(cancelEditing과
+  //   같다). editingRef 규칙은 closeEditingMode가 소유한다.
+  // 이 호출은 early return 앞에 둔다. 훅은 조건부로 부를 수 없다.
+  useDismissibleOverlay({
+    open: toolbarState.mode === "view" || toolbarState.mode === "editing",
     element,
     allowSelectors: LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissViewOutside,
-    onEscapeDismiss: closeViewOnEscape,
+    onClose: (reason) => {
+      if (toolbarState.mode === "editing") {
+        if (reason === "outside") dismissSuppression.clear();
+        closeEditingMode(false);
+        return;
+      }
+      if (reason === "escape") {
+        dismissSuppression.dismiss(currentRangeRef.current);
+      } else {
+        dismissSuppression.clear();
+      }
+      setToolbarState({ mode: "closed" });
+    },
   });
 
   if (toolbarState.mode === "closed") return null;
@@ -292,14 +321,7 @@ export const LinkToolbar = ({
     });
   };
 
-  const closeAndRestoreFocus = () => {
-    editingRef.current = true;
-    focusEditor();
-    setToolbarState({ mode: "closed" });
-    element?.ownerDocument.defaultView?.setTimeout(() => {
-      editingRef.current = false;
-    });
-  };
+  const closeAndRestoreFocus = () => closeEditingMode(true);
 
   const cancelEditing = () => closeAndRestoreFocus();
 

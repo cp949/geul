@@ -249,3 +249,79 @@ test("view에서 editing으로 바뀌며 툴바 폭이 커져도 뷰포트 오�
   await linkInput.fill("https://example.com");
   await expect(linkInput).toHaveValue("https://example.com");
 });
+
+// Issue #233 RD-003 DELTA-02. LinkToolbar의 view·편집 모드 닫힘은
+// useDismissibleOverlay를 거친다. 아래 (a)는 편집기 초점의 실제 Escape를 쓴다.
+// ProseMirror가 편집기 안의 Escape를 `preventDefault`하므로 module의 "편집기가 막은
+// Escape" 예외가 없으면 view 툴바가 닫히지 않는다. jsdom은 이 `preventDefault`를
+// 재현하지 못해 단위 테스트가 대신하지 못한다.
+test("링크 위 편집기 초점에서 Escape를 누르면 링크 툴바(view)가 닫히고 초점이 편집기에 남는다 (#233 RD-003 DELTA-02)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+  await page.getByRole("button", { name: "Add link" }).click();
+  await page.getByRole("textbox", { name: "Link URL" }).fill("/opened");
+  await page.getByRole("button", { name: "Save link" }).click();
+  await expect(editable.locator("a")).toHaveAttribute("href", "/opened");
+
+  await editable.locator("a").click();
+  const toolbar = page.getByRole("toolbar", { name: "Link" });
+  await expect(toolbar).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(toolbar).not.toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
+test("링크 편집 모드에서 편집기 밖을 누르면 툴바가 닫히고 입력 중이던 초안은 버려진다 (#233 RD-003 DELTA-02, 동작 변경 4)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+  await page.getByRole("button", { name: "Add link" }).click();
+  const linkInput = page.getByRole("textbox", { name: "Link URL" });
+  await linkInput.fill("https://draft.example.com");
+  await expect(linkInput).toBeFocused();
+
+  await page.getByRole("heading", { level: 1 }).click();
+
+  await expect(page.getByRole("toolbar", { name: "Link" })).not.toBeVisible();
+  await expect(linkInput).toHaveCount(0);
+  // 저장하지 않고 버려진다. 문서에 링크가 생기지 않는다.
+  await expect(editable.locator("a")).toHaveCount(0);
+});
+
+test("서식 툴바와 링크 툴바가 함께 보일 때 Escape 한 번에 하나만 닫히고 두 번째에 나머지가 닫힌다 (#233 RD-003 DELTA-02, 동작 변경 2)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+  const formatting = page.getByRole("toolbar", { name: "Formatting" });
+  const link = page.getByRole("toolbar", { name: "Link" });
+  await expect(formatting).toBeVisible();
+  await expect(link).toBeVisible();
+
+  // 두 툴바가 같은 selectionchange로 열려 순서는 마운트 순서에 따른다. 어느 쪽이
+  // 먼저 닫히는지는 묻지 않고, 한 번에 하나만 닫히는지를 본다.
+  await page.keyboard.press("Escape");
+
+  await expect
+    .poll(
+      async () => (await formatting.isVisible()) !== (await link.isVisible()),
+    )
+    .toBe(true);
+
+  await page.keyboard.press("Escape");
+
+  await expect(formatting).not.toBeVisible();
+  await expect(link).not.toBeVisible();
+});

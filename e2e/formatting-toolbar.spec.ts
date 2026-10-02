@@ -233,45 +233,72 @@ test("인라인 배경색 팔레트에서 배경색을 적용하고 None으로 �
 // ProseMirror가 편집기 안의 Escape를 `preventDefault`하므로 useDismissibleOverlay의
 // "편집기가 막은 Escape" 예외가 없으면 툴바와 팔레트가 닫히지 않는다.
 // jsdom은 이 `preventDefault`를 재현하지 못해 단위 테스트가 대신하지 못한다.
-test("편집기 초점에서 Escape를 누르면 서식 툴바가 닫히고 초점이 편집기에 남는다 (#233 RD-003 DELTA-01)", async ({
+// 데모는 서식 툴바와 링크 툴바를 함께 마운트한다. 범위 선택이면 둘 다 뜨고 링크
+// 툴바가 나중에 열린다. Escape는 나중에 열린 하나만 닫으므로 서식 툴바는 링크
+// 툴바 다음 회차에 닫힌다(Issue #233 RD-003 DELTA-02, 동작 변경 2).
+test("편집기 초점에서 Escape를 누르면 링크 툴바가 먼저 닫히고 두 번째 Escape에 서식 툴바가 닫혀 초점이 편집기에 남는다 (#233 RD-003 DELTA-01·DELTA-02, 동작 변경 2)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  const linkToolbar = page.getByRole("toolbar", { name: "Link" });
   await editable.click();
   await page.keyboard.type("Hello R1");
   await page.keyboard.press("Control+A");
+  await expect(toolbar).toBeVisible();
+  await expect(linkToolbar).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  // 나중에 열린 링크 툴바만 닫힌다.
+  await expect(linkToolbar).not.toBeVisible();
   await expect(toolbar).toBeVisible();
   await expect(editable).toBeFocused();
 
   await page.keyboard.press("Escape");
 
   await expect(toolbar).not.toBeVisible();
+  await expect(linkToolbar).not.toBeVisible();
   await expect(editable).toBeFocused();
 });
 
-test("팔레트가 열린 채 편집기 초점에서 Escape를 누르면 팔레트만 닫히고 두 번째 Escape에 서식 툴바가 닫힌다 (#233 RD-003 DELTA-01)", async ({
+test("팔레트가 열린 채 편집기 초점에서 Escape를 누르면 팔레트, 링크 툴바, 서식 툴바 순으로 하나씩 닫힌다 (#233 RD-003 DELTA-01·DELTA-02, 동작 변경 2)", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  const linkToolbar = page.getByRole("toolbar", { name: "Link" });
   await editable.click();
   await page.keyboard.type("Hello R1");
   await page.keyboard.press("Control+A");
   await page.getByRole("button", { name: "Text color" }).click();
   const palette = page.getByRole("menu", { name: "Text color" });
   await expect(palette).toBeVisible();
+  await expect(linkToolbar).toBeVisible();
   await expect(editable).toBeFocused();
 
+  // 1회: 가장 나중에 열린 팔레트만 닫힌다.
   await page.keyboard.press("Escape");
 
   await expect(palette).toHaveCount(0);
+  await expect(linkToolbar).toBeVisible();
   await expect(toolbar).toBeVisible();
   await expect(editable).toBeFocused();
 
+  // 2회: 다음으로 나중에 열린 링크 툴바만 닫힌다.
+  await page.keyboard.press("Escape");
+
+  await expect(linkToolbar).not.toBeVisible();
+  await expect(toolbar).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  // 3회: 서식 툴바가 닫힌다.
   await page.keyboard.press("Escape");
 
   await expect(toolbar).not.toBeVisible();
+  await expect(linkToolbar).not.toBeVisible();
+  await expect(palette).toHaveCount(0);
   await expect(editable).toBeFocused();
 });
 
