@@ -25,6 +25,7 @@ import {
   fakeStaticToolbarController,
   mountToolbarWithEditor,
   press,
+  reachesEditor,
 } from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
@@ -398,24 +399,6 @@ describe("StaticToolbar 색상 메뉴의 닫기와 포커스(실제 편집기)",
     // 버튼은 keydown Enter마다 click을 낸다. 확정으로 포커스가 편집기로 돌아간
     // 뒤에도 같은 키의 반복이 이어지면 편집기가 선택 범위를 줄바꿈으로 바꾼다.
     // jsdom은 keydown에서 click을 내지 않으므로 click은 직접 보낸다.
-    // 편집기도 Enter를 `preventDefault`하므로 반환값으로는 막힘을 가를 수
-    // 없다. 키가 편집기 요소에 도달했는지로 본다.
-
-    /** 포커스된 요소에 keydown을 보내고 편집기 요소가 그 키를 받았는지 돌려준다. */
-    const reachesEditor = (
-      editable: HTMLElement,
-      key: string,
-      init: KeyboardEventInit = {},
-    ) => {
-      const received = vi.fn();
-      editable.addEventListener("keydown", received);
-      try {
-        press(key, init);
-      } finally {
-        editable.removeEventListener("keydown", received);
-      }
-      return received.mock.calls.length > 0;
-    };
 
     it("스와치 확정 뒤 편집기로 간 Enter 반복은 편집기에 닿지 않고 keyup 뒤에는 닿는다", () => {
       const { editable } = mountToolbarWithEditor();

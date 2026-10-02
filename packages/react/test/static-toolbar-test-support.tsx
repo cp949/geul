@@ -93,3 +93,24 @@ export const mountToolbarWithEditor = () => {
  */
 export const press = (key: string, init: KeyboardEventInit = {}) =>
   fireEvent.keyDown(document.activeElement as Element, { key, ...init });
+
+/**
+ * 포커스된 요소에 keydown을 보내고 편집기 요소가 그 키를 받았는지 돌려준다.
+ * 편집기도 Enter를 `preventDefault`한다. `press`의 반환값으로는 메뉴가
+ * 막았는지 편집기가 처리했는지 가를 수 없다. 키가 편집기 요소에 도달했는지로
+ * 본다. 문서 capture 단계에서 삼킨 키는 편집기에 닿지 않는다.
+ */
+export const reachesEditor = (
+  editable: HTMLElement,
+  key: string,
+  init: KeyboardEventInit = {},
+) => {
+  const received = vi.fn();
+  editable.addEventListener("keydown", received);
+  try {
+    press(key, init);
+  } finally {
+    editable.removeEventListener("keydown", received);
+  }
+  return received.mock.calls.length > 0;
+};

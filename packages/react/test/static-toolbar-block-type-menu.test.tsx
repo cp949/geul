@@ -5,6 +5,7 @@
  * (RD-003-DELTA-01, Issue #218 결함 5).
  * fake controller로는 열림 상태, 옵션 구성, 키보드 이동이 변환을 일으키지
  * 않는 계약을, 실제 편집기로는 확정·Escape·바깥 클릭 뒤 포커스 위치를 본다.
+ * Enter를 누른 채 있을 때의 자동 반복(Issue #228)도 실제 편집기로 본다.
  * 실제 입력이 어느 블록에 들어가는지와 viewport 클램프는 브라우저에서만
  * 확인되어 e2e가 소유한다.
  */
@@ -25,6 +26,8 @@ import { mountBlockEditor, placeCaret } from "./mount-editor.js";
 import {
   fakeStaticToolbarController,
   mountToolbarWithEditor,
+  press,
+  reachesEditor,
 } from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
@@ -660,5 +663,90 @@ describe("StaticToolbar 블록 타입 메뉴의 수식 키(Issue #225)", () => {
 
     expect(notPrevented).toBe(false);
     expect(blockTypeTrigger().getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
+describe("StaticToolbar 블록 타입 메뉴에서 Enter를 누른 채 있을 때의 반복(Issue #228)", () => {
+  // 옵션 버튼은 keydown Enter마다 click을 낸다. 확정으로 메뉴가 닫혀 포커스가
+  // 편집기로 돌아간 뒤에도 같은 키의 반복이 이어지면 편집기가 블록을 나눈다.
+  // jsdom은 keydown에서 click을 내지 않으므로 click은 직접 보낸다.
+
+  it("키보드로 연 메뉴의 옵션에서 Enter 반복은 기본 동작을 막고 처음 Enter는 막지 않는다", () => {
+    mountToolbarWithEditor();
+    openByKeyboard();
+
+    // 처음 Enter는 막지 않는다. 막으면 브라우저가 click을 내지 않는다.
+    expect(press("Enter")).toBe(true);
+    expect(press("Enter", { repeat: true })).toBe(false);
+    fireEvent.keyUp(document.activeElement as Element, { key: "Enter" });
+  });
+
+  it("옵션 확정 뒤 편집기로 간 Enter 반복은 편집기에 닿지 않고 keyup 뒤에는 닿는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    openByKeyboard();
+
+    press("Enter");
+    fireEvent.click(screen.getByRole("option", { name: "Heading 1" }), {
+      detail: 0,
+    });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+
+    expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(false);
+    expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(false);
+    fireEvent.keyUp(editable, { key: "Enter" });
+    expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(true);
+  });
+
+  it("마우스로 연 메뉴의 트리거에서 Enter로 닫아도 편집기로 간 Enter 반복은 닿지 않는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    openByMouse();
+    blockTypeTrigger().focus();
+
+    press("Enter");
+    fireEvent.click(blockTypeTrigger(), { detail: 0 });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+
+    expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(false);
+    fireEvent.keyUp(editable, { key: "Enter" });
+  });
+
+  it("옵션에서 Control+Enter 반복도 기본 동작을 막는다", () => {
+    mountToolbarWithEditor();
+    openByKeyboard();
+
+    // 수식 키 가드가 Enter 반복 억제보다 앞서면 반복이 막히지 않는다.
+    expect(press("Enter", { repeat: true, ctrlKey: true })).toBe(false);
+  });
+
+  it("트리거의 Control+Enter로 메뉴를 닫아도 편집기로 간 Enter 반복은 닿지 않는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    openByMouse();
+    blockTypeTrigger().focus();
+
+    // 트리거의 수식 키 가드가 억제보다 앞서면 억제가 걸리지 않아 반복이
+    // 편집기에 닿는다.
+    press("Enter", { ctrlKey: true });
+    fireEvent.click(blockTypeTrigger(), { detail: 0 });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+
+    expect(
+      reachesEditor(editable, "Enter", { repeat: true, ctrlKey: true }),
+    ).toBe(false);
+    fireEvent.keyUp(editable, { key: "Enter" });
+  });
+
+  it("메뉴가 닫힌 트리거의 처음 Enter는 억제를 걸지 않는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    blockTypeTrigger().focus();
+
+    // 닫힌 트리거의 Enter는 메뉴를 여는 일반 활성화다. 억제를 걸면 뒤이은
+    // 편집기의 Enter 반복이 삼켜진다.
+    press("Enter");
+    editable.focus();
+
+    expect(reachesEditor(editable, "Enter", { repeat: true })).toBe(true);
   });
 });

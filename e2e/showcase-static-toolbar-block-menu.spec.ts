@@ -212,3 +212,73 @@ test("낮은 viewport에서도 메뉴가 화면 안에 그려지고 마지막 �
 
   await expect(block.locator("h6")).toHaveCount(1);
 });
+
+/** 편집기의 블록 수. 분할이 일어나면 늘어난다. */
+const blockCount = (page: Page) => page.locator("[data-geul-block-id]").count();
+
+test("트리거에서 Enter를 길게 눌러도 반복이 첫 옵션을 확정하거나 블록을 나누지 않는다", async ({
+  page,
+}) => {
+  const { trigger, listbox } = await openWithCaret(page);
+  const before = await blockCount(page);
+  await trigger.focus();
+
+  await page.keyboard.down("Enter");
+  await expect(listbox.getByRole("option", { name: "Text" })).toBeFocused();
+  // 같은 키를 떼지 않고 다시 누르면 `repeat`이 true인 keydown이 간다.
+  for (let i = 0; i < 3; i += 1) {
+    await page.keyboard.down("Enter");
+    await yieldFrame(page);
+  }
+  await page.keyboard.up("Enter");
+
+  await expect(listbox).toBeVisible();
+  await expect(listbox.getByRole("option", { name: "Text" })).toBeFocused();
+  expect(await blockCount(page)).toBe(before);
+});
+
+test("옵션에서 Enter를 길게 눌러도 확정 뒤 반복이 블록을 나누지 않는다", async ({
+  page,
+}) => {
+  const { block, trigger, listbox, editorInput } = await openWithCaret(page);
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(listbox.getByRole("option", { name: "Text" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    listbox.getByRole("option", { name: "Heading 1" }),
+  ).toBeFocused();
+  const before = await blockCount(page);
+
+  await page.keyboard.down("Enter");
+  // 확정으로 메뉴가 닫히고 포커스가 편집기로 돌아간다.
+  await expect(listbox).toHaveCount(0);
+  await expect(editorInput).toBeFocused();
+  await expect(block.locator("h1")).toHaveCount(1);
+  // 같은 키를 떼지 않고 다시 누르면 `repeat`이 true인 keydown이 편집기로 간다.
+  for (let i = 0; i < 3; i += 1) {
+    await page.keyboard.down("Enter");
+    await yieldFrame(page);
+  }
+  await page.keyboard.up("Enter");
+
+  expect(await blockCount(page)).toBe(before);
+});
+
+test("트리거에서 Space를 길게 눌러도 블록을 나누지 않는다", async ({
+  page,
+}) => {
+  // 가설 검증이다. 버튼은 Space를 keyup에서 활성화하므로 keydown 반복이
+  // click을 내지 않는다고 본다. Space 억제는 별도 범위다.
+  const { trigger } = await openWithCaret(page);
+  const before = await blockCount(page);
+  await trigger.focus();
+
+  for (let i = 0; i < 4; i += 1) {
+    await page.keyboard.down("Space");
+    await yieldFrame(page);
+  }
+  await page.keyboard.up("Space");
+
+  expect(await blockCount(page)).toBe(before);
+});
