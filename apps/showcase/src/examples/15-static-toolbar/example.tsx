@@ -5,6 +5,7 @@ import {
   EditorContent,
   EditorProvider,
   FilePanel,
+  FormattingToolbar,
   MediaResizeHandles,
   MediaToolbar,
   SlashMenu,
@@ -574,9 +575,12 @@ const StaticToolbarExample = () => {
           <EditorContent />
         </div>
       </div>
-      {/* StaticToolbar는 블록 변환·서식만 맡는다. 표 핸들·셀 서식, 미디어
-          툴바·리사이즈, 캡션, iframe 로딩 표시는 SlashMenu가 함께 마운트하고,
-          URL 입력 패널(FilePanel)·미디어 툴바·리사이즈 핸들은 따로 마운트한다. */}
+      {/* StaticToolbar는 항상 보이는 상단 툴바다. 글자를 선택하면 뜨는 서식
+          popover(FormattingToolbar)를 함께 둔다 — 두 툴바는 같은 커맨드
+          세트를 쓰고 서로 독립이다. 표 핸들·셀 서식, 미디어 툴바·리사이즈,
+          캡션, iframe 로딩 표시는 SlashMenu가 함께 마운트하고, URL 입력
+          패널(FilePanel)·미디어 툴바·리사이즈 핸들은 따로 마운트한다. */}
+      <FormattingToolbar />
       <SlashMenu />
       <FilePanel />
       <MediaToolbar />

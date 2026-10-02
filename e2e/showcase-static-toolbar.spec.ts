@@ -48,14 +48,17 @@ test("텍스트를 선택하고 Bold를 누르면 실제로 굵게 적용된다"
   await openShowcasePage(page, "/examples/static-toolbar");
   const editable = page.getByRole("textbox", { name: "Editor" });
 
+  // 선택하면 서식 popover(FormattingToolbar)에도 Bold가 있어 StaticToolbar로
+  // 범위를 좁힌다.
+  const bold = page
+    .getByRole("toolbar", { name: "Toolbar", exact: true })
+    .getByRole("button", { name: "Bold" });
+
   await editable.locator("p").first().dblclick();
-  await page.getByRole("button", { name: "Bold" }).click();
+  await bold.click();
 
   await expect(editable.locator("strong")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Bold" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(bold).toHaveAttribute("aria-pressed", "true");
 });
 
 test("블록 타입 컨트롤이 늘어나도 데모 패널 폭 안에서 한 줄로 보인다", async ({
