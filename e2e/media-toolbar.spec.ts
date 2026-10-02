@@ -8,18 +8,18 @@
  * 다음 블록과 겹치지 않게 하기 위해서다(아래 마지막 테스트). rename/caption
  * 편집과 delete의 undo 1회 복원, download 항목의 href/download 속성,
  * Escape/바깥 클릭에 따른 닫힘과 focus 복원 차이를 실제 Chromium event
- * 순서로 검증한다 — Escape/바깥 클릭 한 번은 메뉴가 열려 있어도 메뉴와
- * toolbar 전체를 함께 닫는다(계층적 dismiss를 두지 않는다, media-toolbar.tsx
- * 주석 참고). Preview 토글(image/video/audio 전용, 슬라이스5 RD-002
- * DELTA-03)의 `<img>`↔`<a>` 실제 DOM 교체·undo·aria-checked·JSON
- * round-trip도 이 파일이 검증한다. 정렬 항목 3개(image/video 전용, Issue
- * #154 MED-009)의 aria-checked 반영·undo 1회 복원·audio/file 미노출도
- * 검증한다 — textAlignment는 아직 편집 DOM에 투영하지 않아(media-block-
- * extension.ts 주석) 시각 스타일이 아닌 aria-checked로 "DOM 반영"을
- * 확인한다. Preview·정렬 항목은 클릭해도 메뉴를 닫지 않는다(여러 상태를
- * 이어서 확인할 수 있어야 한다) — Rename/Caption/Replace/Delete는 각각
- * mode 전환·블록 삭제로 메뉴가 자연히 닫힌다. fixed overlay viewport
- * clamp(RD-002, PIT-0011)도 이 파일이 검증한다.
+ * 순서로 검증한다 — 메뉴가 열려 있으면 Escape 한 번은 메뉴만 닫고 두 번째가
+ * toolbar를 닫는다(동작 변경 1, Issue #233 RD-003 DELTA-03). 바깥 클릭 한
+ * 번은 메뉴와 toolbar 전체를 함께 닫는다(오버레이마다 독립 판정). Preview
+ * 토글(image/video/audio 전용, 슬라이스5 RD-002 DELTA-03)의 `<img>`↔`<a>`
+ * 실제 DOM 교체·undo·aria-checked·JSON round-trip도 이 파일이 검증한다. 정렬
+ * 항목 3개(image/video 전용, Issue #154 MED-009)의 aria-checked 반영·undo 1회
+ * 복원·audio/file 미노출도 검증한다 — textAlignment는 아직 편집 DOM에 투영하지
+ * 않아(media-block-extension.ts 주석) 시각 스타일이 아닌 aria-checked로 "DOM
+ * 반영"을 확인한다. Preview·정렬 항목은 클릭해도 메뉴를 닫지 않는다(여러 상태를
+ * 이어서 확인할 수 있어야 한다) — Rename/Caption/Replace/Delete는 각각 mode
+ * 전환·블록 삭제로 메뉴가 자연히 닫힌다. fixed overlay viewport clamp(RD-002,
+ * PIT-0011)도 이 파일이 검증한다.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -234,7 +234,7 @@ test("more 메뉴가 열린 채로 같은 미디어 블록을 다시 클릭하�
   await openMoreMenu(page);
   await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible();
 
-  // 수정 전에는 이 재클릭이 useDismissOnOutsideOrEscape의 allow-list
+  // 수정 전에는 이 재클릭이 toolbar 닫힘 훅의 allow-list
   // (`[data-geul-block-id]`)에 걸려 "바깥 클릭"으로 처리되지 않고, 뒤이은
   // updateFromSelection도 같은 blockId 재관측이라 moreMenuOpen을 그대로
   // 둬 메뉴가 영영 안 닫혔다.
@@ -316,7 +316,16 @@ test("showPreview:false가 Save/Load JSON round-trip 이후에도 유지된다 @
   // 동시에 수행해야 하는 조합에서 onClick이 조용히 무시되는 기존 결함을
   // 실측했다(RD-002 착수 이전부터 존재, 이 슬라이스가 만든 회귀 아님 —
   // `pending-issues/02.md`). Escape로 먼저 닫아 dismiss와 다음 클릭을
-  // 분리한다.
+  // 분리한다. Preview 클릭 뒤에도 more 메뉴가 열려 있어 Escape가 두 번
+  // 필요하다. 첫 Escape는 more 메뉴만 닫고 toolbar는 남긴다(동작 변경 1,
+  // Issue #233 RD-003 DELTA-03).
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Preview" }),
+  ).not.toBeVisible();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("toolbar", { name: "Media toolbar" }),
@@ -405,8 +414,16 @@ test("정렬 값이 Save/Load JSON round-trip 이후에도 유지된다(Issue #1
   // Media toolbar가 열린 채로 "Save JSON"(편집기 바깥 버튼)을 바로 클릭하지
   // 않는다 — 위 showPreview round-trip 테스트와 같은 이유(바깥-클릭 dismiss와
   // Save JSON 자신의 onClick이 동시에 수행돼야 하는 조합의 기존 결함,
-  // `pending-issues/02.md`). Escape로 먼저 닫는다(메뉴가 열려 있어도
-  // Escape 한 번으로 메뉴와 toolbar 전체가 함께 닫힌다).
+  // `pending-issues/02.md`). Escape로 먼저 닫는다(메뉴가 열려 있으면 첫
+  // Escape는 메뉴만 닫고 toolbar는 남긴다 — 동작 변경 1, Issue #233 RD-003
+  // DELTA-03. 두 번째 Escape가 toolbar를 닫는다).
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Align center" }),
+  ).not.toBeVisible();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("toolbar", { name: "Media toolbar" }),
@@ -664,4 +681,54 @@ test("outer 컨테이너 폭이 늘어나면 more-menu가 트리거의 새 위�
       );
     })
     .toBeLessThanOrEqual(1);
+});
+
+// Issue #233 RD-003 DELTA-03(동작 변경 1) — more 메뉴가 열린 채 편집기 초점에서
+// 누른 실제 Escape다. ProseMirror가 편집기 안의 Escape를 `preventDefault`하므로
+// useDismissibleOverlay의 "편집기가 막은 Escape" 예외가 없으면 메뉴도 toolbar도
+// 닫히지 않는다. jsdom은 이 `preventDefault`를 재현하지 못한다.
+test("more 메뉴가 열린 채 편집기 초점에서 Escape를 누르면 메뉴만 닫히고 두 번째에 toolbar가 닫힌다 (#233 RD-003 DELTA-03, 동작 변경 1)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  const menu = page.locator(".geul-media-toolbar__more-menu");
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+  await expect(menu).toBeVisible();
+  // 트리거 버튼은 mousedown에서 초점 이동을 막아 편집기가 초점을 유지한다.
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(menu).not.toBeVisible();
+  await expect(toolbar).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(toolbar).not.toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
+test("more 메뉴가 열린 채 편집기 바깥을 클릭하면 메뉴와 toolbar가 함께 닫힌다 (#233 RD-003 DELTA-03)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  const menu = page.locator(".geul-media-toolbar__more-menu");
+  await expect(menu).toBeVisible();
+
+  const saveJsonButton = page.getByRole("button", { name: "Save JSON" });
+  await saveJsonButton.click();
+
+  await expect(menu).not.toBeVisible();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).not.toBeVisible();
+  await expect(saveJsonButton).toBeFocused();
 });

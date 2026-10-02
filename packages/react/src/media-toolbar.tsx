@@ -30,7 +30,7 @@ import {
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -66,9 +66,9 @@ const moreIcon = <MoreHorizontal {...iconProps} />;
 // `__align-button`을 코드 복제 없이 그대로 재사용한다(같은 절 "결정").
 const mediaToolbarMoreMenuItemClassName = "geul-media-toolbar__more-menu-item";
 
-// useDismissOnOutsideOrEscape allow-list. FilePanel/SlashMenu와 같은 이유로
-// 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가 리스너를 매
-// 렌더 떼었다 다시 붙인다).
+// toolbar용 useDismissibleOverlay allow-list. 모듈 스코프 상수로 둔다. module은
+// 최신 값을 ref로 읽어 매 렌더 새 배열이어도 리스너를 다시 달지 않지만, 다른
+// 호출부(block-side-menu.tsx 등)의 관례를 따른다.
 //
 // `[data-geul-block-id]`(모든 블록의 공통 wrapper, RD-002 계약 — block-selection
 // -toolbar.tsx도 같은 selector를 전체 블록 조회에 쓴다)를 포함하는 이유:
@@ -83,6 +83,10 @@ const mediaToolbarMoreMenuItemClassName = "geul-media-toolbar__more-menu-item";
 // selector로 전부 "바깥 아님" 처리하고, 그 뒤 실제 상태 반영은
 // updateFromSelection(selectionchange/mouseup)에 맡긴다 — 편집기 완전
 // 바깥(예: "Save JSON" 버튼)만 진짜 바깥 클릭으로 남는다.
+// 이 상수를 more 메뉴 인스턴스에 재사용하지 않는다. `[data-geul-block-id]`가
+// 있으면 more 메뉴가 열린 채 같은 블록 캔버스를 다시 클릭해도 메뉴가 안 닫힌다
+// (ceb86ab). more 메뉴는 아래 MEDIA_TOOLBAR_MORE_MENU_DISMISS_ALLOW_SELECTORS를
+// 쓴다.
 // `[data-geul-media-resize-handle]`(media-resize-handles.tsx)도 같은 이유로
 // 포함한다: MediaResizeHandles는 app.tsx에서 이 toolbar와 형제로 마운트되고
 // 자기 핸들을 `[data-geul-block-id]` 밖의 fixed 오버레이로 그린다(리사이즈는
@@ -104,6 +108,15 @@ const MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS = [
   ".geul-media-toolbar__more-menu",
   "[data-geul-block-id]",
   "[data-geul-media-resize-handle]",
+] as const;
+
+// more 메뉴용 useDismissibleOverlay allow-list(Issue #233 RD-003 DELTA-03).
+// toolbar 상수와 달리 `[data-geul-block-id]`·리사이즈 핸들을 넣지 않는다.
+// 넣으면 메뉴가 열린 채 같은 블록 캔버스를 다시 클릭해도 메뉴가 안 닫힌다
+// (ceb86ab). 트리거(`.geul-media-toolbar`)와 메뉴 자신만 "안"이다.
+const MEDIA_TOOLBAR_MORE_MENU_DISMISS_ALLOW_SELECTORS = [
+  ".geul-media-toolbar",
+  ".geul-media-toolbar__more-menu",
 ] as const;
 
 type ToolbarPosition = { left: number; top: number };
@@ -198,12 +211,11 @@ type MediaToolbarMoreMenu = {
 // overlay")을 2곳으로 정리한다 — mode 자체가 view를 벗어나는 자동 close는
 // MediaToolbar 본문의 `toolbarState.mode` 감시 useEffect(아래)가 전담하고,
 // 같은 view 모드 안에서 메뉴 "자신"이 열고 닫히는 나머지 경로(블록 전환,
-// 삭제, ceb86ab의 캔버스 재클릭)는 이 훅 하나에 모은다. 단일 소비처라
-// (media-toolbar.tsx 안에서만 쓴다) 별도 파일로 추출하지 않는다
-// (RD-003-DELTA-03.md와 같은 근거).
-const useMediaToolbarMoreMenu = (
-  element: HTMLElement | null,
-): MediaToolbarMoreMenu => {
+// 삭제)는 이 훅 하나에 모은다. 바깥 클릭·Escape 닫힘은 MediaToolbar 본문의
+// useDismissibleOverlay 인스턴스가 소유한다(Issue #233 RD-003 DELTA-03).
+// 단일 소비처라(media-toolbar.tsx 안에서만 쓴다) 별도 파일로 추출하지 않는다
+// (Issue #203 RD-003 DELTA-03 결정과 같은 근거).
+const useMediaToolbarMoreMenu = (): MediaToolbarMoreMenu => {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const toggleMoreMenu = useCallback(() => {
@@ -212,36 +224,6 @@ const useMediaToolbarMoreMenu = (
   const closeMoreMenu = useCallback(() => {
     setMoreMenuOpen(false);
   }, []);
-
-  // ceb86ab — more 메뉴가 열린 채로 같은 미디어 블록의 캔버스(이미지 본문
-  // 등)를 다시 클릭해도 안 닫히던 버그(사용자 보고, 2026-09-16) 수정.
-  // MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS 기반 useDismissOnOutsideOrEscape는
-  // `[data-geul-block-id]`를 allow-list에 둬 그 클릭을 "바깥 클릭 아님"으로
-  // 넘기고, 뒤이은 updateFromSelection도 같은 blockId 재관측이라
-  // moreMenuOpen을 그대로 두는 규칙(메뉴 안 Preview/정렬 버튼 클릭 재조회를
-  // 지키기 위한 설계)이 있어, 두 경로가 겹치면 열린 메뉴가 있는 상태에서
-  // 같은 블록의 캔버스를 다시 클릭해도 아무 효과가 없었다. 이 효과는 그
-  // 두 경로와 별개로 pointerdown 대상만 보고, 메뉴 자기 자신(트리거·항목)
-  // 이외의 모든 곳을 "메뉴만 닫는" 신호로 취급한다 — toolbar 전체
-  // dismiss(dismissToolbar)는 건드리지 않는다.
-  useEffect(() => {
-    if (!moreMenuOpen || element === null) return;
-    const ownerDocument = element.ownerDocument;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest(".geul-media-toolbar") !== null ||
-        target.closest(".geul-media-toolbar__more-menu") !== null
-      ) {
-        return;
-      }
-      setMoreMenuOpen(false);
-    };
-    ownerDocument.addEventListener("pointerdown", handlePointerDown);
-    return () =>
-      ownerDocument.removeEventListener("pointerdown", handlePointerDown);
-  }, [moreMenuOpen, element]);
 
   return { moreMenuOpen, toggleMoreMenu, closeMoreMenu };
 };
@@ -293,7 +275,7 @@ export const MediaToolbar = ({
   // toolbarState.mode 감시 useEffect 둘로만 모인다 — 그 외 지점은 이 훅이
   // 반환한 closeMoreMenu()만 호출한다.
   const { moreMenuOpen, toggleMoreMenu, closeMoreMenu } =
-    useMediaToolbarMoreMenu(element);
+    useMediaToolbarMoreMenu();
   // 01-계획.md(20260918-01) — mode가 view를 벗어나는 모든 지점(rename/
   // caption/replacing 진입, dismissToolbar·updateFromSelection이 만드는
   // closed 포함)에서 메뉴를 닫는다. 각 전이 지점이 개별로
@@ -714,40 +696,29 @@ export const MediaToolbar = ({
       editingRef.current = false;
     });
   }, [element, clearActionError, dismissSuppression]);
-  // file-panel.tsx dismissPanelAndFocusEditor와 같은 순서(focus 먼저,
-  // close 나중) — 반대로 하면 실제 Chromium에서 Escape 뒤 초점 복원이
-  // 실패한다(RD-003 e2e 실측, 같은 원인이라 이 컴포넌트도 미리 같은 순서를
-  // 지킨다).
-  const dismissToolbarAndFocusEditor = useCallback(() => {
-    focusEditor();
-    dismissToolbar();
-  }, [dismissToolbar, focusEditor]);
-
-  // more 메뉴는 outer 컨테이너와 같은 dismiss 하나를 공유한다 — 별도
-  // useDismissOnOutsideOrEscape 인스턴스를 두지 않는다. 처음엔 메뉴만
-  // 닫는 계층적(nested) dismiss를 시도했으나, 실 Chromium 대상 e2e 다수가
-  // "Escape/바깥 클릭 한 번이 view 모드 전체를 곧바로 닫는다"는 기존
-  // 계약(01-계획.md 완료 조건 2)에 의존해 그 계약을 유지해야 했다 — 메뉴가
-  // 열려 있어도 Escape/바깥 클릭 한 번으로 메뉴와 toolbar 전체가 함께
-  // 닫힌다(dismissToolbar가 mode를 closed로 바꾸고, 위 toolbarState.mode
-  // 감시 useEffect가 그 전이에 반응해 moreMenu도 함께 닫는다).
-  // `.geul-media-toolbar__more-menu`를 MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS
-  // 에 포함해 두는 이유는 여전히 유효하다 — 메뉴 항목 클릭 자체(Preview/
-  // 정렬처럼 메뉴를 안 닫는 토글 포함)가 "바깥 클릭"으로 오판정되는 것만
-  // 막는다.
-  useDismissOnOutsideOrEscape({
-    active: toolbarState.mode === "view",
+  // 닫힘 리스너, reason별 초점 복귀, Escape LIFO는 useDismissibleOverlay가
+  // 소유한다(Issue #233 RD-003 DELTA-03). 인스턴스가 둘이다. 같은 render에서
+  // early return 앞에 호출하고 `open`을 안정적으로 유지한다. 리스너 등록 순서가
+  // 곧 열림 순서라 `open`이 흔들리면 스택 항목이 맨 위로 다시 올라간다.
+  // 1) toolbar: view 모드에서만 연다. rename/caption/replacing은 등록하지 않는다
+  //    (replacing의 Escape·바깥 클릭은 DELTA-04). reason과 무관하게
+  //    dismissToolbar가 닫는다. 초점은 module이 reason별로 옮긴다.
+  useDismissibleOverlay({
+    open: toolbarState.mode === "view",
     element,
     allowSelectors: MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissToolbar,
-    onEscapeDismiss: dismissToolbarAndFocusEditor,
+    onClose: dismissToolbar,
   });
-
-  // more 메뉴가 열린 채로 같은 블록의 캔버스를 다시 클릭해도 안 닫히던
-  // 버그(ceb86ab, 사용자 보고 2026-09-16)의 재현 pointerdown 감시는
-  // useMediaToolbarMoreMenu(위)로 옮겼다 — moreMenuOpen과 별개로 이
-  // toolbar 전체를 닫는 dismissToolbar는 여전히 여기 useDismissOnOutsideOrEscape가
-  // 전담한다.
+  // 2) more 메뉴: toolbar보다 나중에 열려 Escape 한 번에 메뉴만 닫는다(동작 변경
+  //    1). toolbar는 view로 남고 두 번째 Escape가 닫는다. 바깥 클릭은 오버레이마다
+  //    독립이라 둘 다 allow 밖이면 둘 다 닫는다. mode 이탈로 닫히는 경로는 위
+  //    toolbarState.mode 감시 useEffect가 맡는다.
+  useDismissibleOverlay({
+    open: toolbarState.mode === "view" && moreMenuOpen,
+    element,
+    allowSelectors: MEDIA_TOOLBAR_MORE_MENU_DISMISS_ALLOW_SELECTORS,
+    onClose: closeMoreMenu,
+  });
 
   if (toolbarState.mode === "closed") return null;
   // 지금 보여주는 바로 그 블록이 리사이즈 중이면 감춘다 — 다른 블록의
@@ -981,16 +952,13 @@ export const MediaToolbar = ({
                   if (toolbarState.mode === "editingName") applyName();
                   else applyCaption();
                 },
-                escape: () => {
-                  // 이 입력의 Escape는 편집만 취소하고 view로 돌아간다 — 전파를
-                  // 막지 않으면 같은 물리 키 이벤트가 document까지 올라가
-                  // `useDismissOnOutsideOrEscape`(view 모드에서만 active)의
-                  // keydown 리스너에 닿는다. cancelEditing이 이미 view로
-                  // 전환해 그 훅이 재활성화된 상태라 같은 이벤트가 toolbar
-                  // 전체를 곧바로 닫혀버리게 만든다(실측).
-                  event.stopPropagation();
-                  cancelEditing();
-                },
+                // 이 입력의 Escape는 편집만 취소하고 view로 돌아간다.
+                // handleMenuKeyDown이 preventDefault하고, 입력이
+                // `.geul-media-toolbar` 안이라 useDismissibleOverlay가 건너뛴다.
+                // cancelEditing이 view로 전환해 module이 같은 이벤트 전파 중에
+                // 등록돼도 마찬가지라 전파를 막을 필요가 없다(Issue #233
+                // RD-003 DELTA-03).
+                escape: cancelEditing,
               });
             }}
             ref={inputRef}

@@ -960,10 +960,10 @@ describe("MediaToolbar moreMenu 정리(01-계획.md 20260918-01, 순수 리팩�
 
     fireEvent.pointerDown(blockElement);
 
-    // useMediaToolbarMoreMenu의 pointerdown 감시(옛 컴포넌트 인라인
-    // useEffect)가 메뉴만 닫는다 — MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS가
-    // `[data-geul-block-id]`를 허용해 이 클릭을 "바깥 클릭"으로 보지
-    // 않으므로 toolbar 전체(dismissToolbar)는 그대로 남는다.
+    // more 메뉴용 useDismissibleOverlay 인스턴스가 메뉴만 닫는다 —
+    // MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS가 `[data-geul-block-id]`를
+    // 허용해 이 클릭을 "바깥 클릭"으로 보지 않으므로 toolbar 전체
+    // (dismissToolbar)는 그대로 남는다.
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.getByRole("toolbar")).toBeTruthy();
   });
