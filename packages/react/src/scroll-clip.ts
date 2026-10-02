@@ -74,3 +74,35 @@ export const syncClipVisibility = (
       ? ""
       : "hidden";
 };
+
+/**
+ * 뷰포트 기준 점 `(x, y)`가 `boxes` 전부 안(경계 포함)인지 본다. `boxes`가
+ * 비어 있으면 항상 true다.
+ */
+export const isPointInClipBoxes = (
+  x: number,
+  y: number,
+  boxes: readonly DOMRect[],
+): boolean =>
+  boxes.every(
+    (box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
+  );
+
+/**
+ * 앵커 점이 clip 영역 안일 때만 `node`를 보인다. 선택에 붙는 popover
+ * (서식·링크·표 선택·블록 선택 툴바)용이다. `syncClipVisibility`와 달리
+ * 박스가 아니라 앵커를 본다 — popover는 앵커 위나 아래에 붙어 앵커가 영역
+ * 안이어도 박스가 경계 밖으로 조금 삐져나올 수 있고, 그때 숨기면 첫 줄을
+ * 선택할 때 popover가 사라진다. 앵커가 영역 밖으로 스크롤돼 나가면
+ * popover는 뷰포트 가장자리로 clamp된 채 영역 밖에 남으므로 숨긴다.
+ */
+export const syncAnchorClipVisibility = (
+  node: HTMLElement,
+  anchorX: number,
+  anchorY: number,
+  boxes: readonly DOMRect[],
+): void => {
+  node.style.visibility = isPointInClipBoxes(anchorX, anchorY, boxes)
+    ? ""
+    : "hidden";
+};

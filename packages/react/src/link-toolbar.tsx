@@ -7,11 +7,22 @@ import {
   Unlink,
   X,
 } from "lucide-react";
-import { type FC, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type FC,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import {
+  readScrollClipBoxes,
+  syncAnchorClipVisibility,
+} from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import {
@@ -208,6 +219,22 @@ export const LinkToolbar = ({
     toolbarState.mode === "closed" ? 0 : toolbarState.top,
     "centerBelow",
   );
+
+  // 팝업은 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
+  // 앵커(선택·셀·블록)가 스크롤돼 나가 컨테이너의 보이는 영역 밖이 되면
+  // 숨긴다. 박스가 아니라 앵커를 본다(scroll-clip.ts
+  // `syncAnchorClipVisibility` 참고). 스크롤은 useSelectionRefresh가 새
+  // 상태를 만들어 이 렌더를 다시 돌린다.
+  useLayoutEffect(() => {
+    if (element === null || menuRef.current === null) return;
+    if (toolbarState.mode === "closed") return;
+    syncAnchorClipVisibility(
+      menuRef.current,
+      toolbarState.left,
+      toolbarState.top,
+      readScrollClipBoxes(element),
+    );
+  });
   const focusEditor = useFocusEditor(element);
 
   // view 모드도 G-UI-001을 따른다(formatting-toolbar.tsx와 같은 훅). 바깥

@@ -21,6 +21,7 @@ import {
   type LinkToolbarProps,
 } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
+import { stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 import { collapseSelection, selectText } from "./selection-events.js";
 
@@ -579,5 +580,45 @@ describe("LinkToolbar 링크 툴바", () => {
         screen.queryByRole("button", { name: "Custom remove link" }),
       ).toBeNull();
     });
+  });
+});
+
+describe("LinkToolbar 스크롤 컨테이너 clip", () => {
+  // 팝업은 컨테이너 바깥에 그려진다. 선택이 안쪽 스크롤로 보이는 영역 밖에
+  // 나가면 뷰포트 가장자리로 clamp된 채 영역 밖에 남는다 — 앵커(선택 아래
+  // 중앙)가 영역 안일 때만 보인다.
+  const originalRangeRect = Range.prototype.getBoundingClientRect;
+  afterEach(() => {
+    Range.prototype.getBoundingClientRect = originalRangeRect;
+  });
+
+  const selectionAt = (top: number) => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(100, top, 80, 20);
+  };
+
+  it("스크롤로 선택이 영역 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    selectionAt(40);
+    renderWithSelectedText(fakeController());
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar", { name: "Link" }).style.visibility).toBe(
+      "",
+    );
+
+    selectionAt(400);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
+    // 숨은 요소는 접근성 이름이 비므로 name 없이 hidden으로만 찾는다.
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    selectionAt(40);
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar", { name: "Link" }).style.visibility).toBe(
+      "",
+    );
   });
 });

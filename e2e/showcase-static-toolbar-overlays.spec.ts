@@ -82,3 +82,40 @@ test("표 핸들이 안쪽 스크롤에서 표를 따라간다", async ({ page }
   });
   await expect.poll(offsets).toBeCloseTo(before, 0);
 });
+
+test("글자를 선택한 채 스크롤해도 서식 popover와 링크 툴바가 스크롤 영역 밖에 떠 있지 않다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  await editor.locator("p").nth(3).dblclick();
+  await expect(page.getByRole("toolbar", { name: "Formatting" })).toBeVisible();
+
+  const escaped = () =>
+    page.evaluate(() => {
+      const area = document
+        .querySelector('[class*="scrollArea"]')
+        ?.getBoundingClientRect();
+      if (area === undefined) throw new Error("scrollArea 없음");
+      return Array.from(
+        document.querySelectorAll(
+          ".geul-formatting-toolbar, .geul-link-toolbar",
+        ),
+      )
+        .filter((element) => {
+          if (getComputedStyle(element).visibility === "hidden") return false;
+          const rect = element.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return false;
+          return rect.bottom < area.top || rect.top > area.bottom;
+        })
+        .map((element) => String(element.className));
+    });
+
+  expect(await escaped()).toEqual([]);
+  await page.mouse.move(700, 400);
+  for (const deltaY of [400, 800, -1500]) {
+    await page.mouse.wheel(0, deltaY);
+    await page.waitForTimeout(250);
+    expect(await escaped(), `wheel ${deltaY}`).toEqual([]);
+  }
+});

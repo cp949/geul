@@ -9,8 +9,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  isPointInClipBoxes,
   isRectInClipBoxes,
   readScrollClipBoxes,
+  syncAnchorClipVisibility,
   syncClipVisibility,
 } from "../src/scroll-clip.js";
 import { stubRect } from "./mount-editor.js";
@@ -153,6 +155,51 @@ describe("syncClipVisibility", () => {
 
     syncClipVisibility(node, boxes, true);
 
+    expect(node.style.visibility).toBe("");
+  });
+});
+
+describe("isPointInClipBoxes", () => {
+  const boxes = [box(0, 0, 100, 100)];
+
+  it("clip 영역이 없으면 항상 보인다", () => {
+    expect(isPointInClipBoxes(500, 500, [])).toBe(true);
+  });
+
+  it("영역 안의 점은 보이고 경계 위의 점도 보인다", () => {
+    expect(isPointInClipBoxes(50, 50, boxes)).toBe(true);
+    expect(isPointInClipBoxes(0, 100, boxes)).toBe(true);
+  });
+
+  it("영역 밖의 점은 가려진다", () => {
+    expect(isPointInClipBoxes(50, 101, boxes)).toBe(false);
+    expect(isPointInClipBoxes(50, -1, boxes)).toBe(false);
+    expect(isPointInClipBoxes(101, 50, boxes)).toBe(false);
+    expect(isPointInClipBoxes(-1, 50, boxes)).toBe(false);
+  });
+
+  it("중첩된 영역 전부 안이어야 보인다", () => {
+    expect(
+      isPointInClipBoxes(10, 10, [box(0, 0, 100, 100), box(50, 50, 100, 100)]),
+    ).toBe(false);
+  });
+});
+
+describe("syncAnchorClipVisibility", () => {
+  const boxes = [box(0, 0, 100, 100)];
+
+  it("앵커 점이 영역 안이면 보이고 밖이면 숨긴다(박스가 경계 밖으로 삐져도 보인다)", () => {
+    const node = document.createElement("div");
+    // 앵커 위쪽에 붙는 popover는 박스가 영역 위로 삐져나올 수 있다.
+    stubRect(node, { left: 0, top: -30, width: 50, height: 37 });
+
+    syncAnchorClipVisibility(node, 10, 7, boxes);
+    expect(node.style.visibility).toBe("");
+
+    syncAnchorClipVisibility(node, 10, 400, boxes);
+    expect(node.style.visibility).toBe("hidden");
+
+    syncAnchorClipVisibility(node, 10, 7, boxes);
     expect(node.style.visibility).toBe("");
   });
 });

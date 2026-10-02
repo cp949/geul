@@ -22,6 +22,7 @@ import {
   focusOutsideEditor,
   mountBlockEditor,
   type MountBlockEditorOptions,
+  stubRect,
 } from "./mount-editor.js";
 import { fireSelectionChange } from "./selection-events.js";
 
@@ -541,5 +542,38 @@ describe("pointerup 이벤트 하나로 재조회가 결국 일어난다(jsdom s
       "block-3",
       "block-4",
     ]);
+  });
+});
+
+describe("BlockSelectionToolbar 스크롤 컨테이너 clip", () => {
+  // 팝업은 컨테이너 바깥에 그려진다. 선택한 블록이 안쪽 스크롤로 보이는 영역 밖에
+  // 나가면 뷰포트 가장자리로 clamp된 채 영역 밖에 남는다 — 앵커(선택 범위 위쪽
+  // 중앙)가 영역 안일 때만 보인다.
+  it("스크롤로 선택 블록이 영역 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    const { editor, host, restubGeometry } = renderToolbar();
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    editor.commands.selectBlockRange("block-2", "block-4");
+    fireSelectionChange();
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+
+    for (const [index, block] of restubGeometry().entries()) {
+      stubRect(block, {
+        left: 0,
+        top: 500 + index * 20,
+        width: 600,
+        height: 20,
+      });
+    }
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    // 숨은 요소는 접근성 이름이 비므로 name 없이 hidden으로만 찾는다.
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    restubGeometry();
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
   });
 });

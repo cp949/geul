@@ -807,3 +807,33 @@ describe("툴바 메시지와 서식 메뉴 메시지의 상호작용", () => {
     expect(screen.getByRole("button", { name: formatLabel })).not.toBeNull();
   });
 });
+
+describe("TableSelectionToolbar 스크롤 컨테이너 clip", () => {
+  // 팝업은 컨테이너 바깥에 그려진다. 선택한 셀이 안쪽 스크롤로 보이는 영역 밖에
+  // 나가면 뷰포트 가장자리로 clamp된 채 영역 밖에 남는다 — 앵커(셀 선택 위쪽
+  // 중앙)가 영역 안일 때만 보인다.
+  it("스크롤로 선택 셀이 영역 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    const { cell1, cell2 } = renderTable(mergeableSelectionController());
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 300 });
+    fireSelectionChange();
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+
+    stubRect(cell1, { left: 100, top: 500, width: 100, height: 30 });
+    stubRect(cell2, { left: 200, top: 500, width: 100, height: 30 });
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    // 숨은 요소는 접근성 이름이 비므로 name 없이 hidden으로만 찾는다.
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
+    stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+  });
+});

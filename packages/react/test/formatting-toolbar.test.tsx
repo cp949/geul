@@ -22,6 +22,7 @@ import { EditorContent, FormattingToolbar } from "../src/index.js";
 import { expectIconOnlyButton } from "./expect-icon-button.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { fakeController } from "./formatting-toolbar-test-support.js";
+import { stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 import { collapseSelection, selectText } from "./selection-events.js";
 
@@ -988,5 +989,69 @@ describe("FormattingToolbar 서식 툴바", () => {
       expect(screen.queryByRole("toolbar")).toBeNull();
       expect(screen.queryByRole("button", { name: "Custom bold" })).toBeNull();
     });
+  });
+});
+
+describe("FormattingToolbar 스크롤 컨테이너 clip", () => {
+  // popover는 컨테이너 바깥에 그려진다. 선택이 안쪽 스크롤로 보이는 영역 밖에
+  // 나가면 popover는 뷰포트 가장자리로 clamp된 채 영역 밖에 남는다 — 앵커(선택
+  // 위쪽 중앙)가 영역 안일 때만 보인다.
+  const originalRangeRect = Range.prototype.getBoundingClientRect;
+  afterEach(() => {
+    Range.prototype.getBoundingClientRect = originalRangeRect;
+  });
+
+  const setup = () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    const textNode = host.firstChild?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    const selectionAt = (top: number) => {
+      Range.prototype.getBoundingClientRect = () =>
+        new DOMRect(100, top, 80, 20);
+    };
+    return { textNode, selectionAt };
+  };
+
+  it("선택이 보이는 영역 안이면 popover가 보인다", () => {
+    const { textNode, selectionAt } = setup();
+    selectionAt(40);
+
+    selectText(textNode, 0, 8);
+
+    expect(
+      screen.getByRole("toolbar", { name: "Formatting" }).style.visibility,
+    ).toBe("");
+  });
+
+  it("스크롤로 선택이 영역 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    const { textNode, selectionAt } = setup();
+    selectionAt(40);
+    selectText(textNode, 0, 8);
+
+    selectionAt(400);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar", { name: "Formatting" })).toBeNull();
+    // 숨은 요소는 접근성 이름이 비므로 name 없이 hidden으로만 찾는다.
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    selectionAt(40);
+    fireEvent.scroll(window);
+    expect(
+      screen.getByRole("toolbar", { name: "Formatting" }).style.visibility,
+    ).toBe("");
   });
 });

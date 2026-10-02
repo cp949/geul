@@ -18,6 +18,7 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -41,6 +42,10 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
+import {
+  readScrollClipBoxes,
+  syncAnchorClipVisibility,
+} from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import {
@@ -275,6 +280,22 @@ export const FormattingToolbar = ({
     toolbarState?.top ?? 0,
     "centerAbove",
   );
+
+  // 팝업은 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
+  // 앵커(선택·셀·블록)가 스크롤돼 나가 컨테이너의 보이는 영역 밖이 되면
+  // 숨긴다. 박스가 아니라 앵커를 본다(scroll-clip.ts
+  // `syncAnchorClipVisibility` 참고). 스크롤은 useSelectionRefresh가 새
+  // 상태를 만들어 이 렌더를 다시 돌린다.
+  useLayoutEffect(() => {
+    if (element === null || menuRef.current === null) return;
+    if (toolbarState === null) return;
+    syncAnchorClipVisibility(
+      menuRef.current,
+      toolbarState.left,
+      toolbarState.top,
+      readScrollClipBoxes(element),
+    );
+  });
 
   // 툴바 자신도 G-UI-001을 따른다(위 색상 팔레트와 같은 훅). 바깥
   // pointerdown은 자연히 selection을 collapse해 updateFromSelection이 이미
