@@ -28,6 +28,7 @@
   - Shift는 판정에 넣지 않는다. popup의 `Shift+Tab`은 닫기 키다.
   - 처리한 키는 결과가 무효여도 `preventDefault`한다. 후보 0건 상태의 Enter가 기본 Enter(블록 분할)로 새지 않게 한다(Issue #211).
   - popup 자체 Escape는 `escape` 인자로 넘겨 수식 키 가드보다 앞에서 처리한다(Issue #227). 훅이 같은 키를 이미 `preventDefault`하므로 가드 뒤에 두면 popup만 열린 채 남는다.
+  - Shift+Enter처럼 호출부 전용 키는 `handleMenuKeyDown` 호출 전에 거른다. 예: media 캡션 textarea의 줄바꿈.
   - 규칙 밖: 공용 훅 `useDismissOnOutsideOrEscape`의 Escape 리스너.
   - 규칙 밖: 닫힌 트리거의 Enter. 네이티브 click으로 메뉴를 여는 키라서 module을 거치지 않는다(Issue #228).
 
