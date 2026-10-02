@@ -1,8 +1,9 @@
 /**
  * Slash menu의 검색·키보드·블록 추가 배선과 fixed overlay viewport clamp를
- * 실제 Chromium event 순서로 검증한다.
+ * 실제 Chromium event 순서로 검증한다. 방향키로 캐럿이 `/` 블록을 벗어나면
+ * 닫히는 계약도 여기서 고정한다(Issue #229).
  */
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import {
   CLAMP_BOUNDARY_MIN_MARGIN_PX,
@@ -414,5 +415,98 @@ test("수식 키 + 방향키는 하이라이트를 옮기지 않고 기본 동�
     prevented: false,
   });
   await expect(highlighted).toHaveAttribute("id", before ?? "");
+  await expect(menu).toBeVisible();
+});
+
+/**
+ * alpha / `/head` / gamma 세 블록을 만들고 메뉴를 연 채 `/head` 끝에 캐럿을 둔다.
+ * 클릭·키 입력 직후 PM state가 DOM selection을 따라잡지 못하거나 병렬 부하에서
+ * 이동 키가 사라지는 실행이 있어, 셋업 전체를 `toPass` 재시도로 감싼다
+ * (G-EDT-002, G-TST-001). 매 시도는 페이지를 새로 연다.
+ */
+const openHeadBetweenBlocks = async (page: Page) => {
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  let editable: Locator | undefined;
+  await expect(async () => {
+    ({ editable } = await openDemo(page));
+    await editable.click();
+    await yieldFrame(page);
+    await page.keyboard.type("alpha");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("beta");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("gamma");
+    await page.keyboard.press("ArrowUp");
+    await yieldFrame(page);
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+End");
+    await yieldFrame(page);
+    await page.keyboard.type("/head");
+    await expect(menu).toBeVisible({ timeout: 1_000 });
+    await expect(editable.locator("p")).toHaveText(
+      ["alpha", "/head", "gamma"],
+      {
+        timeout: 1_000,
+      },
+    );
+  }).toPass({ timeout: 15_000 });
+  if (editable === undefined) throw new Error("편집 영역을 찾지 못했다");
+  return { editable, menu };
+};
+
+/** DOM selection의 캐럿이 놓인 블록 텍스트. 블록 이탈을 PM state와 무관하게 읽는다. */
+const caretBlockText = (page: Page) =>
+  page.evaluate(() => {
+    const anchor = document.getSelection()?.anchorNode;
+    const element = anchor instanceof Element ? anchor : anchor?.parentElement;
+    return element?.closest("p")?.textContent ?? null;
+  });
+
+// Issue #229: selectionchange 리스너가 PM 리스너보다 먼저 호출돼 낡은
+// state.selection을 읽었다. 방향키로 `/head` 블록을 벗어나도 메뉴가 열린 채
+// 남았고 이어 누른 Enter가 캐럿 블록이 아닌 `/head` 블록을 변환했다.
+for (const key of ["ArrowRight", "Control+ArrowUp", "Control+End"]) {
+  test(`${key}로 캐럿이 /head 블록을 벗어나면 메뉴가 닫히고 Enter가 /head 블록을 변환하지 않는다 (Issue #229)`, async ({
+    page,
+  }) => {
+    const { editable, menu } = await openHeadBetweenBlocks(page);
+
+    await page.keyboard.press(key);
+    // 전제: 캐럿이 /head 블록 밖으로 나갔다.
+    await expect
+      .poll(async () => {
+        const text = await caretBlockText(page);
+        return text !== null && text !== "/head";
+      })
+      .toBe(true);
+    await page.waitForTimeout(150);
+
+    await expect(menu).toHaveCount(0);
+    await page.keyboard.press("Enter");
+
+    await expect(editable.locator("h1, h2, h3, h4, h5, h6")).toHaveCount(0);
+    await expect(
+      editable.locator("p").filter({ hasText: /^\/head$/ }),
+    ).toHaveCount(1);
+    await expect(menu).toHaveCount(0);
+  });
+}
+
+// Issue #229: 같은 블록 안의 캐럿 이동과 query 편집은 메뉴를 닫지 않는다.
+test("같은 블록 안에서 ArrowLeft·Backspace는 메뉴를 유지하고 query를 갱신한다 (Issue #229)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openHeadBetweenBlocks(page);
+
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => caretBlockText(page)).toBe("/head");
+  await page.waitForTimeout(150);
+  await expect(menu).toBeVisible();
+
+  // 캐럿이 "/hea|d"에 있으므로 Backspace는 "/hed"를 만든다. 질의가 갱신돼
+  // Heading 항목이 빠진다.
+  await page.keyboard.press("Backspace");
+  await expect(editable.locator("p").nth(1)).toHaveText("/hed");
+  await expect(menu.getByRole("option", { name: /^Heading 1/ })).toHaveCount(0);
   await expect(menu).toBeVisible();
 });
