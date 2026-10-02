@@ -732,3 +732,50 @@ test("more 메뉴가 열린 채 편집기 바깥을 클릭하면 메뉴와 toolb
   ).not.toBeVisible();
   await expect(saveJsonButton).toBeFocused();
 });
+
+// Issue #233 RD-003 DELTA-04(동작 변경 5) — 교체 모드의 실제 Escape다. 교체 모드에
+// 들어가면 Upload 탭의 file input이 초점을 받는다(편집기 밖). 첫 Escape는 교체
+// 모드만 닫고 view로 돌아가며 초점은 편집기로 간다. 두 번째가 toolbar를 닫는다.
+test("교체 모드에서 Escape를 누르면 view로 돌아가고 두 번째에 toolbar가 닫힌다 (#233 RD-003 DELTA-04, 동작 변경 5)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  const tablist = page.getByRole("tablist");
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+  await expect(tablist).toBeVisible();
+
+  await page.keyboard.press("Escape");
+
+  await expect(tablist).not.toBeVisible();
+  await expect(toolbar).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(toolbar).not.toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
+test("교체 모드에서 편집기 바깥을 클릭하면 toolbar가 닫힌다 (#233 RD-003 DELTA-04)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await expect(page.getByRole("tablist")).toBeVisible();
+
+  const saveJsonButton = page.getByRole("button", { name: "Save JSON" });
+  await saveJsonButton.click();
+
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).not.toBeVisible();
+  await expect(saveJsonButton).toBeFocused();
+});

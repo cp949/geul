@@ -700,14 +700,25 @@ export const MediaToolbar = ({
   // 소유한다(Issue #233 RD-003 DELTA-03). 인스턴스가 둘이다. 같은 render에서
   // early return 앞에 호출하고 `open`을 안정적으로 유지한다. 리스너 등록 순서가
   // 곧 열림 순서라 `open`이 흔들리면 스택 항목이 맨 위로 다시 올라간다.
-  // 1) toolbar: view 모드에서만 연다. rename/caption/replacing은 등록하지 않는다
-  //    (replacing의 Escape·바깥 클릭은 DELTA-04). reason과 무관하게
-  //    dismissToolbar가 닫는다. 초점은 module이 reason별로 옮긴다.
+  // 1) toolbar: view와 replacing 모드에서 연다. rename/caption은 등록하지 않는다.
+  //    view↔replacing 전이에서 `open`이 true로 유지돼 스택 위치가 흔들리지
+  //    않는다. 초점은 module이 reason별로 옮긴다.
+  //    - replacing의 Escape는 cancelReplacing이다(동작 변경 5, Issue #233
+  //      RD-003 DELTA-04). 업로드 abort와 view 복귀가 ✕ 버튼과 같다.
+  //    - 그 밖의 닫힘은 dismissToolbar다. replacing 바깥 클릭은 업로드를
+  //      abort하지 않는다(file-panel dismissPanel과 같다). 완료돼도
+  //      finishReplacing이 mode가 replacing이 아니면 무시한다.
   useDismissibleOverlay({
-    open: toolbarState.mode === "view",
+    open: toolbarState.mode === "view" || toolbarState.mode === "replacing",
     element,
     allowSelectors: MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS,
-    onClose: dismissToolbar,
+    onClose: (reason) => {
+      if (reason === "escape" && toolbarState.mode === "replacing") {
+        cancelReplacing();
+        return;
+      }
+      dismissToolbar();
+    },
   });
   // 2) more 메뉴: toolbar보다 나중에 열려 Escape 한 번에 메뉴만 닫는다(동작 변경
   //    1). toolbar는 view로 남고 두 번째 Escape가 닫는다. 바깥 클릭은 오버레이마다
