@@ -127,6 +127,28 @@ test("Escape는 메뉴를 닫고 포커스를 편집기로 돌린다", async ({ 
   await expect(editorInput).toBeFocused();
 });
 
+test("키보드로 연 메뉴에서 툴바 Bold를 마우스로 누르면 메뉴가 닫히고 포커스가 BODY로 떨어지지 않는다", async ({
+  page,
+}) => {
+  // Issue #225 항목 1. 툴바 버튼 mousedown은 `preventDefault`라 포커스가
+  // 옵션에 남은 채 메뉴가 언마운트되고, 브라우저가 포커스를 BODY로 떨어뜨렸다.
+  const { trigger, listbox, editorInput } = await openWithCaret(page);
+
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(listbox.getByRole("option", { name: "Text" })).toBeFocused();
+  await page
+    .getByRole("toolbar", { name: "Toolbar" })
+    .getByRole("button", { name: "Bold" })
+    .click();
+
+  await expect(listbox).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.tagName))
+    .not.toBe("BODY");
+  await expect(editorInput).toBeFocused();
+});
+
 test("바깥 클릭은 메뉴를 닫고 클릭한 컨트롤의 동작을 실행한다", async ({
   page,
 }) => {

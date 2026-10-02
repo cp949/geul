@@ -46,6 +46,7 @@ import {
   computeFormattingToolbarState,
   type FormattingToolbarState,
 } from "./formatting-toolbar-state.js";
+import { hasCommandModifier } from "./has-command-modifier.js";
 import { IconButton, preserveFocusOnMouseDown } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import {
@@ -260,6 +261,16 @@ export const StaticToolbar = ({
   // 대상 블록이 없으면 disable로 표시한다. 세 군데의 표시와 가드가 이 값
   // 하나를 공유한다.
   const isBlockControlsDisabled = state.blockSelection === null;
+  // codeBlock·미디어 블록·표 셀 다중선택 전부 mark·색상 버튼이 적용
+  // 불가능한 상황이다(FormattingToolbar는 이 셋을 hide로 처리 — 위 컴포넌트
+  // 주석 참고). StaticToolbar는 disable로만 표시한다. 열린 색상 메뉴를 닫는
+  // layout effect가 읽으므로 `Component` early return 앞에서 계산한다(hook 순서).
+  const isCodeBlockSelection =
+    state.blockSelection?.blockType.type === "codeBlock";
+  const isMarkingDisabled =
+    isCodeBlockSelection ||
+    state.isMediaBlockSelected ||
+    state.isCellRangeSelected;
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(
     null,
   );
@@ -271,6 +282,24 @@ export const StaticToolbar = ({
   const [rovingIndex, setRovingIndex] = useState(0);
   const focusEditor = useFocusEditor(element);
 
+  // 메뉴가 닫히거나 바뀔 때, 또는 메뉴를 자동으로 닫을 때 초점이 `selector`가
+  // 가리키는 메뉴 안에 있었으면 편집기로 돌린다. 트리거·툴바 버튼의
+  // mousedown은 `preventDefault`라 초점이 메뉴 항목에 남는다. 그대로
+  // 언마운트하면 초점이 `<body>`로 떨어진다(G-UI-001 자동 닫힘). 초점이 메뉴
+  // 밖이면 건드리지 않는다. 블록 타입 메뉴와 색상 메뉴가 공유한다.
+  const focusEditorIfFocusIn = useCallback(
+    (selector: string) => {
+      const activeElement = element?.ownerDocument.activeElement ?? null;
+      if (
+        activeElement instanceof Element &&
+        activeElement.closest(selector) !== null
+      ) {
+        focusEditor();
+      }
+    },
+    [element, focusEditor],
+  );
+
   // 메뉴가 열린 채 대상 블록이 사라지면 상태까지 비운다. 렌더 조건만 막으면
   // 대상이 돌아왔을 때 닫힌 메뉴가 되살아난다. 초점이 메뉴 안에 있었으면
   // 편집기로 돌린다(G-UI-001 자동 닫힘). 메뉴를 렌더에서 먼저 빼면 초점이
@@ -278,35 +307,27 @@ export const StaticToolbar = ({
   // 그대로 렌더한다. layout effect라 그려지기 전에 닫힌다.
   useLayoutEffect(() => {
     if (!isBlockControlsDisabled) return;
-    const activeElement = element?.ownerDocument.activeElement ?? null;
-    const focusWasInMenu =
-      activeElement instanceof Element &&
-      activeElement.closest(BLOCK_TYPE_MENU_SELECTOR) !== null;
+    focusEditorIfFocusIn(BLOCK_TYPE_MENU_SELECTOR);
     setBlockTypeMenuState(null);
-    if (focusWasInMenu) focusEditor();
-  }, [element, focusEditor, isBlockControlsDisabled]);
+  }, [focusEditorIfFocusIn, isBlockControlsDisabled]);
 
-  // 메뉴가 닫히거나 다른 속성의 메뉴로 바뀔 때 초점이 스와치에 있었으면
-  // 편집기로 돌린다. 트리거·툴바 버튼의 mousedown은 `preventDefault`라 초점이
-  // 스와치에 남는다. 그대로 언마운트하면 초점이 `<body>`로 떨어진다
-  // (G-UI-001 자동 닫힘). 초점이 메뉴 밖이면 건드리지 않는다.
-  const focusEditorIfFocusInColorMenu = useCallback(() => {
-    const activeElement = element?.ownerDocument.activeElement ?? null;
-    if (
-      activeElement instanceof Element &&
-      activeElement.closest(COLOR_MENU_SELECTOR) !== null
-    ) {
-      focusEditor();
-    }
-  }, [element, focusEditor]);
-  const dismissColorMenu = useCallback(() => {
-    focusEditorIfFocusInColorMenu();
+  // 색상 메뉴가 열린 채 mark 적용이 불가능해지면(코드 블록·미디어 블록·표 셀
+  // 범위) 상태까지 비운다. 위 effect와 같은 이유로 렌더 조건만 막지 않고
+  // effect가 닫는다. 초점이 스와치에 있었으면 편집기로 돌린다(Issue #225).
+  useLayoutEffect(() => {
+    if (!isMarkingDisabled) return;
+    focusEditorIfFocusIn(COLOR_MENU_SELECTOR);
     setColorMenuState(null);
-  }, [focusEditorIfFocusInColorMenu]);
-  const dismissBlockTypeMenu = useCallback(
-    () => setBlockTypeMenuState(null),
-    [],
-  );
+  }, [focusEditorIfFocusIn, isMarkingDisabled]);
+
+  const dismissColorMenu = useCallback(() => {
+    focusEditorIfFocusIn(COLOR_MENU_SELECTOR);
+    setColorMenuState(null);
+  }, [focusEditorIfFocusIn]);
+  const dismissBlockTypeMenu = useCallback(() => {
+    focusEditorIfFocusIn(BLOCK_TYPE_MENU_SELECTOR);
+    setBlockTypeMenuState(null);
+  }, [focusEditorIfFocusIn]);
   // 색상 메뉴와 블록 타입 메뉴는 동시에 열리지 않는다. 각 `onClose`는
   // 멱등이라 이미 닫힌 메뉴에 불려도 해롭지 않다.
   const overlay = useExclusiveOverlay({
@@ -419,7 +440,7 @@ export const StaticToolbar = ({
     focusFirst: boolean,
   ) => {
     const rect = trigger.getBoundingClientRect();
-    focusEditorIfFocusInColorMenu();
+    focusEditorIfFocusIn(COLOR_MENU_SELECTOR);
     overlay.open("color");
     setColorMenuState({
       property,
@@ -459,6 +480,9 @@ export const StaticToolbar = ({
       suppressEnterRepeat(event.currentTarget.ownerDocument);
       return;
     }
+    // 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지 않고
+    // 물러난다(Issue #225).
+    if (hasCommandModifier(event)) return;
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     event.preventDefault();
     if (colorMenuState?.property === property) return;
@@ -495,6 +519,9 @@ export const StaticToolbar = ({
   const handleBlockTypeTriggerKeyDown = (
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
+    // 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지 않고
+    // 물러난다(Issue #225).
+    if (hasCommandModifier(event)) return;
     if (isBlockControlsDisabled) return;
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     event.preventDefault();
@@ -550,16 +577,6 @@ export const StaticToolbar = ({
     className === undefined
       ? "geul-static-toolbar"
       : `geul-static-toolbar ${className}`;
-
-  // codeBlock·미디어 블록·표 셀 다중선택 전부 mark·색상 버튼이 적용
-  // 불가능한 상황이다(FormattingToolbar는 이 셋을 hide로 처리 — 위 컴포넌트
-  // 주석 참고). StaticToolbar는 disable로만 표시한다.
-  const isCodeBlockSelection =
-    state.blockSelection?.blockType.type === "codeBlock";
-  const isMarkingDisabled =
-    isCodeBlockSelection ||
-    state.isMediaBlockSelected ||
-    state.isCellRangeSelected;
 
   if (Component !== undefined) {
     const overridden = (

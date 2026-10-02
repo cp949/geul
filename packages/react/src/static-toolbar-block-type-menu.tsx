@@ -1,6 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from "react";
 
 import type { BlockTypeOption } from "./block-type-options.js";
+import { hasCommandModifier } from "./has-command-modifier.js";
 import { preserveFocusOnMouseDown } from "./icon-button.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
@@ -99,8 +100,10 @@ export const StaticToolbarBlockTypeMenu = ({
   }, []);
 
   // 옵션 사이 이동은 DOM 순서를 그대로 쓴다. 옵션이 7개뿐이라 별도 상태 없이
-  // 포커스 자체가 현재 위치다.
+  // 포커스 자체가 현재 위치다. 수식 키가 있으면 처리하지 않은 키이므로
+  // `preventDefault`하지 않고 물러난다(Issue #225).
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (hasCommandModifier(event)) return;
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]'),
     );

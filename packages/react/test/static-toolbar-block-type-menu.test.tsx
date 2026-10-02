@@ -339,6 +339,57 @@ describe("StaticToolbar 블록 타입 메뉴의 확정과 닫기", () => {
   });
 });
 
+describe("StaticToolbar 블록 타입 메뉴를 연 채 툴바 버튼을 누를 때의 포커스(Issue #225)", () => {
+  it("키보드로 연 메뉴에서 툴바 Bold를 누르면 메뉴가 닫히고 포커스가 편집기 안에 있다", () => {
+    const { editable } = mountToolbarWithEditor();
+    openByKeyboard();
+    expect(document.activeElement?.getAttribute("role")).toBe("option");
+    const bold = screen.getByRole("button", { name: "Bold" });
+
+    // 실제 마우스 클릭 순서다. 툴바 버튼 mousedown은 `preventDefault`라 포커스가
+    // 옵션에 남은 채 메뉴가 언마운트된다. jsdom은 mousedown 기본 동작으로
+    // 포커스를 옮기지 않으므로 이 순서가 브라우저와 같다.
+    fireEvent.pointerDown(bold);
+    fireEvent.mouseDown(bold);
+    fireEvent.click(bold, { detail: 1 });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(editable.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("마우스로 연 메뉴(포커스 편집기)에서 툴바 Bold를 눌러도 포커스는 편집기에 남는다", () => {
+    const { editable } = mountToolbarWithEditor();
+    editable.focus();
+    openByMouse();
+    const bold = screen.getByRole("button", { name: "Bold" });
+
+    fireEvent.pointerDown(bold);
+    fireEvent.mouseDown(bold);
+    fireEvent.click(bold, { detail: 1 });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("포커스가 메뉴 밖의 다른 요소에 있으면 바깥 클릭으로 닫혀도 포커스를 옮기지 않는다", () => {
+    mountToolbarWithEditor();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      openByMouse();
+      outside.focus();
+
+      fireEvent.pointerDown(outside);
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+});
+
 describe("StaticToolbar 블록 타입 메뉴의 자동 닫힘 포커스(G-UI-001)", () => {
   /**
    * 대상 블록이 사라진 상황을 만든다. 조회를 null로 고정한 뒤 다른 블록의
@@ -495,5 +546,119 @@ describe("StaticToolbar 블록 타입 메뉴의 트리거 추적", () => {
     const removed = remove.mock.calls.map(([type]) => type);
     expect(removed).toEqual(expect.arrayContaining(["scroll", "resize"]));
     remove.mockRestore();
+  });
+});
+
+describe("StaticToolbar 블록 타입 메뉴의 수식 키(Issue #225)", () => {
+  // 가운데 옵션(Heading 2)에서 시작한다. 화살표·Home·End가 가로채이면
+  // 포커스가 반드시 움직이는 자리다.
+  const openAtHeading2 = () => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    openByKeyboard();
+    const heading2 = screen.getByRole("option", { name: "Heading 2" });
+    heading2.focus();
+    return heading2;
+  };
+
+  it.each([
+    ["Alt", "ArrowDown", { altKey: true }],
+    ["Control", "ArrowDown", { ctrlKey: true }],
+    ["Meta", "ArrowDown", { metaKey: true }],
+    ["Alt", "ArrowUp", { altKey: true }],
+    ["Alt", "Home", { altKey: true }],
+    ["Control", "End", { ctrlKey: true }],
+  ])(
+    "옵션에서 %s+%s는 포커스를 옮기지 않고 기본 동작을 막지 않는다",
+    (_modifier, key, init) => {
+      const heading2 = openAtHeading2();
+
+      const notPrevented = fireEvent.keyDown(heading2, { key, ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(document.activeElement).toBe(heading2);
+    },
+  );
+
+  it("수식 키 없는 ArrowDown은 기존대로 다음 옵션으로 이동하고 기본 동작을 막는다", () => {
+    const heading2 = openAtHeading2();
+
+    const notPrevented = fireEvent.keyDown(heading2, { key: "ArrowDown" });
+
+    expect(notPrevented).toBe(false);
+    expect(document.activeElement).toBe(
+      screen.getByRole("option", { name: "Heading 3" }),
+    );
+  });
+
+  it("Shift+ArrowDown은 수식 키로 보지 않아 기존대로 이동한다", () => {
+    const heading2 = openAtHeading2();
+
+    const notPrevented = fireEvent.keyDown(heading2, {
+      key: "ArrowDown",
+      shiftKey: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(document.activeElement).toBe(
+      screen.getByRole("option", { name: "Heading 3" }),
+    );
+  });
+
+  it.each([
+    ["Control", { ctrlKey: true }],
+    ["Alt", { altKey: true }],
+  ])("%s+Tab은 메뉴를 닫지 않고 기본 동작을 막지 않는다", (_modifier, init) => {
+    const heading2 = openAtHeading2();
+
+    const notPrevented = fireEvent.keyDown(heading2, { key: "Tab", ...init });
+
+    expect(notPrevented).toBe(true);
+    expect(screen.getByRole("listbox", { name: "Block type" })).not.toBeNull();
+    expect(document.activeElement).toBe(heading2);
+  });
+
+  it("Shift+Tab은 Tab과 같이 메뉴를 닫고 포커스를 트리거로 돌린다", () => {
+    const heading2 = openAtHeading2();
+
+    const notPrevented = fireEvent.keyDown(heading2, {
+      key: "Tab",
+      shiftKey: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(blockTypeTrigger());
+  });
+
+  it.each([
+    ["Control", "ArrowDown", { ctrlKey: true }],
+    ["Alt", "ArrowUp", { altKey: true }],
+    ["Meta", "ArrowDown", { metaKey: true }],
+  ])(
+    "트리거에서 %s+%s는 메뉴를 열지 않고 기본 동작을 막지 않는다",
+    (_modifier, key, init) => {
+      render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+      blockTypeTrigger().focus();
+
+      const notPrevented = fireEvent.keyDown(blockTypeTrigger(), {
+        key,
+        ...init,
+      });
+
+      expect(notPrevented).toBe(true);
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(blockTypeTrigger().getAttribute("aria-expanded")).toBe("false");
+    },
+  );
+
+  it("트리거에서 수식 키 없는 ArrowDown은 기존대로 메뉴를 연다", () => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+
+    const notPrevented = fireEvent.keyDown(blockTypeTrigger(), {
+      key: "ArrowDown",
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(blockTypeTrigger().getAttribute("aria-expanded")).toBe("true");
   });
 });

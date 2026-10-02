@@ -10,6 +10,7 @@
  * e2e(showcase-static-toolbar-color-menu.spec.ts)가 소유한다.
  */
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -513,5 +514,185 @@ describe("StaticToolbar 색상 메뉴의 닫기와 포커스(실제 편집기)",
     fireEvent.click(colorTrigger("Text color"), { detail: 1 });
 
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("StaticToolbar 색상 메뉴의 수식 키(Issue #225)", () => {
+  /** 가운데(5번째) 스와치로 포커스를 옮겨 둔다. 이동이 가로채이면 반드시 움직이는 자리다. */
+  const openAtMiddleSwatch = (label: string) => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    openByKeyboard(label);
+    const middle = swatches(label)[4] as HTMLElement;
+    middle.focus();
+    return middle;
+  };
+
+  it.each([
+    ["Alt", "ArrowRight", { altKey: true }],
+    ["Alt", "ArrowLeft", { altKey: true }],
+    ["Control", "ArrowDown", { ctrlKey: true }],
+    ["Control", "ArrowUp", { ctrlKey: true }],
+    ["Meta", "Home", { metaKey: true }],
+    ["Control", "End", { ctrlKey: true }],
+  ])(
+    "스와치에서 %s+%s는 포커스를 옮기지 않고 기본 동작을 막지 않는다",
+    (_modifier, key, init) => {
+      const middle = openAtMiddleSwatch("Text color");
+
+      const notPrevented = fireEvent.keyDown(middle, { key, ...init });
+
+      expect(notPrevented).toBe(true);
+      expect(document.activeElement).toBe(middle);
+    },
+  );
+
+  it("Shift+ArrowRight는 수식 키로 보지 않아 기존대로 다음 스와치로 이동한다", () => {
+    const middle = openAtMiddleSwatch("Text color");
+
+    const notPrevented = fireEvent.keyDown(middle, {
+      key: "ArrowRight",
+      shiftKey: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(document.activeElement).toBe(swatches("Text color")[5]);
+  });
+
+  it.each(TRIGGERS)(
+    "%s 메뉴에서 Control+Tab·Alt+Tab은 메뉴를 닫지 않고 기본 동작을 막지 않는다",
+    (_name, label) => {
+      const middle = openAtMiddleSwatch(label);
+
+      for (const init of [{ ctrlKey: true }, { altKey: true }]) {
+        const notPrevented = fireEvent.keyDown(middle, { key: "Tab", ...init });
+
+        expect(notPrevented).toBe(true);
+        expect(screen.getByRole("menu", { name: label })).not.toBeNull();
+        expect(document.activeElement).toBe(middle);
+      }
+    },
+  );
+
+  it("스와치의 Control+Enter 자동 반복도 기본 동작을 막는다", () => {
+    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    openByKeyboard("Text color");
+
+    // Enter 반복 억제가 수식 키 가드보다 앞이다. 가드가 앞서면 반복이
+    // 그대로 새어 첫 스와치를 확정한다.
+    expect(press("Enter", { repeat: true, ctrlKey: true })).toBe(false);
+  });
+
+  it.each([
+    ["Control", "ArrowDown", { ctrlKey: true }],
+    ["Alt", "ArrowUp", { altKey: true }],
+    ["Meta", "ArrowDown", { metaKey: true }],
+  ])(
+    "색상 트리거에서 %s+%s는 메뉴를 열지 않고 기본 동작을 막지 않는다",
+    (_modifier, key, init) => {
+      render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+
+      for (const [, label] of TRIGGERS) {
+        const notPrevented = fireEvent.keyDown(colorTrigger(label), {
+          key,
+          ...init,
+        });
+
+        expect(notPrevented).toBe(true);
+        expect(screen.queryByRole("menu")).toBeNull();
+        expect(colorTrigger(label).getAttribute("aria-expanded")).toBe("false");
+      }
+    },
+  );
+});
+
+describe("StaticToolbar 색상 메뉴가 열린 채 mark 적용이 불가능해질 때(Issue #225)", () => {
+  /** 첫 문단을 코드 블록으로 바꿔 selection이 있는 채 `isMarkingDisabled`가 되게 한다. */
+  const convertToCodeBlock = (
+    mounted: ReturnType<typeof mountToolbarWithEditor>,
+  ) => {
+    act(() => {
+      mounted.editor.commands.setBlockType("block-1", { type: "codeBlock" });
+    });
+    expect(colorTrigger("Text color").getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+  };
+
+  /** 코드 블록을 다시 일반 문단으로 돌려 `isMarkingDisabled`를 푼다. */
+  const convertToParagraph = (
+    mounted: ReturnType<typeof mountToolbarWithEditor>,
+  ) => {
+    act(() => {
+      mounted.editor.commands.setBlockType("block-1", { type: "paragraph" });
+    });
+    expect(colorTrigger("Text color").getAttribute("aria-disabled")).toBe(
+      "false",
+    );
+  };
+
+  it.each(TRIGGERS)(
+    "마우스로 연 %s 메뉴(포커스 편집기)는 selection이 코드 블록으로 옮겨 가면 닫히고 포커스는 편집기에 남는다",
+    (_name, label) => {
+      const mounted = mountToolbarWithEditor();
+      mounted.editable.focus();
+      openByMouse(label);
+      expect(screen.getByRole("menu", { name: label })).not.toBeNull();
+
+      convertToCodeBlock(mounted);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(colorTrigger(label).getAttribute("aria-expanded")).toBe("false");
+      expect(document.activeElement).toBe(mounted.editable);
+    },
+  );
+
+  it.each(TRIGGERS)(
+    "키보드로 연 %s 메뉴(포커스 스와치)는 mark 적용이 불가능해지면 닫히고 포커스가 편집기로 간다",
+    (_name, label) => {
+      const mounted = mountToolbarWithEditor();
+      openByKeyboard(label);
+      expect(document.activeElement).toBe(swatches(label)[0]);
+
+      convertToCodeBlock(mounted);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(mounted.editable);
+    },
+  );
+
+  it.each([
+    ["마우스", openByMouse],
+    ["키보드", openByKeyboard],
+  ])(
+    "%s로 연 메뉴는 선택이 다시 일반 문단으로 돌아와도 되살아나지 않는다",
+    (_how, open) => {
+      const mounted = mountToolbarWithEditor();
+      open("Text color");
+      convertToCodeBlock(mounted);
+      expect(screen.queryByRole("menu")).toBeNull();
+
+      convertToParagraph(mounted);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(colorTrigger("Text color").getAttribute("aria-expanded")).toBe(
+        "false",
+      );
+    },
+  );
+
+  it("mark 적용이 가능한 상태가 유지되면 열린 메뉴와 스와치 포커스를 건드리지 않는다", () => {
+    const mounted = mountToolbarWithEditor();
+    openByKeyboard("Text color");
+    const swatch = document.activeElement;
+
+    act(() => {
+      mounted.editor.commands.setBlockType("block-1", {
+        type: "heading",
+        level: 1,
+      });
+    });
+
+    expect(screen.getByRole("menu", { name: "Text color" })).not.toBeNull();
+    expect(document.activeElement).toBe(swatch);
   });
 });

@@ -1,5 +1,6 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from "react";
 
+import { hasCommandModifier } from "./has-command-modifier.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import { suppressEnterRepeat } from "./suppress-enter-repeat.js";
 import {
@@ -122,6 +123,9 @@ export const StaticToolbarColorMenu = ({
       suppressEnterRepeat(event.currentTarget.ownerDocument);
       return;
     }
+    // 수식 키가 있으면 처리하지 않은 키이므로 `preventDefault`하지 않고
+    // 물러난다(Issue #225). Enter 반복은 위에서 먼저 막는다.
+    if (hasCommandModifier(event)) return;
     const items = Array.from(
       event.currentTarget.querySelectorAll<HTMLElement>(SWATCH_SELECTOR),
     );
