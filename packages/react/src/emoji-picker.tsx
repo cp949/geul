@@ -225,13 +225,34 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
 
     const ownerDocument = element?.ownerDocument;
     const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromCaret);
+    // selectionchange는 즉시 한 번, 매크로태스크 뒤 한 번 더 읽는다(Issue #229).
+    // ProseMirror의 DOMObserver는 state 갱신마다 자기 selectionchange 리스너를
+    // 떼었다 다시 붙여 항상 이 리스너보다 뒤에 호출된다. 즉시 읽기는 이동 직전
+    // 낡은 state.selection을 본다. 캐럿이 이 블록을 벗어난 이동은 즉시 읽기에서
+    // 열린 채 남고 재통지가 없다. 뒤늦은 읽기는 PM flush가 끝난 최신 state를 본다.
+    // 즉시 읽기는 남긴다. 기존 동기 반응을 바꾸지 않는다.
+    let deferredUpdateTimeout: number | null = null;
+    const onSelectionChange = () => {
+      updateFromCaret();
+      if (ownerWindow === undefined || ownerWindow === null) return;
+      if (deferredUpdateTimeout !== null) {
+        ownerWindow.clearTimeout(deferredUpdateTimeout);
+      }
+      deferredUpdateTimeout = ownerWindow.setTimeout(() => {
+        deferredUpdateTimeout = null;
+        updateFromCaret();
+      }, 0);
+    };
+    ownerDocument?.addEventListener("selectionchange", onSelectionChange);
     ownerDocument?.addEventListener("input", updateFromCaret);
     ownerWindow?.addEventListener("scroll", updateFromCaret, true);
     ownerWindow?.addEventListener("resize", updateFromCaret);
     updateFromCaret();
     return () => {
-      ownerDocument?.removeEventListener("selectionchange", updateFromCaret);
+      ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
+      if (deferredUpdateTimeout !== null) {
+        ownerWindow?.clearTimeout(deferredUpdateTimeout);
+      }
       ownerDocument?.removeEventListener("input", updateFromCaret);
       ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
       ownerWindow?.removeEventListener("resize", updateFromCaret);

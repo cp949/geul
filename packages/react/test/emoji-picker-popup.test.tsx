@@ -3,7 +3,8 @@
 /**
  * EmojiPicker의 `:` 트리거 팝업 - 열기/keyword 필터링/키보드 네비게이션/선택
  * 삽입/portalTarget을 검증한다. Ctrl·Alt·Meta 조합 키를 가로채지 않는 계약도
- * 여기서 고정한다(Issue #227).
+ * 여기서 고정한다(Issue #227). 캐럿이 `:` 블록을 벗어나면 닫히는 계약도
+ * 고정한다(Issue #229).
  */
 
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
@@ -15,6 +16,8 @@ import { EmojiPicker } from "../src/index.js";
 import {
   type MountedBlockEditor,
   mountBlockEditor,
+  moveCaretWithSingleEvent,
+  paragraphOf,
   placeCaret,
 } from "./mount-editor.js";
 import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
@@ -322,5 +325,62 @@ describe("EmojiPicker 수식 키(Issue #227)", () => {
 
     expect(fireEvent.keyDown(rendered.host, { key: "Enter" })).toBe(false);
     expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+  });
+});
+
+describe("EmojiPicker 캐럿 이탈(Issue #229)", () => {
+  // SlashMenu와 같은 구조다. selectionchange 리스너가 PM 리스너보다 먼저
+  // 호출돼 낡은 state.selection을 읽는다.
+  const renderThreeBlocks = () => {
+    const rendered = mountBlockEditor({
+      blockIds: ["alpha", "beta", "gamma"],
+      children: <EmojiPicker />,
+    });
+    rendered.editable.focus();
+    expect(document.activeElement).toBe(rendered.editable);
+    const betaId = rendered.blockIds[1];
+    if (betaId === undefined) throw new Error("beta 블록을 찾지 못했다");
+    const typed = rendered.editor.commands.setText(betaId, ":smi");
+    if (!typed.ok) throw new Error("블록 텍스트 fixture 준비 실패");
+    placeCaret(paragraphOf(rendered.blocks[1]));
+    fireSelectionChange();
+    // 전제: 캐럿이 `:smi` 블록에 있고 메뉴가 열려 있다.
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("beta");
+    expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+    return rendered;
+  };
+
+  it("캐럿이 다른 블록으로 옮겨가면 메뉴가 닫힌다", async () => {
+    const rendered = renderThreeBlocks();
+
+    await moveCaretWithSingleEvent(paragraphOf(rendered.blocks[2]));
+
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("gamma");
+    expect(screen.queryByRole("listbox", { name: listboxName })).toBeNull();
+  });
+
+  it("같은 블록 안에서 캐럿이 움직이면 메뉴를 유지한다", async () => {
+    const rendered = renderThreeBlocks();
+
+    await moveCaretWithSingleEvent(paragraphOf(rendered.blocks[1]));
+
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("beta");
+    expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+  });
+
+  it("이탈 뒤 Enter는 `:smi` 블록을 이모지로 바꾸지 않는다", async () => {
+    const rendered = renderThreeBlocks();
+    await moveCaretWithSingleEvent(paragraphOf(rendered.blocks[2]));
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("gamma");
+
+    fireEvent.keyDown(rendered.editable, { key: "Enter" });
+
+    const beta = rendered.editor
+      .getDocument()
+      .blocks.find((block) => block.id === "beta");
+    expect(beta).toMatchObject({
+      type: "paragraph",
+      content: [{ text: ":smi" }],
+    });
   });
 });

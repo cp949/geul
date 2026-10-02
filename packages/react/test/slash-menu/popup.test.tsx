@@ -3,6 +3,7 @@
 /**
  * SlashMenu의 슬래시 질의 팝업 트리거·필터링·항목 적용을 검증한다.
  * Ctrl·Alt·Meta 조합 키를 가로채지 않는 계약도 여기서 고정한다(Issue #227).
+ * 캐럿이 슬래시 블록을 벗어나면 닫히는 계약도 고정한다(Issue #229).
  */
 
 import {
@@ -20,6 +21,8 @@ import {
   focusOutsideEditor,
   mountBlockEditor,
   mountTableEditor,
+  moveCaretWithSingleEvent,
+  paragraphOf,
   placeCaret,
 } from "../mount-editor.js";
 import { COMMAND_MODIFIERS } from "../command-modifiers-test-support.js";
@@ -640,6 +643,55 @@ describe("SlashMenu 질의 팝업", () => {
 
     expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
     expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("SlashMenu 캐럿 이탈(Issue #229)", () => {
+  // 브라우저 실측: SlashMenu의 selectionchange 리스너가 ProseMirror 리스너보다
+  // 먼저 호출돼 낡은 state.selection을 읽는다. 이동 직후 재통지가 없어 메뉴가
+  // 남는다. 같은 리스너 순서가 jsdom에서도 재현된다.
+  it("캐럿이 다른 블록으로 옮겨가면 메뉴가 닫힌다", async () => {
+    const rendered = renderCaretBlocks({
+      blockIds: ["alpha", "beta", "gamma"],
+    });
+    typeIntoBlock(rendered, 1, "/head");
+    // 전제: 캐럿이 /head 블록에 있고 메뉴가 열려 있다.
+    expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
+
+    await moveCaretWithSingleEvent(paragraphOf(rendered.blocks[2]));
+
+    // 전제: 이동이 끝난 뒤 컨트롤러는 gamma를 캐럿 블록으로 본다.
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("gamma");
+    expect(screen.queryByRole("listbox", { name: "Slash menu" })).toBeNull();
+  });
+
+  it("같은 블록 안에서 캐럿이 움직이면 메뉴를 유지한다", async () => {
+    const rendered = renderCaretBlocks({
+      blockIds: ["alpha", "beta", "gamma"],
+    });
+    typeIntoBlock(rendered, 1, "/head");
+    expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
+
+    await moveCaretWithSingleEvent(paragraphOf(rendered.blocks[1]));
+
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("beta");
+    expect(screen.getByRole("listbox", { name: "Slash menu" })).not.toBeNull();
+  });
+
+  it("이탈 뒤 Enter는 /head 블록을 변환하지 않는다", async () => {
+    const rendered = renderCaretBlocks({
+      blockIds: ["alpha", "beta", "gamma"],
+    });
+    typeIntoBlock(rendered, 1, "/head");
+    await moveCaretWithSingleEvent(paragraphOf(rendered.blocks[2]));
+    expect(rendered.editor.getCaretBlockContext()?.blockId).toBe("gamma");
+
+    fireEvent.keyDown(rendered.editable, { key: "Enter" });
+
+    const beta = rendered.editor
+      .getDocument()
+      .blocks.find((block) => block.id === "beta");
+    expect(beta?.type).toBe("paragraph");
   });
 });
 

@@ -175,6 +175,43 @@ export const placeCaret = (node: HTMLElement) => {
 };
 
 /**
+ * 캐럿을 옮기고 `selectionchange`를 브라우저처럼 한 번만 전달한 뒤 매크로태스크
+ * 하나를 흘려 보낸다(Issue #229).
+ *
+ * 브라우저는 캐럿 이동마다 이벤트를 한 번 쏜다. jsdom의 지연 이벤트 큐잉은
+ * `selection-events.ts`가 소유한다. 그 지연분은 PM이 state를 갱신한 뒤에
+ * 도착해 "리스너가 PM보다 먼저 호출돼 낡은 state를 읽는" 결함을 가린다.
+ * 동기 구간 밖에서 도착한 이벤트는 막아 한 번짜리 순서를 재현한다. 앞선
+ * 호출이 남긴 지연 이벤트는 먼저 흘려 보낸다.
+ */
+export const moveCaretWithSingleEvent = async (target: HTMLElement) => {
+  const flushMacrotask = () =>
+    act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+  await flushMacrotask();
+  let inSyncDispatch = true;
+  const dropQueuedEvent = (event: Event) => {
+    if (!inSyncDispatch) event.stopImmediatePropagation();
+  };
+  document.addEventListener("selectionchange", dropQueuedEvent, true);
+  try {
+    placeCaret(target);
+    inSyncDispatch = false;
+    await flushMacrotask();
+  } finally {
+    document.removeEventListener("selectionchange", dropQueuedEvent, true);
+  }
+};
+
+/** 블록 컨테이너 안의 문단 요소. 컨테이너 자체가 아니라 문단에 캐럿을 놓는다. */
+export const paragraphOf = (block: HTMLElement | undefined): HTMLElement => {
+  const paragraph = block?.querySelector<HTMLElement>("p") ?? null;
+  if (paragraph === null) throw new Error("블록 안 문단을 찾지 못했다");
+  return paragraph;
+};
+
+/**
  * 초점을 편집 영역 밖(방금 누른 오버레이 컨트롤)으로 옮긴다. fixture가
  * 캐럿을 놓느라 편집 영역에 초점을 준 채로 두면 "초점을 편집기로 되돌린다"
  * 단언이 처음부터 편집기에 있던 초점을 다시 보는 공허한 단언이 된다.
