@@ -19,8 +19,12 @@ import {
   type MountBlockEditorOptions,
   stubRect,
 } from "./mount-editor.js";
+import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
 
 afterEach(cleanup);
+// 캡션 Enter가 handleMenuKeyDown의 문서 capture 반복 억제를 건다. 다음 테스트에
+// 남지 않게 푼다(G-TST-003).
+afterEach(releaseEnterRepeatSuppression);
 
 const addCaptionLabel = DEFAULT_DICTIONARY.toolbar.media.addCaptionAriaLabel;
 const inputLabelFor = (kind: "image" | "video" | "audio" | "file") =>
@@ -196,6 +200,58 @@ describe("Escape 취소", () => {
     });
     expect(screen.getByRole("button", { name: "원래 값" })).toBeTruthy();
     expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("IME 조합 중 keydown(Issue #232)", () => {
+  // 조합을 확정하는 Enter와 조합을 취소하는 Escape는 캡션 입력의 키가
+  // 아니다. handleMenuKeyDown이 조합 중 키를 처리하지 않고 preventDefault도
+  // 하지 않는다(link-toolbar.test.tsx의 Issue #230 테스트와 같은 모양).
+  const setup = () => {
+    const changes: DocumentChangeEvent[] = [];
+    const rendered = renderCaptions({
+      initialBlocks: [
+        {
+          id: "image-1",
+          type: "image",
+          url: "https://example.com/a.png",
+          caption: "원래 값",
+        },
+      ],
+      onChange: (event) => changes.push(event),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "원래 값" }));
+    fireEvent.change(captionTextarea(), { target: { value: "조합 중 값" } });
+    return { changes, rendered };
+  };
+
+  it("조합 중 Enter는 캡션을 확정하지 않고 preventDefault하지 않는다", () => {
+    const { changes, rendered } = setup();
+
+    const notPrevented = fireEvent.keyDown(captionTextarea(), {
+      key: "Enter",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(captionTextarea().value).toBe("조합 중 값");
+    expect(changes).toEqual([]);
+    expect(rendered.editor.getDocument().blocks[0]).toMatchObject({
+      caption: "원래 값",
+    });
+  });
+
+  it("조합 중 Escape는 편집을 취소하지 않고 preventDefault하지 않는다", () => {
+    const { changes } = setup();
+
+    const notPrevented = fireEvent.keyDown(captionTextarea(), {
+      key: "Escape",
+      isComposing: true,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(captionTextarea().value).toBe("조합 중 값");
+    expect(changes).toEqual([]);
   });
 });
 

@@ -14,8 +14,10 @@ import { useCallback, useEffect, useRef } from "react";
  * store payload 타입, `{ blockId, draft }` 최소 형태만 요구한다).
  *
  * `useSelectionRefresh` 호출, `handleChange`(media의 autoResizeTextarea
- * 포함), Enter/newline 키 처리는 관심사가 달라 이 훅으로 옮기지 않았다
- * (01-계획.md "범위 밖") — 여전히 각 컴포넌트가 소유한다.
+ * 포함), keydown 배선은 관심사가 달라 이 훅으로 옮기지 않았다
+ * (01-계획.md "범위 밖") — 각 컴포넌트가 소유한다. Enter·Escape·IME 조합
+ * 순서는 handleMenuKeyDown이, Shift+Enter 줄바꿈 가드는 media 컴포넌트가
+ * 맡는다(Issue #232).
  */
 export type CaptionEditingLifecycleDeps<
   T extends { blockId: string; draft: string },

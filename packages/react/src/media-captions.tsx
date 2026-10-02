@@ -19,6 +19,7 @@ import {
   useMediaCaptionEditing,
 } from "./media-caption-editing-store.js";
 import { findMediaVisualElement } from "./media-handle-overlays.js";
+import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
@@ -249,12 +250,15 @@ export const MediaCaptions = () => {
         const handleKeyDown = (
           event: ReactKeyboardEvent<HTMLTextAreaElement>,
         ) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            event.currentTarget.blur();
-          } else if (event.key === "Escape") {
-            cancel(event.currentTarget);
-          }
+          // Shift+Enter는 줄바꿈이다. handleMenuKeyDown은 Shift를 보지 않아
+          // Enter로 취급하므로 호출 전에 거르고 기본 동작에 맡긴다.
+          if (event.key === "Enter" && event.shiftKey) return;
+          // IME 조합 중 키·Enter 반복·preventDefault 순서는 handleMenuKeyDown이
+          // 소유한다(G-UI-001, Issue #232). 조합 중 Enter·Escape는 건너뛴다.
+          handleMenuKeyDown(event, {
+            activate: () => event.currentTarget.blur(),
+            escape: () => cancel(event.currentTarget),
+          });
         };
         const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
           setMediaCaptionEditing({ blockId, draft: event.target.value });
