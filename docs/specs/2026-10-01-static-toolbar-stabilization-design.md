@@ -184,7 +184,10 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 - Enter·Space·클릭이 변환을 확정한다. 확정은 포커스를 편집기로 돌린다.
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다.
 - Tab은 메뉴를 닫고 포커스를 트리거로 돌린다.
-- 바깥 클릭은 포커스를 옮기지 않는다(`G-UI-001`).
+- 바깥 클릭은 메뉴를 닫는다. 포커스가 메뉴 밖이면 옮기지 않는다(`G-UI-001`).
+- 포커스가 옵션에 있었으면 편집기로 돌린다(`G-UI-001` 자동 닫힘). 키보드로 연 메뉴에서 툴바 버튼을 마우스로 눌러 닫는 경우가 해당한다.
+- 메뉴 keydown과 트리거 keydown은 Ctrl·Alt·Meta가 눌린 키에서 처리하지 않는다. `preventDefault`도 하지 않는다. 화살표·Home·End·Tab 전부 해당한다.
+- Shift는 수식 키로 보지 않는다. `Shift+Tab`은 Tab과 같이 메뉴를 닫는다.
 - 선례: `code-block-language-combobox.tsx`의 `listbox`/`option` 패턴.
 
 ### 색상 컨트롤
@@ -206,6 +209,11 @@ Issue #224가 추가했다. 블록 타입 컨트롤과 같은 키보드 계약�
 - Tab·Shift+Tab은 메뉴를 닫고 포커스를 해당 속성의 트리거로 돌린다.
 - 바깥 클릭은 메뉴를 닫는다. 포커스가 메뉴 밖이면 옮기지 않는다.
 - 포커스가 메뉴 안에 있었으면 편집기로 돌린다(`G-UI-001` 자동 닫힘).
+- 메뉴가 열린 채 mark 적용이 불가능해지면(코드 블록·미디어 블록·표 셀 범위 선택) 메뉴를 닫는다. 포커스가 스와치에 있었으면 편집기로 돌린다.
+- 선택이 다시 mark를 적용할 수 있는 상태로 돌아와도 닫힌 메뉴는 다시 열리지 않는다.
+- 메뉴 keydown과 트리거 keydown은 Ctrl·Alt·Meta가 눌린 키에서 처리하지 않는다. `preventDefault`도 하지 않는다.
+- 메뉴 안 Enter 반복 억제가 이 규칙보다 앞선다. `Ctrl+Enter` 반복도 막는다.
+- Shift는 수식 키로 보지 않는다. `Shift+Tab`은 Tab과 같이 메뉴를 닫는다.
 - 한 속성의 메뉴가 열린 채 다른 속성 트리거를 키보드로 열면 메뉴가 바뀌고 첫 스와치가 포커스를 받는다.
 - 스와치 확정은 DOM selection을 다시 쓰지 않는다. 명령은 편집기 상태의 selection을 읽는다.
 
@@ -232,6 +240,11 @@ Issue #222가 추가했다.
 - 팔레트가 줄바꿈되는 칸 수는 메뉴 폭에 따라 달라 2차원 이동을 하지 않는다. 블록 타입 메뉴처럼 양 끝에서 멈추는 선형 이동이다.
 - 스와치로 포커스가 가기 전에 DOM selection이 편집기 안에 그대로 있다. 확정 때 `addRange`로 되돌릴 대상이 없고, 되돌리면 포커스가 편집기로 먼저 옮겨져 이동 중 포커스 계약과 어긋난다(Issue #224 실측).
 - 컨테이너 mousedown을 막지 않으면 포커스가 `BODY`로 가고 DOM selection이 편집기 밖으로 나간다(Issue #222 F3).
+- 툴바 버튼 mousedown은 `preventDefault`라 포커스가 옵션에 남은 채 블록 타입 메뉴가 언마운트됐다. 브라우저가 포커스를 `BODY`로 떨어뜨렸다(Issue #225).
+- 메뉴 keydown과 트리거 keydown이 수식 키를 구분하지 않아 `Alt+ArrowLeft`(뒤로 가기)·`Ctrl+Tab` 같은 브라우저 단축키를 막거나 메뉴를 닫았다(Issue #225).
+- 선택이 코드 블록으로 옮겨 가면 트리거는 `aria-disabled`가 되지만 열린 색상 메뉴는 남았다(Issue #225).
+- 수식 키 규칙이 툴바 탐색과 메뉴에서 다르다. 툴바 roving은 Shift·Ctrl·Alt·Meta 모두에서 물러난다. 메뉴는 Ctrl·Alt·Meta에서만 물러난다.
+- 메뉴에서 `Shift+Tab`이 닫기 키다. Shift를 가드에 넣으면 Shift+Tab 닫기가 동작하지 않는다.
 
 ## 6. 기존 계약과의 관계
 

@@ -322,6 +322,7 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - Home/End는 처음·끝 컨트롤로 이동한다.
 - Escape는 포커스를 편집기로 돌린다.
 - Shift·Ctrl·Alt·Meta를 함께 누르면 이동하지 않는다.
+- 블록 타입·색상 트리거와 메뉴는 Ctrl·Alt·Meta를 함께 누르면 키를 처리하지 않고 `preventDefault`도 하지 않는다. `Alt+ArrowLeft`·`Ctrl+Tab` 같은 브라우저 단축키가 막히지 않는다. Shift는 수식 키로 보지 않는다. 메뉴의 `Shift+Tab`은 닫기 키다. Escape 닫기는 이 규칙 밖이다.
 - 블록 타입 아이콘 버튼, 들여쓰기·내어쓰기, mark 버튼은 Enter·Space로 눌러도 포커스가 그 버튼에 남는다. mark 버튼은 편집기의 선택 범위도 유지한다.
 - 툴바의 빈 영역이나 컨트롤 사이 틈을 눌러도 편집기 포커스와 선택 범위가 유지된다.
 

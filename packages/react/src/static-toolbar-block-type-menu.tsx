@@ -44,7 +44,11 @@ type StaticToolbarBlockTypeMenuProps = {
   /** 옵션 확정(클릭, Enter, Space). */
   onConfirm: (option: BlockTypeOption) => void;
 
-  /** 바깥 클릭. 포커스를 옮기지 않는다. 호출부가 `useCallback`으로 안정시킨다. */
+  /**
+   * 바깥 클릭. 이 컴포넌트는 포커스를 옮기지 않는다. 호출부가 포커스가 메뉴 안에
+   * 있었으면 편집기로 돌린다(G-UI-001 자동 닫힘). 호출부가 `useCallback`으로
+   * 안정시킨다.
+   */
   onOutsideDismiss: () => void;
 
   /** Escape. 호출부가 편집기로 포커스를 돌린다. 호출부가 `useCallback`으로 안정시킨다. */
