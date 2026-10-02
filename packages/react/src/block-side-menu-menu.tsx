@@ -48,6 +48,12 @@ export type BlockSideMenuMenuProps = {
   left: number;
   top: number;
   onClose: () => void;
+  /**
+   * 문서 변경으로 대상 type이 바뀌어 닫을 때 부른다. 없으면 `onClose`를 쓴다.
+   * `onClose`는 초점을 항상 편집기로 돌리므로, 편집기 밖 입력의 초점을 지키려면
+   * `invalidated` 규칙으로 닫는 콜백을 넘긴다.
+   */
+  onInvalidated?: () => void;
 };
 
 /**
@@ -60,6 +66,7 @@ export const BlockSideMenuMenu = ({
   left,
   top,
   onClose,
+  onInvalidated,
 }: BlockSideMenuMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
@@ -97,8 +104,8 @@ export const BlockSideMenuMenu = ({
   // 이후 다시 돌지 않아(RD-005의 click 시점 guard가 그대로 방어선을 맡는다).
   const editorRevision = useEditorRevision();
   const [openedBlockType] = useState(() => blockMenuSource?.type ?? null);
-  const latestOnClose = useRef(onClose);
-  latestOnClose.current = onClose;
+  const latestOnClose = useRef(onInvalidated ?? onClose);
+  latestOnClose.current = onInvalidated ?? onClose;
   useEffect(() => {
     const currentBlockType =
       findBlockTypeDescriptor(editor.getDocument().blocks, blockId)?.type ??
@@ -197,6 +204,9 @@ export const BlockSideMenuMenu = ({
       ref={menuRef}
       role="menu"
       style={style}
+      // 활성 항목이 없을 때 useDismissibleOverlay의 focusOnOpen이 패널에
+      // 초점을 준다. tabIndex가 없으면 그 초점이 무시된다.
+      tabIndex={-1}
     >
       <p className="geul-block-menu__label">{dictionary.menu.turnInto}</p>
       {blockTypeOptions.map((option) => (

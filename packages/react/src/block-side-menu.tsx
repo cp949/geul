@@ -1,5 +1,5 @@
 import { GripVertical, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   computeDragGuide,
@@ -19,9 +19,8 @@ import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
-import { useFocusEditor } from "./use-focus-editor.js";
 import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
@@ -51,10 +50,9 @@ const blockGutterButtonClassName = "geul-block-gutter__button";
 // 난다(사용자 스크린샷, 표가 문단 바로 아래일 때 재현).
 const BLOCK_GUTTER_HOVER_MARGIN = 56;
 
-// useDismissOnOutsideOrEscape allow-list. table-handles.tsx,
-// table-selection-toolbar.tsx와 같은 이유로 모듈 스코프 상수로 둔다 —
-// 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다
-// 다시 붙인다.
+// useDismissibleOverlay allow-list. 모듈 스코프 상수로 둔다.
+// 패널 셀렉터를 맨 앞에 둔다 — focusOnOpen이 활성 항목이 없을 때 첫
+// 셀렉터의 표면(패널)에 초점을 준다. 핸들이 앞이면 초점이 핸들에 남는다.
 const BLOCK_MENU_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-block-menu]",
   "[data-geul-block-handle]",
@@ -68,6 +66,16 @@ const BLOCK_HOVER_IGNORE_SELECTORS = [
   "[data-geul-block-menu]",
 ] as const;
 
+// 핸들 keydown(Enter·Space)이 만드는 click만 키보드 열림으로 본다.
+// click의 `detail === 0`은 jsdom `fireEvent.click` 기본값이기도 해서 신호로
+// 쓰지 않는다. 마우스·터치 열림은 초점을 옮기지 않는다.
+const isKeyboardActivationKey = (key: string): boolean =>
+  key === "Enter" || key === " ";
+
+// 열린 메뉴 상태. `viaKeyboard`는 `focusOnOpen`으로 module에 넘기는 값이다.
+// `BlockMenuState`는 media-handle-overlays.tsx와 공유하므로 여기서 확장한다.
+type OpenBlockMenuState = BlockMenuState & { viaKeyboard: boolean };
+
 export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
@@ -77,13 +85,13 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   >(null);
   const [dragState, dragStateRef, updateDragState] =
     useMirroredState<DragState | null>(null);
-  const [blockMenuState, setBlockMenuState] = useState<BlockMenuState | null>(
-    null,
-  );
+  const [blockMenuState, setBlockMenuState] =
+    useState<OpenBlockMenuState | null>(null);
+  // 핸들 keydown이 세우고 click(onOpen 판정 전)이나 pointerdown이 지운다.
+  const handleKeyboardActivationRef = useRef(false);
   // 드래그 종료 후 합성 click 억제 + pointerdown 스냅샷 기반 재오픈 판정 —
   // table-handles.tsx와 같은 상태 머신을 공유한다(Issue #52).
   const reopenSuppression = useHandleReopenSuppression();
-  const focusEditor = useFocusEditor(element);
 
   // 리스너를 element가 아닌 document에 둔다. gutter는 contenteditable
   // 바깥의 오버레이라서 element 안쪽에서만 hover를 추적하면 포인터가
@@ -301,21 +309,44 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   });
 
   // 블록 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
-  // 닫는 UI는 병렬 e2e로 검증한다). 리스너 등록/해제는
-  // useDismissOnOutsideOrEscape가 소유한다 — table-handles.tsx,
-  // table-selection-toolbar.tsx와 같은 훅이다(Issue #20, #45).
-  const dismissBlockMenu = useCallback(() => setBlockMenuState(null), []);
-  const closeBlockMenu = useCallback(() => {
-    setBlockMenuState(null);
-    focusEditor();
-  }, [focusEditor]);
-  useDismissOnOutsideOrEscape({
-    active: blockMenuState !== null,
+  // 닫는 UI는 병렬 e2e로 검증한다). 리스너, reason별 초점 복귀, Escape
+  // LIFO, 키보드 열림 초점은 useDismissibleOverlay가 소유한다(Issue #233).
+  // 항목 클릭·트리거 재클릭 닫힘은 `close("trigger")`로 편집기에 초점을
+  // 돌린다.
+  const close = useDismissibleOverlay({
+    open: blockMenuState !== null,
     element,
     allowSelectors: BLOCK_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissBlockMenu,
-    onEscapeDismiss: closeBlockMenu,
+    onClose: () => setBlockMenuState(null),
+    focusOnOpen: blockMenuState?.viaKeyboard ?? false,
+    // 열린 채 다른 블록 핸들로 다시 열면 payload만 바뀐다. 메뉴가 key로
+    // 재마운트돼 초점을 잃으므로 대상이 바뀔 때 초점을 다시 준다.
+    focusKey: blockMenuState?.blockId,
   });
+  const closeFromTrigger = useCallback(() => close("trigger"), [close]);
+  const closeFromInvalidated = useCallback(() => close("invalidated"), [close]);
+
+  // 대상 블록이 사라지면 닫는다(`invalidated`). 외부 controller command의
+  // 삭제는 internal·external 마운트 모두에서 `editor.subscribe`로만 알 수
+  // 있다. listener는 틱만 올린다 — Tiptap `transaction` emit이 세션 문서
+  // 갱신보다 앞서 listener 안의 `getDocument()`는 한 단계 낡은 문서를
+  // 읽는다. 존재 판정은 커밋 뒤 effect가 한다.
+  const openBlockId = blockMenuState?.blockId ?? null;
+  const [documentTick, setDocumentTick] = useState(0);
+  useEffect(() => {
+    if (openBlockId === null) return;
+    return editor.subscribe(() => setDocumentTick((tick) => tick + 1));
+  }, [editor, openBlockId]);
+  useEffect(() => {
+    if (openBlockId === null) return;
+    if (findBlockInTreeForDrag(editor.getDocument().blocks, openBlockId)) {
+      return;
+    }
+    close("invalidated");
+    // documentTick은 값을 읽지 않는 재실행 트리거다. openBlockId는 열자마자
+    // 같은 batch에서 삭제된 대상을 열린 직후 한 번 확인한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentTick, openBlockId]);
 
   useEffect(() => {
     if (element === null) return;
@@ -391,6 +422,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     // 실사용 위험이 낮음) 블록 gutter는 문서 전체 세로 스크롤과 드래그
     // 방향이 겹쳐 spec §9.2가 방어적 수정으로 명시 승인했다.
     event.preventDefault();
+    handleKeyboardActivationRef.current = false;
     reopenSuppression.onPointerDown(
       blockMenuState !== null && blockMenuState.blockId === blockId
         ? blockId
@@ -445,7 +477,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     // 없다(table-handles.tsx의 index와 달리). 트리거 버튼도 onMouseDown
     // preventDefault라 초점을 받지 않는다 — 재클릭 닫기에는 바깥 클릭과
     // 달리 "돌아갈 다른 목적지"가 없다. Escape와 같은 그룹으로 다뤄
-    // closeBlockMenu(초점 복구 포함)를 재사용한다(G-UI-001, Issue #52).
+    // close("trigger")(초점 복구 포함)를 재사용한다(G-UI-001, Issue #52).
+    const viaKeyboard = handleKeyboardActivationRef.current;
+    handleKeyboardActivationRef.current = false;
     resolveReopenAwareClick(
       reopenSuppression,
       event,
@@ -462,9 +496,10 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             blockId,
             left: hoverBounds.left,
             top: hoverBounds.top + 28,
+            viaKeyboard,
           });
         },
-        onClose: closeBlockMenu,
+        onClose: closeFromTrigger,
       },
     );
   };
@@ -483,6 +518,11 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
             icon={dragHandleIcon}
             label={dictionary.handle.dragBlock}
             onClick={(event) => handleHandleClick(event, hoverBlockId)}
+            onKeyDown={(event) => {
+              if (isKeyboardActivationKey(event.key)) {
+                handleKeyboardActivationRef.current = true;
+              }
+            }}
             onPointerDown={(event) =>
               handlePointerDownOnHandle(event, hoverBlockId)
             }
@@ -515,8 +555,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {blockMenuState !== null && (
         <BlockSideMenuMenu
           blockId={blockMenuState.blockId}
+          // 대상이 바뀌면 다시 마운트한다. 메뉴가 열 때의 block type을 lazy
+          // init으로 붙들어 두므로, 키가 없으면 이전 대상의 type이 남는다.
+          key={blockMenuState.blockId}
           left={blockMenuState.left}
-          onClose={closeBlockMenu}
+          onClose={closeFromTrigger}
+          onInvalidated={closeFromInvalidated}
           top={blockMenuState.top}
         />
       )}

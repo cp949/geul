@@ -5,6 +5,12 @@
  * 변경/복제/삭제)를 열고, 바깥 클릭·Escape·같은 핸들 재클릭으로 닫는 동작을
  * 검증한다.
  *
+ * 추가 주제(Issue #233, RD-002):
+ * - 핸들 keydown(Enter·Space)으로 연 메뉴의 첫 항목 초점과 신호 소비.
+ * - 대상 블록 삭제 시 닫힘(internal·external), 닫힐 때 초점 규칙, 열자마자의 삭제.
+ * - 대상 전환 시 key 재마운트와 focusKey 재초점.
+ * - 편집기 초점에서 편집기가 먼저 막은 Escape도 메뉴를 닫는다.
+ *
  * 모든 describe가 실제 createEditor() 마운트 위에서 돈다(Issue #76) — 손으로
  * 조립한 fake 컨트롤러/DOM 레인은 남아 있지 않다. 명령이 진짜라 호출 스파이
  * 대신 문서 결과를 단언한다. `<BlockSideMenu />`는 `<SlashMenu />`를 거치지
@@ -20,6 +26,7 @@ import {
   type ParagraphBlock,
 } from "@cp949/geul-core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -1337,5 +1344,364 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     // 기존 "클릭=블록 메뉴 열기" 계약이 그대로 살아 있다 — 억제되지 않는다.
     fireEvent.click(handle, { detail: 1 });
     expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
+  });
+});
+
+/**
+ * 첫 번째 블록 핸들에 키보드 열림 신호(keydown)를 보낸 뒤 click한다.
+ * 브라우저는 핸들에 초점이 있을 때 Enter·Space를 keydown 뒤 click으로 바꾼다.
+ * keydown 없이 click만 쏘는 jsdom 기본 호출과 이 경로를 구분하는 데 쓴다.
+ * 열기 전에 초점을 편집기에 둬서 "초점이 메뉴로 옮겨졌는가"를 판정할 수 있게 한다.
+ */
+const openBlockMenuViaKeyboard = (key: "Enter" | " ") => {
+  const rendered = renderBlockMenu();
+  const [block] = rendered.blocks;
+  if (block === undefined) throw new Error("블록 요소가 없다");
+  rendered.editable.focus();
+  fireEvent.pointerMove(block);
+  const handle = screen.getByRole("button", { name: dragHandleLabel });
+  fireEvent.keyDown(handle, { key });
+  fireEvent.click(handle);
+  return rendered;
+};
+
+describe("블록 메뉴 키보드 열림 초점(Issue #233 RD-002)", () => {
+  it("핸들에서 Enter keydown 뒤 click으로 열면 첫 활성 항목에 초점을 준다", () => {
+    openBlockMenuViaKeyboard("Enter");
+
+    const menu = screen.getByRole("menu", { name: "Block menu" });
+    const [firstItem] = screen.getAllByRole("menuitem");
+    expect(firstItem).toBeDefined();
+    expect(document.activeElement).toBe(firstItem);
+    expect(menu.contains(document.activeElement)).toBe(true);
+  });
+
+  it("핸들에서 Space keydown 뒤 click으로 열어도 첫 활성 항목에 초점을 준다", () => {
+    openBlockMenuViaKeyboard(" ");
+
+    const [firstItem] = screen.getAllByRole("menuitem");
+    expect(document.activeElement).toBe(firstItem);
+  });
+
+  it("keydown 없이 click만 오면 초점을 옮기지 않는다", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    rendered.editable.focus();
+    fireEvent.pointerMove(block);
+
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("남아 있던 keydown 신호는 마우스 pointerdown이 지워 그 뒤 click은 초점을 옮기지 않는다", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    rendered.editable.focus();
+    fireEvent.pointerMove(block);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    // 키로 눌렀지만 click이 오지 않은 신호가 남은 상태를 만든다.
+    fireEvent.keyDown(handle, { key: "Enter" });
+
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    fireEvent.click(handle, { detail: 1 });
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("다른 키의 keydown은 키보드 열림 신호가 아니다", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    rendered.editable.focus();
+    fireEvent.pointerMove(block);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+
+    fireEvent.keyDown(handle, { key: "a" });
+    fireEvent.click(handle);
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("메뉴 패널은 tabIndex -1을 가져 활성 항목이 없을 때 초점을 받을 수 있다", () => {
+    openBlockMenu();
+
+    expect(
+      screen.getByRole("menu", { name: "Block menu" }).getAttribute("tabindex"),
+    ).toBe("-1");
+  });
+});
+
+describe("블록 메뉴 대상 블록 삭제 시 닫힘(Issue #233 RD-002)", () => {
+  it("external 마운트에서 메뉴가 연 블록을 deleteBlock하면 메뉴가 닫힌다", async () => {
+    const rendered = openBlockMenu({ blockIds: ["block-1", "block-2"] });
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    const deleted = rendered.editor.commands.deleteBlock("block-1");
+    if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+    // 구독 통지는 커밋 뒤 effect가 판정한다. 동기 단언이 아니라 수렴을 기다린다.
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("메뉴가 연 블록이 아닌 다른 블록을 삭제하면 메뉴가 닫히지 않는다", async () => {
+    // 마지막 한 블록은 지울 수 없어(문서는 블록이 최소 하나) 세 개로 시작한다.
+    const rendered = openBlockMenu({
+      blockIds: ["block-1", "block-2", "block-3"],
+    });
+
+    const deletedOther = rendered.editor.commands.deleteBlock("block-2");
+    if (!deletedOther.ok) throw new Error("다른 블록 삭제 fixture 준비 실패");
+
+    // 구독 통지와 커밋 뒤 판정이 끝나도록 flush한 다음에 단언한다. 삭제 직후의
+    // 동기 단언은 판정이 돌기 전이라 어떤 구현에서도 통과한다.
+    await act(async () => {});
+    expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
+
+    // 판정이 살아 있음을 같은 테스트에서 확인한다. 대상 블록을 삭제하면 닫힌다.
+    // 이 확인이 없으면 위 단언은 "삭제를 아예 감지하지 않는다"와 구분되지 않는다.
+    const deletedTarget = rendered.editor.commands.deleteBlock("block-1");
+    if (!deletedTarget.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("초점이 메뉴 안에 있을 때 대상 블록이 삭제돼 닫히면 초점을 편집기로 돌린다", async () => {
+    const rendered = openBlockMenu({ blockIds: ["block-1", "block-2"] });
+    screen.getByRole("menuitem", { name: "Duplicate" }).focus();
+    expect(screen.getByRole("menu").contains(document.activeElement)).toBe(
+      true,
+    );
+
+    const deleted = rendered.editor.commands.deleteBlock("block-1");
+    if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+
+  it("internal 마운트에서도 메뉴가 연 블록을 deleteBlock하면 메뉴가 닫힌다", async () => {
+    const rendered = mountInternalBlockEditor(["block-1", "block-2"]);
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block1);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    const deleted = rendered.editor.commands.deleteBlock("block-1");
+    if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+});
+
+describe("블록 메뉴 대상 전환(Issue #233 RD-002)", () => {
+  it("메뉴가 열린 채 다른 블록 핸들로 다시 열면 새 대상의 type을 기준으로 삼아 이후 문서 변경에 닫히지 않는다", async () => {
+    const rendered = mountInternalBlockEditor([
+      "block-1",
+      "block-2",
+      "block-3",
+    ]);
+    const prepared = rendered.editor.commands.setBlockType("block-2", {
+      type: "bulletListItem",
+    });
+    if (!prepared.ok) throw new Error("대상 전환 fixture 준비 실패");
+    const [block1, block2] = rendered.blocks;
+    if (block1 === undefined || block2 === undefined) {
+      throw new Error("블록 요소가 없다");
+    }
+    fireEvent.pointerMove(block1);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    // 메뉴를 닫지 않은 채 포인터가 block-2로 옮겨가 같은 핸들을 키로 연다.
+    fireEvent.pointerMove(block2);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    // 무관한 문서 변경이다. 메뉴가 첫 대상(paragraph) type을 붙들고 있으면
+    // block-2(bulletListItem)와 달라 닫힌다.
+    const unrelated = rendered.editor.commands.setBlockType("block-3", {
+      type: "bulletListItem",
+    });
+    if (!unrelated.ok) throw new Error("무관한 변경 fixture 준비 실패");
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.queryByRole("menu", { name: "Block menu" })).not.toBeNull();
+  });
+});
+
+describe("블록 메뉴 키보드 연속 열림 초점(Issue #233 RD-002)", () => {
+  it("키보드로 연 메뉴에서 다른 블록 핸들을 키보드로 다시 열면 새 메뉴의 첫 항목에 초점을 준다", () => {
+    const rendered = renderBlockMenu({ blockIds: ["block-1", "block-2"] });
+    const [block1, block2] = rendered.blocks;
+    if (block1 === undefined || block2 === undefined) {
+      throw new Error("블록 요소가 없다");
+    }
+    rendered.editable.focus();
+    fireEvent.pointerMove(block1);
+    let handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+    expect(document.activeElement).toBe(screen.getAllByRole("menuitem")[0]);
+
+    // 메뉴를 닫지 않은 채 block-2의 핸들을 다시 키보드로 연다. key 재마운트가
+    // 초점을 가진 이전 항목을 지우므로 새 메뉴가 초점을 다시 받아야 한다.
+    fireEvent.pointerMove(block2);
+    handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+
+    const menu = screen.getByRole("menu", { name: "Block menu" });
+    expect(menu.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(screen.getAllByRole("menuitem")[0]);
+    expect(document.activeElement?.tagName).not.toBe("BODY");
+  });
+});
+
+/**
+ * 편집기 밖에 `<input>`을 만들어 초점을 준다. 편집기 밖 입력에 초점이 있을 때
+ * 메뉴가 닫혀도 초점을 가져가지 않는지 판정하는 데 쓴다. 정리 함수를 돌려준다.
+ */
+const focusOutsideInput = (): {
+  input: HTMLInputElement;
+  remove: () => void;
+} => {
+  const input = document.createElement("input");
+  document.body.append(input);
+  input.focus();
+  return { input, remove: () => input.remove() };
+};
+
+describe("블록 메뉴 삭제 닫힘의 초점 규칙(Issue #233 RD-002)", () => {
+  it("internal 마운트에서 편집기 밖 입력에 초점이 있으면 대상 블록 삭제로 닫혀도 초점을 가져가지 않는다", async () => {
+    const rendered = mountInternalBlockEditor(["block-1", "block-2"]);
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block1);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    const { input, remove } = focusOutsideInput();
+    try {
+      const deleted = rendered.editor.commands.deleteBlock("block-1");
+      if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).toBeNull();
+      });
+      expect(document.activeElement).toBe(input);
+    } finally {
+      remove();
+    }
+  });
+
+  it("external 마운트에서도 편집기 밖 입력의 초점을 가져가지 않는다", async () => {
+    const rendered = openBlockMenu({ blockIds: ["block-1", "block-2"] });
+    const { input, remove } = focusOutsideInput();
+    try {
+      const deleted = rendered.editor.commands.deleteBlock("block-1");
+      if (!deleted.ok) throw new Error("대상 블록 삭제 fixture 준비 실패");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).toBeNull();
+      });
+      expect(document.activeElement).toBe(input);
+    } finally {
+      remove();
+    }
+  });
+});
+
+describe("블록 메뉴를 연 직후 같은 batch의 삭제(Issue #233 RD-002)", () => {
+  it("external 마운트에서 열자마자 같은 act에서 대상을 삭제하면 메뉴가 닫힌다", async () => {
+    const rendered = renderBlockMenu({ blockIds: ["block-1", "block-2"] });
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+
+    act(() => {
+      fireEvent.click(handle);
+      rendered.editor.commands.deleteBlock("block-1");
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("internal 마운트에서도 열자마자 같은 act에서 대상을 삭제하면 메뉴가 닫힌다", async () => {
+    const rendered = mountInternalBlockEditor(["block-1", "block-2"]);
+    const [block1] = rendered.blocks;
+    if (block1 === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block1);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+
+    act(() => {
+      fireEvent.click(handle);
+      rendered.editor.commands.deleteBlock("block-1");
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+});
+
+describe("블록 메뉴 키보드 열림 신호 소비(Issue #233 RD-002)", () => {
+  it("Enter로 연 뒤 닫고 keydown 없이 click만 보내면 초점이 메뉴로 가지 않는다", () => {
+    const rendered = renderBlockMenu();
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    rendered.editable.focus();
+    fireEvent.pointerMove(block);
+    const handle = screen.getByRole("button", { name: dragHandleLabel });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+    expect(document.activeElement).toBe(screen.getAllByRole("menuitem")[0]);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
+
+    // 앞선 keydown 신호가 click에서 소비됐다면 이번 click은 키보드 열림이 아니다.
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("블록 메뉴 편집기 초점에서의 Escape(Issue #233 RD-002)", () => {
+  it("편집기가 Escape를 먼저 preventDefault해도 마우스로 연 메뉴가 닫히고 초점이 편집기에 남는다", () => {
+    const rendered = openBlockMenu();
+    rendered.editable.focus();
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    // ProseMirror editHandlers.keydown이 편집기 안의 Escape를 막는 것을 흉내 낸다.
+    const consume = (event: Event) => event.preventDefault();
+    rendered.editable.addEventListener("keydown", consume);
+    try {
+      fireEvent.keyDown(rendered.editable, { key: "Escape" });
+    } finally {
+      rendered.editable.removeEventListener("keydown", consume);
+    }
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(rendered.editable);
   });
 });

@@ -97,6 +97,25 @@ const isTopEntry = (ownerDocument: Document, entry: StackEntry): boolean => {
 const matchesAny = (node: Element, selectors: readonly string[]): boolean =>
   selectors.some((selector) => node.closest(selector) !== null);
 
+/**
+ * 편집기가 먼저 막은 keydown인지 본다. target이 편집기 host 안이고 오버레이
+ * 표면 밖이면 true다. ProseMirror는 편집기 안의 Escape를 `preventDefault`한다.
+ * 오버레이 표면 안이나 편집기 밖에서 막힌 키는 오버레이 자신의 모드 취소라
+ * false다.
+ */
+const isEditorConsumedKey = (
+  event: KeyboardEvent,
+  element: HTMLElement,
+  selectors: readonly string[],
+): boolean => {
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    element.contains(target) &&
+    !matchesAny(target, selectors)
+  );
+};
+
 /** allow 셀렉터에 걸리는 요소를 문서 순서가 아닌 셀렉터 순서로 모은다. */
 const findSurfaces = (
   ownerDocument: Document,
@@ -145,6 +164,8 @@ const focusFirstItem = (
  * 바깥 클릭은 오버레이마다 독립이다. LIFO는 Escape에만 적용한다.
  * `defaultPrevented`인 keydown은 건너뛴다. 오버레이 안의 모드 취소(입력창
  * Escape)가 `handleMenuKeyDown`으로 먼저 소비하면 오버레이는 닫히지 않는다.
+ * 예외: target이 편집기 host 안이고 오버레이 표면 밖이면 닫는다. ProseMirror가
+ * 편집기 안의 Escape를 습관적으로 막기 때문이다.
  * IME 조합 중 Escape도 건너뛴다. `handleMenuKeyDown`이 조합 중 키를 소비하지
  * 않으므로 여기서 막지 않으면 입력 모드가 있는 오버레이가 조합 취소로 닫힌다.
  * modifier가 눌린 Escape도 닫는다(Issue #227).
@@ -205,7 +226,12 @@ export const useDismissibleOverlay = ({
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (event.defaultPrevented) return;
+      if (
+        event.defaultPrevented &&
+        !isEditorConsumedKey(event, element, latest.current.allowSelectors)
+      ) {
+        return;
+      }
       // 조합 취소용 Escape다. handleMenuKeyDown과 같은 기준으로 건너뛴다.
       if (event.isComposing) return;
       if (!isTopEntry(ownerDocument, entry)) return;

@@ -44,6 +44,8 @@ type ProbeProps = {
   open: boolean;
   focusOnOpen?: boolean;
   focusKey?: unknown;
+  /** true면 패널을 편집기 host 안에 둔다. 오버레이가 편집기 DOM 안에 있는 경우다. */
+  panelInsideHost?: boolean;
   items?: readonly ItemSpec[];
   onClose: (reason: DismissReason) => void;
   /** 훅이 돌려준 `close`를 테스트로 흘려보낸다. */
@@ -60,6 +62,7 @@ const Probe = ({
   open,
   focusOnOpen = false,
   focusKey,
+  panelInsideHost = false,
   items = [{ role: "menuitem" }],
   onClose,
   onReady,
@@ -74,6 +77,22 @@ const Probe = ({
     focusKey,
   });
   onReady?.(close);
+  const panel = (
+    <div data-test-panel="" data-testid="panel" tabIndex={-1}>
+      {items.map((item, index) => (
+        <button
+          key={index}
+          data-testid={`item-${index}`}
+          role={item.role}
+          disabled={item.disabled === "disabled"}
+          aria-disabled={item.disabled === "aria-disabled" ? "true" : undefined}
+          type="button"
+        >
+          item {index}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <div>
       <div data-testid="host" ref={setHost}>
@@ -84,23 +103,9 @@ const Probe = ({
             node?.setAttribute("tabindex", "-1");
           }}
         />
+        {panelInsideHost ? panel : null}
       </div>
-      <div data-test-panel="" data-testid="panel" tabIndex={-1}>
-        {items.map((item, index) => (
-          <button
-            key={index}
-            data-testid={`item-${index}`}
-            role={item.role}
-            disabled={item.disabled === "disabled"}
-            aria-disabled={
-              item.disabled === "aria-disabled" ? "true" : undefined
-            }
-            type="button"
-          >
-            item {index}
-          </button>
-        ))}
-      </div>
+      {panelInsideHost ? null : panel}
       <button data-test-trigger="" data-testid="trigger" type="button">
         trigger
       </button>
@@ -136,6 +141,29 @@ const pressEscape = (init: KeyboardEventInit = {}): KeyboardEvent => {
   act(() => {
     document.body.dispatchEvent(event);
   });
+  return event;
+};
+
+/**
+ * 취소 가능한 Escape keydown을 `target`에서 쏜다. `consumeAt`이 있으면 그
+ * 요소가 먼저 `preventDefault`한다. document 리스너보다 앞서 bubble하는
+ * 소비자(ProseMirror, 오버레이 안의 입력 모드)를 흉내 낸다.
+ */
+const pressEscapeOn = (
+  target: Element,
+  consumeAt: Element | null,
+): KeyboardEvent => {
+  const consume = (event: Event) => event.preventDefault();
+  consumeAt?.addEventListener("keydown", consume);
+  const event = new KeyboardEvent("keydown", {
+    key: "Escape",
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+  consumeAt?.removeEventListener("keydown", consume);
   return event;
 };
 
@@ -333,6 +361,38 @@ describe("useDismissibleOverlay Escape", () => {
     document.body.removeEventListener("keydown", consume);
 
     expect(event.defaultPrevented).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("편집기 host 안에서 먼저 preventDefault된 Escape도 닫는다(ProseMirror가 막는 경우)", () => {
+    const onClose = vi.fn();
+    const { container } = render(<Probe open onClose={onClose} />);
+    const editable = byId(container, "editable");
+
+    pressEscapeOn(editable, editable);
+
+    expect(onClose).toHaveBeenCalledWith("escape");
+  });
+
+  it("편집기 host 안이어도 오버레이 표면 안에서 소비된 Escape는 건너뛴다", () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <Probe open panelInsideHost onClose={onClose} />,
+    );
+    const item = byId(container, "item-0");
+
+    pressEscapeOn(item, item);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("편집기 host 밖에서 소비된 Escape는 건너뛴다", () => {
+    const onClose = vi.fn();
+    const { container } = render(<Probe open onClose={onClose} />);
+    const outside = byId(container, "outside");
+
+    pressEscapeOn(outside, outside);
+
     expect(onClose).not.toHaveBeenCalled();
   });
 
