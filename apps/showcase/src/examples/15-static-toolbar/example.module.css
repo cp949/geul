@@ -24,3 +24,80 @@
 .content {
   padding: 0.75rem 1rem;
 }
+
+/* 결과 패널(샘플 불러오기·미리보기/HTML 탭) 셸 UI. 00-composite의
+   composite-result.css와 같은 모양이며, 소스 패널 자기완결성 때문에
+   공용 파일로 뽑지 않고 이 모듈에 둔다. 미리보기 타이포그래피는
+   `@cp949/geul-io/preview.css`(.geul-preview)가 제공한다. */
+.result {
+  margin-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 1rem;
+}
+
+.resultToolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.resultToolbar button,
+.tablist button {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.resultToolbar .resultError {
+  margin: 0;
+}
+
+.tablist {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tablist button[aria-selected="true"] {
+  border-color: #1a73e8;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.resultError {
+  color: #d93025;
+  margin: 0 0 0.75rem;
+}
+
+.htmlPanel {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.htmlToolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+}
+
+.htmlToolbar button {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.htmlPanel pre {
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+}
