@@ -47,11 +47,11 @@ import {
   syncAnchorClipVisibility,
 } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
 import {
   rangeBoundariesEqual,
   useDismissSuppression,
 } from "./use-dismiss-suppression.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -112,10 +112,10 @@ const backgroundColorIcon = <PaintBucket {...iconProps} />;
 const colorMenuSectionLabelClassName = "geul-menu-section-label";
 const colorMenuSwatchClassName = "geul-menu-swatch";
 
-// useDismissOnOutsideOrEscape allow-list. 트리거 버튼도 포함해야 재클릭이
+// useDismissibleOverlay allow-list. 트리거 버튼도 포함해야 재클릭이
 // "바깥 클릭"으로 먼저 닫히는 레이스 없이 트리거의 onClick 토글만으로
 // 재클릭 닫기가 성립한다(block-side-menu.tsx의 BLOCK_MENU_DISMISS_ALLOW_SELECTORS와
-// 같은 이유, RD-003-DELTA-01 계획 "배경" 절).
+// 같은 이유, 옛 로드맵 Issue #38 슬라이스 8 RD-003 DELTA-01 계획 "배경" 절).
 const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-color-menu]",
   "[data-geul-color-trigger]",
@@ -124,7 +124,14 @@ const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
 // 툴바 자신도 allow-list에 넣는다 — 안 그러면 Bold 등 내부 버튼 pointerdown이
 // "바깥 클릭"으로 잡혀 트리거 클릭보다 먼저 툴바를 지운다(위 색상 팔레트
 // allow-list와 같은 이유).
-const TOOLBAR_DISMISS_ALLOW_SELECTORS = [".geul-formatting-toolbar"] as const;
+// 팔레트는 툴바 DOM 밖 형제라 팔레트 셀렉터도 넣는다. 안 넣으면 스와치
+// pointerdown이 툴바의 바깥 클릭이 되어 색을 적용하기 전에 툴바를 지운다.
+// 예전에는 팔레트가 열린 동안 부모가 툴바 훅을 꺼서 막았다
+// (Issue #233 RD-003 DELTA-01에서 제거).
+const TOOLBAR_DISMISS_ALLOW_SELECTORS = [
+  ".geul-formatting-toolbar",
+  "[data-geul-color-menu]",
+] as const;
 
 type ToolbarState = Omit<
   FormattingToolbarState,
@@ -165,9 +172,9 @@ const restoreEditorSelection = (
 };
 
 /**
- * `portalTarget`을 지정하면 `createPortal`로 그 요소 하위에 렌더한다(RD-003
- * DELTA-01). 미지정(기본값 `null`)이면 기존처럼 부모 트리 내부에 그대로
- * 렌더한다 — additive 확장이라 기존 소비자·테스트의 DOM 배치 가정을 깨지
+ * `portalTarget`을 지정하면 `createPortal`로 그 요소 하위에 렌더한다(옛
+ * 로드맵 Issue #156 슬라이스 4 RD-003 DELTA-01). 미지정(기본값 `null`)이면
+ * 기존처럼 부모 트리 내부에 그대로 렌더한다 — additive 확장이라 기존 소비자·테스트의 DOM 배치 가정을 깨지
  * 않는다.
  *
  * `component`를 지정하면 위치 계산·표시 판정·dismiss는 이 컴포넌트가 그대로
@@ -297,54 +304,51 @@ export const FormattingToolbar = ({
     );
   });
 
-  // 툴바 자신도 G-UI-001을 따른다(위 색상 팔레트와 같은 훅). 바깥
-  // pointerdown은 자연히 selection을 collapse해 updateFromSelection이 이미
-  // 닫아주므로 onOutsideDismiss는 방어적 안전망이다 — 초점은 옮기지 않는다.
-  // Escape는 돌아갈 selection이 없으니 초점을 편집기로 되돌리고, 같은
-  // selection이 재관측돼도 다시 안 열리게 dismissSuppression에 기록한다.
-  // colorMenuState가 열려 있는 동안은 active를 꺼서 Escape 한 번이 팔레트만
-  // 먼저 닫게 한다(안쪽 오버레이 우선 — 두 리스너가 같은 keydown에 동시
-  // 반응하면 팔레트와 툴바가 한 번에 다 닫힌다).
-  const dismissToolbar = useCallback(() => {
-    dismissSuppression.clear();
-    setToolbarState(null);
-    setColorMenuState(null);
-  }, [dismissSuppression]);
-  const closeToolbar = useCallback(() => {
-    dismissSuppression.dismiss(trackedRange.current);
-    setToolbarState(null);
-    setColorMenuState(null);
-    focusEditor();
-  }, [dismissSuppression, focusEditor]);
-  useDismissOnOutsideOrEscape({
-    active: toolbarState !== null && colorMenuState === null,
+  // 툴바 자신도 G-UI-001을 따른다(아래 색상 팔레트와 같은 훅). 닫힘 규칙은
+  // useDismissibleOverlay가 소유한다(Issue #233, RD-003 DELTA-01).
+  // - Escape: module이 초점을 편집기로 되돌린 뒤 부른다. 같은 selection이
+  //   재관측돼도 다시 안 열리게 dismissSuppression에 기록한다.
+  // - 바깥 pointerdown: 보통 selection collapse가 이미 updateFromSelection으로
+  //   닫는다. 이쪽은 방어적 안전망이다. 초점이 툴바 안이면 module이 편집기로
+  //   옮기고, 밖이면 옮기지 않는다.
+  // 팔레트가 열린 동안에도 이 훅은 켜 둔다. 팔레트가 나중에 스택에 올라
+  // Escape 한 번에 팔레트만 먼저 닫힌다(LIFO). 부모가 `active`를 꺼서
+  // 순서를 맞추지 않는다.
+  useDismissibleOverlay({
+    open: toolbarState !== null,
     element,
     allowSelectors: TOOLBAR_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissToolbar,
-    onEscapeDismiss: closeToolbar,
+    onClose: (reason) => {
+      if (reason === "escape") {
+        dismissSuppression.dismiss(trackedRange.current);
+      } else {
+        dismissSuppression.clear();
+      }
+      setToolbarState(null);
+      setColorMenuState(null);
+    },
   });
 
   // 색상 팔레트는 G-UI-001을 그대로 따른다 — 바깥 클릭(초점 미이동)과
-  // Escape(초점 복구)를 분리하고, 트리거 재클릭도 Escape와 같은 초점 복구
-  // 그룹으로 다룬다(closeColorMenu 공유). block-side-menu.tsx의
-  // resolveReopenAwareClick/useHandleReopenSuppression은 핸들이 드래그
-  // 제스처를 겸할 때만 필요한 인프라라 여기서는 쓰지 않는다 — 트리거를
-  // allowSelectors에 포함시키면 바깥 pointerdown이 먼저 팔레트를 지우는
-  // 레이스 자체가 생기지 않아 단순 토글로 충분하다(RD-003-DELTA-01 계획).
+  // Escape(초점 복구)는 useDismissibleOverlay가 맡는다. 트리거 재클릭은 module을
+  // 거치지 않고 closeColorMenu가 Escape와 같은 초점 복구로 닫는다.
+  // block-side-menu.tsx의 resolveReopenAwareClick/useHandleReopenSuppression은
+  // 핸들이 드래그 제스처를 겸할 때만 필요한 인프라라 여기서는 쓰지 않는다 —
+  // 트리거를 allowSelectors에 포함시키면 바깥 pointerdown이 먼저 팔레트를
+  // 지우는 레이스 자체가 생기지 않아 단순 토글로 충분하다(옛 로드맵 Issue #38
+  // 슬라이스 8 RD-003 DELTA-01 계획).
   const { menuRef: colorMenuRef, style: colorMenuStyle } =
     useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
 
-  const dismissColorMenu = useCallback(() => setColorMenuState(null), []);
   const closeColorMenu = useCallback(() => {
     setColorMenuState(null);
     focusEditor();
   }, [focusEditor]);
-  useDismissOnOutsideOrEscape({
-    active: colorMenuState !== null,
+  useDismissibleOverlay({
+    open: colorMenuState !== null,
     element,
     allowSelectors: COLOR_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissColorMenu,
-    onEscapeDismiss: closeColorMenu,
+    onClose: () => setColorMenuState(null),
   });
 
   const handleColorTriggerClick = (

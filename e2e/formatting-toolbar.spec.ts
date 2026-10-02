@@ -229,6 +229,52 @@ test("인라인 배경색 팔레트에서 배경색을 적용하고 None으로 �
   await expect(editable.locator("span")).toHaveCount(0);
 });
 
+// Issue #233 RD-003 DELTA-01. 아래 두 건은 편집기 초점의 실제 Escape를 쓴다.
+// ProseMirror가 편집기 안의 Escape를 `preventDefault`하므로 useDismissibleOverlay의
+// "편집기가 막은 Escape" 예외가 없으면 툴바와 팔레트가 닫히지 않는다.
+// jsdom은 이 `preventDefault`를 재현하지 못해 단위 테스트가 대신하지 못한다.
+test("편집기 초점에서 Escape를 누르면 서식 툴바가 닫히고 초점이 편집기에 남는다 (#233 RD-003 DELTA-01)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+  await expect(toolbar).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(toolbar).not.toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
+test("팔레트가 열린 채 편집기 초점에서 Escape를 누르면 팔레트만 닫히고 두 번째 Escape에 서식 툴바가 닫힌다 (#233 RD-003 DELTA-01)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const toolbar = page.getByRole("toolbar", { name: "Formatting" });
+  await editable.click();
+  await page.keyboard.type("Hello R1");
+  await page.keyboard.press("Control+A");
+  await page.getByRole("button", { name: "Text color" }).click();
+  const palette = page.getByRole("menu", { name: "Text color" });
+  await expect(palette).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(palette).toHaveCount(0);
+  await expect(toolbar).toBeVisible();
+  await expect(editable).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(toolbar).not.toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
 test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
   const { editable } = await openDemo(page);
   await editable.click();
