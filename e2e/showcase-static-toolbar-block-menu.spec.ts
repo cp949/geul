@@ -268,8 +268,9 @@ test("옵션에서 Enter를 길게 눌러도 확정 뒤 반복이 블록을 나�
 test("트리거에서 Space를 길게 눌러도 블록을 나누지 않는다", async ({
   page,
 }) => {
-  // 가설 검증이다. 버튼은 Space를 keyup에서 활성화하므로 keydown 반복이
-  // click을 내지 않는다고 본다. Space 억제는 별도 범위다.
+  // 버튼은 Space를 keyup에서 활성화하므로 keydown 반복이 click을 내지 않는다.
+  // Space에는 Enter 반복 억제가 필요 없다는 전제를 고정한다. 이 전제가
+  // 깨지면 Space 억제를 별도 작업으로 다룬다.
   const { trigger } = await openWithCaret(page);
   const before = await blockCount(page);
   await trigger.focus();

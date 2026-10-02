@@ -181,12 +181,16 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 - ArrowUp/ArrowDown은 옵션 사이를 이동한다. 양 끝에서 멈춘다(순환하지 않는다).
 - Home/End는 처음·끝 옵션으로 이동한다.
 - 이동은 변환하지 않는다.
+- 메뉴 안 Enter 자동 반복(`repeat`)은 무시한다. 트리거에서 Enter를 누른 채 있어도 현재 옵션을 확정하지 않는다.
+- 확정으로 포커스가 편집기로 돌아간 뒤에도 같은 Enter의 반복은 편집기에 닿지 않는다. Enter keyup이나 새 keydown에서 풀린다.
 - Enter·Space·클릭이 변환을 확정한다. 확정은 포커스를 편집기로 돌린다.
 - Escape는 메뉴를 닫고 포커스를 편집기로 돌린다.
 - Tab은 메뉴를 닫고 포커스를 트리거로 돌린다.
 - 바깥 클릭은 메뉴를 닫는다. 포커스가 메뉴 밖이면 옮기지 않는다(`G-UI-001`).
 - 바깥 클릭 때 포커스가 옵션에 있었으면 편집기로 돌린다(`G-UI-001` 바깥 클릭). 키보드로 연 메뉴에서 툴바 버튼을 마우스로 눌러 닫는 경우가 해당한다.
 - 메뉴 keydown과 트리거 keydown은 Ctrl·Alt·Meta가 눌린 키에서 처리하지 않는다. `preventDefault`도 하지 않는다. 화살표·Home·End·Tab 전부 해당한다.
+- 메뉴 안 Enter 반복 억제가 이 규칙보다 앞선다. `Ctrl+Enter` 반복도 막는다.
+- 메뉴가 열린 트리거의 처음 Enter도 같은 억제를 건다. 그 Enter의 click이 메뉴를 닫고 포커스를 편집기로 돌리기 때문이다. 이 억제도 수식 키 규칙보다 앞선다.
 - Shift는 수식 키로 보지 않는다. `Shift+Tab`은 Tab과 같이 메뉴를 닫는다.
 - 선례: `code-block-language-combobox.tsx`의 `listbox`/`option` 패턴.
 
@@ -213,6 +217,7 @@ Issue #224가 추가했다. 블록 타입 컨트롤과 같은 키보드 계약�
 - 선택이 다시 mark를 적용할 수 있는 상태로 돌아와도 닫힌 메뉴는 다시 열리지 않는다.
 - 메뉴 keydown과 트리거 keydown은 Ctrl·Alt·Meta가 눌린 키에서 처리하지 않는다. `preventDefault`도 하지 않는다.
 - 메뉴 안 Enter 반복 억제가 이 규칙보다 앞선다. `Ctrl+Enter` 반복도 막는다.
+- 메뉴가 열린 트리거의 처음 Enter도 같은 억제를 건다. 그 Enter의 click이 메뉴를 닫고 포커스를 편집기로 돌리기 때문이다. 이 억제도 수식 키 규칙보다 앞선다.
 - Shift는 수식 키로 보지 않는다. `Shift+Tab`은 Tab과 같이 메뉴를 닫는다.
 - 한 속성의 메뉴가 열린 채 다른 속성 트리거를 키보드로 열면 메뉴가 바뀌고 첫 스와치가 포커스를 받는다.
 - 스와치 확정은 DOM selection을 다시 쓰지 않는다. 명령은 편집기 상태의 selection을 읽는다.
