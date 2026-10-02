@@ -8,7 +8,7 @@
  *   편집기로 돌아오는지가 대상이다. jsdom은 키 입력을 요소에 라우팅하지
  *   않고 포커스 이동도 구현이 다르다.
  * - 실제 레이아웃. 메뉴가 `position: fixed`로 viewport 안에 들어오는지와
- *   스크롤 영역(max-height 440px) 안 sticky 툴바에서 그려지는지는 jsdom이
+ *   스크롤 영역(max-height 600px) 안 sticky 툴바에서 그려지는지는 jsdom이
  *   레이아웃을 계산하지 못해 볼 수 없다.
  * 열림 상태·옵션 구성·키보드 이동이 변환을 일으키지 않는 계약은 단위
  * 테스트(static-toolbar-block-type-menu.test.tsx)가 소유한다.

@@ -527,7 +527,7 @@ const ResultPanel = ({ revision }: { revision: number }) => {
 
 // 스크롤이 실제로 일어나도록 충분히 긴 문서를 채운다 — "상단 고정"을
 // 실제로 시연하려면 스크롤 중에도 툴바가 그대로 보여야 한다(RD-001 완료
-// 조건 6). 문단 수는 .scrollArea의 max-height(440px)를 넉넉히 넘긴다.
+// 조건 6). 문단 수는 .scrollArea의 max-height(600px)를 넉넉히 넘긴다.
 const PARAGRAPH_COUNT = 40;
 
 const StaticToolbarExample = () => {

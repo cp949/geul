@@ -4,7 +4,7 @@
    커지므로 그것만으로는 스크롤이 안 생긴다), stickyToolbar가 그 스크롤
    컨테이너 기준으로 상단에 붙는다. */
 .scrollArea {
-  max-height: 440px;
+  max-height: 600px;
   overflow-y: auto;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
