@@ -51,11 +51,12 @@ pending 셋의 용도, 파일 형식과 추가 시점은 [`./workflow-shared.md`
 
 ### `_meta.md`
 
-다음 기본 3필드를 두는 manifest다.
+다음 기본 4필드를 두는 manifest다.
 
 ```markdown
 ---
 작업 브랜치: <type>/<이슈번호>-<slug>
+착수 커밋: <브랜치를 만들기 직전의 `git rev-parse dev` 결과>
 대상 이슈: #NN | 없음
 상태: 진행중
 ---
@@ -67,7 +68,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 상위 로드맵: _works/roadmap/roadmap.md#RD-NNN
 ```
 
-단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. 확정 커밋 해시와 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
+단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. `착수 커밋`은 리뷰와 비교의 범위 기준점이다. 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "착수 커밋"을 따른다. 확정 커밋 해시와 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
 
 **단계 진입 가부는 선행 산출물 파일의 존재로 판정한다.** 필요한 파일이 없으면 추측해서 진행하지 않고 무엇이 없는지 보고하고 정지한다.
 
@@ -93,7 +94,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 
 - 입력: `AGENTS.md`의 "작업 시작 순서" 1~9, 대상 이슈(`gh issue view <번호> --comments`), 사용자 대화, roadmap-workflow에서 승격된 작업이면 대상 `RD-NNN.md`와 승격 사유
 - 출력: 작업 폴더, `_meta.md`, `01-계획.md`, 사용자 승인, 작업 브랜치
-- 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다 — 판정은 `_meta.md`의 `상태`가 `진행중`이면 미완료다. `docs/guides/INDEX.md`와 `docs/pitfalls/INDEX.md`를 대조해 계획서의 6·7절을 채운다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. **계획서를 사용자에게 제시하고 승인을 받는다.** 승인 후 `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
+- 절차: 작업 폴더를 먼저 정한다. `_works/`에 같은 이슈를 대상으로 하는 미완료 작업 폴더가 있으면 새로 만들지 않고 이어받는다 — 판정은 `_meta.md`의 `상태`가 `진행중`이면 미완료다. `docs/guides/INDEX.md`와 `docs/pitfalls/INDEX.md`를 대조해 계획서의 6·7절을 채운다. 의사결정이 필요한 지점은 추측하지 않고 사용자에게 묻는다. **계획서를 사용자에게 제시하고 승인을 받는다.** 승인 후 `git rev-parse dev` 결과를 `_meta.md`의 `착수 커밋`에 기록한다. 그다음 `git switch -c <type>/<이슈번호>-<slug> dev`로 브랜치를 만든다 — 분기 기준을 `dev`로 명시한다. 이슈가 없으면 번호를 생략한다. worktree는 만들지 않는다.
 - 정지: 사용자 승인 전에 브랜치를 만들거나 코드를 고치지 않는다. 커밋하지 않는다.
 
 ## 단계-2. 구현
@@ -135,7 +136,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 
 ## 단계-3. 리뷰
 
-- 입력: `git diff dev...<작업 브랜치>`, 대상 코드, `01-계획.md`, 계획서 6·7절이 지목한 가이드·함정, `AGENTS.md`의 아키텍처 불변식
+- 입력: `git diff <착수 커밋>...<작업 브랜치>`(`<착수 커밋>`은 `_meta.md`에서 읽는다), 대상 코드, `01-계획.md`, 계획서 6·7절이 지목한 가이드·함정, `AGENTS.md`의 아키텍처 불변식
 - 출력: `IMPL-REVIEW-NN.md`(append-only)
 - 검증: 단계-2의 focused 검증에 의존한다. `pnpm verify` 전량은 여기서 돌리지 않는다 — 단계-4 병합 직전에 1회만 돈다.
 - 절차: 두 부분을 한 산출물에 담는다.
@@ -169,7 +170,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 4. 이전 후 브랜치를 삭제하고 백업 ref를 정리한다.
 5. 작업 브랜치는 push하지 않는다. push 대상은 `dev`뿐이고 명시적 지시를 기다린다.
 
-커밋 해시 참조 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "커밋 해시 참조"를 그대로 따른다 — 이전 전에는 이슈, 댓글, 초안과 어느 산출물에도 해시를 쓰지 않는다.
+커밋 해시 참조 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "커밋 해시 참조"를 그대로 따른다 — 이전 전에는 이슈, 댓글, 초안과 어느 산출물에도 해시를 쓰지 않는다. 예외는 `_meta.md`의 `착수 커밋`뿐이다.
 
 ## 검증 게이트
 
@@ -189,7 +190,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 | 어느 레인으로 작업하는가                         | [`../../AGENTS.md`](../../AGENTS.md)의 "Git과 작업공간"                      |
 | 단계 절차, 계획서 형식과 작업 폴더 구성          | 이 문서                                                                      |
 | 작업 폴더 인자의 접두 매칭                       | 이 문서의 "언제 쓰나"                                                        |
-| 재그룹화 실행 명령·커밋 해시 참조·브랜치 수명    | [`./workflow-shared.md`](./workflow-shared.md)                               |
+| 재그룹화·커밋 해시 참조·착수 커밋·브랜치 수명    | [`./workflow-shared.md`](./workflow-shared.md)                               |
 | qq 적합 크기 판정에 차용하는 DELTA 크기 상한     | [`./workflow-shared.md`](./workflow-shared.md)의 "DELTA 크기 규칙"           |
 | 리뷰 산출물 형식과 pending 셋 계약               | [`./workflow-shared.md`](./workflow-shared.md)                               |
 | 결함 심각도와 완료 판정 상태                     | [`../process/development-lifecycle.md`](../process/development-lifecycle.md) |
