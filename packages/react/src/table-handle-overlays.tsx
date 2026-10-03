@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { IconButton } from "./icon-button.js";
 import type { TableGeometry } from "./table-handle-geometry.js";
 import {
@@ -73,6 +75,165 @@ export type TableHandleOverlaysProps = {
   showCornerCluster: boolean;
 };
 
+// 행·열·리사이즈 핸들은 항목마다 React.memo다. 활성 바가 옮겨갈 때(커서·선택
+// 이동) 바뀌는 항목은 둘뿐인데, 항목을 한 덩어리로 렌더하면 100x100 표에서
+// 요소 약 300개를 다시 만든다(Issue #240). props는 원시값과 안정 콜백만
+// 받는다 — geometry 객체를 넘기면 판독마다 새 객체라 memo가 항상 깨진다.
+const RowHandle = memo(function RowHandle({
+  active,
+  height,
+  index,
+  label,
+  left,
+  onClick,
+  onKeyDown,
+  onPointerDown,
+  rowId,
+  tableBlockId,
+  top,
+}: {
+  active: boolean;
+  height: number;
+  index: number;
+  label: string;
+  left: number;
+  onClick: TableHandleOverlaysProps["onReorderHandleClick"];
+  onKeyDown: TableHandleOverlaysProps["onReorderHandleKeyDown"];
+  onPointerDown: TableHandleOverlaysProps["onReorderHandlePointerDown"];
+  rowId: string;
+  tableBlockId: string;
+  top: number;
+}) {
+  return (
+    <div
+      className={rowHandleHitClassName}
+      data-geul-table-row-handle-active={active ? "" : undefined}
+      data-geul-table-row-handle-hit=""
+      style={{
+        position: "absolute",
+        top: top + height / 2 - 10,
+        left: left - 18,
+        width: 30,
+        height: 20,
+      }}
+    >
+      <IconButton
+        className={`${handleButtonClassName} ${rowHandleBarClassName}`}
+        data-geul-table-row-handle=""
+        icon={rowHandleIcon}
+        label={label}
+        onClick={(event) => onClick(event, "row", tableBlockId, rowId, index)}
+        onKeyDown={onKeyDown}
+        onPointerDown={(event) =>
+          onPointerDown(event, "row", tableBlockId, rowId, index)
+        }
+        // left는 활성 바(얇은 line)·grip 버튼(pill) 두 값을 오가며
+        // transition해야 해서 여기서 inline으로 고정하지 않는다 —
+        // inline style은 어떤 CSS 셀렉터보다도 우선순위가 높아
+        // :hover/:focus-within/[data-geul-table-row-handle-active]
+        // 규칙이 못 이긴다. left·opacity 모두 _table-handles.scss의
+        // .geul-table-row-handle-bar가 소유한다.
+        style={{ position: "absolute", top: 0 }}
+      />
+    </div>
+  );
+});
+
+const ColumnHandle = memo(function ColumnHandle({
+  active,
+  columnId,
+  index,
+  label,
+  left,
+  onClick,
+  onKeyDown,
+  onPointerDown,
+  tableBlockId,
+  top,
+  width,
+}: {
+  active: boolean;
+  columnId: string;
+  index: number;
+  label: string;
+  left: number;
+  onClick: TableHandleOverlaysProps["onReorderHandleClick"];
+  onKeyDown: TableHandleOverlaysProps["onReorderHandleKeyDown"];
+  onPointerDown: TableHandleOverlaysProps["onReorderHandlePointerDown"];
+  tableBlockId: string;
+  top: number;
+  width: number;
+}) {
+  return (
+    <div
+      className={columnHandleHitClassName}
+      data-geul-table-column-handle-active={active ? "" : undefined}
+      data-geul-table-column-handle-hit=""
+      style={{
+        position: "absolute",
+        left: left + width / 2 - 10,
+        top: top - 18,
+        width: 20,
+        height: 30,
+      }}
+    >
+      <IconButton
+        className={`${handleButtonClassName} ${columnHandleBarClassName}`}
+        data-geul-table-column-handle=""
+        icon={columnHandleIcon}
+        label={label}
+        onClick={(event) =>
+          onClick(event, "column", tableBlockId, columnId, index)
+        }
+        onKeyDown={onKeyDown}
+        onPointerDown={(event) =>
+          onPointerDown(event, "column", tableBlockId, columnId, index)
+        }
+        // top은(행의 left와 마찬가지로) 활성 바·grip 버튼 두 값을
+        // 오가며 transition해야 해서 여기서 inline으로 고정하지
+        // 않는다 — inline style은 어떤 CSS 셀렉터보다도 우선순위가
+        // 높아 :hover/:focus-within/[data-geul-table-column-handle-active]
+        // 규칙이 못 이긴다. top·opacity 모두 _table-handles.scss의
+        // .geul-table-column-handle-bar가 소유한다.
+        style={{ position: "absolute", left: 0 }}
+      />
+    </div>
+  );
+});
+
+const ResizeHandle = memo(function ResizeHandle({
+  columnIndex,
+  columnLeft,
+  columnWidth,
+  height,
+  onPointerDown,
+  tableBlockId,
+  top,
+}: {
+  columnIndex: number;
+  columnLeft: number;
+  columnWidth: number;
+  height: number;
+  onPointerDown: TableHandleOverlaysProps["onResizeHandlePointerDown"];
+  tableBlockId: string;
+  top: number;
+}) {
+  return (
+    <div
+      className="geul-table-resize-handle"
+      data-geul-table-resize-handle=""
+      onPointerDown={(event) =>
+        onPointerDown(event, tableBlockId, columnIndex, columnWidth)
+      }
+      style={{
+        left: columnLeft + columnWidth - 2,
+        top,
+        height,
+      }}
+    />
+  );
+});
+
 /**
  * 표 hover 시 뜨는 프레젠테이셔널 오버레이(행/열 재정렬 핸들, 열 리사이즈
  * 스트립, 행/열 확장 버튼, select/indent/outdent 버튼, 재정렬 가이드). 좌표·
@@ -131,54 +292,20 @@ export const TableHandleOverlays = ({
           맡는다. 이 컴포넌트는 hit box·버튼의 page-relative 좌표와 활성
           바 판정만 계산한다. */}
       {geometry.rows.map((row) => (
-        <div
-          className={rowHandleHitClassName}
-          data-geul-table-row-handle-active={
-            activeRowIds.includes(row.rowId) ? "" : undefined
-          }
-          data-geul-table-row-handle-hit=""
+        <RowHandle
+          active={activeRowIds.includes(row.rowId)}
+          height={row.height}
+          index={row.index}
           key={`row-${row.rowId}`}
-          style={{
-            position: "absolute",
-            top: row.top + row.height / 2 - 10,
-            left: geometry.left - 18,
-            width: 30,
-            height: 20,
-          }}
-        >
-          <IconButton
-            className={`${handleButtonClassName} ${rowHandleBarClassName}`}
-            data-geul-table-row-handle=""
-            icon={rowHandleIcon}
-            label={dictionary.handle.dragRow}
-            onClick={(event) =>
-              onReorderHandleClick(
-                event,
-                "row",
-                geometry.tableBlockId,
-                row.rowId,
-                row.index,
-              )
-            }
-            onKeyDown={onReorderHandleKeyDown}
-            onPointerDown={(event) =>
-              onReorderHandlePointerDown(
-                event,
-                "row",
-                geometry.tableBlockId,
-                row.rowId,
-                row.index,
-              )
-            }
-            // left는 활성 바(얇은 line)·grip 버튼(pill) 두 값을 오가며
-            // transition해야 해서 여기서 inline으로 고정하지 않는다 —
-            // inline style은 어떤 CSS 셀렉터보다도 우선순위가 높아
-            // :hover/:focus-within/[data-geul-table-row-handle-active]
-            // 규칙이 못 이긴다. left·opacity 모두 _table-handles.scss의
-            // .geul-table-row-handle-bar가 소유한다.
-            style={{ position: "absolute", top: 0 }}
-          />
-        </div>
+          label={dictionary.handle.dragRow}
+          left={geometry.left}
+          onClick={onReorderHandleClick}
+          onKeyDown={onReorderHandleKeyDown}
+          onPointerDown={onReorderHandlePointerDown}
+          rowId={row.rowId}
+          tableBlockId={geometry.tableBlockId}
+          top={row.top}
+        />
       ))}
       {/* 열 그립은 행과 대칭인 3단계다: ① 평소 완전히 숨김, ② "활성
           바"(커서가 있거나 마우스가 hover 중인 열 — activeColumnIds 포함,
@@ -192,74 +319,32 @@ export const TableHandleOverlays = ({
           바 판정만 계산한다(버튼 자신의 top은 SCSS 소유 — 아래 style 주석
           참고). */}
       {geometry.columns.map((column) => (
-        <div
-          className={columnHandleHitClassName}
-          data-geul-table-column-handle-active={
-            activeColumnIds.includes(column.columnId) ? "" : undefined
-          }
-          data-geul-table-column-handle-hit=""
+        <ColumnHandle
+          active={activeColumnIds.includes(column.columnId)}
+          columnId={column.columnId}
+          index={column.index}
           key={`column-${column.columnId}`}
-          style={{
-            position: "absolute",
-            left: column.left + column.width / 2 - 10,
-            top: geometry.top - 18,
-            width: 20,
-            height: 30,
-          }}
-        >
-          <IconButton
-            className={`${handleButtonClassName} ${columnHandleBarClassName}`}
-            data-geul-table-column-handle=""
-            icon={columnHandleIcon}
-            label={dictionary.handle.dragColumn}
-            onClick={(event) =>
-              onReorderHandleClick(
-                event,
-                "column",
-                geometry.tableBlockId,
-                column.columnId,
-                column.index,
-              )
-            }
-            onKeyDown={onReorderHandleKeyDown}
-            onPointerDown={(event) =>
-              onReorderHandlePointerDown(
-                event,
-                "column",
-                geometry.tableBlockId,
-                column.columnId,
-                column.index,
-              )
-            }
-            // top은(행의 left와 마찬가지로) 활성 바·grip 버튼 두 값을
-            // 오가며 transition해야 해서 여기서 inline으로 고정하지
-            // 않는다 — inline style은 어떤 CSS 셀렉터보다도 우선순위가
-            // 높아 :hover/:focus-within/[data-geul-table-column-handle-active]
-            // 규칙이 못 이긴다. top·opacity 모두 _table-handles.scss의
-            // .geul-table-column-handle-bar가 소유한다.
-            style={{ position: "absolute", left: 0 }}
-          />
-        </div>
+          label={dictionary.handle.dragColumn}
+          left={column.left}
+          onClick={onReorderHandleClick}
+          onKeyDown={onReorderHandleKeyDown}
+          onPointerDown={onReorderHandlePointerDown}
+          tableBlockId={geometry.tableBlockId}
+          top={geometry.top}
+          width={column.width}
+        />
       ))}
       {geometry.columns.flatMap((column) =>
         column.resizeSegments.map((segment) => (
-          <div
-            className="geul-table-resize-handle"
-            data-geul-table-resize-handle=""
+          <ResizeHandle
+            columnIndex={column.index}
+            columnLeft={column.left}
+            columnWidth={column.width}
+            height={segment.height}
             key={`resize-${column.columnId}-${segment.rowId}`}
-            onPointerDown={(event) =>
-              onResizeHandlePointerDown(
-                event,
-                geometry.tableBlockId,
-                column.index,
-                column.width,
-              )
-            }
-            style={{
-              left: column.left + column.width - 2,
-              top: segment.top,
-              height: segment.height,
-            }}
+            onPointerDown={onResizeHandlePointerDown}
+            tableBlockId={geometry.tableBlockId}
+            top={segment.top}
           />
         )),
       )}

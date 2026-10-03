@@ -46,6 +46,7 @@ import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useHandleKeyboardActivation } from "./use-handle-keyboard-activation.js";
+import { useStableCallback } from "./use-stable-callback.js";
 import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
@@ -977,6 +978,20 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     setTableGripMenuTableId(fresh.tableBlockId);
   };
 
+  // 오버레이 항목은 React.memo다. 위 핸들러는 렌더마다 새 클로저라 그대로 넘기면
+  // memo가 항상 깨진다 — 참조가 안정적인 래퍼로 넘긴다(Issue #240).
+  const stableReorderHandleClick = useStableCallback(handleReorderHandleClick);
+  const stableReorderHandlePointerDown = useStableCallback(
+    handlePointerDownOnReorderHandle,
+  );
+  const stableResizeHandlePointerDown = useStableCallback(
+    handlePointerDownOnResizeHandle,
+  );
+  const stableAddRow = useStableCallback(handleAddRow);
+  const stableAddColumn = useStableCallback(handleAddColumn);
+  const stableAddBlockClick = useStableCallback(handleAddBlockClick);
+  const stableTableGripClick = useStableCallback(handleTableGripClick);
+
   const reorderGuideRect = computeReorderGuideRect(geometry, reorderState);
 
   // 메뉴 좌표를 click 시점에 고정하면 연 채로 스크롤/창 크기 변경 시
@@ -1012,14 +1027,14 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
             activeColumnIds={activeColumnIds}
             activeRowIds={activeRowIds}
             geometry={geometry}
-            onAddBlock={handleAddBlockClick}
-            onAddColumn={handleAddColumn}
-            onAddRow={handleAddRow}
-            onReorderHandleClick={handleReorderHandleClick}
+            onAddBlock={stableAddBlockClick}
+            onAddColumn={stableAddColumn}
+            onAddRow={stableAddRow}
+            onReorderHandleClick={stableReorderHandleClick}
             onReorderHandleKeyDown={keyboardActivation.onKeyDown}
-            onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
-            onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
-            onTableGripClick={handleTableGripClick}
+            onReorderHandlePointerDown={stableReorderHandlePointerDown}
+            onResizeHandlePointerDown={stableResizeHandlePointerDown}
+            onTableGripClick={stableTableGripClick}
             reorderGuideRect={reorderGuideRect}
             showAddColumn={showAddColumn}
             showAddRow={showAddRow}
