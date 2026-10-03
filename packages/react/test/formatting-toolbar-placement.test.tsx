@@ -13,6 +13,7 @@ import { withProvider } from "./fake-editor-provider.js";
 import { fakeController } from "./formatting-toolbar-test-support.js";
 import { selectText } from "./selection-events.js";
 
+/** jsdom 원본 `Range.getBoundingClientRect`. 각 테스트 뒤에 복원한다. */
 const originalRangeRect = Range.prototype.getBoundingClientRect;
 
 afterEach(() => {
@@ -20,10 +21,12 @@ afterEach(() => {
   Range.prototype.getBoundingClientRect = originalRangeRect;
 });
 
+/** 모든 Range가 지정한 rect를 돌려주게 한다. */
 const stubSelectionRect = (rect: DOMRect) => {
   Range.prototype.getBoundingClientRect = () => rect;
 };
 
+/** 서식 툴바와 편집기를 렌더하고 본문 text node를 돌려준다. */
 const setup = () => {
   render(
     withProvider(
@@ -40,6 +43,7 @@ const setup = () => {
   return { textNode };
 };
 
+/** 서식 툴바의 fixed 좌표(style)를 읽는다. */
 const readToolbarPosition = () => {
   const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
   return { left: toolbar.style.left, top: toolbar.style.top };

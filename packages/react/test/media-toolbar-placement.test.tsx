@@ -78,6 +78,7 @@ const fakeController = ({
   },
 });
 
+/** 미디어 툴바와 편집기를 렌더하고 host와 대상 블록 요소를 돌려준다. */
 const renderToolbar = (options: FakeOptions = {}) => {
   render(
     withProvider(
@@ -95,6 +96,7 @@ const renderToolbar = (options: FakeOptions = {}) => {
   return { host, block };
 };
 
+/** left·top·크기로 `DOMRect` 모양 객체를 만든다. */
 const rectAt = (left: number, top: number, width = 200, height = 100) =>
   ({
     left,
@@ -114,18 +116,22 @@ const moveBlock = (block: HTMLElement | null, left: number, top: number) => {
   vi.spyOn(block, "getBoundingClientRect").mockReturnValue(rectAt(left, top));
 };
 
+/** 미디어 툴바 요소를 읽는다. 숨겨진 상태도 포함한다. */
 const readToolbar = () =>
   screen.getByRole("toolbar", { hidden: true }) as HTMLElement;
 
+/** 미디어 툴바의 fixed 좌표(style)를 읽는다. */
 const readPosition = () => {
   const toolbar = readToolbar();
   return { left: toolbar.style.left, top: toolbar.style.top };
 };
 
+/** more 메뉴를 연다. */
 const openMoreMenu = () => {
   fireEvent.click(screen.getByRole("button", { name: "More media options" }));
 };
 
+/** window scroll 이벤트를 act 안에서 보낸다. */
 const scroll = () => {
   act(() => {
     window.dispatchEvent(new Event("scroll"));

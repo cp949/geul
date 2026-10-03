@@ -47,6 +47,7 @@ const stubCaretRect = (initial: CaretRect): CaretRect => {
   return caret;
 };
 
+/** 슬래시 메뉴의 fixed 좌표(style)를 읽는다. */
 const readMenuPosition = () => {
   const menu = screen.getByRole("listbox", { name: "Slash menu" });
   return { left: menu.style.left, top: menu.style.top };

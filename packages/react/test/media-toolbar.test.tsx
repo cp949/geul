@@ -727,10 +727,6 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
       }),
     });
     renderToolbar(controller);
-    const blockElement = getEditable().querySelector(
-      '[data-geul-block-id="media-1"]',
-    );
-    if (blockElement === null) throw new Error("media block DOM missing");
     const toolbar = () => screen.getByRole("toolbar");
     const initialLeft = toolbar().style.left;
     const initialTop = toolbar().style.top;
@@ -1268,10 +1264,6 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
       isUploadEnabled: () => true,
     });
     renderToolbar(controller);
-    const blockElement = getEditable().querySelector(
-      '[data-geul-block-id="media-1"]',
-    );
-    if (blockElement === null) throw new Error("media block DOM missing");
     const toolbar = () => screen.getByRole("toolbar");
     const initialLeft = toolbar().style.left;
     const initialTop = toolbar().style.top;

@@ -66,6 +66,7 @@ const Probe = ({
   return <div data-testid="probe" ref={menuRef} style={style} />;
 };
 
+/** probe 요소의 fixed 좌표(style)를 읽는다. */
 const readStyle = (container: HTMLElement) => {
   const node = container.querySelector<HTMLElement>('[data-testid="probe"]');
   if (node === null) throw new Error("probe 요소가 없다");
@@ -90,6 +91,7 @@ const stubMenuRect = (width: number, height: number) => {
   } as DOMRect);
 };
 
+/** document에 붙은 빈 host 요소를 만든다. */
 const mountHost = () => {
   const host = document.createElement("div");
   document.body.append(host);
@@ -558,6 +560,22 @@ describe("useFixedPlacement", () => {
           readAnchor={() => ({ left: 300, top: 300 })}
         />,
       );
+      expect(readMenu(container).style.visibility).toBe("hidden");
+    });
+
+    it("viewport clamp가 앵커를 박스 안으로 끌어와도 clamp 전 좌표로 판정해 숨긴다", () => {
+      // 앵커 top -100은 clip 박스(top 0) 위다. clamp 후 좌표는 8이라 박스 안이다.
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          open
+          readAnchor={() => ({ left: 300, top: -100 })}
+        />,
+      );
+      expect(readMenu(container).style.top).toBe("8px");
       expect(readMenu(container).style.visibility).toBe("hidden");
     });
 

@@ -17,6 +17,7 @@ import { withProvider } from "./fake-editor-provider.js";
 import { stubRect } from "./mount-editor.js";
 import { selectText } from "./selection-events.js";
 
+/** jsdom 원본 `Range.getBoundingClientRect`. 각 테스트 뒤에 복원한다. */
 const originalRangeRect = Range.prototype.getBoundingClientRect;
 
 afterEach(() => {
@@ -24,6 +25,7 @@ afterEach(() => {
   Range.prototype.getBoundingClientRect = originalRangeRect;
 });
 
+/** 모든 Range가 지정한 rect를 돌려주게 한다. */
 const stubSelectionRect = (rect: DOMRect) => {
   Range.prototype.getBoundingClientRect = () => rect;
 };
@@ -50,6 +52,7 @@ const fakeController = (activeLink: { href: string } | null = null) => ({
   },
 });
 
+/** 링크 툴바와 편집기를 렌더하고 host와 본문 text node를 돌려준다. */
 const renderToolbar = (activeLink: { href: string } | null = null) => {
   render(
     withProvider(
@@ -66,13 +69,16 @@ const renderToolbar = (activeLink: { href: string } | null = null) => {
   return { host, textNode };
 };
 
+/** `Add link`를 눌러 편집 모드로 들어간다. */
 const openEditing = () => {
   fireEvent.click(screen.getByRole("button", { name: "Add link" }));
 };
 
+/** 링크 툴바 요소를 읽는다. 숨겨진 상태도 포함한다. */
 const readToolbar = () =>
   screen.getByRole("toolbar", { hidden: true }) as HTMLElement;
 
+/** 링크 툴바의 fixed 좌표(style)를 읽는다. */
 const readPosition = () => {
   const toolbar = readToolbar();
   return { left: toolbar.style.left, top: toolbar.style.top };
@@ -106,6 +112,9 @@ describe("LinkToolbar 배치", () => {
     selectText(textNode, 0, 8);
     openEditing();
     expect(screen.getByRole("textbox", { name: "Link URL" })).not.toBeNull();
+    // 실제 브라우저에서는 입력에 초점이 가며 DOM selection이 편집기를 떠난다.
+    // 라이브 selection을 읽는 구현이면 여기서 앵커를 잃는다.
+    window.getSelection()?.removeAllRanges();
 
     stubSelectionRect(new DOMRect(100, 150, 80, 20));
     fireEvent.scroll(window);

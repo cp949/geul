@@ -31,6 +31,7 @@ const countingItem = (id: string, label: string) => {
   return { item, reads };
 };
 
+/** `EmojiGrid`를 렌더하고 `rerender`를 돌려준다. `left`로 style을 바꿔 다시 그릴 수 있다. */
 const renderGrid = (
   items: readonly EmojiOption[],
   props: { onSelect?: (item: EmojiOption) => void; left?: number } = {},
