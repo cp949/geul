@@ -342,6 +342,38 @@ test("Escape를 누르면 하이라이트와 툴바가 사라지고 편집기로
   );
 });
 
+// Issue #233 RD-004 DELTA-01 — 과도기 차이 해소 단언. 선택 툴바가 먼저 열려
+// 있고 블록 메뉴가 키보드로 뒤에 열리면(마우스 pointerdown은 툴바 allow-list
+// 밖이라 툴바를 닫는다) Escape 한 번은 나중에 열린 메뉴만 닫고, 둘째가
+// 선택을 해제한다. 이전에는 옛 훅과 module이 섞여 한 번에 둘 다 닫히거나
+// 한 번 더 눌러야 했다.
+test("선택 툴바 위에 블록 메뉴가 열리면 Escape 한 번은 메뉴만, 두 번째는 선택을 닫는다", async ({
+  page,
+}) => {
+  const { editable } = await openWithFixture(page);
+  await dragHandleTo(
+    page,
+    "b1",
+    await centerOf(page.locator('[data-geul-block-id="b3"]')),
+  );
+  const toolbar = page.getByRole("toolbar", { name: "Block selection" });
+  await expect(toolbar).toBeVisible();
+
+  await page.getByRole("button", { name: "Drag to reorder" }).focus();
+  await page.keyboard.press("Enter");
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(toolbar).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(toolbar).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(toolbar).toHaveCount(0);
+  await expect(editable).toBeFocused();
+});
+
 test("선택 범위가 형제 목록 맨 앞/맨 뒤에 닿으면 해당 방향 이동 버튼이 비활성화된다", async ({
   page,
 }) => {

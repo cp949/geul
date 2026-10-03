@@ -577,3 +577,56 @@ describe("BlockSelectionToolbar 스크롤 컨테이너 clip", () => {
     expect(screen.getByRole("toolbar").style.visibility).toBe("");
   });
 });
+
+describe("툴바 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-004 DELTA-01)", () => {
+  const selectRange = () => {
+    const mounted = renderToolbar();
+    mounted.editor.commands.selectBlockRange("block-2", "block-4");
+    fireSelectionChange();
+    expect(
+      screen.getByRole("toolbar", { name: "Block selection" }),
+    ).not.toBeNull();
+    return mounted;
+  };
+
+  it("바깥 클릭 때 초점이 툴바 안에 있으면 선택을 해제하고 편집기로 초점을 옮긴다", () => {
+    const { editor, editable } = selectRange();
+    screen.getByRole("button", { name: moveUpLabel }).focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(editor.getBlockSelection()).toBeNull();
+      expect(document.activeElement).toBe(editable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 선택을 해제하지 않는다", () => {
+    const { editor } = selectRange();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+
+      fireEvent.keyDown(outside, { key: "Escape" });
+
+      expect(editor.getBlockSelection()).not.toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("IME 조합 중 Escape는 선택을 해제하지 않고 조합이 끝난 뒤 Escape는 해제한다", () => {
+    const { editor } = selectRange();
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(editor.getBlockSelection()).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(editor.getBlockSelection()).toBeNull();
+  });
+});

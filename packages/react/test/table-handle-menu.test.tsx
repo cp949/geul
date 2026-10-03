@@ -1448,3 +1448,95 @@ describe("메뉴 대상 정체성 추적(Issue #65)", () => {
     expect(screen.getByRole("alert").textContent).toBe("Action failed");
   });
 });
+
+describe("행/열 메뉴 닫힘과 열림이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-004 DELTA-01)", () => {
+  /**
+   * 핸들을 키보드(Enter)로 활성화한다. 브라우저는 Enter keydown 뒤 pointer
+   * 이벤트 없이 click을 합성한다. jsdom `fireEvent.click`의 `detail`은 항상
+   * 0이라 click만으로는 키보드 열림과 구별되지 않는다 — keydown을 먼저 보낸다.
+   */
+  const activateHandleWithEnter = (handle: HTMLElement) => {
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.click(handle);
+  };
+
+  it("행 핸들을 Enter로 열면 첫 항목에 초점이 간다", () => {
+    const { table } = renderRealTable();
+    fireEvent.pointerMove(table);
+    const [handle] = screen.getAllByRole("button", { name: rowHandleLabel });
+    if (handle === undefined) throw new Error("행 핸들 없음");
+
+    activateHandleWithEnter(handle);
+
+    const menu = screen.getByRole("menu", { name: "Table row menu" });
+    expect(document.activeElement).toBe(
+      menu.querySelector('[role="menuitem"]'),
+    );
+  });
+
+  it("열 핸들을 Enter로 열면 첫 항목에 초점이 간다", () => {
+    const { table } = renderRealTable();
+    fireEvent.pointerMove(table);
+    const [handle] = screen.getAllByRole("button", { name: columnHandleLabel });
+    if (handle === undefined) throw new Error("열 핸들 없음");
+
+    activateHandleWithEnter(handle);
+
+    const menu = screen.getByRole("menu", { name: "Table column menu" });
+    expect(document.activeElement).toBe(
+      menu.querySelector('[role="menuitem"]'),
+    );
+  });
+
+  it("행 핸들을 마우스로 열면 초점을 옮기지 않는다", () => {
+    const { table } = renderRealTable();
+    clickFirstRowHandle(table);
+
+    const menu = screen.getByRole("menu", { name: "Table row menu" });
+    expect(menu.contains(document.activeElement)).toBe(false);
+  });
+
+  it("바깥 클릭 때 초점이 메뉴 안에 있으면 메뉴를 닫고 편집기로 옮긴다", () => {
+    const { contentEditable, table } = renderRealTable();
+    fireEvent.pointerMove(table);
+    const [handle] = screen.getAllByRole("button", { name: rowHandleLabel });
+    if (handle === undefined) throw new Error("행 핸들 없음");
+    activateHandleWithEnter(handle);
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(contentEditable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 메뉴를 닫지 않는다", () => {
+    openRowMenu();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+
+      fireEvent.keyDown(outside, { key: "Escape" });
+
+      expect(screen.queryByRole("menu")).not.toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("IME 조합 중 Escape는 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    openRowMenu();
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(screen.queryByRole("menu")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});

@@ -31,6 +31,9 @@ export type TableHandleOverlaysProps = {
   // :focus-within)보다 넓은 트리거다.
   activeRowIds: readonly string[];
   activeColumnIds: readonly string[];
+  // Enter·Space keydown 신호(useHandleKeyboardActivation.onKeyDown). 행·열
+  // 핸들이 키보드로 열렸는지 click 핸들러가 구별하게 한다.
+  onReorderHandleKeyDown: (event: { key: string }) => void;
   onReorderHandleClick: (
     event: React.MouseEvent<HTMLButtonElement>,
     kind: ReorderKind,
@@ -88,6 +91,7 @@ export const TableHandleOverlays = ({
   geometry,
   reorderGuideRect,
   onReorderHandleClick,
+  onReorderHandleKeyDown,
   onReorderHandlePointerDown,
   onResizeHandlePointerDown,
   onAddRow,
@@ -156,6 +160,7 @@ export const TableHandleOverlays = ({
                 row.index,
               )
             }
+            onKeyDown={onReorderHandleKeyDown}
             onPointerDown={(event) =>
               onReorderHandlePointerDown(
                 event,
@@ -216,6 +221,7 @@ export const TableHandleOverlays = ({
                 column.index,
               )
             }
+            onKeyDown={onReorderHandleKeyDown}
             onPointerDown={(event) =>
               onReorderHandlePointerDown(
                 event,

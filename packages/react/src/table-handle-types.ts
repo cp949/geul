@@ -23,6 +23,10 @@ type HandleMenuState = {
   // effect가 재해석한다. 빈 문자열은 G-UI-002 fail-open(서로 다른 행/열이
   // 같은 빈 id로 충돌할 수 있어 재조준을 시도하지 않는다).
   targetId: string;
+  // 핸들을 Enter·Space로 열었는지. `focusOnOpen`으로 module에 넘긴다(Issue
+  // #233 RD-004 DELTA-01). 재조준이 `...menuState`로 이 값을 이어 가도 초점은
+  // 다시 옮기지 않는다 — 초점 재부여 키는 targetId다.
+  viaKeyboard: boolean;
 };
 
 type ResizeState = {

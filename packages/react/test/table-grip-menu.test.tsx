@@ -17,12 +17,14 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BlockSelectionToolbar } from "../src/block-selection-toolbar.js";
 import { TableHandles } from "../src/table-handles.js";
 import {
   type MountTableEditorOptions,
   mountTableEditor,
   tableBlockOf,
 } from "./mount-editor.js";
+import { fireSelectionChange } from "./selection-events.js";
 
 afterEach(cleanup);
 
@@ -330,5 +332,110 @@ describe("표 그립 메뉴 무효화", () => {
 
     expect(table.isConnected).toBe(false);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("표 그립 메뉴 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-004 DELTA-01)", () => {
+  it("바깥 클릭 때 초점이 메뉴 안에 있으면 메뉴를 닫고 편집기로 옮긴다", () => {
+    const { contentEditable } = openTableGripMenu();
+    const item = screen.getAllByRole("menuitemcheckbox")[0];
+    if (item === undefined) throw new Error("메뉴 항목 없음");
+    item.focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(document.activeElement).toBe(contentEditable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 메뉴를 닫지 않는다", () => {
+    openTableGripMenu();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+
+      fireEvent.keyDown(outside, { key: "Escape" });
+
+      expect(screen.queryByRole("menu")).not.toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("IME 조합 중 Escape는 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    openTableGripMenu();
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(screen.queryByRole("menu")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("표 그립 메뉴와 블록 선택 툴바가 함께 열린 Escape(Issue #233 동작 변경 3, RD-004 DELTA-01)", () => {
+  // 동작 변경 3: 두 오버레이가 함께 열려 있으면 Escape는 나중에 열린 하나만
+  // 닫는다. 이전에는 두 리스너가 한 Escape에 둘 다 닫았다. 그립 클릭은 표를
+  // 블록 선택으로 만들어 툴바를 함께 연다("표가 선택된 상태로 유지된다").
+  const toolbarName = "Block selection";
+
+  it("그립 메뉴를 먼저 열고 툴바가 뒤에 열리면 첫 Escape는 툴바만, 둘째 Escape는 메뉴를 닫는다", () => {
+    const mounted = mountTableEditor({
+      children: (
+        <>
+          <TableHandles />
+          <BlockSelectionToolbar />
+        </>
+      ),
+    });
+    fireEvent.pointerMove(mounted.table);
+    fireEvent.click(screen.getByRole("button", { name: tableGripLabel }));
+    fireSelectionChange();
+    expect(screen.getByRole("menu", { name: "Table menu" })).toBeTruthy();
+    expect(screen.getByRole("toolbar", { name: toolbarName })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("toolbar", { name: toolbarName })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Table menu" })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Table menu" })).toBeNull();
+  });
+
+  it("툴바를 먼저 열고 메뉴가 뒤에 열리면 첫 Escape는 메뉴만, 둘째 Escape는 툴바를 닫는다", () => {
+    const mounted = mountTableEditor({
+      children: (
+        <>
+          <TableHandles />
+          <BlockSelectionToolbar />
+        </>
+      ),
+    });
+    const { editor, tableBlockId } = mounted;
+    editor.commands.selectBlockRange(tableBlockId, tableBlockId);
+    fireSelectionChange();
+    expect(screen.getByRole("toolbar", { name: toolbarName })).toBeTruthy();
+    // 마우스 경로는 그립 pointerdown이 툴바를 닫으므로 키보드 활성화만 쓴다
+    // (pointerdown 없이 keydown → click).
+    fireEvent.pointerMove(mounted.table);
+    const grip = screen.getByRole("button", { name: tableGripLabel });
+    fireEvent.keyDown(grip, { key: "Enter" });
+    fireEvent.click(grip);
+    expect(screen.getByRole("menu", { name: "Table menu" })).toBeTruthy();
+    expect(screen.getByRole("toolbar", { name: toolbarName })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Table menu" })).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: toolbarName })).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("toolbar", { name: toolbarName })).toBeNull();
   });
 });

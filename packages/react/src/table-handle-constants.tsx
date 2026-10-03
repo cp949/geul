@@ -123,8 +123,9 @@ export const TABLE_MENU_SELECTOR = "[data-geul-table-menu]";
 // 관리해 독립된 셀렉터를 쓴다.
 export const TABLE_GRIP_MENU_SELECTOR = "[data-geul-table-grip-menu]";
 
-// useDismissOnOutsideOrEscape에 넘기는 allow-list. 모듈 스코프 상수로 둔다 —
-// 매 렌더 새 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
+// useDismissibleOverlay에 넘기는 allow-list. 모듈 스코프 상수로 둔다. module은
+// 최신 값을 ref로 읽어 매 렌더 새 배열이어도 리스너를 다시 달지 않지만, 다른
+// 호출부(block-side-menu.tsx 등)의 관례를 따른다.
 export const TABLE_MENU_DISMISS_ALLOW_SELECTORS = [
   TABLE_MENU_SELECTOR,
   "[data-geul-table-row-handle]",

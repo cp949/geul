@@ -42,9 +42,10 @@ import type {
   ReorderState,
   ResizeState,
 } from "./table-handle-types.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useHandleKeyboardActivation } from "./use-handle-keyboard-activation.js";
 import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
@@ -178,10 +179,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
 
   const focusEditor = useFocusEditor(element);
 
-  const closeMenu = useCallback(() => {
-    setMenuState(null);
-    focusEditor();
-  }, [focusEditor]);
+  const keyboardActivation = useHandleKeyboardActivation();
 
   // Issue #65 항목4: 무효화 재조준(아래 reconcileMenuState)이 부르는 자동
   // 닫힘 전용 콜백. 사용자의 물리적 클릭이 아니라는 점에서 바깥 클릭·Escape와
@@ -223,30 +221,26 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   }, [element, focusEditor]);
 
   // 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로 닫는 UI는
-  // 병렬 e2e로 검증한다). 실제 리스너 등록/해제는 useDismissOnOutsideOrEscape가
-  // 소유한다 — table-selection-toolbar.tsx도 같은 훅을 쓴다(Issue #20).
-  const dismissMenu = useCallback(() => setMenuState(null), []);
-  useDismissOnOutsideOrEscape({
-    active: menuState !== null,
+  // 병렬 e2e로 검증한다). 리스너, reason별 초점 복귀, Escape LIFO, 키보드
+  // 열림 초점은 useDismissibleOverlay가 소유한다(Issue #233). 명령 성공·
+  // 트리거 재클릭 닫힘은 `close("trigger")`로 편집기에 초점을 돌린다 —
+  // table-selection-toolbar.tsx도 같은 module을 쓴다(Issue #20).
+  const closeMenuState = useCallback(() => setMenuState(null), []);
+  const closeMenu = useDismissibleOverlay({
+    open: menuState !== null,
     element,
     allowSelectors: TABLE_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissMenu,
-    onEscapeDismiss: closeMenu,
+    onClose: closeMenuState,
+    focusOnOpen: menuState?.viaKeyboard ?? false,
+    // 열린 채 다른 행/열 핸들로 다시 열면 payload만 바뀐다. 메뉴가 targetId
+    // key로 재마운트돼 초점을 잃으므로 대상이 바뀔 때 초점을 다시 준다.
+    focusKey: menuState?.targetId,
   });
-
-  // Issue #174 RD-003 — 표 그립 메뉴도 행/열 grip 메뉴와 같은 바깥
-  // pointerdown/Escape 규약을 따르되, 독립된 상태·allow-list로 관리한다
-  // (재조준 대상이 없어 closeMenuOnInvalidation 같은 초점 판단 분기는
-  // 불필요 — 표 자체가 사라지면 아래 무효화 effect가 초점 이동 없이 바로
-  // 닫는다).
-  const closeTableGripMenu = useCallback(() => {
-    setTableGripMenuTableId(null);
-    focusEditor();
-  }, [focusEditor]);
-  const dismissTableGripMenu = useCallback(
-    () => setTableGripMenuTableId(null),
-    [],
+  const closeMenuFromTrigger = useCallback(
+    () => closeMenu("trigger"),
+    [closeMenu],
   );
+
   // Issue #176 — "너비에 맞추기" 클릭 시점에 표의 실제 편집 영역 폭을
   // 실측한다. NodeView가 <table> 자체를 dom으로 반환해(table-extension.ts)
   // 감싸는 wrapper가 없으므로, 문서 흐름상 표가 차지할 수 있는 폭은 부모
@@ -257,13 +251,25 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     const table = findTable(element, tableGripMenuTableId);
     return table?.parentElement?.clientWidth ?? 0;
   }, [element, tableGripMenuTableId]);
-  useDismissOnOutsideOrEscape({
-    active: tableGripMenuTableId !== null,
+  // Issue #174 RD-003 — 표 그립 메뉴도 행/열 grip 메뉴와 같은 바깥
+  // pointerdown/Escape 규약을 따르되, 독립된 상태·allow-list로 관리한다
+  // (재조준 대상이 없어 closeMenuOnInvalidation 같은 초점 판단 분기는
+  // 불필요 — 표 자체가 사라지면 아래 무효화 effect가 초점 이동 없이 바로
+  // 닫는다).
+  const closeTableGripMenuState = useCallback(
+    () => setTableGripMenuTableId(null),
+    [],
+  );
+  const closeTableGripMenu = useDismissibleOverlay({
+    open: tableGripMenuTableId !== null,
     element,
     allowSelectors: TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissTableGripMenu,
-    onEscapeDismiss: closeTableGripMenu,
+    onClose: closeTableGripMenuState,
   });
+  const closeTableGripMenuFromTrigger = useCallback(
+    () => closeTableGripMenu("trigger"),
+    [closeTableGripMenu],
+  );
 
   // gutter가 표 바깥 오버레이라서, hover 추적을 element 안쪽에만 걸면
   // 포인터가 핸들로 이동하는 순간 표 hover가 풀린다(block-side-menu와
@@ -822,6 +828,9 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     id: string,
     index: number,
   ) => {
+    // keydown 신호는 click 하나가 소비한다. 읽어야 다음 마우스 click이
+    // 키보드 열림으로 오인되지 않는다.
+    const viaKeyboard = keyboardActivation.consume();
     // 억제 비교는 안정 id(kind-id, 이동 성공 여부와 무관), 재오픈 비교는
     // 위치 index(kind-index) — 두 축이 다를 수 있어 별도 키로 넘긴다
     // (useHandleReopenSuppression 참고). 빈 id에 대한 별도 가드는 필요
@@ -843,9 +852,15 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
           // 않는다. 표 그립 메뉴가 열려 있었다면 여기서 닫는다(포커스는
           // 곧바로 이 메뉴로 이동하므로 focusEditor는 부르지 않는다).
           setTableGripMenuTableId(null);
-          setMenuState({ kind, tableBlockId, index, targetId: id });
+          setMenuState({
+            kind,
+            tableBlockId,
+            index,
+            targetId: id,
+            viaKeyboard,
+          });
         },
-        onClose: closeMenu,
+        onClose: closeMenuFromTrigger,
       },
     );
   };
@@ -858,6 +873,9 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     sourceIndex: number,
   ) => {
     if (event.button !== 0) return;
+    // 키로 눌렀지만 click이 오지 않은 신호가 뒤따르는 마우스 click을 키보드
+    // 열림으로 만들지 않게 지운다.
+    keyboardActivation.reset();
     // 억제 키는 뒤이은 click이 소비할 때만 비워진다 — 브라우저가 그 click을
     // 아예 합성하지 않으면(G-UI-002) 키가 남아, 나중에 같은 핸들을 진짜로
     // 클릭할 때 한 번 삼켜진다. 새 제스처를 시작하는 시점에 비운다
@@ -951,8 +969,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     const fresh = readFreshGeometry();
     if (fresh === null) return;
     if (tableGripMenuTableId === fresh.tableBlockId) {
-      setTableGripMenuTableId(null);
-      focusEditor();
+      closeTableGripMenuFromTrigger();
       return;
     }
     editor.commands.selectBlockRange(fresh.tableBlockId, fresh.tableBlockId);
@@ -999,6 +1016,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
             onAddColumn={handleAddColumn}
             onAddRow={handleAddRow}
             onReorderHandleClick={handleReorderHandleClick}
+            onReorderHandleKeyDown={keyboardActivation.onKeyDown}
             onReorderHandlePointerDown={handlePointerDownOnReorderHandle}
             onResizeHandlePointerDown={handlePointerDownOnResizeHandle}
             onTableGripClick={handleTableGripClick}
@@ -1033,7 +1051,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
           index={menuState.index}
           kind={menuState.kind}
           left={menuPosition.left}
-          onClose={closeMenu}
+          onClose={closeMenuFromTrigger}
           tableBlockId={menuState.tableBlockId}
           top={menuPosition.top}
         />
@@ -1047,7 +1065,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
             headerRowEnabled={geometry.headerRows === 1}
             key={tableGripMenuTableId}
             left={tableGripMenuPosition.left}
-            onClose={closeTableGripMenu}
+            onClose={closeTableGripMenuFromTrigger}
             tableBlockId={tableGripMenuTableId}
             top={tableGripMenuPosition.top}
           />

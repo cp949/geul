@@ -15,9 +15,8 @@ import {
   syncAnchorClipVisibility,
 } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
-import { useFocusEditor } from "./use-focus-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
 
 const deleteIcon = <Trash2 {...iconProps} />;
@@ -30,7 +29,7 @@ const dangerButtonClassName =
 const actionErrorClassName = "geul-block-selection-toolbar__error";
 const highlightClassName = "geul-block-selection-toolbar__highlight";
 
-// useDismissOnOutsideOrEscape allow-list. table-selection-toolbar.tsx,
+// useDismissibleOverlay allow-list. table-selection-toolbar.tsx,
 // block-side-menu.tsx와 같은 이유로 모듈 스코프 상수로 둔다 — 매 렌더 새
 // 배열을 넘기면 그 훅의 effect가 리스너를 매 렌더 떼었다 다시 붙인다.
 // `[data-geul-block-handle]`을 여기 추가하지 않는다 — 이 handle은 블록마다
@@ -100,7 +99,6 @@ export const BlockSelectionToolbar = () => {
   const dictionary = useDictionary();
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
-  const focusEditor = useFocusEditor(element);
   const { actionError, runCommand } = useTableCommandFeedback();
 
   // 폴링(선택 이벤트)과 명령 성공 콜백(완료 조건 5·6 — DOM이 이미 갱신된
@@ -265,22 +263,19 @@ export const BlockSelectionToolbar = () => {
 
   // 바깥 pointerdown/Escape로 선택을 해제한다(G-UI-001). clearBlockSelection은
   // selectionchange 같은 네이티브 이벤트를 일으키지 않는 세션 필드
-  // 변경이라(DELTA-01), 두 dismiss 콜백 모두 명령 호출 뒤 직접
-  // updateFromSelection을 다시 불러야 툴바가 사라진다.
+  // 변경이라(DELTA-01), 닫을 때 명령 호출 뒤 직접 updateFromSelection을
+  // 다시 불러야 툴바가 사라진다. 리스너, reason별 초점 복귀(Escape는
+  // 편집기로, 초점이 툴바 안인 바깥 클릭도 편집기로), Escape LIFO는
+  // useDismissibleOverlay가 소유한다(Issue #233 RD-004 DELTA-01).
   const dismissSelection = useCallback(() => {
     editor.commands.clearBlockSelection();
     updateFromSelection();
   }, [editor, updateFromSelection]);
-  const dismissSelectionAndFocusEditor = useCallback(() => {
-    dismissSelection();
-    focusEditor();
-  }, [dismissSelection, focusEditor]);
-  useDismissOnOutsideOrEscape({
-    active: toolbarState !== null,
+  useDismissibleOverlay({
+    open: toolbarState !== null,
     element,
     allowSelectors: BLOCK_SELECTION_TOOLBAR_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissSelection,
-    onEscapeDismiss: dismissSelectionAndFocusEditor,
+    onClose: dismissSelection,
   });
 
   const { menuRef, style } = useClampedMenuPosition(
