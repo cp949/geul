@@ -80,3 +80,49 @@ export const expectOverlayFollowsAnchor = async (
     .poll(async () => (await readAnchorGap(anchor, overlay)).gap)
     .toBe(before.gap);
 };
+
+/** 앵커 상단의 viewport y와 오버레이 상단에서 앵커 상단까지의 y 차이. */
+export type TopOffset = { anchorY: number; offset: number };
+
+/**
+ * 오버레이 상단과 앵커 상단의 y 차이(offset)를 잰다. 앵커 위나 옆에 상단을 맞춰
+ * page 좌표 absolute로 그려지는 오버레이(미디어 그립, callout 트리거)가 스크롤
+ * 뒤에도 앵커를 따라가는지 판정하는 기준값이다. `visibility: hidden`인 오버레이도
+ * 박스가 남아 잴 수 있다.
+ */
+export const readTopOffset = async (
+  anchor: Locator,
+  overlay: Locator,
+): Promise<TopOffset> => {
+  const anchorBox = await anchor.boundingBox();
+  const overlayBox = await overlay.boundingBox();
+  if (anchorBox === null || overlayBox === null) {
+    throw new Error("앵커나 오버레이의 위치를 얻지 못했다");
+  }
+  return { anchorY: anchorBox.y, offset: overlayBox.y - anchorBox.y };
+};
+
+/**
+ * 오버레이 상단이 스크롤 뒤에도 앵커 상단과 같은 y를 유지하는지 단언한다.
+ * `expectOverlayFollowsAnchor`는 앵커 하단과 오버레이 상단의 간격을 보는 fixed
+ * 오버레이용이고, 이 함수는 상단끼리 비교한다. 전제로 앵커가 실제로 움직였는지
+ * 먼저 확인한다. 안 움직이면 단언이 공허하다. 스크롤 전 차이가 `expectedOffset`
+ * (기본 0, 상단 일치)인지도 확인해 처음부터 어긋난 채 유지되는 경우를 잡는다.
+ */
+export const expectOverlayTopAlignedWithAnchor = async (
+  page: Page,
+  anchor: Locator,
+  overlay: Locator,
+  scope: ScrollScope = "all",
+  expectedOffset = 0,
+) => {
+  const before = await readTopOffset(anchor, overlay);
+  expect(before.offset).toBe(expectedOffset);
+  await scrollPage(page, scope);
+  await expect
+    .poll(async () => (await readTopOffset(anchor, overlay)).anchorY)
+    .not.toBe(before.anchorY);
+  await expect
+    .poll(async () => (await readTopOffset(anchor, overlay)).offset)
+    .toBe(before.offset);
+};

@@ -85,6 +85,20 @@ export const uploadImageViaFilePanel = async (
   fixturePath = "e2e/fixtures/resize-photo.png",
 ): Promise<Locator> => {
   await editable.click();
+  await uploadImageAtCaret(page, fixturePath);
+
+  return editable.locator("img");
+};
+
+/**
+ * 캐럿이 있는 자리에서 `/image` 슬래시 명령 → Upload 탭 → 파일 선택을 진행하고
+ * 업로드가 끝날 때까지 기다린다. 캐럿 위치는 호출부가 정한다(`uploadImageViaFilePanel`은
+ * 편집기를 클릭하고, 위치가 중요한 spec은 문단을 만들어 둔다).
+ */
+export const uploadImageAtCaret = async (
+  page: Page,
+  fixturePath = "e2e/fixtures/resize-photo.png",
+): Promise<void> => {
   await page.keyboard.type("/image");
   await page.getByRole("option", { name: /^Image/ }).click();
 
@@ -93,8 +107,6 @@ export const uploadImageViaFilePanel = async (
 
   await expect(page.getByRole("status")).toBeVisible();
   await expect(page.getByRole("status")).not.toBeVisible();
-
-  return editable.locator("img");
 };
 
 /**

@@ -6,7 +6,7 @@
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-import { openShowcasePage } from "./support/showcase.js";
+import { openShowcasePage, uploadImageAtCaret } from "./support/showcase.js";
 
 /**
  * 이 예제는 문단 40개가 채워진 문서다. 슬래시 메뉴·이모지 picker 같은 트리거
@@ -54,14 +54,7 @@ test("Upload 탭에서 이미지를 올리면 data url로 렌더된다", async (
   const editable = page.getByRole("textbox", { name: "Editor" });
 
   await placeCaretInNewParagraph(page, editable);
-  await page.keyboard.type("/image");
-  await page.getByRole("option", { name: /^Image/ }).click();
-  await page.getByRole("tab", { name: "Upload" }).click();
-  await page
-    .getByLabel("Image file")
-    .setInputFiles("e2e/fixtures/resize-photo.png");
-  await expect(page.getByRole("status")).toBeVisible();
-  await expect(page.getByRole("status")).not.toBeVisible();
+  await uploadImageAtCaret(page);
 
   await expect(editable.locator("img")).toHaveAttribute(
     "src",
