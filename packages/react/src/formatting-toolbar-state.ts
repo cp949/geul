@@ -1,5 +1,7 @@
 import type { BlockTypeDescriptor, SelectionQuery } from "@cp949/geul-core";
 
+import { blockTypeToOptionId } from "./block-type-options.js";
+
 export type SelectionMark = ReturnType<
   SelectionQuery["getSelectionMarks"]
 >[number];
@@ -7,9 +9,32 @@ export type SelectionMark = ReturnType<
 export type FormattingToolbarState = {
   activeMarks: SelectionMark[];
   blockSelection: { blockId: string; blockType: BlockTypeDescriptor } | null;
+  // 여러 블록에 걸친 텍스트 선택. blockSelection이 null이고 닿은 블록이
+  // 둘 이상일 때만 채운다. blockType은 모든 블록이 같은 타입일 때만 값이고
+  // 섞여 있으면 null이다. 들여쓰기·내어쓰기는 이 선택에 적용하지 않는다.
+  multiBlockSelection: {
+    blockIds: string[];
+    blockType: BlockTypeDescriptor | null;
+  } | null;
   nestingActions: { canIndent: boolean; canOutdent: boolean } | null;
   isMediaBlockSelected: boolean;
   isCellRangeSelected: boolean;
+};
+
+const computeMultiBlockSelection = (
+  editor: SelectionQuery,
+): FormattingToolbarState["multiBlockSelection"] => {
+  const blocks = editor.getSelectionBlocks();
+  const [first] = blocks;
+  if (first === undefined || blocks.length < 2) return null;
+  const isUniform = blocks.every(
+    ({ blockType }) =>
+      blockTypeToOptionId(blockType) === blockTypeToOptionId(first.blockType),
+  );
+  return {
+    blockIds: blocks.map(({ blockId }) => blockId),
+    blockType: isUniform ? first.blockType : null,
+  };
 };
 
 /**
@@ -24,14 +49,20 @@ export const computeFormattingToolbarState = (
   editor: SelectionQuery,
 ): FormattingToolbarState => {
   const blockSelection = editor.getSelectionBlockType();
+  const isMediaBlockSelected = editor.getSelectionMediaBlock() !== null;
+  const isCellRangeSelected = editor.isCellRangeSelected();
   return {
     activeMarks: editor.getSelectionMarks(),
     blockSelection,
+    multiBlockSelection:
+      blockSelection === null && !isMediaBlockSelected && !isCellRangeSelected
+        ? computeMultiBlockSelection(editor)
+        : null,
     nestingActions:
       blockSelection === null
         ? null
         : editor.getBlockNestingActionState(blockSelection.blockId),
-    isMediaBlockSelected: editor.getSelectionMediaBlock() !== null,
-    isCellRangeSelected: editor.isCellRangeSelected(),
+    isMediaBlockSelected,
+    isCellRangeSelected,
   };
 };

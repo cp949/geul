@@ -39,6 +39,7 @@ import {
   BLOCK_TYPE_OPTIONS,
   blockTypeText,
   blockTypeToOptionId,
+  getBlockTypeOptionsForMultiSelection,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import { readAnchorBelowTrigger } from "./fixed-placement.js";
@@ -261,7 +262,10 @@ export const StaticToolbar = ({
   // 블록 컨트롤(트리거, 아이콘 버튼 7종, Indent/Outdent)은 항상 렌더하고
   // 대상 블록이 없으면 disable로 표시한다. 세 군데의 표시와 가드가 이 값
   // 하나를 공유한다.
-  const isBlockControlsDisabled = state.blockSelection === null;
+  // 여러 블록에 걸친 선택(multiBlockSelection)도 블록 타입 대상이다.
+  // Indent·Outdent는 단일 블록 전용이라 nestingActions가 null이어서 따로 꺼진다.
+  const isBlockControlsDisabled =
+    state.blockSelection === null && state.multiBlockSelection === null;
   // codeBlock·미디어 블록·표 셀 다중선택 전부 mark·색상 버튼이 적용
   // 불가능한 상황이다(FormattingToolbar는 이 셋을 hide로 처리 — 위 컴포넌트
   // 주석 참고). StaticToolbar는 disable로만 표시한다. 열린 색상 메뉴를 닫는
@@ -496,18 +500,36 @@ export const StaticToolbar = ({
     });
   };
 
-  // 클릭 시점의 현재 블록을 다시 읽는다. 메뉴가 열려 있는 동안 선택이
-  // 옮겨 갔을 수 있어 렌더 시점 상태를 믿지 않는다.
-  const confirmBlockType = (option: BlockTypeOption) => {
-    const { blockSelection } = computeFormattingToolbarState(editor);
+  // 클릭 시점의 현재 블록을 다시 읽어 option을 적용한다. 허용되지 않는
+  // option이면 아무것도 하지 않는다. 단일 블록이면 setBlockType, 여러 블록에
+  // 걸친 선택이면 setBlockTypes로 한 번에 바꾼다.
+  const applyBlockType = (option: BlockTypeOption) => {
+    const { blockSelection, multiBlockSelection } =
+      computeFormattingToolbarState(editor);
     if (blockSelection !== null) {
       const allowed = getBlockTypeOptionsForSource(
         blockSelection.blockType,
-      ).find((candidate) => candidate.id === option.id);
-      if (allowed !== undefined) {
+      ).some((candidate) => candidate.id === option.id);
+      if (allowed) {
         editor.commands.setBlockType(blockSelection.blockId, option.blockType);
       }
+    } else if (multiBlockSelection !== null) {
+      const allowed = getBlockTypeOptionsForMultiSelection().some(
+        (candidate) => candidate.id === option.id,
+      );
+      if (allowed) {
+        editor.commands.setBlockTypes(
+          multiBlockSelection.blockIds,
+          option.blockType,
+        );
+      }
     }
+  };
+
+  // 클릭 시점의 현재 블록을 다시 읽는다. 메뉴가 열려 있는 동안 선택이
+  // 옮겨 갔을 수 있어 렌더 시점 상태를 믿지 않는다.
+  const confirmBlockType = (option: BlockTypeOption) => {
+    applyBlockType(option);
     closeBlockTypeMenu();
   };
 
@@ -563,18 +585,22 @@ export const StaticToolbar = ({
   // 블록 타입 트리거·메뉴와 아이콘 버튼이 공유하는 파생값 — 모두
   // state.blockSelection 하나에서 나오므로 여기서 한 번만 계산한다(중복 계산
   // 방지, 렌더 지점의 aria-pressed/aria-disabled/aria-selected가 항상 일치).
+  const activeBlockType =
+    state.blockSelection?.blockType ?? state.multiBlockSelection?.blockType;
   const activeBlockTypeId =
-    state.blockSelection === null
+    activeBlockType === undefined || activeBlockType === null
       ? null
-      : blockTypeToOptionId(state.blockSelection.blockType);
+      : blockTypeToOptionId(activeBlockType);
+  const allowedBlockTypeOptions =
+    state.blockSelection !== null
+      ? getBlockTypeOptionsForSource(state.blockSelection.blockType)
+      : state.multiBlockSelection !== null
+        ? getBlockTypeOptionsForMultiSelection()
+        : null;
   const allowedBlockTypeIds =
-    state.blockSelection === null
+    allowedBlockTypeOptions === null
       ? null
-      : new Set(
-          getBlockTypeOptionsForSource(state.blockSelection.blockType).map(
-            (option) => option.id,
-          ),
-        );
+      : new Set(allowedBlockTypeOptions.map((option) => option.id));
 
   // enabledBlockTypes(mode: "deny")로 끈 타입은 목록에서 뺀다(Issue #190,
   // 선례: formatting-toolbar.tsx).
@@ -649,13 +675,8 @@ export const StaticToolbar = ({
             key={option.id}
             label={blockTypeText(dictionary, option.id).label}
             onClick={() => {
-              const { blockSelection } = computeFormattingToolbarState(editor);
-              if (blockSelection === null) return;
               if (allowedBlockTypeIds?.has(option.id) !== true) return;
-              editor.commands.setBlockType(
-                blockSelection.blockId,
-                option.blockType,
-              );
+              applyBlockType(option);
             }}
             tabIndex={rovingTabIndex()}
             title={

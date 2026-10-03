@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import {
   blockTypeText,
   blockTypeToOptionId,
+  getBlockTypeOptionsForMultiSelection,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import {
@@ -289,6 +290,7 @@ export const FormattingToolbar = ({
     setToolbarState({
       activeMarks: computedState.activeMarks,
       blockSelection: computedState.blockSelection,
+      multiBlockSelection: computedState.multiBlockSelection,
       nestingActions: computedState.nestingActions,
     });
   }, [editor, element, dismissSuppression]);
@@ -445,6 +447,23 @@ export const FormattingToolbar = ({
   const isCalloutSelection =
     toolbarState.blockSelection?.blockType.type === "callout";
 
+  // 블록 타입 select의 원천. 단일 블록이면 그 타입에서 갈 수 있는 목록,
+  // 여러 블록에 걸친 선택이면 공통 목록이다. 둘 다 아니면 select를 그리지 않는다.
+  const blockTypeSelect =
+    toolbarState.blockSelection !== null
+      ? {
+          blockType: toolbarState.blockSelection.blockType,
+          options: getBlockTypeOptionsForSource(
+            toolbarState.blockSelection.blockType,
+          ),
+        }
+      : toolbarState.multiBlockSelection !== null
+        ? {
+            blockType: toolbarState.multiBlockSelection.blockType,
+            options: getBlockTypeOptionsForMultiSelection(),
+          }
+        : null;
+
   if (Component !== undefined) {
     const overridden = (
       <div
@@ -471,24 +490,27 @@ export const FormattingToolbar = ({
         role="toolbar"
         style={style}
       >
-        {toolbarState.blockSelection !== null && !isCalloutSelection && (
+        {blockTypeSelect !== null && !isCalloutSelection && (
           <select
             aria-label="Block type"
             className="geul-formatting-toolbar__select"
             onChange={(event) => {
-              const blockSelection = toolbarState.blockSelection;
-              if (blockSelection === null) return;
-              const options = getBlockTypeOptionsForSource(
-                blockSelection.blockType,
-              );
-              const option = options.find(
+              const option = blockTypeSelect.options.find(
                 (candidate) => candidate.id === event.currentTarget.value,
               );
               if (option === undefined) return;
-              editor.commands.setBlockType(
-                blockSelection.blockId,
-                option.blockType,
-              );
+              const { blockSelection, multiBlockSelection } = toolbarState;
+              if (blockSelection !== null) {
+                editor.commands.setBlockType(
+                  blockSelection.blockId,
+                  option.blockType,
+                );
+              } else if (multiBlockSelection !== null) {
+                editor.commands.setBlockTypes(
+                  multiBlockSelection.blockIds,
+                  option.blockType,
+                );
+              }
               updateFromSelection();
             }}
             // IconButton 형제들과 달리 onMouseDown={preventDefault}를 두지
@@ -501,9 +523,19 @@ export const FormattingToolbar = ({
             // 편집기의 window.getSelection()은 collapse되지 않는다(Chromium
             // 실측) — 지킬 불변식이 애초에 깨지지 않으므로 이 select에는
             // preventDefault가 필요 없다.
-            value={blockTypeToOptionId(toolbarState.blockSelection.blockType)}
+            value={
+              blockTypeSelect.blockType === null
+                ? ""
+                : blockTypeToOptionId(blockTypeSelect.blockType)
+            }
           >
-            {getBlockTypeOptionsForSource(toolbarState.blockSelection.blockType)
+            {/* 여러 블록의 타입이 섞여 있으면 고른 값이 없다. */}
+            {blockTypeSelect.blockType === null && (
+              <option disabled value="">
+                {dictionary.toolbar.static.blockTypeNeutralLabel}
+              </option>
+            )}
+            {blockTypeSelect.options
               // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다
               // (Issue #190) — 선례: slash-menu.tsx의 isSlashMenuItemEnabled.
               .filter((option) =>

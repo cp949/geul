@@ -14,6 +14,7 @@ import { isSameStaticToolbarState } from "../src/static-toolbar-state.js";
 const baseState = (): FormattingToolbarState => ({
   activeMarks: ["bold", "italic"],
   blockSelection: { blockId: "block-1", blockType: { type: "paragraph" } },
+  multiBlockSelection: null,
   nestingActions: { canIndent: true, canOutdent: false },
   isMediaBlockSelected: false,
   isCellRangeSelected: false,
@@ -131,5 +132,44 @@ describe("isSameStaticToolbarState", () => {
     const next = { ...baseState(), isCellRangeSelected: true };
 
     expect(isSameStaticToolbarState(baseState(), next)).toBe(false);
+  });
+});
+
+describe("isSameStaticToolbarState 여러 블록 선택", () => {
+  const multi = (
+    blockIds: string[],
+    blockType: { type: "paragraph" } | null = { type: "paragraph" },
+  ): FormattingToolbarState => ({
+    ...baseState(),
+    blockSelection: null,
+    nestingActions: null,
+    multiBlockSelection: { blockIds, blockType },
+  });
+
+  it("같은 블록 id와 타입이면 같다고 판정한다", () => {
+    expect(isSameStaticToolbarState(multi(["a", "b"]), multi(["a", "b"]))).toBe(
+      true,
+    );
+  });
+
+  it("블록 id 목록이 다르면 다르다고 판정한다", () => {
+    expect(isSameStaticToolbarState(multi(["a", "b"]), multi(["a", "c"]))).toBe(
+      false,
+    );
+    expect(isSameStaticToolbarState(multi(["a", "b"]), multi(["a"]))).toBe(
+      false,
+    );
+  });
+
+  it("공통 타입이 값에서 null로 바뀌면 다르다고 판정한다", () => {
+    expect(
+      isSameStaticToolbarState(multi(["a", "b"]), multi(["a", "b"], null)),
+    ).toBe(false);
+  });
+
+  it("단일 블록 선택과 여러 블록 선택은 다르다고 판정한다", () => {
+    expect(isSameStaticToolbarState(baseState(), multi(["a", "b"]))).toBe(
+      false,
+    );
   });
 });

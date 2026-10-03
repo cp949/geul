@@ -33,6 +33,22 @@ export const isSameStaticToolbarState = (
   (left.nestingActions === null || right.nestingActions === null
     ? left.nestingActions === right.nestingActions
     : sameFlatRecord(left.nestingActions, right.nestingActions)) &&
+  (left.multiBlockSelection === null || right.multiBlockSelection === null
+    ? left.multiBlockSelection === right.multiBlockSelection
+    : left.multiBlockSelection.blockIds.length ===
+        right.multiBlockSelection.blockIds.length &&
+      left.multiBlockSelection.blockIds.every(
+        (blockId, index) =>
+          blockId === right.multiBlockSelection?.blockIds[index],
+      ) &&
+      (left.multiBlockSelection.blockType === null ||
+      right.multiBlockSelection.blockType === null
+        ? left.multiBlockSelection.blockType ===
+          right.multiBlockSelection.blockType
+        : sameFlatRecord(
+            left.multiBlockSelection.blockType,
+            right.multiBlockSelection.blockType,
+          ))) &&
   (left.blockSelection === null || right.blockSelection === null
     ? left.blockSelection === right.blockSelection
     : left.blockSelection.blockId === right.blockSelection.blockId &&

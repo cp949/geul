@@ -14,6 +14,11 @@ type SelectionBlockType = {
   blockType: BlockTypeDescriptor;
 } | null;
 
+type SelectionBlocks = {
+  blockId: string;
+  blockType: BlockTypeDescriptor;
+}[];
+
 // media-toolbar.test.tsx의 SelectionMediaBlock과 같은 shape — 이 파일은
 // 기본값(null, "미디어 선택 아님")만 쓰고 media 선택 테스트는 개별
 // override로 이 shape을 채운다.
@@ -46,6 +51,7 @@ type FormattingToolbarFakeController = {
   getDocument: Mock;
   getSelectionMarks: Mock;
   getSelectionBlockType: Mock;
+  getSelectionBlocks: Mock;
   getSelectionMediaBlock: Mock;
   isCellRangeSelected: Mock;
   getBlockNestingActionState: Mock;
@@ -55,6 +61,7 @@ type FormattingToolbarFakeController = {
   commands: {
     setText: Mock;
     setBlockType: Mock;
+    setBlockTypes: Mock;
     indentBlock: Mock;
     outdentBlock: Mock;
     toggleBold: Mock;
@@ -125,6 +132,9 @@ export const fakeController = (
   getDocument: vi.fn(),
   getSelectionMarks,
   getSelectionBlockType,
+  // 여러 블록 선택 테스트 전용 — 기본값 빈 배열이면 단일 블록 테스트 전부가
+  // 그대로 통과한다.
+  getSelectionBlocks: vi.fn((): SelectionBlocks => []),
   getSelectionMediaBlock,
   isCellRangeSelected,
   isBlockTypeEnabled,
@@ -134,6 +144,10 @@ export const fakeController = (
   commands: {
     setText: vi.fn(),
     setBlockType,
+    setBlockTypes: vi.fn((...args: [string[], BlockTypeDescriptor]) => {
+      void args;
+      return { ok: true as const, value: undefined };
+    }),
     indentBlock,
     outdentBlock,
     toggleBold: vi.fn(() => ({ ok: true, value: undefined })),

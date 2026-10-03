@@ -145,6 +145,13 @@ export const getBlockTypeOptionsForSource = (
   return BLOCK_TYPE_OPTIONS;
 };
 
+// 여러 블록 선택의 변환 대상. 여러 블록을 한 codeBlock으로 합치는 것은
+// 지원하지 않아 Code만 뺀다(core setBlockTypes가 codeBlock 대상을 거절).
+// 선택 안의 codeBlock은 command가 건너뛰므로 source 쪽 제한은 없다.
+export const getBlockTypeOptionsForMultiSelection =
+  (): readonly BlockTypeOption[] =>
+    BLOCK_TYPE_OPTIONS.filter(({ id }) => id !== "code");
+
 // spec §8(EXT-009), RD-002-DELTA-02 — `dictionary.blockType`에서 표시용
 // label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 14개
 // 리터럴 중 하나이므로(호출부가 그 배열에서 얻은 `option.id`만 넘긴다)
