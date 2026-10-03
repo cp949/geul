@@ -7,6 +7,10 @@ import {
 } from "react";
 
 import {
+  readScrollClipBoxes,
+  syncAnchorClipVisibility,
+} from "./scroll-clip.js";
+import {
   type ClampAnchor,
   useClampedMenuPosition,
 } from "./use-clamped-menu-position.js";
@@ -64,6 +68,19 @@ type UseFixedPlacementOptions = {
    * 유지한다. 이 옵션은 그때 쓰이지 않는다.
    */
   fallbackAnchor?: FixedPlacementAnchor;
+
+  /**
+   * `true`면 앵커 점(clamp 전 좌표)이 스크롤 컨테이너의 보이는 영역 밖일 때
+   * 메뉴를 숨긴다. 선택에 붙는 popover용이다(`syncAnchorClipVisibility`).
+   * 메뉴는 `position: fixed`로 컨테이너 바깥에 그려져 컨테이너가 잘라내지
+   * 못하므로 앵커가 스크롤돼 나가면 가장자리에 clamp된 채 남는다. 트리거를
+   * 따라가는 메뉴는 `false`로 둔다(#218). 기본값은 `false`이고 이때 메뉴의
+   * `visibility`를 읽지도 쓰지도 않는다.
+   *
+   * 숨김은 `visibility`다. 호출부가 `style`에 `visibility`를 넣으면 렌더가
+   * 덮어쓴다.
+   */
+  clip?: boolean;
 };
 
 /**
@@ -93,6 +110,7 @@ export const useFixedPlacement = ({
   readAnchor,
   clampAnchor = "topLeft",
   fallbackAnchor,
+  clip = false,
 }: UseFixedPlacementOptions): {
   menuRef: RefObject<HTMLDivElement | null>;
   style: CSSProperties;
@@ -140,9 +158,25 @@ export const useFixedPlacement = ({
   });
 
   const placed = anchor ?? fallbackAnchor;
-  return useClampedMenuPosition(
+  const placement = useClampedMenuPosition(
     placed?.left ?? 0,
     placed?.top ?? 0,
     clampAnchor,
   );
+
+  // 의존 배열이 없다. 스크롤마다 앵커가 바뀌고 박스도 움직인다. 매 렌더 판정한다.
+  // 닫혀 있을 때나 앵커가 없을 때는 건드리지 않는다.
+  useLayoutEffect(() => {
+    if (!clip || !open || element === null || placed === undefined) return;
+    const node = placement.menuRef.current;
+    if (node === null) return;
+    syncAnchorClipVisibility(
+      node,
+      placed.left,
+      placed.top,
+      readScrollClipBoxes(element),
+    );
+  });
+
+  return placement;
 };

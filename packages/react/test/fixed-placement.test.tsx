@@ -10,6 +10,8 @@
  * - 읽기 시점: 렌더마다 앵커를 다시 읽고, 앵커가 이벤트 뒤 한 번 더 렌더된 뒤
  *   움직여도 새 좌표로 수렴한다.
  * - `clampAnchor`가 `useClampedMenuPosition`으로 전달된다.
+ * - `clip`: 앵커 점이 스크롤 컨테이너의 보이는 영역 밖이면 메뉴를 숨긴다.
+ *   기본값 `false`와 닫힘에서는 `visibility`를 건드리지 않는다.
  * - `readAnchorBelowTrigger`: 트리거 하단 + 4 좌표와 연결 해제 시 `null`.
  */
 
@@ -35,6 +37,7 @@ type ProbeProps = {
   readAnchor: () => FixedPlacementAnchor | null;
   clampAnchor?: ClampAnchor;
   fallbackAnchor?: FixedPlacementAnchor;
+  clip?: boolean;
 };
 
 /**
@@ -47,6 +50,7 @@ const Probe = ({
   readAnchor,
   clampAnchor,
   fallbackAnchor,
+  clip,
 }: ProbeProps) => {
   const { menuRef, style } = useFixedPlacement({
     open,
@@ -54,6 +58,7 @@ const Probe = ({
     readAnchor,
     ...(clampAnchor === undefined ? {} : { clampAnchor }),
     ...(fallbackAnchor === undefined ? {} : { fallbackAnchor }),
+    ...(clip === undefined ? {} : { clip }),
   });
   return <div data-testid="probe" ref={menuRef} style={style} />;
 };
@@ -461,6 +466,197 @@ describe("useFixedPlacement", () => {
         />,
       );
       expect(readStyle(container)).toEqual({ left: "200px", top: "66px" });
+    });
+  });
+
+  describe("clip", () => {
+    // 에디터 host를 overflow 컨테이너로 본다. 보이는 영역은 (0,0)–(600,100)이다.
+    // `Element.prototype` 스텁은 모든 노드에 같은 rect를 줘 박스와 메뉴를 구분하지
+    // 못한다. host 인스턴스만 스텁한다.
+    const mountClipHost = () => {
+      const host = mountHost();
+      host.style.overflowY = "auto";
+      vi.spyOn(host, "getBoundingClientRect").mockReturnValue({
+        left: 0,
+        top: 0,
+        right: 600,
+        bottom: 100,
+        x: 0,
+        y: 0,
+        width: 600,
+        height: 100,
+        toJSON: () => ({}),
+      } as DOMRect);
+      return host;
+    };
+    const readMenu = (container: HTMLElement) => {
+      const node = container.querySelector<HTMLElement>(
+        '[data-testid="probe"]',
+      );
+      if (node === null) throw new Error("probe 요소가 없다");
+      return node;
+    };
+
+    it("앵커가 clip 박스 안이면 보인다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          open
+          readAnchor={() => ({ left: 300, top: 50 })}
+        />,
+      );
+      expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    it("앵커가 clip 박스 밖이면 숨긴다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          open
+          readAnchor={() => ({ left: 300, top: 300 })}
+        />,
+      );
+      expect(readMenu(container).style.visibility).toBe("hidden");
+    });
+
+    it("스크롤로 앵커가 박스 밖으로 나가면 숨기고 돌아오면 다시 보인다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      let anchor = { left: 300, top: 50 };
+      const { container } = render(
+        <Probe clip element={host} open readAnchor={() => anchor} />,
+      );
+      expect(readMenu(container).style.visibility).toBe("");
+
+      anchor = { left: 300, top: 300 };
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      expect(readMenu(container).style.visibility).toBe("hidden");
+
+      anchor = { left: 300, top: 50 };
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    it("메뉴 박스가 경계 밖으로 삐져나와도 앵커가 안이면 보인다", () => {
+      // 메뉴 박스를 박스 밖(top 300)에 두어도 판정은 앵커 점이다. 첫 줄을
+      // 선택할 때 popover가 사라지지 않게 하는 계약이다(scroll-clip.ts).
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          open
+          readAnchor={() => ({ left: 300, top: 50 })}
+        />,
+      );
+      vi.spyOn(readMenu(container), "getBoundingClientRect").mockReturnValue({
+        left: 280,
+        top: 300,
+        right: 380,
+        bottom: 350,
+        x: 280,
+        y: 300,
+        width: 100,
+        height: 50,
+        toJSON: () => ({}),
+      } as DOMRect);
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    it("clip 기본값은 false라 앵커가 박스 밖이어도 visibility를 건드리지 않는다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          element={host}
+          open
+          readAnchor={() => ({ left: 300, top: 300 })}
+        />,
+      );
+      expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    it("clip이 false여도 호출부가 쓴 visibility를 덮어쓰지 않는다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      let anchor = { left: 300, top: 300 };
+      const { container } = render(
+        <Probe element={host} open readAnchor={() => anchor} />,
+      );
+      readMenu(container).style.visibility = "hidden";
+      anchor = { left: 300, top: 50 };
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      expect(readMenu(container).style.visibility).toBe("hidden");
+    });
+
+    it("open이 false면 박스 밖 앵커(fallbackAnchor)가 있어도 visibility를 건드리지 않는다", () => {
+      // 닫힌 렌더에서 `placed`는 `fallbackAnchor`다. 가드가 없으면 이 좌표로 판정해
+      // 숨긴다.
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          fallbackAnchor={{ left: 300, top: 300 }}
+          open={false}
+          readAnchor={() => ({ left: 300, top: 300 })}
+        />,
+      );
+      expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    it("첫 읽기가 null이면 fallbackAnchor로 판정한다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          fallbackAnchor={{ left: 300, top: 300 }}
+          open
+          readAnchor={() => null}
+        />,
+      );
+      expect(readMenu(container).style.visibility).toBe("hidden");
+    });
+
+    it("읽을 앵커가 없으면(null, fallback 없음) 판정하지 않는다", () => {
+      stubMenuRect(100, 50);
+      const host = mountClipHost();
+      const { container } = render(
+        <Probe clip element={host} open readAnchor={() => null} />,
+      );
+      expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    it("자르는 조상이 없으면 항상 보인다", () => {
+      stubMenuRect(100, 50);
+      const host = mountHost();
+      const { container } = render(
+        <Probe
+          clip
+          element={host}
+          open
+          readAnchor={() => ({ left: 300, top: 5000 })}
+        />,
+      );
+      expect(readMenu(container).style.visibility).toBe("");
     });
   });
 });
