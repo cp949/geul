@@ -7,24 +7,16 @@ import {
   Unlink,
   X,
 } from "lucide-react";
-import {
-  type FC,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import {
+  type FixedPlacementAnchor,
+  useFixedPlacement,
+} from "./fixed-placement.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
-import {
-  readScrollClipBoxes,
-  syncAnchorClipVisibility,
-} from "./scroll-clip.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import {
   rangeBoundariesEqual,
   useDismissSuppression,
@@ -59,25 +51,26 @@ const linkToolbarIconButtonClassName =
 // (Issue #233 RD-003 DELTA-02).
 const LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS = [".geul-link-toolbar"] as const;
 
-type ToolbarPosition = { left: number; top: number };
-
 type ToolbarState =
   | { mode: "closed" }
-  | ({ mode: "view"; href: string | null } & ToolbarPosition)
-  | ({
+  | { mode: "view"; href: string | null }
+  | {
       mode: "editing";
       href: string | null;
       draft: string;
       rejected: boolean;
-    } & ToolbarPosition);
+    };
 
 /**
  * 선택 영역의 화면 좌표를 읽지 못했을 때 쓰는 임의의 뷰포트 안쪽 좌표다.
  * 활성 링크는 있는데 DOM selection이 에디터 밖에 있는 드문 경우에만 쓰인다.
- * 정확한 값에는 의미가 없다 — 최종 위치는 `useClampedMenuPosition`이 어차피
+ * 정확한 값에는 의미가 없다 — 최종 위치는 `useFixedPlacement`가 어차피
  * 뷰포트 안으로 접어 넣으므로 화면 왼쪽 위 어딘가면 충분하다.
  */
-const UNREADABLE_SELECTION_POSITION: ToolbarPosition = { left: 96, top: 48 };
+const UNREADABLE_SELECTION_POSITION: FixedPlacementAnchor = {
+  left: 96,
+  top: 48,
+};
 
 /**
  * 자기 에디터 안에 있는 selection의 Range를 읽는다. collapsed 여부는 묻지
@@ -99,18 +92,27 @@ const readSelectionRangeInElement = (element: HTMLElement): Range | null => {
   return selection.getRangeAt(0);
 };
 
-const readSelectionBounds = (element: HTMLElement): ToolbarPosition | null => {
-  const range = readSelectionRangeInElement(element);
-  if (range === null) return null;
-
-  const bounds = range.getBoundingClientRect?.() ?? {
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 0,
-  };
-  // 서식 툴바(FormattingToolbar)는 선택 영역 위에 뜨므로,
-  // 링크 툴바는 아래쪽에 배치해 두 툴바가 겹치지 않게 한다.
+/**
+ * 선택 Range 아래 중앙에 앵커할 좌표를 읽는다. 서식 툴바(FormattingToolbar)는
+ * 선택 영역 위에 뜨므로 링크 툴바는 아래쪽에 배치해 두 툴바가 겹치지 않게 한다.
+ *
+ * Range가 없으면(DOM selection이 편집기 밖) 고정 대체 좌표다. rect를 읽을 수
+ * 없으면 `null`이다. `getBoundingClientRect`가 없는 환경이거나, 연결이 끊긴
+ * Range거나, 노드가 교체돼 Range가 접혀 rect가 0이 된 경우다. 이때
+ * `useFixedPlacement`가 마지막 좌표를 유지한다.
+ *
+ * 편집 모드에서는 DOM selection이 입력으로 옮겨가 라이브 selection을 읽을 수
+ * 없다. 그래서 라이브 selection이 아니라 열 때 보관한 Range를 읽는다.
+ */
+const readRangeAnchor = (range: Range | null): FixedPlacementAnchor | null => {
+  if (range === null) return UNREADABLE_SELECTION_POSITION;
+  if (!range.startContainer.isConnected || !range.endContainer.isConnected) {
+    return null;
+  }
+  const bounds = range.getBoundingClientRect?.();
+  if (bounds === undefined || (bounds.width === 0 && bounds.height === 0)) {
+    return null;
+  }
   return {
     left: bounds.left + bounds.width / 2,
     top: bounds.top + bounds.height,
@@ -201,12 +203,8 @@ export const LinkToolbar = ({
     dismissSuppression.clear();
     currentRangeRef.current = currentRange?.cloneRange() ?? null;
 
-    const bounds =
-      readSelectionBounds(element) ?? UNREADABLE_SELECTION_POSITION;
     setToolbarState({
       mode: "view",
-      left: bounds.left,
-      top: bounds.top,
       href: activeLink?.href ?? null,
     });
   }, [editor, element, dismissSuppression]);
@@ -217,26 +215,16 @@ export const LinkToolbar = ({
     if (toolbarState.mode === "editing") inputRef.current?.focus();
   }, [toolbarState.mode]);
 
-  const { menuRef, style } = useClampedMenuPosition(
-    toolbarState.mode === "closed" ? 0 : toolbarState.left,
-    toolbarState.mode === "closed" ? 0 : toolbarState.top,
-    "centerBelow",
-  );
-
-  // 팝업은 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
-  // 앵커(선택·셀·블록)가 스크롤돼 나가 컨테이너의 보이는 영역 밖이 되면
-  // 숨긴다. 박스가 아니라 앵커를 본다(scroll-clip.ts
-  // `syncAnchorClipVisibility` 참고). 스크롤은 useSelectionRefresh가 새
-  // 상태를 만들어 이 렌더를 다시 돌린다.
-  useLayoutEffect(() => {
-    if (element === null || menuRef.current === null) return;
-    if (toolbarState.mode === "closed") return;
-    syncAnchorClipVisibility(
-      menuRef.current,
-      toolbarState.left,
-      toolbarState.top,
-      readScrollClipBoxes(element),
-    );
+  // 앵커는 열 때 보관한 Range(`currentRangeRef`)의 rect다. 열린 동안 스크롤마다
+  // 다시 읽는다. 편집 모드는 `updateFromSelection`이 `editingRef`로 막혀도
+  // 위치는 이 훅이 따라간다. clip은 앵커가 스크롤 컨테이너의 보이는 영역 밖이면
+  // 숨긴다. 숨겨도 입력의 초점과 draft는 남는다(`visibility`만 바꾼다).
+  const { menuRef, style } = useFixedPlacement({
+    open: toolbarState.mode !== "closed",
+    element,
+    readAnchor: () => readRangeAnchor(currentRangeRef.current),
+    clampAnchor: "centerBelow",
+    clip: true,
   });
   const focusEditor = useFocusEditor(element);
 
@@ -313,8 +301,6 @@ export const LinkToolbar = ({
     editingRef.current = true;
     setToolbarState({
       mode: "editing",
-      left: toolbarState.left,
-      top: toolbarState.top,
       href: toolbarState.href,
       draft: toolbarState.mode === "view" ? (toolbarState.href ?? "") : "",
       rejected: false,

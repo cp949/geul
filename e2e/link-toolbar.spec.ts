@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { expectOverlayFollowsAnchor } from "./support/anchor-gap.js";
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
@@ -324,4 +325,31 @@ test("서식 툴바와 링크 툴바가 함께 보일 때 Escape 한 번에 하�
 
   await expect(formatting).not.toBeVisible();
   await expect(link).not.toBeVisible();
+});
+
+test("링크 URL을 편집하는 중에 window를 스크롤해도 툴바가 선택한 텍스트 아래에 붙어 있다 (Issue #234 RD-005)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first");
+  for (let index = 0; index < 30; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  // 뷰포트 가장자리에서는 clamp가 툴바를 밀어 간격이 달라진다. 가운데 블록을 고른다.
+  const middle = editable.locator("p").nth(15);
+  await middle.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollBy(0, -200));
+  await selectBlockTextAndNotify(middle, "Middle block");
+
+  await page.getByRole("button", { name: "Add link" }).click();
+  const linkInput = page.getByRole("textbox", { name: "Link URL" });
+  await expect(linkInput).toBeFocused();
+  const toolbar = page.getByRole("toolbar", { name: "Link" });
+  await expect(toolbar).toBeVisible();
+
+  // 편집 중에는 DOM selection이 입력으로 옮겨가 재조회가 막힌다. 그래도 툴바는 따라간다.
+  await expectOverlayFollowsAnchor(page, middle, toolbar, "window");
+  await expect(linkInput).toBeFocused();
 });
