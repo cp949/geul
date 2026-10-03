@@ -13,7 +13,7 @@
 - 오버레이는 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다. 오버레이 자신의 박스가 그 컨테이너의 보이는 영역 안에 있을 때만 보이게 한다 — `scroll-clip.ts`의 `readScrollClipBoxes`로 영역을 읽고 `syncClipVisibility`로 `visibility`를 갱신한다.
   - 세로는 오버레이 박스가 완전히 안쪽일 때만 보인다. 경계에 걸쳐 잘린 채 떠 있지 않게 한다. 가로는 겹치기만 하면 보인다.
   - `unmount`나 `display: none`이 아니라 `visibility`를 쓴다. 레이아웃 박스와 실측 높이가 남는다. 미디어 캡션은 그 높이를 문서 flow에 되먹인다.
-  - 선택에 붙는 popover(서식·링크·표 선택·블록 선택 툴바)는 박스가 아니라 앵커 점으로 판정한다(`syncAnchorClipVisibility`). 앵커 위나 아래에 붙어 앵커가 영역 안이어도 박스가 경계 밖으로 조금 삐져나올 수 있고, 그때 숨기면 첫 줄을 선택할 때 popover가 사라진다. 앵커가 영역 밖으로 스크롤돼 나가면 popover는 뷰포트 가장자리로 clamp된 채 영역 밖에 남으므로 숨긴다.
+  - 선택에 붙는 popover(서식·링크·표 선택·블록 선택 툴바)는 박스가 아니라 앵커 점으로 판정한다. `useFixedPlacement`의 `clip` 옵션이 `syncAnchorClipVisibility`를 불러 판정한다. 호출부는 직접 부르지 않는다([`G-UI-001`](./G-UI-001-build-dismissible-overlays.md)). 앵커 위나 아래에 붙어 앵커가 영역 안이어도 박스가 경계 밖으로 조금 삐져나올 수 있고, 그때 숨기면 첫 줄을 선택할 때 popover가 사라진다. 앵커가 영역 밖으로 스크롤돼 나가면 popover는 뷰포트 가장자리로 clamp된 채 영역 밖에 남으므로 숨긴다.
   - 소비 앱의 sticky 요소(상단 고정 툴바 등)는 오버레이보다 `z-index`가 낮아야 한다. popover(10)가 그 밑으로 깔려 가려지면 안 된다. 캡션(5)만 그 밑으로 지나가게 하려면 5와 10 사이 값을 쓴다.
   - 편집 중인 입력과 드래그 중인 핸들은 숨기지 않는다. 숨기면 포커스·draft·pointer capture를 잃는다.
   - 오버레이의 `style` prop에 `visibility`를 직접 두지 않는다. 다음 렌더가 덮어쓴다.

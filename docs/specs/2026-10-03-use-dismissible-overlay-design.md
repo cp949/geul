@@ -192,7 +192,7 @@ function useDismissibleOverlay(
 | ------------------------------------- | ---------------------------------------------------------------------------------- |
 | 열림 상태와 payload                   | 오버레이마다 모양이 다르다                                                         |
 | 재오픈 억제                           | 예: 닫은 뒤 같은 selection이 재관측돼도 다시 열지 않기. 오버레이마다 조건이 다르다 |
-| 배치                                  | `useClampedMenuPosition` 같은 별도 훅이 맡는다                                     |
+| 배치                                  | `useFixedPlacement`(`packages/react/src/fixed-placement.ts`)가 맡는다              |
 | 항목 사이 화살표 이동                 | 키 계약이 오버레이마다 다르다                                                      |
 | 오버레이 안 입력창의 Escape 모드 취소 | 호출부가 `preventDefault`로 소비하면 훅이 건너뛴다(§5.3)                           |
 
