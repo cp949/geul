@@ -124,6 +124,93 @@ B가 HEAD만큼 느리다. 원인은 코드다.
 - 클러스터 렌더 횟수 축소는 이 이슈 범위 밖이다.
 - 회귀 게이트는 결정적 구조 테스트다. `packages/react/test/table-handle-geometry.test.ts`가 N×N 표 두 크기에서 rect 호출 수와 segment 수의 증가율을 단언한다. 시간 상한은 걸지 않는다([PIT-0034](../pitfalls/PIT-0034-verify-wall-clock-limits-separate-regression-from-load-noise.md)).
 
+## Issue #240 표 선택 클러스터 렌더와 병합 표 geometry
+
+[Issue #240](https://github.com/cp949/geul/issues/240): #239 수정 뒤에도 선택이 control의 약 3배로 남고, 병합 표는 geometry 판독이 셀 수에 비례한다. 이 절은 원인을 분해한 측정 기록이다. 수정 결과는 수정 뒤 이 절에 덧붙인다.
+
+### 측정 환경
+
+- 브라우저: Chromium 153.0.8010.12(Playwright 1.63.0). headless, Desktop Chrome. control도 같은 러너·같은 Chromium으로 돌렸다.
+- 머신: Intel Core i7-8700, 12 논리 코어. Node v24.21.0.
+- 서버: `apps/demo` vite dev(5173). control은 `86d225c2` worktree의 demo dev 서버를 5173에 띄우고, 러너는 현재 저장소 것을 썼다.
+- 측정일: 2026-10-04. 기준 `dev`는 #239 수정 뒤 코드다.
+- 명령: `pnpm exec playwright test --project=perf e2e/table-performance.spec.ts`.
+- 순서: control, dev, control, dev 순으로 같은 세션에서 연달아 돌렸다. 측정 중 다른 백그라운드 프로세스는 없었다.
+- 비교 규칙은 #239 절과 같다. 같은 세션의 상대값만 비교한다.
+
+### 측정 도구
+
+`e2e/table-performance.spec.ts`의 probe 시나리오다. 수치는 단언하지 않는다.
+
+- rect 호출 수: `Element.prototype.getBoundingClientRect`를 래핑해 센다. 측정 도구 자신의 판독은 원본 함수를 써서 뺀다.
+- 렌더 횟수: React DevTools 전역 hook의 `onCommitFiberRoot`로 커밋을 센다. 커밋 뒤 fiber 트리에서 `PerformedWork`가 선 함수 컴포넌트 이름을 모은다. 제품 코드는 건드리지 않는다.
+- 구간 내: 측정 함수 반환값에 들어간 작업이다. 완료 감지 뒤 React 마이크로태스크 flush가 반환값보다 먼저 돈다. 그래서 첫 커밋이 구간 안에 들어온다.
+- 후속 포함: 구간 뒤 프레임 두 개와 50ms를 더 기다려 센 합계다.
+- probe를 켠 측정의 ms는 hook 비용이 섞인다. 선택 기준 비교에는 probe 없는 기존 시나리오와, 같은 사전 조건의 "붙여넣기 흐름" 시나리오만 쓴다.
+- 병합 fixture 시나리오는 문서 로드 뒤 첫 셀을 클릭한 상태에서 잰다. 사전 조건이 달라 같은 코드의 선택이 붙여넣기 흐름과 다른 ms가 된다(control 약 14ms 대 약 48ms). 이 시나리오의 ms는 control과 dev끼리만 비교한다.
+
+### 병합 없는 표의 선택
+
+100×100 표, 붙여넣기 직후 첫 셀→마지막 셀 드래그. 표본 5개 중앙값이다.
+
+| 회차 | 구성 | 선택(ms, probe 없음) | 선택(ms, probe 켬) | undo(ms, probe 없음) |
+| --- | --- | --- | --- | --- |
+| 1 | control(`86d225c2`) | 14.1 | 15.3 | 16.5 |
+| 1 | dev | 59.9 | 56.7 | 16.1 |
+| 2 | control | 14.5 | 16.5 | 18.0 |
+| 2 | dev | 53.8 | 58.7 | 15.8 |
+
+선택은 control의 3.8–4.2배다. 이슈 완료 기준 "control × 2"는 약 28–29ms다. dev는 약 25–30ms를 줄여야 한다.
+
+rect 호출과 렌더 커밋(붙여넣기 흐름, 5회 모두 같은 값):
+
+| 구성 | 구간 내 rect | 구간 내 커밋 | 구간 내 `TableHandles` 커밋 | 후속 포함 rect | 후속 포함 커밋 | 후속 포함 `TableHandles` 커밋 |
+| --- | --- | --- | --- | --- | --- | --- |
+| control | 42 | 2 | 0 | 105 | 7–8 | 0 |
+| dev | 747 | 3 | 1 | 1,511 | 9–11 | 2 |
+
+타임라인(dev, 선택 1회)으로 분해한 사실이다.
+
+- 입력 이벤트 처리와 선택 데코레이션 반영은 약 7–15ms에 끝난다(완료 감지 시점). control의 전체 선택 시간과 같은 자릿수다.
+- 완료 감지 뒤 약 40–65ms 동안 React가 첫 커밋을 만든다. 이 커밋이 `TableHandles`를 렌더하고 rect 약 747회를 부른다. 반환값 약 52–88ms 중 이 부분이 3.8배의 대부분이다.
+- 구간 내 두 번째·세 번째 커밋은 `TableHandleOverlays`, `IconButton`, `TableSelectionToolbar`만 렌더한다. 둘째는 이어서 rect를 읽을 수 있다(+403, 일부 회차).
+- 구간 밖에서 `scroll`(하네스의 `scrollIntoView`가 일으킨다)과 `selectionchange` 뒤 `TableHandles`가 한 번 더 렌더한다. rect가 약 740 더 늘어 합계 약 1,500이다.
+- #239 절의 "선택 한 번에 3번 렌더"는 구간 내 커밋 3개에 대응한다. `TableHandles` 자체는 구간 내 1회, 후속 포함 2회다.
+- `TableHandles` 렌더 1회의 rect는 약 740이다. 가설: 구성은 geometry 약 200과 clip 동기화 약 300 외 나머지다. 이슈 본문의 수치이고 이 측정에서는 나누지 않았다.
+- 붙여넣기 undo는 표를 지우는 경로다. 두 구성 모두 약 16–18ms다.
+
+### 병합 표의 선택과 undo
+
+병합 fixture는 붙여넣기로 만든 문서에 2×2 병합을 얹어 Load JSON으로 넣는다. 병합 1개는 가운데 한 곳이다. 약 10%는 6칸 간격 289개로 1,156셀(11.6%)을 덮는다. 병합 없음 행도 같은 시나리오(문서 로드 + 첫 셀 클릭)라 위 표와 ms가 다르다.
+
+undo는 표가 남는 편집 1회("x" 입력)의 undo다. 붙여넣기 undo와 다른 경로다. 값은 두 회차 중앙값이고 `/`로 나눴다.
+
+| fixture | 구성 | 선택(ms) | 선택 구간 내 rect | undo(ms) | undo 구간 내 rect |
+| --- | --- | --- | --- | --- | --- |
+| 병합 없음 | control | 47.7 / 49.9 | 42 | 407.5 / 382.6 | 20,212 |
+| 병합 없음 | dev | 57.6 / 56.8 | 749–1,151 | 120.9 / 117.8 | 716 |
+| 병합 1개 | control | 51.5 / 51.3 | 42 | 383.6 / 387.9 | 20,206 |
+| 병합 1개 | dev | 356.3 / 394.5 | 30,440–50,636 | 406.6 / 402.8 | 30,407 |
+| 병합 약 10% | control | 55.0 / 55.8 | 42 | 371.7 / 370.5 | 18,478 |
+| 병합 약 10% | dev | 321.9 / 324.0 | 27,848–46,316 | 369.2 / 379.9 | 27,815 |
+
+- 병합이 하나라도 있으면 dev의 선택이 병합 없는 표의 약 5.6–6.9배다. 병합 셀이 1개여도 약 10%여도 비슷하다. 비용은 병합 셀 수가 아니라 표 전체 분기(셀마다 rect)에서 온다.
+- rect 범위의 큰 쪽은 2회차 이후 값이다. 구간 내에 rect를 더 읽는 커밋이 하나 더 들어온다.
+- dev의 병합 표 선택은 control(약 50ms)보다 크게 느리다. control에는 클러스터가 없다.
+- dev의 병합 표 undo는 control과 같은 자릿수(약 370–410ms)다. #239 수정은 병합 없는 표만 줄였다. 병합 표는 control에서도 `TableHandles`가 셀마다 rect를 읽는다(약 18,000–20,000).
+- dev의 병합 표 undo rect(27,815–30,407)는 control(18,478–20,206)보다 약 1.5배다.
+
+### 병합 없는 표의 셀 편집 undo
+
+병합 없음 행의 undo는 control 약 380–410ms, dev 약 118–121ms다. #239 fast path가 이 경로도 줄였다. 그래도 표가 남는 편집 1회마다 `TableHandles`가 렌더되고 rect 716회를 부른다. 붙여넣기 undo(약 16ms)와 달리 셀 편집은 클러스터를 지나간다. 가설: 표 안 타이핑 한 글자도 같은 비용을 낸다. 이 측정에서 확인하지 않았다.
+
+### 한계
+
+- probe의 hook이 있는 ms는 hook 없는 ms와 직접 비교하지 않는다.
+- 렌더 횟수는 hook이 보는 커밋 단위다. StrictMode의 이중 렌더 같은 렌더 함수 호출 수가 아니다.
+- 병합 시나리오의 선택은 사전 조건이 붙여넣기 흐름과 다르다. 이 표의 선택 ms로 "control × 2" 기준을 판정하지 않는다.
+- headless 소프트웨어 렌더링이다. 실제 GPU의 Paint는 알 수 없다.
+
 ## 타이핑 지연(composite 샘플 로드 후)
 
 `/examples/composite`에서 샘플을 불러온 뒤 문자를 입력할 때의 처리 비용이다. 샘플 로드 후 키 입력이 느려졌다. 원인은 예제 `ResultPanel`이었다. `packages/*`는 수정하지 않았다.
