@@ -9,6 +9,7 @@
  * hover로 뜨는 미디어 그립과 callout 트리거도 같은 규칙을 따른다(Issue #235).
  * 둘은 hover 중에만 DOM에 있어서, 숨었는지 보려면 먼저 DOM에 있어야 한다.
  * 코드블록 툴바도 같다(Issue #236). 언어 popover가 열려 있으면 숨기지 않는다.
+ * 툴바 안 버튼에 포커스가 있어도 숨기지 않는다(Issue #237).
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -240,4 +241,53 @@ test("언어 popover가 열려 있으면 코드블록이 스크롤 영역 밖에
   // 전제: 스크롤 중에도 popover가 닫히지 않는다.
   await expect(popover, "popover 유지").toHaveCount(1);
   await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
+});
+
+test("툴바 버튼에 포커스가 있으면 코드블록이 스크롤 영역 밖에 있어도 툴바를 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const codeBlock = editor.locator("pre").first();
+  const toolbar = page.locator(".geul-code-block-toolbar");
+
+  await codeBlock.scrollIntoViewIfNeeded();
+  await codeBlock.hover();
+  await expect(toolbar).toHaveCount(1);
+  // 클릭하면 popover가 열려 popover 면제와 구분되지 않는다. 포커스만 둔다.
+  const copyButton = toolbar.getByRole("button", { name: "Copy code" });
+  await copyButton.focus();
+  await expect(copyButton).toBeFocused();
+
+  const readToolbarY = async () => (await toolbar.boundingBox())?.y;
+  const toolbarYBefore = await readToolbarY();
+
+  // 포인터를 멈춘 채 scrollTop만 바꿔 코드블록을 영역 밖으로 민다.
+  await page.evaluate(() => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    area.scrollTop = 0;
+  });
+  // 툴바가 새 앵커로 옮겨 가야 clip 판정이 한 번 돈 것이다.
+  await expect
+    .poll(readToolbarY, { message: "툴바가 스크롤을 따라 이동" })
+    .not.toBe(toolbarYBefore);
+  const isOutside = await codeBlock.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return rect.bottom < area.top || rect.top > area.bottom;
+  });
+  expect(isOutside, "코드블록이 영역 밖").toBe(true);
+
+  // 포커스가 있는 동안은 숨기지 않는다. 숨기면 포커스가 body로 빠진다.
+  await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
+  await expect(copyButton, "포커스 유지").toBeFocused();
+
+  // 포커스가 빠지면 다시 영역 밖으로 판정해 숨는다.
+  await copyButton.evaluate((element) => element.blur());
+  await expect(toolbar, "포커스 뒤 숨김").toHaveCSS("visibility", "hidden");
 });
