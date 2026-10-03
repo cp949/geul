@@ -31,6 +31,7 @@ import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
 import {
   type MountBlockEditorOptions,
   type MountedBlockEditor,
+  makeScrollContainer,
   mountBlockEditor,
   placeCaret,
   stubRect,
@@ -1579,5 +1580,104 @@ describe("CodeBlock 언어 팝오버와 more 메뉴 닫힘이 useDismissibleOver
     fireEvent.keyDown(document, { key: "Escape" });
     expect(moreMenuOpen()).toBe(false);
     expect(document.activeElement).toBe(rendered.editable);
+  });
+});
+
+describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
+  const moreButton = (): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", {
+      name: "More code block options",
+    });
+
+  /**
+   * 안쪽 스크롤 컨테이너(보이는 영역 0,0–600,100) 안에 코드블록을 마운트한다.
+   * 실제 안쪽 스크롤은 jsdom이 만들 수 없어 rect를 주입하고 window scroll로
+   * 앵커 재조회를 일으킨다. 위치 증명은 Chromium e2e가 한다.
+   */
+  const mountClipFixture = () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const rendered = mountCodeFixture();
+    flushDeferredUpdate();
+    const block = rendered.blocks[0];
+    const toolbar = languageButton().closest<HTMLElement>(
+      ".geul-code-block-toolbar",
+    );
+    if (block === undefined || toolbar === null) {
+      throw new Error("CodeBlock 또는 toolbar를 찾지 못했다");
+    }
+    // 컨테이너는 툴바를 찾은 뒤에 만든다. jsdom의 0x0 rect는 영역 밖으로 판정돼
+    // 숨은 툴바가 접근성 트리에서 빠진다.
+    makeScrollContainer(rendered.host);
+    // 블록 우상단이 앵커다. 블록 top이 바뀌어야 앵커 state가 바뀌어 재렌더된다.
+    const place = (
+      blockTop: number,
+      toolbarRect: { left: number; top: number },
+    ) => {
+      stubRect(block, { left: 0, top: blockTop, width: 600, height: 20 });
+      stubRect(toolbar, { ...toolbarRect, width: 100, height: 24 });
+      fireEvent.scroll(window);
+      flushDeferredUpdate();
+    };
+    return { toolbar, place, host: rendered.host };
+  };
+
+  it("툴바 박스가 영역 밖이면 숨고 영역 안으로 돌아오면 다시 보인다", () => {
+    const { toolbar, place } = mountClipFixture();
+
+    // 앵커 점(600, 10)은 영역 안이고 툴바 박스만 아래로 삐져나온다.
+    place(10, { left: 500, top: 90 });
+    expect(toolbar.style.visibility).toBe("hidden");
+
+    place(11, { left: 500, top: 20 });
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("앵커가 그대로여도 창 resize로 컨테이너 박스가 바뀌면 판정을 다시 한다", () => {
+    const { toolbar, place, host } = mountClipFixture();
+    place(10, { left: 500, top: 20 });
+    expect(toolbar.style.visibility).toBe("");
+
+    // 블록은 움직이지 않고 컨테이너만 줄어 툴바 박스(20–44)가 영역 밖이 된다.
+    stubRect(host, { left: 0, top: 0, width: 600, height: 30 });
+    fireEvent(window, new Event("resize"));
+    flushDeferredUpdate();
+    expect(toolbar.style.visibility).toBe("hidden");
+
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    fireEvent(window, new Event("resize"));
+    flushDeferredUpdate();
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("앵커 점이 영역 밖이면 clamp된 툴바 박스가 영역 안이어도 숨는다", () => {
+    const { toolbar, place } = mountClipFixture();
+
+    // 컨테이너 상단이 뷰포트 y=0이면 clamp가 툴바를 영역 안에 남긴다.
+    place(300, { left: 500, top: 10 });
+    expect(toolbar.style.visibility).toBe("hidden");
+
+    place(10, { left: 500, top: 10 });
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("more 메뉴가 열려 있는 동안에는 영역 밖이어도 툴바를 숨기지 않는다", () => {
+    const { toolbar, place } = mountClipFixture();
+    place(10, { left: 500, top: 10 });
+    expect(toolbar.style.visibility).toBe("");
+
+    fireEvent.click(moreButton());
+    expect(
+      document.querySelector(".geul-code-block-toolbar__more-menu"),
+    ).not.toBeNull();
+
+    place(300, { left: 500, top: 290 });
+    expect(toolbar.style.visibility).toBe("");
+
+    // 메뉴가 닫히면 면제가 풀려 바로 숨는다.
+    fireEvent.click(moreButton());
+    expect(
+      document.querySelector(".geul-code-block-toolbar__more-menu"),
+    ).toBeNull();
+    expect(toolbar.style.visibility).toBe("hidden");
   });
 });

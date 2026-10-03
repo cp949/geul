@@ -23,6 +23,11 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { MenuItemButton } from "./menu-item-button.js";
+import {
+  isPointInClipBoxes,
+  readScrollClipBoxes,
+  syncClipVisibility,
+} from "./scroll-clip.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
@@ -543,6 +548,34 @@ export const CodeBlockLanguageCombobox = () => {
     anchor.top,
     "topRight",
   );
+  // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
+  // 잘라내지 못한다(Issue #236). 툴바 박스와 앵커 점이 모두 컨테이너의 보이는
+  // 영역 안일 때만 보인다. 앵커 점도 보는 이유는 viewport clamp다. 컨테이너
+  // 상단이 뷰포트 y=0이면 clamp가 툴바를 영역 안에 남긴다.
+  // 언어 popover나 more 메뉴가 열려 있으면 숨기지 않는다. `visibility:
+  // hidden`은 포커스를 잃는다. `visibility`만 갱신하고 mode·입력 상태는
+  // 건드리지 않는다. 툴바 `style`에 `visibility`가 없어 렌더가 덮어쓰지
+  // 않는다. 스크롤은 블록을 움직여 앵커 재조회가 렌더를 다시 돌린다. 창
+  // resize는 컨테이너 박스만 바꿀 수 있어 앵커가 그대로면 렌더가 없다.
+  // 그래서 resize에서 렌더를 강제한다.
+  const [, setClipTick] = useState(0);
+  useEffect(() => {
+    const ownerWindow = element?.ownerDocument.defaultView;
+    if (ownerWindow === undefined || ownerWindow === null) return;
+    const refreshClip = () => setClipTick((tick) => tick + 1);
+    ownerWindow.addEventListener("resize", refreshClip);
+    return () => ownerWindow.removeEventListener("resize", refreshClip);
+  }, [element]);
+  useLayoutEffect(() => {
+    const node = toolbarRef.current;
+    if (element === null || node === null) return;
+    const boxes = readScrollClipBoxes(element);
+    const exempt = open || moreMenuOpen;
+    syncClipVisibility(node, boxes, exempt);
+    if (!exempt && !isPointInClipBoxes(anchor.left, anchor.top, boxes)) {
+      node.style.visibility = "hidden";
+    }
+  });
   // 언어 trigger 자신의 div — 더는 독립 위치를 갖지 않는다(위치는 outer
   // toolbar가 소유). `.geul-code-block-language-trigger`의 SCSS 주석대로
   // "shell rect == 버튼 rect"만 유지해 popoverAnchor 실측 기준으로 쓴다.
