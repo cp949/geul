@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorContent, FilePanel } from "../src/index.js";
 import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { withProvider } from "./fake-editor-provider.js";
+import { stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 
 // link-toolbar.test.tsx와 같은 이유(@testing-library/react가 전역
@@ -566,6 +567,40 @@ describe("FilePanel 파일 패널", () => {
     fireEvent.keyUp(document, { key: "ArrowRight" });
 
     expect(screen.getByRole("toolbar", { name: "File panel" })).not.toBeNull();
+  });
+});
+
+describe("FilePanel 배치(Issue #234)", () => {
+  it("열린 패널이 스크롤에서 대상 블록 하단 중앙을 따라가고 입력 중인 draft를 유지한다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => emptyImageBlock,
+    });
+    renderPanel(controller);
+    const block = getEditable().querySelector<HTMLElement>(
+      '[data-geul-block-id="media-1"]',
+    );
+    if (block === null) throw new Error("대상 미디어 블록 DOM이 없다");
+    const panel = screen.getByRole("toolbar", { name: "File panel" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: "https://example.com/dir/photo.png" },
+    });
+
+    // 열릴 때 좌표는 쓰지 않는다 — 스크롤이 일어난 뒤의 블록 위치를 읽는다.
+    stubRect(block, { left: 100, top: 50, width: 200, height: 40 });
+    fireEvent.scroll(block);
+    // 블록 하단 중앙: left = 100 + 200 / 2, top = 50 + 40. centerBelow의
+    // 0.5rem 간격은 CSS translate가 맡아 style에 들어가지 않는다.
+    expect(panel.style.left).toBe("200px");
+    expect(panel.style.top).toBe("90px");
+
+    stubRect(block, { left: 100, top: 300, width: 200, height: 40 });
+    fireEvent.scroll(block);
+    expect(panel.style.left).toBe("200px");
+    expect(panel.style.top).toBe("340px");
+    expect(screen.getByRole("textbox", { name: "Image URL" })).toHaveProperty(
+      "value",
+      "https://example.com/dir/photo.png",
+    );
   });
 });
 

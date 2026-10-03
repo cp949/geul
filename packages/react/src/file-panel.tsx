@@ -8,11 +8,8 @@ import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
-import {
-  FALLBACK_BLOCK_POSITION,
-  readBlockBounds,
-} from "./read-block-bounds.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useFixedPlacement } from "./fixed-placement.js";
+import { readBlockBounds } from "./read-block-bounds.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -27,8 +24,6 @@ const closeIcon = <X {...iconProps} />;
 // 리스너를 매 렌더 떼었다 다시 붙인다).
 const FILE_PANEL_DISMISS_ALLOW_SELECTORS = [".geul-file-panel"] as const;
 
-type PanelPosition = { left: number; top: number };
-
 // Upload 탭의 서브 상태(RD-003 DELTA-02). success/cancelled는 core pending
 // 맵에서 구분하지 않으므로(spec §4.2, 둘 다 null) 여기서도 별도 상태를 두지
 // 않는다 — 둘 다 "idle"로 수렴한다(RD-003-DELTA-02.md "결정" 3).
@@ -39,7 +34,7 @@ type UploadSubState =
 
 type PanelState =
   | { mode: "closed" }
-  | ({
+  | {
       mode: "open";
       blockId: string;
       kind: MediaBlockKind;
@@ -58,7 +53,7 @@ type PanelState =
        * 패널이 닫혔다 다시 열리면(로컬 state 전부 소실) null로 되돌아간다 —
        * 그 경우 시딩된 error는 보여주되 Retry는 숨긴다(결정 5). */
       heldFile: File | null;
-    } & PanelPosition);
+    };
 
 /**
  * `url` 없는 빈 미디어 블록이 선택되면 자동으로 열려 URL 입력을 받는
@@ -187,8 +182,6 @@ export const FilePanel = ({
     }
 
     openBlockIdRef.current = media.blockId;
-    const bounds =
-      readBlockBounds(element, media.blockId) ?? FALLBACK_BLOCK_POSITION;
     // Upload 탭 초깃값 시딩(RD-003-DELTA-02.md "결정" 5) — 이전에 이
     // 블록에서 실패해 error pending이 남아 있으면 재오픈 즉시 그 에러를
     // 보여준다. uploadFile 미등록이면 pending 자체를 조회하지 않는다
@@ -210,9 +203,10 @@ export const FilePanel = ({
     setPanelState((prev) => {
       // 이미 같은 블록에 열려 있다 — draft/activeTab/heldFile 등 진행
       // 중인 로컬 상태를 재관측이 되돌리면 안 된다(QA-067, 위 editingRef
-      // 주석 참고). bounds/upload는 이미 계산했지만 버린다 — 매 재관측마다
+      // 주석 참고). upload는 이미 계산했지만 버린다 — 매 재관측마다
       // 다시 구하는 비용은 다른 selection 기반 컴포넌트(formatting-
-      // toolbar.tsx 등)와 같은 수준이라 특별히 아끼지 않는다.
+      // toolbar.tsx 등)와 같은 수준이라 특별히 아끼지 않는다. 위치는 이
+      // 상태에 없다 — useFixedPlacement가 렌더마다 블록 DOM에서 읽는다.
       if (prev.mode === "open" && prev.blockId === media.blockId) return prev;
       return {
         mode: "open",
@@ -229,8 +223,6 @@ export const FilePanel = ({
         activeTab: uploadEnabled ? "upload" : "embed",
         upload,
         heldFile: null,
-        left: bounds.left,
-        top: bounds.top,
       };
     });
   }, [editor, element, dismissSuppression]);
@@ -382,11 +374,18 @@ export const FilePanel = ({
     );
   };
 
-  const { menuRef, style } = useClampedMenuPosition(
-    panelState.mode === "closed" ? 0 : panelState.left,
-    panelState.mode === "closed" ? 0 : panelState.top,
-    "centerBelow",
-  );
+  // 위치는 열림 상태가 아니라 module이 소유한다(Issue #234). 블록 하단 중앙을
+  // 렌더마다 다시 읽어 스크롤에서도 블록을 따라간다. 같은 블록 재관측이 상태를
+  // 그대로 두는 `return prev`(위 updateFromSelection)는 draft 보존용이다.
+  const { menuRef, style } = useFixedPlacement({
+    open: panelState.mode === "open",
+    element,
+    readAnchor: () =>
+      panelState.mode === "open" && element !== null
+        ? readBlockBounds(element, panelState.blockId)
+        : null,
+    clampAnchor: "centerBelow",
+  });
 
   // Escape의 초점 복귀(focus 먼저, close 나중)는 module이 맡는다(Issue #233
   // RD-003 DELTA-05). 같은 순서라 dismissPanel만 넘긴다.
