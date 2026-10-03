@@ -604,6 +604,19 @@ describe("FilePanel 배치(Issue #234)", () => {
   });
 });
 
+describe("FilePanel 배치 fallback(Issue #234)", () => {
+  it("대상 블록 DOM을 못 찾으면 원점이 아니라 뷰포트 안쪽 기본 좌표에 연다", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => ({ ...emptyImageBlock, blockId: "ghost" }),
+    });
+    renderPanel(controller);
+
+    const panel = screen.getByRole("toolbar", { name: "File panel" });
+    expect(panel.style.left).toBe("96px");
+    expect(panel.style.top).toBe("48px");
+  });
+});
+
 describe("FilePanel Upload 탭(RD-003 DELTA-02)", () => {
   it("uploadFile 미등록 시 탭이 보이지 않고 URL 입력만 남는다", () => {
     const controller = fakeController({

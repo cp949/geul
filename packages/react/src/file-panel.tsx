@@ -9,7 +9,10 @@ import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import { useFixedPlacement } from "./fixed-placement.js";
-import { readBlockBounds } from "./read-block-bounds.js";
+import {
+  FALLBACK_BLOCK_POSITION,
+  readBlockBounds,
+} from "./read-block-bounds.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -385,6 +388,8 @@ export const FilePanel = ({
         ? readBlockBounds(element, panelState.blockId)
         : null,
     clampAnchor: "centerBelow",
+    // 대상 블록 DOM이 없는 드문 경우에 (0, 0) 구석에 뜨지 않게 한다.
+    fallbackAnchor: FALLBACK_BLOCK_POSITION,
   });
 
   // Escape의 초점 복귀(focus 먼저, close 나중)는 module이 맡는다(Issue #233

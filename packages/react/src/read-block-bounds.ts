@@ -48,8 +48,8 @@ export const readBlockTopRightBounds = (
 };
 
 /**
- * 대상 블록 DOM을 못 찾았을 때(드문 경우)만 쓰는 임의 뷰포트 안쪽 좌표 —
- * link-toolbar.tsx의 같은 이름 상수와 같은 이유(정확한 값에는 의미가 없다,
- * `useClampedMenuPosition`이 결국 뷰포트 안으로 접어 넣는다).
+ * 대상 블록 DOM을 못 찾았을 때(드문 경우)만 쓰는 임의 뷰포트 안쪽 좌표.
+ * 정확한 값에는 의미가 없다. `useClampedMenuPosition`이 결국 뷰포트 안으로
+ * 접어 넣는다. file-panel(`fallbackAnchor`)과 media-toolbar가 쓴다.
  */
 export const FALLBACK_BLOCK_POSITION: MenuPosition = { left: 96, top: 48 };
