@@ -38,13 +38,14 @@
 - 읽는 시점은 렌더 직후다. 이벤트 핸들러가 아니다. 구독은 `open` 동안 owner window의 `scroll`(중첩 scroll container를 위한 capture)·`resize`이고 강제 렌더만 일으킨다. 이벤트 안에서 앵커를 읽어 상태에 쓰지 않는다. 앵커가 다른 overlay 안에 있으면(툴바 안 트리거) 그 overlay는 이벤트 뒤 한 번 더 렌더된 뒤에야 움직여 낡은 rect를 읽는다.
 - 앵커를 움직이는 상태는 hook을 부른 컴포넌트 안에 둔다. 다른 컴포넌트의 상태가 앵커를 움직이면 이 hook은 다시 읽지 않는다.
 - 렌더 직후 effect는 같은 좌표에서 `setState`를 부르지 않는다. 상태와 같은 값을 ref에도 두고 `Object.is`로 먼저 거른다. 같은 값으로 `setState`하면 `Maximum update depth exceeded`로 렌더가 연쇄한다.
-- 선택에 붙는 popover는 `clip: true`를 준다. 앵커 점이 스크롤 컨테이너의 보이는 영역 밖이면 hook이 `visibility`로 숨긴다. 트리거를 따라가는 메뉴는 기본값 `false`다. 호출부가 clip을 직접 판정하지 않고 `style`에 `visibility`를 넣지 않는다.
+- 선택에 붙는 popover는 `clip: true`를 준다. 앵커 점이 스크롤 컨테이너의 보이는 영역 밖이면 hook이 `visibility`로 숨긴다. 트리거를 따라가는 메뉴는 기본값 `false`다. 호출부가 앵커 점 clip을 직접 판정하지 않고 `style`에 `visibility`를 넣지 않는다(미디어 툴바 박스 기준 clip은 아래 예외).
 - selection으로 여는 overlay의 reader는 열 때 `cloneRange()`로 보관한 `Range`의 rect를 읽는다. 편집 모드에서는 라이브 selection이 입력창으로 옮겨가 읽을 수 없다. 편집 중 가드(`editingRef`)는 열림·닫힘·payload 판정에만 쓴다. 위치 갱신을 막지 않는다. 편집 중에도 스크롤을 따라가야 한다.
 - clamp 계산은 `useClampedMenuPosition`이 하고 `useFixedPlacement`가 내부에서 부른다. 렌더된 크기를 재고, CSS transform offset을 clamp 입력에 포함하고, 크기 변경을 `ResizeObserver`로 다시 계산한다. 호출부는 `clampAnchor`(`topLeft`·`topRight`·`centerAbove`·`centerBelow`·`leftOfAnchor`·`aboveLeft`)로 박스와 앵커 좌표의 관계만 고른다.
-- `useClampedMenuPosition`을 직접 쓰는 예외가 있다. 새 overlay는 이 예외를 근거로 삼지 않고 `useFixedPlacement`를 쓴다.
-  - 기존 호출부: 표 핸들 메뉴, 표 그립 메뉴, 표 셀 서식 메뉴, code-block 언어 콤보박스(툴바·팝오버·more 메뉴).
-  - 미디어 툴바 more 메뉴: `useAnchoredSubmenu`가 트리거 rect와 컨테이너 `ResizeObserver`로 앵커를 정한다. React 렌더 없이 컨테이너 폭이 바뀌어도 `ResizeObserver`가 재정렬한다.
-  - 상태 좌표를 유지하는 호출부: 표 선택·블록 선택 툴바. 표 셀 서식 메뉴가 표 선택 상태의 좌표를 쓰고, 블록 선택은 하이라이트와 같은 측정을 공유한다. reader가 상태 좌표를 돌려주고 재측정은 기존 구독이 맡는다. 새 overlay는 이 방식을 따르지 않는다.
+- 이 규칙의 예외가 있다. 새 overlay는 예외를 근거로 삼지 않고 `useFixedPlacement`를 쓴다.
+  - `useClampedMenuPosition` 직접 호출, 기존 호출부: 표 핸들 메뉴, 표 그립 메뉴, 표 셀 서식 메뉴, code-block 언어 콤보박스(툴바·팝오버·more 메뉴).
+  - `useClampedMenuPosition` 직접 호출, 미디어 툴바 more 메뉴: `useAnchoredSubmenu`가 트리거 rect와 컨테이너 `ResizeObserver`로 앵커를 정한다. React 렌더 없이 컨테이너 폭이 바뀌어도 `ResizeObserver`가 재정렬한다.
+  - 미디어 툴바 박스 기준 clip: `useFixedPlacement({ clip })`은 앵커 점 기준이라 박스 판정에 쓸 수 없다. `syncClipVisibility`를 직접 부른다.
+  - `useFixedPlacement`를 쓰되 상태 좌표를 유지하는 호출부: 표 선택·블록 선택 툴바. 표 셀 서식 메뉴가 표 선택 상태의 좌표를 쓰고, 블록 선택은 하이라이트와 같은 측정을 공유한다. reader가 상태 좌표를 돌려주고 재측정은 기존 구독이 맡는다. 새 overlay는 이 방식을 따르지 않는다.
   - 배치가 아닌 용도의 `scroll` 구독: 블록 선택 하이라이트 재측정.
   - 패키지 밖 소비처: `useFixedPlacement`는 내부 module이다. 공개 표면은 `useClampedMenuPosition`이다.
 - 고정 폭 overlay도 viewport가 더 좁을 수 있으므로 양쪽 clamp 여백을 뺀 `max-width`와 `box-sizing: border-box`를 같이 둔다.
@@ -67,7 +68,7 @@
 
 [`G-TST-001`](./G-TST-001-test-overlays-and-keyboard-interactions.md)을 적용한다. 네 viewport 경계와 마지막 항목의 실제 클릭 가능성을 Chromium E2E에서 확인한다.
 
-열린 채 스크롤하는 시나리오를 Chromium E2E로 확인한다. window만, 안쪽 스크롤 컨테이너만, 둘 다 스크롤해도 앵커와 overlay 사이 간격(gapY)이 열 때와 같아야 한다. 기대 간격을 숫자로 단언한다. 스크롤 전과 같은지만 보면 오프셋 상수 변이가 통과한다. 공용 helper는 `e2e/support/anchor-gap.ts`(`expectOverlayFollowsAnchor`)다. sticky 툴바 위 트리거는 안쪽 스크롤만으로 움직이지 않는다. 그 조합은 window를 함께 스크롤해 증명한다.
+열린 채 스크롤하는 시나리오를 Chromium E2E로 확인한다. window만, 안쪽 스크롤 컨테이너만, 둘 다 스크롤해도 앵커와 overlay 사이 간격(gapY)이 열 때와 같아야 한다. 기대 간격을 숫자로 단언한다. 스크롤 전과 같은지만 보면 오프셋 상수 변이가 통과한다. 공용 helper는 `e2e/support/anchor-gap.ts`(`expectOverlayFollowsAnchor`)다. 캐럿 메뉴는 `e2e/support/caret-gap.ts`(`expectCaretMenuFollowsCaret`)다. sticky 툴바 위 트리거는 안쪽 스크롤만으로 움직이지 않는다. 그 조합은 window를 함께 스크롤해 증명한다.
 
 ## 경계
 
