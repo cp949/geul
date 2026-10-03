@@ -53,6 +53,22 @@ describe("SCSS 빌드 파이프라인", () => {
     expect(css).toContain("content: attr(data-placeholder);");
   });
 
+  it("네이티브 선택 숨김 규칙을 geul-hide-selection에만 걸고 ProseMirror-hideselection에는 걸지 않는다(#239)", () => {
+    // prosemirror-view의 ProseMirror-hideselection은 CellSelection에도 붙는다 —
+    // 거기에 걸면 표 셀 범위 선택 때 10,000셀의 스타일 재계산이 일어난다.
+    // core의 hide-native-selection-extension.ts가 CellSelection을 제외한
+    // 비가시 selection(NodeSelection·GapCursor)일 때만 geul-hide-selection을
+    // root에 붙인다.
+    const css = compileCss();
+
+    expect(css).toContain(".geul-editor .geul-hide-selection * {");
+    expect(css).toContain(".geul-editor .geul-hide-selection *::selection {");
+    expect(css).toContain(
+      ".geul-editor .geul-hide-selection *::-moz-selection {",
+    );
+    expect(css).not.toContain("ProseMirror-hideselection");
+  });
+
   it("목록 marker를 blockContainer 앞에 그리고 콘텐츠 placeholder와 중첩 padding을 함께 컴파일한다", () => {
     const css = compileCss();
     const markerLayout =

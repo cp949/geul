@@ -47,6 +47,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
+import { HideNativeSelectionExtension } from "./hide-native-selection-extension.js";
 import { HistoryFocusSyncExtension } from "./history-focus-sync-extension.js";
 import { HistoryKeydownFallbackExtension } from "./history-keydown-fallback-extension.js";
 import { HistoryNativeUndoFallbackExtension } from "./history-native-undo-fallback-extension.js";
@@ -680,6 +681,7 @@ export const createProductionEditor = (options: {
       ),
       ListPresentationExtension,
       CalloutBackgroundPresentationExtension,
+      HideNativeSelectionExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension.configure({
         dictionary: options.dictionary ?? DEFAULT_DICTIONARY,

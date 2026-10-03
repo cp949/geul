@@ -9,25 +9,28 @@
 
   // production-editor-assembly.ts가 injectCSS: false로 tiptap의 전역 <style>
   // 주입을 끈다(라이브러리가 소비자 <head>를 오염시키지 않게). 그 주입
-  // 스타일에는 이미지 등 미디어를 NodeSelection으로 고를 때 prosemirror-view가
-  // root에 붙이는 `.ProseMirror-hideselection` 클래스를 실제로 쓰이게 하는
-  // 규칙(caret-color: transparent, ::selection 투명화)이 들어 있는데
-  // injectCSS: false라 이 규칙만 통째로 빠졌었다 — 클래스는 여전히 붙지만
-  // 대응 CSS가 없어 아무 효과가 없었다. 그 결과 이미지를 선택해도 그 전에
-  // 캐럿이 있던 자리에 네이티브 caret이 계속 깜빡였다(사용자 스크린샷
-  // 보고, formatting-toolbar.tsx의 media 선택 가드와 같은 근본 증상의
-  // 다른 표출). tiptap 소스의 동일 규칙(@tiptap/core Editor.ts CSS_STYLES)을
-  // `.geul-editor` 스코프 밑으로 그대로 들여온다 — 전역 주입 없이 같은
-  // 효과만 재현한다.
-  .ProseMirror-hideselection * {
+  // 스타일에는 이미지 등 미디어를 NodeSelection으로 고를 때 네이티브 caret
+  // 잔상을 숨기는 규칙(caret-color: transparent, ::selection 투명화)이
+  // 들어 있는데 injectCSS: false라 통째로 빠졌었다(af5dc91e) — 이미지를
+  // 선택해도 그 전에 캐럿이 있던 자리에 네이티브 caret이 계속 깜빡였다.
+  // tiptap 소스의 동일 규칙(@tiptap/core Editor.ts CSS_STYLES)을 들여온다.
+  //
+  // 선택자는 prosemirror-view의 `.ProseMirror-hideselection`이 아니라 core의
+  // hide-native-selection-extension.ts가 CellSelection을 제외한 비가시
+  // selection(NodeSelection·GapCursor)일 때만 root에 붙이는
+  // `.geul-hide-selection`이다. 앞의 클래스는 CellSelection에도 붙어서 표 셀
+  // 범위 선택 때 10,000셀의 스타일 재계산을 일으켰다(Issue #239, 선택 약
+  // +30ms). caret-color는 상속 속성이라 `*`를 root로 줄여도 같은 비용이
+  // 든다 — CellSelection에서는 클래스 자체가 없어야 한다.
+  .geul-hide-selection * {
     caret-color: transparent;
   }
 
-  .ProseMirror-hideselection *::selection {
+  .geul-hide-selection *::selection {
     background: transparent;
   }
 
-  .ProseMirror-hideselection *::-moz-selection {
+  .geul-hide-selection *::-moz-selection {
     background: transparent;
   }
 
