@@ -8,6 +8,7 @@
  *
  * hover로 뜨는 미디어 그립과 callout 트리거도 같은 규칙을 따른다(Issue #235).
  * 둘은 hover 중에만 DOM에 있어서, 숨었는지 보려면 먼저 DOM에 있어야 한다.
+ * 코드블록 툴바도 같다(Issue #236). 언어 popover가 열려 있으면 숨기지 않는다.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -21,6 +22,7 @@ const OVERLAY_SELECTOR = [
   '[class*="geul-table-"]',
   ".geul-media-handle-overlay",
   ".geul-callout-icon-trigger",
+  ".geul-code-block-toolbar",
 ].join(",");
 
 /** 스크롤 영역 위나 아래로 벗어났는데 보이는 오버레이의 class 목록. */
@@ -158,6 +160,7 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
       editor.locator("[data-geul-callout]").first(),
       ".geul-callout-icon-trigger",
     ],
+    [editor.locator("pre").first(), ".geul-code-block-toolbar"],
   ] as const) {
     const overlay = page.locator(selector);
     await anchor.scrollIntoViewIfNeeded();
@@ -192,4 +195,49 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
       "visible",
     );
   }
+});
+
+test("언어 popover가 열려 있으면 코드블록이 스크롤 영역 밖에 있어도 툴바를 숨기지 않는다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const codeBlock = editor.locator("pre").first();
+  const toolbar = page.locator(".geul-code-block-toolbar");
+
+  await codeBlock.scrollIntoViewIfNeeded();
+  await codeBlock.hover();
+  await expect(toolbar).toHaveCount(1);
+  await page.getByRole("button", { name: "Code language" }).click();
+  const popover = page.locator(".geul-code-block-language-popover");
+  await expect(popover).toHaveCount(1);
+
+  const readToolbarY = async () => (await toolbar.boundingBox())?.y;
+  const toolbarYBefore = await readToolbarY();
+
+  // 포인터를 멈춘 채 scrollTop만 바꿔 코드블록을 영역 밖으로 민다.
+  await page.evaluate(() => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    area.scrollTop = 0;
+  });
+  // 툴바가 새 앵커로 옮겨 가야 clip 판정이 한 번 돈 것이다. 이전에는 시작
+  // 상태(visible)가 그대로라 단언이 판정보다 먼저 통과할 수 있다.
+  await expect
+    .poll(readToolbarY, { message: "툴바가 스크롤을 따라 이동" })
+    .not.toBe(toolbarYBefore);
+  const isOutside = await codeBlock.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return rect.bottom < area.top || rect.top > area.bottom;
+  });
+  expect(isOutside, "코드블록이 영역 밖").toBe(true);
+
+  // 전제: 스크롤 중에도 popover가 닫히지 않는다.
+  await expect(popover, "popover 유지").toHaveCount(1);
+  await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
 });
