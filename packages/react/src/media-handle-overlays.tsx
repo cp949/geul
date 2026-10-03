@@ -1,5 +1,11 @@
 import { GripVertical, MousePointerClick, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   computeDragGuide,
@@ -11,6 +17,7 @@ import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -22,6 +29,7 @@ import {
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // 그립·plus 버튼 자체는 새로 만들지 않는다 — block-side-menu.tsx의
 // .geul-block-gutter__button과 --drag/--add modifier를 그대로 재사용한다.
@@ -369,6 +377,17 @@ export const MediaHandleOverlays = ({
     setInteractingBlockId((prev) => (prev === blockId ? null : blockId));
   };
 
+  // 그립은 page 좌표 absolute라 안쪽 스크롤 컨테이너가 스크롤돼도 제자리에
+  // 남는다(Issue #235). scroll(capture)·resize에서 렌더해 readPageRect로 다시
+  // 읽는다. 그립이 그려지는 hover 동안만 구독한다.
+  const [, setTick] = useState(0);
+  const refresh = useCallback(() => setTick((tick) => tick + 1), []);
+  useSelectionRefresh({
+    element,
+    onUpdate: refresh,
+    enabled: hoverBlockId !== null,
+  });
+
   const hoverElement =
     hoverBlockId === null || element === null
       ? null
@@ -382,6 +401,17 @@ export const MediaHandleOverlays = ({
     hoverElement === null
       ? null
       : readPageRect(findMediaVisualElement(hoverElement) ?? hoverElement);
+
+  // 그립은 안쪽 스크롤 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다. 보이는
+  // 영역 밖이면 visibility로 숨긴다(G-UI-003). 드래그 중에는 숨기지 않는다 —
+  // 숨기면 pointer capture를 잃는다. 렌더마다 돈다. style prop에 visibility를
+  // 두지 않는다.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const node = overlayRef.current;
+    if (element === null || node === null) return;
+    syncClipVisibility(node, readScrollClipBoxes(element), dragState !== null);
+  });
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;
@@ -445,6 +475,7 @@ export const MediaHandleOverlays = ({
       {overlayRect !== null && hoverBlockId !== null && (
         <div
           className="geul-media-handle-overlay"
+          ref={overlayRef}
           style={{
             left: overlayRect.left - MEDIA_HANDLE_OFFSET_PX,
             top: overlayRect.top,

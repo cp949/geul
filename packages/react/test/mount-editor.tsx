@@ -83,6 +83,15 @@ export const stubRect = (
     }) as DOMRect;
 };
 
+/**
+ * 에디터 host를 overflow 컨테이너로 보고 보이는 영역을 (0,0)–(600,100)으로 둔다.
+ * jsdom에는 레이아웃이 없어 `readScrollClipBoxes`가 읽을 rect를 직접 준다.
+ */
+export const makeScrollContainer = (host: HTMLElement): void => {
+  host.style.overflowY = "auto";
+  stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+};
+
 export type Layout = {
   left: number;
   top: number;

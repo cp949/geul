@@ -20,6 +20,12 @@
  * - 대상 블록 삭제 시 닫힘(internal·external), 열자마자의 삭제, 닫힐 때 초점 규칙.
  * - Escape(편집기가 먼저 막은 키 포함)·바깥 클릭·핸들 재클릭·항목 클릭 닫힘의 초점.
  * - 블록 사이드 메뉴와 함께 열렸을 때의 키보드 초점 소유자와 Escape LIFO.
+ *
+ * 추가 주제(Issue #235): 그립 오버레이는 page 좌표 absolute라 안쪽 스크롤
+ * 컨테이너가 스크롤돼도 제자리에 남는다. scroll에서 위치를 다시 읽고, 에디터
+ * host가 자르는 영역 밖이면 숨기며, 드래그 중에는 숨기지 않는다. 실제 안쪽
+ * 스크롤은 jsdom이 만들 수 없어 stubRect로 rect를 주입한다. 위치 증명은
+ * Chromium e2e가 한다.
  */
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
@@ -40,10 +46,12 @@ import {
   MediaHandleOverlays,
 } from "../src/media-handle-overlays.js";
 import {
+  makeScrollContainer,
   mountBlockEditor,
   type MountBlockEditorOptions,
   stubRect,
 } from "./mount-editor.js";
+import { watchWindowScrollCapture } from "./scroll-listener-probe.js";
 
 // jsdom은 setPointerCapture를 구현하지 않는다(block-side-menu.test.tsx와
 // 같은 이유) — 그립 pointerdown이 실제로 이를 호출한다.
@@ -1173,5 +1181,100 @@ describe("media 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
     });
 
     expect(menuPosition()).toEqual({ left: "70px", top: "148px" });
+  });
+});
+
+describe("안쪽 스크롤 추종과 clip(Issue #235)", () => {
+  const renderImage = (
+    layout = { left: 0, top: 0, width: 600, height: 20 },
+  ) => {
+    const rendered = renderMediaOverlays({
+      initialBlocks: [imageBlock("image-1"), tailBlock],
+      layout,
+    });
+    const [media] = rendered.blocks;
+    const visual = media?.querySelector("img") ?? null;
+    if (media === undefined || visual === null) {
+      throw new Error("media 요소가 없다");
+    }
+    return { ...rendered, media, visual };
+  };
+
+  const readOverlay = () => {
+    const overlay = document.querySelector<HTMLElement>(overlaySelector);
+    if (overlay === null) throw new Error("그립 오버레이가 없다");
+    return overlay;
+  };
+
+  it("scroll이 일어나면 그립이 시각 요소의 새 위치를 다시 읽는다", () => {
+    const { media, visual } = renderImage();
+    stubRect(visual, { left: 100, top: 80, width: 200, height: 100 });
+    fireEvent.pointerMove(media);
+    expect(readOverlay().style.top).toBe("80px");
+
+    // 포인터는 그대로이고 안쪽 스크롤만 미디어를 위로 밀어 올린 상황이다.
+    stubRect(visual, { left: 100, top: 20, width: 200, height: 100 });
+    fireEvent.scroll(media);
+
+    expect(readOverlay().style.top).toBe("20px");
+  });
+
+  it("hover 중에만 window scroll capture를 구독한다", () => {
+    const watch = watchWindowScrollCapture();
+    try {
+      const { media } = renderImage();
+      const mounted = watch.net();
+
+      fireEvent.pointerMove(media);
+      expect(watch.net()).toBe(mounted + 1);
+
+      fireEvent.pointerMove(document.body, { clientX: -1000, clientY: -1000 });
+      expect(watch.net()).toBe(mounted);
+    } finally {
+      watch.restore();
+    }
+  });
+
+  it("그립 박스가 영역 안이면 보이고 밖이면 숨긴다", () => {
+    const { host, media } = renderImage();
+    makeScrollContainer(host);
+    fireEvent.pointerMove(media);
+    const overlay = readOverlay();
+
+    stubRect(overlay, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("");
+
+    stubRect(overlay, { left: 0, top: 300, width: 56, height: 24 });
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("hidden");
+
+    stubRect(overlay, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("");
+  });
+
+  it("그립을 드래그하는 동안에는 영역 밖이어도 숨기지 않는다", () => {
+    const { host, media } = renderImage();
+    makeScrollContainer(host);
+    fireEvent.pointerMove(media);
+    const overlay = readOverlay();
+    stubRect(overlay, { left: 0, top: 300, width: 56, height: 24 });
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("hidden");
+
+    // pointer capture를 잃으면 드래그가 끊긴다. 숨기지 않아야 한다.
+    // 숨은 요소는 접근성 트리에서 빠져 getByRole로 못 찾는다. 속성으로 찾는다.
+    const handle = overlay.querySelector("[data-geul-block-handle]");
+    if (handle === null) throw new Error("그립 버튼이 없다");
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    expect(overlay.style.visibility).toBe("");
+
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("");
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("hidden");
   });
 });

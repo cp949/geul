@@ -6,13 +6,23 @@
  * EmojiGrid 팝업이 열리며, 항목을 선택하면 setCalloutIcon이 호출되고
  * undo 1회로 복원됨을 검증한다. media-handle-overlays.test.tsx의 hover
  * 시뮬레이션 관례(fireEvent.pointerMove)를 그대로 따른다.
+ *
+ * 추가 주제(Issue #235): 트리거는 page 좌표 absolute라 안쪽 스크롤 컨테이너가
+ * 스크롤돼도 제자리에 남는다. scroll에서 위치를 다시 읽고, 에디터 host가 자르는
+ * 영역 밖이면 숨기며, 선택기가 열린 동안에는 숨기지 않는다. 실제 안쪽 스크롤은
+ * jsdom이 만들 수 없어 stubRect로 rect를 주입한다. 위치 증명은 Chromium e2e가 한다.
  */
 
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { CalloutIconPicker } from "../src/callout-icon-picker.js";
-import { mountBlockEditor, stubRect } from "./mount-editor.js";
+import {
+  makeScrollContainer,
+  mountBlockEditor,
+  stubRect,
+} from "./mount-editor.js";
+import { watchWindowScrollCapture } from "./scroll-listener-probe.js";
 
 afterEach(cleanup);
 
@@ -199,5 +209,110 @@ describe("그리드 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #2
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+});
+
+describe("안쪽 스크롤 추종과 clip(Issue #235)", () => {
+  const triggerLabel = "Change callout icon";
+
+  it("scroll이 일어나면 트리거가 callout의 새 위치를 다시 읽는다", () => {
+    const { calloutElement } = renderCalloutPicker({
+      left: 40,
+      top: 80,
+      width: 600,
+      height: 20,
+    });
+    fireEvent.pointerMove(calloutElement);
+    const trigger = screen.getByLabelText(triggerLabel);
+    expect(trigger.style.top).toBe("80px");
+
+    // 포인터는 그대로이고 안쪽 스크롤만 callout을 위로 밀어 올린 상황이다.
+    stubRect(calloutElement, { left: 40, top: 20, width: 600, height: 20 });
+    fireEvent.scroll(calloutElement);
+
+    expect(screen.getByLabelText(triggerLabel).style.top).toBe("20px");
+  });
+
+  it("hover 중에만 window scroll capture를 구독한다", () => {
+    const watch = watchWindowScrollCapture();
+    try {
+      const { calloutElement } = renderCalloutPicker();
+      const mounted = watch.net();
+
+      fireEvent.pointerMove(calloutElement);
+      expect(watch.net()).toBe(mounted + 1);
+
+      fireEvent.pointerMove(document.body);
+      expect(watch.net()).toBe(mounted);
+    } finally {
+      watch.restore();
+    }
+  });
+
+  it("트리거 박스가 영역 안이면 보이고 밖이면 숨긴다", () => {
+    const { host, calloutElement } = renderCalloutPicker();
+    makeScrollContainer(host);
+    fireEvent.pointerMove(calloutElement);
+    const trigger = screen.getByLabelText(triggerLabel);
+
+    stubRect(trigger, { left: 0, top: 10, width: 24, height: 24 });
+    fireEvent.scroll(calloutElement);
+    expect(trigger.style.visibility).toBe("");
+
+    stubRect(trigger, { left: 0, top: 300, width: 24, height: 24 });
+    fireEvent.scroll(calloutElement);
+    expect(trigger.style.visibility).toBe("hidden");
+
+    stubRect(trigger, { left: 0, top: 10, width: 24, height: 24 });
+    fireEvent.scroll(calloutElement);
+    expect(trigger.style.visibility).toBe("");
+  });
+
+  it("선택기가 열려 있는 동안에는 영역 밖이어도 트리거를 숨기지 않는다", () => {
+    const { host, calloutElement } = renderCalloutPicker();
+    makeScrollContainer(host);
+    fireEvent.pointerMove(calloutElement);
+    const trigger = screen.getByLabelText(triggerLabel);
+    stubRect(trigger, { left: 0, top: 300, width: 24, height: 24 });
+    fireEvent.scroll(calloutElement);
+    expect(trigger.style.visibility).toBe("hidden");
+
+    // 열린 직후 재렌더에서 exempt가 적용된다. 숨은 요소는 초점을 잃는다.
+    fireEvent.click(trigger);
+    expect(screen.getByRole("listbox")).not.toBeNull();
+    expect(trigger.style.visibility).toBe("");
+
+    fireEvent.scroll(calloutElement);
+    expect(trigger.style.visibility).toBe("");
+  });
+
+  it("선택기가 열린 callout이 아닌 다른 callout의 트리거는 영역 밖이면 숨는다", () => {
+    const { host } = mountBlockEditor({
+      initialBlocks: [
+        { id: "callout-1", type: "callout", content: [{ text: "안내" }] },
+        { id: "callout-2", type: "callout", content: [{ text: "주의" }] },
+      ],
+      children: <CalloutIconPicker />,
+    });
+    const [first, second] = Array.from(
+      host.querySelectorAll<HTMLElement>("[data-geul-callout]"),
+    );
+    if (first === undefined || second === undefined) {
+      throw new Error("callout 요소를 찾지 못했다");
+    }
+    stubRect(first, { left: 0, top: 0, width: 600, height: 20 });
+    stubRect(second, { left: 0, top: 400, width: 600, height: 20 });
+    makeScrollContainer(host);
+
+    fireEvent.pointerMove(first);
+    fireEvent.click(screen.getByLabelText(triggerLabel));
+    expect(screen.getByRole("listbox")).not.toBeNull();
+
+    // 선택기를 연 채 포인터만 옮겨 다른 callout을 hover한다.
+    fireEvent.pointerMove(second);
+    const trigger = screen.getByLabelText(triggerLabel);
+    stubRect(trigger, { left: 0, top: 400, width: 24, height: 24 });
+    fireEvent.scroll(second);
+    expect(trigger.style.visibility).toBe("hidden");
   });
 });

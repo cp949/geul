@@ -4,6 +4,10 @@
  * 때마다 다시 호출하는지 확인한다. element가 null인 동안에는 리스너를
  * 걸지 않으면서도 초기 호출은 그대로 하는지(호출부가 스스로 element null을
  * 판정하는 계약), 언마운트 시 리스너를 제거하는지도 함께 본다.
+ *
+ * 선택 옵션 `enabled`(Issue #235)도 본다. 기본값 true는 기존 동작이고,
+ * false면 구독도 초기 호출도 하지 않는다. true로 바뀌면 구독하고 초기 한 번을
+ * 호출하며, false로 바뀌면 리스너를 뗀다.
  */
 // @vitest-environment jsdom
 
@@ -18,6 +22,7 @@ afterEach(cleanup);
 type ProbeProps = {
   onUpdate: () => void;
   mount?: boolean;
+  enabled?: boolean;
 };
 
 /**
@@ -26,9 +31,14 @@ type ProbeProps = {
  * 내주므로 같은 "처음엔 null" 상황을 재현한다. mount=false면 컨테이너를
  * 아예 렌더하지 않아 element가 계속 null인 상황을 만든다.
  */
-const Probe = ({ onUpdate, mount = true }: ProbeProps) => {
+const Probe = ({ onUpdate, mount = true, enabled }: ProbeProps) => {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
-  useSelectionRefresh({ element: container, onUpdate });
+  // enabled를 주지 않는 호출부와 같은 모양을 유지하려고 undefined면 키를 뺀다.
+  useSelectionRefresh({
+    element: container,
+    onUpdate,
+    ...(enabled === undefined ? {} : { enabled }),
+  });
   return mount ? <div data-testid="container" ref={setContainer} /> : null;
 };
 
@@ -111,5 +121,81 @@ describe("useSelectionRefresh", () => {
     window.dispatchEvent(new Event("resize"));
 
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  describe("enabled 옵션(Issue #235)", () => {
+    /** 훅이 구독하는 다섯 이벤트를 모두 한 번씩 보낸다. */
+    const dispatchAll = () => {
+      document.dispatchEvent(new Event("selectionchange"));
+      document.dispatchEvent(new Event("mouseup"));
+      document.dispatchEvent(new Event("keyup"));
+      window.dispatchEvent(new Event("scroll"));
+      window.dispatchEvent(new Event("resize"));
+    };
+
+    it("enabled가 false면 마운트 시 onUpdate를 호출하지 않는다", () => {
+      const onUpdate = vi.fn();
+      render(<Probe enabled={false} onUpdate={onUpdate} />);
+
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
+
+    it("enabled가 false면 어떤 이벤트에도 onUpdate를 호출하지 않는다", () => {
+      const onUpdate = vi.fn();
+      render(<Probe enabled={false} onUpdate={onUpdate} />);
+
+      dispatchAll();
+
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
+
+    it("enabled가 false면 window에 scroll 리스너를 달지 않는다", () => {
+      const addEventListener = vi.spyOn(window, "addEventListener");
+      try {
+        render(<Probe enabled={false} onUpdate={vi.fn()} />);
+
+        const scrollCalls = addEventListener.mock.calls.filter(
+          ([type]) => type === "scroll",
+        );
+        expect(scrollCalls).toEqual([]);
+      } finally {
+        addEventListener.mockRestore();
+      }
+    });
+
+    it("enabled를 주지 않으면 기본값 true로 동작한다", () => {
+      const onUpdate = vi.fn();
+      render(<Probe onUpdate={onUpdate} />);
+      onUpdate.mockClear();
+
+      window.dispatchEvent(new Event("scroll"));
+
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("false에서 true로 바뀌면 구독하고 초기 한 번을 호출한다", () => {
+      const onUpdate = vi.fn();
+      const { rerender } = render(
+        <Probe enabled={false} onUpdate={onUpdate} />,
+      );
+      expect(onUpdate).not.toHaveBeenCalled();
+
+      rerender(<Probe enabled onUpdate={onUpdate} />);
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+
+      window.dispatchEvent(new Event("scroll"));
+      expect(onUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it("true에서 false로 바뀌면 리스너를 뗀다", () => {
+      const onUpdate = vi.fn();
+      const { rerender } = render(<Probe enabled onUpdate={onUpdate} />);
+
+      rerender(<Probe enabled={false} onUpdate={onUpdate} />);
+      onUpdate.mockClear();
+      dispatchAll();
+
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
   });
 });

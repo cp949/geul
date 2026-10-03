@@ -1,14 +1,16 @@
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { useFixedPlacement } from "./fixed-placement.js";
+import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
+import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // media-handle-overlays.tsx와 같은 이유로 자기 트리거 버튼은 hover 판정에서
 // 제외한다 — 포인터가 트리거로 이동하는 순간 hover가 풀리면 클릭 전에
@@ -106,11 +108,37 @@ export const CalloutIconPicker = () => {
     onCandidateChange: handleHoverCandidateChange,
   });
 
+  // 트리거는 page 좌표 absolute라 안쪽 스크롤 컨테이너가 스크롤돼도 제자리에
+  // 남는다(Issue #235). scroll(capture)·resize에서 렌더해 readPageRect로 다시
+  // 읽는다. 트리거가 그려지는 hover 동안만 구독한다.
+  const [, setTick] = useState(0);
+  const refresh = useCallback(() => setTick((tick) => tick + 1), []);
+  useSelectionRefresh({
+    element,
+    onUpdate: refresh,
+    enabled: hoverBlockId !== null,
+  });
+
   const hoverElement =
     hoverBlockId === null || element === null
       ? null
       : findCalloutVisualElement(element, hoverBlockId);
   const overlayRect = hoverElement === null ? null : readPageRect(hoverElement);
+
+  // 트리거는 안쪽 스크롤 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다.
+  // 보이는 영역 밖이면 visibility로 숨긴다(G-UI-003). 선택기가 열린 callout의
+  // 트리거는 숨기지 않는다 — 숨은 요소는 초점을 잃는다. 다른 callout로 hover가
+  // 옮겨 간 트리거는 숨긴다. 렌더마다 돈다. style prop에 visibility를 두지 않는다.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const node = triggerRef.current;
+    if (element === null || node === null) return;
+    syncClipVisibility(
+      node,
+      readScrollClipBoxes(element),
+      pickerState !== null && pickerState.blockId === hoverBlockId,
+    );
+  });
 
   const closePicker = useCallback(() => setPickerState(null), []);
 
@@ -141,6 +169,7 @@ export const CalloutIconPicker = () => {
           className="geul-callout-icon-trigger"
           data-geul-callout-icon-trigger=""
           onClick={openPicker}
+          ref={triggerRef}
           style={{ left: overlayRect.left, top: overlayRect.top }}
           type="button"
         />

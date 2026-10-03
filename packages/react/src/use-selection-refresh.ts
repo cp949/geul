@@ -10,6 +10,12 @@ type UseSelectionRefreshOptions = {
    * 훅들과 같은 계약, use-pointer-hover-target.ts 참고).
    */
   onUpdate: () => void;
+  /**
+   * 기본값은 `true`다. `false`면 리스너를 걸지 않고 초기 호출도 하지 않는다.
+   * 값이 바뀌면 effect가 다시 돌아 구독을 걸거나 뗀다. 오버레이가 그려질 때만
+   * 구독하고 싶을 때 쓴다(Issue #235).
+   */
+  enabled?: boolean;
 };
 
 /**
@@ -33,8 +39,10 @@ type UseSelectionRefreshOptions = {
 export const useSelectionRefresh = ({
   element,
   onUpdate,
+  enabled = true,
 }: UseSelectionRefreshOptions): void => {
   useEffect(() => {
+    if (!enabled) return;
     const ownerDocument = element?.ownerDocument;
     const ownerWindow = ownerDocument?.defaultView;
     ownerDocument?.addEventListener("selectionchange", onUpdate);
@@ -50,5 +58,5 @@ export const useSelectionRefresh = ({
       ownerWindow?.removeEventListener("scroll", onUpdate, true);
       ownerWindow?.removeEventListener("resize", onUpdate);
     };
-  }, [element, onUpdate]);
+  }, [element, onUpdate, enabled]);
 };
