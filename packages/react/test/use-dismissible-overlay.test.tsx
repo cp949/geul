@@ -8,15 +8,14 @@
  *   modifier+Escape 닫힘 parity.
  * - `focusOnOpen`의 첫 활성 항목 탐색과 `focusKey` 재실행.
  * - 바깥 pointerdown의 즉시성(ADR 0013)과 `startTransition` 계약(Issue #155).
- * - 공개 전환 전이라 `index.ts`가 module을 내보내지 않는다(RD-006에서 뒤집는다).
+ * - 공개 경계: `index.ts`가 module을 내보내고 옛 훅은 내보내지 않는다(RD-006).
  */
 
 import { act, cleanup, render } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { startTransition, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as publicApi from "../src/index.js";
 import {
   type DismissReason,
   useDismissibleOverlay,
@@ -726,14 +725,11 @@ describe("useDismissibleOverlay focusKey", () => {
 });
 
 describe("useDismissibleOverlay 공개 경계", () => {
-  // jsdom 환경에서는 import.meta.url이 file: URL이 아니라 dirname을 쓴다.
-  it("index.ts가 module을 아직 내보내지 않는다(공개 전환은 RD-006)", () => {
-    const source = readFileSync(
-      join(import.meta.dirname, "../src/index.ts"),
-      "utf8",
-    );
+  it("index.ts가 module을 그대로 내보낸다", () => {
+    expect(publicApi.useDismissibleOverlay).toBe(useDismissibleOverlay);
+  });
 
-    expect(source).not.toContain("use-dismissible-overlay");
-    expect(source).not.toContain("useDismissibleOverlay");
+  it("옛 훅 useDismissOnOutsideOrEscape는 내보내지 않는다", () => {
+    expect(publicApi).not.toHaveProperty("useDismissOnOutsideOrEscape");
   });
 });

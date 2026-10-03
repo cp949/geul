@@ -14,7 +14,7 @@ import { useFocusEditor } from "./use-focus-editor.js";
  */
 export type DismissReason = "outside" | "escape" | "invalidated" | "trigger";
 
-type UseDismissibleOverlayOptions = {
+export type UseDismissibleOverlayOptions = {
   /** false면 리스너도 스택 항목도 두지 않는다. 열림 상태는 호출부가 소유한다. */
   open: boolean;
   /**

@@ -47,15 +47,11 @@ export {
   type ClampAnchor,
   useClampedMenuPosition,
 } from "./use-clamped-menu-position.js";
-export { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-// use-dismiss-on-outside-or-escape.ts는 옵션 타입(`UseDismissOnOutsideOrEscapeOptions`
-// 상당)을 그 파일 밖으로 export하지 않는다(내부 전용 관례) — 이번 변경의
-// 편집 허용 범위가 그 파일을 포함하지 않아 새로 export를 추가하는 대신
-// 훅 시그니처에서 그대로 파생한다(구현이 바뀌면 이 타입도 함께 갱신됨).
-import type { useDismissOnOutsideOrEscape as _useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
-export type UseDismissOnOutsideOrEscapeOptions = Parameters<
-  typeof _useDismissOnOutsideOrEscape
->[0];
+export {
+  type DismissReason,
+  type UseDismissibleOverlayOptions,
+  useDismissibleOverlay,
+} from "./use-dismissible-overlay.js";
 export { useEditorElement } from "./use-editor-element.js";
 // TableHandles는 BlockSideMenu처럼 SlashMenu가 자동 마운트한다 — 공개
 // export하면 소비자가 중복 마운트해 핸들 오버레이가 두 벌 겹친다.

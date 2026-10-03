@@ -1,6 +1,6 @@
 import {
   useClampedMenuPosition,
-  useDismissOnOutsideOrEscape,
+  useDismissibleOverlay,
   useEditor,
   useEditorElement,
   useFocusEditor,
@@ -64,7 +64,7 @@ const MENTION_OPTIONS: readonly MentionOption[] = [
 ];
 
 // 바깥 pointerdown 판정에서 이 팝업 자신을 "바깥"으로 취급하지 않기 위한
-// 셀렉터(`useDismissOnOutsideOrEscape`의 `allowSelectors`). 이 예제는
+// 셀렉터(`useDismissibleOverlay`의 `allowSelectors`). 이 예제는
 // `packages/react`의 scss를 갖지 않으므로(showcase 로컬 컴포넌트) class명
 // 대신 data attribute를 표식으로 쓴다. 매 렌더 새 배열이면 그 배열을 참조하는
 // effect가 매번 리스너를 떼었다 붙이므로(emoji-picker.tsx/slash-menu.tsx와
@@ -72,10 +72,6 @@ const MENTION_OPTIONS: readonly MentionOption[] = [
 const MENTION_PICKER_DISMISS_ALLOW_SELECTORS = [
   '[data-geul-mention-picker="true"]',
 ] as const;
-// Escape는 메뉴만 닫고 입력한 "@query" 텍스트는 보존한다(EmojiPicker/
-// SlashMenu와 동일 계약) — 실제 처리는 element의 상시 keydown 리스너가
-// 소유한다.
-const IGNORE_ESCAPE_DISMISS = () => {};
 
 /**
  * `@query` 캐럿-텍스트 트리거 감지. `emoji-picker.tsx`의 `parseEmojiQuery`와
@@ -160,7 +156,7 @@ const targetTypeLabel = (targetType: MentionTargetType): string =>
  * `EmojiPicker`의 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss 골격을
  * 그대로 재사용한다 — `@cp949/geul-react`가 공개하는
  * `useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/
- * `useDismissOnOutsideOrEscape`가 그 배선이다(01-계획.md "## 결정" D4).
+ * `useDismissibleOverlay`가 그 배선이다(01-계획.md "## 결정" D4).
  */
 export const MentionPicker = () => {
   const editor = useEditor();
@@ -332,12 +328,15 @@ export const MentionPicker = () => {
     [editor, focusEditor],
   );
 
-  useDismissOnOutsideOrEscape({
-    active: menuState !== null,
+  // Escape는 메뉴만 닫고 입력한 "@query" 텍스트는 보존한다(EmojiPicker/
+  // SlashMenu와 동일 계약). element의 상시 keydown 리스너가 먼저 닫고, 편집기
+  // 안에서 막힌 Escape는 이 훅도 한 번 더 닫는다. `dismissMenu`가 멱등이라
+  // 이중 호출이 무해하다.
+  useDismissibleOverlay({
+    open: menuState !== null,
     element,
     allowSelectors: MENTION_PICKER_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissMenu,
-    onEscapeDismiss: IGNORE_ESCAPE_DISMISS,
+    onClose: dismissMenu,
   });
 
   useEffect(() => {
