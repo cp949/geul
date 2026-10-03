@@ -21,8 +21,9 @@
  * 전환·블록 삭제로 메뉴가 자연히 닫힌다. fixed overlay viewport clamp(RD-002,
  * PIT-0011)도 이 파일이 검증한다.
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { expectOverlayFollowsAnchor } from "./support/anchor-gap.js";
 import { expectOverlayWithinViewport } from "./support/clamp.js";
 import { insertFilledImage, openDemo } from "./support/demo.js";
 import { beginDrag, dragTo } from "./support/media-resize.js";
@@ -778,4 +779,64 @@ test("교체 모드에서 편집기 바깥을 클릭하면 toolbar가 닫힌다 
     page.getByRole("toolbar", { name: "Media toolbar" }),
   ).not.toBeVisible();
   await expect(saveJsonButton).toBeFocused();
+});
+
+/**
+ * window가 스크롤되는 문서를 만들고 맨 위의 이미지 블록을 선택한다. 이미지 뒤에 줄을
+ * 채워 페이지가 스크롤 가능하게 하고, 스크롤 맨 위에서 이미지를 눌러 toolbar를 띄운다.
+ * 반환값은 이미지를 감싼 블록이다. toolbar는 이 블록 우상단에 앵커한다.
+ */
+const selectImageInScrollableDocument = async (
+  page: Page,
+  editable: Locator,
+): Promise<Locator> => {
+  await insertFilledImage(page, editable);
+  await editable.click();
+  await page.keyboard.press("Control+End");
+  for (let index = 0; index < 40; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const wrapper = editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("img") });
+  await wrapper.click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  return wrapper;
+};
+
+// Issue #234 RD-005 — 편집 중에는 updateFromSelection이 editingRef로 막혀 toolbar가
+// 열 때 좌표에 남았다. 지금은 배치 훅이 블록 DOM을 렌더마다 읽어 편집 모드에서도
+// 블록을 따라간다.
+test("이름을 편집하는 중에 window를 스크롤해도 Media toolbar가 이미지 블록에 붙어 있다 (Issue #234 RD-005)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const wrapper = await selectImageInScrollableDocument(page, editable);
+
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const nameInput = page.getByRole("textbox", { name: "Image name" });
+  await expect(nameInput).toBeFocused();
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+
+  await expectOverlayFollowsAnchor(page, wrapper, toolbar, "window");
+  await expect(nameInput).toBeFocused();
+});
+
+test("more 메뉴가 열린 채 window를 스크롤해도 메뉴가 `⋯` 트리거에 붙어 있다 (Issue #234 RD-005)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await selectImageInScrollableDocument(page, editable);
+
+  await openMoreMenu(page);
+  const trigger = page.getByRole("button", { name: "More media options" });
+  const menu = page.locator(".geul-media-toolbar__more-menu");
+  await expect(menu).toBeVisible();
+
+  await expectOverlayFollowsAnchor(page, trigger, menu, "window");
 });
