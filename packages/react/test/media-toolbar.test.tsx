@@ -735,21 +735,11 @@ describe("MediaToolbar 미디어 편집 toolbar", () => {
     const initialLeft = toolbar().style.left;
     const initialTop = toolbar().style.top;
 
-    // finishEditing이 carryMediaInfo 대신 readBlockBounds를 다시 부르면
-    // 이 새 rect가 반영돼 left/top이 바뀐다 — 지금은 toolbarState를 그대로
-    // 캐리해야 한다(updateFromSelection만 이 값을 다시 읽는다).
-    vi.spyOn(blockElement, "getBoundingClientRect").mockReturnValue({
-      left: 400,
-      top: 300,
-      right: 420,
-      bottom: 310,
-      x: 400,
-      y: 300,
-      width: 20,
-      height: 10,
-      toJSON: () => ({}),
-    } as DOMRect);
-
+    // 위치는 toolbarState가 캐리하지 않는다. 배치 훅(useFixedPlacement)이
+    // blockId로 블록 DOM을 렌더마다 읽는다(Issue #234 RD-005). 그래서 이 테스트가
+    // 예전에 하던 "블록 rect를 바꿔 두고 전환해도 옛 좌표가 남는다" 단언은 새
+    // 설계와 반대다. rect가 바뀌면 따라가는 동작은 media-toolbar-placement.test.tsx가
+    // 고정한다. 여기서는 rect가 그대로일 때 전환이 위치를 바꾸지 않는 것만 본다.
     openMoreMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     fireEvent.click(screen.getByRole("button", { name: "Save name" }));
@@ -1289,22 +1279,8 @@ describe("MediaToolbar Replace 트리거(RD-003 DELTA-03)", () => {
     openMoreMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
 
-    // cancelReplacing이 carryMediaInfo 대신 readBlockTopRightBounds를 다시
-    // 부르면 이 새 rect가 반영된다 — 지금은 replacing 진입 시 캐리해 둔
-    // 값을 그대로 되돌려야 한다(core를 다시 조회하지 않는다,
-    // cancelReplacing 주석 참고).
-    vi.spyOn(blockElement, "getBoundingClientRect").mockReturnValue({
-      left: 400,
-      top: 300,
-      right: 420,
-      bottom: 310,
-      x: 400,
-      y: 300,
-      width: 20,
-      height: 10,
-      toJSON: () => ({}),
-    } as DOMRect);
-
+    // 위치는 toolbarState가 캐리하지 않는다(위 rename 테스트와 같은 이유).
+    // rect가 그대로일 때 replacing 진입·취소가 위치를 바꾸지 않는 것만 본다.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(toolbar().style.left).toBe(initialLeft);

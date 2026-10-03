@@ -18,6 +18,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { extractNameFromUrl } from "./extract-name-from-url.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
@@ -119,8 +120,6 @@ const MEDIA_TOOLBAR_MORE_MENU_DISMISS_ALLOW_SELECTORS = [
   ".geul-media-toolbar__more-menu",
 ] as const;
 
-type ToolbarPosition = { left: number; top: number };
-
 type MediaInfo = {
   blockId: string;
   kind: MediaBlockKind;
@@ -156,9 +155,8 @@ type UploadSubState =
 
 type ToolbarState =
   | { mode: "closed" }
-  | ({ mode: "view" } & MediaInfo & ToolbarPosition)
-  | ({ mode: "editingName" | "editingCaption"; draft: string } & MediaInfo &
-      ToolbarPosition)
+  | ({ mode: "view" } & MediaInfo)
+  | ({ mode: "editingName" | "editingCaption"; draft: string } & MediaInfo)
   | ({
       mode: "replacing";
       /** 기본값은 upload(file-panel.tsx의 Notion parity, 2026-09-12) —
@@ -174,20 +172,20 @@ type ToolbarState =
       upload: UploadSubState;
       /** retry가 파일 선택 대화상자를 다시 열지 않고 재사용할 원본 File. */
       heldFile: File | null;
-    } & MediaInfo &
-      ToolbarPosition);
+    } & MediaInfo);
 
-// "closed" 외 4개 mode 전부가 이 9필드(MediaInfo 7개 + left/top)를 shape
-// 그대로 캐리한다 — mode 전이마다 손으로 9개를 나열하면(구조분해+리턴
+// "closed" 외 4개 mode 전부가 이 7필드(MediaInfo)를 shape
+// 그대로 캐리한다 — mode 전이마다 손으로 7개를 나열하면(구조분해+리턴
 // 리터럴 이중) 필드가 늘 때마다(showPreview, textAlignment 이력) 같은 곳을
-// 반복해서 고쳐야 한다(그릴링 C4, 2026-09-06). `{ ...prev, mode: X }`로
+// 반복해서 고쳐야 한다(그릴링 C4, 2026-09-06). 위치는 상태에 없다. 배치 훅이
+// blockId로 블록 DOM을 읽는다(Issue #234). `{ ...prev, mode: X }`로
 // 단순 spread하지 않는 이유: prev가 replacing/editingName 등이면 그 mode
 // 전용 필드(upload/heldFile/draft)가 새 상태에 런타임으로 남는다 — 이
 // 화이트리스트 추출이 그 누출을 막는다.
 const carryMediaInfo = (
-  prev: MediaInfo & ToolbarPosition,
+  prev: MediaInfo,
   patch: Partial<MediaInfo> = {},
-): MediaInfo & ToolbarPosition => ({
+): MediaInfo => ({
   blockId: prev.blockId,
   kind: prev.kind,
   url: prev.url,
@@ -195,8 +193,6 @@ const carryMediaInfo = (
   caption: prev.caption,
   showPreview: prev.showPreview,
   textAlignment: prev.textAlignment,
-  left: prev.left,
-  top: prev.top,
   ...patch,
 });
 
@@ -349,9 +345,6 @@ export const MediaToolbar = ({
     // 닫는 경로라 useMediaToolbarMoreMenu의 closeMoreMenu를 직접 부른다.
     if (viewBlockIdRef.current !== media.blockId) closeMoreMenu();
     viewBlockIdRef.current = media.blockId;
-    const bounds =
-      readBlockTopRightBounds(element, media.blockId) ??
-      FALLBACK_BLOCK_POSITION;
     // media는 core 재조회 결과라 prev를 캐리하는 게 아니다 — carryMediaInfo의
     // 화이트리스트가 막으려는 "잉여 mode 필드 누출"이 애초에 없어(media는
     // 정확히 MediaInfo 7필드 shape) 단순 spread로 충분하다. url은 spread가
@@ -361,8 +354,6 @@ export const MediaToolbar = ({
       mode: "view",
       ...media,
       url: media.url,
-      left: bounds.left,
-      top: bounds.top,
     });
   }, [editor, element, closeMoreMenu, dismissSuppression]);
 
@@ -395,25 +386,6 @@ export const MediaToolbar = ({
     });
     return () => observer.disconnect();
   }, [element]);
-
-  // 드래그가 끝나면(속성이 사라지면) bounds를 다시 읽어야 한다 — 리사이즈로
-  // 미디어 크기가 바뀌면 topRight 앵커(readBlockTopRightBounds)도 함께
-  // 움직여 드래그 시작 시점에 캐시해 둔 toolbarState.left/top이 더는 맞지
-  // 않는다.
-  // useLayoutEffect여야 한다(사용자 스크린샷 — useEffect였을 때 재표시
-  // 순간 옛 위치가 한 프레임 보였다가 새 위치로 튀었다): resizingBlockId가
-  // null로 바뀐 렌더는 아직 옛 toolbarState.left/top으로 커밋·페인트되고,
-  // 그 다음에야 일반 useEffect(페인트 이후 실행)가 새 bounds로 다시 렌더해
-  // 두 번째 페인트가 뒤따른다. useLayoutEffect는 커밋 직후·페인트 전에
-  // 동기로 flush되므로 이 setState가 같은 페인트에 합쳐진다(브라우저가
-  // 옛 위치를 그리지 않는다) — table-handles.tsx가 표 경계 재측정에 쓰는
-  // 것과 같은 이유·같은 관례.
-  const previousResizingBlockIdRef = useRef<string | null>(null);
-  useLayoutEffect(() => {
-    const previous = previousResizingBlockIdRef.current;
-    previousResizingBlockIdRef.current = resizingBlockId;
-    if (previous !== null && resizingBlockId === null) updateFromSelection();
-  }, [resizingBlockId, updateFromSelection]);
 
   useEffect(() => {
     if (
@@ -462,17 +434,12 @@ export const MediaToolbar = ({
         if (media === null || media.url === null || media.blockId !== blockId) {
           return { mode: "closed" };
         }
-        const bounds =
-          readBlockTopRightBounds(element, media.blockId) ??
-          FALLBACK_BLOCK_POSITION;
         // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
         // 잉여 필드가 없는 fresh MediaInfo다.
         return {
           mode: "view",
           ...media,
           url: media.url,
-          left: bounds.left,
-          top: bounds.top,
         };
       });
     },
@@ -639,16 +606,28 @@ export const MediaToolbar = ({
   // toolbar의 topRight variant). `_media-toolbar.scss`의
   // `transform: translateX(-100%)`가 렌더된 박스를 왼쪽으로 밀어 우상단이
   // 이 좌표와 일치하게 만든다.
-  const { menuRef, style } = useClampedMenuPosition(
-    toolbarState.mode === "closed" ? 0 : toolbarState.left,
-    toolbarState.mode === "closed" ? 0 : toolbarState.top,
-    "topRight",
-  );
+  //
+  // 앵커는 `blockId`로 찾은 블록 DOM의 우상단이다. 열린 동안 렌더마다 다시 읽는다.
+  // 어느 mode에서도 스크롤·resize를 따라간다. 편집 중에는 `updateFromSelection`이
+  // `editingRef`로 막히지만 위치는 그 경로에 의존하지 않는다. 리사이즈가 끝나
+  // 툴바가 다시 렌더되는 커밋도 같은 훅이 새 블록 rect로 수렴시킨다.
+  const blockId = toolbarState.mode === "closed" ? null : toolbarState.blockId;
+  const { menuRef, style } = useFixedPlacement({
+    open: blockId !== null,
+    element,
+    readAnchor: () =>
+      element === null || blockId === null
+        ? null
+        : (readBlockTopRightBounds(element, blockId) ??
+          FALLBACK_BLOCK_POSITION),
+    clampAnchor: "topRight",
+  });
   // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
   // 잘라내지 못한다 — 툴바 자신의 박스가 컨테이너의 보이는 영역 안에 완전히
   // 들어올 때만 보인다. mode·입력 상태는 건드리지 않고 `visibility`만
-  // 갱신한다(편집 중 입력의 포커스와 draft를 잃지 않는다). 스크롤마다
-  // updateFromSelection이 새 toolbarState를 만들어 이 렌더가 다시 돈다.
+  // 갱신한다(편집 중 입력의 포커스와 draft를 잃지 않는다). 박스 기준이라 앵커 점
+  // 기준인 `useFixedPlacement({ clip })`을 쓰지 않는다. 스크롤마다 배치 훅이
+  // 렌더를 다시 돌린다.
   useLayoutEffect(() => {
     if (element === null || menuRef.current === null) return;
     syncClipVisibility(menuRef.current, readScrollClipBoxes(element), false);
@@ -662,21 +641,18 @@ export const MediaToolbar = ({
   // 한다. PIT-0011 — 여기서는 앵커 좌표만 실측하고, 뷰포트 clamp 자체는
   // 아래 useClampedMenuPosition의 기존 ResizeObserver 재계산에 맡긴다(별도
   // 수동 재계산 로직을 새로 만들지 않는다).
-  const viewLeft = toolbarState.mode === "view" ? toolbarState.left : null;
-  const viewTop = toolbarState.mode === "view" ? toolbarState.top : null;
   // 트리거 rect 실측 + outer 컨테이너(menuRef) 리사이즈 보강(코드리뷰
   // 결함 2)은 useAnchoredSubmenu가 code-block-language-combobox.tsx와
   // 공유한다.
   const { anchor: moreMenuAnchor, recompute: recomputeMoreMenuAnchor } =
     useAnchoredSubmenu(moreTriggerRef, menuRef, moreMenuOpen);
   // 훅이 못 보는 재배치만 여기서 다시 잰다 — outer 컨테이너 크기 변화가
-  // 아니라 selection 재조회로 toolbarState 자체(viewLeft/viewTop)가
-  // 옮겨가는 경우다. 이 값의 이름·의미는 소비처마다 달라 훅 인자로 묶을 수
-  // 없다.
+  // 아니라 outer 툴바 자체(`style.left`/`style.top`)가 옮겨가는 경우다. 이 값의
+  // 이름·의미는 소비처마다 달라 훅 인자로 묶을 수 없다.
   useLayoutEffect(() => {
     if (!moreMenuOpen) return;
     recomputeMoreMenuAnchor();
-  }, [moreMenuOpen, viewLeft, viewTop, recomputeMoreMenuAnchor]);
+  }, [moreMenuOpen, style.left, style.top, recomputeMoreMenuAnchor]);
 
   const { menuRef: moreMenuRef, style: moreMenuStyle } = useClampedMenuPosition(
     moreMenuAnchor?.left ?? 0,
