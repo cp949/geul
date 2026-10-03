@@ -508,6 +508,9 @@ describe("StaticToolbar 블록 타입 메뉴의 Tab 기본 동작", () => {
 });
 
 describe("StaticToolbar 블록 타입 메뉴의 트리거 추적", () => {
+  // 편집기를 실제로 마운트한다. 재측정 구독은 `useFixedPlacement`가 마운트
+  // 요소의 owner window에 건다(Issue #234 RD-003). fake controller는 마운트
+  // 요소가 없어 구독이 걸리지 않는다.
   /** 트리거의 viewport 좌표를 바꾼다. 스크롤을 흉내 낸다. */
   const moveTrigger = (left: number, bottom: number) => {
     vi.spyOn(blockTypeTrigger(), "getBoundingClientRect").mockReturnValue({
@@ -534,7 +537,7 @@ describe("StaticToolbar 블록 타입 메뉴의 트리거 추적", () => {
     ["scroll", () => fireEvent.scroll(window)],
     ["resize", () => fireEvent(window, new Event("resize"))],
   ])("%s가 일어나면 열린 메뉴가 트리거 아래로 따라간다", (_name, trigger) => {
-    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    mountToolbarWithEditor();
     moveTrigger(10, 100);
     openByMouse();
     expect(menuStyle()).toEqual({ left: "10px", top: "104px" });
@@ -549,7 +552,7 @@ describe("StaticToolbar 블록 타입 메뉴의 트리거 추적", () => {
 
   it("메뉴를 닫은 뒤에는 window 리스너가 남지 않는다", () => {
     const remove = vi.spyOn(window, "removeEventListener");
-    render(withProvider(fakeStaticToolbarController(), <StaticToolbar />));
+    mountToolbarWithEditor();
     openByMouse();
     fireEvent.click(blockTypeTrigger());
 

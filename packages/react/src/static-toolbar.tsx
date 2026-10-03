@@ -28,7 +28,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -206,8 +205,9 @@ type ColorMenuState = {
 };
 
 type BlockTypeMenuState = {
-  left: number;
-  top: number;
+  // 클릭된 트리거 버튼. 메뉴 좌표는 rect를 보관하지 않고 이 요소에서 매번 읽는다
+  // (Issue #234).
+  trigger: HTMLButtonElement;
   // 키보드로 연 메뉴만 옵션으로 포커스를 옮긴다(RD-003 결정).
   focusSelected: boolean;
 };
@@ -347,32 +347,6 @@ export const StaticToolbar = ({
     setBlockTypeMenuState(null);
     blockTypeTriggerRef.current?.focus({ preventScroll: true });
   }, []);
-  // 열린 블록 타입 메뉴는 트리거를 따라간다(G-UI-001). 메뉴는 열릴 때의
-  // viewport 좌표에 fixed로 그려지므로 스크롤·리사이즈 때 트리거 rect를 다시
-  // 읽는다. 중첩 스크롤 컨테이너를 위해 scroll은 capture로 건다.
-  const isBlockTypeMenuOpen = blockTypeMenuState !== null;
-  useEffect(() => {
-    if (!isBlockTypeMenuOpen) return;
-    const ownerWindow = blockTypeTriggerRef.current?.ownerDocument.defaultView;
-    if (ownerWindow === null || ownerWindow === undefined) return;
-    const reanchor = () => {
-      const trigger = blockTypeTriggerRef.current;
-      if (trigger === null) return;
-      const rect = trigger.getBoundingClientRect();
-      const top = rect.bottom + 4;
-      setBlockTypeMenuState((current) =>
-        current === null || (current.left === rect.left && current.top === top)
-          ? current
-          : { ...current, left: rect.left, top },
-      );
-    };
-    ownerWindow.addEventListener("scroll", reanchor, true);
-    ownerWindow.addEventListener("resize", reanchor);
-    return () => {
-      ownerWindow.removeEventListener("scroll", reanchor, true);
-      ownerWindow.removeEventListener("resize", reanchor);
-    };
-  }, [isBlockTypeMenuOpen]);
   const closeColorMenu = useCallback(() => {
     setColorMenuState(null);
     focusEditor();
@@ -485,13 +459,8 @@ export const StaticToolbar = ({
     trigger: HTMLButtonElement,
     focusSelected: boolean,
   ) => {
-    const rect = trigger.getBoundingClientRect();
     overlay.open("blockType");
-    setBlockTypeMenuState({
-      left: rect.left,
-      top: rect.bottom + 4,
-      focusSelected,
-    });
+    setBlockTypeMenuState({ trigger, focusSelected });
   };
 
   // `event.detail === 0`이면 키보드 활성화(Enter·Space)다. 마우스로 열면
@@ -812,13 +781,12 @@ export const StaticToolbar = ({
           element={element}
           focusSelected={blockTypeMenuState.focusSelected}
           label={dictionary.toolbar.static.blockTypeAriaLabel}
-          left={blockTypeMenuState.left}
           onConfirm={confirmBlockType}
           onClose={() => setBlockTypeMenuState(null)}
           onTabDismiss={closeBlockTypeMenuToTrigger}
           optionLabel={(option) => blockTypeText(dictionary, option.id).label}
           options={blockTypeMenuOptions}
-          top={blockTypeMenuState.top}
+          readAnchor={() => readAnchorBelowTrigger(blockTypeMenuState.trigger)}
         />
       )}
       {colorMenuState !== null && (

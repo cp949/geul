@@ -2,8 +2,11 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect } from "react";
 
 import type { BlockTypeOption } from "./block-type-options.js";
 import { preserveFocusOnMouseDown } from "./icon-button.js";
+import {
+  type FixedPlacementAnchor,
+  useFixedPlacement,
+} from "./fixed-placement.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 
 // 메뉴 패널 루트의 셀렉터. 자동 닫힘 때 초점이 메뉴 안에 있었는지 판정한다.
@@ -19,9 +22,11 @@ const BLOCK_TYPE_MENU_DISMISS_ALLOW_SELECTORS = [
 ] as const;
 
 type StaticToolbarBlockTypeMenuProps = {
-  /** 메뉴 좌상단 앵커의 viewport 좌표. 트리거 하단 기준이다. */
-  left: number;
-  top: number;
+  /**
+   * 메뉴 좌상단 앵커의 viewport 좌표를 지금 읽어 돌려준다. 트리거 하단 기준이다.
+   * 메뉴가 열린 동안 스크롤·resize마다 `useFixedPlacement`가 다시 읽는다.
+   */
+  readAnchor: () => FixedPlacementAnchor | null;
 
   /** 메뉴 aria-label. 트리거와 같은 사전 값을 쓴다. */
   label: string;
@@ -63,8 +68,7 @@ type StaticToolbarBlockTypeMenuProps = {
  * `MenuItemButton`은 `option` role을 허용하지 않아 옵션 버튼을 직접 만든다.
  */
 export const StaticToolbarBlockTypeMenu = ({
-  left,
-  top,
+  readAnchor,
   label,
   options,
   optionLabel,
@@ -75,7 +79,11 @@ export const StaticToolbarBlockTypeMenu = ({
   onClose,
   onTabDismiss,
 }: StaticToolbarBlockTypeMenuProps) => {
-  const { menuRef, style } = useClampedMenuPosition(left, top);
+  const { menuRef, style } = useFixedPlacement({
+    open: true,
+    element,
+    readAnchor,
+  });
 
   // 열려 있을 때만 마운트하므로 `open`은 고정이다. 열림 초점은 아래 로컬
   // effect가 맡고 `focusOnOpen`은 쓰지 않는다. `aria-selected` 옵션을
