@@ -30,6 +30,10 @@ import {
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import {
+  readAnchorBelowTrigger,
+  useFixedPlacement,
+} from "./fixed-placement.js";
+import {
   computeFormattingToolbarState,
   type FormattingToolbarState,
   type SelectionMark,
@@ -143,8 +147,9 @@ type ToolbarState = Omit<
 
 type ColorMenuState = {
   property: "text" | "background";
-  left: number;
-  top: number;
+  // 클릭된 트리거 버튼. 메뉴 좌표는 rect를 보관하지 않고 이 요소에서 매번 읽는다
+  // (Issue #234).
+  trigger: HTMLButtonElement;
 };
 
 /**
@@ -337,8 +342,16 @@ export const FormattingToolbar = ({
   // 트리거를 allowSelectors에 포함시키면 바깥 pointerdown이 먼저 팔레트를
   // 지우는 레이스 자체가 생기지 않아 단순 토글로 충분하다(옛 로드맵 Issue #38
   // 슬라이스 8 RD-003 DELTA-01 계획).
-  const { menuRef: colorMenuRef, style: colorMenuStyle } =
-    useClampedMenuPosition(colorMenuState?.left ?? 0, colorMenuState?.top ?? 0);
+  // 트리거는 툴바 안에 있고 툴바는 선택을 따라 움직인다. 같은 컴포넌트에서 훅을
+  // 불러야 툴바가 한 번 더 렌더된 뒤에도 앵커를 다시 읽는다(fixed-placement.ts).
+  const { menuRef: colorMenuRef, style: colorMenuStyle } = useFixedPlacement({
+    open: colorMenuState !== null,
+    element,
+    readAnchor: () =>
+      colorMenuState === null
+        ? null
+        : readAnchorBelowTrigger(colorMenuState.trigger),
+  });
 
   const closeColorMenu = useCallback(() => {
     setColorMenuState(null);
@@ -359,8 +372,7 @@ export const FormattingToolbar = ({
       closeColorMenu();
       return;
     }
-    const rect = event.currentTarget.getBoundingClientRect();
-    setColorMenuState({ property, left: rect.left, top: rect.bottom + 4 });
+    setColorMenuState({ property, trigger: event.currentTarget });
   };
 
   const applyInlineColor = (

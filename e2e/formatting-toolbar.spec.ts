@@ -4,6 +4,7 @@
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { expectOverlayFollowsAnchor } from "./support/anchor-gap.js";
 import {
   CLAMP_BOUNDARY_MIN_MARGIN_PX,
   expectOverlayWithinViewport,
@@ -300,6 +301,36 @@ test("팔레트가 열린 채 편집기 초점에서 Escape를 누르면 팔레�
   await expect(linkToolbar).not.toBeVisible();
   await expect(palette).toHaveCount(0);
   await expect(editable).toBeFocused();
+});
+
+test("글자색·배경색 메뉴가 열린 채 window를 스크롤해도 메뉴가 트리거 아래에 붙어 있다 (Issue #234)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("first");
+  for (let index = 0; index < 30; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  // 뷰포트 가장자리에서는 clamp가 메뉴를 밀어 gap이 달라진다. 가운데 블록을 고른다.
+  const middle = editable.locator("p").nth(15);
+  await middle.scrollIntoViewIfNeeded();
+  // 블록이 뷰포트 위쪽 가장자리에 붙으면 툴바가 위로 clamp돼 스크롤에서도 안 움직인다.
+  await page.evaluate(() => window.scrollBy(0, -200));
+  await selectBlockTextAndNotify(middle, "Middle block");
+
+  // 서식 툴바가 선택을 따라 움직이므로 툴바 안 트리거도 window 스크롤에서 움직인다.
+  for (const name of ["Text color", "Background color"]) {
+    const trigger = page.getByRole("button", { name });
+    const menu = page.getByRole("menu", { name });
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await expectOverlayFollowsAnchor(page, trigger, menu, "window");
+    await selectBlockTextAndNotify(middle, "Middle block");
+    await trigger.click();
+    await expect(menu).toHaveCount(0);
+  }
 });
 
 test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
