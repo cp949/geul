@@ -15,4 +15,5 @@ status: accepted
 - 이 전략은 새 가이드 [`G-UI-003`](../guides/G-UI-003-make-anchor-overlays-natively-scrollable.md)이 소유한다 — `G-UI-001`(dismissible overlay clamp)과 분리, `CONTEXT.md`의 "해제형 오버레이"/"앵커 오버레이" 구분과 짝을 이룬다.
 - 소비자 앱이 `.geul-editor`와 오버레이 트리 사이 어딘가에 `transform`/`filter`를 건 조상을 두면 이 접근도 깨진다 — 패키지가 소비자 CSS까지 통제하지 않으므로 강제하지 않는다.
 - 재정렬·리사이즈 드래그 히트테스트(`computeReorderTargetIndex` 등)는 pointer 이벤트의 `clientX/clientY`(viewport-relative)와 geometry(이제 page-relative)를 섞어 비교하지 않도록 구현 시 좌표계를 통일해야 한다.
-- `media-resize-handles.tsx`는 동일한 결함을 갖고 있으나 Issue #163 범위 밖이라 이 ADR의 전환 대상이 아니다 — 후속 이슈에서 이 ADR을 참고해 같은 전략을 적용할 수 있다.
+- `media-resize-handles.tsx`의 좌/우 핸들은 Issue #164(`dce72423`)에서 같은 전략으로 전환됐다. `position: absolute`와 `readPageRect`를 쓴다.
+- 이 ADR은 안쪽 스크롤 컨테이너를 다루지 않는다. 그 규칙(`scroll` capture 구독, clip)은 [`G-UI-003`](../guides/G-UI-003-make-anchor-overlays-natively-scrollable.md)이 소유한다.
