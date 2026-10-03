@@ -17,9 +17,9 @@ import type {
   DragState,
 } from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useHandleKeyboardActivation } from "./use-handle-keyboard-activation.js";
@@ -41,7 +41,7 @@ const blockGutterButtonClassName = "geul-block-gutter__button";
 
 // 거터(드래그 핸들·add 버튼)는 _block-side-menu.scss의
 // `transform: translate(-3.5rem, 0)`로 블록 왼쪽 56px 바깥에 뜬다(dy는
-// 0 — useClampedMenuPosition의 leftOfAnchor 참고). 포인터가 블록에서
+// 0 — clampAnchor `leftOfAnchor` 참고). 포인터가 블록에서
 // 거터로 이동하는 도중(둘 중 어느 쪽도 아닌 빈 공간)에는 hover를 유지해야
 // 한다 — 즉시 해제하면 이동 중에 거터가 먼저 사라져 클릭할 수 없다. 이
 // 여백은 왼쪽 방향에만 쓴다(아래 판정) — table-handles.tsx의
@@ -365,7 +365,10 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     );
   };
 
-  const hoverBounds = (() => {
+  // 거터 그립의 앵커. 렌더마다 읽고 스크롤·resize에서 `useFixedPlacement`가 다시
+  // 읽는다. 열린 메뉴가 스크롤을 따라갈 때 그립이 옛 좌표에 남지 않게 한다
+  // (Issue #234).
+  const readHoverAnchor = () => {
     if (hoverBlockId === null || element === null) return null;
     const blockElement = findElementByAttribute(
       element,
@@ -381,13 +384,16 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       left: rect.left,
       top: rect.top + computeGutterTopOffset(blockElement),
     };
-  })();
+  };
+  const hoverBounds = readHoverAnchor();
 
-  const gutterClamp = useClampedMenuPosition(
-    hoverBounds?.left ?? 0,
-    hoverBounds?.top ?? 0,
-    "leftOfAnchor",
-  );
+  const gutterClamp = useFixedPlacement({
+    open: hoverBounds !== null,
+    element,
+    readAnchor: readHoverAnchor,
+    clampAnchor: "leftOfAnchor",
+    ...(hoverBounds === null ? {} : { fallbackAnchor: hoverBounds }),
+  });
 
   const handleAddBlockClick = () => {
     if (hoverBlockId === null) return;

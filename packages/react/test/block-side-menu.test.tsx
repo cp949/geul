@@ -1755,6 +1755,27 @@ describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
     expect(menuPosition()).toEqual({ left: "70px", top: "88px" });
   });
 
+  it.each([
+    ["scroll", () => fireEvent.scroll(window)],
+    ["resize", () => fireEvent(window, new Event("resize"))],
+  ])(
+    "메뉴가 열린 채 %s가 일어나면 거터 그립도 블록을 따라간다",
+    (_name, trigger) => {
+      const { block } = openAt({ left: 40, top: 100 });
+      const gutter = document.querySelector<HTMLElement>(".geul-block-gutter");
+      if (gutter === null) throw new Error("거터가 없다");
+      const before = gutter.style.top;
+
+      stubRect(block, { left: 70, top: 60, width: 600, height: 20 });
+      act(() => {
+        trigger();
+      });
+
+      expect(gutter.style.top).not.toBe(before);
+      expect(gutter.style.left).toBe("70px");
+    },
+  );
+
   it("heading은 열 때와 재측정 때 같은 거터 오프셋을 더한다", () => {
     // line-height 48px, 거터 버튼 24px → (48 - 24) / 2 = 12px를 더한다.
     const { block } = openAt(
