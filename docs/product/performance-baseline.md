@@ -146,6 +146,7 @@ B가 HEAD만큼 느리다. 원인은 코드다.
 - 렌더 횟수: React DevTools 전역 hook의 `onCommitFiberRoot`로 커밋을 센다. 커밋 뒤 fiber 트리에서 `PerformedWork`가 선 함수 컴포넌트 이름을 모은다. 제품 코드는 건드리지 않는다.
 - 구간 내: 측정 함수 반환값에 들어간 작업이다. 완료 감지 뒤 React 마이크로태스크 flush가 반환값보다 먼저 돈다. 그래서 첫 커밋이 구간 안에 들어온다.
 - 후속 포함: 구간 뒤 프레임 두 개와 50ms를 더 기다려 센 합계다.
+- 렌더 판정은 fiber의 `PerformedWork` 플래그다. 자식이 이전 커밋과 같은 객체인 서브트리는 건드려지지 않은 것으로 보고 내려가지 않는다. 내려가면 옛 렌더의 플래그를 다시 센다(처음 구현은 그렇게 세어 커밋별 컴포넌트 목록이 부풀었다).
 - probe를 켠 측정의 ms는 hook 비용이 섞인다. 선택 기준 비교에는 probe 없는 기존 시나리오와, 같은 사전 조건의 "붙여넣기 흐름" 시나리오만 쓴다.
 - 병합 fixture 시나리오는 문서 로드 뒤 첫 셀을 클릭한 상태에서 잰다. 사전 조건이 달라 같은 코드의 선택이 붙여넣기 흐름과 다른 ms가 된다(control 약 14ms 대 약 48ms). 이 시나리오의 ms는 control과 dev끼리만 비교한다.
 
@@ -173,7 +174,7 @@ rect 호출과 렌더 커밋(붙여넣기 흐름, 5회 모두 같은 값):
 
 - 입력 이벤트 처리와 선택 데코레이션 반영은 약 7–15ms에 끝난다(완료 감지 시점). control의 전체 선택 시간과 같은 자릿수다.
 - 완료 감지 뒤 약 40–65ms 동안 React가 첫 커밋을 만든다. 이 커밋이 `TableHandles`를 렌더하고 rect 약 747회를 부른다. 반환값 약 52–88ms 중 이 부분이 3.8배의 대부분이다.
-- 구간 내 두 번째·세 번째 커밋은 `TableHandleOverlays`, `IconButton`, `TableSelectionToolbar`만 렌더한다. 둘째는 이어서 rect를 읽을 수 있다(+403, 일부 회차).
+- 구간 내 두 번째·세 번째 커밋은 `TableSelectionToolbar`(와 그 `IconButton`)만 렌더한다. `TableHandles`와 `TableHandleOverlays`는 첫 커밋에서만 렌더한다. 병합 fixture 시나리오 2회차 이후 구간 내 rect가 약 400 늘어나는 것은 이 툴바 커밋 쪽이다.
 - 구간 밖에서 `scroll`(하네스의 `scrollIntoView`가 일으킨다)과 `selectionchange` 뒤 `TableHandles`가 한 번 더 렌더한다. rect가 약 740 더 늘어 합계 약 1,500이다.
 - #239 절의 "선택 한 번에 3번 렌더"는 구간 내 커밋 3개에 대응한다. `TableHandles` 자체는 구간 내 1회, 후속 포함 2회다.
 - `TableHandles` 렌더 1회의 rect는 약 740이다. 가설: 구성은 geometry 약 200과 clip 동기화 약 300 외 나머지다. 이슈 본문의 수치이고 이 측정에서는 나누지 않았다.

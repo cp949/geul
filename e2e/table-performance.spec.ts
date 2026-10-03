@@ -386,14 +386,18 @@ const installProbe = (): void => {
   type FiberLike = {
     type: unknown;
     flags: number;
+    alternate: FiberLike | null;
     child: FiberLike | null;
     sibling: FiberLike | null;
   };
   const PERFORMED_WORK = 1;
   /**
-   * 이번 커밋에서 렌더 작업을 한 함수 컴포넌트 이름을 모은다. 부모만 렌더되고
-   * memo bailout된 컴포넌트는 `PerformedWork`가 서지 않아 빠진다. 같은
-   * 이름이 여럿이면 한 번만 적는다.
+   * 이번 커밋에서 렌더 작업을 한 함수 컴포넌트 이름을 모은다. fiber의 `flags`는
+   * 그 fiber가 이번 커밋에서 복제(createWorkInProgress)됐을 때만 믿을 수 있다.
+   * 복제되지 않은 서브트리는 옛 렌더의 `PerformedWork`가 그대로 남는다. 자식이
+   * 이전 커밋과 같은 객체(`fiber.alternate.child === fiber.child`)면 서브트리가
+   * 건드려지지 않은 것이므로 내려가지 않는다. 부모만 렌더되고 memo bailout된
+   * 컴포넌트는 복제돼도 `PerformedWork`가 서지 않아 빠진다.
    */
   const renderedComponents = (root: FiberLike): string[] => {
     const names = new Set<string>();
@@ -408,7 +412,9 @@ const installProbe = (): void => {
         if (name) names.add(name);
       }
       if (fiber.sibling !== null) stack.push(fiber.sibling);
-      if (fiber.child !== null) stack.push(fiber.child);
+      const untouched =
+        fiber.alternate !== null && fiber.alternate.child === fiber.child;
+      if (fiber.child !== null && !untouched) stack.push(fiber.child);
     }
     return [...names];
   };
