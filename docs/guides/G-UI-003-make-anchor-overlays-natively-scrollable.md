@@ -10,6 +10,9 @@
 - 좌표는 `getBoundingClientRect()`(viewport-relative)가 아니라 `rect.left/top + window.scrollX/scrollY`(page-relative)로 계산한다.
 - 창 스크롤로는 재계산하지 않는다 — absolute 요소는 창 스크롤에 자동으로 따라오므로 스크롤 이벤트 리스너로 강제 재렌더할 필요가 없다. resize나 앵커 자체의 크기·위치 변화(레이아웃을 바꾸는 DOM mutation 등)에서 재계산한다.
 - 안쪽 스크롤 컨테이너(소비 앱이 에디터를 `overflow: auto` 영역에 두는 경우)는 다르다. 그 스크롤은 앵커의 page 좌표를 바꾸는데 absolute 요소는 제자리에 남는다. `window`에 `scroll`을 capture로 구독해 다시 읽는다(`useSelectionRefresh`가 이미 그렇게 한다).
+  - hover로 뜨는 앵커 오버레이(미디어 그립·callout 트리거 등)도 이 구독 대상이다.
+  - hover 판정에 의한 재렌더에 기대지 않는다. 포인터가 같은 블록 위에 있으면 hover 판정이 바뀌지 않아 렌더가 일어나지 않는다.
+  - hover 대상이 있는 동안만 구독하려면 `useSelectionRefresh`의 `enabled` 옵션을 쓴다(기본 `true`). `false`면 구독도 초기 호출도 하지 않는다.
 - 오버레이는 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다. 오버레이 자신의 박스가 그 컨테이너의 보이는 영역 안에 있을 때만 보이게 한다 — `scroll-clip.ts`의 `readScrollClipBoxes`로 영역을 읽고 `syncClipVisibility`로 `visibility`를 갱신한다.
   - 세로는 오버레이 박스가 완전히 안쪽일 때만 보인다. 경계에 걸쳐 잘린 채 떠 있지 않게 한다. 가로는 겹치기만 하면 보인다.
   - `unmount`나 `display: none`이 아니라 `visibility`를 쓴다. 레이아웃 박스와 실측 높이가 남는다. 미디어 캡션은 그 높이를 문서 flow에 되먹인다.
@@ -31,3 +34,5 @@
 [`G-TST-001`](./G-TST-001-test-overlays-and-keyboard-interactions.md)을 적용하되, fixed overlay의 clamp 검증 대신 앵커가 뷰포트 밖으로 나간 뒤 네이티브 `scrollIntoView()`·Tab 포커스·Playwright 클릭 각각이 실제로 앵커를 뷰포트 안으로 데려오는지 Chromium E2E로 확인한다.
 
 안쪽 스크롤 컨테이너 대응은 jsdom으로 재현하지 못한다(레이아웃이 없다). 단위 테스트는 `stubRect`로 rect를 주입해 판정 로직을 보고, 실제 위치는 Chromium E2E로 확인한다. 예: `e2e/showcase-static-toolbar-overlays.spec.ts`.
+
+hover 기반 앵커 오버레이는 포인터를 멈춘 채 스크롤해 확인한다. 포인터가 움직이면 hover 판정이 다시 일어나 위치 갱신 누락이 가려진다. `e2e/support/anchor-gap.ts`의 `scrollPage`로 `scrollTop`을 대입하고 `expectOverlayTopAlignedWithAnchor`로 오버레이 상단과 앵커 상단의 y가 같은지 단언한다. 예: `e2e/showcase-static-toolbar-media-handle.spec.ts`.
