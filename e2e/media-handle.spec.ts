@@ -217,7 +217,7 @@ test("그립을 드래그하면 들여쓴 media도 재정렬된다(완료 조건
   ]);
 });
 
-test("그립 클릭으로 연 Block menu가 스크롤 중에도 media를 따라간다(완료 조건 2, refreshBlockMenuGeometry 패리티)", async ({
+test("그립 클릭으로 연 Block menu가 스크롤 중에도 media를 따라간다(완료 조건 2)", async ({
   page,
 }) => {
   await routeDepthTestImage(page);
