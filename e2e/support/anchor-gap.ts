@@ -25,17 +25,17 @@ export const readAnchorGap = async (
   };
 };
 
+/** 스크롤 범위. `all`은 안쪽 스크롤 컨테이너와 window를 함께 민다. */
+export type ScrollScope = "window" | "inner" | "all";
+
 /**
  * 스크롤 가능한 조상을 모두 `scrollTop=60`으로 밀고 window를 40px 민다.
- * `window`를 주면 window 스크롤만 한다. 안쪽 스크롤 컨테이너와 window가 함께
- * 움직이는 경우와 window만 움직이는 경우를 따로 증명할 때 쓴다.
+ * `window`를 주면 window 스크롤만, `inner`를 주면 안쪽 스크롤 컨테이너만 민다.
+ * 세 경우를 따로 증명할 때 쓴다.
  */
-export const scrollPage = async (
-  page: Page,
-  scope: "window" | "all" = "all",
-) => {
+export const scrollPage = async (page: Page, scope: ScrollScope = "all") => {
   await page.evaluate((target) => {
-    if (target === "all") {
+    if (target !== "window") {
       for (const element of document.querySelectorAll<HTMLElement>("*")) {
         const scrollable =
           element.scrollHeight > element.clientHeight + 5 &&
@@ -43,7 +43,7 @@ export const scrollPage = async (
         if (scrollable) element.scrollTop = 60;
       }
     }
-    window.scrollBy(0, 40);
+    if (target !== "inner") window.scrollBy(0, 40);
   }, scope);
 };
 
@@ -67,7 +67,7 @@ export const expectOverlayFollowsAnchor = async (
   page: Page,
   anchor: Locator,
   overlay: Locator,
-  scope: "window" | "all" = "all",
+  scope: ScrollScope = "all",
   expectedGap?: number,
 ) => {
   const before = await readAnchorGap(anchor, overlay);

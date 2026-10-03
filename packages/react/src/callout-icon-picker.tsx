@@ -3,8 +3,8 @@ import { useCallback, useState } from "react";
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { readPageRect } from "./table-handle-geometry.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -23,7 +23,28 @@ const CALLOUT_ICON_DISMISS_ALLOW_SELECTORS = [
   ".geul-emoji-picker",
 ] as const;
 
-type PickerState = { blockId: string; left: number; top: number };
+// 열림 상태는 blockId만 보관한다. 위치는 useFixedPlacement가 렌더마다 DOM에서
+// 읽는다(Issue #234) — rect를 값으로 보관하면 스크롤에서 callout과 떨어진다.
+type PickerState = { blockId: string };
+
+// blockId는 blockContainer(data-geul-block-id)가 소유하지만, 위치 계산의
+// 앵커는 실제 시각 요소인 콘텐츠 노드([data-geul-callout], 카드 패딩·
+// 배경을 가진 요소) 자신이어야 한다(media-handle-overlays.tsx의
+// findMediaVisualElement와 동일 근거 — 래퍼가 아니라 실제 렌더 요소).
+const findCalloutVisualElement = (
+  element: HTMLElement,
+  blockId: string,
+): HTMLElement | null => {
+  const container = findElementByAttribute(
+    element,
+    null,
+    "data-geul-block-id",
+    blockId,
+  );
+  return (
+    container?.querySelector<HTMLElement>("[data-geul-callout]") ?? container
+  );
+};
 
 /**
  * callout 아이콘 클릭 교체 UI(Issue #209 RD-004 DELTA-02). 이 저장소는
@@ -47,10 +68,19 @@ export const CalloutIconPicker = () => {
   const { element } = useEditorMount();
   const [hoverBlockId, setHoverBlockId] = useState<string | null>(null);
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
-  const { menuRef, style } = useClampedMenuPosition(
-    pickerState?.left ?? 0,
-    pickerState?.top ?? 0,
-  );
+  const { menuRef, style } = useFixedPlacement({
+    open: pickerState !== null,
+    element,
+    // 앵커는 hover 요소가 아니라 열린 blockId의 callout이다. hoverElement는
+    // 포인터 이동으로 바뀐다. 오프셋(+0, callout 하단에 붙는다)은 여기서만 정한다.
+    readAnchor: () => {
+      if (pickerState === null || element === null) return null;
+      const anchor = findCalloutVisualElement(element, pickerState.blockId);
+      if (anchor === null) return null;
+      const rect = anchor.getBoundingClientRect();
+      return { left: rect.left, top: rect.bottom };
+    },
+  });
   const focusEditor = useFocusEditor(element);
 
   const handleHoverCandidateChange = useCallback(
@@ -76,22 +106,10 @@ export const CalloutIconPicker = () => {
     onCandidateChange: handleHoverCandidateChange,
   });
 
-  // blockId는 blockContainer(data-geul-block-id)가 소유하지만, 위치 계산의
-  // 앵커는 실제 시각 요소인 콘텐츠 노드([data-geul-callout], 카드 패딩·
-  // 배경을 가진 요소) 자신이어야 한다(media-handle-overlays.tsx의
-  // findMediaVisualElement와 동일 근거 — 래퍼가 아니라 실제 렌더 요소).
-  const hoverBlockContainer =
+  const hoverElement =
     hoverBlockId === null || element === null
       ? null
-      : findElementByAttribute(
-          element,
-          null,
-          "data-geul-block-id",
-          hoverBlockId,
-        );
-  const hoverElement =
-    hoverBlockContainer?.querySelector<HTMLElement>("[data-geul-callout]") ??
-    hoverBlockContainer;
+      : findCalloutVisualElement(element, hoverBlockId);
   const overlayRect = hoverElement === null ? null : readPageRect(hoverElement);
 
   const closePicker = useCallback(() => setPickerState(null), []);
@@ -105,17 +123,7 @@ export const CalloutIconPicker = () => {
 
   const openPicker = () => {
     if (hoverElement === null || hoverBlockId === null) return;
-    // 팝업은 useClampedMenuPosition을 통해 viewport-relative(position: fixed)
-    // 좌표를 기대한다 — overlayRect(page-relative, absolute 트리거 버튼용)를
-    // 그대로 넘기면 스크롤된 문서에서 엉뚱한 위치에 뜬다(media-handle-
-    // overlays.tsx의 handleHandleClick과 동일 근거). 클릭 시점에
-    // getBoundingClientRect()를 별도로 다시 읽는다.
-    const rect = hoverElement.getBoundingClientRect();
-    setPickerState({
-      blockId: hoverBlockId,
-      left: rect.left,
-      top: rect.bottom,
-    });
+    setPickerState({ blockId: hoverBlockId });
   };
 
   const selectIcon = (item: EmojiOption) => {

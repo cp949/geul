@@ -127,6 +127,33 @@ describe("아이콘 교체", () => {
   });
 });
 
+describe("열린 그리드의 배치(Issue #234)", () => {
+  it("그리드는 열린 callout 하단에 뜨고 포인터가 떠나도 스크롤이 callout을 따라간다", () => {
+    const { calloutElement } = renderCalloutPicker({
+      left: 40,
+      top: 80,
+      width: 600,
+      height: 20,
+    });
+    fireEvent.pointerMove(calloutElement);
+    fireEvent.click(screen.getByLabelText("Change callout icon"));
+    const listbox = screen.getByRole("listbox", {
+      name: "Callout icon picker",
+    });
+    expect(listbox.style.left).toBe("40px");
+    expect(listbox.style.top).toBe("100px");
+
+    // hover가 풀려도 앵커는 열린 blockId의 callout이다. hoverElement가 아니다.
+    fireEvent.pointerMove(document.body);
+    expect(screen.queryByLabelText("Change callout icon")).toBeNull();
+    stubRect(calloutElement, { left: 40, top: 300, width: 600, height: 20 });
+    fireEvent.scroll(calloutElement);
+
+    expect(listbox.style.left).toBe("40px");
+    expect(listbox.style.top).toBe("320px");
+  });
+});
+
 describe("그리드 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-003 DELTA-05)", () => {
   /** callout을 hover해 아이콘 그리드를 연다. 편집 영역과 트리거를 돌려준다. */
   const openGrid = () => {
