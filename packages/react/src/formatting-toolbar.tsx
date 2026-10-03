@@ -18,7 +18,6 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
   useCallback,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -30,6 +29,7 @@ import {
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
 import {
+  type FixedPlacementAnchor,
   readAnchorBelowTrigger,
   useFixedPlacement,
 } from "./fixed-placement.js";
@@ -46,11 +46,6 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
-import {
-  readScrollClipBoxes,
-  syncAnchorClipVisibility,
-} from "./scroll-clip.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import {
   rangeBoundariesEqual,
   useDismissSuppression,
@@ -140,9 +135,29 @@ const TOOLBAR_DISMISS_ALLOW_SELECTORS = [
 type ToolbarState = Omit<
   FormattingToolbarState,
   "isCellRangeSelected" | "isMediaBlockSelected"
-> & {
-  left: number;
-  top: number;
+>;
+
+/**
+ * 선택 Range 위쪽 중앙에 앵커할 좌표를 읽는다. rect를 읽을 수 없으면 `null`이다.
+ * `getBoundingClientRect`가 없는 환경이거나, 연결이 끊긴 Range거나, 노드가
+ * 교체돼 Range가 접혀 rect가 0이 된 경우다. 이때 `useFixedPlacement`가 마지막
+ * 좌표를 유지한다. 접힌 Range에서 0을 앵커로 쓰면 툴바가 원점으로 튄다.
+ */
+const readSelectionAnchor = (
+  range: Range | null,
+): FixedPlacementAnchor | null => {
+  if (
+    range === null ||
+    !range.startContainer.isConnected ||
+    !range.endContainer.isConnected
+  ) {
+    return null;
+  }
+  const rect = range.getBoundingClientRect?.();
+  if (rect === undefined || (rect.width === 0 && rect.height === 0)) {
+    return null;
+  }
+  return { left: rect.left + rect.width / 2, top: rect.top };
 };
 
 type ColorMenuState = {
@@ -271,42 +286,23 @@ export const FormattingToolbar = ({
     if (dismissSuppression.isSuppressed(range)) return;
     dismissSuppression.clear();
     trackedRange.current = range.cloneRange();
-    const bounds = range.getBoundingClientRect?.() ?? {
-      left: 0,
-      top: 0,
-      width: 0,
-    };
     setToolbarState({
       activeMarks: computedState.activeMarks,
       blockSelection: computedState.blockSelection,
       nestingActions: computedState.nestingActions,
-      left: bounds.left + bounds.width / 2,
-      top: bounds.top,
     });
   }, [editor, element, dismissSuppression]);
 
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
-  const { menuRef, style } = useClampedMenuPosition(
-    toolbarState?.left ?? 0,
-    toolbarState?.top ?? 0,
-    "centerAbove",
-  );
-
-  // 팝업은 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
-  // 앵커(선택·셀·블록)가 스크롤돼 나가 컨테이너의 보이는 영역 밖이 되면
-  // 숨긴다. 박스가 아니라 앵커를 본다(scroll-clip.ts
-  // `syncAnchorClipVisibility` 참고). 스크롤은 useSelectionRefresh가 새
-  // 상태를 만들어 이 렌더를 다시 돌린다.
-  useLayoutEffect(() => {
-    if (element === null || menuRef.current === null) return;
-    if (toolbarState === null) return;
-    syncAnchorClipVisibility(
-      menuRef.current,
-      toolbarState.left,
-      toolbarState.top,
-      readScrollClipBoxes(element),
-    );
+  // 앵커는 열 때 보관한 Range(`trackedRange`)의 rect다. 열린 동안 스크롤마다
+  // 다시 읽는다. clip은 앵커가 스크롤 컨테이너의 보이는 영역 밖이면 숨긴다.
+  const { menuRef, style } = useFixedPlacement({
+    open: toolbarState !== null,
+    element,
+    readAnchor: () => readSelectionAnchor(trackedRange.current),
+    clampAnchor: "centerAbove",
+    clip: true,
   });
 
   // 툴바 자신도 G-UI-001을 따른다(아래 색상 팔레트와 같은 훅). 닫힘 규칙은
