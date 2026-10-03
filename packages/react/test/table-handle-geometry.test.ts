@@ -17,7 +17,7 @@
  */
 
 import { serializeTableColumns } from "@cp949/geul-core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   readColumnBounds,
@@ -517,6 +517,306 @@ describe("readTableGeometry", () => {
       });
       expect(geometry?.rows[0]).toMatchObject({ top: 90 });
       expect(geometry?.columns[0]).toMatchObject({ left: 50 });
+    });
+  });
+});
+
+// Issue #239: 병합 셀이 없는 표는 셀 rect를 첫 행만 읽고 열마다 resize
+// segment를 한 구간으로 합친다. 10,000셀(100x100) 표에서 geometry 판독 한
+// 번이 getBoundingClientRect ~10,100회와 JSX 요소 10,000개를 만들던 비용을
+// 줄이는 최적화다. G-TST-004에 따라 wall-clock이 아니라 결정적 작업량
+// (rect 호출 수, segment 수, 병합 판별 querySelector 호출 수)을 두 크기에서
+// 비교한다. 병합 표는 현행 경로 그대로여야 하므로 같은 값을 단언한다.
+describe("readTableGeometry 판독 작업량 (Issue #239)", () => {
+  const CELL_WIDTH = 100;
+  // 행 높이를 균일하게 두면 "마지막 행 bottom"과 "행 수 x 높이"를 구분하지
+  // 못한다 — 행마다 높이를 달리 둬 합친 구간의 끝이 마지막 행의 bottom인지
+  // 값으로 본다.
+  const rowHeight = (rowIndex: number): number => 30 + (rowIndex % 3) * 10;
+  const rowTop = (rowIndex: number): number => {
+    let top = 0;
+    for (let index = 0; index < rowIndex; index += 1) top += rowHeight(index);
+    return top;
+  };
+
+  const columnIdsOf = (size: number): string[] =>
+    Array.from({ length: size }, (_, index) => `col-${index}`);
+
+  const gridRows = (size: number): RowSpec[] =>
+    Array.from({ length: size }, (_, rowIndex) => ({
+      rowId: `row-${rowIndex}`,
+      rect: {
+        left: 0,
+        top: rowTop(rowIndex),
+        width: size * CELL_WIDTH,
+        height: rowHeight(rowIndex),
+      },
+      cells: columnIdsOf(size).map((columnId, columnIndex) => ({
+        columnId,
+        rect: {
+          left: columnIndex * CELL_WIDTH,
+          top: rowTop(rowIndex),
+          width: CELL_WIDTH,
+          height: rowHeight(rowIndex),
+        },
+      })),
+    }));
+
+  const buildGridTable = (size: number): HTMLTableElement =>
+    buildTable({
+      blockId: "table-1",
+      columnIds: columnIdsOf(size),
+      rect: {
+        left: 0,
+        top: 0,
+        width: size * CELL_WIDTH,
+        height: rowTop(size),
+      },
+      rows: gridRows(size),
+    });
+
+  /**
+   * buildTable이 노드마다 심은 rect stub을 떼어 Element.prototype의
+   * getBoundingClientRect spy로 옮긴다. 값은 그대로 돌려주고 호출 수만 센다.
+   * 복원은 afterEach의 vi.restoreAllMocks가 맡는다.
+   */
+  const countRectReads = (table: HTMLElement) => {
+    const rects = new Map<Element, DOMRect>();
+    for (const element of [table, ...table.querySelectorAll("*")]) {
+      rects.set(element, element.getBoundingClientRect());
+      delete (element as { getBoundingClientRect?: unknown })
+        .getBoundingClientRect;
+    }
+    return vi
+      .spyOn(Element.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: Element) {
+        const rect = rects.get(this);
+        if (rect === undefined) throw new Error("rect를 준비하지 않은 노드");
+        return rect;
+      });
+  };
+
+  // 같은 테스트에서 크기를 바꿔 두 번 부르므로 spy를 호출마다 복원한다 —
+  // 복원하지 않으면 prototype spy가 호출 수를 누적한다.
+  const measureWork = (size: number) => {
+    const table = buildGridTable(size);
+    const rectSpy = countRectReads(table);
+    const querySpy = vi.spyOn(table, "querySelector");
+    try {
+      const geometry = readTableGeometry(table);
+      const spanScans = querySpy.mock.calls.filter(
+        ([selector]) => selector === "[colspan],[rowspan]",
+      ).length;
+      const segmentCount = (geometry?.columns ?? []).reduce(
+        (total, column) => total + column.resizeSegments.length,
+        0,
+      );
+      return {
+        geometry,
+        rectReads: rectSpy.mock.calls.length,
+        segmentCount,
+        spanScans,
+      };
+    } finally {
+      rectSpy.mockRestore();
+      querySpy.mockRestore();
+    }
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe("병합 셀이 없는 표", () => {
+    it("rect 읽기와 resize segment 수가 셀 수(N^2)가 아니라 N에 비례해 늘어난다", () => {
+      const small = measureWork(10);
+      const large = measureWork(40);
+
+      // 표 1 + 행 N + 첫 행 셀 N. 셀 전체를 읽으면 1 + N + N^2이다.
+      expect(small.rectReads).toBeLessThanOrEqual(2 * 10 + 1);
+      expect(large.rectReads).toBeLessThanOrEqual(2 * 40 + 1);
+      // 크기가 4배면 선형은 약 4배, 제곱은 약 15배다.
+      expect(large.rectReads / small.rectReads).toBeLessThan(5);
+      expect(small.segmentCount).toBe(10);
+      expect(large.segmentCount).toBe(40);
+      expect(large.segmentCount / small.segmentCount).toBeLessThan(5);
+    });
+
+    it("병합 판별 querySelector를 geometry 판독 한 번에 정확히 한 번만 부른다", () => {
+      // 열마다 부르면 N^2 셀 스캔이 열 수만큼 반복된다(프로토타입 실측: 선택 +90ms).
+      expect(measureWork(10).spanScans).toBe(1);
+      expect(measureWork(40).spanScans).toBe(1);
+    });
+
+    it("열 경계는 셀을 모두 읽던 현행 계산과 같다", () => {
+      const geometry = measureWork(5).geometry;
+
+      expect(
+        geometry?.columns.map(({ columnId, index, left, width }) => ({
+          columnId,
+          index,
+          left,
+          width,
+        })),
+      ).toEqual(
+        columnIdsOf(5).map((columnId, index) => ({
+          columnId,
+          index,
+          left: index * CELL_WIDTH,
+          width: CELL_WIDTH,
+        })),
+      );
+      expect(geometry?.rows).toEqual(
+        Array.from({ length: 5 }, (_, index) => ({
+          rowId: `row-${index}`,
+          index,
+          top: rowTop(index),
+          height: rowHeight(index),
+        })),
+      );
+    });
+
+    it("열마다 resize segment 하나가 첫 행 top부터 마지막 행 bottom까지 덮고 rowId는 첫 행이다", () => {
+      const geometry = measureWork(5).geometry;
+
+      for (const column of geometry?.columns ?? []) {
+        expect(column.resizeSegments).toEqual([
+          { rowId: "row-0", top: 0, height: rowTop(5) },
+        ]);
+      }
+    });
+
+    it("셀 rect를 모두 읽는 병합 경로의 열 경계와 segment 덮개가 같다", () => {
+      // rowspan="1" 표식 하나로 같은 격자를 병합 경로로 돌려, 최적화 경로의
+      // 결과가 현행 계산과 같은 구간을 덮는지 비교한다.
+      const optimized = readTableGeometry(buildGridTable(6));
+      const legacyTable = buildGridTable(6);
+      legacyTable
+        .querySelector("[data-geul-column-id]")
+        ?.setAttribute("rowspan", "1");
+      const legacy = readTableGeometry(legacyTable);
+
+      expect(
+        optimized?.columns.map(({ left, width }) => ({ left, width })),
+      ).toEqual(legacy?.columns.map(({ left, width }) => ({ left, width })));
+      for (const [index, column] of (optimized?.columns ?? []).entries()) {
+        const legacySegments = legacy?.columns[index]?.resizeSegments ?? [];
+        const first = legacySegments[0];
+        const last = legacySegments[legacySegments.length - 1];
+        expect(legacySegments).toHaveLength(6);
+        expect(column.resizeSegments).toEqual([
+          {
+            rowId: first?.rowId,
+            top: first?.top,
+            height: (last?.top ?? 0) + (last?.height ?? 0) - (first?.top ?? 0),
+          },
+        ]);
+      }
+    });
+
+    it("행이 없으면 열은 있어도 resize segment를 만들지 않는다", () => {
+      const table = buildTable({
+        blockId: "table-1",
+        columnIds: ["col-0", "col-1"],
+        rect: { left: 0, top: 0, width: 200, height: 0 },
+        rows: [],
+      });
+
+      const geometry = readTableGeometry(table);
+
+      expect(geometry?.columns.map((column) => column.resizeSegments)).toEqual([
+        [],
+        [],
+      ]);
+    });
+  });
+
+  describe("병합 셀이 있는 표", () => {
+    it("colspan 표는 셀 rect를 모두 읽고 행 단위 segment를 유지한다", () => {
+      const table = buildGridTable(6);
+      const mergedCell = table.querySelector("[data-geul-column-id]");
+      mergedCell?.setAttribute("colspan", "2");
+      const rectSpy = countRectReads(table);
+
+      const geometry = readTableGeometry(table);
+
+      // 표 1 + 행 6 + 셀 36
+      expect(rectSpy.mock.calls.length).toBe(1 + 6 + 36);
+      // 표식만 붙였고 셀 rect는 그대로(0..100)라 모든 열 경계가 모든 행에서
+      // 셀 경계로 읽힌다 — 열마다 행 단위 segment 6개가 남는다(합치지 않는다).
+      expect(
+        geometry?.columns.map((column) => column.resizeSegments.length),
+      ).toEqual([6, 6, 6, 6, 6, 6]);
+    });
+
+    it("rowspan 표도 병합 경로를 타서 rowspan이 가린 행을 resize segment에서 뺀다", () => {
+      // col-0이 row-0과 row-1에 걸쳐 병합된다. row-1에는 col-0 셀이 없다.
+      const table = buildTable({
+        blockId: "table-1",
+        columnIds: ["col-0", "col-1"],
+        rect: { left: 0, top: 0, width: 200, height: 90 },
+        rows: [
+          {
+            rowId: "row-0",
+            rect: { left: 0, top: 0, width: 200, height: 30 },
+            cells: [
+              {
+                columnId: "col-0",
+                rect: { left: 0, top: 0, width: 100, height: 60 },
+              },
+              {
+                columnId: "col-1",
+                rect: { left: 100, top: 0, width: 100, height: 30 },
+              },
+            ],
+          },
+          {
+            rowId: "row-1",
+            rect: { left: 0, top: 30, width: 200, height: 30 },
+            cells: [
+              {
+                columnId: "col-1",
+                rect: { left: 100, top: 30, width: 100, height: 30 },
+              },
+            ],
+          },
+          {
+            rowId: "row-2",
+            rect: { left: 0, top: 60, width: 200, height: 30 },
+            cells: [
+              {
+                columnId: "col-0",
+                rect: { left: 0, top: 60, width: 100, height: 30 },
+              },
+              {
+                columnId: "col-1",
+                rect: { left: 100, top: 60, width: 100, height: 30 },
+              },
+            ],
+          },
+        ],
+      });
+      table.querySelector("td")?.setAttribute("rowspan", "2");
+
+      const geometry = readTableGeometry(table);
+
+      expect(
+        geometry?.columns.map(({ left, width }) => ({ left, width })),
+      ).toEqual([
+        { left: 0, width: 100 },
+        { left: 100, width: 100 },
+      ]);
+      // col-0의 오른쪽 경계(x=100)는 row-1에서 셀 경계가 아니다(col-1 셀의
+      // right는 200이다).
+      expect(geometry?.columns[0]?.resizeSegments).toEqual([
+        { rowId: "row-0", top: 0, height: 30 },
+        { rowId: "row-2", top: 60, height: 30 },
+      ]);
+      expect(geometry?.columns[1]?.resizeSegments).toEqual([
+        { rowId: "row-0", top: 0, height: 30 },
+        { rowId: "row-1", top: 30, height: 30 },
+        { rowId: "row-2", top: 60, height: 30 },
+      ]);
     });
   });
 });

@@ -174,24 +174,58 @@ const readResizeSegments = (
       height: rowBox.height,
     }));
 
+// 병합 셀이 없는 표의 열 strip. 모든 행에서 모든 열 경계가 셀 경계라 행 단위로
+// 쪼갤 이유가 없다 — 첫 행 top부터 마지막 행 bottom까지 한 구간으로 합친다.
+// 행마다 segment를 만들면 100x100 표에서 JSX 요소가 10,000개다(Issue #239).
+// rowId는 React key용이라 첫 행 id를 쓴다. 행이 없으면 구간도 없다.
+const readSpanlessResizeSegments = (rowBoxes: RowBox[]): ResizeSegment[] => {
+  const first = rowBoxes[0];
+  const last = rowBoxes[rowBoxes.length - 1];
+  if (first === undefined || last === undefined) return [];
+  return [
+    {
+      rowId: first.rowId,
+      top: first.top,
+      height: last.top + last.height - first.top,
+    },
+  ];
+};
+
+// colspan·rowspan 속성이 하나라도 있으면 병합 표다(span 1은 속성을 내보내지
+// 않는다 — table-extension.ts). 10,000셀 표 전체를 훑으므로 geometry 판독
+// 한 번에 정확히 한 번만 부르고 결과를 아래 계층에 넘긴다. 열마다 부르면
+// 스캔이 열 수만큼 반복된다(Issue #239).
+const hasMergedCells = (table: HTMLElement): boolean =>
+  table.querySelector("[colspan],[rowspan]") !== null;
+
+const readCellBoxes = (rowElement: HTMLElement): CellBox[] =>
+  Array.from(
+    rowElement.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
+  ).map((cellElement) => {
+    const rect = readPageRect(cellElement);
+    return {
+      columnId: cellElement.getAttribute("data-geul-column-id") ?? "",
+      spansColumns: cellElement.hasAttribute("colspan"),
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+    };
+  });
+
 // 행과 셀의 rect를 geometry 한 번당 한 번씩만 읽는다. 열 경계와 리사이즈
 // 세그먼트가 각자 DOM을 다시 훑으면 getBoundingClientRect 호출이 열 수 x
 // 셀 수로 늘어나 10,000셀 표(spec 13)의 드래그 프레임을 잡아먹는다.
-const readRowBoxes = (rowElements: HTMLElement[]): RowBox[] =>
-  rowElements.map((rowElement) => {
+// spanless면 모든 행이 같은 열 경계를 가지므로 첫 행 셀만 읽고 나머지 행은
+// 그 CellBox를 공유한다(Issue #239). 공유한 CellBox는 읽기 전용이다.
+const readRowBoxes = (
+  rowElements: HTMLElement[],
+  spanless: boolean,
+): RowBox[] => {
+  let sharedCells: CellBox[] | null = null;
+  return rowElements.map((rowElement) => {
     const rowRect = readPageRect(rowElement);
-    const cells = Array.from(
-      rowElement.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
-    ).map((cellElement) => {
-      const rect = readPageRect(cellElement);
-      return {
-        columnId: cellElement.getAttribute("data-geul-column-id") ?? "",
-        spansColumns: cellElement.hasAttribute("colspan"),
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-      };
-    });
+    const cells = sharedCells ?? readCellBoxes(rowElement);
+    if (spanless) sharedCells = cells;
     return {
       rowId: rowElement.getAttribute("data-geul-row-id") ?? "",
       top: rowRect.top,
@@ -199,14 +233,17 @@ const readRowBoxes = (rowElements: HTMLElement[]): RowBox[] =>
       cells,
     };
   });
+};
 
 export const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
   const tableBlockId = table.getAttribute("data-geul-block-id");
   if (tableBlockId === null) return null;
 
   const tableRect = readPageRect(table);
+  const spanless = !hasMergedCells(table);
   const rowBoxes = readRowBoxes(
     Array.from(table.querySelectorAll<HTMLElement>("[data-geul-row-id]")),
+    spanless,
   );
   const rows: RowGeometry[] = rowBoxes.map((rowBox, index) => ({
     rowId: rowBox.rowId,
@@ -224,7 +261,9 @@ export const readTableGeometry = (table: HTMLElement): TableGeometry | null => {
       index,
       left: bound.left,
       width: bound.width,
-      resizeSegments: readResizeSegments(rowBoxes, bound.left + bound.width),
+      resizeSegments: spanless
+        ? readSpanlessResizeSegments(rowBoxes)
+        : readResizeSegments(rowBoxes, bound.left + bound.width),
     };
   });
 

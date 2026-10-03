@@ -530,12 +530,14 @@ test("뷰포트 밖으로 밀려난 표 확장 버튼도 키보드 Tab 포커스
 
 /**
  * DELTA-01은 Add row(표 아래) 1종만 실측했다. 이 테스트는 표 "안쪽 하단"에
- * 앵커된 나머지 두 종(마지막 행의 재정렬 핸들, 마지막 리사이즈 세그먼트)이
- * 같은 방식(표를 키운 뒤 맨 위로 되돌려 화면 밖으로 미는 것)으로 화면
- * 밖에 놓여도 Playwright의 클릭·hover 자동 스크롤(G-UI-003 "검증" 절의
- * "Playwright 클릭" 경로)로 도달 가능한지 확인한다.
+ * 앵커된 마지막 행의 재정렬 핸들이 같은 방식(표를 키운 뒤 맨 위로 되돌려
+ * 화면 밖으로 미는 것)으로 화면 밖에 놓여도 Playwright의 클릭 자동
+ * 스크롤(G-UI-003 "검증" 절의 "Playwright 클릭" 경로)로 도달 가능한지
+ * 확인한다. 리사이즈 스트립은 병합 셀이 없는 표에서 열당 한 구간(표 top
+ * ~ bottom)이라 표 top에서 시작한다(Issue #239) — 뷰포트 밖 시작 여부는
+ * 검사하지 않고 hover 도달성만 확인한다.
  */
-test("표 하단 행 재정렬 핸들과 리사이즈 스트립도 뷰포트 밖으로 밀려난 뒤 클릭·hover만으로 도달 가능하다 (Issue #163 RD-002 DELTA-02)", async ({
+test("표 하단 행 재정렬 핸들은 뷰포트 밖으로 밀려난 뒤 클릭만으로, 리사이즈 스트립은 hover만으로 도달 가능하다 (Issue #163 RD-002 DELTA-02)", async ({
   page,
 }) => {
   const { table } = await openDemoWithTable(page);
@@ -554,12 +556,15 @@ test("표 하단 행 재정렬 핸들과 리사이즈 스트립도 뷰포트 밖
     .locator("[data-geul-table-resize-handle]")
     .last();
 
-  // sanity check: 둘 다 뷰포트 밖(아래)에서 시작해야 한다 — 깨지면 setup
-  // 자체가 틀린 것이다.
-  for (const locator of [lastRowHandle, lastResizeHandle]) {
-    const box = await locator.boundingBox();
-    expect(box === null || box.y >= (viewport?.height ?? 0)).toBe(true);
-  }
+  // sanity check: 행 재정렬 핸들은 뷰포트 밖(아래)에서 시작해야 한다 — 깨지면
+  // setup 자체가 틀린 것이다. 리사이즈 스트립은 검사하지 않는다 — 병합 셀이
+  // 없는 표는 열마다 스트립이 한 구간(첫 행 top ~ 마지막 행 bottom)이라
+  // 표 top에서 시작한다(Issue #239). 그래서 스트립은 뷰포트 밖에서 시작하지
+  // 않는다.
+  const lastRowHandleBox = await lastRowHandle.boundingBox();
+  expect(
+    lastRowHandleBox === null || lastRowHandleBox.y >= (viewport?.height ?? 0),
+  ).toBe(true);
 
   // 실측 1: 행 핸들은 클릭까지 성공해 메뉴를 연다 — "화면 밖이라 실패하지
   // 않는다"보다 강한 증거다.
@@ -570,7 +575,9 @@ test("표 하단 행 재정렬 핸들과 리사이즈 스트립도 뷰포트 밖
   await page.keyboard.press("Escape");
 
   // 실측 2: 리사이즈 스트립은 클릭 대상이 아니다(드래그 전용) — hover로
-  // 같은 자동 스크롤 경로를 확인한다.
+  // 같은 자동 스크롤 경로를 확인한다. 스트립이 뷰포트 밖에서 시작하는 것을
+  // 더는 증명하지 않는다(위 sanity check). 뷰포트 밖 absolute 오버레이의
+  // 도달성 자체는 실측 1의 행 핸들 클릭이 계속 증명한다.
   await lastResizeHandle.hover();
   await expect(lastResizeHandle).toBeInViewport();
 });
