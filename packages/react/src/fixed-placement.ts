@@ -119,6 +119,8 @@ export const useFixedPlacement = ({
   // 값은 쓰지 않는다. 증가시켜 렌더를 일으키는 용도다.
   const [, setTick] = useState(0);
   const readAnchorRef = useRef(readAnchor);
+  // `anchor` 상태의 최신 값. effect가 `setState` 없이 변화를 판정하는 데 쓴다.
+  const anchorRef = useRef<FixedPlacementAnchor | null>(null);
 
   // 읽기 effect보다 먼저 선언한다. 같은 렌더의 최신 함수를 읽게 한다.
   useLayoutEffect(() => {
@@ -138,23 +140,31 @@ export const useFixedPlacement = ({
     };
   }, [open, element]);
 
-  // 의존 배열이 없다. 렌더마다 읽고, 같은 좌표면 같은 객체를 유지해 무한 렌더를 막는다.
+  // 의존 배열이 없다. 렌더마다 읽는다. 같은 좌표면 `setState`를 부르지 않는다. 같은
+  // 값으로 부르면 React가 eager bailout을 못 하는 렌더(대기 중인 lane이 남은 fiber)에서
+  // 업데이트를 큐에 넣고, 이 effect가 매 커밋 다시 돌아 "Maximum update depth
+  // exceeded"가 난다. 그래서 상태와 같은 값을 ref에도 두고 ref로 먼저 거른다.
   // NaN은 `===`로 같지 않아 `Object.is`로 비교한다.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 렌더 직후 읽기가 계약이다.
   useLayoutEffect(() => {
     if (!open) {
-      setAnchor((current) => (current === null ? current : null));
+      if (anchorRef.current === null) return;
+      anchorRef.current = null;
+      setAnchor(null);
       return;
     }
     const next = readAnchorRef.current();
     if (next === null) return;
-    setAnchor((current) =>
+    const current = anchorRef.current;
+    if (
       current !== null &&
       Object.is(current.left, next.left) &&
       Object.is(current.top, next.top)
-        ? current
-        : next,
-    );
+    ) {
+      return;
+    }
+    anchorRef.current = next;
+    setAnchor(next);
   });
 
   const placed = anchor ?? fallbackAnchor;

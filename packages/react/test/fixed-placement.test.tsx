@@ -38,6 +38,7 @@ type ProbeProps = {
   clampAnchor?: ClampAnchor;
   fallbackAnchor?: FixedPlacementAnchor;
   clip?: boolean;
+  onRender?: () => void;
 };
 
 /**
@@ -51,7 +52,9 @@ const Probe = ({
   clampAnchor,
   fallbackAnchor,
   clip,
+  onRender,
 }: ProbeProps) => {
+  onRender?.();
   const { menuRef, style } = useFixedPlacement({
     open,
     element,
@@ -466,6 +469,39 @@ describe("useFixedPlacement", () => {
         />,
       );
       expect(readStyle(container)).toEqual({ left: "200px", top: "66px" });
+    });
+  });
+
+  describe("렌더 안정성", () => {
+    // 렌더 직후 effect가 같은 좌표로 `setState`를 부르면 React가 업데이트를 큐에 넣어
+    // 매 커밋 다시 렌더한다(Maximum update depth exceeded, 업로드 중 블록을 undo로
+    // 지운 e2e에서 재현). 외부 렌더 한 번당 이 컴포넌트는 정확히 한 번만 렌더돼야 한다.
+    const countRendersPerExternalRender = (open: boolean) => {
+      stubMenuRect(100, 50);
+      const host = mountHost();
+      let renders = 0;
+      const props = {
+        element: host,
+        open,
+        readAnchor: () => ({ left: 120, top: 80 }),
+        onRender: () => {
+          renders += 1;
+        },
+      };
+      const { rerender } = render(<Probe {...props} />);
+      const settled = renders;
+      for (let index = 0; index < 5; index += 1) {
+        rerender(<Probe {...props} />);
+      }
+      return renders - settled;
+    };
+
+    it("열려 있고 좌표가 같으면 외부 렌더 한 번에 한 번만 렌더한다", () => {
+      expect(countRendersPerExternalRender(true)).toBe(5);
+    });
+
+    it("닫혀 있으면 외부 렌더 한 번에 한 번만 렌더한다", () => {
+      expect(countRendersPerExternalRender(false)).toBe(5);
     });
   });
 
