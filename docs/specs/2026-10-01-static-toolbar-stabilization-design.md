@@ -266,3 +266,17 @@ Issue #222가 추가했다.
 
 - 완료 조건은 roadmap 작업의 RD 문서가 소유한다. 이 문서에 복제하지 않는다.
 - 게이트는 `pnpm verify`다.
+
+## 사후 변경 (2026-10-04)
+
+§1·§4가 제외한 여러 블록 타입 변환을 추가했다. 위 본문은 당시 결정이라 고치지 않는다.
+
+- core `SelectionQuery.getSelectionBlocks()`: 선택 범위에 닿은 블록을 문서 순서로 돌려준다. 바꿀 수 없는 블록(divider·table·미디어)은 담지 않는다. 표 셀 범위·`NodeSelection`이면 빈 배열이다.
+- core `commands.setBlockTypes(blockIds, blockType)`: 한 transaction이고 undo 1회다.
+- 대상이 `codeBlock`이면 `COMMAND_NOT_APPLICABLE`이다. 여러 블록을 한 코드 블록으로 합치지 않는다.
+- `codeBlock`인 블록과 이미 같은 타입인 블록은 건너뛴다. 바뀐 블록이 없으면 `COMMAND_NOT_APPLICABLE`이다.
+- 없는 `blockId`가 있으면 `BLOCK_NOT_FOUND`이고 아무것도 바꾸지 않는다.
+- `numberedListItem`의 `startNumber`는 바뀐 첫 블록에만 적용한다.
+- react `computeFormattingToolbarState`에 `multiBlockSelection`을 더했다. 닿은 블록이 둘 이상이고 단일 블록·미디어·표 셀 범위가 아닐 때만 채운다.
+- StaticToolbar: 블록 타입 트리거·아이콘 버튼이 켜진다. Indent/Outdent는 계속 꺼진다. Code는 꺼진다.
+- FormattingToolbar: 블록 타입 select가 뜬다. 타입이 섞여 있으면 값 없는 `blockTypeNeutralLabel` 항목을 보인다.
