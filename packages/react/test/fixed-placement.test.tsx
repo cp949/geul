@@ -5,6 +5,7 @@
  * - 재측정: window scroll, 안쪽 요소 scroll(capture), resize에서 앵커를 다시 읽는다.
  * - 구독 수명: `open`인 동안만 구독하고 닫힘·unmount에서 해제한다.
  * - `readAnchor`가 `null`이면 마지막 좌표를 유지하고, 닫으면 좌표를 버린다.
+ * - 열린 뒤 첫 읽기가 `null`이면 `fallbackAnchor`를 쓴다. 이후 `null`은 마지막 좌표다.
  * - `readAnchor` identity가 바뀌어도 재구독하지 않고 최신 함수를 쓴다.
  * - 읽기 시점: 렌더마다 앵커를 다시 읽고, 앵커가 이벤트 뒤 한 번 더 렌더된 뒤
  *   움직여도 새 좌표로 수렴한다.
@@ -33,18 +34,26 @@ type ProbeProps = {
   element: HTMLElement | null;
   readAnchor: () => FixedPlacementAnchor | null;
   clampAnchor?: ClampAnchor;
+  fallbackAnchor?: FixedPlacementAnchor;
 };
 
 /**
  * 훅이 돌려준 `menuRef`와 `style`을 DOM에 꽂아 보는 최소 소비처.
  * `useClampedMenuPosition`은 노드가 붙어야 좌표를 갱신하므로 항상 렌더한다.
  */
-const Probe = ({ open, element, readAnchor, clampAnchor }: ProbeProps) => {
+const Probe = ({
+  open,
+  element,
+  readAnchor,
+  clampAnchor,
+  fallbackAnchor,
+}: ProbeProps) => {
   const { menuRef, style } = useFixedPlacement({
     open,
     element,
     readAnchor,
     ...(clampAnchor === undefined ? {} : { clampAnchor }),
+    ...(fallbackAnchor === undefined ? {} : { fallbackAnchor }),
   });
   return <div data-testid="probe" ref={menuRef} style={style} />;
 };
@@ -246,6 +255,71 @@ describe("useFixedPlacement", () => {
       seen.length = 0;
       rerender(<Recorder open />);
       expect(seen[0]).not.toEqual({ left: "120", top: "80" });
+    });
+
+    it("열린 첫 읽기가 null이면 fallbackAnchor 좌표를 쓴다", () => {
+      stubMenuRect(100, 50);
+      const host = mountHost();
+      const { container } = render(
+        <Probe
+          element={host}
+          fallbackAnchor={{ left: 96, top: 48 }}
+          open
+          readAnchor={() => null}
+        />,
+      );
+      expect(readStyle(container)).toEqual({ left: "96px", top: "48px" });
+    });
+
+    it("fallbackAnchor가 있어도 읽은 좌표 뒤의 null은 마지막 좌표를 유지한다", () => {
+      stubMenuRect(100, 50);
+      const host = mountHost();
+      let anchor: FixedPlacementAnchor | null = { left: 120, top: 80 };
+      const { container } = render(
+        <Probe
+          element={host}
+          fallbackAnchor={{ left: 96, top: 48 }}
+          open
+          readAnchor={() => anchor}
+        />,
+      );
+      anchor = null;
+      act(() => {
+        window.dispatchEvent(new Event("scroll"));
+      });
+      expect(readStyle(container)).toEqual({ left: "120px", top: "80px" });
+    });
+
+    it("fallbackAnchor는 닫았다 다시 연 첫 읽기에도 쓰인다", () => {
+      stubMenuRect(100, 50);
+      const host = mountHost();
+      let anchor: FixedPlacementAnchor | null = { left: 120, top: 80 };
+      const { container, rerender } = render(
+        <Probe
+          element={host}
+          fallbackAnchor={{ left: 96, top: 48 }}
+          open
+          readAnchor={() => anchor}
+        />,
+      );
+      rerender(
+        <Probe
+          element={host}
+          fallbackAnchor={{ left: 96, top: 48 }}
+          open={false}
+          readAnchor={() => anchor}
+        />,
+      );
+      anchor = null;
+      rerender(
+        <Probe
+          element={host}
+          fallbackAnchor={{ left: 96, top: 48 }}
+          open
+          readAnchor={() => anchor}
+        />,
+      );
+      expect(readStyle(container)).toEqual({ left: "96px", top: "48px" });
     });
   });
 

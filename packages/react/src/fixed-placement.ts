@@ -46,8 +46,8 @@ type UseFixedPlacementOptions = {
    * 함수가 한 번만 정의한다. DOM을 읽을 수 없으면 `null`을 돌려준다. 그러면
    * 마지막 좌표를 유지한다. 닫기는 호출부 책임이다.
    *
-   * 열린 첫 읽기가 `null`이면 호출부 버그다. 그 경우 `useClampedMenuPosition`의
-   * 초기 좌표 (0, 0)이 쓰인다.
+   * 열린 첫 읽기가 `null`이면 `fallbackAnchor`를 쓴다. 옵션이 없으면 호출부
+   * 버그다. 그 경우 `useClampedMenuPosition`의 초기 좌표 (0, 0)이 쓰인다.
    *
    * 매 렌더 새 함수여도 된다. 이 훅은 ref로 최신 함수만 쓰고 구독을 다시
    * 걸지 않는다.
@@ -56,6 +56,14 @@ type UseFixedPlacementOptions = {
 
   /** 렌더된 박스와 앵커 좌표의 기하 관계. 기본값은 `"topLeft"`다. */
   clampAnchor?: ClampAnchor;
+
+  /**
+   * 열린 뒤 첫 읽기가 `null`일 때만 쓰는 좌표. 앵커가 DOM에 없을 수 있는
+   * 호출부(예: 편집기 밖에 DOM 선택이 있는 캐럿 메뉴)가 (0, 0) 구석 대신
+   * 화면 안 기본 위치를 정한다. 한 번 좌표를 읽은 뒤의 `null`은 마지막 좌표를
+   * 유지한다. 이 옵션은 그때 쓰이지 않는다.
+   */
+  fallbackAnchor?: FixedPlacementAnchor;
 };
 
 /**
@@ -84,6 +92,7 @@ export const useFixedPlacement = ({
   element,
   readAnchor,
   clampAnchor = "topLeft",
+  fallbackAnchor,
 }: UseFixedPlacementOptions): {
   menuRef: RefObject<HTMLDivElement | null>;
   style: CSSProperties;
@@ -130,9 +139,10 @@ export const useFixedPlacement = ({
     );
   });
 
+  const placed = anchor ?? fallbackAnchor;
   return useClampedMenuPosition(
-    anchor?.left ?? 0,
-    anchor?.top ?? 0,
+    placed?.left ?? 0,
+    placed?.top ?? 0,
     clampAnchor,
   );
 };
