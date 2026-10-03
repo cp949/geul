@@ -25,7 +25,7 @@ import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -452,17 +452,14 @@ export const CodeBlockLanguageCombobox = () => {
     updateFromSelection();
   }, [updateOpen, updateFromSelection]);
 
-  const dismissWithFocus = useCallback(() => {
-    cancel();
-    focusEditor();
-  }, [cancel, focusEditor]);
-
-  useDismissOnOutsideOrEscape({
-    active: open,
+  // 언어 팝오버와 more 메뉴는 useExclusiveOverlay로 동시에 열리지 않아 Escape
+  // 스택 순서를 따질 일이 없다. reason별 초점 복귀는 useDismissibleOverlay가
+  // 맡는다(Issue #233 RD-003 DELTA-06).
+  useDismissibleOverlay({
+    open,
     element,
     allowSelectors: CODE_BLOCK_TOOLBAR_ALLOW_SELECTORS,
-    onOutsideDismiss: cancel,
-    onEscapeDismiss: dismissWithFocus,
+    onClose: cancel,
   });
 
   const commit = useCallback(
@@ -590,23 +587,17 @@ export const CodeBlockLanguageCombobox = () => {
   // 더보기(⋯) 메뉴 — 사용자 요청(실수 방지)으로 삭제를 toolbar 최상위에서
   // 이 메뉴 안 항목 하나로 옮겼다. 여닫기·바깥/Escape dismiss는
   // block-side-menu-menu.tsx/table-handle-menu.tsx와 같은 계약
-  // (useDismissOnOutsideOrEscape + MenuItemButton)을 그대로 재사용한다.
+  // (useDismissibleOverlay + MenuItemButton)을 그대로 재사용한다.
   const dismissMoreMenu = useCallback(() => {
     updateMoreMenuOpen(false);
     updateFromSelection();
   }, [updateMoreMenuOpen, updateFromSelection]);
 
-  const closeMoreMenuWithFocus = useCallback(() => {
-    dismissMoreMenu();
-    focusEditor();
-  }, [dismissMoreMenu, focusEditor]);
-
-  useDismissOnOutsideOrEscape({
-    active: moreMenuOpen,
+  useDismissibleOverlay({
+    open: moreMenuOpen,
     element,
     allowSelectors: CODE_BLOCK_TOOLBAR_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissMoreMenu,
-    onEscapeDismiss: closeMoreMenuWithFocus,
+    onClose: dismissMoreMenu,
   });
 
   // Issue #199 — 언어 팝오버·caption 편집과 이 toolbar를 공유하므로,

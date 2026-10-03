@@ -1485,3 +1485,99 @@ describe("CodeBlock toolbar 오버레이 상호 배타(Issue #199)", () => {
     expect(captionInput()).not.toBeNull();
   });
 });
+
+describe("CodeBlock 언어 팝오버와 more 메뉴 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-003 DELTA-06)", () => {
+  const moreButton = (): HTMLButtonElement =>
+    screen.getByRole<HTMLButtonElement>("button", {
+      name: "More code block options",
+    });
+  const moreMenuOpen = (): boolean =>
+    document.querySelector(".geul-code-block-toolbar__more-menu") !== null;
+
+  /** 편집기 밖에서 이미 preventDefault된 Escape를 보낸다. */
+  const pressConsumedEscapeOutsideEditor = () => {
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+      fireEvent.keyDown(outside, { key: "Escape" });
+    } finally {
+      outside.remove();
+    }
+  };
+
+  it("바깥 클릭 때 초점이 언어 검색 입력에 있으면 팝오버를 닫고 편집기로 옮긴다", () => {
+    const rendered = mountCodeFixture({ language: "javascript" });
+    fireEvent.click(languageButton());
+    searchInput().focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(querySearchInput()).toBeNull();
+      expect(document.activeElement).toBe(rendered.editable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 언어 팝오버를 닫지 않는다", () => {
+    mountCodeFixture({ language: "javascript" });
+    fireEvent.click(languageButton());
+
+    pressConsumedEscapeOutsideEditor();
+
+    expect(querySearchInput()).not.toBeNull();
+  });
+
+  it("IME 조합 중 Escape는 언어 팝오버를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    mountCodeFixture({ language: "javascript" });
+    fireEvent.click(languageButton());
+
+    fireEvent.keyDown(searchInput(), { key: "Escape", isComposing: true });
+    expect(querySearchInput()).not.toBeNull();
+
+    fireEvent.keyDown(searchInput(), { key: "Escape" });
+    expect(querySearchInput()).toBeNull();
+  });
+
+  it("바깥 클릭 때 초점이 more 트리거에 있으면 메뉴를 닫고 편집기로 옮긴다", () => {
+    const rendered = mountCodeFixture({ language: "javascript" });
+    fireEvent.click(moreButton());
+    expect(moreMenuOpen()).toBe(true);
+    moreButton().focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(moreMenuOpen()).toBe(false);
+      expect(document.activeElement).toBe(rendered.editable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 more 메뉴를 닫지 않는다", () => {
+    mountCodeFixture({ language: "javascript" });
+    fireEvent.click(moreButton());
+
+    pressConsumedEscapeOutsideEditor();
+
+    expect(moreMenuOpen()).toBe(true);
+  });
+
+  it("IME 조합 중 Escape는 more 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    const rendered = mountCodeFixture({ language: "javascript" });
+    fireEvent.click(moreButton());
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(moreMenuOpen()).toBe(true);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(moreMenuOpen()).toBe(false);
+    expect(document.activeElement).toBe(rendered.editable);
+  });
+});
