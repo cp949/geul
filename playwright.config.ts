@@ -63,7 +63,7 @@ export default defineConfig({
       // 중 발견: 이 옵션 없이 `pnpm test:e2e` 전체를 돌려보니 chromium이
       // 같은 파일을 집어 tap() 에러로 실패했다).
       grepInvert: /@mobile/,
-      testIgnore: /table-performance\.spec\.ts$/,
+      testIgnore: /(table|typing)-performance\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
@@ -72,13 +72,13 @@ export default defineConfig({
       // 태그 붙은 부분집합만 3-엔진에서 돌고, 전체 회귀는 chromium이 담당한다.
       name: "firefox",
       grep: /@core/,
-      testIgnore: /table-performance\.spec\.ts$/,
+      testIgnore: /(table|typing)-performance\.spec\.ts$/,
       use: { ...devices["Desktop Firefox"] },
     },
     {
       name: "webkit",
       grep: /@core/,
-      testIgnore: /table-performance\.spec\.ts$/,
+      testIgnore: /(table|typing)-performance\.spec\.ts$/,
       use: { ...devices["Desktop Safari"] },
     },
     {
@@ -91,12 +91,13 @@ export default defineConfig({
       // 태그가 붙은 touch 전용 테스트만 돈다.
       name: "mobile",
       grep: /@mobile/,
-      testIgnore: /table-performance\.spec\.ts$/,
+      testIgnore: /(table|typing)-performance\.spec\.ts$/,
       use: { ...devices["Pixel 5"] },
     },
     {
       // 성능 기준선 기록 전용(`pnpm test:e2e:perf`). 게이트가 아니다 —
-      // table-performance.spec.ts는 표가 만들어졌는지만 단언하고 수치는
+      // table-performance.spec.ts는 표가 만들어졌는지만, typing-
+      // performance.spec.ts는 입력이 반영됐는지만 단언하고 수치는
       // docs/product/performance-baseline.md에 사람이 옮겨 적는다.
       //
       // 게이트에서 떼어내는 이유는 두 가지다. (1) 단일 테스트가 38.6초로
@@ -105,7 +106,7 @@ export default defineConfig({
       // 표본을 뜨게 돼 그 수치로는 20% 회귀 판정을 세울 수 없다.
       // workers: 1로 격리해 표본을 경합에서 떼어낸다(Issue #74).
       name: "perf",
-      testMatch: /table-performance\.spec\.ts$/,
+      testMatch: /(table|typing)-performance\.spec\.ts$/,
       workers: 1,
       use: { ...devices["Desktop Chrome"] },
     },
