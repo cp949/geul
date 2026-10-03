@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   readColumnBounds,
+  readPageRect,
   readTableColumnIds,
   readTableGeometry,
   readTableRowIds,
@@ -30,7 +31,12 @@ import { stubRect } from "./mount-editor.js";
 
 type Rect = { left: number; top: number; width: number; height: number };
 
-type CellSpec = { columnId: string; colspan?: number; rect: Rect };
+type CellSpec = {
+  columnId: string;
+  colspan?: number;
+  rowspan?: number;
+  rect: Rect;
+};
 type RowSpec = { rowId: string; rect: Rect; cells: CellSpec[] };
 
 /**
@@ -77,6 +83,9 @@ const buildTable = (options: {
       cell.setAttribute("data-geul-column-id", cellSpec.columnId);
       if (cellSpec.colspan !== undefined) {
         cell.setAttribute("colspan", String(cellSpec.colspan));
+      }
+      if (cellSpec.rowspan !== undefined) {
+        cell.setAttribute("rowspan", String(cellSpec.rowspan));
       }
       stubRect(cell, cellSpec.rect);
       row.appendChild(cell);
@@ -703,7 +712,15 @@ describe("readTableGeometry 판독 작업량 (Issue #239)", () => {
         const legacySegments = legacy?.columns[index]?.resizeSegments ?? [];
         const first = legacySegments[0];
         const last = legacySegments[legacySegments.length - 1];
-        expect(legacySegments).toHaveLength(6);
+        // 병합 경로는 병합 표식이 든 행을 따로 두고 나머지 연속 행을 합친다
+        // (Issue #240). 개수는 고정하지 않고, 틈 없이 첫 행 top부터 마지막
+        // 행 bottom까지 덮는지만 본다.
+        legacySegments.forEach((segment, position) => {
+          const previous = legacySegments[position - 1];
+          if (previous !== undefined) {
+            expect(segment.top).toBe(previous.top + previous.height);
+          }
+        });
         expect(column.resizeSegments).toEqual([
           {
             rowId: first?.rowId,
@@ -732,7 +749,7 @@ describe("readTableGeometry 판독 작업량 (Issue #239)", () => {
   });
 
   describe("병합 셀이 있는 표", () => {
-    it("colspan 표는 셀 rect를 모두 읽고 행 단위 segment를 유지한다", () => {
+    it("colspan 표식 표는 병합 경로를 타서 rect를 1 + R + C + M회만 읽고 병합 표식이 없는 연속 행을 합친다", () => {
       const table = buildGridTable(6);
       const mergedCell = table.querySelector("[data-geul-column-id]");
       mergedCell?.setAttribute("colspan", "2");
@@ -740,13 +757,18 @@ describe("readTableGeometry 판독 작업량 (Issue #239)", () => {
 
       const geometry = readTableGeometry(table);
 
-      // 표 1 + 행 6 + 셀 36
-      expect(rectSpy.mock.calls.length).toBe(1 + 6 + 36);
+      // 표 1 + 행 6 + 열마다 첫 비병합 셀 6 + 병합 셀 1. 셀 36개를 모두 읽지 않는다.
+      expect(rectSpy.mock.calls.length).toBe(1 + 6 + 6 + 1);
       // 표식만 붙였고 셀 rect는 그대로(0..100)라 모든 열 경계가 모든 행에서
-      // 셀 경계로 읽힌다 — 열마다 행 단위 segment 6개가 남는다(합치지 않는다).
+      // 셀 경계로 읽힌다. 병합 표식이 든 첫 행은 따로 두고 나머지 5행을 하나로
+      // 합친다 — 열마다 segment 2개다(행 단위 6개가 아니다).
       expect(
         geometry?.columns.map((column) => column.resizeSegments.length),
-      ).toEqual([6, 6, 6, 6, 6, 6]);
+      ).toEqual([2, 2, 2, 2, 2, 2]);
+      expect(geometry?.columns[0]?.resizeSegments).toEqual([
+        { rowId: "row-0", top: 0, height: rowHeight(0) },
+        { rowId: "row-1", top: rowTop(1), height: rowTop(6) - rowTop(1) },
+      ]);
     });
 
     it("rowspan 표도 병합 경로를 타서 rowspan이 가린 행을 resize segment에서 뺀다", () => {
@@ -817,6 +839,382 @@ describe("readTableGeometry 판독 작업량 (Issue #239)", () => {
         { rowId: "row-1", top: 30, height: 30 },
         { rowId: "row-2", top: 60, height: 30 },
       ]);
+    });
+  });
+
+  // Issue #240: 병합 표 경로도 셀 수에 비례해 rect를 읽지 않는다. 병합 셀(M)과
+  // 열마다 처음 만나는 비병합 셀(C), 행(R), 표(1)만 읽고 나머지 셀은 열
+  // 경계에서 도출한다. 일반 행(병합 셀이 없고 열마다 셀이 있는 행)의 연속
+  // 구간은 resize segment 하나로 합친다. 병합 셀이 든 행과 rowspan으로 셀이
+  // 빠진 행은 열 경계가 셀 경계인지 행마다 달라 행 단위로 둔다.
+  describe("병합 표 작업량과 동등성 (Issue #240)", () => {
+    type Merge = {
+      row: number;
+      column: number;
+      rowSpan: number;
+      columnSpan: number;
+    };
+
+    const spannedWidth = (column: number): number => 100 + (column % 3) * 20;
+    const spannedLeft = (column: number): number => {
+      let left = 0;
+      for (let index = 0; index < column; index += 1) {
+        left += spannedWidth(index);
+      }
+      return left;
+    };
+
+    /**
+     * rows x columns 격자에 병합 사각형을 얹은 표를 만든다. 병합 셀은 앵커
+     * 행에만 나오고 덮인 자리의 셀은 만들지 않는다(실 DOM과 같다). 열 폭과
+     * 행 높이를 달리 둬 도출한 값이 우연히 맞는 일을 막는다.
+     */
+    const buildSpannedTable = (
+      rowCount: number,
+      columnCount: number,
+      merges: Merge[],
+    ): HTMLTableElement => {
+      const columnIds = Array.from(
+        { length: columnCount },
+        (_, index) => `col-${index}`,
+      );
+      const anchors = new Map(
+        merges.map((merge) => [`${merge.row},${merge.column}`, merge]),
+      );
+      const covered = new Set<string>();
+      for (const merge of merges) {
+        for (let r = merge.row; r < merge.row + merge.rowSpan; r += 1) {
+          for (
+            let c = merge.column;
+            c < merge.column + merge.columnSpan;
+            c += 1
+          ) {
+            if (r !== merge.row || c !== merge.column) covered.add(`${r},${c}`);
+          }
+        }
+      }
+      const tableWidth = spannedLeft(columnCount);
+      const rowHeightAt = (rowIndex: number): number =>
+        30 + (rowIndex % 3) * 10;
+      const rowTopAt = (rowIndex: number): number => {
+        let top = 0;
+        for (let index = 0; index < rowIndex; index += 1) {
+          top += rowHeightAt(index);
+        }
+        return top;
+      };
+      const rows: RowSpec[] = Array.from({ length: rowCount }, (_, r) => {
+        const cells: CellSpec[] = [];
+        for (let c = 0; c < columnCount; c += 1) {
+          const key = `${r},${c}`;
+          if (covered.has(key)) continue;
+          const merge = anchors.get(key);
+          const columnSpan = merge?.columnSpan ?? 1;
+          const rowSpan = merge?.rowSpan ?? 1;
+          let height = 0;
+          for (let index = r; index < r + rowSpan; index += 1) {
+            height += rowHeightAt(index);
+          }
+          cells.push({
+            columnId: columnIds[c] as string,
+            ...(columnSpan > 1 ? { colspan: columnSpan } : {}),
+            ...(rowSpan > 1 ? { rowspan: rowSpan } : {}),
+            rect: {
+              left: spannedLeft(c),
+              top: rowTopAt(r),
+              width: spannedLeft(c + columnSpan) - spannedLeft(c),
+              height,
+            },
+          });
+        }
+        return {
+          rowId: `row-${r}`,
+          rect: {
+            left: 0,
+            top: rowTopAt(r),
+            width: tableWidth,
+            height: rowHeightAt(r),
+          },
+          cells,
+        };
+      });
+      return buildTable({
+        blockId: "table-1",
+        columnIds,
+        rect: {
+          left: 0,
+          top: 0,
+          width: tableWidth,
+          height: rowTopAt(rowCount),
+        },
+        rows,
+      });
+    };
+
+    const readWork = (
+      rowCount: number,
+      columnCount: number,
+      merges: Merge[],
+    ) => {
+      const table = buildSpannedTable(rowCount, columnCount, merges);
+      const rectSpy = countRectReads(table);
+      try {
+        const geometry = readTableGeometry(table);
+        const perColumn = (geometry?.columns ?? []).map(
+          (column) => column.resizeSegments.length,
+        );
+        return {
+          geometry,
+          rectReads: rectSpy.mock.calls.length,
+          perColumn,
+          segmentCount: perColumn.reduce((total, count) => total + count, 0),
+        };
+      } finally {
+        rectSpy.mockRestore();
+      }
+    };
+
+    // 2x2 병합 하나. 열·행 모두 병합이 가장자리에 닿지 않게 (1,1)에 둔다.
+    const ONE_MERGE: Merge[] = [
+      { row: 1, column: 1, rowSpan: 2, columnSpan: 2 },
+    ];
+
+    it("병합 셀 M개 표의 rect 읽기는 같은 크기 병합 없는 표보다 정확히 M개 많다", () => {
+      for (const size of [10, 40]) {
+        const plain = readWork(size, size, []);
+        const merged = readWork(size, size, ONE_MERGE);
+
+        // 병합 없는 표: 표 1 + 행 N + 첫 행 셀 N. 병합 표는 거기에 병합 셀 M.
+        expect(plain.rectReads).toBe(1 + size + size);
+        expect(merged.rectReads).toBe(plain.rectReads + ONE_MERGE.length);
+      }
+    });
+
+    it("병합 셀이 여러 개여도 rect 읽기는 병합 없는 표 + M이다", () => {
+      const merges: Merge[] = [
+        { row: 1, column: 1, rowSpan: 2, columnSpan: 2 },
+        { row: 5, column: 3, rowSpan: 1, columnSpan: 3 },
+        { row: 7, column: 0, rowSpan: 3, columnSpan: 1 },
+      ];
+
+      expect(readWork(12, 10, merges).rectReads).toBe(
+        readWork(12, 10, []).rectReads + merges.length,
+      );
+    });
+
+    it("resize segment 수가 행 수와 무관하고 열마다 2A+1개 이하다(A는 병합 셀이 걸친 행 수)", () => {
+      const columnCount = 10;
+      // 2x2 병합은 앵커 행과 덮인 행, 두 행에 걸친다.
+      const touchedRows = 2;
+      for (const rowCount of [10, 40]) {
+        const work = readWork(rowCount, columnCount, ONE_MERGE);
+
+        for (const count of work.perColumn) {
+          expect(count).toBeLessThanOrEqual(2 * touchedRows + 1);
+        }
+        expect(work.segmentCount).toBeLessThanOrEqual(
+          columnCount * (2 * touchedRows + 1),
+        );
+      }
+    });
+
+    it("병합 셀이 가로지르는 경계와 rowspan이 가린 행은 행 단위로 남기고 나머지 연속 행은 합친다", () => {
+      // 6행 x 4열, (1,1)에서 2x2 병합. 행 높이는 30,40,50,30,40,50.
+      const geometry = readWork(6, 4, [
+        { row: 1, column: 1, rowSpan: 2, columnSpan: 2 },
+      ]).geometry;
+      const tops = [0, 30, 70, 120, 150, 190, 240];
+      const seg = (from: number, to: number) => ({
+        rowId: `row-${from}`,
+        top: tops[from],
+        height: (tops[to + 1] as number) - (tops[from] as number),
+      });
+
+      // col-0 오른쪽 경계: 병합 셀 왼쪽이라 모든 행이 셀 경계. row-1(병합 셀이
+      // 든 행)과 row-2(셀이 빠진 행)는 행 단위, 일반 행 row-0과 row-3..5는 합친다.
+      expect(geometry?.columns[0]?.resizeSegments).toEqual([
+        seg(0, 0),
+        seg(1, 1),
+        seg(2, 2),
+        seg(3, 5),
+      ]);
+      // col-1 오른쪽 경계는 병합 셀 한가운데다. row-1, row-2에는 없다.
+      expect(geometry?.columns[1]?.resizeSegments).toEqual([
+        seg(0, 0),
+        seg(3, 5),
+      ]);
+      // col-2 오른쪽 경계는 병합 셀의 오른쪽 끝이라 row-1은 셀 경계다. row-2는
+      // 셀이 빠졌지만 col-3 셀 right와 같지 않아 제외.
+      expect(geometry?.columns[2]?.resizeSegments).toEqual([
+        seg(0, 0),
+        seg(1, 1),
+        seg(3, 5),
+      ]);
+      expect(geometry?.columns[3]?.resizeSegments).toEqual([
+        seg(0, 0),
+        seg(1, 1),
+        seg(2, 2),
+        seg(3, 5),
+      ]);
+    });
+
+    // 구 알고리즘(모든 셀 rect를 읽고 행마다 segment를 만드는 병합 경로)을
+    // oracle로 둔다. 열 경계는 같아야 하고, segment가 덮는 세로 영역(합집합)도
+    // 같아야 한다. segment 개수는 새 쪽이 같거나 적다.
+    describe("구 알고리즘 oracle", () => {
+      const legacyGeometry = (table: HTMLElement) => {
+        const tableRect = readPageRect(table);
+        const columnIds = readTableColumnIds(table);
+        const rowBoxes: RowBox[] = Array.from(
+          table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
+        ).map((rowElement) => {
+          const rowRect = readPageRect(rowElement);
+          return {
+            rowId: rowElement.getAttribute("data-geul-row-id") ?? "",
+            top: rowRect.top,
+            height: rowRect.height,
+            cells: Array.from(
+              rowElement.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
+            ).map((cellElement) => {
+              const rect = readPageRect(cellElement);
+              return {
+                columnId: cellElement.getAttribute("data-geul-column-id") ?? "",
+                spansColumns: cellElement.hasAttribute("colspan"),
+                left: rect.left,
+                right: rect.right,
+                width: rect.width,
+              };
+            }),
+          };
+        });
+        const bounds = readColumnBounds(columnIds, rowBoxes, tableRect);
+        return bounds.map((bound) => ({
+          left: bound.left,
+          width: bound.width,
+          segments: rowBoxes
+            .filter((rowBox) =>
+              rowBox.cells.some(
+                (cellBox) =>
+                  Math.abs(cellBox.right - (bound.left + bound.width)) <= 1,
+              ),
+            )
+            .map((rowBox) => ({
+              rowId: rowBox.rowId,
+              top: rowBox.top,
+              height: rowBox.height,
+            })),
+        }));
+      };
+
+      /** 맞닿거나 겹친 구간을 합쳐 [top, bottom] 목록으로 만든다. */
+      const unionOf = (
+        segments: ReadonlyArray<{ top: number; height: number }>,
+      ): Array<[number, number]> => {
+        const sorted = [...segments]
+          .map((segment): [number, number] => [
+            segment.top,
+            segment.top + segment.height,
+          ])
+          .sort((a, b) => a[0] - b[0]);
+        const merged: Array<[number, number]> = [];
+        for (const [top, bottom] of sorted) {
+          const last = merged[merged.length - 1];
+          if (last !== undefined && top <= last[1]) {
+            last[1] = Math.max(last[1], bottom);
+          } else {
+            merged.push([top, bottom]);
+          }
+        }
+        return merged;
+      };
+
+      const expectSameAsLegacy = (table: HTMLTableElement) => {
+        const geometry = readTableGeometry(table);
+        const legacy = legacyGeometry(table);
+
+        expect(geometry?.columns.length).toBe(legacy.length);
+        for (const [index, column] of (geometry?.columns ?? []).entries()) {
+          const expected = legacy[index];
+          expect({ left: column.left, width: column.width }).toEqual({
+            left: expected?.left,
+            width: expected?.width,
+          });
+          expect(unionOf(column.resizeSegments)).toEqual(
+            unionOf(expected?.segments ?? []),
+          );
+          expect(column.resizeSegments.length).toBeLessThanOrEqual(
+            expected?.segments.length ?? 0,
+          );
+        }
+      };
+
+      /** 시드 고정 의사 난수(mulberry32). 실패 시 같은 fixture로 재현된다. */
+      const random = (seed: number) => {
+        let state = seed >>> 0;
+        return () => {
+          state = (state + 0x6d2b79f5) >>> 0;
+          let t = state;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      };
+
+      const randomMerges = (
+        next: () => number,
+        rowCount: number,
+        columnCount: number,
+      ): Merge[] => {
+        const merges: Merge[] = [];
+        const taken = new Set<string>();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const rowSpan = 1 + Math.floor(next() * 3);
+          const columnSpan = 1 + Math.floor(next() * 3);
+          if (rowSpan === 1 && columnSpan === 1) continue;
+          const row = Math.floor(next() * rowCount);
+          const column = Math.floor(next() * columnCount);
+          if (row + rowSpan > rowCount || column + columnSpan > columnCount) {
+            continue;
+          }
+          const cells: string[] = [];
+          for (let r = row; r < row + rowSpan; r += 1) {
+            for (let c = column; c < column + columnSpan; c += 1) {
+              cells.push(`${r},${c}`);
+            }
+          }
+          if (cells.some((cell) => taken.has(cell))) continue;
+          for (const cell of cells) taken.add(cell);
+          merges.push({ row, column, rowSpan, columnSpan });
+        }
+        return merges;
+      };
+
+      it("시드 고정 랜덤 병합 fixture 200개에서 열 경계와 strip 영역이 같다", () => {
+        let withMerges = 0;
+        for (let seed = 1; seed <= 200; seed += 1) {
+          const next = random(seed);
+          const rowCount = 2 + Math.floor(next() * 9);
+          const columnCount = 2 + Math.floor(next() * 7);
+          const merges = randomMerges(next, rowCount, columnCount);
+          if (merges.length > 0) withMerges += 1;
+
+          expectSameAsLegacy(buildSpannedTable(rowCount, columnCount, merges));
+        }
+        // 병합 없는 fixture만 돌려 아무것도 검증하지 못하는 일을 막는다.
+        expect(withMerges).toBeGreaterThan(100);
+      });
+
+      it("모든 행이 colspan으로 덮인 열은 이웃 경계 사이로 보간하고 구 알고리즘과 같다", () => {
+        // col-1에는 어느 행에도 셀이 없다.
+        const merges: Merge[] = Array.from({ length: 4 }, (_, row) => ({
+          row,
+          column: 0,
+          rowSpan: 1,
+          columnSpan: 2,
+        }));
+
+        expectSameAsLegacy(buildSpannedTable(4, 3, merges));
+      });
     });
   });
 });
