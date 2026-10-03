@@ -136,12 +136,6 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
   const editor = page.getByRole("textbox", { name: "Editor" });
 
   // 포인터를 멈춘 채 scrollTop만 바꾼다. hover가 유지돼 오버레이가 DOM에 남는다.
-  const readAreaScrollTop = () =>
-    page.evaluate(() => {
-      const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
-      if (area === null) throw new Error("scrollArea 없음");
-      return area.scrollTop;
-    });
   const setAreaScrollTop = (top: number) =>
     page.evaluate((target) => {
       const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
@@ -176,7 +170,6 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
     );
     expect(await readEscapedOverlays(page)).toEqual([]);
 
-    const inside = await readAreaScrollTop();
     await setAreaScrollTop(0);
     expect(
       await isOutsideScrollArea(anchor),
@@ -189,7 +182,11 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
     );
     expect(await readEscapedOverlays(page)).toEqual([]);
 
-    await setAreaScrollTop(inside);
+    // 되돌릴 위치를 앵커에서 구한다. 미디어 로드로 레이아웃이 밀리면(스크롤
+    // 이벤트 없음) 앞서 기록한 scrollTop은 앵커가 영역 밖인 값이 된다.
+    await anchor.evaluate((element) =>
+      element.scrollIntoView({ block: "center" }),
+    );
     await expect(overlay, `${selector} 돌아온 뒤`).toHaveCSS(
       "visibility",
       "visible",
