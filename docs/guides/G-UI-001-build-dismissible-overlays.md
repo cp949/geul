@@ -45,7 +45,7 @@
   - `useClampedMenuPosition` 직접 호출, 기존 호출부: 표 핸들 메뉴, 표 그립 메뉴, 표 셀 서식 메뉴, code-block 언어 콤보박스(툴바·팝오버·more 메뉴). 툴바는 clip을 직접 판정한다(아래 박스 기준 clip 예외).
   - `useClampedMenuPosition` 직접 호출, 미디어 툴바 more 메뉴: `useAnchoredSubmenu`가 트리거 rect와 컨테이너 `ResizeObserver`로 앵커를 정한다. React 렌더 없이 컨테이너 폭이 바뀌어도 `ResizeObserver`가 재정렬한다.
   - 미디어 툴바 박스 기준 clip: `useFixedPlacement({ clip })`은 앵커 점 기준이라 박스 판정에 쓸 수 없다. `syncClipVisibility`를 직접 부른다.
-  - code-block 툴바 박스와 앵커 점 clip: `useClampedMenuPosition`을 유지한 채 `syncClipVisibility`로 박스를 판정하고, 면제가 아니면 `isPointInClipBoxes`로 앵커 점도 판정한다. `useFixedPlacement({ clip })`은 열린 팝업 면제(`exempt`)를 받지 못한다. 언어 popover나 more 메뉴가 열려 있으면 숨기지 않는다.
+  - code-block 툴바 박스와 앵커 점 clip: `useClampedMenuPosition`을 유지한 채 `syncClipVisibility`로 박스를 판정하고, 면제가 아니면 `isPointInClipBoxes`로 앵커 점도 판정한다. `useFixedPlacement({ clip })`은 열린 팝업 면제(`exempt`)를 받지 못한다. 언어 popover나 more 메뉴가 열려 있거나 툴바 안 요소에 포커스가 있으면 숨기지 않는다.
   - `useFixedPlacement`를 쓰되 상태 좌표를 유지하는 호출부: 표 선택·블록 선택 툴바. 표 셀 서식 메뉴가 표 선택 상태의 좌표를 쓰고, 블록 선택은 하이라이트와 같은 측정을 공유한다. reader가 상태 좌표를 돌려주고 재측정은 기존 구독이 맡는다. 새 overlay는 이 방식을 따르지 않는다.
   - 배치가 아닌 용도의 `scroll` 구독: 블록 선택 하이라이트 재측정.
   - 패키지 밖 소비처: `useFixedPlacement`는 내부 module이다. 공개 표면은 `useClampedMenuPosition`이다.

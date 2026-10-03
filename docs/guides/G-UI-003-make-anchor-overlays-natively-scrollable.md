@@ -20,8 +20,9 @@
   - 소비 앱의 sticky 요소(상단 고정 툴바 등)는 오버레이보다 `z-index`가 낮아야 한다. popover(10)가 그 밑으로 깔려 가려지면 안 된다. 캡션(5)만 그 밑으로 지나가게 하려면 5와 10 사이 값을 쓴다.
   - 편집 중인 입력과 드래그 중인 핸들은 숨기지 않는다. 숨기면 포커스·draft·pointer capture를 잃는다.
   - 열린 팝업(선택기 등)을 연 트리거도 숨기지 않는다. 숨기면 포커스를 잃는다. 이 면제는 팝업이 열린 앵커의 트리거에만 준다. hover가 다른 앵커로 옮겨 간 트리거는 박스로 판정한다.
+  - 툴바 안 요소에 포커스가 있는 동안도 숨기지 않는다. 숨기면 포커스가 body로 빠진다. 포커스가 툴바를 떠나면 앵커가 그대로여도 `onBlur`로 렌더를 강제해 다시 판정한다. 툴바 안 요소 사이 이동은 `relatedTarget`으로 무시한다. 현재 적용 대상은 code-block 툴바(Issue #237)다.
   - 오버레이의 `style` prop에 `visibility`를 직접 두지 않는다. 다음 렌더가 덮어쓴다.
-  - `position: fixed` 오버레이도 이 clip 규칙만 차용한다. 위 "fixed 금지"는 앵커 도달성 규칙이라 그대로 두고, 컨테이너가 잘라내지 못한다는 사정만 같다. 예: code-block 툴바(Issue #236). 박스를 `syncClipVisibility`로 판정한 뒤, 면제가 아니고 앵커 점이 영역 밖이면 `isPointInClipBoxes`로 추가로 숨긴다. 앵커 점을 함께 보는 이유는 viewport clamp다. 컨테이너 상단이 뷰포트 y=0이면 clamp가 툴바 박스를 영역 안에 남긴다. 면제 조건(언어 popover·more 메뉴 열림)은 박스와 앵커 점 판정 둘 다에 준다.
+  - `position: fixed` 오버레이도 이 clip 규칙만 차용한다. 위 "fixed 금지"는 앵커 도달성 규칙이라 그대로 두고, 컨테이너가 잘라내지 못한다는 사정만 같다. 예: code-block 툴바(Issue #236). 박스를 `syncClipVisibility`로 판정한 뒤, 면제가 아니고 앵커 점이 영역 밖이면 `isPointInClipBoxes`로 추가로 숨긴다. 앵커 점을 함께 보는 이유는 viewport clamp다. 컨테이너 상단이 뷰포트 y=0이면 clamp가 툴바 박스를 영역 안에 남긴다. 면제 조건(언어 popover·more 메뉴 열림, 툴바 안 요소의 포커스)은 박스와 앵커 점 판정 둘 다에 준다. 포커스는 `activeElement`를 매 effect에서 읽는다. 별도 state를 두지 않는다.
 - 뷰포트 clamp를 하지 않는다 — `G-UI-001`의 dismissible overlay와 달리, 이 카테고리는 앵커에서 분리되면 어떤 대상(행·열·경계)을 가리키는지 사용자가 알 수 없어진다. 도달성은 "핸들을 사용자 쪽으로 당겨오기"가 아니라 "네이티브 스크롤이 앵커를 뷰포트로 데려오게 두기"로 확보한다.
 - pointer 이벤트 기반 드래그·히트테스트(재정렬 대상 판정, 리사이즈 delta 계산 등)는 `event.clientX/clientY`(viewport-relative)와 이 규칙의 geometry(page-relative)를 섞어 비교하지 않는다 — 좌표계를 명시적으로 통일한다.
 - 이 접근은 오버레이 트리와 대상 DOM 사이에 `transform`/`filter`를 건 조상이 없다는 전제에 기댄다. 소비자 앱이 그런 조상을 두면 깨진다 — 패키지가 소비자 CSS까지 통제할 수 없으므로 강제하지 않는다.
