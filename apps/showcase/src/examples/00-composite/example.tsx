@@ -17,13 +17,31 @@ import {
 import "highlight.js/styles/github.css";
 import { common, createLowlight } from "lowlight";
 import { Highlight, themes } from "prism-react-renderer";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import "@cp949/geul-io/preview.css";
 import "./composite-result.css";
 
 // 07-media/example.tsx와 동일 이유 — 소스 패널 자기완결성(스펙 §5).
 const COMPOSITE_UPLOAD_DELAY_MS = 300;
+
+// 결과 패널 갱신을 입력 정지 뒤로 미루는 트레일링 디바운스 지연(ms).
+// 지연값 자체에 근거는 없다 — 체감과 재측정으로 조정한다.
+const RESULT_PANEL_DEBOUNCE_MS = 200;
+
+// 값이 delayMs 동안 더 바뀌지 않으면 마지막 값을 반영하는 트레일링
+// 디바운스. 소스 패널 자기완결성(스펙 §5)을 위해 공용 모듈로 뽑지 않고
+// 이 파일에 둔다.
+const useDebouncedValue = <T,>(value: T, delayMs: number): T => {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+
+  return debounced;
+};
 
 // 실존하지 않는 https://example.com/uploads/... url은 브라우저가 로드할 수
 // 없어 kitchen sink에 이미지가 안 보였다(2026-09-11 사용자 보고). media
@@ -511,11 +529,23 @@ type ResultTab = "preview" | "html";
 // 읽을 수 없어(그릴링 결정 2026-09-11) 셸이 아니라 이 예제 자신이
 // 갖는다. `revision`은 EditorProvider의 `onChange`가 문서가 바뀔 때마다
 // 올려주는 값을 그대로 받아 재계산 시점만 결정한다.
+//
+// 키 입력 경로 비용을 줄이는 설계(타이핑 지연 회귀 방지):
+// - 활성 탭만 마운트한다. 숨긴 탭을 `hidden`으로 두면 DOM에 남아 키마다
+//   갱신되고, 특히 HTML 탭의 Highlight(prism) 토큰화·렌더가 입력마다
+//   돌았다. 탭을 바꾸면 해당 탭을 새로 계산하는 한 번의 비용은 허용한다.
+// - `exportHtml()`은 디바운스한 `revision`으로 입력 렌더와 분리한다.
+//   `useDeferredValue`는 입력 간격이 짧아도 렌더 사이 유휴 시간에 지연
+//   렌더를 매번 실행해 키마다 결과 패널 비용이 돌아왔다. 트레일링
+//   디바운스는 입력이 멈출 때까지 재계산을 시작하지 않는다. 에디터 입력·
+//   선택·툴바 상태는 즉시 갱신되고 결과 패널만 입력 정지 뒤에 따라온다.
+//   대가로 빠르게 입력하는 동안 결과 패널은 이전 내용에 머문다.
 const ResultPanel = ({ revision }: { revision: number }) => {
   const editor = useEditor();
   const [activeTab, setActiveTab] = useState<ResultTab>("preview");
   const [sampleLoadError, setSampleLoadError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const settledRevision = useDebouncedValue(revision, RESULT_PANEL_DEBOUNCE_MS);
 
   const exported = useMemo(
     () =>
@@ -527,21 +557,31 @@ const ResultPanel = ({ revision }: { revision: number }) => {
       exportHtml(editor.getDocument(), {
         syntaxHighlighter: compositeSyntaxHighlighter,
       }),
-    // editor 인스턴스는 EditorProvider 마운트 동안 안정적이다 — revision이
-    // 바뀔 때만 재계산하면 된다.
+    // editor 인스턴스는 EditorProvider 마운트 동안 안정적이다 — 디바운스된
+    // revision이 바뀔 때만 재계산하면 된다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revision],
+    [settledRevision],
   );
   const html = exported.ok ? exported.value : null;
+  // pretty-print는 HTML 탭에서만 쓰인다 — 미리보기 탭에서는 계산하지 않는다.
   const pretty = useMemo(
-    () => (html === null ? null : prettyPrintHtml(html)),
-    [html],
+    () =>
+      activeTab === "html" && html !== null ? prettyPrintHtml(html) : null,
+    [activeTab, html],
   );
 
+  // `{ __html }` 객체를 렌더마다 새로 만들면 react-dom이 객체 정체성이
+  // 달라졌다고 보고 html 문자열이 같아도 innerHTML을 다시 대입한다 — 자식
+  // DOM이 통째로 재생성돼 키마다 레이아웃 비용이 돌았다. html이 바뀔
+  // 때만 새 객체를 만들어 같은 html이면 대입을 건너뛴다.
+  const previewInnerHtml = useMemo(() => ({ __html: html ?? "" }), [html]);
+
+  // 미리보기는 활성일 때만 마운트되므로 탭 전환마다 새 DOM이 생긴다 —
+  // `activeTab`을 의존성에 넣어 다시 마운트된 DOM에도 스타일을 입힌다.
   useLayoutEffect(() => {
     if (previewRef.current === null) return;
     applyDataGeulStyles(previewRef.current);
-  }, [html]);
+  }, [html, activeTab]);
 
   const handleCopy = () => {
     if (pretty === null) return;
@@ -602,18 +642,18 @@ const ResultPanel = ({ revision }: { revision: number }) => {
           HTML 변환 실패: {exported.error.message}
         </p>
       )}
-      <div hidden={activeTab !== "preview"}>
+      {activeTab === "preview" && (
         <div
           aria-label="미리보기"
           className="geul-preview"
           // exportHtml()은 편집기 자신의 문서를 직렬화한 값이다 — 붙여넣기
           // 등 외부 HTML은 import 시점에 이미 sanitize되므로 여기서 다시
           // 신뢰 경계를 넘지 않는다.
-          dangerouslySetInnerHTML={{ __html: html ?? "" }}
+          dangerouslySetInnerHTML={previewInnerHtml}
           ref={previewRef}
         />
-      </div>
-      <div hidden={activeTab !== "html"}>
+      )}
+      {activeTab === "html" && (
         <div aria-label="HTML" className="composite-result__html">
           <div className="composite-result__html-toolbar">
             <button
@@ -642,7 +682,7 @@ const ResultPanel = ({ revision }: { revision: number }) => {
             )}
           </Highlight>
         </div>
-      </div>
+      )}
     </div>
   );
 };

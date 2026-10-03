@@ -44,7 +44,9 @@ test("미리보기 탭의 코드 블록이 라이브 에디터와 동일하게 s
     '[aria-label="미리보기"] pre[data-geul-block-id] code',
   );
   await expect(previewCode).toBeVisible();
-  expect((await previewCode.textContent())?.trim()).toBe('const a = "hello";');
+  // 결과 패널은 디바운스돼 입력 도중 부분 텍스트로 먼저 나타날 수 있다 —
+  // 한 번만 읽지 않고 마지막 텍스트가 될 때까지 자동 재시도한다.
+  await expect(previewCode).toHaveText('const a = "hello";');
 
   const highlightedSpans = previewCode.locator('span[class*="hljs-"]');
   await expect(highlightedSpans.first()).toBeVisible();

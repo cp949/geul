@@ -85,12 +85,17 @@ test("Align left를 누르면 편집기와 미리보기 양쪽에서 이미지�
 
   const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
   const editorMargins = await readHorizontalMargins(editorImage);
-  const previewMargins = await readHorizontalMargins(previewImage);
 
   expect(editorMargins.left).toBe(0);
   expect(editorMargins.right).toBeGreaterThan(0);
-  expect(previewMargins.left).toBe(0);
-  expect(previewMargins.right).toBeGreaterThan(0);
+  // 결과 패널은 디바운스돼 에디터보다 늦게 갱신된다. 한 번만 읽지 않고
+  // 값이 맞을 때까지 자동 재시도한다.
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewImage)).left)
+    .toBe(0);
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewImage)).right)
+    .toBeGreaterThan(0);
 });
 
 test("Align right를 누르면 편집기와 미리보기 양쪽에서 이미지가 오른쪽에 붙는다 @core", async ({
@@ -109,12 +114,17 @@ test("Align right를 누르면 편집기와 미리보기 양쪽에서 이미지�
 
   const previewImage = page.locator('[aria-label="미리보기"]').locator("img");
   const editorMargins = await readHorizontalMargins(editorImage);
-  const previewMargins = await readHorizontalMargins(previewImage);
 
   expect(editorMargins.right).toBe(0);
   expect(editorMargins.left).toBeGreaterThan(0);
-  expect(previewMargins.right).toBe(0);
-  expect(previewMargins.left).toBeGreaterThan(0);
+  // 결과 패널은 디바운스돼 에디터보다 늦게 갱신된다. 한 번만 읽지 않고
+  // 값이 맞을 때까지 자동 재시도한다.
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewImage)).right)
+    .toBe(0);
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewImage)).left)
+    .toBeGreaterThan(0);
 });
 
 test("기본(정렬 미지정) video는 편집기와 미리보기 양쪽에서 중앙 정렬된다", async ({
@@ -155,12 +165,17 @@ test("Align left를 누르면 편집기와 미리보기 양쪽에서 video가 �
 
   const previewVideo = page.locator('[aria-label="미리보기"]').locator("video");
   const editorMargins = await readHorizontalMargins(editorVideo);
-  const previewMargins = await readHorizontalMargins(previewVideo);
 
   expect(editorMargins.left).toBe(0);
   expect(editorMargins.right).toBeGreaterThan(0);
-  expect(previewMargins.left).toBe(0);
-  expect(previewMargins.right).toBeGreaterThan(0);
+  // 결과 패널은 디바운스돼 에디터보다 늦게 갱신된다. 한 번만 읽지 않고
+  // 값이 맞을 때까지 자동 재시도한다.
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewVideo)).left)
+    .toBe(0);
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewVideo)).right)
+    .toBeGreaterThan(0);
 });
 
 test("Align right를 누르면 편집기와 미리보기 양쪽에서 video가 오른쪽에 붙는다", async ({
@@ -179,10 +194,15 @@ test("Align right를 누르면 편집기와 미리보기 양쪽에서 video가 �
 
   const previewVideo = page.locator('[aria-label="미리보기"]').locator("video");
   const editorMargins = await readHorizontalMargins(editorVideo);
-  const previewMargins = await readHorizontalMargins(previewVideo);
 
   expect(editorMargins.right).toBe(0);
   expect(editorMargins.left).toBeGreaterThan(0);
-  expect(previewMargins.right).toBe(0);
-  expect(previewMargins.left).toBeGreaterThan(0);
+  // 결과 패널은 디바운스돼 에디터보다 늦게 갱신된다. 한 번만 읽지 않고
+  // 값이 맞을 때까지 자동 재시도한다.
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewVideo)).right)
+    .toBe(0);
+  await expect
+    .poll(async () => (await readHorizontalMargins(previewVideo)).left)
+    .toBeGreaterThan(0);
 });
