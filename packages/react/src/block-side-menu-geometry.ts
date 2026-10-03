@@ -1,3 +1,4 @@
+import type { FixedPlacementAnchor } from "./fixed-placement.js";
 import type {
   DragState,
   InsertionGuide,
@@ -32,6 +33,27 @@ export const computeGutterTopOffset = (blockElement: HTMLElement): number => {
   const lineHeightPx = parseFloat(getComputedStyle(heading).lineHeight);
   if (!Number.isFinite(lineHeightPx)) return 0;
   return Math.max(0, (lineHeightPx - GUTTER_BUTTON_HEIGHT_PX) / 2);
+};
+
+// 블록 메뉴의 위쪽 앵커가 핸들 줄 아래로 내려가는 거리(px). 메뉴가 그립
+// 버튼과 겹치지 않는다. 이 값은 `readBlockMenuAnchor` 한 곳에서만 쓴다.
+const BLOCK_MENU_TOP_OFFSET_PX = 28;
+
+/**
+ * 블록 메뉴(block-side-menu·media-handle 공유)의 앵커 좌표를 읽는다. 왼쪽은
+ * 앵커 요소의 왼쪽 가장자리, 위쪽은 `rect.top + topOffset + 28`이다. 열 때와
+ * 스크롤·resize 재측정이 같은 공식을 쓰도록 이 함수 한 곳에만 둔다(Issue #234).
+ * `topOffset`은 거터 버튼을 첫 줄 중앙에 맞추는 값이다(`computeGutterTopOffset`).
+ */
+export const readBlockMenuAnchor = (
+  anchorElement: Element,
+  topOffset = 0,
+): FixedPlacementAnchor => {
+  const rect = anchorElement.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top + topOffset + BLOCK_MENU_TOP_OFFSET_PX,
+  };
 };
 
 // usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그

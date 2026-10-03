@@ -14,7 +14,10 @@ import {
   TABLE_BACKGROUND_COLORS,
   TABLE_TEXT_COLORS,
 } from "./table-cell-colors.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import {
+  type FixedPlacementAnchor,
+  useFixedPlacement,
+} from "./fixed-placement.js";
 import { useEditorRevision } from "./use-editor-revision.js";
 import { useDictionary, useEditor } from "./use-editor.js";
 
@@ -45,8 +48,13 @@ const CALLOUT_PRESETS = [
 
 export type BlockSideMenuMenuProps = {
   blockId: string;
-  left: number;
-  top: number;
+  /** 편집기 마운트 요소. 열린 동안 스크롤·resize 재측정의 구독 출처다. */
+  element: HTMLElement | null;
+  /**
+   * 메뉴 좌상단 앵커의 viewport 좌표를 지금 읽어 돌려준다. 메뉴가 열린 동안
+   * 스크롤·resize마다 `useFixedPlacement`가 다시 읽는다.
+   */
+  readAnchor: () => FixedPlacementAnchor | null;
   onClose: () => void;
   /**
    * 문서 변경으로 대상 type이 바뀌어 닫을 때 부른다. 없으면 `onClose`를 쓴다.
@@ -65,20 +73,25 @@ export type BlockSideMenuMenuProps = {
 
 /**
  * 블록 gutter 핸들 클릭 시 열리는 팝업 메뉴(Turn into, Indent/Outdent,
- * Duplicate/Delete, 색상·정렬 — RD-003 DELTA-02). 좌표 계산은 BlockSideMenu가
- * 하고 이 컴포넌트는 표시와 명령 호출만 한다(table-handle-menu.tsx와 같은 경계).
+ * Duplicate/Delete, 색상·정렬 — RD-003 DELTA-02). 앵커 좌표는 호출부가
+ * `readAnchor`로 넘기고 배치는 `useFixedPlacement`가 맡는다. 이 컴포넌트는 표시와
+ * 명령 호출만 한다(table-handle-menu.tsx와 같은 경계).
  */
 export const BlockSideMenuMenu = ({
   blockId,
-  left,
-  top,
+  element,
+  readAnchor,
   onClose,
   onInvalidated,
   owner = "block",
 }: BlockSideMenuMenuProps) => {
   const editor = useEditor();
   const dictionary = useDictionary();
-  const { menuRef, style } = useClampedMenuPosition(left, top);
+  const { menuRef, style } = useFixedPlacement({
+    open: true,
+    element,
+    readAnchor,
+  });
 
   // Turn into 옵션과 색상·정렬 섹션 게이트(RD-003 DELTA-02)가 같은 source
   // descriptor를 쓴다 — 여기서 한 번만 구한다.

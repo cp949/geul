@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   computeDragGuide,
   findBlockInTreeForDrag,
+  readBlockMenuAnchor,
 } from "./block-side-menu-geometry.js";
 import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
 import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
@@ -300,50 +301,24 @@ export const MediaHandleOverlays = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentTick, openBlockId]);
 
-  // block-side-menu.tsx의 refreshBlockMenuGeometry와 같은 이유·같은 패턴
-  // (Issue #187 RD-001 DELTA-03) — 열린 메뉴가 스크롤·리사이즈 중에도
-  // media 블록을 따라가게 한다. DELTA-01은 열 때만 위치를 계산하고 이
-  // 리스너를 이식하지 않아 스크롤하면 메뉴가 클릭 시점 좌표에 멈춰
-  // 있었다(e2e 실측 발견). top 공식(rect.top + 28)은 handleHandleClick의
-  // open 계산과 반드시 같아야 한다 — computeGutterTopOffset은 쓰지 않는다
-  // (media의 첫 자식은 heading이 될 수 없어 항상 0을 반환, block-side-menu
-  // 쪽과 결과가 같지만 media는 애초에 그 개념이 없어 직접 호출하지
-  // 않는다).
-  useEffect(() => {
-    if (element === null) return;
-    const ownerWindow = element.ownerDocument.defaultView;
-    if (ownerWindow === null) return;
-
-    const refreshMenuGeometry = () => {
-      setMenuState((current) => {
-        if (current === null) return null;
-        const blockElement = findElementByAttribute(
-          element,
-          null,
-          "data-geul-block-id",
-          current.blockId,
-        );
-        if (blockElement === null) return current;
-        // overlayRect·onOpen과 같은 이유로 래퍼가 아니라 실제 시각 요소를
-        // 앵커로 쓴다.
-        const anchorElement =
-          findMediaVisualElement(blockElement) ?? blockElement;
-        const rect = anchorElement.getBoundingClientRect();
-        const left = rect.left;
-        const top = rect.top + 28;
-        return current.left === left && current.top === top
-          ? current
-          : { ...current, left, top };
-      });
-    };
-
-    ownerWindow.addEventListener("scroll", refreshMenuGeometry, true);
-    ownerWindow.addEventListener("resize", refreshMenuGeometry);
-    return () => {
-      ownerWindow.removeEventListener("scroll", refreshMenuGeometry, true);
-      ownerWindow.removeEventListener("resize", refreshMenuGeometry);
-    };
-  }, [element]);
+  // 열린 media 메뉴의 앵커. 열 때와 스크롤·resize 재측정이 같은 reader를
+  // 거친다(Issue #234). overlayRect와 같은 이유로 래퍼가 아니라 실제 시각
+  // 요소를 앵커로 쓴다 — 그립이 이미지 옆에 뜨는데 메뉴만 래퍼 왼쪽에서 열리면
+  // 버튼과 메뉴가 서로 멀어진다. 블록이 DOM에 없으면 `null`이라 마지막 좌표를
+  // 유지한다.
+  const readMediaMenuAnchorOf = (blockId: string) => {
+    if (element === null) return null;
+    const blockElement = findElementByAttribute(
+      element,
+      null,
+      "data-geul-block-id",
+      blockId,
+    );
+    if (blockElement === null) return null;
+    return readBlockMenuAnchor(
+      findMediaVisualElement(blockElement) ?? blockElement,
+    );
+  };
 
   // interact 모드 진입·해제를 한 effect로 묶는다 — mount(속성 세팅 + 리스너
   // 등록)와 해제(속성 제거 + 리스너 해제)가 대칭이라 cleanup 함수 하나가
@@ -459,23 +434,7 @@ export const MediaHandleOverlays = ({
         onClose: closeFromTrigger,
         onOpen: () => {
           if (hoverElement === null) return;
-          // 메뉴(BlockSideMenuMenu)는 useClampedMenuPosition을 통해
-          // viewport-relative(position: fixed) 좌표를 기대한다 —
-          // readPageRect(page-relative, absolute용)를 그대로 넘기면 스크롤된
-          // 문서에서 엉뚱한 위치에 뜬다. 클릭 시점에 getBoundingClientRect()를
-          // 별도로 다시 읽는다(block-side-menu.tsx의 hoverBounds와 동일 계산).
-          // overlayRect와 같은 이유로 래퍼가 아니라 실제 시각 요소를 앵커로
-          // 쓴다 — 그립이 이미지 옆에 뜨는데 메뉴만 래퍼 왼쪽에서 열리면
-          // 버튼과 메뉴가 서로 멀어진다.
-          const anchorElement =
-            findMediaVisualElement(hoverElement) ?? hoverElement;
-          const rect = anchorElement.getBoundingClientRect();
-          setMenuState({
-            blockId,
-            left: rect.left,
-            top: rect.top + 28,
-            viaKeyboard,
-          });
+          setMenuState({ blockId, viaKeyboard });
         },
       },
     );
@@ -539,15 +498,15 @@ export const MediaHandleOverlays = ({
       {menuState !== null && (
         <BlockSideMenuMenu
           blockId={menuState.blockId}
+          element={element}
           // block-side-menu.tsx와 같은 규칙이다. 메뉴는 열 때의 block type을
           // lazy init으로 붙들어 두므로 대상이 바뀌면 다시 마운트한다. media는
           // 지금 type descriptor가 null이라 관측 효과가 없다.
           key={menuState.blockId}
-          left={menuState.left}
           onClose={closeFromTrigger}
           onInvalidated={closeFromInvalidated}
           owner="media"
-          top={menuState.top}
+          readAnchor={() => readMediaMenuAnchorOf(menuState.blockId)}
         />
       )}
     </>

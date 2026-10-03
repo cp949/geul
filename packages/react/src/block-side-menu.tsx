@@ -8,6 +8,7 @@ import {
   findBlockInTreeForDrag,
   findOwnRectBlockId,
   isBlockIdWithinBlockSelection,
+  readBlockMenuAnchor,
 } from "./block-side-menu-geometry.js";
 import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
 import type {
@@ -347,37 +348,22 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentTick, openBlockId]);
 
-  useEffect(() => {
-    if (element === null) return;
-    const ownerWindow = element.ownerDocument.defaultView;
-    if (ownerWindow === null) return;
-
-    const refreshBlockMenuGeometry = () => {
-      setBlockMenuState((current) => {
-        if (current === null) return null;
-        const blockElement = findElementByAttribute(
-          element,
-          null,
-          "data-geul-block-id",
-          current.blockId,
-        );
-        if (blockElement === null) return current;
-        const rect = blockElement.getBoundingClientRect();
-        const left = rect.left;
-        const top = rect.top + computeGutterTopOffset(blockElement) + 28;
-        return current.left === left && current.top === top
-          ? current
-          : { ...current, left, top };
-      });
-    };
-
-    ownerWindow.addEventListener("scroll", refreshBlockMenuGeometry, true);
-    ownerWindow.addEventListener("resize", refreshBlockMenuGeometry);
-    return () => {
-      ownerWindow.removeEventListener("scroll", refreshBlockMenuGeometry, true);
-      ownerWindow.removeEventListener("resize", refreshBlockMenuGeometry);
-    };
-  }, [element]);
+  // 열린 블록 메뉴의 앵커. 열 때와 스크롤·resize 재측정이 같은 reader를
+  // 거친다(Issue #234). 블록이 DOM에 없으면 `null`이라 마지막 좌표를 유지한다.
+  const readBlockMenuAnchorOf = (blockId: string) => {
+    if (element === null) return null;
+    const blockElement = findElementByAttribute(
+      element,
+      null,
+      "data-geul-block-id",
+      blockId,
+    );
+    if (blockElement === null) return null;
+    return readBlockMenuAnchor(
+      blockElement,
+      computeGutterTopOffset(blockElement),
+    );
+  };
 
   const hoverBounds = (() => {
     if (hoverBlockId === null || element === null) return null;
@@ -490,12 +476,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {
         onOpen: () => {
           if (hoverBounds === null) return;
-          setBlockMenuState({
-            blockId,
-            left: hoverBounds.left,
-            top: hoverBounds.top + 28,
-            viaKeyboard,
-          });
+          setBlockMenuState({ blockId, viaKeyboard });
         },
         onClose: closeFromTrigger,
       },
@@ -549,14 +530,14 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       {blockMenuState !== null && (
         <BlockSideMenuMenu
           blockId={blockMenuState.blockId}
+          element={element}
           // 대상이 바뀌면 다시 마운트한다. 메뉴가 열 때의 block type을 lazy
           // init으로 붙들어 두므로, 키가 없으면 이전 대상의 type이 남는다.
           key={blockMenuState.blockId}
-          left={blockMenuState.left}
           onClose={closeFromTrigger}
           onInvalidated={closeFromInvalidated}
           owner="block"
-          top={blockMenuState.top}
+          readAnchor={() => readBlockMenuAnchorOf(blockMenuState.blockId)}
         />
       )}
     </>

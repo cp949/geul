@@ -1126,3 +1126,52 @@ describe("블록 메뉴와 media 메뉴가 함께 열릴 때(Issue #233 RD-002 D
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
+
+describe("media 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
+  /** 열린 블록 메뉴 패널의 fixed 좌표. */
+  const menuPosition = () => {
+    const panel = document.querySelector<HTMLElement>("[data-geul-block-menu]");
+    if (panel === null) throw new Error("media 메뉴가 열려 있지 않다");
+    return { left: panel.style.left, top: panel.style.top };
+  };
+
+  /**
+   * 래퍼와 시각 요소(img)의 rect를 다르게 두고 메뉴를 연다. 앵커가 래퍼가 아니라
+   * 시각 요소임을 좌표로 가린다.
+   */
+  const openWithDistinctVisual = () => {
+    const rendered = renderMediaOverlays({
+      initialBlocks: [imageBlock("image-1"), tailBlock],
+      layout: { left: 0, top: 0, width: 600, height: 20 },
+    });
+    const [media] = rendered.blocks;
+    const visual = media?.querySelector("img") ?? null;
+    if (media === undefined || visual === null) {
+      throw new Error("media 요소가 없다");
+    }
+    stubRect(visual, { left: 50, top: 200, width: 100, height: 80 });
+    fireEvent.pointerMove(media);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    return { visual };
+  };
+
+  it("시각 요소 rect의 왼쪽과 위쪽 + 28px에 연다(래퍼가 아니다)", () => {
+    openWithDistinctVisual();
+
+    expect(menuPosition()).toEqual({ left: "50px", top: "228px" });
+  });
+
+  it.each([
+    ["scroll", () => fireEvent.scroll(window)],
+    ["resize", () => fireEvent(window, new Event("resize"))],
+  ])("%s가 일어나면 열린 메뉴가 시각 요소를 따라간다", (_name, trigger) => {
+    const { visual } = openWithDistinctVisual();
+
+    stubRect(visual, { left: 70, top: 120, width: 100, height: 80 });
+    act(() => {
+      trigger();
+    });
+
+    expect(menuPosition()).toEqual({ left: "70px", top: "148px" });
+  });
+});

@@ -37,10 +37,10 @@ export type DragState = {
   rangeSelection: { fromBlockId: string; toBlockId: string } | null;
 };
 
+// 열린 블록 메뉴의 대상. 좌표는 보관하지 않는다. 메뉴가 `readAnchor`로 매번
+// 읽는다(Issue #234).
 export type BlockMenuState = {
   blockId: string;
-  left: number;
-  top: number;
 };
 
 export type BlockSideMenuProps = {

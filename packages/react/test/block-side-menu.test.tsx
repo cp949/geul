@@ -1705,3 +1705,79 @@ describe("블록 메뉴 편집기 초점에서의 Escape(Issue #233 RD-002)", ()
     expect(document.activeElement).toBe(rendered.editable);
   });
 });
+
+describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
+  /** 열린 블록 메뉴 패널의 fixed 좌표. */
+  const menuPosition = () => {
+    const panel = document.querySelector<HTMLElement>("[data-geul-block-menu]");
+    if (panel === null) throw new Error("블록 메뉴가 열려 있지 않다");
+    return { left: panel.style.left, top: panel.style.top };
+  };
+
+  /** 블록 rect를 지정해 첫 블록의 메뉴를 연다. */
+  const openAt = (
+    rect: { left: number; top: number },
+    options?: Omit<MountBlockEditorOptions, "children" | "layout">,
+  ) => {
+    const rendered = renderBlockMenu({
+      ...options,
+      layout: { ...rect, width: 600, height: 20 },
+    });
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    return { ...rendered, block };
+  };
+
+  it("블록 rect의 왼쪽과 위쪽 + 28px에 연다", () => {
+    openAt({ left: 40, top: 100 });
+
+    expect(menuPosition()).toEqual({ left: "40px", top: "128px" });
+  });
+
+  it.each([
+    ["scroll", () => fireEvent.scroll(window)],
+    ["resize", () => fireEvent(window, new Event("resize"))],
+  ])("%s가 일어나면 열린 메뉴가 블록을 따라간다", (_name, trigger) => {
+    const { block } = openAt({ left: 40, top: 100 });
+
+    stubRect(block, { left: 70, top: 60, width: 600, height: 20 });
+    act(() => {
+      trigger();
+    });
+
+    expect(menuPosition()).toEqual({ left: "70px", top: "88px" });
+  });
+
+  it("heading은 열 때와 재측정 때 같은 거터 오프셋을 더한다", () => {
+    const { block } = openAt(
+      { left: 40, top: 100 },
+      {
+        initialBlocks: [
+          {
+            id: "heading-1",
+            type: "heading",
+            level: 1,
+            content: [{ text: "제목" }],
+          },
+        ],
+      },
+    );
+    // line-height 48px, 거터 버튼 24px → (48 - 24) / 2 = 12px를 더한다.
+    const heading = block.firstElementChild;
+    if (!(heading instanceof HTMLElement)) throw new Error("heading이 없다");
+    heading.style.lineHeight = "48px";
+    stubRect(block, { left: 40, top: 100, width: 600, height: 20 });
+    act(() => {
+      fireEvent.scroll(window);
+    });
+    expect(menuPosition()).toEqual({ left: "40px", top: "140px" });
+
+    stubRect(block, { left: 40, top: 50, width: 600, height: 20 });
+    act(() => {
+      fireEvent.scroll(window);
+    });
+    expect(menuPosition()).toEqual({ left: "40px", top: "90px" });
+  });
+});
