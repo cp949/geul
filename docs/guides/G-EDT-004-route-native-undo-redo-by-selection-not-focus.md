@@ -59,11 +59,12 @@
 | 공개 command | `commands.undo()`·`commands.redo()` | `undo`·`redo` |
 | 네이티브 글자 입력 | `view.dom` 안 입력 | `local` |
 
-- `"history$"`는 `prosemirror-history`의 `PluginKey("history")`가 만든 meta 키다. 공개 API가 이 키 객체를 내보내지 않아 문자열로 읽는다.
-- 키 문자열은 로드 순서가 정한다. 같은 `prosemirror-state` 인스턴스에서 `PluginKey("history")`를 먼저 만들면 history 플러그인의 키가 `"history$1"`이 된다.
-- 키 문자열이 코드와 다르면 redo가 조용히 `"undo"`로 보고된다. 이 저장소의 진입점 표 테스트는 저장소 안의 `prosemirror-history` 버전 변경만 감시한다.
+- history meta 키는 `prosemirror-history`의 `PluginKey("history")`가 만든다. 키 문자열은 로드 순서가 정한다. 같은 `prosemirror-state` 인스턴스에서 `PluginKey("history")`를 먼저 만들면 history 플러그인의 키가 `"history$1"`이 된다.
+- 문자열 `"history$"`를 하드코딩하지 않는다. `history().spec.key`(공개 API)로 키 객체를 꺼내 `getMeta(키 객체)`로 읽는다. 키 문자열이 바뀌어도 redo가 `"undo"`로 떨어지지 않는다.
+- 키 선점 환경은 `packages/core/test/history-key-collision.test.ts`가 감시한다. 이 파일만 core 모듈을 동적으로 불러온다. `prosemirror-history`가 import되기 전에 키를 선점해야 하기 때문이다. 정상 키 환경은 진입점 표 테스트가 감시한다.
+- 남은 한계: `history().spec.key`가 없어지면 모듈 로드 시 오류를 던진다. 조용히 틀린 reason을 보고하지 않는다.
 - 새 undo·redo 진입점을 더하면 표에 행을 추가한다. 세션 판정 코드는 바꾸지 않는다.
-- 참고 구현: `packages/core/src/history-change-reason.ts`(Issue #231), 테스트 `packages/core/test/history-change-reason.test.ts`.
+- 참고 구현: `packages/core/src/history-change-reason.ts`(Issue #231), 테스트 `packages/core/test/history-change-reason.test.ts`, `packages/core/test/history-key-collision.test.ts`.
 
 ### undo·redo 뒤 DOM selection을 재동기화하고 포커스 유실을 복구한다
 
