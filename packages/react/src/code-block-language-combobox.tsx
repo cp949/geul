@@ -552,12 +552,15 @@ export const CodeBlockLanguageCombobox = () => {
   // 잘라내지 못한다(Issue #236). 툴바 박스와 앵커 점이 모두 컨테이너의 보이는
   // 영역 안일 때만 보인다. 앵커 점도 보는 이유는 viewport clamp다. 컨테이너
   // 상단이 뷰포트 y=0이면 clamp가 툴바를 영역 안에 남긴다.
-  // 언어 popover나 more 메뉴가 열려 있으면 숨기지 않는다. `visibility:
-  // hidden`은 포커스를 잃는다. `visibility`만 갱신하고 mode·입력 상태는
-  // 건드리지 않는다. 툴바 `style`에 `visibility`가 없어 렌더가 덮어쓰지
-  // 않는다. 스크롤은 블록을 움직여 앵커 재조회가 렌더를 다시 돌린다. 창
-  // resize는 컨테이너 박스만 바꿀 수 있어 앵커가 그대로면 렌더가 없다.
-  // 그래서 resize에서 렌더를 강제한다.
+  // 언어 popover나 more 메뉴가 열려 있으면 숨기지 않는다. 툴바 안 요소에
+  // 포커스가 있어도 숨기지 않는다(Issue #237). `visibility: hidden`은
+  // 포커스를 잃는다. 포커스는 매 effect에서 `activeElement`로 읽는다.
+  // `visibility`만 갱신하고 mode·입력 상태는 건드리지 않는다. 툴바 `style`에
+  // `visibility`가 없어 렌더가 덮어쓰지 않는다. 스크롤은 블록을 움직여 앵커
+  // 재조회가 렌더를 다시 돌린다. 창 resize는 컨테이너 박스만 바꿀 수 있어
+  // 앵커가 그대로면 렌더가 없다. 그래서 resize에서 렌더를 강제한다. 포커스가
+  // 툴바를 떠날 때도 앵커가 그대로면 렌더가 없다. 그래서 `onBlur`에서도
+  // 렌더를 강제한다.
   const [, setClipTick] = useState(0);
   useEffect(() => {
     const ownerWindow = element?.ownerDocument.defaultView;
@@ -570,7 +573,8 @@ export const CodeBlockLanguageCombobox = () => {
     const node = toolbarRef.current;
     if (element === null || node === null) return;
     const boxes = readScrollClipBoxes(element);
-    const exempt = open || moreMenuOpen;
+    const exempt =
+      open || moreMenuOpen || node.contains(node.ownerDocument.activeElement);
     syncClipVisibility(node, boxes, exempt);
     if (!exempt && !isPointInClipBoxes(anchor.left, anchor.top, boxes)) {
       node.style.visibility = "hidden";
@@ -800,6 +804,17 @@ export const CodeBlockLanguageCombobox = () => {
         aria-label={dictionary.toolbar.codeBlock.ariaLabel}
         className="geul-code-block-toolbar"
         data-block-id={languageState.blockId}
+        // 툴바 안 버튼 사이 이동은 무시한다. blur 시점에 activeElement가
+        // body라 그대로 판정하면 숨고 다음 버튼으로 포커스를 못 옮긴다.
+        onBlur={(event) => {
+          if (
+            event.relatedTarget instanceof Node &&
+            event.currentTarget.contains(event.relatedTarget)
+          ) {
+            return;
+          }
+          setClipTick((tick) => tick + 1);
+        }}
         ref={toolbarRef}
         role="toolbar"
         style={toolbarStyle}

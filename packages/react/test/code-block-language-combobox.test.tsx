@@ -22,6 +22,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { flushSync } from "react-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { computeLanguageSuggestions } from "../src/code-block-language-combobox.js";
@@ -1679,5 +1680,70 @@ describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
       document.querySelector(".geul-code-block-toolbar__more-menu"),
     ).toBeNull();
     expect(toolbar.style.visibility).toBe("hidden");
+  });
+
+  it("툴바 안 버튼에 포커스가 있으면 박스와 앵커 점이 영역 밖이어도 숨기지 않는다(Issue #237)", () => {
+    const { toolbar, place } = mountClipFixture();
+    place(10, { left: 500, top: 10 });
+    expect(toolbar.style.visibility).toBe("");
+
+    act(() => {
+      languageButton().focus();
+    });
+    expect(document.activeElement).toBe(languageButton());
+
+    // 박스(290–314)와 앵커 점(600, 300) 모두 영역(0–100) 밖이다.
+    place(300, { left: 500, top: 290 });
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("포커스가 툴바 밖으로 나가면 앵커가 그대로여도 영역 밖인 툴바를 숨긴다(Issue #237)", () => {
+    const { toolbar, place } = mountClipFixture();
+    place(10, { left: 500, top: 10 });
+    act(() => {
+      languageButton().focus();
+    });
+    place(300, { left: 500, top: 290 });
+    expect(toolbar.style.visibility).toBe("");
+
+    // 앵커 변화 없이 blur만 일어난다. onBlur가 렌더를 강제해야 숨는다.
+    act(() => {
+      languageButton().blur();
+    });
+    expect(document.activeElement).toBe(document.body);
+    expect(toolbar.style.visibility).toBe("hidden");
+  });
+
+  it("툴바 안 버튼 사이로 포커스를 옮겨도 영역 밖인 툴바를 숨기지 않는다(Issue #237)", () => {
+    const { toolbar, place } = mountClipFixture();
+    place(10, { left: 500, top: 10 });
+    act(() => {
+      languageButton().focus();
+    });
+    place(300, { left: 500, top: 290 });
+    expect(toolbar.style.visibility).toBe("");
+
+    const copyButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Copy code",
+    });
+    // 브라우저는 focusout 리스너가 끝나면 microtask로 React 렌더를 돌린다.
+    // 그 시점의 activeElement는 body다. jsdom의 focus()는 스크립트 호출이라
+    // microtask가 focus 이동 뒤에야 돌아 그 렌더를 못 본다. 그래서 act를 끄고
+    // focusout 직후에 렌더를 동기로 비운다.
+    const actEnvironment = globalThis as {
+      IS_REACT_ACT_ENVIRONMENT?: boolean | undefined;
+    };
+    const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    const flushAtFocusOut = () => flushSync(() => undefined);
+    actEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+    document.addEventListener("focusout", flushAtFocusOut);
+    try {
+      copyButton.focus();
+    } finally {
+      document.removeEventListener("focusout", flushAtFocusOut);
+      actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+    expect(document.activeElement).toBe(copyButton);
+    expect(toolbar.style.visibility).toBe("");
   });
 });
