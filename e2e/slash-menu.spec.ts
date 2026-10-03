@@ -9,6 +9,7 @@ import {
   CLAMP_BOUNDARY_MIN_MARGIN_PX,
   expectOverlayWithinViewport,
 } from "./support/clamp.js";
+import { expectCaretMenuFollowsCaret } from "./support/caret-gap.js";
 import { openDemo } from "./support/demo.js";
 import {
   lastKeydownPrevented,
@@ -509,4 +510,18 @@ test("같은 블록 안에서 ArrowLeft·Backspace는 메뉴를 유지하고 que
   await expect(editable.locator("p").nth(1)).toHaveText("/hed");
   await expect(menu.getByRole("option", { name: /^Heading 1/ })).toHaveCount(0);
   await expect(menu).toBeVisible();
+});
+
+// Issue #234 RD-004: 캐럿 메뉴는 열린 채 스크롤해도 캐럿 하단에 붙는다.
+// 위 PIT-0011 테스트의 24px 허용 오차는 좌표 어긋남을 못 잡는다.
+test("슬래시 메뉴가 열린 채 window를 스크롤해도 캐럿 하단에 붙어 있다 (Issue #234)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("/");
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  await expect(menu).toBeVisible();
+
+  await expectCaretMenuFollowsCaret(page, menu);
 });

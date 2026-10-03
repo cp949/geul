@@ -8,6 +8,7 @@
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { expectCaretMenuFollowsCaret } from "./support/caret-gap.js";
 import {
   lastKeydownPrevented,
   recordKeydownPrevented,
@@ -174,4 +175,17 @@ test("같은 블록 안에서 Home은 메뉴를 유지한다 (Issue #229)", asyn
   await page.waitForTimeout(150);
 
   await expect(menu).toBeVisible();
+});
+
+// Issue #234 RD-004: 캐럿 메뉴는 열린 채 스크롤해도 캐럿 하단에 붙는다.
+test("이모지 피커가 열린 채 window를 스크롤해도 캐럿 하단에 붙어 있다 (Issue #234)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openEmojiPickerExample(page);
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type(":");
+  await expect(menu).toBeVisible();
+
+  await expectCaretMenuFollowsCaret(page, menu);
 });
