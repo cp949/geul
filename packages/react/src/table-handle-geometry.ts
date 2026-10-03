@@ -23,7 +23,7 @@ export const findTable = (
 // fixed는 앵커가 뷰포트 밖으로 나가면 네이티브 scrollIntoView·포커스
 // 스크롤·Playwright 자동스크롤을 전부 no-op으로 만든다(Issue #163). 이
 // 변환을 가장 낮은 판독 지점(getBoundingClientRect 호출부) 한 곳에 모아,
-// 그 위 레이어(readRowBoxes·readColumnBounds·readTableGeometry)는 좌표계를
+// 그 위 레이어(readSpanlessRowBoxes·readMergedLayout·readColumnBounds·readTableGeometry)는 좌표계를
 // 신경 쓰지 않고 "그 rect"를 그대로 쓰면 된다.
 export const readPageRect = (element: Element): DOMRect => {
   const rect = element.getBoundingClientRect();

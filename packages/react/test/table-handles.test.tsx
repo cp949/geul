@@ -198,7 +198,7 @@ const replaceWithColumnSpanMergedTable = (
   stubRect(bottomLeft, { left: 100, top: 130, width: 100, height: 30 });
   stubRect(bottomRight, { left: 200, top: 130, width: 100, height: 30 });
   // 전제 1: 첫 행이 정말 병합됐다. colspan 속성이 열 경계 판정의 입력이라
-  // (readRowBoxes의 spansColumns), 이게 없으면 아래 두 테스트는 병합되지
+  // (readCellBoxes의 spansColumns, readMergedLayout의 colspan 판독), 이게 없으면 아래 두 테스트는 병합되지
   // 않은 평범한 표를 검증하면서 그대로 통과한다.
   expect(mergedCell.getAttribute("colspan")).toBe("2");
   // 전제 2: 스텁이 문서에 붙어 있는 표에 씌워졌다. replaceDocument가 표
