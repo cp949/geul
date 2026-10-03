@@ -1,4 +1,10 @@
-import type { CSSProperties, RefObject } from "react";
+import {
+  type CSSProperties,
+  type RefObject,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 import type { EmojiOption } from "./emoji-picker-options.js";
 
@@ -31,32 +37,48 @@ export const EmojiGrid = ({
   onSelect,
   menuRef,
   style,
-}: EmojiGridProps) => (
-  <div
-    aria-label={ariaLabel}
-    className="geul-emoji-picker"
-    ref={menuRef}
-    role="listbox"
-    style={style}
-  >
-    {items.length === 0 && (
-      <p className="geul-emoji-picker__empty">{emptyMessage}</p>
-    )}
-    <div className="geul-emoji-picker__grid">
-      {items.map((item, index) => (
+}: EmojiGridProps) => {
+  // onSelect는 호출부가 매 렌더 새로 만든다. ref로 최신값만 읽어, 버튼 목록이
+  // onSelect 때문에 다시 만들어지지 않게 한다.
+  const onSelectRef = useRef(onSelect);
+  useLayoutEffect(() => {
+    onSelectRef.current = onSelect;
+  });
+
+  // 이모지 옵션은 수백 개다. useFixedPlacement가 열린 동안 scroll마다 호출부를
+  // 다시 렌더하므로(Issue #234), 항목·강조가 같으면 같은 요소를 돌려줘 React가
+  // 버튼 하위 트리를 건너뛰게 한다. 위치(`style`)만 바뀌는 렌더가 대상이다.
+  const buttons = useMemo(
+    () =>
+      items.map((item, index) => (
         <button
           aria-label={item.label}
           aria-selected={index === highlightedIndex}
           className="geul-emoji-picker__item"
           key={item.id}
-          onClick={() => onSelect(item)}
+          onClick={() => onSelectRef.current(item)}
           onPointerDown={(event) => event.preventDefault()}
           role="option"
           type="button"
         >
           {item.char}
         </button>
-      ))}
+      )),
+    [items, highlightedIndex],
+  );
+
+  return (
+    <div
+      aria-label={ariaLabel}
+      className="geul-emoji-picker"
+      ref={menuRef}
+      role="listbox"
+      style={style}
+    >
+      {items.length === 0 && (
+        <p className="geul-emoji-picker__empty">{emptyMessage}</p>
+      )}
+      <div className="geul-emoji-picker__grid">{buttons}</div>
     </div>
-  </div>
-);
+  );
+};
