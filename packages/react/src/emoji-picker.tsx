@@ -5,16 +5,13 @@ import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 export type { EmojiOption };
 
 const EMOJI_PICKER_DISMISS_ALLOW_SELECTORS = [".geul-emoji-picker"] as const;
-// Escape는 메뉴만 닫고 텍스트는 보존한다(SlashMenu와 동일 이유) — 실제 처리는
-// element keydown 리스너가 소유한다.
-const IGNORE_ESCAPE_DISMISS = () => {};
 
 /**
  * grid 열 수. `_emoji-picker.scss`의 `.geul-emoji-picker__grid`
@@ -279,12 +276,16 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
     [editor, focusEditor],
   );
 
-  useDismissOnOutsideOrEscape({
-    active: menuState !== null,
+  // 바깥 pointerdown과 Escape LIFO는 useDismissibleOverlay가 소유한다(Issue
+  // #233 RD-004 DELTA-02). Escape의 1차 소비자는 effect 등록 race가 없는 상시
+  // element keydown listener(handleMenuKeyDown)다. module은 편집기 안에서
+  // 막힌 Escape도 닫으므로 같은 닫힘을 한 번 더 부른다. dismissMenu는
+  // 멱등이다.
+  useDismissibleOverlay({
+    open: menuState !== null,
     element,
     allowSelectors: EMOJI_PICKER_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissMenu,
-    onEscapeDismiss: IGNORE_ESCAPE_DISMISS,
+    onClose: dismissMenu,
   });
 
   useEffect(() => {

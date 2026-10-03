@@ -32,13 +32,11 @@ import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 const SLASH_MENU_DISMISS_ALLOW_SELECTORS = [".geul-slash-menu"] as const;
-// Escape는 effect 등록 race가 없는 상시 element keydown listener가 소유한다.
-const IGNORE_ESCAPE_DISMISS = () => {};
 // `items` prop 기본값. 매 렌더 새 배열 리터럴이면 그 배열을 참조하는 effect
 // 의존성 배열이 매 렌더 바뀐 걸로 보여 selectionchange 등 리스너를 매번
 // 떼었다 다시 붙인다(SLASH_MENU_DISMISS_ALLOW_SELECTORS와 같은 이유) — 모듈
@@ -564,12 +562,16 @@ export const SlashMenu = ({
     [editor, focusEditor],
   );
 
-  useDismissOnOutsideOrEscape({
-    active: menuState !== null,
+  // 바깥 pointerdown과 Escape LIFO는 useDismissibleOverlay가 소유한다(Issue
+  // #233 RD-004 DELTA-02). Escape의 1차 소비자는 effect 등록 race가 없는 상시
+  // element keydown listener(handleMenuKeyDown)다. module은 편집기 안에서
+  // 막힌 Escape도 닫으므로 같은 닫힘을 한 번 더 부른다. dismissMenu는
+  // 멱등이다.
+  useDismissibleOverlay({
+    open: menuState !== null,
     element,
     allowSelectors: SLASH_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissMenu,
-    onEscapeDismiss: IGNORE_ESCAPE_DISMISS,
+    onClose: dismissMenu,
   });
 
   useEffect(() => {

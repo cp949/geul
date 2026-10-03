@@ -10,6 +10,7 @@
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BlockSelectionToolbar } from "../src/block-selection-toolbar.js";
 import { EMOJI_OPTIONS } from "../src/emoji-picker-options.js";
 import { filterEmojiOptions } from "../src/emoji-picker.js";
 import { EmojiPicker } from "../src/index.js";
@@ -437,5 +438,54 @@ describe("EmojiPicker Enter 키 순서(Issue #230)", () => {
     fireEvent.keyDown(rendered.editable, { key: "Enter", repeat: true });
 
     expect(reachedEditable).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Escape가 useDismissibleOverlay와 함께 동작한다(Issue #233 RD-004 DELTA-02)", () => {
+  it("IME 조합 중 Escape는 팝업을 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":grinning");
+    expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape", isComposing: true });
+    expect(screen.queryByRole("listbox", { name: listboxName })).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+    expect(screen.queryByRole("listbox", { name: listboxName })).toBeNull();
+  });
+
+  it("블록 선택 툴바 뒤에 팝업이 열리면 Escape 한 번은 팝업만 닫고 선택은 남긴다", () => {
+    const rendered = mountBlockEditor({
+      blockIds: ["block-1", "block-2", "block-3"],
+      children: (
+        <>
+          <EmojiPicker />
+          <BlockSelectionToolbar />
+        </>
+      ),
+    });
+    rendered.editable.focus();
+    rendered.editor.commands.selectBlockRange("block-1", "block-2");
+    fireSelectionChange();
+    expect(
+      screen.getByRole("toolbar", { name: "Block selection" }),
+    ).not.toBeNull();
+    const block = rendered.blocks[2];
+    if (block === undefined) throw new Error("입력할 블록을 찾지 못했다");
+    rendered.editor.commands.setText("block-3", ":grinning");
+    placeCaret(block);
+    fireSelectionChange();
+    expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+
+    expect(screen.queryByRole("listbox", { name: listboxName })).toBeNull();
+    expect(
+      screen.queryByRole("toolbar", { name: "Block selection" }),
+    ).not.toBeNull();
+    expect(rendered.editor.getBlockSelection()).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+    expect(rendered.editor.getBlockSelection()).toBeNull();
   });
 });

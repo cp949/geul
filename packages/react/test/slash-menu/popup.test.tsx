@@ -1031,3 +1031,44 @@ describe("SlashMenu Enter 키 순서(Issue #230)", () => {
     expect(reachedEditable).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Escape가 useDismissibleOverlay와 함께 동작한다(Issue #233 RD-004 DELTA-02)", () => {
+  it("IME 조합 중 Escape는 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, 0, "/");
+    expect(screen.getByRole("listbox")).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape", isComposing: true });
+    expect(screen.queryByRole("listbox")).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("블록 선택 툴바 뒤에 메뉴가 열리면 Escape 한 번은 메뉴만 닫고 선택은 남긴다", () => {
+    const rendered = mountBlockEditor({
+      blockIds: ["block-1", "block-2", "block-3"],
+      // SlashMenu가 BlockSelectionToolbar를 함께 마운트한다.
+      children: <SlashMenu />,
+    });
+    rendered.editable.focus();
+    rendered.editor.commands.selectBlockRange("block-1", "block-2");
+    fireSelectionChange();
+    expect(
+      screen.getByRole("toolbar", { name: "Block selection" }),
+    ).not.toBeNull();
+    typeIntoBlock(rendered, 2, "/");
+    expect(screen.getByRole("listbox")).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(
+      screen.queryByRole("toolbar", { name: "Block selection" }),
+    ).not.toBeNull();
+    expect(rendered.editor.getBlockSelection()).not.toBeNull();
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+    expect(rendered.editor.getBlockSelection()).toBeNull();
+  });
+});
