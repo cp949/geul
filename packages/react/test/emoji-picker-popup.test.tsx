@@ -583,6 +583,17 @@ describe("EmojiPicker 캐럿 배치(Issue #234 RD-004)", () => {
     expect(context).not.toHaveBeenCalled();
   });
 
+  it("닫힌 채 scroll·resize가 와도 열림 판정을 하지 않는다", () => {
+    const rendered = renderCaretBlocks();
+    const context = vi.spyOn(rendered.editor, "getCaretBlockContext");
+
+    fireEvent.scroll(window);
+    fireEvent(window, new Event("resize"));
+
+    expect(context).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
   it("scroll 재렌더는 이모지 버튼을 다시 만들지 않는다", () => {
     // 이모지 옵션은 수백 개다. scroll마다 호출부가 다시 렌더되므로(useFixedPlacement)
     // `items` 배열이 같아야 EmojiGrid가 버튼 목록을 건너뛴다.
