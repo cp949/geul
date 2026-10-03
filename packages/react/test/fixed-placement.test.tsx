@@ -9,6 +9,7 @@
  * - 읽기 시점: 렌더마다 앵커를 다시 읽고, 앵커가 이벤트 뒤 한 번 더 렌더된 뒤
  *   움직여도 새 좌표로 수렴한다.
  * - `clampAnchor`가 `useClampedMenuPosition`으로 전달된다.
+ * - `readAnchorBelowTrigger`: 트리거 하단 + 4 좌표와 연결 해제 시 `null`.
  */
 
 import { act, cleanup, render } from "@testing-library/react";
@@ -17,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type FixedPlacementAnchor,
+  readAnchorBelowTrigger,
   useFixedPlacement,
 } from "../src/fixed-placement.js";
 import type { ClampAnchor } from "../src/use-clamped-menu-position.js";
@@ -386,5 +388,29 @@ describe("useFixedPlacement", () => {
       const { top } = readStyle(container);
       expect(top).not.toBe("10px");
     });
+  });
+});
+
+describe("readAnchorBelowTrigger", () => {
+  it("트리거 왼쪽 가장자리와 하단 + 4px를 돌려준다", () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      left: 30,
+      top: 10,
+      right: 70,
+      bottom: 40,
+      x: 30,
+      y: 10,
+      width: 40,
+      height: 30,
+      toJSON: () => ({}),
+    } as DOMRect);
+    expect(readAnchorBelowTrigger(trigger)).toEqual({ left: 30, top: 44 });
+  });
+
+  it("문서에서 떨어진 트리거는 null을 돌려준다", () => {
+    const trigger = document.createElement("button");
+    expect(readAnchorBelowTrigger(trigger)).toBeNull();
   });
 });

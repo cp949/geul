@@ -17,6 +17,23 @@ export type FixedPlacementAnchor = {
   top: number;
 };
 
+/** 트리거 하단과 메뉴 상단 사이 간격(px). */
+const TRIGGER_MENU_GAP_PX = 4;
+
+/**
+ * 트리거 버튼 아래에 메뉴를 펼칠 때의 앵커 좌표를 읽는다. 왼쪽은 트리거의
+ * 왼쪽 가장자리, 위쪽은 하단 + 4px다. 이 공식은 이 함수 한 곳에만 둔다.
+ * 문서에서 떨어진 트리거는 `null`이다. 그러면 `useFixedPlacement`가 마지막 좌표를
+ * 유지한다.
+ */
+export const readAnchorBelowTrigger = (
+  trigger: Element,
+): FixedPlacementAnchor | null => {
+  if (!trigger.isConnected) return null;
+  const rect = trigger.getBoundingClientRect();
+  return { left: rect.left, top: rect.bottom + TRIGGER_MENU_GAP_PX };
+};
+
 type UseFixedPlacementOptions = {
   /** 열려 있는 동안만 scroll·resize를 구독한다. */
   open: boolean;

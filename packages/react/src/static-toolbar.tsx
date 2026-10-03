@@ -42,6 +42,7 @@ import {
   blockTypeToOptionId,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
+import { readAnchorBelowTrigger } from "./fixed-placement.js";
 import {
   computeFormattingToolbarState,
   type FormattingToolbarState,
@@ -197,8 +198,9 @@ const buttonClassName = "geul-static-toolbar__button";
 
 type ColorMenuState = {
   property: ColorMenuProperty;
-  left: number;
-  top: number;
+  // 클릭된 트리거 버튼. 메뉴 좌표는 rect를 보관하지 않고 이 요소에서 매번 읽는다
+  // (Issue #234).
+  trigger: HTMLButtonElement;
   // 키보드로 연 메뉴만 첫 스와치로 포커스를 옮긴다(Issue #224).
   focusFirst: boolean;
 };
@@ -440,15 +442,9 @@ export const StaticToolbar = ({
     trigger: HTMLButtonElement,
     focusFirst: boolean,
   ) => {
-    const rect = trigger.getBoundingClientRect();
     focusEditorIfFocusIn(COLOR_MENU_SELECTOR);
     overlay.open("color");
-    setColorMenuState({
-      property,
-      left: rect.left,
-      top: rect.bottom + 4,
-      focusFirst,
-    });
+    setColorMenuState({ property, trigger, focusFirst });
   };
 
   // `event.detail === 0`이면 키보드 활성화(Enter·Space)다. 마우스로 열면
@@ -832,13 +828,12 @@ export const StaticToolbar = ({
           focusFirst={colorMenuState.focusFirst}
           key={colorMenuState.property}
           label={colorPropertyLabel(colorMenuState.property)}
-          left={colorMenuState.left}
           noneLabel={dictionary.color.none}
           onApply={(color) => applyInlineColor(colorMenuState.property, color)}
           onClose={() => setColorMenuState(null)}
           onTabDismiss={() => closeColorMenuToTrigger(colorMenuState.property)}
           property={colorMenuState.property}
-          top={colorMenuState.top}
+          readAnchor={() => readAnchorBelowTrigger(colorMenuState.trigger)}
         />
       )}
     </>

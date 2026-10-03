@@ -7,7 +7,10 @@ import {
   TABLE_TEXT_COLORS,
   type TableCellColor,
 } from "./table-cell-colors.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import {
+  type FixedPlacementAnchor,
+  useFixedPlacement,
+} from "./fixed-placement.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 
 export type ColorMenuProperty = "text" | "background";
@@ -27,9 +30,11 @@ const COLOR_MENU_DISMISS_ALLOW_SELECTORS = [
 const SWATCH_SELECTOR = '[role="menuitem"]';
 
 type StaticToolbarColorMenuProps = {
-  /** 메뉴 좌상단 앵커의 viewport 좌표. 트리거 하단 기준이다. */
-  left: number;
-  top: number;
+  /**
+   * 메뉴 좌상단 앵커의 viewport 좌표를 지금 읽어 돌려준다. 트리거 하단 기준이다.
+   * 메뉴가 열린 동안 스크롤·resize마다 `useFixedPlacement`가 다시 읽는다.
+   */
+  readAnchor: () => FixedPlacementAnchor | null;
 
   /** 글자색인지 배경색인지. 팔레트와 스와치 모양이 갈린다. */
   property: ColorMenuProperty;
@@ -73,8 +78,7 @@ type StaticToolbarColorMenuProps = {
  * `tabIndex={-1}`이라 메뉴가 Tab 정지점을 더하지 않는다.
  */
 export const StaticToolbarColorMenu = ({
-  left,
-  top,
+  readAnchor,
   property,
   label,
   colorName,
@@ -85,7 +89,11 @@ export const StaticToolbarColorMenu = ({
   onClose,
   onTabDismiss,
 }: StaticToolbarColorMenuProps) => {
-  const { menuRef, style } = useClampedMenuPosition(left, top);
+  const { menuRef, style } = useFixedPlacement({
+    open: true,
+    element,
+    readAnchor,
+  });
 
   // 열려 있을 때만 마운트하므로 `open`은 고정이다. 열림 초점은 아래 로컬
   // effect가 맡고 `focusOnOpen`은 쓰지 않는다. 속성이 바뀌면 `key`로

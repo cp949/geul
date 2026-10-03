@@ -18,6 +18,10 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
+import {
+  expectOverlayFollowsAnchor,
+  resetPageScroll,
+} from "./support/anchor-gap.js";
 import { openShowcasePage } from "./support/showcase.js";
 import {
   BLOCK_TEXT,
@@ -316,4 +320,38 @@ test("키보드로 연 글자색 메뉴가 열린 채 Bold를 마우스로 누�
 
   await expect(textMenu).toHaveCount(0);
   await expect(editorInput).toBeFocused();
+});
+
+test.describe("열린 채 스크롤 (Issue #234)", () => {
+  // StaticToolbar가 sticky라 안쪽 스크롤만으로는 트리거가 움직이지 않는다.
+  // window만 민 경우와 안쪽 스크롤을 함께 민 경우를 각각 증명한다.
+  for (const [title, scope] of [
+    ["window를 스크롤해도", "window"],
+    ["안쪽 스크롤과 window를 함께 스크롤해도", "all"],
+  ] as const) {
+    test(`글자색·배경색 메뉴가 열린 채 ${title} 메뉴가 트리거 아래에 붙어 있다`, async ({
+      page,
+    }) => {
+      const {
+        block,
+        textTrigger,
+        backgroundTrigger,
+        textMenu,
+        backgroundMenu,
+      } = await openExample(page);
+      await placeCaretAtEnd(page, block, BLOCK_TEXT);
+
+      for (const [trigger, menu] of [
+        [textTrigger, textMenu],
+        [backgroundTrigger, backgroundMenu],
+      ] as const) {
+        await trigger.click();
+        await expect(menu).toBeVisible();
+        await expectOverlayFollowsAnchor(page, trigger, menu, scope);
+        await resetPageScroll(page);
+        await trigger.click();
+        await expect(menu).toHaveCount(0);
+      }
+    });
+  }
 });
