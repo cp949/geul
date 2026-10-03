@@ -1622,6 +1622,21 @@ describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
     return { toolbar, place, host: rendered.host };
   };
 
+  /**
+   * 툴바 첫 버튼에 포커스를 둔 채 코드블록을 영역 밖으로 민다. 박스(290–314)와
+   * 앵커 점(600, 300)이 모두 영역(0–100) 밖이다. 포커스 면제 시나리오의 준비다.
+   */
+  const mountFocusedOutsideArea = () => {
+    const fixture = mountClipFixture();
+    fixture.place(10, { left: 500, top: 10 });
+    act(() => {
+      languageButton().focus();
+    });
+    fixture.place(300, { left: 500, top: 290 });
+    expect(fixture.toolbar.style.visibility).toBe("");
+    return fixture;
+  };
+
   it("툴바 박스가 영역 밖이면 숨고 영역 안으로 돌아오면 다시 보인다", () => {
     const { toolbar, place } = mountClipFixture();
 
@@ -1698,13 +1713,7 @@ describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
   });
 
   it("포커스가 툴바 밖으로 나가면 앵커가 그대로여도 영역 밖인 툴바를 숨긴다(Issue #237)", () => {
-    const { toolbar, place } = mountClipFixture();
-    place(10, { left: 500, top: 10 });
-    act(() => {
-      languageButton().focus();
-    });
-    place(300, { left: 500, top: 290 });
-    expect(toolbar.style.visibility).toBe("");
+    const { toolbar } = mountFocusedOutsideArea();
 
     // 앵커 변화 없이 blur만 일어난다. onBlur가 렌더를 강제해야 숨는다.
     act(() => {
@@ -1715,13 +1724,7 @@ describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
   });
 
   it("툴바 안 버튼 사이로 포커스를 옮겨도 영역 밖인 툴바를 숨기지 않는다(Issue #237)", () => {
-    const { toolbar, place } = mountClipFixture();
-    place(10, { left: 500, top: 10 });
-    act(() => {
-      languageButton().focus();
-    });
-    place(300, { left: 500, top: 290 });
-    expect(toolbar.style.visibility).toBe("");
+    const { toolbar } = mountFocusedOutsideArea();
 
     const copyButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Copy code",

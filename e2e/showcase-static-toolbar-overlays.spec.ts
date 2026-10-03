@@ -11,7 +11,7 @@
  * 코드블록 툴바도 같다(Issue #236). 언어 popover가 열려 있으면 숨기지 않는다.
  * 툴바 안 버튼에 포커스가 있어도 숨기지 않는다(Issue #237).
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
 
@@ -43,6 +43,40 @@ const readEscapedOverlays = (page: Page) =>
       })
       .map((element) => String(element.className));
   }, OVERLAY_SELECTOR);
+
+/** 포인터를 멈춘 채 scrollTop만 바꾼다. hover가 유지돼 오버레이가 DOM에 남는다. */
+const setAreaScrollTop = (page: Page, top: number) =>
+  page.evaluate((target) => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    area.scrollTop = target;
+  }, top);
+
+const isOutsideScrollArea = (anchor: Locator) =>
+  anchor.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return rect.bottom < area.top || rect.top > area.bottom;
+  });
+
+/**
+ * 코드블록을 영역 밖으로 밀고 툴바 clip 판정이 한 번 돈 것을 기다린다.
+ * 툴바가 새 앵커로 옮겨 가야 판정이 돈 것이다. 이전에는 시작 상태(visible)가
+ * 그대로라 단언이 판정보다 먼저 통과할 수 있다.
+ */
+const pushCodeBlockOutOfArea = async (page: Page, codeBlock: Locator) => {
+  const toolbar = page.locator(".geul-code-block-toolbar");
+  const readToolbarY = async () => (await toolbar.boundingBox())?.y;
+  const toolbarYBefore = await readToolbarY();
+  await setAreaScrollTop(page, 0);
+  await expect
+    .poll(readToolbarY, { message: "툴바가 스크롤을 따라 이동" })
+    .not.toBe(toolbarYBefore);
+  expect(await isOutsideScrollArea(codeBlock), "코드블록이 영역 밖").toBe(true);
+};
 
 test("스크롤해도 오버레이가 스크롤 영역 밖에 떠 있지 않다", async ({
   page,
@@ -138,23 +172,6 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
   await page.getByRole("button", { name: "샘플 불러오기" }).click();
   const editor = page.getByRole("textbox", { name: "Editor" });
 
-  // 포인터를 멈춘 채 scrollTop만 바꾼다. hover가 유지돼 오버레이가 DOM에 남는다.
-  const setAreaScrollTop = (top: number) =>
-    page.evaluate((target) => {
-      const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
-      if (area === null) throw new Error("scrollArea 없음");
-      area.scrollTop = target;
-    }, top);
-  const isOutsideScrollArea = (anchor: ReturnType<typeof editor.locator>) =>
-    anchor.evaluate((element) => {
-      const area = document
-        .querySelector('[class*="scrollArea"]')
-        ?.getBoundingClientRect();
-      if (area === undefined) throw new Error("scrollArea 없음");
-      const rect = element.getBoundingClientRect();
-      return rect.bottom < area.top || rect.top > area.bottom;
-    });
-
   for (const [anchor, selector] of [
     [editor.locator("img").first(), ".geul-media-handle-overlay"],
     [
@@ -174,7 +191,7 @@ test("hover로 뜬 미디어 그립과 callout 트리거는 스크롤 영역 밖
     );
     expect(await readEscapedOverlays(page)).toEqual([]);
 
-    await setAreaScrollTop(0);
+    await setAreaScrollTop(page, 0);
     expect(
       await isOutsideScrollArea(anchor),
       `${selector} 앵커가 영역 밖`,
@@ -214,29 +231,7 @@ test("언어 popover가 열려 있으면 코드블록이 스크롤 영역 밖에
   const popover = page.locator(".geul-code-block-language-popover");
   await expect(popover).toHaveCount(1);
 
-  const readToolbarY = async () => (await toolbar.boundingBox())?.y;
-  const toolbarYBefore = await readToolbarY();
-
-  // 포인터를 멈춘 채 scrollTop만 바꿔 코드블록을 영역 밖으로 민다.
-  await page.evaluate(() => {
-    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
-    if (area === null) throw new Error("scrollArea 없음");
-    area.scrollTop = 0;
-  });
-  // 툴바가 새 앵커로 옮겨 가야 clip 판정이 한 번 돈 것이다. 이전에는 시작
-  // 상태(visible)가 그대로라 단언이 판정보다 먼저 통과할 수 있다.
-  await expect
-    .poll(readToolbarY, { message: "툴바가 스크롤을 따라 이동" })
-    .not.toBe(toolbarYBefore);
-  const isOutside = await codeBlock.evaluate((element) => {
-    const area = document
-      .querySelector('[class*="scrollArea"]')
-      ?.getBoundingClientRect();
-    if (area === undefined) throw new Error("scrollArea 없음");
-    const rect = element.getBoundingClientRect();
-    return rect.bottom < area.top || rect.top > area.bottom;
-  });
-  expect(isOutside, "코드블록이 영역 밖").toBe(true);
+  await pushCodeBlockOutOfArea(page, codeBlock);
 
   // 전제: 스크롤 중에도 popover가 닫히지 않는다.
   await expect(popover, "popover 유지").toHaveCount(1);
@@ -260,28 +255,7 @@ test("툴바 버튼에 포커스가 있으면 코드블록이 스크롤 영역 �
   await copyButton.focus();
   await expect(copyButton).toBeFocused();
 
-  const readToolbarY = async () => (await toolbar.boundingBox())?.y;
-  const toolbarYBefore = await readToolbarY();
-
-  // 포인터를 멈춘 채 scrollTop만 바꿔 코드블록을 영역 밖으로 민다.
-  await page.evaluate(() => {
-    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
-    if (area === null) throw new Error("scrollArea 없음");
-    area.scrollTop = 0;
-  });
-  // 툴바가 새 앵커로 옮겨 가야 clip 판정이 한 번 돈 것이다.
-  await expect
-    .poll(readToolbarY, { message: "툴바가 스크롤을 따라 이동" })
-    .not.toBe(toolbarYBefore);
-  const isOutside = await codeBlock.evaluate((element) => {
-    const area = document
-      .querySelector('[class*="scrollArea"]')
-      ?.getBoundingClientRect();
-    if (area === undefined) throw new Error("scrollArea 없음");
-    const rect = element.getBoundingClientRect();
-    return rect.bottom < area.top || rect.top > area.bottom;
-  });
-  expect(isOutside, "코드블록이 영역 밖").toBe(true);
+  await pushCodeBlockOutOfArea(page, codeBlock);
 
   // 포커스가 있는 동안은 숨기지 않는다. 숨기면 포커스가 body로 빠진다.
   await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
