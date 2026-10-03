@@ -376,7 +376,8 @@ describe("useFixedPlacement", () => {
       stubMenuRect(100, 50);
       const host = mountHost();
       // centerAbove는 박스 좌상단이 (left - 폭/2, top - 높이 - 8)에 놓인다.
-      // 앵커가 뷰포트 위쪽에 붙어 있으면 위로 밀려나 top이 바뀐다.
+      // 앵커가 뷰포트 위쪽에 붙어 있으면 위로 밀려난다. 박스 상단이 여백 8px에
+      // 닿도록 top이 8 + 50 + 8 = 66이 된다. 폭은 가운데 정렬이라 left는 그대로다.
       const { container } = render(
         <Probe
           clampAnchor="centerAbove"
@@ -385,8 +386,7 @@ describe("useFixedPlacement", () => {
           readAnchor={() => ({ left: 200, top: 10 })}
         />,
       );
-      const { top } = readStyle(container);
-      expect(top).not.toBe("10px");
+      expect(readStyle(container)).toEqual({ left: "200px", top: "66px" });
     });
   });
 });

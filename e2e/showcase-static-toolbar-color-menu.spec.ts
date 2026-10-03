@@ -21,6 +21,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   expectOverlayFollowsAnchor,
   resetPageScroll,
+  TRIGGER_MENU_GAP,
 } from "./support/anchor-gap.js";
 import { openShowcasePage } from "./support/showcase.js";
 import {
@@ -347,7 +348,13 @@ test.describe("열린 채 스크롤 (Issue #234)", () => {
       ] as const) {
         await trigger.click();
         await expect(menu).toBeVisible();
-        await expectOverlayFollowsAnchor(page, trigger, menu, scope);
+        await expectOverlayFollowsAnchor(
+          page,
+          trigger,
+          menu,
+          scope,
+          TRIGGER_MENU_GAP,
+        );
         await resetPageScroll(page);
         await trigger.click();
         await expect(menu).toHaveCount(0);

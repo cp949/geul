@@ -4,7 +4,10 @@
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { expectOverlayFollowsAnchor } from "./support/anchor-gap.js";
+import {
+  expectOverlayFollowsAnchor,
+  TRIGGER_MENU_GAP,
+} from "./support/anchor-gap.js";
 import {
   CLAMP_BOUNDARY_MIN_MARGIN_PX,
   expectOverlayWithinViewport,
@@ -326,7 +329,13 @@ test("글자색·배경색 메뉴가 열린 채 window를 스크롤해도 메뉴
     const menu = page.getByRole("menu", { name });
     await trigger.click();
     await expect(menu).toBeVisible();
-    await expectOverlayFollowsAnchor(page, trigger, menu, "window");
+    await expectOverlayFollowsAnchor(
+      page,
+      trigger,
+      menu,
+      "window",
+      TRIGGER_MENU_GAP,
+    );
     await selectBlockTextAndNotify(middle, "Middle block");
     await trigger.click();
     await expect(menu).toHaveCount(0);

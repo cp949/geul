@@ -1,5 +1,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+/** 트리거 하단과 메뉴 상단 사이 기대 간격(px). `readAnchorBelowTrigger`의 오프셋과 같다. */
+export const TRIGGER_MENU_GAP = 4;
+
 /** 앵커 하단과 오버레이 상단 사이 간격과 앵커의 viewport y. */
 export type AnchorGap = { anchorY: number; gap: number };
 
@@ -57,14 +60,18 @@ export const resetPageScroll = async (page: Page) => {
 /**
  * 열린 오버레이가 스크롤 뒤에도 앵커 아래 같은 간격을 유지하는지 단언한다.
  * 전제로 앵커가 실제로 움직였는지 먼저 확인한다. 안 움직이면 단언이 공허하다.
+ * `expectedGap`을 주면 스크롤 전 간격도 그 값인지 확인한다. 오프셋 공식이
+ * 틀려 간격이 처음부터 어긋난 채 유지되는 경우를 잡는다.
  */
 export const expectOverlayFollowsAnchor = async (
   page: Page,
   anchor: Locator,
   overlay: Locator,
   scope: "window" | "all" = "all",
+  expectedGap?: number,
 ) => {
   const before = await readAnchorGap(anchor, overlay);
+  if (expectedGap !== undefined) expect(before.gap).toBe(expectedGap);
   await scrollPage(page, scope);
   await expect
     .poll(async () => (await readAnchorGap(anchor, overlay)).anchorY)
