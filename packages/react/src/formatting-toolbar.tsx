@@ -174,8 +174,8 @@ const restoreEditorSelection = (
 /**
  * `portalTarget`을 지정하면 `createPortal`로 그 요소 하위에 렌더한다(옛
  * 로드맵 Issue #156 슬라이스 4 RD-003 DELTA-01). 미지정(기본값 `null`)이면
- * 기존처럼 부모 트리 내부에 그대로 렌더한다 — additive 확장이라 기존 소비자·테스트의 DOM 배치 가정을 깨지
- * 않는다.
+ * 기존처럼 부모 트리 내부에 그대로 렌더한다 — additive 확장이라 기존
+ * 소비자·테스트의 DOM 배치 가정을 깨지 않는다.
  *
  * `component`를 지정하면 위치 계산·표시 판정·dismiss는 이 컴포넌트가 그대로
  * 담당하고 내부 JSX(마크 버튼·블록 타입 select·색상 팔레트)만 `<Component

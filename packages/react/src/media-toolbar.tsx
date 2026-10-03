@@ -327,10 +327,9 @@ export const MediaToolbar = ({
       setToolbarState({ mode: "closed" });
       return;
     }
-    // File Panel이 URL 적용 결과를 보여주는 동안 같은 블록의 toolbar를
-    // 활성화하면 Escape 하나가 두 overlay의 dismiss listener를 함께 태워
-    // dismiss-suppression 상태를 오염시킨다. File Panel이 닫힌 뒤 다음
-    // selection refresh에서만 toolbar를 연다.
+    // File Panel이 URL 적용 결과를 보여주는 동안 같은 블록의 toolbar를 열면
+    // 두 overlay가 한 블록에 겹친다. File Panel이 닫힌 뒤 다음 selection
+    // refresh에서만 toolbar를 연다.
     if (
       element.getAttribute("data-geul-file-panel-block-id") === media.blockId
     ) {
