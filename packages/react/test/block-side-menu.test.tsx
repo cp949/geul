@@ -1714,10 +1714,14 @@ describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
     return { left: panel.style.left, top: panel.style.top };
   };
 
-  /** 블록 rect를 지정해 첫 블록의 메뉴를 연다. */
+  /**
+   * 블록 rect를 지정해 첫 블록의 메뉴를 연다. `beforeOpen`은 핸들을 누르기 직전에
+   * 블록을 손본다. 열 때의 좌표에 반영돼야 하는 스타일을 넣는다.
+   */
   const openAt = (
     rect: { left: number; top: number },
     options?: Omit<MountBlockEditorOptions, "children" | "layout">,
+    beforeOpen?: (block: HTMLElement) => void,
   ) => {
     const rendered = renderBlockMenu({
       ...options,
@@ -1725,6 +1729,7 @@ describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
     });
     const [block] = rendered.blocks;
     if (block === undefined) throw new Error("블록 요소가 없다");
+    beforeOpen?.(block);
     fireEvent.pointerMove(block);
     fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
     return { ...rendered, block };
@@ -1751,6 +1756,7 @@ describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
   });
 
   it("heading은 열 때와 재측정 때 같은 거터 오프셋을 더한다", () => {
+    // line-height 48px, 거터 버튼 24px → (48 - 24) / 2 = 12px를 더한다.
     const { block } = openAt(
       { left: 40, top: 100 },
       {
@@ -1763,15 +1769,13 @@ describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
           },
         ],
       },
+      (target) => {
+        const heading = target.firstElementChild;
+        if (!(heading instanceof HTMLElement))
+          throw new Error("heading이 없다");
+        heading.style.lineHeight = "48px";
+      },
     );
-    // line-height 48px, 거터 버튼 24px → (48 - 24) / 2 = 12px를 더한다.
-    const heading = block.firstElementChild;
-    if (!(heading instanceof HTMLElement)) throw new Error("heading이 없다");
-    heading.style.lineHeight = "48px";
-    stubRect(block, { left: 40, top: 100, width: 600, height: 20 });
-    act(() => {
-      fireEvent.scroll(window);
-    });
     expect(menuPosition()).toEqual({ left: "40px", top: "140px" });
 
     stubRect(block, { left: 40, top: 50, width: 600, height: 20 });
