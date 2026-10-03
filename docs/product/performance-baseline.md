@@ -62,6 +62,68 @@ fixture).
 표(공식 기준선)는 갱신하지 않는다 — 단일 로컬 실행 2회는 기존 표의 5표본
 방법론을 대체할 근거로 부족하다.
 
+## Issue #239 표 선택·undo 회귀 조사
+
+[Issue #239](https://github.com/cp949/geul/issues/239): `pnpm test:e2e:perf`의 선택이 354ms, undo가 48ms로 나왔다. 기준은 선택 11–17ms, undo 15–20ms였다. 로드·붙여넣기는 노이즈 범위다. 원인은 제품 코드 회귀 두 개였다. 의존성과 측정 환경은 원인이 아니었다.
+
+### 비교 규칙
+
+- 머신 간 절대값 비교는 하지 않는다. 같은 머신·같은 세션의 상대값만 비교한다.
+- 위 "측정치" 표(2026-08-27)와 "Issue #167 영향 측정" 표(2026-09-10)는 값이 다르다. 선택은 11.5ms 대 16.1–16.8ms, undo는 14.8ms 대 15.7–20.0ms다. 머신·세션 차이와 프레임 양자화(16.7ms)가 섞인 값이다. 이 절의 비교는 같은 세션에서 잰 control을 기준으로 한다.
+- control은 #167 재측정 커밋(`86d225c2`)이다. 판정은 control 대비 배수로 한다.
+
+### 측정 환경
+
+- 브라우저: Chromium 153.0.8010.12(Playwright 1.63.0)와 151.0.7922.34(Playwright 1.62.1). headless, Desktop Chrome.
+- 머신: Intel Core i7-8700, 12 논리 코어.
+- 서버: `apps/demo` vite dev(5173).
+- 측정일: 2026-10-04. 측정 중 load average는 0.1–4.3이다.
+- 명령: `pnpm exec playwright test --project=perf e2e/table-performance.spec.ts`. `pnpm test:e2e:perf`는 타이핑 spec도 함께 돈다.
+
+### 원인 판정
+
+의존성·Chromium 교란은 칸 대조로 가렸다. 표본 5개 중앙값이다.
+
+| 칸 | 코드 | 의존성 | Chromium | 선택(ms) | undo(ms) |
+| --- | --- | --- | --- | --- | --- |
+| A(control) | `86d225c2` | 자체 lockfile | 151.0.7922.34 | 15.8 | 15.7 |
+| HEAD | `cafae6e1` | HEAD | 153.0.8010.12 | 353.8 | 48.5 |
+| B | `cafae6e1` | 외부 의존성을 `86d225c2` 값으로 고정 | 151.0.7922.34 | 373.4 | 51.0 |
+
+B가 HEAD만큼 느리다. 원인은 코드다.
+
+회귀는 두 단계다. 커밋마다 react `dist`를 빌드하고 `getBoundingClientRect` 호출 수까지 센 프로브로 분리했다.
+
+| 원인 | 커밋 | 선택 | undo | 메커니즘 |
+| --- | --- | --- | --- | --- |
+| A | `af5dc91e` | 17.6 → 49.9ms | 영향 없음 | `_editor.scss`의 `.ProseMirror-hideselection *` 규칙. prosemirror-view가 그 클래스를 CellSelection에도 붙여 10,000셀의 스타일 재계산을 일으킨다 |
+| B | `2a1afd34` | 44 → 344ms | 15.0 → 50.6ms | 표 안에 커서만 있어도 행·열 그립 클러스터를 마운트한다. geometry 판독이 셀 rect 약 10,100회와 resize segment 10,000개를 만든다 |
+
+- 원인 A 대조: 좋은 커밋에 규칙만 주입해도 선택이 15 → 52ms로 오른다. 규칙을 루트에만 걸어도 36–38ms다. `caret-color`가 상속 속성이기 때문이다.
+- 원인 B 구간의 일부 커밋은 선택이 끝나지 않아 표 spec이 실패한다. `git bisect run` 단독으로는 원인을 가르지 못했다.
+- undo는 select 없이 붙여넣기 직후 측정해도 원인 B 커밋에서 오른다.
+
+### 수정과 결과
+
+- 원인 A: core의 `hide-native-selection-extension.ts`가 CellSelection을 제외한 비가시 selection(NodeSelection·GapCursor)일 때만 root에 `geul-hide-selection`을 붙인다. scss 규칙을 그 클래스로 옮겼다. 표 셀 선택의 네이티브 선택 하이라이트는 `af5dc91e` 이전 동작이다.
+- 원인 B: `[colspan],[rowspan]`이 없는 표는 첫 행 셀 rect만 읽고 열당 resize segment를 한 구간으로 합친다. 병합 표는 현행 경로다.
+
+같은 세션에서 control과 수정 후를 연달아 측정했다.
+
+| 구성 | 선택 중앙값(ms) | undo 중앙값(ms) | 선택 중 rect 호출 |
+| --- | --- | --- | --- |
+| control(`86d225c2`) | 18.2 | 16.4 | 45 |
+| 수정 전 | 353.8 | 48.5 | 30,450 |
+| 원인 A 수정만 | 324.0 | 48.2 | 30,450 |
+| 수정 후 1회차 | 56.1 | 16.9 | 750 |
+| 수정 후 2회차 | 54.2 | 18.8 | 750 |
+
+- rect 호출 수는 프로브(`getBoundingClientRect` 래핑)로 센 값이다. 저장소에 재현 도구가 없다.
+- undo는 control 수준으로 돌아왔다.
+- 선택은 control의 약 3배로 남았다. 남은 약 40ms는 `2a1afd34` 기능의 비용이다. 표 안에 커서만 있어도 행·열 그립 클러스터(약 200개 요소)를 마운트하고, 선택 한 번에 3번 렌더한다.
+- 클러스터 렌더 횟수 축소는 이 이슈 범위 밖이다.
+- 회귀 게이트는 결정적 구조 테스트다. `packages/react/test/table-handle-geometry.test.ts`가 N×N 표 두 크기에서 rect 호출 수와 segment 수의 증가율을 단언한다. 시간 상한은 걸지 않는다([PIT-0034](../pitfalls/PIT-0034-verify-wall-clock-limits-separate-regression-from-load-noise.md)).
+
 ## 타이핑 지연(composite 샘플 로드 후)
 
 `/examples/composite`에서 샘플을 불러온 뒤 문자를 입력할 때의 처리 비용이다. 샘플 로드 후 키 입력이 느려졌다. 원인은 예제 `ResultPanel`이었다. `packages/*`는 수정하지 않았다.
