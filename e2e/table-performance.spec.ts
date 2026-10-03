@@ -640,6 +640,66 @@ const formatWindowCounts = (snapshot: ProbeSnapshot): string => {
 const formatCounts = (snapshot: ProbeSnapshot): string =>
   `rect=${snapshot.rect} clientRects=${snapshot.clientRects} rangeRect=${snapshot.rangeRect} commits=${snapshot.commits} tableHandlesCommits=${snapshot.tableHandlesCommits}`;
 
+/**
+ * 붙여넣기 흐름(기존 선택·undo 시나리오와 같은 사전 조건)에 probe를 붙인다.
+ * 이슈 완료 기준 "선택 ≤ control × 2"의 ms는 이 흐름(과 probe 없는 기존
+ * 시나리오)에서만 control과 비교한다. 아래 병합 fixture 시나리오는 문서
+ * 로드 + 첫 셀 클릭이라 사전 조건이 달라, 같은 코드의 선택 ms가 이 흐름과
+ * 크게 어긋난다(control 기준 약 14ms 대 46ms, Issue #240 RD-001 실측).
+ * 그 시나리오의 ms는 같은 시나리오 안에서 control과 dev끼리만 비교한다.
+ */
+test("10,000셀 표 붙여넣기 흐름의 선택·undo rect 호출 수와 TableHandles 렌더 횟수를 기록한다", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(installProbe);
+
+  const { editable } = await openDemo(page);
+  await editable.click();
+  const tsv = buildTsv(100, 100);
+
+  const selectSamples: number[] = [];
+  const undoSamples: number[] = [];
+  const selectCounts: ProbeSnapshot[] = [];
+  const undoCounts: ProbeSnapshot[] = [];
+
+  for (let i = 0; i < SAMPLE_COUNT; i++) {
+    await measurePasteMs(page, tsv);
+    await startProbe(page);
+    selectSamples.push(await measureSelectMs(page));
+    selectCounts.push(await stopProbe(page));
+    await startProbe(page);
+    undoSamples.push(await measureUndoMs(page));
+    undoCounts.push(await stopProbe(page));
+    await expect(page.locator("table")).toHaveCount(0);
+  }
+
+  const label = "붙여넣기 흐름";
+  console.log(
+    `[perf] ${label} select(probe 켬) samples=[${formatSamples(selectSamples)}]ms median=${median(selectSamples).toFixed(1)}ms`,
+  );
+  console.log(
+    `[perf] ${label} undo(probe 켬, 표 제거) samples=[${formatSamples(undoSamples)}]ms median=${median(undoSamples).toFixed(1)}ms`,
+  );
+  selectCounts.forEach((snapshot, i) =>
+    console.log(
+      `[perf] ${label} select run=${i + 1} ${formatWindowCounts(snapshot)} | 후속 포함 ${formatCounts(snapshot)}`,
+    ),
+  );
+  // 기존 undo 측정 함수는 "반환" 표식이 없어 구간 내 집계를 못 한다. 후속
+  // 포함 합계만 남긴다.
+  undoCounts.forEach((snapshot, i) =>
+    console.log(`[perf] ${label} undo run=${i + 1} ${formatCounts(snapshot)}`),
+  );
+  for (const run of [0, SAMPLE_COUNT - 1]) {
+    console.log(
+      `[perf] ${label} select timeline(run=${run + 1}) ${formatTimeline(selectCounts[run] as ProbeSnapshot)}`,
+    );
+  }
+
+  expect(selectCounts.length).toBe(SAMPLE_COUNT);
+});
+
 for (const fixture of [NO_MERGE, SINGLE_MERGE, TEN_PERCENT_MERGE]) {
   test(`10,000셀 표(${fixture.name}) 선택·undo의 rect 호출 수와 TableHandles 렌더 횟수를 기록한다`, async ({
     page,
