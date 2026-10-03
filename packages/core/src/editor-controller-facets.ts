@@ -119,6 +119,14 @@ export interface SelectionQuery {
     blockId: string;
     blockType: BlockTypeDescriptor;
   } | null;
+  // [from, to]에 닿은 블록을 문서 순서로 돌려준다 — 여러 블록에 걸친
+  // 선택에서 getSelectionBlockType()이 null일 때 툴바가 일괄 변환 대상을
+  // 얻는 seam이다. 타입을 바꿀 수 없는 블록(divider·table)은 담지 않는다.
+  // 표 셀 범위·NodeSelection이면 빈 배열이다.
+  getSelectionBlocks(): {
+    blockId: string;
+    blockType: BlockTypeDescriptor;
+  }[];
   // media 4종(file/image/video/audio)은 blockContainer로 감싸이지 않는
   // atom이라(RD-002 "## 결정") getSelectionBlockType의 blockContainer
   // 전용 tree-walk(findSelectionBlock)이 구조적으로 못 본다 — 선택은
@@ -236,6 +244,15 @@ export interface BlockCommands {
       blockId: string,
       blockType: SetBlockTypeDescriptor,
       options?: { clearContent?: boolean },
+    ): Result<void, EditorError>;
+    // 여러 블록을 한 transaction으로 같은 타입으로 바꾼다(undo 1회).
+    // 바꿀 수 없는 블록(codeBlock·이미 같은 타입)은 건너뛰고 나머지를
+    // 바꾼다. 바뀐 블록이 없거나 대상이 codeBlock이면 COMMAND_NOT_APPLICABLE,
+    // 없는 id가 있으면 BLOCK_NOT_FOUND로 거절하고 아무것도 바꾸지 않는다.
+    // numberedListItem의 startNumber는 바뀐 첫 블록에만 적용한다.
+    setBlockTypes(
+      blockIds: readonly string[],
+      blockType: SetBlockTypeDescriptor,
     ): Result<void, EditorError>;
     moveBlockBefore(
       blockId: string,

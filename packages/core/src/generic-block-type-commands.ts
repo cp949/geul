@@ -8,7 +8,7 @@ import {
 } from "@cp949/geul-model";
 import type { Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
-import { Fragment } from "@tiptap/pm/model";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 
 import { findEditableBlockContent } from "./block-position.js";
@@ -27,6 +27,23 @@ import {
   findBlockEntryInTree,
   hasChildren,
 } from "./generic-block-tree-lookup.js";
+
+// numberedListItem startNumber가 모델이 받아들이는 값인지 판정한다. null은
+// 명시 번호 없음이라 항상 유효하다.
+const isValidStartNumber = (startNumber: number | null): boolean =>
+  startNumber === null ||
+  parseDocument({
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      {
+        id: "set-block-type-number-validation",
+        type: "numberedListItem",
+        content: [],
+        startNumber,
+      },
+    ],
+  }).ok;
 
 export const createGenericBlockTypeCommands = (
   session: ProductionEditorSession,
@@ -103,21 +120,7 @@ export const createGenericBlockTypeCommands = (
           ? ((target.node.attrs.startNumber as number | null | undefined) ??
             null)
           : (blockType.startNumber ?? null);
-      if (
-        numberedStartNumber !== null &&
-        !parseDocument({
-          formatVersion: 1,
-          revision: 0,
-          blocks: [
-            {
-              id: "set-block-type-number-validation",
-              type: "numberedListItem",
-              content: [],
-              startNumber: numberedStartNumber,
-            },
-          ],
-        }).ok
-      ) {
+      if (!isValidStartNumber(numberedStartNumber)) {
         return commandNotApplicable("setBlockType");
       }
     }
@@ -241,5 +244,73 @@ export const createGenericBlockTypeCommands = (
     });
   };
 
-  return { setBlockType };
+  // 여러 블록을 한 transaction으로 바꾼다. 위치가 변하지 않는 setNodeMarkup만
+  // 쓰므로 codeBlock 경계(content 변환)는 다루지 않는다 — 대상이 codeBlock이면
+  // 거절하고, codeBlock인 블록은 건너뛴다. 선택은 PM이 그대로 매핑한다.
+  const setBlockTypes = (
+    blockIds: readonly string[],
+    blockType: SetBlockTypeDescriptor,
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("setBlockType");
+    if (blockIds.length === 0 || blockType.type === "codeBlock") {
+      return commandNotApplicable("setBlockType");
+    }
+    const nodeType = session.editor.schema.nodes[blockType.type];
+    if (nodeType === undefined) return commandNotApplicable("setBlockType");
+    const targets: { node: ProseMirrorNode; position: number }[] = [];
+    for (const blockId of blockIds) {
+      const target = findEditableBlockContent(
+        session.editor.state.doc,
+        blockId,
+      );
+      if (target === null) {
+        return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+      }
+      targets.push(target);
+    }
+    const isConvertible = (node: ProseMirrorNode): boolean => {
+      const currentTypeName = node.type.name;
+      if (
+        !isInlineContentBlockType(currentTypeName) ||
+        currentTypeName === "codeBlock"
+      ) {
+        return false;
+      }
+      return blockType.type === "heading"
+        ? !(
+            currentTypeName === "heading" &&
+            node.attrs.level === blockType.level
+          )
+        : currentTypeName !== blockType.type;
+    };
+    const convertible = targets.filter((target) => isConvertible(target.node));
+    if (convertible.length === 0) return commandNotApplicable("setBlockType");
+    const startNumber =
+      blockType.type === "numberedListItem"
+        ? (blockType.startNumber ?? null)
+        : null;
+    if (!isValidStartNumber(startNumber)) {
+      return commandNotApplicable("setBlockType");
+    }
+    return session.runDocumentCommand("setBlockType", "local", () => {
+      let transaction = session.editor.state.tr;
+      convertible.forEach((target, index) => {
+        const attrs =
+          blockType.type === "heading"
+            ? { level: blockType.level }
+            : blockType.type === "numberedListItem"
+              ? { startNumber: index === 0 ? startNumber : null }
+              : {};
+        transaction = transaction.setNodeMarkup(
+          target.position,
+          nodeType,
+          attrs,
+        );
+      });
+      session.editor.view.dispatch(closeHistory(transaction));
+      return true;
+    });
+  };
+
+  return { setBlockType, setBlockTypes };
 };

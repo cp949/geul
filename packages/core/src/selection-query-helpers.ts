@@ -140,3 +140,48 @@ export const findSelectionBlock = (
   });
   return result;
 };
+
+// getSelectionBlocks 전용: [from, to]에 닿은 모든 blockContainer의 콘텐츠
+// 블록을 문서 순서로 모은다. ProseMirror setBlockType처럼 범위 끝이 블록
+// 경계에 닿기만 해도 그 블록을 포함한다. 부모와 자식이 함께 닿으면 둘 다
+// 담는다. 타입을 바꿀 수 없는 블록(divider·table·미디어)은 descriptor가
+// null이라 건너뛴다. 표 안쪽은 blockContainer가 아니라 내려가지 않는다.
+export const collectSelectionBlocks = (
+  node: ProseMirrorNode,
+  nodeStart: number,
+  from: number,
+  to: number,
+  out: { blockId: string; blockType: BlockTypeDescriptor }[] = [],
+): { blockId: string; blockType: BlockTypeDescriptor }[] => {
+  node.forEach((child, childOffset) => {
+    const childStart = nodeStart + childOffset;
+    const childEnd = childStart + child.nodeSize;
+    if (from > childEnd || to < childStart) return;
+
+    if (child.type.name === "blockGroup") {
+      collectSelectionBlocks(child, childStart + 1, from, to, out);
+      return;
+    }
+    if (child.type.name !== "blockContainer") return;
+
+    const blockId = child.attrs.blockId;
+    const blockContent = child.firstChild;
+    if (
+      typeof blockId !== "string" ||
+      blockId.length === 0 ||
+      blockContent === null
+    ) {
+      return;
+    }
+    const contentStart = childStart + 1;
+    const contentEnd = contentStart + blockContent.nodeSize;
+    if (from <= contentEnd && to >= contentStart) {
+      const blockType = blockTypeDescriptorFromNode(blockContent);
+      if (blockType !== null) out.push({ blockId, blockType });
+    }
+    if (child.childCount > 1) {
+      collectSelectionBlocks(child.child(1), contentEnd + 1, from, to, out);
+    }
+  });
+  return out;
+};

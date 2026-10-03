@@ -33,6 +33,7 @@ import {
 import { createSelectionCursorCommands } from "./selection-cursor-commands.js";
 import {
   blockTypeDescriptorFromNode,
+  collectSelectionBlocks,
   findSelectionBlock,
   nearestBlockContainerId,
   toggleableMarkTypes,
@@ -200,6 +201,14 @@ export const createEditor = (
       if (session.isDestroyed) return null;
       const { selection, doc } = session.editor.state;
       return findSelectionBlock(doc, 0, selection.from, selection.to);
+    },
+    getSelectionBlocks() {
+      if (session.isDestroyed) return [];
+      const { selection, doc } = session.editor.state;
+      // 표 셀 범위와 미디어 NodeSelection은 블록 타입 변환 대상이 아니다.
+      if (selection instanceof NodeSelection) return [];
+      if (selection instanceof CellSelection) return [];
+      return collectSelectionBlocks(doc, 0, selection.from, selection.to);
     },
     getSelectionMediaBlock() {
       if (session.isDestroyed) return null;
