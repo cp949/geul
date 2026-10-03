@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -72,7 +72,11 @@ type MenuState = {
   blockId: string;
   query: string;
   highlightedIndex: number;
-} & MenuPosition;
+};
+
+// 캐럿 rect를 읽을 수 없는 채 열릴 때(편집기 밖 DOM 선택)의 첫 좌표.
+// `slash-menu.tsx`의 같은 이름 상수와 값이 같다.
+const FALLBACK_MENU_POSITION: MenuPosition = { left: 96, top: 48 };
 
 /** `slash-menu.tsx`의 동명 함수와 바이트 단위로 같다 — 캐럿 뒤 팝업 배치를
  * 위해 같은 방식으로 캐럿 rect를 읽는다. 두 파일이 서로 다른 트리거를 다뤄
@@ -142,10 +146,14 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
-  const { menuRef, style } = useClampedMenuPosition(
-    menuState?.left ?? 0,
-    menuState?.top ?? 0,
-  );
+  // 배치는 열림 판정과 분리한다(Issue #234). 열림 상태는 좌표를 보관하지 않고
+  // 이 훅이 렌더마다 캐럿 rect를 다시 읽는다. 캐럿이 편집기 밖이면 마지막 좌표를 유지한다.
+  const { menuRef, style } = useFixedPlacement({
+    open: menuState !== null,
+    element,
+    readAnchor: () => (element === null ? null : readCaretBounds(element)),
+    fallbackAnchor: FALLBACK_MENU_POSITION,
+  });
   const menuStateRef = useRef<MenuState | null>(null);
   menuStateRef.current = menuState;
   const focusEditor = useFocusEditor(element);
@@ -201,7 +209,6 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
         return;
       }
 
-      const bounds = element === null ? null : readCaretBounds(element);
       setMenuState((current) => ({
         blockId: context.blockId,
         query,
@@ -215,8 +222,6 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
                 ),
               )
             : 0,
-        left: bounds?.left ?? current?.left ?? 96,
-        top: bounds?.top ?? current?.top ?? 48,
       }));
     };
 
@@ -242,8 +247,6 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
     };
     ownerDocument?.addEventListener("selectionchange", onSelectionChange);
     ownerDocument?.addEventListener("input", updateFromCaret);
-    ownerWindow?.addEventListener("scroll", updateFromCaret, true);
-    ownerWindow?.addEventListener("resize", updateFromCaret);
     updateFromCaret();
     return () => {
       ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
@@ -251,15 +254,16 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
         ownerWindow?.clearTimeout(deferredUpdateTimeout);
       }
       ownerDocument?.removeEventListener("input", updateFromCaret);
-      ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
-      ownerWindow?.removeEventListener("resize", updateFromCaret);
     };
   }, [editor, element]);
 
-  const items =
-    menuState === null
-      ? []
-      : filterEmojiOptions(EMOJI_OPTIONS, menuState.query);
+  // scroll마다 이 컴포넌트가 다시 렌더된다(useFixedPlacement). query가 같으면 같은
+  // 배열을 돌려줘 EmojiGrid가 565개 버튼 목록을 건너뛰게 한다.
+  const query = menuState?.query ?? null;
+  const items = useMemo(
+    () => (query === null ? [] : filterEmojiOptions(EMOJI_OPTIONS, query)),
+    [query],
+  );
 
   const selectItem = useCallback(
     (item: EmojiOption) => {

@@ -489,3 +489,127 @@ describe("Escape가 useDismissibleOverlay와 함께 동작한다(Issue #233 RD-0
     expect(rendered.editor.getBlockSelection()).toBeNull();
   });
 });
+
+type CaretRect = { left: number; top: number; height: number };
+
+/**
+ * 캐럿 Range의 rect를 고정한다. 돌려준 객체를 바꾸면 다음 읽기부터 새 rect다.
+ * jsdom은 Range 레이아웃이 없어 `mount-editor.tsx`가 전부 0으로 폴리필한다.
+ */
+const stubCaretRect = (initial: CaretRect): CaretRect => {
+  const caret = { ...initial };
+  vi.spyOn(Range.prototype, "getBoundingClientRect").mockImplementation(
+    () =>
+      ({
+        left: caret.left,
+        top: caret.top,
+        right: caret.left + 1,
+        bottom: caret.top + caret.height,
+        width: 1,
+        height: caret.height,
+        x: caret.left,
+        y: caret.top,
+        toJSON: () => ({}),
+      }) as DOMRect,
+  );
+  return caret;
+};
+
+const readPickerPosition = () => {
+  const listbox = screen.getByRole("listbox", { name: listboxName });
+  return { left: listbox.style.left, top: listbox.style.top };
+};
+
+describe("EmojiPicker 캐럿 배치(Issue #234 RD-004)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("열릴 때 캐럿 하단·왼쪽에 뜬다", () => {
+    const caret = stubCaretRect({ left: 40, top: 100, height: 20 });
+    const rendered = renderCaretBlocks();
+
+    typeIntoBlock(rendered, ":");
+
+    expect(readPickerPosition()).toEqual({
+      left: `${caret.left}px`,
+      top: `${caret.top + caret.height}px`,
+    });
+  });
+
+  it("window scroll 뒤에 캐럿을 다시 읽어 따라간다", () => {
+    const caret = stubCaretRect({ left: 40, top: 100, height: 20 });
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":");
+
+    caret.top = 60;
+    fireEvent.scroll(window);
+
+    expect(readPickerPosition()).toEqual({ left: "40px", top: "80px" });
+  });
+
+  it("안쪽 스크롤 컨테이너 scroll도 capture로 받아 따라간다", () => {
+    const caret = stubCaretRect({ left: 40, top: 100, height: 20 });
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":");
+
+    caret.top = 70;
+    // scroll은 버블링하지 않는다. window capture 구독만 이 이벤트를 받는다.
+    fireEvent.scroll(rendered.editable);
+
+    expect(readPickerPosition()).toEqual({ left: "40px", top: "90px" });
+  });
+
+  it("resize 뒤에 캐럿을 다시 읽어 따라간다", () => {
+    const caret = stubCaretRect({ left: 40, top: 100, height: 20 });
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":");
+
+    caret.left = 90;
+    fireEvent(window, new Event("resize"));
+
+    expect(readPickerPosition()).toEqual({ left: "90px", top: "120px" });
+  });
+
+  it("scroll·resize는 열림 판정을 다시 하지 않는다", () => {
+    stubCaretRect({ left: 40, top: 100, height: 20 });
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":");
+    const context = vi.spyOn(rendered.editor, "getCaretBlockContext");
+
+    fireEvent.scroll(window);
+    fireEvent(window, new Event("resize"));
+
+    expect(context).not.toHaveBeenCalled();
+  });
+
+  it("scroll 재렌더는 이모지 버튼을 다시 만들지 않는다", () => {
+    // 이모지 옵션은 수백 개다. scroll마다 호출부가 다시 렌더되므로(useFixedPlacement)
+    // `items` 배열이 같아야 EmojiGrid가 버튼 목록을 건너뛴다.
+    const rendered = renderCaretBlocks();
+    const option = EMOJI_OPTIONS[0];
+    if (option === undefined) throw new Error("이모지 옵션이 없다");
+    const original = Object.getOwnPropertyDescriptor(option, "char");
+    if (original === undefined) throw new Error("char 속성이 없다");
+    let reads = 0;
+    Object.defineProperty(option, "char", {
+      configurable: true,
+      get() {
+        reads += 1;
+        return original.value;
+      },
+    });
+    try {
+      typeIntoBlock(rendered, ":");
+      const readsAfterOpen = reads;
+      expect(readsAfterOpen).toBeGreaterThan(0);
+
+      fireEvent.scroll(window);
+      fireEvent.scroll(window);
+
+      expect(reads).toBe(readsAfterOpen);
+    } finally {
+      Object.defineProperty(option, "char", original);
+    }
+  });
+});

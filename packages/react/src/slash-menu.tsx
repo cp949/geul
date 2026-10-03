@@ -25,13 +25,13 @@ import {
 import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { IframeLoadStatus } from "./iframe-load-status.js";
 import { MediaCaptions } from "./media-captions.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -272,7 +272,10 @@ type MenuState = {
   sourceBlockType: BlockTypeDescriptor;
   query: string;
   highlightedIndex: number;
-} & MenuPosition;
+};
+
+// 캐럿 rect를 읽을 수 없는 채 열릴 때(편집기 밖 DOM 선택)의 첫 좌표.
+const FALLBACK_MENU_POSITION: MenuPosition = { left: 96, top: 48 };
 
 const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
   const selection = element.ownerDocument.getSelection();
@@ -332,10 +335,14 @@ export const SlashMenu = ({
   const { element } = useEditorMount();
   const menuId = useId();
   const [menuState, setMenuState] = useState<MenuState | null>(null);
-  const { menuRef, style } = useClampedMenuPosition(
-    menuState?.left ?? 0,
-    menuState?.top ?? 0,
-  );
+  // 배치는 열림 판정과 분리한다(Issue #234). 열림 상태는 좌표를 보관하지 않고
+  // 이 훅이 렌더마다 캐럿 rect를 다시 읽는다. 캐럿이 편집기 밖이면 마지막 좌표를 유지한다.
+  const { menuRef, style } = useFixedPlacement({
+    open: menuState !== null,
+    element,
+    readAnchor: () => (element === null ? null : readCaretBounds(element)),
+    fallbackAnchor: FALLBACK_MENU_POSITION,
+  });
   // 메뉴가 열릴 때(menuState: null → non-null)만 keydown 리스너를 붙이면,
   // "/head" 마지막 글자 입력으로 setMenuState가 실행된 뒤 이 effect가
   // 커밋되기 전에 Escape가 도착하는 레이스가 있었다(React 18+의 useEffect는
@@ -379,15 +386,7 @@ export const SlashMenu = ({
   ) => {
     explicitOpenBlockIdRef.current = query.length === 0 ? blockId : null;
     dismissedQueryRef.current = null;
-    const bounds = element === null ? null : readCaretBounds(element);
-    setMenuState((current) => ({
-      blockId,
-      sourceBlockType,
-      query,
-      highlightedIndex: 0,
-      left: bounds?.left ?? current?.left ?? 96,
-      top: bounds?.top ?? current?.top ?? 48,
-    }));
+    setMenuState({ blockId, sourceBlockType, query, highlightedIndex: 0 });
   };
 
   useEffect(() => {
@@ -432,7 +431,6 @@ export const SlashMenu = ({
         return;
       }
 
-      const bounds = element === null ? null : readCaretBounds(element);
       setMenuState((current) => ({
         blockId: context.blockId,
         sourceBlockType: context.blockType,
@@ -452,8 +450,6 @@ export const SlashMenu = ({
                 ),
               )
             : 0,
-        left: bounds?.left ?? current?.left ?? 96,
-        top: bounds?.top ?? current?.top ?? 48,
       }));
     };
 
@@ -479,8 +475,6 @@ export const SlashMenu = ({
     };
     ownerDocument?.addEventListener("selectionchange", onSelectionChange);
     ownerDocument?.addEventListener("input", updateFromCaret);
-    ownerWindow?.addEventListener("scroll", updateFromCaret, true);
-    ownerWindow?.addEventListener("resize", updateFromCaret);
     updateFromCaret();
     return () => {
       ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
@@ -488,8 +482,6 @@ export const SlashMenu = ({
         ownerWindow?.clearTimeout(deferredUpdateTimeout);
       }
       ownerDocument?.removeEventListener("input", updateFromCaret);
-      ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
-      ownerWindow?.removeEventListener("resize", updateFromCaret);
     };
   }, [customItems, editor, element]);
 
