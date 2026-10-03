@@ -126,3 +126,51 @@ describe("아이콘 교체", () => {
     expect(document.activeElement).toBe(editable);
   });
 });
+
+describe("그리드 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-003 DELTA-05)", () => {
+  /** callout을 hover해 아이콘 그리드를 연다. 편집 영역과 트리거를 돌려준다. */
+  const openGrid = () => {
+    const { editable, calloutElement } = renderCalloutPicker();
+    fireEvent.pointerMove(calloutElement);
+    const trigger = screen.getByLabelText("Change callout icon");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("listbox")).not.toBeNull();
+    return { editable, trigger };
+  };
+
+  it("바깥 클릭 때 초점이 트리거에 있으면 그리드를 닫고 편집기로 옮긴다", () => {
+    const { editable, trigger } = openGrid();
+    trigger.focus();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 그리드를 닫지 않는다", () => {
+    openGrid();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+
+      fireEvent.keyDown(outside, { key: "Escape" });
+
+      expect(screen.queryByRole("listbox")).not.toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("IME 조합 중 Escape는 그리드를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    openGrid();
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(screen.queryByRole("listbox")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+});

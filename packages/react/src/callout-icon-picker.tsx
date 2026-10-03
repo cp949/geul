@@ -5,7 +5,7 @@ import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
@@ -16,7 +16,7 @@ import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 const CALLOUT_ICON_HOVER_IGNORE_SELECTORS = [
   "[data-geul-callout-icon-trigger]",
 ] as const;
-// useDismissOnOutsideOrEscape allow-list — 트리거 버튼과 그리드 팝업 자신은
+// useDismissibleOverlay allow-list — 트리거 버튼과 그리드 팝업 자신은
 // "바깥 클릭"으로 치지 않는다.
 const CALLOUT_ICON_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-callout-icon-trigger]",
@@ -95,17 +95,12 @@ export const CalloutIconPicker = () => {
   const overlayRect = hoverElement === null ? null : readPageRect(hoverElement);
 
   const closePicker = useCallback(() => setPickerState(null), []);
-  const closePickerAndFocus = useCallback(() => {
-    setPickerState(null);
-    focusEditor();
-  }, [focusEditor]);
 
-  useDismissOnOutsideOrEscape({
-    active: pickerState !== null,
+  useDismissibleOverlay({
+    open: pickerState !== null,
     element,
     allowSelectors: CALLOUT_ICON_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: closePicker,
-    onEscapeDismiss: closePickerAndFocus,
+    onClose: closePicker,
   });
 
   const openPicker = () => {

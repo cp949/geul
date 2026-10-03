@@ -12,7 +12,7 @@ import {
   syncAnchorClipVisibility,
 } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -30,7 +30,7 @@ const actionErrorClassName = "geul-table-selection-toolbar__error";
 // PIT-0011 클램프가 뷰포트 안으로 다시 접어 넣으므로 대략치면 충분하다.
 const CELL_FORMAT_MENU_OFFSET = 32;
 
-// useDismissOnOutsideOrEscape allow-list. table-handles.tsx와 같은 이유로
+// useDismissibleOverlay allow-list. table-handles.tsx와 같은 이유로
 // 모듈 스코프 상수로 둔다.
 const CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS = [
   "[data-geul-cell-format-menu]",
@@ -139,15 +139,14 @@ export const TableSelectionToolbar = () => {
   useSelectionRefresh({ element, onUpdate: updateFromSelection });
 
   // 서식 메뉴는 바깥 pointerdown과 Escape로 닫는다(G-TST-001: 키보드로
-  // 닫는 UI는 병렬 e2e로 검증한다). 리스너는 useDismissOnOutsideOrEscape가
-  // 소유한다 — table-handles.tsx의 closeMenu와 같은 훅(Issue #20).
+  // 닫는 UI는 병렬 e2e로 검증한다). 리스너와 reason별 초점 복귀는
+  // useDismissibleOverlay가 소유한다(Issue #233 RD-003 DELTA-05).
   const dismissFormatMenu = useCallback(() => setFormatMenuOpen(false), []);
-  useDismissOnOutsideOrEscape({
-    active: formatMenuOpen,
+  useDismissibleOverlay({
+    open: formatMenuOpen,
     element,
     allowSelectors: CELL_FORMAT_MENU_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissFormatMenu,
-    onEscapeDismiss: closeFormatMenu,
+    onClose: dismissFormatMenu,
   });
 
   const { menuRef, style } = useClampedMenuPosition(

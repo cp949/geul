@@ -998,3 +998,53 @@ describe("FilePanel component override(슬라이스4 RD-001 DELTA-04)", () => {
     expect(screen.queryByRole("button", { name: "Custom save" })).toBeNull();
   });
 });
+
+describe("FilePanel 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-003 DELTA-05)", () => {
+  it("바깥 클릭 때 초점이 패널 안에 있으면 패널을 닫고 편집기로 옮긴다", () => {
+    renderPanel(
+      fakeController({ getSelectionMediaBlock: () => emptyImageBlock }),
+    );
+    const editable = getEditable();
+    screen.getByRole("button", { name: "Close file panel" }).focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(screen.queryByRole("toolbar")).toBeNull();
+      expect(document.activeElement).toBe(editable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 패널을 닫지 않는다", () => {
+    renderPanel(
+      fakeController({ getSelectionMediaBlock: () => emptyImageBlock }),
+    );
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+
+      fireEvent.keyDown(outside, { key: "Escape" });
+
+      expect(screen.queryByRole("toolbar")).not.toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("IME 조합 중 Escape는 패널을 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    renderPanel(
+      fakeController({ getSelectionMediaBlock: () => emptyImageBlock }),
+    );
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(screen.queryByRole("toolbar")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+});

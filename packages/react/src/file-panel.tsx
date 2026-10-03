@@ -13,7 +13,7 @@ import {
   readBlockBounds,
 } from "./read-block-bounds.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useDismissOnOutsideOrEscape } from "./use-dismiss-on-outside-or-escape.js";
+import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -22,7 +22,7 @@ import { useSelectionRefresh } from "./use-selection-refresh.js";
 const filePanelButtonClassName = "geul-file-panel__button";
 const closeIcon = <X {...iconProps} />;
 
-// useDismissOnOutsideOrEscape allow-list. SlashMenu/BlockSelectionToolbar와
+// useDismissibleOverlay allow-list. SlashMenu/BlockSelectionToolbar와
 // 같은 이유로 모듈 스코프 상수로 둔다(매 렌더 새 배열이면 그 훅의 effect가
 // 리스너를 매 렌더 떼었다 다시 붙인다).
 const FILE_PANEL_DISMISS_ALLOW_SELECTORS = [".geul-file-panel"] as const;
@@ -388,12 +388,13 @@ export const FilePanel = ({
     "centerBelow",
   );
 
-  useDismissOnOutsideOrEscape({
-    active: panelState.mode === "open",
+  // Escape의 초점 복귀(focus 먼저, close 나중)는 module이 맡는다(Issue #233
+  // RD-003 DELTA-05). 같은 순서라 dismissPanel만 넘긴다.
+  useDismissibleOverlay({
+    open: panelState.mode === "open",
     element,
     allowSelectors: FILE_PANEL_DISMISS_ALLOW_SELECTORS,
-    onOutsideDismiss: dismissPanel,
-    onEscapeDismiss: dismissPanelAndFocusEditor,
+    onClose: dismissPanel,
   });
 
   if (panelState.mode === "closed") return null;

@@ -837,3 +837,65 @@ describe("TableSelectionToolbar 스크롤 컨테이너 clip", () => {
     expect(screen.getByRole("toolbar").style.visibility).toBe("");
   });
 });
+
+describe("서식 메뉴 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-003 DELTA-05)", () => {
+  /** 병합 셀을 선택하고 서식 메뉴를 연다. 편집 영역과 트리거를 돌려준다. */
+  const openFormatMenu = () => {
+    const { editable, firstMergedCell } = renderMergedCellTable();
+    placeCaret(firstMergedCell);
+    fireSelectionChange();
+    const trigger = screen.getByRole("button", { name: formatLabel });
+    fireEvent.click(trigger);
+    expect(
+      screen.getByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+    return { editable, trigger };
+  };
+
+  it("바깥 클릭 때 초점이 서식 트리거에 있으면 메뉴를 닫고 편집기로 옮긴다", () => {
+    const { editable, trigger } = openFormatMenu();
+    trigger.focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(
+        screen.queryByRole("menu", { name: "Cell formatting" }),
+      ).toBeNull();
+      expect(document.activeElement).toBe(editable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("편집기 밖에서 이미 preventDefault된 Escape는 메뉴를 닫지 않는다", () => {
+    openFormatMenu();
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    try {
+      outside.focus();
+      outside.addEventListener("keydown", (event) => event.preventDefault());
+
+      fireEvent.keyDown(outside, { key: "Escape" });
+
+      expect(
+        screen.queryByRole("menu", { name: "Cell formatting" }),
+      ).not.toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("IME 조합 중 Escape는 메뉴를 닫지 않고 조합이 끝난 뒤 Escape는 닫는다", () => {
+    openFormatMenu();
+
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(
+      screen.queryByRole("menu", { name: "Cell formatting" }),
+    ).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
+  });
+});
