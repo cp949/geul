@@ -18,7 +18,7 @@ export type UseExclusiveOverlayResult = {
 // 정적 config 객체를 매 렌더 새로 받는다는 전제로 설계했다(각 id의 onClose가
 // 그 렌더의 최신 closure를 참조해야 하므로 ref로 캐시하고 의존성 배열에는
 // 넣지 않는다). 이 훅은 "형제 오버레이 중 무엇을 닫을지"만 판정한다 —
-// 바깥 클릭·Escape 판정(ADR-0013, use-dismiss-on-outside-or-escape.ts)과는
+// 바깥 클릭·Escape 판정(ADR-0013, use-dismissible-overlay.ts)과는
 // 별개 계층이라 합성으로만 쓴다(둘을 합치지 않는다). 각 오버레이 자신의
 // 열림 상태(true/false, 또는 code-block-caption-editing-store.ts 같은 외부
 // store)는 계속 소비처가 소유한다 — 이 훅은 "다른 형제가 열리면 나를

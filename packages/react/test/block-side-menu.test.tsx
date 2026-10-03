@@ -1273,7 +1273,7 @@ describe("핸들 드래그 확장: range-select 생성·범위 재드래그 이�
     });
   });
 
-  // BlockSelectionToolbar의 useDismissOnOutsideOrEscape는 document
+  // BlockSelectionToolbar의 useDismissibleOverlay는 document
   // pointerdown을 "바깥 클릭"으로 판정해 clearBlockSelection을 호출한다
   // (block-selection-toolbar.tsx). range-move로 진입하는 handle
   // pointerdown까지 이 리스너에 도달하면 선택이 먼저 지워져 뒤이은

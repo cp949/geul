@@ -12,7 +12,7 @@ import { useEditorMount } from "./use-editor.js";
  * 배선(이 element의 `ownerDocument`/`ownerWindow`에 건다)을 소비자 앱이
  * 자체 트리거 popup(예: `apps/showcase`의 mention 예제)을 만들 때도 그대로
  * 재사용할 수 있도록 `useFocusEditor`/`useClampedMenuPosition`/
- * `useDismissOnOutsideOrEscape`와 함께 공개 표면으로 승격했다.
+ * `useDismissibleOverlay`와 함께 공개 표면으로 승격했다.
  */
 export const useEditorElement = (): HTMLElement | null =>
   useEditorMount().element;

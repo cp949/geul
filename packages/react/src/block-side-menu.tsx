@@ -443,7 +443,7 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       );
 
     // range-move만 propagation을 끊는다. BlockSelectionToolbar의
-    // useDismissOnOutsideOrEscape가 document pointerdown을 "바깥 클릭"으로
+    // useDismissibleOverlay가 document pointerdown을 "바깥 클릭"으로
     // 판정해 clearBlockSelection을 먼저 실행하면, 뒤이은
     // moveSelectedBlocksBefore가 core에서 getBlockSelection()===null을
     // 만나 COMMAND_NOT_APPLICABLE로 거절된다(e2e 실측 발견, Issue #38

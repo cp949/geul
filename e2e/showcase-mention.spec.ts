@@ -3,7 +3,7 @@
  * (`EXT-002`) 확장 지점 위에 `@` 트리거 popup을 구현하는 참조 예제다.
  * `mention-picker.tsx`(showcase 로컬 컴포넌트, `packages/react`가 공개하는
  * `useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/
- * `useDismissOnOutsideOrEscape` 사용)가 실제로 트리거를 인식하고 키보드·
+ * `useDismissibleOverlay` 사용)가 실제로 트리거를 인식하고 키보드·
  * 클릭 선택 후 삽입한 노드가 JSON round-trip에서 살아남는지 실제
  * Chromium 이벤트 순서로 확인한다(G-TST-001).
  */

@@ -223,7 +223,7 @@ test("슬래시 메뉴 바깥을 클릭하면 메뉴를 닫고 클릭한 컨트�
   await expect(saveButton).toBeFocused();
 });
 
-// ADR-0013 회귀(Issue #155): useDismissOnOutsideOrEscape의 12개 소비처 중
+// ADR-0013 회귀(Issue #155): useDismissibleOverlay의 소비처 중
 // 구조가 다른 대표 3곳 중 하나(트리거가 텍스트 커서고 앵커가 DOM 요소가
 // 아니다). Slash menu도 `position: fixed`로 올바르게 스타일돼 있어(다른
 // 대표 소비처 media-toolbar와 달리 페이지 layout에 영향을 주지 않는다)
