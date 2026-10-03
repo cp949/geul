@@ -1,20 +1,10 @@
 import type { DocumentQuery } from "@cp949/geul-core";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
-import {
-  readScrollClipBoxes,
-  syncAnchorClipVisibility,
-} from "./scroll-clip.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
@@ -278,26 +268,19 @@ export const BlockSelectionToolbar = () => {
     onClose: dismissSelection,
   });
 
-  const { menuRef, style } = useClampedMenuPosition(
-    toolbarState?.left ?? 0,
-    toolbarState?.top ?? 0,
-    "centerAbove",
-  );
-
-  // 팝업은 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
-  // 앵커(선택·셀·블록)가 스크롤돼 나가 컨테이너의 보이는 영역 밖이 되면
-  // 숨긴다. 박스가 아니라 앵커를 본다(scroll-clip.ts
-  // `syncAnchorClipVisibility` 참고). 스크롤은 useSelectionRefresh가 새
-  // 상태를 만들어 이 렌더를 다시 돌린다.
-  useLayoutEffect(() => {
-    if (element === null || menuRef.current === null) return;
-    if (toolbarState === null) return;
-    syncAnchorClipVisibility(
-      menuRef.current,
-      toolbarState.left,
-      toolbarState.top,
-      readScrollClipBoxes(element),
-    );
+  // 앵커는 상태의 (left, top)이다. 하이라이트와 같은 측정에서 나온다. 이 툴바는
+  // 하이라이트 rect를 상태로 보관하므로 scroll·resize에서 위 effect가 다시
+  // 측정한다. 툴바와 하이라이트가 같은 측정을 쓰므로 서로 어긋나지 않는다.
+  // clip은 앵커가 스크롤 컨테이너의 보이는 영역 밖이면 숨긴다.
+  const { menuRef, style } = useFixedPlacement({
+    open: toolbarState !== null,
+    element,
+    readAnchor: () =>
+      toolbarState === null
+        ? null
+        : { left: toolbarState.left, top: toolbarState.top },
+    clampAnchor: "centerAbove",
+    clip: true,
   });
 
   if (toolbarState === null) return null;

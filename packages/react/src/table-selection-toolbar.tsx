@@ -1,5 +1,5 @@
 import { Palette, TableCellsMerge, TableCellsSplit } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
@@ -7,11 +7,7 @@ import { iconProps } from "./icon-props.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { findTable } from "./table-handle-geometry.js";
-import {
-  readScrollClipBoxes,
-  syncAnchorClipVisibility,
-} from "./scroll-clip.js";
-import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useFixedPlacement } from "./fixed-placement.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -41,6 +37,7 @@ type ToolbarState = {
   tableBlockId: string;
   cellIds: string[];
   splitCellId: string | null;
+  // 선택 셀 위쪽 중앙의 원본(비클램프) 앵커. 서식 메뉴(TableCellFormatMenu)가 쓴다.
   left: number;
   top: number;
 };
@@ -149,26 +146,18 @@ export const TableSelectionToolbar = () => {
     onClose: dismissFormatMenu,
   });
 
-  const { menuRef, style } = useClampedMenuPosition(
-    toolbarState?.left ?? 0,
-    toolbarState?.top ?? 0,
-    "centerAbove",
-  );
-
-  // 팝업은 컨테이너 바깥에 그려져 안쪽 스크롤 컨테이너가 잘라내지 못한다 —
-  // 앵커(선택·셀·블록)가 스크롤돼 나가 컨테이너의 보이는 영역 밖이 되면
-  // 숨긴다. 박스가 아니라 앵커를 본다(scroll-clip.ts
-  // `syncAnchorClipVisibility` 참고). 스크롤은 useSelectionRefresh가 새
-  // 상태를 만들어 이 렌더를 다시 돌린다.
-  useLayoutEffect(() => {
-    if (element === null || menuRef.current === null) return;
-    if (toolbarState === null) return;
-    syncAnchorClipVisibility(
-      menuRef.current,
-      toolbarState.left,
-      toolbarState.top,
-      readScrollClipBoxes(element),
-    );
+  // 앵커는 상태의 (left, top)이다. 서식 메뉴가 같은 값을 쓰므로 한 측정을 공유한다.
+  // scroll·resize 재측정은 위 useSelectionRefresh가 소유한다. clip은 앵커가 스크롤
+  // 컨테이너의 보이는 영역 밖이면 숨긴다.
+  const { menuRef, style } = useFixedPlacement({
+    open: toolbarState !== null,
+    element,
+    readAnchor: () =>
+      toolbarState === null
+        ? null
+        : { left: toolbarState.left, top: toolbarState.top },
+    clampAnchor: "centerAbove",
+    clip: true,
   });
 
   if (toolbarState === null) return null;
