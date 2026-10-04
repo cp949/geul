@@ -13,6 +13,7 @@
  * - `clip`: 앵커 점이 스크롤 컨테이너의 보이는 영역 밖이면 메뉴를 숨긴다.
  *   기본값 `false`와 닫힘에서는 `visibility`를 건드리지 않는다.
  * - `readAnchorBelowTrigger`: 트리거 하단 + 4 좌표와 연결 해제 시 `null`.
+ * - `readAnchorBelowTriggerEnd`: 트리거 오른쪽·하단 좌표(간격 0)와 연결 해제 시 `null`.
  */
 
 import { act, cleanup, render } from "@testing-library/react";
@@ -22,6 +23,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type FixedPlacementAnchor,
   readAnchorBelowTrigger,
+  readAnchorBelowTriggerEnd,
   useFixedPlacement,
 } from "../src/fixed-placement.js";
 import type { ClampAnchor } from "../src/use-clamped-menu-position.js";
@@ -736,5 +738,29 @@ describe("readAnchorBelowTrigger", () => {
   it("문서에서 떨어진 트리거는 null을 돌려준다", () => {
     const trigger = document.createElement("button");
     expect(readAnchorBelowTrigger(trigger)).toBeNull();
+  });
+});
+
+describe("readAnchorBelowTriggerEnd", () => {
+  it("트리거 오른쪽 가장자리와 하단을 간격 없이 돌려준다", () => {
+    const trigger = document.createElement("button");
+    document.body.append(trigger);
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      left: 30,
+      top: 10,
+      right: 70,
+      bottom: 40,
+      x: 30,
+      y: 10,
+      width: 40,
+      height: 30,
+      toJSON: () => ({}),
+    } as DOMRect);
+    expect(readAnchorBelowTriggerEnd(trigger)).toEqual({ left: 70, top: 40 });
+  });
+
+  it("문서에서 떨어진 트리거는 null을 돌려준다", () => {
+    const trigger = document.createElement("button");
+    expect(readAnchorBelowTriggerEnd(trigger)).toBeNull();
   });
 });

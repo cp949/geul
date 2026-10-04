@@ -451,22 +451,27 @@ test("Shift+Enter는 캐럿 위치에서 CodeBlock을 분할해 다음 블록으
 // `actionError` span이 이 컨테이너 안, 트리거 뒤에 추가돼 폭이 늘어난다.
 // 이 테스트는 그 span과 완전히 같은 DOM
 // (`<span class="geul-code-block-toolbar__error">`)을 직접 주입해 같은
-// 조건(컨테이너 폭 변화)을 결정론적으로 만든다. media-toolbar.tsx와
-// code-block-language-combobox.tsx가 공유하는 useAnchoredSubmenu가 outer
-// 컨테이너 ResizeObserver로 트리거 rect를 다시 읽어 more-menu를
-// 재정렬한다.
-test("outer 컨테이너 폭이 늘어나면 code-block more-menu가 트리거의 새 위치로 재정렬된다(코드리뷰 결함 2)", async ({
-  page,
-}) => {
+// 조건(컨테이너 폭 변화)을 결정론적으로 만든다. code-block 툴바는 열린
+// 동안 outer 컨테이너에 건 ResizeObserver로 렌더를 강제하고,
+// useFixedPlacement가 그 렌더 직후 트리거 rect를 다시 읽어 more-menu를
+// 재정렬한다(Issue #249). media 툴바는 useAnchoredSubmenu가 같은 역할을 한다.
+/**
+ * 메뉴를 연 채 outer 컨테이너에 `actionError` span과 같은 DOM을 주입해 폭을
+ * 늘리고, 메뉴 우측 끝이 트리거의 새 위치 우측 끝을 따라가는지 확인한다.
+ * 더보기 메뉴와 언어 popover가 같은 본문을 쓴다.
+ */
+const expectMenuFollowsToolbarWidthChange = async (
+  page: Page,
+  triggerName: string,
+  menuSelector: string,
+) => {
   const { editable } = await openDemo(page);
   const codeBlock = await insertCodeBlock(page, editable);
   await codeBlock.click();
 
-  const trigger = page.getByRole("button", {
-    name: "More code block options",
-  });
+  const trigger = page.getByRole("button", { name: triggerName });
   await trigger.click();
-  const menu = page.locator(".geul-code-block-toolbar__more-menu");
+  const menu = page.locator(menuSelector);
   await expect(menu).toBeVisible();
 
   const triggerBefore = await trigger.boundingBox();
@@ -503,7 +508,7 @@ test("outer 컨테이너 폭이 늘어나면 code-block more-menu가 트리거�
     })
     .not.toBe(triggerBefore.x);
 
-  // 수정 검증 — more-menu가 트리거의 새 위치를 따라간다(우측 끝 좌표 실측).
+  // 수정 검증 — 메뉴가 트리거의 새 위치를 따라간다(우측 끝 좌표 실측).
   await expect
     .poll(async () => {
       const triggerAfter = await trigger.boundingBox();
@@ -514,4 +519,27 @@ test("outer 컨테이너 폭이 늘어나면 code-block more-menu가 트리거�
       );
     })
     .toBeLessThanOrEqual(1);
+};
+
+test("outer 컨테이너 폭이 늘어나면 code-block more-menu가 트리거의 새 위치로 재정렬된다(코드리뷰 결함 2)", async ({
+  page,
+}) => {
+  await expectMenuFollowsToolbarWidthChange(
+    page,
+    "More code block options",
+    ".geul-code-block-toolbar__more-menu",
+  );
+});
+
+// Issue #249 — 언어 popover도 more 메뉴와 같은 조건에서 트리거를 따라간다.
+// 툴바 폭이 렌더 없이 바뀌어도 열린 동안 건 ResizeObserver가 렌더를 강제해
+// useFixedPlacement가 앵커를 다시 읽는다.
+test("outer 컨테이너 폭이 늘어나면 code-block 언어 popover가 트리거의 새 위치로 재정렬된다(Issue #249)", async ({
+  page,
+}) => {
+  await expectMenuFollowsToolbarWidthChange(
+    page,
+    "Code language",
+    ".geul-code-block-language-popover",
+  );
 });

@@ -641,14 +641,13 @@ export const MediaToolbar = ({
 
   // more-menu는 outer 컨테이너와 독립된 앵커를 쓴다 — view 모드에서 outer
   // 컨테이너 자체가 `⋯` 트리거 하나뿐이라 그 트리거의 렌더된 rect가 곧
-  // 컨테이너 rect이지만, code-block-language-combobox.tsx와 같은 구조를
-  // 그대로 유지해 트리거가 나중에 다른 버튼과 나란히 놓여도 깨지지 않게
-  // 한다. PIT-0011 — 여기서는 앵커 좌표만 실측하고, 뷰포트 clamp 자체는
+  // 컨테이너 rect이지만, 트리거가 나중에 다른 버튼과 나란히 놓여도 깨지지
+  // 않게 독립 앵커로 둔다. PIT-0011 — 여기서는 앵커 좌표만 실측하고, 뷰포트 clamp 자체는
   // 아래 useClampedMenuPosition의 기존 ResizeObserver 재계산에 맡긴다(별도
   // 수동 재계산 로직을 새로 만들지 않는다).
   // 트리거 rect 실측 + outer 컨테이너(menuRef) 리사이즈 보강(코드리뷰
-  // 결함 2)은 useAnchoredSubmenu가 code-block-language-combobox.tsx와
-  // 공유한다.
+  // 결함 2)은 useAnchoredSubmenu가 맡는다. 코드블록 툴바는 Issue #249에서
+  // useFixedPlacement로 옮겨 이 훅을 쓰지 않는다.
   const { anchor: moreMenuAnchor, recompute: recomputeMoreMenuAnchor } =
     useAnchoredSubmenu(moreTriggerRef, menuRef, moreMenuOpen);
   // 훅이 못 보는 재배치만 여기서 다시 잰다 — outer 컨테이너 크기 변화가

@@ -4,7 +4,7 @@ type AnchoredSubmenuPosition = { left: number; top: number };
 
 /**
  * "트리거(⋯) 자신의 rect를 실측해 우측-하단을 서브메뉴 anchor로 쓴다"는
- * media-toolbar.tsx·code-block-language-combobox.tsx 공통 패턴을 추출한다.
+ * media-toolbar.tsx 패턴을 추출한다.
  * 코드리뷰 결함 2 — 형제 노드 삽입(actionError span 등)으로 `containerRef`
  * outer 컨테이너 폭이 바뀌면 topRight anchor(`transform: translateX(-100%)`)가
  * 컨테이너 좌표를 다시 계산해 트리거가 화면에서 밀린다. 트리거 자신은

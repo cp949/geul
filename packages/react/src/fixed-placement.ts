@@ -35,6 +35,20 @@ export const readAnchorBelowTrigger = (
   return { left: rect.left, top: rect.bottom + TRIGGER_MENU_GAP_PX };
 };
 
+/**
+ * 트리거 버튼 아래에 오른쪽 끝을 맞춰 메뉴를 펼칠 때의 앵커 좌표를 읽는다.
+ * 왼쪽은 트리거의 오른쪽 가장자리, 위쪽은 트리거 하단이다. 간격은 0이다.
+ * `clampAnchor: "topRight"`와 짝이다. 공식은 `readAnchorBelowTrigger`와 달라서
+ * 이 파일에 형제로 둔다. 문서에서 떨어진 트리거는 `null`이다.
+ */
+export const readAnchorBelowTriggerEnd = (
+  trigger: Element,
+): FixedPlacementAnchor | null => {
+  if (!trigger.isConnected) return null;
+  const rect = trigger.getBoundingClientRect();
+  return { left: rect.right, top: rect.bottom };
+};
+
 type UseFixedPlacementOptions = {
   /** 열려 있는 동안만 scroll·resize를 구독한다. */
   open: boolean;

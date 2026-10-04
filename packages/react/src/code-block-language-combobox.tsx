@@ -6,7 +6,6 @@ import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -19,12 +18,15 @@ import {
   type CodeBlockLanguageOption,
   useCodeBlockLanguages,
 } from "./code-block-language-option.js";
+import {
+  readAnchorBelowTriggerEnd,
+  useFixedPlacement,
+} from "./fixed-placement.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import { MenuItemButton } from "./menu-item-button.js";
-import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
@@ -558,6 +560,10 @@ export const CodeBlockLanguageCombobox = () => {
   // - 스크롤은 블록을 움직여 앵커 재조회가 렌더를 다시 돌린다.
   // - 앵커가 그대로면 렌더가 없어 판정이 낡는다. 그래서 렌더를 강제한다.
   //   창 resize는 컨테이너 박스만 바꿀 수 있다.
+  // - 같은 렌더가 popover·more 메뉴의 앵커 재읽기도 일으킨다(`useFixedPlacement`는
+  //   렌더 직후에만 읽는다). 열린 동안 툴바 자신의 폭이 렌더 없이 바뀌면
+  //   (형제 노드 삽입) topRight 툴바는 왼쪽 끝이 움직여 트리거가 이동한다.
+  //   그래서 열린 동안만 툴바 크기를 관찰해 렌더를 강제한다(G-UI-001).
   const [, setClipTick] = useState(0);
   useEffect(() => {
     const ownerWindow = element?.ownerDocument.defaultView;
@@ -566,6 +572,21 @@ export const CodeBlockLanguageCombobox = () => {
     ownerWindow.addEventListener("resize", refreshClip);
     return () => ownerWindow.removeEventListener("resize", refreshClip);
   }, [element]);
+  useEffect(() => {
+    if (!open && !moreMenuOpen) return;
+    const toolbar = toolbarRef.current;
+    const ownerWindow = toolbar?.ownerDocument.defaultView;
+    if (toolbar === null || ownerWindow === undefined || ownerWindow === null) {
+      return;
+    }
+    // jsdom에는 ResizeObserver가 없다. 이 보강은 e2e(Chromium)에서만 검증한다.
+    if (typeof ownerWindow.ResizeObserver !== "function") return;
+    const observer = new ownerWindow.ResizeObserver(() =>
+      setClipTick((tick) => tick + 1),
+    );
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [open, moreMenuOpen, toolbarRef]);
   useClipVisibility(element, () => {
     const node = toolbarRef.current;
     if (node === null) return [];
@@ -573,40 +594,22 @@ export const CodeBlockLanguageCombobox = () => {
   });
   // 언어 trigger 자신의 div — 더는 독립 위치를 갖지 않는다(위치는 outer
   // toolbar가 소유). `.geul-code-block-language-trigger`의 SCSS 주석대로
-  // "shell rect == 버튼 rect"만 유지해 popoverAnchor 실측 기준으로 쓴다.
+  // "shell rect == 버튼 rect"만 유지해 popover 앵커 실측 기준으로 쓴다.
   const languageTriggerRef = useRef<HTMLDivElement | null>(null);
 
-  // 팝오버는 언어 trigger 자신의 렌더된 rect를 앵커로 쓴다 — 코드블록이나
-  // toolbar 전체가 아니라 trigger 버튼 바로 아래로 펼친다(복사·더보기
-  // 버튼이 옆에 있어도 팝오버 위치가 밀리지 않는다). 트리거 위치(anchor)가
-  // 바뀌면(스크롤·리사이즈) 다시 실측한다. jsdom에는 ResizeObserver가
-  // 없어 단위 테스트는 이 재실행에 기댄다(use-clamped-menu-position.ts와
-  // 같은 제약).
-  const [popoverAnchor, setPopoverAnchor] = useState<AnchorPosition | null>(
-    null,
-  );
-  useLayoutEffect(() => {
-    if (!open) {
-      setPopoverAnchor(null);
-      return;
-    }
-    const node = languageTriggerRef.current;
-    if (node === null) return;
-    const rect = node.getBoundingClientRect();
-    setPopoverAnchor((current) =>
-      current !== null &&
-      current.left === rect.right &&
-      current.top === rect.bottom
-        ? current
-        : { left: rect.right, top: rect.bottom },
-    );
-  }, [open, languageTriggerRef, anchor.left, anchor.top]);
-
-  const { menuRef: popoverRef, style: popoverStyle } = useClampedMenuPosition(
-    popoverAnchor?.left ?? 0,
-    popoverAnchor?.top ?? 0,
-    "topRight",
-  );
+  // popover는 언어 trigger의 렌더된 rect 바로 아래에 오른쪽 끝을 맞춘다. 복사·
+  // 더보기 버튼이 옆에 있어도 위치가 밀리지 않는다. 앵커는 `useFixedPlacement`가
+  // 렌더 직후 읽는다. 툴바 좌표 상태(`anchor`)가 이 컴포넌트 안에 있어 툴바가
+  // 옮겨 간 뒤의 rect를 읽는다(Issue #249).
+  const { menuRef: popoverRef, style: popoverStyle } = useFixedPlacement({
+    open,
+    element,
+    readAnchor: () =>
+      languageTriggerRef.current === null
+        ? null
+        : readAnchorBelowTriggerEnd(languageTriggerRef.current),
+    clampAnchor: "topRight",
+  });
 
   useEffect(() => {
     if (open) searchInputRef.current?.focus();
@@ -644,23 +647,17 @@ export const CodeBlockLanguageCombobox = () => {
   // ref를 곧바로 버튼 DOM에 붙일 수 없어, 이 shell의 rect를 버튼 경계로
   // 대신 쓴다.
   const moreTriggerRef = useRef<HTMLDivElement | null>(null);
-  // 트리거 rect 실측 + outer 컨테이너(toolbarRef) 리사이즈 보강(코드리뷰
-  // 결함 2, media-toolbar.tsx moreMenuAnchor와 동일 버그)은
-  // useAnchoredSubmenu가 공유한다.
-  const { anchor: moreMenuAnchor, recompute: recomputeMoreMenuAnchor } =
-    useAnchoredSubmenu(moreTriggerRef, toolbarRef, moreMenuOpen);
-  // 훅이 못 보는 재배치만 여기서 다시 잰다 — outer 컨테이너 크기 변화가
-  // 아니라 이 toolbar 자신의 anchor(선택 재조회)가 옮겨가는 경우다.
-  useLayoutEffect(() => {
-    if (!moreMenuOpen) return;
-    recomputeMoreMenuAnchor();
-  }, [moreMenuOpen, anchor.left, anchor.top, recomputeMoreMenuAnchor]);
-
-  const { menuRef: moreMenuRef, style: moreMenuStyle } = useClampedMenuPosition(
-    moreMenuAnchor?.left ?? 0,
-    moreMenuAnchor?.top ?? 0,
-    "topRight",
-  );
+  // more 메뉴도 popover와 같다. 트리거 rect를 `useFixedPlacement`가 렌더 직후
+  // 읽는다. 툴바 폭 변화는 위 `ResizeObserver`가 렌더로 이어 준다(Issue #249).
+  const { menuRef: moreMenuRef, style: moreMenuStyle } = useFixedPlacement({
+    open: moreMenuOpen,
+    element,
+    readAnchor: () =>
+      moreTriggerRef.current === null
+        ? null
+        : readAnchorBelowTriggerEnd(moreTriggerRef.current),
+    clampAnchor: "topRight",
+  });
 
   // RD-001-DELTA-01(Issue #193), 더보기 메뉴 이전 — Result 실패는
   // runCommand가 actionError에 남기고, 성공하면 updateFromSelection이
@@ -789,7 +786,7 @@ export const CodeBlockLanguageCombobox = () => {
           잡는다 — outer toolbar가 코드블록 우상단 position shell이다
           (RD-001-DELTA-01, Issue #193). 언어 trigger 자신의 div는 더는
           위치를 갖지 않는 평범한 자식이지만 padding 없이 버튼 크기에
-          그대로 맞춘다 — popoverAnchor 실측이 이 div의 rect를 버튼
+          그대로 맞춘다 — popover 앵커 실측이 이 div의 rect를 버튼
           경계로 그대로 쓴다(아래 languageTriggerRef). */}
       <div
         aria-label={dictionary.toolbar.codeBlock.ariaLabel}
