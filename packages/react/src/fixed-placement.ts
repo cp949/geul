@@ -7,13 +7,10 @@ import {
 } from "react";
 
 import {
-  readScrollClipBoxes,
-  syncAnchorClipVisibility,
-} from "./scroll-clip.js";
-import {
   type ClampAnchor,
   useClampedMenuPosition,
 } from "./use-clamped-menu-position.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 
 /** viewport 기준 앵커 좌표. `useClampedMenuPosition`의 (left, top)과 같은 좌표계다. */
 export type FixedPlacementAnchor = {
@@ -71,16 +68,23 @@ type UseFixedPlacementOptions = {
 
   /**
    * `true`면 앵커 점(clamp 전 좌표)이 스크롤 컨테이너의 보이는 영역 밖일 때
-   * 메뉴를 숨긴다. 선택에 붙는 popover용이다(`syncAnchorClipVisibility`).
+   * 메뉴를 숨긴다. 선택에 붙는 popover용이다(`useClipVisibility`).
    * 메뉴는 `position: fixed`로 컨테이너 바깥에 그려져 컨테이너가 잘라내지
    * 못하므로 앵커가 스크롤돼 나가면 가장자리에 clamp된 채 남는다. 트리거를
    * 따라가는 메뉴는 `false`로 둔다(#218). 기본값은 `false`이고 이때 메뉴의
    * `visibility`를 읽지도 쓰지도 않는다.
    *
    * 숨김은 `visibility`다. 호출부가 `style`에 `visibility`를 넣으면 렌더가
-   * 덮어쓴다.
+   * 덮어쓴다. 메뉴 안에 포커스가 있으면 숨기지 않는다(`useClipVisibility`).
    */
   clip?: boolean;
+
+  /**
+   * `true`면 앵커가 영역 밖이어도 `clip`이 메뉴를 숨기지 않는다. 이 메뉴의
+   * 자식 메뉴가 열려 있을 때 준다. 부모 메뉴만 숨고 자식 메뉴만 떠 있는 상태를
+   * 막는다. `clip`이 아니면 쓰이지 않는다. 기본값은 `false`다.
+   */
+  clipExempt?: boolean;
 };
 
 /**
@@ -111,6 +115,7 @@ export const useFixedPlacement = ({
   clampAnchor = "topLeft",
   fallbackAnchor,
   clip = false,
+  clipExempt = false,
 }: UseFixedPlacementOptions): {
   menuRef: RefObject<HTMLDivElement | null>;
   style: CSSProperties;
@@ -174,19 +179,18 @@ export const useFixedPlacement = ({
     clampAnchor,
   );
 
-  // 의존 배열이 없다. 스크롤마다 앵커가 바뀌고 박스도 움직인다. 매 렌더 판정한다.
-  // 닫혀 있을 때나 앵커가 없을 때는 건드리지 않는다.
-  useLayoutEffect(() => {
-    if (!clip || !open || element === null || placed === undefined) return;
-    const node = placement.menuRef.current;
-    if (node === null) return;
-    syncAnchorClipVisibility(
-      node,
-      placed.left,
-      placed.top,
-      readScrollClipBoxes(element),
-    );
-  });
+  // 판정과 면제는 `useClipVisibility`가 소유한다. 이 훅은 앵커 점만 넘긴다. 박스는
+  // 보지 않는다. popover는 앵커 위나 아래에 붙어 박스가 경계 밖으로 조금 삐져나올
+  // 수 있다. 닫혀 있을 때나 앵커가 없을 때, `clip`이 아닐 때는 `element`를 `null`로
+  // 줘 `visibility`를 읽지도 쓰지도 않는다.
+  useClipVisibility(
+    clip && open && placed !== undefined ? element : null,
+    () => {
+      const node = placement.menuRef.current;
+      if (node === null || placed === undefined) return [];
+      return [{ node, exempt: clipExempt, box: false, anchor: placed }];
+    },
+  );
 
   return placement;
 };

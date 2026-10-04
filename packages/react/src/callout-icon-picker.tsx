@@ -1,11 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { useFixedPlacement } from "./fixed-placement.js";
-import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -127,17 +127,19 @@ export const CalloutIconPicker = () => {
 
   // 트리거는 안쪽 스크롤 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다.
   // 보이는 영역 밖이면 visibility로 숨긴다(G-UI-003). 선택기가 열린 callout의
-  // 트리거는 숨기지 않는다 — 숨은 요소는 초점을 잃는다. 다른 callout로 hover가
-  // 옮겨 간 트리거는 숨긴다. 렌더마다 돈다. style prop에 visibility를 두지 않는다.
+  // 트리거는 숨기지 않는다 — 숨은 요소는 초점을 잃는다. 트리거 자신에 포커스가
+  // 있어도 숨기지 않는다. 다른 callout로 hover가 옮겨 간 트리거는 박스로
+  // 판정한다. 렌더마다 돈다. style prop에 visibility를 두지 않는다.
   const triggerRef = useRef<HTMLButtonElement>(null);
-  useLayoutEffect(() => {
+  useClipVisibility(element, () => {
     const node = triggerRef.current;
-    if (element === null || node === null) return;
-    syncClipVisibility(
-      node,
-      readScrollClipBoxes(element),
-      pickerState !== null && pickerState.blockId === hoverBlockId,
-    );
+    if (node === null) return [];
+    return [
+      {
+        node,
+        exempt: pickerState !== null && pickerState.blockId === hoverBlockId,
+      },
+    ];
   });
 
   const closePicker = useCallback(() => setPickerState(null), []);

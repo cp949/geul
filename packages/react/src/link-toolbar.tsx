@@ -223,7 +223,9 @@ export const LinkToolbar = ({
   // 앵커는 열 때 보관한 Range(`currentRangeRef`)의 rect다. 열린 동안 스크롤마다
   // 다시 읽는다. 편집 모드는 `updateFromSelection`이 `editingRef`로 막혀도
   // 위치는 이 훅이 따라간다. clip은 앵커가 스크롤 컨테이너의 보이는 영역 밖이면
-  // 숨긴다. 숨겨도 입력의 초점과 draft는 남는다(`visibility`만 바꾼다).
+  // 숨긴다. 단, 툴바 안 요소(편집 입력)에 포커스가 있으면 숨기지 않는다. 숨기면
+  // 브라우저가 포커스를 body로 빼 입력의 포커스를 잃는다. 포커스가 빠지면 다시
+  // 판정한다(`useClipVisibility`).
   const { menuRef, style } = useFixedPlacement({
     open: toolbarState.mode !== "closed",
     element,

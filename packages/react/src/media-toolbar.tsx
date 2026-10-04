@@ -30,8 +30,8 @@ import {
   readBlockTopRightBounds,
 } from "./read-block-bounds.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
-import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -625,13 +625,17 @@ export const MediaToolbar = ({
   });
   // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
   // 잘라내지 못한다 — 툴바 자신의 박스가 컨테이너의 보이는 영역 안에 완전히
-  // 들어올 때만 보인다. mode·입력 상태는 건드리지 않고 `visibility`만
-  // 갱신한다(편집 중 입력의 포커스와 draft를 잃지 않는다). 박스 기준이라 앵커 점
-  // 기준인 `useFixedPlacement({ clip })`을 쓰지 않는다. 스크롤마다 배치 훅이
-  // 렌더를 다시 돌린다.
-  useLayoutEffect(() => {
-    if (element === null || menuRef.current === null) return;
-    syncClipVisibility(menuRef.current, readScrollClipBoxes(element), false);
+  // 들어올 때만 보인다.
+  // - 면제: 열린 more 메뉴, 툴바 안 요소의 포커스. 숨기면 편집 중 입력이 포커스를
+  //   잃는다. 포커스는 mode와 무관하게 본다(rename·caption·replace 입력, more 버튼).
+  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
+  // - mode·입력 상태는 건드리지 않고 `visibility`만 갱신한다. draft가 남는다.
+  // - 박스 기준이라 앵커 점 기준인 `useFixedPlacement({ clip })`을 쓰지 않는다.
+  //   스크롤마다 배치 훅이 렌더를 다시 돌린다.
+  useClipVisibility(element, () => {
+    const node = menuRef.current;
+    if (node === null) return [];
+    return [{ node, exempt: moreMenuOpen }];
   });
   const focusEditor = useFocusEditor(element);
 

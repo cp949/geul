@@ -1,11 +1,5 @@
 import { GripVertical, MousePointerClick, Plus } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   computeDragGuide,
@@ -17,8 +11,8 @@ import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
-import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useHandleKeyboardActivation } from "./use-handle-keyboard-activation.js";
@@ -404,13 +398,13 @@ export const MediaHandleOverlays = ({
 
   // 그립은 안쪽 스크롤 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다. 보이는
   // 영역 밖이면 visibility로 숨긴다(G-UI-003). 드래그 중에는 숨기지 않는다 —
-  // 숨기면 pointer capture를 잃는다. 렌더마다 돈다. style prop에 visibility를
-  // 두지 않는다.
+  // 숨기면 pointer capture를 잃는다. 그립 안 요소에 포커스가 있어도 숨기지
+  // 않는다. 렌더마다 돈다. style prop에 visibility를 두지 않는다.
   const overlayRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
+  useClipVisibility(element, () => {
     const node = overlayRef.current;
-    if (element === null || node === null) return;
-    syncClipVisibility(node, readScrollClipBoxes(element), dragState !== null);
+    if (node === null) return [];
+    return [{ node, exempt: dragState !== null }];
   });
 
   const handleAddBlockClick = () => {

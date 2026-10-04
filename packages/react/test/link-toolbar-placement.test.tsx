@@ -5,11 +5,18 @@
  * - 앵커는 선택 Range 아래 중앙이다. view 모드는 스크롤마다 새 rect를 따라간다.
  * - 편집 모드도 스크롤을 따라간다. 편집 중에는 DOM selection이 입력으로 옮겨가
  *   재조회(`updateFromSelection`)가 막히므로 열 때 보관한 Range에서 읽는다.
- * - 편집 모드에서 앵커가 스크롤 컨테이너 밖으로 나가면 숨기되 입력 draft를 잃지 않는다.
+ * - 편집 입력에 포커스가 있으면 앵커가 스크롤 컨테이너 밖으로 나가도 숨기지 않는다(Issue #243).
+ * - 포커스가 빠진 뒤 앵커가 밖으로 나가면 숨기되 입력 draft를 잃지 않는다.
  * - Range rect를 읽을 수 없으면 마지막 좌표를 유지한다. DOM selection이 편집기 밖이면
  *   고정 대체 좌표(96, 48)를 쓴다.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, LinkToolbar } from "../src/index.js";
@@ -136,7 +143,24 @@ describe("LinkToolbar 배치", () => {
     expect(readPosition()).toEqual({ left: "340px", top: "220px" });
   });
 
-  it("편집 모드에서 앵커가 영역 밖으로 나가면 숨기되 입력 draft를 유지한다", () => {
+  it("편집 입력에 포커스가 있으면 앵커가 영역 밖으로 나가도 숨기지 않는다", () => {
+    const { host, textNode } = renderToolbar();
+    host.style.overflowY = "auto";
+    stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+    stubSelectionRect(new DOMRect(100, 40, 80, 20));
+    selectText(textNode, 0, 8);
+    openEditing();
+    const input = screen.getByRole("textbox", { name: "Link URL" });
+    expect(document.activeElement).toBe(input);
+
+    stubSelectionRect(new DOMRect(100, 400, 80, 20));
+    fireEvent.scroll(window);
+
+    expect(readToolbar().style.visibility).toBe("");
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("편집 입력의 포커스가 빠진 뒤 앵커가 영역 밖으로 나가면 숨기되 입력 draft를 유지한다", () => {
     const { host, textNode } = renderToolbar();
     host.style.overflowY = "auto";
     stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
@@ -147,6 +171,8 @@ describe("LinkToolbar 배치", () => {
       target: { value: "https://example.com" },
     });
     expect(readToolbar().style.visibility).toBe("");
+    // 포커스가 입력에 있으면 숨기지 않는다. 숨김 판정은 포커스가 빠진 뒤에 선다.
+    act(() => screen.getByRole("textbox", { name: "Link URL" }).blur());
 
     stubSelectionRect(new DOMRect(100, 400, 80, 20));
     fireEvent.scroll(window);

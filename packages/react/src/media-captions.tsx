@@ -20,9 +20,9 @@ import {
 } from "./media-caption-editing-store.js";
 import { findMediaVisualElement } from "./media-handle-overlays.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
-import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useMirroredState } from "./use-mirrored-state.js";
@@ -142,14 +142,13 @@ export const MediaCaptions = () => {
   // 규칙). unmount가 아니라 `visibility`다 — 위 spacer 되먹임이 이
   // 오버레이의 실측 높이를 쓰므로, 빼면 spacer 높이가 틀어져 스크롤 중
   // 레이아웃이 밀린다. 편집 중인 caption은 예외다(입력이 숨겨지면 포커스를
-  // 잃는다).
-  useLayoutEffect(() => {
-    if (element === null) return;
-    const clipBoxes = readScrollClipBoxes(element);
-    for (const [blockId, node] of overlayNodesRef.current) {
-      syncClipVisibility(node, clipBoxes, blockId === editing?.blockId);
-    }
-  });
+  // 잃는다). 오버레이 안 요소에 포커스가 있어도 숨기지 않는다.
+  useClipVisibility(element, () =>
+    Array.from(overlayNodesRef.current, ([blockId, node]) => ({
+      node,
+      exempt: blockId === editing?.blockId,
+    })),
+  );
 
   const handleHoverCandidateChange = useCallback(
     (candidate: HTMLElement | null) => {

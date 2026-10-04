@@ -3,7 +3,6 @@ import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -14,9 +13,9 @@ import {
   useCodeBlockCaptionEditing,
 } from "./code-block-caption-editing-store.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
-import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -119,14 +118,14 @@ export const CodeBlockCaptions = () => {
   // 재는 이유는 caption이 블록 위쪽에 붙어(translateY) 블록이 일부 보여도
   // 경계 밖에 걸칠 수 있어서다. 렌더마다(스크롤은 useSelectionRefresh가
   // 렌더를 일으킨다) 레이아웃 직후 `visibility`만 갱신한다. 편집 중인
-  // caption은 예외다(입력이 숨겨지면 포커스를 잃는다).
-  useLayoutEffect(() => {
-    if (element === null) return;
-    const clipBoxes = readScrollClipBoxes(element);
-    for (const [blockId, node] of overlayNodesRef.current) {
-      syncClipVisibility(node, clipBoxes, blockId === editing?.blockId);
-    }
-  });
+  // caption은 예외다(입력이 숨겨지면 포커스를 잃는다). 오버레이 안 요소에
+  // 포커스가 있어도 숨기지 않는다.
+  useClipVisibility(element, () =>
+    Array.from(overlayNodesRef.current, ([blockId, node]) => ({
+      node,
+      exempt: blockId === editing?.blockId,
+    })),
+  );
 
   if (element === null) return null;
 

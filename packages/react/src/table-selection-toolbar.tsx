@@ -149,7 +149,8 @@ export const TableSelectionToolbar = () => {
 
   // 앵커는 상태의 (left, top)이다. 서식 메뉴가 같은 값을 쓰므로 한 측정을 공유한다.
   // scroll·resize 재측정은 위 useSelectionRefresh가 소유한다. clip은 앵커가 스크롤
-  // 컨테이너의 보이는 영역 밖이면 숨긴다.
+  // 컨테이너의 보이는 영역 밖이면 숨긴다. 서식 메뉴가 열려 있으면 숨기지 않는다.
+  // 메뉴만 떠 있는 상태를 막는다.
   const { menuRef, style } = useFixedPlacement({
     open: toolbarState !== null,
     element,
@@ -159,6 +160,7 @@ export const TableSelectionToolbar = () => {
         : { left: toolbarState.left, top: toolbarState.top },
     clampAnchor: "centerAbove",
     clip: true,
+    clipExempt: formatMenuOpen,
   });
 
   if (toolbarState === null) return null;

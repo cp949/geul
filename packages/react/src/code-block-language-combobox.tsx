@@ -24,13 +24,9 @@ import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import { MenuItemButton } from "./menu-item-button.js";
-import {
-  isPointInClipBoxes,
-  readScrollClipBoxes,
-  syncClipVisibility,
-} from "./scroll-clip.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useExclusiveOverlay } from "./use-exclusive-overlay.js";
@@ -556,13 +552,12 @@ export const CodeBlockLanguageCombobox = () => {
   //   clamp가 툴바를 영역 안에 남긴다.
   // - 면제: 언어 popover 열림, more 메뉴 열림, 툴바 안 요소의 포커스
   //   (Issue #237). `visibility: hidden`은 포커스를 잃는다.
-  // - 포커스는 매 effect에서 `activeElement`로 읽는다. state를 두지 않는다.
+  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
   // - `visibility`만 갱신한다. mode·입력 상태는 건드리지 않는다. 툴바
   //   `style`에 `visibility`가 없어 렌더가 덮어쓰지 않는다.
   // - 스크롤은 블록을 움직여 앵커 재조회가 렌더를 다시 돌린다.
   // - 앵커가 그대로면 렌더가 없어 판정이 낡는다. 그래서 렌더를 강제한다.
-  //   창 resize는 컨테이너 박스만 바꿀 수 있다. 포커스 이탈은 툴바 `onBlur`가
-  //   다룬다.
+  //   창 resize는 컨테이너 박스만 바꿀 수 있다.
   const [, setClipTick] = useState(0);
   useEffect(() => {
     const ownerWindow = element?.ownerDocument.defaultView;
@@ -571,16 +566,10 @@ export const CodeBlockLanguageCombobox = () => {
     ownerWindow.addEventListener("resize", refreshClip);
     return () => ownerWindow.removeEventListener("resize", refreshClip);
   }, [element]);
-  useLayoutEffect(() => {
+  useClipVisibility(element, () => {
     const node = toolbarRef.current;
-    if (element === null || node === null) return;
-    const boxes = readScrollClipBoxes(element);
-    const toolbarHasFocus = node.contains(node.ownerDocument.activeElement);
-    const exempt = open || moreMenuOpen || toolbarHasFocus;
-    syncClipVisibility(node, boxes, exempt);
-    if (!exempt && !isPointInClipBoxes(anchor.left, anchor.top, boxes)) {
-      node.style.visibility = "hidden";
-    }
+    if (node === null) return [];
+    return [{ node, exempt: open || moreMenuOpen, anchor }];
   });
   // 언어 trigger 자신의 div — 더는 독립 위치를 갖지 않는다(위치는 outer
   // toolbar가 소유). `.geul-code-block-language-trigger`의 SCSS 주석대로
@@ -806,17 +795,6 @@ export const CodeBlockLanguageCombobox = () => {
         aria-label={dictionary.toolbar.codeBlock.ariaLabel}
         className="geul-code-block-toolbar"
         data-block-id={languageState.blockId}
-        // 툴바 안 버튼 사이 이동은 무시한다. blur 시점에 activeElement가
-        // body라 그대로 판정하면 숨고 다음 버튼으로 포커스를 못 옮긴다.
-        onBlur={(event) => {
-          if (
-            event.relatedTarget instanceof Node &&
-            event.currentTarget.contains(event.relatedTarget)
-          ) {
-            return;
-          }
-          setClipTick((tick) => tick + 1);
-        }}
         onKeyDown={handlePopupButtonKeyDown}
         ref={toolbarRef}
         role="toolbar"

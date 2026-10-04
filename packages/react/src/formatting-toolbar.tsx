@@ -304,12 +304,14 @@ export const FormattingToolbar = ({
 
   // 앵커는 열 때 보관한 Range(`trackedRange`)의 rect다. 열린 동안 스크롤마다
   // 다시 읽는다. clip은 앵커가 스크롤 컨테이너의 보이는 영역 밖이면 숨긴다.
+  // 색상 메뉴가 열려 있으면 숨기지 않는다. 메뉴만 떠 있는 상태를 막는다.
   const { menuRef, style } = useFixedPlacement({
     open: toolbarState !== null,
     element,
     readAnchor: () => readSelectionAnchor(trackedRange.current),
     clampAnchor: "centerAbove",
     clip: true,
+    clipExempt: colorMenuState !== null,
   });
 
   // 툴바 자신도 G-UI-001을 따른다(아래 색상 팔레트와 같은 훅). 닫힘 규칙은

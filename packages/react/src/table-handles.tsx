@@ -42,6 +42,7 @@ import type {
   ReorderState,
   ResizeState,
 } from "./table-handle-types.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -54,7 +55,6 @@ import {
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
-import { readScrollClipBoxes, syncClipVisibility } from "./scroll-clip.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 // Issue #65: menuState.index만으로는 대상보다 앞선 행/열이 사라져 인덱스가
@@ -512,19 +512,18 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   // 에디터가 안쪽 스크롤 컨테이너 안에 있으면 핸들은 그 바깥에 그려져
   // 컨테이너가 잘라내지 못한다 — 핸들 자신의 박스가 컨테이너의 보이는 영역
   // 안에 완전히 들어올 때만 보인다. 렌더마다(스크롤은 위 구독이 렌더를
-  // 일으킨다) 레이아웃 직후 최상위 요소의 `visibility`만 갱신한다. 드래그
-  // 중에는 건너뛰고 전부 보이게 둔다(pointer capture를 쥔 핸들이 사라지면
-  // 드래그가 끊긴다).
-  useLayoutEffect(() => {
+  // 일으킨다) 레이아웃 직후 최상위 요소의 `visibility`만 갱신한다.
+  // - 면제: 드래그 중. 전부 보이게 둔다(pointer capture를 쥔 핸들이 사라지면
+  //   드래그가 끊긴다).
+  // - 면제: 핸들 안 요소의 포커스. 숨기면 포커스가 body로 빠진다.
+  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
+  useClipVisibility(element, () => {
     const layer = overlayLayerRef.current;
-    if (layer === null || element === null) return;
-    const clipBoxes = readScrollClipBoxes(element);
+    if (layer === null) return [];
     const dragging = reorderState !== null || resizeState !== null;
-    for (const child of layer.children) {
-      if (child instanceof HTMLElement) {
-        syncClipVisibility(child, clipBoxes, dragging);
-      }
-    }
+    return Array.from(layer.children)
+      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+      .map((node) => ({ node, exempt: dragging }));
   });
 
   const reorderActive = reorderState !== null;
