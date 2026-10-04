@@ -228,9 +228,10 @@ Issue #224가 추가했다. 블록 타입 컨트롤과 같은 키보드 계약�
 
 ### 팝업 안 버튼의 Enter 반복
 
-Issue #248이 추가했다. StaticToolbar 밖 팝업에 적용한다. 위 블록 타입·색상 컨트롤의 Enter 반복 계약과 같은 규칙이다.
+Issue #248이 추가했고 Issue #256이 표 선택 툴바를 더했다. StaticToolbar 밖 팝업에 적용한다. 위 블록 타입·색상 컨트롤의 Enter 반복 계약과 같은 규칙이다.
 
 - 대상 팝업: 링크 툴바, 파일 패널, 미디어 툴바(more 메뉴 포함), 코드 언어 툴바·popover·more 메뉴, callout 아이콘 picker(`EmojiGrid`).
+- 표 선택 툴바(Issue #256)도 대상이다. `role="toolbar"` 루트에 같은 핸들러를 단다. 트리거는 Cell formatting이다. 반복 Enter가 새면 메뉴가 닫히고 셀 범위 선택이 풀렸다. 서식 메뉴(`TableCellFormatMenu`) 루트에는 달지 않는다. 안의 버튼이 전부 `MenuItemButton`이라 이미 막혀 있다.
 - 대상 버튼: 대상 팝업 안 `<button>` 전부다. 탭, Edit, Add link도 포함한다.
 - 각 팝업 루트의 `onKeyDown`에 `handlePopupButtonKeyDown`을 단다. 루트 위임이라 새 버튼도 구조적으로 덮는다.
 - 첫 Enter는 막지 않는다. 네이티브 click이 난다. 첫 Enter가 문서 capture 반복 억제를 건다.
