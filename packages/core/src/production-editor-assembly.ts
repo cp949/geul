@@ -96,6 +96,7 @@ import { MediaLocalPreviewLifecycleExtension } from "./media-local-preview-lifec
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import { NearestBlockClickExtension } from "./nearest-block-click-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
+import { ToggleCollapseSelectionGuardExtension } from "./toggle-collapse-selection-guard-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
 import {
   ensureTrailingParagraphOnLoad,
@@ -694,6 +695,7 @@ export const createProductionEditor = (options: {
         dictionary: options.dictionary ?? DEFAULT_DICTIONARY,
       }),
       ToggleCollapseVisibilityExtension,
+      ToggleCollapseSelectionGuardExtension,
       ToggleCollapseMarkerExtension,
       TrailingBlockExtension,
       // ExtensionManager.plugins가 addProseMirrorPlugins 결과를

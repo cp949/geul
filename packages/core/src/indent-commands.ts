@@ -213,6 +213,20 @@ const appendIndentStep = (
   const firstChild = mappedPreviousNode.child(0);
   const groupSlotStart = mappedPreviousPosition + 1 + firstChild.nodeSize;
 
+  // 앞 형제가 접힌 toggle이면 같은 tr에서 펼친다. 이동한 블록이 숨은
+  // 자식이 되어 selection이 보이지 않는 곳에 남는 일을 막는다(Issue #246).
+  // attrs만 바꿔 노드 크기가 그대로라 아래 위치 계산이 유효하다. 범위
+  // 들여쓰기가 같은 앞 형제를 다시 만나도 이미 펼쳐져 있어 멱등이다.
+  if (
+    firstChild.type.name === "toggleListItem" &&
+    firstChild.attrs.collapsed === true
+  ) {
+    nextTr.setNodeMarkup(mappedPreviousPosition + 1, undefined, {
+      ...firstChild.attrs,
+      collapsed: false,
+    });
+  }
+
   if (mappedPreviousNode.childCount > 1) {
     // 앞 형제에 이미 blockGroup이 있다 — 그 마지막 자식으로 끼운다.
     const group = mappedPreviousNode.child(1);

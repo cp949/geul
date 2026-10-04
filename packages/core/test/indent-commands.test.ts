@@ -8,7 +8,11 @@
  * outdentBlockCommand도 mergeTableCells와 같은 "Editor를 받아 스스로
  * dispatch하는 순수 함수" 형태이기 때문이다.
  */
-import { MAX_NESTING_DEPTH, parseDocument } from "@cp949/geul-model";
+import {
+  MAX_NESTING_DEPTH,
+  parseDocument,
+  type Block,
+} from "@cp949/geul-model";
 import type { JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
@@ -25,7 +29,14 @@ import {
 } from "../src/indent-commands.js";
 import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
-import { sequentialIds } from "./editor-controller-support.js";
+import { contentTextStart } from "./block-test-support.js";
+import {
+  documentOf,
+  mounted,
+  okResult,
+  paragraphBlock,
+  sequentialIds,
+} from "./editor-controller-support.js";
 import {
   cellJson,
   createTableFixtureEditor,
@@ -807,5 +818,149 @@ describe("outdentBlockRangeCommand", () => {
       error: { code: "COMMAND_NOT_APPLICABLE", command: "outdentBlockRange" },
     });
     expect(editor.getJSON()).toEqual(before);
+  });
+});
+
+/** toggleListItem 리터럴을 만든다. collapsed 부재/명시를 구분한다. */
+const toggleBlock = (
+  id: string,
+  options: { collapsed?: boolean; children?: Block[] } = {},
+): Block => ({
+  id,
+  type: "toggleListItem",
+  content: [{ text: "토글" }],
+  ...(options.collapsed === undefined ? {} : { collapsed: options.collapsed }),
+  ...(options.children === undefined ? {} : { children: options.children }),
+});
+
+/** blockId의 toggleListItem content 노드 attrs.collapsed를 읽는다. */
+const collapsedOf = (
+  tiptap: ReturnType<typeof mounted>["tiptap"],
+  blockId: string,
+): unknown => {
+  const position = findBlockPosition(tiptap.state.doc, blockId);
+  if (position === null) throw new Error(`${blockId} 조회 실패`);
+  return tiptap.state.doc.nodeAt(position + 1)?.attrs.collapsed;
+};
+
+describe("접힌 앞 형제로 들여쓰기 (Issue #246)", () => {
+  const collapsedToggleDocument = () =>
+    documentOf(
+      toggleBlock("t1", {
+        collapsed: true,
+        children: [paragraphBlock("c1", "숨은 자식")],
+      }),
+      paragraphBlock("p2", "대상"),
+      paragraphBlock("p3", "대상3"),
+      paragraphBlock("tail", "꼬리"),
+    );
+
+  it("접힌 toggle도 canIndent는 true다", () => {
+    const { tiptap } = mounted(collapsedToggleDocument());
+
+    expect(getBlockNestingActionState(tiptap.state.doc, "p2").canIndent).toBe(
+      true,
+    );
+  });
+
+  it("indentBlockCommand는 접힌 앞 형제를 펼치고 이동한 블록 안에 selection을 둔다", () => {
+    const { tiptap } = mounted(collapsedToggleDocument());
+    const caret = contentTextStart(tiptap, "p2") + 1;
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(tiptap.state.doc, caret),
+      ),
+    );
+
+    const result = indentBlockCommand(tiptap, "p2");
+
+    expect(result.ok).toBe(true);
+    expect(collapsedOf(tiptap, "t1")).toBe(false);
+    const moved = findBlockPosition(tiptap.state.doc, "p2");
+    if (moved === null) throw new Error("p2 조회 실패");
+    const $moved = tiptap.state.doc.resolve(moved);
+    expect($moved.node($moved.depth - 1).attrs.blockId).toBe("t1");
+    // 축약 selection은 기존 캐럿 배치 계약대로 이동한 블록 콘텐츠 시작에 놓인다.
+    const start = contentTextStart(tiptap, "p2");
+    expect(tiptap.state.selection.toJSON()).toEqual({
+      type: "text",
+      anchor: start,
+      head: start,
+    });
+  });
+
+  it("펼침과 이동이 한 transaction이라 undo 1회로 접힘과 원래 위치가 함께 복원된다", () => {
+    const { editor, tiptap } = mounted(collapsedToggleDocument());
+    const caret = contentTextStart(tiptap, "p2") + 1;
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(tiptap.state.doc, caret),
+      ),
+    );
+    const before = tiptap.state.doc.toJSON();
+
+    expect(indentBlockCommand(tiptap, "p2").ok).toBe(true);
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    expect(tiptap.state.doc.toJSON()).toEqual(before);
+    expect(collapsedOf(tiptap, "t1")).toBe(true);
+    expect(tiptap.state.selection.toJSON()).toEqual({
+      type: "text",
+      anchor: caret,
+      head: caret,
+    });
+  });
+
+  it("indentBlockRangeCommand는 접힌 앞 형제를 한 번 펼치고 anchor·head를 이동한 블록에 복원한다", () => {
+    const { tiptap } = mounted(collapsedToggleDocument());
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(
+          tiptap.state.doc,
+          contentTextStart(tiptap, "p2") + 1,
+          contentTextStart(tiptap, "p3") + 2,
+        ),
+      ),
+    );
+
+    const result = indentBlockRangeCommand(tiptap, "p2", "p3");
+
+    expect(result.ok).toBe(true);
+    expect(collapsedOf(tiptap, "t1")).toBe(false);
+    expect(tiptap.state.selection.toJSON()).toEqual({
+      type: "text",
+      anchor: contentTextStart(tiptap, "p2") + 1,
+      head: contentTextStart(tiptap, "p3") + 2,
+    });
+  });
+
+  it("범위 Tab도 undo 1회로 접힘과 원래 위치가 함께 복원된다", () => {
+    const { editor, tiptap } = mounted(collapsedToggleDocument());
+    const before = tiptap.state.doc.toJSON();
+
+    expect(indentBlockRangeCommand(tiptap, "p2", "p3").ok).toBe(true);
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    expect(tiptap.state.doc.toJSON()).toEqual(before);
+    expect(collapsedOf(tiptap, "t1")).toBe(true);
+  });
+
+  it("접히지 않은 앞 형제의 collapsed는 바꾸지 않는다", () => {
+    const { tiptap } = mounted(
+      documentOf(
+        toggleBlock("t1"),
+        toggleBlock("t2", { collapsed: false }),
+        paragraphBlock("p3", "대상"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    const t1Before = collapsedOf(tiptap, "t1");
+
+    expect(indentBlockCommand(tiptap, "t2").ok).toBe(true);
+    expect(collapsedOf(tiptap, "t1")).toBe(t1Before);
+    expect(collapsedOf(tiptap, "t1")).not.toBe(true);
+
+    expect(indentBlockCommand(tiptap, "p3").ok).toBe(true);
+    expect(collapsedOf(tiptap, "t2")).toBe(false);
   });
 });

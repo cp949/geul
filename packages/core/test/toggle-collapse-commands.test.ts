@@ -8,6 +8,7 @@
 import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
+import { contentTextStart } from "./block-test-support.js";
 import {
   documentOf,
   editorState,
@@ -130,6 +131,28 @@ describe("toggleListItemCollapse", () => {
         tail,
       ),
       revision: 1,
+    });
+  });
+
+  it("캐럿이 든 자식을 가진 toggle을 접으면 selection이 toggle 라벨 끝 캐럿이 된다 (Issue #246)", () => {
+    const source = toggleListItemBlock("toggle-1", "항목", {
+      children: [paragraphBlock("child-1", "자식")],
+    });
+    const { editor, tiptap } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
+    const childCaret = contentTextStart(tiptap, "child-1") + 1;
+    tiptap.commands.setTextSelection(childCaret);
+    const labelEnd = contentTextStart(tiptap, "toggle-1") + "항목".length;
+
+    expect(editor.commands.toggleListItemCollapse("toggle-1")).toEqual(
+      okResult,
+    );
+
+    expect(tiptap.state.selection.toJSON()).toEqual({
+      type: "text",
+      anchor: labelEnd,
+      head: labelEnd,
     });
   });
 });
