@@ -622,6 +622,127 @@ describe("CodeBlock language 변경", () => {
     });
   });
 
+  it("language 변경은 caption과 wrap을 함께 보존한다(Issue #244)", () => {
+    const { editor } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "source" }],
+          language: "typescript",
+          wrap: true,
+          caption: "예시 caption",
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+
+    expect(
+      editor.commands.setBlockType("code", {
+        type: "codeBlock",
+        language: "javascript",
+      }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "code",
+      type: "codeBlock",
+      content: [{ text: "source" }],
+      language: "javascript",
+      wrap: true,
+      caption: "예시 caption",
+    });
+  });
+
+  it("clearContent로 codeBlock에서 codeBlock을 호출해도 caption과 wrap을 보존하고 content만 비운다(Issue #244)", () => {
+    const { editor } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "source" }],
+          language: "typescript",
+          wrap: true,
+          caption: "예시 caption",
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+
+    expect(
+      editor.commands.setBlockType(
+        "code",
+        { type: "codeBlock", language: "javascript" },
+        { clearContent: true },
+      ),
+    ).toEqual({ ok: true, value: undefined });
+    expect(editor.getDocument().blocks[0]).toEqual({
+      id: "code",
+      type: "codeBlock",
+      content: [],
+      language: "javascript",
+      wrap: true,
+      caption: "예시 caption",
+    });
+  });
+
+  it("language 변경은 schema의 language 외 모든 codeBlock attr을 보존한다", () => {
+    // 새 attr이 생기면 이 맵에 non-default 값을 추가해야 통과한다.
+    const nonDefaultAttrs: Record<string, unknown> = {
+      wrap: true,
+      caption: "예시 caption",
+    };
+    const { editor, tiptap } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "source" }],
+          language: "typescript",
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const schemaKeys = Object.keys(
+      tiptap.schema.nodes.codeBlock?.spec.attrs ?? {},
+    ).filter((key) => key !== "language");
+    const missingKeys = schemaKeys.filter((key) => !(key in nonDefaultAttrs));
+    expect(
+      missingKeys,
+      `새 codeBlock attr은 language 변경 때 보존해야 한다. fixture 맵에 non-default 값을 추가한다: ${missingKeys.join(", ")}`,
+    ).toEqual([]);
+
+    // model 타입에 없는 attr도 채우도록 model이 아니라 PM transaction으로 만든다.
+    const codePosition = contentTextStart(tiptap, "code") - 1;
+    const fixture: Record<string, unknown> = {
+      ...Object.fromEntries(
+        schemaKeys.map((key) => [key, nonDefaultAttrs[key]]),
+      ),
+    };
+    const codeNode = tiptap.state.doc.nodeAt(codePosition);
+    expect(codeNode?.type.name).toBe("codeBlock");
+    tiptap.view.dispatch(
+      tiptap.state.tr.setNodeMarkup(codePosition, undefined, {
+        ...codeNode?.attrs,
+        ...fixture,
+      }),
+    );
+    expect(tiptap.state.doc.nodeAt(codePosition)?.attrs).toEqual({
+      ...fixture,
+      language: "typescript",
+    });
+
+    expect(
+      editor.commands.setBlockType("code", {
+        type: "codeBlock",
+        language: "javascript",
+      }),
+    ).toEqual({ ok: true, value: undefined });
+    expect(tiptap.state.doc.nodeAt(codePosition)?.attrs).toEqual({
+      ...fixture,
+      language: "javascript",
+    });
+  });
+
   it("현재 저장형과 같은 canonical language는 dispatch와 history가 없는 성공 no-op이다", () => {
     const { editor, tiptap, changes } = mounted(
       documentOf(
