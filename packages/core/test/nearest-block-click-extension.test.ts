@@ -300,3 +300,30 @@ describe("read-only 에디터 — 개입하지 않는다", () => {
     }).toEqual(before);
   });
 });
+
+describe("접힌 toggle이 있는 빈 영역 클릭", () => {
+  it("실제 mousedown handler는 접힌 자식 밖에 selection을 두고 저장 문서를 보존한다", () => {
+    const { editor, editable, tiptap } = mounted(
+      documentOf(
+        {
+          id: "toggle-1",
+          type: "toggleListItem",
+          content: [{ text: "접힌 제목" }],
+          collapsed: true,
+          children: [paragraphBlock("hidden-1", "숨은 내용")],
+        },
+        tailParagraphBlock,
+      ),
+    );
+    editable.focus();
+    stubBlockRect(tiptap, "toggle-1", { top: 0, height: 24 });
+    const tailPos = stubBlockRect(tiptap, "tail", { top: 24, height: 24 });
+    const savedDocument = editor.getDocument();
+
+    const event = dispatchMousedown(editable, 200);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(tiptap.state.selection.from).toBe(tailPos + 2 + "tail".length);
+    expect(editor.getDocument()).toEqual(savedDocument);
+  });
+});

@@ -150,6 +150,16 @@ describe("접힌 toggle 숨은 selection 가드", () => {
     expectCaretAt(tiptap, labelEnd(tiptap, "t1", LABEL_T1));
   });
 
+  it("서로 다른 접힌 toggle의 자식에 있는 양 끝점을 각 라벨 끝으로 보정한다", () => {
+    const { tiptap } = fixture();
+
+    selectText(tiptap, "c1", 1, "u3", 1);
+
+    const { selection } = tiptap.state;
+    expect(selection.anchor).toBe(labelEnd(tiptap, "t1", LABEL_T1));
+    expect(selection.head).toBe(labelEnd(tiptap, "u2", LABEL_U2));
+  });
+
   it("숨은 atom 블록의 NodeSelection을 라벨 끝 캐럿으로 바꾼다", () => {
     const { tiptap } = fixture();
 
