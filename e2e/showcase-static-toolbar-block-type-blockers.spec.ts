@@ -13,19 +13,17 @@
  * 샘플 문서(`샘플 불러오기`)를 쓴다. block-10은 자식이 있는 토글, block-13은
  * 코드 블록이다.
  */
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { dispatchPaste } from "./support/clipboard.js";
 import { openShowcasePage } from "./support/showcase.js";
+import { blockId, placeCaretIn } from "./support/static-toolbar-sample.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 const CHILDREN_REASON = "Can't convert a block with nested blocks to code";
 const INVALID_TEXT_REASON =
   "Can't convert this code block — it contains a tab or control character";
 const GENERIC_REASON = "Can't convert this block to that type";
-
-const blockId = (editable: Locator, number: number) =>
-  editable.locator(`[data-geul-block-id$="sample-block-${number}"]`);
 
 /** 샘플을 불러오고 편집 영역과 자주 쓰는 컨트롤을 돌려준다. */
 const openSample = async (page: Page) => {
@@ -40,15 +38,6 @@ const openSample = async (page: Page) => {
     code: page.getByRole("button", { name: "Code", exact: true }),
     bullet: page.getByRole("button", { name: "Bulleted List" }),
   };
-};
-
-/** 블록의 텍스트 줄을 클릭해 캐럿을 두고 툴바 상태가 따라올 때까지 기다린다. */
-const placeCaretIn = async (page: Page, target: Locator) => {
-  await target.click();
-  await yieldFrame(page);
-  await expect(
-    page.getByRole("button", { name: "Block type" }),
-  ).toHaveAttribute("aria-disabled", "false");
 };
 
 test("자식이 있는 블록은 Code 버튼이 비활성이고 눌러도 문서가 그대로다", async ({
