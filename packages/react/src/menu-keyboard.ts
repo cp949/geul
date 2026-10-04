@@ -1,6 +1,8 @@
 /**
  * 메뉴·트리거·입력창 keydown의 처리 순서를 한곳에 모은다(Issue #230).
- * index.ts에서 내보내지 않는 내부 module이다.
+ * `handleMenuKeyDown`과 타입 `MenuKeyboardEvent`, `MenuKeyboardHandlers`는
+ * `index.ts`로 공개한다(Issue #247). 소비자가 만드는 트리거 popup도 같은 순서를
+ * 쓰게 하려는 것이다. 그 밖 이 파일의 이름(`suppressEnterRepeat` 등)은 내부다.
  *
  * 순서는 위에서 아래다. 호출부마다 따로 구현하면 순서가 갈라진다.
  * 1. IME 조합 중(`isComposing`): 어떤 키든 처리하지 않고 `false`다.
@@ -43,7 +45,7 @@ export type MenuKeyboardEvent = {
   currentTarget: EventTarget | null;
 };
 
-type MenuKeyboardHandlers = {
+export type MenuKeyboardHandlers = {
   /** 처음 Enter(수식 키 없음)에서 항목을 확정한다. 막는 일은 module이 한다. */
   activate?: () => void;
   /** 이동 키를 처리했으면 `true`. module이 `preventDefault`한다. */

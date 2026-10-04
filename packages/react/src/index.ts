@@ -30,6 +30,11 @@ export { LinkToolbar, type LinkToolbarProps } from "./link-toolbar.js";
 export { MediaResizeHandles } from "./media-resize-handles.js";
 export { MediaToolbar, type MediaToolbarProps } from "./media-toolbar.js";
 export {
+  handleMenuKeyDown,
+  type MenuKeyboardEvent,
+  type MenuKeyboardHandlers,
+} from "./menu-keyboard.js";
+export {
   SlashMenu,
   type SlashMenuCustomItem,
   type SlashMenuProps,
