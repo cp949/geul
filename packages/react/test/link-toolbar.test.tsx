@@ -56,6 +56,7 @@ type FakeControllerOptions = {
   // 선택 테스트 전부가 그대로 통과한다(위 getSelectionMediaBlock과 같은
   // 결).
   isCellRangeSelected?: () => boolean;
+  selectionIntersectsCodeBlock?: () => boolean;
   dictionary?: Dictionary;
 };
 
@@ -64,6 +65,7 @@ const fakeController = ({
   setLink = () => ({ ok: true }),
   getSelectionMediaBlock = () => null,
   isCellRangeSelected = () => false,
+  selectionIntersectsCodeBlock = () => false,
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -84,6 +86,7 @@ const fakeController = ({
   getSelectionBlockType: vi.fn(() => null),
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isCellRangeSelected: vi.fn(isCellRangeSelected),
+  selectionIntersectsCodeBlock: vi.fn(selectionIntersectsCodeBlock),
   getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
@@ -699,5 +702,20 @@ describe("LinkToolbar 스크롤 컨테이너 clip", () => {
     expect(screen.getByRole("toolbar", { name: "Link" }).style.visibility).toBe(
       "",
     );
+  });
+});
+
+describe("LinkToolbar codeBlock 교차 선택(Issue #241)", () => {
+  it("선택이 codeBlock 문자를 교차하면 여러 블록에 걸쳐도 Add link를 표시하지 않는다", () => {
+    // codeBlock의 schema는 marks: ""라 link도 적용 불가하다. 여러 블록
+    // 선택은 getSelectionBlockType()이 null이라 core mark 가드와 같은
+    // selectionIntersectsCodeBlock()으로 구별한다.
+    const controller = fakeController({
+      selectionIntersectsCodeBlock: () => true,
+    });
+    renderWithSelectedText(controller);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add link" })).toBeNull();
   });
 });

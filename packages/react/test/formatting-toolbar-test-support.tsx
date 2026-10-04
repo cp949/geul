@@ -54,6 +54,7 @@ type FormattingToolbarFakeController = {
   getSelectionBlocks: Mock;
   getSelectionMediaBlock: Mock;
   isCellRangeSelected: Mock;
+  selectionIntersectsCodeBlock: Mock;
   getBlockNestingActionState: Mock;
   getDictionary: Mock;
   isBlockTypeEnabled: Mock;
@@ -113,6 +114,14 @@ export const fakeController = (
   // 아님)면 기존 텍스트 선택 테스트 전부가 그대로 통과한다(위
   // getSelectionMediaBlock과 같은 결).
   isCellRangeSelected: Mock = vi.fn((): boolean => false),
+  // codeBlock 문자 구간 교차 판정. 기본값은 단일 블록 선택이 codeBlock이면
+  // true다. core도 캐럿·단일 블록 선택이 codeBlock 안이면 true를 보고하므로
+  // getSelectionBlockType만 codeBlock으로 주입한 기존 테스트가 그대로
+  // 통과한다. 여러 블록 선택은 getSelectionBlockType이 null이라 기본값이
+  // false다. 그 경우 mockReturnValue로 직접 정한다.
+  selectionIntersectsCodeBlock: Mock = vi.fn(
+    (): boolean => getSelectionBlockType()?.blockType.type === "codeBlock",
+  ),
   // enabledBlockTypes 판정 조회 전용(Issue #190) — 기본값 true(모든 타입
   // 허용)면 기존 블록 종류 select 테스트 전부가 그대로 통과한다.
   isBlockTypeEnabled: Mock = vi.fn((): boolean => true),
@@ -137,6 +146,7 @@ export const fakeController = (
   getSelectionBlocks: vi.fn((): SelectionBlocks => []),
   getSelectionMediaBlock,
   isCellRangeSelected,
+  selectionIntersectsCodeBlock,
   isBlockTypeEnabled,
   getBlockNestingActionState,
   getDictionary,

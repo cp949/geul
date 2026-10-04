@@ -163,4 +163,19 @@ describe("StaticToolbar 여러 블록 선택", () => {
         .getAttribute("aria-disabled"),
     ).toBe("true");
   });
+
+  it("codeBlock 문자를 교차하지 않는 여러 블록 선택에서는 mark 버튼이 켜져 있고 명령을 호출한다", () => {
+    // 끝점만 codeBlock에 닿는 선택이다. core가 mark를 적용하므로 UI도 켠다.
+    const controller = multiController([
+      { blockId: "a", blockType: { type: "paragraph" } },
+      { blockId: "b", blockType: { type: "codeBlock" } },
+    ]);
+    controller.selectionIntersectsCodeBlock.mockReturnValue(false);
+    render(withProvider(controller, <StaticToolbar />));
+
+    const bold = screen.getByRole("button", { name: "Bold" });
+    expect(bold.getAttribute("aria-disabled")).toBe("false");
+    fireEvent.click(bold);
+    expect(controller.commands.toggleBold).toHaveBeenCalledTimes(1);
+  });
 });

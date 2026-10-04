@@ -292,6 +292,7 @@ export const FormattingToolbar = ({
       blockSelection: computedState.blockSelection,
       multiBlockSelection: computedState.multiBlockSelection,
       nestingActions: computedState.nestingActions,
+      selectionIntersectsCodeBlock: computedState.selectionIntersectsCodeBlock,
     });
   }, [editor, element, dismissSuppression]);
 
@@ -436,9 +437,9 @@ export const FormattingToolbar = ({
   // 적용 불가하다(code-block-extension.ts, code-block-mark-guard-extension.ts가
   // 같은 이유로 단축키를 막는다) — 블록 타입 select·Indent/Outdent는
   // codeBlock에도 유효하니 그대로 두고, 적용될 수 없는 mark 버튼만 뺀다
-  // (Issue #173 QA).
-  const isCodeBlockSelection =
-    toolbarState.blockSelection?.blockType.type === "codeBlock";
+  // (Issue #173 QA). 판정은 단일 블록 선택만이 아니라 여러 블록에 걸친
+  // 선택도 포함한다 — core mark 명령의 거절 조건과 같은 값이다(Issue #241).
+  const isCodeBlockSelection = toolbarState.selectionIntersectsCodeBlock;
   // callout은 아이콘·배경색이 블록 전체에 걸린 컨테이너라, 본문 텍스트
   // 일부만 선택한 채로 이 select로 다른 타입으로 바꾸면 그 맥락을 잃기
   // 쉽다(QA 피드백, 스크린샷). Turn into는 block-side-menu(블록 핸들)로도

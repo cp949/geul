@@ -167,8 +167,10 @@ export const LinkToolbar = ({
     }
 
     // codeBlock의 schema는 marks: ""라 link도 적용 불가하다
-    // (formatting-toolbar.tsx의 같은 가드 참고, Issue #173 QA).
-    if (editor.getSelectionBlockType()?.blockType.type === "codeBlock") {
+    // (formatting-toolbar.tsx의 같은 가드 참고, Issue #173 QA). 여러 블록에
+    // 걸친 선택은 getSelectionBlockType()이 null이라 core mark 가드와 같은
+    // selectionIntersectsCodeBlock()으로 판정한다(Issue #241).
+    if (editor.selectionIntersectsCodeBlock()) {
       setToolbarState({ mode: "closed" });
       dismissSuppression.clear();
       return;

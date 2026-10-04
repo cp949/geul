@@ -14,6 +14,7 @@ import {
   walkBlockTree,
 } from "./block-tree.js";
 import { createCaretMarkCommands } from "./caret-mark-commands.js";
+import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
 import { createDeferredControllerFacade } from "./deferred-controller-facade.js";
 import type {
   CreateEditorOptions,
@@ -290,6 +291,12 @@ export const createEditor = (
       // 케이스를 포함하지 않는다 — instanceof 한 줄로 CellSelection만
       // 가린다(editor-controller-types.ts의 isCellRangeSelected 주석 참고).
       return session.editor.state.selection instanceof CellSelection;
+    },
+    selectionIntersectsCodeBlock() {
+      if (session.isDestroyed) return false;
+      // mark 명령의 거절 가드와 같은 헬퍼·같은 state를 쓴다.
+      const { doc, selection } = session.editor.state;
+      return selectionIntersectsCodeBlock(doc, selection);
     },
     getBlockSelection() {
       if (session.isDestroyed) return null;

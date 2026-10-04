@@ -98,6 +98,25 @@ const controllerWithCellRange = (dictionary: Dictionary) => {
   return controller;
 };
 
+/**
+ * paragraph·codeBlock·paragraph에 걸친 범위 선택 controller를 만든다.
+ * 단일 블록 선택은 없고(`blockSelection === null`) codeBlock 문자를 교차한다.
+ */
+const controllerWithMultiBlockCodeBlock = (dictionary: Dictionary) => {
+  const controller = fakeStaticToolbarController(
+    undefined,
+    vi.fn(() => null),
+  );
+  controller.getSelectionBlocks.mockReturnValue([
+    { blockId: "a", blockType: { type: "paragraph" } },
+    { blockId: "b", blockType: { type: "codeBlock" } },
+    { blockId: "c", blockType: { type: "paragraph" } },
+  ]);
+  controller.selectionIntersectsCodeBlock.mockReturnValue(true);
+  controller.getDictionary.mockReturnValue(dictionary);
+  return controller;
+};
+
 /** 대상 블록이 없는 controller를 만든다. */
 const controllerWithoutTarget = (dictionary: Dictionary) => {
   const controller = fakeStaticToolbarController(
@@ -150,6 +169,17 @@ describe.each(DICTIONARIES)(
       expectMarkingDisabled();
     });
 
+    it("codeBlock을 걸친 여러 블록 선택에서 mark 5개·색상 2개가 사유 title을 가진다", () => {
+      render(
+        withProvider(
+          controllerWithMultiBlockCodeBlock(dictionary),
+          <StaticToolbar />,
+        ),
+      );
+
+      expectMarkingDisabled();
+    });
+
     it("미디어 블록 선택에서 mark 5개·색상 2개가 사유 title을 가진다", () => {
       render(withProvider(controllerWithMedia(dictionary), <StaticToolbar />));
 
@@ -166,6 +196,24 @@ describe.each(DICTIONARIES)(
 
     it("비활성 mark·색상 버튼을 눌러도 명령을 호출하지 않는다", () => {
       const controller = controllerInBlock({ type: "codeBlock" }, dictionary);
+      render(withProvider(controller, <StaticToolbar />));
+
+      for (const name of markingControlNames(dictionary)) {
+        fireEvent.click(screen.getByRole("button", { name }));
+      }
+
+      expect(controller.commands.toggleBold).not.toHaveBeenCalled();
+      expect(controller.commands.toggleCode).not.toHaveBeenCalled();
+      expect(controller.commands.toggleCaretMark).not.toHaveBeenCalled();
+      expect(controller.commands.toggleCaretTextColor).not.toHaveBeenCalled();
+      expect(
+        controller.commands.toggleCaretBackgroundColor,
+      ).not.toHaveBeenCalled();
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    it("codeBlock을 걸친 여러 블록 선택에서 비활성 mark·색상 버튼을 눌러도 명령을 호출하지 않는다", () => {
+      const controller = controllerWithMultiBlockCodeBlock(dictionary);
       render(withProvider(controller, <StaticToolbar />));
 
       for (const name of markingControlNames(dictionary)) {

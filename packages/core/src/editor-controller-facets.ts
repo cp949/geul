@@ -164,6 +164,12 @@ export interface SelectionQuery {
   // 좁은 판정이다. media 쪽 가드는 91fcefa가 formatting-toolbar·
   // link-toolbar에 이미 추가했고, CellSelection 쪽은 그 대응판이다.
   isCellRangeSelected(): boolean;
+  // 선택이 codeBlock 문자 구간과 겹치는지 보고한다. core mark 명령이
+  // CODE_BLOCK_MARK_NOT_ALLOWED로 거절하는 조건과 같은 판정이다(문자가
+  // 겹치면 true, 끝점만 닿거나 빈 codeBlock만 덮으면 false, 캐럿은 조상
+  // codeBlock). react 툴바가 mark·색상 버튼 비활성 판정에 쓴다.
+  // getSelectionBlocks()는 끝점 접촉도 포함해 이 판정에 쓸 수 없다.
+  selectionIntersectsCodeBlock(): boolean;
   getBlockSelection(): BlockSelection | null;
 }
 

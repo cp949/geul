@@ -46,6 +46,7 @@ const fakeController = (activeLink: { href: string } | null = null) => ({
   getSelectionBlockType: vi.fn(() => null),
   getSelectionMediaBlock: vi.fn(() => null),
   isCellRangeSelected: vi.fn(() => false),
+  selectionIntersectsCodeBlock: vi.fn(() => false),
   commands: {
     setLink: vi.fn(() => ({ ok: true })),
     unsetLink: vi.fn(() => ({ ok: true, value: undefined })),

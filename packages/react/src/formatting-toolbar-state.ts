@@ -19,6 +19,10 @@ export type FormattingToolbarState = {
   nestingActions: { canIndent: boolean; canOutdent: boolean } | null;
   isMediaBlockSelected: boolean;
   isCellRangeSelected: boolean;
+  // 선택이 codeBlock 문자 구간과 겹치는지. core mark 명령의 거절 조건과
+  // 같은 판정이라 여러 블록에 걸친 선택도 포함한다. 끝점만 닿는 선택은
+  // false다.
+  selectionIntersectsCodeBlock: boolean;
 };
 
 const computeMultiBlockSelection = (
@@ -64,5 +68,6 @@ export const computeFormattingToolbarState = (
         : editor.getBlockNestingActionState(blockSelection.blockId),
     isMediaBlockSelected,
     isCellRangeSelected,
+    selectionIntersectsCodeBlock: editor.selectionIntersectsCodeBlock(),
   };
 };

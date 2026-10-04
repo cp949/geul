@@ -95,4 +95,57 @@ describe("FormattingToolbar 여러 블록 선택", () => {
 
     expect(screen.queryByRole("button", { name: "Indent" })).toBeNull();
   });
+
+  it("codeBlock 문자를 교차하는 선택에서는 mark·색상 버튼을 숨기고 블록 타입 select는 남긴다", () => {
+    // 여러 블록 선택은 blockSelection이 null이라 단일 블록 판정으로는
+    // codeBlock을 걸친 것을 알 수 없다. core mark 가드와 같은
+    // selectionIntersectsCodeBlock()으로 판정한다(Issue #241).
+    const controller = fakeController(
+      vi.fn(() => []),
+      vi.fn(() => null),
+    );
+    controller.getSelectionBlocks.mockReturnValue([
+      paragraph("a"),
+      { blockId: "b", blockType: { type: "codeBlock" } },
+      paragraph("c"),
+    ]);
+    controller.selectionIntersectsCodeBlock.mockReturnValue(true);
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    selectText(textNode, 0, 8);
+
+    expect(screen.getByRole("combobox", { name: "Block type" })).not.toBeNull();
+    for (const name of [
+      "Bold",
+      "Italic",
+      "Underline",
+      "Strikethrough",
+      "Inline code",
+      "Text color",
+      "Background color",
+    ]) {
+      expect(screen.queryByRole("button", { name }), name).toBeNull();
+    }
+  });
+
+  it("codeBlock 문자를 교차하지 않는 여러 블록 선택에서는 mark·색상 버튼을 보인다", () => {
+    // 끝점만 codeBlock에 닿는 선택이다. core가 mark를 적용하므로 숨기지 않는다.
+    renderMultiSelection([
+      paragraph("a"),
+      { blockId: "b", blockType: { type: "codeBlock" } },
+    ]);
+
+    expect(screen.getByRole("button", { name: "Bold" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Text color" })).not.toBeNull();
+  });
 });

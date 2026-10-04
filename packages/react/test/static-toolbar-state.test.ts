@@ -18,6 +18,7 @@ const baseState = (): FormattingToolbarState => ({
   nestingActions: { canIndent: true, canOutdent: false },
   isMediaBlockSelected: false,
   isCellRangeSelected: false,
+  selectionIntersectsCodeBlock: false,
 });
 
 describe("isSameStaticToolbarState", () => {
@@ -130,6 +131,12 @@ describe("isSameStaticToolbarState", () => {
 
   it("표 셀 범위 선택 여부가 다르면 다르다고 판정한다", () => {
     const next = { ...baseState(), isCellRangeSelected: true };
+
+    expect(isSameStaticToolbarState(baseState(), next)).toBe(false);
+  });
+
+  it("codeBlock 교차 여부가 다르면 다르다고 판정한다", () => {
+    const next = { ...baseState(), selectionIntersectsCodeBlock: true };
 
     expect(isSameStaticToolbarState(baseState(), next)).toBe(false);
   });

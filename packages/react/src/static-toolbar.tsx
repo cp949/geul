@@ -268,12 +268,13 @@ export const StaticToolbar = ({
     state.blockSelection === null && state.multiBlockSelection === null;
   // codeBlock·미디어 블록·표 셀 다중선택 전부 mark·색상 버튼이 적용
   // 불가능한 상황이다(FormattingToolbar는 이 셋을 hide로 처리 — 위 컴포넌트
-  // 주석 참고). StaticToolbar는 disable로만 표시한다. 열린 색상 메뉴를 닫는
-  // layout effect가 읽으므로 `Component` early return 앞에서 계산한다(hook 순서).
-  const isCodeBlockSelection =
-    state.blockSelection?.blockType.type === "codeBlock";
+  // 주석 참고). StaticToolbar는 disable로만 표시한다. codeBlock 판정은
+  // 단일 블록 선택만이 아니라 여러 블록에 걸친 선택도 포함한다 — core mark
+  // 명령의 거절 조건(selectionIntersectsCodeBlock)과 같은 값을 쓴다.
+  // 열린 색상 메뉴를 닫는 layout effect가 읽으므로 `Component` early
+  // return 앞에서 계산한다(hook 순서).
   const isMarkingDisabled =
-    isCodeBlockSelection ||
+    state.selectionIntersectsCodeBlock ||
     state.isMediaBlockSelected ||
     state.isCellRangeSelected;
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(

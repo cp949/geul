@@ -28,6 +28,7 @@ export const isSameStaticToolbarState = (
 ): boolean =>
   left.isMediaBlockSelected === right.isMediaBlockSelected &&
   left.isCellRangeSelected === right.isCellRangeSelected &&
+  left.selectionIntersectsCodeBlock === right.selectionIntersectsCodeBlock &&
   left.activeMarks.length === right.activeMarks.length &&
   left.activeMarks.every((mark, index) => mark === right.activeMarks[index]) &&
   (left.nestingActions === null || right.nestingActions === null
