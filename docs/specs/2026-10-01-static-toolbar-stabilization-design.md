@@ -226,6 +226,30 @@ Issue #224가 추가했다. 블록 타입 컨트롤과 같은 키보드 계약�
 - 한 속성의 메뉴가 열린 채 다른 속성 트리거를 키보드로 열면 메뉴가 바뀌고 첫 스와치가 포커스를 받는다.
 - 스와치 확정은 DOM selection을 다시 쓰지 않는다. 명령은 편집기 상태의 selection을 읽는다.
 
+### 팝업 안 버튼의 Enter 반복
+
+Issue #248이 추가했다. StaticToolbar 밖 팝업에 적용한다. 위 블록 타입·색상 컨트롤의 Enter 반복 계약과 같은 규칙이다.
+
+- 대상 팝업: 링크 툴바, 파일 패널, 미디어 툴바(more 메뉴 포함), 코드 언어 툴바·popover·more 메뉴, callout 아이콘 picker(`EmojiGrid`).
+- 대상 버튼: 대상 팝업 안 `<button>` 전부다. 탭, Edit, Add link도 포함한다.
+- 각 팝업 루트의 `onKeyDown`에 `handlePopupButtonKeyDown`을 단다. 루트 위임이라 새 버튼도 구조적으로 덮는다.
+- 첫 Enter는 막지 않는다. 네이티브 click이 난다. 첫 Enter가 문서 capture 반복 억제를 건다.
+- 반복 Enter는 막는다. 억제가 포커스가 편집기로 옮겨 간 뒤의 반복을 삼킨다. Enter keyup이나 반복이 아닌 keydown에서 풀린다.
+- `Ctrl+Enter` 반복도 막는다. IME 조합 중 Enter와 Escape·Tab·화살표는 건드리지 않는다.
+- 입력창과 `<a>`는 대상이 아니다. 입력창은 자기 keydown이 `handleMenuKeyDown`으로 처리한다. `<a>`(Open link)는 버튼이 아니다.
+- `component` override 분기의 루트에도 같은 핸들러가 달린다. 소비자 컴포넌트 안 `<button>`의 반복 Enter도 막힌다.
+- 상시 툴바는 유지한다. StaticToolbar mark 버튼의 Enter 반복은 네이티브 그대로다. 포커스가 버튼에 남아 편집기로 새지 않는다. e2e가 mark 버튼으로 확인한다.
+- 표 Add row·Add column도 네이티브 반복 그대로다. 누를 때마다 행·열이 늘어난다. Issue #248 본문 기준이고 이번에 다시 측정하지 않았다.
+- 재발 방지는 e2e 행렬(`e2e/popup-button-enter-repeat.spec.ts`)이다. 새 팝업은 루트에 같은 핸들러를 달아야 한다.
+- e2e 행렬이 닿는 루트는 대표 5곳이다. 링크 툴바·파일 패널·미디어 툴바의 일반 분기, 코드 언어 popover, `EmojiGrid`다. `component` override 분기, 미디어·코드 more 메뉴, 코드 툴바 루트의 배선은 테스트가 직접 덮지 않는다.
+
+근거:
+
+- 첫 Enter의 click이 팝업을 닫고 포커스를 편집기로 돌렸다. 키를 떼기 전의 반복이 편집기에 닿아 블록을 나눴다(문단 +4, 코드 언어 옵션은 +2).
+- 입력창은 `handleMenuKeyDown`을 거쳐 새지 않았다. 팝업 안 `IconButton`과 일반 `<button>`만 어긋났다.
+- 닫지 않는 버튼은 반복을 삼켜도 손해가 없다. 그래서 8곳의 목록이 아니라 팝업 안 `<button>` 전부로 정했다.
+- 상시 툴바는 반복이 편집기로 새지 않는다. 포커스가 버튼에 남는다. Issue #230이 범위에서 제외했다. 사용자 보고가 오면 별도 이슈로 다룬다.
+
 ### 활성화 뒤 포커스와 컨테이너 mousedown
 
 Issue #222가 추가했다.
