@@ -4,8 +4,9 @@
  *
  * 브라우저가 최하위 증명 계층인 이유(ADR-0007):
  * - 네이티브 입력의 기본 동작. `Shift+ArrowDown`이 만드는 실제 다중 블록
- *   selection에서 `getSelectionBlockType()`이 `null`이 되는지는 jsdom이
- *   키 입력으로 selection을 확장하지 않아 볼 수 없다.
+ *   selection에서 컨트롤이 활성으로 남는지는 jsdom이 키 입력으로
+ *   selection을 확장하지 않아 볼 수 없다. 구분선 클릭이 만드는 대상 블록
+ *   없음 selection도 같다.
  * - 실제 레이아웃. 컨트롤의 x 좌표와 툴바 폭이 같은지는 jsdom이 레이아웃을
  *   계산하지 못해 볼 수 없다.
  * 컨트롤 수·`aria-disabled`·`title`·클릭 가드 계약은 단위 테스트
@@ -18,6 +19,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { selectFirstDivider } from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 const DISABLED_REASON = "Available when the cursor is in a single block";
@@ -48,6 +50,22 @@ const openWithCaretInFirstBlock = async (page: Page) => {
   };
 };
 
+/**
+ * 예제를 열고 샘플의 구분선을 클릭해 대상 블록이 없는 NodeSelection을
+ * 만든다(`selectFirstDivider`).
+ */
+const openWithDividerSelected = async (page: Page) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editable = page.getByRole("textbox", { name: "Editor" });
+  await selectFirstDivider(page, editable);
+  return {
+    editable,
+    trigger: page.getByRole("button", { name: "Block type" }),
+    quote: page.getByRole("button", { name: "Quote" }),
+  };
+};
+
 type ToolbarLayout = { count: number; xs: number[]; width: number };
 
 /** 툴바 직계 컨트롤 수, 각 컨트롤의 x 좌표와 툴바 폭을 기록한다. */
@@ -63,7 +81,7 @@ const measureToolbar = (toolbar: ReturnType<Page["getByRole"]>) =>
     };
   });
 
-test("여러 블록을 선택해도 블록 컨트롤의 수와 좌표와 툴바 폭이 같다", async ({
+test("여러 블록을 선택해도 블록 컨트롤의 수와 좌표와 툴바 폭이 같고 컨트롤이 활성이다", async ({
   page,
 }) => {
   const { toolbar, trigger, quote } = await openWithCaretInFirstBlock(page);
@@ -72,11 +90,18 @@ test("여러 블록을 선택해도 블록 컨트롤의 수와 좌표와 툴바 
 
   await page.keyboard.press("Shift+ArrowDown");
 
-  // 상태 갱신은 subscribe 통지 뒤 렌더에서 일어난다. 단언이 재시도한다.
-  await expect(trigger).toHaveAttribute("aria-disabled", "true");
-  await expect(quote).toHaveAttribute("aria-disabled", "true");
-  await expect(trigger).toHaveAttribute("title", DISABLED_REASON);
-  await expect(quote).toHaveAttribute("title", DISABLED_REASON);
+  // 여러 블록 선택은 블록 타입 대상이다(743b7e8b). 트리거와 아이콘 버튼은
+  // 활성으로 남고 비활성 사유 title이 붙지 않는다. 활성 값은 선택 전과 같아
+  // 갱신 대기 지점이 없다. 네이티브 selection이 실제로 확장된 것을 확인하고
+  // 한 프레임과 한 macrotask를 양보해 상태 갱신을 기다린다.
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString().length))
+    .toBeGreaterThan(0);
+  await yieldFrame(page);
+  await expect(trigger).toHaveAttribute("aria-disabled", "false");
+  await expect(quote).toHaveAttribute("aria-disabled", "false");
+  await expect(trigger).not.toHaveAttribute("title", DISABLED_REASON);
+  await expect(quote).not.toHaveAttribute("title", DISABLED_REASON);
   const after = await measureToolbar(toolbar);
   expect(after).toEqual(before);
 });
@@ -84,9 +109,10 @@ test("여러 블록을 선택해도 블록 컨트롤의 수와 좌표와 툴바 
 test("대상 블록이 없을 때 비활성 트리거와 아이콘 버튼을 눌러도 블록이 바뀌지 않는다", async ({
   page,
 }) => {
-  const { editable, trigger, quote } = await openWithCaretInFirstBlock(page);
-  await page.keyboard.press("Shift+ArrowDown");
-  await expect(trigger).toHaveAttribute("aria-disabled", "true");
+  const { editable, trigger, quote } = await openWithDividerSelected(page);
+  await expect(quote).toHaveAttribute("aria-disabled", "true");
+  const blockquoteBefore = await editable.locator("blockquote").count();
+  const htmlBefore = await editable.innerHTML();
 
   // Playwright는 aria-disabled 컨트롤을 "enabled 아님"으로 보고 클릭을
   // 막는다. 사용자가 누르는 상황을 만들려고 force로 우회한다.
@@ -94,14 +120,15 @@ test("대상 블록이 없을 때 비활성 트리거와 아이콘 버튼을 눌
   await quote.click({ force: true });
 
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(editable.locator("blockquote")).toHaveCount(0);
+  await expect(editable.locator("blockquote")).toHaveCount(blockquoteBefore);
+  await expect(editable.locator("hr")).toHaveCount(1);
+  expect(await editable.innerHTML()).toBe(htmlBefore);
 });
 
 test("대상 블록이 없을 때도 비활성 컨트롤이 키보드 포커스를 받는다", async ({
   page,
 }) => {
-  const { trigger, quote } = await openWithCaretInFirstBlock(page);
-  await page.keyboard.press("Shift+ArrowDown");
+  const { trigger, quote } = await openWithDividerSelected(page);
   await expect(quote).toHaveAttribute("aria-disabled", "true");
 
   await trigger.focus();

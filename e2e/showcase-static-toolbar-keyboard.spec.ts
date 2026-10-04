@@ -13,7 +13,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
-import { yieldFrame } from "./support/yield-frame.js";
+import { selectFirstDivider } from "./support/static-toolbar-selection.js";
 
 /** 예제를 열고 툴바 직계 컨트롤을 돌려준다. */
 const openToolbar = async (page: Page) => {
@@ -84,15 +84,10 @@ test("대상 블록이 없을 때 aria-disabled 컨트롤도 화살표로 포커
   page,
 }) => {
   const { controls, first } = await openToolbar(page);
-  const editable = page.getByRole("textbox", { name: "Editor" });
-  await editable.locator("p").first().click();
-  await page.keyboard.press("End");
-  // ProseMirror는 클릭한 selection을 selectionchange 뒤 비동기로 반영한다.
-  // 그 전에 Shift+ArrowDown을 보내면 이전 selection에서 확장된다. 한 프레임과
-  // 한 macrotask를 양보한다(showcase-static-toolbar-block-controls.spec.ts와
-  // 같은 패턴).
-  await yieldFrame(page);
-  await page.keyboard.press("Shift+ArrowDown");
+  // 대상 블록이 없는 상태는 구분선 NodeSelection이다. 여러 블록 선택은 블록
+  // 타입 대상이라 컨트롤이 활성으로 남는다.
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  await selectFirstDivider(page, page.getByRole("textbox", { name: "Editor" }));
   await expect(first).toHaveAttribute("aria-disabled", "true");
 
   await first.focus();

@@ -93,3 +93,17 @@ export const selectRange = async (
     expect(await editorSelectionText(editorInput)).toBe(rangeText);
   }).toPass();
 };
+
+/**
+ * 샘플의 첫 구분선을 클릭해 NodeSelection을 만든다. 구분선 선택은 블록
+ * 컨트롤의 대상 블록이 없는 상태다(`getSelectionBlocks()`가 `[]`라
+ * blockSelection·multiBlockSelection이 모두 null). 클릭이 툴바 상태에
+ * 반영돼 블록 타입 트리거가 비활성이 될 때까지 기다린다. 여러 블록 선택은
+ * 블록 타입 대상이라 이 상태를 대신 만들지 못한다.
+ */
+export const selectFirstDivider = async (page: Page, editable: Locator) => {
+  await editable.locator("hr").first().click();
+  await expect(
+    page.getByRole("button", { name: "Block type" }),
+  ).toHaveAttribute("aria-disabled", "true");
+};
