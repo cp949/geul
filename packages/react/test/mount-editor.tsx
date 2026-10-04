@@ -67,6 +67,8 @@ if (typeof Range.prototype.getBoundingClientRect !== "function") {
 /**
  * jsdom에 레이아웃이 없어 rect를 직접 대입한다. vi.spyOn을 쓰지 않는 이유는
  * 대상이 매 테스트 새로 만들어지는 노드라 복원할 원본이 없기 때문이다.
+ * 선택마다 노드가 새로 생겨 미리 건 스텁이 닿지 않으면 예외로 prototype을
+ * 가로채고 afterEach에서 복원한다(block-selection-toolbar.test.tsx 하이라이트).
  */
 export const stubRect = (
   element: Element,

@@ -39,6 +39,11 @@
   - 열린 자식 메뉴(서식 툴바 색상 메뉴, 표 셀 서식 메뉴, 미디어 More 메뉴)가 있으면 부모 툴바도 숨기지 않는다. 메뉴만 떠 있는 상태를 막는다. `useFixedPlacement`는 `clipExempt` 옵션으로, 박스 판정 오버레이는 훅의 `exempt`로 준다. 메뉴를 닫아도 포커스가 툴바 안(트리거)으로 돌아오면 면제가 이어진다. 포커스가 툴바를 떠나면 다시 판정한다.
   - 오버레이의 `style` prop에 `visibility`를 직접 두지 않는다. 다음 렌더가 덮어쓴다.
   - `position: fixed` 오버레이도 이 clip 규칙만 차용한다. 위 "fixed 금지"는 앵커 도달성 규칙이라 그대로 두고, 컨테이너가 잘라내지 못한다는 사정만 같다. 예: code-block 툴바(Issue #236). 훅에 `anchor`를 함께 줘 박스와 앵커 점을 둘 다 판정한다. 앵커 점을 함께 보는 이유는 viewport clamp다. 컨테이너 상단이 뷰포트 y=0이면 clamp가 툴바 박스를 영역 안에 남긴다. 위 면제 조건(popover·more 메뉴 열림, 툴바 안 포커스)은 박스와 앵커 점 판정 둘 다에 준다.
+  - 블록 선택 하이라이트(Issue #250)도 `position: fixed`라 같은 규칙을 차용한다. 툴바 본체와 별개로 판정한다.
+    - 블록마다 div 하나다. 노드는 callback ref로 `blockId`별로 모으고 해제 때 지운다.
+    - 박스만 판정한다. `anchor`를 주지 않는다. 하이라이트는 viewport clamp를 받지 않는다.
+    - 면제를 주지 않는다. `pointer-events: none`이라 포커스·드래그·draft가 없다.
+    - 일부만 영역에 걸친 블록도 통째로 숨긴다. 영역보다 큰 블록은 선택해도 하이라이트가 안 보인다. 수용한다.
 - 뷰포트 clamp를 하지 않는다 — `G-UI-001`의 dismissible overlay와 달리, 이 카테고리는 앵커에서 분리되면 어떤 대상(행·열·경계)을 가리키는지 사용자가 알 수 없어진다. 도달성은 "핸들을 사용자 쪽으로 당겨오기"가 아니라 "네이티브 스크롤이 앵커를 뷰포트로 데려오게 두기"로 확보한다.
 - pointer 이벤트 기반 드래그·히트테스트(재정렬 대상 판정, 리사이즈 delta 계산 등)는 `event.clientX/clientY`(viewport-relative)와 이 규칙의 geometry(page-relative)를 섞어 비교하지 않는다 — 좌표계를 명시적으로 통일한다.
 - 이 접근은 오버레이 트리와 대상 DOM 사이에 `transform`/`filter`를 건 조상이 없다는 전제에 기댄다. 소비자 앱이 그런 조상을 두면 깨진다 — 패키지가 소비자 CSS까지 통제할 수 없으므로 강제하지 않는다.
@@ -51,6 +56,6 @@
 
 [`G-TST-001`](./G-TST-001-test-overlays-and-keyboard-interactions.md)을 적용하되, fixed overlay의 clamp 검증 대신 앵커가 뷰포트 밖으로 나간 뒤 네이티브 `scrollIntoView()`·Tab 포커스·Playwright 클릭 각각이 실제로 앵커를 뷰포트 안으로 데려오는지 Chromium E2E로 확인한다.
 
-안쪽 스크롤 컨테이너 대응은 jsdom으로 재현하지 못한다(레이아웃이 없다). 단위 테스트는 `stubRect`로 rect를 주입해 판정 로직을 보고, 실제 위치는 Chromium E2E로 확인한다. 예: `e2e/showcase-static-toolbar-overlays.spec.ts`.
+안쪽 스크롤 컨테이너 대응은 jsdom으로 재현하지 못한다(레이아웃이 없다). 단위 테스트는 `stubRect`로 rect를 주입해 판정 로직을 보고, 실제 위치는 Chromium E2E로 확인한다. 선택마다 노드가 새로 생기는 오버레이(블록 선택 하이라이트)는 노드별 `stubRect`를 걸 수 없다. `Element.prototype.getBoundingClientRect`를 가로채 `style`에서 rect를 읽게 하고 `afterEach`에서 복원한다. 예: `packages/react/test/block-selection-toolbar.test.tsx`. e2e 예: `e2e/showcase-static-toolbar-overlays.spec.ts`.
 
 hover 기반 앵커 오버레이는 포인터를 멈춘 채 스크롤해 확인한다. 포인터가 움직이면 hover 판정이 다시 일어나 위치 갱신 누락이 가려진다. `e2e/support/anchor-gap.ts`의 `scrollPage`로 `scrollTop`을 대입하고 `expectOverlayTopAlignedWithAnchor`로 오버레이 상단과 앵커 상단의 y가 같은지 단언한다. 예: `e2e/showcase-static-toolbar-media-handle.spec.ts`.

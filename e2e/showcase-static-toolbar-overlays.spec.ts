@@ -14,10 +14,14 @@
  * 포커스를 가진 요소가 든 오버레이는 어느 오버레이든 숨기지 않고, 포커스가 빠지면
  * 숨긴다(Issue #243). 열린 자식 메뉴가 있으면 부모 툴바도 숨기지 않는다.
  * 숨기면 브라우저가 포커스를 body로 빼 입력의 포커스를 잃는다.
+ *
+ * 블록 선택 하이라이트도 영역 밖에서 숨는다(Issue #250). 하이라이트는 블록마다
+ * 하나라 영역 밖으로 나간 블록의 것만 숨고 영역 안 블록의 것은 보인다.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { blockId } from "./support/static-toolbar-sample.js";
 import { dragSelectCells } from "./support/table-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
@@ -30,6 +34,7 @@ const OVERLAY_SELECTOR = [
   ".geul-media-handle-overlay",
   ".geul-callout-icon-trigger",
   ".geul-code-block-toolbar",
+  ".geul-block-selection-toolbar__highlight",
 ].join(",");
 
 /** 스크롤 영역 위나 아래로 벗어났는데 보이는 오버레이의 class 목록. */
@@ -578,4 +583,73 @@ test("표 셀 서식 메뉴가 열려 있으면 영역 밖에서도 표 선택 �
   await expect(menu).toHaveCount(0);
   await page.evaluate(() => (document.activeElement as HTMLElement).blur());
   await expect(toolbar, "메뉴 닫은 뒤 숨김").toHaveCSS("visibility", "hidden");
+});
+
+test("블록 범위를 선택한 채 스크롤하면 영역 밖으로 나간 블록의 하이라이트만 숨고 돌아오면 다시 보인다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const first = blockId(editor, 2);
+  const last = blockId(editor, 6);
+  await setAreaScrollTop(page, 0);
+
+  // 거터 핸들을 비인접 형제로 드래그하면 블록 범위 선택이 된다(block-selection.spec.ts).
+  await first.hover();
+  const handle = page.getByRole("button", { name: /^Drag to reorder/ });
+  await expect(handle).toBeVisible();
+  const handleBox = await handle.boundingBox();
+  const lastBox = await last.boundingBox();
+  if (handleBox === null || lastBox === null) {
+    throw new Error("Bounding box was not available");
+  }
+  await page.mouse.move(
+    handleBox.x + handleBox.width / 2,
+    handleBox.y + handleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    lastBox.x + lastBox.width / 2,
+    lastBox.y + lastBox.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await expect(
+    page.getByRole("toolbar", { name: "Block selection" }),
+  ).toBeVisible();
+
+  const highlight = (number: number) =>
+    page.locator(
+      `.geul-block-selection-toolbar__highlight[data-geul-highlighted-block-id$="sample-block-${number}"]`,
+    );
+  await expect(highlight(2), "전제: 하이라이트").toHaveCount(1);
+  await expect(highlight(6), "전제: 하이라이트").toHaveCount(1);
+  await expect(highlight(2), "전제: 영역 안").toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  expect(await readEscapedOverlays(page)).toEqual([]);
+
+  // 첫 블록을 영역 위로 완전히 밀어 낸다. 마지막 블록은 영역 안에 남는다.
+  await page.evaluate((id) => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    const block = document.querySelector(`[data-geul-block-id$="${id}"]`);
+    if (area === null || block === null)
+      throw new Error("scrollArea 또는 블록 없음");
+    area.scrollTop +=
+      block.getBoundingClientRect().bottom -
+      area.getBoundingClientRect().top +
+      8;
+  }, "sample-block-2");
+  expect(await isOutsideScrollArea(first), "첫 블록이 영역 밖").toBe(true);
+  expect(await isOutsideScrollArea(last), "마지막 블록은 영역 안").toBe(false);
+  await settleClip(page);
+
+  await expect(highlight(2), "영역 밖 블록").toHaveCSS("visibility", "hidden");
+  await expect(highlight(6), "영역 안 블록").toHaveCSS("visibility", "visible");
+  expect(await readEscapedOverlays(page)).toEqual([]);
+
+  await scrollAnchorIntoArea(first);
+  await expect(highlight(2), "돌아온 뒤").toHaveCSS("visibility", "visible");
 });

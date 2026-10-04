@@ -15,7 +15,7 @@
 import { DEFAULT_DICTIONARY } from "@cp949/geul-core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { act } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlockSelectionToolbar } from "../src/block-selection-toolbar.js";
 import {
@@ -575,6 +575,121 @@ describe("BlockSelectionToolbar 스크롤 컨테이너 clip", () => {
     restubGeometry();
     fireEvent.scroll(window);
     expect(screen.getByRole("toolbar").style.visibility).toBe("");
+  });
+
+  // 하이라이트는 툴바 본체와 별개로 판정한다(Issue #250). 하이라이트는 블록마다
+  // 하나이고 박스 전체가 영역 안일 때만 보인다. 일부 블록만 영역 밖이면 그 블록의
+  // 하이라이트만 숨는다. 툴바는 앵커(범위 위쪽)가 영역 안이라 그대로 보인다.
+  describe("선택 하이라이트(Issue #250)", () => {
+    // 하이라이트는 `position: fixed`라 style의 left·top·width·height가 곧 화면 rect다.
+    // jsdom은 레이아웃이 없어 이 div의 rect가 항상 0이다. 그러면 영역 밖 판정이 안
+    // 선다. 하이라이트 노드만 style에서 rect를 읽게 한다. 선택이 바뀌면 노드가 새로
+    // 생기므로 노드마다 stubRect를 걸 수 없고 프로토타입을 가로챈다.
+    beforeEach(() => {
+      const original = Element.prototype.getBoundingClientRect;
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+        function (this: Element) {
+          if (!this.hasAttribute("data-geul-highlighted-block-id")) {
+            return original.call(this);
+          }
+          const { style } = this as HTMLElement;
+          const left = Number.parseFloat(style.left);
+          const top = Number.parseFloat(style.top);
+          const width = Number.parseFloat(style.width);
+          const height = Number.parseFloat(style.height);
+          return {
+            left,
+            top,
+            width,
+            height,
+            right: left + width,
+            bottom: top + height,
+            x: left,
+            y: top,
+            toJSON: () => ({}),
+          } as DOMRect;
+        },
+      );
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /** 하이라이트 div를 blockId로 찾는다. 숨은 요소도 DOM에 있으므로 attribute로 읽는다. */
+    const highlightVisibility = (blockId: string): string => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-geul-highlighted-block-id="${blockId}"]`,
+      );
+      if (node === null) throw new Error(`하이라이트 없음: ${blockId}`);
+      return node.style.visibility;
+    };
+
+    /** 블록 하나를 영역 아래로 밀어 낸다. */
+    const pushBlockOut = (block: HTMLElement) => {
+      stubRect(block, { left: 0, top: 500, width: 600, height: 20 });
+    };
+
+    it("일부 블록만 영역 밖으로 나가면 그 블록의 하이라이트만 숨기고 되돌아오면 다시 보인다", () => {
+      const { editor, host, blocks, restubGeometry } = renderToolbar();
+      host.style.overflowY = "auto";
+      stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+      editor.commands.selectBlockRange("block-2", "block-4");
+      fireSelectionChange();
+      for (const id of ["block-2", "block-3", "block-4"]) {
+        expect(highlightVisibility(id), `${id} 처음`).toBe("");
+      }
+
+      pushBlockOut(blocks[3] as HTMLElement);
+      fireEvent.scroll(window);
+
+      expect(highlightVisibility("block-2")).toBe("");
+      expect(highlightVisibility("block-3")).toBe("");
+      expect(highlightVisibility("block-4")).toBe("hidden");
+
+      restubGeometry();
+      fireEvent.scroll(window);
+
+      expect(highlightVisibility("block-4")).toBe("");
+    });
+
+    it("선택 개수가 줄어도 남은 하이라이트의 판정이 맞다", () => {
+      const { editor, host, blocks } = renderToolbar();
+      host.style.overflowY = "auto";
+      stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+      editor.commands.selectBlockRange("block-2", "block-4");
+      fireSelectionChange();
+      pushBlockOut(blocks[3] as HTMLElement);
+      fireEvent.scroll(window);
+      expect(highlightVisibility("block-4")).toBe("hidden");
+
+      // block-4가 선택에서 빠져 하이라이트 노드가 사라진다. 그 뒤에도 남은 노드를
+      // 판정해야 한다. block-3을 영역 밖으로 밀면 그 하이라이트만 숨는다.
+      editor.commands.selectBlockRange("block-2", "block-3");
+      fireSelectionChange();
+      expect(highlightedBlockIds().sort()).toEqual(["block-2", "block-3"]);
+      expect(highlightVisibility("block-3")).toBe("");
+
+      pushBlockOut(blocks[2] as HTMLElement);
+      fireEvent.scroll(window);
+
+      expect(highlightVisibility("block-2")).toBe("");
+      expect(highlightVisibility("block-3")).toBe("hidden");
+    });
+
+    it("선택 개수가 늘면 새 하이라이트도 영역 밖이면 숨긴다", () => {
+      const { editor, host, blocks } = renderToolbar();
+      host.style.overflowY = "auto";
+      stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
+      editor.commands.selectBlockRange("block-2", "block-3");
+      fireSelectionChange();
+      pushBlockOut(blocks[3] as HTMLElement);
+
+      editor.commands.selectBlockRange("block-2", "block-4");
+      fireSelectionChange();
+
+      expect(highlightVisibility("block-3")).toBe("");
+      expect(highlightVisibility("block-4")).toBe("hidden");
+    });
   });
 });
 

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useFixedPlacement } from "./fixed-placement.js";
+import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useTableCommandFeedback } from "./use-table-command-feedback.js";
@@ -90,6 +91,9 @@ export const BlockSelectionToolbar = () => {
   const { element } = useEditorMount();
   const [toolbarState, setToolbarState] = useState<ToolbarState | null>(null);
   const { actionError, runCommand } = useTableCommandFeedback();
+  // blockId -> 하이라이트 div. callback ref가 채우고 해제 때 지운다. 렌더 중에는
+  // 건드리지 않는다.
+  const highlightNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // 폴링(선택 이벤트)과 명령 성공 콜백(완료 조건 5·6 — DOM이 이미 갱신된
   // 뒤 네이티브 이벤트를 기다리지 않고 즉시 재조회) 양쪽이 같은 함수를
@@ -283,6 +287,16 @@ export const BlockSelectionToolbar = () => {
     clip: true,
   });
 
+  // 하이라이트는 `position: fixed`라 에디터가 안쪽 스크롤 컨테이너 안에 있으면
+  // 컨테이너가 잘라내지 못한다. 하이라이트 자신의 박스가 보이는 영역 안에 완전히
+  // 들어올 때만 보인다. 앵커와 면제는 없다. 하이라이트는 viewport clamp를 받지
+  // 않고 `pointer-events: none`이라 포커스·드래그가 없다. 판정은 렌더마다 돈다.
+  // 스크롤은 위 effect가 다시 측정해 렌더를 일으킨다. 훅 순서를 지키려고 early
+  // return 앞에서 부른다.
+  useClipVisibility(element, () =>
+    Array.from(highlightNodesRef.current.values(), (node) => ({ node })),
+  );
+
   if (toolbarState === null) return null;
 
   const handleMoveUp = () => {
@@ -320,6 +334,13 @@ export const BlockSelectionToolbar = () => {
           data-geul-block-selection-highlight=""
           data-geul-highlighted-block-id={highlight.blockId}
           key={highlight.blockId}
+          ref={(node) => {
+            if (node === null) {
+              highlightNodesRef.current.delete(highlight.blockId);
+            } else {
+              highlightNodesRef.current.set(highlight.blockId, node);
+            }
+          }}
           style={{
             left: highlight.left,
             top: highlight.top,
