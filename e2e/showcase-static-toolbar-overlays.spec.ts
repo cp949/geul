@@ -10,10 +10,16 @@
  * 둘은 hover 중에만 DOM에 있어서, 숨었는지 보려면 먼저 DOM에 있어야 한다.
  * 코드블록 툴바도 같다(Issue #236). 언어 popover가 열려 있으면 숨기지 않는다.
  * 툴바 안 버튼에 포커스가 있어도 숨기지 않는다(Issue #237).
+ *
+ * 포커스를 가진 요소가 든 오버레이는 어느 오버레이든 숨기지 않고, 포커스가 빠지면
+ * 숨긴다(Issue #243). 열린 자식 메뉴가 있으면 부모 툴바도 숨기지 않는다.
+ * 숨기면 브라우저가 포커스를 body로 빼 입력의 포커스를 잃는다.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { dragSelectCells } from "./support/table-selection.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 const OVERLAY_SELECTOR = [
   ".geul-code-block-caption",
@@ -264,4 +270,312 @@ test("툴바 버튼에 포커스가 있으면 코드블록이 스크롤 영역 �
   // 포커스가 빠지면 다시 영역 밖으로 판정해 숨는다.
   await copyButton.evaluate((element) => element.blur());
   await expect(toolbar, "포커스 뒤 숨김").toHaveCSS("visibility", "hidden");
+});
+
+/**
+ * 스크롤 직후 clip 판정이 한 번 돈 것을 기다린다. 스크롤 이벤트가 렌더를
+ * 일으키고 그 렌더 직후 판정이 돈다. 이 대기 없이 "보인다"를 단언하면 판정보다
+ * 먼저 통과한다. 사전 상태가 이미 visible이기 때문이다.
+ */
+const settleClip = async (page: Page) => {
+  await yieldFrame(page);
+  await yieldFrame(page);
+  await page.waitForTimeout(150);
+};
+
+/** 앵커를 스크롤 영역 밖으로 민다. 위 끝을 먼저 시도하고 안 나가면 아래 끝으로 민다. */
+const scrollAnchorOutOfArea = async (page: Page, anchor: Locator) => {
+  await setAreaScrollTop(page, 0);
+  if (!(await isOutsideScrollArea(anchor))) {
+    await setAreaScrollTop(page, 1_000_000);
+  }
+  expect(await isOutsideScrollArea(anchor), "앵커가 영역 밖").toBe(true);
+  await settleClip(page);
+};
+
+/** 앵커를 영역 가운데로 되돌린다. */
+const scrollAnchorIntoArea = (anchor: Locator) =>
+  anchor.evaluate((element) => element.scrollIntoView({ block: "center" }));
+
+/** 포커스 없이 영역 밖에서 숨는 것을 먼저 증명하려는 호출부는 `overlay`만 쓴다. */
+type FocusExemptCase = {
+  /** 스크롤로 영역 밖으로 보내는 앵커. */
+  anchor: Locator;
+  /** `visibility`가 걸리는 오버레이 노드. */
+  overlay: Locator;
+  /** 포커스를 가진 요소. `overlay` 안이어야 한다. */
+  focused: Locator;
+};
+
+/**
+ * 포커스가 든 오버레이는 영역 밖에서도 보이고 포커스를 유지한다. 포커스가 빠지면
+ * 숨고, 영역 안으로 돌아오면 다시 보인다. 사전 결함은 숨김과 `activeElement`가
+ * BODY로 빠지는 것이다.
+ */
+const expectFocusKeepsOverlay = async (
+  page: Page,
+  { anchor, overlay, focused }: FocusExemptCase,
+) => {
+  await expect(focused, "전제: 포커스").toBeFocused();
+  await expect(overlay, "전제: 영역 안").toHaveCSS("visibility", "visible");
+
+  await scrollAnchorOutOfArea(page, anchor);
+
+  await expect(overlay, "포커스 중 유지").toHaveCSS("visibility", "visible");
+  await expect(focused, "포커스 유지").toBeFocused();
+
+  await focused.evaluate((element) => (element as HTMLElement).blur());
+  await expect(overlay, "포커스 뒤 숨김").toHaveCSS("visibility", "hidden");
+
+  await scrollAnchorIntoArea(anchor);
+  await expect(overlay, "돌아온 뒤").toHaveCSS("visibility", "visible");
+};
+
+/** 샘플을 불러오고 이미지를 선택해 media 툴바를 연다. */
+const openMediaToolbar = async (page: Page) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const image = editor.locator("img").first();
+  await image.scrollIntoViewIfNeeded();
+  await image.click();
+  const toolbar = page.locator(".geul-media-toolbar");
+  await expect(toolbar).toHaveCount(1);
+  return { editor, image, toolbar };
+};
+
+test("링크 툴바 입력에 포커스가 있으면 영역 밖에서도 툴바를 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const paragraph = editor.locator("p").nth(3);
+  await paragraph.scrollIntoViewIfNeeded();
+  await paragraph.dblclick();
+  await page.getByRole("button", { name: "Add link" }).click();
+  const input = page.getByRole("textbox", { name: "Link URL" });
+  await expect(input).toBeFocused();
+
+  await expectFocusKeepsOverlay(page, {
+    anchor: paragraph,
+    overlay: page.locator(".geul-link-toolbar"),
+    focused: input,
+  });
+});
+
+test.describe("미디어 툴바", () => {
+  test("More 버튼에 포커스가 있으면 영역 밖에서도 툴바를 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+    page,
+  }) => {
+    const { image, toolbar } = await openMediaToolbar(page);
+    const more = page.getByRole("button", { name: "More media options" });
+    await more.focus();
+
+    await expectFocusKeepsOverlay(page, {
+      anchor: image,
+      overlay: toolbar,
+      focused: more,
+    });
+  });
+
+  for (const [label, menuItem, inputName] of [
+    ["Rename 입력", "Rename", "Image name"],
+    ["Caption 입력", "Edit caption", "Image caption"],
+  ] as const) {
+    test(`${label}에 포커스가 있으면 영역 밖에서도 툴바를 숨기지 않고 포커스가 빠지면 숨긴다`, async ({
+      page,
+    }) => {
+      const { image, toolbar } = await openMediaToolbar(page);
+      await page.getByRole("button", { name: "More media options" }).click();
+      await page.getByRole("menuitem", { name: menuItem }).click();
+      const input = toolbar.getByRole("textbox", { name: inputName });
+      await expect(input).toBeFocused();
+
+      await expectFocusKeepsOverlay(page, {
+        anchor: image,
+        overlay: toolbar,
+        focused: input,
+      });
+    });
+  }
+
+  test("Replace 입력에 포커스가 있으면 영역 밖에서도 툴바를 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+    page,
+  }) => {
+    const { image, toolbar } = await openMediaToolbar(page);
+    await page.getByRole("button", { name: "More media options" }).click();
+    await page.getByRole("menuitem", { name: "Replace file" }).click();
+    await toolbar.getByRole("tab", { name: "Embed" }).click();
+    const input = toolbar.getByRole("textbox", { name: "Image URL" });
+    await input.focus();
+    await expect(input).toBeFocused();
+
+    await expectFocusKeepsOverlay(page, {
+      anchor: image,
+      overlay: toolbar,
+      focused: input,
+    });
+  });
+
+  test("More 메뉴가 열려 있으면 영역 밖에서도 툴바를 숨기지 않고 메뉴를 닫으면 숨긴다", async ({
+    page,
+  }) => {
+    const { image, toolbar } = await openMediaToolbar(page);
+    await page.getByRole("button", { name: "More media options" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+
+    await scrollAnchorOutOfArea(page, image);
+
+    await expect(menu, "메뉴 유지").toBeVisible();
+    await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
+
+    // 메뉴를 닫은 뒤 포커스가 툴바 밖이어야 면제가 풀린다.
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await expect(toolbar, "메뉴 닫은 뒤 숨김").toHaveCSS(
+      "visibility",
+      "hidden",
+    );
+  });
+});
+
+test("미디어 캡션 입력에 포커스가 있으면 영역 밖에서도 캡션을 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const image = editor.locator("img").first();
+  await image.scrollIntoViewIfNeeded();
+  await image.hover();
+  const caption = page.locator(".geul-media-caption").first();
+  await caption.locator("button").click();
+  const input = caption.getByRole("textbox", { name: "Image caption" });
+  await expect(input).toBeFocused();
+  // blur가 커밋하면 caption이 남아야 숨김을 볼 수 있다. 빈 값이면 오버레이가 사라진다.
+  await input.fill("clip 캡션");
+
+  await expectFocusKeepsOverlay(page, {
+    anchor: image,
+    overlay: caption,
+    focused: input,
+  });
+});
+
+test("표 행 핸들에 포커스가 있으면 영역 밖에서도 핸들을 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const cell = table.locator("td").nth(1);
+  await cell.scrollIntoViewIfNeeded();
+  await cell.click();
+  const handle = page.locator("[data-geul-table-row-handle]").first();
+  await handle.focus();
+
+  await expectFocusKeepsOverlay(page, {
+    anchor: table,
+    overlay: handle.locator("xpath=.."),
+    focused: handle,
+  });
+});
+
+test("미디어 그립에 포커스가 있으면 영역 밖에서도 그립을 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const image = editor.locator("img").first();
+  await image.scrollIntoViewIfNeeded();
+  await image.hover();
+  const overlay = page.locator(".geul-media-handle-overlay");
+  await expect(overlay).toHaveCount(1);
+  const grip = overlay.locator(".geul-block-gutter__button--add");
+  await grip.focus();
+
+  await expectFocusKeepsOverlay(page, {
+    anchor: image,
+    overlay,
+    focused: grip,
+  });
+});
+
+test("callout 트리거에 포커스가 있으면 영역 밖에서도 트리거를 숨기지 않고 포커스가 빠지면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const callout = editor.locator("[data-geul-callout]").first();
+  await callout.scrollIntoViewIfNeeded();
+  await callout.hover();
+  const trigger = page.locator(".geul-callout-icon-trigger");
+  await expect(trigger).toHaveCount(1);
+  await trigger.focus();
+
+  await expectFocusKeepsOverlay(page, {
+    anchor: callout,
+    overlay: trigger,
+    focused: trigger,
+  });
+});
+
+test("서식 툴바 색상 메뉴가 열려 있으면 영역 밖에서도 툴바를 숨기지 않고 메뉴를 닫으면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const paragraph = editor.locator("p").nth(3);
+  await paragraph.scrollIntoViewIfNeeded();
+  await paragraph.dblclick();
+  const toolbar = page.locator(".geul-formatting-toolbar");
+  await expect(toolbar).toHaveCount(1);
+  await toolbar.getByRole("button", { name: "Text color" }).click();
+  const menu = page.getByRole("menu", { name: "Text color" });
+  await expect(menu).toBeVisible();
+
+  await scrollAnchorOutOfArea(page, paragraph);
+
+  await expect(menu, "메뉴 유지").toBeVisible();
+  await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
+
+  // 메뉴를 닫은 뒤 포커스가 툴바 밖이어야 면제가 풀린다.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await expect(toolbar, "메뉴 닫은 뒤 숨김").toHaveCSS("visibility", "hidden");
+});
+
+test("표 셀 서식 메뉴가 열려 있으면 영역 밖에서도 표 선택 툴바를 숨기지 않고 메뉴를 닫으면 숨긴다", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const cells = table.locator("td");
+  await cells.first().scrollIntoViewIfNeeded();
+  await cells.first().click();
+  await dragSelectCells(page, cells.nth(0), cells.nth(1));
+  const toolbar = page.locator(".geul-table-selection-toolbar");
+  await expect(toolbar).toHaveCount(1);
+  await toolbar.getByRole("button", { name: "Cell formatting" }).click();
+  const menu = page.getByRole("menu", { name: "Cell formatting" });
+  await expect(menu).toBeVisible();
+
+  await scrollAnchorOutOfArea(page, table);
+
+  await expect(menu, "메뉴 유지").toBeVisible();
+  await expect(toolbar, "툴바 유지").toHaveCSS("visibility", "visible");
+
+  // 메뉴를 닫은 뒤 포커스가 툴바 밖이어야 면제가 풀린다.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await expect(toolbar, "메뉴 닫은 뒤 숨김").toHaveCSS("visibility", "hidden");
 });
