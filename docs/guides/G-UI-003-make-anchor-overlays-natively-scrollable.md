@@ -30,6 +30,10 @@
     - 훅이 document에 `focusout`(capture)을 듣는다.
     - 포커스가 보관 노드 밖으로 나가면 앵커가 그대로여도 렌더를 강제해 다시 판정한다.
     - 보관 노드 사이 이동은 `relatedTarget`으로 무시한다.
+    - `target`·`relatedTarget`의 타입 검사는 전역 `Node`가 아니라 `ownerDocument.defaultView.Node`로 한다.
+    - iframe 문서의 노드는 상위 realm의 `Node` 인스턴스가 아니다.
+    - 전역 `Node`로 검사하면 이탈 재판정이 조용히 생략된다.
+    - `defaultView`가 없으면 이벤트를 무시한다.
     - `activeElement`는 매 effect에서 읽는다. 별도 state를 두지 않는다.
     - 클릭으로 받은 버튼 포커스는 포커스가 빠질 때까지 영역 밖 오버레이를 남긴다. 설계로 수용한다.
   - 열린 자식 메뉴(서식 툴바 색상 메뉴, 표 셀 서식 메뉴, 미디어 More 메뉴)가 있으면 부모 툴바도 숨기지 않는다. 메뉴만 떠 있는 상태를 막는다. `useFixedPlacement`는 `clipExempt` 옵션으로, 박스 판정 오버레이는 훅의 `exempt`로 준다. 메뉴를 닫아도 포커스가 툴바 안(트리거)으로 돌아오면 면제가 이어진다. 포커스가 툴바를 떠나면 다시 판정한다.
