@@ -207,7 +207,7 @@ const openSmAfterAlpha = async (page: Page) => {
 };
 
 for (const leave of LEAVE_KEYS.filter(
-  (candidate) => candidate.name !== "Home 뒤 ArrowLeft",
+  (candidate) => !candidate.pressesArrowLeft,
 )) {
   for (const wait of leave.waits) {
     test(`:sm 블록을 ${leave.name}로 떠난 ${wait}ms 뒤 Enter는 이모지를 삽입하지 않는다 (Issue #258)`, async ({

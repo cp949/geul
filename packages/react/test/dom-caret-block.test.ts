@@ -29,6 +29,7 @@ const appendBlock = (parent: HTMLElement, id: string, text: string): Text => {
   return textNode;
 };
 
+/** DOM selection을 `node`의 `offset`에 접힌 캐럿으로 둔다. */
 const placeCaret = (node: Node, offset: number) => {
   document.getSelection()?.collapse(node, offset);
 };

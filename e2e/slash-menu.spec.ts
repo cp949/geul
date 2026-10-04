@@ -585,6 +585,34 @@ for (const leave of LEAVE_KEYS) {
   }
 }
 
+// Issue #258: 가드가 Enter를 막아 메뉴를 닫은 뒤 캐럿이 `/he` 블록으로 돌아오면
+// 메뉴는 다시 열린다. `dismissedQueryRef`를 걸지 않는 의도된 동작이고 기존
+// selectionchange 이탈 경로(Issue #229)와 같다.
+test("가드가 Enter를 막아 닫은 메뉴는 캐럿이 `/he` 블록으로 돌아오면 다시 열린다 (Issue #258)", async ({
+  page,
+}) => {
+  for (let attempt = 1; attempt <= MAX_LEAVE_ATTEMPTS; attempt += 1) {
+    const { editable, menu } = await openHeAfterAlpha(page);
+    await recordEnterState(page, ".geul-slash-menu");
+
+    await page.keyboard.press("PageUp");
+    if ((await readCaretBlockText(page)) === "/he") continue;
+    await page.keyboard.press("Enter");
+    const enter = await readEnterState(page);
+    // 즉시 읽기가 먼저 메뉴를 닫았다면 가드를 거치지 않은 시도다.
+    if (enter?.caretBlock === "/he" || enter?.pickerOpen !== true) continue;
+
+    await expect(menu).toHaveCount(0);
+    await expect(editable.locator("p")).toHaveText(["alpha", "/he"]);
+
+    await page.keyboard.press("Control+End");
+    await expect.poll(() => readCaretBlockText(page)).toBe("/he");
+    await expect(menu).toBeVisible();
+    return;
+  }
+  throw new Error(`${MAX_LEAVE_ATTEMPTS}번 시도해도 가드 경로에 닿지 않았다`);
+});
+
 // Issue #258 회귀 보호: 블록 추가 버튼("+")으로 연 메뉴는 새 빈 블록에 캐럿이
 // 놓인 채 열린다. 가드가 이 경로의 정상 Enter 확정을 막으면 안 된다.
 test("블록 추가 버튼으로 연 메뉴에서 키보드로 항목을 고르면 블록을 변환한다 (Issue #258)", async ({

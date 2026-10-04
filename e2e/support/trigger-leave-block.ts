@@ -11,6 +11,8 @@ import type { Page } from "@playwright/test";
  *   `state.selection`이 낡다. 150ms는 재읽기가 끝난 뒤다.
  * - `keepsTrigger`: Enter 뒤에도 트리거 블록이 남는지. 범위 선택은 popup이 먼저
  *   닫혔다면 Enter가 범위를 지운다.
+ * - `pressesArrowLeft`: ArrowLeft를 누르는 행인지. ArrowLeft를 그리드 이동으로
+ *   소비하는 popup(emoji)에는 이탈 시나리오가 아니라 그 spec이 거른다.
  *
  * `Control+Shift+Home`은 캐럿이 아니라 범위를 만든다. anchor는 트리거 블록에
  * 남고 focus만 `alpha`로 간다. 150ms 뒤 Enter는 popup이 닫힌 뒤의 범위 삭제라
@@ -18,7 +20,7 @@ import type { Page } from "@playwright/test";
  * ArrowUp을 하이라이트 이동으로 소비해 선택이 움직이지 않는다.
  *
  * `Home 뒤 ArrowLeft`는 ArrowLeft를 그리드 이동으로 소비하는 popup(emoji)에는
- * 이탈 시나리오가 아니다. 그 popup의 spec은 이 행을 뺀다.
+ * 이탈 시나리오가 아니다. 그 popup의 spec은 `pressesArrowLeft` 행을 뺀다.
  */
 export const LEAVE_KEYS = [
   {
@@ -26,24 +28,28 @@ export const LEAVE_KEYS = [
     press: ["Control+Home"],
     waits: [0, 150],
     keepsTrigger: true,
+    pressesArrowLeft: false,
   },
   {
     name: "PageUp",
     press: ["PageUp"],
     waits: [0, 150],
     keepsTrigger: true,
+    pressesArrowLeft: false,
   },
   {
     name: "Home 뒤 ArrowLeft",
     press: ["Home", "ArrowLeft"],
     waits: [0, 150],
     keepsTrigger: true,
+    pressesArrowLeft: true,
   },
   {
     name: "Control+Shift+Home",
     press: ["Control+Shift+Home"],
     waits: [0],
     keepsTrigger: false,
+    pressesArrowLeft: false,
   },
 ] as const;
 
