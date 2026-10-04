@@ -8,6 +8,7 @@ import type { EditorView } from "@tiptap/pm/view";
 import { inlineToCodeSource } from "./code-block-inline-text.js";
 import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
+import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
 // block-container-extension.ts). PM joinBackward의 deleteBarrier는 이
@@ -26,6 +27,12 @@ import { resolveSelectionAwareState } from "./selection-aware-state.js";
 //
 // Issue #38 슬라이스 3: quote(문단 동형 blockContent)가 같은 병합 규칙에
 // 들어온다.
+//
+// Issue #253: 병합 대상이 접힌 toggleListItem의 숨은 자손이면 Backspace는 가장
+// 바깥 접힌 toggle의 라벨 끝에 병합한다. 숨은 그룹은 시각적으로 존재하지
+// 않아 거기 병합하면 텍스트가 보이지 않는 곳으로 사라진다. 병합 위치만
+// 보정하고 findMergeTarget은 Delete와 공유하므로 바꾸지 않는다. 접힘과 숨은
+// 자손은 그대로다.
 //
 // Issue #202 RD-002·RD-003: atom(divider·image/video/audio/file·table)은
 // 병합 대상에서 제외한다 — 그 자리에 그대로 두고 건너뛰어 그 너머의 병합
@@ -548,11 +555,16 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
     return selectionIsStale && isJoinBoundary(liveState, "backward");
   }
 
+  // 병합 대상이 접힌 toggle의 숨은 자손이면 가장 바깥 접힌 toggle의 라벨 끝에
+  // 병합한다(Issue #253). 숨은 그룹은 화면에 없어 텍스트가 보이지 않는 곳으로
+  // 사라진다. 접힘과 숨은 자손은 그대로 둔다. 판정은 파생 state.doc 기준
+  // previous.$head에만 적용한다(G-EDT-002).
   const $target = previous.$head;
+  const hiddenLabelEnd = collapsedToggleLabelEnd($target);
   mergeContainers(view, liveState, {
     removed: $from.node(containerDepth),
     removedStart: containerStart,
-    mergePos: $target.pos,
+    mergePos: hiddenLabelEnd ?? $target.pos,
     inline: $from.parent.content,
   });
   return true;

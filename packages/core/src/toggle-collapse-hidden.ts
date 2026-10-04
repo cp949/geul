@@ -1,8 +1,10 @@
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 
 // 접힌 toggleListItem의 숨은 자손을 판정하는 공용 헬퍼다. 선택 가드
-// (toggle-collapse-selection-guard-extension.ts)와 방향키 확장
-// (toggle-collapse-arrow-key-extension.ts)이 같은 기준을 쓴다.
+// (toggle-collapse-selection-guard-extension.ts), 방향키 확장
+// (toggle-collapse-arrow-key-extension.ts), Enter 분할
+// (block-split-extension.ts)과 Backspace 병합(block-join-extension.ts)이
+// 같은 기준을 쓴다.
 //
 // 판정 기준은 ToggleCollapseVisibilityExtension과 같다. `collapsed === true`인
 // toggleListItem만 본다. 판정은 조상 체인(깊이 O(d))만 훑고 문서 전체를
@@ -29,4 +31,15 @@ export const outermostCollapsedContainerDepth = (
     if (isCollapsedToggleContent(container.firstChild)) return depth - 1;
   }
   return null;
+};
+
+// $pos가 숨은 그룹 안이면 가장 바깥 접힌 toggle의 라벨 끝 위치를 돌려준다.
+// 숨지 않았으면 null이다. 선택 가드의 clamp 위치와 Backspace 병합 위치
+// (block-join-extension.ts, Issue #253)가 같은 식을 쓴다.
+export const collapsedToggleLabelEnd = ($pos: ResolvedPos): number | null => {
+  const depth = outermostCollapsedContainerDepth($pos);
+  if (depth === null) return null;
+  const label = $pos.node(depth).child(0);
+  // start(depth)는 컨테이너 콘텐츠 시작이다. 라벨 닫는 토큰 앞이 라벨 끝이다.
+  return $pos.start(depth) + label.nodeSize - 1;
 };
