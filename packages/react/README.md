@@ -313,7 +313,7 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
   - 블록 타입 메뉴의 비활성 옵션도 사유 `title`을 가진다. 눌러도 변환하지 않고 메뉴를 닫지 않는다.
   - 블록 타입 아이콘 버튼의 사유 우선순위는 대상 블록 없음, 변환 불가 순이다.
   - 활성 컨트롤의 `title`은 라벨 그대로다.
-  - 사유 문구는 `dictionary.toolbar.static`의 `markingDisabledReason`, `blockTypeDisabledReason`으로 바꾼다.
+  - 사유 문구는 `dictionary.toolbar.static`의 `markingDisabledReason`, `blockTypeDisabledReason`, `blockTypeDisabledByChildrenReason`, `blockTypeDisabledByInvalidTextReason`로 바꾼다.
 - 표시 상태는 `controller.subscribe()`로 갱신한다. 마우스·키보드·명령 호출·undo 모두 같은 경로다.
 - 접힌 캐럿에서 mark·색상 버튼은 이어 입력할 텍스트에 서식을 건다(stored mark). 문서와 undo 스택은 바뀌지 않는다.
 

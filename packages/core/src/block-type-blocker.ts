@@ -1,5 +1,6 @@
 import {
   isInlineContentBlockType,
+  isKnownBlockType,
   isListEntryBlockType,
   isValidInlineText,
 } from "@cp949/geul-model";
@@ -37,6 +38,9 @@ export const evaluateBlockTypeChange = (
   const target = findEditableBlockContent(session.editor.state.doc, blockId);
   if (target === null) return { blocker: "NOT_FOUND" };
   const currentTypeName = target.node.type.name;
+  // 등록된 top-level CustomBlock은 PM에는 있지만 모델 트리 조회(알려진
+  // 타입만 반환)에서는 없다. 이 명령은 그 경우 BLOCK_NOT_FOUND를 돌려줬다.
+  if (!isKnownBlockType(currentTypeName)) return { blocker: "NOT_FOUND" };
   if (!isInlineContentBlockType(currentTypeName)) {
     return { blocker: "NOT_APPLICABLE" };
   }
@@ -71,8 +75,9 @@ export const evaluateBlockTypeChange = (
 };
 
 export type BlockTypesChangeEvaluation =
-  // missingBlockId는 NOT_FOUND일 때 처음 찾지 못한 blockId다.
-  | { blocker: BlockTypeBlocker; missingBlockId?: string }
+  // NOT_FOUND는 처음 찾지 못한 blockId를 항상 싣는다.
+  | { blocker: "NOT_FOUND"; missingBlockId: string }
+  | { blocker: Exclude<BlockTypeBlocker, "NOT_FOUND"> }
   | {
       blocker: null;
       targets: { node: ProseMirrorNode; position: number }[];

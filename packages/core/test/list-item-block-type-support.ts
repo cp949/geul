@@ -45,6 +45,17 @@ export const paragraphBlock = (
   ...(children === undefined ? {} : { children }),
 });
 
+/**
+ * 저장 정규형 codeBlock을 만든다. 텍스트가 빈 문자열이면 content를 빈 배열로
+ * 둔다. 언어는 "text"로 고정한다.
+ */
+export const codeBlockBlock = (id: string, text: string): Block => ({
+  id,
+  type: "codeBlock",
+  language: "text",
+  content: text === "" ? [] : [{ text }],
+});
+
 // model의 ListItemBlockType(bulletListItem/numberedListItem/checkListItem)을
 // 그대로 재노출하지 않는다 — 이 helper는 startNumber 조립만 알고 checked를
 // 몰라 checkListItem literal을 받으면 Block에 할당 불가능해진다(RD-001

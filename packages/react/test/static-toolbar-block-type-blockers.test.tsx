@@ -28,14 +28,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StaticToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
-import { fakeStaticToolbarController } from "./static-toolbar-test-support.js";
+import {
+  DICTIONARIES,
+  blockTypeName,
+  fakeStaticToolbarController,
+} from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
-
-const DICTIONARIES: ReadonlyArray<readonly [string, Dictionary]> = [
-  ["en", DEFAULT_DICTIONARY],
-  ["ko", KO_DICTIONARY],
-];
 
 type BlockerRule = (
   blockType: SetBlockTypeDescriptor,
@@ -82,11 +81,7 @@ const controllerWithMultiSelection = (
   return controller;
 };
 
-const blockTypeName = (
-  dictionary: Dictionary,
-  id: keyof Dictionary["blockType"],
-): string => dictionary.blockType[id].label;
-
+/** 블록 타입 트리거를 눌러 listbox를 열고 그 요소를 돌려준다. */
 const openMenu = (dictionary: Dictionary) => {
   fireEvent.click(
     screen.getByRole("button", {

@@ -16,6 +16,7 @@ import { typeIntoBlock } from "./slash-menu-test-support.js";
 
 afterEach(cleanup);
 
+/** 열린 슬래시 메뉴 항목의 라벨 목록을 돌려준다. */
 const labels = (): (string | null | undefined)[] =>
   screen
     .getAllByRole("option")

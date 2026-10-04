@@ -8,23 +8,21 @@ import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import type { SetBlockTypeDescriptor } from "../src/block-type-descriptor.js";
+import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
+import { mountTiptapEditor } from "./editor-controller-support.js";
 import {
+  codeBlockBlock as codeBlock,
   documentOf,
   listItemBlock as list,
   mounted,
   paragraphBlock as paragraph,
 } from "./list-item-block-type-support.js";
 
-const codeBlock = (id: string, text: string): Block => ({
-  id,
-  type: "codeBlock",
-  language: "text",
-  content: text === "" ? [] : [{ text }],
-});
-
+/** 텍스트가 없는 divider 블록을 만든다. */
 const divider = (id: string): Block => ({ id, type: "divider" });
 
+/** 사유 판정과 parity 테스트가 공유하는 문서. 자식·탭·빈 codeBlock과 divider를 담는다. */
 const fixtureDocument = () =>
   documentOf(
     paragraph("plain", "plain"),
@@ -40,6 +38,7 @@ const fixtureDocument = () =>
     divider("divider"),
   );
 
+/** parity 테스트가 모든 소스 블록에 대해 질의하는 변환 대상 목록이다. */
 const TARGETS: readonly SetBlockTypeDescriptor[] = [
   { type: "paragraph" },
   { type: "heading", level: 1 },
@@ -127,6 +126,31 @@ describe("getBlockTypeBlocker 사유", () => {
     );
   });
 
+  it("등록된 CustomBlock은 질의가 NOT_FOUND이고 명령이 BLOCK_NOT_FOUND로 거절한다", () => {
+    const editor = createEditor({
+      initialDocument: {
+        ...documentOf(paragraph("plain", "plain")),
+        blocks: [
+          paragraph("plain", "plain"),
+          { id: "widget", type: "myWidget", content: "none" },
+        ],
+      },
+      customBlocks: {
+        myWidget: {
+          render: () => ({ element: document.createElement("div") }),
+        },
+      },
+    });
+    mountTiptapEditor(editor);
+    expect(editor.getBlockTypeBlocker("widget", { type: "quote" })).toBe(
+      "NOT_FOUND",
+    );
+    expect(editor.commands.setBlockType("widget", { type: "quote" })).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "widget" },
+    });
+  });
+
   it("텍스트 없는 블록은 NOT_APPLICABLE이다", () => {
     const { editor } = mounted(fixtureDocument());
     expect(editor.getBlockTypeBlocker("divider", { type: "quote" })).toBe(
@@ -204,6 +228,7 @@ describe("getBlockTypesBlocker 사유", () => {
   });
 });
 
+/** 블록이 이미 target과 같은 타입(heading은 level까지)인지 판정한다. */
 const isSameType = (block: Block, target: SetBlockTypeDescriptor): boolean => {
   if (block.type !== target.type) return false;
   if (block.type === "heading" && target.type === "heading") {

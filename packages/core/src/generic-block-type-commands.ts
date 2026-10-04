@@ -223,7 +223,7 @@ export const createGenericBlockTypeCommands = (
         ok: false,
         error: {
           code: "BLOCK_NOT_FOUND",
-          blockId: evaluation.missingBlockId ?? "",
+          blockId: evaluation.missingBlockId,
         },
       };
     }

@@ -21,6 +21,7 @@ afterEach(cleanup);
 
 const dragHandleLabel = "Drag to reorder, click for options";
 
+/** 첫 블록 위에 포인터를 올리고 드래그 핸들을 눌러 블록 메뉴를 연다. */
 const openFirstBlockMenu = (initialBlocks: Block[]) => {
   const rendered = mountBlockEditor({
     initialBlocks,

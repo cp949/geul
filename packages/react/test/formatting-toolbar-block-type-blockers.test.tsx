@@ -26,6 +26,7 @@ type BlockerRule = (
   blockType: SetBlockTypeDescriptor,
 ) => BlockTypeBlocker | null;
 
+/** FormattingToolbar를 그리고 에디터 첫 텍스트를 선택해 툴바를 띄운다. */
 const renderToolbar = (controller: ReturnType<typeof fakeController>) => {
   render(
     withProvider(
@@ -42,6 +43,7 @@ const renderToolbar = (controller: ReturnType<typeof fakeController>) => {
   selectText(textNode, 0, 8);
 };
 
+/** 단일 블록 선택 controller로 툴바를 그린다. 사유는 옵션 descriptor로 정한다. */
 const renderSingle = (blockType: BlockTypeDescriptor, rule: BlockerRule) => {
   const controller = fakeController(
     vi.fn(() => []),
@@ -54,6 +56,7 @@ const renderSingle = (blockType: BlockTypeDescriptor, rule: BlockerRule) => {
   return controller;
 };
 
+/** 여러 블록 선택 controller로 툴바를 그린다. 사유는 옵션 descriptor로 정한다. */
 const renderMulti = (blockTypes: BlockTypeDescriptor[], rule: BlockerRule) => {
   const controller = fakeController(
     vi.fn(() => []),
@@ -73,6 +76,7 @@ const renderMulti = (blockTypes: BlockTypeDescriptor[], rule: BlockerRule) => {
   return controller;
 };
 
+/** 블록 타입 select가 가진 옵션 value 목록을 돌려준다. */
 const optionValues = (): string[] => {
   const select = screen.getByRole("combobox", {
     name: "Block type",

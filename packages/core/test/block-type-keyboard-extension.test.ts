@@ -14,8 +14,6 @@
 import type { Editor } from "@tiptap/core";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Block } from "@cp949/geul-model";
-
 import {
   BlockTypeKeyboardExtension,
   setBlockTypeShortcut,
@@ -38,19 +36,12 @@ import {
   restored,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
+import { codeBlockBlock as codeBlock } from "./list-item-block-type-support.js";
 import {
   createTableFixtureEditor,
   docWithTwoRowTable,
   placeCaretInCell,
 } from "./table-test-support.js";
-
-/** codeBlock 리터럴. */
-const codeBlock = (id: string, text: string): Block => ({
-  id,
-  type: "codeBlock",
-  language: "text",
-  content: text === "" ? [] : [{ text }],
-});
 
 // TrailingBlockExtension이 마지막 블록이 빈 paragraph가 아니면 문서 끝에
 // 빈 paragraph를 자동 삽입한다(production 편집기 배치 계약) — 모든 fixture를

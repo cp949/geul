@@ -18,14 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StaticToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
-import { fakeStaticToolbarController } from "./static-toolbar-test-support.js";
+import {
+  DICTIONARIES,
+  blockTypeName,
+  fakeStaticToolbarController,
+} from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
-
-const DICTIONARIES: ReadonlyArray<readonly [string, Dictionary]> = [
-  ["en", DEFAULT_DICTIONARY],
-  ["ko", KO_DICTIONARY],
-];
 
 // mark 버튼 label은 dictionary가 아니라 컴포넌트 리터럴이다.
 const MARK_NAMES = [
@@ -42,12 +41,6 @@ const markingControlNames = (dictionary: Dictionary): string[] => [
   dictionary.color.textLabel,
   dictionary.color.backgroundLabel,
 ];
-
-/** 블록 타입 아이콘 버튼의 accessible name을 dictionary에서 읽는다. */
-const blockTypeName = (
-  dictionary: Dictionary,
-  id: keyof Dictionary["blockType"],
-): string => dictionary.blockType[id].label;
 
 const ICON_BUTTON_IDS = [
   "quote",

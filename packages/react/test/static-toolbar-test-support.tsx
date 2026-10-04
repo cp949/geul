@@ -7,6 +7,8 @@
  * 요소에 키를 보내는 `press`도 둔다.
  * 메뉴와 같은 Escape 스택에 오르는 `ProbeOverlay`와 `openProbe`도 둔다.
  */
+import { DEFAULT_DICTIONARY, KO_DICTIONARY } from "@cp949/geul-core";
+import type { Dictionary } from "@cp949/geul-core";
 import { act, fireEvent, screen } from "@testing-library/react";
 import { useState } from "react";
 import { vi } from "vitest";
@@ -15,6 +17,18 @@ import { StaticToolbar } from "../src/index.js";
 import { useDismissibleOverlay } from "../src/use-dismissible-overlay.js";
 import { fakeController } from "./formatting-toolbar-test-support.js";
 import { mountBlockEditor, placeCaret } from "./mount-editor.js";
+
+/** en·ko dictionary 쌍. `describe.each`가 문구를 두 언어로 확인하게 한다. */
+export const DICTIONARIES: ReadonlyArray<readonly [string, Dictionary]> = [
+  ["en", DEFAULT_DICTIONARY],
+  ["ko", KO_DICTIONARY],
+];
+
+/** 블록 타입 아이콘 버튼의 accessible name을 dictionary에서 읽는다. */
+export const blockTypeName = (
+  dictionary: Dictionary,
+  id: keyof Dictionary["blockType"],
+): string => dictionary.blockType[id].label;
 
 // 캐럿 명령 mock이 성공과 거절 양쪽을 받도록 반환 타입을 미리 넓혀 둔다.
 // 좁게 추론되면 테스트가 다른 결과를 `mockReturnValue`로 넘길 때 타입 에러가 난다.
