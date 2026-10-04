@@ -1,6 +1,7 @@
 import {
   isListEntryBlockType,
   type BlockCommands,
+  type BlockTypeBlocker,
   type BlockTypeDescriptor,
   type Dictionary,
 } from "@cp949/geul-core";
@@ -151,6 +152,42 @@ export const getBlockTypeOptionsForSource = (
 export const getBlockTypeOptionsForMultiSelection =
   (): readonly BlockTypeOption[] =>
     BLOCK_TYPE_OPTIONS.filter(({ id }) => id !== "code");
+
+// 옵션 id별 core 거절 사유다(Issue #245). 값이 null이거나 키가 없으면 막지
+// 않는다. 선택 종류에 맞는 core 질의(getBlockTypeBlocker·getBlockTypesBlocker)
+// 결과를 `computeFormattingToolbarState`가 채운다.
+export type BlockTypeBlockers = Readonly<
+  Record<string, BlockTypeBlocker | null>
+>;
+
+export const isBlockTypeOptionBlocked = (
+  blockers: BlockTypeBlockers,
+  optionId: string,
+): boolean => (blockers[optionId] ?? null) !== null;
+
+// 비활성 변환 버튼의 사유 title. 원인이 눈에 보이지 않는 두 사유만 전용
+// 문구를 쓰고 나머지는 일반 문구 하나를 공유한다(Issue #245, G-UI-004).
+export const blockTypeBlockerReason = (
+  dictionary: Dictionary,
+  blocker: BlockTypeBlocker,
+): string => {
+  switch (blocker) {
+    case "HAS_CHILDREN":
+      return dictionary.toolbar.static.blockTypeDisabledByChildrenReason;
+    case "INVALID_TEXT":
+      return dictionary.toolbar.static.blockTypeDisabledByInvalidTextReason;
+    default:
+      return dictionary.toolbar.static.blockTypeDisabledReason;
+  }
+};
+
+// 막힌 옵션을 목록에서 뺀다. 목록에 사유 title을 달 수 없는 진입점(select,
+// Turn into, 슬래시)이 쓴다. 현재 타입은 같은 타입 변환이라 막히지 않는다.
+export const withoutBlockedBlockTypeOptions = (
+  options: readonly BlockTypeOption[],
+  blockers: BlockTypeBlockers,
+): readonly BlockTypeOption[] =>
+  options.filter((option) => !isBlockTypeOptionBlocked(blockers, option.id));
 
 // spec §8(EXT-009), RD-002-DELTA-02 — `dictionary.blockType`에서 표시용
 // label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 14개

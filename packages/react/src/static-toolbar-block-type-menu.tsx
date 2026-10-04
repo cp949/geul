@@ -37,6 +37,12 @@ type StaticToolbarBlockTypeMenuProps = {
   /** 옵션 라벨. 사전 문구는 호출부가 소유한다. */
   optionLabel: (option: BlockTypeOption) => string;
 
+  /**
+   * 비활성 옵션의 사유. 문자열이면 옵션이 `aria-disabled`이고 `title`로 사유를
+   * 보인다. 눌러도 확정하지 않고 메뉴를 닫지 않는다(G-UI-004, Issue #245).
+   */
+  optionDisabledReason: (option: BlockTypeOption) => string | undefined;
+
   /** 현재 블록 타입의 옵션 id. 목록 밖이거나 대상이 없으면 `null`이다. */
   activeOptionId: string | null;
 
@@ -72,6 +78,7 @@ export const StaticToolbarBlockTypeMenu = ({
   label,
   options,
   optionLabel,
+  optionDisabledReason,
   activeOptionId,
   focusSelected,
   element,
@@ -144,20 +151,28 @@ export const StaticToolbarBlockTypeMenu = ({
       role="listbox"
       style={style}
     >
-      {options.map((option) => (
-        <button
-          aria-selected={option.id === activeOptionId}
-          className="geul-static-toolbar__block-type-option"
-          key={option.id}
-          onClick={() => onConfirm(option)}
-          onMouseDown={preserveFocusOnMouseDown()}
-          role="option"
-          tabIndex={-1}
-          type="button"
-        >
-          {optionLabel(option)}
-        </button>
-      ))}
+      {options.map((option) => {
+        const disabledReason = optionDisabledReason(option);
+        return (
+          <button
+            aria-disabled={disabledReason === undefined ? undefined : true}
+            aria-selected={option.id === activeOptionId}
+            className="geul-static-toolbar__block-type-option"
+            key={option.id}
+            onClick={() => {
+              if (disabledReason !== undefined) return;
+              onConfirm(option);
+            }}
+            onMouseDown={preserveFocusOnMouseDown()}
+            role="option"
+            tabIndex={-1}
+            title={disabledReason}
+            type="button"
+          >
+            {optionLabel(option)}
+          </button>
+        );
+      })}
     </div>
   );
 };

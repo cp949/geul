@@ -29,6 +29,7 @@ export const isSameStaticToolbarState = (
   left.isAtomBlockSelected === right.isAtomBlockSelected &&
   left.isCellRangeSelected === right.isCellRangeSelected &&
   left.selectionIntersectsCodeBlock === right.selectionIntersectsCodeBlock &&
+  sameFlatRecord(left.blockTypeBlockers, right.blockTypeBlockers) &&
   left.activeMarks.length === right.activeMarks.length &&
   left.activeMarks.every((mark, index) => mark === right.activeMarks[index]) &&
   (left.nestingActions === null || right.nestingActions === null

@@ -1,9 +1,7 @@
 import {
   canonicalizeCodeBlockLanguage,
   isInlineContentBlockType,
-  isListEntryBlockType,
   isValidCodeBlockLanguage,
-  isValidInlineText,
   parseDocument,
 } from "@cp949/geul-model";
 import type { Result } from "@cp949/geul-model";
@@ -11,7 +9,10 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 
-import { findEditableBlockContent } from "./block-position.js";
+import {
+  evaluateBlockTypeChange,
+  evaluateBlockTypesChange,
+} from "./block-type-blocker.js";
 import type { SetBlockTypeDescriptor } from "./block-type-descriptor.js";
 import {
   codeSourceLeafText,
@@ -23,10 +24,6 @@ import {
   commandNotApplicable,
   type ProductionEditorSession,
 } from "./production-editor-session.js";
-import {
-  findBlockEntryInTree,
-  hasChildren,
-} from "./generic-block-tree-lookup.js";
 
 // numberedListItem startNumber가 모델이 받아들이는 값인지 판정한다. null은
 // 명시 번호 없음이라 항상 유효하다.
@@ -54,55 +51,28 @@ export const createGenericBlockTypeCommands = (
     options?: { clearContent?: boolean },
   ): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("setBlockType");
-    const modelTarget = findBlockEntryInTree(session.document.blocks, blockId);
-    if (modelTarget === null) {
+    const clearContent = options?.clearContent ?? false;
+    // 구조적 거절 조건은 질의(getBlockTypeBlocker)와 같은 함수가 판정한다.
+    const evaluation = evaluateBlockTypeChange(
+      session,
+      blockId,
+      blockType,
+      clearContent,
+    );
+    if (evaluation.blocker === "NOT_FOUND") {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
-    const target = findEditableBlockContent(session.editor.state.doc, blockId);
-    if (target === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    const currentTypeName = target.node.type.name;
-    if (!isInlineContentBlockType(currentTypeName)) {
+    if (evaluation.blocker !== null)
       return commandNotApplicable("setBlockType");
-    }
+    const { target } = evaluation;
+    const currentTypeName = target.node.type.name;
     const currentLevel =
       typeof target.node.attrs.level === "number"
         ? target.node.attrs.level
         : null;
     const currentContentSize = target.node.content.size;
-    const clearContent = options?.clearContent ?? false;
-    // bulletListItem/numberedListItem/checkListItem/toggleListItem 넷 다
-    // "목록"이다(spec 글머리·번호·체크·토글 목록) — isListItemBlockType(io
-    // <ul>/<ol> 직렬화 축)이 아니라 isListEntryBlockType(io 축과 분리된 편집
-    // UX 축, RD-003 F2)을 써서 toggleListItem도 이 가드에 포함한다. 그러지
-    // 않으면 자식 없는 toggleListItem만 codeBlock 변환이 허용되는 비대칭이
-    // 생긴다(RD-003 트랙-3 pending 이슈, IMPL-REVIEW-01.md "남은 위험").
-    const currentIsList = isListEntryBlockType(currentTypeName);
-    const targetIsList = isListEntryBlockType(blockType.type);
-    if (
-      (currentTypeName === "codeBlock" && targetIsList) ||
-      (currentIsList && blockType.type === "codeBlock")
-    ) {
-      return commandNotApplicable("setBlockType");
-    }
     const changesCodeBlockBoundary =
       currentTypeName === "codeBlock" || blockType.type === "codeBlock";
-    if (
-      blockType.type === "codeBlock" &&
-      currentTypeName !== "codeBlock" &&
-      hasChildren(modelTarget.block)
-    ) {
-      return commandNotApplicable("setBlockType");
-    }
-    if (
-      currentTypeName === "codeBlock" &&
-      blockType.type !== "codeBlock" &&
-      !clearContent &&
-      !isValidInlineText(target.node.textContent)
-    ) {
-      return commandNotApplicable("setBlockType");
-    }
     let codeBlockLanguage: string | null = null;
     if (blockType.type === "codeBlock") {
       const requestedLanguage = blockType.language ?? "text";
@@ -247,23 +217,21 @@ export const createGenericBlockTypeCommands = (
     blockIds: readonly string[],
     blockType: SetBlockTypeDescriptor,
   ): Result<void, EditorError> => {
-    if (session.isDestroyed) return commandNotApplicable("setBlockType");
-    if (blockIds.length === 0 || blockType.type === "codeBlock") {
-      return commandNotApplicable("setBlockType");
+    const evaluation = evaluateBlockTypesChange(session, blockIds, blockType);
+    if (evaluation.blocker === "NOT_FOUND") {
+      return {
+        ok: false,
+        error: {
+          code: "BLOCK_NOT_FOUND",
+          blockId: evaluation.missingBlockId ?? "",
+        },
+      };
     }
+    if (evaluation.blocker !== null)
+      return commandNotApplicable("setBlockType");
+    const { targets } = evaluation;
     const nodeType = session.editor.schema.nodes[blockType.type];
     if (nodeType === undefined) return commandNotApplicable("setBlockType");
-    const targets: { node: ProseMirrorNode; position: number }[] = [];
-    for (const blockId of blockIds) {
-      const target = findEditableBlockContent(
-        session.editor.state.doc,
-        blockId,
-      );
-      if (target === null) {
-        return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-      }
-      targets.push(target);
-    }
     const isConvertible = (node: ProseMirrorNode): boolean => {
       const currentTypeName = node.type.name;
       if (

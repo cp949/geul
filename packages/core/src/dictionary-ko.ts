@@ -201,6 +201,10 @@ export const KO_DICTIONARY: Dictionary = {
         "커서가 블록 하나 안에 있을 때 사용할 수 있습니다",
       markingDisabledReason: "이 선택에서는 서식을 적용할 수 없습니다",
       blockTypeDisabledReason: "이 블록은 해당 타입으로 변환할 수 없습니다",
+      blockTypeDisabledByChildrenReason:
+        "하위 블록이 있어 코드로 변환할 수 없습니다",
+      blockTypeDisabledByInvalidTextReason:
+        "탭이나 제어 문자가 있는 코드 블록은 변환할 수 없습니다",
     },
     codeBlock: {
       ariaLabel: "코드 블록 툴바",

@@ -1,6 +1,14 @@
-import type { BlockTypeDescriptor, SelectionQuery } from "@cp949/geul-core";
+import type {
+  BlockTypeBlocker,
+  BlockTypeDescriptor,
+  SelectionQuery,
+} from "@cp949/geul-core";
 
-import { blockTypeToOptionId } from "./block-type-options.js";
+import {
+  BLOCK_TYPE_OPTIONS,
+  blockTypeToOptionId,
+  type BlockTypeBlockers,
+} from "./block-type-options.js";
 
 export type SelectionMark = ReturnType<
   SelectionQuery["getSelectionMarks"]
@@ -25,6 +33,35 @@ export type FormattingToolbarState = {
   // 같은 판정이라 여러 블록에 걸친 선택도 포함한다. 끝점만 닿는 선택은
   // false다.
   selectionIntersectsCodeBlock: boolean;
+  // 블록 타입 옵션 id별 core 변환 거절 사유(Issue #245). 단일 블록이면
+  // getBlockTypeBlocker, 여러 블록 선택이면 getBlockTypesBlocker 결과다.
+  // 대상 블록이 없으면 빈 객체다. 탭 입력처럼 블록 타입이 그대로인 문서
+  // 변경도 사유를 바꾸므로 상태 동등 비교에 포함한다.
+  blockTypeBlockers: BlockTypeBlockers;
+};
+
+const computeBlockTypeBlockers = (
+  editor: SelectionQuery,
+  blockSelection: FormattingToolbarState["blockSelection"],
+  multiBlockSelection: FormattingToolbarState["multiBlockSelection"],
+): BlockTypeBlockers => {
+  const blockers: Record<string, BlockTypeBlocker | null> = {};
+  if (blockSelection !== null) {
+    for (const option of BLOCK_TYPE_OPTIONS) {
+      blockers[option.id] = editor.getBlockTypeBlocker(
+        blockSelection.blockId,
+        option.blockType,
+      );
+    }
+  } else if (multiBlockSelection !== null) {
+    for (const option of BLOCK_TYPE_OPTIONS) {
+      blockers[option.id] = editor.getBlockTypesBlocker(
+        multiBlockSelection.blockIds,
+        option.blockType,
+      );
+    }
+  }
+  return blockers;
 };
 
 const computeMultiBlockSelection = (
@@ -57,13 +94,14 @@ export const computeFormattingToolbarState = (
   const blockSelection = editor.getSelectionBlockType();
   const isAtomBlockSelected = editor.isAtomBlockSelected();
   const isCellRangeSelected = editor.isCellRangeSelected();
+  const multiBlockSelection =
+    blockSelection === null && !isAtomBlockSelected && !isCellRangeSelected
+      ? computeMultiBlockSelection(editor)
+      : null;
   return {
     activeMarks: editor.getSelectionMarks(),
     blockSelection,
-    multiBlockSelection:
-      blockSelection === null && !isAtomBlockSelected && !isCellRangeSelected
-        ? computeMultiBlockSelection(editor)
-        : null,
+    multiBlockSelection,
     nestingActions:
       blockSelection === null
         ? null
@@ -71,5 +109,10 @@ export const computeFormattingToolbarState = (
     isAtomBlockSelected,
     isCellRangeSelected,
     selectionIntersectsCodeBlock: editor.selectionIntersectsCodeBlock(),
+    blockTypeBlockers: computeBlockTypeBlockers(
+      editor,
+      blockSelection,
+      multiBlockSelection,
+    ),
   };
 };

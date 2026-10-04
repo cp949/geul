@@ -3,6 +3,7 @@ import type {
   Dictionary,
   EditorController,
   EditorLifecycle,
+  SelectionQuery,
   MediaBlockKind,
 } from "@cp949/geul-core";
 import {
@@ -196,16 +197,27 @@ const isSlashMenuItemEnabled = (
 };
 
 const getSlashMenuItems = (
+  blockId: string,
   source: BlockTypeDescriptor,
   customItems: readonly SlashMenuCustomItem[],
-  editor: EditorLifecycle,
+  editor: EditorLifecycle & SelectionQuery,
 ): readonly SlashMenuItem[] =>
   (
     [
-      ...getBlockTypeOptionsForSource(source).map((option) => ({
-        kind: "blockType" as const,
-        ...option,
-      })),
+      ...getBlockTypeOptionsForSource(source)
+        // core가 거절하는 변환(자식 있는 블록의 Code 등)은 항목에서 뺀다
+        // (Issue #245). 선택은 clearContent로 변환하므로 같은 옵션으로
+        // 질의한다.
+        .filter(
+          (option) =>
+            editor.getBlockTypeBlocker(blockId, option.blockType, {
+              clearContent: true,
+            }) === null,
+        )
+        .map((option) => ({
+          kind: "blockType" as const,
+          ...option,
+        })),
       TABLE_SLASH_ITEM,
       DIVIDER_SLASH_ITEM,
       FILE_SLASH_ITEM,
@@ -235,12 +247,13 @@ const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
 };
 
 const filterItems = (
+  blockId: string,
   source: BlockTypeDescriptor,
   query: string,
   customItems: readonly SlashMenuCustomItem[],
-  editor: EditorLifecycle,
+  editor: EditorLifecycle & SelectionQuery,
 ): SlashMenuItem[] =>
-  getSlashMenuItems(source, customItems, editor).filter((item) =>
+  getSlashMenuItems(blockId, source, customItems, editor).filter((item) =>
     matchesQuery(item, query),
   );
 
@@ -441,6 +454,7 @@ export const SlashMenu = ({
                 current.highlightedIndex,
                 Math.max(
                   filterItems(
+                    context.blockId,
                     context.blockType,
                     resolvedQuery,
                     customItems,
@@ -489,6 +503,7 @@ export const SlashMenu = ({
     menuState === null
       ? []
       : filterItems(
+          menuState.blockId,
           menuState.sourceBlockType,
           menuState.query,
           customItems,
@@ -585,6 +600,7 @@ export const SlashMenu = ({
             if (currentState === null) return null;
             const count = Math.max(
               filterItems(
+                currentState.blockId,
                 currentState.sourceBlockType,
                 currentState.query,
                 customItems,
@@ -602,6 +618,7 @@ export const SlashMenu = ({
         },
         activate: () => {
           const item = filterItems(
+            current.blockId,
             current.sourceBlockType,
             current.query,
             customItems,

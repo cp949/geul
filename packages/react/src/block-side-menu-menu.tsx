@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { findBlockTypeDescriptor } from "./block-side-menu-block-type.js";
 import {
   blockTypeText,
+  blockTypeToOptionId,
   type BlockTypeOption,
   getBlockTypeOptionsForSource,
 } from "./block-type-options.js";
@@ -108,9 +109,20 @@ export const BlockSideMenuMenu = ({
   const blockTypeOptions =
     blockMenuSource === null
       ? []
-      : getBlockTypeOptionsForSource(blockMenuSource).filter((option) =>
-          editor.isBlockTypeEnabled(option.blockType.type),
+      : getBlockTypeOptionsForSource(blockMenuSource).filter(
+          (option) =>
+            editor.isBlockTypeEnabled(option.blockType.type) &&
+            // core가 거절하는 변환(자식 있는 블록의 Code, 탭이 든 codeBlock의
+            // 일반 블록 등)은 목록에서 뺀다(Issue #245).
+            editor.getBlockTypeBlocker(blockId, option.blockType) === null,
         );
+  // 현재 타입 말고 고를 항목이 없으면 Turn into 섹션을 그리지 않는다. 눌러도
+  // 반응 없는 항목만 남기지 않는다(Issue #245).
+  const currentBlockTypeOptionId =
+    blockMenuSource === null ? null : blockTypeToOptionId(blockMenuSource);
+  const hasTurnIntoAlternative = blockTypeOptions.some(
+    (option) => option.id !== currentBlockTypeOptionId,
+  );
 
   // Issue #141 — 열려 있는 동안 외부 EditorController command가 이
   // blockId의 type을 바꾸면 메뉴를 닫는다(옵션 재계산이 아니다 — 01-계획.md
@@ -179,7 +191,8 @@ export const BlockSideMenuMenu = ({
       source !== null &&
       getBlockTypeOptionsForSource(source).some(
         (option) => option.id === item.id,
-      );
+      ) &&
+      editor.getBlockTypeBlocker(blockId, item.blockType) === null;
     if (isAllowed) {
       editor.commands.setBlockType(blockId, item.blockType);
     }
@@ -230,20 +243,24 @@ export const BlockSideMenuMenu = ({
       // 초점을 준다. tabIndex가 없으면 그 초점이 무시된다.
       tabIndex={-1}
     >
-      <p className="geul-block-menu__label">{dictionary.menu.turnInto}</p>
-      {blockTypeOptions.map((option) => (
-        <MenuItemButton
-          className={blockMenuItemClassName}
-          key={option.id}
-          onClick={() => handleTurnInto(option)}
-        >
-          {blockTypeText(dictionary, option.id).label}
-        </MenuItemButton>
-      ))}
-      {/* mx-0(SCSS margin-inline: 0)에 대응: preflight 미포함이라 UA의
+      {hasTurnIntoAlternative && (
+        <>
+          <p className="geul-block-menu__label">{dictionary.menu.turnInto}</p>
+          {blockTypeOptions.map((option) => (
+            <MenuItemButton
+              className={blockMenuItemClassName}
+              key={option.id}
+              onClick={() => handleTurnInto(option)}
+            >
+              {blockTypeText(dictionary, option.id).label}
+            </MenuItemButton>
+          ))}
+          {/* mx-0(SCSS margin-inline: 0)에 대응: preflight 미포함이라 UA의
           margin-inline auto가 남으면 flex column에서 hr이 0폭으로
           붕괴한다 */}
-      <hr className="geul-block-menu__divider" />
+          <hr className="geul-block-menu__divider" />
+        </>
+      )}
       <MenuItemButton
         aria-disabled={nestingActions?.canIndent !== true}
         className={blockMenuItemClassName}

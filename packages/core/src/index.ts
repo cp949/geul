@@ -50,6 +50,7 @@ export {
   serializeTableColumns,
 } from "@cp949/geul-model";
 export type {
+  BlockTypeBlocker,
   BlockTypeDescriptor,
   BlockTypeSource,
   SetBlockTypeDescriptor,

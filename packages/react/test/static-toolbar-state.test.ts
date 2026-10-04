@@ -19,6 +19,7 @@ const baseState = (): FormattingToolbarState => ({
   isAtomBlockSelected: false,
   isCellRangeSelected: false,
   selectionIntersectsCodeBlock: false,
+  blockTypeBlockers: { code: null, quote: null },
 });
 
 describe("isSameStaticToolbarState", () => {
@@ -178,5 +179,27 @@ describe("isSameStaticToolbarState 여러 블록 선택", () => {
     expect(isSameStaticToolbarState(baseState(), multi(["a", "b"]))).toBe(
       false,
     );
+  });
+
+  it("블록 타입 변환 사유가 달라지면 다르다고 판정한다(Issue #245)", () => {
+    const next = {
+      ...baseState(),
+      blockTypeBlockers: { code: "HAS_CHILDREN" as const, quote: null },
+    };
+
+    expect(isSameStaticToolbarState(baseState(), next)).toBe(false);
+  });
+
+  it("블록 타입 변환 사유가 같으면 같다고 판정한다(Issue #245)", () => {
+    const left = {
+      ...baseState(),
+      blockTypeBlockers: { code: "INVALID_TEXT" as const, quote: null },
+    };
+    const right = {
+      ...baseState(),
+      blockTypeBlockers: { code: "INVALID_TEXT" as const, quote: null },
+    };
+
+    expect(isSameStaticToolbarState(left, right)).toBe(true);
   });
 });

@@ -6,6 +6,10 @@ import {
   createBlockAttributeCommands,
   isTextAlignableMediaBlockKind,
 } from "./block-attribute-commands.js";
+import {
+  evaluateBlockTypeChange,
+  evaluateBlockTypesChange,
+} from "./block-type-blocker.js";
 import { createBlockCrudCommands } from "./block-crud-commands.js";
 import {
   findAdjacentInTree,
@@ -308,6 +312,17 @@ export const createEditor = (
         selection.node.isBlock &&
         selection.node.isAtom
       );
+    },
+    getBlockTypeBlocker(blockId, blockType, options) {
+      return evaluateBlockTypeChange(
+        session,
+        blockId,
+        blockType,
+        options?.clearContent ?? false,
+      ).blocker;
+    },
+    getBlockTypesBlocker(blockIds, blockType) {
+      return evaluateBlockTypesChange(session, blockIds, blockType).blocker;
     },
     getBlockSelection() {
       if (session.isDestroyed) return null;

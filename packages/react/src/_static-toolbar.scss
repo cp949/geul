@@ -98,4 +98,14 @@
     background-color: var(--geul-color-accent-muted, #e8f0fe);
     color: var(--geul-color-accent, #1a73e8);
   }
+
+  // 대상 블록이 변환을 거절하는 옵션. 포커스는 받고 hover 강조는 끈다.
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.4;
+
+    &:hover {
+      background-color: transparent;
+    }
+  }
 }

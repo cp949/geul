@@ -28,6 +28,7 @@ import {
   blockTypeToOptionId,
   getBlockTypeOptionsForMultiSelection,
   getBlockTypeOptionsForSource,
+  withoutBlockedBlockTypeOptions,
 } from "./block-type-options.js";
 import {
   type FixedPlacementAnchor,
@@ -295,6 +296,7 @@ export const FormattingToolbar = ({
       multiBlockSelection: computedState.multiBlockSelection,
       nestingActions: computedState.nestingActions,
       selectionIntersectsCodeBlock: computedState.selectionIntersectsCodeBlock,
+      blockTypeBlockers: computedState.blockTypeBlockers,
     });
   }, [editor, element, dismissSuppression]);
 
@@ -452,7 +454,7 @@ export const FormattingToolbar = ({
 
   // 블록 타입 select의 원천. 단일 블록이면 그 타입에서 갈 수 있는 목록,
   // 여러 블록에 걸친 선택이면 공통 목록이다. 둘 다 아니면 select를 그리지 않는다.
-  const blockTypeSelect =
+  const blockTypeSelectSource =
     toolbarState.blockSelection !== null
       ? {
           blockType: toolbarState.blockSelection.blockType,
@@ -466,6 +468,30 @@ export const FormattingToolbar = ({
             options: getBlockTypeOptionsForMultiSelection(),
           }
         : null;
+  // core가 거절하는 옵션(자식 있는 블록의 Code, 탭이 든 codeBlock의 일반
+  // 블록 등)과 enabledBlockTypes(mode: "deny")로 끈 타입(Issue #190)을
+  // 목록에서 뺀다. 선례: slash-menu.tsx의 isSlashMenuItemEnabled.
+  const blockTypeSelect =
+    blockTypeSelectSource === null
+      ? null
+      : {
+          blockType: blockTypeSelectSource.blockType,
+          options: withoutBlockedBlockTypeOptions(
+            blockTypeSelectSource.options,
+            toolbarState.blockTypeBlockers,
+          ).filter((option) =>
+            editor.isBlockTypeEnabled(option.blockType.type),
+          ),
+        };
+  // 현재 타입 말고 고를 옵션이 없으면 select가 아무것도 바꾸지 못한다.
+  // 눌러도 반응 없는 컨트롤을 그리지 않는다(Issue #245).
+  const currentOptionId =
+    blockTypeSelect?.blockType === null || blockTypeSelect === null
+      ? null
+      : blockTypeToOptionId(blockTypeSelect.blockType);
+  const hasBlockTypeAlternative =
+    blockTypeSelect !== null &&
+    blockTypeSelect.options.some((option) => option.id !== currentOptionId);
 
   if (Component !== undefined) {
     const overridden = (
@@ -493,64 +519,60 @@ export const FormattingToolbar = ({
         role="toolbar"
         style={style}
       >
-        {blockTypeSelect !== null && !isCalloutSelection && (
-          <select
-            aria-label="Block type"
-            className="geul-formatting-toolbar__select"
-            onChange={(event) => {
-              const option = blockTypeSelect.options.find(
-                (candidate) => candidate.id === event.currentTarget.value,
-              );
-              if (option === undefined) return;
-              const { blockSelection, multiBlockSelection } = toolbarState;
-              if (blockSelection !== null) {
-                editor.commands.setBlockType(
-                  blockSelection.blockId,
-                  option.blockType,
+        {blockTypeSelect !== null &&
+          hasBlockTypeAlternative &&
+          !isCalloutSelection && (
+            <select
+              aria-label="Block type"
+              className="geul-formatting-toolbar__select"
+              onChange={(event) => {
+                const option = blockTypeSelect.options.find(
+                  (candidate) => candidate.id === event.currentTarget.value,
                 );
-              } else if (multiBlockSelection !== null) {
-                editor.commands.setBlockTypes(
-                  multiBlockSelection.blockIds,
-                  option.blockType,
-                );
+                if (option === undefined) return;
+                const { blockSelection, multiBlockSelection } = toolbarState;
+                if (blockSelection !== null) {
+                  editor.commands.setBlockType(
+                    blockSelection.blockId,
+                    option.blockType,
+                  );
+                } else if (multiBlockSelection !== null) {
+                  editor.commands.setBlockTypes(
+                    multiBlockSelection.blockIds,
+                    option.blockType,
+                  );
+                }
+                updateFromSelection();
+              }}
+              // IconButton 형제들과 달리 onMouseDown={preventDefault}를 두지
+              // 않는다 — 네이티브 <select>는 mousedown의 기본 동작이 곧
+              // 드롭다운을 여는 것이라(Chromium 실측, QA-087) 막으면 드롭다운
+              // 자체가 안 열려 클릭으로 옵션을 고를 수 없다. 그 preventDefault는
+              // 애초에 "mousedown이 contenteditable 초점을 훔치지 않는다"는
+              // 불변식(icon-button.tsx 참고)을 위한 것인데, 이 select에 실제로
+              // 초점이 옮겨가도(document.activeElement가 select로 바뀌어도)
+              // 편집기의 window.getSelection()은 collapse되지 않는다(Chromium
+              // 실측) — 지킬 불변식이 애초에 깨지지 않으므로 이 select에는
+              // preventDefault가 필요 없다.
+              value={
+                blockTypeSelect.blockType === null
+                  ? ""
+                  : blockTypeToOptionId(blockTypeSelect.blockType)
               }
-              updateFromSelection();
-            }}
-            // IconButton 형제들과 달리 onMouseDown={preventDefault}를 두지
-            // 않는다 — 네이티브 <select>는 mousedown의 기본 동작이 곧
-            // 드롭다운을 여는 것이라(Chromium 실측, QA-087) 막으면 드롭다운
-            // 자체가 안 열려 클릭으로 옵션을 고를 수 없다. 그 preventDefault는
-            // 애초에 "mousedown이 contenteditable 초점을 훔치지 않는다"는
-            // 불변식(icon-button.tsx 참고)을 위한 것인데, 이 select에 실제로
-            // 초점이 옮겨가도(document.activeElement가 select로 바뀌어도)
-            // 편집기의 window.getSelection()은 collapse되지 않는다(Chromium
-            // 실측) — 지킬 불변식이 애초에 깨지지 않으므로 이 select에는
-            // preventDefault가 필요 없다.
-            value={
-              blockTypeSelect.blockType === null
-                ? ""
-                : blockTypeToOptionId(blockTypeSelect.blockType)
-            }
-          >
-            {/* 여러 블록의 타입이 섞여 있으면 고른 값이 없다. */}
-            {blockTypeSelect.blockType === null && (
-              <option disabled value="">
-                {dictionary.toolbar.static.blockTypeNeutralLabel}
-              </option>
-            )}
-            {blockTypeSelect.options
-              // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다
-              // (Issue #190) — 선례: slash-menu.tsx의 isSlashMenuItemEnabled.
-              .filter((option) =>
-                editor.isBlockTypeEnabled(option.blockType.type),
-              )
-              .map((option) => (
+            >
+              {/* 여러 블록의 타입이 섞여 있으면 고른 값이 없다. */}
+              {blockTypeSelect.blockType === null && (
+                <option disabled value="">
+                  {dictionary.toolbar.static.blockTypeNeutralLabel}
+                </option>
+              )}
+              {blockTypeSelect.options.map((option) => (
                 <option key={option.id} value={option.id}>
                   {blockTypeText(dictionary, option.id).label}
                 </option>
               ))}
-          </select>
-        )}
+            </select>
+          )}
         {toolbarState.blockSelection !== null && (
           <>
             {/* 표 셀 안에서는 blockSelection이 이미 null이라(기존 동작,

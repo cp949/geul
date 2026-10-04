@@ -293,6 +293,11 @@ export type Dictionary = {
       // 버튼(예: codeBlock 안의 목록 4종, 목록 안의 Code)의 비활성 사유
       // title. 소스 블록별로 문구를 나누지 않고 하나를 공유한다.
       blockTypeDisabledReason: string;
+      // Issue #245 — 자식이 있는 블록의 Code 버튼 비활성 사유 title.
+      blockTypeDisabledByChildrenReason: string;
+      // Issue #245 — 탭 등 무효 문자가 든 codeBlock의 일반 블록 타입 버튼
+      // 비활성 사유 title.
+      blockTypeDisabledByInvalidTextReason: string;
     };
     // Issue #193 RD-001-DELTA-01 — code-block-language-combobox.tsx의
     // outer `role="toolbar"` 컨테이너(언어 trigger + 복사 + 더보기, DELTA-02가
@@ -627,6 +632,10 @@ export const DEFAULT_DICTIONARY: Dictionary = {
         "Available when the cursor is in a single block",
       markingDisabledReason: "Formatting isn't available for this selection",
       blockTypeDisabledReason: "Can't convert this block to that type",
+      blockTypeDisabledByChildrenReason:
+        "Can't convert a block with nested blocks to code",
+      blockTypeDisabledByInvalidTextReason:
+        "Can't convert this code block — it contains a tab or control character",
     },
     codeBlock: {
       ariaLabel: "Code block toolbar",

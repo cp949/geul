@@ -37,10 +37,12 @@ import { createPortal } from "react-dom";
 import {
   type BlockTypeOption,
   BLOCK_TYPE_OPTIONS,
+  blockTypeBlockerReason,
   blockTypeText,
   blockTypeToOptionId,
   getBlockTypeOptionsForMultiSelection,
   getBlockTypeOptionsForSource,
+  isBlockTypeOptionBlocked,
 } from "./block-type-options.js";
 import { readAnchorBelowTrigger } from "./fixed-placement.js";
 import {
@@ -507,8 +509,10 @@ export const StaticToolbar = ({
   // option이면 아무것도 하지 않는다. 단일 블록이면 setBlockType, 여러 블록에
   // 걸친 선택이면 setBlockTypes로 한 번에 바꾼다.
   const applyBlockType = (option: BlockTypeOption) => {
-    const { blockSelection, multiBlockSelection } =
+    const { blockSelection, multiBlockSelection, blockTypeBlockers } =
       computeFormattingToolbarState(editor);
+    // core 거절 사유도 클릭 시점의 값으로 다시 본다(Issue #245).
+    if (isBlockTypeOptionBlocked(blockTypeBlockers, option.id)) return;
     if (blockSelection !== null) {
       const allowed = getBlockTypeOptionsForSource(
         blockSelection.blockType,
@@ -600,10 +604,26 @@ export const StaticToolbar = ({
       : state.multiBlockSelection !== null
         ? getBlockTypeOptionsForMultiSelection()
         : null;
+  // source 타입 목록에 있고 core가 거절하지 않는 옵션만 허용한다(Issue #245).
   const allowedBlockTypeIds =
     allowedBlockTypeOptions === null
       ? null
-      : new Set(allowedBlockTypeOptions.map((option) => option.id));
+      : new Set(
+          allowedBlockTypeOptions
+            .filter(
+              (option) =>
+                !isBlockTypeOptionBlocked(state.blockTypeBlockers, option.id),
+            )
+            .map((option) => option.id),
+        );
+  // 허용되지 않은 옵션의 사유 title. core 사유가 있으면 그 문구를 쓰고
+  // 없으면(source 타입 목록 밖) 일반 문구다.
+  const blockTypeDisabledTitle = (optionId: string): string => {
+    const blocker = state.blockTypeBlockers[optionId] ?? null;
+    return blocker === null
+      ? dictionary.toolbar.static.blockTypeDisabledReason
+      : blockTypeBlockerReason(dictionary, blocker);
+  };
 
   // enabledBlockTypes(mode: "deny")로 끈 타입은 목록에서 뺀다(Issue #190,
   // 선례: formatting-toolbar.tsx).
@@ -686,7 +706,7 @@ export const StaticToolbar = ({
               isBlockControlsDisabled
                 ? blockControlsDisabledReason
                 : allowedBlockTypeIds?.has(option.id) !== true
-                  ? dictionary.toolbar.static.blockTypeDisabledReason
+                  ? blockTypeDisabledTitle(option.id)
                   : undefined
             }
           />
@@ -809,6 +829,11 @@ export const StaticToolbar = ({
           onClose={() => setBlockTypeMenuState(null)}
           onTabDismiss={closeBlockTypeMenuToTrigger}
           optionLabel={(option) => blockTypeText(dictionary, option.id).label}
+          optionDisabledReason={(option) =>
+            allowedBlockTypeIds !== null && !allowedBlockTypeIds.has(option.id)
+              ? blockTypeDisabledTitle(option.id)
+              : undefined
+          }
           options={blockTypeMenuOptions}
           readAnchor={() => readAnchorBelowTrigger(blockTypeMenuState.trigger)}
         />

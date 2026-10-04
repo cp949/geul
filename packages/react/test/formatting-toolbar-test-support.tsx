@@ -56,6 +56,8 @@ type FormattingToolbarFakeController = {
   isCellRangeSelected: Mock;
   selectionIntersectsCodeBlock: Mock;
   isAtomBlockSelected: Mock;
+  getBlockTypeBlocker: Mock;
+  getBlockTypesBlocker: Mock;
   getBlockNestingActionState: Mock;
   getDictionary: Mock;
   isBlockTypeEnabled: Mock;
@@ -157,6 +159,11 @@ export const fakeController = (
   isCellRangeSelected,
   selectionIntersectsCodeBlock,
   isAtomBlockSelected,
+  // 블록 타입 변환 거절 사유 질의(Issue #245). 기본값 null(막지 않음)이면
+  // 기존 변환 테스트 전부가 그대로 통과한다. 각 테스트가 mockImplementation으로
+  // 옵션별 사유를 정한다.
+  getBlockTypeBlocker: vi.fn((): string | null => null),
+  getBlockTypesBlocker: vi.fn((): string | null => null),
   isBlockTypeEnabled,
   getBlockNestingActionState,
   getDictionary,

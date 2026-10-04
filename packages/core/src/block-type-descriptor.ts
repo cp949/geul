@@ -19,6 +19,26 @@ export type SetBlockTypeDescriptor =
   | { type: "toggleListItem" }
   | { type: "callout" };
 
+// 블록 타입 변환(setBlockType·setBlockTypes)이 구조적으로 거절되는 사유다
+// (Issue #245). UI가 변환 버튼의 활성 여부와 비활성 사유를 정하는 데 쓴다.
+// 같은 타입으로의 변환(no-op)과 입력 값 검증(language·startNumber)은 사유가
+// 아니다 — 앞은 UI가 aria-pressed로 따로 표시하고, 뒤는 호출자가 만든 입력의
+// 문제라 UI 옵션 목록에서는 발생하지 않는다.
+export type BlockTypeBlocker =
+  // 자식이 있는 블록은 Code로 바꿀 수 없다.
+  | "HAS_CHILDREN"
+  // 탭 등 isValidInlineText를 통과하지 못하는 문자가 든 codeBlock은
+  // clearContent 없이 일반 블록으로 바꿀 수 없다.
+  | "INVALID_TEXT"
+  // codeBlock과 목록류(글머리·번호·체크·토글) 사이 변환은 지원하지 않는다.
+  | "LIST_CODE_MISMATCH"
+  // 선택한 블록이 전부 codeBlock이면 여러 블록 변환의 대상이 0개다.
+  | "ALL_CODE_BLOCK"
+  | "NOT_FOUND"
+  // 텍스트 없는 블록·Code 대상 다중 변환·빈 선택·파괴된 편집기 등 위 사유가
+  // 아닌 구조적 거절이다.
+  | "NOT_APPLICABLE";
+
 export type BlockTypeDescriptor =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }
