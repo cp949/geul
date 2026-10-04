@@ -1,8 +1,8 @@
 /**
  * 메뉴·트리거·입력창 keydown의 처리 순서를 한곳에 모은다(Issue #230).
- * `handleMenuKeyDown`과 타입 `MenuKeyboardEvent`, `MenuKeyboardHandlers`는
- * `index.ts`로 공개한다(Issue #247). 소비자가 만드는 트리거 popup도 같은 순서를
- * 쓰게 하려는 것이다. 그 밖 이 파일의 이름(`suppressEnterRepeat` 등)은 내부다.
+ * 공개 API다. `@cp949/geul-react`는 `handleMenuKeyDown`과 타입
+ * `MenuKeyboardEvent`, `MenuKeyboardHandlers`만 내보낸다(Issue #247). 이 파일의
+ * 그 밖 이름은 내부다. 소비자가 만드는 트리거 popup도 같은 순서를 쓴다.
  *
  * 순서는 위에서 아래다. 호출부마다 따로 구현하면 순서가 갈라진다.
  * 1. IME 조합 중(`isComposing`): 어떤 키든 처리하지 않고 `false`다.
@@ -17,6 +17,8 @@
  *      막으면 click이 나지 않아 확정되지 않는다. 수식 키는 따지지 않는다.
  *    - `activate`가 있으면 수식 키가 없을 때만 반복 억제를 걸고, 막고, 부른다.
  *      수식 키가 있으면 처리하지 않은 키이므로 `false`로 물러난다.
+ *    - 반복 억제는 문서 capture 단계에서 반복 Enter를 삼킨다. Enter keyup이나
+ *      반복이 아닌 keydown이 오면 스스로 푼다.
  * 5. 수식 키(Ctrl·Alt·Meta): 처리하지 않은 키이므로 `preventDefault`하지 않고
  *    `false`로 물러난다. `Alt+ArrowLeft`(뒤로 가기)와 `Ctrl+Tab`(탭 전환)
  *    같은 단축키가 막히지 않게 한다. `shiftKey`는 보지 않는다. 메뉴에서

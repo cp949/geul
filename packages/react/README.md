@@ -152,7 +152,23 @@ function Editor() {
 }
 ```
 
-**알려진 제약**: `insertCustomInlineContent`는 caret 앞 텍스트를 지우고 그 자리를 대체하는 offset 기반 API가 아니다 — 현재 selection에 원소를 끼워 넣기만 한다. `@query`처럼 텍스트 트리거로 popup을 여는 UI(mention 등)를 만들려면 소비자가 직접 트리거 감지·팝업·후보 필터링·키보드 네비게이션을 구현해야 한다 — 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss까지 포함한 실행 가능한 전체 예제는 `apps/showcase`의 `src/examples/17-mention`을 참고한다(`useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/`useDismissibleOverlay`를 그 예제가 그대로 재사용한다). `customInlineContent`의 `toHtml`은 저장만 될 뿐 `io`(HTML/GFM export)에는 아직 연결돼 있지 않다 — 등록해도 HTML/GFM 내보내기에서는 그 원소가 사라진다(기존 갭, 이 문서가 메우지 않는다).
+**알려진 제약**: `insertCustomInlineContent`는 caret 앞 텍스트를 지우고 그 자리를 대체하는 offset 기반 API가 아니다 — 현재 selection에 원소를 끼워 넣기만 한다. `@query`처럼 텍스트 트리거로 popup을 여는 UI(mention 등)를 만들려면 소비자가 직접 트리거 감지·팝업·후보 필터링·키보드 네비게이션을 구현해야 한다 — 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss까지 포함한 실행 가능한 전체 예제는 `apps/showcase`의 `src/examples/17-mention`을 참고한다(`useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/`useDismissibleOverlay`/`handleMenuKeyDown`을 그 예제가 그대로 재사용한다). `customInlineContent`의 `toHtml`은 저장만 될 뿐 `io`(HTML/GFM export)에는 아직 연결돼 있지 않다 — 등록해도 HTML/GFM 내보내기에서는 그 원소가 사라진다(기존 갭, 이 문서가 메우지 않는다).
+
+**트리거 popup의 keydown**: `handleMenuKeyDown`으로 처리한다. IME 조합 중 키, Enter 자동 반복, Ctrl·Alt·Meta 조합 키를 이 함수가 걸러 준다. `navigate`가 `true`를 돌려주면 `preventDefault`도 이 함수가 한다. `activate`를 부른 Enter의 자동 반복은 문서 capture 단계에서 삼키고, Enter keyup에서 푼다. 처리 순서의 정본은 `menu-keyboard.d.ts` 맨 위 주석이다(저장소에서는 `packages/react/src/menu-keyboard.ts` 헤더).
+
+```tsx
+handleMenuKeyDown(event, {
+  escape: closeMenu,
+  navigate: (key) => {
+    if (key !== "ArrowDown") return false;
+    moveHighlight(1);
+    return true;
+  },
+  activate: selectHighlighted,
+});
+```
+
+키보드로 `@query` 블록을 떠난 직후의 Enter는 `activate`에서 막는다. `editor.getCaretBlockContext()`는 그때 낡은 블록을 돌려준다. DOM selection이 속한 블록이 popup을 연 블록과 같은지 확인한다. 예제의 `readDomCaretBlockId`가 그 구현이다.
 
 ### 이미지 업로드
 
