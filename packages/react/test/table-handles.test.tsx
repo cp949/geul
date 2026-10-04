@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
 import {
+  makeScrollContainer,
   type MountTableEditorOptions,
   mountTableEditor,
   placeCaret,
@@ -999,5 +1000,180 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
 
     expect(first!.style.visibility).toBe("");
     expect(second!.style.visibility).toBe("hidden");
+  });
+
+  // Issue #260: 열 리사이즈 strip은 열 경계 전체 높이를 한 구간으로 덮는다
+  // (#239). 병합 표는 연속한 일반 행 구간을 한 구간으로 덮는다(#240). 표가
+  // 영역보다 위아래로 길면 strip 박스가 영역을 넘어 항상 숨었다.
+  // strip은 영역과의 세로 교집합으로 잘라 그린다.
+  const resizeStrips = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>("[data-geul-table-resize-handle]"),
+    );
+
+  /**
+   * strip rect를 렌더된 `style`에서 읽게 한다. jsdom에는 레이아웃이 없어 strip
+   * 박스가 늘 0이다. 창 스크롤이 0이라 page 좌표가 곧 viewport 좌표다. 폭은
+   * SCSS가 소유해 `style`에 없다. 판정에 영향이 없는 값 4를 둔다.
+   */
+  const stubRectFromStyle = (node: HTMLElement) => {
+    node.getBoundingClientRect = () =>
+      new DOMRect(
+        Number.parseFloat(node.style.left),
+        Number.parseFloat(node.style.top),
+        4,
+        Number.parseFloat(node.style.height),
+      );
+  };
+
+  /** 표와 행·셀 rect를 세로로 `deltaY`만큼 옮긴다. 안쪽 스크롤을 흉내 낸다. */
+  const shiftTableRects = (table: HTMLElement, deltaY: number) => {
+    for (const element of [
+      table,
+      ...table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
+      ...table.querySelectorAll<HTMLElement>("[data-geul-column-id]"),
+    ]) {
+      const rect = element.getBoundingClientRect();
+      stubRect(element, {
+        left: rect.left,
+        top: rect.top + deltaY,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+  };
+
+  /** strip의 세로 구간 `[top, bottom]`(page 좌표, `style` 기준). */
+  const stripSpan = (strip: HTMLElement) => {
+    const top = Number.parseFloat(strip.style.top);
+    return [top, top + Number.parseFloat(strip.style.height)];
+  };
+
+  it("병합 셀 없는 표가 영역보다 길면 열 strip을 영역 안으로 잘라 보인다(#260)", () => {
+    // 6x2, 행 높이 30 → 표 높이 180. 표를 -30–150에 두면 영역 0–100의 위아래를
+    // 모두 넘는다.
+    const { host, table } = renderRealTable({ rows: 6 });
+    placeCaret(firstRowCell(table));
+    makeScrollContainer(host);
+    const strips = resizeStrips();
+    // 전제: 병합 셀 없는 표는 열마다 strip 하나다(#239 한 구간 합치기).
+    expect(strips).toHaveLength(2);
+    strips.forEach(stubRectFromStyle);
+    shiftTableRects(table, -130);
+
+    fireEvent.scroll(host);
+
+    // 같은 노드다(key 유지). 노드가 바뀌면 위 rect 스텁이 닿지 않는다.
+    const after = resizeStrips();
+    expect(after).toHaveLength(strips.length);
+    strips.forEach((strip, index) => expect(after[index]).toBe(strip));
+    for (const strip of strips) {
+      expect(strip.style.visibility).toBe("");
+      expect(stripSpan(strip)).toEqual([0, 100]);
+    }
+  });
+
+  it("병합 표의 일반 행 구간이 영역보다 길면 그 strip을 영역 안으로 잘라 보이고 영역 밖 구간은 뺀다(#260)", () => {
+    const rendered = renderRealTable({ rows: 6 });
+    const { editor, host, tableBlockId } = rendered;
+    const document0 = editor.getDocument();
+    const block = tableBlockOf(editor);
+    const [row0, ...restRows] = block.rows;
+    const topLeftCell = row0?.cells[0];
+    if (row0 === undefined || topLeftCell === undefined) {
+      throw new Error("병합할 첫 행을 찾지 못했다");
+    }
+    // 첫 행만 두 열을 병합한다. 나머지 5행은 연속한 일반 행 구간이다.
+    const replaced = editor.replaceDocument({
+      ...document0,
+      blocks: document0.blocks.map((candidate) =>
+        candidate.id === block.id
+          ? {
+              ...block,
+              rows: [
+                { ...row0, cells: [{ ...topLeftCell, columnSpan: 2 }] },
+                ...restRows,
+              ],
+            }
+          : candidate,
+      ),
+    });
+    if (!replaced.ok) throw new Error("병합 문서 fixture 준비 실패");
+
+    // replaceDocument가 표 노드를 갈아치운다. 다시 찾아 rect를 직접 씌운다.
+    // 첫 행 -60–-30(영역 위), 일반 행 구간 -30–120(영역 0–100의 위아래를 넘는다).
+    const table = host.querySelector<HTMLElement>(
+      `table[data-geul-block-id="${tableBlockId}"]`,
+    );
+    if (table === null) throw new Error("병합 표가 렌더되지 않았다");
+    const rowElements = Array.from(
+      table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
+    );
+    expect(rowElements).toHaveLength(6);
+    stubRect(table, { left: 100, top: -60, width: 200, height: 180 });
+    rowElements.forEach((rowElement, rowIndex) => {
+      const top = -60 + rowIndex * 30;
+      stubRect(rowElement, { left: 100, top, width: 200, height: 30 });
+      rowElement
+        .querySelectorAll<HTMLElement>("[data-geul-column-id]")
+        .forEach((cell, cellIndex) => {
+          const width = rowIndex === 0 ? 200 : 100;
+          stubRect(cell, {
+            left: 100 + cellIndex * 100,
+            top,
+            width,
+            height: 30,
+          });
+        });
+    });
+    // 전제: 첫 행이 정말 병합됐다. 아니면 병합 표 경로를 타지 않는다.
+    expect(
+      rowElements[0]
+        ?.querySelector("[data-geul-column-id]")
+        ?.getAttribute("colspan"),
+    ).toBe("2");
+
+    const visibleCell = rowElements[3]?.querySelector<HTMLElement>(
+      "[data-geul-column-id]",
+    );
+    if (visibleCell === null || visibleCell === undefined) {
+      throw new Error("영역 안 셀을 찾지 못했다");
+    }
+    placeCaret(visibleCell);
+    makeScrollContainer(host);
+    resizeStrips().forEach(stubRectFromStyle);
+
+    fireEvent.scroll(host);
+
+    // 첫째 열 경계는 일반 행 구간 하나, 둘째 열 경계는 병합 셀 오른쪽 끝(첫 행)과
+    // 일반 행 구간 둘이다. 첫 행 구간은 영역 밖이라 빠진다.
+    const strips = resizeStrips();
+    expect(strips).toHaveLength(2);
+    for (const strip of strips) {
+      expect(strip.style.visibility).toBe("");
+      expect(stripSpan(strip)).toEqual([0, 100]);
+    }
+  });
+
+  it("리사이즈 드래그 중에는 스크롤해도 strip을 자르지 않고 같은 노드를 유지한다(#260)", () => {
+    const { host, table } = renderRealTable({ rows: 6 });
+    placeCaret(firstRowCell(table));
+    makeScrollContainer(host);
+    resizeStrips().forEach(stubRectFromStyle);
+    shiftTableRects(table, -130);
+    fireEvent.scroll(host);
+    const [strip] = resizeStrips();
+    if (strip === undefined) throw new Error("resize strip 없음");
+    // 전제: 드래그 전에는 영역 안으로 잘린다.
+    expect(stripSpan(strip)).toEqual([0, 100]);
+
+    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 200 });
+    fireEvent.scroll(host);
+
+    // pointer capture를 쥔 노드가 바뀌거나 숨으면 드래그가 끊긴다.
+    expect(resizeStrips()[0]).toBe(strip);
+    expect(strip.style.visibility).toBe("");
+    // geometry 구간 그대로다(표 -30–150).
+    expect(stripSpan(strip)).toEqual([-30, 150]);
   });
 });

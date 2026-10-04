@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  clipSpanToBoxes,
   isPointInClipBoxes,
   isRectInClipBoxes,
   readScrollClipBoxes,
@@ -124,6 +125,57 @@ describe("isRectInClipBoxes", () => {
         box(50, 50, 100, 100),
       ]),
     ).toBe(false);
+  });
+});
+
+describe("clipSpanToBoxes", () => {
+  const boxes = [box(0, 0, 100, 100)];
+
+  it("clip 영역이 없으면 구간을 그대로 돌려준다", () => {
+    const span = { top: -50, bottom: 500 };
+
+    expect(clipSpanToBoxes(span, [])).toBe(span);
+  });
+
+  it("영역 안에 완전히 들어오면 그대로다", () => {
+    expect(clipSpanToBoxes({ top: 10, bottom: 90 }, boxes)).toEqual({
+      top: 10,
+      bottom: 90,
+    });
+  });
+
+  it("일부만 겹치면 영역과의 교집합으로 자른다", () => {
+    expect(clipSpanToBoxes({ top: -30, bottom: 50 }, boxes)).toEqual({
+      top: 0,
+      bottom: 50,
+    });
+    expect(clipSpanToBoxes({ top: 50, bottom: 150 }, boxes)).toEqual({
+      top: 50,
+      bottom: 100,
+    });
+    expect(clipSpanToBoxes({ top: -30, bottom: 150 }, boxes)).toEqual({
+      top: 0,
+      bottom: 100,
+    });
+  });
+
+  it("겹치지 않으면 null이다(경계에 닿기만 해도 null)", () => {
+    expect(clipSpanToBoxes({ top: 120, bottom: 150 }, boxes)).toBeNull();
+    expect(clipSpanToBoxes({ top: -60, bottom: -30 }, boxes)).toBeNull();
+    expect(clipSpanToBoxes({ top: 100, bottom: 130 }, boxes)).toBeNull();
+  });
+
+  it("중첩된 영역 전부와의 교집합으로 자른다", () => {
+    const nested = [box(0, 0, 100, 100), box(0, 40, 100, 100)];
+
+    expect(clipSpanToBoxes({ top: -30, bottom: 150 }, nested)).toEqual({
+      top: 40,
+      bottom: 100,
+    });
+    expect(
+      clipSpanToBoxes({ top: 0, bottom: 30 }, nested),
+      "한 영역과만 겹친다",
+    ).toBeNull();
   });
 });
 

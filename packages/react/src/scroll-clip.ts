@@ -54,6 +54,32 @@ export const isRectInClipBoxes = (
       rect.left < box.right,
   );
 
+/** 세로 구간. `top`·`bottom` 모두 같은 좌표계다. */
+export type VerticalSpan = { top: number; bottom: number };
+
+/**
+ * 세로 구간 `span`(뷰포트 기준)을 `boxes` 전부와 교집합한다.
+ *
+ * - `boxes`가 비어 있으면 `span`을 그대로 돌려준다.
+ * - 교집합이 비거나 경계에 닿기만 하면 `null`이다.
+ *
+ * 영역보다 긴 오버레이(표 열 리사이즈 strip)용이다. 그대로 두면
+ * `isRectInClipBoxes`의 세로 완전 포함 규칙에 걸려 늘 숨는다. 잘라 그리면
+ * 보이는 부분만 남는다.
+ */
+export const clipSpanToBoxes = (
+  span: VerticalSpan,
+  boxes: readonly DOMRect[],
+): VerticalSpan | null => {
+  if (boxes.length === 0) return span;
+  let { top, bottom } = span;
+  for (const box of boxes) {
+    top = Math.max(top, box.top);
+    bottom = Math.min(bottom, box.bottom);
+  }
+  return bottom > top ? { top, bottom } : null;
+};
+
 /**
  * 오버레이 `node`의 실제 박스가 `boxes` 안이면 `visibility`를 비우고, 아니면
  * `hidden`으로 만든다. `exempt`면 항상 보인다(편집 중 입력이 사라지면
