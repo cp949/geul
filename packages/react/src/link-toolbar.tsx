@@ -17,6 +17,7 @@ import {
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
+import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import {
   rangeBoundariesEqual,
   useDismissSuppression,
@@ -289,6 +290,7 @@ export const LinkToolbar = ({
       <div
         aria-label={dictionary.toolbar.link.ariaLabel}
         className="geul-link-toolbar"
+        onKeyDown={handlePopupButtonKeyDown}
         ref={menuRef}
         role="toolbar"
         style={style}
@@ -338,6 +340,7 @@ export const LinkToolbar = ({
     <div
       aria-label={dictionary.toolbar.link.ariaLabel}
       className="geul-link-toolbar"
+      onKeyDown={handlePopupButtonKeyDown}
       ref={menuRef}
       role="toolbar"
       style={style}

@@ -22,7 +22,12 @@ import {
   handleMenuKeyDown,
 } from "../src/menu-keyboard.js";
 import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
-import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
+import {
+  dispatchKeydown,
+  isRepeatEnterSwallowed,
+  releaseEnterRepeatSuppression,
+  trackCaptureListeners,
+} from "./menu-keyboard-test-support.js";
 
 type KeyInit = {
   key: string;
@@ -66,39 +71,6 @@ const createHandlers = (navigateResult = false) => ({
   escape: vi.fn(),
   tab: vi.fn(),
 });
-
-/**
- * 문서에 keydown 하나를 실제로 보내 반복 억제가 걸려 있는지 본다. 억제가
- * 걸려 있으면 문서 capture에서 삼켜져 body 리스너에 닿지 않고
- * `defaultPrevented`가 된다.
- */
-const dispatchKeydown = (init: {
-  key: string;
-  repeat?: boolean;
-}): { reachedTarget: boolean; defaultPrevented: boolean } => {
-  let reachedTarget = false;
-  const listener = () => {
-    reachedTarget = true;
-  };
-  document.body.addEventListener("keydown", listener);
-  const event = new KeyboardEvent("keydown", {
-    ...init,
-    bubbles: true,
-    cancelable: true,
-  });
-  document.body.dispatchEvent(event);
-  document.body.removeEventListener("keydown", listener);
-  return { reachedTarget, defaultPrevented: event.defaultPrevented };
-};
-
-/** 반복 Enter keydown이 문서 capture에서 삼켜지는지. */
-const isRepeatEnterSwallowed = (): boolean => {
-  const { reachedTarget, defaultPrevented } = dispatchKeydown({
-    key: "Enter",
-    repeat: true,
-  });
-  return !reachedTarget && defaultPrevented;
-};
 
 afterEach(() => {
   releaseEnterRepeatSuppression();
@@ -435,42 +407,6 @@ describe("handleMenuKeyDown 반복 억제", () => {
   });
 
   describe("같은 문서에 중복 설치하지 않는다", () => {
-    /**
-     * 문서의 keydown·keyup capture 리스너 수를 add/remove 호출로 센다. 같은
-     * keydown을 MenuItemButton과 컨테이너가 두 번 부르는 경우의 누수를
-     * 이벤트 동작으로는 볼 수 없어 리스너 수로 본다.
-     */
-    const trackCaptureListeners = () => {
-      const live = new Set<EventListenerOrEventListenerObject>();
-      const isCapture = (options: unknown) =>
-        options === true ||
-        (typeof options === "object" &&
-          options !== null &&
-          "capture" in options &&
-          options.capture === true);
-      const originalAdd = document.addEventListener.bind(document);
-      const originalRemove = document.removeEventListener.bind(document);
-      vi.spyOn(document, "addEventListener").mockImplementation(
-        (type, listener, options) => {
-          if (
-            (type === "keydown" || type === "keyup") &&
-            isCapture(options) &&
-            listener !== null
-          ) {
-            live.add(listener);
-          }
-          originalAdd(type, listener, options);
-        },
-      );
-      vi.spyOn(document, "removeEventListener").mockImplementation(
-        (type, listener, options) => {
-          if (listener !== null) live.delete(listener);
-          originalRemove(type, listener, options);
-        },
-      );
-      return () => live.size;
-    };
-
     it("두 번 불러도 리스너는 keydown·keyup 한 쌍뿐이다", () => {
       const liveCount = trackCaptureListeners();
 

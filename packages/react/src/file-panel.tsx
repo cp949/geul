@@ -7,6 +7,7 @@ import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
+import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import {
@@ -408,6 +409,7 @@ export const FilePanel = ({
       <div
         aria-label={dictionary.toolbar.filePanel.ariaLabel}
         className="geul-file-panel"
+        onKeyDown={handlePopupButtonKeyDown}
         ref={menuRef}
         role="toolbar"
         style={style}
@@ -472,6 +474,7 @@ export const FilePanel = ({
     <div
       aria-label={dictionary.toolbar.filePanel.ariaLabel}
       className="geul-file-panel"
+      onKeyDown={handlePopupButtonKeyDown}
       ref={menuRef}
       role="toolbar"
       style={style}

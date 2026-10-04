@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import type { EmojiOption } from "./emoji-picker-options.js";
+import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 
 export type EmojiGridProps = {
   ariaLabel: string;
@@ -71,6 +72,7 @@ export const EmojiGrid = ({
     <div
       aria-label={ariaLabel}
       className="geul-emoji-picker"
+      onKeyDown={handlePopupButtonKeyDown}
       ref={menuRef}
       role="listbox"
       style={style}

@@ -22,6 +22,7 @@ import {
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
+import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import {
   isPointInClipBoxes,
@@ -816,6 +817,7 @@ export const CodeBlockLanguageCombobox = () => {
           }
           setClipTick((tick) => tick + 1);
         }}
+        onKeyDown={handlePopupButtonKeyDown}
         ref={toolbarRef}
         role="toolbar"
         style={toolbarStyle}
@@ -887,6 +889,7 @@ export const CodeBlockLanguageCombobox = () => {
         <div
           className="geul-code-block-language-popover"
           data-block-id={languageState.blockId}
+          onKeyDown={handlePopupButtonKeyDown}
           ref={popoverRef}
           style={popoverStyle}
         >
@@ -946,6 +949,7 @@ export const CodeBlockLanguageCombobox = () => {
         <div
           className="geul-code-block-toolbar__more-menu"
           data-block-id={languageState.blockId}
+          onKeyDown={handlePopupButtonKeyDown}
           ref={moreMenuRef}
           role="menu"
           style={moreMenuStyle}

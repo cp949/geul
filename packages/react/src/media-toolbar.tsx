@@ -24,6 +24,7 @@ import { iconProps } from "./icon-props.js";
 import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
+import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import {
   FALLBACK_BLOCK_POSITION,
   readBlockTopRightBounds,
@@ -717,6 +718,7 @@ export const MediaToolbar = ({
       <div
         aria-label={dictionary.toolbar.media.ariaLabel}
         className="geul-media-toolbar"
+        onKeyDown={handlePopupButtonKeyDown}
         ref={menuRef}
         role="toolbar"
         style={style}
@@ -881,6 +883,7 @@ export const MediaToolbar = ({
           ? "geul-media-toolbar geul-media-toolbar--replacing"
           : "geul-media-toolbar"
       }
+      onKeyDown={handlePopupButtonKeyDown}
       ref={menuRef}
       role="toolbar"
       style={style}
@@ -1136,6 +1139,7 @@ export const MediaToolbar = ({
     <div
       className="geul-media-toolbar__more-menu"
       data-block-id={toolbarState.blockId}
+      onKeyDown={handlePopupButtonKeyDown}
       ref={moreMenuRef}
       role="menu"
       style={moreMenuStyle}
