@@ -1084,6 +1084,44 @@ test("rename 모드에서 다른 미디어 블록을 클릭하면 편집이 닫�
   );
 });
 
+// 편집기 밖 클릭으로 닫은 블록 B는 재오픈 억제가 걸린다. 다른 블록 A의 view가
+// 열린 뒤 B를 다시 클릭하면 억제가 이미 풀려 B의 view가 열려야 한다. 억제가 남으면
+// A의 toolbar가 B 선택 중에도 그대로 남는다(Issue #259).
+test("편집기 밖 클릭으로 닫은 이미지를 다른 이미지 선택 뒤 다시 클릭하면 그 이미지의 view toolbar가 열린다 (#259)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await selectFirstOfTwoImages(page, editable);
+  const first = imageWrapper(page, editable, 0);
+  const second = imageWrapper(page, editable, 1);
+  const secondBlockId = await second.getAttribute("data-geul-block-id");
+  const firstBlockId = await first.getAttribute("data-geul-block-id");
+  expect(secondBlockId).not.toBeNull();
+  expect(secondBlockId).not.toBe(firstBlockId);
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+  const moreMenu = page.locator(".geul-media-toolbar__more-menu");
+
+  // B(두 번째 이미지)를 열고 편집기 밖 요소 클릭으로 닫아 억제를 기록한다.
+  await second.click();
+  await expect(toolbar).toBeVisible();
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  await expect(toolbar).toHaveCount(0);
+
+  // A(첫 이미지)의 view를 연다.
+  await first.click();
+  await expect(toolbar).toBeVisible();
+  await openMoreMenu(page);
+  await expect(moreMenu).toHaveAttribute("data-block-id", firstBlockId ?? "");
+  await page.keyboard.press("Escape");
+  await expect(moreMenu).toHaveCount(0);
+
+  await second.click();
+
+  await expect(toolbar).toBeVisible();
+  await openMoreMenu(page);
+  await expect(moreMenu).toHaveAttribute("data-block-id", secondBlockId ?? "");
+});
+
 test("rename 모드에서 입력을 클릭해도 모드와 draft가 유지된다 (#251)", async ({
   page,
 }) => {

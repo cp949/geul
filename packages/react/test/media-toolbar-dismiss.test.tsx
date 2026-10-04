@@ -15,6 +15,9 @@
  *   view로 바뀐다. 같은 블록이면 편집과 draft가 유지된다. 편집기 밖 pointerdown과
  *   입력 밖 Escape는 draft를 버리고 닫는다. 입력 안 Escape는 현행대로 view로
  *   돌아간다.
+ * - 닫은 블록 B의 재오픈 억제는 다른 미디어 블록 A가 열리면 풀린다(Issue #259).
+ *   A의 view·rename에서 B로 selection을 옮기면 B의 view가 열린다. A의 툴바·draft·
+ *   more 메뉴가 남지 않는다.
  * - 편집기가 먼저 막은 Escape는 닫고, 편집기 밖에서 막힌 Escape와 IME 조합 중
  *   Escape는 닫지 않는다.
  * - 바깥 클릭 때 초점이 오버레이 안이면 편집기로 옮기고, 밖이면 그대로 둔다.
@@ -530,6 +533,74 @@ describe("rename·caption 모드가 selection 변경·Escape·편집기 밖 클�
     } finally {
       outside.remove();
     }
+  });
+});
+
+/** 억제된 블록(media-1)과 다른 미디어 블록. 테스트에서 "A"다. */
+const otherImageBlock: SelectionMediaBlock = {
+  ...filledImageBlock,
+  blockId: "media-2",
+  name: "second.png",
+};
+
+/** 열린 more 메뉴의 `data-block-id`를 읽는다. 메뉴가 없으면 null이다. */
+const moreMenuBlockId = () =>
+  document
+    .querySelector(".geul-media-toolbar__more-menu")
+    ?.getAttribute("data-block-id") ?? null;
+
+/**
+ * media-1(B)의 view toolbar를 Escape로 닫아 억제를 기록한 뒤 media-2(A)로
+ * selection을 옮겨 A의 view를 연다. 억제 키는 여전히 B다.
+ */
+const openOtherAfterDismiss = async () => {
+  const opened = openToolbar();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(toolbarVisible()).toBe(false);
+  // 닫힘의 editingRef 해제와 jsdom이 큐잉한 selectionchange를 흘려보낸다.
+  await flushEditingGuard();
+  expect(toolbarVisible()).toBe(false);
+
+  opened.controller.getSelectionMediaBlock.mockReturnValue(otherImageBlock);
+  fireSelectionChange();
+  expect(toolbarVisible()).toBe(true);
+  return opened;
+};
+
+describe("닫은 블록의 재오픈 억제가 다른 블록의 toolbar를 남기지 않는다(Issue #259)", () => {
+  it("B를 Escape로 닫고 A의 view에서 B로 selection을 옮기면 B의 view가 열리고 A의 more 메뉴가 남지 않는다 (#259)", async () => {
+    const { controller } = await openOtherAfterDismiss();
+    fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+    expect(moreMenuBlockId()).toBe("media-2");
+
+    controller.getSelectionMediaBlock.mockReturnValue(filledImageBlock);
+    fireSelectionChange();
+    await flushEditingGuard();
+
+    expect(toolbarVisible()).toBe(true);
+    expect(moreMenuVisible()).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+    expect(moreMenuBlockId()).toBe("media-1");
+  });
+
+  it("B를 Escape로 닫고 A의 rename 중 B로 selection을 옮기면 draft를 버리고 B의 view가 열린다 (#259)", async () => {
+    const { controller } = await openOtherAfterDismiss();
+    fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Image name" }), {
+      target: { value: "discarded.png" },
+    });
+
+    controller.getSelectionMediaBlock.mockReturnValue(filledImageBlock);
+    fireSelectionChange();
+    // 편집 모드는 매크로태스크 뒤 selection을 한 번 더 읽는다(Issue #251).
+    await flushEditingGuard();
+
+    expect(screen.queryByRole("textbox", { name: "Image name" })).toBeNull();
+    expect(toolbarVisible()).toBe(true);
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+    expect(moreMenuBlockId()).toBe("media-1");
   });
 });
 

@@ -11,6 +11,8 @@
  * - 교체 모드에서 편집기 안 클릭은 selection 변경으로 판정한다(Issue #251).
  *   selection이 다른 블록이나 비미디어로 옮겨가면 닫히거나 새 블록의 view가 된다.
  *   같은 블록이면 교체 모드가 유지된다.
+ * - 닫은 블록 B의 재오픈 억제는 다른 블록 A의 교체 모드를 남기지 않는다(Issue
+ *   #259). A의 교체 모드에서 B로 selection을 옮기면 B의 view가 열린다.
  * - 편집 모드(rename·caption)의 닫힘은 media-toolbar-dismiss.test.tsx가 소유한다.
  * 기존 media-toolbar.test.tsx 단언은 이전 후에도 수정 없이 통과한다.
  */
@@ -334,5 +336,63 @@ describe("교체 모드는 selection 변경으로 닫힌다(Issue #251)", () => 
     } finally {
       handle.remove();
     }
+  });
+});
+
+/**
+ * 컴포넌트 타이머(닫힘의 editingRef 해제, 편집·교체 모드의 지연 재읽기)와 jsdom이
+ * 큐잉한 selectionchange를 흘려보낸다. 컴포넌트 타이머가 먼저 등록돼 이 타이머보다
+ * 앞서 실행된다. 고정 sleep이 아니다.
+ */
+const flushMacrotask = () =>
+  act(
+    () =>
+      new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 0);
+      }),
+  );
+
+/** 열린 more 메뉴의 `data-block-id`를 읽는다. 메뉴가 없으면 null이다. */
+const moreMenuBlockId = () =>
+  document
+    .querySelector(".geul-media-toolbar__more-menu")
+    ?.getAttribute("data-block-id") ?? null;
+
+describe("닫은 블록의 재오픈 억제가 다른 블록의 교체 모드를 남기지 않는다(Issue #259)", () => {
+  it("B를 Escape로 닫고 A의 교체 모드에서 B로 selection을 옮기면 교체 모드가 닫히고 B의 view가 열린다 (#259)", async () => {
+    const controller = fakeController(() => new Promise<never>(() => {}));
+    render(
+      withProvider(
+        controller,
+        <>
+          <MediaToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    // media-1(B)의 view를 Escape로 닫아 억제를 기록한다.
+    expect(toolbarVisible()).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(toolbarVisible()).toBe(false);
+    await flushMacrotask();
+
+    // media-2(A)의 view를 열고 교체 모드로 들어간다. 억제 키는 여전히 B다.
+    controller.getSelectionMediaBlock.mockReturnValue({
+      ...filledImageBlock,
+      blockId: "media-2",
+    });
+    fireSelectionChange();
+    fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+    expect(replacingVisible()).toBe(true);
+
+    controller.getSelectionMediaBlock.mockReturnValue(filledImageBlock);
+    fireSelectionChange();
+    await flushMacrotask();
+
+    expect(replacingVisible()).toBe(false);
+    expect(toolbarVisible()).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "More media options" }));
+    expect(moreMenuBlockId()).toBe("media-1");
   });
 });
