@@ -298,6 +298,17 @@ export const createEditor = (
       const { doc, selection } = session.editor.state;
       return selectionIntersectsCodeBlock(doc, selection);
     },
+    isAtomBlockSelected() {
+      if (session.isDestroyed) return false;
+      const { selection } = session.editor.state;
+      // 종류별 허용 목록 대신 스키마 속성으로 판정한다. 인라인 atom과
+      // 표(isAtom: false)는 걸리지 않는다.
+      return (
+        selection instanceof NodeSelection &&
+        selection.node.isBlock &&
+        selection.node.isAtom
+      );
+    },
     getBlockSelection() {
       if (session.isDestroyed) return null;
       return session.getBlockSelection();

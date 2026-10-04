@@ -55,6 +55,7 @@ type FormattingToolbarFakeController = {
   getSelectionMediaBlock: Mock;
   isCellRangeSelected: Mock;
   selectionIntersectsCodeBlock: Mock;
+  isAtomBlockSelected: Mock;
   getBlockNestingActionState: Mock;
   getDictionary: Mock;
   isBlockTypeEnabled: Mock;
@@ -125,6 +126,14 @@ export const fakeController = (
   // enabledBlockTypes 판정 조회 전용(Issue #190) — 기본값 true(모든 타입
   // 허용)면 기존 블록 종류 select 테스트 전부가 그대로 통과한다.
   isBlockTypeEnabled: Mock = vi.fn((): boolean => true),
+  // 텍스트 없는 atom 블록(구분선·미디어·customBlock) NodeSelection 판정.
+  // 기본값은 미디어 선택이면 true다. core도 미디어 NodeSelection에서 true를
+  // 보고하므로 getSelectionMediaBlock만 주입한 기존 미디어 테스트가 그대로
+  // 통과한다. 구분선·customBlock은 getSelectionMediaBlock이 null이라 기본값이
+  // false다. 그 경우 mockReturnValue로 직접 정한다(Issue #242).
+  isAtomBlockSelected: Mock = vi.fn(
+    (): boolean => getSelectionMediaBlock() !== null,
+  ),
 ): FormattingToolbarFakeController => ({
   mount: vi.fn((element: HTMLElement) => {
     const editable = document.createElement("div");
@@ -147,6 +156,7 @@ export const fakeController = (
   getSelectionMediaBlock,
   isCellRangeSelected,
   selectionIntersectsCodeBlock,
+  isAtomBlockSelected,
   isBlockTypeEnabled,
   getBlockNestingActionState,
   getDictionary,

@@ -176,10 +176,12 @@ export const LinkToolbar = ({
       return;
     }
 
-    // 미디어 블록 선택은 non-collapsed Range를 만들어 위 hasRange 판정을
-    // 통과한다 — 텍스트가 없는 노드라 link도 적용 불가하다(formatting-
-    // toolbar.tsx의 같은 가드와 같은 이유, MediaToolbar가 전담).
-    if (editor.getSelectionMediaBlock() !== null) {
+    // atom 블록(구분선·미디어·customBlock) 선택은 non-collapsed Range를
+    // 만들어 위 hasRange 판정을 통과한다 — 텍스트가 없는 노드라 link도
+    // 적용 불가하다(formatting-toolbar.tsx의 같은 가드와 같은 이유, 미디어는
+    // MediaToolbar가 전담). 미디어만 보는 getSelectionMediaBlock() 대신
+    // isAtomBlockSelected()로 판정한다(Issue #242).
+    if (editor.isAtomBlockSelected()) {
       setToolbarState({ mode: "closed" });
       dismissSuppression.clear();
       return;

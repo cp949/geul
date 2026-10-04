@@ -135,7 +135,7 @@ const TOOLBAR_DISMISS_ALLOW_SELECTORS = [
 
 type ToolbarState = Omit<
   FormattingToolbarState,
-  "isCellRangeSelected" | "isMediaBlockSelected"
+  "isCellRangeSelected" | "isAtomBlockSelected"
 >;
 
 /**
@@ -250,19 +250,21 @@ export const FormattingToolbar = ({
     }
 
     // formatting-toolbar-state.js가 activeMarks/blockSelection/
-    // nestingActions와 media·cell 판정을 함께 계산한다(RD-001-DELTA-01,
-    // StaticToolbar와 공유). 아래 두 가드는 그중 media·cell 플래그만
+    // nestingActions와 atom·cell 판정을 함께 계산한다(RD-001-DELTA-01,
+    // StaticToolbar와 공유). 아래 두 가드는 그중 atom·cell 플래그만
     // 골라 쓴다 — 계산 자체는 순수 함수라 여기서 hide로 이어지든 말든
     // 부수효과가 없다.
     const computedState = computeFormattingToolbarState(editor);
 
-    // 미디어 블록(image/video/audio/file)을 고르면 DOM selection이 그
-    // 노드를 감싸는 non-collapsed Range가 돼 위 가드를 통과한다 — 하지만
-    // Bold 등 인라인 mark·색상·link는 텍스트가 없는 미디어 노드엔 애초에
-    // 적용 불가하다(MediaToolbar가 전담). blockSelection도 media는
-    // BlockTypeDescriptor에 없어 이미 null로 떨어지므로(block-type-
+    // atom 블록(구분선·image/video/audio/file·customBlock)을 고르면 DOM
+    // selection이 그 노드를 감싸는 non-collapsed Range가 돼 위 가드를
+    // 통과한다 — 하지만 Bold 등 인라인 mark·색상·link는 텍스트가 없는 atom
+    // 노드엔 애초에 적용 불가하다(미디어는 MediaToolbar가 전담, 구분선은
+    // 전담 툴바가 없어 닫아도 정보 손실이 없다). blockSelection도 이
+    // 블록들은 BlockTypeDescriptor에 없어 이미 null로 떨어지므로(block-type-
     // descriptor.ts) 이 가드가 없으면 마크·색상 버튼만 덩그러니 뜬다.
-    if (computedState.isMediaBlockSelected) {
+    // 종류별 허용 목록 대신 isAtomBlockSelected()로 판정한다(Issue #242).
+    if (computedState.isAtomBlockSelected) {
       setToolbarState(null);
       setColorMenuState(null);
       dismissSuppression.clear();

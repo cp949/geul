@@ -245,10 +245,11 @@ export type StaticToolbarProps = {
 
 /**
  * 선택 트리거 없이 항상 렌더되는 옵트인 툴바(RD-001-DELTA-03, Issue #184).
- * FormattingToolbar와 커맨드 세트는 같지만 표시 정책이 다르다 — 미디어
- * 블록·표 셀 다중선택·codeBlock에서 FormattingToolbar는 툴바 전체를
- * 숨기거나(미디어·셀) mark 버튼만 뺀다(codeBlock). StaticToolbar는 항상
- * 렌더되므로 세 경우 전부 해당 버튼을 disable로 표시한다 — 숨기지 않는다.
+ * FormattingToolbar와 커맨드 세트는 같지만 표시 정책이 다르다 — atom
+ * 블록(구분선·미디어·customBlock)·표 셀 다중선택·codeBlock에서
+ * FormattingToolbar는 툴바 전체를 숨기거나(atom·셀) mark 버튼만 뺀다
+ * (codeBlock). StaticToolbar는 항상 렌더되므로 세 경우 전부 해당 버튼을
+ * disable로 표시한다 — 숨기지 않는다.
  */
 export const StaticToolbar = ({
   className,
@@ -266,16 +267,17 @@ export const StaticToolbar = ({
   // Indent·Outdent는 단일 블록 전용이라 nestingActions가 null이어서 따로 꺼진다.
   const isBlockControlsDisabled =
     state.blockSelection === null && state.multiBlockSelection === null;
-  // codeBlock·미디어 블록·표 셀 다중선택 전부 mark·색상 버튼이 적용
-  // 불가능한 상황이다(FormattingToolbar는 이 셋을 hide로 처리 — 위 컴포넌트
-  // 주석 참고). StaticToolbar는 disable로만 표시한다. codeBlock 판정은
-  // 단일 블록 선택만이 아니라 여러 블록에 걸친 선택도 포함한다 — core mark
-  // 명령의 거절 조건(selectionIntersectsCodeBlock)과 같은 값을 쓴다.
+  // codeBlock·atom 블록(구분선·미디어·customBlock)·표 셀 다중선택 전부
+  // mark·색상 버튼이 적용 불가능한 상황이다(FormattingToolbar는 이 셋을
+  // hide로 처리 — 위 컴포넌트 주석 참고). StaticToolbar는 disable로만
+  // 표시한다. codeBlock 판정은 단일 블록 선택만이 아니라 여러 블록에 걸친
+  // 선택도 포함한다 — core mark 명령의 거절 조건
+  // (selectionIntersectsCodeBlock)과 같은 값을 쓴다.
   // 열린 색상 메뉴를 닫는 layout effect가 읽으므로 `Component` early
   // return 앞에서 계산한다(hook 순서).
   const isMarkingDisabled =
     state.selectionIntersectsCodeBlock ||
-    state.isMediaBlockSelected ||
+    state.isAtomBlockSelected ||
     state.isCellRangeSelected;
   const [colorMenuState, setColorMenuState] = useState<ColorMenuState | null>(
     null,
@@ -317,7 +319,7 @@ export const StaticToolbar = ({
     setBlockTypeMenuState(null);
   }, [focusEditorIfFocusIn, isBlockControlsDisabled]);
 
-  // 색상 메뉴가 열린 채 mark 적용이 불가능해지면(코드 블록·미디어 블록·표 셀
+  // 색상 메뉴가 열린 채 mark 적용이 불가능해지면(코드 블록·atom 블록·표 셀
   // 범위) 상태까지 비운다. 위 effect와 같은 이유로 렌더 조건만 막지 않고
   // effect가 닫는다. 초점이 스와치에 있었으면 편집기로 돌린다(Issue #225).
   useLayoutEffect(() => {

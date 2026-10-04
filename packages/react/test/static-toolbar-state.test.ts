@@ -16,7 +16,7 @@ const baseState = (): FormattingToolbarState => ({
   blockSelection: { blockId: "block-1", blockType: { type: "paragraph" } },
   multiBlockSelection: null,
   nestingActions: { canIndent: true, canOutdent: false },
-  isMediaBlockSelected: false,
+  isAtomBlockSelected: false,
   isCellRangeSelected: false,
   selectionIntersectsCodeBlock: false,
 });
@@ -123,8 +123,8 @@ describe("isSameStaticToolbarState", () => {
     expect(isSameStaticToolbarState(next, baseState())).toBe(false);
   });
 
-  it("미디어 블록 선택 여부가 다르면 다르다고 판정한다", () => {
-    const next = { ...baseState(), isMediaBlockSelected: true };
+  it("atom 블록 선택 여부가 다르면 다르다고 판정한다", () => {
+    const next = { ...baseState(), isAtomBlockSelected: true };
 
     expect(isSameStaticToolbarState(baseState(), next)).toBe(false);
   });

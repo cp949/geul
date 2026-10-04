@@ -170,6 +170,13 @@ export interface SelectionQuery {
   // codeBlock). react 툴바가 mark·색상 버튼 비활성 판정에 쓴다.
   // getSelectionBlocks()는 끝점 접촉도 포함해 이 판정에 쓸 수 없다.
   selectionIntersectsCodeBlock(): boolean;
+  // 선택이 텍스트 없는 atom 블록(구분선·미디어·customBlock)의 NodeSelection
+  // 인지 보고한다. `NodeSelection`이고 `node.isBlock && node.isAtom`이면
+  // true다. 새 atom 블록도 자동으로 걸린다. 표(isAtom: false)·인라인
+  // atom·CellSelection·텍스트 선택은 false다. getSelectionMediaBlock()은
+  // 미디어 종류만 보고해 구분선·customBlock을 놓친다. react 툴바가 mark·
+  // 색상 버튼 비활성과 FormattingToolbar·LinkToolbar 닫힘 판정에 쓴다.
+  isAtomBlockSelected(): boolean;
   getBlockSelection(): BlockSelection | null;
 }
 

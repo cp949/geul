@@ -57,6 +57,10 @@ type FakeControllerOptions = {
   // 결).
   isCellRangeSelected?: () => boolean;
   selectionIntersectsCodeBlock?: () => boolean;
+  // 텍스트 없는 atom 블록 NodeSelection 판정. 기본값은 미디어 선택이면
+  // true다(core도 미디어 NodeSelection에서 true). 구분선·customBlock은
+  // 이 옵션으로 직접 정한다(Issue #242).
+  isAtomBlockSelected?: () => boolean;
   dictionary?: Dictionary;
 };
 
@@ -66,6 +70,7 @@ const fakeController = ({
   getSelectionMediaBlock = () => null,
   isCellRangeSelected = () => false,
   selectionIntersectsCodeBlock = () => false,
+  isAtomBlockSelected = () => getSelectionMediaBlock() !== null,
   dictionary,
 }: FakeControllerOptions = {}) => ({
   mount: vi.fn((element: HTMLElement) => {
@@ -87,6 +92,7 @@ const fakeController = ({
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isCellRangeSelected: vi.fn(isCellRangeSelected),
   selectionIntersectsCodeBlock: vi.fn(selectionIntersectsCodeBlock),
+  isAtomBlockSelected: vi.fn(isAtomBlockSelected),
   getDictionary: vi.fn(() => dictionary ?? DEFAULT_DICTIONARY),
   replaceDocument: vi.fn(),
   commands: {
@@ -712,6 +718,22 @@ describe("LinkToolbar codeBlock 교차 선택(Issue #241)", () => {
     // selectionIntersectsCodeBlock()으로 구별한다.
     const controller = fakeController({
       selectionIntersectsCodeBlock: () => true,
+    });
+    renderWithSelectedText(controller);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add link" })).toBeNull();
+  });
+});
+
+describe("LinkToolbar atom 블록 선택(Issue #242)", () => {
+  it("구분선·customBlock 같은 atom 블록을 선택하면 미디어가 아니어도 Add link를 표시하지 않는다", () => {
+    // 구분선·customBlock은 getSelectionMediaBlock()이 null이다. NodeSelection도
+    // non-collapsed Range를 만들어 hasRange 판정을 통과하므로
+    // isAtomBlockSelected()로 텍스트 선택과 구별한다.
+    const controller = fakeController({
+      getSelectionMediaBlock: () => null,
+      isAtomBlockSelected: () => true,
     });
     renderWithSelectedText(controller);
 

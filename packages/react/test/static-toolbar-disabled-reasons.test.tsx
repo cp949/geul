@@ -2,7 +2,8 @@
 
 /**
  * StaticToolbar 비활성 컨트롤의 사유 title을 확인한다(Issue #220, G-UI-004).
- * - codeBlock·미디어 블록·표 셀 범위 선택에서 mark 5개·색상 2개는 같은
+ * - codeBlock·atom 블록(구분선·미디어·customBlock)·표 셀 범위 선택에서
+ *   mark 5개·색상 2개는 같은
  *   사유(`markingDisabledReason`)를 title로 가진다.
  * - 현재 블록이 변환을 허용하지 않는 블록 타입 아이콘 버튼은
  *   `blockTypeDisabledReason`을 title로 가진다.
@@ -86,6 +87,20 @@ const controllerWithMedia = (dictionary: Dictionary) => {
     showPreview: null,
     textAlignment: null,
   });
+  controller.getDictionary.mockReturnValue(dictionary);
+  return controller;
+};
+
+/**
+ * 구분선·customBlock 같은 atom 블록이 선택된 controller를 만든다.
+ * `getSelectionMediaBlock()`은 null이고 `blockSelection`도 null이다(Issue #242).
+ */
+const controllerWithAtomBlock = (dictionary: Dictionary) => {
+  const controller = fakeStaticToolbarController(
+    undefined,
+    vi.fn(() => null),
+  );
+  controller.isAtomBlockSelected.mockReturnValue(true);
   controller.getDictionary.mockReturnValue(dictionary);
   return controller;
 };
@@ -184,6 +199,32 @@ describe.each(DICTIONARIES)(
       render(withProvider(controllerWithMedia(dictionary), <StaticToolbar />));
 
       expectMarkingDisabled();
+    });
+
+    it("구분선 같은 atom 블록 선택에서 mark 5개·색상 2개가 사유 title을 가진다", () => {
+      render(
+        withProvider(controllerWithAtomBlock(dictionary), <StaticToolbar />),
+      );
+
+      expectMarkingDisabled();
+    });
+
+    it("atom 블록 선택에서 비활성 mark·색상 버튼을 눌러도 명령을 호출하지 않는다", () => {
+      const controller = controllerWithAtomBlock(dictionary);
+      render(withProvider(controller, <StaticToolbar />));
+
+      for (const name of markingControlNames(dictionary)) {
+        fireEvent.click(screen.getByRole("button", { name }));
+      }
+
+      expect(controller.commands.toggleBold).not.toHaveBeenCalled();
+      expect(controller.commands.toggleCode).not.toHaveBeenCalled();
+      expect(controller.commands.toggleCaretMark).not.toHaveBeenCalled();
+      expect(controller.commands.toggleCaretTextColor).not.toHaveBeenCalled();
+      expect(
+        controller.commands.toggleCaretBackgroundColor,
+      ).not.toHaveBeenCalled();
+      expect(screen.queryByRole("menu")).toBeNull();
     });
 
     it("표 셀 범위 선택에서 mark 5개·색상 2개가 사유 title을 가진다", () => {

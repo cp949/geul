@@ -26,7 +26,7 @@ export const isSameStaticToolbarState = (
   left: FormattingToolbarState,
   right: FormattingToolbarState,
 ): boolean =>
-  left.isMediaBlockSelected === right.isMediaBlockSelected &&
+  left.isAtomBlockSelected === right.isAtomBlockSelected &&
   left.isCellRangeSelected === right.isCellRangeSelected &&
   left.selectionIntersectsCodeBlock === right.selectionIntersectsCodeBlock &&
   left.activeMarks.length === right.activeMarks.length &&

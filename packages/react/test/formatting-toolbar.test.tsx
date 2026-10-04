@@ -144,6 +144,30 @@ describe("FormattingToolbar 서식 툴바", () => {
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
 
+  it("구분선·customBlock 같은 atom 블록을 선택하면 미디어가 아니어도 렌더링하지 않는다", () => {
+    // 구분선·customBlock은 getSelectionMediaBlock()이 null이고 blockSelection도
+    // null이라 남는 버튼이 mark·색상뿐이다. 모두 적용 불가하므로
+    // isAtomBlockSelected()로 구별해 닫는다(Issue #242).
+    const controller = fakeController();
+    controller.isAtomBlockSelected.mockReturnValue(true);
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+      ?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+
+    selectText(textNode, 0, 8);
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
   it("표에서 여러 셀을 선택(CellSelection)하면 렌더링하지 않는다", () => {
     // 표 드래그 다중 셀 선택도 DOM selection이 그 범위를 덮는 non-collapsed
     // Range가 돼 위 미디어 가드와 같은 구멍이 있었다 —

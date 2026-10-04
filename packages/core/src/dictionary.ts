@@ -285,8 +285,9 @@ export type Dictionary = {
       // 아이콘 버튼, Indent/Outdent)의 비활성 사유 title. 미디어·표 셀·여러
       // 블록 선택을 가리지 않고 하나의 문구를 공유한다.
       blockControlsDisabledReason: string;
-      // Issue #220 — codeBlock·미디어 블록·표 셀 범위 선택에서 mark·색상
-      // 버튼(7개)의 비활성 사유 title. 세 경우가 하나의 문구를 공유한다.
+      // Issue #220 — mark·색상 버튼(7개)이 적용 불가한 선택(codeBlock·
+      // 텍스트 없는 atom 블록·표 셀 범위)의 비활성 사유 title. 모든 경우가
+      // 하나의 일반 문구를 공유한다. 선택 종류를 열거하지 않는다(Issue #242).
       markingDisabledReason: string;
       // Issue #220 — 현재 블록이 변환을 허용하지 않는 블록 타입 아이콘
       // 버튼(예: codeBlock 안의 목록 4종, 목록 안의 Code)의 비활성 사유
@@ -624,8 +625,7 @@ export const DEFAULT_DICTIONARY: Dictionary = {
       blockTypeNeutralLabel: "Other",
       blockControlsDisabledReason:
         "Available when the cursor is in a single block",
-      markingDisabledReason:
-        "Formatting isn't available in code blocks, media blocks, or table cell ranges",
+      markingDisabledReason: "Formatting isn't available for this selection",
       blockTypeDisabledReason: "Can't convert this block to that type",
     },
     codeBlock: {
