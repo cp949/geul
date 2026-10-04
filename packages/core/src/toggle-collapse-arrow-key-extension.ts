@@ -17,14 +17,17 @@ import {
 // 키를 소비하는 조건은 아래 넷이다. 하나라도 어긋나면 false를 반환해
 // 네이티브 이동에 맡긴다.
 // - selection이 빈 TextSelection이다. Shift 등 조합 키는 바인딩에서 걸러진다.
-// - $head가 접힌 toggle 라벨 끝이다. endOfTextblock이 레이아웃을 읽으므로
-//   라벨 판정 뒤에 부른다.
+// - $head가 접힌 toggle 라벨 안이다. ArrowRight는 라벨 끝만 소비한다.
+//   ArrowDown은 라벨 어디서든 소비한다(Issue #255). endOfTextblock이
+//   레이아웃을 읽으므로 라벨 판정 뒤에 부른다.
 // - 방향 이동이 고를 첫 위치가 숨은 자손의 NodeSelection이다. 첫 숨은 자식이
 //   텍스트블록이면 네이티브 이동이 이미 맞다(Chromium 실측).
 // - endOfTextblock가 throw하지 않는다.
 //
-// 라벨 중간(한 줄 라벨의 캐럿이 끝이 아닌 경우)의 ArrowDown은 이 확장이 다루지
-// 않는다. PM이 만든 숨은 NodeSelection을 가드가 라벨 끝으로 되돌린다.
+// 라벨 중간의 ArrowRight는 글자 한 칸 이동이라 가로채지 않는다. 라벨 중간의
+// ArrowDown은 endOfTextblock("down")이 마지막 줄만 통과시킨다. 여러 줄 라벨의
+// 첫 줄이면 거짓이라 네이티브가 다음 줄로 보낸다. ArrowDown 착지는 시작 고정이다.
+// goal column은 유지하지 않는다.
 //
 // 클릭 직후 DOM 캐럿이 대상 밖이면 live selection이 라벨 끝이어도 소비하지
 // 않고 폴스루한다(G-EDT-002의 소비형 규칙을 적용하지 않는다). 폴스루한 기본
@@ -33,7 +36,7 @@ import {
 
 type ArrowKey = "down" | "forward";
 
-// 접힌 toggle container 뒤 첫 선택 가능 위치. 라벨 끝 캐럿이 아니면 null이다.
+// 접힌 toggle container 뒤 첫 선택 가능 위치. 소비 조건에 안 맞으면 null이다.
 const collapsedToggleExitSelection = (
   editor: Editor,
   direction: ArrowKey,
@@ -44,7 +47,13 @@ const collapsedToggleExitSelection = (
   const { $head } = selection;
   if ($head.depth < 2) return null;
   if (!isCollapsedToggleContent($head.parent)) return null;
-  if ($head.parentOffset !== $head.parent.content.size) return null;
+  // 라벨 끝 요구는 ArrowRight만 갖는다. ArrowDown은 endOfTextblock이 마지막 줄을 가른다.
+  if (
+    direction === "forward" &&
+    $head.parentOffset !== $head.parent.content.size
+  ) {
+    return null;
+  }
   try {
     if (!editor.view.endOfTextblock(direction, state)) return null;
   } catch {

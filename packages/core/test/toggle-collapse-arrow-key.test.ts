@@ -1,10 +1,12 @@
 /**
- * 접힌 toggleListItem 라벨 끝에서 ArrowDown·ArrowRight가 숨은 첫 자식 atom에
- * 막히지 않는지 검증한다(Issue #254). 핸들러는 첫 숨은 자식이 atom일 때만 키를
- * 소비하고, 접힌 container 뒤 첫 선택 가능 위치로 selection을 옮긴다.
- * 소비 조건(빈 TextSelection·접힌 라벨 끝·첫 숨은 자식이 NodeSelection),
+ * 접힌 toggleListItem 라벨에서 ArrowDown·ArrowRight가 숨은 첫 자식 atom에
+ * 막히지 않는지 검증한다(Issue #254, #255). 핸들러는 첫 숨은 자식이 atom일 때만
+ * 키를 소비하고, 접힌 container 뒤 첫 선택 가능 위치로 selection을 옮긴다.
+ * 소비 조건(빈 TextSelection·접힌 라벨·첫 숨은 자식이 NodeSelection),
  * 착지(텍스트블록 시작·atom NodeSelection), 중첩 접힘, dispatch 1회·문서 불변,
  * 클릭 직후 stale selection(G-EDT-002)을 다룬다.
+ * 라벨 끝 요구는 ArrowRight만 갖는다. ArrowDown은 라벨 중간·시작에서도
+ * 마지막 줄이면 소비한다(Issue #255).
  *
  * jsdom은 레이아웃이 없어 view.endOfTextblock을 믿을 수 없다. 값을
  * vi.spyOn으로 고정한다(ADR-0007). 실제 값은 e2e가 증명한다.
@@ -108,9 +110,21 @@ const placeCaret = (tiptap: TiptapEditor, pos: number): void => {
   );
 };
 
+/** blockId 라벨 중간(시작 다음 글자 뒤) 위치. */
+const labelMiddle = (tiptap: TiptapEditor, blockId: string): number =>
+  contentTextStart(tiptap, blockId) + 1;
+
 /** blockId 라벨 끝에 캐럿을 둔다. */
 const placeCaretAtLabelEnd = (tiptap: TiptapEditor, blockId: string): void =>
   placeCaret(tiptap, labelEnd(tiptap, blockId));
+
+/** blockId 라벨 중간에 캐럿을 둔다. */
+const placeCaretAtLabelMiddle = (tiptap: TiptapEditor, blockId: string): void =>
+  placeCaret(tiptap, labelMiddle(tiptap, blockId));
+
+/** blockId 라벨 시작(offset 0)에 캐럿을 둔다. */
+const placeCaretAtLabelStart = (tiptap: TiptapEditor, blockId: string): void =>
+  placeCaret(tiptap, contentTextStart(tiptap, blockId));
 
 /** view.endOfTextblock 값을 고정한다. jsdom은 이 값을 믿을 수 없다. */
 const stubEndOfTextblock = (tiptap: TiptapEditor, value: boolean) =>
@@ -242,16 +256,6 @@ describe("접힌 toggle 방향키", () => {
       expect(dispatch).not.toHaveBeenCalled();
     });
 
-    it("라벨 끝이 아니면(endOfTextblock이 true여도) 소비하지 않는다", () => {
-      const { tiptap } = fixture();
-      placeCaret(tiptap, contentTextStart(tiptap, "t1") + 1);
-      stubEndOfTextblock(tiptap, true);
-      const dispatch = vi.spyOn(tiptap.view, "dispatch");
-
-      expect(dispatchKeydown(tiptap, key)).toBe(false);
-      expect(dispatch).not.toHaveBeenCalled();
-    });
-
     it("endOfTextblock이 throw하면 소비하지 않는다", () => {
       const { tiptap } = fixture();
       placeCaretAtLabelEnd(tiptap, "t1");
@@ -362,6 +366,158 @@ describe("접힌 toggle 방향키", () => {
 
       expect(dispatch).not.toHaveBeenCalled();
       expect(tiptap.state.selection).toBe(labelSelection);
+    });
+  });
+
+  it("ArrowRight는 라벨 중간이면(endOfTextblock이 true여도) 소비하지 않는다", () => {
+    const { tiptap } = fixture();
+    placeCaretAtLabelMiddle(tiptap, "t1");
+    stubEndOfTextblock(tiptap, true);
+    const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  // 라벨 끝 요구는 ArrowDown에서 뺐다. 마지막 줄 판정은 endOfTextblock이 맡는다(Issue #255).
+  describe("ArrowDown 라벨 중간·시작", () => {
+    const POSITIONS = [
+      ["중간", placeCaretAtLabelMiddle],
+      ["시작", placeCaretAtLabelStart],
+    ] as const;
+
+    describe.each(POSITIONS)("라벨 %s", (_position, place) => {
+      it.each([
+        ["divider", "t1", "a1"],
+        ["미디어(atom)", "t6", "a6"],
+      ])(
+        "첫 숨은 자식이 %s이면 키를 소비하고 다음 보이는 블록 시작으로 간다",
+        (_label, toggleId, nextId) => {
+          const { tiptap } = fixture();
+          place(tiptap, toggleId);
+          const endOfTextblock = stubEndOfTextblock(tiptap, true);
+
+          const consumed = dispatchKeydown(tiptap, "ArrowDown");
+
+          expect(consumed).toBe(true);
+          expect(
+            endOfTextblock.mock.calls.map(([direction]) => direction),
+          ).toContain("down");
+          expectCaretAt(tiptap, contentTextStart(tiptap, nextId));
+        },
+      );
+
+      it("다음 보이는 블록이 atom이면 그 atom의 NodeSelection이 된다", () => {
+        const { tiptap } = fixture();
+        place(tiptap, "t4");
+        stubEndOfTextblock(tiptap, true);
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+
+        expect(tiptap.state.selection).toBeInstanceOf(NodeSelection);
+        expectDividerNodeSelection(tiptap, "n4");
+      });
+
+      it.each([
+        ["첫 숨은 자식이 텍스트블록인 접힌 toggle", "t2"],
+        ["자식 없는 접힌 toggle", "t3"],
+        ["접히지 않은 toggle", "u1"],
+      ])("%s은 소비하지 않고 dispatch하지 않는다", (_label, toggleId) => {
+        const { tiptap } = fixture();
+        place(tiptap, toggleId);
+        stubEndOfTextblock(tiptap, true);
+        const before = tiptap.state.selection;
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(false);
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(tiptap.state.selection).toBe(before);
+      });
+
+      it("endOfTextblock이 false면(여러 줄 라벨의 첫 줄) 소비하지 않고 dispatch하지 않는다", () => {
+        const { tiptap } = fixture();
+        place(tiptap, "t1");
+        stubEndOfTextblock(tiptap, false);
+        const before = tiptap.state.selection;
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(false);
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(tiptap.state.selection).toBe(before);
+      });
+
+      it("endOfTextblock이 throw하면 소비하지 않는다", () => {
+        const { tiptap } = fixture();
+        place(tiptap, "t1");
+        // gapcursor 쪽 호출은 state를 넘기지 않는다. state를 넘기는 호출만 throw시킨다.
+        vi.spyOn(tiptap.view, "endOfTextblock").mockImplementation(
+          (_direction, state) => {
+            if (state !== undefined) throw new Error("레이아웃 없음");
+            return false;
+          },
+        );
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(false);
+        expect(dispatch).not.toHaveBeenCalled();
+      });
+
+      it("접힌 toggle이 부모 toggle의 마지막 자식이면 부모 뒤 첫 선택 가능 위치로 간다", () => {
+        const { tiptap } = fixture();
+        place(tiptap, "t7");
+        stubEndOfTextblock(tiptap, true);
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+
+        expectCaretAt(tiptap, contentTextStart(tiptap, "a7"));
+      });
+
+      it("dispatch 1회로 selection만 바꾸고 숨은 자손에 들어가지 않는다", () => {
+        const { tiptap } = fixture();
+        place(tiptap, "t1");
+        stubEndOfTextblock(tiptap, true);
+        const docBefore = tiptap.state.doc;
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+
+        expect(dispatch).toHaveBeenCalledTimes(1);
+        expect(tiptap.state.doc).toBe(docBefore);
+        const { selection } = tiptap.state;
+        expect(isHidden(selection.$from)).toBe(false);
+        expect(isHidden(selection.$to)).toBe(false);
+      });
+    });
+
+    it("일반 블록 중간은 소비하지 않는다", () => {
+      const { tiptap } = fixture();
+      placeCaret(tiptap, contentTextStart(tiptap, "a1") + 1);
+      stubEndOfTextblock(tiptap, true);
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+      expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(false);
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("클릭 직후 stale selection이어도 DOM 기준 라벨 중간 캐럿으로 판정한다", () => {
+      const { tiptap } = fixture();
+      const dom = tiptap.view.domAtPos(labelMiddle(tiptap, "t1"));
+      // PM selection만 의도적으로 다른 문단으로 stale하게 만든다.
+      placeCaret(tiptap, contentTextStart(tiptap, "tail"));
+      stubEndOfTextblock(tiptap, true);
+
+      withNativeCaret(
+        tiptap.view.dom as HTMLElement,
+        () => {
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+          });
+        },
+        dom.node,
+        dom.offset,
+      );
+
+      expectCaretAt(tiptap, contentTextStart(tiptap, "a1"));
     });
   });
 
