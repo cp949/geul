@@ -359,6 +359,10 @@ export const MediaToolbar = ({
       return;
     }
     if (dismissSuppression.isSuppressed(media.blockId)) return;
+    // 억제되지 않은 미디어를 관측해 툴바를 연다. 이때 억제를 푼다(Issue #259).
+    // 억제 키는 툴바가 닫혀 있을 때만 남는다. 남겨 두면 다른 블록 A를 연 뒤
+    // 닫았던 B로 돌아갈 때 위 return이 A의 툴바·draft를 그대로 둔다.
+    dismissSuppression.clear();
 
     // 다른 블록으로 전환됐으면 이전 블록에서 열려 있던 more 메뉴를 새
     // 블록까지 들고 오지 않는다 — 같은 블록을 계속 보고 있을 때는(재조회가

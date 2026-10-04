@@ -5,9 +5,13 @@ import { useMemo, useRef } from "react";
  * 닫힌 뒤에도 같은 상태가 재관측되면 다시 열리는 문제를 막는다(G-UI-001
  * "selection·input 관측으로 열리는 overlay는 닫은 상태의 안정 key를 ref에
  * 기록하고 같은 상태의 재관측만 무시한다"). 억제 여부는 `isEqual`로만
- * 판정한다 — dismiss 이후 다른 이유로 key가 바뀌면(예: selection 이동, 다른
- * 블록 선택) 새 key가 dismissedKey와 더 이상 같지 않아 억제가 자동으로
- * 풀린다.
+ * 판정한다. 다른 key를 관측해도 억제 키는 자동으로 풀리지 않는다. 해제는
+ * 호출부 책임이다. `clear()`를 부르지 않으면 나중에 같은 key로 돌아왔을 때
+ * 다시 막힌다(Issue #259).
+ * - `formatting-toolbar.tsx`·`link-toolbar.tsx`·`media-toolbar.tsx`: 억제를
+ *   통과해 overlay를 열 때와 대상이 사라질 때 `clear()`한다.
+ * - `file-panel.tsx`: 대상이 사라지거나 채워진 블록으로 옮겨갈 때 `clear()`한다.
+ *   같은 블록의 새 제스처는 제스처 순번으로 억제를 건너뛴다.
  *
  * `formatting-toolbar.tsx`/`link-toolbar.tsx`는 `Range` 경계 비교(아래
  * `rangeBoundariesEqual`)로, `media-toolbar.tsx`/`file-panel.tsx`는 blockId
