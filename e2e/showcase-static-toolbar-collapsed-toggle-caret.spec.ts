@@ -13,9 +13,10 @@
  * 샘플 문서(`샘플 불러오기`)를 쓴다. block-10은 자식 block-11을 가진 토글이고
  * block-12는 그 뒤 제목이다.
  */
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
+import { labelText } from "./support/static-toolbar-collapsed-toggle.js";
 import { blockId, placeCaretIn } from "./support/static-toolbar-sample.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
@@ -31,10 +32,6 @@ const openSample = async (page: Page) => {
     trigger: page.getByRole("button", { name: "Block type" }),
   };
 };
-
-/** toggle 라벨 줄(블록 컨테이너의 첫 자식)의 텍스트. 자식 블록 텍스트는 뺀다. */
-const labelText = (block: Locator) =>
-  block.evaluate((element) => element.firstElementChild?.textContent ?? "");
 
 test("접힌 toggle 뒤 블록을 Indent하면 toggle이 펼쳐지고 입력이 이동한 블록에 들어간다", async ({
   page,
