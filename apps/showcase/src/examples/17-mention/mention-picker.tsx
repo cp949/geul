@@ -1,4 +1,5 @@
 import {
+  handleMenuKeyDown,
   useClampedMenuPosition,
   useDismissibleOverlay,
   useEditor,
@@ -143,6 +144,31 @@ const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
   return { left: bounds.left, top: bounds.top + bounds.height };
 };
 
+/**
+ * 브라우저 DOM selection이 접힌 캐럿일 때 그 캐럿이 속한 블록의 id. 편집기 밖,
+ * 범위 선택, 블록 컨테이너 밖(atom 블록 선택 등)이면 `null`이다.
+ *
+ * `editor.getCaretBlockContext()`는 쓰지 않는다. 키보드로 블록을 옮긴 직후에는
+ * ProseMirror가 `selectionchange`를 비동기로 반영해 이전 블록을 돌려준다.
+ * DOM selection은 그때 이미 새 위치를 가리킨다. 블록 id는 `renderHTML`이 내는
+ * `data-geul-block-id`로 읽는다(G-EDT-003).
+ */
+const readDomCaretBlockId = (element: HTMLElement): string | null => {
+  const selection = element.ownerDocument.getSelection();
+  if (selection === null || !selection.isCollapsed) return null;
+  const anchorNode = selection.anchorNode;
+  if (anchorNode === null || !element.contains(anchorNode)) return null;
+  const anchorElement =
+    anchorNode.nodeType === Node.ELEMENT_NODE
+      ? (anchorNode as Element)
+      : anchorNode.parentElement;
+  return (
+    anchorElement
+      ?.closest("[data-geul-block-id]")
+      ?.getAttribute("data-geul-block-id") ?? null
+  );
+};
+
 const targetTypeLabel = (targetType: MentionTargetType): string =>
   targetType === "user" ? "User" : "Document";
 
@@ -244,13 +270,35 @@ export const MentionPicker = () => {
 
     const ownerDocument = element?.ownerDocument;
     const ownerWindow = ownerDocument?.defaultView;
-    ownerDocument?.addEventListener("selectionchange", updateFromCaret);
+    // selectionchange는 즉시 한 번, 매크로태스크 뒤 한 번 더 읽는다(Issue #247,
+    // slash-menu.tsx·emoji-picker.tsx의 Issue #229와 같은 이유).
+    // ProseMirror의 DOMObserver는 state 갱신마다 자기 selectionchange 리스너를
+    // 떼었다 다시 붙여 항상 이 리스너보다 뒤에 호출된다. 즉시 읽기는 이동 직전
+    // 낡은 state.selection을 본다. 캐럿이 `@query` 블록을 벗어난 이동은 즉시
+    // 읽기에서 열린 채 남고 재통지가 없다. 뒤늦은 읽기는 PM flush가 끝난 최신
+    // state를 본다. 즉시 읽기는 남긴다. 기존 동기 반응을 바꾸지 않는다.
+    let deferredUpdateTimeout: number | null = null;
+    const onSelectionChange = () => {
+      updateFromCaret();
+      if (ownerWindow === undefined || ownerWindow === null) return;
+      if (deferredUpdateTimeout !== null) {
+        ownerWindow.clearTimeout(deferredUpdateTimeout);
+      }
+      deferredUpdateTimeout = ownerWindow.setTimeout(() => {
+        deferredUpdateTimeout = null;
+        updateFromCaret();
+      }, 0);
+    };
+    ownerDocument?.addEventListener("selectionchange", onSelectionChange);
     ownerDocument?.addEventListener("input", updateFromCaret);
     ownerWindow?.addEventListener("scroll", updateFromCaret, true);
     ownerWindow?.addEventListener("resize", updateFromCaret);
     updateFromCaret();
     return () => {
-      ownerDocument?.removeEventListener("selectionchange", updateFromCaret);
+      ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
+      if (deferredUpdateTimeout !== null) {
+        ownerWindow?.clearTimeout(deferredUpdateTimeout);
+      }
       ownerDocument?.removeEventListener("input", updateFromCaret);
       ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
       ownerWindow?.removeEventListener("resize", updateFromCaret);
@@ -346,55 +394,44 @@ export const MentionPicker = () => {
       const current = menuStateRef.current;
       if (current === null) return;
 
-      if (event.key === "Escape") {
-        event.preventDefault();
-        dismissMenuAndFocusEditor();
-        return;
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setMenuState((currentState) => {
-          if (currentState === null) return null;
-          const count = Math.max(
-            filterMentionOptions(MENTION_OPTIONS, currentState.query).length,
-            1,
-          );
-          return {
-            ...currentState,
-            highlightedIndex: (currentState.highlightedIndex + 1) % count,
-          };
-        });
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setMenuState((currentState) => {
-          if (currentState === null) return null;
-          const count = Math.max(
-            filterMentionOptions(MENTION_OPTIONS, currentState.query).length,
-            1,
-          );
-          return {
-            ...currentState,
-            highlightedIndex:
-              (currentState.highlightedIndex - 1 + count) % count,
-          };
-        });
-        return;
-      }
-      if (event.key === "Enter") {
-        const currentItems = filterMentionOptions(
-          MENTION_OPTIONS,
-          current.query,
-        );
-        const item = currentItems[current.highlightedIndex];
-        if (item !== undefined) {
-          event.preventDefault();
-          selectItem(item);
-        } else {
-          event.preventDefault();
-        }
-      }
+      // IME → Escape → Enter 반복 → 수식 키 → 이동·확정 순서와 `preventDefault`는
+      // handleMenuKeyDown이 소유한다(Issue #211, #227, #230, #247). 후보가 0건인
+      // Enter도 module이 막고 확정만 건너뛴다.
+      handleMenuKeyDown(event, {
+        escape: dismissMenuAndFocusEditor,
+        navigate: (key) => {
+          if (key !== "ArrowDown" && key !== "ArrowUp") return false;
+          const step = key === "ArrowDown" ? 1 : -1;
+          setMenuState((currentState) => {
+            if (currentState === null) return null;
+            const count = Math.max(
+              filterMentionOptions(MENTION_OPTIONS, currentState.query).length,
+              1,
+            );
+            return {
+              ...currentState,
+              highlightedIndex:
+                (currentState.highlightedIndex + step + count) % count,
+            };
+          });
+          return true;
+        },
+        activate: () => {
+          // 키보드로 `@query` 블록을 떠난 직후의 Enter는 확정하지 않는다.
+          // PM state는 이동 직후 낡아 selectionchange 재읽기도 이 keydown보다
+          // 늦을 수 있다. DOM selection이 같은 블록의 접힌 캐럿이 아니면
+          // (다른 블록, 범위 선택, 블록 밖) 메뉴만 닫는다.
+          // handleMenuKeyDown이 이미 막았으므로 이 Enter는 문서를 바꾸지 않는다.
+          if (readDomCaretBlockId(element) !== current.blockId) {
+            setMenuState(null);
+            return;
+          }
+          const item = filterMentionOptions(MENTION_OPTIONS, current.query)[
+            current.highlightedIndex
+          ];
+          if (item !== undefined) selectItem(item);
+        },
+      });
     };
 
     element.addEventListener("keydown", handleKeyDown, true);

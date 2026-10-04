@@ -7,8 +7,12 @@
  * 클릭 선택 후 삽입한 노드가 JSON round-trip에서 살아남는지 실제
  * Chromium 이벤트 순서로 확인한다(G-TST-001).
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import {
+  lastKeydownPrevented,
+  recordKeydownPrevented,
+} from "./support/keydown-prevented.js";
 import { openShowcasePage } from "./support/showcase.js";
 
 /**
@@ -198,4 +202,272 @@ test("mention 삽입 후 Export JSON에 targetType/targetId/label이 남는다(r
       label: "Grace Hopper",
     },
   });
+});
+
+// Issue #247: mention-picker가 #227·#228·#229·#230의 가드를 받는다. 슬래시
+// 메뉴·이모지 선택기와 같은 계약이다.
+
+/**
+ * `@al` 블록을 키보드로 떠나는 키.
+ * - `waits`: 이탈 뒤 Enter까지의 대기. 0ms는 이동 키 직후 곧바로 Enter를
+ *   보낸다. ProseMirror는 selectionchange를 비동기로 반영해 이 구간의
+ *   `state.selection`이 낡다. 150ms는 재읽기가 끝난 뒤다.
+ * - `keepsTrigger`: Enter 뒤에도 `@al` 블록이 남는지. 범위 선택은 popup이 먼저
+ *   닫혔다면 Enter가 범위를 지운다.
+ *
+ * `Control+Shift+Home`은 캐럿이 아니라 범위를 만든다. anchor는 `@al`에 남고
+ * focus만 `alpha`로 간다. 150ms 뒤 Enter는 popup이 닫힌 뒤의 범위 삭제라 이
+ * 이슈의 대상이 아니다. 0ms만 본다. `Shift+ArrowUp`은 쓰지 않는다. popup이
+ * ArrowUp을 하이라이트 이동으로 소비해 선택이 움직이지 않는다.
+ */
+const LEAVE_KEYS = [
+  {
+    name: "Control+Home",
+    press: ["Control+Home"],
+    waits: [0, 150],
+    keepsTrigger: true,
+  },
+  {
+    name: "PageUp",
+    press: ["PageUp"],
+    waits: [0, 150],
+    keepsTrigger: true,
+  },
+  {
+    name: "Home 뒤 ArrowLeft",
+    press: ["Home", "ArrowLeft"],
+    waits: [0, 150],
+    keepsTrigger: true,
+  },
+  {
+    name: "Control+Shift+Home",
+    press: ["Control+Shift+Home"],
+    waits: [0],
+    keepsTrigger: false,
+  },
+] as const;
+
+/** `alpha` 블록과 그 뒤 `@al` 블록을 만들고 picker가 열린 상태로 둔다. */
+const openAfterAlpha = async (page: Page) => {
+  const { editable, menu } = await openMentionExample(page);
+  await editable.click();
+  await page.keyboard.type("alpha");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("@al");
+  await expect(menu).toBeVisible();
+  return { editable, menu };
+};
+
+/** Enter keydown 시점의 상태를 담는 window 속성 이름. */
+const ENTER_STATE = "__geulEnterState";
+
+/** Enter keydown 시점의 selection focus 블록(`p`) 텍스트와 picker 열림 여부. */
+type EnterState = { caretBlock: string | null; pickerOpen: boolean };
+
+/**
+ * selection focus가 속한 블록(`p`)의 텍스트. 편집기 밖이면 `null`이다. DOM
+ * selection을 읽으므로 ProseMirror state가 낡아도 실제 캐럿 위치를 준다.
+ */
+const readCaretBlockText = (page: Page) =>
+  page.evaluate(() => {
+    const node = document.getSelection()?.focusNode;
+    const element = node instanceof Element ? node : node?.parentElement;
+    return element?.closest("p")?.textContent ?? null;
+  });
+
+/**
+ * Enter keydown 시점의 상태를 `window`에 남긴다. 문서 capture 단계라 편집기와
+ * picker의 핸들러보다 먼저 읽는다.
+ */
+const recordEnterState = (page: Page) =>
+  page.evaluate((name) => {
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Enter") return;
+        const node = document.getSelection()?.focusNode;
+        const element = node instanceof Element ? node : node?.parentElement;
+        const state: EnterState = {
+          caretBlock: element?.closest("p")?.textContent ?? null,
+          pickerOpen:
+            document.querySelector('[aria-label="Mention picker"]') !== null,
+        };
+        (window as unknown as Record<string, unknown>)[name] = state;
+      },
+      true,
+    );
+  }, ENTER_STATE);
+
+const readEnterState = (page: Page) =>
+  page.evaluate(
+    (name) =>
+      ((window as unknown as Record<string, unknown>)[name] ??
+        null) as EnterState | null,
+    ENTER_STATE,
+  );
+
+/**
+ * 이동 키를 누른 직후 ProseMirror가 DOM selection을 낡은 state로 되돌리는
+ * 경합이 약 1%에서 난다(실측: Home keyup 때 `alpha`였던 selection이 Enter keydown
+ * 전에 `@al`로 돌아온다). 그때 캐럿은 실제로 `@al`에 있어 이 예제가 막을 수
+ * 없다. 이동이 유지된 시도만 판정하고 되돌려졌으면 장면을 다시 만든다.
+ */
+const MAX_LEAVE_ATTEMPTS = 5;
+
+for (const leave of LEAVE_KEYS) {
+  for (const wait of leave.waits) {
+    test(`@al 블록을 ${leave.name}로 떠난 ${wait}ms 뒤 Enter는 mention을 삽입하지 않는다 (Issue #247)`, async ({
+      page,
+    }) => {
+      for (let attempt = 1; attempt <= MAX_LEAVE_ATTEMPTS; attempt += 1) {
+        const { editable, menu } = await openAfterAlpha(page);
+        await recordEnterState(page);
+
+        for (const key of leave.press) await page.keyboard.press(key);
+        if (wait > 0) {
+          await page.waitForTimeout(wait);
+          if ((await readCaretBlockText(page)) === "@al") continue;
+          // 재읽기가 끝난 뒤에는 Enter 없이도 picker가 닫혀 있다.
+          await expect(menu).toHaveCount(0);
+        }
+        await page.keyboard.press("Enter");
+        const enter = await readEnterState(page);
+        if (enter?.caretBlock === "@al") continue;
+
+        await expect(menu).toHaveCount(0);
+        await expect(
+          editable.locator('[data-geul-mention="true"]'),
+        ).toHaveCount(0);
+        // 캐럿이 떠난 `@al` 블록은 텍스트 그대로 남는다.
+        if (leave.keepsTrigger) {
+          await expect(
+            editable.locator("p").filter({ hasText: /^@al$/ }),
+          ).toHaveCount(1);
+        }
+        // 0ms는 두 경로가 모두 유효하다. Enter 때 popup이 아직 열려 있으면 가드가
+        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. 즉시 읽기가 먼저
+        // popup을 닫았으면 Enter가 편집기에서 평소대로 동작한다.
+        if (enter?.pickerOpen === true) {
+          await expect(editable.locator("p")).toHaveText(["alpha", "@al"]);
+        }
+        return;
+      }
+      throw new Error(
+        `${MAX_LEAVE_ATTEMPTS}번 시도해도 이동이 유지되지 않았다`,
+      );
+    });
+  }
+}
+
+test("Enter를 누른 채 있어도 mention은 한 번만 삽입되고 빈 블록이 생기지 않는다 (Issue #247)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openMentionExample(page);
+  await editable.click();
+  await page.keyboard.type("@ada");
+  await expect(menu).toBeVisible();
+
+  try {
+    // 첫 down은 처음 Enter, 이어지는 down은 `repeat`가 true다.
+    for (let i = 0; i < 5; i += 1) {
+      await page.keyboard.down("Enter");
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => setTimeout(resolve, 0)),
+          ),
+      );
+    }
+  } finally {
+    await page.keyboard.up("Enter");
+  }
+
+  await expect(menu).toHaveCount(0);
+  await expect(editable.locator('[data-geul-mention="true"]')).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveText("@Ada Lovelace");
+});
+
+for (const modifier of ["Alt", "Meta", "Control"] as const) {
+  test(`${modifier}+ArrowDown은 가로채지 않고 하이라이트를 옮기지 않는다 (Issue #247)`, async ({
+    page,
+  }) => {
+    const { editable, menu } = await openMentionExample(page);
+    await editable.click();
+    await page.keyboard.type("@");
+    await expect(menu).toBeVisible();
+    await recordKeydownPrevented(page);
+
+    await page.keyboard.press(`${modifier}+ArrowDown`);
+
+    expect(await lastKeydownPrevented(page)).toEqual({
+      key: "ArrowDown",
+      prevented: false,
+    });
+    await expect(page.getByRole("option").first()).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+}
+
+/**
+ * IME 조합을 시작한다. 실제 IME는 `compositionstart` 뒤 `isComposing:true`인
+ * keydown을 보내고 ProseMirror는 그 keydown을 무시한다. 합성 keydown만 보내면
+ * PM keymap이 Enter를 처리해 블록을 나눈다. Playwright `keyboard`는
+ * `isComposing`을 만들 수 없어 DOM 이벤트를 직접 보낸다.
+ */
+const startComposition = (editable: Locator) =>
+  editable.evaluate((element) => {
+    element.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
+  });
+
+test("IME 조합 중 Enter는 mention을 삽입하지 않는다 (Issue #247)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openMentionExample(page);
+  await editable.click();
+  await page.keyboard.type("@");
+  await expect(menu).toBeVisible();
+
+  await startComposition(editable);
+  await editable.evaluate((element) => {
+    element.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+
+  await expect(menu).toBeVisible();
+  await expect(editable.locator('[data-geul-mention="true"]')).toHaveCount(0);
+  await expect(editable.locator("p")).toHaveText("@");
+});
+
+test("IME 조합 중 Escape는 picker를 닫지 않는다 (Issue #247)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openMentionExample(page);
+  await editable.click();
+  await page.keyboard.type("@");
+  await expect(menu).toBeVisible();
+
+  await startComposition(editable);
+  await editable.evaluate((element) => {
+    element.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+
+  await expect(menu).toBeVisible();
 });
