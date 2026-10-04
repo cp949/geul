@@ -23,8 +23,7 @@ import { selectFirstDivider } from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 const DISABLED_REASON = "Available when the cursor is in a single block";
-const MARKING_DISABLED_REASON =
-  "Formatting isn't available in code blocks, media blocks, or table cell ranges";
+const MARKING_DISABLED_REASON = "Formatting isn't available for this selection";
 
 /** 예제를 열고 첫 문단에 캐럿을 둔다. */
 const openWithCaretInFirstBlock = async (page: Page) => {
@@ -160,4 +159,46 @@ test("샘플 전체 선택(Ctrl+A)이 codeBlock을 걸치면 Bold가 비활성�
   await bold.click({ force: true });
 
   await expect(editable.locator("strong")).toHaveCount(strongBefore);
+});
+
+test("구분선을 선택하면 mark·색상 버튼이 비활성이고 눌러도 서식이 바뀌지 않으며 떠 있는 툴바가 열리지 않는다", async ({
+  page,
+}) => {
+  // Issue #242. 구분선은 getSelectionMediaBlock()이 null이라 종류별 허용
+  // 목록에서 빠졌다. mark·색상 버튼이 활성으로 남고, 같은 선택에서
+  // FormattingToolbar와 LinkToolbar(Add link)가 열렸다.
+  const { editable } = await openWithDividerSelected(page);
+  // 예제는 FormattingToolbar도 같이 띄우므로 StaticToolbar 안으로 좁힌다.
+  const toolbar = page.getByRole("toolbar", { name: "Toolbar" });
+  const controls = [
+    "Bold",
+    "Italic",
+    "Underline",
+    "Strikethrough",
+    "Inline code",
+    "Text color",
+    "Background color",
+  ];
+  for (const name of controls) {
+    const control = toolbar.getByRole("button", { name, exact: true });
+    await expect(control, name).toHaveAttribute("aria-disabled", "true");
+    await expect(control, name).toHaveAttribute(
+      "title",
+      MARKING_DISABLED_REASON,
+    );
+  }
+  const strongBefore = await editable.locator("strong").count();
+
+  // aria-disabled 컨트롤은 Playwright가 클릭을 막으므로 force로 우회한다.
+  await toolbar
+    .getByRole("button", { name: "Bold", exact: true })
+    .click({ force: true });
+  await yieldFrame(page);
+
+  await expect(editable.locator("strong")).toHaveCount(strongBefore);
+  await expect(page.getByRole("toolbar", { name: "Formatting" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("toolbar", { name: "Link" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add link" })).toHaveCount(0);
 });
