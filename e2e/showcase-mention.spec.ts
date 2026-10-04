@@ -14,6 +14,13 @@ import {
   recordKeydownPrevented,
 } from "./support/keydown-prevented.js";
 import { openShowcasePage } from "./support/showcase.js";
+import {
+  LEAVE_KEYS,
+  MAX_LEAVE_ATTEMPTS,
+  readCaretBlockText,
+  readEnterState,
+  recordEnterState,
+} from "./support/trigger-leave-block.js";
 
 /**
  * `e2e/support/demo.ts`의 `openDemo`와 동일 분리 — 접근성 이름으로 잡은
@@ -207,46 +214,6 @@ test("mention 삽입 후 Export JSON에 targetType/targetId/label이 남는다(r
 // Issue #247: mention-picker가 #227·#228·#229·#230의 가드를 받는다. 슬래시
 // 메뉴·이모지 선택기와 같은 계약이다.
 
-/**
- * `@al` 블록을 키보드로 떠나는 키.
- * - `waits`: 이탈 뒤 Enter까지의 대기. 0ms는 이동 키 직후 곧바로 Enter를
- *   보낸다. ProseMirror는 selectionchange를 비동기로 반영해 이 구간의
- *   `state.selection`이 낡다. 150ms는 재읽기가 끝난 뒤다.
- * - `keepsTrigger`: Enter 뒤에도 `@al` 블록이 남는지. 범위 선택은 popup이 먼저
- *   닫혔다면 Enter가 범위를 지운다.
- *
- * `Control+Shift+Home`은 캐럿이 아니라 범위를 만든다. anchor는 `@al`에 남고
- * focus만 `alpha`로 간다. 150ms 뒤 Enter는 popup이 닫힌 뒤의 범위 삭제라 이
- * 이슈의 대상이 아니다. 0ms만 본다. `Shift+ArrowUp`은 쓰지 않는다. popup이
- * ArrowUp을 하이라이트 이동으로 소비해 선택이 움직이지 않는다.
- */
-const LEAVE_KEYS = [
-  {
-    name: "Control+Home",
-    press: ["Control+Home"],
-    waits: [0, 150],
-    keepsTrigger: true,
-  },
-  {
-    name: "PageUp",
-    press: ["PageUp"],
-    waits: [0, 150],
-    keepsTrigger: true,
-  },
-  {
-    name: "Home 뒤 ArrowLeft",
-    press: ["Home", "ArrowLeft"],
-    waits: [0, 150],
-    keepsTrigger: true,
-  },
-  {
-    name: "Control+Shift+Home",
-    press: ["Control+Shift+Home"],
-    waits: [0],
-    keepsTrigger: false,
-  },
-] as const;
-
 /** `alpha` 블록과 그 뒤 `@al` 블록을 만들고 picker가 열린 상태로 둔다. */
 const openAfterAlpha = async (page: Page) => {
   const { editable, menu } = await openMentionExample(page);
@@ -258,61 +225,8 @@ const openAfterAlpha = async (page: Page) => {
   return { editable, menu };
 };
 
-/** Enter keydown 시점의 상태를 담는 window 속성 이름. */
-const ENTER_STATE = "__geulEnterState";
-
-/** Enter keydown 시점의 selection focus 블록(`p`) 텍스트와 picker 열림 여부. */
-type EnterState = { caretBlock: string | null; pickerOpen: boolean };
-
-/**
- * selection focus가 속한 블록(`p`)의 텍스트. 편집기 밖이면 `null`이다. DOM
- * selection을 읽으므로 ProseMirror state가 낡아도 실제 캐럿 위치를 준다.
- */
-const readCaretBlockText = (page: Page) =>
-  page.evaluate(() => {
-    const node = document.getSelection()?.focusNode;
-    const element = node instanceof Element ? node : node?.parentElement;
-    return element?.closest("p")?.textContent ?? null;
-  });
-
-/**
- * Enter keydown 시점의 상태를 `window`에 남긴다. 문서 capture 단계라 편집기와
- * picker의 핸들러보다 먼저 읽는다.
- */
-const recordEnterState = (page: Page) =>
-  page.evaluate((name) => {
-    document.addEventListener(
-      "keydown",
-      (event) => {
-        if (event.key !== "Enter") return;
-        const node = document.getSelection()?.focusNode;
-        const element = node instanceof Element ? node : node?.parentElement;
-        const state: EnterState = {
-          caretBlock: element?.closest("p")?.textContent ?? null,
-          pickerOpen:
-            document.querySelector('[aria-label="Mention picker"]') !== null,
-        };
-        (window as unknown as Record<string, unknown>)[name] = state;
-      },
-      true,
-    );
-  }, ENTER_STATE);
-
-const readEnterState = (page: Page) =>
-  page.evaluate(
-    (name) =>
-      ((window as unknown as Record<string, unknown>)[name] ??
-        null) as EnterState | null,
-    ENTER_STATE,
-  );
-
-/**
- * 이동 키를 누른 직후 ProseMirror가 DOM selection을 낡은 state로 되돌리는
- * 경합이 약 1%에서 난다(실측: Home keyup 때 `alpha`였던 selection이 Enter keydown
- * 전에 `@al`로 돌아온다). 그때 캐럿은 실제로 `@al`에 있어 이 예제가 막을 수
- * 없다. 이동이 유지된 시도만 판정하고 되돌려졌으면 장면을 다시 만든다.
- */
-const MAX_LEAVE_ATTEMPTS = 5;
+/** mention picker 루트 선택자. */
+const MENTION_PICKER_SELECTOR = '[aria-label="Mention picker"]';
 
 for (const leave of LEAVE_KEYS) {
   for (const wait of leave.waits) {
@@ -321,7 +235,7 @@ for (const leave of LEAVE_KEYS) {
     }) => {
       for (let attempt = 1; attempt <= MAX_LEAVE_ATTEMPTS; attempt += 1) {
         const { editable, menu } = await openAfterAlpha(page);
-        await recordEnterState(page);
+        await recordEnterState(page, MENTION_PICKER_SELECTOR);
 
         for (const key of leave.press) await page.keyboard.press(key);
         if (wait > 0) {

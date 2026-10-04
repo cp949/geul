@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { readDomCaretBlockId } from "./dom-caret-block.js";
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { useFixedPlacement } from "./fixed-placement.js";
@@ -339,6 +340,15 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
           return true;
         },
         activate: () => {
+          // 키보드로 `:query` 블록을 떠난 직후의 Enter는 확정하지 않는다
+          // (Issue #258). 이동 직후 PM state가 낡아 selectionchange 재읽기도
+          // 이 keydown보다 늦을 수 있다. DOM selection이 같은 블록의 접힌
+          // 캐럿이 아니면(다른 블록, 범위 선택, 블록 밖) picker만 닫는다.
+          // handleMenuKeyDown이 이미 막았으므로 이 Enter는 문서를 바꾸지 않는다.
+          if (readDomCaretBlockId(element) !== current.blockId) {
+            setMenuState(null);
+            return;
+          }
           const item = filterEmojiOptions(EMOJI_OPTIONS, current.query)[
             current.highlightedIndex
           ];

@@ -15,6 +15,13 @@ import {
   lastKeydownPrevented,
   recordKeydownPrevented,
 } from "./support/keydown-prevented.js";
+import {
+  LEAVE_KEYS,
+  MAX_LEAVE_ATTEMPTS,
+  readCaretBlockText,
+  readEnterState,
+  recordEnterState,
+} from "./support/trigger-leave-block.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 test("'/' 입력에 검색 가능한 메뉴를 열고 항목을 고르면 블록을 변환한다 @core", async ({
@@ -455,14 +462,6 @@ const openHeadBetweenBlocks = async (page: Page) => {
   return { editable, menu };
 };
 
-/** DOM selection의 캐럿이 놓인 블록 텍스트. 블록 이탈을 PM state와 무관하게 읽는다. */
-const caretBlockText = (page: Page) =>
-  page.evaluate(() => {
-    const anchor = document.getSelection()?.anchorNode;
-    const element = anchor instanceof Element ? anchor : anchor?.parentElement;
-    return element?.closest("p")?.textContent ?? null;
-  });
-
 // Issue #229: selectionchange 리스너가 PM 리스너보다 먼저 호출돼 낡은
 // state.selection을 읽었다. 방향키로 `/head` 블록을 벗어나도 메뉴가 열린 채
 // 남았고 이어 누른 Enter가 캐럿 블록이 아닌 `/head` 블록을 변환했다.
@@ -476,7 +475,7 @@ for (const key of ["ArrowRight", "Control+ArrowUp", "Control+End"]) {
     // 전제: 캐럿이 /head 블록 밖으로 나갔다.
     await expect
       .poll(async () => {
-        const text = await caretBlockText(page);
+        const text = await readCaretBlockText(page);
         return text !== null && text !== "/head";
       })
       .toBe(true);
@@ -500,7 +499,7 @@ test("같은 블록 안에서 ArrowLeft·Backspace는 메뉴를 유지하고 que
   const { editable, menu } = await openHeadBetweenBlocks(page);
 
   await page.keyboard.press("ArrowLeft");
-  await expect.poll(() => caretBlockText(page)).toBe("/head");
+  await expect.poll(() => readCaretBlockText(page)).toBe("/head");
   await page.waitForTimeout(150);
   await expect(menu).toBeVisible();
 
@@ -524,4 +523,87 @@ test("슬래시 메뉴가 열린 채 window를 스크롤해도 캐럿 하단에 
   await expect(menu).toBeVisible();
 
   await expectCaretMenuFollowsCaret(page, menu);
+});
+
+// Issue #258: 이동 키 직후(0ms)의 Enter는 PM state가 낡아 이전 `/he` 블록을
+// 변환했다. 확정은 DOM selection의 캐럿 블록을 확인한다. Issue #229의 150ms
+// 재읽기 계약과 같은 이동 키를 쓴다.
+
+/** `alpha` 블록과 그 뒤 `/he` 블록을 만들고 메뉴가 열린 상태로 둔다. */
+const openHeAfterAlpha = async (page: Page) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type("alpha");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/he");
+  await expect(menu).toBeVisible();
+  return { editable, menu };
+};
+
+for (const leave of LEAVE_KEYS) {
+  for (const wait of leave.waits) {
+    test(`/he 블록을 ${leave.name}로 떠난 ${wait}ms 뒤 Enter는 블록을 변환하지 않는다 (Issue #258)`, async ({
+      page,
+    }) => {
+      for (let attempt = 1; attempt <= MAX_LEAVE_ATTEMPTS; attempt += 1) {
+        const { editable, menu } = await openHeAfterAlpha(page);
+        await recordEnterState(page, ".geul-slash-menu");
+
+        for (const key of leave.press) await page.keyboard.press(key);
+        if (wait > 0) {
+          await page.waitForTimeout(wait);
+          if ((await readCaretBlockText(page)) === "/he") continue;
+          // 재읽기가 끝난 뒤에는 Enter 없이도 메뉴가 닫혀 있다.
+          await expect(menu).toHaveCount(0);
+        }
+        await page.keyboard.press("Enter");
+        const enter = await readEnterState(page);
+        if (enter?.caretBlock === "/he") continue;
+
+        await expect(menu).toHaveCount(0);
+        await expect(editable.locator("h1, h2, h3, h4, h5, h6")).toHaveCount(0);
+        // 캐럿이 떠난 `/he` 블록은 텍스트 그대로 남는다.
+        if (leave.keepsTrigger) {
+          await expect(
+            editable.locator("p").filter({ hasText: /^\/he$/ }),
+          ).toHaveCount(1);
+        }
+        // 0ms는 두 경로가 모두 유효하다. Enter 때 메뉴가 아직 열려 있으면 가드가
+        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. 즉시 읽기가 먼저
+        // 메뉴를 닫았으면 Enter가 편집기에서 평소대로 동작한다.
+        if (enter?.pickerOpen === true) {
+          await expect(editable.locator("p")).toHaveText(["alpha", "/he"]);
+        }
+        return;
+      }
+      throw new Error(
+        `${MAX_LEAVE_ATTEMPTS}번 시도해도 이동이 유지되지 않았다`,
+      );
+    });
+  }
+}
+
+// Issue #258 회귀 보호: 블록 추가 버튼("+")으로 연 메뉴는 새 빈 블록에 캐럿이
+// 놓인 채 열린다. 가드가 이 경로의 정상 Enter 확정을 막으면 안 된다.
+test("블록 추가 버튼으로 연 메뉴에서 키보드로 항목을 고르면 블록을 변환한다 (Issue #258)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("first block");
+  await editable.locator("p").first().hover();
+  await page.getByRole("button", { name: "Add block" }).click();
+  await expect(menu).toBeVisible();
+  await expect(editable.locator("p")).toHaveCount(2);
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+
+  await expect(menu).toHaveCount(0);
+  await expect(editable.locator("h1")).toHaveCount(1);
+  await expect(editable.locator("p").first()).toHaveText("first block");
 });

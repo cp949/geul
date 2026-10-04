@@ -14,6 +14,13 @@ import {
   recordKeydownPrevented,
 } from "./support/keydown-prevented.js";
 import { openShowcasePage } from "./support/showcase.js";
+import {
+  LEAVE_KEYS,
+  MAX_LEAVE_ATTEMPTS,
+  readCaretBlockText,
+  readEnterState,
+  recordEnterState,
+} from "./support/trigger-leave-block.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 /**
@@ -122,14 +129,6 @@ const openSmiBetweenBlocks = async (page: Page) => {
   return opened;
 };
 
-/** DOM selection의 캐럿이 놓인 블록 텍스트. 블록 이탈을 PM state와 무관하게 읽는다. */
-const caretBlockText = (page: Page) =>
-  page.evaluate(() => {
-    const anchor = document.getSelection()?.anchorNode;
-    const element = anchor instanceof Element ? anchor : anchor?.parentElement;
-    return element?.closest("p")?.textContent ?? null;
-  });
-
 // Issue #229: selectionchange 리스너가 PM 리스너보다 먼저 호출돼 낡은
 // state.selection을 읽었다. 방향키로 `:smi` 블록을 벗어나도 메뉴가 열린 채
 // 남았고 이어 누른 Enter가 캐럿 블록이 아닌 `:smi` 블록을 이모지로 바꿨다.
@@ -145,7 +144,7 @@ for (const key of ["Control+ArrowUp", "Control+End"]) {
     // 전제: 캐럿이 :smi 블록 밖으로 나갔다.
     await expect
       .poll(async () => {
-        const text = await caretBlockText(page);
+        const text = await readCaretBlockText(page);
         return text !== null && text !== ":smi";
       })
       .toBe(true);
@@ -188,4 +187,88 @@ test("이모지 피커가 열린 채 window를 스크롤해도 캐럿 하단에 
   await expect(menu).toBeVisible();
 
   await expectCaretMenuFollowsCaret(page, menu);
+});
+
+// Issue #258: 이동 키 직후(0ms)의 Enter는 PM state가 낡아 이전 `:sm` 블록을
+// 이모지로 바꿨다. 확정은 DOM selection의 캐럿 블록을 확인한다. Issue #229의
+// 150ms 재읽기 계약과 같은 이동 키를 쓴다. `Home 뒤 ArrowLeft`는 ArrowLeft를
+// grid 이동으로 소비해 이탈 시나리오가 아니므로 뺀다.
+
+/** `alpha` 블록과 그 뒤 `:sm` 블록을 만들고 picker가 열린 상태로 둔다. */
+const openSmAfterAlpha = async (page: Page) => {
+  const { editable, menu } = await openEmojiPickerExample(page);
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type("alpha");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(":sm");
+  await expect(menu).toBeVisible();
+  return { editable, menu };
+};
+
+for (const leave of LEAVE_KEYS.filter(
+  (candidate) => candidate.name !== "Home 뒤 ArrowLeft",
+)) {
+  for (const wait of leave.waits) {
+    test(`:sm 블록을 ${leave.name}로 떠난 ${wait}ms 뒤 Enter는 이모지를 삽입하지 않는다 (Issue #258)`, async ({
+      page,
+    }) => {
+      for (let attempt = 1; attempt <= MAX_LEAVE_ATTEMPTS; attempt += 1) {
+        const { editable, menu } = await openSmAfterAlpha(page);
+        await recordEnterState(page, '[aria-label="Emoji picker"]');
+
+        for (const key of leave.press) await page.keyboard.press(key);
+        if (wait > 0) {
+          await page.waitForTimeout(wait);
+          if ((await readCaretBlockText(page)) === ":sm") continue;
+          // 재읽기가 끝난 뒤에는 Enter 없이도 picker가 닫혀 있다.
+          await expect(menu).toHaveCount(0);
+        }
+        await page.keyboard.press("Enter");
+        const enter = await readEnterState(page);
+        if (enter?.caretBlock === ":sm") continue;
+
+        await expect(menu).toHaveCount(0);
+        // 캐럿이 떠난 `:sm` 블록은 텍스트 그대로 남는다.
+        if (leave.keepsTrigger) {
+          await expect(
+            editable.locator("p").filter({ hasText: /^:sm$/ }),
+          ).toHaveCount(1);
+        }
+        // 0ms는 두 경로가 모두 유효하다. Enter 때 picker가 아직 열려 있으면 가드가
+        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. 즉시 읽기가 먼저
+        // picker를 닫았으면 Enter가 편집기에서 평소대로 동작한다.
+        if (enter?.pickerOpen === true) {
+          await expect(editable.locator("p")).toHaveText(["alpha", ":sm"]);
+        }
+        return;
+      }
+      throw new Error(
+        `${MAX_LEAVE_ATTEMPTS}번 시도해도 이동이 유지되지 않았다`,
+      );
+    });
+  }
+}
+
+// Issue #258 회귀 보호: 같은 블록에 캐럿이 있으면 Enter가 이모지를 확정한다.
+test(":sm에서 Enter는 강조된 이모지로 블록을 바꾼다 (Issue #258)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openEmojiPickerExample(page);
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type(":sm");
+  await expect(menu).toBeVisible();
+  const highlighted = menu.locator('[role="option"][aria-selected="true"]');
+  const char = await highlighted.textContent();
+  expect(char).not.toBeNull();
+  expect(char).not.toBe("");
+
+  await page.keyboard.press("Enter");
+
+  await expect(menu).toHaveCount(0);
+  await expect(editable.locator("p")).toHaveCount(1);
+  // 블록 텍스트가 강조돼 있던 이모지 한 글자와 같다.
+  await expect(editable.locator("p")).toHaveText(char ?? "");
+  await expect(editable).toBeFocused();
 });

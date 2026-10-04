@@ -26,6 +26,7 @@ import {
 import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
+import { readDomCaretBlockId } from "./dom-caret-block.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { IframeLoadStatus } from "./iframe-load-status.js";
 import { MediaCaptions } from "./media-captions.js";
@@ -617,6 +618,15 @@ export const SlashMenu = ({
           return true;
         },
         activate: () => {
+          // 키보드로 `/query` 블록을 떠난 직후의 Enter는 확정하지 않는다
+          // (Issue #258). 이동 직후 PM state가 낡아 selectionchange 재읽기도
+          // 이 keydown보다 늦을 수 있다. DOM selection이 같은 블록의 접힌
+          // 캐럿이 아니면(다른 블록, 범위 선택, 블록 밖) 메뉴만 닫는다.
+          // handleMenuKeyDown이 이미 막았으므로 이 Enter는 문서를 바꾸지 않는다.
+          if (readDomCaretBlockId(element) !== current.blockId) {
+            setMenuState(null);
+            return;
+          }
           const item = filterItems(
             current.blockId,
             current.sourceBlockType,
