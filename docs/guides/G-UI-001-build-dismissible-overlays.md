@@ -30,19 +30,20 @@
 - 열린 `position: fixed` overlay의 위치는 `useFixedPlacement`(`packages/react/src/fixed-placement.ts`)가 정한다. 앵커 읽기, 재측정 구독, viewport clamp, clip 판정을 이 hook이 맡는다. 호출부는 `useClampedMenuPosition`을 직접 부르지 않고 `scroll`·`resize`를 직접 구독하지 않는다. 반환한 `{ menuRef, style }`을 overlay 표면에 단다.
 - 열림 상태는 `open`과 식별자(`blockId`, 트리거 요소)만 가진다. 클릭 시점의 rect나 좌표를 값으로 보관하지 않는다. 보관한 좌표는 스크롤에서 앵커와 떨어진다.
 - 앵커는 `readAnchor: () => { left, top } | null`로 넘긴다. DOM에서 지금 읽는다.
-  - 오프셋(예: 트리거 하단 + 4)은 `readAnchor` 안에서 한 번만 정의한다. 열 때와 갱신 때 공식을 따로 두지 않는다. 트리거 아래 메뉴는 `readAnchorBelowTrigger`를 쓴다.
+  - 오프셋(예: 트리거 하단 + 4)은 `readAnchor` 안에서 한 번만 정의한다. 열 때와 갱신 때 공식을 따로 두지 않는다. 트리거 아래 메뉴는 `readAnchorBelowTrigger`를 쓴다. 오른쪽 끝을 맞추는 `clampAnchor: "topRight"` 메뉴는 `readAnchorBelowTriggerEnd`(트리거 오른쪽·하단, 간격 0)를 쓴다.
   - 사라질 수 있는 대상은 요소가 아니라 식별자로 찾는다(`blockId`로 DOM 조회). 요소를 보관하면 `isConnected`를 확인한다.
   - DOM을 읽을 수 없으면 `null`을 돌려준다. hook이 마지막 좌표를 유지한다. 닫기는 호출부가 한다.
   - 열린 첫 읽기가 `null`일 수 있으면 `fallbackAnchor`를 준다. 없으면 (0, 0)에 뜬다.
   - 매 렌더 새 함수여도 된다. hook이 ref로 최신 함수만 쓰고 구독을 다시 걸지 않는다.
 - 읽는 시점은 렌더 직후다. 이벤트 핸들러가 아니다. 구독은 `open` 동안 owner window의 `scroll`(중첩 scroll container를 위한 capture)·`resize`이고 강제 렌더만 일으킨다. 이벤트 안에서 앵커를 읽어 상태에 쓰지 않는다. 앵커가 다른 overlay 안에 있으면(툴바 안 트리거) 그 overlay는 이벤트 뒤 한 번 더 렌더된 뒤에야 움직여 낡은 rect를 읽는다.
 - 앵커를 움직이는 상태는 hook을 부른 컴포넌트 안에 둔다. 다른 컴포넌트의 상태가 앵커를 움직이면 이 hook은 다시 읽지 않는다.
+  - 렌더 없이 앵커가 움직이는 경우(예: 툴바 폭 변화)는 호출부가 `ResizeObserver`로 렌더를 강제한다. code-block 툴바가 메뉴가 열린 동안 건다(Issue #249).
 - 렌더 직후 effect는 같은 좌표에서 `setState`를 부르지 않는다. 상태와 같은 값을 ref에도 두고 `Object.is`로 먼저 거른다. 같은 값으로 `setState`하면 `Maximum update depth exceeded`로 렌더가 연쇄한다.
 - 선택에 붙는 popover는 `clip: true`를 준다. 앵커 점이 스크롤 컨테이너의 보이는 영역 밖이면 hook이 `visibility`로 숨긴다. 트리거를 따라가는 메뉴는 기본값 `false`다. 열린 자식 메뉴가 있는 툴바는 `clipExempt`를 준다. 호출부가 clip을 직접 판정하지 않고 `style`에 `visibility`를 넣지 않는다. 판정과 면제는 `use-clip-visibility.ts`의 `useClipVisibility`가 소유한다(미디어 툴바·code-block 툴바의 박스 기준 clip은 아래 예외).
 - selection으로 여는 overlay의 reader는 열 때 `cloneRange()`로 보관한 `Range`의 rect를 읽는다. 편집 모드에서는 라이브 selection이 입력창으로 옮겨가 읽을 수 없다. 편집 중 가드(`editingRef`)는 열림·닫힘·payload 판정에만 쓴다. 위치 갱신을 막지 않는다. 편집 중에도 스크롤을 따라가야 한다.
 - clamp 계산은 `useClampedMenuPosition`이 하고 `useFixedPlacement`가 내부에서 부른다. 렌더된 크기를 재고, CSS transform offset을 clamp 입력에 포함하고, 크기 변경을 `ResizeObserver`로 다시 계산한다. 호출부는 `clampAnchor`(`topLeft`·`topRight`·`centerAbove`·`centerBelow`·`leftOfAnchor`·`aboveLeft`)로 박스와 앵커 좌표의 관계만 고른다.
 - 이 규칙의 예외가 있다. 새 overlay는 예외를 근거로 삼지 않고 `useFixedPlacement`를 쓴다.
-  - `useClampedMenuPosition` 직접 호출, 기존 호출부: 표 핸들 메뉴, 표 그립 메뉴, 표 셀 서식 메뉴, code-block 언어 콤보박스(툴바·팝오버·more 메뉴). 툴바는 `useClipVisibility`로 clip을 판정한다(아래 박스 기준 clip 예외).
+  - `useClampedMenuPosition` 직접 호출, 기존 호출부: 표 핸들 메뉴, 표 그립 메뉴, 표 셀 서식 메뉴, code-block 언어 콤보박스 툴바. 툴바는 `useClipVisibility`로 clip을 판정한다(아래 박스 기준 clip 예외).
   - `useClampedMenuPosition` 직접 호출, 미디어 툴바 more 메뉴: `useAnchoredSubmenu`가 트리거 rect와 컨테이너 `ResizeObserver`로 앵커를 정한다. React 렌더 없이 컨테이너 폭이 바뀌어도 `ResizeObserver`가 재정렬한다.
   - 미디어 툴바 박스 기준 clip: `useFixedPlacement({ clip })`은 앵커 점 기준이라 박스 판정에 쓸 수 없다. `useClipVisibility`를 직접 부른다. 열린 More 메뉴는 `exempt`로 준다.
   - code-block 툴바 박스와 앵커 점 clip: `useClampedMenuPosition`을 유지한 채 `useClipVisibility`로 박스와 앵커 점을 함께 판정한다. 언어 popover나 more 메뉴가 열려 있으면 `exempt`로 숨기지 않는다. 툴바 안 요소에 포커스가 있어도 훅이 숨기지 않는다.
