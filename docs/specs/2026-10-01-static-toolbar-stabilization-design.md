@@ -294,3 +294,12 @@ Issue #222가 추가했다.
 - StaticToolbar: 구분선·`customBlock`·미디어 선택에서 mark 5개·색상 2개가 꺼진다.
 - FormattingToolbar·LinkToolbar: 같은 선택에서 열리지 않는다. 구분선은 전담 툴바가 없어 닫아도 잃는 정보가 없다.
 - `markingDisabledReason`을 선택 종류를 열거하지 않는 일반 문구로 바꿨다. ko "이 선택에서는 서식을 적용할 수 없습니다", en "Formatting isn't available for this selection". 본문 §4의 "세 경우가 문구 하나를 공유한다" 서술은 당시 결정이다.
+- [Issue #245](https://github.com/cp949/geul/issues/245): 블록 타입 변환 버튼이 core 거절 조건을 반영하지 않아 활성인데 무반응이던 세 경우를 고쳤다. 자식 있는 블록 → Code, 탭 등 `isValidInlineText`를 통과하지 못하는 문자가 든 `codeBlock` → 일반 블록, `codeBlock`만 여러 개 선택이다.
+- core `SelectionQuery.getBlockTypeBlocker(blockId, blockType, { clearContent })`와 `getBlockTypesBlocker(blockIds, blockType)`: `setBlockType`·`setBlockTypes`의 구조적 거절 사유를 돌려준다. 거절하지 않으면 `null`이다. 명령과 같은 판정 함수를 쓴다.
+- `BlockTypeBlocker`: `HAS_CHILDREN`, `INVALID_TEXT`, `LIST_CODE_MISMATCH`, `ALL_CODE_BLOCK`, `NOT_FOUND`, `NOT_APPLICABLE`. 같은 타입 변환(no-op)과 `language`·`startNumber` 입력 검증은 사유가 아니다.
+- react `computeFormattingToolbarState`: 옵션 id별 사유를 `blockTypeBlockers`에 싣는다. `isSameStaticToolbarState`가 비교하므로 탭 입력처럼 블록 타입이 그대로인 변경도 버튼에 반영된다.
+- StaticToolbar: 아이콘 버튼과 블록 타입 메뉴 옵션이 비활성이면 `aria-disabled`와 사유 `title`을 가진다. 비활성 옵션을 눌러도 명령을 호출하지 않고 메뉴를 닫지 않는다.
+- 사유 문구: `HAS_CHILDREN`은 `blockTypeDisabledByChildrenReason`, `INVALID_TEXT`는 `blockTypeDisabledByInvalidTextReason`이다. 나머지는 `blockTypeDisabledReason`을 공유한다.
+- FormattingToolbar select, 블록 사이드 메뉴 Turn into, 슬래시 메뉴: 막힌 옵션을 목록에서 뺀다. 현재 타입 말고 고를 옵션이 없으면 select와 Turn into 섹션을 그리지 않는다.
+- 슬래시 메뉴는 `clearContent: true`로 질의한다. `codeBlock` source에서는 열리지 않아 탭 경로는 해당하지 않는다.
+- 범위 밖: 탭을 포함한 `codeBlock`을 일반 블록으로 바꾸게 하는 core 계약 변경.

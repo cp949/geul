@@ -309,6 +309,8 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
   - 대상 블록이 없으면(여러 블록 선택 포함) 블록 컨트롤 전부가 사유 `title`을 가진다. 들여쓰기·내어쓰기가 불가능하면 nesting 사유를 가진다.
   - 코드 블록·atom 블록(구분선·미디어·`customBlock`)·표 셀 범위에서는 mark 버튼 5개와 색상 버튼 2개가 서식 불가 사유 `title`을 가진다.
   - 현재 블록이 변환을 허용하지 않는 블록 타입 아이콘 버튼은 변환 불가 사유 `title`을 가진다. 예: 코드 블록 안의 목록 4종, 목록 안의 Code.
+  - core가 변환을 거절하는 경우도 같다. 자식이 있는 블록의 Code, 탭이 든 코드 블록의 일반 블록 변환, 코드 블록만 여러 개 선택한 변환이다. 자식과 탭 사유는 전용 문구를 가진다.
+  - 블록 타입 메뉴의 비활성 옵션도 사유 `title`을 가진다. 눌러도 변환하지 않고 메뉴를 닫지 않는다.
   - 블록 타입 아이콘 버튼의 사유 우선순위는 대상 블록 없음, 변환 불가 순이다.
   - 활성 컨트롤의 `title`은 라벨 그대로다.
   - 사유 문구는 `dictionary.toolbar.static`의 `markingDisabledReason`, `blockTypeDisabledReason`으로 바꾼다.
