@@ -14,6 +14,9 @@
  * - 이슈 표 8행을 매개변수화한다. 각 행은 대상 버튼에 포커스를 두고 Enter를
  *   누른 채 repeat를 보낸 뒤, 블록 수와 편집기 DOM이 첫 Enter 직후와 같고
  *   첫 Enter의 효과가 그대로 적용됐는지 본다.
+ * - 표 선택 툴바 Cell formatting 트리거는 팝업 "안" 버튼이 아니라 툴바 자체라
+ *   8행과 단언 틀이 달라 별도 test로 둔다(Issue #256). 반복이 편집기에 닿으면
+ *   셀 범위 선택이 풀리므로 `.selectedCell` 유지까지 본다.
  * - 대조(링크 URL 입력창)와 상시 툴바(mark 버튼)는 이번 변경이 바꾸지 않는
  *   동작을 고정한다.
  *
@@ -22,8 +25,9 @@
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { insertFilledImage, openDemo } from "./support/demo.js";
+import { insertFilledImage, insertTable, openDemo } from "./support/demo.js";
 import { openShowcasePage } from "./support/showcase.js";
+import { dragSelectCells } from "./support/table-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 /** 첫 Enter 뒤에 더 보내는 repeat keydown 수. */
@@ -241,6 +245,52 @@ test.describe("팝업 안 버튼의 Enter 반복", () => {
       await expectApplied();
     });
   }
+});
+
+test("표 선택 툴바 Cell formatting에서 Enter를 길게 눌러도 셀 범위 선택이 풀리지 않는다", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (row: number, column: number) =>
+    table.locator("tr").nth(row).locator("td").nth(column);
+  const labels = [
+    [0, 0, "A1"],
+    [0, 1, "B1"],
+    [1, 0, "A2"],
+    [1, 1, "B2"],
+  ] as const;
+  for (const [row, column, text] of labels) {
+    await cell(row, column).click();
+    await page.keyboard.type(text);
+  }
+  await cell(0, 0).click();
+  await dragSelectCells(page, cell(0, 0), cell(1, 1));
+  const selected = table.locator(".selectedCell");
+  await expect(selected).toHaveCount(4);
+  const trigger = page.getByRole("button", { name: "Cell formatting" });
+  const menu = page.getByRole("menu", { name: "Cell formatting" });
+  await trigger.focus();
+
+  await page.keyboard.down("Enter");
+  await expect(menu).toBeVisible();
+  await yieldFrame(page);
+  const afterFirst = await editable.innerHTML();
+  const blocksAfterFirst = await blockCount(page);
+  await sendRepeats(page);
+
+  // 반복이 편집기에 닿으면 첫 repeat가 메뉴를 닫고 선택을 푼다.
+  await expect(selected).toHaveCount(4);
+  expect(await editable.innerHTML()).toBe(afterFirst);
+  expect(await blockCount(page)).toBe(blocksAfterFirst);
+  await expect(menu).toBeVisible();
+  await expect(trigger).toBeFocused();
+
+  // 키를 떼면 억제가 풀려 다음 Enter가 토글로 메뉴를 닫는다.
+  await page.keyboard.up("Enter");
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(editable).toBeFocused();
 });
 
 test("대조: 링크 URL 입력창의 Enter 반복은 여전히 새지 않는다", async ({
