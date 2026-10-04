@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
+import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
 import { TableCellFormatMenu } from "./table-cell-format-menu.js";
 import { tableCommandErrorMessage } from "./table-command-error-messages.js";
 import { findTable } from "./table-handle-geometry.js";
@@ -167,6 +168,7 @@ export const TableSelectionToolbar = () => {
       <div
         aria-label={dictionary.toolbar.tableSelection.ariaLabel}
         className="geul-table-selection-toolbar"
+        onKeyDown={handlePopupButtonKeyDown}
         ref={menuRef}
         role="toolbar"
         style={style}

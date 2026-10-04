@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorContent } from "../src/index.js";
 import { TableSelectionToolbar } from "../src/table-selection-toolbar.js";
 import { withProvider } from "./fake-editor-provider.js";
+import { releaseEnterRepeatSuppression } from "./menu-keyboard-test-support.js";
 import {
   focusOutsideEditor,
   mountTableEditor,
@@ -41,6 +42,9 @@ import { fireSelectionChange } from "./selection-events.js";
 // assertion이 먼저 던질 때 DOM이 남아 다음 테스트의 getByRole(...)가
 // "multiple elements"로 실패한다 — 진짜 실패가 가려진다.
 afterEach(cleanup);
+// 트리거의 첫 Enter가 건 문서 capture 반복 억제를 테스트 사이에 남기지 않는다
+// (G-TST-003). 단언이 먼저 던져도 풀린다.
+afterEach(releaseEnterRepeatSuppression);
 
 const mergeLabel = "Merge cells";
 const splitLabel = "Split cell";
@@ -650,6 +654,26 @@ describe("Cell formatting 버튼으로 색상 메뉴를 연다", () => {
 
     expect(screen.queryByRole("menu", { name: "Cell formatting" })).toBeNull();
     expect(document.activeElement).toBe(editable);
+  });
+
+  // 툴바 루트 onKeyDown 위임(Issue #256). 반복 Enter가 편집기에 닿으면 셀 범위
+  // 선택이 풀린다. 첫 Enter는 막지 않는다. 첫 Enter가 문서 capture 반복 억제를
+  // 걸고, 반복 keydown은 그 억제가 삼킨다. jsdom은 keydown에서 click을 만들지
+  // 않아 메뉴 열림은 보지 않는다. 메뉴 열림은 e2e가 소유한다.
+  it("트리거의 첫 Enter는 막지 않고 반복 Enter는 막는다", () => {
+    const { firstMergedCell } = renderMergedCellTable();
+    placeCaret(firstMergedCell);
+    fireSelectionChange();
+    const trigger = screen.getByRole("button", { name: formatLabel });
+
+    const firstNotPrevented = fireEvent.keyDown(trigger, { key: "Enter" });
+    const repeatNotPrevented = fireEvent.keyDown(trigger, {
+      key: "Enter",
+      repeat: true,
+    });
+
+    expect(firstNotPrevented).toBe(true);
+    expect(repeatNotPrevented).toBe(false);
   });
 });
 
