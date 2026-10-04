@@ -95,6 +95,7 @@ import { MediaDropPasteExtension } from "./media-drop-paste-extension.js";
 import { MediaLocalPreviewLifecycleExtension } from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import { NearestBlockClickExtension } from "./nearest-block-click-extension.js";
+import { ToggleCollapseArrowKeyExtension } from "./toggle-collapse-arrow-key-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseSelectionGuardExtension } from "./toggle-collapse-selection-guard-extension.js";
 import { ToggleCollapseVisibilityExtension } from "./toggle-collapse-visibility-extension.js";
@@ -696,6 +697,7 @@ export const createProductionEditor = (options: {
       }),
       ToggleCollapseVisibilityExtension,
       ToggleCollapseSelectionGuardExtension,
+      ToggleCollapseArrowKeyExtension,
       ToggleCollapseMarkerExtension,
       TrailingBlockExtension,
       // ExtensionManager.plugins가 addProseMirrorPlugins 결과를

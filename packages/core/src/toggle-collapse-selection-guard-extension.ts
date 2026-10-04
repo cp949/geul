@@ -1,11 +1,13 @@
 import { Extension } from "@tiptap/core";
-import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
+import type { ResolvedPos } from "@tiptap/pm/model";
 import {
   Plugin,
   TextSelection,
   type EditorState,
   type Selection,
 } from "@tiptap/pm/state";
+
+import { outermostCollapsedContainerDepth } from "./toggle-collapse-hidden.js";
 
 // selection 끝점이 접힌 toggleListItem의 숨은 자손 안에 있으면 가장 바깥
 // 접힌 toggle의 라벨 끝으로 옮긴다(Issue #246). 숨은 그룹은 display:none이라
@@ -16,25 +18,6 @@ import {
 // 판정 기준은 ToggleCollapseVisibilityExtension과 같다. `collapsed === true`인
 // toggleListItem만 본다. 판정은 끝점의 조상 체인(깊이 O(d))만 훑고 문서
 // 전체를 스캔하지 않는다.
-
-// 접힌 toggle의 라벨(blockContainer 첫 자식)인지 판정한다.
-const isCollapsedToggleContent = (node: ProseMirrorNode | null): boolean =>
-  node !== null &&
-  node.type.name === "toggleListItem" &&
-  node.attrs.collapsed === true;
-
-// $pos가 숨은 그룹 안이면 가장 바깥 접힌 toggle의 blockContainer 깊이를
-// 돌려준다. 숨은 그룹은 blockGroup이고, 그 부모 blockContainer의 첫 자식이
-// 접힌 toggle이다. 얕은 깊이부터 훑어 첫 일치를 쓰면 가장 바깥이다.
-const outermostCollapsedContainerDepth = ($pos: ResolvedPos): number | null => {
-  for (let depth = 1; depth <= $pos.depth; depth += 1) {
-    if ($pos.node(depth).type.name !== "blockGroup") continue;
-    const container = $pos.node(depth - 1);
-    if (container.type.name !== "blockContainer") continue;
-    if (isCollapsedToggleContent(container.firstChild)) return depth - 1;
-  }
-  return null;
-};
 
 // 가장 바깥 접힌 toggle의 라벨 끝 위치. 숨지 않았으면 null이다.
 const clampedPosition = ($pos: ResolvedPos): number | null => {
