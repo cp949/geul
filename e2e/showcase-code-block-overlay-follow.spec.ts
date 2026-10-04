@@ -120,6 +120,7 @@ const expectGapZero = async (
   label: string,
   previousTriggerY?: number,
 ): Promise<number> => {
+  const delayedCheckAt = Date.now() + 450;
   const read = () => readSample(page, menu.triggerName, menu.menuSelector);
 
   if (previousTriggerY !== undefined) {
@@ -139,20 +140,32 @@ const expectGapZero = async (
   );
   expect(early.inViewport, `${label}: rAF 2회 뒤 뷰포트 안`).toBe(true);
 
-  // 이후. 0으로 유지·수렴하는지 기다린다.
+  // 이후. 동작 기준 450ms 뒤 첫 geometry를 재고, 더 늦은 값으로 대체하지 않는다.
+  // poll은 450ms 경계를 기다릴 뿐, 그 전의 정상값으로 통과시키지 않는다.
+  const delayed: { sample: Sample | null } = { sample: null };
   await expect
     .poll(
       async () => {
-        const sample = await read();
-        return Math.abs(sample.gapY) <= TOLERANCE && sample.inViewport;
+        if (Date.now() < delayedCheckAt) return false;
+        delayed.sample = await read();
+        return true;
       },
       {
-        message: `${label}: gapY 수렴과 뷰포트 안`,
+        message: `${label}: 450ms 뒤 geometry 측정`,
         timeout: POLL_TIMEOUT_MS,
+        intervals: [10],
       },
     )
     .toBe(true);
-  return (await read()).triggerY;
+  if (delayed.sample === null) {
+    throw new Error(`${label}: 450ms 뒤 측정값 없음`);
+  }
+  expect(
+    Math.abs(delayed.sample.gapY),
+    `${label}: 450ms 뒤 gapY`,
+  ).toBeLessThanOrEqual(TOLERANCE);
+  expect(delayed.sample.inViewport, `${label}: 450ms 뒤 뷰포트 안`).toBe(true);
+  return delayed.sample.triggerY;
 };
 
 /** 안쪽 스크롤 컨테이너의 scrollTop을 읽는다. */

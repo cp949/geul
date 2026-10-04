@@ -745,18 +745,22 @@ describe("readAnchorBelowTriggerEnd", () => {
   it("트리거 오른쪽 가장자리와 하단을 간격 없이 돌려준다", () => {
     const trigger = document.createElement("button");
     document.body.append(trigger);
-    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
-      left: 30,
-      top: 10,
-      right: 70,
-      bottom: 40,
-      x: 30,
-      y: 10,
-      width: 40,
-      height: 30,
-      toJSON: () => ({}),
-    } as DOMRect);
-    expect(readAnchorBelowTriggerEnd(trigger)).toEqual({ left: 70, top: 40 });
+    try {
+      vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+        left: 30,
+        top: 10,
+        right: 70,
+        bottom: 40,
+        x: 30,
+        y: 10,
+        width: 40,
+        height: 30,
+        toJSON: () => ({}),
+      } as DOMRect);
+      expect(readAnchorBelowTriggerEnd(trigger)).toEqual({ left: 70, top: 40 });
+    } finally {
+      trigger.remove();
+    }
   });
 
   it("문서에서 떨어진 트리거는 null을 돌려준다", () => {
