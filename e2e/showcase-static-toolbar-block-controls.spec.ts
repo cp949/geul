@@ -21,6 +21,8 @@ import { openShowcasePage } from "./support/showcase.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 const DISABLED_REASON = "Available when the cursor is in a single block";
+const MARKING_DISABLED_REASON =
+  "Formatting isn't available in code blocks, media blocks, or table cell ranges";
 
 /** 예제를 열고 첫 문단에 캐럿을 둔다. */
 const openWithCaretInFirstBlock = async (page: Page) => {
@@ -106,4 +108,29 @@ test("대상 블록이 없을 때도 비활성 컨트롤이 키보드 포커스�
   await expect(trigger).toBeFocused();
   await quote.focus();
   await expect(quote).toBeFocused();
+});
+
+test("샘플 전체 선택(Ctrl+A)이 codeBlock을 걸치면 Bold가 비활성이고 눌러도 서식이 바뀌지 않는다", async ({
+  page,
+}) => {
+  // Issue #241. 여러 블록 선택에서 단일 블록 판정만 보면 mark 버튼이
+  // 활성으로 남고, core는 codeBlock 교차 선택의 mark를 거절해 무반응이 된다.
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editable = page.getByRole("textbox", { name: "Editor" });
+  await editable.locator("p").first().click();
+  await page.keyboard.press("Control+A");
+
+  // 예제는 FormattingToolbar도 같이 띄우므로 StaticToolbar 안으로 좁힌다.
+  const bold = page
+    .getByRole("toolbar", { name: "Toolbar" })
+    .getByRole("button", { name: "Bold" });
+  await expect(bold).toHaveAttribute("aria-disabled", "true");
+  await expect(bold).toHaveAttribute("title", MARKING_DISABLED_REASON);
+  const strongBefore = await editable.locator("strong").count();
+
+  // aria-disabled 컨트롤은 Playwright가 클릭을 막으므로 force로 우회한다.
+  await bold.click({ force: true });
+
+  await expect(editable.locator("strong")).toHaveCount(strongBefore);
 });
