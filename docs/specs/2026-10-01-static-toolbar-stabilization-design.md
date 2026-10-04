@@ -280,3 +280,11 @@ Issue #222가 추가했다.
 - react `computeFormattingToolbarState`에 `multiBlockSelection`을 더했다. 닿은 블록이 둘 이상이고 단일 블록·미디어·표 셀 범위가 아닐 때만 채운다.
 - StaticToolbar: 블록 타입 트리거·아이콘 버튼이 켜진다. Indent/Outdent는 계속 꺼진다. Code는 꺼진다.
 - FormattingToolbar: 블록 타입 select가 뜬다. 타입이 섞여 있으면 값 없는 `blockTypeNeutralLabel` 항목을 보인다.
+- [Issue #241](https://github.com/cp949/geul/issues/241): §4의 "코드 블록 선택" 판정을 core mark 가드와 맞췄다. 단일 블록 선택만 보던 판정이 여러 블록에 걸친 선택을 놓쳤다.
+- core `SelectionQuery.selectionIntersectsCodeBlock()`: 선택이 `codeBlock`의 문자 구간과 겹치면 true다. 끝점만 닿거나 빈 `codeBlock`만 덮으면 false다. 캐럿이 `codeBlock` 안이면 true다.
+- react `computeFormattingToolbarState`에 `selectionIntersectsCodeBlock`을 더했다.
+- StaticToolbar: `codeBlock`을 걸친 여러 블록 선택(`Ctrl+A` 포함)에서도 mark 5개·색상 2개가 `markingDisabledReason`으로 꺼진다.
+- FormattingToolbar: 같은 선택에서 mark·색상 버튼을 숨긴다. 블록 타입 select는 남긴다.
+- LinkToolbar: 같은 선택에서 닫힌다.
+- 끝점만 `codeBlock`에 닿는 선택은 core가 mark를 적용하므로 버튼이 켜져 있다.
+- 구분선 `NodeSelection`에서 mark 버튼이 켜진 채 무반응인 현상은 이 변경의 범위 밖이다.
