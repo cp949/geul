@@ -66,7 +66,8 @@
   - Shift+Enter처럼 호출부 전용 키는 `handleMenuKeyDown` 호출 전에 거른다. 예: media 캡션 textarea의 줄바꿈.
   - 패키지 밖 소비처: `handleMenuKeyDown`과 타입 `MenuKeyboardEvent`·`MenuKeyboardHandlers`는 공개다(Issue #247). 소비자가 만드는 트리거 popup도 이 함수를 거친다. `suppressEnterRepeat` 등 그 밖 이름은 내부다.
   - 소비자가 만드는 트리거 popup은 확정하기 전 캐럿 블록을 확인한다. 키보드로 트리거 블록을 떠난 직후의 Enter는 `editor.getCaretBlockContext()`로 거를 수 없다. PM state가 이동 직후 낡아 이전 블록을 돌려준다. DOM selection이 popup을 연 블록 안의 접힌 캐럿인지 `activate`에서 확인한다. 다른 블록이거나, 범위 선택이거나, 블록 밖(atom 블록 선택)이면 popup만 닫고 확정하지 않는다. 예: `apps/showcase/src/examples/17-mention/mention-picker.tsx`의 `readDomCaretBlockId`.
-  - 내장 `SlashMenu`와 `EmojiPicker`에는 이 확인이 아직 없다. 재읽기(#229)만 있다. 이동 키 직후(0ms) Enter는 별건 이슈로 추적한다.
+  - 이 확인의 위치(Issue #258): 내장 `SlashMenu`·`EmojiPicker`는 react 내부 헬퍼 `packages/react/src/dom-caret-block.ts`의 `readDomCaretBlockId`를 `activate`에서 쓴다. 이 헬퍼는 공개 export가 아니다. 소비자는 위 예제의 함수를 복사한다. 공개 질의는 소비자 요구가 생기면 별도 이슈로 다룬다. `selectionchange` 재읽기 추출은 보류다. 세 구현의 주변 로직이 달라 추출하면 #229 회귀 위험이 있다.
+  - 가드는 키보드 확정 경로에만 있다. 마우스 클릭 경로 `selectItem`에는 없다. 클릭은 `selectionchange` 재읽기 뒤에 일어나 낡은 state 구간이 사실상 없다.
   - `selectionchange` 뒤 `setTimeout(0)` 재읽기(Issue #229, #247)는 popup을 닫는 용도다. Enter 확정의 방어선은 위 DOM selection 확인이다. 재읽기만으로는 이동 키 직후 곧바로 오는 Enter를 막지 못한다.
   - 규칙 밖: `useDismissibleOverlay`의 Escape 리스너. 이 리스너는 `handleMenuKeyDown`을 거치지 않고 `defaultPrevented`와 `isComposing`을 직접 본다.
   - 규칙 밖: 닫힌 트리거의 Enter. 네이티브 click으로 메뉴를 여는 키라서 module을 거치지 않는다(Issue #228).

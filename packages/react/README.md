@@ -168,7 +168,7 @@ handleMenuKeyDown(event, {
 });
 ```
 
-키보드로 `@query` 블록을 떠난 직후의 Enter는 `activate`에서 막는다. `editor.getCaretBlockContext()`는 그때 낡은 블록을 돌려준다. DOM selection이 속한 블록이 popup을 연 블록과 같은지 확인한다. 예제의 `readDomCaretBlockId`가 그 구현이다.
+키보드로 `@query` 블록을 떠난 직후의 Enter는 `activate`에서 막는다. `editor.getCaretBlockContext()`는 그때 낡은 블록을 돌려준다. DOM selection이 속한 블록이 popup을 연 블록과 같은지 확인한다. 예제의 `readDomCaretBlockId`가 그 구현이다. 내장 `SlashMenu`와 `EmojiPicker`는 같은 확인을 이미 한다. 이 헬퍼는 공개 API가 아니다.
 
 ### 이미지 업로드
 
