@@ -79,10 +79,16 @@ export const useClipVisibility = (
     const handleFocusOut = (event: FocusEvent) => {
       const nodes = nodesRef.current;
       const { target, relatedTarget } = event;
-      if (!(target instanceof Node)) return;
+      const NodeConstructor = ownerDocument.defaultView?.Node;
+      if (
+        NodeConstructor === undefined ||
+        !(target instanceof NodeConstructor)
+      ) {
+        return;
+      }
       if (!nodes.some((node) => node.contains(target))) return;
       if (
-        relatedTarget instanceof Node &&
+        relatedTarget instanceof NodeConstructor &&
         nodes.some((node) => node.contains(relatedTarget))
       ) {
         return;

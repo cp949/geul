@@ -6,6 +6,7 @@
  * - 앵커 판정: `anchor`가 있으면 앵커 점도 영역 안이어야 보인다. `box: false`면 박스는 보지 않는다.
  * - 면제: `exempt`이거나 노드 안에 포커스가 있으면 영역 밖이어도 보인다.
  * - 포커스 이탈: 포커스가 보관 노드 밖으로 나가면 렌더를 강제해 다시 판정한다.
+ * - iframe 문서에서도 포커스 이탈을 다시 판정한다. 노드 타입 검사는 문서 window의 `Node`를 쓴다.
  * - 노드 사이 포커스 이동은 렌더를 강제하지 않는다.
  * - `collect`가 빈 배열이면 어떤 노드도 건드리지 않는다.
  * - `element`가 `null`이면 판정도 구독도 하지 않는다.
@@ -200,6 +201,36 @@ describe("useClipVisibility", () => {
   });
 
   describe("포커스 이탈", () => {
+    it("다른 window 문서에서 포커스가 이탈하면 다시 판정한다", () => {
+      const iframe = document.createElement("iframe");
+      document.body.append(iframe);
+      try {
+        const frameDocument = iframe.contentDocument;
+        if (frameDocument === null) throw new Error("iframe 문서가 없다");
+        const host = frameDocument.createElement("div");
+        frameDocument.body.append(host);
+        makeScrollContainer(host);
+
+        const options = { a: {} };
+        const { container, rerender } = render(
+          <Probe element={host} options={options} />,
+          { container: frameDocument.body },
+        );
+        const overlay = byId(container, "a");
+        stubRect(overlay, OUTSIDE);
+        act(() => byId(container, "a-button").focus());
+        rerender(<Probe element={host} options={options} />);
+        expect(overlay.style.visibility).toBe("");
+
+        act(() => byId(container, "outside").focus());
+
+        expect(overlay.style.visibility).toBe("hidden");
+      } finally {
+        cleanup();
+        iframe.remove();
+      }
+    });
+
     it("포커스가 노드 밖으로 나가면 렌더를 강제해 숨긴다", () => {
       const host = mountHost();
       const options = { a: {} };
