@@ -332,6 +332,23 @@ export const dividerBlock = (id: string): Block => ({
 });
 
 /**
+ * toggleListItem 블록 리터럴. collapsed·children은 주어질 때만 필드로 넣어
+ * 부재와 명시를 구분한다. 접힌 toggle 가드·방향키·Enter 테스트가 공유한다
+ * (G-TST-002).
+ */
+export const toggleBlock = (
+  id: string,
+  text: string,
+  options: { collapsed?: boolean; children?: Block[] } = {},
+): Block => ({
+  id,
+  type: "toggleListItem",
+  content: [{ text }],
+  ...(options.collapsed === undefined ? {} : { collapsed: options.collapsed }),
+  ...(options.children === undefined ? {} : { children: options.children }),
+});
+
+/**
  * checkListItem 블록 리터럴. block-type-keyboard-extension.test.ts(RD-001
  * 캐럿 단축키)와 block-type-input-rule-extension.test.ts(RD-002 DELTA-02
  * native shorthand)가 같은 리터럴을 필요로 해 공유 위치로 옮겼다(G-TST-002).

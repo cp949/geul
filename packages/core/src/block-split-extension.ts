@@ -4,6 +4,7 @@ import { Fragment, type Node } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
+import { isCollapsedToggleContent } from "./toggle-collapse-hidden.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
 // block-container-extension.ts). Tiptap 기본 splitBlock은 canSplit(doc, pos,
@@ -14,6 +15,12 @@ import { resolveSelectionAwareState } from "./selection-aware-state.js";
 // 전부)이 새 컨테이너로 통째로 넘어가 원본이 자식을 잃는다 — 이 형태는 쓰지
 // 않는다(D23). 대신 컨테이너를 직접 재구성해 새 블록을 원본의 첫 자식으로
 // 삽입한다(D23, 사용자 결정 완료).
+//
+// D23은 접히지 않은 블록에만 적용한다(#252). 접힌 toggleListItem은 기존
+// 자식 그룹이 숨겨져 있어 첫 자식으로 넣은 새 블록도 숨는다. 화면은 안
+// 바뀌고 이어지는 입력이 숨은 블록으로 사라진다. 접힌 toggle은 자식 유무와
+// 무관하게 원본 컨테이너(기존 그룹 유지) 바로 뒤에 새 형제를 둔다. 새
+// 형제는 접힘 없이 펼친 목록 항목이다.
 //
 // 참조: BlockNote v0.54.0
 // packages/core/src/api/blockManipulation/commands/splitBlock/(구조만
@@ -177,20 +184,34 @@ function splitAtCaret(tr: Transaction): boolean {
   // 있을 때만 성립한다. 자식이 전혀 없던 블록은 이관 위험 자체가 없으므로
   // 새 블록을 형제로 삽입한다 — R1부터 있던 "Enter로 문단을 둘로 나눈다"는
   // 기본 동작이 사용자가 기대하는 형태(형제)를 되찾는다.
+  // 접힌 toggle은 자식이 있어도 형제로 삽입한다(#252, 위 머리 주석).
   const existingGroup = container.childCount > 1 ? container.child(1) : null;
 
   let replacement: Fragment;
-  if (existingGroup === null) {
-    // 원본은 자신의 attrs를 보존한 채 콘텐츠만 줄이고(blockGroup 없음),
-    // 새 컨테이너를 그 형제로 바로 이어붙인다 — 두 노드를 한 Fragment로
-    // replaceWith에 넘기면 원본 자리에 형제 둘이 들어간다.
+  let newCaretPos: number;
+  // 접힌 toggle은 숨은 그룹에 새 블록을 넣지 않는다(#252). 자식이 있어도
+  // 형제 분기로 보낸다. 판정은 범위 삭제 후 tr.doc 기준 contentNode다.
+  if (existingGroup === null || isCollapsedToggleContent(contentNode)) {
+    // 원본은 자신의 attrs를 보존한 채 콘텐츠만 줄이고, 새 컨테이너를 그
+    // 형제로 바로 이어붙인다 — 두 노드를 한 Fragment로 replaceWith에 넘기면
+    // 원본 자리에 형제 둘이 들어간다. 접힌 toggle이면 기존 그룹을 원본에
+    // 그대로 남긴다. updatedContentNode가 contentNode.attrs를 유지해 접힘도
+    // 남는다.
     const rebuiltContainer = container.type.create(
       container.attrs,
-      Fragment.from(updatedContentNode),
+      existingGroup === null
+        ? Fragment.from(updatedContentNode)
+        : Fragment.from(updatedContentNode).append(
+            Fragment.from(existingGroup),
+          ),
     );
     replacement = Fragment.from(rebuiltContainer).append(
       Fragment.from(newContainer),
     );
+    // 커서는 새 블록 텍스트 시작이다. containerStart + 재구성된 원본
+    // 컨테이너 nodeSize(원본 끝 지남) + 1(새 컨테이너 진입) + 1(새
+    // contentNode 진입).
+    newCaretPos = containerStart + rebuiltContainer.nodeSize + 1 + 1;
   } else {
     // D23: 기존 자식 그룹을 보존한 채 새 컨테이너를 맨 앞에 붙인 새
     // blockGroup을 만들어 원본의 첫 자식으로 삽입한다.
@@ -203,19 +224,15 @@ function splitAtCaret(tr: Transaction): boolean {
       Fragment.from(updatedContentNode).append(Fragment.from(newGroup)),
     );
     replacement = Fragment.from(rebuiltContainer);
+    // containerStart + 1(컨테이너 진입) + updatedContentNode.nodeSize(첫
+    // 자식) + 1(blockGroup 진입) + 1(새 컨테이너 진입) + 1(새 contentNode
+    // 진입) = 새 텍스트 시작.
+    newCaretPos = containerStart + 1 + updatedContentNode.nodeSize + 1 + 1 + 1;
   }
 
   tr.replaceWith(containerStart, containerEnd, replacement);
 
-  // 커서를 새 블록(새 컨테이너 안 newContentNode) 텍스트 시작 위치로
-  // 옮긴다. 두 분기 모두 containerStart로부터 같은 4개의 구조 토큰(원본
-  // 컨테이너 진입 또는 종료, 그룹 또는 형제 경계, 새 컨테이너 진입, 새
-  // contentNode 진입)을 지나 새 텍스트 시작에 닿는다 — D24 배경 산술 참고.
-  // containerStart + 1(컨테이너 진입) + updatedContentNode.nodeSize(첫
-  // 자식) + 1(blockGroup 진입 또는 원본 컨테이너 종료) + 1(새 컨테이너
-  // 진입) + 1(새 contentNode 진입) = 새 텍스트 시작.
-  const newCaretPos =
-    containerStart + 1 + updatedContentNode.nodeSize + 1 + 1 + 1;
+  // 커서를 새 블록(새 컨테이너 안 newContentNode) 텍스트 시작 위치로 옮긴다.
   const resolvedCaret = tr.doc.resolve(
     Math.min(newCaretPos, tr.doc.content.size),
   );

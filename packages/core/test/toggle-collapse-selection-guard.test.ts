@@ -21,24 +21,11 @@ import {
   oneCellTableBlock,
   paragraphBlock,
   selectBlockNode,
+  toggleBlock,
 } from "./editor-controller-support.js";
 import { placeCaretInCell, selectSingleCell } from "./table-test-support.js";
 
-import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
-
-/** toggleListItem 리터럴을 만든다. */
-const toggleBlock = (
-  id: string,
-  text: string,
-  options: { collapsed?: boolean; children?: Block[] } = {},
-): Block => ({
-  id,
-  type: "toggleListItem",
-  content: [{ text }],
-  ...(options.collapsed === undefined ? {} : { collapsed: options.collapsed }),
-  ...(options.children === undefined ? {} : { children: options.children }),
-});
 
 const LABEL_T1 = "토글";
 const LABEL_T2 = "중첩";
