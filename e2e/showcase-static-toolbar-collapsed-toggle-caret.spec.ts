@@ -166,3 +166,113 @@ test("첫 숨은 자식이 문단인 접힌 toggle 라벨 끝의 ArrowDown은 �
   await expect(blockId(editable, 12)).toContainText("Z");
   expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
 });
+
+/**
+ * 라벨 중간 캐럿에서 ArrowDown 1회 뒤 `Z`를 입력하고 12번째 블록이 시작 고정으로
+ * 받았는지 확인한다(Issue #255). `afterHome` 만큼 ArrowRight를 눌러 캐럿을 둔다.
+ */
+const arrowDownFromLabel = async (page: Page, afterHome: number) => {
+  const { editable } = await collapseWithDividerFirstChild(page);
+  const labelBefore = await labelText(blockId(editable, 10));
+  const blockBefore = await blockId(editable, 12).innerText();
+
+  await page.keyboard.press("Home");
+  for (let i = 0; i < afterHome; i += 1) {
+    await page.keyboard.press("ArrowRight");
+  }
+  await yieldFrame(page);
+  await page.keyboard.press("ArrowDown");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  // 블록 시작에 들어갔다. 기존 텍스트 앞에 Z가 붙는다.
+  expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
+  expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
+};
+
+test("첫 숨은 자식이 divider인 접힌 toggle 라벨 중간에서 ArrowDown하면 다음 보이는 블록 시작으로 가고 입력이 거기 들어간다", async ({
+  page,
+}) => {
+  await arrowDownFromLabel(page, 3);
+});
+
+test("첫 숨은 자식이 divider인 접힌 toggle 라벨 시작에서 ArrowDown하면 다음 보이는 블록 시작으로 가고 입력이 거기 들어간다", async ({
+  page,
+}) => {
+  await arrowDownFromLabel(page, 0);
+});
+
+test("여러 줄로 줄바꿈된 접힌 toggle 라벨 첫 줄의 ArrowDown은 라벨 둘째 줄로 가고 다음 블록으로 점프하지 않는다", async ({
+  page,
+}) => {
+  const { editable } = await collapseWithDividerFirstChild(page);
+  const block = blockId(editable, 10);
+  const label = block.locator(":scope > :first-child");
+  const blockBefore = await blockId(editable, 12).innerText();
+  const oneLineHeight = (await label.boundingBox())?.height ?? 0;
+
+  // 라벨 끝에서 긴 텍스트를 입력해 줄바꿈시킨다.
+  await page.keyboard.type(
+    " 줄바꿈을 일으키는 아주 긴 라벨 텍스트를 이어서 입력해 라벨이 여러 줄이 되게 한다 ".repeat(
+      3,
+    ),
+  );
+  await yieldFrame(page);
+  // 전제: 줄바꿈이 안 되면 테스트가 공허하게 통과한다.
+  const wrappedHeight = (await label.boundingBox())?.height ?? 0;
+  expect(oneLineHeight).toBeGreaterThan(0);
+  expect(wrappedHeight).toBeGreaterThan(oneLineHeight * 1.5);
+
+  // 캐럿이 라벨 첫 줄에 올 때까지 ArrowUp한다. 마지막 줄의 Home은 그 줄 시작이다.
+  const caretTop = () =>
+    page.evaluate(() => {
+      const range = getSelection()?.getRangeAt(0);
+      const rect = range?.getClientRects()[0] ?? range?.getBoundingClientRect();
+      return rect?.top ?? Number.NaN;
+    });
+  const labelTop = (await label.boundingBox())?.y ?? 0;
+  for (
+    let i = 0;
+    i < 6 && (await caretTop()) > labelTop + oneLineHeight / 2;
+    i += 1
+  ) {
+    await page.keyboard.press("ArrowUp");
+    await yieldFrame(page);
+  }
+  expect(await caretTop()).toBeLessThan(labelTop + oneLineHeight / 2);
+  const labelBefore = await labelText(block);
+
+  await page.keyboard.press("ArrowDown");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  // Z는 라벨 안에 들어가고 12번째 블록은 그대로다.
+  expect(await labelText(block)).toContain("Z");
+  expect(await labelText(block)).not.toBe(labelBefore);
+  expect(await blockId(editable, 12).innerText()).toBe(blockBefore);
+});
+
+test("첫 숨은 자식이 문단인 접힌 toggle 라벨 중간의 ArrowDown은 네이티브 이동으로 다음 보이는 블록에 간다", async ({
+  page,
+}) => {
+  const { editable, marker } = await openSample(page);
+  await marker.click();
+  await expect(blockId(editable, 11)).toBeHidden();
+  await placeCaretIn(page, blockId(editable, 10));
+  await page.keyboard.press("Home");
+  for (let i = 0; i < 3; i += 1) {
+    await page.keyboard.press("ArrowRight");
+  }
+  await yieldFrame(page);
+  const labelBefore = await labelText(blockId(editable, 10));
+
+  await page.keyboard.press("ArrowDown");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  await expect(blockId(editable, 12)).toContainText("Z");
+  expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
+});
