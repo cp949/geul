@@ -653,3 +653,95 @@ test("블록 범위를 선택한 채 스크롤하면 영역 밖으로 나간 블
   await scrollAnchorIntoArea(first);
   await expect(highlight(2), "돌아온 뒤").toHaveCSS("visibility", "visible");
 });
+
+test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리사이즈 strip이 보이고 드래그로 열 폭을 바꾼다(#260)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const lastRow = table.locator("tr").last();
+  const cell = lastRow.locator("td").first();
+  await cell.scrollIntoViewIfNeeded();
+  // 커서를 표 안에 둔다. 스크롤 뒤 hover 없이도 핸들이 남는다.
+  await cell.click();
+  // 창을 스크롤해 영역 상단을 뷰포트 상단에 맞춘다. 영역이 뷰포트 밖이면 마우스로
+  // strip을 끌 수 없다.
+  await page.evaluate(() => {
+    const area = document.querySelector('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    window.scrollBy(0, area.getBoundingClientRect().top);
+  });
+
+  // 표 상단을 영역 위로 20px 민다. 아래 행들은 영역 안에 남는다.
+  const target = await table.evaluate((element) => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    return (
+      area.scrollTop +
+      element.getBoundingClientRect().top -
+      area.getBoundingClientRect().top +
+      20
+    );
+  });
+  await setAreaScrollTop(page, target);
+  const layout = await lastRow.evaluate((row) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    const tableRect = row.closest("table")?.getBoundingClientRect();
+    if (area === undefined || tableRect === undefined) {
+      throw new Error("scrollArea 또는 표 없음");
+    }
+    const rowRect = row.getBoundingClientRect();
+    return {
+      areaInViewport: area.top >= 0 && area.bottom <= window.innerHeight,
+      tableTopAbove: tableRect.top < area.top,
+      lastRowInside: rowRect.top >= area.top && rowRect.bottom <= area.bottom,
+    };
+  });
+  expect(layout, "전제: 표 상단만 영역 밖").toEqual({
+    areaInViewport: true,
+    tableTopAbove: true,
+    lastRowInside: true,
+  });
+  await settleClip(page);
+
+  // 병합 셀 없는 표는 열마다 strip 하나다. 첫 열 경계 strip을 본다.
+  const strip = page.locator("[data-geul-table-resize-handle]").first();
+  await expect(strip, "영역에 걸친 strip").toHaveCSS("visibility", "visible");
+  const stripInsideArea = await strip.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return rect.top >= area.top && rect.bottom <= area.bottom;
+  });
+  expect(stripInsideArea, "strip 박스가 영역 안").toBe(true);
+  expect(await readEscapedOverlays(page)).toEqual([]);
+
+  // 보이는 마지막 행 높이에서 strip을 끌어 첫 열 폭을 바꾼다.
+  const stripBox = await strip.boundingBox();
+  const rowBox = await lastRow.boundingBox();
+  if (stripBox === null || rowBox === null) {
+    throw new Error("Bounding box was not available");
+  }
+  const startX = stripBox.x + stripBox.width / 2;
+  const y = rowBox.y + rowBox.height / 2;
+  const firstColumn = table.locator("colgroup col").first();
+  await expect(firstColumn, "전제: 시작 폭").toHaveAttribute(
+    "style",
+    /width:\s*160px/,
+  );
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(startX + 40, y, { steps: 5 });
+  await page.mouse.up();
+
+  await expect(firstColumn, "드래그 뒤 폭").toHaveAttribute(
+    "style",
+    /width:\s*200px/,
+  );
+});
