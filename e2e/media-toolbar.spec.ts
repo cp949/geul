@@ -840,3 +840,280 @@ test("more 메뉴가 열린 채 window를 스크롤해도 메뉴가 `⋯` 트리
 
   await expectOverlayFollowsAnchor(page, trigger, menu, "window");
 });
+
+// Issue #251 — rename·caption·교체 모드의 닫힘이다. 편집기 안 클릭은 pointerdown이
+// 아니라 selection 변경으로 판정한다. 다른 블록이면 닫히거나 새 블록의 view가 되고
+// 같은 블록이면 편집이 유지된다. 편집기 밖 클릭은 현행 outside다. 입력 밖(편집기)에서
+// 누른 Escape는 view로 돌아가지 않고 완전히 닫는다.
+
+const FIRST_IMAGE_URL = "https://example.com/dir/photo.png";
+const SECOND_IMAGE_URL = "https://example.com/dir/second.png";
+
+/** 이미지 블록 wrapper를 문서 순서로 고른다. 깨진 `<img>`는 0x0이라 wrapper를 쓴다. */
+const imageWrapper = (page: Page, editable: Locator, index = 0): Locator =>
+  editable
+    .locator("[data-geul-block-id]")
+    .filter({ has: page.locator("img") })
+    .nth(index);
+
+/**
+ * 이미지 뒤에 단락을 만들고 이미지를 다시 선택해 view toolbar를 연다.
+ * 반환값은 이미지 뒤 단락이다. 편집기 안 "다른 블록" 클릭 대상이다.
+ */
+const selectImageWithTailParagraph = async (
+  page: Page,
+  editable: Locator,
+): Promise<Locator> => {
+  await insertFilledImage(page, editable);
+  await editable.click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("tail paragraph");
+  const tail = editable
+    .locator("[data-geul-block-id]")
+    .filter({ hasText: "tail paragraph" });
+  await imageWrapper(page, editable).click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  return tail;
+};
+
+/** 두 번째 이미지(`second.png`)를 이미지 뒤에 만들고 첫 이미지를 다시 선택한다. */
+const selectFirstOfTwoImages = async (page: Page, editable: Locator) => {
+  await insertFilledImage(page, editable, FIRST_IMAGE_URL);
+  await editable.click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/image");
+  await page.getByRole("option", { name: /^Image/ }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page
+    .getByRole("textbox", { name: "Image URL" })
+    .pressSequentially(SECOND_IMAGE_URL);
+  await page.getByRole("button", { name: "Save URL" }).click();
+  await expect(editable.locator("img")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("toolbar", { name: "File panel" }),
+  ).not.toBeVisible();
+  await imageWrapper(page, editable, 0).click();
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+};
+
+type EditMode = {
+  title: string;
+  menuItem: string;
+  /** 모드에 들어갔는지 보이는 요소. */
+  marker: (page: Page) => Locator;
+};
+
+const EDIT_MODES: readonly EditMode[] = [
+  {
+    title: "rename",
+    menuItem: "Rename",
+    marker: (page) => page.getByRole("textbox", { name: "Image name" }),
+  },
+  {
+    title: "caption",
+    menuItem: "Edit caption",
+    marker: (page) => page.getByRole("textbox", { name: "Image caption" }),
+  },
+  {
+    title: "replacing",
+    menuItem: "Replace file",
+    marker: (page) => page.getByRole("tablist"),
+  },
+];
+
+for (const mode of EDIT_MODES) {
+  test(`${mode.title} 모드에서 편집기 안 다른 블록을 클릭하면 toolbar가 닫히고 초점이 편집기에 있다 (#251)`, async ({
+    page,
+  }) => {
+    const { editable } = await openDemo(page);
+    const tail = await selectImageWithTailParagraph(page, editable);
+    await openMoreMenu(page);
+    await page.getByRole("menuitem", { name: mode.menuItem }).click();
+    await expect(mode.marker(page)).toBeVisible();
+
+    await tail.click();
+
+    await expect(
+      page.getByRole("toolbar", { name: "Media toolbar" }),
+    ).not.toBeVisible();
+    await expect(editable).toBeFocused();
+  });
+}
+
+for (const mode of EDIT_MODES.filter((item) => item.title !== "replacing")) {
+  test(`${mode.title} 모드에서 편집기에 초점이 있을 때 Escape는 toolbar를 닫고 초점이 편집기에 남는다 (#251)`, async ({
+    page,
+  }) => {
+    const { editable } = await openDemo(page);
+    await selectImageWithTailParagraph(page, editable);
+    await openMoreMenu(page);
+    await page.getByRole("menuitem", { name: mode.menuItem }).click();
+    await expect(mode.marker(page)).toBeFocused();
+    // 입력 밖(편집기)으로 초점을 옮긴다. pointerdown 없이 옮겨 바깥 클릭 경로를 피한다.
+    // `focus()`는 PM selection을 옮겨 Escape 전에 selection 비교가 편집을 먼저 닫는다.
+    // 이 테스트는 Escape 이후 초점과 재오픈 없음을 본다. Escape 닫힘 경로 자체는 아래
+    // "같은 블록 selection" 테스트가 소유한다.
+    await editable.focus();
+    await expect(editable).toBeFocused();
+
+    await page.keyboard.press("Escape");
+
+    await expect(
+      page.getByRole("toolbar", { name: "Media toolbar" }),
+    ).not.toBeVisible();
+    await expect(editable).toBeFocused();
+    // 닫힘 뒤 늦게 도착하는 selectionchange가 view를 다시 열지 않는지 본다.
+    await page.evaluate(
+      () => new Promise<void>((resolve) => setTimeout(resolve, 100)),
+    );
+    await expect(
+      page.getByRole("toolbar", { name: "Media toolbar" }),
+    ).not.toBeVisible();
+    await expect(editable).toBeFocused();
+  });
+}
+
+// 같은 이미지를 클릭하면 selection이 같은 블록에 남고 초점만 입력에서 편집기로
+// 옮겨간다. 이 상태의 Escape가 selection 비교가 아니라 훅의 Escape 경로로 닫는다.
+// Escape의 keyup이 selection을 다시 읽어도 view가 다시 열리면 안 된다(재오픈 억제).
+// replacing의 Escape는 닫힘이 아니라 cancelReplacing(view 복귀)이라 여기서 다루지
+// 않는다(동작 변경 5).
+for (const mode of EDIT_MODES.filter((item) => item.title !== "replacing")) {
+  test(`${mode.title} 모드에서 selection이 같은 블록에 남은 채 편집기에서 Escape를 누르면 닫히고 keyup 뒤에도 다시 열리지 않는다 (#251)`, async ({
+    page,
+  }) => {
+    const { editable } = await openDemo(page);
+    await insertFilledImage(page, editable);
+    await openMoreMenu(page);
+    await page.getByRole("menuitem", { name: mode.menuItem }).click();
+    await expect(mode.marker(page)).toBeFocused();
+    await imageWrapper(page, editable).click();
+    await expect(editable).toBeFocused();
+    await expect(mode.marker(page)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+    await expect(toolbar).toHaveCount(0);
+    // 키를 뗀 뒤 늦게 도착하는 keyup·selectionchange 재조회를 기다린다.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(toolbar).toHaveCount(0);
+    await expect(editable).toBeFocused();
+  });
+}
+
+// 같은 이미지 재클릭은 selection이 그대로라 편집이 유지된다. 입력 포커스 중
+// selectionchange가 draft를 지우지 않는다는 가설을 이 단언이 확인한다.
+test("rename 모드에서 같은 이미지를 다시 클릭해도 편집과 draft가 유지된다 (#251)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const image = await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const nameInput = page.getByRole("textbox", { name: "Image name" });
+  await nameInput.fill("kept.png");
+
+  await imageWrapper(page, editable).click();
+  await page.evaluate(
+    () => new Promise<void>((resolve) => setTimeout(resolve, 100)),
+  );
+
+  await expect(nameInput).toBeVisible();
+  await expect(nameInput).toHaveValue("kept.png");
+  await expect(image).toHaveAttribute("alt", "photo.png");
+});
+
+test("rename 모드에서 편집기 밖 요소를 클릭하면 닫히고 같은 블록 재관측이 다시 열지 않는다 (#251)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  await page.getByRole("textbox", { name: "Image name" }).fill("discarded.png");
+
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  await page.evaluate(
+    () => new Promise<void>((resolve) => setTimeout(resolve, 100)),
+  );
+
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).not.toBeVisible();
+});
+
+test("rename 모드에서 다른 미디어 블록을 클릭하면 편집이 닫히고 그 블록의 view toolbar가 열린다 (#251)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await selectFirstOfTwoImages(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  await page.getByRole("textbox", { name: "Image name" }).fill("discarded.png");
+
+  await imageWrapper(page, editable, 1).click();
+
+  await expect(page.getByRole("textbox", { name: "Image name" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
+  // 열린 toolbar가 두 번째 이미지 것인지 그 이름으로 확인한다.
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  await expect(page.getByRole("textbox", { name: "Image name" })).toHaveValue(
+    "second.png",
+  );
+  await expect(editable.locator("img").first()).toHaveAttribute(
+    "alt",
+    "photo.png",
+  );
+});
+
+test("rename 모드에서 입력을 클릭해도 모드와 draft가 유지된다 (#251)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  const nameInput = page.getByRole("textbox", { name: "Image name" });
+  await nameInput.fill("kept.png");
+
+  await nameInput.click();
+
+  await expect(nameInput).toBeVisible();
+  await expect(nameInput).toHaveValue("kept.png");
+});
+
+test("교체 모드에서 toolbar 안의 탭을 클릭해도 모드가 닫히지 않는다 (#251)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await expect(page.getByRole("tablist")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Embed" }).click();
+
+  await expect(page.getByRole("tablist")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Embed" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});

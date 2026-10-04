@@ -9,8 +9,12 @@
  * - rename·caption 입력의 Escape는 편집만 취소하고 toolbar는 남는다.
  *   stopPropagation 없이도 module이 defaultPrevented로 건너뛴다. jsdom은 결과
  *   상태만 확인하고 전파 순서는 e2e/media-toolbar.spec.ts:109가 소유한다.
- * - 편집 모드(rename·caption)는 module에 등록하지 않는다. 바깥 클릭·Escape에
- *   반응하지 않는 현행을 유지한다.
+ * - 편집 모드(rename·caption)도 module에 등록한다(Issue #251). allow 목록은 view와
+ *   같다. 편집기 안 클릭은 pointerdown이 아니라 selection 변경으로 판정한다.
+ *   selection이 다른 블록이나 비미디어로 옮겨가면 draft를 버리고 닫거나 새 블록의
+ *   view로 바뀐다. 같은 블록이면 편집과 draft가 유지된다. 편집기 밖 pointerdown과
+ *   입력 밖 Escape는 draft를 버리고 닫는다. 입력 안 Escape는 현행대로 view로
+ *   돌아간다.
  * - 편집기가 먼저 막은 Escape는 닫고, 편집기 밖에서 막힌 Escape와 IME 조합 중
  *   Escape는 닫지 않는다.
  * - 바깥 클릭 때 초점이 오버레이 안이면 편집기로 옮기고, 밖이면 그대로 둔다.
@@ -340,6 +344,195 @@ const enterEditing = (itemName: string, inputName: string) => {
   return { ...opened, input };
 };
 
+describe("rename·caption 모드가 selection 변경·Escape·편집기 밖 클릭으로 닫힌다(Issue #251)", () => {
+  const EDIT_MODES = [
+    { title: "rename", item: "Rename", input: "Image name", save: "Save name" },
+    {
+      title: "caption",
+      item: "Edit caption",
+      input: "Image caption",
+      save: "Save caption",
+    },
+  ] as const;
+
+  for (const mode of EDIT_MODES) {
+    it(`${mode.title}: selection이 비미디어로 옮겨가면 draft를 버리고 toolbar를 닫는다`, () => {
+      const { controller, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "discarded" } });
+      controller.getSelectionMediaBlock.mockReturnValue(null);
+
+      fireSelectionChange();
+
+      expect(toolbarVisible()).toBe(false);
+      expect(screen.queryByRole("textbox", { name: mode.input })).toBeNull();
+      expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
+      expect(controller.commands.setMediaBlockCaption).not.toHaveBeenCalled();
+    });
+
+    // ProseMirror 갱신이 이 리스너보다 늦어 이벤트 안의 읽기는 이동 직전 selection을
+    // 본다. 매크로태스크 뒤 한 번 더 읽어야 닫힌다(Issue #229·#251).
+    it(`${mode.title}: 이벤트 안 읽기가 이동 직전 selection이어도 매크로태스크 뒤 재읽기가 toolbar를 닫는다`, async () => {
+      const { controller, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "discarded" } });
+      // jsdom이 초점 이동으로 큐잉한 selectionchange를 먼저 흘려보낸다. 남겨 두면
+      // 그 이벤트가 재읽기를 대신해 이 테스트가 지연 읽기 없이도 통과한다.
+      await flushEditingGuard();
+
+      fireSelectionChange();
+      expect(toolbarVisible()).toBe(true);
+
+      controller.getSelectionMediaBlock.mockReturnValue(null);
+      await flushEditingGuard();
+
+      expect(toolbarVisible()).toBe(false);
+    });
+
+    it(`${mode.title}: selection이 다른 미디어 블록으로 옮겨가면 편집을 버리고 그 블록의 view toolbar가 열린다`, () => {
+      const { controller, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "discarded" } });
+      controller.getSelectionMediaBlock.mockReturnValue({
+        ...filledImageBlock,
+        blockId: "media-2",
+        name: "second.png",
+      });
+
+      fireSelectionChange();
+
+      expect(toolbarVisible()).toBe(true);
+      expect(screen.queryByRole("textbox", { name: mode.input })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "More media options" }),
+      ).not.toBeNull();
+    });
+
+    it(`${mode.title}: 같은 블록 pointerdown과 selection 재관측은 편집과 draft를 유지한다`, async () => {
+      const { editable, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "kept" } });
+      const sameBlock = editable.querySelector<HTMLElement>(
+        '[data-geul-block-id="media-1"]',
+      );
+      if (sameBlock === null) throw new Error("미디어 블록 요소가 없다");
+
+      fireEvent.pointerDown(sameBlock);
+      await flushEditingGuard();
+      fireSelectionChange();
+
+      expect(toolbarVisible()).toBe(true);
+      expect(
+        screen.getByRole<HTMLInputElement>("textbox", { name: mode.input })
+          .value,
+      ).toBe("kept");
+    });
+
+    it(`${mode.title}: 입력 밖 Escape는 view로 돌아가지 않고 toolbar를 닫는다`, () => {
+      const { editable, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "discarded" } });
+      editable.focus();
+
+      fireEvent.keyDown(editable, { key: "Escape" });
+
+      expect(toolbarVisible()).toBe(false);
+      expect(document.activeElement).toBe(editable);
+    });
+
+    // Escape 직후 keyup이 selection 재조회를 일으킨다. 억제가 없으면 같은 블록이
+    // view로 다시 열린다(G-UI-001 재오픈 억제).
+    it(`${mode.title}: 입력 밖 Escape로 닫은 뒤 keyup과 selection 재관측이 toolbar를 다시 열지 않는다`, async () => {
+      const { editable, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "discarded" } });
+      editable.focus();
+
+      fireEvent.keyDown(editable, { key: "Escape" });
+      expect(toolbarVisible()).toBe(false);
+
+      fireEvent.keyUp(editable, { key: "Escape" });
+      await flushEditingGuard();
+      fireSelectionChange();
+
+      expect(toolbarVisible()).toBe(false);
+    });
+
+    it(`${mode.title}: 편집기 밖 pointerdown은 draft를 버리고 닫으며 같은 블록 재관측이 다시 열지 않는다`, async () => {
+      const { input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "discarded" } });
+      const outside = createOutsideInput();
+      try {
+        fireEvent.pointerDown(outside);
+
+        expect(toolbarVisible()).toBe(false);
+
+        await flushEditingGuard();
+        fireSelectionChange();
+
+        expect(toolbarVisible()).toBe(false);
+      } finally {
+        outside.remove();
+      }
+    });
+
+    it(`${mode.title}: toolbar 안(입력·Save·Cancel)과 리사이즈 핸들 pointerdown은 닫지 않는다`, () => {
+      const { editable, input } = enterEditing(mode.item, mode.input);
+      fireEvent.change(input, { target: { value: "kept" } });
+      const handle = document.createElement("div");
+      handle.setAttribute("data-geul-media-resize-handle", "");
+      document.body.append(handle);
+      try {
+        fireEvent.pointerDown(input);
+        fireEvent.pointerDown(screen.getByRole("button", { name: mode.save }));
+        fireEvent.pointerDown(screen.getByRole("button", { name: "Cancel" }));
+        fireEvent.pointerDown(handle);
+
+        expect(toolbarVisible()).toBe(true);
+        expect(
+          screen.getByRole<HTMLInputElement>("textbox", { name: mode.input })
+            .value,
+        ).toBe("kept");
+        expect(document.activeElement).not.toBe(editable);
+      } finally {
+        handle.remove();
+      }
+    });
+
+    it(`${mode.title}: IME 조합 중 Escape는 닫지 않는다`, () => {
+      const { editable, input } = enterEditing(mode.item, mode.input);
+      editable.focus();
+
+      fireEvent.keyDown(editable, { key: "Escape", isComposing: true });
+
+      expect(toolbarVisible()).toBe(true);
+      expect(screen.queryByRole("textbox", { name: mode.input })).toBe(input);
+    });
+  }
+
+  // #233에서 "현행 유지"로 고정한 단언이다. 설계 근거가 아니라 그 시점 동작의
+  // 기록이었다. Issue #251이 편집 모드를 module에 등록해 반대 단언으로 바꿨다.
+  it("편집 중 입력 밖 document의 Escape는 draft를 버리고 toolbar를 닫는다", () => {
+    const { editable, input } = enterEditing("Rename", "Image name");
+    fireEvent.change(input, { target: { value: "draft.png" } });
+    editable.focus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(toolbarVisible()).toBe(false);
+    expect(screen.queryByRole("textbox", { name: "Image name" })).toBeNull();
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("편집 중 편집기 밖 바깥 클릭은 draft를 버리고 toolbar를 닫는다", () => {
+    const { input } = enterEditing("Rename", "Image name");
+    fireEvent.change(input, { target: { value: "draft.png" } });
+    const outside = createOutsideInput();
+    try {
+      fireEvent.pointerDown(outside);
+
+      expect(toolbarVisible()).toBe(false);
+      expect(screen.queryByRole("textbox", { name: "Image name" })).toBeNull();
+    } finally {
+      outside.remove();
+    }
+  });
+});
+
 describe("옛 훅과 같은 결과를 내는 MediaToolbar 회귀 가드(Issue #233 RD-003 DELTA-03)", () => {
   // 이 describe의 테스트는 옛 훅에서도 통과한다. module 경유를 증명하지 않고 이전
   // 전후로 닫힘 계약이 같음을 잠근다. module 경유 증명은 다른 describe들이 맡는다.
@@ -443,24 +636,6 @@ describe("옛 훅과 같은 결과를 내는 MediaToolbar 회귀 가드(Issue #2
       screen.queryByRole("button", { name: "More media options" }),
     ).not.toBeNull();
     expect(document.activeElement).toBe(editable);
-  });
-
-  it("편집 중 입력 밖 document의 Escape와 바깥 클릭에는 반응하지 않는다", () => {
-    const { input } = enterEditing("Rename", "Image name");
-    fireEvent.change(input, { target: { value: "draft.png" } });
-    const outside = createOutsideInput();
-    try {
-      fireEvent.keyDown(document, { key: "Escape" });
-      fireEvent.pointerDown(outside);
-
-      expect(toolbarVisible()).toBe(true);
-      expect(
-        screen.getByRole<HTMLInputElement>("textbox", { name: "Image name" })
-          .value,
-      ).toBe("draft.png");
-    } finally {
-      outside.remove();
-    }
   });
 
   it("component 오버라이드도 view 모드 Escape로 닫히고 훅 호출 순서가 깨지지 않는다", () => {

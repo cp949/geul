@@ -85,6 +85,10 @@ const mediaToolbarMoreMenuItemClassName = "geul-media-toolbar__more-menu-item";
 // selector로 전부 "바깥 아님" 처리하고, 그 뒤 실제 상태 반영은
 // updateFromSelection(selectionchange/mouseup)에 맡긴다 — 편집기 완전
 // 바깥(예: "Save JSON" 버튼)만 진짜 바깥 클릭으로 남는다.
+// 이 상수는 편집(rename·caption)·교체 모드에서도 그대로 쓴다(Issue #251).
+// 편집기 안 클릭은 pointerdown이 아니라 updateFromSelection의 selection
+// 비교로 닫는다. pointerdown 시점의 닫힘은 클릭이 만드는 selection 확정과
+// editingRef 가드 타이밍이 어긋나 view 재오픈이 막히거나 옛 selection을 읽었다.
 // 이 상수를 more 메뉴 인스턴스에 재사용하지 않는다. `[data-geul-block-id]`가
 // 있으면 more 메뉴가 열린 채 같은 블록 캔버스를 다시 클릭해도 메뉴가 안 닫힌다
 // (ceb86ab). more 메뉴는 아래 MEDIA_TOOLBAR_MORE_MENU_DISMISS_ALLOW_SELECTORS를
@@ -296,6 +300,10 @@ export const MediaToolbar = ({
   // 최신 값을 읽기 위해 ref로 따로 둔다(file-panel.tsx openBlockIdRef와
   // 같은 이유 — dismissToolbar를 `[element]`만으로 안정된 참조로 유지한다).
   const viewBlockIdRef = useRef<string | null>(null);
+  // 최신 mode. updateFromSelection이 상태 클로저 없이 읽는다(Issue #251). 렌더마다
+  // 갱신한다.
+  const toolbarModeRef = useRef<ToolbarState["mode"]>("closed");
+  toolbarModeRef.current = toolbarState.mode;
   // dismissToolbar가 방금 닫은 blockId. 같은 blockId의 재관측을 무시해
   // Escape/바깥 클릭 직후 뒤늦게 도착하는 이벤트의 재오픈을 막는다
   // (G-UI-001, file-panel.tsx의 같은 훅 사용과 같은 문제·같은 해법).
@@ -307,6 +315,20 @@ export const MediaToolbar = ({
     useTableCommandFeedback();
 
   const updateFromSelection = useCallback(() => {
+    // 편집·교체 중 selection이 다른 블록이나 비미디어로 옮겨갔으면 편집을 버리고
+    // 아래 기존 로직으로 진행한다(Issue #251). 결과는 closed 또는 새 블록의 view다.
+    // 같은 블록이면 아래 가드가 막아 입력 중 selectionchange가 draft를 지우지
+    // 않는다. 억제는 기록하지 않는다. 새 selection이 이미 다른 블록이다.
+    const mode = toolbarModeRef.current;
+    if (
+      (mode === "editingName" ||
+        mode === "editingCaption" ||
+        mode === "replacing") &&
+      (element === null ||
+        editor.getSelectionMediaBlock()?.blockId !== viewBlockIdRef.current)
+    ) {
+      editingRef.current = false;
+    }
     if (editingRef.current) return;
     if (element === null) {
       viewBlockIdRef.current = null;
@@ -358,7 +380,62 @@ export const MediaToolbar = ({
     });
   }, [editor, element, closeMoreMenu, dismissSuppression]);
 
-  useSelectionRefresh({ element, onUpdate: updateFromSelection });
+  // 편집·교체 모드의 selection 비교는 이벤트 안에서 한 번, 매크로태스크 뒤에 한 번
+  // 더 읽는다(G-UI-001 selectionchange 이중 읽기, Issue #229·#251). ProseMirror는
+  // 자기 selectionchange 리스너가 이 리스너보다 뒤에 돌아, 이벤트 안의 읽기는
+  // 이동 직전 selection을 본다(실측: 약 1ms 차이). 그 뒤에는 재통지가 없어 편집기
+  // 안 다른 블록 클릭이 편집을 닫지 못한다. view·closed 모드는 지연 읽기를 걸지
+  // 않는다.
+  // 타이머는 owner window의 것을 쓴다. editingRef 해제 타이머와 같다(iframe 호스트).
+  // 취소도 같은 window로 한다. 타이머 id와 window를 함께 보관한다.
+  const deferredRefreshRef = useRef<{ window: Window; id: number } | null>(
+    null,
+  );
+  const clearDeferredRefresh = useCallback(() => {
+    const pending = deferredRefreshRef.current;
+    if (pending === null) return;
+    pending.window.clearTimeout(pending.id);
+    deferredRefreshRef.current = null;
+  }, []);
+  const refreshFromSelection = useCallback(() => {
+    updateFromSelection();
+    const mode = toolbarModeRef.current;
+    if (
+      mode !== "editingName" &&
+      mode !== "editingCaption" &&
+      mode !== "replacing"
+    ) {
+      return;
+    }
+    clearDeferredRefresh();
+    const ownerWindow = element?.ownerDocument.defaultView;
+    if (ownerWindow === null || ownerWindow === undefined) return;
+    const id = ownerWindow.setTimeout(() => {
+      deferredRefreshRef.current = null;
+      // 그 사이 편집·교체를 벗어났으면 상태를 되살리지 않는다.
+      const latest = toolbarModeRef.current;
+      if (
+        latest === "editingName" ||
+        latest === "editingCaption" ||
+        latest === "replacing"
+      ) {
+        updateFromSelection();
+      }
+    }, 0);
+    deferredRefreshRef.current = { window: ownerWindow, id };
+  }, [element, updateFromSelection, clearDeferredRefresh]);
+  useSelectionRefresh({ element, onUpdate: refreshFromSelection });
+  // 모드 이탈과 언마운트 때 예약된 지연 읽기를 취소한다.
+  useEffect(() => {
+    if (
+      toolbarState.mode !== "editingName" &&
+      toolbarState.mode !== "editingCaption" &&
+      toolbarState.mode !== "replacing"
+    ) {
+      clearDeferredRefresh();
+    }
+  }, [toolbarState.mode, clearDeferredRefresh]);
+  useEffect(() => clearDeferredRefresh, [clearDeferredRefresh]);
 
   // 리사이즈 중 숨김(사용자 스크린샷 — 드래그 동안 toolbar가 드래그 시작
   // 시점 위치에 그대로 떠 이미지를 가린다). media-resize-handles.tsx가
@@ -675,23 +752,57 @@ export const MediaToolbar = ({
       editingRef.current = false;
     });
   }, [element, clearActionError, dismissSuppression]);
+  // 편집(rename·caption) 모드를 draft째 버리고 toolbar를 닫는다(Issue #251).
+  // 재오픈 억제는 호출부가 정한다. editingRef를 세워 닫힘이 만드는 selection
+  // 재조회와 경합하지 않게 하고 매크로태스크 뒤 푼다(link-toolbar.tsx
+  // closeEditingMode와 같다). 초점은 useDismissibleOverlay가 이미 정리했다.
+  const closeEditingMode = useCallback(() => {
+    editingRef.current = true;
+    clearActionError();
+    setToolbarState({ mode: "closed" });
+    element?.ownerDocument.defaultView?.setTimeout(() => {
+      editingRef.current = false;
+    });
+  }, [element, clearActionError]);
   // 닫힘 리스너, reason별 초점 복귀, Escape LIFO는 useDismissibleOverlay가
   // 소유한다(Issue #233 RD-003 DELTA-03). 인스턴스가 둘이다. 같은 render에서
   // early return 앞에 호출하고 `open`을 안정적으로 유지한다. 리스너 등록 순서가
   // 곧 열림 순서라 `open`이 흔들리면 스택 항목이 맨 위로 다시 올라간다.
-  // 1) toolbar: view와 replacing 모드에서 연다. rename/caption은 등록하지 않는다.
-  //    view↔replacing 전이에서 `open`이 true로 유지돼 스택 위치가 흔들리지
-  //    않는다. 초점은 module이 reason별로 옮긴다.
+  // 1) toolbar: view, replacing, rename, caption 모드에서 연다. 모드 전이에서
+  //    `open`이 true로 유지돼 스택 위치가 흔들리지 않는다. 초점은 module이
+  //    reason별로 옮긴다. allow 목록은 모드와 무관하게 하나다.
+  //    - 편집기 안 클릭은 "안"이다. 편집·교체 중 다른 블록 클릭은
+  //      updateFromSelection이 selection으로 닫는다(Issue #251).
+  //    - view: 닫힘은 전부 dismissToolbar다.
+  //    - rename·caption: escape·invalidated는 draft를 버리고 closed다. escape는
+  //      재오픈 억제를 기록한다. 입력 안 Escape는 `.geul-media-toolbar` 안이라 module이 건너뛰고 cancelEditing이
+  //      view로 돌린다. 편집기 밖 요소를 누른 outside는 dismissToolbar다.
   //    - replacing의 Escape는 cancelReplacing이다(동작 변경 5, Issue #233
   //      RD-003 DELTA-04). 업로드 abort와 view 복귀가 ✕ 버튼과 같다.
-  //    - 그 밖의 닫힘은 dismissToolbar다. replacing 바깥 클릭은 업로드를
-  //      abort하지 않는다(file-panel dismissPanel과 같다). 완료돼도
-  //      finishReplacing이 mode가 replacing이 아니면 무시한다.
+  //    - replacing의 outside는 dismissToolbar다. 업로드는 abort하지 않는다
+  //      (file-panel dismissPanel과 같다). 완료돼도 finishReplacing이 mode가
+  //      replacing이 아니면 무시한다.
+  const isEditingMode =
+    toolbarState.mode === "editingName" ||
+    toolbarState.mode === "editingCaption";
   useDismissibleOverlay({
-    open: toolbarState.mode === "view" || toolbarState.mode === "replacing",
+    open:
+      toolbarState.mode === "view" ||
+      toolbarState.mode === "replacing" ||
+      isEditingMode,
     element,
     allowSelectors: MEDIA_TOOLBAR_DISMISS_ALLOW_SELECTORS,
     onClose: (reason) => {
+      if (isEditingMode && reason !== "outside") {
+        // Escape는 selection이 같은 블록에 남아 있다. keyup이 selection을 다시
+        // 읽어 view로 다시 열지 않게 억제를 기록한다(view의 dismissToolbar와 같다).
+        // invalidated는 대상 삭제·undo라 필요 없다. selection 비교로 닫는 경로도
+        // 기록하지 않는다. 새 selection이 이미 다른 블록이다.
+        if (reason === "escape")
+          dismissSuppression.dismiss(viewBlockIdRef.current);
+        closeEditingMode();
+        return;
+      }
       if (reason === "escape" && toolbarState.mode === "replacing") {
         cancelReplacing();
         return;
