@@ -379,6 +379,16 @@ describe("접힌 toggle 방향키", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it("ArrowRight는 라벨 시작에서도 소비하지 않는다", () => {
+    const { tiptap } = fixture();
+    placeCaretAtLabelStart(tiptap, "t1");
+    stubEndOfTextblock(tiptap, true);
+    const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   // 라벨 끝 요구는 ArrowDown에서 뺐다. 마지막 줄 판정은 endOfTextblock이 맡는다(Issue #255).
   describe("ArrowDown 라벨 중간·시작", () => {
     const POSITIONS = [
