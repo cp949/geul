@@ -78,3 +78,91 @@ test("캐럿이 든 자식을 가진 toggle을 접으면 입력이 toggle 라벨
   expect(await labelText(blockId(editable, 10))).toBe("펼쳐서 보는 토글 항목Z");
   await expect(blockId(editable, 11)).not.toContainText("Z");
 });
+
+/**
+ * 10번째 toggle의 첫 자식을 divider로 만들고 접는다(Issue #254 재현 상태).
+ * 라벨 끝 Enter는 새 블록을 마지막 자식 뒤에 붙인다. 첫 자식 앞에 빈 문단을
+ * 만들려고 11번째 블록 시작에서 Enter를 쓴다. 접힌 뒤 라벨 끝 클릭 → End까지
+ * 맞춘다. 접힌 toggle의 첫 숨은 자식이 atom이면 ArrowDown·ArrowRight가
+ * 막히는 결함의 전제 상태다.
+ */
+const collapseWithDividerFirstChild = async (page: Page) => {
+  const { editable, marker } = await openSample(page);
+  const block = blockId(editable, 10);
+  await placeCaretIn(page, blockId(editable, 11));
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.type("/divider");
+  await expect(page.getByRole("option", { name: /Divider/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(block.locator("hr")).toHaveCount(1);
+  // 첫 자식이 divider다.
+  expect(
+    await block.evaluate(
+      (element) =>
+        element.querySelector("[data-geul-block-group]")?.firstElementChild
+          ?.tagName,
+    ),
+  ).toBe("HR");
+
+  await marker.click();
+  await expect(block.locator("hr")).toBeHidden();
+
+  await placeCaretIn(page, block);
+  await page.keyboard.press("End");
+  await yieldFrame(page);
+  return { editable };
+};
+
+test("첫 숨은 자식이 divider인 접힌 toggle 라벨 끝에서 ArrowDown하면 다음 보이는 블록으로 가고 입력이 거기 들어간다", async ({
+  page,
+}) => {
+  const { editable } = await collapseWithDividerFirstChild(page);
+  const labelBefore = await labelText(blockId(editable, 10));
+
+  await page.keyboard.press("ArrowDown");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  await expect(blockId(editable, 12)).toContainText("Z");
+  expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
+});
+
+test("첫 숨은 자식이 divider인 접힌 toggle 라벨 끝에서 ArrowRight하면 다음 보이는 블록 시작으로 가고 입력이 거기 들어간다", async ({
+  page,
+}) => {
+  const { editable } = await collapseWithDividerFirstChild(page);
+  const labelBefore = await labelText(blockId(editable, 10));
+  const blockBefore = await blockId(editable, 12).innerText();
+
+  await page.keyboard.press("ArrowRight");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  // 블록 시작에 들어갔다. 기존 텍스트 앞에 Z가 붙는다.
+  expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
+  expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
+});
+
+test("첫 숨은 자식이 문단인 접힌 toggle 라벨 끝의 ArrowDown은 네이티브 이동으로 다음 보이는 블록에 간다", async ({
+  page,
+}) => {
+  const { editable, marker } = await openSample(page);
+  await marker.click();
+  await expect(blockId(editable, 11)).toBeHidden();
+  await placeCaretIn(page, blockId(editable, 10));
+  await page.keyboard.press("End");
+  await yieldFrame(page);
+  const labelBefore = await labelText(blockId(editable, 10));
+
+  await page.keyboard.press("ArrowDown");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  await expect(blockId(editable, 12)).toContainText("Z");
+  expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
+});
