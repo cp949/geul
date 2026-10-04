@@ -288,3 +288,9 @@ Issue #222가 추가했다.
 - LinkToolbar: 같은 선택에서 닫힌다.
 - 끝점만 `codeBlock`에 닿는 선택은 core가 mark를 적용하므로 버튼이 켜져 있다.
 - 구분선 `NodeSelection`에서 mark 버튼이 켜진 채 무반응인 현상은 이 변경의 범위 밖이다.
+- [Issue #242](https://github.com/cp949/geul/issues/242): 위 "범위 밖" 현상을 고쳤다. 구분선·`customBlock`은 `getSelectionMediaBlock()`이 `null`이라 미디어 종류별 허용 목록에서 빠져 있었다.
+- core `SelectionQuery.isAtomBlockSelected()`: `NodeSelection`이고 `node.isBlock && node.isAtom`이면 true다. 구분선·미디어·`customBlock`이 걸린다. 표(`isAtom: false`)·인라인 atom·`CellSelection`·텍스트 선택은 false다.
+- react `computeFormattingToolbarState`: `isMediaBlockSelected`를 `isAtomBlockSelected`로 바꿨다. `multiBlockSelection` 가드도 같은 값을 쓴다.
+- StaticToolbar: 구분선·`customBlock`·미디어 선택에서 mark 5개·색상 2개가 꺼진다.
+- FormattingToolbar·LinkToolbar: 같은 선택에서 열리지 않는다. 구분선은 전담 툴바가 없어 닫아도 잃는 정보가 없다.
+- `markingDisabledReason`을 선택 종류를 열거하지 않는 일반 문구로 바꿨다. ko "이 선택에서는 서식을 적용할 수 없습니다", en "Formatting isn't available for this selection". 본문 §4의 "세 경우가 문구 하나를 공유한다" 서술은 당시 결정이다.
