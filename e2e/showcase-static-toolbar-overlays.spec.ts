@@ -19,6 +19,7 @@
  * 하나라 영역 밖으로 나간 블록의 것만 숨고 영역 안 블록의 것은 보인다.
  *
  * sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 입력을 가로채지 않는다(Issue #265).
+ * 툴바 띠에 들어온 블록 앵커 오버레이 여섯도 툴바 입력을 가로채지 않는다(Issue #266).
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -657,9 +658,19 @@ test("블록 범위를 선택한 채 스크롤하면 영역 밖으로 나간 블
 });
 
 /**
+ * 창을 스크롤해 스크롤 영역 상단을 뷰포트 상단에 맞춘다. 영역이 뷰포트 밖이면
+ * 마우스로 영역 안 핸들이나 툴바를 누를 수 없다.
+ */
+const alignAreaToViewportTop = (page: Page) =>
+  page.evaluate(() => {
+    const area = document.querySelector('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    window.scrollBy(0, area.getBoundingClientRect().top);
+  });
+
+/**
  * 표 상단만 스크롤 영역 위로 20px 밀어 낸다. 마지막 행 셀에 커서를 둬 hover 없이도
- * 표 핸들이 남는다. 창을 스크롤해 영역 상단을 뷰포트 상단에 맞춘다. 영역이
- * 뷰포트 밖이면 마우스로 strip을 끌 수 없다.
+ * 표 핸들이 남는다. 창을 스크롤해 영역 상단을 뷰포트 상단에 맞춘다.
  */
 const pushTableTopAboveArea = async (page: Page) => {
   await openShowcasePage(page, "/examples/static-toolbar");
@@ -670,11 +681,7 @@ const pushTableTopAboveArea = async (page: Page) => {
   const cell = lastRow.locator("td").first();
   await cell.scrollIntoViewIfNeeded();
   await cell.click();
-  await page.evaluate(() => {
-    const area = document.querySelector('[class*="scrollArea"]');
-    if (area === null) throw new Error("scrollArea 없음");
-    window.scrollBy(0, area.getBoundingClientRect().top);
-  });
+  await alignAreaToViewportTop(page);
 
   // 표 상단을 영역 위로 20px 민다. 아래 행들은 영역 안에 남는다.
   const target = await table.evaluate((element) => {
@@ -758,48 +765,72 @@ test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리�
 /** 예제의 sticky 상단 툴바(`StaticToolbar` 루트). */
 const STATIC_TOOLBAR_SELECTOR = '[role="toolbar"][aria-label="Toolbar"]';
 
-test("sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 클릭과 드래그를 가로채지 않는다(#265)", async ({
-  page,
-}) => {
-  const { table } = await pushTableTopAboveArea(page);
-  const strip = page.locator("[data-geul-table-resize-handle]").first();
-  await expect(strip, "전제: strip 보임").toHaveCSS("visibility", "visible");
+type Point = { x: number; y: number };
 
-  // 첫 열 strip x, 툴바 중앙 y. strip은 영역 상단까지 잘려 툴바 띠와 겹친다.
-  const point = await strip.evaluate((element, selector) => {
+/** 오버레이 박스와 툴바 박스가 겹친 사각형의 중앙 점. 겹치지 않으면 `null`이다. */
+const readToolbarOverlapPoint = (overlay: Locator) =>
+  overlay.evaluate((element, selector): Point | null => {
     const toolbar = document.querySelector(selector);
     if (toolbar === null) throw new Error("툴바 없음");
-    const stripRect = element.getBoundingClientRect();
-    const toolbarRect = toolbar.getBoundingClientRect();
-    return {
-      x: stripRect.x + stripRect.width / 2,
-      y: (toolbarRect.top + toolbarRect.bottom) / 2,
-      overlaps:
-        stripRect.top < toolbarRect.bottom &&
-        stripRect.bottom > toolbarRect.top &&
-        stripRect.left < toolbarRect.right &&
-        stripRect.right > toolbarRect.left,
-    };
+    const a = element.getBoundingClientRect();
+    const b = toolbar.getBoundingClientRect();
+    const top = Math.max(a.top, b.top);
+    const bottom = Math.min(a.bottom, b.bottom);
+    const left = Math.max(a.left, b.left);
+    const right = Math.min(a.right, b.right);
+    if (bottom <= top || right <= left) return null;
+    return { x: (left + right) / 2, y: (top + bottom) / 2 };
   }, STATIC_TOOLBAR_SELECTOR);
-  expect(point.overlaps, "전제: strip이 툴바 띠와 겹친다").toBe(true);
 
-  const topIsInToolbar = await page.evaluate(
-    ({ x, y, selector }) =>
-      document.elementsFromPoint(x, y)[0]?.closest(selector) != null,
+/**
+ * 툴바 띠에 들어온 오버레이 위 점에서 툴바가 입력을 받는지 단언한다.
+ * 전제는 오버레이가 보이고 툴바와 겹치는 것이다. 겹친 사각형 중앙 점에서
+ * hit-test 맨 위와 실제 click 대상이 모두 툴바 안이어야 한다. 툴바 밖이면 받은
+ * 요소의 `tag.class`가 실패 메시지에 남는다. class가 없는 요소(svg 안 path 등)는
+ * class를 가진 가장 가까운 조상으로 적는다. 점은 툴바 레이아웃에 따라 버튼 위일
+ * 수도 버튼 사이 틈일 수도 있어 버튼으로 한정하지 않는다. 이어지는 드래그 단언이
+ * 쓰도록 점을 돌려준다.
+ */
+const expectToolbarTakesInputOverOverlay = async (
+  page: Page,
+  overlay: Locator,
+) => {
+  await expect(overlay, "전제: 오버레이 보임").toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  // fixed 오버레이는 스크롤 뒤 렌더로 재배치된다. 겹침이 수렴할 때까지 기다린다.
+  await expect
+    .poll(() => readToolbarOverlapPoint(overlay), {
+      message: "전제: 오버레이가 툴바 띠와 겹친다",
+    })
+    .not.toBeNull();
+  const point = await readToolbarOverlapPoint(overlay);
+  if (point === null)
+    throw new Error("전제: 오버레이가 툴바 띠와 겹치지 않는다");
+
+  const topElement = await page.evaluate(
+    ({ x, y, selector }) => {
+      const top = document.elementsFromPoint(x, y)[0];
+      if (top === undefined) return "none";
+      if (top.closest(selector) !== null) return "toolbar";
+      // svg의 className은 문자열이 아니다. class 속성을 읽는다.
+      const owner = top.closest("[class]") ?? top;
+      return `${owner.tagName}.${owner.getAttribute("class") ?? ""}`;
+    },
     { ...point, selector: STATIC_TOOLBAR_SELECTOR },
   );
-  expect(topIsInToolbar, "hit-test 맨 위가 툴바 자손").toBe(true);
+  expect(topElement, "hit-test 맨 위가 툴바 자손").toBe("toolbar");
 
-  // click을 받은 대상을 기록한다. 툴바 안이면 "toolbar"다. strip 점은 툴바 레이아웃에
-  // 따라 버튼 위일 수도 버튼 사이 틈일 수도 있어 버튼으로 한정하지 않는다.
   await page.evaluate((selector) => {
     document.addEventListener(
       "click",
       (event) => {
         const target = event.target as Element;
+        const owner = target.closest("[class]") ?? target;
         document.body.dataset.clickTarget =
           target.closest(selector) === null
-            ? `${target.tagName}.${String(target.className)}`
+            ? `${owner.tagName}.${owner.getAttribute("class") ?? ""}`
             : "toolbar";
       },
       { capture: true, once: true },
@@ -810,6 +841,17 @@ test("sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 클릭과 드
     "data-click-target",
     "toolbar",
   );
+  return point;
+};
+
+test("sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 클릭과 드래그를 가로채지 않는다(#265)", async ({
+  page,
+}) => {
+  const { table } = await pushTableTopAboveArea(page);
+  const strip = page.locator("[data-geul-table-resize-handle]").first();
+
+  // strip은 영역 상단까지 잘려 툴바 띠와 겹친다. 겹친 점은 첫 열 strip x, 툴바 중앙 y다.
+  const point = await expectToolbarTakesInputOverOverlay(page, strip);
 
   // 툴바 띠 안에서 strip x를 40px 끌어도 첫 열 폭이 그대로다.
   const firstColumn = table.locator("colgroup col").first();
@@ -830,4 +872,184 @@ test("sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 클릭과 드
     "style",
     /width:\s*160px/,
   );
+});
+
+/** 앵커의 어느 y를 툴바 상단 기준 위치에 맞출지. */
+type BandPlacement = {
+  /** `top`은 앵커 상단, `center`는 앵커 세로 중앙을 맞춘다. */
+  edge: "top" | "center";
+  /** 툴바 상단에서 아래로 떨어진 거리(px). */
+  offset: number;
+};
+
+/**
+ * 안쪽 스크롤로 앵커의 `edge`를 툴바 상단 아래 `offset`px에 둔다. `scrollTop`
+ * 대입만 해서 포인터는 움직이지 않는다. 스크롤 한계로 원하는 위치에 못 가면
+ * 전제 단언이 실패한다.
+ */
+const placeAnchorInBand = async (
+  page: Page,
+  anchor: Locator,
+  { edge, offset }: BandPlacement,
+) => {
+  const placed = await anchor.evaluate(
+    (element, { edge, offset, selector }) => {
+      const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+      const toolbar = document.querySelector(selector);
+      if (area === null || toolbar === null) {
+        throw new Error("scrollArea 또는 툴바 없음");
+      }
+      const readY = () => {
+        const rect = element.getBoundingClientRect();
+        return edge === "top" ? rect.top : (rect.top + rect.bottom) / 2;
+      };
+      const target = toolbar.getBoundingClientRect().top + offset;
+      area.scrollTop += readY() - target;
+      return Math.abs(readY() - target) < 1;
+    },
+    { edge, offset, selector: STATIC_TOOLBAR_SELECTOR },
+  );
+  expect(placed, `전제: 앵커 ${edge}가 툴바 상단 +${offset}px`).toBe(true);
+  await settleClip(page);
+};
+
+/**
+ * hover 오버레이를 툴바 띠로 올린다. 먼저 앵커를 띠 바로 아래에 두고 포인터를
+ * 앵커 위에 멈춘다. 그다음 `scrollTop` 대입으로만 앵커 상단을 띠에 넣는다.
+ * 포인터 y는 스크롤 뒤 띠 아래로 보이는 앵커 부분의 가운데다. 그래서 스크롤
+ * 전후 모두 앵커 위에 있고 hover가 유지된다.
+ */
+const hoverAnchorIntoBand = async (
+  page: Page,
+  anchor: Locator,
+  overlay: Locator,
+  offset: number,
+) => {
+  await alignAreaToViewportTop(page);
+  const band = await page
+    .locator(STATIC_TOOLBAR_SELECTOR)
+    .evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    });
+  await placeAnchorInBand(page, anchor, {
+    edge: "top",
+    offset: band.bottom - band.top + 2,
+  });
+  const before = await anchor.boundingBox();
+  if (before === null) throw new Error("Bounding box was not available");
+  const pointer = {
+    x: before.x + Math.min(30, before.width / 2),
+    y: (band.bottom + band.top + offset + before.height) / 2,
+  };
+  expect(
+    pointer.y > before.y && pointer.y < before.y + before.height,
+    "전제: 스크롤 전 포인터가 앵커 위",
+  ).toBe(true);
+  await page.mouse.move(pointer.x + 2, pointer.y);
+  await page.mouse.move(pointer.x, pointer.y);
+  await expect(overlay, "전제: hover 오버레이 존재").toHaveCount(1);
+
+  await placeAnchorInBand(page, anchor, { edge: "top", offset });
+  const after = await anchor.boundingBox();
+  if (after === null) throw new Error("Bounding box was not available");
+  expect(
+    pointer.y > Math.max(after.y, band.bottom) &&
+      pointer.y < after.y + after.height,
+    "전제: 스크롤 뒤 포인터가 띠 아래 앵커 위",
+  ).toBe(true);
+};
+
+/** 샘플을 불러오고 영역 상단을 뷰포트 상단에 맞춘다. */
+const openSampleAligned = async (page: Page) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  await alignAreaToViewportTop(page);
+  return editor;
+};
+
+test("sticky 툴바 띠에 들어온 hover 미디어 그립은 툴바 클릭을 가로채지 않는다(#266)", async ({
+  page,
+}) => {
+  const editor = await openSampleAligned(page);
+  const grip = page.locator(".geul-media-handle-overlay");
+  // 그립 상단은 이미지 상단과 같다. 그립(24px)이 툴바 상단 아래 4px부터 띠에 걸친다.
+  await hoverAnchorIntoBand(page, editor.locator("img").first(), grip, 4);
+
+  await expectToolbarTakesInputOverOverlay(page, grip);
+});
+
+test("sticky 툴바 띠에 들어온 hover callout 트리거는 툴바 클릭을 가로채지 않는다(#266)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  await editor.locator('[data-geul-block-id$="block-3"]').click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/callout");
+  await page.getByRole("option", { name: "Callout" }).click();
+  const trigger = page.locator(".geul-callout-icon-trigger");
+  // 트리거 상단은 callout 상단과 같다. 트리거(24px)가 툴바 상단 아래 10px부터 띠에 걸친다.
+  await hoverAnchorIntoBand(
+    page,
+    editor.locator("[data-geul-callout]").first(),
+    trigger,
+    10,
+  );
+
+  await expectToolbarTakesInputOverOverlay(page, trigger);
+});
+
+test("sticky 툴바 띠에 들어온 미디어 리사이즈 핸들은 툴바 클릭을 가로채지 않는다(#266)", async ({
+  page,
+}) => {
+  const { image } = await openMediaToolbar(page);
+  await alignAreaToViewportTop(page);
+  // 핸들은 이미지 세로 중앙에 있다. 이미지 중앙을 툴바 세로 중앙 근처에 둔다.
+  await placeAnchorInBand(page, image, { edge: "center", offset: 18 });
+
+  await expectToolbarTakesInputOverOverlay(
+    page,
+    page.locator(".geul-media-resize-handle").first(),
+  );
+});
+
+test("sticky 툴바 띠에 들어온 코드블록 툴바는 툴바 클릭을 가로채지 않는다(#266)", async ({
+  page,
+}) => {
+  const editor = await openSampleAligned(page);
+  const toolbar = page.locator(".geul-code-block-toolbar");
+  // 코드블록 툴바 상단은 코드블록 상단과 같다. 툴바 상단 아래 16px부터 띠에 걸친다.
+  await hoverAnchorIntoBand(page, editor.locator("pre").first(), toolbar, 16);
+
+  await expectToolbarTakesInputOverOverlay(page, toolbar);
+});
+
+test("sticky 툴바 띠에 들어온 미디어 툴바는 툴바 클릭을 가로채지 않는다(#266)", async ({
+  page,
+}) => {
+  const { image, toolbar } = await openMediaToolbar(page);
+  await alignAreaToViewportTop(page);
+  // 미디어 툴바 상단은 이미지 상단과 같다. 툴바 상단 아래 20px부터 띠에 걸친다.
+  await placeAnchorInBand(page, image, { edge: "top", offset: 20 });
+
+  await expectToolbarTakesInputOverOverlay(page, toolbar);
+});
+
+test("sticky 툴바 띠에 들어온 블록 gutter는 툴바 클릭을 가로채지 않는다(#266)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const gutter = page.locator(".geul-block-gutter");
+  // 깊이 0 문단. gutter 상단은 블록 상단과 같다. 툴바 상단 아래 24px부터 띠에 걸친다.
+  const block = editor.locator(
+    '[data-geul-block-id="showcase-static-toolbar-block-10"]',
+  );
+  await expect(block, "전제: 초기 문서").toBeVisible();
+  await hoverAnchorIntoBand(page, block, gutter, 24);
+
+  await expectToolbarTakesInputOverOverlay(page, gutter);
 });
