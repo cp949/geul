@@ -10,10 +10,10 @@
   border-radius: 6px;
 }
 
-/* z-index 6: 캡션(z-index 5)은 스크롤 영역 바깥에 그려져, 스크롤 영역 맨
-   위 띠로 올라오면 툴바 위에 덧그려진다. 그 캡션보다는 위에 둬 일반 sticky
-   헤더처럼 콘텐츠가 밑으로 지나가게 한다. 서식 popover·링크 툴바·핸들
-   (z-index 10)보다는 아래다. 첫 줄을 선택하면 popover가 툴바 띠와 겹치는데,
+/* z-index 6: 캡션과 표 열 리사이즈 strip(z-index 5)은 스크롤 영역 바깥에
+   그려져, 스크롤 영역 맨 위 띠로 올라오면 툴바 위에 덧그려진다. 그 둘보다는
+   위에 둬 일반 sticky 헤더처럼 콘텐츠가 밑으로 지나가게 한다. 서식 popover·
+   링크 툴바·미디어 grip 같은 핸들(z-index 10)보다는 아래다. 첫 줄을 선택하면 popover가 툴바 띠와 겹치는데,
    popover가 가려지면 안 된다. */
 .stickyToolbar {
   position: sticky;
