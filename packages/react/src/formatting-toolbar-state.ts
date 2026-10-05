@@ -18,8 +18,10 @@ export type FormattingToolbarState = {
   activeMarks: SelectionMark[];
   blockSelection: { blockId: string; blockType: BlockTypeDescriptor } | null;
   // 여러 블록에 걸친 텍스트 선택. blockSelection이 null이고 닿은 블록이
-  // 둘 이상일 때만 채운다. blockType은 모든 블록이 같은 타입일 때만 값이고
-  // 섞여 있으면 null이다. 들여쓰기·내어쓰기는 이 선택에 적용하지 않는다.
+  // 둘 이상일 때만 채운다. blockIds는 codeBlock을 포함한 전체다. blockType은
+  // codeBlock을 뺀 블록이 모두 같은 타입일 때만 값이고 섞여 있으면 null이다.
+  // 전부 codeBlock이면 codeBlock이다(Issue #269). 들여쓰기·내어쓰기는 이
+  // 선택에 적용하지 않는다.
   multiBlockSelection: {
     blockIds: string[];
     blockType: BlockTypeDescriptor | null;
@@ -68,12 +70,22 @@ const computeMultiBlockSelection = (
   editor: SelectionQuery,
 ): FormattingToolbarState["multiBlockSelection"] => {
   const blocks = editor.getSelectionBlocks();
-  const [first] = blocks;
-  if (first === undefined || blocks.length < 2) return null;
-  const isUniform = blocks.every(
-    ({ blockType }) =>
-      blockTypeToOptionId(blockType) === blockTypeToOptionId(first.blockType),
+  if (blocks.length < 2) return null;
+  // setBlockTypes가 codeBlock을 건너뛰므로 공통 타입도 codeBlock을 빼고
+  // 판정한다(Issue #269). blockIds는 codeBlock을 포함한 전체다. 전부
+  // codeBlock이면 뺄 것만 남으므로 전체로 판정한다(단일 codeBlock 선택과
+  // 같은 표시).
+  const nonCode = blocks.filter(
+    ({ blockType }) => blockType.type !== "codeBlock",
   );
+  const compared = nonCode.length > 0 ? nonCode : blocks;
+  const [first] = compared;
+  const isUniform =
+    first !== undefined &&
+    compared.every(
+      ({ blockType }) =>
+        blockTypeToOptionId(blockType) === blockTypeToOptionId(first.blockType),
+    );
   return {
     blockIds: blocks.map(({ blockId }) => blockId),
     blockType: isUniform ? first.blockType : null,
