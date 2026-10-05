@@ -71,7 +71,7 @@ subscribe(listener: () => void): () => void;
 ### 보장
 
 - 발화 시점에 `SelectionQuery` 조회가 새 상태를 반환한다.
-- 대상은 `getSelectionMarks()`, `getSelectionBlockType()` 등이다.
+- 대상은 `getSelectionMarks()`, `getSelectionBlockType()`, `getBlockTypeBlocker()` 등이다.
 
 ### 비보장
 

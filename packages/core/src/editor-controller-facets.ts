@@ -38,8 +38,8 @@ export interface EditorLifecycle {
    * 편집기 내부 상태가 바뀐 뒤 listener를 호출한다.
    * 문서 변경, selection 변경, stored mark 변경, `replaceDocument()` 성공이 대상이다.
    *
-   * 호출 시점에 `getSelectionMarks()`, `getSelectionBlockType()` 등
-   * 선택 조회는 새 상태를 반환한다.
+   * 호출 시점에 `getSelectionMarks()`, `getSelectionBlockType()`,
+   * `getBlockTypeBlocker()` 등 선택 조회는 새 상태를 반환한다.
    * `getDocument()`의 최신 여부와 `onChange`와의 호출 순서는 보장하지 않는다.
    * 문서 내용이 필요하면 `onChange`를 쓴다.
    *
