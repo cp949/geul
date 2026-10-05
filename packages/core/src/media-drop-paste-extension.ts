@@ -5,6 +5,7 @@ import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { NodeSelection, Plugin } from "@tiptap/pm/state";
 
 import { finalizeAndDispatch } from "./dispatch.js";
+import { isHtmlElement } from "./dom-node.js";
 import { insertMediaBlock as insertMediaBlockCommand } from "./media-commands.js";
 import {
   detectMediaBlockKind,
@@ -231,7 +232,7 @@ const resolveDropTarget = (
   if (container === null) return { position: $pos.pos };
 
   const dom = view.nodeDOM(container.position);
-  const rect = dom instanceof HTMLElement ? dom.getBoundingClientRect() : null;
+  const rect = isHtmlElement(dom) ? dom.getBoundingClientRect() : null;
   const before = rect !== null && clientY < rect.top + rect.height / 2;
   return {
     position: before

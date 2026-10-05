@@ -8,6 +8,8 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
+import { isHtmlElement } from "./dom-node.js";
+
 // 그릴링 2026-09-17 발견 — 빈 에디터(paragraph 한 줄)의 min-height
 // 여백(_editor.scss `.geul-editor [contenteditable="true"] { min-height:
 // 12rem }`)을 클릭해도 커서가 안 생긴다. 이 저장소는 클릭→커서 배치를
@@ -39,7 +41,7 @@ const collectBlockCandidates = (view: EditorView): BlockCandidate[] => {
     const blockId = node.attrs.blockId as unknown;
     if (typeof blockId !== "string" || blockId.length === 0) return true;
     const dom = view.nodeDOM(pos);
-    if (!(dom instanceof HTMLElement)) return true;
+    if (!isHtmlElement(dom)) return true;
     const rect = dom.getBoundingClientRect();
     // 접힌 toggle 자식(display:none 조상, toggle-collapse-visibility-
     // extension.ts) 등 숨은 블록은 rect가 0x0으로 남는다 — 후보에서 제외.
