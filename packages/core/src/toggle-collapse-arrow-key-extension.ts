@@ -1,5 +1,5 @@
 import { type Editor, Extension } from "@tiptap/core";
-import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
+import { Selection, TextSelection } from "@tiptap/pm/state";
 
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 import {
@@ -14,14 +14,18 @@ import {
 // 되돌려 캐럿이 제자리에 갇힌다. 이 확장이 키를 먼저 받아 접힌 container 뒤
 // 첫 선택 가능 위치로 옮긴다.
 //
+// 첫 숨은 자식이 문단·표여도 소비한다(Issue #261). 네이티브 이동에 맡기면
+// 뒤 보이는 atom을 건너뛰거나 엔진마다 착지가 다르다.
+//
 // 키를 소비하는 조건은 아래 넷이다. 하나라도 어긋나면 false를 반환해
 // 네이티브 이동에 맡긴다.
 // - selection이 빈 TextSelection이다. Shift 등 조합 키는 바인딩에서 걸러진다.
 // - $head가 접힌 toggle 라벨 안이다. ArrowRight는 라벨 끝만 소비한다.
 //   ArrowDown은 라벨 어디서든 소비한다(Issue #255). endOfTextblock이
 //   레이아웃을 읽으므로 라벨 판정 뒤에 부른다.
-// - 방향 이동이 고를 첫 위치가 숨은 자손의 NodeSelection이다. 첫 숨은 자식이
-//   텍스트블록이면 네이티브 이동이 이미 맞다(Chromium 실측).
+// - 방향 이동이 고를 첫 위치가 숨은 자손이다. Selection 종류는 보지 않는다.
+//   숨은 문단·표 셀이면 TextSelection, 숨은 atom이면 NodeSelection이다.
+//   자식 없는 접힌 toggle은 첫 위치가 다음 보이는 블록이라 소비하지 않는다.
 // - endOfTextblock가 throw하지 않는다.
 //
 // 라벨 중간의 ArrowRight는 글자 한 칸 이동이라 가로채지 않는다. 라벨 중간의
@@ -60,10 +64,10 @@ const collapsedToggleExitSelection = (
     // jsdom처럼 레이아웃이 없으면 던진다. 판정 불가로 보고 개입하지 않는다.
     return null;
   }
-  // PM이 고를 첫 위치(moveSelectionBlock과 같은 계산)가 숨은 atom인지 본다.
+  // PM이 고를 첫 위치(moveSelectionBlock과 같은 계산)가 숨은 자손인지 본다.
   const first = Selection.findFrom(state.doc.resolve($head.after()), 1);
   if (
-    !(first instanceof NodeSelection) ||
+    first === null ||
     outermostCollapsedContainerDepth(first.$from) === null
   ) {
     return null;
