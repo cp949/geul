@@ -24,6 +24,11 @@
  *
  * RTL로 끝나는 라벨 끝의 ArrowLeft는 첫 숨은 자식이 divider면 Firefox·WebKit에서
  * 다음 보이는 블록 시작으로 가고 Chromium에서 라벨 안에서 움직인다(Issue #273).
+ *
+ * ProseMirror 범위(U+0590–U+08AC) 밖 RTL 라벨의 ArrowRight도 엔진의 시각 이동을
+ * 따른다(Issue #274). Firefox만 라벨 안에서 움직인다. 다섯 건 모두 `@core`다.
+ * 혼합 라벨 연속 ArrowRight는 펼친 상태 네이티브와 같은 키 횟수로 라벨을
+ * 벗어난다. Firefox caretBidiLevel이 남아야 같다.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -383,7 +388,8 @@ const MIXED_LABEL = `${RTL_LABEL} abc`;
 
 /**
  * 접힌 block-10 라벨 끝에서 key 1회 뒤 `Z`를 입력한다(Issue #268, #273).
- * inLabel이면 엔진이 라벨 안에서 한 글자 움직인 결과를 기대한다. 아니면
+ * inLabel이면 엔진이 라벨 안에서 한 글자 움직인 결과를 기대한다. 글자는
+ * 코드포인트 단위다(Issue #274). 아니면
  * block-12 시작을 기대한다. 키 전후와 입력 뒤 최상위 블록 수가 같다.
  */
 const arrowAtLabelEnd = async (
@@ -413,9 +419,9 @@ const arrowAtLabelEnd = async (
 
   expect(await siblingCount(block)).toBe(countBefore);
   if (inLabel) {
-    expect(await labelText(block)).toBe(
-      `${label.slice(0, label.length - 1)}Z${label.slice(label.length - 1)}`,
-    );
+    const chars = Array.from(label);
+    const last = chars.pop() ?? "";
+    expect(await labelText(block)).toBe(`${chars.join("")}Z${last}`);
     expect(await blockId(editable, 12).innerText()).toBe(blockBefore);
   } else {
     expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
@@ -482,3 +488,100 @@ for (const label of [RTL_LABEL, RTL_ENDING_MIXED_LABEL]) {
     );
   });
 }
+
+/** PM 범위(U+0590–U+08AC) 밖 RTL 라벨이다(Issue #274). */
+const OUT_OF_PM_RTL_LABELS = [
+  [
+    "Arabic Presentation Forms-B",
+    String.fromCodePoint(0xfee3, 0xfeae, 0xfea3, 0xfe92, 0xfe8e),
+  ],
+  [
+    "Arabic Extended-A",
+    String.fromCodePoint(0x08b6, 0x08b7, 0x08b8, 0x08b6, 0x08b7),
+  ],
+  [
+    "Hebrew Presentation Forms",
+    String.fromCodePoint(0xfb2a, 0xfb31, 0xfb4b, 0xfb3c, 0xfb44),
+  ],
+  [
+    "Adlam(astral)",
+    String.fromCodePoint(0x1e922, 0x1e923, 0x1e924, 0x1e925, 0x1e926),
+  ],
+] as const;
+
+for (const [name, label] of OUT_OF_PM_RTL_LABELS) {
+  test(`PM 범위 밖 RTL(${name})로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 첫 숨은 자식이 문단이면 엔진의 시각 이동을 따른다 @core`, async ({
+    page,
+  }, testInfo) => {
+    const { editable, marker } = await openSample(page);
+    await replaceLabel(page, blockId(editable, 10), label);
+    await marker.click();
+    await expect(blockId(editable, 11)).toBeHidden();
+
+    // Firefox만 시각 오른쪽이 라벨 안이다.
+    await arrowAtLabelEnd(
+      page,
+      editable,
+      label,
+      "ArrowRight",
+      testInfo.project.name === "firefox",
+    );
+  });
+}
+
+test("PM 범위 밖 RTL(Arabic Presentation Forms-B)로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 첫 숨은 자식이 divider여도 엔진의 시각 이동을 따른다 @core", async ({
+  page,
+}, testInfo) => {
+  const [, label] = OUT_OF_PM_RTL_LABELS[0];
+  const { editable } = await collapseWithDividerFirstChild(page, label);
+
+  await arrowAtLabelEnd(
+    page,
+    editable,
+    label,
+    "ArrowRight",
+    testInfo.project.name === "firefox",
+  );
+});
+
+test("PM 범위 밖 RTL 글자로 끝나는 혼합 접힌 toggle 라벨 끝의 ArrowRight 2회는 펼친 상태처럼 라벨을 벗어난다 @core", async ({
+  page,
+}, testInfo) => {
+  // `abc ` 뒤 Arabic Presentation Forms-B 한 글자다.
+  const label = String.fromCodePoint(0x61, 0x62, 0x63, 0x20, 0xfee3);
+  const { editable, marker } = await openSample(page);
+  const block = blockId(editable, 10);
+  await replaceLabel(page, block, label);
+  await marker.click();
+  await expect(blockId(editable, 11)).toBeHidden();
+  await placeCaretInsideOf(page, labelOf(block));
+  // 전제: 캐럿이 라벨 논리 끝이다.
+  await expect(async () => {
+    await page.keyboard.press("End");
+    await yieldFrame(page);
+    expect(await textBeforeCaret(labelOf(block))).toBe(label);
+  }).toPass();
+  const blockBefore = await blockId(editable, 12).innerText();
+  const countBefore = await siblingCount(block);
+
+  // Firefox 펼침 네이티브는 라벨 안 bidi 수준 전환 1회 뒤 라벨을 벗어난다.
+  // 확장이 첫 키를 대신해도 그 bidi 수준을 남겨야 같은 횟수가 된다.
+  await page.keyboard.press("ArrowRight");
+  await yieldFrame(page);
+  await page.keyboard.press("ArrowRight");
+  await yieldFrame(page);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  expect(await siblingCount(block)).toBe(countBefore);
+  expect(await labelText(block)).toBe(label);
+  if (testInfo.project.name === "firefox") {
+    expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
+  } else {
+    // 첫 키가 block-12 시작으로 가고 둘째 키가 한 글자 움직인다.
+    const [first = "", ...rest] = Array.from(blockBefore);
+    expect(await blockId(editable, 12).innerText()).toBe(
+      `${first}Z${rest.join("")}`,
+    );
+  }
+});

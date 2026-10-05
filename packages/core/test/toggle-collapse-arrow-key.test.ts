@@ -10,6 +10,9 @@
  * 마지막 줄이면 소비한다(Issue #255).
  * ArrowRight는 시각 방향 "right"로 판정한다. RTL로 끝나는 라벨은 논리 끝이어도
  * 시각 오른쪽 끝이 아닐 수 있다(Issue #268).
+ * PM 범위(U+0590–U+08AC) 밖 RTL 라벨은 확장이 Selection.modify로 직접 실측한다.
+ * 라벨 안 이동이면 키를 소비하고 실측 위치로 selection을 옮긴다(Issue #274).
+ * caretBidiLevel은 실측 뒤 되돌리고, dispatch 뒤 실측 직후 값을 다시 넣는다.
  * ArrowLeft는 소비하지 않고 사후 교정한다. 라벨 끝 keydown 뒤 PM이 만든 숨은
  * NodeSelection만 접힌 container 뒤로 옮긴다(Issue #273).
  *
@@ -18,7 +21,7 @@
  */
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import type { ResolvedPos } from "@tiptap/pm/model";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, type Mock, vi } from "vitest";
 
 import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
 import {
@@ -814,5 +817,410 @@ describe("접힌 toggle 방향키", () => {
 
       expectCaretAt(tiptap, labelEnd(tiptap, "t1"));
     });
+  });
+
+  // PM은 U+0590–U+08AC 밖 RTL 글자를 실측하지 않고 논리 판정한다. 확장이
+  // 그 라벨을 Selection.modify로 직접 실측한다. 라벨 안 이동이면 확장이 그
+  // 위치로 옮긴다. jsdom Selection에는 modify가 없어 테스트가 심는다. 엔진
+  // 결과는 e2e가 증명한다(ADR-0007).
+  describe("ArrowRight PM 범위 밖 RTL(Issue #274)", () => {
+    // Arabic Presentation Forms-B. PM 범위 밖이다.
+    const L2 = String.fromCodePoint(0xfee3, 0xfeae, 0xfea3, 0xfe92, 0xfe8e);
+    // Arabic. PM 범위 안이다.
+    const L1 = String.fromCodePoint(0x0645, 0x0631, 0x062d, 0x0628, 0x0627);
+    // Adlam. astral이고 PM 범위 밖이다.
+    const L5 = String.fromCodePoint(
+      0x1e922,
+      0x1e923,
+      0x1e924,
+      0x1e925,
+      0x1e926,
+    );
+
+    type DomSelection = NonNullable<ReturnType<Document["getSelection"]>> & {
+      caretBidiLevel?: number;
+    };
+
+    /**
+     * fixture. 라벨만 바꾼다.
+     * - r1: 접힘, 첫 자식 문단 rc1. 뒤는 문단 ra1.
+     */
+    const rtlFixture = (label: string) =>
+      mounted(
+        documentOf(
+          toggleBlock("r1", label, {
+            collapsed: true,
+            children: [paragraphBlock("rc1", "숨은 문단")],
+          }),
+          paragraphBlock("ra1", "뒤"),
+        ),
+      );
+
+    /** r1 라벨 끝 위치. UTF-16 길이로 센다. */
+    const rtlLabelEnd = (tiptap: TiptapEditor, label: string): number =>
+      contentTextStart(tiptap, "r1") + label.length;
+
+    /** r1 라벨의 텍스트 노드. */
+    const labelTextNode = (tiptap: TiptapEditor): Node => {
+      const { node } = tiptap.view.domAtPos(contentTextStart(tiptap, "r1") + 1);
+      if (node.nodeType !== Node.TEXT_NODE) {
+        throw new Error("r1 라벨 텍스트 노드 조회 실패");
+      }
+      return node;
+    };
+
+    /** 라벨 마지막 코드포인트 앞의 텍스트 offset. UTF-16으로 센다. */
+    const insideOffset = (label: string): number =>
+      label.length - (Array.from(label).pop() ?? "").length;
+
+    /** 라벨 마지막 코드포인트 앞의 PM 위치. */
+    const insidePos = (tiptap: TiptapEditor, label: string): number =>
+      contentTextStart(tiptap, "r1") + insideOffset(label);
+
+    /**
+     * 라벨 마지막 코드포인트 앞으로 focus를 옮긴다. Firefox처럼
+     * caretBidiLevel도 바꾼다.
+     */
+    const moveInsideLabel =
+      (tiptap: TiptapEditor, label: string) => (selection: DomSelection) => {
+        selection.collapse(labelTextNode(tiptap), insideOffset(label));
+        selection.caretBidiLevel = 1;
+      };
+
+    /** focus를 뒤 문단 ra1 시작으로 옮긴다. */
+    const moveOutOfLabel =
+      (tiptap: TiptapEditor) => (selection: DomSelection) => {
+        const { node, offset } = tiptap.view.domAtPos(
+          contentTextStart(tiptap, "ra1"),
+        );
+        selection.collapse(node, offset);
+      };
+
+    /**
+     * PM selection과 DOM 캐럿을 r1 라벨 끝에 두고 fn을 실행한다. move를 주면
+     * 그 동작을 하는 modify를 Selection에 심는다. 심은 modify와
+     * caretBidiLevel은 fn 뒤 지운다(G-TST-003).
+     */
+    const withCaretAtLabelEnd = (
+      tiptap: TiptapEditor,
+      label: string,
+      move: ((selection: DomSelection) => void) | undefined,
+      fn: (selection: DomSelection, modify: Mock) => void,
+    ): void => {
+      const pos = rtlLabelEnd(tiptap, label);
+      placeCaret(tiptap, pos);
+      const dom = tiptap.view.domAtPos(pos);
+      withNativeCaret(
+        tiptap.view.dom as HTMLElement,
+        () => {
+          const selection = tiptap.view.dom.ownerDocument.getSelection();
+          if (selection === null) throw new Error("DOM selection 없음");
+          const target: DomSelection = selection;
+          // lib.dom은 modify를 필수로 선언한다. 심고 지우려고 선택 속성으로 본다.
+          const planted = target as unknown as { modify?: unknown };
+          const modify = vi.fn(() => {
+            move?.(target);
+          });
+          if (move !== undefined) planted.modify = modify;
+          try {
+            fn(target, modify);
+          } finally {
+            delete planted.modify;
+            delete target.caretBidiLevel;
+          }
+        },
+        dom.node,
+        dom.offset,
+      );
+    };
+
+    /** 핸들러가 state를 넘겨 부른 endOfTextblock 방향. gapcursor 호출은 뺀다. */
+    const handlerDirections = (
+      endOfTextblock: Mock<TiptapEditor["view"]["endOfTextblock"]>,
+    ): string[] =>
+      endOfTextblock.mock.calls
+        .filter(([, state]) => state !== undefined)
+        .map(([direction]) => direction);
+
+    it("실측이 라벨 안 이동이면 소비하고 dispatch 1회로 그 위치에 캐럿을 둔다", () => {
+      const { tiptap } = rtlFixture(L2);
+      const endOfTextblock = vi.spyOn(tiptap.view, "endOfTextblock");
+      const docBefore = tiptap.state.doc;
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        moveInsideLabel(tiptap, L2),
+        (_selection, modify) => {
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+          });
+
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          expect(modify).toHaveBeenCalledWith("move", "right", "character");
+        },
+      );
+      expectCaretAt(tiptap, insidePos(tiptap, L2));
+      expect(tiptap.state.doc).toBe(docBefore);
+      expect(handlerDirections(endOfTextblock)).not.toContain("right");
+    });
+
+    it("실측 뒤 dispatch 전에 DOM selection과 caretBidiLevel을 되돌린다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        moveInsideLabel(tiptap, L2),
+        (selection, modify) => {
+          selection.caretBidiLevel = 0;
+          const { anchorNode, anchorOffset, focusNode, focusOffset } =
+            selection;
+          // dispatch 시점의 DOM selection을 기록한다.
+          const original = tiptap.view.dispatch.bind(tiptap.view);
+          const atDispatch: unknown[] = [];
+          vi.spyOn(tiptap.view, "dispatch").mockImplementation((tr) => {
+            atDispatch.push([
+              selection.anchorNode,
+              selection.anchorOffset,
+              selection.focusNode,
+              selection.focusOffset,
+              selection.caretBidiLevel,
+            ]);
+            original(tr);
+          });
+
+          withoutScrollCrash(tiptap, () => {
+            dispatchKeydown(tiptap, "ArrowRight");
+          });
+
+          expect(modify).toHaveBeenCalledTimes(1);
+          expect(atDispatch).toHaveLength(1);
+          const [state] = atDispatch as unknown[][];
+          expect(state?.[0]).toBe(anchorNode);
+          expect(state?.[1]).toBe(anchorOffset);
+          expect(state?.[2]).toBe(focusNode);
+          expect(state?.[3]).toBe(focusOffset);
+          expect(state?.[4]).toBe(0);
+        },
+      );
+    });
+
+    it("실측이 라벨 안 이동이면 dispatch 뒤 DOM selection에 실측 직후 caretBidiLevel을 다시 넣는다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        moveInsideLabel(tiptap, L2),
+        (selection) => {
+          selection.caretBidiLevel = 0;
+
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+          });
+
+          // Firefox 네이티브 이동처럼 다음 키가 실측 직후 bidi 수준에서 시작한다.
+          expect(selection.caretBidiLevel).toBe(1);
+        },
+      );
+      expectCaretAt(tiptap, insidePos(tiptap, L2));
+    });
+
+    it("caretBidiLevel이 없는 엔진에서는 dispatch 뒤 그 값을 넣지 않는다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        (selection) => {
+          selection.collapse(labelTextNode(tiptap), insideOffset(L2));
+        },
+        (selection) => {
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+          });
+
+          expect("caretBidiLevel" in selection).toBe(false);
+        },
+      );
+      expectCaretAt(tiptap, insidePos(tiptap, L2));
+    });
+
+    it("실측이 라벨 밖 이동이면 소비하고 다음 보이는 블록 시작으로 간다", () => {
+      const { tiptap } = rtlFixture(L2);
+      const endOfTextblock = vi.spyOn(tiptap.view, "endOfTextblock");
+
+      withCaretAtLabelEnd(tiptap, L2, moveOutOfLabel(tiptap), () => {
+        withoutScrollCrash(tiptap, () => {
+          expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+        });
+      });
+
+      expectCaretAt(tiptap, contentTextStart(tiptap, "ra1"));
+      expect(handlerDirections(endOfTextblock)).not.toContain("right");
+    });
+
+    it("실측에서 캐럿이 움직이지 않으면 소비한다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        () => {},
+        () => {
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+          });
+        },
+      );
+
+      expectCaretAt(tiptap, contentTextStart(tiptap, "ra1"));
+    });
+
+    it("Selection.modify가 없으면 논리 판정으로 소비한다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(tiptap, L2, undefined, (selection) => {
+        // 전제: jsdom Selection에는 modify가 없다.
+        expect("modify" in selection).toBe(false);
+        withoutScrollCrash(tiptap, () => {
+          expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+        });
+      });
+
+      expectCaretAt(tiptap, contentTextStart(tiptap, "ra1"));
+    });
+
+    it("DOM selection이 null이면 논리 판정으로 소비한다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        moveInsideLabel(tiptap, L2),
+        (_selection, modify) => {
+          // document는 전역이라 spy를 반드시 복원한다(G-TST-003).
+          const getSelection = vi
+            .spyOn(tiptap.view.dom.ownerDocument, "getSelection")
+            .mockReturnValue(null);
+          try {
+            withoutScrollCrash(tiptap, () => {
+              expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+            });
+          } finally {
+            getSelection.mockRestore();
+          }
+          expect(modify).not.toHaveBeenCalled();
+        },
+      );
+
+      expectCaretAt(tiptap, contentTextStart(tiptap, "ra1"));
+    });
+
+    it("Selection.modify가 throw하면 소비하지 않는다", () => {
+      const { tiptap } = rtlFixture(L2);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L2,
+        () => {
+          throw new Error("modify 실패");
+        },
+        () => {
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(false);
+          });
+
+          expect(dispatch).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    it.each([
+      ["PM 범위 안 RTL", L1],
+      ["LTR", "abc"],
+    ])(
+      "%s 라벨은 endOfTextblock으로 판정하고 직접 실측하지 않는다",
+      (_label, label) => {
+        const { tiptap } = rtlFixture(label);
+        // PM endOfTextblock도 Selection.modify를 부른다. 값을 고정해 막는다.
+        const endOfTextblock = stubEndOfTextblock(tiptap, true);
+
+        withCaretAtLabelEnd(
+          tiptap,
+          label,
+          moveInsideLabel(tiptap, label),
+          (_selection, modify) => {
+            withoutScrollCrash(tiptap, () => {
+              expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+            });
+            expect(modify).not.toHaveBeenCalled();
+          },
+        );
+
+        expect(handlerDirections(endOfTextblock)).toContain("right");
+        expectCaretAt(tiptap, contentTextStart(tiptap, "ra1"));
+      },
+    );
+
+    it("astral RTL 라벨도 직접 실측해 라벨 안 이동이면 그 위치에 캐럿을 둔다", () => {
+      const { tiptap } = rtlFixture(L5);
+
+      withCaretAtLabelEnd(
+        tiptap,
+        L5,
+        moveInsideLabel(tiptap, L5),
+        (_selection, modify) => {
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(true);
+          });
+
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          expect(modify).toHaveBeenCalledTimes(1);
+        },
+      );
+      // 마지막 코드포인트는 UTF-16 두 단위다.
+      expectCaretAt(tiptap, rtlLabelEnd(tiptap, L5) - 2);
+    });
+
+    it.each([
+      ["라벨 밖이면", "outside"],
+      ["throw하면", "throw"],
+    ] as const)(
+      "실측 위치의 posAtDOM 결과가 %s 소비하지 않는다",
+      (_label, mode) => {
+        const { tiptap } = rtlFixture(L2);
+        const textNode = labelTextNode(tiptap);
+        const outside = contentTextStart(tiptap, "ra1");
+        const original = tiptap.view.posAtDOM.bind(tiptap.view);
+        // 실측이 옮긴 위치만 바꾼다. DOM 캐럿 해석은 원본이다.
+        vi.spyOn(tiptap.view, "posAtDOM").mockImplementation(
+          (node, offset, bias) => {
+            if (node !== textNode || offset !== insideOffset(L2)) {
+              return original(node, offset, bias);
+            }
+            if (mode === "throw") throw new Error("위치 해석 실패");
+            return outside;
+          },
+        );
+
+        withCaretAtLabelEnd(tiptap, L2, moveInsideLabel(tiptap, L2), () => {
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+          withoutScrollCrash(tiptap, () => {
+            expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(false);
+          });
+
+          expect(dispatch).not.toHaveBeenCalled();
+        });
+      },
+    );
   });
 });

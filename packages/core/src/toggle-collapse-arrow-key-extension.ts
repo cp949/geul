@@ -8,6 +8,7 @@ import {
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 import {
@@ -49,9 +50,19 @@ import {
 // ArrowRight는 시각 방향 "right"로 판정한다(Issue #268). 논리 "forward"로
 // 판정하면 RTL로 끝나는 라벨에서 Firefox가 라벨 안에서 움직일 키를 가로챈다.
 // - ProseMirror는 라벨에 U+0590–U+08AC 글자가 있으면 Selection.modify로 시각
-//   이동을 실측한다.
-// - 그 밖이면 논리 판정(라벨 끝)으로 대체한다. LTR 결과는 그대로다. 범위 밖
-//   RTL 글자(Arabic Presentation Forms 등)는 수정 전처럼 라벨 끝에서 소비한다.
+//   이동을 실측한다. 그 밖이면 논리 판정(라벨 끝)으로 대체한다. LTR 결과는 그대로다.
+// - 범위 밖 RTL 글자(Arabic Presentation Forms·Adlam 등)만 있는 라벨은 확장이
+//   직접 실측한다(Issue #274). PM 논리 판정은 Firefox에서 라벨 안 이동을 가로챈다.
+// - 직접 실측은 PM과 같다. 한 글자 이동 뒤 focus가 라벨 밖이거나 제자리면
+//   끝이다. 그 뒤 DOM selection과 caretBidiLevel을 되돌린다.
+// - 실측이 라벨 안 이동이면 키를 소비하고 그 위치로 selection을 옮긴다.
+//   폴스루하면 Firefox에서 PM이 숨은 첫 자식 atom을 골라 캐럿이 갇힌다.
+//   그 위치가 라벨 밖이거나 posAtDOM이 던지면 개입하지 않는다.
+// - 그때 dispatch 뒤 DOM selection에 실측 직후 caretBidiLevel을 다시 넣는다.
+//   넣지 않으면 Firefox가 다음 키를 bidi 수준 전환에 써서 라벨을 벗어나는 데
+//   네이티브보다 키가 한 번 더 든다. caretBidiLevel이 없는 엔진은 넣지 않는다.
+// - 실측할 수 없으면(DOM selection·modify 없음) 논리 판정으로 소비한다. 실측이
+//   throw하면 개입하지 않는다.
 // - 라벨 논리 끝 요구는 유지한다. 시각 판정은 그 위에 더하는 조건이다.
 //
 // ArrowLeft는 소비하지 않고 사후 교정한다(Issue #273).
@@ -73,6 +84,100 @@ import {
 
 type ArrowKey = "down" | "right";
 
+// PM 1.42.3 maybeRTL과 같다. 이 글자가 있으면 PM endOfTextblock이 실측한다.
+const PM_MEASURED_RTL = /[\u0590-\u08ac]/;
+
+// Unicode가 기본 bidi 클래스 R·AL로 배정한 블록이다(Issue #274).
+// PM maybeRTL이 이 블록을 덮으면 직접 실측 분기를 지운다.
+const RTL_BLOCKS =
+  /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff\u{10800}-\u{10fff}\u{1e800}-\u{1efff}]/u;
+
+// Firefox만 caretBidiLevel을 가진다.
+type DomSelection = NonNullable<ReturnType<Document["getSelection"]>> & {
+  caretBidiLevel?: number;
+};
+
+// 엔진이 라벨 안에서 옮길 위치다(Issue #274). caretBidiLevel은 실측 직후
+// 값이다. Firefox만 가진다.
+type LabelMove = { pos: number; caretBidiLevel: number | undefined };
+
+// 라벨 끝 판정 결과다. true는 끝, false는 끝이 아님(폴스루)이다.
+type TextblockEnd = boolean | LabelMove;
+
+// 라벨 끝 캐럿의 시각 오른쪽 이동을 Selection.modify로 실측한다(Issue #274).
+// PM endOfTextblockHorizontal과 같은 방식이다. PM 비공개 API는 쓰지 않는다.
+// 판정 state는 DOM 캐럿에서 파생했다. DOM은 이미 그 위치라 flush하지 않는다.
+// focus가 라벨 밖이거나 제자리면 true다. 라벨 안에서 움직였으면 그 PM 위치다.
+const measureVisualRight = (
+  view: EditorView,
+  state: EditorState,
+): TextblockEnd => {
+  const { $head } = state.selection;
+  const selection: DomSelection | null = view.dom.ownerDocument.getSelection();
+  const labelDOM = view.nodeDOM($head.before());
+  // 실측할 수 없으면 논리 판정이다. 호출부가 라벨 논리 끝을 이미 확인했다.
+  if (
+    selection === null ||
+    typeof selection.modify !== "function" ||
+    labelDOM === null
+  ) {
+    return true;
+  }
+  const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+  const bidiLevel = selection.caretBidiLevel;
+  let moved: { node: Node; offset: number; caretBidiLevel: number | undefined };
+  try {
+    selection.modify("move", "right", "character");
+    const { focusNode: newNode, focusOffset: newOffset } = selection;
+    if (newNode === focusNode && newOffset === focusOffset) return true;
+    // focus를 잃으면 PM처럼 끝이 아니다. 위치를 몰라 폴스루한다.
+    if (newNode === null) return false;
+    if (!labelDOM.contains(newNode)) return true;
+    moved = {
+      node: newNode,
+      offset: newOffset,
+      caretBidiLevel: selection.caretBidiLevel,
+    };
+  } finally {
+    try {
+      selection.collapse(anchorNode, anchorOffset);
+      if (
+        focusNode !== null &&
+        (focusNode !== anchorNode || focusOffset !== anchorOffset)
+      ) {
+        selection.extend(focusNode, focusOffset);
+      }
+    } catch {
+      // 복원 실패는 PM처럼 삼킨다.
+    }
+    if (bidiLevel !== undefined) selection.caretBidiLevel = bidiLevel;
+  }
+  // 복원 뒤 PM 위치로 바꾼다. 라벨 밖이거나 posAtDOM이 던지면 개입하지 않는다.
+  try {
+    const pos = view.posAtDOM(moved.node, moved.offset);
+    return pos >= $head.start() && pos <= $head.end()
+      ? { pos, caretBidiLevel: moved.caretBidiLevel }
+      : false;
+  } catch {
+    return false;
+  }
+};
+
+// direction 쪽으로 라벨 끝인지 판정한다. 범위 밖 RTL 라벨의 "right"만 직접 실측한다.
+const textblockEnd = (
+  view: EditorView,
+  state: EditorState,
+  direction: ArrowKey,
+): TextblockEnd => {
+  if (direction === "right") {
+    const text = state.selection.$head.parent.textContent;
+    if (!PM_MEASURED_RTL.test(text) && RTL_BLOCKS.test(text)) {
+      return measureVisualRight(view, state);
+    }
+  }
+  return view.endOfTextblock(direction, state);
+};
+
 // 라벨 $head가 속한 blockContainer 뒤 첫 선택 가능 위치다. 마지막 자식이면
 // 부모 뒤로 올라간다. 없으면 null이다.
 const selectionAfterCollapsedContainer = (
@@ -81,10 +186,14 @@ const selectionAfterCollapsedContainer = (
   Selection.findFrom($head.doc.resolve($head.after($head.depth - 1)), 1);
 
 // 접힌 toggle container 뒤 첫 선택 가능 위치. 소비 조건에 안 맞으면 null이다.
+// 범위 밖 RTL 라벨 안 이동이면 그 라벨 안 위치와 실측 caretBidiLevel이다(Issue #274).
 const collapsedToggleExitSelection = (
   editor: Editor,
   direction: ArrowKey,
-): { selection: Selection | null } | null => {
+): {
+  selection: Selection | null;
+  caretBidiLevel?: number | undefined;
+} | null => {
   const state = resolveSelectionAwareState(editor);
   const { selection } = state;
   if (!(selection instanceof TextSelection) || !selection.empty) return null;
@@ -98,12 +207,14 @@ const collapsedToggleExitSelection = (
   ) {
     return null;
   }
+  let end: TextblockEnd;
   try {
-    if (!editor.view.endOfTextblock(direction, state)) return null;
+    end = textblockEnd(editor.view, state, direction);
   } catch {
-    // jsdom처럼 레이아웃이 없으면 던진다. 판정 불가로 보고 개입하지 않는다.
+    // jsdom처럼 레이아웃이 없거나 실측이 던지면 판정 불가로 보고 개입하지 않는다.
     return null;
   }
+  if (end === false) return null;
   // 라벨 뒤 첫 선택 가능 위치(Selection.findFrom)가 숨은 자손인지 본다.
   const first = Selection.findFrom(state.doc.resolve($head.after()), 1);
   if (
@@ -111,6 +222,14 @@ const collapsedToggleExitSelection = (
     outermostCollapsedContainerDepth(first.$from) === null
   ) {
     return null;
+  }
+  // 범위 밖 RTL 라벨 안 이동은 확장이 대신한다(Issue #274). 폴스루하면 PM
+  // findDirection이 Firefox에서 "ltr"로 판정해 숨은 atom을 고르고 갇힌다.
+  if (typeof end === "object") {
+    return {
+      selection: TextSelection.create(state.doc, end.pos),
+      caretBidiLevel: end.caretBidiLevel,
+    };
   }
   return { selection: selectionAfterCollapsedContainer($head) };
 };
@@ -127,6 +246,14 @@ const moveOutOfCollapsedToggle = (
   // 같은 doc을 공유한다(G-EDT-002).
   const { view } = editor;
   view.dispatch(view.state.tr.setSelection(exit.selection).scrollIntoView());
+  // 실측 직후 bidi 수준을 다시 넣는다(Issue #274). 실측 복원이 dispatch 전에
+  // 원래 값으로 되돌렸다. 그대로 두면 Firefox가 다음 키를 bidi 수준 전환에
+  // 써서 네이티브보다 키가 한 번 더 든다.
+  if (typeof exit.caretBidiLevel === "number") {
+    const selection: DomSelection | null =
+      view.dom.ownerDocument.getSelection();
+    if (selection !== null) selection.caretBidiLevel = exit.caretBidiLevel;
+  }
   return true;
 };
 
