@@ -125,6 +125,101 @@ describe("StaticToolbar 여러 블록 선택", () => {
     ).toBe("true");
   });
 
+  it("codeBlock을 뺀 나머지가 모두 Quote면 Quote 아이콘이 눌린 상태다", () => {
+    // setBlockTypes가 codeBlock을 건너뛰므로 공통 타입 판정에서도 뺀다(Issue #269).
+    render(
+      withProvider(
+        multiController([
+          { blockId: "code-id", blockType: { type: "codeBlock" as const } },
+          { blockId: "quote-id", blockType: { type: "quote" as const } },
+        ]),
+        <StaticToolbar />,
+      ),
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Quote" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("codeBlock이 섞인 선택에서 눌린 Quote를 눌러도 전체 blockIds로 setBlockTypes를 한 번 호출한다", () => {
+    // 클릭 경로는 바뀌지 않는다. 문서 불변은 core가 보장한다.
+    const controller = multiController([
+      { blockId: "code-id", blockType: { type: "codeBlock" as const } },
+      { blockId: "quote-id", blockType: { type: "quote" as const } },
+    ]);
+    render(withProvider(controller, <StaticToolbar />));
+
+    fireEvent.click(screen.getByRole("button", { name: "Quote" }));
+
+    expect(controller.commands.setBlockTypes).toHaveBeenCalledTimes(1);
+    expect(controller.commands.setBlockTypes).toHaveBeenCalledWith(
+      ["code-id", "quote-id"],
+      { type: "quote" },
+    );
+  });
+
+  it("codeBlock을 뺀 나머지가 모두 Heading 2면 메뉴에서 Heading 2만 선택 상태다", () => {
+    render(
+      withProvider(
+        multiController([
+          { blockId: "code-id", blockType: { type: "codeBlock" as const } },
+          {
+            blockId: "heading-id",
+            blockType: { type: "heading" as const, level: 2 as const },
+          },
+        ]),
+        <StaticToolbar />,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Block type" }), {
+      detail: 1,
+    });
+
+    const selected = screen
+      .getAllByRole("option")
+      .filter((option) => option.getAttribute("aria-selected") === "true");
+    expect(selected.map((option) => option.textContent)).toEqual(["Heading 2"]);
+  });
+
+  it("codeBlock을 뺀 나머지 타입이 섞여 있으면 눌린 아이콘이 없다", () => {
+    render(
+      withProvider(
+        multiController([
+          { blockId: "code-id", blockType: { type: "codeBlock" as const } },
+          { blockId: "p-id", blockType: { type: "paragraph" as const } },
+          { blockId: "quote-id", blockType: { type: "quote" as const } },
+        ]),
+        <StaticToolbar />,
+      ),
+    );
+
+    const pressed = screen
+      .getAllByRole("button")
+      .filter((button) => button.getAttribute("aria-pressed") === "true");
+    expect(pressed).toEqual([]);
+  });
+
+  it("전부 codeBlock이면 Code 아이콘이 눌린 상태로 남는다", () => {
+    // 뺄 codeBlock만 있으면 전체로 판정한다. 단일 codeBlock 선택과 같은 표시다.
+    render(
+      withProvider(
+        multiController([
+          { blockId: "code-a", blockType: { type: "codeBlock" as const } },
+          { blockId: "code-b", blockType: { type: "codeBlock" as const } },
+        ]),
+        <StaticToolbar />,
+      ),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Code" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
   it("Code는 여러 블록 대상에서 비활성이다", () => {
     const controller = multiController();
     render(withProvider(controller, <StaticToolbar />));

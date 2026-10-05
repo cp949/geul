@@ -70,6 +70,35 @@ describe("FormattingToolbar 여러 블록 선택", () => {
     expect(select.value).toBe("");
   });
 
+  it("codeBlock을 뺀 나머지가 모두 Heading 2면 그 값을 보여 준다", () => {
+    // setBlockTypes가 codeBlock을 건너뛰므로 공통 타입 판정에서도 뺀다(Issue #269).
+    renderMultiSelection([
+      { blockId: "code-id", blockType: { type: "codeBlock" as const } },
+      {
+        blockId: "heading-id",
+        blockType: { type: "heading" as const, level: 2 as const },
+      },
+    ]);
+
+    const select = screen.getByRole("combobox", {
+      name: "Block type",
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("heading-2");
+  });
+
+  it("codeBlock을 뺀 나머지 타입이 섞여 있으면 값 없는 중립 항목을 보여 준다", () => {
+    renderMultiSelection([
+      { blockId: "code-id", blockType: { type: "codeBlock" as const } },
+      paragraph("p-id"),
+      { blockId: "list-id", blockType: { type: "bulletListItem" as const } },
+    ]);
+
+    const select = screen.getByRole("combobox", {
+      name: "Block type",
+    }) as HTMLSelectElement;
+    expect(select.value).toBe("");
+  });
+
   it("고른 타입을 선택한 블록 전부에 setBlockTypes로 적용한다", () => {
     const controller = renderMultiSelection();
 
