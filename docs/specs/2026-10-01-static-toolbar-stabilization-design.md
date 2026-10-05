@@ -329,3 +329,10 @@ Issue #222가 추가했다.
 - FormattingToolbar select, 블록 사이드 메뉴 Turn into, 슬래시 메뉴: 막힌 옵션을 목록에서 뺀다. 현재 타입 말고 고를 옵션이 없으면 select와 Turn into 섹션을 그리지 않는다.
 - 슬래시 메뉴는 `clearContent: true`로 질의한다. `codeBlock` source에서는 열리지 않아 탭 경로는 해당하지 않는다.
 - 범위 밖: 탭을 포함한 `codeBlock`을 일반 블록으로 바꾸게 하는 core 계약 변경.
+- [Issue #269](https://github.com/cp949/geul/issues/269): `codeBlock`이 섞인 여러 블록 선택에서 나머지 블록이 이미 대상 타입이어도 그 옵션이 눌린 상태로 보이지 않았다.
+- react `computeFormattingToolbarState`: `multiBlockSelection.blockType`을 `codeBlock`을 뺀 블록으로 판정한다. `setBlockTypes`가 `codeBlock`을 건너뛰기 때문이다.
+- `multiBlockSelection.blockIds`는 `codeBlock`을 포함한 전체다. 여러 블록 선택 여부(닿은 블록 둘 이상)도 그대로다.
+- 위 FormattingToolbar 항목의 "타입이 섞여 있으면"은 `codeBlock`을 뺀 블록 기준이다.
+- StaticToolbar 아이콘 `aria-pressed`, 블록 타입 메뉴 `aria-selected`, 트리거 라벨, FormattingToolbar select 값이 같은 공통 타입을 따른다.
+- 전부 `codeBlock`인 선택은 `blockType`이 `codeBlock`이다. Code 아이콘은 단일 `codeBlock` 선택처럼 눌린 상태다. `ALL_CODE_BLOCK` 비활성은 그대로다.
+- 같은 타입 변환이 사유가 아니라는 `BlockTypeBlocker` 계약은 그대로다. 눌린 옵션을 눌러도 명령을 호출하고 core가 `COMMAND_NOT_APPLICABLE`로 거절한다.
