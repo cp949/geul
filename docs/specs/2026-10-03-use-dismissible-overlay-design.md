@@ -285,3 +285,15 @@ function useDismissibleOverlay(
 - 열림 상태까지 소유하는 컴포넌트형 API(`<DismissibleOverlay>`).
 - 편집기 밖 문서(iframe)의 이벤트 중계.
 - 한글 IME Escape 실기 검증. 별도 확인 대상이다.
+
+## 14. 사후 변경 (2026-10-05)
+
+[Issue #271](https://github.com/cp949/geul/issues/271): §5.1·§5.3의 대상 판정을 realm과 무관하게 바꿨다. 위 본문은 당시 결정이라 고치지 않는다.
+
+- 배경: iframe 문서에 렌더하면 React가 그린 노드는 iframe realm 인스턴스다. 전역 `Element`의 `instanceof`가 거짓이다.
+- 결과: iframe 문서의 React 요소 위 바깥 pointerdown이 닫지 않았다. host 안 React 요소가 막은 Escape도 닫지 않았다.
+- §5.1 "대상이 `Element`가 아니면 무시한다"는 `nodeType`이 요소가 아니면 무시한다는 뜻이다. 판정은 `packages/react/src/dom-node.ts`의 `isElementNode`가 한다.
+- §5.3 예외의 "target이 `element` 안"도 같은 helper로 target이 요소인지 먼저 본다.
+- 문서 window의 생성자(`ownerDocument.defaultView.Element`)는 쓰지 않는다. ProseMirror·core가 만든 노드는 iframe 문서에 붙어도 메인 realm 인스턴스다.
+- 판정 순서, reason별 초점, Escape LIFO는 그대로다.
+- §13의 "편집기 밖 문서(iframe)의 이벤트 중계"는 여전히 범위 밖이다. 이번 변경은 편집기와 같은 문서 안의 판정만 다룬다.
