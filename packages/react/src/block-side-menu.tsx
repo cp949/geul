@@ -387,12 +387,23 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   };
   const hoverBounds = readHoverAnchor();
 
+  // 거터는 `position: fixed`라 안쪽 스크롤 컨테이너가 잘라내지 못한다. 블록이
+  // 영역 밖으로 나가면 숨긴다(Issue #267). viewport clamp가 박스를 영역 안으로
+  // 끌어올 수 있어 앵커 점과 박스를 함께 본다(`clipBox`).
+  // - 드래그 중은 면제한다. 숨기면 pointer capture를 잃는다.
+  // - 블록 메뉴를 연 블록의 거터는 면제한다. 메뉴만 남고 거터만 숨는 상태를 막는다.
+  // - hover가 다른 블록으로 옮겨 가면 그 거터는 판정한다(G-UI-003).
   const gutterClamp = useFixedPlacement({
     open: hoverBounds !== null,
     element,
     readAnchor: readHoverAnchor,
     clampAnchor: "leftOfAnchor",
     ...(hoverBounds === null ? {} : { fallbackAnchor: hoverBounds }),
+    clip: true,
+    clipBox: true,
+    clipExempt:
+      dragState !== null ||
+      (blockMenuState !== null && blockMenuState.blockId === hoverBlockId),
   });
 
   const handleAddBlockClick = () => {

@@ -31,7 +31,6 @@ import {
 } from "./read-block-bounds.js";
 import { useAnchoredSubmenu } from "./use-anchored-submenu.js";
 import { useClampedMenuPosition } from "./use-clamped-menu-position.js";
-import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useDismissSuppression } from "./use-dismiss-suppression.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
@@ -694,6 +693,16 @@ export const MediaToolbar = ({
   // `editingRef`로 막히지만 위치는 그 경로에 의존하지 않는다. 리사이즈가 끝나
   // 툴바가 다시 렌더되는 커밋도 같은 훅이 새 블록 rect로 수렴시킨다.
   const blockId = toolbarState.mode === "closed" ? null : toolbarState.blockId;
+  // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
+  // 잘라내지 못한다. 블록 우상단 앵커와 툴바 박스가 모두 컨테이너의 보이는
+  // 영역 안일 때만 보인다(`clipBox`, Issue #267). 박스만 보면 viewport clamp가
+  // 박스를 영역 안으로 끌어와 영역 밖 블록의 툴바가 남는다.
+  // - 면제: 열린 more 메뉴(`clipExempt`), 툴바 안 요소의 포커스. 숨기면 편집 중
+  //   입력이 포커스를 잃는다. 포커스는 mode와 무관하게 본다(rename·caption·replace
+  //   입력, more 버튼).
+  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
+  //   `useFixedPlacement`가 그 훅을 부른다.
+  // - mode·입력 상태는 건드리지 않고 `visibility`만 갱신한다. draft가 남는다.
   const { menuRef, style } = useFixedPlacement({
     open: blockId !== null,
     element,
@@ -703,20 +712,9 @@ export const MediaToolbar = ({
         : (readBlockTopRightBounds(element, blockId) ??
           FALLBACK_BLOCK_POSITION),
     clampAnchor: "topRight",
-  });
-  // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
-  // 잘라내지 못한다 — 툴바 자신의 박스가 컨테이너의 보이는 영역 안에 완전히
-  // 들어올 때만 보인다.
-  // - 면제: 열린 more 메뉴, 툴바 안 요소의 포커스. 숨기면 편집 중 입력이 포커스를
-  //   잃는다. 포커스는 mode와 무관하게 본다(rename·caption·replace 입력, more 버튼).
-  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
-  // - mode·입력 상태는 건드리지 않고 `visibility`만 갱신한다. draft가 남는다.
-  // - 박스 기준이라 앵커 점 기준인 `useFixedPlacement({ clip })`을 쓰지 않는다.
-  //   스크롤마다 배치 훅이 렌더를 다시 돌린다.
-  useClipVisibility(element, () => {
-    const node = menuRef.current;
-    if (node === null) return [];
-    return [{ node, exempt: moreMenuOpen }];
+    clip: true,
+    clipBox: true,
+    clipExempt: moreMenuOpen,
   });
   const focusEditor = useFocusEditor(element);
 

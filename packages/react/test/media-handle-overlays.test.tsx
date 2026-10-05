@@ -26,6 +26,9 @@
  * host가 자르는 영역 밖이면 숨기며, 드래그 중에는 숨기지 않는다. 실제 안쪽
  * 스크롤은 jsdom이 만들 수 없어 stubRect로 rect를 주입한다. 위치 증명은
  * Chromium e2e가 한다.
+ *
+ * 추가 주제(Issue #267): 그립으로 연 media 메뉴가 열린 동안은 그 블록의 그립을
+ * 숨기지 않는다. hover가 다른 블록으로 옮겨 가면 그 그립은 판정한다.
  */
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
@@ -1275,6 +1278,60 @@ describe("안쪽 스크롤 추종과 clip(Issue #235)", () => {
 
     fireEvent.pointerUp(handle, { pointerId: 1 });
     fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("hidden");
+  });
+  it("그립으로 연 media 메뉴가 열린 동안에는 영역 밖이어도 숨기지 않는다(Issue #267)", () => {
+    const { host, media } = renderImage();
+    makeScrollContainer(host);
+    fireEvent.pointerMove(media);
+    const overlay = readOverlay();
+    const handle = overlay.querySelector<HTMLElement>(
+      "[data-geul-block-handle]",
+    );
+    if (handle === null) throw new Error("그립 버튼이 없다");
+    stubRect(overlay, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.click(handle);
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    // 메뉴만 떠 있고 메뉴를 연 그립만 숨는 상태를 막는다.
+    stubRect(overlay, { left: 0, top: 300, width: 56, height: 24 });
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Block menu" })).toBeNull();
+    fireEvent.scroll(media);
+    expect(overlay.style.visibility).toBe("hidden");
+  });
+
+  it("메뉴를 연 블록이 아닌 다른 블록으로 hover가 옮겨 가면 그 블록이 영역 밖일 때 숨긴다(Issue #267)", () => {
+    const { host, blocks } = renderMediaOverlays({
+      initialBlocks: twoImageBlocks(),
+    });
+    makeScrollContainer(host);
+    const [first, second] = blocks;
+    if (first === undefined || second === undefined) {
+      throw new Error("media 요소가 없다");
+    }
+    fireEvent.pointerMove(first);
+    const overlay = readOverlay();
+    const handle = overlay.querySelector<HTMLElement>(
+      "[data-geul-block-handle]",
+    );
+    if (handle === null) throw new Error("그립 버튼이 없다");
+    stubRect(overlay, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.click(handle);
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    // 메뉴는 열린 채 hover만 둘째 media로 옮긴다. 그립은 같은 노드다.
+    fireEvent.pointerMove(second);
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+    expect(readOverlay()).toBe(overlay);
+
+    // 면제는 메뉴를 연 블록의 그립에만 준다. 둘째 블록은 박스로 판정한다.
+    stubRect(overlay, { left: 0, top: 300, width: 56, height: 24 });
+    fireEvent.scroll(second);
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
     expect(overlay.style.visibility).toBe("hidden");
   });
 });

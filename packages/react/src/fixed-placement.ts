@@ -94,11 +94,25 @@ type UseFixedPlacementOptions = {
   clip?: boolean;
 
   /**
-   * `true`면 앵커가 영역 밖이어도 `clip`이 메뉴를 숨기지 않는다. 이 메뉴의
-   * 자식 메뉴가 열려 있을 때 준다. 부모 메뉴만 숨고 자식 메뉴만 떠 있는 상태를
-   * 막는다. `clip`이 아니면 쓰이지 않는다. 기본값은 `false`다.
+   * `true`면 `clip`이 메뉴를 숨기지 않는다. 앵커 판정을 면제한다.
+   * `clipBox`이면 박스 판정도 면제한다.
+   * - 이 메뉴의 자식 메뉴가 열려 있을 때 준다. 부모 메뉴만 숨고 자식 메뉴만
+   *   떠 있는 상태를 막는다.
+   * - 블록 오버레이는 드래그 중일 때와 이 오버레이로 연 메뉴가 열려 있을 때 준다.
+   * `clip`이 아니면 쓰이지 않는다. 기본값은 `false`다.
    */
   clipExempt?: boolean;
+
+  /**
+   * `true`면 `clip`이 앵커 점과 함께 메뉴 박스도 본다. 둘 다 영역 안이어야
+   * 보인다. 블록에 붙는 fixed 오버레이(블록 gutter, 미디어 툴바)용이다(#267).
+   * - 박스만 보면 viewport clamp가 박스를 영역 안으로 끌어와 영역 밖 블록의
+   *   오버레이가 남는다.
+   * - 앵커만 보면 박스가 영역 경계에 걸쳐 삐져나온다.
+   *
+   * `clip`이 아니면 쓰이지 않는다. 기본값은 `false`다.
+   */
+  clipBox?: boolean;
 };
 
 /**
@@ -130,6 +144,7 @@ export const useFixedPlacement = ({
   fallbackAnchor,
   clip = false,
   clipExempt = false,
+  clipBox = false,
 }: UseFixedPlacementOptions): {
   menuRef: RefObject<HTMLDivElement | null>;
   style: CSSProperties;
@@ -193,16 +208,17 @@ export const useFixedPlacement = ({
     clampAnchor,
   );
 
-  // 판정과 면제는 `useClipVisibility`가 소유한다. 이 훅은 앵커 점만 넘긴다. 박스는
-  // 보지 않는다. popover는 앵커 위나 아래에 붙어 박스가 경계 밖으로 조금 삐져나올
-  // 수 있다. 닫혀 있을 때나 앵커가 없을 때, `clip`이 아닐 때는 `element`를 `null`로
-  // 줘 `visibility`를 읽지도 쓰지도 않는다.
+  // 판정과 면제는 `useClipVisibility`가 소유한다. 이 훅은 앵커 점을 넘긴다. 박스는
+  // `clipBox`일 때만 본다. popover는 앵커 위나 아래에 붙어 박스가 경계 밖으로 조금
+  // 삐져나올 수 있다. 앵커 점은 clamp 전 좌표다. 박스는 clamp 뒤 렌더된 박스다.
+  // 닫혀 있을 때나 앵커가 없을 때, `clip`이 아닐 때는 `element`를 `null`로 줘
+  // `visibility`를 읽지도 쓰지도 않는다.
   useClipVisibility(
     clip && open && placed !== undefined ? element : null,
     () => {
       const node = placement.menuRef.current;
       if (node === null || placed === undefined) return [];
-      return [{ node, exempt: clipExempt, box: false, anchor: placed }];
+      return [{ node, exempt: clipExempt, box: clipBox, anchor: placed }];
     },
   );
 

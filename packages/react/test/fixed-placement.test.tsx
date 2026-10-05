@@ -12,6 +12,8 @@
  * - `clampAnchor`가 `useClampedMenuPosition`으로 전달된다.
  * - `clip`: 앵커 점이 스크롤 컨테이너의 보이는 영역 밖이면 메뉴를 숨긴다.
  *   기본값 `false`와 닫힘에서는 `visibility`를 건드리지 않는다.
+ * - `clipBox`: 앵커 점과 메뉴 박스가 모두 영역 안이어야 보인다(Issue #267).
+ *   `clipExempt`면 둘 다 영역 밖이어도 보인다.
  * - `readAnchorBelowTrigger`: 트리거 하단 + 4 좌표와 연결 해제 시 `null`.
  * - `readAnchorBelowTriggerEnd`: 트리거 오른쪽·하단 좌표(간격 0)와 연결 해제 시 `null`.
  */
@@ -40,6 +42,8 @@ type ProbeProps = {
   clampAnchor?: ClampAnchor;
   fallbackAnchor?: FixedPlacementAnchor;
   clip?: boolean;
+  clipBox?: boolean;
+  clipExempt?: boolean;
   onRender?: () => void;
 };
 
@@ -54,6 +58,8 @@ const Probe = ({
   clampAnchor,
   fallbackAnchor,
   clip,
+  clipBox,
+  clipExempt,
   onRender,
 }: ProbeProps) => {
   onRender?.();
@@ -64,6 +70,8 @@ const Probe = ({
     ...(clampAnchor === undefined ? {} : { clampAnchor }),
     ...(fallbackAnchor === undefined ? {} : { fallbackAnchor }),
     ...(clip === undefined ? {} : { clip }),
+    ...(clipBox === undefined ? {} : { clipBox }),
+    ...(clipExempt === undefined ? {} : { clipExempt }),
   });
   return <div data-testid="probe" ref={menuRef} style={style} />;
 };
@@ -630,6 +638,79 @@ describe("useFixedPlacement", () => {
         window.dispatchEvent(new Event("scroll"));
       });
       expect(readMenu(container).style.visibility).toBe("");
+    });
+
+    describe("clipBox(Issue #267)", () => {
+      /** 메뉴 노드의 박스를 (280, top)–(380, top + 50)으로 둔다. */
+      const stubMenuBox = (container: HTMLElement, top: number) => {
+        vi.spyOn(readMenu(container), "getBoundingClientRect").mockReturnValue({
+          left: 280,
+          top,
+          right: 380,
+          bottom: top + 50,
+          x: 280,
+          y: top,
+          width: 100,
+          height: 50,
+          toJSON: () => ({}),
+        } as DOMRect);
+      };
+
+      it("앵커가 영역 안이어도 메뉴 박스가 영역 밖이면 숨긴다", () => {
+        const host = mountClipHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipBox
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: 50 })}
+          />,
+        );
+        stubMenuBox(container, 300);
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("hidden");
+      });
+
+      it("viewport clamp가 메뉴 박스를 영역 안으로 끌어와도 앵커가 영역 밖이면 숨긴다", () => {
+        // 앵커 top -100은 영역(top 0) 위다. clamp된 박스는 8–58이라 영역 안이다.
+        const host = mountClipHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipBox
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: -100 })}
+          />,
+        );
+        stubMenuBox(container, 8);
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("hidden");
+      });
+
+      it("clipExempt면 앵커와 메뉴 박스가 영역 밖이어도 보인다", () => {
+        const host = mountClipHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipBox
+            clipExempt
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: 300 })}
+          />,
+        );
+        stubMenuBox(container, 300);
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("");
+      });
     });
 
     it("clip 기본값은 false라 앵커가 박스 밖이어도 visibility를 건드리지 않는다", () => {

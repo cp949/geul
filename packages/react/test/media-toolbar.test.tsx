@@ -1719,7 +1719,9 @@ describe("MediaToolbar component override(슬라이스4 RD-001 DELTA-03)", () =>
 describe("MediaToolbar 스크롤 컨테이너 clip", () => {
   // 툴바는 컨테이너 바깥(position: fixed)에 그려져 컨테이너가 잘라내지
   // 못한다. 에디터 host를 overflow 컨테이너로 보고, 툴바 자신의 박스가 그
-  // 보이는 영역 안에 완전히 들어올 때만 보이게 한다. 선택은 유지되므로
+  // 보이는 영역 안에 완전히 들어올 때만 보이게 한다. 블록 우상단 앵커도 영역
+  // 안이어야 한다(Issue #267). 툴바는 viewport에 clamp돼 박스만으로는 영역
+  // 밖 블록을 못 가린다. 선택은 유지되므로
   // 되돌아오면 다시 보인다. visibility: hidden은 접근성 트리에서도 빠지므로
   // 숨은 툴바는 `{ hidden: true }`로 찾는다.
   const setup = () => {
@@ -1761,5 +1763,55 @@ describe("MediaToolbar 스크롤 컨테이너 clip", () => {
     fireEvent.scroll(window);
 
     expect(toolbar.style.visibility).toBe("hidden");
+  });
+
+  /** 대상 미디어 블록 DOM. 툴바 앵커는 이 rect의 우상단이다. */
+  const mediaBlockOf = (host: HTMLElement) => {
+    const block = host.querySelector<HTMLElement>(
+      '[data-geul-block-id="media-1"]',
+    );
+    if (block === null) throw new Error("미디어 블록 요소가 없다");
+    return block;
+  };
+
+  it("블록이 영역 위로 나가면 툴바 박스가 clamp로 영역 안이어도 숨긴다(Issue #267)", () => {
+    const { host, toolbar } = setup();
+    // 앵커(블록 우상단)는 영역 위다. clamp된 툴바 박스는 영역 안이다.
+    stubRect(mediaBlockOf(host), {
+      left: 60,
+      top: -300,
+      width: 480,
+      height: 240,
+    });
+    stubRect(toolbar, { left: 500, top: 8, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("hidden");
+
+    stubRect(mediaBlockOf(host), {
+      left: 60,
+      top: 10,
+      width: 480,
+      height: 240,
+    });
+    stubRect(toolbar, { left: 500, top: 10, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("More 메뉴가 열려 있으면 블록과 툴바가 영역 밖이어도 숨기지 않는다", () => {
+    const { host, toolbar } = setup();
+    openMoreMenu();
+    stubRect(mediaBlockOf(host), {
+      left: 60,
+      top: -300,
+      width: 480,
+      height: 240,
+    });
+    stubRect(toolbar, { left: 500, top: 300, width: 40, height: 38 });
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("");
   });
 });

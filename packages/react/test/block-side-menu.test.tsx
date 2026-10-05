@@ -11,6 +11,10 @@
  * - 대상 전환 시 key 재마운트와 focusKey 재초점.
  * - 편집기 초점에서 편집기가 먼저 막은 Escape도 메뉴를 닫는다.
  *
+ * 추가 주제(Issue #267): 거터는 블록 앵커 점과 거터 박스가 모두 안쪽 스크롤
+ * 영역 안일 때만 보인다. 드래그 중과 메뉴를 연 블록의 거터는 숨기지 않는다.
+ * hover가 다른 블록으로 옮겨 가면 그 거터는 판정한다. 실제 안쪽 스크롤은 jsdom이 만들 수 없어 stubRect로 rect를 주입한다.
+ *
  * 모든 describe가 실제 createEditor() 마운트 위에서 돈다(Issue #76) — 손으로
  * 조립한 fake 컨트롤러/DOM 레인은 남아 있지 않다. 명령이 진짜라 호출 스파이
  * 대신 문서 결과를 단언한다. `<BlockSideMenu />`는 `<SlashMenu />`를 거치지
@@ -38,6 +42,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BlockSideMenu } from "../src/block-side-menu.js";
 import { EditorContent, EditorProvider, useEditor } from "../src/index.js";
 import {
+  makeScrollContainer,
   mountBlockEditor,
   stubRect,
   type MountBlockEditorOptions,
@@ -1804,5 +1809,129 @@ describe("블록 메뉴 위치와 스크롤 추적(Issue #234 RD-003)", () => {
       fireEvent.scroll(window);
     });
     expect(menuPosition()).toEqual({ left: "40px", top: "90px" });
+  });
+});
+
+describe("영역 밖 블록의 거터 clip(Issue #267)", () => {
+  /** 블록 rect. 영역(0,0)–(600,100) 안이다. */
+  const insideBlock = { left: 40, top: 10, width: 600, height: 20 };
+  /** 영역 위로 나간 블록 rect. */
+  const aboveBlock = { left: 40, top: -200, width: 600, height: 20 };
+  /** viewport clamp가 끌어온 거터 박스. 영역 안이다. */
+  const clampedGutter = { left: 0, top: 8, width: 56, height: 24 };
+
+  /**
+   * 에디터 host를 스크롤 컨테이너로 두고 첫 블록 hover로 거터를 띄운다.
+   * 거터 박스는 블록 옆(영역 안)에 둔다.
+   */
+  const hoverGutter = () => {
+    const rendered = renderBlockMenu({ layout: insideBlock });
+    makeScrollContainer(rendered.host);
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    const gutter = document.querySelector<HTMLElement>(".geul-block-gutter");
+    if (gutter === null) throw new Error("거터가 없다");
+    stubRect(gutter, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("");
+    // 숨은 요소는 접근성 트리에서 빠져 getByRole로 못 찾는다. 속성으로 찾는다.
+    const handle = gutter.querySelector<HTMLElement>(
+      "[data-geul-block-handle]",
+    );
+    if (handle === null) throw new Error("드래그 핸들이 없다");
+    return { block, gutter, handle };
+  };
+
+  /** 블록을 영역 위로 밀고 거터 박스는 clamp된 자리(영역 안)에 둔다. */
+  const pushBlockAbove = (block: HTMLElement, gutter: HTMLElement) => {
+    stubRect(block, aboveBlock);
+    stubRect(gutter, clampedGutter);
+    fireEvent.scroll(window);
+  };
+
+  it("블록이 영역 밖이면 거터 박스가 clamp로 영역 안이어도 숨기고 돌아오면 다시 보인다", () => {
+    const { block, gutter } = hoverGutter();
+
+    pushBlockAbove(block, gutter);
+    expect(gutter.style.visibility).toBe("hidden");
+
+    stubRect(block, insideBlock);
+    stubRect(gutter, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("");
+  });
+
+  it("블록 앵커가 영역 안이어도 거터 박스가 영역 경계에 걸치면 숨긴다", () => {
+    const { gutter } = hoverGutter();
+
+    stubRect(gutter, { left: 0, top: 90, width: 56, height: 24 });
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("hidden");
+  });
+
+  it("핸들을 드래그하는 동안에는 영역 밖이어도 숨기지 않는다", () => {
+    const { block, gutter, handle } = hoverGutter();
+    pushBlockAbove(block, gutter);
+    expect(gutter.style.visibility).toBe("hidden");
+
+    // pointer capture를 잃으면 드래그가 끊긴다. 숨기지 않아야 한다.
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    expect(gutter.style.visibility).toBe("");
+
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("");
+
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("hidden");
+  });
+
+  it("블록 메뉴가 열린 동안에는 영역 밖이어도 숨기지 않는다", () => {
+    const { block, gutter, handle } = hoverGutter();
+    fireEvent.click(handle);
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    // 메뉴만 떠 있고 메뉴를 연 거터만 숨는 상태를 막는다.
+    pushBlockAbove(block, gutter);
+    expect(gutter.style.visibility).toBe("");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("hidden");
+  });
+
+  it("메뉴를 연 블록이 아닌 다른 블록으로 hover가 옮겨 가면 그 블록이 영역 밖일 때 숨긴다", () => {
+    const rendered = renderBlockMenu({
+      blockIds: ["block-1", "block-2"],
+      layout: insideBlock,
+    });
+    makeScrollContainer(rendered.host);
+    const [first, second] = rendered.blocks;
+    if (first === undefined || second === undefined) {
+      throw new Error("블록 요소가 없다");
+    }
+    fireEvent.pointerMove(first);
+    const gutter = document.querySelector<HTMLElement>(".geul-block-gutter");
+    if (gutter === null) throw new Error("거터가 없다");
+    stubRect(gutter, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(window);
+    const handle = gutter.querySelector<HTMLElement>(
+      "[data-geul-block-handle]",
+    );
+    if (handle === null) throw new Error("드래그 핸들이 없다");
+    fireEvent.click(handle);
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    // 메뉴는 열린 채 hover만 둘째 블록으로 옮긴다. 거터는 같은 노드다.
+    fireEvent.pointerMove(second);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(document.querySelector(".geul-block-gutter")).toBe(gutter);
+
+    // 면제는 메뉴를 연 블록의 거터에만 준다. 둘째 블록은 박스로 판정한다.
+    pushBlockAbove(second, gutter);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(gutter.style.visibility).toBe("hidden");
   });
 });

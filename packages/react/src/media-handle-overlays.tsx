@@ -398,13 +398,18 @@ export const MediaHandleOverlays = ({
 
   // 그립은 안쪽 스크롤 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다. 보이는
   // 영역 밖이면 visibility로 숨긴다(G-UI-003). 드래그 중에는 숨기지 않는다 —
-  // 숨기면 pointer capture를 잃는다. 그립 안 요소에 포커스가 있어도 숨기지
-  // 않는다. 렌더마다 돈다. style prop에 visibility를 두지 않는다.
+  // 숨기면 pointer capture를 잃는다. 메뉴를 연 블록의 그립도 숨기지 않는다.
+  // 메뉴만 남고 그립만 숨는 상태를 막는다(Issue #267). hover가 다른 블록으로
+  // 옮겨 가면 그 그립은 판정한다. 그립 안 요소에 포커스가 있어도 숨기지 않는다.
+  // 렌더마다 돈다. style prop에 visibility를 두지 않는다.
   const overlayRef = useRef<HTMLDivElement>(null);
   useClipVisibility(element, () => {
     const node = overlayRef.current;
     if (node === null) return [];
-    return [{ node, exempt: dragState !== null }];
+    const exempt =
+      dragState !== null ||
+      (menuState !== null && menuState.blockId === hoverBlockId);
+    return [{ node, exempt }];
   });
 
   const handleAddBlockClick = () => {
