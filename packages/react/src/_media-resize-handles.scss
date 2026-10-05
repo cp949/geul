@@ -83,9 +83,11 @@
 // table-handle-geometry.ts의 readPageRect를 재사용) — fixed는 앵커가
 // 뷰포트 밖으로 나가면 네이티브 scrollIntoView·Playwright 자동 스크롤을
 // no-op으로 만든다(Issue #163과 같은 근본 원인, Issue #164).
+// z-index 5 — 소비 앱 sticky 툴바(G-UI-003의 6–9 사이) 밑으로 지나가야
+// 툴바 띠에서 툴바 입력을 가로채지 않는다(Issue #266).
 .geul-media-resize-handle {
   position: absolute;
-  z-index: 10;
+  z-index: 5;
   height: 1rem;
   width: 1rem;
   touch-action: none;

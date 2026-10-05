@@ -13,9 +13,13 @@
 // container가 비어 있고 언어 trigger 버튼 혼자 자기 border를 가져
 // (아래 `.geul-code-block-language-trigger button`) 복사·더보기 버튼과
 // 시각적으로 붙지 않고 독립된 칩처럼 떠 보였다(사용자 스크린샷).
+//
+// z-index 5 — 소비 앱 sticky 툴바(G-UI-003의 6–9 사이) 밑으로 지나가야
+// 툴바 띠에서 툴바 입력을 가로채지 않는다(Issue #266).
+// 언어 popover·more 메뉴(30)는 툴바의 형제로 렌더돼 이 층에 갇히지 않는다.
 .geul-code-block-toolbar {
   position: fixed;
-  z-index: 20;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.125rem;

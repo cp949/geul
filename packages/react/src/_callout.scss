@@ -31,9 +31,11 @@
 // depth가 쌓여도 실측 rect를 그대로 따라간다. 아이콘 시각 표시는 위
 // [data-geul-callout]::before가 그대로 담당하고, 이 버튼은 그 자리 위에
 // 투명 클릭 영역만 겹친다(own 아이콘 문자를 다시 그리지 않는다).
+// z-index 5 — 소비 앱 sticky 툴바(G-UI-003의 6–9 사이) 밑으로 지나가야
+// 툴바 띠에서 툴바 입력을 가로채지 않는다(Issue #266).
 .geul-callout-icon-trigger {
   position: absolute;
-  z-index: 10;
+  z-index: 5;
   width: 1.5rem;
   height: 1.5rem;
   border: none;
