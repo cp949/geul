@@ -2,6 +2,7 @@ import type { CustomTextMark } from "@cp949/geul-model";
 import { Mark, mergeAttributes } from "@tiptap/core";
 
 import type { CustomStyleDefinition } from "./custom-extension-definitions.js";
+import { isHtmlElement } from "./dom-node.js";
 
 // 등록된 커스텀 스타일(spec §4.4, EXT-003)마다 PM Mark를 하나 만든다
 // (RD-002-DELTA-19). text-color-mark-extension.ts와 같은 "addAttributes +
@@ -71,7 +72,8 @@ export const createCustomStyleMark = (
             }),
       };
       const rendered = definition.render(value);
-      if (rendered instanceof HTMLElement) {
+      // iframe 문서가 만든 요소도 태그·속성을 추출한다(Issue #272).
+      if (isHtmlElement(rendered)) {
         const [tag, attrs, hole] = elementToOutputSpec(rendered);
         return [tag, mergeAttributes(HTMLAttributes, attrs), hole];
       }

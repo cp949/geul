@@ -136,7 +136,7 @@ export const runCleanups = (
  * ProseMirror selection을 DOM selection에 동기화하지 않으므로(편집기에
  * 포커스가 없다) 직접 만든다. 실제 브라우저에서 툴바 버튼에 포커스가 가도
  * selection이 편집기에 남는 상태를 재현한다. editable은 문서에 붙어 있어야
- * 한다.
+ * 한다. selection은 editable이 붙은 문서의 것이다. iframe 문서도 같다.
  */
 export const placeDomSelectionInFirstParagraph = (
   editable: HTMLElement,
@@ -147,7 +147,7 @@ export const placeDomSelectionInFirstParagraph = (
   if (text === null || text === undefined) {
     throw new Error("편집기 문단 텍스트 노드 조회 실패");
   }
-  const selection = document.getSelection();
+  const selection = editable.ownerDocument.getSelection();
   expect(selection).not.toBeNull();
   selection?.setBaseAndExtent(text, offset, text, offset);
   expect(editable.contains(selection?.focusNode ?? null)).toBe(true);

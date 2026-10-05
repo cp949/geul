@@ -2,6 +2,8 @@ import { Extension, isMacOS, isiOS } from "@tiptap/core";
 import { redo, undo } from "@tiptap/pm/history";
 import { Plugin } from "@tiptap/pm/state";
 
+import { isElementNode, isNode } from "./dom-node.js";
+
 // Issue #219, Issue #222 — 툴바 버튼처럼 에디터 밖 비편집 요소에 포커스가
 // 있을 때 `Mod-Shift-z`·`Mod-y`가 redo하지 않고, `Mod-z`가 툴바 명령을
 // undo하지 않던 결함.
@@ -128,10 +130,12 @@ export const HistoryKeydownFallbackExtension = Extension.create({
                 : null;
             if (command === null) return;
 
+            // iframe 문서의 target은 다른 realm 인스턴스다. 전역 생성자
+            // `instanceof` 대신 `nodeType`으로 판정한다(Issue #272).
             const target = event.target;
-            if (!(target instanceof Node)) return;
+            if (!isNode(target)) return;
             if (editorView.dom.contains(target)) return;
-            if (target instanceof Element && isInputTarget(target)) return;
+            if (isElementNode(target) && isInputTarget(target)) return;
 
             const selection = ownerDocument.getSelection();
             const anchor =
