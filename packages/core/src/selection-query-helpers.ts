@@ -7,6 +7,7 @@ import {
   type BlockTypeSource,
   type HeadingLevel,
 } from "./block-type-descriptor.js";
+import { isCollapsedToggleContent } from "./toggle-collapse-hidden.js";
 
 // PM block content node를 BlockTypeSource로 좁힌 뒤 blockTypeDescriptorFromBlock에
 // 위임한다. PM attrs는 unknown이라 캐스트가 이 지점에서만 필요하다 — caret과
@@ -146,6 +147,8 @@ export const findSelectionBlock = (
 // 경계에 닿기만 해도 그 블록을 포함한다. 부모와 자식이 함께 닿으면 둘 다
 // 담는다. 타입을 바꿀 수 없는 블록(divider·table·미디어)은 descriptor가
 // null이라 건너뛴다. 표 안쪽은 blockContainer가 아니라 내려가지 않는다.
+// 접힌 toggle의 숨은 그룹으로는 내려가지 않는다(Issue #264). 라벨은
+// 보이므로 담는다. 숨은 자손은 블록 단위 변환 대상이 아니다.
 export const collectSelectionBlocks = (
   node: ProseMirrorNode,
   nodeStart: number,
@@ -179,7 +182,7 @@ export const collectSelectionBlocks = (
       const blockType = blockTypeDescriptorFromNode(blockContent);
       if (blockType !== null) out.push({ blockId, blockType });
     }
-    if (child.childCount > 1) {
+    if (child.childCount > 1 && !isCollapsedToggleContent(blockContent)) {
       collectSelectionBlocks(child.child(1), contentEnd + 1, from, to, out);
     }
   });

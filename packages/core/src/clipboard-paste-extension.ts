@@ -10,7 +10,7 @@ import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
-import { selectionIntersectsCodeBlock } from "./code-block-mark-guard-extension.js";
+import { selectionIntersectsAnyCodeBlock } from "./code-block-mark-guard-extension.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
@@ -199,9 +199,10 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 있으면 이미 text/html을 무시하고 text/plain만으로 순수
               // 텍스트 slice를 만들어두므로, 여기서 조기 반환해 그 PM 기본
               // 처리를 그대로 살린다 — 별도로 "text/plain 우선" 로직을 새로
-              // 만들 필요가 없다.
+              // 만들 필요가 없다. 접힌 toggle의 숨은 codeBlock도 범위
+              // 안이면 같은 분기다. 붙여넣기는 범위 전체를 바꾼다(Issue #264).
               if (
-                selectionIntersectsCodeBlock(
+                selectionIntersectsAnyCodeBlock(
                   view.state.doc,
                   view.state.selection,
                 )
