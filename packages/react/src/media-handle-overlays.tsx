@@ -8,6 +8,7 @@ import {
 } from "./block-side-menu-geometry.js";
 import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
 import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
+import { isElementNode, isHtmlElement } from "./dom-node.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
@@ -335,7 +336,7 @@ export const MediaHandleOverlays = ({
     );
     const iframeElement =
       blockElement === null ? null : findMediaVisualElement(blockElement);
-    if (!(iframeElement instanceof HTMLIFrameElement)) {
+    if (!isHtmlElement(iframeElement, "iframe")) {
       setInteractingBlockId(null);
       return;
     }
@@ -348,7 +349,7 @@ export const MediaHandleOverlays = ({
       // 같이 반응하면 capture가 target보다 먼저 실행돼 버튼의 토글-off 판정이
       // "이미 꺼진 상태에서 다시 켜기"로 뒤집힌다.
       if (
-        event.target instanceof Element &&
+        isElementNode(event.target) &&
         event.target.closest(interactButtonSelector) !== null
       ) {
         return;

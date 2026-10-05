@@ -43,6 +43,7 @@ import type {
   ResizeState,
 } from "./table-handle-types.js";
 import { clipSpanToBoxes, readScrollClipBoxes } from "./scroll-clip.js";
+import { isElementNode, isHtmlElement } from "./dom-node.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -182,7 +183,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
       anchorNode === null ||
       !element.contains(anchorNode)
         ? null
-        : anchorNode instanceof Element
+        : isElementNode(anchorNode)
           ? anchorNode
           : anchorNode.parentElement;
     const rowElement =
@@ -243,7 +244,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   const closeMenuOnInvalidation = useCallback(() => {
     const activeElement = element?.ownerDocument.activeElement ?? null;
     const focusWasInMenu =
-      activeElement instanceof Element &&
+      isElementNode(activeElement) &&
       activeElement.closest(TABLE_MENU_SELECTOR) !== null;
     setMenuState(null);
     if (focusWasInMenu) {
@@ -257,7 +258,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   const closeTableGripMenuOnInvalidation = useCallback(() => {
     const activeElement = element?.ownerDocument.activeElement ?? null;
     const focusWasInMenu =
-      activeElement instanceof Element &&
+      isElementNode(activeElement) &&
       activeElement.closest(TABLE_GRIP_MENU_SELECTOR) !== null;
     setTableGripMenuTableId(null);
     if (focusWasInMenu) {
@@ -332,14 +333,12 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
         // 결과 Add row/column 버튼 위로 이동해도 직전 값이 그대로
         // 유지된다(의도, computeExpandButtonVisibility 주석 참고).
         const target = event.target;
-        const rowElement =
-          target instanceof Element
-            ? target.closest<HTMLElement>("[data-geul-row-id]")
-            : null;
-        const cellElement =
-          target instanceof Element
-            ? target.closest<HTMLElement>("[data-geul-column-id]")
-            : null;
+        const rowElement = isElementNode(target)
+          ? target.closest<HTMLElement>("[data-geul-row-id]")
+          : null;
+        const cellElement = isElementNode(target)
+          ? target.closest<HTMLElement>("[data-geul-column-id]")
+          : null;
         setHoverRowId(rowElement?.getAttribute("data-geul-row-id") ?? null);
         setHoverColumnId(
           cellElement?.getAttribute("data-geul-column-id") ?? null,
@@ -381,10 +380,9 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
           // 빈 여백(어떤 블록에도 안 속함)은 여전히 유지돼 rail까지
           // 마우스가 무사히 도달한다.
           const target = event.target;
-          const targetBlock =
-            target instanceof Element
-              ? target.closest<HTMLElement>("[data-geul-block-id]")
-              : null;
+          const targetBlock = isElementNode(target)
+            ? target.closest<HTMLElement>("[data-geul-block-id]")
+            : null;
           const targetBlockId = targetBlock?.getAttribute("data-geul-block-id");
           if (
             targetBlockId !== undefined &&
@@ -566,7 +564,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     if (layer === null) return [];
     const dragging = reorderState !== null || resizeState !== null;
     return Array.from(layer.children)
-      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+      .filter((child): child is HTMLElement => isHtmlElement(child))
       .map((node) => ({ node, exempt: dragging }));
   });
 

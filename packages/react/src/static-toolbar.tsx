@@ -44,6 +44,7 @@ import {
   getBlockTypeOptionsForSource,
   isBlockTypeOptionBlocked,
 } from "./block-type-options.js";
+import { isElementNode, isHtmlElement } from "./dom-node.js";
 import { readAnchorBelowTrigger } from "./fixed-placement.js";
 import {
   computeFormattingToolbarState,
@@ -301,7 +302,7 @@ export const StaticToolbar = ({
     (selector: string) => {
       const activeElement = element?.ownerDocument.activeElement ?? null;
       if (
-        activeElement instanceof Element &&
+        isElementNode(activeElement) &&
         activeElement.closest(selector) !== null
       ) {
         focusEditor();
@@ -372,7 +373,7 @@ export const StaticToolbar = ({
   // 툴바 직계 컨트롤. 메뉴(listbox, 색상)는 툴바 밖 형제라 포함되지 않는다.
   const toolbarControls = () =>
     Array.from(toolbarRef.current?.children ?? []).filter(
-      (child): child is HTMLButtonElement => child instanceof HTMLButtonElement,
+      (child): child is HTMLButtonElement => isHtmlElement(child, "button"),
     );
 
   // `event.target`은 이벤트가 걸린 요소(div)로 좁혀 추론되므로 비교 대상을

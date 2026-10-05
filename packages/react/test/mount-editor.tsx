@@ -18,7 +18,7 @@ import {
   type EditorController,
   type TableBlock,
 } from "@cp949/geul-core";
-import { render, screen } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import { act, type ReactNode } from "react";
 import { afterEach, expect } from "vitest";
 
@@ -232,6 +232,22 @@ export const focusOutsideEditor = (element: HTMLElement) => {
   expect(document.activeElement).toBe(element);
 };
 
+/**
+ * `render`에 넘길 옵션. container가 없으면 기본(`document.body`에 새 div)이다.
+ * iframe 문서의 노드를 container로 주면 React가 iframe realm 노드를 만든다.
+ */
+const renderOptionsFor = (container: HTMLElement | undefined) =>
+  container === undefined ? undefined : { container };
+
+/**
+ * 마운트 host(role="textbox")를 찾는다. container가 속한 문서의 body에서
+ * 찾는다. 전역 `screen`은 메인 문서만 보므로 iframe 문서의 host를 놓친다.
+ */
+const queryHost = (container: HTMLElement | undefined): HTMLElement =>
+  within(container?.ownerDocument.body ?? document.body).getByRole("textbox", {
+    name: "Editor",
+  });
+
 export type BlockLayout = {
   left: number;
   top: number;
@@ -268,6 +284,8 @@ export type MountBlockEditorOptions = {
   // Issue #189, RD-002-DELTA-01 — SlashMenu의 enabledBlockTypes 필터링
   // 테스트가 공용으로 쓴다(dictionary와 동일 threading 패턴).
   enabledBlockTypes?: CreateEditorOptions["enabledBlockTypes"];
+  /** 렌더 container. iframe 문서에 그릴 때 준다(Issue #271). */
+  container?: HTMLElement;
 };
 
 export type MountedBlockEditor = {
@@ -303,6 +321,7 @@ export const mountBlockEditor = ({
   dictionary,
   codeBlockLanguages,
   enabledBlockTypes,
+  container,
 }: MountBlockEditorOptions = {}): MountedBlockEditor => {
   const resolvedBlocks =
     initialBlocks ??
@@ -335,9 +354,10 @@ export const mountBlockEditor = ({
       {children}
       <EditorContent />
     </EditorProvider>,
+    renderOptionsFor(container),
   );
 
-  const host = screen.getByRole("textbox", { name: "Editor" });
+  const host = queryHost(container);
   const editable = queryMountedEditable(host);
 
   /**
@@ -400,6 +420,8 @@ export type MountTableEditorOptions = {
   layout?: Layout;
   // mountBlockEditor의 dictionary와 동일 근거(RD-002-DELTA-02).
   dictionary?: CreateEditorOptions["dictionary"];
+  /** 렌더 container. mountBlockEditor의 같은 옵션과 같다. */
+  container?: HTMLElement;
 };
 
 export type MountedTableEditor = {
@@ -445,6 +467,7 @@ export const mountTableEditor = ({
   children,
   layout = DEFAULT_LAYOUT,
   dictionary,
+  container,
 }: MountTableEditorOptions = {}): MountedTableEditor => {
   const editor = createEditor({
     initialDocument: {
@@ -479,9 +502,10 @@ export const mountTableEditor = ({
       {children}
       <EditorContent />
     </EditorProvider>,
+    renderOptionsFor(container),
   );
 
-  const host = screen.getByRole("textbox", { name: "Editor" });
+  const host = queryHost(container);
   const editable = queryMountedEditable(host);
   const table = host.querySelector<HTMLElement>(
     `table[data-geul-block-id="${tableBlockId}"]`,

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
+import { isNode } from "./dom-node.js";
 import {
   isPointInClipBoxes,
   isRectInClipBoxes,
@@ -79,16 +80,11 @@ export const useClipVisibility = (
     const handleFocusOut = (event: FocusEvent) => {
       const nodes = nodesRef.current;
       const { target, relatedTarget } = event;
-      const NodeConstructor = ownerDocument.defaultView?.Node;
-      if (
-        NodeConstructor === undefined ||
-        !(target instanceof NodeConstructor)
-      ) {
-        return;
-      }
+      // realm과 무관하게 판정한다. iframe 문서에는 두 realm의 노드가 섞인다.
+      if (!isNode(target)) return;
       if (!nodes.some((node) => node.contains(target))) return;
       if (
-        relatedTarget instanceof NodeConstructor &&
+        isNode(relatedTarget) &&
         nodes.some((node) => node.contains(relatedTarget))
       ) {
         return;

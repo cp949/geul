@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useRef } from "react";
 
+import { isElementNode } from "./dom-node.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 /**
@@ -110,7 +111,7 @@ const isEditorConsumedKey = (
 ): boolean => {
   const target = event.target;
   return (
-    target instanceof Element &&
+    isElementNode(target) &&
     element.contains(target) &&
     !matchesAny(target, selectors)
   );
@@ -221,7 +222,7 @@ export const useDismissibleOverlay = ({
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Element)) return;
+      if (!isElementNode(target)) return;
       if (matchesAny(target, latest.current.allowSelectors)) return;
       close("outside");
     };

@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+import { isElementNode } from "./dom-node.js";
+
 type UsePointerHoverTargetOptions = {
   element: HTMLElement | null;
   /**
@@ -45,7 +47,7 @@ export const usePointerHoverTarget = ({
 
     const handlePointerMove = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Element)) return;
+      if (!isElementNode(target)) return;
       if (
         ignoreSelectors.some((selector) => target.closest(selector) !== null)
       ) {

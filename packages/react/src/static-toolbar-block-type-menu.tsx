@@ -127,7 +127,9 @@ export const StaticToolbarBlockTypeMenu = ({
         const items = Array.from(
           container.querySelectorAll<HTMLElement>('[role="option"]'),
         );
-        const current = items.indexOf(document.activeElement as HTMLElement);
+        const current = items.indexOf(
+          container.ownerDocument.activeElement as HTMLElement,
+        );
         const last = items.length - 1;
         let next: number | null = null;
         if (key === "ArrowDown") next = Math.min(current + 1, last);
