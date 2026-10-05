@@ -2,14 +2,18 @@
 
 /**
  * handleMenuKeyDown: 메뉴·트리거·입력창 keydown의 처리 순서 계약을 고정한다
- * (Issue #230). 순서는 IME → Escape → Enter 반복 → 수식 키 → Tab·화살표
- * 처리다. 순서 계약 describe의 번호 1~13은 이 파일 안의 케이스 번호다.
- * module 머리 주석의 순서 목록 번호와 별개다.
+ * (Issue #230). 순서는 IME → Escape → Enter 반복 → IME가 처리한 Enter →
+ * 수식 키 → Tab·화살표 처리다. 순서 계약 describe의 번호 1~14는 이 파일 안의
+ * 케이스 번호다. module 머리 주석의 순서 목록 번호와 별개다.
  *
  * 입력은 keydown 최소 구조의 가짜 이벤트로 만든다. 순서 계약은 키 필드와
  * 콜백 호출만 본다. 반복 억제는 문서 capture 리스너라 실제 KeyboardEvent를
  * 문서에 보내 관찰한다. React 합성 이벤트 모양(nativeEvent.isComposing)도
  * 한 건 둔다.
+ *
+ * IME가 처리한 Enter(`keyCode` 229, Issue #270)는 React 합성 이벤트 모양과
+ * 실제 KeyboardEvent를 각각 한 건 둔다. 수식 키 keydown이 반복 억제를 풀지
+ * 않는 계약(Issue #270)은 다섯 수식 키와 반복 여부를 모두 돈다.
  *
  * 중복 설치 방지는 이벤트 동작으로는 구별되지 않는다. 두 번 설치해도 keyup
  * 한 번에 둘 다 풀리기 때문이다. 문서에 남은 capture 리스너 수로 증명한다.
@@ -37,7 +41,31 @@ type KeyInit = {
   ctrlKey?: boolean;
   altKey?: boolean;
   metaKey?: boolean;
+  keyCode?: number;
 };
+
+/** IME가 처리한 keydown의 `keyCode`. 조합 확정 Enter가 이 값으로 온다. */
+const IME_PROCESS_KEY_CODE = 229;
+
+/**
+ * 반복 억제를 풀지 않는 수식 키와 그 keydown의 플래그. `AltGraph`는 대응하는
+ * 플래그 필드가 없어 키 이름만 보낸다.
+ */
+const MODIFIER_KEYDOWNS: ReadonlyArray<{
+  key: string;
+  flags: {
+    shiftKey?: boolean;
+    ctrlKey?: boolean;
+    altKey?: boolean;
+    metaKey?: boolean;
+  };
+}> = [
+  { key: "Shift", flags: { shiftKey: true } },
+  { key: "Control", flags: { ctrlKey: true } },
+  { key: "Alt", flags: { altKey: true } },
+  { key: "AltGraph", flags: {} },
+  { key: "Meta", flags: { metaKey: true } },
+];
 
 /** 수식 키 없음과 Ctrl·Alt·Meta 각각을 이름과 함께 돌려주는 케이스 목록. */
 const MODIFIER_CASES: ReadonlyArray<{ name: string; init: Partial<KeyInit> }> =
@@ -56,6 +84,7 @@ const createKeyEvent = (init: KeyInit) => {
     altKey: init.altKey ?? false,
     metaKey: init.metaKey ?? false,
     isComposing: init.isComposing ?? false,
+    ...(init.keyCode === undefined ? {} : { keyCode: init.keyCode }),
     preventDefault: () => {
       defaultPrevented = true;
     },
@@ -347,6 +376,137 @@ describe("handleMenuKeyDown 순서 계약", () => {
       expect(wasPrevented()).toBe(false);
     });
   });
+
+  describe("14. IME가 처리한 Enter(keyCode 229, isComposing false)", () => {
+    for (const { name, init } of MODIFIER_CASES) {
+      it(`${name}: true를 돌려주고 막으며 activate와 반복 억제를 건너뛴다`, () => {
+        const handlers = createHandlers();
+        const { event, wasPrevented } = createKeyEvent({
+          key: "Enter",
+          keyCode: IME_PROCESS_KEY_CODE,
+          ...init,
+        });
+
+        const consumed = handleMenuKeyDown(event, handlers);
+
+        expect(consumed).toBe(true);
+        expect(wasPrevented()).toBe(true);
+        expect(handlers.activate).not.toHaveBeenCalled();
+        expect(isRepeatEnterSwallowed()).toBe(false);
+      });
+    }
+
+    it("activate가 없어도 true를 돌려주고 막으며 반복 억제를 걸지 않는다", () => {
+      const { event, wasPrevented } = createKeyEvent({
+        key: "Enter",
+        keyCode: IME_PROCESS_KEY_CODE,
+      });
+
+      expect(handleMenuKeyDown(event, {})).toBe(true);
+      expect(wasPrevented()).toBe(true);
+      expect(isRepeatEnterSwallowed()).toBe(false);
+    });
+
+    it("React 합성 이벤트 모양(이벤트 자신의 keyCode)도 같게 판정한다", () => {
+      const handlers = createHandlers();
+      let prevented = false;
+      const syntheticEvent: MenuKeyboardEvent = {
+        key: "Enter",
+        repeat: false,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        keyCode: IME_PROCESS_KEY_CODE,
+        nativeEvent: { isComposing: false },
+        preventDefault: () => {
+          prevented = true;
+        },
+        currentTarget: document.body,
+      };
+
+      const consumed = handleMenuKeyDown(syntheticEvent, handlers);
+
+      expect(consumed).toBe(true);
+      expect(prevented).toBe(true);
+      expect(handlers.activate).not.toHaveBeenCalled();
+      expect(isRepeatEnterSwallowed()).toBe(false);
+    });
+
+    it("네이티브 KeyboardEvent도 같게 판정한다", () => {
+      const handlers = createHandlers();
+      let consumed: boolean | undefined;
+      const listener = (event: KeyboardEvent) => {
+        consumed = handleMenuKeyDown(event, handlers);
+      };
+      const event = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, "keyCode", { value: IME_PROCESS_KEY_CODE });
+      document.body.addEventListener("keydown", listener);
+      try {
+        document.body.dispatchEvent(event);
+      } finally {
+        document.body.removeEventListener("keydown", listener);
+      }
+
+      expect(event.isComposing).toBe(false);
+      expect(consumed).toBe(true);
+      expect(event.defaultPrevented).toBe(true);
+      expect(handlers.activate).not.toHaveBeenCalled();
+      expect(isRepeatEnterSwallowed()).toBe(false);
+    });
+
+    it("Enter 반복은 keyCode 229여도 기존대로 막기만 한다", () => {
+      const handlers = createHandlers();
+      const { event, wasPrevented } = createKeyEvent({
+        key: "Enter",
+        repeat: true,
+        keyCode: IME_PROCESS_KEY_CODE,
+      });
+
+      expect(handleMenuKeyDown(event, handlers)).toBe(true);
+      expect(wasPrevented()).toBe(true);
+      expect(handlers.activate).not.toHaveBeenCalled();
+    });
+
+    it("keyCode 229인 Escape는 기존대로 escape를 부른다", () => {
+      const handlers = createHandlers();
+      const { event, wasPrevented } = createKeyEvent({
+        key: "Escape",
+        keyCode: IME_PROCESS_KEY_CODE,
+      });
+
+      expect(handleMenuKeyDown(event, handlers)).toBe(true);
+      expect(wasPrevented()).toBe(true);
+      expect(handlers.escape).toHaveBeenCalledTimes(1);
+    });
+
+    it("keyCode 229인 Tab은 기존대로 tab을 부른다", () => {
+      const handlers = createHandlers();
+      const { event, wasPrevented } = createKeyEvent({
+        key: "Tab",
+        keyCode: IME_PROCESS_KEY_CODE,
+      });
+
+      expect(handleMenuKeyDown(event, handlers)).toBe(true);
+      expect(wasPrevented()).toBe(true);
+      expect(handlers.tab).toHaveBeenCalledTimes(1);
+    });
+
+    it("keyCode 229인 ArrowDown은 기존대로 navigate 결과를 따른다", () => {
+      const handlers = createHandlers(true);
+      const { event, wasPrevented } = createKeyEvent({
+        key: "ArrowDown",
+        keyCode: IME_PROCESS_KEY_CODE,
+      });
+
+      expect(handleMenuKeyDown(event, handlers)).toBe(true);
+      expect(wasPrevented()).toBe(true);
+      expect(handlers.navigate).toHaveBeenCalledWith("ArrowDown");
+    });
+  });
 });
 
 describe("handleMenuKeyDown 반복 억제", () => {
@@ -396,6 +556,24 @@ describe("handleMenuKeyDown 반복 억제", () => {
 
     expect(fresh).toEqual({ reachedTarget: true, defaultPrevented: false });
     expect(isRepeatEnterSwallowed()).toBe(false);
+  });
+
+  describe("수식 키 keydown은 풀지 않는다", () => {
+    for (const { key, flags } of MODIFIER_KEYDOWNS) {
+      for (const repeat of [false, true]) {
+        it(`${key}(repeat ${String(repeat)}) keydown은 통과하고 반복 Enter를 계속 삼킨다`, () => {
+          handleMenuKeyDown(createKeyEvent({ key: "Enter" }).event, {});
+
+          const modifier = dispatchKeydown({ key, repeat, ...flags });
+
+          expect(modifier).toEqual({
+            reachedTarget: true,
+            defaultPrevented: false,
+          });
+          expect(isRepeatEnterSwallowed()).toBe(true);
+        });
+      }
+    }
   });
 
   it("반복이 아닌 keydown이 풀기 전에는 반복 Enter를 여러 번 삼킨다", () => {

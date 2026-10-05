@@ -61,11 +61,16 @@ export const trackCaptureListeners = (): (() => number) => {
 /**
  * 문서에 keydown 하나를 실제로 보내 반복 억제가 걸려 있는지 본다. 억제가
  * 걸려 있으면 문서 capture에서 삼켜져 body 리스너에 닿지 않고
- * `defaultPrevented`가 된다.
+ * `defaultPrevented`가 된다. 수식 키 플래그는 수식 키 keydown 자체를 보낼 때
+ * 쓴다.
  */
 export const dispatchKeydown = (init: {
   key: string;
   repeat?: boolean;
+  shiftKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
 }): { reachedTarget: boolean; defaultPrevented: boolean } => {
   let reachedTarget = false;
   const listener = () => {

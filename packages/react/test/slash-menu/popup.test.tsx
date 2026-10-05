@@ -4,6 +4,7 @@
  * SlashMenu의 슬래시 질의 팝업 트리거·필터링·항목 적용을 검증한다.
  * Ctrl·Alt·Meta 조합 키를 가로채지 않는 계약도 여기서 고정한다(Issue #227).
  * 캐럿이 슬래시 블록을 벗어나면 닫히는 계약도 고정한다(Issue #229).
+ * IME가 처리한 Enter와 확정 뒤 수식 키 keydown의 반복 억제도 고정한다(Issue #270).
  */
 
 import {
@@ -1029,6 +1030,42 @@ describe("SlashMenu Enter 키 순서(Issue #230)", () => {
     fireEvent.keyDown(rendered.editable, { key: "Enter", repeat: true });
 
     expect(reachedEditable).toHaveBeenCalledTimes(1);
+  });
+
+  it("IME가 처리한 Enter(keyCode 229)는 항목을 확정하지 않고 preventDefault한다(Issue #270)", () => {
+    const rendered = renderCaretBlocks();
+    const blockId = typeIntoBlock(rendered, 0, "/head");
+
+    const notPrevented = fireEvent.keyDown(rendered.host, {
+      key: "Enter",
+      keyCode: 229,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(rendered.editor.getCaretBlockContext()).toEqual({
+      blockId,
+      blockType: { type: "paragraph" },
+      text: "/head",
+    });
+  });
+
+  it("Enter로 확정한 뒤 Shift를 눌러도 반복 Enter는 편집기에 닿지 않는다(Issue #270)", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, 0, "/head");
+    const reachedEditable = vi.fn();
+    rendered.editable.addEventListener("keydown", reachedEditable);
+
+    fireEvent.keyDown(rendered.host, { key: "Enter" });
+    fireEvent.keyDown(rendered.editable, { key: "Shift", shiftKey: true });
+    const notPrevented = fireEvent.keyDown(rendered.editable, {
+      key: "Enter",
+      repeat: true,
+      shiftKey: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(reachedEditable).toHaveBeenCalledTimes(1);
+    expect(reachedEditable.mock.calls[0]?.[0]).toMatchObject({ key: "Shift" });
   });
 });
 
