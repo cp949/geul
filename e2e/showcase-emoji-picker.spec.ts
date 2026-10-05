@@ -236,8 +236,9 @@ for (const leave of LEAVE_KEYS.filter(
           ).toHaveCount(1);
         }
         // 0ms는 두 경로가 모두 유효하다. Enter 때 picker가 아직 열려 있으면 가드가
-        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. 즉시 읽기가 먼저
-        // picker를 닫았으면 Enter가 편집기에서 평소대로 동작한다.
+        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. selectionchange
+        // 재읽기가 Enter보다 먼저 picker를 닫았으면 Enter가 편집기에서 평소대로
+        // 동작한다.
         if (enter?.pickerOpen === true) {
           await expect(editable.locator("p")).toHaveText(["alpha", ":sm"]);
         }

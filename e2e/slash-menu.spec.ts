@@ -16,6 +16,7 @@ import {
   recordKeydownPrevented,
 } from "./support/keydown-prevented.js";
 import {
+  holdSelectionChangeUntilEnter,
   LEAVE_KEYS,
   MAX_LEAVE_ATTEMPTS,
   readCaretBlockText,
@@ -571,8 +572,9 @@ for (const leave of LEAVE_KEYS) {
           ).toHaveCount(1);
         }
         // 0ms는 두 경로가 모두 유효하다. Enter 때 메뉴가 아직 열려 있으면 가드가
-        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. 즉시 읽기가 먼저
-        // 메뉴를 닫았으면 Enter가 편집기에서 평소대로 동작한다.
+        // 그 Enter를 소비하므로 문서가 변하지 않아야 한다. 뒤늦은 읽기
+        // (`setTimeout(0)`)가 Enter보다 먼저 메뉴를 닫았으면 Enter가 편집기에서
+        // 평소대로 동작한다.
         if (enter?.pickerOpen === true) {
           await expect(editable.locator("p")).toHaveText(["alpha", "/he"]);
         }
@@ -587,20 +589,22 @@ for (const leave of LEAVE_KEYS) {
 
 // Issue #258: 가드가 Enter를 막아 메뉴를 닫은 뒤 캐럿이 `/he` 블록으로 돌아오면
 // 메뉴는 다시 열린다. `dismissedQueryRef`를 걸지 않는 의도된 동작이고 기존
-// selectionchange 이탈 경로(Issue #229)와 같다.
+// selectionchange 이탈 경로(Issue #229)와 같다. 헬퍼로 selectionchange를
+// Enter까지 막아 가드 상태를 매 시도 만든다(Issue #275).
 test("가드가 Enter를 막아 닫은 메뉴는 캐럿이 `/he` 블록으로 돌아오면 다시 열린다 (Issue #258)", async ({
   page,
 }) => {
   for (let attempt = 1; attempt <= MAX_LEAVE_ATTEMPTS; attempt += 1) {
     const { editable, menu } = await openHeAfterAlpha(page);
     await recordEnterState(page, ".geul-slash-menu");
+    await holdSelectionChangeUntilEnter(page);
 
     await page.keyboard.press("PageUp");
-    if ((await readCaretBlockText(page)) === "/he") continue;
     await page.keyboard.press("Enter");
     const enter = await readEnterState(page);
-    // 즉시 읽기가 먼저 메뉴를 닫았다면 가드를 거치지 않은 시도다.
-    if (enter?.caretBlock === "/he" || enter?.pickerOpen !== true) continue;
+    if (enter?.caretBlock === "/he") continue;
+    // 가드 경로를 밟았다. Enter 때 메뉴가 열려 있었다.
+    expect(enter?.pickerOpen).toBe(true);
 
     await expect(menu).toHaveCount(0);
     await expect(editable.locator("p")).toHaveText(["alpha", "/he"]);
@@ -610,7 +614,7 @@ test("가드가 Enter를 막아 닫은 메뉴는 캐럿이 `/he` 블록으로 �
     await expect(menu).toBeVisible();
     return;
   }
-  throw new Error(`${MAX_LEAVE_ATTEMPTS}번 시도해도 가드 경로에 닿지 않았다`);
+  throw new Error(`${MAX_LEAVE_ATTEMPTS}번 시도해도 이동이 유지되지 않았다`);
 });
 
 // Issue #258 회귀 보호: 블록 추가 버튼("+")으로 연 메뉴는 새 빈 블록에 캐럿이

@@ -106,6 +106,31 @@ export const readEnterState = (page: Page) =>
   );
 
 /**
+ * 다음 Enter keydown까지 selectionchange 전달을 막는다. 가드가 겨냥한 상태를
+ * 만든다. Enter 때 DOM 캐럿은 이동 뒤 블록에 있고, PM state와 popup은 트리거
+ * 블록에 머문다.
+ * - selectionchange는 document에서 발생한다. window capture 리스너가 document
+ *   리스너(popup의 즉시·뒤늦은 읽기, PM DOMObserver)보다 먼저 돈다.
+ * - 해제는 Enter keydown의 window capture 단계다. popup의 keydown 처리보다 먼저다.
+ * - PM state는 Enter 처리 뒤 DOM selection을 다시 읽어 따라잡는다. 문서는
+ *   바뀌지 않는다.
+ * - 실제 타이밍 경합은 재현하지 않는다. 그 경로는 0ms 이탈 행이 맡는다.
+ * - Enter 없이 시도가 끝나면 리스너가 남는다. 시도마다 `page.goto`로 새
+ *   페이지를 열어 누적되지 않는다.
+ */
+export const holdSelectionChangeUntilEnter = (page: Page) =>
+  page.evaluate(() => {
+    const hold = (event: Event) => event.stopImmediatePropagation();
+    window.addEventListener("selectionchange", hold, true);
+    const release = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") return;
+      window.removeEventListener("selectionchange", hold, true);
+      window.removeEventListener("keydown", release, true);
+    };
+    window.addEventListener("keydown", release, true);
+  });
+
+/**
  * 이동 키를 누른 직후 ProseMirror가 DOM selection을 낡은 state로 되돌리는
  * 경합이 약 1%에서 난다(실측: Home keyup 때 `alpha`였던 selection이 Enter keydown
  * 전에 트리거 블록으로 돌아온다). 그때 캐럿은 실제로 트리거 블록에 있어 popup이
