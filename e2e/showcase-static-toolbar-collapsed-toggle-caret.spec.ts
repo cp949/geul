@@ -335,8 +335,15 @@ for (const key of ["ArrowDown", "ArrowRight"] as const) {
     await yieldFrame(page);
 
     await expect(divider).toHaveClass(/ProseMirror-selectednode/);
-    // 키 자체가 블록을 만들지 않는다. 입력 뒤 유령 블록(WebKit)은 단언하지 않는다.
-    // divider NodeSelection이면 DOM 캐럿이 루트 블록 사이로 가지 않는다.
+    // 키 자체가 블록을 만들지 않는다.
+    expect(await siblingCount(block)).toBe(countBefore);
+    expect(await labelText(block)).toBe(labelBefore);
+
+    // 입력해도 toggle과 divider 사이에 유령 블록이 생기지 않는다(WebKit 증상).
+    // 입력이 divider를 대체하는지는 단언하지 않는다. 블록 수만 본다.
+    await page.keyboard.type("Z");
+    await yieldFrame(page);
+
     expect(await siblingCount(block)).toBe(countBefore);
     expect(await labelText(block)).toBe(labelBefore);
   });
