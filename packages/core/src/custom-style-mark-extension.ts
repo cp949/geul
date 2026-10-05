@@ -5,11 +5,10 @@ import type { CustomStyleDefinition } from "./custom-extension-definitions.js";
 import { isHtmlElement } from "./dom-node.js";
 
 // 등록된 커스텀 스타일(spec §4.4, EXT-003)마다 PM Mark를 하나 만든다
-// (RD-002-DELTA-19). text-color-mark-extension.ts와 같은 "addAttributes +
+// (Issue #156). text-color-mark-extension.ts와 같은 "addAttributes +
 // renderHTML" 구조이지만, `CustomStyleDefinition.render`가 raw HTMLElement나
 // {className, style} 객체를 반환해(spec §4.4) PM Mark의 배열 기반
-// DOMOutputSpec(콘텐츠 hole `0` 필수)으로 변환하는 단계가 하나 더 있다
-// (RD-002-DELTA-19.md "결정" 1).
+// DOMOutputSpec(콘텐츠 hole `0` 필수)으로 변환하는 단계가 하나 더 있다.
 //
 // CustomBlockDefinition/CustomInlineContentDefinition과 달리 render()가
 // `editor: EditorController`를 받지 않는다(spec §4.4 — 스타일은 값만으로

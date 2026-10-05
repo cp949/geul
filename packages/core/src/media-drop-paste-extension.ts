@@ -17,18 +17,16 @@ import {
   type LocalPreviewAttrs,
 } from "./media-local-preview.js";
 
-// spec §5.2 — File drop/paste가 media 블록을 만드는 신규 확장(RD-002
-// DELTA-01, roadmap `_works/roadmap/RD-002.md`). ClipboardPasteExtension·
-// TablePasteExtension과 나란히 배선하되(production-editor-assembly.ts),
-// session을 참조하지 않고 this.editor로 직접 트랜잭션을 낸다 —
-// ProductionEditorSession.onTiptapUpdate의 activeReason===null 분기가
-// session 우회 dispatch도 "local" 변경으로 커밋한다(readiness probe 확인
-// 사실, RD-002.md "진입 조건"). 실제 업로드 콜백 호출은 이 확장의 책임이
-// 아니다(DELTA-02) — 콜백이 있으면 여기서 만든 media 블록은 항상
-// url: null로 남는다(uploadMediaFile이 비동기로 채운다). 콜백이 없으면
-// Issue #168 roadmap RD-001 DELTA-02부터 파일 1개는 로컬 프리뷰(ADR 0015)
-// attrs를 채운 채로 삽입한다 — 파일 2개 이상은 아직 DELTA-03 범위라 기존
-// "완전히 무시" 동작을 유지한다(아래 handlePaste/handleDrop 게이트).
+// spec §5.2 — File drop/paste가 media 블록을 만드는 확장(Issue #152).
+// ClipboardPasteExtension·TablePasteExtension과 나란히 배선하되
+// (production-editor-assembly.ts), session을 참조하지 않고 this.editor로
+// 직접 트랜잭션을 낸다 — ProductionEditorSession.onTiptapUpdate의
+// activeReason===null 분기가 session 우회 dispatch도 "local" 변경으로
+// 커밋한다(readiness probe 확인 사실). 실제 업로드 콜백 호출은 이 확장의
+// 책임이 아니다(세션의 uploadMediaFile) — 콜백이 있으면 여기서 만든 media
+// 블록은 항상 url: null로 남는다(uploadMediaFile이 비동기로 채운다).
+// 콜백이 없으면 파일마다 로컬 프리뷰(ADR 0015) attrs를 채운 채로
+// 삽입한다(Issue #168, 아래 handlePaste/handleDrop).
 
 export type MediaDropPasteOptions = {
   createId: IdFactory;
@@ -37,8 +35,8 @@ export type MediaDropPasteOptions = {
   // 생성 시점에 계산한 정적 boolean 하나로 충분하다(production-editor-session.ts
   // ::createTiptapEditor()가 계산해 넘긴다).
   isUploadEnabled: boolean;
-  // RD-002 DELTA-02 — 삽입한 media 블록마다 실제 업로드를 트리거하는
-  // 세션 클로저(production-editor-session.ts::createTiptapEditor()가
+  // 삽입한 media 블록마다 실제 업로드를 트리거하는 세션 클로저
+  // (production-editor-session.ts::createTiptapEditor()가
   // session.uploadMediaFile을 fire-and-forget으로 감싸 넘긴다). 이
   // 확장은 반환값을 기다리지 않는다 — isUploadEnabled===false면 이
   // 옵션이 호출되는 코드 경로 자체에 도달하지 않는다(두 핸들러 모두
@@ -99,11 +97,11 @@ const isMediaKindAvailable = (editor: Editor, file: File): boolean =>
 // 동일해 병합했다. 거절되면(TRANSACTION_REJECTED, 희귀) null을 반환해
 // 체이닝을 멈추게 한다.
 //
-// localPreview(Issue #168 roadmap RD-001 DELTA-02) — null이면(콜백 있음)
-// 기존과 동일하게 blockId만 세팅한다. 값이 있으면(콜백 없음, 파일 1개)
-// 노드 생성과 같은 트랜잭션에 localPreviewUrl·localPreviewFile도 함께
-// 세팅한다 — 별도 후속 트랜잭션으로 나누면 삽입 직후 한 틱 동안 attrs
-// 없는 빈 미디어 블록이 화면에 보이는 깜빡임이 생긴다.
+// localPreview(Issue #168) — null이면(콜백 있음) 기존과 동일하게 blockId만
+// 세팅한다. 값이 있으면(콜백 없음) 노드 생성과 같은 트랜잭션에
+// localPreviewUrl·localPreviewFile도 함께 세팅한다 — 별도 후속 트랜잭션으로
+// 나누면 삽입 직후 한 틱 동안 attrs 없는 빈 미디어 블록이 화면에 보이는
+// 깜빡임이 생긴다.
 const insertMediaAtTarget = (
   editor: Editor,
   target: MediaInsertTarget,
@@ -144,12 +142,12 @@ const insertMediaAtTarget = (
 // D2 다중 파일 체이닝 — 첫 파일 이후는 항상 "직전 반환 blockId 뒤에 삽입"만
 // 반복한다(기존 insertMediaBlock, session 무관). 앞선 삽입이 거절되면(희귀)
 // 더 이상 유효한 anchor가 없으므로 남은 파일을 조용히 포기한다. 콜백이
-// 있으면(isUploadEnabled) 삽입이 성공한 파일마다(RD-002 DELTA-02)
+// 있으면(isUploadEnabled) 삽입이 성공한 파일마다
 // triggerUpload(blockId, file)을 그 자리에서 바로 호출한다 — 다음 파일의
 // anchor 삽입 실패와 무관하게 이미 성공한 블록은 업로드를 시작해야 한다.
-// 콜백이 없으면(Issue #168 roadmap RD-001 DELTA-03) 각 파일을 독립적으로
-// 로컬 프리뷰 attrs와 함께 삽입한다 — 한 파일의 로컬 프리뷰 처리가 다른
-// 파일에 영향을 주지 않는다(항목별 독립 처리, roadmap.md 전체 포함 범위).
+// 콜백이 없으면(Issue #168) 각 파일을 독립적으로 로컬 프리뷰 attrs와 함께
+// 삽입한다 — 한 파일의 로컬 프리뷰 처리가 다른 파일에 영향을 주지 않는다
+// (항목별 독립 처리).
 const chainRemainingFiles = (
   editor: Editor,
   createId: IdFactory,
@@ -195,9 +193,8 @@ type MediaInsertTarget =
   | { mode: "replace"; position: number; nodeSize: number };
 
 // paste 전용 위치 판정 — 좌표가 없어 "빈 paragraph면 교체, 아니면 뒤에
-// 삽입"으로 가른다(spec §5.2 불릿 1·2). drop과 별개 규칙이다(RD-002.md
-// "결정" — spec §5.2 재독해, 3개 불릿은 paste/drop 각자의 규칙이지 하나가
-// 아니다).
+// 삽입"으로 가른다(spec §5.2 불릿 1·2). drop과 별개 규칙이다 — spec §5.2의
+// 3개 불릿은 paste/drop 각자의 규칙이지 하나가 아니다.
 const resolvePasteTarget = ($pos: ResolvedPos): MediaInsertTarget => {
   const bypass = resolveTableBypass($pos);
   if (bypass !== null) return { mode: "insert", position: bypass.position };
@@ -254,7 +251,8 @@ const deleteNonEmptySelection = (editor: Editor): void => {
 
 // D8 디렉터리 필터 입력 조립 — dataTransfer.items(webkitGetAsEntry)가 있으면
 // 그 판정을 쓰고, 없거나 비어 있으면(구형·비표준 환경) dataTransfer.files로
-// 최선노력 폴백해 전부 파일로 취급한다. filterUploadableFiles(RD-001)가
+// 최선노력 폴백해 전부 파일로 취급한다. filterUploadableFiles
+// (media-drop-paste-detection.ts)가
 // 실제 디렉터리 제외를 수행한다 — 이 함수는 판정된 isDirectory만 조립한다.
 const collectDropEntries = (
   dataTransfer: DataTransfer,
@@ -307,11 +305,10 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
       new Plugin({
         props: {
           // 콜백이 있으면(isUploadEnabled) 항상 처리하고 업로드를
-          // 트리거한다(기존 동작 불변). 콜백이 없으면 Issue #168 roadmap
-          // RD-001 DELTA-02·03부터 파일 개수와 무관하게 항상 처리하고, 각
-          // 파일을 독립적으로 로컬 프리뷰(ADR 0015)로 채운다 — 더 이상
-          // "파일 페이로드는 무시한다"(R3 spec §4.1, IO-007 own 경계,
-          // DELTA-02 이전 결정)로 되돌아가지 않는다.
+          // 트리거한다(기존 동작 불변). 콜백이 없으면 파일 개수와 무관하게
+          // 항상 처리하고, 각 파일을 독립적으로 로컬 프리뷰(ADR 0015)로
+          // 채운다(Issue #168) — 더 이상 "파일 페이로드는 무시한다"(R3 spec
+          // §4.1, IO-007 own 경계, Issue #168 이전 결정)로 되돌아가지 않는다.
           handlePaste: (_view, event) => {
             const clipboardData = event.clipboardData;
             if (clipboardData === null) return false;
