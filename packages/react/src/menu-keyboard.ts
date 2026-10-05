@@ -21,8 +21,8 @@
  *      막으면 click이 나지 않아 확정되지 않는다. 수식 키는 따지지 않는다.
  *    - `activate`가 있으면 수식 키가 없을 때만 반복 억제를 걸고, 막고, 부른다.
  *      수식 키가 있으면 처리하지 않은 키이므로 `false`로 물러난다.
- *    - 반복 억제는 문서 capture 단계에서 반복 Enter를 삼킨다. Enter keyup이나
- *      수식 키가 아닌 keydown이 오면 스스로 푼다.
+ *    - 반복 억제는 문서 capture 단계에서 반복 Enter를 삼킨다. Enter keyup이
+ *      오면 스스로 푼다. 반복 Enter도 수식 키도 아닌 keydown이 와도 푼다.
  * 6. 수식 키(Ctrl·Alt·Meta): 처리하지 않은 키이므로 `preventDefault`하지 않고
  *    `false`로 물러난다. `Alt+ArrowLeft`(뒤로 가기)와 `Ctrl+Tab`(탭 전환)
  *    같은 단축키가 막히지 않게 한다. `shiftKey`는 보지 않는다. 메뉴에서

@@ -58,6 +58,8 @@
   - IME 조합 중(`isComposing`)이면 어떤 키도 처리하지 않는다.
   - Escape는 `escape` 인자가 있으면 처리한다. 수식 키 가드보다 앞이다.
   - Enter 자동 반복은 막고 처리하지 않는다. 수식 키 가드보다 앞이다.
+  - IME가 처리한 Enter(`keyCode` 229)는 막고 확정하지 않는다. `isComposing`이 `false`로 와도 같다(Issue #270). 반복 억제도 걸지 않는다. 수식 키 가드보다 앞이다. 다른 키의 229는 따로 보지 않는다.
+  - 확정 Enter가 건 반복 억제는 Enter keyup에서 풀린다. 반복 Enter도 수식 키도 아닌 keydown에서도 풀린다. Shift·Control·Alt·AltGraph·Meta keydown은 반복 여부와 상관없이 풀지 않고 통과한다(Issue #270).
   - Ctrl·Alt·Meta가 눌린 키는 처리 없이 물러나고 `preventDefault`도 하지 않는다. `Alt+ArrowLeft`, `Ctrl+Tab` 같은 브라우저·OS 단축키를 막지 않기 위해서다.
   - Shift는 판정에 넣지 않는다. popup의 `Shift+Tab`은 닫기 키다.
   - 처리한 키는 결과가 무효여도 `preventDefault`한다. 후보 0건 상태의 Enter가 기본 Enter(블록 분할)로 새지 않게 한다(Issue #211).

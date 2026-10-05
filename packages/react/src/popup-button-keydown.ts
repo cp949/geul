@@ -9,6 +9,7 @@
  *
  * 처리는 `handleMenuKeyDown(event, {})`에 맡긴다.
  * - 첫 Enter는 막지 않는다. 네이티브 click이 난다. 문서 capture 반복 억제를 건다.
+ * - IME가 처리한 Enter(`keyCode` 229)는 막는다. click이 나지 않는다(Issue #270).
  * - 반복 Enter는 막는다.
  * - Escape·Tab·화살표는 `false`다. 위임 때문에 기존 처리가 바뀌지 않는다.
  *

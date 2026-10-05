@@ -336,3 +336,6 @@ Issue #222가 추가했다.
 - StaticToolbar 아이콘 `aria-pressed`, 블록 타입 메뉴 `aria-selected`, 트리거 라벨, FormattingToolbar select 값이 같은 공통 타입을 따른다.
 - 전부 `codeBlock`인 선택은 `blockType`이 `codeBlock`이다. Code 아이콘은 단일 `codeBlock` 선택처럼 눌린 상태다. `ALL_CODE_BLOCK` 비활성은 그대로다.
 - 같은 타입 변환이 사유가 아니라는 `BlockTypeBlocker` 계약은 그대로다. 눌린 옵션을 눌러도 명령을 호출하고 core가 `COMMAND_NOT_APPLICABLE`로 거절한다.
+- [Issue #270](https://github.com/cp949/geul/issues/270): §5의 Enter 처리에 두 규칙을 더했다. 판정 원본은 `packages/react/src/menu-keyboard.ts` 머리 주석이다.
+- IME가 처리한 Enter(`keyCode` 229)는 `isComposing`이 `false`여도 막고 확정하지 않는다. 팝업 버튼의 첫 Enter도 같아서 click이 나지 않는다. 반복 억제는 걸지 않는다.
+- 반복 억제는 Shift·Control·Alt·AltGraph·Meta keydown에서 풀리지 않는다. 본문 §5의 "새 keydown에서 풀린다"와 "반복이 아닌 keydown에서 풀린다"는 수식 키가 아닌 keydown을 뜻한다.
