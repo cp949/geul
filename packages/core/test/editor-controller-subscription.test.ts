@@ -8,6 +8,9 @@
  * appendTransaction 되돌림은 editor-controller-subscription-assembly.test.ts가
  * 소유한다. mount()된 editor의 정리는 mountTiptapEditor가 등록하는 module
  * scope afterEach에 위임한다(G-TST-003).
+ *
+ * Issue #262: listener 안 getBlockTypeBlocker가 자식 유무를 낡은 모델이
+ * 아니라 통지 시점 편집기 상태로 판정함을 네 경로로 고정한다.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -16,6 +19,7 @@ import {
   type DocumentChangeEvent,
   type EditorController,
 } from "../src/index.js";
+import { dispatchKeydown } from "./block-test-support.js";
 import {
   documentOf,
   editorState,
@@ -34,6 +38,44 @@ function threeBlockDocument(): Document {
     { id: "block-2", type: "heading", level: 1, content: [{ text: "title" }] },
     paragraphBlock("block-3", "tail"),
   );
+}
+
+/**
+ * 문단 a 밑에 자식 문단 c를 둔 문서. 마지막 블록이 문단이라 로드 시
+ * 정규화가 일어나지 않는다.
+ */
+function parentChildDocument(): Document {
+  return documentOf(
+    paragraphBlock("a", "parent", [paragraphBlock("c", "child")]),
+    paragraphBlock("tail", "tail"),
+  );
+}
+
+/**
+ * a와 c가 형제 문단인 문서. c를 들여쓰면 a의 자식이 된다.
+ */
+function siblingDocument(): Document {
+  return documentOf(
+    paragraphBlock("a", "parent"),
+    paragraphBlock("c", "child"),
+    paragraphBlock("tail", "tail"),
+  );
+}
+
+/**
+ * 문서를 마운트하고, listener 안에서 a의 Code 변환 사유를 조회해 쌓는다.
+ * 명령 뒤 같은 조회와 비교하도록 조회 함수도 함께 돌려준다.
+ */
+function mountedWithCodeBlockerLog(document: Document) {
+  const editor = createEditor({ initialDocument: document });
+  const mountedParts = mountTiptapEditor(editor);
+  const queryCodeBlocker = () =>
+    editor.getBlockTypeBlocker("a", { type: "codeBlock" });
+  const seen: Array<ReturnType<typeof queryCodeBlocker>> = [];
+  editor.subscribe(() => {
+    seen.push(queryCodeBlocker());
+  });
+  return { editor, seen, queryCodeBlocker, ...mountedParts };
 }
 
 /**
@@ -311,6 +353,66 @@ describe("에디터 컨트롤러 subscribe 호출 시점", () => {
     tiptap.commands.toggleBold();
 
     expect(seen).toEqual([[]]);
+  });
+});
+
+describe("listener 안 getBlockTypeBlocker는 명령 완료 뒤 조회와 같다", () => {
+  it("자식 시작 Backspace로 부모에 병합하면 listener 안 마지막 조회가 null이다", () => {
+    const { editor, seen, queryCodeBlocker, tiptap } =
+      mountedWithCodeBlockerLog(parentChildDocument());
+    expect(editor.setTextCursorPosition("c", "start").ok).toBe(true);
+    seen.length = 0;
+
+    expect(dispatchKeydown(tiptap, "Backspace")).toBe(true);
+
+    expect(editor.getDocument().blocks).toEqual([
+      paragraphBlock("a", "parentchild"),
+      paragraphBlock("tail", "tail"),
+    ]);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.at(-1)).toBeNull();
+    expect(queryCodeBlocker()).toBeNull();
+  });
+
+  it("removeBlocks로 자식을 지우면 listener 안 마지막 조회가 null이다", () => {
+    const { editor, seen, queryCodeBlocker } = mountedWithCodeBlockerLog(
+      parentChildDocument(),
+    );
+
+    expect(editor.removeBlocks(["c"]).ok).toBe(true);
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.at(-1)).toBeNull();
+    expect(queryCodeBlocker()).toBeNull();
+  });
+
+  it("outdentBlock으로 자식을 내어쓰면 listener 안 마지막 조회가 null이다", () => {
+    const { editor, seen, queryCodeBlocker } = mountedWithCodeBlockerLog(
+      parentChildDocument(),
+    );
+
+    expect(editor.commands.outdentBlock("c")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.at(-1)).toBeNull();
+    expect(queryCodeBlocker()).toBeNull();
+  });
+
+  it("indentBlock으로 형제를 자식으로 만들면 listener 안 마지막 조회가 HAS_CHILDREN이다", () => {
+    const { editor, seen, queryCodeBlocker } =
+      mountedWithCodeBlockerLog(siblingDocument());
+
+    expect(editor.commands.indentBlock("c")).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.at(-1)).toBe("HAS_CHILDREN");
+    expect(queryCodeBlocker()).toBe("HAS_CHILDREN");
   });
 });
 

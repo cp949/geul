@@ -6,6 +6,8 @@
  * fake로는 등록·해제·재렌더 생략·클릭 시점 조회를, 실제 편집기로는
  * 명령 호출만으로 표시가 바뀌는 경로(external ownership)를 본다.
  * 빠른 클릭 순서 문제 자체는 브라우저에서만 재현되어 e2e가 소유한다.
+ * Issue #262: 자식을 없애는 편집 뒤 Code 버튼이 낡은 HAS_CHILDREN 사유로
+ * 비활성에 남지 않음을 실제 편집기로 고정한다.
  */
 import {
   act,
@@ -14,20 +16,60 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import type { BlockTypeDescriptor } from "@cp949/geul-core";
+import {
+  DEFAULT_DICTIONARY,
+  type BlockTypeDescriptor,
+  type EditorController,
+} from "@cp949/geul-core";
 import { Profiler } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StaticToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { mountBlockEditor } from "./mount-editor.js";
-import { fakeStaticToolbarController } from "./static-toolbar-test-support.js";
+import {
+  blockTypeName,
+  fakeStaticToolbarController,
+} from "./static-toolbar-test-support.js";
 
 afterEach(cleanup);
 
 /** 현재 블록 타입을 돌려주는 조회 mock을 만든다. */
 const blockTypeQuery = (blockId: string, blockType: BlockTypeDescriptor) =>
   vi.fn(() => ({ blockId, blockType }));
+
+const CHILDREN_REASON =
+  DEFAULT_DICTIONARY.toolbar.static.blockTypeDisabledByChildrenReason;
+
+/**
+ * 문단 a 밑에 자식 문단 c를 둔 문서로 실제 편집기와 StaticToolbar를
+ * 마운트한다. 캐럿을 a 끝에 두고 Code 버튼을 돌려준다.
+ * mountBlockEditor는 렌더된 블록 수를 top-level 블록 수와 비교해 중첩
+ * 문서를 거부한다. 그래서 형제 a·c로 마운트한 뒤 c를 들여써 자식으로 만든다.
+ */
+const mountParentChildToolbar = (): {
+  editor: EditorController;
+  editable: HTMLElement;
+  code: HTMLElement;
+} => {
+  const { editor, editable } = mountBlockEditor({
+    initialBlocks: [
+      { id: "a", type: "paragraph", content: [{ text: "parent" }] },
+      { id: "c", type: "paragraph", content: [{ text: "child" }] },
+      { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+    ],
+    children: <StaticToolbar />,
+  });
+  act(() => {
+    const indented = editor.commands.indentBlock("c");
+    if (!indented.ok) throw new Error("자식 c fixture 준비 실패");
+    editor.setTextCursorPosition("a", "end");
+  });
+  const code = screen.getByRole("button", {
+    name: blockTypeName(DEFAULT_DICTIONARY, "code"),
+  });
+  return { editor, editable, code };
+};
 
 describe("StaticToolbar 구독 기반 상태 갱신", () => {
   it("마운트하면 subscribe로 listener를 1개 등록한다", () => {
@@ -129,6 +171,43 @@ describe("StaticToolbar 구독 기반 상태 갱신", () => {
       });
 
       expect(quote.getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("자식 시작 Backspace로 부모에 병합하면 Code 버튼이 HAS_CHILDREN 사유로 비활성에 남지 않는다", () => {
+      const { editor, editable, code } = mountParentChildToolbar();
+      expect(code.getAttribute("aria-disabled")).toBe("true");
+      expect(code.getAttribute("title")).toBe(CHILDREN_REASON);
+
+      act(() => {
+        editor.setTextCursorPosition("c", "start");
+      });
+      act(() => {
+        fireEvent.keyDown(editable, { key: "Backspace" });
+      });
+
+      expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+        "a",
+        "tail",
+      ]);
+      expect(code.getAttribute("aria-disabled")).not.toBe("true");
+      expect(code.getAttribute("title")).not.toBe(CHILDREN_REASON);
+    });
+
+    it("removeBlocks로 자식을 지우면 Code 버튼이 HAS_CHILDREN 사유로 비활성에 남지 않는다", () => {
+      const { editor, code } = mountParentChildToolbar();
+      expect(code.getAttribute("aria-disabled")).toBe("true");
+      expect(code.getAttribute("title")).toBe(CHILDREN_REASON);
+
+      act(() => {
+        editor.removeBlocks(["c"]);
+      });
+
+      expect(editor.getDocument().blocks.map((block) => block.id)).toEqual([
+        "a",
+        "tail",
+      ]);
+      expect(code.getAttribute("aria-disabled")).not.toBe("true");
+      expect(code.getAttribute("title")).not.toBe(CHILDREN_REASON);
     });
   });
 });
