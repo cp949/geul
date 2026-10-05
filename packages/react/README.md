@@ -373,3 +373,7 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 - `EditorProvider`/`EditorContent`는 서버 렌더 환경에서 `null`을 렌더하고, 실제 편집기 생성(`createEditor()`, `@cp949/geul-core`)은 `useEffect` 안에서만 호출한다. `createEditor()`를 이 경로 없이 직접 호출하는 저수준 사용은 서버 환경에서도 크래시하지 않지만(`EXT-013`), 반환된 controller의 문서는 로드 시점 정규화가 실제 client mount 시점까지 지연된 상태일 수 있다.
 - `StaticToolbar`의 키보드·상태 계약은 Chromium에서 검증했다. Firefox·WebKit은 mark 버튼 키보드 활성화 뒤의 포커스와 선택 범위 유지, 색상 메뉴의 키보드 이동과 Enter 확정만 확인했다.
 - `StaticToolbar`는 여러 블록을 선택하면 블록 타입 변환을 비활성으로 표시한다. 여러 블록의 타입을 한 번에 바꾸는 기능은 없다.
+- 에디터를 안쪽 스크롤 컨테이너(`overflow: auto` 등) 안에 두면 블록 왼쪽에 gutter 자리를 둔다. 3.5rem을 권장한다.
+  - 블록 gutter와 미디어 그립은 블록 왼쪽 바깥에 그려진다.
+  - 둘 다 컨테이너의 보이는 영역과 겹칠 때만 보인다.
+  - 컨테이너 왼쪽과 블록 사이 여백이 약 6px 이하면 둘이 늘 숨는다.
