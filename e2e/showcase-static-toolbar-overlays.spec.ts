@@ -790,25 +790,26 @@ test("sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 클릭과 드
   );
   expect(topIsInToolbar, "hit-test 맨 위가 툴바 자손").toBe(true);
 
-  // click을 받은 대상을 기록한다. 툴바 안 버튼이면 "toolbar-button"이다.
+  // click을 받은 대상을 기록한다. 툴바 안이면 "toolbar"다. strip 점은 툴바 레이아웃에
+  // 따라 버튼 위일 수도 버튼 사이 틈일 수도 있어 버튼으로 한정하지 않는다.
   await page.evaluate((selector) => {
     document.addEventListener(
       "click",
       (event) => {
         const target = event.target as Element;
         document.body.dataset.clickTarget =
-          target.closest(`${selector} button`) === null
+          target.closest(selector) === null
             ? `${target.tagName}.${String(target.className)}`
-            : "toolbar-button";
+            : "toolbar";
       },
       { capture: true, once: true },
     );
   }, STATIC_TOOLBAR_SELECTOR);
   await page.mouse.click(point.x, point.y);
-  await expect(
-    page.locator("body"),
-    "click target이 툴바 버튼",
-  ).toHaveAttribute("data-click-target", "toolbar-button");
+  await expect(page.locator("body"), "click target이 툴바 안").toHaveAttribute(
+    "data-click-target",
+    "toolbar",
+  );
 
   // 툴바 띠 안에서 strip x를 40px 끌어도 첫 열 폭이 그대로다.
   const firstColumn = table.locator("colgroup col").first();

@@ -188,7 +188,7 @@
 // readPageRect) — fixed는 앵커가 뷰포트 밖으로 나가면 네이티브
 // scrollIntoView·포커스 스크롤을 no-op으로 만든다(Issue #163).
 // z-index 5 — strip은 보이지 않는 입력 핸들이다. 캡션과 같은 층에 둔다.
-// 소비 앱 sticky 툴바(G-UI-003의 5–10 사이) 밑으로 지나가야 툴바 띠에서
+// 소비 앱 sticky 툴바(G-UI-003의 6–9 사이) 밑으로 지나가야 툴바 띠에서
 // 툴바 클릭·드래그를 가로채지 않는다(Issue #265). 표의 다른 핸들은
 // z-index auto라 strip은 5에서도 그 위에 남는다.
 .geul-table-resize-handle {
