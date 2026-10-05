@@ -1813,5 +1813,15 @@ describe("MediaToolbar 스크롤 컨테이너 clip", () => {
     fireEvent.scroll(window);
 
     expect(toolbar.style.visibility).toBe("");
+
+    // 대조: 메뉴가 닫히고 포커스가 툴바를 떠나면 같은 위치를 숨긴다. 판정이
+    // 아예 안 돌아서 ""가 나온 경우를 가른다. Escape 뒤 포커스는 More 버튼으로
+    // 돌아와 면제가 이어지므로 포커스를 뺀다.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.scroll(window);
+
+    expect(toolbar.style.visibility).toBe("hidden");
   });
 });

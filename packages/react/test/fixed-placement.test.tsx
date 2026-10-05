@@ -711,6 +711,27 @@ describe("useFixedPlacement", () => {
         });
         expect(readMenu(container).style.visibility).toBe("");
       });
+
+      it("clipExempt면 앵커가 영역 안이고 메뉴 박스만 영역 밖이어도 보인다", () => {
+        // 앵커가 밖인 위 케이스는 앵커 면제만 있어도 통과한다. 박스 면제는
+        // 앵커를 영역 안에 두고 박스만 밖에 둬야 고정된다.
+        const host = mountClipHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipBox
+            clipExempt
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: 50 })}
+          />,
+        );
+        stubMenuBox(container, 300);
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("");
+      });
     });
 
     it("clip 기본값은 false라 앵커가 박스 밖이어도 visibility를 건드리지 않는다", () => {
