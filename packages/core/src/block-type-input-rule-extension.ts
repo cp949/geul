@@ -13,8 +13,8 @@ import { TextSelection } from "@tiptap/pm/state";
 // blockContainer.content가 "(nestableBlockContent blockGroup?) |
 // leafBlockContent"라 대상에 이미 blockGroup(들여쓴 자식)이 있으면 그
 // alternative를 만족 못 해 PM이 조용히 no-op한다 — 아래 allowsChildren 가드가
-// 이를 막는다(RD-003.md "결정" (a), generic-block-commands.ts의 기존
-// `hasChildren` 가드와 같은 제약의 InputRule 쪽 대응).
+// 이를 막는다(RD-003.md "결정" (a), block-type-blocker.ts의 HAS_CHILDREN
+// 판정과 같은 제약의 InputRule 쪽 대응).
 // 즉시 Backspace 복원은 이 파일에서 별도로 구현하지 않는다 —
 // ListInputRuleExtension의 Backspace 단축키와 undo-bridge plugin이 대신
 // 처리한다. Tiptap core는 addInputRules를 가진 확장마다 별도 isInputRules

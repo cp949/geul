@@ -33,11 +33,6 @@ export const findBlockEntryInTree = (
   return null;
 };
 
-export const hasChildren = (block: Block): boolean =>
-  "children" in block &&
-  block.children !== undefined &&
-  block.children.length > 0;
-
 // Issue #125 D2 — beforeBlockId가 ancestorBlock 자신의 하위 트리 안(자손)에
 // 있는지 재귀로 판정한다. moveBlockBefore가 자기 자손 앞으로 이동을
 // mutation 전에 거절하는 데만 쓴다 — ancestorBlock 자신은 포함하지 않는다
@@ -103,7 +98,7 @@ export type BlockSelectionRangeResolution = {
 // (예: indentBlock으로 범위 안 블록이 다른 부모로 옮겨짐, 또는 deleteBlock으로
 // 범위 안 블록이 사라짐)이 stale하게 만들 수 있다. blockId 자체가
 // 사라졌으면 BLOCK_NOT_FOUND, 더 이상 같은 부모 형제가 아니면
-// COMMAND_NOT_APPLICABLE로 구분한다. findBlockEntryInTree·hasChildren처럼 순수
+// COMMAND_NOT_APPLICABLE로 구분한다. findBlockEntryInTree처럼 순수
 // 함수로 두어 session 없이도 테스트하기 쉽게 한다.
 export const resolveBlockSelectionRange = (
   documentBlocks: readonly DocumentBlock[],

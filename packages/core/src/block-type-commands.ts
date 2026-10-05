@@ -36,7 +36,7 @@ export type BlockTypeConversionDescriptor =
 // session(ProductionEditorSession) 없이 Editor+blockId만으로 동작한다 —
 // Tiptap keyboard-shortcut 확장은 session이 생성되기 전에 등록되므로 그
 // 클로저에 닿을 수 없다(RD-001.md "결정" 참고). 대상이 codeBlock으로
-// 바뀌지 않으므로 language·clearContent·model 트리 조회(hasChildren) 분기는
+// 바뀌지 않으므로 language·clearContent·자식 유무(HAS_CHILDREN) 분기는
 // 이 함수에 없다 — 전부 원본에서 도달 불가능한 경로였다.
 export const setBlockTypeCommand = (
   editor: Editor,

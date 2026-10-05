@@ -11,10 +11,6 @@ import type {
   BlockTypeBlocker,
   SetBlockTypeDescriptor,
 } from "./block-type-descriptor.js";
-import {
-  findBlockEntryInTree,
-  hasChildren,
-} from "./generic-block-tree-lookup.js";
 import type { ProductionEditorSession } from "./production-editor-session.js";
 
 export type BlockTypeChangeEvaluation =
@@ -25,9 +21,10 @@ export type BlockTypeChangeEvaluation =
     };
 
 // setBlockType의 구조적 거절 조건을 한 곳에서 판정한다. 명령과 질의가 같은
-// 함수를 써서 UI 판정이 core 거절 조건과 어긋나지 않게 한다. 싼 검사부터
-// 하고, 모델 트리 조회는 비Code → Code 변환일 때만 한다(타이핑마다 옵션
-// 수만큼 호출되므로).
+// 함수를 써서 UI 판정이 core 거절 조건과 어긋나지 않게 한다. 모든 판정은
+// PM 문서(session.editor.state.doc)만 본다. 저장 모델 트리는 읽지 않는다.
+// subscribe 통지 시점에는 PM은 새 상태지만 모델은 아직 commit 전이라
+// 낡았다(Issue #262).
 export const evaluateBlockTypeChange = (
   session: ProductionEditorSession,
   blockId: string,
@@ -59,9 +56,13 @@ export const evaluateBlockTypeChange = (
     return { blocker: "LIST_CODE_MISMATCH" };
   }
   if (blockType.type === "codeBlock" && currentTypeName !== "codeBlock") {
-    const modelTarget = findBlockEntryInTree(session.document.blocks, blockId);
-    if (modelTarget === null) return { blocker: "NOT_FOUND" };
-    if (hasChildren(modelTarget.block)) return { blocker: "HAS_CHILDREN" };
+    // content의 상위 blockContainer가 content 뒤에 blockGroup(들여쓴
+    // 자식)을 가지면 childCount > 1이다. blockGroup은 block+라 비어 있을
+    // 수 없다(block-type-input-rule-extension.ts와 같은 관용).
+    const container = session.editor.state.doc.resolve(target.position).parent;
+    if (container.type.name === "blockContainer" && container.childCount > 1) {
+      return { blocker: "HAS_CHILDREN" };
+    }
   }
   if (
     currentTypeName === "codeBlock" &&
