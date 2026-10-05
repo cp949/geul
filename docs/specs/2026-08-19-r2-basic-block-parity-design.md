@@ -113,7 +113,7 @@ export type Block =
 - code source 문자열은 LF(`U+000A`)와 Tab(`U+0009`)을 허용한다. 나머지 C0 control, DEL과 invalid surrogate는 거절한다. 일반 `InlineContent`의 LF-only 문자열 불변식은 바꾸지 않고 CodeBlock 전용 검증을 둔다.
 - 위반은 두 레이어에서 거절한다(R1 `INVALID_ALIGN` 패턴과 동일한 이유 — 문서 로드 시점 무결성과 대화형 명령 시점 거절을 분리):
   - **model**: `parseDocument`가 위 content 정규형·문자 불변식·mark 금지를 검증하고 위반을 `DOCUMENT_INVALID`로 거절한다.
-  - **core 공개 command**: caret이 CodeBlock 안이거나 selection이 CodeBlock을 한 글자라도 교차하면 `toggleBold`/`toggleItalic`/`toggleUnderline`/`toggleStrike`/`toggleCode`/`setLink`/`unsetLink` 전체를 새 `EditorError` 코드 `CODE_BLOCK_MARK_NOT_ALLOWED`로 거절한다. document, ProseMirror document, selection, stored mark, revision과 change event는 모두 바뀌지 않는다.
+  - **core 공개 command**: caret이 CodeBlock 안이거나 selection이 CodeBlock을 한 글자라도 교차하면 `toggleBold`/`toggleItalic`/`toggleUnderline`/`toggleStrike`/`toggleCode`/`setLink`/`unsetLink` 전체를 새 `EditorError` 코드 `CODE_BLOCK_MARK_NOT_ALLOWED`로 거절한다. document, ProseMirror document, selection, stored mark, revision과 change event는 모두 바뀌지 않는다. 정정(2026-10-05, Issue #264): 교차 대상은 보이는 CodeBlock이다. 접힌 `toggleListItem`의 숨은 CodeBlock은 교차로 치지 않는다(4.4). 같은 판정을 쓰는 단축키와 React 툴바 mark 버튼도 같다. 붙여넣기의 CodeBlock 분기는 범위 전체 판정이라 숨은 CodeBlock도 본다.
   - **DOM/StarterKit 단축키**: 같은 selection 조건에서 `Mod-b`·`Mod-i`·`Mod-e`·`Mod-Shift-s` 등 mark 단축키를 소비하고 완전한 no-op으로 처리한다. DOM 경로에는 오류 반환 호출자가 없으므로 외부 오류 callback을 신설하지 않는다.
 - `language`는 optional 자유 문자열이지만 빈 문자열은 `DOCUMENT_INVALID`다. 제어 문자는 기존 문자열 불변식으로 거절한다. known alias만 trim·case-insensitive하게 canonical ID로 바꾸고 unknown은 공백·대소문자를 포함해 exact 보존한다. 신규 CodeBlock과 UI에서 비운 language draft는 `"text"`를 저장한다. 미지정 필드는 유효한 기존 상태이며 로드에서 `"text"`를 강제 삽입하지 않는다.
 - known alias는 `plain text`/`none`→`text`, `js`→`javascript`, `ts`→`typescript`, `sh`/`shell`→`bash`, `py`→`python`, `md`→`markdown`이다. syntax highlighting과 highlighter dependency는 이 슬라이스 범위가 아니며 R5 `BLK-017`의 잔여 범위다.
@@ -125,7 +125,7 @@ export type Block =
 - BlockNote와 동일하게 별도 블록 타입 4개로 표현한다(단일 `listItem` + `listType` 판별자 방식은 채택하지 않는다) — 타입별 고유 필드(`startNumber`, `checked`, `collapsed`)가 discriminated union으로 깔끔하게 검증된다.
 - `checkListItem.checked`는 필수 `boolean`(생성 시 기본 `false`).
 - `numberedListItem.startNumber`는 optional. 명시 값은 저장 시 정수 `0..999999999`만 허용한다. GFM/HTML `ol[start]`와의 교집합에서 음수·소수·표현 불가능하게 큰 시작값을 모델 단계에서 제외해 변환 경로마다 의미가 갈리지 않게 한다. 값이 없으면 바로 앞 연속된 `numberedListItem` 형제의 번호(또는 그 형제의 명시적 `startNumber`)를 이어받아 1씩 증가한다. 연속이 끊기거나(다른 타입 블록이 사이에 옴) 첫 항목이면 `startNumber` 없이는 1부터 시작한다.
-- `toggleListItem.collapsed`는 4.1의 토글 제목과 동일한 의미·저장 규칙을 따른다.
+- `toggleListItem.collapsed`는 4.1의 토글 제목과 동일한 의미·저장 규칙을 따른다. 정정(2026-10-05, Issue #264): 숨은 자손은 조상 중 접힌 `toggleListItem`이 하나라도 있는 블록이다. 접힌 toggle의 라벨은 보인다. 블록 단위 수집은 보이는 블록만 본다. 대상은 `getSelectionBlocks()`와 그 결과로 부르는 여러 블록 타입 변환·blocker 판정, 그리고 CodeBlock 교차 판정(4.3)이다. 숨은 그룹은 화면에 없어 편집 대상이 아니기 때문이다(5.1 #252·#253 정정과 같은 원칙). 텍스트 범위 연산은 범위 전체를 본다. 대상은 mark 적용·active 판정, 범위 삭제, 붙여넣기다. 그래서 범위 mark는 숨은 일반 텍스트에도 적용된다. 명시적 id로 숨은 블록을 넘긴 `setBlockTypes`·`getBlockTypesBlocker` 호출은 거르지 않는다. 호출자 책임이다. 접힌 toggle 자신을 다른 타입으로 바꾸면 접힘이 사라져 자식이 드러난다.
 - 목록 항목의 `children`은 하위 목록 항목뿐 아니라 임의 블록(예: 항목 아래 문단)을 담을 수 있다 — 들여쓰기가 "하위 목록"과 "블록 중첩"을 같은 메커니즘으로 표현한다.
 
 ## 5. 에디터 코어

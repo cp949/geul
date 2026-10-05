@@ -31,7 +31,7 @@ export type FormattingToolbarState = {
   isCellRangeSelected: boolean;
   // 선택이 codeBlock 문자 구간과 겹치는지. core mark 명령의 거절 조건과
   // 같은 판정이라 여러 블록에 걸친 선택도 포함한다. 끝점만 닿는 선택은
-  // false다.
+  // false다. 접힌 toggle의 숨은 codeBlock은 보지 않는다(Issue #264).
   selectionIntersectsCodeBlock: boolean;
   // 블록 타입 옵션 id별 core 변환 거절 사유(Issue #245). 단일 블록이면
   // getBlockTypeBlocker, 여러 블록 선택이면 getBlockTypesBlocker 결과다.

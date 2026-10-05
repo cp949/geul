@@ -4,7 +4,8 @@ import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 // (toggle-collapse-selection-guard-extension.ts), 방향키 확장
 // (toggle-collapse-arrow-key-extension.ts), Enter 분할
 // (block-split-extension.ts)과 Backspace 병합(block-join-extension.ts)이
-// 같은 기준을 쓴다.
+// 같은 기준을 쓴다. 여러 블록 수집(selection-query-helpers.ts)과 CodeBlock
+// 교차 판정(code-block-mark-guard-extension.ts)도 같다(Issue #264).
 //
 // 판정 기준은 ToggleCollapseVisibilityExtension과 같다. `collapsed === true`인
 // toggleListItem만 본다. 판정은 조상 체인(깊이 O(d))만 훑고 문서 전체를

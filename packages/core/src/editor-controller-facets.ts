@@ -123,7 +123,8 @@ export interface SelectionQuery {
   // [from, to]에 닿은 블록을 문서 순서로 돌려준다 — 여러 블록에 걸친
   // 선택에서 getSelectionBlockType()이 null일 때 툴바가 일괄 변환 대상을
   // 얻는 seam이다. 타입을 바꿀 수 없는 블록(divider·table)은 담지 않는다.
-  // 표 셀 범위·NodeSelection이면 빈 배열이다.
+  // 표 셀 범위·NodeSelection이면 빈 배열이다. 접힌 toggle의 숨은 자손은
+  // 담지 않는다. 라벨은 담는다(Issue #264).
   getSelectionBlocks(): {
     blockId: string;
     blockType: BlockTypeDescriptor;
@@ -170,6 +171,7 @@ export interface SelectionQuery {
   // 겹치면 true, 끝점만 닿거나 빈 codeBlock만 덮으면 false, 캐럿은 조상
   // codeBlock). react 툴바가 mark·색상 버튼 비활성 판정에 쓴다.
   // getSelectionBlocks()는 끝점 접촉도 포함해 이 판정에 쓸 수 없다.
+  // 접힌 toggle의 숨은 codeBlock은 겹침으로 치지 않는다(Issue #264).
   selectionIntersectsCodeBlock(): boolean;
   // 선택이 텍스트 없는 atom 블록(구분선·미디어·customBlock)의 NodeSelection
   // 인지 보고한다. `NodeSelection`이고 `node.isBlock && node.isAtom`이면

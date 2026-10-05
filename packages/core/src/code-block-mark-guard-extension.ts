@@ -52,7 +52,7 @@ export const selectionIntersectsCodeBlock = (
 ): boolean => intersectsCodeBlock(doc, selection, true);
 
 // 범위 전체의 CodeBlock 교차 판정. 숨은 CodeBlock도 본다. 텍스트 범위를
-// 통째로 바꾸는 붙여넣기 분기가 쓴다(Issue #264 결정 Q5).
+// 통째로 바꾸는 붙여넣기 분기가 쓴다(Issue #264, r2 스펙 4.3 정정).
 export const selectionIntersectsAnyCodeBlock = (
   doc: ProseMirrorNode,
   selection: Selection,
