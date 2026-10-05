@@ -312,6 +312,8 @@ highlight.js/lowlight 외 나머지 4개 라이브러리(Prism/refractor, Shiki,
 
 선택과 무관하게 항상 렌더되는 옵트인 툴바다. 위치는 강제하지 않는다. `className`으로 직접 배치한다.
 
+`position: sticky`로 고정하면 `z-index`를 6–9 사이로 준다. 블록 오버레이(그립·gutter·블록 툴바 등, 5)는 그 밑으로 지나가 툴바 클릭을 가로채지 않는다. 선택 popover와 메뉴(10 이상)는 그 위에 뜬다. `auto`나 5 이하면 툴바 띠에 들어온 오버레이가 툴바 입력을 가로챈다.
+
 ```tsx
 <EditorProvider initialDocument={initialDocument}>
   <StaticToolbar className="my-toolbar" />
