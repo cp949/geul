@@ -7,6 +7,9 @@
  *
  * 그래서 문서 window의 생성자(`ownerDocument.defaultView.Element`)도 쓰지
  * 않는다. PM 노드에서 거짓이 된다. 판정은 `nodeType`과 `namespaceURI`로 한다.
+ *
+ * 이 파일이 판정 기준 원본이다. core 사본은 `packages/core/src/dom-node.ts`다
+ * (Issue #272). 기준을 바꾸면 두 파일을 함께 바꾼다.
  */
 
 const ELEMENT_NODE = 1;

@@ -59,4 +59,24 @@ export default [
       },
     },
   },
+  {
+    // Issue #271·#272 — 전역 DOM 생성자 `instanceof`는 iframe 문서 노드에서
+    // 틀린다. iframe 문서의 노드와 이벤트는 다른 realm 인스턴스다.
+    // 판정은 각 패키지 `dom-node.ts`의 `nodeType` helper로 한다.
+    // test 파일과 apps는 대상이 아니다.
+    // 규칙은 이름만 본다. `@tiptap/core`의 `Node` 같은 같은 이름 클래스의
+    // 정당한 `instanceof`는 그 줄에 disable 주석과 이유를 단다.
+    files: ["packages/core/src/**/*.ts", "packages/react/src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "BinaryExpression[operator='instanceof'][right.type='Identifier'][right.name=/^(Node|Element|Text|CharacterData|Document|DocumentFragment|ShadowRoot|Window|(HTML|SVG|MathML)\\w*Element|\\w*Event)$/]",
+          message:
+            "전역 DOM 생성자 instanceof는 iframe 문서 노드에서 틀린다. 각 패키지 dom-node.ts의 helper로 nodeType 판정을 한다.",
+        },
+      ],
+    },
+  },
 ];
