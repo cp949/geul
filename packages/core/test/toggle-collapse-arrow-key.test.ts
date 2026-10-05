@@ -8,6 +8,8 @@
  * 클릭 직후 stale selection(G-EDT-002)을 다룬다.
  * 라벨 끝 요구는 ArrowRight만 갖는다. ArrowDown은 라벨 중간·시작에서도
  * 마지막 줄이면 소비한다(Issue #255).
+ * ArrowRight는 시각 방향 "right"로 판정한다. RTL로 끝나는 라벨은 논리 끝이어도
+ * 시각 오른쪽 끝이 아닐 수 있다(Issue #268).
  *
  * jsdom은 레이아웃이 없어 view.endOfTextblock을 믿을 수 없다. 값을
  * vi.spyOn으로 고정한다(ADR-0007). 실제 값은 e2e가 증명한다.
@@ -165,7 +167,7 @@ const isHidden = ($pos: ResolvedPos): boolean => {
 const KEYS = ["ArrowDown", "ArrowRight"] as const;
 const EXPECTED_DIRECTION = {
   ArrowDown: "down",
-  ArrowRight: "forward",
+  ArrowRight: "right",
 } as const;
 
 describe("접힌 toggle 방향키", () => {
@@ -184,7 +186,7 @@ describe("접힌 toggle 방향키", () => {
         const consumed = dispatchKeydown(tiptap, key);
 
         expect(consumed).toBe(true);
-        // gapcursor도 같은 spy를 부른다. 핸들러 방향("forward"·"down") 호출이 있는지 본다.
+        // gapcursor도 같은 spy를 부른다. 핸들러 방향("right"·"down") 호출이 있는지 본다.
         expect(
           endOfTextblock.mock.calls.map(([direction]) => direction),
         ).toContain(EXPECTED_DIRECTION[key]);
@@ -393,6 +395,20 @@ describe("접힌 toggle 방향키", () => {
     const { tiptap } = fixture();
     placeCaretAtLabelMiddle(tiptap, "t1");
     stubEndOfTextblock(tiptap, true);
+    const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+    expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("ArrowRight는 라벨 논리 끝이어도 시각 오른쪽 끝이 아니면(RTL) 소비하지 않는다", () => {
+    const { tiptap } = fixture();
+    placeCaretAtLabelEnd(tiptap, "t1");
+    // RTL로 끝나는 라벨의 Firefox 판정이다. "right"만 false다(Issue #268).
+    // gapcursor도 같은 spy를 부른다.
+    vi.spyOn(tiptap.view, "endOfTextblock").mockImplementation(
+      (direction) => direction !== "right",
+    );
     const dispatch = vi.spyOn(tiptap.view, "dispatch");
 
     expect(dispatchKeydown(tiptap, "ArrowRight")).toBe(false);

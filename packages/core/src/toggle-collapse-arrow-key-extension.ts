@@ -37,8 +37,16 @@ import {
 // 않고 폴스루한다(G-EDT-002의 소비형 규칙을 적용하지 않는다). 폴스루한 기본
 // 동작이 파괴적이지 않다. 숨은 NodeSelection이 생겨도 가드가 라벨 끝으로
 // 되돌릴 뿐 문서는 바뀌지 않는다.
+//
+// ArrowRight는 시각 방향 "right"로 판정한다(Issue #268). 논리 "forward"로
+// 판정하면 RTL로 끝나는 라벨에서 Firefox가 라벨 안에서 움직일 키를 가로챈다.
+// - ProseMirror는 라벨에 U+0590–U+08AC 글자가 있으면 Selection.modify로 시각
+//   이동을 실측한다.
+// - 그 밖이면 논리 판정(라벨 끝)으로 대체한다. LTR 결과는 그대로다. 범위 밖
+//   RTL 글자(Arabic Presentation Forms 등)는 수정 전처럼 라벨 끝에서 소비한다.
+// - 라벨 논리 끝 요구는 유지한다. 시각 판정은 그 위에 더하는 조건이다.
 
-type ArrowKey = "down" | "forward";
+type ArrowKey = "down" | "right";
 
 // 접힌 toggle container 뒤 첫 선택 가능 위치. 소비 조건에 안 맞으면 null이다.
 const collapsedToggleExitSelection = (
@@ -53,7 +61,7 @@ const collapsedToggleExitSelection = (
   if (!isCollapsedToggleContent($head.parent)) return null;
   // 라벨 끝 요구는 ArrowRight만 갖는다. ArrowDown은 endOfTextblock이 마지막 줄을 가른다.
   if (
-    direction === "forward" &&
+    direction === "right" &&
     $head.parentOffset !== $head.parent.content.size
   ) {
     return null;
@@ -101,7 +109,7 @@ export const ToggleCollapseArrowKeyExtension = Extension.create({
   addKeyboardShortcuts() {
     return {
       ArrowDown: () => moveOutOfCollapsedToggle(this.editor, "down"),
-      ArrowRight: () => moveOutOfCollapsedToggle(this.editor, "forward"),
+      ArrowRight: () => moveOutOfCollapsedToggle(this.editor, "right"),
     };
   },
 });

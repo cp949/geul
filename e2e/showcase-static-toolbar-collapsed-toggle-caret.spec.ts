@@ -16,6 +16,11 @@
  * 접힌 toggle 라벨의 ArrowDown·ArrowRight는 첫 숨은 자식 종류와 무관하게 다음
  * 보이는 블록 시작으로 간다(Issue #254, #255, #261). 다음 블록이 divider면 그
  * NodeSelection이다. 엔진마다 증상이 달라 #261 두 건은 `@core`다.
+ *
+ * RTL로 끝나는 라벨 끝의 ArrowRight는 엔진의 시각 이동을 따른다(Issue #268).
+ * Firefox는 라벨 안에서 한 글자 움직이고 나머지 엔진은 다음 블록으로 간다.
+ * 판정이 엔진의 Selection.modify 구현에 기대므로 세 건 모두 `@core`다.
+ * LTR로 끝나는 혼합 라벨 건은 세 엔진 기대값이 같다.
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -25,7 +30,10 @@ import {
   nextSibling,
 } from "./support/static-toolbar-collapsed-toggle.js";
 import { blockId, placeCaretIn } from "./support/static-toolbar-sample.js";
-import { placeCaretInsideOf } from "./support/static-toolbar-selection.js";
+import {
+  placeCaretInsideOf,
+  textBeforeCaret,
+} from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 /** 샘플을 불러오고 편집 영역과 toggle 접기 마커를 돌려준다. */
@@ -84,16 +92,34 @@ test("캐럿이 든 자식을 가진 toggle을 접으면 입력이 toggle 라벨
   await expect(blockId(editable, 11)).not.toContainText("Z");
 });
 
+/** block의 toggle 라벨 줄(블록 컨테이너의 첫 자식). */
+const labelOf = (block: Locator) => block.locator(":scope > :first-child");
+
+/**
+ * block의 toggle 라벨을 text로 바꾼다(Issue #268). 라벨 안 캐럿에서 Home →
+ * Shift+End로 라벨 전체를 잡고 insertText로 바꾼다.
+ */
+const replaceLabel = async (page: Page, block: Locator, text: string) => {
+  await placeCaretInsideOf(page, labelOf(block));
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  await page.keyboard.insertText(text);
+  await yieldFrame(page);
+  // 전제: 라벨이 정확히 text다.
+  expect(await labelText(block)).toBe(text);
+};
+
 /**
  * 10번째 toggle의 첫 자식을 divider로 만들고 접는다(Issue #254 재현 상태).
  * 라벨 끝 Enter는 새 블록을 마지막 자식 뒤에 붙인다. 첫 자식 앞에 빈 문단을
  * 만들려고 11번째 블록 시작에서 Enter를 쓴다. 접힌 뒤 라벨 끝 클릭 → End까지
  * 맞춘다. 접힌 toggle의 첫 숨은 자식이 atom이면 ArrowDown·ArrowRight가
- * 막히는 결함의 전제 상태다.
+ * 막히는 결함의 전제 상태다. label을 주면 먼저 라벨을 바꾼다(Issue #268).
  */
-const collapseWithDividerFirstChild = async (page: Page) => {
+const collapseWithDividerFirstChild = async (page: Page, label?: string) => {
   const { editable, marker } = await openSample(page);
   const block = blockId(editable, 10);
+  if (label !== undefined) await replaceLabel(page, block, label);
   await placeCaretIn(page, blockId(editable, 11));
   await page.keyboard.press("Home");
   await page.keyboard.press("Enter");
@@ -348,3 +374,86 @@ for (const key of ["ArrowDown", "ArrowRight"] as const) {
     expect(await labelText(block)).toBe(labelBefore);
   });
 }
+
+const RTL_LABEL = "مرحبا";
+const MIXED_LABEL = `${RTL_LABEL} abc`;
+
+/**
+ * 접힌 block-10 라벨 끝에서 ArrowRight 1회 뒤 `Z`를 입력한다(Issue #268).
+ * inLabel이면 엔진이 라벨 안에서 한 글자 움직인 결과를 기대한다. 아니면
+ * block-12 시작을 기대한다. 키 전후와 입력 뒤 최상위 블록 수가 같다.
+ */
+const arrowRightAtLabelEnd = async (
+  page: Page,
+  editable: Locator,
+  label: string,
+  inLabel: boolean,
+) => {
+  const block = blockId(editable, 10);
+  await placeCaretInsideOf(page, labelOf(block));
+  // 전제: 캐럿이 라벨 논리 끝이다.
+  await expect(async () => {
+    await page.keyboard.press("End");
+    await yieldFrame(page);
+    expect(await textBeforeCaret(labelOf(block))).toBe(label);
+  }).toPass();
+  expect(await labelText(block)).toBe(label);
+  const blockBefore = await blockId(editable, 12).innerText();
+  const countBefore = await siblingCount(block);
+
+  await page.keyboard.press("ArrowRight");
+  await yieldFrame(page);
+  expect(await siblingCount(block)).toBe(countBefore);
+  await page.keyboard.type("Z");
+  await yieldFrame(page);
+
+  expect(await siblingCount(block)).toBe(countBefore);
+  if (inLabel) {
+    expect(await labelText(block)).toBe(
+      `${label.slice(0, 4)}Z${label.slice(4)}`,
+    );
+    expect(await blockId(editable, 12).innerText()).toBe(blockBefore);
+  } else {
+    expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
+    expect(await labelText(block)).toBe(label);
+  }
+};
+
+test("RTL로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 첫 숨은 자식이 문단이면 엔진의 시각 이동을 따른다 @core", async ({
+  page,
+}, testInfo) => {
+  const { editable, marker } = await openSample(page);
+  await replaceLabel(page, blockId(editable, 10), RTL_LABEL);
+  await marker.click();
+  await expect(blockId(editable, 11)).toBeHidden();
+
+  // Firefox만 시각 오른쪽이 라벨 안이다.
+  await arrowRightAtLabelEnd(
+    page,
+    editable,
+    RTL_LABEL,
+    testInfo.project.name === "firefox",
+  );
+});
+
+test("RTL로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 첫 숨은 자식이 divider여도 엔진의 시각 이동을 따른다 @core", async ({
+  page,
+}, testInfo) => {
+  const { editable } = await collapseWithDividerFirstChild(page, RTL_LABEL);
+
+  await arrowRightAtLabelEnd(
+    page,
+    editable,
+    RTL_LABEL,
+    testInfo.project.name === "firefox",
+  );
+});
+
+test("RTL 글자가 있어도 LTR로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 다음 보이는 블록 시작으로 간다 @core", async ({
+  page,
+}) => {
+  const { editable } = await collapseWithDividerFirstChild(page, MIXED_LABEL);
+
+  // 세 엔진 모두 시각 오른쪽 끝이다. RTL 글자 유무로 폴스루하면 divider에 갇힌다.
+  await arrowRightAtLabelEnd(page, editable, MIXED_LABEL, false);
+});
