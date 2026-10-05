@@ -20,6 +20,7 @@
  *
  * sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 입력을 가로채지 않는다(Issue #265).
  * 툴바 띠에 들어온 블록 앵커 오버레이 여섯도 툴바 입력을 가로채지 않는다(Issue #266).
+ * 영역 밖으로 나간 블록의 gutter·미디어 툴바는 clamp돼도 숨고 입력을 받지 않는다(Issue #267).
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -1052,4 +1053,162 @@ test("sticky 툴바 띠에 들어온 블록 gutter는 툴바 클릭을 가로채
   await hoverAnchorIntoBand(page, block, gutter, 24);
 
   await expectToolbarTakesInputOverOverlay(page, gutter);
+});
+
+/**
+ * 안쪽 스크롤만 옮겨 앵커 상단을 뷰포트 y `top`에 둔다. 포인터는 움직이지 않는다.
+ * 앵커는 영역 밖이어야 한다.
+ */
+const placeAnchorTopAt = async (page: Page, anchor: Locator, top: number) => {
+  await anchor.evaluate((element, target) => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    area.scrollTop += element.getBoundingClientRect().top - target;
+  }, top);
+  expect(await isOutsideScrollArea(anchor), "전제: 앵커가 영역 밖").toBe(true);
+  await settleClip(page);
+};
+
+/**
+ * 문단 블록에 포인터를 멈춰 gutter를 띄운다. 포인터를 고정한 채 `scrollTop`
+ * 대입으로 블록 상단을 뷰포트 y `top`에 둔다. 블록은 영역 위 끝 밖이다.
+ * 포인터가 움직이지 않아 hover가 유지된다.
+ */
+const hoverBlockThenPushAbove = async (
+  page: Page,
+  block: Locator,
+  top: number,
+) => {
+  const box = await block.boundingBox();
+  if (box === null) throw new Error("Bounding box was not available");
+  await page.mouse.move(box.x + 60, box.y + box.height / 2);
+  const gutter = page.locator(".geul-block-gutter");
+  await expect(gutter, "전제: hover gutter").toHaveCSS("visibility", "visible");
+  await placeAnchorTopAt(page, block, top);
+  await expect(gutter, "전제: 스크롤 뒤에도 hover 유지").toHaveCount(1);
+  return gutter;
+};
+
+/**
+ * 노드 rect에서 sticky 툴바에 가리지 않은 부분의 중앙 점. 툴바가 노드와 가로로
+ * 겹치고 노드 위쪽을 덮으면 툴바 하단 아래만 본다. 남는 부분이 없으면 `null`이다.
+ */
+const readUncoveredCenter = (node: Locator) =>
+  node.evaluate((element, selector): Point | null => {
+    const toolbar = document.querySelector(selector);
+    if (toolbar === null) throw new Error("툴바 없음");
+    const rect = element.getBoundingClientRect();
+    const bar = toolbar.getBoundingClientRect();
+    const covers =
+      bar.left < rect.right && rect.left < bar.right && bar.top <= rect.top;
+    const top = covers ? Math.max(rect.top, bar.bottom) : rect.top;
+    if (rect.bottom <= top) return null;
+    return { x: (rect.left + rect.right) / 2, y: (top + rect.bottom) / 2 };
+  }, STATIC_TOOLBAR_SELECTOR);
+
+/**
+ * 숨은 오버레이 버튼 자리를 마우스로 누른다. `visibility: hidden`이어도 박스는
+ * 남는다. 그 박스 중앙(sticky 툴바 띠에 가린 부분 제외)을 누른다. 수정 전에는
+ * 이 점에서 버튼이 click을 받아 메뉴를 연다.
+ */
+const clickWhereHidden = async (page: Page, button: Locator) => {
+  const point = await readUncoveredCenter(button);
+  if (point === null) throw new Error("전제: 버튼 일부가 툴바에 가리지 않는다");
+  await page.mouse.click(point.x, point.y);
+  await settleClip(page);
+};
+
+test("영역 위 끝 밖으로 나간 블록의 gutter는 숨고 그 자리 클릭이 블록 메뉴를 열지 않는다(#267)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const block = editor.locator(
+    '[data-geul-block-id="showcase-static-toolbar-block-3"]',
+  );
+  await expect(block, "전제: 초기 문서").toBeVisible();
+  // 창 스크롤 0이면 영역 상단은 페이지 헤더 아래다. 블록을 영역 위 헤더 높이로 민다.
+  const areaTop = await page
+    .locator('[class*="scrollArea"]')
+    .evaluate((element) => element.getBoundingClientRect().top);
+  expect(areaTop, "전제: 영역이 헤더 아래에서 시작").toBeGreaterThan(120);
+  const gutter = await hoverBlockThenPushAbove(page, block, areaTop - 110);
+
+  await expect(gutter, "영역 밖 gutter").toHaveCSS("visibility", "hidden");
+
+  await clickWhereHidden(
+    page,
+    gutter.locator(".geul-block-gutter__button--drag"),
+  );
+  await expect(page.getByRole("menu", { name: "Block menu" })).toHaveCount(0);
+});
+
+test("영역 상단이 뷰포트 상단이면 clamp된 gutter도 블록이 영역 밖일 때 숨고 그 자리 클릭이 블록 메뉴를 열지 않는다(#267)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const block = editor.locator(
+    '[data-geul-block-id="showcase-static-toolbar-block-6"]',
+  );
+  await expect(block, "전제: 초기 문서").toBeVisible();
+  await alignAreaToViewportTop(page);
+  // 블록을 뷰포트 위로 300px 민다. gutter는 뷰포트 상단 + 8px에 clamp된다.
+  const gutter = await hoverBlockThenPushAbove(page, block, -300);
+  const gutterTop = await gutter.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(gutterTop, "전제: gutter 박스가 clamp로 영역 안").toBeGreaterThan(0);
+
+  await expect(gutter, "영역 밖 블록의 gutter").toHaveCSS(
+    "visibility",
+    "hidden",
+  );
+
+  await clickWhereHidden(
+    page,
+    gutter.locator(".geul-block-gutter__button--drag"),
+  );
+  await expect(page.getByRole("menu", { name: "Block menu" })).toHaveCount(0);
+});
+
+test("영역 상단이 뷰포트 상단이면 clamp된 미디어 툴바도 이미지가 영역 밖일 때 숨고 그 자리 클릭이 more 메뉴를 열지 않는다(#267)", async ({
+  page,
+}) => {
+  const { image, toolbar } = await openMediaToolbar(page);
+  // 샘플은 끝까지 스크롤해도 이미지 하단이 영역 안에 16px 남는다. 문서 끝에 빈
+  // 문단을 더해 스크롤 여유를 만든 뒤 이미지를 다시 선택한다. 스크롤 직후 바로
+  // 누르면 첫 클릭이 선택을 못 바꿀 때가 있어 한 번 기다린다.
+  await page.keyboard.press("Control+End");
+  for (let index = 0; index < 5; index += 1) {
+    await page.keyboard.press("Enter");
+  }
+  await image.scrollIntoViewIfNeeded();
+  await settleClip(page);
+  await image.click();
+  await expect(toolbar, "전제: 다시 선택한 이미지의 툴바").toHaveCount(1);
+  await alignAreaToViewportTop(page);
+  // 이미지 하단을 영역 상단 30px 위에 둔다. 툴바는 뷰포트 상단 + 8px에 clamp된다.
+  const imageHeight = await image.evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  await placeAnchorTopAt(page, image, -30 - imageHeight);
+  const toolbarTop = await toolbar.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(toolbarTop, "전제: 툴바 박스가 clamp로 영역 안").toBeGreaterThan(0);
+
+  await expect(toolbar, "영역 밖 이미지의 툴바").toHaveCSS(
+    "visibility",
+    "hidden",
+  );
+
+  await clickWhereHidden(
+    page,
+    toolbar.getByRole("button", {
+      name: "More media options",
+      includeHidden: true,
+    }),
+  );
+  await expect(page.locator(".geul-media-toolbar__more-menu")).toHaveCount(0);
 });
