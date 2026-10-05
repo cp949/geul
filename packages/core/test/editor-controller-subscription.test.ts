@@ -10,7 +10,8 @@
  * scope afterEach에 위임한다(G-TST-003).
  *
  * Issue #262: listener 안 getBlockTypeBlocker가 자식 유무를 낡은 모델이
- * 아니라 통지 시점 편집기 상태로 판정함을 네 경로로 고정한다.
+ * 아니라 통지 시점 편집기 상태로 판정함을 네 경로로 고정한다. Enter로
+ * 만든 새 블록처럼 모델에 아직 없는 블록도 같은 상태로 판정한다.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -413,6 +414,36 @@ describe("listener 안 getBlockTypeBlocker는 명령 완료 뒤 조회와 같다
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.at(-1)).toBe("HAS_CHILDREN");
     expect(queryCodeBlocker()).toBe("HAS_CHILDREN");
+  });
+
+  it("Enter로 만든 새 블록의 listener 안 마지막 조회가 null이다", () => {
+    const editor = createEditor({
+      initialDocument: documentOf(
+        paragraphBlock("a", "parent"),
+        paragraphBlock("tail", "tail"),
+      ),
+    });
+    const { tiptap } = mountTiptapEditor(editor);
+    expect(editor.setTextCursorPosition("a", "end").ok).toBe(true);
+    // 통지 시점에는 새 블록이 편집기에만 있고 저장 모델에는 아직 없다.
+    const queryCaretCodeBlocker = () => {
+      const caret = editor.getSelectionBlockType();
+      return caret === null
+        ? "no-caret"
+        : editor.getBlockTypeBlocker(caret.blockId, { type: "codeBlock" });
+    };
+    const seen: Array<ReturnType<typeof queryCaretCodeBlocker>> = [];
+    editor.subscribe(() => {
+      seen.push(queryCaretCodeBlocker());
+    });
+
+    expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
+
+    expect(editor.getSelectionBlockType()?.blockId).not.toBe("a");
+    expect(editor.getDocument().blocks).toHaveLength(3);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.at(-1)).toBeNull();
+    expect(queryCaretCodeBlocker()).toBeNull();
   });
 });
 
