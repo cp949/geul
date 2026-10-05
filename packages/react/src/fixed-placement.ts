@@ -82,7 +82,8 @@ type UseFixedPlacementOptions = {
 
   /**
    * `true`면 앵커 점(clamp 전 좌표)이 스크롤 컨테이너의 보이는 영역 밖일 때
-   * 메뉴를 숨긴다. 선택에 붙는 popover용이다(`useClipVisibility`).
+   * 메뉴를 숨긴다. 선택에 붙는 popover와 블록에 붙는 fixed 오버레이용이다
+   * (`useClipVisibility`). 후자는 `clipBox`를 함께 준다.
    * 메뉴는 `position: fixed`로 컨테이너 바깥에 그려져 컨테이너가 잘라내지
    * 못하므로 앵커가 스크롤돼 나가면 가장자리에 clamp된 채 남는다. 트리거를
    * 따라가는 메뉴는 `false`로 둔다(#218). 기본값은 `false`이고 이때 메뉴의
