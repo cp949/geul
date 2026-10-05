@@ -22,6 +22,7 @@ import {
   type ClipTarget,
   useClipVisibility,
 } from "../src/use-clip-visibility.js";
+import { mountFrameContainer } from "./frame-container.js";
 import { makeScrollContainer, stubRect } from "./mount-editor.js";
 
 type ProbeProps = {
@@ -202,33 +203,24 @@ describe("useClipVisibility", () => {
 
   describe("포커스 이탈", () => {
     it("다른 window 문서에서 포커스가 이탈하면 다시 판정한다", () => {
-      const iframe = document.createElement("iframe");
-      document.body.append(iframe);
-      try {
-        const frameDocument = iframe.contentDocument;
-        if (frameDocument === null) throw new Error("iframe 문서가 없다");
-        const host = frameDocument.createElement("div");
-        frameDocument.body.append(host);
-        makeScrollContainer(host);
+      const host = mountFrameContainer();
+      const frameDocument = host.ownerDocument;
+      makeScrollContainer(host);
 
-        const options = { a: {} };
-        const { container, rerender } = render(
-          <Probe element={host} options={options} />,
-          { container: frameDocument.body },
-        );
-        const overlay = byId(container, "a");
-        stubRect(overlay, OUTSIDE);
-        act(() => byId(container, "a-button").focus());
-        rerender(<Probe element={host} options={options} />);
-        expect(overlay.style.visibility).toBe("");
+      const options = { a: {} };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+        { container: frameDocument.body },
+      );
+      const overlay = byId(container, "a");
+      stubRect(overlay, OUTSIDE);
+      act(() => byId(container, "a-button").focus());
+      rerender(<Probe element={host} options={options} />);
+      expect(overlay.style.visibility).toBe("");
 
-        act(() => byId(container, "outside").focus());
+      act(() => byId(container, "outside").focus());
 
-        expect(overlay.style.visibility).toBe("hidden");
-      } finally {
-        cleanup();
-        iframe.remove();
-      }
+      expect(overlay.style.visibility).toBe("hidden");
     });
 
     it("포커스가 노드 밖으로 나가면 렌더를 강제해 숨긴다", () => {

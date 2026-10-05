@@ -18,8 +18,8 @@
  *   블록 hover 해제, interact 진입). helper가 PM 노드를 놓치면 RED다.
  * - helper 단위: 두 realm의 요소를 모두 요소로 판정한다.
  *
- * iframe 문서 Element에는 pointer capture가 없어 frame realm prototype에 빈
- * 구현을 둔다. 초점은 `container.ownerDocument.activeElement`로 본다.
+ * iframe 문서 container는 `frame-container.ts`가 만들고 정리한다. 초점은
+ * `container.ownerDocument.activeElement`로 본다.
  */
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
@@ -43,12 +43,15 @@ import {
 } from "../src/use-dismissible-overlay.js";
 import { usePointerHoverTarget } from "../src/use-pointer-hover-target.js";
 import { withProvider } from "./fake-editor-provider.js";
+import { mountFrameContainer } from "./frame-container.js";
 import {
   mountBlockEditor,
   mountTableEditor,
   paragraphOf,
   placeCaret,
   stubRect,
+  tableCellAt,
+  tableHandleHitBoxes,
 } from "./mount-editor.js";
 import { fakeStaticToolbarController } from "./static-toolbar-test-support.js";
 
@@ -60,11 +63,10 @@ if (typeof Element.prototype.releasePointerCapture !== "function") {
 }
 
 const editors: EditorController[] = [];
-const frames: HTMLIFrameElement[] = [];
 
 /**
- * React 렌더 → 편집기 → iframe 순서로 정리한다(G-TST-003). 하나가 던져도
- * 나머지를 정리하고 실패를 모아 던진다.
+ * React 렌더 → 편집기 순서로 정리한다(G-TST-003). 하나가 던져도 나머지를
+ * 정리하고 실패를 모아 던진다. iframe은 그 뒤에 `frame-container.ts`가 뗀다.
  */
 const tearDown = () => {
   const errors: unknown[] = [];
@@ -77,7 +79,6 @@ const tearDown = () => {
   };
   attempt(cleanup);
   for (const editor of editors.splice(0)) attempt(() => editor.destroy());
-  for (const frame of frames.splice(0)) attempt(() => frame.remove());
   if (errors.length > 0) throw new AggregateError(errors, "정리 실패");
 };
 
@@ -90,31 +91,9 @@ const createMainContainer = (): HTMLElement => {
   return container;
 };
 
-/**
- * iframe을 붙이고 그 문서 body에 렌더 container를 만든다. frame realm
- * `Element.prototype`에 pointer capture 빈 구현을 둔다. jsdom iframe 문서
- * Element에는 이 메서드가 없다.
- */
-const createFrameContainer = (): HTMLElement => {
-  const iframe = document.createElement("iframe");
-  document.body.append(iframe);
-  frames.push(iframe);
-  const frameDocument = iframe.contentDocument;
-  const frameWindow = iframe.contentWindow as
-    (Window & typeof globalThis) | null;
-  if (frameDocument === null || frameWindow === null) {
-    throw new Error("iframe 문서가 없다");
-  }
-  frameWindow.Element.prototype.setPointerCapture = () => {};
-  frameWindow.Element.prototype.releasePointerCapture = () => {};
-  const container = frameDocument.createElement("div");
-  frameDocument.body.append(container);
-  return container;
-};
-
 const SURFACES = [
   ["메인 문서", createMainContainer],
-  ["iframe 문서", createFrameContainer],
+  ["iframe 문서", mountFrameContainer],
 ] as const;
 
 /** container가 속한 문서 body 기준 쿼리. 전역 `screen`은 메인 문서만 본다. */
@@ -185,29 +164,6 @@ const HoverProbe = ({
 };
 
 const rowHandleLabel = "Drag to reorder row, click for options";
-
-/** 표의 `rowIndex`번 행, `columnIndex`번 셀(PM이 만든 TD). */
-const cellOf = (
-  table: HTMLElement,
-  rowIndex: number,
-  columnIndex: number,
-): HTMLElement => {
-  const row =
-    table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[rowIndex];
-  const cell = row?.querySelectorAll<HTMLElement>("[data-geul-column-id]")[
-    columnIndex
-  ];
-  if (cell === undefined) throw new Error("셀을 찾지 못했다");
-  return cell;
-};
-
-/** 렌더된 행·열 hit box를 화면 순서대로 읽는다. */
-const hitBoxes = (container: HTMLElement, axis: "row" | "column") =>
-  Array.from(
-    container.ownerDocument.querySelectorAll<HTMLElement>(
-      `[data-geul-table-${axis}-handle-hit]`,
-    ),
-  );
 
 /** hit box에 활성 바 표시가 붙었는지. */
 const isActive = (hit: HTMLElement | undefined, axis: "row" | "column") =>
@@ -397,10 +353,10 @@ describe.each(SURFACES)("%s의 TableHandles", (_, createContainer) => {
   it("스크롤 영역 밖 행 핸들이 visibility: hidden이 된다", () => {
     const container = createContainer();
     const m = mountTable(container);
-    placeCaret(cellOf(m.table, 0, 0));
+    placeCaret(tableCellAt(m.table, 0, 0));
     m.host.style.overflowY = "auto";
     stubRect(m.host, { left: 0, top: 0, width: 600, height: 100 });
-    const [first, second] = hitBoxes(container, "row");
+    const [first, second] = tableHandleHitBoxes(container.ownerDocument, "row");
     if (first === undefined || second === undefined) {
       throw new Error("행 hit box가 둘이 아니다");
     }
@@ -419,10 +375,10 @@ describe.each(SURFACES)("%s의 TableHandles", (_, createContainer) => {
 
     // 캐럿 anchor가 셀(TD) 자신이다. 셀을 요소로 못 보면 부모 행으로
     // 올라가 열을 놓친다.
-    placeCaret(cellOf(m.table, 1, 1));
+    placeCaret(tableCellAt(m.table, 1, 1));
 
-    const rows = hitBoxes(container, "row");
-    const columns = hitBoxes(container, "column");
+    const rows = tableHandleHitBoxes(container.ownerDocument, "row");
+    const columns = tableHandleHitBoxes(container.ownerDocument, "column");
     expect(isActive(rows[0], "row")).toBe(false);
     expect(isActive(rows[1], "row")).toBe(true);
     expect(isActive(columns[0], "column")).toBe(false);
@@ -434,10 +390,10 @@ describe.each(SURFACES)("%s의 TableHandles", (_, createContainer) => {
     const m = mountTable(container);
     fireEvent.pointerMove(m.table);
 
-    fireEvent.pointerMove(cellOf(m.table, 1, 1));
+    fireEvent.pointerMove(tableCellAt(m.table, 1, 1));
 
-    const rows = hitBoxes(container, "row");
-    const columns = hitBoxes(container, "column");
+    const rows = tableHandleHitBoxes(container.ownerDocument, "row");
+    const columns = tableHandleHitBoxes(container.ownerDocument, "column");
     expect(isActive(rows[0], "row")).toBe(false);
     expect(isActive(rows[1], "row")).toBe(true);
     expect(isActive(columns[0], "column")).toBe(false);
@@ -448,8 +404,10 @@ describe.each(SURFACES)("%s의 TableHandles", (_, createContainer) => {
     const container = createContainer();
     const m = mountTable(container);
     fireEvent.pointerMove(m.table);
-    fireEvent.pointerMove(cellOf(m.table, 1, 1));
-    expect(isActive(hitBoxes(container, "row")[1], "row")).toBe(true);
+    fireEvent.pointerMove(tableCellAt(m.table, 1, 1));
+    expect(
+      isActive(tableHandleHitBoxes(container.ownerDocument, "row")[1], "row"),
+    ).toBe(true);
     const otherBlock = m.host.querySelector<HTMLElement>(
       '[data-geul-block-id="block-1"]',
     );
@@ -460,8 +418,15 @@ describe.each(SURFACES)("%s의 TableHandles", (_, createContainer) => {
 
     const ui = queriesFor(container);
     expect(ui.getAllByRole("button", { name: rowHandleLabel })).toHaveLength(2);
-    expect(isActive(hitBoxes(container, "row")[1], "row")).toBe(false);
-    expect(isActive(hitBoxes(container, "column")[1], "column")).toBe(false);
+    expect(
+      isActive(tableHandleHitBoxes(container.ownerDocument, "row")[1], "row"),
+    ).toBe(false);
+    expect(
+      isActive(
+        tableHandleHitBoxes(container.ownerDocument, "column")[1],
+        "column",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -517,7 +482,7 @@ describe.each(SURFACES)("%s의 MediaHandleOverlays", (_, createContainer) => {
 
 describe("dom-node helper", () => {
   it("iframe realm 요소와 메인 realm 요소를 모두 요소로 판정한다", () => {
-    const frameContainer = createFrameContainer();
+    const frameContainer = mountFrameContainer();
     const frameElement = frameContainer.ownerDocument.createElement("button");
     const mainElement = document.createElement("button");
     // 전제: 둘은 서로 다른 realm 인스턴스다.
@@ -533,7 +498,7 @@ describe("dom-node helper", () => {
   });
 
   it("null, window, 텍스트 노드, 문서는 요소가 아니다", () => {
-    const frameDocument = createFrameContainer().ownerDocument;
+    const frameDocument = mountFrameContainer().ownerDocument;
     const values: unknown[] = [
       null,
       undefined,
@@ -552,7 +517,7 @@ describe("dom-node helper", () => {
   });
 
   it("노드 판정은 텍스트 노드와 문서를 노드로, null과 window를 노드가 아닌 값으로 본다", () => {
-    const frameDocument = createFrameContainer().ownerDocument;
+    const frameDocument = mountFrameContainer().ownerDocument;
 
     expect(isNode(frameDocument.createTextNode("text"))).toBe(true);
     expect(isNode(frameDocument)).toBe(true);

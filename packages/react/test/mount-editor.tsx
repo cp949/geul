@@ -5,8 +5,9 @@
  * 못한다(G-TST-001, Issue #62). 여기서는 진짜 createEditor()를 마운트해 편집기
  * DOM을 편집기가 직접 만들게 한다. 표가 필요한 오버레이는 mountTableEditor,
  * 일반 블록이 필요한 오버레이는 mountBlockEditor를 쓴다. 마운트 외에 표 블록 조회
- * (tableBlockOf), DOM 캐럿 배치(placeCaret), 초점 단언(focusOutsideEditor)도
- * 이 모듈이 단독 소유한다(G-TST-002).
+ * (tableBlockOf), 표 셀·핸들 hit box 조회(tableCellAt, tableHandleHitBoxes),
+ * DOM 캐럿 배치(placeCaret), 초점 단언(focusOutsideEditor)도 이 모듈이 단독
+ * 소유한다(G-TST-002).
  *
  * 다만 jsdom은 레이아웃을 계산하지 않아 getBoundingClientRect()가 전부 0이다.
  * 오버레이 geometry는 rect에 전적으로 의존하므로 rect만 스텁한다 — 이것이
@@ -149,6 +150,38 @@ export const tableBlockOf = (editor: EditorController): TableBlock => {
   // "table"은 예약 리터럴이라 CustomBlock일 수 없다.
   return block as TableBlock;
 };
+
+/**
+ * 표의 `rowIndex`번 행, `columnIndex`번 셀(PM이 만든 TD)을 찾는다. 열은 행
+ * 안 셀 순번으로 센다. 병합 셀이 있는 행에서는 순번과 열 번호가 갈린다.
+ */
+export const tableCellAt = (
+  table: HTMLElement,
+  rowIndex: number,
+  columnIndex: number,
+): HTMLElement => {
+  const row =
+    table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[rowIndex];
+  const cell = row?.querySelectorAll<HTMLElement>("[data-geul-column-id]")[
+    columnIndex
+  ];
+  if (cell === undefined) {
+    throw new Error(`${rowIndex}행 ${columnIndex}열의 셀을 찾지 못했다`);
+  }
+  return cell;
+};
+
+/**
+ * TableHandles가 렌더한 행·열 hit box를 화면 순서대로 읽는다. `root`는
+ * 오버레이를 렌더한 문서다. iframe 문서에 렌더했으면 그 문서를 준다.
+ */
+export const tableHandleHitBoxes = (
+  root: Document,
+  axis: "row" | "column",
+): HTMLElement[] =>
+  Array.from(
+    root.querySelectorAll<HTMLElement>(`[data-geul-table-${axis}-handle-hit]`),
+  );
 
 /**
  * 편집기 안의 노드(문단, 표 셀 등)에 실제 DOM 캐럿을 놓는다. EditorController에는

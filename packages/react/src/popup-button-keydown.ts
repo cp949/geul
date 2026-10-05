@@ -20,6 +20,7 @@
  * 같은 keydown이 항목 핸들러(`MenuItemButton`)와 루트 핸들러에서 두 번 불려도
  * 안전하다. 반복 억제는 문서마다 하나만 걸린다.
  */
+import { isElementNode } from "./dom-node.js";
 import { type MenuKeyboardEvent, handleMenuKeyDown } from "./menu-keyboard.js";
 
 /** 루트에서 받는 keydown. `target`은 keydown이 실제로 난 요소다. */
@@ -27,14 +28,9 @@ export type PopupKeyboardEvent = MenuKeyboardEvent & {
   target: EventTarget | null;
 };
 
-const ELEMENT_NODE = 1;
-
 /** keydown 대상이 `<button>` 자신이거나 그 안의 자식 요소인지. */
-const isInsideButton = (target: EventTarget | null): boolean => {
-  const node = target as Node | null;
-  if (node === null || node.nodeType !== ELEMENT_NODE) return false;
-  return (node as Element).closest("button") !== null;
-};
+const isInsideButton = (target: EventTarget | null): boolean =>
+  isElementNode(target) && target.closest("button") !== null;
 
 /**
  * 팝업 루트의 `onKeyDown`에 단다. 버튼에서 난 keydown을 소비했으면 `true`다.

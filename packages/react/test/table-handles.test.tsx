@@ -22,6 +22,8 @@ import {
   placeCaret,
   stubRect,
   tableBlockOf,
+  tableCellAt,
+  tableHandleHitBoxes,
 } from "./mount-editor.js";
 
 // @testing-library/react는 전역 afterEach나 teardown이 함수일 때만 자동
@@ -333,29 +335,13 @@ describe("표 위에 hover하면 핸들을 표시한다", () => {
 // grip 버튼 전환은 CSS :hover라 jsdom에서 못 잡는다(위 "position:
 // absolute" 테스트 주석과 같은 이유, 정적 grep·e2e가 대신 확인).
 describe("텍스트 커서나 마우스 hover가 있는 행에 활성 바가 뜬다", () => {
-  const firstCellOf = (table: HTMLElement, rowIndex: number): HTMLElement => {
-    const row =
-      table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[rowIndex];
-    const cell = row?.querySelector<HTMLElement>("[data-geul-column-id]");
-    if (cell === undefined || cell === null) {
-      throw new Error(`${rowIndex}번 행의 셀을 찾지 못했다`);
-    }
-    return cell;
-  };
-  const rowHitBoxes = () =>
-    Array.from(
-      document.querySelectorAll<HTMLElement>(
-        "[data-geul-table-row-handle-hit]",
-      ),
-    );
-
   it("마우스 hover 없이 커서만 표 안에 있어도 행 그립 클러스터가 뜬다", () => {
     const { table } = renderRealTable();
 
     // fireEvent.pointerMove(table)를 전혀 부르지 않는다 — hover가 아니라
     // activeTableId의 selectionTableId fallback만으로 클러스터가
     // 마운트되는지 검증한다.
-    placeCaret(firstCellOf(table, 0));
+    placeCaret(tableCellAt(table, 0, 0));
 
     expect(
       screen.getAllByRole("button", { name: rowHandleLabel }),
@@ -365,28 +351,36 @@ describe("텍스트 커서나 마우스 hover가 있는 행에 활성 바가 뜬
   it("커서가 있는 행의 hit box에만 active 속성이 붙고, 다른 행으로 옮기면 같이 옮겨간다", () => {
     const { table } = renderRealTable();
 
-    placeCaret(firstCellOf(table, 0));
+    placeCaret(tableCellAt(table, 0, 0));
 
     expect(
-      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[0]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(true);
     expect(
-      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[1]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(false);
 
-    placeCaret(firstCellOf(table, 1));
+    placeCaret(tableCellAt(table, 1, 0));
 
     expect(
-      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[0]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(false);
     expect(
-      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[1]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(true);
   });
 
   it("hover도 커서도 없으면(커서가 표 밖으로 나가면) 그립 클러스터가 사라진다", () => {
     const { editable, table } = renderRealTable();
-    placeCaret(firstCellOf(table, 0));
+    placeCaret(tableCellAt(table, 0, 0));
     expect(
       screen.getAllByRole("button", { name: rowHandleLabel }),
     ).toHaveLength(2);
@@ -408,28 +402,36 @@ describe("텍스트 커서나 마우스 hover가 있는 행에 활성 바가 뜬
     // 자신이라 event.target.closest("[data-geul-row-id]")가 못 찾는다 —
     // 특정 행의 셀에 쏴야 hoverRowId가 그 행으로 좁혀진다.
     fireEvent.pointerMove(table);
-    fireEvent.pointerMove(firstCellOf(table, 1));
+    fireEvent.pointerMove(tableCellAt(table, 1, 0));
 
     expect(
-      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[0]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(false);
     expect(
-      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[1]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(true);
   });
 
   it("커서와 마우스 hover가 서로 다른 행을 가리키면 최대 2개 행에 동시에 활성 바가 뜬다", () => {
     const { table } = renderRealTable();
 
-    placeCaret(firstCellOf(table, 0));
+    placeCaret(tableCellAt(table, 0, 0));
     fireEvent.pointerMove(table);
-    fireEvent.pointerMove(firstCellOf(table, 1));
+    fireEvent.pointerMove(tableCellAt(table, 1, 0));
 
     expect(
-      rowHitBoxes()[0]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[0]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(true);
     expect(
-      rowHitBoxes()[1]?.hasAttribute("data-geul-table-row-handle-active"),
+      tableHandleHitBoxes(document, "row")[1]?.hasAttribute(
+        "data-geul-table-row-handle-active",
+      ),
     ).toBe(true);
   });
 });
@@ -440,32 +442,10 @@ describe("텍스트 커서나 마우스 hover가 있는 행에 활성 바가 뜬
 // 클러스터 전체가 사라지는 케이스는 행 describe의 세 번째 테스트가 이미
 // 검증한다(activeTableId 게이트를 공유한다).
 describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬다", () => {
-  const cellAt = (
-    table: HTMLElement,
-    rowIndex: number,
-    columnIndex: number,
-  ): HTMLElement => {
-    const row =
-      table.querySelectorAll<HTMLElement>("[data-geul-row-id]")[rowIndex];
-    const cell = row?.querySelectorAll<HTMLElement>("[data-geul-column-id]")[
-      columnIndex
-    ];
-    if (cell === undefined) {
-      throw new Error(`${rowIndex}행 ${columnIndex}열의 셀을 찾지 못했다`);
-    }
-    return cell;
-  };
-  const columnHitBoxes = () =>
-    Array.from(
-      document.querySelectorAll<HTMLElement>(
-        "[data-geul-table-column-handle-hit]",
-      ),
-    );
-
   it("마우스 hover 없이 커서만 표 안에 있어도 열 그립 클러스터가 뜬다", () => {
     const { table } = renderRealTable();
 
-    placeCaret(cellAt(table, 0, 0));
+    placeCaret(tableCellAt(table, 0, 0));
 
     expect(
       screen.getAllByRole("button", { name: columnHandleLabel }),
@@ -475,22 +455,30 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
   it("커서가 있는 열의 hit box에만 active 속성이 붙고, 다른 열로 옮기면 같이 옮겨간다", () => {
     const { table } = renderRealTable();
 
-    placeCaret(cellAt(table, 0, 0));
+    placeCaret(tableCellAt(table, 0, 0));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(true);
     expect(
-      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(false);
 
-    placeCaret(cellAt(table, 0, 1));
+    placeCaret(tableCellAt(table, 0, 1));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(false);
     expect(
-      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(true);
   });
 
@@ -498,28 +486,36 @@ describe("텍스트 커서나 마우스 hover가 있는 열에 활성 바가 뜬
     const { table } = renderRealTable();
 
     fireEvent.pointerMove(table);
-    fireEvent.pointerMove(cellAt(table, 0, 1));
+    fireEvent.pointerMove(tableCellAt(table, 0, 1));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(false);
     expect(
-      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(true);
   });
 
   it("커서와 마우스 hover가 서로 다른 열을 가리키면 최대 2개 열에 동시에 활성 바가 뜬다", () => {
     const { table } = renderRealTable();
 
-    placeCaret(cellAt(table, 0, 0));
+    placeCaret(tableCellAt(table, 0, 0));
     fireEvent.pointerMove(table);
-    fireEvent.pointerMove(cellAt(table, 0, 1));
+    fireEvent.pointerMove(tableCellAt(table, 0, 1));
 
     expect(
-      columnHitBoxes()[0]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[0]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(true);
     expect(
-      columnHitBoxes()[1]?.hasAttribute("data-geul-table-column-handle-active"),
+      tableHandleHitBoxes(document, "column")[1]?.hasAttribute(
+        "data-geul-table-column-handle-active",
+      ),
     ).toBe(true);
   });
 });
@@ -946,24 +942,11 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
   // 스크롤 컨테이너가 움직이면 표의 page 좌표가 바뀌는데도 메뉴가 닫혀
   // 있으면 아무도 다시 계산하지 않아 핸들이 제자리에 남았다. 그리고 핸들은
   // 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다.
-  const firstRowCell = (table: HTMLElement): HTMLElement => {
-    const cell = table.querySelector<HTMLElement>(
-      "[data-geul-row-id] [data-geul-column-id]",
-    );
-    if (cell === null) throw new Error("첫 셀을 찾지 못했다");
-    return cell;
-  };
-  const rowHitBoxes = () =>
-    Array.from(
-      document.querySelectorAll<HTMLElement>(
-        "[data-geul-table-row-handle-hit]",
-      ),
-    );
 
   it("스크롤하면 표를 따라 핸들 위치를 다시 계산한다(메뉴가 닫혀 있어도)", () => {
     const { host, table } = renderRealTable();
-    placeCaret(firstRowCell(table));
-    const before = rowHitBoxes()[0]?.style.top;
+    placeCaret(tableCellAt(table, 0, 0));
+    const before = tableHandleHitBoxes(document, "row")[0]?.style.top;
     expect(before).toBeDefined();
 
     // 핸들 좌표는 표와 각 행·셀 rect에서 나온다 — 스크롤로 전부 같이 움직인다.
@@ -982,7 +965,7 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
     }
     fireEvent.scroll(host);
 
-    const after = rowHitBoxes()[0]?.style.top;
+    const after = tableHandleHitBoxes(document, "row")[0]?.style.top;
     expect(Number.parseFloat(after ?? "NaN")).toBe(
       Number.parseFloat(before ?? "NaN") - 30,
     );
@@ -990,10 +973,10 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
 
   it("핸들 박스가 컨테이너 보이는 영역 밖이면 숨기고 안이면 보인다", () => {
     const { host, table } = renderRealTable();
-    placeCaret(firstRowCell(table));
+    placeCaret(tableCellAt(table, 0, 0));
     host.style.overflowY = "auto";
     stubRect(host, { left: 0, top: 0, width: 600, height: 100 });
-    const [first, second] = rowHitBoxes();
+    const [first, second] = tableHandleHitBoxes(document, "row");
     stubRect(first!, { left: 0, top: 10, width: 20, height: 30 });
     stubRect(second!, { left: 0, top: 300, width: 20, height: 30 });
     fireEvent.scroll(host);
@@ -1053,7 +1036,7 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
     // 6x2, 행 높이 30 → 표 높이 180. 표를 -30–150에 두면 영역 0–100의 위아래를
     // 모두 넘는다.
     const { host, table } = renderRealTable({ rows: 6 });
-    placeCaret(firstRowCell(table));
+    placeCaret(tableCellAt(table, 0, 0));
     makeScrollContainer(host);
     const strips = resizeStrips();
     // 전제: 병합 셀 없는 표는 열마다 strip 하나다(#239 한 구간 합치기).
@@ -1157,7 +1140,7 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
 
   it("리사이즈 드래그 중에는 스크롤해도 strip을 자르지 않고 같은 노드를 유지한다(#260)", () => {
     const { host, table } = renderRealTable({ rows: 6 });
-    placeCaret(firstRowCell(table));
+    placeCaret(tableCellAt(table, 0, 0));
     makeScrollContainer(host);
     resizeStrips().forEach(stubRectFromStyle);
     shiftTableRects(table, -130);
