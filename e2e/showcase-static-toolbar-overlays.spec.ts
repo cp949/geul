@@ -17,6 +17,8 @@
  *
  * 블록 선택 하이라이트도 영역 밖에서 숨는다(Issue #250). 하이라이트는 블록마다
  * 하나라 영역 밖으로 나간 블록의 것만 숨고 영역 안 블록의 것은 보인다.
+ *
+ * sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 입력을 가로채지 않는다(Issue #265).
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -654,9 +656,12 @@ test("블록 범위를 선택한 채 스크롤하면 영역 밖으로 나간 블
   await expect(highlight(2), "돌아온 뒤").toHaveCSS("visibility", "visible");
 });
 
-test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리사이즈 strip이 보이고 드래그로 열 폭을 바꾼다(#260)", async ({
-  page,
-}) => {
+/**
+ * 표 상단만 스크롤 영역 위로 20px 밀어 낸다. 마지막 행 셀에 커서를 둬 hover 없이도
+ * 표 핸들이 남는다. 창을 스크롤해 영역 상단을 뷰포트 상단에 맞춘다. 영역이
+ * 뷰포트 밖이면 마우스로 strip을 끌 수 없다.
+ */
+const pushTableTopAboveArea = async (page: Page) => {
   await openShowcasePage(page, "/examples/static-toolbar");
   await page.getByRole("button", { name: "샘플 불러오기" }).click();
   const editor = page.getByRole("textbox", { name: "Editor" });
@@ -664,10 +669,7 @@ test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리�
   const lastRow = table.locator("tr").last();
   const cell = lastRow.locator("td").first();
   await cell.scrollIntoViewIfNeeded();
-  // 커서를 표 안에 둔다. 스크롤 뒤 hover 없이도 핸들이 남는다.
   await cell.click();
-  // 창을 스크롤해 영역 상단을 뷰포트 상단에 맞춘다. 영역이 뷰포트 밖이면 마우스로
-  // strip을 끌 수 없다.
   await page.evaluate(() => {
     const area = document.querySelector('[class*="scrollArea"]');
     if (area === null) throw new Error("scrollArea 없음");
@@ -707,6 +709,13 @@ test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리�
     lastRowInside: true,
   });
   await settleClip(page);
+  return { table, lastRow };
+};
+
+test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리사이즈 strip이 보이고 드래그로 열 폭을 바꾼다(#260)", async ({
+  page,
+}) => {
+  const { table, lastRow } = await pushTableTopAboveArea(page);
 
   // 병합 셀 없는 표는 열마다 strip 하나다. 첫 열 경계 strip을 본다.
   const strip = page.locator("[data-geul-table-resize-handle]").first();
@@ -743,5 +752,81 @@ test("표 상단이 스크롤 영역 위로 나가도 보이는 행 옆 열 리�
   await expect(firstColumn, "드래그 뒤 폭").toHaveAttribute(
     "style",
     /width:\s*200px/,
+  );
+});
+
+/** 예제의 sticky 상단 툴바(`StaticToolbar` 루트). */
+const STATIC_TOOLBAR_SELECTOR = '[role="toolbar"][aria-label="Toolbar"]';
+
+test("sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 클릭과 드래그를 가로채지 않는다(#265)", async ({
+  page,
+}) => {
+  const { table } = await pushTableTopAboveArea(page);
+  const strip = page.locator("[data-geul-table-resize-handle]").first();
+  await expect(strip, "전제: strip 보임").toHaveCSS("visibility", "visible");
+
+  // 첫 열 strip x, 툴바 중앙 y. strip은 영역 상단까지 잘려 툴바 띠와 겹친다.
+  const point = await strip.evaluate((element, selector) => {
+    const toolbar = document.querySelector(selector);
+    if (toolbar === null) throw new Error("툴바 없음");
+    const stripRect = element.getBoundingClientRect();
+    const toolbarRect = toolbar.getBoundingClientRect();
+    return {
+      x: stripRect.x + stripRect.width / 2,
+      y: (toolbarRect.top + toolbarRect.bottom) / 2,
+      overlaps:
+        stripRect.top < toolbarRect.bottom &&
+        stripRect.bottom > toolbarRect.top &&
+        stripRect.left < toolbarRect.right &&
+        stripRect.right > toolbarRect.left,
+    };
+  }, STATIC_TOOLBAR_SELECTOR);
+  expect(point.overlaps, "전제: strip이 툴바 띠와 겹친다").toBe(true);
+
+  const topIsInToolbar = await page.evaluate(
+    ({ x, y, selector }) =>
+      document.elementsFromPoint(x, y)[0]?.closest(selector) != null,
+    { ...point, selector: STATIC_TOOLBAR_SELECTOR },
+  );
+  expect(topIsInToolbar, "hit-test 맨 위가 툴바 자손").toBe(true);
+
+  // click을 받은 대상을 기록한다. 툴바 안 버튼이면 "toolbar-button"이다.
+  await page.evaluate((selector) => {
+    document.addEventListener(
+      "click",
+      (event) => {
+        const target = event.target as Element;
+        document.body.dataset.clickTarget =
+          target.closest(`${selector} button`) === null
+            ? `${target.tagName}.${String(target.className)}`
+            : "toolbar-button";
+      },
+      { capture: true, once: true },
+    );
+  }, STATIC_TOOLBAR_SELECTOR);
+  await page.mouse.click(point.x, point.y);
+  await expect(
+    page.locator("body"),
+    "click target이 툴바 버튼",
+  ).toHaveAttribute("data-click-target", "toolbar-button");
+
+  // 툴바 띠 안에서 strip x를 40px 끌어도 첫 열 폭이 그대로다.
+  const firstColumn = table.locator("colgroup col").first();
+  await expect(firstColumn, "전제: 시작 폭").toHaveAttribute(
+    "style",
+    /width:\s*160px/,
+  );
+  await expect(strip, "전제: 드래그 전 strip 보임").toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 40, point.y, { steps: 5 });
+  await page.mouse.up();
+  await settleClip(page);
+  await expect(firstColumn, "툴바 띠 드래그 뒤 폭 유지").toHaveAttribute(
+    "style",
+    /width:\s*160px/,
   );
 });
