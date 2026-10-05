@@ -10,6 +10,8 @@
  * 마지막 줄이면 소비한다(Issue #255).
  * ArrowRight는 시각 방향 "right"로 판정한다. RTL로 끝나는 라벨은 논리 끝이어도
  * 시각 오른쪽 끝이 아닐 수 있다(Issue #268).
+ * ArrowLeft는 소비하지 않고 사후 교정한다. 라벨 끝 keydown 뒤 PM이 만든 숨은
+ * NodeSelection만 접힌 container 뒤로 옮긴다(Issue #273).
  *
  * jsdom은 레이아웃이 없어 view.endOfTextblock을 믿을 수 없다. 값을
  * vi.spyOn으로 고정한다(ADR-0007). 실제 값은 e2e가 증명한다.
@@ -652,5 +654,165 @@ describe("접힌 toggle 방향키", () => {
     expect(dispatchKeydown(tiptap, "ArrowUp")).toBe(false);
     expect(dispatchKeydown(tiptap, "ArrowLeft")).toBe(false);
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  // Firefox·WebKit은 RTL 라벨 끝 ArrowLeft를 forward로 처리해 숨은 첫 자식
+  // NodeSelection을 만든다. jsdom은 레이아웃이 없어 PM의 RTL forward 판정을
+  // 재현할 수 없다. 그 NodeSelection을 직접 dispatch한다(ADR-0007).
+  describe("ArrowLeft 사후 교정(RTL, Issue #273)", () => {
+    /**
+     * blockId 라벨 뒤 첫 선택 가능 위치(숨은 첫 자식)의 NodeSelection을
+     * dispatch한다. PM moveSelectionBlock이 만들 selection과 같다.
+     */
+    const dispatchHiddenNodeSelection = (
+      tiptap: TiptapEditor,
+      blockId: string,
+    ): void => {
+      const { doc } = tiptap.state;
+      const $end = doc.resolve(labelEnd(tiptap, blockId));
+      const selection = Selection.findFrom(doc.resolve($end.after()), 1);
+      // 전제: 숨은 첫 자식 atom의 NodeSelection이다.
+      expect(selection).toBeInstanceOf(NodeSelection);
+      expect(isHidden((selection as NodeSelection).$from)).toBe(true);
+      tiptap.view.dispatch(
+        tiptap.state.tr.setSelection(selection as NodeSelection),
+      );
+    };
+
+    it.each([
+      ["첫 숨은 자식이 divider", "t1", "a1"],
+      ["부모 toggle의 마지막 자식", "t7", "a7"],
+    ])(
+      "%s인 접힌 toggle 라벨 끝 keydown 뒤 숨은 NodeSelection은 다음 보이는 블록 시작으로 간다",
+      (_label, toggleId, nextId) => {
+        const { tiptap } = fixture();
+        placeCaretAtLabelEnd(tiptap, toggleId);
+        const docBefore = tiptap.state.doc;
+
+        dispatchKeydown(tiptap, "ArrowLeft");
+        dispatchHiddenNodeSelection(tiptap, toggleId);
+
+        expectCaretAt(tiptap, contentTextStart(tiptap, nextId));
+        expect(tiptap.state.doc).toBe(docBefore);
+      },
+    );
+
+    it("다음 보이는 블록이 atom이면 그 atom의 NodeSelection이 된다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelEnd(tiptap, "t4");
+
+      dispatchKeydown(tiptap, "ArrowLeft");
+      dispatchHiddenNodeSelection(tiptap, "t4");
+
+      expectDividerNodeSelection(tiptap, "n4");
+    });
+
+    it("keydown 없이 숨은 NodeSelection이 오면 가드대로 라벨 끝으로 간다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelEnd(tiptap, "t1");
+
+      dispatchHiddenNodeSelection(tiptap, "t1");
+
+      expectCaretAt(tiptap, labelEnd(tiptap, "t1"));
+    });
+
+    it("keydown 뒤 다른 transaction이 끼면 기록이 만료되어 라벨 끝으로 간다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelEnd(tiptap, "t1");
+
+      dispatchKeydown(tiptap, "ArrowLeft");
+      // 무관한 selection 이동 뒤 같은 라벨 끝으로 돌아온다. state 객체가 바뀐다.
+      placeCaret(tiptap, contentTextStart(tiptap, "tail"));
+      placeCaretAtLabelEnd(tiptap, "t1");
+      dispatchHiddenNodeSelection(tiptap, "t1");
+
+      expectCaretAt(tiptap, labelEnd(tiptap, "t1"));
+    });
+
+    it("라벨 중간 keydown 뒤 숨은 NodeSelection은 가드대로 라벨 끝으로 간다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelMiddle(tiptap, "t1");
+
+      dispatchKeydown(tiptap, "ArrowLeft");
+      dispatchHiddenNodeSelection(tiptap, "t1");
+
+      expectCaretAt(tiptap, labelEnd(tiptap, "t1"));
+    });
+
+    it("Shift+ArrowLeft keydown 뒤 숨은 NodeSelection은 가드대로 라벨 끝으로 간다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelEnd(tiptap, "t1");
+
+      dispatchKeydown(tiptap, "ArrowLeft", true);
+      dispatchHiddenNodeSelection(tiptap, "t1");
+
+      expectCaretAt(tiptap, labelEnd(tiptap, "t1"));
+    });
+
+    it("keydown 뒤 라벨 안 TextSelection은 교정하지 않는다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelEnd(tiptap, "t1");
+      const back = labelEnd(tiptap, "t1") - 1;
+
+      dispatchKeydown(tiptap, "ArrowLeft");
+      placeCaret(tiptap, back);
+
+      expectCaretAt(tiptap, back);
+    });
+
+    it("라벨 끝 ArrowLeft keydown은 소비하지 않는다", () => {
+      const { tiptap } = fixture();
+      placeCaretAtLabelEnd(tiptap, "t1");
+
+      expect(dispatchKeydown(tiptap, "ArrowLeft")).toBe(false);
+    });
+
+    // 빈 라벨은 논리 끝이자 시작이다. PM은 backward로 처리해 앞 접힌 toggle의
+    // 숨은 마지막 atom을 고른다. 이 경로는 jsdom에서도 PM captureKeyDown이
+    // 실제로 돈다(view.dom keydown).
+    it("빈 라벨 ArrowLeft가 앞 접힌 toggle의 숨은 atom을 고르면 가드대로 앞 라벨 끝으로 간다", () => {
+      const { tiptap } = mounted(
+        documentOf(
+          toggleBlock("ta", LABEL, {
+            collapsed: true,
+            children: [paragraphBlock("ca", "숨은 문단"), dividerBlock("da")],
+          }),
+          { id: "tb", type: "toggleListItem", content: [], collapsed: true },
+          paragraphBlock("ab", "뒤"),
+        ),
+      );
+      placeCaret(tiptap, contentTextStart(tiptap, "tb"));
+
+      withoutScrollCrash(tiptap, () => {
+        tiptap.view.dom.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "ArrowLeft",
+            keyCode: 37,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
+
+      expectCaretAt(tiptap, labelEnd(tiptap, "ta"));
+    });
+
+    it("역방향 stale(DOM 캐럿은 대상 밖, live selection은 라벨 끝)이면 기록하지 않아 라벨 끝으로 간다", () => {
+      const { tiptap } = fixture();
+      const dom = tiptap.view.domAtPos(contentTextStart(tiptap, "tail"));
+      placeCaretAtLabelEnd(tiptap, "t1");
+
+      withNativeCaret(
+        tiptap.view.dom as HTMLElement,
+        () => {
+          dispatchKeydown(tiptap, "ArrowLeft");
+        },
+        dom.node,
+        dom.offset,
+      );
+      dispatchHiddenNodeSelection(tiptap, "t1");
+
+      expectCaretAt(tiptap, labelEnd(tiptap, "t1"));
+    });
   });
 });

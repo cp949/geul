@@ -1,5 +1,13 @@
 import { type Editor, Extension } from "@tiptap/core";
-import { Selection, TextSelection } from "@tiptap/pm/state";
+import type { ResolvedPos } from "@tiptap/pm/model";
+import {
+  type EditorState,
+  NodeSelection,
+  Plugin,
+  Selection,
+  TextSelection,
+  type Transaction,
+} from "@tiptap/pm/state";
 
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 import {
@@ -45,8 +53,32 @@ import {
 // - 그 밖이면 논리 판정(라벨 끝)으로 대체한다. LTR 결과는 그대로다. 범위 밖
 //   RTL 글자(Arabic Presentation Forms 등)는 수정 전처럼 라벨 끝에서 소비한다.
 // - 라벨 논리 끝 요구는 유지한다. 시각 판정은 그 위에 더하는 조건이다.
+//
+// ArrowLeft는 소비하지 않고 사후 교정한다(Issue #273).
+// - PM은 RTL 글자 옆 ArrowLeft를 forward로 처리한다(captureKeyDown의
+//   findDirection). Firefox·WebKit은 RTL 라벨 끝에서 숨은 첫 자식 atom의
+//   NodeSelection을 만든다. 가드가 라벨 끝으로 되돌려 캐럿이 갇힌다.
+// - PM 방향 판정을 복제하지 않는다. keydown 시점 state를 기록하고 그
+//   state에서 시작한 PM tr의 결과를 appendTransaction에서 본다.
+// - 기록 조건: 파생 state의 selection이 live selection과 같다(G-EDT-002).
+//   live selection이 빈 TextSelection이고 접힌 toggle 라벨 논리 끝이다.
+// - 교정 조건: oldState가 기록한 state 객체다. 첫 tr이 doc을 바꾸지 않고
+//   숨은 자손 NodeSelection을 만든다. 그 selection이 라벨 뒤 첫 선택 가능
+//   위치(forward 이동 결과)와 같다. 교정은 ArrowRight와 같은 목적지로 간다.
+// - 첫 tr만 보므로 가드와의 plugin 순서에 기대지 않는다.
+// - 기록은 교정 판정 뒤 지운다. 다른 tr이 끼면 oldState가 달라 만료된다.
+// - Chromium은 PM이 backward로 처리한다. backward 결과는 forward 위치와 달라
+//   교정하지 않는다. 빈 라벨에서 앞 접힌 toggle의 숨은 atom을 고르는 경우도
+//   같다. 가드가 앞 라벨 끝으로 보낸다.
 
 type ArrowKey = "down" | "right";
+
+// 라벨 $head가 속한 blockContainer 뒤 첫 선택 가능 위치다. 마지막 자식이면
+// 부모 뒤로 올라간다. 없으면 null이다.
+const selectionAfterCollapsedContainer = (
+  $head: ResolvedPos,
+): Selection | null =>
+  Selection.findFrom($head.doc.resolve($head.after($head.depth - 1)), 1);
 
 // 접힌 toggle container 뒤 첫 선택 가능 위치. 소비 조건에 안 맞으면 null이다.
 const collapsedToggleExitSelection = (
@@ -80,12 +112,7 @@ const collapsedToggleExitSelection = (
   ) {
     return null;
   }
-  // blockContainer 뒤 첫 선택 가능 위치다. 마지막 자식이면 부모 뒤로 올라간다.
-  const exit = Selection.findFrom(
-    state.doc.resolve($head.after($head.depth - 1)),
-    1,
-  );
-  return { selection: exit };
+  return { selection: selectionAfterCollapsedContainer($head) };
 };
 
 // 키를 소비했으면 true다. 목적지가 없으면 소비만 하고 이동하지 않는다.
@@ -103,6 +130,62 @@ const moveOutOfCollapsedToggle = (
   return true;
 };
 
+// 편집기별 ArrowLeft keydown 시점 state다(Issue #273).
+const arrowLeftStates = new WeakMap<Editor, EditorState>();
+
+// 라벨 논리 끝 ArrowLeft keydown이면 그 시점 state를 기록한다. 키는 소비하지 않는다.
+const recordArrowLeftAtLabelEnd = (editor: Editor): false => {
+  arrowLeftStates.delete(editor);
+  const live = editor.view.state;
+  // 클릭 직후 DOM 캐럿이 다르면 기록하지 않는다. 가드 복귀(현행)를 유지한다.
+  if (!resolveSelectionAwareState(editor).selection.eq(live.selection)) {
+    return false;
+  }
+  const { selection } = live;
+  if (!(selection instanceof TextSelection) || !selection.empty) return false;
+  const { $head } = selection;
+  if ($head.depth < 2 || !isCollapsedToggleContent($head.parent)) return false;
+  if ($head.parentOffset !== $head.parent.content.size) return false;
+  arrowLeftStates.set(editor, live);
+  return false;
+};
+
+// 기록한 state에서 PM이 만든 숨은 NodeSelection을 container 뒤로 옮기는 tr이다.
+const correctArrowLeftSelection = (
+  editor: Editor,
+  transactions: readonly Transaction[],
+  oldState: EditorState,
+  newState: EditorState,
+): Transaction | null => {
+  const recorded = arrowLeftStates.get(editor);
+  if (recorded === undefined) return null;
+  if (oldState !== recorded) return null;
+  const [first] = transactions;
+  if (first === undefined || first.docChanged || !first.selectionSet) {
+    return null;
+  }
+  const { selection } = first;
+  if (
+    !(selection instanceof NodeSelection) ||
+    outermostCollapsedContainerDepth(selection.$from) === null
+  ) {
+    return null;
+  }
+  arrowLeftStates.delete(editor);
+  // 뒤 plugin이 doc을 바꿨으면 oldState 위치를 쓸 수 없다.
+  if (newState.doc !== oldState.doc) return null;
+  // forward 이동(라벨 뒤 첫 선택 가능 위치)만 교정한다. 빈 라벨은 PM이
+  // backward로 처리해 앞 접힌 toggle의 숨은 atom을 고른다. 그 경우는 가드에 맡긴다.
+  const { $head } = oldState.selection;
+  const forward = Selection.findFrom(oldState.doc.resolve($head.after()), 1);
+  if (forward === null || !forward.eq(selection)) return null;
+  const exit = selectionAfterCollapsedContainer($head);
+  // 목적지가 없으면 가드 결과(라벨 끝)를 둔다.
+  if (exit === null) return null;
+  // selection만 바꾸는 appended tr이다(G-EDT-001). history 단계를 추가하지 않는다.
+  return newState.tr.setSelection(exit).setMeta("addToHistory", false);
+};
+
 export const ToggleCollapseArrowKeyExtension = Extension.create({
   name: "toggleCollapseArrowKey",
 
@@ -110,6 +193,17 @@ export const ToggleCollapseArrowKeyExtension = Extension.create({
     return {
       ArrowDown: () => moveOutOfCollapsedToggle(this.editor, "down"),
       ArrowRight: () => moveOutOfCollapsedToggle(this.editor, "right"),
+      ArrowLeft: () => recordArrowLeftAtLabelEnd(this.editor),
     };
+  },
+
+  addProseMirrorPlugins() {
+    const { editor } = this;
+    return [
+      new Plugin({
+        appendTransaction: (transactions, oldState, newState) =>
+          correctArrowLeftSelection(editor, transactions, oldState, newState),
+      }),
+    ];
   },
 });

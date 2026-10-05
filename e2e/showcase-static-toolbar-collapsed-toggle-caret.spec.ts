@@ -21,6 +21,9 @@
  * Firefox는 라벨 안에서 한 글자 움직이고 나머지 엔진은 다음 블록으로 간다.
  * 판정이 엔진의 Selection.modify 구현에 기대므로 세 건 모두 `@core`다.
  * LTR로 끝나는 혼합 라벨 건은 세 엔진 기대값이 같다.
+ *
+ * RTL로 끝나는 라벨 끝의 ArrowLeft는 첫 숨은 자식이 divider면 Firefox·WebKit에서
+ * 다음 보이는 블록 시작으로 가고 Chromium에서 라벨 안에서 움직인다(Issue #273).
  */
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -379,14 +382,15 @@ const RTL_LABEL = "مرحبا";
 const MIXED_LABEL = `${RTL_LABEL} abc`;
 
 /**
- * 접힌 block-10 라벨 끝에서 ArrowRight 1회 뒤 `Z`를 입력한다(Issue #268).
+ * 접힌 block-10 라벨 끝에서 key 1회 뒤 `Z`를 입력한다(Issue #268, #273).
  * inLabel이면 엔진이 라벨 안에서 한 글자 움직인 결과를 기대한다. 아니면
  * block-12 시작을 기대한다. 키 전후와 입력 뒤 최상위 블록 수가 같다.
  */
-const arrowRightAtLabelEnd = async (
+const arrowAtLabelEnd = async (
   page: Page,
   editable: Locator,
   label: string,
+  key: "ArrowLeft" | "ArrowRight",
   inLabel: boolean,
 ) => {
   const block = blockId(editable, 10);
@@ -401,7 +405,7 @@ const arrowRightAtLabelEnd = async (
   const blockBefore = await blockId(editable, 12).innerText();
   const countBefore = await siblingCount(block);
 
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press(key);
   await yieldFrame(page);
   expect(await siblingCount(block)).toBe(countBefore);
   await page.keyboard.type("Z");
@@ -410,7 +414,7 @@ const arrowRightAtLabelEnd = async (
   expect(await siblingCount(block)).toBe(countBefore);
   if (inLabel) {
     expect(await labelText(block)).toBe(
-      `${label.slice(0, 4)}Z${label.slice(4)}`,
+      `${label.slice(0, label.length - 1)}Z${label.slice(label.length - 1)}`,
     );
     expect(await blockId(editable, 12).innerText()).toBe(blockBefore);
   } else {
@@ -428,10 +432,11 @@ test("RTL로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 첫 숨은 자�
   await expect(blockId(editable, 11)).toBeHidden();
 
   // Firefox만 시각 오른쪽이 라벨 안이다.
-  await arrowRightAtLabelEnd(
+  await arrowAtLabelEnd(
     page,
     editable,
     RTL_LABEL,
+    "ArrowRight",
     testInfo.project.name === "firefox",
   );
 });
@@ -441,10 +446,11 @@ test("RTL로 끝나는 접힌 toggle 라벨 끝의 ArrowRight는 첫 숨은 자�
 }, testInfo) => {
   const { editable } = await collapseWithDividerFirstChild(page, RTL_LABEL);
 
-  await arrowRightAtLabelEnd(
+  await arrowAtLabelEnd(
     page,
     editable,
     RTL_LABEL,
+    "ArrowRight",
     testInfo.project.name === "firefox",
   );
 });
@@ -455,5 +461,24 @@ test("RTL 글자가 있어도 LTR로 끝나는 접힌 toggle 라벨 끝의 Arrow
   const { editable } = await collapseWithDividerFirstChild(page, MIXED_LABEL);
 
   // 세 엔진 모두 시각 오른쪽 끝이다. RTL 글자 유무로 폴스루하면 divider에 갇힌다.
-  await arrowRightAtLabelEnd(page, editable, MIXED_LABEL, false);
+  await arrowAtLabelEnd(page, editable, MIXED_LABEL, "ArrowRight", false);
 });
+
+const RTL_ENDING_MIXED_LABEL = `abc ${RTL_LABEL}`;
+
+for (const label of [RTL_LABEL, RTL_ENDING_MIXED_LABEL]) {
+  test(`RTL로 끝나는 접힌 toggle 라벨(${label}) 끝의 ArrowLeft는 첫 숨은 자식이 divider여도 라벨 끝에 갇히지 않는다 @core`, async ({
+    page,
+  }, testInfo) => {
+    const { editable } = await collapseWithDividerFirstChild(page, label);
+
+    // Chromium만 PM이 backward로 처리해 라벨 안에서 움직인다.
+    await arrowAtLabelEnd(
+      page,
+      editable,
+      label,
+      "ArrowLeft",
+      testInfo.project.name === "chromium",
+    );
+  });
+}
