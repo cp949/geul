@@ -23,7 +23,7 @@ export const createGenericBlockMoveCommands = (
   // children 목록 안 임의 위치, (b) beforeBlockId===null인 최상위 문서 끝을
   // 모두 지원한다(R2 — null은 항상 최상위 문서 끝이지, 소스의 현재 부모
   // 끝이 아니다). 원본과 그 하위 트리 전체(표 포함)를 하나의 transaction으로
-  // 옮긴다 — hasChildren·"같은 부모 형제만" 두 가드를 모두 제거하고, 대신
+  // 옮긴다 — 자식 유무·"같은 부모 형제만" 두 가드를 모두 제거하고, 대신
   // 자기 자손 이동 거절(D2)과 깊이 사전 판정(D3)으로 대체한다.
   const moveBlockBefore = (
     blockId: string,
@@ -97,7 +97,7 @@ export const createGenericBlockMoveCommands = (
       if (sourceNode === null) return false;
       // deleteBlock과 같은 판정: 소스가 blockGroup의 유일한 자식이면
       // 소스만 지워서는 "block+"를 위반하는 빈 그룹이 남는다 — 그룹 자체를
-      // 지운다. 이전 구현은 hasChildren 가드로 소스가 항상 leaf였고, leaf가
+      // 지운다. 이전 구현은 자식 유무 가드로 소스가 항상 leaf였고, leaf가
       // 유일한 자식인 경우는 "같은 부모 형제만" 가드가 no-op으로 흡수해
       // 이 분기에 도달할 수 없었다 — cross-parent 이동을 여는 이 변경에서
       // 처음으로 도달 가능해졌다.
@@ -144,7 +144,7 @@ export const createGenericBlockMoveCommands = (
   // moveSelectedBlocksBefore 자신의 설계다(DELTA-02) — moveBlockBefore(위)는
   // Issue #125부터 cross-parent 이동을 허용하지만, blockSelection 범위
   // 이동은 이번 변경의 범위 밖이라 그대로 둔다. children 동반 이동은 애초에
-  // hasChildren류 가드가 없었다(DELTA-02 트랙-4 확인사항 1, 범위 삭제와 같은
+  // 자식 유무 가드가 없었다(DELTA-02 트랙-4 확인사항 1, 범위 삭제와 같은
   // 이유). 문서 하나를 여러 트랜잭션으로 쪼개지 않도록 delete → insert를
   // 한 dispatch로 묶는다(G-EDT-001, moveBlockBefore와 같은 이유로 delete
   // 전에 원본 Fragment를 캡처한다 — delete 후에는 위치가 무효화된다).

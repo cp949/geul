@@ -35,8 +35,9 @@ export const evaluateBlockTypeChange = (
   const target = findEditableBlockContent(session.editor.state.doc, blockId);
   if (target === null) return { blocker: "NOT_FOUND" };
   const currentTypeName = target.node.type.name;
-  // 등록된 top-level CustomBlock은 PM에는 있지만 모델 트리 조회(알려진
-  // 타입만 반환)에서는 없다. 이 명령은 그 경우 BLOCK_NOT_FOUND를 돌려줬다.
+  // 등록된 top-level CustomBlock은 PM에는 있지만 알려진 타입 전용 명령의
+  // 대상이 아니다. 이 명령은 모델 트리 조회 시절부터 그 경우
+  // BLOCK_NOT_FOUND를 돌려줬다. 그 결과를 유지한다.
   if (!isKnownBlockType(currentTypeName)) return { blocker: "NOT_FOUND" };
   if (!isInlineContentBlockType(currentTypeName)) {
     return { blocker: "NOT_APPLICABLE" };
