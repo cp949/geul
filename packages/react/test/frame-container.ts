@@ -6,37 +6,20 @@
  * iframe 문서를 만든다. iframe 생성·container 준비·iframe 정리는 이 모듈이
  * 단독 소유한다(G-TST-002).
  *
- * 정리는 이 모듈의 afterEach가 한다(G-TST-003). Vitest는 afterEach를 등록
- * 역순으로 돈다. 그래서 테스트 파일의 React `cleanup`이 iframe 제거보다 먼저
- * 돈다.
+ * 정리는 iframe을 붙인 테스트의 `onTestFinished`가 한다(G-TST-003).
+ * - 모듈 최상위 hook을 두지 않는다. `--no-isolate`에서는 모듈이 캐시돼 첫
+ *   테스트 파일에만 등록된다.
+ * - Vitest는 `onTestFinished`를 모든 afterEach 뒤에 돌린다. 그래서 테스트
+ *   파일의 React `cleanup`과 editor `destroy()`가 iframe 제거보다 먼저 돈다.
  */
-import { afterEach } from "vitest";
-
-const mountedFrames = new Set<HTMLIFrameElement>();
-
-/**
- * 붙인 iframe을 모두 뗀다. 하나가 던져도 나머지를 떼고 실패를 모아 던진다.
- * 던져도 집합은 비운다. 안 비우면 다음 테스트의 정리가 같은 iframe에서 다시
- * 던진다.
- */
-export const removeMountedFrames = (): void => {
-  const errors: unknown[] = [];
-  for (const frame of mountedFrames) {
-    try {
-      frame.remove();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  mountedFrames.clear();
-  if (errors.length > 0) throw new AggregateError(errors, "iframe 정리 실패");
-};
-
-afterEach(removeMountedFrames);
+import { onTestFinished } from "vitest";
 
 /**
  * iframe을 메인 문서 body에 붙이고 그 문서 body에 렌더 container(div)를
- * 만든다. iframe은 afterEach가 뗀다.
+ * 만든다. iframe은 호출한 테스트가 끝나면 뗀다.
+ *
+ * test 본문이나 beforeEach 안에서만 부른다. 그 밖에서는 `onTestFinished`가
+ * 던진다.
  *
  * frame realm `Element.prototype`에 pointer capture 빈 구현을 둔다. jsdom
  * iframe 문서 Element에는 이 메서드가 없다. prototype은 iframe마다 따로라
@@ -45,7 +28,7 @@ afterEach(removeMountedFrames);
 export const mountFrameContainer = (): HTMLElement => {
   const iframe = document.createElement("iframe");
   document.body.append(iframe);
-  mountedFrames.add(iframe);
+  onTestFinished(() => iframe.remove());
   const frameDocument = iframe.contentDocument;
   const frameWindow = iframe.contentWindow as
     (Window & typeof globalThis) | null;
