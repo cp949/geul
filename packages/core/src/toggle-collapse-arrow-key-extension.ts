@@ -64,7 +64,7 @@ const collapsedToggleExitSelection = (
     // jsdom처럼 레이아웃이 없으면 던진다. 판정 불가로 보고 개입하지 않는다.
     return null;
   }
-  // PM이 고를 첫 위치(moveSelectionBlock과 같은 계산)가 숨은 자손인지 본다.
+  // 라벨 뒤 첫 선택 가능 위치(Selection.findFrom)가 숨은 자손인지 본다.
   const first = Selection.findFrom(state.doc.resolve($head.after()), 1);
   if (
     first === null ||

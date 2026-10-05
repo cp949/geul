@@ -1,8 +1,9 @@
 /**
  * 접힌 toggleListItem 라벨에서 ArrowDown·ArrowRight가 숨은 첫 자식 atom에
- * 막히지 않는지 검증한다(Issue #254, #255). 핸들러는 첫 숨은 자식이 atom일 때만
- * 키를 소비하고, 접힌 container 뒤 첫 선택 가능 위치로 selection을 옮긴다.
- * 소비 조건(빈 TextSelection·접힌 라벨·첫 숨은 자식이 NodeSelection),
+ * 막히지 않는지 검증한다(Issue #254, #255). 핸들러는 첫 숨은 자식이 있으면
+ * 종류(atom·문단·표)와 무관하게 키를 소비하고(Issue #261), 접힌 container 뒤
+ * 첫 선택 가능 위치로 selection을 옮긴다.
+ * 소비 조건(빈 TextSelection·접힌 라벨·첫 위치가 숨은 자손),
  * 착지(텍스트블록 시작·atom NodeSelection), 중첩 접힘, dispatch 1회·문서 불변,
  * 클릭 직후 stale selection(G-EDT-002)을 다룬다.
  * 라벨 끝 요구는 ArrowRight만 갖는다. ArrowDown은 라벨 중간·시작에서도
@@ -22,6 +23,7 @@ import {
   expectDividerNodeSelection,
   mediaBlock,
   mounted,
+  oneCellTableBlock,
   paragraphBlock,
   toggleBlock,
 } from "./editor-controller-support.js";
@@ -43,6 +45,8 @@ const LABEL = "토글";
  * - u1: 펼침, 첫 자식 divider. 뒤는 문단 a5.
  * - t6: 접힘, 첫 자식 image. 뒤는 문단 a6.
  * - p1: 펼침. 마지막 자식이 접힌 t7(첫 자식 divider). 뒤는 문단 a7.
+ * - t8: 접힘, 첫 자식 문단 c8. 뒤는 divider n8(atom).
+ * - t9: 접힘, 첫 자식 1칸 표 tb9. 뒤는 divider n9(atom).
  * - tail: 꼬리 문단.
  */
 const fixture = () =>
@@ -82,6 +86,16 @@ const fixture = () =>
         ],
       }),
       paragraphBlock("a7", "뒤7"),
+      toggleBlock("t8", LABEL, {
+        collapsed: true,
+        children: [paragraphBlock("c8", "숨은 문단8")],
+      }),
+      dividerBlock("n8"),
+      toggleBlock("t9", LABEL, {
+        collapsed: true,
+        children: [oneCellTableBlock("tb9")],
+      }),
+      dividerBlock("n9"),
       paragraphBlock("tail", "꼬리"),
     ),
   );
@@ -159,6 +173,7 @@ describe("접힌 toggle 방향키", () => {
     it.each([
       ["divider", "t1", "a1"],
       ["미디어(atom)", "t6", "a6"],
+      ["문단(텍스트블록)", "t2", "a2"],
     ])(
       "첫 숨은 자식이 %s이면 키를 소비하고 다음 보이는 블록 시작으로 간다",
       (_label, toggleId, nextId) => {
@@ -189,18 +204,14 @@ describe("접힌 toggle 방향키", () => {
       expectDividerNodeSelection(tiptap, "n4");
     });
 
-    it("첫 숨은 자식이 텍스트블록이면 소비하지 않고 dispatch하지 않는다", () => {
+    it("첫 숨은 자식이 텍스트블록이어도 다음 보이는 블록이 atom이면 그 NodeSelection이 된다", () => {
       const { tiptap } = fixture();
-      placeCaretAtLabelEnd(tiptap, "t2");
+      placeCaretAtLabelEnd(tiptap, "t8");
       stubEndOfTextblock(tiptap, true);
-      const before = tiptap.state.selection;
-      const dispatch = vi.spyOn(tiptap.view, "dispatch");
 
-      const consumed = dispatchKeydown(tiptap, key);
+      expect(dispatchKeydown(tiptap, key)).toBe(true);
 
-      expect(consumed).toBe(false);
-      expect(dispatch).not.toHaveBeenCalled();
-      expect(tiptap.state.selection).toBe(before);
+      expectDividerNodeSelection(tiptap, "n8");
     });
 
     it("자식 없는 접힌 toggle은 소비하지 않는다", () => {
@@ -285,6 +296,28 @@ describe("접힌 toggle 방향키", () => {
       expect(isHidden(selection.$from)).toBe(false);
       expect(isHidden(selection.$to)).toBe(false);
     });
+
+    it.each([
+      ["문단", "t2"],
+      ["divider", "t8"],
+    ])(
+      "첫 숨은 자식이 문단이고 뒤가 %s인 접힌 toggle도 dispatch 1회로 selection만 바꾸고 숨은 자손에 들어가지 않는다",
+      (_label, toggleId) => {
+        const { tiptap } = fixture();
+        placeCaretAtLabelEnd(tiptap, toggleId);
+        stubEndOfTextblock(tiptap, true);
+        const docBefore = tiptap.state.doc;
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        expect(dispatchKeydown(tiptap, key)).toBe(true);
+
+        expect(dispatch).toHaveBeenCalledTimes(1);
+        expect(tiptap.state.doc).toBe(docBefore);
+        const { selection } = tiptap.state;
+        expect(isHidden(selection.$from)).toBe(false);
+        expect(isHidden(selection.$to)).toBe(false);
+      },
+    );
 
     it("목적지가 없으면 키만 소비하고 selection을 바꾸지 않는다", () => {
       const { tiptap } = fixture();
@@ -387,6 +420,7 @@ describe("접힌 toggle 방향키", () => {
       it.each([
         ["divider", "t1", "a1"],
         ["미디어(atom)", "t6", "a6"],
+        ["문단(텍스트블록)", "t2", "a2"],
       ])(
         "첫 숨은 자식이 %s이면 키를 소비하고 다음 보이는 블록 시작으로 간다",
         (_label, toggleId, nextId) => {
@@ -415,8 +449,17 @@ describe("접힌 toggle 방향키", () => {
         expectDividerNodeSelection(tiptap, "n4");
       });
 
+      it("첫 숨은 자식이 텍스트블록이어도 다음 보이는 블록이 atom이면 그 NodeSelection이 된다", () => {
+        const { tiptap } = fixture();
+        place(tiptap, "t8");
+        stubEndOfTextblock(tiptap, true);
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+
+        expectDividerNodeSelection(tiptap, "n8");
+      });
+
       it.each([
-        ["첫 숨은 자식이 텍스트블록인 접힌 toggle", "t2"],
         ["자식 없는 접힌 toggle", "t3"],
         ["접히지 않은 toggle", "u1"],
       ])("%s은 소비하지 않고 dispatch하지 않는다", (_label, toggleId) => {
@@ -484,6 +527,28 @@ describe("접힌 toggle 방향키", () => {
         expect(isHidden(selection.$from)).toBe(false);
         expect(isHidden(selection.$to)).toBe(false);
       });
+
+      it.each([
+        ["문단", "t2"],
+        ["divider", "t8"],
+      ])(
+        "첫 숨은 자식이 문단이고 뒤가 %s인 접힌 toggle도 dispatch 1회로 selection만 바꾸고 숨은 자손에 들어가지 않는다",
+        (_label, toggleId) => {
+          const { tiptap } = fixture();
+          place(tiptap, toggleId);
+          stubEndOfTextblock(tiptap, true);
+          const docBefore = tiptap.state.doc;
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+          expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          expect(tiptap.state.doc).toBe(docBefore);
+          const { selection } = tiptap.state;
+          expect(isHidden(selection.$from)).toBe(false);
+          expect(isHidden(selection.$to)).toBe(false);
+        },
+      );
     });
 
     it("일반 블록 중간은 소비하지 않는다", () => {
@@ -516,6 +581,30 @@ describe("접힌 toggle 방향키", () => {
 
       expectCaretAt(tiptap, contentTextStart(tiptap, "a1"));
     });
+  });
+
+  // 첫 숨은 자식이 표면 첫 위치는 숨은 셀 안 TextSelection이다(Issue #261).
+  describe("첫 숨은 자식이 표", () => {
+    it.each([
+      ["끝", placeCaretAtLabelEnd],
+      ["중간", placeCaretAtLabelMiddle],
+    ])(
+      "라벨 %s ArrowDown은 다음 보이는 divider의 NodeSelection으로 가고 dispatch 1회다",
+      (_position, place) => {
+        const { tiptap } = fixture();
+        place(tiptap, "t9");
+        stubEndOfTextblock(tiptap, true);
+        const docBefore = tiptap.state.doc;
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        expect(dispatchKeydown(tiptap, "ArrowDown")).toBe(true);
+
+        expect(dispatch).toHaveBeenCalledTimes(1);
+        expect(tiptap.state.doc).toBe(docBefore);
+        expectDividerNodeSelection(tiptap, "n9");
+        expect(isHidden(tiptap.state.selection.$from)).toBe(false);
+      },
+    );
   });
 
   it("Shift+ArrowDown은 소비하지 않는다", () => {

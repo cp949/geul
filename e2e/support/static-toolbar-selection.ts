@@ -6,6 +6,7 @@
  */
 import { expect, type Locator, type Page } from "@playwright/test";
 
+import { placeCaretIn } from "./static-toolbar-sample.js";
 import { yieldFrame } from "./yield-frame.js";
 
 /** showcase `/examples/static-toolbar`의 3번 문단 초기 텍스트. */
@@ -67,6 +68,25 @@ export const placeCaretAtEnd = async (
     await page.keyboard.press("End");
     await yieldFrame(page);
     expect(await textBeforeCaret(block)).toBe(blockText);
+  }).toPass();
+};
+
+/**
+ * target을 클릭해 캐럿을 두고 DOM selection이 target 안일 때까지 다시 시도한다.
+ *
+ * - firefox·webkit에서 첫 클릭 캐럿이 문서 시작에 남는 실행이 있었다(16회 중
+ *   4회, Issue #261).
+ * - `placeCaretAtEnd`의 End 재시도로는 못 잡는다. 캐럿이 대상 밖이면 End가
+ *   다른 블록 끝으로 간다. 그래서 클릭부터 다시 한다.
+ */
+export const placeCaretInsideOf = async (page: Page, target: Locator) => {
+  await expect(async () => {
+    await placeCaretIn(page, target);
+    expect(
+      await target.evaluate((element) =>
+        element.contains(getSelection()?.anchorNode ?? null),
+      ),
+    ).toBe(true);
   }).toPass();
 };
 

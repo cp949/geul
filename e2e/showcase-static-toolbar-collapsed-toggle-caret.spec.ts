@@ -12,12 +12,20 @@
  *
  * 샘플 문서(`샘플 불러오기`)를 쓴다. block-10은 자식 block-11을 가진 토글이고
  * block-12는 그 뒤 제목이다.
+ *
+ * 접힌 toggle 라벨의 ArrowDown·ArrowRight는 첫 숨은 자식 종류와 무관하게 다음
+ * 보이는 블록 시작으로 간다(Issue #254, #255, #261). 다음 블록이 divider면 그
+ * NodeSelection이다. 엔진마다 증상이 달라 #261 두 건은 `@core`다.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { openShowcasePage } from "./support/showcase.js";
-import { labelText } from "./support/static-toolbar-collapsed-toggle.js";
+import {
+  labelText,
+  nextSibling,
+} from "./support/static-toolbar-collapsed-toggle.js";
 import { blockId, placeCaretIn } from "./support/static-toolbar-sample.js";
+import { placeCaretInsideOf } from "./support/static-toolbar-selection.js";
 import { yieldFrame } from "./support/yield-frame.js";
 
 /** 샘플을 불러오고 편집 영역과 toggle 접기 마커를 돌려준다. */
@@ -144,7 +152,7 @@ test("첫 숨은 자식이 divider인 접힌 toggle 라벨 끝에서 ArrowRight�
   expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
 });
 
-test("첫 숨은 자식이 문단인 접힌 toggle 라벨 끝의 ArrowDown은 네이티브 이동으로 다음 보이는 블록에 간다", async ({
+test("첫 숨은 자식이 문단인 접힌 toggle 라벨 끝의 ArrowDown은 다음 보이는 블록 시작으로 가고 입력이 거기 들어간다", async ({
   page,
 }) => {
   const { editable, marker } = await openSample(page);
@@ -154,13 +162,15 @@ test("첫 숨은 자식이 문단인 접힌 toggle 라벨 끝의 ArrowDown은 �
   await page.keyboard.press("End");
   await yieldFrame(page);
   const labelBefore = await labelText(blockId(editable, 10));
+  const blockBefore = await blockId(editable, 12).innerText();
 
   await page.keyboard.press("ArrowDown");
   await yieldFrame(page);
   await page.keyboard.type("Z");
   await yieldFrame(page);
 
-  await expect(blockId(editable, 12)).toContainText("Z");
+  // 블록 시작에 들어갔다. 기존 텍스트 앞에 Z가 붙는다(Issue #261).
+  expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
   expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
 });
 
@@ -251,7 +261,7 @@ test("여러 줄로 줄바꿈된 접힌 toggle 라벨 첫 줄의 ArrowDown은 �
   expect(await blockId(editable, 12).innerText()).toBe(blockBefore);
 });
 
-test("첫 숨은 자식이 문단인 접힌 toggle 라벨 중간의 ArrowDown은 네이티브 이동으로 다음 보이는 블록에 간다", async ({
+test("첫 숨은 자식이 문단인 접힌 toggle 라벨 중간의 ArrowDown은 다음 보이는 블록 시작으로 가고 입력이 거기 들어간다", async ({
   page,
 }) => {
   const { editable, marker } = await openSample(page);
@@ -264,12 +274,70 @@ test("첫 숨은 자식이 문단인 접힌 toggle 라벨 중간의 ArrowDown은
   }
   await yieldFrame(page);
   const labelBefore = await labelText(blockId(editable, 10));
+  const blockBefore = await blockId(editable, 12).innerText();
 
   await page.keyboard.press("ArrowDown");
   await yieldFrame(page);
   await page.keyboard.type("Z");
   await yieldFrame(page);
 
-  await expect(blockId(editable, 12)).toContainText("Z");
+  // 블록 시작에 들어갔다. 기존 텍스트 앞에 Z가 붙는다(Issue #261).
+  expect(await blockId(editable, 12).innerText()).toBe(`Z${blockBefore}`);
   expect(await labelText(blockId(editable, 10))).toBe(labelBefore);
 });
+
+/**
+ * block-10(첫 자식 문단 block-11) 뒤, block-12 내용 앞 최상위에 divider를 두고
+ * block-10을 접는다(Issue #261 재현 상태). block-12 시작 Enter로 앞에 빈 블록을
+ * 만들고 거기서 `/divider`를 쓴다. 접힌 뒤 라벨 끝 클릭 → End까지 맞춘다.
+ * 시작 Enter는 block-12 id를 앞 빈 블록에 남긴다. 그 빈 블록이 divider로
+ * 바뀌고 원래 내용은 새 id 블록에 있다(세 엔진 실측). 그래서 내용으로 대조한다.
+ */
+const collapseWithDividerAfterToggle = async (page: Page) => {
+  const { editable, marker } = await openSample(page);
+  const block = blockId(editable, 10);
+  const nextText = await blockId(editable, 12).innerText();
+  await placeCaretInsideOf(page, blockId(editable, 12));
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.type("/divider");
+  await expect(page.getByRole("option", { name: /Divider/ })).toBeVisible();
+  await page.keyboard.press("Enter");
+  // 전제: divider는 block-10 숨은 그룹 밖, block-10과 원래 block-12 내용 사이 최상위다.
+  const divider = nextSibling(block);
+  await expect(divider).toHaveJSProperty("tagName", "HR");
+  expect(await nextSibling(divider).innerText()).toBe(nextText);
+  await expect(block.locator("hr")).toHaveCount(0);
+
+  await marker.click();
+  await expect(blockId(editable, 11)).toBeHidden();
+
+  await placeCaretInsideOf(page, block);
+  await page.keyboard.press("End");
+  await yieldFrame(page);
+  return { editable, block, divider };
+};
+
+/** block의 부모 그룹(최상위) 직속 블록 수. */
+const siblingCount = (block: Locator) =>
+  block.evaluate((element) => element.parentElement?.childElementCount ?? 0);
+
+for (const key of ["ArrowDown", "ArrowRight"] as const) {
+  test(`첫 숨은 자식이 문단이고 뒤가 divider인 접힌 toggle 라벨 끝에서 ${key}하면 그 divider가 선택된다 @core`, async ({
+    page,
+  }) => {
+    const { block, divider } = await collapseWithDividerAfterToggle(page);
+    const labelBefore = await labelText(block);
+    const countBefore = await siblingCount(block);
+
+    await page.keyboard.press(key);
+    await yieldFrame(page);
+
+    await expect(divider).toHaveClass(/ProseMirror-selectednode/);
+    // 키 자체가 블록을 만들지 않는다. 입력 뒤 유령 블록(WebKit)은 단언하지 않는다.
+    // divider NodeSelection이면 DOM 캐럿이 루트 블록 사이로 가지 않는다.
+    expect(await siblingCount(block)).toBe(countBefore);
+    expect(await labelText(block)).toBe(labelBefore);
+  });
+}
