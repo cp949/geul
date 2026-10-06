@@ -9,6 +9,7 @@ import {
 import { Extension } from "@tiptap/core";
 import { type EditorState, Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
+import type { EditorView } from "@tiptap/pm/view";
 
 import { selectionIntersectsAnyCodeBlock } from "./code-block-mark-guard-extension.js";
 import type { EditorController } from "./editor-controller-types.js";
@@ -170,8 +171,8 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     const pasteHandler = this.options.pasteHandler;
     const controllerFacade = this.options.controllerFacade;
     const iframeEmbed = this.options.iframeEmbed;
-    // view.pasteText(sanitized, event) 재진입 가드(아래 sanitize 분기
-    // 전용) — prosemirror-view의 doPaste가 자체적으로
+    // view.pasteText(sanitized, event) 재진입 가드(아래 sanitize 분기와
+    // html 폴백 분기 전용) — prosemirror-view의 doPaste가 자체적으로
     // view.someProp("handlePaste", f => f(view, event, slice))를 한 번 더
     // 호출한다(EditorView.pasteText → doPaste 내부, 이 플러그인 등록
     // 시그니처와 별개 3-인자 호출). 그 재호출도 이 handlePaste로 들어와
@@ -182,6 +183,20 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     // 사실상 무시한다 — doPaste 자신은 이미 계산해 둔 slice로 계속
     // 진행하므로 삽입 자체는 그대로 된다.
     let sanitizedPasteInFlight = false;
+
+    // PM 자신의 평문 붙여넣기(doPaste)를 재진입 가드 안에서 호출한다.
+    const pasteTextThroughPm = (
+      view: EditorView,
+      value: string,
+      event: ClipboardEvent,
+    ): void => {
+      sanitizedPasteInFlight = true;
+      try {
+        view.pasteText(value, event);
+      } finally {
+        sanitizedPasteInFlight = false;
+      }
+    };
 
     return [
       new Plugin({
@@ -238,11 +253,14 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               //   서식을 잃는다.
               // 시작이 codeBlock 안인 범위와 캐럿은 위 설명 그대로 PM 기본
               // 처리를 유지한다. Markdown·평문 분기는 이 예외 대상이 아니다.
+              // 이 예외로 들어온 html이 블록을 못 만들면 아래에서 평문으로
+              // 폴백한다(Issue #287). 그때도 Markdown 감지는 하지 않는다.
+              const intersectsCodeBlock = selectionIntersectsAnyCodeBlock(
+                view.state.doc,
+                view.state.selection,
+              );
               if (
-                selectionIntersectsAnyCodeBlock(
-                  view.state.doc,
-                  view.state.selection,
-                ) &&
+                intersectsCodeBlock &&
                 !(
                   html.length > 0 && isRangeStartingOutsideCodeBlock(view.state)
                 )
@@ -257,6 +275,9 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                 editor.commands.insertContent(clampDepth(nodes, targetDepth));
               };
 
+              // html이 블록을 만들지 못했는지(Issue #287). 만들지 못하면
+              // 아래 평문 분기로 낙하한다. 낙하 전에 문서를 바꾸지 않는다.
+              let htmlFellBack = false;
               if (html.length > 0) {
                 // TablePasteExtension이 이 확장보다 먼저 등록돼 있어(
                 // production-editor-assembly.ts) 표 형태 HTML은 여기
@@ -270,21 +291,40 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                   html,
                   iframeEmbed === undefined ? undefined : { iframeEmbed },
                 );
-                if (!imported.ok) return true;
-                const document = {
-                  ...imported.value.document,
-                  blocks: reassignNonTableBlockIds(
-                    imported.value.document.blocks,
-                    createId,
-                  ),
-                };
-                const encoded = modelToTiptap(document);
-                if (!encoded.ok) return true;
-                insert(encoded.value.content ?? []);
-                return true;
+                if (imported.ok) {
+                  const document = {
+                    ...imported.value.document,
+                    blocks: reassignNonTableBlockIds(
+                      imported.value.document.blocks,
+                      createId,
+                    ),
+                  };
+                  // 블록이 0개면 modelToTiptap이 DOCUMENT_INVALID로 거절한다.
+                  const encoded = modelToTiptap(document);
+                  if (encoded.ok) {
+                    insert(encoded.value.content ?? []);
+                    return true;
+                  }
+                }
+                // import 실패와 빈 결과는 같은 클립보드의 text/plain으로
+                // 폴백한다. 위험 URL·제어문자 html은 여전히 import하지
+                // 않는다. 사용자 눈에는 붙여넣기가 사라진 것이라 평문을 쓴다.
+                htmlFellBack = true;
               }
 
-              if (text.length === 0) return false;
+              // 평문도 비면 html 분기에서 온 경우만 이벤트를 소비한다(문서
+              // 불변). html이 없던 경우는 PM 기본 처리에 위임한다.
+              if (text.length === 0) return htmlFellBack;
+
+              // codeBlock에 걸친 범위가 여기 닿는 경우는 html 폴백뿐이다(위
+              // 조기 반환을 통과하고 html 분기가 소비하지 못했다). Markdown
+              // 감지와 직접 배치를 건너뛰고 PM 평문 경로로 보낸다(spec 7.3
+              // 한계 유지, #286).
+              if (intersectsCodeBlock) {
+                const inline = sanitizeInlineText(text);
+                if (inline.length > 0) pasteTextThroughPm(view, inline, event);
+                return true;
+              }
 
               const detection = detectMarkdownPaste(text, { createId });
               if (detection.detected) {
@@ -300,7 +340,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // sanitize한다 — 무효 문자 처리는 아래 분기와 같은 결과다.
               // 직접 배치할 수 없으면(NodeSelection 등) tr을 버리고 아래
               // 기존 분기로 PM 기본 처리에 위임한다. 코드블록에 걸친 범위는
-              // 위 조기 반환이 이미 걸렀다.
+              // 위 조기 반환이나 폴백 분기가 이미 걸렀다.
               const lines = splitPlainTextLines(sanitizeInlineText(text));
               if (lines.length >= 2) {
                 const pasteTransaction = buildPlainMultilinePasteTransaction(
@@ -325,15 +365,15 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 문자가 있을 때만 sanitize한 텍스트로 PM 자신의
               // view.pasteText를 호출한다 — doPaste를 그대로 재사용해
               // 네이티브와 같은 단락 분리를 유지하면서 무효 문자만 뺀다.
+              //
+              // html에서 폴백한 경우는 원본이 유효해도 return false로 위임하지
+              // 않는다. PM 기본 처리는 비어 있지 않은 text/html이 있으면
+              // text/plain을 버려 평문이 사라진다(Issue #287). pasteText는
+              // html 없이 평문만 쓴다.
               const sanitized = sanitizeInlineText(text);
-              if (sanitized === text) return false;
+              if (sanitized === text && !htmlFellBack) return false;
               if (sanitized.length === 0) return true;
-              sanitizedPasteInFlight = true;
-              try {
-                view.pasteText(sanitized, event);
-              } finally {
-                sanitizedPasteInFlight = false;
-              }
+              pasteTextThroughPm(view, sanitized, event);
               return true;
             };
 
