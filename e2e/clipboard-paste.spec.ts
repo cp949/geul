@@ -19,7 +19,7 @@
  * 그 새 계약(데모 앱 배선, ADR-0007)으로 갱신됐다(RD-002 DELTA-03,
  * `_works/roadmap/result/RD-002-DELTA-03.md` "배경").
  *
- * 여러 줄 plain text 붙여넣기 배치(Issue #284)는 아래 마지막 세 테스트가
+ * 여러 줄 plain text 붙여넣기 배치(Issue #284)는 `abcdBlocks` 아래 세 테스트가
  * 실제 브라우저에서 확인한다. 배치 규칙·타입별 분기·범위 선택·transaction
  * 계약은 core 단위 테스트(`clipboard-paste-plain-multiline.test.ts`)가
  * 소유한다. 이 파일은 엔진별 클립보드·drop 경로가 같은 결과를 내는지만
@@ -31,6 +31,13 @@
  * 범위(V)다. 서식 보존·숨은 codeBlock·시작이 codeBlock 안인 범위 등 나머지
  * 축은 core 단위 테스트(`clipboard-paste-code-block-range.test.ts`)가 소유한다.
  * 범위는 Range로 DOM selection을 만들고 selectionchange를 보내 동기화한다.
+ *
+ * 여러 줄 평문 drop과 codeBlock에 걸친 범위의 자식 보존(Issue #285)은 drop
+ * 행과 맨 아래 한 테스트가 확인한다. 자식 있는 문단 중간에 drop하는 행(chromium
+ * 전용)과, 범위 끝 뒤에 자식이 남는 codeBlock 걸친 범위에 평문을 붙이는 행이다.
+ * 위치 위임 조건·마크·selection·transaction 계약은 core 단위 테스트
+ * (`clipboard-drop-plain-multiline.test.ts`,
+ * `clipboard-paste-code-block-range.test.ts`)가 소유한다.
  *
  * text/html이 블록을 만들지 못할 때의 평문 폴백(Issue #287)은 맨 아래 두
  * 테스트가 확인한다 — 캐럿과 codeBlock에 걸친 범위(시작이 codeBlock 밖)다.
@@ -225,25 +232,22 @@ test("Ctrl+Shift+V로 여러 줄 평문을 붙여도 같은 배치이고 undo 1�
   expect(await exportedBlocks(page)).toEqual(abcdBlocks);
 });
 
-test("여러 줄 평문을 문단 중간에 drop해도 둘째 줄이 다음 형제 문단이 된다", async ({
-  page,
-  browserName,
-}) => {
-  test.skip(
-    browserName !== "chromium",
-    "drop 재현은 chromium 전용이다(실제 OS 드래그 없이 DragEvent를 직접 보낸다)",
-  );
-  const editable = await importBlocks(page, abcdBlocks);
-  const paragraph = editable.locator('[data-geul-block-id="p1"] p');
+// p1 문단의 "ab" 뒤 좌표에 text/plain drop 이벤트를 직접 보낸다. 실제 OS
+// 드래그 없이 DragEvent를 보내므로 chromium 전용이다. "c" 글자 왼쪽 경계의
+// 화면 좌표를 잰다.
+const dropPlainAfterAb = async (
+  editable: Locator,
+  text: string,
+): Promise<void> => {
+  // 자식이 있으면 p1 컨테이너 안에 문단이 여럿이라 첫 문단(p1 자신)을 고른다.
+  const paragraph = editable.locator('[data-geul-block-id="p1"] p').first();
   await expect(paragraph).toHaveText("abcd");
-
-  // "c" 글자 왼쪽 경계(= "ab" 뒤)의 화면 좌표를 잰다.
   const point = await paragraph.evaluate((element) => {
-    const text = element.firstChild;
-    if (text === null) throw new Error("문단 텍스트 노드가 없다");
+    const textNode = element.firstChild;
+    if (textNode === null) throw new Error("문단 텍스트 노드가 없다");
     const range = document.createRange();
-    range.setStart(text, 2);
-    range.setEnd(text, 3);
+    range.setStart(textNode, 2);
+    range.setEnd(textNode, 3);
     const rect = range.getBoundingClientRect();
     return { x: rect.left + 1, y: rect.top + rect.height / 2 };
   });
@@ -262,10 +266,58 @@ test("여러 줄 평문을 문단 중간에 drop해도 둘째 줄이 다음 형�
         }),
       );
     },
-    { text: "X\nY", x: point.x, y: point.y },
+    { text, x: point.x, y: point.y },
   );
+};
+
+const dropSkipReason =
+  "drop 재현은 chromium 전용이다(실제 OS 드래그 없이 DragEvent를 직접 보낸다)";
+
+test("여러 줄 평문을 문단 중간에 drop해도 둘째 줄이 다음 형제 문단이 된다", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", dropSkipReason);
+  const editable = await importBlocks(page, abcdBlocks);
+
+  await dropPlainAfterAb(editable, "X\nY");
 
   expect(await exportedBlocks(page)).toEqual(expectedAfterPaste);
+});
+
+test("자식 있는 문단 중간에 여러 줄 평문을 drop하면 새 블록이 첫 자식이 되고 기존 자식은 그대로다", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", dropSkipReason);
+  const editable = await importBlocks(page, [
+    {
+      id: "p1",
+      type: "paragraph",
+      content: [{ text: "abcd" }],
+      children: [{ id: "c1", type: "paragraph", content: [{ text: "child" }] }],
+    },
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
+
+  await dropPlainAfterAb(editable, "X\nY");
+
+  expect(await exportedBlocks(page)).toEqual([
+    {
+      id: "p1",
+      type: "paragraph",
+      content: [{ text: "abX" }],
+      children: [
+        {
+          id: expect.any(String),
+          type: "paragraph",
+          content: [{ text: "Ycd" }],
+        },
+        { id: "c1", type: "paragraph", content: [{ text: "child" }] },
+      ],
+    },
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
 });
 
 // 블록 id의 첫 텍스트 노드 offset 위치로 DOM selection 범위를 만들고
@@ -412,5 +464,49 @@ test("블록을 만들지 못하는 html과 평문이 함께 있으면 codeBlock
   expect(await exportedBlocks(page)).toEqual([
     { id: "p1", type: "paragraph", content: [{ text: "abQbar" }] },
     { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
+});
+
+test("범위 끝 뒤에 자식이 남는 codeBlock 걸친 범위에 여러 줄 평문을 붙이면 그 자식이 마지막 줄 블록으로 넘어가지 않는다 @core", async ({
+  page,
+}) => {
+  const blocks = [
+    {
+      id: "p1",
+      type: "paragraph",
+      content: [{ text: "abcd" }],
+      children: [
+        { id: "cb", type: "codeBlock", content: [{ text: "xyz" }] },
+        { id: "c2", type: "paragraph", content: [{ text: "c2" }] },
+      ],
+    },
+  ];
+  const editable = await importBlocks(page, blocks);
+  await selectRange(
+    page,
+    editable,
+    { id: "p1", offset: 2 },
+    { id: "cb", offset: 2 },
+  );
+
+  await editable.evaluate(dispatchPaste, { text: "X\nY" });
+
+  expect(await exportedBlocks(page)).toEqual([
+    {
+      id: "p1",
+      type: "paragraph",
+      content: [{ text: "abX" }],
+      children: [
+        {
+          id: expect.any(String),
+          type: "paragraph",
+          content: [{ text: "Yz" }],
+        },
+        { id: "c2", type: "paragraph", content: [{ text: "c2" }] },
+      ],
+    },
+    // 마지막 블록이 codeBlock 자식을 거쳤던 문서는 편집기가 끝에 빈 문단을
+    // 붙인다. 붙여넣기 전 문서에도 있는 기준선이다(PM 기본 결과도 같다).
+    { id: expect.any(String), type: "paragraph", content: [] },
   ]);
 });
