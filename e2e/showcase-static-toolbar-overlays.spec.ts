@@ -21,9 +21,13 @@
  * sticky 툴바 띠와 겹친 열 리사이즈 strip은 툴바 입력을 가로채지 않는다(Issue #265).
  * 툴바 띠에 들어온 블록 앵커 오버레이 여섯도 툴바 입력을 가로채지 않는다(Issue #266).
  * 영역 밖으로 나간 블록의 gutter·미디어 툴바는 clamp돼도 숨고 입력을 받지 않는다(Issue #267).
+ *
+ * 표 행·열 핸들 메뉴나 표 그립 메뉴를 연 핸들은 영역 밖으로 나가도 숨기지 않는다(Issue #279).
+ * 메뉴는 fixed + viewport clamp라 핸들이 숨으면 메뉴만 떠 있다. 메뉴를 닫으면 다시 판정한다.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { expectOverlayWithinViewport } from "./support/clamp.js";
 import { openShowcasePage } from "./support/showcase.js";
 import { blockId } from "./support/static-toolbar-sample.js";
 import { dragSelectCells } from "./support/table-selection.js";
@@ -1383,4 +1387,173 @@ test("영역보다 긴 표를 영역 밖으로 완전히 밀면 열 추가 rail�
   ).toBe(true);
 
   await expect(rail, "영역 밖 표의 rail").toHaveCSS("visibility", "hidden");
+});
+
+/**
+ * 표 핸들 메뉴 면제 e2e의 시작 상태를 만든다(#279). 샘플을 불러오고 첫 셀에 커서를 둔 뒤
+ * 창을 스크롤해 영역 상단을 뷰포트 상단에 맞춘다. 표와 핸들이 영역 안에 있다.
+ *
+ * `gutterPadding`을 주면 스크롤 영역 왼쪽 padding을 키운다. 표 그립은 표 왼쪽 70px 밖에
+ * 놓여, 이 예제의 영역 폭에서는 그립 박스가 영역 왼쪽 밖이라 메뉴를 열기 전에도
+ * 숨어 있다. 표를 오른쪽으로 밀어 그립을 영역 안에 들인다. 행·열 핸들 시나리오는
+ * 쓰지 않는다.
+ */
+const openTableForHandleMenu = async (
+  page: Page,
+  { gutterPadding = 0 }: { gutterPadding?: number } = {},
+) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  if (gutterPadding > 0) {
+    await page.addStyleTag({
+      content: `[class*="scrollArea"] { padding-left: ${gutterPadding}px; }`,
+    });
+  }
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const cell = table.locator("td").first();
+  await cell.scrollIntoViewIfNeeded();
+  await cell.click();
+  await alignAreaToViewportTop(page);
+  await cell.hover();
+  return { table, cell };
+};
+
+/**
+ * 표를 영역 아래로 밀되 핸들은 창 뷰포트 안에 남긴다(#279). 영역을 위 끝으로 밀어 표를
+ * 영역 아래에 두고, 창을 스크롤해 표 상단을 뷰포트 y 400에 맞춘다. 핸들이 창 밖이면
+ * 메뉴가 핸들 기준으로 clamp되는 사례가 아니다.
+ */
+const pushTableBelowAreaInsideWindow = async (page: Page, table: Locator) => {
+  await setAreaScrollTop(page, 0);
+  await table.evaluate((element) => {
+    window.scrollBy(0, element.getBoundingClientRect().top - 400);
+  });
+  await settleClip(page);
+  const layout = await table.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return {
+      belowArea: rect.top > area.bottom,
+      insideWindow: rect.top >= 0 && rect.top + 100 <= window.innerHeight,
+    };
+  });
+  expect(layout, "전제: 표는 영역 아래, 핸들은 창 안").toEqual({
+    belowArea: true,
+    insideWindow: true,
+  });
+};
+
+/** 핸들 박스와 메뉴 박스가 이 거리(px) 안에 붙어 있어야 한다. 메뉴는 핸들 기준 clamp 위치다. */
+const MENU_NEAR_HANDLE_PX = 100;
+
+/** 핸들과 메뉴 박스의 좌상단 거리가 가깝고 메뉴가 뷰포트 안인지 본다(PIT-0011). */
+const expectMenuNearHandle = async (
+  page: Page,
+  handle: Locator,
+  menu: Locator,
+) => {
+  await expectOverlayWithinViewport(menu, page);
+  await expect
+    .poll(
+      async () => {
+        const handleBox = await handle.boundingBox();
+        const menuBox = await menu.boundingBox();
+        if (handleBox === null || menuBox === null) return Number.NaN;
+        return Math.hypot(menuBox.x - handleBox.x, menuBox.y - handleBox.y);
+      },
+      { message: "메뉴가 핸들 가까이 있다" },
+    )
+    .toBeLessThan(MENU_NEAR_HANDLE_PX);
+};
+
+test("행 메뉴를 연 행 핸들은 영역 밖으로 나가도 숨지 않고 메뉴 옆에 남는다(#279)", async ({
+  page,
+}) => {
+  const { table } = await openTableForHandleMenu(page);
+  const handle = page.locator("[data-geul-table-row-handle]").first();
+  const hit = handle.locator("xpath=..");
+  await handle.click();
+  const menu = page.locator("[data-geul-table-menu]");
+  await expect(menu).toBeVisible();
+
+  await pushTableBelowAreaInsideWindow(page, table);
+
+  await expect(hit, "메뉴를 연 행 핸들").toHaveCSS("visibility", "visible");
+  await expect(menu, "메뉴 유지").toBeVisible();
+  await expect(
+    page.locator("[data-geul-table-row-handle-hit]").nth(1),
+    "메뉴를 연 핸들이 아니면 숨는다",
+  ).toHaveCSS("visibility", "hidden");
+  await expectMenuNearHandle(page, handle, menu);
+});
+
+test("열 메뉴를 연 열 핸들은 영역 밖으로 나가도 숨지 않고 메뉴 옆에 남는다(#279)", async ({
+  page,
+}) => {
+  const { table } = await openTableForHandleMenu(page);
+  const handle = page.locator("[data-geul-table-column-handle]").first();
+  const hit = handle.locator("xpath=..");
+  await handle.click();
+  const menu = page.locator("[data-geul-table-menu]");
+  await expect(menu).toBeVisible();
+
+  await pushTableBelowAreaInsideWindow(page, table);
+
+  await expect(hit, "메뉴를 연 열 핸들").toHaveCSS("visibility", "visible");
+  await expect(menu, "메뉴 유지").toBeVisible();
+  await expect(
+    page.locator("[data-geul-table-column-handle-hit]").nth(1),
+    "메뉴를 연 핸들이 아니면 숨는다",
+  ).toHaveCSS("visibility", "hidden");
+  await expectMenuNearHandle(page, handle, menu);
+});
+
+test("표 그립 메뉴를 연 그립은 영역 밖으로 나가도 숨지 않고 Plus는 숨는다(#279)", async ({
+  page,
+}) => {
+  const { table } = await openTableForHandleMenu(page, { gutterPadding: 100 });
+  const grip = page.locator("[data-geul-table-grip]");
+  await expect(grip, "전제: 그립이 영역 안에서 보인다").toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  await grip.click();
+  const menu = page.locator("[data-geul-table-grip-menu]");
+  await expect(menu).toBeVisible();
+
+  await pushTableBelowAreaInsideWindow(page, table);
+
+  await expect(grip, "메뉴를 연 그립").toHaveCSS("visibility", "visible");
+  await expect(menu, "메뉴 유지").toBeVisible();
+  await expect(
+    page.locator("[data-geul-table-quick-insert]"),
+    "같은 층의 Plus는 숨는다",
+  ).toHaveCSS("visibility", "hidden");
+  await expectMenuNearHandle(page, grip, menu);
+});
+
+test("표 핸들 메뉴를 닫으면 면제가 풀려 영역 밖 핸들이 숨는다(#279)", async ({
+  page,
+}) => {
+  const { table } = await openTableForHandleMenu(page);
+  const handle = page.locator("[data-geul-table-row-handle]").first();
+  const hit = handle.locator("xpath=..");
+  await handle.click();
+  const menu = page.locator("[data-geul-table-menu]");
+  await expect(menu).toBeVisible();
+  await pushTableBelowAreaInsideWindow(page, table);
+  await expect(hit, "전제: 메뉴가 열린 동안 보인다").toHaveCSS(
+    "visibility",
+    "visible",
+  );
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  // Escape는 포커스를 편집기로 돌린다. 핸들 안 포커스가 없어 닫힘 렌더만으로 재판정된다.
+  await expect(hit, "메뉴를 닫은 뒤 숨김").toHaveCSS("visibility", "hidden");
 });
