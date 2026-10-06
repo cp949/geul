@@ -267,6 +267,16 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 - HTML 붙여넣기는 7.1 계약과 동일한 sanitizer·매핑을 재사용한다(문서 HTML import와 다른 경로를 만들지 않는다 — R1 슬라이스 11의 표 클립보드가 문서 HTML sanitizer를 재사용한 것과 같은 원칙).
 - 표 붙여넣기(R1 `TablePasteExtension`)와의 경계: 클립보드에 표 형태의 `text/html`이 있으면 R1 계약이 우선한다 — 이 슬라이스는 표가 아닌 콘텐츠(문단, 목록, heading 등)의 붙여넣기만 다룬다.
 - 파일이 클립보드에 있고 대체 가능한 HTML/텍스트 표현이 없으면(예: 이미지 파일 단독) 이벤트를 소비하지 않고 무시한다 — R3에서 파일 블록과 함께 처리한다(2.2).
+- 여러 줄 `text/plain` 배치(정정 2026-10-06, Issue #284). 줄이 둘 이상인 평문은 Enter 분할(5.1, D23·D24·#252)과 같은 규칙으로 놓는다. 들여쓰기 없던 블록이 붙여넣기만으로 자식을 얻지 않는다. 이전에는 PM 기본 처리가 줄마다 문단 slice를 만들어 둘째 줄 이후를 캐럿 블록의 자식으로 넣었다.
+  - 입력은 먼저 `sanitizeInlineText`로 정리한다. 줄은 `\r\n`·`\r`·`\n`으로 나눈다. 연속 개행은 한 경계다. 앞·뒤 개행은 빈 줄로 남아 경계가 된다.
+  - 범위 선택은 Enter와 같은 기준(`deleteSelection`)으로 지운 뒤 붙인다.
+  - 줄 사이마다 Enter 분할을 한다. 자식 없는 블록은 다음 형제를 만든다. 자식 있는 블록은 원본의 첫 자식을 만들고 기존 자식 귀속은 바뀌지 않는다. 접힌 toggle은 펼친 형제를 만든다. heading·quote의 끝은 새 블록이 paragraph이고 목록은 같은 타입이다.
+  - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
+  - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
+  - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다.
+  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 한 줄 평문, `text/html` 동봉(HTML 우선), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안, 캐럿이 codeBlock 안인 붙여넣기, `TextSelection`이 아닌 selection이 해당한다.
+  - drop과 codeBlock에 걸친 범위는 `clipboardTextParser`가 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다.
+  - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 후속 이슈로 분리한다.
 
 ## 8. 오류 계약 확장
 
