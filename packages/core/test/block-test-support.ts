@@ -32,6 +32,36 @@ export const dispatchKeydown = (
   ) === true;
 
 /**
+ * 수식 키 조합을 지정해 keydown을 실 디스패치하고 소비 여부를 돌려준다.
+ * dispatchKeydown은 Shift만 받아 Ctrl·Alt·Meta 조합을 만들 수 없다.
+ * "Mod"는 jsdom 기본 플랫폼 기준 ctrlKey다. 키 소비 판정 경로는
+ * dispatchKeydown과 같다(G-WKS-001).
+ */
+export const dispatchModifiedKeydown = (
+  tiptap: Pick<TiptapEditor, "view">,
+  key: string,
+  modifiers: {
+    shiftKey?: boolean;
+    ctrlKey?: boolean;
+    altKey?: boolean;
+    metaKey?: boolean;
+  } = {},
+): boolean =>
+  tiptap.view.someProp(
+    "handleKeyDown",
+    (f) =>
+      f(
+        tiptap.view,
+        new KeyboardEvent("keydown", {
+          key,
+          ...modifiers,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ) === true,
+  ) === true;
+
+/**
  * Mod-Shift-<key> keydown을 실 디스패치한다("Mod"는 jsdom 기본 플랫폼
  * 기준 ctrlKey). `addKeyboardShortcuts`로만 등록된 커맨드는 editor.commands로
  * 노출되지 않아(G-WKS-001) 이 경로가 유일한 트리거인 이유는 dispatchKeydown과
