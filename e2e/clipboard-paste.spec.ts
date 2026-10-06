@@ -18,12 +18,21 @@
  * clipboard도 media 블록을 만들고 실제 업로드까지 완주한다. 이 테스트가
  * 그 새 계약(데모 앱 배선, ADR-0007)으로 갱신됐다(RD-002 DELTA-03,
  * `_works/roadmap/result/RD-002-DELTA-03.md` "배경").
+ *
+ * 여러 줄 plain text 붙여넣기 배치(Issue #284)는 아래 마지막 세 테스트가
+ * 실제 브라우저에서 확인한다. 배치 규칙·타입별 분기·범위 선택·transaction
+ * 계약은 core 단위 테스트(`clipboard-paste-plain-multiline.test.ts`)가
+ * 소유한다. 이 파일은 엔진별 클립보드·drop 경로가 같은 결과를 내는지만
+ * 본다. 문서는 showcase document-io 예제의 Import JSON으로 배치하고 Export
+ * JSON으로 읽는다. Ctrl+Shift+V와 drop은 chromium 전용이다.
  */
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { dispatchPaste } from "./support/clipboard.js";
 import { openDemo } from "./support/demo.js";
+import { exportedBlocks, importBlocks } from "./support/document-io.js";
 import { trackPageErrors } from "./support/ids.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 test("own-export 중첩 wrapper HTML을 붙이면 실제 DOM에 blockGroup 중첩이 반영된다 @core", async ({
   page,
@@ -132,4 +141,117 @@ test("파일 단독 클립보드는 실제 uploadFile까지 완주해 media 블�
     "https://example.com/uploads/photo.png",
   );
   expect(pageErrors).toEqual([]);
+});
+
+// "abcd" 문단의 "ab" 뒤에 캐럿을 두는 문서와 단계. 아래 세 테스트가 공유한다.
+const abcdBlocks = [
+  { id: "p1", type: "paragraph", content: [{ text: "abcd" }] },
+  { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+];
+
+// p1 문단을 눌러 포커스를 준 뒤 DOM selection을 "ab" 뒤로 옮기고
+// selectionchange를 보내 편집기 selection을 동기화한다. 방향키로 옮기면
+// 부하가 큰 실행(--workers=6)에서 selectionchange 반영이 붙여넣기보다 늦어
+// 캐럿이 한 글자 앞에 선다(G-EDT-002).
+const placeCaretAfterAb = async (page: Page, editable: Locator) => {
+  const paragraph = editable.locator('[data-geul-block-id="p1"] p');
+  await paragraph.click();
+  await yieldFrame(page);
+  await paragraph.evaluate((element) => {
+    const text = element.firstChild;
+    if (text === null) throw new Error("p1 문단 텍스트 노드가 없다");
+    const range = document.createRange();
+    range.setStart(text, 2);
+    range.collapse(true);
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+};
+
+// 붙여넣기 뒤 기대 문서: 원본은 id를 지키고 자식을 얻지 않으며 둘째 줄이
+// 다음 형제가 된다.
+const expectedAfterPaste = [
+  { id: "p1", type: "paragraph", content: [{ text: "abX" }] },
+  { id: expect.any(String), type: "paragraph", content: [{ text: "Ycd" }] },
+  { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+];
+
+test("문단 중간에 여러 줄 평문을 붙이면 둘째 줄이 다음 형제 문단이 된다 @core", async ({
+  page,
+}) => {
+  const editable = await importBlocks(page, abcdBlocks);
+  await placeCaretAfterAb(page, editable);
+
+  await editable.evaluate(dispatchPaste, { text: "X\nY" });
+
+  expect(await exportedBlocks(page)).toEqual(expectedAfterPaste);
+});
+
+test("Ctrl+Shift+V로 여러 줄 평문을 붙여도 같은 배치이고 undo 1회로 복원된다", async ({
+  page,
+  context,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== "chromium",
+    "실제 시스템 클립보드 권한 부여는 chromium 전용이다",
+  );
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const editable = await importBlocks(page, abcdBlocks);
+  await placeCaretAfterAb(page, editable);
+  await page.evaluate(() => navigator.clipboard.writeText("X\nY"));
+
+  await page.keyboard.press("Control+Shift+V");
+
+  expect(await exportedBlocks(page)).toEqual(expectedAfterPaste);
+
+  // Export JSON 버튼에 포커스가 있어도 selection이 편집기 안이면 keydown
+  // 폴백이 undo를 라우팅한다(G-EDT-004).
+  await page.keyboard.press("Control+z");
+  expect(await exportedBlocks(page)).toEqual(abcdBlocks);
+});
+
+test("여러 줄 평문을 문단 중간에 drop해도 둘째 줄이 다음 형제 문단이 된다", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== "chromium",
+    "drop 재현은 chromium 전용이다(실제 OS 드래그 없이 DragEvent를 직접 보낸다)",
+  );
+  const editable = await importBlocks(page, abcdBlocks);
+  const paragraph = editable.locator('[data-geul-block-id="p1"] p');
+  await expect(paragraph).toHaveText("abcd");
+
+  // "c" 글자 왼쪽 경계(= "ab" 뒤)의 화면 좌표를 잰다.
+  const point = await paragraph.evaluate((element) => {
+    const text = element.firstChild;
+    if (text === null) throw new Error("문단 텍스트 노드가 없다");
+    const range = document.createRange();
+    range.setStart(text, 2);
+    range.setEnd(text, 3);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.left + 1, y: rect.top + rect.height / 2 };
+  });
+
+  await editable.evaluate(
+    (target, input) => {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData("text/plain", input.text);
+      target.dispatchEvent(
+        new DragEvent("drop", {
+          dataTransfer,
+          clientX: input.x,
+          clientY: input.y,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    },
+    { text: "X\nY", x: point.x, y: point.y },
+  );
+
+  expect(await exportedBlocks(page)).toEqual(expectedAfterPaste);
 });

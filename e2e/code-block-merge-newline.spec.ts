@@ -14,33 +14,10 @@
  *
  * 문서는 showcase document-io 예제의 Import JSON으로 배치한다.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { openShowcasePage } from "./support/showcase.js";
+import { exportedBlocks, importBlocks } from "./support/document-io.js";
 import { yieldFrame } from "./support/yield-frame.js";
-
-/**
- * document-io 예제를 열고 blocks를 Import JSON으로 불러온다. 불러온 뒤의
- * 편집 영역 locator를 돌려준다.
- */
-const importBlocks = async (page: Page, blocks: unknown[]) => {
-  await openShowcasePage(page, "/examples/document-io");
-  await page
-    .getByRole("textbox", { name: "Document JSON" })
-    .fill(JSON.stringify({ formatVersion: 1, revision: 0, blocks }));
-  await page.getByRole("button", { name: "Import JSON" }).click();
-  await expect(page.getByRole("status")).toHaveText("Imported.");
-  return page.locator(".ProseMirror");
-};
-
-/** Export JSON 결과의 blocks를 읽는다. */
-const exportedBlocks = async (page: Page): Promise<unknown[]> => {
-  await page.getByRole("button", { name: "Export JSON" }).click();
-  const json = await page
-    .getByRole("textbox", { name: "Document JSON" })
-    .inputValue();
-  return (JSON.parse(json) as { blocks: unknown[] }).blocks;
-};
 
 test("여러 줄 codeBlock 뒤 문단 선두 Backspace 후 입력하면 개행이 두 줄로 보이고 export도 개행을 유지한다 @core", async ({
   page,
