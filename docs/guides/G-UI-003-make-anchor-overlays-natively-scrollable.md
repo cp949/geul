@@ -18,6 +18,7 @@
   - 훅은 `collect()`가 돌려준 노드마다 `exempt`·`box`·`anchor`를 받는다. 판정 계산은 `scroll-clip.ts`의 순수 함수(`readScrollClipBoxes`·`isRectInClipBoxes`·`isPointInClipBoxes`)가 맡는다.
   - 세로는 오버레이 박스가 완전히 안쪽일 때만 보인다. 경계에 걸쳐 잘린 채 떠 있지 않게 한다. 가로는 겹치기만 하면 보인다.
     - 표 열 리사이즈 strip과 열 추가 rail은 clip 영역과의 세로 교집합으로 잘라 그린다(`clipSpanToBoxes`, Issue #260·#278). 표 높이 전체를 덮는 박스라 영역보다 길면 늘 숨기 때문이다. 드래그 중에는 자르지 않는다. rail은 교집합이 비면 원래 구간을 쓴다. 기존 판정이 숨긴다.
+    - 표 행 추가 rail은 clip 영역과의 가로 교집합으로 잘라 그린다(`clipHorizontalSpanToBoxes`, Issue #283). 표 폭 전체를 덮는 박스라 영역보다 넓으면 영역 밖 클릭을 받기 때문이다. 드래그 중에는 자르지 않는다. 교집합이 비면 원래 구간을 쓴다. 기존 판정이 숨긴다.
   - `unmount`나 `display: none`이 아니라 `visibility`를 쓴다. 레이아웃 박스와 실측 높이가 남는다. 미디어 캡션은 그 높이를 문서 flow에 되먹인다.
   - 선택에 붙는 popover(서식·링크·표 선택·블록 선택 툴바)는 박스가 아니라 앵커 점으로 판정한다. `useFixedPlacement`의 `clip` 옵션이 `useClipVisibility`에 앵커 점을 넘겨 판정한다. 호출부는 훅을 직접 부르지 않는다([`G-UI-001`](./G-UI-001-build-dismissible-overlays.md)). 앵커 위나 아래에 붙어 앵커가 영역 안이어도 박스가 경계 밖으로 조금 삐져나올 수 있고, 그때 숨기면 첫 줄을 선택할 때 popover가 사라진다. 앵커가 영역 밖으로 스크롤돼 나가면 popover는 뷰포트 가장자리로 clamp된 채 영역 밖에 남으므로 숨긴다.
   - `position: fixed` 오버레이는 앵커 점 판정에 창 레이아웃 뷰포트도 영역에 더한다(Issue #277). `ClipTarget.viewport`가 `true`인 노드만 대상이다.
