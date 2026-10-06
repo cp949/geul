@@ -31,6 +31,12 @@
  * 범위(V)다. 서식 보존·숨은 codeBlock·시작이 codeBlock 안인 범위 등 나머지
  * 축은 core 단위 테스트(`clipboard-paste-code-block-range.test.ts`)가 소유한다.
  * 범위는 Range로 DOM selection을 만들고 selectionchange를 보내 동기화한다.
+ *
+ * text/html이 블록을 만들지 못할 때의 평문 폴백(Issue #287)은 맨 아래 두
+ * 테스트가 확인한다 — 캐럿과 codeBlock에 걸친 범위(시작이 codeBlock 밖)다.
+ * 빈 결과 html(`<meta>`)과 text/plain이 함께 오는 클립보드다. import 실패
+ * 입력·비코드 범위·Markdown·여러 줄 평문·빈 문단 대조군·transaction 계약은
+ * core 단위 테스트(`clipboard-paste-html-fallback.test.ts`)가 소유한다.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -364,6 +370,47 @@ test("자식 블록에서 시작해 최상위 codeBlock에서 끝나는 범위�
       ],
     },
     { id: "cb", type: "codeBlock", content: [{ text: "bar" }] },
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
+});
+
+// 블록을 만들지 못하는 html. 폴백 시나리오 둘이 같은 클립보드를 쓴다.
+const emptyResultClipboard = { html: "<meta charset='utf-8'>", text: "Q" };
+
+test("블록을 만들지 못하는 html과 평문이 함께 있으면 캐럿에 평문이 붙는다 @core", async ({
+  page,
+}) => {
+  const editable = await importBlocks(page, abcdBlocks);
+  await placeCaretAfterAb(page, editable);
+
+  await editable.evaluate(dispatchPaste, emptyResultClipboard);
+
+  expect(await exportedBlocks(page)).toEqual([
+    { id: "p1", type: "paragraph", content: [{ text: "abQcd" }] },
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
+});
+
+test("블록을 만들지 못하는 html과 평문이 함께 있으면 codeBlock에 걸친 범위가 지워지고 평문이 붙는다 @core", async ({
+  page,
+}) => {
+  const blocks = [
+    { id: "p1", type: "paragraph", content: [{ text: "abcd" }] },
+    codeBlockModel,
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ];
+  const editable = await importBlocks(page, blocks);
+  await selectRange(
+    page,
+    editable,
+    { id: "p1", offset: 2 },
+    { id: "cb", offset: 3 },
+  );
+
+  await editable.evaluate(dispatchPaste, emptyResultClipboard);
+
+  expect(await exportedBlocks(page)).toEqual([
+    { id: "p1", type: "paragraph", content: [{ text: "abQbar" }] },
     { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
   ]);
 });
