@@ -7,11 +7,13 @@
  * 남고, 드롭이 보이지 않는 블록 앞에 놓인다. jsdom은 레이아웃이 없어 0x0 rect가
  * 실제 위치 계산을 거치는 모양을 재현하지 못한다.
  *
- * 경로 네 가지를 본다.
+ * 경로 다섯 가지를 본다.
  * - 표 행·그립 메뉴가 열린 채 표가 접힌다.
  * - hover 중인 자식 블록이 접힌다(gutter·코드블록 툴바·callout 트리거).
  * - 접힌 toggle이 낀 범위를 블록 선택한다(툴바 위치).
  * - 접힌 toggle이 있는 문서에서 블록을 뷰포트 위 밖으로 끌어 놓는다(드롭 후보).
+ * - 접힌 toggle 안 image·codeBlock의 caption 오버레이(#288). 호스트 API로 접거나
+ *   지우는 경로(DOM 이벤트 없음)는 데모에서 호출할 수 없어 단위 테스트가 맡는다.
  *
  * 판정 기준은 `visibility`다. 접힘 뒤에는 DOM 요소 참조가 낡으므로 locator를
  * 다시 찾는다. 숨김 단언이 가짜로 통과하지 않게, 각 시나리오는 접히기 전에
@@ -501,4 +503,80 @@ test("hover 중인 자식 표가 접히면 핸들 층·추가 rail·리사이즈
   for (const selector of layerParts) {
     await expect(page.locator(selector), `접힌 뒤 ${selector}`).toHaveCount(0);
   }
+});
+
+const CAPTIONED_IMAGE_URL =
+  "https://example.com/dir/hidden-overlays-caption.png";
+
+/** caption을 가진 image와 codeBlock을 접힌 toggle 안에 둔 문서를 싣는다. */
+const loadCaptionedChildren = async (page: Page) => {
+  await page.route(CAPTIONED_IMAGE_URL, (route) =>
+    route.fulfill({ path: "e2e/fixtures/resize-photo.png" }),
+  );
+  return loadBlocks(page, [
+    collapsedToggle("t1", [
+      {
+        id: "im",
+        type: "image",
+        url: CAPTIONED_IMAGE_URL,
+        caption: "이미지캡션",
+      },
+      { ...codeBlock("cb"), caption: "코드캡션" },
+    ]),
+    paragraph("tail", "tail"),
+  ]);
+};
+
+test("접힌 toggle 안 image·codeBlock의 caption 오버레이가 보이지 않고 펼치면 블록 곁에 나타난다(#288)", async ({
+  page,
+}) => {
+  const { editable } = await loadCaptionedChildren(page);
+  await yieldFrame(page);
+  const imageCaption = page.locator(".geul-media-caption");
+  const codeCaption = page.locator(".geul-code-block-caption");
+
+  await expect(imageCaption, "접힌 image caption").toHaveCount(0);
+  await expect(codeCaption, "접힌 codeBlock caption").toHaveCount(0);
+
+  await expandToggle(editable, "t1");
+  await expect(imageCaption, "펼친 image caption").toBeVisible();
+  await expect(codeCaption, "펼친 codeBlock caption").toBeVisible();
+  // 오버레이가 뷰포트 구석이 아니라 각자 블록 곁에 있다.
+  const image = await blockOf(editable, "im").locator("img").boundingBox();
+  const imageCaptionBox = await imageCaption.boundingBox();
+  const code = await blockOf(editable, "cb").boundingBox();
+  const codeCaptionBox = await codeCaption.boundingBox();
+  if (
+    image === null ||
+    imageCaptionBox === null ||
+    code === null ||
+    codeCaptionBox === null
+  ) {
+    throw new Error("bounding box 없음");
+  }
+  expect(Math.abs(imageCaptionBox.y - (image.y + image.height))).toBeLessThan(
+    4,
+  );
+  expect(
+    Math.abs(codeCaptionBox.y + codeCaptionBox.height - code.y),
+  ).toBeLessThan(16);
+});
+
+test("펼친 image·codeBlock이 접히면 caption 오버레이가 남지 않는다(#288)", async ({
+  page,
+}) => {
+  const { editable } = await loadCaptionedChildren(page);
+  await expandToggle(editable, "t1");
+  await blockOf(editable, "tail").click();
+  await yieldFrame(page);
+  const imageCaption = page.locator(".geul-media-caption");
+  const codeCaption = page.locator(".geul-code-block-caption");
+  await expect(imageCaption, "전제: image caption이 보인다").toBeVisible();
+  await expect(codeCaption, "전제: codeBlock caption이 보인다").toBeVisible();
+
+  await page.keyboard.press("Control+z");
+  await expectHidden(blockOf(editable, "im"));
+
+  await expect(imageCaption, "접힌 뒤 image caption").toHaveCount(0);
+  await expect(codeCaption, "접힌 뒤 codeBlock caption").toHaveCount(0);
 });
