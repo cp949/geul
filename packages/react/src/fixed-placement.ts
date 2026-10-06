@@ -81,8 +81,9 @@ type UseFixedPlacementOptions = {
   fallbackAnchor?: FixedPlacementAnchor;
 
   /**
-   * `true`면 앵커 점(clamp 전 좌표)이 스크롤 컨테이너의 보이는 영역 밖일 때
-   * 메뉴를 숨긴다. 선택에 붙는 popover와 블록에 붙는 fixed 오버레이용이다
+   * `true`면 앵커 점(clamp 전 좌표)이 스크롤 컨테이너의 보이는 영역 밖이거나 창
+   * 레이아웃 뷰포트 밖일 때 메뉴를 숨긴다(Issue #277). 뷰포트는 앵커 점에만 쓴다.
+   * 스크롤 컨테이너 조상이 없어도 돈다. 선택에 붙는 popover와 블록에 붙는 fixed 오버레이용이다
    * (`useClipVisibility`). 후자는 `clipBox`를 함께 준다.
    * 메뉴는 `position: fixed`로 컨테이너 바깥에 그려져 컨테이너가 잘라내지
    * 못하므로 앵커가 스크롤돼 나가면 가장자리에 clamp된 채 남는다. 트리거를
@@ -212,6 +213,8 @@ export const useFixedPlacement = ({
   // 판정과 면제는 `useClipVisibility`가 소유한다. 이 훅은 앵커 점을 넘긴다. 박스는
   // `clipBox`일 때만 본다. popover는 앵커 위나 아래에 붙어 박스가 경계 밖으로 조금
   // 삐져나올 수 있다. 앵커 점은 clamp 전 좌표다. 박스는 clamp 뒤 렌더된 박스다.
+  // 앵커 점은 창 뷰포트 안이어야 한다(`viewport`, Issue #277). fixed 메뉴는 뷰포트 clamp로
+  // 창 스크롤 뒤에도 가장자리에 남기 때문이다. 박스 판정에는 뷰포트를 쓰지 않는다.
   // 닫혀 있을 때나 앵커가 없을 때, `clip`이 아닐 때는 `element`를 `null`로 줘
   // `visibility`를 읽지도 쓰지도 않는다.
   useClipVisibility(
@@ -219,7 +222,15 @@ export const useFixedPlacement = ({
     () => {
       const node = placement.menuRef.current;
       if (node === null || placed === undefined) return [];
-      return [{ node, exempt: clipExempt, box: clipBox, anchor: placed }];
+      return [
+        {
+          node,
+          exempt: clipExempt,
+          box: clipBox,
+          anchor: placed,
+          viewport: true,
+        },
+      ];
     },
   );
 

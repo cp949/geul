@@ -1825,3 +1825,66 @@ describe("MediaToolbar 스크롤 컨테이너 clip", () => {
     expect(toolbar.style.visibility).toBe("hidden");
   });
 });
+
+describe("MediaToolbar 창 스크롤 뷰포트 clip(Issue #277)", () => {
+  // 스크롤 컨테이너 조상이 없어도 창 스크롤로 미디어 블록이 뷰포트 밖에 나가면
+  // 툴바는 뷰포트 가장자리로 clamp된 채 남는다. 앵커(블록 우상단)가 뷰포트 안이어야
+  // 보인다. 숨은 툴바는 `{ hidden: true }`로 찾는다.
+  const setup = () => {
+    renderToolbar(
+      fakeController({ getSelectionMediaBlock: () => filledImageBlock }),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const block = host.querySelector<HTMLElement>(
+      '[data-geul-block-id="media-1"]',
+    );
+    if (block === null) throw new Error("미디어 블록 요소가 없다");
+    return { block, toolbar: screen.getByRole("toolbar") };
+  };
+
+  it("블록이 뷰포트 아래로 나가면 툴바 박스가 clamp로 뷰포트 안이어도 숨긴다", () => {
+    const { block, toolbar } = setup();
+    stubRect(block, { left: 60, top: 10, width: 480, height: 240 });
+    stubRect(toolbar, { left: 500, top: 10, width: 40, height: 38 });
+    fireEvent.scroll(window);
+    expect(toolbar.style.visibility).toBe("");
+
+    // 앵커(블록 우상단)는 뷰포트 아래다. clamp된 툴바 박스는 뷰포트 안이다.
+    stubRect(block, {
+      left: 60,
+      top: window.innerHeight + 400,
+      width: 480,
+      height: 240,
+    });
+    stubRect(toolbar, {
+      left: 500,
+      top: window.innerHeight - 46,
+      width: 40,
+      height: 38,
+    });
+    fireEvent.scroll(window);
+    expect(toolbar.style.visibility).toBe("hidden");
+
+    stubRect(block, { left: 60, top: 10, width: 480, height: 240 });
+    stubRect(toolbar, { left: 500, top: 10, width: 40, height: 38 });
+    fireEvent.scroll(window);
+    expect(toolbar.style.visibility).toBe("");
+  });
+
+  it("More 메뉴가 열려 있으면 뷰포트 밖이어도 숨기지 않는다", () => {
+    const { block, toolbar } = setup();
+    stubRect(block, { left: 60, top: 10, width: 480, height: 240 });
+    stubRect(toolbar, { left: 500, top: 10, width: 40, height: 38 });
+    fireEvent.scroll(window);
+    openMoreMenu();
+
+    stubRect(block, {
+      left: 60,
+      top: window.innerHeight + 400,
+      width: 480,
+      height: 240,
+    });
+    fireEvent.scroll(window);
+    expect(toolbar.style.visibility).toBe("");
+  });
+});

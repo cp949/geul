@@ -1935,3 +1935,70 @@ describe("영역 밖 블록의 거터 clip(Issue #267)", () => {
     expect(gutter.style.visibility).toBe("hidden");
   });
 });
+
+describe("창 스크롤로 뷰포트 밖에 나간 블록의 거터 clip(Issue #277)", () => {
+  /** 블록 rect. 뷰포트 안이다. */
+  const insideBlock = { left: 40, top: 10, width: 600, height: 20 };
+
+  /**
+   * 스크롤 컨테이너 조상이 없는 에디터에서 첫 블록 hover로 거터를 띄운다.
+   * 영역은 레이아웃 뷰포트 하나뿐이다.
+   */
+  const hoverGutter = () => {
+    const rendered = renderBlockMenu({ layout: insideBlock });
+    const [block] = rendered.blocks;
+    if (block === undefined) throw new Error("블록 요소가 없다");
+    fireEvent.pointerMove(block);
+    const gutter = document.querySelector<HTMLElement>(".geul-block-gutter");
+    if (gutter === null) throw new Error("거터가 없다");
+    stubRect(gutter, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("");
+    const handle = gutter.querySelector<HTMLElement>(
+      "[data-geul-block-handle]",
+    );
+    if (handle === null) throw new Error("드래그 핸들이 없다");
+    return { block, gutter, handle };
+  };
+
+  /** 블록을 뷰포트 아래로 밀고 거터 박스는 clamp된 자리(뷰포트 안)에 둔다. */
+  const pushBlockBelow = (block: HTMLElement, gutter: HTMLElement) => {
+    stubRect(block, {
+      ...insideBlock,
+      top: window.innerHeight + 400,
+    });
+    stubRect(gutter, {
+      left: 0,
+      top: window.innerHeight - 32,
+      width: 56,
+      height: 24,
+    });
+    fireEvent.scroll(window);
+  };
+
+  it("블록이 뷰포트 밖이면 거터 박스가 clamp로 뷰포트 안이어도 숨기고 돌아오면 다시 보인다", () => {
+    const { block, gutter } = hoverGutter();
+
+    pushBlockBelow(block, gutter);
+    expect(gutter.style.visibility).toBe("hidden");
+
+    stubRect(block, insideBlock);
+    stubRect(gutter, { left: 0, top: 10, width: 56, height: 24 });
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("");
+  });
+
+  it("블록 메뉴가 열린 동안에는 뷰포트 밖이어도 숨기지 않는다", () => {
+    const { block, gutter, handle } = hoverGutter();
+    fireEvent.click(handle);
+    expect(screen.getByRole("menu")).toBeTruthy();
+
+    pushBlockBelow(block, gutter);
+    expect(gutter.style.visibility).toBe("");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.scroll(window);
+    expect(gutter.style.visibility).toBe("hidden");
+  });
+});

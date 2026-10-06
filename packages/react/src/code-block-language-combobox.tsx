@@ -549,7 +549,9 @@ export const CodeBlockLanguageCombobox = () => {
   );
   // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
   // 잘라내지 못한다(Issue #236).
-  // - 보이는 조건: 툴바 박스와 앵커 점이 모두 컨테이너의 보이는 영역 안.
+  // - 보이는 조건: 툴바 박스와 앵커 점이 모두 컨테이너의 보이는 영역 안이고, 앵커 점이
+  //   창 레이아웃 뷰포트 안(Issue #277). 창 스크롤로 블록이 뷰포트 밖에 나가도 툴바는
+  //   clamp로 가장자리에 남기 때문이다. 박스는 뷰포트로 판정하지 않는다.
   // - 앵커 점도 보는 이유: viewport clamp. 컨테이너 상단이 뷰포트 y=0이면
   //   clamp가 툴바를 영역 안에 남긴다.
   // - 면제: 언어 popover 열림, more 메뉴 열림, 툴바 안 요소의 포커스
@@ -590,7 +592,7 @@ export const CodeBlockLanguageCombobox = () => {
   useClipVisibility(element, () => {
     const node = toolbarRef.current;
     if (node === null) return [];
-    return [{ node, exempt: open || moreMenuOpen, anchor }];
+    return [{ node, exempt: open || moreMenuOpen, anchor, viewport: true }];
   });
   // 언어 trigger 자신의 div — 더는 독립 위치를 갖지 않는다(위치는 outer
   // toolbar가 소유). `.geul-code-block-language-trigger`의 SCSS 주석대로

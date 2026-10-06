@@ -4,6 +4,8 @@
  * useClipVisibility의 clip 판정과 면제 계약을 검증한다.
  * - 박스 판정: 노드 박스가 스크롤 컨테이너의 보이는 영역 밖이면 숨긴다.
  * - 앵커 판정: `anchor`가 있으면 앵커 점도 영역 안이어야 보인다. `box: false`면 박스는 보지 않는다.
+ * - 뷰포트 판정: `viewport: true`면 앵커 점 판정에만 레이아웃 뷰포트를 영역에 더한다(Issue #277).
+ *   박스 판정에는 더하지 않는다. 기본값은 `false`다.
  * - 면제: `exempt`이거나 노드 안에 포커스가 있으면 영역 밖이어도 보인다.
  * - 포커스 이탈: 포커스가 보관 노드 밖으로 나가면 렌더를 강제해 다시 판정한다.
  * - iframe 문서에서도 포커스 이탈을 다시 판정한다. 노드 타입 검사는 realm과 무관한 `isNode`를 쓴다.
@@ -16,7 +18,7 @@
 
 import { act, cleanup, render } from "@testing-library/react";
 import { useRef } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   type ClipTarget,
@@ -159,6 +161,176 @@ describe("useClipVisibility", () => {
       const { container } = render(<Probe element={host} options={options} />);
 
       expect(byId(container, "a").style.visibility).toBe("hidden");
+    });
+  });
+
+  describe("뷰포트 판정(Issue #277)", () => {
+    // 창 스크롤로 오버레이가 뷰포트 밖에 나간 상황이다. 스크롤 컨테이너 조상이 없는
+    // host를 쓴다. 영역은 뷰포트 하나뿐이다.
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
+    beforeEach(() => {
+      window.innerWidth = 800;
+      window.innerHeight = 500;
+    });
+    afterEach(() => {
+      window.innerWidth = originalWidth;
+      window.innerHeight = originalHeight;
+    });
+
+    const mountPlainHost = () => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      return host;
+    };
+    const BELOW_VIEWPORT = { left: 10, top: 900, width: 50, height: 20 };
+
+    it("`viewport: true`여도 박스 판정에는 뷰포트를 쓰지 않는다(앵커가 없으면 박스가 뷰포트 밖이어도 보인다)", () => {
+      const host = mountPlainHost();
+      const options = { a: { viewport: true } };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), BELOW_VIEWPORT);
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("`viewport: true`여도 박스가 0×0이면 앵커 점이 뷰포트 안일 때 보인다(jsdom 0×0 rect 회귀)", () => {
+      const host = mountPlainHost();
+      const options = {
+        a: { viewport: true, anchor: { left: 20, top: 20 } },
+      };
+      const { container } = render(<Probe element={host} options={options} />);
+
+      // stubRect를 걸지 않아 jsdom 기본 rect(전부 0)다.
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("`viewport: true`와 앵커 점이 뷰포트 밖이면 숨기고 안으로 돌아오면 보인다", () => {
+      const host = mountPlainHost();
+      const outside = {
+        a: { viewport: true, anchor: { left: 20, top: 900 } },
+      };
+      const inside = {
+        a: { viewport: true, anchor: { left: 20, top: 20 } },
+      };
+      const { container, rerender } = render(
+        <Probe element={host} options={outside} />,
+      );
+      expect(byId(container, "a").style.visibility).toBe("hidden");
+
+      rerender(<Probe element={host} options={inside} />);
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("`viewport: true`면 박스가 안이어도 앵커 점이 뷰포트 밖이면 숨긴다", () => {
+      const host = mountPlainHost();
+      const options = {
+        a: { viewport: true, anchor: { left: 20, top: 900 } },
+      };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), INSIDE);
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("hidden");
+    });
+
+    it("`viewport: true`와 `box: false`면 앵커 점만 뷰포트로 판정한다", () => {
+      const host = mountPlainHost();
+      const outside = {
+        a: { viewport: true, box: false, anchor: { left: 20, top: 900 } },
+      };
+      const inside = {
+        a: { viewport: true, box: false, anchor: { left: 20, top: 20 } },
+      };
+      const { container, rerender } = render(
+        <Probe element={host} options={outside} />,
+      );
+      stubRect(byId(container, "a"), BELOW_VIEWPORT);
+      rerender(<Probe element={host} options={outside} />);
+      expect(byId(container, "a").style.visibility).toBe("hidden");
+
+      rerender(<Probe element={host} options={inside} />);
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("`viewport`를 주지 않으면 뷰포트 밖이어도 숨기지 않는다", () => {
+      const host = mountPlainHost();
+      const options = { a: { anchor: { left: 20, top: 900 } } };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), BELOW_VIEWPORT);
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("`viewport: false`도 뷰포트 밖에서 숨기지 않는다", () => {
+      const host = mountPlainHost();
+      const options = { a: { viewport: false } };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), BELOW_VIEWPORT);
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("스크롤 컨테이너 안이어도 컨테이너가 뷰포트보다 크면 뷰포트 밖 앵커를 숨긴다", () => {
+      const host = mountPlainHost();
+      makeScrollContainer(host);
+      stubRect(host, { left: 0, top: 0, width: 600, height: 2000 });
+      const options = {
+        a: { viewport: true, anchor: { left: 20, top: 900 } },
+        b: { anchor: { left: 20, top: 900 } },
+      };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), INSIDE);
+      stubRect(byId(container, "b"), INSIDE);
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("hidden");
+      expect(byId(container, "b").style.visibility).toBe("");
+    });
+
+    it("`exempt`면 뷰포트 밖이어도 보인다", () => {
+      const host = mountPlainHost();
+      const options = {
+        a: { viewport: true, exempt: true, anchor: { left: 20, top: 900 } },
+      };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), BELOW_VIEWPORT);
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("");
+    });
+
+    it("노드 안 요소에 포커스가 있으면 뷰포트 밖이어도 보인다", () => {
+      const host = mountPlainHost();
+      const options = {
+        a: { viewport: true, anchor: { left: 20, top: 900 } },
+        b: { viewport: true, anchor: { left: 20, top: 900 } },
+      };
+      const { container, rerender } = render(
+        <Probe element={host} options={options} />,
+      );
+      stubRect(byId(container, "a"), BELOW_VIEWPORT);
+      stubRect(byId(container, "b"), BELOW_VIEWPORT);
+      act(() => byId(container, "a-button").focus());
+      rerender(<Probe element={host} options={options} />);
+
+      expect(byId(container, "a").style.visibility).toBe("");
+      expect(byId(container, "b").style.visibility).toBe("hidden");
     });
   });
 

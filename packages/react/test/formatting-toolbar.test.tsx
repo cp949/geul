@@ -1079,3 +1079,50 @@ describe("FormattingToolbar 스크롤 컨테이너 clip", () => {
     ).toBe("");
   });
 });
+
+describe("FormattingToolbar 창 스크롤 뷰포트 clip(Issue #277)", () => {
+  // 스크롤 컨테이너 조상이 없어도 창 스크롤로 선택이 뷰포트 밖에 나가면 popover는
+  // 뷰포트 가장자리로 clamp된 채 남는다. 앵커가 뷰포트 안일 때만 보인다.
+  const originalRangeRect = Range.prototype.getBoundingClientRect;
+  afterEach(() => {
+    Range.prototype.getBoundingClientRect = originalRangeRect;
+  });
+
+  it("창 스크롤로 선택이 뷰포트 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <FormattingToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+    const textNode = host.firstChild?.firstChild;
+    if (!textNode) throw new Error("Text node was not rendered");
+    const selectionAt = (top: number) => {
+      Range.prototype.getBoundingClientRect = () =>
+        new DOMRect(100, top, 80, 20);
+    };
+    selectionAt(40);
+    selectText(textNode, 0, 8);
+    expect(
+      screen.getByRole("toolbar", { name: "Formatting" }).style.visibility,
+    ).toBe("");
+
+    selectionAt(window.innerHeight + 400);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar", { name: "Formatting" })).toBeNull();
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    selectionAt(40);
+    fireEvent.scroll(window);
+    expect(
+      screen.getByRole("toolbar", { name: "Formatting" }).style.visibility,
+    ).toBe("");
+  });
+});

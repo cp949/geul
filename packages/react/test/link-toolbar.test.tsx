@@ -711,6 +711,40 @@ describe("LinkToolbar 스크롤 컨테이너 clip", () => {
   });
 });
 
+describe("LinkToolbar 창 스크롤 뷰포트 clip(Issue #277)", () => {
+  // 스크롤 컨테이너 조상이 없어도 창 스크롤로 선택이 뷰포트 밖에 나가면 숨긴다.
+  const originalRangeRect = Range.prototype.getBoundingClientRect;
+  afterEach(() => {
+    Range.prototype.getBoundingClientRect = originalRangeRect;
+  });
+
+  const selectionAt = (top: number) => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(100, top, 80, 20);
+  };
+
+  it("창 스크롤로 선택이 뷰포트 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    selectionAt(40);
+    renderWithSelectedText(fakeController());
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar", { name: "Link" }).style.visibility).toBe(
+      "",
+    );
+
+    selectionAt(window.innerHeight + 400);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar", { name: "Link" })).toBeNull();
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    selectionAt(40);
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar", { name: "Link" }).style.visibility).toBe(
+      "",
+    );
+  });
+});
+
 describe("LinkToolbar codeBlock 교차 선택(Issue #241)", () => {
   it("선택이 codeBlock 문자를 교차하면 여러 블록에 걸쳐도 Add link를 표시하지 않는다", () => {
     // codeBlock의 schema는 marks: ""라 link도 적용 불가하다. 여러 블록

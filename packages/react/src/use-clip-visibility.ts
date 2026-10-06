@@ -5,6 +5,7 @@ import {
   isPointInClipBoxes,
   isRectInClipBoxes,
   readScrollClipBoxes,
+  readViewportBox,
 } from "./scroll-clip.js";
 
 /** clip 판정 대상 오버레이 노드 하나와 그 판정 옵션. */
@@ -19,6 +20,17 @@ export type ClipTarget = {
 
   /** 있으면 앵커 점(viewport 기준)도 clip 영역 안이어야 보인다. */
   anchor?: { left: number; top: number };
+
+  /**
+   * `true`면 앵커 점 판정에만 창 레이아웃 뷰포트를 영역에 더한다(Issue #277). 기본값은
+   * `false`다. 박스 판정에는 더하지 않는다.
+   * - 뷰포트 clamp로 창 스크롤 뒤에도 가장자리에 남는 `position: fixed` 오버레이용이다.
+   * - 박스를 보지 않는 이유: clamp된 박스는 늘 뷰포트 안이라 판정이 무의미하다. jsdom의
+   *   0×0 rect는 가로 겹침 규칙에 걸려 숨는다.
+   * - absolute 오버레이는 문서와 함께 스크롤돼 뷰포트 밖이면 어차피 보이지 않는다.
+   * `anchor`가 없으면 효과가 없다.
+   */
+  viewport?: boolean;
 };
 
 /**
@@ -31,6 +43,9 @@ export type ClipTarget = {
  *
  * - 보임 조건: `exempt`이거나 노드 안에 `activeElement`가 있거나, `box`와 `anchor` 판정이
  *   모두 영역 안이다.
+ * - 영역: 박스 판정은 안쪽 스크롤 컨테이너들의 보이는 영역이다. 앵커 점 판정은 `viewport`인
+ *   노드에 한해 창 레이아웃 뷰포트도 더한다. 창 스크롤로 뷰포트 밖에 나간 fixed 오버레이를
+ *   숨긴다. 면제와 포커스 규칙은 뷰포트에도 같다.
  * - 판정은 렌더마다 `useLayoutEffect`(deps 없음)에서 돈다. 스크롤은 호출부가 렌더를
  *   일으킨다.
  * - `activeElement`는 매 effect에서 읽는다. 포커스 state를 두지 않는다.
@@ -62,14 +77,27 @@ export const useClipVisibility = (
     nodesRef.current = targets.map((target) => target.node);
     if (targets.length === 0) return;
     const boxes = readScrollClipBoxes(element);
+    const viewportBox = readViewportBox(element);
+    // 앵커 점 판정 전용이다. 박스 판정에는 뷰포트를 더하지 않는다.
+    const anchorBoxes = viewportBox === null ? boxes : [...boxes, viewportBox];
     const activeElement = element.ownerDocument.activeElement;
-    for (const { node, exempt = false, box = true, anchor } of targets) {
+    for (const {
+      node,
+      exempt = false,
+      box = true,
+      anchor,
+      viewport = false,
+    } of targets) {
       const visible =
         exempt ||
         node.contains(activeElement) ||
         ((!box || isRectInClipBoxes(node.getBoundingClientRect(), boxes)) &&
           (anchor === undefined ||
-            isPointInClipBoxes(anchor.left, anchor.top, boxes)));
+            isPointInClipBoxes(
+              anchor.left,
+              anchor.top,
+              viewport ? anchorBoxes : boxes,
+            )));
       node.style.visibility = visible ? "" : "hidden";
     }
   });

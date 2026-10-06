@@ -1648,6 +1648,57 @@ describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
     expect(toolbar.style.visibility).toBe("");
   });
 
+  describe("창 스크롤로 뷰포트 밖에 나간 코드블록(Issue #277)", () => {
+    // 스크롤 컨테이너 조상이 없는 호스트다. 영역은 레이아웃 뷰포트 하나뿐이다.
+    // jsdom 뷰포트는 1024×768이다.
+    const mountViewportFixture = () => {
+      const fixture = mountClipFixture();
+      fixture.host.style.overflowY = "";
+      return fixture;
+    };
+    const farBelow = () => window.innerHeight + 300;
+
+    it("앵커 점이 뷰포트 아래로 나가면 숨기고 돌아오면 다시 보인다", () => {
+      const { toolbar, place } = mountViewportFixture();
+      place(10, { left: 500, top: 10 });
+      expect(toolbar.style.visibility).toBe("");
+
+      place(farBelow(), { left: 500, top: farBelow() - 10 });
+      expect(toolbar.style.visibility).toBe("hidden");
+
+      place(11, { left: 500, top: 11 });
+      expect(toolbar.style.visibility).toBe("");
+    });
+
+    it("앵커 점이 뷰포트 위로 나가면 clamp된 툴바 박스가 뷰포트 안이어도 숨긴다", () => {
+      const { toolbar, place } = mountViewportFixture();
+      place(10, { left: 500, top: 10 });
+
+      place(-300, { left: 500, top: 8 });
+      expect(toolbar.style.visibility).toBe("hidden");
+    });
+
+    it("more 메뉴가 열려 있으면 뷰포트 밖이어도 숨기지 않는다", () => {
+      const { toolbar, place } = mountViewportFixture();
+      place(10, { left: 500, top: 10 });
+      fireEvent.click(moreButton());
+
+      place(farBelow(), { left: 500, top: farBelow() - 10 });
+      expect(toolbar.style.visibility).toBe("");
+    });
+
+    it("툴바 안 버튼에 포커스가 있으면 뷰포트 밖이어도 숨기지 않는다", () => {
+      const { toolbar, place } = mountViewportFixture();
+      place(10, { left: 500, top: 10 });
+      act(() => {
+        languageButton().focus();
+      });
+
+      place(farBelow(), { left: 500, top: farBelow() - 10 });
+      expect(toolbar.style.visibility).toBe("");
+    });
+  });
+
   it("앵커가 그대로여도 창 resize로 컨테이너 박스가 바뀌면 판정을 다시 한다", () => {
     const { toolbar, place, host } = mountClipFixture();
     place(10, { left: 500, top: 20 });

@@ -385,6 +385,16 @@ test("툴바를 선택한 텍스트 옆에 배치한다", async ({ page }) => {
     .toBeLessThan(24);
 
   await page.setViewportSize({ width: 320, height: 200 });
+  // #277: 선택이 창 뷰포트 밖이면 툴바가 숨는다. 작은 뷰포트의 clamp를 검증하려고
+  // 선택을 뷰포트 안(위에서 80px)으로 스크롤한다.
+  await page.evaluate(() => {
+    const selectionRect = document
+      .getSelection()
+      ?.getRangeAt(0)
+      .getBoundingClientRect();
+    if (selectionRect === undefined) throw new Error("선택 없음");
+    window.scrollBy(0, selectionRect.top - 80);
+  });
   await expectOverlayWithinViewport(
     page.getByRole("toolbar", { name: "Formatting" }),
     page,

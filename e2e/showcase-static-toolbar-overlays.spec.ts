@@ -78,6 +78,15 @@ const isOutsideScrollArea = (anchor: Locator) =>
   });
 
 /**
+ * 앵커를 창 뷰포트 안(위에서 100px)으로 스크롤한다(#277). 앵커 점이 창 뷰포트 밖이면
+ * fixed 툴바가 숨는다. `scrollIntoViewIfNeeded` 뒤 앵커가 뷰포트 경계에 걸릴 수 있다.
+ */
+const scrollAnchorIntoWindowViewport = (anchor: Locator) =>
+  anchor.evaluate((element) => {
+    window.scrollBy(0, element.getBoundingClientRect().top - 100);
+  });
+
+/**
  * 코드블록을 영역 밖으로 밀고 툴바 clip 판정이 한 번 돈 것을 기다린다.
  * 툴바가 새 앵커로 옮겨 가야 판정이 돈 것이다. 이전에는 시작 상태(visible)가
  * 그대로라 단언이 판정보다 먼저 통과할 수 있다.
@@ -240,6 +249,8 @@ test("언어 popover가 열려 있으면 코드블록이 스크롤 영역 밖에
   const toolbar = page.locator(".geul-code-block-toolbar");
 
   await codeBlock.scrollIntoViewIfNeeded();
+  // #277: 앵커 점이 창 뷰포트 안이어야 툴바가 보인다.
+  await scrollAnchorIntoWindowViewport(codeBlock);
   await codeBlock.hover();
   await expect(toolbar).toHaveCount(1);
   await page.getByRole("button", { name: "Code language" }).click();
@@ -263,6 +274,8 @@ test("툴바 버튼에 포커스가 있으면 코드블록이 스크롤 영역 �
   const toolbar = page.locator(".geul-code-block-toolbar");
 
   await codeBlock.scrollIntoViewIfNeeded();
+  // #277: 앵커 점이 창 뷰포트 안이어야 툴바가 보인다.
+  await scrollAnchorIntoWindowViewport(codeBlock);
   await codeBlock.hover();
   await expect(toolbar).toHaveCount(1);
   // 클릭하면 popover가 열려 popover 면제와 구분되지 않는다. 포커스만 둔다.
@@ -569,6 +582,8 @@ test("표 셀 서식 메뉴가 열려 있으면 영역 밖에서도 표 선택 �
   const table = editor.locator("table").first();
   const cells = table.locator("td");
   await cells.first().scrollIntoViewIfNeeded();
+  // #277: 앵커 점이 창 뷰포트 안이어야 툴바가 보인다.
+  await scrollAnchorIntoWindowViewport(cells.first());
   await cells.first().click();
   await dragSelectCells(page, cells.nth(0), cells.nth(1));
   const toolbar = page.locator(".geul-table-selection-toolbar");

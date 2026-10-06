@@ -13,6 +13,7 @@ import {
   isPointInClipBoxes,
   isRectInClipBoxes,
   readScrollClipBoxes,
+  readViewportBox,
   syncAnchorClipVisibility,
   syncClipVisibility,
 } from "../src/scroll-clip.js";
@@ -80,6 +81,44 @@ describe("readScrollClipBoxes", () => {
       setOverflow(document.documentElement, "");
       setOverflow(document.body, "");
     }
+  });
+});
+
+describe("readViewportBox", () => {
+  // jsdom의 innerWidth·innerHeight는 쓰기 가능한 값 속성이다. 원래 값을 되돌린다.
+  const originalWidth = window.innerWidth;
+  const originalHeight = window.innerHeight;
+  afterEach(() => {
+    window.innerWidth = originalWidth;
+    window.innerHeight = originalHeight;
+  });
+
+  it("owner window의 레이아웃 뷰포트 (0, 0, innerWidth, innerHeight)를 돌려준다", () => {
+    window.innerWidth = 800;
+    window.innerHeight = 500;
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+
+    const viewport = readViewportBox(element);
+
+    expect(viewport?.left).toBe(0);
+    expect(viewport?.top).toBe(0);
+    expect(viewport?.right).toBe(800);
+    expect(viewport?.bottom).toBe(500);
+  });
+
+  it("스크롤 컨테이너 조상과 무관하게 뷰포트 하나만 돌려준다", () => {
+    const { container, inner } = nest("auto");
+    stubRect(container, { left: 10, top: 20, width: 100, height: 50 });
+
+    expect(readViewportBox(inner)?.bottom).toBe(window.innerHeight);
+  });
+
+  it("owner window가 없는 문서의 요소는 null이다", () => {
+    const detached = document.implementation.createHTMLDocument("");
+    const element = detached.createElement("div");
+
+    expect(readViewportBox(element)).toBeNull();
   });
 });
 

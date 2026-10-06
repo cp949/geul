@@ -862,6 +862,31 @@ describe("TableSelectionToolbar 스크롤 컨테이너 clip", () => {
   });
 });
 
+describe("TableSelectionToolbar 창 스크롤 뷰포트 clip(Issue #277)", () => {
+  // 스크롤 컨테이너 조상이 없어도 창 스크롤로 선택 셀이 뷰포트 밖에 나가면 숨긴다.
+  it("창 스크롤로 선택 셀이 뷰포트 밖에 나가면 숨기고 되돌아오면 다시 보인다", () => {
+    const { cell1, cell2 } = renderTable(mergeableSelectionController());
+    cell1.classList.add("selectedCell");
+    cell2.classList.add("selectedCell");
+    fireSelectionChange();
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+
+    const farBelow = window.innerHeight + 400;
+    stubRect(cell1, { left: 100, top: farBelow, width: 100, height: 30 });
+    stubRect(cell2, { left: 200, top: farBelow, width: 100, height: 30 });
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    stubRect(cell1, { left: 100, top: 100, width: 100, height: 30 });
+    stubRect(cell2, { left: 200, top: 100, width: 100, height: 30 });
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+  });
+});
+
 describe("서식 메뉴 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 RD-003 DELTA-05)", () => {
   /** 병합 셀을 선택하고 서식 메뉴를 연다. 편집 영역과 트리거를 돌려준다. */
   const openFormatMenu = () => {

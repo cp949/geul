@@ -10,8 +10,11 @@ const CLIPPING_OVERFLOW = new Set(["auto", "scroll", "hidden", "clip"]);
  * 오버레이는 잘리지 않고 컨테이너 밖에 떠 있다. 이 rect로 "블록이 아직
  * 보이는가"를 판정해 그 경우 오버레이를 그리지 않는다.
  *
- * `body`/`html`은 건너뛴다. 창 스크롤은 page-relative 좌표(`readPageRect`)가
- * 이미 따라가고, 창 뷰포트 밖 오버레이는 어차피 보이지 않는다.
+ * `body`/`html`은 건너뛴다. 창 뷰포트는 이 함수의 대상이 아니다.
+ * - absolute 오버레이: 창 스크롤은 page-relative 좌표(`readPageRect`)가 이미
+ *   따라가고, 창 뷰포트 밖이면 어차피 보이지 않는다.
+ * - fixed 오버레이: 뷰포트 가장자리로 clamp돼 뷰포트 밖에서도 남는다. 이쪽은
+ *   `readViewportBox`를 앵커 점 판정에 더한다(Issue #277).
  */
 export const readScrollClipBoxes = (element: HTMLElement): DOMRect[] => {
   const ownerDocument = element.ownerDocument;
@@ -31,6 +34,24 @@ export const readScrollClipBoxes = (element: HTMLElement): DOMRect[] => {
     }
   }
   return boxes;
+};
+
+/**
+ * `element`가 속한 창의 레이아웃 뷰포트 `(0, 0, innerWidth, innerHeight)`를
+ * 돌려준다. owner window가 없으면 `null`이다. 그러면 호출부는 판정에서
+ * 제외한다.
+ *
+ * fixed 오버레이용이다(Issue #277). 창 스크롤로 앵커가 뷰포트 밖에 나가면
+ * clamp된 오버레이가 가장자리에 남는다. 이 box를 `readScrollClipBoxes` 결과에
+ * 더해 앵커 점 판정(`isPointInClipBoxes`)에만 쓴다. 박스 판정(`isRectInClipBoxes`)에는
+ * 쓰지 않는다. clamp된 박스는 늘 뷰포트 안이라 무의미하다.
+ *
+ * `visualViewport`(키보드·핀치 줌)가 아니라 레이아웃 뷰포트다.
+ */
+export const readViewportBox = (element: HTMLElement): DOMRect | null => {
+  const view = element.ownerDocument.defaultView;
+  if (view === null) return null;
+  return new DOMRect(0, 0, view.innerWidth, view.innerHeight);
 };
 
 /**

@@ -140,6 +140,11 @@ test("탭이 든 codeBlock의 블록 메뉴에는 Turn into 섹션이 없다", a
         .evaluate((el) => el.textContent?.includes("\t")),
     )
     .toBe(true);
+  // 창 뷰포트 위쪽 밖에 블록 top이 1px만 나가도 gutter 앵커가 밖이라 숨는다(#277).
+  // hover의 자동 스크롤은 그 경계에 멈출 수 있어 블록을 뷰포트 안으로 먼저 둔다.
+  await codeBlock.evaluate((element) => {
+    window.scrollBy(0, element.getBoundingClientRect().top - 100);
+  });
   await codeBlock.hover();
   const handle = page.getByRole("button", {
     name: "Drag to reorder, click for options",

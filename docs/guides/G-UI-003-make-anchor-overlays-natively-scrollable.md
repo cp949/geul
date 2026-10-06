@@ -20,6 +20,17 @@
     - 표 열 리사이즈 strip은 clip 영역과의 세로 교집합으로 잘라 그린다(`clipSpanToBoxes`, Issue #260). 열 경계 전체 높이라 영역보다 길면 늘 숨기 때문이다. 드래그 중에는 자르지 않는다.
   - `unmount`나 `display: none`이 아니라 `visibility`를 쓴다. 레이아웃 박스와 실측 높이가 남는다. 미디어 캡션은 그 높이를 문서 flow에 되먹인다.
   - 선택에 붙는 popover(서식·링크·표 선택·블록 선택 툴바)는 박스가 아니라 앵커 점으로 판정한다. `useFixedPlacement`의 `clip` 옵션이 `useClipVisibility`에 앵커 점을 넘겨 판정한다. 호출부는 훅을 직접 부르지 않는다([`G-UI-001`](./G-UI-001-build-dismissible-overlays.md)). 앵커 위나 아래에 붙어 앵커가 영역 안이어도 박스가 경계 밖으로 조금 삐져나올 수 있고, 그때 숨기면 첫 줄을 선택할 때 popover가 사라진다. 앵커가 영역 밖으로 스크롤돼 나가면 popover는 뷰포트 가장자리로 clamp된 채 영역 밖에 남으므로 숨긴다.
+  - `position: fixed` 오버레이는 앵커 점 판정에 창 레이아웃 뷰포트도 영역에 더한다(Issue #277). `ClipTarget.viewport`가 `true`인 노드만 대상이다.
+    - 이유: fixed 오버레이는 viewport clamp로 뷰포트 가장자리에 남는다. 창 스크롤로 앵커가 뷰포트 밖에 나가도 클릭을 받는다. 스크롤 컨테이너 조상이 없으면 영역이 하나도 없어 숨기는 경로가 없었다.
+    - 영역: `readViewportBox`가 `{0, 0, innerWidth, innerHeight}`를 돌려준다. `visualViewport`(키보드·핀치 줌)가 아니라 레이아웃 뷰포트다. owner window가 없으면 더하지 않는다.
+    - 앵커 점 판정에만 쓴다. 박스 판정(`isRectInClipBoxes`)에는 뷰포트를 더하지 않는다. clamp된 박스는 늘 뷰포트 안이라 판정이 무의미하다. 소비 앱의 jsdom 테스트에서 0×0 rect가 가로 겹침 규칙에 걸려 툴바가 숨는 것도 막는다. 뷰포트보다 큰 오버레이는 앵커 점만 안이면 보인다.
+    - 적용: `useFixedPlacement`가 `clip: true`일 때 항상 `viewport: true`를 넘긴다. 옵션은 없다. code-block 툴바도 직접 준다.
+    - absolute 오버레이는 `viewport`를 주지 않는다. 문서와 함께 스크롤돼 뷰포트 밖이면 어차피 보이지 않는다. `readScrollClipBoxes`에는 뷰포트를 넣지 않는다. 넣으면 absolute 오버레이까지 숨는다.
+    - 면제(`exempt`, 포커스)는 뷰포트에도 같다.
+    - 부분 가시를 수용한다. 선택 윗부분만 뷰포트 밖이어도 앵커(선택 위쪽 중앙)가 밖이면 서식 툴바가 숨는다. 아랫부분이 보여도 같다. 앵커를 아랫부분으로 옮기는 규칙은 없다.
+    - 블록 앵커 오버레이도 같다. gutter(블록 top), 미디어 툴바(블록 우상단), 코드블록 툴바(블록 우상단)는 앵커가 뷰포트 밖이면 본문이 보여도 숨는다. 블록 top이 뷰포트 위로 1px만 나가도 gutter가 사라진다. 블록 우측이 `innerWidth`를 넘는 가로 오버플로 페이지도 같다. 앵커 점 판정은 경계를 포함한다(y == 0, y == `innerHeight`는 보인다). 수용한다. 안쪽 스크롤 컨테이너의 같은 수용(Issue #267)과 일관된다.
+    - 면제로 남는 경우: 오버레이 안에 포커스가 있으면 뷰포트 밖에서도 남는다. 예: 링크 툴바 입력에 포커스를 둔 채 창 스크롤하면 툴바가 뷰포트 가장자리에 남는다. 열린 자식 메뉴(색상 메뉴, More 메뉴, 코드블록 popover)와 드래그 중 핸들도 같다. 설계로 수용한다(Issue #243).
+    - 검증하지 않았다: `visualViewport` 차이, iframe 호스트(owner window가 iframe), 줌·transform 조상, RTL.
   - 소비 앱의 sticky 요소(상단 고정 툴바 등)는 `z-index` 6–9를 쓴다. 층 배치와 근거는 아래 [`z-index` 층](#z-index-층) 표가 소유한다.
   - 면제 목록은 아래와 같다. 숨기면 포커스·draft·pointer capture를 잃기 때문이다.
     - 편집 중인 입력(caption).
@@ -91,6 +102,8 @@
 
 [`G-TST-001`](./G-TST-001-test-overlays-and-keyboard-interactions.md)을 적용하되, fixed overlay의 clamp 검증 대신 앵커가 뷰포트 밖으로 나간 뒤 네이티브 `scrollIntoView()`·Tab 포커스·Playwright 클릭 각각이 실제로 앵커를 뷰포트 안으로 데려오는지 Chromium E2E로 확인한다.
 
-안쪽 스크롤 컨테이너 대응은 jsdom으로 재현하지 못한다(레이아웃이 없다). 단위 테스트는 `stubRect`로 rect를 주입해 판정 로직을 보고, 실제 위치는 Chromium E2E로 확인한다. 선택마다 노드가 새로 생기는 오버레이(블록 선택 하이라이트)는 노드별 `stubRect`를 걸 수 없다. `Element.prototype.getBoundingClientRect`를 가로채 `style`에서 rect를 읽게 하고 `afterEach`에서 복원한다. 예: `packages/react/test/block-selection-toolbar.test.tsx`. e2e 예: `e2e/showcase-static-toolbar-overlays.spec.ts`.
+안쪽 스크롤 컨테이너 대응은 jsdom으로 재현하지 못한다(레이아웃이 없다). 단위 테스트는 `stubRect`로 rect를 주입해 판정 로직을 보고, 실제 위치는 Chromium E2E로 확인한다.
+
+뷰포트 판정(Issue #277)은 jsdom의 기본 뷰포트(`innerWidth`·`innerHeight`)와 `window.innerHeight` 대입으로 단위 테스트한다. 대입한 값은 `afterEach`에서 되돌린다. 뷰포트는 앵커 점에만 쓰므로 rect를 스텁하지 않은 0×0 박스도 앵커 점이 뷰포트 안이면 보인다. 이 회귀를 `use-clip-visibility.test.tsx`와 `fixed-placement.test.tsx`가 고정한다. 창 스크롤 e2e는 `e2e/showcase-window-scroll-overlays.spec.ts`다. 포커스를 에디터에 둔 채 `window.scrollTo`로 앵커를 뷰포트 밖에 보내 `visibility`와 그 자리의 클릭 도달성을 본다. 선택마다 노드가 새로 생기는 오버레이(블록 선택 하이라이트)는 노드별 `stubRect`를 걸 수 없다. `Element.prototype.getBoundingClientRect`를 가로채 `style`에서 rect를 읽게 하고 `afterEach`에서 복원한다. 예: `packages/react/test/block-selection-toolbar.test.tsx`. e2e 예: `e2e/showcase-static-toolbar-overlays.spec.ts`.
 
 hover 기반 앵커 오버레이는 포인터를 멈춘 채 스크롤해 확인한다. 포인터가 움직이면 hover 판정이 다시 일어나 위치 갱신 누락이 가려진다. `e2e/support/anchor-gap.ts`의 `scrollPage`로 `scrollTop`을 대입하고 `expectOverlayTopAlignedWithAnchor`로 오버레이 상단과 앵커 상단의 y가 같은지 단언한다. 예: `e2e/showcase-static-toolbar-media-handle.spec.ts`.

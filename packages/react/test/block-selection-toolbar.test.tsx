@@ -577,6 +577,33 @@ describe("BlockSelectionToolbar 스크롤 컨테이너 clip", () => {
     expect(screen.getByRole("toolbar").style.visibility).toBe("");
   });
 
+  // 스크롤 컨테이너 조상이 없어도 창 스크롤로 선택 블록이 뷰포트 밖에 나가면
+  // 툴바를 숨긴다(Issue #277). 하이라이트는 뷰포트 판정을 받지 않는다.
+  it("창 스크롤로 선택 블록이 뷰포트 밖에 나가면 툴바를 숨기고 되돌아오면 다시 보인다", () => {
+    const { editor, restubGeometry } = renderToolbar();
+    editor.commands.selectBlockRange("block-2", "block-4");
+    fireSelectionChange();
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+
+    for (const [index, block] of restubGeometry().entries()) {
+      stubRect(block, {
+        left: 0,
+        top: window.innerHeight + 400 + index * 20,
+        width: 600,
+        height: 20,
+      });
+    }
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.getByRole("toolbar", { hidden: true }).style.visibility).toBe(
+      "hidden",
+    );
+
+    restubGeometry();
+    fireEvent.scroll(window);
+    expect(screen.getByRole("toolbar").style.visibility).toBe("");
+  });
+
   // 하이라이트는 툴바 본체와 별개로 판정한다(Issue #250). 하이라이트는 블록마다
   // 하나이고 박스 전체가 영역 안일 때만 보인다. 일부 블록만 영역 밖이면 그 블록의
   // 하이라이트만 숨는다. 툴바는 앵커(범위 위쪽)가 영역 안이라 그대로 보인다.

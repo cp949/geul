@@ -14,6 +14,8 @@
  *   기본값 `false`와 닫힘에서는 `visibility`를 건드리지 않는다.
  * - `clipBox`: 앵커 점과 메뉴 박스가 모두 영역 안이어야 보인다(Issue #267).
  *   `clipExempt`면 둘 다 영역 밖이어도 보인다.
+ * - 뷰포트: `clip`이면 창 스크롤로 앵커 점이 레이아웃 뷰포트 밖에 나가도 숨긴다(Issue #277).
+ *   스크롤 컨테이너 조상이 없어도 같다. `clipExempt`면 보이고 `clip`이 없으면 건드리지 않는다.
  * - `readAnchorBelowTrigger`: 트리거 하단 + 4 좌표와 연결 해제 시 `null`.
  * - `readAnchorBelowTriggerEnd`: 트리거 오른쪽·하단 좌표(간격 0)와 연결 해제 시 `null`.
  */
@@ -734,6 +736,134 @@ describe("useFixedPlacement", () => {
       });
     });
 
+    describe("뷰포트(Issue #277)", () => {
+      // 창 스크롤로 앵커가 뷰포트 밖에 나간 상황이다. 스크롤 컨테이너 조상이 없는
+      // host를 쓴다. 영역은 뷰포트 하나뿐이다. jsdom 뷰포트는 1024×768이다.
+      const originalHeight = window.innerHeight;
+      afterEach(() => {
+        window.innerHeight = originalHeight;
+      });
+
+      it("스크롤 컨테이너가 없어도 앵커가 뷰포트 아래로 나가면 숨기고 돌아오면 보인다", () => {
+        stubMenuRect(100, 50);
+        const host = mountHost();
+        let anchor = { left: 300, top: 50 };
+        const { container } = render(
+          <Probe clip element={host} open readAnchor={() => anchor} />,
+        );
+        expect(readMenu(container).style.visibility).toBe("");
+
+        anchor = { left: 300, top: window.innerHeight + 200 };
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("hidden");
+
+        anchor = { left: 300, top: 50 };
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("");
+      });
+
+      it("앵커가 뷰포트 위로 나가도 숨긴다(clamp가 박스를 끌어와도)", () => {
+        stubMenuRect(100, 50);
+        const host = mountHost();
+        const { container } = render(
+          <Probe
+            clip
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: -200 })}
+          />,
+        );
+
+        expect(readMenu(container).style.top).toBe("8px");
+        expect(readMenu(container).style.visibility).toBe("hidden");
+      });
+
+      it("뷰포트 높이는 매번 읽는다", () => {
+        stubMenuRect(100, 50);
+        const host = mountHost();
+        const { container } = render(
+          <Probe
+            clip
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: 400 })}
+          />,
+        );
+        expect(readMenu(container).style.visibility).toBe("");
+
+        window.innerHeight = 300;
+        act(() => {
+          window.dispatchEvent(new Event("resize"));
+        });
+        expect(readMenu(container).style.visibility).toBe("hidden");
+      });
+
+      it("clipBox여도 박스 판정에는 뷰포트를 쓰지 않는다(앵커가 뷰포트 안이면 박스가 0×0이어도 보인다)", () => {
+        const host = mountHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipBox
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: 50 })}
+          />,
+        );
+        // 박스에 스텁을 걸지 않아 jsdom 기본 rect(전부 0)다.
+        act(() => {
+          window.dispatchEvent(new Event("scroll"));
+        });
+        expect(readMenu(container).style.visibility).toBe("");
+      });
+
+      it("clipBox면 앵커가 뷰포트 밖일 때 박스가 clamp로 뷰포트 안이어도 숨긴다", () => {
+        stubMenuRect(100, 50);
+        const host = mountHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipBox
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: window.innerHeight + 200 })}
+          />,
+        );
+        expect(readMenu(container).style.visibility).toBe("hidden");
+      });
+
+      it("clipExempt면 앵커가 뷰포트 밖이어도 보인다", () => {
+        stubMenuRect(100, 50);
+        const host = mountHost();
+        const { container } = render(
+          <Probe
+            clip
+            clipExempt
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: window.innerHeight + 200 })}
+          />,
+        );
+        expect(readMenu(container).style.visibility).toBe("");
+      });
+
+      it("clip이 없으면 앵커가 뷰포트 밖이어도 visibility를 건드리지 않는다", () => {
+        stubMenuRect(100, 50);
+        const host = mountHost();
+        const { container } = render(
+          <Probe
+            element={host}
+            open
+            readAnchor={() => ({ left: 300, top: window.innerHeight + 200 })}
+          />,
+        );
+        expect(readMenu(container).style.visibility).toBe("");
+      });
+    });
+
     it("clip 기본값은 false라 앵커가 박스 밖이어도 visibility를 건드리지 않는다", () => {
       stubMenuRect(100, 50);
       const host = mountClipHost();
@@ -803,7 +933,8 @@ describe("useFixedPlacement", () => {
       expect(readMenu(container).style.visibility).toBe("");
     });
 
-    it("자르는 조상이 없으면 항상 보인다", () => {
+    it("자르는 조상이 없어도 앵커가 뷰포트 안이면 보인다", () => {
+      // 뷰포트 밖 앵커는 숨는다(Issue #277). 아래 "뷰포트" 묶음이 고정한다.
       stubMenuRect(100, 50);
       const host = mountHost();
       const { container } = render(
@@ -811,7 +942,7 @@ describe("useFixedPlacement", () => {
           clip
           element={host}
           open
-          readAnchor={() => ({ left: 300, top: 5000 })}
+          readAnchor={() => ({ left: 300, top: 500 })}
         />,
       );
       expect(readMenu(container).style.visibility).toBe("");
