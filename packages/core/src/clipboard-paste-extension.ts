@@ -7,7 +7,7 @@ import {
   sanitizeInlineText,
 } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
-import { type EditorState, Plugin } from "@tiptap/pm/state";
+import { type EditorState, Plugin, TextSelection } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
@@ -201,8 +201,9 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     return [
       new Plugin({
         props: {
-          // drop과 codeBlock에 걸친 범위처럼 handlePaste가 물러나는 경로의
-          // 여러 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
+          // handlePaste·handleDrop이 직접 삽입하지 않고 물러나는 경로의 여러
+          // 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
+          // 자식 있는 블록의 D23 배치는 이 경로로 만들 수 없다(spec 7.3).
           clipboardTextParser: plainTextClipboardParser,
           handlePaste: (view, event) => {
             if (sanitizedPasteInFlight) return false;
@@ -242,7 +243,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               const html = clipboardData.getData("text/html");
               const text = clipboardData.getData("text/plain");
 
-              // 예외(Issue #286): text/html이 있고 선택이 비어 있지 않고
+              // 예외 1(Issue #286): text/html이 있고 선택이 비어 있지 않고
               // 시작($from)이 codeBlock 밖이면 조기 반환하지 않고 아래
               // html-import 분기로 합류한다.
               // - insertContent는 범위를 replaceWith로 대체한다(단일
@@ -251,21 +252,23 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               //   새 codeBlock을 codeBlock 한복판에 넣지 않는다.
               // - PM 기본 처리는 둘째 블록 이후를 앞 블록의 자식으로 넣고
               //   서식을 잃는다.
-              // 시작이 codeBlock 안인 범위와 캐럿은 위 설명 그대로 PM 기본
-              // 처리를 유지한다. Markdown·평문 분기는 이 예외 대상이 아니다.
-              // 이 예외로 들어온 html이 블록을 못 만들면 아래에서 평문으로
+              // 예외 2(Issue #285): 같은 조건(범위, 시작이 codeBlock 밖)에서
+              // sanitize한 평문이 여러 줄이면 아래 직접 삽입으로 합류한다.
+              // PM 기본 처리는 범위 끝 뒤의 자식을 마지막 줄 블록으로 넘긴다.
+              // 시작이 codeBlock 안인 범위, 캐럿, 한 줄 평문은 위 설명 그대로
+              // PM 기본 처리를 유지한다. Markdown 감지는 이 예외 대상이
+              // 아니다. html이 블록을 못 만들면 아래에서 평문으로
               // 폴백한다(Issue #287). 그때도 Markdown 감지는 하지 않는다.
               const intersectsCodeBlock = selectionIntersectsAnyCodeBlock(
                 view.state.doc,
                 view.state.selection,
               );
-              if (
-                intersectsCodeBlock &&
-                !(
-                  html.length > 0 && isRangeStartingOutsideCodeBlock(view.state)
-                )
-              )
-                return false;
+              if (intersectsCodeBlock) {
+                if (!isRangeStartingOutsideCodeBlock(view.state)) return false;
+                const multilinePlain =
+                  splitPlainTextLines(sanitizeInlineText(text)).length >= 2;
+                if (html.length === 0 && !multilinePlain) return false;
+              }
 
               const insert = (nodes: TiptapJsonNode[]): void => {
                 if (nodes.length === 0) return;
@@ -316,12 +319,25 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 불변). html이 없던 경우는 PM 기본 처리에 위임한다.
               if (text.length === 0) return htmlFellBack;
 
-              // codeBlock에 걸친 범위가 여기 닿는 경우는 html 폴백뿐이다(위
-              // 조기 반환을 통과하고 html 분기가 소비하지 못했다). Markdown
-              // 감지와 직접 배치를 건너뛰고 PM 평문 경로로 보낸다(spec 7.3
-              // 한계 유지, #286).
+              // codeBlock에 걸친 범위가 여기 닿는 경우는 html 폴백과 여러 줄
+              // 평문(Issue #285)이다. Markdown 감지를 건너뛴다(spec 7.3
+              // 한계 유지, #286). 여러 줄이면 직접 삽입한다. 직접 삽입을 못
+              // 하면 평문 단독은 PM 기본에 위임하고, html 폴백은 PM 평문
+              // 경로로 보낸다. 한 줄 html 폴백은 PM 평문 경로 그대로다.
               if (intersectsCodeBlock) {
                 const inline = sanitizeInlineText(text);
+                const inlineLines = splitPlainTextLines(inline);
+                if (inlineLines.length >= 2) {
+                  const pasteTransaction = buildPlainMultilinePasteTransaction(
+                    view.state,
+                    inlineLines,
+                  );
+                  if (pasteTransaction !== null) {
+                    view.dispatch(pasteTransaction);
+                    return true;
+                  }
+                }
+                if (!htmlFellBack) return false;
                 if (inline.length > 0) pasteTextThroughPm(view, inline, event);
                 return true;
               }
@@ -340,7 +356,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // sanitize한다 — 무효 문자 처리는 아래 분기와 같은 결과다.
               // 직접 배치할 수 없으면(NodeSelection 등) tr을 버리고 아래
               // 기존 분기로 PM 기본 처리에 위임한다. 코드블록에 걸친 범위는
-              // 위 조기 반환이나 폴백 분기가 이미 걸렀다.
+              // 위 분기가 이미 처리했다.
               const lines = splitPlainTextLines(sanitizeInlineText(text));
               if (lines.length >= 2) {
                 const pasteTransaction = buildPlainMultilinePasteTransaction(
@@ -390,6 +406,58 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
             // true(처리됨)·false(취소) 둘 다 PM handlePaste 레벨에선 true를
             // 반환해야 한다 — false(취소)는 PM 기본 plain-text 붙여넣기까지
             // 억제해야 하므로 PM의 "위임" 신호(false)를 쓸 수 없다.
+            return true;
+          },
+
+          // 여러 줄 text/plain drop을 drop 위치에 직접 삽입한다(Issue #285).
+          // PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치 블록의 기존
+          // 자식을 마지막 줄 블록으로 넘긴다. 배치는 붙여넣기와 같은 Enter
+          // 분할 규칙이다(plain-text-paste.ts).
+          // 아래 입력은 PM 기본(또는 미디어 확장)에 위임한다(false).
+          // - 내부 드래그(view.dragging), 파일 동반, text/html 동반
+          // - sanitize 뒤 한 줄인 평문
+          // - 좌표를 못 푸는 위치, 줄을 놓을 수 없는 위치(표 셀·atom·블록
+          //   사이). 위치를 보정하지 않는다.
+          // 판정은 live view.state로 한다(G-EDT-002). drop은 현재 selection을
+          // 지우지 않는다. 삽입 범위(drop 위치~마지막 줄 끝)를 선택한다. PM
+          // 기본 drop과 같다.
+          handleDrop: (view, event) => {
+            if (view.dragging) return false;
+            const dataTransfer = event.dataTransfer;
+            if (dataTransfer === null) return false;
+            if (dataTransfer.files.length > 0) return false;
+            if (dataTransfer.getData("text/html").length > 0) return false;
+
+            const lines = splitPlainTextLines(
+              sanitizeInlineText(dataTransfer.getData("text/plain")),
+            );
+            if (lines.length < 2) return false;
+
+            const coords = view.posAtCoords({
+              left: event.clientX,
+              top: event.clientY,
+            });
+            if (coords === null) return false;
+
+            const dropTransaction = buildPlainMultilinePasteTransaction(
+              view.state,
+              lines,
+              { position: coords.pos },
+            );
+            if (dropTransaction === null) return false;
+
+            // paste meta를 달지 않는다. PM 기본 drop과 같은 uiEvent만 단다.
+            dropTransaction
+              .setSelection(
+                TextSelection.create(
+                  dropTransaction.doc,
+                  coords.pos,
+                  dropTransaction.selection.from,
+                ),
+              )
+              .setMeta("uiEvent", "drop");
+            view.dispatch(dropTransaction);
+            view.focus();
             return true;
           },
         },

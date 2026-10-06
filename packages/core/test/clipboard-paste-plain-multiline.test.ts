@@ -5,15 +5,16 @@
  * 들여쓰기 없던 문단이 붙여넣기만으로 자식을 얻으면 안 된다.
  *
  * 다루는 축은 직접 삽입 경로(handlePaste, C1~C10)와 clipboardTextParser
- * 경로(drop·codeBlock에 걸친 범위, C11)다. 한 줄 평문·빈 줄 Markdown·표 셀·
- * codeBlock 안은 현행 유지를 특성화한다. 실제 drop은 jsdom에서 좌표 판정이
- * 안 돼 e2e/clipboard-paste.spec.ts가 맡는다. clipboardTextParser는
+ * 경로(view.pasteText가 타는 PM 기본, C11)다. 한 줄 평문·빈 줄 Markdown·표
+ * 셀·codeBlock 안은 현행 유지를 특성화한다. drop 직접 삽입은
+ * clipboard-drop-plain-multiline.test.ts가, 실제 브라우저 drop은
+ * e2e/clipboard-paste.spec.ts가 맡는다. clipboardTextParser는
  * view.pasteText로 PM doPaste를 그대로 태워 검증한다.
  *
  * 자식 있는 블록에서 clipboardTextParser 경로는 D23 배치를 만들 수 없다
  * (r2 스펙 7.3). 그 현행 동작은 여기서 고정하지 않는다.
  */
-import type { Block, DocumentBlock } from "@cp949/geul-model";
+import type { Block } from "@cp949/geul-model";
 import { TextSelection, Transaction } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
@@ -28,6 +29,7 @@ import {
   blocksOf,
   outline,
   pasteData,
+  runsOf,
   textOf,
 } from "./clipboard-test-support.js";
 import {
@@ -483,7 +485,7 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
       expect(blocks[0] !== undefined && "children" in blocks[0]).toBe(false);
     });
 
-    it("codeBlock에 걸친 범위는 handlePaste가 물러나 파서 경로로 형제 배치한다", () => {
+    it("시작이 밖인 codeBlock에 걸친 범위도 직접 삽입으로 형제 배치한다(Issue #285)", () => {
       const { editor, editable, tiptap } = setup(
         [
           paragraphBlock("p1", "abcd"),
@@ -553,19 +555,6 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
 
   describe("마크(F1·F2)", () => {
     const BOLD = { type: "bold" };
-
-    // 블록의 inline 런(text와 marks)만 뽑는다. marks가 없으면 필드를 뺀다.
-    const runsOf = (block: DocumentBlock | undefined) =>
-      block !== undefined && "content" in block && Array.isArray(block.content)
-        ? block.content.map((item) =>
-            "text" in item
-              ? {
-                  text: item.text,
-                  ...(item.marks === undefined ? {} : { marks: item.marks }),
-                }
-              : item,
-          )
-        : [];
 
     it("bold 문단의 끝 캐럿에 붙이면 분할 뒤 새 블록 줄도 bold다", () => {
       const { editor, editable } = setup(

@@ -3,9 +3,10 @@
  * dispatch helper + own-export wrapper HTML 조립 + 붙여넣기 배치 단언용
  * 블록 요약(outline).
  */
-import type { DocumentBlock } from "@cp949/geul-model";
+import type { Block, DocumentBlock } from "@cp949/geul-model";
 
 import type { EditorController } from "../src/index.js";
+import { codeBlockBlock, paragraphBlock } from "./editor-controller-support.js";
 
 // jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
 // (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
@@ -163,6 +164,39 @@ export const dropEntries = (
   );
 };
 
+/**
+ * 주어진 MIME → 문자열 항목을 담은 drop 이벤트를 만든다(dispatch하지 않는다).
+ * files를 주면 파일 동반 drop이다. 좌표는 0이고 호출부가 view.posAtCoords를
+ * stub한다(jsdom은 좌표를 해석하지 못한다).
+ */
+export const dropEventOf = (
+  entries: Record<string, string>,
+  files: readonly File[] = [],
+): DragEvent => {
+  const data = new DataTransfer();
+  for (const [format, value] of Object.entries(entries))
+    data.setData(format, value);
+  (data as unknown as { files: File[] }).files = [...files];
+  return new DragEvent("drop", {
+    dataTransfer: data,
+    clientX: 0,
+    clientY: 0,
+    bubbles: true,
+    cancelable: true,
+  });
+};
+
+/** dropEventOf로 만든 drop 이벤트를 editable에 dispatch하고 그 이벤트를 돌려준다. */
+export const dropData = (
+  editable: HTMLElement,
+  entries: Record<string, string>,
+  files: readonly File[] = [],
+): DragEvent => {
+  const event = dropEventOf(entries, files);
+  editable.dispatchEvent(event);
+  return event;
+};
+
 /** pasteHtml처럼 pasteData/pasteFiles의 drop 축약 — 파일 전부를 디렉터리 아님으로 채운다. */
 export const dropFiles = (
   editable: HTMLElement,
@@ -279,3 +313,30 @@ export const outline = (blocks: readonly DocumentBlock[]): string[] =>
 export const blocksOf = (
   editor: Pick<EditorController, "getDocument">,
 ): readonly DocumentBlock[] => editor.getDocument().blocks;
+
+/**
+ * 블록의 inline 런(text와 marks)만 뽑는다. marks가 없으면 필드를 뺀다.
+ * 붙여넣기·drop 마크 단언이 쓴다.
+ */
+export const runsOf = (block: DocumentBlock | undefined) =>
+  block !== undefined && "content" in block && Array.isArray(block.content)
+    ? block.content.map((item) =>
+        "text" in item
+          ? {
+              text: item.text,
+              ...(item.marks === undefined ? {} : { marks: item.marks }),
+            }
+          : item,
+      )
+    : [];
+
+/**
+ * 범위 끝 뒤에 자식이 남는 codeBlock 모양(Issue #285): p1 "abcd" 자식
+ * [code cb "xyz", c2 "c2"]. 붙여넣기 범위는 p1 "ab" 뒤부터 cb "xy" 뒤다.
+ */
+export const childCodeBlocks = (): Block[] => [
+  paragraphBlock("p1", "abcd", [
+    codeBlockBlock("cb", "xyz"),
+    paragraphBlock("c2", "c2"),
+  ]),
+];

@@ -8,9 +8,10 @@
  * 다루는 축은 기준 배치(A·B·C), 서식 보존(H·I·O), 자식 블록에서 시작하는
  * 범위(V), 숨은 codeBlock, transaction 계약이다. 시작이 codeBlock 안인
  * 범위(E·J)와 캐럿이 codeBlock 안인 붙여넣기는 PM 기본 처리를 유지하므로
- * 특성화만 한다. Markdown 평문과 여러 줄 평문은 가드 완화 대상이 아니므로
- * 현행 유지를 확인한다. 실제 브라우저 대표 시나리오는
- * e2e/clipboard-paste.spec.ts가 맡는다.
+ * 특성화만 한다. 시작이 codeBlock 밖인 범위의 여러 줄 평문은 직접 삽입으로
+ * 배치한다(Issue #285). 범위 끝 뒤에 자식이 남는 모양에서도 그 자식이 마지막
+ * 줄 블록으로 넘어가지 않는다. Markdown 평문은 이 범위에서 감지하지 않는다.
+ * 실제 브라우저 대표 시나리오는 e2e/clipboard-paste.spec.ts가 맡는다.
  */
 import type { Block, TableBlock } from "@cp949/geul-model";
 import { AllSelection, TextSelection } from "@tiptap/pm/state";
@@ -20,6 +21,7 @@ import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
   blocksOf,
+  childCodeBlocks,
   outline,
   pasteData,
   pasteHtml,
@@ -395,8 +397,8 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
   });
 
-  describe("가드 완화 대상 밖(C7)", () => {
-    it("Markdown 평문은 감지하지 않고 PM 기본 처리가 리터럴 문단으로 넣는다(현행)", () => {
+  describe("HTML 분기 대상 밖(C7)", () => {
+    it("Markdown 평문은 감지하지 않고 리터럴 문단으로 넣는다(현행)", () => {
       const { editor, editable } = setup(baseBlocks(), ...baseRange());
 
       pasteData(editable, { "text/plain": "# H\n\n- a\n- b" });
@@ -409,7 +411,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
       ]);
     });
 
-    it("여러 줄 평문은 파서 경로로 형제 배치한다", () => {
+    it("여러 줄 평문은 직접 삽입으로 형제 배치한다(Issue #285, 자식 없는 모양은 결과가 현행과 같다)", () => {
       const { editor, editable } = setup(baseBlocks(), ...baseRange());
 
       pasteData(editable, { "text/plain": "X\nY" });
@@ -434,6 +436,129 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
         "code:bar",
         "p:tail",
       ]);
+    });
+  });
+
+  // 범위 끝 뒤에 자식이 남는 모양은 PM 기본 처리가 그 자식을 마지막 줄
+  // 블록으로 넘긴다(Issue #285). 시작이 codeBlock 밖이고 평문이 여러 줄이면
+  // 직접 삽입이 Enter 분할과 같은 자리에 줄을 놓는다.
+  describe("여러 줄 평문 붙여넣기(Issue #285)", () => {
+    // D2는 childCodeBlocks()다. 범위는 p1 "ab" 뒤 → code "xy" 뒤.
+    const childCodeRange = () =>
+      [
+        { id: "p1", offset: 2 },
+        { id: "cb", offset: 2 },
+      ] as const;
+
+    it("범위 끝 뒤 자식 c2가 마지막 줄 블록 소속으로 넘어가지 않고 첫 자식 뒤에 형제로 남는다(C9)", () => {
+      const { editor, editable } = setup(
+        childCodeBlocks(),
+        ...childCodeRange(),
+      );
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      const blocks = blocksOf(editor);
+      // 끝의 빈 문단은 편집기가 문서 끝에 붙이는 기준선이다(붙여넣기 전부터 있다).
+      expect(outline(blocks)).toEqual(["p:abX[p:Yz,p:c2]", "p:"]);
+      expect(blocks[0]?.id).toBe("p1");
+    });
+
+    it("codeBlock이 손자이고 c2가 그 뒤 자식이어도 같다(C9)", () => {
+      const { editor, editable } = setup(
+        [
+          paragraphBlock("p1", "abcd", [
+            paragraphBlock("m", "mid", [codeBlockBlock("cb", "xyz")]),
+            paragraphBlock("c2", "c2"),
+          ]),
+        ],
+        { id: "p1", offset: 2 },
+        { id: "cb", offset: 2 },
+      );
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:abX[p:Yz,p:c2]", "p:"]);
+    });
+
+    it("범위 끝 뒤에 자식이 없는 일반 모양은 현행 결과 그대로다(C10)", () => {
+      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:abX", "p:Ybar", "p:tail"]);
+    });
+
+    it("시작이 codeBlock 안인 범위는 PM 기본이다(C11)", () => {
+      const { editor, editable } = setup(
+        baseBlocks(),
+        { id: "cb", offset: 3 },
+        { id: "tail", offset: 2 },
+      );
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      expect(outline(blocksOf(editor))).toEqual([
+        "p:abcd",
+        "code:fooX\nYil",
+        "p:",
+      ]);
+    });
+
+    it("한 줄 평문은 PM 기본이다(C11)", () => {
+      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+
+      pasteData(editable, { "text/plain": "X" });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:abXbar", "p:tail"]);
+    });
+
+    it("Markdown 평문은 감지하지 않는다(C12)", () => {
+      const { editor, editable } = setup(
+        childCodeBlocks(),
+        ...childCodeRange(),
+      );
+
+      pasteData(editable, { "text/plain": "# H\n\n- a" });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:ab# H[p:- az,p:c2]", "p:"]);
+    });
+
+    it("접힌 toggle 안 숨은 codeBlock을 포함한 범위의 여러 줄 평문은 배치만 Enter 규칙이고 숨은 자식은 범위와 함께 지워진다(C14)", () => {
+      const { editor, editable } = setup(
+        [
+          paragraphBlock("p1", "abcd"),
+          toggleBlock("t1", "tog", {
+            collapsed: true,
+            children: [codeBlockBlock("cb", "foobar")],
+          }),
+          paragraphBlock("tail", "tail"),
+        ],
+        { id: "p1", offset: 2 },
+        { id: "tail", offset: 2 },
+      );
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:abX", "p:Yil"]);
+    });
+
+    it("dispatch 1회, revision +1, undo 1회로 원복된다", () => {
+      const { editor, editable, tiptap } = setup(
+        childCodeBlocks(),
+        ...childCodeRange(),
+      );
+      const beforeJson = tiptap.state.doc.toJSON();
+      const revision = editor.getDocument().revision;
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(editor.getDocument().revision).toBe(revision + 1);
+
+      tiptap.commands.undo();
+      expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
     });
   });
 

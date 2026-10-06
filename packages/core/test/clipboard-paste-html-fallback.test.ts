@@ -10,12 +10,14 @@
  * text/plain만 있는 클립보드와 같아야 한다.
  */
 import type { Block } from "@cp949/geul-model";
+import { Transaction } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
   blocksOf,
+  childCodeBlocks,
   outline,
   pasteData,
   withUnhandledErrorTracking,
@@ -190,6 +192,64 @@ describe("html이 블록을 만들지 못할 때의 평문 폴백(Issue #287)", 
 
       expect(results).toEqual([true]);
       expect(editor.getDocument()).toEqual(before);
+    });
+  });
+
+  // 범위 끝 뒤에 자식이 남는 모양에서 여러 줄 폴백은 직접 삽입이다(Issue
+  // #285). PM 기본 처리는 그 자식을 마지막 줄 블록으로 넘긴다. 한 줄 폴백은
+  // 직접 삽입하지 않고 PM 평문 경로(pasteText) 그대로다.
+  describe("codeBlock에 걸친 범위의 폴백, 자식이 남는 모양(Issue #285 C13)", () => {
+    // D2는 childCodeBlocks()다. 범위는 p1 "ab" 뒤 → code "xy" 뒤.
+    const CHILD_CODE_END: Position = { id: "cb", offset: 2 };
+
+    it("빈 결과 html과 여러 줄 평문은 c2가 마지막 줄 블록 소속으로 넘어가지 않는다", () => {
+      const withHtml = pasteOutline(childCodeBlocks(), CARET, CHILD_CODE_END, {
+        "text/html": EMPTY_RESULT_HTML,
+        "text/plain": "X\nY",
+      });
+      const plainOnly = pasteOutline(childCodeBlocks(), CARET, CHILD_CODE_END, {
+        "text/plain": "X\nY",
+      });
+
+      expect(withHtml).toEqual(["p:abX[p:Yz,p:c2]", "p:"]);
+      expect(withHtml).toEqual(plainOnly);
+    });
+
+    it("import 실패 html도 같은 결과다", () => {
+      const outlineOf = pasteOutline(childCodeBlocks(), CARET, CHILD_CODE_END, {
+        "text/html": "<img src='javascript:x'>",
+        "text/plain": "X\nY",
+      });
+
+      expect(outlineOf).toEqual(["p:abX[p:Yz,p:c2]", "p:"]);
+    });
+
+    it("한 줄 폴백은 직접 삽입하지 않고 PM 평문 경로 그대로다", () => {
+      const insertText = vi.spyOn(Transaction.prototype, "insertText");
+
+      try {
+        const withHtml = pasteOutline(
+          childCodeBlocks(),
+          CARET,
+          CHILD_CODE_END,
+          {
+            "text/html": EMPTY_RESULT_HTML,
+            "text/plain": "Q",
+          },
+        );
+        const plainOnly = pasteOutline(
+          childCodeBlocks(),
+          CARET,
+          CHILD_CODE_END,
+          { "text/plain": "Q" },
+        );
+
+        expect(insertText).not.toHaveBeenCalled();
+        expect(withHtml).toEqual(plainOnly);
+        expect(withHtml).toEqual(["p:abQz[p:c2]", "p:"]);
+      } finally {
+        insertText.mockRestore();
+      }
     });
   });
 
