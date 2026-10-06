@@ -24,6 +24,9 @@
  *
  * 표 행·열 핸들 메뉴나 표 그립 메뉴를 연 핸들은 영역 밖으로 나가도 숨기지 않는다(Issue #279).
  * 메뉴는 fixed + viewport clamp라 핸들이 숨으면 메뉴만 떠 있다. 메뉴를 닫으면 다시 판정한다.
+ *
+ * 영역보다 가로로 넓은 표의 행 추가 rail은 영역과 가로로 교집합해 그린다(Issue #283).
+ * 영역 오른쪽 밖을 눌러도 행이 늘지 않는다.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -1556,4 +1559,223 @@ test("표 핸들 메뉴를 닫으면 면제가 풀려 영역 밖 핸들이 숨�
 
   // Escape는 포커스를 편집기로 돌린다. 핸들 안 포커스가 없어 닫힘 렌더만으로 재판정된다.
   await expect(hit, "메뉴를 닫은 뒤 숨김").toHaveCSS("visibility", "hidden");
+});
+
+// Issue #283: 행 추가 rail은 표 폭 전체를 덮는다. 가로는 겹치기만 하면 보이는
+// 규칙이라 표가 영역보다 넓으면 rail이 영역 오른쪽 밖까지 덮고 그 자리의 클릭을
+// 받아 행을 늘렸다. 영역 밖 클릭은 rail 바깥으로 가야 한다.
+
+/** 끊기지 않는 긴 문자열. 셀 폭을 min-content까지 벌려 표를 가로로 넘치게 한다. */
+const UNBROKEN_TEXT = "W".repeat(40);
+
+/** 행 추가 rail이 영역 안에 세로로 들어오게 표를 영역 가운데로 스크롤한다. */
+const centerTableInArea = async (table: Locator) => {
+  await table.evaluate((element) => {
+    element.scrollIntoView({ block: "center", inline: "nearest" });
+  });
+};
+
+/** 표 열 수·가로 폭과 영역 가로 구간을 읽는다. 전제 단언에 쓴다. */
+const readTableAndAreaXBox = (table: Locator) =>
+  table.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return {
+      tableLeft: rect.left,
+      tableRight: rect.right,
+      tableWidth: rect.width,
+      areaLeft: area.left,
+      areaRight: area.right,
+      areaWidth: area.width,
+    };
+  });
+
+/** 행 추가 rail 박스의 가로 구간을 읽는다. */
+const readExpandRowRail = (page: Page) =>
+  page.locator("[data-geul-table-expand-row]").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+      top: rect.top,
+      height: rect.height,
+    };
+  });
+
+/**
+ * 열을 6개로 늘리고 첫 행 셀마다 끊기지 않는 긴 문자열을 넣어 영역보다 가로로
+ * 넓은 표를 만든다(#283). 마지막 행 셀에 커서를 둬 hover 없이도 표 핸들이 남게 한다.
+ */
+const openWideTable = async (page: Page) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const lastCell = table.locator("tr").last().locator("td").first();
+  await lastCell.scrollIntoViewIfNeeded();
+  await lastCell.click();
+  const columns = table.locator("colgroup col");
+  while ((await columns.count()) < 6) {
+    const before = await columns.count();
+    await page.locator("[data-geul-table-expand-column]").click();
+    await expect(columns, "열 추가 뒤 col 수").toHaveCount(before + 1);
+  }
+  const cells = table.locator("tr").first().locator("td");
+  for (let index = 0; index < 6; index += 1) {
+    await cells.nth(index).click();
+    await page.keyboard.insertText(UNBROKEN_TEXT);
+  }
+  await lastCell.click();
+  await centerTableInArea(table);
+  await alignAreaToViewportTop(page);
+  await settleClip(page);
+  return { table };
+};
+
+/** rail 세로 중심에서 영역 오른쪽 밖 `gap`px 지점의 좌표를 구한다. */
+const pointRightOfArea = async (page: Page, gap: number) => {
+  const rail = await readExpandRowRail(page);
+  const area = await page.evaluate(() => {
+    const rect = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (rect === undefined) throw new Error("scrollArea 없음");
+    return { right: rect.right };
+  });
+  return { x: area.right + gap, y: rail.top + rail.height / 2 };
+};
+
+/** 좌표의 맨 위 요소가 행 추가 rail(또는 그 자손)인지 본다. */
+const isExpandRowRailOnTop = (page: Page, point: { x: number; y: number }) =>
+  page.evaluate(({ x, y }) => {
+    const top = document.elementsFromPoint(x, y)[0];
+    return top?.closest("[data-geul-table-expand-row]") != null;
+  }, point);
+
+test("영역보다 넓은 표에서 영역 오른쪽 밖을 눌러도 행이 늘지 않는다(#283)", async ({
+  page,
+}) => {
+  const { table } = await openWideTable(page);
+  const box = await readTableAndAreaXBox(table);
+  expect(box.tableWidth, "전제: 표가 영역보다 넓다").toBeGreaterThan(
+    box.areaWidth,
+  );
+  expect(box.tableRight, "전제: 표 오른쪽이 영역 밖").toBeGreaterThan(
+    box.areaRight + 10,
+  );
+  const rows = table.locator("tr");
+  const before = await rows.count();
+  const point = await pointRightOfArea(page, 10);
+  expect(point.x, "전제: 클릭 지점이 창 안").toBeLessThan(
+    page.viewportSize()?.width ?? 0,
+  );
+
+  expect(
+    await isExpandRowRailOnTop(page, point),
+    "영역 밖 지점의 맨 위 요소가 행 추가 rail이 아니다",
+  ).toBe(false);
+  await page.mouse.click(point.x, point.y);
+  await settleClip(page);
+
+  await expect(rows, "영역 밖 클릭 뒤 행 수").toHaveCount(before);
+});
+
+test("영역보다 넓은 표에서 영역 안 rail 부분을 누르면 행이 하나 늘어난다(#283)", async ({
+  page,
+}) => {
+  const { table } = await openWideTable(page);
+  const rows = table.locator("tr");
+  const before = await rows.count();
+  const rail = await readExpandRowRail(page);
+  const box = await readTableAndAreaXBox(table);
+  expect(rail.left, "rail 왼쪽이 영역 안").toBeGreaterThanOrEqual(
+    box.areaLeft - 0.5,
+  );
+  expect(rail.right, "rail 오른쪽이 영역 안").toBeLessThanOrEqual(
+    box.areaRight + 0.5,
+  );
+
+  await page.mouse.click(
+    rail.left + rail.width / 2,
+    rail.top + rail.height / 2,
+  );
+
+  await expect(rows, "rail 클릭 뒤 행 수").toHaveCount(before + 1);
+});
+
+test("영역 폭에 들어오는 표는 행 추가 rail이 표 폭 전체를 덮는다(#283 대조)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const cell = table.locator("tr").last().locator("td").first();
+  await cell.scrollIntoViewIfNeeded();
+  await cell.click();
+  await centerTableInArea(table);
+  await alignAreaToViewportTop(page);
+  await settleClip(page);
+  const box = await readTableAndAreaXBox(table);
+  expect(box.tableLeft, "전제: 표 왼쪽이 영역 안").toBeGreaterThanOrEqual(
+    box.areaLeft,
+  );
+  expect(box.tableRight, "전제: 표 오른쪽이 영역 안").toBeLessThanOrEqual(
+    box.areaRight,
+  );
+
+  await expect(page.locator("[data-geul-table-expand-row]")).toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  const rail = await readExpandRowRail(page);
+  expect(rail.left, "rail 왼쪽이 표 왼쪽과 같다").toBeCloseTo(box.tableLeft, 0);
+  expect(rail.width, "rail 폭이 표 폭과 같다").toBeCloseTo(box.tableWidth, 0);
+  const rows = table.locator("tr");
+  const before = await rows.count();
+
+  await page.mouse.click(
+    rail.left + rail.width / 2,
+    rail.top + rail.height / 2,
+  );
+
+  await expect(rows, "rail 클릭 뒤 행 수").toHaveCount(before + 1);
+});
+
+test("영역을 가로로 스크롤해도 행 추가 rail이 영역 가로 안에 머문다(#283)", async ({
+  page,
+}) => {
+  const { table } = await openWideTable(page);
+  const rail = page.locator("[data-geul-table-expand-row]");
+  const box = await readTableAndAreaXBox(table);
+  expect(box.tableWidth, "전제: 표가 영역보다 넓다").toBeGreaterThan(
+    box.areaWidth,
+  );
+
+  for (const scrollLeft of [0, 200, 1_000_000]) {
+    await page.evaluate((target) => {
+      const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+      if (area === null) throw new Error("scrollArea 없음");
+      area.scrollLeft = target;
+    }, scrollLeft);
+    await settleClip(page);
+    const now = await readTableAndAreaXBox(table);
+    const railBox = await readExpandRowRail(page);
+    await expect(rail, `scrollLeft ${scrollLeft}`).toHaveCSS(
+      "visibility",
+      "visible",
+    );
+    expect(
+      railBox.left,
+      `rail 왼쪽(scrollLeft ${scrollLeft})`,
+    ).toBeGreaterThanOrEqual(now.areaLeft - 0.5);
+    expect(
+      railBox.right,
+      `rail 오른쪽(scrollLeft ${scrollLeft})`,
+    ).toBeLessThanOrEqual(now.areaRight + 0.5);
+  }
 });

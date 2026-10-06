@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  clipHorizontalSpanToBoxes,
   clipSpanToBoxes,
   isPointInClipBoxes,
   isRectInClipBoxes,
@@ -292,5 +293,72 @@ describe("syncAnchorClipVisibility", () => {
 
     syncAnchorClipVisibility(node, 10, 7, boxes);
     expect(node.style.visibility).toBe("");
+  });
+});
+
+describe("clipHorizontalSpanToBoxes", () => {
+  const boxes = [box(0, 0, 100, 100)];
+
+  it("clip 영역이 없으면 구간을 그대로 돌려준다", () => {
+    const span = { left: -50, right: 500 };
+
+    expect(clipHorizontalSpanToBoxes(span, [])).toBe(span);
+  });
+
+  it("영역 안에 완전히 들어오면 그대로다", () => {
+    expect(clipHorizontalSpanToBoxes({ left: 10, right: 90 }, boxes)).toEqual({
+      left: 10,
+      right: 90,
+    });
+  });
+
+  it("일부만 겹치면 영역과의 교집합으로 자른다", () => {
+    expect(clipHorizontalSpanToBoxes({ left: -30, right: 50 }, boxes)).toEqual({
+      left: 0,
+      right: 50,
+    });
+    expect(clipHorizontalSpanToBoxes({ left: 50, right: 150 }, boxes)).toEqual({
+      left: 50,
+      right: 100,
+    });
+    expect(clipHorizontalSpanToBoxes({ left: -30, right: 150 }, boxes)).toEqual(
+      {
+        left: 0,
+        right: 100,
+      },
+    );
+  });
+
+  it("겹치지 않으면 null이다", () => {
+    expect(
+      clipHorizontalSpanToBoxes({ left: 120, right: 150 }, boxes),
+    ).toBeNull();
+    expect(
+      clipHorizontalSpanToBoxes({ left: -60, right: -30 }, boxes),
+    ).toBeNull();
+  });
+
+  it("경계에 닿기만 해도 null이다", () => {
+    expect(
+      clipHorizontalSpanToBoxes({ left: 100, right: 130 }, boxes),
+    ).toBeNull();
+    expect(
+      clipHorizontalSpanToBoxes({ left: -30, right: 0 }, boxes),
+    ).toBeNull();
+  });
+
+  it("중첩된 영역 전부와의 교집합으로 자른다", () => {
+    const nested = [box(0, 0, 100, 100), box(40, 0, 100, 100)];
+
+    expect(
+      clipHorizontalSpanToBoxes({ left: -30, right: 150 }, nested),
+    ).toEqual({
+      left: 40,
+      right: 100,
+    });
+    expect(
+      clipHorizontalSpanToBoxes({ left: 0, right: 30 }, nested),
+      "한 영역과만 겹친다",
+    ).toBeNull();
   });
 });

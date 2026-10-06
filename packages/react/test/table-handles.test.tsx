@@ -1038,8 +1038,11 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
       );
   };
 
-  /** 표와 행·셀 rect를 세로로 `deltaY`만큼 옮긴다. 안쪽 스크롤을 흉내 낸다. */
-  const shiftTableRects = (table: HTMLElement, deltaY: number) => {
+  /**
+   * 표와 행·셀 rect를 세로로 `deltaY`, 가로로 `deltaX`만큼 옮긴다. 안쪽 스크롤을
+   * 흉내 낸다. `deltaX`는 생략하면 0이다(#283).
+   */
+  const shiftTableRects = (table: HTMLElement, deltaY: number, deltaX = 0) => {
     for (const element of [
       table,
       ...table.querySelectorAll<HTMLElement>("[data-geul-row-id]"),
@@ -1047,7 +1050,7 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
     ]) {
       const rect = element.getBoundingClientRect();
       stubRect(element, {
-        left: rect.left,
+        left: rect.left + deltaX,
         top: rect.top + deltaY,
         width: rect.width,
         height: rect.height,
@@ -1256,6 +1259,108 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
 
     // geometry 구간 그대로다(표 -30–150).
     expect(railSpan(expandColumnRail())).toEqual([-30, 150]);
+  });
+
+  // Issue #283: 행 추가 rail은 표 폭 전체를 덮는다. 가로는 겹치기만 하면 보이는
+  // 규칙(isRectInClipBoxes)이라 표가 영역보다 넓으면 rail이 영역 밖까지 덮고
+  // 영역 밖 클릭을 받았다. rail은 영역과의 가로 교집합으로 잘라 그린다.
+  const expandRowRail = () => {
+    const rail = document.querySelector<HTMLElement>(
+      "[data-geul-table-expand-row]",
+    );
+    if (rail === null) throw new Error("행 추가 rail 없음");
+    return rail;
+  };
+
+  /** rail의 가로 구간 `[left, right]`(page 좌표, `style` 기준). */
+  const railXSpan = (rail: HTMLElement) => {
+    const left = Number.parseFloat(rail.style.left);
+    return [left, left + Number.parseFloat(rail.style.width)];
+  };
+
+  it("표가 영역보다 넓으면 행 추가 rail을 영역 안으로 잘라 보인다(#283)", () => {
+    // 2x2, 열 너비 100 → 표 폭 200, 높이 60. 표를 가로 500–700, 세로 0–60에 두면
+    // 영역 0–600의 오른쪽 끝을 넘는다. rail 세로(62–74)는 영역 0–100 안이다.
+    const { host, table } = renderRealTable();
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    const rail = expandRowRail();
+    stubRectFromStyle(rail);
+    shiftTableRects(table, -100, 400);
+
+    fireEvent.scroll(host);
+
+    // 같은 노드다. 노드가 바뀌면 위 rect 스텁이 닿지 않는다.
+    expect(expandRowRail()).toBe(rail);
+    expect(rail.style.visibility).toBe("");
+    expect(railXSpan(rail)).toEqual([500, 600]);
+  });
+
+  it("표가 영역 왼쪽 끝을 넘으면 행 추가 rail을 영역 안으로 잘라 보인다(#283)", () => {
+    // 표를 가로 -50–150에 두면 영역 0–600의 왼쪽 끝을 넘는다.
+    const { host, table } = renderRealTable();
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    const rail = expandRowRail();
+    stubRectFromStyle(rail);
+    shiftTableRects(table, -100, -150);
+
+    fireEvent.scroll(host);
+
+    expect(expandRowRail()).toBe(rail);
+    expect(rail.style.visibility).toBe("");
+    expect(railXSpan(rail)).toEqual([0, 150]);
+  });
+
+  it("영역 폭 안에 들어오는 표의 행 추가 rail은 표 폭 그대로다(#283)", () => {
+    // 표를 가로 100–300에 둔다. 영역 0–600 안이다.
+    const { host, table } = renderRealTable();
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    const rail = expandRowRail();
+    stubRectFromStyle(rail);
+    shiftTableRects(table, -100);
+
+    fireEvent.scroll(host);
+
+    expect(rail.style.visibility).toBe("");
+    expect(railXSpan(rail)).toEqual([100, 300]);
+  });
+
+  it("표가 영역 밖으로 가로로 완전히 나가면 행 추가 rail은 원래 구간 그대로 숨는다(#283)", () => {
+    const { host, table } = renderRealTable();
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    const rail = expandRowRail();
+    stubRectFromStyle(rail);
+    // 표를 영역 0–600 오른쪽(700–900)으로 옮긴다. 교집합이 비어 원래 구간이 남는다.
+    shiftTableRects(table, -100, 600);
+
+    fireEvent.scroll(host);
+
+    expect(expandRowRail()).toBe(rail);
+    expect(railXSpan(rail)).toEqual([700, 900]);
+    expect(rail.style.visibility).toBe("hidden");
+  });
+
+  it("리사이즈 드래그 중에는 스크롤해도 행 추가 rail을 자르지 않는다(#283)", () => {
+    const { host, table } = renderRealTable();
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    resizeStrips().forEach(stubRectFromStyle);
+    stubRectFromStyle(expandRowRail());
+    shiftTableRects(table, -100, 400);
+    fireEvent.scroll(host);
+    // 전제: 드래그 전에는 영역 안으로 잘린다.
+    expect(railXSpan(expandRowRail())).toEqual([500, 600]);
+
+    const [strip] = resizeStrips();
+    if (strip === undefined) throw new Error("resize strip 없음");
+    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 200 });
+    fireEvent.scroll(host);
+
+    // geometry 구간 그대로다(표 500–700).
+    expect(railXSpan(expandRowRail())).toEqual([500, 700]);
   });
 
   // Issue #279: 행·열 핸들 메뉴나 표 그립 메뉴를 연 동안 그 트리거는 clip 판정에서
