@@ -13,6 +13,8 @@
  * - 편집기가 먼저 막은 Escape는 닫고, 편집기 밖에서 막힌 Escape와 IME 조합 중
  *   Escape는 닫지 않는다.
  * - 바깥 클릭 때 초점이 툴바 안이면 편집기로 옮기고, 밖이면 그대로 둔다.
+ * - DOM selection이 편집기 밖이면 view를 열지 않고, 열려 있으면 닫는다. 활성 링크가
+ *   남아 있어도 같다. 단 초점이 툴바 안이면 닫지 않는다(Issue #282).
  * 기존 link-toolbar.test.tsx 단언은 이전 후에도 수정 없이 통과한다.
  * 편집기 안 Escape를 ProseMirror가 막는 경로는 jsdom이 재현하지 못해
  * e2e/link-toolbar.spec.ts가 소유한다.
@@ -24,13 +26,20 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import type { EditorController } from "@cp949/geul-core";
+import type { FC } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, FormattingToolbar, LinkToolbar } from "../src/index.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { fakeController as fakeFormattingController } from "./formatting-toolbar-test-support.js";
+import { mountBlockEditor } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
-import { selectText } from "./selection-events.js";
+import {
+  collapseSelection,
+  fireSelectionChange,
+  selectText,
+} from "./selection-events.js";
 
 afterEach(cleanup);
 
@@ -504,5 +513,113 @@ describe("서식 툴바와 링크 툴바가 함께 열려도 Escape는 나중에
     fireEvent.keyDown(document, { key: "Escape" });
 
     expect(linkToolbarVisible()).toBe(false);
+  });
+});
+
+describe("LinkToolbar는 DOM selection이 편집기 밖이면 열지 않고 닫는다(Issue #282)", () => {
+  const LINK_TEXT = "링크 본문";
+
+  /**
+   * 링크 문단 하나를 실제 편집기로 마운트한다. 활성 링크는 `getSelectionLink`
+   * 스파이로 고정한다. 실제 selection이 링크 안인지는 이 테스트의 관심사가 아니다.
+   * 관심사는 활성 링크가 있는데 DOM selection이 편집기 밖인 상태다.
+   */
+  const mountLinkEditor = (component?: FC<{ editor: EditorController }>) => {
+    const mounted = mountBlockEditor({
+      initialBlocks: [
+        {
+          id: "block-1",
+          type: "paragraph",
+          content: [
+            { text: LINK_TEXT, marks: [{ type: "link", href: EXISTING_HREF }] },
+          ],
+        },
+      ],
+      children:
+        component === undefined ? (
+          <LinkToolbar />
+        ) : (
+          <LinkToolbar component={component} />
+        ),
+    });
+    const getSelectionLink = vi
+      .spyOn(mounted.editor, "getSelectionLink")
+      .mockReturnValue({ href: EXISTING_HREF });
+    const textNode = mounted.editable.querySelector("a")?.firstChild;
+    if (!textNode) throw new Error("링크 text node가 렌더되지 않았다");
+    return { ...mounted, getSelectionLink, textNode };
+  };
+
+  /** 편집기 밖에 텍스트가 든 요소를 만든다. 호출부가 `remove()`로 치운다. */
+  const createOutsideText = () => {
+    const outside = document.createElement("p");
+    outside.textContent = "편집기 밖 문장";
+    document.body.append(outside);
+    return outside;
+  };
+
+  it("단위 1: 활성 링크가 있어도 DOM selection이 편집기 밖이면 view를 열지 않는다", async () => {
+    const { getSelectionLink } = mountLinkEditor();
+    const outside = createOutsideText();
+    try {
+      // 선택이 없는 상태(rangeCount 0)와 편집기 밖 텍스트 선택을 모두 본다.
+      collapseSelection();
+      expect(getSelectionLink()).not.toBeNull();
+      expect(linkToolbarVisible()).toBe(false);
+
+      const outsideText = outside.firstChild;
+      if (!outsideText) throw new Error("바깥 text node가 없다");
+      selectText(outsideText, 0, 3);
+
+      expect(getSelectionLink()).not.toBeNull();
+      expect(linkToolbarVisible()).toBe(false);
+      // jsdom이 늦게 큐잉한 selectionchange를 act 안에서 소화한다.
+      await flushEditingGuard();
+      expect(linkToolbarVisible()).toBe(false);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("단위 2: view가 열린 뒤 DOM selection이 편집기 밖으로 가면 활성 링크가 남아 있어도 닫힌다", async () => {
+    const { getSelectionLink, textNode } = mountLinkEditor();
+    selectText(textNode, 1, 1);
+    expect(linkToolbarVisible()).toBe(true);
+    const outside = createOutsideText();
+    try {
+      const outsideText = outside.firstChild;
+      if (!outsideText) throw new Error("바깥 text node가 없다");
+
+      selectText(outsideText, 0, 3);
+
+      expect(getSelectionLink()).not.toBeNull();
+      expect(linkToolbarVisible()).toBe(false);
+
+      // 편집기 안으로 돌아오면 다시 열린다.
+      selectText(textNode, 1, 1);
+      expect(linkToolbarVisible()).toBe(true);
+      await flushEditingGuard();
+      expect(linkToolbarVisible()).toBe(true);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("단위 3: 초점이 툴바 안 요소이면 DOM selection이 밖이어도 닫지 않는다(D4, 커스텀 component 입력)", () => {
+    const CustomInput: FC<{ editor: EditorController }> = () => (
+      <input aria-label="커스텀 URL" />
+    );
+    const { textNode } = mountLinkEditor(CustomInput);
+    selectText(textNode, 1, 1);
+    expect(linkToolbarVisible()).toBe(true);
+    const input = screen.getByRole("textbox", { name: "커스텀 URL" });
+
+    // jsdom은 입력에 초점을 주면 DOM selection을 입력으로 옮긴다. 입력 안
+    // selection은 편집기 밖이다.
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    fireSelectionChange();
+
+    expect(linkToolbarVisible()).toBe(true);
   });
 });

@@ -7,8 +7,9 @@
  *   재조회(`updateFromSelection`)가 막히므로 열 때 보관한 Range에서 읽는다.
  * - 편집 입력에 포커스가 있으면 앵커가 스크롤 컨테이너 밖으로 나가도 숨기지 않는다(Issue #243).
  * - 포커스가 빠진 뒤 앵커가 밖으로 나가면 숨기되 입력 draft를 잃지 않는다.
- * - Range rect를 읽을 수 없으면 마지막 좌표를 유지한다. DOM selection이 편집기 밖이면
- *   고정 대체 좌표(96, 48)를 쓴다.
+ * - Range rect를 읽을 수 없으면 마지막 좌표를 유지한다.
+ * - DOM selection이 편집기 밖이면 활성 링크가 있어도 열지 않는다. 고정 대체 좌표는
+ *   없다(Issue #282).
  */
 import {
   act,
@@ -198,9 +199,9 @@ describe("LinkToolbar 배치", () => {
     expect(readPosition()).toEqual({ left: "140px", top: "220px" });
   });
 
-  it("활성 링크는 있는데 DOM selection이 편집기 밖이면 (96, 48)에 둔다", () => {
+  it("활성 링크는 있는데 DOM selection이 편집기 밖이면 닫힌다", () => {
     renderToolbar({ href: "https://example.com" });
 
-    expect(readPosition()).toEqual({ left: "96px", top: "48px" });
+    expect(screen.queryByRole("toolbar", { hidden: true })).toBeNull();
   });
 });

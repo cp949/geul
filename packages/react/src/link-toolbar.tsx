@@ -63,17 +63,6 @@ type ToolbarState =
     };
 
 /**
- * 선택 영역의 화면 좌표를 읽지 못했을 때 쓰는 임의의 뷰포트 안쪽 좌표다.
- * 활성 링크는 있는데 DOM selection이 에디터 밖에 있는 드문 경우에만 쓰인다.
- * 정확한 값에는 의미가 없다 — 최종 위치는 `useFixedPlacement`가 어차피
- * 뷰포트 안으로 접어 넣으므로 화면 왼쪽 위 어딘가면 충분하다.
- */
-const UNREADABLE_SELECTION_POSITION: FixedPlacementAnchor = {
-  left: 96,
-  top: 48,
-};
-
-/**
  * 자기 에디터 안에 있는 selection의 Range를 읽는다. collapsed 여부는 묻지
  * 않는다 — 링크 툴바는 collapsed caret(기존 링크 안)로도 뜨므로, 이 Range를
  * dismiss-suppression 키(useDismissSuppression<Range>)로도 재사용한다.
@@ -94,19 +83,32 @@ const readSelectionRangeInElement = (element: HTMLElement): Range | null => {
 };
 
 /**
+ * 초점이 링크 툴바 안 요소에 있는지 본다. 커스텀 `component`가 view 모드에
+ * 입력을 두면 초점이 입력으로 가며 DOM selection도 입력으로 옮겨간다.
+ * 툴바 셀렉터는 `LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS`와 같다.
+ */
+const isFocusInsideLinkToolbar = (element: HTMLElement): boolean => {
+  const active = element.ownerDocument.activeElement;
+  return (
+    active !== null &&
+    LINK_TOOLBAR_DISMISS_ALLOW_SELECTORS.some(
+      (selector) => active.closest(selector) !== null,
+    )
+  );
+};
+
+/**
  * 선택 Range 아래 중앙에 앵커할 좌표를 읽는다. 서식 툴바(FormattingToolbar)는
  * 선택 영역 위에 뜨므로 링크 툴바는 아래쪽에 배치해 두 툴바가 겹치지 않게 한다.
  *
- * Range가 없으면(DOM selection이 편집기 밖) 고정 대체 좌표다. rect를 읽을 수
- * 없으면 `null`이다. `getBoundingClientRect`가 없는 환경이거나, 연결이 끊긴
- * Range거나, 노드가 교체돼 Range가 접혀 rect가 0이 된 경우다. 이때
+ * rect를 읽을 수 없으면 `null`이다. `getBoundingClientRect`가 없는 환경이거나,
+ * 연결이 끊긴 Range거나, 노드가 교체돼 Range가 접혀 rect가 0이 된 경우다. 이때
  * `useFixedPlacement`가 마지막 좌표를 유지한다.
  *
  * 편집 모드에서는 DOM selection이 입력으로 옮겨가 라이브 selection을 읽을 수
  * 없다. 그래서 라이브 selection이 아니라 열 때 보관한 Range를 읽는다.
  */
-const readRangeAnchor = (range: Range | null): FixedPlacementAnchor | null => {
-  if (range === null) return UNREADABLE_SELECTION_POSITION;
+const readRangeAnchor = (range: Range): FixedPlacementAnchor | null => {
   if (!range.startContainer.isConnected || !range.endContainer.isConnected) {
     return null;
   }
@@ -158,7 +160,18 @@ export const LinkToolbar = ({
     }
 
     const currentRange = readSelectionRangeInElement(element);
-    const hasRange = currentRange !== null && !currentRange.collapsed;
+    if (currentRange === null) {
+      // DOM selection이 편집기 밖이면 `activeLink`와 무관하게 닫는다. 앵커로 쓸
+      // Range가 없고, PM state의 `getSelectionLink()`는 클릭 직후 낡을 수 있어
+      // 판정 근거가 되지 못한다(G-EDT-002, Issue #282). 예외: 초점이 툴바 안
+      // 요소(커스텀 `component`의 입력)이면 selection이 입력으로 옮겨가 편집기
+      // 밖이 된다. 이때는 상태를 바꾸지 않는다.
+      if (isFocusInsideLinkToolbar(element)) return;
+      setToolbarState({ mode: "closed" });
+      dismissSuppression.clear();
+      return;
+    }
+    const hasRange = !currentRange.collapsed;
     const activeLink = editor.getSelectionLink();
 
     if (!hasRange && activeLink === null) {
@@ -199,14 +212,9 @@ export const LinkToolbar = ({
       return;
     }
 
-    if (
-      currentRange !== null &&
-      dismissSuppression.isSuppressed(currentRange)
-    ) {
-      return;
-    }
+    if (dismissSuppression.isSuppressed(currentRange)) return;
     dismissSuppression.clear();
-    currentRangeRef.current = currentRange?.cloneRange() ?? null;
+    currentRangeRef.current = currentRange.cloneRange();
 
     setToolbarState({
       mode: "view",
@@ -229,7 +237,10 @@ export const LinkToolbar = ({
   const { menuRef, style } = useFixedPlacement({
     open: toolbarState.mode !== "closed",
     element,
-    readAnchor: () => readRangeAnchor(currentRangeRef.current),
+    readAnchor: () => {
+      const range = currentRangeRef.current;
+      return range === null ? null : readRangeAnchor(range);
+    },
     clampAnchor: "centerBelow",
     clip: true,
   });

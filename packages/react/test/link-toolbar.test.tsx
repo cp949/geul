@@ -131,6 +131,20 @@ const renderWithSelectedText = (
 };
 
 /**
+ * 편집기 본문 안에 collapsed caret을 놓는다. 기존 링크 안 캐럿을 흉내 낸다.
+ * `collapseSelection()`은 rangeCount 0이라 DOM selection이 편집기 밖이다.
+ * 이 상태는 링크 툴바가 열지 않는다(Issue #282).
+ */
+const placeCaretInEditorText = () => {
+  const textNode = screen.getByRole("textbox", { name: "Editor" }).firstChild
+    ?.firstChild;
+  if (textNode === null || textNode === undefined) {
+    throw new Error("Text node was not rendered");
+  }
+  selectText(textNode, 2, 2);
+};
+
+/**
  * 초점 복구 단언 대상을 얻는다. `role="textbox"` host 자체가 아니라 그 안의
  * 편집 가능 영역을 돌려준다 — LinkToolbar의 초점 복구는
  * `'[contenteditable="true"]'`로 찾은 자식에 `focus()`를 거는데, host는 이
@@ -207,7 +221,7 @@ describe("LinkToolbar 링크 툴바", () => {
         </>,
       ),
     );
-    collapseSelection();
+    placeCaretInEditorText();
 
     expect(screen.getByRole("toolbar", { name: "Link" })).not.toBeNull();
     expect(
@@ -242,7 +256,7 @@ describe("LinkToolbar 링크 툴바", () => {
         </>,
       ),
     );
-    collapseSelection();
+    placeCaretInEditorText();
 
     expect(screen.getByRole("toolbar", { name: "링크 툴바" })).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "링크 편집" }));
@@ -328,7 +342,7 @@ describe("LinkToolbar 링크 툴바", () => {
         </>,
       ),
     );
-    collapseSelection();
+    placeCaretInEditorText();
     const editable = getEditable();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
@@ -350,7 +364,7 @@ describe("LinkToolbar 링크 툴바", () => {
         </>,
       ),
     );
-    collapseSelection();
+    placeCaretInEditorText();
     const editable = getEditable();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
@@ -383,7 +397,7 @@ describe("LinkToolbar 링크 툴바", () => {
         </>,
       ),
     );
-    collapseSelection();
+    placeCaretInEditorText();
     const editable = getEditable();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
@@ -400,6 +414,23 @@ describe("LinkToolbar 링크 툴바", () => {
     expect(screen.queryByRole("toolbar")).not.toBeNull();
 
     collapseSelection();
+
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("편집기 안 collapsed 캐럿에 활성 링크가 없으면 숨긴다", () => {
+    const controller = fakeController();
+    render(
+      withProvider(
+        controller,
+        <>
+          <LinkToolbar />
+          <EditorContent />
+        </>,
+      ),
+    );
+
+    placeCaretInEditorText();
 
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
