@@ -16,7 +16,10 @@ import {
 } from "./table-handle-geometry.js";
 import { TableGripMenu } from "./table-grip-menu.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
-import { TableHandleOverlays } from "./table-handle-overlays.js";
+import {
+  type ExpandColumnSpan,
+  TableHandleOverlays,
+} from "./table-handle-overlays.js";
 import {
   HANDLE_HOVER_MARGIN,
   TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS,
@@ -94,46 +97,79 @@ const resolveMenuTargetIndex = (
   return { index: nextIndex === -1 ? null : nextIndex, count: ids.length };
 };
 
-// Issue #260: 열 리사이즈 strip을 안쪽 스크롤 컨테이너의 보이는 영역과 세로로
-// 교집합한다. 병합 셀 없는 표는 strip이 열 경계 전체 높이 한 구간이다(#239).
-// 병합 표도 연속한 일반 행 구간을 한 strip으로 합친다(#240). 표 일부만 영역에
-// 보이면 strip 박스가 영역을 넘어 clip 판정(세로 완전 포함)에 늘 숨었다.
+// Issue #260, #278: 영역보다 긴 표의 오버레이 구간을 안쪽 스크롤 컨테이너의
+// 보이는 영역과 세로로 교집합한다. 오버레이 박스가 영역을 넘으면 clip 판정(세로
+// 완전 포함)에 늘 숨기 때문이다.
+// - 열 리사이즈 strip(#260): 병합 셀 없는 표는 열 경계 전체 높이 한 구간이다(#239).
+//   병합 표도 연속한 일반 행 구간을 한 strip으로 합친다(#240).
+// - 열 추가 rail(#278): 표 전체 높이(`geometry.top`~`bottom`) 한 구간이다.
 // - geometry는 page 좌표다. `scrollY`로 viewport로 바꿔 자르고 page로 되돌린다
 //   (`readPageRect`와 같은 기준, ADR-0012).
-// - 교집합이 빈 구간은 뺀다. 남는 구간은 원래 구간 안이라 병합 셀을 덮지 않는다
-//   (G-TBL-001).
+// - strip의 교집합이 빈 구간은 뺀다. 남는 구간은 원래 구간 안이라 병합 셀을 덮지
+//   않는다(G-TBL-001).
+// - rail의 교집합이 비면 원래 구간을 그대로 쓴다. 표가 영역 밖이라는 뜻이다. 기존
+//   clip 판정이 숨긴다. 노드는 마운트 상태를 유지한다.
 // - `rowId`(React key)는 그대로다. strip 노드가 스크롤마다 다시 만들어지지 않는다.
-// - clip 영역이 없으면(창 스크롤만 쓰는 구성) geometry를 그대로 돌려준다.
-const clipResizeSegments = (
+// - clip 영역이 없으면(창 스크롤만 쓰는 구성) 원래 구간을 그대로 돌려준다.
+// - `geometry.top`·`bottom`은 바꾸지 않는다. 자르는 값은 오버레이에 넘기는
+//   사본과 `expandColumnSpan`에만 담는다.
+type OverlayClip = {
+  geometry: TableGeometry;
+  expandColumnSpan: ExpandColumnSpan;
+};
+
+const uncutOverlay = (geometry: TableGeometry): OverlayClip => ({
+  geometry,
+  expandColumnSpan: {
+    top: geometry.top,
+    height: geometry.bottom - geometry.top,
+  },
+});
+
+const clipOverlaySpans = (
   geometry: TableGeometry,
   element: HTMLElement,
-): TableGeometry => {
+): OverlayClip => {
+  const original = uncutOverlay(geometry);
   const boxes = readScrollClipBoxes(element);
-  if (boxes.length === 0) return geometry;
+  if (boxes.length === 0) return original;
   const scrollY = element.ownerDocument.defaultView?.scrollY ?? 0;
+  const railClipped = clipSpanToBoxes(
+    { top: geometry.top - scrollY, bottom: geometry.bottom - scrollY },
+    boxes,
+  );
   return {
-    ...geometry,
-    columns: geometry.columns.map((column) => ({
-      ...column,
-      resizeSegments: column.resizeSegments.flatMap((segment) => {
-        const clipped = clipSpanToBoxes(
-          {
-            top: segment.top - scrollY,
-            bottom: segment.top + segment.height - scrollY,
+    geometry: {
+      ...geometry,
+      columns: geometry.columns.map((column) => ({
+        ...column,
+        resizeSegments: column.resizeSegments.flatMap((segment) => {
+          const clipped = clipSpanToBoxes(
+            {
+              top: segment.top - scrollY,
+              bottom: segment.top + segment.height - scrollY,
+            },
+            boxes,
+          );
+          return clipped === null
+            ? []
+            : [
+                {
+                  rowId: segment.rowId,
+                  top: clipped.top + scrollY,
+                  height: clipped.bottom - clipped.top,
+                },
+              ];
+        }),
+      })),
+    },
+    expandColumnSpan:
+      railClipped === null
+        ? original.expandColumnSpan
+        : {
+            top: railClipped.top + scrollY,
+            height: railClipped.bottom - railClipped.top,
           },
-          boxes,
-        );
-        return clipped === null
-          ? []
-          : [
-              {
-                rowId: segment.rowId,
-                top: clipped.top + scrollY,
-                height: clipped.bottom - clipped.top,
-              },
-            ];
-      }),
-    })),
   };
 };
 
@@ -1035,17 +1071,16 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
 
   const reorderGuideRect = computeReorderGuideRect(geometry, reorderState);
 
-  // 오버레이에만 strip을 자른 geometry를 넘긴다(clipResizeSegments). 메뉴 좌표·
+  // 오버레이에만 strip·rail 구간을 자른 값을 넘긴다(clipOverlaySpans). 메뉴 좌표·
   // 재정렬 가이드·layout effect 비교는 원래 geometry를 쓴다. 드래그 중에는
   // 자르지 않는다. 스크롤로 구간이 바뀌어도 pointer capture를 쥔 strip이 원래
   // 구간에 남는다(clip 판정 면제와 같은 이유).
-  const overlayGeometry =
-    geometry === null ||
-    element === null ||
-    reorderState !== null ||
-    resizeState !== null
-      ? geometry
-      : clipResizeSegments(geometry, element);
+  const overlayClip: OverlayClip | null =
+    geometry === null
+      ? null
+      : element === null || reorderState !== null || resizeState !== null
+        ? uncutOverlay(geometry)
+        : clipOverlaySpans(geometry, element);
 
   // 메뉴 좌표를 click 시점에 고정하면 연 채로 스크롤/창 크기 변경 시
   // 앵커(핸들)와 어긋난다 — 핸들 자신처럼 매 렌더마다 geometry에서 다시
@@ -1070,7 +1105,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
 
   return (
     <>
-      {overlayGeometry !== null && (
+      {overlayClip !== null && (
         <div
           data-geul-table-overlay-layer=""
           ref={overlayLayerRef}
@@ -1079,7 +1114,8 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
           <TableHandleOverlays
             activeColumnIds={activeColumnIds}
             activeRowIds={activeRowIds}
-            geometry={overlayGeometry}
+            expandColumnSpan={overlayClip.expandColumnSpan}
+            geometry={overlayClip.geometry}
             onAddBlock={stableAddBlockClick}
             onAddColumn={stableAddColumn}
             onAddRow={stableAddRow}

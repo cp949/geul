@@ -21,7 +21,12 @@ import type { ReorderGuideRect } from "./table-handle-helpers.js";
 import type { ReorderKind } from "./table-handle-types.js";
 import { useDictionary } from "./use-editor.js";
 
+// 열 추가 rail의 세로 구간(page 좌표). 영역보다 긴 표는 TableHandles가 영역과
+// 교집합한 구간을 넘긴다(Issue #278). 자르지 않으면 표 전체 높이다.
+export type ExpandColumnSpan = { top: number; height: number };
+
 export type TableHandleOverlaysProps = {
+  expandColumnSpan: ExpandColumnSpan;
   geometry: TableGeometry;
   reorderGuideRect: ReorderGuideRect | null;
   // "활성 바"(사용자 네이밍) 노출 대상 행/열 id 목록 — 커서가 있는 행/열과
@@ -249,6 +254,7 @@ const ResizeHandle = memo(function ResizeHandle({
 export const TableHandleOverlays = ({
   activeColumnIds,
   activeRowIds,
+  expandColumnSpan,
   geometry,
   reorderGuideRect,
   onReorderHandleClick,
@@ -393,9 +399,9 @@ export const TableHandleOverlays = ({
         style={{
           position: "absolute",
           left: geometry.right + 8,
-          top: geometry.top,
+          top: expandColumnSpan.top,
           width: 24,
-          height: geometry.bottom - geometry.top,
+          height: expandColumnSpan.height,
         }}
       />
       {/* 좌상단 클러스터(Plus+표 그립, Issue #174 RD-002) — 일반 블록

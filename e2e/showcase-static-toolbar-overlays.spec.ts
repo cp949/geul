@@ -1227,3 +1227,160 @@ test("영역 상단이 뷰포트 상단이면 clamp된 미디어 툴바도 이�
   );
   await expect(page.locator(".geul-media-toolbar__more-menu")).toHaveCount(0);
 });
+
+/**
+ * 표 셀 위아래 padding을 `padding`px로 키워 표 높이를 조절한다. 마지막 행 셀에
+ * 커서를 둬 hover 없이도 표 핸들이 남게 하고, 창을 스크롤해 영역 상단을 뷰포트
+ * 상단에 맞춘다(#278).
+ */
+const openTableWithCellPadding = async (page: Page, padding: number) => {
+  await openShowcasePage(page, "/examples/static-toolbar");
+  await page.getByRole("button", { name: "샘플 불러오기" }).click();
+  await page.addStyleTag({
+    content: `[contenteditable] table td { padding-top: ${padding}px; padding-bottom: ${padding}px; }`,
+  });
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  const table = editor.locator("table").first();
+  const cell = table.locator("tr").last().locator("td").first();
+  await cell.scrollIntoViewIfNeeded();
+  await cell.click();
+  await alignAreaToViewportTop(page);
+  return { table };
+};
+
+/** 표 상단이 영역 상단에서 `offset`px 아래에 오도록 영역을 스크롤한다. 음수면 표 상단이 영역 위로 나간다. */
+const scrollTableTopTo = async (page: Page, table: Locator, offset: number) => {
+  const target = await table.evaluate((element, gap) => {
+    const area = document.querySelector<HTMLElement>('[class*="scrollArea"]');
+    if (area === null) throw new Error("scrollArea 없음");
+    return (
+      area.scrollTop +
+      element.getBoundingClientRect().top -
+      area.getBoundingClientRect().top -
+      gap
+    );
+  }, offset);
+  await setAreaScrollTop(page, target);
+  await settleClip(page);
+};
+
+/** 표와 영역의 세로 길이·위치를 읽는다. 전제 단언에 쓴다. */
+const readTableAndAreaBox = (table: Locator) =>
+  table.evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return {
+      tableTop: rect.top,
+      tableBottom: rect.bottom,
+      tableHeight: rect.height,
+      areaTop: area.top,
+      areaBottom: area.bottom,
+      areaHeight: area.height,
+    };
+  });
+
+/** 열 추가 rail 박스가 영역 안인지와 표 높이와의 차이를 읽는다. */
+const readExpandColumnRail = (page: Page) =>
+  page.locator("[data-geul-table-expand-column]").evaluate((element) => {
+    const area = document
+      .querySelector('[class*="scrollArea"]')
+      ?.getBoundingClientRect();
+    if (area === undefined) throw new Error("scrollArea 없음");
+    const rect = element.getBoundingClientRect();
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      height: rect.height,
+      insideArea: rect.top >= area.top && rect.bottom <= area.bottom,
+    };
+  });
+
+test("영역보다 긴 표에서도 열 추가 rail이 영역 안에 보인다(#278)", async ({
+  page,
+}) => {
+  const { table } = await openTableWithCellPadding(page, 160);
+  const rail = page.locator("[data-geul-table-expand-column]");
+
+  // 표 상단이 영역 상단에서 20px 아래, 표 상단이 영역 위로 300px 나간 중간.
+  for (const offset of [20, -300]) {
+    await scrollTableTopTo(page, table, offset);
+    const box = await readTableAndAreaBox(table);
+    expect(box.tableHeight, "전제: 표가 영역보다 길다").toBeGreaterThan(
+      box.areaHeight,
+    );
+    await expect(rail, `표 상단 offset ${offset}`).toHaveCSS(
+      "visibility",
+      "visible",
+    );
+    expect(
+      (await readExpandColumnRail(page)).insideArea,
+      `rail 박스가 영역 안(offset ${offset})`,
+    ).toBe(true);
+    expect(await readEscapedOverlays(page)).toEqual([]);
+  }
+});
+
+test("영역보다 긴 표의 열 추가 rail을 누르면 열이 하나 늘어난다(#278)", async ({
+  page,
+}) => {
+  const { table } = await openTableWithCellPadding(page, 160);
+  const columns = table.locator("colgroup col");
+  const before = await columns.count();
+  await scrollTableTopTo(page, table, -300);
+
+  await page.locator("[data-geul-table-expand-column]").click();
+
+  await expect(columns, "열 추가 뒤 col 수").toHaveCount(before + 1);
+});
+
+test("영역 안에 표가 통째로 들어오면 열 추가 rail은 표 높이 전체를 덮는다(#278 대조)", async ({
+  page,
+}) => {
+  const { table } = await openTableWithCellPadding(page, 70);
+  await scrollTableTopTo(page, table, 50);
+  const box = await readTableAndAreaBox(table);
+  expect(box.tableTop, "전제: 표 상단이 영역 안").toBeGreaterThanOrEqual(
+    box.areaTop,
+  );
+  expect(box.tableBottom, "전제: 표 하단이 영역 안").toBeLessThanOrEqual(
+    box.areaBottom,
+  );
+
+  await expect(page.locator("[data-geul-table-expand-column]")).toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  const rail = await readExpandColumnRail(page);
+  expect(rail.height, "rail 높이가 표 높이와 같다").toBeCloseTo(
+    box.tableHeight,
+    0,
+  );
+  expect(rail.insideArea).toBe(true);
+});
+
+test("영역보다 긴 표를 영역 밖으로 완전히 밀면 열 추가 rail이 숨는다(#278)", async ({
+  page,
+}) => {
+  const { table } = await openTableWithCellPadding(page, 160);
+  const rail = page.locator("[data-geul-table-expand-column]");
+
+  // 영역을 위 끝으로 밀어 표가 영역 아래로 완전히 나가게 한다.
+  await setAreaScrollTop(page, 0);
+  await settleClip(page);
+  const box = await readTableAndAreaBox(table);
+  if (box.tableTop <= box.areaBottom) {
+    // 표가 아래에도 안 나가면 아래 끝으로 민다.
+    await setAreaScrollTop(page, 1_000_000);
+    await settleClip(page);
+  }
+  const pushed = await readTableAndAreaBox(table);
+  expect(
+    pushed.tableBottom < pushed.areaTop || pushed.tableTop > pushed.areaBottom,
+    "전제: 표가 영역 밖",
+  ).toBe(true);
+
+  await expect(rail, "영역 밖 표의 rail").toHaveCSS("visibility", "hidden");
+});
