@@ -15,6 +15,11 @@ import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
+import {
+  buildPlainMultilinePasteTransaction,
+  plainTextClipboardParser,
+  splitPlainTextLines,
+} from "./plain-text-paste.js";
 
 // spec §7.3은 HTML 붙여넣기가 문서 HTML import와 같은 sanitizer·매핑을
 // 재사용해야 한다고 못 박는다 — 개별 Tiptap 확장의 parseHTML을 하나씩
@@ -169,6 +174,9 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     return [
       new Plugin({
         props: {
+          // drop과 codeBlock에 걸친 범위처럼 handlePaste가 물러나는 경로의
+          // 여러 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
+          clipboardTextParser: plainTextClipboardParser,
           handlePaste: (view, event) => {
             if (sanitizedPasteInFlight) return false;
             // 표 셀 안에서는 손대지 않는다(R1 계약 그대로) — pasteHandler도
@@ -258,6 +266,25 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                 if (!encoded.ok) return true;
                 insert(encoded.value.content ?? []);
                 return true;
+              }
+
+              // 여러 줄 plain text는 Enter 분할과 같은 규칙으로 직접 배치한다
+              // (Issue #284). PM 기본 처리는 줄마다 문단 slice를 만들어 캐럿
+              // 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 입력은 먼저
+              // sanitize한다 — 무효 문자 처리는 아래 분기와 같은 결과다.
+              // 직접 배치할 수 없으면(NodeSelection 등) tr을 버리고 아래
+              // 기존 분기로 PM 기본 처리에 위임한다. 코드블록에 걸친 범위는
+              // 위 조기 반환이 이미 걸렀다.
+              const lines = splitPlainTextLines(sanitizeInlineText(text));
+              if (lines.length >= 2) {
+                const pasteTransaction = buildPlainMultilinePasteTransaction(
+                  view.state,
+                  lines,
+                );
+                if (pasteTransaction !== null) {
+                  view.dispatch(pasteTransaction);
+                  return true;
+                }
               }
 
               // 감지되지 않은 단순 plain text는 PM 기본 처리(paragraph

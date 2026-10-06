@@ -166,11 +166,26 @@ function enterOverCodeBlockRange(
   return true;
 }
 
+// splitAtCaret 옵션.
+export type SplitAtCaretOptions = {
+  // 빈 목록 항목에서 새 항목 대신 paragraph로 바꾸는 exit 규칙을 켠다.
+  // 기본값은 true다(Enter). 붙여넣기 중간 분할(plain-text-paste.ts)은 끈다.
+  exitEmptyList?: boolean;
+};
+
 // tr.selection(범위 선택이었다면 deleteSelection이 남긴 캐럿)과 tr.doc
 // 기준으로 컨테이너 분할 step들을 같은 tr에 쌓는다. 가드 실패 시 false를
 // 반환하고 tr에 아무 step도 추가하지 않는다 — dispatch 여부는 호출부가
 // 결정한다.
-function splitAtCaret(tr: Transaction): boolean {
+//
+// core 내부 모듈 간 공유용 export다. index.ts에 재노출하지 않는다
+// (G-WKS-001). 평문 다줄 붙여넣기(plain-text-paste.ts)가 줄 사이 분할에
+// 같은 D23·D24·#252 규칙을 쓰려고 호출한다(Issue #284).
+export function splitAtCaret(
+  tr: Transaction,
+  options: SplitAtCaretOptions = {},
+): boolean {
+  const exitEmptyList = options.exitEmptyList ?? true;
   const { $from } = tr.selection;
   const contentNode = $from.parent;
   if (!isSplittableContent(contentNode)) {
@@ -193,7 +208,11 @@ function splitAtCaret(tr: Transaction): boolean {
   // blockGroup(children), 부모 안 인덱스와 중첩 깊이가 그대로 남는다.
   // 타입 전환과 selection을 같은 tr에 담아 dispatch·revision/event·undo를
   // 각각 한 번으로 유지한다(G-EDT-001).
-  if (isListItemContent(contentNode) && contentNode.content.size === 0) {
+  if (
+    exitEmptyList &&
+    isListItemContent(contentNode) &&
+    contentNode.content.size === 0
+  ) {
     const contentPosition = $from.before($from.depth);
     const paragraph = contentNode.type.schema.nodes.paragraph;
     if (paragraph === undefined) return false;
