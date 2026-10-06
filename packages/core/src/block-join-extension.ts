@@ -6,6 +6,7 @@ import { CellSelection } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
 import { inlineToCodeSource } from "./code-block-inline-text.js";
+import { deleteKeyBindings } from "./delete-key-bindings.js";
 import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
@@ -47,6 +48,12 @@ import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
 // table도 같은 재귀에 편입한다. 표 셀 content가 "inline*"라 table은
 // nesting되지 않으므로 이 반복은 무한 루프에 빠지지 않는다.
 //
+// Issue #276: Backspace·Delete만 바인딩하면 같은 방향의 수식 키가 Tiptap
+// Keymap으로 새어 PM joinBackward·joinForward를 탄다. 접힌 toggle 뒤 블록은
+// 숨은 자손에 병합되어 텍스트가 사라지고, 비접힘 블록은 앞 블록의 자식으로
+// 중첩된다. 키 계열은 deleteKeyBindings가 소유한다. 핸들러는 블록 경계가
+// 아니면 false를 돌려 단어 단위 삭제 등 기존 동작을 유지한다.
+//
 // 사용자가 직접 만든(드래그 등) 전체 표 `CellSelection`에서 Backspace/Delete
 // 로 표를 지우는 경로(deleteSelectedTable)는 이 재귀 스킵과 무관하게
 // 유지된다 — 아래 findMergeTarget/findFrom은 caret(empty selection)에서만
@@ -60,8 +67,10 @@ export const BlockJoinExtension = Extension.create({
 
   addKeyboardShortcuts() {
     return {
-      Backspace: () => joinBackwardAtBlockStart(this.editor),
-      Delete: () => joinForwardAtTextEnd(this.editor),
+      ...deleteKeyBindings("backward", () =>
+        joinBackwardAtBlockStart(this.editor),
+      ),
+      ...deleteKeyBindings("forward", () => joinForwardAtTextEnd(this.editor)),
     };
   },
 });

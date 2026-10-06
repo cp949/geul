@@ -8,6 +8,8 @@ import {
   type Transaction,
 } from "@tiptap/pm/state";
 
+import { deleteKeyBindings } from "./delete-key-bindings.js";
+
 type InputRuleUndoState = {
   // 이 undo 정보가 속한 실제 isInputRules plugin 참조. Tiptap core는
   // addInputRules를 가진 확장마다 별도 plugin 인스턴스를 하나씩 만든다
@@ -91,43 +93,40 @@ export const ListInputRuleExtension = Extension.create({
   priority: 1_100,
 
   addKeyboardShortcuts() {
-    return {
-      Backspace: () => {
-        const { state } = this.editor;
-        const plugin = activeInputRulesPlugin(state);
-        const undoable = plugin?.getState(state);
-        const hasUndoableInputRule =
-          undoable !== null && undoable !== undefined;
-        if (!hasUndoableInputRule) return false;
+    return deleteKeyBindings("backward", () => {
+      const { state } = this.editor;
+      const plugin = activeInputRulesPlugin(state);
+      const undoable = plugin?.getState(state);
+      const hasUndoableInputRule = undoable !== null && undoable !== undefined;
+      if (!hasUndoableInputRule) return false;
 
-        const preTransformDoc = (undoable as InputRuleUndoState).transform
-          .docs[0];
-        if (preTransformDoc === undefined) {
-          return this.editor.commands.undoInputRule();
-        }
+      const preTransformDoc = (undoable as InputRuleUndoState).transform
+        .docs[0];
+      if (preTransformDoc === undefined) {
+        return this.editor.commands.undoInputRule();
+      }
 
-        return this.editor
-          .chain()
-          .undoInputRule()
-          .command(({ tr }) => {
-            const lastBlock = tr.doc.lastChild;
-            const isConversionCreatedTrailingParagraph =
-              tr.doc.childCount === preTransformDoc.childCount + 1 &&
-              lastBlock?.type.name === "blockContainer" &&
-              lastBlock.childCount === 1 &&
-              lastBlock.firstChild?.type.name === "paragraph" &&
-              lastBlock.firstChild.content.size === 0;
-            if (!isConversionCreatedTrailingParagraph) return true;
+      return this.editor
+        .chain()
+        .undoInputRule()
+        .command(({ tr }) => {
+          const lastBlock = tr.doc.lastChild;
+          const isConversionCreatedTrailingParagraph =
+            tr.doc.childCount === preTransformDoc.childCount + 1 &&
+            lastBlock?.type.name === "blockContainer" &&
+            lastBlock.childCount === 1 &&
+            lastBlock.firstChild?.type.name === "paragraph" &&
+            lastBlock.firstChild.content.size === 0;
+          if (!isConversionCreatedTrailingParagraph) return true;
 
-            tr.delete(
-              tr.doc.content.size - lastBlock.nodeSize,
-              tr.doc.content.size,
-            );
-            return true;
-          })
-          .run();
-      },
-    };
+          tr.delete(
+            tr.doc.content.size - lastBlock.nodeSize,
+            tr.doc.content.size,
+          );
+          return true;
+        })
+        .run();
+    });
   },
 
   addProseMirrorPlugins() {

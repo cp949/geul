@@ -8,6 +8,7 @@ import {
 } from "@tiptap/pm/state";
 
 import { codeSourceToInline } from "./code-block-inline-text.js";
+import { deleteKeyBindings } from "./delete-key-bindings.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 
 // codeBlock에서만 반응하는 Enter(double 개행 종료)·Shift-Enter(캐럿 위치
@@ -32,7 +33,7 @@ export const CodeBlockExitExtension = Extension.create({
     return {
       Enter: () => exitCodeBlockOnDoubleEnter(this.editor),
       "Shift-Enter": () => splitCodeBlockOnShiftEnter(this.editor),
-      Delete: () => deleteEmptyCodeBlock(this.editor),
+      ...deleteKeyBindings("forward", () => deleteEmptyCodeBlock(this.editor)),
     };
   },
 });
