@@ -12,6 +12,11 @@ import {
 import { deleteKeyBindings } from "./delete-key-bindings.js";
 import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
+import {
+  consumeWhileLiveBoundaryRange,
+  deleteTableBoundaryRange,
+  findTableBoundaryRange,
+} from "./table-boundary-range.js";
 import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
@@ -57,6 +62,11 @@ import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
 // 중첩된다. 키 계열은 deleteKeyBindings가 소유한다. 핸들러는 블록 경계가
 // 아니면 false를 돌려 단어 단위 삭제 등 기존 동작을 유지한다.
 //
+// Issue #289: 표 경계에 걸친 범위 선택의 Backspace·Delete는 선택한 텍스트만
+// 지운다. 표 안은 셀 텍스트만 지워 구조를 유지하고 표 밖은 일반 삭제한다.
+// 판정과 삭제는 table-boundary-range.ts가 소유한다. 두 핸들러가 맨 앞에서
+// 이 경로를 먼저 탄다.
+//
 // 사용자가 직접 만든(드래그 등) 전체 표 `CellSelection`에서 Backspace/Delete
 // 로 표를 지우는 경로(deleteSelectedTable)는 이 재귀 스킵과 무관하게
 // 유지된다 — 아래 findMergeTarget/findFrom은 caret(empty selection)에서만
@@ -70,10 +80,19 @@ export const BlockJoinExtension = Extension.create({
 
   addKeyboardShortcuts() {
     return {
+      // 역방향 stale(파생 selection은 대상 밖, live는 표 경계 범위)에서 false
+      // 폴스루하면 Tiptap 기본 deleteSelection이 live 범위에 적용돼 선택하지
+      // 않은 텍스트가 셀로 옮겨 간다. 소비한다(Issue #289, G-EDT-002).
       ...deleteKeyBindings("backward", () =>
-        joinBackwardAtBlockStart(this.editor),
+        consumeWhileLiveBoundaryRange(this.editor, () =>
+          joinBackwardAtBlockStart(this.editor),
+        ),
       ),
-      ...deleteKeyBindings("forward", () => joinForwardAtTextEnd(this.editor)),
+      ...deleteKeyBindings("forward", () =>
+        consumeWhileLiveBoundaryRange(this.editor, () =>
+          joinForwardAtTextEnd(this.editor),
+        ),
+      ),
     };
   },
 });
@@ -482,6 +501,30 @@ function handleCodeBlockBoundary(
   return selectionIsStale && isLiveCodeRelatedBoundary(liveState, direction);
 }
 
+// 표 경계에 걸친 범위 선택의 Backspace·Delete(Issue #289). 경계 범위면 선택한
+// 텍스트만 한 tr로 지우고 키를 소비한다. 표 안은 셀 텍스트만 지워 구조를
+// 유지하고, 표 밖은 일반 삭제한다(table-boundary-range.ts). 이전에는 PM
+// 기본 deleteSelection이 선택하지 않은 뒷부분 텍스트를 셀로 옮기거나 셀을
+// 지웠다. 경계 범위가 아니면 false라 아래 기존 경로가 그대로 이어진다.
+//
+// 판정과 삭제 위치는 파생 selection에서 계산한 range가 정한다. 문서
+// transaction은 live state에서 만든다(G-EDT-002). tr에 파생 selection을 먼저
+// 두지 않는다. 삭제 위치는 range 기준이고 마지막 setSelection이 캐럿을 정하며,
+// undo selection은 history가 live state에서 기록한다. 수식 키도 이 핸들러를
+// 타므로 Mod-Backspace·Mod-Delete가 같은 결과다(Issue #276).
+function deleteTableBoundarySelection(
+  editor: Editor,
+  state: EditorState,
+): boolean {
+  const range = findTableBoundaryRange(state.selection);
+  if (range === null) return false;
+  const liveState = editor.state;
+  const tr = liveState.tr;
+  deleteTableBoundaryRange(tr, range);
+  editor.view.dispatch(tr);
+  return true;
+}
+
 // 블록 선두 Backspace: 시각적으로 이전인 텍스트블록에 병합한다. 블록
 // 중간(parentOffset > 0)은 기본 문자 삭제 몫이라 관여하지 않는다.
 function joinBackwardAtBlockStart(editor: Editor): boolean {
@@ -489,6 +532,7 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
     allowNativeTextSelectionFromCellSelection: true,
   });
   const liveState = editor.state;
+  if (deleteTableBoundarySelection(editor, state)) return true;
   const selectionIsStale = !state.selection.eq(liveState.selection);
   // 유효한 DOM-derived 일반 join이면 live stale CellSelection·CodeBlock
   // 보호보다 우선한다. 단, DOM caret의 실제 인접 대상이
@@ -615,6 +659,7 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
     allowNativeTextSelectionFromCellSelection: true,
   });
   const liveState = editor.state;
+  if (deleteTableBoundarySelection(editor, state)) return true;
   const selectionIsStale = !state.selection.eq(liveState.selection);
   // Backspace와 같은 우선순위 계약의 정방향 대칭이다.
   const nativeJoinOverridesLive =

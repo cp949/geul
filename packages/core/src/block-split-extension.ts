@@ -9,6 +9,7 @@ import {
 
 import { appendCodeBlockEnter } from "./code-block-exit-extension.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
+import { findTableBoundaryRange } from "./table-boundary-range.js";
 import { isCollapsedToggleContent } from "./toggle-collapse-hidden.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
@@ -69,6 +70,15 @@ function splitBlockContainer(editor: Editor): boolean {
     allowNativeTextSelectionFromCellSelection: true,
   });
   const { selection } = selectionAwareState;
+
+  // 표 경계에 걸친 범위는 키만 소비한다(Issue #289). 셀 content는 "inline*"라
+  // 분할할 위치가 없고, 범위를 지우고 분할하면 표가 사라지거나 예외가
+  // 난다. 어느 방향이든 문서를 바꾸지 않는다. codeBlock에서 시작해 셀로
+  // 끝나는 범위가 enterOverCodeBlockRange로 가지 않게 그 판정보다 앞에
+  // 둔다.
+  if (findTableBoundaryRange(selection) !== null) {
+    return true;
+  }
 
   const fromParent = selection.$from.parent;
   if (isCodeBlockRangeLeavingBlock(selection)) {
