@@ -18,6 +18,7 @@ import { TableGripMenu } from "./table-grip-menu.js";
 import { TableHandleMenu } from "./table-handle-menu.js";
 import {
   type ExpandColumnSpan,
+  type ExpandRowSpan,
   TableHandleOverlays,
 } from "./table-handle-overlays.js";
 import {
@@ -46,7 +47,11 @@ import type {
   ReorderState,
   ResizeState,
 } from "./table-handle-types.js";
-import { clipSpanToBoxes, readScrollClipBoxes } from "./scroll-clip.js";
+import {
+  clipHorizontalSpanToBoxes,
+  clipSpanToBoxes,
+  readScrollClipBoxes,
+} from "./scroll-clip.js";
 import { isElementNode, isHtmlElement } from "./dom-node.js";
 import {
   COLLAPSED_HIDDEN_ATTRIBUTE,
@@ -114,25 +119,30 @@ const readVisibleGeometryFor = (
   return readGeometryFor(element, tableBlockId);
 };
 
-// Issue #260, #278: 영역보다 긴 표의 오버레이 구간을 안쪽 스크롤 컨테이너의
-// 보이는 영역과 세로로 교집합한다. 오버레이 박스가 영역을 넘으면 clip 판정(세로
-// 완전 포함)에 늘 숨기 때문이다.
+// Issue #260, #278, #283: 영역보다 긴·넓은 표의 오버레이 구간을 안쪽 스크롤
+// 컨테이너의 보이는 영역과 교집합한다. 세로는 오버레이 박스가 영역을 넘으면 clip
+// 판정(세로 완전 포함)에 늘 숨기 때문이다. 가로는 clip 판정이 겹치기만 하면
+// 보여, 박스가 영역 밖까지 뻗은 rail이 영역 밖 클릭을 받기 때문이다.
 // - 열 리사이즈 strip(#260): 병합 셀 없는 표는 열 경계 전체 높이 한 구간이다(#239).
 //   병합 표도 연속한 일반 행 구간을 한 strip으로 합친다(#240).
 // - 열 추가 rail(#278): 표 전체 높이(`geometry.top`~`bottom`) 한 구간이다.
-// - geometry는 page 좌표다. `scrollY`로 viewport로 바꿔 자르고 page로 되돌린다
-//   (`readPageRect`와 같은 기준, ADR-0012).
+// - 행 추가 rail(#283): 표 전체 폭(`geometry.left`~`right`) 한 구간이다. 가로로
+//   자른다.
+// - geometry는 page 좌표다. `scrollY`·`scrollX`로 viewport로 바꿔 자르고 page로
+//   되돌린다(`readPageRect`와 같은 기준, ADR-0012).
 // - strip의 교집합이 빈 구간은 뺀다. 남는 구간은 원래 구간 안이라 병합 셀을 덮지
 //   않는다(G-TBL-001).
 // - rail의 교집합이 비면 원래 구간을 그대로 쓴다. 표가 영역 밖이라는 뜻이다. 기존
 //   clip 판정이 숨긴다. 노드는 마운트 상태를 유지한다.
+// - 행 추가 rail의 아이콘은 보이는 부분의 가운데로 옮겨진다. 수용한 동작이다.
 // - `rowId`(React key)는 그대로다. strip 노드가 스크롤마다 다시 만들어지지 않는다.
 // - clip 영역이 없으면(창 스크롤만 쓰는 구성) 원래 구간을 그대로 돌려준다.
 // - `geometry.top`·`bottom`은 바꾸지 않는다. 자르는 값은 오버레이에 넘기는
-//   사본과 `expandColumnSpan`에만 담는다.
+//   사본과 `expandColumnSpan`·`expandRowSpan`에만 담는다.
 type OverlayClip = {
   geometry: TableGeometry;
   expandColumnSpan: ExpandColumnSpan;
+  expandRowSpan: ExpandRowSpan;
 };
 
 const uncutOverlay = (geometry: TableGeometry): OverlayClip => ({
@@ -140,6 +150,10 @@ const uncutOverlay = (geometry: TableGeometry): OverlayClip => ({
   expandColumnSpan: {
     top: geometry.top,
     height: geometry.bottom - geometry.top,
+  },
+  expandRowSpan: {
+    left: geometry.left,
+    width: geometry.right - geometry.left,
   },
 });
 
@@ -150,9 +164,15 @@ const clipOverlaySpans = (
   const original = uncutOverlay(geometry);
   const boxes = readScrollClipBoxes(element);
   if (boxes.length === 0) return original;
-  const scrollY = element.ownerDocument.defaultView?.scrollY ?? 0;
+  const view = element.ownerDocument.defaultView;
+  const scrollX = view?.scrollX ?? 0;
+  const scrollY = view?.scrollY ?? 0;
   const railClipped = clipSpanToBoxes(
     { top: geometry.top - scrollY, bottom: geometry.bottom - scrollY },
+    boxes,
+  );
+  const rowRailClipped = clipHorizontalSpanToBoxes(
+    { left: geometry.left - scrollX, right: geometry.right - scrollX },
     boxes,
   );
   return {
@@ -186,6 +206,13 @@ const clipOverlaySpans = (
         : {
             top: railClipped.top + scrollY,
             height: railClipped.bottom - railClipped.top,
+          },
+    expandRowSpan:
+      rowRailClipped === null
+        ? original.expandRowSpan
+        : {
+            left: rowRailClipped.left + scrollX,
+            width: rowRailClipped.right - rowRailClipped.left,
           },
   };
 };
@@ -1162,6 +1189,7 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
             activeColumnIds={activeColumnIds}
             activeRowIds={activeRowIds}
             expandColumnSpan={overlayClip.expandColumnSpan}
+            expandRowSpan={overlayClip.expandRowSpan}
             geometry={overlayClip.geometry}
             onAddBlock={stableAddBlockClick}
             onAddColumn={stableAddColumn}

@@ -101,6 +101,33 @@ export const clipSpanToBoxes = (
   return bottom > top ? { top, bottom } : null;
 };
 
+/** 가로 구간. `left`·`right` 모두 같은 좌표계다. */
+export type HorizontalSpan = { left: number; right: number };
+
+/**
+ * 가로 구간 `span`(뷰포트 기준)을 `boxes` 전부와 교집합한다. 규칙은
+ * `clipSpanToBoxes`의 가로 짝이다.
+ *
+ * - `boxes`가 비어 있으면 `span`을 그대로 돌려준다.
+ * - 교집합이 비거나 경계에 닿기만 하면 `null`이다.
+ *
+ * 영역보다 넓은 오버레이(표 행 추가 rail)용이다. `isRectInClipBoxes`는 가로를
+ * 겹치기만 하면 보이게 하므로, 박스가 영역 밖까지 뻗은 rail은 그 밖의 클릭도
+ * 받는다. 잘라 그리면 영역 안 부분만 남는다(Issue #283).
+ */
+export const clipHorizontalSpanToBoxes = (
+  span: HorizontalSpan,
+  boxes: readonly DOMRect[],
+): HorizontalSpan | null => {
+  if (boxes.length === 0) return span;
+  let { left, right } = span;
+  for (const box of boxes) {
+    left = Math.max(left, box.left);
+    right = Math.min(right, box.right);
+  }
+  return right > left ? { left, right } : null;
+};
+
 /**
  * 오버레이 `node`의 실제 박스가 `boxes` 안이면 `visibility`를 비우고, 아니면
  * `hidden`으로 만든다. `exempt`면 항상 보인다(편집 중 입력이 사라지면

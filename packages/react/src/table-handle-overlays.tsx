@@ -25,8 +25,13 @@ import { useDictionary } from "./use-editor.js";
 // 교집합한 구간을 넘긴다(Issue #278). 자르지 않으면 표 전체 높이다.
 export type ExpandColumnSpan = { top: number; height: number };
 
+// 행 추가 rail의 가로 구간(page 좌표). 영역보다 넓은 표는 TableHandles가 영역과
+// 교집합한 구간을 넘긴다(Issue #283). 자르지 않으면 표 폭이다.
+export type ExpandRowSpan = { left: number; width: number };
+
 export type TableHandleOverlaysProps = {
   expandColumnSpan: ExpandColumnSpan;
+  expandRowSpan: ExpandRowSpan;
   geometry: TableGeometry;
   reorderGuideRect: ReorderGuideRect | null;
   // "활성 바"(사용자 네이밍) 노출 대상 행/열 id 목록 — 커서가 있는 행/열과
@@ -255,6 +260,7 @@ export const TableHandleOverlays = ({
   activeColumnIds,
   activeRowIds,
   expandColumnSpan,
+  expandRowSpan,
   geometry,
   reorderGuideRect,
   onReorderHandleClick,
@@ -364,6 +370,11 @@ export const TableHandleOverlays = ({
           막대(둘 다 :focus로도 보인다, Tab 접근성은 DOM에 항상
           존재한다는 사실만으로 이미 보장되고 opacity와 무관하다).
 
+          Add row의 가로 구간(expandRowSpan)과 Add column의 세로 구간
+          (expandColumnSpan)은 표가 스크롤 영역보다 넓거나 길면 영역과
+          교집합한 값을 받는다(Issue #283, #278). 자르지 않으면 rail이
+          영역 밖까지 덮어 그 자리의 클릭을 받는다.
+
           Add row는 top:2/height:12로 작게 잡는다 — 표 바로 아래 블록과의
           기본 간격이 16px 정도로 좁아(실측), 이전처럼 top:8/height:24로
           두면 표시된 rail이 그 블록 내용과 겹쳐 보이는 버그가 났다(사용자
@@ -383,9 +394,9 @@ export const TableHandleOverlays = ({
         onClick={onAddRow}
         style={{
           position: "absolute",
-          left: geometry.left,
+          left: expandRowSpan.left,
           top: geometry.bottom + 2,
-          width: geometry.right - geometry.left,
+          width: expandRowSpan.width,
           height: 12,
         }}
       />
