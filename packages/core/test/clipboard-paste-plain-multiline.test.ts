@@ -17,14 +17,19 @@ import type { Block, DocumentBlock } from "@cp949/geul-model";
 import { TextSelection, Transaction } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import { createEditor, type EditorController } from "../src/index.js";
+import { createEditor } from "../src/index.js";
 import {
   buildPlainMultilinePasteTransaction,
   plainTextClipboardParser,
   splitPlainTextLines,
 } from "../src/plain-text-paste.js";
 import { contentTextStart } from "./block-test-support.js";
-import { pasteData } from "./clipboard-test-support.js";
+import {
+  blocksOf,
+  outline,
+  pasteData,
+  textOf,
+} from "./clipboard-test-support.js";
 import {
   codeBlockBlock,
   dividerBlock,
@@ -39,41 +44,6 @@ import {
   toggleBlock,
 } from "./editor-controller-support.js";
 import { placeCaretInCell } from "./table-test-support.js";
-
-// 블록 한 줄 요약: "타입약어:텍스트" + 자식이 있으면 "[...]". 빈 children은
-// 쓰지 않는다. 배치 단언을 한눈에 읽게 한다.
-const TYPE_LABEL: Record<string, string> = {
-  paragraph: "p",
-  bulletListItem: "ul",
-  numberedListItem: "ol",
-  toggleListItem: "toggle",
-  quote: "quote",
-  codeBlock: "code",
-};
-
-const textOf = (block: DocumentBlock): string =>
-  "content" in block && Array.isArray(block.content)
-    ? block.content.map((item) => ("text" in item ? item.text : "")).join("")
-    : "";
-
-const outline = (blocks: readonly DocumentBlock[]): string[] =>
-  blocks.map((block) => {
-    const label =
-      block.type === "heading" && "level" in block
-        ? `h${block.level}`
-        : (TYPE_LABEL[block.type] ?? block.type);
-    const collapsed =
-      block.type === "toggleListItem" &&
-      "collapsed" in block &&
-      block.collapsed === true
-        ? "~"
-        : "";
-    const children =
-      "children" in block && block.children !== undefined
-        ? `[${outline(block.children).join(",")}]`
-        : "";
-    return `${label}${collapsed}:${textOf(block)}${children}`;
-  });
 
 // 문서를 마운트하고 blockId 블록의 텍스트 offset에 캐럿을 둔다.
 const setup = (blocks: Block[], caretBlockId: string, offset: number) => {
@@ -91,9 +61,6 @@ const setup = (blocks: Block[], caretBlockId: string, offset: number) => {
 
 const plainPaste = (editable: HTMLElement, text: string): void =>
   pasteData(editable, { "text/plain": text });
-
-const blocksOf = (editor: EditorController): readonly DocumentBlock[] =>
-  editor.getDocument().blocks;
 
 const abcdAndTail = (): Block[] => [
   paragraphBlock("p1", "abcd"),

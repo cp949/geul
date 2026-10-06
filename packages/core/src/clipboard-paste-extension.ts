@@ -7,7 +7,7 @@ import {
   sanitizeInlineText,
 } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
-import { Plugin } from "@tiptap/pm/state";
+import { type EditorState, Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
 
 import { selectionIntersectsAnyCodeBlock } from "./code-block-mark-guard-extension.js";
@@ -41,6 +41,18 @@ import {
 // 에서 이미 동등하게 인식) 둘 다 이 확장을 거치지 않고 io.importHtml에
 // 원본 그대로 전달된다 — 이 확장은 두 형식을 구분하는 사전 정규화
 // 코드를 갖지 않는다(G-CNV-002, 의미는 sanitize 이후 HAST에서만 만든다).
+
+// 선택이 비어 있지 않고 시작($from)의 조상에 codeBlock이 없는지 판정한다
+// (Issue #286). 삽입 지점이 시작 블록 쪽이라 HTML 삽입이 안전하다.
+const isRangeStartingOutsideCodeBlock = (state: EditorState): boolean => {
+  const { selection } = state;
+  if (selection.empty) return false;
+  const { $from } = selection;
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    if ($from.node(depth).type.name === "codeBlock") return false;
+  }
+  return true;
+};
 
 // enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12)를 이 확장의 두
 // modelToTiptap 호출부(아래)에 threading하지 않는다 — 착수 중
@@ -209,19 +221,33 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 처리를 그대로 살린다 — 별도로 "text/plain 우선" 로직을 새로
               // 만들 필요가 없다. 접힌 toggle의 숨은 codeBlock도 범위
               // 안이면 같은 분기다. 붙여넣기는 범위 전체를 바꾼다(Issue #264).
-              if (
-                selectionIntersectsAnyCodeBlock(
-                  view.state.doc,
-                  view.state.selection,
-                )
-              )
-                return false;
-
               const clipboardData = event.clipboardData;
               if (clipboardData === null) return false;
 
               const html = clipboardData.getData("text/html");
               const text = clipboardData.getData("text/plain");
+
+              // 예외(Issue #286): text/html이 있고 선택이 비어 있지 않고
+              // 시작($from)이 codeBlock 밖이면 조기 반환하지 않고 아래
+              // html-import 분기로 합류한다.
+              // - insertContent는 범위를 replaceWith로 대체한다(단일
+              //   transaction, 별도 삭제 단계 없음).
+              // - 삽입 지점은 범위 시작($from)이다. 시작이 codeBlock 밖이라
+              //   새 codeBlock을 codeBlock 한복판에 넣지 않는다.
+              // - PM 기본 처리는 둘째 블록 이후를 앞 블록의 자식으로 넣고
+              //   서식을 잃는다.
+              // 시작이 codeBlock 안인 범위와 캐럿은 위 설명 그대로 PM 기본
+              // 처리를 유지한다. Markdown·평문 분기는 이 예외 대상이 아니다.
+              if (
+                selectionIntersectsAnyCodeBlock(
+                  view.state.doc,
+                  view.state.selection,
+                ) &&
+                !(
+                  html.length > 0 && isRangeStartingOutsideCodeBlock(view.state)
+                )
+              )
+                return false;
 
               const insert = (nodes: TiptapJsonNode[]): void => {
                 if (nodes.length === 0) return;

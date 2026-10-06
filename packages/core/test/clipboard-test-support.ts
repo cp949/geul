@@ -1,7 +1,11 @@
 /**
  * jsdom Clipboard/Drag 폴리필 설치(side-effect) + 붙여넣기·drop 이벤트
- * dispatch helper + own-export wrapper HTML 조립.
+ * dispatch helper + own-export wrapper HTML 조립 + 붙여넣기 배치 단언용
+ * 블록 요약(outline).
  */
+import type { DocumentBlock } from "@cp949/geul-model";
+
+import type { EditorController } from "../src/index.js";
 
 // jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
 // (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
@@ -230,3 +234,48 @@ export const nestedParagraphWrapperHtml = (depth: number): string => {
   }
   return html;
 };
+
+// 블록 한 줄 요약의 타입 약어. 목록에 없는 타입은 type 이름 그대로 쓴다.
+const TYPE_LABEL: Record<string, string> = {
+  paragraph: "p",
+  bulletListItem: "ul",
+  numberedListItem: "ol",
+  toggleListItem: "toggle",
+  quote: "quote",
+  codeBlock: "code",
+};
+
+/** 블록 content의 텍스트 항목을 이어 붙인다. content가 없거나 배열이 아니면 빈 문자열이다. */
+export const textOf = (block: DocumentBlock): string =>
+  "content" in block && Array.isArray(block.content)
+    ? block.content.map((item) => ("text" in item ? item.text : "")).join("")
+    : "";
+
+/**
+ * 블록 한 줄 요약: "타입약어:텍스트" + 자식이 있으면 "[...]". 접힌 toggle은
+ * 약어 뒤에 "~"를 붙인다. 빈 children은 쓰지 않는다. 붙여넣기 배치 단언을
+ * 한눈에 읽게 한다.
+ */
+export const outline = (blocks: readonly DocumentBlock[]): string[] =>
+  blocks.map((block) => {
+    const label =
+      block.type === "heading" && "level" in block
+        ? `h${block.level}`
+        : (TYPE_LABEL[block.type] ?? block.type);
+    const collapsed =
+      block.type === "toggleListItem" &&
+      "collapsed" in block &&
+      block.collapsed === true
+        ? "~"
+        : "";
+    const children =
+      "children" in block && block.children !== undefined
+        ? `[${outline(block.children).join(",")}]`
+        : "";
+    return `${label}${collapsed}:${textOf(block)}${children}`;
+  });
+
+/** 컨트롤러 문서의 최상위 블록 목록. */
+export const blocksOf = (
+  editor: Pick<EditorController, "getDocument">,
+): readonly DocumentBlock[] => editor.getDocument().blocks;

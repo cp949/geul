@@ -21,6 +21,8 @@ import { describe, expect, it } from "vitest";
 import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
+  outline,
+  pasteData,
   pasteHtml,
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
@@ -288,7 +290,10 @@ describe("접힌 toggle을 걸친 여러 블록 선택의 codeBlock 교차 판�
 });
 
 describe("접힌 toggle을 걸친 범위의 붙여넣기 codeBlock 분기", () => {
-  it("숨은 codeBlock을 걸친 범위에서도 기본 붙여넣기는 codeBlock 분기로 처리를 넘긴다", () => {
+  // 숨은 codeBlock이 범위 안이어도 평문은 codeBlock 분기가 PM 기본 처리로
+  // 넘긴다(Issue #264). HTML은 시작이 codeBlock 밖이면 이 분기를 지나 HTML
+  // 분기로 합류한다(Issue #286) — 아래 두 번째 테스트가 맡는다.
+  it("숨은 codeBlock을 걸친 범위에서도 평문 기본 붙여넣기는 codeBlock 분기로 처리를 넘긴다", () => {
     const results: boolean[] = [];
     const editor = createEditor({
       initialDocument: hiddenChildDocument(codeBlockBlock("h", TEXT_H, "text")),
@@ -305,11 +310,40 @@ describe("접힌 toggle을 걸친 범위의 붙여넣기 codeBlock 분기", () =
     const before = editor.getDocument();
 
     withUnhandledErrorTracking((errors) => {
-      pasteHtml(editable, "<h4>붙임</h4>");
+      pasteData(editable, { "text/plain": "붙임" });
 
       // false는 codeBlock 분기가 PM 기본 처리로 넘겼다는 뜻이다.
       expect(results).toEqual([false]);
       expect(editor.getDocument()).toEqual(before);
+      expect(errors).toEqual([]);
+    });
+  });
+
+  it("숨은 codeBlock을 걸친 범위라도 시작이 codeBlock 밖이면 HTML은 HTML 분기가 처리한다(Issue #286)", () => {
+    const results: boolean[] = [];
+    const editor = createEditor({
+      initialDocument: hiddenChildDocument(codeBlockBlock("h", TEXT_H, "text")),
+      createId: sequentialIds("id"),
+      pasteHandler: (context) => {
+        results.push(context.defaultPasteHandler());
+        return true;
+      },
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    selectAToZ(tiptap);
+
+    withUnhandledErrorTracking((errors) => {
+      pasteHtml(editable, "<h4>붙임</h4>");
+
+      // true는 HTML 분기가 처리했다는 뜻이다. 범위가 h4 하나로 대체되고
+      // 양끝 문단은 빈 문단으로 남으며 숨은 codeBlock은 남지 않는다.
+      expect(results).toEqual([true]);
+      expect(outline(editor.getDocument().blocks)).toEqual([
+        "p:",
+        "h4:붙임",
+        "p:",
+      ]);
       expect(errors).toEqual([]);
     });
   });
