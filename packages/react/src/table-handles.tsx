@@ -62,6 +62,7 @@ import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
 } from "./use-handle-reopen-suppression.js";
+import { useHiddenBlockRefresh } from "./use-hidden-block-refresh.js";
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
@@ -100,6 +101,17 @@ const resolveMenuTargetIndex = (
       : readTableColumnIds(table);
   const nextIndex = ids.indexOf(menuState.targetId);
   return { index: nextIndex === -1 ? null : nextIndex, count: ids.length };
+};
+
+// 접힌 toggle이 가린 표는 geometry가 없다. rect가 0x0이라 읽은 geometry로 핸들 층을
+// 그리면 층이 페이지 구석에 남는다(Issue #280). readGeometryFor를 감싼다.
+const readVisibleGeometryFor = (
+  element: HTMLElement,
+  tableBlockId: string,
+): TableGeometry | null => {
+  const table = findTable(element, tableBlockId);
+  if (table === null || isHiddenBlockElement(table)) return null;
+  return readGeometryFor(element, tableBlockId);
 };
 
 // Issue #260, #278: 영역보다 긴 표의 오버레이 구간을 안쪽 스크롤 컨테이너의
@@ -478,10 +490,14 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     menuState !== null ||
     tableGripMenuTableId !== null ||
     hoverTableId !== null;
+  // 접힌 toggle이 가린 표는 rect가 0x0이라 핸들 층이 페이지 구석에 남는다. 숨은
+  // 표는 geometry를 비워 층과 메뉴를 그리지 않는다. hover 중 접히는 경우는
+  // `useHiddenBlockRefresh`가 다시 그린다(Issue #280).
+  useHiddenBlockRefresh(editor, element, activeTableId);
   const geometry =
     activeTableId === null || element === null
       ? null
-      : readGeometryFor(element, activeTableId);
+      : readVisibleGeometryFor(element, activeTableId);
   const { showAddRow, showAddColumn } = computeExpandButtonVisibility(
     geometry,
     hoverRowId,

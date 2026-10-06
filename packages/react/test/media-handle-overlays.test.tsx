@@ -29,6 +29,10 @@
  *
  * 추가 주제(Issue #267): 그립으로 연 media 메뉴가 열린 동안은 그 블록의 그립을
  * 숨기지 않는다. hover가 다른 블록으로 옮겨 가면 그 그립은 판정한다.
+ *
+ * 추가 주제(Issue #280): 접힌 toggle이 가린 media는 그립 앵커가 아니다. hover 중인
+ * media가 접히면 그립이 내려가고, 열린 media 메뉴는 닫힌다. 접힘 표식은 core 접힘
+ * decoration이 실제로 붙인다.
  */
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
@@ -1333,5 +1337,125 @@ describe("안쪽 스크롤 추종과 clip(Issue #235)", () => {
     fireEvent.scroll(second);
     expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
     expect(overlay.style.visibility).toBe("hidden");
+  });
+});
+
+describe("접힌 toggle이 가린 media는 그립 앵커가 아니다(Issue #280)", () => {
+  /** DOM 순서는 tg, image-1(tg의 자식), tail-1이다. */
+  const toggleWithImage = (collapsed: boolean) => [
+    {
+      id: "tg",
+      type: "toggleListItem" as const,
+      content: [{ text: "toggle" }],
+      collapsed,
+      children: [imageBlock("image-1")],
+    },
+    tailBlock,
+  ];
+
+  /** host의 현재 media 요소. 접힘이 자식 DOM을 다시 그릴 수 있어 매번 새로 찾는다. */
+  const queryMedia = (host: HTMLElement): HTMLElement => {
+    const media = host.querySelector<HTMLElement>(
+      '[data-geul-block-id="image-1"]',
+    );
+    if (media === null) throw new Error("media 요소가 없다");
+    return media;
+  };
+
+  it("접힌 toggle 안 숨은 media 위에 hover해도 그립을 그리지 않는다", () => {
+    const { host } = renderMediaOverlays({
+      initialBlocks: toggleWithImage(true),
+    });
+    const media = queryMedia(host);
+    expect(media.closest("[data-geul-collapsed-hidden]")).not.toBeNull();
+
+    fireEvent.pointerMove(media);
+
+    expect(document.querySelector(overlaySelector)).toBeNull();
+  });
+
+  it("펼친 toggle 안 media 위에서는 그립을 그린다", () => {
+    const { host } = renderMediaOverlays({
+      initialBlocks: toggleWithImage(false),
+    });
+
+    fireEvent.pointerMove(queryMedia(host));
+
+    expect(document.querySelector(overlaySelector)).not.toBeNull();
+  });
+
+  it("hover 중인 media가 접힘으로 가려지면 포인터가 멈춰 있어도 그립이 내려가고 펼치면 돌아온다", async () => {
+    const { editor, host } = renderMediaOverlays({
+      initialBlocks: toggleWithImage(false),
+    });
+    fireEvent.pointerMove(queryMedia(host));
+    expect(document.querySelector(overlaySelector)).not.toBeNull();
+
+    // 포인터 이동도 selectionchange·keyup·scroll도 없다. 표식만 붙는다.
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    expect(
+      queryMedia(host).closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+    await waitFor(() => {
+      expect(document.querySelector(overlaySelector)).toBeNull();
+    });
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    await waitFor(() => {
+      expect(document.querySelector(overlaySelector)).not.toBeNull();
+    });
+  });
+
+  it("그립으로 연 media 메뉴는 대상 media가 접힘으로 가려지면 닫힌다", async () => {
+    const { editor, host } = renderMediaOverlays({
+      initialBlocks: toggleWithImage(false),
+    });
+    fireEvent.pointerMove(queryMedia(host));
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(screen.getByRole("menu", { name: "Block menu" })).toBeTruthy();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+  });
+
+  it("메뉴가 연 media가 아닌 다른 블록이 접혀도 메뉴는 닫히지 않는다", async () => {
+    const { editor, host } = renderMediaOverlays({
+      initialBlocks: [
+        imageBlock("image-1"),
+        {
+          id: "tg",
+          type: "toggleListItem" as const,
+          content: [{ text: "toggle" }],
+          collapsed: false,
+          children: [
+            {
+              id: "child",
+              type: "paragraph" as const,
+              content: [{ text: "child" }],
+            },
+          ],
+        },
+        tailBlock,
+      ],
+    });
+    fireEvent.pointerMove(queryMedia(host));
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    // 구독 통지와 커밋 뒤 판정이 끝나도록 flush한 다음에 단언한다.
+    await act(async () => {});
+    expect(screen.getByRole("menu", { name: "Block menu" })).not.toBeNull();
   });
 });

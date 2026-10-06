@@ -18,6 +18,7 @@ import type {
 } from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { useFixedPlacement } from "./fixed-placement.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
@@ -27,6 +28,7 @@ import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
 } from "./use-handle-reopen-suppression.js";
+import { useHiddenBlockRefresh } from "./use-hidden-block-refresh.js";
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
@@ -340,7 +342,23 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
   useEffect(() => {
     if (openBlockId === null) return;
     if (findBlockInTreeForDrag(editor.getDocument().blocks, openBlockId)) {
-      return;
+      // 접힘이 대상 블록을 가려도 닫는다. 보이지 않는 블록에 Turn into·Delete가
+      // 나가지 않게 한다(Issue #280).
+      const openBlockElement =
+        element === null
+          ? null
+          : findElementByAttribute(
+              element,
+              null,
+              "data-geul-block-id",
+              openBlockId,
+            );
+      if (
+        openBlockElement === null ||
+        !isHiddenBlockElement(openBlockElement)
+      ) {
+        return;
+      }
     }
     close("invalidated");
     // documentTick은 값을 읽지 않는 재실행 트리거다. openBlockId는 열자마자
@@ -359,6 +377,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       blockId,
     );
     if (blockElement === null) return null;
+    // 접힌 toggle이 가린 블록은 rect가 0x0이다. 메뉴가 그 좌표로 옮겨 가지
+    // 않게 마지막 좌표를 유지한다(Issue #280).
+    if (isHiddenBlockElement(blockElement)) return null;
     return readBlockMenuAnchor(
       blockElement,
       computeGutterTopOffset(blockElement),
@@ -377,6 +398,9 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
       hoverBlockId,
     );
     if (blockElement === null) return null;
+    // 접힌 toggle이 가린 블록은 rect가 0x0이라 거터가 화면 구석에 뜬다. `null`이면
+    // `hoverBounds`가 `null`이라 거터가 내려간다(Issue #280).
+    if (isHiddenBlockElement(blockElement)) return null;
     const rect = blockElement.getBoundingClientRect();
     // heading은 line-height가 버튼보다 커 top 그대로면 버튼이 첫 줄
     // 위쪽으로 쏠린다 — computeGutterTopOffset 참고(block-side-menu-geometry.ts).
@@ -386,6 +410,10 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
     };
   };
   const hoverBounds = readHoverAnchor();
+
+  // hover 중인 블록이 포인터 이동 없이 접힘에 가려질 수 있다(undo, 외부 command).
+  // 숨김 여부가 바뀔 때만 렌더를 강제한다(Issue #280).
+  useHiddenBlockRefresh(editor, element, hoverBlockId);
 
   // 거터는 `position: fixed`라 안쪽 스크롤 컨테이너가 잘라내지 못한다. 블록이
   // 영역 밖으로 나가면 숨긴다(Issue #267). viewport clamp가 박스를 영역 안으로

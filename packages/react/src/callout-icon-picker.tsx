@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
 import { useFixedPlacement } from "./fixed-placement.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
@@ -79,6 +80,10 @@ export const CalloutIconPicker = () => {
       if (pickerState === null || element === null) return null;
       const anchor = findCalloutVisualElement(element, pickerState.blockId);
       if (anchor === null) return null;
+      // 접힌 toggle이 가린 callout은 rect가 0x0이다. 닫힘은 아래 effect가 맡고,
+      // 그 사이 선택기가 그 좌표로 옮겨 가지 않게 마지막 좌표를 유지한다
+      // (Issue #280).
+      if (isHiddenBlockElement(anchor)) return null;
       const rect = anchor.getBoundingClientRect();
       return { left: rect.left, top: rect.bottom };
     },
@@ -119,10 +124,16 @@ export const CalloutIconPicker = () => {
     enabled: hoverBlockId !== null,
   });
 
-  const hoverElement =
+  // 접힌 toggle이 가린 callout은 트리거를 그리지 않는다. rect가 0x0이라 트리거가
+  // 화면 구석에 뜬다. 재평가는 위 `useSelectionRefresh`가 맡는다(Issue #280).
+  const foundHoverElement =
     hoverBlockId === null || element === null
       ? null
       : findCalloutVisualElement(element, hoverBlockId);
+  const hoverElement =
+    foundHoverElement !== null && isHiddenBlockElement(foundHoverElement)
+      ? null
+      : foundHoverElement;
   const overlayRect = hoverElement === null ? null : readPageRect(hoverElement);
 
   // 트리거는 안쪽 스크롤 컨테이너 바깥에 그려져 컨테이너가 잘라내지 못한다.
@@ -144,12 +155,38 @@ export const CalloutIconPicker = () => {
 
   const closePicker = useCallback(() => setPickerState(null), []);
 
-  useDismissibleOverlay({
+  const close = useDismissibleOverlay({
     open: pickerState !== null,
     element,
     allowSelectors: CALLOUT_ICON_DISMISS_ALLOW_SELECTORS,
     onClose: closePicker,
   });
+
+  // 대상 callout이 접힘에 가려지면 선택기를 닫는다. 보이지 않는 callout에
+  // setCalloutIcon이 나가지 않게 한다(Issue #280, block-side-menu.tsx와 같은
+  // 규칙). listener는 틱만 올리고 판정은 커밋 뒤 effect가 한다. 닫힌 뒤에는
+  // 다시 펼쳐도 열리지 않는다.
+  const openBlockId = pickerState?.blockId ?? null;
+  const [documentTick, setDocumentTick] = useState(0);
+  useEffect(() => {
+    if (openBlockId === null) return;
+    return editor.subscribe(() => setDocumentTick((tick) => tick + 1));
+  }, [editor, openBlockId]);
+  useEffect(() => {
+    if (openBlockId === null || element === null) return;
+    const openBlockElement = findElementByAttribute(
+      element,
+      null,
+      "data-geul-block-id",
+      openBlockId,
+    );
+    if (openBlockElement === null || !isHiddenBlockElement(openBlockElement)) {
+      return;
+    }
+    close("invalidated");
+    // documentTick은 값을 읽지 않는 재실행 트리거다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentTick, openBlockId]);
 
   const openPicker = () => {
     if (hoverElement === null || hoverBlockId === null) return;

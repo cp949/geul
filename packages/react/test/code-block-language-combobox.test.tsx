@@ -12,6 +12,10 @@
  * 기능은 폐기했다 — 트리거는 코드블록 자신의 우상단에 작게 앵커링돼
  * 아래 블록을 덮지 않고, 팝오버는 열렸을 때만 잠깐 내용을 덮는 일반적인
  * 드롭다운 동작이라 별도 회피가 필요 없다(RD-002.md "결정").
+ *
+ * 추가 주제(Issue #280): 접힌 toggle이 가린 코드블록(`data-geul-collapsed-hidden`
+ * 조상)은 hover 대상이 아니다. hover 코드블록이 가려지면 selection으로
+ * fallback하고, 활성 코드블록이 없으면 툴바가 사라진다.
  */
 
 import { DEFAULT_DICTIONARY, type CodeBlock } from "@cp949/geul-core";
@@ -1799,5 +1803,144 @@ describe("CodeBlock toolbar 안쪽 스크롤 clip(Issue #236)", () => {
     }
     expect(document.activeElement).toBe(copyButton);
     expect(toolbar.style.visibility).toBe("");
+  });
+});
+
+describe("접힌 toggle 안 숨은 코드블록은 hover 대상이 아니다(Issue #280)", () => {
+  const paragraph = {
+    id: "p1",
+    type: "paragraph" as const,
+    content: [{ text: "문단" }],
+  };
+  const codeBlock = (id: string, language: string) => ({
+    id,
+    type: "codeBlock" as const,
+    language,
+    content: [{ text: "body {}" }],
+  });
+
+  /**
+   * p1, tg(자식 code-1), code-2 순서 문서를 마운트하고 캐럿을 문단 p1에 둔다.
+   * code-2는 tg 밖의 보이는 코드블록이다. `withVisibleCode`가 아니면 뺀다.
+   * 재평가는 deferredUpdateFromSelection의 setTimeout을 거치므로 fake timer를 켠다.
+   */
+  const mountToggleCode = (options: {
+    collapsed: boolean;
+    withVisibleCode?: boolean;
+  }) => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const rendered = mountBlockEditor({
+      initialBlocks: [
+        paragraph,
+        {
+          id: "tg",
+          type: "toggleListItem" as const,
+          content: [{ text: "toggle" }],
+          collapsed: options.collapsed,
+          children: [codeBlock("code-1", "css")],
+        },
+        ...(options.withVisibleCode === true
+          ? [codeBlock("code-2", "javascript")]
+          : []),
+      ],
+      children: <SlashMenu />,
+    });
+    rendered.editable.focus();
+    const caretTarget = rendered.host.querySelector<HTMLElement>("p");
+    if (caretTarget === null) throw new Error("문단 DOM을 찾지 못했다");
+    placeCaret(caretTarget);
+    fireSelectionChange();
+    flushDeferredUpdate();
+    return rendered;
+  };
+
+  /** 블록 id로 코드블록의 `code` 요소를 host에서 새로 찾는다. 접힘이 DOM을 다시 그린다. */
+  const codeOf = (host: HTMLElement, blockId: string): HTMLElement => {
+    const block = Array.from(
+      host.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
+    ).find(
+      (candidate) => candidate.getAttribute("data-geul-block-id") === blockId,
+    );
+    const code = block?.querySelector<HTMLElement>("code") ?? null;
+    if (code === null) throw new Error(`${blockId}의 code 요소가 없다`);
+    return code;
+  };
+
+  /** Ctrl+Z 같은 키 입력 뒤 오는 keyup과 그 지연 재평가를 흘린다. */
+  const reevaluateAfterKeyup = () => {
+    fireEvent.keyUp(document, { key: "z", ctrlKey: true });
+    flushDeferredUpdate();
+  };
+
+  const toolbarBlockId = () =>
+    languageButton().closest<HTMLElement>(".geul-code-block-toolbar")?.dataset
+      .blockId;
+
+  it("접힌 toggle의 숨은 코드블록 위에 hover해도 툴바를 열지 않는다", () => {
+    const { host } = mountToggleCode({ collapsed: true });
+    expect(
+      codeOf(host, "code-1").closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+
+    fireEvent.pointerMove(codeOf(host, "code-1"));
+    flushDeferredUpdate();
+
+    expect(queryLanguageButton()).toBeNull();
+  });
+
+  it("펼친 toggle의 자식 코드블록 위에서는 hover 툴바를 연다", () => {
+    const { host } = mountToggleCode({ collapsed: false });
+
+    fireEvent.pointerMove(codeOf(host, "code-1"));
+
+    expect(toolbarBlockId()).toBe("code-1");
+  });
+
+  it("hover 중인 코드블록이 접힘에 가려지면 재평가 뒤 툴바가 사라진다", () => {
+    const { host, editor } = mountToggleCode({ collapsed: false });
+    fireEvent.pointerMove(codeOf(host, "code-1"));
+    expect(toolbarBlockId()).toBe("code-1");
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    expect(
+      codeOf(host, "code-1").closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+    reevaluateAfterKeyup();
+
+    expect(queryLanguageButton()).toBeNull();
+  });
+
+  it("hover 코드블록이 가려지면 selection이 있는 다른 코드블록의 툴바로 넘어간다", () => {
+    const { host, editor } = mountToggleCode({
+      collapsed: false,
+      withVisibleCode: true,
+    });
+    fireEvent.pointerMove(codeOf(host, "code-1"));
+    expect(toolbarBlockId()).toBe("code-1");
+    placeCaret(codeOf(host, "code-2"));
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    reevaluateAfterKeyup();
+
+    expect(toolbarBlockId()).toBe("code-2");
+  });
+
+  it("언어 팝오버가 열린 채 코드블록이 가려지면 재평가 뒤 팝오버와 툴바가 닫힌다", () => {
+    const { host, editor } = mountToggleCode({ collapsed: false });
+    fireEvent.pointerMove(codeOf(host, "code-1"));
+    fireEvent.click(languageButton());
+    expect(querySearchInput()).not.toBeNull();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    reevaluateAfterKeyup();
+
+    expect(querySearchInput()).toBeNull();
+    expect(queryLanguageButton()).toBeNull();
   });
 });

@@ -15,6 +15,12 @@
  * 영역 안일 때만 보인다. 드래그 중과 메뉴를 연 블록의 거터는 숨기지 않는다.
  * hover가 다른 블록으로 옮겨 가면 그 거터는 판정한다. 실제 안쪽 스크롤은 jsdom이 만들 수 없어 stubRect로 rect를 주입한다.
  *
+ * 추가 주제(Issue #280): 접힌 toggle이 가린 블록(`data-geul-collapsed-hidden`
+ * 조상)은 거터 앵커가 아니다. hover 중인 블록이 접히면 거터가 내려가고, 열린
+ * 블록 메뉴는 숨은 블록의 0x0 rect로 옮겨 가지 않는다. 표식은 core 접힘
+ * decoration이 실제로 붙인다. rect는 stubRect로 주입해 표식만이 판정 근거가
+ * 되게 한다.
+ *
  * 모든 describe가 실제 createEditor() 마운트 위에서 돈다(Issue #76) — 손으로
  * 조립한 fake 컨트롤러/DOM 레인은 남아 있지 않다. 명령이 진짜라 호출 스파이
  * 대신 문서 결과를 단언한다. `<BlockSideMenu />`는 `<SlashMenu />`를 거치지
@@ -2000,5 +2006,174 @@ describe("창 스크롤로 뷰포트 밖에 나간 블록의 거터 clip(Issue #
     expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.scroll(window);
     expect(gutter.style.visibility).toBe("hidden");
+  });
+});
+
+describe("접힌 toggle 안 숨은 블록은 거터 앵커가 아니다(Issue #280)", () => {
+  const paragraph = (id: string) => ({
+    id,
+    type: "paragraph" as const,
+    content: [{ text: id }],
+  });
+  /** DOM 순서는 p1, tg, c1, p2다. c1은 tg의 자식이다. */
+  const toggleDocument = (collapsed: boolean) => [
+    paragraph("p1"),
+    {
+      id: "tg",
+      type: "toggleListItem" as const,
+      content: [{ text: "toggle" }],
+      collapsed,
+      children: [paragraph("c1")],
+    },
+    paragraph("p2"),
+  ];
+
+  /**
+   * 블록 id로 요소를 찾는다. rect는 마운트 헬퍼가 전부 보이는 값으로 스텁해,
+   * 숨은 자식도 0x0이 아니다. 거터를 거르는 근거는 표식뿐이다.
+   */
+  const blockById = (blocks: HTMLElement[], id: string): HTMLElement => {
+    const found = blocks.find(
+      (block) => block.getAttribute("data-geul-block-id") === id,
+    );
+    if (found === undefined) throw new Error(`블록 ${id}가 없다`);
+    return found;
+  };
+
+  const queryGutter = () =>
+    document.querySelector<HTMLElement>(".geul-block-gutter");
+
+  /** host의 현재 블록 요소를 문서 순서로 모은다. */
+  const queryBlocks = (host: HTMLElement): HTMLElement[] =>
+    Array.from(host.querySelectorAll<HTMLElement>("[data-geul-block-id]"));
+
+  it("접힌 toggle의 숨은 자식 위에 hover하면 거터를 그리지 않는다", () => {
+    const { blocks } = renderBlockMenu({ initialBlocks: toggleDocument(true) });
+    const hidden = blockById(blocks, "c1");
+    expect(hidden.closest("[data-geul-collapsed-hidden]")).not.toBeNull();
+
+    fireEvent.pointerMove(hidden);
+
+    expect(queryGutter()).toBeNull();
+  });
+
+  it("접힌 toggle 자신의 라벨 블록과 다른 보이는 블록 위에서는 거터를 그린다", () => {
+    const { blocks } = renderBlockMenu({ initialBlocks: toggleDocument(true) });
+
+    fireEvent.pointerMove(blockById(blocks, "tg"));
+    expect(queryGutter()).not.toBeNull();
+
+    fireEvent.pointerMove(blockById(blocks, "p2"));
+    expect(queryGutter()).not.toBeNull();
+  });
+
+  it("펼친 toggle의 자식 위에서는 거터를 그린다", () => {
+    const { blocks } = renderBlockMenu({
+      initialBlocks: toggleDocument(false),
+    });
+
+    fireEvent.pointerMove(blockById(blocks, "c1"));
+
+    expect(queryGutter()).not.toBeNull();
+  });
+
+  it("hover 중인 자식이 접힘으로 가려지면 포인터가 멈춰 있어도 거터가 내려간다", async () => {
+    const { blocks, editor, host } = renderBlockMenu({
+      initialBlocks: toggleDocument(false),
+    });
+    fireEvent.pointerMove(blockById(blocks, "c1"));
+    expect(queryGutter()).not.toBeNull();
+
+    // 포인터 이동도 selectionchange·keyup·scroll도 없다. 표식만 붙는다. 접힘이
+    // 자식 DOM을 다시 그릴 수 있어 요소는 host에서 새로 찾는다.
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    expect(
+      blockById(queryBlocks(host), "c1").closest(
+        "[data-geul-collapsed-hidden]",
+      ),
+    ).not.toBeNull();
+
+    await waitFor(() => {
+      expect(queryGutter()).toBeNull();
+    });
+  });
+
+  it("가려진 뒤 다시 펼치면 같은 hover 블록의 거터가 돌아온다", async () => {
+    const { blocks, editor } = renderBlockMenu({
+      initialBlocks: toggleDocument(false),
+    });
+    fireEvent.pointerMove(blockById(blocks, "c1"));
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    await waitFor(() => {
+      expect(queryGutter()).toBeNull();
+    });
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    await waitFor(() => {
+      expect(queryGutter()).not.toBeNull();
+    });
+  });
+
+  it("열린 블록 메뉴가 가리키는 블록이 가려져도 메뉴는 숨은 블록의 rect로 옮겨 가지 않는다", () => {
+    const { blocks } = renderBlockMenu({
+      initialBlocks: toggleDocument(false),
+      layout: { left: 40, top: 100, width: 600, height: 20 },
+    });
+    const child = blockById(blocks, "c1");
+    fireEvent.pointerMove(child);
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    const panel = document.querySelector<HTMLElement>("[data-geul-block-menu]");
+    if (panel === null) throw new Error("블록 메뉴가 열려 있지 않다");
+    const before = { left: panel.style.left, top: panel.style.top };
+
+    // 숨은 블록의 display: none rect는 0x0이다. 표식은 직접 붙인다.
+    stubRect(child, { left: 0, top: 0, width: 0, height: 0 });
+    child.parentElement?.setAttribute("data-geul-collapsed-hidden", "");
+    act(() => {
+      fireEvent.scroll(window);
+    });
+
+    expect({ left: panel.style.left, top: panel.style.top }).toEqual(before);
+  });
+
+  it("열린 블록 메뉴가 가리키는 블록이 접힘으로 가려지면 메뉴가 닫힌다", async () => {
+    const { blocks, editor } = renderBlockMenu({
+      initialBlocks: toggleDocument(false),
+    });
+    fireEvent.pointerMove(blockById(blocks, "c1"));
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(document.querySelector("[data-geul-block-menu]")).not.toBeNull();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-geul-block-menu]")).toBeNull();
+    });
+  });
+
+  it("메뉴가 연 블록이 아닌 다른 toggle이 접혀도 메뉴는 닫히지 않는다", async () => {
+    const { blocks, editor } = renderBlockMenu({
+      initialBlocks: toggleDocument(false),
+    });
+    fireEvent.pointerMove(blockById(blocks, "p1"));
+    fireEvent.click(screen.getByRole("button", { name: dragHandleLabel }));
+    expect(document.querySelector("[data-geul-block-menu]")).not.toBeNull();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    // 구독 통지와 커밋 뒤 판정이 끝나도록 flush한 다음에 단언한다.
+    await act(async () => {});
+    expect(document.querySelector("[data-geul-block-menu]")).not.toBeNull();
   });
 });

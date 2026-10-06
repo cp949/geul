@@ -10,6 +10,7 @@ import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
 import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
 import { isElementNode, isHtmlElement } from "./dom-node.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { readPageRect } from "./table-handle-geometry.js";
@@ -21,6 +22,7 @@ import {
   resolveReopenAwareClick,
   useHandleReopenSuppression,
 } from "./use-handle-reopen-suppression.js";
+import { useHiddenBlockRefresh } from "./use-hidden-block-refresh.js";
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerDragGesture } from "./use-pointer-drag-gesture.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
@@ -296,7 +298,23 @@ export const MediaHandleOverlays = ({
   useEffect(() => {
     if (openBlockId === null) return;
     if (findBlockInTreeForDrag(editor.getDocument().blocks, openBlockId)) {
-      return;
+      // 접힘이 대상 블록을 가려도 닫는다. block-side-menu.tsx와 같은 규칙이다
+      // (Issue #280).
+      const openBlockElement =
+        element === null
+          ? null
+          : findElementByAttribute(
+              element,
+              null,
+              "data-geul-block-id",
+              openBlockId,
+            );
+      if (
+        openBlockElement === null ||
+        !isHiddenBlockElement(openBlockElement)
+      ) {
+        return;
+      }
     }
     close("invalidated");
     // documentTick은 값을 읽지 않는 재실행 트리거다. openBlockId는 열자마자
@@ -318,6 +336,9 @@ export const MediaHandleOverlays = ({
       blockId,
     );
     if (blockElement === null) return null;
+    // 접힌 toggle이 가린 블록은 rect가 0x0이다. 메뉴가 그 좌표로 옮겨 가지
+    // 않게 마지막 좌표를 유지한다(Issue #280).
+    if (isHiddenBlockElement(blockElement)) return null;
     return readBlockMenuAnchor(
       findMediaVisualElement(blockElement) ?? blockElement,
     );
@@ -392,8 +413,12 @@ export const MediaHandleOverlays = ({
           "data-geul-block-id",
           hoverBlockId,
         );
+  // 접힌 toggle이 가린 블록은 rect가 0x0이라 그립이 페이지 구석에 남는다. 숨은
+  // 블록이면 그립을 그리지 않는다. hover 중 접히는 경우는 `useHiddenBlockRefresh`가
+  // 다시 그린다(Issue #280).
+  useHiddenBlockRefresh(editor, element, hoverBlockId);
   const overlayRect =
-    hoverElement === null
+    hoverElement === null || isHiddenBlockElement(hoverElement)
       ? null
       : readPageRect(findMediaVisualElement(hoverElement) ?? hoverElement);
 

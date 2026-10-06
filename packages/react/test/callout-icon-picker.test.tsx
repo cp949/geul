@@ -11,9 +11,14 @@
  * 스크롤돼도 제자리에 남는다. scroll에서 위치를 다시 읽고, 에디터 host가 자르는
  * 영역 밖이면 숨기며, 선택기가 열린 동안에는 숨기지 않는다. 실제 안쪽 스크롤은
  * jsdom이 만들 수 없어 stubRect로 rect를 주입한다. 위치 증명은 Chromium e2e가 한다.
+ *
+ * 추가 주제(Issue #280): 접힌 toggle이 가린 callout(`data-geul-collapsed-hidden`
+ * 조상)은 트리거를 그리지 않는다. hover 중인 callout이 가려지면 재평가 뒤 트리거가
+ * 사라지고, 열린 선택기는 대상 callout이 가려지면 닫힌다. 표식은 core
+ * 접힘 decoration이 실제로 붙인다.
  */
 
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { CalloutIconPicker } from "../src/callout-icon-picker.js";
@@ -314,5 +319,119 @@ describe("안쪽 스크롤 추종과 clip(Issue #235)", () => {
     stubRect(trigger, { left: 0, top: 400, width: 24, height: 24 });
     fireEvent.scroll(second);
     expect(trigger.style.visibility).toBe("hidden");
+  });
+});
+
+describe("접힌 toggle 안 숨은 callout은 트리거 대상이 아니다(Issue #280)", () => {
+  const triggerLabel = "Change callout icon";
+
+  /**
+   * p1, tg(자식 callout c1) 문서를 마운트한다. callout 콘텐츠 노드는
+   * 마운트 헬퍼가 스텁하지 않아 직접 rect를 건다. 숨은 callout도 보이는 rect를
+   * 가져 표식만이 판정 근거가 된다.
+   */
+  const mountToggleCallout = (collapsed: boolean) => {
+    const rendered = mountBlockEditor({
+      initialBlocks: [
+        { id: "p1", type: "paragraph", content: [{ text: "문단" }] },
+        {
+          id: "tg",
+          type: "toggleListItem",
+          content: [{ text: "toggle" }],
+          collapsed,
+          children: [
+            { id: "c1", type: "callout", content: [{ text: "안내" }] },
+          ],
+        },
+      ],
+      children: <CalloutIconPicker />,
+    });
+    return rendered;
+  };
+
+  /** 접힘이 DOM을 다시 그릴 수 있어 callout 콘텐츠 노드를 host에서 새로 찾고 rect를 건다. */
+  const calloutOf = (host: HTMLElement): HTMLElement => {
+    const callout = host.querySelector<HTMLElement>("[data-geul-callout]");
+    if (callout === null) throw new Error("callout 요소를 찾지 못했다");
+    stubRect(callout, { left: 40, top: 100, width: 600, height: 20 });
+    return callout;
+  };
+
+  it("접힌 toggle의 숨은 callout 위에 hover해도 트리거를 그리지 않는다", () => {
+    const { host } = mountToggleCallout(true);
+    const callout = calloutOf(host);
+    expect(callout.closest("[data-geul-collapsed-hidden]")).not.toBeNull();
+
+    fireEvent.pointerMove(callout);
+
+    expect(screen.queryByLabelText(triggerLabel)).toBeNull();
+  });
+
+  it("펼친 toggle의 자식 callout 위에서는 트리거를 그린다", () => {
+    const { host } = mountToggleCallout(false);
+
+    fireEvent.pointerMove(calloutOf(host));
+
+    expect(screen.getByLabelText(triggerLabel).style.top).toBe("100px");
+  });
+
+  it("hover 중인 callout이 접힘에 가려지면 재평가 뒤 트리거가 사라진다", () => {
+    const { host, editor } = mountToggleCallout(false);
+    fireEvent.pointerMove(calloutOf(host));
+    expect(screen.getByLabelText(triggerLabel)).not.toBeNull();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    expect(
+      calloutOf(host).closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+    // Ctrl+Z 같은 키 입력 뒤 오는 keyup이 useSelectionRefresh를 돈다.
+    fireEvent.keyUp(document, { key: "z", ctrlKey: true });
+
+    expect(screen.queryByLabelText(triggerLabel)).toBeNull();
+  });
+
+  it("열린 선택기는 대상 callout이 접힘에 가려지면 닫힌다", () => {
+    const { host, editor } = mountToggleCallout(false);
+    fireEvent.pointerMove(calloutOf(host));
+    fireEvent.click(screen.getByLabelText(triggerLabel));
+    expect(screen.getByRole("listbox")).not.toBeNull();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    expect(
+      calloutOf(host).closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("접힘 뒤 다시 펼쳐도 닫힌 선택기는 되살아나지 않는다", () => {
+    const { host, editor } = mountToggleCallout(false);
+    fireEvent.pointerMove(calloutOf(host));
+    fireEvent.click(screen.getByLabelText(triggerLabel));
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("접힘 표식이 없는 callout의 열린 선택기는 문서가 바뀌어도 열려 있다(대조)", () => {
+    const { host, editor } = mountToggleCallout(false);
+    fireEvent.pointerMove(calloutOf(host));
+    fireEvent.click(screen.getByLabelText(triggerLabel));
+
+    act(() => {
+      editor.commands.setCalloutIcon("c1", "\u{1F4A1}");
+    });
+
+    expect(screen.getByRole("listbox")).not.toBeNull();
   });
 });

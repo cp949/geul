@@ -8,15 +8,27 @@
  * 모든 describe가 실제 createEditor() 마운트 위에서 돈다(Issue #76) —
  * 손으로 조립한 fake 컨트롤러/DOM 레인은 남아 있지 않다. 명령이 진짜라
  * 호출 스파이 대신 문서 결과(rowIdsOf/columnsOf)를 단언한다.
+ *
+ * 추가 주제(Issue #280): 접힌 toggle이 가린 표는 핸들 층(행·열 핸들, 그립, 추가
+ * rail, 리사이즈 strip)을 그리지 않는다. hover 중인 표가 접히면 층이 내려가고,
+ * 열린 행·열·그립 메뉴는 닫힌다. 메뉴 닫힘은 표식 속성을 직접 붙여 observer를
+ * 확인하고, 층은 core 접힘 decoration이 붙인 실제 표식으로 확인한다.
  */
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
 import {
   makeScrollContainer,
+  mountBlockEditor,
   type MountTableEditorOptions,
   mountTableEditor,
   placeCaret,
@@ -1433,5 +1445,125 @@ describe("접힌 toggle이 표를 가리면 열린 표 메뉴를 닫는다(Issue
     });
 
     expect(screen.queryByRole("menu", { name: "Table menu" })).not.toBeNull();
+  });
+});
+
+describe("접힌 toggle이 가린 표에는 핸들 층을 그리지 않는다(Issue #280)", () => {
+  const cell = (rowId: string) => ({
+    id: `${rowId}-c1`,
+    columnId: "col-1",
+    rowSpan: 1,
+    columnSpan: 1,
+    content: [{ text: "cell" }],
+  });
+  const tableLiteral = {
+    id: "tb",
+    type: "table" as const,
+    columns: [{ id: "col-1", width: 160 }],
+    rows: [
+      { id: "row-1", cells: [cell("row-1")] },
+      { id: "row-2", cells: [cell("row-2")] },
+    ],
+    headerRows: 0 as const,
+    headerColumns: 0 as const,
+  };
+  /** DOM 순서는 tg, tb(tg의 자식), tail이다. */
+  const toggleWithTable = (collapsed: boolean) => [
+    {
+      id: "tg",
+      type: "toggleListItem" as const,
+      content: [{ text: "toggle" }],
+      collapsed,
+      children: [tableLiteral],
+    },
+    { id: "tail", type: "paragraph" as const, content: [{ text: "tail" }] },
+  ];
+
+  const layerSelector = "[data-geul-table-overlay-layer]";
+
+  const queryTable = (host: HTMLElement): HTMLElement => {
+    const table = host.querySelector<HTMLElement>(
+      'table[data-geul-block-id="tb"]',
+    );
+    if (table === null) throw new Error("표 요소가 없다");
+    return table;
+  };
+
+  const mount = (collapsed: boolean) =>
+    mountBlockEditor({
+      initialBlocks: toggleWithTable(collapsed),
+      children: <TableHandles onBlockAdded={vi.fn()} />,
+    });
+
+  it("접힌 toggle 안 숨은 표 위에 hover해도 핸들 층을 그리지 않는다", () => {
+    const { host } = mount(true);
+    const table = queryTable(host);
+    expect(table.closest("[data-geul-collapsed-hidden]")).not.toBeNull();
+
+    fireEvent.pointerMove(table);
+
+    expect(document.querySelector(layerSelector)).toBeNull();
+    expect(tableHandleHitBoxes(document, "row")).toHaveLength(0);
+  });
+
+  it("펼친 toggle 안 표 위에서는 핸들 층을 그린다", () => {
+    const { host } = mount(false);
+
+    fireEvent.pointerMove(queryTable(host));
+
+    expect(document.querySelector(layerSelector)).not.toBeNull();
+    expect(tableHandleHitBoxes(document, "row").length).toBeGreaterThan(0);
+  });
+
+  it("hover 중인 표가 접힘으로 가려지면 포인터가 멈춰 있어도 층이 내려가고 펼치면 돌아온다", async () => {
+    const { editor, host } = mount(false);
+    fireEvent.pointerMove(queryTable(host));
+    expect(document.querySelector(layerSelector)).not.toBeNull();
+
+    // 포인터 이동도 selectionchange·keyup·scroll도 없다. 표식만 붙는다.
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    expect(
+      queryTable(host).closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+    await waitFor(() => {
+      expect(document.querySelector(layerSelector)).toBeNull();
+    });
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+    await waitFor(() => {
+      expect(document.querySelector(layerSelector)).not.toBeNull();
+    });
+  });
+
+  it("다른 블록이 접혀 가려져도 보이는 표의 층은 그대로다", async () => {
+    const { editor, host } = mountBlockEditor({
+      initialBlocks: [
+        tableLiteral,
+        {
+          id: "tg",
+          type: "toggleListItem" as const,
+          content: [{ text: "toggle" }],
+          collapsed: false,
+          children: [
+            { id: "c1", type: "paragraph" as const, content: [{ text: "c1" }] },
+          ],
+        },
+        { id: "tail", type: "paragraph" as const, content: [{ text: "tail" }] },
+      ],
+      children: <TableHandles onBlockAdded={vi.fn()} />,
+    });
+    fireEvent.pointerMove(queryTable(host));
+    expect(document.querySelector(layerSelector)).not.toBeNull();
+
+    act(() => {
+      editor.commands.toggleListItemCollapse("tg");
+    });
+
+    await act(async () => {});
+    expect(document.querySelector(layerSelector)).not.toBeNull();
   });
 });

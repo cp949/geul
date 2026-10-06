@@ -22,6 +22,7 @@ import {
   readAnchorBelowTriggerEnd,
   useFixedPlacement,
 } from "./fixed-placement.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
@@ -262,6 +263,23 @@ export const CodeBlockLanguageCombobox = () => {
     onCandidateChange: handleHoverCandidateChange,
   });
 
+  // blockId는 따옴표·백슬래시를 포함할 수 있어(테스트로 고정) CSS
+  // attribute selector 문자열을 직접 조립하지 않는다 — 전부 순회하며
+  // `getAttribute` 동등 비교로만 찾는다. readActiveCodeBlock(숨은 블록 판정),
+  // updateAnchor(위치 계산), handleCopy(RD-001-DELTA-02, 텍스트 추출)가 함께 쓴다.
+  const findBlockElement = useCallback(
+    (blockId: string): HTMLElement | undefined => {
+      if (element === null) return undefined;
+      const blockElements = Array.from(
+        element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
+      );
+      return blockElements.find(
+        (candidate) => candidate.getAttribute("data-geul-block-id") === blockId,
+      );
+    },
+    [element],
+  );
+
   // hover 우선, hover가 코드블록을 안 가리키면 selection으로 fallback한다
   // (table-handles.tsx의 activeTableId = hoverTableId ?? selectionTableId와
   // 동일 판단, Notion 참고·사용자 요청) — 마우스가 코드블록을 완전히
@@ -271,7 +289,14 @@ export const CodeBlockLanguageCombobox = () => {
   // 소스는 기존 그대로 `editor.getSelectionBlockType()`을 쓴다.
   const readActiveCodeBlock = useCallback(() => {
     const hoverId = hoverBlockIdRef.current;
-    if (hoverId !== null) {
+    // 접힌 toggle이 가린 코드블록은 hover 대상이 아니다. 이 판정을 건너뛰면
+    // 툴바가 0x0 rect 앵커로 화면 구석에 뜬다. selection fallback으로 넘어간다
+    // (Issue #280).
+    const hoverElement =
+      hoverId === null ? undefined : findBlockElement(hoverId);
+    const isHoverHidden =
+      hoverElement !== undefined && isHiddenBlockElement(hoverElement);
+    if (hoverId !== null && !isHoverHidden) {
       const block = editor.getBlock(hoverId);
       if (block?.type === "codeBlock") {
         // getBlock의 반환 타입 DocumentBlock = Block | CustomBlock에서
@@ -304,29 +329,14 @@ export const CodeBlockLanguageCombobox = () => {
       value: selection.blockType.language ?? "text",
       wrap,
     };
-  }, [editor, hoverBlockIdRef]);
-
-  // blockId는 따옴표·백슬래시를 포함할 수 있어(테스트로 고정) CSS
-  // attribute selector 문자열을 직접 조립하지 않는다 — 전부 순회하며
-  // `getAttribute` 동등 비교로만 찾는다. updateAnchor(위치 계산)와
-  // handleCopy(RD-001-DELTA-02, 텍스트 추출)가 함께 쓴다.
-  const findBlockElement = useCallback(
-    (blockId: string): HTMLElement | undefined => {
-      if (element === null) return undefined;
-      const blockElements = Array.from(
-        element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
-      );
-      return blockElements.find(
-        (candidate) => candidate.getAttribute("data-geul-block-id") === blockId,
-      );
-    },
-    [element],
-  );
+  }, [editor, hoverBlockIdRef, findBlockElement]);
 
   const updateAnchor = useCallback(
     (blockId: string) => {
       const block = findBlockElement(blockId);
       if (block === undefined) return;
+      // 가린 블록의 rect는 0x0이다. 앵커를 (0, 0)으로 옮기지 않는다(Issue #280).
+      if (isHiddenBlockElement(block)) return;
       const rect = block.getBoundingClientRect();
       // 트리거를 코드블록 우상단에 앵커링한다(topRight) — 코드블록 DOM
       // 자체에는 아무것도 쓰지 않는다(PM DOMObserver가 예상 밖 변경으로
