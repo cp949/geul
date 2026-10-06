@@ -63,6 +63,10 @@
     - 열린 블록 메뉴·미디어 메뉴·표 행·열·그립 메뉴는 닫는다(`invalidated`). 보이지 않는 블록에 명령이 나가지 않게 한다.
     - hover 중 접히면 포인터가 멈춰 있어도 다시 읽는다. `useHiddenBlockRefresh`가 숨김 여부가 바뀔 때만 렌더한다. 문서 변경마다 렌더하지 않는다.
     - 블록 선택 툴바와 드롭 가이드는 보이는 블록만 계산에 넣는다. 보이는 블록이 없으면 툴바를 그리지 않는다.
+    - 문서 안 모든 인스턴스를 렌더하는 오버레이(미디어·코드블록 caption)는 인스턴스 수집에서 숨은 블록을 거른다(Issue #288). `isHiddenBlockElement`로 판정한다. 0×0 rect를 `readPageRect`에 넘기지 않는다.
+    - 인스턴스 수집형 오버레이는 `useHiddenBlocksRefresh(editor, element, selector)`를 건다. 보이는 블록 목록이 바뀔 때만 렌더한다. 숨김·펼침·삭제·추가를 한 경로로 잡는다. DOM 이벤트 없이 일어나는 호스트 API의 접힘·삭제도 포함한다. 단일 hover 블록은 `useHiddenBlockRefresh`다.
+    - 편집 상태를 가진 오버레이는 대상이 숨거나 삭제되면 편집 store를 비운다. `use-caption-editing-lifecycle.ts`가 소유한다. 비운 뒤 다시 펼쳐도 편집이 되살아나지 않는다. 사라진 블록에는 caption command를 보내지 않는다. 오버레이 제거가 부르는 blur commit도 막는다.
+    - 열린 선택기·메뉴는 대상 삭제도 `invalidated`로 닫는다. 삭제는 모델(`findBlockInTreeForDrag`)로 판정한다. DOM 요소가 없다는 사실만으로는 삭제로 보지 않는다.
     - `useClipVisibility`·`useFixedPlacement`·`scroll-clip.ts`의 판정과 면제 규칙은 바꾸지 않는다.
   - 오버레이의 `style` prop에 `visibility`를 직접 두지 않는다. 다음 렌더가 덮어쓴다.
   - `position: fixed` 오버레이도 이 clip 규칙만 차용한다. 위 "fixed 금지"는 앵커 도달성 규칙이라 그대로 두고, 컨테이너가 잘라내지 못한다는 사정만 같다. 예: code-block 툴바(Issue #236), 블록 gutter·미디어 툴바(Issue #267). 훅에 `anchor`를 함께 줘 박스와 앵커 점을 둘 다 판정한다. 앵커 점을 함께 보는 이유는 viewport clamp다. 컨테이너 상단이 뷰포트 y=0이면 clamp가 툴바 박스를 영역 안에 남긴다. 위 면제 조건(popover·more 메뉴 열림, 툴바 안 포커스)은 박스와 앵커 점 판정 둘 다에 준다.
