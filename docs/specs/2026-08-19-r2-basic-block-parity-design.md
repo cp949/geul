@@ -274,7 +274,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
   - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
   - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다.
-  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 한 줄 평문, `text/html` 동봉(HTML 우선), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안, 캐럿이 codeBlock 안인 붙여넣기, `TextSelection`이 아닌 selection이 해당한다.
+  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 한 줄 평문, `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안, 캐럿이 codeBlock 안인 붙여넣기, `TextSelection`이 아닌 selection이 해당한다.
   - drop과 codeBlock에 걸친 범위는 `clipboardTextParser`가 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 후속 이슈로 분리한다.
 - codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
@@ -287,6 +287,20 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: `NodeSelection`·`AllSelection`도 시작이 codeBlock 밖이면 이 분기를 탄다. codeBlock `NodeSelection`은 그 블록 전체를 HTML 블록으로 대체하고, `AllSelection`은 문서 전체를 대체한다. 수정 전 PM 기본 처리와 결과가 같다.
   - 한계: 시작이 codeBlock 안인 범위와 캐럿이 codeBlock 안인 붙여넣기는 현행 PM 기본 처리를 유지한다. 시작이 codeBlock 안인 범위는 `fooX`·`Yil`처럼 나뉜다.
   - 한계: `text/html`이 없으면 이 예외가 없다. codeBlock에 걸친 범위의 Markdown 평문은 감지하지 않고 PM 기본 처리가 리터럴 문단으로 넣는다. 여러 줄 평문은 위 `clipboardTextParser` 경로다.
+- html이 블록을 만들지 못할 때의 평문 폴백(정정 2026-10-07, Issue #287). `text/html`이 있어도 블록이 생기지 않으면 같은 클립보드의 `text/plain`을 붙인다. 우선순위는 `text/html` → Markdown → `text/plain`이다. html이 블록을 못 만들면 그 단계만 건너뛴다. 이전에는 붙여넣기가 조용히 사라졌다. `<meta charset='utf-8'>`만 담긴 클립보드가 대표 사례다.
+  - 폴백 대상은 블록 0개인 결과와 import 실패다. 블록 0개는 `modelToTiptap`이 `DOCUMENT_INVALID`로 거절한다. import 실패는 위험 URL(`<img src='javascript:x'>`)·제어문자(`<pre>`에 `\u0001`)가 대표다.
+  - 위험 입력은 여전히 import하지 않는다. 문서에는 평문만 들어온다.
+  - 빈 문단 1개 이상은 폴백하지 않는다. `<p></p>`·`<p><br></p>`·`<p> </p>`는 html 우선이고 평문은 쓰지 않는다. 빈 줄 복사가 빈 문단을 넣는 동작을 지킨다.
+  - 폴백 후 규칙은 `text/plain`만 있는 클립보드와 같다. Markdown 감지, 여러 줄 직접 배치(#284), `sanitizeInlineText` 순서다.
+  - 한 줄 평문은 PM 기본 처리에 위임하지 않고 `view.pasteText`로 넣는다. PM 기본은 비어 있지 않은 `text/html`이 있으면 `text/plain`을 버린다.
+  - codeBlock에 걸친 범위(시작이 codeBlock 밖)는 Markdown 감지와 직접 배치를 건너뛴다. `sanitizeInlineText` 결과를 `view.pasteText`로 넣는다. Markdown 평문은 리터럴 문단이다. 여러 줄 평문은 위 `clipboardTextParser` 경로다.
+  - 평문도 비면 이벤트를 소비하고 문서는 그대로다. `sanitizeInlineText` 뒤 빈 문자열인 경우도 같다. `text/html`이 없고 평문도 비면 현행대로 PM에 위임한다.
+  - 폴백 붙여넣기는 한 transaction이다. revision은 1 늘고 undo는 1회다. codeBlock에 걸친 범위도 같다.
+  - `pasteHandler`가 `defaultPasteHandler()`로 위임해도 같은 폴백을 받는다. `true`를 돌려받는다.
+  - 한계: 폴백 중 codeBlock에 걸친 범위의 끝 잔여는 PM 기본 처리가 앞 블록과 병합한다. `[p "abcd", code "foobar", p "tail"]`에서 `ab` 뒤부터 `foo` 뒤까지 `Q`를 붙이면 `[p "abQbar", p "tail"]`다. codeBlock 잔여는 남지 않는다. `text/plain`만 있는 클립보드와 같다.
+  - 한계: 폴백은 무효 문자를 지운 평문을 넣는다. codeBlock에 걸친 범위에 무효 문자만 있는 평문을 `text/plain`만으로 붙이면 문서가 그대로다. 폴백은 지운 뒤 남은 글자를 넣는다.
+  - 한계: 시작이 codeBlock 안인 범위에 빈 결과 html만 붙이면(평문 없음) PM 기본 처리가 선택을 지운다. 이 폴백은 시작이 codeBlock 밖인 경우만 고친다.
+  - 한계: 폴백은 `text/plain`만 읽는다. 빈 결과 html에 `Text`·`text/uri-list`만 있는 클립보드는 붙지 않는다. 이전에도 같았다.
 
 ## 8. 오류 계약 확장
 
