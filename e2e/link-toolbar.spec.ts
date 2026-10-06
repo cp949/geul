@@ -4,6 +4,7 @@ import { expectOverlayFollowsAnchor } from "./support/anchor-gap.js";
 import { CLAMP_BOUNDARY_MIN_MARGIN_PX } from "./support/clamp.js";
 import { openDemo } from "./support/demo.js";
 import { selectBlockTextAndNotify } from "./support/selection.js";
+import { yieldFrame } from "./support/yield-frame.js";
 
 /**
  * 실제 역방향 순차 포커스로 대상 버튼에 도달한다(formatting-toolbar.spec.ts와
@@ -352,4 +353,71 @@ test("링크 URL을 편집하는 중에 window를 스크롤해도 툴바가 선�
   // 편집 중에는 DOM selection이 입력으로 옮겨가 재조회가 막힌다. 그래도 툴바는 따라간다.
   await expectOverlayFollowsAnchor(page, middle, toolbar, "window");
   await expect(linkInput).toBeFocused();
+});
+
+// Issue #282. DOM selection이 편집기 밖이면 링크 툴바를 열어 두지 않는다. 편집기 밖을
+// 누르면 바깥 pointerdown이 먼저 닫는다. 그 뒤 selection이 밖(h1 텍스트·textarea)으로
+// 옮겨가며 selectionchange가 온다. 활성 링크는 PM state에 남아 있어, 열림 판정이
+// Range 없음을 허용하면 툴바가 고정 좌표(96, 48)에 다시 뜬다. 두 프레임을 양보해
+// 닫힌 직후의 재오픈을 기다린 뒤 부재를 본다.
+test.describe("편집기 밖 selection이면 링크 툴바를 닫는다 (#282)", () => {
+  /** 링크가 든 문서를 만들고 링크 안 캐럿으로 view 툴바를 연다. */
+  const openLinkToolbarAtCaret = async (page: Page) => {
+    const { editable } = await openDemo(page);
+    await editable.click();
+    await page.keyboard.type("Hello R1");
+    await page.keyboard.press("Control+A");
+    await page.getByRole("button", { name: "Add link" }).click();
+    await page.getByRole("textbox", { name: "Link URL" }).fill("/opened");
+    await page.getByRole("button", { name: "Save link" }).click();
+    await expect(editable.locator("a")).toHaveAttribute("href", "/opened");
+
+    await editable.locator("a").click();
+    const toolbar = page.getByRole("toolbar", { name: "Link" });
+    await expect(toolbar).toBeVisible();
+    return { editable, toolbar };
+  };
+
+  test("링크 안 캐럿에서 h1을 누르면 링크 툴바가 사라지고 링크는 그대로다", async ({
+    page,
+  }) => {
+    const { editable, toolbar } = await openLinkToolbarAtCaret(page);
+
+    await page.getByRole("heading", { level: 1 }).click();
+    await yieldFrame(page);
+    await yieldFrame(page);
+
+    await expect(toolbar).toHaveCount(0);
+    await expect(editable.locator("a")).toHaveCount(1);
+  });
+
+  test("링크 안 캐럿에서 Document source textarea를 누르면 링크 툴바가 사라진다", async ({
+    page,
+  }) => {
+    const { toolbar } = await openLinkToolbarAtCaret(page);
+
+    await page.getByRole("textbox", { name: "Document source" }).click();
+    await yieldFrame(page);
+    await yieldFrame(page);
+
+    await expect(toolbar).toHaveCount(0);
+  });
+
+  test("닫힌 뒤 링크를 다시 누르면 링크 툴바가 다시 열린다", async ({
+    page,
+  }) => {
+    const { editable, toolbar } = await openLinkToolbarAtCaret(page);
+    await page.getByRole("heading", { level: 1 }).click();
+    await yieldFrame(page);
+    await yieldFrame(page);
+    await expect(toolbar).toHaveCount(0);
+
+    await editable.locator("a").click();
+
+    await expect(toolbar).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open link" })).toHaveAttribute(
+      "href",
+      "/opened",
+    );
+  });
 });

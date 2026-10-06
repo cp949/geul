@@ -164,6 +164,38 @@ test("링크 툴바는 선택이 창 스크롤로 뷰포트 밖에 나가면 숨
   await expect(page.locator(".geul-link-toolbar__input")).toHaveCount(0);
 });
 
+test("링크 툴바는 링크 안 collapsed 캐럿이 창 스크롤로 뷰포트 밖에 나가면 숨고 되돌리면 다시 보인다 (#282)", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/composite");
+  const editor = page.getByRole("textbox", { name: "Editor" });
+  await typeLines(page, editor);
+  // 첫 줄에 링크를 만든 뒤 링크 안에 캐럿을 둔다. 앵커는 실제 Range rect다.
+  await selectFirstLine(page);
+  await page.locator('.geul-link-toolbar [aria-label="Add link"]').click();
+  await page.locator(".geul-link-toolbar__input").fill("/opened");
+  await page.locator('.geul-link-toolbar [aria-label="Save link"]').click();
+  const link = editor.locator("a").first();
+  await expect(link).toHaveAttribute("href", "/opened");
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("ArrowRight");
+  await yieldFrame(page);
+
+  const toolbar = page.locator(".geul-link-toolbar");
+  await expectVisible(toolbar, "링크 안 캐럿 직후 보임");
+  await expect(toolbar.locator('[aria-label="Open link"]')).toHaveAttribute(
+    "href",
+    "/opened",
+  );
+
+  await scrollWindowTo(page, 1800);
+  expect(await isAboveViewport(link), "링크가 뷰포트 위").toBe(true);
+  await expectHidden(toolbar, "창 스크롤 뒤");
+
+  await scrollWindowTo(page, 0);
+  await expectVisible(toolbar, "스크롤 복귀");
+});
+
 /**
  * 첫 줄 위에 이미지를 올리고 이미지 블록을 선택한다. 페이지가 길어 창 스크롤이
  * 이미지를 뷰포트 밖으로 밀 수 있다. 이미지 블록 locator를 돌려준다.
