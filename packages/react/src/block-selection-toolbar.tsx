@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { IconButton } from "./icon-button.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { iconProps } from "./icon-props.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
@@ -127,7 +128,13 @@ export const BlockSelectionToolbar = () => {
     }
     const rangeStart = Math.min(fromDomIndex, toDomIndex);
     const rangeEnd = Math.max(fromDomIndex, toDomIndex);
-    const rangeElements = blockElements.slice(rangeStart, rangeEnd + 1);
+    // 접힌 toggle이 가린 자손은 뺀다. 숨은 블록의 rect는 0x0이라 하이라이트가
+    // 원점에 뜨고 앵커 min/max가 0으로 끌려간다(Issue #280). 범위 끝점이 숨은
+    // 블록이어도 인덱스는 위에서 전체 DOM 기준으로 구했다. 보이는 블록이 하나도
+    // 없으면 툴바를 숨긴다.
+    const rangeElements = blockElements
+      .slice(rangeStart, rangeEnd + 1)
+      .filter((candidate) => !isHiddenBlockElement(candidate));
     if (rangeElements.length === 0) {
       setToolbarState(null);
       return;

@@ -772,3 +772,90 @@ describe("툴바 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #233 
     expect(editor.getBlockSelection()).toBeNull();
   });
 });
+
+describe("접힌 toggle 안 숨은 블록은 툴바 앵커와 하이라이트에서 빠진다(Issue #280)", () => {
+  const paragraph = (id: string) => ({
+    id,
+    type: "paragraph" as const,
+    content: [{ text: id }],
+  });
+  // DOM 순서는 p1, tg, c1, c2, p2다. c1·c2는 접힘 decoration이 가려
+  // `data-geul-collapsed-hidden` 그룹 안에 있다. 접힌 toggle tg 자신은 보인다.
+  const COLLAPSED_BLOCKS = [
+    paragraph("p1"),
+    {
+      id: "tg",
+      type: "toggleListItem" as const,
+      content: [{ text: "접힌 toggle" }],
+      collapsed: true,
+      children: [paragraph("c1"), paragraph("c2")],
+    },
+    paragraph("p2"),
+  ];
+
+  /**
+   * 접힌 toggle 문서를 마운트하고 숨은 블록의 rect를 0x0으로 둔다.
+   * 보이는 블록은 left 0, top 100부터 20px 간격이다. 숨은 블록은 `display: none`이
+   * 돌려주는 값과 같게 전부 0이다.
+   */
+  const renderCollapsed = () => {
+    const rendered = mountBlockEditor({
+      initialBlocks: COLLAPSED_BLOCKS,
+      children: <BlockSelectionToolbar />,
+      layout: { left: 0, top: 100, width: 600, height: 20 },
+    });
+    const hiddenBlocks = rendered.blocks.filter((block) =>
+      ["c1", "c2"].includes(block.getAttribute("data-geul-block-id") ?? ""),
+    );
+    expect(hiddenBlocks).toHaveLength(2);
+    for (const block of hiddenBlocks) {
+      stubRect(block, { left: 0, top: 0, width: 0, height: 0 });
+    }
+    return rendered;
+  };
+
+  it("core 접힘 decoration이 숨은 자식에만 표식을 붙인다(react 판정의 전제)", () => {
+    const { blocks } = renderCollapsed();
+
+    const hiddenIds = blocks
+      .filter((block) => block.closest("[data-geul-collapsed-hidden]") !== null)
+      .map((block) => block.getAttribute("data-geul-block-id"));
+    expect(hiddenIds).toEqual(["c1", "c2"]);
+  });
+
+  it("범위에 숨은 자손이 끼어도 하이라이트에는 보이는 블록만 든다", () => {
+    const { editor } = renderCollapsed();
+
+    editor.commands.selectBlockRange("p1", "p2");
+    fireSelectionChange();
+
+    expect(highlightedBlockIds().sort()).toEqual(["p1", "p2", "tg"]);
+  });
+
+  it("툴바 앵커는 숨은 자손의 0x0 rect가 아니라 보이는 블록의 최소 top을 쓴다", () => {
+    const { editor } = renderCollapsed();
+    const readToolbarTop = (from: string, to: string): number => {
+      editor.commands.selectBlockRange(from, to);
+      fireSelectionChange();
+      return Number.parseFloat(screen.getByRole("toolbar").style.top);
+    };
+
+    // p1~tg는 숨은 블록이 없다. 최소 top은 p1의 100이다.
+    const visibleOnlyTop = readToolbarTop("p1", "tg");
+    // p1~p2는 숨은 c1·c2(rect top 0)를 품는다. 앵커는 같은 100이어야 한다.
+    const withHiddenTop = readToolbarTop("p1", "p2");
+
+    expect(visibleOnlyTop).toBeGreaterThan(8);
+    expect(withHiddenTop).toBe(visibleOnlyTop);
+  });
+
+  it("범위 전체가 숨은 블록이면 툴바와 하이라이트를 렌더하지 않는다", () => {
+    const { editor } = renderCollapsed();
+
+    editor.commands.selectBlockRange("c1", "c2");
+    fireSelectionChange();
+
+    expect(screen.queryByRole("toolbar", { hidden: true })).toBeNull();
+    expect(highlightedBlockIds()).toEqual([]);
+  });
+});

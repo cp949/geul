@@ -48,6 +48,10 @@ import type {
 } from "./table-handle-types.js";
 import { clipSpanToBoxes, readScrollClipBoxes } from "./scroll-clip.js";
 import { isElementNode, isHtmlElement } from "./dom-node.js";
+import {
+  COLLAPSED_HIDDEN_ATTRIBUTE,
+  isHiddenBlockElement,
+} from "./hidden-block.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
@@ -850,6 +854,12 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
         closeMenuOnInvalidation();
         return;
       }
+      // 접힌 toggle이 표를 가리면 표 rect가 0x0이라 메뉴가 보이지 않는 곳을
+      // 가리킨다. 숨은 표에 행·열 명령이 나가지 않게 닫는다(Issue #280).
+      if (isHiddenBlockElement(table)) {
+        closeMenuOnInvalidation();
+        return;
+      }
 
       const { count, index: nextIndex } = resolveMenuTargetIndex(
         menuState,
@@ -879,9 +889,11 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     // 그 노드가 통째로 제거될 때(제거는 부모의 childList mutation이라
     // 제거되는 노드 자신의 observer에는 오지 않는다) 콜백이 오지 않아
     // 메뉴가 죽은 표를 가리킨 채 남는다.
+    // 접힘은 childList·열 속성 변화가 아니다. 접힘 표식 속성도 본다. 표식만
+    // 걸러 편집 중 비용을 키우지 않는다(Issue #280).
     const observer = new MutationObserver(reconcileMenuState);
     observer.observe(element, {
-      attributeFilter: ["data-geul-columns"],
+      attributeFilter: ["data-geul-columns", COLLAPSED_HIDDEN_ATTRIBUTE],
       attributes: true,
       childList: true,
       subtree: true,
@@ -900,7 +912,8 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
 
     const reconcileTableGripMenu = () => {
       const table = findTable(element, tableGripMenuTableId);
-      if (table === null) {
+      // 접힌 toggle이 표를 가려도 닫는다(Issue #280). 위 행·열 메뉴와 같다.
+      if (table === null || isHiddenBlockElement(table)) {
         closeTableGripMenuOnInvalidation();
       }
     };
@@ -908,7 +921,12 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
     reconcileTableGripMenu();
 
     const observer = new MutationObserver(reconcileTableGripMenu);
-    observer.observe(element, { childList: true, subtree: true });
+    observer.observe(element, {
+      attributeFilter: [COLLAPSED_HIDDEN_ATTRIBUTE],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
     return () => observer.disconnect();
   }, [tableGripMenuTableId, element, closeTableGripMenuOnInvalidation]);
 

@@ -11,7 +11,7 @@
  */
 
 import { DEFAULT_DICTIONARY, type EditorController } from "@cp949/geul-core";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableHandles } from "../src/table-handles.js";
@@ -937,6 +937,23 @@ describe("첫 행이 병합된 표의 열 geometry", () => {
   });
 });
 
+/** `index`번 행·열 핸들을 클릭해 메뉴를 연다. */
+const openHandleMenu = (
+  table: HTMLElement,
+  kind: "row" | "column",
+  index: number,
+) => {
+  fireEvent.pointerMove(table);
+  const label = kind === "row" ? rowHandleLabel : columnHandleLabel;
+  const handle = screen.getAllByRole("button", { name: label })[index];
+  if (handle === undefined) throw new Error(`${kind} 핸들 없음`);
+  fireEvent.pointerDown(handle, { pointerId: 1 });
+  fireEvent.pointerUp(handle, { pointerId: 1 });
+  fireEvent.click(handle);
+  // 전제: 메뉴가 열렸다.
+  expect(screen.queryByRole("menu")).not.toBeNull();
+};
+
 describe("안쪽 스크롤 컨테이너 스크롤", () => {
   // 핸들은 page-relative absolute라 창 스크롤은 브라우저가 따라가지만, 안쪽
   // 스크롤 컨테이너가 움직이면 표의 page 좌표가 바뀌는데도 메뉴가 닫혀
@@ -1265,23 +1282,6 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
       return node.style.visibility;
     };
 
-    /** `index`번 행·열 핸들을 클릭해 메뉴를 연다. */
-    const openHandleMenu = (
-      table: HTMLElement,
-      kind: "row" | "column",
-      index: number,
-    ) => {
-      fireEvent.pointerMove(table);
-      const label = kind === "row" ? rowHandleLabel : columnHandleLabel;
-      const handle = screen.getAllByRole("button", { name: label })[index];
-      if (handle === undefined) throw new Error(`${kind} 핸들 없음`);
-      fireEvent.pointerDown(handle, { pointerId: 1 });
-      fireEvent.pointerUp(handle, { pointerId: 1 });
-      fireEvent.click(handle);
-      // 전제: 메뉴가 열렸다.
-      expect(screen.queryByRole("menu")).not.toBeNull();
-    };
-
     it("행 메뉴를 연 행 핸들은 영역 밖이어도 보인다", () => {
       const { host, table } = renderRealTable();
       openHandleMenu(table, "row", 1);
@@ -1369,5 +1369,69 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
 
       expect(visibilityOf(tableGripNode())).toBe("hidden");
     });
+  });
+});
+
+describe("접힌 toggle이 표를 가리면 열린 표 메뉴를 닫는다(Issue #280)", () => {
+  // 접힘 decoration은 숨은 blockGroup에 표식을 붙인다. 표는 에디터 contenteditable의
+  // 직계 자식이라 jsdom에서는 표 자신에 표식을 붙인다. 판정은 closest라 조상에 붙은
+  // 경우와 같다(hidden-block.test.ts). MutationObserver 콜백은 마이크로태스크라
+  // act로 흘려보낸다.
+  const HIDDEN_ATTRIBUTE = "data-geul-collapsed-hidden";
+
+  /** 접힘 decoration이 하는 일을 흉내 낸다. 속성이 붙은 뒤 observer 콜백을 흘려보낸다. */
+  const markHidden = async (table: HTMLElement) => {
+    await act(async () => {
+      table.setAttribute(HIDDEN_ATTRIBUTE, "");
+    });
+  };
+
+  it.each(["row", "column"] as const)(
+    "%s 메뉴가 열린 상태에서 표가 숨으면 메뉴가 닫힌다",
+    async (kind) => {
+      const { table } = renderRealTable();
+      openHandleMenu(table, kind, 1);
+
+      await markHidden(table);
+
+      expect(screen.queryByRole("menu")).toBeNull();
+    },
+  );
+
+  it("표 그립 메뉴가 열린 상태에서 표가 숨으면 메뉴가 닫힌다", async () => {
+    const { table } = renderRealTable();
+    fireEvent.pointerMove(table);
+    fireEvent.click(screen.getByRole("button", { name: tableMenuLabel }));
+    // 전제: 그립 메뉴가 열렸다.
+    expect(screen.queryByRole("menu", { name: "Table menu" })).not.toBeNull();
+
+    await markHidden(table);
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("표식이 없는 표는 reconcile이 돌아도 행·열·그립 메뉴를 닫지 않는다", async () => {
+    const { table } = renderRealTable();
+    openHandleMenu(table, "row", 1);
+    // 표식 아닌 속성 mutation으로 reconcile을 돌린다. 값은 그대로다.
+    await act(async () => {
+      table.setAttribute(
+        "data-geul-columns",
+        table.getAttribute("data-geul-columns") ?? "",
+      );
+    });
+    expect(screen.queryByRole("menu")).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.pointerMove(table);
+    fireEvent.click(screen.getByRole("button", { name: tableMenuLabel }));
+    await act(async () => {
+      table.setAttribute(
+        "data-geul-columns",
+        table.getAttribute("data-geul-columns") ?? "",
+      );
+    });
+
+    expect(screen.queryByRole("menu", { name: "Table menu" })).not.toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import type { FixedPlacementAnchor } from "./fixed-placement.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import type {
   DragState,
   InsertionGuide,
@@ -56,6 +57,16 @@ export const readBlockMenuAnchor = (
   };
 };
 
+// 드롭 후보 블록을 문서 순서로 모은다. 접힌 toggle이 가린 블록은 뺀다 — 숨은
+// 블록의 rect는 0x0이라 midpoint 판정이 항상 top=0 기준으로 돈다. clientY가
+// 음수이면 숨은 블록이 후보로 뽑혀 폭 0 가이드가 뜬다(Issue #280). ids와
+// source/start/end 인덱스는 이 배열에서만 나온다. 필터를 한 곳에 둬 인덱스가
+// 어긋나지 않게 한다.
+const collectDropCandidates = (element: HTMLElement): HTMLElement[] =>
+  Array.from(
+    element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
+  ).filter((candidate) => !isHiddenBlockElement(candidate));
+
 // usePointerDragGesture의 onMove 콜백에서 쓰는 순수 함수다. 원래는 그
 // 4-listener 이펙트 안의 지역 함수였지만, 훅으로 옮기며 콜백이
 // useCallback으로 안정화돼야 해서 element를 인자로 받는 모듈 스코프
@@ -65,9 +76,7 @@ export const computeDragGuide = (
   clientY: number,
   current: DragState,
 ): InsertionGuide | null => {
-  const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
-  );
+  const blockElements = collectDropCandidates(element);
   const ids = blockElements.map((candidate) =>
     candidate.getAttribute("data-geul-block-id"),
   );
@@ -176,9 +185,7 @@ export const computeRangeMoveDragGuide = (
   fromBlockId: string,
   toBlockId: string,
 ): InsertionGuide | null => {
-  const blockElements = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
-  );
+  const blockElements = collectDropCandidates(element);
   const ids = blockElements.map((candidate) =>
     candidate.getAttribute("data-geul-block-id"),
   );

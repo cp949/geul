@@ -321,6 +321,20 @@ export type MountBlockEditorOptions = {
   container?: HTMLElement;
 };
 
+/** 문서 블록 수를 자식까지 센다. 렌더된 `[data-geul-block-id]` 수와 비교한다. */
+const countBlocksDeep = (
+  blocks: ReturnType<EditorController["getDocument"]>["blocks"],
+): number =>
+  blocks.reduce(
+    (sum, block) =>
+      sum +
+      1 +
+      ("children" in block && block.children !== undefined
+        ? countBlocksDeep(block.children)
+        : 0),
+    0,
+  );
+
 export type MountedBlockEditor = {
   editor: EditorController;
   host: HTMLElement;
@@ -431,8 +445,10 @@ export const mountBlockEditor = ({
     return blockElements;
   };
   const blocks = restubGeometry();
+  // 자식 블록도 `[data-geul-block-id]`로 렌더되므로 중첩까지 센다. 접힌 toggle의
+  // 자식은 display: none이어도 DOM에 있다.
   const documentBlocks = editor.getDocument().blocks;
-  if (blocks.length !== documentBlocks.length) {
+  if (blocks.length !== countBlocksDeep(documentBlocks)) {
     throw new Error("블록이 요청한 개수만큼 렌더되지 않았다");
   }
 
