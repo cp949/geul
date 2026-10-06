@@ -39,3 +39,46 @@ export const useHiddenBlockRefresh = (
     });
   }, [editor, element, blockId]);
 };
+
+/**
+ * `selector`에 걸린 요소 중 보이는 블록의 목록이 바뀔 때 호출 컴포넌트를 다시
+ * 렌더한다. 인스턴스 전체를 매 렌더 DOM에서 모으는 오버레이(caption)용이다.
+ * 단일 hover 블록을 보는 `useHiddenBlockRefresh`의 다중 블록판이다(Issue #288).
+ *
+ * 숨김·펼침·삭제·추가가 모두 "보이는 목록의 변화"라 한 경로로 잡힌다.
+ * 목록은 문서 순서의 blockId 열이라 순서가 바뀌어도 렌더한다. 문서 변경마다
+ * 렌더하지 않는다. 목록이 그대로인 변경(다른 블록의 타이핑)은 렌더하지 않는다.
+ * 레이아웃을 읽지 않는다. `closest`·`getAttribute`만 쓴다.
+ *
+ * `selector`는 호출부의 모듈 스코프 상수로 넘긴다. blockId는 매칭 요소 자신
+ * 또는 가장 가까운 조상의 `data-geul-block-id`에서 읽는다.
+ */
+export const useHiddenBlocksRefresh = (
+  editor: EditorController,
+  element: HTMLElement | null,
+  selector: string,
+): void => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (element === null) return;
+    const readVisibleBlockIds = () => {
+      const ids: string[] = [];
+      for (const match of element.querySelectorAll(selector)) {
+        if (isHiddenBlockElement(match)) continue;
+        const blockId = match
+          .closest("[data-geul-block-id]")
+          ?.getAttribute("data-geul-block-id");
+        if (blockId !== null && blockId !== undefined) ids.push(blockId);
+      }
+      // id는 임의 문자열이라 구분자 충돌 없이 비교하려면 직렬화한다.
+      return JSON.stringify(ids);
+    };
+    let previous = readVisibleBlockIds();
+    return editor.subscribe(() => {
+      const next = readVisibleBlockIds();
+      if (next === previous) return;
+      previous = next;
+      setTick((tick) => tick + 1);
+    });
+  }, [editor, element, selector]);
+};

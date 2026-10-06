@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import type { EditorController } from "@cp949/geul-core";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { findElementByAttribute } from "./find-by-attribute.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 
 /**
  * media caption(media-captions.tsx)과 codeBlock caption(code-block-
@@ -42,6 +46,18 @@ export type CaptionEditingLifecycleDeps<
    * 더 구체적이라 이쪽을 따랐다. "계획과 실제 코드가 달랐던 지점" 참고).
    */
   focusEditor: () => void;
+  /**
+   * 편집 대상 블록이 삭제됐는지 판정하고 변경을 구독한다(`subscribe`·`getBlock`만
+   * 쓴다). 호스트 API의 삭제와 접힘도 DOM 이벤트 없이 닿아야 한다(Issue #288).
+   */
+  editor: Pick<EditorController, "getBlock" | "subscribe">;
+  /** 편집기 host. 접힘 판정이 대상 블록 DOM을 여기서 찾는다. `null`이면 숨김은 판정하지 않는다. */
+  element: HTMLElement | null;
+  /**
+   * 편집 중인 blockId. 없으면 `null`이다. 값이 있는 동안만 문서 변경을 구독한다.
+   * 편집 상태가 없는 문서 변경마다 판정하지 않는다.
+   */
+  editingBlockId: string | null;
 };
 
 export type CaptionEditingLifecycle = {
@@ -67,8 +83,58 @@ export const useCaptionEditingLifecycle = <
   setEditing,
   applyCommand,
   focusEditor,
+  editor,
+  element,
+  editingBlockId,
 }: CaptionEditingLifecycleDeps<T>): CaptionEditingLifecycle => {
   const cancelledRef = useRef(false);
+
+  // 대상 블록이 사라졌는지 판정한다. 삭제는 모델로, 숨김은 접힘 표식으로 본다.
+  // DOM 요소가 없다는 사실만으로는 사라졌다고 보지 않는다. NodeView를 다시 그리는
+  // 동안 일시적으로 `null`일 수 있다.
+  const isBlockGone = useCallback(
+    (blockId: string): boolean => {
+      if (editor.getBlock(blockId) === undefined) return true;
+      if (element === null) return false;
+      const block = findElementByAttribute(
+        element,
+        null,
+        "data-geul-block-id",
+        blockId,
+      );
+      return block !== null && isHiddenBlockElement(block);
+    },
+    [editor, element],
+  );
+
+  // 편집 중 대상 블록이 삭제되거나 접힘에 가려지면 편집 상태를 버린다. 오버레이가
+  // 사라진 뒤에도 store가 남으면 다시 펼칠 때 입력이 되살아나고, 보이지 않는
+  // 블록에 caption command가 나간다(Issue #288). commit하지 않는다.
+  // listener는 틱만 올린다. 세션 문서 갱신보다 앞서 listener 안의 `getBlock`은
+  // 낡은 문서를 읽을 수 있어(block-side-menu.tsx와 같은 규칙) 판정은 커밋 뒤
+  // effect가 한다.
+  //
+  // 편집 store는 모듈 싱글톤이라 `EditorProvider`가 둘이면 상대 editor의 편집
+  // blockId도 보인다. 이 editor 문서에 한 번도 없던 블록은 건드리지 않는다.
+  // 이 editor에서 존재를 확인한 블록이 사라질 때만 비운다.
+  const seenBlockIdRef = useRef<string | null>(null);
+  const [documentTick, setDocumentTick] = useState(0);
+  useEffect(() => {
+    if (editingBlockId === null) return;
+    return editor.subscribe(() => setDocumentTick((tick) => tick + 1));
+  }, [editor, editingBlockId]);
+  useEffect(() => {
+    if (editingBlockId === null) {
+      seenBlockIdRef.current = null;
+      return;
+    }
+    if (editor.getBlock(editingBlockId) !== undefined) {
+      seenBlockIdRef.current = editingBlockId;
+    }
+    if (seenBlockIdRef.current !== editingBlockId) return;
+    if (isBlockGone(editingBlockId)) setEditing(null);
+    // documentTick은 값을 읽지 않는 재실행 트리거다.
+  }, [documentTick, editingBlockId, editor, isBlockGone, setEditing]);
 
   // unmount 시 공유 store를 비운다 — 다음 마운트(다음 테스트, 다음 editor)가
   // 이 인스턴스가 열어 둔 편집 상태를 이어받지 않는다(두 store 문서 주석의
@@ -80,6 +146,13 @@ export const useCaptionEditingLifecycle = <
 
   const commit = useCallback(
     (blockId: string, committedCaption: string) => {
+      // 오버레이가 사라지며 입력의 blur가 이 commit을 부를 수 있다. 사라진 블록에는
+      // command를 보내지 않는다(Issue #288).
+      if (isBlockGone(blockId)) {
+        cancelledRef.current = false;
+        setEditing(null);
+        return;
+      }
       if (cancelledRef.current) {
         cancelledRef.current = false;
         setEditing(null);
@@ -95,7 +168,7 @@ export const useCaptionEditingLifecycle = <
       }
       setEditing(null);
     },
-    [getSnapshot, setEditing, applyCommand],
+    [getSnapshot, setEditing, applyCommand, isBlockGone],
   );
 
   const cancel = useCallback(

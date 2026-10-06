@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
+import { findBlockInTreeForDrag } from "./block-side-menu-geometry.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { isHiddenBlockElement } from "./hidden-block.js";
 import { readPageRect } from "./table-handle-geometry.js";
@@ -10,6 +11,7 @@ import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useHiddenBlockRefresh } from "./use-hidden-block-refresh.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
@@ -125,7 +127,9 @@ export const CalloutIconPicker = () => {
   });
 
   // 접힌 toggle이 가린 callout은 트리거를 그리지 않는다. rect가 0x0이라 트리거가
-  // 화면 구석에 뜬다. 재평가는 위 `useSelectionRefresh`가 맡는다(Issue #280).
+  // 화면 구석에 뜬다. 재평가는 위 `useSelectionRefresh`와 `useHiddenBlockRefresh`가
+  // 맡는다. 호스트 API의 접힘은 DOM 이벤트 없이 hover 블록을 가린다(Issue #280·#288).
+  useHiddenBlockRefresh(editor, element, hoverBlockId);
   const foundHoverElement =
     hoverBlockId === null || element === null
       ? null
@@ -162,10 +166,10 @@ export const CalloutIconPicker = () => {
     onClose: closePicker,
   });
 
-  // 대상 callout이 접힘에 가려지면 선택기를 닫는다. 보이지 않는 callout에
-  // setCalloutIcon이 나가지 않게 한다(Issue #280, block-side-menu.tsx와 같은
-  // 규칙). listener는 틱만 올리고 판정은 커밋 뒤 effect가 한다. 닫힌 뒤에는
-  // 다시 펼쳐도 열리지 않는다.
+  // 대상 callout이 삭제되거나 접힘에 가려지면 선택기를 닫는다. 없는 callout과
+  // 보이지 않는 callout에 setCalloutIcon이 나가지 않게 한다(Issue #280·#288,
+  // block-side-menu.tsx와 같은 규칙). listener는 틱만 올리고 판정은 커밋 뒤
+  // effect가 한다. 닫힌 뒤에는 다시 펼쳐도 열리지 않는다.
   const openBlockId = pickerState?.blockId ?? null;
   const [documentTick, setDocumentTick] = useState(0);
   useEffect(() => {
@@ -174,14 +178,20 @@ export const CalloutIconPicker = () => {
   }, [editor, openBlockId]);
   useEffect(() => {
     if (openBlockId === null || element === null) return;
-    const openBlockElement = findElementByAttribute(
-      element,
-      null,
-      "data-geul-block-id",
-      openBlockId,
-    );
-    if (openBlockElement === null || !isHiddenBlockElement(openBlockElement)) {
-      return;
+    // 삭제는 모델로 판정한다. DOM 요소가 없다는 사실만으로는 삭제로 보지 않는다.
+    if (findBlockInTreeForDrag(editor.getDocument().blocks, openBlockId)) {
+      const openBlockElement = findElementByAttribute(
+        element,
+        null,
+        "data-geul-block-id",
+        openBlockId,
+      );
+      if (
+        openBlockElement === null ||
+        !isHiddenBlockElement(openBlockElement)
+      ) {
+        return;
+      }
     }
     close("invalidated");
     // documentTick은 값을 읽지 않는 재실행 트리거다.

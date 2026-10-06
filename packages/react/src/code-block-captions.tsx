@@ -12,15 +12,20 @@ import {
   setCodeBlockCaptionEditing,
   useCodeBlockCaptionEditing,
 } from "./code-block-caption-editing-store.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { readPageRect } from "./table-handle-geometry.js";
 import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useHiddenBlocksRefresh } from "./use-hidden-block-refresh.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
 
 type CodeBlockInstance = { blockId: string; rect: DOMRect };
+
+// 보이는 codeBlock 인스턴스 목록이 바뀔 때 다시 렌더하는 훅에 넘기는 selector다.
+const CODE_BLOCK_INSTANCE_SELECTOR = "pre[data-geul-code-block]";
 
 /**
  * 코드블록 좌상단 caption 오버레이(RD-002 DELTA-02, Issue #194; 좌상단 위치와
@@ -97,6 +102,10 @@ export const CodeBlockCaptions = () => {
 
   const refresh = useCallback(() => setTick((tick) => tick + 1), []);
   useSelectionRefresh({ element, onUpdate: refresh });
+  // 호스트 API의 접힘·삭제는 DOM 이벤트 없이 보이는 인스턴스를 바꾼다. 목록이
+  // 바뀔 때만 렌더해 아래 instances 수집이 숨은·삭제된 블록을 거르게 한다
+  // (Issue #288).
+  useHiddenBlocksRefresh(editor, element, CODE_BLOCK_INSTANCE_SELECTOR);
 
   // commit/cancel/unmount cleanup은 media-captions.tsx와 동형인 상태
   // 머신이라 use-caption-editing-lifecycle.ts로 통합했다(01-계획.md
@@ -107,6 +116,9 @@ export const CodeBlockCaptions = () => {
     applyCommand: (blockId, draft) =>
       editor.commands.setCodeBlockCaption(blockId, draft),
     focusEditor,
+    editor,
+    element,
+    editingBlockId: editing?.blockId ?? null,
   });
 
   // blockId -> 이 컴포넌트가 렌더한 오버레이(.geul-code-block-caption) DOM.
@@ -145,9 +157,12 @@ export const CodeBlockCaptions = () => {
     element.querySelectorAll<HTMLElement>("[data-geul-block-id]"),
   )
     .map((wrapper): CodeBlockInstance | null => {
-      if (wrapper.querySelector("pre[data-geul-code-block]") === null) {
+      if (wrapper.querySelector(CODE_BLOCK_INSTANCE_SELECTOR) === null) {
         return null;
       }
+      // 접힌 toggle이 가린 codeBlock은 rect가 0x0이라 오버레이를 그리지 않는다
+      // (Issue #288).
+      if (isHiddenBlockElement(wrapper)) return null;
       const blockId = wrapper.getAttribute("data-geul-block-id");
       return blockId === null ? null : { blockId, rect: readPageRect(wrapper) };
     })

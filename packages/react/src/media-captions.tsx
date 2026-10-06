@@ -18,6 +18,7 @@ import {
   setMediaCaptionEditing,
   useMediaCaptionEditing,
 } from "./media-caption-editing-store.js";
+import { isHiddenBlockElement } from "./hidden-block.js";
 import { findMediaVisualElement } from "./media-handle-overlays.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { readPageRect } from "./table-handle-geometry.js";
@@ -25,6 +26,7 @@ import { useCaptionEditingLifecycle } from "./use-caption-editing-lifecycle.js";
 import { useClipVisibility } from "./use-clip-visibility.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
+import { useHiddenBlocksRefresh } from "./use-hidden-block-refresh.js";
 import { useMirroredState } from "./use-mirrored-state.js";
 import { usePointerHoverTarget } from "./use-pointer-hover-target.js";
 import { useSelectionRefresh } from "./use-selection-refresh.js";
@@ -43,6 +45,9 @@ type MediaCaptionInstance = {
   rect: DOMRect;
   textAlignment: "left" | "center" | "right" | null;
 };
+
+// 보이는 media 인스턴스 목록이 바뀔 때 다시 렌더하는 훅에 넘기는 selector다.
+const MEDIA_INSTANCE_SELECTOR = "[data-geul-media-kind]";
 
 // 8rem — 그릴링 결정(2026-09-16, Q8). 리사이즈로 이미지가 아주 좁아져도
 // caption 박스(따라서 편집 textarea)가 한 글자씩 줄줄이 끊기지 않을 하한선.
@@ -109,6 +114,10 @@ export const MediaCaptions = () => {
 
   const refresh = useCallback(() => setTick((tick) => tick + 1), []);
   useSelectionRefresh({ element, onUpdate: refresh });
+  // 호스트 API의 접힘·삭제는 DOM 이벤트 없이 보이는 인스턴스를 바꾼다. 목록이
+  // 바뀔 때만 렌더해 아래 instances 수집이 숨은·삭제된 블록을 거르게 한다
+  // (Issue #288).
+  useHiddenBlocksRefresh(editor, element, MEDIA_INSTANCE_SELECTOR);
 
   // caption 오버레이는 core의 real caption DOM 밖(별도 서브트리)에 그려져
   // 문서 flow에 자기 높이를 반영하지 못한다(2026-09-16, 버그 수정 — 캡션이
@@ -159,7 +168,7 @@ export const MediaCaptions = () => {
 
   usePointerHoverTarget({
     element,
-    entitySelector: "[data-geul-media-kind]",
+    entitySelector: MEDIA_INSTANCE_SELECTOR,
     ignoreSelectors: MEDIA_CAPTION_HOVER_IGNORE_SELECTORS,
     onCandidateChange: handleHoverCandidateChange,
   });
@@ -173,13 +182,19 @@ export const MediaCaptions = () => {
     applyCommand: (blockId, draft) =>
       editor.commands.setMediaBlockCaption(blockId, draft),
     focusEditor,
+    editor,
+    element,
+    editingBlockId: editing?.blockId ?? null,
   });
 
   if (element === null) return null;
 
+  // 접힌 toggle이 가린 블록은 rect가 0x0이다. 이 rect로 오버레이를 그리면 뷰포트
+  // 구석에 visible로 남는다. 숨은 인스턴스는 거른다(Issue #288).
   const instances: MediaCaptionInstance[] = Array.from(
-    element.querySelectorAll<HTMLElement>("[data-geul-media-kind]"),
+    element.querySelectorAll<HTMLElement>(MEDIA_INSTANCE_SELECTOR),
   )
+    .filter((wrapper) => !isHiddenBlockElement(wrapper))
     .map((wrapper): MediaCaptionInstance | null => {
       const blockId = wrapper.getAttribute("data-geul-block-id");
       const kind = wrapper.getAttribute("data-geul-media-kind");

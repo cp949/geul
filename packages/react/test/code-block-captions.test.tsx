@@ -17,8 +17,15 @@ import { DEFAULT_DICTIONARY, type DocumentChangeEvent } from "@cp949/geul-core";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { setCodeBlockCaptionEditing } from "../src/code-block-caption-editing-store.js";
+import {
+  getCodeBlockCaptionEditingSnapshot,
+  setCodeBlockCaptionEditing,
+} from "../src/code-block-caption-editing-store.js";
 import { CodeBlockCaptions } from "../src/code-block-captions.js";
+import {
+  toggleCollapseByHostApi,
+  toggleWithChild,
+} from "./collapsed-toggle-test-support.js";
 import {
   mountBlockEditor,
   type MountBlockEditorOptions,
@@ -421,6 +428,117 @@ describe("스크롤 컨테이너 clip", () => {
     fireEvent.scroll(host);
 
     expect(second.style.visibility).toBe("");
+    expect(captionInput().value).toBe("초안");
+  });
+});
+
+describe("접힌 toggle이 가린 codeBlock의 caption(Issue #288)", () => {
+  // 접힘은 자식을 display:none으로 가려 rect가 0x0이다. 이 rect로 오버레이를
+  // 그리면 뷰포트 구석에 visible로 남는다. 표식(data-geul-collapsed-hidden)으로
+  // 판정한다.
+  const codeBlock = {
+    id: "code-1",
+    type: "codeBlock" as const,
+    content: [{ text: "a" }],
+    caption: "설명",
+  };
+  const captionOverlays = () =>
+    document.querySelectorAll(".geul-code-block-caption");
+
+  it("접힌 toggle 안 codeBlock의 caption 오버레이를 렌더하지 않는다", () => {
+    const { host } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, true),
+    });
+    fireEvent(window, new Event("resize"));
+
+    expect(host.querySelector("[data-geul-collapsed-hidden]")).not.toBeNull();
+    expect(captionOverlays()).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "설명" })).toBeNull();
+  });
+
+  it("대조: 펼친 toggle 안 codeBlock의 caption 오버레이는 렌더한다", () => {
+    const { host } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, false),
+    });
+    fireEvent(window, new Event("resize"));
+
+    expect(host.querySelector("[data-geul-collapsed-hidden]")).toBeNull();
+    expect(captionOverlays()).toHaveLength(1);
+  });
+
+  it("호스트 API로 접으면 DOM 이벤트 없이 사라지고, 펼치면 다시 나타난다", () => {
+    const { editor, host } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, false),
+    });
+    expect(captionOverlays()).toHaveLength(1);
+
+    toggleCollapseByHostApi(editor);
+    expect(host.querySelector("[data-geul-collapsed-hidden]")).not.toBeNull();
+    expect(captionOverlays()).toHaveLength(0);
+
+    toggleCollapseByHostApi(editor);
+    expect(host.querySelector("[data-geul-collapsed-hidden]")).toBeNull();
+    expect(captionOverlays()).toHaveLength(1);
+  });
+
+  it("deleteBlock으로 지운 codeBlock의 caption 오버레이가 DOM 이벤트 없이 사라진다", () => {
+    const { editor } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, false),
+    });
+    expect(captionOverlays()).toHaveLength(1);
+
+    act(() => {
+      editor.commands.deleteBlock("code-1");
+    });
+
+    expect(captionOverlays()).toHaveLength(0);
+  });
+
+  it("편집 중인 codeBlock이 접히면 편집 store를 비우고 caption을 커밋하지 않으며 펼쳐도 되살아나지 않는다", () => {
+    const { editor } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, false),
+    });
+    act(() => setCodeBlockCaptionEditing({ blockId: "code-1", draft: "초안" }));
+    expect(captionInput().value).toBe("초안");
+
+    toggleCollapseByHostApi(editor);
+
+    expect(getCodeBlockCaptionEditingSnapshot()).toBeNull();
+    expect(screen.queryByRole("textbox", { name: inputLabel })).toBeNull();
+    toggleCollapseByHostApi(editor);
+    expect(screen.queryByRole("textbox", { name: inputLabel })).toBeNull();
+    expect(screen.getByRole("button", { name: "설명" })).toBeTruthy();
+    expect(editor.getBlock("code-1")).toMatchObject({ caption: "설명" });
+  });
+
+  it("편집 중인 codeBlock을 deleteBlock으로 지우면 편집 store를 비운다", () => {
+    const { editor } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, false),
+    });
+    act(() => setCodeBlockCaptionEditing({ blockId: "code-1", draft: "초안" }));
+
+    act(() => {
+      editor.commands.deleteBlock("code-1");
+    });
+
+    expect(getCodeBlockCaptionEditingSnapshot()).toBeNull();
+    expect(screen.queryByRole("textbox", { name: inputLabel })).toBeNull();
+  });
+
+  it("대조: 보이는 codeBlock을 편집 중일 때 다른 블록 변경은 편집을 지우지 않는다", () => {
+    const { editor } = renderCaptions({
+      initialBlocks: toggleWithChild(codeBlock, false),
+    });
+    act(() => setCodeBlockCaptionEditing({ blockId: "code-1", draft: "초안" }));
+
+    act(() => {
+      editor.commands.setText("p1", "다른 블록 변경");
+    });
+
+    expect(getCodeBlockCaptionEditingSnapshot()).toEqual({
+      blockId: "code-1",
+      draft: "초안",
+    });
     expect(captionInput().value).toBe("초안");
   });
 });

@@ -16,12 +16,16 @@
  * 조상)은 트리거를 그리지 않는다. hover 중인 callout이 가려지면 재평가 뒤 트리거가
  * 사라지고, 열린 선택기는 대상 callout이 가려지면 닫힌다. 표식은 core
  * 접힘 decoration이 실제로 붙인다.
+ *
+ * 추가 주제(Issue #288): hover 중인 callout이 호스트 API로 접히면 DOM 이벤트 없이
+ * 트리거가 사라진다. 열린 선택기의 대상 callout이 삭제되면 `invalidated`로 닫힌다.
  */
 
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { CalloutIconPicker } from "../src/callout-icon-picker.js";
+import { toggleCollapseByHostApi } from "./collapsed-toggle-test-support.js";
 import {
   makeScrollContainer,
   mountBlockEditor,
@@ -433,5 +437,34 @@ describe("접힌 toggle 안 숨은 callout은 트리거 대상이 아니다(Issu
     });
 
     expect(screen.getByRole("listbox")).not.toBeNull();
+  });
+
+  // Issue #288. 아래 두 경로는 DOM 이벤트(keyup·selectionchange·resize)를 보내지
+  // 않는다. 호스트 API만으로 문서가 바뀌는 경우다.
+  it("hover 중인 callout이 호스트 API로 접히면 DOM 이벤트 없이 트리거가 사라진다(#288)", () => {
+    const { host, editor } = mountToggleCallout(false);
+    fireEvent.pointerMove(calloutOf(host));
+    expect(screen.getByLabelText(triggerLabel)).not.toBeNull();
+
+    toggleCollapseByHostApi(editor);
+
+    expect(
+      calloutOf(host).closest("[data-geul-collapsed-hidden]"),
+    ).not.toBeNull();
+    expect(screen.queryByLabelText(triggerLabel)).toBeNull();
+  });
+
+  it("열린 선택기의 대상 callout이 deleteBlock으로 지워지면 invalidated로 닫힌다(#288)", () => {
+    const { host, editor } = mountToggleCallout(false);
+    fireEvent.pointerMove(calloutOf(host));
+    fireEvent.click(screen.getByLabelText(triggerLabel));
+    expect(screen.getByRole("listbox")).not.toBeNull();
+
+    act(() => {
+      editor.commands.deleteBlock("c1");
+    });
+
+    expect(editor.getBlock("c1")).toBeUndefined();
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
