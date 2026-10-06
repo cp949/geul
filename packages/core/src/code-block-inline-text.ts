@@ -1,5 +1,5 @@
 import { Fragment } from "@tiptap/pm/model";
-import type { Node, Schema } from "@tiptap/pm/model";
+import type { Mark, Node, Schema } from "@tiptap/pm/model";
 
 // inline 콘텐츠와 CodeBlock source 텍스트 사이의 변환을 소유하는 leaf 모듈.
 // 병합(block-join-extension.ts), CodeBlock 종료(code-block-exit-extension.ts),
@@ -31,27 +31,41 @@ export function inlineToCodeSource(
 
 // codeBlock 텍스트 조각(리터럴 `\n` 포함 가능, marks 없음 — schema
 // `marks: ""`)을 paragraph가 받는 inline 콘텐츠로 변환한다.
-// model-to-tiptap.ts의 inlineContentToTiptap이 저장 모델 JSON 위에서 하는
-// `\n→hardBreak` 분할과 같은 규칙을 살아있는 PM Fragment 위에서
-// 재구현한다(paragraph content: "inline*"라 리터럴 개행을 담은 text
-// 노드를 허용하지 않는다). 빈 세그먼트(연속 `\n`)는 text 노드를 만들지
-// 않고 건너뛴다 — 원본 규칙과 동일.
+// paragraph content: "inline*"는 리터럴 개행을 담은 text 노드를 허용하지
+// 않는다. 분할 규칙은 아래 textToHardBreakInline이 소유한다.
 export function codeSourceToInline(
   schema: Schema,
   content: Fragment,
 ): Fragment {
-  const hardBreakType = schema.nodes.hardBreak;
   let result = Fragment.empty;
   content.forEach((child: Node) => {
-    const segments = (child.text ?? "").split("\n");
-    segments.forEach((segment, index) => {
-      if (segment.length > 0) {
-        result = result.append(Fragment.from(schema.text(segment)));
-      }
-      if (index < segments.length - 1 && hardBreakType !== undefined) {
-        result = result.append(Fragment.from(hardBreakType.create()));
-      }
-    });
+    result = result.append(textToHardBreakInline(schema, child.text ?? ""));
   });
   return result;
+}
+
+// 텍스트 하나를 `\n` 경계로 나눠 그 사이에 hardBreak를 끼운 inline
+// Fragment로 만든다. model-to-tiptap.ts의 inlineContentToTiptap이 저장 모델
+// JSON 위에서 하는 `\n→hardBreak` 분할과 같은 규칙을 살아있는 PM 노드
+// 위에서 적용한다.
+// - 빈 세그먼트(연속 `\n`)는 text 노드를 만들지 않고 건너뛴다.
+// - marks는 세그먼트 text와 hardBreak 모두에 붙인다. tiptap-to-model.ts가
+//   같은 mark의 hardBreak를 앞뒤 런과 합쳐 export가 한 런 그대로다.
+// codeSourceToInline(병합·종료·종류 변경)과 리터럴 개행 정규화
+// (hard-break-newline-normalize-extension.ts, Issue #281)가 공유한다.
+export function textToHardBreakInline(
+  schema: Schema,
+  text: string,
+  marks: readonly Mark[] = [],
+): Fragment {
+  const hardBreakType = schema.nodes.hardBreak;
+  const nodes: Node[] = [];
+  const segments = text.split("\n");
+  segments.forEach((segment, index) => {
+    if (segment.length > 0) nodes.push(schema.text(segment, marks));
+    if (index < segments.length - 1 && hardBreakType !== undefined) {
+      nodes.push(hardBreakType.create(null, null, marks));
+    }
+  });
+  return Fragment.fromArray(nodes);
 }

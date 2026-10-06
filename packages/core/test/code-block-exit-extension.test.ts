@@ -13,7 +13,12 @@
  * 그 뒤에 맨몸 paragraph(첫 자동 id "id-1")를 붙인다(codeBlock은
  * endsWithChildlessParagraph를 절대 만족 못 함, trailing-block-extension.ts)
  * — 아래 fixture 다수가 이 자동 삽입을 기대값에 그대로 반영한다.
+ *
+ * Issue #281이 더한 축: codeBlock에서 시작해 그 밖까지 걸친 범위의 Enter는
+ * "범위를 지운 뒤 접힌 캐럿 자리에서 일반 Enter"와 같은 결과다. 같은 문서
+ * 두 벌에서 두 경로를 따로 실행해 문서·selection을 대조한다.
  */
+import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { contentTextStart, dispatchKeydown } from "./block-test-support.js";
@@ -270,6 +275,95 @@ describe("빈 codeBlock Delete 삭제", () => {
     expect(editor.getDocument().blocks).toEqual([
       codeBlockBlock("target", "code"),
       paragraphBlock("id-1", ""),
+    ]);
+  });
+});
+
+/**
+ * codeBlock "code" 뒤에 꼬리 블록을 둔 문서를 마운트하고, codeBlock 안
+ * fromOffset부터 꼬리 블록 안 toOffset까지 범위를 잡는다.
+ */
+const mountCodeRange = (
+  tail: Block,
+  fromOffset: number,
+  toOffset: number,
+  source = "code",
+) => {
+  const harness = mounted(
+    documentOf(
+      codeBlockBlock("code-1", source),
+      tail,
+      paragraphBlock("after", "끝"),
+    ),
+  );
+  const { tiptap } = harness;
+  tiptap.commands.setTextSelection({
+    from: contentTextStart(tiptap, "code-1") + fromOffset,
+    to: contentTextStart(tiptap, tail.id) + toOffset,
+  });
+  return harness;
+};
+
+describe("codeBlock 시작 범위 Enter(Issue #281)", () => {
+  it.each([
+    ["plain 꼬리", () => paragraphBlock("p1", "PQRS"), 2, 2, "code"],
+    [
+      "서식 꼬리",
+      (): Block => ({
+        id: "p1",
+        type: "paragraph",
+        content: [{ text: "PQ" }, { text: "RS", marks: [{ type: "bold" }] }],
+      }),
+      2,
+      2,
+      "code",
+    ],
+    [
+      "끝 개행 뒤에서 문단 끝까지",
+      () => paragraphBlock("p1", "PQRS"),
+      5,
+      4,
+      "code\n",
+    ],
+  ] as const)(
+    "%s: 범위 Enter는 deleteSelection 뒤 접힌 캐럿 Enter와 같은 문서·selection이고 키를 소비한다",
+    (_label, makeTail, fromOffset, toOffset, source) => {
+      const actual = mountCodeRange(makeTail(), fromOffset, toOffset, source);
+      const expected = mountCodeRange(makeTail(), fromOffset, toOffset, source);
+      const beforeJson = actual.tiptap.state.doc.toJSON();
+
+      const handled = dispatchKeydown(actual.tiptap, "Enter");
+      expected.tiptap.commands.deleteSelection();
+      dispatchKeydown(expected.tiptap, "Enter");
+
+      expect(handled).toBe(true);
+      expect(actual.editor.getDocument().blocks).toEqual(
+        expected.editor.getDocument().blocks,
+      );
+      expect(actual.tiptap.state.selection.toJSON()).toEqual(
+        expected.tiptap.state.selection.toJSON(),
+      );
+      expect(actual.editor.getDocument().revision).toBe(1);
+
+      actual.tiptap.commands.undo();
+      expect(actual.tiptap.state.doc.toJSON()).toEqual(beforeJson);
+    },
+  );
+
+  it("codeBlock 안에서 끝나는 범위 Enter는 지금처럼 범위를 개행 하나로 바꾼다(회귀 없음)", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        codeBlockBlock("code-1", "abcdef"),
+        paragraphBlock("tail", "꼬리"),
+      ),
+    );
+    const start = contentTextStart(tiptap, "code-1");
+    tiptap.commands.setTextSelection({ from: start + 2, to: start + 4 });
+
+    expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("code-1", "ab\nef"),
+      paragraphBlock("tail", "꼬리"),
     ]);
   });
 });

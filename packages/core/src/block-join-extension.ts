@@ -5,7 +5,10 @@ import { Selection, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
-import { inlineToCodeSource } from "./code-block-inline-text.js";
+import {
+  codeSourceToInline,
+  inlineToCodeSource,
+} from "./code-block-inline-text.js";
 import { deleteKeyBindings } from "./delete-key-bindings.js";
 import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
@@ -287,7 +290,11 @@ function leafBlockContainerAt(
 // Text 블록 경계에 인접한 CodeBlock을 Text에 흡수한다(#202 스펙 표
 // 행1·2, RD-001-DELTA-01) — CodeBlock이 항상 소멸하는 쪽이고 Text가
 // 살아남는다. CodeBlock은 marks:""라(code-block-extension.ts) 옮기는
-// 인라인 콘텐츠에 애초 서식이 없어 별도 stripMarks가 필요 없다.
+// 인라인 콘텐츠에 애초 서식이 없어 별도 stripMarks가 필요 없다. 대신
+// 리터럴 `\n`은 codeSourceToInline으로 hardBreak로 바꾼다(Issue #281).
+// Text 블록 content "inline*"는 개행을 hardBreak 노드로 담는다. h1도 같다
+// (h1 제한은 Shift-Enter 입력 정책이다). 숨은 codeBlock 흡수(#253)도 이
+// 함수를 탄다.
 //
 // backward(행1, Backspace)는 mergeContainers의 기존 호출부와 순서가
 // 반대다 — 제거 대상(CodeBlock)이 대상(Text)보다 문서 앞이라 mergePos가
@@ -316,7 +323,7 @@ function mergeCodeBlockIntoText(
     removed: container,
     removedStart: containerStart,
     mergePos: context.$from.pos,
-    inline: adjacent.node.content,
+    inline: codeSourceToInline(liveState.schema, adjacent.node.content),
     caretAt: direction === "backward" ? "after" : "before",
   });
   return true;
@@ -570,6 +577,28 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   // previous.$head에만 적용한다(G-EDT-002).
   const $target = previous.$head;
   const hiddenLabelEnd = collapsedToggleLabelEnd($target);
+  // atom 너머 대상이 보이는 CodeBlock이면 문단을 CodeBlock에 넣지 않는다
+  // (Issue #281). 그 경로는 hardBreak 뒤를 새 블록으로 쪼개고 블록 id와
+  // mark를 잃었다. 인접 규칙(mergeCodeBlockIntoText)처럼 문단이 남고
+  // CodeBlock을 흡수한다. atom은 제자리에 남는다. 목록 항목은 인접 규칙과
+  // 같은 2단계 보호를 받는다. 숨은 CodeBlock이면 아래 라벨 끝 병합(#253)을
+  // 그대로 쓴다.
+  if (hiddenLabelEnd === null && $target.parent.type.name === "codeBlock") {
+    if (isListItemContent($from.parent)) {
+      return exitListItem(view, liveState, {
+        contentPosition: $from.before($from.depth),
+      });
+    }
+    const codeBlockDepth = $target.depth - 1;
+    mergeContainers(view, liveState, {
+      removed: $target.node(codeBlockDepth),
+      removedStart: $target.before(codeBlockDepth),
+      mergePos: $from.pos,
+      inline: codeSourceToInline(liveState.schema, $target.parent.content),
+      caretAt: "after",
+    });
+    return true;
+  }
   mergeContainers(view, liveState, {
     removed: $from.node(containerDepth),
     removedStart: containerStart,
@@ -634,11 +663,16 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
     return selectionIsStale && isJoinBoundary(liveState, "forward");
   }
 
+  // atom 너머 대상이 CodeBlock이면 리터럴 `\n`을 hardBreak로 바꿔 붙인다
+  // (Issue #281). 방향(현재 블록이 남음)은 그대로다.
   mergeContainers(view, liveState, {
     removed: nextContainer,
     removedStart: $next.before(nextContainerDepth),
     mergePos: $from.pos,
-    inline: $next.parent.content,
+    inline:
+      $next.parent.type.name === "codeBlock"
+        ? codeSourceToInline(liveState.schema, $next.parent.content)
+        : $next.parent.content,
   });
   return true;
 }

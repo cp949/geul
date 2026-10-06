@@ -4,6 +4,7 @@
  * 시점에 사본 대신 이 모듈로 올렸다(G-TST-002).
  */
 import type { Editor as TiptapEditor } from "@tiptap/core";
+import type { Node as PmNode } from "@tiptap/pm/model";
 
 /**
  * keydown을 view.someProp("handleKeyDown", ...)로 실 디스패치하고 소비
@@ -144,5 +145,51 @@ export const contentTextStart = (
     return true;
   });
   if (found === null) throw new Error(`blockContainer ${blockId} 조회 실패`);
+  return found;
+};
+
+/** blockId 컨테이너(blockContainer) 노드. 없으면 던진다. */
+export const containerOf = (
+  tiptap: Pick<TiptapEditor, "state">,
+  blockId: string,
+): PmNode => {
+  let found: PmNode | null = null;
+  tiptap.state.doc.descendants((node) => {
+    if (found !== null) return false;
+    if (node.type.name === "blockContainer" && node.attrs.blockId === blockId) {
+      found = node;
+      return false;
+    }
+    return true;
+  });
+  if (found === null) throw new Error(`blockContainer ${blockId} 조회 실패`);
+  return found;
+};
+
+/** inline 자식 모양. text는 텍스트, 그 외 노드는 `<타입>`이다. */
+export const inlineShape = (node: PmNode | null | undefined): string[] => {
+  const shape: string[] = [];
+  node?.forEach((child) => {
+    shape.push(child.isText ? (child.text ?? "") : `<${child.type.name}>`);
+  });
+  return shape;
+};
+
+/**
+ * codeBlock 밖 text 노드 중 리터럴 `\n`을 담은 것의 텍스트 목록. 비어
+ * 있어야 hardBreak 정규화가 끝난 문서다(Issue #281).
+ */
+export const literalNewlineTexts = (doc: PmNode): string[] => {
+  const found: string[] = [];
+  doc.descendants((node, _pos, parent) => {
+    if (
+      node.isText &&
+      (node.text ?? "").includes("\n") &&
+      parent?.type.name !== "codeBlock"
+    ) {
+      found.push(node.text ?? "");
+    }
+    return true;
+  });
   return found;
 };

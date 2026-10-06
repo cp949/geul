@@ -1,6 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import { Fragment } from "@tiptap/pm/model";
+import { Fragment, type ResolvedPos } from "@tiptap/pm/model";
 import {
   TextSelection,
   type EditorState,
@@ -44,10 +44,12 @@ export const CodeBlockExitExtension = Extension.create({
 // 남겨 둔다, "빈 CodeBlock Delete 삭제"와 트리거 키 자체가 다르다).
 function isDoubleEnterExitPoint(state: EditorState): boolean {
   const { selection } = state;
-  if (!selection.empty || selection.$from.parent.type.name !== "codeBlock") {
-    return false;
-  }
-  const { parent, parentOffset } = selection.$from;
+  return selection.empty && isDoubleEnterExitPos(selection.$from);
+}
+
+function isDoubleEnterExitPos($from: ResolvedPos): boolean {
+  if ($from.parent.type.name !== "codeBlock") return false;
+  const { parent, parentOffset } = $from;
   return (
     parentOffset === parent.content.size &&
     parentOffset > 0 &&
@@ -63,15 +65,36 @@ function exitCodeBlockOnDoubleEnter(editor: Editor): boolean {
     : liveState;
   if (!isDoubleEnterExitPoint(referenceState)) return false;
 
-  const $from = referenceState.selection.$from;
+  // 파생 state와 live state는 같은 doc이라 $from을 live tr에 그대로 쓴다.
+  const tr = liveState.tr;
+  if (!appendDoubleEnterExit(tr, referenceState.selection.$from)) return false;
+  editor.view.dispatch(tr);
+  return true;
+}
+
+// tr.doc 위의 접힌 캐럿 $from에서 codeBlock 일반 Enter를 tr에 쌓는다.
+// "범위를 지운 뒤 그 자리에서 Enter"를 한 tr로 만드는 범위 Enter
+// (block-split-extension.ts, Issue #281)가 쓴다. 키 체인의 접힌 Enter와
+// 같은 결과다.
+// - double Enter 종료 지점이고 종료할 수 있으면 종료한다.
+// - 그 외에는 Tiptap 코어 newlineInCode처럼 개행 한 글자를 넣는다.
+export function appendCodeBlockEnter(
+  tr: Transaction,
+  $from: ResolvedPos,
+): void {
+  if (appendDoubleEnterExit(tr, $from)) return;
+  tr.insertText("\n", $from.pos);
+}
+
+// $from(tr.doc 기준 접힌 캐럿)이 double Enter 종료 지점이면 마지막 개행을
+// 지우고 다음 형제 선두로 캐럿을 옮기는 step을 tr에 쌓고 true를 돌려준다.
+// 종료할 수 없으면 tr을 건드리지 않고 false다.
+function appendDoubleEnterExit(tr: Transaction, $from: ResolvedPos): boolean {
+  if (!isDoubleEnterExitPos($from)) return false;
   const containerDepth = $from.depth - 1;
   if (containerDepth < 0) return false;
   const container = $from.node(containerDepth);
   if (container.type.name !== "blockContainer") return false;
-
-  // 직전 Enter가 넣은 마지막 개행 한 글자만 지운다 — 그 앞 code source는
-  // 그대로 둔다.
-  const tr = liveState.tr.delete($from.pos - 1, $from.pos);
 
   // codeBlock이 문서 최상위 마지막 블록이면 TrailingBlockExtension이 항상
   // 그 뒤에 맨몸 paragraph를 붙여 둔다(endsWithChildlessParagraph가
@@ -82,14 +105,18 @@ function exitCodeBlockOnDoubleEnter(editor: Editor): boolean {
   // codeBlock이 들여쓴 blockGroup의 마지막 자식이거나(그 그룹 안엔 다음
   // 형제가 없음) 다음 형제가 blockContainer로 감싸이지 않는 divider/table
   // 이면 아래에서 그대로 물러난다(일반 개행 삽입으로 폴백).
-  const containerEnd = tr.mapping.map($from.after(containerDepth));
-  const nextSibling = tr.doc.resolve(containerEnd).nodeAfter;
+  const containerEnd = $from.after(containerDepth);
+  const nextSibling = $from.doc.resolve(containerEnd).nodeAfter;
   if (nextSibling === null || nextSibling.type.name !== "blockContainer") {
     return false;
   }
-  tr.setSelection(TextSelection.create(tr.doc, containerEnd + 2));
 
-  editor.view.dispatch(tr);
+  // 직전 Enter가 넣은 마지막 개행 한 글자만 지운다 — 그 앞 code source는
+  // 그대로 둔다. 지운 한 글자만큼 컨테이너 끝이 앞당겨진다. 캐럿은 다음
+  // 형제 컨테이너와 그 콘텐츠 노드에 들어간 자리(+2)다.
+  tr.delete($from.pos - 1, $from.pos);
+  const shiftedContainerEnd = containerEnd - 1;
+  tr.setSelection(TextSelection.create(tr.doc, shiftedContainerEnd + 2));
   return true;
 }
 

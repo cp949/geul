@@ -1,8 +1,13 @@
 import { isListEntryBlockType, isNestableBlockType } from "@cp949/geul-model";
 import { Extension, type Editor } from "@tiptap/core";
 import { Fragment, type Node } from "@tiptap/pm/model";
-import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import {
+  TextSelection,
+  type Selection,
+  type Transaction,
+} from "@tiptap/pm/state";
 
+import { appendCodeBlockEnter } from "./code-block-exit-extension.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 import { isCollapsedToggleContent } from "./toggle-collapse-hidden.js";
 
@@ -66,6 +71,9 @@ function splitBlockContainer(editor: Editor): boolean {
   const { selection } = selectionAwareState;
 
   const fromParent = selection.$from.parent;
+  if (isCodeBlockRangeLeavingBlock(selection)) {
+    return enterOverCodeBlockRange(editor, selection);
+  }
   if (!isSplittableContent(fromParent)) {
     // 표 셀 등을 여기서 배제한다: 표 셀 content는 "inline*"라(D19,
     // table-extension.ts) $from.parent가 애초에 paragraph/heading/quote가
@@ -107,6 +115,54 @@ function splitBlockContainer(editor: Editor): boolean {
   }
 
   view.dispatch(tr);
+  return true;
+}
+
+// codeBlock에서 시작해 그 codeBlock 밖까지 걸친 범위 선택인지 판정한다.
+// codeBlock 안에서 끝나는 범위는 대상이 아니다 — 그 Enter는 Tiptap 코어
+// newlineInCode가 범위를 개행 하나로 바꾸는 현재 동작을 유지한다.
+function isCodeBlockRangeLeavingBlock(selection: Selection): boolean {
+  const { $from, $to } = selection;
+  return (
+    !selection.empty &&
+    $from.parent.type.name === "codeBlock" &&
+    $to.pos > $from.end()
+  );
+}
+
+// codeBlock 시작 범위 Enter(Issue #281). 범위를 지운 뒤 접힌 캐럿 자리에서
+// 일반 Enter를 누른 것과 같은 문서·selection을 만든다.
+// - 캐럿이 codeBlock에 남으면 codeBlock Enter다(개행, double Enter 종료).
+// - 캐럿이 일반 텍스트 블록에 닿으면 아래 splitAtCaret 분할이다.
+// 이전에는 어떤 핸들러도 키를 소비하지 않아 native Enter가 범위만 지웠다.
+// 삭제와 Enter를 한 tr에 쌓아 dispatch·undo가 1회다(G-EDT-001). 문서
+// transaction은 live state에서 만들고 파생 selection만 옮긴다(G-EDT-002).
+//
+// 삭제는 범위 Backspace·Delete가 타는 Tiptap 코어 deleteSelection 커맨드와
+// 같은 deleteRange다. PM tr.deleteSelection은 꼬리가 codeBlock에 합쳐지지
+// 않을 때(서식 있는 꼬리) 캐럿을 꼬리 블록 선두로 옮겨 키 삭제 결과와
+// 다르다. Tiptap 커맨드의 inline 노드 확장 분기는 text를 담는 inline 노드가
+// 없는 이 스키마에서 관여하지 않는다.
+function enterOverCodeBlockRange(
+  editor: Editor,
+  selection: Selection,
+): boolean {
+  const liveState = editor.view.state;
+  const tr = liveState.tr;
+  if (!selection.eq(liveState.selection)) {
+    tr.setSelection(selection);
+  }
+  tr.deleteRange(selection.from, selection.to);
+  if (!tr.selection.empty) {
+    tr.setSelection(TextSelection.near(tr.doc.resolve(tr.selection.from)));
+  }
+  const { $from } = tr.selection;
+  if (tr.selection.empty && $from.parent.type.name === "codeBlock") {
+    appendCodeBlockEnter(tr, $from);
+  } else if (!splitAtCaret(tr)) {
+    return false;
+  }
+  editor.view.dispatch(tr);
   return true;
 }
 

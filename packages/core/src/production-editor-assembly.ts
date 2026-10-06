@@ -47,6 +47,7 @@ import type {
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
 import { HardBreakKeyboardExtension } from "./hard-break-keyboard-extension.js";
+import { HardBreakNewlineNormalizeExtension } from "./hard-break-newline-normalize-extension.js";
 import { HideNativeSelectionExtension } from "./hide-native-selection-extension.js";
 import { HistoryFocusSyncExtension } from "./history-focus-sync-extension.js";
 import { HistoryKeydownFallbackExtension } from "./history-keydown-fallback-extension.js";
@@ -612,6 +613,9 @@ export const createProductionEditor = (options: {
       BlockSplitExtension,
       BlockJoinExtension,
       HardBreakKeyboardExtension,
+      // 리터럴 `\n` text를 hardBreak로 바꾸는 appendTransaction(Issue #281).
+      // 위치 크기를 바꾸지 않아 다른 appendTransaction과 순서 의존이 없다.
+      HardBreakNewlineNormalizeExtension,
       // table 3종 노드(table/tableRow/tableCell)는 표 기능 하나를
       // 이루는 묶음이라 한 조건으로 함께 켜고 끈다.
       ...(isBlockTypeEnabled("table", options.enabledBlockTypes)
