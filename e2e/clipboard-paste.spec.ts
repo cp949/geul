@@ -25,6 +25,12 @@
  * 소유한다. 이 파일은 엔진별 클립보드·drop 경로가 같은 결과를 내는지만
  * 본다. 문서는 showcase document-io 예제의 Import JSON으로 배치하고 Export
  * JSON으로 읽는다. Ctrl+Shift+V와 drop은 chromium 전용이다.
+ *
+ * codeBlock에 걸친 범위에 여러 블록 HTML을 붙이는 배치(Issue #286)는 맨
+ * 아래 두 테스트가 확인한다 — 기준 배치(A)와 자식 블록에서 시작하는
+ * 범위(V)다. 서식 보존·숨은 codeBlock·시작이 codeBlock 안인 범위 등 나머지
+ * 축은 core 단위 테스트(`clipboard-paste-code-block-range.test.ts`)가 소유한다.
+ * 범위는 Range로 DOM selection을 만들고 selectionchange를 보내 동기화한다.
  */
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -254,4 +260,110 @@ test("여러 줄 평문을 문단 중간에 drop해도 둘째 줄이 다음 형�
   );
 
   expect(await exportedBlocks(page)).toEqual(expectedAfterPaste);
+});
+
+// 블록 id의 첫 텍스트 노드 offset 위치로 DOM selection 범위를 만들고
+// selectionchange를 보내 편집기 selection을 동기화한다(placeCaretAfterAb와
+// 같은 이유, G-EDT-002). 시작 블록을 먼저 눌러 포커스를 준다.
+const selectRange = async (
+  page: Page,
+  editable: Locator,
+  from: { id: string; offset: number },
+  to: { id: string; offset: number },
+) => {
+  await editable.locator(`[data-geul-block-id="${from.id}"] p`).first().click();
+  await yieldFrame(page);
+  await editable.evaluate(
+    (root, input) => {
+      const textOf = (id: string): Text => {
+        const block = root.querySelector(`[data-geul-block-id="${id}"]`);
+        const text = block?.ownerDocument
+          .createTreeWalker(block, NodeFilter.SHOW_TEXT)
+          .nextNode();
+        if (!(text instanceof Text))
+          throw new Error(`${id} 텍스트 노드가 없다`);
+        return text;
+      };
+      const range = document.createRange();
+      range.setStart(textOf(input.from.id), input.from.offset);
+      range.setEnd(textOf(input.to.id), input.to.offset);
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    },
+    { from, to },
+  );
+};
+
+const codeBlockModel = {
+  id: "cb",
+  type: "codeBlock",
+  content: [{ text: "foobar" }],
+};
+
+test("codeBlock에 걸친 범위에 두 블록 HTML을 붙이면 둘째 블록이 형제가 되고 끝 잔여는 codeBlock이다 @core", async ({
+  page,
+}) => {
+  const blocks = [
+    { id: "p1", type: "paragraph", content: [{ text: "abcd" }] },
+    codeBlockModel,
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ];
+  const editable = await importBlocks(page, blocks);
+  await selectRange(
+    page,
+    editable,
+    { id: "p1", offset: 2 },
+    { id: "cb", offset: 3 },
+  );
+
+  await editable.evaluate(dispatchPaste, { html: "<p>X</p><p>Y</p>" });
+
+  expect(await exportedBlocks(page)).toEqual([
+    { id: "p1", type: "paragraph", content: [{ text: "ab" }] },
+    { id: expect.any(String), type: "paragraph", content: [{ text: "X" }] },
+    { id: expect.any(String), type: "paragraph", content: [{ text: "Y" }] },
+    { id: "cb", type: "codeBlock", content: [{ text: "bar" }] },
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
+});
+
+test("자식 블록에서 시작해 최상위 codeBlock에서 끝나는 범위에 붙이면 새 블록이 그 자식과 같은 층위 형제다 @core", async ({
+  page,
+}) => {
+  const blocks = [
+    {
+      id: "p1",
+      type: "paragraph",
+      content: [{ text: "abcd" }],
+      children: [{ id: "c1", type: "paragraph", content: [{ text: "child" }] }],
+    },
+    codeBlockModel,
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ];
+  const editable = await importBlocks(page, blocks);
+  await selectRange(
+    page,
+    editable,
+    { id: "c1", offset: 2 },
+    { id: "cb", offset: 3 },
+  );
+
+  await editable.evaluate(dispatchPaste, { html: "<p>X</p><p>Y</p>" });
+
+  expect(await exportedBlocks(page)).toEqual([
+    {
+      id: "p1",
+      type: "paragraph",
+      content: [{ text: "abcd" }],
+      children: [
+        { id: "c1", type: "paragraph", content: [{ text: "ch" }] },
+        { id: expect.any(String), type: "paragraph", content: [{ text: "X" }] },
+        { id: expect.any(String), type: "paragraph", content: [{ text: "Y" }] },
+      ],
+    },
+    { id: "cb", type: "codeBlock", content: [{ text: "bar" }] },
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
 });
