@@ -1159,4 +1159,73 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
     // geometry 구간 그대로다(표 -30–150).
     expect(stripSpan(strip)).toEqual([-30, 150]);
   });
+
+  /** 열 추가 rail 노드(#278). */
+  const expandColumnRail = () => {
+    const rail = document.querySelector<HTMLElement>(
+      "[data-geul-table-expand-column]",
+    );
+    if (rail === null) throw new Error("열 추가 rail 없음");
+    return rail;
+  };
+
+  /** rail의 세로 구간 `[top, bottom]`(page 좌표, `style` 기준). */
+  const railSpan = (rail: HTMLElement) => {
+    const top = Number.parseFloat(rail.style.top);
+    return [top, top + Number.parseFloat(rail.style.height)];
+  };
+
+  it("표가 영역보다 길면 열 추가 rail을 영역 안으로 잘라 보인다(#278)", () => {
+    // 6x2, 행 높이 30 → 표 높이 180. 표를 -30–150에 두면 영역 0–100의 위아래를
+    // 모두 넘는다.
+    const { host, table } = renderRealTable({ rows: 6 });
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    const rail = expandColumnRail();
+    stubRectFromStyle(rail);
+    shiftTableRects(table, -130);
+
+    fireEvent.scroll(host);
+
+    // 같은 노드다. 노드가 바뀌면 위 rect 스텁이 닿지 않는다.
+    expect(expandColumnRail()).toBe(rail);
+    expect(rail.style.visibility).toBe("");
+    expect(railSpan(rail)).toEqual([0, 100]);
+  });
+
+  it("표가 영역 밖으로 완전히 나가면 열 추가 rail은 원래 구간 그대로 숨는다(#278)", () => {
+    const { host, table } = renderRealTable({ rows: 6 });
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    const rail = expandColumnRail();
+    stubRectFromStyle(rail);
+    // 표를 영역 0–100 아래(170–350)로 옮긴다. 교집합이 비어 원래 구간이 남는다.
+    shiftTableRects(table, 70);
+
+    fireEvent.scroll(host);
+
+    expect(expandColumnRail()).toBe(rail);
+    expect(railSpan(rail)).toEqual([170, 350]);
+    expect(rail.style.visibility).toBe("hidden");
+  });
+
+  it("리사이즈 드래그 중에는 스크롤해도 열 추가 rail을 자르지 않는다(#278)", () => {
+    const { host, table } = renderRealTable({ rows: 6 });
+    placeCaret(tableCellAt(table, 0, 0));
+    makeScrollContainer(host);
+    resizeStrips().forEach(stubRectFromStyle);
+    stubRectFromStyle(expandColumnRail());
+    shiftTableRects(table, -130);
+    fireEvent.scroll(host);
+    // 전제: 드래그 전에는 영역 안으로 잘린다.
+    expect(railSpan(expandColumnRail())).toEqual([0, 100]);
+
+    const [strip] = resizeStrips();
+    if (strip === undefined) throw new Error("resize strip 없음");
+    fireEvent.pointerDown(strip, { pointerId: 1, clientX: 200 });
+    fireEvent.scroll(host);
+
+    // geometry 구간 그대로다(표 -30–150).
+    expect(railSpan(expandColumnRail())).toEqual([-30, 150]);
+  });
 });
