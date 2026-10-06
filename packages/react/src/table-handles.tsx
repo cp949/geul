@@ -36,6 +36,7 @@ import {
   computeReorderGuideRect,
   computeReorderTargetIndex,
   computeTableGripMenuPosition,
+  pickMenuOpenHandleNodes,
   readColumnStyleWidth,
   setColumnStyleWidth,
 } from "./table-handle-helpers.js";
@@ -594,14 +595,26 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
   // - 면제: 드래그 중. 전부 보이게 둔다(pointer capture를 쥔 핸들이 사라지면
   //   드래그가 끊긴다).
   // - 면제: 핸들 안 요소의 포커스. 숨기면 포커스가 body로 빠진다.
+  // - 면제: 행·열 메뉴를 연 핸들 하나와 표 그립 메뉴를 연 그립 버튼(Issue #279).
+  //   메뉴는 fixed + viewport clamp라 핸들이 영역 밖이어도 뷰포트에 남는다. 메뉴만
+  //   떠 있지 않게 한다. 클릭으로 연 메뉴는 포커스가 편집기에 남아(Chromium 실측)
+  //   위 포커스 면제가 걸리지 않는다. 다른 핸들은 판정한다.
   // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
   useClipVisibility(element, () => {
     const layer = overlayLayerRef.current;
     if (layer === null) return [];
     const dragging = reorderState !== null || resizeState !== null;
-    return Array.from(layer.children)
-      .filter((child): child is HTMLElement => isHtmlElement(child))
-      .map((node) => ({ node, exempt: dragging }));
+    const nodes = Array.from(layer.children).filter(
+      (child): child is HTMLElement => isHtmlElement(child),
+    );
+    const menuOpenNodes = pickMenuOpenHandleNodes(nodes, {
+      menu: menuState,
+      tableGripMenuOpen: tableGripMenuTableId !== null,
+    });
+    return nodes.map((node) => ({
+      node,
+      exempt: dragging || menuOpenNodes.has(node),
+    }));
   });
 
   const reorderActive = reorderState !== null;

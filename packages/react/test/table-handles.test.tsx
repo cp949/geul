@@ -1228,4 +1228,146 @@ describe("안쪽 스크롤 컨테이너 스크롤", () => {
     // geometry 구간 그대로다(표 -30–150).
     expect(railSpan(expandColumnRail())).toEqual([-30, 150]);
   });
+
+  // Issue #279: 행·열 핸들 메뉴나 표 그립 메뉴를 연 동안 그 트리거는 clip 판정에서
+  // 면제한다. 메뉴는 fixed + viewport clamp라 영역 밖에서도 남는다. 트리거가
+  // 숨으면 메뉴만 떠 있다. 면제는 메뉴를 연 핸들 하나에만 간다.
+  describe("메뉴를 연 핸들의 clip 면제(#279)", () => {
+    const tableGripNode = () =>
+      document.querySelector<HTMLElement>("[data-geul-table-grip]");
+    const quickInsertNode = () =>
+      document.querySelector<HTMLElement>("[data-geul-table-quick-insert]");
+
+    /** 영역(0–100) 아래 y 300에 놓인 20×20 박스를 노드에 씌운다. */
+    const stubOutsideArea = (node: HTMLElement | null) => {
+      if (node === null) throw new Error("clip 판정 노드 없음");
+      stubRect(node, { left: 0, top: 300, width: 20, height: 20 });
+    };
+
+    /**
+     * 보이는 영역을 (0,0)–(600,100)으로 잡고 행·열 hit box와 그립·Plus를 전부 영역
+     * 밖에 둔 뒤 판정을 한 번 돌린다.
+     */
+    const pushAllHandlesOutsideArea = (host: HTMLElement) => {
+      // 메뉴를 연 뒤에 건다. 영역 밖 핸들은 숨어 접근성 질의로 찾지 못한다.
+      makeScrollContainer(host);
+      for (const axis of ["row", "column"] as const) {
+        tableHandleHitBoxes(document, axis).forEach(stubOutsideArea);
+      }
+      stubOutsideArea(tableGripNode());
+      stubOutsideArea(quickInsertNode());
+      fireEvent.scroll(host);
+    };
+
+    /** 핸들 hit box의 `visibility`. */
+    const visibilityOf = (node: HTMLElement | null | undefined) => {
+      if (node === null || node === undefined) throw new Error("노드 없음");
+      return node.style.visibility;
+    };
+
+    /** `index`번 행·열 핸들을 클릭해 메뉴를 연다. */
+    const openHandleMenu = (
+      table: HTMLElement,
+      kind: "row" | "column",
+      index: number,
+    ) => {
+      fireEvent.pointerMove(table);
+      const label = kind === "row" ? rowHandleLabel : columnHandleLabel;
+      const handle = screen.getAllByRole("button", { name: label })[index];
+      if (handle === undefined) throw new Error(`${kind} 핸들 없음`);
+      fireEvent.pointerDown(handle, { pointerId: 1 });
+      fireEvent.pointerUp(handle, { pointerId: 1 });
+      fireEvent.click(handle);
+      // 전제: 메뉴가 열렸다.
+      expect(screen.queryByRole("menu")).not.toBeNull();
+    };
+
+    it("행 메뉴를 연 행 핸들은 영역 밖이어도 보인다", () => {
+      const { host, table } = renderRealTable();
+      openHandleMenu(table, "row", 1);
+
+      pushAllHandlesOutsideArea(host);
+
+      const [first, second] = tableHandleHitBoxes(document, "row");
+      expect(visibilityOf(second)).toBe("");
+      expect(visibilityOf(first)).toBe("hidden");
+    });
+
+    it("열 메뉴를 연 열 핸들은 영역 밖이어도 보인다", () => {
+      const { host, table } = renderRealTable();
+      openHandleMenu(table, "column", 1);
+
+      pushAllHandlesOutsideArea(host);
+
+      const [first, second] = tableHandleHitBoxes(document, "column");
+      expect(visibilityOf(second)).toBe("");
+      expect(visibilityOf(first)).toBe("hidden");
+    });
+
+    it("면제는 메뉴를 연 핸들 하나에만 가고 같은 렌더의 다른 행·열·그립·Plus는 영역 밖이면 숨는다", () => {
+      const { host, table } = renderRealTable();
+      openHandleMenu(table, "row", 0);
+
+      pushAllHandlesOutsideArea(host);
+
+      const [openRow, otherRow] = tableHandleHitBoxes(document, "row");
+      expect(visibilityOf(openRow)).toBe("");
+      expect(visibilityOf(otherRow)).toBe("hidden");
+      for (const column of tableHandleHitBoxes(document, "column")) {
+        expect(visibilityOf(column)).toBe("hidden");
+      }
+      expect(visibilityOf(tableGripNode())).toBe("hidden");
+      expect(visibilityOf(quickInsertNode())).toBe("hidden");
+    });
+
+    it("표 그립 메뉴를 연 그립 버튼은 영역 밖이어도 보이고 같은 층의 Plus는 숨는다", () => {
+      const { host, table } = renderRealTable();
+      fireEvent.pointerMove(table);
+      fireEvent.click(screen.getByRole("button", { name: tableMenuLabel }));
+      // 전제: 그립 메뉴가 열렸다.
+      expect(screen.queryByRole("menu", { name: "Table menu" })).not.toBeNull();
+
+      pushAllHandlesOutsideArea(host);
+
+      expect(visibilityOf(tableGripNode())).toBe("");
+      expect(visibilityOf(quickInsertNode())).toBe("hidden");
+      // 그립 메뉴는 행·열 핸들을 면제하지 않는다.
+      for (const axis of ["row", "column"] as const) {
+        for (const node of tableHandleHitBoxes(document, axis)) {
+          expect(visibilityOf(node)).toBe("hidden");
+        }
+      }
+    });
+
+    it("메뉴를 닫으면 면제가 풀려 영역 밖 핸들이 숨는다", () => {
+      const { host, table } = renderRealTable();
+      openHandleMenu(table, "row", 1);
+      pushAllHandlesOutsideArea(host);
+      const [, openRow] = tableHandleHitBoxes(document, "row");
+      // 전제: 메뉴가 열린 동안은 보인다.
+      expect(visibilityOf(openRow)).toBe("");
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      // 전제: 메뉴가 닫혔다.
+      expect(screen.queryByRole("menu")).toBeNull();
+      fireEvent.scroll(host);
+
+      expect(visibilityOf(openRow)).toBe("hidden");
+    });
+
+    it("표 그립 메뉴를 닫으면 그립 버튼 면제가 풀린다", () => {
+      const { host, table } = renderRealTable();
+      fireEvent.pointerMove(table);
+      fireEvent.click(screen.getByRole("button", { name: tableMenuLabel }));
+      pushAllHandlesOutsideArea(host);
+      // 전제: 메뉴가 열린 동안은 보인다.
+      expect(visibilityOf(tableGripNode())).toBe("");
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("menu", { name: "Table menu" })).toBeNull();
+      fireEvent.scroll(host);
+
+      expect(visibilityOf(tableGripNode())).toBe("hidden");
+    });
+  });
 });

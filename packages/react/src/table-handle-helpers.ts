@@ -200,3 +200,36 @@ export const computeTableGripMenuPosition = (
     top: geometry.top - 4 - scrollOffset.y,
   };
 };
+
+// Issue #279 — 메뉴를 연 핸들을 clip 판정에서 면제하려고 고른다(G-UI-003).
+// 메뉴는 fixed + viewport clamp라 핸들이 영역 밖으로 나가도 뷰포트에 남는다.
+// 트리거가 숨으면 메뉴만 떠 있다.
+// - 행·열 메뉴: 그 종류 hit box 중 `menu.index`번째 하나. hit box는 geometry의
+//   rows·columns 순서로 렌더되고 `index`가 그 위치다. 범위를 벗어나면 고르지
+//   않는다(재조준 직후 한 렌더).
+// - 표 그립 메뉴: `data-geul-table-grip` 버튼만. 같은 층의 Plus는 고르지 않는다.
+// 입력은 오버레이 층의 최상위 노드다. 호출부는 결과를 `useClipVisibility`의
+// `exempt`로만 넘긴다.
+export const pickMenuOpenHandleNodes = (
+  nodes: readonly HTMLElement[],
+  open: {
+    menu: Pick<HandleMenuState, "kind" | "index"> | null;
+    tableGripMenuOpen: boolean;
+  },
+): ReadonlySet<HTMLElement> => {
+  const picked = new Set<HTMLElement>();
+  if (open.menu !== null) {
+    const attribute = `data-geul-table-${open.menu.kind}-handle-hit`;
+    const hit = nodes.filter((node) => node.hasAttribute(attribute))[
+      open.menu.index
+    ];
+    if (hit !== undefined) picked.add(hit);
+  }
+  if (open.tableGripMenuOpen) {
+    const grip = nodes.find((node) =>
+      node.hasAttribute("data-geul-table-grip"),
+    );
+    if (grip !== undefined) picked.add(grip);
+  }
+  return picked;
+};
