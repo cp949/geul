@@ -277,6 +277,16 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 한 줄 평문, `text/html` 동봉(HTML 우선), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안, 캐럿이 codeBlock 안인 붙여넣기, `TextSelection`이 아닌 selection이 해당한다.
   - drop과 codeBlock에 걸친 범위는 `clipboardTextParser`가 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 후속 이슈로 분리한다.
+- codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
+  - `insertContent`가 범위를 `replaceWith`로 대체한다. 삭제 단계는 없다. 삽입 지점은 범위 시작이다. 새 블록은 시작 블록의 형제다. 시작이 자식 블록이면 그 자식과 같은 층위 형제다.
+  - 끝 codeBlock의 잔여는 codeBlock으로 남는다. `[p "abcd", code "foobar"]`에서 `ab` 뒤부터 `foo` 뒤까지 `<p>X</p><p>Y</p>`를 붙이면 `[p "ab", p "X", p "Y", code "bar"]`다.
+  - 서식은 보존된다. `<ul>`은 목록 항목, `<h1>`은 heading, `<pre>`는 codeBlock으로 들어간다.
+  - 시작이 codeBlock 밖이면 접힌 toggle 안 숨은 codeBlock이 범위 중간에 있어도 같은 분기다.
+  - 범위 대체는 한 transaction이다. revision은 1 늘고 undo는 1회다.
+  - 한계: 첫·끝 블록의 인라인 병합(PM 열린 slice) 의미는 따르지 않는다. 한 블록 HTML도 `ab`, `X`, `bar`로 나뉜다. 이는 비코드 범위·캐럿과 같은 `insertContent` 의미다.
+  - 한계: `NodeSelection`·`AllSelection`도 시작이 codeBlock 밖이면 이 분기를 탄다. codeBlock `NodeSelection`은 그 블록 전체를 HTML 블록으로 대체하고, `AllSelection`은 문서 전체를 대체한다. 수정 전 PM 기본 처리와 결과가 같다.
+  - 한계: 시작이 codeBlock 안인 범위와 캐럿이 codeBlock 안인 붙여넣기는 현행 PM 기본 처리를 유지한다. 시작이 codeBlock 안인 범위는 `fooX`·`Yil`처럼 나뉜다.
+  - 한계: `text/html`이 없으면 이 예외가 없다. codeBlock에 걸친 범위의 Markdown 평문은 감지하지 않고 PM 기본 처리가 리터럴 문단으로 넣는다. 여러 줄 평문은 위 `clipboardTextParser` 경로다.
 
 ## 8. 오류 계약 확장
 
