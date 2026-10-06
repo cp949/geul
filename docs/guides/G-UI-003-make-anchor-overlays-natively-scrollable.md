@@ -55,6 +55,14 @@
     - `activeElement`는 매 effect에서 읽는다. 별도 state를 두지 않는다.
     - 클릭으로 받은 버튼 포커스는 포커스가 빠질 때까지 영역 밖 오버레이를 남긴다. 설계로 수용한다.
   - 열린 자식 메뉴(서식 툴바 색상 메뉴, 표 셀 서식 메뉴, 미디어 More 메뉴)가 있으면 부모 툴바도 숨기지 않는다. 메뉴만 떠 있는 상태를 막는다. `useFixedPlacement`를 쓰는 오버레이는 `clipExempt` 옵션으로 준다. 훅을 직접 부르는 오버레이는 `exempt`로 준다. 메뉴를 닫아도 포커스가 툴바 안(트리거)으로 돌아오면 면제가 이어진다. 포커스가 툴바를 떠나면 다시 판정한다.
+  - 접힌 toggle이 가린 블록은 앵커·측정·드롭 후보가 아니다(Issue #280). 접힘 decoration은 `display: none`이라 숨은 블록의 rect가 0×0이다.
+    - 0×0 rect를 앵커로 쓰면 오버레이가 뷰포트 왼쪽 위 구석에 `visible`로 남는다. 앵커 점 판정이 경계를 포함해 구석이 뷰포트 안으로 판정되기 때문이다.
+    - 판정은 `hidden-block.ts`의 `isHiddenBlockElement`가 맡는다. 접힘 표식 `data-geul-collapsed-hidden`이 붙은 조상이 있으면 숨은 블록이다. 0×0 rect로 판정하지 않는다. 레이아웃에 의존하지 않는다.
+    - 앵커 reader가 숨은 블록이면 `null`을 돌려준다. gutter·미디어 그립·코드블록 툴바·callout 트리거·표 핸들 층은 그리지 않는다.
+    - 열린 블록 메뉴·미디어 메뉴·표 행·열·그립 메뉴는 닫는다(`invalidated`). 보이지 않는 블록에 명령이 나가지 않게 한다.
+    - hover 중 접히면 포인터가 멈춰 있어도 다시 읽는다. `useHiddenBlockRefresh`가 숨김 여부가 바뀔 때만 렌더한다. 문서 변경마다 렌더하지 않는다.
+    - 블록 선택 툴바와 드롭 가이드는 보이는 블록만 계산에 넣는다. 보이는 블록이 없으면 툴바를 그리지 않는다.
+    - `useClipVisibility`·`useFixedPlacement`·`scroll-clip.ts`의 판정과 면제 규칙은 바꾸지 않는다.
   - 오버레이의 `style` prop에 `visibility`를 직접 두지 않는다. 다음 렌더가 덮어쓴다.
   - `position: fixed` 오버레이도 이 clip 규칙만 차용한다. 위 "fixed 금지"는 앵커 도달성 규칙이라 그대로 두고, 컨테이너가 잘라내지 못한다는 사정만 같다. 예: code-block 툴바(Issue #236), 블록 gutter·미디어 툴바(Issue #267). 훅에 `anchor`를 함께 줘 박스와 앵커 점을 둘 다 판정한다. 앵커 점을 함께 보는 이유는 viewport clamp다. 컨테이너 상단이 뷰포트 y=0이면 clamp가 툴바 박스를 영역 안에 남긴다. 위 면제 조건(popover·more 메뉴 열림, 툴바 안 포커스)은 박스와 앵커 점 판정 둘 다에 준다.
     - code-block 툴바는 `useClipVisibility`를 직접 부른다.
