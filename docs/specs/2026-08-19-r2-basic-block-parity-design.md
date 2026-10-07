@@ -324,9 +324,19 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 삽입 깊이는 계산한 삽입 위치 기준이다. 새 블록이 자식 자리에 들어가므로 캐럿 블록보다 한 단 깊다. `clampDepth`가 `MAX_NESTING_DEPTH`를 넘는 목록을 평탄화한다. 깊이 `MAX-1` 부모의 첫 자식 자리에 3단 목록을 붙이면 `a`, `b`, `c`가 같은 층위로 놓이고 최대 깊이가 `MAX`다.
   - 배치 계산은 `paste-block-placement.ts`의 `resolvePasteBlockPlacement`가 맡는다. 호출부는 `clipboard-paste-extension.ts`의 `insert`다. 공개 API는 바뀌지 않는다. HTML과 Markdown 감지 경로가 같은 `insert`를 쓴다.
   - 현행 유지: 자식 없는 블록, 자식 있는 블록의 시작·중간 캐럿, 블록 끝에서 끝나지 않는 같은 블록 범위, 다른 블록에 걸친 범위. 시작 캐럿의 빈 head(`p ""`)와 중간 캐럿의 분할은 자식 없는 블록에도 나오는 baseline이다. 이슈 서술의 "시작 캐럿" 결함은 자식이 `abcd`에 남으므로 해당하지 않는다.
-  - 한계: 시작이 끝 블록과 다른 블록인 범위는 대상이 아니다. `[p0 "abcd", p1 "efgh" 자식 [child]]`에서 p0 offset 2부터 p1 끝까지 `<p>X</p><p>Y</p>`를 붙이면 `[p "ab", X, Y, p "" 자식 [child]]`다. 빈 껍데기가 자식을 가진다. 범위 대체의 `replaceWith` 의미(#286)와 자식 귀속 정책이 걸려 별건이다.
+  - 한계: 시작이 끝 블록과 다른 블록인 범위는 대상이 아니다. `[p0 "abcd", p1 "efgh" 자식 [child]]`에서 p0 offset 2부터 p1 끝까지 `<p>X</p><p>Y</p>`를 붙이면 `[p "ab", X, Y, p "" 자식 [child]]`다. 빈 껍데기가 자식을 가진다. 범위 대체의 `replaceWith` 의미(#286)와 자식 귀속 정책이 걸려 별건이다. 정정(2026-10-07, Issue #294): 해소됐다. 아래 #294 문단을 따른다.
   - 한계: 표를 포함한 HTML은 표 붙여넣기 경로(`TablePasteExtension`)가 먼저 처리한다. 이 규칙의 대상이 아니다. 새 블록이 최상위 형제로 놓인다.
   - 한계: 평문 경로(#284)와 drop(#285)은 바꾸지 않았다. 같은 내용도 평문 한 줄이면 캐럿 블록 텍스트에 이어 붙는 다른 의미다. 표 셀 안과 내부 드래그도 바꾸지 않았다.
+- 다른 블록에서 시작해 자식 있는 블록 끝에서 끝나는 범위의 HTML·Markdown 배치(정정 2026-10-07, Issue #294). 붙여넣기는 범위 삭제 뒤 캐럿 삽입이다. 삭제는 Backspace·글자 입력과 같은 PM 기본 삭제라 끝 블록의 자식이 시작 블록의 자식이 된다. 삽입은 지운 뒤 캐럿에 #290 배치를 적용한다. 이전에는 `insertContent`가 범위를 한 번에 대체해 빈 껍데기가 자식을 가졌다. `[p0 "abcd", p1 "efgh" 자식 [child], tail]`에서 p0 offset 2부터 p1 끝까지 `<p>X</p><p>Y</p>`를 붙이면 `[p "ab", X, Y, p "" 자식 [child], tail]`였다.
+  - 위 문서는 `[p "ab" 자식 [X, Y, child], tail]`가 된다. 자식 id는 보존되고 빈 블록이 생기지 않는다. 시작이 heading이면 `[h2 "he" 자식 [X, Y, child], tail]`다. 시작 블록의 타입과 attrs가 유지된다. 단일 블록 HTML도 같다. 새 블록이 시작 블록의 형제가 아니라 자식이다. 끝 블록에 자식이 없는 같은 모양(`[he, X, Y, tail]`)과 다르다. #290의 같은 블록 범위와 같은 차이다.
+  - 대상은 넷을 모두 만족하는 입력이다. `TextSelection`이고 비어 있지 않다. 시작과 끝의 텍스트블록이 다르다. 끝이 중첩 가능한 텍스트블록 내용의 끝이다. 그 `blockContainer`가 자식 `blockGroup`을 가진다. 하나라도 아니면 현행이다. 같은 텍스트블록 안 범위는 #290 경로다.
+  - 시작 블록의 자식은 범위 안이라 삭제된다. 시작이 접힌 toggle이면 지운 뒤 캐럿 규칙(#252)에 따라 새 블록이 컨테이너 뒤 형제다.
+  - 끝 블록이 접힌 toggle이면 특례가 없다. 삭제처럼 toggle 타입을 잃고 숨은 자식이 시작 블록의 보이는 자식이 된다. 새 블록은 그 앞의 첫 자식이다. 4.4의 #264(범위 삭제·붙여넣기는 범위 전체를 본다)를 따른다.
+  - 삭제와 삽입은 한 transaction이다. dispatch·revision·undo가 각각 1회다. 캐럿은 삽입 내용 끝이다. 깊이는 지운 뒤 삽입 위치 기준이고 `clampDepth`가 `MAX_NESTING_DEPTH`를 넘는 목록을 평탄화한다.
+  - 배치 판정은 `paste-block-placement.ts`의 `isRangeEndingAtChildrenBlockEnd`가 맡는다. 호출부는 `clipboard-paste-extension.ts`의 `insert`다. `resolvePasteBlockPlacement`는 바꾸지 않았다. 지운 뒤 캐럿이 대상이 아니면 그 캐럿에 단일 캐럿 붙여넣기(`insertContent`)를 한다. 공개 API는 바뀌지 않는다.
+  - 현행 유지: 끝 블록에 자식이 없는 같은 모양, 끝이 내용 끝이 아닌 범위(남은 텍스트가 자식을 가진다), 같은 블록 범위, 끝 codeBlock 잔여(#286), 시작이 codeBlock 안인 범위.
+  - 한계: 시작이 끝 블록보다 깊거나 끝 블록이 부모의 자식인 모양은 삭제 기준선을 따른다. 삭제가 빈 블록을 남기고 그 아래에 자식이 있다. `[par 자식 [s "abcd"], e "efgh" 자식 [child], tail]`에서 s offset 2부터 e 끝까지 붙이면 `[par 자식 [s "ab", X, Y], p "" 자식 [child], tail]`다. `[p0 "abcd", par 자식 [e "efgh" 자식 [child], sib], tail]`에서 p0 offset 2부터 e 끝까지 붙이면 `[p "ab" 자식 [X, Y, p "" 자식 [child], sib], tail]`다. Backspace도 같은 빈 블록을 남기므로 붙여넣기만의 결함이 아니다.
+  - 한계: 표 셀 안, 평문 경로(#284·#285), 시작이 codeBlock 안인 범위는 바꾸지 않았다. 표 경계 범위는 #292가 먼저 지운다.
 
 ## 8. 오류 계약 확장
 
