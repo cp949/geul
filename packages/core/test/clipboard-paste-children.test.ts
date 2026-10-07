@@ -1,12 +1,15 @@
 /**
  * 자식 있는 블록의 끝에 HTML·Markdown 블록을 붙일 때의 배치 계약을 고정한다
- * (Issue #290). 끝 캐럿에서 insertContent가 블록을 가르면 뒤 조각이 빈 껍데기가
- * 되고 기존 자식이 그 껍데기로 넘어갔다. 새 계약은 Enter 분할 규칙을 따른다 —
- * 열린 블록은 새 블록이 첫 자식(D23), 접힌 toggle은 새 블록이 형제(#252)다.
+ * (Issue #290, #294). 끝 캐럿에서 insertContent가 블록을 가르면 뒤 조각이 빈
+ * 껍데기가 되고 기존 자식이 그 껍데기로 넘어갔다. 새 계약은 Enter 분할 규칙을
+ * 따른다 — 열린 블록은 새 블록이 첫 자식(D23), 접힌 toggle은 새 블록이
+ * 형제(#252)다.
  *
  * 다루는 축은 끝 캐럿(C1~C5), 같은 블록 범위(C6), 깊이 상한(C7), 변경 전
  * 결과와 같아야 하는 입력(C8), transaction 계약(C9), 삽입 뒤 캐럿(C10)이다.
- * 평문 경로(#284)·drop(#285)·블록 걸친 범위·표 셀 안은 다루지 않는다. 평문
+ * #294는 다른 블록에서 시작해 자식 있는 블록의 끝에서 끝나는 범위를 다룬다.
+ * 범위를 PM 기본 삭제로 지운 뒤 캐럿 삽입 규칙을 적용한다. 그 축은 "Issue #294"
+ * describe에 모았다. 평문 경로(#284)·drop(#285)·표 셀 안은 다루지 않는다. 평문
  * 경로는 clipboard-paste-plain-multiline.test.ts가 맡는다.
  *
  * C8은 구현 전에 측정한 결과를 특성화한다. 시작 캐럿의 빈 head(`p:`)와 중간
@@ -26,6 +29,7 @@ import { contentTextStart } from "./block-test-support.js";
 import { blocksOf, outline, pasteData } from "./clipboard-test-support.js";
 import {
   checkListItemBlock,
+  codeBlockBlock,
   documentOf,
   headingBlock,
   listItemBlock,
@@ -434,7 +438,7 @@ describe("자식 있는 블록 끝의 블록 붙여넣기(Issue #290)", () => {
       });
     }
 
-    it("자식 있는 블록에서 끝나지만 다른 블록에서 시작하는 범위는 대상이 아니다", () => {
+    it("다른 블록에서 시작해 자식 있는 블록 끝에서 끝나는 범위는 지운 뒤 시작 블록의 첫 자식으로 붙는다(Issue #294)", () => {
       const blocks = [
         paragraphBlock("p0", "abcd"),
         paragraphBlock("p1", "efgh", [paragraphBlock("c1", "child")]),
@@ -443,8 +447,7 @@ describe("자식 있는 블록 끝의 블록 붙여넣기(Issue #290)", () => {
 
       const result = pasteAndOutline(blocks, ["p0", 2], ["p1", 4], HTML_XY);
 
-      // 끝 쪽 빈 껍데기와 자식이 남는 것은 현행 결과다. 별건으로 다룬다.
-      expect(result).toEqual(["p:ab", "p:X", "p:Y", "p:[p:child]", "p:tail"]);
+      expect(result).toEqual(["p:ab[p:X,p:Y,p:child]", "p:tail"]);
     });
   });
 
@@ -646,6 +649,425 @@ describe("자식 있는 블록 끝의 블록 붙여넣기(Issue #290)", () => {
       expect(selection.$from.start()).not.toBe(selection.$to.start());
 
       expect(resolvePasteBlockPlacement(selection)).toBeNull();
+    });
+  });
+  describe("다른 블록에서 시작해 자식 있는 블록 끝에서 끝나는 범위(Issue #294)", () => {
+    // D1: 최상위 두 블록. D2: 시작 블록이 head다.
+    const d1 = (): Block[] => [
+      paragraphBlock("p0", "abcd"),
+      paragraphBlock("p1", "efgh", [paragraphBlock("c1", "child")]),
+      paragraphBlock("tail", "tail"),
+    ];
+    const d2 = (): Block[] => [
+      paragraphBlock("head", "head"),
+      paragraphBlock("p1", "abcd", [paragraphBlock("c1", "child")]),
+      paragraphBlock("tail", "tail"),
+    ];
+
+    describe("기준 배치(C1·C2)", () => {
+      it.each(INPUTS)(
+        "D1: $name 붙이면 시작 블록 ab의 첫 자식들로 놓이고 child id가 보존되며 빈 블록이 없다",
+        ({ entries, expected }) => {
+          const { editor, editable } = setup(d1(), ["p0", 2], ["p1", 4]);
+
+          pasteData(editable, entries);
+
+          const blocks = blocksOf(editor);
+          expect(outline(blocks)).toEqual([
+            `p:ab[${[...expected, "p:child"].join(",")}]`,
+            "p:tail",
+          ]);
+          expect(blocks.map((block) => block.id)).toEqual(["p0", "tail"]);
+          expect(childrenOf(blocks[0]).at(-1)?.id).toBe("c1");
+        },
+      );
+
+      it.each(INPUTS)(
+        "D2: $name 붙이면 시작 블록 he의 첫 자식들로 놓인다",
+        ({ entries, expected }) => {
+          const result = pasteAndOutline(d2(), ["head", 2], ["p1", 4], entries);
+
+          expect(result).toEqual([
+            `p:he[${[...expected, "p:child"].join(",")}]`,
+            "p:tail",
+          ]);
+        },
+      );
+
+      it("단일 블록 HTML도 시작 블록의 첫 자식이 된다", () => {
+        const result = pasteAndOutline(d1(), ["p0", 2], ["p1", 4], {
+          "text/html": "<p>X</p>",
+        });
+
+        expect(result).toEqual(["p:ab[p:X,p:child]", "p:tail"]);
+      });
+    });
+
+    describe("시작 블록 타입·attrs 유지(C3)", () => {
+      const cases: ReadonlyArray<{
+        name: string;
+        start: Block;
+        label: string;
+        attrs: Record<string, unknown>;
+      }> = [
+        {
+          name: "heading level 2",
+          start: headingBlock("p0", 2, "abcd"),
+          label: "h2",
+          attrs: { level: 2 },
+        },
+        {
+          name: "번호 목록 항목",
+          start: listItemBlock("p0", "numberedListItem", "abcd", {
+            startNumber: 3,
+          }),
+          label: "ol",
+          attrs: { startNumber: 3 },
+        },
+        {
+          name: "체크 목록 항목",
+          start: checkListItemBlock("p0", "abcd", true),
+          label: "checkListItem",
+          attrs: { checked: true },
+        },
+      ];
+
+      it.each(cases)(
+        "$name: 시작하면 타입·attrs를 유지하고 새 블록이 그 자식이 된다",
+        ({ start, label, attrs }) => {
+          const blocks = [
+            start,
+            paragraphBlock("p1", "efgh", [paragraphBlock("c1", "child")]),
+            paragraphBlock("tail", "tail"),
+          ];
+          const { editor, editable } = setup(blocks, ["p0", 2], ["p1", 4]);
+
+          pasteData(editable, HTML_XY);
+
+          const result = blocksOf(editor);
+          expect(outline(result)).toEqual([
+            `${label}:ab[p:X,p:Y,p:child]`,
+            "p:tail",
+          ]);
+          expect(result[0]?.id).toBe("p0");
+          expect(result[0]).toMatchObject(attrs);
+        },
+      );
+    });
+
+    describe("끝 블록 모양(C4·C5)", () => {
+      it("끝 블록이 접힌 toggle이면 Backspace와 같은 결과에 새 블록이 첫 자식으로 놓인다", () => {
+        const blocks = (): Block[] => [
+          paragraphBlock("p0", "abcd"),
+          toggleBlock("t1", "efgh", {
+            collapsed: true,
+            children: [paragraphBlock("c1", "child")],
+          }),
+          paragraphBlock("tail", "tail"),
+        ];
+        const baseline = setup(blocks(), ["p0", 2], ["t1", 4]);
+        baseline.tiptap.commands.deleteSelection();
+        const deleted = outline(blocksOf(baseline.editor));
+
+        const { editor, editable } = setup(blocks(), ["p0", 2], ["t1", 4]);
+        pasteData(editable, HTML_XY);
+
+        // 삭제는 접힌 toggle 껍데기를 남기지 않고 숨은 자식이 시작 블록 자식이 된다.
+        expect(deleted).toEqual(["p:ab[p:child]", "p:tail"]);
+        const result = blocksOf(editor);
+        expect(outline(result)).toEqual(["p:ab[p:X,p:Y,p:child]", "p:tail"]);
+        expect(
+          result.filter((block) => block.type === "toggleListItem"),
+        ).toHaveLength(0);
+      });
+
+      it("끝 블록이 부모의 자식이면 삭제 기준선의 모양에 새 블록이 시작 블록의 첫 자식으로 놓인다", () => {
+        const blocks = (): Block[] => [
+          paragraphBlock("p0", "abcd"),
+          paragraphBlock("par", "top", [
+            paragraphBlock("e", "efgh", [paragraphBlock("c1", "child")]),
+            paragraphBlock("sib", "sib"),
+          ]),
+          paragraphBlock("tail", "tail"),
+        ];
+        const baseline = setup(blocks(), ["p0", 2], ["e", 4]);
+        baseline.tiptap.commands.deleteSelection();
+        const deleted = outline(blocksOf(baseline.editor));
+
+        const { editor, editable, tiptap } = setup(
+          blocks(),
+          ["p0", 2],
+          ["e", 4],
+        );
+        pasteData(editable, HTML_XY);
+
+        // 삭제 기준선이 빈 e를 남긴다. 붙여넣기는 그 앞에 새 블록을 둔다.
+        expect(deleted).toEqual(["p:ab[p:[p:child],p:sib]", "p:tail"]);
+        expect(outline(blocksOf(editor))).toEqual([
+          "p:ab[p:X,p:Y,p:[p:child],p:sib]",
+          "p:tail",
+        ]);
+        expect(() => tiptap.state.doc.check()).not.toThrow();
+      });
+    });
+
+    describe("시작 블록 모양별 폴백과 배치(실측 특성화)", () => {
+      it("시작이 끝보다 깊으면 지운 뒤 캐럿 블록에 자식이 없어 평문 캐럿 삽입으로 폴백한다", () => {
+        // 삭제 기준선이 자식을 가진 빈 블록 `p:[p:child]`를 남긴다. 붙여넣기는
+        // 그 블록을 건드리지 않고 시작 블록의 형제로 붙는다.
+        const blocks = [
+          paragraphBlock("par", "par", [paragraphBlock("s", "abcd")]),
+          paragraphBlock("e", "efgh", [paragraphBlock("c1", "child")]),
+          paragraphBlock("tail", "tail"),
+        ];
+        const { editor, editable, tiptap } = setup(blocks, ["s", 2], ["e", 4]);
+
+        pasteData(editable, HTML_XY);
+
+        expect(outline(blocksOf(editor))).toEqual([
+          "p:par[p:ab,p:X,p:Y]",
+          "p:[p:child]",
+          "p:tail",
+        ]);
+        expect(() => tiptap.state.doc.check()).not.toThrow();
+      });
+
+      it("폴백 삽입도 깊이 상한을 지킨다", () => {
+        // 시작 s가 최대 깊이 블록이다. 끝 e는 최상위라 폴백이 s의 형제로 붙인다.
+        let wrapper: Block = paragraphBlock(
+          `w-${MAX_NESTING_DEPTH - 1}`,
+          "wrap",
+          [paragraphBlock("s", "abcd")],
+        );
+        for (let level = MAX_NESTING_DEPTH - 2; level >= 1; level -= 1) {
+          wrapper = paragraphBlock(`w-${level}`, "wrap", [wrapper]);
+        }
+        const blocks = [
+          wrapper,
+          paragraphBlock("e", "efgh", [paragraphBlock("c1", "child")]),
+        ];
+        const { editor, editable, tiptap } = setup(blocks, ["s", 2], ["e", 4]);
+
+        pasteData(editable, {
+          "text/html":
+            "<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>",
+        });
+
+        expect(() => tiptap.state.doc.check()).not.toThrow();
+        const document = editor.getDocument();
+        expect(maxBlockDepth(document.blocks)).toBe(MAX_NESTING_DEPTH);
+        // 상한을 넘는 중첩 목록이 평탄화되어 s의 형제로 붙는다. 붙지 않으면 RED다.
+        let node: DocumentBlock | undefined = document.blocks[0];
+        for (let level = 1; level < MAX_NESTING_DEPTH - 1; level += 1) {
+          node = childrenOf(node)[0];
+        }
+        expect(outline(childrenOf(node))).toEqual([
+          "p:ab",
+          "ul:a",
+          "ul:b",
+          "ul:c",
+        ]);
+      });
+
+      it("시작이 접힌 toggle이면 삭제 뒤 새 블록이 그 toggle의 뒤 형제로 붙는다", () => {
+        const blocks = [
+          toggleBlock("t1", "abcd", {
+            collapsed: true,
+            children: [paragraphBlock("h1", "hidden")],
+          }),
+          paragraphBlock("p1", "efgh", [paragraphBlock("c1", "child")]),
+          paragraphBlock("tail", "tail"),
+        ];
+
+        const result = pasteAndOutline(blocks, ["t1", 2], ["p1", 4], HTML_XY);
+
+        expect(result).toEqual(["toggle~:ab[p:child]", "p:X", "p:Y", "p:tail"]);
+      });
+
+      it("시작이 끝 블록의 부모이면 삭제 기준선의 빈 블록 앞에 붙는다", () => {
+        const blocks = [
+          paragraphBlock("s", "abcd", [
+            paragraphBlock("e", "efgh", [paragraphBlock("c1", "child")]),
+          ]),
+          paragraphBlock("tail", "tail"),
+        ];
+
+        const result = pasteAndOutline(blocks, ["s", 2], ["e", 4], HTML_XY);
+
+        expect(result).toEqual(["p:ab[p:X,p:Y,p:[p:child]]", "p:tail"]);
+      });
+    });
+
+    describe("시작 블록에 자식이 있다(C6)", () => {
+      it("범위 안의 c0는 삭제되고 결과는 D1과 같다", () => {
+        const blocks = [
+          paragraphBlock("p0", "abcd", [paragraphBlock("c0", "zz")]),
+          paragraphBlock("p1", "efgh", [paragraphBlock("c1", "child")]),
+          paragraphBlock("tail", "tail"),
+        ];
+
+        const result = pasteAndOutline(blocks, ["p0", 2], ["p1", 4], HTML_XY);
+
+        expect(result).toEqual(["p:ab[p:X,p:Y,p:child]", "p:tail"]);
+      });
+    });
+
+    describe("깊이 상한(C7)", () => {
+      it("시작 블록이 깊이 MAX-1이면 중첩 목록이 평탄화되고 문서가 유효하다", () => {
+        // 깊이 MAX-2 래퍼 아래에 시작 s(깊이 MAX-1)와 끝 e(자식 leaf)가 형제다.
+        const startDepth = MAX_NESTING_DEPTH - 1;
+        let wrapper: Block = paragraphBlock(`w-${startDepth - 1}`, "wrap", [
+          paragraphBlock("s", "start"),
+          paragraphBlock("e", "end", [paragraphBlock("leaf", "child")]),
+        ]);
+        for (let level = startDepth - 2; level >= 1; level -= 1) {
+          wrapper = paragraphBlock(`w-${level}`, "wrap", [wrapper]);
+        }
+        const { editor, editable, tiptap } = setup(
+          [wrapper],
+          ["s", 2],
+          ["e", 3],
+        );
+
+        pasteData(editable, {
+          "text/html":
+            "<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>",
+        });
+
+        expect(() => tiptap.state.doc.check()).not.toThrow();
+        const document = editor.getDocument();
+        expect(maxBlockDepth(document.blocks)).toBe(MAX_NESTING_DEPTH);
+        let node: DocumentBlock | undefined = document.blocks[0];
+        for (let level = 1; level < startDepth - 1; level += 1) {
+          node = childrenOf(node)[0];
+        }
+        const start = childrenOf(node)[0];
+        expect(start?.id).toBe("s");
+        expect(outline(childrenOf(start))).toEqual([
+          "ul:a",
+          "ul:b",
+          "ul:c",
+          "p:child",
+        ]);
+      });
+    });
+
+    describe("변경 전 결과와 같다(C8)", () => {
+      const cb = (): Block[] => [
+        paragraphBlock("p1", "abcd"),
+        codeBlockBlock("cb", "foobar"),
+        paragraphBlock("tail", "tail"),
+      ];
+      const characterized: ReadonlyArray<{
+        name: string;
+        blocks: () => Block[];
+        from: Point;
+        to: Point;
+        expected: string[];
+      }> = [
+        {
+          name: "끝 블록에 자식이 없다",
+          blocks: () => [
+            paragraphBlock("head", "head"),
+            paragraphBlock("p1", "abcd"),
+            paragraphBlock("tail", "tail"),
+          ],
+          from: ["head", 2],
+          to: ["p1", 4],
+          expected: ["p:he", "p:X", "p:Y", "p:tail"],
+        },
+        {
+          name: "끝이 내용 끝이 아니다(자식은 잔여가 가져간다)",
+          blocks: d1,
+          from: ["p0", 2],
+          to: ["p1", 2],
+          expected: ["p:ab", "p:X", "p:Y", "p:gh[p:child]", "p:tail"],
+        },
+        {
+          name: "끝이 다음 블록 중간이다",
+          blocks: d1,
+          from: ["p0", 2],
+          to: ["tail", 2],
+          expected: ["p:ab", "p:X", "p:Y", "p:il"],
+        },
+        {
+          name: "끝 codeBlock 잔여(#286)",
+          blocks: cb,
+          from: ["p1", 2],
+          to: ["cb", 3],
+          expected: ["p:ab", "p:X", "p:Y", "code:bar", "p:tail"],
+        },
+        {
+          name: "시작이 codeBlock 안(PM 기본)",
+          blocks: cb,
+          from: ["cb", 3],
+          to: ["tail", 2],
+          expected: ["p:abcd", "code:fooX", "p:Yil"],
+        },
+      ];
+
+      for (const { name, blocks, from, to, expected } of characterized) {
+        it(`${name}: HTML 배치를 유지한다`, () => {
+          expect(pasteAndOutline(blocks(), from, to, HTML_XY)).toEqual(
+            expected,
+          );
+        });
+      }
+
+      it("같은 블록 범위는 #290 결과 그대로다", () => {
+        const result = pasteAndOutline(d1(), ["p1", 2], ["p1", 4], HTML_XY);
+
+        expect(result).toEqual(["p:abcd", "p:ef[p:X,p:Y,p:child]", "p:tail"]);
+      });
+    });
+
+    describe("transaction 계약과 캐럿(C9·C10)", () => {
+      it("범위 삭제와 삽입이 dispatch·onChange·revision 1회이고 undo 1회로 원복한다", () => {
+        const { editor, editable, tiptap, onChange } = setup(
+          d1(),
+          ["p0", 2],
+          ["p1", 4],
+        );
+        const initialJson = tiptap.state.doc.toJSON();
+        const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+        pasteData(editable, HTML_XY);
+
+        expect(dispatch).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(editor.getDocument().revision).toBe(1);
+        expect(() => tiptap.state.doc.check()).not.toThrow();
+        tiptap.commands.undo();
+        expect(tiptap.state.doc.toJSON()).toEqual(initialJson);
+      });
+
+      it("캐럿이 삽입 내용 끝에 놓인다", () => {
+        const { editable, tiptap } = setup(d1(), ["p0", 2], ["p1", 4]);
+
+        pasteData(editable, HTML_XY);
+
+        const { selection } = tiptap.state;
+        expect(selection.empty).toBe(true);
+        expect(selection.$from.parent.textContent).toBe("Y");
+        expect(selection.$from.parentOffset).toBe(1);
+      });
+
+      it("새 블록 id는 서로 다르고 원본 id와 겹치지 않는다", () => {
+        const { editor, editable } = setup(d1(), ["p0", 2], ["p1", 4]);
+
+        pasteData(editable, HTML_XY);
+
+        const ids: string[] = [];
+        const collect = (blocks: readonly DocumentBlock[]): void => {
+          for (const block of blocks) {
+            ids.push(block.id);
+            collect(childrenOf(block));
+          }
+        };
+        collect(blocksOf(editor));
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(ids).not.toContain("p1");
+      });
     });
   });
 });
