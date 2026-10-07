@@ -117,7 +117,13 @@ export type CreateEditorOptions = {
   // 아닌 붙여넣기(own HTML/외부 HTML/Markdown/plain text)를 처리하기 직전에
   // 호출한다. `true`는 처리됨(기본 동작 중단), `false`는 취소(아무 것도
   // 삽입하지 않음, PM 기본 plain-text 붙여넣기도 포함해 억제), `undefined`는
-  // `defaultPasteHandler()`로 위임 가능한 기본 동작 위임이다. 표
+  // `defaultPasteHandler()`로 위임 가능한 기본 동작 위임이다.
+  // `defaultPasteHandler()`는 기본 처리를 실행하고 그 결과를 돌려준다. `true`는
+  // 기본 처리가 붙여넣기를 처리했다는 뜻이다(삽입했거나 넣을 것이 없어 이벤트만
+  // 소비). `false`는 클립보드에 붙일 내용이 없어 아무것도 하지 않았다는 뜻이다.
+  // 이 반환값을 그대로 돌려줘도 안전하다. 정정(2026-10-08, Issue #306): 이전에는
+  // 기본 처리가 PM 기본 붙여넣기에 맡기는 입력(한 줄 유효 평문 등)에서 `false`를
+  // 돌려줘 그대로 돌려주면 취소로 읽혔다. 표
   // (TablePasteExtension)·미디어(MediaDropPasteExtension) 붙여넣기는
   // 이 hook의 대상이 아니다(roadmap.md "제외 범위"). raw PM Plugin/Tiptap
   // Extension은 노출하지 않는다(ADR-0002) — `event`만 원본 DOM

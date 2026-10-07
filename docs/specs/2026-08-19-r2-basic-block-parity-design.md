@@ -446,9 +446,16 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: 표 형태 `text/html`과 TSV 평문은 `TablePasteExtension`이 Shift와 무관하게 표로 만든다. 이 확장보다 먼저 `event.clipboardData`를 직접 읽는다. 표 밖 Ctrl+Shift+V도 표를 만든다.
   - 한계: 평문 단독 클립보드의 Markdown 감지는 Shift와 무관하다. Shift는 html 분기만 건너뛴다. Ctrl+Shift+V로 `# T`를 붙이면 heading이 된다.
   - 한계: 파일·이미지 붙여넣기(`MediaDropPasteExtension`)는 Shift를 구분하지 않는다.
-  - 한계: `pasteHandler`가 `defaultPasteHandler()`의 결과를 그대로 돌려주면 한 줄 유효 평문이 들어가지 않는다. 이 입력에서 기본 처리는 PM 위임(`false`)을 돌려주고 `handlePaste`가 `false`를 취소로 해석한다. 한 줄 평문만 있는 Ctrl+V와 같은 현행 동작이다. 수정 전 Shift 입력은 html을 가져와 `true`를 돌려주던 경로라 이 입력에서 달라진다.
+  - 한계: `pasteHandler`가 `defaultPasteHandler()`의 결과를 그대로 돌려주면 한 줄 유효 평문이 들어가지 않는다. 이 입력에서 기본 처리는 PM 위임(`false`)을 돌려주고 `handlePaste`가 `false`를 취소로 해석한다. 한 줄 평문만 있는 Ctrl+V와 같은 현행 동작이다. 수정 전 Shift 입력은 html을 가져와 `true`를 돌려주던 경로라 이 입력에서 달라진다. 정정(2026-10-08, Issue #306): 해소했다. 아래 #306 문단이 현재 계약이다.
   - 실측(Chromium, showcase document-io 예제, 임시 e2e 프로브는 삭제): 실제 `ClipboardItem`으로 html `<b>x</b>`와 평문 `a`를 쓰고 `paste` 이벤트의 `clipboardData`를 기록했다. 실제 Ctrl+V는 `types`가 `["text/plain","text/html"]`이고 bold `x` 문단이 들어간다. 실제 Ctrl+Shift+V는 `types`가 `["text/plain"]`이고 `text/html`이 빈 문자열이다. 문서는 수정 전(`text/html` 읽기를 되돌린 빌드)과 수정 후 모두 `aba`다. Chromium은 Ctrl+Shift+V에서 html을 싣지 않는다. 실제 키 입력에서는 이 결함이 보이지 않는다. 실제 Shift+Insert는 `types`가 둘이고 bold `x` 문단이 들어간다. html만 있는 클립보드의 Ctrl+Shift+V는 `types`가 `[]`이고 문서가 그대로다. Shift를 누른 채 합성 `paste` 이벤트(html과 평문을 담은 `DataTransfer`)를 보내면 수정 전은 bold `x` 문단이 들어가고 수정 후는 `aba`다. 이 수정이 보호하는 대상은 jsdom 계약, `text/html`을 싣는 엔진, 프로그램적 `ClipboardEvent`다.
   - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
+- 붙여넣기 계획과 실행기(정정 2026-10-08, Issue #306). 붙여넣기·drop의 위치·형태 판정은 core 내부 module `paste-plan.ts`(붙여넣기 계획, `CONTEXT.md`)가 한다. `ClipboardPasteExtension`의 PM hook은 계획을 실행한다. 공개 API의 타입은 바뀌지 않는다.
+  - 실행기가 삽입을 직접 한다. 이전에 PM 기본 붙여넣기에 맡기던 입력도 PM 기본과 같은 방식으로 넣는다. PM이 파싱한 slice가 단일 노드면 `replaceSelectionWith`, 아니면 `replaceSelection`이다. `paste`·`uiEvent: "paste"` meta를 달고 스크롤한다. 문서 결과는 이전과 같다. PM이 파싱한 결과가 없으면(붙일 내용 없음) 이전처럼 처리하지 않는다.
+  - `defaultPasteHandler()`는 위 삽입을 실행하고 `true`를 돌려준다. `pasteHandler`가 그 값을 그대로 돌려줘도 붙여넣기가 남는다. 위 #303 문단의 `defaultPasteHandler()` 한계는 해소됐다.
+  - 표 셀 안 정리는 `handlePaste` 시점의 state로 한다. 이전에는 `transformPasted`가 정리했다. 그 hook은 표 경계 범위를 지우기 전에 불려 지우기 전 selection을 봤다. 셀 안 판정은 선택 시작(`$from`)으로 한다. 결과: 셀에서 시작해 뒤 문단에서 끝나는 경계 범위에 무효 문자 html(`<p>a` U+0001 `b</p>`)을 붙이면 정리본이 셀에 들어간다(`para / table[ceab] / il`). 이전에는 지움만 남고 붙여넣기가 사라졌다.
+  - 셀 안에서도 `CellSelection`과 셀 조각 slice(표에서 복사한 셀)는 prosemirror-tables가 처리한다. 이전과 같다.
+  - drop: 무효 문자(LF 외 C0·DEL·짝 없는 surrogate)가 든 외부 drop은 정리본을 drop 위치에 넣는다. 문단·codeBlock·표 셀, 한 줄·두 줄 평문, html이 대상이다. 결과는 같은 캐럿 붙여넣기와 같다. drop 위치가 codeBlock이면 Tab은 남긴다. 이전에는 PM 기본 drop이 원문을 넣어 되돌림 guard가 drop을 통째로 지웠다. 삽입은 PM 기본 drop과 같은 방식이다(`dropPoint`, 삽입 범위 선택, `uiEvent: "drop"`). 유효한 외부 drop과 내부 드래그 이동은 PM 기본 drop 그대로다. 위 #303 문단의 `dropInFlight`는 없어졌다.
+  - 유지: 표 붙여넣기(`TablePasteExtension`), 파일 붙여넣기(`MediaDropPasteExtension`), 표 경계 범위 삭제(`TableBoundaryInputExtension`), 정리한 평문의 `view.pasteText` 재진입.
 
 ## 8. 오류 계약 확장
 
