@@ -28,8 +28,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createEditor } from "../src/index.js";
 import {
-  normalizeCodeBlockPasteText,
-  normalizeForMarkdownDetection,
+  normalizeKeepingTabs,
   normalizeLineBreaks,
   normalizePasteText,
   sanitizeSliceInlineText,
@@ -146,37 +145,31 @@ describe("붙여넣기 평문 정규화(Issue #291)", () => {
       expect(normalizePasteText(text)).toBe(text);
     });
 
-    it("normalizeForMarkdownDetection은 Tab을 전부 남기고 Tab 외 제어문자를 지운다", () => {
-      expect(normalizeForMarkdownDetection("- a\n\t- b\tc")).toBe(
-        "- a\n\t- b\tc",
-      );
-      expect(normalizeForMarkdownDetection("  x\ty")).toBe("  x\ty");
-      expect(normalizeForMarkdownDetection(`\t\tx${SOH}${ESC}`)).toBe("\t\tx");
-      expect(normalizeForMarkdownDetection(`a\tb${SOH}c\u007fd`)).toBe(
-        "a\tbcd",
-      );
-      expect(normalizeForMarkdownDetection(`${SOH}\tx`)).toBe("\tx");
+    it("normalizeKeepingTabs는 Tab을 전부 남기고 Tab 외 제어문자를 지운다", () => {
+      expect(normalizeKeepingTabs("- a\n\t- b\tc")).toBe("- a\n\t- b\tc");
+      expect(normalizeKeepingTabs("  x\ty")).toBe("  x\ty");
+      expect(normalizeKeepingTabs(`\t\tx${SOH}${ESC}`)).toBe("\t\tx");
+      expect(normalizeKeepingTabs(`a\tb${SOH}c\u007fd`)).toBe("a\tbcd");
+      expect(normalizeKeepingTabs(`${SOH}\tx`)).toBe("\tx");
     });
 
-    it("normalizeForMarkdownDetection은 CR을 LF로 바꾸고 Tab을 건드리지 않는다", () => {
-      expect(normalizeForMarkdownDetection("a\r\n\tb\r\tc")).toBe(
-        "a\n\tb\n\tc",
-      );
-      expect(normalizeForMarkdownDetection("\t\t\nx")).toBe("\t\t\nx");
-      expect(normalizeForMarkdownDetection("-\tone\r\rx")).toBe("-\tone\n\nx");
+    it("normalizeKeepingTabs는 CR을 LF로 바꾸고 Tab을 건드리지 않는다", () => {
+      expect(normalizeKeepingTabs("a\r\n\tb\r\tc")).toBe("a\n\tb\n\tc");
+      expect(normalizeKeepingTabs("\t\t\nx")).toBe("\t\t\nx");
+      expect(normalizeKeepingTabs("-\tone\r\rx")).toBe("-\tone\n\nx");
     });
 
-    it("normalizeForMarkdownDetection은 빈 문자열과 짝 없는 surrogate를 처리한다", () => {
-      expect(normalizeForMarkdownDetection("")).toBe("");
-      expect(normalizeForMarkdownDetection("a\ud800b")).toBe("ab");
-      expect(normalizeForMarkdownDetection("a\t\ud800\tb")).toBe("a\t\tb");
+    it("normalizeKeepingTabs는 빈 문자열과 짝 없는 surrogate를 처리한다", () => {
+      expect(normalizeKeepingTabs("")).toBe("");
+      expect(normalizeKeepingTabs("a\ud800b")).toBe("ab");
+      expect(normalizeKeepingTabs("a\t\ud800\tb")).toBe("a\t\tb");
     });
   });
 
   // codeBlock 안 붙여넣기용 정규화본이다(Issue #296). model의 codeBlock
   // 검증이 거부하는 문자만 지운다. Tab·LF와 U+2028·U+2029·U+FEFF·U+0085는
   // 유효라 남긴다.
-  describe("normalizeCodeBlockPasteText 헬퍼 단위(Issue #296)", () => {
+  describe("normalizeKeepingTabs 헬퍼 단위(Issue #296)", () => {
     const TAB = String.fromCharCode(9);
     const FEFF = String.fromCharCode(0xfeff);
 
@@ -192,7 +185,7 @@ describe("붙여넣기 평문 정규화(Issue #291)", () => {
       invalid.push(String.fromCharCode(0xdfff));
 
       for (const char of invalid) {
-        const output = normalizeCodeBlockPasteText(`a${char}b`);
+        const output = normalizeKeepingTabs(`a${char}b`);
 
         expect(
           isValidCodeBlockSource(output),
@@ -200,40 +193,40 @@ describe("붙여넣기 평문 정규화(Issue #291)", () => {
         ).toBe(true);
       }
       expect(
-        isValidCodeBlockSource(normalizeCodeBlockPasteText(invalid.join(""))),
+        isValidCodeBlockSource(normalizeKeepingTabs(invalid.join(""))),
       ).toBe(true);
     });
 
     it("Tab·LF는 남기고 나머지 C0·DEL·짝 없는 surrogate는 지운다(C4)", () => {
       const input = `a${TAB}b\nc${SOH}d${ESC}e${String.fromCharCode(0x7f)}f${String.fromCharCode(0xd800)}g`;
 
-      expect(normalizeCodeBlockPasteText(input)).toBe(`a${TAB}b\ncdefg`);
+      expect(normalizeKeepingTabs(input)).toBe(`a${TAB}b\ncdefg`);
     });
 
     it("짝 있는 surrogate(이모지)는 지우지 않는다", () => {
-      expect(normalizeCodeBlockPasteText("a\u{1F600}b")).toBe("a\u{1F600}b");
+      expect(normalizeKeepingTabs("a\u{1F600}b")).toBe("a\u{1F600}b");
     });
 
     it("CR·CRLF를 LF로 바꾼다(C3)", () => {
-      expect(normalizeCodeBlockPasteText("a\r\nb\rc\nd")).toBe("a\nb\nc\nd");
-      expect(normalizeCodeBlockPasteText(`a${SOH}\r\nb`)).toBe("a\nb");
+      expect(normalizeKeepingTabs("a\r\nb\rc\nd")).toBe("a\nb\nc\nd");
+      expect(normalizeKeepingTabs(`a${SOH}\r\nb`)).toBe("a\nb");
     });
 
     it("U+2028·U+2029·U+FEFF·U+0085는 지우지 않는다", () => {
       const text = `a${LS}b${PS}c${FEFF}d${NEL}e`;
 
-      expect(normalizeCodeBlockPasteText(text)).toBe(text);
+      expect(normalizeKeepingTabs(text)).toBe(text);
       expect(isValidCodeBlockSource(text)).toBe(true);
     });
 
     it("유효한 입력과 빈 문자열은 그대로다", () => {
-      expect(normalizeCodeBlockPasteText("")).toBe("");
-      expect(normalizeCodeBlockPasteText("a\tb\nc")).toBe("a\tb\nc");
+      expect(normalizeKeepingTabs("")).toBe("");
+      expect(normalizeKeepingTabs("a\tb\nc")).toBe("a\tb\nc");
     });
 
     it("제어문자만 있으면 빈 문자열이다", () => {
-      expect(normalizeCodeBlockPasteText(SOH)).toBe("");
-      expect(normalizeCodeBlockPasteText(`${SOH}${ESC}`)).toBe("");
+      expect(normalizeKeepingTabs(SOH)).toBe("");
+      expect(normalizeKeepingTabs(`${SOH}${ESC}`)).toBe("");
     });
   });
 

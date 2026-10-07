@@ -5,7 +5,11 @@ import {
   type IdFactory,
   MAX_NESTING_DEPTH,
 } from "@cp949/geul-model";
-import type { EditorState, Transaction } from "@tiptap/pm/state";
+import {
+  type EditorState,
+  TextSelection,
+  type Transaction,
+} from "@tiptap/pm/state";
 import { CellSelection, isInTable } from "@tiptap/pm/tables";
 
 import {
@@ -22,8 +26,7 @@ import {
 } from "./paste-block-placement.js";
 import {
   buildPlainMultilinePasteTransaction,
-  normalizeCodeBlockPasteText,
-  normalizeForMarkdownDetection,
+  normalizeKeepingTabs,
   normalizeLineBreaks,
   normalizePasteText,
   splitPlainTextLines,
@@ -77,18 +80,6 @@ export type PastePlan =
 export type DefaultPastePlanDeps = {
   createId: IdFactory;
   iframeEmbed?: IframeEmbedConfig;
-};
-
-// 선택이 비어 있지 않고 시작($from)의 조상에 codeBlock이 없는지 판정한다
-// (Issue #286). 삽입 지점이 시작 블록 쪽이라 HTML 삽입이 안전하다.
-const isRangeStartingOutsideCodeBlock = (state: EditorState): boolean => {
-  const { selection } = state;
-  if (selection.empty) return false;
-  const { $from } = selection;
-  for (let depth = $from.depth; depth >= 0; depth -= 1) {
-    if ($from.node(depth).type.name === "codeBlock") return false;
-  }
-  return true;
 };
 
 // 이미 조립된 blockContainer JSON 배열의 절대 깊이가 MAX_NESTING_DEPTH를
@@ -305,14 +296,19 @@ export const planDefaultPaste = (
     selectionIntersectsAnyCodeBlock(state.doc, state.selection) ||
     selectionStartsInCodeBlock(state.selection);
   if (intersectsCodeBlock) {
-    if (!isRangeStartingOutsideCodeBlock(state)) {
+    // 선택이 비어 있지 않고 시작($from)의 조상에 codeBlock이 없으면 범위가
+    // codeBlock 밖에서 시작한다(Issue #286). 삽입 지점이 시작 블록 쪽이라
+    // HTML 삽입이 안전하다.
+    const rangeStartsOutsideCodeBlock =
+      !state.selection.empty && !selectionStartsInCodeBlock(state.selection);
+    if (!rangeStartsOutsideCodeBlock) {
       // 캐럿·시작이 codeBlock 안이다(Issue #296). 유효한 평문은
       // PM 기본에 맡긴다. PM이 codeBlock 안에서 html을 무시하고
       // 평문만 넣는다. 무효 문자가 섞였으면 정리본을 평문으로
       // 넣는다. Tab·LF는 codeBlock 내용이라 지우지 않는다. 정리본이
       // 비면 이벤트만 소비한다. PM 기본이 raw 무효 문자를 넣으면
       // 되돌림 guard가 붙여넣기를 통째로 지운다.
-      const codeText = normalizeCodeBlockPasteText(rawText);
+      const codeText = normalizeKeepingTabs(rawText);
       if (codeText === normalizeLineBreaks(rawText)) {
         return { kind: "delegate" };
       }
@@ -394,10 +390,9 @@ export const planDefaultPaste = (
 
   // 감지 입력은 Tab을 지우지 않는다(Issue #291). Tab 외 무효 문자만
   // 지운다. 삽입 입력과 이 지점만 다르다.
-  const detection = detectMarkdownPaste(
-    normalizeForMarkdownDetection(rawText),
-    { createId: deps.createId },
-  );
+  const detection = detectMarkdownPaste(normalizeKeepingTabs(rawText), {
+    createId: deps.createId,
+  });
   if (detection.detected) {
     const encoded = modelToTiptap(detection.document);
     if (!encoded.ok) return { kind: "consume" };
@@ -441,4 +436,57 @@ export const planDefaultPaste = (
   if (delegable && !htmlFellBack) return { kind: "delegate" };
   if (text.length === 0) return { kind: "consume" };
   return { kind: "pasteText", text };
+};
+
+// drop에서 읽은 값이다. dataTransfer가 없으면 계획에 null을 넘긴다.
+export type PlainDrop = {
+  dragging: boolean;
+  hasFiles: boolean;
+  html: string;
+  text: string;
+};
+
+// 여러 줄 text/plain drop을 drop 위치에 직접 삽입하는 계획이다(Issue #285).
+// PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치 블록의 기존 자식을
+// 마지막 줄 블록으로 넘긴다. 배치는 붙여넣기와 같은 Enter 분할 규칙이다
+// (plain-text-paste.ts). 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
+// - 내부 드래그(view.dragging), 파일 동반, text/html 동반
+// - 정규화 뒤 한 줄인 평문
+// - 좌표를 못 푸는 위치, 줄을 놓을 수 없는 위치(표 셀·atom·블록 사이).
+//   위치를 보정하지 않는다.
+// 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
+// 않는다. 삽입 범위(drop 위치~마지막 줄 끝)를 선택한다. PM 기본 drop과
+// 같다. paste meta는 달지 않고 PM 기본 drop과 같은 uiEvent만 단다.
+// resolvePosition은 줄이 둘 이상일 때만 부른다. 좌표 해석(posAtCoords)은
+// 레이아웃이 필요하다.
+export const planPlainDrop = (
+  state: EditorState,
+  drop: PlainDrop | null,
+  resolvePosition: () => number | null,
+): PastePlan => {
+  if (drop === null || drop.dragging || drop.hasFiles) {
+    return { kind: "delegate" };
+  }
+  if (drop.html.length > 0) return { kind: "delegate" };
+
+  const lines = splitPlainTextLines(normalizePasteText(drop.text));
+  if (lines.length < 2) return { kind: "delegate" };
+
+  const position = resolvePosition();
+  if (position === null) return { kind: "delegate" };
+
+  const transaction = buildPlainMultilinePasteTransaction(state, lines, {
+    position,
+  });
+  if (transaction === null) return { kind: "delegate" };
+  transaction
+    .setSelection(
+      TextSelection.create(
+        transaction.doc,
+        position,
+        transaction.selection.from,
+      ),
+    )
+    .setMeta("uiEvent", "drop");
+  return { kind: "dispatch", transaction };
 };

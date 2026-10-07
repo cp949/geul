@@ -47,34 +47,26 @@ export const normalizeLineBreaks = (text: string): string =>
 // 바꾼 뒤 무효 문자(LF 외 C0·DEL·Tab·짝 없는 surrogate)를 지운다. 직접 삽입,
 // 시작이 codeBlock 밖인 범위의 codeBlock 분기, PM 폴백, drop이 이 결과를
 // 쓴다. 캐럿·시작이 codeBlock 안인 붙여넣기는 Tab을 남기는
-// normalizeCodeBlockPasteText를 쓴다(Issue #296).
+// normalizeKeepingTabs를 쓴다(Issue #296).
 export const normalizePasteText = (text: string): string =>
   sanitizeInlineText(normalizeLineBreaks(text));
 
 // Tab을 지우지 않고 CR을 줄 경계로 바꾼 뒤 나머지 무효 문자(LF 외 C0·DEL·
 // 짝 없는 surrogate)를 지운다. 삽입용(normalizePasteText)과 Tab 처리만
-// 다르다. Markdown 감지와 codeBlock 안 삽입이 같은 규칙을 쓴다.
-const normalizeKeepingTabs = (text: string): string =>
+// 다르다. 두 곳이 쓴다.
+// - Markdown 감지(Issue #291). Tab은 중첩 목록·들여쓴 코드의 구조이고 마커
+//   뒤 공백이며 코드 내용이다. model의 codeBlock 정책도 Tab을 허용한다.
+//   인라인 본문에 남은 Tab은 importMarkdown이 거절해 감지가 꺼진다(QA-078
+//   Tab 정책, 이전과 같다).
+// - codeBlock 안 붙여넣기(Issue #296). model의 codeBlock 검증
+//   (isValidCodeBlockSource)이 거부하는 문자만 지운다. Tab·LF는 코드 내용이라
+//   남긴다. U+2028·U+2029·U+FEFF·U+0085는 유효라 지우지 않는다. 출력은 항상
+//   검증을 통과한다.
+export const normalizeKeepingTabs = (text: string): string =>
   normalizeLineBreaks(text)
     .split("\t")
     .map((part) => sanitizeInlineText(part))
     .join("\t");
-
-// Markdown 감지 전용 정규화본이다(Issue #291). 삽입용과 Tab 처리만 다르다.
-// Tab은 지우지 않는다. 중첩 목록·들여쓴 코드의 구조이고 마커 뒤 공백이며
-// 코드 내용이다. model의 codeBlock 정책도 Tab을 허용한다. Tab 외 무효
-// 문자(LF 외 C0·DEL·짝 없는 surrogate)는 삽입 경로와 같게 지운다.
-// 인라인 본문에 남은 Tab은 importMarkdown이 거절해 감지가 꺼진다(QA-078 Tab
-// 정책, 이전과 같다).
-export const normalizeForMarkdownDetection = (text: string): string =>
-  normalizeKeepingTabs(text);
-
-// codeBlock 안 붙여넣기용 정규화본이다(Issue #296). model의 codeBlock 검증
-// (isValidCodeBlockSource)이 거부하는 문자만 지운다. Tab·LF는 코드 내용이라
-// 남긴다. U+2028·U+2029·U+FEFF·U+0085는 유효라 지우지 않는다. 출력은 항상
-// 검증을 통과한다.
-export const normalizeCodeBlockPasteText = (text: string): string =>
-  normalizeKeepingTabs(text);
 
 // slice 안 text 노드의 무효 문자를 지운다(Issue #302). 표 셀 안 붙여넣기의
 // transformPasted가 쓴다. PM 기본 붙여넣기는 slice의 무효 문자를 거르지 않아

@@ -1,6 +1,6 @@
 import type { IdFactory } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
-import { Plugin, TextSelection } from "@tiptap/pm/state";
+import { Plugin } from "@tiptap/pm/state";
 import { CellSelection, isInTable } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
@@ -13,14 +13,12 @@ import {
   type PasteClipboard,
   type PastePlan,
   planDefaultPaste,
+  planPlainDrop,
   planTableCellPaste,
 } from "./paste-plan.js";
 import {
-  buildPlainMultilinePasteTransaction,
-  normalizePasteText,
   plainTextClipboardParser,
   sanitizeSliceInlineText,
-  splitPlainTextLines,
 } from "./plain-text-paste.js";
 
 // spec §7.3은 HTML 붙여넣기가 문서 HTML import와 같은 sanitizer·매핑을
@@ -306,53 +304,25 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           },
 
           // 여러 줄 text/plain drop을 drop 위치에 직접 삽입한다(Issue #285).
-          // PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치 블록의 기존
-          // 자식을 마지막 줄 블록으로 넘긴다. 배치는 붙여넣기와 같은 Enter
-          // 분할 규칙이다(plain-text-paste.ts).
-          // 아래 입력은 PM 기본(또는 미디어 확장)에 위임한다(false).
-          // - 내부 드래그(view.dragging), 파일 동반, text/html 동반
-          // - 정규화 뒤 한 줄인 평문
-          // - 좌표를 못 푸는 위치, 줄을 놓을 수 없는 위치(표 셀·atom·블록
-          //   사이). 위치를 보정하지 않는다.
-          // 판정은 live view.state로 한다(G-EDT-002). drop은 현재 selection을
-          // 지우지 않는다. 삽입 범위(drop 위치~마지막 줄 끝)를 선택한다. PM
-          // 기본 drop과 같다.
+          // 판정은 planPlainDrop이 한다(paste-plan.ts).
           handleDrop: (view, event) => {
-            if (view.dragging) return false;
             const dataTransfer = event.dataTransfer;
-            if (dataTransfer === null) return false;
-            if (dataTransfer.files.length > 0) return false;
-            if (dataTransfer.getData("text/html").length > 0) return false;
-
-            const lines = splitPlainTextLines(
-              normalizePasteText(dataTransfer.getData("text/plain")),
-            );
-            if (lines.length < 2) return false;
-
-            const coords = view.posAtCoords({
-              left: event.clientX,
-              top: event.clientY,
-            });
-            if (coords === null) return false;
-
-            const dropTransaction = buildPlainMultilinePasteTransaction(
+            const plan = planPlainDrop(
               view.state,
-              lines,
-              { position: coords.pos },
+              dataTransfer === null
+                ? null
+                : {
+                    dragging: Boolean(view.dragging),
+                    hasFiles: dataTransfer.files.length > 0,
+                    html: dataTransfer.getData("text/html"),
+                    text: dataTransfer.getData("text/plain"),
+                  },
+              () =>
+                view.posAtCoords({ left: event.clientX, top: event.clientY })
+                  ?.pos ?? null,
             );
-            if (dropTransaction === null) return false;
-
-            // paste meta를 달지 않는다. PM 기본 drop과 같은 uiEvent만 단다.
-            dropTransaction
-              .setSelection(
-                TextSelection.create(
-                  dropTransaction.doc,
-                  coords.pos,
-                  dropTransaction.selection.from,
-                ),
-              )
-              .setMeta("uiEvent", "drop");
-            view.dispatch(dropTransaction);
+            if (plan.kind !== "dispatch") return false;
+            view.dispatch(plan.transaction);
             view.focus();
             return true;
           },
