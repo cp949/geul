@@ -21,8 +21,10 @@
  * 기본 삭제가 live 범위에 적용돼 선택하지 않은 텍스트가 셀로 옮겨 갔다.
  * Enter는 DOM 캐럿 위치를 파생 기준으로 처리한다(G-EDT-002).
  *
- * 끝 블록이 상위 블록의 자식이고 상위 블록의 라벨이 범위에 들면 상위 블록이
- * 빈 paragraph가 되는 알려진 한계를 한 건으로 고정한다.
+ * 끝 블록이 상위 블록의 자식이면 라벨이 범위에 든 상위 블록은 타입과 attrs를
+ * 유지한 빈 라벨로 남는다(Issue #293). 이전에는 빈 paragraph가 되거나 끝
+ * 블록이 다른 부모로 합류하거나 서브트리가 사라졌다. 끝이 표 셀인 경우와
+ * 체인 앞 형제 삭제도 같은 규칙이다.
  *
  * 키 소비는 view.someProp("handleKeyDown", ...) 실 디스패치로 검증한다.
  * 실제 확장 세트(createEditor + mountTiptapEditor)를 쓴다. 실제 DOM
@@ -39,6 +41,7 @@ import {
 } from "../block-test-support.js";
 import {
   calloutBlock,
+  checkListItemBlock,
   codeBlockBlock,
   documentOf,
   editorState,
@@ -66,6 +69,7 @@ import {
   outline,
   type Pos,
   run,
+  type RunResult,
   setLiveSelection,
   singleCellTable,
   TAIL,
@@ -914,38 +918,483 @@ describe("표 경계 범위 stale이어도 파생 selection 기준의 정상 동
   });
 });
 
-describe("끝 블록이 상위 블록의 자식이면 알려진 한계가 있다(Issue #289)", () => {
+// 라벨이 범위에 든 상위 블록(Issue #293). 끝 블록이 상위 블록의 자식이면
+// 그 상위 블록은 타입과 attrs를 유지한 채 빈 라벨로 남는다. 기준 문서 D는
+// [table 1x1 "cell", X "xxxx" > 자식 B "wxyz", paragraph "tail"]이고
+// 선택은 셀 offset 2 -> B offset 2다.
+describe("라벨이 범위에 든 상위 블록은 타입과 attrs를 유지한 빈 라벨로 남는다(Issue #293)", () => {
   const child = () => paragraphBlock("b", "wxyz");
   const withChild = (block: Block): Block =>
     ({ ...block, children: [child()] }) as Block;
 
-  it.each([
-    { type: "heading", parent: withChild(headingBlock("x", 2, "xxxx")) },
-    { type: "quote", parent: quoteBlock("x", "xxxx", [child()]) },
-    { type: "callout", parent: calloutBlock("x", "xxxx", "i", [child()]) },
+  // 상위가 될 수 있는 8종 중 라벨 타입과 attrs가 있는 7종(paragraph 제외).
+  const PARENTS = [
+    {
+      type: "heading",
+      make: () => withChild(headingBlock("x", 2, "xxxx")),
+      attrs: { type: "heading", level: 2 },
+    },
+    {
+      type: "quote",
+      make: () => quoteBlock("x", "xxxx", [child()]),
+      attrs: { type: "quote" },
+    },
+    {
+      type: "callout",
+      make: () => calloutBlock("x", "xxxx", "i", [child()]),
+      attrs: { type: "callout", icon: "i" },
+    },
     {
       type: "toggleListItem",
-      parent: toggleBlock("x", "xxxx", { children: [child()] }),
+      make: () =>
+        toggleBlock("x", "xxxx", { collapsed: false, children: [child()] }),
+      attrs: { type: "toggleListItem", collapsed: false },
     },
-  ])(
-    "알려진 한계: 라벨이 범위에 든 $type 상위 블록은 타입과 attrs를 잃고 빈 paragraph가 된다",
-    ({ parent }) => {
+    {
+      type: "bulletListItem",
+      make: () =>
+        listItemBlock("x", "bulletListItem", "xxxx", { children: [child()] }),
+      attrs: { type: "bulletListItem" },
+    },
+    {
+      type: "numberedListItem",
+      make: () =>
+        listItemBlock("x", "numberedListItem", "xxxx", {
+          startNumber: 3,
+          children: [child()],
+        }),
+      attrs: { type: "numberedListItem", startNumber: 3 },
+    },
+    {
+      type: "checkListItem",
+      make: () => withChild(checkListItemBlock("x", "xxxx", true)),
+      attrs: { type: "checkListItem", checked: true },
+    },
+  ] as const;
+
+  const KEYS_293 = [
+    ...KEYS,
+    {
+      key: "Mod-Backspace",
+      press: (t: TiptapEditor) =>
+        dispatchModifiedKeydown(t, "Backspace", { ctrlKey: true }),
+    },
+    {
+      key: "Mod-Delete",
+      press: (t: TiptapEditor) =>
+        dispatchModifiedKeydown(t, "Delete", { ctrlKey: true }),
+    },
+  ];
+
+  const modelBlocks = (result: RunResult) => result.editor.getDocument().blocks;
+  const expectIntact = (result: RunResult): void => {
+    result.tiptap.state.doc.check();
+    expectSchemaValid(result.tiptap);
+  };
+  const cellToChild = (
+    blocks: Block[],
+    press: (t: TiptapEditor) => boolean,
+    childId = "b",
+    childOffset = 2,
+  ) => run(blocks, inCell("t-r0c0", 2), inBlock(childId, childOffset), press);
+
+  describe.each(KEYS_293)("$key", ({ press }) => {
+    it.each(PARENTS)(
+      "$type 상위 블록은 타입과 attrs를 유지하고 라벨이 비며 자식 B는 `yz`다",
+      ({ type, make, attrs }) => {
+        const result = cellToChild(
+          [singleCellTable("t", "cell"), make(), TAIL],
+          press,
+        );
+
+        expect(result.handled).toBe(true);
+        expect(blocksOf(result)).toEqual([
+          "table[ce]",
+          `${type}:>{paragraph:yz}`,
+          "paragraph:tail",
+        ]);
+        expect(modelBlocks(result)[1]).toMatchObject(attrs);
+        expectIntact(result);
+      },
+    );
+
+    it("조부모 `X > Y > B`는 X·Y가 모두 타입과 attrs를 유지하고 라벨이 빈다", () => {
+      const result = cellToChild(
+        [
+          singleCellTable("t", "cell"),
+          quoteBlock("x", "xxxx", [calloutBlock("y", "yyyy", "i", [child()])]),
+          TAIL,
+        ],
+        press,
+      );
+
+      expect(result.handled).toBe(true);
+      expect(blocksOf(result)).toEqual([
+        "table[ce]",
+        "quote:>{callout:>{paragraph:yz}}",
+        "paragraph:tail",
+      ]);
+      expect(modelBlocks(result)[1]).toMatchObject({
+        type: "quote",
+        children: [
+          {
+            type: "callout",
+            icon: "i",
+            children: [{ type: "paragraph" }],
+          },
+        ],
+      });
+      expectIntact(result);
+    });
+
+    it.each([
+      {
+        name: "X > B",
+        parent: () => quoteBlock("x", "xxxx", [child()]),
+        expected: "quote:>{paragraph:}",
+      },
+      {
+        name: "X > [S, B]",
+        parent: () =>
+          quoteBlock("x", "xxxx", [paragraphBlock("s", "ss"), child()]),
+        expected: "quote:>{paragraph:}",
+      },
+      {
+        name: "X > Y > B",
+        parent: () =>
+          quoteBlock("x", "xxxx", [calloutBlock("y", "yyyy", "i", [child()])]),
+        expected: "quote:>{callout:>{paragraph:}}",
+      },
+      {
+        name: "X > [B, C]",
+        parent: () =>
+          quoteBlock("x", "xxxx", [child(), paragraphBlock("c", "cc")]),
+        expected: "quote:>{paragraph:,paragraph:cc}",
+      },
+    ])(
+      "끝 블록 텍스트를 전부 덮어도($name) 서브트리가 사라지지 않고 B는 빈 텍스트로 남는다",
+      ({ parent, expected }) => {
+        const result = cellToChild(
+          [singleCellTable("t", "cell"), parent(), TAIL],
+          press,
+          "b",
+          4,
+        );
+
+        expect(result.handled).toBe(true);
+        expect(blocksOf(result)).toEqual([
+          "table[ce]",
+          expected,
+          "paragraph:tail",
+        ]);
+        expect(modelBlocks(result)[1]).toMatchObject({ type: "quote" });
+        expectIntact(result);
+      },
+    );
+  });
+
+  it("끝 블록이 최상위이면 B 전체를 덮어도 빈 B가 남는 기준선이 그대로다", () => {
+    const result = run(
+      [singleCellTable("t", "cell"), paragraphBlock("w", "wxyz"), TAIL],
+      inCell("t-r0c0", 2),
+      inBlock("w", 4),
+      (t) => dispatchKeydown(t, "Backspace"),
+    );
+
+    expect(blocksOf(result)).toEqual([
+      "table[ce]",
+      "paragraph:",
+      "paragraph:tail",
+    ]);
+  });
+
+  it("앞 형제 `X > [S, B]`에서 S는 삭제되고 X는 유지된다", () => {
+    const result = cellToChild(
+      [
+        singleCellTable("t", "cell"),
+        {
+          ...headingBlock("x", 2, "xxxx"),
+          children: [paragraphBlock("s", "ss"), child()],
+        } as Block,
+        TAIL,
+      ],
+      (t) => dispatchKeydown(t, "Backspace"),
+    );
+
+    expect(blocksOf(result)).toEqual([
+      "table[ce]",
+      "heading:>{paragraph:yz}",
+      "paragraph:tail",
+    ]);
+    expect(modelBlocks(result)[1]).toMatchObject({ type: "heading", level: 2 });
+    expectIntact(result);
+  });
+
+  it("뒤 형제 `X > [B, C]`에서 C는 그대로 남는다", () => {
+    const result = cellToChild(
+      [
+        singleCellTable("t", "cell"),
+        quoteBlock("x", "xxxx", [child(), paragraphBlock("c", "cc")]),
+        TAIL,
+      ],
+      (t) => dispatchKeydown(t, "Backspace"),
+    );
+
+    expect(blocksOf(result)).toEqual([
+      "table[ce]",
+      "quote:>{paragraph:yz,paragraph:cc}",
+      "paragraph:tail",
+    ]);
+    expectIntact(result);
+  });
+
+  describe("끝이 표 셀이면 표의 상위 블록에도 같은 규칙이다", () => {
+    const fromT = inCell("t-r0c0", 2);
+    const toU = inCell("u-r0c0", 2);
+
+    it("5i: 표 t의 셀에서 `X > [표 u]`의 u 셀까지 범위는 X가 타입과 attrs를 유지하고 라벨이 빈다", () => {
       const result = run(
-        [singleCellTable("t", "cell"), parent, TAIL],
+        [
+          singleCellTable("t", "cell"),
+          {
+            ...headingBlock("x", 2, "xxxx"),
+            children: [singleCellTable("u", "cell")],
+          } as Block,
+          TAIL,
+        ],
+        fromT,
+        toU,
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(result.handled).toBe(true);
+      expect(blocksOf(result)).toEqual([
+        "table[ce]",
+        "heading:>{table[ll]}",
+        "paragraph:tail",
+      ]);
+      expect(modelBlocks(result)[1]).toMatchObject({
+        type: "heading",
+        level: 2,
+      });
+      expectIntact(result);
+    });
+
+    it("5j: 표 u 앞 형제 S는 삭제되고 X는 유지되며 u 셀은 선택 구간만 지워진다", () => {
+      const result = run(
+        [
+          singleCellTable("t", "cell"),
+          calloutBlock("x", "xxxx", "i", [
+            paragraphBlock("s", "ss"),
+            singleCellTable("u", "cell"),
+          ]),
+          TAIL,
+        ],
+        fromT,
+        toU,
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(result.handled).toBe(true);
+      expect(blocksOf(result)).toEqual([
+        "table[ce]",
+        "callout:>{table[ll]}",
+        "paragraph:tail",
+      ]);
+      expect(modelBlocks(result)[1]).toMatchObject({
+        type: "callout",
+        icon: "i",
+      });
+      expectIntact(result);
+    });
+  });
+
+  describe("표가 상위 블록의 자식이고 끝 블록이 다른 상위 블록의 자식이다", () => {
+    it("5f: `X1 > [table]`의 셀에서 `X2 > [B]`까지 범위는 B가 X2의 자식으로 남고 X1에 합류하지 않는다", () => {
+      const result = run(
+        [
+          quoteBlock("x1", "x1x1", [singleCellTable("t", "cell")]),
+          calloutBlock("x2", "xxxx", "i", [child()]),
+          TAIL,
+        ],
         inCell("t-r0c0", 2),
         inBlock("b", 2),
         (t) => dispatchKeydown(t, "Backspace"),
       );
 
       expect(result.handled).toBe(true);
-      // 선택하지 않은 텍스트는 보존된다. 상위 블록은 paragraph가 된다.
       expect(blocksOf(result)).toEqual([
-        "table[ce]",
-        "paragraph:>{paragraph:yz}",
+        "quote:x1x1>{table[ce]}",
+        "callout:>{paragraph:yz}",
         "paragraph:tail",
       ]);
-      result.tiptap.state.doc.check();
-      expectSchemaValid(result.tiptap);
-    },
-  );
+      expect(modelBlocks(result)[1]).toMatchObject({
+        type: "callout",
+        icon: "i",
+      });
+      expectIntact(result);
+    });
+
+    it("`X1 > [table, Z]` -> `X2 > [B]`에서 Z는 삭제되고 X2는 유지된다", () => {
+      const result = run(
+        [
+          quoteBlock("x1", "x1x1", [
+            singleCellTable("t", "cell"),
+            paragraphBlock("z", "zz"),
+          ]),
+          calloutBlock("x2", "xxxx", "i", [child()]),
+          TAIL,
+        ],
+        inCell("t-r0c0", 2),
+        inBlock("b", 2),
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(result.handled).toBe(true);
+      expect(blocksOf(result)).toEqual([
+        "quote:x1x1>{table[ce]}",
+        "callout:>{paragraph:yz}",
+        "paragraph:tail",
+      ]);
+      expectIntact(result);
+    });
+  });
+
+  it("dispatch 1회, undo 1회로 문서와 selection이 원복되고 캐럿은 범위 시작에 접힌다", () => {
+    const blocks = () => [
+      singleCellTable("t", "cell"),
+      quoteBlock("x", "xxxx", [
+        paragraphBlock("s", "ss"),
+        calloutBlock("y", "yyyy", "i", [child()]),
+      ]),
+      TAIL,
+    ];
+    const result = cellToChild(blocks(), (t) =>
+      dispatchKeydown(t, "Backspace"),
+    );
+
+    expect(result.dispatchCount).toBe(1);
+    expect(result.changes).toHaveLength(1);
+    expect(result.tiptap.state.selection.empty).toBe(true);
+    expect(result.tiptap.state.selection.from).toBe(result.anchor);
+    expect(blocksOf(result)).toEqual([
+      "table[ce]",
+      "quote:>{callout:>{paragraph:yz}}",
+      "paragraph:tail",
+    ]);
+    expectIntact(result);
+
+    expect(result.editor.commands.undo()).toEqual(okResult);
+    expectRestored(result);
+    expect(result.editor.commands.undo()).toEqual(notApplicable("undo"));
+  });
+
+  describe("대상 밖은 현행이다", () => {
+    it("시작 쪽 거울 5a: 표가 X의 자식이고 범위가 X 라벨 중간에서 시작하면 라벨 꼬리 텍스트만 지운다", () => {
+      const result = run(
+        [
+          {
+            ...headingBlock("x", 2, "xxxx"),
+            children: [singleCellTable("t", "cell")],
+          } as Block,
+          TAIL,
+        ],
+        inBlock("x", 2),
+        inCell("t-r0c0", 2),
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(blocksOf(result)).toEqual([
+        "heading:xx>{table[ll]}",
+        "paragraph:tail",
+      ]);
+      expect(modelBlocks(result)[0]).toMatchObject({
+        type: "heading",
+        level: 2,
+      });
+      expectIntact(result);
+    });
+
+    it("시작 쪽 거울 5d: X 라벨과 표 사이 형제는 삭제된다", () => {
+      const result = run(
+        [
+          quoteBlock("x", "xxxx", [
+            paragraphBlock("s", "ss"),
+            singleCellTable("t", "cell"),
+          ]),
+          TAIL,
+        ],
+        inBlock("x", 2),
+        inCell("t-r0c0", 2),
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(blocksOf(result)).toEqual([
+        "quote:xx>{table[ll]}",
+        "paragraph:tail",
+      ]);
+      expectIntact(result);
+    });
+
+    it("시작 쪽 거울 5h: 표 뒤 형제는 범위 밖이라 남는다", () => {
+      const result = run(
+        [
+          quoteBlock("x", "xxxx", [
+            singleCellTable("t", "cell"),
+            paragraphBlock("z", "zz"),
+          ]),
+          TAIL,
+        ],
+        inBlock("x", 2),
+        inCell("t-r0c0", 2),
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(blocksOf(result)).toEqual([
+        "quote:xx>{table[ll],paragraph:zz}",
+        "paragraph:tail",
+      ]);
+      expectIntact(result);
+    });
+
+    it("접힌 toggle X는 selection guard가 head를 라벨 끝으로 당겨 문서가 손상되지 않는다", () => {
+      const result = cellToChild(
+        [
+          singleCellTable("t", "cell"),
+          toggleBlock("x", "xxxx", { collapsed: true, children: [child()] }),
+          TAIL,
+        ],
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(result.handled).toBe(true);
+      expect(blocksOf(result)).toEqual([
+        "table[ce]",
+        "toggleListItem:>{paragraph:wxyz}",
+        "paragraph:tail",
+      ]);
+      expect(modelBlocks(result)[1]).toMatchObject({
+        type: "toggleListItem",
+        collapsed: true,
+      });
+      expectIntact(result);
+    });
+
+    it("두 끝이 모두 표 밖이면(표를 완전히 감싸는 범위) 표를 지우고 양 끝 블록을 병합하는 현행이다", () => {
+      const result = run(
+        [
+          paragraphBlock("a", "abcd"),
+          singleCellTable("t", "cell"),
+          quoteBlock("x", "xxxx", [child()]),
+          TAIL,
+        ],
+        inBlock("a", 2),
+        inBlock("b", 2),
+        (t) => dispatchKeydown(t, "Backspace"),
+      );
+
+      expect(blocksOf(result)).toEqual(["paragraph:abyz", "paragraph:tail"]);
+      expectIntact(result);
+    });
+  });
 });

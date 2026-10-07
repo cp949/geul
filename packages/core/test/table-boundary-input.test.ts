@@ -45,6 +45,7 @@ import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import { dispatchKeydown, dispatchTextInput } from "./block-test-support.js";
 import { dispatchPasteData } from "./clipboard-test-support.js";
 import {
+  calloutBlock,
   codeBlockBlock,
   dividerBlock,
   documentOf,
@@ -54,6 +55,7 @@ import {
   notApplicable,
   okResult,
   paragraphBlock,
+  quoteBlock,
 } from "./editor-controller-support.js";
 import {
   blocksOf,
@@ -428,6 +430,81 @@ describe("표 경계 범위에서 Cut하면 선택한 텍스트만 지우고 삽
     });
 
     expectNoOpConsumed(result);
+  });
+});
+
+describe("라벨이 범위에 든 상위 블록은 입력·Cut 뒤에도 타입과 attrs를 유지한다(Issue #293)", () => {
+  // 기준 문서 D: [table "cell", heading(level 2) "xxxx" > 자식 B "wxyz", tail].
+  // 범위는 셀 offset 2 -> B offset 2다. 같은 함수를 공유해 #289 Backspace와
+  // 같은 결과다.
+  const nested = (): Block[] => [
+    singleCellTable("t", "cell"),
+    {
+      ...headingBlock("x", 2, "xxxx"),
+      children: [paragraphBlock("b", "wxyz")],
+    } as Block,
+    TAIL,
+  ];
+  const grandparent = (): Block[] => [
+    singleCellTable("t", "cell"),
+    quoteBlock("x", "xxxx", [
+      calloutBlock("y", "yyyy", "i", [paragraphBlock("b", "wxyz")]),
+    ]),
+    TAIL,
+  ];
+  const from = inCell("t-r0c0", 2);
+  const to = inBlock("b", 2);
+
+  it.each([
+    { name: "글자 입력 Q", act: typeChar("Q"), ins: "Q" },
+    { name: "Cut", act: cut, ins: "" },
+  ])(
+    "$name: heading(level 2) 상위 블록이 타입과 attrs를 유지하고 라벨이 빈다",
+    ({ act, ins }) => {
+      const result = run(nested(), from, to, act);
+
+      expect(result.handled).toBe(true);
+      expect(blocksOf(result)).toEqual([
+        `table[ce${ins}]`,
+        "heading:>{paragraph:yz}",
+        "paragraph:tail",
+      ]);
+      expect(result.editor.getDocument().blocks[1]).toMatchObject({
+        type: "heading",
+        level: 2,
+      });
+      result.tiptap.state.doc.check();
+      expectSchemaValid(result.tiptap);
+    },
+  );
+
+  it.each([
+    { name: "글자 입력 Q", act: typeChar("Q"), ins: "Q" },
+    { name: "Cut", act: cut, ins: "" },
+  ])(
+    "$name: 조부모 `X > Y > B`도 X·Y가 타입과 attrs를 유지한다",
+    ({ act, ins }) => {
+      const result = run(grandparent(), from, to, act);
+
+      expect(blocksOf(result)).toEqual([
+        `table[ce${ins}]`,
+        "quote:>{callout:>{paragraph:yz}}",
+        "paragraph:tail",
+      ]);
+      expect(result.editor.getDocument().blocks[1]).toMatchObject({
+        type: "quote",
+        children: [{ type: "callout", icon: "i" }],
+      });
+      expectSchemaValid(result.tiptap);
+    },
+  );
+
+  it("글자 입력은 dispatch 1회, undo 1회로 원복된다", () => {
+    const result = run(nested(), from, to, typeChar("Q"));
+
+    expect(result.dispatchCount).toBe(1);
+    expect(result.changes).toHaveLength(1);
+    expectUndoOnce(result);
   });
 });
 
