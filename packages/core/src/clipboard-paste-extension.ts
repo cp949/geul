@@ -252,6 +252,11 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // Tab을 지우지 않는 별도 정규화본을 쓴다.
               const rawText = clipboardData.getData("text/plain");
               const text = normalizePasteText(rawText);
+              // 위임 가능 여부다(Issue #295). CR→LF 변환만 다른 유효 입력이면
+              // 참이다. 무효 문자가 있으면 거짓이라 PM 기본에 맡기지 않는다.
+              // PM 기본이 raw 무효 문자를 넣으면 되돌림 guard가 붙여넣기를
+              // 통째로 지운다.
+              const delegable = text === normalizeLineBreaks(rawText);
 
               // 예외 1(Issue #286): text/html이 있고 선택이 비어 있지 않고
               // 시작($from)이 codeBlock 밖이면 조기 반환하지 않고 아래
@@ -265,10 +270,12 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 예외 2(Issue #285): 같은 조건(범위, 시작이 codeBlock 밖)에서
               // 정규화한 평문이 여러 줄이면 아래 직접 삽입으로 합류한다.
               // PM 기본 처리는 범위 끝 뒤의 자식을 마지막 줄 블록으로 넘긴다.
-              // 시작이 codeBlock 안인 범위, 캐럿, 한 줄 평문은 위 설명 그대로
-              // PM 기본 처리를 유지한다. Markdown 감지는 이 예외 대상이
-              // 아니다. html이 블록을 못 만들면 아래에서 평문으로
-              // 폴백한다(Issue #287). 그때도 Markdown 감지는 하지 않는다.
+              // 시작이 codeBlock 안인 범위, 캐럿, 유효한 한 줄 평문은 위 설명
+              // 그대로 PM 기본 처리를 유지한다. 무효 문자가 섞인 한 줄 평문은
+              // 위임하지 않고 아래로 내려간다(Issue #295). Markdown 감지는
+              // 이 예외 대상이 아니다. html이 블록을 못 만들면 아래에서
+              // 평문으로 폴백한다(Issue #287). 그때도 Markdown 감지는 하지
+              // 않는다.
               const intersectsCodeBlock = selectionIntersectsAnyCodeBlock(
                 view.state.doc,
                 view.state.selection,
@@ -276,7 +283,9 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               if (intersectsCodeBlock) {
                 if (!isRangeStartingOutsideCodeBlock(view.state)) return false;
                 const multilinePlain = splitPlainTextLines(text).length >= 2;
-                if (html.length === 0 && !multilinePlain) return false;
+                if (html.length === 0 && !multilinePlain && delegable) {
+                  return false;
+                }
               }
 
               const insert = (nodes: TiptapJsonNode[]): void => {
@@ -383,8 +392,10 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // codeBlock에 걸친 범위가 여기 닿는 경우는 html 폴백과 여러 줄
               // 평문(Issue #285)이다. Markdown 감지를 건너뛴다(spec 7.3
               // 한계 유지, #286). 여러 줄이면 직접 삽입한다. 직접 삽입을 못
-              // 하면 평문 단독은 PM 기본에 위임하고, html 폴백은 PM 평문
-              // 경로로 보낸다. 한 줄 html 폴백은 PM 평문 경로 그대로다.
+              // 하면 유효한 평문 단독은 PM 기본에 위임한다. html 폴백과 무효
+              // 문자가 섞인 평문은 정리본을 PM 평문 경로로 보낸다. 한 줄 html
+              // 폴백은 PM 평문 경로 그대로다. 제어문자만 있으면 이벤트만
+              // 소비한다(Issue #295).
               if (intersectsCodeBlock) {
                 const inlineLines = splitPlainTextLines(text);
                 if (inlineLines.length >= 2) {
@@ -397,7 +408,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                     return true;
                   }
                 }
-                if (!htmlFellBack) return false;
+                if (!htmlFellBack && delegable) return false;
                 if (text.length > 0) pasteTextThroughPm(view, text, event);
                 return true;
               }
@@ -453,9 +464,9 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // html 없이 평문만 쓴다.
               //
               // CR은 무효 문자로 세지 않는다(Issue #291). CR을 LF로 바꾼 것만
-              // 다르면 raw 그대로 위임한다. PM 기본 처리와 clipboardTextParser가
-              // CR을 줄 경계로 나눈다.
-              if (text === normalizeLineBreaks(rawText) && !htmlFellBack) {
+              // 다르면(delegable) raw 그대로 위임한다. PM 기본 처리와
+              // clipboardTextParser가 CR을 줄 경계로 나눈다.
+              if (delegable && !htmlFellBack) {
                 return false;
               }
               if (text.length === 0) return true;
