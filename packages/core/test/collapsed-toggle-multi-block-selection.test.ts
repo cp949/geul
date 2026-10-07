@@ -290,9 +290,10 @@ describe("접힌 toggle을 걸친 여러 블록 선택의 codeBlock 교차 판�
 });
 
 describe("접힌 toggle을 걸친 범위의 붙여넣기 codeBlock 분기", () => {
-  // 숨은 codeBlock이 범위 안이어도 평문은 codeBlock 분기가 PM 기본 처리로
-  // 넘긴다(Issue #264). HTML은 시작이 codeBlock 밖이면 이 분기를 지나 HTML
-  // 분기로 합류한다(Issue #286) — 아래 두 번째 테스트가 맡는다.
+  // 숨은 codeBlock이 범위 안이어도 평문은 codeBlock 분기가 처리한다(Issue
+  // #264). 유효한 한 줄 평문이라 PM 파싱 slice가 범위를 대체한다(Issue #306
+  // 전에는 PM 기본 위임 false였다). HTML은 시작이 codeBlock 밖이면 이 분기를
+  // 지나 HTML 분기로 합류한다(Issue #286) — 아래 두 번째 테스트가 맡는다.
   it("숨은 codeBlock을 걸친 범위에서도 평문 기본 붙여넣기는 codeBlock 분기로 처리를 넘긴다", () => {
     const results: boolean[] = [];
     const editor = createEditor({
@@ -300,21 +301,19 @@ describe("접힌 toggle을 걸친 범위의 붙여넣기 codeBlock 분기", () =
       createId: sequentialIds("id"),
       pasteHandler: (context) => {
         results.push(context.defaultPasteHandler());
-        // 기본 처리 결과만 기록한다. PM 기본 붙여넣기는 막는다.
         return true;
       },
     });
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
     selectAToZ(tiptap);
-    const before = editor.getDocument();
 
     withUnhandledErrorTracking((errors) => {
       pasteData(editable, { "text/plain": "붙임" });
 
-      // false는 codeBlock 분기가 PM 기본 처리로 넘겼다는 뜻이다.
-      expect(results).toEqual([false]);
-      expect(editor.getDocument()).toEqual(before);
+      // 범위 전체(숨은 codeBlock 포함)가 평문 한 문단으로 대체된다.
+      expect(results).toEqual([true]);
+      expect(outline(editor.getDocument().blocks)).toEqual(["p:붙임"]);
       expect(errors).toEqual([]);
     });
   });

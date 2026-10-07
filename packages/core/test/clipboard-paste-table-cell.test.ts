@@ -1074,15 +1074,25 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
     };
     const dirtySlice = (tiptap: TiptapEditor): Slice =>
       new Slice(Fragment.from(tiptap.schema.text(`a${SOH}b`)), 0, 0);
-    const textOf = (slice: Slice): string =>
-      slice.content.textBetween(0, slice.content.size);
 
-    it("셀 안 캐럿에서는 slice text를 정리한다", () => {
+    // 셀 안 정리는 붙여넣기 계획이 handlePaste 시점의 state로 한다(Issue
+    // #306). transformPasted는 표 경계 범위를 지우기 전에 불려 지우기 전
+    // state를 본다. 정리 결과는 paste-plan.test.ts와 아래 이벤트 테스트가 본다.
+    it("셀 안 캐럿에서도 transformPasted는 slice를 바꾸지 않는다", () => {
       const m = mounted(documentOf(...S1.blocks()));
       S1.place(m.tiptap);
       const slice = dirtySlice(m.tiptap);
 
-      expect(textOf(transform(m.tiptap, slice))).toBe("ab");
+      expect(transform(m.tiptap, slice)).toBe(slice);
+    });
+
+    it("셀 안 캐럿의 무효 문자 html은 정리본이 셀에 들어간다", () => {
+      const result = pasteIn(S1.blocks(), S1.place, {
+        "text/html": `<p>a${SOH}b</p>`,
+        "text/plain": "ab",
+      });
+
+      expect(result.blocks()).toEqual(docOutline("table[cellab]"));
     });
 
     it("CellSelection에서는 slice를 바꾸지 않는다", () => {

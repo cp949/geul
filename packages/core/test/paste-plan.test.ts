@@ -4,13 +4,14 @@
  * clipboard-*.test.ts의 이벤트 테스트가 소유한다. 여기서는 결과 종류마다
  * 대표 입력 하나를 둔다.
  *
- * 표 셀 계획(planTableCellPaste)은 pass·delegate·consume·pasteText와 표 밖
- * null을, 기본 계획(planDefaultPaste)은 delegate·consume·pasteText·dispatch와
+ * 표 셀 계획(planTableCellPaste)은 pass·insertSlice·consume·pasteText와 표
+ * 밖 null을, 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
  * 블록 삽입 배치 3종(caret·blockBoundary·afterRangeDelete)을, drop 계획
  * (planPlainDrop)은 delegate·dispatch를 다룬다.
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
@@ -77,6 +78,13 @@ const clip = (text: string, html = "", plain = false): PasteClipboard => ({
 
 const deps = { createId: sequentialIds("p") };
 
+/** PM이 파싱한 slice 자리다. 기본 계획은 이 slice를 그대로 넣는다. */
+const PM_SLICE = new Slice(Fragment.empty, 0, 0);
+
+/** 글자 n개짜리 텍스트 slice다. 셀 계획은 slice 크기로 html 내용 유무를 본다. */
+const sliceOfSize = (tiptap: TiptapEditor, size: number): Slice =>
+  new Slice(Fragment.from(tiptap.schema.text("x".repeat(size))), 0, 0);
+
 const cellBlocks = (): Block[] => [
   paragraphBlock("p1", "para"),
   singleCellTable("t", "cell"),
@@ -86,34 +94,93 @@ const cellBlocks = (): Block[] => [
 describe("planTableCellPaste", () => {
   it("표 밖이면 null이다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    expect(planTableCellPaste(tiptap.state, clip("x"), 1)).toBeNull();
+    expect(
+      planTableCellPaste(tiptap.state, clip("x"), sliceOfSize(tiptap, 1)),
+    ).toBeNull();
   });
 
   it("CellSelection이면 pass다", () => {
     const tiptap = mountAt(cellBlocks(), at("p1", 0));
     selectCellRange(tiptap, "t-r0c0", "t-r0c0");
-    expect(planTableCellPaste(tiptap.state, clip("x"), 1)).toEqual({
+    expect(
+      planTableCellPaste(tiptap.state, clip("x"), sliceOfSize(tiptap, 1)),
+    ).toEqual({
       kind: "pass",
     });
   });
 
+  it("셀 안에 셀 조각 slice를 붙이면 pass다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    let tableSlice: Slice | null = null;
+    tiptap.state.doc.descendants((node, pos) => {
+      if (tableSlice !== null) return false;
+      if (node.type.name !== "table") return true;
+      tableSlice = tiptap.state.doc.slice(pos, pos + node.nodeSize);
+      return false;
+    });
+    if (tableSlice === null) throw new Error("표 조회 실패");
+    expect(
+      planTableCellPaste(
+        tiptap.state,
+        clip("cell", "<table></table>"),
+        tableSlice,
+      ),
+    ).toEqual({ kind: "pass" });
+  });
+
+  it("범위 시작이 셀 안이면 끝이 표 밖이어도 셀 계획이다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2), at("tail", 2));
+    expect(
+      planTableCellPaste(tiptap.state, clip("ab"), sliceOfSize(tiptap, 1)),
+    ).not.toBeNull();
+  });
+
+  it("무효 문자가 든 html slice는 정리해 넣는다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const dirty = new Slice(
+      Fragment.from(tiptap.schema.text(`a${SOH}b`)),
+      0,
+      0,
+    );
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("ab", `<p>a${SOH}b</p>`),
+      dirty,
+    );
+    expect(plan?.kind).toBe("insertSlice");
+    if (plan?.kind !== "insertSlice") return;
+    expect(plan.slice.content.textBetween(0, plan.slice.content.size)).toBe(
+      "ab",
+    );
+  });
+
   it("html 없는 유효한 평문은 delegate다", () => {
     const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
-    expect(planTableCellPaste(tiptap.state, clip("ab"), 1)).toEqual({
-      kind: "delegate",
-    });
+    expect(
+      planTableCellPaste(tiptap.state, clip("ab"), sliceOfSize(tiptap, 1)),
+    ).toMatchObject({ kind: "insertSlice" });
   });
 
   it("html이 내용을 가지면 delegate다", () => {
     const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
     expect(
-      planTableCellPaste(tiptap.state, clip(`a${SOH}b`, "<b>x</b>"), 3),
-    ).toEqual({ kind: "delegate" });
+      planTableCellPaste(
+        tiptap.state,
+        clip(`a${SOH}b`, "<b>x</b>"),
+        sliceOfSize(tiptap, 3),
+      ),
+    ).toMatchObject({ kind: "insertSlice" });
   });
 
   it("무효 문자가 섞인 평문은 정리본 pasteText다", () => {
     const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
-    expect(planTableCellPaste(tiptap.state, clip(`a${SOH}b`), 3)).toEqual({
+    expect(
+      planTableCellPaste(
+        tiptap.state,
+        clip(`a${SOH}b`),
+        sliceOfSize(tiptap, 3),
+      ),
+    ).toEqual({
       kind: "pasteText",
       text: "ab",
     });
@@ -121,7 +188,9 @@ describe("planTableCellPaste", () => {
 
   it("정리본이 비면 consume이다", () => {
     const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
-    expect(planTableCellPaste(tiptap.state, clip(SOH), 1)).toEqual({
+    expect(
+      planTableCellPaste(tiptap.state, clip(SOH), sliceOfSize(tiptap, 1)),
+    ).toEqual({
       kind: "consume",
     });
   });
@@ -130,21 +199,25 @@ describe("planTableCellPaste", () => {
 describe("planDefaultPaste", () => {
   it("클립보드가 없으면 delegate다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    expect(planDefaultPaste(tiptap.state, null, deps)).toEqual({
-      kind: "delegate",
+    expect(planDefaultPaste(tiptap.state, null, PM_SLICE, deps)).toEqual({
+      kind: "insertSlice",
+      slice: PM_SLICE,
     });
   });
 
   it("유효한 한 줄 평문은 delegate다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    expect(planDefaultPaste(tiptap.state, clip("xy"), deps)).toEqual({
-      kind: "delegate",
+    expect(planDefaultPaste(tiptap.state, clip("xy"), PM_SLICE, deps)).toEqual({
+      kind: "insertSlice",
+      slice: PM_SLICE,
     });
   });
 
   it("무효 문자가 섞인 한 줄 평문은 정리본 pasteText다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    expect(planDefaultPaste(tiptap.state, clip(`x${SOH}y`), deps)).toEqual({
+    expect(
+      planDefaultPaste(tiptap.state, clip(`x${SOH}y`), PM_SLICE, deps),
+    ).toEqual({
       kind: "pasteText",
       text: "xy",
     });
@@ -152,14 +225,16 @@ describe("planDefaultPaste", () => {
 
   it("블록을 못 만드는 html에 평문이 없으면 consume이다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    expect(planDefaultPaste(tiptap.state, clip("", "<meta>"), deps)).toEqual({
+    expect(
+      planDefaultPaste(tiptap.state, clip("", "<meta>"), PM_SLICE, deps),
+    ).toEqual({
       kind: "consume",
     });
   });
 
   it("여러 줄 평문은 직접 삽입 transaction을 dispatch한다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    const plan = planDefaultPaste(tiptap.state, clip("x\ny"), deps);
+    const plan = planDefaultPaste(tiptap.state, clip("x\ny"), PM_SLICE, deps);
     expect(plan.kind).toBe("dispatch");
   });
 
@@ -169,29 +244,35 @@ describe("planDefaultPaste", () => {
       planDefaultPaste(
         tiptap.state,
         clip("xy", "<p><b>xy</b></p>", true),
+        PM_SLICE,
         deps,
       ),
-    ).toEqual({ kind: "delegate" });
+    ).toEqual({ kind: "insertSlice", slice: PM_SLICE });
   });
 
   it("codeBlock 안 무효 문자 평문은 Tab을 남긴 pasteText다", () => {
     const tiptap = mountAt([codeBlockBlock("cb", "code")], at("cb", 2));
     expect(
-      planDefaultPaste(tiptap.state, clip(`a${TAB}b${SOH}`), deps),
+      planDefaultPaste(tiptap.state, clip(`a${TAB}b${SOH}`), PM_SLICE, deps),
     ).toEqual({ kind: "pasteText", text: `a${TAB}b` });
   });
 
   it("codeBlock 안 유효한 평문은 delegate다", () => {
     const tiptap = mountAt([codeBlockBlock("cb", "code")], at("cb", 2));
     expect(
-      planDefaultPaste(tiptap.state, clip("a\nb", "<p>a</p>"), deps),
-    ).toEqual({ kind: "delegate" });
+      planDefaultPaste(tiptap.state, clip("a\nb", "<p>a</p>"), PM_SLICE, deps),
+    ).toEqual({ kind: "insertSlice", slice: PM_SLICE });
   });
 
   describe("블록 삽입 배치", () => {
     it("자식 없는 블록 캐럿은 caret 배치다", () => {
       const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-      const plan = planDefaultPaste(tiptap.state, clip("", "<p>X</p>"), deps);
+      const plan = planDefaultPaste(
+        tiptap.state,
+        clip("", "<p>X</p>"),
+        PM_SLICE,
+        deps,
+      );
       expect(plan).toMatchObject({
         kind: "insertBlocks",
         placement: { kind: "caret", depth: 1 },
@@ -207,7 +288,12 @@ describe("planDefaultPaste", () => {
         ],
         at("li", 6),
       );
-      const plan = planDefaultPaste(tiptap.state, clip("", "<p>X</p>"), deps);
+      const plan = planDefaultPaste(
+        tiptap.state,
+        clip("", "<p>X</p>"),
+        PM_SLICE,
+        deps,
+      );
       expect(plan).toMatchObject({
         kind: "insertBlocks",
         placement: { kind: "blockBoundary", placement: { depth: 2 } },
@@ -225,7 +311,12 @@ describe("planDefaultPaste", () => {
         at("p1", 2),
         at("li", 6),
       );
-      const plan = planDefaultPaste(tiptap.state, clip("", "<p>X</p>"), deps);
+      const plan = planDefaultPaste(
+        tiptap.state,
+        clip("", "<p>X</p>"),
+        PM_SLICE,
+        deps,
+      );
       expect(plan).toMatchObject({
         kind: "insertBlocks",
         placement: { kind: "afterRangeDelete" },
@@ -234,7 +325,12 @@ describe("planDefaultPaste", () => {
 
     it("Markdown으로 감지된 평문도 블록 삽입이다", () => {
       const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-      const plan = planDefaultPaste(tiptap.state, clip("# 제목"), deps);
+      const plan = planDefaultPaste(
+        tiptap.state,
+        clip("# 제목"),
+        PM_SLICE,
+        deps,
+      );
       expect(plan).toMatchObject({
         kind: "insertBlocks",
         placement: { kind: "caret" },
@@ -245,8 +341,8 @@ describe("planDefaultPaste", () => {
   it("계획은 문서를 바꾸지 않는다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
     const before = tiptap.state.doc;
-    planDefaultPaste(tiptap.state, clip("x\ny", "<p>X</p>"), deps);
-    planDefaultPaste(tiptap.state, clip("x\ny"), deps);
+    planDefaultPaste(tiptap.state, clip("x\ny", "<p>X</p>"), PM_SLICE, deps);
+    planDefaultPaste(tiptap.state, clip("x\ny"), PM_SLICE, deps);
     expect(tiptap.state.doc).toBe(before);
   });
 });

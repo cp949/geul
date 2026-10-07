@@ -285,13 +285,12 @@ describe("표 밖 서식 없이 붙여넣기(Issue #303)", () => {
       expect(outline(blocksOf(editor))).toEqual(["p:aba", "p:tail"]);
     });
 
-    it("defaultPasteHandler()는 html을 건너뛰고 PM 기본 위임(false)을 돌려준다", () => {
-      // 위임 결과 false를 pasteHandler가 그대로 돌려주면 handlePaste가 취소로
-      // 해석해 붙여넣기가 일어나지 않는다. 한 줄 평문만 있는 Ctrl+V와 같은 현행
-      // 동작이다. 여기서는 기본 처리가 평문 경로를 탔는지만 본다. html을 가져오면
-      // true를 돌려준다.
+    it("defaultPasteHandler()는 html을 건너뛰고 평문을 넣은 뒤 true를 돌려준다", () => {
+      // 기본 처리가 PM 파싱 slice를 직접 넣는다(Issue #306, #305 흡수). 예전에는
+      // PM 기본에 위임하는 false를 돌려줘 pasteHandler가 그대로 돌려주면 취소로
+      // 읽혔다.
       const delegated: boolean[] = [];
-      const { editable } = caretAtEnd({
+      const { editor, editable } = caretAtEnd({
         pasteHandler: ({ defaultPasteHandler }) => {
           delegated.push(defaultPasteHandler());
           return true;
@@ -300,7 +299,8 @@ describe("표 밖 서식 없이 붙여넣기(Issue #303)", () => {
 
       shiftPaste(editable, BOLD_X);
 
-      expect(delegated).toEqual([false]);
+      expect(delegated).toEqual([true]);
+      expect(outline(blocksOf(editor))).toEqual(["p:aba", "p:tail"]);
     });
 
     it("핸들러는 event로 text/html을 직접 읽을 수 있다", () => {
@@ -332,10 +332,12 @@ describe("표 밖 서식 없이 붙여넣기(Issue #303)", () => {
       pasteData(editable, { "text/html": "<i>y</i>", "text/plain": "b" });
       const before = outline(blocksOf(editor));
 
-      // 평문 요청이 확정돼 있으면 html을 건너뛰고 PM 기본에 위임(false)한다.
-      // 현재 값을 다시 읽으면 html을 가져와 문서를 바꾸고 true를 돌려준다.
-      expect(deferred?.()).toBe(false);
-      expect(outline(blocksOf(editor))).toEqual(before);
+      // 평문 요청이 확정돼 있으면 html을 건너뛰고 붙여넣기 시점의 평문 "a"를
+      // 넣는다(Issue #306). 현재 값을 다시 읽으면 html의 bold x나 다음
+      // 붙여넣기의 italic y를 블록으로 가져온다.
+      expect(before).toEqual(["p:ab", "p:tail"]);
+      expect(deferred?.()).toBe(true);
+      expect(outline(blocksOf(editor))).toEqual(["p:aba", "p:tail"]);
     });
   });
 

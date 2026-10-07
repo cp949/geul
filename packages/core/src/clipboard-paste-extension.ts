@@ -1,7 +1,7 @@
 import type { IdFactory } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
+import { Slice } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
-import { CellSelection, isInTable } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { EditorController } from "./editor-controller-types.js";
@@ -16,10 +16,7 @@ import {
   planPlainDrop,
   planTableCellPaste,
 } from "./paste-plan.js";
-import {
-  plainTextClipboardParser,
-  sanitizeSliceInlineText,
-} from "./plain-text-paste.js";
+import { plainTextClipboardParser } from "./plain-text-paste.js";
 
 // spec §7.3은 HTML 붙여넣기가 문서 HTML import와 같은 sanitizer·매핑을
 // 재사용해야 한다고 못 박는다 — 개별 Tiptap 확장의 parseHTML을 하나씩
@@ -133,15 +130,44 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     };
 
     // 붙여넣기 계획을 실행하고 handlePaste 반환값을 돌려준다.
+    // plain은 transformPasted가 기록한 평문 신호다. PM 기본 붙여넣기의
+    // preferPlain(Shift 여부)은 PM 비공개라 이 신호로 근사한다. 차이는 단일
+    // 노드 slice의 마크 상속에서만 난다. 단일 텍스트 노드 slice는 codeBlock
+    // 안(마크 없음)에서만 생긴다.
     const runPastePlan = (
       view: EditorView,
       plan: PastePlan,
       event: ClipboardEvent,
+      plain: boolean,
     ): boolean => {
       switch (plan.kind) {
         case "pass":
         case "delegate":
           return false;
+        case "insertSlice": {
+          // PM 기본 붙여넣기(prosemirror-view 1.42.3 doPaste)와 같은 삽입이다.
+          // PM은 파싱 결과가 없으면 정적 Slice.empty를 넘기고 붙여넣기를
+          // 처리하지 않는다.
+          const { slice } = plan;
+          if (slice === Slice.empty) return false;
+          const singleNode =
+            slice.openStart === 0 &&
+            slice.openEnd === 0 &&
+            slice.content.childCount === 1
+              ? slice.content.firstChild
+              : null;
+          const tr =
+            singleNode === null
+              ? view.state.tr.replaceSelection(slice)
+              : view.state.tr.replaceSelectionWith(singleNode, plain);
+          view.dispatch(
+            tr
+              .scrollIntoView()
+              .setMeta("paste", true)
+              .setMeta("uiEvent", "paste"),
+          );
+          return true;
+        }
         case "consume":
           return true;
         case "pasteText":
@@ -211,29 +237,18 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           // 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
           // 자식 있는 블록의 D23 배치는 이 경로로 만들 수 없다(spec 7.3).
           clipboardTextParser: plainTextClipboardParser,
-          // 표 셀 안 캐럿·같은 셀 안 범위의 slice에서 무효 문자를 지운다(Issue
-          // #302). 셀 안에서 html이 내용을 가지면 handlePaste가 PM 기본에
-          // 맡기는데 PM 기본은 slice의 무효 문자를 거르지 않아 되돌림 guard가
-          // 붙여넣기를 통째로 지운다. PM은 handlePaste 호출 전에 이 변환을
-          // 적용한다. html 출처와 Ctrl+Shift+V 평문 출처 slice를 같은 코드가
-          // 덮는다. 아래 handlePaste는 정리된 slice를 받는다.
-          // - CellSelection은 유효 평문도 PM 기본이 되돌리는 별개 결함이라 제외한다.
-          // - 표 밖은 아래 handlePaste의 기존 경로가 처리하므로 바꾸지 않는다.
-          // - drop은 제외한다. PM이 drop에도 이 변환을 부르지만 그때
-          //   view.state.selection은 drop 위치를 반영하지 않는다. 캐럿이 셀
-          //   안이면 다른 위치 drop까지 정리해 codeBlock의 Tab을 지운다.
-          // 같은 변환이 3번째 인자로 평문 요청을 기록한다(Issue #303). drop에도
-          // 불리지만 drop은 handlePaste를 거치지 않아 기록하지 않는다.
-          transformPasted: (slice, view, plain) => {
+          // PM이 이번 붙여넣기를 평문 경로로 만들었다는 신호를 기록한다(Issue
+          // #303). slice는 바꾸지 않는다. 표 셀 안 정리는 붙여넣기 계획이
+          // handlePaste 시점의 state로 한다(Issue #306). 이 hook은 표 경계 범위
+          // 삭제 전에 불려 지우기 전 state를 본다.
+          // drop에도 불리지만 drop은 handlePaste를 거치지 않아 기록하지 않는다.
+          transformPasted: (slice, _view, plain) => {
             if (dropInFlight) return slice;
             plainPasteRequested = plain;
             queueMicrotask(() => {
               plainPasteRequested = false;
             });
-            return isInTable(view.state) &&
-              !(view.state.selection instanceof CellSelection)
-              ? sanitizeSliceInlineText(slice)
-              : slice;
+            return slice;
           },
           // drop 이벤트 처리 중에만 true다. PM은 drop 이벤트 안에서 slice를
           // 동기로 만든다. 같은 호출 스택이 끝나면 microtask가 내린다.
@@ -268,10 +283,10 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
             const tableCellPlan = planTableCellPaste(
               view.state,
               clipboard,
-              slice.size,
+              slice,
             );
             if (tableCellPlan !== null) {
-              return runPastePlan(view, tableCellPlan, event);
+              return runPastePlan(view, tableCellPlan, event, preferPlain);
             }
 
             // spec §10(IO-008) — 기본 처리 전체를 defaultPasteHandler로
@@ -280,11 +295,12 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
             const defaultHandlePaste = (): boolean =>
               runPastePlan(
                 view,
-                planDefaultPaste(view.state, clipboard, {
+                planDefaultPaste(view.state, clipboard, slice, {
                   createId,
                   ...(iframeEmbed === undefined ? {} : { iframeEmbed }),
                 }),
                 event,
+                preferPlain,
               );
 
             if (pasteHandler === undefined || controllerFacade === undefined) {

@@ -10,7 +10,8 @@ import {
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
-import { CellSelection, isInTable } from "@tiptap/pm/tables";
+import type { Slice } from "@tiptap/pm/model";
+import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
 import {
   selectionIntersectsAnyCodeBlock,
@@ -29,6 +30,7 @@ import {
   normalizeKeepingTabs,
   normalizeLineBreaks,
   normalizePasteText,
+  sanitizeSliceInlineText,
   splitPlainTextLines,
 } from "./plain-text-paste.js";
 
@@ -36,9 +38,9 @@ import {
 // 정한다. 문서를 바꾸지 않는다. 실행은 ClipboardPasteExtension이 한다
 // (Issue #306). core 내부 module이고 index.ts로 내보내지 않는다(ADR 0002).
 //
-// 판정 순서와 술어 정의는 계획 도입 전 handlePaste와 같다. 정의가 서로
-// 다른 술어(codeBlock 안 판정 3종, 셀 안 판정의 $head·$from)는 이름으로만
-// 구분하고 통일하지 않는다. 통일은 동작 변경이다.
+// 판정 순서는 계획 도입 전 handlePaste와 같다. 삽입은 PM 기본에 맡기지
+// 않는다. PM 기본과 같은 삽입(insertSlice)도 실행기가 한다(Issue #306). 셀
+// 안 판정은 선택 시작($from)으로 한다.
 
 // 클립보드에서 읽은 값이다. plain은 PM이 이번 붙여넣기를 평문 경로로
 // 만들었다는 신호다(Issue #303, transformPasted의 3번째 인자).
@@ -58,9 +60,12 @@ export type BlockInsertPlacement =
   | { kind: "afterRangeDelete" }
   | { kind: "caret"; depth: number };
 
-// 계획 결과다. 실행기가 handlePaste 반환값을 정한다.
-// - pass: 다른 plugin 소관이다(CellSelection). false.
-// - delegate: PM 기본 붙여넣기에 맡긴다. false.
+// 계획 결과다. 실행기가 handlePaste·handleDrop 반환값을 정한다.
+// - pass: 다른 plugin 소관이다. false. prosemirror-tables가 처리하는
+//   CellSelection과 셀 안에 붙이는 셀 조각 slice다.
+// - delegate: PM 기본 drop에 맡긴다. false. drop 계획만 쓴다.
+// - insertSlice: PM이 파싱한 slice를 PM 기본 붙여넣기와 같은 방식으로
+//   넣는다. true. 파싱 결과가 없는 정적 Slice.empty면 false다(PM 기본과 같다).
 // - consume: 문서를 바꾸지 않고 이벤트만 소비한다. true.
 // - pasteText: 정리한 평문을 PM 평문 경로로 넣는다. true.
 // - dispatch: 이미 만든 transaction을 보낸다. true.
@@ -68,6 +73,7 @@ export type BlockInsertPlacement =
 export type PastePlan =
   | { kind: "pass" }
   | { kind: "delegate" }
+  | { kind: "insertSlice"; slice: Slice }
   | { kind: "consume" }
   | { kind: "pasteText"; text: string }
   | { kind: "dispatch"; transaction: Transaction }
@@ -181,16 +187,30 @@ const planInsertBlocks = (
   };
 };
 
+// 선택 시작($from)이 표 행 안인지 판정한다. 표 경계 범위는
+// TableBoundaryInputExtension이 이 판정 전에 지운다(Issue #292). 남는
+// TextSelection은 한 셀 안이거나 표 밖이라 시작만 봐도 된다.
+const selectionStartsInTable = (state: EditorState): boolean => {
+  const { $from } = state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type.spec.tableRole === "row") return true;
+  }
+  return false;
+};
+
 // 표 셀 안 붙여넣기 계획이다. 표 안이 아니면 null이다. 표 안은
 // pasteHandler를 부르지 않는다(roadmap.md "제외 범위", IO-008은 표·미디어
-// 붙여넣기를 대상으로 하지 않는다). 기본은 PM 기본에 맡긴다(R1 계약).
-// 예외는 PM 기본이 평문을 잃는 두 경우다. 무효 문자가 섞인 평문(Issue
-// #297)과 빈 slice html에 딸린 평문(Issue #301)이다. 정리본을 평문으로
-// 넣는다. 판정은 isInTable($head)이다.
-// - CellSelection은 유효 평문도 PM 기본이 되돌리는 별개 결함이다(#300).
-// - html이 실제 내용(sliceSize > 0)을 가지면 PM이 html만 쓴다. 개입하면
-//   셀 서식을 잃는다. slice는 transformPasted가 이미 정리한 본이다(Issue
-//   #302). html의 무효 문자는 PM 기본이 넣기 전에 지워진다.
+// 붙여넣기를 대상으로 하지 않는다). 기본은 PM이 파싱한 slice를 그대로
+// 넣는다(R1 계약). 넣기 전에 slice의 무효 문자를 지운다(Issue #302). 지우지
+// 않으면 되돌림 guard가 붙여넣기를 통째로 지운다. 예외는 PM 파싱이 평문을
+// 잃는 두 경우다. 무효 문자가 섞인 평문(Issue #297)과 빈 slice html에 딸린
+// 평문(Issue #301)이다. 정리본을 평문으로 넣는다.
+// - CellSelection은 prosemirror-tables가 처리한다. 유효 평문도 되돌려지는
+//   별개 결함이다(#300).
+// - 셀 조각 slice(표 안에서 복사한 셀)는 prosemirror-tables가 셀 단위로
+//   넣는다.
+// - html이 실제 내용(slice.size > 0)을 가지면 html만 쓴다. 평문으로
+//   개입하면 셀 서식을 잃는다.
 // - html이 있어도 PM 파싱 결과가 빈 slice이면 PM은 평문을 버린다.
 //   공백·meta·StartFragment 주석·빈 문단이 해당한다. 평문을 넣는다.
 //   무효 문자뿐인 html도 정리 뒤 빈 slice라 여기에 든다.
@@ -199,23 +219,35 @@ const planInsertBlocks = (
 export const planTableCellPaste = (
   state: EditorState,
   clipboard: PasteClipboard | null,
-  sliceSize: number,
+  slice: Slice,
 ): PastePlan | null => {
-  if (!isInTable(state)) return null;
-  if (state.selection instanceof CellSelection) return { kind: "pass" };
-  if (clipboard === null) return { kind: "delegate" };
+  if (!selectionStartsInTable(state)) return null;
+  if (
+    state.selection instanceof CellSelection ||
+    __pastedCells(slice) !== null
+  ) {
+    return { kind: "pass" };
+  }
+  // html 내용 유무는 정리한 slice로 판정한다. 무효 문자뿐인 html은 정리 뒤
+  // 빈 slice라 평문 분기로 내려간다.
+  const sanitized = sanitizeSliceInlineText(slice);
+  const insertSanitizedSlice: PastePlan = {
+    kind: "insertSlice",
+    slice: sanitized,
+  };
+  if (clipboard === null) return insertSanitizedSlice;
   const { html, text: rawText } = clipboard;
-  if (html.length > 0 && sliceSize > 0) return { kind: "delegate" };
-  // 평문이 비면 개입하지 않는다. 빈 slice html이면 PM 기본이 범위만
-  // 지운다(현행 유지).
-  if (rawText.length === 0) return { kind: "delegate" };
-  // html이 없는 유효한 평문은 PM 기본에 맡긴다. PM 기본이 raw 무효
-  // 문자를 넣으면 되돌림 guard가 붙여넣기를 통째로 지운다. Tab도
-  // 셀에서는 무효라 정리본이 raw와 다르다. 정리본이 비면 이벤트만
-  // 소비한다. html이 빈 slice이면 유효한 평문도 아래로 내려간다.
+  if (html.length > 0 && sanitized.size > 0) return insertSanitizedSlice;
+  // 평문이 비면 개입하지 않는다. 빈 slice html이면 범위만 지운다(현행
+  // 유지).
+  if (rawText.length === 0) return insertSanitizedSlice;
+  // html이 없는 유효한 평문은 PM이 파싱한 slice를 넣는다. raw 무효 문자는
+  // 정리본으로 넣는다. Tab도 셀에서는 무효라 정리본이 raw와 다르다.
+  // 정리본이 비면 이벤트만 소비한다. html이 빈 slice이면 유효한 평문도
+  // 아래로 내려간다.
   const cleaned = normalizePasteText(rawText);
   if (html.length === 0 && cleaned === normalizeLineBreaks(rawText)) {
-    return { kind: "delegate" };
+    return insertSanitizedSlice;
   }
   if (cleaned.length === 0) return { kind: "consume" };
   return { kind: "pasteText", text: cleaned };
@@ -226,8 +258,11 @@ export const planTableCellPaste = (
 export const planDefaultPaste = (
   state: EditorState,
   clipboard: PasteClipboard | null,
+  slice: Slice,
   deps: DefaultPastePlanDeps,
 ): PastePlan => {
+  // PM이 파싱한 slice를 PM 기본 붙여넣기와 같은 방식으로 넣는다.
+  const insertPmSlice: PastePlan = { kind: "insertSlice", slice };
   // 코드블록 안에서는 이 기본 처리만 손대지 않는다(Issue #198)
   // — 표·미디어와 달리 codeBlock은 pasteHandler 범위 밖이
   // 아니다(roadmap.md "제외 범위" — pasteHandler는 표·미디어만
@@ -243,12 +278,12 @@ export const planDefaultPaste = (
   // codeBlock 한복판에 구조적으로 삽입해버린다. codeBlock spec의
   // code: true 덕분에 PM의 parseFromClipboard(prosemirror-view)가
   // caret이 code 안에 있으면 이미 text/html을 무시하고 text/plain
-  // 만으로 순수 텍스트 slice를 만들어두므로, 여기서 PM 기본에 맡겨
-  // 그 처리를 그대로 살린다 — 별도로 "text/plain 우선" 로직을 새로
+  // 만으로 순수 텍스트 slice를 만들어두므로, 여기서 그 slice를 그대로
+  // 넣는다 — 별도로 "text/plain 우선" 로직을 새로
   // 만들 필요가 없다. 접힌 toggle의 숨은 codeBlock도 범위 안이면
   // 같은 분기다. 붙여넣기는 범위 전체를 바꾼다(Issue #264). 무효
   // 문자가 섞인 평문만 예외다. 아래에서 정리본을 넣는다(Issue #296).
-  if (clipboard === null) return { kind: "delegate" };
+  if (clipboard === null) return insertPmSlice;
 
   // 서식 없이 붙여넣기(Ctrl+Shift+V)면 text/html을 읽지 않는다(Issue
   // #303). html.length가 아래 모든 html 분기(범위 합류·html import·
@@ -303,21 +338,21 @@ export const planDefaultPaste = (
       !state.selection.empty && !selectionStartsInCodeBlock(state.selection);
     if (!rangeStartsOutsideCodeBlock) {
       // 캐럿·시작이 codeBlock 안이다(Issue #296). 유효한 평문은
-      // PM 기본에 맡긴다. PM이 codeBlock 안에서 html을 무시하고
-      // 평문만 넣는다. 무효 문자가 섞였으면 정리본을 평문으로
+      // PM 파싱 slice를 넣는다. PM이 codeBlock 안에서 html을 무시하고
+      // 평문만 파싱한다. 무효 문자가 섞였으면 정리본을 평문으로
       // 넣는다. Tab·LF는 codeBlock 내용이라 지우지 않는다. 정리본이
-      // 비면 이벤트만 소비한다. PM 기본이 raw 무효 문자를 넣으면
-      // 되돌림 guard가 붙여넣기를 통째로 지운다.
+      // 비면 이벤트만 소비한다. raw 무효 문자를 넣으면 되돌림 guard가
+      // 붙여넣기를 통째로 지운다.
       const codeText = normalizeKeepingTabs(rawText);
       if (codeText === normalizeLineBreaks(rawText)) {
-        return { kind: "delegate" };
+        return insertPmSlice;
       }
       if (codeText.length === 0) return { kind: "consume" };
       return { kind: "pasteText", text: codeText };
     }
     const multilinePlain = splitPlainTextLines(text).length >= 2;
     if (html.length === 0 && !multilinePlain && delegable) {
-      return { kind: "delegate" };
+      return insertPmSlice;
     }
   }
 
@@ -360,17 +395,17 @@ export const planDefaultPaste = (
   }
 
   // 평문도 비면 html 분기에서 온 경우만 이벤트를 소비한다(문서
-  // 불변). html이 없던 경우는 PM 기본 처리에 위임한다. 빈 판정은
+  // 불변). html이 없던 경우는 PM 파싱 slice를 넣는다. 빈 판정은
   // rawText로 한다. 제어문자만 있는 입력은 text가 비어도 아래에서
-  // 이벤트를 소비한다. 위임하면 PM 기본이 raw 제어문자를 넣는다.
+  // 이벤트를 소비한다. PM 파싱 slice에는 raw 제어문자가 남는다.
   if (rawText.length === 0) {
-    return htmlFellBack ? { kind: "consume" } : { kind: "delegate" };
+    return htmlFellBack ? { kind: "consume" } : insertPmSlice;
   }
 
   // codeBlock에 걸친 범위가 여기 닿는 경우는 html 폴백과 여러 줄
   // 평문(Issue #285)이다. Markdown 감지를 건너뛴다(spec 7.3
   // 한계 유지, #286). 여러 줄이면 직접 삽입한다. 직접 삽입을 못
-  // 하면 유효한 평문 단독은 PM 기본에 위임한다. html 폴백과 무효
+  // 하면 유효한 평문 단독은 PM 파싱 slice를 넣는다. html 폴백과 무효
   // 문자가 섞인 평문은 정리본을 PM 평문 경로로 보낸다. 한 줄 html
   // 폴백은 PM 평문 경로 그대로다. 제어문자만 있으면 이벤트만
   // 소비한다(Issue #295).
@@ -383,7 +418,7 @@ export const planDefaultPaste = (
       );
       if (transaction !== null) return { kind: "dispatch", transaction };
     }
-    if (!htmlFellBack && delegable) return { kind: "delegate" };
+    if (!htmlFellBack && delegable) return insertPmSlice;
     if (text.length === 0) return { kind: "consume" };
     return { kind: "pasteText", text };
   }
@@ -404,7 +439,7 @@ export const planDefaultPaste = (
   // 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 입력은 위에서
   // 정규화한 text다 — 무효 문자 처리는 아래 분기와 같은 결과다.
   // 직접 배치할 수 없으면(NodeSelection 등) tr을 버리고 아래
-  // 기존 분기로 PM 기본 처리에 위임한다. 코드블록에 걸친 범위는
+  // 기존 분기로 내려간다. 코드블록에 걸친 범위는
   // 위 분기가 이미 처리했다.
   const lines = splitPlainTextLines(text);
   if (lines.length >= 2) {
@@ -412,28 +447,27 @@ export const planDefaultPaste = (
     if (transaction !== null) return { kind: "dispatch", transaction };
   }
 
-  // 감지되지 않은 단순 plain text는 PM 기본 처리(paragraph
-  // 분리 등)에 그대로 위임해왔다. 하지만 model은 inline text에서
-  // LF를 제외한 C0 제어문자·DEL·짝 없는 surrogate를 금지하는데
-  // (document-structure-validation.ts), PM 기본 처리는 그
-  // 불변식을 모르고 원본 그대로 문서에 넣는다 — 문서 검증이
-  // 실패해 되돌림 guard(revision-guard-extension.ts)가 붙여넣기를
-  // 통째로 지운다(Issue #295). guard가 없던 때는 model 검증이
-  // 뒤늦게 던지는 TypeError가 uncaught exception이 됐다(QA-078
-  // 회귀 발견). 원본이 이미 유효하면(가장 흔한 경우) 위임을
-  // 그대로 유지해 기존 단락 분리 동작을 안 건드리고, 무효
-  // 문자가 있을 때만 정규화한 텍스트로 PM 자신의
-  // view.pasteText를 호출한다 — doPaste를 그대로 재사용해
-  // 네이티브와 같은 단락 분리를 유지하면서 무효 문자만 뺀다.
+  // 감지되지 않은 단순 plain text는 PM 파싱 slice(paragraph 분리
+  // 등)를 넣는다. 하지만 model은 inline text에서 LF를 제외한 C0
+  // 제어문자·DEL·짝 없는 surrogate를 금지하는데
+  // (document-structure-validation.ts), PM 파싱은 그 불변식을 모르고
+  // 원본 그대로 slice에 넣는다 — 문서 검증이 실패해 되돌림
+  // guard(revision-guard-extension.ts)가 붙여넣기를 통째로 지운다
+  // (Issue #295). guard가 없던 때는 model 검증이 뒤늦게 던지는
+  // TypeError가 uncaught exception이 됐다(QA-078 회귀 발견). 원본이
+  // 이미 유효하면(가장 흔한 경우) PM 파싱 slice를 그대로 넣어 기존
+  // 단락 분리 동작을 안 건드리고, 무효 문자가 있을 때만 정규화한
+  // 텍스트로 PM 자신의 view.pasteText를 호출한다 — 네이티브와 같은
+  // 단락 분리를 유지하면서 무효 문자만 뺀다.
   //
-  // html에서 폴백한 경우는 원본이 유효해도 위임하지 않는다. PM
-  // 기본 처리는 비어 있지 않은 text/html이 있으면 text/plain을 버려
-  // 평문이 사라진다(Issue #287). pasteText는 html 없이 평문만 쓴다.
+  // html에서 폴백한 경우는 원본이 유효해도 PM 파싱 slice를 쓰지 않는다.
+  // PM은 비어 있지 않은 text/html이 있으면 text/plain을 버려 평문이
+  // 사라진다(Issue #287). pasteText는 html 없이 평문만 쓴다.
   //
   // CR은 무효 문자로 세지 않는다(Issue #291). CR을 LF로 바꾼 것만
-  // 다르면(delegable) raw 그대로 위임한다. PM 기본 처리와
+  // 다르면(delegable) PM 파싱 slice를 넣는다. PM 파싱과
   // clipboardTextParser가 CR을 줄 경계로 나눈다.
-  if (delegable && !htmlFellBack) return { kind: "delegate" };
+  if (delegable && !htmlFellBack) return insertPmSlice;
   if (text.length === 0) return { kind: "consume" };
   return { kind: "pasteText", text };
 };
