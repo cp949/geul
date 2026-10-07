@@ -1,4 +1,4 @@
-import { isNestableBlockType } from "@cp949/geul-model";
+import { isNestableBlockType, sanitizeInlineText } from "@cp949/geul-model";
 import {
   Fragment,
   Slice,
@@ -32,9 +32,34 @@ import { splitAtCaret } from "./block-split-extension.js";
 //   경로로 만들 수 없다. PM Fitter가 꼬리 텍스트를 가르면서 기존 blockGroup을
 //   함께 옮기기 때문이다. 한계는 r2 스펙 7.3이 소유한다.
 
-// PM parseFromClipboard의 줄 분리와 같은 정규식이다. 직접 삽입은 sanitize 뒤
-// 호출하므로 CR이 남지 않는다. 연속 개행은 한 경계로 묶는다(Q2, 현행 유지).
+// PM parseFromClipboard의 줄 분리와 같은 정규식이다. 직접 삽입은
+// normalizePasteText 뒤 호출하므로 CR이 남지 않는다. clipboardTextParser는
+// raw 입력도 받아 CR 분기가 쓰인다. 연속 개행은 한 경계로 묶는다(Q2, 현행 유지).
 const LINE_BREAKS = /(?:\r\n?|\n)+/;
+
+// 줄 경계를 LF로 통일한다(Issue #291). 경계는 CRLF·CR·LF만이다. U+2028·
+// U+2029·U+0085는 건드리지 않는다. sanitizeInlineText가 CR을 지우므로 항상
+// 그보다 먼저 호출한다.
+export const normalizeLineBreaks = (text: string): string =>
+  text.replace(/\r\n?/g, "\n");
+
+// 붙여넣기·drop 평문의 삽입용 정규화본이다(Issue #291). CR을 줄 경계로
+// 바꾼 뒤 무효 문자(LF 외 C0·DEL·Tab·짝 없는 surrogate)를 지운다. 직접 삽입,
+// codeBlock 분기, PM 폴백, drop이 이 결과를 쓴다.
+export const normalizePasteText = (text: string): string =>
+  sanitizeInlineText(normalizeLineBreaks(text));
+
+// Markdown 감지 전용 정규화본이다(Issue #291). 삽입용과 Tab 처리만 다르다.
+// Tab은 지우지 않는다. 중첩 목록·들여쓴 코드의 구조이고 마커 뒤 공백이며
+// 코드 내용이다. model의 codeBlock 정책도 Tab을 허용한다. Tab 외 무효
+// 문자(LF 외 C0·DEL·짝 없는 surrogate)는 삽입 경로와 같게 지운다.
+// 인라인 본문에 남은 Tab은 importMarkdown이 거절해 감지가 꺼진다(QA-078 Tab
+// 정책, 이전과 같다).
+export const normalizeForMarkdownDetection = (text: string): string =>
+  normalizeLineBreaks(text)
+    .split("\t")
+    .map((part) => sanitizeInlineText(part))
+    .join("\t");
 
 // 줄 분해. 앞·뒤 개행은 빈 줄로 남아 줄 경계가 된다(Q7).
 export const splitPlainTextLines = (text: string): string[] =>
