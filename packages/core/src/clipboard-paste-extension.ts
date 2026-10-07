@@ -196,6 +196,14 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     let sanitizedPasteInFlight = false;
     // drop 이벤트 안에서 PM이 부르는 transformPasted를 건너뛰는 플래그다(Issue #302).
     let dropInFlight = false;
+    // Ctrl+Shift+V(서식 없이 붙여넣기) 요청이다(Issue #303). PM은 handlePaste를
+    // 부르기 직전 같은 호출 스택에서 transformPasted의 3번째 인자로 평문 요청
+    // 여부를 알려 준다. view.input.shiftKey는 PM 비공개라 쓰지 않는다. PM이
+    // Shift+Insert를 평문으로 보지 않는 예외도 이 인자에 이미 반영돼 있다.
+    // transformPasted가 기록하고 handlePaste 진입에서 읽어 내린다. 다른
+    // 플러그인이 붙여넣기를 먼저 소비하면 이 플러그인의 handlePaste가 불리지
+    // 않으므로 microtask로도 내린다.
+    let plainPasteRequested = false;
 
     // PM 자신의 평문 붙여넣기(doPaste)를 재진입 가드 안에서 호출한다.
     const pasteTextThroughPm = (
@@ -229,12 +237,19 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           // - drop은 제외한다. PM이 drop에도 이 변환을 부르지만 그때
           //   view.state.selection은 drop 위치를 반영하지 않는다. 캐럿이 셀
           //   안이면 다른 위치 drop까지 정리해 codeBlock의 Tab을 지운다.
-          transformPasted: (slice, view) =>
-            !dropInFlight &&
-            isInTable(view.state) &&
-            !(view.state.selection instanceof CellSelection)
+          // 같은 변환이 3번째 인자로 평문 요청을 기록한다(Issue #303). drop에도
+          // 불리지만 drop은 handlePaste를 거치지 않아 기록하지 않는다.
+          transformPasted: (slice, view, plain) => {
+            if (dropInFlight) return slice;
+            plainPasteRequested = plain;
+            queueMicrotask(() => {
+              plainPasteRequested = false;
+            });
+            return isInTable(view.state) &&
+              !(view.state.selection instanceof CellSelection)
               ? sanitizeSliceInlineText(slice)
-              : slice,
+              : slice;
+          },
           // drop 이벤트 처리 중에만 true다. PM은 drop 이벤트 안에서 slice를
           // 동기로 만든다. 같은 호출 스택이 끝나면 microtask가 내린다.
           handleDOMEvents: {
@@ -247,6 +262,12 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
             },
           },
           handlePaste: (view, event, slice) => {
+            // 평문 요청을 가드보다 먼저 읽어 내린다(Issue #303). pasteText 재진입도
+            // transformPasted를 다시 불러 요청을 켜므로 가드 뒤에서 읽으면 남는다.
+            // 상수로 확정해 pasteHandler가 나중에 부른 defaultPasteHandler도 이
+            // 붙여넣기의 요청을 따른다.
+            const preferPlain = plainPasteRequested;
+            plainPasteRequested = false;
             if (sanitizedPasteInFlight) return false;
             // 표 셀 안은 PM 기본에 맡긴다(R1 계약). pasteHandler도 호출하지
             // 않는다(roadmap.md "제외 범위", IO-008은 표·미디어 붙여넣기를
@@ -317,7 +338,13 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               const clipboardData = event.clipboardData;
               if (clipboardData === null) return false;
 
-              const html = clipboardData.getData("text/html");
+              // 서식 없이 붙여넣기(Ctrl+Shift+V)면 text/html을 읽지 않는다(Issue
+              // #303). html.length가 아래 모든 html 분기(범위 합류·html import·
+              // 폴백)를 지배해 비우면 평문 경로로 내려간다. PM은 평문이 있을 때만
+              // 요청을 켜므로 평문 없는 html 단독 클립보드는 영향이 없다.
+              const html = preferPlain
+                ? ""
+                : clipboardData.getData("text/html");
               // rawText는 클립보드 값 그대로다. text는 삽입용 정규화본이다
               // (Issue #291). CR을 LF로 바꾼 뒤 무효 문자를 지운다. 감지만
               // Tab을 지우지 않는 별도 정규화본을 쓴다.
