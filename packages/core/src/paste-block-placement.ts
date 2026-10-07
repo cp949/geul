@@ -1,4 +1,5 @@
 import { isNestableBlockType } from "@cp949/geul-model";
+import type { ResolvedPos } from "@tiptap/pm/model";
 import { type Selection, TextSelection } from "@tiptap/pm/state";
 
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
@@ -25,6 +26,24 @@ export type PasteBlockPlacement = {
   depth: number;
 };
 
+// 위치가 자식 있는 블록의 텍스트 끝인지 판정한다. 두 판정 함수가 같은
+// 조건을 공유해 한쪽만 바뀌어 대상 집합에 틈이 생기는 일을 막는다.
+// - 위치의 부모가 중첩 가능한 텍스트블록이다.
+// - 위치가 그 텍스트블록 내용의 끝이다.
+// - 그 블록 컨테이너가 자식 blockGroup을 가진다.
+const endsAtChildrenBlockEnd = ($pos: ResolvedPos): boolean => {
+  const textblock = $pos.parent;
+  if (!textblock.isTextblock || !isNestableBlockType(textblock.type.name)) {
+    return false;
+  }
+  if ($pos.parentOffset !== textblock.content.size) return false;
+  if ($pos.depth < 2) return false;
+
+  const container = $pos.node($pos.depth - 1);
+  if (container.type.name !== "blockContainer") return false;
+  return container.lastChild?.type.name === "blockGroup";
+};
+
 // 배치를 계산한다. 아래 중 하나라도 아니면 null이다. 호출부는 현행
 // insertContent를 쓴다.
 // - TextSelection이다.
@@ -38,18 +57,10 @@ export const resolvePasteBlockPlacement = (
   const { $from, $to } = selection;
   // 노드 인스턴스는 공유될 수 있다. 위치 기준으로 같은 부모를 판정한다.
   if (!$from.sameParent($to)) return null;
+  if (!endsAtChildrenBlockEnd($to)) return null;
+
   const textblock = $to.parent;
-  if (!textblock.isTextblock || !isNestableBlockType(textblock.type.name)) {
-    return null;
-  }
-  if ($to.parentOffset !== textblock.content.size) return null;
-  if ($to.depth < 2) return null;
-
   const containerDepth = $to.depth - 1;
-  const container = $to.node(containerDepth);
-  if (container.type.name !== "blockContainer") return null;
-  if (container.lastChild?.type.name !== "blockGroup") return null;
-
   const insertAt = isCollapsedToggleContent(textblock)
     ? $to.after(containerDepth)
     : $to.after() + 1;
@@ -59,4 +70,28 @@ export const resolvePasteBlockPlacement = (
     insertAt,
     depth: modelDepthAtPasteTarget(selection.$to.doc.resolve(insertAt)),
   };
+};
+
+// 다른 텍스트블록에서 시작해 자식 있는 블록의 끝에서 끝나는 범위인지
+// 판정한다(Issue #294). 맞으면 호출부는 범위를 먼저 지운 뒤 캐럿 삽입
+// 규칙을 적용한다.
+// - insertContent는 범위를 한 번에 대체한다. 끝 블록의 남은 조각이 빈
+//   껍데기가 되어 자식 blockGroup을 가져간다.
+// - 범위 삭제는 끝 블록의 자식을 시작 블록의 자식으로 합친다. 붙여넣기도
+//   그 귀속을 따른다.
+// 같은 텍스트블록 안 범위는 resolvePasteBlockPlacement가 이미 처리한다.
+// 아래 중 하나라도 아니면 false다.
+// - TextSelection이고 비어 있지 않다.
+// - 시작과 끝의 텍스트블록이 다르다.
+// - 끝이 중첩 가능한 텍스트블록 내용의 끝이다.
+// - 그 블록 컨테이너가 자식 blockGroup을 가진다.
+export const isRangeEndingAtChildrenBlockEnd = (
+  selection: Selection,
+): boolean => {
+  if (!(selection instanceof TextSelection)) return false;
+  if (selection.empty) return false;
+  const { $from, $to } = selection;
+  // 노드 인스턴스는 공유될 수 있다. 위치 기준으로 같은 부모를 판정한다.
+  if ($from.sameParent($to)) return false;
+  return endsAtChildrenBlockEnd($to);
 };

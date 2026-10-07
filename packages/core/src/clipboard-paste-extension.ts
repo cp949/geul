@@ -16,7 +16,10 @@ import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
-import { resolvePasteBlockPlacement } from "./paste-block-placement.js";
+import {
+  isRangeEndingAtChildrenBlockEnd,
+  resolvePasteBlockPlacement,
+} from "./paste-block-placement.js";
 import {
   buildPlainMultilinePasteTransaction,
   plainTextClipboardParser,
@@ -293,6 +296,33 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                       placement.insertAt - deleteLength,
                       clampDepth(nodes, placement.depth),
                     )
+                    .run();
+                  return;
+                }
+                // 다른 블록에서 시작해 자식 있는 블록의 끝에서 끝나는 범위는
+                // 먼저 지운 뒤 캐럿 삽입 규칙을 적용한다(Issue #294). 삭제는
+                // PM 기본 삭제라 끝 블록의 자식이 시작 블록의 자식이 된다.
+                // 지운 뒤의 캐럿으로 배치를 다시 판정한다. 범위 삭제와 삽입은
+                // 한 transaction이다.
+                if (isRangeEndingAtChildrenBlockEnd(view.state.selection)) {
+                  editor
+                    .chain()
+                    .command(({ tr, commands }) => {
+                      tr.deleteSelection();
+                      const placed = resolvePasteBlockPlacement(tr.selection);
+                      if (placed !== null) {
+                        return commands.insertContentAt(
+                          placed.insertAt,
+                          clampDepth(nodes, placed.depth),
+                        );
+                      }
+                      return commands.insertContent(
+                        clampDepth(
+                          nodes,
+                          modelDepthAtPasteTarget(tr.selection.$from),
+                        ),
+                      );
+                    })
                     .run();
                   return;
                 }
