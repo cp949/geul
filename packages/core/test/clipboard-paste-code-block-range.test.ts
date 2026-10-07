@@ -14,6 +14,9 @@
  * 무효 문자(제어문자·짝 없는 surrogate)가 섞인 한 줄 평문은 정리본을
  * view.pasteText로 넣고, 제어문자만 있으면 이벤트만 소비한다(Issue #295).
  * 직접 삽입이 안 되는 선택(NodeSelection·AllSelection)의 여러 줄도 같다.
+ * 캐럿·시작이 codeBlock 안인 범위도 무효 문자가 섞인 평문은 정리본을
+ * view.pasteText로 넣는다(Issue #296). Tab·LF는 남기고, 유효한 평문은 PM
+ * 기본에 위임한다.
  * 실제 브라우저 대표 시나리오는 e2e/clipboard-paste.spec.ts가 맡는다.
  */
 import type { Block, TableBlock } from "@cp949/geul-model";
@@ -700,5 +703,221 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
       expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
       expect(blocksOf(editor)).toEqual(before);
     });
+  });
+
+  // 캐럿이 codeBlock 안이거나 시작이 codeBlock 안인 범위(Issue #296). 수정 전
+  // 에는 입력과 무관하게 PM 기본에 위임해 raw 무효 문자가 문서에 들어갔고
+  // 되돌림 guard가 붙여넣기를 통째로 지웠다. 유효한 평문은 PM 기본 그대로다.
+  describe("캐럿·시작이 codeBlock 안인 평문의 무효 문자(Issue #296)", () => {
+    const SOH = String.fromCharCode(1);
+    const HIGH_SURROGATE = String.fromCharCode(0xd800);
+    const TAB = String.fromCharCode(9);
+    const CR = String.fromCharCode(13);
+
+    type SelectionCase = {
+      name: string;
+      from: { id: string; offset: number };
+      to: { id: string; offset: number };
+    };
+    // S1 캐럿 cb:3, S2 cb:2 ~ tail:2(시작이 codeBlock 안), S3 cb:1 ~ cb:4.
+    const selections: SelectionCase[] = [
+      {
+        name: "S1 캐럿 cb:3",
+        from: { id: "cb", offset: 3 },
+        to: { id: "cb", offset: 3 },
+      },
+      {
+        name: "S2 cb:2 ~ tail:2",
+        from: { id: "cb", offset: 2 },
+        to: { id: "tail", offset: 2 },
+      },
+      {
+        name: "S3 cb:1 ~ cb:4",
+        from: { id: "cb", offset: 1 },
+        to: { id: "cb", offset: 4 },
+      },
+    ];
+
+    // 입력 하나에 대한 선택별 기대 outline이다. 기준 문서는 p1 "abcd",
+    // cb "foobar", tail "tail"이다.
+    type PasteCase = {
+      name: string;
+      input: string;
+      expected: [string[], string[], string[]];
+    };
+    const outlineOf = (code: string, tail: string): string[] => [
+      `p:abcd`,
+      `code:${code}`,
+      `p:${tail}`,
+    ];
+    const invalidCases: PasteCase[] = [
+      {
+        name: "제어문자가 섞인 한 줄",
+        input: `a${SOH}b`,
+        expected: [
+          outlineOf("fooabbar", "tail"),
+          outlineOf("foabil", ""),
+          outlineOf("fabar", "tail"),
+        ],
+      },
+      {
+        name: "짝 없는 surrogate가 섞인 한 줄",
+        input: `a${HIGH_SURROGATE}b`,
+        expected: [
+          outlineOf("fooabbar", "tail"),
+          outlineOf("foabil", ""),
+          outlineOf("fabar", "tail"),
+        ],
+      },
+      {
+        name: "제어문자가 섞인 여러 줄",
+        input: `a${SOH}b\nc${SOH}d`,
+        expected: [
+          outlineOf("fooab\ncdbar", "tail"),
+          outlineOf("foab\ncdil", ""),
+          outlineOf("fab\ncdar", "tail"),
+        ],
+      },
+      {
+        name: "CRLF와 제어문자가 섞인 입력",
+        input: `a${SOH}${CR}\nb`,
+        expected: [
+          outlineOf("fooa\nbbar", "tail"),
+          outlineOf("foa\nbil", ""),
+          outlineOf("fa\nbar", "tail"),
+        ],
+      },
+      {
+        name: "단독 CR과 제어문자가 섞인 입력(CR이 줄 경계)",
+        input: `a${SOH}${CR}b`,
+        expected: [
+          outlineOf("fooa\nbbar", "tail"),
+          outlineOf("foa\nbil", ""),
+          outlineOf("fa\nbar", "tail"),
+        ],
+      },
+      {
+        name: "Tab이 있고 제어문자가 섞인 여러 줄(표로 가로채이지 않는 모양)",
+        input: `a${TAB}b${SOH}\nc`,
+        expected: [
+          outlineOf(`fooa${TAB}b\ncbar`, "tail"),
+          outlineOf(`foa${TAB}b\ncil`, ""),
+          outlineOf(`fa${TAB}b\ncar`, "tail"),
+        ],
+      },
+    ];
+    const validCases: PasteCase[] = [
+      {
+        name: "유효한 한 줄",
+        input: "ab",
+        expected: [
+          outlineOf("fooabbar", "tail"),
+          outlineOf("foabil", ""),
+          outlineOf("fabar", "tail"),
+        ],
+      },
+      {
+        name: "유효한 LF 여러 줄",
+        input: "a\nb",
+        expected: [
+          outlineOf("fooa\nbbar", "tail"),
+          outlineOf("foa\nbil", ""),
+          outlineOf("fa\nbar", "tail"),
+        ],
+      },
+      {
+        name: "유효한 CRLF 여러 줄",
+        input: `a${CR}\nb`,
+        expected: [
+          outlineOf("fooa\nbbar", "tail"),
+          outlineOf("foa\nbil", ""),
+          outlineOf("fa\nbar", "tail"),
+        ],
+      },
+    ];
+
+    const mount = (selection: SelectionCase) =>
+      setup(baseBlocks(), selection.from, selection.to);
+
+    describe.each(selections.map((selection, index) => ({ selection, index })))(
+      "$selection.name",
+      ({ selection, index }) => {
+        it.each(invalidCases)(
+          "$name 입력은 무효 문자만 지우고 선택을 대체한다(C1~C4)",
+          ({ input, expected }) => {
+            const { editor, editable, tiptap } = mount(selection);
+
+            pasteData(editable, { "text/plain": input });
+
+            expect(outline(blocksOf(editor))).toEqual(expected[index]);
+            expect(() => tiptap.state.doc.check()).not.toThrow();
+          },
+        );
+
+        it.each(validCases)(
+          "$name 입력은 view.pasteText 없이 PM 기본에 위임하고 결과가 현행과 같다(C6)",
+          ({ input, expected }) => {
+            const { editor, editable, tiptap } = mount(selection);
+            const pasteText = vi.spyOn(tiptap.view, "pasteText");
+
+            pasteData(editable, { "text/plain": input });
+
+            expect(pasteText).not.toHaveBeenCalled();
+            expect(outline(blocksOf(editor))).toEqual(expected[index]);
+          },
+        );
+
+        it("정리본 붙여넣기는 pasteText·dispatch 1회, undo 1회로 원복된다(C8)", () => {
+          const { editor, editable, tiptap } = mount(selection);
+          const beforeJson = tiptap.state.doc.toJSON();
+          const revision = editor.getDocument().revision;
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+          const pasteText = vi.spyOn(tiptap.view, "pasteText");
+
+          pasteData(editable, { "text/plain": `a${SOH}b` });
+
+          expect(pasteText).toHaveBeenCalledTimes(1);
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          expect(editor.getDocument().revision).toBe(revision + 1);
+          expect(() => tiptap.state.doc.check()).not.toThrow();
+
+          tiptap.commands.undo();
+          expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+        });
+
+        it("제어문자만 있는 입력은 이벤트만 소비하고 문서와 선택을 바꾸지 않는다(C5)", () => {
+          const { editable, tiptap } = mount(selection);
+          const beforeJson = tiptap.state.doc.toJSON();
+          const { from, to } = tiptap.state.selection;
+          const dispatch = vi.spyOn(tiptap.view, "dispatch");
+          const pasteText = vi.spyOn(tiptap.view, "pasteText");
+
+          withUnhandledErrorTracking((errors) => {
+            const event = dispatchPasteData(editable, { "text/plain": SOH });
+
+            expect(event.defaultPrevented).toBe(true);
+            expect(dispatch).not.toHaveBeenCalled();
+            expect(pasteText).not.toHaveBeenCalled();
+            expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+            expect(tiptap.state.selection.from).toBe(from);
+            expect(tiptap.state.selection.to).toBe(to);
+            expect(errors).toEqual([]);
+          });
+        });
+
+        it("text/html이 함께 와도 평문 정리본만 쓴다(PM의 inCode 규칙과 같다)", () => {
+          const { editor, editable } = mount(selection);
+
+          pasteData(editable, {
+            "text/plain": `a${SOH}b`,
+            "text/html": "<p>X</p><p>Y</p>",
+          });
+
+          expect(outline(blocksOf(editor))).toEqual(
+            invalidCases[0]?.expected[index],
+          );
+        });
+      },
+    );
   });
 });
