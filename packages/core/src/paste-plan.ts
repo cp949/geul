@@ -15,6 +15,7 @@ import { dropPoint } from "@tiptap/pm/transform";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
+import { textToHardBreakInline } from "./code-block-inline-text.js";
 import {
   selectionIntersectsAnyCodeBlock,
   selectionStartsInCodeBlock,
@@ -64,7 +65,7 @@ export type BlockInsertPlacement =
 
 // 계획 결과다. 실행기가 handlePaste·handleDrop 반환값을 정한다.
 // - pass: 다른 plugin 소관이다. false. prosemirror-tables가 처리하는
-//   CellSelection과 셀 안에 붙이는 셀 조각 slice다.
+//   셀 안에 붙이는 셀 조각 slice와 html이 실제 내용을 가진 CellSelection이다.
 // - delegate: PM 기본 drop에 맡긴다. false. drop 계획만 쓴다.
 // - insertSlice: PM이 파싱한 slice를 PM 기본 붙여넣기와 같은 방식으로
 //   넣는다. true. 파싱 결과가 없는 정적 Slice.empty면 false다(PM 기본과 같다).
@@ -200,6 +201,43 @@ const selectionStartsInTable = (state: EditorState): boolean => {
   return false;
 };
 
+// CellSelection 평문 붙여넣기 계획이다(Issue #300). 선택한 모든 셀의 내용을
+// 비우고 문서 순서 첫 셀에 정리본을 hardBreak로 이어 넣는다. 셀 노드·attrs·
+// cellId는 유지한다. prosemirror-tables 기본 경로는 셀 노드를 새로 만들어
+// cellId와 셀 attrs를 잃고, 되돌림 guard가 붙여넣기를 지운다. 비우기와
+// 삽입은 한 transaction이다. 정리본이 비면 이벤트만 소비한다.
+const planCellSelectionPlainPaste = (
+  state: EditorState,
+  selection: CellSelection,
+  rawText: string,
+): PastePlan => {
+  const cleaned = normalizePasteText(rawText);
+  if (cleaned.length === 0) return { kind: "consume" };
+  // forEachCell은 병합 셀을 한 번만 방문하고 위치 오름차순이다.
+  const cells: { pos: number; size: number }[] = [];
+  selection.forEachCell((node, pos) => {
+    cells.push({ pos, size: node.content.size });
+  });
+  const first = cells[0];
+  if (first === undefined) return { kind: "consume" };
+  const tr = state.tr;
+  // 뒤 셀부터 비우면 앞 셀 위치가 밀리지 않는다.
+  for (let index = cells.length - 1; index > 0; index -= 1) {
+    const { pos, size } = cells[index] ?? first;
+    if (size > 0) tr.delete(pos + 1, pos + 1 + size);
+  }
+  const inserted = textToHardBreakInline(state.schema, cleaned);
+  tr.replaceWith(first.pos + 1, first.pos + 1 + first.size, inserted);
+  tr.setSelection(TextSelection.create(tr.doc, first.pos + 1 + inserted.size));
+  return {
+    kind: "dispatch",
+    transaction: tr
+      .setMeta("paste", true)
+      .setMeta("uiEvent", "paste")
+      .scrollIntoView(),
+  };
+};
+
 // 표 셀 안 붙여넣기 계획이다. 표 안이 아니면 null이다. 표 안은
 // pasteHandler를 부르지 않는다(roadmap.md "제외 범위", IO-008은 표·미디어
 // 붙여넣기를 대상으로 하지 않는다). 기본은 PM이 파싱한 slice를 그대로
@@ -207,10 +245,12 @@ const selectionStartsInTable = (state: EditorState): boolean => {
 // 않으면 되돌림 guard가 붙여넣기를 통째로 지운다. 예외는 PM 파싱이 평문을
 // 잃는 두 경우다. 무효 문자가 섞인 평문(Issue #297)과 빈 slice html에 딸린
 // 평문(Issue #301)이다. 정리본을 평문으로 넣는다.
-// - CellSelection은 prosemirror-tables가 처리한다. 유효 평문도 되돌려지는
-//   별개 결함이다(#300).
 // - 셀 조각 slice(표 안에서 복사한 셀)는 prosemirror-tables가 셀 단위로
 //   넣는다.
+// - CellSelection은 html이 실제 내용을 가지면 prosemirror-tables에 맡긴다.
+//   서식 없이 붙여넣기는 예외다. html이 있어도 평문 정리본을 넣는다.
+//   html이 없거나 빈 slice이면 평문 정리본이 선택을 대체한다. 유효 평문도
+//   포함한다(Issue #300). 아래 두 번째 예외의 판정과 같다.
 // - html이 실제 내용(slice.size > 0)을 가지면 html만 쓴다. 평문으로
 //   개입하면 셀 서식을 잃는다.
 // - html이 있어도 PM 파싱 결과가 빈 slice이면 PM은 평문을 버린다.
@@ -224,32 +264,43 @@ export const planTableCellPaste = (
   slice: Slice,
 ): PastePlan | null => {
   if (!selectionStartsInTable(state)) return null;
-  if (
-    state.selection instanceof CellSelection ||
-    __pastedCells(slice) !== null
-  ) {
-    return { kind: "pass" };
-  }
+  if (__pastedCells(slice) !== null) return { kind: "pass" };
+  const { selection } = state;
+  const cellSelection = selection instanceof CellSelection ? selection : null;
   // html 내용 유무는 정리한 slice로 판정한다. 무효 문자뿐인 html은 정리 뒤
   // 빈 slice라 평문 분기로 내려간다.
   const sanitized = sanitizeSliceInlineText(slice);
-  const insertSanitizedSlice: PastePlan = {
-    kind: "insertSlice",
-    slice: sanitized,
-  };
-  if (clipboard === null) return insertSanitizedSlice;
+  // 평문으로 개입하지 않을 때의 계획이다. CellSelection은 prosemirror-tables에
+  // 맡기고 나머지는 정리한 slice를 넣는다.
+  const noIntervention: PastePlan =
+    cellSelection === null
+      ? { kind: "insertSlice", slice: sanitized }
+      : { kind: "pass" };
+  if (clipboard === null) return noIntervention;
   const { html, text: rawText } = clipboard;
-  if (html.length > 0 && sanitized.size > 0) return insertSanitizedSlice;
+  // 서식 없이 붙여넣기면 PM이 평문으로 slice를 만든다. CellSelection은 그
+  // slice도 prosemirror-tables에 맡기면 되돌려지므로 html을 보지 않는다
+  // (Issue #300). 캐럿 경로는 PM 평문 slice를 그대로 넣어 결과가 같다.
+  const htmlWins =
+    html.length > 0 &&
+    sanitized.size > 0 &&
+    !(cellSelection !== null && clipboard.plain);
+  if (htmlWins) return noIntervention;
   // 평문이 비면 개입하지 않는다. 빈 slice html이면 범위만 지운다(현행
   // 유지).
-  if (rawText.length === 0) return insertSanitizedSlice;
+  if (rawText.length === 0) return noIntervention;
+  // CellSelection은 평문이 유효해도 PM 기본이 선택을 지우지 못하고 되돌려진다
+  // (Issue #300). 정리본으로 선택을 대체한다.
+  if (cellSelection !== null) {
+    return planCellSelectionPlainPaste(state, cellSelection, rawText);
+  }
   // html이 없는 유효한 평문은 PM이 파싱한 slice를 넣는다. raw 무효 문자는
   // 정리본으로 넣는다. Tab도 셀에서는 무효라 정리본이 raw와 다르다.
   // 정리본이 비면 이벤트만 소비한다. html이 빈 slice이면 유효한 평문도
   // 아래로 내려간다.
   const cleaned = normalizePasteText(rawText);
   if (html.length === 0 && cleaned === normalizeLineBreaks(rawText)) {
-    return insertSanitizedSlice;
+    return noIntervention;
   }
   if (cleaned.length === 0) return { kind: "consume" };
   return { kind: "pasteText", text: cleaned };
