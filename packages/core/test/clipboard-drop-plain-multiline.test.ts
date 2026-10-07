@@ -250,14 +250,14 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       expect(tiptap.state.doc).toBe(before);
     });
 
-    it("sanitize 뒤 한 줄이 되는 평문은 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
-      const before = tiptap.state.doc;
+    // Issue #306 전에는 위임(falsy)을 단언했다. PM 기본 drop이 원문 무효
+    // 문자를 넣어 되돌림 guard가 drop을 지웠다. 이제 정리본이 들어간다.
+    it("sanitize 뒤 한 줄이 되는 평문은 정리본이 drop 위치에 들어간다", () => {
+      const { editor, editable } = setup(childDocument(), "p1", 2);
 
-      expect(
-        handled(tiptap, dropEventOf({ "text/plain": "X\u0001" })),
-      ).toBeFalsy();
-      expect(tiptap.state.doc).toBe(before);
+      plainDrop(editable, "X\u0001");
+
+      expect(outline(blocksOf(editor))).toEqual(["p:abXcd[p:child]", "p:tail"]);
     });
 
     it("평문이 비어 있으면 위임한다", () => {
@@ -437,17 +437,17 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
       stubPosAtCoords(tiptap, positionOf(tiptap, target));
       dropData(editable, entries);
-      return outline(blocksOf(editor));
+      return editor.getDocument().blocks;
     };
     const pasteResult = (target: Target, entries: Record<string, string>) => {
       const { editor, editable, tiptap } = mount();
       tiptap.commands.setTextSelection(positionOf(tiptap, target));
       pasteData(editable, entries);
-      return outline(blocksOf(editor));
+      return editor.getDocument().blocks;
     };
     const original = () => {
       const { editor } = mount();
-      return outline(blocksOf(editor));
+      return editor.getDocument().blocks;
     };
 
     it.each([
@@ -470,14 +470,17 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       },
     );
 
-    it.each(["문단", "셀"] as const)(
+    it.each([
+      ["문단", "ababcd"],
+      ["셀", "ceabll"],
+    ] as const)(
       "%s에 무효 문자 html을 drop하면 정리본이 들어간다",
-      (target) => {
+      (target, expected) => {
         const entries = { "text/html": `<p>a${SOH}b</p>`, "text/plain": "ab" };
-        const dropped = dropResult(target, entries);
+        const dropped = JSON.stringify(dropResult(target, entries));
 
-        expect(dropped).not.toEqual(original());
-        expect(dropped.join("|")).toContain("ab");
+        expect(dropped).toContain(`"${expected}"`);
+        expect(dropped).not.toContain(SOH);
       },
     );
 
@@ -485,7 +488,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       const tab = String.fromCharCode(9);
       const dropped = dropResult("codeBlock", { "text/plain": `a${tab}b` });
 
-      expect(dropped.join("|")).toContain(`coa${tab}bde`);
+      expect(outline(dropped)).toContain(`code:coa${tab}bde`);
     });
   });
 });

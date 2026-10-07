@@ -13,7 +13,7 @@ import {
   type PasteClipboard,
   type PastePlan,
   planDefaultPaste,
-  planPlainDrop,
+  planDrop,
   planTableCellPaste,
 } from "./paste-plan.js";
 import { plainTextClipboardParser } from "./plain-text-paste.js";
@@ -101,8 +101,6 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     // 사실상 무시한다 — doPaste 자신은 이미 계산해 둔 slice로 계속
     // 진행하므로 삽입 자체는 그대로 된다.
     let sanitizedPasteInFlight = false;
-    // drop 이벤트 안에서 PM이 부르는 transformPasted를 건너뛰는 플래그다(Issue #302).
-    let dropInFlight = false;
     // PM이 이번 붙여넣기를 평문 경로로 만들었다는 신호다(Issue #303). PM은
     // handlePaste를 부르기 직전 같은 호출 스택에서 transformPasted의 3번째
     // 인자(asText)로 알려 준다. Ctrl+Shift+V뿐 아니라 평문 단독 클립보드와
@@ -241,25 +239,14 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           // #303). slice는 바꾸지 않는다. 표 셀 안 정리는 붙여넣기 계획이
           // handlePaste 시점의 state로 한다(Issue #306). 이 hook은 표 경계 범위
           // 삭제 전에 불려 지우기 전 state를 본다.
-          // drop에도 불리지만 drop은 handlePaste를 거치지 않아 기록하지 않는다.
+          // drop에도 불린다. drop은 handlePaste를 거치지 않아 기록은 아래
+          // microtask가 내린다.
           transformPasted: (slice, _view, plain) => {
-            if (dropInFlight) return slice;
             plainPasteRequested = plain;
             queueMicrotask(() => {
               plainPasteRequested = false;
             });
             return slice;
-          },
-          // drop 이벤트 처리 중에만 true다. PM은 drop 이벤트 안에서 slice를
-          // 동기로 만든다. 같은 호출 스택이 끝나면 microtask가 내린다.
-          handleDOMEvents: {
-            drop: () => {
-              dropInFlight = true;
-              queueMicrotask(() => {
-                dropInFlight = false;
-              });
-              return false;
-            },
           },
           handlePaste: (view, event, slice) => {
             // 평문 요청을 가드보다 먼저 읽어 내린다(Issue #303). pasteText 재진입도
@@ -319,11 +306,10 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
             return true;
           },
 
-          // 여러 줄 text/plain drop을 drop 위치에 직접 삽입한다(Issue #285).
-          // 판정은 planPlainDrop이 한다(paste-plan.ts).
-          handleDrop: (view, event) => {
+          // drop 판정은 planDrop이 한다(paste-plan.ts, Issue #285·#306).
+          handleDrop: (view, event, slice) => {
             const dataTransfer = event.dataTransfer;
-            const plan = planPlainDrop(
+            const plan = planDrop(
               view.state,
               dataTransfer === null
                 ? null
@@ -333,10 +319,13 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                     html: dataTransfer.getData("text/html"),
                     text: dataTransfer.getData("text/plain"),
                   },
+              // 직접 호출(view.someProp)은 slice를 넘기지 않을 수 있다.
+              (slice as Slice | undefined) ?? Slice.empty,
               () =>
                 view.posAtCoords({ left: event.clientX, top: event.clientY })
                   ?.pos ?? null,
             );
+            if (plan.kind === "consume") return true;
             if (plan.kind !== "dispatch") return false;
             view.dispatch(plan.transaction);
             view.focus();

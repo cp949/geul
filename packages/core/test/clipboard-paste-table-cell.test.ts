@@ -1157,17 +1157,24 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
       );
     });
 
-    it("캐럿이 셀 안일 때 표 밖에 drop한 무효 문자 html은 정리하지 않는다", () => {
+    // Issue #306 전에는 이 drop이 정리되지 않아 되돌림 guard가 지웠다(문서
+    // 불변을 단언했다). 이제 drop 위치 기준으로 정리본이 들어간다. 캐럿이 셀
+    // 안인 것은 drop 정리에 영향이 없다.
+    it("캐럿이 셀 안일 때 표 밖에 drop한 무효 문자 html도 drop 위치 기준으로 정리본이 들어간다", () => {
       const m = mounted(documentOf(...dropBlocks()));
       S1.place(m.tiptap);
-      const before = outline(m.editor.getDocument().blocks);
 
       dropAt(m.tiptap, inBlock("p1", 2)(m.tiptap), {
         "text/html": `<p>a${SOH}b</p>`,
         "text/plain": "ab",
       });
 
-      expect(outline(m.editor.getDocument().blocks)).toEqual(before);
+      expect(outline(m.editor.getDocument().blocks)).toEqual([
+        "paragraph:paabra",
+        "table[cell]",
+        "codeBlock:xyz",
+        "paragraph:tail",
+      ]);
     });
   });
 

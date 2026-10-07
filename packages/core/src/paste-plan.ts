@@ -7,10 +7,12 @@ import {
 } from "@cp949/geul-model";
 import {
   type EditorState,
+  NodeSelection,
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
-import type { Slice } from "@tiptap/pm/model";
+import { dropPoint } from "@tiptap/pm/transform";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
 import {
@@ -473,54 +475,138 @@ export const planDefaultPaste = (
 };
 
 // drop에서 읽은 값이다. dataTransfer가 없으면 계획에 null을 넘긴다.
-export type PlainDrop = {
+export type DropInput = {
   dragging: boolean;
   hasFiles: boolean;
   html: string;
   text: string;
 };
 
-// 여러 줄 text/plain drop을 drop 위치에 직접 삽입하는 계획이다(Issue #285).
-// PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치 블록의 기존 자식을
-// 마지막 줄 블록으로 넘긴다. 배치는 붙여넣기와 같은 Enter 분할 규칙이다
-// (plain-text-paste.ts). 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
-// - 내부 드래그(view.dragging), 파일 동반, text/html 동반
-// - 정규화 뒤 한 줄인 평문
-// - 좌표를 못 푸는 위치, 줄을 놓을 수 없는 위치(표 셀·atom·블록 사이).
-//   위치를 보정하지 않는다.
-// 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
-// 않는다. 삽입 범위(drop 위치~마지막 줄 끝)를 선택한다. PM 기본 drop과
-// 같다. paste meta는 달지 않고 PM 기본 drop과 같은 uiEvent만 단다.
-// resolvePosition은 줄이 둘 이상일 때만 부른다. 좌표 해석(posAtCoords)은
-// 레이아웃이 필요하다.
-export const planPlainDrop = (
+// drop slice를 정리한다. 정리할 것이 없으면 null이다. drop 위치 부모가
+// codeBlock이면 PM은 평문 텍스트 노드 하나로 slice를 만든다. Tab·LF는 코드
+// 내용이라 남긴다(Issue #296과 같은 규칙).
+const sanitizeDropSlice = (slice: Slice, inCode: boolean): Slice | null => {
+  if (!inCode) {
+    const sanitized = sanitizeSliceInlineText(slice);
+    return sanitized === slice ? null : sanitized;
+  }
+  const text = slice.content.textBetween(0, slice.content.size);
+  const cleaned = normalizeKeepingTabs(text);
+  if (cleaned === text) return null;
+  if (cleaned.length === 0) return Slice.empty;
+  const textNode = slice.content.firstChild;
+  if (textNode === null) return null;
+  return new Slice(Fragment.from(textNode.type.schema.text(cleaned)), 0, 0);
+};
+
+// PM 기본 drop의 이동 없는 삽입(prosemirror-view 1.42.3 handleDrop)과 같은
+// transaction을 만든다. 문서가 바뀌지 않으면 null이다. selection은 단일
+// 선택 가능 노드면 NodeSelection, 아니면 삽입 범위다.
+const buildDropSliceTransaction = (
   state: EditorState,
-  drop: PlainDrop | null,
+  position: number,
+  slice: Slice,
+): Transaction | null => {
+  const insertAt = dropPoint(state.doc, position, slice) ?? position;
+  const tr = state.tr;
+  const node =
+    slice.openStart === 0 &&
+    slice.openEnd === 0 &&
+    slice.content.childCount === 1
+      ? slice.content.firstChild
+      : null;
+  const before = tr.doc;
+  if (node === null) tr.replaceRange(insertAt, insertAt, slice);
+  else tr.replaceRangeWith(insertAt, insertAt, node);
+  if (tr.doc.eq(before)) return null;
+  const $insert = tr.doc.resolve(insertAt);
+  if (
+    node !== null &&
+    NodeSelection.isSelectable(node) &&
+    $insert.nodeAfter?.sameMarkup(node) === true
+  ) {
+    return tr
+      .setSelection(new NodeSelection($insert))
+      .setMeta("uiEvent", "drop");
+  }
+  let end = tr.mapping.map(insertAt);
+  tr.mapping.maps[tr.mapping.maps.length - 1]?.forEach(
+    (_from, _to, _newFrom, newTo) => {
+      end = newTo;
+    },
+  );
+  return tr
+    .setSelection(TextSelection.between($insert, tr.doc.resolve(end)))
+    .setMeta("uiEvent", "drop");
+};
+
+// drop 계획이다(Issue #285, #306). PM이 drop 위치 기준으로 파싱한 slice를
+// 받는다. 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
+// - 내부 드래그(view.dragging). 이동은 PM 비공개 드래그 상태에 기댄다.
+// - 파일 동반
+// - 정리할 무효 문자가 없는 slice. 유효한 외부 drop은 PM 기본 drop 그대로다.
+// - 좌표를 못 푸는 위치
+// 여러 줄 text/plain(html 없음)은 drop 위치에 Enter 분할과 같은 규칙으로 직접
+// 삽입한다(Issue #285). PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치
+// 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 줄을 놓을 수 없는 위치(표
+// 셀·atom·블록 사이)는 아래 정리 분기로 내려간다.
+// 무효 문자가 든 slice는 정리본을 PM 기본 drop과 같은 방식으로 넣는다(Issue
+// #306). PM 기본 drop은 원문 그대로 넣어 되돌림 guard가 drop을 통째로 지웠다.
+// 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
+// 않는다. 삽입 범위를 선택한다. paste meta는 달지 않고 uiEvent만 단다.
+// resolvePosition은 필요할 때만 한 번 부른다. 좌표 해석(posAtCoords)은
+// 레이아웃이 필요하다.
+export const planDrop = (
+  state: EditorState,
+  drop: DropInput | null,
+  slice: Slice,
   resolvePosition: () => number | null,
 ): PastePlan => {
   if (drop === null || drop.dragging || drop.hasFiles) {
     return { kind: "delegate" };
   }
-  if (drop.html.length > 0) return { kind: "delegate" };
+  let resolved: { position: number | null } | null = null;
+  const position = (): number | null => {
+    resolved ??= { position: resolvePosition() };
+    return resolved.position;
+  };
 
-  const lines = splitPlainTextLines(normalizePasteText(drop.text));
-  if (lines.length < 2) return { kind: "delegate" };
+  if (drop.html.length === 0) {
+    const lines = splitPlainTextLines(normalizePasteText(drop.text));
+    if (lines.length >= 2) {
+      const at = position();
+      if (at === null) return { kind: "delegate" };
+      const transaction = buildPlainMultilinePasteTransaction(state, lines, {
+        position: at,
+      });
+      if (transaction !== null) {
+        transaction
+          .setSelection(
+            TextSelection.create(
+              transaction.doc,
+              at,
+              transaction.selection.from,
+            ),
+          )
+          .setMeta("uiEvent", "drop");
+        return { kind: "dispatch", transaction };
+      }
+    }
+  }
 
-  const position = resolvePosition();
-  if (position === null) return { kind: "delegate" };
-
-  const transaction = buildPlainMultilinePasteTransaction(state, lines, {
-    position,
-  });
-  if (transaction === null) return { kind: "delegate" };
-  transaction
-    .setSelection(
-      TextSelection.create(
-        transaction.doc,
-        position,
-        transaction.selection.from,
-      ),
-    )
-    .setMeta("uiEvent", "drop");
-  return { kind: "dispatch", transaction };
+  // 정리 후보가 없으면 좌표를 풀지 않는다. codeBlock 안 Tab은 후보지만
+  // 아래에서 유효로 판정된다.
+  if (slice.size === 0 || sanitizeSliceInlineText(slice) === slice) {
+    return { kind: "delegate" };
+  }
+  const at = position();
+  if (at === null) return { kind: "delegate" };
+  const inCode = state.doc.resolve(at).parent.type.spec.code === true;
+  const sanitized = sanitizeDropSlice(slice, inCode);
+  if (sanitized === null) return { kind: "delegate" };
+  if (sanitized.size === 0) return { kind: "consume" };
+  const transaction = buildDropSliceTransaction(state, at, sanitized);
+  return transaction === null
+    ? { kind: "consume" }
+    : { kind: "dispatch", transaction };
 };

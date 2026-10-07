@@ -7,7 +7,7 @@
  * 표 셀 계획(planTableCellPaste)은 pass·insertSlice·consume·pasteText와 표
  * 밖 null을, 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
  * 블록 삽입 배치 3종(caret·blockBoundary·afterRangeDelete)을, drop 계획
- * (planPlainDrop)은 delegate·dispatch를 다룬다.
+ * (planDrop)은 delegate·dispatch·consume을 다룬다.
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -19,7 +19,7 @@ import { createEditor } from "../src/index.js";
 import {
   type PasteClipboard,
   planDefaultPaste,
-  planPlainDrop,
+  planDrop,
   planTableCellPaste,
 } from "../src/paste-plan.js";
 import { contentTextStart } from "./block-test-support.js";
@@ -347,7 +347,7 @@ describe("planDefaultPaste", () => {
   });
 });
 
-describe("planPlainDrop", () => {
+describe("planDrop", () => {
   const drop = (text: string, html = "") => ({
     dragging: false,
     hasFiles: false,
@@ -358,32 +358,34 @@ describe("planPlainDrop", () => {
   it("dataTransfer가 없거나 내부 드래그·파일·html 동반이면 delegate다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
     const position = () => contentTextStart(tiptap, "p1") + 1;
-    expect(planPlainDrop(tiptap.state, null, position)).toEqual({
+    expect(planDrop(tiptap.state, null, Slice.empty, position)).toEqual({
       kind: "delegate",
     });
     expect(
-      planPlainDrop(
+      planDrop(
         tiptap.state,
         { ...drop("x\ny"), dragging: true },
+        Slice.empty,
         position,
       ),
     ).toEqual({ kind: "delegate" });
     expect(
-      planPlainDrop(
+      planDrop(
         tiptap.state,
         { ...drop("x\ny"), hasFiles: true },
+        Slice.empty,
         position,
       ),
     ).toEqual({ kind: "delegate" });
     expect(
-      planPlainDrop(tiptap.state, drop("x\ny", "<p>x</p>"), position),
+      planDrop(tiptap.state, drop("x\ny", "<p>x</p>"), Slice.empty, position),
     ).toEqual({ kind: "delegate" });
   });
 
   it("한 줄 평문은 좌표를 풀지 않고 delegate다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
     let resolved = 0;
-    const plan = planPlainDrop(tiptap.state, drop("xy"), () => {
+    const plan = planDrop(tiptap.state, drop("xy"), Slice.empty, () => {
       resolved += 1;
       return contentTextStart(tiptap, "p1") + 1;
     });
@@ -393,7 +395,9 @@ describe("planPlainDrop", () => {
 
   it("좌표를 못 풀면 delegate다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
-    expect(planPlainDrop(tiptap.state, drop("x\ny"), () => null)).toEqual({
+    expect(
+      planDrop(tiptap.state, drop("x\ny"), Slice.empty, () => null),
+    ).toEqual({
       kind: "delegate",
     });
   });
@@ -401,11 +405,59 @@ describe("planPlainDrop", () => {
   it("여러 줄 평문은 drop 위치 transaction을 dispatch한다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
     const position = contentTextStart(tiptap, "p1") + 1;
-    const plan = planPlainDrop(tiptap.state, drop("x\ny"), () => position);
+    const plan = planDrop(
+      tiptap.state,
+      drop("x\ny"),
+      Slice.empty,
+      () => position,
+    );
     expect(plan.kind).toBe("dispatch");
     if (plan.kind !== "dispatch") return;
     expect(plan.transaction.getMeta("uiEvent")).toBe("drop");
     expect(plan.transaction.getMeta("paste")).toBeUndefined();
     expect(plan.transaction.selection.from).toBe(position);
+  });
+
+  it("무효 문자가 든 slice는 정리본을 drop 위치에 넣는 transaction이다", () => {
+    const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+    const position = contentTextStart(tiptap, "p1") + 2;
+    const dirty = new Slice(
+      Fragment.from(tiptap.schema.text(`x${SOH}y`)),
+      0,
+      0,
+    );
+    const plan = planDrop(
+      tiptap.state,
+      drop(`x${SOH}y`),
+      dirty,
+      () => position,
+    );
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind !== "dispatch") return;
+    expect(plan.transaction.getMeta("uiEvent")).toBe("drop");
+    expect(plan.transaction.getMeta("paste")).toBeUndefined();
+    expect(plan.transaction.doc.textContent).toBe("abxycd");
+  });
+
+  it("무효 문자뿐인 slice는 consume이다", () => {
+    const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+    const position = contentTextStart(tiptap, "p1") + 2;
+    const dirty = new Slice(Fragment.from(tiptap.schema.text(SOH)), 0, 0);
+    expect(planDrop(tiptap.state, drop(SOH), dirty, () => position)).toEqual({
+      kind: "consume",
+    });
+  });
+
+  it("codeBlock 위치의 Tab만 든 slice는 유효라 delegate다", () => {
+    const tiptap = mountAt([codeBlockBlock("cb", "code")], at("cb", 0));
+    const position = contentTextStart(tiptap, "cb") + 2;
+    const tabbed = new Slice(
+      Fragment.from(tiptap.schema.text(`a${TAB}b`)),
+      0,
+      0,
+    );
+    expect(
+      planDrop(tiptap.state, drop(`a${TAB}b`), tabbed, () => position),
+    ).toEqual({ kind: "delegate" });
   });
 });
