@@ -449,9 +449,10 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 분리 등)에 그대로 위임해왔다. 하지만 model은 inline text에서
               // LF를 제외한 C0 제어문자·DEL·짝 없는 surrogate를 금지하는데
               // (document-structure-validation.ts), PM 기본 처리는 그
-              // 불변식을 모르고 원본 그대로 문서에 넣는다 — 다음
-              // onTiptapUpdate에서 model 검증이 뒤늦게 실패해 던지는
-              // TypeError가 어디서도 안 잡혀 uncaught exception이 된다(QA-078
+              // 불변식을 모르고 원본 그대로 문서에 넣는다 — 문서 검증이
+              // 실패해 되돌림 guard(revision-guard-extension.ts)가 붙여넣기를
+              // 통째로 지운다(Issue #295). guard가 없던 때는 model 검증이
+              // 뒤늦게 던지는 TypeError가 uncaught exception이 됐다(QA-078
               // 회귀 발견). 원본이 이미 유효하면(가장 흔한 경우) 위임을
               // 그대로 유지해 기존 단락 분리 동작을 안 건드리고, 무효
               // 문자가 있을 때만 정규화한 텍스트로 PM 자신의
