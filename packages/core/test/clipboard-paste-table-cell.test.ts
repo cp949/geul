@@ -11,9 +11,11 @@
  * CellSelection(Issue #300이 정정), pasteHandler 미호출 계약, 표 경계
  * 범위(Issue #292) 뒤 캐럿 위치, 불변 특성화(TSV·표 밖)다.
  *
- * 여러 줄은 유효 여러 줄과 구조가 같다. 마지막 셀은 첫 줄만 셀에 들어가고
- * 나머지는 표 뒤 문단이 된다. 마지막이 아닌 셀은 PM이 표를 쪼갠 뒤 되돌림이
- * 복원해 불변이다. 이 결함은 이슈 범위 밖이라 현행을 특성화한다.
+ * 여러 줄은 Issue #299가 정정했다. 수정 전에는 마지막 셀이 첫 줄만 셀에 넣고
+ * 나머지를 표 뒤 문단으로 만들었고, 마지막이 아닌 셀은 PM이 표를 쪼갠 뒤
+ * 되돌림이 복원해 불변이었다. 이제 줄 사이를 hardBreak로 이어 셀에 넣는다.
+ * 여러 줄 축은 clipboard-paste-table-cell-multiline.test.ts가 소유한다. 이
+ * 파일의 여러 줄 행은 정정된 기대값을 한 줄씩 확인한다.
  * 실제 브라우저 대표 시나리오는 e2e/clipboard-paste.spec.ts와
  * e2e/table-paste.spec.ts가 맡는다.
  *
@@ -218,8 +220,7 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
     expected: [string[], string[], string[]];
   };
 
-  // 여러 줄 입력은 유효 여러 줄과 같은 구조다. S3은 표를 쪼갠 뒤 되돌림이
-  // 복원해 불변이다.
+  // 한 줄 입력이다. 여러 줄은 아래 multilineCases가 맡는다(Issue #299).
   const invalidCases: PasteCase[] = [
     {
       name: "제어문자가 섞인 한 줄",
@@ -239,22 +240,29 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
         docOutline("table[c1ab|c2]"),
       ],
     },
+  ];
+
+  // 여러 줄은 줄 사이를 hardBreak로 이어 셀에 직접 넣는다(Issue #299). 무효
+  // 문자가 섞여도 정리본을 pasteText 없이 넣는다. 수정 전에는 S1·S2가 첫 줄만
+  // 셀에 넣고 나머지를 표 뒤 문단으로 만들었고, S3은 표를 쪼갠 뒤 되돌림이
+  // 복원해 불변이었다.
+  const multilineCases: PasteCase[] = [
     {
       name: "제어문자가 섞인 여러 줄",
       input: `a${SOH}b\nc`,
       expected: [
-        docOutline("table[cellab]", "paragraph:c"),
-        docOutline("table[cab]", "paragraph:cl"),
-        docOutline("table[c1|c2]"),
+        docOutline("table[cellab\nc]"),
+        docOutline("table[cab\ncl]"),
+        docOutline("table[c1ab\nc|c2]"),
       ],
     },
     {
       name: "CRLF와 제어문자가 섞인 두 줄",
       input: `a${SOH}${CR}\nb`,
       expected: [
-        docOutline("table[cella]", "paragraph:b"),
-        docOutline("table[ca]", "paragraph:bl"),
-        docOutline("table[c1|c2]"),
+        docOutline("table[cella\nb]"),
+        docOutline("table[ca\nbl]"),
+        docOutline("table[c1a\nb|c2]"),
       ],
     },
     {
@@ -262,9 +270,27 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
       name: "Tab이 든 여러 줄(표로 가로채이지 않는 모양)",
       input: `a${TAB}b\nc`,
       expected: [
-        docOutline("table[cellab]", "paragraph:c"),
-        docOutline("table[cab]", "paragraph:cl"),
-        docOutline("table[c1|c2]"),
+        docOutline("table[cellab\nc]"),
+        docOutline("table[cab\ncl]"),
+        docOutline("table[c1ab\nc|c2]"),
+      ],
+    },
+    {
+      name: "유효한 LF 여러 줄",
+      input: "a\nb",
+      expected: [
+        docOutline("table[cella\nb]"),
+        docOutline("table[ca\nbl]"),
+        docOutline("table[c1a\nb|c2]"),
+      ],
+    },
+    {
+      name: "유효한 CRLF 여러 줄",
+      input: `a${CR}\nb`,
+      expected: [
+        docOutline("table[cella\nb]"),
+        docOutline("table[ca\nbl]"),
+        docOutline("table[c1a\nb|c2]"),
       ],
     },
   ];
@@ -280,29 +306,25 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
         docOutline("table[c1ab|c2]"),
       ],
     },
-    {
-      name: "유효한 LF 여러 줄",
-      input: "a\nb",
-      expected: [
-        docOutline("table[cella]", "paragraph:b"),
-        docOutline("table[ca]", "paragraph:bl"),
-        docOutline("table[c1|c2]"),
-      ],
-    },
-    {
-      name: "유효한 CRLF 여러 줄",
-      input: `a${CR}\nb`,
-      expected: [
-        docOutline("table[cella]", "paragraph:b"),
-        docOutline("table[ca]", "paragraph:bl"),
-        docOutline("table[c1|c2]"),
-      ],
-    },
   ];
 
   describe.each(selections.map((selection, index) => ({ selection, index })))(
     "$selection.name",
     ({ selection, index }) => {
+      it.each(multilineCases)(
+        "$name 입력은 pasteText 없이 hardBreak로 이어 셀에 직접 넣는다(Issue #299)",
+        ({ input, expected }) => {
+          const result = pasteIn(selection.blocks(), selection.place, {
+            "text/plain": input,
+          });
+
+          expect(result.pasteText).not.toHaveBeenCalled();
+          expect(result.blocks()).toEqual(expected[index]);
+          expectSchemaValid(result.tiptap);
+          expect(result.event.defaultPrevented).toBe(true);
+        },
+      );
+
       it.each(invalidCases)(
         "$name 입력은 무효 문자만 지운 정리본을 pasteText 1회로 셀에 넣는다(C1~C4)",
         ({ input, expected }) => {
@@ -310,8 +332,8 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
             "text/plain": input,
           });
 
-          // S3 여러 줄은 문서가 불변이다. 정리본이 PM에 닿았는지는 pasteText
-          // 호출로 가른다. 가드가 없으면 호출이 0회다.
+          // 정리본이 PM에 닿았는지는 pasteText 호출로 가른다. 가드가 없으면
+          // 호출이 0회다.
           expect(result.pasteText).toHaveBeenCalledTimes(1);
           expect(result.blocks()).toEqual(expected[index]);
           expectSchemaValid(result.tiptap);
@@ -581,8 +603,6 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
     expected: [string[], string[], string[]];
   };
 
-  // 여러 줄은 유효 여러 줄과 같은 구조다. 마지막 셀은 첫 줄만 셀에 들어가고
-  // 나머지는 표 뒤 문단이 된다. S3은 표를 쪼갠 뒤 되돌림이 복원해 불변이다.
   const plainCases: PlainCase[] = [
     {
       name: "유효한 한 줄",
@@ -602,13 +622,19 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
         docOutline("table[c1ab|c2]"),
       ],
     },
+  ];
+
+  // 여러 줄은 줄 사이를 hardBreak로 이어 pasteText 없이 직접 넣는다(Issue
+  // #299). 수정 전에는 마지막 셀이 첫 줄만 셀에 넣고 나머지를 표 뒤 문단으로
+  // 만들었고, S3은 표를 쪼갠 뒤 되돌림이 복원해 불변이었다.
+  const multilinePlainCases: PlainCase[] = [
     {
       name: "유효한 LF 여러 줄",
       input: "a\nb",
       expected: [
-        docOutline("table[cella]", "paragraph:b"),
-        docOutline("table[ca]", "paragraph:bl"),
-        docOutline("table[c1|c2]"),
+        docOutline("table[cella\nb]"),
+        docOutline("table[ca\nbl]"),
+        docOutline("table[c1a\nb|c2]"),
       ],
     },
   ];
@@ -617,6 +643,21 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
     "$selection.name",
     ({ selection, index }) => {
       describe.each(emptySliceHtmls)("html: $name", ({ html }) => {
+        it.each(multilinePlainCases)(
+          "$name 평문은 pasteText 없이 hardBreak로 이어 셀에 직접 넣는다(Issue #299)",
+          ({ input, expected }) => {
+            const result = pasteIn(selection.blocks(), selection.place, {
+              "text/html": html,
+              "text/plain": input,
+            });
+
+            expect(result.pasteText).not.toHaveBeenCalled();
+            expect(result.blocks()).toEqual(expected[index]);
+            expectSchemaValid(result.tiptap);
+            expect(result.event.defaultPrevented).toBe(true);
+          },
+        );
+
         it.each(plainCases)(
           "$name 평문은 정리본을 pasteText 1회로 셀에 넣는다(C1~C3)",
           ({ input, expected }) => {

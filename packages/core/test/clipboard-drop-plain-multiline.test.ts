@@ -458,7 +458,6 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       ["codeBlock", `a${DEL}b`],
       ["셀", `a${LONE}b`],
       ["codeBlock", `a${SOH}b\nc`],
-      ["셀", `a${SOH}b\nc`],
     ] as const)(
       "%s에 무효 문자 평문 %j를 drop하면 같은 캐럿 붙여넣기와 같은 정리본이 들어간다",
       (target, text) => {
@@ -469,6 +468,27 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
         expect(dropped).toEqual(pasteResult(target, entries));
       },
     );
+
+    // 셀 안 여러 줄 평문은 붙여넣기만 hardBreak로 셀에 넣는다(Issue #299).
+    // drop은 범위 밖이라 같은 캐럿 붙여넣기와 결과가 다르다.
+    it("셀에 무효 문자가 섞인 여러 줄 평문을 drop해도 같은 캐럿 붙여넣기와 결과가 다르다(범위 밖 특성화)", () => {
+      const entries = { "text/plain": `a${SOH}b\nc` };
+      const dropped = dropResult("셀", entries);
+      const pasted = JSON.stringify(pasteResult("셀", entries));
+
+      // 붙여넣기는 한 셀 안에 hardBreak로 이어 넣는다.
+      expect(pasted).toContain('"text":"ceab\\ncll"');
+      // drop은 첫 줄만 셀에 넣고 나머지를 표 뒤 문단으로 뺀다(현행).
+      expect(JSON.stringify(dropped)).toContain('"text":"ceab"');
+      expect(dropped.map((block) => block.type)).toEqual([
+        "paragraph",
+        "codeBlock",
+        "table",
+        "paragraph",
+        "paragraph",
+      ]);
+      expect(JSON.stringify(dropped[3])).toContain('"text":"cll"');
+    });
 
     it.each([
       ["문단", "ababcd"],

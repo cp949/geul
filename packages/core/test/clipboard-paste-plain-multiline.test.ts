@@ -5,8 +5,10 @@
  * 들여쓰기 없던 문단이 붙여넣기만으로 자식을 얻으면 안 된다.
  *
  * 다루는 축은 직접 삽입 경로(handlePaste, C1~C10)와 clipboardTextParser
- * 경로(view.pasteText가 타는 PM 기본, C11)다. 한 줄 평문·빈 줄 Markdown·표
- * 셀·codeBlock 안은 현행 유지를 특성화한다. drop 직접 삽입은
+ * 경로(view.pasteText가 타는 PM 기본, C11)다. 한 줄 평문·빈 줄 Markdown·
+ * codeBlock 안은 현행 유지를 특성화한다. 표 셀 안은 이 모듈이 아니라
+ * 셀 계획이 맡는다(Issue #299, clipboard-paste-table-cell-multiline.test.ts).
+ * 여기서는 셀 안 붙여넣기가 블록 배치를 바꾸지 않음만 본다. drop 직접 삽입은
  * clipboard-drop-plain-multiline.test.ts가, 실제 브라우저 drop은
  * e2e/clipboard-paste.spec.ts가 맡는다. clipboardTextParser는
  * view.pasteText로 PM doPaste를 그대로 태워 검증한다.
@@ -407,7 +409,7 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
   });
 
   describe("직접 삽입 대상 밖(C10)", () => {
-    it("표 셀 안 붙여넣기는 블록 배치를 바꾸지 않는다", () => {
+    it("표 셀 안 붙여넣기는 블록을 만들지 않고 셀 계획이 hardBreak로 셀에 넣는다(Issue #299)", () => {
       const { editor, cellIds } = editorWithTable();
       const { editable, tiptap } = mountTiptapEditor(editor);
       editable.focus();
@@ -415,20 +417,28 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
       if (cellId === undefined) throw new Error("셀 fixture 준비 실패");
       placeCaretInCell(tiptap, cellId);
 
-      const before = tiptap.state.doc.toJSON();
+      const before = editor.getDocument().blocks.map((block) => block.type);
       plainPaste(editable, "X\nY");
 
-      // 셀은 inline*라 줄 분리 slice가 들어갈 자리가 없다. 마지막이 아닌
-      // 셀에서는 PM이 표를 쪼갠 뒤 되돌림 guard가 복원해 문서가 불변이다.
-      // 직접 삽입은 셀에 관여하지 않는다.
-      expect(tiptap.state.doc.toJSON()).toEqual(before);
+      // 셀은 inline*라 줄 분리 slice가 들어갈 자리가 없다. 이 모듈의 직접
+      // 삽입은 셀에 관여하지 않는다. 셀 안은 planTableCellPaste가 줄 사이를
+      // hardBreak로 이어 셀에 넣는다. 블록 배치는 바뀌지 않는다.
       const blocks = editor.getDocument().blocks;
+      expect(blocks.map((block) => block.type)).toEqual(before);
       expect(blocks.filter((block) => block.type === "table")).toHaveLength(1);
       expect(
         blocks.some(
           (block) => "children" in block && block.children !== undefined,
         ),
       ).toBe(false);
+      expect(
+        tiptap.state.doc.textBetween(
+          0,
+          tiptap.state.doc.content.size,
+          "",
+          "\n",
+        ),
+      ).toContain("X\nY");
     });
 
     it("캐럿이 codeBlock 안이면 개행째로 코드에 들어간다", () => {

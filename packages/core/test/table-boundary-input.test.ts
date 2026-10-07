@@ -523,19 +523,15 @@ describe("표 경계 범위에 붙여넣으면 선택한 텍스트만 지우고 
   } as const;
   type Kind = keyof typeof KINDS;
 
-  // 캐럿이 셀이면(C1·C2) 셀 안 규칙(ClipboardPaste는 물러나고 PM 기본)을,
-  // 표 밖이면(C3) 블록 규칙을 쓴다. 표 붙여넣기는 캐럿 셀부터 덮어쓰거나
-  // 캐럿 블록 뒤에 새 표를 둔다. 어느 쪽이든 선택하지 않은 텍스트(yz·xyz·ll)는
-  // 남고 원본 표는 구조를 잃지 않는다.
+  // 캐럿이 셀이면(C1·C2) 셀 안 규칙을, 표 밖이면(C3) 블록 규칙을 쓴다.
+  // 셀 안 plain 2줄은 hardBreak로 이어 셀에 넣는다(Issue #299). 표
+  // 붙여넣기는 캐럿 셀부터 덮어쓰거나 캐럿 블록 뒤에 새 표를 둔다. 어느
+  // 쪽이든 선택하지 않은 텍스트(yz·xyz·ll)는 남고 원본 표는 구조를 잃지
+  // 않는다.
   const EXPECTED: Record<Scenario["id"], Record<Kind, string[]>> = {
     C1: {
       "plain 1줄": ["table[cePP]", "paragraph:yz", "paragraph:tail"],
-      "plain 2줄": [
-        "table[ceP1]",
-        "paragraph:P2",
-        "paragraph:yz",
-        "paragraph:tail",
-      ],
+      "plain 2줄": ["table[ceP1\nP2]", "paragraph:yz", "paragraph:tail"],
       HTML: ["table[ceH1]", "paragraph:yz", "paragraph:tail"],
       Markdown: ["table[ce# Title]", "paragraph:yz", "paragraph:tail"],
       TSV: ["table[x|y/1|2]", "paragraph:yz", "paragraph:tail"],
@@ -543,12 +539,7 @@ describe("표 경계 범위에 붙여넣으면 선택한 텍스트만 지우고 
     },
     C2: {
       "plain 1줄": ["table[PP]", "paragraph:xyz", "paragraph:tail"],
-      "plain 2줄": [
-        "table[P1]",
-        "paragraph:P2",
-        "paragraph:xyz",
-        "paragraph:tail",
-      ],
+      "plain 2줄": ["table[P1\nP2]", "paragraph:xyz", "paragraph:tail"],
       HTML: ["table[H1]", "paragraph:xyz", "paragraph:tail"],
       Markdown: ["table[# Title]", "paragraph:xyz", "paragraph:tail"],
       TSV: ["table[x|y/1|2]", "paragraph:xyz", "paragraph:tail"],

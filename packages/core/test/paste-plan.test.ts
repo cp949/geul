@@ -5,14 +5,15 @@
  * 대표 입력 하나를 둔다.
  *
  * 표 셀 계획(planTableCellPaste)은 pass·insertSlice·consume·pasteText·dispatch와
- * 표 밖 null을(CellSelection의 조건별 결과는 Issue #300), 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
+ * 표 밖 null을(CellSelection의 조건별 결과는 Issue #300, 셀 안 여러 줄 평문은
+ * Issue #299), 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
  * 블록 삽입 배치 3종(caret·blockBoundary·afterRangeDelete)을, drop 계획
  * (planDrop)은 delegate·dispatch·consume을 다룬다.
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { Fragment, Slice } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
@@ -271,6 +272,106 @@ describe("planTableCellPaste", () => {
     ).toEqual({
       kind: "consume",
     });
+  });
+});
+
+describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
+  /** 계획 transaction이 만든 셀 t-r0c0의 자식을 종류 목록으로 줄인다. */
+  const cellKinds = (tr: Transaction): string[] => {
+    const kinds: string[] = [];
+    tr.doc.descendants((node) => {
+      if (node.type.name !== "tableCell") return true;
+      node.forEach((child) => {
+        kinds.push(child.isText ? (child.text ?? "") : child.type.name);
+      });
+      return false;
+    });
+    return kinds;
+  };
+
+  it("셀 안 캐럿의 여러 줄 평문은 hardBreak를 이은 dispatch다. 계획은 문서를 바꾸지 않는다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a\nb"),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(cellKinds(plan.transaction)).toEqual(["cella", "hardBreak", "b"]);
+    expect(tiptap.state.doc.textContent).toBe("paracelltail");
+  });
+
+  it("무효 문자가 섞인 여러 줄은 pasteText가 아니라 정리본 dispatch다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip(`a${SOH}b\nc`),
+      sliceOfSize(tiptap, 3),
+    );
+
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(cellKinds(plan.transaction)).toEqual(["cellab", "hardBreak", "c"]);
+  });
+
+  it("빈 slice html + 여러 줄 평문도 dispatch다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+
+    expect(
+      planTableCellPaste(tiptap.state, clip("a\nb", "<meta>"), PM_SLICE)?.kind,
+    ).toBe("dispatch");
+  });
+
+  it("서식 있는 html은 서식 없이 붙여넣기 신호가 없으면 insertSlice, 있으면 평문 dispatch다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const slice = sliceOfSize(tiptap, 1);
+
+    expect(
+      planTableCellPaste(tiptap.state, clip("a\nb", "<b>x</b>"), slice)?.kind,
+    ).toBe("insertSlice");
+    expect(
+      planTableCellPaste(tiptap.state, clip("a\nb", "<b>x</b>", true), slice)
+        ?.kind,
+    ).toBe("dispatch");
+  });
+
+  it("한 줄 평문은 서식 없이 붙여넣기 신호가 있어도 현행 계획이다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+
+    expect(
+      planTableCellPaste(
+        tiptap.state,
+        clip("ab", "<b>x</b>", true),
+        sliceOfSize(tiptap, 1),
+      )?.kind,
+    ).toBe("insertSlice");
+  });
+
+  it("정리본이 비는 입력은 consume이다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+
+    expect(
+      planTableCellPaste(tiptap.state, clip(SOH), sliceOfSize(tiptap, 1)),
+    ).toEqual({ kind: "consume" });
+  });
+
+  it("CellSelection의 연속 개행은 hardBreak 하나다", () => {
+    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 0));
+    selectCellRange(tiptap, "t-r0c0", "t-r0c0");
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a\n\nb"),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(cellKinds(plan.transaction)).toEqual(["a", "hardBreak", "b"]);
   });
 });
 
