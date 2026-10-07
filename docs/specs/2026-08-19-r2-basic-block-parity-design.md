@@ -268,7 +268,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 - 표 붙여넣기(R1 `TablePasteExtension`)와의 경계: 클립보드에 표 형태의 `text/html`이 있으면 R1 계약이 우선한다 — 이 슬라이스는 표가 아닌 콘텐츠(문단, 목록, heading 등)의 붙여넣기만 다룬다.
 - 파일이 클립보드에 있고 대체 가능한 HTML/텍스트 표현이 없으면(예: 이미지 파일 단독) 이벤트를 소비하지 않고 무시한다 — R3에서 파일 블록과 함께 처리한다(2.2).
 - 여러 줄 `text/plain` 배치(정정 2026-10-06, Issue #284). 줄이 둘 이상인 평문은 Enter 분할(5.1, D23·D24·#252)과 같은 규칙으로 놓는다. 들여쓰기 없던 블록이 붙여넣기만으로 자식을 얻지 않는다. 이전에는 PM 기본 처리가 줄마다 문단 slice를 만들어 둘째 줄 이후를 캐럿 블록의 자식으로 넣었다.
-  - 입력은 먼저 `sanitizeInlineText`로 정리한다. 줄은 `\r\n`·`\r`·`\n`으로 나눈다. 연속 개행은 한 경계다. 앞·뒤 개행은 빈 줄로 남아 경계가 된다.
+  - 입력은 먼저 `normalizePasteText`로 정리한다. CR을 LF로 바꾼 뒤 `sanitizeInlineText`를 건다. 줄은 `\r\n`·`\r`·`\n`으로 나눈다. 연속 개행은 한 경계다. 앞·뒤 개행은 빈 줄로 남아 경계가 된다. 정정(2026-10-07, Issue #291): 이전 서술은 sanitize가 먼저였다. `sanitizeInlineText`가 CR을 지워 단독 `\r`이 줄 경계가 되지 못했다. 자세한 규칙은 아래 #291 문단이다.
   - 범위 선택은 Enter와 같은 기준(`deleteSelection`)으로 지운 뒤 붙인다.
   - 줄 사이마다 Enter 분할을 한다. 자식 없는 블록은 다음 형제를 만든다. 자식 있는 블록은 원본의 첫 자식을 만들고 기존 자식 귀속은 바뀌지 않는다. 접힌 toggle은 펼친 형제를 만든다. heading·quote의 끝은 새 블록이 paragraph이고 목록은 같은 타입이다.
   - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
@@ -337,6 +337,19 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 현행 유지: 끝 블록에 자식이 없는 같은 모양, 끝이 내용 끝이 아닌 범위(남은 텍스트가 자식을 가진다), 같은 블록 범위, 끝 codeBlock 잔여(#286), 시작이 codeBlock 안인 범위.
   - 한계: 시작이 끝 블록보다 깊거나 끝 블록이 부모의 자식인 모양은 삭제 기준선을 따른다. 삭제가 빈 블록을 남기고 그 아래에 자식이 있다. `[par 자식 [s "abcd"], e "efgh" 자식 [child], tail]`에서 s offset 2부터 e 끝까지 붙이면 `[par 자식 [s "ab", X, Y], p "" 자식 [child], tail]`다. `[p0 "abcd", par 자식 [e "efgh" 자식 [child], sib], tail]`에서 p0 offset 2부터 e 끝까지 붙이면 `[p "ab" 자식 [X, Y, p "" 자식 [child], sib], tail]`다. Backspace도 같은 빈 블록을 남기므로 붙여넣기만의 결함이 아니다.
   - 한계: 표 셀 안, 평문 경로(#284·#285), 시작이 codeBlock 안인 범위는 바꾸지 않았다. 표 경계 범위는 #292가 먼저 지운다.
+- 붙여넣기·drop 평문의 줄 경계와 감지 입력(정정 2026-10-07, Issue #291). 줄 경계는 CRLF·CR·LF다. Tab 외 제어문자 유무가 줄 배치와 Markdown 감지를 바꾸지 않는다. 이전에는 단독 `\r`이 지워져 한 줄로 합쳐졌고, 제어문자 하나가 Markdown 감지를 껐다.
+  - 정규화 순서는 CR → LF가 먼저, 무효 문자 제거(`sanitizeInlineText`)가 그다음이다. 삽입용은 `normalizePasteText`다(`plain-text-paste.ts`). U+2028·U+2029·U+0085는 줄 경계가 아니다. 건드리지 않는다.
+  - 직접 삽입·codeBlock 걸친 범위 분기·`view.pasteText` 폴백·drop이 같은 정규화본에서 나온다. 감지만 입력이 한 지점 다르다. 감지 전용 `normalizeForMarkdownDetection`은 CR을 LF로 바꾼 뒤 Tab 외 무효 문자만 지운다. Tab은 감지 입력에서 지우지 않는다. 삽입용은 Tab까지 지운다(QA-078).
+  - Tab을 남기는 이유는 Markdown 구조와 코드 내용이다. 줄 앞 Tab(중첩 목록 `- a\n\t- b`, 들여쓴 코드 `\tcode`), 마커 뒤 Tab(`1.\tfoo`, `#\tHeading`, `-\tone`), 코드 펜스·들여쓴 코드 안 Tab(`a\tb`)이 이전과 같다. codeBlock 정책(model)이 Tab을 허용한다.
+  - Tab 외 제어문자(U+0001·ESC 등)는 감지를 끄지 않는다. `# H\u0001\n\nbody`는 heading이다. 코드 펜스 안 `\u0001`이 있어도 codeBlock이다. 코드 내용의 Tab은 남는다(`a\tb\u0001c` → `a\tbc`). 이전에는 이 입력 전부가 감지되지 않아 문단으로 들어갔다.
+  - 인라인 본문(문단·heading·목록 항목 텍스트)에 Tab이 있으면 `importMarkdown`이 거절해 감지가 꺼지고 평문으로 들어간다. 이전과 같다. `a\tb\n\nc`는 감지되지 않고 `[ab, c]`로 이어 붙는다(Tab 정책 QA-078).
+  - 단독 `\r`은 단독 `\n`과 같다. 줄 경계 하나다. `\r\r`은 `\n\n`과 같아 Markdown 문단 경계다.
+  - `view.pasteText` 위임 판정은 CR을 무효 문자로 세지 않는다. 정규화본이 CR→LF 변환만 한 입력과 같고 html 폴백이 아니면 raw 그대로 PM 기본에 위임한다. CRLF만 있는 평문은 최종 문서 결과가 이전과 같다. 이전에는 sanitize가 CR을 지워 `view.pasteText`를 불렀고, 지금은 raw를 PM 기본에 위임하고 `view.pasteText`를 부르지 않는다. 무효 문자가 있을 때만 정규화본으로 `view.pasteText`를 부른다.
+  - 빈 판정은 raw 클립보드 값으로 한다. 제어문자만 있는 입력은 이벤트를 소비하고 문서를 바꾸지 않는다.
+  - drop은 같은 `normalizePasteText`를 쓴다. 단독 `\r` 평문 drop도 직접 삽입으로 줄이 나뉜다.
+  - 표 셀 안 평문과 `clipboardTextParser`는 바꾸지 않았다. `clipboardTextParser`는 raw 입력도 받으며 CR을 이미 줄 경계로 나눈다. 공개 API는 바뀌지 않는다.
+  - 한계: 인라인 본문에 Tab이 있는 Markdown은 감지되지 않고 평문으로 들어간다. 변경 전과 같다.
+  - 한계: 시작이 codeBlock 밖인 codeBlock 걸친 범위의 한 줄 평문에 제어문자가 섞이면 붙여넣기가 문서를 바꾸지 않고 사라진다. 한 줄 평문은 PM 기본 처리에 위임한다. 문서는 그대로이고 `TypeError`는 나지 않는다(jsdom 실측). 이 작업이 바꾸지 않았다.
 
 ## 8. 오류 계약 확장
 
