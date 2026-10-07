@@ -215,27 +215,41 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           // 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
           // 자식 있는 블록의 D23 배치는 이 경로로 만들 수 없다(spec 7.3).
           clipboardTextParser: plainTextClipboardParser,
-          handlePaste: (view, event) => {
+          handlePaste: (view, event, slice) => {
             if (sanitizedPasteInFlight) return false;
             // 표 셀 안은 PM 기본에 맡긴다(R1 계약). pasteHandler도 호출하지
             // 않는다(roadmap.md "제외 범위", IO-008은 표·미디어 붙여넣기를
-            // 대상으로 하지 않는다). 예외는 무효 문자가 섞인 평문 하나다
-            // (Issue #297). 정리본을 평문으로 넣는다.
+            // 대상으로 하지 않는다). 예외는 PM 기본이 평문을 잃는 두 경우다.
+            // 무효 문자가 섞인 평문(Issue #297)과 빈 slice html에 딸린
+            // 평문(Issue #301)이다. 정리본을 평문으로 넣는다.
             if (isInTable(view.state)) {
-              // CellSelection이 아니고 text/html이 비어 있을 때만 개입한다.
+              // CellSelection이 아니고 html이 실제 내용을 갖지 않을 때만 개입한다.
               // - CellSelection은 유효 평문도 PM 기본이 되돌리는 별개 결함이다.
-              // - html이 있으면 PM이 html만 쓴다. 개입하면 셀 서식을 잃는다.
+              // - html이 실제 내용(slice.size > 0)을 가지면 PM이 html만 쓴다.
+              //   개입하면 셀 서식을 잃는다.
+              // - html이 있어도 PM 파싱 결과가 빈 slice이면 PM은 평문을 버린다.
+              //   공백·meta·StartFragment 주석·빈 문단이 해당한다. 평문을 넣는다.
               // - 셀 안 인라인 atom NodeSelection은 정리본이 atom을 대체한다.
               if (view.state.selection instanceof CellSelection) return false;
               const clipboardData = event.clipboardData;
               if (clipboardData === null) return false;
-              if (clipboardData.getData("text/html").length > 0) return false;
-              // 유효한 평문은 PM 기본에 맡긴다. PM 기본이 raw 무효 문자를 넣으면
-              // 되돌림 guard가 붙여넣기를 통째로 지운다. Tab도 셀에서는 무효라
-              // 정리본이 raw와 다르다. 정리본이 비면 이벤트만 소비한다.
+              const html = clipboardData.getData("text/html");
+              if (html.length > 0 && slice.size > 0) return false;
+              // 평문이 비면 개입하지 않는다. 빈 slice html이면 PM 기본이 범위만
+              // 지운다(현행 유지).
               const rawText = clipboardData.getData("text/plain");
+              if (rawText.length === 0) return false;
+              // html이 없는 유효한 평문은 PM 기본에 맡긴다. PM 기본이 raw 무효
+              // 문자를 넣으면 되돌림 guard가 붙여넣기를 통째로 지운다. Tab도
+              // 셀에서는 무효라 정리본이 raw와 다르다. 정리본이 비면 이벤트만
+              // 소비한다. html이 빈 slice이면 유효한 평문도 아래로 내려간다.
               const cleaned = normalizePasteText(rawText);
-              if (cleaned === normalizeLineBreaks(rawText)) return false;
+              if (
+                html.length === 0 &&
+                cleaned === normalizeLineBreaks(rawText)
+              ) {
+                return false;
+              }
               if (cleaned.length > 0) pasteTextThroughPm(view, cleaned, event);
               return true;
             }
