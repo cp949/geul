@@ -440,6 +440,52 @@ describe("ClipboardPasteExtension", () => {
       });
     });
 
+    // Issue #306(#305 흡수). defaultPasteHandler()의 반환값을 그대로 돌려줘도
+    // 기본 처리 결과가 남는다. 한 줄 유효 평문은 PM 기본 삽입이라 예전에는
+    // false("위임")를 돌려줘 pasteHandler의 false("취소")로 읽혔다.
+    it("defaultPasteHandler()의 반환값을 그대로 돌려줘도 한 줄 평문이 들어간다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+        pasteHandler: ({ defaultPasteHandler }) => defaultPasteHandler(),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+
+      withUnhandledErrorTracking((errors) => {
+        pasteData(editable, { "text/plain": "X" });
+
+        const blocks = editor.getDocument().blocks;
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ content: [{ text: "seedX" }] });
+        expect(errors).toEqual([]);
+      });
+    });
+
+    it("기본 처리 삽입 transaction은 paste·uiEvent meta를 단다", () => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("seed"),
+        createId: sequentialIds("id"),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+      const metas: unknown[][] = [];
+      tiptap.on("transaction", ({ transaction }) => {
+        if (transaction.docChanged) {
+          metas.push([
+            transaction.getMeta("paste"),
+            transaction.getMeta("uiEvent"),
+          ]);
+        }
+      });
+
+      pasteData(editable, { "text/plain": "X" });
+
+      expect(metas).toEqual([[true, "paste"]]);
+    });
+
     it("context.editor가 EditorController facade로 동작해 호출 시점 문서를 조회할 수 있다", () => {
       const seenBlockCounts: number[] = [];
       const editor = createEditor({

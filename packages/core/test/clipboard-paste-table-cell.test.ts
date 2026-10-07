@@ -484,6 +484,24 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
       expectSchemaValid(result.tiptap);
     });
 
+    // Issue #306 결함 1. 지우기 전 state는 head가 표 밖이라 셀 정리를
+    // 건너뛰었다. 지운 뒤 캐럿은 셀 안이라 정리 안 된 slice가 들어가 되돌림
+    // guard가 붙여넣기를 지웠다(지움만 남음).
+    it("시작이 셀 안이고 끝이 뒤 문단 안이면 무효 문자 html도 정리본이 셀에 들어간다", () => {
+      const result = pasteIn(
+        lastCellBlocks(),
+        textSelection(inCell("t-r0c0", 2), tail(2)),
+        { "text/html": `<p>a${SOH}b</p>`, "text/plain": "ab" },
+      );
+
+      expect(result.blocks()).toEqual([
+        "paragraph:para",
+        "table[ceab]",
+        "paragraph:il",
+      ]);
+      expectSchemaValid(result.tiptap);
+    });
+
     it("시작이 표 밖이면 지운 뒤 캐럿이 표 밖이라 표 밖 경로가 정리본을 넣는다", () => {
       const result = pasteIn(
         lastCellBlocks(),
