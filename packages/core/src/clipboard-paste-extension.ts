@@ -196,10 +196,13 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     let sanitizedPasteInFlight = false;
     // drop 이벤트 안에서 PM이 부르는 transformPasted를 건너뛰는 플래그다(Issue #302).
     let dropInFlight = false;
-    // Ctrl+Shift+V(서식 없이 붙여넣기) 요청이다(Issue #303). PM은 handlePaste를
-    // 부르기 직전 같은 호출 스택에서 transformPasted의 3번째 인자로 평문 요청
-    // 여부를 알려 준다. view.input.shiftKey는 PM 비공개라 쓰지 않는다. PM이
-    // Shift+Insert를 평문으로 보지 않는 예외도 이 인자에 이미 반영돼 있다.
+    // PM이 이번 붙여넣기를 평문 경로로 만들었다는 신호다(Issue #303). PM은
+    // handlePaste를 부르기 직전 같은 호출 스택에서 transformPasted의 3번째
+    // 인자(asText)로 알려 준다. Ctrl+Shift+V뿐 아니라 평문 단독 클립보드와
+    // 캐럿이 codeBlock 안인 붙여넣기에서도 참이다. 두 경우는 html이 비었거나
+    // 아래 codeBlock 조기 반환이 먼저 처리해 영향이 없다. view.input.shiftKey는
+    // PM 비공개라 쓰지 않는다. PM이 Shift+Insert를 평문으로 보지 않는 예외도
+    // 이 인자에 이미 반영돼 있다.
     // transformPasted가 기록하고 handlePaste 진입에서 읽어 내린다. 다른
     // 플러그인이 붙여넣기를 먼저 소비하면 이 플러그인의 handlePaste가 불리지
     // 않으므로 microtask로도 내린다.
@@ -340,8 +343,11 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
 
               // 서식 없이 붙여넣기(Ctrl+Shift+V)면 text/html을 읽지 않는다(Issue
               // #303). html.length가 아래 모든 html 분기(범위 합류·html import·
-              // 폴백)를 지배해 비우면 평문 경로로 내려간다. PM은 평문이 있을 때만
-              // 요청을 켜므로 평문 없는 html 단독 클립보드는 영향이 없다.
+              // 폴백)를 지배해 비우면 평문 경로로 내려간다. PM은 평문 텍스트가
+              // 있을 때만 요청을 켠다. 평문 없는 html 단독 클립보드는 영향이
+              // 없다. PM의 평문 판정은 text/plain이 비면 Text·text/uri-list를
+              // 대신 쓴다. 그 값이 html과 함께 오면 이 경로도 html을 건너뛰고
+              // PM 기본이 그 값을 넣는다.
               const html = preferPlain
                 ? ""
                 : clipboardData.getData("text/html");

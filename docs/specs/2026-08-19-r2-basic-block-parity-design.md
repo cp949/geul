@@ -273,8 +273,8 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 줄 사이마다 Enter 분할을 한다. 자식 없는 블록은 다음 형제를 만든다. 자식 있는 블록은 원본의 첫 자식을 만들고 기존 자식 귀속은 바뀌지 않는다. 접힌 toggle은 펼친 형제를 만든다. heading·quote의 끝은 새 블록이 paragraph이고 목록은 같은 타입이다.
   - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
   - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
-  - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다.
-  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297)(정정 2026-10-07, Issue #301: `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 평문을 정리본으로 넣는다)(정정 2026-10-07, Issue #302: 셀 안 slice의 무효 문자는 `transformPasted`가 지운다), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
+  - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다. 정정(2026-10-07, Issue #303): 평문 단독 입력은 같다. `text/html`이 함께 오면 확장이 Shift를 구분한다. 서식 없이 붙여넣기는 html을 건너뛴다(아래 #303 문단).
+  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백)(정정 2026-10-07, Issue #303: Ctrl+Shift+V는 html을 건너뛴다), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297)(정정 2026-10-07, Issue #301: `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 평문을 정리본으로 넣는다)(정정 2026-10-07, Issue #302: 셀 안 slice의 무효 문자는 `transformPasted`가 지운다), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
   - 직접 배치가 물러나는 입력은 `clipboardTextParser`를 탄다. 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 경로가 아니라 아래 직접 삽입이다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 한계에서 벗어났다. 이 경로는 위임 입력에만 남는다(#285 한계 참조). 그 입력에서는 이 한계가 그대로다.
 - codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
@@ -419,7 +419,35 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - drop은 정리 대상이 아니다. PM이 drop에도 `transformPasted`를 호출하지만 이때 `view.state.selection`은 drop 위치가 아니라 현재 selection이다. 캐럿이 셀 안이면 다른 위치 drop까지 정리돼 codeBlock에 drop한 Tab이 지워졌다(jsdom 실측: `xqryz`). `drop` 이벤트 처리 중에는 변환을 건너뛴다. 캐럿이 셀 안이어도 codeBlock에 drop한 Tab은 남고(`xq` TAB `ryz`), 표 밖에 drop한 무효 문자 html은 이전처럼 문서가 그대로다. 셀 안으로 drop한 무효 문자 html도 정리하지 않는다. 이 경로는 바꾸지 않았다. 내부 드래그 slice는 변환을 타지 않는다.
   - 한계: 무효 문자뿐인 문단이 둘 이상인 html(`<p>` U+0001 `</p><p>` U+0001 `</p>`)은 정리 뒤에도 빈 문단 둘이 남아 slice가 비지 않는다. 평문 폴백이 일어나지 않고 표 뒤에 빈 문단이 생긴다. 유효한 빈 문단 html과 같은 구조라 바꾸지 않았다.
   - 한계: `&nbsp;` 같은 보이지 않는 문자만 있는 html은 slice가 비지 않아 html이 이긴다(#301 한계 유지). `CellSelection`·표 경계 범위·표 밖은 바꾸지 않았다.
-  - 한계: 표 밖 Ctrl+Shift+V는 Shift를 구분하지 않는다. 이 문단 밖이다.
+  - 한계: 표 밖 Ctrl+Shift+V는 Shift를 구분하지 않는다. 이 문단 밖이다. 정정(2026-10-07, Issue #303): 표 밖은 해소했다. 아래 #303 문단이 현재 계약이다. 표 셀 안 Ctrl+Shift+V는 이 문단 그대로다.
+  - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
+- 표 밖 Ctrl+Shift+V(서식 없이 붙여넣기)는 `text/plain`만 넣는다(정정 2026-10-07, Issue #303). `text/html`이 함께 있어도 서식을 넣지 않는다. 이전에는 Shift를 구분하지 않아 html의 서식이 들어갔다.
+  - 원인: `defaultHandlePaste`가 `event.clipboardData`의 `text/html`을 직접 읽었다. PM이 Shift로 만든 평문 slice는 `handlePaste`의 `slice` 인자로만 전달된다. 이 코드는 slice를 보지 않는다. `packages/core/src`에 Shift 판정이 없었다. `html.length`가 `htmlFellBack`·`delegable`·`intersectsCodeBlock` 분기를 모두 지배한다.
+  - 수정: `ClipboardPasteExtension` 클로저에 `plainPasteRequested` 플래그를 둔다. `transformPasted(slice, view, plain)`의 3번째 인자를 기록한다. 이 인자(`asText`)는 PM 공개 API다. PM이 평문 경로로 붙인다는 신호이고 Shift 값 자체는 아니다. Shift는 `plainText = view.input.shiftKey && view.input.lastKeyCode != 45`로 `asText`에 들어간다. 평문 단독 클립보드와 캐럿이 codeBlock 안인 붙여넣기에서도 참이다. 두 경우는 html이 비었거나 codeBlock 조기 반환이 먼저 처리해 영향이 없다. `view.input`은 PM 비공개라 쓰지 않는다. drop 중에는 기록하지 않는다(#302의 `dropInFlight`). 기록 뒤 microtask로 내린다.
+  - `handlePaste`는 맨 위에서 플래그를 읽어 `preferPlain` 상수로 확정하고 내린다. `sanitizedPasteInFlight` 가드보다 앞이다. `view.pasteText` 재진입도 `transformPasted`를 다시 불러 플래그를 켜기 때문이다. 다른 플러그인(`TablePasteExtension`)이 붙여넣기를 소비하면 이 `handlePaste`가 불리지 않는다. 그때를 위해 microtask로도 내린다.
+  - `defaultHandlePaste`는 `preferPlain`이면 `text/html`을 읽지 않고 빈 문자열로 둔다. 읽는 줄 하나만 바뀐다. 표 셀 안 분기와 `pasteHandler` 호출 로직은 바꾸지 않았다. 상수라서 `pasteHandler`가 나중에 부른 `defaultPasteHandler`도 그 붙여넣기의 요청을 따른다.
+  - PM은 평문이 있을 때만 요청을 켠다(`asText = !!text && (plainText || inCode || !html)`). 평문 없이 html만 있는 클립보드는 `preferPlain`이 거짓이라 html을 가져온다. PM의 평문 판정은 `text/plain`이 비면 `Text`·`text/uri-list`를 대신 쓴다. 그 값이 html과 함께 오면 `preferPlain`이 참이라 html을 건너뛰고 PM 기본이 그 값을 평문으로 넣는다. Shift+Insert는 PM이 평문으로 보지 않아 Shift 없는 Ctrl+V와 같다.
+  - 결과(Shift, 표 밖, html 동봉). 문서 `[p1 "ab", tail]`, 캐럿 `ab|` 기준이다(jsdom 실측).
+
+    | 입력 | 수정 전 | 수정 후 |
+    |---|---|---|
+    | 평문 `a` + html `<b>x</b>` | `ab`, bold `x` 문단, `tail` | `aba`, `tail`. 서식 없음 |
+    | 평문 `ab` + html `<h1>H</h1><p>b</p>` | `ab`, heading `H`, `b`, `tail` | `abab`, `tail` |
+    | 범위 `a[b]` + 평문 `Z` + html `<h1>H</h1>` | `a`, heading `H`, `tail` | `aZ`, `tail` |
+    | `p1 "abcd"`·codeBlock `foobar`에 걸친 범위(`ab` 뒤 – `foo` 뒤) + 평문 `Z` + html `<p>H</p>` | html 합류(`ab`, `H`, codeBlock `bar`) | 범위가 평문으로 대체돼 `abZbar`, `tail`(#286 예외 1이 해제된다) |
+    | 여러 줄 평문 `X\nY` + html `<h1>H</h1>`(문서 `p1 "abcd"`, 캐럿 `ab|cd`) | `ab`, heading `H`, `cd` | #284 직접 배치(`abX`, `Ycd`) |
+    | 무효 문자(U+0001)가 섞인 평문 + html | html 블록 | 정리본 평문 `abab`(#295). 되돌림 없음 |
+    | Markdown 평문 `# T` + html | html 블록 | heading `T`(Markdown 감지는 Shift와 무관, 유지) |
+    | html만(평문 없음) | html 가져옴 | 같다(유지) |
+    | Shift+Insert + html + 평문 | html 가져옴 | 같다(유지) |
+
+  - 유지: 표 셀 안(셀 안 분기가 먼저 처리한다, #297·#301·#302), 캐럿이 codeBlock 안(PM 기본), drop, `CellSelection`, 평문 단독과 html 단독의 Shift 없는 경로. `pasteHandler`는 Shift여도 1회 호출한다. 핸들러가 `event`로 html을 직접 읽을 수 있다. `defaultPasteHandler()`는 html을 건너뛴 결과를 돌려준다.
+  - transaction은 하나다. 새 transaction 경로가 없다. PM 기본·#284 직접 배치·`pasteTextThroughPm`이 그대로 만든다. dispatch·undo가 각각 1회다.
+  - 한계: 표 형태 `text/html`과 TSV 평문은 `TablePasteExtension`이 Shift와 무관하게 표로 만든다. 이 확장보다 먼저 `event.clipboardData`를 직접 읽는다. 표 밖 Ctrl+Shift+V도 표를 만든다.
+  - 한계: 평문 단독 클립보드의 Markdown 감지는 Shift와 무관하다. Shift는 html 분기만 건너뛴다. Ctrl+Shift+V로 `# T`를 붙이면 heading이 된다.
+  - 한계: 파일·이미지 붙여넣기(`MediaDropPasteExtension`)는 Shift를 구분하지 않는다.
+  - 한계: `pasteHandler`가 `defaultPasteHandler()`의 결과를 그대로 돌려주면 한 줄 유효 평문이 들어가지 않는다. 이 입력에서 기본 처리는 PM 위임(`false`)을 돌려주고 `handlePaste`가 `false`를 취소로 해석한다. 한 줄 평문만 있는 Ctrl+V와 같은 현행 동작이다. 수정 전 Shift 입력은 html을 가져와 `true`를 돌려주던 경로라 이 입력에서 달라진다.
+  - 실측(Chromium, showcase document-io 예제, 임시 e2e 프로브는 삭제): 실제 `ClipboardItem`으로 html `<b>x</b>`와 평문 `a`를 쓰고 `paste` 이벤트의 `clipboardData`를 기록했다. 실제 Ctrl+V는 `types`가 `["text/plain","text/html"]`이고 bold `x` 문단이 들어간다. 실제 Ctrl+Shift+V는 `types`가 `["text/plain"]`이고 `text/html`이 빈 문자열이다. 문서는 수정 전(`text/html` 읽기를 되돌린 빌드)과 수정 후 모두 `aba`다. Chromium은 Ctrl+Shift+V에서 html을 싣지 않는다. 실제 키 입력에서는 이 결함이 보이지 않는다. 실제 Shift+Insert는 `types`가 둘이고 bold `x` 문단이 들어간다. html만 있는 클립보드의 Ctrl+Shift+V는 `types`가 `[]`이고 문서가 그대로다. Shift를 누른 채 합성 `paste` 이벤트(html과 평문을 담은 `DataTransfer`)를 보내면 수정 전은 bold `x` 문단이 들어가고 수정 후는 `aba`다. 이 수정이 보호하는 대상은 jsdom 계약, `text/html`을 싣는 엔진, 프로그램적 `ClipboardEvent`다.
   - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
 
 ## 8. 오류 계약 확장
