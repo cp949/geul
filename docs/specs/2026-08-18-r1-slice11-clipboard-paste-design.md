@@ -137,7 +137,7 @@ sanitizer는 `htmlSanitizeSchema`를 그대로 쓰되 `htmlAllowedAttributes.td`
 
 구현 반영(2차 리뷰 후 계약 변경): 짧은 행 패딩을 하지 않는다. TSV 경로는 **모든 줄의 탭 개수가 같고 열이 2개 이상일 때만** 표로 인정하고, 들쭉날쭉하면 `NOT_TABULAR`로 기본 붙여넣기에 넘긴다. 끝 개행 하나가 만든 빈 줄만 버리고 중간 빈 줄은 버리지 않는다(버리면 행 인덱스가 조용히 밀린다 — 중간 빈 줄은 탭 개수 검사가 걸러낸다).
 
-이유: `text.includes("\t")` 하나로 판정하면 탭 들여쓰기 코드나 탭이 섞인 로그가 전부 표가 되고, §7.2 계약대로 확장이 이벤트를 소비하므로 사용자가 기본 붙여넣기를 되찾을 방법이 없다. 스프레드시트 클립보드는 항상 직사각형이므로 이 조건이 실제 대상 입력을 잃지 않는다. HTML 표의 짧은 행 패딩은 그대로 유지한다 — 진짜 표 마크업은 정상적으로 들쭉날쭉하다.
+이유: `text.includes("\t")` 하나로 판정하면 탭 들여쓰기 코드나 탭이 섞인 로그가 전부 표가 되고, §7.2 계약대로 확장이 이벤트를 소비하므로 사용자가 기본 붙여넣기를 되찾을 방법이 없다. 스프레드시트 클립보드는 항상 직사각형이므로 이 조건이 실제 대상 입력을 잃지 않는다. HTML 표의 짧은 행 패딩은 그대로 유지한다 — 진짜 표 마크업은 정상적으로 들쭉날쭉하다. 예외: 캐럿이나 범위 시작이 codeBlock 안이면 이 판정에 닿기 전에 표 붙여넣기가 물러나 탭 들여쓰기 코드가 코드 텍스트로 들어간다(§7.2 Issue #298).
 
 구현 반영(TSV whitespace 정책, Issue #34): TSV 경로의 셀 whitespace는 HTML 경로와 의도적으로 비대칭 유지한다 — **보존**하고 collapse/trim하지 않는다. `parseTsv`(`clipboard-table-parser.ts:485-528`)는 셀 텍스트에 `sanitizeCellText`(`cell-text.ts:16-17`, `:517`에서 호출)만 적용한다 — model의 `sanitizeInlineText`(`string-invariants.ts:39-46`) 위임이라 LF를 제외한 C0 제어문자·DEL·짝없는 surrogate만 제거하고 공백은 건드리지 않는다. 반면 HTML 경로(§4.2)는 `collapseHtmlWhitespace`(`cell-text.ts:22-32`)로 연속 공백 run을 하나로 접고 `normalizeCellContent`(`cell-text.ts:82-111`)로 셀 앞뒤 공백까지 trim한다. 비대칭 근거는 둘이다. (1) TSV 전용 경로(HTML 표현이 없는 클립보드)로 들어오는 실제 입력은 탭 들여쓰기 코드나 로그처럼 공백 자체가 원문의 의미인 텍스트일 가능성이 높다 — 바로 위 단락의 "탭 들여쓰기 코드/로그" 판정 근거와 같은 소스다. collapse/trim은 이런 원문을 조용히 훼손한다. (2) 실사용 스프레드시트(Excel, Google Sheets 등) 붙여넣기는 대부분 `text/html`을 함께 담아 오므로 §4.1 우선순위 규칙에 따라 HTML 경로로 처리되고 이미 collapse/trim을 거친다 — TSV whitespace 정책은 그 경로에 영향을 주지 않는다. 이 (2)는 브라우저 실측이 아니라 클립보드 payload 구성에 대한 합리적 추정이다. 이 비대칭 동작은 `clipboard-table-normalization.test.ts:77-84`가 이미 회귀 테스트로 고정한다.
 
@@ -248,6 +248,20 @@ addProseMirrorPlugins() {
 구현 반영(붙여넣기 실패 피드백 표면, Issue #36): `handlePaste`가 이벤트를 소비하며 거절하는 두 경로(파서 거절 `CLIPBOARD_TABLE_INVALID`, 명령 거절 — `pasteClipboardContent` 실패)는 호출자에게 원인을 알리지 않았다. `TablePasteOptions`/`CreateEditorOptions`에 `onPasteRejected?: (reason: PasteRejectedReason) => void`를 추가해 두 경로 모두에서 호출한다 — `NOT_TABULAR`(§7.2 위 문단, 표 붙여넣기 대상이 아니었던 폴백)는 거절이 아니므로 호출하지 않는다. `PasteRejectedReason`은 `Exclude<ClipboardParseError, {code:"NOT_TABULAR"}> | TableCommandError`로, 기존 타입을 그대로 재사용해 새 flatten 계약을 만들지 않는다. 콜백은 읽기 전용 알림이라 어떤 transaction도 dispatch하지 않고, `handlePaste`의 반환값(이벤트 소비 여부)도 바꾸지 않는다 — G-EDT-001의 원자성 계약과 충돌하지 않는다. react `EditorProvider`는 `onChange`와 정확히 같은 패턴(내부 `ownership` 분기에서만 허용, 외부 `editor` 제공 시 `never`, `useRef`로 최신 콜백 유지)으로 `onPasteRejected`를 `createEditor`에 중계한다. 이 슬라이스는 core 헤드리스 콜백 표면과 react 중계까지만 다룬다 — 토스트 등 화면에 보이는 UI는 다루지 않는다(각주 "범위 밖", `apps/demo` 통합은 별도 이슈).
 
 구현 반영(`TableCommandError` 선언 위치 분리, Issue #36): `PasteRejectedReason`이 `TableCommandError`를 재사용하려면 `CreateEditorOptions`(core 공개 declaration)에서 그 타입에 도달할 수 있어야 한다. 그런데 `TableCommandError`는 원래 `table-commands.ts`에, `TableCodecError`는 `table-model-codec.ts`에 선언돼 있었고 두 파일 모두 Tiptap/ProseMirror 타입(`Editor`, `Transaction`, `ProseMirrorNode`, `Schema`)을 쓰는 함수를 같은 파일에 갖고 있다 — tsc는 파일 단위로 `.d.ts`를 내보내므로, 공개 declaration이 그 파일에서 타입 하나만 import해도 같은 파일의 나머지 선언(Tiptap/PM 타입 포함) 전체가 `packages/core/test/public-types.test.ts`의 도달 가능 그래프에 딸려 나와 ADR-0002("core의 공개 declaration에는 Tiptap 또는 ProseMirror 타입을 노출하지 않는다")를 깬다(실측: `TablePasteExtension: Extension<...>` 노출로 재현). `table-paste-extension.ts`도 `TablePasteExtension`(Tiptap `Extension` 인스턴스)을 선언하므로 `PasteRejectedReason`을 그 파일에 두는 것도 같은 문제였다. 해결: `TableCommandError`/`TableCodecError`/`PasteRejectedReason`을 Tiptap/PM을 전혀 참조하지 않는 새 파일 `packages/core/src/table-command-error.ts`로 옮긴다. `table-commands.ts`는 `export type { TableCommandError } from "./table-command-error.js";`로 재-export해 기존 호출부 호환을 유지하고, `table-model-codec.ts`·`table-paste-extension.ts`는 그 타입들을 새 파일에서 import한다. 패키지 경계(ADR-0002의 `core -> io` 등)는 바뀌지 않는다 — core 내부 파일 재배치일 뿐이다.
+
+구현 반영(codeBlock 안에서 물러남, Issue #298): 캐럿이나 범위 시작(`$from`)이 codeBlock 안이면 `handlePaste`가 맨 앞에서 `false`를 반환한다. 표 판정과 `parseClipboardTable` 호출 전이다. 위 "표로 인식된 뒤 항상 소비" 계약의 예외다. 예외는 판정 전에 일어나므로 "표로 인식된 뒤 거절" 계약을 깨지 않는다.
+
+- 판정은 `selectionStartsInCodeBlock(selection)`이다(`code-block-mark-guard-extension.ts`, core 내부 export). `$from` 조상에 `codeBlock`이 있으면 참이다. 범위의 끝은 보지 않는다. 접힌 toggle 안 숨은 codeBlock도 참이다.
+- `ClipboardPasteExtension`의 codeBlock 분기도 같은 판정으로 진입한다. 기존 조건(`selectionIntersectsAnyCodeBlock`)은 문자 구간이 겹쳐야 참이라 코드 내용 끝이나 빈 codeBlock에서 시작하는 범위를 놓쳤다. 놓치면 표 붙여넣기만 물러나고 이 분기는 타지 않아 평문의 Tab이 지워지고, html 표는 `createId`가 아닌 `importHtml` 기본 id의 표 블록이 됐다. 두 판정이 같아야 한다.
+- `NodeSelection`은 `$from`이 문서 쪽이라 codeBlock 자신을 골라도 거짓이다. 이 경우는 이전처럼 표 붙여넣기가 처리한다.
+- 물러남은 거절이 아니다. `onPasteRejected`를 부르지 않는다. 셀 수 상한(10,000)을 넘는 html 표도 같다. 표 판정 전이라 `CLIPBOARD_TABLE_INVALID`가 만들어지지 않는다.
+- 물러난 뒤 처리는 `ClipboardPasteExtension`의 codeBlock 분기가 맡는다(r2 스펙 #296 문단). 유효한 평문은 PM 기본에 위임한다. 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣고 Tab은 남긴다. `text/html`은 평문이 있으면 무시된다.
+- 이전에는 `a⇥b`, 탭 들여쓰기 코드, 스프레드시트 복사(html 표 + TSV)가 모두 표 블록이 됐다. 이제 평문 그대로 코드 텍스트로 들어간다.
+- 예: 문서 `p1 "abcd"`, `cb "foobar"`, `tail`에서 `a⇥b`를 붙이면 캐럿 cb:3은 `code "fooa⇥bbar"`, cb:2 ~ tail:2는 `code "foa⇥bil"`과 빈 문단, cb:1 ~ cb:4는 `code "fa⇥bar"`, 코드 내용 끝에서 시작하는 cb:6 ~ tail:2는 `code "foobara⇥bil"`과 빈 문단이다.
+- 한계: html 표만 있고 평문이 없는 입력은 PM이 html을 파싱해 넣는다. 단순 셀은 셀 텍스트가 탭 없이 이어 붙는다(`code "fooabcdbar"`). 셀 안에 블록(`<p>` 둘)이나 `<br>`이 있으면 codeBlock이 쪼개져 뒷부분이 문단이 된다(`code "fooa"`, `p "b"`, `p "cbar"`). 무효 문자가 든 html 표(`<td>a&#1;</td>`)는 붙여넣기가 사라진다. 평문의 무효 문자 규칙(#296)은 `text/plain`만 다룬다.
+- 한계: `pasteHandler`는 codeBlock 안 표 모양 입력에도 호출된다. 표·미디어만 범위 밖이라는 기존 계약에 codeBlock은 없다. 이전에는 표 붙여넣기가 먼저 소비해 호출되지 않았다.
+- 한계: 앱 내부 표 복사는 커스텀 `clipboardTextSerializer`가 없다. 평문이 PM 기본(셀 텍스트 연결)이라 TSV가 아니다. codeBlock 안에 붙이면 셀 텍스트가 이어 붙는다.
+- 한계: 시작이 codeBlock 밖인 범위는 끝이 codeBlock 안이어도 이전처럼 표 붙여넣기가 가로챈다(범위를 지운 뒤 표를 넣는다).
 
 ## 8. 오류 계약 확장
 
