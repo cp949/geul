@@ -11,6 +11,9 @@
  * 특성화만 한다. 시작이 codeBlock 밖인 범위의 여러 줄 평문은 직접 삽입으로
  * 배치한다(Issue #285). 범위 끝 뒤에 자식이 남는 모양에서도 그 자식이 마지막
  * 줄 블록으로 넘어가지 않는다. Markdown 평문은 이 범위에서 감지하지 않는다.
+ * 무효 문자(제어문자·짝 없는 surrogate)가 섞인 한 줄 평문은 정리본을
+ * view.pasteText로 넣고, 제어문자만 있으면 이벤트만 소비한다(Issue #295).
+ * 직접 삽입이 안 되는 선택(NodeSelection·AllSelection)의 여러 줄도 같다.
  * 실제 브라우저 대표 시나리오는 e2e/clipboard-paste.spec.ts가 맡는다.
  */
 import type { Block, TableBlock } from "@cp949/geul-model";
@@ -22,10 +25,12 @@ import { contentTextStart } from "./block-test-support.js";
 import {
   blocksOf,
   childCodeBlocks,
+  dispatchPasteData,
   outline,
   pasteData,
   pasteHtml,
   textOf,
+  withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
   codeBlockBlock,
@@ -508,6 +513,121 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
       pasteData(editable, { "text/plain": "X" });
 
       expect(outline(blocksOf(editor))).toEqual(["p:abXbar", "p:tail"]);
+    });
+
+    it("유효한 한 줄 평문은 view.pasteText 없이 PM 기본에 위임한다(Issue #295 C4)", () => {
+      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const pasteText = vi.spyOn(tiptap.view, "pasteText");
+
+      pasteData(editable, { "text/plain": "ab" });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:ababbar", "p:tail"]);
+      expect(pasteText).not.toHaveBeenCalled();
+    });
+
+    it("제어문자가 섞인 한 줄 평문은 제어문자를 지우고 범위를 대체한다(Issue #295 C1·C7)", () => {
+      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const beforeJson = tiptap.state.doc.toJSON();
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+      const pasteText = vi.spyOn(tiptap.view, "pasteText");
+
+      pasteData(editable, {
+        "text/plain": `a${String.fromCharCode(1)}b`,
+      });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:ababbar", "p:tail"]);
+      expect(pasteText).toHaveBeenCalledTimes(1);
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(() => tiptap.state.doc.check()).not.toThrow();
+
+      tiptap.commands.undo();
+      expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+    });
+
+    it("짝 없는 surrogate가 섞인 한 줄 평문도 지우고 범위를 대체한다(Issue #295 C2)", () => {
+      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+
+      pasteData(editable, {
+        "text/plain": `a${String.fromCharCode(0xd800)}b`,
+      });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:ababbar", "p:tail"]);
+    });
+
+    it("제어문자만 있는 입력은 이벤트를 소비하고 문서를 바꾸지 않으며 TypeError가 없다(Issue #295 C3)", () => {
+      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const before = outline(blocksOf(editor));
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+      withUnhandledErrorTracking((errors) => {
+        const event = dispatchPasteData(editable, {
+          "text/plain": String.fromCharCode(1),
+        });
+
+        expect(event.defaultPrevented).toBe(true);
+        // 수정 전에는 PM 기본이 raw 제어문자를 넣고 되돌림 guard가 지웠다.
+        // transaction 자체가 없어야 위임하지 않은 것이다.
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(outline(blocksOf(editor))).toEqual(before);
+        expect(errors).toEqual([]);
+      });
+    });
+
+    // 직접 삽입이 null인 모양(TextSelection이 아님)이다. 여러 줄 평문에
+    // 무효 문자가 섞이면 정리본이 PM 평문 경로로 간다(Issue #295). 유효한
+    // 여러 줄은 PM 기본 위임 그대로다.
+    it("codeBlock NodeSelection에 무효 문자가 섞인 여러 줄 평문은 정리본으로 대체한다(Issue #295)", () => {
+      const { editor, editable, tiptap } = setup(baseBlocks(), {
+        id: "p1",
+        offset: 0,
+      });
+      selectBlockNode(tiptap, "cb");
+
+      pasteData(editable, {
+        "text/plain": `X${String.fromCharCode(1)}\nY`,
+      });
+
+      expect(outline(blocksOf(editor))).toEqual([
+        "p:abcd",
+        "p:X",
+        "p:Y",
+        "p:tail",
+      ]);
+    });
+
+    it("codeBlock NodeSelection에 유효한 여러 줄 평문은 view.pasteText 없이 PM 기본에 위임한다(Issue #295)", () => {
+      const { editor, editable, tiptap } = setup(baseBlocks(), {
+        id: "p1",
+        offset: 0,
+      });
+      selectBlockNode(tiptap, "cb");
+      const pasteText = vi.spyOn(tiptap.view, "pasteText");
+
+      pasteData(editable, { "text/plain": "X\nY" });
+
+      expect(pasteText).not.toHaveBeenCalled();
+      expect(outline(blocksOf(editor))).toEqual([
+        "p:abcd",
+        "p:X",
+        "p:Y",
+        "p:tail",
+      ]);
+    });
+
+    it("AllSelection에 무효 문자가 섞인 여러 줄 평문은 정리본으로 대체한다(Issue #295)", () => {
+      const { editor, editable, tiptap } = setup(baseBlocks(), {
+        id: "p1",
+        offset: 0,
+      });
+      tiptap.view.dispatch(
+        tiptap.state.tr.setSelection(new AllSelection(tiptap.state.doc)),
+      );
+
+      pasteData(editable, {
+        "text/plain": `X${String.fromCharCode(1)}\nY`,
+      });
+
+      expect(outline(blocksOf(editor))).toEqual(["p:X", "p:Y"]);
     });
 
     it("Markdown 평문은 감지하지 않는다(C12)", () => {
