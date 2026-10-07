@@ -10,7 +10,10 @@ import { type EditorState, Plugin, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, isInTable } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
-import { selectionIntersectsAnyCodeBlock } from "./code-block-mark-guard-extension.js";
+import {
+  selectionIntersectsAnyCodeBlock,
+  selectionStartsInCodeBlock,
+} from "./code-block-mark-guard-extension.js";
 import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
@@ -299,10 +302,14 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // Markdown 감지는 이 예외 대상이 아니다. html이 블록을 못 만들면
               // 아래에서 평문으로 폴백한다(Issue #287). 그때도 Markdown 감지는
               // 하지 않는다.
-              const intersectsCodeBlock = selectionIntersectsAnyCodeBlock(
-                view.state.doc,
-                view.state.selection,
-              );
+              // 시작이 codeBlock 안이면 문자 구간이 겹치지 않아도 이 분기로
+              // 온다(Issue #298). 코드 내용 끝이나 빈 codeBlock에서 시작하는
+              // 범위가 해당한다. TablePasteExtension의 물러남 판정과 같다.
+              const intersectsCodeBlock =
+                selectionIntersectsAnyCodeBlock(
+                  view.state.doc,
+                  view.state.selection,
+                ) || selectionStartsInCodeBlock(view.state.selection);
               if (intersectsCodeBlock) {
                 if (!isRangeStartingOutsideCodeBlock(view.state)) {
                   // 캐럿·시작이 codeBlock 안이다(Issue #296). 유효한 평문은

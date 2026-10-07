@@ -58,6 +58,19 @@ export const selectionIntersectsAnyCodeBlock = (
   selection: Selection,
 ): boolean => intersectsCodeBlock(doc, selection, false);
 
+// selection의 시작($from)이 CodeBlock 안인지 본다. 범위 selection도 시작만
+// 본다. 끝이 CodeBlock 밖이어도 시작이 안이면 참이다. 조상에 CodeBlock이
+// 있으면 접힌 toggle의 숨은 CodeBlock도 참이다. NodeSelection은 $from이
+// 부모 쪽이라 CodeBlock 자신을 골라도 거짓이다. 표 붙여넣기가 물러날지
+// 판정한다(Issue #298). core 내부 export이고 index.ts로 내보내지 않는다.
+export const selectionStartsInCodeBlock = (selection: Selection): boolean => {
+  const { $from } = selection;
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    if ($from.node(depth).type.name === "codeBlock") return true;
+  }
+  return false;
+};
+
 // StarterKit mark keymap보다 먼저 실행한다. CodeBlock에서는 오류를 받을
 // command 호출자가 없으므로 keydown만 소비하고 transaction은 만들지 않는다.
 // derived/live 양쪽을 검사해 G-EDT-002의 forward·reverse stale을 모두 막는다.
