@@ -418,8 +418,9 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
       const before = tiptap.state.doc.toJSON();
       plainPaste(editable, "X\nY");
 
-      // 셀은 inline*라 줄 분리 slice가 들어갈 자리가 없다. PM 기본 처리는
-      // 아무것도 삽입하지 않는다(현행). 직접 삽입은 셀에 관여하지 않는다.
+      // 셀은 inline*라 줄 분리 slice가 들어갈 자리가 없다. 마지막이 아닌
+      // 셀에서는 PM이 표를 쪼갠 뒤 되돌림 guard가 복원해 문서가 불변이다.
+      // 직접 삽입은 셀에 관여하지 않는다.
       expect(tiptap.state.doc.toJSON()).toEqual(before);
       const blocks = editor.getDocument().blocks;
       expect(blocks.filter((block) => block.type === "table")).toHaveLength(1);
