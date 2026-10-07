@@ -44,13 +44,10 @@
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { Fragment, Slice } from "@tiptap/pm/model";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CreateEditorOptions } from "../src/index.js";
 import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import {
-  dispatchPasteData,
   dropEventOf,
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
@@ -72,40 +69,24 @@ import {
   TAIL,
 } from "./table-boundary-test-support.js";
 import { selectCellRange } from "./table-test-support.js";
+import {
+  atomBlocks,
+  atomSelected,
+  docOutline,
+  firstCellBlocks,
+  lastCellBlocks,
+  pasteIn,
+  type Place,
+  selectFirstTwoCells,
+  textSelection,
+  withTag,
+} from "./table-cell-paste-test-support.js";
 
 const SOH = String.fromCharCode(1);
 const HIGH_SURROGATE = String.fromCharCode(0xd800);
 const TAB = String.fromCharCode(9);
 const CR = String.fromCharCode(13);
 const DEL = String.fromCharCode(0x7f);
-
-// 선택을 두는 함수. 마운트 뒤에야 문서 위치를 알 수 있다.
-type Place = (tiptap: TiptapEditor) => void;
-
-// anchor→head TextSelection을 둔다. head를 생략하면 캐럿이다.
-const textSelection =
-  (anchor: Pos, head: Pos = anchor): Place =>
-  (tiptap) => {
-    tiptap.view.dispatch(
-      tiptap.state.tr.setSelection(
-        TextSelection.create(tiptap.state.doc, anchor(tiptap), head(tiptap)),
-      ),
-    );
-  };
-
-// 기준 문서 T: p1 "para", 1x1 표(셀 "cell"), tail.
-const lastCellBlocks = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  singleCellTable("t", "cell"),
-  TAIL,
-];
-
-// 마지막이 아닌 셀 문서: p1 "para", 1x2 표("c1"|"c2"), tail.
-const firstCellBlocks = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  gridTable("g", 1, 2, ["c1", "c2"]),
-  TAIL,
-];
 
 type SelectionCase = {
   name: string;
@@ -131,86 +112,6 @@ const S3: SelectionCase = {
   place: textSelection(inCell("g-r0c0", 2)),
 };
 const selections: SelectionCase[] = [S1, S2, S3];
-
-// 최상위 블록 요약. 표는 table[셀|셀]이다.
-const docOutline = (...middle: string[]): string[] => [
-  "paragraph:para",
-  ...middle,
-  "paragraph:tail",
-];
-
-type PasteOptions = Partial<CreateEditorOptions>;
-
-// 셀 안 인라인 atom NodeSelection 공용 fixture다(Issue #297·#301).
-const atomBlocks = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  {
-    ...(singleCellTable("t", "cell") as Extract<Block, { type: "table" }>),
-    rows: [
-      {
-        id: "t-row0",
-        cells: [
-          {
-            id: "t-r0c0",
-            columnId: "t-col0",
-            rowSpan: 1,
-            columnSpan: 1,
-            content: [
-              { text: "ab" },
-              { type: "custom", customType: "myTag" },
-              { text: "cd" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  TAIL,
-];
-const atomSelected: Place = (tiptap) => {
-  tiptap.view.dispatch(
-    tiptap.state.tr.setSelection(
-      NodeSelection.create(tiptap.state.doc, inCell("t-r0c0", 2)(tiptap)),
-    ),
-  );
-};
-const withTag: PasteOptions = {
-  customInlineContent: {
-    myTag: {
-      render: () => {
-        const element = document.createElement("span");
-        element.textContent = "tag";
-        return element;
-      },
-    },
-  },
-};
-
-// 문서를 마운트하고 선택을 둔 뒤 paste 이벤트를 dispatch한다. pasteText와
-// dispatch 호출을 붙여넣기 직전에 감시한다.
-const pasteIn = (
-  blocks: Block[],
-  place: Place,
-  entries: Record<string, string>,
-  options: PasteOptions = {},
-  beforePaste: (tiptap: TiptapEditor) => void = () => undefined,
-) => {
-  const m = mounted(documentOf(...blocks), options);
-  place(m.tiptap);
-  beforePaste(m.tiptap);
-  const before = editorState(m.editor, m.tiptap);
-  const pasteText = vi.spyOn(m.tiptap.view, "pasteText");
-  const dispatch = vi.spyOn(m.tiptap.view, "dispatch");
-  const event = dispatchPasteData(m.tiptap.view.dom, entries);
-  return {
-    ...m,
-    before,
-    pasteText,
-    dispatch,
-    event,
-    blocks: () => outline(m.editor.getDocument().blocks),
-  };
-};
 
 describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
   type PasteCase = {
@@ -420,16 +321,13 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
     // 2셀 CellSelection이다. 수정 전에는 입력과 무관하게 prosemirror-tables에
     // 맡겨 NOID cell 때문에 되돌려졌다. 이제 평문 정리본이 선택을 대체한다.
     // 자세한 축은 clipboard-paste-cell-selection.test.ts가 소유한다(C9).
-    const cellSelected: Place = (tiptap) =>
-      selectCellRange(tiptap, "g-r0c0", "g-r0c1");
-
     it.each([
       { name: "무효 문자 평문", text: `a${SOH}b` },
       { name: "유효 평문", text: "ab" },
     ])(
       "CellSelection에서 $name 입력은 정리본이 첫 셀을 채우고 나머지 선택 셀을 비우며 view.pasteText를 부르지 않는다(C9)",
       ({ text }) => {
-        const result = pasteIn(firstCellBlocks(), cellSelected, {
+        const result = pasteIn(firstCellBlocks(), selectFirstTwoCells, {
           "text/plain": text,
         });
 
@@ -806,13 +704,10 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
   });
 
   describe("CellSelection에서는 평문 정책이 선택을 대체한다(C10, Issue #300이 정정)", () => {
-    const cellSelected: Place = (tiptap) =>
-      selectCellRange(tiptap, "g-r0c0", "g-r0c1");
-
     it.each(emptySliceHtmls)(
       "html: $name. 평문이 첫 셀을 채우고 나머지 선택 셀을 비우며 view.pasteText를 부르지 않는다",
       ({ html }) => {
-        const result = pasteIn(firstCellBlocks(), cellSelected, {
+        const result = pasteIn(firstCellBlocks(), selectFirstTwoCells, {
           "text/html": html,
           "text/plain": "ab",
         });
@@ -885,12 +780,6 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
 
 describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
   const HIGH = String.fromCharCode(0xd800);
-  // 셀 안에서 Ctrl+Shift+V다. PM은 view.input.shiftKey로 평문 slice를 만든다.
-  const shiftPressed = (tiptap: TiptapEditor): void => {
-    (
-      tiptap.view as unknown as { input: { shiftKey: boolean } }
-    ).input.shiftKey = true;
-  };
   const cellContent = (result: ReturnType<typeof pasteIn>) => {
     const table = result.editor.getDocument().blocks[1];
     if (table?.type !== "table") throw new Error("표 블록이 사라졌다");
@@ -935,8 +824,7 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
           selection.blocks(),
           selection.place,
           { "text/html": "<b>x</b>", "text/plain": `a${SOH}b` },
-          {},
-          shiftPressed,
+          { shift: true },
         );
 
         expect(result.blocks()).toEqual(abInserted[index]);
@@ -996,15 +884,13 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
       S1.blocks(),
       S1.place,
       { "text/html": "<b>x</b>", "text/plain": `a${SOH}b` },
-      {},
-      shiftPressed,
+      { shift: true },
     );
     const valid = pasteIn(
       S1.blocks(),
       S1.place,
       { "text/html": "<b>x</b>", "text/plain": "ab" },
-      {},
-      shiftPressed,
+      { shift: true },
     );
 
     expect(invalid.blocks()).toEqual(docOutline("table[cellab]"));
@@ -1062,8 +948,7 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
             selection.blocks(),
             selection.place,
             { "text/plain": SOH },
-            {},
-            shiftPressed,
+            { shift: true },
           );
 
           expect(result.event.defaultPrevented).toBe(true);
@@ -1252,8 +1137,7 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
         S1.blocks(),
         S1.place,
         { "text/plain": `a${SOH}b` },
-        { pasteHandler },
-        shiftPressed,
+        { pasteHandler, shift: true },
       );
 
       expect(pasteHandler).not.toHaveBeenCalled();
@@ -1267,8 +1151,7 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
         S1.blocks(),
         S1.place,
         { "text/plain": `a${TAB}b` },
-        {},
-        shiftPressed,
+        { shift: true },
       );
 
       expect(result.pasteText).not.toHaveBeenCalled();

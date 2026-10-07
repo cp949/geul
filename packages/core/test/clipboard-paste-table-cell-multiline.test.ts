@@ -26,16 +26,12 @@ import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { Fragment, Slice, type Node as PmNode } from "@tiptap/pm/model";
 import { CellSelection } from "@tiptap/pm/tables";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CreateEditorOptions } from "../src/index.js";
 import { planTableCellPaste } from "../src/paste-plan.js";
 import { expectSchemaValid } from "./block-join/block-join-test-support.js";
-import {
-  dispatchPasteData,
-  withUnhandledErrorTracking,
-} from "./clipboard-test-support.js";
+import { withUnhandledErrorTracking } from "./clipboard-test-support.js";
 import {
   documentOf,
   editorState,
@@ -46,42 +42,29 @@ import {
   gridTable,
   inBlock,
   inCell,
-  outline,
   type Pos,
   setLiveSelection,
   singleCellTable,
   TAIL,
 } from "./table-boundary-test-support.js";
 import { selectCellRange } from "./table-test-support.js";
+import {
+  atomBlocks,
+  atomSelected,
+  docOutline,
+  findCell,
+  firstCellBlocks,
+  lastCellBlocks,
+  pasteIn,
+  selectFirstTwoCells,
+  textSelection,
+  withTag,
+} from "./table-cell-paste-test-support.js";
 
 const SOH = String.fromCharCode(1);
 const HIGH_SURROGATE = String.fromCharCode(0xd800);
 const TAB = String.fromCharCode(9);
 const CR = String.fromCharCode(13);
-
-/** 선택을 두는 함수. 마운트 뒤에야 문서 위치를 알 수 있다. */
-type Place = (tiptap: TiptapEditor) => void;
-
-/** anchor→head TextSelection을 둔다. head를 생략하면 캐럿이다. */
-const textSelection =
-  (anchor: Pos, head: Pos = anchor): Place =>
-  (tiptap) => {
-    setLiveSelection(tiptap, anchor(tiptap), head(tiptap));
-  };
-
-/** 기준 문서: 문단 p1 "para", 1x1 표(셀 "cell"), tail. */
-const lastCellBlocks = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  singleCellTable("t", "cell"),
-  TAIL,
-];
-
-/** 마지막이 아닌 셀 문서: 1x2 표("c1"|"c2"). */
-const firstCellBlocks = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  gridTable("g", 1, 2, ["c1", "c2"]),
-  TAIL,
-];
 
 /** 2x2 표 문서. 첫 셀이 마지막 셀도 마지막 행도 아니다. */
 const gridBlocks = (): Block[] => [
@@ -106,60 +89,6 @@ const boldCellBlocks = (): Block[] => {
   return [paragraphBlock("p1", "para"), table, TAIL];
 };
 
-/** 셀 "ab"+atom+"cd" 문서. 인라인 atom NodeSelection을 본다. */
-const atomBlocks = (): Block[] => {
-  const table = singleCellTable("t", "") as Extract<Block, { type: "table" }>;
-  const cell = table.rows[0]?.cells[0];
-  if (cell === undefined) throw new Error("fixture 준비 실패");
-  cell.content = [
-    { text: "ab" },
-    { type: "custom", customType: "myTag" },
-    { text: "cd" },
-  ];
-  return [paragraphBlock("p1", "para"), table, TAIL];
-};
-const withTag: Partial<CreateEditorOptions> = {
-  customInlineContent: {
-    myTag: {
-      render: () => {
-        const element = document.createElement("span");
-        element.textContent = "tag";
-        return element;
-      },
-    },
-  },
-};
-const atomSelected: Place = (tiptap) => {
-  tiptap.view.dispatch(
-    tiptap.state.tr.setSelection(
-      NodeSelection.create(tiptap.state.doc, inCell("t-r0c0", 2)(tiptap)),
-    ),
-  );
-};
-
-/** 최상위 블록 요약. 표는 table[셀|셀]이고 hardBreak는 개행 문자다. */
-const docOutline = (...middle: string[]): string[] => [
-  "paragraph:para",
-  ...middle,
-  "paragraph:tail",
-];
-
-/**
- * 문서에서 cellId가 같은 셀 노드를 찾는다. 모델 요약이 보여 주지 못하는 PM
- * 노드 구성(text·hardBreak, 마크)을 직접 비교하려고 쓴다.
- */
-const findCell = (doc: PmNode, cellId: string): PmNode => {
-  let found: PmNode | null = null;
-  doc.descendants((node) => {
-    if (node.type.name === "tableCell" && node.attrs.cellId === cellId) {
-      found = node;
-    }
-    return found === null;
-  });
-  if (found === null) throw new Error(`tableCell ${cellId} 조회 실패`);
-  return found;
-};
-
 /**
  * 셀 자식을 종류 목록으로 줄인다. text는 내용, hardBreak는 `br`이다. 마크가
  * 있으면 `*마크이름`을 붙인다.
@@ -177,39 +106,6 @@ const kindsInDoc = (doc: PmNode, cellId: string): string[] => {
 /** 편집기 현재 문서에서 셀 자식 종류 목록을 얻는다. */
 const kindsOf = (tiptap: TiptapEditor, cellId: string): string[] =>
   kindsInDoc(tiptap.state.doc, cellId);
-
-/**
- * 문서를 마운트하고 선택을 둔 뒤 paste 이벤트를 dispatch한다. view.pasteText와
- * view.dispatch는 붙여넣기 직전에 감시를 시작한다. shift이면 Ctrl+Shift+V다.
- * PM은 view.input.shiftKey로 평문 요청을 알아본다.
- */
-const pasteIn = (
-  blocks: Block[],
-  place: Place,
-  entries: Record<string, string>,
-  options: Partial<CreateEditorOptions> & { shift?: boolean } = {},
-) => {
-  const { shift = false, ...editorOptions } = options;
-  const m = mounted(documentOf(...blocks), editorOptions);
-  place(m.tiptap);
-  if (shift) {
-    (
-      m.tiptap.view as unknown as { input: { shiftKey: boolean } }
-    ).input.shiftKey = true;
-  }
-  const before = editorState(m.editor, m.tiptap);
-  const pasteText = vi.spyOn(m.tiptap.view, "pasteText");
-  const dispatch = vi.spyOn(m.tiptap.view, "dispatch");
-  const event = dispatchPasteData(m.tiptap.view.dom, entries);
-  return {
-    ...m,
-    before,
-    pasteText,
-    dispatch,
-    event,
-    blocks: () => outline(m.editor.getDocument().blocks),
-  };
-};
 
 type PasteResult = ReturnType<typeof pasteIn>;
 
@@ -352,15 +248,12 @@ describe("표 셀 안 여러 줄 평문 붙여넣기(Issue #299)", () => {
   });
 
   describe("CellSelection의 연속 개행(C5)", () => {
-    const selectAB: Place = (tiptap) =>
-      selectCellRange(tiptap, "g-r0c0", "g-r0c1");
-
     it.each([
       { name: "연속 개행", input: "a\n\nb", kinds: ["a", "br", "b"] },
       { name: "앞 개행", input: "\na", kinds: ["br", "a"] },
       { name: "뒤 개행", input: "a\n", kinds: ["a", "br"] },
     ])("$name 입력은 hardBreak 하나가 된다", ({ input, kinds }) => {
-      const result = pasteIn(firstCellBlocks(), selectAB, {
+      const result = pasteIn(firstCellBlocks(), selectFirstTwoCells, {
         "text/plain": input,
       });
 

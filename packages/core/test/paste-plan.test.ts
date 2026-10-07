@@ -32,11 +32,8 @@ import {
   paragraphBlock,
   sequentialIds,
 } from "./list-item-block-type-support.js";
-import {
-  inCell,
-  singleCellTable,
-  TAIL,
-} from "./table-boundary-test-support.js";
+import { inCell } from "./table-boundary-test-support.js";
+import { findCell, lastCellBlocks } from "./table-cell-paste-test-support.js";
 import { selectCellRange } from "./table-test-support.js";
 
 const SOH = String.fromCharCode(1);
@@ -86,12 +83,6 @@ const PM_SLICE = new Slice(Fragment.empty, 0, 0);
 const sliceOfSize = (tiptap: TiptapEditor, size: number): Slice =>
   new Slice(Fragment.from(tiptap.schema.text("x".repeat(size))), 0, 0);
 
-const cellBlocks = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  singleCellTable("t", "cell"),
-  TAIL,
-];
-
 describe("planTableCellPaste", () => {
   it("표 밖이면 null이다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
@@ -103,7 +94,7 @@ describe("planTableCellPaste", () => {
   describe("CellSelection(Issue #300)", () => {
     // 단일 셀 CellSelection이다. 평문 정책은 셀 개수와 무관하다.
     const mountCellSelected = (): TiptapEditor => {
-      const tiptap = mountAt(cellBlocks(), at("p1", 0));
+      const tiptap = mountAt(lastCellBlocks(), at("p1", 0));
       selectCellRange(tiptap, "t-r0c0", "t-r0c0");
       return tiptap;
     };
@@ -189,7 +180,7 @@ describe("planTableCellPaste", () => {
   });
 
   it("셀 안에 셀 조각 slice를 붙이면 pass다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     let tableSlice: Slice | null = null;
     tiptap.state.doc.descendants((node, pos) => {
       if (tableSlice !== null) return false;
@@ -208,14 +199,18 @@ describe("planTableCellPaste", () => {
   });
 
   it("범위 시작이 셀 안이면 끝이 표 밖이어도 셀 계획이다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2), at("tail", 2));
+    const tiptap = mountAt(
+      lastCellBlocks(),
+      inCell("t-r0c0", 2),
+      at("tail", 2),
+    );
     expect(
       planTableCellPaste(tiptap.state, clip("ab"), sliceOfSize(tiptap, 1)),
     ).not.toBeNull();
   });
 
   it("무효 문자가 든 html slice는 정리해 넣는다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     const dirty = new Slice(
       Fragment.from(tiptap.schema.text(`a${SOH}b`)),
       0,
@@ -234,14 +229,14 @@ describe("planTableCellPaste", () => {
   });
 
   it("html 없는 유효한 평문은 delegate다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     expect(
       planTableCellPaste(tiptap.state, clip("ab"), sliceOfSize(tiptap, 1)),
     ).toMatchObject({ kind: "insertSlice" });
   });
 
   it("html이 내용을 가지면 delegate다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     expect(
       planTableCellPaste(
         tiptap.state,
@@ -252,7 +247,7 @@ describe("planTableCellPaste", () => {
   });
 
   it("무효 문자가 섞인 평문은 정리본 pasteText다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     expect(
       planTableCellPaste(
         tiptap.state,
@@ -266,7 +261,7 @@ describe("planTableCellPaste", () => {
   });
 
   it("정리본이 비면 consume이다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 2));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     expect(
       planTableCellPaste(tiptap.state, clip(SOH), sliceOfSize(tiptap, 1)),
     ).toEqual({
@@ -279,18 +274,14 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   /** 계획 transaction이 만든 셀 t-r0c0의 자식을 종류 목록으로 줄인다. */
   const cellKinds = (tr: Transaction): string[] => {
     const kinds: string[] = [];
-    tr.doc.descendants((node) => {
-      if (node.type.name !== "tableCell") return true;
-      node.forEach((child) => {
-        kinds.push(child.isText ? (child.text ?? "") : child.type.name);
-      });
-      return false;
+    findCell(tr.doc, "t-r0c0").forEach((child) => {
+      kinds.push(child.isText ? (child.text ?? "") : child.type.name);
     });
     return kinds;
   };
 
   it("셀 안 캐럿의 여러 줄 평문은 hardBreak를 이은 dispatch다. 계획은 문서를 바꾸지 않는다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
 
     const plan = planTableCellPaste(
       tiptap.state,
@@ -305,7 +296,7 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   });
 
   it("무효 문자가 섞인 여러 줄은 pasteText가 아니라 정리본 dispatch다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
 
     const plan = planTableCellPaste(
       tiptap.state,
@@ -319,7 +310,7 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   });
 
   it("빈 slice html + 여러 줄 평문도 dispatch다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
 
     expect(
       planTableCellPaste(tiptap.state, clip("a\nb", "<meta>"), PM_SLICE)?.kind,
@@ -327,7 +318,7 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   });
 
   it("서식 있는 html은 서식 없이 붙여넣기 신호가 없으면 insertSlice, 있으면 평문 dispatch다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
     const slice = sliceOfSize(tiptap, 1);
 
     expect(
@@ -340,7 +331,7 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   });
 
   it("한 줄 평문은 서식 없이 붙여넣기 신호가 있어도 현행 계획이다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
 
     expect(
       planTableCellPaste(
@@ -352,7 +343,7 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   });
 
   it("정리본이 비는 입력은 consume이다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 4));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
 
     expect(
       planTableCellPaste(tiptap.state, clip(SOH), sliceOfSize(tiptap, 1)),
@@ -360,7 +351,7 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
   });
 
   it("CellSelection의 연속 개행은 hardBreak 하나다", () => {
-    const tiptap = mountAt(cellBlocks(), inCell("t-r0c0", 0));
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 0));
     selectCellRange(tiptap, "t-r0c0", "t-r0c0");
 
     const plan = planTableCellPaste(

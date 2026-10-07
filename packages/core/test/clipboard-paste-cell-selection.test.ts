@@ -25,7 +25,6 @@ import { CellSelection } from "@tiptap/pm/tables";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CreateEditorOptions } from "../src/index.js";
 import { planTableCellPaste } from "../src/paste-plan.js";
 import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import {
@@ -45,6 +44,11 @@ import {
   TAIL,
 } from "./table-boundary-test-support.js";
 import { selectCellRange, selectSingleCell } from "./table-test-support.js";
+import {
+  docOutline,
+  pasteIn,
+  selectFirstTwoCells,
+} from "./table-cell-paste-test-support.js";
 
 const SOH = String.fromCharCode(1);
 const HIGH_SURROGATE = String.fromCharCode(0xd800);
@@ -54,13 +58,6 @@ const rowDocument = (): Block[] => [
   paragraphBlock("p1", "para"),
   gridTable("g", 1, 3, ["A", "B", "C"]),
   TAIL,
-];
-
-/** 표 밖 블록을 포함한 최상위 요약에서 표 요약만 끼워 만든다. */
-const docOutline = (table: string): string[] => [
-  "paragraph:para",
-  table,
-  "paragraph:tail",
 ];
 
 /**
@@ -78,40 +75,14 @@ const cellsOf = (result: { editor: { getDocument: () => unknown } }) => {
 const contentById = (result: Parameters<typeof cellsOf>[0]) =>
   Object.fromEntries(cellsOf(result).map((cell) => [cell.id, cell.content]));
 
-type SelectCells = (tiptap: TiptapEditor) => void;
-
 /** 실제 내용이 있는 인라인 텍스트 slice를 만든다. PM 파싱 결과 대역이다. */
 const textSlice = (tiptap: TiptapEditor, text: string): Slice =>
   new Slice(Fragment.from(tiptap.schema.text(text)), 0, 0);
 
-/** g-r0c0과 g-r0c1 두 셀을 고른다. */
-const selectAB: SelectCells = (tiptap) =>
-  selectCellRange(tiptap, "g-r0c0", "g-r0c1");
-
-/**
- * 문서를 마운트하고 CellSelection을 둔 뒤 paste 이벤트를 dispatch한다.
- * view.dispatch와 view.pasteText는 붙여넣기 직전에 감시를 시작한다. 이벤트
- * 소비 여부와 호출 횟수를 함께 본다.
- */
-const pasteInto = (
-  blocks: Block[],
-  select: SelectCells,
-  entries: Record<string, string>,
-  options: Partial<CreateEditorOptions> = {},
-) => {
-  const m = mounted(documentOf(...blocks), options);
-  select(m.tiptap);
-  const before = editorState(m.editor, m.tiptap);
-  const pasteText = vi.spyOn(m.tiptap.view, "pasteText");
-  const dispatch = vi.spyOn(m.tiptap.view, "dispatch");
-  const event = dispatchPasteData(m.tiptap.view.dom, entries);
-  return { ...m, before, pasteText, dispatch, event };
-};
-
 describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
   describe("선택 대체(P1)", () => {
     it("2셀을 고르고 한 줄을 붙이면 첫 셀만 채우고 나머지 선택 셀은 비운다(C1)", () => {
-      const result = pasteInto(rowDocument(), selectAB, {
+      const result = pasteIn(rowDocument(), selectFirstTwoCells, {
         "text/plain": "X",
       });
 
@@ -128,7 +99,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     });
 
     it("셀 하나만 고른 CellSelection도 같다(C3)", () => {
-      const result = pasteInto(
+      const result = pasteIn(
         rowDocument(),
         (tiptap) => selectSingleCell(tiptap, "g-r0c1"),
         { "text/plain": "X" },
@@ -143,7 +114,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     });
 
     it("2x2 전체를 고르면 첫 셀만 채우고 나머지는 비우며 이미 빈 셀은 그대로 둔다(C4)", () => {
-      const result = pasteInto(
+      const result = pasteIn(
         [
           paragraphBlock("p1", "para"),
           gridTable("g", 2, 2, ["a", "b", "", "d"]),
@@ -167,7 +138,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
       const originalCells = original.rows.flatMap((row) => row.cells);
       // 선택에 든 셀 id를 문서 순서로 기록한다. forEachCell은 병합 셀을 한 번만 방문한다.
       const selected: string[] = [];
-      const result = pasteInto(
+      const result = pasteIn(
         [paragraphBlock("p1", "para"), mergedTable(), TAIL],
         (tiptap) => {
           selectCellRange(tiptap, "m-1", "m-4");
@@ -206,7 +177,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     ])(
       "$name 여러 줄은 hardBreak로 이어 첫 셀에 넣고 표 밖에 블록을 만들지 않는다(C2)",
       ({ input }) => {
-        const result = pasteInto(rowDocument(), selectAB, {
+        const result = pasteIn(rowDocument(), selectFirstTwoCells, {
           "text/plain": input,
         });
 
@@ -237,7 +208,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     // 계획 자체가 hardBreak 노드를 담는지 직접 본다.
     it("여러 줄 계획은 문자열 개행이 아니라 hardBreak 노드를 담는다", () => {
       const m = mounted(documentOf(...rowDocument()));
-      selectAB(m.tiptap);
+      selectFirstTwoCells(m.tiptap);
 
       const plan = planTableCellPaste(
         m.tiptap.state,
@@ -264,7 +235,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
       { name: "제어문자", input: `a${SOH}b` },
       { name: "짝 없는 surrogate", input: `a${HIGH_SURROGATE}b` },
     ])("무효 문자($name)가 섞인 평문은 정리본이 들어간다(C6)", ({ input }) => {
-      const result = pasteInto(rowDocument(), selectAB, {
+      const result = pasteIn(rowDocument(), selectFirstTwoCells, {
         "text/plain": input,
       });
 
@@ -275,7 +246,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
 
     it("정리본이 비면 이벤트만 소비하고 문서와 선택을 바꾸지 않는다(C6)", () => {
       withUnhandledErrorTracking((errors) => {
-        const result = pasteInto(rowDocument(), selectAB, {
+        const result = pasteIn(rowDocument(), selectFirstTwoCells, {
           "text/plain": SOH,
         });
 
@@ -300,7 +271,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
       { name: "빈 문단 html", entries: { "text/html": "<p></p>" } },
       { name: "무효 문자뿐인 html", entries: { "text/html": `<p>${SOH}</p>` } },
     ])("$name + 평문은 평문 정책이 적용된다(C7)", ({ entries }) => {
-      const result = pasteInto(rowDocument(), selectAB, {
+      const result = pasteIn(rowDocument(), selectFirstTwoCells, {
         ...entries,
         "text/plain": "X",
       });
@@ -311,7 +282,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     });
 
     it("서식 있는 html은 현행대로 prosemirror-tables에 맡겨 문서가 불변이다(C8, 현행 특성화)", () => {
-      const result = pasteInto(rowDocument(), selectAB, {
+      const result = pasteIn(rowDocument(), selectFirstTwoCells, {
         "text/html": "<b>x</b>",
         "text/plain": "ab",
       });
@@ -327,7 +298,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     // 평문 정책이 선택을 대체한다.
     it("서식 없이 붙여넣기 신호가 있으면 서식 있는 html이 와도 평문 정책이 적용된다", () => {
       const m = mounted(documentOf(...rowDocument()));
-      selectAB(m.tiptap);
+      selectFirstTwoCells(m.tiptap);
 
       const plan = planTableCellPaste(
         m.tiptap.state,
@@ -340,7 +311,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
 
     it("Ctrl+Shift+V에 서식 있는 html이 함께 와도 평문이 선택을 대체한다", () => {
       const m = mounted(documentOf(...rowDocument()));
-      selectAB(m.tiptap);
+      selectFirstTwoCells(m.tiptap);
       m.tiptap.view.dom.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "Shift",
@@ -364,7 +335,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
 
     it("서식 없이 붙여넣기 신호가 없으면 서식 있는 html은 그대로 맡긴다", () => {
       const m = mounted(documentOf(...rowDocument()));
-      selectAB(m.tiptap);
+      selectFirstTwoCells(m.tiptap);
 
       const plan = planTableCellPaste(
         m.tiptap.state,
@@ -376,7 +347,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     });
 
     it("평문이 비면 html 유무와 관계없이 개입하지 않는다", () => {
-      const result = pasteInto(rowDocument(), selectAB, {
+      const result = pasteIn(rowDocument(), selectFirstTwoCells, {
         "text/html": "<meta charset='utf-8'>",
         "text/plain": "",
       });
@@ -389,7 +360,7 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
 
   describe("selection과 undo(P7)", () => {
     it("붙여넣기 뒤 selection은 첫 셀 삽입 텍스트 끝이고 dispatch 1회, undo 1회로 복원된다(C10)", () => {
-      const result = pasteInto(rowDocument(), selectAB, {
+      const result = pasteIn(rowDocument(), selectFirstTwoCells, {
         "text/plain": "XY",
       });
 
@@ -422,9 +393,9 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
       firstCell.align = "center";
       firstCell.backgroundColor = "#00FF00";
 
-      const result = pasteInto(
+      const result = pasteIn(
         [paragraphBlock("p1", "para"), styled, TAIL],
-        selectAB,
+        selectFirstTwoCells,
         { "text/plain": "X" },
       );
 
@@ -440,9 +411,9 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     it("pasteHandler를 호출하지 않고 view.pasteText도 부르지 않는다", () => {
       const pasteHandler = vi.fn(() => true);
 
-      const result = pasteInto(
+      const result = pasteIn(
         rowDocument(),
-        selectAB,
+        selectFirstTwoCells,
         { "text/plain": "X" },
         { pasteHandler },
       );
