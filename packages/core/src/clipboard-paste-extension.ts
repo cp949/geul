@@ -21,6 +21,7 @@ import {
 } from "./paste-block-placement.js";
 import {
   buildPlainMultilinePasteTransaction,
+  normalizeCodeBlockPasteText,
   normalizeForMarkdownDetection,
   normalizeLineBreaks,
   normalizePasteText,
@@ -243,6 +244,8 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 처리를 그대로 살린다 — 별도로 "text/plain 우선" 로직을 새로
               // 만들 필요가 없다. 접힌 toggle의 숨은 codeBlock도 범위
               // 안이면 같은 분기다. 붙여넣기는 범위 전체를 바꾼다(Issue #264).
+              // 무효 문자가 섞인 평문만 예외다. 아래에서 정리본을 넣는다
+              // (Issue #296).
               const clipboardData = event.clipboardData;
               if (clipboardData === null) return false;
 
@@ -270,18 +273,33 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // 예외 2(Issue #285): 같은 조건(범위, 시작이 codeBlock 밖)에서
               // 정규화한 평문이 여러 줄이면 아래 직접 삽입으로 합류한다.
               // PM 기본 처리는 범위 끝 뒤의 자식을 마지막 줄 블록으로 넘긴다.
-              // 시작이 codeBlock 안인 범위, 캐럿, 유효한 한 줄 평문은 위 설명
-              // 그대로 PM 기본 처리를 유지한다. 무효 문자가 섞인 한 줄 평문은
-              // 위임하지 않고 아래로 내려간다(Issue #295). Markdown 감지는
-              // 이 예외 대상이 아니다. html이 블록을 못 만들면 아래에서
-              // 평문으로 폴백한다(Issue #287). 그때도 Markdown 감지는 하지
-              // 않는다.
+              // 캐럿·시작이 codeBlock 안인 범위는 아래 분기가 먼저 거른다
+              // (Issue #296). 유효한 평문은 PM 기본 처리를 유지하고 무효 문자가
+              // 섞이면 정리본을 평문으로 넣는다. 시작이 밖인 범위의 유효한 한
+              // 줄 평문은 위 설명 그대로 PM 기본 처리를 유지한다. 무효 문자가
+              // 섞인 한 줄 평문은 위임하지 않고 아래로 내려간다(Issue #295).
+              // Markdown 감지는 이 예외 대상이 아니다. html이 블록을 못 만들면
+              // 아래에서 평문으로 폴백한다(Issue #287). 그때도 Markdown 감지는
+              // 하지 않는다.
               const intersectsCodeBlock = selectionIntersectsAnyCodeBlock(
                 view.state.doc,
                 view.state.selection,
               );
               if (intersectsCodeBlock) {
-                if (!isRangeStartingOutsideCodeBlock(view.state)) return false;
+                if (!isRangeStartingOutsideCodeBlock(view.state)) {
+                  // 캐럿·시작이 codeBlock 안이다(Issue #296). 유효한 평문은
+                  // PM 기본에 맡긴다. PM이 codeBlock 안에서 html을 무시하고
+                  // 평문만 넣는다. 무효 문자가 섞였으면 정리본을 평문으로
+                  // 넣는다. Tab·LF는 codeBlock 내용이라 지우지 않는다. 정리본이
+                  // 비면 이벤트만 소비한다. PM 기본이 raw 무효 문자를 넣으면
+                  // 되돌림 guard가 붙여넣기를 통째로 지운다.
+                  const codeText = normalizeCodeBlockPasteText(rawText);
+                  if (codeText === normalizeLineBreaks(rawText)) return false;
+                  if (codeText.length > 0) {
+                    pasteTextThroughPm(view, codeText, event);
+                  }
+                  return true;
+                }
                 const multilinePlain = splitPlainTextLines(text).length >= 2;
                 if (html.length === 0 && !multilinePlain && delegable) {
                   return false;
