@@ -28,8 +28,16 @@ if (typeof globalThis.DataTransfer === "undefined") {
       webkitGetAsEntry?: () => { isDirectory: boolean } | null;
     }[] = [];
 
+    // cut·copy·dragstart 핸들러가 쓰는 표면이다. 실제 DataTransfer처럼
+    // clearData가 저장 항목을 비우고 effectAllowed를 대입할 수 있다.
+    effectAllowed = "uninitialized";
+
     setData(format: string, data: string): void {
       this.store.set(format, data);
+    }
+
+    clearData(): void {
+      this.store.clear();
     }
 
     getData(format: string): string {
@@ -209,21 +217,33 @@ export const dropFiles = (
     coords,
   );
 
+/**
+ * 주어진 MIME → 문자열 항목을 클립보드 데이터로 담아 editable에 paste 이벤트를
+ * dispatch하고 그 이벤트를 돌려준다(bubbles·cancelable). 호출부는
+ * defaultPrevented로 붙여넣기 소비 여부를 본다.
+ */
+export const dispatchPasteData = (
+  editable: HTMLElement,
+  entries: Record<string, string>,
+): ClipboardEvent => {
+  const data = new DataTransfer();
+  for (const [format, value] of Object.entries(entries))
+    data.setData(format, value);
+  const event = new ClipboardEvent("paste", {
+    clipboardData: data,
+    bubbles: true,
+    cancelable: true,
+  });
+  editable.dispatchEvent(event);
+  return event;
+};
+
 /** 주어진 MIME → 문자열 항목을 클립보드 데이터로 담아 editable에 paste 이벤트를 dispatch한다(bubbles·cancelable). */
 export const pasteData = (
   editable: HTMLElement,
   entries: Record<string, string>,
 ): void => {
-  const data = new DataTransfer();
-  for (const [format, value] of Object.entries(entries))
-    data.setData(format, value);
-  editable.dispatchEvent(
-    new ClipboardEvent("paste", {
-      clipboardData: data,
-      bubbles: true,
-      cancelable: true,
-    }),
-  );
+  dispatchPasteData(editable, entries);
 };
 
 /** text/html 하나만 담는 pasteData 축약. */

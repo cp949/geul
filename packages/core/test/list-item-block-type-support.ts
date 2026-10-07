@@ -13,6 +13,7 @@ import { afterEach } from "vitest";
 
 import {
   createEditor,
+  type CreateEditorOptions,
   type DocumentChangeEvent,
   type EditorController,
 } from "../src/index.js";
@@ -159,11 +160,19 @@ export const mountTiptapEditor = (
  * (editor-controller-divider.test.ts)과 divider 명령 characterization
  * (editor-controller-divider-commands.test.ts)이 공유한다(G-TST-002).
  */
-export const mounted = (initialDocument: Document) => {
+export const mounted = (
+  initialDocument: Document,
+  options: Partial<CreateEditorOptions> = {},
+) => {
   const changes: DocumentChangeEvent[] = [];
   const onChange = (event: DocumentChangeEvent) => changes.push(event);
   const createId = sequentialIds("id");
-  const editor = createEditor({ initialDocument, createId, onChange });
+  const editor = createEditor({
+    ...options,
+    initialDocument,
+    createId,
+    onChange,
+  });
   return { editor, changes, ...mountTiptapEditor(editor) };
 };
 
