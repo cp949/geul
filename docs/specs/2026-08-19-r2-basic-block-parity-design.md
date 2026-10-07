@@ -274,7 +274,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
   - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
   - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다.
-  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
+  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297)(정정 2026-10-07, Issue #301: `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 평문을 정리본으로 넣는다), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
   - 직접 배치가 물러나는 입력은 `clipboardTextParser`를 탄다. 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 경로가 아니라 아래 직접 삽입이다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 한계에서 벗어났다. 이 경로는 위임 입력에만 남는다(#285 한계 참조). 그 입력에서는 이 한계가 그대로다.
 - codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
@@ -370,7 +370,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: codeBlock 안에서 Tab이 든 TSV 모양 입력(모든 줄의 탭 개수가 같은 직사각형)은 표 붙여넣기가 먼저 가로채 표 블록을 만든다. 유효한 입력도 같고 수정 전과 같다(jsdom 실측). 이 경로 밖이다. 정정(2026-10-07, Issue #298): 이 한계는 해소했다. 캐럿이나 시작이 codeBlock 안이면 표 붙여넣기가 물러나 평문이 코드 텍스트로 들어간다. 현재 계약은 r1 슬라이스 11 스펙 §7.2의 Issue #298 문단이다.
   - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
 - 표 셀 안 평문 붙여넣기의 무효 문자(정정 2026-10-07, Issue #297). 표 셀 안 캐럿이나 같은 셀 안 범위에 무효 문자(U+0001 등 제어문자, 짝 없는 surrogate)가 섞인 평문을 붙여도 붙여넣기가 사라지지 않는다. 무효 문자와 Tab을 지운 평문이 선택을 대체한다. 이전에는 표 셀 안이면 입력과 무관하게 PM 기본에 맡겼다. PM 기본이 raw 무효 문자를 넣었고 `revision-guard-extension.ts`가 문서를 되돌렸다. 붙여넣기가 문서를 바꾸지 않고 사라졌다. `onChange`도 `TypeError`도 없었다.
-  - 개입 조건은 둘이다. 선택이 `CellSelection`이 아니다. `text/html`이 비어 있다. 하나라도 아니면 이전과 같다. 셀 안 인라인 atom `NodeSelection`은 개입 대상이다.
+  - 개입 조건은 둘이다. 선택이 `CellSelection`이 아니다. `text/html`이 비어 있다. 하나라도 아니면 이전과 같다. 정정(2026-10-07, Issue #301): 두 번째 조건은 `text/html`이 비어 있거나 PM 파싱 결과가 빈 slice인 것으로 넓혔다. 아래 #301 문단이 현재 계약이다. 셀 안 인라인 atom `NodeSelection`은 개입 대상이다.
   - 처리는 표 셀 안 가드 안에서 한다. `pasteHandler`와 `defaultHandlePaste`는 부르지 않는다. 표 셀 안에서 `pasteHandler`를 부르지 않는 계약(roadmap "제외 범위")은 그대로다.
   - 정규화본은 표 밖 평문과 같은 `normalizePasteText`다. CR을 LF로 바꾼 뒤 무효 문자를 지운다. 셀은 인라인 정책이라 Tab도 지운다.
   - 유효한 평문은 PM 기본에 맡긴다. `view.pasteText`를 부르지 않고 결과는 이전과 같다. 비교 기준은 `normalizeLineBreaks(rawText)`다.
@@ -381,11 +381,26 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 표 경계 범위(#292)는 `TableBoundaryInputExtension`이 범위를 먼저 지운다. 이 핸들러는 지운 뒤 state를 읽는다. 시작이 셀 안이고 끝이 뒤 문단 안이면 캐럿이 셀 안이라 이 분기가 정리본을 넣는다(셀 `ceab`, 뒤 문단 `il`). 시작이 표 밖이면 캐럿이 표 밖이라 표 밖 경로가 넣는다.
   - 셀 안 인라인 atom `NodeSelection`에 무효 문자가 섞인 평문을 붙이면 정리본이 atom을 대체한다(`ab` atom `cd`에 `a` U+0001 `b`를 붙이면 `ababcd`). 유효 평문은 PM 기본이라 이전처럼 atom을 대체한다.
   - 현행 유지: `text/html` 동반(PM이 html만 쓴다), `CellSelection`, TSV 한 줄(표 붙여넣기가 먼저 처리한다), 표 밖과 codeBlock 안.
-  - 한계: `text/html`이 함께 오면 개입하지 않는다. 개입하면 셀 서식(mark)을 잃는다. html 안의 무효 문자는 바꾸지 않았다.
-  - 한계: 공백뿐이거나 파싱 결과가 빈 `text/html`이 함께 와도 개입하지 않는다. PM이 html만 쓰므로 유효 평문까지 사라진다. 수정 전과 같다. 표 밖은 #287 폴백이 평문을 넣는다.
+  - 한계: `text/html`이 함께 오면 개입하지 않는다. 개입하면 셀 서식(mark)을 잃는다. html 안의 무효 문자는 바꾸지 않았다. 정정(2026-10-07, Issue #301): html이 있어도 PM 파싱 결과가 빈 slice이면 개입한다. 아래 #301 문단이 현재 계약이다.
+  - 한계: 공백뿐이거나 파싱 결과가 빈 `text/html`이 함께 와도 개입하지 않는다. PM이 html만 쓰므로 유효 평문까지 사라진다. 수정 전과 같다. 표 밖은 #287 폴백이 평문을 넣는다. 정정(2026-10-07, Issue #301): 이 한계는 해소했다. 아래 #301 문단이 현재 계약이다.
   - 한계: 표 경계 범위의 제어문자만 있는 입력은 범위 삭제가 남는다. `TableBoundaryInputExtension`이 raw 기준으로 비었는지 판정해 먼저 지운다. 이 문단의 "범위를 지우지 않는다"는 같은 셀 안 범위와 캐럿에만 해당한다.
   - 한계: `CellSelection`에서는 유효 평문도 사라진다. 원인이 무효 문자가 아니라 NOID 셀의 되돌림이라 이 문단 밖이다.
   - 한계: 유효한 여러 줄 평문은 이전 그대로다. 마지막 셀은 둘째 줄 이후가 표 뒤 문단으로 빠지고, 마지막이 아닌 셀은 붙여넣기가 사라진다. 이 문단은 무효 문자만 다룬다.
+  - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
+- 표 셀 안 빈 slice html과 함께 온 평문(정정 2026-10-07, Issue #301). 표 셀 안 캐럿이나 같은 셀 안 범위에서 `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 `text/plain`이 셀에 들어간다. 이전에는 `text/html`이 한 글자라도 있으면 PM 기본에 맡겼다. PM 기본은 html만 파싱하고 평문을 버린다. 빈 slice는 `replaceSelection`이 선택만 지우고 붙여넣기가 사라졌다. `onChange`도 `TypeError`도 없었다.
+  - 판정은 `handlePaste`의 세 번째 인자 `slice.size === 0`이다. PM `parseFromClipboard` 결과를 그대로 쓴다. `clipboardParser`를 따로 부르지 않는다. 다른 확장에 `transformPasted`가 없다.
+  - 빈 slice가 되는 입력: 공백뿐인 html, `<meta charset='utf-8'>`만, `<!--StartFragment--><!--EndFragment-->`만, `<p></p>`·`<div></div>`·`<br>`·`<p> </p>`·`<span> </span>`, `<script>`·`<style>`만, `<img>`(src 유무와 무관)·`<hr>`·`<table></table>`·`<ul><li></li></ul>`·`<h1></h1>`·`<pre></pre>`만이다. 웹에서 이미지를 복사한 클립보드(`<meta>`와 src 있는 `<img>`)가 이 모양이다. 셀 안은 인라인 컨텍스트라 빈 문단이 PM `Slice.maxOpen`에 흡수되고 이미지·구분선·빈 목록·빈 표는 slice에 담기지 않아 size가 0이다. 테스트는 대표 입력과 웹 이미지 복사 모양을 고정한다.
+  - 표 밖 #287 폴백과 기준이 다르다. 표 밖은 `importHtml`·`modelToTiptap`이 블록 0개이거나 실패할 때 폴백하고 `<p></p>`는 html 우선이다. 셀 안은 PM 파싱 결과가 기준이라 `<p></p>`도 폴백한다.
+  - 처리는 표 셀 안 가드 안에서 한다. `pasteHandler`와 `defaultHandlePaste`는 부르지 않는다. `CellSelection`이면 개입하지 않는다. 순서는 다음과 같다. html이 있고 `slice.size > 0`이면 PM 기본에 맡긴다. 평문이 비면 PM 기본에 맡긴다. html이 없고 평문이 유효하면 PM 기본에 맡긴다. 그 외는 `normalizePasteText` 정리본을 `view.pasteText`로 넣는다.
+  - html이 빈 slice이면 유효한 평문도 `view.pasteText`로 넣는다. PM 기본에 맡기면 html이 있다는 이유로 평문을 버린다. transaction은 하나다. dispatch·undo가 각각 1회다.
+  - 한 줄 예: 문서 `p "para"`, 1x1 표 `"cell"`, `tail`에서 빈 slice html과 `ab`를 붙이면 셀 끝 캐럿은 `cellab`이다. 같은 셀 안 범위 `c[el]l`은 `cabl`이다. 1x2 표의 마지막이 아닌 셀 끝 캐럿(`c1`)은 `c1ab`다. 무효 문자가 섞인 평문은 #297처럼 정리본이 들어간다.
+  - 여러 줄은 #297과 같은 구조다. 마지막 셀은 첫 줄만 셀에 들어가고 나머지는 표 뒤 문단이 된다. `a\nb`는 셀 `cella`와 표 뒤 문단 `b`다. 마지막이 아닌 셀은 PM이 표를 쪼갠 뒤 되돌림 guard가 복원해 문서가 그대로다.
+  - 평문이 비면 이전과 같다. 빈 slice html이면 PM 기본이 선택만 지운다(`c[el]l`은 `cl`). 표 밖 폴백은 문서를 바꾸지 않아 어긋난다. 제어문자만 있는 평문은 이벤트만 소비하고 범위를 지우지 않는다(#297과 같다).
+  - 현행 유지: html이 실제 내용을 가진 입력(`<b>x</b>`는 셀에 bold `x`), `CellSelection`, 셀 안 인라인 atom `NodeSelection`(PM 기본 결과와 같다), 표 경계 범위(#292, 지운 뒤 캐럿이 셀 안이면 이 분기가 받는다), TSV 한 줄, 표 밖과 codeBlock 안.
+  - 한계: `text/html`이 `&nbsp;` 같은 보이지 않는 문자를 가지면 slice가 비지 않아 html이 이긴다. 평문이 사라진다.
+  - 한계: html 안에 무효 문자(U+0001 등)가 있으면 slice가 비지 않는다. PM 기본이 raw로 넣고 되돌림 guard가 지운다. 표 밖은 `importHtml`이 거절해 평문으로 폴백한다.
+  - 한계: `Text`·`text/uri-list`만 있는 클립보드는 `text/plain`이 비어 폴백 대상이 아니다. Ctrl+Shift+V(서식 없이 붙여넣기)는 PM이 평문에서 slice를 만든다. size가 0보다 커서 이전처럼 위임한다. html이 있고 평문에 무효 문자가 섞이면 PM 기본이 raw 무효 문자를 넣고 되돌림 guard가 지워 붙여넣기가 사라진다(이전과 같다). 이번에 바꾸지 않았다.
+  - 한계: `CellSelection`에서 평문이 사라지는 결함과 유효한 여러 줄 평문의 결함은 이 문단 밖이다.
   - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
 
 ## 8. 오류 계약 확장
