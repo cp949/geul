@@ -29,6 +29,7 @@ import {
   normalizeLineBreaks,
   normalizePasteText,
   plainTextClipboardParser,
+  sanitizeSliceInlineText,
   splitPlainTextLines,
 } from "./plain-text-paste.js";
 
@@ -193,6 +194,8 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     // 사실상 무시한다 — doPaste 자신은 이미 계산해 둔 slice로 계속
     // 진행하므로 삽입 자체는 그대로 된다.
     let sanitizedPasteInFlight = false;
+    // drop 이벤트 안에서 PM이 부르는 transformPasted를 건너뛰는 플래그다(Issue #302).
+    let dropInFlight = false;
 
     // PM 자신의 평문 붙여넣기(doPaste)를 재진입 가드 안에서 호출한다.
     const pasteTextThroughPm = (
@@ -215,6 +218,34 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           // 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
           // 자식 있는 블록의 D23 배치는 이 경로로 만들 수 없다(spec 7.3).
           clipboardTextParser: plainTextClipboardParser,
+          // 표 셀 안 캐럿·같은 셀 안 범위의 slice에서 무효 문자를 지운다(Issue
+          // #302). 셀 안에서 html이 내용을 가지면 handlePaste가 PM 기본에
+          // 맡기는데 PM 기본은 slice의 무효 문자를 거르지 않아 되돌림 guard가
+          // 붙여넣기를 통째로 지운다. PM은 handlePaste 호출 전에 이 변환을
+          // 적용한다. html 출처와 Ctrl+Shift+V 평문 출처 slice를 같은 코드가
+          // 덮는다. 아래 handlePaste는 정리된 slice를 받는다.
+          // - CellSelection은 유효 평문도 PM 기본이 되돌리는 별개 결함이라 제외한다.
+          // - 표 밖은 아래 handlePaste의 기존 경로가 처리하므로 바꾸지 않는다.
+          // - drop은 제외한다. PM이 drop에도 이 변환을 부르지만 그때
+          //   view.state.selection은 drop 위치를 반영하지 않는다. 캐럿이 셀
+          //   안이면 다른 위치 drop까지 정리해 codeBlock의 Tab을 지운다.
+          transformPasted: (slice, view) =>
+            !dropInFlight &&
+            isInTable(view.state) &&
+            !(view.state.selection instanceof CellSelection)
+              ? sanitizeSliceInlineText(slice)
+              : slice,
+          // drop 이벤트 처리 중에만 true다. PM은 drop 이벤트 안에서 slice를
+          // 동기로 만든다. 같은 호출 스택이 끝나면 microtask가 내린다.
+          handleDOMEvents: {
+            drop: () => {
+              dropInFlight = true;
+              queueMicrotask(() => {
+                dropInFlight = false;
+              });
+              return false;
+            },
+          },
           handlePaste: (view, event, slice) => {
             if (sanitizedPasteInFlight) return false;
             // 표 셀 안은 PM 기본에 맡긴다(R1 계약). pasteHandler도 호출하지
@@ -226,9 +257,11 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
               // CellSelection이 아니고 html이 실제 내용을 갖지 않을 때만 개입한다.
               // - CellSelection은 유효 평문도 PM 기본이 되돌리는 별개 결함이다.
               // - html이 실제 내용(slice.size > 0)을 가지면 PM이 html만 쓴다.
-              //   개입하면 셀 서식을 잃는다.
+              //   개입하면 셀 서식을 잃는다. slice는 transformPasted가 이미 정리한
+              //   본이다(Issue #302). html의 무효 문자는 PM 기본이 넣기 전에 지워진다.
               // - html이 있어도 PM 파싱 결과가 빈 slice이면 PM은 평문을 버린다.
               //   공백·meta·StartFragment 주석·빈 문단이 해당한다. 평문을 넣는다.
+              //   무효 문자뿐인 html도 정리 뒤 빈 slice라 여기에 든다.
               // - 셀 안 인라인 atom NodeSelection은 정리본이 atom을 대체한다.
               if (view.state.selection instanceof CellSelection) return false;
               const clipboardData = event.clipboardData;

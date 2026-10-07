@@ -76,6 +76,54 @@ export const normalizeForMarkdownDetection = (text: string): string =>
 export const normalizeCodeBlockPasteText = (text: string): string =>
   normalizeKeepingTabs(text);
 
+// slice 안 text 노드의 무효 문자를 지운다(Issue #302). 표 셀 안 붙여넣기의
+// transformPasted가 쓴다. PM 기본 붙여넣기는 slice의 무효 문자를 거르지 않아
+// 되돌림 guard가 붙여넣기를 통째로 지운다. 정리 규칙은 model의
+// sanitizeInlineText를 그대로 쓴다(G-CNV-001).
+// - 정리 결과가 빈 text 노드는 제거한다. PM은 빈 text 노드를 만들 수 없다.
+// - 마크·노드 속성·openStart·openEnd는 그대로다.
+// - codeBlock 안 text는 건드리지 않는다. codeBlock은 Tab을 허용한다.
+// - 바뀐 것이 없으면 같은 slice 객체를 돌려준다.
+const sanitizeFragmentInlineText = (fragment: Fragment): Fragment => {
+  const nodes: ProseMirrorNode[] = [];
+  let changed = false;
+
+  fragment.forEach((node) => {
+    if (node.isText) {
+      const text = node.text ?? "";
+      const cleaned = sanitizeInlineText(text);
+      if (cleaned === text) {
+        nodes.push(node);
+        return;
+      }
+      changed = true;
+      if (cleaned.length > 0) {
+        nodes.push(node.type.schema.text(cleaned, node.marks));
+      }
+      return;
+    }
+    if (node.type.spec.code === true) {
+      nodes.push(node);
+      return;
+    }
+    const content = sanitizeFragmentInlineText(node.content);
+    if (content === node.content) {
+      nodes.push(node);
+      return;
+    }
+    changed = true;
+    nodes.push(node.copy(content));
+  });
+
+  return changed ? Fragment.fromArray(nodes) : fragment;
+};
+
+export const sanitizeSliceInlineText = (slice: Slice): Slice => {
+  const content = sanitizeFragmentInlineText(slice.content);
+  if (content === slice.content) return slice;
+  return new Slice(content, slice.openStart, slice.openEnd);
+};
+
 // 줄 분해. 앞·뒤 개행은 빈 줄로 남아 줄 경계가 된다(Q7).
 export const splitPlainTextLines = (text: string): string[] =>
   text.split(LINE_BREAKS);
