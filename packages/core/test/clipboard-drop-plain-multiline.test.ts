@@ -5,7 +5,8 @@
  * PM 기본 drop이 기존 자식을 마지막 줄 블록으로 넘겼다.
  *
  * 다루는 축은 배치(C1~C3), transaction 계약(C4·C6), 삽입 뒤 selection(C5),
- * PM 기본에 위임하는 입력(C7), sanitize·마크·selection 비접촉(C8)이다.
+ * PM 기본에 위임하는 입력(C7), sanitize·마크·selection 비접촉(C8),
+ * 무효 문자 drop(C9, Issue #306)이다.
  * jsdom은 좌표를 해석하지 못해 view.posAtCoords를 stub한다. 위임 입력은
  * view.someProp("handleDrop")으로 호출해 플러그인의 반환값을 직접 읽는다.
  * 실제 브라우저 drop은 e2e/clipboard-paste.spec.ts가 맡는다.
@@ -23,9 +24,11 @@ import {
   dropData,
   dropEventOf,
   outline,
+  pasteData,
   runsOf,
 } from "./clipboard-test-support.js";
 import {
+  codeBlockBlock,
   dividerBlock,
   documentOf,
   editorWithTable,
@@ -34,6 +37,7 @@ import {
   sequentialIds,
   toggleBlock,
 } from "./editor-controller-support.js";
+import { singleCellTable } from "./table-boundary-test-support.js";
 import { findCellBoundaryPosition } from "./table-test-support.js";
 
 type Tiptap = ReturnType<typeof mountTiptapEditor>["tiptap"];
@@ -390,6 +394,98 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
         "p:abX[p:Ycd,p:child]",
         "p:tail",
       ]);
+    });
+  });
+
+  // Issue #306 결함 2. 무효 문자가 든 drop은 PM 기본 drop이 원문 그대로 넣어
+  // 되돌림 guard가 지웠다. 같은 위치 붙여넣기는 정리본을 넣는다. drop 결과가
+  // 같은 캐럿 붙여넣기 결과와 같아야 한다.
+  describe("무효 문자 drop(C9)", () => {
+    const SOH = String.fromCharCode(1);
+    const NUL = String.fromCharCode(0);
+    const DEL = String.fromCharCode(0x7f);
+    const LONE = String.fromCharCode(0xd800);
+
+    // D9: p1 "abcd", codeBlock cb "code", 1x1 표(셀 "cell"), tail. drop 위치는
+    // 각 대상 텍스트의 offset 2다.
+    type Target = "문단" | "codeBlock" | "셀";
+    const blocksFor = (): Block[] => [
+      paragraphBlock("p1", "abcd"),
+      codeBlockBlock("cb", "code"),
+      singleCellTable("t", "cell"),
+      paragraphBlock("tail", "tail"),
+    ];
+    const positionOf = (tiptap: Tiptap, target: Target): number => {
+      if (target === "문단") return contentTextStart(tiptap, "p1") + 2;
+      if (target === "codeBlock") return contentTextStart(tiptap, "cb") + 2;
+      const boundary = findCellBoundaryPosition(tiptap, "t-r0c0");
+      if (boundary === null) throw new Error("셀 조회 실패");
+      return boundary + 1 + 2;
+    };
+    const mount = () => {
+      const editor = createEditor({
+        initialDocument: documentOf(...blocksFor()),
+        createId: sequentialIds("id"),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      return { editor, editable, tiptap };
+    };
+    const dropResult = (target: Target, entries: Record<string, string>) => {
+      const { editor, editable, tiptap } = mount();
+      // 선택은 tail 끝 캐럿이다. drop 위치와 다르다.
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+      stubPosAtCoords(tiptap, positionOf(tiptap, target));
+      dropData(editable, entries);
+      return outline(blocksOf(editor));
+    };
+    const pasteResult = (target: Target, entries: Record<string, string>) => {
+      const { editor, editable, tiptap } = mount();
+      tiptap.commands.setTextSelection(positionOf(tiptap, target));
+      pasteData(editable, entries);
+      return outline(blocksOf(editor));
+    };
+    const original = () => {
+      const { editor } = mount();
+      return outline(blocksOf(editor));
+    };
+
+    it.each([
+      ["문단", `a${SOH}b`],
+      ["codeBlock", `a${SOH}b`],
+      ["셀", `a${SOH}b`],
+      ["문단", `a${NUL}b`],
+      ["codeBlock", `a${DEL}b`],
+      ["셀", `a${LONE}b`],
+      ["codeBlock", `a${SOH}b\nc`],
+      ["셀", `a${SOH}b\nc`],
+    ] as const)(
+      "%s에 무효 문자 평문 %j를 drop하면 같은 캐럿 붙여넣기와 같은 정리본이 들어간다",
+      (target, text) => {
+        const entries = { "text/plain": text };
+        const dropped = dropResult(target, entries);
+
+        expect(dropped).not.toEqual(original());
+        expect(dropped).toEqual(pasteResult(target, entries));
+      },
+    );
+
+    it.each(["문단", "셀"] as const)(
+      "%s에 무효 문자 html을 drop하면 정리본이 들어간다",
+      (target) => {
+        const entries = { "text/html": `<p>a${SOH}b</p>`, "text/plain": "ab" };
+        const dropped = dropResult(target, entries);
+
+        expect(dropped).not.toEqual(original());
+        expect(dropped.join("|")).toContain("ab");
+      },
+    );
+
+    it("codeBlock에 Tab만 든 유효 평문 drop은 PM 기본에 맡겨 Tab이 남는다", () => {
+      const tab = String.fromCharCode(9);
+      const dropped = dropResult("codeBlock", { "text/plain": `a${tab}b` });
+
+      expect(dropped.join("|")).toContain(`coa${tab}bde`);
     });
   });
 });
