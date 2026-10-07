@@ -16,6 +16,7 @@ import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
+import { resolvePasteBlockPlacement } from "./paste-block-placement.js";
 import {
   buildPlainMultilinePasteTransaction,
   plainTextClipboardParser,
@@ -272,6 +273,29 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
 
               const insert = (nodes: TiptapJsonNode[]): void => {
                 if (nodes.length === 0) return;
+                // 자식 있는 블록의 끝이면 블록 경계에 바로 넣는다(Issue #290).
+                // 범위 삭제와 삽입은 한 transaction이다.
+                const placement = resolvePasteBlockPlacement(
+                  view.state.selection,
+                );
+                if (placement !== null) {
+                  const deleteLength =
+                    placement.deleteTo - placement.deleteFrom;
+                  editor
+                    .chain()
+                    .command(({ tr }) => {
+                      if (deleteLength > 0) {
+                        tr.delete(placement.deleteFrom, placement.deleteTo);
+                      }
+                      return true;
+                    })
+                    .insertContentAt(
+                      placement.insertAt - deleteLength,
+                      clampDepth(nodes, placement.depth),
+                    )
+                    .run();
+                  return;
+                }
                 const targetDepth = modelDepthAtPasteTarget(
                   view.state.selection.$from,
                 );
