@@ -20,6 +20,10 @@ import {
 // 범위, CellSelection, 양 끝이 표 밖인 범위(표를 완전히 감싸는 범위 포함)는
 // 대상이 아니다.
 
+// 삭제 계약. 선택하지 않은 텍스트는 보존하고 선택한 텍스트만 지운다. 끝 쪽이
+// 상위 블록의 자식이어도 같다(Issue #293). 라벨이 범위에 든 상위 블록은
+// 타입과 attrs를 유지한 채 빈 라벨로 남고 끝 블록은 그 자식으로 남는다.
+
 // 표 노드 하나의 문서 범위. start는 표 앞, end는 표 뒤 위치다.
 type TableSpan = { start: number; end: number };
 
@@ -100,12 +104,20 @@ function isStructuralGap(doc: Node, from: number, to: number): boolean {
 //
 // - 표 안 구간: 범위와 겹치는 각 셀에서 겹친 인라인 구간만 지운다. 셀·행·열
 //   구조는 건드리지 않는다.
-// - 표 밖 구간: [시작 쪽 표 끝 또는 from, 끝 쪽 표 시작 또는 to]를 일반
-//   삭제한다. 사이 블록·사이 표는 사라지고 끝 블록은 텍스트만 줄어 남는다.
+// - 표 밖 구간: $to의 조상 체인에서 열린 토큰이 범위에 드는 blockContainer를
+//   "대상 컨테이너"라 한다. 대상 컨테이너는 지우지 않고 아래처럼 비운다.
+//   - 끝 블록: 라벨 텍스트 [내용 시작, to]만 지운다. 끝이 표 셀이면 표를
+//     감싼 컨테이너라 라벨이 없다.
+//   - 그 위의 상위 블록: 라벨 인라인 내용 전체를 지운다. 라벨 노드가 남아
+//     타입과 attrs를 유지한다.
+//   - 체인 자식 앞의 형제 블록: 통째로 지운다. 범위에 든 사이 블록이다.
+//   - 사이 구간: [시작 쪽 표 끝 또는 from, 가장 바깥 대상 컨테이너 시작]을
+//     일반 삭제한다. 닫는 토큰만 가로지르므로 끝 쪽 블록의 부모 관계가
+//     바뀌지 않는다.
 //
-// 위치가 큰 구간부터 적용해 앞 구간의 위치가 밀리지 않게 한다. 캐럿은
-// 범위 시작에 접는다. tr은 호출 시점에 step이 없어야 한다(위치가 tr.doc
-// 기준이고 캐럿 매핑이 이 함수의 step만 지나야 한다).
+// 위치가 큰 구간부터 적용해 앞 구간의 위치가 밀리지 않게 한다. 구간은 서로
+// 겹치지 않는다. 캐럿은 범위 시작에 접는다. tr은 호출 시점에 step이 없어야
+// 한다(위치가 tr.doc 기준이고 캐럿 매핑이 이 함수의 step만 지나야 한다).
 export function deleteTableBoundaryRange(
   tr: Transaction,
   range: TableBoundaryRange,
@@ -129,15 +141,43 @@ export function deleteTableBoundaryRange(
     return false;
   });
 
-  // 표 밖 구간. 끝 블록은 텍스트 구간만 따로 지운다. PM 삭제는 끝 블록
-  // 텍스트 전체를 덮으면 그 블록째 지우기 때문이다. 끝 블록 내용 시작까지만
-  // 일반 삭제하고 끝 블록은 남긴다.
+  // 표 밖 구간. 끝 쪽 대상 컨테이너를 깊은 쪽부터 모은다.
   const outsideFrom = fromTable === null ? from : fromTable.end;
-  let outsideTo = toTable === null ? to : toTable.start;
-  if (toTable === null) {
-    const endBlockStart = tr.doc.resolve(to).start();
-    if (endBlockStart < to) spans.push({ from: endBlockStart, to });
-    outsideTo = endBlockStart;
+  const $to = tr.doc.resolve(to);
+  const targetDepths: number[] = [];
+  for (let depth = $to.depth; depth > 0; depth -= 1) {
+    if (
+      $to.node(depth).type.name === "blockContainer" &&
+      $to.before(depth) >= outsideFrom
+    ) {
+      targetDepths.push(depth);
+    }
+  }
+
+  let outsideTo = toTable === null ? $to.start() : toTable.start;
+  targetDepths.forEach((depth, index) => {
+    if (toTable === null && index === 0) {
+      // 끝 블록은 텍스트 구간만 따로 지운다. PM 삭제는 끝 블록 텍스트 전체를
+      // 덮으면 그 블록째 지우기 때문이다.
+      if ($to.start() < to) spans.push({ from: $to.start(), to });
+      return;
+    }
+    // 상위 블록. 라벨 노드는 남기고 인라인 내용만 지운다.
+    const labelStart = $to.start(depth) + 1;
+    const labelSize = $to.node(depth).child(0).content.size;
+    if (labelSize > 0) {
+      spans.push({ from: labelStart, to: labelStart + labelSize });
+    }
+    // 체인 자식(자식 컨테이너 또는 끝 쪽 표) 앞의 형제 블록은 범위에 든 사이
+    // 블록이다. 상위 블록의 자식 그룹 안이라 사이 구간이 닿지 않는다.
+    const groupStart = $to.start(depth + 1);
+    const chainChildStart = $to.before(depth + 2);
+    if (groupStart < chainChildStart) {
+      spans.push({ from: groupStart, to: chainChildStart });
+    }
+  });
+  if (targetDepths.length > 0) {
+    outsideTo = $to.before(targetDepths[targetDepths.length - 1]);
   }
   if (!isStructuralGap(tr.doc, outsideFrom, outsideTo)) {
     spans.push({ from: outsideFrom, to: outsideTo });
