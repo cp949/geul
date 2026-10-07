@@ -13,8 +13,17 @@
  * 판정(C7), codeBlock 걸친 범위, transaction 계약(C11)이다. 기준 문서는
  * p1 "abcd"이고 캐럿은 2다. 제어문자는 U+0001을 쓴다. 실제 브라우저
  * 시나리오는 e2e/clipboard-paste.spec.ts가 회귀로만 맡는다.
+ *
+ * 마지막 describe는 slice text 정리 헬퍼(sanitizeSliceInlineText, Issue #302)
+ * 단위 테스트다. 무효 문자 제거, 빈 text 노드 제거, 마크·열림 깊이 보존,
+ * codeBlock text 보호, 변경이 없으면 같은 객체 반환을 고정한다.
  */
 import { isValidCodeBlockSource, type Block } from "@cp949/geul-model";
+import {
+  Fragment,
+  Slice,
+  type Node as ProseMirrorNode,
+} from "@tiptap/pm/model";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createEditor } from "../src/index.js";
@@ -23,6 +32,7 @@ import {
   normalizeForMarkdownDetection,
   normalizeLineBreaks,
   normalizePasteText,
+  sanitizeSliceInlineText,
 } from "../src/plain-text-paste.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
@@ -604,6 +614,179 @@ describe("붙여넣기 평문 정규화(Issue #291)", () => {
 
     it("한 줄 평문에 제어문자가 있으면 지우고 넣는다", () => {
       expect(pasteOutline(`a${SOH}b`)).toEqual(["p:ababcd"]);
+    });
+  });
+});
+
+describe("slice text 정리 헬퍼 단위(Issue #302)", () => {
+  const TAB = String.fromCharCode(9);
+  const DEL = String.fromCharCode(0x7f);
+  const HIGH = String.fromCharCode(0xd800);
+
+  const schemaOf = () => setup(baseDocument(), "p1", 2).tiptap.schema;
+
+  // 문단 하나를 담은 slice다. 내용은 인라인 노드 목록이다.
+  const paragraphSlice = (
+    inline: (schema: ReturnType<typeof schemaOf>) => ProseMirrorNode[],
+    open = 1,
+  ): { slice: Slice; schema: ReturnType<typeof schemaOf> } => {
+    const schema = schemaOf();
+    const paragraph = schema.nodes.paragraph;
+    if (paragraph === undefined) throw new Error("paragraph 조회 실패");
+    return {
+      slice: new Slice(
+        Fragment.from(paragraph.create(null, inline(schema))),
+        open,
+        open,
+      ),
+      schema,
+    };
+  };
+
+  const bold = (schema: ReturnType<typeof schemaOf>) => {
+    const mark = schema.marks.bold;
+    if (mark === undefined) throw new Error("bold 조회 실패");
+    return mark.create();
+  };
+
+  const textsOf = (slice: Slice): string[] => {
+    const texts: string[] = [];
+    slice.content.descendants((node) => {
+      if (node.isText) texts.push(node.text ?? "");
+    });
+    return texts;
+  };
+
+  it("무효 문자(C0 제어문자·Tab·DEL·짝 없는 surrogate)를 text 노드에서 지운다", () => {
+    const { slice } = paragraphSlice((schema) => [
+      schema.text(`a${SOH}b${TAB}c${DEL}d${HIGH}e`),
+    ]);
+
+    expect(textsOf(sanitizeSliceInlineText(slice))).toEqual(["abcde"]);
+  });
+
+  it("짝 있는 surrogate(이모지)는 지우지 않는다", () => {
+    const { slice } = paragraphSlice((schema) => [schema.text("a\u{1F600}b")]);
+
+    expect(sanitizeSliceInlineText(slice)).toBe(slice);
+  });
+
+  it("무효 문자가 없는 slice는 같은 객체를 반환한다(C9)", () => {
+    const { slice } = paragraphSlice((schema) => [schema.text("abc")]);
+
+    expect(sanitizeSliceInlineText(slice)).toBe(slice);
+    expect(sanitizeSliceInlineText(Slice.empty)).toBe(Slice.empty);
+  });
+
+  it("text 노드가 없는 slice는 같은 객체를 반환한다", () => {
+    const { slice } = paragraphSlice(() => []);
+
+    expect(sanitizeSliceInlineText(slice)).toBe(slice);
+  });
+
+  it("정리 결과가 빈 text 노드는 제거한다. 빈 text 노드를 만들지 않는다", () => {
+    const { slice } = paragraphSlice((schema) => [
+      schema.text(SOH),
+      schema.text("x", [bold(schema)]),
+    ]);
+
+    const result = sanitizeSliceInlineText(slice);
+
+    expect(textsOf(result)).toEqual(["x"]);
+    expect(result.content.firstChild?.childCount).toBe(1);
+  });
+
+  it("무효 문자뿐인 문단은 빈 문단으로 남는다", () => {
+    const { slice } = paragraphSlice((schema) => [schema.text(SOH)]);
+
+    const result = sanitizeSliceInlineText(slice);
+
+    expect(result.content.childCount).toBe(1);
+    expect(result.content.firstChild?.childCount).toBe(0);
+    expect(textsOf(result)).toEqual([]);
+  });
+
+  it("마크를 보존한다", () => {
+    const { slice } = paragraphSlice((schema) => [
+      schema.text(`a${SOH}`, [bold(schema)]),
+      schema.text("b"),
+    ]);
+
+    const result = sanitizeSliceInlineText(slice);
+    const children: ProseMirrorNode[] = [];
+    result.content.firstChild?.forEach((child) => children.push(child));
+
+    expect(children.map((child) => child.text)).toEqual(["a", "b"]);
+    expect(
+      children.map((child) => child.marks.map((m) => m.type.name)),
+    ).toEqual([["bold"], []]);
+  });
+
+  it("openStart·openEnd를 보존한다", () => {
+    const { slice } = paragraphSlice((schema) => [schema.text(`a${SOH}b`)], 1);
+    const wide = new Slice(slice.content, 1, 0);
+
+    const result = sanitizeSliceInlineText(wide);
+
+    expect(result.openStart).toBe(1);
+    expect(result.openEnd).toBe(0);
+    expect(textsOf(result)).toEqual(["ab"]);
+  });
+
+  it("blockContainer 안 중첩 문단의 text도 정리한다", () => {
+    const schema = schemaOf();
+    const container = schema.nodes.blockContainer;
+    const paragraph = schema.nodes.paragraph;
+    if (container === undefined || paragraph === undefined) {
+      throw new Error("노드 타입 조회 실패");
+    }
+    const slice = new Slice(
+      Fragment.from([
+        container.create(null, paragraph.create(null, schema.text(`x${SOH}`))),
+        container.create(null, paragraph.create(null, schema.text("y"))),
+      ]),
+      0,
+      0,
+    );
+
+    const result = sanitizeSliceInlineText(slice);
+
+    expect(textsOf(result)).toEqual(["x", "y"]);
+    // 바뀌지 않은 두 번째 container는 같은 노드다.
+    expect(result.content.child(1)).toBe(slice.content.child(1));
+  });
+
+  describe("codeBlock text 보호(C10)", () => {
+    const codeBlockSlice = (
+      codeText: string,
+      paragraphText?: string,
+    ): Slice => {
+      const schema = schemaOf();
+      const codeBlock = schema.nodes.codeBlock;
+      const paragraph = schema.nodes.paragraph;
+      if (codeBlock === undefined || paragraph === undefined) {
+        throw new Error("노드 타입 조회 실패");
+      }
+      const nodes = [codeBlock.create(null, schema.text(codeText))];
+      if (paragraphText !== undefined) {
+        nodes.push(paragraph.create(null, schema.text(paragraphText)));
+      }
+      return new Slice(Fragment.from(nodes), 0, 0);
+    };
+
+    it("codeBlock의 Tab은 보존하고 같은 객체를 반환한다", () => {
+      const slice = codeBlockSlice(`a${TAB}b\nc`);
+
+      expect(sanitizeSliceInlineText(slice)).toBe(slice);
+    });
+
+    it("codeBlock text는 무효 문자도 건드리지 않는다. 같은 slice의 문단 text만 정리한다", () => {
+      const slice = codeBlockSlice(`a${TAB}b${SOH}`, `x${SOH}y${TAB}z`);
+
+      const result = sanitizeSliceInlineText(slice);
+
+      expect(textsOf(result)).toEqual([`a${TAB}b${SOH}`, "xyz"]);
+      expect(result.content.child(0)).toBe(slice.content.child(0));
     });
   });
 });

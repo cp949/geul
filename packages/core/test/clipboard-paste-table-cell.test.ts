@@ -22,12 +22,22 @@
  * 평문을 버려 붙여넣기가 소실됐다. 이제 html이 실제 내용(slice.size > 0)을
  * 가질 때만 PM 기본에 맡기고, 빈 slice이면 평문 정리본을 넣는다. 다루는 축은
  * 빈 slice html 대표 입력 x 평문 행렬 x 선택 종류, 평문이 비거나 무효 문자뿐인
- * 입력, 서식 있는 html 불변, 보이지 않는 문자·html 안 무효 문자 한계, 개입하지
+ * 입력, 서식 있는 html 불변, 보이지 않는 문자 한계, html 안 무효 문자(Issue #302가 정정), 개입하지
  * 않는 경로(CellSelection), atom NodeSelection, pasteHandler 미호출 계약,
  * 표 경계 범위 뒤 캐럿 위치, transaction 계약이다.
+ *
+ * 세 번째 축은 무효 문자가 든 text/html과 Ctrl+Shift+V 평문이다(Issue #302).
+ * html이 실제 내용(slice.size > 0)을 가지면 PM 기본이 slice를 넣는다. slice의
+ * 무효 문자를 되돌림 guard가 통째로 지워 붙여넣기가 소실됐다. 이제 플러그인
+ * transformPasted가 셀 안 캐럿·같은 셀 안 범위(CellSelection 제외)의 slice
+ * text를 정리한다. 다루는 축은 무효 문자 종류(U+0001·U+D800·U+007F·문자
+ * 참조) x 선택 종류, Shift 평문, 서식 유지, 정리 뒤 빈 slice, 다문단,
+ * transaction 계약, 변경 없는 slice 불변, transformPasted 적용 범위(CellSelection·
+ * 표 밖), pasteHandler 미호출 계약, 병합·헤더 셀 캐럿이다.
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
@@ -35,9 +45,11 @@ import type { CreateEditorOptions } from "../src/index.js";
 import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import {
   dispatchPasteData,
+  dropEventOf,
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
+  codeBlockBlock,
   documentOf,
   editorState,
   mounted,
@@ -47,6 +59,7 @@ import {
   gridTable,
   inBlock,
   inCell,
+  mergedTable,
   outline,
   type Pos,
   singleCellTable,
@@ -58,6 +71,7 @@ const SOH = String.fromCharCode(1);
 const HIGH_SURROGATE = String.fromCharCode(0xd800);
 const TAB = String.fromCharCode(9);
 const CR = String.fromCharCode(13);
+const DEL = String.fromCharCode(0x7f);
 
 // 선택을 두는 함수. 마운트 뒤에야 문서 위치를 알 수 있다.
 type Place = (tiptap: TiptapEditor) => void;
@@ -173,9 +187,11 @@ const pasteIn = (
   place: Place,
   entries: Record<string, string>,
   options: PasteOptions = {},
+  beforePaste: (tiptap: TiptapEditor) => void = () => undefined,
 ) => {
   const m = mounted(documentOf(...blocks), options);
   place(m.tiptap);
+  beforePaste(m.tiptap);
   const before = editorState(m.editor, m.tiptap);
   const pasteText = vi.spyOn(m.tiptap.view, "pasteText");
   const dispatch = vi.spyOn(m.tiptap.view, "dispatch");
@@ -679,7 +695,7 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
         );
       });
 
-      it("html 안 텍스트에 제어문자가 있으면 현행대로 개입하지 않고 문서가 불변이다(C8 한계)", () => {
+      it("html 안 텍스트에 제어문자가 있으면 PM 기본이 정리된 slice를 넣는다(C8 한계 정정, Issue #302)", () => {
         const result = pasteIn(selection.blocks(), selection.place, {
           "text/html": `<p>a${SOH}b</p>`,
           "text/plain": "ab",
@@ -688,9 +704,9 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
         expect(result.pasteText).not.toHaveBeenCalled();
         expect(result.blocks()).toEqual(
           [
-            docOutline("table[cell]"),
-            docOutline("table[cell]"),
-            docOutline("table[c1|c2]"),
+            docOutline("table[cellab]"),
+            docOutline("table[cabl]"),
+            docOutline("table[c1ab|c2]"),
           ][index],
         );
       });
@@ -798,6 +814,429 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
         "table[ceab]",
         "paragraph:il",
       ]);
+      expectSchemaValid(result.tiptap);
+    });
+  });
+});
+
+describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
+  const HIGH = String.fromCharCode(0xd800);
+  // 셀 안에서 Ctrl+Shift+V다. PM은 view.input.shiftKey로 평문 slice를 만든다.
+  const shiftPressed = (tiptap: TiptapEditor): void => {
+    (
+      tiptap.view as unknown as { input: { shiftKey: boolean } }
+    ).input.shiftKey = true;
+  };
+  const cellContent = (result: ReturnType<typeof pasteIn>) => {
+    const table = result.editor.getDocument().blocks[1];
+    if (table?.type !== "table") throw new Error("표 블록이 사라졌다");
+    return (table as Extract<Block, { type: "table" }>).rows[0]?.cells[0]
+      ?.content;
+  };
+
+  // selections 순서(S1·S2·S3)의 기대 outline이다. 정리본 "ab"가 들어간 결과다.
+  const abInserted = [
+    docOutline("table[cellab]"),
+    docOutline("table[cabl]"),
+    docOutline("table[c1ab|c2]"),
+  ];
+
+  const invalidHtmls = [
+    { name: "제어문자 U+0001", html: `<p>a${SOH}b</p>` },
+    { name: "짝 없는 surrogate U+D800", html: `<p>a${HIGH}b</p>` },
+    { name: "DEL U+007F", html: `<p>a${DEL}b</p>` },
+    { name: "숫자 문자 참조", html: "<p>a&#1;b</p>" },
+  ];
+
+  describe.each(selections.map((selection, index) => ({ selection, index })))(
+    "$selection.name",
+    ({ selection, index }) => {
+      it.each(invalidHtmls)(
+        "html $name 입력은 무효 문자만 지워 셀에 넣고 PM 기본 경로를 쓴다(C1·C3)",
+        ({ html }) => {
+          const result = pasteIn(selection.blocks(), selection.place, {
+            "text/html": html,
+            "text/plain": "ab",
+          });
+
+          expect(result.pasteText).not.toHaveBeenCalled();
+          expect(result.blocks()).toEqual(abInserted[index]);
+          expectSchemaValid(result.tiptap);
+          expect(result.event.defaultPrevented).toBe(true);
+        },
+      );
+
+      it("Shift 평문에 무효 문자가 섞이면 html이 함께 와도 정리본이 셀에 들어간다(C2)", () => {
+        const result = pasteIn(
+          selection.blocks(),
+          selection.place,
+          { "text/html": "<b>x</b>", "text/plain": `a${SOH}b` },
+          {},
+          shiftPressed,
+        );
+
+        expect(result.blocks()).toEqual(abInserted[index]);
+        expectSchemaValid(result.tiptap);
+      });
+
+      it("정리본 붙여넣기는 dispatch 1회, undo 1회로 원복되고 문서가 유효하다(C8)", () => {
+        const result = pasteIn(selection.blocks(), selection.place, {
+          "text/html": `<p>a${SOH}b</p>`,
+          "text/plain": "ab",
+        });
+
+        expect(result.dispatch).toHaveBeenCalledTimes(1);
+        expect(result.editor.getDocument().revision).toBe(
+          result.before.document.revision + 1,
+        );
+        expectSchemaValid(result.tiptap);
+        expect(result.blocks().join("")).not.toContain(SOH);
+
+        result.tiptap.commands.undo();
+        expect(result.tiptap.state.doc.toJSON()).toEqual(
+          result.before.tiptapDocument,
+        );
+      });
+
+      it("정리 뒤 빈 slice이면 평문 정리본이 pasteText 1회로 들어간다(C5)", () => {
+        const result = pasteIn(selection.blocks(), selection.place, {
+          "text/html": `<p>${SOH}</p>`,
+          "text/plain": "ab",
+        });
+
+        expect(result.pasteText).toHaveBeenCalledTimes(1);
+        expect(result.blocks()).toEqual(abInserted[index]);
+        expectSchemaValid(result.tiptap);
+      });
+
+      it("유효한 서식 html은 transformPasted를 거쳐도 현행과 같다(C9)", () => {
+        const result = pasteIn(selection.blocks(), selection.place, {
+          "text/html": "<b>x</b>",
+          "text/plain": "ab",
+        });
+
+        expect(result.pasteText).not.toHaveBeenCalled();
+        expect(result.blocks()).toEqual(
+          [
+            docOutline("table[cellx]"),
+            docOutline("table[cxl]"),
+            docOutline("table[c1x|c2]"),
+          ][index],
+        );
+      });
+    },
+  );
+
+  it("Shift 평문은 html의 서식을 쓰지 않는다. 무효 문자가 있든 없든 평문 그대로다(C2)", () => {
+    const invalid = pasteIn(
+      S1.blocks(),
+      S1.place,
+      { "text/html": "<b>x</b>", "text/plain": `a${SOH}b` },
+      {},
+      shiftPressed,
+    );
+    const valid = pasteIn(
+      S1.blocks(),
+      S1.place,
+      { "text/html": "<b>x</b>", "text/plain": "ab" },
+      {},
+      shiftPressed,
+    );
+
+    expect(invalid.blocks()).toEqual(docOutline("table[cellab]"));
+    expect(cellContent(invalid)).toEqual([{ text: "cellab" }]);
+    expect(valid.blocks()).toEqual(docOutline("table[cellab]"));
+    expect(cellContent(valid)).toEqual([{ text: "cellab" }]);
+  });
+
+  it("서식이 든 html에서 무효 문자만 지우고 마크는 유지한다(C4)", () => {
+    const result = pasteIn(S1.blocks(), S1.place, {
+      "text/html": `<p><b>a${SOH}</b>b</p>`,
+      "text/plain": "ab",
+    });
+
+    expect(result.blocks()).toEqual(docOutline("table[cellab]"));
+    expect(cellContent(result)).toEqual([
+      { text: "cell" },
+      { text: "a", marks: [{ type: "bold" }] },
+      { text: "b" },
+    ]);
+  });
+
+  describe("정리 결과가 비는 입력(C6)", () => {
+    it.each([S1, S3])(
+      "$name - 무효 문자뿐인 html만 오면 문서·선택이 불변이고 오류·onChange가 없다",
+      (selection) => {
+        withUnhandledErrorTracking((errors) => {
+          const result = pasteIn(selection.blocks(), selection.place, {
+            "text/html": `<p>${SOH}</p>`,
+          });
+
+          expect(editorState(result.editor, result.tiptap)).toEqual(
+            result.before,
+          );
+          expect(result.changes).toEqual([]);
+          expect(errors).toEqual([]);
+        });
+      },
+    );
+
+    it("S2 같은 셀 안 범위에서 무효 문자뿐인 html만 오면 빈 slice라 범위만 지워진다(#301 빈 평문과 같다)", () => {
+      const result = pasteIn(S2.blocks(), S2.place, {
+        "text/html": `<p>${SOH}</p>`,
+      });
+
+      expect(result.blocks()).toEqual(docOutline("table[cl]"));
+      expectSchemaValid(result.tiptap);
+    });
+
+    it.each([S1, S2, S3])(
+      "$name - Shift와 무효 문자뿐인 평문은 이벤트만 소비하고 문서·선택이 불변이다",
+      (selection) => {
+        withUnhandledErrorTracking((errors) => {
+          const result = pasteIn(
+            selection.blocks(),
+            selection.place,
+            { "text/plain": SOH },
+            {},
+            shiftPressed,
+          );
+
+          expect(result.event.defaultPrevented).toBe(true);
+          expect(editorState(result.editor, result.tiptap)).toEqual(
+            result.before,
+          );
+          expect(result.changes).toEqual([]);
+          expect(errors).toEqual([]);
+        });
+      },
+    );
+  });
+
+  it("다문단 html에서 가운데 문단만 무효 문자이면 가운데 빈 문단이 남는다. 유효 다문단과 같은 구조다(C7)", () => {
+    const invalid = pasteIn(S1.blocks(), S1.place, {
+      "text/html": `<p>x</p><p>${SOH}</p><p>y</p>`,
+    });
+    const valid = pasteIn(S1.blocks(), S1.place, {
+      "text/html": "<p>x</p><p>z</p><p>y</p>",
+    });
+
+    expect(valid.blocks()).toEqual(
+      docOutline("table[cellx]", "paragraph:z", "paragraph:y"),
+    );
+    expect(invalid.blocks()).toEqual(
+      docOutline("table[cellx]", "paragraph:", "paragraph:y"),
+    );
+    expectSchemaValid(invalid.tiptap);
+  });
+
+  it("무효 문자뿐인 문단이 둘이면 정리 뒤에도 빈 문단이 남아 평문으로 폴백하지 않는다", () => {
+    const result = pasteIn(S1.blocks(), S1.place, {
+      "text/html": `<p>${SOH}</p><p>${SOH}</p>`,
+      "text/plain": "q",
+    });
+
+    expect(result.pasteText).not.toHaveBeenCalled();
+    expect(result.blocks()).toEqual([
+      "paragraph:para",
+      "table[cell]",
+      "paragraph:",
+      "paragraph:tail",
+    ]);
+  });
+
+  describe("transformPasted 적용 범위(C11)", () => {
+    // PM이 붙여넣기 때 하는 대로 모든 플러그인 transformPasted를 차례로 적용한다.
+    const transform = (tiptap: TiptapEditor, slice: Slice): Slice => {
+      let result = slice;
+      tiptap.view.someProp("transformPasted", (f) => {
+        result = f(result, tiptap.view, false);
+      });
+      return result;
+    };
+    const dirtySlice = (tiptap: TiptapEditor): Slice =>
+      new Slice(Fragment.from(tiptap.schema.text(`a${SOH}b`)), 0, 0);
+    const textOf = (slice: Slice): string =>
+      slice.content.textBetween(0, slice.content.size);
+
+    it("셀 안 캐럿에서는 slice text를 정리한다", () => {
+      const m = mounted(documentOf(...S1.blocks()));
+      S1.place(m.tiptap);
+      const slice = dirtySlice(m.tiptap);
+
+      expect(textOf(transform(m.tiptap, slice))).toBe("ab");
+    });
+
+    it("CellSelection에서는 slice를 바꾸지 않는다", () => {
+      const m = mounted(documentOf(...firstCellBlocks()));
+      selectCellRange(m.tiptap, "g-r0c0", "g-r0c1");
+      const slice = dirtySlice(m.tiptap);
+
+      expect(transform(m.tiptap, slice)).toBe(slice);
+    });
+
+    it("표 밖 캐럿에서는 slice를 바꾸지 않는다", () => {
+      const m = mounted(documentOf(...S1.blocks()));
+      textSelection(inBlock("p1", 4))(m.tiptap);
+      const slice = dirtySlice(m.tiptap);
+
+      expect(transform(m.tiptap, slice)).toBe(slice);
+    });
+
+    it("표 밖 캐럿의 무효 문자 html은 현행대로 표 밖 경로가 정리한다", () => {
+      const result = pasteIn(S1.blocks(), textSelection(inBlock("p1", 4)), {
+        "text/html": `<p>a${SOH}b</p>`,
+        "text/plain": "ab",
+      });
+
+      expect(result.blocks()).toEqual([
+        "paragraph:para",
+        "paragraph:ab",
+        "table[cell]",
+        "paragraph:tail",
+      ]);
+    });
+  });
+
+  describe("drop은 정리 대상이 아니다(C16)", () => {
+    // 문서: p1 "para", 1x1 표(셀 "cell"), codeBlock cb "xyz", tail. 캐럿은 셀 끝이다.
+    const dropBlocks = (): Block[] => [
+      paragraphBlock("p1", "para"),
+      singleCellTable("t", "cell"),
+      codeBlockBlock("cb", "xyz"),
+      TAIL,
+    ];
+    // PM drop은 view.posAtCoords로 위치를 얻는다. jsdom은 좌표를 해석하지 못해 stub한다.
+    const dropAt = (
+      tiptap: TiptapEditor,
+      pos: number,
+      entries: Record<string, string>,
+    ): void => {
+      tiptap.view.posAtCoords = () => ({ pos, inside: pos });
+      tiptap.view.dom.dispatchEvent(dropEventOf(entries));
+    };
+
+    it("캐럿이 셀 안이어도 codeBlock에 drop한 Tab은 지우지 않는다", () => {
+      const m = mounted(documentOf(...dropBlocks()));
+      S1.place(m.tiptap);
+
+      dropAt(m.tiptap, inBlock("cb", 1)(m.tiptap), {
+        "text/plain": `q${TAB}r`,
+      });
+
+      expect(outline(m.editor.getDocument().blocks)).toContain(
+        `codeBlock:xq${TAB}ryz`,
+      );
+    });
+
+    it("캐럿이 셀 안일 때 표 밖에 drop한 무효 문자 html은 정리하지 않는다", () => {
+      const m = mounted(documentOf(...dropBlocks()));
+      S1.place(m.tiptap);
+      const before = outline(m.editor.getDocument().blocks);
+
+      dropAt(m.tiptap, inBlock("p1", 2)(m.tiptap), {
+        "text/html": `<p>a${SOH}b</p>`,
+        "text/plain": "ab",
+      });
+
+      expect(outline(m.editor.getDocument().blocks)).toEqual(before);
+    });
+  });
+
+  describe("pasteHandler 계약(C12)", () => {
+    it.each([
+      { name: "무효 문자 html", entries: { "text/html": `<p>a${SOH}b</p>` } },
+      {
+        name: "무효 문자 html과 평문",
+        entries: { "text/html": `<p>a${SOH}b</p>`, "text/plain": "ab" },
+      },
+    ])(
+      "$name 입력도 표 셀 안에서 pasteHandler를 호출하지 않는다",
+      ({ entries }) => {
+        const pasteHandler = vi.fn(() => true);
+
+        const result = pasteIn(S1.blocks(), S1.place, entries, {
+          pasteHandler,
+        });
+
+        expect(pasteHandler).not.toHaveBeenCalled();
+        expect(result.blocks()).toEqual(docOutline("table[cellab]"));
+      },
+    );
+
+    it("Shift 무효 문자 평문도 pasteHandler를 호출하지 않는다", () => {
+      const pasteHandler = vi.fn(() => true);
+
+      const result = pasteIn(
+        S1.blocks(),
+        S1.place,
+        { "text/plain": `a${SOH}b` },
+        { pasteHandler },
+        shiftPressed,
+      );
+
+      expect(pasteHandler).not.toHaveBeenCalled();
+      expect(result.blocks()).toEqual(docOutline("table[cellab]"));
+    });
+  });
+
+  describe("불변 특성화(C13)", () => {
+    it("표 판정되는 TSV 한 줄은 Shift에서도 표 붙여넣기가 처리한다", () => {
+      const result = pasteIn(
+        S1.blocks(),
+        S1.place,
+        { "text/plain": `a${TAB}b` },
+        {},
+        shiftPressed,
+      );
+
+      expect(result.pasteText).not.toHaveBeenCalled();
+      expect(result.blocks()).toEqual(docOutline("table[a|b]"));
+    });
+  });
+
+  describe("병합·헤더 셀 캐럿", () => {
+    const headerTable = (): Block => ({
+      ...(gridTable("h", 2, 2, ["h1", "h2", "d1", "d2"]) as Extract<
+        Block,
+        { type: "table" }
+      >),
+      headerRows: 1,
+      headerColumns: 1,
+    });
+
+    it.each([
+      {
+        name: "병합 셀 m-4(columnSpan 2) 끝",
+        blocks: () => [paragraphBlock("p1", "para"), mergedTable(), TAIL],
+        place: textSelection(inCell("m-4", 3)),
+        expected: "table[m-1|m-2|m-3/m-4ab/m-5|m-6|m-7]",
+      },
+      {
+        name: "병합 셀 m-1(rowSpan 2) 중간",
+        blocks: () => [paragraphBlock("p1", "para"), mergedTable(), TAIL],
+        place: textSelection(inCell("m-1", 1)),
+        expected: "table[mab-1|m-2|m-3/m-4/m-5|m-6|m-7]",
+      },
+      {
+        name: "헤더 행·열 교차 셀 끝",
+        blocks: () => [paragraphBlock("p1", "para"), headerTable(), TAIL],
+        place: textSelection(inCell("h-r0c0", 2)),
+        expected: "table[h1ab|h2/d1|d2]",
+      },
+      {
+        name: "헤더 행 셀 끝",
+        blocks: () => [paragraphBlock("p1", "para"), headerTable(), TAIL],
+        place: textSelection(inCell("h-r0c1", 2)),
+        expected: "table[h1|h2ab/d1|d2]",
+      },
+    ])("$name 캐럿에서도 정리본이 들어간다", ({ blocks, place, expected }) => {
+      const result = pasteIn(blocks(), place, {
+        "text/html": `<p>a${SOH}b</p>`,
+        "text/plain": "ab",
+      });
+
+      expect(result.blocks()).toEqual(docOutline(expected));
       expectSchemaValid(result.tiptap);
     });
   });
