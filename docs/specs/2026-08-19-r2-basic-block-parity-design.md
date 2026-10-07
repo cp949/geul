@@ -470,7 +470,8 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 대상: 시작과 끝이 같은 부모(셀의 인라인 컨텐츠)인 `TextSelection`과 인라인 atom `NodeSelection`이다. 부모가 다른 범위는 대상이 아니다. 표 경계 범위는 `TableBoundaryInputExtension`이 먼저 지운다(#292). 지운 뒤 캐럿이 셀 안이면 이 분기가 받는다. 셀 조각 slice(표에서 복사한 셀)는 이전과 같다.
   - 줄 경계: 표 밖 여러 줄(#284)과 같다. `splitPlainTextLines`를 쓴다. 연속 개행은 경계 하나다. 앞·뒤 개행은 빈 줄이 되어 `hardBreak` 하나가 된다. `X\n\nY`는 `X`·`hardBreak`·`Y`다. `\nX`는 `hardBreak`·`X`다. `X\n`은 `X`·`hardBreak`다.
   - 입력: `normalizePasteText`로 무효 문자와 Tab을 지운 정리본을 줄로 나눈다. 정리본이 비면 문서를 바꾸지 않고 이벤트만 소비한다. 무효 문자가 섞인 여러 줄도 `view.pasteText`를 거치지 않고 직접 넣는다. 한 줄 평문은 이전과 같다. 유효하면 PM 기본이고 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다.
-  - 마크: 캐럿 위치(`$from.marks()`)의 마크를 삽입 텍스트와 `hardBreak`에 입힌다. PM 기본 평문 붙여넣기와 표 밖 직접 삽입(#284)과 같다. `CellSelection`은 셀 내용을 비우므로 마크가 없다.
+  - 마크: 캐럿 위치(`$from.marks()`)의 마크를 삽입 텍스트와 `hardBreak`에 입힌다. 표 밖 직접 삽입(#284)과 같다. `CellSelection`은 셀 내용을 비우므로 마크가 없다.
+  - 한 줄과의 차이: 한 줄 평문은 PM 기본이다. PM 기본은 평문을 DOM으로 직렬화했다가 다시 파싱한다. 이 왕복에서 `textColor`·`backgroundColor`가 빠진다. bold·link 등은 이어진다. 그래서 색 마크 캐럿에서 `ab`는 색 없이, `a\nb`는 색과 함께 들어간다. 표 밖 한 줄과 여러 줄(#284)도 같은 차이가 있다.
   - html 분기: 빈 slice html은 평문을 직접 넣는다(#301). html이 실제 내용을 가지면 이전과 같다. Ctrl+Shift+V는 예외다. html이 함께 와도 평문 여러 줄을 직접 넣는다. PM이 평문으로 만든 여러 문단 slice가 같은 방식으로 표 밖으로 빠지기 때문이다. 한 줄 평문의 Ctrl+Shift+V는 이전과 같다.
   - 한 줄 예: 문서 `p "para"`, 1x1 표 `"cell"`, `tail`에서 `a\nb\nc`를 붙이면 셀 끝 캐럿은 `cella`·`hardBreak`·`b`·`hardBreak`·`c`다. 표 뒤 문단은 생기지 않는다. 셀 중간 캐럿 `ce|ll`은 `cea`·`hardBreak`·`b`·`hardBreak`·`cll`이다. 같은 셀 안 범위 `c[el]l`에 `a\nb`는 `ca`·`hardBreak`·`bl`이다. 1x2 표의 마지막이 아닌 셀(`c1`)에서도 표가 쪼개지지 않고 `c1a`·`hardBreak`·`b`다. 셀 안 인라인 atom `NodeSelection`은 atom을 대체한다.
   - 붙여넣기 뒤 selection은 삽입 텍스트 끝의 `TextSelection`이다. transaction은 하나다. dispatch 1회, undo 1회로 원래 문서가 복원된다. `pasteHandler`와 `view.pasteText`를 부르지 않는다.
