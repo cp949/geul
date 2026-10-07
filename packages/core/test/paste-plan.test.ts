@@ -4,8 +4,8 @@
  * clipboard-*.test.ts의 이벤트 테스트가 소유한다. 여기서는 결과 종류마다
  * 대표 입력 하나를 둔다.
  *
- * 표 셀 계획(planTableCellPaste)은 pass·insertSlice·consume·pasteText와 표
- * 밖 null을, 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
+ * 표 셀 계획(planTableCellPaste)은 pass·insertSlice·consume·pasteText·dispatch와
+ * 표 밖 null을(CellSelection의 조건별 결과는 Issue #300), 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
  * 블록 삽입 배치 3종(caret·blockBoundary·afterRangeDelete)을, drop 계획
  * (planDrop)은 delegate·dispatch·consume을 다룬다.
  */
@@ -99,13 +99,91 @@ describe("planTableCellPaste", () => {
     ).toBeNull();
   });
 
-  it("CellSelection이면 pass다", () => {
-    const tiptap = mountAt(cellBlocks(), at("p1", 0));
-    selectCellRange(tiptap, "t-r0c0", "t-r0c0");
-    expect(
-      planTableCellPaste(tiptap.state, clip("x"), sliceOfSize(tiptap, 1)),
-    ).toEqual({
-      kind: "pass",
+  describe("CellSelection(Issue #300)", () => {
+    // 단일 셀 CellSelection이다. 평문 정책은 셀 개수와 무관하다.
+    const mountCellSelected = (): TiptapEditor => {
+      const tiptap = mountAt(cellBlocks(), at("p1", 0));
+      selectCellRange(tiptap, "t-r0c0", "t-r0c0");
+      return tiptap;
+    };
+
+    it("html이 실제 내용을 가지면 pass다", () => {
+      const tiptap = mountCellSelected();
+      expect(
+        planTableCellPaste(
+          tiptap.state,
+          clip("x", "<b>x</b>"),
+          sliceOfSize(tiptap, 1),
+        ),
+      ).toEqual({ kind: "pass" });
+    });
+
+    it("클립보드가 없으면 pass다", () => {
+      const tiptap = mountCellSelected();
+      expect(
+        planTableCellPaste(tiptap.state, null, sliceOfSize(tiptap, 1)),
+      ).toEqual({ kind: "pass" });
+    });
+
+    it("평문이 비면 pass다", () => {
+      const tiptap = mountCellSelected();
+      expect(
+        planTableCellPaste(tiptap.state, clip(""), sliceOfSize(tiptap, 1)),
+      ).toEqual({ kind: "pass" });
+    });
+
+    it("셀 조각 slice는 평문이 있어도 pass다", () => {
+      const tiptap = mountCellSelected();
+      const tableSlice = tiptap.state.doc.slice(
+        tiptap.state.selection.from,
+        tiptap.state.selection.to,
+      );
+      expect(
+        planTableCellPaste(
+          tiptap.state,
+          clip("x", "<table></table>"),
+          tableSlice,
+        ),
+      ).toEqual({ kind: "pass" });
+    });
+
+    it("html 없는 유효한 평문은 선택을 대체하는 dispatch다. 계획은 문서를 바꾸지 않는다", () => {
+      const tiptap = mountCellSelected();
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("X"),
+        sliceOfSize(tiptap, 1),
+      );
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(plan.transaction.doc.textContent).toBe("paraXtail");
+      expect(tiptap.state.doc.textContent).toBe("paracelltail");
+    });
+
+    it("빈 slice html이면 평문을 dispatch로 넣는다", () => {
+      const tiptap = mountCellSelected();
+      expect(
+        planTableCellPaste(tiptap.state, clip("X", "<meta>"), PM_SLICE)?.kind,
+      ).toBe("dispatch");
+    });
+
+    it("무효 문자가 섞인 평문은 pasteText가 아니라 정리본 dispatch다", () => {
+      const tiptap = mountCellSelected();
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip(`a${SOH}b`),
+        sliceOfSize(tiptap, 3),
+      );
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(plan.transaction.doc.textContent).toBe("paraabtail");
+    });
+
+    it("정리본이 비면 consume이다", () => {
+      const tiptap = mountCellSelected();
+      expect(
+        planTableCellPaste(tiptap.state, clip(SOH), sliceOfSize(tiptap, 1)),
+      ).toEqual({ kind: "consume" });
     });
   });
 

@@ -7,9 +7,9 @@
  *
  * 다루는 축은 선택 종류(S1 마지막 셀 끝 캐럿, S2 같은 셀 안 범위, S3 마지막이
  * 아닌 셀 캐럿) x 입력 행렬, 정리본이 비는 입력, 유효 평문 위임, transaction
- * 계약, 셀 안 인라인 atom NodeSelection, 개입하지 않는 경로(html 동반·
- * CellSelection), pasteHandler 미호출 계약, 표 경계 범위(Issue #292) 뒤 캐럿 위치, 불변
- * 특성화(TSV·표 밖)다.
+ * 계약, 셀 안 인라인 atom NodeSelection, 개입하지 않는 경로(html 동반),
+ * CellSelection(Issue #300이 정정), pasteHandler 미호출 계약, 표 경계
+ * 범위(Issue #292) 뒤 캐럿 위치, 불변 특성화(TSV·표 밖)다.
  *
  * 여러 줄은 유효 여러 줄과 구조가 같다. 마지막 셀은 첫 줄만 셀에 들어가고
  * 나머지는 표 뒤 문단이 된다. 마지막이 아닌 셀은 PM이 표를 쪼갠 뒤 되돌림이
@@ -22,9 +22,9 @@
  * 평문을 버려 붙여넣기가 소실됐다. 이제 html이 실제 내용(slice.size > 0)을
  * 가질 때만 PM 기본에 맡기고, 빈 slice이면 평문 정리본을 넣는다. 다루는 축은
  * 빈 slice html 대표 입력 x 평문 행렬 x 선택 종류, 평문이 비거나 무효 문자뿐인
- * 입력, 서식 있는 html 불변, 보이지 않는 문자 한계, html 안 무효 문자(Issue #302가 정정), 개입하지
- * 않는 경로(CellSelection), atom NodeSelection, pasteHandler 미호출 계약,
- * 표 경계 범위 뒤 캐럿 위치, transaction 계약이다.
+ * 입력, 서식 있는 html 불변, 보이지 않는 문자 한계, html 안 무효 문자(Issue
+ * #302가 정정), CellSelection(Issue #300이 정정), atom NodeSelection,
+ * pasteHandler 미호출 계약, 표 경계 범위 뒤 캐럿 위치, transaction 계약이다.
  *
  * 세 번째 축은 무효 문자가 든 text/html과 Ctrl+Shift+V 평문이다(Issue #302).
  * html이 실제 내용(slice.size > 0)을 가지면 PM 기본이 slice를 넣는다. slice의
@@ -34,6 +34,10 @@
  * 참조) x 선택 종류, Shift 평문, 서식 유지, 정리 뒤 빈 slice, 다문단,
  * transaction 계약, 변경 없는 slice 불변, transformPasted 적용 범위(CellSelection·
  * 표 밖), pasteHandler 미호출 계약, 병합·헤더 셀 캐럿이다.
+ *
+ * CellSelection은 이 파일의 두 곳(C9·C10)이 Issue #300 이후 계약을 확인한다.
+ * 수정 전에는 문서 불변을 특성화했다. 이제 평문 정리본이 선택을 대체한다.
+ * 전체 축은 clipboard-paste-cell-selection.test.ts가 소유한다.
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -390,9 +394,10 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
     );
   });
 
-  describe("개입하지 않는 선택: CellSelection(현행 특성화, 별건)", () => {
-    // 2셀 CellSelection이다. 유효 평문도 NOID cell 때문에 되돌려져 사라진다.
-    // 무효 문자와 무관한 별개 결함이라 이 이슈에서 고치지 않는다(C9).
+  describe("CellSelection(Issue #300이 정정)", () => {
+    // 2셀 CellSelection이다. 수정 전에는 입력과 무관하게 prosemirror-tables에
+    // 맡겨 NOID cell 때문에 되돌려졌다. 이제 평문 정리본이 선택을 대체한다.
+    // 자세한 축은 clipboard-paste-cell-selection.test.ts가 소유한다(C9).
     const cellSelected: Place = (tiptap) =>
       selectCellRange(tiptap, "g-r0c0", "g-r0c1");
 
@@ -400,14 +405,14 @@ describe("표 셀 안 평문 붙여넣기의 무효 문자(Issue #297)", () => {
       { name: "무효 문자 평문", text: `a${SOH}b` },
       { name: "유효 평문", text: "ab" },
     ])(
-      "CellSelection에서 $name 입력은 현행대로 문서가 불변이고 view.pasteText를 부르지 않는다(C9)",
+      "CellSelection에서 $name 입력은 정리본이 첫 셀을 채우고 나머지 선택 셀을 비우며 view.pasteText를 부르지 않는다(C9)",
       ({ text }) => {
         const result = pasteIn(firstCellBlocks(), cellSelected, {
           "text/plain": text,
         });
 
         expect(result.pasteText).not.toHaveBeenCalled();
-        expect(result.blocks()).toEqual(docOutline("table[c1|c2]"));
+        expect(result.blocks()).toEqual(docOutline("table[ab|]"));
       },
     );
   });
@@ -759,12 +764,12 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
     );
   });
 
-  describe("CellSelection에서는 개입하지 않는다(C10)", () => {
+  describe("CellSelection에서는 평문 정책이 선택을 대체한다(C10, Issue #300이 정정)", () => {
     const cellSelected: Place = (tiptap) =>
       selectCellRange(tiptap, "g-r0c0", "g-r0c1");
 
     it.each(emptySliceHtmls)(
-      "html: $name. 현행대로 문서가 불변이고 view.pasteText를 부르지 않는다",
+      "html: $name. 평문이 첫 셀을 채우고 나머지 선택 셀을 비우며 view.pasteText를 부르지 않는다",
       ({ html }) => {
         const result = pasteIn(firstCellBlocks(), cellSelected, {
           "text/html": html,
@@ -772,7 +777,7 @@ describe("표 셀 안 빈 slice html과 함께 온 평문(Issue #301)", () => {
         });
 
         expect(result.pasteText).not.toHaveBeenCalled();
-        expect(result.blocks()).toEqual(docOutline("table[c1|c2]"));
+        expect(result.blocks()).toEqual(docOutline("table[ab|]"));
       },
     );
   });
