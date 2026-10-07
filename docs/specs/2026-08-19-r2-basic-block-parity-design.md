@@ -315,6 +315,18 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: 끝 잔여는 codeBlock으로 남지 않는다. `[p "abcd", code "foobar"]`에서 `ab` 뒤부터 `foo` 뒤까지 `X\nY`를 붙이면 `[p "abX", p "Ybar"]`다. #286 HTML 경로와 다르다. `text/plain`만 있는 PM 기본과 같다.
   - 한계: 범위가 중간 컨테이너의 라벨을 지우고 그 자식을 남기면 빈 문단이 그 자식을 가진다. `[p "abcd" 자식 [p "mid" 자식 [code "xyz", p "g2"]]]`에서 `ab` 뒤부터 `xy` 뒤까지 `X\nY`를 붙이면 `p "abX"`의 자식이 `["Yz", 빈 문단 자식 ["g2"]]`다. PM 기본도 같은 빈 문단을 만든다.
   - 한계: 접힌 toggle 안 숨은 codeBlock이 범위에 있는 여러 줄 평문은 시작이 codeBlock 밖이면 직접 삽입이다. 범위 삭제는 #264 결과 그대로 숨은 자손을 지운다.
+- 자식 있는 블록 끝의 HTML·Markdown 배치(정정 2026-10-07, Issue #290). 자식이 있는 텍스트블록의 끝 캐럿에 `text/html`·Markdown 블록을 붙이면 새 블록이 Enter 분할(5.1, D23·#252)과 같은 위치에 놓인다. 이전에는 `insertContent`가 캐럿에서 블록을 갈라 뒤 조각이 빈 껍데기가 됐고 기존 자식이 그 껍데기로 넘어갔다. `[p "abcd" 자식 [p "child"], p "tail"]`의 끝에 `<p>X</p><p>Y</p>`를 붙이면 `[p "abcd", p "X", p "Y", p "" 자식 [p "child"], p "tail"]`였다.
+  - 열린 블록은 새 블록이 자식 그룹의 첫 자리에 놓인다(D23). 위 문서는 `[p "abcd" 자식 [X, Y, child], p "tail"]`가 된다. 자식 id는 보존되고 빈 블록이 생기지 않는다.
+  - 접힌 toggle은 새 블록이 컨테이너 바로 뒤 형제다(#252). 숨은 자식은 toggle에 남는다. `[toggle~ "abcd" 자식 [child], tail]`은 `[toggle~ "abcd" 자식 [child], X, Y, tail]`다.
+  - 대상은 넷을 모두 만족하는 입력이다. `TextSelection`이다. 시작과 끝이 같은 중첩 가능한 텍스트블록이다. 끝이 그 텍스트블록 내용의 끝이다. 그 `blockContainer`가 자식 `blockGroup`을 가진다. 하나라도 아니면 현행 `insertContent`다.
+  - 부모 타입과 attrs는 유지된다. 열린 toggle·heading·quote·번호 목록·체크 목록 모두 같다. 자식 있는 빈 문단은 빈 문단을 유지하고 같은 규칙이다. 손자가 있는 자식의 끝은 그 자식의 첫 자식이 된다.
+  - 같은 텍스트블록 안 범위가 블록 끝에서 끝나면 범위를 지운 뒤 같은 규칙이다. 선택하지 않은 앞 텍스트는 남는다. 삭제와 삽입은 한 transaction이다. dispatch·revision·undo가 각각 1회다. 캐럿은 삽입 내용 끝이다.
+  - 삽입 깊이는 계산한 삽입 위치 기준이다. 새 블록이 자식 자리에 들어가므로 캐럿 블록보다 한 단 깊다. `clampDepth`가 `MAX_NESTING_DEPTH`를 넘는 목록을 평탄화한다. 깊이 `MAX-1` 부모의 첫 자식 자리에 3단 목록을 붙이면 `a`, `b`, `c`가 같은 층위로 놓이고 최대 깊이가 `MAX`다.
+  - 배치 계산은 `paste-block-placement.ts`의 `resolvePasteBlockPlacement`가 맡는다. 호출부는 `clipboard-paste-extension.ts`의 `insert`다. 공개 API는 바뀌지 않는다. HTML과 Markdown 감지 경로가 같은 `insert`를 쓴다.
+  - 현행 유지: 자식 없는 블록, 자식 있는 블록의 시작·중간 캐럿, 블록 끝에서 끝나지 않는 같은 블록 범위, 다른 블록에 걸친 범위. 시작 캐럿의 빈 head(`p ""`)와 중간 캐럿의 분할은 자식 없는 블록에도 나오는 baseline이다. 이슈 서술의 "시작 캐럿" 결함은 자식이 `abcd`에 남으므로 해당하지 않는다.
+  - 한계: 시작이 끝 블록과 다른 블록인 범위는 대상이 아니다. `[p0 "abcd", p1 "efgh" 자식 [child]]`에서 p0 offset 2부터 p1 끝까지 `<p>X</p><p>Y</p>`를 붙이면 `[p "ab", X, Y, p "" 자식 [child]]`다. 빈 껍데기가 자식을 가진다. 범위 대체의 `replaceWith` 의미(#286)와 자식 귀속 정책이 걸려 별건이다.
+  - 한계: 표를 포함한 HTML은 표 붙여넣기 경로(`TablePasteExtension`)가 먼저 처리한다. 이 규칙의 대상이 아니다. 새 블록이 최상위 형제로 놓인다.
+  - 한계: 평문 경로(#284)와 drop(#285)은 바꾸지 않았다. 같은 내용도 평문 한 줄이면 캐럿 블록 텍스트에 이어 붙는 다른 의미다. 표 셀 안과 내부 드래그도 바꾸지 않았다.
 
 ## 8. 오류 계약 확장
 
