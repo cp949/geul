@@ -274,7 +274,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
   - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
   - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다.
-  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안, 캐럿이 codeBlock 안인 붙여넣기, `TextSelection`이 아닌 selection이 해당한다.
+  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안, 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
   - 직접 배치가 물러나는 입력은 `clipboardTextParser`를 탄다. 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 경로가 아니라 아래 직접 삽입이다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 한계에서 벗어났다. 이 경로는 위임 입력에만 남는다(#285 한계 참조). 그 입력에서는 이 한계가 그대로다.
 - codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
@@ -285,7 +285,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 범위 대체는 한 transaction이다. revision은 1 늘고 undo는 1회다.
   - 한계: 첫·끝 블록의 인라인 병합(PM 열린 slice) 의미는 따르지 않는다. 한 블록 HTML도 `ab`, `X`, `bar`로 나뉜다. 이는 비코드 범위·캐럿과 같은 `insertContent` 의미다.
   - 한계: `NodeSelection`·`AllSelection`도 시작이 codeBlock 밖이면 이 분기를 탄다. codeBlock `NodeSelection`은 그 블록 전체를 HTML 블록으로 대체하고, `AllSelection`은 문서 전체를 대체한다. 수정 전 PM 기본 처리와 결과가 같다.
-  - 한계: 시작이 codeBlock 안인 범위와 캐럿이 codeBlock 안인 붙여넣기는 현행 PM 기본 처리를 유지한다. 시작이 codeBlock 안인 범위는 `fooX`·`Yil`처럼 나뉜다.
+  - 한계: 시작이 codeBlock 안인 범위와 캐럿이 codeBlock 안인 붙여넣기는 현행 PM 기본 처리를 유지한다. 시작이 codeBlock 안인 범위는 `fooX`·`Yil`처럼 나뉜다. 정정(2026-10-07, Issue #296): 유효한 평문은 이 서술 그대로다. 무효 문자가 섞인 평문은 정리본을 `view.pasteText`로 넣는다(아래 #296 문단).
   - 한계: `text/html`이 없으면 이 예외가 없다. codeBlock에 걸친 범위의 Markdown 평문은 감지하지 않고 리터럴 문단으로 넣는다. 시작이 codeBlock 밖인 범위의 여러 줄 평문은 아래 #285 직접 삽입이다.
 - html이 블록을 만들지 못할 때의 평문 폴백(정정 2026-10-07, Issue #287). `text/html`이 있어도 블록이 생기지 않으면 같은 클립보드의 `text/plain`을 붙인다. 우선순위는 `text/html` → Markdown → `text/plain`이다. html이 블록을 못 만들면 그 단계만 건너뛴다. 이전에는 붙여넣기가 조용히 사라졌다. `<meta charset='utf-8'>`만 담긴 클립보드가 대표 사례다.
   - 폴백 대상은 블록 0개인 결과와 import 실패다. 블록 0개는 `modelToTiptap`이 `DOCUMENT_INVALID`로 거절한다. import 실패는 위험 URL(`<img src='javascript:x'>`)·제어문자(`<pre>`에 `\u0001`)가 대표다.
@@ -357,8 +357,18 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 제어문자만 있는 입력은 이벤트를 소비하고 문서를 바꾸지 않는다. 범위를 지우지 않는다. 비-codeBlock 경로와 같다. `TypeError`는 없다.
   - 직접 삽입이 안 되는 선택(`NodeSelection`·`AllSelection`)의 여러 줄 평문도 같다. 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다. 유효한 여러 줄은 PM 기본 위임 그대로다.
   - Markdown 감지는 이 범위에서 건너뛴다(#286). 바꾸지 않았다.
-  - 한계: 캐럿이 codeBlock 안일 때와 시작이 codeBlock 안인 범위는 바꾸지 않았다. 무효 문자가 섞이면 같은 되돌림으로 붙여넣기가 사라진다. codeBlock 안은 Tab·LF를 보존해야 해서 `normalizePasteText`(Tab 삭제)를 쓸 수 없다. 별도 정규화 설계가 필요하다.
+  - 한계(정정 2026-10-07, Issue #296): 캐럿이 codeBlock 안일 때와 시작이 codeBlock 안인 범위는 바꾸지 않았다. 무효 문자가 섞이면 같은 되돌림으로 붙여넣기가 사라지던 한계는 해소했다. 아래 #296 문단이 현재 계약이다. 원래 한계 근거는 그대로다. codeBlock 안은 Tab·LF를 보존해야 해서 `normalizePasteText`(Tab 삭제)를 쓸 수 없다.
   - 한계: 표 셀 안은 바꾸지 않았다. Tab이 든 한 줄 평문은 TSV 표 붙여넣기가 먼저 가로챈다. 이 경로 밖이다.
+- 캐럿·시작이 codeBlock 안인 붙여넣기의 무효 문자 평문(정정 2026-10-07, Issue #296). 캐럿이 codeBlock 안이거나 범위의 시작(`$from`)이 codeBlock 안일 때 무효 문자(U+0001 등 제어문자, 짝 없는 surrogate)가 섞인 평문을 붙여도 붙여넣기가 사라지지 않는다. 무효 문자만 지운 평문이 선택을 대체한다. 이전에는 입력과 무관하게 PM 기본에 위임했다. PM 기본이 raw 무효 문자를 넣었고 `revision-guard-extension.ts`가 문서를 되돌렸다. 붙여넣기가 문서를 바꾸지 않고 사라졌다. `onChange`도 `TypeError`도 없었다.
+  - 정규화본은 `normalizeCodeBlockPasteText`다. CR을 LF로 바꾼 뒤 `isValidCodeBlockSource`가 거부하는 문자만 지운다. Tab·LF는 코드 내용이라 남긴다. U+2028·U+2029·U+FEFF·U+0085도 유효라 남긴다. 출력은 항상 모델 검증을 통과한다.
+  - 유효한 평문은 PM 기본에 위임한다. `view.pasteText`를 부르지 않고 결과는 이전과 같다. 비교 기준은 `normalizeLineBreaks(rawText)`다. CR→LF 변환만 다른 입력은 유효로 본다.
+  - 무효 문자가 섞인 평문은 정리본을 `view.pasteText`로 넣는다. PM 자신의 `doPaste`라 transaction이 하나다. dispatch·undo가 각각 1회다. 범위 선택은 PM 기본과 같이 정리본으로 대체된다.
+  - 정리본이 비는 입력(제어문자만 있는 입력)은 이벤트를 소비하고 문서와 선택을 바꾸지 않는다. dispatch가 없다. 범위를 지우지 않는다. 시작이 codeBlock 밖인 경로(#295)와 같다.
+  - `text/html`이 함께 와도 평문 정리본만 쓴다. PM이 codeBlock 안에서 html을 무시하는 현행과 같다.
+  - 예: 문서 `p1 "abcd"`, `cb "foobar"`, `tail`에서 `a` U+0001 `b`를 붙이면 캐럿 cb:3은 `code "fooabbar"`, cb:2 ~ tail:2는 `code "foabil"`과 빈 문단, cb:1 ~ cb:4는 `code "fabar"`다.
+  - 한계: 표 셀 안은 바꾸지 않았다. 표 셀 안 가드가 먼저 물러난다.
+  - 한계: codeBlock 안에서 Tab이 든 TSV 모양 입력(모든 줄의 탭 개수가 같은 직사각형)은 표 붙여넣기가 먼저 가로채 표 블록을 만든다. 유효한 입력도 같고 수정 전과 같다(jsdom 실측). 이 경로 밖이다.
+  - 한계: Firefox·WebKit은 측정하지 않았다. Chromium만 실측했다.
 
 ## 8. 오류 계약 확장
 
