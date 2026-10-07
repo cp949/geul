@@ -1,12 +1,23 @@
 /**
  * jsdom Clipboard/Drag 폴리필 설치(side-effect) + 붙여넣기·drop 이벤트
  * dispatch helper + own-export wrapper HTML 조립 + 붙여넣기 배치 단언용
- * 블록 요약(outline).
+ * 블록 요약(outline) + 문서 마운트·범위 선택 helper(setupPasteSelection).
  */
 import type { Block, DocumentBlock } from "@cp949/geul-model";
 
-import type { EditorController } from "../src/index.js";
-import { codeBlockBlock, paragraphBlock } from "./editor-controller-support.js";
+import {
+  createEditor,
+  type CreateEditorOptions,
+  type EditorController,
+} from "../src/index.js";
+import { contentTextStart } from "./block-test-support.js";
+import {
+  codeBlockBlock,
+  documentOf,
+  mountTiptapEditor,
+  paragraphBlock,
+  sequentialIds,
+} from "./editor-controller-support.js";
 
 // jsdom(27.x)은 Clipboard API(DataTransfer/ClipboardEvent)를 구현하지 않는다
 // (jsdom/jsdom#1568) — 실제 ClipboardEvent를 가로채는 handlePaste 계약을
@@ -359,4 +370,37 @@ export const childCodeBlocks = (): Block[] => [
     codeBlockBlock("cb", "xyz"),
     paragraphBlock("c2", "c2"),
   ]),
+];
+
+/**
+ * 문서를 마운트하고 시작 블록·끝 블록의 텍스트 offset으로 범위를 만든다.
+ * 끝을 생략하면 시작과 같은 캐럿이다. onPasteRejected·pasteHandler 옵션은
+ * overrides로 넘긴다. codeBlock에 걸친 붙여넣기 테스트
+ * (clipboard-paste-code-block-*)가 공유한다(G-TST-002).
+ */
+export const setupPasteSelection = (
+  blocks: Block[],
+  from: { id: string; offset: number },
+  to: { id: string; offset: number } = from,
+  overrides: Pick<CreateEditorOptions, "onPasteRejected" | "pasteHandler"> = {},
+) => {
+  const editor = createEditor({
+    initialDocument: documentOf(...blocks),
+    createId: sequentialIds("id"),
+    ...overrides,
+  });
+  const { editable, tiptap } = mountTiptapEditor(editor);
+  editable.focus();
+  tiptap.commands.setTextSelection({
+    from: contentTextStart(tiptap, from.id) + from.offset,
+    to: contentTextStart(tiptap, to.id) + to.offset,
+  });
+  return { editor, editable, tiptap };
+};
+
+/** 기준 문서: p1 "abcd", codeBlock cb "foobar", tail "tail". */
+export const baseBlocks = (): Block[] => [
+  paragraphBlock("p1", "abcd"),
+  codeBlockBlock("cb", "foobar"),
+  paragraphBlock("tail", "tail"),
 ];

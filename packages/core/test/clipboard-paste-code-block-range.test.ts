@@ -19,59 +19,30 @@
  * 기본에 위임한다.
  * 실제 브라우저 대표 시나리오는 e2e/clipboard-paste.spec.ts가 맡는다.
  */
-import type { Block, TableBlock } from "@cp949/geul-model";
+import type { TableBlock } from "@cp949/geul-model";
 import { AllSelection, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
+  baseBlocks,
   blocksOf,
   childCodeBlocks,
   dispatchPasteData,
   outline,
   pasteData,
   pasteHtml,
+  setupPasteSelection,
   textOf,
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
   codeBlockBlock,
-  documentOf,
-  mountTiptapEditor,
   paragraphBlock,
   selectBlockNode,
-  sequentialIds,
   toggleBlock,
 } from "./editor-controller-support.js";
 import { findCellBoundaryPosition } from "./table-test-support.js";
-
-// 문서를 마운트하고 시작 블록·끝 블록의 텍스트 offset으로 범위를 만든다.
-// 끝이 시작과 같으면 캐럿이다.
-const setup = (
-  blocks: Block[],
-  from: { id: string; offset: number },
-  to: { id: string; offset: number } = from,
-) => {
-  const editor = createEditor({
-    initialDocument: documentOf(...blocks),
-    createId: sequentialIds("id"),
-  });
-  const { editable, tiptap } = mountTiptapEditor(editor);
-  editable.focus();
-  tiptap.commands.setTextSelection({
-    from: contentTextStart(tiptap, from.id) + from.offset,
-    to: contentTextStart(tiptap, to.id) + to.offset,
-  });
-  return { editor, editable, tiptap };
-};
-
-// 기준 문서: p1 "abcd", codeBlock cb "foobar", tail "tail".
-const baseBlocks = (): Block[] => [
-  paragraphBlock("p1", "abcd"),
-  codeBlockBlock("cb", "foobar"),
-  paragraphBlock("tail", "tail"),
-];
 
 // 기준 범위: p1 "ab" 뒤 → cb "foo" 뒤.
 const baseRange = () =>
@@ -83,7 +54,10 @@ const baseRange = () =>
 describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", () => {
   describe("기준 배치(C1·C2)", () => {
     it("두 블록 HTML은 둘째 블록이 앞 블록의 자식이 되지 않고 형제로 놓이며 p1 id가 보존된다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteHtml(editable, "<p>X</p><p>Y</p>");
 
@@ -100,7 +74,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("한 블록 HTML도 범위를 대체한 자리에 삽입되고 남은 꼬리와 나뉜다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteHtml(editable, "<p>X</p>");
 
@@ -113,7 +90,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("세 블록 HTML은 셋 모두 형제다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteHtml(editable, "<p>X</p><p>Y</p><p>Z</p>");
 
@@ -130,7 +110,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("비코드 범위(p1 → tail)와 같은 규칙이다", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         [
           paragraphBlock("p1", "abcd"),
           paragraphBlock("mid", "foobar"),
@@ -154,7 +134,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
 
   describe("서식 보존(C3)", () => {
     it("목록 HTML이 목록 항목으로 들어간다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteHtml(editable, "<ul><li>a</li><li>b</li></ul>");
 
@@ -168,7 +151,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("heading HTML이 heading으로 들어간다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteHtml(editable, "<h1>H</h1><p>Y</p>");
 
@@ -182,7 +168,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("pre HTML이 codeBlock으로 들어가고 끝 잔여도 codeBlock이다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteHtml(editable, "<pre><code>K</code></pre>");
 
@@ -197,7 +186,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
 
   describe("자식 블록에서 시작하는 범위(C4, V)", () => {
     it("시작이 자식 c1이고 끝이 최상위 codeBlock이면 새 블록은 c1과 같은 층위 형제다", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         [
           paragraphBlock("p1", "abcd", [paragraphBlock("c1", "child")]),
           codeBlockBlock("cb", "foobar"),
@@ -219,7 +208,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
 
   describe("시작이 codeBlock 안인 범위(C5, E·J)는 PM 기본 처리를 유지한다", () => {
     it("E: 시작이 codeBlock 안이고 끝이 다음 블록이면 codeBlock에 이어 붙는다", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         baseBlocks(),
         { id: "cb", offset: 3 },
         { id: "tail", offset: 2 },
@@ -235,7 +224,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("J: 양끝이 같은 codeBlock 안이면 코드 텍스트만 바뀐다", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         baseBlocks(),
         { id: "cb", offset: 1 },
         { id: "cb", offset: 4 },
@@ -252,7 +241,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("캐럿이 codeBlock 안이면 새 codeBlock이 생기지 않는다", () => {
-      const { editor, editable } = setup(baseBlocks(), {
+      const { editor, editable } = setupPasteSelection(baseBlocks(), {
         id: "cb",
         offset: 3,
       });
@@ -272,7 +261,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
   // 경로도 같은 결과를 내므로 가드 완화 변이를 탐지하지 않는다.
   describe("NodeSelection·AllSelection(특성화)", () => {
     it("codeBlock NodeSelection은 codeBlock 전체를 HTML 블록으로 대체한다", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), {
+      const { editor, editable, tiptap } = setupPasteSelection(baseBlocks(), {
         id: "p1",
         offset: 0,
       });
@@ -289,7 +278,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("AllSelection은 문서 전체를 HTML 블록으로 대체한다", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), {
+      const { editor, editable, tiptap } = setupPasteSelection(baseBlocks(), {
         id: "p1",
         offset: 0,
       });
@@ -316,7 +305,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
         columnSpan: 1,
         content: [{ text }],
       });
-      const { editor, editable, tiptap } = setup(
+      const { editor, editable, tiptap } = setupPasteSelection(
         [
           {
             id: "tb",
@@ -383,7 +372,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
 
   describe("숨은 codeBlock(C6)", () => {
     it("접힌 toggle 안 codeBlock이 범위 중간이고 시작이 밖이면 HTML 분기로 배치한다", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         [
           paragraphBlock("p1", "abcd"),
           toggleBlock("t1", "tog", {
@@ -404,7 +393,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
 
   describe("HTML 분기 대상 밖(C7)", () => {
     it("Markdown 평문은 감지하지 않고 리터럴 문단으로 넣는다(현행)", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteData(editable, { "text/plain": "# H\n\n- a\n- b" });
 
@@ -417,7 +409,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("여러 줄 평문은 직접 삽입으로 형제 배치한다(Issue #285, 자식 없는 모양은 결과가 현행과 같다)", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteData(editable, { "text/plain": "X\nY" });
 
@@ -427,7 +422,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("text/html과 text/plain이 함께 있으면 HTML을 쓴다", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteData(editable, {
         "text/html": "<p>X</p><p>Y</p>",
@@ -456,7 +454,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
       ] as const;
 
     it("범위 끝 뒤 자식 c2가 마지막 줄 블록 소속으로 넘어가지 않고 첫 자식 뒤에 형제로 남는다(C9)", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         childCodeBlocks(),
         ...childCodeRange(),
       );
@@ -470,7 +468,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("codeBlock이 손자이고 c2가 그 뒤 자식이어도 같다(C9)", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         [
           paragraphBlock("p1", "abcd", [
             paragraphBlock("m", "mid", [codeBlockBlock("cb", "xyz")]),
@@ -487,7 +485,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("범위 끝 뒤에 자식이 없는 일반 모양은 현행 결과 그대로다(C10)", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteData(editable, { "text/plain": "X\nY" });
 
@@ -495,7 +496,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("시작이 codeBlock 안인 범위는 PM 기본이다(C11)", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         baseBlocks(),
         { id: "cb", offset: 3 },
         { id: "tail", offset: 2 },
@@ -511,7 +512,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("한 줄 평문은 PM 기본이다(C11)", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteData(editable, { "text/plain": "X" });
 
@@ -519,7 +523,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("유효한 한 줄 평문은 view.pasteText 없이 PM 기본에 위임한다(Issue #295 C4)", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable, tiptap } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
       const pasteText = vi.spyOn(tiptap.view, "pasteText");
 
       pasteData(editable, { "text/plain": "ab" });
@@ -529,7 +536,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("제어문자가 섞인 한 줄 평문은 제어문자를 지우고 범위를 대체한다(Issue #295 C1·C7)", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable, tiptap } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
       const beforeJson = tiptap.state.doc.toJSON();
       const dispatch = vi.spyOn(tiptap.view, "dispatch");
       const pasteText = vi.spyOn(tiptap.view, "pasteText");
@@ -548,7 +558,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("짝 없는 surrogate가 섞인 한 줄 평문도 지우고 범위를 대체한다(Issue #295 C2)", () => {
-      const { editor, editable } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
 
       pasteData(editable, {
         "text/plain": `a${String.fromCharCode(0xd800)}b`,
@@ -558,7 +571,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("제어문자만 있는 입력은 이벤트를 소비하고 문서를 바꾸지 않으며 TypeError가 없다(Issue #295 C3)", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable, tiptap } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
       const before = outline(blocksOf(editor));
       const dispatch = vi.spyOn(tiptap.view, "dispatch");
 
@@ -580,7 +596,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     // 무효 문자가 섞이면 정리본이 PM 평문 경로로 간다(Issue #295). 유효한
     // 여러 줄은 PM 기본 위임 그대로다.
     it("codeBlock NodeSelection에 무효 문자가 섞인 여러 줄 평문은 정리본으로 대체한다(Issue #295)", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), {
+      const { editor, editable, tiptap } = setupPasteSelection(baseBlocks(), {
         id: "p1",
         offset: 0,
       });
@@ -599,7 +615,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("codeBlock NodeSelection에 유효한 여러 줄 평문은 view.pasteText 없이 PM 기본에 위임한다(Issue #295)", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), {
+      const { editor, editable, tiptap } = setupPasteSelection(baseBlocks(), {
         id: "p1",
         offset: 0,
       });
@@ -618,7 +634,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("AllSelection에 무효 문자가 섞인 여러 줄 평문은 정리본으로 대체한다(Issue #295)", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), {
+      const { editor, editable, tiptap } = setupPasteSelection(baseBlocks(), {
         id: "p1",
         offset: 0,
       });
@@ -634,7 +650,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("Markdown 평문은 감지하지 않는다(C12)", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         childCodeBlocks(),
         ...childCodeRange(),
       );
@@ -645,7 +661,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("접힌 toggle 안 숨은 codeBlock을 포함한 범위의 여러 줄 평문은 배치만 Enter 규칙이고 숨은 자식은 범위와 함께 지워진다(C14)", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = setupPasteSelection(
         [
           paragraphBlock("p1", "abcd"),
           toggleBlock("t1", "tog", {
@@ -664,7 +680,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     });
 
     it("dispatch 1회, revision +1, undo 1회로 원복된다", () => {
-      const { editor, editable, tiptap } = setup(
+      const { editor, editable, tiptap } = setupPasteSelection(
         childCodeBlocks(),
         ...childCodeRange(),
       );
@@ -687,7 +703,10 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     // 경로도 이 테스트를 통과하므로 가드 완화 변이를 탐지하지 않는다. 변이
     // 탐지는 A·V·서식 테스트가 맡는다.
     it("revision이 1 늘고 undo 1회로 원래 문서가 돌아온다", () => {
-      const { editor, editable, tiptap } = setup(baseBlocks(), ...baseRange());
+      const { editor, editable, tiptap } = setupPasteSelection(
+        baseBlocks(),
+        ...baseRange(),
+      );
       const before = blocksOf(editor);
       const beforeJson = tiptap.state.doc.toJSON();
       const dispatch = vi.spyOn(tiptap.view, "dispatch");
@@ -837,7 +856,7 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
     ];
 
     const mount = (selection: SelectionCase) =>
-      setup(baseBlocks(), selection.from, selection.to);
+      setupPasteSelection(baseBlocks(), selection.from, selection.to);
 
     describe.each(selections.map((selection, index) => ({ selection, index })))(
       "$selection.name",
