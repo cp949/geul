@@ -5,6 +5,7 @@ import {
   type Mark,
   type Node as ProseMirrorNode,
   type ResolvedPos,
+  type Schema,
 } from "@tiptap/pm/model";
 import {
   TextSelection,
@@ -13,6 +14,7 @@ import {
 } from "@tiptap/pm/state";
 
 import { splitAtCaret } from "./block-split-extension.js";
+import { textToHardBreakInline } from "./code-block-inline-text.js";
 
 // 여러 줄 plain text 붙여넣기·drop의 블록 배치(Issue #284, #285).
 //
@@ -119,6 +121,17 @@ export const sanitizeSliceInlineText = (slice: Slice): Slice => {
 // 줄 분해. 앞·뒤 개행은 빈 줄로 남아 줄 경계가 된다(Q7).
 export const splitPlainTextLines = (text: string): string[] =>
   text.split(LINE_BREAKS);
+
+// 줄 목록을 hardBreak로 이은 inline Fragment를 만든다(Issue #299). 표 셀처럼
+// 블록을 나눌 수 없는 인라인 컨텐츠에 여러 줄을 넣을 때 쓴다.
+// - 입력은 splitPlainTextLines 결과다. 연속 개행은 이미 경계 하나다.
+// - 빈 줄은 text 노드를 만들지 않는다. 앞·뒤 개행은 hardBreak 하나가 된다.
+// - marks는 text와 hardBreak 모두에 붙인다.
+export const linesToHardBreakInline = (
+  schema: Schema,
+  lines: readonly string[],
+  marks: readonly Mark[] = [],
+): Fragment => textToHardBreakInline(schema, lines.join("\n"), marks);
 
 const isSplittableTextBlock = (node: ProseMirrorNode): boolean =>
   node.isTextblock && isNestableBlockType(node.type.name);

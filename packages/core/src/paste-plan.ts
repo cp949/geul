@@ -8,6 +8,7 @@ import {
 import {
   type EditorState,
   NodeSelection,
+  type Selection,
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
@@ -15,7 +16,6 @@ import { dropPoint } from "@tiptap/pm/transform";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
-import { textToHardBreakInline } from "./code-block-inline-text.js";
 import {
   selectionIntersectsAnyCodeBlock,
   selectionStartsInCodeBlock,
@@ -30,6 +30,7 @@ import {
 } from "./paste-block-placement.js";
 import {
   buildPlainMultilinePasteTransaction,
+  linesToHardBreakInline,
   normalizeKeepingTabs,
   normalizeLineBreaks,
   normalizePasteText,
@@ -43,7 +44,8 @@ import {
 //
 // 판정 순서는 계획 도입 전 handlePaste와 같다. 삽입은 PM 기본에 맡기지
 // 않는다. PM 기본과 같은 삽입(insertSlice)도 실행기가 한다(Issue #306). 셀
-// 안 판정은 선택 시작($from)으로 한다.
+// 안 판정은 선택 시작($from)으로 한다. 셀 안 여러 줄 평문은 PM 기본에 맡기지
+// 않고 줄 사이를 hardBreak로 이어 셀 안에 직접 넣는다(Issue #299).
 
 // 클립보드에서 읽은 값이다. plain은 PM이 이번 붙여넣기를 평문 경로로
 // 만들었다는 신호다(Issue #303, transformPasted의 3번째 인자).
@@ -205,7 +207,8 @@ const selectionStartsInTable = (state: EditorState): boolean => {
 // 비우고 문서 순서 첫 셀에 정리본을 hardBreak로 이어 넣는다. 셀 노드·attrs·
 // cellId는 유지한다. prosemirror-tables 기본 경로는 셀 노드를 새로 만들어
 // cellId와 셀 attrs를 잃고, 되돌림 guard가 붙여넣기를 지운다. 비우기와
-// 삽입은 한 transaction이다. 정리본이 비면 이벤트만 소비한다.
+// 삽입은 한 transaction이다. 정리본이 비면 이벤트만 소비한다. 줄 경계는 캐럿·
+// 범위 경로와 같다. 연속 개행은 hardBreak 하나다(Issue #299). 마크는 없다.
 const planCellSelectionPlainPaste = (
   state: EditorState,
   selection: CellSelection,
@@ -226,9 +229,44 @@ const planCellSelectionPlainPaste = (
     const { pos, size } = cells[index] ?? first;
     if (size > 0) tr.delete(pos + 1, pos + 1 + size);
   }
-  const inserted = textToHardBreakInline(state.schema, cleaned);
+  const inserted = linesToHardBreakInline(
+    state.schema,
+    splitPlainTextLines(cleaned),
+  );
   tr.replaceWith(first.pos + 1, first.pos + 1 + first.size, inserted);
   tr.setSelection(TextSelection.create(tr.doc, first.pos + 1 + inserted.size));
+  return {
+    kind: "dispatch",
+    transaction: tr
+      .setMeta("paste", true)
+      .setMeta("uiEvent", "paste")
+      .scrollIntoView(),
+  };
+};
+
+// 셀 안 여러 줄 직접 삽입 대상인지 판정한다(Issue #299). 대상은 시작과 끝이
+// 같은 부모(셀의 인라인 컨텐츠)인 TextSelection과 인라인 atom NodeSelection
+// 이다. 부모가 다른 범위(표 경계 범위·다른 셀에 걸친 범위)는 대상이 아니다.
+// 표 경계 범위는 TableBoundaryInputExtension이 먼저 지운다(Issue #292).
+const isCellInlineInsertTarget = (selection: Selection): boolean => {
+  const { $from, $to } = selection;
+  if (!$from.sameParent($to) || !$from.parent.inlineContent) return false;
+  if (selection instanceof TextSelection) return true;
+  return selection instanceof NodeSelection && selection.node.isInline;
+};
+
+// 셀 안 캐럿·범위의 여러 줄 평문 직접 삽입 계획이다(Issue #299). 줄 사이를
+// hardBreak로 이어 선택을 대체한다. 삽입 텍스트와 hardBreak에 시작 위치
+// ($from)의 마크를 입힌다. 캐럿은 삽입 끝에 둔다. 대체와 삽입은 한
+// transaction이다. 셀 노드와 attrs는 건드리지 않는다.
+const planCellInlineMultilinePaste = (
+  state: EditorState,
+  lines: readonly string[],
+): PastePlan => {
+  const { from, to, $from } = state.selection;
+  const inserted = linesToHardBreakInline(state.schema, lines, $from.marks());
+  const tr = state.tr.replaceWith(from, to, inserted);
+  tr.setSelection(TextSelection.create(tr.doc, from + inserted.size));
   return {
     kind: "dispatch",
     transaction: tr
@@ -257,7 +295,13 @@ const planCellSelectionPlainPaste = (
 //   공백·meta·StartFragment 주석·빈 문단이 해당한다. 평문을 넣는다.
 //   무효 문자뿐인 html도 정리 뒤 빈 slice라 여기에 든다.
 // - 셀 안 인라인 atom NodeSelection은 정리본이 atom을 대체한다.
-// - html은 서식 없이 붙여넣기 신호와 무관하게 클립보드 값을 본다.
+// - 정리본이 여러 줄이고 선택이 직접 삽입 대상이면 줄 사이를 hardBreak로
+//   이어 셀 안에 넣는다(Issue #299). PM 기본은 줄마다 문단 slice를 만들어
+//   첫 줄만 셀에 넣고 나머지를 표 밖으로 빼거나 표를 쪼갠 뒤 되돌려진다.
+//   서식 없이 붙여넣기는 html이 있어도 이 삽입을 쓴다. PM이 평문으로 만든
+//   여러 문단 slice가 같은 방식으로 표 밖으로 빠지기 때문이다.
+// - html은 서식 없이 붙여넣기 신호와 무관하게 클립보드 값을 본다. 단 위의
+//   여러 줄 직접 삽입 예외가 있다.
 export const planTableCellPaste = (
   state: EditorState,
   clipboard: PasteClipboard | null,
@@ -278,13 +322,23 @@ export const planTableCellPaste = (
       : { kind: "pass" };
   if (clipboard === null) return noIntervention;
   const { html, text: rawText } = clipboard;
+  const cleaned = normalizePasteText(rawText);
+  const lines = splitPlainTextLines(cleaned);
+  // 여러 줄 직접 삽입 대상이다(Issue #299). CellSelection은 아래 별도 분기다.
+  const inlineMultiline =
+    cellSelection === null &&
+    lines.length >= 2 &&
+    isCellInlineInsertTarget(selection);
   // 서식 없이 붙여넣기면 PM이 평문으로 slice를 만든다. CellSelection은 그
   // slice도 prosemirror-tables에 맡기면 되돌려지므로 html을 보지 않는다
-  // (Issue #300). 캐럿 경로는 PM 평문 slice를 그대로 넣어 결과가 같다.
+  // (Issue #300). 캐럿 경로는 한 줄이면 PM 평문 slice를 그대로 넣어 결과가
+  // 같다. 여러 줄이면 그 slice가 표 밖으로 빠지므로 평문을 직접 넣는다
+  // (Issue #299).
   const htmlWins =
     html.length > 0 &&
     sanitized.size > 0 &&
-    !(cellSelection !== null && clipboard.plain);
+    !(cellSelection !== null && clipboard.plain) &&
+    !(inlineMultiline && clipboard.plain);
   if (htmlWins) return noIntervention;
   // 평문이 비면 개입하지 않는다. 빈 slice html이면 범위만 지운다(현행
   // 유지).
@@ -294,11 +348,13 @@ export const planTableCellPaste = (
   if (cellSelection !== null) {
     return planCellSelectionPlainPaste(state, cellSelection, rawText);
   }
-  // html이 없는 유효한 평문은 PM이 파싱한 slice를 넣는다. raw 무효 문자는
-  // 정리본으로 넣는다. Tab도 셀에서는 무효라 정리본이 raw와 다르다.
+  // 여러 줄은 줄 사이를 hardBreak로 이어 직접 넣는다(Issue #299). 무효 문자는
+  // 이미 지운 정리본이라 pasteText를 거치지 않는다.
+  if (inlineMultiline) return planCellInlineMultilinePaste(state, lines);
+  // html이 없는 유효한 한 줄 평문은 PM이 파싱한 slice를 넣는다. raw 무효
+  // 문자는 정리본으로 넣는다. Tab도 셀에서는 무효라 정리본이 raw와 다르다.
   // 정리본이 비면 이벤트만 소비한다. html이 빈 slice이면 유효한 평문도
   // 아래로 내려간다.
-  const cleaned = normalizePasteText(rawText);
   if (html.length === 0 && cleaned === normalizeLineBreaks(rawText)) {
     return noIntervention;
   }
