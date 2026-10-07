@@ -1,6 +1,11 @@
 import type { Result } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 
+import {
+  deleteTableBoundaryRange,
+  findTableBoundaryRange,
+} from "./table-boundary-range.js";
+
 // insertCustomBlock(custom-block-commands.ts)과 다른 점: 삽입 위치가
 // afterBlockId가 아니라 현재 selection(caret)이다 — inline 원소는 model에
 // id가 없어(spec §4.2) block처럼 위치를 식별할 identity가 없다(RD-002-DELTA-18.md
@@ -29,8 +34,17 @@ export const insertCustomInlineContent = (
     };
   }
 
+  // 표 경계에 걸친 범위(Issue #292)는 선택한 텍스트만 먼저 지운다. Tiptap
+  // insertContent가 범위를 일반 삭제하면 선택하지 않은 텍스트가 셀로 옮겨
+  // 가거나 표가 사라진다. 지운 뒤 캐럿이 범위 시작이라 같은 transaction에서
+  // 이어 삽입한다(G-EDT-001).
+  const range = findTableBoundaryRange(editor.state.selection);
   const applied = editor
     .chain()
+    .command(({ tr }) => {
+      if (range !== null) deleteTableBoundaryRange(tr, range);
+      return true;
+    })
     .insertContent({ type, attrs: { props: props ?? null } })
     .run();
 

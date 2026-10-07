@@ -89,6 +89,7 @@ import {
   TableExtension,
   TableRowExtension,
 } from "./table-extension.js";
+import { TableBoundaryInputExtension } from "./table-boundary-input-extension.js";
 import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js";
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
@@ -675,6 +676,12 @@ export const createProductionEditor = (options: {
       ...Object.entries(options.customStyles ?? {}).map(([type, definition]) =>
         createCustomStyleMark(type, definition),
       ),
+      // 표 경계에 걸친 범위의 글자 입력·Cut·붙여넣기·끌어 놓기·Shift-Enter
+      // (Issue #292). 선언 순서와 무관하게 priority 1_200이 입력 규칙·표
+      // 키보드·붙여넣기 확장보다 앞선다. 표 확장이 켜졌을 때만 의미가 있다.
+      ...(isBlockTypeEnabled("table", options.enabledBlockTypes)
+        ? [TableBoundaryInputExtension]
+        : []),
       TableKeyboardNavigationExtension.configure({
         createId: options.createId,
       }),
