@@ -40,6 +40,11 @@
  * CellSelection은 이 파일의 두 곳(C9·C10)이 Issue #300 이후 계약을 확인한다.
  * 수정 전에는 문서 불변을 특성화했다. 이제 평문 정리본이 선택을 대체한다.
  * 전체 축은 clipboard-paste-cell-selection.test.ts가 소유한다.
+ *
+ * 다문단 html은 Issue #304가 정정했다. 수정 전에는 첫 문단만 셀에 들어가고
+ * 나머지가 표 뒤 문단이 됐다. 이제 블록을 줄로 이어 셀에 넣는다(C7 한 곳).
+ * 여러 블록 html 축은 clipboard-paste-table-cell-multiblock-html.test.ts가
+ * 소유한다.
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -73,7 +78,9 @@ import {
   atomBlocks,
   atomSelected,
   docOutline,
+  expectTableIntact,
   firstCellBlocks,
+  kindsOf,
   lastCellBlocks,
   pasteIn,
   type Place,
@@ -962,7 +969,10 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
     );
   });
 
-  it("다문단 html에서 가운데 문단만 무효 문자이면 가운데 빈 문단이 남는다. 유효 다문단과 같은 구조다(C7)", () => {
+  // Issue #304 전에는 두 문단 이후가 표 밖 문단이 됐고(셀 `cellx`, 표 뒤 `z`·`y`),
+  // 무효 문자뿐인 가운데 문단은 표 뒤 빈 문단으로 남았다. 이제 블록을 줄로
+  // 이어 셀에 넣는다. 정리 뒤 빈 가운데 문단은 빈 줄이라 접힌다.
+  it("다문단 html에서 가운데 문단만 무효 문자이면 그 줄은 접히고 셀 안에 두 줄이 남는다(C7, Issue #304가 정정)", () => {
     const invalid = pasteIn(S1.blocks(), S1.place, {
       "text/html": `<p>x</p><p>${SOH}</p><p>y</p>`,
     });
@@ -970,13 +980,11 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
       "text/html": "<p>x</p><p>z</p><p>y</p>",
     });
 
-    expect(valid.blocks()).toEqual(
-      docOutline("table[cellx]", "paragraph:z", "paragraph:y"),
-    );
-    expect(invalid.blocks()).toEqual(
-      docOutline("table[cellx]", "paragraph:", "paragraph:y"),
-    );
-    expectSchemaValid(invalid.tiptap);
+    expect(valid.blocks()).toEqual(docOutline("table[cellx\nz\ny]"));
+    expect(invalid.blocks()).toEqual(docOutline("table[cellx\ny]"));
+    expect(kindsOf(invalid.tiptap, "t-r0c0")).toEqual(["cellx", "br", "y"]);
+    expectTableIntact(valid);
+    expectTableIntact(invalid);
   });
 
   it("무효 문자뿐인 문단이 둘이면 정리 뒤에도 빈 문단이 남아 평문으로 폴백하지 않는다", () => {

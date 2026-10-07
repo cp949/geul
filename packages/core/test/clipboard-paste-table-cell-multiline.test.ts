@@ -23,14 +23,12 @@
  * 함께 본다. outline은 hardBreak를 개행 문자로 보여 준다.
  */
 import type { Block } from "@cp949/geul-model";
-import type { Editor as TiptapEditor } from "@tiptap/core";
-import { Fragment, Slice, type Node as PmNode } from "@tiptap/pm/model";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { CellSelection } from "@tiptap/pm/tables";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
 import { planTableCellPaste } from "../src/paste-plan.js";
-import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import { withUnhandledErrorTracking } from "./clipboard-test-support.js";
 import {
   documentOf,
@@ -51,9 +49,12 @@ import { selectCellRange } from "./table-test-support.js";
 import {
   atomBlocks,
   atomSelected,
+  boldCellBlocks,
   docOutline,
-  findCell,
+  expectTableIntact,
   firstCellBlocks,
+  kindsInDoc,
+  kindsOf,
   lastCellBlocks,
   pasteIn,
   selectFirstTwoCells,
@@ -79,47 +80,6 @@ const emptyCellBlocks = (): Block[] => [
   singleCellTable("t", ""),
   TAIL,
 ];
-
-/** 셀 "ce"+bold "ll" 문서. 캐럿 마크 상속을 본다. */
-const boldCellBlocks = (): Block[] => {
-  const table = singleCellTable("t", "") as Extract<Block, { type: "table" }>;
-  const cell = table.rows[0]?.cells[0];
-  if (cell === undefined) throw new Error("fixture 준비 실패");
-  cell.content = [{ text: "ce" }, { text: "ll", marks: [{ type: "bold" }] }];
-  return [paragraphBlock("p1", "para"), table, TAIL];
-};
-
-/**
- * 셀 자식을 종류 목록으로 줄인다. text는 내용, hardBreak는 `br`이다. 마크가
- * 있으면 `*마크이름`을 붙인다.
- */
-const kindsInDoc = (doc: PmNode, cellId: string): string[] => {
-  const kinds: string[] = [];
-  findCell(doc, cellId).forEach((child) => {
-    const marks = child.marks.map((mark) => `*${mark.type.name}`).join("");
-    const name = child.type.name === "hardBreak" ? "br" : child.type.name;
-    kinds.push(`${child.isText ? child.text : name}${marks}`);
-  });
-  return kinds;
-};
-
-/** 편집기 현재 문서에서 셀 자식 종류 목록을 얻는다. */
-const kindsOf = (tiptap: TiptapEditor, cellId: string): string[] =>
-  kindsInDoc(tiptap.state.doc, cellId);
-
-type PasteResult = ReturnType<typeof pasteIn>;
-
-/** 표 뒤에 문단이 새로 생기지 않았고 표가 하나뿐임을 단언한다. */
-const expectTableIntact = (result: PasteResult): void => {
-  const blocks = result.editor.getDocument().blocks;
-  expect(blocks.map((block) => block.type)).toEqual([
-    "paragraph",
-    "table",
-    "paragraph",
-  ]);
-  expect(result.tiptap.state.doc.childCount).toBe(3);
-  expectSchemaValid(result.tiptap);
-};
 
 describe("표 셀 안 여러 줄 평문 붙여넣기(Issue #299)", () => {
   describe("선택 종류 x 줄바꿈 종류(C1~C3)", () => {

@@ -16,6 +16,7 @@ import { dropPoint } from "@tiptap/pm/transform";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
+import { buildCellHtmlInline } from "./cell-html-inline.js";
 import {
   selectionIntersectsAnyCodeBlock,
   selectionStartsInCodeBlock,
@@ -45,7 +46,8 @@ import {
 // 판정 순서는 계획 도입 전 handlePaste와 같다. 삽입은 PM 기본에 맡기지
 // 않는다. PM 기본과 같은 삽입(insertSlice)도 실행기가 한다(Issue #306). 셀
 // 안 판정은 선택 시작($from)으로 한다. 셀 안 여러 줄 평문은 PM 기본에 맡기지
-// 않고 줄 사이를 hardBreak로 이어 셀 안에 직접 넣는다(Issue #299).
+// 않고 줄 사이를 hardBreak로 이어 셀 안에 직접 넣는다(Issue #299). 셀 안
+// 여러 블록 html도 블록을 줄로 이어 셀 안에 직접 넣는다(Issue #304).
 
 // 클립보드에서 읽은 값이다. plain은 PM이 이번 붙여넣기를 평문 경로로
 // 만들었다는 신호다(Issue #303, transformPasted의 3번째 인자).
@@ -255,16 +257,14 @@ const isCellInlineInsertTarget = (selection: Selection): boolean => {
   return selection instanceof NodeSelection && selection.node.isInline;
 };
 
-// 셀 안 캐럿·범위의 여러 줄 평문 직접 삽입 계획이다(Issue #299). 줄 사이를
-// hardBreak로 이어 선택을 대체한다. 삽입 텍스트와 hardBreak에 시작 위치
-// ($from)의 마크를 입힌다. 캐럿은 삽입 끝에 둔다. 대체와 삽입은 한
-// transaction이다. 셀 노드와 attrs는 건드리지 않는다.
-const planCellInlineMultilinePaste = (
+// 셀 안 선택을 inline Fragment로 대체하는 계획이다(Issue #299, #304). 선택
+// 대체와 삽입, 캐럿 설정은 한 transaction이다. 캐럿은 삽입 끝에 둔다. 셀
+// 노드와 attrs는 건드리지 않는다.
+const planCellInlineReplace = (
   state: EditorState,
-  lines: readonly string[],
+  inserted: Fragment,
 ): PastePlan => {
-  const { from, to, $from } = state.selection;
-  const inserted = linesToHardBreakInline(state.schema, lines, $from.marks());
+  const { from, to } = state.selection;
   const tr = state.tr.replaceWith(from, to, inserted);
   tr.setSelection(TextSelection.create(tr.doc, from + inserted.size));
   return {
@@ -276,6 +276,39 @@ const planCellInlineMultilinePaste = (
   };
 };
 
+// 셀 안 캐럿·범위의 여러 줄 평문 직접 삽입 계획이다(Issue #299). 줄 사이를
+// hardBreak로 이어 선택을 대체한다. 삽입 텍스트와 hardBreak에 시작 위치
+// ($from)의 마크를 입힌다.
+const planCellInlineMultilinePaste = (
+  state: EditorState,
+  lines: readonly string[],
+): PastePlan =>
+  planCellInlineReplace(
+    state,
+    linesToHardBreakInline(state.schema, lines, state.selection.$from.marks()),
+  );
+
+// 셀 안 캐럿·범위의 여러 블록 html 직접 삽입 계획이다(Issue #304). 블록을
+// 줄로 평탄화해 hardBreak로 이어 선택을 대체한다. 줄 안 마크는 html의 것이고
+// 캐럿 마크는 입히지 않는다. 이 분기를 탈 수 없으면 null이다.
+// - importHtml이 실패하면 null이다(이전 경로).
+// - 표가 있거나 content 블록이 2개 미만이거나 정리 뒤 줄이 0개이면 null이다
+//   (buildCellHtmlInline). 줄이 1개만 남아도 블록이 둘 이상이면 그 줄을 넣는다.
+// PM이 파싱한 slice는 쓰지 않는다. 목록·`<pre>` 여러 블록은 PM이 셀 조각으로
+// 오인해 되돌림 guard가 붙여넣기를 지우고, 문단 여러 개는 첫 문단만 셀에 들어간다.
+const planCellHtmlInlinePaste = (
+  state: EditorState,
+  html: string,
+): PastePlan | null => {
+  const imported = importHtml(html);
+  if (!imported.ok) return null;
+  const inserted = buildCellHtmlInline(
+    state.schema,
+    imported.value.document.blocks,
+  );
+  return inserted === null ? null : planCellInlineReplace(state, inserted);
+};
+
 // 표 셀 안 붙여넣기 계획이다. 표 안이 아니면 null이다. 표 안은
 // pasteHandler를 부르지 않는다(roadmap.md "제외 범위", IO-008은 표·미디어
 // 붙여넣기를 대상으로 하지 않는다). 기본은 PM이 파싱한 slice를 그대로
@@ -283,6 +316,13 @@ const planCellInlineMultilinePaste = (
 // 않으면 되돌림 guard가 붙여넣기를 통째로 지운다. 예외는 PM 파싱이 평문을
 // 잃는 두 경우다. 무효 문자가 섞인 평문(Issue #297)과 빈 slice html에 딸린
 // 평문(Issue #301)이다. 정리본을 평문으로 넣는다.
+// - 여러 블록 html은 셀 조각 판정보다 먼저 본다(Issue #304). 캐럿·같은 셀
+//   범위·인라인 atom NodeSelection에서 importHtml 블록이 표 없이 content 블록
+//   2개 이상이고 정리 뒤 줄이 1개 이상이면 블록을 hardBreak로 이어 셀 안에
+//   직접 넣는다. PM 기본은 문단 여러 개의 나머지를 표 밖으로 빼고, 목록·`<pre>`
+//   여러 블록은 셀 조각으로 오인해 되돌려진다. 서식 없이 붙여넣기·CellSelection은
+//   이 분기를 타지 않는다. importHtml 실패, content 블록 1개, 줄 0개는 아래
+//   이전 경로다.
 // - 셀 조각 slice(표 안에서 복사한 셀)는 prosemirror-tables가 셀 단위로
 //   넣는다.
 // - CellSelection은 html이 실제 내용을 가지면 prosemirror-tables에 맡긴다.
@@ -308,8 +348,21 @@ export const planTableCellPaste = (
   slice: Slice,
 ): PastePlan | null => {
   if (!selectionStartsInTable(state)) return null;
-  if (__pastedCells(slice) !== null) return { kind: "pass" };
   const { selection } = state;
+  // 여러 블록 html은 셀 조각 판정보다 먼저 본다(Issue #304). 목록 html이 셀
+  // 조각으로 오인되어 아래 pass로 빠지기 때문이다. 서식 없이 붙여넣기는 html을
+  // 읽지 않는다. CellSelection은 별건이다(#308).
+  if (
+    clipboard !== null &&
+    !clipboard.plain &&
+    clipboard.html.length > 0 &&
+    !(selection instanceof CellSelection) &&
+    isCellInlineInsertTarget(selection)
+  ) {
+    const htmlPlan = planCellHtmlInlinePaste(state, clipboard.html);
+    if (htmlPlan !== null) return htmlPlan;
+  }
+  if (__pastedCells(slice) !== null) return { kind: "pass" };
   const cellSelection = selection instanceof CellSelection ? selection : null;
   // html 내용 유무는 정리한 slice로 판정한다. 무효 문자뿐인 html은 정리 뒤
   // 빈 slice라 평문 분기로 내려간다.

@@ -32,8 +32,13 @@ import {
   paragraphBlock,
   sequentialIds,
 } from "./list-item-block-type-support.js";
-import { inCell } from "./table-boundary-test-support.js";
-import { findCell, lastCellBlocks } from "./table-cell-paste-test-support.js";
+import { inBlock, inCell } from "./table-boundary-test-support.js";
+import {
+  findCell,
+  firstCellBlocks,
+  kindsInDoc,
+  lastCellBlocks,
+} from "./table-cell-paste-test-support.js";
 import { selectCellRange } from "./table-test-support.js";
 
 const SOH = String.fromCharCode(1);
@@ -363,6 +368,213 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
     expect(plan?.kind).toBe("dispatch");
     if (plan?.kind !== "dispatch") return;
     expect(cellKinds(plan.transaction)).toEqual(["a", "hardBreak", "b"]);
+  });
+});
+
+describe("planTableCellPaste 여러 블록 html(Issue #304)", () => {
+  const TWO_PARAGRAPHS = "<p>a</p><p>b</p>";
+
+  /** 셀 조각 slice다. 표 안에서 복사한 셀을 PM이 이렇게 파싱한다. */
+  const cellFragmentSlice = (tiptap: TiptapEditor): Slice => {
+    let found: Slice | null = null;
+    tiptap.state.doc.descendants((node, pos) => {
+      if (found !== null) return false;
+      if (node.type.name !== "table") return true;
+      found = tiptap.state.doc.slice(pos, pos + node.nodeSize);
+      return false;
+    });
+    if (found === null) throw new Error("표 조회 실패");
+    return found;
+  };
+
+  it("문단 둘은 hardBreak를 이은 dispatch다. 계획은 문서를 바꾸지 않고 meta를 단다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+    const before = tiptap.state.doc;
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a\nb", TWO_PARAGRAPHS),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual([
+      "cella",
+      "br",
+      "b",
+    ]);
+    expect(plan.transaction.getMeta("paste")).toBe(true);
+    expect(plan.transaction.getMeta("uiEvent")).toBe("paste");
+    expect(plan.transaction.scrolledIntoView).toBe(true);
+    expect(tiptap.state.doc).toBe(before);
+  });
+
+  it("목록 html이 셀 조각 slice로 파싱돼도 셀 조각 pass보다 먼저 dispatch다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a\nb", "<ul><li>a</li><li>b</li></ul>"),
+      cellFragmentSlice(tiptap),
+    );
+
+    expect(plan?.kind).toBe("dispatch");
+  });
+
+  it("표를 포함한 html은 이 분기를 타지 않는다. 셀 조각이면 pass다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a\tb", "<table><tr><td>a</td><td>b</td></tr></table>"),
+      cellFragmentSlice(tiptap),
+    );
+
+    expect(plan).toEqual({ kind: "pass" });
+  });
+
+  it("표와 문단 여러 개가 섞인 html은 줄이 둘이어도 이전 계획이다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a", "<table><tr><td>x</td></tr></table><p>a</p><p>b</p>"),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("insertSlice");
+  });
+
+  it.each([
+    { name: "문단 하나", html: "<p>a</p>" },
+    { name: "굵은 글자", html: "<b>x</b>" },
+    { name: "목록 항목 하나", html: "<ul><li>a</li></ul>" },
+    { name: "codeBlock 하나", html: "<pre><code>a\nb</code></pre>" },
+  ])("content 블록이 하나인 html($name)은 이전 계획이다", ({ html }) => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a", html),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("insertSlice");
+  });
+
+  // Issue #304 리뷰로 정정: 전에는 줄이 1개 이하인 "빈 문단이 섞인 문단 하나"
+  // (`<p>a</p><p></p>`)를 이전 계획(insertSlice)으로 단언했다. 이전 경로는 표
+  // 뒤에 빈 문단을 남기는 결함이었다. 이제 남은 한 줄을 셀에 넣는 dispatch다.
+  it.each([
+    { name: "빈 문단이 섞인 문단 하나", html: "<p>a</p><p></p>" },
+    { name: "빈 첫 문단", html: "<p></p><p>a</p>" },
+  ])(
+    "블록이 둘 이상이면 줄이 1개 남아도 dispatch다($name, Issue #304 리뷰로 정정)",
+    ({ html }) => {
+      const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("a", html),
+        sliceOfSize(tiptap, 1),
+      );
+
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual(["cella"]);
+    },
+  );
+
+  it("줄이 모두 비는 html은 이전 계획이다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a", "<p></p><p></p>"),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("insertSlice");
+  });
+
+  it("클립보드가 없으면 이전 계획이다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    expect(
+      planTableCellPaste(tiptap.state, null, sliceOfSize(tiptap, 1))?.kind,
+    ).toBe("insertSlice");
+  });
+
+  it("서식 없이 붙여넣기 신호가 있으면 html을 보지 않고 평문을 넣는다", () => {
+    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("x\ny", TWO_PARAGRAPHS, true),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual([
+      "cellx",
+      "br",
+      "y",
+    ]);
+  });
+
+  it("CellSelection은 이 분기를 타지 않는다", () => {
+    const tiptap = mountAt(lastCellBlocks(), at("p1", 0));
+    selectCellRange(tiptap, "t-r0c0", "t-r0c0");
+
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip("a\nb", TWO_PARAGRAPHS),
+      sliceOfSize(tiptap, 1),
+    );
+
+    expect(plan).toEqual({ kind: "pass" });
+  });
+
+  it("직접 삽입 대상이 아닌 범위(다른 셀에 걸침·표 밖에서 끝남)는 이전 계획이다", () => {
+    const grid = mountAt(
+      firstCellBlocks(),
+      inCell("g-r0c0", 1),
+      inCell("g-r0c1", 1),
+    );
+    const across = mountAt(
+      lastCellBlocks(),
+      inCell("t-r0c0", 2),
+      inBlock("tail", 2),
+    );
+
+    expect(
+      planTableCellPaste(
+        grid.state,
+        clip("a\nb", TWO_PARAGRAPHS),
+        sliceOfSize(grid, 1),
+      )?.kind,
+    ).toBe("insertSlice");
+    expect(
+      planTableCellPaste(
+        across.state,
+        clip("a\nb", TWO_PARAGRAPHS),
+        sliceOfSize(across, 1),
+      )?.kind,
+    ).toBe("insertSlice");
+  });
+
+  it("표 밖 캐럿은 null이다", () => {
+    const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
+
+    expect(
+      planTableCellPaste(
+        tiptap.state,
+        clip("a\nb", TWO_PARAGRAPHS),
+        sliceOfSize(tiptap, 1),
+      ),
+    ).toBeNull();
   });
 });
 

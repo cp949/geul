@@ -4,12 +4,14 @@
  * 이벤트 테스트와 붙여넣기 계획 테스트가 같은 문서와 실행 절차를 쓴다.
  *
  * - 문서: lastCellBlocks(1x1 표 t)·firstCellBlocks(1x2 표 g)·atomBlocks(셀 안
- *   인라인 atom)
+ *   인라인 atom)·boldCellBlocks(셀 "ce"+bold "ll")
  * - 기대 요약: docOutline(앞뒤 문단 사이에 표 요약을 끼운다)
  * - 선택: Place·textSelection·atomSelected·selectFirstTwoCells
  * - 편집기 옵션: withTag(인라인 atom 렌더 등록)
  * - 실행: pasteIn(마운트·선택·paste 이벤트 dispatch·호출 감시)
  * - PM 조회: findCell(cellId로 셀 노드를 찾는다)
+ * - 셀 결과 요약: kindsOfFragment(Fragment 자식 종류 목록)·kindsInDoc·kindsOf
+ *   (셀 자식 종류 목록)·expectTableIntact(표 뒤 문단이 생기지 않았음을 단언)
  *
  * 표 fixture 원본(gridTable·singleCellTable·TAIL)과 위치 헬퍼(inCell)는
  * table-boundary-test-support.ts가, 셀 범위 선택은 table-test-support.ts가
@@ -17,11 +19,12 @@
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
-import type { Node as PmNode } from "@tiptap/pm/model";
+import type { Fragment, Node as PmNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 
 import type { CreateEditorOptions } from "../src/index.js";
+import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import { dispatchPasteData } from "./clipboard-test-support.js";
 import {
   documentOf,
@@ -80,6 +83,15 @@ export const atomBlocks = (): Block[] => {
     { type: "custom", customType: "myTag" },
     { text: "cd" },
   ];
+  return [paragraphBlock("p1", "para"), table, TAIL];
+};
+
+/** 셀 t-r0c0이 "ce"+bold "ll"인 문서. 캐럿 마크 상속·비상속을 본다. */
+export const boldCellBlocks = (): Block[] => {
+  const table = singleCellTable("t", "") as Extract<Block, { type: "table" }>;
+  const cell = table.rows[0]?.cells[0];
+  if (cell === undefined) throw new Error("fixture 준비 실패");
+  cell.content = [{ text: "ce" }, { text: "ll", marks: [{ type: "bold" }] }];
   return [paragraphBlock("p1", "para"), table, TAIL];
 };
 
@@ -183,4 +195,42 @@ export const pasteIn = (
     event,
     blocks: () => outline(m.editor.getDocument().blocks),
   };
+};
+
+/**
+ * Fragment의 자식을 종류 목록으로 줄인다. text는 내용, hardBreak는 `br`이다.
+ * 마크가 있으면 `*마크이름`을 붙인다. 셀 노드 없이 inline Fragment만 있을 때
+ * 쓴다(cell-html-inline helper의 결과).
+ */
+export const kindsOfFragment = (fragment: Fragment): string[] => {
+  const kinds: string[] = [];
+  fragment.forEach((child) => {
+    const marks = child.marks.map((mark) => `*${mark.type.name}`).join("");
+    const name = child.type.name === "hardBreak" ? "br" : child.type.name;
+    kinds.push(`${child.isText ? child.text : name}${marks}`);
+  });
+  return kinds;
+};
+
+/** 셀 자식을 종류 목록으로 줄인다. 표기는 kindsOfFragment와 같다. */
+export const kindsInDoc = (doc: PmNode, cellId: string): string[] =>
+  kindsOfFragment(findCell(doc, cellId).content);
+
+/** 편집기 현재 문서에서 셀 자식 종류 목록을 얻는다. */
+export const kindsOf = (tiptap: TiptapEditor, cellId: string): string[] =>
+  kindsInDoc(tiptap.state.doc, cellId);
+
+/** pasteIn의 반환 형태다. */
+export type PasteResult = ReturnType<typeof pasteIn>;
+
+/** 표 뒤에 문단이 새로 생기지 않았고 표가 하나뿐임을 단언한다. */
+export const expectTableIntact = (result: PasteResult): void => {
+  const blocks = result.editor.getDocument().blocks;
+  expect(blocks.map((block) => block.type)).toEqual([
+    "paragraph",
+    "table",
+    "paragraph",
+  ]);
+  expect(result.tiptap.state.doc.childCount).toBe(3);
+  expectSchemaValid(result.tiptap);
 };

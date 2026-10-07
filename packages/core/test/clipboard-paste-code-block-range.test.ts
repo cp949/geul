@@ -294,10 +294,11 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
 
   describe("표 셀에서 시작해 codeBlock으로 끝나는 범위(특성화)", () => {
     // 표 경계 범위라 붙여넣기 전에 선택한 텍스트만 먼저 지운다(Issue #292).
-    // 캐럿이 셀에 남아 ClipboardPaste는 물러나고 PM 기본 처리가 첫 블록을
-    // 시작 셀에, 나머지를 표 뒤에 놓는다. 표 구조는 유지되고 셀 텍스트만
-    // 잘린다.
-    it("표 구조(행·열·셀 id)가 유지되고 첫 블록은 시작 셀에 나머지 블록은 표 뒤 형제로 놓인다", () => {
+    // 캐럿이 셀에 남아 ClipboardPaste는 물러난다. Issue #304 전에는 PM 기본
+    // 처리가 첫 블록을 시작 셀에, 나머지를 표 뒤에 놓았다. 이제 셀 안 여러
+    // 블록 html 계획이 블록을 hardBreak로 이어 시작 셀에 넣는다. 표 구조는
+    // 유지되고 셀 텍스트만 잘린다.
+    it("표 구조(행·열·셀 id)가 유지되고 블록이 시작 셀 안에 줄로 이어지며 표 뒤에는 남은 codeBlock만 놓인다", () => {
       const cell = (id: string, columnId: string, text: string) => ({
         id,
         columnId,
@@ -364,9 +365,9 @@ describe("codeBlock에 걸친 범위의 HTML 붙여넣기 배치(Issue #286)", (
         ),
       ).toEqual([
         ["AAAA", "BBBB"],
-        ["CCCC", "DX"],
+        ["CCCC", "DX\nY"],
       ]);
-      expect(outline(blocks.slice(1))).toEqual(["p:Y", "code:bar", "p:tail"]);
+      expect(outline(blocks.slice(1))).toEqual(["code:bar", "p:tail"]);
     });
   });
 
