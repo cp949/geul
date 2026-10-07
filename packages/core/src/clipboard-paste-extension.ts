@@ -7,7 +7,7 @@ import {
 } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { type EditorState, Plugin, TextSelection } from "@tiptap/pm/state";
-import { isInTable } from "@tiptap/pm/tables";
+import { CellSelection, isInTable } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 
 import { selectionIntersectsAnyCodeBlock } from "./code-block-mark-guard-extension.js";
@@ -214,10 +214,28 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
           clipboardTextParser: plainTextClipboardParser,
           handlePaste: (view, event) => {
             if (sanitizedPasteInFlight) return false;
-            // 표 셀 안에서는 손대지 않는다(R1 계약 그대로) — pasteHandler도
-            // 호출하지 않는다(roadmap.md "제외 범위", IO-008은 표·미디어
-            // 붙여넣기를 대상으로 하지 않는다).
-            if (isInTable(view.state)) return false;
+            // 표 셀 안은 PM 기본에 맡긴다(R1 계약). pasteHandler도 호출하지
+            // 않는다(roadmap.md "제외 범위", IO-008은 표·미디어 붙여넣기를
+            // 대상으로 하지 않는다). 예외는 무효 문자가 섞인 평문 하나다
+            // (Issue #297). 정리본을 평문으로 넣는다.
+            if (isInTable(view.state)) {
+              // CellSelection이 아니고 text/html이 비어 있을 때만 개입한다.
+              // - CellSelection은 유효 평문도 PM 기본이 되돌리는 별개 결함이다.
+              // - html이 있으면 PM이 html만 쓴다. 개입하면 셀 서식을 잃는다.
+              // - 셀 안 인라인 atom NodeSelection은 정리본이 atom을 대체한다.
+              if (view.state.selection instanceof CellSelection) return false;
+              const clipboardData = event.clipboardData;
+              if (clipboardData === null) return false;
+              if (clipboardData.getData("text/html").length > 0) return false;
+              // 유효한 평문은 PM 기본에 맡긴다. PM 기본이 raw 무효 문자를 넣으면
+              // 되돌림 guard가 붙여넣기를 통째로 지운다. Tab도 셀에서는 무효라
+              // 정리본이 raw와 다르다. 정리본이 비면 이벤트만 소비한다.
+              const rawText = clipboardData.getData("text/plain");
+              const cleaned = normalizePasteText(rawText);
+              if (cleaned === normalizeLineBreaks(rawText)) return false;
+              if (cleaned.length > 0) pasteTextThroughPm(view, cleaned, event);
+              return true;
+            }
 
             // spec §10(IO-008) — 기존 handlePaste 로직 전체를 그대로
             // defaultPasteHandler로 노출한다. pasteHandler가 undefined를
