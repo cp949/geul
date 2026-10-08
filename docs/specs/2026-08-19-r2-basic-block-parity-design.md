@@ -275,7 +275,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
   - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다. 정정(2026-10-07, Issue #303): 평문 단독 입력은 같다. `text/html`이 함께 오면 확장이 Shift를 구분한다. 서식 없이 붙여넣기는 html을 건너뛴다(아래 #303 문단).
   - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백)(정정 2026-10-07, Issue #303: Ctrl+Shift+V는 html을 건너뛴다), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297)(정정 2026-10-07, Issue #301: `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 평문을 정리본으로 넣는다)(정정 2026-10-07, Issue #302: 셀 안 slice의 무효 문자는 `transformPasted`가 지운다)(정정 2026-10-08, Issue #299: 셀 안 여러 줄 평문은 줄 사이를 `hardBreak`로 이어 셀에 직접 넣는다), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
-  - 직접 배치가 물러나는 입력은 `clipboardTextParser`를 탄다. 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다. 자식 없는 블록은 위와 같은 형제 배치다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 경로가 아니라 아래 직접 삽입이다.
+  - 직접 배치가 물러나는 입력은 `clipboardTextParser`를 탄다. 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다(정정 2026-10-09, Issue #310: 한 줄은 캐럿 마크를 입힌 paragraph 하나를 돌려준다. 아래 #310 문단이 정한다). 자식 없는 블록은 위와 같은 형제 배치다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 경로가 아니라 아래 직접 삽입이다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 한계에서 벗어났다. 이 경로는 위임 입력에만 남는다(#285 한계 참조). 그 입력에서는 이 한계가 그대로다.
 - codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
   - `insertContent`가 범위를 `replaceWith`로 대체한다. 삭제 단계는 없다. 삽입 지점은 범위 시작이다. 새 블록은 시작 블록의 형제다. 시작이 자식 블록이면 그 자식과 같은 층위 형제다.
@@ -471,7 +471,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 줄 경계: 표 밖 여러 줄(#284)과 같다. `splitPlainTextLines`를 쓴다. 연속 개행은 경계 하나다. 앞·뒤 개행은 빈 줄이 되어 `hardBreak` 하나가 된다. `X\n\nY`는 `X`·`hardBreak`·`Y`다. `\nX`는 `hardBreak`·`X`다. `X\n`은 `X`·`hardBreak`다.
   - 입력: `normalizePasteText`로 무효 문자와 Tab을 지운 정리본을 줄로 나눈다. 정리본이 비면 문서를 바꾸지 않고 이벤트만 소비한다. 무효 문자가 섞인 여러 줄도 `view.pasteText`를 거치지 않고 직접 넣는다. 한 줄 평문은 이전과 같다. 유효하면 PM 기본이고 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다.
   - 마크: 캐럿 위치(`$from.marks()`)의 마크를 삽입 텍스트와 `hardBreak`에 입힌다. 표 밖 직접 삽입(#284)과 같다. `CellSelection`은 셀 내용을 비우므로 마크가 없다.
-  - 한 줄과의 차이: 한 줄 평문은 PM 기본이다. PM 기본은 평문을 DOM으로 직렬화했다가 다시 파싱한다. 이 왕복에서 `textColor`·`backgroundColor`가 빠진다. bold·link 등은 이어진다. 그래서 색 마크 캐럿에서 `ab`는 색 없이, `a\nb`는 색과 함께 들어간다. 표 밖 한 줄과 여러 줄(#284)도 같은 차이가 있다.
+  - 한 줄과의 차이: 한 줄 평문은 PM 기본이다. PM 기본은 평문을 DOM으로 직렬화했다가 다시 파싱한다. 이 왕복에서 `textColor`·`backgroundColor`가 빠진다. bold·link 등은 이어진다. 그래서 색 마크 캐럿에서 `ab`는 색 없이, `a\nb`는 색과 함께 들어간다. 표 밖 한 줄과 여러 줄(#284)도 같은 차이가 있다. 정정(2026-10-09, Issue #310): 해소했다. 한 줄 평문도 캐럿 마크를 잇는다. 아래 #310 문단이 정한다.
   - html 분기: 빈 slice html은 평문을 직접 넣는다(#301). html이 실제 내용을 가지면 이전과 같다. Ctrl+Shift+V는 예외다. html이 함께 와도 평문 여러 줄을 직접 넣는다. PM이 평문으로 만든 여러 문단 slice가 같은 방식으로 표 밖으로 빠지기 때문이다. 한 줄 평문의 Ctrl+Shift+V는 이전과 같다.
   - 한 줄 예: 문서 `p "para"`, 1x1 표 `"cell"`, `tail`에서 `a\nb\nc`를 붙이면 셀 끝 캐럿은 `cella`·`hardBreak`·`b`·`hardBreak`·`c`다. 표 뒤 문단은 생기지 않는다. 셀 중간 캐럿 `ce|ll`은 `cea`·`hardBreak`·`b`·`hardBreak`·`cll`이다. 같은 셀 안 범위 `c[el]l`에 `a\nb`는 `ca`·`hardBreak`·`bl`이다. 1x2 표의 마지막이 아닌 셀(`c1`)에서도 표가 쪼개지지 않고 `c1a`·`hardBreak`·`b`다. 셀 안 인라인 atom `NodeSelection`은 atom을 대체한다.
   - 붙여넣기 뒤 selection은 삽입 텍스트 끝의 `TextSelection`이다. transaction은 하나다. dispatch 1회, undo 1회로 원래 문서가 복원된다. `pasteHandler`와 `view.pasteText`를 부르지 않는다.
@@ -545,6 +545,16 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: 표 구조(병합·정렬·색)는 셀 안에 보존하지 않는다.
   - 한계: 붙여넣기와 문서가 다르다. 붙여넣기는 표를 셀 전체 대체로 처리한다. drop은 위치 삽입이다.
   - 한계: jsdom 합성 drop으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
+- 한 줄 평문 붙여넣기의 캐럿 마크 상속(정정 2026-10-09, Issue #310). 색 마크(`textColor`·`backgroundColor`) 캐럿에 한 줄 평문을 붙이면 색이 이어진다. 이전에는 삽입 텍스트에 색이 없었다. 줄 수와 무관하게 캐럿 마크를 잇는 규칙 하나다.
+  - 원인: 한 줄은 `clipboardTextParser`가 `null`이라 PM 기본(`parseFromClipboard`)이 처리했다. PM 기본은 `$context.marks()`를 입힌 text를 `DOMSerializer`로 직렬화하고 다시 파싱한다. `TextColorMark`·`BackgroundColorMark`는 `parseHTML`이 없어 이 왕복에서 빠진다. bold·link는 파싱 규칙이 있어 이어졌다. 이슈 본문의 가설 "왕복 규칙 불일치"는 정확하지 않다. 규칙이 없는 것이 원인이다.
+  - 수정: `parsePlainTextClipboard`가 한 줄도 처리한다. `$context.marks()`를 입힌 text를 담은 paragraph 하나를 `open(1,1)` slice로 돌려준다. PM의 DOM 왕복을 타지 않는다. 판정은 여러 줄과 같다. 텍스트 블록이고 codeBlock이 아닐 때만 만든다. 빈 문자열은 `null`이다. `parseHTML` 추가는 하지 않았다(`text-color-mark-extension.ts` 머리 주석의 비정규 색 승격 방지).
+  - 모양: text 노드 단독 slice는 쓸 수 없다. `doPaste`와 실행기(`runPastePlan`)가 단일 노드 slice를 `replaceSelectionWith(node, 평문 신호)`로 보낸다. 그 경로는 `storedMarks`로 마크를 덮어쓴다. 현행은 `storedMarks`를 무시하므로 어긋난다. `blockContainer`로 한 겹 더 감싼 `open(2,2)`도 쓰지 않는다. 빈 문단에서 PM `replaceRange`가 container째 바꿔 blockId가 새로 매겨진다. paragraph `open(1,1)`은 표 셀 안(blockContainer 밖)에도 같은 모양이다.
+  - 마크 기준: 캐럿이면 그 위치의 `$from.marks()`다. 범위 선택이면 범위 시작이다. `storedMarks`는 쓰지 않는다. Ctrl+V, Ctrl+Shift+V, `view.pasteText` 모두 이전처럼 무시한다.
+  - 대상 진입점: Ctrl+V, Ctrl+Shift+V, `view.pasteText`, 한 줄 평문 drop이다. drop은 PM 기본 drop이 같은 `clipboardTextParser`를 부른다. drop 위치의 마크를 쓴다. 표 밖·표 셀 안 모두 같다.
+  - 무효 문자: 정리본을 `view.pasteText`로 넣는 경로도 같은 파서를 탄다. 정리본에 색이 이어진다. `view.pasteText`에 무효 문자를 직접 넘기는 입력은 이 확장이 정리하지 않는다. 되돌림 guard가 지우는 현행을 유지한다.
+  - transaction: 새 경로가 없다. PM 기본 붙여넣기 transaction이 그대로 만든다. dispatch 1회, undo 1회다. `paste` meta와 `uiEvent: "paste"`는 이전과 같다.
+  - 유지: 여러 줄 결과(#284·#299), bold·link 상속, 마크 없는 캐럿, codeBlock 안, `CellSelection`(#300, 셀 내용을 비워 마크가 없다), `NodeSelection`, `text/html` 붙여넣기. 문서·selection 결과는 이전과 같다. 색 마크 없는 문서는 수정 전과 문서·selection이 같다. jsdom에서 문단·자식 있는 문단·제목·목록·접힌 toggle·bold·표 셀·빈 문단 문서의 캐럿·범위 붙여넣기(Shift 유무)·drop·`view.pasteText` 416건과 `CellSelection`·인라인 atom·구분선 `NodeSelection` 12건을 수정 전과 대조했다.
+  - 한계: jsdom으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
 
 ## 8. 오류 계약 확장
 
