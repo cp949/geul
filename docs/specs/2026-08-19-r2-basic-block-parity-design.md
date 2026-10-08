@@ -302,7 +302,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: 시작이 codeBlock 안인 범위에 빈 결과 html만 붙이면(평문 없음) PM 기본 처리가 선택을 지운다. 이 폴백은 시작이 codeBlock 밖인 경우만 고친다.
   - 한계: 폴백은 `text/plain`만 읽는다. 빈 결과 html에 `Text`·`text/uri-list`만 있는 클립보드는 붙지 않는다. 이전에도 같았다.
 - 여러 줄 평문 drop과 codeBlock에 걸친 범위의 자식 보존(정정 2026-10-07, Issue #285). 여러 줄 `text/plain`을 drop하거나 시작이 codeBlock 밖인 codeBlock 걸친 범위에 붙여도 기존 자식이 마지막 줄 블록으로 넘어가지 않는다. 배치는 #284와 같은 Enter 분할(5.1, D23·D24·#252)이다. 이전에는 PM 기본 처리가 `clipboardTextParser` slice를 넣어 자식을 마지막 줄 블록으로 넘겼다.
-  - drop 직접 삽입 조건은 넷이다. `view.dragging`이 없다. `files`가 비어 있다. `text/html`이 비어 있다. `sanitizeInlineText`한 `text/plain`이 둘 이상의 줄이다. 판정은 live `view.state`로 한다.
+  - drop 직접 삽입 조건은 넷이다. `view.dragging`이 없다. `files`가 비어 있다. `text/html`이 비어 있다. `sanitizeInlineText`한 `text/plain`이 둘 이상의 줄이다. 판정은 live `view.state`로 한다. 정정(2026-10-08, Issue #311): 셀 위 위치의 여러 블록 `text/html`은 세 번째 조건의 예외다. 아래 #311 문단이 정한다.
   - 위임(`false`) 입력은 PM 기본이다. 파일 동반 drop은 미디어 확장이 처리한다. 위 조건 밖 입력과 아래 위치가 해당한다. `posAtCoords`가 `null`인 위치. 부모가 분할 가능한 텍스트 블록이 아닌 위치(표 셀·atom 블록·블록 사이). 위치를 보정하지 않는다. 정정(2026-10-08, Issue #309): 표 셀 안 위치는 위임하지 않고 `hardBreak`로 셀에 직접 넣는다. 표 경계·atom 블록·블록 사이는 이전과 같다.
   - 줄은 drop 위치에 놓는다. 현재 selection은 지우지 않는다. 마크는 drop 위치의 `$from.marks()`다. 입력은 `sanitizeInlineText`를 거친다.
   - 삽입은 한 transaction이다. dispatch·undo는 각각 1회다. `uiEvent: "drop"`만 달고 `paste` meta는 달지 않는다. dispatch 뒤 `view.focus()`를 부른다. 삽입 범위(drop 위치부터 마지막 줄 끝)를 `TextSelection`으로 선택한다. PM 기본 drop과 같다.
@@ -311,7 +311,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 직접 삽입을 못 하면(`NodeSelection` 등) 유효한 평문 단독은 PM 기본에 위임한다. html 폴백과 무효 문자가 섞인 평문은 정리본을 `view.pasteText`로 넣는다(#295).
   - 예: `[p "abcd" 자식 [code "xyz", p "c2"]]`에서 `ab` 뒤부터 `xy` 뒤까지 `X\nY`를 붙이면 `p "abX"`의 자식이 `["Yz", "c2"]`다. 이전에는 `p "abX"` 뒤에 `p "Yz"`가 오고 `c2`가 `"Yz"`의 자식이었다.
   - 이슈 서술 정정: 결함 조건은 "시작 블록에 자식이 있음"이 아니라 "범위 끝 뒤에 자식이 남는 모양"이다. 범위 끝 뒤에 자식이 없는 일반 모양은 PM 기본도 결함이 없고 결과가 같다. 가설 "`handleDrop`에서 `splitAtCaret`"은 `buildPlainMultilinePasteTransaction`의 `at` 옵션으로 확정했다.
-  - 한계: 위임 입력은 PM 기본이라 자식 있는 블록에서 기존 자식이 마지막 줄 블록으로 넘어간다. 내부 드래그, `text/html` 동반 drop, 표 셀·구분선 위치 drop, `NodeSelection`, 시작이 codeBlock 안인 범위가 해당한다. 정정(2026-10-08, Issue #309): 표 셀 안 위치의 여러 줄 평문 drop은 해당하지 않는다. 직접 넣는다.
+  - 한계: 위임 입력은 PM 기본이라 자식 있는 블록에서 기존 자식이 마지막 줄 블록으로 넘어간다. 내부 드래그, `text/html` 동반 drop, 표 셀·구분선 위치 drop, `NodeSelection`, 시작이 codeBlock 안인 범위가 해당한다. 정정(2026-10-08, Issue #309): 표 셀 안 위치의 여러 줄 평문 drop은 해당하지 않는다. 직접 넣는다. 정정(2026-10-08, Issue #311): 표 셀 안 위치의 여러 블록 `text/html` drop도 해당하지 않는다. 해소했다. 아래 #311 문단이 정한다.
   - 한계: 끝 잔여는 codeBlock으로 남지 않는다. `[p "abcd", code "foobar"]`에서 `ab` 뒤부터 `foo` 뒤까지 `X\nY`를 붙이면 `[p "abX", p "Ybar"]`다. #286 HTML 경로와 다르다. `text/plain`만 있는 PM 기본과 같다.
   - 한계: 범위가 중간 컨테이너의 라벨을 지우고 그 자식을 남기면 빈 문단이 그 자식을 가진다. `[p "abcd" 자식 [p "mid" 자식 [code "xyz", p "g2"]]]`에서 `ab` 뒤부터 `xy` 뒤까지 `X\nY`를 붙이면 `p "abX"`의 자식이 `["Yz", 빈 문단 자식 ["g2"]]`다. PM 기본도 같은 빈 문단을 만든다.
   - 한계: 접힌 toggle 안 숨은 codeBlock이 범위에 있는 여러 줄 평문은 시작이 codeBlock 밖이면 직접 삽입이다. 범위 삭제는 #264 결과 그대로 숨은 자손을 지운다.
@@ -487,7 +487,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한 줄 예: 문서 `p "para"`, 1x1 표 `"cell"`, `tail`에서 `<p>a</p><p>b</p>`를 붙이면 셀 끝 캐럿은 `cella`·`hardBreak`·`b`다. 표 뒤 문단은 생기지 않는다. `<ul><li>a</li><li>b</li></ul>`와 `<ol>`도 같다. `<h1>a</h1><p><b>b</b></p>`는 `a`·`hardBreak`·bold `b`다. `<p>a</p><p></p><p>b</p>`와 `<p>a</p><p><br></p><p>b</p>`는 `hardBreak` 하나다. `<p>a</p><p></p>`는 `a`만 남고 표 뒤 빈 문단이 생기지 않는다. `<pre><code>a\nb</code></pre><p>c</p>`는 `a`·`hardBreak`·`b`·`hardBreak`·`c`이고 code 마크가 없다. 셀 중간 캐럿·같은 셀 안 범위·마지막이 아닌 셀·인라인 atom `NodeSelection`도 같은 구조다. 범위와 atom은 선택을 대체한다.
   - 붙여넣기 뒤 selection은 삽입 끝의 `TextSelection`이다. transaction은 하나다. dispatch 1회, undo 1회로 복원된다. `pasteHandler`와 `view.pasteText`를 부르지 않는다.
   - 유지: Ctrl+Shift+V(html을 읽지 않는다, #299·#303), `CellSelection`, 표 밖, 표 경계 범위(#292), 표·TSV 붙여넣기, 셀 조각 붙여넣기. 정정(2026-10-08, Issue #308): `CellSelection`의 서식 있는 html은 같은 평탄화로 첫 셀에 들어간다. 아래 #308 문단이 정한다.
-  - 한계: `CellSelection`의 서식 있는 html은 여전히 사라진다(#308). 정정(2026-10-08, Issue #308): 해소했다. 셀 위 drop은 첫 문단만 셀에 넣고 나머지를 표 뒤 문단으로 만든다(#309). 정정(2026-10-08, Issue #309): 여러 줄 평문 외부 drop은 해소했다. 아래 #309 문단이 정한다. `text/html` 동반 drop은 이전과 같다. `<pre>` 단독은 개행이 공백이 되고 code 마크가 붙은 채 셀에 들어간다(이전과 같다). 내용을 가진 블록이 모두 비어 있는 html(`<p></p><p></p>`)은 이전 경로다. 셀 안 html 붙여넣기마다 `importHtml`이 한 번 더 돈다. 평탄화는 선형이다(문단 32000개 35ms). `importHtml` 자체의 큰 입력 지연은 측정하지 않았다.
+  - 한계: `CellSelection`의 서식 있는 html은 여전히 사라진다(#308). 정정(2026-10-08, Issue #308): 해소했다. 셀 위 drop은 첫 문단만 셀에 넣고 나머지를 표 뒤 문단으로 만든다(#309). 정정(2026-10-08, Issue #309): 여러 줄 평문 외부 drop은 해소했다. 아래 #309 문단이 정한다. `text/html` 동반 drop은 이전과 같다. 정정(2026-10-08, Issue #311): 여러 블록 `text/html` 동반 drop은 해소했다. 아래 #311 문단이 정한다. `<pre>` 단독은 개행이 공백이 되고 code 마크가 붙은 채 셀에 들어간다(이전과 같다). 내용을 가진 블록이 모두 비어 있는 html(`<p></p><p></p>`)은 이전 경로다. 셀 안 html 붙여넣기마다 `importHtml`이 한 번 더 돈다. 평탄화는 선형이다(문단 32000개 35ms). `importHtml` 자체의 큰 입력 지연은 측정하지 않았다.
 
 - CellSelection 서식 있는 html 붙여넣기(정정 2026-10-08, Issue #308). 여러 셀을 고른 상태(`CellSelection`)에서 서식 있는 `text/html`을 붙이면 html 인라인 내용이 선택을 대체한다. 이전에는 prosemirror-tables에 맡겼다. 그 경로는 `cellId`가 없는 셀을 만들었다. `revision-guard-extension.ts`가 문서를 되돌렸다. 붙여넣기가 사라졌다. 목록 html은 `CellSelection` 문맥에서도 셀 조각(`__pastedCells`)으로 판정되어 같은 결과였다.
   - 수정: `planTableCellPaste`가 셀 조각 판정 앞에서 `CellSelection`의 html을 `dispatch` 계획으로 만든다. 판정은 `paste-plan.ts`가 소유하고 실행기는 바꾸지 않았다. 변환은 #304의 `buildCellHtmlInline`이다. 최소 블록 수 인자 1을 넘겨 한 블록 html도 바꾼다. 기본값 2(셀 안 캐럿·범위)는 그대로다. 셀 비우기와 첫 셀 삽입은 #300 평문 경로와 같은 helper다. PM 파싱 slice는 쓰지 않는다.
@@ -508,9 +508,19 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 입력: #285와 같은 drop 직접 삽입 조건이다. `text/html`이 비어 있고 정리한 평문이 둘 이상의 줄이다. 줄은 `normalizePasteText`와 `splitPlainTextLines` 결과다. 무효 문자 정리는 #306과 같다. 줄 경계 규칙은 #299와 같다.
   - 마크: drop 위치의 `$pos.marks()`를 삽입 텍스트와 `hardBreak`에 입힌다. 현재 selection의 마크가 아니다.
   - selection·transaction: 삽입 범위(drop 위치부터 삽입 끝)를 `TextSelection`으로 선택한다. `uiEvent: "drop"`만 달고 `paste` meta는 달지 않는다. drop은 현재 selection을 지우지 않는다. 같은 셀 안의 다른 범위 선택도 그대로다. dispatch 1회, undo 1회로 복원된다. 판정은 live state로 한다.
-  - 유지(PM 기본): 한 줄 평문, `text/html` 동반 drop, 내부 드래그(`view.dragging`), 파일 동반 drop, `posAtCoords`가 `null`인 위치.
+  - 유지(PM 기본): 한 줄 평문, `text/html` 동반 drop, 내부 드래그(`view.dragging`), 파일 동반 drop, `posAtCoords`가 `null`인 위치. 정정(2026-10-08, Issue #311): 여러 블록 `text/html` 동반 drop은 유지가 아니다. 셀에 직접 넣는다.
   - 예: 문서 `p "abcd"`, `code "code"`, 1x1 표 `"cell"`, `tail`에서 `ce|ll` 위치에 `X\nY`를 drop하면 셀은 `ceX`·`hardBreak`·`Yll`이다. 표 뒤 문단은 생기지 않는다. 이전에는 셀이 `ceX`이고 표 뒤에 문단 `Yll`이 생겼다.
-  - 한계: 셀 위 `text/html` 동반 drop은 PM 기본이라 여전히 같은 결함이 있다. 실측(jsdom, 합성 drop): 문단 두 개 html(`<p>H1</p><p>H2</p>`)은 첫 문단만 셀에 들어가고 둘째가 표 뒤 문단이 된다. 목록 html(`<ul><li>a</li><li>b</li></ul>`)은 문서가 바뀌지 않는다(붙여넣기는 셀 안 `a`·`hardBreak`·`b`다). 한 문단 html은 결함이 없다. 후속 이슈가 필요하다. 내부 드래그, 표 경계 위치는 이 문단 밖이다. Chromium은 합성 `DragEvent`로만 측정했다. Firefox·WebKit은 측정하지 않았다.
+  - 한계: 셀 위 `text/html` 동반 drop은 PM 기본이라 여전히 같은 결함이 있다. 정정(2026-10-08, Issue #311): 여러 블록 `text/html` drop은 해소했다. 아래 #311 문단이 정한다. 실측(jsdom, 합성 drop): 문단 두 개 html(`<p>H1</p><p>H2</p>`)은 첫 문단만 셀에 들어가고 둘째가 표 뒤 문단이 된다. 목록 html(`<ul><li>a</li><li>b</li></ul>`)은 문서가 바뀌지 않는다(붙여넣기는 셀 안 `a`·`hardBreak`·`b`다). 한 문단 html은 결함이 없다. 후속 이슈가 필요하다. 내부 드래그, 표 경계 위치는 이 문단 밖이다. Chromium은 합성 `DragEvent`로만 측정했다. Firefox·WebKit은 측정하지 않았다.
+
+- 표 셀 위 여러 블록 html drop(정정 2026-10-08, Issue #311). 표 셀 안 위치에 외부 여러 블록 `text/html`을 drop하면 블록 사이를 `hardBreak`로 이어 그 셀에 넣는다. 이전에는 PM 기본이 첫 블록만 셀에 넣고 나머지를 표 뒤 문단으로 뺐다(문단 셋, `<h1>`+`<p>`). 목록 여러 항목은 PM이 셀 조각으로 오인했다. 되돌림 guard가 drop을 지워 문서가 바뀌지 않았다. 같은 위치 캐럿 붙여넣기(#304)와 문서 결과가 같다.
+  - 수정: `planDrop`이 `text/html`이 있으면 drop 위치를 푼 뒤, 위치가 셀의 인라인 컨텐츠일 때만 `importHtml`과 `buildCellHtmlInline`을 부른다. 변환 helper는 #304 붙여넣기와 같은 `cellInlineFromHtml`이다. `buildCellInlineDropTransaction`은 줄이 아니라 inline `Fragment`를 받는다. 평문 분기(#309)는 호출부에서 줄을 `Fragment`로 바꿔 넘긴다.
+  - 대상: drop 위치의 부모가 `tableCell`이고 인라인 컨텐츠를 가진다. 표 경계(부모가 행 등)·셀 밖·atom 블록·블록 사이는 대상이 아니다. 이전과 같다. 이 위치에서는 `importHtml`을 부르지 않는다. `posAtCoords`는 한 번만 부른다.
+  - 발동 조건: #304와 같다. `importHtml`이 성공한다. 표가 없다. 내용을 가진 블록이 둘 이상이다. 정리한 줄이 하나 이상이다. 하나라도 아니면 이전 경로(정리 분기 또는 PM 기본)로 내려간다.
+  - 마크: html의 마크만 쓴다. drop 위치의 `$pos.marks()`는 입히지 않는다. #304와 같다. 평문 drop(#309)은 위치의 마크를 입힌다. 입력 종류가 달라 규칙이 다르다.
+  - selection·transaction: #309와 같다. 삽입 범위를 `TextSelection`으로 선택한다. `uiEvent: "drop"`만 달고 `paste` meta는 달지 않는다. drop은 현재 selection을 지우지 않는다. dispatch 1회, revision +1, undo 1회다. 판정은 live state로 한다.
+  - 유지(PM 기본): 한 블록 html(한 문단, 한 항목 목록, `<pre>` 단독), 표 포함 html, 표 단독 html, `importHtml` 실패, 내부 드래그(`view.dragging`), 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치.
+  - 예: 문서 `p "abcd"`, `code "code"`, 1x1 표 `"cell"`, `tail`에서 `ce|ll` 위치에 `<p>H1</p><p>H2</p>`를 drop하면 셀은 `ceH1`·`hardBreak`·`H2ll`이다. 목록 `<ul><li>a</li><li>b</li></ul>`은 `cea`·`hardBreak`·`bll`이다. 이전에는 문단 둘이 셀 `ceH1`과 표 뒤 문단 `H2ll`이었고, 목록은 문서가 바뀌지 않았다.
+  - 한계: 표 포함 html(`<p>x</p><table>...</table>`)을 셀 위에 drop하면 문서가 바뀌지 않는다. 발동 조건에서 빠져 PM 기본으로 내려가고, PM 기본의 결과를 되돌림 guard가 지운다. 이번 범위 밖이다. 표 단독 html은 PM 기본이 표 내용을 셀에 합친다. 붙여넣기는 셀을 대체한다. drop은 위치 삽입이라 동작이 다르다. jsdom 합성 drop으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
 
 ## 8. 오류 계약 확장
 
