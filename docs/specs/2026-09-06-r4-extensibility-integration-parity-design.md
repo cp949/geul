@@ -232,7 +232,7 @@ exportMarkdown(document: Document, options?: { customBlockToMarkdown?: Record<st
 ```ts
 // CreateEditorOptions 확장
 commands?: Record<string, (editor: EditorController, ...args: unknown[]) => Result<void, EditorError>>;
-keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>; // true 반환 시 기본 동작 억제
+keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>; // 내장보다 먼저 실행. true 반환 시 내장 동작 억제, false면 내장 이어짐
 ```
 
 raw ProseMirror `Plugin`이나 Tiptap `Extension`을 그대로 등록받는 API는 만들지 않는다(ADR-0002 유지, 2.2). 등록된 command는 별도 `Record` 키 공간에 저장되므로 기존 `EditorController.commands.*`와 이름이 겹쳐도 충돌하지 않는다(단순 객체 키 분리 — 별도 충돌 감지 로직 불필요). 등록된 command가 문서를 바꾸면 §3.1의 `runDocumentCommand` 진입점을 통과하도록 안내(문서화)하되, 강제 래핑은 하지 않는다 — 소비자가 직접 `editor.insertBlocks`/`updateBlock` 등 §3.2 공개 API를 호출하면 자동으로 이 진입점을 통과한다.
