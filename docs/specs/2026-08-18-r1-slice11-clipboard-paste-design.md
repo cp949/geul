@@ -96,6 +96,13 @@ export const parseClipboardTable = (input: {
 
 구현 반영(표 직속 비섹션 자식 보존, Issue #70): 위 무손실 시퀀스 계약은 표 서브트리 **바깥**(형제·조상)의 텍스트만 다뤘다. 표 서브트리 **안쪽**, 즉 `<table>` 직속 자식 중 `thead`/`tbody`/`tfoot`/`tr`/`colgroup`이 아닌 나머지에도 실질 텍스트가 남을 수 있다 — 대표 사례는 `caption`이다. `caption`은 `htmlAllowedTagNames`에 없어 sanitize가 unwrap하고(`sanitize-schema.ts`), 그 텍스트는 `<table>`의 직속 텍스트 노드가 된다. 이 빈틈은 위와 같은 정책(표 밖 문단)으로 흡수한다: `table-layout.ts`의 `tableNonSectionChildren`이 이 노드들을 뽑아내고(텍스트 노드를 포함한 `table.children` 원본을 순회한다 — 요소만 통과하는 `childElements`를 쓰면 unwrap된 caption 텍스트가 걸러져 사라진다), `hasSubstantialText`(같은 파일로 이관, clipboard·import 공유)가 실질 텍스트 여부를 판정한다. clipboard 경로(`clipboard-table-parser.ts`의 `walk()`)는 기존 `pending`을 `flush()`로 먼저 내보낸 뒤 caption을 담아 한 번 더 `flush()`한다 — 그래서 표 앞 기존 문단(intro)과 순서가 뒤바뀌지 않고, caption 텍스트도 `collapseHtmlWhitespace`/`normalizeCellContent`(셀 텍스트와 같은 정규화)를 그대로 거친다. import 경로(`import-html.ts`의 `documentFromRoot`)는 같은 헬퍼로 뽑은 노드에 실질 텍스트가 있으면 `parseTable` 결과 앞에 문단 블록을 삽입한다 — caption→문단 다운그레이드에 `SAFE_BLOCK_DOWNGRADED`류 warning은 붙지 않는다(범위 밖, `import-warnings.ts` 미변경).
 
+구현 반영(표 밖 시퀀스 블록 모양, Issue #315): 위 Issue #71 문단의 "문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다"는 bare 문단 노드를 가리켰다. 그 모양은 틀렸다. `buildSequenceNode`가 문단·heading을 bare 노드로 만들면 `transaction.insert`가 연속한 bare 노드를 앞 컨테이너의 `blockGroup`으로 감싼다. `<p>x</p><p>y</p><table>`은 `x[y, table]`이 됐다. 표 앞뒤 문단·제목이 형제가 아니라 자식으로 중첩됐다.
+
+- 문단·heading은 `blockContainer(blockContent)`로 감싸 만든다. `model-to-tiptap.ts`의 `blockToTiptapJson`과 같은 shape이다. 코드는 공유하지 않는다(id 없는 입력).
+- `blockId`는 비워 둔다. `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다. `createId` 소비 순서와 횟수는 바뀌지 않는다.
+- 표는 `blockContainer`로 감싸지 않는다. 목록 항목은 `listItemToTiptapJson`이 이미 컨테이너를 만든다.
+- 결과: 표 앞뒤 문단·제목이 최상위 형제 블록이다. 캐럿은 첫 표 좌상단 셀이고 undo 1회로 원복된다.
+
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
 `io/html/import-html.ts`의 `parseTable`이 쓰는 hast 트리 순회 로직 중 id 배정과 무관한 부분(`layoutRows`, `inferredColumnCount`, `columnElements`, `tableRows`, `layoutColumnSpan`, `childElements`, `tableNonSectionChildren`, `hasSubstantialText`)을 `packages/io/src/html/table-layout.ts`(신규)로 뽑아 두 소비자가 공유한다:
@@ -262,6 +269,16 @@ addProseMirrorPlugins() {
 - 한계: `pasteHandler`는 codeBlock 안 표 모양 입력에도 호출된다. 표·미디어만 범위 밖이라는 기존 계약에 codeBlock은 없다. 이전에는 표 붙여넣기가 먼저 소비해 호출되지 않았다.
 - 한계: 앱 내부 표 복사는 커스텀 `clipboardTextSerializer`가 없다. 평문이 PM 기본(셀 텍스트 연결)이라 TSV가 아니다. codeBlock 안에 붙이면 셀 텍스트가 이어 붙는다.
 - 한계: 시작이 codeBlock 밖인 범위는 끝이 codeBlock 안이어도 이전처럼 표 붙여넣기가 가로챈다(범위를 지운 뒤 표를 넣는다).
+
+구현 반영(최상위 표 없음 물러남, Issue #315): `NOT_TABULAR`만 기본 붙여넣기로 폴백한다는 위 계약에 한 가지가 더해진다. `parseClipboardTable`이 성공했어도 결과에 최상위 `type === "table"` 블록이 없으면 `handlePaste`가 `false`로 물러난다. 목록 항목 children 안에만 표가 있는 html이 이 경우다(`<ul><li><table>…</table></li><li>hello</li></ul>`).
+
+- 이전에는 표 밖 시퀀스가 옮길 첫 표를 찾지 못해 `PASTE_TARGET_NOT_FOUND`로 거절했다. 붙여넣기가 사라졌다.
+- 물러남은 거절이 아니다. `onPasteRejected`를 부르지 않는다. dispatch 전이라 원자성(G-EDT-001)이 유지된다.
+- 그 뒤 처리는 `ClipboardPasteExtension`의 `importHtml` 경로가 맡는다. 목록 항목 children 안의 표를 보존한다. 첫 목록 항목의 자식으로 표가, 둘째 항목으로 `hello`가 들어간다.
+- 표 셀 안 캐럿에서도 `PASTE_TARGET_NOT_FOUND`와 `onPasteRejected` 통지는 나오지 않는다. 표 안 분기의 `PASTE_TARGET_NOT_FOUND`는 `pasteClipboardContent`를 직접 호출하는 경로에만 남는다.
+- 한계: 표 셀 안 캐럿에서 목록 안 표가 든 html은 붙지 않는다. 셀 붙여넣기 계획(`cellInlineFromHtml`)이 표가 든 html을 위임하고 PM 기본 slice는 되돌림 guard가 지운다. 거절 통지 없이 문서가 그대로다. `CellSelection`은 셀 텍스트로 들어간다.
+- 최상위 표가 있는 입력(표 단독, 문단 하나와 표 하나, 표 둘 이상)은 이전과 같다.
+- 한계: 캐럿을 목록 항목 안 표로 옮기지 않는다. `importHtml` 경로의 기존 캐럿 규칙을 따른다.
 
 ## 8. 오류 계약 확장
 

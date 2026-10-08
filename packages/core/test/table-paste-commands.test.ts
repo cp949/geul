@@ -623,6 +623,26 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
+  // Issue #315: TablePasteExtension은 최상위 표가 없으면 물러나지만 명령을
+  // 직접 부르는 경로는 여전히 이 거절에 닿는다.
+  it("최상위 표가 없는 시퀀스는 PASTE_TARGET_NOT_FOUND로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [{ type: "paragraph", content: [{ text: "x" }] }],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: "PASTE_TARGET_NOT_FOUND" },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
   it("표 안에서 표 2개가 섞인 시퀀스는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");

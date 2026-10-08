@@ -130,9 +130,11 @@ const pasteOutOfTable = (
   const { nodes, firstTable } = sequence.value;
 
   if (firstTable === null) {
-    // parseClipboardTable은 표를 하나도 못 찾으면 이 시퀀스를 만들지
-    // 않는다 — 여기 도달하는 유일한 길은 파서를 거치지 않고 직접 구성한
-    // 순수 문단 ClipboardContent다. 반환할 blockId가 없으므로 거절한다.
+    // 최상위 표가 없는 시퀀스다. 반환할 blockId와 캐럿을 옮길 표가 없어
+    // 거절한다. TablePasteExtension은 최상위 표가 없는 파서 결과에서 먼저
+    // 물러나므로(Issue #315) 확장 경로는 여기 오지 않는다. 도달 경로는
+    // pasteClipboardContent를 직접 호출하는 경우다. 예: 목록 항목 children
+    // 안에만 표가 있는 시퀀스, 직접 구성한 순수 문단 ClipboardContent.
     return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
   }
 
@@ -357,6 +359,8 @@ export const pasteClipboardContent = (
       };
     }
 
+    // 최상위 표가 없으면 병합할 표가 없다. TablePasteExtension은 이 경우
+    // 먼저 물러나므로(Issue #315) 확장 경로는 여기 오지 않는다.
     const tableIndex = content.findIndex((entry) => entry.type === "table");
     const tableBlock = content[tableIndex];
     if (tableIndex === -1 || tableBlock?.type !== "table") {

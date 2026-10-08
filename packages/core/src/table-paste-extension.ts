@@ -31,6 +31,12 @@ export type TablePasteOptions = {
 // 물러남은 거절이 아니라 onPasteRejected를 부르지 않는다. 그 뒤 처리는
 // ClipboardPasteExtension의 codeBlock 분기가 맡는다(Issue #296).
 //
+// 파싱은 성공했어도 최상위에 table 블록이 없으면 false로 물러난다
+// (Issue #315). 목록 항목 children 안에만 표가 있는 html이다. 표 밖 시퀀스는
+// 첫 최상위 표 안으로 캐럿을 옮기는데, 옮길 표가 없어 PASTE_TARGET_NOT_FOUND로
+// 거절돼 붙여넣기가 사라졌다. 물러남은 거절이 아니라 onPasteRejected를 부르지
+// 않는다. 그 뒤 처리는 ClipboardPasteExtension의 importHtml 경로가 맡는다.
+//
 // onPasteRejected는 두 거절 경로(파서·명령) 모두에서 호출되는 읽기 전용
 // 알림이다 — 어떤 transaction도 dispatch하지 않아 위 원자성 계약과
 // 충돌하지 않는다. NOT_TABULAR(기본 붙여넣기 폴백)에서는 호출하지 않는다
@@ -70,6 +76,10 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
               if (parsed.error.code === "NOT_TABULAR") return false;
               onPasteRejected?.(parsed.error);
               return true;
+            }
+
+            if (!parsed.value.some((block) => block.type === "table")) {
+              return false;
             }
 
             const result = pasteClipboardContent(

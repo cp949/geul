@@ -55,9 +55,11 @@ const buildFilledTableBlock = (
 // 조립한다(DELTA-02, Issue #143 (b)). table은 model-to-tiptap.ts의
 // blockToTiptapJson과 같은 원칙으로 container 없이 직결한다
 // (ClipboardContentBlock union에 divider는 없어 그 분기는 없다).
-// paragraph/heading은 최상위 buildSequenceNode와 달리(bare + appendTransaction
-// 사후 배정) 여기서는 항상 blockContainer로 감싼다 — blockGroup의 스키마
+// paragraph/heading은 항상 blockContainer로 감싼다 — blockGroup의 스키마
 // content("block+")가 bare nestableBlockContent를 허용하지 않는다.
+// blockId는 listItemToTiptapJson과 같은 관례로 바로 배정한다. 최상위
+// buildSequenceNode는 같은 모양으로 감싸되 blockId를 appendTransaction의
+// 사후 배정에 맡긴다.
 const listChildToTiptapJson = (
   block: ClipboardContentBlock,
   createId: IdFactory,
@@ -135,14 +137,16 @@ const listItemToTiptapJson = (
   };
 };
 
-// 클립보드 시퀀스의 블록 하나를 노드로 바꾼다. 문단/heading은 인라인
-// 콘텐츠만 옮기고, 표는 buildFilledTableBlock으로 채운 TableBlock을
-// 인코딩한다 — pasteTabularData(table-commands.ts)의 표 밖 분기와 같은
-// 조립 순서다. 목록 항목(bulletListItem/numberedListItem)은
-// listItemToTiptapJson으로 blockContainer/blockGroup 트리를 완전히
-// 조립한다(DELTA-02, Issue #143 (b)) — table은 firstTable로 앞서 반환하지만
-// 목록 항목 children 안에 중첩된 표는 이 추적 대상이 아니다(최상위 시퀀스의
-// 첫 표만 추적하는 기존 범위, DELTA-02 범위 밖).
+// 클립보드 시퀀스의 블록 하나를 노드로 바꾼다.
+// - 문단/heading: 인라인 콘텐츠만 옮겨 blockContainer(blockContent)로 감싼다.
+// - 표: buildFilledTableBlock으로 채운 TableBlock을 인코딩한다. container로
+//   감싸지 않는다. pasteTabularData(table-commands.ts)의 표 밖 분기와 같은
+//   조립 순서다.
+// - 목록 항목(bulletListItem/numberedListItem): listItemToTiptapJson으로
+//   blockContainer/blockGroup 트리를 완전히 조립한다(DELTA-02, Issue #143 (b)).
+// table은 firstTable로 앞서 반환한다. 목록 항목 children 안에 중첩된 표는
+// 이 추적 대상이 아니다(최상위 시퀀스의 첫 표만 추적하는 기존 범위,
+// DELTA-02 범위 밖).
 const buildSequenceNode = (
   schema: Schema,
   block: ClipboardContentBlock,
@@ -151,22 +155,23 @@ const buildSequenceNode = (
   { node: ProseMirrorNode; table: TableBlock | null },
   TableCommandError
 > => {
-  if (block.type === "paragraph") {
-    // blockId 없이 만든다 — BlockIdExtension.appendTransaction이 같은
-    // dispatch 안에서 사후 배정한다(buildOutOfTableSequence 호출자의 필러
-    // 문단 처리와 같은 확립된 패턴).
+  if (block.type === "paragraph" || block.type === "heading") {
+    // blockContainer로 감싼다. bare 노드를 연달아 삽입하면 PM이 뒤 노드를
+    // 앞 컨테이너의 blockGroup으로 감싸 형제 블록이 자식으로 중첩된다
+    // (Issue #315). blockId는 비워 둔다 — BlockIdExtension.appendTransaction이
+    // 같은 dispatch 안에서 사후 배정한다(buildOutOfTableSequence 호출자의
+    // 필러 문단 처리와 같은 확립된 패턴). createId는 소비하지 않는다.
     const node = schema.nodeFromJSON({
-      type: "paragraph",
-      content: inlineContentToTiptap(block.content),
-    });
-    return { ok: true, value: { node, table: null } };
-  }
-
-  if (block.type === "heading") {
-    const node = schema.nodeFromJSON({
-      type: "heading",
-      attrs: { level: block.level },
-      content: inlineContentToTiptap(block.content),
+      type: "blockContainer",
+      content: [
+        {
+          type: block.type,
+          ...(block.type === "heading"
+            ? { attrs: { level: block.level } }
+            : {}),
+          content: inlineContentToTiptap(block.content),
+        },
+      ],
     });
     return { ok: true, value: { node, table: null } };
   }

@@ -73,7 +73,8 @@ describe("buildOutOfTableSequence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("조립 실패");
     expect(result.value.nodes).toHaveLength(1);
-    expect(result.value.nodes[0]?.type.name).toBe("paragraph");
+    expect(result.value.nodes[0]?.type.name).toBe("blockContainer");
+    expect(result.value.nodes[0]?.child(0).type.name).toBe("paragraph");
     expect(result.value.nodes[0]?.textContent).toBe("hello");
     expect(result.value.firstTable).toBeNull();
   });
@@ -87,8 +88,9 @@ describe("buildOutOfTableSequence", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("조립 실패");
-    expect(result.value.nodes[0]?.type.name).toBe("heading");
-    expect(result.value.nodes[0]?.attrs.level).toBe(2);
+    expect(result.value.nodes[0]?.type.name).toBe("blockContainer");
+    expect(result.value.nodes[0]?.child(0).type.name).toBe("heading");
+    expect(result.value.nodes[0]?.child(0).attrs.level).toBe(2);
   });
 
   it("문단+표+문단 순서에서 firstTable.offset은 앞선 문단의 nodeSize다", () => {
@@ -101,11 +103,14 @@ describe("buildOutOfTableSequence", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("조립 실패");
     const { nodes, firstTable } = result.value;
-    expect(nodes.map((node) => node.type.name)).toEqual([
-      "paragraph",
-      "table",
-      "paragraph",
-    ]);
+    // 문단은 blockContainer로 감싸이고 표는 감싸이지 않는다.
+    expect(
+      nodes.map((node) =>
+        node.type.name === "blockContainer"
+          ? node.child(0).type.name
+          : node.type.name,
+      ),
+    ).toEqual(["paragraph", "table", "paragraph"]);
     expect(firstTable).not.toBeNull();
     expect(firstTable?.offset).toBe(nodes[0]?.nodeSize);
     expect(firstTable?.node).toBe(nodes[1]);
@@ -115,6 +120,65 @@ describe("buildOutOfTableSequence", () => {
           Extract<InlineContentItem, { text: string }> | undefined
       )?.text,
     ).toBe("A");
+  });
+
+  // Issue #315: bare 문단·heading을 연달아 삽입하면 PM이 뒤 노드를 앞
+  // 컨테이너의 blockGroup으로 감싼다 — 처음부터 blockContainer로 만든다.
+  it("문단과 heading은 blockId 없는 blockContainer(blockContent)로 조립된다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [paragraphBlock("p"), headingBlock("h", 3), tableBlock("A")],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const [p, h, t] = result.value.nodes;
+    for (const [container, inner] of [
+      [p, "paragraph"],
+      [h, "heading"],
+    ] as const) {
+      expect(container?.type.name).toBe("blockContainer");
+      expect(container?.childCount).toBe(1);
+      expect(container?.child(0).type.name).toBe(inner);
+      // blockId는 BlockIdExtension.appendTransaction이 사후 배정한다.
+      expect(container?.attrs.blockId).toBeFalsy();
+    }
+    expect(h?.child(0).attrs.level).toBe(3);
+    expect(t?.type.name).toBe("table");
+  });
+
+  it("문단과 heading은 createId를 소비하지 않는다", () => {
+    let consumed = 0;
+    const countingIds = () => {
+      consumed += 1;
+      return `id-${consumed}`;
+    };
+
+    const result = buildOutOfTableSequence(
+      schema,
+      [paragraphBlock("p"), headingBlock("h", 1), paragraphBlock("q")],
+      countingIds,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(consumed).toBe(0);
+  });
+
+  it("표 앞뒤 문단이 있어도 createId 소비 횟수는 표 단독과 같다", () => {
+    const consumedBy = (blocks: ClipboardContentBlock[]): number => {
+      let consumed = 0;
+      const result = buildOutOfTableSequence(schema, blocks, () => {
+        consumed += 1;
+        return `id-${consumed}`;
+      });
+      expect(result.ok).toBe(true);
+      return consumed;
+    };
+
+    expect(
+      consumedBy([paragraphBlock("a"), tableBlock("A"), paragraphBlock("b")]),
+    ).toBe(consumedBy([tableBlock("A")]));
   });
 
   it("표가 시퀀스 첫 원소면 firstTable.offset은 0이다", () => {

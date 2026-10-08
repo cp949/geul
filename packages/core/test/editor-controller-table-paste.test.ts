@@ -5,9 +5,12 @@
  * 보존하는지, pasteTabularData의 성공·거절 원인 전달을 다룬다. 파서 거절과
  * 명령 거절 각각에서 onPasteRejected 콜백이 원인을 전달하는지,
  * NOT_TABULAR(폴백 경로)에서는 호출되지 않는지도 다룬다(Issue #36).
+ * 표 밖 시퀀스의 문단·제목이 최상위 형제로 들어가는지, 최상위 표가 없는
+ * 입력이 importHtml 경로로 물러나는지도 다룬다(Issue #315).
  */
 import type { TabularData } from "@cp949/geul-io";
 import type {
+  DocumentBlock,
   InlineContentItem,
   ParagraphBlock,
   TableBlock,
@@ -20,16 +23,22 @@ import {
   editorWithTable,
   firstTableBlockIn,
   mountTiptapEditor,
+  paragraphBlock,
   paragraphDocument,
   sequentialIds,
   tableBlockOf,
 } from "./editor-controller-support.js";
 import {
+  activeCellId,
   findCellBoundaryPosition,
   placeCaretInCell,
   selectCellRange,
 } from "./table-test-support.js";
-import { pasteData } from "./clipboard-test-support.js";
+import {
+  outline,
+  pasteData,
+  setupPasteSelection,
+} from "./clipboard-test-support.js";
 
 describe("에디터 컨트롤러 표", () => {
   it("마운트된 표는 colgroup col로 모델 열 너비를 렌더하고 리사이즈를 반영한다", () => {
@@ -590,5 +599,180 @@ describe("에디터 컨트롤러 표", () => {
     expect(rejections).toEqual([]);
 
     editor.destroy();
+  });
+
+  // Issue #315: 문단·제목을 bare 노드로 만들면 PM이 연속 bare 노드를 앞
+  // 컨테이너의 blockGroup으로 감싸 형제 블록이 자식으로 중첩됐다.
+  describe("표 밖 시퀀스의 블록 모양 (Issue #315)", () => {
+    const tableHtml = "<table><tbody><tr><td>a</td></tr></tbody></table>";
+
+    // 문서는 문단 first, last이고 캐럿은 last 끝이다.
+    const setup = (overrides: Parameters<typeof setupPasteSelection>[3] = {}) =>
+      setupPasteSelection(
+        [paragraphBlock("first", "first"), paragraphBlock("last", "last")],
+        { id: "last", offset: 4 },
+        undefined,
+        overrides,
+      );
+
+    const collectIds = (blocks: readonly DocumentBlock[]): string[] =>
+      blocks.flatMap((block) => [
+        block.id,
+        ...("children" in block && block.children !== undefined
+          ? collectIds(block.children)
+          : []),
+      ]);
+
+    it("문단 둘과 표를 붙여넣으면 앞 문단이 자식을 갖지 않고 형제로 들어간다", () => {
+      const { editor, editable } = setup();
+
+      pasteData(editable, {
+        "text/html": `<p>x</p><p>y</p>${tableHtml}`,
+        "text/plain": "x\ny\na",
+      });
+
+      expect(outline(editor.getDocument().blocks)).toEqual([
+        "p:first",
+        "p:last",
+        "p:x",
+        "p:y",
+        "table:",
+        // 마지막 블록이 문단이 아니면 trailing 빈 문단이 따라붙는다(UI-010).
+        "p:",
+      ]);
+
+      editor.destroy();
+    });
+
+    it("제목과 문단이 표 앞뒤에 섞여도 형제 네 개로 들어간다", () => {
+      const { editor, editable } = setup();
+
+      pasteData(editable, {
+        "text/html": `<h2>Title</h2><p>Intro</p>${tableHtml}<p>Outro</p>`,
+        "text/plain": "Title\nIntro\na\nOutro",
+      });
+
+      expect(outline(editor.getDocument().blocks).slice(2)).toEqual([
+        "h2:Title",
+        "p:Intro",
+        "table:",
+        "p:Outro",
+      ]);
+
+      editor.destroy();
+    });
+
+    it("표 뒤 문단 둘이 서로 형제다", () => {
+      const { editor, editable } = setup();
+
+      pasteData(editable, {
+        "text/html": `<p>A</p>${tableHtml}<p>B</p><p>C</p>`,
+        "text/plain": "A\na\nB\nC",
+      });
+
+      expect(outline(editor.getDocument().blocks).slice(2)).toEqual([
+        "p:A",
+        "table:",
+        "p:B",
+        "p:C",
+      ]);
+
+      editor.destroy();
+    });
+
+    it("편집기 안 복사 래퍼의 문단 여럿과 표도 자식 중첩 없이 들어간다", () => {
+      const { editor, editable } = setup();
+
+      pasteData(editable, {
+        "text/html":
+          '<div data-pm-slice="1 1 []"><p>one</p><p>two</p>' +
+          `${tableHtml}<p>three</p></div>`,
+        "text/plain": "one\ntwo\na\nthree",
+      });
+
+      expect(outline(editor.getDocument().blocks).slice(2)).toEqual([
+        "p:one",
+        "p:two",
+        "table:",
+        "p:three",
+      ]);
+
+      editor.destroy();
+    });
+
+    it("붙여넣기 뒤 캐럿이 첫 표 좌상단 셀 안이고 undo 1회로 원복되며 blockId가 겹치지 않는다", () => {
+      const { editor, editable, tiptap } = setup();
+      const before = editor.getDocument();
+
+      pasteData(editable, {
+        "text/html": `<p>x</p><p>y</p>${tableHtml}`,
+        "text/plain": "x\ny\na",
+      });
+
+      const after = editor.getDocument();
+      const table = firstTableBlockIn(after);
+      expect(activeCellId(tiptap)).toBe(table.rows[0]?.cells[0]?.id);
+      const ids = collectIds(after.blocks);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editor.getDocument().blocks).toEqual(before.blocks);
+
+      editor.destroy();
+    });
+
+    it("최상위 표 없이 목록 항목 안에만 표가 있어도 거절 없이 목록 항목 자식으로 들어간다", () => {
+      const rejections: unknown[] = [];
+      const { editor, editable } = setup({
+        onPasteRejected: (reason) => rejections.push(reason),
+      });
+
+      pasteData(editable, {
+        "text/html": `<ul><li>${tableHtml}</li><li>hello</li></ul>`,
+        "text/plain": "a\nhello",
+      });
+
+      expect(rejections).toEqual([]);
+      expect(outline(editor.getDocument().blocks).slice(2)).toEqual([
+        "ul:[table:]",
+        "ul:hello",
+        "p:",
+      ]);
+
+      editor.destroy();
+    });
+
+    // 한계: 물러난 뒤 셀 붙여넣기 계획이 표가 든 html을 위임하고, PM 기본
+    // slice는 되돌림 guard가 지운다. 거절 통지 없이 문서가 그대로다.
+    it("표 셀 안 캐럿에서 최상위 표 없는 html을 붙이면 PASTE_TARGET_NOT_FOUND 없이 문서가 바뀌지 않는다", () => {
+      const rejections: unknown[] = [];
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("id"),
+        onPasteRejected: (reason) => rejections.push(reason),
+      });
+      const mounted = mountTiptapEditor(editor);
+      const inserted = editor.commands.insertTable("block-1", {
+        rows: 1,
+        columns: 1,
+      });
+      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+      const cellId = tableBlockOf(editor).rows[0]?.cells[0]?.id;
+      if (cellId === undefined) throw new Error("셀 fixture 준비 실패");
+      placeCaretInCell(mounted.tiptap, cellId);
+      mounted.editable.focus();
+
+      const before = editor.getDocument().blocks;
+
+      pasteData(mounted.editable, {
+        "text/html": `<ul><li>${tableHtml}</li><li>hello</li></ul>`,
+        "text/plain": "a\nhello",
+      });
+
+      expect(rejections).toEqual([]);
+      expect(editor.getDocument().blocks).toEqual(before);
+
+      editor.destroy();
+    });
   });
 });
