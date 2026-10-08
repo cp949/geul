@@ -782,9 +782,9 @@ export const createProductionEditor = (options: {
         validateDocument: (doc) =>
           loadNormalizing || options.validateDocumentStructure(doc),
       }),
-      // 배열 맨 끝(roadmap.md "결정") — 선언 역순 keymap 우선순위(위
-      // ClipboardPasteExtension 주석 참고)로 등록된 keyboardShortcuts가
-      // 내장 키 9개보다 항상 먼저 시도된다.
+      // 순서는 배열 위치가 아니라 priority가 정한다(Issue #307). 등록된
+      // keyboardShortcuts는 CUSTOM_KEYBOARD_SHORTCUTS_PRIORITY(10_000)로
+      // 내장 확장보다 먼저 시도된다. 배열 맨 끝 위치는 관례로 둔다.
       ...(options.keyboardShortcuts === undefined
         ? []
         : [

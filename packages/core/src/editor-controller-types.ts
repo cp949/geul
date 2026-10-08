@@ -232,15 +232,23 @@ export type CreateEditorOptions = {
     string,
     (editor: EditorController, ...args: unknown[]) => Result<void, EditorError>
   >;
-  // spec §5(EXT-005), RD-002-DELTA-01 — 등록된 함수는 내장 keyboard
-  // shortcut 9개(block-join/move/split/type-keyboard, code-block-exit/
-  // mark-guard, indent-keyboard, list-input-rule, table-keyboard)와 겹쳐도
-  // 항상 우선한다(roadmap.md "결정" — CustomKeyboardShortcutsExtension을
-  // extensions 배열 끝에 두어 Tiptap 3.30.1의 선언 역순 keymap 우선순위를
-  // 이용한다). 겹치는 키는 등록 시 console.warn으로 알리되 등록을 막지
-  // 않는다. `false`를 반환하면 ProseMirror keymap 표준 폴스루로 내장
-  // shortcut이 이어서 실행된다. raw PM Plugin/Tiptap Extension은 노출하지
-  // 않는다(ADR-0002).
+  // spec §5(EXT-005), RD-002-DELTA-01, Issue #307 — 등록한 handler는
+  // 내장 keyboard shortcut보다 먼저 실행된다.
+  // - `true`를 반환하면 내장 동작을 건너뛴다. 표 경계·codeBlock 보호도
+  //   건너뛴다.
+  // - `false`를 반환하면 ProseMirror keymap 표준 폴스루로 내장 shortcut이
+  //   이어진다.
+  // - 내장 키와 겹치는 키는 등록 시 console.warn으로 알린다. 등록은
+  //   막지 않는다.
+  // 한계:
+  // - 편집기 DOM에 도달한 keydown의 keymap 단계 기준이다. 툴바 등 편집기
+  //   밖에서 눌린 undo/redo fallback(history-keydown-fallback, beforeinput
+  //   historyUndo)과 열린 SlashMenu·EmojiPicker의 캡처 리스너는 이 계약
+  //   밖이다.
+  // - 조합 중(IME)·읽기 전용 상태의 keydown은 호출되지 않는다.
+  // - 키 표기가 다르면(`Mod-Shift-z` vs `Shift-Mod-z`) 겹침 경고가 나지
+  //   않을 수 있다. 동작은 같다.
+  // raw PM Plugin/Tiptap Extension은 노출하지 않는다(ADR-0002).
   keyboardShortcuts?: Record<string, (editor: EditorController) => boolean>;
   // spec §7(EXT-008), R4 슬라이스5 RD-002-DELTA-01 — DOM 역할별 전역 정적
   // attribute 주입(roadmap.md "결정" — BlockNote의 domAttributes/block 이름을
