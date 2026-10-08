@@ -18,7 +18,8 @@
  * - F1·F2·F4 개행·공백뿐인 문단 접기, 줄 1개만 남는 html, 마크 정규화
  *   (Issue #304 리뷰)
  * - H13 dispatch 1회·undo 1회·삽입 끝 캐럿·pasteHandler 미호출
- * - H14 서식 없이 붙여넣기·표 밖·셀 위 drop은 이전과 같음. CellSelection은
+ * - H14 서식 없이 붙여넣기·표 밖은 이전과 같음. 셀 위 drop은 Issue #311이
+ *   정정(planDrop이 같은 평탄화로 셀에 넣음). CellSelection은
  *   Issue #308이 정정(같은 평탄화로 첫 셀에 넣음)
  *
  * 셀 결과는 모델 요약(outline)과 PM 셀 노드의 자식 종류(text·hardBreak)를
@@ -541,8 +542,10 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       ]);
     });
 
-    // 셀 위 drop은 #309가 소유한다. 지금은 이전 결과를 유지한다.
-    it("셀 위 drop은 이 분기를 타지 않는다", () => {
+    // 셀 위 drop은 붙여넣기 계획을 타지 않고 planDrop이 소유한다. 여러 블록
+    // html drop은 Issue #311이 같은 평탄화로 셀에 넣는다. 전에는 첫 문단만
+    // 셀에 넣고 나머지를 표 뒤 문단으로 뺐다.
+    it("셀 위 drop은 붙여넣기 계획이 아니라 planDrop이 같은 평탄화로 처리한다(Issue #311)", () => {
       const m = mounted(documentOf(...lastCellBlocks()));
       textSelection(inCell("t-r0c0", 2))(m.tiptap);
       m.tiptap.view.posAtCoords = () => ({
@@ -558,7 +561,7 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       );
 
       expect(outline(m.editor.getDocument().blocks)).toEqual(
-        docOutline("table[cella]", "paragraph:b"),
+        docOutline("table[cella\nb]"),
       );
     });
   });
