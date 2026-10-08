@@ -8,6 +8,7 @@ import {
   type Schema,
 } from "@tiptap/pm/model";
 import {
+  NodeSelection,
   TextSelection,
   type EditorState,
   type Transaction,
@@ -27,13 +28,15 @@ import { textToHardBreakInline } from "./code-block-inline-text.js";
 //   쓴다. 줄 사이를 Enter 분할(splitAtCaret)로 잇는다. 배치는 Enter와 같다.
 //   자식 없음 → 다음 형제, 자식 있음 → 첫 자식(D23), 접힌 toggle → 형제(#252).
 //   drop은 `position` 옵션으로 drop 위치에 놓는다. selection은 지우지 않는다.
+//   인라인 atom NodeSelection은 atom을 지우고 그 자리 캐럿에서 잇는다.
 // - clipboardTextParser(plainTextClipboardParser): 두 입력을 받는다.
 //   - 여러 줄. 직접 삽입이 물러나는 경로가 쓴다. 대상은 직접 삽입을 못 하는
-//     입력이다(NodeSelection, 시작이 codeBlock 안인 범위, 직접 삽입이 줄을 못
-//     놓는 위치). 줄마다 blockContainer를 만든 slice를 돌려준다. 자식 있는
-//     블록의 D23 배치는 이 경로로 만들 수 없다. PM Fitter가 꼬리 텍스트를
-//     가르면서 기존 blockGroup을 함께 옮기기 때문이다. 한계는 r2 스펙 7.3이
-//     소유한다.
+//     입력이다(블록 NodeSelection·AllSelection·CellSelection, 시작이
+//     codeBlock 안인 범위, 직접 삽입이 줄을 못 놓는 위치). 인라인 atom
+//     NodeSelection은 직접 삽입이 받는다(Issue #314). 줄마다 blockContainer를
+//     만든 slice를 돌려준다. 자식 있는 블록의 D23 배치는 이 경로로 만들 수
+//     없다. PM Fitter가 꼬리 텍스트를 가르면서 기존 blockGroup을 함께
+//     옮기기 때문이다. 한계는 r2 스펙 7.3이 소유한다.
 //   - 한 줄(Issue #310). 캐럿 마크를 입힌 paragraph 하나를 돌려준다. PM 기본은
 //     마크를 DOM 직렬화·재파싱으로 옮긴다. 파싱 규칙이 없는 마크(textColor·
 //     backgroundColor)는 이 왕복에서 빠진다.
@@ -156,6 +159,10 @@ export type PlainMultilinePasteOptions = {
 // 범위 선택 삭제는 Enter(splitBlockContainer)와 같은 tr.deleteSelection이다.
 // codeBlock에 걸친 범위는 시작이 codeBlock 밖일 때만 받는다. 호출부가 그
 // 조건을 거른다.
+//
+// 받는 selection은 TextSelection과 인라인 atom NodeSelection이다(Issue #314).
+// 인라인 atom은 지운 뒤 그 자리 캐럿에서 잇는다. 블록 NodeSelection·
+// AllSelection·CellSelection은 null이다.
 export const buildPlainMultilinePasteTransaction = (
   state: EditorState,
   lines: readonly string[],
@@ -174,11 +181,22 @@ export const buildPlainMultilinePasteTransaction = (
     marks = $position.marks();
     tr.setSelection(TextSelection.create(tr.doc, options.position));
   } else {
-    // TextSelection만 다룬다. NodeSelection·AllSelection·CellSelection은 PM
-    // 기본 처리에 맡긴다.
-    if (!(state.selection instanceof TextSelection)) return null;
-    marks = state.selection.$from.marks();
-    if (!tr.selection.empty) tr.deleteSelection();
+    // TextSelection과 인라인 atom NodeSelection만 다룬다. 블록 NodeSelection·
+    // AllSelection·CellSelection은 PM 기본 처리에 맡긴다.
+    const { selection } = state;
+    if (selection instanceof TextSelection) {
+      marks = selection.$from.marks();
+      if (!tr.selection.empty) tr.deleteSelection();
+    } else if (selection instanceof NodeSelection && selection.node.isInline) {
+      // 마크는 atom을 지운 뒤 캐럿 기준이다. 지우기 전 $from.marks()는 문단
+      // 시작에서 nodeAfter(atom)의 마크를 물려받는다. 대체로 사라질 atom의
+      // 마크라 붙여넣은 텍스트에 이어지면 안 된다. deleteSelection은 삭제 뒤
+      // selection을 그 자리 TextSelection으로 둔다.
+      tr.deleteSelection();
+      marks = tr.selection.$from.marks();
+    } else {
+      return null;
+    }
   }
 
   for (const [index, line] of lines.entries()) {

@@ -670,8 +670,9 @@ export const planDefaultPaste = (
   // (Issue #284). PM 기본 처리는 줄마다 문단 slice를 만들어 캐럿
   // 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 입력은 위에서
   // 정규화한 text다 — 무효 문자 처리는 아래 분기와 같은 결과다.
-  // 직접 배치할 수 없으면(NodeSelection 등) tr을 버리고 아래
-  // 기존 분기로 내려간다. 코드블록에 걸친 범위는
+  // 직접 배치할 수 없으면(블록 NodeSelection·AllSelection 등) tr을
+  // 버리고 아래 기존 분기로 내려간다. 인라인 atom NodeSelection은
+  // 직접 배치한다(Issue #314). 코드블록에 걸친 범위는
   // 위 분기가 이미 처리했다.
   const lines = splitPlainTextLines(text);
   if (lines.length >= 2) {
