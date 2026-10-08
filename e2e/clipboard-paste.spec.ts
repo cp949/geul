@@ -37,7 +37,9 @@
  * 전용)과, 범위 끝 뒤에 자식이 남는 codeBlock 걸친 범위에 평문을 붙이는 행이다.
  * 위치 위임 조건·마크·selection·transaction 계약은 core 단위 테스트
  * (`clipboard-drop-plain-multiline.test.ts`,
- * `clipboard-paste-code-block-range.test.ts`)가 소유한다.
+ * `clipboard-paste-code-block-range.test.ts`)가 소유한다. 표 셀 텍스트 위
+ * 여러 줄 평문 drop이 셀 안 hardBreak로 들어가는 행(Issue #309, chromium
+ * 전용)도 있다. 좌표가 실제로 셀 안 위치로 풀리는지는 이 행이 확인한다.
  *
  * text/html이 블록을 만들지 못할 때의 평문 폴백(Issue #287)은 맨 아래 두
  * 테스트가 확인한다 — 캐럿과 codeBlock에 걸친 범위(시작이 codeBlock 밖)다.
@@ -232,25 +234,24 @@ test("Ctrl+Shift+V로 여러 줄 평문을 붙여도 같은 배치이고 undo 1�
   expect(await exportedBlocks(page)).toEqual(abcdBlocks);
 });
 
-// p1 문단의 "ab" 뒤 좌표에 text/plain drop 이벤트를 직접 보낸다. 실제 OS
-// 드래그 없이 DragEvent를 보내므로 chromium 전용이다. "c" 글자 왼쪽 경계의
-// 화면 좌표를 잰다.
-const dropPlainAfterAb = async (
+// host 요소의 첫 텍스트 노드 offset 글자 왼쪽 경계 좌표에 text/plain drop
+// 이벤트를 직접 보낸다. 실제 OS 드래그 없이 DragEvent를 보내므로 chromium
+// 전용이다.
+const dropPlainAtOffset = async (
   editable: Locator,
+  host: Locator,
+  offset: number,
   text: string,
 ): Promise<void> => {
-  // 자식이 있으면 p1 컨테이너 안에 문단이 여럿이라 첫 문단(p1 자신)을 고른다.
-  const paragraph = editable.locator('[data-geul-block-id="p1"] p').first();
-  await expect(paragraph).toHaveText("abcd");
-  const point = await paragraph.evaluate((element) => {
+  const point = await host.evaluate((element, at) => {
     const textNode = element.firstChild;
-    if (textNode === null) throw new Error("문단 텍스트 노드가 없다");
+    if (textNode === null) throw new Error("텍스트 노드가 없다");
     const range = document.createRange();
-    range.setStart(textNode, 2);
-    range.setEnd(textNode, 3);
+    range.setStart(textNode, at);
+    range.setEnd(textNode, at + 1);
     const rect = range.getBoundingClientRect();
     return { x: rect.left + 1, y: rect.top + rect.height / 2 };
-  });
+  }, offset);
 
   await editable.evaluate(
     (target, input) => {
@@ -268,6 +269,18 @@ const dropPlainAfterAb = async (
     },
     { text, x: point.x, y: point.y },
   );
+};
+
+// p1 문단의 "ab" 뒤 좌표에 text/plain drop 이벤트를 보낸다. "c" 글자 왼쪽
+// 경계의 화면 좌표를 잰다.
+const dropPlainAfterAb = async (
+  editable: Locator,
+  text: string,
+): Promise<void> => {
+  // 자식이 있으면 p1 컨테이너 안에 문단이 여럿이라 첫 문단(p1 자신)을 고른다.
+  const paragraph = editable.locator('[data-geul-block-id="p1"] p').first();
+  await expect(paragraph).toHaveText("abcd");
+  await dropPlainAtOffset(editable, paragraph, 2, text);
 };
 
 const dropSkipReason =
@@ -318,6 +331,54 @@ test("자식 있는 문단 중간에 여러 줄 평문을 drop하면 새 블록�
     },
     { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
   ]);
+});
+
+test("표 셀 텍스트 위에 여러 줄 평문을 drop하면 한 셀 안에 hardBreak로 들어가고 표 뒤 문단이 생기지 않는다", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", dropSkipReason);
+  const tableBlock = {
+    id: "t",
+    type: "table",
+    columns: [{ id: "t-col0", width: 100 }],
+    rows: [
+      {
+        id: "t-row0",
+        cells: [
+          {
+            id: "t-r0c0",
+            columnId: "t-col0",
+            rowSpan: 1,
+            columnSpan: 1,
+            content: [{ text: "cell" }],
+          },
+        ],
+      },
+    ],
+    headerRows: 0,
+    headerColumns: 0,
+  };
+  const editable = await importBlocks(page, [
+    { id: "p1", type: "paragraph", content: [{ text: "abcd" }] },
+    tableBlock,
+    { id: "tail", type: "paragraph", content: [{ text: "tail" }] },
+  ]);
+  const cell = editable.locator('[data-geul-cell-id="t-r0c0"]');
+  await expect(cell).toHaveText("cell");
+
+  // "cell"의 "ll" 앞(offset 2) 좌표다. 셀 안 위치로 풀려야 직접 삽입한다.
+  await dropPlainAtOffset(editable, cell, 2, "X\nY");
+
+  const blocks = (await exportedBlocks(page)) as { type: string }[];
+  expect(blocks.map((block) => block.type)).toEqual([
+    "paragraph",
+    "table",
+    "paragraph",
+  ]);
+  expect(blocks[1]).toMatchObject({
+    rows: [{ cells: [{ content: [{ text: "ceX\nYll" }] }] }],
+  });
 });
 
 // 블록 id의 첫 텍스트 노드 offset 위치로 DOM selection 범위를 만들고

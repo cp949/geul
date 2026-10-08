@@ -6,7 +6,7 @@
  *
  * 다루는 축은 배치(C1~C3), transaction 계약(C4·C6), 삽입 뒤 selection(C5),
  * PM 기본에 위임하는 입력(C7), sanitize·마크·selection 비접촉(C8),
- * 무효 문자 drop(C9, Issue #306)이다.
+ * 무효 문자 drop(C9, Issue #306), 표 셀 위 여러 줄 drop(C10, Issue #309)이다.
  * jsdom은 좌표를 해석하지 못해 view.posAtCoords를 stub한다. 위임 입력은
  * view.someProp("handleDrop")으로 호출해 플러그인의 반환값을 직접 읽는다.
  * 실제 브라우저 drop은 e2e/clipboard-paste.spec.ts가 맡는다.
@@ -37,7 +37,8 @@ import {
   sequentialIds,
   toggleBlock,
 } from "./editor-controller-support.js";
-import { singleCellTable } from "./table-boundary-test-support.js";
+import { inCell, singleCellTable } from "./table-boundary-test-support.js";
+import { boldCellBlocks, kindsOf } from "./table-cell-paste-test-support.js";
 import { findCellBoundaryPosition } from "./table-test-support.js";
 
 type Tiptap = ReturnType<typeof mountTiptapEditor>["tiptap"];
@@ -279,7 +280,9 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       expect(tiptap.state.doc).toBe(before);
     });
 
-    it("표 셀 안 위치는 위임한다", () => {
+    // 셀 안 위치의 여러 줄 평문은 hardBreak로 직접 삽입한다(Issue #309, C10).
+    // 한 줄 평문은 PM 기본에 맡긴다.
+    it("표 셀 안 위치의 한 줄 평문은 위임한다", () => {
       const { editor, cellIds } = editorWithTable();
       const { tiptap } = mountTiptapEditor(editor);
       const cellId = cellIds[0];
@@ -289,9 +292,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       stubPosAtCoords(tiptap, boundary + 1);
       const before = tiptap.state.doc;
 
-      expect(
-        handled(tiptap, dropEventOf({ "text/plain": "X\nY" })),
-      ).toBeFalsy();
+      expect(handled(tiptap, dropEventOf({ "text/plain": "X" }))).toBeFalsy();
       expect(tiptap.state.doc).toBe(before);
     });
 
@@ -458,6 +459,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       ["codeBlock", `a${DEL}b`],
       ["셀", `a${LONE}b`],
       ["codeBlock", `a${SOH}b\nc`],
+      ["셀", `a${SOH}b\nc`],
     ] as const)(
       "%s에 무효 문자 평문 %j를 drop하면 같은 캐럿 붙여넣기와 같은 정리본이 들어간다",
       (target, text) => {
@@ -469,25 +471,24 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       },
     );
 
-    // 셀 안 여러 줄 평문은 붙여넣기만 hardBreak로 셀에 넣는다(Issue #299).
-    // drop은 범위 밖이라 같은 캐럿 붙여넣기와 결과가 다르다.
-    it("셀에 무효 문자가 섞인 여러 줄 평문을 drop해도 같은 캐럿 붙여넣기와 결과가 다르다(범위 밖 특성화)", () => {
+    // 셀 안 여러 줄 평문은 붙여넣기와 drop 모두 hardBreak로 셀에 넣는다
+    // (Issue #299, #309). 전에는 drop만 첫 줄을 셀에 넣고 나머지를 표 뒤 문단으로
+    // 뺐다.
+    it("셀에 무효 문자가 섞인 여러 줄 평문을 drop하면 같은 캐럿 붙여넣기처럼 한 셀 안에 hardBreak로 들어간다", () => {
       const entries = { "text/plain": `a${SOH}b\nc` };
       const dropped = dropResult("셀", entries);
-      const pasted = JSON.stringify(pasteResult("셀", entries));
+      const pasted = pasteResult("셀", entries);
 
-      // 붙여넣기는 한 셀 안에 hardBreak로 이어 넣는다.
-      expect(pasted).toContain('"text":"ceab\\ncll"');
-      // drop은 첫 줄만 셀에 넣고 나머지를 표 뒤 문단으로 뺀다(현행).
-      expect(JSON.stringify(dropped)).toContain('"text":"ceab"');
+      // 붙여넣기와 drop 모두 한 셀 안에 hardBreak로 이어 넣는다.
+      expect(JSON.stringify(pasted)).toContain('"text":"ceab\\ncll"');
+      expect(JSON.stringify(dropped)).toContain('"text":"ceab\\ncll"');
+      expect(dropped).toEqual(pasted);
       expect(dropped.map((block) => block.type)).toEqual([
         "paragraph",
         "codeBlock",
         "table",
         "paragraph",
-        "paragraph",
       ]);
-      expect(JSON.stringify(dropped[3])).toContain('"text":"cll"');
     });
 
     it.each([
@@ -509,6 +510,234 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
       const dropped = dropResult("codeBlock", { "text/plain": `a${tab}b` });
 
       expect(outline(dropped)).toContain(`code:coa${tab}bde`);
+    });
+  });
+
+  // Issue #309. 셀 위 여러 줄 평문 외부 drop은 같은 위치 캐럿 붙여넣기(#299)처럼
+  // 줄 사이를 hardBreak로 이어 셀 안에 넣는다. 전에는 PM 기본이 첫 줄만 셀에
+  // 넣고 나머지를 표 뒤 문단으로 뺐다.
+  describe("표 셀 위 여러 줄 평문 drop(C10, Issue #309)", () => {
+    const SOH = String.fromCharCode(1);
+
+    // D10: p1 "abcd", codeBlock cb "code", 1x1 표(셀 t-r0c0 "cell"), tail.
+    // drop 위치는 셀 offset(기본 2)이고 선택은 tail 끝 캐럿이다.
+    const cellBlocks = (): Block[] => [
+      paragraphBlock("p1", "abcd"),
+      codeBlockBlock("cb", "code"),
+      singleCellTable("t", "cell"),
+      paragraphBlock("tail", "tail"),
+    ];
+    const mountCell = (blocks: Block[] = cellBlocks(), cellOffset = 2) => {
+      const editor = createEditor({
+        initialDocument: documentOf(...blocks),
+        createId: sequentialIds("id"),
+      });
+      const { editable, tiptap } = mountTiptapEditor(editor);
+      editable.focus();
+      tiptap.commands.setTextSelection(tiptap.state.doc.content.size - 2);
+      const pos = inCell("t-r0c0", cellOffset)(tiptap);
+      stubPosAtCoords(tiptap, pos);
+      return { editor, editable, tiptap, pos };
+    };
+    const handled = (tiptap: Tiptap, event: DragEvent): unknown =>
+      tiptap.view.someProp("handleDrop", (handler) =>
+        handler(tiptap.view, event, Slice.empty, false),
+      );
+    const types = (editor: ReturnType<typeof createEditor>): string[] =>
+      blocksOf(editor).map((block) => block.type);
+
+    it("이슈 재현 문서에서 셀 위 여러 줄 평문이 셀 안 hardBreak로 들어가고 표 뒤 문단이 생기지 않는다", () => {
+      const { editor, editable, tiptap } = mountCell();
+
+      plainDrop(editable, `a${SOH}b\nc`);
+
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceab", "br", "cll"]);
+      expect(types(editor)).toEqual([
+        "paragraph",
+        "codeBlock",
+        "table",
+        "paragraph",
+      ]);
+      expect(outline(blocksOf(editor)).at(-1)).toBe("p:tail");
+    });
+
+    it.each([
+      ["LF", "X\nY"],
+      ["CRLF", "X\r\nY"],
+      ["세 줄", "X\nY\nZ"],
+      ["연속 개행", "X\n\nY"],
+      ["앞 개행", "\nX"],
+      ["뒤 개행", "X\n"],
+      ["무효 문자 섞임", `a${SOH}b\nc`],
+    ] as const)(
+      "%s 입력은 같은 위치 캐럿 붙여넣기와 문서가 같다",
+      (_label, text) => {
+        const dropped = mountCell();
+        plainDrop(dropped.editable, text);
+
+        const pasted = mountCell();
+        pasted.tiptap.commands.setTextSelection(pasted.pos);
+        pasteData(pasted.editable, { "text/plain": text });
+
+        expect(dropped.editor.getDocument().blocks).not.toEqual(
+          mountCell().editor.getDocument().blocks,
+        );
+        expect(dropped.editor.getDocument().blocks).toEqual(
+          pasted.editor.getDocument().blocks,
+        );
+      },
+    );
+
+    it("drop 뒤 selection은 삽입 범위이고 tr은 uiEvent drop만 단다", () => {
+      const { editable, tiptap, pos } = mountCell();
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+      const event = plainDrop(editable, "X\nY");
+
+      const { selection } = tiptap.state;
+      expect(selection).toBeInstanceOf(TextSelection);
+      expect(selection.from).toBe(pos);
+      // X(1) + hardBreak(1) + Y(1)
+      expect(selection.to).toBe(pos + 3);
+      expect(
+        tiptap.state.doc.textBetween(selection.from, selection.to, "", "\n"),
+      ).toBe("X\nY");
+      const transaction = dispatch.mock.calls[0]?.[0];
+      expect(transaction?.getMeta("uiEvent")).toBe("drop");
+      expect(transaction?.getMeta("paste")).toBeUndefined();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("dispatch 1회, revision +1, undo 1회로 원복된다", () => {
+      const { editor, editable, tiptap } = mountCell();
+      const initialJson = tiptap.state.doc.toJSON();
+      const revision = editor.getDocument().revision;
+      const dispatch = vi.spyOn(tiptap.view, "dispatch");
+
+      plainDrop(editable, "X\nY\nZ");
+
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(editor.getDocument().revision).toBe(revision + 1);
+
+      tiptap.commands.undo();
+      expect(tiptap.state.doc.toJSON()).toEqual(initialJson);
+    });
+
+    it("drop과 무관한 범위 선택을 지우지 않는다", () => {
+      const { editor, editable, tiptap } = mountCell();
+      const tailStart = contentTextStart(tiptap, "tail");
+      tiptap.commands.setTextSelection({
+        from: tailStart,
+        to: tailStart + 2,
+      });
+
+      plainDrop(editable, "X\nY");
+
+      expect(outline(blocksOf(editor)).at(-1)).toBe("p:tail");
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceX", "br", "Yll"]);
+    });
+
+    it("같은 셀 안의 다른 범위 선택을 지우지 않는다", () => {
+      const { editable, tiptap } = mountCell(cellBlocks(), 1);
+      tiptap.commands.setTextSelection({
+        from: inCell("t-r0c0", 2)(tiptap),
+        to: inCell("t-r0c0", 4)(tiptap),
+      });
+
+      plainDrop(editable, "X\nY");
+
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual(["cX", "br", "Yell"]);
+    });
+
+    it("마크는 selection이 아니라 drop 위치의 마크를 따른다", () => {
+      // 셀은 "ce" + bold "ll"이다. drop 위치는 bold "ll" 안(offset 3)이고
+      // 선택은 마크 없는 tail 끝이다.
+      const { editable, tiptap } = mountCell(boldCellBlocks(), 3);
+
+      plainDrop(editable, "X\nY");
+
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual([
+        "ce",
+        "lX*bold",
+        "br*bold",
+        "Yl*bold",
+      ]);
+    });
+
+    describe("PM 기본에 맡기는 입력", () => {
+      it("셀 위 text/html 동반 drop은 위임한다", () => {
+        const { tiptap } = mountCell();
+        const before = tiptap.state.doc;
+
+        expect(
+          handled(
+            tiptap,
+            dropEventOf({ "text/html": "<p>H</p>", "text/plain": "X\nY" }),
+          ),
+        ).toBeFalsy();
+        expect(tiptap.state.doc).toBe(before);
+      });
+
+      it("셀 위 내부 드래그(view.dragging)는 위임한다", () => {
+        const { tiptap } = mountCell();
+        tiptap.view.dragging = { slice: Slice.empty, move: false };
+        const before = tiptap.state.doc;
+
+        expect(
+          handled(tiptap, dropEventOf({ "text/plain": "X\nY" })),
+        ).toBeFalsy();
+        expect(tiptap.state.doc).toBe(before);
+      });
+
+      it("셀 위 파일 동반 drop은 직접 삽입하지 않는다", () => {
+        const { tiptap, editable } = mountCell();
+        const file = new File(["x"], "a.txt", { type: "text/plain" });
+
+        dropData(editable, { "text/plain": "X\nY" }, [file]);
+
+        // 직접 삽입이면 셀 안에 hardBreak가 생긴다.
+        expect(kindsOf(tiptap, "t-r0c0")).not.toContain("br");
+      });
+
+      it("셀 위 posAtCoords가 null이면 위임한다", () => {
+        const { tiptap } = mountCell();
+        stubPosAtCoords(tiptap, null);
+        const before = tiptap.state.doc;
+
+        expect(
+          handled(tiptap, dropEventOf({ "text/plain": "X\nY" })),
+        ).toBeFalsy();
+        expect(tiptap.state.doc).toBe(before);
+      });
+    });
+
+    describe("셀 밖 위치는 기존 동작이다", () => {
+      it("표 셀 경계(부모가 행) 위치는 위임한다", () => {
+        const { tiptap } = mountCell();
+        const boundary = findCellBoundaryPosition(tiptap, "t-r0c0");
+        if (boundary === null) throw new Error("셀 위치 조회 실패");
+        stubPosAtCoords(tiptap, boundary);
+        const before = tiptap.state.doc;
+
+        expect(
+          handled(tiptap, dropEventOf({ "text/plain": "X\nY" })),
+        ).toBeFalsy();
+        expect(tiptap.state.doc).toBe(before);
+      });
+
+      it("표가 있는 문서에서도 문단 위치는 Enter 분할 배치다", () => {
+        const { editor, editable, tiptap } = mountCell();
+        stubPosAtCoords(tiptap, contentTextStart(tiptap, "p1") + 2);
+
+        plainDrop(editable, "X\nY");
+
+        expect(outline(blocksOf(editor)).slice(0, 3)).toEqual([
+          "p:abX",
+          "p:Ycd",
+          "code:code",
+        ]);
+        expect(kindsOf(tiptap, "t-r0c0")).toEqual(["cell"]);
+      });
     });
   });
 });
