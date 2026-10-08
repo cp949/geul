@@ -13,7 +13,7 @@ import {
   type Transaction,
 } from "@tiptap/pm/state";
 import { dropPoint } from "@tiptap/pm/transform";
-import { Fragment, Slice } from "@tiptap/pm/model";
+import { Fragment, type ResolvedPos, Slice } from "@tiptap/pm/model";
 import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
 import { buildCellHtmlInline } from "./cell-html-inline.js";
@@ -322,6 +322,18 @@ const planCellInlineMultilinePaste = (
     linesToHardBreakInline(state.schema, lines, state.selection.$from.marks()),
   );
 
+// 여러 블록 html을 셀 inline Fragment로 바꾼다(Issue #304, #311). importHtml이
+// 실패하거나 buildCellHtmlInline이 null이면(표 포함·content 블록 2개 미만·정리
+// 뒤 줄 0개) null이다. 붙여넣기와 drop이 같은 변환을 쓴다.
+const cellInlineFromHtml = (
+  state: EditorState,
+  html: string,
+): Fragment | null => {
+  const imported = importHtml(html);
+  if (!imported.ok) return null;
+  return buildCellHtmlInline(state.schema, imported.value.document.blocks);
+};
+
 // 셀 안 캐럿·범위의 여러 블록 html 직접 삽입 계획이다(Issue #304). 블록을
 // 줄로 평탄화해 hardBreak로 이어 선택을 대체한다. 줄 안 마크는 html의 것이고
 // 캐럿 마크는 입히지 않는다. 이 분기를 탈 수 없으면 null이다.
@@ -334,12 +346,7 @@ const planCellHtmlInlinePaste = (
   state: EditorState,
   html: string,
 ): PastePlan | null => {
-  const imported = importHtml(html);
-  if (!imported.ok) return null;
-  const inserted = buildCellHtmlInline(
-    state.schema,
-    imported.value.document.blocks,
-  );
+  const inserted = cellInlineFromHtml(state, html);
   return inserted === null ? null : planCellInlineReplace(state, inserted);
 };
 
@@ -751,28 +758,20 @@ const buildDropSliceTransaction = (
     .setMeta("uiEvent", "drop");
 };
 
-// 셀 위 위치의 여러 줄 평문 drop transaction이다(Issue #309). 위치의 부모가
-// 셀의 인라인 컨텐츠가 아니면 null이다(표 경계·셀 밖·atom·블록 사이). 줄 사이를
-// hardBreak로 이어 위치에 넣고 삽입 범위를 선택한다. 마크는 위치의
-// $pos.marks()다. drop은 현재 selection을 지우지 않는다. 삽입 위치는 선택과
-// 무관하다.
+// 위치의 부모가 셀의 인라인 컨텐츠인지 본다. 표 경계(부모가 행)·셀 밖·atom·블록
+// 사이는 아니다.
+const isCellInlinePosition = ($position: ResolvedPos): boolean =>
+  $position.parent.type.name === "tableCell" && $position.parent.inlineContent;
+
+// 셀 위 위치에 inline Fragment를 넣는 drop transaction이다(Issue #309, #311).
+// 호출부가 위치의 부모가 셀의 인라인 컨텐츠임을 확인한다(isCellInlinePosition).
+// Fragment를 위치에 넣고 삽입 범위를 선택한다. 줄 변환과 마크는 호출부 몫이다.
+// drop은 현재 selection을 지우지 않는다. 삽입 위치는 선택과 무관하다.
 const buildCellInlineDropTransaction = (
   state: EditorState,
-  lines: readonly string[],
+  inserted: Fragment,
   position: number,
-): Transaction | null => {
-  const $position = state.doc.resolve(position);
-  if (
-    $position.parent.type.name !== "tableCell" ||
-    !$position.parent.inlineContent
-  ) {
-    return null;
-  }
-  const inserted = linesToHardBreakInline(
-    state.schema,
-    lines,
-    $position.marks(),
-  );
+): Transaction => {
   const tr = state.tr.insert(position, inserted);
   return tr
     .setSelection(
@@ -781,8 +780,8 @@ const buildCellInlineDropTransaction = (
     .setMeta("uiEvent", "drop");
 };
 
-// drop 계획이다(Issue #285, #306, #309). PM이 drop 위치 기준으로 파싱한 slice를
-// 받는다. 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
+// drop 계획이다(Issue #285, #306, #309, #311). PM이 drop 위치 기준으로 파싱한
+// slice를 받는다. 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
 // - 내부 드래그(view.dragging). 이동은 PM 비공개 드래그 상태에 기댄다.
 // - 파일 동반
 // - 정리할 무효 문자가 없는 slice. 유효한 외부 drop은 PM 기본 drop 그대로다.
@@ -792,12 +791,20 @@ const buildCellInlineDropTransaction = (
 // 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 표 셀 위 위치는 블록을 나눌
 // 수 없어 줄 사이를 hardBreak로 이어 셀 안에 넣는다(Issue #309). 줄을 놓을 수
 // 없는 위치(표 경계·atom·블록 사이)는 아래 정리 분기로 내려간다.
+// 셀 위 위치의 여러 블록 text/html도 블록 사이를 hardBreak로 이어 셀 안에
+// 넣는다(Issue #311). 같은 위치 캐럿 붙여넣기(#304)와 문서가 같다. PM 기본
+// drop은 문단 여러 개의 나머지를 표 뒤로 빼고, 목록 여러 항목은 셀 조각으로
+// 오인해 되돌림 guard가 drop을 지웠다. 위치가 셀의 인라인 컨텐츠일 때만
+// importHtml을 부른다. 줄 안 마크는 html의 것이고 위치의 마크는 입히지 않는다.
+// 한 블록 html, 표 포함 html, importHtml 실패와 셀이 아닌 위치는 아래 정리
+// 분기로 내려간다.
 // 무효 문자가 든 slice는 정리본을 PM 기본 drop과 같은 방식으로 넣는다(Issue
 // #306). PM 기본 drop은 원문 그대로 넣어 되돌림 guard가 drop을 통째로 지웠다.
 // 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
 // 않는다. 삽입 범위를 선택한다. paste meta는 달지 않고 uiEvent만 단다.
 // resolvePosition은 필요할 때만 한 번 부른다. 좌표 해석(posAtCoords)은
-// 레이아웃이 필요하다.
+// 레이아웃이 필요하다. 여러 줄 평문과 text/html drop은 위치가 필요해 항상
+// 부른다(Issue #311). 그 밖의 입력은 정리 후보가 있을 때만 부른다.
 export const planDrop = (
   state: EditorState,
   drop: DropInput | null,
@@ -813,16 +820,36 @@ export const planDrop = (
     return resolved.position;
   };
 
-  if (drop.html.length === 0) {
+  if (drop.html.length > 0) {
+    const at = position();
+    if (at !== null && isCellInlinePosition(state.doc.resolve(at))) {
+      // 셀 위 위치만 importHtml을 부른다. null이면 아래 정리 분기로 내려간다.
+      const inserted = cellInlineFromHtml(state, drop.html);
+      if (inserted !== null) {
+        return {
+          kind: "dispatch",
+          transaction: buildCellInlineDropTransaction(state, inserted, at),
+        };
+      }
+    }
+  } else {
     const lines = splitPlainTextLines(normalizePasteText(drop.text));
     if (lines.length >= 2) {
       const at = position();
       if (at === null) return { kind: "delegate" };
       // 셀 위 위치는 블록을 나눌 수 없다. 줄 사이를 hardBreak로 이어 셀 안에
-      // 넣는다(Issue #309). 같은 위치 캐럿 붙여넣기(#299)와 문서가 같다.
-      const cellTransaction = buildCellInlineDropTransaction(state, lines, at);
-      if (cellTransaction !== null) {
-        return { kind: "dispatch", transaction: cellTransaction };
+      // 넣는다(Issue #309). 같은 위치 캐럿 붙여넣기(#299)와 문서가 같다. 마크는
+      // 위치의 $pos.marks()다.
+      const $at = state.doc.resolve(at);
+      if (isCellInlinePosition($at)) {
+        return {
+          kind: "dispatch",
+          transaction: buildCellInlineDropTransaction(
+            state,
+            linesToHardBreakInline(state.schema, lines, $at.marks()),
+            at,
+          ),
+        };
       }
       const transaction = buildPlainMultilinePasteTransaction(state, lines, {
         position: at,
@@ -842,8 +869,8 @@ export const planDrop = (
     }
   }
 
-  // 정리 후보가 없으면 좌표를 풀지 않는다. codeBlock 안 Tab은 후보지만
-  // 아래에서 유효로 판정된다.
+  // 정리 후보가 없으면 좌표를 더 풀지 않는다(html drop은 위에서 이미 풀었다).
+  // codeBlock 안 Tab은 후보지만 아래에서 유효로 판정된다.
   if (slice.size === 0 || sanitizeSliceInlineText(slice) === slice) {
     return { kind: "delegate" };
   }
