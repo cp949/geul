@@ -232,7 +232,8 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
       new Plugin({
         props: {
           // handlePaste·handleDrop이 직접 삽입하지 않고 물러나는 경로의 여러
-          // 줄 평문 배치(Issue #284). 한 줄이면 null이라 PM 기본이다.
+          // 줄 평문 배치(Issue #284). 한 줄은 캐럿 마크를 입힌 paragraph
+          // slice를 돌려준다(Issue #310).
           // 자식 있는 블록의 D23 배치는 이 경로로 만들 수 없다(spec 7.3).
           clipboardTextParser: plainTextClipboardParser,
           // PM이 이번 붙여넣기를 평문 경로로 만들었다는 신호를 기록한다(Issue

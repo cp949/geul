@@ -5,8 +5,10 @@
  * 들여쓰기 없던 문단이 붙여넣기만으로 자식을 얻으면 안 된다.
  *
  * 다루는 축은 직접 삽입 경로(handlePaste, C1~C10)와 clipboardTextParser
- * 경로(view.pasteText가 타는 PM 기본, C11)다. 한 줄 평문·빈 줄 Markdown·
- * codeBlock 안은 현행 유지를 특성화한다. 표 셀 안은 이 모듈이 아니라
+ * 경로(view.pasteText가 타는 PM 기본, C11)다. 한 줄 평문은 clipboardTextParser가
+ * 캐럿 마크를 입힌 paragraph를 돌려준다(Issue #310, 마크 상속은
+ * clipboard-paste-plain-single-line-marks.test.ts). 빈 줄 Markdown·codeBlock
+ * 안은 현행 유지를 특성화한다. 표 셀 안은 이 모듈이 아니라
  * 셀 계획이 맡는다(Issue #299, clipboard-paste-table-cell-multiline.test.ts).
  * 여기서는 셀 안 붙여넣기가 블록 배치를 바꾸지 않음만 본다. drop 직접 삽입은
  * clipboard-drop-plain-multiline.test.ts가, 실제 브라우저 drop은
@@ -520,11 +522,48 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
       expect(blocks.map(textOf)).toEqual(["abX", "Yde", "tail"]);
     });
 
-    it("한 줄 평문은 null을 돌려줘 PM 기본을 유지한다", () => {
+    // 한 줄은 캐럿 마크를 입힌 paragraph 하나를 직접 돌려준다(Issue #310).
+    // 마크 상속 결과는 clipboard-paste-plain-single-line-marks.test.ts가 본다.
+    it("한 줄 평문은 paragraph 하나를 담은 open(1,1) slice를 돌려준다", () => {
       const { tiptap } = setup(abcdAndTail(), "p1", 2);
       const { $from } = tiptap.state.selection;
 
-      expect(plainTextClipboardParser("X", $from)).toBeNull();
+      const slice = plainTextClipboardParser("X", $from);
+
+      expect(slice?.openStart).toBe(1);
+      expect(slice?.openEnd).toBe(1);
+      expect(slice?.content.childCount).toBe(1);
+      expect(slice?.content.firstChild?.type.name).toBe("paragraph");
+      expect(slice?.content.firstChild?.textContent).toBe("X");
+    });
+
+    it("빈 문자열은 null을 돌려줘 PM 기본을 유지한다", () => {
+      const { tiptap } = setup(abcdAndTail(), "p1", 2);
+      const { $from } = tiptap.state.selection;
+
+      expect(plainTextClipboardParser("", $from)).toBeNull();
+    });
+
+    it("한 줄 평문은 표 셀 안에서도 paragraph 하나를 돌려준다", () => {
+      const { editor, cellIds } = editorWithTable();
+      const { tiptap } = mountTiptapEditor(editor);
+      const cellId = cellIds[0];
+      if (cellId === undefined) throw new Error("셀 fixture 준비 실패");
+      placeCaretInCell(tiptap, cellId);
+
+      const slice = plainTextClipboardParser("X", tiptap.state.selection.$from);
+
+      expect(slice?.openStart).toBe(1);
+      expect(slice?.openEnd).toBe(1);
+      expect(slice?.content.firstChild?.type.name).toBe("paragraph");
+    });
+
+    it("한 줄 평문은 codeBlock 안이면 null을 돌려준다", () => {
+      const { tiptap } = setup([codeBlockBlock("c1", "code")], "c1", 2);
+
+      expect(
+        plainTextClipboardParser("X", tiptap.state.selection.$from),
+      ).toBeNull();
     });
 
     it("blockContainer 밖(표 셀 안)이면 null을 돌려준다", () => {

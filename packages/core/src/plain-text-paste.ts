@@ -27,12 +27,16 @@ import { textToHardBreakInline } from "./code-block-inline-text.js";
 //   쓴다. 줄 사이를 Enter 분할(splitAtCaret)로 잇는다. 배치는 Enter와 같다.
 //   자식 없음 → 다음 형제, 자식 있음 → 첫 자식(D23), 접힌 toggle → 형제(#252).
 //   drop은 `position` 옵션으로 drop 위치에 놓는다. selection은 지우지 않는다.
-// - clipboardTextParser(plainTextClipboardParser): 직접 삽입이 물러나는
-//   경로가 쓴다. 대상은 직접 삽입을 못 하는 입력이다(NodeSelection, 시작이
-//   codeBlock 안인 범위, 직접 삽입이 줄을 못 놓는 위치). 줄마다
-//   blockContainer를 만든 slice를 돌려준다. 자식 있는 블록의 D23 배치는 이
-//   경로로 만들 수 없다. PM Fitter가 꼬리 텍스트를 가르면서 기존 blockGroup을
-//   함께 옮기기 때문이다. 한계는 r2 스펙 7.3이 소유한다.
+// - clipboardTextParser(plainTextClipboardParser): 두 입력을 받는다.
+//   - 여러 줄. 직접 삽입이 물러나는 경로가 쓴다. 대상은 직접 삽입을 못 하는
+//     입력이다(NodeSelection, 시작이 codeBlock 안인 범위, 직접 삽입이 줄을 못
+//     놓는 위치). 줄마다 blockContainer를 만든 slice를 돌려준다. 자식 있는
+//     블록의 D23 배치는 이 경로로 만들 수 없다. PM Fitter가 꼬리 텍스트를
+//     가르면서 기존 blockGroup을 함께 옮기기 때문이다. 한계는 r2 스펙 7.3이
+//     소유한다.
+//   - 한 줄(Issue #310). 캐럿 마크를 입힌 paragraph 하나를 돌려준다. PM 기본은
+//     마크를 DOM 직렬화·재파싱으로 옮긴다. 파싱 규칙이 없는 마크(textColor·
+//     backgroundColor)는 이 왕복에서 빠진다.
 
 // PM parseFromClipboard의 줄 분리와 같은 정규식이다. 직접 삽입은
 // normalizePasteText 뒤 호출하므로 CR이 남지 않는다. clipboardTextParser는
@@ -188,19 +192,51 @@ export const buildPlainMultilinePasteTransaction = (
   return tr.setMeta("paste", true).setMeta("uiEvent", "paste").scrollIntoView();
 };
 
-// clipboardTextParser 본체. 줄이 둘 이상이고 $context가 blockContainer 안
-// 텍스트 블록일 때만 줄마다 blockContainer(paragraph)를 만든다. 그 외는 null이라
-// PM 기본 처리를 유지한다(한 줄 평문, codeBlock 안, 표 셀 안).
-// 첫·끝 container의 paragraph를 열어(open 2,2) 캐럿 앞뒤 텍스트와 잇는다.
+// 한 줄 평문의 slice다(Issue #310). $context의 마크를 입힌 text를 paragraph
+// 하나에 담아 open(1,1)로 돌려준다.
+// - PM의 DOM 왕복을 타지 않아 파싱 규칙 없는 마크도 이어진다.
+// - paragraph로 감싼 이유는 doPaste가 단일 text 노드 slice를 inheritMarks
+//   삽입(replaceSelectionWith)으로 보내기 때문이다. 그 경로는 storedMarks로
+//   마크를 덮어쓴다. 현행은 storedMarks를 무시하므로 이를 지킨다.
+// - blockContainer로 한 겹 더 감싸지 않는다. 빈 블록에서 PM replaceRange가
+//   container째 바꿔 blockId가 새로 매겨진다.
+// - 표 셀처럼 blockContainer 밖에도 같은 모양이다. 인라인 내용만 셀에 들어간다.
+const buildSingleLineSlice = (
+  line: string,
+  $context: ResolvedPos,
+): Slice | null => {
+  const { schema } = $context.parent.type;
+  const paragraphType = schema.nodes.paragraph;
+  if (paragraphType === undefined) return null;
+
+  const paragraph = paragraphType.create(
+    null,
+    schema.text(line, $context.marks()),
+  );
+  return new Slice(Fragment.from(paragraph), 1, 1);
+};
+
+// clipboardTextParser 본체. $context가 텍스트 블록(codeBlock 아님)일 때만 slice를
+// 만든다. 그 외는 null이라 PM 기본 처리를 유지한다(codeBlock 안, 빈 줄).
+// - 한 줄: 캐럿 마크를 입힌 paragraph 하나(buildSingleLineSlice).
+// - 두 줄 이상: $context가 blockContainer 안일 때만 줄마다 blockContainer
+//   (paragraph)를 만든다. 첫·끝 container의 paragraph를 열어(open 2,2) 캐럿
+//   앞뒤 텍스트와 잇는다. 표 셀 안은 null이다.
 export const parsePlainTextClipboard = (
   text: string,
   $context: ResolvedPos,
 ): Slice | null => {
   const lines = splitPlainTextLines(text);
-  if (lines.length < 2) return null;
-
   const parent = $context.parent;
   if (!parent.isTextblock || parent.type.spec.code === true) return null;
+
+  const [first] = lines;
+  if (lines.length === 1) {
+    return first === undefined || first.length === 0
+      ? null
+      : buildSingleLineSlice(first, $context);
+  }
+
   if ($context.depth < 1) return null;
   const container = $context.node($context.depth - 1);
   if (container.type.name !== "blockContainer") return null;
