@@ -751,7 +751,37 @@ const buildDropSliceTransaction = (
     .setMeta("uiEvent", "drop");
 };
 
-// drop 계획이다(Issue #285, #306). PM이 drop 위치 기준으로 파싱한 slice를
+// 셀 위 위치의 여러 줄 평문 drop transaction이다(Issue #309). 위치의 부모가
+// 셀의 인라인 컨텐츠가 아니면 null이다(표 경계·셀 밖·atom·블록 사이). 줄 사이를
+// hardBreak로 이어 위치에 넣고 삽입 범위를 선택한다. 마크는 위치의
+// $pos.marks()다. drop은 현재 selection을 지우지 않는다. 삽입 위치는 선택과
+// 무관하다.
+const buildCellInlineDropTransaction = (
+  state: EditorState,
+  lines: readonly string[],
+  position: number,
+): Transaction | null => {
+  const $position = state.doc.resolve(position);
+  if (
+    $position.parent.type.name !== "tableCell" ||
+    !$position.parent.inlineContent
+  ) {
+    return null;
+  }
+  const inserted = linesToHardBreakInline(
+    state.schema,
+    lines,
+    $position.marks(),
+  );
+  const tr = state.tr.insert(position, inserted);
+  return tr
+    .setSelection(
+      TextSelection.create(tr.doc, position, position + inserted.size),
+    )
+    .setMeta("uiEvent", "drop");
+};
+
+// drop 계획이다(Issue #285, #306, #309). PM이 drop 위치 기준으로 파싱한 slice를
 // 받는다. 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
 // - 내부 드래그(view.dragging). 이동은 PM 비공개 드래그 상태에 기댄다.
 // - 파일 동반
@@ -759,8 +789,9 @@ const buildDropSliceTransaction = (
 // - 좌표를 못 푸는 위치
 // 여러 줄 text/plain(html 없음)은 drop 위치에 Enter 분할과 같은 규칙으로 직접
 // 삽입한다(Issue #285). PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치
-// 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 줄을 놓을 수 없는 위치(표
-// 셀·atom·블록 사이)는 아래 정리 분기로 내려간다.
+// 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 표 셀 위 위치는 블록을 나눌
+// 수 없어 줄 사이를 hardBreak로 이어 셀 안에 넣는다(Issue #309). 줄을 놓을 수
+// 없는 위치(표 경계·atom·블록 사이)는 아래 정리 분기로 내려간다.
 // 무효 문자가 든 slice는 정리본을 PM 기본 drop과 같은 방식으로 넣는다(Issue
 // #306). PM 기본 drop은 원문 그대로 넣어 되돌림 guard가 drop을 통째로 지웠다.
 // 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
@@ -787,6 +818,12 @@ export const planDrop = (
     if (lines.length >= 2) {
       const at = position();
       if (at === null) return { kind: "delegate" };
+      // 셀 위 위치는 블록을 나눌 수 없다. 줄 사이를 hardBreak로 이어 셀 안에
+      // 넣는다(Issue #309). 같은 위치 캐럿 붙여넣기(#299)와 문서가 같다.
+      const cellTransaction = buildCellInlineDropTransaction(state, lines, at);
+      if (cellTransaction !== null) {
+        return { kind: "dispatch", transaction: cellTransaction };
+      }
       const transaction = buildPlainMultilinePasteTransaction(state, lines, {
         position: at,
       });
