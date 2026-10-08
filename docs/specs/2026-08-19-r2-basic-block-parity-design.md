@@ -274,7 +274,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 빈 목록 항목의 exit 규칙(빈 항목 Enter는 paragraph로 바꾼다)은 붙여넣기 중간 분할에서 끈다. 빈 항목에 `"\nX"`를 붙이면 빈 항목과 새 항목 `X`가 남는다.
   - 삭제·삽입·분할은 한 transaction이다. dispatch와 undo가 각각 1회다. `paste` meta와 `uiEvent: "paste"`를 단다.
   - Ctrl+Shift+V도 같다. 확장은 Shift를 구분하지 않는다. 정정(2026-10-07, Issue #303): 평문 단독 입력은 같다. `text/html`이 함께 오면 확장이 Shift를 구분한다. 서식 없이 붙여넣기는 html을 건너뛴다(아래 #303 문단).
-  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백)(정정 2026-10-07, Issue #303: Ctrl+Shift+V는 html을 건너뛴다), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297)(정정 2026-10-07, Issue #301: `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 평문을 정리본으로 넣는다)(정정 2026-10-07, Issue #302: 셀 안 slice의 무효 문자는 `transformPasted`가 지운다)(정정 2026-10-08, Issue #299: 셀 안 여러 줄 평문은 줄 사이를 `hardBreak`로 이어 셀에 직접 넣는다), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), `TextSelection`이 아닌 selection이 해당한다.
+  - 직접 배치하지 않는 경우는 PM 기본 처리나 기존 분기를 유지한다. 유효한 한 줄 평문(무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #295), `text/html` 동봉(HTML 우선, 블록을 못 만들면 아래 #287 폴백)(정정 2026-10-07, Issue #303: Ctrl+Shift+V는 html을 건너뛴다), Markdown 감지(빈 줄 포함 평문 등), 표 셀 안(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #297)(정정 2026-10-07, Issue #301: `text/html`이 있어도 PM 파싱 결과가 빈 slice이면 평문을 정리본으로 넣는다)(정정 2026-10-07, Issue #302: 셀 안 slice의 무효 문자는 `transformPasted`가 지운다)(정정 2026-10-08, Issue #299: 셀 안 여러 줄 평문은 줄 사이를 `hardBreak`로 이어 셀에 직접 넣는다), 캐럿·시작이 codeBlock 안인 붙여넣기(유효한 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다, #296), 블록 `NodeSelection`·`AllSelection`·`CellSelection`이 해당한다(정정 2026-10-09, Issue #314: 인라인 atom `NodeSelection`은 해당하지 않는다. 직접 삽입한다. 아래 #314 문단이 정한다).
   - 직접 배치가 물러나는 입력은 `clipboardTextParser`를 탄다. 줄마다 `blockContainer(paragraph)`를 만든 `open(2,2)` slice를 돌려준다. 한 줄이면 `null`이라 PM 기본이다(정정 2026-10-09, Issue #310: 한 줄은 캐럿 마크를 입힌 paragraph 하나를 돌려준다. 아래 #310 문단이 정한다). 자식 없는 블록은 위와 같은 형제 배치다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 경로가 아니라 아래 직접 삽입이다.
   - 한계: `clipboardTextParser` 경로는 자식 있는 블록에서 D23 배치를 만들 수 없다. PM Fitter가 캐럿 뒤 꼬리 텍스트를 새 컨테이너로 가르면서 기존 `blockGroup`을 함께 옮긴다. `open(1,3)` 같은 slice 모양으로도 꼬리와 기존 자식을 한 `blockGroup`에 모을 수 없다. 이 경로에서는 기존 자식이 마지막 줄 블록으로 넘어간다. 정정(2026-10-07, Issue #285): drop과 시작이 codeBlock 밖인 codeBlock 걸친 범위는 이 한계에서 벗어났다. 이 경로는 위임 입력에만 남는다(#285 한계 참조). 그 입력에서는 이 한계가 그대로다.
 - codeBlock에 걸친 범위의 HTML 배치(정정 2026-10-07, Issue #286). 선택이 비어 있지 않고 시작(`$from`)이 codeBlock 밖이면 `text/html`은 비코드 범위와 같은 분기(`importHtml` → `insertContent`)로 배치한다. 이전에는 codeBlock에 걸치면 조기 반환해 PM 기본 처리로 넘어갔다. 그 결과 `abX[Ybar]`처럼 둘째 블록이 앞 블록의 자식이 되고 목록·heading·`pre` 서식이 사라졌다.
@@ -308,10 +308,10 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 삽입은 한 transaction이다. dispatch·undo는 각각 1회다. `uiEvent: "drop"`만 달고 `paste` meta는 달지 않는다. dispatch 뒤 `view.focus()`를 부른다. 삽입 범위(drop 위치부터 마지막 줄 끝)를 `TextSelection`으로 선택한다. PM 기본 drop과 같다.
   - codeBlock 걸친 범위는 시작(`$from`)이 codeBlock 밖이고 (`text/html`이 있거나 sanitize 후 평문이 여러 줄이면) #286의 조기 반환을 통과한다. 평문 단독 여러 줄과 html 폴백(#287) 여러 줄은 직접 삽입한다. 유효한 한 줄 평문만 PM 기본이고, 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다(#295). 한 줄 폴백은 `view.pasteText`다. html import가 성공하는 경로(#286)는 그대로다.
   - 이 범위의 평문은 Markdown을 감지하지 않는다. 현행 한계를 유지한다.
-  - 직접 삽입을 못 하면(`NodeSelection` 등) 유효한 평문 단독은 PM 기본에 위임한다. html 폴백과 무효 문자가 섞인 평문은 정리본을 `view.pasteText`로 넣는다(#295).
+  - 직접 삽입을 못 하면(블록 `NodeSelection` 등, 정정 2026-10-09, Issue #314: 인라인 atom `NodeSelection`은 직접 삽입한다) 유효한 평문 단독은 PM 기본에 위임한다. html 폴백과 무효 문자가 섞인 평문은 정리본을 `view.pasteText`로 넣는다(#295).
   - 예: `[p "abcd" 자식 [code "xyz", p "c2"]]`에서 `ab` 뒤부터 `xy` 뒤까지 `X\nY`를 붙이면 `p "abX"`의 자식이 `["Yz", "c2"]`다. 이전에는 `p "abX"` 뒤에 `p "Yz"`가 오고 `c2`가 `"Yz"`의 자식이었다.
   - 이슈 서술 정정: 결함 조건은 "시작 블록에 자식이 있음"이 아니라 "범위 끝 뒤에 자식이 남는 모양"이다. 범위 끝 뒤에 자식이 없는 일반 모양은 PM 기본도 결함이 없고 결과가 같다. 가설 "`handleDrop`에서 `splitAtCaret`"은 `buildPlainMultilinePasteTransaction`의 `at` 옵션으로 확정했다.
-  - 한계: 위임 입력은 PM 기본이라 자식 있는 블록에서 기존 자식이 마지막 줄 블록으로 넘어간다. 내부 드래그, `text/html` 동반 drop, 표 셀·구분선 위치 drop, `NodeSelection`, 시작이 codeBlock 안인 범위가 해당한다. 정정(2026-10-08, Issue #309): 표 셀 안 위치의 여러 줄 평문 drop은 해당하지 않는다. 직접 넣는다. 정정(2026-10-08, Issue #311): 표 셀 안 위치의 여러 블록 `text/html` drop도 해당하지 않는다. 해소했다. 아래 #311 문단이 정한다.
+  - 한계: 위임 입력은 PM 기본이라 자식 있는 블록에서 기존 자식이 마지막 줄 블록으로 넘어간다. 내부 드래그, `text/html` 동반 drop, 표 셀·구분선 위치 drop, `NodeSelection`(정정 2026-10-09, Issue #314: 인라인 atom `NodeSelection`은 제외한다), 시작이 codeBlock 안인 범위가 해당한다. 정정(2026-10-08, Issue #309): 표 셀 안 위치의 여러 줄 평문 drop은 해당하지 않는다. 직접 넣는다. 정정(2026-10-08, Issue #311): 표 셀 안 위치의 여러 블록 `text/html` drop도 해당하지 않는다. 해소했다. 아래 #311 문단이 정한다.
   - 한계: 끝 잔여는 codeBlock으로 남지 않는다. `[p "abcd", code "foobar"]`에서 `ab` 뒤부터 `foo` 뒤까지 `X\nY`를 붙이면 `[p "abX", p "Ybar"]`다. #286 HTML 경로와 다르다. `text/plain`만 있는 PM 기본과 같다.
   - 한계: 범위가 중간 컨테이너의 라벨을 지우고 그 자식을 남기면 빈 문단이 그 자식을 가진다. `[p "abcd" 자식 [p "mid" 자식 [code "xyz", p "g2"]]]`에서 `ab` 뒤부터 `xy` 뒤까지 `X\nY`를 붙이면 `p "abX"`의 자식이 `["Yz", 빈 문단 자식 ["g2"]]`다. PM 기본도 같은 빈 문단을 만든다.
   - 한계: 접힌 toggle 안 숨은 codeBlock이 범위에 있는 여러 줄 평문은 시작이 codeBlock 밖이면 직접 삽입이다. 범위 삭제는 #264 결과 그대로 숨은 자손을 지운다.
@@ -355,7 +355,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 유효한 한 줄 평문만 PM 기본에 위임한다. 결과는 이전과 같다(`ab` → `[p "ababbar", p "tail"]`, `view.pasteText` 미호출).
   - 무효 문자가 섞인 한 줄 평문은 정리본을 `view.pasteText`로 넣는다. PM 자신의 `doPaste`라 transaction이 하나다. dispatch·undo가 각각 1회다. `a` U+0001 `b`와 `a` U+D800 `b`가 모두 `[p "ababbar", p "tail"]`다.
   - 제어문자만 있는 입력은 이벤트를 소비하고 문서를 바꾸지 않는다. 범위를 지우지 않는다. 비-codeBlock 경로와 같다. `TypeError`는 없다.
-  - 직접 삽입이 안 되는 선택(`NodeSelection`·`AllSelection`)의 여러 줄 평문도 같다. 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다. 유효한 여러 줄은 PM 기본 위임 그대로다.
+  - 직접 삽입이 안 되는 선택(블록 `NodeSelection`·`AllSelection`)의 여러 줄 평문도 같다. 무효 문자가 섞이면 정리본을 `view.pasteText`로 넣는다. 유효한 여러 줄은 PM 기본 위임 그대로다.
   - Markdown 감지는 이 범위에서 건너뛴다(#286). 바꾸지 않았다.
   - 한계(정정 2026-10-07, Issue #296): 캐럿이 codeBlock 안일 때와 시작이 codeBlock 안인 범위는 바꾸지 않았다. 무효 문자가 섞이면 같은 되돌림으로 붙여넣기가 사라지던 한계는 해소했다. 아래 #296 문단이 현재 계약이다. 원래 한계 근거는 그대로다. codeBlock 안은 Tab·LF를 보존해야 해서 `normalizePasteText`(Tab 삭제)를 쓸 수 없다.
   - 한계(정정 2026-10-07, Issue #297): 표 셀 안은 바꾸지 않았다. 무효 문자가 섞이면 같은 되돌림으로 붙여넣기가 사라지던 한계는 해소했다. 아래 #297 문단이 현재 계약이다. Tab이 든 한 줄 평문은 TSV 표 붙여넣기가 먼저 가로챈다. 이 경로 밖이다.
@@ -554,6 +554,16 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 무효 문자: 정리본을 `view.pasteText`로 넣는 경로도 같은 파서를 탄다. 정리본에 색이 이어진다. `view.pasteText`에 무효 문자를 직접 넘기는 입력은 이 확장이 정리하지 않는다. 되돌림 guard가 지우는 현행을 유지한다.
   - transaction: 새 경로가 없다. PM 기본 붙여넣기 transaction이 그대로 만든다. dispatch 1회, undo 1회다. `paste` meta와 `uiEvent: "paste"`는 이전과 같다.
   - 유지: 여러 줄 결과(#284·#299), bold·link 상속, 마크 없는 캐럿, codeBlock 안, `CellSelection`(#300, 셀 내용을 비워 마크가 없다), `NodeSelection`, `text/html` 붙여넣기. 문서·selection 결과는 이전과 같다. 색 마크 없는 문서는 수정 전과 문서·selection이 같다. jsdom에서 문단·자식 있는 문단·제목·목록·접힌 toggle·bold·표 셀·빈 문단 문서의 캐럿·범위 붙여넣기(Shift 유무)·drop·`view.pasteText` 416건과 `CellSelection`·인라인 atom·구분선 `NodeSelection` 12건을 수정 전과 대조했다.
+  - 한계: jsdom으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
+- 인라인 atom `NodeSelection`의 여러 줄 평문 붙여넣기(정정 2026-10-09, Issue #314). 인라인 atom만 든 문단에서 atom을 `NodeSelection`으로 고르고 여러 줄 평문을 붙여도 문단 `blockId`와 타입이 유지된다. 이전에는 `blockId`가 새로 매겨졌다.
+  - 실측(수정 전, jsdom): 문서 `p1`(인라인 atom `myTag` 하나뿐), `tail`에서 atom을 고르고 `x\ny`를 붙이면 최상위 `blockId`가 `["p1","tail"]`에서 `["id-2","id-3","tail"]`이 됐다. 3줄, heading, bulletListItem도 같았다.
+  - 원인: 직접 삽입이 `TextSelection`만 받아 인라인 atom `NodeSelection`은 `null`이었다. 호출부가 `clipboardTextParser`에 위임했고, 줄마다 `blockContainer`를 만든 `open(2,2)` slice가 atom을 대체했다. atom 대체로 대상 블록이 비면 PM `replaceRange`가 container째 바꿔 `blockId`가 새로 매겨졌다.
+  - 수정: `buildPlainMultilinePasteTransaction`이 인라인 atom `NodeSelection`(`selection.node.isInline`)을 받는다. `tr.deleteSelection()`으로 atom을 지우고 그 자리 캐럿에서 이어 줄을 놓는다. 위임하지 않는다. 판정은 표 셀 안 계획(`isCellInlineInsertTarget`)의 인라인 atom 판정과 같은 식이다.
+  - 배치: 범위 선택(#284)과 같은 Enter 분할 규칙이다. 대상 블록이 `blockId`와 타입을 유지하고 첫 줄을 갖는다. 새 블록은 Enter 분할 규칙을 따른다. `ab`, atom, `cd`에서 가운데 atom을 고르면 `abx`와 `ycd`다. 이전 결과와 같다.
+  - 마크: 삭제 뒤 캐럿의 `$from.marks()`다. 삭제 전 `$from.marks()`는 문단 시작에서 `nodeAfter`(atom)의 마크를 물려받는다. 마크를 가진 인라인 atom은 `hardBreak`다. 모델의 `"\n"` text가 마크를 갖는다. bold `hardBreak`만 든 문단을 고르면 `x`와 `y`에 bold가 없다. 이전에는 bold가 이어졌다. custom 인라인 atom은 마크를 가질 수 없다. bold `ab` 뒤 atom은 `x`와 `y`에 bold가 이어지며 이전과 같다. 문단 시작 atom 뒤에 마크 있는 텍스트가 오는 경우도 달라진다(여러 줄만 해당). 이전에는 위임 경로가 삭제 전 `$context.marks()`를 써서 `nodeAfter`(atom) 기준이라 마크가 없었다. 지금은 삭제 뒤 `nodeAfter`(뒤 텍스트)의 마크를 잇는다. 예: atom, bold `cd`에서 atom을 고르고 `x\ny`를 붙이면 `x`와 `ycd`에 모두 bold가 붙는다. 같은 selection의 한 줄 평문 `x`는 한 줄 경로가 삭제 전 `$context.marks()`를 그대로 써서 이전과 같다. `x`에 bold가 없다. 줄 수에 따라 결과가 다르며 정책은 바꾸지 않는다.
+  - 부수 효과: 자식 있는 블록의 atom 문단이면 D23 첫 자식 배치가 된다. `p1(x)` 자식 `[새 블록(y), 기존 자식]`이다. 이전에는 `clipboardTextParser`의 한계(위 #284 한계)로 기존 자식이 마지막 줄 블록으로 넘어갔다. 위임 경로의 한계를 일반으로 해소한 것은 아니다.
+  - 유지: 블록 `NodeSelection`(divider 등)은 위임이다. 교체된 블록 자체의 id가 바뀌는 것이 정상이다. `AllSelection`과 `CellSelection`도 위임이다. 표 셀 안 인라인 atom `NodeSelection`은 셀 계획(#299)이 먼저 처리하며 결과가 같다. 한 줄 평문과 drop(`position` 옵션)은 `selection`을 지우지 않으므로 같다.
+  - transaction: 삭제·삽입·분할은 한 transaction이다. dispatch 1회, undo 1회다. `paste` meta와 `uiEvent: "paste"`는 이전과 같다. undo는 atom을 포함한 원래 문서로 돌아간다. 붙여넣기 뒤 selection은 마지막 줄 끝의 `TextSelection`이다.
   - 한계: jsdom으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
 
 ## 8. 오류 계약 확장
