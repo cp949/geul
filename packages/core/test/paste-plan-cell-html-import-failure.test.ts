@@ -9,7 +9,7 @@ import { importHtml } from "@cp949/geul-io";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { describe, expect, it, vi } from "vitest";
 
-import { planTableCellPaste } from "../src/paste-plan.js";
+import { planTableCellPaste } from "../src/table-cell-paste-plan.js";
 import { documentOf, mounted } from "./editor-controller-support.js";
 import { inCell, setLiveSelection } from "./table-boundary-test-support.js";
 import {

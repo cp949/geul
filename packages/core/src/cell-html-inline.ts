@@ -1,3 +1,4 @@
+import { importHtml } from "@cp949/geul-io";
 import {
   type Block,
   type DocumentBlock,
@@ -24,6 +25,9 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // 순수 함수다. 문서와 selection을 바꾸지 않고 입력 블록도 바꾸지 않는다.
 // 삽입은 호출부가 한다. 선택 종류를 모른다. CellSelection의 서식 있는
 // html(Issue #308)도 같은 함수를 부른다.
+//
+// `cellInlineFromHtml`은 importHtml과 이 변환을 묶는다. 붙여넣기와 drop이
+// 함께 쓴다.
 //
 // 규칙은 다음과 같다.
 // - 줄이 되는 블록: paragraph·heading·quote·목록 4종·callout의 content,
@@ -185,4 +189,25 @@ export const buildCellHtmlInline = (
     lineCount += 1;
   }
   return lineCount === 0 ? null : Fragment.fromArray(nodes);
+};
+
+// 여러 블록 html을 셀 inline Fragment로 바꾼다(Issue #304, #311, #312).
+// importHtml이 실패하거나 buildCellHtmlInline이 null이면 null이다. 붙여넣기와
+// drop이 같은 변환을 쓴다. null 조건은 content 블록 2개 미만, 정리 뒤 줄 0개,
+// 표 포함이다. 표 포함은 flattenTables가 꺼진 붙여넣기에만 해당한다.
+// flattenTables는 drop만 켠다. 붙여넣기는 표를 TablePasteExtension이 먼저
+// 소비한다.
+export const cellInlineFromHtml = (
+  schema: Schema,
+  html: string,
+  options?: CellHtmlInlineOptions,
+): Fragment | null => {
+  const imported = importHtml(html);
+  if (!imported.ok) return null;
+  return buildCellHtmlInline(
+    schema,
+    imported.value.document.blocks,
+    undefined,
+    options,
+  );
 };

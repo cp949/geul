@@ -1016,7 +1016,7 @@ describe("표 셀 안 무효 문자 html과 Shift 평문(Issue #302)", () => {
 
     // 셀 안 정리는 붙여넣기 계획이 handlePaste 시점의 state로 한다(Issue
     // #306). transformPasted는 표 경계 범위를 지우기 전에 불려 지우기 전
-    // state를 본다. 정리 결과는 paste-plan.test.ts와 아래 이벤트 테스트가 본다.
+    // state를 본다. 정리 결과는 table-cell-paste-plan.test.ts와 아래 이벤트 테스트가 본다.
     it("셀 안 캐럿에서도 transformPasted는 slice를 바꾸지 않는다", () => {
       const m = mounted(documentOf(...S1.blocks()));
       S1.place(m.tiptap);

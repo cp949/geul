@@ -16,32 +16,22 @@
  * - C9 Ctrl+Shift+V + 서식 있는 html + 여러 줄 평문
  * - C10 캐럿의 마크 상속(CellSelection은 마크 없음)
  * - C11 인라인 atom NodeSelection 대체
- * - C12 직접 삽입 대상 밖(부모가 다른 범위)은 현행 계획
+ * - C12 직접 삽입 대상 밖은 셀 계획 테스트가 소유
  * - C13 dispatch 1회·undo 1회·삽입 끝 캐럿·pasteHandler 미호출
  *
  * 셀 결과는 모델 요약(outline)과 PM 셀 노드의 자식 종류(text·hardBreak)를
  * 함께 본다. outline은 hardBreak를 개행 문자로 보여 준다.
  */
 import type { Block } from "@cp949/geul-model";
-import { Fragment, Slice } from "@tiptap/pm/model";
 import { CellSelection } from "@tiptap/pm/tables";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import { planTableCellPaste } from "../src/paste-plan.js";
 import { withUnhandledErrorTracking } from "./clipboard-test-support.js";
-import {
-  documentOf,
-  editorState,
-  mounted,
-  paragraphBlock,
-} from "./editor-controller-support.js";
+import { editorState, paragraphBlock } from "./editor-controller-support.js";
 import {
   gridTable,
-  inBlock,
   inCell,
-  type Pos,
-  setLiveSelection,
   singleCellTable,
   TAIL,
 } from "./table-boundary-test-support.js";
@@ -53,7 +43,6 @@ import {
   docOutline,
   expectTableIntact,
   firstCellBlocks,
-  kindsInDoc,
   kindsOf,
   lastCellBlocks,
   pasteIn,
@@ -445,78 +434,6 @@ describe("표 셀 안 여러 줄 평문 붙여넣기(Issue #299)", () => {
     });
   });
 
-  describe("직접 삽입 대상 밖(C12)", () => {
-    // 부모가 다른 범위는 계획 판정만 본다. 표 경계 범위는 실행기가 먼저
-    // 지운 뒤 호출 시점 state로 다시 판정한다(Issue #292).
-    const planFor = (blocks: Block[], anchor: Pos, head: Pos, text: string) => {
-      const m = mounted(documentOf(...blocks));
-      setLiveSelection(m.tiptap, anchor(m.tiptap), head(m.tiptap));
-      return planTableCellPaste(
-        m.tiptap.state,
-        { html: "", text, plain: false },
-        Slice.empty,
-      );
-    };
-
-    it("시작이 셀 안이고 끝이 표 밖인 범위는 직접 삽입하지 않는다", () => {
-      const plan = planFor(
-        lastCellBlocks(),
-        inCell("t-r0c0", 2),
-        inBlock("tail", 2),
-        "a\nb",
-      );
-
-      expect(plan?.kind).toBe("insertSlice");
-    });
-
-    it("다른 셀에 걸친 TextSelection은 직접 삽입하지 않는다", () => {
-      const plan = planFor(
-        firstCellBlocks(),
-        inCell("g-r0c0", 1),
-        inCell("g-r0c1", 1),
-        "a\nb",
-      );
-
-      expect(plan?.kind).toBe("insertSlice");
-    });
-
-    it("셀 조각 slice는 pass다", () => {
-      const m = mounted(documentOf(...lastCellBlocks()));
-      setLiveSelection(
-        m.tiptap,
-        inCell("t-r0c0", 2)(m.tiptap),
-        inCell("t-r0c0", 2)(m.tiptap),
-      );
-      let tableSlice: Slice | null = null;
-      m.tiptap.state.doc.descendants((node, pos) => {
-        if (tableSlice !== null) return false;
-        if (node.type.name !== "table") return true;
-        tableSlice = m.tiptap.state.doc.slice(pos, pos + node.nodeSize);
-        return false;
-      });
-      if (tableSlice === null) throw new Error("표 조회 실패");
-
-      const plan = planTableCellPaste(
-        m.tiptap.state,
-        { html: "<table></table>", text: "a\nb", plain: false },
-        tableSlice,
-      );
-
-      expect(plan).toEqual({ kind: "pass" });
-    });
-
-    it("표 밖 캐럿은 null이다", () => {
-      const plan = planFor(
-        lastCellBlocks(),
-        inBlock("p1", 2),
-        inBlock("p1", 2),
-        "a\nb",
-      );
-
-      expect(plan).toBeNull();
-    });
-  });
-
   describe("transaction 계약(C13)", () => {
     it("dispatch 1회, undo 1회로 원복하고 캐럿은 삽입 끝이다", () => {
       const result = pasteIn(
@@ -540,54 +457,6 @@ describe("표 셀 안 여러 줄 평문 붙여넣기(Issue #299)", () => {
       expect(result.tiptap.state.doc.toJSON()).toEqual(
         result.before.tiptapDocument,
       );
-    });
-
-    it("계획은 paste·uiEvent meta와 scrollIntoView를 단 dispatch이고 문서를 바꾸지 않는다", () => {
-      const m = mounted(documentOf(...lastCellBlocks()));
-      setLiveSelection(
-        m.tiptap,
-        inCell("t-r0c0", 4)(m.tiptap),
-        inCell("t-r0c0", 4)(m.tiptap),
-      );
-      const before = m.tiptap.state.doc;
-
-      const plan = planTableCellPaste(
-        m.tiptap.state,
-        { html: "", text: "a\nb", plain: false },
-        new Slice(Fragment.empty, 0, 0),
-      );
-
-      expect(plan?.kind).toBe("dispatch");
-      if (plan?.kind !== "dispatch") return;
-      expect(plan.transaction.getMeta("paste")).toBe(true);
-      expect(plan.transaction.getMeta("uiEvent")).toBe("paste");
-      expect(plan.transaction.scrolledIntoView).toBe(true);
-      expect(m.tiptap.state.doc).toBe(before);
-    });
-
-    // 이벤트 결과는 리터럴 개행 정규화(Issue #281)가 보정해 같아질 수 있다.
-    // 보정 전 계획 자체가 hardBreak 노드를 담는지 직접 본다.
-    it("계획 transaction은 개행 문자가 아니라 hardBreak 노드를 담는다", () => {
-      const m = mounted(documentOf(...lastCellBlocks()));
-      setLiveSelection(
-        m.tiptap,
-        inCell("t-r0c0", 4)(m.tiptap),
-        inCell("t-r0c0", 4)(m.tiptap),
-      );
-
-      const plan = planTableCellPaste(
-        m.tiptap.state,
-        { html: "", text: "a\nb", plain: false },
-        Slice.empty,
-      );
-
-      expect(plan?.kind).toBe("dispatch");
-      if (plan?.kind !== "dispatch") return;
-      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual([
-        "cella",
-        "br",
-        "b",
-      ]);
     });
 
     it("pasteHandler와 view.pasteText를 호출하지 않는다", () => {

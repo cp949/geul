@@ -9,11 +9,11 @@
  * 다루는 축은 다음과 같다.
  * - P1 선택 대체: 2셀·1셀·2x2(비어 있던 셀 포함)·병합 셀이 걸친 선택
  * - P3 여러 줄: LF·CRLF 입력이 hardBreak로 이어져 첫 셀에 들어감. 이벤트
- *   결과는 개행 정규화가 보정하므로 계획 transaction도 직접 본다
+ *   결과의 개행 정규화 전 계획은 셀 계획 테스트가 소유한다
  * - P4 무효 문자: 정리본 삽입, 정리본이 비면 이벤트만 소비
  * - P5 html 분기: html이 없거나 빈 slice이면 평문 정책, 실제 내용이면 서식 있는
  *   html 경로(Issue #308이 정정)
- * - P6 셀 조각 slice: 계획이 pass(paste-plan.test.ts가 소유, 여기서는 기존 셀
+ * - P6 셀 조각 slice: 계획이 pass(table-cell-paste-plan.test.ts가 소유, 여기서는 기존 셀
  *   붙여넣기 테스트 통과로 확인)
  * - P7 붙여넣기 뒤 selection과 undo, 첫 셀 서식 대체, pasteHandler 미호출 계약
  *
@@ -31,13 +31,10 @@
  * 표 셀 캐럿·같은 셀 범위는 clipboard-paste-table-cell.test.ts가 맡는다.
  */
 import type { Block, InlineContent, TableBlock } from "@cp949/geul-model";
-import type { Editor as TiptapEditor } from "@tiptap/core";
-import { Fragment, Slice } from "@tiptap/pm/model";
 import { CellSelection } from "@tiptap/pm/tables";
 import { TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
-import { planTableCellPaste } from "../src/paste-plan.js";
 import { expectSchemaValid } from "./block-join/block-join-test-support.js";
 import {
   dispatchPasteData,
@@ -61,23 +58,16 @@ import {
   docOutline,
   expectTableIntact,
   findCell,
-  kindsInDoc,
   kindsOf,
   lastCellBlocks,
   pasteIn,
+  rowDocument,
   selectFirstTwoCells,
   textSelection,
 } from "./table-cell-paste-test-support.js";
 
 const SOH = String.fromCharCode(1);
 const HIGH_SURROGATE = String.fromCharCode(0xd800);
-
-/** 기준 문서: 문단 p1, 1x3 표(A|B|C, 셀 id g-r0c0..2), 뒤 문단. */
-const rowDocument = (): Block[] => [
-  paragraphBlock("p1", "para"),
-  gridTable("g", 1, 3, ["A", "B", "C"]),
-  TAIL,
-];
 
 /**
  * 표가 둘째 블록인 문서에서 표의 셀을 문서 순서로 모은다. 셀 id·병합 값·
@@ -93,10 +83,6 @@ const cellsOf = (result: { editor: { getDocument: () => unknown } }) => {
 /** 셀 내용을 셀 id 순서로 줄인다. 값 비교를 읽기 쉽게 한다. */
 const contentById = (result: Parameters<typeof cellsOf>[0]) =>
   Object.fromEntries(cellsOf(result).map((cell) => [cell.id, cell.content]));
-
-/** 실제 내용이 있는 인라인 텍스트 slice를 만든다. PM 파싱 결과 대역이다. */
-const textSlice = (tiptap: TiptapEditor, text: string): Slice =>
-  new Slice(Fragment.from(tiptap.schema.text(text)), 0, 0);
 
 describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
   describe("선택 대체(P1)", () => {
@@ -222,33 +208,6 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
     );
   });
 
-  describe("계획 transaction(P3)", () => {
-    // 이벤트 결과는 리터럴 개행 정규화(Issue #281)가 보정해 같아진다. 보정 전
-    // 계획 자체가 hardBreak 노드를 담는지 직접 본다.
-    it("여러 줄 계획은 문자열 개행이 아니라 hardBreak 노드를 담는다", () => {
-      const m = mounted(documentOf(...rowDocument()));
-      selectFirstTwoCells(m.tiptap);
-
-      const plan = planTableCellPaste(
-        m.tiptap.state,
-        { html: "", text: "X\nY", plain: false },
-        Slice.empty,
-      );
-
-      expect(plan?.kind).toBe("dispatch");
-      if (plan?.kind !== "dispatch") return;
-      const firstCell = plan.transaction.doc.child(1).child(0).child(0);
-      const kinds: string[] = [];
-      firstCell.forEach((child) => {
-        kinds.push(child.isText ? `text:${child.text}` : child.type.name);
-      });
-      expect(kinds).toEqual(["text:X", "hardBreak", "text:Y"]);
-      expect(plan.transaction.getMeta("paste")).toBe(true);
-      expect(plan.transaction.getMeta("uiEvent")).toBe("paste");
-      expect(plan.transaction.scrolledIntoView).toBe(true);
-    });
-  });
-
   describe("무효 문자(P4)", () => {
     it.each([
       { name: "제어문자", input: `a${SOH}b` },
@@ -315,22 +274,6 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
       expect(kindsOf(result.tiptap, "g-r0c0")).toEqual(["x*bold"]);
     });
 
-    // 서식 없이 붙여넣기(Ctrl+Shift+V)면 PM이 평문으로 slice를 만든다. 그 slice를
-    // prosemirror-tables에 맡기면 같은 NOID 되돌림이 일어난다. html이 함께 와도
-    // 평문 정책이 선택을 대체한다.
-    it("서식 없이 붙여넣기 신호가 있으면 서식 있는 html이 와도 평문 정책이 적용된다", () => {
-      const m = mounted(documentOf(...rowDocument()));
-      selectFirstTwoCells(m.tiptap);
-
-      const plan = planTableCellPaste(
-        m.tiptap.state,
-        { html: "<b>x</b>", text: "ab", plain: true },
-        textSlice(m.tiptap, "ab"),
-      );
-
-      expect(plan?.kind).toBe("dispatch");
-    });
-
     it("Ctrl+Shift+V에 서식 있는 html이 함께 와도 평문이 선택을 대체한다", () => {
       const m = mounted(documentOf(...rowDocument()));
       selectFirstTwoCells(m.tiptap);
@@ -353,23 +296,6 @@ describe("CellSelection 평문 붙여넣기(Issue #300)", () => {
       expect(contentById(result)["g-r0c0"]).toEqual([{ text: "ab" }]);
       expect(contentById(result)["g-r0c1"]).toEqual([]);
       expectSchemaValid(m.tiptap);
-    });
-
-    // Issue #308이 정정: 수정 전 계획은 pass였다.
-    it("서식 없이 붙여넣기 신호가 없으면 서식 있는 html을 셀 인라인으로 넣는다(Issue #308이 정정)", () => {
-      const m = mounted(documentOf(...rowDocument()));
-      selectFirstTwoCells(m.tiptap);
-
-      const plan = planTableCellPaste(
-        m.tiptap.state,
-        { html: "<b>x</b>", text: "ab", plain: false },
-        textSlice(m.tiptap, "x"),
-      );
-
-      expect(plan?.kind).toBe("dispatch");
-      if (plan?.kind !== "dispatch") return;
-      expect(kindsInDoc(plan.transaction.doc, "g-r0c0")).toEqual(["x*bold"]);
-      expect(kindsInDoc(plan.transaction.doc, "g-r0c1")).toEqual([]);
     });
 
     it("평문이 비면 html 유무와 관계없이 개입하지 않는다", () => {

@@ -8,14 +8,9 @@ import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
 import { resolvePasteBlockPlacement } from "./paste-block-placement.js";
-import {
-  clampDepth,
-  type PasteClipboard,
-  type PastePlan,
-  planDefaultPaste,
-  planDrop,
-  planTableCellPaste,
-} from "./paste-plan.js";
+import { clampDepth, planDefaultPaste, planDrop } from "./paste-plan.js";
+import type { PasteClipboard, PastePlan } from "./paste-plan-types.js";
+import { planTableCellPaste } from "./table-cell-paste-plan.js";
 import { plainTextClipboardParser } from "./plain-text-paste.js";
 
 // spec §7.3은 HTML 붙여넣기가 문서 HTML import와 같은 sanitizer·매핑을
@@ -39,8 +34,8 @@ import { plainTextClipboardParser } from "./plain-text-paste.js";
 // 원본 그대로 전달된다 — 이 확장은 두 형식을 구분하는 사전 정규화
 // 코드를 갖지 않는다(G-CNV-002, 의미는 sanitize 이후 HAST에서만 만든다).
 //
-// 위치·형태 판정은 붙여넣기 계획(paste-plan.ts)이 한다. 이 확장은 PM hook
-// 에서 클립보드 값을 읽어 계획을 받고 실행한다(Issue #306).
+// 위치·형태 판정은 붙여넣기 계획(paste-plan.ts·table-cell-paste-plan.ts)이 한다.
+// 이 확장은 PM hook에서 클립보드 값을 읽어 계획을 받고 실행한다(Issue #306).
 
 // enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12)를 이 확장의 두
 // modelToTiptap 호출부(아래)에 threading하지 않는다 — 착수 중
@@ -267,7 +262,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                     plain: preferPlain,
                   };
 
-            // 표 셀 안은 pasteHandler를 부르지 않는다(paste-plan.ts).
+            // 표 셀 안은 pasteHandler를 부르지 않는다(table-cell-paste-plan.ts).
             const tableCellPlan = planTableCellPaste(
               view.state,
               clipboard,

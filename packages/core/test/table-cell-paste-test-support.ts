@@ -3,8 +3,8 @@
  * (G-TST-002). 셀 캐럿·같은 셀 범위·셀 안 여러 줄·CellSelection 붙여넣기
  * 이벤트 테스트와 붙여넣기 계획 테스트가 같은 문서와 실행 절차를 쓴다.
  *
- * - 문서: lastCellBlocks(1x1 표 t)·firstCellBlocks(1x2 표 g)·atomBlocks(셀 안
- *   인라인 atom)·boldCellBlocks(셀 "ce"+bold "ll")
+ * - 문서: rowDocument(1x3 표 g)·lastCellBlocks(1x1 표 t)·firstCellBlocks(1x2 표 g)·
+ *   atomBlocks(셀 안 인라인 atom)·boldCellBlocks(셀 "ce"+bold "ll")
  * - 기대 요약: docOutline(앞뒤 문단 사이에 표 요약을 끼운다)
  * - 선택: Place·textSelection·atomSelected·selectFirstTwoCells
  * - 편집기 옵션: withTag(인라인 atom 렌더 등록)
@@ -60,6 +60,13 @@ export const textSelection =
 export const lastCellBlocks = (): Block[] => [
   paragraphBlock("p1", "para"),
   singleCellTable("t", "cell"),
+  TAIL,
+];
+
+/** 기준 문서: 문단 p1, 1x3 표(A|B|C, 셀 id g-r0c0..2), 뒤 문단. */
+export const rowDocument = (): Block[] => [
+  paragraphBlock("p1", "para"),
+  gridTable("g", 1, 3, ["A", "B", "C"]),
   TAIL,
 ];
 
