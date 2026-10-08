@@ -70,8 +70,9 @@ export type BlockInsertPlacement =
 
 // 계획 결과다. 실행기가 handlePaste·handleDrop 반환값을 정한다.
 // - pass: 다른 plugin 소관이다. false. prosemirror-tables가 처리하는
-//   셀 조각 slice다. CellSelection은 html이 없거나 서식 없이 붙여넣기일
-//   때만 여기 온다(Issue #308).
+//   셀 조각 slice다. CellSelection은 셋일 때만 여기 온다(Issue #308).
+//   클립보드 데이터가 없다. 셀 조각 slice에 html이 없거나 서식 없이
+//   붙여넣기다. 평문이 비고 html이 없거나 정리 뒤 빈 slice다.
 // - delegate: PM 기본 drop에 맡긴다. false. drop 계획만 쓴다.
 // - insertSlice: PM이 파싱한 slice를 PM 기본 붙여넣기와 같은 방식으로
 //   넣는다. true. 파싱 결과가 없는 정적 Slice.empty면 false다(PM 기본과 같다).
