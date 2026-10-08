@@ -7,6 +7,7 @@
  * - 문서: cellDropBlocks(문단 p1, codeBlock cb, 1x1 표 t, tail)
  * - 마운트: mountCellDrop(선택은 tail 끝 캐럿, drop 위치는 셀 offset)
  * - 위임 판정: handledDrop(플러그인 handleDrop 반환값을 직접 읽는다)
+ * - 이벤트: htmlDrop(text/html과 text/plain을 함께 싣는 drop 이벤트)
  *
  * 표 fixture 원본(singleCellTable)과 위치 헬퍼(inCell)는
  * table-boundary-test-support.ts가 소유한다.
@@ -15,6 +16,7 @@ import type { Block } from "@cp949/geul-model";
 import { Slice } from "@tiptap/pm/model";
 
 import { createEditor } from "../src/index.js";
+import { dropData } from "./clipboard-test-support.js";
 import {
   codeBlockBlock,
   documentOf,
@@ -70,3 +72,7 @@ export const handledDrop = (tiptap: Tiptap, event: DragEvent): unknown =>
   tiptap.view.someProp("handleDrop", (handler) =>
     handler(tiptap.view, event, Slice.empty, false),
   );
+
+/** text/html과 text/plain을 함께 싣는 drop 이벤트를 만들어 editable에 보낸다. */
+export const htmlDrop = (editable: HTMLElement, html: string): DragEvent =>
+  dropData(editable, { "text/html": html, "text/plain": "plain" });

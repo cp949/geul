@@ -35,6 +35,7 @@ import { contentTextStart } from "./block-test-support.js";
 import {
   cellDropBlocks,
   handledDrop,
+  htmlDrop,
   mountCellDrop,
   stubPosAtCoords,
 } from "./clipboard-drop-test-support.js";
@@ -57,9 +58,6 @@ const TABLE_1X1 = "<table><tr><td>t</td></tr></table>";
 const TABLE_2X2 =
   "<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>";
 const P_THEN_TABLE = `<p>x</p>${TABLE_1X1}`;
-
-const htmlDrop = (editable: HTMLElement, html: string): DragEvent =>
-  dropData(editable, { "text/html": html, "text/plain": "plain" });
 
 /** 블록을 "type" 또는 "table[행/행]" 요약으로 줄인다. 셀은 `|`로 잇는다. */
 const shapeOf = (blocks: readonly DocumentBlock[]): string[] =>

@@ -538,7 +538,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 수정: `buildCellHtmlInline`의 표 단독 예외(`flattenTables`이고 표가 하나이고 표 밖 content가 없으면 `null`)를 없앴다. `flattenTables`가 켜져 있고 표가 하나 이상이면 최소 블록 수를 1로 쓴다. 인자로 받은 `minBlocks`는 무시한다. 줄이 1개여도 직접 삽입한다. 단일 셀 표는 줄 원본이 1개라 최소 블록 수 2에 걸리기 때문이다. 표가 없는 입력의 최소 블록 수(기본 2)는 그대로다. `LineStats`는 표 수만 센다. `planDrop`의 코드는 바뀌지 않았다.
   - 줄: 셀 하나가 줄 하나다. 표 안은 행 우선이다. 줄 사이는 `hardBreak` 하나다. 셀 안 `<br>`와 `<pre>`의 개행은 `hardBreak`다. 셀 content의 굵게·링크 마크는 유지한다.
   - 셀 안 문단: `importHtml`이 셀 안 문단과 목록을 한 줄로 이어 붙인 그대로 받는다(`<td><p>a</p><p>b</p></td>`는 `ab`). io 변환 계약이라 이번 범위 밖이다.
-  - 위임: 모든 셀이 빈 표는 줄이 0개라 `null`이다. 위임이고 문서가 바뀌지 않는다. 옵션이 없으면 표가 있을 때 `null`이다. 붙여넣기(`planCellHtmlInlinePaste`)와 `CellSelection` html 붙여넣기(#308)는 옵션을 넘기지 않아 바뀌지 않는다.
+  - 위임: 모든 셀이 빈 표는 줄이 0개라 `null`이다. 위임이고 문서가 바뀌지 않는다. NBSP뿐인 셀의 표도 줄이 0개라 위임이지만, PM 기본이 NBSP를 넣어 문서가 바뀐다(내용 소실·누수는 없다). 옵션이 없으면 표가 있을 때 `null`이다. 붙여넣기(`planCellHtmlInlinePaste`)와 `CellSelection` html 붙여넣기(#308)는 옵션을 넘기지 않아 바뀌지 않는다.
   - selection·transaction: #312와 같다. 삽입 범위를 `TextSelection`으로 선택한다. `uiEvent: "drop"`만 단다. dispatch 1회, revision +1, undo 1회다.
   - 유지(PM 기본): 모든 셀이 빈 표, 한 블록 html, `importHtml` 실패, 내부 드래그, 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치.
   - 예: 문서 `p "abcd"`, `code "code"`, 1x1 표 `"cell"`, `tail`에서 `ce|ll` 위치에 `<table><tr><td><p>a</p><p>b</p></td></tr></table>`을 drop하면 셀은 `ceabll`이다. 최상위 블록은 4개다. 이전에는 셀 `cea`와 표 밖 문단 `bll`이었다. 셀 안 제목 + 문단은 `cehpll`, 셀 안 목록은 `ceabll`이다. 이전에는 표 밖 누수(제목 + 문단)와 문서 불변(목록)이었다. 2x2 표(`a b / c d`)는 `ce`·`a`·`hardBreak`·`b`·`hardBreak`·`c`·`hardBreak`·`d`·`ll`이다. 이전에는 `ceabcdll`이었다. 1x1 표(`t`)는 `cetll`이고 결과는 이전과 같다.

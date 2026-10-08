@@ -326,10 +326,11 @@ const planCellInlineMultilinePaste = (
   );
 
 // 여러 블록 html을 셀 inline Fragment로 바꾼다(Issue #304, #311, #312).
-// importHtml이 실패하거나 buildCellHtmlInline이 null이면(표 포함·content 블록
-// 2개 미만·정리 뒤 줄 0개) null이다. 붙여넣기와 drop이 같은 변환을 쓴다. 표
-// 평탄화(flattenTables)는 drop만 켠다. 붙여넣기는 표를 TablePasteExtension이
-// 먼저 소비한다.
+// importHtml이 실패하거나 buildCellHtmlInline이 null이면 null이다. 붙여넣기와
+// drop이 같은 변환을 쓴다. null 조건은 content 블록 2개 미만, 정리 뒤 줄 0개,
+// 표 포함이다. 표 포함은 flattenTables가 꺼진 붙여넣기에만 해당한다.
+// flattenTables는 drop만 켠다. 붙여넣기는 표를 TablePasteExtension이 먼저
+// 소비한다.
 const cellInlineFromHtml = (
   state: EditorState,
   html: string,

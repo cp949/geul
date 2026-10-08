@@ -29,6 +29,7 @@ import { contentTextStart } from "./block-test-support.js";
 import {
   cellDropBlocks,
   handledDrop,
+  htmlDrop,
   mountCellDrop,
   stubPosAtCoords,
 } from "./clipboard-drop-test-support.js";
@@ -51,9 +52,6 @@ vi.mock("@cp949/geul-io", async (importOriginal) => {
 });
 
 const TWO_PARAGRAPHS = "<p>H1</p><p>H2</p>";
-
-const htmlDrop = (editable: HTMLElement, html: string): DragEvent =>
-  dropData(editable, { "text/html": html, "text/plain": "plain" });
 
 beforeEach(() => {
   vi.mocked(importHtml).mockClear();
