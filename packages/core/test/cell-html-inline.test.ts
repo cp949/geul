@@ -14,6 +14,8 @@
  * - 개행·공백뿐인 줄 접기와 줄 앞뒤 hardBreak 제거
  * - 마크 정규화: bold와 code가 함께면 code만 남김
  * - 발동 조건: content 블록 2개 이상이고 정리 뒤 줄 1개 이상. 표가 있으면 null
+ * - 최소 블록 수 인자(Issue #308): CellSelection 경로는 1을 넘겨 한 블록 html도
+ *   변환한다. 기본값은 2다
  */
 import type { Block, DocumentBlock } from "@cp949/geul-model";
 import type { Schema } from "@tiptap/pm/model";
@@ -39,6 +41,12 @@ const cellSchema = (): Schema =>
 /** 변환 결과를 종류 목록으로 얻는다. 발동하지 않으면 null이다. */
 const convert = (...blocks: DocumentBlock[]): string[] | null => {
   const fragment = buildCellHtmlInline(cellSchema(), blocks);
+  return fragment === null ? null : kindsOfFragment(fragment);
+};
+
+/** 최소 블록 수 1로 변환한다(CellSelection 경로). 발동하지 않으면 null이다. */
+const convertSingle = (...blocks: DocumentBlock[]): string[] | null => {
+  const fragment = buildCellHtmlInline(cellSchema(), blocks, 1);
   return fragment === null ? null : kindsOfFragment(fragment);
 };
 
@@ -407,6 +415,39 @@ describe("buildCellHtmlInline", () => {
           paragraphBlock("b", "b"),
         ),
       ).toBeNull();
+    });
+  });
+
+  describe("최소 블록 수 인자(Issue #308)", () => {
+    it("1이면 content 블록 하나도 줄을 내고 마크를 유지한다", () => {
+      expect(
+        convertSingle({
+          id: "a",
+          type: "paragraph",
+          content: [{ text: "x", marks: [{ type: "bold" }] }],
+        }),
+      ).toEqual(["x*bold"]);
+      expect(convertSingle(heading("h", "t"))).toEqual(["t"]);
+    });
+
+    it("1이면 codeBlock 한 블록도 개행이 hardBreak이고 code 마크가 없다", () => {
+      expect(convertSingle(codeBlockBlock("a", "a\nb"))).toEqual([
+        "a",
+        "br",
+        "b",
+      ]);
+    });
+
+    it("1이어도 줄이 0개이면 null이다", () => {
+      expect(convertSingle(paragraphBlock("a", ""))).toBeNull();
+      expect(convertSingle(paragraphBlock("a", SOH))).toBeNull();
+      expect(convertSingle({ id: "d", type: "divider" })).toBeNull();
+      expect(convertSingle()).toBeNull();
+    });
+
+    it("생략하면 2다(한 블록은 null)", () => {
+      expect(convert(paragraphBlock("a", "a"))).toBeNull();
+      expect(convertSingle(paragraphBlock("a", "a"))).toEqual(["a"]);
     });
   });
 

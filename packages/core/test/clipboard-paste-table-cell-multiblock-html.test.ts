@@ -18,7 +18,8 @@
  * - F1·F2·F4 개행·공백뿐인 문단 접기, 줄 1개만 남는 html, 마크 정규화
  *   (Issue #304 리뷰)
  * - H13 dispatch 1회·undo 1회·삽입 끝 캐럿·pasteHandler 미호출
- * - H14 서식 없이 붙여넣기·CellSelection·표 밖·셀 위 drop은 이전과 같음
+ * - H14 서식 없이 붙여넣기·표 밖·셀 위 drop은 이전과 같음. CellSelection은
+ *   Issue #308이 정정(같은 평탄화로 첫 셀에 넣음)
  *
  * 셀 결과는 모델 요약(outline)과 PM 셀 노드의 자식 종류(text·hardBreak)를
  * 함께 본다. outline은 hardBreak를 개행 문자로 보여 준다.
@@ -508,13 +509,16 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       expectTableIntact(result);
     });
 
-    it("CellSelection은 문서를 바꾸지 않는다(#308 범위)", () => {
+    // Issue #308이 정정: 수정 전에는 문서가 바뀌지 않았다(되돌림 guard).
+    // 자세한 축은 clipboard-paste-cell-selection.test.ts가 소유한다.
+    it("CellSelection은 같은 평탄화로 첫 셀에 넣고 나머지 선택 셀을 비운다(Issue #308이 정정)", () => {
       const result = pasteIn(firstCellBlocks(), selectFirstTwoCells, {
         "text/html": "<ul><li>a</li><li>b</li></ul>",
         "text/plain": "a\nb",
       });
 
-      expect(result.blocks()).toEqual(docOutline("table[c1|c2]"));
+      expect(kindsOf(result.tiptap, "g-r0c0")).toEqual(["a", "br", "b"]);
+      expect(result.blocks()).toEqual(docOutline("table[a\nb|]"));
     });
 
     it("표 밖 캐럿은 표 밖 경로가 넣는다", () => {

@@ -5,7 +5,7 @@
  * 대표 입력 하나를 둔다.
  *
  * 표 셀 계획(planTableCellPaste)은 pass·insertSlice·consume·pasteText·dispatch와
- * 표 밖 null을(CellSelection의 조건별 결과는 Issue #300, 셀 안 여러 줄 평문은
+ * 표 밖 null을(CellSelection의 조건별 결과는 Issue #300·#308, 셀 안 여러 줄 평문은
  * Issue #299), 기본 계획(planDefaultPaste)은 insertSlice·consume·pasteText·dispatch와
  * 블록 삽입 배치 3종(caret·blockBoundary·afterRangeDelete)을, drop 계획
  * (planDrop)은 delegate·dispatch·consume을 다룬다.
@@ -14,6 +14,7 @@ import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import { __pastedCells } from "@tiptap/pm/tables";
 import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../src/index.js";
@@ -104,15 +105,37 @@ describe("planTableCellPaste", () => {
       return tiptap;
     };
 
-    it("html이 실제 내용을 가지면 pass다", () => {
+    // Issue #308이 정정: 수정 전에는 pass였다.
+    it("html이 실제 내용을 가지면 html 인라인 내용으로 선택을 대체하는 dispatch다(Issue #308)", () => {
       const tiptap = mountCellSelected();
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("x", "<b>x</b>"),
+        sliceOfSize(tiptap, 1),
+      );
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual(["x*bold"]);
+      expect(tiptap.state.doc.textContent).toBe("paracelltail");
+    });
+
+    it("html이 실제 내용을 가져도 셀 인라인 줄이 0개이면 평문 dispatch, 평문도 비면 consume이다(Issue #308)", () => {
+      const tiptap = mountCellSelected();
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("X", "<p></p><p></p>"),
+        sliceOfSize(tiptap, 1),
+      );
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual(["X"]);
       expect(
         planTableCellPaste(
           tiptap.state,
-          clip("x", "<b>x</b>"),
+          clip("", "<p></p><p></p>"),
           sliceOfSize(tiptap, 1),
         ),
-      ).toEqual({ kind: "pass" });
+      ).toEqual({ kind: "consume" });
     });
 
     it("클립보드가 없으면 pass다", () => {
@@ -129,19 +152,59 @@ describe("planTableCellPaste", () => {
       ).toEqual({ kind: "pass" });
     });
 
-    it("셀 조각 slice는 평문이 있어도 pass다", () => {
-      const tiptap = mountCellSelected();
-      const tableSlice = tiptap.state.doc.slice(
-        tiptap.state.selection.from,
-        tiptap.state.selection.to,
+    // 표 행 전체 slice다. __pastedCells가 셀 조각으로 판정한다. 셀 하나
+    // CellSelection의 from·to로 자른 slice는 셀 안 인라인 내용이라 셀 조각이
+    // 아니다(Issue #308 작업 중 확인).
+    const rowsSlice = (tiptap: TiptapEditor): Slice => {
+      const { doc } = tiptap.state;
+      const tableStart = doc.child(0).nodeSize;
+      const slice = doc.slice(
+        tableStart + 1,
+        tableStart + doc.child(1).nodeSize - 1,
       );
+      expect(__pastedCells(slice)).not.toBeNull();
+      return slice;
+    };
+
+    it("셀 조각 slice는 html이 없으면 평문이 있어도 pass다", () => {
+      const tiptap = mountCellSelected();
       expect(
-        planTableCellPaste(
-          tiptap.state,
-          clip("x", "<table></table>"),
-          tableSlice,
-        ),
+        planTableCellPaste(tiptap.state, clip("x"), rowsSlice(tiptap)),
       ).toEqual({ kind: "pass" });
+    });
+
+    // Issue #308이 정정: html이 있으면 셀 조각 판정보다 html 분기가 먼저다.
+    // 목록 html이 CellSelection 문맥에서 셀 조각으로 판정되기 때문이다. 표
+    // html은 TablePasteExtension이 이 계획보다 먼저 처리해 실제 붙여넣기에서는
+    // 여기 오지 않는다. importHtml이 실패하는 html(`<table></table>`)은 평문
+    // 정책이다. 수정 전 기존 테스트(셀 범위로 자른 slice + 이 html → pass)는
+    // 셀 조각이 아니라 html 실제 내용 분기로 pass였다.
+    it("셀 조각 slice에 셀 인라인으로 바꿀 수 없는 html이 오면 평문 dispatch다(Issue #308)", () => {
+      const tiptap = mountCellSelected();
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("x", "<table></table>"),
+        rowsSlice(tiptap),
+      );
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual(["x"]);
+    });
+
+    it("셀 조각 slice라도 목록 html이면 셀 인라인으로 넣는다(Issue #308)", () => {
+      const tiptap = mountCellSelected();
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("a\nb", "<ul><li>a</li><li>b</li></ul>"),
+        rowsSlice(tiptap),
+      );
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual([
+        "a",
+        "br",
+        "b",
+      ]);
     });
 
     it("html 없는 유효한 평문은 선택을 대체하는 dispatch다. 계획은 문서를 바꾸지 않는다", () => {
@@ -155,6 +218,15 @@ describe("planTableCellPaste", () => {
       if (plan?.kind !== "dispatch") return;
       expect(plan.transaction.doc.textContent).toBe("paraXtail");
       expect(tiptap.state.doc.textContent).toBe("paracelltail");
+    });
+
+    // Issue #308 분기는 정리한 slice가 실제 내용을 가질 때만 탄다. 빈 slice
+    // html은 #300 판정 그대로다. 평문까지 비면 이전처럼 pass다.
+    it("빈 slice html에 평문도 비면 #300과 같이 pass다(Issue #308 분기 밖)", () => {
+      const tiptap = mountCellSelected();
+      expect(
+        planTableCellPaste(tiptap.state, clip("", "<meta>"), PM_SLICE),
+      ).toEqual({ kind: "pass" });
     });
 
     it("빈 slice html이면 평문을 dispatch로 넣는다", () => {
@@ -524,7 +596,10 @@ describe("planTableCellPaste 여러 블록 html(Issue #304)", () => {
     ]);
   });
 
-  it("CellSelection은 이 분기를 타지 않는다", () => {
+  // Issue #308이 정정: 수정 전에는 pass였다. CellSelection은 이 분기 대신
+  // CellSelection html 분기가 받는다. 선택 셀 내용을 대체한다(기존 "cell"이
+  // 남지 않는다).
+  it("CellSelection은 이 분기를 타지 않고 CellSelection html 분기가 선택을 대체한다(Issue #308이 정정)", () => {
     const tiptap = mountAt(lastCellBlocks(), at("p1", 0));
     selectCellRange(tiptap, "t-r0c0", "t-r0c0");
 
@@ -534,7 +609,13 @@ describe("planTableCellPaste 여러 블록 html(Issue #304)", () => {
       sliceOfSize(tiptap, 1),
     );
 
-    expect(plan).toEqual({ kind: "pass" });
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual([
+      "a",
+      "br",
+      "b",
+    ]);
   });
 
   it("직접 삽입 대상이 아닌 범위(다른 셀에 걸침·표 밖에서 끝남)는 이전 계획이다", () => {

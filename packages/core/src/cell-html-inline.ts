@@ -22,8 +22,8 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // index.ts로 내보내지 않는다(ADR 0002).
 //
 // 순수 함수다. 문서와 selection을 바꾸지 않고 입력 블록도 바꾸지 않는다.
-// 삽입은 호출부가 한다. 선택 종류를 모르므로 CellSelection의 서식 있는
-// html(#308)이 같은 함수를 부를 수 있다.
+// 삽입은 호출부가 한다. 선택 종류를 모른다. CellSelection의 서식 있는
+// html(Issue #308)도 같은 함수를 부른다.
 //
 // 규칙은 다음과 같다.
 // - 줄이 되는 블록: paragraph·heading·quote·목록 4종·callout의 content,
@@ -38,13 +38,15 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // - 줄 안 마크는 유지한다. 마크 집합은 스키마 규칙(excludes)으로 다시 쌓는다.
 //   bold와 code가 함께면 code만 남는다.
 // - text run이 아닌 inline 원소는 모두 버린다. 셀 스키마가 받는 inline atom도
-//   포함한다. 셀 스키마에 없는 마크도 버린다. #308이 이 함수를 재사용하면
-//   등록된 custom inline도 사라진다. 보존하려면 별도 설계가 필요하다.
+//   포함한다. 셀 스키마에 없는 마크도 버린다. CellSelection 경로(Issue #308)도
+//   등록된 custom inline을 버린다. 보존하려면 별도 설계가 필요하다.
 // - 무효 문자는 줄에서 지운다. 정리 뒤 비는 줄은 버린다.
 //
-// 발동 조건은 content를 가진 블록이 2개 이상이고 정리 뒤 줄이 1개 이상일 때다.
-// 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전 경로로 내려가면 PM 기본이
-// 남은 빈 문단을 표 뒤에 남기기 때문이다.
+// 발동 조건은 content를 가진 블록이 최소 블록 수 이상이고 정리 뒤 줄이 1개
+// 이상일 때다. 최소 블록 수는 기본 2다(셀 안 캐럿·범위, Issue #304).
+// CellSelection 경로는 1을 넘긴다(Issue #308). 한 블록 html도 PM 기본에
+// 맡기면 되돌려지기 때문이다. 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전
+// 경로로 내려가면 PM 기본이 남은 빈 문단을 표 뒤에 남기기 때문이다.
 
 // 블록 트리를 깊이 우선으로 훑어 줄 원본을 out에 모은다. 표가 있으면 false다.
 // content를 가진 블록은 비어 있어도 모은다. 호출부가 블록 수를 센다.
@@ -118,17 +120,18 @@ const lineToNodes = (schema: Schema, source: InlineContent): PmNode[] => {
 };
 
 /**
- * 블록 트리를 셀 인라인 Fragment로 바꾼다. 표가 있거나, content 블록이 2개
- * 미만이거나, 정리 뒤 줄이 0개이면 null이다. null이면 호출부는 이전 경로를
- * 쓴다.
+ * 블록 트리를 셀 인라인 Fragment로 바꾼다. 표가 있거나, content 블록이
+ * minBlocks(기본 2) 미만이거나, 정리 뒤 줄이 0개이면 null이다. null이면
+ * 호출부는 이전 경로를 쓴다.
  */
 export const buildCellHtmlInline = (
   schema: Schema,
   blocks: readonly DocumentBlock[],
+  minBlocks = 2,
 ): Fragment | null => {
   const sources: InlineContent[] = [];
   if (!collectLines(blocks, sources)) return null;
-  if (sources.length < 2) return null;
+  if (sources.length < minBlocks) return null;
   const hardBreak = schema.nodes.hardBreak?.create();
   if (hardBreak === undefined) return null;
   // 노드를 한 배열에 모아 Fragment를 한 번만 만든다. 줄마다 Fragment를

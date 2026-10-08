@@ -2,12 +2,14 @@
  * 클립보드 붙여넣기로 표가 만들어지는 실제 브라우저 동작을 검증한다.
  * Google Sheets/Excel HTML(서식 포함), TSV, 탭 없는 일반 텍스트, 표와
  * 문단이 섞인 혼합 HTML(Issue #71, 문단·표 구조 모두 무손실 보존)을
- * 함께 다룬다.
+ * 함께 다룬다. 여러 셀을 고른 상태(CellSelection)에 서식 있는 html을 붙이는
+ * 경로(Issue #308)도 실제 브라우저에서 확인한다.
  */
 import { expect, test } from "@playwright/test";
 
 import { dispatchPaste } from "./support/clipboard.js";
-import { openDemo } from "./support/demo.js";
+import { insertTable, openDemo } from "./support/demo.js";
+import { dragSelectCells } from "./support/table-selection.js";
 
 test("Google Sheets 대표 HTML을 표 밖에 붙이면 서식이 있는 표가 생긴다 @core", async ({
   page,
@@ -258,4 +260,53 @@ test("표 앞뒤에 문단이 섞인 HTML은 문단과 표 구조를 모두 보�
     )
     .toEqual(["div"]);
   await expect(editable.locator("p")).toHaveText("");
+});
+
+test("여러 셀을 고르고 서식 있는 html을 붙이면 첫 셀에 굵은 글자가 들어가고 나머지 선택 셀은 비며 셀 id가 유지된다", async ({
+  page,
+}) => {
+  // 수정 전에는 prosemirror-tables가 cellId 없는 셀을 만들어 되돌림 guard가
+  // 붙여넣기를 지웠다(Issue #308). 문서가 그대로 A|B|C로 남았다.
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const cell = (column: number) =>
+    table.locator("tr").first().locator("td").nth(column);
+
+  for (const [column, text] of ["A", "B", "C"].entries()) {
+    await cell(column).click();
+    await page.keyboard.type(text);
+  }
+  await expect(cell(2)).toHaveText("C");
+  const idsBefore = await table
+    .locator("tr")
+    .first()
+    .locator("td")
+    .evaluateAll((cells) =>
+      cells.map((node) => node.getAttribute("data-geul-cell-id")),
+    );
+  expect(idsBefore.every((id) => id !== null && id.length > 0)).toBe(true);
+
+  // 드래그 전 클릭으로 포커스를 표 안에 둔다(table-cell-selection.spec.ts와
+  // 같은 이유: 첫 포커스 mousedown은 CellSelection 추적을 시작하지 않을 수 있다).
+  await cell(0).click();
+  await dragSelectCells(page, cell(0), cell(1));
+  await expect(
+    page.getByRole("toolbar", { name: "Table selection" }),
+  ).toBeVisible();
+
+  await editable.evaluate(dispatchPaste, { html: "<b>x</b>", text: "ab" });
+
+  await expect(cell(0)).toHaveText("x");
+  await expect(cell(0).locator("strong")).toHaveText("x");
+  await expect(cell(1)).toHaveText("");
+  await expect(cell(2)).toHaveText("C");
+  await expect(editable.locator("table")).toHaveCount(1);
+  const idsAfter = await table
+    .locator("tr")
+    .first()
+    .locator("td")
+    .evaluateAll((cells) =>
+      cells.map((node) => node.getAttribute("data-geul-cell-id")),
+    );
+  expect(idsAfter).toEqual(idsBefore);
 });
