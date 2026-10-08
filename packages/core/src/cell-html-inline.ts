@@ -42,20 +42,21 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 //   등록된 custom inline을 버린다. 보존하려면 별도 설계가 필요하다.
 // - 무효 문자는 줄에서 지운다. 정리 뒤 비는 줄은 버린다.
 //
-// 표(Issue #312, drop 전용 flattenTables 옵션): 표의 셀 하나가 줄 원본 하나다.
-// 표 안은 행 우선이고 표 사이·표 밖 블록과는 문서 순서다. 표가 정확히 하나이고
-// 표 밖 content 블록이 없으면 평탄화하지 않고 null이다(PM 기본 drop이 현행이다).
-// 옵션이 없으면 표가 있을 때 null이다. 붙여넣기 경로(#304, #308)는 옵션을 넘기지
-// 않는다.
+// 표(Issue #312, #313, drop 전용 flattenTables 옵션): 표의 셀 하나가 줄 원본
+// 하나다. 표 안은 행 우선이고 표 사이·표 밖 블록과는 문서 순서다. 표 하나만 든
+// 입력도 평탄화한다(Issue #313). PM 기본 drop에 맡기면 셀 안 문단이 표 밖으로
+// 새고 목록이 사라졌다. 옵션이 없으면 표가 있을 때 null이다. 붙여넣기 경로
+// (#304, #308)는 옵션을 넘기지 않는다.
 //
 // 발동 조건은 content를 가진 블록이 최소 블록 수 이상이고 정리 뒤 줄이 1개
 // 이상일 때다. 최소 블록 수는 기본 2다(셀 안 캐럿·범위, Issue #304).
 // CellSelection 경로는 1을 넘긴다(Issue #308). 한 블록 html도 PM 기본에
-// 맡기면 되돌려지기 때문이다. 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전
+// 맡기면 되돌려지기 때문이다. flattenTables가 켜져 있고 표가 있으면 인자와
+// 무관하게 1이다(Issue #313). 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전
 // 경로로 내려가면 PM 기본이 남은 빈 문단을 표 뒤에 남기기 때문이다.
 
-// collectLines가 센 값이다. 표 수와 표 밖 content 블록 수로 표 단독 입력을 가린다.
-type LineStats = { tables: number; outside: number };
+// collectLines가 센 값이다. 평탄화한 표의 수다. 표가 있으면 최소 블록 수를 1로 쓴다.
+type LineStats = { tables: number };
 
 // 블록 트리를 깊이 우선으로 훑어 줄 원본을 out에 모은다. flattenTables가
 // 꺼져 있고 표가 있으면 false다. 켜져 있으면 표의 셀 content를 행 우선으로
@@ -81,7 +82,6 @@ const collectLines = (
     }
     if ("content" in block) {
       out.push(block.content);
-      stats.outside += 1;
     }
     if ("children" in block && block.children !== undefined) {
       if (!collectLines(block.children, out, flattenTables, stats)) {
@@ -148,8 +148,8 @@ const lineToNodes = (schema: Schema, source: InlineContent): PmNode[] => {
 export type CellHtmlInlineOptions = {
   /**
    * 켜면 표의 셀 content를 행 우선 줄로 모은다(Issue #312, drop 전용). 표가
-   * 정확히 하나이고 표 밖 content 블록이 없으면 평탄화하지 않고 null이다.
-   * 기본은 꺼짐이고, 표가 있으면 null이다.
+   * 하나 이상이면 최소 블록 수를 1로 쓴다(Issue #313). 기본은 꺼짐이고, 표가
+   * 있으면 null이다.
    */
   flattenTables?: boolean;
 };
@@ -157,8 +157,8 @@ export type CellHtmlInlineOptions = {
 /**
  * 블록 트리를 셀 인라인 Fragment로 바꾼다. 표가 있거나(flattenTables 꺼짐),
  * content 블록이 minBlocks(기본 2) 미만이거나, 정리 뒤 줄이 0개이면 null이다.
- * flattenTables가 켜져 있으면 표 하나만 든 입력도 null이다. null이면
- * 호출부는 이전 경로를 쓴다. minBlocks는 셀을 포함한 줄 원본 수로 센다.
+ * flattenTables가 켜져 있고 표가 있으면 minBlocks는 1이다. 이때 셀 하나가 줄
+ * 원본 하나다. null이면 호출부는 이전 경로를 쓴다.
  */
 export const buildCellHtmlInline = (
   schema: Schema,
@@ -168,10 +168,9 @@ export const buildCellHtmlInline = (
 ): Fragment | null => {
   const flattenTables = options.flattenTables === true;
   const sources: InlineContent[] = [];
-  const stats: LineStats = { tables: 0, outside: 0 };
+  const stats: LineStats = { tables: 0 };
   if (!collectLines(blocks, sources, flattenTables, stats)) return null;
-  if (flattenTables && stats.tables === 1 && stats.outside === 0) return null;
-  if (sources.length < minBlocks) return null;
+  if (sources.length < (stats.tables > 0 ? 1 : minBlocks)) return null;
   const hardBreak = schema.nodes.hardBreak?.create();
   if (hardBreak === undefined) return null;
   // 노드를 한 배열에 모아 Fragment를 한 번만 만든다. 줄마다 Fragment를

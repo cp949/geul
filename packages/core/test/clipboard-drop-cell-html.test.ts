@@ -10,8 +10,8 @@
  * - D2 같은 위치 캐럿 붙여넣기와 문서가 같음
  * - D3 줄 안 마크는 html의 것이고 위치의 마크는 입히지 않음
  * - D4 selection·meta·dispatch 1회·revision +1·undo 1회·현재 selection 보존
- * - D5 현행을 유지하는 입력(한 블록·표 단독·importHtml 실패·내부 드래그·파일
- *   동반·좌표 null). 표를 포함한 html은 Issue #312가 정정해
+ * - D5 현행을 유지하는 입력(한 블록·importHtml 실패·내부 드래그·파일
+ *   동반·좌표 null). 표를 포함한 html은 표 단독까지 Issue #312, #313이 정정해
  *   clipboard-drop-cell-html-table.test.ts가 소유한다
  * - D6 셀이 아닌 위치는 importHtml을 부르지 않고 좌표를 한 번만 푼다
  *
@@ -224,7 +224,6 @@ describe("표 셀 위 여러 블록 html drop(Issue #311)", () => {
       ["한 블록 html", "<p>H</p>"],
       ["한 항목 목록", "<ul><li>a</li></ul>"],
       ["pre 단독", "<pre>x</pre>"],
-      ["표 단독 html", "<table><tr><td>a</td></tr></table>"],
     ] as const)("%s는 직접 삽입하지 않고 위임한다", (_label, html) => {
       const { tiptap } = mountCellDrop();
       const before = tiptap.state.doc;

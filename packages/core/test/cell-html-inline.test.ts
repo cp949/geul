@@ -16,8 +16,9 @@
  * - 발동 조건: content 블록 2개 이상이고 정리 뒤 줄 1개 이상. 표가 있으면 null
  * - 최소 블록 수 인자(Issue #308): CellSelection 경로는 1을 넘겨 한 블록 html도
  *   변환한다. 기본값은 2다
- * - flattenTables 옵션(Issue #312): drop 전용이다. 표의 셀을 행 우선 줄로
- *   평탄화한다. 표 하나만 있으면 null이고, 옵션이 없으면 표가 있을 때 null이다
+ * - flattenTables 옵션(Issue #312, #313): drop 전용이다. 표의 셀을 행 우선
+ *   줄로 평탄화한다. 표가 하나 이상이면 최소 블록 수 1을 쓰므로 표 하나만 있어도
+ *   줄을 낸다. 옵션이 없으면 표가 있을 때 null이다
  */
 import type { Block, DocumentBlock } from "@cp949/geul-model";
 import type { Schema } from "@tiptap/pm/model";
@@ -480,15 +481,50 @@ describe("buildCellHtmlInline", () => {
       ).toBeNull();
     });
 
-    it("표 하나만 있으면 null이다(1x1, 2x2)", () => {
-      expect(convertFlat([table1()])).toBeNull();
+    it("표 하나만 있어도 줄을 낸다(1x1, 2x2)", () => {
+      expect(convertFlat([table1()])).toEqual(["t"]);
       expect(
         convertFlat([gridTable("t2", 2, 2, ["a", "b", "c", "d"])]),
-      ).toBeNull();
+      ).toEqual(["a", "br", "b", "br", "c", "br", "d"]);
     });
 
-    it("표 하나와 구분선만 있어도 content 블록이 없어 null이다", () => {
-      expect(convertFlat([table1(), { id: "d", type: "divider" }])).toBeNull();
+    it("표 하나와 구분선은 표 밖 content가 없어도 표의 줄을 낸다", () => {
+      expect(convertFlat([table1(), { id: "d", type: "divider" }])).toEqual([
+        "t",
+      ]);
+    });
+
+    it("옵션이 없으면 표 하나만 있어도 null이다", () => {
+      expect(convert(table1())).toBeNull();
+      expect(convertSingle(table1())).toBeNull();
+    });
+
+    it("셀이 모두 비면 표 하나만 있어도 줄이 0개라 null이다", () => {
+      expect(convertFlat([gridTable("t2", 1, 1, [""])])).toBeNull();
+    });
+
+    it("셀 content의 br와 마크를 유지하고 pre 개행도 hardBreak다", () => {
+      const table = gridTable("t2", 1, 2, ["", ""]);
+      if (table.type !== "table") throw new Error("fixture 준비 실패");
+      const cells = table.rows[0]?.cells;
+      if (cells?.[0] === undefined || cells[1] === undefined) {
+        throw new Error("fixture 준비 실패");
+      }
+      cells[0].content = [
+        { text: "a", marks: [{ type: "bold" }] },
+        { text: "\nb" },
+      ];
+      cells[1].content = [{ text: "c\nd" }];
+
+      expect(convertFlat([table])).toEqual([
+        "a*bold",
+        "br",
+        "b",
+        "br",
+        "c",
+        "br",
+        "d",
+      ]);
     });
 
     it.each([
@@ -586,16 +622,21 @@ describe("buildCellHtmlInline", () => {
       ).toEqual(["a", "br", "c", "br", "t"]);
     });
 
-    it("최소 블록 수는 셀을 포함한 줄 원본 수로 센다", () => {
-      // 문단 하나 + 1x1 표는 원본이 2개다.
-      expect(convertFlat([paragraphBlock("a", "x"), table1()], 3)).toBeNull();
-      // 문단 하나 + 1x2 표는 원본이 3개다.
+    it("표가 있으면 최소 블록 수가 크게 주어져도 1로 쓴다", () => {
+      expect(convertFlat([table1()], 3)).toEqual(["t"]);
+      expect(convertFlat([paragraphBlock("a", "x"), table1()], 3)).toEqual([
+        "x",
+        "br",
+        "t",
+      ]);
+    });
+
+    it("표가 없으면 flattenTables가 켜져도 최소 블록 수를 그대로 쓴다", () => {
+      expect(convertFlat([paragraphBlock("a", "x")])).toBeNull();
+      expect(convertFlat([paragraphBlock("a", "x")], 1)).toEqual(["x"]);
       expect(
-        convertFlat(
-          [paragraphBlock("a", "x"), gridTable("t2", 1, 2, ["a", "b"])],
-          3,
-        ),
-      ).toEqual(["x", "br", "a", "br", "b"]);
+        convertFlat([paragraphBlock("a", "x"), paragraphBlock("b", "y")], 3),
+      ).toBeNull();
     });
 
     it("셀이 모두 비면 표 둘이어도 줄이 0개라 null이다", () => {
