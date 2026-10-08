@@ -515,23 +515,35 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 - 표 셀 위 여러 블록 html drop(정정 2026-10-08, Issue #311). 표 셀 안 위치에 외부 여러 블록 `text/html`을 drop하면 블록 사이를 `hardBreak`로 이어 그 셀에 넣는다. 이전에는 PM 기본이 첫 블록만 셀에 넣고 나머지를 표 뒤 문단으로 뺐다(문단 셋, `<h1>`+`<p>`). 목록 여러 항목은 PM이 셀 조각으로 오인했다. 되돌림 guard가 drop을 지워 문서가 바뀌지 않았다. 같은 위치 캐럿 붙여넣기(#304)와 문서 결과가 같다.
   - 수정: `planDrop`이 `text/html`이 있으면 drop 위치를 푼 뒤, 위치가 셀의 인라인 컨텐츠일 때만 `importHtml`과 `buildCellHtmlInline`을 부른다. 변환 helper는 #304 붙여넣기와 같은 `cellInlineFromHtml`이다. `buildCellInlineDropTransaction`은 줄이 아니라 inline `Fragment`를 받는다. 평문 분기(#309)는 호출부에서 줄을 `Fragment`로 바꿔 넘긴다.
   - 대상: drop 위치의 부모가 `tableCell`이고 인라인 컨텐츠를 가진다. 표 경계(부모가 행 등)·셀 밖·atom 블록·블록 사이는 대상이 아니다. 이전과 같다. 이 위치에서는 `importHtml`을 부르지 않는다. `posAtCoords`는 한 번만 부른다.
-  - 발동 조건: #304와 같다. `importHtml`이 성공한다. 표가 없다. 내용을 가진 블록이 둘 이상이다. 정리한 줄이 하나 이상이다. 하나라도 아니면 이전 경로(정리 분기 또는 PM 기본)로 내려간다. 정정(2026-10-08, Issue #312): "표가 없다"는 표 하나만 든 입력에 한정한다. 표가 있는 그 밖의 입력은 표 셀을 줄로 풀어 발동한다.
+  - 발동 조건: #304와 같다. `importHtml`이 성공한다. 표가 없다. 내용을 가진 블록이 둘 이상이다. 정리한 줄이 하나 이상이다. 하나라도 아니면 이전 경로(정리 분기 또는 PM 기본)로 내려간다. 정정(2026-10-08, Issue #312): "표가 없다"는 표 하나만 든 입력에 한정한다. 표가 있는 그 밖의 입력은 표 셀을 줄로 풀어 발동한다. 정정(2026-10-08, Issue #313): 표 하나만 든 입력도 발동한다. 표가 있으면 최소 블록 수는 1이다. 아래 #313 문단이 정한다.
   - 마크: html의 마크만 쓴다. drop 위치의 `$pos.marks()`는 입히지 않는다. #304와 같다. 평문 drop(#309)은 위치의 마크를 입힌다. 입력 종류가 달라 규칙이 다르다.
   - selection·transaction: #309와 같다. 삽입 범위를 `TextSelection`으로 선택한다. `uiEvent: "drop"`만 달고 `paste` meta는 달지 않는다. drop은 현재 selection을 지우지 않는다. dispatch 1회, revision +1, undo 1회다. 판정은 live state로 한다.
-  - 유지(PM 기본): 한 블록 html(한 문단, 한 항목 목록, `<pre>` 단독), 표 포함 html, 표 단독 html, `importHtml` 실패, 내부 드래그(`view.dragging`), 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치. 정정(2026-10-08, Issue #312): 표 단독이 아닌 표 포함 html은 유지가 아니다. 셀에 직접 넣는다. 아래 #312 문단이 정한다.
+  - 유지(PM 기본): 한 블록 html(한 문단, 한 항목 목록, `<pre>` 단독), 표 포함 html, 표 단독 html, `importHtml` 실패, 내부 드래그(`view.dragging`), 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치. 정정(2026-10-08, Issue #312): 표 단독이 아닌 표 포함 html은 유지가 아니다. 셀에 직접 넣는다. 아래 #312 문단이 정한다. 정정(2026-10-08, Issue #313): 표 단독 html도 유지가 아니다. 아래 #313 문단이 정한다. 모든 셀이 빈 표만 위임한다.
   - 예: 문서 `p "abcd"`, `code "code"`, 1x1 표 `"cell"`, `tail`에서 `ce|ll` 위치에 `<p>H1</p><p>H2</p>`를 drop하면 셀은 `ceH1`·`hardBreak`·`H2ll`이다. 목록 `<ul><li>a</li><li>b</li></ul>`은 `cea`·`hardBreak`·`bll`이다. 이전에는 문단 둘이 셀 `ceH1`과 표 뒤 문단 `H2ll`이었고, 목록은 문서가 바뀌지 않았다.
-  - 한계: 표 포함 html(`<p>x</p><table>...</table>`)을 셀 위에 drop하면 문서가 바뀌지 않는다. 발동 조건에서 빠져 PM 기본으로 내려가고, PM 기본의 결과를 되돌림 guard가 지운다. 이번 범위 밖이다. 정정(2026-10-08, Issue #312): 해소했다. 표 단독이 아닌 표 포함 html은 아래 #312 문단이 정한다. 표 단독 html은 PM 기본이 표 내용을 셀에 합친다. 붙여넣기는 셀을 대체한다. drop은 위치 삽입이라 동작이 다르다. jsdom 합성 drop으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
+  - 한계: 표 포함 html(`<p>x</p><table>...</table>`)을 셀 위에 drop하면 문서가 바뀌지 않는다. 발동 조건에서 빠져 PM 기본으로 내려가고, PM 기본의 결과를 되돌림 guard가 지운다. 이번 범위 밖이다. 정정(2026-10-08, Issue #312): 해소했다. 표 단독이 아닌 표 포함 html은 아래 #312 문단이 정한다. 표 단독 html은 PM 기본이 표 내용을 셀에 합친다. 붙여넣기는 셀을 대체한다. drop은 위치 삽입이라 동작이 다르다. jsdom 합성 drop으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다. 정정(2026-10-08, Issue #313): 표 단독 html도 해소했다. 아래 #313 문단이 정한다.
 
 - 표 셀 위 표 포함 html drop(정정 2026-10-08, Issue #312). 표 셀 안 위치에 표를 포함한 외부 `text/html`을 drop하면 표를 셀 단위 줄로 풀어 `hardBreak`로 이어 그 셀에 넣는다. 내용이 사라지지 않고 표 밖으로 새지 않는다. 이전에는 PM 기본이 표를 셀 안에서 3분할해 삽입된 표의 `blockId`·`rowId`·`cellId`가 `null`이 됐다. 문서 검증이 실패해 되돌림 guard(`revision-guard-extension.ts`)가 drop을 통째로 지웠다. 사라진 입력은 문단 + 표, 표 + 문단, 문단 + 표 + 문단, 표 둘이다.
   - 수정: `buildCellHtmlInline`에 drop 전용 옵션 `flattenTables`를 더했다. 켜면 표의 셀 content를 행 우선으로 줄 원본에 모은다. 셀 하나가 줄 하나다. 표 사이·표 밖 블록과는 문서 순서다. 줄 사이는 `hardBreak` 하나다. 빈 줄 버림·무효 문자 정리·마크 정규화는 #304와 같은 `lineToNodes`를 쓴다. 병합 셀 때문에 행의 셀 수가 열 수와 다를 수 있어 존재하는 셀만 읽는다. `planDrop`의 html 셀 분기만 옵션을 켠다. 붙여넣기(`planCellHtmlInlinePaste`)와 `CellSelection` html 붙여넣기(#308)는 옵션을 넘기지 않아 표가 있으면 `null`이다.
-  - 경계: 표가 정확히 하나이고 표 밖 content 블록이 없으면 평탄화하지 않고 `null`이다. 표 단독 html은 PM 기본이 현행이다. 표 둘, 중첩 표 + 문단, 표 + 문단은 평탄화한다. 표 수와 표 밖 content 블록 수는 `collectLines`가 센다. 최소 블록 수(기본 2)는 셀을 포함한 줄 원본 수다.
+  - 경계: 표가 정확히 하나이고 표 밖 content 블록이 없으면 평탄화하지 않고 `null`이다. 표 단독 html은 PM 기본이 현행이다. 표 둘, 중첩 표 + 문단, 표 + 문단은 평탄화한다. 표 수와 표 밖 content 블록 수는 `collectLines`가 센다. 최소 블록 수(기본 2)는 셀을 포함한 줄 원본 수다. 정정(2026-10-08, Issue #313): 표 단독 예외를 없앴다. 표가 하나 이상이면 최소 블록 수는 1이다. `collectLines`는 표 수만 센다. 아래 #313 문단이 정한다.
   - `importHtml` 실측(jsdom): 표 앞뒤에 빈 문단을 만들지 않는다. 문단 + 표는 `[paragraph, table]`, 표 + 문단은 `[table, paragraph]`다. 중첩 표는 바깥 표의 한 셀로 이어 붙는다(`<td>o<table>…in…</table></td>`는 셀 `oin` 하나). 셀 안 문단 둘(`<td><p>a</p><p>b</p></td>`)도 셀 `ab` 하나다.
   - 마크: 셀 content의 인라인 마크를 유지한다. drop 위치의 마크는 입히지 않는다. #311과 같다. 표 구조(행·열 병합, 정렬, 색)는 셀 안에 보존하지 않는다.
   - selection·transaction: #311과 같다. 삽입 범위를 `TextSelection`으로 선택한다. `uiEvent: "drop"`만 달고 `paste` meta는 달지 않는다. drop은 현재 selection을 지우지 않는다. dispatch 1회, revision +1, undo 1회다. 판정은 live state로 한다. 판정 순서는 #311과 같다.
-  - 유지(PM 기본): 표 하나만 든 html(1x1, 2x2, 셀 안 문단 둘), 표와 구분선만 든 html, 한 블록 html, `importHtml` 실패, 내부 드래그, 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치.
+  - 유지(PM 기본): 표 하나만 든 html(1x1, 2x2, 셀 안 문단 둘), 표와 구분선만 든 html, 한 블록 html, `importHtml` 실패, 내부 드래그, 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치. 정정(2026-10-08, Issue #313): 표 하나만 든 html과 표와 구분선만 든 html은 유지가 아니다. 셀에 직접 넣는다. 아래 #313 문단이 정한다.
   - 예: 문서 `p "abcd"`, `code "code"`, 1x1 표 `"cell"`, `tail`에서 `ce|ll` 위치에 `<p>x</p><table><tr><td>t</td></tr></table>`을 drop하면 셀은 `cex`·`hardBreak`·`tll`이다. 표는 하나이고 행·열·셀 id가 그대로이며 표 뒤 문단이 생기지 않는다. 2x2 표(`a b / c d`) + 문단 `x`는 `x`·`a`·`b`·`c`·`d`가 행 우선으로 한 줄씩 `hardBreak`로 이어진다. 표 둘(`t`, `u`)은 `t`·`hardBreak`·`u`다. 이전에는 위 입력 모두 문서가 바뀌지 않았다.
   - 한계: 붙여넣기와 문서가 다르다. 붙여넣기는 `TablePasteExtension`이 표를 셀 전체 대체(그리드 덮어쓰기)로 처리한다. drop은 위치 삽입이다. 이슈 재현 입력(`<p>x</p><table>…t…</table>`)을 같은 위치에 붙이면 셀이 `x`·줄바꿈·`t` 하나로 바뀌고 셀 id가 새로 매겨진다(실측, jsdom). drop은 `cex`·`hardBreak`·`tll`이다. 이슈 본문이 적은 붙여넣기 기대(`ce`·`x`·`t`·`ll`)는 실측과 다르다. 계약은 "내용이 사라지지 않고 표 밖으로 새지 않는다"다.
-  - 한계: 표 단독 html drop은 이전과 같다. 셀 안 문단이 둘이면 `cea`와 표 밖 새 문단 `bll`이 생긴다(실측, jsdom). 표 단독 2x2는 셀 `ceabcdll`로 연결되어 내용은 보존된다. 이번 범위 밖이다.
+  - 한계: 표 단독 html drop은 이전과 같다. 셀 안 문단이 둘이면 `cea`와 표 밖 새 문단 `bll`이 생긴다(실측, jsdom). 표 단독 2x2는 셀 `ceabcdll`로 연결되어 내용은 보존된다. 이번 범위 밖이다. 정정(2026-10-08, Issue #313): 해소했다. 아래 #313 문단이 정한다.
+  - 한계: jsdom 합성 drop으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
+
+- 표 셀 위 표 하나만 든 html drop(정정 2026-10-08, Issue #313). #312는 표 하나만 든 html을 PM 기본 drop에 맡겼다. 그 입력에서 내용이 표 밖으로 새거나 사라지거나 구분 없이 이어졌다. 이제 표가 든 html은 모두 같은 방식으로 셀 안에 넣는다.
+  - 수정: `buildCellHtmlInline`의 표 단독 예외(`flattenTables`이고 표가 하나이고 표 밖 content가 없으면 `null`)를 없앴다. `flattenTables`가 켜져 있고 표가 하나 이상이면 최소 블록 수를 1로 쓴다. 인자로 받은 `minBlocks`는 무시한다. 줄이 1개여도 직접 삽입한다. 단일 셀 표는 줄 원본이 1개라 최소 블록 수 2에 걸리기 때문이다. 표가 없는 입력의 최소 블록 수(기본 2)는 그대로다. `LineStats`는 표 수만 센다. `planDrop`의 코드는 바뀌지 않았다.
+  - 줄: 셀 하나가 줄 하나다. 표 안은 행 우선이다. 줄 사이는 `hardBreak` 하나다. 셀 안 `<br>`와 `<pre>`의 개행은 `hardBreak`다. 셀 content의 굵게·링크 마크는 유지한다.
+  - 셀 안 문단: `importHtml`이 셀 안 문단과 목록을 한 줄로 이어 붙인 그대로 받는다(`<td><p>a</p><p>b</p></td>`는 `ab`). io 변환 계약이라 이번 범위 밖이다.
+  - 위임: 모든 셀이 빈 표는 줄이 0개라 `null`이다. 위임이고 문서가 바뀌지 않는다. 옵션이 없으면 표가 있을 때 `null`이다. 붙여넣기(`planCellHtmlInlinePaste`)와 `CellSelection` html 붙여넣기(#308)는 옵션을 넘기지 않아 바뀌지 않는다.
+  - selection·transaction: #312와 같다. 삽입 범위를 `TextSelection`으로 선택한다. `uiEvent: "drop"`만 단다. dispatch 1회, revision +1, undo 1회다.
+  - 유지(PM 기본): 모든 셀이 빈 표, 한 블록 html, `importHtml` 실패, 내부 드래그, 파일 동반 drop, `posAtCoords`가 `null`인 위치, 셀이 아닌 위치.
+  - 예: 문서 `p "abcd"`, `code "code"`, 1x1 표 `"cell"`, `tail`에서 `ce|ll` 위치에 `<table><tr><td><p>a</p><p>b</p></td></tr></table>`을 drop하면 셀은 `ceabll`이다. 최상위 블록은 4개다. 이전에는 셀 `cea`와 표 밖 문단 `bll`이었다. 셀 안 제목 + 문단은 `cehpll`, 셀 안 목록은 `ceabll`이다. 이전에는 표 밖 누수(제목 + 문단)와 문서 불변(목록)이었다. 2x2 표(`a b / c d`)는 `ce`·`a`·`hardBreak`·`b`·`hardBreak`·`c`·`hardBreak`·`d`·`ll`이다. 이전에는 `ceabcdll`이었다. 1x1 표(`t`)는 `cetll`이고 결과는 이전과 같다.
+  - 한계: 표 구조(병합·정렬·색)는 셀 안에 보존하지 않는다.
+  - 한계: 붙여넣기와 문서가 다르다. 붙여넣기는 표를 셀 전체 대체로 처리한다. drop은 위치 삽입이다.
   - 한계: jsdom 합성 drop으로만 측정했다. Chromium·Firefox·WebKit은 측정하지 않았다.
 
 ## 8. 오류 계약 확장
