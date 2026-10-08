@@ -454,8 +454,8 @@ export const planTableCellPaste = (
   // 서식 없이 붙여넣기면 PM이 평문으로 slice를 만든다. CellSelection은 그
   // slice도 prosemirror-tables에 맡기면 되돌려지므로 html을 보지 않는다
   // (Issue #300). 서식 있는 CellSelection html은 위 분기가 이미 처리했다
-  // (Issue #308). 캐럿 경로는 한 줄이면 PM 평문 slice를 그대로 넣어 결과가
-  // 같다. 여러 줄이면 그 slice가 표 밖으로 빠지므로 평문을 직접 넣는다
+  // (Issue #308). 캐럿 경로는 한 줄이면 clipboardTextParser가 만든 캐럿 마크
+  // slice를 PM이 그대로 넣어 결과가 같다(Issue #310). 여러 줄이면 그 slice가 표 밖으로 빠지므로 평문을 직접 넣는다
   // (Issue #299).
   const htmlWins =
     html.length > 0 &&
@@ -474,7 +474,7 @@ export const planTableCellPaste = (
   // 여러 줄은 줄 사이를 hardBreak로 이어 직접 넣는다(Issue #299). 무효 문자는
   // 이미 지운 정리본이라 pasteText를 거치지 않는다.
   if (inlineMultiline) return planCellInlineMultilinePaste(state, lines);
-  // html이 없는 유효한 한 줄 평문은 PM이 파싱한 slice를 넣는다. raw 무효
+  // html이 없는 유효한 한 줄 평문은 clipboardTextParser slice를 PM이 넣는다. raw 무효
   // 문자는 정리본으로 넣는다. Tab도 셀에서는 무효라 정리본이 raw와 다르다.
   // 정리본이 비면 이벤트만 소비한다. html이 빈 slice이면 유효한 평문도
   // 아래로 내려간다.
