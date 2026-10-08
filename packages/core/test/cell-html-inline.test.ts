@@ -16,12 +16,15 @@
  * - 발동 조건: content 블록 2개 이상이고 정리 뒤 줄 1개 이상. 표가 있으면 null
  * - 최소 블록 수 인자(Issue #308): CellSelection 경로는 1을 넘겨 한 블록 html도
  *   변환한다. 기본값은 2다
+ * - flattenTables 옵션(Issue #312): drop 전용이다. 표의 셀을 행 우선 줄로
+ *   평탄화한다. 표 하나만 있으면 null이고, 옵션이 없으면 표가 있을 때 null이다
  */
 import type { Block, DocumentBlock } from "@cp949/geul-model";
 import type { Schema } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
 
 import { buildCellHtmlInline } from "../src/cell-html-inline.js";
+import { gridTable } from "./table-boundary-test-support.js";
 import {
   codeBlockBlock,
   documentOf,
@@ -47,6 +50,17 @@ const convert = (...blocks: DocumentBlock[]): string[] | null => {
 /** 최소 블록 수 1로 변환한다(CellSelection 경로). 발동하지 않으면 null이다. */
 const convertSingle = (...blocks: DocumentBlock[]): string[] | null => {
   const fragment = buildCellHtmlInline(cellSchema(), blocks, 1);
+  return fragment === null ? null : kindsOfFragment(fragment);
+};
+
+/** flattenTables를 켜고 변환한다(drop 경로). 발동하지 않으면 null이다. */
+const convertFlat = (
+  blocks: readonly DocumentBlock[],
+  minBlocks?: number,
+): string[] | null => {
+  const fragment = buildCellHtmlInline(cellSchema(), blocks, minBlocks, {
+    flattenTables: true,
+  });
   return fragment === null ? null : kindsOfFragment(fragment);
 };
 
@@ -448,6 +462,158 @@ describe("buildCellHtmlInline", () => {
     it("생략하면 2다(한 블록은 null)", () => {
       expect(convert(paragraphBlock("a", "a"))).toBeNull();
       expect(convertSingle(paragraphBlock("a", "a"))).toEqual(["a"]);
+    });
+  });
+
+  describe("표 평탄화 옵션 flattenTables(Issue #312)", () => {
+    const table1 = (text = "t"): Block => gridTable("t1", 1, 1, [text]);
+
+    it("옵션이 없으면 표와 문단이 함께여도 null이다", () => {
+      expect(convert(paragraphBlock("a", "x"), table1())).toBeNull();
+      expect(
+        buildCellHtmlInline(
+          cellSchema(),
+          [paragraphBlock("a", "x"), table1()],
+          2,
+          { flattenTables: false },
+        ),
+      ).toBeNull();
+    });
+
+    it("표 하나만 있으면 null이다(1x1, 2x2)", () => {
+      expect(convertFlat([table1()])).toBeNull();
+      expect(
+        convertFlat([gridTable("t2", 2, 2, ["a", "b", "c", "d"])]),
+      ).toBeNull();
+    });
+
+    it("표 하나와 구분선만 있어도 content 블록이 없어 null이다", () => {
+      expect(convertFlat([table1(), { id: "d", type: "divider" }])).toBeNull();
+    });
+
+    it.each([
+      [
+        "문단 + 표",
+        () => [paragraphBlock("a", "x"), table1()],
+        ["x", "br", "t"],
+      ],
+      [
+        "표 + 문단",
+        () => [table1(), paragraphBlock("a", "y")],
+        ["t", "br", "y"],
+      ],
+      [
+        "문단 + 표 + 문단",
+        () => [paragraphBlock("a", "x"), table1(), paragraphBlock("b", "y")],
+        ["x", "br", "t", "br", "y"],
+      ],
+      [
+        "표 둘",
+        () => [table1("t"), gridTable("t2", 1, 1, ["u"])],
+        ["t", "br", "u"],
+      ],
+    ] as const)("%s 입력은 문서 순서로 줄을 낸다", (_label, make, kinds) => {
+      expect(convertFlat([...make()])).toEqual(kinds);
+    });
+
+    it("2x2 표와 문단은 셀을 행 우선으로 한 줄씩 낸다", () => {
+      expect(
+        convertFlat([
+          paragraphBlock("a", "x"),
+          gridTable("t2", 2, 2, ["a", "b", "c", "d"]),
+        ]),
+      ).toEqual(["x", "br", "a", "br", "b", "br", "c", "br", "d"]);
+    });
+
+    it("빈 셀과 공백뿐인 셀은 줄을 내지 않는다", () => {
+      expect(
+        convertFlat([
+          paragraphBlock("a", "x"),
+          gridTable("t2", 1, 4, ["", " ", "m", "n"]),
+        ]),
+      ).toEqual(["x", "br", "m", "br", "n"]);
+    });
+
+    it("셀 content의 마크를 유지한다", () => {
+      const table = gridTable("t2", 1, 1, ["t"]);
+      if (table.type !== "table") throw new Error("fixture 준비 실패");
+      const cell = table.rows[0]?.cells[0];
+      if (cell === undefined) throw new Error("fixture 준비 실패");
+      cell.content = [{ text: "t", marks: [{ type: "bold" }] }];
+
+      expect(convertFlat([paragraphBlock("a", "x"), table])).toEqual([
+        "x",
+        "br",
+        "t*bold",
+      ]);
+    });
+
+    it("병합으로 행마다 셀 수가 달라도 존재하는 셀만 읽는다", () => {
+      const table = gridTable("t2", 2, 2, ["a", "b", "c", "d"]);
+      if (table.type !== "table") throw new Error("fixture 준비 실패");
+      const first = table.rows[0];
+      if (first === undefined) throw new Error("fixture 준비 실패");
+      first.cells = [{ ...first.cells[0]!, columnSpan: 2 }];
+
+      expect(convertFlat([paragraphBlock("a", "x"), table])).toEqual([
+        "x",
+        "br",
+        "a",
+        "br",
+        "c",
+        "br",
+        "d",
+      ]);
+    });
+
+    it("셀의 무효 문자를 지우고 비는 셀은 버린다", () => {
+      expect(
+        convertFlat([
+          paragraphBlock("a", "x"),
+          gridTable("t2", 1, 2, [SOH, `m${SOH}n`]),
+        ]),
+      ).toEqual(["x", "br", "mn"]);
+    });
+
+    it("자식이 있는 블록 뒤의 표도 문서 순서다", () => {
+      expect(
+        convertFlat([
+          listItemBlock("a", "bulletListItem", "a", {
+            children: [paragraphBlock("c", "c")],
+          }),
+          table1(),
+        ]),
+      ).toEqual(["a", "br", "c", "br", "t"]);
+    });
+
+    it("최소 블록 수는 셀을 포함한 줄 원본 수로 센다", () => {
+      // 문단 하나 + 1x1 표는 원본이 2개다.
+      expect(convertFlat([paragraphBlock("a", "x"), table1()], 3)).toBeNull();
+      // 문단 하나 + 1x2 표는 원본이 3개다.
+      expect(
+        convertFlat(
+          [paragraphBlock("a", "x"), gridTable("t2", 1, 2, ["a", "b"])],
+          3,
+        ),
+      ).toEqual(["x", "br", "a", "br", "b"]);
+    });
+
+    it("셀이 모두 비면 표 둘이어도 줄이 0개라 null이다", () => {
+      expect(
+        convertFlat([
+          gridTable("t2", 1, 1, [""]),
+          gridTable("t3", 1, 1, [" "]),
+        ]),
+      ).toBeNull();
+    });
+
+    it("입력 블록을 바꾸지 않는다", () => {
+      const blocks = [paragraphBlock("a", "x"), table1()];
+      const snapshot = structuredClone(blocks);
+
+      convertFlat(blocks);
+
+      expect(blocks).toEqual(snapshot);
     });
   });
 

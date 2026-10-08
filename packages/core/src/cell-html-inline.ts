@@ -42,26 +42,51 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 //   등록된 custom inline을 버린다. 보존하려면 별도 설계가 필요하다.
 // - 무효 문자는 줄에서 지운다. 정리 뒤 비는 줄은 버린다.
 //
+// 표(Issue #312, drop 전용 flattenTables 옵션): 표의 셀 하나가 줄 원본 하나다.
+// 표 안은 행 우선이고 표 사이·표 밖 블록과는 문서 순서다. 표가 정확히 하나이고
+// 표 밖 content 블록이 없으면 평탄화하지 않고 null이다(PM 기본 drop이 현행이다).
+// 옵션이 없으면 표가 있을 때 null이다. 붙여넣기 경로(#304, #308)는 옵션을 넘기지
+// 않는다.
+//
 // 발동 조건은 content를 가진 블록이 최소 블록 수 이상이고 정리 뒤 줄이 1개
 // 이상일 때다. 최소 블록 수는 기본 2다(셀 안 캐럿·범위, Issue #304).
 // CellSelection 경로는 1을 넘긴다(Issue #308). 한 블록 html도 PM 기본에
 // 맡기면 되돌려지기 때문이다. 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전
 // 경로로 내려가면 PM 기본이 남은 빈 문단을 표 뒤에 남기기 때문이다.
 
-// 블록 트리를 깊이 우선으로 훑어 줄 원본을 out에 모은다. 표가 있으면 false다.
-// content를 가진 블록은 비어 있어도 모은다. 호출부가 블록 수를 센다.
+// collectLines가 센 값이다. 표 수와 표 밖 content 블록 수로 표 단독 입력을 가린다.
+type LineStats = { tables: number; outside: number };
+
+// 블록 트리를 깊이 우선으로 훑어 줄 원본을 out에 모은다. flattenTables가
+// 꺼져 있고 표가 있으면 false다. 켜져 있으면 표의 셀 content를 행 우선으로
+// 모은다. content를 가진 블록은 비어 있어도 모은다. 호출부가 블록 수를 센다.
 const collectLines = (
   blocks: readonly DocumentBlock[],
   out: InlineContent[],
+  flattenTables: boolean,
+  stats: LineStats,
 ): boolean => {
   for (const candidate of blocks) {
     // custom 블록은 content가 문자열이라 줄을 내지 않는다.
     if (!isKnownBlockType(candidate.type)) continue;
     const block = candidate as Block;
-    if (block.type === "table") return false;
-    if ("content" in block) out.push(block.content);
+    if (block.type === "table") {
+      if (!flattenTables) return false;
+      stats.tables += 1;
+      // 병합 셀 때문에 행의 셀 수는 열 수와 다를 수 있다. 존재하는 셀만 읽는다.
+      for (const row of block.rows) {
+        for (const cell of row.cells) out.push(cell.content);
+      }
+      continue;
+    }
+    if ("content" in block) {
+      out.push(block.content);
+      stats.outside += 1;
+    }
     if ("children" in block && block.children !== undefined) {
-      if (!collectLines(block.children, out)) return false;
+      if (!collectLines(block.children, out, flattenTables, stats)) {
+        return false;
+      }
     }
   }
   return true;
@@ -119,18 +144,33 @@ const lineToNodes = (schema: Schema, source: InlineContent): PmNode[] => {
   return nodes.slice(start, end);
 };
 
+/** buildCellHtmlInline의 선택 옵션이다. */
+export type CellHtmlInlineOptions = {
+  /**
+   * 켜면 표의 셀 content를 행 우선 줄로 모은다(Issue #312, drop 전용). 표가
+   * 정확히 하나이고 표 밖 content 블록이 없으면 평탄화하지 않고 null이다.
+   * 기본은 꺼짐이고, 표가 있으면 null이다.
+   */
+  flattenTables?: boolean;
+};
+
 /**
- * 블록 트리를 셀 인라인 Fragment로 바꾼다. 표가 있거나, content 블록이
- * minBlocks(기본 2) 미만이거나, 정리 뒤 줄이 0개이면 null이다. null이면
- * 호출부는 이전 경로를 쓴다.
+ * 블록 트리를 셀 인라인 Fragment로 바꾼다. 표가 있거나(flattenTables 꺼짐),
+ * content 블록이 minBlocks(기본 2) 미만이거나, 정리 뒤 줄이 0개이면 null이다.
+ * flattenTables가 켜져 있으면 표 하나만 든 입력도 null이다. null이면
+ * 호출부는 이전 경로를 쓴다. minBlocks는 셀을 포함한 줄 원본 수로 센다.
  */
 export const buildCellHtmlInline = (
   schema: Schema,
   blocks: readonly DocumentBlock[],
   minBlocks = 2,
+  options: CellHtmlInlineOptions = {},
 ): Fragment | null => {
+  const flattenTables = options.flattenTables === true;
   const sources: InlineContent[] = [];
-  if (!collectLines(blocks, sources)) return null;
+  const stats: LineStats = { tables: 0, outside: 0 };
+  if (!collectLines(blocks, sources, flattenTables, stats)) return null;
+  if (flattenTables && stats.tables === 1 && stats.outside === 0) return null;
   if (sources.length < minBlocks) return null;
   const hardBreak = schema.nodes.hardBreak?.create();
   if (hardBreak === undefined) return null;

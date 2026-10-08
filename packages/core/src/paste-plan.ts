@@ -16,7 +16,10 @@ import { dropPoint } from "@tiptap/pm/transform";
 import { Fragment, type ResolvedPos, Slice } from "@tiptap/pm/model";
 import { __pastedCells, CellSelection } from "@tiptap/pm/tables";
 
-import { buildCellHtmlInline } from "./cell-html-inline.js";
+import {
+  buildCellHtmlInline,
+  type CellHtmlInlineOptions,
+} from "./cell-html-inline.js";
 import {
   selectionIntersectsAnyCodeBlock,
   selectionStartsInCodeBlock,
@@ -322,16 +325,24 @@ const planCellInlineMultilinePaste = (
     linesToHardBreakInline(state.schema, lines, state.selection.$from.marks()),
   );
 
-// 여러 블록 html을 셀 inline Fragment로 바꾼다(Issue #304, #311). importHtml이
-// 실패하거나 buildCellHtmlInline이 null이면(표 포함·content 블록 2개 미만·정리
-// 뒤 줄 0개) null이다. 붙여넣기와 drop이 같은 변환을 쓴다.
+// 여러 블록 html을 셀 inline Fragment로 바꾼다(Issue #304, #311, #312).
+// importHtml이 실패하거나 buildCellHtmlInline이 null이면(표 포함·content 블록
+// 2개 미만·정리 뒤 줄 0개) null이다. 붙여넣기와 drop이 같은 변환을 쓴다. 표
+// 평탄화(flattenTables)는 drop만 켠다. 붙여넣기는 표를 TablePasteExtension이
+// 먼저 소비한다.
 const cellInlineFromHtml = (
   state: EditorState,
   html: string,
+  options?: CellHtmlInlineOptions,
 ): Fragment | null => {
   const imported = importHtml(html);
   if (!imported.ok) return null;
-  return buildCellHtmlInline(state.schema, imported.value.document.blocks);
+  return buildCellHtmlInline(
+    state.schema,
+    imported.value.document.blocks,
+    undefined,
+    options,
+  );
 };
 
 // 셀 안 캐럿·범위의 여러 블록 html 직접 삽입 계획이다(Issue #304). 블록을
@@ -796,8 +807,11 @@ const buildCellInlineDropTransaction = (
 // drop은 문단 여러 개의 나머지를 표 뒤로 빼고, 목록 여러 항목은 셀 조각으로
 // 오인해 되돌림 guard가 drop을 지웠다. 위치가 셀의 인라인 컨텐츠일 때만
 // importHtml을 부른다. 줄 안 마크는 html의 것이고 위치의 마크는 입히지 않는다.
-// 한 블록 html, 표 포함 html, importHtml 실패와 셀이 아닌 위치는 아래 정리
-// 분기로 내려간다.
+// 표를 포함한 html도 표 셀을 행 우선 줄로 풀어 같은 방식으로 넣는다(Issue
+// #312). PM 기본 drop은 표를 셀 안에 쪼개 넣어 삽입된 표의 id가 null이 되고
+// 되돌림 guard가 drop을 지웠다. 표 하나만 든 html은 PM 기본 drop이 현행이다.
+// 한 블록 html, 표 하나만 든 html, importHtml 실패와 셀이 아닌 위치는 아래
+// 정리 분기로 내려간다.
 // 무효 문자가 든 slice는 정리본을 PM 기본 drop과 같은 방식으로 넣는다(Issue
 // #306). PM 기본 drop은 원문 그대로 넣어 되돌림 guard가 drop을 통째로 지웠다.
 // 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
@@ -824,7 +838,10 @@ export const planDrop = (
     const at = position();
     if (at !== null && isCellInlinePosition(state.doc.resolve(at))) {
       // 셀 위 위치만 importHtml을 부른다. null이면 아래 정리 분기로 내려간다.
-      const inserted = cellInlineFromHtml(state, drop.html);
+      // 표를 포함한 html은 셀 단위 줄로 풀어 넣는다(Issue #312).
+      const inserted = cellInlineFromHtml(state, drop.html, {
+        flattenTables: true,
+      });
       if (inserted !== null) {
         return {
           kind: "dispatch",
