@@ -299,11 +299,12 @@ describe("html이 블록을 만들지 못할 때의 평문 폴백(Issue #287)", 
     });
 
     // 빈 문단 하나도 의미 있는 html이라 평문으로 폴백하지 않는다. 빈 줄 복사가
-    // 빈 문단을 넣는 동작을 지킨다. 문단 내용은 import 결과 그대로다.
+    // 빈 문단을 넣는 동작을 지킨다. 문단 내용은 import 결과 그대로다. 공백뿐인
+    // 문단은 importHtml이 소스 공백을 접어(Issue #320) 빈 문단이 된다.
     it.each([
       ["<p></p>", "p:"],
       ["<p><br></p>", "p:\n"],
-      ["<p> </p>", "p: "],
+      ["<p> </p>", "p:"],
     ])("빈 문단 %s는 html 우선이라 평문을 쓰지 않는다", (html, pasted) => {
       const { editor, editable, results } = setup(
         abcdAndTail(),

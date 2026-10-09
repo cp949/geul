@@ -63,8 +63,9 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // 1이다(Issue #313). 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전 경로로
 // 내려가면 PM 기본이 남은 빈 문단을 표 뒤에 남기기 때문이다.
 //
-// importHtml 한계가 한 블록에도 그대로 나온다. 스타일 기반 서식과 `<del>`은
-// 인식하지 못해 평문이 된다. `<br>`와 소스 개행은 둘 다 hardBreak가 된다.
+// importHtml 한계가 한 블록에도 그대로 나온다. 읽지 않는 스타일(`div`의
+// `white-space`, `text-transform` 등)과 `<ins>`는 평문이 된다. 소스 개행은
+// importHtml이 공백으로 접고 `<br>`만 hardBreak가 된다(Issue #320).
 
 // 줄 원본이다. code는 codeBlock에서 온 줄이라는 표시다.
 type LineSource = { content: InlineContent; code: boolean };

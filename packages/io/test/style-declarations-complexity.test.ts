@@ -21,75 +21,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseInlineStyleMarks } from "../src/clipboard/style-declarations.js";
+import {
+  measureStringWorkload,
+  restoreStringMethods,
+  type StringWorkload,
+} from "./string-workload-support.js";
 
-const INSTRUMENTED_METHODS = [
-  "split",
-  "indexOf",
-  "lastIndexOf",
-  "slice",
-  "substring",
-  "trim",
-  "trimStart",
-  "trimEnd",
-  "toLowerCase",
-  "toUpperCase",
-  "startsWith",
-  "endsWith",
-  "includes",
-  "charAt",
-  "charCodeAt",
-  "codePointAt",
-  "at",
-  "replace",
-  "replaceAll",
-  "match",
-  "matchAll",
-  "search",
-] as const;
-
-type Workload = { calls: number; chars: number };
-
-type StringMethod = (this: string, ...args: unknown[]) => unknown;
-
-const originals = new Map<string, PropertyDescriptor>();
-
-const restoreStringMethods = (): void => {
-  for (const [name, descriptor] of originals) {
-    Object.defineProperty(String.prototype, name, descriptor);
-  }
-  originals.clear();
-};
-
-/**
- * 파서 한 번 호출 동안 String.prototype 메서드 호출 횟수와 수신 문자열 길이
- * 합을 센다. 계측 코드는 `.length`와 숫자 덧셈만 쓴다 — 계측된 메서드를
- * 부르면 자기 호출까지 세어 결과가 오염된다.
- */
-const measureWorkload = (style: string): Workload => {
-  const workload: Workload = { calls: 0, chars: 0 };
-
-  for (const name of INSTRUMENTED_METHODS) {
-    const descriptor = Object.getOwnPropertyDescriptor(String.prototype, name);
-    if (descriptor === undefined) continue;
-    originals.set(name, descriptor);
-    const original = descriptor.value as StringMethod;
-    Object.defineProperty(String.prototype, name, {
-      ...descriptor,
-      value: function (this: string, ...args: unknown[]) {
-        workload.calls += 1;
-        workload.chars += this.length;
-        return original.apply(this, args);
-      },
-    });
-  }
-
-  try {
+const measureWorkload = (style: string): StringWorkload =>
+  measureStringWorkload(() => {
     parseInlineStyleMarks(style);
-  } finally {
-    restoreStringMethods();
-  }
-  return workload;
-};
+  });
 
 afterEach(restoreStringMethods);
 

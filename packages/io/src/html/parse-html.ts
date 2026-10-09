@@ -120,8 +120,9 @@ const preserveRawIntegerProperties = (
 // 실용 집합이다 — 여기 없는 태그(span, strong 등)는 인라인으로 취급돼
 // 텍스트가 이어 붙는다. 절단 텍스트는 어차피 단일 텍스트 노드가 되므로
 // 구분자 유무만 의미가 있고, 연속 경계가 만드는 중복 개행은 아래 수집기가
-// 하나로 접는다.
-const flattenBlockBoundaryTagNames = new Set([
+// 하나로 접는다. 소스 공백 접기(collapse-source-whitespace.ts)도 이 집합을
+// 줄 경계로 쓴다.
+export const flattenBlockBoundaryTagNames = new Set([
   "address",
   "article",
   "aside",

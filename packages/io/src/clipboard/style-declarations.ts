@@ -149,3 +149,28 @@ export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
 
   return result;
 };
+
+const WHITESPACE_PRESERVING_KEYWORDS = new Set([
+  "pre",
+  "pre-wrap",
+  "break-spaces",
+]);
+
+// style 속성의 마지막 `white-space` 선언이 소스 공백과 개행을 보존하는 값
+// (pre, pre-wrap, break-spaces)인지 읽는다. pre-line은 공백을 접으므로
+// 보존이 아니다. parseInlineStyleMarks와 같은 선형 방식(`;`로 자르고 선언마다
+// 첫 `:`로 나눔)이고 `!important`·대소문자·공백은 무시한다.
+export const isWhitespacePreservingStyle = (style: string): boolean => {
+  let value: string | undefined;
+
+  for (const declaration of style.split(";")) {
+    const colon = declaration.indexOf(":");
+    if (colon < 0) continue;
+    if (declaration.slice(0, colon).trim().toLowerCase() !== "white-space") {
+      continue;
+    }
+    value = normalizeDeclarationValue(declaration.slice(colon + 1));
+  }
+
+  return value !== undefined && WHITESPACE_PRESERVING_KEYWORDS.has(value);
+};

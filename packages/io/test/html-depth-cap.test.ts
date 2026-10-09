@@ -212,6 +212,48 @@ describe("importHtml 깊이 방어(Issue #130)", () => {
   });
 });
 
+// 깊이-캡 절단 텍스트의 "\n"은 수집기가 만든 br·블록 경계 구분자다(소스
+// 개행이 아니다). importHtml의 소스 공백 접기(Issue #320)가 이 개행을 공백으로
+// 바꾸면 G-CNV-002 "보이는 text와 block 경계를 보존한다"를 어긴다. 절단된
+// 입력은 접지 않는다.
+describe("importHtml 깊이-캡 절단 텍스트의 개행(Issue #320)", () => {
+  const importedText = (html: string): string => {
+    const result = importHtml(html);
+    if (!result.ok) throw new Error(result.error.message);
+    return documentVisibleText(result.value.document);
+  };
+
+  it("절단된 서브트리 안의 p 형제 텍스트는 접기 뒤에도 개행으로 구분된다", () => {
+    expect(
+      importedText(
+        buildDeepChainHtml(
+          "div",
+          MAX_HTML_TREE_DEPTH,
+          "<p>Alpha</p><p>Beta</p>",
+        ),
+      ),
+    ).toBe("Alpha\nBeta");
+  });
+
+  it("절단된 서브트리 안의 br은 접기 뒤에도 개행으로 남는다", () => {
+    expect(
+      importedText(buildDeepChainHtml("div", MAX_HTML_TREE_DEPTH, "x<br>y")),
+    ).toBe("x\ny");
+  });
+
+  it("절단된 서브트리 안의 표 셀 텍스트는 접기 뒤에도 개행으로 구분된다", () => {
+    expect(
+      importedText(
+        buildDeepChainHtml(
+          "div",
+          MAX_HTML_TREE_DEPTH,
+          "<table><tr><td>c1</td><td>c2</td></tr></table>",
+        ),
+      ),
+    ).toBe("c1\nc2");
+  });
+});
+
 describe("parseClipboardTable 깊이 방어(Issue #130)", () => {
   it("3000단 div 안의 표는 예외를 새지 않고 구조화된 NOT_TABULAR를 반환한다", () => {
     // 표 자체가 캡 너머(깊이 3001)에 있으므로 절단으로 사라진다 — 표를

@@ -163,6 +163,21 @@ describe("표 셀 위 여러 블록 html drop(Issue #311)", () => {
       ]);
     });
 
+    // Issue #320: 소스 개행은 공백으로 접히고 `<br>`만 hardBreak가 된다.
+    it.each([
+      ["문단 안 소스 개행", "<p>one\ntwo</p>", ["ceone twoll"]],
+      ["<br>", "<p>a<br>b</p>", ["cea", "br", "bll"]],
+    ] as const)(
+      "%s drop은 소스 개행을 공백으로 접고 <br>만 hardBreak로 넣는다",
+      (_label, html, kinds) => {
+        const { editable, tiptap } = mountCellDrop();
+
+        htmlDrop(editable, html);
+
+        expect(kindsOf(tiptap, "t-r0c0")).toEqual(kinds);
+      },
+    );
+
     it("`<pre><code>` 개행은 hardBreak이고 code 마크가 없다", () => {
       const { editable, tiptap } = mountCellDrop();
 

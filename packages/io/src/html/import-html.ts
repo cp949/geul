@@ -14,6 +14,10 @@ import { sanitize } from "hast-util-sanitize";
 
 import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
+import {
+  collapseSourceWhitespace,
+  hasGeulIdentityAttribute,
+} from "./collapse-source-whitespace.js";
 import { sanitizeLinks } from "./hast-properties.js";
 import {
   createDefaultIdFactory,
@@ -74,6 +78,15 @@ export const importHtml = (
     }
 
     sanitizeLinks(safeRoot.children);
+    // 외부 HTML의 소스 공백은 브라우저 규칙대로 접는다(Issue #320). 우리
+    // export가 낸 조각(data-geul-block-id·data-geul-cell-id)이 하나라도 있으면
+    // 문서 전체를 접지 않는다 — export는 공백을 그대로 내므로 접으면 왕복이
+    // 깨진다. 접기는 sanitize된 트리만 읽고 고친다(G-CNV-002). 깊이-캡으로
+    // 절단된 입력도 접지 않는다 — 절단 텍스트의 "\n"은 br·블록 경계 구분자라
+    // 소스 개행과 구분할 수 없고, 접으면 보이는 text와 block 경계가 사라진다.
+    if (!truncated && !hasGeulIdentityAttribute(safeRoot)) {
+      collapseSourceWhitespace(safeRoot);
+    }
     const document = documentFromRoot(
       safeRoot,
       options?.createId ?? createDefaultIdFactory(safeRoot),

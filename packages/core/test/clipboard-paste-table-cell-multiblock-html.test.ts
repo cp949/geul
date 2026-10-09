@@ -499,16 +499,13 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       expectTableIntact(result);
     });
 
-    // importHtml이 `<br>`와 소스 개행을 둘 다 text "\n"으로 만들어 구분하지
-    // 못한다. 여러 블록·CellSelection의 현행과 같다(스펙 한계).
-    it("문단 안 소스 개행은 hardBreak가 된다(importHtml이 br과 구분하지 못한다)", () => {
+    // Issue #320: importHtml이 소스 개행을 공백으로 접어 `<br>`와 구분한다.
+    // `<br>`만 hardBreak가 된다(아래 it.each의 "br로 나뉜 문단"). 여러
+    // 블록·CellSelection도 같은 importHtml 결과를 쓴다.
+    it("문단 안 소스 개행은 공백 하나로 접힌다(<br>만 hardBreak가 된다)", () => {
       const result = pasteMiddle("<p>one\ntwo</p>");
 
-      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
-        "ceone",
-        "br",
-        "twoll",
-      ]);
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["ceone twoll"]);
       expectTableIntact(result);
     });
 
@@ -580,14 +577,12 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       },
     );
 
-    it("줄 안쪽 소스 개행과 연속 공백은 접지 않는다(PM 기본은 접었다)", () => {
+    // Issue #320: importHtml이 줄 안쪽 소스 개행과 연속 공백을 PM 기본처럼 공백
+    // 하나로 접는다.
+    it("줄 안쪽 소스 개행과 연속 공백은 공백 하나로 접는다", () => {
       const result = pasteMiddle("<p>a   b\n   c</p>");
 
-      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
-        "cea   b",
-        "br",
-        "   cll",
-      ]);
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["cea b cll"]);
       expectTableIntact(result);
     });
 
@@ -609,10 +604,11 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       expectTableIntact(result);
     });
 
-    it("개행 없이 앞에만 있는 공백은 그대로 둔다", () => {
+    // Issue #320: 개행이 없어도 블록 시작의 소스 공백은 렌더링에서 접힌다.
+    it("개행 없이 앞에만 있는 공백도 줄 시작이라 자른다", () => {
       const result = pasteMiddle("<p>  lead</p>");
 
-      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["ce  leadll"]);
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["celeadll"]);
     });
 
     describe("선택 종류별로 같은 변환을 쓴다", () => {

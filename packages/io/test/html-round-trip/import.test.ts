@@ -189,4 +189,68 @@ describe("HTML 왕복 변환", () => {
       error: { code: "HTML_DOCUMENT_INVALID" },
     });
   });
+
+  // Issue #320: importHtml이 외부 HTML의 소스 공백을 접어도 우리 export가 낸
+  // 공백은 왕복에서 보존된다. export는 data-geul-block-id·data-geul-cell-id를
+  // 달고, 입력에 그 표식이 하나라도 있으면 접기를 건너뛴다.
+  it("exportHtml이 낸 연속·양끝 공백은 importHtml 왕복에서 보존된다", () => {
+    const document: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        { id: "paragraph", type: "paragraph", content: [{ text: "a  b " }] },
+        { id: "item", type: "bulletListItem", content: [{ text: "x  y" }] },
+        { id: "quote", type: "quote", content: [{ text: "q  q" }] },
+        {
+          id: "table",
+          type: "table",
+          columns: [{ id: "column", width: 160 }],
+          rows: [
+            {
+              id: "row",
+              cells: [
+                {
+                  id: "cell",
+                  columnId: "column",
+                  rowSpan: 1,
+                  columnSpan: 1,
+                  content: [{ text: "c  d" }],
+                },
+              ],
+            },
+          ],
+          headerRows: 0,
+          headerColumns: 0,
+        },
+      ],
+    };
+
+    const exported = exportHtml(document);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    const imported = importHtml(exported.value);
+
+    expect(imported).toEqual({
+      ok: true,
+      value: { document, warnings: [] },
+    });
+  });
+
+  it("우리 export 조각 옆의 외부 조각도 접지 않는다(문서 단위 판정)", () => {
+    const imported = importHtml(
+      '<p data-geul-block-id="own">a  b </p><p>c  d\ne</p>',
+    );
+
+    expect(imported).toMatchObject({
+      ok: true,
+      value: {
+        document: {
+          blocks: [
+            { id: "own", content: [{ text: "a  b " }] },
+            { content: [{ text: "c  d\ne" }] },
+          ],
+        },
+      },
+    });
+  });
 });
