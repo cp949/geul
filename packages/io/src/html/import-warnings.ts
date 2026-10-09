@@ -8,7 +8,12 @@ import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
-import type { HtmlElementNode, HtmlNode, HtmlRoot } from "./inline-content.js";
+import {
+  findBlockBearingColorTags,
+  type HtmlElementNode,
+  type HtmlNode,
+  type HtmlRoot,
+} from "./inline-content.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
@@ -328,6 +333,7 @@ const collectFromNodes = (
   insideCodeBlockPre: boolean,
   insideTable: boolean,
   parentFigurePreviewWidthStyle: string | undefined,
+  unwrappedColorTags: ReadonlySet<HtmlNode>,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
@@ -358,7 +364,11 @@ const collectFromNodes = (
     } else if (
       topLevel &&
       !supportedBlockNames.has(node.tagName) &&
-      !(insideSupportedBoundary && supportedInlineNames.has(node.tagName)) &&
+      !(
+        insideSupportedBoundary &&
+        supportedInlineNames.has(node.tagName) &&
+        !unwrappedColorTags.has(node)
+      ) &&
       !isOwnMediaAnchorElement(node)
     ) {
       warnings.push({
@@ -368,8 +378,14 @@ const collectFromNodes = (
       });
     }
 
+    // 블록을 품어 벗겨지는 font·mark는 color·style이 사라진다. 읽는 속성이
+    // 아니므로 #334 이전처럼 제거를 보고한다.
     const allowedAttributes = new Set(
-      htmlAllowedAttributes[node.tagName] ?? htmlAllowedAttributes["*"] ?? [],
+      unwrappedColorTags.has(node)
+        ? []
+        : (htmlAllowedAttributes[node.tagName] ??
+            htmlAllowedAttributes["*"] ??
+            []),
     );
     // code의 language/class metadata는 CodeBlock의 pre 안에서만 의미가 있다.
     // sanitizer schema는 semantic importer의 입력 보존을 위해 이를 남기지만,
@@ -433,7 +449,9 @@ const collectFromNodes = (
       warnings,
       topLevel &&
         (isBlockBoundaryTag(node.tagName) ||
-          (insideSupportedBoundary && supportedInlineNames.has(node.tagName))),
+          (insideSupportedBoundary &&
+            supportedInlineNames.has(node.tagName) &&
+            !unwrappedColorTags.has(node))),
       insideSupportedBoundary || isBlockBoundaryTag(node.tagName),
       node.tagName,
       insideCodeBlockPre || (node.tagName === "pre" && !insideTable),
@@ -441,6 +459,7 @@ const collectFromNodes = (
       node.tagName === "figure"
         ? expectedMediaPreviewWidthStyle(node)
         : undefined,
+      unwrappedColorTags,
     );
   }
 };
@@ -461,6 +480,7 @@ export const collectHtmlImportWarnings = (
     false,
     false,
     undefined,
+    findBlockBearingColorTags(root.children),
   );
   return warnings;
 };

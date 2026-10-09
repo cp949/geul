@@ -8,7 +8,8 @@
  * - 블록 경계 자손이 있으면 sanitize 이후 단계에서 그 태그만 벗긴다. 블록 자손이
  *   없는 `font`·`mark`는 색·배경 마크로 읽는다.
  * - 이 처리는 `importHtml`과 `parseClipboardTable`이 공유한다.
- * - 경고는 raw HAST 기준이라 벗기는 처리로 달라지지 않는다(G-CNV-002).
+ * - 경고는 raw HAST 기준이다. 벗겨지는 font·mark는 #334 이전처럼 지원 밖
+ *   태그로 경고한다(G-CNV-002).
  * - 기대값은 #334 이전(b5a2b8e5) 번들 실측이다. 아래 "블록 자손이 없는" 묶음은
  *   가드라 수정 전에도 통과한다.
  */
@@ -180,6 +181,57 @@ describe("경고는 블록을 벗겨도 raw HAST 기준 그대로다", () => {
     ["<mark><ul><li>a</li></ul></mark>", ["SAFE_BLOCK_DOWNGRADED:mark:"]],
   ])("%s", (html, expected) => {
     expect(warningsOf(html)).toEqual(expected);
+  });
+});
+
+describe("벗겨져 색이 사라지는 font·mark는 #334 이전 경고를 그대로 낸다", () => {
+  // 벗기면 font의 color·style과 mark의 노랑 배경이 사라진다. 경고가 없으면
+  // 손실이 조용하다(G-CNV-002). 기대값은 b5a2b8e5 번들 실측이다.
+  it.each([
+    [
+      "<div><font color=red><p>a</p></font></div>",
+      ["SAFE_BLOCK_DOWNGRADED:font:", "UNSAFE_ATTRIBUTE_REMOVED:font:color"],
+    ],
+    ["<div><mark><p>a</p></mark></div>", ["SAFE_BLOCK_DOWNGRADED:mark:"]],
+    [
+      "<ul><li><font color=red>a<ul><li>b</li></ul></font></li></ul>",
+      ["SAFE_BLOCK_DOWNGRADED:font:", "UNSAFE_ATTRIBUTE_REMOVED:font:color"],
+    ],
+    [
+      "<table><tbody><tr><td><font color=red><p>a</p><p>b</p></font></td></tr></tbody></table>",
+      ["UNSAFE_ATTRIBUTE_REMOVED:font:color"],
+    ],
+    [
+      "<font color=red><ul><li>a</li></ul></font>",
+      ["SAFE_BLOCK_DOWNGRADED:font:", "UNSAFE_ATTRIBUTE_REMOVED:font:color"],
+    ],
+    [
+      '<blockquote><font style="color:red"><p>a</p></font></blockquote>',
+      ["SAFE_BLOCK_DOWNGRADED:font:", "UNSAFE_ATTRIBUTE_REMOVED:font:style"],
+    ],
+  ])("%s", (html, expected) => {
+    const warnings = imported(html).warnings.map((warning) => {
+      const fields = warning as { element?: string; attribute?: string };
+      return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+    });
+    expect(warnings).toEqual(expected);
+  });
+
+  it("블록이 없는 font는 속성 경고 없이 마크로 읽는다", () => {
+    expect(imported('<p><font color="red">x</font></p>').warnings).toEqual([]);
+  });
+
+  it("바깥만 벗겨지고 안쪽 font는 남으면 안쪽 속성 경고는 없다", () => {
+    const warnings = imported(
+      '<div><font color="red"><p><font color="blue">x</font></p></font></div>',
+    ).warnings.map((warning) => {
+      const fields = warning as { element?: string; attribute?: string };
+      return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+    });
+    expect(warnings).toEqual([
+      "SAFE_BLOCK_DOWNGRADED:font:",
+      "UNSAFE_ATTRIBUTE_REMOVED:font:color",
+    ]);
   });
 });
 

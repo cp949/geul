@@ -356,17 +356,34 @@ const colorInlineTagNames: ReadonlySet<string> = new Set(["font", "mark"]);
 // 남았다. 허용 태그로 올린 뒤에는 인라인 요소가 블록을 품어 목록이 문단으로,
 // 표가 목록 항목 텍스트로 깨졌다. 블록 자손이 없는 font·mark는 그대로 두어
 // 색·배경 마크로 읽는다. sanitize 이후의 의미 변환이라 경고 수집(raw HAST)과
-// 무관하다(G-CNV-002). 자식을 먼저 처리하므로 바깥이 벗겨져도 블록이 없는
+// 별개다(G-CNV-002). 벗겨지는 태그의 경고는 findBlockBearingColorTags가
+// 수집기에 알린다. 자식을 먼저 처리하므로 바깥이 벗겨져도 블록이 없는
 // 안쪽 font·mark는 남는다.
 // 후위 순회 한 번으로 끝낸다 — 자식 목록 처리가 "블록 경계가 있는가"를 돌려주고
 // 부모는 그 결과로 자기 판정을 얻는다. font·mark마다 자손을 다시 훑으면 중첩
 // 깊이에 이차다. 벗기는 일은 새 배열을 만들어 한 번에 덮어써, 형제가 많아도
 // splice의 이동 비용이 붙지 않는다. 벗겨도 자손의 블록 여부는 바뀌지 않는다.
 export const unwrapBlockBearingColorTags = (nodes: HtmlNode[]): void => {
-  processColorTags(nodes);
+  processColorTags(nodes, undefined);
 };
 
-const processColorTags = (nodes: HtmlNode[]): boolean => {
+// 벗겨질 font·mark를 변경 없이 찾는다. 경고 수집기가 raw HAST에서 이 태그를
+// 지원 밖으로 보고하려고 쓴다 — 벗기면 color·style과 mark의 노랑 배경이
+// 사라지므로 #334 이전처럼 경고해야 손실이 조용하지 않다(G-CNV-002). sanitize는
+// 블록 경계 태그를 지우지 않으므로 raw와 sanitize 이후 판정이 같다.
+export const findBlockBearingColorTags = (
+  nodes: readonly HtmlNode[],
+): ReadonlySet<HtmlNode> => {
+  const found = new Set<HtmlNode>();
+  processColorTags(nodes as HtmlNode[], found);
+  return found;
+};
+
+// found를 주면 트리를 바꾸지 않고 벗길 태그만 모은다.
+const processColorTags = (
+  nodes: HtmlNode[],
+  found: Set<HtmlNode> | undefined,
+): boolean => {
   let hasBlock = false;
   let changed = false;
   const result: HtmlNode[] = [];
@@ -375,13 +392,18 @@ const processColorTags = (nodes: HtmlNode[]): boolean => {
       result.push(node);
       continue;
     }
-    const childHasBlock = processColorTags(node.children);
+    const childHasBlock = processColorTags(node.children, found);
     if (blockBoundaryTagNames.has(node.tagName) || childHasBlock) {
       hasBlock = true;
     }
     if (colorInlineTagNames.has(node.tagName) && childHasBlock) {
-      for (const child of node.children) result.push(child);
-      changed = true;
+      if (found !== undefined) {
+        found.add(node);
+        result.push(node);
+      } else {
+        for (const child of node.children) result.push(child);
+        changed = true;
+      }
     } else {
       result.push(node);
     }
