@@ -247,7 +247,7 @@ describe("b·strong의 style", () => {
     ).toEqual(markedText([{ type: "bold" }]));
   });
 
-  it("b는 normal·400이 아닌 font-weight를 기존처럼 bold로 읽는다", () => {
+  it("b는 유효한 비굵기 font-weight를 굵게로 읽지 않고 무효 값은 굵게로 읽는다", () => {
     // Issue #334로 판정이 바뀌었다. 유효하지만 굵지 않은 값(500·lighter)은
     // 굵게가 아니고, 무효한 값은 선언이 무시돼 UA 굵기(bold)가 남는다.
     expect(paragraphContent('<b style="font-weight:500">x</b>')).toEqual([
@@ -291,7 +291,7 @@ describe("색과 스타일 마크", () => {
   });
 });
 
-describe("style을 읽지 않는 곳", () => {
+describe("style 속성 제거 경고 계약", () => {
   it("p의 style은 서식을 마크로 읽고 속성 제거 경고를 낸다", () => {
     const value = importedValue('<p style="font-weight:700">x</p>');
 

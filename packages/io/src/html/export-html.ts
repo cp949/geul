@@ -93,8 +93,8 @@ export type ExportHtmlOptions = {
 // 4종)이 공유하는 data-geul-* 매핑이다. 표 셀 색상·정렬(cellNode 아래)과 같은
 // 패턴이지만 필드명이 align이 아니라 textAlignment라 별도 속성명을 쓴다.
 // style(text-block-props-style.ts, Issue #179)은 이 세 data-geul-* 뒤에
-// 마지막으로 붙는다 — import 쪽은 문서 내용 생성에는 style을 읽지 않고
-// 항상 data-geul-*만 권위로 삼는다(G-CNV-001). 같은 직렬화 규칙을
+// 마지막으로 붙는다 — import 쪽은 data-geul-*를 권위로 삼고, data-geul-*가
+// 없는 필드만 style에서 채운다(Issue #334, G-CNV-001). 같은 직렬화 규칙을
 // import-warnings.ts가 재사용해 raw style이 이 함수가 낼 값과 정확히
 // 같을 때만 "제거됨" 경고를 억제한다 — 순서 자체는 그 비교의 일부라 여기서
 // 바꾸면 import-warnings.ts도 함께 바꿔야 한다.

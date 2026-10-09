@@ -88,8 +88,9 @@ export const buildProductionListItemBlock = (
   | ToggleListItemBlock => {
   // TextBlockProps(textColor/backgroundColor/textAlignment)는 이 DELTA
   // 범위가 아니다 — Production*ListItemExtension이 아직 이 속성을 DOM에
-  // 노출하지 않는다(production-editor-assembly.ts). div 허용 목록에도
-  // 올리지 않았으므로 sanitize가 어차피 지운다.
+  // 노출하지 않는다(production-editor-assembly.ts). 이 함수는 목록 항목 div의
+  // style을 읽지 않는다. Issue #334 이후 sanitize는 div의 style을 남기지만
+  // 이 경로에서는 쓰이지 않는다.
   const id = propertyString(ownNode, "dataGeulBlockId") ?? createId();
   const content = paragraphContentFromNodes(ownNode.children);
   switch (type) {

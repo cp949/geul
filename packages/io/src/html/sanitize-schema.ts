@@ -118,12 +118,11 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // (inline-content.ts의 wrapMark 참고).
   // p/h1~h6/blockquote/li/summary(TextBlockProps, Issue #179)는 exportHtml이
   // style도 함께 내지만(export-html.ts의 textBlockPropsAttributes) 이 허용
-  // 목록에는 의도적으로 올리지 않는다 — data-geul-* 3종이 이미 유일한 권위
-  // 값이라(G-CNV-001) import는 style을 다시 파싱·검증할 필요가 없고, span과
-  // 달리 이 다섯 태그는 값이 항상 data-geul-*로도 왕복하므로 style을 별도로
-  // 허용해도 얻는 정보가 없다. sanitize가 그대로 제거하고, 그 raw "제거됨"
-  // 경고는 data-geul-* 존재를 조건으로 import-html-blocks.ts가
-  // consumePreservedAttributeWarning으로 억제한다(계획서 "## 결정").
+  // 목록(경고 기준)에는 올리지 않는다 — data-geul-* 3종이 권위 값이다
+  // (G-CNV-001). 외부 HTML은 data-geul-*가 없는 필드를 style에서 읽어야 하므로
+  // sanitize 스키마에는 styleReadAttributes로 style을 남긴다(Issue #334). raw
+  // "제거됨" 경고는 이전 그대로 나오고, data-geul-* 존재를 조건으로
+  // import-html-blocks.ts가 consumePreservedAttributeWarning으로 억제한다.
   span: ["style"],
   // b·strong의 style은 굵기 판정(`font-weight:normal|400` 등)과 색·기울임·
   // 밑줄·취소선 마크 판정에만 쓴다(Issue #316·#320·#334, marksForElement).
