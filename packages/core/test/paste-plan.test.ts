@@ -66,6 +66,45 @@ describe("planDefaultPaste", () => {
     expect(plan.kind).toBe("dispatch");
   });
 
+  describe("막은 블록 타입(Issue #318)", () => {
+    const denyQuote = {
+      ...deps,
+      enabledBlockTypes: { mode: "deny", types: ["quote"] },
+    } as const;
+    const quoteHtml = "<p>a</p><blockquote>q</blockquote>";
+
+    it("막은 타입이 든 html은 한 줄 평문 pasteText로 폴백한다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
+      expect(
+        planDefaultPaste(
+          tiptap.state,
+          clip("a q", quoteHtml),
+          PM_SLICE,
+          denyQuote,
+        ),
+      ).toEqual({ kind: "pasteText", text: "a q" });
+    });
+
+    it("막은 타입이 든 html의 여러 줄 평문은 직접 삽입 transaction을 dispatch한다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
+      const plan = planDefaultPaste(
+        tiptap.state,
+        clip("a\nq", quoteHtml),
+        PM_SLICE,
+        denyQuote,
+      );
+      expect(plan.kind).toBe("dispatch");
+    });
+
+    it("enabledBlockTypes가 없으면 같은 html이 블록 삽입이다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
+      expect(
+        planDefaultPaste(tiptap.state, clip("a q", quoteHtml), PM_SLICE, deps)
+          .kind,
+      ).toBe("insertBlocks");
+    });
+  });
+
   it("서식 없이 붙여넣기면 html을 읽지 않는다", () => {
     const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 2));
     expect(

@@ -374,15 +374,18 @@ export const childCodeBlocks = (): Block[] => [
 
 /**
  * 문서를 마운트하고 시작 블록·끝 블록의 텍스트 offset으로 범위를 만든다.
- * 끝을 생략하면 시작과 같은 캐럿이다. onPasteRejected·pasteHandler 옵션은
- * overrides로 넘긴다. codeBlock에 걸친 붙여넣기 테스트
+ * 끝을 생략하면 시작과 같은 캐럿이다. enabledBlockTypes·onPasteRejected·
+ * pasteHandler 옵션은 overrides로 넘긴다. codeBlock에 걸친 붙여넣기 테스트
  * (clipboard-paste-code-block-*)가 공유한다(G-TST-002).
  */
 export const setupPasteSelection = (
   blocks: Block[],
   from: { id: string; offset: number },
   to: { id: string; offset: number } = from,
-  overrides: Pick<CreateEditorOptions, "onPasteRejected" | "pasteHandler"> = {},
+  overrides: Pick<
+    CreateEditorOptions,
+    "enabledBlockTypes" | "onPasteRejected" | "pasteHandler"
+  > = {},
 ) => {
   const editor = createEditor({
     initialDocument: documentOf(...blocks),

@@ -21,7 +21,11 @@ import {
 } from "./code-block-mark-guard-extension.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
-import { modelToTiptap, type TiptapJsonNode } from "./model-to-tiptap.js";
+import {
+  type EnabledBlockTypes,
+  modelToTiptap,
+  type TiptapJsonNode,
+} from "./model-to-tiptap.js";
 import {
   isRangeEndingAtChildrenBlockEnd,
   resolvePasteBlockPlacement,
@@ -46,6 +50,10 @@ import {
 export type DefaultPastePlanDeps = {
   createId: IdFactory;
   iframeEmbed?: IframeEmbedConfig;
+  // 막은 블록 타입이 든 입력은 modelToTiptap이 거절한다(Issue #318).
+  // 거절되면 html은 평문으로 폴백한다. Markdown은 감지 결과를 버리고
+  // 평문 경로로 내려간다.
+  enabledBlockTypes?: EnabledBlockTypes;
 };
 
 // 이미 조립된 blockContainer JSON 배열의 절대 깊이가 MAX_NESTING_DEPTH를
@@ -250,6 +258,12 @@ export const planDefaultPaste = (
     }
   }
 
+  // modelToTiptap에 넘길 옵션이다. 막은 블록 타입이 든 입력을 거절하게 한다.
+  const encodeOptions =
+    deps.enabledBlockTypes === undefined
+      ? undefined
+      : { enabledBlockTypes: deps.enabledBlockTypes };
+
   // html이 블록을 만들지 못했는지(Issue #287). 만들지 못하면
   // 아래 평문 분기로 낙하한다. 낙하 전에 문서를 바꾸지 않는다.
   let htmlFellBack = false;
@@ -277,14 +291,18 @@ export const planDefaultPaste = (
         ),
       };
       // 블록이 0개면 modelToTiptap이 DOCUMENT_INVALID로 거절한다.
-      const encoded = modelToTiptap(document);
+      // 막은 타입이 하나라도 있으면 EDITOR_FEATURE_UNAVAILABLE로
+      // 거절한다(Issue #318). 허용 블록만 골라 넣지 않는다.
+      const encoded = modelToTiptap(document, encodeOptions);
       if (encoded.ok) {
         return planInsertBlocks(state, encoded.value.content ?? []);
       }
     }
-    // import 실패와 빈 결과는 같은 클립보드의 text/plain으로
-    // 폴백한다. 위험 URL·제어문자 html은 여전히 import하지
-    // 않는다. 사용자 눈에는 붙여넣기가 사라진 것이라 평문을 쓴다.
+    // import 실패, 빈 결과, 막은 블록 타입이 든 결과는 같은
+    // 클립보드의 text/plain으로 폴백한다. 위험 URL·제어문자 html은
+    // 여전히 import하지 않는다. 사용자 눈에는 붙여넣기가 사라진
+    // 것이라 평문을 쓴다. 막은 타입을 그대로 삽입하면 insertContent가
+    // false를 내도 반환값이 무시돼 삽입만 사라진다(Issue #318).
     htmlFellBack = true;
   }
 
@@ -323,9 +341,12 @@ export const planDefaultPaste = (
     createId: deps.createId,
   });
   if (detection.detected) {
-    const encoded = modelToTiptap(detection.document);
-    if (!encoded.ok) return { kind: "consume" };
-    return planInsertBlocks(state, encoded.value.content ?? []);
+    const encoded = modelToTiptap(detection.document, encodeOptions);
+    // 막은 타입이 든 Markdown은 consume하지 않고 아래 평문 경로로
+    // 내려간다. consume은 붙여넣기를 조용히 지운다(Issue #318).
+    if (encoded.ok) {
+      return planInsertBlocks(state, encoded.value.content ?? []);
+    }
   }
 
   // 여러 줄 plain text는 Enter 분할과 같은 규칙으로 직접 배치한다

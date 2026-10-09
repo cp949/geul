@@ -737,6 +737,11 @@ export const createProductionEditor = (options: {
         ...(options.iframeEmbed === undefined
           ? {}
           : { iframeEmbed: options.iframeEmbed }),
+        // Issue #318 — 막은 블록 타입이 든 붙여넣기를 계획 단계에서 거르고
+        // 평문으로 폴백하게 한다. 위 스키마 gate와 같은 소스다.
+        ...(options.enabledBlockTypes === undefined
+          ? {}
+          : { enabledBlockTypes: options.enabledBlockTypes }),
       }),
       TablePasteExtension.configure({
         createId: options.createId,

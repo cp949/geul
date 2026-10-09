@@ -7,6 +7,7 @@ import type { EditorView } from "@tiptap/pm/view";
 import type { EditorController } from "./editor-controller-types.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
 import { modelDepthAtPasteTarget } from "./indent-commands.js";
+import type { EnabledBlockTypes } from "./model-to-tiptap.js";
 import { resolvePasteBlockPlacement } from "./paste-block-placement.js";
 import { clampDepth, planDefaultPaste, planDrop } from "./paste-plan.js";
 import type { PasteClipboard, PastePlan } from "./paste-plan-types.js";
@@ -37,16 +38,19 @@ import { plainTextClipboardParser } from "./plain-text-paste.js";
 // 위치·형태 판정은 붙여넣기 계획(paste-plan.ts·table-cell-paste-plan.ts)이 한다.
 // 이 확장은 PM hook에서 클립보드 값을 읽어 계획을 받고 실행한다(Issue #306).
 
-// enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12)를 이 확장의 두
-// modelToTiptap 호출부(아래)에 threading하지 않는다 — 착수 중
-// "비활성 타입 붙여넣기가 insertContent에서 크래시할 것"이라는 가설을
-// 세웠다가 실측(node_modules/@tiptap/core/src/commands/insertContentAt.ts)
-// 으로 반증했다: `content = createNodeFromContent(...)`가 항상(editor
-// 옵션과 무관) try/catch로 감싸여 있어 알 수 없는 노드 타입이면
+// enabledBlockTypes(spec §4.4 EXT-004, RD-002-DELTA-12)는 붙여넣기 계획
+// (paste-plan.ts)의 modelToTiptap 호출에 넘긴다(Issue #318). 막은 타입이
+// 든 입력을 거르기 위해서다. 크래시 때문이 아니다. 착수 중 "비활성 타입
+// 붙여넣기가 insertContent에서 크래시할 것"이라는 가설은 실측
+// (node_modules/@tiptap/core/src/commands/insertContentAt.ts)으로
+// 반증했다: `content = createNodeFromContent(...)`가 항상(editor 옵션과
+// 무관) try/catch로 감싸여 있어 알 수 없는 노드 타입이면
 // `emitContentError` 이벤트만 내고 `return false`로 조용히 끝난다 —
-// uncaught exception이 없다. modelToTiptap이 미리 거절하든 안 하든
-// 관찰 가능한 결과(붙여넣기가 아무것도 넣지 않는다)가 같아 이 스레딩은
-// 검출 변이를 만들 수 없는 죽은 코드였다.
+// uncaught exception이 없다.
+// 다만 그 false를 계획 실행이 무시한다. 허용 블록이 섞인 입력은 삽입이
+// 사라지고, 범위 선택이면 chain `.run()`이 범위 삭제만 dispatch한다.
+// 그래서 modelToTiptap이 미리 거절하게 하고, 거절된 html은 text/plain으로
+// 폴백한다.
 export type ClipboardPasteOptions = {
   createId: IdFactory;
   // spec §10(IO-008), RD-001-DELTA-01 — 등록된 pasteHandler가 아래
@@ -65,6 +69,10 @@ export type ClipboardPasteOptions = {
   // 것과 같은 소스). 미지정이면 io.importHtml 자체 기본값(가장 보수적)이
   // 적용된다.
   iframeEmbed?: IframeEmbedConfig;
+  // Issue #318 — production-editor-assembly.ts가 construction-time
+  // `options.enabledBlockTypes`를 그대로 전달한다. 미지정이면 모든 타입이
+  // 허용이다.
+  enabledBlockTypes?: EnabledBlockTypes;
 };
 
 export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
@@ -84,6 +92,7 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
     const pasteHandler = this.options.pasteHandler;
     const controllerFacade = this.options.controllerFacade;
     const iframeEmbed = this.options.iframeEmbed;
+    const enabledBlockTypes = this.options.enabledBlockTypes;
     // view.pasteText(sanitized, event) 재진입 가드(아래 sanitize 분기와
     // html 폴백 분기 전용) — prosemirror-view의 doPaste가 자체적으로
     // view.someProp("handlePaste", f => f(view, event, slice))를 한 번 더
@@ -281,6 +290,9 @@ export const ClipboardPasteExtension = Extension.create<ClipboardPasteOptions>({
                 planDefaultPaste(view.state, clipboard, slice, {
                   createId,
                   ...(iframeEmbed === undefined ? {} : { iframeEmbed }),
+                  ...(enabledBlockTypes === undefined
+                    ? {}
+                    : { enabledBlockTypes }),
                 }),
                 event,
                 preferPlain,
