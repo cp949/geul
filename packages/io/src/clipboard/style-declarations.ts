@@ -6,7 +6,82 @@ export type StyleDeclarations = {
   align?: "left" | "center" | "right";
 };
 
-const DECLARATION_PATTERN = /([a-zA-Z-]+)\s*:\s*([^;]+)/g;
+// 정규식 `\s`와 같은 집합이다. 문자 하나를 정규식 없이 판정하려고 둔다.
+const REGEX_WHITESPACE = new Set([
+  "\t",
+  "\n",
+  "\v",
+  "\f",
+  "\r",
+  " ",
+  "\u00a0",
+  "\u1680",
+  "\u2000",
+  "\u2001",
+  "\u2002",
+  "\u2003",
+  "\u2004",
+  "\u2005",
+  "\u2006",
+  "\u2007",
+  "\u2008",
+  "\u2009",
+  "\u200a",
+  "\u2028",
+  "\u2029",
+  "\u202f",
+  "\u205f",
+  "\u3000",
+  "\ufeff",
+]);
+
+const isPropertyCharacter = (character: string): boolean =>
+  (character >= "a" && character <= "z") ||
+  (character >= "A" && character <= "Z") ||
+  character === "-";
+
+// `;`로 자른 선언 하나에서 속성 이름과 값을 읽는다. 옛 정규식
+// `([a-zA-Z-]+)\s*:\s*([^;]+)`과 결과가 같다.
+// - 속성은 `:` 직전(공백은 건너뜀)의 [a-zA-Z-] run이다. 그 앞의 다른 글자는
+//   무시한다.
+// - 앞에 속성 run이 없는 `:`는 건너뛰고 다음 `:`를 본다.
+// - 속성 run이 있는 첫 `:`가 선언의 유일한 매칭이다. 값은 그 뒤 끝까지다.
+// - 그 `:`가 선언의 마지막 글자면 값이 비어 매칭이 없다. 뒤에 `:`도 없다.
+// 정규식은 시작 위치마다 끝까지 매칭했다가 되돌아가 알파벳 run에서 이차
+// 시간이었다. 여기서는 선언을 한 번 훑고 각 글자를 상수 번만 본다. 글자는
+// 대괄호로 읽는다 — String 메서드를 선언마다 부르지 않는다.
+const readDeclaration = (
+  declaration: string,
+): { property: string; rawValue: string } | undefined => {
+  // 현재 속성 후보 run의 [start, end). start가 -1이면 후보가 없다.
+  let runStart = -1;
+  let runEnd = -1;
+  // 후보 run이 아직 열려 있는지(글자가 이어지는 중)다. 닫힌 뒤에는 공백만
+  // 와야 후보가 유지된다.
+  let inRun = false;
+
+  for (let index = 0; index < declaration.length; index += 1) {
+    const character = declaration[index] as string;
+    if (isPropertyCharacter(character)) {
+      if (!inRun) runStart = index;
+      inRun = true;
+      runEnd = index + 1;
+    } else if (REGEX_WHITESPACE.has(character)) {
+      inRun = false;
+    } else if (character === ":" && runStart >= 0) {
+      if (index === declaration.length - 1) return undefined;
+      return {
+        property: declaration.slice(runStart, runEnd),
+        rawValue: declaration.slice(index + 1),
+      };
+    } else {
+      inRun = false;
+      runStart = -1;
+    }
+  }
+
+  return undefined;
+};
 
 const toHexChannel = (value: number): string =>
   Math.min(255, Math.max(0, value)).toString(16).padStart(2, "0").toUpperCase();
@@ -46,10 +121,11 @@ const normalizeColor = (rawValue: string): string | undefined => {
 export const parseStyleDeclarations = (style: string): StyleDeclarations => {
   const result: StyleDeclarations = {};
 
-  for (const match of style.matchAll(DECLARATION_PATTERN)) {
-    const property = match[1]?.trim().toLowerCase();
-    const rawValue = match[2]?.trim();
-    if (property === undefined || rawValue === undefined) continue;
+  for (const declaration of style.split(";")) {
+    const read = readDeclaration(declaration);
+    if (read === undefined) continue;
+    const property = read.property.toLowerCase();
+    const rawValue = read.rawValue.trim();
 
     if (property === "color") {
       const normalized = normalizeColor(rawValue);

@@ -1,8 +1,8 @@
 /**
- * `parseInlineStyleMarks`가 style 입력 길이에 선형임을 시간이 아니라
- * 관측 가능한 작업량으로 고정한다(G-TST-004).
+ * `parseInlineStyleMarks`와 `parseStyleDeclarations`가 style 입력 길이에
+ * 선형임을 시간이 아니라 관측 가능한 작업량으로 고정한다(G-TST-004).
  *
- * 파서는 `String.prototype`의 문자열 메서드(split·indexOf·slice·trim 등)만으로
+ * 두 파서는 `String.prototype`의 문자열 메서드(split·indexOf·slice·trim 등)만으로
  * 입력을 읽는다. 그 메서드를 감싸 두 축을 센다.
  * 1. 호출 횟수: 선언마다 다시 훑는 형태(이미 읽은 조각을 되돌아가 재처리)는
  *    호출 횟수가 선언 수의 제곱으로 뛴다.
@@ -14,13 +14,20 @@
  * 선언이 아주 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력,
  * 공백·토큰이 긴 입력이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
- * 한계: 정규식 엔진 내부 작업은 이 계측에 잡히지 않는다. 파서는
- * `!important` 제거와 선언 분리에 정규식을 쓰지 않는다(공백 run 입력에서
- * 이차 시간이 되는 `\s*!important\s*$` 형태를 피했다).
+ * 한계: 정규식 엔진 내부 작업은 이 계측에 잡히지 않는다.
+ * `parseInlineStyleMarks`는 `!important` 제거와 선언 분리에 정규식을 쓰지
+ * 않는다(공백 run 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를
+ * 피했다). `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳
+ * run에서 이차 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이
+ * 2로 보였다. 그래서 `parseStyleDeclarations`에는 이 작업량 테스트에 더해
+ * 시간 상한 테스트를 하나 둔다.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseInlineStyleMarks } from "../src/clipboard/style-declarations.js";
+import {
+  parseInlineStyleMarks,
+  parseStyleDeclarations,
+} from "../src/clipboard/style-declarations.js";
 import {
   measureStringWorkload,
   restoreStringMethods,
@@ -75,5 +82,60 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     const before = String.prototype.slice;
     measureWorkload("font-weight:700");
     expect(String.prototype.slice).toBe(before);
+  });
+});
+
+const declarationInputShapes: Array<[string, (size: number) => string]> = [
+  ["선언이 아주 많은 입력", (size) => "color:#ff0000;".repeat(size)],
+  ["값이 긴 알파벳 run인 입력", (size) => `color:${"a".repeat(size)}`],
+  ["`;`와 `:`가 없는 긴 입력", (size) => "a".repeat(size)],
+  [
+    "공백·토큰이 긴 입력",
+    (size) =>
+      `background:${" ".repeat(size * 16)}#fff;color:${"x ".repeat(size)}: text-align :${" ".repeat(size)}left`,
+  ],
+];
+
+describe("parseStyleDeclarations의 선형 시간", () => {
+  it.each(declarationInputShapes)(
+    "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
+    (_name, build) => {
+      const small = measureStringWorkload(() => {
+        parseStyleDeclarations(build(BASE_SIZE));
+      });
+      const large = measureStringWorkload(() => {
+        parseStyleDeclarations(build(BASE_SIZE * 2));
+      });
+
+      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
+      expect(small.calls).toBeGreaterThan(0);
+      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
+
+      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
+        2,
+      );
+      expect(
+        large.chars / small.chars,
+        "처리 문자 수 증가율",
+      ).toBeLessThanOrEqual(2);
+    },
+  );
+
+  // 작업량 계측은 정규식 엔진 내부의 되돌아가기(backtracking)를 세지 못한다.
+  // 옛 구현은 `:`가 없는 알파벳 run에서 시작 위치마다 끝까지 매칭했다가
+  // 되돌아가 이차 시간이었고, 계측에는 `matchAll` 호출 1회로 보였다. 그
+  // 구현으로 되돌리는 변이를 잡으려고 시간 상한을 하나 둔다. 이슈 실측은
+  // 80,000자에서 6.6초였고 선형 구현은 밀리초 단위다. 둘이 겹치지 않도록
+  // 상한은 1초로 잡는다. 느린 기계나 병렬 부하의 지터는 이 간격이 흡수하고,
+  // 이 상한은 심각한 붕괴만 잡는다.
+  it("`:`가 없는 알파벳 run 80,000자를 1초 안에 읽는다", () => {
+    const style = "a".repeat(80_000);
+
+    const started = performance.now();
+    const result = parseStyleDeclarations(style);
+    const elapsed = performance.now() - started;
+
+    expect(result).toEqual({});
+    expect(elapsed).toBeLessThan(1000);
   });
 });
