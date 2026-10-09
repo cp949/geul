@@ -236,6 +236,41 @@ describe("HTML 왕복 변환", () => {
     });
   });
 
+  // Issue #322: 미리보기 CSS가 빈 문단에 높이를 주는 쪽(preview.css)으로
+  // 풀기로 했다. export 출력은 바꾸지 않고 빈 문단을 `<p …></p>` 그대로
+  // 내보낸다. 왕복에서 빈 문단 수가 유지돼야 그 전제가 선다.
+  it.each([0, 1, 2, 3])(
+    "빈 문단 %i개는 exportHtml이 빈 <p>로 내보내고 importHtml 왕복에서 수가 유지된다",
+    (emptyCount) => {
+      const document: Document = {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          { id: "above", type: "paragraph", content: [{ text: "위" }] },
+          ...Array.from({ length: emptyCount }, (_, index) => ({
+            id: `empty-${index}`,
+            type: "paragraph" as const,
+            content: [],
+          })),
+          { id: "below", type: "paragraph", content: [{ text: "아래" }] },
+        ],
+      };
+
+      const exported = exportHtml(document);
+      expect(exported.ok).toBe(true);
+      if (!exported.ok) throw new Error(exported.error.message);
+      const emptyParagraphs =
+        exported.value.match(/<p data-geul-block-id="empty-\d+"><\/p>/g) ?? [];
+      expect(emptyParagraphs).toHaveLength(emptyCount);
+      expect(exported.value).not.toContain("<br");
+
+      expect(importHtml(exported.value)).toEqual({
+        ok: true,
+        value: { document, warnings: [] },
+      });
+    },
+  );
+
   it("우리 export 조각 옆의 외부 조각도 접지 않는다(문서 단위 판정)", () => {
     const imported = importHtml(
       '<p data-geul-block-id="own">a  b </p><p>c  d\ne</p>',

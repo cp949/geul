@@ -46,6 +46,25 @@ describe("preview.css export", () => {
     expect(withoutComments).not.toContain(":is(");
   });
 
+  it("소스가 Chrome75 미지원 lh 단위를 쓰지 않는다(Issue #322)", () => {
+    const css = readFileSync(join(packageRoot, "src/preview.css"), "utf8");
+    // 주석이 lh 단위를 언급하므로 주석을 지운 실제 CSS만 검사한다.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(withoutComments).not.toMatch(/\dlh\b/);
+  });
+
+  it("빈 문단에 한 줄 높이를 주는 규칙을 가진다(Issue #322)", () => {
+    const css = readFileSync(join(packageRoot, "src/preview.css"), "utf8");
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    // 둘째 선언은 대체 텍스트 구문이다. 첫째 선언이 Chrome 75 폴백이라
+    // 둘 다 있어야 한다. 파일에 이스케이프가 원시 문자(U+200B)가 아닌
+    // `\200b` 글자 그대로 남아야 한다 — 원시 ZWSP는 눈에 보이지 않아 편집 중 손상돼도 모른다.
+    expect(withoutComments).toMatch(
+      /\.geul-preview p:empty::before\s*\{\s*content:\s*"\\200b";\s*content:\s*"\\200b"\s*\/\s*"";\s*\}/,
+    );
+    expect(css).not.toContain("\u200b");
+  });
+
   it("소스가 승격 대상 규칙을 전부 유지한다(헤딩/문단/blockquote/콜아웃/목록/코드/표/hr/링크/details/미디어)", () => {
     const css = readFileSync(join(packageRoot, "src/preview.css"), "utf8");
     for (const selectorFragment of [
