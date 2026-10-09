@@ -23,7 +23,7 @@ qq-workflow로 진행: <작업 설명 또는 이슈 번호>
 qq-workflow의 단계-3을 진행 (_works/20260824-04)
 ```
 
-작업 폴더 인자는 접두 매칭을 허용한다. `20260823-01`처럼 앞부분만 주어도 `_works/` 아래에서 유일하게 매칭되면 그 폴더로 해석한다. `_works/` 접두사는 붙여도 생략해도 된다. 매칭이 없거나 둘 이상이면 후보를 출력하고 정지한다.
+작업 폴더 인자는 접두 매칭을 허용한다. `20260823-01`처럼 앞부분만 주어도 `_works/`와 `_works/_completed/` 아래에서 유일하게 매칭되면 그 폴더로 해석한다. `_works/` 접두사는 붙여도 생략해도 된다. 매칭이 없거나 둘 이상이면 후보를 출력하고 정지한다. 완료한 작업은 단계-4가 `_completed/`로 옮기므로 재실행 지시는 그 안에서 찾는다.
 
 용어: 이 흐름은 **단계**만 쓴다. roadmap-workflow의 RD·DELTA 용어를 쓰지 않는다.
 
@@ -45,7 +45,7 @@ _works/<yyyyMMdd>-<NN>-<slug>/
   pending-issues/  pending-guides/  pending-pitfalls/   (필요 시)
 ```
 
-`NN`은 그날 `_works/` 아래의 순번이다. 이슈가 있으면 slug 앞에 `issue<번호>-`를 붙인다(`20260824-04-issue26-editmap-perf`).
+`NN`은 그날 `_works/`와 `_works/_completed/` 아래의 순번이다. 완료한 폴더가 `_completed/`로 옮겨가도 번호를 재사용하지 않는다. 이슈가 있으면 slug 앞에 `issue<번호>-`를 붙인다(`20260824-04-issue26-editmap-perf`).
 
 pending 셋의 용도, 파일 형식과 추가 시점은 [`./workflow-shared.md`](./workflow-shared.md)의 "pending-issues, pending-guides와 pending-pitfalls"를 그대로 따른다. 어느 단계에서든 추가할 수 있다.
 
@@ -68,7 +68,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 상위 로드맵: _works/roadmap/roadmap.md#RD-NNN
 ```
 
-단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾼다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. `착수 커밋`은 리뷰와 비교의 범위 기준점이다. 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "착수 커밋"을 따른다. 확정 커밋 해시와 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
+단계-4의 `dev` 이전이 끝나면 `상태: 완료`로 바꾸고 폴더를 `_works/_completed/`로 옮긴다. `상태`는 단계-1이 같은 이슈의 미완료 작업 폴더를 이어받을지 판정하는 데만 쓴다. 단계-1은 `_works/` 바로 아래만 훑으므로 옮긴 폴더는 이어받기 대상이 아니다. `착수 커밋`은 리뷰와 비교의 범위 기준점이다. 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "착수 커밋"을 따른다. 확정 커밋 해시와 단계별 진행 이력은 단계 산출물과 Git이 소유한다.
 
 **단계 진입 가부는 선행 산출물 파일의 존재로 판정한다.** 필요한 파일이 없으면 추측해서 진행하지 않고 무엇이 없는지 보고하고 정지한다.
 
@@ -149,7 +149,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 ## 단계-4. 병합과 등록
 
 - 입력: 판정이 끝난 `IMPL-REVIEW-*.md` 최소 하나, `pending-issues/*`, `pending-guides/*`, `pending-pitfalls/*`
-- 출력: `dev`의 커밋, GitHub 이슈·댓글, `_meta.md`의 `상태: 완료`
+- 출력: `dev`의 커밋, GitHub 이슈·댓글, `_meta.md`의 `상태: 완료`, `_works/_completed/`로 옮긴 작업 폴더
 - 게이트: **리뷰를 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없거나 최신 리뷰에 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 남아 있으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `01-계획.md`의 "## 결정" 절에 적는다.
 - 절차: 메인 세션이 단독으로 직렬 수행한다. subagent에 위임하지 않는다.
   1. `pnpm verify:quick <관련 e2e spec…>`을 통과시킨다. 관련 spec은 계획서 검증 명령의 e2e spec이다. 실패를 고친 뒤에는 `pnpm verify:failed`만 다시 돈다. e2e 전량은 `dev` push 직전 `pnpm verify`가 맡는다.
@@ -159,6 +159,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
   5. `_meta.md`의 `상태`를 `완료`로 바꾼다. 확정 해시는 `dev`의 커밋 로그가 기록한다.
   6. [`./issue-tracker.md`](./issue-tracker.md)에 따라 GitHub 게시·종료를 판단하고 사용자 확인 없이 수행한다.
   7. `pending-guides/*`·`pending-pitfalls/*`의 승격을 판단해 등록하고 해당 INDEX를 같은 변경에서 동기화한다.
+  8. 작업 폴더를 `_works/_completed/`로 옮긴다. 폴더 이름은 그대로 둔다. 5~7단계가 이 폴더의 `_meta.md`와 pending 초안을 읽고 쓰므로 맨 마지막에 한다. 옮긴 뒤 `_works/` 바로 아래에 같은 이름이 남지 않았는지 확인한다.
 - 보고: `AGENTS.md`의 "완료 보고" 형식. 삭제한 브랜치명, 미푸시 커밋 수, 닫은 이슈 번호를 남긴다.
 - 정지: `dev`를 push하지 않고 `dev` → `main` 병합도 하지 않는다. 둘 다 사용자가 직접 지시하거나 수행한다.
 
