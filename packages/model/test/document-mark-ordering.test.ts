@@ -2,7 +2,7 @@
  * 독립 문서 모델의 저장용 텍스트 mark 정규 순서와 검증 계약을 확인한다.
  */
 import { describe, expect, it } from "vitest";
-import type { Block } from "../src/index.js";
+import type { Block, TextMark } from "../src/index.js";
 import {
   canonicalizeTextMarks,
   isCanonicalTextMarks,
@@ -92,6 +92,71 @@ describe("독립 문서 모델 - mark 정렬/검증", () => {
         path: ["blocks", 0, "content", 0, "marks", 1],
       },
     });
+  });
+
+  it("같은 종류 색 mark가 둘이면 color가 달라도 앞의 것만 남긴다", () => {
+    expect(
+      canonicalizeTextMarks([
+        { type: "textColor", color: "#FF0000" },
+        { type: "bold" },
+        { type: "textColor", color: "#0000FF" },
+        { type: "backgroundColor", color: "#111111" },
+        { type: "backgroundColor", color: "#222222" },
+      ]),
+    ).toEqual([
+      { type: "bold" },
+      { type: "textColor", color: "#FF0000" },
+      { type: "backgroundColor", color: "#111111" },
+    ]);
+  });
+
+  it("같은 종류 색 mark가 둘인 배열은 정규형이 아니고 문서 검증이 둘째 위치를 거절한다", () => {
+    const marks: TextMark[] = [
+      { type: "textColor", color: "#FF0000" },
+      { type: "textColor", color: "#0000FF" },
+    ];
+    expect(isCanonicalTextMarks(marks)).toBe(false);
+    expect(
+      parseDocument({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "two-text-colors",
+            type: "paragraph",
+            content: [{ text: "colors", marks }],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "DOCUMENT_INVALID",
+        path: ["blocks", 0, "content", 0, "marks", 1],
+      },
+    });
+  });
+
+  it("색 mark가 하나씩이고 정규 순서면 정규형이고 문서 검증을 통과한다", () => {
+    const marks: TextMark[] = [
+      { type: "bold" },
+      { type: "textColor", color: "#FF0000" },
+      { type: "backgroundColor", color: "#0000FF" },
+    ];
+    expect(isCanonicalTextMarks(marks)).toBe(true);
+    expect(
+      parseDocument({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "one-each-color",
+            type: "paragraph",
+            content: [{ text: "colors", marks }],
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: true });
   });
 
   it("정규 순서를 따르는 저장용 mark 배열만 허용한다", () => {
@@ -284,6 +349,66 @@ describe("sameMarks", () => {
   it("중복 mark가 섞여 있어도 정규화 후 비교한다", () => {
     expect(
       sameMarks([{ type: "bold" }, { type: "bold" }], [{ type: "bold" }]),
+    ).toBe(true);
+  });
+
+  it("textColor의 color가 다르면 다르다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "textColor", color: "#FF0000" }],
+        [{ type: "textColor", color: "#0000FF" }],
+      ),
+    ).toBe(false);
+  });
+
+  it("textColor의 color가 같으면 같다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "textColor", color: "#FF0000" }],
+        [{ type: "textColor", color: "#FF0000" }],
+      ),
+    ).toBe(true);
+  });
+
+  it("backgroundColor의 color가 다르면 다르다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "backgroundColor", color: "#FF0000" }],
+        [{ type: "backgroundColor", color: "#0000FF" }],
+      ),
+    ).toBe(false);
+  });
+
+  it("backgroundColor의 color가 같으면 같다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "backgroundColor", color: "#FF0000" }],
+        [{ type: "backgroundColor", color: "#FF0000" }],
+      ),
+    ).toBe(true);
+  });
+
+  it("다른 mark가 같아도 한쪽의 색이 다르면 다르다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [{ type: "bold" }, { type: "textColor", color: "#FF0000" }],
+        [{ type: "textColor", color: "#0000FF" }, { type: "bold" }],
+      ),
+    ).toBe(false);
+  });
+
+  it("mark 순서만 다르고 색이 같으면 같다고 판정한다", () => {
+    expect(
+      sameMarks(
+        [
+          { type: "backgroundColor", color: "#00FF00" },
+          { type: "textColor", color: "#FF0000" },
+        ],
+        [
+          { type: "textColor", color: "#FF0000" },
+          { type: "backgroundColor", color: "#00FF00" },
+        ],
+      ),
     ).toBe(true);
   });
 });

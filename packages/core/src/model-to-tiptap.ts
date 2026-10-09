@@ -23,6 +23,7 @@ import {
   type ParagraphBlock,
   type QuoteBlock,
   type Result,
+  sameMarks,
   type TableBlock,
   type TextMark,
   type ToggleListItemBlock,
@@ -69,9 +70,6 @@ const invalid = (message: string): Result<never, EditorError> => ({
   error: { code: "DOCUMENT_INVALID", message },
 });
 
-const markKey = (mark: TextMark): string =>
-  mark.type === "link" ? `link:${mark.href}` : mark.type;
-
 export type InlineContentViolation = {
   code: "DOCUMENT_INVALID" | "EDITOR_FEATURE_UNAVAILABLE";
   reason: string;
@@ -116,7 +114,9 @@ export const inlineContentViolation = (
   const customInlineContentTypes =
     options?.customInlineContentTypes ?? new Set<string>();
   const customStyleTypes = options?.customStyleTypes ?? new Set<string>();
-  let previousMarks: string | undefined;
+  // 직전 텍스트 런의 알려진 마크와 커스텀 마크 서명. 직전 런이 없으면 undefined.
+  let previousRun:
+    { known: readonly TextMark[]; customSignature: string } | undefined;
 
   for (const item of content) {
     if (!isTextRunItem(item)) {
@@ -128,8 +128,8 @@ export const inlineContentViolation = (
       }
       // 등록된 커스텀 inline 원소는 atom 노드로 표현 가능하다(RD-002-DELTA-18) —
       // "인접 동일 마크" 판정은 연속된 텍스트 런 사이에만 적용된다. 이
-      // 원소가 그 인접성을 끊으므로 previousMarks를 리셋한다.
-      previousMarks = undefined;
+      // 원소가 그 인접성을 끊으므로 previousRun을 리셋한다.
+      previousRun = undefined;
       continue;
     }
     if (item.text.length === 0) {
@@ -182,22 +182,25 @@ export const inlineContentViolation = (
       };
     }
 
-    // 등록된 커스텀 마크의 type+props까지 서명에 포함한다(RD-002-DELTA-19
-    // "결정" 3) — 알려진 마크만으로 서명을 만들면 커스텀 마크의 props가
+    // 등록된 커스텀 마크의 type+props까지 비교에 포함한다(RD-002-DELTA-19
+    // "결정" 3) — 알려진 마크만으로 비교하면 커스텀 마크의 props가
     // 다른 두 인접 런(예: 하이라이트 색상이 다른 두 런)을 "동일 마크"로
-    // 오판해 유효한 문서를 거절하게 된다. 커스텀 마크가 없으면 이 접미사는
-    // 항상 "[]"로 접혀 회귀가 없다.
-    const currentMarks =
-      JSON.stringify(knownMarks.map(markKey)) +
-      "|" +
-      customMarkSignature(marks);
-    if (currentMarks === previousMarks) {
+    // 오판해 유효한 문서를 거절하게 된다. 커스텀 마크가 없으면 서명이
+    // 항상 "[]"로 접혀 회귀가 없다. 알려진 마크의 동일 판정은 model
+    // sameMarks가 소유한다 — textColor/backgroundColor는 color까지 비교한다
+    // (Issue #331, G-CNV-001).
+    const customSignature = customMarkSignature(marks);
+    if (
+      previousRun !== undefined &&
+      sameMarks(previousRun.known, knownMarks) &&
+      previousRun.customSignature === customSignature
+    ) {
       return {
         code: "DOCUMENT_INVALID",
         reason: "contains adjacent inline runs with identical marks",
       };
     }
-    previousMarks = currentMarks;
+    previousRun = { known: knownMarks, customSignature };
   }
   return null;
 };

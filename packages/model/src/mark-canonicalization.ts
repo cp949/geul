@@ -24,9 +24,19 @@ const storedMarkOrder: Record<TextMark["type"], number> = {
   backgroundColor: 7,
 };
 
-const sameMark = (left: TextMark, right: TextMark): boolean =>
+// 같은 종류인지 판정한다. link는 href까지, 색 mark는 color를 보지 않는다.
+// canonicalizeTextMarks의 중복 제거는 이것만 쓴다 — 한 조각에 같은 종류 색
+// mark가 둘 남으면 isCanonicalTextMarks와 충돌한다.
+const sameMarkKind = (left: TextMark, right: TextMark): boolean =>
   left.type === right.type &&
   (left.type !== "link" || (right.type === "link" && left.href === right.href));
+
+// 값까지 같은지 판정한다. textColor/backgroundColor는 color도 비교한다.
+// 색이 다른 인접 조각을 합치지 않기 위함이다(Issue #331).
+const sameMark = (left: TextMark, right: TextMark): boolean =>
+  sameMarkKind(left, right) &&
+  ((left.type !== "textColor" && left.type !== "backgroundColor") ||
+    (right.type === left.type && left.color === right.color));
 
 export const canonicalizeTextMarks = (marks: readonly TextMark[]): TextMark[] =>
   marks
@@ -39,7 +49,8 @@ export const canonicalizeTextMarks = (marks: readonly TextMark[]): TextMark[] =>
     .map(({ mark }) => mark)
     .filter(
       (mark, index, canonical) =>
-        canonical.findIndex((candidate) => sameMark(mark, candidate)) === index,
+        canonical.findIndex((candidate) => sameMarkKind(mark, candidate)) ===
+        index,
     );
 
 export const isCanonicalTextMarks = (marks: readonly TextMark[]): boolean => {
