@@ -66,6 +66,22 @@ export function findTableBoundaryRange(
   return { from: selection.from, to: selection.to, fromTable, toTable };
 }
 
+// selection이 같은 표 안에서 서로 다른 셀에 걸친 범위면 true다(Issue #317).
+// 두 끝이 같은 표 안이라 findTableBoundaryRange가 null을 돌려주는 범위 중
+// 한 셀 안 범위를 뺀 것이다. 한 셀 안 범위는 일반 문자 삭제 몫이다. 셀
+// content가 "inline*"라 셀 자체가 $from.parent다.
+export function isCrossCellRangeInSameTable(selection: Selection): boolean {
+  if (!(selection instanceof TextSelection) || selection.empty) return false;
+  const fromTable = tableSpanAt(selection.$from);
+  const toTable = tableSpanAt(selection.$to);
+  return (
+    fromTable !== null &&
+    toTable !== null &&
+    fromTable.start === toTable.start &&
+    !selection.$from.sameParent(selection.$to)
+  );
+}
+
 // 역방향 stale 소비(Issue #289, G-EDT-002). 호출 시작 시점의 live selection이
 // 경계 범위인데 handler가 false를 돌려주면 true로 바꿔 키를 소비한다. 파생
 // selection이 대상 밖이면 handler가 false로 폴스루하고, 그 뒤 Tiptap 기본
@@ -118,6 +134,13 @@ function isStructuralGap(doc: Node, from: number, to: number): boolean {
 // 위치가 큰 구간부터 적용해 앞 구간의 위치가 밀리지 않게 한다. 구간은 서로
 // 겹치지 않는다. 캐럿은 범위 시작에 접는다. tr은 호출 시점에 step이 없어야
 // 한다(위치가 tr.doc 기준이고 캐럿 매핑이 이 함수의 step만 지나야 한다).
+//
+// preventClearDocument 메타(Issue #317). 첫 블록이 표이고 범위가 첫 셀 시작에서
+// 문서 끝까지면 삭제 뒤 문서가 비어 보인다. Tiptap Keymap의 clearDocument가
+// appendTransaction에서 clearNodes()를 불러 cellId가 null인 셀을 만들고,
+// revision guard가 삭제 전체를 되돌렸다. 이 함수는 표 구조를 유지한 채 텍스트만
+// 지우므로 문서를 비우는 정리가 필요 없다. Backspace·Delete·Cut·입력·붙여넣기·
+// drop이 모두 이 함수를 거쳐 한 곳에서 막는다.
 export function deleteTableBoundaryRange(
   tr: Transaction,
   range: TableBoundaryRange,
@@ -188,4 +211,5 @@ export function deleteTableBoundaryRange(
     tr.delete(span.from, span.to);
   }
   tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(from))));
+  tr.setMeta("preventClearDocument", true);
 }

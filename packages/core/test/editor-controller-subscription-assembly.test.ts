@@ -3,17 +3,17 @@
  * 정규화 구간 제외, 상태가 같은 transaction 미통지, 문서·selection·
  * stored mark 변경 통지, appendTransaction 되돌림 경로를 다룬다.
  *
- * 되돌림은 문서를 복원하지만 selection을 문서 끝으로 옮긴다. 그래서
- * selection이 이동하면 통지하고, 캐럿이 이미 문서 끝이라 상태가 모두
- * 같으면 통지하지 않는다. 되돌림 케이스는 validateDocumentStructure를
- * 생성 뒤에 false로 바꿔 만든다.
+ * 되돌림은 문서와 selection을 되돌림 전 상태로 복원한다(Issue #317). 이전에는
+ * selection을 문서 끝으로 옮겨 통지했다. 지금은 상태가 모두 같아 통지하지
+ * 않는다. 되돌림 케이스는 validateDocumentStructure를 생성 뒤에 false로
+ * 바꿔 만든다.
  * 컨트롤러 계약(구독 해제·listener 의미·시점)은
  * editor-controller-subscription.test.ts가 소유한다.
  */
 import type { Block, Document } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
-import { Selection } from "@tiptap/pm/state";
-import { afterEach, describe, expect, it } from "vitest";
+import { Selection, TextSelection } from "@tiptap/pm/state";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProductionEditor } from "../src/production-editor-assembly.js";
 import { paragraphBlock, sequentialIds } from "./editor-controller-support.js";
 import { productionDocumentOf } from "./production-editor-test-support.js";
@@ -132,7 +132,9 @@ describe("production 편집기 상태 변경 통지", () => {
     expect(state.notifications).toBe(0);
   });
 
-  it("appendTransaction이 문서를 되돌리고 selection이 이동하면 통지한다", () => {
+  // Issue #317 — 되돌림이 selection도 복원한다. 이전에는 selection이 문서 끝으로
+  // 이동해 통지했다.
+  it("appendTransaction이 문서를 되돌리면 selection도 복원돼 상태가 같아 통지하지 않는다", () => {
     const { editor, state } = createCountingEditor(
       productionDocumentOf(paragraphBlock("p1", "hello")),
     );
@@ -144,7 +146,36 @@ describe("production 편집기 상태 변경 통지", () => {
     editor.view.dispatch(editor.state.tr.insertText("x"));
 
     expect(editor.state.doc.eq(docBefore)).toBe(true);
-    expect(editor.state.selection.eq(selectionBefore)).toBe(false);
+    expect(editor.state.selection.eq(selectionBefore)).toBe(true);
+    expect(state.transactionEvents).toBe(1);
+    expect(state.notifications).toBe(0);
+  });
+
+  it("appendTransaction이 문서를 되돌렸는데 selection 복원이 실패해 달라지면 통지한다", () => {
+    const { editor, state } = createCountingEditor(
+      productionDocumentOf(paragraphBlock("p1", "hello")),
+    );
+    mountAndProbe(editor, state);
+    editor.view.dispatch(
+      editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, 3, 5),
+      ),
+    );
+    state.valid = false;
+    state.notifications = 0;
+    state.transactionEvents = 0;
+    const restore = vi.spyOn(Selection, "fromJSON").mockImplementation(() => {
+      throw new RangeError("복원 실패");
+    });
+
+    try {
+      editor.view.dispatch(editor.state.tr.insertText("x"));
+    } finally {
+      restore.mockRestore();
+    }
+
+    // 폴백은 범위 시작의 캐럿이라 옛 범위 selection과 다르다.
+    expect(editor.state.selection.empty).toBe(true);
     expect(state.transactionEvents).toBe(1);
     expect(state.notifications).toBe(1);
   });

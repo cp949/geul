@@ -16,6 +16,7 @@ import {
   consumeWhileLiveBoundaryRange,
   deleteTableBoundaryRange,
   findTableBoundaryRange,
+  isCrossCellRangeInSameTable,
 } from "./table-boundary-range.js";
 import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
 
@@ -117,6 +118,35 @@ function caretContext(
   if (containerDepth < 1) return null;
   if ($from.node(containerDepth).type.name !== "blockContainer") return null;
   return { $from, containerDepth };
+}
+
+// 표 셀 경계의 키를 소비할지 판정한다(Issue #317). 셀 content는 "inline*"라
+// caretContext가 null이고, 소비하지 않으면 Tiptap 기본 체인이 문서를 바꿨다가
+// revision guard가 되돌렸다. 되돌림은 캐럿을 문서 끝으로 보내고 빈 undo 항목을
+// 남겼다. 셀 사이 이동·병합은 이 확장의 계약이 아니다. 키만 소비하고 아무것도
+// 바꾸지 않는다.
+// - 캐럿: Backspace는 셀 content 맨 앞, Delete는 맨 끝이다. 첫 셀·마지막 셀·
+//   빈 셀도 같다. 위치로 가르면 첫 블록이 표인 문서에서 빈 첫 셀이 새어 나간다.
+// - 범위: 같은 표 안 서로 다른 셀에 걸친 범위는 방향과 무관하게 소비한다.
+//   겹친 셀 텍스트를 지우지 않는다(#289가 이 범위를 경계 범위 삭제에서 뺀 이유).
+// 셀 노드 이름은 block-id-extension.ts처럼 tableCell·tableHeader를 모두 본다.
+// 파생 state 기준이다(G-EDT-002).
+const TABLE_CELL_TYPE_NAMES: ReadonlySet<string> = new Set([
+  "tableCell",
+  "tableHeader",
+]);
+
+function isTableCellBoundaryKey(
+  state: EditorState,
+  direction: "backward" | "forward",
+): boolean {
+  const { selection } = state;
+  if (!selection.empty) return isCrossCellRangeInSameTable(selection);
+  const { $from } = selection;
+  if (!TABLE_CELL_TYPE_NAMES.has($from.parent.type.name)) return false;
+  return direction === "backward"
+    ? $from.parentOffset === 0
+    : $from.parentOffset === $from.parent.content.size;
 }
 
 function isListItemContent(node: Node): boolean {
@@ -555,7 +585,10 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   }
   const context = caretContext(state);
   if (context === null) {
-    return selectionIsStale && isJoinBoundary(liveState, "backward");
+    return (
+      isTableCellBoundaryKey(state, "backward") ||
+      (selectionIsStale && isJoinBoundary(liveState, "backward"))
+    );
   }
   const { $from, containerDepth } = context;
   if ($from.parentOffset !== 0) {
@@ -678,7 +711,10 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   }
   const context = caretContext(state);
   if (context === null) {
-    return selectionIsStale && isJoinBoundary(liveState, "forward");
+    return (
+      isTableCellBoundaryKey(state, "forward") ||
+      (selectionIsStale && isJoinBoundary(liveState, "forward"))
+    );
   }
   const { $from } = context;
   if ($from.parentOffset !== $from.parent.content.size) {

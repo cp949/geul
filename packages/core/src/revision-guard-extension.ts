@@ -1,6 +1,11 @@
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, type Transaction } from "@tiptap/pm/state";
+import {
+  type EditorState,
+  Plugin,
+  Selection,
+  type Transaction,
+} from "@tiptap/pm/state";
 
 // RD-004-DELTA-02 — canApplyDocumentChange가 transaction을 받는다.
 // production-editor-session.ts::evaluateBeforeChange가 revision
@@ -19,6 +24,34 @@ type RevisionGuardOptions = {
   canApplyDocumentChange: (transaction: Transaction) => boolean;
   validateDocument: (doc: ProseMirrorNode) => boolean;
 };
+
+// 되돌림 transaction의 selection과 stored mark를 되돌림 전 값으로 맞춘다
+// (Issue #317).
+// 문서 전체 replaceWith는 selection을 문서 끝으로 매핑해 캐럿이 엉뚱한 곳으로
+// 갔다. 되돌린 문서는 oldState.doc과 같아 JSON으로 그대로 복원된다.
+// CellSelection·NodeSelection 복원이 던지면 옛 selection의 시작 위치 근처
+// 유효한 selection으로 물러난다. 예외를 밖으로 내보내지 않는다 — 되돌림이
+// 실패하면 무효 문서가 남기 때문이다.
+//
+// addToHistory: false는 걸지 않는다. 루트 transaction의 undo 항목이 이미 남은
+// 뒤라 효과가 없고, undo가 캐럿을 엉뚱한 곳으로 보내는 부작용만 생긴다(실측).
+// undo 항목이 남지 않게 하는 일은 되돌림이 일어나지 않게 하는 원인 쪽 수정의
+// 몫이다.
+function restoreSelection(
+  tr: Transaction,
+  oldSelection: Selection,
+  oldStoredMarks: EditorState["storedMarks"],
+): void {
+  try {
+    tr.setSelection(Selection.fromJSON(tr.doc, oldSelection.toJSON()));
+  } catch {
+    const pos = Math.min(oldSelection.from, tr.doc.content.size);
+    tr.setSelection(Selection.near(tr.doc.resolve(pos)));
+  }
+  // replaceWith와 setSelection이 stored mark를 지운다. 되돌림 전 값을 되살려
+  // 거절된 변경이 stored mark도 남기지 않게 한다(G-EDT-001).
+  if (oldStoredMarks !== null) tr.setStoredMarks(oldStoredMarks);
+}
 
 export const RevisionGuardExtension = Extension.create<RevisionGuardOptions>({
   name: "revisionGuard",
@@ -63,11 +96,13 @@ export const RevisionGuardExtension = Extension.create<RevisionGuardOptions>({
         appendTransaction: (transactions, oldState, newState) => {
           if (!transactions.some((tr) => tr.docChanged)) return null;
           if (validateDocument(newState.doc)) return null;
-          return newState.tr.replaceWith(
+          const tr = newState.tr.replaceWith(
             0,
             newState.doc.content.size,
             oldState.doc.content,
           );
+          restoreSelection(tr, oldState.selection, oldState.storedMarks);
+          return tr;
         },
       }),
     ];

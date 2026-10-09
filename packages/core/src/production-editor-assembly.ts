@@ -367,11 +367,12 @@ export const createProductionEditor = (options: {
   // 새 상태를 읽는다. 이 이벤트는 root transaction이 filterTransaction을
   // 통과했을 때만 발화하므로 onBeforeChange 거절은 여기서 걸러진다. 반면
   // RevisionGuardExtension의 appendTransaction 되돌림은 root가 통과한 뒤라
-  // 이벤트가 발화한다. 되돌림은 문서만 복원하고 selection은 문서 끝으로
-  // 옮긴다(실측). 그래서 `beforeTransaction`에서 잡은 변경 전 상태와
-  // 비교해 문서·selection·stored mark가 모두 같을 때만 통지하지 않는다.
-  // selection이 이동했으면 통지한다. load-normalizing 구간은 통지하지
-  // 않는다. 미지정이면 등록하지 않는다.
+  // 이벤트가 발화한다. 되돌림은 문서와 selection을 변경 전 상태로 복원한다
+  // (Issue #317, 이전에는 selection이 문서 끝으로 갔다). 그래서
+  // `beforeTransaction`에서 잡은 변경 전 상태와 비교해 문서·selection·
+  // stored mark가 모두 같을 때만 통지하지 않는다. selection 복원이 실패해
+  // 달라졌으면 통지한다. load-normalizing 구간은 통지하지 않는다. 미지정이면
+  // 등록하지 않는다.
   onStateChange?: () => void;
   // RD-004-DELTA-02 — canApplyDocumentChange가 두 번째 인자로
   // loadNormalizing을 받는다. 이 함수 자신의 아래 내부

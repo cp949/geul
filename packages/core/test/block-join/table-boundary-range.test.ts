@@ -3,9 +3,11 @@
  * (Issue #289).
  *
  * 경계 범위는 비어 있지 않은 TextSelection이고 $from과 $to가 속한 표가
- * 서로 다른 범위다. 한쪽만 표 안이거나 서로 다른 두 표 안이다. 같은 표
- * 안 범위, CellSelection, 양 끝이 표 밖인 범위(표를 완전히 감싸는 범위
- * 포함)는 대상이 아니라 현행 동작을 유지한다.
+ * 서로 다른 범위다. 한쪽만 표 안이거나 서로 다른 두 표 안이다. CellSelection,
+ * 양 끝이 표 밖인 범위(표를 완전히 감싸는 범위 포함)는 대상이 아니라 현행
+ * 동작을 유지한다. 같은 표 안 범위는 Issue #317에서 갱신했다. 경계 범위 삭제
+ * 대상은 아니지만, Backspace·Delete는 키를 소비하고 문서·selection을 바꾸지
+ * 않는다(셀 사이 범위의 소유 테스트는 table-cell-boundary-key.test.ts).
  *
  * Enter는 키만 소비한다. 문서·selection·dispatch가 불변이다. 이전에는
  * 표 셀 content가 "inline*"라 분할할 위치가 없어 예외를 던지거나 표가
@@ -20,6 +22,12 @@
  * Backspace·Delete는 키를 소비하고 문서를 바꾸지 않는다. 폴스루하면 Tiptap
  * 기본 삭제가 live 범위에 적용돼 선택하지 않은 텍스트가 셀로 옮겨 갔다.
  * Enter는 DOM 캐럿 위치를 파생 기준으로 처리한다(G-EDT-002).
+ *
+ * 첫 블록이 표이고 범위가 첫 셀 시작에서 시작하면 선택이 문서 전체를 덮는다
+ * (Issue #317). Tiptap Keymap의 clearDocument가 appendTransaction에서
+ * clearNodes()로 cellId가 null인 셀을 만들었고 revision guard가 삭제를 통째로
+ * 되돌렸다. deleteTableBoundaryRange의 tr에 preventClearDocument 메타를 걸어
+ * 이 경로를 막는다. Backspace·Delete·Cut이 같은 함수를 거친다.
  *
  * 끝 블록이 상위 블록의 자식이면 라벨이 범위에 든 상위 블록은 타입과 attrs를
  * 유지한 빈 라벨로 남는다(Issue #293). 이전에는 빈 paragraph가 되거나 끝
@@ -76,6 +84,8 @@ import {
   withDomSelection,
 } from "../table-boundary-test-support.js";
 import { selectCellRange } from "../table-test-support.js";
+// jsdom에 없는 ClipboardEvent·DataTransfer 폴리필을 등록한다(Cut 테스트).
+import "../clipboard-test-support.js";
 import { expectSchemaValid } from "./block-join-test-support.js";
 
 const KEYS = [
@@ -569,24 +579,27 @@ describe("표 경계 범위 대상 밖은 현행 동작을 유지한다(Issue #2
     expect(blocksOf(result)).toEqual(["paragraph:abyz", "paragraph:tail"]);
   });
 
-  it("같은 표 안 셀 사이 범위 Backspace는 경계 범위 삭제가 아니라 기존 동작(문서 불변, 캐럿만 이동)이다", () => {
-    const result = run(
-      [gridTable("t", 2, 2), TAIL],
-      inCell("t-r0c0", 1),
-      inCell("t-r1c1", 1),
-      (t) => dispatchKeydown(t, "Backspace"),
-    );
+  it.each(["Backspace", "Delete"])(
+    "같은 표 안 셀 사이 범위 %s는 경계 범위 삭제가 아니라 키만 소비하고 아무것도 바꾸지 않는다(Issue #317)",
+    (key) => {
+      const result = run(
+        [gridTable("t", 2, 2), TAIL],
+        inCell("t-r0c0", 1),
+        inCell("t-r1c1", 1),
+        (t) => dispatchKeydown(t, key),
+      );
 
-    // 경계 범위로 취급하면 겹친 셀 텍스트가 지워진다(`c`·`1` 등). 기존
-    // 경로는 문서 전체를 바꾸지 않는다. 문서 전체를 기준과 비교한다.
-    expect(result.handled).toBe(true);
-    expect(result.dispatchCount).toBe(1);
-    expect(blocksOf(result)).toEqual([
-      "table[c00|c01/c10|c11]",
-      "paragraph:tail",
-    ]);
-    expect(result.tiptap.state.selection.empty).toBe(true);
-  });
+      // 경계 범위로 취급하면 겹친 셀 텍스트가 지워진다(`c`·`1` 등). Enter와
+      // 같은 no-op 소비 계약이다. 이전에는 PM 기본 경로가 문서를 바꿨다가
+      // revision guard가 되돌려 캐럿이 문서 끝으로 가고 undo 항목이 남았다.
+      expectNoOpConsumed(result);
+      expect(result.tiptap.can().undo()).toBe(false);
+      expect(blocksOf(result)).toEqual([
+        "table[c00|c01/c10|c11]",
+        "paragraph:tail",
+      ]);
+    },
+  );
 
   it("같은 표 안 한 셀 범위 Enter는 경계 범위 no-op이 아니라 표 키보드 계약(아래 셀로 이동)을 탄다", () => {
     const result = run(
@@ -639,6 +652,105 @@ describe("표 경계 범위 대상 밖은 현행 동작을 유지한다(Issue #2
       "paragraph:wxyz",
       "paragraph:tail",
     ]);
+  });
+});
+
+describe("첫 블록이 표이고 범위가 첫 셀 시작에서 문서 끝까지면 표 구조를 유지하고 텍스트만 지운다(Issue #317)", () => {
+  const cut = (tiptap: TiptapEditor): boolean => {
+    const event = new ClipboardEvent("cut", {
+      clipboardData: new DataTransfer(),
+      bubbles: true,
+      cancelable: true,
+    });
+    tiptap.view.dom.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const key = (name: string) => (tiptap: TiptapEditor) =>
+    dispatchKeydown(tiptap, name);
+  const modKey = (name: string) => (tiptap: TiptapEditor) =>
+    dispatchModifiedKeydown(tiptap, name, { ctrlKey: true });
+
+  const fixture = (): Block[] => [gridTable("t", 2, 2), TAIL];
+
+  it.each([
+    { name: "Backspace", press: key("Backspace") },
+    { name: "Delete", press: key("Delete") },
+    { name: "Mod-Backspace", press: modKey("Backspace") },
+    { name: "Mod-Delete", press: modKey("Delete") },
+    { name: "Cut", press: cut },
+  ])(
+    "$name 키는 셀 텍스트와 뒤 문단 텍스트를 지우고 표를 유지한다",
+    ({ press }) => {
+      const result = run(
+        fixture(),
+        inCell("t-r0c0", 0),
+        inBlock("tail", 4),
+        press,
+      );
+
+      // 수정 전: 문서 불변, 캐럿 문서 끝, canUndo=true. clearDocument가 만든
+      // cellId null 셀을 revision guard가 되돌렸다.
+      expect(result.handled).toBe(true);
+      expect(result.dispatchCount).toBe(1);
+      expect(blocksOf(result)).toEqual(["table[|/|]", "paragraph:"]);
+      expectSchemaValid(result.tiptap);
+      const { selection } = result.tiptap.state;
+      expect(selection.empty).toBe(true);
+      expect(selection.from).toBe(result.anchor);
+    },
+  );
+
+  it("셀 id와 표 구조(행·열)가 그대로다", () => {
+    const result = run(
+      fixture(),
+      inCell("t-r0c0", 0),
+      inBlock("tail", 4),
+      key("Backspace"),
+    );
+
+    const cellIds: string[] = [];
+    let rowCount = 0;
+    result.tiptap.state.doc.descendants((node) => {
+      if (node.type.name === "tableRow") rowCount += 1;
+      if (node.type.name === "tableCell") cellIds.push(node.attrs.cellId);
+      return true;
+    });
+    expect(rowCount).toBe(2);
+    expect(cellIds).toEqual(["t-r0c0", "t-r0c1", "t-r1c0", "t-r1c1"]);
+  });
+
+  it("undo 1회로 문서와 selection이 원복된다", () => {
+    const result = run(
+      fixture(),
+      inCell("t-r0c0", 0),
+      inBlock("tail", 4),
+      key("Backspace"),
+    );
+
+    expect(result.tiptap.commands.undo()).toBe(true);
+    expectRestored(result);
+  });
+
+  it("역방향 선택(head가 첫 셀 시작)도 같다", () => {
+    const result = run(
+      fixture(),
+      inBlock("tail", 4),
+      inCell("t-r0c0", 0),
+      key("Backspace"),
+    );
+
+    expect(blocksOf(result)).toEqual(["table[|/|]", "paragraph:"]);
+  });
+
+  it("첫 셀 중간에서 시작하면 앞 글자는 남는다(기준선)", () => {
+    const result = run(
+      fixture(),
+      inCell("t-r0c0", 1),
+      inBlock("tail", 4),
+      key("Backspace"),
+    );
+
+    expect(blocksOf(result)).toEqual(["table[c|/|]", "paragraph:"]);
   });
 });
 
