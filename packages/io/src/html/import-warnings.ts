@@ -14,6 +14,7 @@ import {
   type HtmlNode,
   type HtmlRoot,
 } from "./inline-content.js";
+import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
@@ -434,7 +435,14 @@ const collectFromNodes = (
       ) {
         continue;
       }
-      if (!allowedAttributes.has(attribute)) {
+      // font의 color는 허용 속성이지만 값을 읽지 못하면 색이 사라진다.
+      // 읽지 못한 값은 #334 이전처럼 제거를 보고한다.
+      const unreadableFontColor =
+        node.tagName === "font" &&
+        attribute === "color" &&
+        (typeof value !== "string" ||
+          readLegacyAttributeColor(value) === undefined);
+      if (!allowedAttributes.has(attribute) || unreadableFontColor) {
         warnings.push({
           kind: "UNSAFE_ATTRIBUTE_REMOVED",
           element: node.tagName,

@@ -68,6 +68,35 @@ describe("블록을 품은 font·mark는 태그만 벗겨 블록 구조를 유�
       "<mark><ul><li>a</li></ul></mark>",
       [{ type: "bulletListItem", content: [{ text: "a" }] }],
     ],
+    // 아래 네 줄은 블록 경계 태그 목록(blockBoundaryTagNames)의 hr·pre·details·
+    // img를 각각 고정한다. 기대값은 b5a2b8e5 번들 실측이다.
+    [
+      "font > 글자 hr 글자",
+      '<font color="red">a<hr>b</font>',
+      [
+        { type: "paragraph", content: [{ text: "a" }] },
+        { type: "divider" },
+        { type: "paragraph", content: [{ text: "b" }] },
+      ],
+    ],
+    [
+      "mark > pre",
+      "<mark><pre>code</pre></mark>",
+      [{ type: "codeBlock", content: [{ text: "code" }] }],
+    ],
+    [
+      "font > details",
+      '<font color="red"><details><summary>s</summary>d</details></font>',
+      [
+        { type: "paragraph", content: [{ text: "s" }] },
+        { type: "paragraph", content: [{ text: "d" }] },
+      ],
+    ],
+    [
+      "font > img",
+      '<font color="red"><img src="https://example.com/a.png" alt="x"></font>',
+      [{ type: "image", url: "https://example.com/a.png" }],
+    ],
     [
       "li 안 font > 글자와 표",
       `<ul><li><font>x${tableHtml}</font></li></ul>`,
@@ -155,6 +184,19 @@ describe("블록을 품은 font·mark는 태그만 벗겨 블록 구조를 유�
     ]);
   });
 
+  it("클립보드 표 파서는 벗긴 font의 색을 목록 항목에 싣지 않는다", () => {
+    // 벗기는 호출이 빠지면 font가 인라인으로 남아 목록 항목이 색 마크를 얻는다.
+    const result = parseClipboardTable({
+      html: `<font color="red"><ul><li>a</li></ul></font>${tableHtml}`,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([
+      { type: "bulletListItem", content: [{ text: "a" }] },
+      expect.objectContaining({ type: "table" }),
+    ]);
+  });
+
   it("클립보드 표 파서의 mark 안 문단도 문단 블록으로 읽는다", () => {
     const result = parseClipboardTable({
       html: `${tableHtml}<mark><p>x</p></mark>`,
@@ -197,6 +239,17 @@ describe("벗겨져 색이 사라지는 font·mark는 #334 이전 경고를 그�
       "<ul><li><font color=red>a<ul><li>b</li></ul></font></li></ul>",
       ["SAFE_BLOCK_DOWNGRADED:font:", "UNSAFE_ATTRIBUTE_REMOVED:font:color"],
     ],
+    // 블록 경계 태그 목록의 hr·pre·details·img를 경고로 고정한다. 구조는 목록과
+    // 무관하게 같아 블록 결과 표만으로는 이 항목을 지워도 알 수 없다.
+    ...[
+      '<div><font color="red">a<hr>b</font></div>',
+      '<div><font color="red"><pre>code</pre></font></div>',
+      '<div><font color="red"><details><summary>s</summary>d</details></font></div>',
+      '<div><font color="red"><img src="https://example.com/a.png" alt="x"></font></div>',
+    ].map((html): [string, string[]] => [
+      html,
+      ["SAFE_BLOCK_DOWNGRADED:font:", "UNSAFE_ATTRIBUTE_REMOVED:font:color"],
+    ]),
     [
       "<table><tbody><tr><td><font color=red><p>a</p><p>b</p></font></td></tr></tbody></table>",
       ["UNSAFE_ATTRIBUTE_REMOVED:font:color"],
@@ -232,6 +285,32 @@ describe("벗겨져 색이 사라지는 font·mark는 #334 이전 경고를 그�
       "SAFE_BLOCK_DOWNGRADED:font:",
       "UNSAFE_ATTRIBUTE_REMOVED:font:color",
     ]);
+  });
+});
+
+describe("font color 값을 읽지 못하면 #334 이전 경고를 그대로 낸다", () => {
+  // 읽지 못한 색은 사라진다. 기준 커밋은 font의 color 제거를 경고했다.
+  it.each([
+    '<p><font color="rgb(255,0,0)">x</font></p>',
+    '<p><font color="#12">x</font></p>',
+    '<p><font color="transparent">x</font></p>',
+    '<p><font color="">x</font></p>',
+  ])("%s", (html) => {
+    expect(
+      imported(html).warnings.map((warning) => {
+        const fields = warning as { element?: string; attribute?: string };
+        return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+      }),
+    ).toEqual(["UNSAFE_ATTRIBUTE_REMOVED:font:color"]);
+  });
+
+  it.each([
+    '<p><font color="red">x</font></p>',
+    '<p><font color="#f00">x</font></p>',
+    '<p><font color="ff0000">x</font></p>',
+    '<p><font color=" red ">x</font></p>',
+  ])("읽는 값은 경고가 없다: %s", (html) => {
+    expect(imported(html).warnings).toEqual([]);
   });
 });
 
