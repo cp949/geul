@@ -13,9 +13,9 @@
  * - 무효 문자 정리
  * - 개행·공백뿐인 줄 접기와 줄 앞뒤 hardBreak 제거
  * - 마크 정규화: bold와 code가 함께면 code만 남김
- * - 발동 조건: content 블록 2개 이상이고 정리 뒤 줄 1개 이상. 표가 있으면 null
- * - 최소 블록 수 인자(Issue #308): CellSelection 경로는 1을 넘겨 한 블록 html도
- *   변환한다. 기본값은 2다
+ * - 발동 조건: content 블록 1개 이상이고 정리 뒤 줄 1개 이상. 표가 있으면 null
+ * - 최소 블록 수 인자(Issue #308, #316): CellSelection 경로는 1을 넘겨 한 블록
+ *   html도 변환한다. 기본값도 1이다(Issue #316이 2에서 낮췄다)
  * - flattenTables 옵션(Issue #312, #313): drop 전용이다. 표의 셀을 행 우선
  *   줄로 평탄화한다. 표가 하나 이상이면 최소 블록 수 1을 쓰므로 표 하나만 있어도
  *   줄을 낸다. 옵션이 없으면 표가 있을 때 null이다
@@ -365,8 +365,9 @@ describe("buildCellHtmlInline", () => {
   });
 
   describe("발동 조건", () => {
-    it("줄이 하나면 null이다", () => {
-      expect(convert(paragraphBlock("a", "a"))).toBeNull();
+    // Issue #316 정정: 한 블록 html도 변환한다. 기본 최소 블록 수가 2였다.
+    it("줄이 하나여도 Fragment를 돌려준다(Issue #316으로 정정)", () => {
+      expect(convert(paragraphBlock("a", "a"))).toEqual(["a"]);
     });
 
     // Issue #304 리뷰로 정정: 줄이 하나 남아도 블록이 둘 이상이면 그 줄을 낸다.
@@ -377,14 +378,15 @@ describe("buildCellHtmlInline", () => {
       ).toEqual(["a"]);
     });
 
-    it("content 블록이 하나면 줄 수와 상관없이 null이다", () => {
-      expect(convert(paragraphBlock("a", "a\nb"))).toBeNull();
+    // Issue #316 정정: content 블록 하나도 줄을 낸다. 이전에는 null이었다.
+    it("content 블록이 하나여도 줄을 낸다(Issue #316으로 정정)", () => {
+      expect(convert(paragraphBlock("a", "a\nb"))).toEqual(["a", "br", "b"]);
       expect(
         convert(listItemBlock("a", "bulletListItem", "a"), {
           id: "d",
           type: "divider",
         }),
-      ).toBeNull();
+      ).toEqual(["a"]);
     });
 
     it("블록이 둘 이상이어도 줄이 0개이면 null이다", () => {
@@ -398,8 +400,9 @@ describe("buildCellHtmlInline", () => {
       expect(convert()).toBeNull();
     });
 
-    it("codeBlock 한 블록만 있으면 null이다", () => {
-      expect(convert(codeBlockBlock("a", "x\ny"))).toBeNull();
+    // Issue #316 정정: codeBlock 한 블록도 변환한다. 이전에는 null이었다.
+    it("codeBlock 한 블록만 있어도 개행이 hardBreak다(Issue #316으로 정정)", () => {
+      expect(convert(codeBlockBlock("a", "x\ny"))).toEqual(["x", "br", "y"]);
     });
 
     it("최상위 표가 있으면 줄이 많아도 null이다", () => {
@@ -460,8 +463,29 @@ describe("buildCellHtmlInline", () => {
       expect(convertSingle()).toBeNull();
     });
 
-    it("생략하면 2다(한 블록은 null)", () => {
-      expect(convert(paragraphBlock("a", "a"))).toBeNull();
+    // Issue #316: 한 블록 html도 PM 기본에 맡기면 색 마크가 빠지고 `<pre>`
+    // 개행이 공백이 됐다. 기본값을 1로 낮춘다.
+    it("생략하면 content 블록 하나도 Fragment를 돌려준다(기본값 1, Issue #316)", () => {
+      expect(
+        convert({
+          id: "a",
+          type: "paragraph",
+          content: [
+            {
+              text: "r",
+              marks: [{ type: "textColor", color: "#FF0000" }],
+            },
+          ],
+        }),
+      ).toEqual(["r*textColor"]);
+      expect(convert(codeBlockBlock("a", "a\nb"))).toEqual(["a", "br", "b"]);
+      expect(convert(paragraphBlock("a", ""))).toBeNull();
+      expect(convert({ id: "d", type: "divider" })).toBeNull();
+    });
+
+    // Issue #316 정정: 기본값이 2에서 1로 낮아졌다. 생략과 1이 같다.
+    it("생략하면 1이다(한 블록도 변환한다, Issue #316으로 정정)", () => {
+      expect(convert(paragraphBlock("a", "a"))).toEqual(["a"]);
       expect(convertSingle(paragraphBlock("a", "a"))).toEqual(["a"]);
     });
   });
@@ -632,7 +656,8 @@ describe("buildCellHtmlInline", () => {
     });
 
     it("표가 없으면 flattenTables가 켜져도 최소 블록 수를 그대로 쓴다", () => {
-      expect(convertFlat([paragraphBlock("a", "x")])).toBeNull();
+      // 생략하면 기본값 1이다(Issue #316으로 정정. 이전에는 null이었다).
+      expect(convertFlat([paragraphBlock("a", "x")])).toEqual(["x"]);
       expect(convertFlat([paragraphBlock("a", "x")], 1)).toEqual(["x"]);
       expect(
         convertFlat([paragraphBlock("a", "x"), paragraphBlock("b", "y")], 3),

@@ -146,14 +146,15 @@ const planCellInlineMultilinePaste = (
     linesToHardBreakInline(state.schema, lines, state.selection.$from.marks()),
   );
 
-// 셀 안 캐럿·범위의 여러 블록 html 직접 삽입 계획이다(Issue #304). 블록을
+// 셀 안 캐럿·범위의 html 직접 삽입 계획이다(Issue #304, 한 블록은 #316). 블록을
 // 줄로 평탄화해 hardBreak로 이어 선택을 대체한다. 줄 안 마크는 html의 것이고
 // 캐럿 마크는 입히지 않는다. 이 분기를 탈 수 없으면 null이다.
 // - importHtml이 실패하면 null이다(이전 경로).
-// - 표가 있거나 content 블록이 2개 미만이거나 정리 뒤 줄이 0개이면 null이다
-//   (buildCellHtmlInline). 줄이 1개만 남아도 블록이 둘 이상이면 그 줄을 넣는다.
+// - 표가 있거나 정리 뒤 줄이 0개이면 null이다(buildCellHtmlInline). 블록이
+//   하나여도, 줄이 1개만 남아도 그 줄을 넣는다.
 // PM이 파싱한 slice는 쓰지 않는다. 목록·`<pre>` 여러 블록은 PM이 셀 조각으로
 // 오인해 되돌림 guard가 붙여넣기를 지우고, 문단 여러 개는 첫 문단만 셀에 들어간다.
+// 한 블록도 PM 기본은 색 마크를 잃고 `<pre>` 개행을 공백으로 만든다.
 const planCellHtmlInlinePaste = (
   state: EditorState,
   html: string,
@@ -169,13 +170,13 @@ const planCellHtmlInlinePaste = (
 // 않으면 되돌림 guard가 붙여넣기를 통째로 지운다. 예외는 PM 파싱이 평문을
 // 잃는 두 경우다. 무효 문자가 섞인 평문(Issue #297)과 빈 slice html에 딸린
 // 평문(Issue #301)이다. 정리본을 평문으로 넣는다.
-// - 여러 블록 html은 셀 조각 판정보다 먼저 본다(Issue #304). 캐럿·같은 셀
-//   범위·인라인 atom NodeSelection에서 importHtml 블록이 표 없이 content 블록
-//   2개 이상이고 정리 뒤 줄이 1개 이상이면 블록을 hardBreak로 이어 셀 안에
-//   직접 넣는다. PM 기본은 문단 여러 개의 나머지를 표 밖으로 빼고, 목록·`<pre>`
-//   여러 블록은 셀 조각으로 오인해 되돌려진다. 서식 없이 붙여넣기·CellSelection은
-//   이 분기를 타지 않는다. importHtml 실패, content 블록 1개, 줄 0개는 아래
-//   이전 경로다.
+// - 셀 안 html은 셀 조각 판정보다 먼저 본다(Issue #304, 한 블록은 #316). 캐럿·
+//   같은 셀 범위·인라인 atom NodeSelection에서 importHtml 블록이 표 없이 정리
+//   뒤 줄이 1개 이상이면 블록을 hardBreak로 이어 셀 안에 직접 넣는다. 한
+//   블록도 포함한다. PM 기본은 문단 여러 개의 나머지를 표 밖으로 빼고, 목록·
+//   `<pre>` 여러 블록은 셀 조각으로 오인해 되돌려진다. 한 블록은 색 마크를
+//   잃고 `<pre>` 개행이 공백이 된다. 서식 없이 붙여넣기·CellSelection은 이
+//   분기를 타지 않는다. importHtml 실패와 줄 0개는 아래 이전 경로다.
 // - CellSelection의 서식 있는 html도 셀 조각 판정보다 먼저 본다(Issue
 //   #308). html이 실제 내용(정리한 slice.size > 0)을 가지면 importHtml 블록을
 //   셀 인라인으로 바꿔 선택을 대체한다. 한 블록 html도 포함한다. 바꿀 줄이
@@ -206,7 +207,7 @@ export const planTableCellPaste = (
   if (!selectionStartsInTable(state)) return null;
   const { selection } = state;
   const cellSelection = selection instanceof CellSelection ? selection : null;
-  // 여러 블록 html은 셀 조각 판정보다 먼저 본다(Issue #304). 목록 html이 셀
+  // 셀 안 html은 셀 조각 판정보다 먼저 본다(Issue #304, #316). 목록 html이 셀
   // 조각으로 오인되어 아래 pass로 빠지기 때문이다. 서식 없이 붙여넣기는 html을
   // 읽지 않는다. CellSelection은 아래 별도 분기다(Issue #308).
   if (

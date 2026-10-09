@@ -237,7 +237,9 @@ describe("planTableCellPaste", () => {
     ).not.toBeNull();
   });
 
-  it("무효 문자가 든 html slice는 정리해 넣는다", () => {
+  // Issue #316 정정: 한 블록 html은 셀 인라인 dispatch가 정리해 넣는다. 이전에는
+  // 정리한 slice를 insertSlice로 넣었다.
+  it("무효 문자가 든 한 블록 html은 정리해 셀 인라인 dispatch로 넣는다(Issue #316으로 정정)", () => {
     const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
     const dirty = new Slice(
       Fragment.from(tiptap.schema.text(`a${SOH}b`)),
@@ -249,11 +251,9 @@ describe("planTableCellPaste", () => {
       clip("ab", `<p>a${SOH}b</p>`),
       dirty,
     );
-    expect(plan?.kind).toBe("insertSlice");
-    if (plan?.kind !== "insertSlice") return;
-    expect(plan.slice.content.textBetween(0, plan.slice.content.size)).toBe(
-      "ab",
-    );
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual(["ceabll"]);
   });
 
   it("html 없는 유효한 평문은 delegate다", () => {
@@ -263,15 +263,22 @@ describe("planTableCellPaste", () => {
     ).toMatchObject({ kind: "insertSlice" });
   });
 
-  it("html이 내용을 가지면 delegate다", () => {
+  // Issue #316 정정: 한 블록 html은 평문과 무관하게 html 셀 인라인 dispatch다.
+  // 이전에는 insertSlice였다(옛 제목은 "html이 내용을 가지면 delegate다").
+  it("html이 내용을 가지면 평문 없이 html 셀 인라인 dispatch다(Issue #316으로 정정)", () => {
     const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 2));
-    expect(
-      planTableCellPaste(
-        tiptap.state,
-        clip(`a${SOH}b`, "<b>x</b>"),
-        sliceOfSize(tiptap, 3),
-      ),
-    ).toMatchObject({ kind: "insertSlice" });
+    const plan = planTableCellPaste(
+      tiptap.state,
+      clip(`a${SOH}b`, "<b>x</b>"),
+      sliceOfSize(tiptap, 3),
+    );
+    expect(plan?.kind).toBe("dispatch");
+    if (plan?.kind !== "dispatch") return;
+    expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual([
+      "ce",
+      "x*bold",
+      "ll",
+    ]);
   });
 
   it("무효 문자가 섞인 평문은 정리본 pasteText다", () => {
@@ -345,17 +352,29 @@ describe("planTableCellPaste 여러 줄 평문(Issue #299)", () => {
     ).toBe("dispatch");
   });
 
-  it("서식 있는 html은 서식 없이 붙여넣기 신호가 없으면 insertSlice, 있으면 평문 dispatch다", () => {
+  it("서식 있는 html은 서식 없이 붙여넣기 신호가 없으면 html 셀 인라인 dispatch, 있으면 평문 dispatch다(Issue #316으로 정정)", () => {
     const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
     const slice = sliceOfSize(tiptap, 1);
 
-    expect(
-      planTableCellPaste(tiptap.state, clip("a\nb", "<b>x</b>"), slice)?.kind,
-    ).toBe("insertSlice");
-    expect(
-      planTableCellPaste(tiptap.state, clip("a\nb", "<b>x</b>", true), slice)
-        ?.kind,
-    ).toBe("dispatch");
+    const formatted = planTableCellPaste(
+      tiptap.state,
+      clip("a\nb", "<b>x</b>"),
+      slice,
+    );
+    expect(formatted?.kind).toBe("dispatch");
+    if (formatted?.kind !== "dispatch") return;
+    expect(kindsInDoc(formatted.transaction.doc, "t-r0c0")).toEqual([
+      "cell",
+      "x*bold",
+    ]);
+    const plain = planTableCellPaste(
+      tiptap.state,
+      clip("a\nb", "<b>x</b>", true),
+      slice,
+    );
+    expect(plain?.kind).toBe("dispatch");
+    if (plain?.kind !== "dispatch") return;
+    expect(cellKinds(plain.transaction)).toEqual(["cella", "hardBreak", "b"]);
   });
 
   it("한 줄 평문은 서식 없이 붙여넣기 신호가 있어도 현행 계획이다", () => {
@@ -469,22 +488,33 @@ describe("planTableCellPaste 여러 블록 html(Issue #304)", () => {
     expect(plan?.kind).toBe("insertSlice");
   });
 
+  // Issue #316 정정: content 블록 하나도 셀 인라인 dispatch다. 이전에는 이전
+  // 계획(insertSlice)이었다.
   it.each([
-    { name: "문단 하나", html: "<p>a</p>" },
-    { name: "굵은 글자", html: "<b>x</b>" },
-    { name: "목록 항목 하나", html: "<ul><li>a</li></ul>" },
-    { name: "codeBlock 하나", html: "<pre><code>a\nb</code></pre>" },
-  ])("content 블록이 하나인 html($name)은 이전 계획이다", ({ html }) => {
-    const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
+    { name: "문단 하나", html: "<p>a</p>", kinds: ["cella"] },
+    { name: "굵은 글자", html: "<b>x</b>", kinds: ["cell", "x*bold"] },
+    { name: "목록 항목 하나", html: "<ul><li>a</li></ul>", kinds: ["cella"] },
+    {
+      name: "codeBlock 하나",
+      html: "<pre><code>a\nb</code></pre>",
+      kinds: ["cella", "br", "b"],
+    },
+  ])(
+    "content 블록이 하나인 html($name)도 셀 인라인 dispatch다(Issue #316으로 정정)",
+    ({ html, kinds }) => {
+      const tiptap = mountAt(lastCellBlocks(), inCell("t-r0c0", 4));
 
-    const plan = planTableCellPaste(
-      tiptap.state,
-      clip("a", html),
-      sliceOfSize(tiptap, 1),
-    );
+      const plan = planTableCellPaste(
+        tiptap.state,
+        clip("a", html),
+        sliceOfSize(tiptap, 1),
+      );
 
-    expect(plan?.kind).toBe("insertSlice");
-  });
+      expect(plan?.kind).toBe("dispatch");
+      if (plan?.kind !== "dispatch") return;
+      expect(kindsInDoc(plan.transaction.doc, "t-r0c0")).toEqual(kinds);
+    },
+  );
 
   // Issue #304 리뷰로 정정: 전에는 줄이 1개 이하인 "빈 문단이 섞인 문단 하나"
   // (`<p>a</p><p></p>`)를 이전 계획(insertSlice)으로 단언했다. 이전 경로는 표

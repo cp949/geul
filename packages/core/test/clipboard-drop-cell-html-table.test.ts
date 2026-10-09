@@ -15,8 +15,9 @@
  * - T3 importHtml이 낸 블록 트리 실측(표 앞뒤 빈 문단 없음, 중첩 표는 한 셀)
  * - T4 빈 셀·공백 셀, 셀 content 마크, 위치 마크 미적용
  * - T5 selection·meta·dispatch 1회·revision +1·undo 1회·현재 selection 보존
- * - T6 현행을 유지하는 입력(모든 셀이 빈 표, 한 블록 html, importHtml 실패,
- *   내부 드래그, 파일 동반, 좌표 null)
+ * - T6 현행을 유지하는 입력(모든 셀이 빈 표, importHtml 실패, 내부 드래그,
+ *   파일 동반, 좌표 null). 한 블록 html은 Issue #316이 정정해
+ *   clipboard-drop-cell-html.test.ts가 소유한다
  * - T8 표 하나만 든 html(Issue #313): 셀 안 문단·제목·목록, 2x2·헤더·rowspan,
  *   1x1, `<br>`·`<pre>` 셀, 마크 유지, 표 밖 구분선·이미지
  * - T7 셀이 아닌 위치는 importHtml을 부르지 않고 좌표를 한 번만 푼다

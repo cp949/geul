@@ -13,7 +13,9 @@
  * - H6 codeBlock(내부 개행은 hardBreak, code 마크 없음)
  * - H7~H8 빈 블록·구분선·이미지는 줄을 내지 않음
  * - H9 표 포함 html은 이전 경로
- * - H10 줄이 1개인 html은 이전 경로(`<pre>` 단독 포함)
+ * - H10 줄이 1개인 html. Issue #316 전에는 이전 경로(PM 기본)였고 지금은
+ *   같은 평탄화로 넣는다(`<pre>` 단독은 개행이 hardBreak로 바뀌었다)
+ * - 한 블록 html(Issue #316) 색 마크·`<pre>` 개행·소스 개행과 줄 0개 입력
  * - H11 무효 문자 정리(정리 뒤 줄이 1개여도 셀에 넣음)
  * - F1·F2·F4 개행·공백뿐인 문단 접기, 줄 1개만 남는 html, 마크 정규화
  *   (Issue #304 리뷰)
@@ -402,7 +404,7 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
     });
   });
 
-  describe("줄이 1개인 html은 이전 경로(H10)", () => {
+  describe("줄이 1개인 html은 같은 평탄화로 넣고 결과가 대체로 이전과 같다(H10, Issue #316으로 정정)", () => {
     it("굵은 한 줄은 이전과 같다", () => {
       const result = pasteAtCellEnd("<b>x</b>", "a\nb");
 
@@ -420,15 +422,134 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       expect(result.blocks()).toEqual(docOutline("table[cella]"));
     });
 
-    // 수정 전 실측: `<pre>` 단독은 사라지지 않는다. PM이 code 마크 텍스트로
-    // 셀에 넣고 개행은 공백이 된다(계획 D1의 소실 전제는 `<pre>` 뒤에 다른
-    // 블록이 있을 때만 맞다). 이전과 같은 결과를 유지한다.
-    it("codeBlock 단독은 이전과 같다", () => {
+    // Issue #316 정정: 수정 전에는 PM이 code 마크 텍스트로 셀에 넣고 개행은
+    // 공백이었다(`cell`+`a b`*code). 이제 개행은 hardBreak이고 code 마크가 없다.
+    it("codeBlock 단독은 개행이 hardBreak이고 code 마크가 없다(Issue #316으로 정정)", () => {
       const result = pasteAtCellEnd("<pre><code>a\nb</code></pre>", "a\nb");
 
-      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["cell", "a b*code"]);
-      expect(result.blocks()).toEqual(docOutline("table[cella b]"));
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["cella", "br", "b"]);
+      expect(result.blocks()).toEqual(docOutline("table[cella\nb]"));
     });
+  });
+
+  describe("한 블록 html도 같은 평탄화로 넣는다(Issue #316)", () => {
+    /** 셀 자식 중 마크 이름이 같은 첫 마크의 attrs를 돌려준다. 없으면 null이다. */
+    const markAttrsOf = (
+      result: ReturnType<typeof pasteAtCellEnd>,
+      markName: string,
+    ): Record<string, unknown> | null => {
+      let found: Record<string, unknown> | null = null;
+      findCell(result.tiptap.state.doc, "t-r0c0").forEach((child) => {
+        const mark = child.marks.find((m) => m.type.name === markName);
+        if (mark !== undefined && found === null) {
+          found = { ...mark.attrs };
+        }
+      });
+      return found;
+    };
+
+    /** 셀 중간(offset 2) 캐럿에 한 블록 html을 붙인다. */
+    const pasteMiddle = (html: string, text = "plain") =>
+      pasteIn(lastCellBlocks(), textSelection(inCell("t-r0c0", 2)), {
+        "text/html": html,
+        "text/plain": text,
+      });
+
+    it("색 마크(textColor)를 유지한다", () => {
+      const result = pasteMiddle(
+        '<p><span style="color:#ff0000">red</span></p>',
+      );
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "ce",
+        "red*textColor",
+        "ll",
+      ]);
+      expect(markAttrsOf(result, "textColor")).toEqual({ color: "#FF0000" });
+      expectTableIntact(result);
+    });
+
+    it("배경색 마크(backgroundColor)를 유지한다", () => {
+      const result = pasteMiddle(
+        '<p><span style="background-color:#ffff00">y</span></p>',
+      );
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "ce",
+        "y*backgroundColor",
+        "ll",
+      ]);
+      expect(markAttrsOf(result, "backgroundColor")).toEqual({
+        color: "#FFFF00",
+      });
+      expectTableIntact(result);
+    });
+
+    it("`<pre><code>`의 개행은 hardBreak이고 code 마크가 없다", () => {
+      const result = pasteMiddle("<pre><code>l1\nl2\nl3</code></pre>");
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "cel1",
+        "br",
+        "l2",
+        "br",
+        "l3ll",
+      ]);
+      expect(markAttrsOf(result, "code")).toBeNull();
+      expectTableIntact(result);
+    });
+
+    // importHtml이 `<br>`와 소스 개행을 둘 다 text "\n"으로 만들어 구분하지
+    // 못한다. 여러 블록·CellSelection의 현행과 같다(스펙 한계).
+    it("문단 안 소스 개행은 hardBreak가 된다(importHtml이 br과 구분하지 못한다)", () => {
+      const result = pasteMiddle("<p>one\ntwo</p>");
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "ceone",
+        "br",
+        "twoll",
+      ]);
+      expectTableIntact(result);
+    });
+
+    it.each([
+      { name: "bold", html: "<b>x</b>", kinds: ["ce", "x*bold", "ll"] },
+      { name: "italic", html: "<i>x</i>", kinds: ["ce", "x*italic", "ll"] },
+      {
+        name: "underline",
+        html: "<u>x</u>",
+        kinds: ["ce", "x*underline", "ll"],
+      },
+      { name: "strike", html: "<s>x</s>", kinds: ["ce", "x*strike", "ll"] },
+      { name: "code", html: "<code>x</code>", kinds: ["ce", "x*code", "ll"] },
+      { name: "제목", html: "<h1>x</h1>", kinds: ["cexll"] },
+      { name: "한 항목 목록", html: "<ul><li>x</li></ul>", kinds: ["cexll"] },
+      {
+        name: "br로 나뉜 문단",
+        html: "<p>a<br>b</p>",
+        kinds: ["cea", "br", "bll"],
+      },
+    ])("$name 결과는 이전과 같다", ({ html, kinds }) => {
+      const result = pasteMiddle(html);
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(kinds);
+      expectTableIntact(result);
+    });
+
+    it.each([
+      { name: "빈 문단", html: "<p></p>" },
+      { name: "br뿐인 문단", html: "<p><br></p>" },
+      { name: "구분선", html: "<hr>" },
+      { name: "이미지", html: '<img src="https://x.y/a.png" alt="">' },
+    ])(
+      "줄이 0개인 $name은 이전 경로라 평문이 있으면 평문을 넣는다",
+      ({ html }) => {
+        const result = pasteMiddle(html, "plain");
+
+        expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["ceplainll"]);
+        expectTableIntact(result);
+      },
+    );
   });
 
   describe("무효 문자(H11)", () => {

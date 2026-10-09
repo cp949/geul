@@ -17,7 +17,7 @@ import {
 import { inlineContentToTiptap } from "./model-to-tiptap.js";
 import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 
-// 여러 블록 html을 표 셀 인라인 컨텐츠로 바꾼다(Issue #304). 표 셀은
+// html을 표 셀 인라인 컨텐츠로 바꾼다(Issue #304, 한 블록은 Issue #316). 표 셀은
 // `inline*`이라 블록을 담지 못한다. importHtml이 만든 블록 트리를 줄 목록으로
 // 평탄화하고 줄 사이를 hardBreak 하나로 잇는다. core 내부 module이고
 // index.ts로 내보내지 않는다(ADR 0002).
@@ -53,11 +53,15 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // (#304, #308)는 옵션을 넘기지 않는다.
 //
 // 발동 조건은 content를 가진 블록이 최소 블록 수 이상이고 정리 뒤 줄이 1개
-// 이상일 때다. 최소 블록 수는 기본 2다(셀 안 캐럿·범위, Issue #304).
-// CellSelection 경로는 1을 넘긴다(Issue #308). 한 블록 html도 PM 기본에
-// 맡기면 되돌려지기 때문이다. flattenTables가 켜져 있고 표가 있으면 인자와
-// 무관하게 1이다(Issue #313). 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전
-// 경로로 내려가면 PM 기본이 남은 빈 문단을 표 뒤에 남기기 때문이다.
+// 이상일 때다. 최소 블록 수는 기본 1이다(Issue #316). 한 블록 html도 PM 기본에
+// 맡기면 색 마크가 빠지고 `<pre>` 개행이 공백이 된다. 기본은 처음에 2였고
+// 한 블록은 PM 기본에 맡겼다(Issue #304). CellSelection 경로는 1을 명시해
+// 넘긴다(Issue #308). flattenTables가 켜져 있고 표가 있으면 인자와 무관하게
+// 1이다(Issue #313). 줄이 1개만 남아도 그 줄을 낸다. 호출부가 이전 경로로
+// 내려가면 PM 기본이 남은 빈 문단을 표 뒤에 남기기 때문이다.
+//
+// importHtml 한계가 한 블록에도 그대로 나온다. 스타일 기반 서식과 `<del>`은
+// 인식하지 못해 평문이 된다. `<br>`와 소스 개행은 둘 다 hardBreak가 된다.
 
 // collectLines가 센 값이다. 평탄화한 표의 수다. 표가 있으면 최소 블록 수를 1로 쓴다.
 type LineStats = { tables: number };
@@ -160,14 +164,14 @@ export type CellHtmlInlineOptions = {
 
 /**
  * 블록 트리를 셀 인라인 Fragment로 바꾼다. 표가 있거나(flattenTables 꺼짐),
- * content 블록이 minBlocks(기본 2) 미만이거나, 정리 뒤 줄이 0개이면 null이다.
+ * content 블록이 minBlocks(기본 1) 미만이거나, 정리 뒤 줄이 0개이면 null이다.
  * flattenTables가 켜져 있고 표가 있으면 minBlocks는 1이다. 이때 셀 하나가 줄
  * 원본 하나다. null이면 호출부는 이전 경로를 쓴다.
  */
 export const buildCellHtmlInline = (
   schema: Schema,
   blocks: readonly DocumentBlock[],
-  minBlocks = 2,
+  minBlocks = 1,
   options: CellHtmlInlineOptions = {},
 ): Fragment | null => {
   const flattenTables = options.flattenTables === true;
@@ -191,9 +195,9 @@ export const buildCellHtmlInline = (
   return lineCount === 0 ? null : Fragment.fromArray(nodes);
 };
 
-// 여러 블록 html을 셀 inline Fragment로 바꾼다(Issue #304, #311, #312).
+// html을 셀 inline Fragment로 바꾼다(Issue #304, #311, #312, #316).
 // importHtml이 실패하거나 buildCellHtmlInline이 null이면 null이다. 붙여넣기와
-// drop이 같은 변환을 쓴다. null 조건은 content 블록 2개 미만, 정리 뒤 줄 0개,
+// drop이 같은 변환을 쓴다. null 조건은 content 블록 0개, 정리 뒤 줄 0개,
 // 표 포함이다. 표 포함은 flattenTables가 꺼진 붙여넣기에만 해당한다.
 // flattenTables는 drop만 켠다. 붙여넣기는 표를 TablePasteExtension이 먼저
 // 소비한다.

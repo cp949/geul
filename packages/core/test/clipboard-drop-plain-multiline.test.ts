@@ -635,7 +635,9 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     describe("PM 기본에 맡기는 입력", () => {
-      it("셀 위 한 블록 text/html 동반 drop은 위임한다(여러 블록은 Issue #311)", () => {
+      // Issue #316 정정: 한 블록 html도 셀 안에 직접 넣는다. 이전에는 PM 기본에
+      // 위임해 문서가 그대로였다. 평문은 html이 있으면 쓰지 않는다.
+      it("셀 위 한 블록 text/html 동반 drop은 html을 셀 안에 직접 넣고 평문은 쓰지 않는다(Issue #316으로 정정)", () => {
         const { tiptap } = mountCellDrop();
         const before = tiptap.state.doc;
 
@@ -644,8 +646,9 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
             tiptap,
             dropEventOf({ "text/html": "<p>H</p>", "text/plain": "X\nY" }),
           ),
-        ).toBeFalsy();
-        expect(tiptap.state.doc).toBe(before);
+        ).toBeTruthy();
+        expect(tiptap.state.doc).not.toBe(before);
+        expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceHll"]);
       });
 
       it("셀 위 내부 드래그(view.dragging)는 위임한다", () => {
