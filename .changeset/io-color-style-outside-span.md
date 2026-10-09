@@ -14,5 +14,7 @@
 - 블록 자식이 있는 래퍼 `div`의 색·배경은 읽지 않는다. VS Code 복사의 바깥 `div` 테마 색이 따라오지 않는다.
 - `td`·`th`·`tr`·`table`·`em`·`p` 등 기존 태그의 `style`·`bgcolor` 제거 경고(`UNSAFE_ATTRIBUTE_REMOVED`)는 이전과 같다.
 - 브라우저 복사의 계산 스타일 덤프가 붙은 요소(`style`에 `-webkit-text-stroke-width` 선언)의 색·배경은 블록 속성·표 셀 색·셀 안 블록 요소 마크로 읽지 않는다. Chrome 복사가 심는 검정 글자·흰 배경이 문서에 박히지 않는다.
-- `font`·`mark`가 목록·표 같은 블록을 품으면 태그만 벗겨 블록 구조를 유지한다.
+- `b`·`strong`·`em`·`i`·`u`·`s`·`del`·`strike`·`code`·`font`·`mark`도 같은 표식이 있으면 `style`의 색·배경을 읽지 않는다. 서식 선언, `font`의 `color` 속성, `mark`의 기본 노랑 배경은 읽는다. `span`은 그대로다.
+- 읽지 못한 `font color` 값(`rgb()` 등)은 이전처럼 `UNSAFE_ATTRIBUTE_REMOVED`로 경고한다.
+- `font`·`mark`가 목록·표 같은 블록을 품으면 태그만 벗겨 블록 구조를 유지한다. 벗겨지는 태그의 `color`·`style`은 사라지므로 이전처럼 경고한다.
 - `a`의 `style`, `thead`·`tbody`·`col`의 색, `mark`의 기본 글자색, 옛 속성 쓰레기 값(`bgcolor="garbage"`)은 읽지 않는다.

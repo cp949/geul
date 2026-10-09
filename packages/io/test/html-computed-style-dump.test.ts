@@ -9,8 +9,11 @@
  * - 적용 범위: 블록 속성(p·h1–h6·blockquote·li·callout·문단 div), 표 셀 색
  *   (td·th·tr·table 단마다, 그 단의 bgcolor 속성은 그대로 읽는다), 표 셀 안 블록
  *   요소의 색 마크(굵게·기울임·밑줄·취소선 마크는 그대로 읽는다).
- * - span·b·em·font·mark 등 인라인 요소의 style은 바꾸지 않는다. 덤프 표식이
- *   있어도 이전처럼 색 마크를 만든다.
+ * - span의 style은 바꾸지 않는다. 덤프 표식이 있어도 이전처럼 색 마크를 만든다
+ *   (Issue #338이 다룬다).
+ * - b·strong·em·i·u·s·del·strike·code·font·mark는 #334가 style 색을 새로 읽는
+ *   태그라 덤프 표식이 있으면 style의 색·배경을 읽지 않는다. 서식 선언과 font의
+ *   color 속성, mark의 기본 배경은 그대로다.
  * - 아래 상수는 실제 Chromium 복사 원문(playwright, 2026-10-10)이다. 본문 페이지는
  *   body color #24292f·배경 #fff, `code{background:#eee}`다. 안쪽
  *   `<code style="background: rgb(238, 238, 238);">`는 작성자 style이라 읽는다.
@@ -330,7 +333,7 @@ describe("블록 표면 전체에서 덤프 표식을 따른다", () => {
   });
 });
 
-describe("인라인 요소의 style은 덤프 표식이 있어도 바꾸지 않는다", () => {
+describe("span의 style은 덤프 표식이 있어도 바꾸지 않는다", () => {
   it("span은 이전처럼 색 마크를 만든다", () => {
     const block = documentOf(
       `<p>a<span style="color: red; background-color: #00ff00; ${DUMP}">x</span></p>`,
@@ -355,20 +358,81 @@ describe("인라인 요소의 style은 덤프 표식이 있어도 바꾸지 않�
     expect(importedCells(html)[0]?.content).toEqual(expected);
     expect(clipboardCells(html)[0]?.content).toEqual(expected);
   });
+});
+
+// span을 뺀 인라인 요소는 덤프 표식이 있으면 style의 색·배경을 읽지 않는다.
+// Chromium은 요소 안쪽만 선택해 복사해도 em·strong 등에 같은 덤프를 싣는다.
+// span은 기준 커밋부터 색을 읽어 왔으므로 Issue #338이 따로 다룬다.
+describe("span을 뺀 인라인 요소는 덤프 표식이 있으면 style 색을 읽지 않는다", () => {
+  /** 마크 종류만 문자열로 줄인다. 순서는 읽은 순서다. */
+  const marksOf = (html: string): string[] => {
+    const block = documentOf(html).blocks[0] as DocumentBlock;
+    return contentOf(block).flatMap((item) =>
+      "marks" in item
+        ? (item.marks ?? []).map((mark) =>
+            "color" in mark ? `${mark.type}:${mark.color}` : mark.type,
+          )
+        : [],
+    );
+  };
 
   it.each([
-    ["b", "b"],
-    ["em", "em"],
-    ["font", "font"],
-    ["mark", "mark"],
-  ])("%s의 style 색은 이전처럼 마크가 된다", (_name, tag) => {
-    const block = documentOf(
-      `<p><${tag} style="color: #ff0000; ${DUMP}">x</${tag}></p>`,
-    ).blocks[0] as DocumentBlock;
+    ["b", ["bold"]],
+    ["strong", ["bold"]],
+    ["em", ["italic"]],
+    ["i", ["italic"]],
+    ["u", ["underline"]],
+    ["s", ["strike"]],
+    ["del", ["strike"]],
+    ["strike", ["strike"]],
+    ["code", ["code"]],
+    ["font", []],
+    // mark의 기본 노랑 배경은 style이 아니라 태그 의미라 남는다.
+    ["mark", ["backgroundColor:#FFFF00"]],
+  ])("%s는 태그 마크만 남긴다", (tag, expected) => {
     expect(
-      contentOf(block).flatMap((item) =>
-        "marks" in item ? (item.marks ?? []) : [],
+      marksOf(
+        `<p><${tag} style="color: #ff0000; background-color: #00ff00; ${DUMP}">x</${tag}></p>`,
       ),
-    ).toContainEqual({ type: "textColor", color: "#FF0000" });
+    ).toEqual(expected);
+  });
+
+  it("실제 Chromium 부분 선택 복사 원문(em)도 색을 읽지 않는다", () => {
+    expect(
+      marksOf(
+        '<p>pre <em style="color: rgb(171, 205, 239); font-family: Arial; font-style: italic; -webkit-text-stroke-width: 0px; background-color: rgb(17, 34, 51);">alic t</em> post</p>',
+      ),
+    ).toEqual(["italic"]);
+  });
+
+  it("덤프가 있어도 서식 선언은 읽는다", () => {
+    expect(
+      marksOf(
+        `<p><em style="color: red; font-weight: 700; text-decoration: underline; ${DUMP}">x</em></p>`,
+      ),
+    ).toEqual(["bold", "italic", "underline"]);
+  });
+
+  it("font의 color 속성은 덤프 style이 있어도 읽는다", () => {
+    expect(
+      marksOf(
+        `<p><font color="#0000ff" style="color: #ff0000; ${DUMP}">x</font></p>`,
+      ),
+    ).toEqual(["textColor:#0000FF"]);
+  });
+
+  it("표식이 없는 style 색은 읽는다", () => {
+    expect(
+      marksOf(
+        '<p><em style="color: #ff0000; background-color: #00ff00">x</em></p>',
+      ),
+    ).toEqual(["italic", "textColor:#FF0000", "backgroundColor:#00FF00"]);
+  });
+
+  it("셀 안에서도 두 경로가 같다", () => {
+    const html = `<table><tr><td><em style="color: red; ${DUMP}">x</em></td></tr></table>`;
+    const expected = [{ text: "x", marks: [{ type: "italic" }] }];
+    expect(importedCells(html)[0]?.content).toEqual(expected);
+    expect(clipboardCells(html)[0]?.content).toEqual(expected);
   });
 });

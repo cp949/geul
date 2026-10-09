@@ -118,16 +118,23 @@ const resolveColor = (
 // 같은 규칙으로 읽는다(Issue #334). bold는 font-weight가 bold일 때만 낸다.
 // 굵기를 끄는 쪽(b·strong의 normal·light)은 호출부가 fontWeight로 판정한다.
 // 색은 안쪽 요소가 정하지 않았을 때만 바깥 색이 남는다(inheritMarks).
+//
+// ignoreStyleColors는 style의 color·background-color를 읽지 않고 defaults만 쓴다.
+// 서식 선언은 그대로 읽는다.
 const marksFromStyle = (
   style: unknown,
   defaults: {
     textColor?: string | undefined;
     backgroundColor?: string | undefined;
   } = {},
+  ignoreStyleColors = false,
 ): { marks: TextMark[]; fontWeight: InlineFontWeight | undefined } => {
   const marks: TextMark[] = [];
   const text = typeof style === "string" ? style : undefined;
-  const states = text === undefined ? undefined : parseStyleColorStates(text);
+  const states =
+    text === undefined || ignoreStyleColors
+      ? undefined
+      : parseStyleColorStates(text);
 
   const textColor = resolveColor(states?.color, defaults.textColor);
   if (textColor !== undefined)
@@ -167,8 +174,17 @@ export const blockStyleMarks = (node: HtmlElementNode): TextMark[] => {
 // 값(`<em style="font-style:normal">`)은 읽지 않는다. 태그 마크는 그대로다.
 const tagMarkWithStyle = (node: HtmlElementNode, own: TextMark): TextMark[] => [
   own,
-  ...marksFromStyle(node.properties.style).marks,
+  ...marksFromStyle(node.properties.style, {}, hasStyleDump(node)).marks,
 ];
+
+// 브라우저 복사의 계산 스타일 덤프가 붙은 인라인 요소다(Issue #334). span을 뺀
+// 인라인 요소는 #334가 style 색을 새로 읽으므로, 덤프의 테마 색이 마크로 박히지
+// 않게 색만 읽지 않는다. Chromium은 요소 안쪽만 선택해 복사해도 em·strong에
+// 덤프를 싣는다. span은 이전부터 색을 읽어 왔고 Issue #338이 따로 다룬다.
+const hasStyleDump = (node: HtmlElementNode): boolean => {
+  const style = node.properties.style;
+  return typeof style === "string" && hasComputedStyleDump(style);
+};
 
 // 다른 case는 대개 mark 0개 또는 1개지만 style을 읽는 요소는 선언 하나에 여러
 // 마크(color·background-color·font-weight 등)가 동시에 있을 수 있어(우리
@@ -188,7 +204,11 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
       // 무효한 값은 선언이 무시돼 UA 굵기(bold)가 남고, revert도 UA 굵기다.
       // font 줄임에 굵기가 없으면 normal이다. 색·배경·기울임·밑줄·취소선은
       // 더해 읽는다(Issue #320, #334).
-      const { marks, fontWeight } = marksFromStyle(node.properties.style);
+      const { marks, fontWeight } = marksFromStyle(
+        node.properties.style,
+        {},
+        hasStyleDump(node),
+      );
       return fontWeight === "normal" || fontWeight === "light"
         ? marks
         : [{ type: "bold" }, ...marks];
@@ -211,20 +231,26 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
       // color 속성은 옛 HTML 글자색이다. style의 color가 이긴다. size·face는
       // 읽지 않는다.
       const attribute = node.properties.color;
-      return marksFromStyle(node.properties.style, {
-        textColor:
-          typeof attribute === "string"
-            ? readLegacyAttributeColor(attribute)
-            : undefined,
-      }).marks;
+      return marksFromStyle(
+        node.properties.style,
+        {
+          textColor:
+            typeof attribute === "string"
+              ? readLegacyAttributeColor(attribute)
+              : undefined,
+        },
+        hasStyleDump(node),
+      ).marks;
     }
     case "mark":
       // 기본 배경은 노랑이다. style 배경이 있으면 그 값이 이기고, 배경이
       // clear(투명·반투명·none)면 기본 노랑도 없다. 기본 글자색(검정)은
       // 읽지 않는다.
-      return marksFromStyle(node.properties.style, {
-        backgroundColor: MARK_DEFAULT_BACKGROUND,
-      }).marks;
+      return marksFromStyle(
+        node.properties.style,
+        { backgroundColor: MARK_DEFAULT_BACKGROUND },
+        hasStyleDump(node),
+      ).marks;
     default:
       return [];
   }
