@@ -26,7 +26,7 @@ pnpm check:licenses
 pnpm verify
 ```
 
-`pnpm verify`는 lint, build, dist ES 호환성(check:escompat), typecheck, unit test, package boundary, license, Chromium E2E를 순서대로 실행하는 최종 게이트다.
+`pnpm verify`는 lint, build, dist ES 호환성(check:escompat), typecheck, unit test, package boundary, license, Chromium E2E를 순서대로 실행하는 최종 게이트다. 실패해도 멈추지 않고 끝까지 돈 뒤 결과를 한 번에 보고한다. 실패를 고친 뒤에는 `pnpm verify:failed`로 실패한 것만 다시 돈다. `pnpm verify:quick [spec…]`은 e2e 전량 대신 인자로 준 spec만 돈다.
 
 단일 패키지는 filter로 검증할 수 있다.
 

@@ -102,7 +102,7 @@ roadmap-workflow에서 승격된 작업이면 다음 포인터를 네 번째 필
 - 입력: `01-계획.md`, 계획서 6·7절이 지목한 가이드·함정
 - 출력: 작업 브랜치 커밋
 - 절차: subagent 협업 모드로 진행한다. 메인 세션이 아래 "구현 prompt"를 파일 쓰기 subagent 하나에 전달한다. subagent가 반환하면 메인 세션은 diff와 검증 증거를 확인한 뒤 커밋한다. roadmap-workflow에서 승격된 작업은 구현 gate 뒤 상위 RD의 "예상 DELTA"·"완료 조건" 체크리스트를 갱신하고 남은 상위 RD 의존을 재평가한다.
-- 검증: 계획서의 검증 명령(focused). `pnpm verify` 전량은 여기서 돌리지 않는다.
+- 검증: 계획서의 검증 명령(focused). `pnpm verify:quick`과 `pnpm verify`는 여기서 돌리지 않는다.
 - 정지: squash, `dev` 병합, push, GitHub 쓰기를 하지 않는다. 변경이 DELTA 크기 상한을 넘게 되면 정지하고 보고한다. 독립 qq-workflow의 레인 전환 판단은 사용자가 한다. roadmap-workflow에서 승격된 작업은 상위 roadmap-workflow의 "RD 사이" 규칙을 따른다.
 
 ### 구현 prompt
@@ -138,7 +138,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 
 - 입력: `git diff <착수 커밋>...<작업 브랜치>`(`<착수 커밋>`은 `_meta.md`에서 읽는다), 대상 코드, `01-계획.md`, 계획서 6·7절이 지목한 가이드·함정, `AGENTS.md`의 아키텍처 불변식
 - 출력: `IMPL-REVIEW-NN.md`(append-only)
-- 검증: 단계-2의 focused 검증에 의존한다. `pnpm verify` 전량은 여기서 돌리지 않는다 — 단계-4 병합 직전에 1회만 돈다.
+- 검증: 단계-2의 focused 검증에 의존한다. 게이트는 여기서 돌리지 않는다 — 단계-4 병합 직전에 `pnpm verify:quick`을 1회 돈다.
 - 절차: 두 부분을 한 산출물에 담는다.
   1. **완료 조건 대조** — 메인 세션이 계획서의 완료 조건을 실측 증거와 대조해 `PASS` / `FAIL`로 판정한다. 판정 근거는 재현 가능한 증거로 남긴다 — 테스트 제목, 명령과 출력, 파일 경로와 줄 번호.
   2. **결함 탐지** — 읽기 전용 subagent에 dispatch한다. 프롬프트에 diff 범위, 계획서 6·7절의 가이드·함정 목록과 아키텍처 불변식을 옮겨 적는다. 계획서의 목적·완료 조건은 주지 않는다 — 계획의 사각지대를 물려받지 않기 위해서다. subagent 협업의 공통 규칙은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent 협업 규칙"을 따른다.
@@ -152,7 +152,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 - 출력: `dev`의 커밋, GitHub 이슈·댓글, `_meta.md`의 `상태: 완료`
 - 게이트: **리뷰를 거치지 않은 구현은 `dev`에 병합하지 않는다.** `IMPL-REVIEW-*.md`가 하나도 없거나 최신 리뷰에 미해결 `FAIL`·`BLOCKER`·`MAJOR`가 남아 있으면 아무것도 바꾸지 않고 정지하고 무엇이 없는지 보고한다. 사용자가 그 실행에서 리뷰 생략을 명시 지시한 경우에만 예외로 하고, 생략한 사실과 지시 내용을 `01-계획.md`의 "## 결정" 절에 적는다.
 - 절차: 메인 세션이 단독으로 직렬 수행한다. subagent에 위임하지 않는다.
-  1. `pnpm verify` 전량을 통과시킨다.
+  1. `pnpm verify:quick <관련 e2e spec…>`을 통과시킨다. 관련 spec은 계획서 검증 명령의 e2e spec이다. 실패를 고친 뒤에는 `pnpm verify:failed`만 다시 돈다. e2e 전량은 `dev` push 직전 `pnpm verify`가 맡는다.
   2. 작업 브랜치 커밋을 [`./workflow-shared.md`](./workflow-shared.md)의 "재그룹화 실행 명령" 절 그대로 재그룹화한다. 전제, 순서, 무결성 판정과 금지 목록도 같다.
   3. `git switch dev` 후 `git merge --ff-only <작업 브랜치>`. ff가 거절되면 현재 `dev` 기준으로 2단계를 다시 실행한다.
   4. `git branch -d <작업 브랜치>`로 삭제하고 백업 ref를 정리한다.
@@ -166,7 +166,7 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 
 1. 단계-1에서 사용자 승인 후 `dev`에서 분기해 작업 브랜치를 만든다. worktree는 만들지 않는다.
 2. 단계-2·3이 같은 브랜치에 세분화된 커밋을 그대로 누적한다.
-3. 단계-4가 `pnpm verify` 전량 통과 후 재그룹화하고 `dev`로 ff-only 이전한다.
+3. 단계-4가 `pnpm verify:quick` 통과 후 재그룹화하고 `dev`로 ff-only 이전한다.
 4. 이전 후 브랜치를 삭제하고 백업 ref를 정리한다.
 5. 작업 브랜치는 push하지 않는다. push 대상은 `dev`뿐이고 명시적 지시를 기다린다.
 
@@ -174,10 +174,11 @@ subagent 협업은 [`./workflow-shared.md`](./workflow-shared.md)의 "subagent �
 
 ## 검증 게이트
 
-| 시점             | 검증                        |
-| ---------------- | --------------------------- |
-| 단계-2 구현 중   | 계획서의 검증 명령(focused) |
-| 단계-4 병합 직전 | `pnpm verify` 전량 1회      |
+| 시점             | 검증                                                       |
+| ---------------- | ---------------------------------------------------------- |
+| 단계-2 구현 중   | 계획서의 검증 명령(focused)                                |
+| 단계-4 병합 직전 | `pnpm verify:quick` 1회, 실패 수정 뒤 `pnpm verify:failed` |
+| `dev` push 직전  | `pnpm verify` 전량 1회                                     |
 
 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
 

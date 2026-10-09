@@ -20,7 +20,7 @@
  *
  * PIT-0027: 검사 대상이 0건이면 게이트가 조용히 무력화되므로, 패키지별로
  * dist의 JS 파일이 1건도 없으면 실패한다. dist는 빌드 산출물이라 `pnpm
- * build` 뒤에 실행해야 한다(verify:packages가 build 뒤에 배선한다).
+ * build` 뒤에 실행해야 한다(scripts/verify.mjs가 build 뒤에 배선한다).
  *
  * 게이트 자신의 계약 — 대상 파생이 조용히 좁아지지 않는가, 검출력(aggressive
  * 모드·규칙 구성)이 죽지 않는가 — 은 `tests/check-escompat.test.ts`가 진다.

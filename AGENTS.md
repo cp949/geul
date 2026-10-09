@@ -80,7 +80,7 @@ demo  -> react, io, model
 
 ## 검증
 
-변경 범위에 맞는 focused 검증을 먼저 실행하고 완료를 보고하기 전 최종 게이트를 실행한다.
+변경 범위에 맞는 focused 검증을 먼저 실행하고 완료를 보고하기 전 해당 시점의 게이트를 실행한다.
 
 ```bash
 pnpm --filter @cp949/geul-model test
@@ -88,12 +88,30 @@ pnpm --filter @cp949/geul-io test
 pnpm --filter @cp949/geul-core test
 pnpm --filter @cp949/geul-react typecheck
 pnpm test
+pnpm verify:quick e2e/<관련 spec>.spec.ts
+pnpm verify:failed
 pnpm verify
 git diff --check
 git status --short
 ```
 
-`pnpm verify`는 lint, build, typecheck, unit test, package boundary, license와 E2E 회귀 게이트(`test:e2e` — chromium 전량)를 포함한다. firefox·webkit(`@core` 부분집합)은 기본 게이트에서 제외돼 있다 — 필요할 때 `pnpm test:e2e:full`(chromium·firefox·webkit)로 실행한다. 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
+게이트는 `scripts/verify.mjs` 하나가 실행한다. 세 모드가 있다.
+
+| 명령 | 범위 | 쓰는 시점 |
+| --- | --- | --- |
+| `pnpm verify:quick [spec…]` | e2e 전량을 뺀 전 단계와 인자로 준 e2e spec | 이슈 하나의 `dev` 병합 직전 |
+| `pnpm verify` | 전 단계와 e2e 회귀 게이트(`test:e2e`, chromium·mobile 전량) | `dev` push 직전, CI |
+| `pnpm verify:failed` | 직전 `verify`·`verify:quick`에서 실패하거나 건너뛴 단계 | 실패를 고친 뒤 |
+
+- 전 단계: lint, format, build, check:escompat, typecheck, unit test, package boundary, license.
+- 게이트는 실패해도 멈추지 않는다. 끝까지 돈 뒤 단계별 결과와 실패 목록을 한 번에 보고한다.
+- 실패를 고친 뒤 전량을 다시 돌지 않는다. `pnpm verify:failed`로 실패한 것만 다시 돈다.
+- `verify:failed`는 실패한 unit 파일과 e2e 테스트(`file:line`)만 다시 돈다. lint·format은 바뀐 파일만 검사한다. 직전 실행 이후 바뀐 파일과 관련된 unit test(`vitest --changed`)를 더한다. build, escompat, typecheck, boundary, license는 항상 다시 돈다.
+- `verify:failed`가 전 단계 통과를 보고하면 그 게이트를 통과한 것이다.
+- 상태와 단계별 로그는 `_tmp/verify/`에 남는다.
+- `dev` push 지시를 받으면 push 전에 `pnpm verify`를 실행한다. 이슈마다 쌓인 회귀는 여기서 잡는다. 원인 커밋은 `git bisect`로 찾는다.
+
+firefox·webkit(`@core` 부분집합)은 기본 게이트에서 제외돼 있다 — 필요할 때 `pnpm test:e2e:full`(chromium·firefox·webkit)로 실행한다. 실패가 있으면 baseline 실패와 현재 변경이 만든 실패를 구분하고 성공으로 보고하지 않는다.
 
 성능 기준선 spec(`e2e/table-performance.spec.ts`, `e2e/typing-performance.spec.ts`)은 게이트가 아니라 측정 도구라 `perf` 프로젝트로 분리했고 `pnpm verify`에 포함하지 않는다. 표 편집·클립보드 붙여넣기·undo의 성능 특성을 바꾸거나 타이핑 지연(예제 결과 패널, 에디터 입력 경로)을 바꾸는 변경에서는 `pnpm test:e2e:perf`를 따로 실행하고 결과를 `docs/product/performance-baseline.md`에 갱신한다.
 
@@ -151,7 +169,7 @@ RD 상태·의존 DAG, readiness probe, DELTA 계획 예산과 자동 재계획�
 - 요청받지 않은 파일을 되돌리거나 광범위하게 정리하지 않는다.
 - worktree는 사용자가 그 세션에서 명시적으로 요청한 경우에만 만든다. 병렬 에이전트에도 worktree 격리를 기본으로 주지 않는다.
 - `커밋` 요청은 현재 범위의 로컬 커밋만 허용한다. merge, push, tag와 PR 생성은 각각 별도 요청이 필요하다. 예외: qq-workflow의 단계-1 계획 승인은 작업 브랜치의 해당 종료 단계 `dev` fast-forward merge까지 허가한다. push, tag와 PR 생성은 이 레인에서도 별도 요청이 필요하다.
-- push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다. "작업 후 한번에" 같은 유예 답변은 완료 판단 시 자동 실행해도 된다는 허가가 아니다.
+- push는 사용자가 그 세션에서 명시적으로 지시하기 전까지 실행하지 않는다. 지시를 받으면 push 전에 `pnpm verify` 전량을 통과시킨다. "작업 후 한번에" 같은 유예 답변은 완료 판단 시 자동 실행해도 된다는 허가가 아니다.
 - 편집기를 여는 git 명령(`git rebase -i`, `-m` 없는 `git commit`·`git commit --amend`·`git tag -a`, `--no-edit` 없는 `git merge`)을 쓰지 않는다. 에이전트 세션은 `GIT_EDITOR=true`라 입력 없이 기본값으로 조용히 성공한다 — [`PIT-0023`](./docs/pitfalls/PIT-0023-editor-opening-git-commands-succeed-silently.md).
 - merge conflict는 양쪽 변경 의도를 확인해 해결하고 전체 병합 결과를 다시 검증한다.
 - `git reset --hard`, 강제 push와 광범위한 `git clean`을 사용하지 않는다.
