@@ -197,6 +197,11 @@ const blockSequenceFromNodes = (
   // import-html.ts의 blocksFromListElement와 같은 원칙으로 그 ol의 첫
   // li에만 붙인다(형제 scope 재시작 로직은 범위 밖) — li의 children은
   // blocksFromNodeList를 재귀 호출해 표·중첩 목록·문단을 그대로 처리한다.
+  //
+  // li가 아닌 직속 자식(ul 안의 ul, 텍스트 등)은 연속 run으로 모아
+  // blocksFromNodeList에 보낸다. 그 블록을 문서 순서대로 항목 사이에
+  // 형제로 놓아 텍스트를 잃지 않는다(Issue #326). 이전 li의 children으로
+  // 해석하지 않는다. 공백뿐인 run은 블록을 만들지 않는다.
   const blocksFromListNode = (
     listNode: HtmlElementNode,
   ): Result<ClipboardContentBlock[], ClipboardParseError> => {
@@ -204,8 +209,23 @@ const blockSequenceFromNodes = (
     const explicitStart = parseExplicitStartNumber(listNode);
     const blocks: ClipboardContentBlock[] = [];
     let itemIndex = 0;
+    let nonItemRun: HtmlNode[] = [];
+    // 비-li run이 먼저 와도 startNumber 기준은 li 순서(itemIndex)다.
+    const flushNonItemRun = (): Result<null, ClipboardParseError> => {
+      if (nonItemRun.length === 0) return { ok: true, value: null };
+      const runResult = blocksFromNodeList(nonItemRun);
+      nonItemRun = [];
+      if (!runResult.ok) return runResult;
+      blocks.push(...runResult.value);
+      return { ok: true, value: null };
+    };
     for (const child of listNode.children) {
-      if (child.type !== "element" || child.tagName !== "li") continue;
+      if (child.type !== "element" || child.tagName !== "li") {
+        nonItemRun.push(child);
+        continue;
+      }
+      const flushed = flushNonItemRun();
+      if (!flushed.ok) return flushed;
       const { contentNodes, childrenNodes } = splitListItemChildren(
         child,
         isBlockLevelNode,
@@ -231,6 +251,8 @@ const blockSequenceFromNodes = (
       );
       itemIndex += 1;
     }
+    const flushed = flushNonItemRun();
+    if (!flushed.ok) return flushed;
     return { ok: true, value: blocks };
   };
 
