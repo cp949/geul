@@ -18,6 +18,7 @@ import {
   type InsertMediaBlockError,
   insertMediaBlock as insertMediaBlockCommand,
 } from "./media-commands.js";
+import { disabledBlockTypeError } from "./model-to-tiptap.js";
 import {
   commandNotApplicable,
   type ProductionEditorSession,
@@ -49,6 +50,15 @@ export const createInsertBlockCommands = (session: ProductionEditorSession) => {
     options?: { clearAfterBlockText?: boolean },
   ): Result<{ blockId: string }, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("insertDivider");
+    // divider를 막으면 스키마에 노드가 없다. 명령 모듈은 paragraph 노드도
+    // 뒤따르는 형제와 무관하게 요구하므로(맨몸 paragraph 삽입용) paragraph를
+    // 막아도 같다. 명령 모듈이 던지기 전에 transaction 없이 거절한다
+    // (Issue #330, G-EDT-001).
+    for (const type of ["divider", "paragraph"] as const) {
+      if (!session.isBlockTypeEnabled(type)) {
+        return { ok: false, error: disabledBlockTypeError(type) };
+      }
+    }
     const captured: {
       code: DividerCommandError["code"] | null;
       blockId: string | null;

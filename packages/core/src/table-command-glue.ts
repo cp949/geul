@@ -2,6 +2,7 @@ import type { TabularData } from "@cp949/geul-io";
 import type { Result } from "@cp949/geul-model";
 
 import type { EditorError } from "./errors.js";
+import { disabledBlockTypeError } from "./model-to-tiptap.js";
 import {
   commandNotApplicable,
   type ProductionEditorSession,
@@ -191,6 +192,11 @@ export const createTableCommands = (session: ProductionEditorSession) => {
     data: TabularData,
   ): Result<{ blockId: string }, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("pasteTabularData");
+    // table을 막으면 스키마에 표 노드가 없다 — 명령 모듈이 TypeError를 던지기
+    // 전에 transaction 없이 거절한다(Issue #330, G-EDT-001).
+    if (!session.isBlockTypeEnabled("table")) {
+      return { ok: false, error: disabledBlockTypeError("table") };
+    }
     return runTableCommand("pasteTabularData", () =>
       pasteTabularDataCommand(session.editor, data, session.createId),
     );
@@ -201,6 +207,11 @@ export const createTableCommands = (session: ProductionEditorSession) => {
     options?: { clearAfterBlockText?: boolean },
   ): Result<{ blockId: string }, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("insertTable");
+    // table을 막으면 스키마에 표 노드가 없다 — 명령 모듈이 TypeError를 던지기
+    // 전에 transaction 없이 거절한다(Issue #330, G-EDT-001).
+    if (!session.isBlockTypeEnabled("table")) {
+      return { ok: false, error: disabledBlockTypeError("table") };
+    }
     return runTableCommand("insertTable", () =>
       insertTableCommand(
         session.editor,

@@ -612,6 +612,14 @@ export const disabledBlockError = (
   message: `Block ${block.id} has type "${block.type}" disabled via CreateEditorOptions.enabledBlockTypes`,
 });
 
+// 타입 이름만으로 만드는 막은 타입 거절 EditorError. 삽입 명령 래퍼
+// (insertDivider·insertTable·pasteTabularData)는 블록 인스턴스가 없어
+// disabledBlockError를 쓸 수 없다(Issue #330, G-CNV-001).
+export const disabledBlockTypeError = (type: Block["type"]): EditorError => ({
+  code: "EDITOR_FEATURE_UNAVAILABLE",
+  message: `Block type "${type}" is disabled via CreateEditorOptions.enabledBlockTypes`,
+});
+
 export const modelToTiptap = (
   document: Document,
   options?: {

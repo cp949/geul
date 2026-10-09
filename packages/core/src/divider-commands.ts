@@ -64,11 +64,13 @@ export const insertDivider = (
 ): Result<{ blockId: string }, DividerCommandError> => {
   const dividerType = editor.schema.nodes.divider;
   const paragraphType = editor.schema.nodes.paragraph;
-  // createTiptapEditor(editor-controller.ts)가 두 확장의 등록을 보장하므로
-  // 이 부재는 도달 불가 방어선이다 — 명령 결과로 위장하지 않고 던진다.
+  // enabledBlockTypes가 divider·paragraph를 막은 경우는 insertDivider 래퍼
+  // (insert-block-commands.ts)가 이 함수 전에 EDITOR_FEATURE_UNAVAILABLE로
+  // 거절한다(Issue #330). 이 부재는 그 뒤에도 남는 도달 불가 방어선이다 —
+  // 명령 결과로 위장하지 않고 던진다.
   if (dividerType === undefined || paragraphType === undefined) {
     throw new TypeError(
-      "divider/paragraph 노드 타입이 스키마에 없다 — createTiptapEditor가 확장 등록을 보장한다",
+      "divider/paragraph 노드 타입이 스키마에 없다 — insertDivider 래퍼가 막은 타입을 먼저 거절한다",
     );
   }
 
