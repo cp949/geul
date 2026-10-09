@@ -12,8 +12,9 @@
  * - span·b·strong·em·i·u·s·del·strike·code·font·mark는 덤프 표식이 있으면 style의
  *   색·배경을 읽지 않는다(span은 Issue #338). 서식 선언과 font의 color 속성,
  *   mark의 기본 배경은 그대로다. 표식이 없는 span의 색은 이전과 같다.
- * - 작성자 색이 덤프와 같이 온 span(안쪽 복사)도 색을 읽지 않는다. 작성자 색과
- *   테마 색을 구분할 수 없어 작성자 색 소실을 한계로 받아들인다.
+ * - 작성자 색이 덤프와 같이 온 span도 색을 읽지 않는다. 안쪽 복사는 작성자 색과
+ *   테마 색을 구분할 수 없다. 색 span을 통째로 포함한 복사는 작성자 색이 스타일
+ *   맨 끝에 오지만 직렬화 순서에 기대지 않는다. 작성자 색 소실을 한계로 받아들인다.
  * - 아래 상수는 실제 Chromium 복사 원문(playwright, 2026-10-10)이다. 본문 페이지는
  *   body color #24292f·배경 #fff, `code{background:#eee}`다. 안쪽
  *   `<code style="background: rgb(238, 238, 238);">`는 작성자 style이라 읽는다.
@@ -109,7 +110,8 @@ const CHROME_SPAN_AUTHOR_RED =
 // 작성자 노랑 배경 span 안쪽 선택.
 const CHROME_SPAN_AUTHOR_YELLOW =
   '<span style="color: rgb(255, 0, 0); font-size: medium; font-style: normal; font-weight: 400; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 0); display: inline !important; float: none;">thor b</span>';
-// 작성자 파랑 span 일부 선택: 작성자 color가 스타일 맨 끝에 온다.
+// 작성자 파랑 span 일부 선택: 작성자 color가 스타일 맨 끝에 온다. 색 span을 통째로
+// 포함한 복사(문단 전체 선택 포함)도 같은 모양이다.
 const CHROME_SPAN_AUTHOR_BLUE =
   '<span style="font-size: medium; font-style: normal; font-weight: 400; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); color: rgb(0, 0, 255);">bl</span>';
 
@@ -452,7 +454,7 @@ describe("인라인 요소는 덤프 표식이 있으면 style 색을 읽지 않
     ["font", []],
     // mark의 기본 노랑 배경은 style이 아니라 태그 의미라 남는다.
     ["mark", ["backgroundColor:#FFFF00"]],
-  ])("%s는 태그 마크만 남긴다", (tag, expected) => {
+  ])("%s: 태그 마크만 남긴다", (tag, expected) => {
     expect(
       marksOf(
         `<p><${tag} style="color: #ff0000; background-color: #00ff00; ${DUMP}">x</${tag}></p>`,

@@ -179,8 +179,9 @@ const tagMarkWithStyle = (node: HtmlElementNode, own: TextMark): TextMark[] => [
 
 // 브라우저 복사의 계산 스타일 덤프가 붙은 인라인 요소다(Issue #334, #338).
 // 덤프의 테마 색이 마크로 박히지 않게 색만 읽지 않는다. Chromium은 요소 안쪽만
-// 선택해 복사해도 span·em·strong에 덤프를 싣는다. span도 같다. 안쪽 복사에서는
-// 작성자 색과 테마 색을 구분할 수 없어 작성자 색도 읽지 않는다.
+// 선택해 복사해도 span·em·strong에 덤프를 싣는다. 색 span을 통째로 포함한
+// 복사도 span마다 덤프가 붙는다. 작성자 색과 테마 색을 위치로 구분하지 않아
+// 작성자 색도 읽지 않는다.
 const hasStyleDump = (node: HtmlElementNode): boolean => {
   const style = node.properties.style;
   return typeof style === "string" && hasComputedStyleDump(style);
