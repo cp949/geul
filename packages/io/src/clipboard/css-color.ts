@@ -477,11 +477,12 @@ const readHsl = (parts: FunctionArguments): CssColorResult => {
   }
   if (!isOpaque(alpha)) return CLEAR;
 
-  // 채도는 쉼표 문법에서만 100%로 자른다. 공백 문법은 위로 자르지 않는다.
+  // 채도와 명도는 쉼표 문법에서만 100%로 자른다. 공백 문법은 위로 자르지 않는다.
+  // 채도가 100%를 넘으면 명도를 자른 결과가 달라지므로 명도도 같은 규칙이다.
   const [red, green, blue] = hslToRgb(
     degrees,
     parts.comma ? toUnitRange(saturation) : toUnclampedRatio(saturation.value),
-    toUnitRange(lightness),
+    parts.comma ? toUnitRange(lightness) : toUnclampedRatio(lightness.value),
   );
   return colorFromUnitRgb(red, green, blue);
 };
