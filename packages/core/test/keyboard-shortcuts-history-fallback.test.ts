@@ -395,14 +395,17 @@ describe("keyboardShortcuts — undo·redo 폴백 소비자 우선", () => {
     const first = mountHistoryEditor("first", {
       keyboardShortcuts: { "Mod-z": firstHandler },
     });
-    const second = mountHistoryEditor("second", {
-      keyboardShortcuts: { "Mod-z": secondHandler },
-    });
     const button = document.createElement("button");
     document.body.append(button);
+    // 두 번째 마운트가 던져도 첫 편집기와 버튼을 정리하도록 try 안에서 만든다.
+    let second: ReturnType<typeof mountHistoryEditor> | undefined;
     try {
+      second = mountHistoryEditor("second", {
+        keyboardShortcuts: { "Mod-z": secondHandler },
+      });
+      const secondMount = second;
       withoutScrollCrash(first.tiptap, () =>
-        withoutScrollCrash(second.tiptap, () => {
+        withoutScrollCrash(secondMount.tiptap, () => {
           placeDomSelectionIn(first.editable);
           press(button, { key: "z", ctrlKey: true });
 
@@ -410,13 +413,13 @@ describe("keyboardShortcuts — undo·redo 폴백 소비자 우선", () => {
           expect(secondHandler).not.toHaveBeenCalled();
 
           // selection을 두 번째 편집기로 옮기면 그쪽 handler만 호출된다.
-          placeDomSelectionIn(second.editable);
+          placeDomSelectionIn(secondMount.editable);
           press(button, { key: "z", ctrlKey: true });
 
           expect(firstHandler).toHaveBeenCalledTimes(1);
           expect(secondHandler).toHaveBeenCalledTimes(1);
           expect(first.tiptap.state.doc.textContent).toBe(AFTER_SETUP);
-          expect(second.tiptap.state.doc.textContent).toBe(AFTER_SETUP);
+          expect(secondMount.tiptap.state.doc.textContent).toBe(AFTER_SETUP);
         }),
       );
     } finally {
@@ -425,9 +428,9 @@ describe("keyboardShortcuts — undo·redo 폴백 소비자 우선", () => {
           () => document.getSelection()?.removeAllRanges(),
           () => button.remove(),
           () => first.container.remove(),
-          () => second.container.remove(),
+          () => second?.container.remove(),
           () => first.editor.destroy(),
-          () => second.editor.destroy(),
+          () => second?.editor.destroy(),
         ],
         "두 편집기 시나리오 정리 실패",
       );
