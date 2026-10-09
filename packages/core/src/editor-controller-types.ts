@@ -240,11 +240,17 @@ export type CreateEditorOptions = {
   //   이어진다.
   // - 내장 키와 겹치는 키는 등록 시 console.warn으로 알린다. 등록은
   //   막지 않는다.
+  // - 툴바 버튼처럼 편집기 밖에 포커스가 있을 때 눌린 undo·redo 키
+  //   (`Mod-z`·`Mod-Shift-z`·`Mod-y`)도 같다(history-keydown-fallback,
+  //   Issue #319). DOM selection이 이 편집기 안일 때 등록 handler가
+  //   내장 undo·redo보다 먼저 실행된다. 입력 컨트롤(input·textarea·select·
+  //   편집 영역)에서 보낸 keydown은 제외한다.
   // 한계:
-  // - 편집기 DOM에 도달한 keydown의 keymap 단계 기준이다. 툴바 등 편집기
-  //   밖에서 눌린 undo/redo fallback(history-keydown-fallback, beforeinput
-  //   historyUndo)과 열린 SlashMenu·EmojiPicker의 캡처 리스너는 이 계약
-  //   밖이다.
+  // - 편집기 DOM에 도달한 keydown의 keymap 단계와 위 undo·redo 폴백이
+  //   기준이다. 키 정보가 없는 beforeinput historyUndo 경로와 열린
+  //   SlashMenu·EmojiPicker의 캡처 리스너는 이 계약 밖이다.
+  // - 편집기 밖 keydown은 undo·redo 키에서만 handler를 호출한다. 다른
+  //   키는 호출하지 않는다.
   // - 조합 중(IME)·읽기 전용 상태의 keydown은 호출되지 않는다.
   // - 키 표기가 다르면(`Mod-Shift-z` vs `Shift-Mod-z`) 겹침 경고가 나지
   //   않을 수 있다. 동작은 같다.

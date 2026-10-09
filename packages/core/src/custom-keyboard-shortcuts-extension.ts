@@ -4,6 +4,8 @@ import {
   type Editor,
   type KeyboardShortcutCommand,
 } from "@tiptap/core";
+import { keydownHandler } from "@tiptap/pm/keymap";
+import type { EditorView } from "@tiptap/pm/view";
 
 import type { EditorController } from "./editor-controller-types.js";
 
@@ -44,6 +46,36 @@ const collectBuiltinKeyboardShortcutKeys = (
   return keys;
 };
 
+// 폴백 확장(HistoryKeydownFallbackExtension)이 editor.storage로 부르는 면이다
+// (Issue #319). 등록 키를 keymap 표기 그대로 매칭한다.
+export type CustomKeyboardShortcutsStorage = {
+  /** addKeyboardShortcuts가 keymap 플러그인에 넘기는 바인딩과 같은 객체다. */
+  bindings: Record<string, () => boolean>;
+  /**
+   * keydown이 등록 키와 맞고 handler가 true를 반환했으면 true다.
+   * - 매칭은 `@tiptap/pm/keymap`의 keydownHandler다. 편집기 밖 이벤트도 같다.
+   * - keyboardShortcuts가 비었거나 controllerFacade가 없으면 항상 false다.
+   */
+  handleKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
+};
+
+const CUSTOM_KEYBOARD_SHORTCUTS_NAME = "customKeyboardShortcuts";
+
+/**
+ * 편집기의 등록 확장 storage를 돌려준다. `keyboardShortcuts`를 지정하지 않은
+ * 편집기는 확장이 없으므로 `undefined`다. Tiptap의 `Storage` 인터페이스를
+ * 전역 확장하지 않으려고 좁은 단언을 이 한 곳에 둔다.
+ */
+export const getCustomKeyboardShortcutsStorage = (
+  editor: Editor,
+): CustomKeyboardShortcutsStorage | undefined =>
+  (
+    editor.storage as unknown as Record<
+      string,
+      CustomKeyboardShortcutsStorage | undefined
+    >
+  )[CUSTOM_KEYBOARD_SHORTCUTS_NAME];
+
 // 등록 확장의 priority다. 내장 확장 priority의 최댓값(1_200,
 // TableBoundaryInputExtension)보다 크게 둔다.
 // - Tiptap은 priority 내림차순으로 keymap 플러그인을 만든다.
@@ -58,35 +90,53 @@ export const CUSTOM_KEYBOARD_SHORTCUTS_PRIORITY = 10_000;
 // - true를 반환하면 내장 동작을 건너뛴다. 표 경계·codeBlock 보호도 건너뛴다.
 // - false를 반환하면 ProseMirror keymap 표준 폴스루로 내장 shortcut이
 //   이어진다. 이 확장이 별도로 구현할 필요가 없다.
-export const CustomKeyboardShortcutsExtension =
-  Extension.create<CustomKeyboardShortcutsOptions>({
-    name: "customKeyboardShortcuts",
+// 편집기 밖에서 눌린 undo·redo는 HistoryKeydownFallbackExtension이 이 확장의
+// storage.handleKeyDown을 불러 같은 handler를 먼저 실행한다(Issue #319).
+// 바인딩 객체는 keymap 플러그인과 storage가 공유한다. controllerFacade가
+// 없으면 false를 돌려주는 규칙이 한 곳에만 있다.
+export const CustomKeyboardShortcutsExtension = Extension.create<
+  CustomKeyboardShortcutsOptions,
+  CustomKeyboardShortcutsStorage
+>({
+  name: "customKeyboardShortcuts",
 
-    priority: CUSTOM_KEYBOARD_SHORTCUTS_PRIORITY,
+  priority: CUSTOM_KEYBOARD_SHORTCUTS_PRIORITY,
 
-    addOptions() {
-      return { keyboardShortcuts: {} };
-    },
+  addOptions() {
+    return { keyboardShortcuts: {} };
+  },
 
-    addKeyboardShortcuts() {
-      const { keyboardShortcuts, controllerFacade } = this.options;
-      const entries = Object.entries(keyboardShortcuts);
-      if (entries.length === 0) return {};
+  addStorage() {
+    const { keyboardShortcuts, controllerFacade } = this.options;
+    const bindings: Record<string, () => boolean> = {};
+    for (const [key, run] of Object.entries(keyboardShortcuts)) {
+      bindings[key] = () =>
+        controllerFacade === undefined ? false : run(controllerFacade);
+    }
+    const match = keydownHandler(bindings);
+    return {
+      bindings,
+      handleKeyDown: (view, event) =>
+        Object.keys(bindings).length > 0 && match(view, event),
+    };
+  },
 
-      const builtinKeys = collectBuiltinKeyboardShortcutKeys(
-        this.editor,
-        this.name,
-      );
-      const bindings: Record<string, () => boolean> = {};
-      for (const [key, run] of entries) {
-        if (builtinKeys.has(key)) {
-          console.warn(
-            `[CustomKeyboardShortcutsExtension] 등록한 keyboardShortcuts["${key}"]가 내장 keyboard shortcut과 겹친다 — 등록한 handler가 먼저 실행된다. true를 반환하면 내장 동작(표 경계·codeBlock 보호 포함)을 건너뛴다. false를 반환하면 내장 동작이 이어진다.`,
-          );
-        }
-        bindings[key] = () =>
-          controllerFacade === undefined ? false : run(controllerFacade);
+  addKeyboardShortcuts() {
+    const { bindings } = this.storage;
+    const registered = Object.keys(bindings);
+    if (registered.length === 0) return {};
+
+    const builtinKeys = collectBuiltinKeyboardShortcutKeys(
+      this.editor,
+      this.name,
+    );
+    for (const key of registered) {
+      if (builtinKeys.has(key)) {
+        console.warn(
+          `[CustomKeyboardShortcutsExtension] 등록한 keyboardShortcuts["${key}"]가 내장 keyboard shortcut과 겹친다 — 등록한 handler가 먼저 실행된다. true를 반환하면 내장 동작(표 경계·codeBlock 보호 포함)을 건너뛴다. false를 반환하면 내장 동작이 이어진다.`,
+        );
       }
-      return bindings;
-    },
-  });
+    }
+    return bindings;
+  },
+});

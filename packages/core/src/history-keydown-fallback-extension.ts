@@ -2,6 +2,7 @@ import { Extension, isMacOS, isiOS } from "@tiptap/core";
 import { redo, undo } from "@tiptap/pm/history";
 import { Plugin } from "@tiptap/pm/state";
 
+import { getCustomKeyboardShortcutsStorage } from "./custom-keyboard-shortcuts-extension.js";
 import { isElementNode, isNode } from "./dom-node.js";
 
 // Issue #219, Issue #222 — 툴바 버튼처럼 에디터 밖 비편집 요소에 포커스가
@@ -42,6 +43,14 @@ import { isElementNode, isNode } from "./dom-node.js";
 // 7. `document.getSelection()`이 이 view.dom 안에 있다. 다른 편집기
 //    인스턴스의 undo·redo를 훔치지 않는 유일한 신호다(focus가 아니라
 //    selection 기준).
+//
+// 8. 소비자 우선(Issue #319). `CreateEditorOptions.keyboardShortcuts`에
+//    등록한 handler가 이 키와 맞고 `true`를 반환하면 `preventDefault`만 하고
+//    내장 undo·redo를 건너뛴다. `false`거나 등록이 없으면 내장 동작이 이어진다.
+//    조건 1–7을 통과한 keydown에서만 부른다. 호출 대상은 이 확장이 undo·redo로
+//    판정한 세 키뿐이다.
+// 9. 실행. `preventDefault` 뒤 `undo`·`redo`를 호출한다. 8번에서 소비자가
+//    처리했으면 건너뛴다.
 //
 // 리스너는 document bubble 단계에 둔다. React 합성 이벤트나 툴바 자체
 // onKeyDown이 먼저 처리할 기회를 주고, `defaultPrevented`로 양보한다.
@@ -115,6 +124,7 @@ export const HistoryKeydownFallbackExtension = Extension.create({
   name: "historyKeydownFallback",
 
   addProseMirrorPlugins() {
+    const editor = this.editor;
     return [
       new Plugin({
         view(editorView) {
@@ -142,9 +152,19 @@ export const HistoryKeydownFallbackExtension = Extension.create({
               selection?.focusNode ?? selection?.anchorNode ?? null;
             if (anchor === null || !editorView.dom.contains(anchor)) return;
 
+            // 소비자 우선(조건 8, Issue #319). 등록한 keyboardShortcuts
+            // handler가 true를 반환하면 내장 undo·redo를 건너뛴다. storage는
+            // keyboardShortcuts를 지정한 편집기에만 있다.
+            const consumed =
+              getCustomKeyboardShortcutsStorage(editor)?.handleKeyDown(
+                editorView,
+                event,
+              ) === true;
+
             // undo·redo할 것이 없어도 막는다. 막지 않으면 브라우저 기본
             // 동작이 이어진다.
             event.preventDefault();
+            if (consumed) return;
             command(editorView.state, editorView.dispatch);
           };
           ownerDocument.addEventListener("keydown", handleKeyDown);
