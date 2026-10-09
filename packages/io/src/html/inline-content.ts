@@ -5,7 +5,8 @@ import {
 } from "@cp949/geul-model";
 
 import {
-  hasNormalFontWeight,
+  type InlineStyleMarks,
+  parseInlineStyleMarks,
   parseStyleDeclarations,
 } from "../clipboard/style-declarations.js";
 
@@ -81,10 +82,23 @@ const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
     )
     .map(({ mark }) => mark);
 
-// 다른 6개 case는 항상 mark 0개 또는 1개지만 span은 style 선언 하나에
-// color·background-color가 동시에 있을 수 있어(우리 export는 만들지 않는
-// 모양이지만 외부 HTML은 흔히 이렇게 낸다) 반환형이 배열이다 — 한쪽만
-// 반환하면 나머지 하나가 조용히 사라진다.
+// style의 italic·underline·strike를 마크로 바꾼다. bold는 태그마다 판정이
+// 달라(span은 bold일 때만, b·strong은 normal이 아닐 때) 호출부가 정한다.
+// 같은 종류 마크가 겹쳐도(`<b><span style="font-weight:700">`) 여기서 막지
+// 않는다 — appendOrMergeInlineItem이 canonicalizeTextMarks로 종류당 하나만
+// 남긴다.
+const decorationMarks = (parsed: InlineStyleMarks): TextMark[] => {
+  const marks: TextMark[] = [];
+  if (parsed.italic) marks.push({ type: "italic" });
+  if (parsed.underline) marks.push({ type: "underline" });
+  if (parsed.strike) marks.push({ type: "strike" });
+  return marks;
+};
+
+// 다른 case는 대개 mark 0개 또는 1개지만 span과 b·strong은 style 선언 하나에
+// 여러 마크(color·background-color·font-weight 등)가 동시에 있을 수 있어
+// (우리 export는 만들지 않는 모양이지만 외부 HTML은 흔히 이렇게 낸다) 반환형이
+// 배열이다 — 한쪽만 반환하면 나머지가 조용히 사라진다.
 const marksForElement = (node: HtmlElementNode): TextMark[] => {
   switch (node.tagName) {
     case "a": {
@@ -94,18 +108,26 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
     case "strong":
     case "b": {
       // Google Docs 복사 래퍼 `<b style="font-weight:normal">`는 굵지 않다
-      // (Issue #316). style은 sanitize 허용 목록이 b·strong에 남긴다.
+      // (Issue #316). style은 sanitize 허용 목록이 b·strong에 남긴다. bold
+      // 판정은 기존 규칙 그대로(font-weight가 normal·400이 아니면 bold)이고,
+      // style의 italic·underline·strike는 추가로 읽는다(Issue #320).
       const style = node.properties.style;
-      return typeof style === "string" && hasNormalFontWeight(style)
-        ? []
-        : [{ type: "bold" }];
+      const parsed =
+        typeof style === "string" ? parseInlineStyleMarks(style) : undefined;
+      const marks: TextMark[] =
+        parsed?.fontWeight === "normal" ? [] : [{ type: "bold" }];
+      if (parsed !== undefined) marks.push(...decorationMarks(parsed));
+      return marks;
     }
     case "em":
     case "i":
       return [{ type: "italic" }];
     case "u":
       return [{ type: "underline" }];
+    // del·strike는 s와 같은 취소선이다. ins는 읽지 않는다.
     case "s":
+    case "del":
+    case "strike":
       return [{ type: "strike" }];
     case "code":
       return [{ type: "code" }];
@@ -120,6 +142,9 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
       if (parsed.backgroundColor !== undefined) {
         marks.push({ type: "backgroundColor", color: parsed.backgroundColor });
       }
+      const styleMarks = parseInlineStyleMarks(style);
+      if (styleMarks.fontWeight === "bold") marks.push({ type: "bold" });
+      marks.push(...decorationMarks(styleMarks));
       return marks;
     }
     default:

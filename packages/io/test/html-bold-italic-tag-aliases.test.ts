@@ -65,7 +65,8 @@ describe("HTML b/i 태그의 bold/italic mark 인식", () => {
  * `font-weight:normal|400` 인라인 스타일이 붙은 `<b>`·`<strong>`은 굵지 않다
  * (Issue #316). Google Docs 복사는 문서 전체를 `<b style="font-weight:normal">`
  * 래퍼로 감싼다. 래퍼를 bold로 읽으면 본문 전체가 굵게 들어온다. 이 패턴만 다룬다.
- * `font-weight:700` 같은 스타일 기반 굵게는 인식하지 않는다.
+ * `span`의 `font-weight:700` 같은 스타일 기반 굵게는 Issue #320부터 읽지만
+ * 이 describe의 범위 밖이다.
  */
 describe("font-weight:normal 래퍼 <b>·<strong>", () => {
   const importedContent = (html: string) => {

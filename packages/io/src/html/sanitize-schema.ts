@@ -125,11 +125,12 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // 경고는 data-geul-* 존재를 조건으로 import-html-blocks.ts가
   // consumePreservedAttributeWarning으로 억제한다(계획서 "## 결정").
   span: ["style"],
-  // b·strong의 style은 `font-weight:normal|400` 판정에만 쓴다(Issue #316,
-  // marksForElement). Google Docs 복사가 문서 전체를 `<b
-  // style="font-weight:normal">`로 감싼다. 이 목록에 없으면 sanitize가 style을
-  // 지워 래퍼가 bold가 된다. raw 경고는 이전처럼 style 제거를 보고한다
-  // (import-warnings.ts가 b·strong의 style을 허용 속성에서 뺀다).
+  // b·strong의 style은 `font-weight:normal|400` 판정과 italic·underline·strike
+  // 마크 판정에만 쓴다(Issue #316·#320, marksForElement). Google Docs 복사가
+  // 문서 전체를 `<b style="font-weight:normal">`로 감싼다. 이 목록에 없으면
+  // sanitize가 style을 지워 래퍼가 bold가 된다. raw 경고는 이전처럼 style
+  // 제거를 보고한다(import-warnings.ts가 b·strong의 style을 허용 속성에서
+  // 뺀다).
   b: ["style"],
   strong: ["style"],
   code: ["dataLanguage", "className"],
@@ -194,6 +195,12 @@ export const htmlAllowedTagNames = [
   "i",
   "u",
   "s",
+  // del·strike는 s의 동의어다 — 구형 웹페이지·워드·Google Docs가 취소선을
+  // 이 태그로 낸다. 없으면 sanitize가 태그를 벗겨 취소선이 사라진다
+  // (marksForElement가 같은 strike mark로 매핑, Issue #320). ins는 의미가
+  // 밑줄과 달라 읽지 않는다.
+  "del",
+  "strike",
   "code",
   "a",
   "br",

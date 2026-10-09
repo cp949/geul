@@ -182,6 +182,8 @@ const supportedInlineNames = new Set([
   "i",
   "u",
   "s",
+  "del",
+  "strike",
   "code",
   "a",
   "br",

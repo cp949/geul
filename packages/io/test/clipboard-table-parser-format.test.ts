@@ -103,6 +103,41 @@ describe("parseClipboardTable", () => {
     ]);
   });
 
+  // 문서 import(inline-content.ts의 marksForElement)와 같은 마크 함수·허용
+  // 태그를 쓰므로 셀 안 span 스타일과 del·strike도 마크로 읽힌다(Issue #320).
+  it("셀 안 span의 font-weight 스타일을 bold mark로 읽는다", () => {
+    const html =
+      '<table><tbody><tr><td><span style="font-weight:700">x</span></td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]?.content).toEqual([
+      { text: "x", marks: [{ type: "bold" }] },
+    ]);
+  });
+
+  it("셀 안 span의 font-style·text-decoration 스타일을 mark로 읽는다", () => {
+    const html =
+      '<table><tbody><tr><td><span style="font-style:italic;text-decoration:underline">x</span></td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]?.content).toEqual([
+      { text: "x", marks: [{ type: "italic" }, { type: "underline" }] },
+    ]);
+  });
+
+  it("셀 안 del·strike를 strike mark로 읽는다", () => {
+    const html =
+      "<table><tbody><tr><td><del>x</del></td><td><strike>y</strike></td></tr></tbody></table>";
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]?.content).toEqual([
+      { text: "x", marks: [{ type: "strike" }] },
+    ]);
+    expect(table.rows[0]?.cells[1]?.content).toEqual([
+      { text: "y", marks: [{ type: "strike" }] },
+    ]);
+  });
+
   it("정규 형식이 아닌 data-geul-text-color는 무시한다", () => {
     const html =
       '<table><tbody><tr><td data-geul-text-color="red">1</td></tr></tbody></table>';
