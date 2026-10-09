@@ -2,8 +2,8 @@
  * `parseInlineStyleMarks`와 `parseStyleDeclarations`가 style 입력 길이에
  * 선형임을 시간이 아니라 관측 가능한 작업량으로 고정한다(G-TST-004).
  *
- * 두 파서는 `String.prototype`의 문자열 메서드(split·indexOf·slice·trim 등)만으로
- * 입력을 읽는다. 그 메서드를 감싸 두 축을 센다.
+ * 두 파서는 큰 문자열을 `String.prototype`의 문자열 메서드(split·indexOf·slice·
+ * trim 등)로 읽는다. 그 메서드를 감싸 두 축을 센다.
  * 1. 호출 횟수: 선언마다 다시 훑는 형태(이미 읽은 조각을 되돌아가 재처리)는
  *    호출 횟수가 선언 수의 제곱으로 뛴다.
  * 2. 처리 문자 수: 호출마다 수신 문자열의 길이를 더한다. 긴 문자열 전체를
@@ -14,7 +14,8 @@
  * 선언이 아주 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력,
  * 공백·토큰이 긴 입력이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
- * 한계: 정규식 엔진 내부 작업은 이 계측에 잡히지 않는다.
+ * 한계: 정규식 엔진 내부 작업과 대괄호로 글자를 읽는 루프(`parseStyleDeclarations`의
+ * 선언 분할기)는 이 계측에 잡히지 않는다.
  * `parseInlineStyleMarks`는 `!important` 제거와 선언 분리에 정규식을 쓰지
  * 않는다(공백 run 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를
  * 피했다). `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳
@@ -184,6 +185,29 @@ describe("parseStyleDeclarations의 선형 시간", () => {
     const elapsed = performance.now() - started;
 
     expect(result).toEqual({});
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  // 선언 분할기는 글자를 대괄호로 읽어 위 계측(String 메서드 호출 수와 수신
+  // 문자열 길이)에 보이지 않는다. 괄호·따옴표·주석이 열려 있는 동안 조각마다
+  // 앞부분을 처음부터 다시 훑는 변이는 두 비율이 1과 2로 남아 통과한다.
+  // 그 변이를 잡으려고 시간 상한을 둔다. 80,000개 조각에서 그 변이는 입력이
+  // 2배가 될 때마다 시간이 약 4배다.
+  // 실측(Node, 2026-10-10, 80,000개): 재순회 변이는 괄호 안 `;` 1.3–9.7초,
+  // 닫히지 않은 괄호·따옴표 3.9–30.8초다(변이 세기에 따라 다르다). 선형
+  // 구현은 33개 병적 모양 최대 68ms다. 상한 1초는 이 최대보다 약 15배 크고
+  // 가장 약한 변이보다 작아, 둘이 겹치지 않는다.
+  it.each([
+    ["괄호 안 세미콜론", `background:url(${";".repeat(80_000)}) red`],
+    [
+      "닫히지 않은 괄호와 따옴표",
+      `color:red;background:url("${"a;(".repeat(80_000)}`,
+    ],
+  ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
+    const started = performance.now();
+    parseStyleDeclarations(style);
+    const elapsed = performance.now() - started;
+
     expect(elapsed).toBeLessThan(1000);
   });
 });
