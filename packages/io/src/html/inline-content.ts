@@ -177,10 +177,10 @@ const tagMarkWithStyle = (node: HtmlElementNode, own: TextMark): TextMark[] => [
   ...marksFromStyle(node.properties.style, {}, hasStyleDump(node)).marks,
 ];
 
-// 브라우저 복사의 계산 스타일 덤프가 붙은 인라인 요소다(Issue #334). span을 뺀
-// 인라인 요소는 #334가 style 색을 새로 읽으므로, 덤프의 테마 색이 마크로 박히지
-// 않게 색만 읽지 않는다. Chromium은 요소 안쪽만 선택해 복사해도 em·strong에
-// 덤프를 싣는다. span은 이전부터 색을 읽어 왔고 Issue #338이 따로 다룬다.
+// 브라우저 복사의 계산 스타일 덤프가 붙은 인라인 요소다(Issue #334, #338).
+// 덤프의 테마 색이 마크로 박히지 않게 색만 읽지 않는다. Chromium은 요소 안쪽만
+// 선택해 복사해도 span·em·strong에 덤프를 싣는다. span도 같다. 안쪽 복사에서는
+// 작성자 색과 테마 색을 구분할 수 없어 작성자 색도 읽지 않는다.
 const hasStyleDump = (node: HtmlElementNode): boolean => {
   const style = node.properties.style;
   return typeof style === "string" && hasComputedStyleDump(style);
@@ -226,7 +226,8 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
     case "code":
       return tagMarkWithStyle(node, { type: "code" });
     case "span":
-      return marksFromStyle(node.properties.style).marks;
+      return marksFromStyle(node.properties.style, {}, hasStyleDump(node))
+        .marks;
     case "font": {
       // color 속성은 옛 HTML 글자색이다. style의 color가 이긴다. size·face는
       // 읽지 않는다.
@@ -443,7 +444,8 @@ const processColorTags = (
 
 // 셀 안 블록 요소 style의 마크다. 계산 스타일 덤프(브라우저 복사)가 붙은 style의
 // 색·배경은 테마 색이라 마크로 만들지 않는다. 굵게·기울임·밑줄·취소선은 실제
-// 시각 값이라 그대로 읽는다. 인라인 요소(span 등)는 이 규칙을 따르지 않는다.
+// 시각 값이라 그대로 읽는다. 인라인 요소는 marksForElement가 같은 표식으로 색을
+// 건너뛴다.
 const cellBlockStyleMarks = (style: unknown): TextMark[] => {
   const marks = marksFromStyle(style).marks;
   return typeof style === "string" && hasComputedStyleDump(style)

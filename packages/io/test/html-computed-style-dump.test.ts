@@ -9,11 +9,11 @@
  * - 적용 범위: 블록 속성(p·h1–h6·blockquote·li·callout·문단 div), 표 셀 색
  *   (td·th·tr·table 단마다, 그 단의 bgcolor 속성은 그대로 읽는다), 표 셀 안 블록
  *   요소의 색 마크(굵게·기울임·밑줄·취소선 마크는 그대로 읽는다).
- * - span의 style은 바꾸지 않는다. 덤프 표식이 있어도 이전처럼 색 마크를 만든다
- *   (Issue #338이 다룬다).
- * - b·strong·em·i·u·s·del·strike·code·font·mark는 #334가 style 색을 새로 읽는
- *   태그라 덤프 표식이 있으면 style의 색·배경을 읽지 않는다. 서식 선언과 font의
- *   color 속성, mark의 기본 배경은 그대로다.
+ * - span·b·strong·em·i·u·s·del·strike·code·font·mark는 덤프 표식이 있으면 style의
+ *   색·배경을 읽지 않는다(span은 Issue #338). 서식 선언과 font의 color 속성,
+ *   mark의 기본 배경은 그대로다. 표식이 없는 span의 색은 이전과 같다.
+ * - 작성자 색이 덤프와 같이 온 span(안쪽 복사)도 색을 읽지 않는다. 작성자 색과
+ *   테마 색을 구분할 수 없어 작성자 색 소실을 한계로 받아들인다.
  * - 아래 상수는 실제 Chromium 복사 원문(playwright, 2026-10-10)이다. 본문 페이지는
  *   body color #24292f·배경 #fff, `code{background:#eee}`다. 안쪽
  *   `<code style="background: rgb(238, 238, 238);">`는 작성자 style이라 읽는다.
@@ -97,6 +97,21 @@ const cellColorsOnBothPaths = (html: string) => {
 };
 
 const DUMP = "-webkit-text-stroke-width: 0px";
+
+// 실제 Chromium 부분 선택 복사 원문(playwright, 2026-10-10)이다. 스타일 중간의
+// font-family 등은 생략했다. 마크 판정은 표식과 color·background-color만 본다.
+// 문단 일부 선택: 테마 색(검정 글자·흰 배경)이 덤프로 온다.
+const CHROME_SPAN_THEME =
+  '<span style="color: rgb(36, 41, 47); font-size: medium; font-style: normal; font-weight: 400; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); display: inline !important; float: none;">words</span>';
+// 작성자 빨강 span 안쪽 선택: 작성자 색이 덤프 맨 앞에 같은 모양으로 온다.
+const CHROME_SPAN_AUTHOR_RED =
+  '<span style="color: rgb(255, 0, 0); font-size: medium; font-style: normal; font-weight: 400; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); display: inline !important; float: none;">red w</span>';
+// 작성자 노랑 배경 span 안쪽 선택.
+const CHROME_SPAN_AUTHOR_YELLOW =
+  '<span style="color: rgb(255, 0, 0); font-size: medium; font-style: normal; font-weight: 400; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 0); display: inline !important; float: none;">thor b</span>';
+// 작성자 파랑 span 일부 선택: 작성자 color가 스타일 맨 끝에 온다.
+const CHROME_SPAN_AUTHOR_BLUE =
+  '<span style="font-size: medium; font-style: normal; font-weight: 400; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); color: rgb(0, 0, 255);">bl</span>';
 
 describe("hasComputedStyleDump", () => {
   it.each([
@@ -333,13 +348,52 @@ describe("블록 표면 전체에서 덤프 표식을 따른다", () => {
   });
 });
 
-describe("span의 style은 덤프 표식이 있어도 바꾸지 않는다", () => {
-  it("span은 이전처럼 색 마크를 만든다", () => {
+describe("span의 style도 덤프 표식이 있으면 색·배경을 읽지 않는다", () => {
+  it("span의 색·배경 style은 색 마크를 만들지 않는다", () => {
     const block = documentOf(
       `<p>a<span style="color: red; background-color: #00ff00; ${DUMP}">x</span></p>`,
     ).blocks[0] as DocumentBlock;
+    // 마크가 없으면 이웃 텍스트와 합쳐진다.
+    expect(contentOf(block)).toEqual([{ text: "ax" }]);
+  });
+
+  it("셀 안 span도 색 마크를 만들지 않는다(두 경로)", () => {
+    const html = `<table><tr><td><span style="color: red; ${DUMP}">x</span></td></tr></table>`;
+    const expected = [{ text: "x" }];
+    expect(importedCells(html)[0]?.content).toEqual(expected);
+    expect(clipboardCells(html)[0]?.content).toEqual(expected);
+  });
+
+  it.each([
+    ["문단 일부(테마 색)", CHROME_SPAN_THEME, "words"],
+    ["작성자 빨강 안쪽", CHROME_SPAN_AUTHOR_RED, "red w"],
+    ["작성자 노랑 배경 안쪽", CHROME_SPAN_AUTHOR_YELLOW, "thor b"],
+    ["작성자 파랑 일부(맨 끝 color)", CHROME_SPAN_AUTHOR_BLUE, "bl"],
+  ])(
+    "실제 Chromium 부분 선택 복사 원문(%s)은 색 마크가 없다",
+    (_name, span, text) => {
+      const block = documentOf(`<p>${span}</p>`).blocks[0] as DocumentBlock;
+      expect(contentOf(block)).toEqual([{ text }]);
+      const html = `<table><tr><td>${span}</td></tr></table>`;
+      expect(importedCells(html)[0]?.content).toEqual([{ text }]);
+      expect(clipboardCells(html)[0]?.content).toEqual([{ text }]);
+    },
+  );
+
+  it("덤프가 있어도 span의 서식 선언은 읽는다", () => {
+    const block = documentOf(
+      `<p><span style="color: red; font-weight: 700; ${DUMP}">x</span></p>`,
+    ).blocks[0] as DocumentBlock;
     expect(contentOf(block)).toEqual([
-      { text: "a" },
+      { text: "x", marks: [{ type: "bold" }] },
+    ]);
+  });
+
+  it("표식 없는 span의 색은 이전과 같다", () => {
+    const block = documentOf(
+      '<p><span style="color: red; background-color: #00ff00">x</span></p>',
+    ).blocks[0] as DocumentBlock;
+    expect(contentOf(block)).toEqual([
       {
         text: "x",
         marks: [
@@ -350,20 +404,28 @@ describe("span의 style은 덤프 표식이 있어도 바꾸지 않는다", () =
     ]);
   });
 
-  it("셀 안 span도 이전처럼 색 마크를 만든다", () => {
-    const html = `<table><tr><td><span style="color: red; ${DUMP}">x</span></td></tr></table>`;
-    const expected = [
-      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
-    ];
-    expect(importedCells(html)[0]?.content).toEqual(expected);
-    expect(clipboardCells(html)[0]?.content).toEqual(expected);
+  it("덤프 span 안쪽의 표식 없는 span 색은 유지된다", () => {
+    const block = documentOf(
+      `<p><span style="color: red; ${DUMP}"><span style="color: #0000ff">x</span></span></p>`,
+    ).blocks[0] as DocumentBlock;
+    expect(contentOf(block)).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#0000FF" }] },
+    ]);
+  });
+
+  it("덤프 span을 감싼 바깥 요소의 색은 유지된다", () => {
+    const block = documentOf(
+      `<p><span style="color: #0000ff"><span style="color: red; background-color: #fff; ${DUMP}">x</span></span></p>`,
+    ).blocks[0] as DocumentBlock;
+    expect(contentOf(block)).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#0000FF" }] },
+    ]);
   });
 });
 
-// span을 뺀 인라인 요소는 덤프 표식이 있으면 style의 색·배경을 읽지 않는다.
-// Chromium은 요소 안쪽만 선택해 복사해도 em·strong 등에 같은 덤프를 싣는다.
-// span은 기준 커밋부터 색을 읽어 왔으므로 Issue #338이 따로 다룬다.
-describe("span을 뺀 인라인 요소는 덤프 표식이 있으면 style 색을 읽지 않는다", () => {
+// 인라인 요소는 덤프 표식이 있으면 style의 색·배경을 읽지 않는다.
+// Chromium은 요소 안쪽만 선택해 복사해도 span·em·strong 등에 같은 덤프를 싣는다.
+describe("인라인 요소는 덤프 표식이 있으면 style 색을 읽지 않는다", () => {
   /** 마크 종류만 문자열로 줄인다. 순서는 읽은 순서다. */
   const marksOf = (html: string): string[] => {
     const block = documentOf(html).blocks[0] as DocumentBlock;
@@ -386,6 +448,7 @@ describe("span을 뺀 인라인 요소는 덤프 표식이 있으면 style 색�
     ["del", ["strike"]],
     ["strike", ["strike"]],
     ["code", ["code"]],
+    ["span", []],
     ["font", []],
     // mark의 기본 노랑 배경은 style이 아니라 태그 의미라 남는다.
     ["mark", ["backgroundColor:#FFFF00"]],
