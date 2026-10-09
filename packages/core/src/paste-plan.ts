@@ -269,9 +269,11 @@ export const planDefaultPaste = (
   let htmlFellBack = false;
   if (html.length > 0) {
     // TablePasteExtension이 이 확장보다 먼저 등록돼 있어(
-    // production-editor-assembly.ts) 표 형태 HTML은 여기
-    // 도달하지 않는다 — 이 확장 안에서 표 여부를 다시
-    // 판정하지 않는다.
+    // production-editor-assembly.ts) 표를 넣을 수 있는 표 형태 HTML은
+    // 여기 도달하지 않는다. 표 확장이 물러난 입력은 온다(table을 막은
+    // 편집기, 막은 타입이 섞인 클립보드 — Issue #328). 이 확장 안에서
+    // 표 여부를 다시 판정하지 않는다. 표 블록은 아래 modelToTiptap이
+    // enabledBlockTypes로 거절한다.
     // createId를 넘기지 않는다 — 이 결과의 모든 비표 블록 id는
     // 어차피 아래에서 전부 재발급되므로, importHtml 내부가 임시로
     // 발급하는 기본 id(own 마커가 없는 블록에만 해당)까지 editor의
