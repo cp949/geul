@@ -748,6 +748,11 @@ export const createProductionEditor = (options: {
         ...(options.onPasteRejected === undefined
           ? {}
           : { onPasteRejected: options.onPasteRejected }),
+        // Issue #328 — 막은 타입이 든 클립보드는 표 확장이 물러나게 한다.
+        // 위 스키마 gate와 같은 소스다.
+        ...(options.enabledBlockTypes === undefined
+          ? {}
+          : { enabledBlockTypes: options.enabledBlockTypes }),
       }),
       // TablePasteExtension보다 뒤(배열상 더 아래)에 선언해 선언 역순
       // 우선순위(위 주석)로 이 확장이 파일 존재 여부를 표보다 먼저

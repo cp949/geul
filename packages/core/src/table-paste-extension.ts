@@ -1,16 +1,39 @@
-import { parseClipboardTable } from "@cp949/geul-io";
+import {
+  type ClipboardContentBlock,
+  parseClipboardTable,
+} from "@cp949/geul-io";
 import type { IdFactory } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
+import { isInTable } from "@tiptap/pm/tables";
 
 import { selectionStartsInCodeBlock } from "./code-block-mark-guard-extension.js";
+import {
+  type EnabledBlockTypes,
+  isBlockTypeEnabled,
+} from "./model-to-tiptap.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { pasteClipboardContent } from "./table-paste-commands.js";
 
 export type TablePasteOptions = {
   createId: IdFactory;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
+  enabledBlockTypes?: EnabledBlockTypes;
 };
+
+// 파싱된 시퀀스에 막은 타입이 하나라도 있는지 본다. 목록 항목 children도
+// 재귀로 훑는다. 표 data 안은 셀 내용뿐이라 훑지 않는다.
+const containsBlockedType = (
+  blocks: readonly ClipboardContentBlock[],
+  enabledBlockTypes: EnabledBlockTypes,
+): boolean =>
+  blocks.some(
+    (block) =>
+      !isBlockTypeEnabled(block.type, enabledBlockTypes) ||
+      ("children" in block &&
+        block.children !== undefined &&
+        containsBlockedType(block.children, enabledBlockTypes)),
+  );
 
 // 실제 ClipboardEvent를 가로채 표/TSV/혼합 시퀀스로 파싱되면
 // pasteClipboardContent로 처리하고 이벤트를 소비한다. 파싱 대상이
@@ -37,6 +60,21 @@ export type TablePasteOptions = {
 // 거절돼 붙여넣기가 사라졌다. 물러남은 거절이 아니라 onPasteRejected를 부르지
 // 않는다. 그 뒤 처리는 ClipboardPasteExtension의 importHtml 경로가 맡는다.
 //
+// enabledBlockTypes가 table을 막았으면 파싱 전에 false로 물러난다
+// (Issue #328). 표 블록을 못 넣는 편집기라 이 확장이 할 일이 없다. 파서 거절
+// (CLIPBOARD_TABLE_INVALID)이 붙여넣기를 소비하는 일도 막는다.
+//
+// 표가 허용이어도 파싱된 시퀀스에 막은 타입이 하나라도 있으면 false로
+// 물러난다. 목록 항목 children 안까지 훑는다. 스키마에 없는 노드 타입이
+// pasteClipboardContent에 닿아 TypeError·RangeError를 던지던 경로를 막는다.
+//
+// 캐럿이나 선택이 표 안이면 이 검사를 하지 않는다. 표 안은 격자 연산만 해서
+// 제목·목록 PM 노드를 만들지 않으므로 예외가 없다. 물러나면 표 셀 경로가 표
+// 포함 html을 받지 않아 붙여넣기가 조용히 사라진다.
+//
+// 이 물러남도 거절이 아니라 onPasteRejected를 부르지 않는다. 그 뒤 처리는
+// ClipboardPasteExtension의 text/plain 폴백(Issue #318)이 맡는다.
+//
 // onPasteRejected는 두 거절 경로(파서·명령) 모두에서 호출되는 읽기 전용
 // 알림이다 — 어떤 transaction도 dispatch하지 않아 위 원자성 계약과
 // 충돌하지 않는다. NOT_TABULAR(기본 붙여넣기 폴백)에서는 호출하지 않는다
@@ -56,12 +94,14 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
     const editor = this.editor;
     const createId = this.options.createId;
     const onPasteRejected = this.options.onPasteRejected;
+    const enabledBlockTypes = this.options.enabledBlockTypes;
 
     return [
       new Plugin({
         props: {
           handlePaste: (view, event) => {
             if (selectionStartsInCodeBlock(view.state.selection)) return false;
+            if (!isBlockTypeEnabled("table", enabledBlockTypes)) return false;
 
             const clipboardData = event.clipboardData;
             if (clipboardData === null) return false;
@@ -79,6 +119,13 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
             }
 
             if (!parsed.value.some((block) => block.type === "table")) {
+              return false;
+            }
+            if (
+              enabledBlockTypes !== undefined &&
+              !isInTable(view.state) &&
+              containsBlockedType(parsed.value, enabledBlockTypes)
+            ) {
               return false;
             }
 
