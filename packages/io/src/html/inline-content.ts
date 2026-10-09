@@ -4,10 +4,13 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
+import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import {
+  type ColorState,
+  type InlineFontWeight,
   type InlineStyleMarks,
   parseInlineStyleMarks,
-  parseStyleDeclarations,
+  parseStyleColorStates,
 } from "../clipboard/style-declarations.js";
 
 export type HtmlTextNode = {
@@ -83,7 +86,7 @@ const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
     .map(({ mark }) => mark);
 
 // style의 italic·underline·strike를 마크로 바꾼다. bold는 태그마다 판정이
-// 달라(span은 bold일 때만, b·strong은 normal이 아닐 때) 호출부가 정한다.
+// 달라(span은 bold일 때만, b·strong은 normal·light가 아닐 때) 호출부가 정한다.
 // 같은 종류 마크가 겹쳐도(`<b><span style="font-weight:700">`) 여기서 막지
 // 않는다 — appendOrMergeInlineItem이 canonicalizeTextMarks로 종류당 하나만
 // 남긴다.
@@ -95,9 +98,66 @@ const decorationMarks = (parsed: InlineStyleMarks): TextMark[] => {
   return marks;
 };
 
-// 다른 case는 대개 mark 0개 또는 1개지만 span과 b·strong은 style 선언 하나에
-// 여러 마크(color·background-color·font-weight 등)가 동시에 있을 수 있어
-// (우리 export는 만들지 않는 모양이지만 외부 HTML은 흔히 이렇게 낸다) 반환형이
+// `mark`의 기본 배경이다. 브라우저가 `mark`에 칠하는 노랑이다.
+const MARK_DEFAULT_BACKGROUND = "#FFFF00";
+
+// 선언이 정한 색 상태를 마크 색으로 바꾼다. unset(선언이 없거나 모두 문법
+// 오류)이면 요소 기본값(`font`의 color 속성, `mark`의 노랑)을 쓰고, clear(투명·
+// 반투명·상속)이면 기본값도 쓰지 않는다.
+const resolveColor = (
+  state: ColorState | undefined,
+  fallback: string | undefined,
+): string | undefined => {
+  if (state?.kind === "color") return state.color;
+  if (state?.kind === "clear") return undefined;
+  return fallback;
+};
+
+// style 속성 하나에서 색·서식 마크를 만든다. span·b·strong 밖의 인라인 요소도
+// 같은 규칙으로 읽는다(Issue #334). bold는 font-weight가 bold일 때만 낸다.
+// 굵기를 끄는 쪽(b·strong의 normal·light)은 호출부가 fontWeight로 판정한다.
+// 색은 안쪽 요소가 정하지 않았을 때만 바깥 색이 남는다(inheritMarks).
+const marksFromStyle = (
+  style: unknown,
+  defaults: {
+    textColor?: string | undefined;
+    backgroundColor?: string | undefined;
+  } = {},
+): { marks: TextMark[]; fontWeight: InlineFontWeight | undefined } => {
+  const marks: TextMark[] = [];
+  const text = typeof style === "string" ? style : undefined;
+  const states = text === undefined ? undefined : parseStyleColorStates(text);
+
+  const textColor = resolveColor(states?.color, defaults.textColor);
+  if (textColor !== undefined)
+    marks.push({ type: "textColor", color: textColor });
+  const backgroundColor = resolveColor(
+    states?.backgroundColor,
+    defaults.backgroundColor,
+  );
+  if (backgroundColor !== undefined) {
+    marks.push({ type: "backgroundColor", color: backgroundColor });
+  }
+
+  if (text === undefined) return { marks, fontWeight: undefined };
+  const inline = parseInlineStyleMarks(text);
+  if (inline.fontWeight === "bold") marks.push({ type: "bold" });
+  marks.push(...decorationMarks(inline));
+  return { marks, fontWeight: inline.fontWeight };
+};
+
+// 태그 자신의 마크 뒤에 style에서 읽은 마크를 잇는다. 같은 종류 마크가
+// 겹쳐도(`<em style="font-style:italic">`) 여기서 막지 않는다 —
+// appendOrMergeInlineItem이 종류당 하나만 남긴다. 안에서 자기 태그 마크를 끄는
+// 값(`<em style="font-style:normal">`)은 읽지 않는다. 태그 마크는 그대로다.
+const tagMarkWithStyle = (node: HtmlElementNode, own: TextMark): TextMark[] => [
+  own,
+  ...marksFromStyle(node.properties.style).marks,
+];
+
+// 다른 case는 대개 mark 0개 또는 1개지만 style을 읽는 요소는 선언 하나에 여러
+// 마크(color·background-color·font-weight 등)가 동시에 있을 수 있어(우리
+// export는 만들지 않는 모양이지만 외부 HTML은 흔히 이렇게 낸다) 반환형이
 // 배열이다 — 한쪽만 반환하면 나머지가 조용히 사라진다.
 const marksForElement = (node: HtmlElementNode): TextMark[] => {
   switch (node.tagName) {
@@ -108,45 +168,48 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
     case "strong":
     case "b": {
       // Google Docs 복사 래퍼 `<b style="font-weight:normal">`는 굵지 않다
-      // (Issue #316). style은 sanitize 허용 목록이 b·strong에 남긴다. bold
-      // 판정은 기존 규칙 그대로(font-weight가 normal·400이 아니면 bold)이고,
-      // style의 italic·underline·strike는 추가로 읽는다(Issue #320).
-      const style = node.properties.style;
-      const parsed =
-        typeof style === "string" ? parseInlineStyleMarks(style) : undefined;
-      const marks: TextMark[] =
-        parsed?.fontWeight === "normal" ? [] : [{ type: "bold" }];
-      if (parsed !== undefined) marks.push(...decorationMarks(parsed));
-      return marks;
+      // (Issue #316). 유효하지만 굵지 않은 값(normal·400·lighter·100–599·
+      // inherit·initial·unset)은 UA 굵기를 덮어 굵게가 아니다(Issue #334).
+      // 무효한 값은 선언이 무시돼 UA 굵기(bold)가 남고, revert도 UA 굵기다.
+      // font 줄임에 굵기가 없으면 normal이다. 색·배경·기울임·밑줄·취소선은
+      // 더해 읽는다(Issue #320, #334).
+      const { marks, fontWeight } = marksFromStyle(node.properties.style);
+      return fontWeight === "normal" || fontWeight === "light"
+        ? marks
+        : [{ type: "bold" }, ...marks];
     }
     case "em":
     case "i":
-      return [{ type: "italic" }];
+      return tagMarkWithStyle(node, { type: "italic" });
     case "u":
-      return [{ type: "underline" }];
+      return tagMarkWithStyle(node, { type: "underline" });
     // del·strike는 s와 같은 취소선이다. ins는 읽지 않는다.
     case "s":
     case "del":
     case "strike":
-      return [{ type: "strike" }];
+      return tagMarkWithStyle(node, { type: "strike" });
     case "code":
-      return [{ type: "code" }];
-    case "span": {
-      const style = node.properties.style;
-      if (typeof style !== "string") return [];
-      const parsed = parseStyleDeclarations(style);
-      const marks: TextMark[] = [];
-      if (parsed.color !== undefined) {
-        marks.push({ type: "textColor", color: parsed.color });
-      }
-      if (parsed.backgroundColor !== undefined) {
-        marks.push({ type: "backgroundColor", color: parsed.backgroundColor });
-      }
-      const styleMarks = parseInlineStyleMarks(style);
-      if (styleMarks.fontWeight === "bold") marks.push({ type: "bold" });
-      marks.push(...decorationMarks(styleMarks));
-      return marks;
+      return tagMarkWithStyle(node, { type: "code" });
+    case "span":
+      return marksFromStyle(node.properties.style).marks;
+    case "font": {
+      // color 속성은 옛 HTML 글자색이다. style의 color가 이긴다. size·face는
+      // 읽지 않는다.
+      const attribute = node.properties.color;
+      return marksFromStyle(node.properties.style, {
+        textColor:
+          typeof attribute === "string"
+            ? readLegacyAttributeColor(attribute)
+            : undefined,
+      }).marks;
     }
+    case "mark":
+      // 기본 배경은 노랑이다. style 배경이 있으면 그 값이 이기고, 배경이
+      // clear(투명·반투명·none)면 기본 노랑도 없다. 기본 글자색(검정)은
+      // 읽지 않는다.
+      return marksFromStyle(node.properties.style, {
+        backgroundColor: MARK_DEFAULT_BACKGROUND,
+      }).marks;
     default:
       return [];
   }

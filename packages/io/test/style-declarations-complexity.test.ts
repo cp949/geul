@@ -57,6 +57,45 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     (size) =>
       `text-decoration:${"underline ".repeat(size)}!important;font-style:${" ".repeat(size * 16)}italic`,
   ],
+  // 아래는 font 줄임 속성(Issue #334)이 만든 입력 모양이다. 줄임 파서는
+  // 값을 한 번 훑고 토큰·글꼴 이름마다 일정한 일만 한다.
+  [
+    "font 줄임 선언이 아주 많은 입력",
+    (size) => "font:bold 12px Arial;".repeat(size),
+  ],
+  [
+    "font 줄임 값이 긴 알파벳 run인 입력",
+    (size) => `font:${"a".repeat(size * 16)}`,
+  ],
+  [
+    "font 줄임 앞 토큰 사이 공백이 긴 입력",
+    (size) => `font:bold${" ".repeat(size * 16)}12px Arial`,
+  ],
+  [
+    "font 줄임 글꼴 목록이 긴 입력",
+    (size) => `font:12px ${"a,".repeat(size)}a`,
+  ],
+  [
+    "font 줄임 글꼴 식별자가 많은 입력",
+    (size) => `font:12px ${"a ".repeat(size)}`,
+  ],
+  [
+    "font 줄임 따옴표가 닫히지 않은 긴 입력",
+    (size) => `font:12px "${"a ".repeat(size)}`,
+  ],
+  [
+    "font 줄임 계산 함수 토큰이 긴 입력",
+    (size) => `font:calc(${"1px + ".repeat(size)}1px) a`,
+  ],
+  ["font 줄임 쉼표만 많은 입력", (size) => `font:12px ${",".repeat(size)}`],
+  [
+    "font 줄임 앞 토큰이 아주 많은 입력",
+    (size) => `font:${"bold ".repeat(size)}12px a`,
+  ],
+  [
+    "font 줄임 line-height 토큰이 긴 입력",
+    (size) => `font:12px/${"1".repeat(size * 16)} a`,
+  ],
 ];
 
 describe("parseInlineStyleMarks의 선형 시간", () => {

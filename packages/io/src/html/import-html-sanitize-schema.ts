@@ -3,9 +3,9 @@
 // summary/img/figure/figcaption/video/audio 등 document-import 전용 태그·
 // 속성만 이 파일에서 추가로 허용한다.
 import {
-  htmlAllowedAttributes,
   htmlAllowedTagNames,
   htmlSanitizeSchema,
+  sanitizeAllowedAttributes,
 } from "./sanitize-schema.js";
 
 // 4종 미디어 블록(file/image/video/audio, spec §7.1)이 공유하는 data-geul-*
@@ -60,7 +60,7 @@ export const htmlImportSanitizeSchema = {
     "audio",
   ],
   attributes: {
-    ...htmlAllowedAttributes,
+    ...sanitizeAllowedAttributes,
     // 뒤 세 속성(TextBlockProps, RD-004 DELTA-02)은 li(bulletListItem/
     // numberedListItem/checkListItem)·summary(toggleListItem)가 공유하는
     // 블록 레벨 색상·정렬 매핑이다 — 위 htmlAllowedAttributes의
@@ -89,7 +89,7 @@ export const htmlImportSanitizeSchema = {
     // 태그일 때 data-geul-*를 직접 갖는다(RD-001-DELTA-01 export 계약) — 기존
     // href는 공유 목록(htmlAllowedAttributes.a)에 이미 있어 스프레드로
     // 유지된다.
-    a: [...(htmlAllowedAttributes.a ?? []), ...mediaDataAttributeNames],
+    a: [...(sanitizeAllowedAttributes.a ?? []), ...mediaDataAttributeNames],
     img: ["src", "alt", ...mediaDataAttributeNames],
     video: ["src", "controls", ...mediaDataAttributeNames],
     audio: ["src", "controls", ...mediaDataAttributeNames],
@@ -101,7 +101,7 @@ export const htmlImportSanitizeSchema = {
     // 남긴다(Issue #321) — 다른 선언은 의미가 없다. raw 경고는 공유 허용 목록
     // (style 없음)으로 판정하므로 이전처럼 style 제거를 보고한다.
     div: [
-      ...(htmlAllowedAttributes.div ?? []),
+      ...(sanitizeAllowedAttributes.div ?? []),
       "style",
       ...mediaDataAttributeNames.filter((name) => name !== "dataGeulBlockId"),
     ],

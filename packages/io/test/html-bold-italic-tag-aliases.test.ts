@@ -66,7 +66,9 @@ describe("HTML b/i 태그의 bold/italic mark 인식", () => {
  * (Issue #316). Google Docs 복사는 문서 전체를 `<b style="font-weight:normal">`
  * 래퍼로 감싼다. 래퍼를 bold로 읽으면 본문 전체가 굵게 들어온다. 이 패턴만 다룬다.
  * `span`의 `font-weight:700` 같은 스타일 기반 굵게는 Issue #320부터 읽지만
- * 이 describe의 범위 밖이다.
+ * 이 describe의 범위 밖이다. `color` 같은 색 선언은 Issue #334부터 마크로 읽으므로
+ * "다른 선언"과 "무관한 선언" 행은 읽지 않는 `font-family`를 쓴다(색은
+ * `html-inline-element-style`이 다룬다).
  */
 describe("font-weight:normal 래퍼 <b>·<strong>", () => {
   const importedContent = (html: string) => {
@@ -82,7 +84,10 @@ describe("font-weight:normal 래퍼 <b>·<strong>", () => {
     ['<b style="font-weight: normal;">x</b>', "공백과 세미콜론"],
     ['<b style="FONT-WEIGHT : Normal">x</b>', "대소문자와 콜론 앞 공백"],
     ['<b style="font-weight:400 !important">x</b>', "!important"],
-    ['<b style="color:#112233;font-weight:normal">x</b>', "다른 선언과 함께"],
+    [
+      '<b style="font-family:Arial;font-weight:normal">x</b>',
+      "다른 선언과 함께",
+    ],
     ['<strong style="font-weight:normal">x</strong>', "strong"],
   ])("%s(%s)는 bold가 아니다", (inner) => {
     const value = importedContent(`<p>${inner}</p>`);
@@ -95,7 +100,7 @@ describe("font-weight:normal 래퍼 <b>·<strong>", () => {
   it.each([
     ['<b style="font-weight:700">x</b>', "700"],
     ['<b style="font-weight:bold">x</b>', "bold"],
-    ['<b style="color:#112233">x</b>', "무관한 선언"],
+    ['<b style="font-family:Arial">x</b>', "무관한 선언"],
     [
       '<b style="font-weight:normal;font-weight:700">x</b>',
       "마지막 선언이 700",

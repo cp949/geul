@@ -210,11 +210,12 @@ const colorFromBytes = (red: number, green: number, blue: number) =>
 // 254/255다. 불투명이 아니면 clear다.
 const isOpaque = (alpha: number): boolean => Math.round(alpha * 255) === 255;
 
-type Numeric = { value: number; unit: string };
+export type Numeric = { value: number; unit: string };
 
 // CSS 숫자 토큰 하나를 읽는다. 단위는 `%` 또는 영문 단위(소문자)다. `1.`과
-// `1e+`처럼 토큰이 어긋나면 undefined다.
-const readNumeric = (token: string): Numeric | undefined => {
+// `1e+`처럼 토큰이 어긋나면 undefined다. font 줄임 속성(style-declarations.ts)도
+// 이 함수로 크기·굵기 토큰을 읽는다.
+export const readNumeric = (token: string): Numeric | undefined => {
   const length = token.length;
   let index = 0;
   if (token[index] === "+" || token[index] === "-") index += 1;
@@ -602,6 +603,30 @@ export const readCssColor = (value: string): CssColorResult => {
   return readColorValue(trimmed);
 };
 
+// 옛 HTML 색 속성(`<font color>`)의 값을 읽는다(Issue #334). 읽는 값은 CSS 색
+// 이름, `#rgb`, `#rrggbb`, `#` 없는 6자리 hex다. 앞뒤 ASCII 공백은 걷는다.
+// Chromium은 쓰레기 값·`#` 없는 3자리·5자리·함수 표기도 옛 규칙으로 색을
+// 만들어 그리지만 읽지 않는다(의도한 불일치). 읽지 않는 값은 undefined다.
+export const readLegacyAttributeColor = (value: string): string | undefined => {
+  let start = 0;
+  let end = value.length;
+  while (start < end && isCssSpace(value[start] as string)) start += 1;
+  while (end > start && isCssSpace(value[end - 1] as string)) end -= 1;
+  const trimmed =
+    start === 0 && end === value.length ? value : value.slice(start, end);
+  if (trimmed === "") return undefined;
+
+  const named = NAMED_COLORS.get(trimmed.toLowerCase());
+  if (named !== undefined) return named;
+
+  const hasHash = trimmed[0] === "#";
+  const digitCount = trimmed.length - (hasHash ? 1 : 0);
+  if (digitCount === 3 && !hasHash) return undefined;
+  if (digitCount !== 3 && digitCount !== 6) return undefined;
+  const result = readHex(hasHash ? trimmed : `#${trimmed}`);
+  return result.kind === "color" ? result.color : undefined;
+};
+
 const BACKGROUND_KEYWORDS: ReadonlySet<string> = new Set([
   "none",
   "repeat",
@@ -751,6 +776,10 @@ const isImageToken = (lower: string): boolean => {
     name.endsWith("-gradient")
   );
 };
+
+// 길이 단위 하나인지 본다. 입력은 소문자다.
+export const isCssLengthUnit = (unit: string): boolean =>
+  LENGTH_UNITS.has(unit);
 
 const isPositionToken = (token: string): boolean => {
   const numeric = readNumeric(token);

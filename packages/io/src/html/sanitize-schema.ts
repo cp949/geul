@@ -125,15 +125,21 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // 경고는 data-geul-* 존재를 조건으로 import-html-blocks.ts가
   // consumePreservedAttributeWarning으로 억제한다(계획서 "## 결정").
   span: ["style"],
-  // b·strong의 style은 `font-weight:normal|400` 판정과 italic·underline·strike
-  // 마크 판정에만 쓴다(Issue #316·#320, marksForElement). Google Docs 복사가
-  // 문서 전체를 `<b style="font-weight:normal">`로 감싼다. 이 목록에 없으면
-  // sanitize가 style을 지워 래퍼가 bold가 된다. raw 경고는 이전처럼 style
-  // 제거를 보고한다(import-warnings.ts가 b·strong의 style을 허용 속성에서
-  // 뺀다).
+  // b·strong의 style은 굵기 판정(`font-weight:normal|400` 등)과 색·기울임·
+  // 밑줄·취소선 마크 판정에만 쓴다(Issue #316·#320·#334, marksForElement).
+  // Google Docs 복사가 문서 전체를 `<b style="font-weight:normal">`로 감싼다.
+  // 이 목록에 없으면 sanitize가 style을 지워 래퍼가 bold가 된다. raw 경고는
+  // 이전처럼 style 제거를 보고한다(import-warnings.ts가 b·strong의 style을
+  // 허용 속성에서 뺀다).
   b: ["style"],
   strong: ["style"],
   code: ["dataLanguage", "className"],
+  // font·mark는 Issue #334부터 색·서식 마크로 읽는 태그다(inline-content.ts의
+  // marksForElement). font는 color 속성(옛 HTML 글자색)과 style, mark는 style을
+  // 정식으로 허용한다 — 읽는 속성이라 제거 경고가 없다. size·face는 읽지 않아
+  // 이전처럼 속성 제거 경고를 낸다.
+  font: ["color", "style"],
+  mark: ["style"],
   table: ["dataGeulBlockId", "dataGeulHeaderRows", "dataGeulHeaderColumns"],
   td: [
     "rowSpan",
@@ -157,6 +163,39 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   ],
   tr: ["dataGeulRowId"],
 };
+
+// sanitize 스키마에만 합치는 읽기 전용 속성이다(Issue #334). 이 요소들의
+// style은 색·서식 마크를 읽는 데만 쓴다. 경고 기준(htmlAllowedAttributes)에는
+// 올리지 않는다 — import-warnings.ts가 그 집합으로 "제거됨" 경고를 판정하므로,
+// 올리면 이전처럼 style 제거를 보고해야 하는 기존 경고 계약(G-CNV-002)이
+// 깨진다. b·strong·span의 style은 위 htmlAllowedAttributes에 이미 있다.
+export const styleReadAttributes: Record<string, string[]> = {
+  em: ["style"],
+  i: ["style"],
+  u: ["style"],
+  s: ["style"],
+  del: ["style"],
+  strike: ["style"],
+  code: ["style"],
+};
+
+// 태그마다 속성 이름을 이어 붙여 새 객체를 만든다. 두 입력은 바꾸지 않는다.
+const mergeAttributes = (
+  base: Record<string, string[]>,
+  extra: Record<string, string[]>,
+): Record<string, string[]> => {
+  const merged: Record<string, string[]> = { ...base };
+  for (const [tag, names] of Object.entries(extra)) {
+    merged[tag] = [...(base[tag] ?? []), ...names];
+  }
+  return merged;
+};
+
+// sanitize 스키마가 쓰는 속성 허용 목록이다: 경고 기준 + 읽기 전용 속성. 세
+// 스키마(htmlSanitizeSchema·clipboardSanitizeSchema·htmlImportSanitizeSchema)가
+// 모두 이 목록에서 파생한다.
+export const sanitizeAllowedAttributes: Record<string, string[]> =
+  mergeAttributes(htmlAllowedAttributes, styleReadAttributes);
 
 export const htmlStrippedTagNames = [
   "script",
@@ -202,6 +241,10 @@ export const htmlAllowedTagNames = [
   "del",
   "strike",
   "code",
+  // font·mark는 색·서식 마크로 읽는다(Issue #334). 없으면 sanitize가 태그를
+  // 벗겨 글자색과 형광펜 배경이 사라진다.
+  "font",
+  "mark",
   "a",
   "br",
   // span은 model에 전용 타입이 없다 — textColor/backgroundColor mark의 HTML
@@ -246,7 +289,7 @@ export const htmlSanitizeSchema: Schema = {
     thead: ["table"],
     tr: ["table"],
   },
-  attributes: htmlAllowedAttributes,
+  attributes: sanitizeAllowedAttributes,
   clobber: [],
   protocols: {
     href: ["http", "https", "mailto", "tel"],
@@ -261,11 +304,14 @@ export const htmlSanitizeSchema: Schema = {
 // import-warnings가 "제거됨"으로 보고하지 않게 되고(경고 소실), role은
 // 문서 모델에 없는 속성인데 import 계약에 새 속성이 생긴 것처럼 보인다.
 // 그래서 클립보드에만 필요한 두 속성을 여기서만 얹는다.
-const clipboardCellAttributes = [...(htmlAllowedAttributes.td ?? []), "style"];
+const clipboardCellAttributes = [
+  ...(sanitizeAllowedAttributes.td ?? []),
+  "style",
+];
 
 export const clipboardAllowedAttributes: Record<string, string[]> = {
-  ...htmlAllowedAttributes,
-  table: [...(htmlAllowedAttributes.table ?? []), "role"],
+  ...sanitizeAllowedAttributes,
+  table: [...(sanitizeAllowedAttributes.table ?? []), "role"],
   td: clipboardCellAttributes,
   th: clipboardCellAttributes,
 };

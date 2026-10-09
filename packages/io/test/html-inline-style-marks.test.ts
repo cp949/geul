@@ -7,7 +7,8 @@
  *   `!important`·대소문자·공백은 무시한다.
  * - 꺼 주는 값(`font-weight:normal`, `text-decoration:none`)은 바깥 요소가
  *   만든 마크를 지우지 않는다. 마크는 누적만 한다.
- * - `p`·`div`·`i` 같은 다른 태그의 style은 sanitize가 지워서 읽지 않는다.
+ * - `p`·`div` 같은 블록 태그의 style은 sanitize가 지워서 읽지 않는다. `i` 등
+ *   인라인 태그의 style은 Issue #334부터 읽는다(`html-inline-element-style`).
  * - 파서 단위 계약(`parseInlineStyleMarks`)과 `UNSAFE_ATTRIBUTE_REMOVED`
  *   경고 계약이 이전과 같은지도 함께 본다.
  */
@@ -247,11 +248,15 @@ describe("b·strong의 style", () => {
   });
 
   it("b는 normal·400이 아닌 font-weight를 기존처럼 bold로 읽는다", () => {
-    // 이번 변경은 b·strong의 bold 판정을 넓히지 않는다.
-    expect(paragraphContent('<b style="font-weight:500">x</b>')).toEqual(
-      markedText([{ type: "bold" }]),
-    );
-    expect(paragraphContent('<b style="font-weight:lighter">x</b>')).toEqual(
+    // Issue #334로 판정이 바뀌었다. 유효하지만 굵지 않은 값(500·lighter)은
+    // 굵게가 아니고, 무효한 값은 선언이 무시돼 UA 굵기(bold)가 남는다.
+    expect(paragraphContent('<b style="font-weight:500">x</b>')).toEqual([
+      { text: "x" },
+    ]);
+    expect(paragraphContent('<b style="font-weight:lighter">x</b>')).toEqual([
+      { text: "x" },
+    ]);
+    expect(paragraphContent('<b style="font-weight:foo">x</b>')).toEqual(
       markedText([{ type: "bold" }]),
     );
   });
@@ -334,14 +339,16 @@ describe("style을 읽지 않는 곳", () => {
     ]);
   });
 
-  it("i의 style은 italic만 남기고 속성 제거 경고를 낸다", () => {
+  it("i의 style은 읽은 마크를 더하고 속성 제거 경고를 낸다", () => {
+    // Issue #334 이전에는 i의 style을 읽지 않아 italic만 남았다. 지금은
+    // font-weight:700도 bold로 읽는다. 경고는 이전과 같다.
     const value = importedValue('<p><i style="font-weight:700">x</i></p>');
 
     expect(value.document.blocks).toEqual([
       {
         id: "html-1",
         type: "paragraph",
-        content: markedText([{ type: "italic" }]),
+        content: markedText([{ type: "bold" }, { type: "italic" }]),
       },
     ]);
     expect(value.warnings).toEqual([
@@ -393,7 +400,7 @@ describe("parseInlineStyleMarks", () => {
   it("font-weight는 bold·normal·other로 분류한다", () => {
     expect(parseInlineStyleMarks("font-weight:700").fontWeight).toBe("bold");
     expect(parseInlineStyleMarks("font-weight:400").fontWeight).toBe("normal");
-    expect(parseInlineStyleMarks("font-weight:500").fontWeight).toBe("other");
+    expect(parseInlineStyleMarks("font-weight:500").fontWeight).toBe("light");
     expect(parseInlineStyleMarks("font-weight:foo").fontWeight).toBe("other");
     expect(parseInlineStyleMarks("font-weight:1200").fontWeight).toBe("other");
   });

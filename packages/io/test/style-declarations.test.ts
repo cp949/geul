@@ -13,6 +13,9 @@
 import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import {
+  type InlineFontWeight,
+  parseInlineStyleMarks,
+  parseStyleColorStates,
   parseStyleDeclarations,
   parseWhiteSpaceMode,
   type StyleDeclarations,
@@ -568,5 +571,429 @@ describe("parseWhiteSpaceMode", () => {
     expect(
       parseWhiteSpaceMode("white-space:preserve;white-space:collapse"),
     ).toBe("normal");
+  });
+});
+
+/*
+ * 아래는 Issue #334 단계 A가 더한 규칙이다: font-weight 분류의 light, font
+ * 줄임 속성, 색 칸의 상태(unset·clear·color). 기대값은 Chromium
+ * getComputedStyle 실측(2026-10-10)이다.
+ */
+
+describe("parseStyleColorStates", () => {
+  it("선언이 없으면 둘 다 unset이다", () => {
+    expect(parseStyleColorStates("")).toEqual({
+      color: { kind: "unset" },
+      backgroundColor: { kind: "unset" },
+    });
+    expect(parseStyleColorStates("font-weight:700")).toEqual({
+      color: { kind: "unset" },
+      backgroundColor: { kind: "unset" },
+    });
+  });
+
+  it("읽은 색은 정규 형식 color다", () => {
+    expect(
+      parseStyleColorStates("color:red;background-color:rgb(0,0,255)"),
+    ).toEqual({
+      color: { kind: "color", color: "#FF0000" },
+      backgroundColor: { kind: "color", color: "#0000FF" },
+    });
+  });
+
+  it.each([
+    ["background-color:transparent"],
+    ["background-color:rgba(0,0,255,.5)"],
+    ["background-color:inherit"],
+    ["background-color:initial"],
+    ["background-color:currentcolor"],
+    ["background:none"],
+    ["background:url(x.png)"],
+    ["background-color:red;background-color:transparent"],
+    ["background-color:transparent;background-color:bogus"],
+    ["background:red;background:url(x.png)"],
+  ])("%s는 배경이 clear다", (style) => {
+    expect(parseStyleColorStates(style).backgroundColor).toEqual({
+      kind: "clear",
+    });
+  });
+
+  it.each([
+    ["background-color:bogus"],
+    ["background-color:lab(50% 40 59)"],
+    ["background-color:var(--c)"],
+  ])("%s는 문법 오류라 배경이 unset이다", (style) => {
+    expect(parseStyleColorStates(style).backgroundColor).toEqual({
+      kind: "unset",
+    });
+  });
+
+  it("글자색도 같은 규칙이다", () => {
+    expect(parseStyleColorStates("color:red;color:inherit").color).toEqual({
+      kind: "clear",
+    });
+    expect(parseStyleColorStates("color:red;color:bogus").color).toEqual({
+      kind: "color",
+      color: "#FF0000",
+    });
+    expect(
+      parseStyleColorStates("color:red !important;color:blue").color,
+    ).toEqual({ kind: "color", color: "#FF0000" });
+  });
+
+  it("parseStyleDeclarations와 같은 선언을 같은 결과로 읽는다", () => {
+    const style =
+      "color:#ff0000;background:url(x.png) #00ff00;text-align:right";
+    expect(parseStyleDeclarations(style)).toEqual({
+      color: "#FF0000",
+      backgroundColor: "#00FF00",
+      align: "right",
+    });
+    expect(parseStyleColorStates(style)).toEqual({
+      color: { kind: "color", color: "#FF0000" },
+      backgroundColor: { kind: "color", color: "#00FF00" },
+    });
+  });
+});
+
+describe("parseInlineStyleMarks의 font-weight 분류", () => {
+  // 유효하지만 굵지 않은 값은 light다. normal·400은 normal로 남는다.
+  it.each([
+    ["1", "light"],
+    ["100", "light"],
+    ["300", "light"],
+    ["399.9", "light"],
+    ["500", "light"],
+    ["599", "light"],
+    ["599.9", "light"],
+    ["5e2", "light"],
+    [".5e3", "light"],
+    ["+300", "light"],
+    ["300.0", "light"],
+    ["lighter", "light"],
+    ["LIGHTER", "light"],
+    ["inherit", "light"],
+    ["initial", "light"],
+    ["unset", "light"],
+    ["normal", "normal"],
+    ["400", "normal"],
+    ["400.0", "normal"],
+    ["600", "bold"],
+    ["700", "bold"],
+    ["700.5", "bold"],
+    ["1000", "bold"],
+    ["1e3", "bold"],
+    ["bold", "bold"],
+    ["bolder", "bold"],
+    ["BOLD", "bold"],
+    ["bold !important", "bold"],
+    ["300 !important", "light"],
+  ] as Array<[string, InlineFontWeight]>)(
+    "font-weight:%s는 %s다",
+    (value, expected) => {
+      expect(parseInlineStyleMarks(`font-weight:${value}`).fontWeight).toBe(
+        expected,
+      );
+    },
+  );
+
+  // revert·revert-layer는 UA 굵기(b·strong은 굵게)로 돌아가므로 굵기를 정하지
+  // 않는다. 무효한 값은 선언이 무시된다. calc()는 읽지 않는다(Chromium은
+  // 유효로 보고 굵기를 계산한다, 한계).
+  it.each([
+    ["revert"],
+    ["revert-layer"],
+    ["foo"],
+    ["0"],
+    ["1001"],
+    ["-1"],
+    ["1e"],
+    ["calc(300)"],
+    [""],
+  ])("font-weight:%j는 other다", (value) => {
+    expect(parseInlineStyleMarks(`font-weight:${value}`).fontWeight).toBe(
+      "other",
+    );
+  });
+
+  it("무효한 선언은 앞의 유효한 분류를 지우지 않는다", () => {
+    expect(
+      parseInlineStyleMarks("font-weight:300;font-weight:bogus").fontWeight,
+    ).toBe("light");
+    expect(
+      parseInlineStyleMarks("font-weight:bogus;font-weight:300").fontWeight,
+    ).toBe("light");
+    expect(
+      parseInlineStyleMarks("font-weight:bogus;font-weight:bogus2").fontWeight,
+    ).toBe("other");
+  });
+
+  it("revert는 앞의 유효한 분류를 other로 덮는다", () => {
+    expect(
+      parseInlineStyleMarks("font-weight:700;font-weight:revert").fontWeight,
+    ).toBe("other");
+  });
+});
+
+// 아래 표는 각 값을 `font:<값>`으로 읽은 Chromium 결과다. 굵기는 계산 굵기가
+// 600 이상이면 bold, 400이면 normal, 그 밖은 light이고, 기울임은 계산
+// font-style이 normal이 아니면 true다. 줄임에 굵기가 없으면 normal이다.
+// 거절 표는 Chromium이 선언을 받지 않은 값이다.
+const accepted: Array<[string, InlineFontWeight, boolean]> = [
+  ["italic bold 12px Arial", "bold", true],
+  ["bold italic 12px Arial", "bold", true],
+  ["oblique 12px Arial", "normal", true],
+  ["oblique 10deg 12px Arial", "normal", true],
+  ["normal normal normal normal 12px a", "normal", false],
+  ["small-caps bold 12px a", "bold", false],
+  ["bold small-caps italic condensed 12px a", "bold", true],
+  ["bold 12px/1.5 Arial", "bold", false],
+  ["12px / 1.5 Arial", "normal", false],
+  ["12px /1.5 Arial", "normal", false],
+  ["12px/ 1.5 Arial", "normal", false],
+  ["bold 0 Arial", "bold", false],
+  ["700 12px Arial", "bold", false],
+  ["1 12px a", "light", false],
+  ["1000 12px a", "bold", false],
+  ["700.5 12px a", "bold", false],
+  ["599.9 12px a", "light", false],
+  ["bolder 12px a", "bold", false],
+  ["lighter 12px a", "light", false],
+  ["larger a", "normal", false],
+  ["xx-small a", "normal", false],
+  ["smaller serif", "normal", false],
+  ["50% a", "normal", false],
+  ['12px "Times New Roman", serif', "normal", false],
+  ["12px 'a b'", "normal", false],
+  ["12px a b", "normal", false],
+  ["12px a, b", "normal", false],
+  ["caption", "normal", false],
+  ["icon", "normal", false],
+  ["menu", "normal", false],
+  ["message-box", "normal", false],
+  ["small-caption", "normal", false],
+  ["status-bar", "normal", false],
+  ["Caption", "normal", false],
+  ["italic 12px/normal a", "normal", true],
+  ["12px/1 a", "normal", false],
+  ["12px/1.5em a", "normal", false],
+  ["12px/150% a", "normal", false],
+  ["bold  12px  Arial", "bold", false],
+  ["bold\t12px Arial", "bold", false],
+  ["bold 12px Arial !important", "bold", false],
+  ["bold calc(12px) Arial", "bold", false],
+  ["bold calc(1px + 2px) a", "bold", false],
+  ["semi-condensed 12px a", "normal", false],
+  ["expanded bold 12px a", "bold", false],
+  ["bold 12px/normal Arial", "bold", false],
+  ["bold 12px serif", "bold", false],
+  ["12px system-ui", "normal", false],
+  ["12PX Arial", "normal", false],
+  ["BOLD 12px ARIAL", "bold", false],
+  ['bold 12px "unclosed', "bold", false],
+  ["normal 12px a", "normal", false],
+  ["normal bold 12px a", "bold", false],
+  ["bold normal 12px a", "bold", false],
+  ["italic bold small-caps 12px a", "bold", true],
+  ["italic 700 normal 12px a", "bold", true],
+  ["ultra-condensed italic 12px a", "normal", true],
+  ["oblique 20deg bold 12px a", "bold", true],
+  ["12px a  b", "normal", false],
+  ["bold 12px -a", "bold", false],
+  ["bold 12px --a", "bold", false],
+  ["bold .5em a", "bold", false],
+  ["bold +12px a", "bold", false],
+  ["bold 1e1px a", "bold", false],
+  ["bold 12PX a", "bold", false],
+  ["xxx-large a", "normal", false],
+  ["math a", "normal", false],
+  ["bold 12px/0 a", "bold", false],
+  ["bold 12px/1.5 a, b", "bold", false],
+  ["oblique 90deg 12px a", "normal", true],
+  ["oblique -10deg 12px a", "normal", true],
+  ["oblique 1turn 12px a", "normal", true],
+  ["oblique 0.1turn 12px a", "normal", true],
+  ["oblique 10 12px a", "light", true],
+  ["calc(12px) a", "normal", false],
+  ["min(1px,2px) a", "normal", false],
+  ["clamp(1px,2px,3px) a", "normal", false],
+  ["MEDIUM a", "normal", false],
+  ["12Px a", "normal", false],
+  ["1e1px a", "normal", false],
+  [".5em a", "normal", false],
+  ["0.0px a", "normal", false],
+  ["0% a", "normal", false],
+  ["-0 a", "normal", false],
+  ["-0px a", "normal", false],
+  ["+0 a", "normal", false],
+  ["12px/.5 a", "normal", false],
+  ["12px/1e1 a", "normal", false],
+  ["12px/calc(1px) a", "normal", false],
+  ["12px/normal a", "normal", false],
+  ["12px/ normal a", "normal", false],
+  ["12px/-0 a", "normal", false],
+  ["12px/0 a", "normal", false],
+  ["12px/50% a", "normal", false],
+  ["12px/1.5em a", "normal", false],
+  ['italic 12px/1.5 "A B", serif', "normal", true],
+  ["bold 12px 'unclosed", "bold", false],
+  ['bold 12px "a" , b', "bold", false],
+  ["bold 12px a , b", "bold", false],
+  ["12px a-b", "normal", false],
+  ["12px a_b", "normal", false],
+  ["12px _a", "normal", false],
+  ["12px 日本語", "normal", false],
+  ["12px a1", "normal", false],
+  ["bold 1e400px a", "bold", false],
+  ["bold 1px a", "bold", false],
+  ["800 12px a", "bold", false],
+  ["bold 12px/1.5 Arial !important", "bold", false],
+  ["  bold   12px   Arial  ", "bold", false],
+  ["bold 12px\tArial", "bold", false],
+];
+const rejected = [
+  "italic oblique 12px a",
+  "italic italic 12px a",
+  "normal normal normal normal normal 12px a",
+  "bold 12px",
+  "12px",
+  "bold 12 Arial",
+  "1001 12px Arial",
+  "0 12px a",
+  "12px ,a",
+  "12px 1a",
+  "bold inherit",
+  "50% 12px a",
+  "bold 12px/ Arial",
+  "italic bold",
+  "bold italic",
+  "italic bold 12px",
+  "bold 12px Arial,",
+  "bold 12px/1.5",
+  "12px/1.5",
+  "bold bold 12px a",
+  "bold 700 12px a",
+  "small-caps small-caps 12px a",
+  "oblique 10deg 20deg 12px a",
+  "12px a/b",
+  '12px "a"b',
+  "bold -12px a",
+  "bold 12.px a",
+  "12px/-1 a",
+  "12px/1px/2 a",
+  "bold 12px initial",
+  "bold 12px inherit",
+  "bold 12px default",
+  "bold 12px serif, inherit",
+  "oblique 10px 12px a",
+  "oblique 10deg italic 12px a",
+  "italic oblique 10deg 12px a",
+  "12 a",
+  "1e1 a",
+  "5.em a",
+  "bold normal a",
+  "normal a",
+  "status-bar bold",
+  "bold caption",
+  "bold 12px serif,",
+  "bold 12px a,,b",
+  "12px a.b",
+  "12px a!",
+];
+
+const fontShorthand = (value: string) => parseInlineStyleMarks(`font:${value}`);
+
+describe("parseInlineStyleMarks의 font 줄임 속성", () => {
+  it.each(accepted)(
+    "font:%s는 굵기 %s, 기울임 %s다",
+    (value, weight, italic) => {
+      const parsed = fontShorthand(value);
+      expect(parsed.fontWeight).toBe(weight);
+      expect(parsed.italic).toBe(italic);
+    },
+  );
+
+  // 문법 오류 선언은 통째로 버린다. 아무것도 읽지 않는다.
+  it.each(rejected)("font:%s는 문법 오류라 아무것도 읽지 않는다", (value) => {
+    expect(fontShorthand(value)).toEqual({
+      fontWeight: undefined,
+      italic: false,
+      underline: false,
+      strike: false,
+    });
+  });
+
+  it("시스템 글꼴 키워드는 normal이고 기울임이 아니다", () => {
+    for (const value of [
+      "caption",
+      "icon",
+      "menu",
+      "message-box",
+      "small-caption",
+      "status-bar",
+      "CAPTION",
+    ]) {
+      expect(fontShorthand(value)).toMatchObject({
+        fontWeight: "normal",
+        italic: false,
+      });
+    }
+  });
+
+  it("전역 키워드는 굵기를 정하지 않거나 굵지 않은 값으로 읽는다", () => {
+    expect(fontShorthand("inherit")).toMatchObject({
+      fontWeight: "light",
+      italic: false,
+    });
+    expect(fontShorthand("unset")).toMatchObject({
+      fontWeight: "light",
+      italic: false,
+    });
+    expect(fontShorthand("initial")).toMatchObject({
+      fontWeight: "normal",
+      italic: false,
+    });
+    expect(fontShorthand("revert")).toMatchObject({
+      fontWeight: "other",
+      italic: false,
+    });
+    expect(fontShorthand("revert-layer")).toMatchObject({
+      fontWeight: "other",
+      italic: false,
+    });
+  });
+
+  it("공백 종류와 !important와 대소문자를 무시한다", () => {
+    expect(fontShorthand("bold\t12px\tArial")).toMatchObject({
+      fontWeight: "bold",
+    });
+    expect(fontShorthand("ITALIC BOLD 12PX ARIAL !important")).toMatchObject({
+      fontWeight: "bold",
+      italic: true,
+    });
+  });
+
+  it("뒤의 줄임이 앞의 font-weight와 font-style을 덮는다", () => {
+    expect(
+      parseInlineStyleMarks("font-weight:700;font-style:italic;font:12px a"),
+    ).toMatchObject({ fontWeight: "normal", italic: false });
+  });
+
+  it("줄임 뒤의 font-weight와 font-style이 줄임을 덮는다", () => {
+    expect(
+      parseInlineStyleMarks("font:12px a;font-weight:700;font-style:italic"),
+    ).toMatchObject({ fontWeight: "bold", italic: true });
+  });
+
+  it("문법 오류 줄임은 앞의 값을 지우지 않는다", () => {
+    expect(
+      parseInlineStyleMarks("font-weight:700;font-style:italic;font:bogus"),
+    ).toMatchObject({ fontWeight: "bold", italic: true });
+  });
+
+  it("밑줄·취소선은 줄임이 건드리지 않는다", () => {
+    expect(
+      parseInlineStyleMarks("text-decoration:underline;font:bold 12px a"),
+    ).toMatchObject({ underline: true, strike: false, fontWeight: "bold" });
   });
 });

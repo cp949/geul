@@ -18,6 +18,7 @@ import {
   type CssColorResult,
   readBackgroundShorthand,
   readCssColor,
+  readLegacyAttributeColor,
 } from "../src/clipboard/css-color.js";
 
 /** 결과를 표의 기대값 표기(`#RRGGBB`·`clear`·`invalid`)로 바꾼다. */
@@ -621,5 +622,79 @@ describe("readBackgroundShorthand", () => {
 
   it("닫히지 않은 url()은 invalid다(Chromium은 clear, 한계)", () => {
     expect(show(readBackgroundShorthand("url(x.png"))).toBe("invalid");
+  });
+});
+
+/*
+ * `readLegacyAttributeColor`는 옛 HTML 색 속성(`<font color>`)을 읽는다(Issue
+ * #334). 읽는 값은 CSS 색 이름, `#rgb`, `#rrggbb`, `#` 없는 6자리 hex다. 앞뒤
+ * ASCII 공백은 걷는다. 그 밖은 읽지 않는다. 기대값은 Chromium
+ * getComputedStyle 실측(2026-10-10)이다.
+ */
+describe("readLegacyAttributeColor", () => {
+  it.each([
+    ["#ff0000", "#FF0000"],
+    ["#FF0000", "#FF0000"],
+    ["#f00", "#FF0000"],
+    ["#FFF", "#FFFFFF"],
+    ["#aBc", "#AABBCC"],
+    ["ff0000", "#FF0000"],
+    ["FF0000", "#FF0000"],
+    ["123456", "#123456"],
+    ["abcdef", "#ABCDEF"],
+    ["red", "#FF0000"],
+    ["Red", "#FF0000"],
+    ["RED", "#FF0000"],
+    ["rebeccapurple", "#663399"],
+    ["lightgoldenrodyellow", "#FAFAD2"],
+    ["grey", "#808080"],
+    ["gray", "#808080"],
+    ["black", "#000000"],
+    ["  red  ", "#FF0000"],
+    ["ff0000 ", "#FF0000"],
+    ["#ff0000 ", "#FF0000"],
+  ])("%j는 %s로 읽는다", (value, expected) => {
+    expect(readLegacyAttributeColor(value)).toBe(expected);
+  });
+
+  // 아래는 Chromium이 옛 규칙으로 색을 만들어 그리지만 읽지 않는다(의도한
+  // 불일치). 예: `garbage`는 #0ABAE0, `f00`은 #0F0000, `#ff0000ff`는 #FF00FF.
+  it.each([
+    ["garbage"],
+    ["f00"],
+    ["abc"],
+    ["12345"],
+    ["#ff000"],
+    ["#ff00000"],
+    ["#ff0000ff"],
+    ["#12345g"],
+    ["#gggggg"],
+    ["#ff"],
+    ["#"],
+    ["rgb(255,0,0)"],
+    ["rgb(255 0 0)"],
+    ["hsl(0,100%,50%)"],
+    ["transparent"],
+    ["currentcolor"],
+    ["inherit"],
+    [""],
+    ["   "],
+    ["red blue"],
+    ["# ff0000"],
+    ["ff 0000"],
+    ["gggggg"],
+  ])("%j는 읽지 않는다", (value) => {
+    expect(readLegacyAttributeColor(value)).toBeUndefined();
+  });
+
+  it("앞뒤 공백은 ASCII 공백 다섯 가지만 걷는다", () => {
+    expect(readLegacyAttributeColor(" \t\n\f\rred\r\n\f\t ")).toBe("#FF0000");
+    expect(readLegacyAttributeColor("\u00a0red")).toBeUndefined();
+  });
+
+  it("CSS 색 이름과 readCssColor가 같은 색을 낸다", () => {
+    for (const name of ["aliceblue", "coral", "darkslategrey", "yellowgreen"]) {
+      expect(readLegacyAttributeColor(name)).toBe(show(readCssColor(name)));
+    }
   });
 });
