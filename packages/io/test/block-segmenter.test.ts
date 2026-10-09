@@ -160,3 +160,60 @@ describe("segmentBlocks", () => {
     ).toEqual(["span", "span"]);
   });
 });
+
+describe("paragraph 세그먼트의 origin(Issue #334 단계 B)", () => {
+  /** paragraph 세그먼트마다 origin 태그명(없으면 null)을 모은다. */
+  const originTags = (html: string): Array<string | null> =>
+    segment(html).flatMap((s) =>
+      s.kind === "paragraph" ? [s.origin?.tagName ?? null] : [],
+    );
+
+  it("블록 경계 자식이 없는 div가 만든 문단은 그 div를 origin으로 싣는다", () => {
+    const segments = segment('<div style="color:red">a<span>b</span></div>');
+    expect(segments).toHaveLength(1);
+    const [first] = segments;
+    expect(first?.kind).toBe("paragraph");
+    if (first?.kind !== "paragraph") return;
+    expect(first.origin?.tagName).toBe("div");
+    expect(first.origin?.properties.style).toBe("color:red");
+    expect(textOf(first.nodes)).toBe("ab");
+  });
+
+  it("형제 div는 각자 자기 origin을 싣는다", () => {
+    const segments = segment('<div id="one">a</div><div id="two">b</div>');
+    expect(
+      segments.map((s) =>
+        s.kind === "paragraph" ? s.origin?.properties.id : undefined,
+      ),
+    ).toEqual(["one", "two"]);
+  });
+
+  it("블록 자식이 있는 래퍼 div는 origin을 싣지 않는다", () => {
+    expect(originTags("<div>lead<p>a</p>tail</div>")).toEqual([null, null]);
+    expect(originTags("<div><div>a</div></div>")).toEqual(["div"]);
+  });
+
+  it("div 앞뒤 loose 텍스트는 origin을 싣지 않는다", () => {
+    expect(originTags("lead<div>a</div>tail")).toEqual([null, "div", null]);
+  });
+
+  it("li·blockquote·ul로 만든 문단은 origin을 싣지 않는다", () => {
+    expect(originTags("<li>a</li>")).toEqual([null]);
+    expect(originTags("<blockquote>a</blockquote>")).toEqual([null]);
+    expect(originTags("<ul>a</ul>")).toEqual([null]);
+  });
+
+  it("origin 필드가 없는 문단 세그먼트에는 origin 키 자체가 없다", () => {
+    const [first] = segment("loose");
+    expect(first).toEqual({ kind: "paragraph", nodes: expect.any(Array) });
+    expect(first !== undefined && "origin" in first).toBe(false);
+  });
+
+  it("div 안 표는 블록 경계라 앞뒤 문단이 origin을 싣지 않는다", () => {
+    expect(
+      originTags(
+        "<div>a<table><tbody><tr><td>c</td></tr></tbody></table>b</div>",
+      ),
+    ).toEqual([null, null]);
+  });
+});

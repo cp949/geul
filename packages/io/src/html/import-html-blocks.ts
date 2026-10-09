@@ -40,7 +40,12 @@ import {
   splitListItemChildren,
   splitQuoteChildren,
 } from "./import-html-wrappers.js";
-import type { HtmlElementNode, HtmlNode, HtmlRoot } from "./inline-content.js";
+import {
+  blockStyleMarks,
+  type HtmlElementNode,
+  type HtmlNode,
+  type HtmlRoot,
+} from "./inline-content.js";
 import {
   codeBlockLanguageMetadataIgnoredWarning,
   type HtmlImportWarning,
@@ -71,11 +76,24 @@ const blocksFromSegments = (
       // flushInlineNodes 관례를 그대로 따른다: collapse/normalize 없이
       // textValue(...).trim()으로만 실질 텍스트를 거르고, id는 항상
       // 새로 발급한다(이 gap은 이번 변경의 범위 밖이다).
+      // 블록 자식이 없는 div가 만든 문단은 origin(그 div)이 있다 — 그 div의
+      // style 색을 블록 속성으로, 서식을 안쪽 마크로 읽는다(Issue #334 단계 B).
+      // 래퍼 div(블록 자식 있음)는 origin이 없어 색·서식이 따라오지 않는다.
       if (textValue(segment.nodes).trim().length > 0) {
+        const originProps =
+          segment.origin === undefined
+            ? {}
+            : textBlockPropsFromElement(segment.origin);
         blocks.push({
           id: createId(),
           type: "paragraph",
-          content: paragraphContentFromNodes(segment.nodes),
+          content: paragraphContentFromNodes(
+            segment.nodes,
+            segment.origin === undefined
+              ? undefined
+              : blockStyleMarks(segment.origin),
+          ),
+          ...originProps,
         });
       }
       continue;
@@ -92,7 +110,10 @@ const blocksFromSegments = (
       blocks.push({
         id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "paragraph",
-        content: paragraphContentFromNodes(segment.nodes),
+        content: paragraphContentFromNodes(
+          segment.nodes,
+          blockStyleMarks(segment.node),
+        ),
         ...paragraphProps,
       });
       continue;
@@ -109,7 +130,10 @@ const blocksFromSegments = (
         id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "heading",
         level: segment.level,
-        content: paragraphContentFromNodes(segment.nodes),
+        content: paragraphContentFromNodes(
+          segment.nodes,
+          blockStyleMarks(segment.node),
+        ),
         ...headingProps,
       });
       continue;
@@ -150,7 +174,10 @@ const blocksFromSegments = (
       // 소비하므로 MAX_HTML_TREE_DEPTH로 유계다.
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
-      const content = paragraphContentFromNodes(contentNodes);
+      const content = paragraphContentFromNodes(
+        contentNodes,
+        blockStyleMarks(segment.node),
+      );
       // style 오탐 억제는 위 paragraph/heading과 동일하게
       // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 판정한다
       // (Issue #179 리뷰 수정).
@@ -193,7 +220,10 @@ const blocksFromSegments = (
       // propertyString이 undefined를 돌려줘 필드 자체가 생략된다.
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
-      const content = paragraphContentFromNodes(contentNodes);
+      const content = paragraphContentFromNodes(
+        contentNodes,
+        blockStyleMarks(segment.node),
+      );
       const calloutProps = textBlockPropsFromElement(segment.node);
       const icon = propertyString(segment.node, "dataGeulIcon");
       if (depth >= MAX_NESTING_DEPTH) {
@@ -364,7 +394,10 @@ const blocksFromListItem = (
 ): Block[] => {
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
   const { contentNodes, childrenNodes } = splitListItemChildren(node);
-  const content = paragraphContentFromNodes(contentNodes);
+  const content = paragraphContentFromNodes(
+    contentNodes,
+    blockStyleMarks(node),
+  );
   const listItemProps = textBlockPropsFromElement(node);
   const ownBlock: ListItemBlock =
     listType === "numberedListItem"

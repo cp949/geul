@@ -34,7 +34,12 @@ export type BlockSegment<
   // div/li/blockquote 재귀 안에서 나온 내용)이다. 이걸 만든 특정 요소가
   // 없으므로 원본 element 참조가 없다 — import-html.ts는 이 kind만
   // 실질 텍스트 판정(비었으면 블록을 만들지 않음)을 적용한다.
-  | { kind: "paragraph"; nodes: HtmlElementContent[] }
+  // origin은 선택이다(Issue #334 단계 B). 블록 경계 자식이 없는 div가 그 직접
+  // 인라인 자식으로 만든 문단에만 그 div를 싣는다. 호출자가 div의 style 색·서식을
+  // 읽는 자리다. 래퍼 div(블록 자식 있음)와 ul·ol·table·li·blockquote는 싣지
+  // 않는다 — 래퍼의 색은 소스 앱의 테마 색이라 문단에 따라오면 안 된다.
+  // clipboard-table-parser.ts는 이 필드를 읽지 않는다.
+  | { kind: "paragraph"; nodes: HtmlElementContent[]; origin?: HtmlElementNode }
   // p 자신의 본문(wholesale 교체, 재귀하지 않음). node를 함께 주는 이유는
   // dataGeulBlockId 같은 그 요소 자신의 속성을 호출자가 읽어야 해서다 —
   // import-html.ts는 p 하나당 블록 하나를 실질 텍스트 여부와 무관하게
@@ -252,9 +257,13 @@ export function segmentBlocks<Level extends number = number>(
   const segments: BlockSegment<Level, true>[] = [];
   let pending: HtmlElementContent[] = [];
 
-  const flush = (): void => {
+  const flush = (origin?: HtmlElementNode): void => {
     if (pending.length === 0) return;
-    segments.push({ kind: "paragraph", nodes: pending });
+    segments.push(
+      origin === undefined
+        ? { kind: "paragraph", nodes: pending }
+        : { kind: "paragraph", nodes: pending, origin },
+    );
     pending = [];
   };
 
@@ -460,7 +469,13 @@ export function segmentBlocks<Level extends number = number>(
       if (policy.isNestedBoundary(node.tagName)) {
         flush();
         walk(node.children, structuralAncestors(node));
-        flush();
+        // 블록 경계 자식이 없는 div만 자기 문단의 origin이 된다. 이 경우 walk는
+        // 자식을 pending에만 쌓아 위 flush가 비운 pending이 이 div의 문단이다.
+        flush(
+          node.tagName === "div" && !containsAnyBlockBoundary(node.children)
+            ? node
+            : undefined,
+        );
         continue;
       }
       if (policy.isTransparent(node.tagName)) {

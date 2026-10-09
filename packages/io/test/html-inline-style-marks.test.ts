@@ -292,11 +292,17 @@ describe("색과 스타일 마크", () => {
 });
 
 describe("style을 읽지 않는 곳", () => {
-  it("p의 style은 마크가 없고 속성 제거 경고를 낸다", () => {
+  it("p의 style은 서식을 마크로 읽고 속성 제거 경고를 낸다", () => {
     const value = importedValue('<p style="font-weight:700">x</p>');
 
+    // Issue #334 단계 B부터 블록 style의 굵기를 안쪽 텍스트 마크로 읽는다.
+    // 이전에는 마크가 없었다. 경고는 이전과 같다.
     expect(value.document.blocks).toEqual([
-      { id: "html-1", type: "paragraph", content: [{ text: "x" }] },
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "x", marks: [{ type: "bold" }] }],
+      },
     ]);
     expect(value.warnings).toEqual([
       {
@@ -308,11 +314,17 @@ describe("style을 읽지 않는 곳", () => {
     ]);
   });
 
-  it("div의 style은 마크가 없고 속성 제거 경고를 낸다", () => {
+  it("문단 div의 style은 서식을 마크로 읽고 속성 제거 경고를 낸다", () => {
     const value = importedValue('<div style="font-weight:700">x</div>');
 
+    // Issue #334 단계 B부터 블록 자식이 없는 div는 style 굵기를 안쪽 텍스트
+    // 마크로 읽는다. 이전에는 마크가 없었다. 경고는 이전과 같다.
     expect(value.document.blocks).toEqual([
-      { id: "html-1", type: "paragraph", content: [{ text: "x" }] },
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "x", marks: [{ type: "bold" }] }],
+      },
     ]);
     expect(value.warnings).toEqual([
       {

@@ -343,13 +343,13 @@ describe("style 오탐 억제는 raw 노드 단위로 정확하다(IMPL-REVIEW-0
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
-    // textColor 자체는 data-geul-*로 정상 복원된다 — 사라지는 것은
-    // font-weight뿐이고, 그 손실이 정확히 경고돼야 한다(조용히 사라지면
-    // 안 된다).
+    // textColor 자체는 data-geul-*로 정상 복원된다. font-weight는 Issue #334
+    // 단계 B부터 안쪽 텍스트 bold 마크로 읽힌다(이전에는 사라졌다). 경고는
+    // style 전체를 읽는 것이 아니므로 이전과 같이 나야 한다.
     expect(result.value.document.blocks[0]).toEqual({
       id: "p1",
       type: "paragraph",
-      content: [{ text: "x" }],
+      content: [{ text: "x", marks: [{ type: "bold" }] }],
       textColor: "#112233",
     });
     expect(result.value.warnings).toEqual(
@@ -397,10 +397,13 @@ describe("style 단독(외부 HTML)은 여전히 손실로 경고된다 — 억�
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
+    // Issue #334 단계 B부터 data-geul-*가 없는 필드는 style 색으로 채운다.
+    // 이전에는 textColor가 없었다. 경고는 이전과 같다.
     expect(result.value.document.blocks[0]).toEqual({
       id: "p1",
       type: "paragraph",
       content: [{ text: "x" }],
+      textColor: "#FF0000",
     });
     expect(result.value.warnings).toEqual(
       expect.arrayContaining([

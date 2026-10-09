@@ -169,6 +169,11 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
 // 올리지 않는다 — import-warnings.ts가 그 집합으로 "제거됨" 경고를 판정하므로,
 // 올리면 이전처럼 style 제거를 보고해야 하는 기존 경고 계약(G-CNV-002)이
 // 깨진다. b·strong·span의 style은 위 htmlAllowedAttributes에 이미 있다.
+// 블록 요소(p·h1~h6·li·blockquote·div, 단계 B)는 style 색을 블록 속성으로,
+// 서식을 안쪽 마크로 읽거나(textBlockPropsFromElement, 문단 div) 표 셀
+// 평탄화에서 마크로 읽는다. p·h1~h6·blockquote·li의 자기 echo style 경고 억제
+// (import-warnings.ts의 isOwnEchoStyle)는 raw HAST와 이 경고 기준만 보므로
+// 이 집합과 무관하다.
 export const styleReadAttributes: Record<string, string[]> = {
   em: ["style"],
   i: ["style"],
@@ -177,6 +182,16 @@ export const styleReadAttributes: Record<string, string[]> = {
   del: ["style"],
   strike: ["style"],
   code: ["style"],
+  p: ["style"],
+  h1: ["style"],
+  h2: ["style"],
+  h3: ["style"],
+  h4: ["style"],
+  h5: ["style"],
+  h6: ["style"],
+  li: ["style"],
+  blockquote: ["style"],
+  div: ["style"],
 };
 
 // 태그마다 속성 이름을 이어 붙여 새 객체를 만든다. 두 입력은 바꾸지 않는다.

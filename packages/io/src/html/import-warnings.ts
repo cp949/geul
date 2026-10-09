@@ -185,6 +185,10 @@ const supportedInlineNames = new Set([
   "del",
   "strike",
   "code",
+  // font·mark는 색·서식 마크로 읽는다(Issue #334). 지원 경계 안에서는 보존되는
+  // 인라인이라 블록 강등 경고 대상이 아니다. 루트 인라인은 기존대로 경고한다.
+  "font",
+  "mark",
   "a",
   "br",
 ]);

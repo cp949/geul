@@ -146,6 +146,20 @@ const marksFromStyle = (
   return { marks, fontWeight: inline.fontWeight };
 };
 
+// 블록 요소 style의 굵게·기울임·밑줄·취소선을 안쪽 텍스트 마크로 바꾼다
+// (Issue #334 단계 B). 색은 읽지 않는다 — 블록 속성(textBlockPropsFromElement)이
+// 읽는다. 블록 요소의 기본 굵기(`h1`)는 읽지 않고 style이 정한 굵기만 읽는다.
+// 블록 속성이 없는 서식이라 마크가 유일한 표현이다.
+export const blockStyleMarks = (node: HtmlElementNode): TextMark[] => {
+  const style = node.properties.style;
+  if (typeof style !== "string") return [];
+  const parsed = parseInlineStyleMarks(style);
+  const marks: TextMark[] = [];
+  if (parsed.fontWeight === "bold") marks.push({ type: "bold" });
+  marks.push(...decorationMarks(parsed));
+  return marks;
+};
+
 // 태그 자신의 마크 뒤에 style에서 읽은 마크를 잇는다. 같은 종류 마크가
 // 겹쳐도(`<em style="font-style:italic">`) 여기서 막지 않는다 —
 // appendOrMergeInlineItem이 종류당 하나만 남긴다. 안에서 자기 태그 마크를 끄는
@@ -278,6 +292,24 @@ const inheritMarks = (
   return [...marks.filter((mark) => !overridden.has(mark.type)), ...own];
 };
 
+// 표 셀 평탄화 중 style의 색·서식을 마크로 읽는 블록 요소다(Issue #334 단계 B).
+// 셀 안에는 블록 속성이 없어 마크가 유일한 표현이다. sanitize가 style을 남기는
+// 블록 태그(styleReadAttributes)만 든다. ul·ol·table·tr·td 같은 래퍼는 읽지
+// 않는다. 블록 모드(blockBreakTagNames 없음)에서는 이 경로가 꺼져 있어 같은
+// 색이 블록 속성과 마크로 이중 반영되지 않는다.
+const cellBlockStyleTagNames: ReadonlySet<string> = new Set([
+  "p",
+  "div",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "li",
+  "blockquote",
+]);
+
 const readInlineNodes = (
   nodes: HtmlNode[],
   marks: TextMark[],
@@ -298,9 +330,13 @@ const readInlineNodes = (
 
     const isBlock = breaks?.tagNames.has(node.tagName) === true;
     if (isBlock && breaks !== undefined) breaks.pending = true;
+    const ownMarks =
+      isBlock && cellBlockStyleTagNames.has(node.tagName)
+        ? marksFromStyle(node.properties.style).marks
+        : marksForElement(node);
     readInlineNodes(
       node.children,
-      inheritMarks(marks, marksForElement(node)),
+      inheritMarks(marks, ownMarks),
       content,
       breaks,
     );
@@ -314,15 +350,21 @@ const readInlineNodes = (
 // (Issue #323). importHtml 표 셀과 클립보드 표 파서의 셀(Issue #325)이
 // 켠다. 끄면 `<p>a</p><p>b</p>`가 `ab`로 붙는다. importHtml 경로에서는
 // 소스 공백 접기가 이 경계의 공백을 지우므로 `<p>a</p> <p>b</p>`도 붙는다.
+//
+// baseMarks는 모든 텍스트가 받는 바깥 마크다. 블록 요소 style의 서식
+// (blockStyleMarks)을 그 안쪽 텍스트에 싣는다(Issue #334 단계 B).
 export const inlineContentFromNodes = (
   nodes: HtmlNode[],
-  options?: { blockBreakTagNames?: ReadonlySet<string> },
+  options?: {
+    blockBreakTagNames?: ReadonlySet<string>;
+    baseMarks?: readonly TextMark[];
+  },
 ): InlineContent => {
   const content: InlineContent = [];
   const tagNames = options?.blockBreakTagNames;
   readInlineNodes(
     nodes,
-    [],
+    [...(options?.baseMarks ?? [])],
     content,
     tagNames === undefined
       ? undefined

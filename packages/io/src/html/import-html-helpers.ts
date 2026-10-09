@@ -12,6 +12,7 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
+import { parseStyleDeclarations } from "../clipboard/style-declarations.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   type HtmlElementNode,
@@ -25,13 +26,31 @@ import {
 // 구성부)와 같은 전략 — 정규형 검증은 하지 않고 원시 문자열을 그대로
 // 통과시킨다. 최종 검증은 importHtml 끝의 parseDocument 한 곳(G-CNV-001)이
 // 한다.
+// data-geul-*가 없는 textColor/backgroundColor는 style의 color·
+// background-color에서 채운다(Issue #334 단계 B, 외부 HTML). 필드별로 따진다 —
+// data-geul-*가 있는 필드는 style을 보지 않고, 없는 필드만 style이 채운다. style
+// 값은 parseStyleDeclarations가 canonical #RRGGBB 대문자로만 낸다(반투명·무효는
+// 값 없음). textAlignment는 data-geul-*만 읽는다.
 export const textBlockPropsFromElement = (
   element: HtmlElementNode,
 ): Partial<
   Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">
 > => {
-  const textColor = propertyString(element, "dataGeulTextColor");
-  const backgroundColor = propertyString(element, "dataGeulBackgroundColor");
+  const dataTextColor = propertyString(element, "dataGeulTextColor");
+  const dataBackgroundColor = propertyString(
+    element,
+    "dataGeulBackgroundColor",
+  );
+  // 두 필드가 모두 data-geul-*로 정해졌으면 style을 파싱하지 않는다(자기 export
+  // 에코가 이 경우다).
+  const style =
+    dataTextColor !== undefined && dataBackgroundColor !== undefined
+      ? undefined
+      : propertyString(element, "style");
+  const declared =
+    style === undefined ? undefined : parseStyleDeclarations(style);
+  const textColor = dataTextColor ?? declared?.color;
+  const backgroundColor = dataBackgroundColor ?? declared?.backgroundColor;
   const textAlignment = propertyString(element, "dataGeulTextAlignment") as
     TextBlockProps["textAlignment"] | undefined;
   return {
@@ -155,8 +174,18 @@ export const firstDirectCode = (
       child.type === "element" && child.tagName === "code",
   );
 
-export const paragraphContentFromNodes = (nodes: HtmlNode[]): InlineContent =>
-  sanitizeInlineContentText(inlineContentFromNodes(nodes));
+// baseMarks는 블록 요소 style의 서식(blockStyleMarks)을 안쪽 텍스트에 싣는다
+// (Issue #334 단계 B). 호출부가 블록 요소를 알 때만 넘긴다.
+export const paragraphContentFromNodes = (
+  nodes: HtmlNode[],
+  baseMarks?: readonly TextMark[],
+): InlineContent =>
+  sanitizeInlineContentText(
+    inlineContentFromNodes(
+      nodes,
+      baseMarks === undefined ? undefined : { baseMarks },
+    ),
+  );
 
 export const isElementNode = (node: HtmlNode): node is HtmlElementNode =>
   node.type === "element";
