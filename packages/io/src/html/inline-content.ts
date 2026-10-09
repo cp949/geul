@@ -197,6 +197,24 @@ const appendText = (
   appendOrMergeInlineItem(content, text, marks);
 };
 
+// 안쪽 요소의 색이 바깥 색을 덮는다. 브라우저는 중첩 span 중 안쪽 색으로
+// 그리는데, 둘 다 쌓으면 canonicalizeTextMarks가 먼저 쌓인 바깥 색만 남긴다.
+// 안쪽이 낸 색 종류만 쌓인 마크에서 먼저 빼고, 안쪽이 색을 못 읽었으면
+// (색 이름·inherit) 바깥 색을 유지한다. link·bold 등은 건드리지 않는다.
+const inheritMarks = (
+  marks: readonly TextMark[],
+  own: readonly TextMark[],
+): TextMark[] => {
+  const overridden = new Set<TextMark["type"]>(
+    own
+      .filter(
+        (mark) => mark.type === "textColor" || mark.type === "backgroundColor",
+      )
+      .map((mark) => mark.type),
+  );
+  return [...marks.filter((mark) => !overridden.has(mark.type)), ...own];
+};
+
 const readInlineNodes = (
   nodes: HtmlNode[],
   marks: TextMark[],
@@ -219,7 +237,7 @@ const readInlineNodes = (
     if (isBlock && breaks !== undefined) breaks.pending = true;
     readInlineNodes(
       node.children,
-      [...marks, ...marksForElement(node)],
+      inheritMarks(marks, marksForElement(node)),
       content,
       breaks,
     );

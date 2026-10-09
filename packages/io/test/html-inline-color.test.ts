@@ -454,3 +454,92 @@ describe("인접 span 색 mark 병합 (Issue #331)", () => {
     ).toEqual([{ text: "ab" }]);
   });
 });
+
+// Issue #332: 중첩 span의 색은 브라우저처럼 안쪽이 바깥을 덮는다.
+describe("중첩 span 색 mark 상속 (Issue #332)", () => {
+  it("안쪽 span의 textColor가 바깥 textColor를 덮는다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#ff0000"><span style="color:#0000ff">x</span></span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#0000FF" }] },
+    ]);
+  });
+
+  it("안쪽 span 앞뒤 텍스트는 바깥 색을 유지하고 안쪽만 안쪽 색을 가진다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#ff0000">a<span style="color:#0000ff">x</span>b</span></p>',
+      ),
+    ).toEqual([
+      { text: "a", marks: [{ type: "textColor", color: "#FF0000" }] },
+      { text: "x", marks: [{ type: "textColor", color: "#0000FF" }] },
+      { text: "b", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
+  });
+
+  it("안쪽 span의 backgroundColor가 바깥 backgroundColor를 덮는다", () => {
+    expect(
+      importedContent(
+        '<p><span style="background-color:#ff0000"><span style="background-color:#0000ff">x</span></span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "backgroundColor", color: "#0000FF" }] },
+    ]);
+  });
+
+  it("backgroundColor도 안쪽 span 앞뒤 텍스트는 바깥 색을 유지한다", () => {
+    expect(
+      importedContent(
+        '<p><span style="background-color:#ff0000">a<span style="background-color:#0000ff">x</span>b</span></p>',
+      ),
+    ).toEqual([
+      { text: "a", marks: [{ type: "backgroundColor", color: "#FF0000" }] },
+      { text: "x", marks: [{ type: "backgroundColor", color: "#0000FF" }] },
+      { text: "b", marks: [{ type: "backgroundColor", color: "#FF0000" }] },
+    ]);
+  });
+
+  it("바깥이 color·background-color이고 안쪽이 color만이면 안쪽 textColor와 바깥 backgroundColor를 함께 가진다", () => {
+    const content = importedContent(
+      '<p><span style="color:#ff0000;background-color:#ffff00"><span style="color:#0000ff">x</span></span></p>',
+    );
+    expect(content).toHaveLength(1);
+    expect(content[0]).toMatchObject({ text: "x" });
+    const marks = "marks" in content[0]! ? (content[0].marks ?? []) : [];
+    expect(marks).toHaveLength(2);
+    expect(marks).toContainEqual({ type: "textColor", color: "#0000FF" });
+    expect(marks).toContainEqual({ type: "backgroundColor", color: "#FFFF00" });
+  });
+
+  it("안쪽 색이 색 이름이면 읽지 못하므로 바깥 색을 유지한다(한계)", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#ff0000"><span style="color:blue">x</span></span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
+  });
+
+  it("안쪽 색이 inherit이면 바깥 색을 유지한다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#ff0000"><span style="color:inherit">x</span></span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
+  });
+
+  it("같은 색을 겹쳐도 한 조각이다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#ff0000"><span style="color:#ff0000">x</span></span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
+  });
+});
