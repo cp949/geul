@@ -9,8 +9,11 @@
  * - 블록 경계에서 단어가 붙지 않는다. figure·figcaption·details·summary는
  *   문단 경계이고, importHtml 표 셀은 경계마다 줄바꿈을 넣는다(Issue #323).
  * - NBSP는 접지도 자르지도 않는다.
- * - `<pre>`와 `white-space`가 pre·pre-wrap·break-spaces인 `span` 안은 접지
- *   않는다. pre-line과 다른 태그의 `white-space`는 접는다.
+ * - `<pre>` 안은 접지 않는다. `div`·`span`은 자기 `style`의 `white-space`로
+ *   모드를 정한다(Issue #321). pre·pre-wrap·break-spaces는 보존하고,
+ *   pre-line은 공백 run을 접되 개행을 남기고, normal·nowrap은 접는다. 다른
+ *   값과 선언 없음은 부모 모드를 상속한다. 다른 태그의 `white-space`는 읽지
+ *   않는다.
  * - 입력에 `data-geul-block-id` 또는 `data-geul-cell-id`가 하나라도 있으면
  *   문서 전체를 접지 않는다. 우리 export 결과의 공백을 보존하기 위해서다.
  * - 외부 `<table>`의 셀 안 텍스트도 접는다. 클립보드 표 파서의 결과는 이미
@@ -221,7 +224,7 @@ describe("접지 않는 예외", () => {
   it("span의 white-space:pre-line은 접는다", () => {
     expect(
       paragraphContent('<span style="white-space:pre-line">a  b\nc</span>'),
-    ).toEqual([{ text: "a b c" }]);
+    ).toEqual([{ text: "a b\nc" }]);
   });
 
   it("마지막 선언이 normal이면 접는다", () => {
@@ -549,5 +552,352 @@ describe("접은 결과의 검증", () => {
     expect(warnings.map((warning) => warning.kind)).toContain(
       "UNSAFE_CODE_POINT_REMOVED",
     );
+  });
+});
+
+/** 최상위 블록들의 content만 꺼낸다. */
+const blockContents = (html: string): InlineContent[] =>
+  importedDocument(html).blocks.map(contentOf);
+
+// div·span의 white-space가 모드를 정한다(Issue #321). 모드는 자손이 상속하고
+// 자손 div·span이 자기 선언으로 덮어쓴다.
+describe("div·span의 white-space 모드", () => {
+  it("div white-space:pre 안의 조각 span 공백을 보존한다", () => {
+    expect(
+      blockContents(
+        '<div style="white-space: pre"><div><span>    </span><span>return</span><span>  </span><span>1</span></div></div>',
+      ),
+    ).toEqual([[{ text: "    return  1" }]]);
+  });
+
+  it("span white-space:pre-line 안 개행을 보존한다", () => {
+    expect(
+      paragraphContent('x<span style="white-space:pre-line">a\nb</span>y'),
+    ).toEqual([{ text: "xa\nby" }]);
+  });
+
+  describe("pre-line", () => {
+    it.each([
+      ["개행 앞뒤 공백을 지운다", "a  \n  b", "a\nb"],
+      ["공백 run은 한 칸으로 접는다", "a   b", "a b"],
+      ["탭·FF run도 한 칸으로 접는다", "a\t\f\tb", "a b"],
+      ["CRLF는 개행 하나다", "a\r\nb", "a\nb"],
+      ["연속 개행은 각각 남긴다", "a \n\n b", "a\n\nb"],
+      ["줄 시작 공백은 지운다", "  a", "a"],
+      ["개행 뒤 줄 시작 공백은 지운다", "a\n   b", "a\nb"],
+    ])("%s", (_name, inner, expected) => {
+      expect(
+        paragraphContent(`<span style="white-space:pre-line">${inner}</span>`),
+      ).toEqual([{ text: expected }]);
+    });
+
+    it("바깥 일반 텍스트의 줄 끝 공백도 개행 앞에서 지운다", () => {
+      expect(
+        paragraphContent('x   <span style="white-space:pre-line">\nb</span>'),
+      ).toEqual([{ text: "x\nb" }]);
+    });
+
+    it("개행으로 끝난 뒤 바깥 텍스트 앞 공백은 줄 시작이라 지운다", () => {
+      expect(
+        paragraphContent('<span style="white-space:pre-line">a\n</span>  b'),
+      ).toEqual([{ text: "a\nb" }]);
+    });
+
+    it("보존 구간이 개행으로 끝난 뒤 바깥 텍스트 앞 공백은 줄 시작이라 지운다", () => {
+      expect(
+        paragraphContent('<span style="white-space:pre">a\n</span>  b'),
+      ).toEqual([{ text: "a\nb" }]);
+    });
+
+    it("요소를 넘어도 개행 앞 공백을 지운다", () => {
+      expect(
+        paragraphContent(
+          '<span style="white-space:pre-line"><b>a </b> \n b</span>',
+        ),
+      ).toEqual([{ text: "a", marks: [{ type: "bold" }] }, { text: "\nb" }]);
+    });
+
+    it("div의 pre-line도 같다", () => {
+      expect(
+        blockContents('<div style="white-space:pre-line">a  \n  b   c</div>'),
+      ).toEqual([[{ text: "a\nb c" }]]);
+    });
+  });
+
+  describe("div 보존", () => {
+    it.each(["pre", "pre-wrap", "break-spaces"])(
+      "div의 white-space:%s는 하위 텍스트를 보존한다",
+      (keyword) => {
+        expect(
+          blockContents(
+            `<div style="white-space:${keyword}"><span>  a  </span><b> b </b></div>`,
+          ),
+        ).toEqual([
+          [{ text: "  a  " }, { text: " b ", marks: [{ type: "bold" }] }],
+        ]);
+      },
+    );
+
+    it("줄별 div는 문단 둘이고 들여쓰기를 보존하며 codeBlock이 되지 않는다", () => {
+      const { blocks } = importedDocument(
+        '<div style="white-space:pre"><div>a</div><div>  b</div></div>',
+      );
+
+      expect(blocks.map((block) => block.type)).toEqual([
+        "paragraph",
+        "paragraph",
+      ]);
+      expect(blocks.map(contentOf)).toEqual([
+        [{ text: "a" }],
+        [{ text: "  b" }],
+      ]);
+    });
+
+    it("div 직속 텍스트의 소스 개행은 문단 안 개행으로 남는다", () => {
+      expect(
+        blockContents('<div style="white-space:pre">  a\n  b</div>'),
+      ).toEqual([[{ text: "  a\n  b" }]]);
+    });
+
+    it("예쁜 출력의 줄바꿈과 들여쓰기는 빈 문단이나 개행 잡음을 만들지 않는다", () => {
+      const { blocks } = importedDocument(
+        '<div style="white-space:pre">\n<div>a</div>\n<div>b</div>\n</div>',
+      );
+
+      expect(blocks.map((block) => block.type)).toEqual([
+        "paragraph",
+        "paragraph",
+      ]);
+      expect(blocks.map(contentOf)).toEqual([[{ text: "a" }], [{ text: "b" }]]);
+    });
+
+    it("들여쓴 예쁜 출력도 문단 둘이다", () => {
+      const { blocks } = importedDocument(
+        '<div style="white-space:pre">\n  <div>a</div>\n  <div>  b</div>\n</div>',
+      );
+
+      expect(blocks.map(contentOf)).toEqual([
+        [{ text: "a" }],
+        [{ text: "  b" }],
+      ]);
+    });
+  });
+
+  describe("덮어쓰기와 상속", () => {
+    it("보존 div 안 normal span은 접는다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre">a  <span style="white-space:normal">b   c</span></div>',
+        ),
+      ).toEqual([[{ text: "a  b c" }]]);
+    });
+
+    it("보존 span 안 normal span도 접는다", () => {
+      expect(
+        paragraphContent(
+          '<span style="white-space:pre">a  <span style="white-space:normal">b   c</span>  d</span>',
+        ),
+      ).toEqual([{ text: "a  b c  d" }]);
+    });
+
+    it("pre-line 안 pre span은 보존한다", () => {
+      expect(
+        paragraphContent(
+          '<span style="white-space:pre-line">a   b<span style="white-space:pre">  c  d</span></span>',
+        ),
+      ).toEqual([{ text: "a b  c  d" }]);
+    });
+
+    it("보존 안 pre-line span은 개행을 남기고 공백은 접는다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre">  a<span style="white-space:pre-line">  b   \n  c</span></div>',
+        ),
+      ).toEqual([[{ text: "  a b\nc" }]]);
+    });
+
+    it("선언 없는 자손은 부모 모드를 상속한다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre"><span><b><i>a  b</i></b></span></div>',
+        ),
+      ).toEqual([
+        [
+          {
+            text: "a  b",
+            marks: [{ type: "bold" }, { type: "italic" }],
+          },
+        ],
+      ]);
+      expect(
+        paragraphContent(
+          '<span style="white-space:pre-line"><span>a  \n  b</span></span>',
+        ),
+      ).toEqual([{ text: "a\nb" }]);
+    });
+
+    it("자손 div도 부모 div의 모드를 상속하고 덮어쓸 수 있다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre"><div>  a</div><div style="white-space:normal">  b   c</div><div>  d</div></div>',
+        ),
+      ).toEqual([[{ text: "  a" }], [{ text: "b c" }], [{ text: "  d" }]]);
+    });
+
+    it("덮어쓴 구간이 끝나면 부모 모드로 돌아온다", () => {
+      expect(
+        paragraphContent(
+          '<span style="white-space:pre">a  <span style="white-space:normal">b  c</span>  d  e</span>',
+        ),
+      ).toEqual([{ text: "a  b c  d  e" }]);
+    });
+  });
+
+  describe("값 매핑", () => {
+    it.each(["normal", "nowrap"])(
+      "%s는 보존 부모 안에서도 접는다",
+      (keyword) => {
+        expect(
+          blockContents(
+            `<div style="white-space:pre"><span style="white-space:${keyword}">a  b</span></div>`,
+          ),
+        ).toEqual([[{ text: "a b" }]]);
+      },
+    );
+
+    it.each([
+      "inherit",
+      "initial",
+      "unset",
+      "revert",
+      "revert-layer",
+      "foo",
+      "pre foo",
+      "",
+    ])("%j는 부모 모드를 상속한다", (value) => {
+      const style = `white-space:${value}`;
+
+      expect(
+        blockContents(
+          `<div style="white-space:pre"><span style="${style}">a  b</span></div>`,
+        ),
+      ).toEqual([[{ text: "a  b" }]]);
+      expect(
+        blockContents(
+          `<div style="white-space:pre-line"><span style="${style}">a  \n b</span></div>`,
+        ),
+      ).toEqual([[{ text: "a\nb" }]]);
+      expect(paragraphContent(`<span style="${style}">a  b</span>`)).toEqual([
+        { text: "a b" },
+      ]);
+    });
+
+    it("white-space 선언이 없는 style은 부모 모드를 상속한다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre"><span style="color:red">a  b</span></div>',
+        ),
+      ).toEqual([[{ text: "a  b" }]]);
+    });
+
+    it.each([
+      ["대소문자·공백·!important", "WHITE-SPACE : Pre-Wrap !important", "a  b"],
+      ["마지막 선언이 이긴다", "white-space:normal;white-space:pre", "a  b"],
+      [
+        "마지막이 normal이면 접는다",
+        "white-space:pre;white-space:normal",
+        "a b",
+      ],
+      [
+        "상속 값이 마지막이면 부모로 돌아간다",
+        "white-space:normal;white-space:inherit",
+        "a  b",
+      ],
+    ])("div는 %s", (_name, style, expected) => {
+      expect(
+        blockContents(
+          `<div style="white-space:pre"><div style="${style}">a  b</div></div>`,
+        ),
+      ).toEqual([[{ text: expected }]]);
+    });
+  });
+
+  describe("읽지 않는 태그", () => {
+    it("p·li·td·b·i의 white-space는 읽지 않는다", () => {
+      expect(blockContents('<p style="white-space:pre">a  b</p>')).toEqual([
+        [{ text: "a b" }],
+      ]);
+      expect(
+        blockContents('<ul><li style="white-space:pre">a  b</li></ul>'),
+      ).toEqual([[{ text: "a b" }]]);
+      expect(
+        blockContents('<p><b style="white-space:pre">a  b</b></p>'),
+      ).toEqual([[{ text: "a b", marks: [{ type: "bold" }] }]]);
+      expect(
+        blockContents('<p><i style="white-space:pre">a  b</i></p>'),
+      ).toEqual([[{ text: "a b", marks: [{ type: "italic" }] }]]);
+      expect(
+        importedDocument(
+          '<table><tr><td style="white-space:pre">a  b</td></tr></table>',
+        ).blocks,
+      ).toMatchObject([
+        { type: "table", rows: [{ cells: [{ content: [{ text: "a b" }] }] }] },
+      ]);
+    });
+
+    it("읽지 않는 태그는 보존 부모의 모드를 상속하고 자기 style은 무시한다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre"><p style="white-space:normal">a  b</p></div>',
+        ),
+      ).toEqual([[{ text: "a  b" }]]);
+    });
+  });
+
+  describe("경고 계약", () => {
+    it("div style은 white-space여도 UNSAFE_ATTRIBUTE_REMOVED를 낸다", () => {
+      const { warnings } = importedValue(
+        '<div style="white-space:pre">a</div>',
+      );
+
+      expect(warnings).toEqual([
+        {
+          kind: "UNSAFE_ATTRIBUTE_REMOVED",
+          element: "div",
+          attribute: "style",
+          message: "Unsupported style attribute was removed from div",
+        },
+      ]);
+    });
+
+    it("span style은 경고를 내지 않는다", () => {
+      expect(
+        importedValue('<p><span style="white-space:pre">a</span></p>').warnings,
+      ).toEqual([]);
+    });
+  });
+
+  describe("접지 않는 입력", () => {
+    it("data-geul-block-id가 있으면 white-space와 무관하게 접지 않는다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:normal"><p data-geul-block-id="p1">a  b\n c</p></div>',
+        ),
+      ).toEqual([[{ text: "a  b\n c" }]]);
+      expect(
+        blockContents(
+          '<div style="white-space:pre-line"><p data-geul-block-id="p1">a  b\n c</p></div>',
+        ),
+      ).toEqual([[{ text: "a  b\n c" }]]);
+    });
+
+    it("data-geul-cell-id가 있는 표 옆의 pre-line도 접지 않는다", () => {
+      const { blocks } = importedDocument(
+        '<table><tr><td data-geul-cell-id="c1">c  d</td></tr></table><span style="white-space:pre-line">a   b</span>',
+      );
+
+      expect(JSON.stringify(blocks)).toContain("a   b");
+      expect(JSON.stringify(blocks)).toContain("c  d");
+    });
   });
 });

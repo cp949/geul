@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   parseInlineStyleMarks,
   parseStyleDeclarations,
+  parseWhiteSpaceMode,
 } from "../src/clipboard/style-declarations.js";
 import {
   measureStringWorkload,
@@ -140,4 +141,44 @@ describe("parseStyleDeclarations의 선형 시간", () => {
     expect(result).toEqual({});
     expect(elapsed).toBeLessThan(1000);
   });
+});
+
+const whiteSpaceInputShapes: Array<[string, (size: number) => string]> = [
+  ["선언이 아주 많은 입력", (size) => "white-space:pre;".repeat(size)],
+  [
+    "값이 긴 알파벳 run인 입력",
+    (size) => `white-space:${"a".repeat(size * 16)}`,
+  ],
+  ["`;`와 `:`가 없는 긴 입력", (size) => "a".repeat(size * 16)],
+  [
+    "공백이 긴 입력",
+    (size) =>
+      `white-space:${" ".repeat(size * 16)}pre${" ".repeat(size)}!important`,
+  ],
+];
+
+describe("parseWhiteSpaceMode의 선형 시간", () => {
+  it.each(whiteSpaceInputShapes)(
+    "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
+    (_name, build) => {
+      const small = measureStringWorkload(() => {
+        parseWhiteSpaceMode(build(BASE_SIZE));
+      });
+      const large = measureStringWorkload(() => {
+        parseWhiteSpaceMode(build(BASE_SIZE * 2));
+      });
+
+      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
+      expect(small.calls).toBeGreaterThan(0);
+      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
+
+      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
+        2,
+      );
+      expect(
+        large.chars / small.chars,
+        "처리 문자 수 증가율",
+      ).toBeLessThanOrEqual(2);
+    },
+  );
 });

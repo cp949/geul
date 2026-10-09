@@ -319,6 +319,21 @@ describe("style을 읽지 않는 곳", () => {
     ]);
   });
 
+  it("div의 white-space style도 속성 제거 경고를 낸다(Issue #321)", () => {
+    // 소스 공백 접기가 div의 white-space를 읽으려고 sanitizer schema가 style을
+    // 남기지만 raw 경고 계약은 그대로다.
+    const value = importedValue('<div style="white-space:pre">x</div>');
+
+    expect(value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "div",
+        attribute: "style",
+        message: "Unsupported style attribute was removed from div",
+      },
+    ]);
+  });
+
   it("i의 style은 italic만 남기고 속성 제거 경고를 낸다", () => {
     const value = importedValue('<p><i style="font-weight:700">x</i></p>');
 

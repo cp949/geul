@@ -13,7 +13,8 @@
  *
  * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 긴 공백
  * run, 긴 알파벳 run, 깊은 인라인 중첩, 깊은 블록 중첩, 줄 끝 공백을 되돌리는
- * 많은 줄, 긴 style 속성을 가진 보호 후보 span이다. 기계 속도와 동시 실행
+ * 많은 줄, 긴 style 속성을 가진 보호 후보 span·div, pre-line 긴 텍스트, white-space
+ * style을 가진 깊은 div 중첩이다. 기계 속도와 동시 실행
  * 부하에 의존하지 않는다.
  *
  * 한계: 정규식 엔진 내부 작업은 문자열 계측에 잡히지 않는다. 접기 정규식
@@ -144,6 +145,69 @@ const inputShapes: Array<[string, (b: Builder, size: number) => HtmlRoot]> = [
           ),
         ]),
       ]),
+  ],
+  [
+    "긴 style 속성을 가진 div",
+    (b, size) =>
+      b.root([
+        b.element("div", [b.text("a  b")], "x".repeat(size * 16)),
+        b.element(
+          "div",
+          [b.text("c  d")],
+          `${"color:red;".repeat(size)}white-space:pre`,
+        ),
+        b.element("div", [b.text("e  f")], `white-space:${" ".repeat(size)}`),
+      ]),
+  ],
+  [
+    "pre-line 긴 텍스트",
+    (b, size) =>
+      b.root([
+        b.element("p", [
+          b.element(
+            "span",
+            [b.text("word   \t more \n  line ".repeat(size))],
+            "white-space:pre-line",
+          ),
+        ]),
+      ]),
+  ],
+  [
+    "pre-line 긴 공백·개행 run",
+    (b, size) =>
+      b.root([
+        b.element("p", [
+          b.element(
+            "span",
+            [
+              b.text(
+                ` ${" \t\n".repeat(size * 4)}x${" \r\f\n".repeat(size * 4)}`,
+              ),
+            ],
+            "white-space:pre-line",
+          ),
+        ]),
+      ]),
+  ],
+  [
+    "white-space style을 가진 깊은 div 중첩",
+    (b, size) => {
+      const styles = [
+        "white-space:pre",
+        "white-space:normal",
+        "white-space:pre-line",
+        "color:red",
+      ];
+      let node = b.text(" x \n ");
+      for (let depth = 0; depth < size; depth += 1) {
+        node = b.element(
+          depth % 2 === 0 ? "div" : "span",
+          [b.text(" a  "), node, b.text(" \n b ")],
+          styles[depth % styles.length],
+        );
+      }
+      return b.root([node]);
+    },
   ],
 ];
 

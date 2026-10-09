@@ -226,17 +226,27 @@ export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
   return result;
 };
 
-const WHITESPACE_PRESERVING_KEYWORDS = new Set([
-  "pre",
-  "pre-wrap",
-  "break-spaces",
+// 소스 공백을 다루는 방식이다. preserve는 공백과 개행을 그대로 두고, pre-line은
+// 공백 run을 접되 개행을 남기며, normal은 공백과 개행을 모두 접는다.
+export type WhiteSpaceMode = "normal" | "pre-line" | "preserve";
+
+const WHITE_SPACE_MODES: ReadonlyMap<string, WhiteSpaceMode> = new Map([
+  ["pre", "preserve"],
+  ["pre-wrap", "preserve"],
+  ["break-spaces", "preserve"],
+  ["pre-line", "pre-line"],
+  ["normal", "normal"],
+  ["nowrap", "normal"],
 ]);
 
-// style 속성의 마지막 `white-space` 선언이 소스 공백과 개행을 보존하는 값
-// (pre, pre-wrap, break-spaces)인지 읽는다. pre-line은 공백을 접으므로
-// 보존이 아니다. parseInlineStyleMarks와 같은 선형 방식(`;`로 자르고 선언마다
-// 첫 `:`로 나눔)이고 `!important`·대소문자·공백은 무시한다.
-export const isWhitespacePreservingStyle = (style: string): boolean => {
+// style 속성의 마지막 `white-space` 선언을 소스 공백 모드로 읽는다. 선언이
+// 없거나 값이 상속 키워드(inherit·initial·unset·revert)이거나 알 수 없으면
+// undefined다 — 호출부가 부모 모드를 상속한다. parseInlineStyleMarks와 같은
+// 선형 방식(`;`로 자르고 선언마다 첫 `:`로 나눔)이고 `!important`·대소문자·
+// 공백은 무시한다.
+export const parseWhiteSpaceMode = (
+  style: string,
+): WhiteSpaceMode | undefined => {
   let value: string | undefined;
 
   for (const declaration of style.split(";")) {
@@ -248,5 +258,5 @@ export const isWhitespacePreservingStyle = (style: string): boolean => {
     value = normalizeDeclarationValue(declaration.slice(colon + 1));
   }
 
-  return value !== undefined && WHITESPACE_PRESERVING_KEYWORDS.has(value);
+  return value === undefined ? undefined : WHITE_SPACE_MODES.get(value);
 };

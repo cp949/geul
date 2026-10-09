@@ -8,6 +8,7 @@ import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import {
   parseStyleDeclarations,
+  parseWhiteSpaceMode,
   type StyleDeclarations,
 } from "../src/clipboard/style-declarations.js";
 
@@ -214,5 +215,71 @@ describe("parseStyleDeclarations 오라클 대조", () => {
       }
     }
     expect(mismatches).toEqual([]);
+  });
+});
+
+describe("parseWhiteSpaceMode", () => {
+  it.each([
+    ["pre", "preserve"],
+    ["pre-wrap", "preserve"],
+    ["break-spaces", "preserve"],
+    ["pre-line", "pre-line"],
+    ["normal", "normal"],
+    ["nowrap", "normal"],
+  ] as const)("white-space:%s는 %s 모드다", (value, mode) => {
+    expect(parseWhiteSpaceMode(`white-space:${value}`)).toBe(mode);
+  });
+
+  it.each([
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "foo",
+    "pre foo",
+    "",
+  ])("white-space:%j는 판정하지 않는다(부모 상속)", (value) => {
+    expect(parseWhiteSpaceMode(`white-space:${value}`)).toBeUndefined();
+  });
+
+  it("white-space 선언이 없으면 판정하지 않는다", () => {
+    expect(parseWhiteSpaceMode("")).toBeUndefined();
+    expect(parseWhiteSpaceMode("color:red")).toBeUndefined();
+    expect(parseWhiteSpaceMode("white-space")).toBeUndefined();
+    expect(parseWhiteSpaceMode("x-white-space:pre")).toBeUndefined();
+  });
+
+  it("대소문자·공백·!important를 무시한다", () => {
+    expect(parseWhiteSpaceMode("  WHITE-SPACE :  PRE-WRAP  !important ")).toBe(
+      "preserve",
+    );
+    expect(parseWhiteSpaceMode("White-Space:Pre-Line!IMPORTANT")).toBe(
+      "pre-line",
+    );
+  });
+
+  it("다른 선언 사이에서 읽는다", () => {
+    expect(parseWhiteSpaceMode("color:red;white-space:pre;margin:0")).toBe(
+      "preserve",
+    );
+  });
+
+  it("마지막 선언이 이긴다", () => {
+    expect(parseWhiteSpaceMode("white-space:pre;white-space:normal")).toBe(
+      "normal",
+    );
+    expect(parseWhiteSpaceMode("white-space:normal;white-space:pre-line")).toBe(
+      "pre-line",
+    );
+  });
+
+  it("마지막 선언이 상속·알 수 없는 값이면 앞 선언을 쓰지 않고 판정하지 않는다", () => {
+    expect(
+      parseWhiteSpaceMode("white-space:pre;white-space:inherit"),
+    ).toBeUndefined();
+    expect(
+      parseWhiteSpaceMode("white-space:pre;white-space:foo"),
+    ).toBeUndefined();
   });
 });

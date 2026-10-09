@@ -97,9 +97,12 @@ export const htmlImportSanitizeSchema = {
     // div는 이미 children wrapper·목록류 마커를 갖는다(공유 목록) — url
     // 없는 빈 미디어 블록(<div data-geul-block-id data-geul-media-type>)도
     // 같은 태그를 재사용하므로 media 속성만 추가한다(dataGeulBlockId는
-    // 이미 있어 제외).
+    // 이미 있어 제외). style은 소스 공백 접기가 white-space 모드를 읽으려고
+    // 남긴다(Issue #321) — 다른 선언은 의미가 없다. raw 경고는 공유 허용 목록
+    // (style 없음)으로 판정하므로 이전처럼 style 제거를 보고한다.
     div: [
       ...(htmlAllowedAttributes.div ?? []),
+      "style",
       ...mediaDataAttributeNames.filter((name) => name !== "dataGeulBlockId"),
     ],
   },
