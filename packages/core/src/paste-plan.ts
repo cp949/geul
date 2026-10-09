@@ -33,6 +33,7 @@ import {
   normalizeKeepingTabs,
   normalizeLineBreaks,
   normalizePasteText,
+  parsePlainTextClipboard,
   sanitizeSliceInlineText,
   splitPlainTextLines,
 } from "./plain-text-paste.js";
@@ -454,13 +455,75 @@ const buildCellInlineDropTransaction = (
     .setMeta("uiEvent", "drop");
 };
 
+// 평문 drop 계획이다(Issue #285, #309, #316). 줄이 여러 개면 drop 위치에 직접
+// 삽입한다. html이 비어 한 줄만 와도 넣는다(fallback). 계획을 못 세우면 null이라
+// 호출부가 아래 정리 분기로 내려간다.
+// - 여러 줄: 셀 위는 hardBreak(#309), 그 밖은 Enter 분할 배치(#285)다.
+// - 한 줄(fallback만): PM 기본 평문 drop과 같은 slice(parsePlainTextClipboard)를
+//   buildDropSliceTransaction으로 넣는다. drop 위치의 $pos.marks()가 입혀진다.
+//   codeBlock 안은 파서가 null이라 넣지 않는다. PM이 codeBlock 안에서 html을
+//   무시하고 text/plain으로 slice를 만들어 빈 slice가 되지 않는다. 정리 분기가
+//   무효 문자를 처리한다.
+// - 정리 뒤 평문이 비면 null이다.
+const planPlainDrop = (
+  state: EditorState,
+  text: string,
+  position: () => number | null,
+  fallback: boolean,
+): PastePlan | null => {
+  const lines = splitPlainTextLines(normalizePasteText(text));
+  const [line] = lines;
+  const multiline = lines.length >= 2;
+  if (!multiline && (!fallback || line === undefined || line.length === 0)) {
+    return null;
+  }
+  const at = position();
+  if (at === null) return { kind: "delegate" };
+  const $at = state.doc.resolve(at);
+
+  if (!multiline) {
+    const slice = parsePlainTextClipboard(line ?? "", $at);
+    if (slice === null) return null;
+    const transaction = buildDropSliceTransaction(state, at, slice);
+    // 문서가 바뀌지 않으면 transaction이 null이다. PM 기본 drop도 이 경우
+    // dispatch 없이 이벤트만 소비한다. 정리 분기의 null 처리와 같다.
+    return transaction === null
+      ? { kind: "consume" }
+      : { kind: "dispatch", transaction };
+  }
+
+  // 셀 위 위치는 블록을 나눌 수 없다. 줄 사이를 hardBreak로 이어 셀 안에
+  // 넣는다(Issue #309). 같은 위치 캐럿 붙여넣기(#299)와 문서가 같다. 마크는
+  // 위치의 $pos.marks()다.
+  if (isCellInlinePosition($at)) {
+    return {
+      kind: "dispatch",
+      transaction: buildCellInlineDropTransaction(
+        state,
+        linesToHardBreakInline(state.schema, lines, $at.marks()),
+        at,
+      ),
+    };
+  }
+  const transaction = buildPlainMultilinePasteTransaction(state, lines, {
+    position: at,
+  });
+  if (transaction === null) return null;
+  transaction
+    .setSelection(
+      TextSelection.create(transaction.doc, at, transaction.selection.from),
+    )
+    .setMeta("uiEvent", "drop");
+  return { kind: "dispatch", transaction };
+};
+
 // drop 계획이다(Issue #285, #306, #309, #311). PM이 drop 위치 기준으로 파싱한
 // slice를 받는다. 아래 입력은 PM 기본(또는 미디어 확장)에 맡긴다.
 // - 내부 드래그(view.dragging). 이동은 PM 비공개 드래그 상태에 기댄다.
 // - 파일 동반
 // - 정리할 무효 문자가 없는 slice. 유효한 외부 drop은 PM 기본 drop 그대로다.
 // - 좌표를 못 푸는 위치
-// 여러 줄 text/plain(html 없음)은 drop 위치에 Enter 분할과 같은 규칙으로 직접
+// 여러 줄 text/plain(html 없음 또는 빈 slice html)은 drop 위치에 Enter 분할과 같은 규칙으로 직접
 // 삽입한다(Issue #285). PM 기본 drop은 줄마다 문단 slice를 만들어 drop 위치
 // 블록의 기존 자식을 마지막 줄 블록으로 넘긴다. 표 셀 위 위치는 블록을 나눌
 // 수 없어 줄 사이를 hardBreak로 이어 셀 안에 넣는다(Issue #309). 줄을 놓을 수
@@ -478,6 +541,13 @@ const buildCellInlineDropTransaction = (
 // 마크를 잃고 `<pre>` 개행을 공백으로 만들었다. 줄이 0개인 html(빈 문단·구분선
 // 등), 모든 셀이 빈 표, importHtml 실패와 셀이 아닌 위치는 아래 정리 분기로
 // 내려간다.
+// 정리한 PM slice가 비는 html(`<meta>`뿐·빈 문단·구분선·이미지)은 html이 없는
+// 것과 같다(Issue #316). PM 기본 drop은 빈 slice를 넣고 평문을 버려 문서가
+// 그대로였다. 평문을 같은 방식으로 넣는다. 여러 줄은 위 직접 삽입(#285, #309)과
+// 같은 코드(planPlainDrop)를 탄다. 한 줄은 PM 기본 평문 drop과 같은 slice에
+// drop 위치의 마크를 입혀 넣는다. 내용이 있는 html(size > 0)은 평문을 쓰지
+// 않는다. 한계: `<hr>`·이미지 html과 평문이 오면 붙여넣기는 divider·이미지를
+// 만들고(importHtml 블록 수 기준) drop은 평문을 넣는다(PM slice 크기 기준).
 // 무효 문자가 든 slice는 정리본을 PM 기본 drop과 같은 방식으로 넣는다(Issue
 // #306). PM 기본 drop은 원문 그대로 넣어 되돌림 guard가 drop을 통째로 지웠다.
 // 판정은 live state로 한다(G-EDT-002). drop은 현재 selection을 지우지
@@ -500,10 +570,13 @@ export const planDrop = (
     return resolved.position;
   };
 
+  // html이 비었는지다(Issue #316). 정리한 PM slice가 비면 html이 없는 것과 같다.
+  // PM 기본 drop은 빈 slice를 넣고 평문을 버린다.
+  let htmlEmpty = false;
   if (drop.html.length > 0) {
     const at = position();
     if (at !== null && isCellInlinePosition(state.doc.resolve(at))) {
-      // 셀 위 위치만 importHtml을 부른다. null이면 아래 정리 분기로 내려간다.
+      // 셀 위 위치만 importHtml을 부른다. null이면 아래로 내려간다.
       // 표를 포함한 html은 셀 단위 줄로 풀어 넣는다(Issue #312).
       const inserted = cellInlineFromHtml(state.schema, drop.html, {
         flattenTables: true,
@@ -515,41 +588,11 @@ export const planDrop = (
         };
       }
     }
-  } else {
-    const lines = splitPlainTextLines(normalizePasteText(drop.text));
-    if (lines.length >= 2) {
-      const at = position();
-      if (at === null) return { kind: "delegate" };
-      // 셀 위 위치는 블록을 나눌 수 없다. 줄 사이를 hardBreak로 이어 셀 안에
-      // 넣는다(Issue #309). 같은 위치 캐럿 붙여넣기(#299)와 문서가 같다. 마크는
-      // 위치의 $pos.marks()다.
-      const $at = state.doc.resolve(at);
-      if (isCellInlinePosition($at)) {
-        return {
-          kind: "dispatch",
-          transaction: buildCellInlineDropTransaction(
-            state,
-            linesToHardBreakInline(state.schema, lines, $at.marks()),
-            at,
-          ),
-        };
-      }
-      const transaction = buildPlainMultilinePasteTransaction(state, lines, {
-        position: at,
-      });
-      if (transaction !== null) {
-        transaction
-          .setSelection(
-            TextSelection.create(
-              transaction.doc,
-              at,
-              transaction.selection.from,
-            ),
-          )
-          .setMeta("uiEvent", "drop");
-        return { kind: "dispatch", transaction };
-      }
-    }
+    htmlEmpty = sanitizeSliceInlineText(slice).size === 0;
+  }
+  if (drop.html.length === 0 || htmlEmpty) {
+    const plan = planPlainDrop(state, drop.text, position, htmlEmpty);
+    if (plan !== null) return plan;
   }
 
   // 정리 후보가 없으면 좌표를 더 풀지 않는다(html drop은 위에서 이미 풀었다).

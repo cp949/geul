@@ -219,18 +219,19 @@ describe("표 셀 위 여러 블록 html drop(Issue #311)", () => {
       ["빈 문단", "<p></p>"],
       ["구분선", "<hr>"],
     ] as const)(
-      "줄이 0개인 %s는 직접 삽입하지 않고 위임한다",
+      "줄이 0개인 %s는 html을 직접 삽입하지 않고 빈 slice라 평문을 셀에 넣는다(Issue #316으로 정정)",
       (_label, html) => {
         const { tiptap } = mountCellDrop();
-        const before = tiptap.state.doc;
 
+        // Issue #316 전에는 PM 기본에 위임해 문서가 그대로였다. 빈 slice html은
+        // 평문 폴백이 평문을 넣는다. html의 줄은 넣지 않아 hardBreak가 없다.
         expect(
           handledDrop(
             tiptap,
             dropEventOf({ "text/html": html, "text/plain": "plain" }),
           ),
-        ).toBeFalsy();
-        expect(tiptap.state.doc).toBe(before);
+        ).toBeTruthy();
+        expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceplainll"]);
       },
     );
   });

@@ -206,9 +206,86 @@ describe("planDrop", () => {
         position,
       ),
     ).toEqual({ kind: "delegate" });
+    // html에 내용이 있다. PM이 파싱한 slice가 비지 않아 평문을 쓰지 않는다
+    // (Issue #316). 빈 slice는 html이 없는 것과 같아 평문을 넣는다.
+    const htmlSlice = new Slice(Fragment.from(tiptap.schema.text("x")), 0, 0);
     expect(
-      planDrop(tiptap.state, drop("x\ny", "<p>x</p>"), Slice.empty, position),
+      planDrop(tiptap.state, drop("x\ny", "<p>x</p>"), htmlSlice, position),
     ).toEqual({ kind: "delegate" });
+  });
+
+  describe("빈 slice html 평문 폴백(Issue #316)", () => {
+    const META = "<meta charset='utf-8'>";
+
+    it("한 줄 평문은 drop 위치에 넣는 transaction이다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+      const position = contentTextStart(tiptap, "p1") + 2;
+      const plan = planDrop(
+        tiptap.state,
+        drop("x", META),
+        Slice.empty,
+        () => position,
+      );
+      expect(plan.kind).toBe("dispatch");
+      if (plan.kind !== "dispatch") return;
+      expect(plan.transaction.getMeta("uiEvent")).toBe("drop");
+      expect(plan.transaction.getMeta("paste")).toBeUndefined();
+      expect(plan.transaction.doc.textContent).toBe("abxcd");
+      expect(plan.transaction.selection.from).toBe(position);
+      expect(plan.transaction.selection.to).toBe(position + 1);
+    });
+
+    it("여러 줄 평문은 html 없는 여러 줄 drop과 같은 transaction이다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+      const position = contentTextStart(tiptap, "p1") + 2;
+      const withHtml = planDrop(
+        tiptap.state,
+        drop("x\ny", META),
+        Slice.empty,
+        () => position,
+      );
+      const withoutHtml = planDrop(
+        tiptap.state,
+        drop("x\ny"),
+        Slice.empty,
+        () => position,
+      );
+      expect(withHtml.kind).toBe("dispatch");
+      if (withHtml.kind !== "dispatch" || withoutHtml.kind !== "dispatch") {
+        return;
+      }
+      expect(withHtml.transaction.doc.eq(withoutHtml.transaction.doc)).toBe(
+        true,
+      );
+    });
+
+    it("평문이 없거나 정리 뒤 비면 delegate다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+      const position = contentTextStart(tiptap, "p1") + 2;
+      expect(
+        planDrop(tiptap.state, drop("", META), Slice.empty, () => position),
+      ).toEqual({ kind: "delegate" });
+      expect(
+        planDrop(tiptap.state, drop(SOH, META), Slice.empty, () => position),
+      ).toEqual({ kind: "delegate" });
+    });
+
+    it("좌표를 못 풀면 delegate다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+      expect(
+        planDrop(tiptap.state, drop("x", META), Slice.empty, () => null),
+      ).toEqual({ kind: "delegate" });
+    });
+
+    it("좌표는 한 번만 푼다", () => {
+      const tiptap = mountAt([paragraphBlock("p1", "abcd")], at("p1", 0));
+      let resolved = 0;
+      planDrop(tiptap.state, drop("x", META), Slice.empty, () => {
+        resolved += 1;
+        return contentTextStart(tiptap, "p1") + 2;
+      });
+      expect(resolved).toBe(1);
+    });
   });
 
   it("한 줄 평문은 좌표를 풀지 않고 delegate다", () => {

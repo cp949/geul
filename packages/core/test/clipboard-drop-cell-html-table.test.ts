@@ -356,20 +356,22 @@ describe("표 셀 위 표 포함 html drop(Issue #312)", () => {
       ["모든 셀이 빈 표", "<table><tr><td></td></tr></table>"],
       ["공백뿐인 셀의 표", "<table><tr><td> </td><td></td></tr></table>"],
     ] as const)(
-      "%s: 줄이 0개라 직접 삽입하지 않고 위임한다",
+      "%s: 줄이 0개라 html을 직접 삽입하지 않고 빈 slice라 평문을 셀에 넣는다(Issue #316으로 정정)",
       (_label, html) => {
         const { editor, tiptap } = mountCellDrop();
-        const before = tiptap.state.doc;
         const revision = editor.getDocument().revision;
 
+        // Issue #316 전에는 PM 기본에 위임해 문서가 그대로였다. 빈 slice html은
+        // 평문 폴백이 평문을 넣는다. 표는 만들지 않고 transaction은 하나다.
         expect(
           handledDrop(
             tiptap,
             dropEventOf({ "text/html": html, "text/plain": "plain" }),
           ),
-        ).toBeFalsy();
-        expect(tiptap.state.doc).toBe(before);
-        expect(editor.getDocument().revision).toBe(revision);
+        ).toBeTruthy();
+        expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceplainll"]);
+        expect(tiptap.state.doc.childCount).toBe(4);
+        expect(editor.getDocument().revision).toBe(revision + 1);
       },
     );
 

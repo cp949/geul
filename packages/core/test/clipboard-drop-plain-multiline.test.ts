@@ -12,7 +12,7 @@
  * 실제 브라우저 drop은 e2e/clipboard-paste.spec.ts가 맡는다.
  */
 import type { Block } from "@cp949/geul-model";
-import { Slice } from "@tiptap/pm/model";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { TextSelection, Transaction } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,6 +23,7 @@ import {
   cellDropBlocks,
   handledDrop,
   mountCellDrop,
+  mountDropAt,
   stubPosAtCoords,
 } from "./clipboard-drop-test-support.js";
 import {
@@ -48,20 +49,6 @@ import { findCellBoundaryPosition } from "./table-test-support.js";
 
 type Tiptap = ReturnType<typeof mountTiptapEditor>["tiptap"];
 
-// 문서를 마운트하고 view.posAtCoords가 caretBlockId 블록 텍스트의 offset을
-// 가리키게 stub한다. 선택은 건드리지 않는다.
-const setup = (blocks: Block[], caretBlockId: string, offset: number) => {
-  const editor = createEditor({
-    initialDocument: documentOf(...blocks),
-    createId: sequentialIds("id"),
-  });
-  const { editable, tiptap } = mountTiptapEditor(editor);
-  editable.focus();
-  const pos = contentTextStart(tiptap, caretBlockId) + offset;
-  stubPosAtCoords(tiptap, pos);
-  return { editor, editable, tiptap, pos };
-};
-
 // D1: p1 "abcd" 자식 [c1 "child"], tail "tail".
 const childDocument = (): Block[] => [
   paragraphBlock("p1", "abcd", [paragraphBlock("c1", "child")]),
@@ -74,7 +61,7 @@ const plainDrop = (editable: HTMLElement, text: string): DragEvent =>
 describe("여러 줄 평문 drop 배치(Issue #285)", () => {
   describe("배치(C1~C3)", () => {
     it("자식 있는 문단 중간에 drop하면 새 블록이 원본의 첫 자식이 되고 기존 자식은 그대로다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
 
       plainDrop(editable, "X\nY");
 
@@ -87,7 +74,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("세 줄이면 새 블록들이 기존 자식 앞에 순서대로 놓이고 빈 문단이 생기지 않는다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
 
       plainDrop(editable, "X\nY\nZ");
 
@@ -98,7 +85,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("접힌 toggle 라벨 중간에 drop하면 펼친 형제 toggle이 생기고 숨은 자식은 원본에 남는다(#252)", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = mountDropAt(
         [
           toggleBlock("t1", "abcd", {
             collapsed: true,
@@ -120,7 +107,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("자식 없는 블록에 drop하면 다음 형제로 놓이고 원본은 자식을 얻지 않는다", () => {
-      const { editor, editable } = setup(
+      const { editor, editable } = mountDropAt(
         [paragraphBlock("p1", "abcd"), paragraphBlock("tail", "tail")],
         "p1",
         2,
@@ -134,7 +121,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("CRLF 줄바꿈도 같은 배치다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
 
       plainDrop(editable, "X\r\nY");
 
@@ -147,7 +134,11 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
 
   describe("transaction 계약(C4·C6)", () => {
     it("dispatch 1회, revision +1, undo 1회로 원복된다", () => {
-      const { editor, editable, tiptap } = setup(childDocument(), "p1", 2);
+      const { editor, editable, tiptap } = mountDropAt(
+        childDocument(),
+        "p1",
+        2,
+      );
       const initialJson = tiptap.state.doc.toJSON();
       const revision = editor.getDocument().revision;
       const dispatch = vi.spyOn(tiptap.view, "dispatch");
@@ -162,7 +153,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("tr은 uiEvent drop만 달고 paste meta를 달지 않으며 dispatch 뒤 view.focus()를 부른다", () => {
-      const { editable, tiptap } = setup(childDocument(), "p1", 2);
+      const { editable, tiptap } = mountDropAt(childDocument(), "p1", 2);
       const dispatch = vi.spyOn(tiptap.view, "dispatch");
       const focus = vi.spyOn(tiptap.view, "focus");
 
@@ -181,7 +172,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
 
   describe("삽입 뒤 selection(C5)", () => {
     it("drop 위치부터 마지막 줄 끝까지의 TextSelection이다", () => {
-      const { editable, tiptap, pos } = setup(childDocument(), "p1", 2);
+      const { editable, tiptap, pos } = mountDropAt(childDocument(), "p1", 2);
 
       plainDrop(editable, "X\nY");
 
@@ -199,7 +190,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
   describe("PM 기본에 위임하는 입력(C7)", () => {
     // 위임이면 문서가 그대로다.
     it("내부 드래그(view.dragging)는 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
+      const { tiptap } = mountDropAt(childDocument(), "p1", 2);
       tiptap.view.dragging = { slice: Slice.empty, move: false };
       const before = tiptap.state.doc;
 
@@ -210,7 +201,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("파일이 포함된 drop은 직접 삽입하지 않는다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
       // 직접 삽입은 줄마다 tr.insertText를 쓴다. 파일 drop은 미디어 확장이
       // 가져가므로 이 확장의 줄 삽입이 일어나지 않아야 한다.
       const insertText = vi.spyOn(Transaction.prototype, "insertText");
@@ -227,20 +218,27 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("text/html이 동반되면 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
+      const { tiptap } = mountDropAt(childDocument(), "p1", 2);
       const before = tiptap.state.doc;
+      // PM이 html에서 파싱한 slice다. 빈 slice면 평문을 넣는다(Issue #316).
+      const slice = new Slice(
+        Fragment.from(tiptap.state.schema.text("H")),
+        0,
+        0,
+      );
 
       expect(
         handledDrop(
           tiptap,
           dropEventOf({ "text/html": "<p>H</p>", "text/plain": "X\nY" }),
+          slice,
         ),
       ).toBeFalsy();
       expect(tiptap.state.doc).toBe(before);
     });
 
     it("한 줄 평문은 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
+      const { tiptap } = mountDropAt(childDocument(), "p1", 2);
       const before = tiptap.state.doc;
 
       expect(
@@ -252,7 +250,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     // Issue #306 전에는 위임(falsy)을 단언했다. PM 기본 drop이 원문 무효
     // 문자를 넣어 되돌림 guard가 drop을 지웠다. 이제 정리본이 들어간다.
     it("sanitize 뒤 한 줄이 되는 평문은 정리본이 drop 위치에 들어간다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
 
       plainDrop(editable, "X\u0001");
 
@@ -260,7 +258,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("평문이 비어 있으면 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
+      const { tiptap } = mountDropAt(childDocument(), "p1", 2);
       const before = tiptap.state.doc;
 
       expect(handledDrop(tiptap, dropEventOf({}))).toBeFalsy();
@@ -268,7 +266,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("posAtCoords가 null이면 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
+      const { tiptap } = mountDropAt(childDocument(), "p1", 2);
       stubPosAtCoords(tiptap, null);
       const before = tiptap.state.doc;
 
@@ -297,7 +295,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("atom 블록(divider) 위치는 위임한다", () => {
-      const { tiptap } = setup(
+      const { tiptap } = mountDropAt(
         [
           paragraphBlock("p1", "abcd"),
           dividerBlock("d1"),
@@ -319,7 +317,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("블록 사이 경계 위치는 위임한다", () => {
-      const { tiptap } = setup(childDocument(), "p1", 2);
+      const { tiptap } = mountDropAt(childDocument(), "p1", 2);
       // tail container 바로 앞이다. 부모가 blockGroup이다.
       stubPosAtCoords(tiptap, contentTextStart(tiptap, "tail") - 2);
       const before = tiptap.state.doc;
@@ -331,7 +329,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("위임한 drop의 PM 기본 결과는 선택 위치가 아니라 좌표 위치에 평문 한 줄을 넣는 현행이다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
 
       dropData(editable, { "text/plain": "X" });
 
@@ -343,7 +341,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     const BOLD = { type: "bold" };
 
     it("무효 제어문자가 낀 평문은 문자를 지운 뒤 같은 배치로 놓인다", () => {
-      const { editor, editable } = setup(childDocument(), "p1", 2);
+      const { editor, editable } = mountDropAt(childDocument(), "p1", 2);
 
       plainDrop(editable, `X${String.fromCharCode(1)}\nY`);
 
@@ -354,7 +352,7 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("마크는 drop 위치의 캐럿 마크를 따르고 뒤쪽 원래 텍스트는 마크를 유지한다", () => {
-      const { editor, editable, tiptap } = setup(
+      const { editor, editable, tiptap } = mountDropAt(
         [
           {
             id: "p1",
@@ -382,7 +380,11 @@ describe("여러 줄 평문 drop 배치(Issue #285)", () => {
     });
 
     it("drop과 무관한 곳의 범위 선택을 지우지 않는다", () => {
-      const { editor, editable, tiptap } = setup(childDocument(), "p1", 2);
+      const { editor, editable, tiptap } = mountDropAt(
+        childDocument(),
+        "p1",
+        2,
+      );
       const tailStart = contentTextStart(tiptap, "tail");
       tiptap.commands.setTextSelection({
         from: tailStart,
