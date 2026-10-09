@@ -274,12 +274,46 @@ describe("parseWhiteSpaceMode", () => {
     );
   });
 
-  it("마지막 선언이 상속·알 수 없는 값이면 앞 선언을 쓰지 않고 판정하지 않는다", () => {
+  it.each(["inherit", "initial", "unset", "revert", "revert-layer"])(
+    "마지막 선언이 %s이면 앞 선언을 지우고 판정하지 않는다(부모 상속)",
+    (keyword) => {
+      expect(
+        parseWhiteSpaceMode(`white-space:pre;white-space:${keyword}`),
+      ).toBeUndefined();
+    },
+  );
+
+  it.each(["foo", "pre foo", "", "-o-pre-wrap", "pre pre", "nowrap wrap"])(
+    "무효 선언 white-space:%j는 버리고 앞 선언을 유지한다",
+    (value) => {
+      expect(parseWhiteSpaceMode(`white-space:pre;white-space:${value}`)).toBe(
+        "preserve",
+      );
+      expect(
+        parseWhiteSpaceMode(`white-space:pre-line;white-space:${value}`),
+      ).toBe("pre-line");
+    },
+  );
+
+  it.each([
+    ["preserve", "preserve"],
+    ["preserve nowrap", "preserve"],
+    ["nowrap preserve", "preserve"],
+    ["preserve wrap", "preserve"],
+    ["break-spaces nowrap", "preserve"],
+    ["preserve-breaks", "pre-line"],
+    ["preserve-breaks nowrap", "pre-line"],
+    ["collapse", "normal"],
+    ["collapse nowrap", "normal"],
+    ["wrap", "normal"],
+    ["  PRESERVE   NOWRAP  ", "preserve"],
+  ] as const)("CSS Text 4 값 white-space:%j는 %s 모드다", (value, mode) => {
+    expect(parseWhiteSpaceMode(`white-space:${value}`)).toBe(mode);
+  });
+
+  it("두 축약형 값 사이의 마지막 유효 선언이 이긴다", () => {
     expect(
-      parseWhiteSpaceMode("white-space:pre;white-space:inherit"),
-    ).toBeUndefined();
-    expect(
-      parseWhiteSpaceMode("white-space:pre;white-space:foo"),
-    ).toBeUndefined();
+      parseWhiteSpaceMode("white-space:preserve;white-space:collapse"),
+    ).toBe("normal");
   });
 });

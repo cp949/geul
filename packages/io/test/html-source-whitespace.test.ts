@@ -656,6 +656,35 @@ describe("div·span의 white-space 모드", () => {
     });
   });
 
+  describe("white-space 값 해석", () => {
+    it("무효한 뒤 선언은 버리고 앞의 유효 선언을 유지한다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre;white-space:-o-pre-wrap">a  b</div>',
+        ),
+      ).toEqual([[{ text: "a  b" }]]);
+    });
+
+    it("뒤 선언이 상속 키워드이면 앞 선언을 지우고 부모 모드를 따른다", () => {
+      expect(
+        blockContents(
+          '<div style="white-space:pre;white-space:inherit">a  b</div>',
+        ),
+      ).toEqual([[{ text: "a b" }]]);
+    });
+
+    it.each([
+      ["preserve", "a  b", "a  b"],
+      ["preserve nowrap", "a  b", "a  b"],
+      ["preserve-breaks", "a  \n  b", "a\nb"],
+      ["collapse", "a  b", "a b"],
+    ])("CSS Text 4 값 white-space:%s를 읽는다", (value, inner, expected) => {
+      expect(
+        blockContents(`<div style="white-space:${value}">${inner}</div>`),
+      ).toEqual([[{ text: expected }]]);
+    });
+  });
+
   describe("div 보존", () => {
     it.each(["pre", "pre-wrap", "break-spaces"])(
       "div의 white-space:%s는 하위 텍스트를 보존한다",

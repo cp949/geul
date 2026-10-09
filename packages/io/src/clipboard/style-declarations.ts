@@ -230,24 +230,67 @@ export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
 // 공백 run을 접되 개행을 남기며, normal은 공백과 개행을 모두 접는다.
 export type WhiteSpaceMode = "normal" | "pre-line" | "preserve";
 
-const WHITE_SPACE_MODES: ReadonlyMap<string, WhiteSpaceMode> = new Map([
+// 한 낱말로 쓰는 값이다. CSS Text 3의 white-space 값과 CSS Text 4가 더한 낱말
+// (collapse·preserve·preserve-breaks·wrap)이다.
+const WHITE_SPACE_KEYWORDS: ReadonlyMap<string, WhiteSpaceMode> = new Map([
   ["pre", "preserve"],
   ["pre-wrap", "preserve"],
   ["break-spaces", "preserve"],
+  ["preserve", "preserve"],
   ["pre-line", "pre-line"],
+  ["preserve-breaks", "pre-line"],
   ["normal", "normal"],
   ["nowrap", "normal"],
+  ["wrap", "normal"],
+  ["collapse", "normal"],
 ]);
 
-// style 속성의 마지막 `white-space` 선언을 소스 공백 모드로 읽는다. 선언이
-// 없거나 값이 상속 키워드(inherit·initial·unset·revert)이거나 알 수 없으면
-// undefined다 — 호출부가 부모 모드를 상속한다. parseInlineStyleMarks와 같은
-// 선형 방식(`;`로 자르고 선언마다 첫 `:`로 나눔)이고 `!important`·대소문자·
-// 공백은 무시한다.
+// CSS Text 4 축약형은 white-space-collapse 낱말과 text-wrap-mode 낱말을 한
+// 번씩 짝지어 쓴다(`preserve nowrap`). 모드는 앞쪽 낱말이 정한다.
+const COLLAPSE_KEYWORDS: ReadonlySet<string> = new Set([
+  "collapse",
+  "preserve",
+  "preserve-breaks",
+  "break-spaces",
+]);
+const WRAP_KEYWORDS: ReadonlySet<string> = new Set(["wrap", "nowrap"]);
+
+// 부모 모드를 따르게 하는 CSS 전역 키워드다.
+const WHITE_SPACE_RESET_KEYWORDS: ReadonlySet<string> = new Set([
+  "inherit",
+  "initial",
+  "unset",
+  "revert",
+  "revert-layer",
+]);
+
+// 유효한 값이면 모드를, 아니면 undefined를 돌려준다.
+const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
+  const tokens = value.split(WHITESPACE_RUN);
+  if (tokens.length === 1) return WHITE_SPACE_KEYWORDS.get(value);
+  if (tokens.length !== 2) return undefined;
+
+  const [first = "", second = ""] = tokens;
+  if (COLLAPSE_KEYWORDS.has(first) && WRAP_KEYWORDS.has(second)) {
+    return WHITE_SPACE_KEYWORDS.get(first);
+  }
+  if (WRAP_KEYWORDS.has(first) && COLLAPSE_KEYWORDS.has(second)) {
+    return WHITE_SPACE_KEYWORDS.get(second);
+  }
+  return undefined;
+};
+
+// style 속성의 `white-space` 선언을 소스 공백 모드로 읽는다. 브라우저처럼
+// 무효 선언은 버리고 앞의 유효 선언을 유지하며, 유효 선언 중 마지막이 이긴다.
+// 선언이 없거나 마지막 유효 선언이 상속 키워드(inherit·initial·unset·revert·
+// revert-layer)이면 undefined다 — 호출부가 부모 모드를 상속한다.
+// parseInlineStyleMarks와 같은 선형 방식(`;`로 자르고 선언마다 첫 `:`로 나눔)
+// 이고 `!important`·대소문자·공백은 무시한다. `/* */` 주석과 `url()` 안의 `;`는
+// 읽지 않는다.
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {
-  let value: string | undefined;
+  let mode: WhiteSpaceMode | undefined;
 
   for (const declaration of style.split(";")) {
     const colon = declaration.indexOf(":");
@@ -255,8 +298,13 @@ export const parseWhiteSpaceMode = (
     if (declaration.slice(0, colon).trim().toLowerCase() !== "white-space") {
       continue;
     }
-    value = normalizeDeclarationValue(declaration.slice(colon + 1));
+    const value = normalizeDeclarationValue(declaration.slice(colon + 1));
+    if (WHITE_SPACE_RESET_KEYWORDS.has(value)) {
+      mode = undefined;
+      continue;
+    }
+    mode = readWhiteSpaceValue(value) ?? mode;
   }
 
-  return value === undefined ? undefined : WHITE_SPACE_MODES.get(value);
+  return mode;
 };

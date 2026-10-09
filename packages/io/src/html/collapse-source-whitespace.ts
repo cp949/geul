@@ -22,7 +22,7 @@ import { flattenBlockBoundaryTagNames } from "./parse-html.js";
 //   버리고 줄 끝 공백은 이미 낸 텍스트 노드에서 되돌려 지운다.
 // - `<pre>` 하위는 건드리지 않는다. `div`·`span`은 자기 style의 white-space로
 //   모드를 정한다(parseWhiteSpaceMode). 다른 태그는 style을 읽지 않고 부모
-//   모드를 상속한다. 선언이 없거나 상속·알 수 없는 값이면 부모 모드다.
+//   모드를 상속한다. 선언이 없거나 상속 키워드면 부모 모드다. 무효 선언은 버린다.
 //   - preserve(pre·pre-wrap·break-spaces): 텍스트를 건드리지 않는다. 보호
 //     구간 앞 공백 run은 접는다.
 //   - pre-line: 공백 run은 한 칸으로 접고 개행은 남긴다. 개행 앞뒤 공백은
