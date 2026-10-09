@@ -83,7 +83,7 @@ const blocksFromSegments = (
         const originProps =
           segment.origin === undefined
             ? {}
-            : textBlockPropsFromElement(segment.origin);
+            : textBlockPropsFromElement(segment.origin, { styleOnly: true });
         blocks.push({
           id: createId(),
           type: "paragraph",

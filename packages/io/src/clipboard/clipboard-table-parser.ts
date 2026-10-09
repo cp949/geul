@@ -26,6 +26,7 @@ import {
   type HtmlNode,
   type HtmlRoot,
   inlineContentFromNodes,
+  unwrapBlockBearingColorTags,
 } from "../html/inline-content.js";
 import {
   markerTypeFromTag,
@@ -553,6 +554,7 @@ const parseHtmlTable = (html: string): HtmlTableOutcome => {
   // importHtml과 같은 링크 정책을 적용한다 — 살려두면 core의
   // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
   sanitizeLinks(safeRoot.children);
+  unwrapBlockBearingColorTags(safeRoot.children);
 
   const tables = findDataTables(safeRoot);
   if (tables.length === 0)

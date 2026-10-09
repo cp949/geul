@@ -25,6 +25,7 @@ import {
 } from "./import-html-helpers.js";
 import { documentFromRoot } from "./import-html-blocks.js";
 import { htmlImportSanitizeSchema } from "./import-html-sanitize-schema.js";
+import { unwrapBlockBearingColorTags } from "./inline-content.js";
 import {
   collectHtmlImportWarnings,
   deepTreeFlattenedWarning,
@@ -78,6 +79,7 @@ export const importHtml = (
     }
 
     sanitizeLinks(safeRoot.children);
+    unwrapBlockBearingColorTags(safeRoot.children);
     // 외부 HTML의 소스 공백은 브라우저 규칙대로 접는다(Issue #320). 우리
     // export가 낸 조각(data-geul-block-id·data-geul-cell-id)이 하나라도 있으면
     // 문서 전체를 접지 않는다 — export는 공백을 그대로 내므로 접으면 왕복이

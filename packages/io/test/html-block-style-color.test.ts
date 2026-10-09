@@ -509,6 +509,50 @@ describe("블록 자식이 없는 div만 문단으로 읽는다", () => {
     ]);
   });
 
+  // 문단 div는 style만 읽는다. data-geul-*는 p·h1–h6·blockquote·li·callout의
+  // 계약이라 평범한 div에서 읽으면 잘못된 값이 문서 전체를 거절시킨다(리뷰
+  // MINOR-2). #334 전에는 이 값이 무시됐다.
+  it.each([
+    ["글자색", 'data-geul-text-color="#abc"'],
+    ["배경", 'data-geul-background-color="not-a-color"'],
+    ["정렬", 'data-geul-text-alignment="bogus"'],
+    [
+      "셋 다",
+      'data-geul-text-color="#abc" data-geul-background-color="x" data-geul-text-alignment="y"',
+    ],
+  ])(
+    "문단 div의 잘못된 data-geul-* 값(%s)은 무시하고 문서를 거절하지 않는다",
+    (_name, attrs) => {
+      const block = firstBlock(`<div ${attrs}>x</div>`);
+      expect(block.type).toBe("paragraph");
+      expect(colorProps(block)).toEqual({});
+      expect(contentOf(block)).toEqual([{ text: "x" }]);
+    },
+  );
+
+  it("문단 div는 유효한 data-geul-* 값도 읽지 않고 style만 읽는다", () => {
+    const block = firstBlock(
+      '<div data-geul-text-color="#112233" data-geul-text-alignment="center" style="color:#ff0000">x</div>',
+    );
+    expect(colorProps(block)).toEqual({ textColor: "#FF0000" });
+    expect(block).not.toHaveProperty("textAlignment");
+  });
+
+  it("p·h1·blockquote·li의 data-geul-* 계약은 그대로다", () => {
+    for (const html of [
+      '<p data-geul-text-color="#112233">x</p>',
+      '<h1 data-geul-text-color="#112233">x</h1>',
+      '<blockquote data-geul-text-color="#112233">x</blockquote>',
+      '<ul><li data-geul-text-color="#112233">x</li></ul>',
+      '<div data-geul-callout="true" data-geul-text-color="#112233">x</div>',
+    ]) {
+      expect(colorProps(firstBlock(html)), html).toEqual({
+        textColor: "#112233",
+      });
+    }
+    expect(importHtml('<p data-geul-text-color="#abc">x</p>').ok).toBe(false);
+  });
+
   it("br로 나뉜 줄도 한 문단이다", () => {
     const blocks = blocksOf('<div style="color:#ff0000">a<br>b</div>');
     expect(blocks).toHaveLength(1);
@@ -637,7 +681,11 @@ describe("표 셀 안 블록 요소는 색과 서식을 텍스트 마크로 읽�
     ["p", '<p style="color:#ff0000">x</p>'],
     ["div", '<div style="color:#ff0000">x</div>'],
     ["h1", '<h1 style="color:#ff0000">x</h1>'],
+    ["h2", '<h2 style="color:#ff0000">x</h2>'],
+    ["h3", '<h3 style="color:#ff0000">x</h3>'],
     ["h4", '<h4 style="color:#ff0000">x</h4>'],
+    ["h5", '<h5 style="color:#ff0000">x</h5>'],
+    ["h6", '<h6 style="color:#ff0000">x</h6>'],
     ["blockquote", '<blockquote style="color:#ff0000">x</blockquote>'],
     ["li", '<ul><li style="color:#ff0000">x</li></ul>'],
   ])("%s의 style 글자색은 글자색 마크다", (_name, inner) => {
@@ -645,6 +693,26 @@ describe("표 셀 안 블록 요소는 색과 서식을 텍스트 마크로 읽�
       { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
     ]);
   });
+
+  // h1–h6 어느 하나가 cellBlockStyleTagNames에서 빠지면 그 레벨만 마크를 잃는다
+  // (리뷰 MINOR-6). 색 말고 배경과 서식도 레벨마다 고정한다.
+  it.each(["h1", "h2", "h3", "h4", "h5", "h6"])(
+    "%s의 style 배경·굵게·기울임·밑줄·취소선도 마크로 읽는다",
+    (tag) => {
+      for (const [name, content] of cellContents(
+        `<${tag} style="color:#ff0000;background-color:#00ff00;font-weight:700;font-style:italic;text-decoration:underline line-through">x</${tag}>`,
+      )) {
+        expect(factsOfItem(content[0] as InlineContent[number]), name).toEqual({
+          textColor: "#FF0000",
+          backgroundColor: "#00FF00",
+          bold: true,
+          italic: true,
+          underline: true,
+          strike: true,
+        });
+      }
+    },
+  );
 
   it("배경과 서식도 마크로 읽는다", () => {
     for (const [name, content] of cellContents(
@@ -678,15 +746,51 @@ describe("표 셀 안 블록 요소는 색과 서식을 텍스트 마크로 읽�
     ]);
   });
 
-  it("div가 p를 품어도 div 색을 안쪽 글자가 받는다(셀 안에는 블록 속성이 없다)", () => {
-    expectBothPaths('<div style="color:#ff0000"><p>x</p></div>', [
-      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+  // 래퍼 div의 색은 소스 앱 테마 색이라 읽지 않는다. 셀 밖 래퍼 div와 같은 규칙이다
+  // (리뷰 MINOR-1).
+  it.each([
+    ["p", '<div style="color:#000000;background-color:#ffffff"><p>x</p></div>'],
+    ["div", '<div style="color:#000000"><div>x</div></div>'],
+    ["ul", '<div style="color:#000000"><ul><li>x</li></ul></div>'],
+    ["h2", '<div style="color:#000000"><h2>x</h2></div>'],
+    [
+      "blockquote",
+      '<div style="color:#000000"><blockquote>x</blockquote></div>',
+    ],
+    [
+      "table",
+      '<div style="color:#000000"><table><tr><td>x</td></tr></table></div>',
+    ],
+    ["span 뒤 p", '<div style="color:#000000"><span>x</span><p>y</p></div>'],
+  ])("블록 자식(%s)이 있는 래퍼 div의 색은 읽지 않는다", (_name, inner) => {
+    for (const [name, content] of cellContents(inner)) {
+      expect(markTypesOf(content), name).toEqual([]);
+    }
+  });
+
+  it("블록 자식이 없는 div는 색을 읽는다(인라인 자식만 든 경우)", () => {
+    expectBothPaths('<div style="color:#ff0000"><span>x</span><br></div>', [
+      { text: "x\n", marks: [{ type: "textColor", color: "#FF0000" }] },
     ]);
   });
 
-  it("바깥 블록과 안쪽 블록의 서로 다른 색은 안쪽이 이긴다", () => {
+  it("래퍼 안쪽 p의 색은 읽고 래퍼 div 색은 따라오지 않는다", () => {
     expectBothPaths(
       '<div style="color:#ff0000"><p style="color:#0000ff">x</p></div>',
+      [{ text: "x", marks: [{ type: "textColor", color: "#0000FF" }] }],
+    );
+    expectBothPaths(
+      '<div style="color:#ff0000"><p>x</p><p style="color:#0000ff">y</p></div>',
+      [
+        { text: "x\n" },
+        { text: "y", marks: [{ type: "textColor", color: "#0000FF" }] },
+      ],
+    );
+  });
+
+  it("바깥 래퍼 div는 읽지 않고 안쪽 블록 자식 없는 div는 읽는다", () => {
+    expectBothPaths(
+      '<div style="color:#ff0000"><div style="color:#0000ff">x</div></div>',
       [{ text: "x", marks: [{ type: "textColor", color: "#0000FF" }] }],
     );
   });

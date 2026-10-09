@@ -208,22 +208,20 @@ describe("font 태그의 중첩과 style", () => {
     );
   });
 
-  it("font 안의 굵게와 블록 문단은 색을 물려받는다", () => {
+  it("font 안의 굵게는 색을 물려받는다", () => {
     expectEveryPath('<font color="red"><b>x</b></font>', {
       textColor: "#FF0000",
       bold: true,
     });
+  });
+
+  // 블록 경계를 품은 font·mark는 태그만 벗겨 #334 이전 구조를 유지한다(리뷰
+  // MAJOR-2, html-font-mark-block-unwrap.test.ts). 벗겨진 font의 color는 읽지
+  // 않는다.
+  it("font이 블록 문단을 품으면 벗겨져 색을 읽지 않는다", () => {
     expect(
       imported('<font color="red"><p>x</p></font>').document.blocks,
-    ).toEqual([
-      {
-        id: "html-1",
-        type: "paragraph",
-        content: [
-          { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
-        ],
-      },
-    ]);
+    ).toEqual([{ id: "html-1", type: "paragraph", content: [{ text: "x" }] }]);
   });
 });
 

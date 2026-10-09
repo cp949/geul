@@ -310,6 +310,111 @@ const cellBlockStyleTagNames: ReadonlySet<string> = new Set([
   "blockquote",
 ]);
 
+// 블록 경계가 될 수 있는 태그다. 문서 import(importHtml)와 클립보드 두 경로가
+// 인식하는 경계의 합집합이다 — 경로마다 정책이 달라 안쪽 판정을 그대로 쓸 수
+// 없으므로, 어느 경로에서든 #334 이전 sanitize가 font·mark를 벗겼을 때와 같은
+// 결과를 내려면 합집합이어야 한다. 허용되지 않는 태그는 sanitize가 이미 지웠다.
+const blockBoundaryTagNames: ReadonlySet<string> = new Set([
+  "p",
+  "pre",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "div",
+  "li",
+  "ul",
+  "ol",
+  "blockquote",
+  "table",
+  "colgroup",
+  "col",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "th",
+  "td",
+  "details",
+  "summary",
+  "figure",
+  "figcaption",
+  "img",
+  "video",
+  "audio",
+]);
+
+// 색·서식 마크로 읽는 인라인 태그 가운데 #334가 허용 태그에 올린 둘이다.
+const colorInlineTagNames: ReadonlySet<string> = new Set(["font", "mark"]);
+
+// 블록 경계를 자손으로 가진 font·mark는 태그만 벗기고 자식을 그 자리에 둔다
+// (Issue #334 리뷰). #334 전에는 sanitize가 두 태그를 벗겨 블록 구조가 그대로
+// 남았다. 허용 태그로 올린 뒤에는 인라인 요소가 블록을 품어 목록이 문단으로,
+// 표가 목록 항목 텍스트로 깨졌다. 블록 자손이 없는 font·mark는 그대로 두어
+// 색·배경 마크로 읽는다. sanitize 이후의 의미 변환이라 경고 수집(raw HAST)과
+// 무관하다(G-CNV-002). 자식을 먼저 처리하므로 바깥이 벗겨져도 블록이 없는
+// 안쪽 font·mark는 남는다.
+// 후위 순회 한 번으로 끝낸다 — 자식 목록 처리가 "블록 경계가 있는가"를 돌려주고
+// 부모는 그 결과로 자기 판정을 얻는다. font·mark마다 자손을 다시 훑으면 중첩
+// 깊이에 이차다. 벗기는 일은 새 배열을 만들어 한 번에 덮어써, 형제가 많아도
+// splice의 이동 비용이 붙지 않는다. 벗겨도 자손의 블록 여부는 바뀌지 않는다.
+export const unwrapBlockBearingColorTags = (nodes: HtmlNode[]): void => {
+  processColorTags(nodes);
+};
+
+const processColorTags = (nodes: HtmlNode[]): boolean => {
+  let hasBlock = false;
+  let changed = false;
+  const result: HtmlNode[] = [];
+  for (const node of nodes) {
+    if (node.type !== "element") {
+      result.push(node);
+      continue;
+    }
+    const childHasBlock = processColorTags(node.children);
+    if (blockBoundaryTagNames.has(node.tagName) || childHasBlock) {
+      hasBlock = true;
+    }
+    if (colorInlineTagNames.has(node.tagName) && childHasBlock) {
+      for (const child of node.children) result.push(child);
+      changed = true;
+    } else {
+      result.push(node);
+    }
+  }
+  if (changed) {
+    nodes.length = 0;
+    for (const node of result) nodes.push(node);
+  }
+  return hasBlock;
+};
+
+// 블록 경계 태그(breaks.tagNames)를 자손으로 가졌는지 본다. 래퍼 div 판정에 쓴다.
+const hasBlockBreakDescendant = (
+  nodes: readonly HtmlNode[],
+  tagNames: ReadonlySet<string>,
+): boolean => {
+  for (const node of nodes) {
+    if (node.type !== "element") continue;
+    if (tagNames.has(node.tagName)) return true;
+    if (hasBlockBreakDescendant(node.children, tagNames)) return true;
+  }
+  return false;
+};
+
+// 셀 안 블록 요소의 style을 마크로 읽을지 정한다. div는 블록 자손이 없는
+// 것만 읽는다 — 블록을 품은 래퍼 div의 색은 소스 앱 테마 색이라 셀 밖 래퍼
+// div와 같이 읽지 않는다(Issue #334 리뷰 MINOR-1).
+const readsCellBlockStyle = (
+  node: HtmlElementNode,
+  tagNames: ReadonlySet<string>,
+): boolean =>
+  cellBlockStyleTagNames.has(node.tagName) &&
+  (node.tagName !== "div" || !hasBlockBreakDescendant(node.children, tagNames));
+
 const readInlineNodes = (
   nodes: HtmlNode[],
   marks: TextMark[],
@@ -331,7 +436,9 @@ const readInlineNodes = (
     const isBlock = breaks?.tagNames.has(node.tagName) === true;
     if (isBlock && breaks !== undefined) breaks.pending = true;
     const ownMarks =
-      isBlock && cellBlockStyleTagNames.has(node.tagName)
+      isBlock &&
+      breaks !== undefined &&
+      readsCellBlockStyle(node, breaks.tagNames)
         ? marksFromStyle(node.properties.style).marks
         : marksForElement(node);
     readInlineNodes(

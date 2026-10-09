@@ -31,16 +31,23 @@ import {
 // data-geul-*가 있는 필드는 style을 보지 않고, 없는 필드만 style이 채운다. style
 // 값은 parseStyleDeclarations가 canonical #RRGGBB 대문자로만 낸다(반투명·무효는
 // 값 없음). textAlignment는 data-geul-*만 읽는다.
+// styleOnly는 평범한 문단 div용이다 — data-geul-*는 p·h1~h6·blockquote·li·
+// callout의 계약이라 div에서는 읽지 않고(정렬 포함) style만 읽는다. 읽으면
+// 잘못된 data-geul-* 값이 parseDocument 거절로 문서 전체를 막는다(Issue #334
+// 리뷰 MINOR-2, #334 전에는 무시됐다).
 export const textBlockPropsFromElement = (
   element: HtmlElementNode,
+  options?: { styleOnly?: boolean },
 ): Partial<
   Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">
 > => {
-  const dataTextColor = propertyString(element, "dataGeulTextColor");
-  const dataBackgroundColor = propertyString(
-    element,
-    "dataGeulBackgroundColor",
-  );
+  const styleOnly = options?.styleOnly === true;
+  const dataTextColor = styleOnly
+    ? undefined
+    : propertyString(element, "dataGeulTextColor");
+  const dataBackgroundColor = styleOnly
+    ? undefined
+    : propertyString(element, "dataGeulBackgroundColor");
   // 두 필드가 모두 data-geul-*로 정해졌으면 style을 파싱하지 않는다(자기 export
   // 에코가 이 경우다).
   const style =
@@ -51,8 +58,10 @@ export const textBlockPropsFromElement = (
     style === undefined ? undefined : parseStyleDeclarations(style);
   const textColor = dataTextColor ?? declared?.color;
   const backgroundColor = dataBackgroundColor ?? declared?.backgroundColor;
-  const textAlignment = propertyString(element, "dataGeulTextAlignment") as
-    TextBlockProps["textAlignment"] | undefined;
+  const textAlignment = styleOnly
+    ? undefined
+    : (propertyString(element, "dataGeulTextAlignment") as
+        TextBlockProps["textAlignment"] | undefined);
   return {
     ...(textColor === undefined ? {} : { textColor }),
     ...(backgroundColor === undefined ? {} : { backgroundColor }),
