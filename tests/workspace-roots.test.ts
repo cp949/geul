@@ -278,6 +278,12 @@ const arrayLiteralCopyThreshold = 2;
 const workspaceRootsImport =
   /^\s*import\s[^;]*from\s*["']\.\/workspace-roots\.mjs["']/m;
 
+// workspace 패키지 목록을 쓰지 않는 스크립트다. `pnpm` 명령만 실행하므로 이
+// 모듈을 import할 이유가 없고, 억지 import는 미사용 import가 된다. 사람이
+// 판단해 예외로 뺀 것이다. 사본 탐지 단언은 이 스크립트도 그대로 훑으므로
+// 목록 리터럴이 생기면 그쪽에서 잡힌다. 새 항목은 같은 판단을 거쳐서만 더한다.
+const workspaceFreeScriptPaths = ["scripts/verify.mjs"];
+
 /**
  * `git ls-files scripts`로 발견한 `.mjs` 중 루트 목록을 소유하는 모듈 자신을 뺀
  * 전부. 소비처 목록을 이 파일에 리터럴로 적지 않으므로 새 스크립트가 생기면
@@ -301,7 +307,10 @@ const consumerScriptPaths = () =>
   })
     .split("\n")
     .filter(
-      (path) => path.endsWith(".mjs") && path !== workspaceRootsModulePath,
+      (path) =>
+        path.endsWith(".mjs") &&
+        path !== workspaceRootsModulePath &&
+        !workspaceFreeScriptPaths.includes(path),
     );
 
 /**
@@ -795,6 +804,20 @@ describe("workspace 패키지 glob·루트 이름 목록·headless 목록의 단
     );
 
     expect(missing).toEqual([]);
+  });
+
+  it("목록을 쓰지 않는 예외 스크립트가 모두 추적 중인 .mjs다", () => {
+    const tracked = execFileSync("git", ["ls-files", "scripts"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }).split("\n");
+
+    // 지워지거나 옮겨진 스크립트가 예외 목록에 남아 조용히 낡는 것을 막는다.
+    expect(
+      workspaceFreeScriptPaths.filter(
+        (path) => !path.endsWith(".mjs") || !tracked.includes(path),
+      ),
+    ).toEqual([]);
   });
 
   it("glob 목록 배열 리터럴을 가진 추적 소스 파일이 이 모듈 하나뿐이다", () => {
