@@ -856,7 +856,7 @@ describe("div·span의 white-space 모드", () => {
     it("white-space 선언이 없는 style은 부모 모드를 상속한다", () => {
       expect(
         blockContents(
-          '<div style="white-space:pre"><span style="color:red">a  b</span></div>',
+          '<div style="white-space:pre"><span style="font-size:12pt">a  b</span></div>',
         ),
       ).toEqual([[{ text: "a  b" }]]);
     });

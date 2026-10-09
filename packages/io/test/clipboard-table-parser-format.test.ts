@@ -46,6 +46,48 @@ describe("parseClipboardTable", () => {
     });
   });
 
+  // Word·Outlook·Excel HTML은 색 이름을 쓴다(Issue #333).
+  it("셀 style의 색 이름을 글자색·배경색으로 읽는다", () => {
+    const html =
+      '<table><tbody><tr><td style="background:yellow;color:red">1</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]).toMatchObject({
+      backgroundColor: "#FFFF00",
+      textColor: "#FF0000",
+    });
+  });
+
+  it("셀 style의 짧은 hex·rgb 공백 문법·hsl을 읽는다", () => {
+    const html =
+      '<table><tbody><tr><td style="background-color:#ff0;color:rgb(255 0 0)">1</td><td style="color:hsl(120,100%,50%)">2</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]).toMatchObject({
+      backgroundColor: "#FFFF00",
+      textColor: "#FF0000",
+    });
+    expect(table.rows[0]?.cells[1]?.textColor).toBe("#00FF00");
+  });
+
+  it("셀 style의 반투명·투명 색은 색을 정하지 않는다", () => {
+    const html =
+      '<table><tbody><tr><td style="background:rgba(255,255,0,0.5);color:rgba(255,0,0,0.5)">1</td><td style="background-color:transparent">2</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]?.backgroundColor).toBeUndefined();
+    expect(table.rows[0]?.cells[0]?.textColor).toBeUndefined();
+    expect(table.rows[0]?.cells[1]?.backgroundColor).toBeUndefined();
+  });
+
+  it("셀 style의 !important가 뒤 선언을 이긴다", () => {
+    const html =
+      '<table><tbody><tr><td style="background-color:#FF0000 !important;background:#00FF00">1</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]?.backgroundColor).toBe("#FF0000");
+  });
+
   it("Excel 대표 클립보드 HTML의 표·색상·정렬을 읽는다", () => {
     const table = expectSingleTable(
       parseClipboardTable({ html: excelClipboardHtml }),

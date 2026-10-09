@@ -1,5 +1,12 @@
 import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 
+import {
+  type CssColorResult,
+  isCssSpace,
+  readBackgroundShorthand,
+  readCssColor,
+} from "./css-color.js";
+
 export type StyleDeclarations = {
   color?: string;
   backgroundColor?: string;
@@ -83,62 +90,183 @@ const readDeclaration = (
   return undefined;
 };
 
-const toHexChannel = (value: number): string =>
-  Math.min(255, Math.max(0, value)).toString(16).padStart(2, "0").toUpperCase();
-
-// color/background-color 값을 대문자 #RRGGBB로 정규화한다. hex와 rgb()/rgba()
-// 두 표기만 지원한다(실제 Excel/Google Sheets 클립보드 HTML이 쓰는 형식) —
-// named color나 hsl() 등은 지원 범위 밖이라 undefined로 버린다.
-const normalizeColor = (rawValue: string): string | undefined => {
-  const trimmed = rawValue.trim();
-
-  const hexMatch = /^#([0-9a-fA-F]{6})$/.exec(trimmed);
-  if (hexMatch !== null) {
-    const upper = `#${hexMatch[1]?.toUpperCase()}`;
-    return isCanonicalCellColor(upper) ? upper : undefined;
-  }
-
-  const rgbMatch =
-    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/.exec(
-      trimmed,
-    );
-  if (rgbMatch !== null) {
-    const [, r, g, b] = rgbMatch;
-    const hex = `#${toHexChannel(Number(r))}${toHexChannel(Number(g))}${toHexChannel(Number(b))}`;
-    return isCanonicalCellColor(hex) ? hex : undefined;
-  }
-
-  return undefined;
+// `;`로 선언을 자르고 `/* */` 주석을 공백 하나로 바꾼다. 괄호 `()`와 따옴표
+// 안의 `;`에서는 자르지 않는다(`url(data:image/png;base64,...)`). 닫히지 않은
+// 괄호·따옴표는 입력 끝까지 한 선언이고, 닫히지 않은 주석은 끝까지 주석이다.
+// 계측 테스트(G-TST-004)가 큰 문자열의 String 메서드 호출을 세므로 큰 문자열
+// 메서드는 `split(";")` 한 번만 부른다. 이어 붙일 조각과 주석 치환은 조각
+// 단위로, 글자를 대괄호로 읽고 `+=`로 쌓는다.
+// escaped는 조각이 따옴표 밖 `\\`로 끝났다는 표시다. 다음 `;`가 이스케이프된다.
+type ScanState = {
+  quote: string;
+  depth: number;
+  inComment: boolean;
+  escaped: boolean;
 };
 
-// style 속성 문자열에서 color/background-color/background/text-align 네
-// 선언만 읽는다. 나머지 CSS 선언과, 이 네 선언이라도 우리 canonical 형식을
-// 통과하지 못하는 값은 조용히 버린다 — 파싱 실패로 전체 붙여넣기를 거절하지
-// 않는다. background 축약형은 Excel 클립보드 HTML이 실제로 쓰는 표기라
-// 읽되, 값 전체가 순수 색상 리터럴일 때만 반영한다(normalizeColor가 hex와
-// rgb()/rgba()만 통째로 매칭하므로 `url(...) #fff` 같은 복합 축약형은
-// 자동으로 undefined가 된다).
-export const parseStyleDeclarations = (style: string): StyleDeclarations => {
-  const result: StyleDeclarations = {};
+const scanPiece = (piece: string, state: ScanState): string => {
+  // 주석을 만나기 전에는 조각을 그대로 쓴다. out이 정해지면 글자를 쌓는다.
+  let out: string | undefined = state.inComment ? "" : undefined;
+  state.escaped = false;
+  const keep = (character: string): void => {
+    if (out !== undefined) out += character;
+  };
 
-  for (const declaration of style.split(";")) {
-    const read = readDeclaration(declaration);
-    if (read === undefined) continue;
-    const property = read.property.toLowerCase();
-    const rawValue = read.rawValue.trim();
-
-    if (property === "color") {
-      const normalized = normalizeColor(rawValue);
-      if (normalized !== undefined) result.color = normalized;
-    } else if (property === "background-color" || property === "background") {
-      const normalized = normalizeColor(rawValue);
-      if (normalized !== undefined) result.backgroundColor = normalized;
-    } else if (property === "text-align") {
-      const value = rawValue.toLowerCase();
-      if (isCanonicalCellAlign(value)) result.align = value;
+  for (let index = 0; index < piece.length; index += 1) {
+    const character = piece[index] as string;
+    if (state.inComment) {
+      if (character === "*" && piece[index + 1] === "/") {
+        state.inComment = false;
+        index += 1;
+      }
+    } else if (state.quote !== "") {
+      keep(character);
+      if (character === "\\") {
+        index += 1;
+        keep(piece[index] ?? "");
+      } else if (character === state.quote) {
+        state.quote = "";
+      }
+    } else if (character === "/" && piece[index + 1] === "*") {
+      if (out === undefined) {
+        out = "";
+        for (let copy = 0; copy < index; copy += 1) out += piece[copy];
+      }
+      out += " ";
+      state.inComment = true;
+      index += 1;
+    } else if (character === "\\") {
+      // 따옴표 밖 백슬래시도 다음 글자를 이스케이프한다. `\\(`는 괄호를 열지
+      // 않고, 조각 끝의 `\\`는 잘려 나간 `;`를 이스케이프한다.
+      keep(character);
+      index += 1;
+      keep(piece[index] ?? "");
+      if (index >= piece.length) state.escaped = true;
+    } else {
+      keep(character);
+      if (character === '"' || character === "'") state.quote = character;
+      else if (character === "(") state.depth += 1;
+      else if (character === ")" && state.depth > 0) state.depth -= 1;
     }
   }
 
+  return out ?? piece;
+};
+
+const splitDeclarations = (style: string): string[] => {
+  const declarations: string[] = [];
+  const state: ScanState = {
+    quote: "",
+    depth: 0,
+    inComment: false,
+    escaped: false,
+  };
+  let pending: string | undefined;
+
+  for (const piece of style.split(";")) {
+    // 앞 조각이 주석 안에서 끝났으면 그 `;`는 주석 내용이라 버린다.
+    const joiner = state.inComment ? "" : ";";
+    const scanned = scanPiece(piece, state);
+    pending = pending === undefined ? scanned : pending + joiner + scanned;
+    if (
+      state.quote === "" &&
+      state.depth === 0 &&
+      !state.inComment &&
+      !state.escaped
+    ) {
+      declarations.push(pending);
+      pending = undefined;
+    }
+  }
+  if (pending !== undefined) declarations.push(pending);
+
+  return declarations;
+};
+
+const IMPORTANT_KEYWORD = "important";
+
+// 값 끝의 `!important`(`!`와 낱말 사이 공백, 대소문자 허용)를 떼어 낸다.
+const splitImportant = (
+  rawValue: string,
+): { value: string; important: boolean } => {
+  const trimmed = rawValue.trimEnd();
+  const wordStart = trimmed.length - IMPORTANT_KEYWORD.length;
+  if (
+    wordStart < 1 ||
+    trimmed.slice(wordStart).toLowerCase() !== IMPORTANT_KEYWORD
+  ) {
+    return { value: rawValue, important: false };
+  }
+  let bang = wordStart;
+  while (bang > 0 && isCssSpace(trimmed[bang - 1] as string)) bang -= 1;
+  if (bang === 0 || trimmed[bang - 1] !== "!") {
+    return { value: rawValue, important: false };
+  }
+  return { value: trimmed.slice(0, bang - 1), important: true };
+};
+
+// 색 하나가 받는 칸이다. 중요도가 높은 선언이 칸을 차지하면 일반 선언은 못
+// 덮는다. 같은 중요도끼리는 뒤가 이긴다. invalid는 칸을 건드리지 않는다.
+type ColorSlot = { result: CssColorResult | undefined; important: boolean };
+
+const applyColor = (
+  slot: ColorSlot,
+  result: CssColorResult,
+  important: boolean,
+): void => {
+  if (result.kind === "invalid") return;
+  if (slot.important && !important) return;
+  slot.result = result;
+  slot.important ||= important;
+};
+
+// 칸의 최종 결과를 모델 정규 형식 색으로 돌려준다. clear·무선언은 undefined다.
+const slotColor = (slot: ColorSlot): string | undefined =>
+  slot.result?.kind === "color" && isCanonicalCellColor(slot.result.color)
+    ? slot.result.color
+    : undefined;
+
+// style 속성 문자열에서 color/background-color/background/text-align 네
+// 선언만 읽는다. 나머지 CSS 선언은 조용히 버린다 — 파싱 실패로 전체
+// 붙여넣기를 거절하지 않는다.
+// 색 값은 CSS 문법대로 읽는다(css-color.ts). 우선순위는 브라우저와 같다.
+// - `!important` 선언은 일반 선언을 이긴다. 같은 중요도끼리는 뒤가 이긴다.
+// - 문법 오류 선언은 버리고 앞 값을 유지한다.
+// - 투명·반투명·상속 키워드와 색 토큰 없는 `background`는 같은 요소의 앞
+//   값을 지운다. 바깥 요소의 색은 건드리지 않는다.
+// - `background-color`와 `background`는 같은 배경색 칸을 순서대로 덮는다.
+// text-align은 `!important`를 읽지 않는다(옛 동작 유지).
+export const parseStyleDeclarations = (style: string): StyleDeclarations => {
+  const color: ColorSlot = { result: undefined, important: false };
+  const background: ColorSlot = { result: undefined, important: false };
+  let align: StyleDeclarations["align"];
+
+  for (const declaration of splitDeclarations(style)) {
+    const read = readDeclaration(declaration);
+    if (read === undefined) continue;
+    const property = read.property.toLowerCase();
+
+    if (property === "color") {
+      const { value, important } = splitImportant(read.rawValue);
+      applyColor(color, readCssColor(value), important);
+    } else if (property === "background-color") {
+      const { value, important } = splitImportant(read.rawValue);
+      applyColor(background, readCssColor(value), important);
+    } else if (property === "background") {
+      const { value, important } = splitImportant(read.rawValue);
+      applyColor(background, readBackgroundShorthand(value), important);
+    } else if (property === "text-align") {
+      const value = read.rawValue.trim().toLowerCase();
+      if (isCanonicalCellAlign(value)) align = value;
+    }
+  }
+
+  const result: StyleDeclarations = {};
+  const textColor = slotColor(color);
+  if (textColor !== undefined) result.color = textColor;
+  const backgroundColor = slotColor(background);
+  if (backgroundColor !== undefined) result.backgroundColor = backgroundColor;
+  if (align !== undefined) result.align = align;
   return result;
 };
 

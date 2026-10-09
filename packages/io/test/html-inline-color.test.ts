@@ -231,27 +231,37 @@ describe("인라인 색상 mark HTML import", () => {
     });
   });
 
-  it("named color·hsl() 같은 지원 밖 값도 mark 없이 무시한다(문서 전체를 거절하지 않음)", () => {
-    const result = importHtml(
-      '<p data-geul-block-id="paragraph-1"><span style="color:red">named</span></p>',
-    );
-    expect(result).toEqual({
-      ok: true,
-      value: {
-        document: {
-          formatVersion: 1,
-          revision: 0,
-          blocks: [
-            {
-              id: "paragraph-1",
-              type: "paragraph",
-              content: [{ text: "named" }],
-            },
-          ],
+  it("named color를 mark로 읽는다(Issue #333)", () => {
+    expect(
+      importedContent('<p><span style="color:red">named</span></p>'),
+    ).toEqual([
+      { text: "named", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
+  });
+
+  it("읽지 않는 값(lab·var)과 문법 오류는 mark 없이 무시한다(문서 전체를 거절하지 않음)", () => {
+    for (const value of ["lab(50% 40 59)", "var(--c)", "bogus"]) {
+      const result = importHtml(
+        `<p data-geul-block-id="paragraph-1"><span style="color:${value}">x</span></p>`,
+      );
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          document: {
+            formatVersion: 1,
+            revision: 0,
+            blocks: [
+              {
+                id: "paragraph-1",
+                type: "paragraph",
+                content: [{ text: "x" }],
+              },
+            ],
+          },
+          warnings: [],
         },
-        warnings: [],
-      },
-    });
+      });
+    }
   });
 });
 
@@ -446,12 +456,25 @@ describe("인접 span 색 mark 병합 (Issue #331)", () => {
     ]);
   });
 
-  it("색 이름은 읽지 않으므로 인접 span이 마크 없는 한 조각이 된다", () => {
+  it("색 이름이 다른 인접 span은 색별로 나뉜다", () => {
     expect(
       importedContent(
         '<p><span style="color:red">a</span><span style="color:blue">b</span></p>',
       ),
-    ).toEqual([{ text: "ab" }]);
+    ).toEqual([
+      { text: "a", marks: [{ type: "textColor", color: "#FF0000" }] },
+      { text: "b", marks: [{ type: "textColor", color: "#0000FF" }] },
+    ]);
+  });
+
+  it("같은 색을 이름과 hex로 쓴 인접 span은 한 조각으로 합친다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:red">a</span><span style="color:#ff0000">b</span></p>',
+      ),
+    ).toEqual([
+      { text: "ab", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
   });
 });
 
@@ -513,14 +536,26 @@ describe("중첩 span 색 mark 상속 (Issue #332)", () => {
     expect(marks).toContainEqual({ type: "backgroundColor", color: "#FFFF00" });
   });
 
-  it("안쪽 색이 색 이름이면 읽지 못하므로 바깥 색을 유지한다(한계)", () => {
+  it("안쪽 색이 색 이름이면 바깥 색을 덮는다", () => {
     expect(
       importedContent(
         '<p><span style="color:#ff0000"><span style="color:blue">x</span></span></p>',
       ),
     ).toEqual([
-      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+      { text: "x", marks: [{ type: "textColor", color: "#0000FF" }] },
     ]);
+  });
+
+  it("안쪽 색을 읽지 못하면(lab·var·문법 오류) 바깥 색을 유지한다", () => {
+    for (const value of ["lab(50% 40 59)", "var(--c)", "bogus"]) {
+      expect(
+        importedContent(
+          `<p><span style="color:#ff0000"><span style="color:${value}">x</span></span></p>`,
+        ),
+      ).toEqual([
+        { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+      ]);
+    }
   });
 
   it("안쪽 색이 inherit이면 바깥 색을 유지한다", () => {
@@ -541,5 +576,116 @@ describe("중첩 span 색 mark 상속 (Issue #332)", () => {
     ).toEqual([
       { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
     ]);
+  });
+});
+
+// Issue #333: 색 값 문법과 투명 처리가 중첩에서도 같다.
+describe("색 값 문법 (Issue #333)", () => {
+  it.each([
+    ["color", "#f00", "textColor"],
+    ["color", "#f00f", "textColor"],
+    ["color", "#ff0000ff", "textColor"],
+    ["color", "RGB(255 0 0)", "textColor"],
+    ["color", "rgb(100%,0%,0%)", "textColor"],
+    ["color", "hsl(0,100%,50%)", "textColor"],
+    ["color", "hwb(0 0% 0%)", "textColor"],
+    ["color", "Red", "textColor"],
+    ["color", "red !important", "textColor"],
+    ["color", "/*c*/#ff0000", "textColor"],
+    ["background-color", "#f00", "backgroundColor"],
+    ["background-color", "red", "backgroundColor"],
+    ["background", "red", "backgroundColor"],
+    ["background", "url(x.png) #ff0000", "backgroundColor"],
+    ["background", "#ff0000 no-repeat", "backgroundColor"],
+    ["background", "url(data:image/png;base64,AAAA) red", "backgroundColor"],
+  ] as const)("span의 %s:%s를 #FF0000 %s로 읽는다", (property, value, type) => {
+    expect(
+      importedContent(`<p><span style="${property}:${value}">x</span></p>`),
+    ).toEqual([{ text: "x", marks: [{ type, color: "#FF0000" }] }]);
+  });
+
+  it.each([
+    "transparent",
+    "rgba(255,0,0,0.5)",
+    "rgba(255,0,0,0)",
+    "#ff000080",
+    "rgb(255 0 0 / 50%)",
+    "inherit",
+    "currentcolor",
+  ])("반투명·투명·상속 color:%s는 마크를 만들지 않는다", (value) => {
+    expect(
+      importedContent(`<p><span style="color:${value}">x</span></p>`),
+    ).toEqual([{ text: "x" }]);
+    expect(
+      importedContent(
+        `<p><span style="background-color:${value}">x</span></p>`,
+      ),
+    ).toEqual([{ text: "x" }]);
+  });
+
+  it("같은 span 안에서 color:inherit가 앞의 color를 지운다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#0000ff;color:inherit">x</span></p>',
+      ),
+    ).toEqual([{ text: "x" }]);
+  });
+
+  it("같은 span 안에서 !important가 뒤 선언을 이긴다", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#0000ff !important;color:#ff0000">x</span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#0000FF" }] },
+    ]);
+  });
+
+  it("background가 앞의 background-color를 지운다", () => {
+    expect(
+      importedContent(
+        '<p><span style="background-color:#ff0000;background:url(x.png)">x</span></p>',
+      ),
+    ).toEqual([{ text: "x" }]);
+  });
+
+  it.each(["transparent", "rgba(0,0,0,0)", "inherit", "rgba(0,0,0,0.5)"])(
+    "안쪽 background-color:%s는 바깥 배경을 덮지 않는다",
+    (value) => {
+      const content = importedContent(
+        `<p><span style="color:#ff0000;background-color:#ffff00"><span style="background-color:${value}">x</span></span></p>`,
+      );
+      expect(content).toHaveLength(1);
+      const marks = "marks" in content[0]! ? (content[0].marks ?? []) : [];
+      expect(marks).toHaveLength(2);
+      expect(marks).toContainEqual({ type: "textColor", color: "#FF0000" });
+      expect(marks).toContainEqual({
+        type: "backgroundColor",
+        color: "#FFFF00",
+      });
+    },
+  );
+
+  it("안쪽 color:transparent는 바깥 글자색을 덮지 않는다(반투명 합성은 하지 않는다)", () => {
+    expect(
+      importedContent(
+        '<p><span style="color:#ff0000"><span style="color:transparent">x</span></span></p>',
+      ),
+    ).toEqual([
+      { text: "x", marks: [{ type: "textColor", color: "#FF0000" }] },
+    ]);
+  });
+
+  it("안쪽 color:blue는 바깥 빨강을 덮고 바깥 배경은 유지한다", () => {
+    const content = importedContent(
+      '<p><span style="color:#ff0000;background-color:#ffff00"><span style="color:blue">x</span></span></p>',
+    );
+    const marks = "marks" in content[0]! ? (content[0].marks ?? []) : [];
+    expect(marks).toHaveLength(2);
+    expect(marks).toContainEqual({ type: "textColor", color: "#0000FF" });
+    expect(marks).toContainEqual({
+      type: "backgroundColor",
+      color: "#FFFF00",
+    });
   });
 });

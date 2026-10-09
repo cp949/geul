@@ -95,6 +95,51 @@ const declarationInputShapes: Array<[string, (size: number) => string]> = [
     (size) =>
       `background:${" ".repeat(size * 16)}#fff;color:${"x ".repeat(size)}: text-align :${" ".repeat(size)}left`,
   ],
+  // 아래는 색 값 문법(Issue #333)이 만든 입력 모양이다. 선언 분할은 괄호·
+  // 따옴표·주석 상태를 한 번 훑고, 색 읽기는 큰 문자열에 String 메서드를
+  // 반복해 부르지 않는다.
+  [
+    "괄호 안 세미콜론이 많은 입력",
+    (size) => `background:url(${";".repeat(size)}) red`,
+  ],
+  ["주석이 많은 입력", (size) => `${"/**/".repeat(size)}color:red`],
+  [
+    "주석 안 세미콜론이 많은 입력",
+    (size) => `color:red/*${";".repeat(size)}*/;background:blue`,
+  ],
+  [
+    "background 토큰이 많은 입력",
+    (size) => `background:${"no-repeat ".repeat(size)}red`,
+  ],
+  [
+    "background 레이어가 많은 입력",
+    (size) => `background:${"none,".repeat(size)}red`,
+  ],
+  [
+    "background 괄호 토큰이 많은 입력",
+    (size) => `background:${"url(a.png) ".repeat(size)}red`,
+  ],
+  ["색 함수 인자가 많은 입력", (size) => `color:rgb(${"1,".repeat(size)}1)`],
+  [
+    "색 함수 공백이 긴 입력",
+    (size) => `color:rgb(${" ".repeat(size * 16)}1 2 3)`,
+  ],
+  [
+    "색 함수 숫자가 긴 입력",
+    (size) => `color:rgb(${"1".repeat(size * 16)},0,0)`,
+  ],
+  [
+    "닫히지 않은 괄호와 따옴표가 많은 입력",
+    (size) => `color:red;background:url("${"a;(".repeat(size)}`,
+  ],
+  [
+    "선언이 많고 !important가 반복된 입력",
+    (size) => `color:red${" !important".repeat(size)};`.repeat(2),
+  ],
+  [
+    "!important 선언이 아주 많은 입력",
+    (size) => "color:#ff0000 !important;".repeat(size),
+  ],
 ];
 
 describe("parseStyleDeclarations의 선형 시간", () => {
