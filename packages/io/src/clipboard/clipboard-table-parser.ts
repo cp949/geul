@@ -32,7 +32,11 @@ import {
   parseExplicitStartNumber,
   splitListItemChildren,
 } from "../html/list-block-builder.js";
-import { asRoot, parseHtmlFragment } from "../html/parse-html.js";
+import {
+  asRoot,
+  flattenBlockBoundaryTagNames,
+  parseHtmlFragment,
+} from "../html/parse-html.js";
 import {
   clipboardAllowedAttributes,
   clipboardSanitizeSchema,
@@ -467,8 +471,12 @@ const tabularDataFromTable = (
         // 멀쩡한 표 붙여넣기가 통째로 거절된다.
         rowSpan: layoutRowSpan(layout.rowSpan),
         columnSpan: layoutColumnSpan(layout.columnSpan),
+        // 셀 안 블록 요소(p, div 등) 경계에 줄바꿈 하나를 넣어 단어가
+        // 붙지 않게 한다(Issue #325). importHtml 표 셀과 같은 집합을 쓴다.
         content: normalizeCellContent(
-          inlineContentFromNodes(layout.element.children),
+          inlineContentFromNodes(layout.element.children, {
+            blockBreakTagNames: flattenBlockBoundaryTagNames,
+          }),
         ),
         ...cellStyleFields(layout.element),
       }));

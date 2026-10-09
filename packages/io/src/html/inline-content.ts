@@ -154,9 +154,12 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
 
 // 블록 줄바꿈 옵션의 상태다. pending은 블록 요소의 시작이나 끝을 지나
 // 다음 텍스트 앞에 줄바꿈을 넣어야 하는지다.
+// seenText는 공백이 아닌 텍스트를 한 번이라도 읽었는지다. 셀 맨 앞의 소스
+// 공백 뒤 첫 블록이 줄바꿈으로 시작하지 않게 한다.
 type BlockBreakState = {
   tagNames: ReadonlySet<string>;
   pending: boolean;
+  seenText: boolean;
 };
 
 const HTML_WHITESPACE_ONLY = /^[\t\n\f\r ]+$/;
@@ -169,16 +172,27 @@ const appendText = (
 ): void => {
   if (text.length === 0) return;
   if (breaks?.pending === true) {
-    // 블록 사이 공백뿐인 텍스트는 버리고 줄바꿈 대기를 유지한다. 소스 공백
-    // 접기가 꺼진 입력(data-geul-*)에서 공백과 줄바꿈이 섞이지 않게 한다.
+    // 블록 사이 공백뿐인 텍스트는 버리고 줄바꿈 대기를 유지한다. 클립보드
+    // 표 파서는 공백을 한 칸으로 접어 두고, 소스 공백 접기가 꺼진 입력
+    // (data-geul-*)은 공백이 그대로 온다. 어느 쪽이든 공백과 줄바꿈이
+    // 섞이지 않게 한다.
     if (HTML_WHITESPACE_ONLY.test(text)) return;
     breaks.pending = false;
     const last = content[content.length - 1];
-    // 앞 내용이 없거나 이미 줄바꿈으로 끝나면 넣지 않는다. 블록 양끝과
-    // 연속 경계가 빈 줄을 만들지 않는다.
-    if (last !== undefined && "text" in last && !last.text.endsWith("\n")) {
+    // 앞에 보이는 텍스트가 없거나 이미 줄바꿈으로 끝나면 넣지 않는다. 블록
+    // 양끝과 연속 경계가 빈 줄을 만들지 않는다. 앞이 공백뿐이면 그 공백은
+    // 셀 정규화가 버린다.
+    if (
+      breaks.seenText &&
+      last !== undefined &&
+      "text" in last &&
+      !last.text.endsWith("\n")
+    ) {
       appendOrMergeInlineItem(content, "\n", []);
     }
+  }
+  if (breaks !== undefined && !HTML_WHITESPACE_ONLY.test(text)) {
+    breaks.seenText = true;
   }
   appendOrMergeInlineItem(content, text, marks);
 };
@@ -216,9 +230,9 @@ const readInlineNodes = (
 // blockBreakTagNames를 주면 그 태그(블록 요소)가 인라인으로 펼쳐질 때 앞뒤
 // 내용 사이에 줄바꿈(`\n`) 하나를 넣는다. 브라우저가 그 경계에서 줄을
 // 바꿔 보여 주는 것과 맞춘다. 앞뒤 어느 쪽에 내용이 없으면 넣지 않는다
-// (Issue #323). importHtml 경로만 켠다. 소스 공백 접기가 이 경계의 공백을
-// 지우므로, 끄면 `<td><p>a</p> <p>b</p></td>`가 `ab`로 붙는다. 클립보드 표
-// 파서는 켜지 않는다(기존 동작 유지).
+// (Issue #323). importHtml 표 셀과 클립보드 표 파서의 셀(Issue #325)이
+// 켠다. 끄면 `<p>a</p><p>b</p>`가 `ab`로 붙는다. importHtml 경로에서는
+// 소스 공백 접기가 이 경계의 공백을 지우므로 `<p>a</p> <p>b</p>`도 붙는다.
 export const inlineContentFromNodes = (
   nodes: HtmlNode[],
   options?: { blockBreakTagNames?: ReadonlySet<string> },
@@ -229,7 +243,9 @@ export const inlineContentFromNodes = (
     nodes,
     [],
     content,
-    tagNames === undefined ? undefined : { tagNames, pending: false },
+    tagNames === undefined
+      ? undefined
+      : { tagNames, pending: false, seenText: false },
   );
   return content;
 };
