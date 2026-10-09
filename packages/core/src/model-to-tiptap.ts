@@ -581,20 +581,19 @@ const customBlockToTiptapJson = (block: CustomBlock): TiptapJsonNode => ({
 // 타입으로 Editor를 만들거나 insertContent하면 PM이 예외를 던지므로
 // 로드 자체를 막는다. block-tree.ts의 기존 재사용 프리미티브를 그대로
 // 쓴다 — 재귀를 여기서 다시 구현하지 않는다.
-const findDisabledBlock = (
+// 판정은 호출자가 넘기는 함수가 맡는다. modelToTiptap은 옵션 값으로,
+// 범용 블록 조작 API(block-crud-commands.ts)는 session으로 판정한다
+// (Issue #329).
+export const findDisabledBlock = (
   blocks: Document["blocks"],
-  enabledBlockTypes: EnabledBlockTypes | undefined,
+  isEnabled: (type: Block["type"]) => boolean,
 ): Document["blocks"][number] | undefined => {
-  if (enabledBlockTypes === undefined) return undefined;
   let found: Document["blocks"][number] | undefined;
   walkBlockTree(
     blocks,
     null,
     (block) => {
-      if (
-        isKnownBlockType(block.type) &&
-        !isBlockTypeEnabled(block.type, enabledBlockTypes)
-      ) {
+      if (isKnownBlockType(block.type) && !isEnabled(block.type)) {
         found = block;
         return false;
       }
@@ -603,6 +602,15 @@ const findDisabledBlock = (
   );
   return found;
 };
+
+// 막은 타입 거절 EditorError. modelToTiptap(문서 로드)과 범용 블록 조작
+// API가 같은 코드·메시지를 쓰도록 한곳에서 만든다(Issue #329, G-CNV-001).
+export const disabledBlockError = (
+  block: Document["blocks"][number],
+): EditorError => ({
+  code: "EDITOR_FEATURE_UNAVAILABLE",
+  message: `Block ${block.id} has type "${block.type}" disabled via CreateEditorOptions.enabledBlockTypes`,
+});
 
 export const modelToTiptap = (
   document: Document,
@@ -636,18 +644,15 @@ export const modelToTiptap = (
       },
     };
   }
-  const disabledBlock = findDisabledBlock(
-    document.blocks,
-    options?.enabledBlockTypes,
-  );
+  const enabledBlockTypes = options?.enabledBlockTypes;
+  const disabledBlock =
+    enabledBlockTypes === undefined
+      ? undefined
+      : findDisabledBlock(document.blocks, (type) =>
+          isBlockTypeEnabled(type, enabledBlockTypes),
+        );
   if (disabledBlock !== undefined) {
-    return {
-      ok: false,
-      error: {
-        code: "EDITOR_FEATURE_UNAVAILABLE",
-        message: `Block ${disabledBlock.id} has type "${disabledBlock.type}" disabled via CreateEditorOptions.enabledBlockTypes`,
-      },
-    };
+    return { ok: false, error: disabledBlockError(disabledBlock) };
   }
   const knownBlocks = document.blocks.filter((block) =>
     isKnownBlockType(block.type),

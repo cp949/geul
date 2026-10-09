@@ -18,7 +18,11 @@ import {
 } from "./block-tree-edit.js";
 import type { PartialBlock } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
-import { blockToTiptapJson } from "./model-to-tiptap.js";
+import {
+  blockToTiptapJson,
+  disabledBlockError,
+  findDisabledBlock,
+} from "./model-to-tiptap.js";
 import {
   commandNotApplicable,
   type ProductionEditorSession,
@@ -91,6 +95,16 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
           message: "R0 editor documents require at least one block",
         },
       };
+    }
+    // enabledBlockTypes가 막은 타입은 PM 스키마에 노드가 없다 — 통과시키면
+    // 뒤따르는 Fragment.fromJSON이 RangeError를 던진다(Issue #329). 후보
+    // 문서 전체를 훑어 중첩 자식 안의 막은 타입도 문서 로드(modelToTiptap)와
+    // 같은 코드·메시지로 거절한다. transaction 전 판정이라 문서·undo가 그대로다.
+    const disabledBlock = findDisabledBlock(parsed.value.blocks, (type) =>
+      session.isBlockTypeEnabled(type),
+    );
+    if (disabledBlock !== undefined) {
+      return { ok: false, error: disabledBlockError(disabledBlock) };
     }
     return parsed;
   };
