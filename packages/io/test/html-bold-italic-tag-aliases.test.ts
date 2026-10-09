@@ -60,3 +60,115 @@ describe("HTML b/i 태그의 bold/italic mark 인식", () => {
     expect(result.value.warnings).toEqual([]);
   });
 });
+
+/**
+ * `font-weight:normal|400` 인라인 스타일이 붙은 `<b>`·`<strong>`은 굵지 않다
+ * (Issue #316). Google Docs 복사는 문서 전체를 `<b style="font-weight:normal">`
+ * 래퍼로 감싼다. 래퍼를 bold로 읽으면 본문 전체가 굵게 들어온다. 이 패턴만 다룬다.
+ * `font-weight:700` 같은 스타일 기반 굵게는 인식하지 않는다.
+ */
+describe("font-weight:normal 래퍼 <b>·<strong>", () => {
+  const importedContent = (html: string) => {
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  };
+
+  it.each([
+    ['<b style="font-weight:normal">x</b>', "normal"],
+    ['<b style="font-weight:400">x</b>', "400"],
+    ['<b style="font-weight: normal;">x</b>', "공백과 세미콜론"],
+    ['<b style="FONT-WEIGHT : Normal">x</b>', "대소문자와 콜론 앞 공백"],
+    ['<b style="font-weight:400 !important">x</b>', "!important"],
+    ['<b style="color:#112233;font-weight:normal">x</b>', "다른 선언과 함께"],
+    ['<strong style="font-weight:normal">x</strong>', "strong"],
+  ])("%s(%s)는 bold가 아니다", (inner) => {
+    const value = importedContent(`<p>${inner}</p>`);
+
+    expect(value.document.blocks).toEqual([
+      { id: "html-1", type: "paragraph", content: [{ text: "x" }] },
+    ]);
+  });
+
+  it.each([
+    ['<b style="font-weight:700">x</b>', "700"],
+    ['<b style="font-weight:bold">x</b>', "bold"],
+    ['<b style="color:#112233">x</b>', "무관한 선언"],
+    [
+      '<b style="font-weight:normal;font-weight:700">x</b>',
+      "마지막 선언이 700",
+    ],
+    ['<strong style="font-weight:600">x</strong>', "strong 600"],
+    ["<b>x</b>", "style 없음"],
+    ["<strong>x</strong>", "strong style 없음"],
+  ])("%s(%s)는 그대로 bold다", (inner) => {
+    const value = importedContent(`<p>${inner}</p>`);
+
+    expect(value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "x", marks: [{ type: "bold" }] }],
+      },
+    ]);
+  });
+
+  it("바깥 래퍼만 굵지 않고 안쪽 <b>는 bold다", () => {
+    const value = importedContent(
+      '<p><b style="font-weight:normal">a <b>b</b></b></p>',
+    );
+
+    expect(value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [{ text: "a " }, { text: "b", marks: [{ type: "bold" }] }],
+      },
+    ]);
+  });
+
+  it("Google Docs 모양은 bold 없이 text와 textColor가 된다", () => {
+    const value = importedContent(
+      '<b style="font-weight:normal;" id="docs-internal-guid-x"><p><span style="color:#000000;font-weight:400;">hello</span></p></b>',
+    );
+
+    expect(value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "paragraph",
+        content: [
+          { text: "hello", marks: [{ type: "textColor", color: "#000000" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("style 제거 경고는 이전과 같다(경고 계약 불변)", () => {
+    const value = importedContent('<p><b style="font-weight:normal">x</b></p>');
+
+    expect(value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "b",
+        attribute: "style",
+        message: "Unsupported style attribute was removed from b",
+      },
+    ]);
+  });
+
+  it("strong의 style 제거 경고도 낸다", () => {
+    const value = importedContent(
+      '<p><strong style="font-weight:700">x</strong></p>',
+    );
+
+    expect(value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "strong",
+        attribute: "style",
+        message: "Unsupported style attribute was removed from strong",
+      },
+    ]);
+  });
+});

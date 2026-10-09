@@ -65,3 +65,22 @@ export const parseStyleDeclarations = (style: string): StyleDeclarations => {
 
   return result;
 };
+
+// style 속성의 마지막 font-weight 선언이 normal 또는 400이면 true다. Google
+// Docs 복사는 문서 전체를 `<b style="font-weight:normal">` 래퍼로 감싼다.
+// 래퍼는 굵지 않다. `!important`와 대소문자를 무시한다. 선언이 없거나 다른
+// 값(700, bold 등)이면 false다. 스타일 기반 굵게 인식은 하지 않는다.
+export const hasNormalFontWeight = (style: string): boolean => {
+  let normal = false;
+
+  for (const match of style.matchAll(DECLARATION_PATTERN)) {
+    if (match[1]?.trim().toLowerCase() !== "font-weight") continue;
+    const value = (match[2] ?? "")
+      .replace(/\s*!important\s*$/i, "")
+      .trim()
+      .toLowerCase();
+    normal = value === "normal" || value === "400";
+  }
+
+  return normal;
+};

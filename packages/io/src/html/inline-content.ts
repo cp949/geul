@@ -4,7 +4,10 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
-import { parseStyleDeclarations } from "../clipboard/style-declarations.js";
+import {
+  hasNormalFontWeight,
+  parseStyleDeclarations,
+} from "../clipboard/style-declarations.js";
 
 export type HtmlTextNode = {
   type: "text";
@@ -89,8 +92,14 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
       return typeof href === "string" ? [{ type: "link", href }] : [];
     }
     case "strong":
-    case "b":
-      return [{ type: "bold" }];
+    case "b": {
+      // Google Docs 복사 래퍼 `<b style="font-weight:normal">`는 굵지 않다
+      // (Issue #316). style은 sanitize 허용 목록이 b·strong에 남긴다.
+      const style = node.properties.style;
+      return typeof style === "string" && hasNormalFontWeight(style)
+        ? []
+        : [{ type: "bold" }];
+    }
     case "em":
     case "i":
       return [{ type: "italic" }];

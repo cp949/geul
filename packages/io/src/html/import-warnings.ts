@@ -372,6 +372,12 @@ const collectFromNodes = (
       allowedAttributes.delete("dataLanguage");
       allowedAttributes.delete("className");
     }
+    // b·strong의 style은 font-weight:normal|400 판정에만 쓰려고 sanitizer
+    // schema가 남긴다(Issue #316). 다른 선언은 의미가 없으므로 raw 경고는
+    // 이전처럼 style 제거를 보고한다.
+    if (node.tagName === "b" || node.tagName === "strong") {
+      allowedAttributes.delete("style");
+    }
     // table cell의 pre는 TableCell.content 인라인 경로로 변환돼 CodeBlock
     // id/language/class 의미를 갖지 않는다. sanitizer가 semantic importer
     // 입력 보존을 위해 남긴 속성이라도 이 문맥에서는 실제로 버려진다.
