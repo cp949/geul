@@ -617,6 +617,38 @@ describe("div·span의 white-space 모드", () => {
       ).toEqual([{ text: "a", marks: [{ type: "bold" }] }, { text: "\nb" }]);
     });
 
+    it("CR 문자 참조는 개행이 아니라 공백으로 접힌다", () => {
+      // parse5는 입력의 CR을 LF로 바꾸므로 문자 참조로만 CR이 남는다.
+      expect(
+        paragraphContent(
+          '<span style="white-space:pre-line">c&#13;&#10;d&#13;e</span>',
+        ),
+      ).toEqual([{ text: "c\nd e" }]);
+    });
+
+    it("텍스트 중간의 개행은 앞쪽 텍스트의 줄 끝 공백을 지우지 않는다", () => {
+      expect(
+        paragraphContent('a\nb <span style="white-space:pre-line">c\nd</span>'),
+      ).toEqual([{ text: "a b c\nd" }]);
+    });
+
+    it("공백뿐인 pre-line 노드도 앞 요소의 줄 끝 공백을 이어받아 <br> 앞에서 지운다", () => {
+      expect(
+        paragraphContent(
+          '<b>a </b><span style="white-space:pre-line"> </span><br>x',
+        ),
+      ).toEqual([{ text: "a", marks: [{ type: "bold" }] }, { text: "\nx" }]);
+    });
+
+    it("개행으로 끝난 pre-line 텍스트의 끝 개행은 줄 끝에서도 지우지 않는다", () => {
+      expect(
+        paragraphContent('<span style="white-space:pre-line">a\n</span><br>b'),
+      ).toEqual([{ text: "a\n\nb" }]);
+      expect(
+        blockContents('<div style="white-space:pre-line">a\n</div><p>x</p>'),
+      ).toEqual([[{ text: "a\n" }], [{ text: "x" }]]);
+    });
+
     it("div의 pre-line도 같다", () => {
       expect(
         blockContents('<div style="white-space:pre-line">a  \n  b   c</div>'),
