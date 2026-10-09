@@ -143,6 +143,32 @@ test.describe("미리보기 빈 문단 높이(Issue #322)", () => {
       .evaluateAll((nodes) => nodes.map((node) => node.textContent));
     expect(texts).toEqual(["위", "", "", "아래"]);
 
+    // 빈 제목(Issue #327)도 같은 규칙에 닿는다 — exportHtml()이 만드는 빈
+    // 제목 6종을 `.geul-preview`에 주입해 AX 트리 검사에 함께 넣는다. 가상
+    // 콘텐츠가 실제로 붙었는지 먼저 확인한다(안 붙었으면 AX 검사가 의미
+    // 없이 통과한다).
+    const injectedContent = await page.evaluate(() => {
+      const host = document.createElement("div");
+      host.className = "geul-preview";
+      host.id = "ax-empty-headings";
+      host.innerHTML = [1, 2, 3, 4, 5, 6]
+        .map(
+          (level) =>
+            `<h${level} data-geul-block-id="ax-h${level}"></h${level}>`,
+        )
+        .join("");
+      document.body.append(host);
+      return [1, 2, 3, 4, 5, 6].map((level) => {
+        const heading = host.querySelector(`h${level}`);
+        if (heading === null) throw new Error(`h${level} 없음`);
+        return getComputedStyle(heading, "::before").content;
+      });
+    });
+    for (const content of injectedContent) {
+      expect(content).not.toBe("none");
+      expect(content).not.toBe("normal");
+    }
+
     // Playwright aria 스냅샷은 DOM 기반이라 ::before를 보지 못한다. Chromium
     // 전체 AX 트리(CDP)를 직접 읽어, 스크린리더에 노출되는(ignored가 아닌)
     // ZWSP 노드가 없는지 본다.
@@ -163,6 +189,9 @@ test.describe("미리보기 빈 문단 높이(Issue #322)", () => {
       expect(exposed).toEqual([]);
     } finally {
       await client.detach();
+      await page.evaluate(() =>
+        document.getElementById("ax-empty-headings")?.remove(),
+      );
     }
   });
 
@@ -180,7 +209,6 @@ test.describe("미리보기 빈 문단 높이(Issue #322)", () => {
         '<div data-geul-block-id="c1" data-geul-callout="true"><p>내용</p></div>' +
         '<div data-geul-block-id="c2" data-geul-callout="true"><p></p></div>' +
         '<blockquote data-geul-block-id="q"><p></p></blockquote>' +
-        '<h2 data-geul-block-id="h"></h2>' +
         '<p data-geul-block-id="p1">내용</p>' +
         '<p data-geul-block-id="p2"></p>';
       document.body.append(host);
@@ -216,5 +244,211 @@ test.describe("미리보기 빈 문단 높이(Issue #322)", () => {
     expect(measured.emptyCalloutP.height).toBeCloseTo(lineHeight, 1);
     // 빈 인용 안쪽 문단도 한 줄 높이를 얻는다(의도한 변화).
     expect(measured.emptyQuoteP.height).toBeCloseTo(lineHeight, 1);
+  });
+});
+
+/**
+ * 빈 제목 높이(Issue #327). exportHtml()은 빈 제목을 `<hN …></hN>`로 내보낸다.
+ * #322의 `p:empty::before`가 제목에 닿지 않아 빈 제목은 높이 0이었다.
+ * preview.css가 h1–h6에도 같은 규칙을 병합한다. `::before`가 제목의 글자
+ * 크기를 상속하므로 높이 목표는 "같은 레벨의 내용 있는 제목"이다
+ * (`font-size × 1.6`).
+ */
+const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+
+/**
+ * `.geul-preview` 호스트에 html을 주입하고 그 호스트 locator를 돌려준다.
+ * 페이지는 테스트마다 새로 열리므로 따로 치우지 않는다.
+ */
+const injectPreview = async (page: Page, html: string) => {
+  await page.evaluate((innerHtml) => {
+    const host = document.createElement("div");
+    host.className = "geul-preview";
+    host.id = "injected-preview";
+    host.innerHTML = innerHtml;
+    document.body.append(host);
+  }, html);
+  return page.locator("#injected-preview");
+};
+
+test.describe("미리보기 빈 제목 높이(Issue #327)", () => {
+  test("빈 h1–h6 각각의 높이가 같은 레벨의 내용 있는 제목과 같고 내용 있는 제목의 높이·margin은 그대로다", async ({
+    page,
+  }) => {
+    await openShowcasePage(page, "/examples/composite");
+
+    const html = HEADING_LEVELS.map(
+      (level) =>
+        `<h${level} data-geul-block-id="f${level}">내용</h${level}>` +
+        `<h${level} data-geul-block-id="e${level}"></h${level}>`,
+    ).join("");
+    const host = await injectPreview(page, html);
+    const measured = await host.evaluate((root) =>
+      [1, 2, 3, 4, 5, 6].map((level) => {
+        const read = (id: string) => {
+          const node = root.querySelector(`[data-geul-block-id="${id}"]`);
+          if (node === null) throw new Error(`${id} 없음`);
+          const style = getComputedStyle(node);
+          return {
+            height: node.getBoundingClientRect().height,
+            marginTop: style.marginTop,
+            marginBottom: style.marginBottom,
+            fontSize: Number.parseFloat(style.fontSize),
+          };
+        };
+        return { level, filled: read(`f${level}`), empty: read(`e${level}`) };
+      }),
+    );
+
+    for (const { level, filled, empty } of measured) {
+      const lineHeight = filled.fontSize * PREVIEW_LINE_HEIGHT;
+      // 내용 있는 제목은 이전과 같다: 한 줄 높이, margin `1em 0 0.5em`.
+      expect(filled.height, `h${level} 내용 있는 높이`).toBeCloseTo(
+        lineHeight,
+        1,
+      );
+      expect(Number.parseFloat(filled.marginTop)).toBeCloseTo(
+        filled.fontSize,
+        2,
+      );
+      expect(Number.parseFloat(filled.marginBottom)).toBeCloseTo(
+        filled.fontSize * 0.5,
+        2,
+      );
+      // 빈 제목은 같은 레벨의 내용 있는 제목과 같은 높이·margin이다.
+      expect(empty.fontSize).toBe(filled.fontSize);
+      expect(empty.height, `h${level} 빈 높이`).toBeCloseTo(filled.height, 1);
+      expect(empty.marginTop).toBe(filled.marginTop);
+      expect(empty.marginBottom).toBe(filled.marginBottom);
+    }
+  });
+
+  test("자식 있는 빈 제목(`<div><h3></h3><div data-geul-children>`)의 h3도 내용 있는 h3와 같은 높이다", async ({
+    page,
+  }) => {
+    await openShowcasePage(page, "/examples/composite");
+
+    const host = await injectPreview(
+      page,
+      '<div data-geul-block-id="w1"><h3 data-geul-block-id="w1">내용</h3><div data-geul-children="1"><p data-geul-block-id="c1">자식</p></div></div>' +
+        '<div data-geul-block-id="w2"><h3 data-geul-block-id="w2"></h3><div data-geul-children="1"><p data-geul-block-id="c2">자식</p></div></div>',
+    );
+    const measured = await host.evaluate((root) => {
+      const read = (selector: string) => {
+        const node = root.querySelector(selector);
+        if (node === null) throw new Error(`${selector} 없음`);
+        return {
+          height: node.getBoundingClientRect().height,
+          fontSize: Number.parseFloat(getComputedStyle(node).fontSize),
+        };
+      };
+      return {
+        filled: read('[data-geul-block-id="w1"] > h3'),
+        empty: read('[data-geul-block-id="w2"] > h3'),
+      };
+    });
+
+    expect(measured.filled.height).toBeCloseTo(
+      measured.filled.fontSize * PREVIEW_LINE_HEIGHT,
+      1,
+    );
+    expect(measured.empty.height).toBeCloseTo(measured.filled.height, 1);
+  });
+
+  test("빈 li·번호 li·체크리스트 li·summary·인용 안쪽 문단은 이미 한 줄 높이다(현행 유지)", async ({
+    page,
+  }) => {
+    await openShowcasePage(page, "/examples/composite");
+
+    // 실측으로 고정한다. li·summary는 마커가 줄 상자를 만들어 원래 한 줄이다
+    // (제목 규칙이 만든 값이 아니다). 인용 안쪽 `<p>`는 #322의
+    // `p:empty::before` 규칙으로 한 줄이 된다.
+    const host = await injectPreview(
+      page,
+      '<ul><li data-geul-block-id="l1"></li></ul>' +
+        '<ol><li data-geul-block-id="l2"></li></ol>' +
+        '<ul><li data-geul-block-id="l3" data-geul-checked="false"></li></ul>' +
+        '<details data-geul-block-id="t1" open><summary data-geul-block-id="t1"></summary><div data-geul-children="1"><p data-geul-block-id="t2">자식</p></div></details>' +
+        '<blockquote data-geul-block-id="q1"><p></p></blockquote>' +
+        '<p data-geul-block-id="p1">내용</p>',
+    );
+    const measured = await host.evaluate((root) => {
+      const read = (selector: string) => {
+        const node = root.querySelector(selector);
+        if (node === null) throw new Error(`${selector} 없음`);
+        return node.getBoundingClientRect().height;
+      };
+      const paragraph = root.querySelector('[data-geul-block-id="p1"]');
+      if (paragraph === null) throw new Error("p1 없음");
+      return {
+        paragraph: read('[data-geul-block-id="p1"]'),
+        bulletLi: read('ul > li[data-geul-block-id="l1"]'),
+        numberedLi: read('ol > li[data-geul-block-id="l2"]'),
+        checkLi: read('li[data-geul-block-id="l3"]'),
+        summary: read("summary"),
+        quoteP: read("blockquote > p"),
+        fontSize: Number.parseFloat(getComputedStyle(paragraph).fontSize),
+      };
+    });
+
+    const { fontSize, ...heights } = measured;
+    expect(heights.paragraph).toBeCloseTo(fontSize * PREVIEW_LINE_HEIGHT, 1);
+    for (const [name, height] of Object.entries(heights)) {
+      expect(height, name).toBeCloseTo(heights.paragraph, 1);
+    }
+  });
+
+  test("에디터에서 `# `로 만든 빈 제목이 미리보기에서 내용 있는 제목과 같은 높이를 얻는다", async ({
+    page,
+  }) => {
+    await openShowcasePage(page, "/examples/composite");
+
+    const editable = page.getByRole("textbox", { name: "Editor" });
+    await editable.click();
+    await page.keyboard.type("# ");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("## ");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("### 제목");
+
+    const preview = page.locator('[aria-label="미리보기"]');
+    await expect(preview.locator("h3")).toHaveText("제목");
+    await expect(preview.locator("h1:empty")).toHaveCount(1);
+    await expect(preview.locator("h2:empty")).toHaveCount(1);
+
+    // 결과 패널이 디바운스돼 있어 높이가 안정될 때까지 재시도한다.
+    await expect
+      .poll(async () =>
+        preview.evaluate((root) => {
+          const heightOf = (selector: string) => {
+            const node = root.querySelector(selector);
+            if (node === null) return null;
+            const style = getComputedStyle(node);
+            // 높이를 자기 글자 크기로 나눈다. 빈 제목이 높이 0이면 0이 된다.
+            return {
+              lineHeightRatio:
+                node.getBoundingClientRect().height /
+                Number.parseFloat(style.fontSize),
+            };
+          };
+          return { h1: heightOf("h1"), h2: heightOf("h2") };
+        }),
+      )
+      .toMatchObject({
+        h1: { lineHeightRatio: expect.closeTo(PREVIEW_LINE_HEIGHT, 2) },
+        h2: { lineHeightRatio: expect.closeTo(PREVIEW_LINE_HEIGHT, 2) },
+      });
+
+    // 글자 크기는 레벨 순서를 지킨다(기본 16px 가정 없이 제목끼리 비교).
+    const sizes = await preview.evaluate((root) => {
+      const sizeOf = (selector: string) => {
+        const node = root.querySelector(selector);
+        if (node === null) throw new Error(`${selector} 없음`);
+        return Number.parseFloat(getComputedStyle(node).fontSize);
+      };
+      return { h1: sizeOf("h1"), h2: sizeOf("h2"), h3: sizeOf("h3") };
+    });
+    expect(sizes.h1).toBeGreaterThan(sizes.h2);
+    expect(sizes.h2).toBeGreaterThan(sizes.h3);
   });
 });

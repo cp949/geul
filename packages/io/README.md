@@ -93,6 +93,6 @@ import "@cp949/geul-io/preview.css";
 <div className="geul-preview" dangerouslySetInnerHTML={{ __html: html }} />
 ```
 
-`exportHtml()`은 빈 문단을 `<p …></p>`로 내보낸다. 빈 `<p>`는 줄 상자가 없어 높이가 0이므로 `preview.css`를 쓰지 않는 소비자는 빈 줄이 사라진다. `preview.css`의 규칙은 `:empty`에 기대므로 `<p …></p>`를 공백 없이 그대로 렌더링해야 한다(pretty-print로 공백이 끼면 매칭되지 않는다) — 자체 규칙(`p:empty::before { content: "\200b"; }` 등)이나 `:empty` 처리를 추가한다. `preview.css`는 이 규칙을 이미 가진다.
+`exportHtml()`은 빈 문단을 `<p …></p>`로 내보낸다. 빈 `<p>`는 줄 상자가 없어 높이가 0이므로 `preview.css`를 쓰지 않는 소비자는 빈 줄이 사라진다. 빈 제목(`<h1 …></h1>`–`<h6 …></h6>`)도 같은 증상이다. `preview.css`의 규칙은 `:empty`에 기대므로 `<p …></p>`와 `<hN …></hN>`을 공백 없이 그대로 렌더링해야 한다(pretty-print로 공백이 끼면 매칭되지 않는다) — 자체 규칙(`p:empty::before, h1:empty::before, …, h6:empty::before { content: "\200b"; }` 등)이나 `:empty` 처리를 추가한다. `preview.css`는 문단과 제목 모두 이 규칙을 이미 가진다. 빈 제목의 높이는 같은 레벨의 내용 있는 제목 한 줄과 같다.
 
 다크 모드는 아직 지원하지 않는다. 텍스트 블록(문단/헤딩/인용/목록 4종) 단위 `textColor`/`backgroundColor`/`textAlignment`는 `exportHtml()`이 `data-geul-*` 3종과 함께 인라인 `style`(`color`/`background-color`/`text-align`, 지정된 것만)도 함께 내보내므로(Issue #179) 이 CSS나 별도 후처리 없이 `exportHtml()` 출력 자체에서 이미 시각적으로 반영된다. 표 셀(`td`/`th`)의 `textColor`/`backgroundColor`/`align`은 별도 계약이라 아직 `data-geul-*`만 나가고 `style`은 나가지 않는다 — 표 셀 값을 시각적으로 반영하려면 소비자가 여전히 `style`로 직접 투영해야 한다.

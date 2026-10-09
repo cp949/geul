@@ -53,14 +53,15 @@ describe("preview.css export", () => {
     expect(withoutComments).not.toMatch(/\dlh\b/);
   });
 
-  it("빈 문단에 한 줄 높이를 주는 규칙을 가진다(Issue #322)", () => {
+  it("빈 문단과 빈 제목(h1–h6)에 한 줄 높이를 주는 규칙을 한 선언 블록으로 가진다(Issue #322, #327)", () => {
     const css = readFileSync(join(packageRoot, "src/preview.css"), "utf8");
     const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
     // 둘째 선언은 대체 텍스트 구문이다. 첫째 선언이 Chrome 75 폴백이라
     // 둘 다 있어야 한다. 파일에 이스케이프가 원시 문자(U+200B)가 아닌
     // `\200b` 글자 그대로 남아야 한다 — 원시 ZWSP는 눈에 보이지 않아 편집 중 손상돼도 모른다.
+    // 제목 6종은 `:is()` 없이 펼쳐 같은 선언 블록에 병합한다.
     expect(withoutComments).toMatch(
-      /\.geul-preview p:empty::before\s*\{\s*content:\s*"\\200b";\s*content:\s*"\\200b"\s*\/\s*"";\s*\}/,
+      /\.geul-preview p:empty::before,\s*\.geul-preview h1:empty::before,\s*\.geul-preview h2:empty::before,\s*\.geul-preview h3:empty::before,\s*\.geul-preview h4:empty::before,\s*\.geul-preview h5:empty::before,\s*\.geul-preview h6:empty::before\s*\{\s*content:\s*"\\200b";\s*content:\s*"\\200b"\s*\/\s*"";\s*\}/,
     );
     expect(css).not.toContain("\u200b");
   });
@@ -152,6 +153,51 @@ describe("실제 export DOM에 승격 대상 규칙이 매치한다(Issue #201)"
     );
     expect(select(".geul-preview h1", tree as SelectTree)).toBeDefined();
     expect(select(".geul-preview h6", tree as SelectTree)).toBeDefined();
+  });
+
+  it("빈 heading(h1–h6)이 공백 없는 `<hN …></hN>`로 나와 :empty 셀렉터에 실제 매치한다(Issue #327)", () => {
+    const levels = [1, 2, 3, 4, 5, 6] as const;
+    const html = exportOk({
+      formatVersion: 1,
+      revision: 0,
+      blocks: levels.map((level) => ({
+        id: `eh-${level}`,
+        type: "heading" as const,
+        level,
+        content: [],
+      })),
+    });
+    // 소스 문자열에서도 여는 태그와 닫는 태그 사이에 공백이 없어야 한다.
+    for (const level of levels) {
+      expect(html).toMatch(new RegExp(`<h${level}\\b[^>]*></h${level}>`));
+    }
+    const tree = previewRoot(html);
+    for (const level of levels) {
+      expect(
+        select(`.geul-preview h${level}:empty`, tree as SelectTree),
+      ).toBeDefined();
+    }
+  });
+
+  it("내용 있는 heading은 :empty 셀렉터에 매치하지 않는다(Issue #327)", () => {
+    const tree = previewRoot(
+      exportOk({
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          {
+            id: "fh-2",
+            type: "heading",
+            level: 2,
+            content: [{ text: "제목" }],
+          },
+        ],
+      }),
+    );
+    expect(select(".geul-preview h2", tree as SelectTree)).toBeDefined();
+    expect(
+      select(".geul-preview h2:empty", tree as SelectTree),
+    ).toBeUndefined();
   });
 
   it("paragraph가 실제 매치한다", () => {

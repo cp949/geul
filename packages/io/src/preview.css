@@ -38,18 +38,27 @@
   margin: 0.5em 0;
 }
 
-/* 빈 문단(Issue #322) — exportHtml()은 빈 문단을 `<p …></p>`로 내보낸다.
-   빈 `<p>`는 줄 상자가 없어 높이가 0이다. 에디터의 빈 줄 N개가 미리보기에서
-   간격 0으로 사라진다. ::before에 U+200B(ZWSP, CSS 이스케이프 `\200b`)를
-   넣어 줄 상자를 만들고 한 줄 높이를 준다. 높이는 `.geul-preview`의
-   line-height를 상속하므로 소비자가 줄 간격을 바꿔도 따라간다.
+/* 빈 문단과 빈 제목(Issue #322, #327) — exportHtml()은 빈 문단을 `<p …></p>`,
+   빈 제목을 `<hN …></hN>`로 내보낸다. 빈 `<p>`와 빈 `<hN>`은 줄 상자가 없어
+   높이가 0이다. 에디터의 빈 줄 N개가 미리보기에서 간격 0으로 사라진다.
+   ::before에 U+200B(ZWSP, CSS 이스케이프 `\200b`)를 넣어 줄 상자를 만들고
+   한 줄 높이를 준다. 높이는 `.geul-preview`의 line-height를 상속하므로
+   소비자가 줄 간격을 바꿔도 따라간다. 빈 제목의 높이는 ::before가 제목의
+   글자 크기를 상속해 그 레벨의 내용 있는 제목 한 줄과 같다.
    `min-height: 1lh`는 쓰지 않는다 — `lh` 단위는 Chrome 109+라 이 패키지의
-   floor(Chrome 75)에서 무시된다. 이 규칙은 callout 안쪽 빈 `<p>`에도
-   닿는다(margin 0 규칙은 그대로, 높이만 한 줄이 된다).
+   floor(Chrome 75)에서 무시된다. 제목 6종은 `:is()`(Chrome 88+) 없이 펼쳐
+   쓴다. 이 규칙은 callout 안쪽 빈 `<p>`에도 닿는다(margin 0 규칙은 그대로,
+   높이만 한 줄이 된다).
    둘째 선언은 대체 텍스트 구문(`/ ""`)이다. 지원하는 엔진(Chrome 111+)은
    ZWSP를 접근성 트리에서 뺀다. 모르는 엔진(Chrome 75)은 둘째 선언을
    무효로 버리고 첫째를 쓴다. */
-.geul-preview p:empty::before {
+.geul-preview p:empty::before,
+.geul-preview h1:empty::before,
+.geul-preview h2:empty::before,
+.geul-preview h3:empty::before,
+.geul-preview h4:empty::before,
+.geul-preview h5:empty::before,
+.geul-preview h6:empty::before {
   content: "\200b";
   content: "\200b" / "";
 }
