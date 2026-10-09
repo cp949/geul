@@ -5,8 +5,8 @@
  *
  * 다루는 축은 html 분기(캐럿·범위, 목록·제목 차단, allow 모드, 차단 타입만 든
  * 입력), Markdown 분기(캐럿·범위), 허용 타입만 든 html과 미지정 설정의 대조군,
- * pasteHandler 위임 경로, transaction 계약(undo 1회 복원, 평문이 없을 때 문서·
- * selection 불변)이다. 입력은 mock 없이 실입력으로 유발한다.
+ * pasteHandler 위임 경로, transaction 계약(undo 1회로 문서·selection 복원,
+ * 평문이 없을 때 문서·selection 불변)이다. 입력은 mock 없이 실입력으로 유발한다.
  */
 import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -133,6 +133,8 @@ describe("차단 블록이 섞인 html은 text/plain으로 폴백한다(Issue #3
       expect(result).toEqual(["p:fiqrst", "p:second"]);
     });
 
+    // 회귀 대조군이다. 수정 전에도 통과한다.
+    // 수정 전에는 insertContent가 false를 내고 끝나 문서가 불변이었다.
     it("평문이 없으면 문서와 selection이 그대로다", () => {
       const { editor, editable, tiptap } = setupPasteSelection(
         twoParagraphs(),
@@ -243,6 +245,7 @@ describe("transaction 계약", () => {
       { enabledBlockTypes: DENY_QUOTE },
     );
     const before = outline(blocksOf(editor));
+    const selectionBefore = tiptap.state.selection;
     const revision = editor.getDocument().revision;
 
     pasteData(editable, {
@@ -261,5 +264,6 @@ describe("transaction 계약", () => {
     tiptap.commands.undo();
 
     expect(outline(blocksOf(editor))).toEqual(before);
+    expect(tiptap.state.selection.eq(selectionBefore)).toBe(true);
   });
 });
