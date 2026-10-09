@@ -157,6 +157,13 @@ export type BlockSegmentPolicy<
   // ul/ol처럼 그 자체는 경계가 아니라 순수 wrapper인 태그. flush 없이
   // 항상 재귀한다.
   isTransparent: (tagName: string) => boolean;
+  // true면 isNestedBoundary·isTransparent 요소를 조상 래퍼 체인에 넣지
+  // 않는다. 두 요소는 마크가 없어 인라인 결과가 같다. 넣으면 안쪽
+  // blockquote·li·callout의 텍스트 leaf가 그 요소의 복제로 감싸지고, 호출자의
+  // content/children 분할이 복제를 블록으로 보아 content가 빈다
+  // (`<figure><blockquote>q</blockquote></figure>`, Issue #323). document
+  // import만 켠다. clipboard는 이전 체인을 유지한다.
+  omitStructuralAncestors?: boolean;
   // 표로 취급할 노드 판정. import는 단순 태그명 검사, clipboard는
   // findDataTables가 미리 고른 표 집합의 멤버십 검사처럼 호출자마다
   // 다르다 — 표 탐지 알고리즘 자체는 이 모듈이 아니라 호출자가 소유한다.
@@ -187,9 +194,9 @@ export type BlockSegmentPolicy<
 // 조상 서식 체인을 노드에 얕은 클론으로 다시 씌운다. 재귀 중 표나 중첩
 // 경계를 만나 pending을 flush하면 그 안의 텍스트가 원래 있던 위치의 조상
 // (`<strong>`, `<a>` 등)에서 떨어져 나오므로, 이 복원이 없으면 서식(href
-// 포함)을 잃는다. 마크 없는 조상(p/div/li/ul 등)까지 함께 씌워도
-// inlineContentFromNodes가 그 태그들을 인식하지 않고 그냥 재귀 통과하므로
-// 결과는 달라지지 않는다.
+// 포함)을 잃는다. 마크 없는 조상(div/li/ul 등)까지 씌우면 인라인 결과는
+// 같지만, blockquote·목록의 content/children 분할이 그 복제를 블록으로 볼
+// 수 있다. 정책의 omitStructuralAncestors가 이 조상을 체인에서 뺀다.
 const wrapInAncestors = (
   node: HtmlElementContent,
   ancestors: readonly HtmlElementNode[],
@@ -283,6 +290,14 @@ export function segmentBlocks<Level extends number = number>(
     list: readonly HtmlNode[],
     ancestors: readonly HtmlElementNode[],
   ): void => {
+    // isNestedBoundary·isTransparent 요소 안으로 재귀할 때의 조상 체인이다.
+    const structuralAncestors = (
+      node: HtmlElementNode,
+    ): readonly HtmlElementNode[] =>
+      policy.omitStructuralAncestors === true
+        ? ancestors
+        : [...ancestors, node];
+
     for (const node of list) {
       if (node.type === "element" && policy.isTableNode(node)) {
         // 기존 pending(intro 등)을 먼저 내보낸 뒤에야 표 직속 비섹션
@@ -444,12 +459,12 @@ export function segmentBlocks<Level extends number = number>(
       }
       if (policy.isNestedBoundary(node.tagName)) {
         flush();
-        walk(node.children, [...ancestors, node]);
+        walk(node.children, structuralAncestors(node));
         flush();
         continue;
       }
       if (policy.isTransparent(node.tagName)) {
-        walk(node.children, [...ancestors, node]);
+        walk(node.children, structuralAncestors(node));
         continue;
       }
       if (containsAnyBlockBoundary(node.children)) {

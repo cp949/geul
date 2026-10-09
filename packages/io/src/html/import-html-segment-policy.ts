@@ -53,6 +53,18 @@ const isCodeBlockFigureNode = (node: HtmlElementNode): boolean =>
 const isCalloutNode = (node: HtmlElementNode): boolean =>
   node.tagName === "div" && propertyString(node, "dataGeulCallout") === "true";
 
+// figure·figcaption·details·summary는 importHtml 전용 sanitize만 살린다
+// (import-html-sanitize-schema.ts). 미디어·codeBlock figure, toggle details로
+// 읽히지 않으면 div처럼 문단 경계다. 브라우저도 이 경계에서 줄을 바꾼다.
+// 경계가 아니면 바깥 문단에 구분자 없이 이어 붙고, 소스 공백 접기가 경계의
+// 공백을 지워 단어가 붙는다(Issue #323).
+const importOnlyNestedBoundaryTagNames = new Set([
+  "details",
+  "figcaption",
+  "figure",
+  "summary",
+]);
+
 // documentFromRoot의 재귀 경계 판정(문단/헤딩/구분선/표 시퀀스로 쪼개기)은
 // clipboard-table-parser.ts의 blockSequenceFromNodes와 block-segmenter.ts를
 // 공유한다(아키텍처 리뷰 2차 후보 G) — p/h1~h3/table만 보던 예전 documentFromRoot
@@ -71,8 +83,11 @@ export const importBlockSegmentPolicy: BlockSegmentPolicy<
 > = {
   isSimpleBoundary: isParagraphTag,
   headingLevelFromTagName: (tagName) => headingLevelByTagName.get(tagName),
-  isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
+  isNestedBoundary: (tagName) =>
+    NESTED_BOUNDARY_TAG_NAMES.has(tagName) ||
+    importOnlyNestedBoundaryTagNames.has(tagName),
   isTransparent: isTransparentListTag,
+  omitStructuralAncestors: true,
   isTableNode: (node) => node.tagName === "table",
   isDividerTag: (tagName) => tagName === "hr",
   isQuoteTag: (tagName) => tagName === "blockquote",

@@ -173,7 +173,14 @@ describe("표 셀 위 표 포함 html drop(Issue #312)", () => {
         "<p>x</p><table><tr><td>o<table><tr><td>in</td></tr></table></td></tr></table>",
       );
 
-      expect(kindsOf(tiptap, "t-r0c0")).toEqual(["cex", "br", "oinll"]);
+      // importHtml이 셀 안 표 경계에 줄바꿈을 넣는다(Issue #323).
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual([
+        "cex",
+        "br",
+        "o",
+        "br",
+        "inll",
+      ]);
       expectTableIntact(editor, tiptap);
     });
 
@@ -185,7 +192,14 @@ describe("표 셀 위 표 포함 html drop(Issue #312)", () => {
         "<p>x</p><table><tr><td><p>a</p><p>b</p></td></tr></table>",
       );
 
-      expect(kindsOf(tiptap, "t-r0c0")).toEqual(["cex", "br", "abll"]);
+      // importHtml이 셀 안 문단 경계에 줄바꿈을 넣는다(Issue #323).
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual([
+        "cex",
+        "br",
+        "a",
+        "br",
+        "bll",
+      ]);
       expectTableIntact(editor, tiptap);
     });
 
@@ -451,26 +465,31 @@ describe("표 셀 위 표 포함 html drop(Issue #312)", () => {
   });
 
   describe("표 하나만 든 html(T8, Issue #313)", () => {
+    // 셀 안 블록 경계는 importHtml이 줄바꿈으로 잇는다(Issue #323).
     const CELL_TWO_PARAGRAPHS =
       "<table><tr><td><p>a</p><p>b</p></td></tr></table>";
 
     it.each([
-      ["셀 안 문단 둘", CELL_TWO_PARAGRAPHS, ["ceabll"]],
+      ["셀 안 문단 둘", CELL_TWO_PARAGRAPHS, ["cea", "br", "bll"]],
       [
         "셀 안 제목 + 문단",
         "<table><tr><td><h1>h</h1><p>p</p></td></tr></table>",
-        ["cehpll"],
+        ["ceh", "br", "pll"],
       ],
-      ["셀 안 문단 둘인 표와 구분선", `${CELL_TWO_PARAGRAPHS}<hr>`, ["ceabll"]],
+      [
+        "셀 안 문단 둘인 표와 구분선",
+        `${CELL_TWO_PARAGRAPHS}<hr>`,
+        ["cea", "br", "bll"],
+      ],
       [
         "셀 안 목록이 든 표",
         "<table><tr><td><ul><li>a</li><li>b</li></ul></td></tr></table>",
-        ["ceabll"],
+        ["cea", "br", "bll"],
       ],
       [
         "셀 하나만 문단 둘인 2x2",
         "<table><tr><td><p>a</p><p>b</p></td><td></td></tr><tr><td></td><td></td></tr></table>",
-        ["ceabll"],
+        ["cea", "br", "bll"],
       ],
     ] as const)(
       "%s: 내용이 셀 안에 들어가고 표 밖으로 새지 않는다",

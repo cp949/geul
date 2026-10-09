@@ -152,7 +152,8 @@ describe("hr ↔ divider", () => {
 describe("경계 유지(회귀)", () => {
   // 표 셀은 parseTable이 inlineContentFromNodes로만 읽는다 — segmentBlocks가
   // 표 노드 안으로 내려가지 않으므로 hr 세그먼트가 셀 안에서 블록을 만들
-  // 경로가 없다. hr은 텍스트를 내지 않고 h4는 인라인 텍스트로 풀린다.
+  // 경로가 없다. hr은 텍스트를 내지 않고 h4는 인라인 텍스트로 풀린다. 두
+  // 경계는 줄바꿈 하나가 된다(Issue #323, 이전에는 `abc`로 붙었다).
   it("표 셀 안 <hr>과 <h4>는 블록을 만들지 않고 셀 인라인 텍스트로 남는다", () => {
     const { document, warnings } = importOk(
       "<table><tr><td>a<hr>b<h4>c</h4></td></tr></table>",
@@ -166,7 +167,7 @@ describe("경계 유지(회귀)", () => {
       (table as TableBlock).rows.map((row) =>
         row.cells.map((cell) => cell.content),
       ),
-    ).toEqual([[[{ text: "abc" }]]]);
+    ).toEqual([[[{ text: "a\nb\nc" }]]]);
     expect(warnings).toEqual([]);
   });
 });

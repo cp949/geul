@@ -152,33 +152,85 @@ const marksForElement = (node: HtmlElementNode): TextMark[] => {
   }
 };
 
+// 블록 줄바꿈 옵션의 상태다. pending은 블록 요소의 시작이나 끝을 지나
+// 다음 텍스트 앞에 줄바꿈을 넣어야 하는지다.
+type BlockBreakState = {
+  tagNames: ReadonlySet<string>;
+  pending: boolean;
+};
+
+const HTML_WHITESPACE_ONLY = /^[\t\n\f\r ]+$/;
+
+const appendText = (
+  content: InlineContent,
+  text: string,
+  marks: TextMark[],
+  breaks: BlockBreakState | undefined,
+): void => {
+  if (text.length === 0) return;
+  if (breaks?.pending === true) {
+    // 블록 사이 공백뿐인 텍스트는 버리고 줄바꿈 대기를 유지한다. 소스 공백
+    // 접기가 꺼진 입력(data-geul-*)에서 공백과 줄바꿈이 섞이지 않게 한다.
+    if (HTML_WHITESPACE_ONLY.test(text)) return;
+    breaks.pending = false;
+    const last = content[content.length - 1];
+    // 앞 내용이 없거나 이미 줄바꿈으로 끝나면 넣지 않는다. 블록 양끝과
+    // 연속 경계가 빈 줄을 만들지 않는다.
+    if (last !== undefined && "text" in last && !last.text.endsWith("\n")) {
+      appendOrMergeInlineItem(content, "\n", []);
+    }
+  }
+  appendOrMergeInlineItem(content, text, marks);
+};
+
 const readInlineNodes = (
   nodes: HtmlNode[],
   marks: TextMark[],
   content: InlineContent,
+  breaks: BlockBreakState | undefined,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
-      appendOrMergeInlineItem(content, node.value, marks);
+      appendText(content, node.value, marks, breaks);
       continue;
     }
     if (node.type !== "element") continue;
     if (node.tagName === "br") {
       appendOrMergeInlineItem(content, "\n", marks);
+      if (breaks !== undefined) breaks.pending = false;
       continue;
     }
 
+    const isBlock = breaks?.tagNames.has(node.tagName) === true;
+    if (isBlock && breaks !== undefined) breaks.pending = true;
     readInlineNodes(
       node.children,
       [...marks, ...marksForElement(node)],
       content,
+      breaks,
     );
+    if (isBlock && breaks !== undefined) breaks.pending = true;
   }
 };
 
-export const inlineContentFromNodes = (nodes: HtmlNode[]): InlineContent => {
+// blockBreakTagNames를 주면 그 태그(블록 요소)가 인라인으로 펼쳐질 때 앞뒤
+// 내용 사이에 줄바꿈(`\n`) 하나를 넣는다. 브라우저가 그 경계에서 줄을
+// 바꿔 보여 주는 것과 맞춘다. 앞뒤 어느 쪽에 내용이 없으면 넣지 않는다
+// (Issue #323). importHtml 경로만 켠다. 소스 공백 접기가 이 경계의 공백을
+// 지우므로, 끄면 `<td><p>a</p> <p>b</p></td>`가 `ab`로 붙는다. 클립보드 표
+// 파서는 켜지 않는다(기존 동작 유지).
+export const inlineContentFromNodes = (
+  nodes: HtmlNode[],
+  options?: { blockBreakTagNames?: ReadonlySet<string> },
+): InlineContent => {
   const content: InlineContent = [];
-  readInlineNodes(nodes, [], content);
+  const tagNames = options?.blockBreakTagNames;
+  readInlineNodes(
+    nodes,
+    [],
+    content,
+    tagNames === undefined ? undefined : { tagNames, pending: false },
+  );
   return content;
 };
 

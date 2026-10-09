@@ -6,6 +6,8 @@
  *   공백은 앞쪽 텍스트에 남긴다.
  * - 블록 경계 태그의 안쪽 양끝과 `<br>` 옆 공백은 지운다. `<br>`는 줄바꿈으로
  *   남고 소스 개행과 구분된다. 공백뿐인 텍스트 노드는 블록을 만들지 않는다.
+ * - 블록 경계에서 단어가 붙지 않는다. figure·figcaption·details·summary는
+ *   문단 경계이고, importHtml 표 셀은 경계마다 줄바꿈을 넣는다(Issue #323).
  * - NBSP는 접지도 자르지도 않는다.
  * - `<pre>`와 `white-space`가 pre·pre-wrap·break-spaces인 `span` 안은 접지
  *   않는다. pre-line과 다른 태그의 `white-space`는 접는다.
@@ -263,6 +265,191 @@ describe("접지 않는 예외", () => {
     expect(
       paragraphContent('a  <span style="white-space:pre"><br>b  </span>'),
     ).toEqual([{ text: "a\nb  " }]);
+  });
+});
+
+// 소스 공백 접기는 블록 경계 태그 양쪽 공백을 지운다. importHtml이 그 경계를
+// 구분자 없이 이어 붙이면 단어가 붙는다(Issue #323). figure·figcaption·
+// details·summary는 문단 경계로 나누고, 표 셀처럼 블록을 담지 못하는 곳은
+// 경계마다 줄바꿈을 넣는다.
+describe("블록 경계에서 단어가 붙지 않는다", () => {
+  it("figure 앞뒤 텍스트는 별도 문단이다", () => {
+    const { blocks } = importedDocument(
+      "<div>Intro <figure>Figure body</figure> outro</div>",
+    );
+
+    expect(blocks.map(contentOf)).toEqual([
+      [{ text: "Intro" }],
+      [{ text: "Figure body" }],
+      [{ text: "outro" }],
+    ]);
+  });
+
+  it("summary와 details 본문은 별도 문단이다", () => {
+    const { blocks } = importedDocument(
+      "<details><summary>Title</summary> body text </details>",
+    );
+
+    expect(blocks.map(contentOf)).toEqual([
+      [{ text: "Title" }],
+      [{ text: "body text" }],
+    ]);
+  });
+
+  it("figcaption과 뒤따르는 텍스트는 별도 문단이다", () => {
+    const { blocks } = importedDocument(
+      "<p>Before</p>\n<figure>\n  <figcaption>Fig 1</figcaption>\n  <span>text</span>\n</figure>",
+    );
+
+    expect(blocks.map(contentOf)).toEqual([
+      [{ text: "Before" }],
+      [{ text: "Fig 1" }],
+      [{ text: "text" }],
+    ]);
+  });
+
+  it("목록 항목 안 figure는 항목 content를 끝내고 자식이 된다", () => {
+    const { blocks } = importedDocument(
+      "<ul>\n <li>\n  a\n  <figure>f</figure>\n  b\n </li>\n</ul>",
+    );
+
+    expect(blocks).toMatchObject([
+      {
+        type: "bulletListItem",
+        content: [{ text: "a" }],
+        children: [
+          { type: "paragraph", content: [{ text: "f" }] },
+          { type: "paragraph", content: [{ text: "b" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("인용 안 figure 뒤 텍스트는 별도 문단이다", () => {
+    const { blocks } = importedDocument(
+      "<blockquote><p>q</p> <figure>f</figure> x</blockquote>",
+    );
+
+    expect(blocks).toMatchObject([
+      {
+        type: "quote",
+        content: [{ text: "q" }],
+        children: [
+          { type: "paragraph", content: [{ text: "f" }] },
+          { type: "paragraph", content: [{ text: "x" }] },
+        ],
+      },
+    ]);
+  });
+
+  it.each([
+    ["p", "<td>\n <p>a</p>\n <p>b</p>\n</td>", "a\nb"],
+    ["공백 없는 p", "<td><p>a</p><p>b</p></td>", "a\nb"],
+    ["div", "<td><div>a</div>\n<div>b</div></td>", "a\nb"],
+    ["pre", "<td>x\n<pre>code</pre>\ny</td>", "x\ncode\ny"],
+    ["figure", "<td>a <figure>f</figure> b</td>", "a\nf\nb"],
+    [
+      "details·summary",
+      "<td>a <details><summary>s</summary> d</details> b</td>",
+      "a\ns\nd\nb",
+    ],
+    ["끝 <br> 뒤 p", "<td><p>a<br></p><p>b</p></td>", "a\nb"],
+  ])("표 셀 안 %s 경계는 줄바꿈 하나가 된다", (_name, cell, text) => {
+    const { blocks } = importedDocument(`<table><tr>${cell}</tr></table>`);
+
+    expect(blocks).toMatchObject([
+      { type: "table", rows: [{ cells: [{ content: [{ text }] }] }] },
+    ]);
+  });
+
+  it.each([
+    ["div", "<div><blockquote>q</blockquote></div>"],
+    ["figure", "<figure><blockquote>q</blockquote></figure>"],
+    ["details", "<details><blockquote>q</blockquote></details>"],
+  ])("%s 안 인용의 텍스트는 인용 content다", (_name, html) => {
+    expect(importedDocument(html).blocks).toMatchObject([
+      { type: "quote", content: [{ text: "q" }] },
+    ]);
+  });
+
+  it.each([
+    [
+      "details 안 목록",
+      "<details><summary>S</summary><ul><li><blockquote>q</blockquote></li></ul></details>",
+    ],
+    [
+      "figure 안 목록",
+      "<figure><ol><li><blockquote>q</blockquote></li></ol></figure>",
+    ],
+  ])("%s 속 인용의 텍스트는 인용 content다", (_name, html) => {
+    const quote = (blocks: Document["blocks"]): unknown =>
+      blocks
+        .flatMap((block) => [
+          block,
+          ...("children" in block && Array.isArray(block.children)
+            ? (block.children as Document["blocks"])
+            : []),
+        ])
+        .find((block) => block.type === "quote");
+
+    expect(quote(importedDocument(html).blocks)).toMatchObject({
+      type: "quote",
+      content: [{ text: "q" }],
+    });
+  });
+
+  it("공백 접기가 꺼진 입력의 셀 블록 사이 공백뿐인 텍스트는 줄바꿈과 섞이지 않는다", () => {
+    const { blocks } = importedDocument(
+      '<p data-geul-block-id="x">z</p><table><tr><td><p>a</p> <p>b</p></td></tr></table>',
+    );
+
+    expect(blocks[1]).toMatchObject({
+      type: "table",
+      rows: [{ cells: [{ content: [{ text: "a\nb" }] }] }],
+    });
+  });
+
+  it("figure 안 인용과 figcaption은 인용과 문단이 된다", () => {
+    const { blocks } = importedDocument(
+      "<figure><blockquote> q </blockquote><figcaption> - author </figcaption></figure>",
+    );
+
+    expect(blocks).toMatchObject([
+      { type: "quote", content: [{ text: "q" }] },
+      { type: "paragraph", content: [{ text: "- author" }] },
+    ]);
+    expect(blocks[0]).not.toHaveProperty("children");
+  });
+
+  it.each([
+    [
+      "img와 figcaption이 든 조각 끝 figure",
+      "<figure>\n <img src='https://example.com/a.png'>\n <figcaption>\n  A caption\n </figcaption>\n</figure>\n",
+      [
+        { type: "image" },
+        { type: "paragraph", content: [{ text: "A caption" }] },
+      ],
+    ],
+    [
+      "summary와 p가 든 details",
+      "<details>\n <summary>\n  Title\n </summary>\n <p>\n  Body\n </p>\n</details>",
+      [
+        { type: "paragraph", content: [{ text: "Title" }] },
+        { type: "paragraph", content: [{ text: "Body" }] },
+      ],
+    ],
+    [
+      "codeBlock figure의 caption",
+      "<figure><pre>code</pre><figcaption>\n Cap\n</figcaption></figure>\n",
+      [{ type: "codeBlock", caption: "Cap" }],
+    ],
+    [
+      "toggle details의 summary",
+      "<details data-geul-toggleable='true'>\n<summary> Label </summary>\n</details>",
+      [{ type: "toggleListItem", content: [{ text: "Label" }] }],
+    ],
+  ])("%s는 양끝 공백 없이 들어온다", (_name, html, expected) => {
+    expect(importedDocument(html).blocks).toMatchObject(expected);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   type HtmlElementNode,
   inlineContentFromNodes,
 } from "./inline-content.js";
+import { flattenBlockBoundaryTagNames } from "./parse-html.js";
 import {
   type CellLayout,
   columnElements,
@@ -185,7 +186,9 @@ export const parseTable = (
         rowSpan: layoutRowSpan(layout.rowSpan),
         columnSpan: malformedColumnSpan(layout.columnSpan),
         content: sanitizeInlineContentText(
-          inlineContentFromNodes(layout.element.children),
+          inlineContentFromNodes(layout.element.children, {
+            blockBreakTagNames: flattenBlockBoundaryTagNames,
+          }),
         ),
         ...(textColor === undefined ? {} : { textColor }),
         ...(backgroundColor === undefined ? {} : { backgroundColor }),
