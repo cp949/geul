@@ -26,9 +26,11 @@
   5. target이 `view.dom` 밖의 Node다. 안쪽은 keymap이 처리한다.
   6. target이 `input`·`textarea`·`select`·편집 영역이 아니다.
   7. `document.getSelection()`의 `focusNode ?? anchorNode`가 `view.dom` 안이다.
-  8. 실행은 `preventDefault()` 뒤 `undo(view.state, view.dispatch)` 또는 `redo(view.state, view.dispatch)`다. 되돌리거나 다시 실행할 것이 없어도 막는다.
+  8. 소비자 우선 단계다. 조건 1–7을 통과한 뒤 `getCustomKeyboardShortcutsStorage(editor)?.handleKeyDown(view, event)`(`editor.storage.customKeyboardShortcuts`)를 부른다. `CreateEditorOptions.keyboardShortcuts`에 등록한 handler가 이 키와 맞고 `true`를 반환하면 `preventDefault()`만 하고 내장 `undo`·`redo`를 건너뛴다. `false`거나 등록이 없으면 다음 조건으로 간다. 호출은 조건 7 뒤에만 둔다. 읽기 전용·조합 입력·입력 컨트롤·다른 편집기 selection에서는 handler를 부르지 않는다. 호출 대상은 위 세 키뿐이다.
+  9. 실행은 `preventDefault()` 뒤 `undo(view.state, view.dispatch)` 또는 `redo(view.state, view.dispatch)`다. 되돌리거나 다시 실행할 것이 없어도 막는다.
 - keydown을 `preventDefault()`하면 `beforeinput`이 오지 않는다. keydown 라우팅과 `beforeinput` 경로가 한 키 입력에 함께 실행되지 않는다.
 - `beforeinput` 경로(`prosemirror-history`와 위 호환 shim)는 keydown을 거치지 않는 native undo·redo를 계속 맡는다.
+  - 이 경로는 키 정보가 없어 소비자 `keyboardShortcuts` handler를 부르지 않는다.
 - 키 판별은 순수 함수(`isHistoryUndoShortcut`·`isHistoryRedoShortcut`)로 분리해 비Apple(Ctrl)·Apple(Meta) 분기를 단위 테스트로 고정한다. `event.key`가 비ASCII(한글 두벌식 등)이면 `event.code`로 폴백한다.
 - 참고 구현: `packages/core/src/history-keydown-fallback-extension.ts`(Issue #219, Issue #222).
 
@@ -91,6 +93,7 @@
 - native undo/redo에 의존하는 core 확장이 "focus가 아니라 selection이 라우팅 기준"이라는 전제를 지키는지 확인한다.
 - 한 페이지에 편집기 인스턴스가 여러 개 있을 때 각 인스턴스가 자신의 `view.dom` 소유 selection만 가로채고 다른 인스턴스·무관한 `input`/`textarea`의 `historyUndo`를 훔치지 않는지 확인한다.
 - undo·redo 라우팅이 target 가드(조건 6)와 selection 가드(조건 7)를 모두 가지는지 확인한다. 둘 중 하나만 지워도 단위 테스트가 RED여야 한다. Chromium은 입력 컨트롤에 포커스가 가면 DOM selection이 컨트롤로 옮겨져 e2e는 selection 가드로도 통과한다 — redo e2e(`toolbar-focus-redo.spec.ts`)는 두 가드를 모두 지워야 RED가 된다. undo의 입력 컨트롤 비침해는 단위 테스트만 소유한다.
+- 소비자 우선 단계(조건 8)가 조건 7 뒤에 있고, `keyboardShortcuts` handler가 `true`일 때 내장 undo·redo가 실행되지 않는지 확인한다. 툴바 버튼 포커스와 편집기 안 포커스의 결과가 같아야 한다. `keyboard-shortcuts-history-fallback.test.ts`가 소유한다.
 - undo keydown 라우팅이 `beforeinput` 경로와 이중 실행되지 않는지 Chromium e2e로 확인한다. 글자 입력 뒤 툴바 명령을 적용하고 버튼 포커스의 `Mod-z` 1회가 한 단계만 되돌리는지 본다. `showcase-static-toolbar-focus.spec.ts`가 소유한다.
 - undo·redo의 reason이 진입점마다 같은지 확인한다. 위 표의 모든 행이 `onChange`와 `onBeforeChange` 둘 다 같은 reason을 내야 한다.
 - undo·redo 뒤 포커스 복구는 jsdom 단위 테스트와 Chromium e2e를 함께 갖는지 확인한다. 단위 테스트는 가드·감시 해제·정리를 하나씩 깨뜨려 RED여야 한다. e2e는 `toolbar-focus-undo-redo.spec.ts`가 툴바별로 소유하고 `--repeat-each=10 --workers=5`로 타이밍 경합을 확인한다.
