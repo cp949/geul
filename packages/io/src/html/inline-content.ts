@@ -9,6 +9,7 @@ import {
   type ColorState,
   type InlineFontWeight,
   type InlineStyleMarks,
+  hasComputedStyleDump,
   parseInlineStyleMarks,
   parseStyleColorStates,
 } from "../clipboard/style-declarations.js";
@@ -392,6 +393,18 @@ const processColorTags = (nodes: HtmlNode[]): boolean => {
   return hasBlock;
 };
 
+// 셀 안 블록 요소 style의 마크다. 계산 스타일 덤프(브라우저 복사)가 붙은 style의
+// 색·배경은 테마 색이라 마크로 만들지 않는다. 굵게·기울임·밑줄·취소선은 실제
+// 시각 값이라 그대로 읽는다. 인라인 요소(span 등)는 이 규칙을 따르지 않는다.
+const cellBlockStyleMarks = (style: unknown): TextMark[] => {
+  const marks = marksFromStyle(style).marks;
+  return typeof style === "string" && hasComputedStyleDump(style)
+    ? marks.filter(
+        (mark) => mark.type !== "textColor" && mark.type !== "backgroundColor",
+      )
+    : marks;
+};
+
 // 블록 경계 태그(breaks.tagNames)를 자손으로 가졌는지 본다. 래퍼 div 판정에 쓴다.
 const hasBlockBreakDescendant = (
   nodes: readonly HtmlNode[],
@@ -439,7 +452,7 @@ const readInlineNodes = (
       isBlock &&
       breaks !== undefined &&
       readsCellBlockStyle(node, breaks.tagNames)
-        ? marksFromStyle(node.properties.style).marks
+        ? cellBlockStyleMarks(node.properties.style)
         : marksForElement(node);
     readInlineNodes(
       node.children,

@@ -316,6 +316,28 @@ export const parseStyleColorStates = (
   };
 };
 
+// 브라우저 복사의 계산 스타일 덤프 표식이다(Issue #334). Chromium은 복사할 때
+// 블록·표 루트 요소에 color·background-color와 함께 font-family·orphans·widows 등
+// 계산 스타일 전체를 style로 싣고, 그 안에 항상 `-webkit-text-stroke-width`가
+// 있다. 이 선언이 있는 요소의 색은 작성자가 쓴 색이 아니라 페이지 테마의 계산
+// 값이라 새로 읽는 블록·표 셀 표면은 읽지 않는다. 속성 이름은 대소문자를
+// 구분하지 않는다. 기존 선언 분할기를 쓰므로 주석·따옴표 안의 이름은 선언이
+// 아니다. 선언을 한 번만 훑는다.
+const COMPUTED_STYLE_DUMP_PROPERTY = "-webkit-text-stroke-width";
+
+export const hasComputedStyleDump = (style: string): boolean => {
+  for (const declaration of splitDeclarations(style)) {
+    const read = readDeclaration(declaration);
+    if (
+      read !== undefined &&
+      read.property.toLowerCase() === COMPUTED_STYLE_DUMP_PROPERTY
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
 // font-weight 선언 하나의 분류다.
 // - bold: bold·bolder·600 이상이다.
 // - normal: normal·400이다.

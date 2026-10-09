@@ -14,11 +14,14 @@
 //   것과 같아 같은 단의 bgcolor를 쓴다.
 // - bgcolor는 색 이름과 hex만 읽는다(readLegacyAttributeColor).
 //   Chromium이 쓰레기 값도 색으로 바꿔 그리는 불일치는 의도한 것이다.
+// - 계산 스타일 덤프(`-webkit-text-stroke-width` 선언)가 붙은 단의 style
+//   색·배경은 읽지 않는다. 그 단의 bgcolor는 읽는다(hasComputedStyleDump).
 import { propertyString } from "../html/hast-properties.js";
 import type { HtmlElementNode } from "../html/inline-content.js";
 import { readLegacyAttributeColor } from "./css-color.js";
 import {
   type ColorState,
+  hasComputedStyleDump,
   parseStyleColorStates,
 } from "./style-declarations.js";
 
@@ -39,7 +42,12 @@ const statesOf = (element: HtmlElementNode): StyleColorStates => {
   const cached = statesByElement.get(element);
   if (cached !== undefined) return cached;
   const style = propertyString(element, "style");
-  const states = style === undefined ? NO_STATES : parseStyleColorStates(style);
+  // 계산 스타일 덤프(브라우저 복사)가 붙은 단의 style 색·배경은 테마 색이라
+  // 건너뛴다. 그 단의 bgcolor 속성은 style 선언이 없는 것처럼 읽는다.
+  const states =
+    style === undefined || hasComputedStyleDump(style)
+      ? NO_STATES
+      : parseStyleColorStates(style);
   statesByElement.set(element, states);
   return states;
 };

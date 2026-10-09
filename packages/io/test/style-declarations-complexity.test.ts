@@ -26,6 +26,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  hasComputedStyleDump,
   parseInlineStyleMarks,
   parseStyleDeclarations,
   parseWhiteSpaceMode,
@@ -274,6 +275,48 @@ describe("parseWhiteSpaceMode의 선형 시간", () => {
       });
       const large = measureStringWorkload(() => {
         parseWhiteSpaceMode(build(BASE_SIZE * 2));
+      });
+
+      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
+      expect(small.calls).toBeGreaterThan(0);
+      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
+
+      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
+        2,
+      );
+      expect(
+        large.chars / small.chars,
+        "처리 문자 수 증가율",
+      ).toBeLessThanOrEqual(2);
+    },
+  );
+});
+
+const dumpInputShapes: Array<[string, (size: number) => string]> = [
+  ...declarationInputShapes,
+  [
+    "표식이 맨 끝에 있고 앞에 선언이 아주 많은 입력",
+    (size) => `${"color:#ff0000;".repeat(size)}-webkit-text-stroke-width:0px`,
+  ],
+  [
+    "표식과 비슷한 속성 이름이 아주 많은 입력",
+    (size) => "-webkit-text-stroke-color:red;".repeat(size),
+  ],
+  [
+    "표식 이름이 값에만 아주 많이 든 입력",
+    (size) => `font-family:${"-webkit-text-stroke-width ".repeat(size)}`,
+  ],
+];
+
+describe("hasComputedStyleDump의 선형 시간", () => {
+  it.each(dumpInputShapes)(
+    "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
+    (_name, build) => {
+      const small = measureStringWorkload(() => {
+        hasComputedStyleDump(build(BASE_SIZE));
+      });
+      const large = measureStringWorkload(() => {
+        hasComputedStyleDump(build(BASE_SIZE * 2));
       });
 
       // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.

@@ -12,7 +12,10 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
-import { parseStyleDeclarations } from "../clipboard/style-declarations.js";
+import {
+  hasComputedStyleDump,
+  parseStyleDeclarations,
+} from "../clipboard/style-declarations.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   type HtmlElementNode,
@@ -50,10 +53,15 @@ export const textBlockPropsFromElement = (
     : propertyString(element, "dataGeulBackgroundColor");
   // 두 필드가 모두 data-geul-*로 정해졌으면 style을 파싱하지 않는다(자기 export
   // 에코가 이 경우다).
-  const style =
+  // 계산 스타일 덤프(브라우저 복사)가 붙은 style의 색은 테마 색이라 읽지 않는다.
+  const rawStyle =
     dataTextColor !== undefined && dataBackgroundColor !== undefined
       ? undefined
       : propertyString(element, "style");
+  const style =
+    rawStyle === undefined || hasComputedStyleDump(rawStyle)
+      ? undefined
+      : rawStyle;
   const declared =
     style === undefined ? undefined : parseStyleDeclarations(style);
   const textColor = dataTextColor ?? declared?.color;
