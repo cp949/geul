@@ -174,6 +174,9 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
 // 평탄화에서 마크로 읽는다. p·h1~h6·blockquote·li의 자기 echo style 경고 억제
 // (import-warnings.ts의 isOwnEchoStyle)는 raw HAST와 이 경고 기준만 보므로
 // 이 집합과 무관하다.
+// 표 요소(td·th·tr·table, 단계 C)는 style 색과 옛 bgcolor 속성(HAST 이름
+// bgColor)을 셀 색으로 읽는다(cell-colors.ts). 두 경로(importHtml·클립보드)가
+// 같은 읽기 함수를 쓴다.
 export const styleReadAttributes: Record<string, string[]> = {
   em: ["style"],
   i: ["style"],
@@ -192,6 +195,10 @@ export const styleReadAttributes: Record<string, string[]> = {
   li: ["style"],
   blockquote: ["style"],
   div: ["style"],
+  td: ["style", "bgColor"],
+  th: ["style", "bgColor"],
+  tr: ["style", "bgColor"],
+  table: ["style", "bgColor"],
 };
 
 // 태그마다 속성 이름을 이어 붙여 새 객체를 만든다. 두 입력은 바꾸지 않는다.
@@ -314,21 +321,15 @@ export const htmlSanitizeSchema: Schema = {
   tagNames: htmlAllowedTagNames,
 };
 
-// 클립보드 경로 전용 허용 목록. importHtml의 목록을 공유하면 두 가지가
-// 깨진다 — style을 공유 목록에 넣으면 importHtml이 여전히 무시하는 속성을
-// import-warnings가 "제거됨"으로 보고하지 않게 되고(경고 소실), role은
-// 문서 모델에 없는 속성인데 import 계약에 새 속성이 생긴 것처럼 보인다.
-// 그래서 클립보드에만 필요한 두 속성을 여기서만 얹는다.
-const clipboardCellAttributes = [
-  ...(sanitizeAllowedAttributes.td ?? []),
-  "style",
-];
-
+// 클립보드 경로 전용 허용 목록. importHtml의 목록을 공유하면 role이 문제다 —
+// 문서 모델에 없는 속성인데 import 계약에 새 속성이 생긴 것처럼 보인다. 그래서
+// 클립보드에만 필요한 table의 role을 여기서만 얹는다. td·th의 style은 읽기
+// 전용 속성 집합(styleReadAttributes)으로 이미 들어 있다(Issue #334 전에는
+// 클립보드만 td style을 남겼다). 경고 기준(htmlAllowedAttributes)에는 style이
+// 없으므로 importHtml은 이전처럼 style 제거를 보고한다.
 export const clipboardAllowedAttributes: Record<string, string[]> = {
   ...sanitizeAllowedAttributes,
   table: [...(sanitizeAllowedAttributes.table ?? []), "role"],
-  td: clipboardCellAttributes,
-  th: clipboardCellAttributes,
 };
 
 // clipboard 경로 전용 tagNames. DELTA-03(Issue #72)에서는 h4~h6를 여기서만

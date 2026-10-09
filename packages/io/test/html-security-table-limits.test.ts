@@ -129,7 +129,7 @@ describe("HTML 보안", () => {
     );
   });
 
-  it("셀의 style 속성은 import에서 제거되고 경고로 보고된다", () => {
+  it("셀의 style 속성은 색으로 읽어도 import 제거 경고로 보고된다", () => {
     const result = importHtml(
       '<table><tbody><tr><td style="color:#FF0000">a</td></tr></tbody></table>',
     );

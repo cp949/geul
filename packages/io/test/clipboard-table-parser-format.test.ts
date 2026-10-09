@@ -203,4 +203,42 @@ describe("parseClipboardTable", () => {
     const table = expectSingleTable(parseClipboardTable({ html }));
     expect(table.rows[0]?.cells[0]?.align).toBeUndefined();
   });
+
+  // 셀 색은 td → tr → table 순으로 읽는다(Issue #334). 우선순위 전체 표는
+  // html-cell-style-color.test.ts가 소유한다.
+  it("tr·table의 style 색을 셀이 읽는다", () => {
+    const html =
+      '<table style="background-color:#0000ff;color:#0000ff"><tbody><tr style="background-color:#00ff00"><td>1</td></tr><tr><td style="color:#ff0000">2</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]).toMatchObject({
+      backgroundColor: "#00FF00",
+      textColor: "#0000FF",
+    });
+    expect(table.rows[1]?.cells[0]).toMatchObject({
+      backgroundColor: "#0000FF",
+      textColor: "#FF0000",
+    });
+  });
+
+  it("td·tr·table의 bgcolor 속성을 배경으로 읽는다", () => {
+    const html =
+      '<table bgcolor="#0000ff"><tbody><tr bgcolor="lime"><td bgcolor="red">1</td><td>2</td></tr><tr><td>3</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]?.backgroundColor).toBe("#FF0000");
+    expect(table.rows[0]?.cells[1]?.backgroundColor).toBe("#00FF00");
+    expect(table.rows[1]?.cells[0]?.backgroundColor).toBe("#0000FF");
+  });
+
+  it("정규 형식이 아닌 data-geul 색은 버리고 tr·table 색을 쓴다", () => {
+    const html =
+      '<table style="color:#0000ff"><tbody><tr style="background-color:#00ff00"><td data-geul-text-color="red" data-geul-background-color="#00ff00">1</td></tr></tbody></table>';
+
+    const table = expectSingleTable(parseClipboardTable({ html }));
+    expect(table.rows[0]?.cells[0]).toMatchObject({
+      textColor: "#0000FF",
+      backgroundColor: "#00FF00",
+    });
+  });
 });

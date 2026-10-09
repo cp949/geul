@@ -9,6 +9,7 @@ import {
   validateTableSize,
 } from "@cp949/geul-model";
 
+import { readCellColors } from "../clipboard/cell-colors.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   HtmlDocumentInvalidError,
@@ -164,11 +165,20 @@ export const parseTable = (
         propertyString(layout.element, "dataGeulColumnId") ??
         column?.id ??
         createId();
-      const textColor = propertyString(layout.element, "dataGeulTextColor");
-      const backgroundColor = propertyString(
+      // data-geul-*는 원시 문자열 그대로 통과시킨다(parseDocument가 최종
+      // 검증한다). 없는 필드만 style·bgcolor에서 td·th → tr → table 순으로
+      // 채운다(Issue #334). tr은 이 셀이 시작하는 행이다(rowspan 셀도 같다).
+      const dataTextColor = propertyString(layout.element, "dataGeulTextColor");
+      const dataBackgroundColor = propertyString(
         layout.element,
         "dataGeulBackgroundColor",
       );
+      const styled =
+        dataTextColor === undefined || dataBackgroundColor === undefined
+          ? readCellColors(layout.element, row.element, element)
+          : {};
+      const textColor = dataTextColor ?? styled.textColor;
+      const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;
       const align = propertyString(layout.element, "dataGeulAlign") as
         TableBlock["rows"][number]["cells"][number]["align"] | undefined;
 

@@ -54,6 +54,7 @@ import {
   tableRows,
 } from "../html/table-layout.js";
 import type { Result } from "../result.js";
+import { readCellColors } from "./cell-colors.js";
 import {
   collapseHtmlWhitespace,
   normalizeCellContent,
@@ -341,10 +342,14 @@ const canonicalAlign = (
 ): "left" | "center" | "right" | undefined =>
   value !== undefined && isCanonicalCellAlign(value) ? value : undefined;
 
-// data-geul-*(자기 복사)가 있으면 우선하고, 없으면 style에서 뽑는다(외부
-// Excel/Google Sheets는 data-geul-*가 없으므로 항상 style로 떨어진다).
+// data-geul-*(자기 복사)가 있으면 우선하고, 없으면 style·bgcolor에서 뽑는다
+// (외부 Excel/Google Sheets는 data-geul-*가 없으므로 항상 style로 떨어진다).
+// 색은 td·th → tr → table 순으로 읽는다(Issue #334, cell-colors.ts). row는 이
+// 셀이 시작하는 tr이다. 정렬은 td·th의 style만 읽는다.
 const cellStyleFields = (
   element: HtmlElementNode,
+  row: HtmlElementNode,
+  table: HtmlElementNode,
 ): Pick<TabularCell, "textColor" | "backgroundColor" | "align"> => {
   const styleAttribute = propertyString(element, "style");
   const parsedStyle =
@@ -353,12 +358,18 @@ const cellStyleFields = (
   // data-geul-*도 style과 똑같이 model의 정규 형식을 통과해야 한다. 그냥
   // 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 parseDocument가
   // 커밋 시점에 터진다(모델↔에디터 영구 desync).
-  const textColor =
-    canonicalColor(propertyString(element, "dataGeulTextColor")) ??
-    parsedStyle.color;
-  const backgroundColor =
-    canonicalColor(propertyString(element, "dataGeulBackgroundColor")) ??
-    parsedStyle.backgroundColor;
+  const dataTextColor = canonicalColor(
+    propertyString(element, "dataGeulTextColor"),
+  );
+  const dataBackgroundColor = canonicalColor(
+    propertyString(element, "dataGeulBackgroundColor"),
+  );
+  const styled =
+    dataTextColor === undefined || dataBackgroundColor === undefined
+      ? readCellColors(element, row, table)
+      : {};
+  const textColor = dataTextColor ?? styled.textColor;
+  const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;
   const align =
     canonicalAlign(propertyString(element, "dataGeulAlign")) ??
     parsedStyle.align;
@@ -464,6 +475,9 @@ const tabularDataFromTable = (
   const data: TabularData = {
     columnCount,
     rows: layouts.map((row, rowIndex) => {
+      // layouts는 rows와 같은 순서·길이라 항상 있다. 이 행의 tr이 셀 색의
+      // 둘째 단이다.
+      const rowElement = rows[rowIndex]?.element ?? table;
       const cells: TabularCell[] = row.map((layout) => ({
         columnIndex: layout.columnIndex,
         // coveredCoordinates가 쓰는 보정값과 반드시 같아야 한다 — 어긋나면
@@ -478,7 +492,7 @@ const tabularDataFromTable = (
             blockBreakTagNames: flattenBlockBoundaryTagNames,
           }),
         ),
-        ...cellStyleFields(layout.element),
+        ...cellStyleFields(layout.element, rowElement, table),
       }));
 
       for (let column = 0; column < columnCount; column += 1) {
