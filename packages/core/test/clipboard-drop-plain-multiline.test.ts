@@ -11,7 +11,6 @@
  * view.someProp("handleDrop")으로 호출해 플러그인의 반환값을 직접 읽는다.
  * 실제 브라우저 drop은 e2e/clipboard-paste.spec.ts가 맡는다.
  */
-import type { Block } from "@cp949/geul-model";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { TextSelection, Transaction } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
@@ -21,6 +20,7 @@ import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
   cellDropBlocks,
+  childDocument,
   handledDrop,
   mountCellDrop,
   mountDropAt,
@@ -48,12 +48,6 @@ import { boldCellBlocks, kindsOf } from "./table-cell-paste-test-support.js";
 import { findCellBoundaryPosition } from "./table-test-support.js";
 
 type Tiptap = ReturnType<typeof mountTiptapEditor>["tiptap"];
-
-// D1: p1 "abcd" 자식 [c1 "child"], tail "tail".
-const childDocument = (): Block[] => [
-  paragraphBlock("p1", "abcd", [paragraphBlock("c1", "child")]),
-  paragraphBlock("tail", "tail"),
-];
 
 const plainDrop = (editable: HTMLElement, text: string): DragEvent =>
   dropData(editable, { "text/plain": text });

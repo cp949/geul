@@ -183,6 +183,52 @@ describe("buildCellHtmlInline", () => {
         convert(codeBlockBlock("a", `x${TAB}y`), paragraphBlock("b", "z")),
       ).toEqual(["xy", "br", "z"]);
     });
+
+    // Issue #316 리뷰 02 F1: 줄 양끝 정리는 일반 줄 규칙이다. codeBlock 줄은 앞뒤
+    // hardBreak만 자르고 첫 줄의 들여쓰기를 보존한다.
+    it("앞 개행이 있어도 첫 줄의 들여쓰기를 보존한다", () => {
+      expect(
+        convert(
+          codeBlockBlock("a", "\n  if (a) {\n    b\n  }\n"),
+          paragraphBlock("b", "z"),
+        ),
+      ).toEqual(["  if (a) {", "br", "    b", "br", "  }", "br", "z"]);
+    });
+
+    it("앞뒤 연속 개행(hardBreak)은 자르고 첫 줄 들여쓰기는 보존한다", () => {
+      expect(convert(codeBlockBlock("a", "\n\n  x\ny\n\n"))).toEqual([
+        "  x",
+        "br",
+        "y",
+      ]);
+    });
+
+    it("앞 개행이 없는 첫 줄 들여쓰기도 보존한다", () => {
+      expect(convert(codeBlockBlock("a", "  x\n  y"))).toEqual([
+        "  x",
+        "br",
+        "  y",
+      ]);
+    });
+
+    it("codeBlock과 이웃한 일반 줄은 양끝 공백·개행을 자른다", () => {
+      expect(
+        convert(
+          paragraphBlock("a", "\n    a\n  "),
+          codeBlockBlock("b", "\n  x\n"),
+          paragraphBlock("c", "\n    c\n  "),
+        ),
+      ).toEqual(["a", "br", "  x", "br", "c"]);
+    });
+
+    it("플랫튼한 표 셀은 일반 줄이라 양끝 공백·개행을 자른다", () => {
+      const table = gridTable("t1", 1, 1, ["\n    cell\n  "]);
+      expect(convertFlat([codeBlockBlock("a", "\n  x\n"), table])).toEqual([
+        "  x",
+        "br",
+        "cell",
+      ]);
+    });
   });
 
   describe("빈 줄과 줄이 아닌 블록", () => {
@@ -284,6 +330,87 @@ describe("buildCellHtmlInline", () => {
       expect(
         convert(paragraphBlock("a", " a "), paragraphBlock("b", "b")),
       ).toEqual([" a ", "br", "b"]);
+    });
+
+    // Issue #316 리뷰: 줄 양끝의 "공백과 개행" 구간을 자른다. HTML 소스의 들여쓰기가
+    // `<p>⏎      text⏎    </p>`처럼 줄 양끝에 남는다. 줄 안쪽은 건드리지 않는다.
+    // "탭 들여쓰기" 사례는 `\t` 분기를 검증하지 않는다. Tab은 셀에서 무효라
+    // sanitizeSliceInlineText가 먼저 지운다. 이 사례는 정리 뒤 결과만 고정한다.
+    it.each([
+      { name: "앞 개행과 들여쓰기", text: "\n      Some text here" },
+      { name: "뒤 개행과 들여쓰기", text: "Some text here\n    " },
+      { name: "양끝 개행과 들여쓰기", text: "\n      Some text here\n    " },
+      { name: "공백 뒤 개행(앞)", text: "  \n  Some text here" },
+      {
+        name: "탭 들여쓰기(Tab은 정리 단계에서 먼저 지워진다)",
+        text: "\n\t\tSome text here\n\t",
+      },
+      { name: "연속 개행", text: "\n \n  Some text here\n \n" },
+    ])("줄 양끝의 공백·개행($name)을 자른다", ({ text }) => {
+      expect(convert(paragraphBlock("a", text))).toEqual(["Some text here"]);
+    });
+
+    it("줄 양끝의 공백·개행 구간이 text run 경계에 걸쳐도 자른다", () => {
+      expect(
+        convert({
+          id: "a",
+          type: "paragraph",
+          content: [
+            { text: " ", marks: [{ type: "bold" }] },
+            { text: "\n  " },
+            { text: "x", marks: [{ type: "italic" }] },
+            { text: "\n", marks: [{ type: "bold" }] },
+            { text: "  " },
+          ],
+        }),
+      ).toEqual(["x*italic"]);
+    });
+
+    it("들여쓰기만 자르고 첫 글자의 마크는 유지한다", () => {
+      expect(
+        convert({
+          id: "a",
+          type: "paragraph",
+          content: [
+            { text: "\n   " },
+            { text: "  x", marks: [{ type: "bold" }] },
+            { text: "y\n  " },
+          ],
+        }),
+      ).toEqual(["x*bold", "y"]);
+    });
+
+    it("줄 안쪽의 개행·hardBreak·공백은 건드리지 않는다", () => {
+      expect(convert(paragraphBlock("a", "\n  a\n   b  c\n"))).toEqual([
+        "a",
+        "br",
+        "   b  c",
+      ]);
+    });
+
+    // 끝 규칙은 개행부터 자른다. 개행 앞 공백은 줄 안 텍스트의 일부다.
+    it("개행 앞의 공백은 자르지 않는다", () => {
+      expect(convert(paragraphBlock("a", "x  \n"))).toEqual(["x  "]);
+    });
+
+    it("개행 없이 앞뒤에만 있는 공백은 그대로 둔다", () => {
+      expect(convert(paragraphBlock("a", "  lead"))).toEqual(["  lead"]);
+      expect(convert(paragraphBlock("a", "trail  "))).toEqual(["trail  "]);
+    });
+
+    it("NBSP는 자르지 않는다", () => {
+      expect(convert(paragraphBlock("a", `\n${NBSP}x${NBSP}\n`))).toEqual([
+        `${NBSP}x${NBSP}`,
+      ]);
+    });
+
+    it("줄 양끝을 자르고도 줄 사이 hardBreak는 하나다", () => {
+      expect(
+        convert(
+          paragraphBlock("a", "\n  a\n"),
+          paragraphBlock("b", "\n  b\n  "),
+        ),
+      ).toEqual(["a", "br", "b"]);
     });
 
     it("무효 문자를 지운 뒤 hardBreak만 남는 줄도 버린다", () => {

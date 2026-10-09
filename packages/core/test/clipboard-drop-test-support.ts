@@ -9,12 +9,16 @@
  * - 마운트: mountCellDrop(선택은 tail 끝 캐럿, drop 위치는 셀 offset)
  * - 위임 판정: handledDrop(플러그인 handleDrop 반환값을 직접 읽는다)
  * - 이벤트: htmlDrop(text/html과 text/plain을 함께 싣는 drop 이벤트)
+ * - slice 관찰: recordDropSlices(실제 drop 흐름에서 PM이 파싱해 handleDrop에
+ *   넘기는 slice를 모은다)
+ * - 문서: childDocument(자식을 가진 문단 fixture)
  *
  * 표 fixture 원본(singleCellTable)과 위치 헬퍼(inCell)는
  * table-boundary-test-support.ts가 소유한다.
  */
 import type { Block } from "@cp949/geul-model";
 import { Slice } from "@tiptap/pm/model";
+import type { EditorProps } from "@tiptap/pm/view";
 
 import { createEditor } from "../src/index.js";
 import { contentTextStart } from "./block-test-support.js";
@@ -43,6 +47,12 @@ export const cellDropBlocks = (): Block[] => [
   paragraphBlock("p1", "abcd"),
   codeBlockBlock("cb", "code"),
   singleCellTable("t", "cell"),
+  paragraphBlock("tail", "tail"),
+];
+
+/** 자식을 가진 문단 문서다. p1 "abcd" 자식 [c1 "child"], tail "tail". */
+export const childDocument = (): Block[] => [
+  paragraphBlock("p1", "abcd", [paragraphBlock("c1", "child")]),
   paragraphBlock("tail", "tail"),
 ];
 
@@ -104,3 +114,35 @@ export const handledDrop = (
 /** text/html과 text/plain을 함께 싣는 drop 이벤트를 만들어 editable에 보낸다. */
 export const htmlDrop = (editable: HTMLElement, html: string): DragEvent =>
   dropData(editable, { "text/html": html, "text/plain": "plain" });
+
+type DropHandler = NonNullable<EditorProps["handleDrop"]>;
+
+/** recordDropSlices가 바꿔 끼우는 someProp의 최소 모양이다. */
+type SomeProp = (
+  name: string,
+  f?: (handler: DropHandler) => unknown,
+) => unknown;
+
+/**
+ * 실제 drop 흐름에서 PM이 html을 파싱해 플러그인 handleDrop에 넘기는 slice를
+ * 모은다. 반환 배열은 호출마다 채워진다. 직접 만든 Slice.empty와 달리 PM 파싱
+ * 결과라서 "정리한 slice가 비는 html"을 실제 경로로 증명한다. dropData 전에 부른다.
+ */
+export const recordDropSlices = (tiptap: Tiptap): Slice[] => {
+  const slices: Slice[] = [];
+  const view = tiptap.view;
+  const someProp: SomeProp = view.someProp.bind(view);
+  const recording: SomeProp = (name, f) =>
+    someProp(
+      name,
+      name === "handleDrop" && f !== undefined
+        ? (handler) =>
+            f((v, e, slice, moved) => {
+              slices.push(slice);
+              return handler(v, e, slice, moved);
+            })
+        : f,
+    );
+  Object.assign(view, { someProp: recording });
+  return slices;
+};

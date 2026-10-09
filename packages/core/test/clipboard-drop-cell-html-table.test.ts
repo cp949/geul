@@ -32,12 +32,14 @@ import { Slice } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { sanitizeSliceInlineText } from "../src/plain-text-paste.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
   cellDropBlocks,
   handledDrop,
   htmlDrop,
   mountCellDrop,
+  recordDropSlices,
   stubPosAtCoords,
 } from "./clipboard-drop-test-support.js";
 import {
@@ -372,6 +374,29 @@ describe("표 셀 위 표 포함 html drop(Issue #312)", () => {
         expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceplainll"]);
         expect(tiptap.state.doc.childCount).toBe(4);
         expect(editor.getDocument().revision).toBe(revision + 1);
+      },
+    );
+
+    // 위 케이스의 handledDrop은 Slice.empty를 직접 넘긴다. 실제 drop 흐름에서
+    // PM이 파싱한 slice가 정말 비는지, 그 결과 평문이 들어가는지 증명한다
+    // (Issue #316 리뷰 m4).
+    it.each([
+      ["모든 셀이 빈 표", "<table><tr><td></td></tr></table>"],
+      ["공백뿐인 셀의 표", "<table><tr><td> </td><td></td></tr></table>"],
+    ] as const)(
+      "%s: 실제 PM 파싱 slice가 비어 있고 평문이 셀에 들어간다(Issue #316)",
+      (_label, html) => {
+        const { editable, tiptap } = mountCellDrop();
+        const slices = recordDropSlices(tiptap);
+
+        dropData(editable, { "text/html": html, "text/plain": "plain" });
+
+        expect(slices.length).toBeGreaterThan(0);
+        for (const slice of slices) {
+          expect(sanitizeSliceInlineText(slice).size).toBe(0);
+        }
+        expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceplainll"]);
+        expect(tiptap.state.doc.childCount).toBe(4);
       },
     );
 

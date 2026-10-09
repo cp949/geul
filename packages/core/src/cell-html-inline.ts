@@ -35,9 +35,12 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // - children은 부모 다음 줄이다. 깊이 우선이다.
 // - divider·미디어·custom 블록은 줄을 내지 않는다.
 // - codeBlock 텍스트의 개행은 hardBreak이고 code 마크가 없다.
-// - 줄 앞뒤의 hardBreak는 자른다. 줄 안쪽 hardBreak는 둔다.
-// - 공백(NBSP 포함)이나 hardBreak뿐인 줄은 빈 줄이라 버린다. 줄 안 텍스트의
-//   앞뒤 공백은 그대로 둔다(빈 줄 판정에만 쓴다).
+// - 일반 줄은 양끝의 공백과 개행 구간을 자른다(Issue #316). 줄 안쪽 hardBreak와
+//   공백은 둔다. 개행 없이 앞뒤에만 있는 공백과 NBSP도 둔다.
+// - codeBlock 줄은 앞뒤 hardBreak만 자른다. 첫 줄 들여쓰기는 코드 내용이라
+//   둔다(Issue #316 리뷰 02). 표 셀 content는 일반 줄이다.
+// - 공백(NBSP 포함)이나 hardBreak뿐인 줄은 빈 줄이라 버린다. 이 판정 말고는
+//   개행에 붙지 않은 앞뒤 공백을 자르지 않는다.
 // - 줄 사이에 hardBreak 하나를 끼운다.
 // - 줄 안 마크는 유지한다. 마크 집합은 스키마 규칙(excludes)으로 다시 쌓는다.
 //   bold와 code가 함께면 code만 남는다.
@@ -63,6 +66,9 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // importHtml 한계가 한 블록에도 그대로 나온다. 스타일 기반 서식과 `<del>`은
 // 인식하지 못해 평문이 된다. `<br>`와 소스 개행은 둘 다 hardBreak가 된다.
 
+// 줄 원본이다. code는 codeBlock에서 온 줄이라는 표시다.
+type LineSource = { content: InlineContent; code: boolean };
+
 // collectLines가 센 값이다. 평탄화한 표의 수다. 표가 있으면 최소 블록 수를 1로 쓴다.
 type LineStats = { tables: number };
 
@@ -71,7 +77,7 @@ type LineStats = { tables: number };
 // 모은다. content를 가진 블록은 비어 있어도 모은다. 호출부가 블록 수를 센다.
 const collectLines = (
   blocks: readonly DocumentBlock[],
-  out: InlineContent[],
+  out: LineSource[],
   flattenTables: boolean,
   stats: LineStats,
 ): boolean => {
@@ -84,12 +90,14 @@ const collectLines = (
       stats.tables += 1;
       // 병합 셀 때문에 행의 셀 수는 열 수와 다를 수 있다. 존재하는 셀만 읽는다.
       for (const row of block.rows) {
-        for (const cell of row.cells) out.push(cell.content);
+        for (const cell of row.cells) {
+          out.push({ content: cell.content, code: false });
+        }
       }
       continue;
     }
     if ("content" in block) {
-      out.push(block.content);
+      out.push({ content: block.content, code: block.type === "codeBlock" });
     }
     if ("children" in block && block.children !== undefined) {
       if (!collectLines(block.children, out, flattenTables, stats)) {
@@ -118,13 +126,67 @@ const isBlankLine = (nodes: readonly PmNode[]): boolean =>
       (node.isText && (node.text ?? "").trim() === ""),
   );
 
+const isHardBreak = (node: PmNode): boolean => node.type.name === "hardBreak";
+
+// 스페이스·탭뿐인 텍스트 노드인지 본다. NBSP는 아니다. lineToNodes가 먼저
+// sanitizeSliceInlineText로 Tab을 지워서 실제로 오는 값은 스페이스뿐이다. 탭 분기는
+// 정리 단계가 바뀔 때를 대비한 방어다.
+const isIndentText = (node: PmNode): boolean =>
+  node.isText && /^[ \t]*$/.test(node.text ?? "");
+
+// 줄 양끝의 "공백과 개행" 구간을 자른다(Issue #316). 줄 시작의
+// `^[ \t]*(\n[ \t]*)+`와 끝의 `(\n[ \t]*)+$`다. HTML 소스의 들여쓰기가
+// `<p>⏎      text⏎    </p>`처럼 줄 양끝에 남기 때문이다. 개행은 hardBreak 노드이고
+// text run 경계를 가로질러도 같은 규칙이다. 개행이 없는 앞뒤 공백, 줄 안쪽의
+// 개행·공백, NBSP는 건드리지 않는다. 빈 줄이 아닌 줄만 받는다.
+const trimLineEdges = (nodes: readonly PmNode[]): PmNode[] => {
+  let start = 0;
+  let sawBreak = false;
+  while (start < nodes.length) {
+    const node = nodes[start];
+    if (node === undefined) break;
+    if (isHardBreak(node)) sawBreak = true;
+    else if (!isIndentText(node)) break;
+    start += 1;
+  }
+  if (!sawBreak) start = 0;
+
+  let end = nodes.length;
+  let firstBreak = -1;
+  for (let index = nodes.length - 1; index >= start; index -= 1) {
+    const node = nodes[index];
+    if (node === undefined) break;
+    if (isHardBreak(node)) firstBreak = index;
+    else if (!isIndentText(node)) break;
+  }
+  if (firstBreak >= 0) end = firstBreak;
+
+  const kept = nodes.slice(start, end);
+  const first = kept[0];
+  if (sawBreak && first?.isText === true) {
+    const text = (first.text ?? "").replace(/^[ \t]+/, "");
+    kept[0] = first.type.schema.text(text, first.marks);
+  }
+  return kept;
+};
+
+// codeBlock 줄의 앞뒤 hardBreak만 자른다. 들여쓰기와 줄 안쪽은 건드리지 않는다.
+// 빈 줄이 아닌 줄만 받는다.
+const trimHardBreaks = (nodes: readonly PmNode[]): PmNode[] => {
+  let start = 0;
+  let end = nodes.length;
+  while (start < end && nodes[start]?.type.name === "hardBreak") start += 1;
+  while (end > start && nodes[end - 1]?.type.name === "hardBreak") end -= 1;
+  return nodes.slice(start, end);
+};
+
 // 줄 원본을 셀 inline 노드 배열로 만든다. 빈 줄이면 빈 배열이다.
 // text run이 아닌 inline 원소와 셀 스키마에 없는 마크를 버려 nodeFromJSON이
 // 던지지 않게 한다. 무효 문자를 지운 뒤 판정한다. codeBlock의 개행도
 // inlineContentToTiptap이 hardBreak로 나눈다.
-const lineToNodes = (schema: Schema, source: InlineContent): PmNode[] => {
+const lineToNodes = (schema: Schema, source: LineSource): PmNode[] => {
   const runs: InlineContent = [];
-  for (const item of source) {
+  for (const item of source.content) {
     if (!isTextRunItem(item)) continue;
     const marks = item.marks?.filter(
       (mark) => schema.marks[mark.type] !== undefined,
@@ -145,11 +207,7 @@ const lineToNodes = (schema: Schema, source: InlineContent): PmNode[] => {
     nodes.push(node);
   });
   if (isBlankLine(nodes)) return [];
-  let start = 0;
-  let end = nodes.length;
-  while (start < end && nodes[start]?.type.name === "hardBreak") start += 1;
-  while (end > start && nodes[end - 1]?.type.name === "hardBreak") end -= 1;
-  return nodes.slice(start, end);
+  return source.code ? trimHardBreaks(nodes) : trimLineEdges(nodes);
 };
 
 /** buildCellHtmlInline의 선택 옵션이다. */
@@ -175,7 +233,7 @@ export const buildCellHtmlInline = (
   options: CellHtmlInlineOptions = {},
 ): Fragment | null => {
   const flattenTables = options.flattenTables === true;
-  const sources: InlineContent[] = [];
+  const sources: LineSource[] = [];
   const stats: LineStats = { tables: 0 };
   if (!collectLines(blocks, sources, flattenTables, stats)) return null;
   if (sources.length < (stats.tables > 0 ? 1 : minBlocks)) return null;

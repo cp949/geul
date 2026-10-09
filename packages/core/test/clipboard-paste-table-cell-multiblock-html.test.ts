@@ -536,6 +536,133 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
       expectTableIntact(result);
     });
 
+    // Issue #316 리뷰 M1: Google Docs 복사는 문서 전체를 굵지 않은 `<b>`로 감싼다.
+    // io가 font-weight:normal|400 래퍼를 bold로 읽지 않는다.
+    it("Google Docs 모양(굵지 않은 <b> 래퍼)은 bold 없이 text와 textColor가 된다", () => {
+      const result = pasteMiddle(
+        '<b style="font-weight:normal;" id="docs-internal-guid-x"><p><span style="color:#000000;font-weight:400;">hello</span></p></b>',
+      );
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "ce",
+        "hello*textColor",
+        "ll",
+      ]);
+      expect(markAttrsOf(result, "textColor")).toEqual({ color: "#000000" });
+      expect(markAttrsOf(result, "bold")).toBeNull();
+      expectTableIntact(result);
+    });
+
+    // Issue #316 리뷰 m1: HTML 소스의 들여쓰기가 줄 양끝에 남지 않는다.
+    it.each([
+      {
+        name: "문단",
+        html: "<p>\n      Some text here\n    </p>",
+        kinds: ["ceSome text herell"],
+      },
+      {
+        name: "목록 항목",
+        html: "<ul><li>\n    item\n  </li></ul>",
+        kinds: ["ceitemll"],
+      },
+      {
+        name: "제목",
+        html: "<h1>\n  title\n</h1>",
+        kinds: ["cetitlell"],
+      },
+    ])(
+      "$name 줄 양끝의 공백·개행은 자르고 줄 안쪽은 건드리지 않는다",
+      ({ html, kinds }) => {
+        const result = pasteMiddle(html);
+
+        expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(kinds);
+        expectTableIntact(result);
+      },
+    );
+
+    it("줄 안쪽 소스 개행과 연속 공백은 접지 않는다(PM 기본은 접었다)", () => {
+      const result = pasteMiddle("<p>a   b\n   c</p>");
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "cea   b",
+        "br",
+        "   cll",
+      ]);
+      expectTableIntact(result);
+    });
+
+    // Issue #316 리뷰 02 F1: codeBlock 줄은 앞뒤 hardBreak만 자르고 첫 줄
+    // 들여쓰기를 보존한다.
+    it("`<pre><code>` 첫 줄의 들여쓰기는 앞 개행이 있어도 보존한다", () => {
+      const result = pasteMiddle(
+        "<pre><code>\n  if (a) {\n    b\n  }\n</code></pre>",
+      );
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+        "ce  if (a) {",
+        "br",
+        "    b",
+        "br",
+        "  }ll",
+      ]);
+      expect(markAttrsOf(result, "code")).toBeNull();
+      expectTableIntact(result);
+    });
+
+    it("개행 없이 앞에만 있는 공백은 그대로 둔다", () => {
+      const result = pasteMiddle("<p>  lead</p>");
+
+      expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["ce  leadll"]);
+    });
+
+    describe("선택 종류별로 같은 변환을 쓴다", () => {
+      const RED = '<p><span style="color:#ff0000">red</span></p>';
+
+      it("같은 셀 안 범위(offset 1–3)는 범위를 색 마크 텍스트로 대체한다", () => {
+        const result = pasteIn(
+          lastCellBlocks(),
+          textSelection(inCell("t-r0c0", 1), inCell("t-r0c0", 3)),
+          { "text/html": RED, "text/plain": "plain" },
+        );
+
+        expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+          "c",
+          "red*textColor",
+          "l",
+        ]);
+        expect(markAttrsOf(result, "textColor")).toEqual({ color: "#FF0000" });
+        expectTableIntact(result);
+      });
+
+      it("인라인 atom NodeSelection은 atom을 색 마크 텍스트로 대체한다", () => {
+        const result = pasteIn(
+          atomBlocks(),
+          atomSelected,
+          { "text/html": RED, "text/plain": "plain" },
+          withTag,
+        );
+
+        expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
+          "ab",
+          "red*textColor",
+          "cd",
+        ]);
+        expect(markAttrsOf(result, "textColor")).toEqual({ color: "#FF0000" });
+        expectTableIntact(result);
+      });
+
+      it("같은 셀 안 범위의 <pre> 개행은 hardBreak이고 code 마크가 없다", () => {
+        const result = pasteIn(
+          lastCellBlocks(),
+          textSelection(inCell("t-r0c0", 1), inCell("t-r0c0", 3)),
+          { "text/html": "<pre><code>l1\nl2</code></pre>", "text/plain": "p" },
+        );
+
+        expect(kindsOf(result.tiptap, "t-r0c0")).toEqual(["cl1", "br", "l2l"]);
+        expect(markAttrsOf(result, "code")).toBeNull();
+      });
+    });
+
     it.each([
       { name: "빈 문단", html: "<p></p>" },
       { name: "br뿐인 문단", html: "<p><br></p>" },

@@ -318,13 +318,14 @@ describe("표 셀 위 여러 블록 html drop(Issue #311)", () => {
         const { tiptap } = mountCellDrop();
         const before = tiptap.state.doc;
 
+        // 평문을 싣지 않는다. 평문이 있으면 셀 html 분기가 깨져도 빈 slice 평문
+        // 폴백이 평문을 넣어 이 테스트가 거짓 통과한다(Issue #316 리뷰 m3).
+        // 평문이 없으면 분기가 깨질 때 위임(falsy)이고 문서가 그대로다.
         expect(
-          handledDrop(
-            tiptap,
-            dropEventOf({ "text/html": html, "text/plain": "plain" }),
-          ),
+          handledDrop(tiptap, dropEventOf({ "text/html": html })),
         ).toBeTruthy();
         expect(tiptap.state.doc).not.toBe(before);
+        expect(kindsOf(tiptap, "t-r0c0")).not.toEqual(["cell"]);
       },
     );
 
@@ -344,6 +345,32 @@ describe("표 셀 위 여러 블록 html drop(Issue #311)", () => {
         expect(tiptap.state.doc.childCount).toBe(4);
       },
     );
+
+    // Issue #316 리뷰 M1: Google Docs 복사는 굵지 않은 `<b>`로 문서를 감싼다.
+    it("Google Docs 모양(굵지 않은 <b> 래퍼) drop은 bold 없이 text와 textColor가 된다", () => {
+      const { editable, tiptap } = mountCellDrop();
+
+      htmlDrop(
+        editable,
+        '<b style="font-weight:normal;" id="docs-internal-guid-x"><p><span style="color:#000000;font-weight:400;">hello</span></p></b>',
+      );
+
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual([
+        "ce",
+        "hello*textColor",
+        "ll",
+      ]);
+      expect(tiptap.state.doc.childCount).toBe(4);
+    });
+
+    // Issue #316 리뷰 m1: 줄 양끝의 소스 들여쓰기는 남지 않는다.
+    it("문단 양끝의 소스 공백·개행은 자르고 한 줄로 넣는다", () => {
+      const { editable, tiptap } = mountCellDrop();
+
+      htmlDrop(editable, "<p>\n      Some text here\n    </p>");
+
+      expect(kindsOf(tiptap, "t-r0c0")).toEqual(["ceSome text herell"]);
+    });
 
     it("importHtml이 실패하면 위임한다", () => {
       vi.mocked(importHtml).mockImplementationOnce(() => ({

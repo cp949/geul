@@ -29,6 +29,7 @@ import { findBlockPosition } from "../src/block-position.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
   cellDropBlocks,
+  childDocument,
   handledDrop,
   mountCellDrop,
   mountDropAt,
@@ -52,12 +53,6 @@ import { boldCellBlocks, kindsOf } from "./table-cell-paste-test-support.js";
 const META = "<meta charset='utf-8'>";
 const BOLD = { type: "bold" };
 const SOH = String.fromCharCode(1);
-
-// p1 "abcd" 자식 [c1 "child"], tail "tail".
-const childDocument = (): Block[] => [
-  paragraphBlock("p1", "abcd", [paragraphBlock("c1", "child")]),
-  paragraphBlock("tail", "tail"),
-];
 
 // p1 "abcd", tail "tail".
 const plainDocument = (): Block[] => [
