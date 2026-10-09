@@ -197,16 +197,22 @@ describe("parseStyleDeclarations 오라클 대조", () => {
   );
 
   it("모든 UTF-16 코드 유닛에 대해 속성 앞뒤 공백 판정이 정규식 \\s와 같다", () => {
+    // 코드 유닛 65,536개 × 3모양을 도는 테스트다. 케이스마다 expect를 부르면
+    // 병렬 실행에서 기본 timeout에 가까워져 불일치만 모아 한 번에 단언한다.
+    const mismatches: string[] = [];
     for (let unit = 0; unit < 0x10000; unit += 1) {
       const character = String.fromCharCode(unit);
       const beforeColon = `color${character}:#ff0000`;
       const afterColon = `color:${character}#ff0000`;
       const beforeProperty = `${character}text-align:left`;
       for (const style of [beforeColon, afterColon, beforeProperty]) {
-        expect(parseStyleDeclarations(style), `U+${unit.toString(16)}`).toEqual(
-          legacyParseStyleDeclarations(style),
-        );
+        const actual = JSON.stringify(parseStyleDeclarations(style));
+        const expected = JSON.stringify(legacyParseStyleDeclarations(style));
+        if (actual !== expected) {
+          mismatches.push(`U+${unit.toString(16)} ${JSON.stringify(style)}`);
+        }
       }
     }
+    expect(mismatches).toEqual([]);
   });
 });
