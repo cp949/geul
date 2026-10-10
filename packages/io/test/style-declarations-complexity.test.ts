@@ -14,8 +14,14 @@
  * 선언이 아주 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력,
  * 공백·토큰이 긴 입력이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
- * 한계: 정규식 엔진 내부 작업과 대괄호로 글자를 읽는 루프(`parseStyleDeclarations`의
- * 선언 분할기)는 이 계측에 잡히지 않는다.
+ * 한계: 정규식 엔진 내부 작업과 대괄호로 글자를 읽는 루프는 이 String 메서드
+ * 계측에 잡히지 않는다.
+ * - font 줄임 파서(`parseFontShorthand`)의 대괄호 읽기는 아래
+ *   `parseFontShorthand`의 대괄호 읽기 절이 센다(Issue #340).
+ *   `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
+ *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
+ * - 선언 분할기(`parseStyleDeclarations`)의 대괄호 읽기는 시간 상한 테스트만
+ *   덮는다.
  * `parseInlineStyleMarks`는 `!important` 제거와 선언 분리에 정규식을 쓰지
  * 않는다(공백 run 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를
  * 피했다). `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳
@@ -27,6 +33,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   hasComputedStyleDump,
+  parseFontShorthand,
   parseInlineStyleMarks,
   parseStyleDeclarations,
   parseWhiteSpaceMode,
@@ -126,6 +133,124 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     measureWorkload("font-weight:700");
     expect(String.prototype.slice).toBe(before);
   });
+});
+
+// 대괄호 읽기(`value[index]`)를 세는 계측이다. 위 String 메서드 계측은 글자를
+// 대괄호로 읽는 루프를 보지 못한다. `new String(value)`를 Proxy로 감싸 숫자 키
+// `get`만 센다. 함수 속성(`slice`·`charCodeAt` 등)은 target에 bind해 돌려주고
+// 세지 않는다. 계측 코드는 typeof와 Number 비교만 쓴다. String 메서드를 부르지
+// 않아 읽기 수가 오염되지 않고, 전역을 바꾸지 않아 되돌릴 것도 없다.
+// Proxy는 원시 문자열이 아니라서 `value === "inherit"` 같은 전체 일치 분기는
+// 타지 않는다. 아래 모양은 모두 그 분기 밖의 입력이다.
+// 읽기 수가 입력 길이의 `MAX_READS_PER_CHAR`배를 넘으면 던진다. vitest는 동기
+// 루프를 중간에 끊지 못한다. 재순회 회귀가 생기면 상한이 없을 때 실패 보고까지
+// 수 분에서 수십 분이 걸린다. 선형 구현의 읽기 수는 글자당 5회 이하다.
+const MAX_READS_PER_CHAR = 32;
+
+const countIndexReads = (
+  value: string,
+  run: (proxy: string) => void,
+): number => {
+  let reads = 0;
+  const limit = value.length * MAX_READS_PER_CHAR;
+  const target = new String(value);
+  const proxy = new Proxy(target, {
+    get(boxed, key) {
+      if (
+        typeof key === "string" &&
+        key !== "" &&
+        Number.isInteger(Number(key))
+      ) {
+        reads += 1;
+        if (reads > limit) {
+          throw new Error(
+            `대괄호 읽기가 입력 길이 ${value.length}의 ${MAX_READS_PER_CHAR}배를 넘었다`,
+          );
+        }
+      }
+      const member: unknown = Reflect.get(boxed, key, boxed);
+      return typeof member === "function" ? member.bind(boxed) : member;
+    },
+  });
+  run(proxy as unknown as string);
+  return reads;
+};
+
+// `font:` 접두를 뗀 값 수준 모양이다. 선언 수준인 "선언이 아주 많은 입력"은
+// 뺐고, 긴 글꼴 식별자 하나를 더했다. 그 모양이 있어야 `scanFamilyIdent`의
+// 루프 안 재순회가 잡힌다. 셋째 값은 입력을 끝까지 훑는지다. 쉼표만 많은
+// 입력은 `isFamilyList`가 첫 글자 `,`에서 거절하고, 앞 토큰이 아주 많은
+// 입력은 앞 슬롯 네 개를 넘기면 거절한다. 두 모양은 입력이 아무리 커도
+// 읽기 수가 상수라 `BASE_SIZE` 이상을 요구하지 않는다.
+const fontShorthandValueShapes: Array<
+  [name: string, build: (size: number) => string, scansWholeInput: boolean]
+> = [
+  ["값이 긴 알파벳 run인 입력", (size) => "a".repeat(size * 16), true],
+  [
+    "앞 토큰 사이 공백이 긴 입력",
+    (size) => `bold${" ".repeat(size * 16)}12px Arial`,
+    true,
+  ],
+  ["글꼴 목록이 긴 입력", (size) => `12px ${"a,".repeat(size)}a`, true],
+  ["글꼴 식별자가 많은 입력", (size) => `12px ${"a ".repeat(size)}`, true],
+  [
+    "따옴표가 닫히지 않은 긴 입력",
+    (size) => `12px "${"a ".repeat(size)}`,
+    true,
+  ],
+  [
+    "계산 함수 토큰이 긴 입력",
+    (size) => `calc(${"1px + ".repeat(size)}1px) a`,
+    true,
+  ],
+  ["쉼표만 많은 입력", (size) => `12px ${",".repeat(size)}`, false],
+  [
+    "앞 토큰이 아주 많은 입력",
+    (size) => `${"bold ".repeat(size)}12px a`,
+    false,
+  ],
+  [
+    "line-height 토큰이 긴 입력",
+    (size) => `12px/${"1".repeat(size * 16)} a`,
+    true,
+  ],
+  ["긴 글꼴 식별자 하나", (size) => `12px ${"a".repeat(size * 16)}`, true],
+];
+
+// 변이로 확인한 RED다(Issue #340). 아래 앞 세 변이는 읽기 증가율이 4 가까이
+// 뛴다(상한 없이 잰 값). 상한(`MAX_READS_PER_CHAR`)을 둔 뒤에는 읽기 수가 상한을
+// 먼저 넘어 던지고, 각 변이의 RED가 0.3–2초에 나온다.
+// 실측(Node, 2026-10-11): 정상 구현은 모양별 증가율이 2.00 이하다. 읽기 수
+// (작은 쪽/큰 쪽)는 값이 긴 알파벳 run 320,001/640,001, 글꼴 목록 200,014/
+// 400,014, 글꼴 식별자 140,009/280,009, 긴 글꼴 식별자 하나 320,013/640,013이다.
+// 쉼표만 많은 입력과 앞 토큰이 아주 많은 입력은 둘 다 13/13이다.
+// - `isFamilyList` 루프에 `for (k < index) void value[k]`를 넣으면 글꼴 목록이
+//   긴 입력이 3.998이다.
+// - `isFamilyList`가 항목마다 목록 시작부터 `scanFamilyIdent`를 이어 다시
+//   부르면 글꼴 식별자가 많은 입력이 3.9999이다.
+// - `scanFamilyIdent` while 루프에서 글자마다 `from`부터 다시 읽으면 긴 글꼴
+//   식별자 하나가 3.9999이다. 이 모양이 없으면 이 변이는 통과한다.
+// - `isFamilyList` 루프에서 `value.slice(0, index)` 사본을 훑는 변이는 대괄호
+//   읽기를 늘리지 않는다. 위 String 메서드 계측의 font 줄임 글꼴 목록이 긴
+//   입력이 처리 문자 수 증가율 3.999로 잡는다.
+describe("parseFontShorthand의 대괄호 읽기", () => {
+  it.each(fontShorthandValueShapes)(
+    "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
+    (_name, build, scansWholeInput) => {
+      const small = countIndexReads(build(BASE_SIZE), (value) => {
+        parseFontShorthand(value);
+      });
+      const large = countIndexReads(build(BASE_SIZE * 2), (value) => {
+        parseFontShorthand(value);
+      });
+
+      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
+      expect(small).toBeGreaterThan(0);
+      if (scansWholeInput) expect(small).toBeGreaterThanOrEqual(BASE_SIZE);
+
+      expect(large / small, "대괄호 읽기 증가율").toBeLessThanOrEqual(2);
+    },
+  );
 });
 
 const declarationInputShapes: Array<[string, (size: number) => string]> = [

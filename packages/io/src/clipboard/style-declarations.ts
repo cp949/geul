@@ -706,7 +706,11 @@ const isFamilyList = (value: string, from: number): boolean => {
 //   돌아간다(initial).
 // - 굵기 토큰이 없으면 normal이고 기울임 토큰이 없으면 normal이다.
 // 값을 앞에서 한 번 훑고 토큰마다 일정한 일만 한다. 정규식을 쓰지 않는다.
-const parseFontShorthand = (value: string): FontShorthand | undefined => {
+// export는 복잡도 테스트 전용이다. 테스트가 대괄호 읽기를 세려고 Proxy 값을
+// 직접 넘긴다. 공개 API가 아니다.
+export const parseFontShorthand = (
+  value: string,
+): FontShorthand | undefined => {
   if (value === "") return undefined;
   if (value === "inherit" || value === "unset") {
     return { weight: "inherit", fontStyle: "inherit" };
