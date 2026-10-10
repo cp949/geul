@@ -9,6 +9,12 @@
  * - Tab·LF만 든 `pre`와 무효 문자 없는 `pre`는 결과와 경고가 이전과 같다.
  * - 표 안 `pre`의 기존 경고 동작은 그대로다.
  * - `data-language`의 무효 문자는 이번 범위 밖이라 여전히 문서를 거절한다.
+ *
+ * Issue #354 — 변환이 `pre`를 `codeBlock`이 아닌 인라인 글자로 평탄화할 때 지우는 Tab도 경고한다.
+ * - 문맥(최상위·div·li·중첩 li·blockquote·callout·표 셀 등)과 인라인 래퍼의 행렬을 고정한다.
+ * - 평탄화 판정은 변환기의 분할 규칙(목록 항목·인용·callout 본문 vs children)을 따른다.
+ * - 평탄화되는 행은 부모 블록 본문이 `ab`이고 Tab 경고가 `pre`(또는 `code`) element로 난다.
+ * - `codeBlock`이 되는 행은 Tab이 남고 경고가 없다. CR·C0 경고 개수와 표 셀 행은 이전과 같다.
  */
 import {
   type DocumentBlock,
@@ -147,5 +153,452 @@ describe("importHtml pre 안 무효 문자(Issue #352)", () => {
     expect(
       importHtml('<pre data-language="bad&#x7f;">source</pre>'),
     ).toMatchObject({ ok: false, error: { code: "HTML_DOCUMENT_INVALID" } });
+  });
+});
+
+/** 블록 트리를 [type, 글자, children?] 형태로 줄인다. */
+type Outline = [string, string] | [string, string, Outline[]];
+const outline = (blocks: readonly DocumentBlock[]): Outline[] =>
+  blocks.map((block): Outline => {
+    const text =
+      "content" in block && Array.isArray(block.content)
+        ? textOf(block.content)
+        : "";
+    const children = "children" in block ? (block.children ?? []) : [];
+    return children.length > 0
+      ? [block.type, text, outline(children)]
+      : [block.type, text];
+  });
+
+/** 래퍼 이름 배열로 인라인 래퍼를 안쪽부터 감싼다. */
+const wrapWith = (wrappers: readonly string[], inner: string): string =>
+  wrappers.reduceRight(
+    (acc, tag) =>
+      `<${tag}${tag === "a" ? ' href="https://example.com/"' : ""}>${acc}</${tag}>`,
+    inner,
+  );
+
+const TAB_PRE = "<pre>a\tb</pre>";
+
+/** 래퍼 행렬에 쓰는 인라인 래퍼 조합이다. 이름은 테스트 제목에 쓴다. */
+const inlineWrappers: [string, string[]][] = [
+  ["span", ["span"]],
+  ["b", ["b"]],
+  ["a", ["a"]],
+  ["em", ["em"]],
+  ["code", ["code"]],
+  ["span 안 b", ["span", "b"]],
+  ["b 안 span", ["b", "span"]],
+];
+
+describe("importHtml 평탄화 pre의 Tab 삭제 경고(Issue #354)", () => {
+  // 목록 항목·인용·callout은 본문 인라인 구간을 평탄화한다.
+  // 그 구간에서 인라인 래퍼를 지나 만난 pre는 codeBlock이 되지 않는다.
+  const flatteningContexts: [string, (inner: string) => string, Outline[]][] = [
+    ["li", (x) => `<ul><li>${x}</li></ul>`, [["bulletListItem", "ab"]]],
+    ["ol의 li", (x) => `<ol><li>${x}</li></ol>`, [["numberedListItem", "ab"]]],
+    [
+      "중첩 li",
+      (x) => `<ul><li>head<ul><li>${x}</li></ul></li></ul>`,
+      [["bulletListItem", "head", [["bulletListItem", "ab"]]]],
+    ],
+    ["blockquote", (x) => `<blockquote>${x}</blockquote>`, [["quote", "ab"]]],
+    [
+      "callout",
+      (x) => `<div data-geul-callout="true">${x}</div>`,
+      [["callout", "ab"]],
+    ],
+    [
+      "인용 안 목록의 li",
+      (x) => `<blockquote><ul><li>${x}</li></ul></blockquote>`,
+      [["quote", "", [["bulletListItem", "ab"]]]],
+    ],
+  ];
+
+  describe.each(flatteningContexts)(
+    "%s 안의 래퍼 pre",
+    (_context, build, expected) => {
+      it.each(inlineWrappers)(
+        "%s 래퍼는 본문 글자로 평탄화하고 Tab 삭제를 경고한다",
+        (_name, wrappers) => {
+          const value = imported(build(wrapWith(wrappers, TAB_PRE)));
+
+          expect(outline(value.document.blocks)).toEqual(expected);
+          expect(value.warnings).toEqual([
+            expect.objectContaining({ kind: REMOVED, element: "pre" }),
+          ]);
+        },
+      );
+    },
+  );
+
+  it("평탄화 pre 안 code의 경고 element는 code다", () => {
+    const value = imported(
+      "<ul><li><span><pre><code>a\tb</code></pre></span></li></ul>",
+    );
+
+    expect(outline(value.document.blocks)).toEqual([["bulletListItem", "ab"]]);
+    expect(value.warnings).toEqual([
+      expect.objectContaining({ kind: REMOVED, element: "code" }),
+    ]);
+  });
+
+  // 래퍼 안쪽의 블록(div·ul·blockquote·figure)도 본문 구간 안이면 같이 평탄화된다.
+  it.each([
+    [
+      "span 안 div 안 pre",
+      `<ul><li><span><div>${TAB_PRE}</div></span></li></ul>`,
+    ],
+    [
+      "span 안 ul 안 li 안 pre",
+      `<ul><li><span><ul><li>${TAB_PRE}</li></ul></span></li></ul>`,
+    ],
+    [
+      "span 안 blockquote 안 pre",
+      `<ul><li><span><blockquote>${TAB_PRE}</blockquote></span></li></ul>`,
+    ],
+    [
+      "span 안 figure 안 pre",
+      `<ul><li><span><figure>${TAB_PRE}<figcaption>c</figcaption></figure></span></li></ul>`,
+    ],
+    [
+      "font 안 span 안 pre",
+      `<ul><li><font><span>${TAB_PRE}</span></font></li></ul>`,
+    ],
+    [
+      "span 안 font 안 pre",
+      `<ul><li><span><font>${TAB_PRE}</font></span></li></ul>`,
+    ],
+    [
+      "미지원 태그 안 span 안 pre",
+      `<ul><li><center><span>${TAB_PRE}</span></center></li></ul>`,
+    ],
+    [
+      "span 안 미지원 태그 안 pre",
+      `<ul><li><span><center>${TAB_PRE}</center></span></li></ul>`,
+    ],
+    [
+      "앞선 글자가 있는 span 안 pre",
+      `<ul><li>head <span>${TAB_PRE}</span></li></ul>`,
+    ],
+    [
+      "앞선 공백만 있는 span 안 pre",
+      `<ul><li>  <span>${TAB_PRE}</span></li></ul>`,
+    ],
+    ["u 안 pre", `<ul><li><u>${TAB_PRE}</u></li></ul>`],
+    ["strong 안 pre", `<ul><li><strong>${TAB_PRE}</strong></li></ul>`],
+    [
+      "center 안 ul 안 li 안 span 안 pre",
+      `<center><ul><li><span>${TAB_PRE}</span></li></ul></center>`,
+    ],
+  ])("확장 문맥 %s도 평탄화하고 Tab 삭제를 경고한다", (_name, html) => {
+    const value = imported(html);
+
+    expect(codeTexts(value.document.blocks)).toEqual([]);
+    expect(
+      value.warnings.filter((warning) => warning.kind === REMOVED),
+    ).toHaveLength(1);
+  });
+
+  it("평탄화한 본문 뒤의 children codeBlock은 Tab을 남기고 경고하지 않는다", () => {
+    const value = imported(
+      `<ul><li><span>${TAB_PRE}</span><pre>c\td</pre></li></ul>`,
+    );
+
+    expect(outline(value.document.blocks)).toEqual([
+      ["bulletListItem", "ab", [["codeBlock", "c\td"]]],
+    ]);
+    expect(value.warnings).toHaveLength(1);
+  });
+
+  it("평탄화한 본문 뒤 p와 목록 children은 그대로다", () => {
+    const value = imported(
+      `<ul><li><span>${TAB_PRE}</span><p>h</p><ul><li>n</li></ul></li></ul>`,
+    );
+
+    expect(outline(value.document.blocks)).toEqual([
+      [
+        "bulletListItem",
+        "ab",
+        [
+          ["paragraph", "h"],
+          ["bulletListItem", "n"],
+        ],
+      ],
+    ]);
+    expect(value.warnings).toEqual([
+      expect.objectContaining({ kind: REMOVED, element: "pre" }),
+    ]);
+  });
+
+  // codeBlock이 되는 문맥은 Tab을 남기고 경고하지 않는다(무변화 가드).
+  const codeBlockContexts: [string, string, Outline[]][] = [
+    ["최상위 span 안 pre", `<span>${TAB_PRE}</span>`, [["codeBlock", "a\tb"]]],
+    [
+      "div 안 span 안 pre",
+      `<div><span>${TAB_PRE}</span></div>`,
+      [["codeBlock", "a\tb"]],
+    ],
+    [
+      "h1 안 span 안 pre",
+      `<h1><span>${TAB_PRE}</span></h1>`,
+      [["codeBlock", "a\tb"]],
+    ],
+    [
+      "미지원 태그 안 pre",
+      `<center>${TAB_PRE}</center>`,
+      [["codeBlock", "a\tb"]],
+    ],
+    [
+      "figure 안 pre",
+      `<figure>${TAB_PRE}<figcaption>c</figcaption></figure>`,
+      [["codeBlock", "a\tb"]],
+    ],
+    [
+      "일반 details 안 span 안 pre",
+      `<details><summary>s</summary><span>${TAB_PRE}</span></details>`,
+      [
+        ["paragraph", "s"],
+        ["codeBlock", "a\tb"],
+      ],
+    ],
+    [
+      "래퍼 없는 li 안 pre",
+      `<ul><li>${TAB_PRE}</li></ul>`,
+      [["bulletListItem", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "래퍼 없는 blockquote 안 pre",
+      `<blockquote>${TAB_PRE}</blockquote>`,
+      [["quote", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "래퍼 없는 callout 안 pre",
+      `<div data-geul-callout="true">${TAB_PRE}</div>`,
+      [["callout", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "li 안 font 래퍼 pre",
+      `<ul><li><font>${TAB_PRE}</font></li></ul>`,
+      [["bulletListItem", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "li 안 mark 래퍼 pre",
+      `<ul><li><mark>${TAB_PRE}</mark></li></ul>`,
+      [["bulletListItem", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "li 안 div 안 span 안 pre",
+      `<ul><li><div><span>${TAB_PRE}</span></div></li></ul>`,
+      [["bulletListItem", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "li 안 div 안 b 안 span 안 pre",
+      `<ul><li><div><b><span>${TAB_PRE}</span></b></div></li></ul>`,
+      [["bulletListItem", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "li 안 p 뒤 span 안 pre",
+      `<ul><li><p>h</p><span>${TAB_PRE}</span></li></ul>`,
+      [["bulletListItem", "h", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "li 안 div 뒤 span 안 pre",
+      `<ul><li><div>h</div><span>${TAB_PRE}</span></li></ul>`,
+      [
+        [
+          "bulletListItem",
+          "",
+          [
+            ["paragraph", "h"],
+            ["codeBlock", "a\tb"],
+          ],
+        ],
+      ],
+    ],
+    [
+      "li 안 pre 뒤 span 안 pre",
+      `<ul><li>${TAB_PRE}<span>${TAB_PRE}</span></li></ul>`,
+      [
+        [
+          "bulletListItem",
+          "",
+          [
+            ["codeBlock", "a\tb"],
+            ["codeBlock", "a\tb"],
+          ],
+        ],
+      ],
+    ],
+    [
+      "blockquote 안 p 뒤 span 안 pre",
+      `<blockquote><p>h</p><span>${TAB_PRE}</span></blockquote>`,
+      [["quote", "h", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "blockquote 안 div 안 span 안 pre",
+      `<blockquote><div><span>${TAB_PRE}</span></div></blockquote>`,
+      [["quote", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "callout 안 p 뒤 span 안 pre",
+      `<div data-geul-callout="true"><p>h</p><span>${TAB_PRE}</span></div>`,
+      [["callout", "h", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "callout 안 div 안 span 안 pre",
+      `<div data-geul-callout="true"><div><span>${TAB_PRE}</span></div></div>`,
+      [["callout", "", [["codeBlock", "a\tb"]]]],
+    ],
+    [
+      "h1 안 blockquote의 앞선 글자 뒤 span 안 pre",
+      `<h1><blockquote>head <span>${TAB_PRE}</span></blockquote></h1>`,
+      [
+        [
+          "quote",
+          "",
+          [
+            ["heading", "head"],
+            ["codeBlock", "a\tb"],
+          ],
+        ],
+      ],
+    ],
+    [
+      "ul 밖 li 안 span 안 pre",
+      `<li><span>${TAB_PRE}</span></li>`,
+      [["codeBlock", "a\tb"]],
+    ],
+    [
+      "div 안 ul 안 li 안 span 안 pre",
+      `<div><ul><li><span>${TAB_PRE}</span></li></ul></div>`,
+      [["codeBlock", "a\tb"]],
+    ],
+    [
+      "li 안 div 안 ul 안 li 안 span 안 pre",
+      `<ul><li><div><ul><li><span>${TAB_PRE}</span></li></ul></div></li></ul>`,
+      [["bulletListItem", "", [["codeBlock", "a\tb"]]]],
+    ],
+  ];
+
+  it.each(codeBlockContexts)(
+    "%s은 codeBlock이고 Tab을 남기며 경고하지 않는다",
+    (_name, html, expected) => {
+      const value = imported(html);
+
+      expect(outline(value.document.blocks)).toEqual(expected);
+      expect(
+        value.warnings.filter((warning) => warning.kind === REMOVED),
+      ).toEqual([]);
+    },
+  );
+
+  // CR·C0 경고 개수는 codeBlock이 되든 평탄화되든 텍스트 노드마다 한 번으로 같다.
+  it.each([
+    [
+      "평탄화 span 안 pre의 CR",
+      "<ul><li><span><pre>a&#13;b</pre></span></li></ul>",
+    ],
+    [
+      "평탄화 span 안 pre의 C0",
+      "<ul><li><span><pre>a&#1;b</pre></span></li></ul>",
+    ],
+    [
+      "평탄화 pre의 Tab과 C0",
+      "<ul><li><span><pre>a\t&#1;b</pre></span></li></ul>",
+    ],
+    ["codeBlock span 안 pre의 CR", "<span><pre>a&#13;b</pre></span>"],
+    ["codeBlock li 안 pre의 C0", "<ul><li><pre>a&#1;b</pre></li></ul>"],
+  ])("%s는 경고를 한 번만 낸다", (_name, html) => {
+    const warnings = imported(html).warnings.filter(
+      (warning) => warning.kind === REMOVED,
+    );
+
+    expect(warnings).toHaveLength(1);
+  });
+
+  // 표 셀 안 pre는 평탄화 경로이며 이전에도 Tab 삭제를 경고했다.
+  it.each([
+    ["래퍼 없는 pre", TAB_PRE],
+    ["span 래퍼 pre", `<span>${TAB_PRE}</span>`],
+    ["div 래퍼 pre", `<div>${TAB_PRE}</div>`],
+  ])("표 셀 안 %s의 Tab 삭제 경고는 그대로다", (_name, inner) => {
+    const value = imported(
+      `<table><tbody><tr><td>${inner}</td></tr></tbody></table>`,
+    );
+
+    expect(value.warnings).toEqual([
+      expect.objectContaining({ kind: REMOVED, element: "pre" }),
+    ]);
+  });
+
+  it("평탄화 안쪽 표 셀의 pre도 경고는 한 번이다", () => {
+    const value = imported(
+      `<ul><li><span><table><tbody><tr><td>${TAB_PRE}</td></tr></tbody></table></span></li></ul>`,
+    );
+
+    expect(
+      value.warnings.filter((warning) => warning.kind === REMOVED),
+    ).toHaveLength(1);
+  });
+});
+
+// IMPL-REVIEW-01(Issue #354)이 찾은 어긋남을 고정한다.
+describe("importHtml 평탄화 pre 경고의 어긋남 보정(Issue #354 리뷰)", () => {
+  // 표 밖 td·th·tr·tbody는 sanitize가 조상(table) 부족으로 벗긴다.
+  // 벗겨진 자리의 목록 항목은 본문 구간을 평탄화한다.
+  it.each([
+    ["td", `<td><ul><li><span>${TAB_PRE}</span></li></ul></td>`],
+    ["th", `<th><ol><li><em>${TAB_PRE}</em></li></ol></th>`],
+    [
+      "tbody 안 tr 안 td",
+      `<tbody><tr><td><ul><li><span>${TAB_PRE}</span></li></ul></td></tr></tbody>`,
+    ],
+  ])("표 밖 %s 안 평탄화 pre도 Tab 삭제를 경고한다", (_name, html) => {
+    const value = imported(html);
+
+    expect(codeTexts(value.document.blocks)).toEqual([]);
+    expect(
+      value.warnings.filter((warning) => warning.kind === REMOVED),
+    ).toHaveLength(1);
+  });
+
+  // 바깥 pre가 자식 전체를 소스로 읽는다. 안쪽 구조는 변환에 쓰이지 않는다.
+  it.each([
+    [
+      "blockquote 안 span 안 pre",
+      `<pre><blockquote><span>${TAB_PRE}</span></blockquote></pre>`,
+    ],
+    [
+      "callout 안 span 안 pre",
+      `<pre><div data-geul-callout="true"><span>${TAB_PRE}</span></div></pre>`,
+    ],
+  ])("pre 안 %s의 Tab은 codeBlock에 남고 경고하지 않는다", (_name, html) => {
+    const value = imported(html);
+
+    expect(codeTexts(value.document.blocks)).toEqual(["a\tb"]);
+    expect(
+      value.warnings.filter((warning) => warning.kind === REMOVED),
+    ).toEqual([]);
+  });
+
+  // 수집기가 따라가지 않는 자리는 이전처럼 Tab 삭제를 경고하지 않는다(QA-149 한계).
+  // 이 자리를 따라가도록 고치면 이 테스트가 먼저 깨져 한계 서술을 갱신하게 한다.
+  it.each([
+    [
+      "제목 안 인용 안 span 안 pre",
+      `<h1><blockquote><span>${TAB_PRE}</span></blockquote></h1>`,
+    ],
+    [
+      "토글 summary 안 span 안 pre",
+      `<details data-geul-toggleable="true"><summary><span>${TAB_PRE}</span></summary></details>`,
+    ],
+  ])("한계: %s의 Tab 삭제는 경고하지 않는다", (_name, html) => {
+    const value = imported(html);
+
+    expect(codeTexts(value.document.blocks)).toEqual([]);
+    expect(
+      value.warnings.filter((warning) => warning.kind === REMOVED),
+    ).toEqual([]);
   });
 });

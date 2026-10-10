@@ -11,12 +11,18 @@ import {
 } from "./block-segmenter.js";
 import {
   findBlockBearingColorTags,
+  type HtmlElementContent,
   type HtmlElementNode,
   type HtmlNode,
   type HtmlRoot,
 } from "./inline-content.js";
 import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import { INLINE_PRESENTATION_TAG_NAMES } from "./element-presentation.js";
+import {
+  splitListItemChildren,
+  splitQuoteChildren,
+} from "./import-html-wrappers.js";
+import { htmlImportSanitizeSchema } from "./import-html-sanitize-schema.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
@@ -318,6 +324,146 @@ const isOwnEchoStyle = (
 const isBlockBoundaryTag = (tagName: string): boolean =>
   NESTED_BOUNDARY_TAG_NAMES.has(tagName) || isTransparentListTag(tagName);
 
+// pre가 codeBlock이 아닌 인라인 글자로 평탄화되는 자리를 raw HAST에서 찾는다
+// (Issue #354). 평탄화 경로는 sanitizeInlineText로 Tab도 지운다. 수집기가 모든
+// pre를 codeBlock 소스로 보면 그 Tab 삭제를 놓친다.
+//
+// 변환기는 목록 항목(splitListItemChildren)과 인용·callout(splitQuoteChildren)의
+// 본문 구간을 paragraphContentFromNodes로 평탄화한다. 그 구간 안의 pre는
+// 인라인 래퍼를 지나든 블록 안이든 글자가 된다. 본문 구간 밖(children)과 그 밖의
+// 문맥은 segmentBlocks를 거쳐 pre가 codeBlock이 된다. 표 셀은 insideTable이
+// 따로 다룬다.
+//
+// 이 판정은 변환기를 거울처럼 따라간다. 변환이 바뀌면 어긋날 수 있고, 행렬
+// 테스트가 현재 판정을 고정해 어긋남을 드러낸다. raw 트리와 변환기가 보는
+// sanitize 뒤 트리는 노드가 달라 변환기가 평탄화 사실을 넘겨 줄 수 없다.
+// - 분할은 변환기가 쓰는 두 함수를 그대로 부른다. 입력만 sanitize 뒤 모양에
+//   맞춘다. 허용 목록에 없는 태그와 블록을 품은 font·mark는 sanitize가 벗겨
+//   자식이 부모 자리로 올라온다.
+// - ul·ol은 blocksFromNodes가 직접 읽는 자리(최상위, 목록 항목·인용·callout의
+//   children)에서만 목록 항목이 된다. div 안 ul처럼 segmentBlocks가 걷는 자리의
+//   li는 문단 경계라 평탄화하지 않는다.
+// - 제목 안은 따라가지 않는다. 제목 안 인용은 segmentBlocks가 본문 텍스트를
+//   조상 복제로 감싸 본문 구간의 모양이 바뀐다. 이 자리의 pre는 이전처럼
+//   codeBlock으로 본다.
+// - 토글 summary와 children wrapper(own-format) 안은 따라가지 않는다. 그 자리의
+//   pre는 이전처럼 codeBlock으로 본다.
+type ConversionPositions = {
+  // 평탄화되는 본문 구간의 뿌리 노드다.
+  flattenedContent: Set<HtmlNode>;
+  // blocksFromNodes가 블록 목록으로 읽는 구간의 뿌리 노드다.
+  blockLevel: Set<HtmlNode>;
+};
+
+// 부모에서 자식으로 내려가며 요소마다 새로 만드는 상태다.
+type ConversionState = {
+  positions: ConversionPositions;
+  // 이 노드 목록을 blocksFromNodes가 블록 목록으로 읽는다.
+  atBlockLevel: boolean;
+  // 평탄화되는 본문 구간 안이다.
+  insideFlattenedContent: boolean;
+  // h1~h6 아래다.
+  insideHeading: boolean;
+};
+
+const headingTagNames: ReadonlySet<string> = new Set([
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+]);
+
+const importAllowedTagNames: ReadonlySet<string> = new Set(
+  htmlImportSanitizeSchema.tagNames ?? [],
+);
+
+// 조상 제약(ancestors)이 있는 태그다. td·tr 등이며 table 밖이면 벗겨진다.
+// Object.hasOwn은 Chrome 75 목표에서 금지라 키 집합으로 판정한다.
+const ancestorRequiredTagNames: ReadonlySet<string> = new Set(
+  Object.keys(htmlImportSanitizeSchema.ancestors ?? {}),
+);
+
+// sanitize가 태그만 벗기고 자식을 부모 자리에 올리는 요소다. 분할 입력은 컨테이너
+// 직계 쪽만 훑으므로 table 조상이 없다.
+const isUnwrappedBySanitize = (
+  node: HtmlElementNode,
+  unwrappedColorTags: ReadonlySet<HtmlNode>,
+  insideTable = false,
+): boolean =>
+  unwrappedColorTags.has(node) ||
+  (!importAllowedTagNames.has(node.tagName) &&
+    !htmlStrippedTagNames.includes(node.tagName)) ||
+  (!insideTable && ancestorRequiredTagNames.has(node.tagName));
+
+// 벗겨지는 요소를 그 자식으로 바꾼 sanitize 뒤 자식 목록이다.
+const childrenAfterSanitize = (
+  nodes: readonly HtmlElementContent[],
+  unwrappedColorTags: ReadonlySet<HtmlNode>,
+): HtmlElementContent[] =>
+  nodes.flatMap((node) =>
+    node.type === "element" && isUnwrappedBySanitize(node, unwrappedColorTags)
+      ? childrenAfterSanitize(node.children, unwrappedColorTags)
+      : [node],
+  );
+
+const registerSplitPositions = (
+  container: HtmlElementNode,
+  split: typeof splitListItemChildren,
+  positions: ConversionPositions,
+  unwrappedColorTags: ReadonlySet<HtmlNode>,
+): void => {
+  const { contentNodes, childrenNodes } = split({
+    ...container,
+    children: childrenAfterSanitize(container.children, unwrappedColorTags),
+  });
+  for (const node of contentNodes) positions.flattenedContent.add(node);
+  for (const node of childrenNodes) positions.blockLevel.add(node);
+};
+
+// 본문 구간을 가진 컨테이너라면 자식 위치를 positions에 적는다. 자식은 이
+// 요소를 지난 뒤에 훑으므로 미리 적어 두면 된다.
+const registerConversionPositions = (
+  node: HtmlElementNode,
+  atBlockLevel: boolean,
+  positions: ConversionPositions,
+  unwrappedColorTags: ReadonlySet<HtmlNode>,
+): void => {
+  if (
+    node.tagName === "blockquote" ||
+    (node.tagName === "div" &&
+      propertyStringOrUndefined(node, "dataGeulCallout") === "true")
+  ) {
+    registerSplitPositions(
+      node,
+      splitQuoteChildren,
+      positions,
+      unwrappedColorTags,
+    );
+    return;
+  }
+  if ((node.tagName === "ul" || node.tagName === "ol") && atBlockLevel) {
+    for (const child of childrenAfterSanitize(
+      node.children,
+      unwrappedColorTags,
+    )) {
+      if (child.type !== "element") continue;
+      if (child.tagName === "li") {
+        registerSplitPositions(
+          child,
+          splitListItemChildren,
+          positions,
+          unwrappedColorTags,
+        );
+      } else {
+        // 목록 항목이 아닌 자식은 형제 블록으로 읽힌다.
+        positions.blockLevel.add(child);
+      }
+    }
+  }
+};
+
 const collectFromNodes = (
   nodes: HtmlNode[],
   warnings: HtmlImportWarning[],
@@ -328,6 +474,7 @@ const collectFromNodes = (
   insideTable: boolean,
   parentFigurePreviewWidthStyle: string | undefined,
   unwrappedColorTags: ReadonlySet<HtmlNode>,
+  conversion: ConversionState,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
@@ -335,9 +482,11 @@ const collectFromNodes = (
       // warning fact는 raw HAST에서 수집한다). 정책은 model의
       // sanitizeInlineText가 단독 소유한다(G-CNV-001).
       // pre 안 텍스트는 codeBlock 소스 정제(Tab·LF 허용)와 비교한다(Issue #352).
-      const sanitized = insideCodeBlockPre
-        ? sanitizeCodeBlockSource(node.value)
-        : sanitizeInlineText(node.value);
+      // 본문 구간으로 평탄화되는 pre는 인라인 글자라 Tab도 지운다(Issue #354).
+      const sanitized =
+        insideCodeBlockPre && !conversion.insideFlattenedContent
+          ? sanitizeCodeBlockSource(node.value)
+          : sanitizeInlineText(node.value);
       if (sanitized !== node.value) {
         warnings.push({
           kind: "UNSAFE_CODE_POINT_REMOVED",
@@ -349,6 +498,29 @@ const collectFromNodes = (
       continue;
     }
     if (node.type !== "element") continue;
+
+    // 본문 구간으로 평탄화되는 자리 안이면 아래 자손의 pre는 codeBlock이 아니다.
+    const { positions } = conversion;
+    const flattenedHere =
+      conversion.insideFlattenedContent || positions.flattenedContent.has(node);
+    const blockLevelHere =
+      conversion.atBlockLevel || positions.blockLevel.has(node);
+    const insideHeadingHere =
+      conversion.insideHeading || headingTagNames.has(node.tagName);
+    // pre 안쪽은 구조가 변환에 쓰이지 않는다. 바깥 pre가 자식 전체를 소스로 읽는다.
+    if (
+      !flattenedHere &&
+      !insideTable &&
+      !insideHeadingHere &&
+      !insideCodeBlockPre
+    ) {
+      registerConversionPositions(
+        node,
+        blockLevelHere,
+        positions,
+        unwrappedColorTags,
+      );
+    }
 
     if (unsafeElementNames.has(node.tagName)) {
       warnings.push({
@@ -462,6 +634,15 @@ const collectFromNodes = (
         ? expectedMediaPreviewWidthStyle(node)
         : undefined,
       unwrappedColorTags,
+      {
+        positions,
+        // 벗겨지는 요소는 자식이 부모 자리에 오르므로 블록 위치를 이어받는다.
+        atBlockLevel:
+          blockLevelHere &&
+          isUnwrappedBySanitize(node, unwrappedColorTags, insideTable),
+        insideFlattenedContent: flattenedHere,
+        insideHeading: insideHeadingHere,
+      },
     );
   }
 };
@@ -483,6 +664,12 @@ export const collectHtmlImportWarnings = (
     false,
     undefined,
     findBlockBearingColorTags(root.children),
+    {
+      positions: { flattenedContent: new Set(), blockLevel: new Set() },
+      atBlockLevel: true,
+      insideFlattenedContent: false,
+      insideHeading: false,
+    },
   );
   return warnings;
 };
