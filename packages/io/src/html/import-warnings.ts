@@ -354,8 +354,6 @@ const collectFromNodes = (
   warnings: HtmlImportWarning[],
   topLevel: boolean,
   insideSupportedBoundary: boolean,
-  insideCodeBlockPre: boolean,
-  insideTable: boolean,
   parentFigurePreviewWidthStyle: string | undefined,
   unwrappedColorTags: ReadonlySet<HtmlNode>,
 ): void => {
@@ -390,27 +388,11 @@ const collectFromNodes = (
     const allowedAttributes = new Set(
       htmlAllowedAttributes[node.tagName] ?? htmlAllowedAttributes["*"] ?? [],
     );
-    // code의 language/class metadata는 CodeBlock의 pre 안에서만 의미가 있다.
-    // sanitizer schema는 semantic importer의 입력 보존을 위해 이를 남기지만,
-    // raw warning은 현재 문맥에서 실제로 지원되는 속성만 보고한다.
-    if (!insideCodeBlockPre && node.tagName === "code") {
-      allowedAttributes.delete("dataLanguage");
-      allowedAttributes.delete("className");
-    }
     // b·strong의 style은 font-weight:normal|400 판정에만 쓰려고 sanitizer
     // schema가 남긴다(Issue #316). 다른 선언은 의미가 없으므로 raw 경고는
     // 이전처럼 style 제거를 보고한다.
     if (node.tagName === "b" || node.tagName === "strong") {
       allowedAttributes.delete("style");
-    }
-    // table cell의 pre는 TableCell.content 인라인 경로로 변환돼 CodeBlock
-    // id/language/class 의미를 갖지 않는다. sanitizer가 semantic importer
-    // 입력 보존을 위해 남긴 속성이라도 이 문맥에서는 실제로 버려진다.
-    if (insideTable && node.tagName === "pre") {
-      allowedAttributes.delete("dataGeulBlockId");
-      allowedAttributes.delete("dataLanguage");
-      allowedAttributes.delete("className");
-      allowedAttributes.delete("dataGeulCodeWrap");
     }
     for (const [attribute, value] of Object.entries(node.properties)) {
       if (
@@ -443,7 +425,7 @@ const collectFromNodes = (
         value,
       );
       // 감사 대상 속성은 변환 뒤 감사가 판정한다(HtmlImportContext.preserved.
-      // audit, RD-001).
+      // audit, RD-001). code·pre의 codeBlock 메타도 여기 든다(RD-006).
       if (isAuditedAttribute(node.tagName, attribute)) continue;
       if (!allowedAttributes.has(attribute) || unreadableFontColor) {
         warnings.push({
@@ -464,8 +446,6 @@ const collectFromNodes = (
             supportedInlineNames.has(node.tagName) &&
             !unwrappedColorTags.has(node))),
       insideSupportedBoundary || isBlockBoundaryTag(node.tagName),
-      insideCodeBlockPre || (node.tagName === "pre" && !insideTable),
-      insideTable || node.tagName === "table",
       node.tagName === "figure"
         ? expectedMediaPreviewWidthStyle(node)
         : undefined,
@@ -482,8 +462,6 @@ export const collectHtmlImportWarnings = (
     root.children,
     warnings,
     true,
-    false,
-    false,
     false,
     undefined,
     findBlockBearingColorTags(root.children),

@@ -118,9 +118,18 @@ const importAttributes: Record<string, string[]> =
 // (RD-001 결정). 감사 대상이 아니다.
 const REPORTED_EVEN_WHEN_READ_ATTRIBUTES = new Set(["style", "bgColor"]);
 
+// codeBlock 메타다. 경고 기준에 있지만 codeBlock 분기만 읽는다. 표 셀 pre,
+// pre 밖 code, codeBlock 안에서 버려지는 pre·code에서는 사라진다. 그래서 감사
+// 대상이다(Issue #356 RD-006).
+const CODE_BLOCK_META_ATTRIBUTES: Record<string, readonly string[]> = {
+  pre: ["dataGeulBlockId", "dataLanguage", "className", "dataGeulCodeWrap"],
+  code: ["dataLanguage", "className"],
+};
+
 // 변환 뒤 감사 대상인 속성인지 판정한다(RD-001). 기준:
 // - 이 schema가 남긴다.
-// - 경고 기준(htmlAllowedAttributes)에는 없다.
+// - 경고 기준(htmlAllowedAttributes)에는 없다. 단 codeBlock 메타(위)는 감사
+//   대상이다.
 // - 읽어도 보고하는 속성(위)이 아니다.
 // 수집기(import-warnings.ts)는 이 속성을 건너뛰고, 변환기가 보존했다고 표시하지
 // 않은 것만 변환 뒤 감사가 경고한다. 두 쪽이 같은 함수를 쓰므로 이 속성의
@@ -129,10 +138,11 @@ export const isAuditedAttribute = (
   tagName: string,
   attribute: string,
 ): boolean =>
-  !REPORTED_EVEN_WHEN_READ_ATTRIBUTES.has(attribute) &&
-  (importAttributes[tagName] ?? []).includes(attribute) &&
-  !(
-    htmlAllowedAttributes[tagName] ??
-    htmlAllowedAttributes["*"] ??
-    []
-  ).includes(attribute);
+  (CODE_BLOCK_META_ATTRIBUTES[tagName] ?? []).includes(attribute) ||
+  (!REPORTED_EVEN_WHEN_READ_ATTRIBUTES.has(attribute) &&
+    (importAttributes[tagName] ?? []).includes(attribute) &&
+    !(
+      htmlAllowedAttributes[tagName] ??
+      htmlAllowedAttributes["*"] ??
+      []
+    ).includes(attribute));

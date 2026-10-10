@@ -20,6 +20,7 @@ import { type BlockSegment, segmentBlocks } from "./block-segmenter.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
 import {
+  firstDirectCode,
   isElementNode,
   isListElement,
   paragraphContentFromNodes,
@@ -427,6 +428,20 @@ const blocksFromSegments = (
       // 소스 글자 경고 뒤, 충돌 경고 앞이다.
       const { language, metadataConflict, rejected } =
         selectCodeBlockLanguage(preNode);
+      // 읽은 메타만 보존으로 표시한다. 안쪽 pre·두 번째 code 등 읽지 않은
+      // 메타는 변환 뒤 감사가 경고한다(Issue #356 RD-006). 무효 language
+      // 후보도 읽은 것이다. 위 rejected 경고가 이미 알린다.
+      context.preserved.mark(
+        preNode,
+        "dataGeulBlockId",
+        "dataLanguage",
+        "className",
+        "dataGeulCodeWrap",
+      );
+      const directCode = firstDirectCode(preNode);
+      if (directCode !== undefined) {
+        context.preserved.mark(directCode, "dataLanguage", "className");
+      }
       for (const { node, attribute } of rejected ?? []) {
         context.warnings.push({
           kind: "UNSAFE_ATTRIBUTE_REMOVED",
