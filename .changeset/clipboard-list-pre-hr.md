@@ -17,3 +17,8 @@
 - core: 표 안 캐럿에서 `codeBlock`은 글자의 줄마다 셀 줄이 되고 `divider`는 줄이 없다.
 - 표 밖 캐럿에서 `enabledBlockTypes`가 `codeBlock` 또는 `divider`를 막으면 붙여넣기는 평문 폴백으로 처리된다. 캐럿이나 선택이 표 안이면 막은 타입을 검사하지 않아 셀 줄로 붙는다.
 - `li` 안 `img` 등 미디어는 클립보드에 미디어 블록 타입이 없어 이전처럼 사라진다.
+- 정정: 위 io·core 문장 중 최상위 `pre`·`hr`, 읽지 않는 속성, 내용 없는 `pre`, 최상위 거절, `li` 안 미디어 서술은 이 changeset 시점의 서술이다. `clipboard-table-delegation`이 모두 바꾼다.
+  - 최상위 `pre`·`hr`도 `codeBlock`·`divider`가 된다. core가 거절하지 않는다.
+  - `wrap`·`caption`·`data-geul-block-id`를 읽는다. `figure` 안 `figcaption`은 `codeBlock.caption`이다.
+  - 내용 없는 `pre`는 빈 `codeBlock`이 된다.
+  - `li` 안 `img`는 자식 `image`가 된다.

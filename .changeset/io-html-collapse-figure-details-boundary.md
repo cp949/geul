@@ -10,3 +10,4 @@
 - 제목 안 `figure`·`details`는 `div`와 같이 제목을 문단으로 나눈다(`<h2>a<figure>b</figure>c</h2>` → 문단 셋).
 - 클립보드 표 파서(`parseClipboardTable`)는 바뀌지 않는다. 셀 안 `<p>a</p><p>b</p>`는 여전히 `ab`다.
 - 한계: 제어문자만 든 셀 안 블록은 셀 끝에 빈 줄을 남긴다. 셀 경계 줄바꿈에는 마크가 붙지 않는다.
+- 정정: 위 클립보드 표 파서 문장은 이 changeset 시점의 서술이다. #325 이후 셀 안 `<p>a</p><p>b</p>`는 `a`·줄바꿈·`b`다. `clipboard-table-delegation` 이후 표 옆 블록도 `importHtml` 변환기가 읽어 이 changeset의 경계 규칙을 따른다.

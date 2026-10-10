@@ -11,3 +11,4 @@
 - 첫 실질 자식이 `p`인 항목은 이전과 같다. 승격 경로가 먼저 처리한다.
 - 내용 없는 `p`·`h1`–`h6`(빈 요소, 공백뿐, `<br>`만 든 `p`)는 클립보드가 자식 블록을 만들지 않는다. `importHtml`은 빈 자식 블록을 만든다.
 - `importHtml` 결과는 바뀌지 않는다.
+- 정정: 위 원인 문장과 내용 없는 `p`·`h1`–`h6` 문장은 이 changeset 시점의 서술이다. `clipboard-table-delegation` 이후 `isBlockLevelNode`는 없다. 클립보드도 `importHtml`처럼 빈 자식 블록을 만든다.
