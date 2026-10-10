@@ -271,23 +271,38 @@ export const blockPresentation = (node: HtmlElementNode): BlockPresentation => {
   };
 };
 
-export type CellPresentation = { textColor?: string; backgroundColor?: string };
+export type CellPresentation = {
+  textColor?: string;
+  backgroundColor?: string;
+  // 셀 안 글자가 받는 서식이다. td·tr·table의 style에서 읽는다.
+  format: TextFormat;
+};
+
+type CellTier = { states: ColorStates; format: TextFormat };
 
 // 요소마다 style을 한 번만 읽는다. tr·table은 셀마다 다시 오므로 같은 문자열을
 // 셀 수만큼 훑지 않게 한다. 키는 파싱한 HAST 요소라 문서가 끝나면 풀린다.
-const cellStatesByElement = new WeakMap<HtmlElementNode, ColorStates>();
+const cellTierByElement = new WeakMap<HtmlElementNode, CellTier>();
 
-const cellStatesOf = (element: HtmlElementNode): ColorStates => {
-  const cached = cellStatesByElement.get(element);
+const cellTierOf = (element: HtmlElementNode): CellTier => {
+  const cached = cellTierByElement.get(element);
   if (cached !== undefined) return cached;
   const style = propertyString(element, "style");
   // 덤프가 붙은 단의 style 색·배경은 읽지 않는다. 그 단의 bgcolor 속성은 style
-  // 선언이 없는 것처럼 읽는다.
-  const states =
-    style === undefined ? UNSET_COLOR_STATES : colorStatesOf(style);
-  cellStatesByElement.set(element, states);
-  return states;
+  // 선언이 없는 것처럼 읽는다. 서식은 덤프와 무관하게 읽는다.
+  const tier: CellTier =
+    style === undefined
+      ? { states: UNSET_COLOR_STATES, format: {} }
+      : {
+          states: colorStatesOf(style),
+          format: formatFromStyle(parseInlineStyleMarks(style)),
+        };
+  cellTierByElement.set(element, tier);
+  return tier;
 };
+
+const cellStatesOf = (element: HtmlElementNode): ColorStates =>
+  cellTierOf(element).states;
 
 const colorOf = (state: ColorState): string | undefined =>
   state.kind === "color" ? state.color : undefined;
@@ -320,6 +335,9 @@ const cellBackgroundOf = (element: HtmlElementNode): string | undefined => {
 // - bgcolor는 색 이름과 hex만 읽는다(readLegacyAttributeColor).
 //   Chromium이 쓰레기 값도 색으로 바꿔 그리는 불일치는 의도한 것이다.
 // - 덤프가 붙은 단의 style 색·배경은 읽지 않는다. 그 단의 bgcolor는 읽는다.
+// - 서식(굵게·기울임·밑줄·취소선)은 table → tr → td 순으로 겹친다. 굵기·기울임은
+//   안쪽 값이 이기고 끄는 값도 덮는다. 밑줄·취소선은 전파라 합집합이다
+//   (Issue #342). th의 기본 굵기는 읽지 않는다.
 //
 // data-geul-* 우선순위는 호출부가 갖는다. importHtml은 원시 문자열을
 // 통과시키고 클립보드는 정규형만 쓴다.
@@ -328,16 +346,21 @@ export const cellPresentation = (
   row: HtmlElementNode,
   table: HtmlElementNode,
 ): CellPresentation => {
-  const tiers = [cell, row, table];
   let textColor: string | undefined;
   let backgroundColor: string | undefined;
-  for (const tier of tiers) {
+  for (const tier of [cell, row, table]) {
     textColor ??= colorOf(cellStatesOf(tier).color);
     backgroundColor ??= cellBackgroundOf(tier);
   }
+  const format: TextFormat = {
+    ...cellTierOf(table).format,
+    ...cellTierOf(row).format,
+    ...cellTierOf(cell).format,
+  };
   return {
     ...(textColor === undefined ? {} : { textColor }),
     ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    format,
   };
 };
 

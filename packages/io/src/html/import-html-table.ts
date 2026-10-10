@@ -173,10 +173,8 @@ export const parseTable = (
         layout.element,
         "dataGeulBackgroundColor",
       );
-      const styled =
-        dataTextColor === undefined || dataBackgroundColor === undefined
-          ? cellPresentation(layout.element, row.element, element)
-          : {};
+      // 서식은 data-geul-* 색과 독립이라 항상 읽는다.
+      const styled = cellPresentation(layout.element, row.element, element);
       const textColor = dataTextColor ?? styled.textColor;
       const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;
       const align = propertyString(layout.element, "dataGeulAlign") as
@@ -198,6 +196,7 @@ export const parseTable = (
         content: sanitizeInlineContentText(
           inlineContentFromNodes(layout.element.children, {
             blockBreakTagNames: flattenBlockBoundaryTagNames,
+            baseFormat: styled.format,
           }),
         ),
         ...(textColor === undefined ? {} : { textColor }),

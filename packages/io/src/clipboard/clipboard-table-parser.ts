@@ -33,7 +33,10 @@ import {
   parseExplicitStartNumber,
   splitListItemChildren,
 } from "../html/list-block-builder.js";
-import { cellPresentation } from "../html/element-presentation.js";
+import {
+  type CellPresentation,
+  cellPresentation,
+} from "../html/element-presentation.js";
 import {
   asRoot,
   flattenBlockBoundaryTagNames,
@@ -345,12 +348,11 @@ const canonicalAlign = (
 
 // data-geul-*(자기 복사)가 있으면 우선하고, 없으면 style·bgcolor에서 뽑는다
 // (외부 Excel/Google Sheets는 data-geul-*가 없으므로 항상 style로 떨어진다).
-// 색은 td·th → tr → table 순으로 읽는다(Issue #334, element-presentation.ts). row는 이
-// 셀이 시작하는 tr이다. 정렬은 td·th의 style만 읽는다.
+// 색은 td·th → tr → table 순으로 읽는다(Issue #334, element-presentation.ts).
+// styled는 그 읽기의 결과다. 정렬은 td·th의 style만 읽는다.
 const cellStyleFields = (
   element: HtmlElementNode,
-  row: HtmlElementNode,
-  table: HtmlElementNode,
+  styled: CellPresentation,
 ): Pick<TabularCell, "textColor" | "backgroundColor" | "align"> => {
   const styleAttribute = propertyString(element, "style");
   const parsedStyle =
@@ -365,10 +367,6 @@ const cellStyleFields = (
   const dataBackgroundColor = canonicalColor(
     propertyString(element, "dataGeulBackgroundColor"),
   );
-  const styled =
-    dataTextColor === undefined || dataBackgroundColor === undefined
-      ? cellPresentation(element, row, table)
-      : {};
   const textColor = dataTextColor ?? styled.textColor;
   const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;
   const align =
@@ -479,22 +477,27 @@ const tabularDataFromTable = (
       // layouts는 rows와 같은 순서·길이라 항상 있다. 이 행의 tr이 셀 색의
       // 둘째 단이다.
       const rowElement = rows[rowIndex]?.element ?? table;
-      const cells: TabularCell[] = row.map((layout) => ({
-        columnIndex: layout.columnIndex,
-        // coveredCoordinates가 쓰는 보정값과 반드시 같아야 한다 — 어긋나면
-        // 커버리지는 채워졌는데 검증기는 UNCOVERED_COORDINATE를 내서
-        // 멀쩡한 표 붙여넣기가 통째로 거절된다.
-        rowSpan: layoutRowSpan(layout.rowSpan),
-        columnSpan: layoutColumnSpan(layout.columnSpan),
-        // 셀 안 블록 요소(p, div 등) 경계에 줄바꿈 하나를 넣어 단어가
-        // 붙지 않게 한다(Issue #325). importHtml 표 셀과 같은 집합을 쓴다.
-        content: normalizeCellContent(
-          inlineContentFromNodes(layout.element.children, {
-            blockBreakTagNames: flattenBlockBoundaryTagNames,
-          }),
-        ),
-        ...cellStyleFields(layout.element, rowElement, table),
-      }));
+      const cells: TabularCell[] = row.map((layout) => {
+        // 서식은 data-geul-* 색과 독립이라 항상 읽는다.
+        const styled = cellPresentation(layout.element, rowElement, table);
+        return {
+          columnIndex: layout.columnIndex,
+          // coveredCoordinates가 쓰는 보정값과 반드시 같아야 한다 — 어긋나면
+          // 커버리지는 채워졌는데 검증기는 UNCOVERED_COORDINATE를 내서
+          // 멀쩡한 표 붙여넣기가 통째로 거절된다.
+          rowSpan: layoutRowSpan(layout.rowSpan),
+          columnSpan: layoutColumnSpan(layout.columnSpan),
+          // 셀 안 블록 요소(p, div 등) 경계에 줄바꿈 하나를 넣어 단어가
+          // 붙지 않게 한다(Issue #325). importHtml 표 셀과 같은 집합을 쓴다.
+          content: normalizeCellContent(
+            inlineContentFromNodes(layout.element.children, {
+              blockBreakTagNames: flattenBlockBoundaryTagNames,
+              baseFormat: styled.format,
+            }),
+          ),
+          ...cellStyleFields(layout.element, styled),
+        };
+      });
 
       for (let column = 0; column < columnCount; column += 1) {
         if (covered[rowIndex]?.[column] === true) continue;
