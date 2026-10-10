@@ -89,3 +89,16 @@ export const clipDivider = (): ClipboardContentBlock => ({
   id: tempId(),
   type: "divider",
 });
+
+/** 유니온 멤버마다 K를 뺀다. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+/**
+ * 임의 비표 블록에 임시 id를 붙인다. quote·callout·미디어처럼 위 빌더가 없는
+ * type을 model 필드 그대로 쓸 때 쓴다(Issue #356 RD-005).
+ */
+export const clipBlock = (
+  block: DistributiveOmit<NonTableBlock, "id">,
+): ClipboardContentBlock => ({ ...block, id: tempId() }) as NonTableBlock;

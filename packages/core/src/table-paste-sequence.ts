@@ -1,18 +1,15 @@
 import type { ClipboardContent, ClipboardContentBlock } from "@cp949/geul-io";
 import {
+  type Block,
   type IdFactory,
   type InlineContent,
+  isKnownBlockType,
   isTextRunItem,
   type Result,
   type TableBlock,
 } from "@cp949/geul-model";
 import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
-import {
-  blockToTiptapJson,
-  inlineContentToTiptap,
-  tableBlockToTiptapJson,
-  type TiptapJsonNode,
-} from "./model-to-tiptap.js";
+import { blockToTiptapJson } from "./model-to-tiptap.js";
 import { pasteInto as pasteGridInto } from "./table-grid-paste.js";
 import { DEFAULT_COLUMN_WIDTH } from "./table-grid.js";
 import { tableBlockToTiptapNode } from "./table-model-codec.js";
@@ -43,10 +40,9 @@ export const buildPasteTableSkeleton = (
 });
 
 // TabularData를 pasteGridInto로 채운 TableBlock을 만든다 — 표 밖 최상위
-// 시퀀스(buildSequenceNode)와 목록 항목 children(listChildToTiptapJson)
-// 양쪽이 공유하는 조립이다(pasteTabularData의 표 밖 분기와 같은 순서:
-// 골격 생성 후 anchor (0,0)부터 채운다). DELTA-02(Issue #143 (b)) 전에는
-// buildSequenceNode 안에 인라인돼 있었다.
+// 시퀀스(buildSequenceNode)와 블록 children(clipboardBlockToModel) 양쪽이
+// 공유하는 조립이다(pasteTabularData의 표 밖 분기와 같은 순서: 골격 생성 후
+// anchor (0,0)부터 채운다).
 const buildFilledTableBlock = (
   block: Extract<ClipboardContentBlock, { type: "table" }>,
   createId: IdFactory,
@@ -58,9 +54,14 @@ const buildFilledTableBlock = (
   return pasteGridInto(emptyTable, { row: 0, column: 0 }, block.data, createId);
 };
 
-// core가 붙이는 클립보드 블록 type이다. 새 ClipboardContentBlock 타입은 model의
-// 모든 비표 블록을 담지만 파서는 이 6종과 table만 낸다. 그 밖의 type은 거절한다
-// (RD-005가 표 옆 블록을 importHtml 변환기에 위임하면 이 범위를 넓힌다).
+// 클립보드 시퀀스가 담는 비표 블록이다. model의 비표 블록 전부다.
+export type ClipboardNonTableBlock = Exclude<
+  ClipboardContentBlock,
+  { type: "table" }
+>;
+
+// model이 모르는 type의 거절 메시지다. ClipboardContentBlock 타입은 model의
+// 14종만 담지만 공개 API라 런타임에는 임의 type 문자열이 들어올 수 있다.
 // 검증(validateOutOfTableContent)이 먼저 같은 거절을 하고 조립은 방어선이다.
 export const unsupportedBlockMessage = (type: string): string =>
   `Unsupported clipboard block type: ${type}`;
@@ -83,79 +84,37 @@ export const clipboardCodeBlockSource = (
 export const codeBlockContentMessage =
   "CodeBlock content must be plain text runs";
 
-// 클립보드 블록의 자기 style 색(Issue #343)을 blockContainer attrs로 옮긴다.
-// model-to-tiptap.ts blockToTiptapJson과 같은 이름·값 규칙이다(값 없으면
-// null = 필드 부재). canonical 판정은 호출자(validateOutOfTableContent)가
-// 뮤테이션 전에 끝낸다.
-const blockColorAttrs = (
-  block: Extract<
-    ClipboardContentBlock,
-    {
-      type: "paragraph" | "heading" | "bulletListItem" | "numberedListItem";
-    }
-  >,
-): { textColor: string | null; backgroundColor: string | null } => ({
-  textColor: block.textColor ?? null,
-  backgroundColor: block.backgroundColor ?? null,
-});
-
-// 목록 항목의 children 하나를 blockGroup 안에 들어갈 tiptap JSON으로
-// 조립한다(DELTA-02, Issue #143 (b)). table은 model-to-tiptap.ts의
-// blockToTiptapJson과 같은 원칙으로 container 없이 직결한다.
-// divider와 codeBlock은 li 안 hr·pre에서 온다(Issue #351). 모델 블록으로
-// 바꿔 blockToTiptapJson에 맡겨 PM 인코딩(divider는 container 없이
-// blockId만, codeBlock은 blockContainer 안 codeBlock 노드)을 공유한다.
-// 미지원 type(quote, callout 등)은 거절한다. 검증이 먼저 같은 거절을 하는
-// 방어선이다.
-// paragraph/heading은 항상 blockContainer로 감싼다 — blockGroup의 스키마
-// content("block+")가 bare nestableBlockContent를 허용하지 않는다.
-// blockId는 listItemToTiptapJson과 같은 관례로 바로 배정한다. 최상위
-// buildSequenceNode는 같은 모양으로 감싸되 blockId를 appendTransaction의
-// 사후 배정에 맡긴다.
-const listChildToTiptapJson = (
-  block: ClipboardContentBlock,
-  createId: IdFactory,
-): Result<TiptapJsonNode, TableCommandError> => {
-  if (block.type === "table") {
-    const filled = buildFilledTableBlock(block, createId);
-    if (!filled.ok) return filled;
-    return { ok: true, value: tableBlockToTiptapJson(filled.value) };
-  }
-
-  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
-    return listItemToTiptapJson(block, createId);
-  }
-
-  if (block.type === "divider") {
-    return {
-      ok: true,
-      value: blockToTiptapJson({ id: createId(), type: "divider" }),
-    };
-  }
-
+// 클립보드 비표 블록 하나를 children 없는 model 블록으로 바꾼다. 필드는
+// 그대로 옮기고 id만 바꾼다. 검증(model 프로브)과 조립이 같은 변환을 써서
+// 검증한 모양이 그대로 인코딩된다.
+// codeBlock content는 소스 런 하나로 접는다. model의 codeBlock 정규형(런 1개
+// 이하, 마크 없음, 빈 런 없음)이다. 여러 런과 런 마크를 받던 기존 계약을
+// 지킨다. 커스텀 inline 원소가 든 codeBlock은 호출자가 먼저 거른다.
+export const clipboardBlockToShallowModel = (
+  block: ClipboardNonTableBlock,
+  id: string,
+): Block => {
+  const shallow: Record<string, unknown> = { ...block, id };
+  delete shallow.children;
   if (block.type === "codeBlock") {
-    const source = clipboardCodeBlockSource(block.content);
-    if (source === null) {
-      return {
-        ok: false,
-        error: {
-          code: "CLIPBOARD_CONTENT_INVALID",
-          message: codeBlockContentMessage,
-        },
-      };
-    }
-    return {
-      ok: true,
-      value: blockToTiptapJson({
-        id: createId(),
-        type: "codeBlock",
-        content: source.length === 0 ? [] : [{ text: source }],
-        ...(block.language === undefined ? {} : { language: block.language }),
-      }),
-    };
+    const source = clipboardCodeBlockSource(block.content) ?? "";
+    shallow.content = source.length === 0 ? [] : [{ text: source }];
   }
+  return shallow as Block;
+};
 
-  if (block.type !== "paragraph" && block.type !== "heading") {
+// 클립보드 비표 블록 트리를 model 블록 트리로 바꾼다(Issue #356 RD-005).
+// id는 호출자가 준 값이다. children id는 createId로 새로 발급한다. 부모 id를
+// 자식보다 먼저 발급한다(문서 순서). 파서의 임시 id를 문서에 넣지 않는다.
+// children의 표는 buildFilledTableBlock으로 채운다.
+// 검증이 먼저 거른 입력이 오지만 model이 모르는 type과 커스텀 inline 원소가 든
+// codeBlock은 다시 거절한다. 인코딩이 예외를 던지는 입력이라서다.
+const clipboardBlockToModel = (
+  block: ClipboardNonTableBlock,
+  id: string,
+  createId: IdFactory,
+): Result<Block, TableCommandError> => {
+  if (!isKnownBlockType(block.type)) {
     return {
       ok: false,
       error: {
@@ -164,90 +123,54 @@ const listChildToTiptapJson = (
       },
     };
   }
-
-  return {
-    ok: true,
-    value: {
-      type: "blockContainer",
-      attrs: { blockId: createId(), ...blockColorAttrs(block) },
-      content: [
-        {
-          type: block.type,
-          ...(block.type === "heading"
-            ? { attrs: { level: block.level } }
-            : {}),
-          content: inlineContentToTiptap(block.content),
-        },
-      ],
-    },
-  };
-};
-
-// 목록 항목 하나를 blockContainer(blockContent, blockGroup?(children…))
-// tiptap JSON으로 완전히 조립한다(D19 shape, DELTA-02 트랙-4 확인사항 —
-// bare + appendTransaction 사후 배정 경로도 이론적으로 가능하지만
-// buildPasteTableSkeleton과 같은 이 파일 기존 관례를 따라 명시 조립을
-// 유지한다). model-to-tiptap.ts의 blockToTiptapJson/blockContentToTiptapJson과
-// 같은 JSON shape이다. 다만 입력의 id는 파서의 임시값이라 쓰지 않고 createId로
-// 재발급하며, children의 표는 TabularData variant라 코드는 공유하지 않는다 —
-// attrs 이름·shape(특히 numberedListItem의 startNumber: block.startNumber ?? null)만
-// 반드시 일치시킨다.
-const listItemToTiptapJson = (
-  block: Extract<
-    ClipboardContentBlock,
-    { type: "bulletListItem" } | { type: "numberedListItem" }
-  >,
-  createId: IdFactory,
-): Result<TiptapJsonNode, TableCommandError> => {
-  const content: TiptapJsonNode[] = [
-    {
-      type: block.type,
-      ...(block.type === "numberedListItem"
-        ? { attrs: { startNumber: block.startNumber ?? null } }
-        : {}),
-      content: inlineContentToTiptap(block.content),
-    },
-  ];
-
-  if (block.children !== undefined && block.children.length > 0) {
-    const childNodes: TiptapJsonNode[] = [];
-    for (const child of block.children) {
-      const built = listChildToTiptapJson(child, createId);
-      if (!built.ok) return built;
-      childNodes.push(built.value);
-    }
-    content.push({ type: "blockGroup", content: childNodes });
+  if (
+    block.type === "codeBlock" &&
+    clipboardCodeBlockSource(block.content) === null
+  ) {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: codeBlockContentMessage,
+      },
+    };
   }
 
-  return {
-    ok: true,
-    value: {
-      type: "blockContainer",
-      attrs: { blockId: createId(), ...blockColorAttrs(block) },
-      content,
-    },
-  };
+  const shallow = clipboardBlockToShallowModel(block, id);
+  if (!("children" in block) || (block.children ?? []).length === 0) {
+    return { ok: true, value: shallow };
+  }
+
+  const children: Block[] = [];
+  for (const child of block.children ?? []) {
+    const built =
+      child.type === "table"
+        ? buildFilledTableBlock(child, createId)
+        : clipboardBlockToModel(child, createId(), createId);
+    if (!built.ok) return built;
+    children.push(built.value);
+  }
+  return { ok: true, value: { ...shallow, children } as Block };
 };
 
-// 최상위 codeBlock·divider 거절 메시지다. 검증과 조립이 같은 문장을 쓴다.
-export const topLevelBlockMessage = (type: "codeBlock" | "divider"): string =>
-  `Top-level ${type} is not a supported clipboard block`;
+// 사후 배정 블록에 잠깐 넣는 자리표시 id다. 인코딩 직후 blockId를 null로
+// 바꿔 문서에 남지 않는다.
+const POST_ASSIGNED_ID = "clipboard-post-assigned";
 
 // 클립보드 시퀀스의 블록 하나를 노드로 바꾼다.
-// - 문단/heading: 인라인 콘텐츠와 블록 색을 옮겨 blockContainer(blockContent)로
-//   감싼다.
 // - 표: buildFilledTableBlock으로 채운 TableBlock을 인코딩한다. container로
 //   감싸지 않는다. pasteTabularData(table-commands.ts)의 표 밖 분기와 같은
 //   조립 순서다.
-// - 목록 항목(bulletListItem/numberedListItem): listItemToTiptapJson으로
-//   blockContainer/blockGroup 트리를 완전히 조립한다(DELTA-02, Issue #143 (b)).
-// codeBlock/divider는 목록 항목 children에서만 온다(Issue #351). 최상위에서는
-// 거절한다. 그 밖의 미지원 type(quote, callout 등)도 거절한다
-// (unsupportedBlockMessage). validateOutOfTableContent가 먼저 같은 거절을
-// 하므로 둘 다 방어선이다.
-// table은 firstTable로 앞서 반환한다. 목록 항목 children 안에 중첩된 표는
-// 이 추적 대상이 아니다(최상위 시퀀스의 첫 표만 추적하는 기존 범위,
-// DELTA-02 범위 밖).
+// - 그 밖의 블록: model 블록 트리로 바꿔 model-to-tiptap.ts의
+//   blockToTiptapJson으로 인코딩한다. 일반 html 붙여넣기(paste-plan.ts의
+//   modelToTiptap)와 같은 인코딩이라 textAlignment, codeBlock wrap·caption 같은
+//   필드를 같은 방식으로 싣는다(Issue #356 RD-005).
+// 최상위 문단·heading 컨테이너는 blockId를 비워 둔다.
+// BlockIdExtension.appendTransaction이 같은 dispatch 안에서 사후 배정한다
+// (Issue #315의 blockContainer 감싸기와 함께 정한 관례). 그래서 이 둘은
+// createId를 소비하지 않는다. children이 있으면 children id는 발급한다.
+// table은 firstTable로 앞서 반환한다. 다른 블록 children 안에 중첩된 표는
+// 이 추적 대상이 아니다(최상위 시퀀스의 첫 표만 추적하는 기존 범위).
 const buildSequenceNode = (
   schema: Schema,
   block: ClipboardContentBlock,
@@ -256,68 +179,30 @@ const buildSequenceNode = (
   { node: ProseMirrorNode; table: TableBlock | null },
   TableCommandError
 > => {
-  if (block.type === "paragraph" || block.type === "heading") {
-    // blockContainer로 감싼다. bare 노드를 연달아 삽입하면 PM이 뒤 노드를
-    // 앞 컨테이너의 blockGroup으로 감싸 형제 블록이 자식으로 중첩된다
-    // (Issue #315). blockId는 비워 둔다 — BlockIdExtension.appendTransaction이
-    // 같은 dispatch 안에서 사후 배정한다(buildOutOfTableSequence 호출자의
-    // 필러 문단 처리와 같은 확립된 패턴). createId는 소비하지 않는다.
-    // 블록 색은 attrs에 싣는다(Issue #343).
-    const node = schema.nodeFromJSON({
-      type: "blockContainer",
-      attrs: blockColorAttrs(block),
-      content: [
-        {
-          type: block.type,
-          ...(block.type === "heading"
-            ? { attrs: { level: block.level } }
-            : {}),
-          content: inlineContentToTiptap(block.content),
-        },
-      ],
-    });
-    return { ok: true, value: { node, table: null } };
-  }
-
-  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
-    const built = listItemToTiptapJson(block, createId);
-    if (!built.ok) return built;
+  if (block.type === "table") {
+    const filled = buildFilledTableBlock(block, createId);
+    if (!filled.ok) return filled;
     return {
       ok: true,
-      value: { node: schema.nodeFromJSON(built.value), table: null },
-    };
-  }
-
-  if (block.type === "codeBlock" || block.type === "divider") {
-    return {
-      ok: false,
-      error: {
-        code: "CLIPBOARD_CONTENT_INVALID",
-        message: topLevelBlockMessage(block.type),
+      value: {
+        node: tableBlockToTiptapNode(schema, filled.value),
+        table: filled.value,
       },
     };
   }
 
-  if (block.type !== "table") {
-    return {
-      ok: false,
-      error: {
-        code: "CLIPBOARD_CONTENT_INVALID",
-        message: unsupportedBlockMessage(block.type),
-      },
-    };
-  }
-
-  const filled = buildFilledTableBlock(block, createId);
-  if (!filled.ok) return filled;
-
-  return {
-    ok: true,
-    value: {
-      node: tableBlockToTiptapNode(schema, filled.value),
-      table: filled.value,
-    },
-  };
+  const postAssigned = block.type === "paragraph" || block.type === "heading";
+  const model = clipboardBlockToModel(
+    block,
+    postAssigned ? POST_ASSIGNED_ID : createId(),
+    createId,
+  );
+  if (!model.ok) return model;
+  const json = blockToTiptapJson(model.value);
+  const node = schema.nodeFromJSON(
+    postAssigned ? { ...json, attrs: { ...json.attrs, blockId: null } } : json,
+  );
+  return { ok: true, value: { node, table: null } };
 };
 
 export type OutOfTableSequence = {

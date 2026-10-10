@@ -947,7 +947,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       ok: false,
       error: {
         code: "CLIPBOARD_CONTENT_INVALID",
-        message: expect.stringContaining(String(MAX_NESTING_DEPTH)),
+        message: `Nesting depth exceeds ${MAX_NESTING_DEPTH}`,
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
@@ -980,7 +980,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 });
 
 // Issue #351: 클립보드 파서는 li 안 pre·hr를 목록 항목의 자식 codeBlock·divider로
-// 만든다. 최상위에는 이 두 타입이 오지 않아 core가 거절한다.
+// 만든다. 최상위 두 타입은 Issue #356 RD-005부터 core가 받는다.
 describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351)", () => {
   const itemWith = (children: ClipboardContentBlock[]): ClipboardContentBlock =>
     clipBullet([{ text: "item" }], { children });
@@ -1040,59 +1040,49 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
     expect(result.ok).toBe(true);
   });
 
-  it.each([
-    ["codeBlock", clipCodeBlock("x")],
-    ["divider", clipDivider()],
-  ])(
-    "표 밖에서 최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
-    (_name, block) => {
-      const editor = createTableFixtureEditor(docWithParagraph);
-      editor.commands.setTextSelection(1);
-      const before = editor.getJSON() as TiptapJsonNode;
+  // Issue #356 RD-005: 최상위 codeBlock·divider 거절을 풀었다.
+  it("표 밖에서 최상위 codeBlock·divider가 표 앞 최상위 블록으로 붙는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
 
-      const result = pasteClipboardContent(
-        editor,
-        [block, tableBlock("A")],
-        sequentialIds("paste"),
-      );
+    const result = pasteClipboardContent(
+      editor,
+      [clipCodeBlock("x"), clipDivider(), tableBlock("A")],
+      sequentialIds("paste"),
+    );
 
-      expect(result).toEqual({
-        ok: false,
-        error: {
-          code: "CLIPBOARD_CONTENT_INVALID",
-          message: expect.stringContaining(block.type),
-        },
-      });
-      expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    },
-  );
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    expect(doc.content?.[1]?.type).toBe("blockContainer");
+    expect(doc.content?.[1]?.content?.[0]?.type).toBe("codeBlock");
+    expect(doc.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe("x");
+    expect(doc.content?.[2]?.type).toBe("divider");
+    expect(doc.content?.[3]?.type).toBe("table");
+    const model = tiptapToModel(doc, 0, sequentialIds("model"));
+    if (!model.ok) throw new Error(model.error.code);
+    expect(model.value.blocks.map((block) => block.type)).toEqual([
+      "paragraph",
+      "codeBlock",
+      "divider",
+      "table",
+    ]);
+  });
 
-  it.each([
-    ["codeBlock", clipCodeBlock("x")],
-    ["divider", clipDivider()],
-  ])(
-    "표 안에서도 최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
-    (_name, block) => {
-      const editor = createTableFixtureEditor(docWithTwoRowTable);
-      placeCaretInCell(editor, "cell-1");
-      const before = editor.getJSON() as TiptapJsonNode;
+  it("표 안에서 최상위 codeBlock은 셀 줄이 되고 divider는 줄이 없다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
 
-      const result = pasteClipboardContent(
-        editor,
-        [block, tableBlock("A")],
-        sequentialIds("paste"),
-      );
+    const result = pasteClipboardContent(
+      editor,
+      [clipCodeBlock("x"), clipDivider(), tableBlock("A")],
+      sequentialIds("paste"),
+    );
 
-      expect(result).toEqual({
-        ok: false,
-        error: {
-          code: "CLIPBOARD_CONTENT_INVALID",
-          message: expect.stringContaining(block.type),
-        },
-      });
-      expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
-    },
-  );
+    expect(result.ok).toBe(true);
+    const table = getTableBlock(editor, "table-1");
+    if (!table.ok) throw new Error("표 조회 실패");
+    expect(table.value.rows[0]?.cells[0]?.content).toEqual([{ text: "x\nA" }]);
+  });
 
   it.each([
     ["C0 제어문자", "a\u0001b"],
@@ -1165,7 +1155,7 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
       ok: false,
       error: {
         code: "CLIPBOARD_CONTENT_INVALID",
-        message: expect.stringContaining(String(MAX_NESTING_DEPTH)),
+        message: `Nesting depth exceeds ${MAX_NESTING_DEPTH}`,
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);

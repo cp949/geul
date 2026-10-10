@@ -402,7 +402,7 @@ describe("buildOutOfTableSequence", () => {
 });
 
 // Issue #351: 클립보드 파서는 li 안 pre·hr를 목록 항목의 자식 codeBlock·divider로
-// 만든다. 최상위에는 이 두 타입이 오지 않는다.
+// 만든다. 최상위 두 타입은 Issue #356 RD-005부터 조립한다.
 describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #351)", () => {
   it("목록 항목 자식 codeBlock은 blockContainer 안 codeBlock 노드가 된다", () => {
     const result = buildOutOfTableSequence(
@@ -477,22 +477,26 @@ describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #35
     expect(group?.child(2).child(0).type.name).toBe("paragraph");
   });
 
-  it.each([
-    ["codeBlock", clipCodeBlock("x")],
-    ["divider", clipDivider()],
-  ])("최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절한다", (_name, block) => {
+  it("최상위 codeBlock·divider도 조립하고 blockId를 바로 받는다", () => {
     const result = buildOutOfTableSequence(
       schema,
-      [paragraphBlock("p"), block],
+      [
+        paragraphBlock("p"),
+        clipCodeBlock("x", { language: "typescript" }),
+        clipDivider(),
+      ],
       sequentialIds("id"),
     );
 
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        code: "CLIPBOARD_CONTENT_INVALID",
-        message: expect.stringContaining(block.type),
-      },
-    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const [, code, divider] = result.value.nodes;
+    expect(code?.type.name).toBe("blockContainer");
+    expect(code?.attrs.blockId).toBe("id-1");
+    expect(code?.child(0).type.name).toBe("codeBlock");
+    expect(code?.child(0).attrs.language).toBe("typescript");
+    expect(code?.child(0).textContent).toBe("x");
+    expect(divider?.type.name).toBe("divider");
+    expect(divider?.attrs.blockId).toBe("id-2");
   });
 });

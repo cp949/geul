@@ -21,7 +21,8 @@ export type TablePasteOptions = {
   enabledBlockTypes?: EnabledBlockTypes;
 };
 
-// 파싱된 시퀀스에 막은 타입이 하나라도 있는지 본다. 목록 항목 children도
+// 파싱된 시퀀스에 막은 타입이 하나라도 있는지 본다. model의 모든 비표
+// 블록(quote·callout·미디어 등, Issue #356 RD-005)을 보고 children이 있는 블록은
 // 재귀로 훑는다. 표 data 안은 셀 내용뿐이라 훑지 않는다.
 const containsBlockedType = (
   blocks: readonly ClipboardContentBlock[],
@@ -65,11 +66,11 @@ const containsBlockedType = (
 // (CLIPBOARD_TABLE_INVALID)이 붙여넣기를 소비하는 일도 막는다.
 //
 // 표가 허용이어도 파싱된 시퀀스에 막은 타입이 하나라도 있으면 false로
-// 물러난다. 목록 항목 children 안까지 훑는다. 스키마에 없는 노드 타입이
+// 물러난다. 블록 children 안까지 훑는다. 스키마에 없는 노드 타입이
 // pasteClipboardContent에 닿아 TypeError·RangeError를 던지던 경로를 막는다.
 //
 // 캐럿이나 선택이 표 안이면 이 검사를 하지 않는다. 표 안은 격자 연산만 해서
-// 제목·목록 PM 노드를 만들지 않으므로 예외가 없다. 물러나면 표 셀 경로가 표
+// 비표 블록 PM 노드를 만들지 않으므로 예외가 없다. 물러나면 표 셀 경로가 표
 // 포함 html을 받지 않아 붙여넣기가 조용히 사라진다.
 //
 // 이 물러남도 거절이 아니라 onPasteRejected를 부르지 않는다. 그 뒤 처리는

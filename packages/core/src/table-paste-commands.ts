@@ -10,6 +10,8 @@ import {
   type IdFactory,
   type InlineContent,
   isCanonicalCellColor,
+  isKnownBlockType,
+  isNestableBlockType,
   isTextRunItem,
   isValidCodeBlockLanguage,
   isValidCodeBlockSource,
@@ -33,9 +35,10 @@ import {
 import { pasteInto as pasteGridInto } from "./table-grid-paste.js";
 import {
   buildOutOfTableSequence,
+  type ClipboardNonTableBlock,
+  clipboardBlockToShallowModel,
   clipboardCodeBlockSource,
   codeBlockContentMessage,
-  topLevelBlockMessage,
   unsupportedBlockMessage,
 } from "./table-paste-sequence.js";
 
@@ -270,17 +273,168 @@ const blockColorViolation = (
   return null;
 };
 
+// 클립보드 비표 블록 하나를 model 계약으로 판정한다(Issue #356 RD-005).
+// children을 뗀 model 블록을 parseDocument로 프로브한다(isStartNumberInRange와
+// 같은 방식). checkListItem checked 같은 필수 필드, 색·정렬 정규형, 미디어
+// url·previewWidth, callout icon 같은 판정을 core가 복제하지 않는다(G-CNV-001).
+// children은 호출자가 재귀로 판정한다. 깊이 검사도 거기서 한다.
+// 조립(clipboardBlockToShallowModel)과 같은 변환이라 검증한 모양이 그대로
+// 인코딩된다. 파서의 임시 id는 쓰지 않는다. 위반이 없으면 null이다.
+const modelBlockViolation = (
+  block: ClipboardNonTableBlock,
+): Result<never, TableCommandError> | null => {
+  const parsed = parseDocument({
+    formatVersion: 1,
+    revision: 0,
+    blocks: [
+      clipboardBlockToShallowModel(block, "clipboard-paste-block-probe"),
+    ],
+  });
+  if (parsed.ok) return null;
+  // path는 ["blocks", 0, ...필드]다. 블록 안 경로만 남긴다.
+  const field = parsed.error.path.slice(2).join(".");
+  return {
+    ok: false,
+    error: {
+      code: "CLIPBOARD_CONTENT_INVALID",
+      message: `Clipboard ${block.type} block ${field.length > 0 ? `${field} ` : ""}is invalid: ${parsed.error.message}`,
+    },
+  };
+};
+
+// 비표 블록 하나의 type별 판정이다. model 프로브보다 먼저 해 기존 메시지를
+// 지킨다. children은 보지 않는다. 위반이 없으면 null이다.
+const ownBlockViolation = (
+  block: ClipboardNonTableBlock,
+): Result<never, TableCommandError> | null => {
+  if (block.type === "paragraph" || block.type === "heading") {
+    const blockTypeLabel = block.type === "heading" ? "Heading" : "Paragraph";
+    const violation = inlineContentViolation(block.content);
+    if (violation !== null) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: `${blockTypeLabel} content ${violation.reason}`,
+        },
+      };
+    }
+    return blockColorViolation(block, blockTypeLabel);
+  }
+  if (block.type === "bulletListItem" || block.type === "numberedListItem") {
+    const blockTypeLabel =
+      block.type === "numberedListItem"
+        ? "Numbered list item"
+        : "Bullet list item";
+    const violation = inlineContentViolation(block.content);
+    if (violation !== null) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: `${blockTypeLabel} content ${violation.reason}`,
+        },
+      };
+    }
+    const colorViolation = blockColorViolation(block, blockTypeLabel);
+    if (colorViolation !== null) return colorViolation;
+    if (
+      block.type === "numberedListItem" &&
+      block.startNumber !== undefined &&
+      !isStartNumberInRange(block.startNumber)
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: "Numbered list item startNumber is out of range",
+        },
+      };
+    }
+    return null;
+  }
+  if (block.type === "codeBlock") {
+    const source = clipboardCodeBlockSource(block.content);
+    if (source === null) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: codeBlockContentMessage,
+        },
+      };
+    }
+    if (!isValidCodeBlockSource(source)) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message:
+            "CodeBlock text may contain LF and Tab but no other C0 controls, DEL, or invalid surrogate code units",
+        },
+      };
+    }
+    if (
+      block.language !== undefined &&
+      !isValidCodeBlockLanguage(block.language)
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: "CodeBlock language is not valid",
+        },
+      };
+    }
+    return null;
+  }
+  if (!isKnownBlockType(block.type)) {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: unsupportedBlockMessage(block.type),
+      },
+    };
+  }
+  // 새 종류의 content도 편집기 inline 계약을 따른다. 빈 런과 미등록 커스텀
+  // inline 원소는 model이 받아도 PM 조립이 던지거나 표현하지 못한다.
+  if ("content" in block) {
+    const violation = inlineContentViolation(block.content);
+    if (violation !== null) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: `Clipboard ${block.type} block content ${violation.reason}`,
+        },
+      };
+    }
+  }
+  return null;
+};
+
 // 표 밖 붙여넣기 검증: 문단/heading은 편집 가능 콘텐츠 계약(inline), 표는
 // pasteTabularData와 같은 구조·서식·셀 한도 검증, 목록 항목
-// (bulletListItem/numberedListItem)은 자신의 content(inline)와 children을
-// 재귀로(같은 규칙) 검사한다(DELTA-02, Issue #143 (b)) — 위반이 있으면
-// CLIPBOARD_CONTENT_INVALID로 거절한다. 문단/heading/목록 항목의 블록 색도
-// 검사한다(Issue #343, blockColorViolation). codeBlock·divider는 목록 항목
-// children에서만 받는다(Issue #351). 최상위(depth 1)는 거절하고, codeBlock은
-// content 런을 이어 붙인 글자와 language를 model의 codeBlock 계약
-// (isValidCodeBlockSource, isValidCodeBlockLanguage)으로 검사한다. content에
-// 커스텀 inline 원소가 있으면 거절한다. divider는 검사할 필드가 없다. 이 6종과
-// table 밖의 type(quote, callout 등)은 어느 깊이에서든 거절한다.
+// (bulletListItem/numberedListItem)은 자신의 content(inline)를 검사한다
+// (DELTA-02, Issue #143 (b)) — 위반이 있으면 CLIPBOARD_CONTENT_INVALID로
+// 거절한다. 문단/heading/목록 항목의 블록 색도 검사한다(Issue #343,
+// blockColorViolation). codeBlock은 content 런을 이어 붙인 글자와 language를
+// model의 codeBlock 계약(isValidCodeBlockSource, isValidCodeBlockLanguage)으로
+// 검사한다(Issue #351). content에 커스텀 inline 원소가 있으면 거절한다.
+// 위 판정은 기존 메시지를 지키려고 먼저 한다.
+//
+// 그 밖의 model 비표 블록(quote, callout, checkListItem, toggleListItem,
+// 미디어 4종, iframe)은 content가 있으면 같은 inline 계약을 적용한다(Issue #356
+// RD-005). 이어서 모든 비표 블록을 model 프로브(modelBlockViolation)로
+// 판정한다. 기존 6종도 프로브를 거친다. textAlignment 같은 필드를 이제
+// 인코딩하므로 model이 거절하는 값이 문서에 들어가면 안 된다. model이 모르는
+// type은 거절한다(unsupportedBlockMessage). 최상위 codeBlock·divider도 받는다.
+// children은 재귀로(같은 규칙) 검사한다. children을 가질 수 있는 블록은 model
+// isNestableBlockType(문단·제목·quote·callout·목록 4종)뿐이다. 리프(codeBlock,
+// divider, 미디어 4종, iframe)의 비어 있지 않은 children은 거절한다. model은
+// nestable 부모가 받는 child type을 제한하지 않는다(block-schema.ts의
+// children은 blockSchema 전체).
 //
 // depth는 model/schema.ts의 findNestingDepthViolation과 같은 정의(top-level
 // 1, blocks 배열 자체가 그 depth)다 — pasteOutOfTable의 삽입은 항상
@@ -304,118 +458,34 @@ const validateOutOfTableContent = (
     };
   }
   for (const block of blocks) {
-    if (block.type === "paragraph" || block.type === "heading") {
-      const blockTypeLabel = block.type === "heading" ? "Heading" : "Paragraph";
-      const violation = inlineContentViolation(block.content);
-      if (violation !== null) {
-        return {
-          ok: false,
-          error: {
-            code: "CLIPBOARD_CONTENT_INVALID",
-            message: `${blockTypeLabel} content ${violation.reason}`,
-          },
-        };
-      }
-      const colorViolation = blockColorViolation(block, blockTypeLabel);
-      if (colorViolation !== null) return colorViolation;
+    if (block.type === "table") {
+      const validated = validateTabularDataForPaste(block.data);
+      if (!validated.ok) return validated;
       continue;
     }
-    if (block.type === "bulletListItem" || block.type === "numberedListItem") {
-      const blockTypeLabel =
-        block.type === "numberedListItem"
-          ? "Numbered list item"
-          : "Bullet list item";
-      const violation = inlineContentViolation(block.content);
-      if (violation !== null) {
+    const ownViolation = ownBlockViolation(block);
+    if (ownViolation !== null) return ownViolation;
+    const modelViolation = modelBlockViolation(block);
+    if (modelViolation !== null) return modelViolation;
+    if ("children" in block && (block.children ?? []).length > 0) {
+      // 프로브는 children을 떼고 판정해 model의 리프 제한(strict 스키마)을
+      // 보지 못한다. 리프의 children은 조립이 조용히 버리므로 여기서
+      // 거절한다. children을 받는 type의 판정 권위는 model이다.
+      if (!isNestableBlockType(block.type)) {
         return {
           ok: false,
           error: {
             code: "CLIPBOARD_CONTENT_INVALID",
-            message: `${blockTypeLabel} content ${violation.reason}`,
+            message: `Clipboard ${block.type} block cannot have children`,
           },
         };
       }
-      const colorViolation = blockColorViolation(block, blockTypeLabel);
-      if (colorViolation !== null) return colorViolation;
-      if (
-        block.type === "numberedListItem" &&
-        block.startNumber !== undefined &&
-        !isStartNumberInRange(block.startNumber)
-      ) {
-        return {
-          ok: false,
-          error: {
-            code: "CLIPBOARD_CONTENT_INVALID",
-            message: "Numbered list item startNumber is out of range",
-          },
-        };
-      }
-      if (block.children !== undefined && block.children.length > 0) {
-        const childResult = validateOutOfTableContent(
-          block.children,
-          depth + 1,
-        );
-        if (!childResult.ok) return childResult;
-      }
-      continue;
+      const childResult = validateOutOfTableContent(
+        block.children ?? [],
+        depth + 1,
+      );
+      if (!childResult.ok) return childResult;
     }
-    if (block.type === "codeBlock" || block.type === "divider") {
-      if (depth === 1) {
-        return {
-          ok: false,
-          error: {
-            code: "CLIPBOARD_CONTENT_INVALID",
-            message: topLevelBlockMessage(block.type),
-          },
-        };
-      }
-      if (block.type === "codeBlock") {
-        const source = clipboardCodeBlockSource(block.content);
-        if (source === null) {
-          return {
-            ok: false,
-            error: {
-              code: "CLIPBOARD_CONTENT_INVALID",
-              message: codeBlockContentMessage,
-            },
-          };
-        }
-        if (!isValidCodeBlockSource(source)) {
-          return {
-            ok: false,
-            error: {
-              code: "CLIPBOARD_CONTENT_INVALID",
-              message:
-                "CodeBlock text may contain LF and Tab but no other C0 controls, DEL, or invalid surrogate code units",
-            },
-          };
-        }
-        if (
-          block.language !== undefined &&
-          !isValidCodeBlockLanguage(block.language)
-        ) {
-          return {
-            ok: false,
-            error: {
-              code: "CLIPBOARD_CONTENT_INVALID",
-              message: "CodeBlock language is not valid",
-            },
-          };
-        }
-      }
-      continue;
-    }
-    if (block.type !== "table") {
-      return {
-        ok: false,
-        error: {
-          code: "CLIPBOARD_CONTENT_INVALID",
-          message: unsupportedBlockMessage(block.type),
-        },
-      };
-    }
-    const validated = validateTabularDataForPaste(block.data);
-    if (!validated.ok) return validated;
   }
   return { ok: true, value: undefined };
 };
@@ -453,8 +523,8 @@ const withBlockColorMarks = (
   );
 };
 
-// 클립보드 시퀀스 안 표 개수다. 목록 항목 children 안 표까지 깊이 우선으로
-// 센다. 문단·제목·codeBlock·divider는 children이 없다.
+// 클립보드 시퀀스 안 표 개수다. 비표 블록 children 안 표까지 깊이 우선으로
+// 센다. children은 nestable 블록(문단·제목·quote·callout·목록 4종)에만 있다.
 const countTables = (blocks: readonly ClipboardContentBlock[]): number => {
   let count = 0;
   for (const block of blocks) {
@@ -467,21 +537,23 @@ const countTables = (blocks: readonly ClipboardContentBlock[]): number => {
 };
 
 // 표 안 캐럿 분기에서 셀에 합칠 블록을 줄 목록으로 만든다(Issue #345).
-// 문단·제목·목록 항목이 줄 하나씩이다.
-// 목록 항목 children은 부모 다음에 깊이 우선으로 잇는다.
-// 접두어·들여쓰기는 없다. 셀 안 html 붙여넣기의 줄 정책과 같다.
+// 줄 정책은 셀 안 html 붙여넣기(cell-html-inline.ts의 collectLines)와 같다
+// (Issue #356 RD-005).
+// - content를 가진 블록(문단·제목·quote·callout·목록 4종)은 줄 하나다. 비어
+//   있어도 모은다. 빈 줄은 withParagraphsMergedIntoCells가 건너뛴다.
+// - children은 부모 다음에 깊이 우선으로 잇는다. 접두어·들여쓰기는 없다.
+// - content가 없는 블록(divider, 미디어 4종, iframe)은 줄이 없다.
 // 블록 색은 셀에 속성으로 남을 수 없어 텍스트 마크로 옮긴다(Issue #343).
+// textColor·backgroundColor 필드를 가진 블록 전부에 적용한다.
 // 표는 줄이 아니다. 최상위 표는 호출부가 떼고, children 안 표는 거절한다.
-// codeBlock은 글자의 줄마다 셀 줄이다(Issue #351). 글자가 있는 줄의 공백 들여쓰기는
-// 지키고, 비었거나 공백·Tab뿐인 줄은 만들지 않는다. 셀 텍스트는 Tab을 거부하므로
-// Tab은 지운다. divider는 글자가 없어
-// 줄이 없다.
-// 빈 줄은 withParagraphsMergedIntoCells가 건너뛴다.
+// codeBlock은 글자의 줄마다 셀 줄이다(Issue #351). 글자가 있는 줄의 공백
+// 들여쓰기는 지키고, 비었거나 공백·Tab뿐인 줄은 만들지 않는다. 셀 텍스트는
+// Tab을 거부하므로 Tab은 지운다. 최상위 codeBlock도 같은 정책이다.
 const cellLinesOf = (
   blocks: readonly ClipboardContentBlock[],
 ): InlineContent[] =>
   blocks.flatMap((block): InlineContent[] => {
-    if (block.type === "table" || block.type === "divider") return [];
+    if (block.type === "table") return [];
     if (block.type === "codeBlock") {
       // 커스텀 inline 원소가 든 codeBlock은 validateOutOfTableContent가 먼저
       // 거절한다. 도달하면 줄이 없는 것으로 본다.
@@ -491,18 +563,8 @@ const cellLinesOf = (
         .filter((line) => line.trim().length > 0)
         .map((line) => [{ text: line }]);
     }
-    // 미지원 type(quote, callout 등)은 validateOutOfTableContent가 먼저
-    // 거절한다. 도달하면 줄이 없는 것으로 본다.
-    if (
-      block.type !== "paragraph" &&
-      block.type !== "heading" &&
-      block.type !== "bulletListItem" &&
-      block.type !== "numberedListItem"
-    ) {
-      return [];
-    }
+    if (!("content" in block)) return [];
     const line = withBlockColorMarks(block.content, block);
-    if (block.type === "paragraph" || block.type === "heading") return [line];
     return [line, ...cellLinesOf(block.children ?? [])];
   });
 
@@ -524,7 +586,7 @@ export const pasteClipboardContent = (
   }
 
   // 뮤테이션 전에 시퀀스 전체를 검증한다(G-EDT-001) — validateOutOfTableContent가
-  // 표·문단·제목·목록 항목(재귀) 각각의 계약을 적용한다.
+  // 표와 model 비표 블록(재귀) 각각의 계약을 적용한다.
   const outOfTableValidation = validateOutOfTableContent(content);
   if (!outOfTableValidation.ok) return outOfTableValidation;
 
@@ -534,7 +596,7 @@ export const pasteClipboardContent = (
     // 표 블록이 둘 이상인 경우 다중 표를 명시적으로 거절한다 — 표 안
     // 분기에서는 문단을 별도 블록으로 끼울 수 없으므로 다중 표를 지원할 수
     // 없다. TBL-012(성능 계약)는 표 크기 한도이지 "표 1개" 제품 계약이 아니다.
-    // 목록 항목 children 안 표도 센다(Issue #345). 셀 줄로 풀 수 없어 버리면
+    // 블록 children 안 표도 센다(Issue #345). 셀 줄로 풀 수 없어 버리면
     // 글자가 무신호로 사라진다.
     if (countTables(content) > 1) {
       return {

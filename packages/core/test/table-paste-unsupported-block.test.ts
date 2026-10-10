@@ -1,10 +1,11 @@
 /**
  * 클립보드 시퀀스의 블록 모양 계약 두 가지를 고정한다 (Issue #356 RD-004).
- * - 미지원 variant 거절: 새 ClipboardContentBlock 타입은 model의 모든 비표
- *   블록을 담지만 core는 paragraph, heading, 두 목록 항목, codeBlock, divider,
- *   table만 붙인다. 그 밖의 type(quote, callout 등)은 최상위든 목록 항목
- *   children 안이든 표 안 캐럿이든 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를
- *   바꾸지 않는다. 조립 함수도 같은 거절을 하는 방어선이다.
+ * - 미지원 type 거절: ClipboardContentBlock 타입은 model의 14종만 담지만
+ *   pasteClipboardContent는 런타임에 임의 type 문자열을 받을 수 있다. model이
+ *   모르는 type은 최상위든 목록 항목 children 안이든 표 안 캐럿이든
+ *   CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다. 조립 함수도 같은
+ *   거절을 하는 방어선이다. model 비표 블록(quote, callout 등)은 RD-005부터
+ *   붙는다. 그 계약은 table-paste-model-blocks.test.ts가 소유한다.
  * - id 재발급: 파서의 임시 id(`clipboard-…`)는 문서에 들어가지 않는다.
  * codeBlock 내용이 마크 없는 평문 런이 아닌 입력의 거절도 함께 본다.
  */
@@ -45,44 +46,38 @@ const tableBlock = (text: string): ClipboardContentBlock => ({
   },
 });
 
-/** 파서가 아직 내지 않는 비표 블록이다. */
-const quoteBlock: ClipboardContentBlock = {
-  id: "clipboard-quote",
-  type: "quote",
-  content: [{ text: "q" }],
-};
+/** model이 모르는 type의 블록이다. 타입 밖 런타임 입력을 흉내 낸다. */
+const widgetBlock = {
+  id: "clipboard-widget",
+  type: "widget",
+  content: [{ text: "w" }],
+} as unknown as ClipboardContentBlock;
 
-const calloutBlock: ClipboardContentBlock = {
-  id: "clipboard-callout",
-  type: "callout",
-  content: [{ text: "c" }],
-};
-
-const quoteRejected = {
+const widgetRejected = {
   ok: false,
   error: {
     code: "CLIPBOARD_CONTENT_INVALID",
-    message: "Unsupported clipboard block type: quote",
+    message: "Unsupported clipboard block type: widget",
   },
 };
 
-describe("미지원 variant를 거절한다", () => {
-  it("표 밖 최상위 quote는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+describe("model이 모르는 type을 거절한다", () => {
+  it("표 밖 최상위 미지원 type은 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const before = editor.getJSON() as TiptapJsonNode;
 
     const result = pasteClipboardContent(
       editor,
-      [clipParagraph([{ text: "p" }]), quoteBlock, tableBlock("A")],
+      [clipParagraph([{ text: "p" }]), widgetBlock, tableBlock("A")],
       sequentialIds("paste"),
     );
 
-    expect(result).toEqual(quoteRejected);
+    expect(result).toEqual(widgetRejected);
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
-  it("목록 항목 children 안 callout도 거절하고 문서를 바꾸지 않는다", () => {
+  it("목록 항목 children 안 미지원 type도 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const before = editor.getJSON() as TiptapJsonNode;
@@ -90,55 +85,49 @@ describe("미지원 variant를 거절한다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        clipBullet([{ text: "item" }], { children: [calloutBlock] }),
+        clipBullet([{ text: "item" }], { children: [widgetBlock] }),
         tableBlock("A"),
       ],
       sequentialIds("paste"),
     );
 
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        code: "CLIPBOARD_CONTENT_INVALID",
-        message: "Unsupported clipboard block type: callout",
-      },
-    });
+    expect(result).toEqual(widgetRejected);
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
-  it("표 안 캐럿에서도 표 앞 quote를 거절하고 문서를 바꾸지 않는다", () => {
+  it("표 안 캐럿에서도 표 앞 미지원 type을 거절하고 문서를 바꾸지 않는다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
     const before = editor.getJSON() as TiptapJsonNode;
 
     const result = pasteClipboardContent(
       editor,
-      [quoteBlock, tableBlock("x")],
+      [widgetBlock, tableBlock("x")],
       sequentialIds("paste"),
     );
 
-    expect(result).toEqual(quoteRejected);
+    expect(result).toEqual(widgetRejected);
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
-  it("조립 함수도 최상위 quote를 거절한다 (검증을 거치지 않는 방어선)", () => {
+  it("조립 함수도 최상위 미지원 type을 거절한다 (검증을 거치지 않는 방어선)", () => {
     const result = buildOutOfTableSequence(
       buildTestSchema(),
-      [quoteBlock, tableBlock("A")],
+      [widgetBlock, tableBlock("A")],
       sequentialIds("id"),
     );
 
-    expect(result).toEqual(quoteRejected);
+    expect(result).toEqual(widgetRejected);
   });
 
-  it("조립 함수는 목록 항목 children 안 quote도 거절한다", () => {
+  it("조립 함수는 목록 항목 children 안 미지원 type도 거절한다", () => {
     const result = buildOutOfTableSequence(
       buildTestSchema(),
-      [clipBullet([{ text: "item" }], { children: [quoteBlock] })],
+      [clipBullet([{ text: "item" }], { children: [widgetBlock] })],
       sequentialIds("id"),
     );
 
-    expect(result).toEqual(quoteRejected);
+    expect(result).toEqual(widgetRejected);
   });
 });
 
