@@ -113,6 +113,15 @@ export const parseClipboardTable = (input: {
 - `pasteClipboardContent`는 비정규 블록 색을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다.
 - 읽지 않는 것: 블록 `data-geul-*`(색·정렬), 블록 자식 없는 `div`의 `style`, `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 마지막 경우 그 글자는 `li` content에 합쳐져 `li` 색을 받는다.
 
+구현 반영(표 밖 블록 자식 없는 div의 자기 style, Issue #344): 위 Issue #343 문단은 블록 자식 없는 `div`의 `style`을 읽지 않는 것으로 적었다. 공유 분할기 `segmentBlocks`는 클립보드 정책에서도 그 `div`가 만든 `paragraph` segment에 `origin`(그 `div`)을 싣는데, `blockSequenceFromNodes`가 읽지 않았다.
+
+- `paragraph` segment의 `origin`을 `simpleBoundary`의 `node`와 같은 출처로 읽는다. 색은 `textBlockPropsFromElement(el, { styleOnly: true })`, 서식은 `blockPresentation(el).format`이다. 위 #343 규칙이 `div`에도 그대로 적용된다.
+- 목록 항목 안 `div`가 만든 자식 문단도 같다. `li` 안 `div` 문단은 자기 색을 받는다.
+- 블록 자식이 있는 래퍼 `div`는 `origin`이 없어 색이 따라오지 않는다. `importHtml`과 같다. 안쪽 `div`의 색만 남는다.
+- `div` 안 `<br>`는 줄바꿈으로 보존되고 안쪽 `span` 색 마크는 `div`의 블록 색과 공존한다.
+- 셀 안 캐럿 붙여넣기는 core 변경 없이 #343 규칙으로 `div` 문단의 블록 색을 셀 텍스트 마크로 옮긴다.
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬), `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 위 #343 서술과 같다.
+
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
 `io/html/import-html.ts`의 `parseTable`이 쓰는 hast 트리 순회 로직 중 id 배정과 무관한 부분(`layoutRows`, `inferredColumnCount`, `columnElements`, `tableRows`, `layoutColumnSpan`, `childElements`, `tableNonSectionChildren`, `hasSubstantialText`)을 `packages/io/src/html/table-layout.ts`(신규)로 뽑아 두 소비자가 공유한다:
