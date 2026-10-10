@@ -169,7 +169,8 @@ export type BlockSegmentPolicy<
   // blockquote·li·callout의 텍스트 leaf가 그 요소의 복제로 감싸지고, 호출자의
   // content/children 분할이 복제를 블록으로 보아 content가 빈다
   // (`<figure><blockquote>q</blockquote></figure>`, Issue #323). document
-  // import만 켠다. clipboard는 이전 체인을 유지한다.
+  // import만 켠다. clipboard는 이전 체인을 유지한다(div 같은 문단 origin 태그만
+  // 목록 leaf 복제에서 빠진다, Issue #344).
   omitStructuralAncestors?: boolean;
   // 표로 취급할 노드 판정. import는 단순 태그명 검사, clipboard는
   // findDataTables가 미리 고른 표 집합의 멤버십 검사처럼 호출자마다

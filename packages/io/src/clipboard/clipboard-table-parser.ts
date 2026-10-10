@@ -164,7 +164,8 @@ const visibleText = (content: InlineContent): string =>
     .map((item) => item.text)
     .join("");
 
-// 표 밖 블록 요소(p·h1~h6·li) 자신의 style 색이다(Issue #343). importHtml과
+// 표 밖 블록 요소(p·h1~h6·li, 블록 자식 없는 div) 자신의 style 색이다
+// (Issue #343, #344). importHtml과
 // 같은 읽기를 쓴다. style만 읽고 data-geul-*와 정렬은 읽지 않는다. li가 승격한
 // p의 색은 li 색을 이긴다.
 const blockColorsFromElement = (

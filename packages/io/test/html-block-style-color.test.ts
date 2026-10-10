@@ -1108,41 +1108,53 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     ).toEqual([{ type: "paragraph", content: [{ text: "b" }] }]);
   });
 
-  /** 블록 트리 어디에든 블록 색이 있는지 본다. */
-  const hasBlockColor = (shapes: readonly Shape[]): boolean =>
-    shapes.some(
-      (shape) =>
-        shape.textColor !== undefined ||
-        shape.backgroundColor !== undefined ||
-        hasBlockColor(shape.children ?? []),
-    );
-
   // 목록을 품은 div도 래퍼다. 클립보드 분할기는 목록을 접으며 조상 div를
   // 텍스트 leaf마다 복제하는데, 그 복제가 블록 자식 없는 div로 보여 래퍼의
-  // 테마 색이 항목 안 문단에 붙던 결함을 막는다(Issue #344 리뷰).
-  it.each([
+  // 테마 색이 항목 안 문단에 붙던 결함을 막는다(Issue #344 리뷰). 색이 없다는
+  // 단언만으로는 목록이 통째로 사라져도 통과하므로 전체 모양을 비교한다.
+  it.each<[string, string, Shape[]]>([
     [
       "목록을 품은 div",
       `<div style="color:#d4d4d4;background-color:#1e1e1e"><ul><li>a</li><li>b</li></ul></div>`,
+      [
+        { type: "bulletListItem", content: [{ text: "a" }] },
+        { type: "bulletListItem", content: [{ text: "b" }] },
+      ],
     ],
     [
       "중첩 목록을 품은 div",
       `<div style="color:#d4d4d4;background-color:#1e1e1e"><ol><li>a<ul><li>n</li></ul></li></ol></div>`,
+      [
+        {
+          type: "numberedListItem",
+          content: [{ text: "a" }],
+          children: [{ type: "bulletListItem", content: [{ text: "n" }] }],
+        },
+      ],
     ],
     [
       "span으로 감싼 목록을 품은 div",
       `<div style="color:#d4d4d4"><span><ul><li>a</li></ul></span></div>`,
+      [{ type: "bulletListItem", content: [{ text: "a" }] }],
     ],
     [
       "목록을 품은 div의 안쪽 div",
       `<div style="color:#d4d4d4"><div style="color:#ff0000"><ul><li>a</li></ul></div></div>`,
+      [{ type: "bulletListItem", content: [{ text: "a" }] }],
     ],
     [
       "li 안에서 목록을 품은 div",
       `<ul><li><div style="color:#ff0000"><ul><li>a</li></ul></div></li></ul>`,
+      [
+        {
+          type: "bulletListItem",
+          content: [],
+          children: [{ type: "bulletListItem", content: [{ text: "a" }] }],
+        },
+      ],
     ],
-  ])("%s의 색은 읽지 않는다", (_name, html) => {
-    expect(hasBlockColor(clipboardShapes(`${html}${TABLE}`))).toBe(false);
+  ])("%s의 색은 읽지 않는다", (_name, html, expected) => {
+    expect(clipboardShapes(`${html}${TABLE}`)).toEqual(expected);
   });
 
   it("목록을 품은 div 안 항목의 글자는 항목 content에 남는다", () => {
@@ -1154,10 +1166,19 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
   });
 
   it("목록을 품은 래퍼 div 안의 블록 자식 없는 div는 자기 색을 읽는다", () => {
-    const html = `<div style="color:#d4d4d4"><ul><li><div style="color:#ff0000">x</div></li></ul></div>${TABLE}`;
-    const shapes = clipboardShapes(html);
-    expect(hasBlockColor(shapes)).toBe(true);
-    expect(JSON.stringify(shapes)).not.toContain("#D4D4D4");
+    expect(
+      clipboardShapes(
+        `<div style="color:#d4d4d4"><ul><li><div style="color:#ff0000">x</div></li></ul></div>${TABLE}`,
+      ),
+    ).toEqual([
+      {
+        type: "bulletListItem",
+        content: [],
+        children: [
+          { type: "paragraph", content: [{ text: "x" }], textColor: "#FF0000" },
+        ],
+      },
+    ]);
   });
 
   it("style이 없는 div는 색을 만들지 않는다", () => {
