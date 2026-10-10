@@ -9,7 +9,7 @@ import {
   validateTableSize,
 } from "@cp949/geul-model";
 
-import { readCellColors } from "../clipboard/cell-colors.js";
+import { cellPresentation } from "./element-presentation.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   HtmlDocumentInvalidError,
@@ -175,7 +175,7 @@ export const parseTable = (
       );
       const styled =
         dataTextColor === undefined || dataBackgroundColor === undefined
-          ? readCellColors(layout.element, row.element, element)
+          ? cellPresentation(layout.element, row.element, element)
           : {};
       const textColor = dataTextColor ?? styled.textColor;
       const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;

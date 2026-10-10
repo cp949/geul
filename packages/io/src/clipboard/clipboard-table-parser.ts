@@ -33,6 +33,7 @@ import {
   parseExplicitStartNumber,
   splitListItemChildren,
 } from "../html/list-block-builder.js";
+import { cellPresentation } from "../html/element-presentation.js";
 import {
   asRoot,
   flattenBlockBoundaryTagNames,
@@ -55,7 +56,6 @@ import {
   tableRows,
 } from "../html/table-layout.js";
 import type { Result } from "../result.js";
-import { readCellColors } from "./cell-colors.js";
 import {
   collapseHtmlWhitespace,
   normalizeCellContent,
@@ -345,7 +345,7 @@ const canonicalAlign = (
 
 // data-geul-*(자기 복사)가 있으면 우선하고, 없으면 style·bgcolor에서 뽑는다
 // (외부 Excel/Google Sheets는 data-geul-*가 없으므로 항상 style로 떨어진다).
-// 색은 td·th → tr → table 순으로 읽는다(Issue #334, cell-colors.ts). row는 이
+// 색은 td·th → tr → table 순으로 읽는다(Issue #334, element-presentation.ts). row는 이
 // 셀이 시작하는 tr이다. 정렬은 td·th의 style만 읽는다.
 const cellStyleFields = (
   element: HtmlElementNode,
@@ -367,7 +367,7 @@ const cellStyleFields = (
   );
   const styled =
     dataTextColor === undefined || dataBackgroundColor === undefined
-      ? readCellColors(element, row, table)
+      ? cellPresentation(element, row, table)
       : {};
   const textColor = dataTextColor ?? styled.textColor;
   const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;

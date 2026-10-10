@@ -174,7 +174,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
 // (import-warnings.ts의 isOwnEchoStyle)는 raw HAST와 이 경고 기준만 보므로
 // 이 집합과 무관하다.
 // 표 요소(td·th·tr·table, 단계 C)는 style 색과 옛 bgcolor 속성(HAST 이름
-// bgColor)을 셀 색으로 읽는다(cell-colors.ts). 두 경로(importHtml·클립보드)가
+// bgColor)을 셀 색으로 읽는다(element-presentation.ts의 cellPresentation). 두 경로(importHtml·클립보드)가
 // 같은 읽기 함수를 쓴다.
 export const styleReadAttributes: Record<string, string[]> = {
   em: ["style"],

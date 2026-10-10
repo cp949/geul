@@ -12,11 +12,7 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
-import {
-  hasComputedStyleDump,
-  parseStyleDeclarations,
-} from "../clipboard/style-declarations.js";
-import type { TextFormat } from "./element-presentation.js";
+import { blockPresentation, type TextFormat } from "./element-presentation.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   type HtmlElementNode,
@@ -33,8 +29,8 @@ import {
 // data-geul-*가 없는 textColor/backgroundColor는 style의 color·
 // background-color에서 채운다(Issue #334 단계 B, 외부 HTML). 필드별로 따진다 —
 // data-geul-*가 있는 필드는 style을 보지 않고, 없는 필드만 style이 채운다. style
-// 값은 parseStyleDeclarations가 canonical #RRGGBB 대문자로만 낸다(반투명·무효는
-// 값 없음). textAlignment는 data-geul-*만 읽는다.
+// 값은 canonical #RRGGBB 대문자로만 낸다(반투명·무효는 값 없음).
+// textAlignment는 data-geul-*만 읽는다.
 // styleOnly는 평범한 문단 div용이다 — data-geul-*는 p·h1~h6·blockquote·li·
 // callout의 계약이라 div에서는 읽지 않고(정렬 포함) style만 읽는다. 읽으면
 // 잘못된 data-geul-* 값이 parseDocument 거절로 문서 전체를 막는다(Issue #334
@@ -52,21 +48,14 @@ export const textBlockPropsFromElement = (
   const dataBackgroundColor = styleOnly
     ? undefined
     : propertyString(element, "dataGeulBackgroundColor");
-  // 두 필드가 모두 data-geul-*로 정해졌으면 style을 파싱하지 않는다(자기 export
-  // 에코가 이 경우다).
-  // 계산 스타일 덤프(브라우저 복사)가 붙은 style의 색은 테마 색이라 읽지 않는다.
-  const rawStyle =
+  // 두 필드가 모두 data-geul-*로 정해졌으면 style을 읽지 않는다(자기 export
+  // 에코가 이 경우다). 덤프가 붙은 style의 색은 읽지 않는다(blockPresentation).
+  const styled =
     dataTextColor !== undefined && dataBackgroundColor !== undefined
       ? undefined
-      : propertyString(element, "style");
-  const style =
-    rawStyle === undefined || hasComputedStyleDump(rawStyle)
-      ? undefined
-      : rawStyle;
-  const declared =
-    style === undefined ? undefined : parseStyleDeclarations(style);
-  const textColor = dataTextColor ?? declared?.color;
-  const backgroundColor = dataBackgroundColor ?? declared?.backgroundColor;
+      : blockPresentation(element).colors;
+  const textColor = dataTextColor ?? styled?.textColor;
+  const backgroundColor = dataBackgroundColor ?? styled?.backgroundColor;
   const textAlignment = styleOnly
     ? undefined
     : (propertyString(element, "dataGeulTextAlignment") as
