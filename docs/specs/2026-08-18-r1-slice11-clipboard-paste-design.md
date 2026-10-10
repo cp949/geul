@@ -149,7 +149,7 @@ export const parseClipboardTable = (input: {
 구현 반영(클립보드 블록의 model Block 모양, Issue #356 RD-004): 위 Issue #71·#72·#343·#346·#351 문단은 `ClipboardContentBlock`을 전용 variant 7종(paragraph, heading, 두 목록 항목, codeBlock, divider, table)으로 적었다. 표 아닌 블록은 id 없는 전용 모양이었다. 그 서술은 이 문단으로 대체된다.
 
 - `ClipboardContentBlock`은 `{ type: "table"; data: TabularData }`와 model `Block`에서 `TableBlock`을 뺀 유니온에서 파생한 모양의 합이다. 필드명과 값 형식이 model과 같다.
-- 표 아닌 블록은 `id`를 가진다. 파서가 `parseClipboardTable` 호출마다 0부터 세어 `clipboard-1`, `clipboard-2`…로 붙인 임시값이다. 같은 입력은 같은 id를 낸다. 목록 항목은 children을 읽기 전에 발급해 부모 id가 자식보다 앞선다. 문서 안에서 안정하지 않다. core는 입력 id를 읽지 않고 붙일 때 `createId`나 `BlockIdExtension`으로 재발급한다. 표 variant에는 id가 없다.
+- 표 아닌 블록은 `id`를 가진다. 파서가 `parseClipboardTable` 호출마다 1부터 새로 번호를 매겨 `clipboard-1`, `clipboard-2`…로 붙인 임시값이다. 같은 입력은 같은 id를 낸다. 목록 항목은 children을 읽기 전에 발급해 부모 id가 자식보다 앞선다. 문서 안에서 안정하지 않다. core는 입력 id를 읽지 않고 붙일 때 `createId`나 `BlockIdExtension`으로 재발급한다. 표 variant에는 id가 없다.
 - `children`은 model의 `Block[]` 대신 `readonly ClipboardContentBlock[]`다. 표가 `li` 안 children에 들 수 있어서다.
 - `codeBlock`은 `text` 대신 `content: [{ text }]`를 가진다. 마크 없는 런 하나다. `language`는 이전과 같다. 타입에는 `wrap`·`caption`이 있으나 파서는 내지 않는다.
 - 타입은 model의 모든 비표 블록을 허용한다. 파서는 이전과 같은 paragraph, heading, `bulletListItem`, `numberedListItem`, 목록 children 안 `codeBlock`·`divider`만 낸다. 최상위 `pre`·`hr`는 여전히 블록이 되지 않는다.

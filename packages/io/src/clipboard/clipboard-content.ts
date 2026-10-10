@@ -8,7 +8,7 @@ import type { TabularData } from "./tabular-data.js";
 // content/language 등). 표는 기존 TabularData variant 그대로다
 // (Issue #356 RD-004).
 //
-// - id는 파서가 호출마다 0부터 세어 붙인 임시값이다(`clipboard-1`, ...).
+// - id는 파서가 호출마다 1부터 새로 번호를 매긴 임시값이다(`clipboard-1`, ...).
 //   같은 입력은 같은 id를 낸다. 문서 안에서 안정하지 않다 — core가 붙여넣을 때
 //   재발급한다. 표 variant에는 id가 없다.
 // - children은 model의 Block[] 대신 ClipboardContentBlock을 재귀로 담는다.
