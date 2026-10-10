@@ -169,8 +169,9 @@ export type BlockSegmentPolicy<
   // blockquote·li·callout의 텍스트 leaf가 그 요소의 복제로 감싸지고, 호출자의
   // content/children 분할이 복제를 블록으로 보아 content가 빈다
   // (`<figure><blockquote>q</blockquote></figure>`, Issue #323). document
-  // import만 켠다. clipboard는 이전 체인을 유지한다(div 같은 문단 origin 태그만
-  // 목록 leaf 복제에서 빠진다, Issue #344).
+  // import만 켠다. clipboard는 이 옵션을 켜지 않고 체인에 이 요소를 유지한다.
+  // 이 옵션과 무관하게 quote·list·callout 세그먼트의 leaf 복제에서는 항상 이
+  // 요소를 뺀다(Issue #344, #350).
   omitStructuralAncestors?: boolean;
   // 표로 취급할 노드 판정. import는 단순 태그명 검사, clipboard는
   // findDataTables가 미리 고른 표 집합의 멤버십 검사처럼 호출자마다
@@ -204,7 +205,8 @@ export type BlockSegmentPolicy<
 // (`<strong>`, `<a>` 등)에서 떨어져 나오므로, 이 복원이 없으면 서식(href
 // 포함)을 잃는다. 마크 없는 조상(div/li/ul 등)까지 씌우면 인라인 결과는
 // 같지만, blockquote·목록의 content/children 분할이 그 복제를 블록으로 볼
-// 수 있다. 정책의 omitStructuralAncestors가 이 조상을 체인에서 뺀다.
+// 수 있다. 정책의 omitStructuralAncestors가 이 조상을 체인에서 빼고, leaf 복제는
+// wrapTextDescendantsInAncestors가 따로 뺀다.
 const wrapInAncestors = (
   node: HtmlElementContent,
   ancestors: readonly HtmlElementNode[],
@@ -232,16 +234,17 @@ const wrapTextDescendantsInAncestors = (
   node: HtmlElementContent,
   ancestors: readonly HtmlElementNode[],
   isTableNode: (node: HtmlElementNode) => boolean,
+  isStructuralTag: (tagName: string) => boolean,
 ): HtmlElementContent => {
   if (node.type === "text") {
-    // 문단 origin이 될 수 있는 조상(div 등)은 복제하지 않는다. 마크가 없어 인라인
-    // 결과가 같고, 복제하면 목록 분할이 그 복제를 블록 자식 없는 div로 보아
-    // 래퍼의 style 색을 문단 origin으로 읽는다(Issue #344).
+    // 구조 조상(정책의 isNestedBoundary·isTransparent: div·li·blockquote·ul·ol
+    // 등)은 복제하지 않는다. 마크가 없어 인라인 결과가 같고, 복제하면 목록
+    // 분할이 그 복제를 블록으로 보아 항목 content가 비거나(blockquote, Issue
+    // #350) 래퍼 div의 style 색을 문단 origin으로 읽는다(Issue #344). 마크가 있는
+    // 조상(span, b, a 등)은 계속 복제한다.
     return wrapInAncestors(
       node,
-      ancestors.filter(
-        (ancestor) => !paragraphOriginTagNames.has(ancestor.tagName),
-      ),
+      ancestors.filter((ancestor) => !isStructuralTag(ancestor.tagName)),
     );
   }
   if (node.type === "comment") return node;
@@ -250,14 +253,20 @@ const wrapTextDescendantsInAncestors = (
     node.tagName,
     node.properties,
     node.children.map((child) =>
-      wrapTextDescendantsInAncestors(child, ancestors, isTableNode),
+      wrapTextDescendantsInAncestors(
+        child,
+        ancestors,
+        isTableNode,
+        isStructuralTag,
+      ),
     ),
   );
 };
 
 // 문단의 origin이 될 수 있는 태그다(Issue #342). 정책이 문단 경계로 다루는
-// 요소 중 style 색·서식을 문단이 이어받는 것들이다. summary·figcaption은 import
-// 정책만 문단 경계로 쓰므로 클립보드 경로에는 영향이 없다.
+// 요소 중 style 색·서식을 문단이 이어받는 것들이다. flush(origin) 판정에만
+// 쓴다. leaf 복제에서 뺄 조상은 정책의 구조 조상 판정이 정한다. summary·
+// figcaption은 import 정책만 문단 경계로 쓰므로 클립보드 경로에는 영향이 없다.
 const paragraphOriginTagNames: ReadonlySet<string> = new Set([
   "div",
   "summary",
@@ -321,6 +330,10 @@ export function segmentBlocks<Level extends number = number>(
     list: readonly HtmlNode[],
     ancestors: readonly HtmlElementNode[],
   ): void => {
+    // quote·list·callout 세그먼트의 leaf 복제에서 뺄 구조 조상 판정이다.
+    const isStructuralTag = (tagName: string): boolean =>
+      policy.isNestedBoundary(tagName) || policy.isTransparent(tagName);
+
     // isNestedBoundary·isTransparent 요소 안으로 재귀할 때의 조상 체인이다.
     const structuralAncestors = (
       node: HtmlElementNode,
@@ -373,6 +386,7 @@ export function segmentBlocks<Level extends number = number>(
                 child,
                 ancestors,
                 policy.isTableNode,
+                isStructuralTag,
               ),
             ),
           ),
@@ -395,6 +409,7 @@ export function segmentBlocks<Level extends number = number>(
                 child,
                 ancestors,
                 policy.isTableNode,
+                isStructuralTag,
               ),
             ),
           ),
@@ -444,6 +459,7 @@ export function segmentBlocks<Level extends number = number>(
                 child,
                 ancestors,
                 policy.isTableNode,
+                isStructuralTag,
               ),
             ),
           ),

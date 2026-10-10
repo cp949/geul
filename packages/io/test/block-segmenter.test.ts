@@ -217,3 +217,59 @@ describe("paragraph 세그먼트의 origin(Issue #334 단계 B)", () => {
     ).toEqual([null, null]);
   });
 });
+
+describe("list 세그먼트 안 텍스트 leaf의 조상 복제(Issue #350)", () => {
+  // ul/ol만 세그먼트로 승격하고 blockquote는 문단 경계로 둔다. 클립보드 정책과
+  // 같은 조합이다.
+  const listPolicy: BlockSegmentPolicy = {
+    ...genericPolicy,
+    isListTag: isTransparentListTag,
+  };
+
+  /** 텍스트 leaf마다 그 위를 감싼 요소 태그를 바깥부터 모은다. 세그먼트 루트는 뺀다. */
+  const leafAncestorTags = (
+    node: HtmlNode,
+    trail: string[] = [],
+  ): string[][] => {
+    if (node.type === "text") return [trail];
+    if (node.type !== "element") return [];
+    return node.children.flatMap((child) =>
+      leafAncestorTags(child, [...trail, node.tagName]),
+    );
+  };
+
+  /** list 세그먼트를 모아 leaf 조상 태그 목록을 낸다. */
+  const listLeafTags = (html: string): string[][] => {
+    const parsed = parseHtmlFragment(html);
+    if (parsed === undefined) throw new Error("fixture 파싱 실패");
+    return segmentBlocks(parsed.root.children, listPolicy)
+      .flatMap((segment) =>
+        segment.kind === "list" ? leafAncestorTags(segment.node) : [],
+      )
+      .map((tags) => tags.slice(1));
+  };
+
+  it("blockquote가 감싼 목록의 leaf는 blockquote 복제로 감싸이지 않는다", () => {
+    expect(
+      listLeafTags("<blockquote><ul><li>a</li></ul></blockquote>"),
+    ).toEqual([["li"]]);
+  });
+
+  it("blockquote·div가 겹쳐도 leaf에 구조 조상 복제가 없다", () => {
+    expect(
+      listLeafTags(
+        "<blockquote><div><blockquote><ol><li>a</li></ol></blockquote></div></blockquote>",
+      ),
+    ).toEqual([["li"]]);
+  });
+
+  it("ul·ol 밖의 li가 감싼 목록도 leaf에 li 복제가 없다", () => {
+    expect(listLeafTags("<li><ul><li>a</li></ul></li>")).toEqual([["li"]]);
+  });
+
+  it("마크가 있는 조상은 leaf에 계속 복제된다", () => {
+    expect(
+      listLeafTags("<blockquote><b><ul><li>a</li></ul></b></blockquote>"),
+    ).toEqual([["li", "b"]]);
+  });
+});
