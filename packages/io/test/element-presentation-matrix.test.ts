@@ -6,8 +6,11 @@
  * - 선언 묶음 8개: 색, 배경, 굵게, 기울임, 밑줄, 취소선, 끄는 값, 계산 스타일
  *   덤프.
  * - 같은 선언은 어느 표면에 두어도 같은 글자 서식을 낸다. 기대값은 묶음마다 하나다.
- * - `importHtml`은 11개 표면 전부, `parseClipboardTable`은 표 표면 4개(`td`, `tr`,
- *   `table`, 셀 안 `p`)에 건다.
+ * - `importHtml`은 11개 표면 전부에 건다.
+ * - `parseClipboardTable`은 표 표면 4개(`td`, `tr`, `table`, 셀 안 `p`)에 건다.
+ * - `parseClipboardTable`은 표 옆 블록 표면 3개(`p`, `li`, `li` 안 `p`)에도 건다.
+ *   입력 뒤에 한 셀 표를 붙인다. 표가 없으면 파서가 표 붙여넣기를 하지 않는다
+ *   (Issue #343).
  * - 아직 고치지 않은 칸은 `KNOWN_DEFECTS`에 적고 `it.fails`로 건다. 지금은 비어
  *   있다. 칸이 예상보다 먼저 고쳐지면 `it.fails`가 실패해 알려 준다.
  *
@@ -65,6 +68,9 @@ type SurfaceName = keyof typeof SURFACES;
 /** 표 표면이다. 클립보드 표 파서가 읽는다. */
 const TABLE_SURFACES: readonly SurfaceName[] = ["td", "tr", "table", "cell>p"];
 
+/** 표 옆 블록 표면이다. 클립보드 표 파서가 표 밖 블록으로 읽는다. */
+const BESIDE_TABLE_SURFACES: readonly SurfaceName[] = ["p", "li", "li>p"];
+
 const NONE: Leaf = {
   bold: false,
   italic: false,
@@ -100,7 +106,7 @@ const BUNDLES = {
 
 type BundleName = keyof typeof BUNDLES;
 
-type Path = "importHtml" | "클립보드";
+type Path = "importHtml" | "클립보드" | "클립보드 표 옆";
 
 /**
  * 아직 고치지 않은 칸이다. 키는 `경로 표면 × 묶음`, 값은 고치는 곳이다.
@@ -176,6 +182,10 @@ const clipboardLeaf = (html: string): Leaf | undefined => {
   return result.ok ? leafOf(result.value) : undefined;
 };
 
+/** 블록 뒤에 한 셀 표를 붙여 클립보드 표 파서가 읽은 글자 `x`를 돌려준다. */
+const clipboardBesideTableLeaf = (html: string): Leaf | undefined =>
+  clipboardLeaf(`${html}${cellTable("<td>t</td>")}`);
+
 /** 경로·표면·묶음 한 칸을 건다. 아직 고치지 않은 칸이면 `it.fails`다. */
 const defineCell = (
   path: Path,
@@ -208,6 +218,14 @@ describe("요소 표현 행렬: 클립보드 표", () => {
   for (const surface of TABLE_SURFACES) {
     for (const bundle of Object.keys(BUNDLES) as BundleName[]) {
       defineCell("클립보드", surface, bundle, clipboardLeaf);
+    }
+  }
+});
+
+describe("요소 표현 행렬: 클립보드 표 옆 블록", () => {
+  for (const surface of BESIDE_TABLE_SURFACES) {
+    for (const bundle of Object.keys(BUNDLES) as BundleName[]) {
+      defineCell("클립보드 표 옆", surface, bundle, clipboardBesideTableLeaf);
     }
   }
 });

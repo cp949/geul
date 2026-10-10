@@ -34,9 +34,13 @@ import {
   splitListItemChildren,
 } from "../html/list-block-builder.js";
 import {
+  blockPresentation,
   type CellPresentation,
   cellPresentation,
+  promotedFormat,
+  type TextFormat,
 } from "../html/element-presentation.js";
+import { textBlockPropsFromElement } from "../html/import-html-helpers.js";
 import {
   asRoot,
   flattenBlockBoundaryTagNames,
@@ -160,6 +164,23 @@ const visibleText = (content: InlineContent): string =>
     .map((item) => item.text)
     .join("");
 
+// 표 밖 블록 요소(p·h1~h6·li) 자신의 style 색이다(Issue #343). importHtml과
+// 같은 읽기를 쓴다. style만 읽고 data-geul-*와 정렬은 읽지 않는다. li가 승격한
+// p의 색은 li 색을 이긴다.
+const blockColorsFromElement = (
+  element: HtmlElementNode,
+  promoted?: HtmlElementNode,
+): { textColor?: string; backgroundColor?: string } => {
+  const { textColor, backgroundColor } = textBlockPropsFromElement(element, {
+    styleOnly: true,
+    promoted,
+  });
+  return {
+    ...(textColor === undefined ? {} : { textColor }),
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+  };
+};
+
 const blockSequenceFromNodes = (
   nodes: readonly HtmlNode[],
   tables: readonly HtmlElementNode[],
@@ -186,9 +207,18 @@ const blockSequenceFromNodes = (
   // 인라인 콘텐츠로 만든다. 문단 생성과 heading 분기(h1~h6)가 이 정규화를
   // 공유한다 — 누락되면 model의 isValidInlineText가 거절하는 코드포인트가
   // 남아 readEditorDocument에서 throw된다(editor 영구 desync).
-  const normalizedInlineContent = (segmentNodes: HtmlNode[]): InlineContent => {
+  // baseFormat은 블록 요소 자신의 style 서식이다. 글자 마크가 된다(Issue #343).
+  const normalizedInlineContent = (
+    segmentNodes: HtmlNode[],
+    baseFormat?: TextFormat,
+  ): InlineContent => {
     collapseHtmlWhitespace(segmentNodes);
-    return normalizeCellContent(inlineContentFromNodes(segmentNodes));
+    return normalizeCellContent(
+      inlineContentFromNodes(
+        segmentNodes,
+        baseFormat === undefined ? undefined : { baseFormat },
+      ),
+    );
   };
 
   // li 안 "block-level" 판정 — splitListItemChildren이 content/children을
@@ -235,11 +265,16 @@ const blockSequenceFromNodes = (
       }
       const flushed = flushNonItemRun();
       if (!flushed.ok) return flushed;
-      const { contentNodes, childrenNodes } = splitListItemChildren(
+      const { contentNodes, childrenNodes, promoted } = splitListItemChildren(
         child,
         isBlockLevelNode,
       );
-      const content = normalizedInlineContent(contentNodes);
+      // li와 승격한 p의 style을 읽는다. p가 안쪽이라 이긴다(importHtml과 같다).
+      const content = normalizedInlineContent(
+        contentNodes,
+        promotedFormat(child, promoted),
+      );
+      const colors = blockColorsFromElement(child, promoted);
       const childrenResult = blocksFromNodeList(childrenNodes);
       if (!childrenResult.ok) return childrenResult;
       const children = childrenResult.value;
@@ -250,11 +285,13 @@ const blockSequenceFromNodes = (
               type: "numberedListItem",
               content,
               ...(startNumber === undefined ? {} : { startNumber }),
+              ...colors,
               ...(children.length > 0 ? { children } : {}),
             }
           : {
               type: "bulletListItem",
               content,
+              ...colors,
               ...(children.length > 0 ? { children } : {}),
             },
       );
@@ -278,19 +315,38 @@ const blockSequenceFromNodes = (
       // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
       // dataGeulBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
       // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
+      // simpleBoundary는 p 자신의 style 색·서식을 읽는다(Issue #343).
+      // paragraph의 origin(블록 자식 없는 div)은 읽지 않는다. 범위 밖이다.
       if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
-        const content = normalizedInlineContent(segment.nodes);
+        const source =
+          segment.kind === "simpleBoundary" ? segment.node : undefined;
+        const content = normalizedInlineContent(
+          segment.nodes,
+          source === undefined ? undefined : blockPresentation(source).format,
+        );
         const text = visibleText(content);
         if (hasSubstantialText(text)) {
-          blocks.push({ type: "paragraph", content });
+          blocks.push({
+            type: "paragraph",
+            content,
+            ...(source === undefined ? {} : blockColorsFromElement(source)),
+          });
         }
         continue;
       }
       if (segment.kind === "heading") {
-        const content = normalizedInlineContent(segment.nodes);
+        const content = normalizedInlineContent(
+          segment.nodes,
+          blockPresentation(segment.node).format,
+        );
         const text = visibleText(content);
         if (!hasSubstantialText(text)) continue;
-        blocks.push({ type: "heading", level: segment.level, content });
+        blocks.push({
+          type: "heading",
+          level: segment.level,
+          content,
+          ...blockColorsFromElement(segment.node),
+        });
         continue;
       }
       // 클립보드 정책은 isDividerTag를 넘기지 않아 도달하지 않는다 — 공유

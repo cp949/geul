@@ -40,7 +40,7 @@ import {
   splitListItemChildren,
   splitQuoteChildren,
 } from "./import-html-wrappers.js";
-import { blockPresentation, type TextFormat } from "./element-presentation.js";
+import { blockPresentation, promotedFormat } from "./element-presentation.js";
 import {
   type HtmlElementNode,
   type HtmlNode,
@@ -385,17 +385,6 @@ const blocksFromSegments = (
 
   return blocks;
 };
-
-// 블록 요소의 서식에 content로 승격한 p의 서식을 안쪽 우선으로 겹친다. p는
-// 블록 요소 안쪽이다. 굵기·기울임은 p가 이기고(끄는 값 포함) 밑줄·취소선은
-// 합집합이다(Issue #342).
-const promotedFormat = (
-  node: HtmlElementNode,
-  promoted: HtmlElementNode | undefined,
-): TextFormat => ({
-  ...blockPresentation(node).format,
-  ...(promoted === undefined ? {} : blockPresentation(promoted).format),
-});
 
 // sanitized li 하나를 목록 블록으로 만든다. children depth가 model 상한에
 // 닿으면 부모 항목은 유지하고 초과 블록을 같은 배열의 뒤쪽 형제로 내보낸다.

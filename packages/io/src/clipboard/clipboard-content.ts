@@ -18,19 +18,37 @@ import type { TabularData } from "./tabular-data.js";
 // BulletListItemBlock.children: BlockNode[]와 동일한 유연성이라 재귀
 // 타입 참조가 필요하다. 목록 항목 안에 중첩된 표(li 안 <table>)도
 // children에 그대로 담긴다.
+//
+// textColor/backgroundColor는 블록 요소 자신의 style 색이다(Issue #343).
+// TabularCell과 같은 모양이다. 파서는 대문자 #RRGGBB만 담는다.
 export type ClipboardContentBlock =
-  | { type: "paragraph"; content: InlineContent }
-  | { type: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; content: InlineContent }
+  | {
+      type: "paragraph";
+      content: InlineContent;
+      textColor?: string;
+      backgroundColor?: string;
+    }
+  | {
+      type: "heading";
+      level: 1 | 2 | 3 | 4 | 5 | 6;
+      content: InlineContent;
+      textColor?: string;
+      backgroundColor?: string;
+    }
   | { type: "table"; data: TabularData }
   | {
       type: "bulletListItem";
       content: InlineContent;
+      textColor?: string;
+      backgroundColor?: string;
       children?: readonly ClipboardContentBlock[];
     }
   | {
       type: "numberedListItem";
       content: InlineContent;
       startNumber?: number;
+      textColor?: string;
+      backgroundColor?: string;
       children?: readonly ClipboardContentBlock[];
     };
 

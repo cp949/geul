@@ -292,6 +292,17 @@ export const blockPresentation = (node: HtmlElementNode): BlockPresentation => {
   };
 };
 
+// 블록 요소의 서식에 content로 승격한 p의 서식을 안쪽 우선으로 겹친다. p는
+// 블록 요소 안쪽이다. 굵기·기울임은 p가 이기고(끄는 값 포함) 밑줄·취소선은
+// 합집합이다(Issue #342). importHtml과 클립보드 파서가 같이 쓴다(Issue #343).
+export const promotedFormat = (
+  node: HtmlElementNode,
+  promoted: HtmlElementNode | undefined,
+): TextFormat => ({
+  ...blockPresentation(node).format,
+  ...(promoted === undefined ? {} : blockPresentation(promoted).format),
+});
+
 export type CellPresentation = {
   textColor?: string;
   backgroundColor?: string;

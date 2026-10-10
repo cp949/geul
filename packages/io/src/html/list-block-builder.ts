@@ -60,10 +60,17 @@ const textValue = (nodes: HtmlNode[]): string =>
 // 주입받는다 — clipboard-table-parser.ts는 자신이 인식하는 표·중첩 경계
 // 집합(isTableNode, isTransparentListTag, NESTED_BOUNDARY_TAG_NAMES)을
 // 그대로 조립해 넘긴다.
+//
+// promoted는 content로 승격한 그 p다. 승격하지 않았으면 없다. 호출자가 p의
+// style 색·서식을 li보다 안쪽 값으로 읽는 자리다(Issue #343).
 export const splitListItemChildren = (
   node: HtmlElementNode,
   isBlockLevelNode: (node: HtmlElementNode) => boolean,
-): { contentNodes: HtmlNode[]; childrenNodes: HtmlNode[] } => {
+): {
+  contentNodes: HtmlNode[];
+  childrenNodes: HtmlNode[];
+  promoted?: HtmlElementNode;
+} => {
   const firstSubstantialIndex = node.children.findIndex(
     (child) => isElementNode(child) || hasSubstantialText(textValue([child])),
   );
@@ -79,6 +86,7 @@ export const splitListItemChildren = (
     return {
       contentNodes: first.children,
       childrenNodes: node.children.filter((child) => child !== first),
+      promoted: first,
     };
   }
   if (isElementNode(first) && isBlockLevelNode(first)) {

@@ -937,7 +937,8 @@ describe("클립보드 문단 경로는 div 출처를 읽지 않는다", () => {
     });
   });
 
-  it("표 앞 p 문단도 같다", () => {
+  // 대조군이다. p 자신의 style은 읽는다(Issue #343). div만 읽지 않는다.
+  it("표 앞 p 문단은 자기 style 색·굵게를 읽는다", () => {
     const result = parseClipboardTable({
       html:
         '<p style="color:#ff0000;font-weight:700">intro</p>' +
@@ -947,7 +948,8 @@ describe("클립보드 문단 경로는 div 출처를 읽지 않는다", () => {
     if (!result.ok) throw new Error(result.error.code);
     expect(result.value[0]).toEqual({
       type: "paragraph",
-      content: [{ text: "intro" }],
+      textColor: "#FF0000",
+      content: [{ text: "intro", marks: [{ type: "bold" }] }],
     });
   });
 });
