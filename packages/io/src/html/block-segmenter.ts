@@ -34,10 +34,11 @@ export type BlockSegment<
   // div/li/blockquote 재귀 안에서 나온 내용)이다. 이걸 만든 특정 요소가
   // 없으므로 원본 element 참조가 없다 — import-html.ts는 이 kind만
   // 실질 텍스트 판정(비었으면 블록을 만들지 않음)을 적용한다.
-  // origin은 선택이다(Issue #334 단계 B). 블록 경계 자식이 없는 div가 그 직접
-  // 인라인 자식으로 만든 문단에만 그 div를 싣는다. 호출자가 div의 style 색·서식을
-  // 읽는 자리다. 래퍼 div(블록 자식 있음)와 ul·ol·table·li·blockquote는 싣지
-  // 않는다 — 래퍼의 색은 소스 앱의 테마 색이라 문단에 따라오면 안 된다.
+  // origin은 선택이다(Issue #334 단계 B). 블록 경계 자식이 없는 div·summary·
+  // figcaption이 그 직접 인라인 자식으로 만든 문단에만 그 요소를 싣는다. 호출자가
+  // 요소의 style 색·서식을 읽는 자리다. 래퍼 div(블록 자식 있음)와 ul·ol·table·
+  // li·blockquote는 싣지 않는다 — 래퍼의 색은 소스 앱의 테마 색이라 문단에
+  // 따라오면 안 된다.
   // clipboard-table-parser.ts는 이 필드를 읽지 않는다.
   | { kind: "paragraph"; nodes: HtmlElementContent[]; origin?: HtmlElementNode }
   // p 자신의 본문(wholesale 교체, 재귀하지 않음). node를 함께 주는 이유는
@@ -241,6 +242,15 @@ const wrapTextDescendantsInAncestors = (
     ),
   );
 };
+
+// 문단의 origin이 될 수 있는 태그다(Issue #342). 정책이 문단 경계로 다루는
+// 요소 중 style 색·서식을 문단이 이어받는 것들이다. summary·figcaption은 import
+// 정책만 문단 경계로 쓰므로 클립보드 경로에는 영향이 없다.
+const paragraphOriginTagNames: ReadonlySet<string> = new Set([
+  "div",
+  "summary",
+  "figcaption",
+]);
 
 export function segmentBlocks<Level extends number = number>(
   nodes: readonly HtmlNode[],
@@ -472,7 +482,8 @@ export function segmentBlocks<Level extends number = number>(
         // 블록 경계 자식이 없는 div만 자기 문단의 origin이 된다. 이 경우 walk는
         // 자식을 pending에만 쌓아 위 flush가 비운 pending이 이 div의 문단이다.
         flush(
-          node.tagName === "div" && !containsAnyBlockBoundary(node.children)
+          paragraphOriginTagNames.has(node.tagName) &&
+            !containsAnyBlockBoundary(node.children)
             ? node
             : undefined,
         );

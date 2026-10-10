@@ -733,7 +733,10 @@ const blocksFromNodes = (
       // summary의 warning이 뒤바뀔 수 있었다).
       const id =
         propertyString(details.summaryNode, "dataGeulBlockId") ?? createId();
-      const content = paragraphContentFromNodes(details.summaryNode.children);
+      const content = paragraphContentFromNodes(
+        details.summaryNode.children,
+        blockPresentation(details.summaryNode).format,
+      );
       blocks.push({
         id,
         type: "toggleListItem",

@@ -83,12 +83,16 @@ export const htmlImportSanitizeSchema = {
       "dataGeulCollapsed",
       "open",
     ],
+    // summary·figcaption의 style은 색을 블록 속성으로, 서식을 안쪽 마크로
+    // 읽으려고 남긴다(Issue #342). 읽기 전용이라 경고 기준에는 없다.
     summary: [
       "dataGeulBlockId",
       "dataGeulTextColor",
       "dataGeulBackgroundColor",
       "dataGeulTextAlignment",
+      "style",
     ],
+    figcaption: ["style"],
     // file, 또는 showPreview:false로 강등된 image/video/audio가 bare 시각
     // 태그일 때 data-geul-*를 직접 갖는다(RD-001-DELTA-01 export 계약) — 기존
     // href는 공유 목록(htmlAllowedAttributes.a)에 이미 있어 스프레드로

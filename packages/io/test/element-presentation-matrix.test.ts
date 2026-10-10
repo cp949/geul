@@ -8,9 +8,8 @@
  * - 같은 선언은 어느 표면에 두어도 같은 글자 서식을 낸다. 기대값은 묶음마다 하나다.
  * - `importHtml`은 11개 표면 전부, `parseClipboardTable`은 표 표면 4개(`td`, `tr`,
  *   `table`, 셀 안 `p`)에 건다.
- * - 아직 고치지 않은 칸은 `KNOWN_DEFECTS`에 소유 RD와 함께 적고 `it.fails`로 건다.
- *   그 칸을 고치는 RD가 목록에서 지우면 일반 `it`이 된다. 칸이 예상보다 먼저
- *   고쳐지면 `it.fails`가 실패해 알려 준다.
+ * - 아직 고치지 않은 칸은 `KNOWN_DEFECTS`에 적고 `it.fails`로 건다. 지금은 비어
+ *   있다. 칸이 예상보다 먼저 고쳐지면 `it.fails`가 실패해 알려 준다.
  *
  * 기대값은 Chromium `getComputedStyle` 실측이다.
  * - 실측일: 2026-10-10, Chromium 153.0.8010.12(playwright 1.63).
@@ -103,32 +102,12 @@ type BundleName = keyof typeof BUNDLES;
 
 type Path = "importHtml" | "클립보드";
 
-type Owner = "RD-004";
-
-/** 경로·표면 목록·묶음 목록의 곱을 소유 RD에 묶는다. */
-const defects = (
-  path: Path,
-  surfaces: readonly SurfaceName[],
-  bundles: readonly BundleName[],
-  owner: Owner,
-): Record<string, Owner> =>
-  Object.fromEntries(
-    surfaces.flatMap((surface) =>
-      bundles.map((bundle) => [`${path} ${surface} × ${bundle}`, owner]),
-    ),
-  );
-
-const ALL_BUNDLES = Object.keys(BUNDLES) as BundleName[];
-/** 끄는 값을 뺀 묶음이다. 끄는 값은 이미 모든 표면에서 읽는다. */
-const READ_BUNDLES = ALL_BUNDLES.filter((bundle) => bundle !== "끄는값");
 /**
- * 아직 고치지 않은 칸이다. 키는 `경로 표면 × 묶음`, 값은 고치는 RD다.
- * 칸을 고친 RD가 이 목록에서 지운다.
+ * 아직 고치지 않은 칸이다. 키는 `경로 표면 × 묶음`, 값은 고치는 곳이다.
+ * 비어 있으면 모든 칸이 Chromium과 같다. 칸을 고친 쪽이 지운다. 남은 칸은
+ * `it.fails`로 걸려 예상보다 먼저 고쳐지면 실패로 알려 준다.
  */
-const KNOWN_DEFECTS: Record<string, Owner> = {
-  // li·blockquote가 승격한 p와 summary·figcaption의 style을 읽지 않는다.
-  ...defects("importHtml", ["summary", "figcaption"], READ_BUNDLES, "RD-004"),
-};
+const KNOWN_DEFECTS: Record<string, string> = {};
 
 /** 모델 노드를 훑어 글자 `x`의 서식과 색을 모은다. 블록·셀 색은 아래로 번진다. */
 const collectLeaves = (
