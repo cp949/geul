@@ -70,7 +70,7 @@ import { useFocusEditor } from "./use-focus-editor.js";
 /**
  * 접힌 캐럿 명령을 먼저 부르고, `COMMAND_NOT_APPLICABLE`이면 기존 선택 영역
  * 명령으로 넘어간다(RD-002 결정).
- * - 이 코드는 범위 선택, `code` 배제, 색 없음 해제를 덮는다.
+ * - 이 코드는 범위 선택과 색 없음 해제를 덮는다. `code`는 다른 mark와 공존하므로 이 코드를 받지 않는다(Issue #349).
  * - 기존 명령이 그 경우를 이어받는다.
  * - `CODE_BLOCK_MARK_NOT_ALLOWED`와 `INVALID_COLOR`는 넘기지 않는다. 기존 명령도 같은 이유로 거절한다.
  */

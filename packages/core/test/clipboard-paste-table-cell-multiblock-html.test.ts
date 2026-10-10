@@ -17,7 +17,7 @@
  *   같은 평탄화로 넣는다(`<pre>` 단독은 개행이 hardBreak로 바뀌었다)
  * - 한 블록 html(Issue #316) 색 마크·`<pre>` 개행·소스 개행과 줄 0개 입력
  * - H11 무효 문자 정리(정리 뒤 줄이 1개여도 셀에 넣음)
- * - F1·F2·F4 개행·공백뿐인 문단 접기, 줄 1개만 남는 html, 마크 정규화
+ * - F1·F2·F4 개행·공백뿐인 문단 접기, 줄 1개만 남는 html, 마크 공존
  *   (Issue #304 리뷰)
  * - H13 dispatch 1회·undo 1회·삽입 끝 캐럿·pasteHandler 미호출
  * - H14 서식 없이 붙여넣기·표 밖은 이전과 같음. 셀 위 drop은 Issue #311이
@@ -371,8 +371,8 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
     );
   });
 
-  describe("마크 정규화(Issue #304 리뷰 F4)", () => {
-    it("bold와 code가 함께인 텍스트는 code만 남고 문서가 스키마를 통과한다", () => {
+  describe("마크 공존(Issue #304 리뷰 F4, Issue #349로 정정)", () => {
+    it("bold와 code가 함께인 텍스트는 둘 다 남고 문서가 스키마를 통과한다", () => {
       const result = pasteAtCellEnd(
         "<p><code><b>x</b></code></p><p>y</p>",
         "x\ny",
@@ -380,7 +380,7 @@ describe("표 셀 안 여러 블록 html 붙여넣기(Issue #304)", () => {
 
       expect(kindsOf(result.tiptap, "t-r0c0")).toEqual([
         "cell",
-        "x*code",
+        "x*bold*code",
         "br",
         "y",
       ]);

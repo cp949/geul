@@ -229,33 +229,33 @@ describe("접힌 캐럿 mark 거절", () => {
   );
 });
 
-describe("접힌 캐럿 code mark의 상호 배제", () => {
-  it("code를 설정하면 앞서 설정한 다른 stored mark를 대체한다", () => {
+describe("접힌 캐럿 code mark와 다른 mark의 공존", () => {
+  it("code를 설정하면 앞서 설정한 다른 stored mark를 지우지 않고 함께 둔다 (Issue #349)", () => {
     const { editor, tiptap, listener } = mountedAtCaret();
     expect(editor.commands.toggleCaretMark("bold")).toEqual(ok);
 
     expect(editor.commands.toggleCaretMark("code")).toEqual(ok);
 
     expect(tiptap.state.storedMarks?.map((mark) => mark.type.name)).toEqual([
+      "bold",
       "code",
     ]);
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it("code가 stored mark이면 다른 mark는 COMMAND_NOT_APPLICABLE로 거절하고 상태를 바꾸지 않는다", () => {
+  it("code가 stored mark이면 다른 mark도 거절하지 않고 함께 둔다 (Issue #349)", () => {
     const fixture = mountedAtCaret();
     expect(fixture.editor.commands.toggleCaretMark("code")).toEqual(ok);
     fixture.listener.mockClear();
-    const before = stateSnapshot(fixture);
 
     for (const type of ["bold", "italic", "underline", "strike"] as const) {
-      expect(fixture.editor.commands.toggleCaretMark(type)).toEqual(
-        notApplicable("toggleCaretMark"),
-      );
+      expect(fixture.editor.commands.toggleCaretMark(type)).toEqual(ok);
     }
 
-    expect(stateSnapshot(fixture)).toEqual(before);
-    expect(fixture.listener).not.toHaveBeenCalled();
+    expect(
+      fixture.tiptap.state.storedMarks?.map((mark) => mark.type.name).sort(),
+    ).toEqual(["bold", "code", "italic", "strike", "underline"]);
+    expect(fixture.listener).toHaveBeenCalledTimes(4);
   });
 
   it("code가 stored mark이어도 색상은 허용하고 두 mark를 함께 둔다 (Issue #347)", () => {

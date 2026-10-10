@@ -3,16 +3,17 @@
  * model은 두 마크의 공존을 허용하지만, 편집기 스키마의 Code 마크는 모든
  * 마크와 배타였다. 그래서 `doc.check()`가 `Invalid collection of marks for
  * node text: code,textColor`를 던졌다. Code 마크의 excludes에서 색 마크 둘만
- * 뺀 뒤의 계약이다.
+ * 뺀 뒤의 계약이다. 이후 Issue #349가 excludes를 비워 code가 다섯 서식 마크와도
+ * 공존한다. 그 조합은 code-mark-full-coexistence.test.ts가 소유한다.
  *
  * 다루는 축은 다음과 같다.
  * - 표 셀 안 clipboard 붙여넣기: 문단 블록색+code, 셀 content의 code+색
  * - 표 셀 안 html 붙여넣기: `<code style=color>`, `<td><code style=color>`
  * - 표 밖 붙여넣기와 초기 문서 로드
  * - tiptapToModel 결과가 code와 색 마크를 잃지 않음
- * - bold+code는 이전과 같이 스키마가 거절함(범위 밖, 배타 유지)
+ * - bold·italic·underline·strike·link와 code는 스키마가 받음(Issue #349)
  * - 캐럿·범위 code 토글과 색 적용 명령의 동작
- * - 커스텀 스타일 마크는 excludes 목록에 이름이 없어 code와 공존함
+ * - 커스텀 스타일 마크는 code와 공존함
  */
 import type { ClipboardContentBlock } from "@cp949/geul-io";
 import type { Block, InlineContent } from "@cp949/geul-model";
@@ -272,8 +273,8 @@ describe("tiptapToModel이 code와 색 마크를 잃지 않는다", () => {
   });
 });
 
-describe("bold와 code는 스키마가 계속 배타로 둔다", () => {
-  it("bold+code 문단을 스키마로 검증하면 이전처럼 거절한다", () => {
+describe("bold와 code는 스키마가 함께 받는다(Issue #349)", () => {
+  it("bold+code 문단을 스키마로 검증하면 통과한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const schema = editor.schema;
 
@@ -283,10 +284,10 @@ describe("bold와 code는 스키마가 계속 배타로 둔다", () => {
         schema.marks.code!.create(),
       ]),
     ]);
-    expect(() => paragraph?.check()).toThrow(/Invalid collection of marks/);
+    expect(() => paragraph?.check()).not.toThrow();
   });
 
-  it("italic·underline·strike·link도 code와 함께 있으면 스키마가 거절한다", () => {
+  it("italic·underline·strike·link도 code와 함께 있으면 스키마가 받는다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
     const schema = editor.schema;
 
@@ -300,9 +301,7 @@ describe("bold와 code는 스키마가 계속 배타로 둔다", () => {
       const paragraph = schema.nodes.paragraph?.create(null, [
         schema.text("x", [mark, schema.marks.code!.create()]),
       ]);
-      expect(() => paragraph?.check(), name).toThrow(
-        /Invalid collection of marks/,
-      );
+      expect(() => paragraph?.check(), name).not.toThrow();
     }
   });
 });
@@ -436,7 +435,7 @@ describe("code와 색 조합의 범위 명령", () => {
     ]);
   });
 
-  it("bold 글자에 toggleCode를 적용하면 bold가 빠지고 code만 남는다(배타 유지)", () => {
+  it("bold 글자에 toggleCode를 적용하면 bold를 지우지 않고 code를 더한다(Issue #349)", () => {
     const fixture = mountedParagraph(
       [{ text: "abc", marks: [{ type: "bold" }] }],
       0,
@@ -446,7 +445,7 @@ describe("code와 색 조합의 범위 명령", () => {
     expect(fixture.editor.commands.toggleCode()).toEqual(ok);
 
     expect(contentOfB1(fixture)).toEqual([
-      { text: "abc", marks: [{ type: "code" }] },
+      { text: "abc", marks: [{ type: "bold" }, { type: "code" }] },
     ]);
     expectSchemaValid(fixture.tiptap);
   });
@@ -487,14 +486,16 @@ describe("code와 색 조합의 접힌 캐럿 명령", () => {
     ]);
   });
 
-  it("code stored mark이면 bold는 계속 COMMAND_NOT_APPLICABLE로 거절한다", () => {
+  it("code stored mark이면 bold도 거절하지 않고 함께 둔다(Issue #349)", () => {
     const fixture = mountedParagraph([{ text: "abc" }], 1);
     expect(fixture.editor.commands.toggleCaretMark("code")).toEqual(ok);
 
-    expect(fixture.editor.commands.toggleCaretMark("bold")).toEqual({
-      ok: false,
-      error: { code: "COMMAND_NOT_APPLICABLE", command: "toggleCaretMark" },
-    });
+    expect(fixture.editor.commands.toggleCaretMark("bold")).toEqual(ok);
+
+    expect(fixture.tiptap.state.storedMarks?.map((m) => m.type.name)).toEqual([
+      "bold",
+      "code",
+    ]);
   });
 
   it("code+textColor 글자 안 캐럿에서 PM 마크는 둘이고 getSelectionMarks는 code만 보고한다", () => {

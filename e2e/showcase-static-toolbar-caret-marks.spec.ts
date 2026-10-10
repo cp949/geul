@@ -88,20 +88,22 @@ test("접힌 캐럿에서 글자색을 고르면 이어 입력한 텍스트에 �
   await expect(colored).toHaveCSS("color", "rgb(217, 48, 37)");
 });
 
-test("접힌 캐럿에서 Inline code를 누르면 Bold 표시가 꺼진다", async ({
+test("접힌 캐럿에서 Inline code를 눌러도 Bold 표시가 유지된다", async ({
   page,
 }) => {
   const { editable, paragraph } = await openParagraph(page);
   await placeCaretAtEnd(page, paragraph);
   const bold = page.getByRole("button", { name: "Bold" });
+  const code = page.getByRole("button", { name: "Inline code" });
 
   await bold.click();
   await expect(bold).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Inline code" }).click();
+  await code.click();
   await page.keyboard.type(TYPED);
 
-  // code는 다른 mark와 함께 걸 수 없어 stored Bold가 대체된다.
-  await expect(bold).toHaveAttribute("aria-pressed", "false");
+  // code는 다른 mark를 배제하지 않아 stored Bold가 그대로 남는다(Issue #349).
+  await expect(bold).toHaveAttribute("aria-pressed", "true");
+  await expect(code).toHaveAttribute("aria-pressed", "true");
   await expect(editable.locator("code")).toHaveText(TYPED);
-  await expect(editable.locator("strong")).toHaveCount(0);
+  await expect(editable.locator("strong")).toHaveText(TYPED);
 });

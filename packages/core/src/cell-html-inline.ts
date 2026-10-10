@@ -8,7 +8,6 @@ import {
 } from "@cp949/geul-model";
 import {
   Fragment,
-  Mark,
   type Node as PmNode,
   type Schema,
   Slice,
@@ -42,8 +41,7 @@ import { sanitizeSliceInlineText } from "./plain-text-paste.js";
 // - 공백(NBSP 포함)이나 hardBreak뿐인 줄은 빈 줄이라 버린다. 이 판정 말고는
 //   개행에 붙지 않은 앞뒤 공백을 자르지 않는다.
 // - 줄 사이에 hardBreak 하나를 끼운다.
-// - 줄 안 마크는 유지한다. 마크 집합은 스키마 규칙(excludes)으로 다시 쌓는다.
-//   bold와 code가 함께면 code만 남는다.
+// - 줄 안 마크는 그대로 유지한다. code도 다른 마크를 지우지 않는다(Issue #349).
 // - text run이 아닌 inline 원소는 모두 버린다. 셀 스키마가 받는 inline atom도
 //   포함한다. 셀 스키마에 없는 마크도 버린다. CellSelection 경로(Issue #308)도
 //   등록된 custom inline을 버린다. 보존하려면 별도 설계가 필요하다.
@@ -108,16 +106,6 @@ const collectLines = (
   }
   return true;
 };
-
-// 마크 집합을 스키마 규칙으로 다시 쌓는다. nodeFromJSON은 마크 집합을 검사하지
-// 않아 bold와 code가 함께인 무효 집합이 그대로 남는다(check 단계에서 던진다).
-// Mark.addToSet이 excludes를 적용해 code만 남긴다.
-const normalizeMarks = (node: PmNode): PmNode =>
-  node.marks.length < 2
-    ? node
-    : node.mark(
-        node.marks.reduce((set, mark) => mark.addToSet(set), Mark.none),
-      );
 
 // 빈 줄 후보인지 본다. hardBreak와 공백뿐인 텍스트만 있으면 빈 줄이다.
 const isBlankLine = (nodes: readonly PmNode[]): boolean =>
@@ -199,7 +187,7 @@ const lineToNodes = (schema: Schema, source: LineSource): PmNode[] => {
     );
   }
   const created: PmNode[] = inlineContentToTiptap(runs).map((json) =>
-    normalizeMarks(schema.nodeFromJSON(json)),
+    schema.nodeFromJSON(json),
   );
   const nodes: PmNode[] = [];
   sanitizeSliceInlineText(

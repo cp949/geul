@@ -12,7 +12,7 @@
  * - 줄 안 마크 유지와 셀에 없는 inline 원소·마크 제거
  * - 무효 문자 정리
  * - 개행·공백뿐인 줄 접기와 줄 앞뒤 hardBreak 제거
- * - 마크 정규화: bold와 code가 함께면 code만 남김
+ * - 마크 공존: bold와 code가 함께여도 둘 다 남고 셀 스키마를 통과함(Issue #349)
  * - 발동 조건: content 블록 1개 이상이고 정리 뒤 줄 1개 이상. 표가 있으면 null
  * - 최소 블록 수 인자(Issue #308, #316): CellSelection 경로는 1을 넘겨 한 블록
  *   html도 변환한다. 기본값도 1이다(Issue #316이 2에서 낮췄다)
@@ -824,9 +824,9 @@ describe("buildCellHtmlInline", () => {
     ).not.toThrow();
   });
 
-  // Issue #304 리뷰 F4: bold와 code가 함께 있으면 PM 스키마가 거절하는 마크
-  // 집합이다. 한 줄 이전 경로와 같이 code만 남긴다.
-  it("bold와 code가 함께인 텍스트는 code만 남아 셀 스키마를 통과한다", () => {
+  // Issue #304 리뷰 F4는 bold와 code를 code만 남겼다. 스키마가 둘의 공존을
+  // 받으므로(Issue #349) 마크를 그대로 둔다. 마크 순서는 스키마 rank 순이다.
+  it("bold와 code가 함께인 텍스트는 둘 다 남아 셀 스키마를 통과한다", () => {
     const schema = cellSchema();
     const fragment = buildCellHtmlInline(schema, [
       {
@@ -843,7 +843,11 @@ describe("buildCellHtmlInline", () => {
 
     expect(fragment).not.toBeNull();
     if (fragment === null) return;
-    expect(kindsOfFragment(fragment)).toEqual(["x*code", "br", "y*code"]);
+    expect(kindsOfFragment(fragment)).toEqual([
+      "x*bold*code",
+      "br",
+      "y*bold*code",
+    ]);
     expect(() =>
       schema.nodes.tableCell?.create(null, fragment).check(),
     ).not.toThrow();

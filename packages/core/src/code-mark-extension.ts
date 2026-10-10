@@ -1,24 +1,31 @@
 import StarterKit from "@tiptap/starter-kit";
 
 // StarterKit의 code 마크는 Tiptap 기본값(excludes "_")이라 다른 모든 마크와
-// 배타다. model은 code와 textColor/backgroundColor의 공존을 허용하고(
-// canonicalizeTextMarks), QA-144는 `<code style="background-color">`를
-// 색 마크로 읽는다고 정했다. 스키마가 그 결과를 거절하면 doc.check()가
-// `Invalid collection of marks for node text`를 던진다(Issue #347).
+// 배타다. model은 code와 다른 마크의 공존을 허용한다(canonicalizeTextMarks).
+// io와 마크다운도 같다. 스키마가 거절하면 두 증상이 나온다.
+// - 초기 문서 로드: doc.check()가 `Invalid collection of marks for node text`를
+//   던진다.
+// - 붙여넣기: 처리되지 않은 RangeError가 난다.
+// 그래서 스키마를 model에 맞춘다(Issue #347, #349).
 //
-// 색 마크 둘만 배타 목록에서 뺀다. bold italic underline strike link는 계속
-// 배타다. 코드 글자에 굵게·링크 등을 허용하는 것은 이번 범위 밖이다.
-// 커스텀 스타일 마크는 목록에 이름이 없어 code와 공존할 수 있다. model이
-// 이미 허용하는 조합이다.
+// excludes를 빈 문자열로 둔다. code가 아무 마크도 배제하지 않는다. bold italic
+// underline strike link, 색 마크 둘, 커스텀 스타일 마크가 모두 공존한다.
+// excludes가 이름을 나열하지 않으므로 해당 마크를 끄는 옵션이 스키마 생성을
+// 깨지 않는다.
+//
+// 함정:
+// - 빈 문자열은 falsy다. `excludes: ""`를 무시하는 경로가 있으면 기본값 "_"로
+//   돌아간다. code-mark-full-coexistence.test.ts가 excluded 목록이 빈 것을
+//   고정한다.
+// - 명령 코드에 code 전용 대체 규칙을 두지 않는다. toggleCode와 toggleBold 등은
+//   스키마를 따른다. 마크를 서로 지우지 않는다.
 //
 // @tiptap/extension-code는 core의 직접 의존이 아니다. 새 의존을 더하지
 // 않으려고 StarterKit이 만든 code 마크를 addExtensions에서 받아 excludes만
-// 바꾼다. code: false 같은 옵션은 parent가 처리한다. excludes가 이름으로
-// 가리키는 bold italic underline strike link 중 하나라도 끄면 스키마 생성이
-// `Unknown mark type`으로 던진다. 프로덕션 조립은 이 다섯을 끄지 않는다.
-const CODE_EXCLUDES = "bold italic underline strike link";
+// 바꾼다. code: false 같은 옵션은 parent가 처리한다.
+const CODE_EXCLUDES = "";
 
-export const StarterKitWithCodeColor = StarterKit.extend({
+export const StarterKitWithCodeMarks = StarterKit.extend({
   addExtensions() {
     return (this.parent?.() ?? []).map((extension) =>
       extension.name === "code"

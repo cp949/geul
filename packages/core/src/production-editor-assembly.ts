@@ -23,7 +23,7 @@ import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
 import { CalloutBackgroundPresentationExtension } from "./callout-background-presentation-extension.js";
 import { CalloutExtension } from "./callout-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
-import { StarterKitWithCodeColor } from "./code-mark-extension.js";
+import { StarterKitWithCodeMarks } from "./code-mark-extension.js";
 import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockHighlightExtension } from "./code-block-highlight-extension.js";
@@ -528,7 +528,7 @@ export const createProductionEditor = (options: {
     injectCSS: false,
     editable: options.editable ?? true,
     extensions: [
-      StarterKitWithCodeColor.configure({
+      StarterKitWithCodeMarks.configure({
         blockquote: false,
         bulletList: false,
         codeBlock: false,

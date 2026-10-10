@@ -26,7 +26,7 @@ import {
 } from "../src/block-container-extension.js";
 import { BlockIdExtension } from "../src/block-id-extension.js";
 import { CodeBlockExtension } from "../src/code-block-extension.js";
-import { StarterKitWithCodeColor } from "../src/code-mark-extension.js";
+import { StarterKitWithCodeMarks } from "../src/code-mark-extension.js";
 import {
   BulletListItemExtension,
   NumberedListItemExtension,
@@ -190,7 +190,7 @@ afterEach(destroyFixtureEditorsForTest);
  * 얻게 한다(중복 정의는 두 목록이 갈릴 위험을 만든다).
  */
 const TABLE_FIXTURE_EXTENSIONS: Extensions = [
-  StarterKitWithCodeColor.configure({
+  StarterKitWithCodeMarks.configure({
     blockquote: false,
     bulletList: false,
     codeBlock: false,
