@@ -228,7 +228,7 @@ const blockSequenceFromNodes = (
   // import-html.ts의 isBlockLevelElement와 같은 원칙 — 단 표 판정은
   // 이 파일의 tableSet 멤버십을 쓴다).
   // p(isSimpleBoundary)와 h1~h6(headingLevelFromTagName)도 블록이다.
-  // 빠지면 li 첫 자식이 아닌 p·제목의 글자가 항목 content에 합쳐지고
+  // 빠지면 승격되지 않는 p·제목의 글자가 항목 content에 합쳐지고
   // 자기 style을 잃는다(Issue #346).
   const isBlockLevelNode = (node: HtmlElementNode): boolean =>
     policy.isTableNode(node) ||
