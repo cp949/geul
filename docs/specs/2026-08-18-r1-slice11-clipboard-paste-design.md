@@ -130,7 +130,21 @@ export const parseClipboardTable = (input: {
 - 글자 사이 제목(`t<h3>H</h3>u`)은 `importHtml`과 같이 항목 content `t`, 자식 제목 `H`, 자식 문단 `u`가 된다.
 - `span`이 감싼 `p`는 이전과 같다. `importHtml`도 인라인으로 읽는다.
 - 차이: 내용 없는 `p`·`h1`–`h6`(빈 요소, 공백뿐, `<br>`만 든 `p`)는 클립보드가 자식 블록을 만들지 않는다. `importHtml`은 빈 자식 블록을 만든다.
-- 읽지 않는 것: 블록 `data-geul-*`(색·정렬). `li` 안 `pre`·`hr`는 `codeBlock`·`divider` 클립보드 블록 타입이 없어 글자가 붙거나 사라진다.
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬). `li` 안 `pre`·`hr`는 Issue #351이 자식 블록으로 읽는다(아래 문단).
+
+구현 반영(목록 항목 안 pre·hr의 자식 블록, Issue #351): 위 Issue #346 문단은 `li` 안 `pre`·`hr`를 클립보드 블록 타입이 없어 글자가 붙거나 사라지는 것으로 적었다. `ClipboardContentBlock`에 `codeBlock`·`divider`가 없었고, `isBlockLevelNode`가 `pre`·`hr`를 블록으로 보지 않았다.
+
+- `ClipboardContentBlock`에 `{ type: "codeBlock"; text: string; language?: string }`와 `{ type: "divider" }`를 더한다. 목록 항목의 children에서만 나온다.
+- `li` 자식용 세그먼트 정책(`listChildPolicy`)이 기존 정책에 `isDividerTag`(`hr`)와 `isCodeBlockTag`(`pre`)를 더한다. 최상위와 `li`가 아닌 자식 run은 기존 정책이다. 표 밖 최상위 `pre`·`hr`의 결과는 바뀌지 않는다.
+- `isBlockLevelNode`가 `pre`·`hr`도 블록으로 본다. 첫 자식이 `pre`·`hr`이면 항목 content는 비고 자식 블록만 남는다. `div`·`blockquote`·중첩 목록 안 `pre`·`hr`도 자식 블록이다.
+- `codeBlock.text`는 `br`을 줄바꿈으로 읽고 줄바꿈·들여쓰기·Tab을 보존한다. 공백을 접지 않고 마크를 싣지 않는다. model의 codeBlock 소스 계약이 거부하는 문자만 지운다.
+- 내용 없는 `pre`(빈 요소, 공백뿐)는 만들지 않는다. `hr`는 항상 `divider`다.
+- `language` 선택 규칙을 함수 `selectCodeBlockLanguage`로 추출해 `importHtml`과 클립보드가 공유한다. `importHtml`의 결과와 경고는 바뀌지 않는다. 클립보드는 고른 값을 model 정규형으로 바꾼다. model이 거부하는 값이면 버린다. `wrap`·`caption`·`id`·경고는 읽지 않는다.
+- core: `listChildToTiptapJson`이 `divider`(컨테이너 없이 `blockId`만)와 `codeBlock`(`blockContainer` 안 `codeBlock` 노드)을 만든다. `validateOutOfTableContent`가 `codeBlock` 글자와 `language`를 model 계약으로 검사하고 최상위의 두 타입을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다.
+- 셀 안 캐럿: `codeBlock`은 글자의 줄마다 셀 줄이고 `divider`는 줄이 없다. `countTables`는 `children`이 없는 타입을 건너뛴다.
+- 막은 타입: `containsBlockedType`가 타입 이름으로 `codeBlock`·`divider`를 판정한다. 막았으면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 처리한다.
+- 차이: `importHtml`은 빈 `pre`를 빈 `codeBlock`으로 만들 수 있고 클립보드는 만들지 않는다. `blockquote`는 클립보드에서 `quote`가 되지 않는다(Issue #350).
+- 읽지 않는 것: `li` 안 `img` 등 미디어. 클립보드에 미디어 블록 타입이 없어 사라진다.
 
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
