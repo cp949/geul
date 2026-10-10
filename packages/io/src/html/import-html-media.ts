@@ -14,8 +14,6 @@ import {
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
 import { isElementNode, textValue } from "./import-html-helpers.js";
-import { consumePreservedAttributeWarning } from "./import-html-list.js";
-import type { HtmlImportWarning } from "./import-warnings.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
 // 5종 미디어 블록 판별 타입(export-html.ts의 MediaBlock과 동형, spec §3.1,
@@ -74,19 +72,19 @@ export const isMediaNode = (node: HtmlElementNode): boolean => {
   return false;
 };
 
-// consumePreservedAttributeWarning은 li/ol/details/summary(import-html-
-// blocks.ts)와 동일 패턴이다 — htmlImportSanitizeSchema(import-html-
-// sanitize-schema.ts)의 로컬 override가 실제 허용하는 속성이라도
-// import-warnings.ts의 경고 판정은 공유 htmlAllowedAttributes만 보므로
-// (sanitizer 결합 회피 원칙) raw "제거됨" 오탐이 남는다 — media가 실제로
-// 보존한 속성만 여기서 지운다(G-CNV-002). data-geul-*는 segment.node 자신이
-// 갖고(bare 태그·div·figure 공통), src/alt/controls는 visualNode가 갖는다 —
-// figure에서는 이 둘이 다른 노드라 mediaBlockFromNode가 각각 따로 호출한다.
-const consumeMediaDataAttributeWarnings = (
-  warnings: HtmlImportWarning[],
+// 미디어 변환이 읽는 속성을 노드에 표시한다(li/ol/details/summary와 같은
+// 방식, import-html-blocks.ts). htmlImportSanitizeSchema(import-html-
+// sanitize-schema.ts)가 남기는 속성은 변환 뒤 감사(HtmlImportContext.
+// preserved.audit)가 표시 여부로 판정한다(G-CNV-002). data-geul-*는
+// segment.node 자신이 갖고(bare 태그·div·figure 공통), src/alt/controls는
+// visualNode가 갖는다 — figure에서는 이 둘이 다른 노드라 mediaBlockFromNode가
+// 각각 따로 호출한다.
+const markMediaDataAttributes = (
+  context: HtmlImportContext,
   node: HtmlElementNode,
 ): void => {
-  for (const attribute of [
+  context.preserved.mark(
+    node,
     "dataGeulBlockId",
     "dataGeulMediaType",
     "dataGeulName",
@@ -95,30 +93,26 @@ const consumeMediaDataAttributeWarnings = (
     "dataGeulPreviewWidth",
     "dataGeulTextAlignment",
     // iframe(CUS-001~004)만 쓰는 2개(DELTA-01이 sanitize allowlist에 추가) —
-    // 다른 4종은 이 값을 절대 싣지 않으므로 무차별 추가해도 안전하다(sanitize-
+    // 다른 4종은 이 값을 절대 싣지 않으므로 무차별 표시해도 안전하다(sanitize-
     // schema.ts의 mediaDataAttributeNames와 동일하게 공통 목록 하나로 관리).
     "dataGeulSrc",
     "dataGeulAspectRatio",
-  ]) {
-    consumePreservedAttributeWarning(warnings, node.tagName, attribute);
-  }
+  );
 };
 
-const consumeMediaVisualAttributeWarnings = (
-  warnings: HtmlImportWarning[],
+const markMediaVisualAttributes = (
+  context: HtmlImportContext,
   visualNode: HtmlElementNode,
 ): void => {
   if (visualNode.tagName === "img") {
-    consumePreservedAttributeWarning(warnings, "img", "src");
-    consumePreservedAttributeWarning(warnings, "img", "alt");
+    context.preserved.mark(visualNode, "src", "alt");
     return;
   }
   if (visualNode.tagName === "video" || visualNode.tagName === "audio") {
-    consumePreservedAttributeWarning(warnings, visualNode.tagName, "src");
-    consumePreservedAttributeWarning(warnings, visualNode.tagName, "controls");
+    context.preserved.mark(visualNode, "src", "controls");
   }
-  // <a>의 href는 공유 htmlAllowedAttributes.a에 이미 있어 오탐이 나지
-  // 않는다 — 소비할 것이 없다.
+  // <a>의 href는 공유 htmlAllowedAttributes.a에 이미 있어 감사 대상이 아니다 —
+  // 표시할 것이 없다.
 };
 
 // wrapper의 data-geul-src를 resolveIframeEmbedDecision으로 재검증한다
@@ -170,9 +164,9 @@ export const mediaBlockFromNode = (
     (child) => child.tagName === "figcaption",
   );
 
-  consumeMediaDataAttributeWarnings(context.warnings, node);
+  markMediaDataAttributes(context, node);
   if (visualNode !== undefined) {
-    consumeMediaVisualAttributeWarnings(context.warnings, visualNode);
+    markMediaVisualAttributes(context, visualNode);
   }
 
   const mediaType = mediaTypeFromNode(node) ?? "file";

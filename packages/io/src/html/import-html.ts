@@ -93,12 +93,16 @@ export const importHtml = (
     // 변환기가 글자를 정제하는 지점에서 UNSAFE_CODE_POINT_REMOVED를 낸다
     // (RD-001). 수집기 경고 뒤에 변환 순서로 쌓인다. 접기를 마친 트리에서
     // 텍스트 노드의 sanitize 뒤 부모 태그를 읽는다.
+    const context = createImportContext(safeRoot, warnings);
     const document = documentFromRoot(
       safeRoot,
       options?.createId ?? createDefaultIdFactory(safeRoot),
-      createImportContext(safeRoot, warnings),
+      context,
       options?.iframeEmbed ?? {},
     );
+    // 변환기가 보존했다고 표시하지 않은 감사 대상 속성을 경고한다. 변환기
+    // 경고라 가장 뒤에 붙는다.
+    context.preserved.audit(safeRoot);
     const parsed = parseDocument(document);
     if (!parsed.ok) {
       return {

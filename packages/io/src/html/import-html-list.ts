@@ -1,8 +1,7 @@
 // production 편집기가 own-content div로 내는 목록류 4종(bulletListItem/
 // numberedListItem/checkListItem/toggleListItem)의 마커 판별과 블록 생성을
-// 담당한다(RD-003). raw HAST sanitize 오탐 억제(consumePreservedAttributeWarning)
-// 와 ol[start] 범위 판정(isStartNumberInRange)도 목록류가 공유하는 로직이라
-// 함께 둔다.
+// 담당한다(RD-003). ol[start] 범위 판정(isStartNumberInRange)도 목록류가
+// 공유하는 로직이라 함께 둔다.
 import {
   type BulletListItemBlock,
   type CheckListItemBlock,
@@ -15,7 +14,6 @@ import {
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
 import { paragraphContentFromNodes } from "./import-html-helpers.js";
-import type { HtmlImportWarning } from "./import-warnings.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
 // RD-003이 편입하는 목록류 4종. toggleListItem은 ListItemBlock 유니온
@@ -49,25 +47,6 @@ export const productionListItemType = (
     if (node.properties[property] !== undefined) return type;
   }
   return undefined;
-};
-
-// raw warning fact 중 sanitized 목록 변환이 실제로 소비해 보존한 속성 하나만
-// 제거한다. 전역 필터와 달리 blocksFromListElement에 도달하지 않은 standalone
-// li, 비-li ol, 표 셀 내부 목록의 속성 손실 warning은 그대로 남는다. li/ol
-// 전용이었으나 RD-005-DELTA-01에서 details/summary까지 다뤄 이름과 매개변수
-// 타입을 일반화했다.
-export const consumePreservedAttributeWarning = (
-  warnings: HtmlImportWarning[],
-  element: string,
-  attribute: string,
-): void => {
-  const index = warnings.findIndex(
-    (warning) =>
-      warning.kind === "UNSAFE_ATTRIBUTE_REMOVED" &&
-      warning.element === element &&
-      warning.attribute === attribute,
-  );
-  if (index >= 0) warnings.splice(index, 1);
 };
 
 // production 목록류 own-content div(findChildrenWrapper가 productionListItemType로

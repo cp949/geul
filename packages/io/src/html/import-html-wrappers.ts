@@ -283,6 +283,7 @@ export const findDetailsWrapper = (
 ):
   | {
       kind: "toggleListItem";
+      detailsNode: HtmlElementNode;
       summaryNode: HtmlElementNode;
       collapsed: boolean | undefined;
       childrenNodes: HtmlElementContent[];
@@ -321,5 +322,11 @@ export const findDetailsWrapper = (
   const collapsed =
     collapsedAttr === undefined ? undefined : collapsedAttr === "true";
 
-  return { kind: "toggleListItem", summaryNode, collapsed, childrenNodes };
+  return {
+    kind: "toggleListItem",
+    detailsNode: node,
+    summaryNode,
+    collapsed,
+    childrenNodes,
+  };
 };

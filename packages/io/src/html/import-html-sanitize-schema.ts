@@ -3,6 +3,7 @@
 // summary/img/figure/figcaption/video/audio 등 document-import 전용 태그·
 // 속성만 이 파일에서 추가로 허용한다.
 import {
+  htmlAllowedAttributes,
   htmlAllowedTagNames,
   htmlSanitizeSchema,
   sanitizeAllowedAttributes,
@@ -115,3 +116,29 @@ export const htmlImportSanitizeSchema = {
     ],
   },
 };
+
+const importAttributes: Record<string, string[]> =
+  htmlImportSanitizeSchema.attributes;
+
+// style과 bgColor는 읽어도 제거를 보고하는 정책이라 수집기가 계속 판정한다
+// (RD-001 결정). 감사 대상이 아니다.
+const REPORTED_EVEN_WHEN_READ_ATTRIBUTES = new Set(["style", "bgColor"]);
+
+// 변환 뒤 감사 대상인 속성인지 판정한다(RD-001). 기준:
+// - 이 schema가 남긴다.
+// - 경고 기준(htmlAllowedAttributes)에는 없다.
+// - 읽어도 보고하는 속성(위)이 아니다.
+// 수집기(import-warnings.ts)는 이 속성을 건너뛰고, 변환기가 보존했다고 표시하지
+// 않은 것만 변환 뒤 감사가 경고한다. 두 쪽이 같은 함수를 쓰므로 이 속성의
+// 경고는 정확히 한 곳에서만 나온다.
+export const isAuditedAttribute = (
+  tagName: string,
+  attribute: string,
+): boolean =>
+  !REPORTED_EVEN_WHEN_READ_ATTRIBUTES.has(attribute) &&
+  (importAttributes[tagName] ?? []).includes(attribute) &&
+  !(
+    htmlAllowedAttributes[tagName] ??
+    htmlAllowedAttributes["*"] ??
+    []
+  ).includes(attribute);

@@ -121,8 +121,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // 목록(경고 기준)에는 올리지 않는다 — data-geul-* 3종이 권위 값이다
   // (G-CNV-001). 외부 HTML은 data-geul-*가 없는 필드를 style에서 읽어야 하므로
   // sanitize 스키마에는 styleReadAttributes로 style을 남긴다(Issue #334). raw
-  // "제거됨" 경고는 이전 그대로 나오고, data-geul-* 존재를 조건으로
-  // import-html-blocks.ts가 consumePreservedAttributeWarning으로 억제한다.
+  // "제거됨" 경고는 이전 그대로 나온다.
   span: ["style"],
   // b·strong의 style은 굵기 판정(`font-weight:normal|400` 등)과 색·기울임·
   // 밑줄·취소선 마크 판정에만 쓴다(Issue #316·#320·#334, inlineElementPresentation).

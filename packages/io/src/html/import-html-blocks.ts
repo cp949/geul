@@ -28,7 +28,6 @@ import {
 } from "./import-html-helpers.js";
 import {
   buildProductionListItemBlock,
-  consumePreservedAttributeWarning,
   isStartNumberInRange,
   productionListItemType,
 } from "./import-html-list.js";
@@ -490,64 +489,27 @@ const blocksFromListElement = (
       continue;
     }
     flushNonItemRun();
-    if (propertyString(child, "dataGeulBlockId") !== undefined) {
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "li",
-        "dataGeulBlockId",
-      );
-    }
-    // TextBlockProps 3필드(RD-004 DELTA-02)도 li/dataGeulBlockId와 같은 raw
-    // 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
-    const hasTextColor =
-      propertyString(child, "dataGeulTextColor") !== undefined;
-    const hasBackgroundColor =
-      propertyString(child, "dataGeulBackgroundColor") !== undefined;
-    const hasTextAlignment =
-      propertyString(child, "dataGeulTextAlignment") !== undefined;
-    if (hasTextColor) {
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "li",
-        "dataGeulTextColor",
-      );
-    }
-    if (hasBackgroundColor) {
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "li",
-        "dataGeulBackgroundColor",
-      );
-    }
-    if (hasTextAlignment) {
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "li",
-        "dataGeulTextAlignment",
-      );
-    }
-    // style의 raw "제거됨" 오탐 억제는 import-warnings.ts의 isOwnEchoStyle이
-    // raw 노드 단위로 판정한다(Issue #179 리뷰 수정 — 위 세 data-geul-*와
-    // 달리 style은 존재 여부만으로 소비하면 서로 다른 li의 warning이 뒤바뀔
-    // 수 있었다).
+    // 이 li에서 읽는 속성을 표시한다. 표시는 이 노드에만 닿는다. style의 "제거됨"
+    // 판정은 import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 한다(Issue
+    // #179 리뷰 수정).
+    context.preserved.mark(
+      child,
+      "dataGeulBlockId",
+      "dataGeulTextColor",
+      "dataGeulBackgroundColor",
+      "dataGeulTextAlignment",
+      "dataGeulChecked",
+    );
     // data-geul-checked 존재 여부가 tag보다 우선한다 — own export는 항상
-    // <ul>에 checkListItem을 낸다(로드맵 D3). 속성이 있으면 own-format
-    // 계약이라 raw 오탐 경고도 함께 억제한다.
+    // <ul>에 checkListItem을 낸다(로드맵 D3).
     const isCheckListItem =
       propertyString(child, "dataGeulChecked") !== undefined;
-    if (isCheckListItem) {
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "li",
-        "dataGeulChecked",
-      );
-    }
     if (
       node.tagName === "ol" &&
       itemIndex === 0 &&
       Number.isInteger(explicitStart)
     ) {
-      consumePreservedAttributeWarning(context.warnings, "ol", "start");
+      context.preserved.mark(node, "start");
     }
     const startNumber =
       itemIndex === 0 && Number.isInteger(explicitStart)
@@ -656,27 +618,15 @@ const blocksFromNodes = (
       }
 
       flushPlainRun();
-      // own-format 마커·구조를 raw HAST에서도 이미 확인했으므로(findDetailsWrapper)
-      // sanitize가 details의 신규 속성 전부(공유 htmlAllowedAttributes에
-      // "details" 항목 자체가 없어 전부 raw 오탐 대상이다)를 보존한 이번
-      // 결과에 대한 raw "제거됨" 오탐만 지운다(consumePreservedAttributeWarning,
-      // li/ol과 동일 패턴).
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "details",
+      // own-format 마커·구조를 sanitized HAST에서 확인했으므로(findDetailsWrapper)
+      // details의 속성 전부를 이 변환이 읽는다. 표시한다.
+      context.preserved.mark(
+        details.detailsNode,
         "dataGeulBlockId",
-      );
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "details",
         "dataGeulToggleable",
-      );
-      consumePreservedAttributeWarning(
-        context.warnings,
-        "details",
         "dataGeulCollapsed",
+        "open",
       );
-      consumePreservedAttributeWarning(context.warnings, "details", "open");
       const children = blocksFromNodes(
         details.childrenNodes,
         createId,
@@ -685,50 +635,15 @@ const blocksFromNodes = (
         iframeEmbedConfig,
       );
 
-      if (
-        propertyString(details.summaryNode, "dataGeulBlockId") !== undefined
-      ) {
-        consumePreservedAttributeWarning(
-          context.warnings,
-          "summary",
-          "dataGeulBlockId",
-        );
-      }
-      // TextBlockProps 3필드(RD-004 DELTA-02)도 summary/dataGeulBlockId와 같은
-      // raw 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
-      const summaryHasTextColor =
-        propertyString(details.summaryNode, "dataGeulTextColor") !== undefined;
-      const summaryHasBackgroundColor =
-        propertyString(details.summaryNode, "dataGeulBackgroundColor") !==
-        undefined;
-      const summaryHasTextAlignment =
-        propertyString(details.summaryNode, "dataGeulTextAlignment") !==
-        undefined;
-      if (summaryHasTextColor) {
-        consumePreservedAttributeWarning(
-          context.warnings,
-          "summary",
-          "dataGeulTextColor",
-        );
-      }
-      if (summaryHasBackgroundColor) {
-        consumePreservedAttributeWarning(
-          context.warnings,
-          "summary",
-          "dataGeulBackgroundColor",
-        );
-      }
-      if (summaryHasTextAlignment) {
-        consumePreservedAttributeWarning(
-          context.warnings,
-          "summary",
-          "dataGeulTextAlignment",
-        );
-      }
-      // style의 raw "제거됨" 오탐 억제는 import-warnings.ts의
-      // isOwnEchoStyle이 raw 노드 단위로 판정한다(Issue #179 리뷰 수정 —
-      // 위 세 data-geul-*와 달리 존재 여부만으로 소비하면 서로 다른
-      // summary의 warning이 뒤바뀔 수 있었다).
+      // summary에서 읽는 속성을 표시한다. style의 "제거됨" 판정은
+      // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 한다(Issue #179).
+      context.preserved.mark(
+        details.summaryNode,
+        "dataGeulBlockId",
+        "dataGeulTextColor",
+        "dataGeulBackgroundColor",
+        "dataGeulTextAlignment",
+      );
       const id =
         propertyString(details.summaryNode, "dataGeulBlockId") ?? createId();
       const content = paragraphContentFromNodes(

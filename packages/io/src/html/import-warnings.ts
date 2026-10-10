@@ -12,6 +12,7 @@ import {
 } from "./inline-content.js";
 import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import { INLINE_PRESENTATION_TAG_NAMES } from "./element-presentation.js";
+import { isAuditedAttribute } from "./import-html-sanitize-schema.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
@@ -243,8 +244,7 @@ const propertyStringOrUndefined = (
 // 재구성한 값과 raw style 문자열이 "완전히 같을 때만" own-echo로 인정해
 // 경고를 생략한다 — 한 글자라도 다르면(추가 선언, 다른 값, 다른 순서
 // 전부 포함) 보수적으로 경고를 그대로 낸다. 이 판정은 같은 raw 노드
-// 하나만 보고 끝나 서로 다른 노드의 warning을 섞을 위험이 없다(fix 전
-// consumePreservedAttributeWarning 기반 억제와의 핵심 차이).
+// 하나만 보고 끝나 서로 다른 노드의 warning을 섞을 위험이 없다.
 const expectedMediaPreviewWidthStyle = (
   node: HtmlElementNode,
 ): string | undefined => {
@@ -412,6 +412,15 @@ const collectFromNodes = (
         attribute === "color" &&
         (typeof value !== "string" ||
           readLegacyAttributeColor(value) === undefined);
+      // 감사 대상 속성은 변환 뒤 감사가 판정한다(HtmlImportContext.preserved.
+      // audit, RD-001). 블록을 품어 벗겨지는 font·mark는 감사 트리에 없으므로
+      // 이 수집기가 이전처럼 판정한다.
+      if (
+        !unwrappedColorTags.has(node) &&
+        isAuditedAttribute(node.tagName, attribute)
+      ) {
+        continue;
+      }
       if (!allowedAttributes.has(attribute) || unreadableFontColor) {
         warnings.push({
           kind: "UNSAFE_ATTRIBUTE_REMOVED",
