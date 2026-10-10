@@ -225,17 +225,29 @@ describe("validateTabularData", () => {
 
 /**
  * columnIndex가 오름차순이 아닌(배열 순서 ≠ 열 순서) 행을 만든다 —
- * extremeCellIndex가 배열 위치가 아니라 columnIndex로 판정하는지 보려면
+ * withParagraphsMergedIntoCells가 배열 위치가 아니라 columnIndex로 판정하는지 보려면
  * validateTabularData가 정상적으로 거부할 이 순서를 일부러 써야 한다.
  */
 const unsortedRow = (cells: TabularCell[]) => ({ cells });
 
-const cell = (columnIndex: number, content: InlineContent): TabularCell => ({
+const cell = (
+  columnIndex: number,
+  content: InlineContent,
+  span: { rowSpan?: number; columnSpan?: number } = {},
+): TabularCell => ({
   columnIndex,
-  rowSpan: 1,
-  columnSpan: 1,
+  rowSpan: span.rowSpan ?? 1,
+  columnSpan: span.columnSpan ?? 1,
   content,
 });
+
+/** 셀 내용을 행별 텍스트 배열로 줄여 읽는다. */
+const textRows = (data: TabularData): string[][] =>
+  data.rows.map((row) =>
+    row.cells.map((c) =>
+      c.content.map((run) => ("text" in run ? run.text : "")).join(""),
+    ),
+  );
 
 describe("withParagraphsMergedIntoCells", () => {
   it("leading·trailing이 모두 비어 있으면 원본을 그대로 돌려준다", () => {
@@ -378,5 +390,203 @@ describe("withParagraphsMergedIntoCells", () => {
     expect(result.rows[0]?.cells[0]?.content).toEqual([
       { text: "lead\nmid\ntrail" },
     ]);
+  });
+});
+
+describe("withParagraphsMergedIntoCells: 병합 셀이 가장자리를 덮는 격자 (Issue #348)", () => {
+  it("위 행에서 내려온 rowSpan 셀이 우하단을 덮으면 trailing은 그 셀 뒤에 붙는다", () => {
+    // 2열. 행1: a / b(rowSpan 2). 행2: c. 우하단 칸 (1,1)을 덮는 셀은 b다.
+    const data: TabularData = {
+      columnCount: 2,
+      rows: [
+        unsortedRow([
+          cell(0, [{ text: "a" }]),
+          cell(1, [{ text: "b" }], { rowSpan: 2 }),
+        ]),
+        unsortedRow([cell(0, [{ text: "c" }])]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [], [[{ text: "T" }]]);
+
+    expect(textRows(result)).toEqual([["a", "b\nT"], ["c"]]);
+  });
+
+  it("마지막 행에 셀이 없어도 trailing은 우하단을 덮는 셀 뒤에 붙는다", () => {
+    // 1열. 행1: a(rowSpan 2). 행2: 셀 없음.
+    const data: TabularData = {
+      columnCount: 1,
+      rows: [
+        unsortedRow([cell(0, [{ text: "a" }], { rowSpan: 2 })]),
+        unsortedRow([]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [], [[{ text: "T" }]]);
+
+    expect(textRows(result)).toEqual([["a\nT"], []]);
+  });
+
+  it("columnSpan 셀이 우하단을 덮으면 trailing은 그 셀 뒤에 붙는다", () => {
+    // 3열. 행2: w / x(columnIndex 1, columnSpan 2). 우하단 칸 (1,2)는 x다.
+    const data: TabularData = {
+      columnCount: 3,
+      rows: [
+        unsortedRow([
+          cell(0, [{ text: "a" }]),
+          cell(1, [{ text: "b" }]),
+          cell(2, [{ text: "c" }]),
+        ]),
+        unsortedRow([
+          cell(0, [{ text: "w" }]),
+          cell(1, [{ text: "x" }], { columnSpan: 2 }),
+        ]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [], [[{ text: "T" }]]);
+
+    expect(textRows(result)).toEqual([
+      ["a", "b", "c"],
+      ["w", "x\nT"],
+    ]);
+  });
+
+  it("rowSpan과 columnSpan이 함께 우하단을 덮는 셀에도 trailing이 붙는다", () => {
+    // 3열. 행1: a / z(columnIndex 1, rowSpan 2, columnSpan 2). 행2: c.
+    const data: TabularData = {
+      columnCount: 3,
+      rows: [
+        unsortedRow([
+          cell(0, [{ text: "a" }]),
+          cell(1, [{ text: "z" }], { rowSpan: 2, columnSpan: 2 }),
+        ]),
+        unsortedRow([cell(0, [{ text: "c" }])]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [], [[{ text: "T" }]]);
+
+    expect(textRows(result)).toEqual([["a", "z\nT"], ["c"]]);
+  });
+
+  it("좌상단을 덮는 rowSpan·columnSpan 셀 앞에 leading이 붙는다", () => {
+    const data: TabularData = {
+      columnCount: 3,
+      rows: [
+        unsortedRow([
+          cell(0, [{ text: "z" }], { rowSpan: 2, columnSpan: 2 }),
+          cell(2, [{ text: "b" }]),
+        ]),
+        unsortedRow([cell(2, [{ text: "d" }])]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [[{ text: "L" }]], []);
+
+    expect(textRows(result)).toEqual([["L\nz", "b"], ["d"]]);
+  });
+
+  it("병합 없는 표와 1x1 표의 결과는 이전과 같다", () => {
+    const plain: TabularData = {
+      columnCount: 2,
+      rows: [
+        unsortedRow([cell(0, [{ text: "a" }]), cell(1, [{ text: "b" }])]),
+        unsortedRow([cell(0, [{ text: "c" }]), cell(1, [{ text: "d" }])]),
+      ],
+    };
+    const single: TabularData = {
+      columnCount: 1,
+      rows: [unsortedRow([cell(0, [{ text: "m" }])])],
+    };
+
+    expect(
+      textRows(
+        withParagraphsMergedIntoCells(
+          plain,
+          [[{ text: "L" }]],
+          [[{ text: "T" }]],
+        ),
+      ),
+    ).toEqual([
+      ["L\na", "b"],
+      ["c", "d\nT"],
+    ]);
+    expect(
+      textRows(
+        withParagraphsMergedIntoCells(
+          single,
+          [[{ text: "L" }]],
+          [[{ text: "T" }]],
+        ),
+      ),
+    ).toEqual([["L\nm\nT"]]);
+  });
+
+  it("덮는 셀이 없는 유효하지 않은 격자에서도 trailing을 버리지 않고 읽기 순서 마지막 셀에 붙인다", () => {
+    // 2열 2행 선언이지만 칸 (1,1)을 덮는 셀이 없다. 마지막 행 cells가 비었다.
+    const data: TabularData = {
+      columnCount: 2,
+      rows: [
+        unsortedRow([cell(0, [{ text: "a" }]), cell(1, [{ text: "b" }])]),
+        unsortedRow([]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [], [[{ text: "T" }]]);
+
+    expect(textRows(result)).toEqual([["a", "b\nT"], []]);
+  });
+
+  it("덮는 셀이 없는 유효하지 않은 격자에서도 leading을 버리지 않고 읽기 순서 첫 셀에 붙인다", () => {
+    // 첫 행 cells가 비었고 칸 (0,0)을 덮는 셀이 없다.
+    const data: TabularData = {
+      columnCount: 2,
+      rows: [
+        unsortedRow([]),
+        unsortedRow([cell(1, [{ text: "y" }]), cell(0, [{ text: "x" }])]),
+      ],
+    };
+
+    const result = withParagraphsMergedIntoCells(data, [[{ text: "L" }]], []);
+
+    expect(textRows(result)).toEqual([[], ["y", "L\nx"]]);
+  });
+
+  it("셀이 하나도 없으면 입력과 같은 내용을 돌려준다", () => {
+    const data: TabularData = {
+      columnCount: 1,
+      rows: [unsortedRow([]), unsortedRow([])],
+    };
+
+    const result = withParagraphsMergedIntoCells(
+      data,
+      [[{ text: "L" }]],
+      [[{ text: "T" }]],
+    );
+
+    expect(result).toEqual(data);
+  });
+
+  it("입력 data·leading·trailing을 변형하지 않는다", () => {
+    const data: TabularData = {
+      columnCount: 2,
+      rows: [
+        unsortedRow([
+          cell(0, [{ text: "a" }]),
+          cell(1, [{ text: "b" }], { rowSpan: 2 }),
+        ]),
+        unsortedRow([cell(0, [{ text: "c" }])]),
+      ],
+    };
+    const leading: InlineContent[] = [[{ text: "L" }]];
+    const trailing: InlineContent[] = [[{ text: "T" }]];
+    const snapshot = structuredClone({ data, leading, trailing });
+
+    const result = withParagraphsMergedIntoCells(data, leading, trailing);
+
+    expect({ data, leading, trailing }).toEqual(snapshot);
+    // 손대지 않은 셀은 원본과 참조를 공유한다.
+    expect(result.rows[1]?.cells[0]).toBe(data.rows[1]?.cells[0]);
   });
 });

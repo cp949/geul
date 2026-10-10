@@ -185,33 +185,71 @@ const joinInlineSegments = (segments: InlineContent[]): InlineContent => {
   return joined;
 };
 
-// 논리 열 좌표가 가장 작은/큰 셀의 배열 인덱스. TabularData.rows[].cells의
-// 배열 순서는 열 순서의 권위가 아니므로(공개 API로 직접 들어온 데이터는
-// 정렬돼 있지 않을 수 있다) columnIndex로 판정한다.
-const extremeCellIndex = (
-  cells: TabularCell[],
-  pick: "min" | "max",
-): number | null => {
-  let found: number | null = null;
-  for (const [index, cell] of cells.entries()) {
-    const current = cells[found ?? -1];
-    if (
-      current === undefined ||
-      (pick === "min"
-        ? cell.columnIndex < current.columnIndex
-        : cell.columnIndex > current.columnIndex)
-    ) {
-      found = index;
+// 셀 위치: rows[row].cells[index].
+type CellPosition = { row: number; index: number };
+
+// 논리 격자 칸 (row, column)을 덮는 셀의 위치. 셀은 시작 행에서 rowSpan
+// 행까지, columnIndex에서 columnSpan 열까지 덮는다. 모든 행의 모든 셀을
+// 훑는다. 위 행에서 내려온 rowSpan 셀은 그 행의 cells에 없기 때문이다.
+const cellCovering = (
+  rows: Array<{ cells: TabularCell[] }>,
+  row: number,
+  column: number,
+): CellPosition | null => {
+  for (const [rowIndex, { cells }] of rows.entries()) {
+    if (rowIndex > row) break;
+    for (const [index, cell] of cells.entries()) {
+      if (
+        row < rowIndex + cell.rowSpan &&
+        cell.columnIndex <= column &&
+        column < cell.columnIndex + cell.columnSpan
+      ) {
+        return { row: rowIndex, index };
+      }
     }
   }
-  return found;
+  return null;
+};
+
+// 읽기 순서의 가장자리 셀 위치. 셀이 있는 첫/마지막 행에서 columnIndex가
+// 가장 작은/큰 셀이다. cells의 배열 순서는 열 순서의 권위가 아니므로(공개
+// API로 직접 들어온 데이터는 정렬돼 있지 않을 수 있다) columnIndex로 판정한다.
+const readingOrderEdgeCell = (
+  rows: Array<{ cells: TabularCell[] }>,
+  pick: "first" | "last",
+): CellPosition | null => {
+  const rowOrder = [...rows.keys()];
+  if (pick === "last") rowOrder.reverse();
+  for (const row of rowOrder) {
+    const cells = rows[row]?.cells ?? [];
+    let found: number | null = null;
+    for (const [index, cell] of cells.entries()) {
+      const current = cells[found ?? -1];
+      if (
+        current === undefined ||
+        (pick === "first"
+          ? cell.columnIndex < current.columnIndex
+          : cell.columnIndex > current.columnIndex)
+      ) {
+        found = index;
+      }
+    }
+    if (found !== null) return { row, index: found };
+  }
+  return null;
 };
 
 // 표 셀은 블록 자식을 가질 수 없다(model `TableCell.content: InlineContent`).
 // 표를 감싼 문단이 표 안/밖 경계에서 사라지지 않도록, 읽기 순서를 지켜 셀
 // 인라인 콘텐츠에 합친다 — 앞쪽 콘텐츠는 좌상단 셀 앞에, 뒤쪽 콘텐츠는
-// 마지막 셀 뒤에 붙는다. 1×1 표에서는 두 셀이 같으므로 앞뒤가 한 셀에
+// 우하단 셀 뒤에 붙는다. 1×1 표에서는 두 셀이 같으므로 앞뒤가 한 셀에
 // 순서대로 쌓인다.
+//
+// 가장자리 셀은 논리 격자 좌표로 고른다(G-TBL-001). 좌상단은 칸 (0, 0)을,
+// 우하단은 칸 (마지막 행, 마지막 열)을 덮는 셀이다. 덮는 셀을 못 찾는
+// 유효하지 않은 격자(공개 API 직접 호출)에서는 글자를 버리지 않고 읽기
+// 순서의 첫/마지막 셀에 붙인다. 셀이 하나도 없으면 붙일 곳이 없어 입력을
+// 그대로 돌려준다.
 export const withParagraphsMergedIntoCells = (
   data: TabularData,
   leading: InlineContent[],
@@ -220,15 +258,17 @@ export const withParagraphsMergedIntoCells = (
   if (leading.length === 0 && trailing.length === 0) return data;
 
   const rows = data.rows.map((row) => ({ cells: [...row.cells] }));
-  const firstRow = rows[0];
-  const lastRow = rows[rows.length - 1];
-  if (firstRow === undefined || lastRow === undefined) return data;
+  const lastRow = rows.length - 1;
+  const lastColumn = data.columnCount - 1;
 
   if (leading.length > 0) {
-    const index = extremeCellIndex(firstRow.cells, "min");
-    const cell = index === null ? undefined : firstRow.cells[index];
-    if (index !== null && cell !== undefined) {
-      firstRow.cells[index] = {
+    const position =
+      cellCovering(rows, 0, 0) ?? readingOrderEdgeCell(rows, "first");
+    const targetRow = position === null ? undefined : rows[position.row];
+    const cell =
+      position === null ? undefined : targetRow?.cells[position.index];
+    if (position !== null && targetRow !== undefined && cell !== undefined) {
+      targetRow.cells[position.index] = {
         ...cell,
         content: joinInlineSegments([...leading, cell.content]),
       };
@@ -236,10 +276,14 @@ export const withParagraphsMergedIntoCells = (
   }
 
   if (trailing.length > 0) {
-    const index = extremeCellIndex(lastRow.cells, "max");
-    const cell = index === null ? undefined : lastRow.cells[index];
-    if (index !== null && cell !== undefined) {
-      lastRow.cells[index] = {
+    const position =
+      cellCovering(rows, lastRow, lastColumn) ??
+      readingOrderEdgeCell(rows, "last");
+    const targetRow = position === null ? undefined : rows[position.row];
+    const cell =
+      position === null ? undefined : targetRow?.cells[position.index];
+    if (position !== null && targetRow !== undefined && cell !== undefined) {
+      targetRow.cells[position.index] = {
         ...cell,
         content: joinInlineSegments([cell.content, ...trailing]),
       };

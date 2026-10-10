@@ -9,6 +9,8 @@
  * 입력이 importHtml 경로로 물러나는지도 다룬다(Issue #315). 표 셀 안 캐럿에
  * 목록과 표가 든 html을 붙이면 목록 글자가 셀에 남는지, 목록 항목 안 표와
  * 최상위 표가 함께 있으면 onPasteRejected로 알리는지도 다룬다(Issue #345).
+ * 표 뒤 줄이 병합 셀이 덮는 논리 우하단 셀에 붙고, 마지막 행에 셀이 없어도
+ * 사라지지 않는지도 다룬다(Issue #348).
  */
 import type { TabularData } from "@cp949/geul-io";
 import type {
@@ -846,6 +848,74 @@ describe("에디터 컨트롤러 표", () => {
         },
       ]);
       expect(editorState(editor, tiptap)).toEqual(before);
+
+      editor.destroy();
+    });
+  });
+
+  // Issue #348: 표 뒤 줄이 논리 우하단이 아닌 셀에 붙거나 사라졌다.
+  describe("표 셀 안 캐럿의 표 뒤 줄과 병합 셀 (Issue #348)", () => {
+    // 2x2 표의 좌상단 셀에 캐럿을 둔다.
+    const setup = (
+      overrides: Pick<CreateEditorOptions, "onPasteRejected"> = {},
+    ) => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("id"),
+        ...overrides,
+      });
+      const mounted = mountTiptapEditor(editor);
+      const inserted = editor.commands.insertTable("block-1", {
+        rows: 2,
+        columns: 2,
+      });
+      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+      const topLeft = tableBlockOf(editor).rows[0]?.cells[0]?.id;
+      if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
+      placeCaretInCell(mounted.tiptap, topLeft);
+      mounted.editable.focus();
+      return { editor, editable: mounted.editable };
+    };
+
+    it("아래 행으로 이어진 rowSpan 셀이 우하단을 덮으면 표 뒤 줄은 그 셀 뒤에 붙는다", () => {
+      const rejections: unknown[] = [];
+      const { editor, editable } = setup({
+        onPasteRejected: (reason) => rejections.push(reason),
+      });
+
+      pasteData(editable, {
+        "text/html":
+          '<table><tr><td>a</td><td rowspan="2">b</td></tr><tr><td>c</td></tr></table>' +
+          "<ul><li>T</li></ul>",
+        "text/plain": "a\tb\nc\nT",
+      });
+
+      expect(rejections).toEqual([]);
+      const table = firstTableBlockIn(editor.getDocument());
+      expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "a" }]);
+      expect(table.rows[0]?.cells[1]?.content).toEqual([{ text: "b\nT" }]);
+      expect(table.rows[1]?.cells[0]?.content).toEqual([{ text: "c" }]);
+
+      editor.destroy();
+    });
+
+    it("마지막 행에 셀이 없는 표도 앞뒤 줄을 한 셀에 쌓고 글자를 잃지 않는다", () => {
+      const rejections: unknown[] = [];
+      const { editor, editable } = setup({
+        onPasteRejected: (reason) => rejections.push(reason),
+      });
+
+      pasteData(editable, {
+        "text/html":
+          "<ul><li>L</li></ul>" +
+          '<table><tr><td rowspan="2">a</td></tr><tr></tr></table>' +
+          "<ul><li>T</li></ul>",
+        "text/plain": "L\na\nT",
+      });
+
+      expect(rejections).toEqual([]);
+      const table = firstTableBlockIn(editor.getDocument());
+      expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "L\na\nT" }]);
 
       editor.destroy();
     });
