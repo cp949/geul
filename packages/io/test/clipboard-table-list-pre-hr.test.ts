@@ -8,6 +8,7 @@
  * - 비교만으로는 둘이 함께 틀려도 통과하므로, 재현 입력은 명시 값으로도 고정한다.
  * - 클립보드는 내용 없는 `pre`의 `codeBlock`을 만들지 않는다. 이 차이는 의도다.
  * - 클립보드는 `pre`의 `wrap`·`caption`·`id`를 읽지 않고 경고도 내지 않는다. `importHtml`과 다른 점이다.
+ *   `figure` 안 `pre`의 `figcaption` 글자는 `codeBlock.caption`이 아니라 별도 자식 문단으로 남는다.
  * - 클립보드는 `blockquote`를 `quote`로 만들지 않는다(#350). `blockquote` 안 `pre`·`hr`는 명시 값으로만 고정한다.
  * - `language`는 model 정규형으로 바꾼다(`ts`는 `typescript`). model이 거부하는 값은 버린다.
  * - 코드 글자의 Tab은 남기고 나머지 무효 코드포인트만 지운다.

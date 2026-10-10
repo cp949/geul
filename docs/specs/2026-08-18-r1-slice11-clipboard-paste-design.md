@@ -139,10 +139,10 @@ export const parseClipboardTable = (input: {
 - `isBlockLevelNode`가 `pre`·`hr`도 블록으로 본다. 첫 자식이 `pre`·`hr`이면 항목 content는 비고 자식 블록만 남는다. `div`·`blockquote`·중첩 목록 안 `pre`·`hr`도 자식 블록이다.
 - `codeBlock.text`는 `br`을 줄바꿈으로 읽고 줄바꿈·들여쓰기·Tab을 보존한다. 공백을 접지 않고 마크를 싣지 않는다. model의 codeBlock 소스 계약이 거부하는 문자만 지운다.
 - 내용 없는 `pre`(빈 요소, 공백뿐)는 만들지 않는다. `hr`는 항상 `divider`다.
-- `language` 선택 규칙을 함수 `selectCodeBlockLanguage`로 추출해 `importHtml`과 클립보드가 공유한다. `importHtml`의 결과와 경고는 바뀌지 않는다. 클립보드는 고른 값을 model 정규형으로 바꾼다. model이 거부하는 값이면 버린다. `wrap`·`caption`·`id`·경고는 읽지 않는다.
+- `language` 선택 규칙을 함수 `selectCodeBlockLanguage`로 추출해 `importHtml`과 클립보드가 공유한다. `importHtml`의 결과와 경고는 바뀌지 않는다. 클립보드는 고른 값을 model 정규형으로 바꾼다. model이 거부하는 값이면 버린다. `wrap`·`caption`·`id`·경고는 읽지 않는다. `figure` 안 `pre`의 `figcaption` 글자는 `codeBlock.caption`이 아니라 별도 자식 문단으로 남는다.
 - core: `listChildToTiptapJson`이 `divider`(컨테이너 없이 `blockId`만)와 `codeBlock`(`blockContainer` 안 `codeBlock` 노드)을 만든다. `validateOutOfTableContent`가 `codeBlock` 글자와 `language`를 model 계약으로 검사하고 최상위의 두 타입을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다.
 - 셀 안 캐럿: `codeBlock`은 글자의 줄마다 셀 줄이고 `divider`는 줄이 없다. `countTables`는 `children`이 없는 타입을 건너뛴다.
-- 막은 타입: `containsBlockedType`가 타입 이름으로 `codeBlock`·`divider`를 판정한다. 막았으면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 처리한다.
+- 막은 타입: `containsBlockedType`가 타입 이름으로 `codeBlock`·`divider`를 판정한다. 막았고 캐럿이 표 밖이면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 처리한다. 캐럿이나 선택이 표 안이면 막은 타입을 검사하지 않아 셀 줄로 붙는다.
 - 차이: `importHtml`은 빈 `pre`를 빈 `codeBlock`으로 만들 수 있고 클립보드는 만들지 않는다. `blockquote`는 클립보드에서 `quote`가 되지 않는다(Issue #350).
 - 읽지 않는 것: `li` 안 `img` 등 미디어. 클립보드에 미디어 블록 타입이 없어 사라진다.
 
