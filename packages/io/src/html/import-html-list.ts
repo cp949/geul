@@ -13,6 +13,7 @@ import {
 } from "@cp949/geul-model";
 
 import { propertyInteger, propertyString } from "./hast-properties.js";
+import type { HtmlImportContext } from "./import-context.js";
 import { paragraphContentFromNodes } from "./import-html-helpers.js";
 import type { HtmlImportWarning } from "./import-warnings.js";
 import type { HtmlElementNode } from "./inline-content.js";
@@ -81,6 +82,7 @@ export const buildProductionListItemBlock = (
   type: ProductionListItemType,
   ownNode: HtmlElementNode,
   createId: IdFactory,
+  context: HtmlImportContext,
 ):
   | BulletListItemBlock
   | NumberedListItemBlock
@@ -92,7 +94,7 @@ export const buildProductionListItemBlock = (
   // style을 읽지 않는다. Issue #334 이후 sanitize는 div의 style을 남기지만
   // 이 경로에서는 쓰이지 않는다.
   const id = propertyString(ownNode, "dataGeulBlockId") ?? createId();
-  const content = paragraphContentFromNodes(ownNode.children);
+  const content = paragraphContentFromNodes(ownNode.children, context);
   switch (type) {
     case "numberedListItem": {
       const startNumber = propertyInteger(

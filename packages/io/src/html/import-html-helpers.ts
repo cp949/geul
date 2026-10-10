@@ -14,6 +14,7 @@ import {
 
 import { blockPresentation, type TextFormat } from "./element-presentation.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
+import type { HtmlImportContext } from "./import-context.js";
 import {
   type HtmlElementNode,
   type HtmlNode,
@@ -234,15 +235,18 @@ export const selectCodeBlockLanguage = (
 
 // baseFormat은 블록 요소 style의 서식(blockPresentation의 format)을 안쪽
 // 텍스트에 싣는다(Issue #334 단계 B). 호출부가 블록 요소를 알 때만 넘긴다.
+//
+// 읽는 텍스트 노드마다 context가 글자 정제 경고를 검사한다(RD-001).
 export const paragraphContentFromNodes = (
   nodes: HtmlNode[],
+  context: HtmlImportContext,
   baseFormat?: TextFormat,
 ): InlineContent =>
   sanitizeInlineContentText(
-    inlineContentFromNodes(
-      nodes,
-      baseFormat === undefined ? undefined : { baseFormat },
-    ),
+    inlineContentFromNodes(nodes, {
+      ...(baseFormat === undefined ? {} : { baseFormat }),
+      onText: context.codePoints.inlineText,
+    }),
   );
 
 export const isElementNode = (node: HtmlNode): node is HtmlElementNode =>

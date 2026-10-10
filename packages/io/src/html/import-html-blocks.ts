@@ -17,6 +17,7 @@ import {
 
 import { segmentBlocks } from "./block-segmenter.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
+import type { HtmlImportContext } from "./import-context.js";
 import {
   isElementNode,
   isListElement,
@@ -48,7 +49,6 @@ import {
 } from "./inline-content.js";
 import {
   codeBlockLanguageMetadataIgnoredWarning,
-  type HtmlImportWarning,
   nestedChildrenFlattenedWarning,
 } from "./import-warnings.js";
 import { hasSubstantialText } from "./table-layout.js";
@@ -57,14 +57,14 @@ import { hasSubstantialText } from "./table-layout.js";
 // unwrap은 다루지 않는다 — blocksFromNodes가 감싼다). documentFromRoot의
 // 기존 루프 그대로이고, DELTA-04는 이 함수를 두 자리에서 재사용한다: (1)
 // 최상위 nodes 중 children wrapper가 아닌 나머지("평면" 구간), (2) wrapper
-// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고). depth·warnings는
+// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고). depth·context는
 // blockquote 세그먼트의 children 재귀(blocksFromNodes로 되돌아감)가 wrapper
 // 재귀와 같은 깊이 가드를 받기 위해서만 받는다(DELTA-06a).
 const blocksFromSegments = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,
   depth: number,
-  warnings: HtmlImportWarning[],
+  context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const blocks: Block[] = [];
@@ -89,6 +89,7 @@ const blocksFromSegments = (
           type: "paragraph",
           content: paragraphContentFromNodes(
             segment.nodes,
+            context,
             segment.origin === undefined
               ? undefined
               : blockPresentation(segment.origin).format,
@@ -112,6 +113,7 @@ const blocksFromSegments = (
         type: "paragraph",
         content: paragraphContentFromNodes(
           segment.nodes,
+          context,
           blockPresentation(segment.node).format,
         ),
         ...paragraphProps,
@@ -132,6 +134,7 @@ const blocksFromSegments = (
         level: segment.level,
         content: paragraphContentFromNodes(
           segment.nodes,
+          context,
           blockPresentation(segment.node).format,
         ),
         ...headingProps,
@@ -157,7 +160,7 @@ const blocksFromSegments = (
       // 중복 생성 방지 가드는 block-segmenter.ts의 media 세그먼트가 안쪽을
       // 재귀하지 않는다는 사실과 대칭이다.
       blocks.push(
-        mediaBlockFromNode(segment.node, createId, warnings, iframeEmbedConfig),
+        mediaBlockFromNode(segment.node, createId, context, iframeEmbedConfig),
       );
       continue;
     }
@@ -178,6 +181,7 @@ const blocksFromSegments = (
       );
       const content = paragraphContentFromNodes(
         contentNodes,
+        context,
         promotedFormat(segment.node, promoted),
       );
       // style 오탐 억제는 위 paragraph/heading과 동일하게
@@ -189,11 +193,11 @@ const blocksFromSegments = (
           childrenNodes,
           createId,
           depth,
-          warnings,
+          context,
           iframeEmbedConfig,
         );
         if (flattened.length > 0)
-          warnings.push(nestedChildrenFlattenedWarning());
+          context.warnings.push(nestedChildrenFlattenedWarning());
         blocks.push(
           { id, type: "quote", content, ...quoteProps },
           ...flattened,
@@ -204,7 +208,7 @@ const blocksFromSegments = (
         childrenNodes,
         createId,
         depth + 1,
-        warnings,
+        context,
         iframeEmbedConfig,
       );
       blocks.push(
@@ -226,6 +230,7 @@ const blocksFromSegments = (
       );
       const content = paragraphContentFromNodes(
         contentNodes,
+        context,
         promotedFormat(segment.node, promoted),
       );
       const calloutProps = textBlockPropsFromElement(segment.node, {
@@ -237,11 +242,11 @@ const blocksFromSegments = (
           childrenNodes,
           createId,
           depth,
-          warnings,
+          context,
           iframeEmbedConfig,
         );
         if (flattened.length > 0)
-          warnings.push(nestedChildrenFlattenedWarning());
+          context.warnings.push(nestedChildrenFlattenedWarning());
         blocks.push(
           {
             id,
@@ -258,7 +263,7 @@ const blocksFromSegments = (
         childrenNodes,
         createId,
         depth + 1,
-        warnings,
+        context,
         iframeEmbedConfig,
       );
       blocks.push(
@@ -310,19 +315,24 @@ const blocksFromSegments = (
         : undefined;
       // caption은 plain string이다(rich text 아님, model CodeBlock.caption).
       // media caption 디코드(import-html-media.ts)와 동일하게 textValue로
-      // 평탄화 후 sanitizeInlineText로 정규화한다.
+      // 평탄화 후 sanitizeInlineText로 정규화한다. 지운 글자는 정제하는 이 자리에서
+      // 경고한다(RD-001).
+      if (figcaptionNode !== undefined) {
+        context.codePoints.inlineTextIn(figcaptionNode.children);
+      }
       const caption =
         figcaptionNode === undefined
           ? undefined
           : sanitizeInlineText(textValue(figcaptionNode.children));
 
-      // 무효 문자는 거절하지 않고 지운다(Issue #352). 경고는 raw 텍스트에서
-      // import-warnings.ts가 모은다(G-CNV-002).
+      // 무효 문자는 거절하지 않고 지운다(Issue #352). 지운 글자는 정제하는 이 자리에서
+      // 경고한다(RD-001).
+      context.codePoints.codeTextIn(preNode.children);
       const source = sanitizeCodeBlockSource(textValue(preNode.children));
       const id = propertyString(preNode, "dataGeulBlockId") ?? createId();
       const { language, metadataConflict } = selectCodeBlockLanguage(preNode);
       if (metadataConflict) {
-        warnings.push(codeBlockLanguageMetadataIgnoredWarning(id));
+        context.warnings.push(codeBlockLanguageMetadataIgnoredWarning(id));
       }
       // marker 패턴 — 값 내용은 보지 않고 존재만 본다(export-html.ts의
       // codeBlockNode와 동일 관례, import-html-wrappers.ts의
@@ -355,10 +365,10 @@ const blocksFromSegments = (
       blocks.push({
         id: createId(),
         type: "paragraph",
-        content: paragraphContentFromNodes(nonSectionChildren),
+        content: paragraphContentFromNodes(nonSectionChildren, context),
       });
     }
-    blocks.push(parseTable(segment.node, createId));
+    blocks.push(parseTable(segment.node, createId, context));
   }
 
   return blocks;
@@ -373,13 +383,14 @@ const blocksFromListItem = (
   startNumber: number | undefined,
   createId: IdFactory,
   depth: number,
-  warnings: HtmlImportWarning[],
+  context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
   const { contentNodes, childrenNodes, promoted } = splitListItemChildren(node);
   const content = paragraphContentFromNodes(
     contentNodes,
+    context,
     promotedFormat(node, promoted),
   );
   const listItemProps = textBlockPropsFromElement(node, { promoted });
@@ -407,11 +418,11 @@ const blocksFromListItem = (
       childrenNodes,
       createId,
       depth,
-      warnings,
+      context,
       iframeEmbedConfig,
     );
     if (flattened.length > 0) {
-      warnings.push(nestedChildrenFlattenedWarning());
+      context.warnings.push(nestedChildrenFlattenedWarning());
     }
     return [ownBlock, ...flattened];
   }
@@ -420,7 +431,7 @@ const blocksFromListItem = (
     childrenNodes,
     createId,
     depth + 1,
-    warnings,
+    context,
     iframeEmbedConfig,
   );
   return children.length > 0 ? [{ ...ownBlock, children }] : [ownBlock];
@@ -440,7 +451,7 @@ const blocksFromListElement = (
   node: HtmlElementNode & { tagName: "ul" | "ol" },
   createId: IdFactory,
   depth: number,
-  warnings: HtmlImportWarning[],
+  context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
   restartDefaultOrderedList: boolean,
 ): Block[] => {
@@ -463,7 +474,7 @@ const blocksFromListElement = (
         nonItemRun,
         createId,
         depth,
-        warnings,
+        context,
         iframeEmbedConfig,
       ),
     );
@@ -480,7 +491,11 @@ const blocksFromListElement = (
     }
     flushNonItemRun();
     if (propertyString(child, "dataGeulBlockId") !== undefined) {
-      consumePreservedAttributeWarning(warnings, "li", "dataGeulBlockId");
+      consumePreservedAttributeWarning(
+        context.warnings,
+        "li",
+        "dataGeulBlockId",
+      );
     }
     // TextBlockProps 3필드(RD-004 DELTA-02)도 li/dataGeulBlockId와 같은 raw
     // 오탐 패턴이다 — 셋 중 있는 것만 개별로 억제한다.
@@ -491,17 +506,25 @@ const blocksFromListElement = (
     const hasTextAlignment =
       propertyString(child, "dataGeulTextAlignment") !== undefined;
     if (hasTextColor) {
-      consumePreservedAttributeWarning(warnings, "li", "dataGeulTextColor");
+      consumePreservedAttributeWarning(
+        context.warnings,
+        "li",
+        "dataGeulTextColor",
+      );
     }
     if (hasBackgroundColor) {
       consumePreservedAttributeWarning(
-        warnings,
+        context.warnings,
         "li",
         "dataGeulBackgroundColor",
       );
     }
     if (hasTextAlignment) {
-      consumePreservedAttributeWarning(warnings, "li", "dataGeulTextAlignment");
+      consumePreservedAttributeWarning(
+        context.warnings,
+        "li",
+        "dataGeulTextAlignment",
+      );
     }
     // style의 raw "제거됨" 오탐 억제는 import-warnings.ts의 isOwnEchoStyle이
     // raw 노드 단위로 판정한다(Issue #179 리뷰 수정 — 위 세 data-geul-*와
@@ -513,14 +536,18 @@ const blocksFromListElement = (
     const isCheckListItem =
       propertyString(child, "dataGeulChecked") !== undefined;
     if (isCheckListItem) {
-      consumePreservedAttributeWarning(warnings, "li", "dataGeulChecked");
+      consumePreservedAttributeWarning(
+        context.warnings,
+        "li",
+        "dataGeulChecked",
+      );
     }
     if (
       node.tagName === "ol" &&
       itemIndex === 0 &&
       Number.isInteger(explicitStart)
     ) {
-      consumePreservedAttributeWarning(warnings, "ol", "start");
+      consumePreservedAttributeWarning(context.warnings, "ol", "start");
     }
     const startNumber =
       itemIndex === 0 && Number.isInteger(explicitStart)
@@ -544,7 +571,7 @@ const blocksFromListElement = (
         startNumber,
         createId,
         depth,
-        warnings,
+        context,
         iframeEmbedConfig,
       ),
     );
@@ -580,7 +607,7 @@ const blocksFromNodes = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,
   depth: number,
-  warnings: HtmlImportWarning[],
+  context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const blocks: Block[] = [];
@@ -593,7 +620,7 @@ const blocksFromNodes = (
         plainRun,
         createId,
         depth,
-        warnings,
+        context,
         iframeEmbedConfig,
       ),
     );
@@ -609,7 +636,7 @@ const blocksFromNodes = (
           node,
           createId,
           depth,
-          warnings,
+          context,
           iframeEmbedConfig,
           node.tagName === "ol" && previousBlock?.type === "numberedListItem",
         ),
@@ -622,7 +649,7 @@ const blocksFromNodes = (
         // findChildrenWrapper의 depth 가드와 동일 원칙(63행 부근) — 정확히
         // 상한 깊이로 끝나는 체인은 경고하지 않는다.
         if (details.childrenNodes.length > 0) {
-          warnings.push(nestedChildrenFlattenedWarning());
+          context.warnings.push(nestedChildrenFlattenedWarning());
         }
         plainRun.push(node);
         continue;
@@ -634,23 +661,27 @@ const blocksFromNodes = (
       // "details" 항목 자체가 없어 전부 raw 오탐 대상이다)를 보존한 이번
       // 결과에 대한 raw "제거됨" 오탐만 지운다(consumePreservedAttributeWarning,
       // li/ol과 동일 패턴).
-      consumePreservedAttributeWarning(warnings, "details", "dataGeulBlockId");
       consumePreservedAttributeWarning(
-        warnings,
+        context.warnings,
+        "details",
+        "dataGeulBlockId",
+      );
+      consumePreservedAttributeWarning(
+        context.warnings,
         "details",
         "dataGeulToggleable",
       );
       consumePreservedAttributeWarning(
-        warnings,
+        context.warnings,
         "details",
         "dataGeulCollapsed",
       );
-      consumePreservedAttributeWarning(warnings, "details", "open");
+      consumePreservedAttributeWarning(context.warnings, "details", "open");
       const children = blocksFromNodes(
         details.childrenNodes,
         createId,
         depth + 1,
-        warnings,
+        context,
         iframeEmbedConfig,
       );
 
@@ -658,7 +689,7 @@ const blocksFromNodes = (
         propertyString(details.summaryNode, "dataGeulBlockId") !== undefined
       ) {
         consumePreservedAttributeWarning(
-          warnings,
+          context.warnings,
           "summary",
           "dataGeulBlockId",
         );
@@ -675,21 +706,21 @@ const blocksFromNodes = (
         undefined;
       if (summaryHasTextColor) {
         consumePreservedAttributeWarning(
-          warnings,
+          context.warnings,
           "summary",
           "dataGeulTextColor",
         );
       }
       if (summaryHasBackgroundColor) {
         consumePreservedAttributeWarning(
-          warnings,
+          context.warnings,
           "summary",
           "dataGeulBackgroundColor",
         );
       }
       if (summaryHasTextAlignment) {
         consumePreservedAttributeWarning(
-          warnings,
+          context.warnings,
           "summary",
           "dataGeulTextAlignment",
         );
@@ -702,6 +733,7 @@ const blocksFromNodes = (
         propertyString(details.summaryNode, "dataGeulBlockId") ?? createId();
       const content = paragraphContentFromNodes(
         details.summaryNode.children,
+        context,
         blockPresentation(details.summaryNode).format,
       );
       blocks.push({
@@ -726,7 +758,7 @@ const blocksFromNodes = (
       // 평탄화 결과가 wrapper를 인식했을 때와 동일하므로 경고하지 않는다 —
       // 64단 입력의 기존 산출·경고를 그대로 유지한다.
       if (wrapper.childrenNodes.length > 0) {
-        warnings.push(nestedChildrenFlattenedWarning());
+        context.warnings.push(nestedChildrenFlattenedWarning());
       }
       plainRun.push(node);
       continue;
@@ -746,7 +778,7 @@ const blocksFromNodes = (
               [wrapper.ownNode],
               createId,
               depth,
-              warnings,
+              context,
               iframeEmbedConfig,
             );
             const candidate = ownBlocks[0];
@@ -759,7 +791,12 @@ const blocksFromNodes = (
               ? candidate
               : undefined;
           })()
-        : buildProductionListItemBlock(listItemType, wrapper.ownNode, createId);
+        : buildProductionListItemBlock(
+            listItemType,
+            wrapper.ownNode,
+            createId,
+            context,
+          );
     if (rawOwnBlock === undefined) {
       // findChildrenWrapper가 ownNode를 own-content 태그로만 걸렀으므로
       // 정상 입력에서 이 분기는 도달하지 않는다 — 그 태그가 (HTML5
@@ -801,7 +838,7 @@ const blocksFromNodes = (
       wrapper.childrenNodes,
       createId,
       depth + 1,
-      warnings,
+      context,
       iframeEmbedConfig,
     );
     // codeBlock(model CodeBlock)엔 children 필드가 없다 — findChildrenWrapper
@@ -823,14 +860,14 @@ const blocksFromNodes = (
 export const documentFromRoot = (
   root: HtmlRoot,
   createId: IdFactory,
-  warnings: HtmlImportWarning[],
+  context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
 ): Document => {
   const blocks = blocksFromNodes(
     root.children,
     createId,
     1,
-    warnings,
+    context,
     iframeEmbedConfig,
   );
   return { formatVersion: 1, revision: 0, blocks };

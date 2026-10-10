@@ -11,6 +11,7 @@ import {
 
 import { cellPresentation } from "./element-presentation.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
+import type { HtmlImportContext } from "./import-context.js";
 import {
   HtmlDocumentInvalidError,
   propertyHeaderFlag,
@@ -83,6 +84,7 @@ const inferHeaderColumns = (
 export const parseTable = (
   element: HtmlElementNode,
   createId: IdFactory,
+  context: HtmlImportContext,
 ): TableBlock => {
   const tableId = propertyString(element, "dataGeulBlockId") ?? createId();
   const cols = columnElements(element);
@@ -197,6 +199,7 @@ export const parseTable = (
           inlineContentFromNodes(layout.element.children, {
             blockBreakTagNames: flattenBlockBoundaryTagNames,
             baseFormat: styled.format,
+            onText: context.codePoints.inlineText,
           }),
         ),
         ...(textColor === undefined ? {} : { textColor }),

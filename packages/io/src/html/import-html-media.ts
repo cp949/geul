@@ -12,6 +12,7 @@ import {
 } from "@cp949/geul-model";
 
 import { propertyInteger, propertyString } from "./hast-properties.js";
+import type { HtmlImportContext } from "./import-context.js";
 import { isElementNode, textValue } from "./import-html-helpers.js";
 import { consumePreservedAttributeWarning } from "./import-html-list.js";
 import type { HtmlImportWarning } from "./import-warnings.js";
@@ -147,7 +148,7 @@ const resolvedIframeUrl = (
 export const mediaBlockFromNode = (
   node: HtmlElementNode,
   createId: IdFactory,
-  warnings: HtmlImportWarning[],
+  context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
 ): MediaBlock => {
   const isFigure = node.tagName === "figure";
@@ -169,9 +170,9 @@ export const mediaBlockFromNode = (
     (child) => child.tagName === "figcaption",
   );
 
-  consumeMediaDataAttributeWarnings(warnings, node);
+  consumeMediaDataAttributeWarnings(context.warnings, node);
   if (visualNode !== undefined) {
-    consumeMediaVisualAttributeWarnings(warnings, visualNode);
+    consumeMediaVisualAttributeWarnings(context.warnings, visualNode);
   }
 
   const mediaType = mediaTypeFromNode(node) ?? "file";
@@ -195,12 +196,13 @@ export const mediaBlockFromNode = (
   const aspectRatio = propertyString(node, "dataGeulAspectRatio") as
     "16:9" | undefined;
   // caption은 plain string이다(rich text 아님, spec §3.1) — 인라인 mark를
-  // 보존할 필요가 없어 textValue로 평탄화한다. sanitizeInlineText는 raw
-  // 텍스트 스캐너(import-warnings.ts)가 이 노드에 대해 이미
-  // UNSAFE_CODE_POINT_REMOVED를 낼 수 있으므로 실제로도 제거해 경고와
-  // 실동작을 맞춘다(G-CNV-002) — data-geul-name은 속성값이라 그 스캐너가
-  // 애초에 검사하지 않으므로 대칭 처리하지 않는다(표 셀 속성값과 동일
-  // 관례).
+  // 보존할 필요가 없어 textValue로 평탄화한다. sanitizeInlineText로 지운
+  // 글자는 정제하는 이 자리에서 UNSAFE_CODE_POINT_REMOVED로 경고한다
+  // (RD-001, G-CNV-002) — data-geul-name은 속성값이라 검사하지 않는다(표 셀
+  // 속성값과 동일 관례).
+  if (figcaptionNode !== undefined) {
+    context.codePoints.inlineTextIn(figcaptionNode.children);
+  }
   const caption =
     figcaptionNode === undefined
       ? undefined

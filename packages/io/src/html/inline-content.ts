@@ -281,9 +281,11 @@ const readInlineNodes = (
   inherited: InlinePresentation,
   content: InlineContent,
   breaks: BlockBreakState | undefined,
+  onText: ((node: HtmlTextNode) => void) | undefined,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
+      onText?.(node);
       appendText(
         content,
         node.value,
@@ -316,6 +318,7 @@ const readInlineNodes = (
       inheritInlinePresentation(inherited, own),
       content,
       breaks,
+      onText,
     );
     if (isBlock && breaks !== undefined) breaks.pending = true;
   }
@@ -337,11 +340,15 @@ const cellBlockPresentation = (node: HtmlElementNode): InlinePresentation => {
 //
 // baseFormat은 모든 텍스트가 받는 바깥 서식이다. 블록 요소 style의 서식
 // (blockPresentation의 format)을 그 안쪽 텍스트에 싣는다(Issue #334 단계 B).
+//
+// onText는 읽는 텍스트 노드마다 부른다. importHtml 변환기가 글자 정제 경고를
+// 내는 자리다(RD-001). 클립보드 표 파서는 넘기지 않아 경고를 만들지 않는다.
 export const inlineContentFromNodes = (
   nodes: HtmlNode[],
   options?: {
     blockBreakTagNames?: ReadonlySet<string>;
     baseFormat?: TextFormat;
+    onText?: (node: HtmlTextNode) => void;
   },
 ): InlineContent => {
   const content: InlineContent = [];
@@ -355,6 +362,7 @@ export const inlineContentFromNodes = (
     tagNames === undefined
       ? undefined
       : { tagNames, pending: false, seenText: false },
+    options?.onText,
   );
   return content;
 };

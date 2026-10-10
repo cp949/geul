@@ -23,6 +23,7 @@ import {
   createDefaultIdFactory,
   HtmlDocumentInvalidError,
 } from "./import-html-helpers.js";
+import { createImportContext } from "./import-context.js";
 import { documentFromRoot } from "./import-html-blocks.js";
 import { htmlImportSanitizeSchema } from "./import-html-sanitize-schema.js";
 import { unwrapBlockBearingColorTags } from "./inline-content.js";
@@ -89,10 +90,13 @@ export const importHtml = (
     if (!truncated && !hasGeulIdentityAttribute(safeRoot)) {
       collapseSourceWhitespace(safeRoot);
     }
+    // 변환기가 글자를 정제하는 지점에서 UNSAFE_CODE_POINT_REMOVED를 낸다
+    // (RD-001). 수집기 경고 뒤에 변환 순서로 쌓인다. 접기를 마친 트리에서
+    // 텍스트 노드의 sanitize 뒤 부모 태그를 읽는다.
     const document = documentFromRoot(
       safeRoot,
       options?.createId ?? createDefaultIdFactory(safeRoot),
-      warnings,
+      createImportContext(safeRoot, warnings),
       options?.iframeEmbed ?? {},
     );
     const parsed = parseDocument(document);
