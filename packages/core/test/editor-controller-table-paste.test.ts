@@ -6,7 +6,9 @@
  * 명령 거절 각각에서 onPasteRejected 콜백이 원인을 전달하는지,
  * NOT_TABULAR(폴백 경로)에서는 호출되지 않는지도 다룬다(Issue #36).
  * 표 밖 시퀀스의 문단·제목이 최상위 형제로 들어가는지, 최상위 표가 없는
- * 입력이 importHtml 경로로 물러나는지도 다룬다(Issue #315).
+ * 입력이 importHtml 경로로 물러나는지도 다룬다(Issue #315). 표 셀 안 캐럿에
+ * 목록과 표가 든 html을 붙이면 목록 글자가 셀에 남는지, 목록 항목 안 표와
+ * 최상위 표가 함께 있으면 onPasteRejected로 알리는지도 다룬다(Issue #345).
  */
 import type { TabularData } from "@cp949/geul-io";
 import type {
@@ -771,6 +773,79 @@ describe("에디터 컨트롤러 표", () => {
 
       expect(rejections).toEqual([]);
       expect(editor.getDocument().blocks).toEqual(before);
+
+      editor.destroy();
+    });
+  });
+
+  // Issue #345: 표 안 분기가 목록 항목을 버려 글자가 무신호로 사라졌다.
+  describe("표 셀 안 캐럿의 목록 항목 (Issue #345)", () => {
+    const tableHtml =
+      "<table><tbody><tr><td>a</td><td>b</td></tr>" +
+      "<tr><td>c</td><td>d</td></tr></tbody></table>";
+
+    // 2x2 표의 좌상단 셀에 캐럿을 둔다.
+    const setup = (
+      overrides: Pick<CreateEditorOptions, "onPasteRejected"> = {},
+    ) => {
+      const editor = createEditor({
+        initialDocument: paragraphDocument("content"),
+        createId: sequentialIds("id"),
+        ...overrides,
+      });
+      const mounted = mountTiptapEditor(editor);
+      const inserted = editor.commands.insertTable("block-1", {
+        rows: 2,
+        columns: 2,
+      });
+      if (!inserted.ok) throw new Error("표 삽입 fixture 준비 실패");
+      const topLeft = tableBlockOf(editor).rows[0]?.cells[0]?.id;
+      if (topLeft === undefined) throw new Error("셀 fixture 준비 실패");
+      placeCaretInCell(mounted.tiptap, topLeft);
+      mounted.editable.focus();
+      return { editor, editable: mounted.editable, tiptap: mounted.tiptap };
+    };
+
+    it("목록과 표가 든 html을 붙이면 목록 글자가 좌상단 셀에 줄로 남고 거절 통지가 없다", () => {
+      const rejections: unknown[] = [];
+      const { editor, editable } = setup({
+        onPasteRejected: (reason) => rejections.push(reason),
+      });
+
+      pasteData(editable, {
+        "text/html": `<ul><li>L1</li><li>L2</li></ul>${tableHtml}`,
+        "text/plain": "L1\nL2\na\tb\nc\td",
+      });
+
+      expect(rejections).toEqual([]);
+      const table = firstTableBlockIn(editor.getDocument());
+      expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "L1\nL2\na" }]);
+      expect(table.rows[0]?.cells[1]?.content).toEqual([{ text: "b" }]);
+      expect(table.rows[1]?.cells[0]?.content).toEqual([{ text: "c" }]);
+      expect(table.rows[1]?.cells[1]?.content).toEqual([{ text: "d" }]);
+
+      editor.destroy();
+    });
+
+    it("목록 항목 안 표와 최상위 표가 함께 있으면 문서를 바꾸지 않고 CLIPBOARD_CONTENT_INVALID를 알린다", () => {
+      const rejections: unknown[] = [];
+      const { editor, editable, tiptap } = setup({
+        onPasteRejected: (reason) => rejections.push(reason),
+      });
+      const before = editorState(editor, tiptap);
+
+      pasteData(editable, {
+        "text/html": `<ul><li>L1${tableHtml}</li></ul>${tableHtml}`,
+        "text/plain": "L1\na\tb\nc\td\na\tb\nc\td",
+      });
+
+      expect(rejections).toEqual([
+        {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: "Cannot paste multiple tables inside an existing table cell",
+        },
+      ]);
+      expect(editorState(editor, tiptap)).toEqual(before);
 
       editor.destroy();
     });

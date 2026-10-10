@@ -389,8 +389,9 @@ describe("표 셀 안 캐럿은 막은 타입이 있어도 이전처럼 격자�
 
     expect(result.errors).toEqual([]);
     expect(result.rejected).toEqual([]);
+    // 목록 항목은 셀 줄이 되어 막은 타입을 문서에 만들지 않는다(Issue #345).
     expect(result.cells).toEqual([
-      ["a", "b"],
+      ["l\na", "b"],
       ["c", "d"],
     ]);
   });

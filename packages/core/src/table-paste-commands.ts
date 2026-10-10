@@ -385,6 +385,36 @@ const withBlockColorMarks = (
   );
 };
 
+// 클립보드 시퀀스 안 표 개수다. 목록 항목 children 안 표까지 깊이 우선으로
+// 센다. 문단·제목은 children이 없다.
+const countTables = (blocks: readonly ClipboardContentBlock[]): number => {
+  let count = 0;
+  for (const block of blocks) {
+    if (block.type === "table") count += 1;
+    else if (block.type !== "paragraph" && block.type !== "heading") {
+      count += countTables(block.children ?? []);
+    }
+  }
+  return count;
+};
+
+// 표 안 캐럿 분기에서 셀에 합칠 블록을 줄 목록으로 만든다(Issue #345).
+// 문단·제목·목록 항목이 줄 하나씩이다.
+// 목록 항목 children은 부모 다음에 깊이 우선으로 잇는다.
+// 접두어·들여쓰기는 없다. 셀 안 html 붙여넣기의 줄 정책과 같다.
+// 블록 색은 셀에 속성으로 남을 수 없어 텍스트 마크로 옮긴다(Issue #343).
+// 표는 줄이 아니다. 최상위 표는 호출부가 떼고, children 안 표는 거절한다.
+// 빈 줄은 withParagraphsMergedIntoCells가 건너뛴다.
+const cellLinesOf = (
+  blocks: readonly ClipboardContentBlock[],
+): InlineContent[] =>
+  blocks.flatMap((block): InlineContent[] => {
+    if (block.type === "table") return [];
+    const line = withBlockColorMarks(block.content, block);
+    if (block.type === "paragraph" || block.type === "heading") return [line];
+    return [line, ...cellLinesOf(block.children ?? [])];
+  });
+
 // 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
 // 표가 fragment의 유일한 실질 콘텐츠일 때 반환하는 단일 표 시퀀스는
 // pasteTabularData에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을
@@ -413,8 +443,9 @@ export const pasteClipboardContent = (
     // 표 블록이 둘 이상인 경우 다중 표를 명시적으로 거절한다 — 표 안
     // 분기에서는 문단을 별도 블록으로 끼울 수 없으므로 다중 표를 지원할 수
     // 없다. TBL-012(성능 계약)는 표 크기 한도이지 "표 1개" 제품 계약이 아니다.
-    const tableCount = content.filter((entry) => entry.type === "table").length;
-    if (tableCount > 1) {
+    // 목록 항목 children 안 표도 센다(Issue #345). 셀 줄로 풀 수 없어 버리면
+    // 글자가 무신호로 사라진다.
+    if (countTables(content) > 1) {
       return {
         ok: false,
         error: {
@@ -432,31 +463,12 @@ export const pasteClipboardContent = (
       return { ok: false, error: { code: "PASTE_TARGET_NOT_FOUND" } };
     }
 
-    // 문단과 heading 둘 다 셀에 병합될 자격이 있다(표는 블록 자식을 가질
-    // 수 없어 heading의 level도 문단과 동일하게 텍스트만 남긴다, DELTA-04
-    // Issue #72) — 이름을 paragraphContent에서 넓혀 그 사실을 반영한다.
-    // 블록 색은 셀에 블록 속성으로 남을 수 없어 텍스트 마크로 옮긴다
-    // (Issue #343, withBlockColorMarks).
-    const mergeableInlineContent = (
-      blocks: readonly ClipboardContentBlock[],
-    ): InlineContent[] =>
-      blocks
-        .filter(
-          (
-            entry,
-          ): entry is Extract<
-            ClipboardContentBlock,
-            { type: "paragraph" | "heading" }
-          > => entry.type === "paragraph" || entry.type === "heading",
-        )
-        .map((entry) => withBlockColorMarks(entry.content, entry));
-
     return pasteTabularData(
       editor,
       withParagraphsMergedIntoCells(
         tableBlock.data,
-        mergeableInlineContent(content.slice(0, tableIndex)),
-        mergeableInlineContent(content.slice(tableIndex + 1)),
+        cellLinesOf(content.slice(0, tableIndex)),
+        cellLinesOf(content.slice(tableIndex + 1)),
       ),
       createId,
     );

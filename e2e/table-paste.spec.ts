@@ -296,6 +296,32 @@ test("표 앞 문단의 자기 style 색은 붙여넣은 뒤 그 문단 블록�
   expect(saved.blocks[1]?.textColor).toBe("#0000FF");
 });
 
+test("표 셀 안 캐럿에 목록과 표가 든 html을 붙이면 목록 글자가 좌상단 셀에 줄로 남는다", async ({
+  page,
+}) => {
+  // 수정 전에는 표 안 분기가 목록 항목을 버려 L1·L2가 무신호로 사라졌다
+  // (Issue #345). 이제 목록 항목은 문단처럼 셀 줄이 된다.
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+  const firstRowCells = table.locator("tr").first().locator("td");
+
+  await firstRowCells.first().click();
+  await editable.evaluate(dispatchPaste, {
+    html:
+      "<ul><li>L1</li><li>L2</li></ul>" +
+      "<table><tbody><tr><td>a</td><td>b</td></tr>" +
+      "<tr><td>c</td><td>d</td></tr></tbody></table>",
+    text: "L1\nL2\na\tb\nc\td",
+  });
+
+  await expect(editable.locator("table")).toHaveCount(1);
+  // 셀 안 줄바꿈은 hardBreak라 innerText가 줄 사이를 줄바꿈으로 읽는다.
+  await expect(firstRowCells.nth(0)).toHaveText(/^L1\s*L2\s*a$/);
+  await expect(firstRowCells.nth(1)).toHaveText("b");
+  await expect(table.locator("tr").nth(1).locator("td").nth(0)).toHaveText("c");
+  await expect(table.locator("tr").nth(1).locator("td").nth(1)).toHaveText("d");
+});
+
 test("여러 셀을 고르고 서식 있는 html을 붙이면 첫 셀에 굵은 글자가 들어가고 나머지 선택 셀은 비며 셀 id가 유지된다", async ({
   page,
 }) => {

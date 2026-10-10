@@ -906,10 +906,10 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
-  // 완료 조건 4(Issue #143 (b), DELTA-02): "표 안" 병합 경로는 코드
-  // 변경 없이 기존 mergeableInlineContent 타입 predicate가 목록 variant를
-  // 구조적으로 배제한다 — 목록은 조용히 드롭되고 문단만 셀에 병합된다.
-  it("표 안에서 목록 항목이 섞인 시퀀스는 목록을 드롭하고 문단만 셀에 합친다", () => {
+  // Issue #143 (b), DELTA-02는 표 안 병합이 목록을 조용히 버리는 것을
+  // 고정했다. Issue #345가 정정했다. 목록 항목도 셀 줄로 합친다.
+  // 전체 축은 table-paste-cell-list.test.ts가 소유한다.
+  it("표 안에서 목록 항목이 섞인 시퀀스는 문단과 목록 항목을 읽기 순서로 셀에 합친다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
     placeCaretInCell(editor, "cell-1");
 
@@ -927,7 +927,9 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(result.ok).toBe(true);
     const table = getTableBlock(editor, "table-1");
     if (!table.ok) throw new Error("표 조회 실패");
-    expect(cellItemAt(table.value, 0, 0)?.text).toBe("intro\nx\noutro");
+    expect(cellItemAt(table.value, 0, 0)?.text).toBe(
+      "intro\ndropped\nx\noutro",
+    );
   });
 
   // 트랙-6 결함 탐지(BLOCKER): pasteOutOfTable의 삽입은 항상 최상위(depth
