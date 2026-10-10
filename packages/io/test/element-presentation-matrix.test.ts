@@ -127,12 +127,7 @@ const READ_BUNDLES = ALL_BUNDLES.filter((bundle) => bundle !== "끄는값");
  */
 const KNOWN_DEFECTS: Record<string, Owner> = {
   // li·blockquote가 승격한 p와 summary·figcaption의 style을 읽지 않는다.
-  ...defects(
-    "importHtml",
-    ["li>p", "blockquote>p", "summary", "figcaption"],
-    READ_BUNDLES,
-    "RD-004",
-  ),
+  ...defects("importHtml", ["summary", "figcaption"], READ_BUNDLES, "RD-004"),
 };
 
 /** 모델 노드를 훑어 글자 `x`의 서식과 색을 모은다. 블록·셀 색은 아래로 번진다. */

@@ -39,11 +39,17 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
 
 // li가 목록 블록의 안정 ID와 content를 직접 소유한다(RD-003 HTML 정규형).
 // 첫 실질 자식이 p면 그 p는 content wrapper일 뿐 별도 paragraph/ID가 아니다.
+// 승격한 p는 promoted로 돌려준다. 호출부가 그 p의 style 색·서식을 읽는다
+// (Issue #342).
 // direct inline run으로 시작하면 첫 block boundary 전까지가 content이고,
 // 이후 flow content는 종류와 무관하게 children 변환 경계로 넘긴다.
 export const splitListItemChildren = (
   node: HtmlElementNode,
-): { contentNodes: HtmlNode[]; childrenNodes: HtmlNode[] } => {
+): {
+  contentNodes: HtmlNode[];
+  childrenNodes: HtmlNode[];
+  promoted?: HtmlElementNode;
+} => {
   const firstSubstantialIndex = node.children.findIndex(
     (child) => isElementNode(child) || hasSubstantialText(textValue([child])),
   );
@@ -59,6 +65,7 @@ export const splitListItemChildren = (
     return {
       contentNodes: first.children,
       childrenNodes: node.children.filter((child) => child !== first),
+      promoted: first,
     };
   }
   if (isElementNode(first) && isBlockLevelElement(first)) {
@@ -101,7 +108,11 @@ export const splitListItemChildren = (
 // 적용한다).
 export const splitQuoteChildren = (
   node: HtmlElementNode,
-): { contentNodes: HtmlNode[]; childrenNodes: HtmlNode[] } => {
+): {
+  contentNodes: HtmlNode[];
+  childrenNodes: HtmlNode[];
+  promoted?: HtmlElementNode;
+} => {
   const head = node.children.find(
     (child) => isElementNode(child) || hasSubstantialText(textValue([child])),
   );
@@ -146,6 +157,7 @@ export const splitQuoteChildren = (
       isSingleChildrenContainer && container !== undefined
         ? container.children
         : rest,
+    ...(isParagraphTag(head.tagName) ? { promoted: head } : {}),
   };
 };
 

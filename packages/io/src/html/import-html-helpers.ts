@@ -37,7 +37,10 @@ import {
 // 리뷰 MINOR-2, #334 전에는 무시됐다).
 export const textBlockPropsFromElement = (
   element: HtmlElementNode,
-  options?: { styleOnly?: boolean },
+  options?: {
+    styleOnly?: boolean;
+    promoted?: HtmlElementNode | undefined;
+  },
 ): Partial<
   Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">
 > => {
@@ -54,8 +57,15 @@ export const textBlockPropsFromElement = (
     dataTextColor !== undefined && dataBackgroundColor !== undefined
       ? undefined
       : blockPresentation(element).colors;
-  const textColor = dataTextColor ?? styled?.textColor;
-  const backgroundColor = dataBackgroundColor ?? styled?.backgroundColor;
+  // li·blockquote가 content로 승격한 p는 element 안쪽이라 element의 style 색을
+  // 이긴다. data-geul-*는 여전히 먼저다(Issue #342).
+  const promoted =
+    styled === undefined || options?.promoted === undefined
+      ? undefined
+      : blockPresentation(options.promoted).colors;
+  const textColor = dataTextColor ?? promoted?.textColor ?? styled?.textColor;
+  const backgroundColor =
+    dataBackgroundColor ?? promoted?.backgroundColor ?? styled?.backgroundColor;
   const textAlignment = styleOnly
     ? undefined
     : (propertyString(element, "dataGeulTextAlignment") as

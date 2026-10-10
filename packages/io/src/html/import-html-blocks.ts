@@ -40,7 +40,7 @@ import {
   splitListItemChildren,
   splitQuoteChildren,
 } from "./import-html-wrappers.js";
-import { blockPresentation } from "./element-presentation.js";
+import { blockPresentation, type TextFormat } from "./element-presentation.js";
 import {
   type HtmlElementNode,
   type HtmlNode,
@@ -173,15 +173,17 @@ const blocksFromSegments = (
       // 경고한다(Issue #132, G-CNV-002). 같은 depth 재귀는 HTML 트리 한 단계를
       // 소비하므로 MAX_HTML_TREE_DEPTH로 유계다.
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
-      const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
+      const { contentNodes, childrenNodes, promoted } = splitQuoteChildren(
+        segment.node,
+      );
       const content = paragraphContentFromNodes(
         contentNodes,
-        blockPresentation(segment.node).format,
+        promotedFormat(segment.node, promoted),
       );
       // style 오탐 억제는 위 paragraph/heading과 동일하게
       // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 판정한다
       // (Issue #179 리뷰 수정).
-      const quoteProps = textBlockPropsFromElement(segment.node);
+      const quoteProps = textBlockPropsFromElement(segment.node, { promoted });
       if (depth >= MAX_NESTING_DEPTH) {
         const flattened = blocksFromNodes(
           childrenNodes,
@@ -219,12 +221,16 @@ const blocksFromSegments = (
       // startNumber와 같은 "정의된 경우만" 패턴 — HTML에 속성이 없으면
       // propertyString이 undefined를 돌려줘 필드 자체가 생략된다.
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
-      const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
+      const { contentNodes, childrenNodes, promoted } = splitQuoteChildren(
+        segment.node,
+      );
       const content = paragraphContentFromNodes(
         contentNodes,
-        blockPresentation(segment.node).format,
+        promotedFormat(segment.node, promoted),
       );
-      const calloutProps = textBlockPropsFromElement(segment.node);
+      const calloutProps = textBlockPropsFromElement(segment.node, {
+        promoted,
+      });
       const icon = propertyString(segment.node, "dataGeulIcon");
       if (depth >= MAX_NESTING_DEPTH) {
         const flattened = blocksFromNodes(
@@ -380,6 +386,17 @@ const blocksFromSegments = (
   return blocks;
 };
 
+// 블록 요소의 서식에 content로 승격한 p의 서식을 안쪽 우선으로 겹친다. p는
+// 블록 요소 안쪽이다. 굵기·기울임은 p가 이기고(끄는 값 포함) 밑줄·취소선은
+// 합집합이다(Issue #342).
+const promotedFormat = (
+  node: HtmlElementNode,
+  promoted: HtmlElementNode | undefined,
+): TextFormat => ({
+  ...blockPresentation(node).format,
+  ...(promoted === undefined ? {} : blockPresentation(promoted).format),
+});
+
 // sanitized li 하나를 목록 블록으로 만든다. children depth가 model 상한에
 // 닿으면 부모 항목은 유지하고 초과 블록을 같은 배열의 뒤쪽 형제로 내보낸다.
 // quote/wrapper 경계와 같은 NESTED_CHILDREN_FLATTENED 계약이다.
@@ -393,12 +410,12 @@ const blocksFromListItem = (
   iframeEmbedConfig: IframeEmbedConfig,
 ): Block[] => {
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
-  const { contentNodes, childrenNodes } = splitListItemChildren(node);
+  const { contentNodes, childrenNodes, promoted } = splitListItemChildren(node);
   const content = paragraphContentFromNodes(
     contentNodes,
-    blockPresentation(node).format,
+    promotedFormat(node, promoted),
   );
-  const listItemProps = textBlockPropsFromElement(node);
+  const listItemProps = textBlockPropsFromElement(node, { promoted });
   const ownBlock: ListItemBlock =
     listType === "numberedListItem"
       ? {
