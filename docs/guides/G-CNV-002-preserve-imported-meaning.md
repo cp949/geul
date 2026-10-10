@@ -15,6 +15,7 @@
   - warning `element`는 텍스트 노드의 sanitized 부모 태그다. 최상위 loose 텍스트는 `"text"`다.
   - 속성 보존 warning은 변환기가 쓴 속성을 노드에 표시하고, 변환 뒤 sanitized 트리를 한 번 돌며 표시되지 않은 감사 대상 속성만 낸다.
   - 한 속성의 warning은 수집기와 감사 중 한 곳에서만 난다. 수집기는 감사 대상 속성을 건너뛴다. 예외는 블록을 품어 벗겨지는 `font`·`mark`다. 이 노드는 감사 트리에 없어 수집기가 계속 판정한다.
+  - 남은 예측: 루트 인라인과 블록을 품은 `font`·`mark`의 블록 강등, 벗겨지는 `font`·`mark`의 속성, `pre` 밖 `code`와 표 셀 안 `pre`의 메타 속성. 수집기가 아직 raw 트리로 판정한다. 새 예측을 더하지 않는다.
 - warning 순서는 수집기 warning, 변환기 warning, 속성 감사 warning이다. 깊이 절단 warning(`DEEP_TREE_FLATTENED`)은 수집기 warning 맨 앞이다.
 - raw HAST의 순서나 내용을 변환기로 넘기지 않는다.
 - raw HAST의 text, URL과 attribute를 결과 문서 생성에 사용하지 않는다.
