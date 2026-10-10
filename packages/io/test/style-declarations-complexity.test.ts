@@ -30,6 +30,7 @@ import {
   parseInlineStyleMarks,
   parseStyleDeclarations,
   parseWhiteSpaceMode,
+  readDumpAuthorDeclarations,
 } from "../src/clipboard/style-declarations.js";
 import {
   measureStringWorkload,
@@ -317,6 +318,46 @@ describe("hasComputedStyleDump의 선형 시간", () => {
       });
       const large = measureStringWorkload(() => {
         hasComputedStyleDump(build(BASE_SIZE * 2));
+      });
+
+      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
+      expect(small.calls).toBeGreaterThan(0);
+      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
+
+      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
+        2,
+      );
+      expect(
+        large.chars / small.chars,
+        "처리 문자 수 증가율",
+      ).toBeLessThanOrEqual(2);
+    },
+  );
+});
+
+const dumpAuthorInputShapes: Array<[string, (size: number) => string]> = [
+  ...dumpInputShapes,
+  [
+    "표식과 text-decoration 뒤에 작성자 선언이 아주 많은 입력",
+    (size) =>
+      `-webkit-text-stroke-width:0px;text-decoration-color:initial;${"color:#ff0000;".repeat(size)}`,
+  ],
+  [
+    "text-decoration 선언이 아주 많은 입력",
+    (size) =>
+      `-webkit-text-stroke-width:0px;${"text-decoration-color:initial;".repeat(size)}`,
+  ],
+];
+
+describe("readDumpAuthorDeclarations의 선형 시간", () => {
+  it.each(dumpAuthorInputShapes)(
+    "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
+    (_name, build) => {
+      const small = measureStringWorkload(() => {
+        readDumpAuthorDeclarations(build(BASE_SIZE));
+      });
+      const large = measureStringWorkload(() => {
+        readDumpAuthorDeclarations(build(BASE_SIZE * 2));
       });
 
       // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.

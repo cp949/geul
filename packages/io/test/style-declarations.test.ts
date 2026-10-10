@@ -19,6 +19,7 @@ import {
   parseStyleColorStates,
   parseStyleDeclarations,
   parseWhiteSpaceMode,
+  readDumpAuthorDeclarations,
   type StyleDeclarations,
 } from "../src/clipboard/style-declarations.js";
 
@@ -1011,5 +1012,139 @@ describe("parseInlineStyleMarks의 font 줄임 속성", () => {
     expect(
       parseInlineStyleMarks("text-decoration:underline;font:bold 12px a"),
     ).toMatchObject({ underline: true, strike: false, fontWeight: "bold" });
+  });
+});
+
+// Chromium 153 복사 원문의 선언 순서에 기댄다(Issue #341). 인라인 style이 준
+// text-decoration은 표식 뒤에 오고 작성자 값은 그 뒤에 붙는다. 앵커는 표식 뒤의
+// 마지막 text-decoration* 선언이다. 표식 앞의 text-decoration*은 스타일시트가
+// 준 것이라 앵커가 아니다.
+describe("readDumpAuthorDeclarations", () => {
+  const DUMP = "-webkit-text-stroke-width: 0px";
+  const DECORATION =
+    "text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial";
+
+  /** 돌려받은 선언 부분을 색 판정기에 넣은 결과다. */
+  const statesOfAuthorPart = (style: string) =>
+    parseStyleColorStates(readDumpAuthorDeclarations(style) ?? "");
+
+  it("덤프 표식이 없으면 undefined다", () => {
+    expect(readDumpAuthorDeclarations("")).toBeUndefined();
+    expect(
+      readDumpAuthorDeclarations(
+        "color: red; text-decoration-color: initial; background: #fff",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("표식이 있고 text-decoration* 선언이 없으면 빈 문자열이다", () => {
+    expect(
+      readDumpAuthorDeclarations(
+        `color: red; ${DUMP}; white-space: normal; background-color: #fff`,
+      ),
+    ).toBe("");
+    expect(readDumpAuthorDeclarations(DUMP)).toBe("");
+  });
+
+  it("마지막 text-decoration* 선언 뒤의 선언만 돌려준다", () => {
+    const style = `color: rgb(36, 41, 47); ${DUMP}; white-space: normal; background-color: rgb(255, 255, 255); ${DECORATION}; color: rgb(255, 0, 0)`;
+    expect(readDumpAuthorDeclarations(style)).toBe(" color: rgb(255, 0, 0)");
+    expect(statesOfAuthorPart(style)).toEqual({
+      color: { kind: "color", color: "#FF0000" },
+      backgroundColor: { kind: "unset" },
+    });
+  });
+
+  it("text-decoration* 뒤에 선언이 없으면 빈 문자열이다", () => {
+    expect(
+      readDumpAuthorDeclarations(`color: red; ${DUMP}; ${DECORATION}`),
+    ).toBe("");
+    expect(
+      readDumpAuthorDeclarations(`color: red; ${DUMP}; ${DECORATION};`),
+    ).toBe("");
+  });
+
+  it("줄임 text-decoration 뒤의 선언을 돌려준다", () => {
+    const style = `${DUMP}; background-color: #fff; text-decoration: underline; color: red; background-color: yellow`;
+    expect(statesOfAuthorPart(style)).toEqual({
+      color: { kind: "color", color: "#FF0000" },
+      backgroundColor: { kind: "color", color: "#FFFF00" },
+    });
+  });
+
+  it("text-decoration이 여러 번이면 마지막 것 뒤만 돌려준다", () => {
+    const style = `${DUMP}; text-decoration: underline; color: blue; text-decoration-line: none; background-color: yellow`;
+    expect(statesOfAuthorPart(style)).toEqual({
+      color: { kind: "unset" },
+      backgroundColor: { kind: "color", color: "#FFFF00" },
+    });
+  });
+
+  it("text-decoration으로 시작하지 않는 속성은 기준이 아니다", () => {
+    const style = `${DUMP}; color: red; text-decorations: none; background-color: yellow`;
+    expect(readDumpAuthorDeclarations(style)).toBe("");
+  });
+
+  it("속성 이름의 대소문자를 무시한다", () => {
+    const style = `-WEBKIT-Text-Stroke-Width: 0px; Color: blue; TEXT-DECORATION-COLOR: initial; COLOR: red`;
+    expect(statesOfAuthorPart(style).color).toEqual({
+      kind: "color",
+      color: "#FF0000",
+    });
+  });
+
+  it("!important 값을 보존한다", () => {
+    const style = `${DUMP}; ${DECORATION}; color: red !important; color: blue`;
+    expect(statesOfAuthorPart(style).color).toEqual({
+      kind: "color",
+      color: "#FF0000",
+    });
+  });
+
+  it("background 줄임 선언도 돌려준다", () => {
+    const style = `${DUMP}; ${DECORATION}; background: rgb(255, 255, 0)`;
+    expect(statesOfAuthorPart(style).backgroundColor).toEqual({
+      kind: "color",
+      color: "#FFFF00",
+    });
+  });
+
+  it("따옴표·주석 안의 이름은 선언으로 세지 않는다", () => {
+    const style = `${DUMP}; content: "a; text-decoration: none"; /* text-decoration: none */ color: red`;
+    expect(readDumpAuthorDeclarations(style)).toBe("");
+  });
+
+  it("값에 든 text-decoration 이름은 기준이 아니다", () => {
+    const style = `${DUMP}; font-family: text-decoration; color: red`;
+    expect(readDumpAuthorDeclarations(style)).toBe("");
+  });
+
+  // Issue #341 리뷰 F1: 스타일시트 클래스가 준 text-decoration은 표식 앞(style 첫
+  // 선언)에 온다. 그 선언은 앵커가 아니다.
+  it("표식 앞의 text-decoration은 앵커가 아니라 빈 문자열이다", () => {
+    const style = `text-decoration: underline; color: rgb(36, 41, 47); ${DUMP}; white-space: normal; background-color: rgb(255, 255, 255)`;
+    expect(readDumpAuthorDeclarations(style)).toBe("");
+    expect(statesOfAuthorPart(style)).toEqual({
+      color: { kind: "unset" },
+      backgroundColor: { kind: "unset" },
+    });
+  });
+
+  it("표식 앞 text-decoration이 있어도 표식 뒤 앵커 뒤 선언을 돌려준다", () => {
+    const style = `text-decoration: underline; color: blue; ${DUMP}; text-decoration-color: initial; color: red`;
+    expect(readDumpAuthorDeclarations(style)).toBe(" color: red");
+  });
+
+  it("표식이 여러 개면 마지막 표식 뒤만 센다", () => {
+    expect(
+      readDumpAuthorDeclarations(
+        `${DUMP}; text-decoration: none; color: blue; ${DUMP}; background-color: yellow`,
+      ),
+    ).toBe("");
+    expect(
+      readDumpAuthorDeclarations(
+        `${DUMP}; color: blue; ${DUMP}; text-decoration: none; background: yellow`,
+      ),
+    ).toBe(" background: yellow");
   });
 });

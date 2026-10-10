@@ -52,7 +52,8 @@ export const textBlockPropsFromElement = (
     ? undefined
     : propertyString(element, "dataGeulBackgroundColor");
   // 두 필드가 모두 data-geul-*로 정해졌으면 style을 읽지 않는다(자기 export
-  // 에코가 이 경우다). 덤프가 붙은 style의 색은 읽지 않는다(blockPresentation).
+  // 에코가 이 경우다). 덤프가 붙은 style은 표식 뒤 text-decoration* 선언 뒤의
+  // 작성자 선언만 색으로 읽는다(blockPresentation).
   const styled =
     dataTextColor !== undefined && dataBackgroundColor !== undefined
       ? undefined

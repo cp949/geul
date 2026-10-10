@@ -17,9 +17,9 @@ import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import {
   type ColorState,
   type InlineStyleMarks,
-  hasComputedStyleDump,
   parseInlineStyleMarks,
   parseStyleColorStates,
+  readDumpAuthorDeclarations,
 } from "../clipboard/style-declarations.js";
 import { propertyString } from "./hast-properties.js";
 import type { HtmlElementNode } from "./inline-content.js";
@@ -68,13 +68,13 @@ const UNSET_COLOR_STATES: ColorStates = {
   backgroundColor: { kind: "unset" },
 };
 
-// 브라우저 복사의 계산 스타일 덤프가 붙은 style의 색·배경은 읽지 않는다.
-// 페이지 테마의 계산 값이라 작성자가 쓴 색이 아니다. 서식 선언은 시각 값이라
-// 그대로 읽는다. 덤프 판정은 이 한 곳이다(Issue #334, #338, #342).
+// style의 색·배경 선언을 읽는다. 브라우저 복사의 계산 스타일 덤프가 붙은 style은
+// 표식 뒤의 마지막 `text-decoration*` 선언(앵커) 뒤의 작성자 선언만 읽는다.
+// 덤프 안쪽의 테마 색은 작성자가 쓴 색이 아니다. 앵커가 없으면 색을 읽지 않는다.
+// 서식 선언은 시각 값이라 호출부가 style 전체에서 읽는다. 덤프 판정은 이 한
+// 곳이다(Issue #334, #338, #341, #342).
 const colorStatesOf = (style: string): ColorStates =>
-  hasComputedStyleDump(style)
-    ? UNSET_COLOR_STATES
-    : parseStyleColorStates(style);
+  parseStyleColorStates(readDumpAuthorDeclarations(style) ?? style);
 
 // `mark`의 기본 배경이다. 브라우저가 `mark`에 칠하는 노랑이다.
 const MARK_DEFAULT_BACKGROUND = "#FFFF00";
@@ -309,8 +309,9 @@ const cellTierOf = (element: HtmlElementNode): CellTier => {
   const cached = cellTierByElement.get(element);
   if (cached !== undefined) return cached;
   const style = propertyString(element, "style");
-  // 덤프가 붙은 단의 style 색·배경은 읽지 않는다. 그 단의 bgcolor 속성은 style
-  // 선언이 없는 것처럼 읽는다. 서식은 덤프와 무관하게 읽는다.
+  // 덤프가 붙은 단은 표식 뒤 마지막 text-decoration* 선언 뒤의 작성자 선언만
+  // 색으로 읽는다(colorStatesOf). 그 단의 bgcolor 속성은 style 배경 선언이
+  // 없으면 읽는다. 서식은 덤프와 무관하게 style 전체에서 읽는다.
   const tier: CellTier =
     style === undefined
       ? { states: UNSET_COLOR_STATES, format: {} }
@@ -355,7 +356,8 @@ const cellBackgroundOf = (element: HtmlElementNode): string | undefined => {
 //   것과 같아 같은 단의 bgcolor를 쓴다.
 // - bgcolor는 색 이름과 hex만 읽는다(readLegacyAttributeColor).
 //   Chromium이 쓰레기 값도 색으로 바꿔 그리는 불일치는 의도한 것이다.
-// - 덤프가 붙은 단의 style 색·배경은 읽지 않는다. 그 단의 bgcolor는 읽는다.
+// - 덤프가 붙은 단은 표식 뒤 마지막 text-decoration* 선언 뒤의 작성자 선언만
+//   style 색·배경으로 읽는다. 그 단의 bgcolor는 읽는다.
 // - 서식(굵게·기울임·밑줄·취소선)은 table → tr → td 순으로 겹친다. 굵기·기울임은
 //   안쪽 값이 이기고 끄는 값도 덮는다. 밑줄·취소선은 전파라 합집합이다
 //   (Issue #342). th의 기본 굵기는 읽지 않는다.

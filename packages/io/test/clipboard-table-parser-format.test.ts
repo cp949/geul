@@ -2,7 +2,8 @@
  * `parseClipboardTable`가 셀의 서식 정보를 읽는 경로를 검증한다. style
  * 색상·정렬, Excel 대표 클립보드 구조, style보다 우선하는 data-geul-* 자기복사
  * 속성, 정규 형식이 아닌 data-geul-* 값의 무시, 링크 mark 보존과 미지원 href
- * 처리, script·이벤트 핸들러 제거를 함께 다룬다.
+ * 처리, script·이벤트 핸들러 제거, Chromium 계산 스타일 덤프 맨 끝의 작성자 색을
+ * 함께 다룬다.
  */
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
@@ -239,6 +240,60 @@ describe("parseClipboardTable", () => {
     expect(table.rows[0]?.cells[0]).toMatchObject({
       textColor: "#0000FF",
       backgroundColor: "#00FF00",
+    });
+  });
+
+  // Chromium 153 복사 원문(2026-10-10). 요소를 통째로 포함한 복사는 작성자
+  // 색·배경이 계산 스타일 덤프 맨 끝(마지막 text-decoration* 선언 뒤)에 온다
+  // (Issue #341). font-family 등 판정과 무관한 선언은 생략했다.
+  describe("계산 스타일 덤프 맨 끝의 작성자 색 (Issue #341)", () => {
+    const decoration =
+      "text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial;";
+    const themeSpan = (text: string): string =>
+      `<span style="color: rgb(36, 41, 47); font-style: normal; font-weight: 400; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); ${decoration} display: inline !important; float: none;">${text}</span>`;
+    const authorRedSpan = `<span style="font-style: normal; font-weight: 400; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); ${decoration} color: rgb(255, 0, 0);">red</span>`;
+    const authorYellowSpan = `<span style="color: rgb(36, 41, 47); font-style: normal; font-weight: 400; -webkit-text-stroke-width: 0px; white-space: normal; ${decoration} background-color: rgb(255, 255, 0);">yel</span>`;
+    const insideRedSpan = `<span style="color: rgb(255, 0, 0); font-style: normal; font-weight: 400; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); ${decoration} display: inline !important; float: none;">red</span>`;
+
+    it("셀 안 색 span을 통째로 포함한 복사는 작성자 마크만 남긴다", () => {
+      const html = `<table><tbody><tr><td>${themeSpan("a ")}${authorRedSpan}${themeSpan(" ")}${authorYellowSpan}${themeSpan(" z")}</td></tr></tbody></table>`;
+
+      const table = expectSingleTable(parseClipboardTable({ html }));
+      expect(table.rows[0]?.cells[0]?.content).toEqual([
+        { text: "a " },
+        { text: "red", marks: [{ type: "textColor", color: "#FF0000" }] },
+        { text: " " },
+        {
+          text: "yel",
+          marks: [{ type: "backgroundColor", color: "#FFFF00" }],
+        },
+        { text: " z" },
+      ]);
+    });
+
+    it("셀 안 색 span의 안쪽만 복사한 원문은 색 마크가 없다", () => {
+      const html = `<table><tbody><tr><td>${insideRedSpan}</td></tr></tbody></table>`;
+
+      const table = expectSingleTable(parseClipboardTable({ html }));
+      expect(table.rows[0]?.cells[0]?.content).toEqual([{ text: "red" }]);
+    });
+
+    it("덤프가 붙은 table의 작성자 색·배경은 셀 색이다", () => {
+      const html = `<table id="t" border="1" style="font-style: normal; font-weight: 400; -webkit-text-stroke-width: 0px; white-space: normal; ${decoration} background-color: rgb(255, 255, 0); color: rgb(0, 0, 255);"><tbody><tr><td>c1</td></tr></tbody></table>`;
+
+      const table = expectSingleTable(parseClipboardTable({ html }));
+      expect(table.rows[0]?.cells[0]).toMatchObject({
+        textColor: "#0000FF",
+        backgroundColor: "#FFFF00",
+      });
+    });
+
+    it("작성자 색이 없는 덤프 table은 셀 색이 없다", () => {
+      const html = `<table id="t" style="color: rgb(36, 41, 47); font-style: normal; font-weight: 400; -webkit-text-stroke-width: 0px; white-space: normal; ${decoration}"><tbody><tr><td>c1</td></tr></tbody></table>`;
+
+      const table = expectSingleTable(parseClipboardTable({ html }));
+      expect(table.rows[0]?.cells[0]?.textColor).toBeUndefined();
+      expect(table.rows[0]?.cells[0]?.backgroundColor).toBeUndefined();
     });
   });
 });

@@ -317,12 +317,13 @@ export const parseStyleColorStates = (
 };
 
 // 브라우저 복사의 계산 스타일 덤프 표식이다(Issue #334). Chromium은 복사할 때
-// 블록·표 루트 요소에 color·background-color와 함께 font-family·orphans·widows 등
-// 계산 스타일 전체를 style로 싣고, 그 안에 항상 `-webkit-text-stroke-width`가
-// 있다. 이 선언이 있는 요소의 색은 작성자가 쓴 색이 아니라 페이지 테마의 계산
-// 값이라 블록·표 셀 표면과 인라인 요소(span 포함)는 읽지 않는다. 속성 이름은
-// 대소문자를 구분하지 않는다. 기존 선언 분할기를 쓰므로 주석·따옴표 안의 이름은
-// 선언이 아니다. 선언을 한 번만 훑는다.
+// 요소에 color·background-color와 함께 font-family·orphans·widows 등 계산 스타일
+// 전체를 style로 싣고, 그 안에 항상 `-webkit-text-stroke-width`가 있다. 덤프
+// 안쪽의 테마 color·background-color는 작성자가 쓴 색이 아니다. 작성자 색은
+// 표식 뒤 `text-decoration*` 선언 뒤에서만 `readDumpAuthorDeclarations`가
+// 꺼낸다. 속성 이름은 대소문자를 구분하지
+// 않는다. 기존 선언 분할기를 쓰므로 주석·따옴표 안의 이름은 선언이 아니다.
+// 선언을 한 번만 훑는다.
 const COMPUTED_STYLE_DUMP_PROPERTY = "-webkit-text-stroke-width";
 
 export const hasComputedStyleDump = (style: string): boolean => {
@@ -336,6 +337,47 @@ export const hasComputedStyleDump = (style: string): boolean => {
     }
   }
   return false;
+};
+
+// `text-decoration`과 그 longhand(`text-decoration-color` 등)다.
+const isTextDecorationProperty = (property: string): boolean =>
+  property === "text-decoration" || property.startsWith("text-decoration-");
+
+// 덤프 style에서 작성자가 쓴 선언 부분을 문자열로 돌려준다(Issue #341).
+// - 덤프 표식이 없으면 undefined다. 호출부가 style 전체를 읽는다.
+// - 표식이 있으면 표식 뒤의 마지막 `text-decoration*` 선언(앵커) 뒤의 선언을
+//   `;`로 이어 돌려준다. 앵커가 없거나 그 뒤에 선언이 없으면 빈 문자열이다.
+//   표식이 여러 개면 마지막 표식 뒤만 센다.
+// Chromium 153의 직렬화 순서에 기댄다.
+// - 인라인 style이 준 text-decoration은 표식 뒤에 온다. 테마 color·
+//   background-color는 표식 앞뒤에 있고 앵커 앞이다. 요소를 통째로 포함한 복사의
+//   작성자 값은 앵커 뒤(맨 끝)에 붙는다. 줄임 `text-decoration`도 같다.
+// - 스타일시트가 준 text-decoration은 표식 앞(style 첫 선언)에 온다. 앵커로 보지
+//   않으므로 이 요소는 색을 읽지 않는다. 인라인 color를 같이 걸어도 같다.
+// - 안쪽만 복사한 요소는 작성자 color가 맨 앞에 와서 테마 color와 구분할 수 없다.
+// - u·s·del·strike·a는 `text-decoration*` 선언이 없고 작성자 배경이 테마 배경 자리에 온다.
+// 이들은 빈 문자열이라 색을 읽지 않는다. 다른 Chromium 버전의 순서는 알 수 없다.
+export const readDumpAuthorDeclarations = (
+  style: string,
+): string | undefined => {
+  const declarations = splitDeclarations(style);
+  let hasDump = false;
+  // 표식 뒤 마지막 text-decoration* 선언의 다음 위치다. -1이면 앵커가 없다.
+  let authorStart = -1;
+  for (let index = 0; index < declarations.length; index += 1) {
+    const read = readDeclaration(declarations[index] as string);
+    if (read === undefined) continue;
+    const property = read.property.toLowerCase();
+    if (property === COMPUTED_STYLE_DUMP_PROPERTY) {
+      hasDump = true;
+      // 표식 앞의 text-decoration*은 앵커가 아니다.
+      authorStart = -1;
+    } else if (isTextDecorationProperty(property)) {
+      authorStart = index + 1;
+    }
+  }
+  if (!hasDump) return undefined;
+  return authorStart < 0 ? "" : declarations.slice(authorStart).join(";");
 };
 
 // font-weight 선언 하나의 분류다.
