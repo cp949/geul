@@ -240,7 +240,22 @@ CodeBlock의 Enter는 source에 LF를 삽입하는 일반 code editing만 담당
 - 코드 블록 export → `<pre><code data-language="..." class="language-...">source</code></pre>`. language가 있으면 exact 값을 HTML escape한 `data-language`에 저장한다. `/^[A-Za-z0-9][A-Za-z0-9_-]*$/`을 만족할 때만 같은 값의 `language-*` class를 병기한다. language가 없으면 두 metadata를 모두 생략한다.
 - 코드 블록 import는 `<pre><code>`와 bare `<pre>`를 모두 받는다. language metadata가 없는 bare `<pre>`는 language 없는 CodeBlock이다. bare `<pre>` 자체의 `data-language`·`language-*` class는 다음 우선순위의 `<pre>` 후보로 처리한다. source는 sanitized descendant text를 문서 순서대로 연결하고 `<br>`만 LF로 바꾼다. `span` 등 wrapper는 visible text만 보존하고 element 경계 자체로 LF를 만들지 않는다.
 - language import 우선순위는 `<code data-language>` → `<pre data-language>` → `<code class="language-*">` → `<pre class="language-*">`다. 빈 `data-language`는 미지정으로 보고 다음 후보를 읽는다. 같은 위치에 `language-*` class가 여러 개면 첫 token을 쓴다. 선택되지 않은 non-empty metadata가 선택값과 다르면 결과는 유지하고 `CODE_BLOCK_LANGUAGE_METADATA_IGNORED` warning을 반환한다. 같은 값의 중복은 warning이 아니다.
-- `<pre>` descendant text의 code-point warning은 Code source 문자 계약을 따른다. literal Tab은 `CodeBlock`이 되는 `<pre>`에서 허용된 source이므로 `UNSAFE_CODE_POINT_REMOVED`를 반환하지 않는다. `CodeBlock`이 되지 않고 인라인 글자로 평탄화되는 `<pre>`는 Tab 삭제도 경고한다. 표 셀 안 `<pre>`와 목록 항목·quote·callout 본문 구간 안에서 인라인 래퍼를 지난 `<pre>`가 그렇다(정정 2026-10-10, Issue #354). 제목 안 quote·callout, 토글 `summary`, children wrapper, 생산 편집기 목록 `div` 안에서 평탄화되는 `<pre>`는 경고 수집기가 따라가지 않아 Tab 삭제를 경고하지 않는다(알려진 한계, QA-149). 선택된 language가 4.3의 문자 계약을 위반하면 값을 보정하거나 후순위 metadata로 fallback하지 않고 `HTML_DOCUMENT_INVALID`로 거절하며 document·warning 목록을 반환하지 않는다. source가 4.3의 문자 계약을 위반하면 거절하지 않고 무효 문자(CR 포함)를 지운 CodeBlock과 `UNSAFE_CODE_POINT_REMOVED` warning을 반환한다. warning `element`는 글자의 부모 태그다(정정 2026-10-10, Issue #352). 이전에는 source 위반도 거절했다. 정제 규칙은 model의 `sanitizeCodeBlockSource`가 소유한다.
+- `<pre>` descendant text의 code-point warning은 Code source 문자 계약을 따른다. literal Tab은 `CodeBlock`이 되는 `<pre>`에서 허용된 source이므로 `UNSAFE_CODE_POINT_REMOVED`를 반환하지 않는다. `CodeBlock`이 되지 않고 인라인 글자로 평탄화되는 `<pre>`는 Tab 삭제도 경고한다. 변환기가 글자를 정제하는 지점에서 경고하므로 평탄화되는 모든 자리가 같다. 평탄화되는 자리는 둘이다. 하나는 표 셀과 토글 `summary` 안 `<pre>`다. 다른 하나는 목록 항목·quote·callout 본문 구간 안에서 인라인 래퍼(`span` 등)를 지난 `<pre>`다. 래퍼 없는 `<pre>`는 이 구간에서도 `CodeBlock`이 되어 Tab이 남고 경고가 없다. 본문 구간이 제목 안 quote·callout, children wrapper, 생산 편집기 목록 `div` 안에 있어도 같다(정정 2026-10-11, Issue #356). 이전에는 경고 수집기가 변환을 예측했다. 제목 안 quote·callout, 토글 `summary`, children wrapper, 생산 편집기 목록 `div` 안에서 평탄화되는 `<pre>`는 따라가지 못해 Tab 삭제를 경고하지 않았다(QA-149). 이 한계는 해소했다. 선택된 language가 4.3의 문자 계약을 위반하면 값을 보정하거나 후순위 metadata로 fallback하지 않고 `HTML_DOCUMENT_INVALID`로 거절하며 document·warning 목록을 반환하지 않는다. source가 4.3의 문자 계약을 위반하면 거절하지 않고 무효 문자(CR 포함)를 지운 CodeBlock과 `UNSAFE_CODE_POINT_REMOVED` warning을 반환한다. 이전에는 source 위반도 거절했다. 정제 규칙은 model의 `sanitizeCodeBlockSource`가 소유한다. warning `element`는 글자의 sanitize 뒤 부모 태그다(정정 2026-10-10, Issue #352. 정정 2026-10-11, Issue #356). `<pre><code>`의 글자는 `code`다. sanitize가 벗긴 요소는 부모가 아니다. `<caption>` 안 글자의 `element`는 `table`이다. 최상위 loose 텍스트는 `text`다.
+- `importHtml`의 코드포인트 경고는 변환기가 글자를 실제로 정제하는 지점에서 낸다(정정 2026-10-11, Issue #356). 수집기는 이 경고를 만들지 않는다.
+  - 판정 값은 소스 공백 접기를 마친 글자다. 접기로 공백이 된 Tab은 글자가 남으므로 경고하지 않는다. `<p>a(Tab)b</p>`가 그렇다.
+  - `<script>` 안 제어문자는 요소 제거 경고 하나만 낸다. 변환기는 지워진 요소의 글자를 읽지 않는다.
+  - 같은 텍스트 노드는 한 번만 검사한다.
+  - 알려진 한계: 짝 있는 surrogate가 주석 등으로 텍스트 노드 둘로 갈라지면 `UNSAFE_CODE_POINT_REMOVED`가 두 번 난다. 변환기는 이어 붙여 글자를 남긴다.
+  - 알려진 한계: `data-geul-block-id`·`data-geul-cell-id`가 든 입력은 소스 공백 접기가 꺼진다. 이때 셀 안 블록 사이 Tab이 글자 손실 없이 경고된다.
+- `importHtml` 속성 보존 경고는 변환기가 쓴 속성을 노드에 표시하고, 변환 뒤 sanitized 트리를 감사해 표시되지 않은 감사 대상 속성만 `UNSAFE_ATTRIBUTE_REMOVED`로 낸다(정정 2026-10-11, Issue #356).
+  - 감사 대상은 import용 sanitize schema가 남기고 공용 경고 기준에 없는 속성이다. `style`·`bgColor`는 제외한다. 이 둘은 읽어도 제거를 보고하는 정책이라 수집기가 판정한다.
+  - 표시는 노드 단위다. 한 노드의 표시가 같은 태그·속성을 가진 다른 노드의 경고를 지우지 않는다.
+  - 알려진 한계: sanitize가 요소째 지우는 `svg`·`object`·`math` 안 감사 대상 속성은 경고하지 않는다. 그 요소가 `UNSAFE_ELEMENT_REMOVED`로 보고된다.
+- `importHtml` warning 순서는 수집기 warning, 변환기 warning, 속성 감사 warning이다(정정 2026-10-11, Issue #356).
+  - 수집기 warning은 raw 순서다. `DEEP_TREE_FLATTENED`는 맨 앞이다.
+  - 변환기 warning은 변환 순서다. `UNSAFE_CODE_POINT_REMOVED`, `NESTED_CHILDREN_FLATTENED`, `CODE_BLOCK_LANGUAGE_METADATA_IGNORED`가 여기에 속한다.
+  - 속성 감사 warning은 맨 뒤다.
+  - raw 순서를 sanitized 노드에 찍어 정렬하지 않는다. 그러면 raw 정보가 변환기로 흐른다(ADR-0003).
 - 목록 4종 → `ul`/`ol`(`start` 속성 매핑)/체크박스는 `input[type=checkbox][disabled]` 또는 `data-checked` 속성(정확한 형태는 슬라이스 착수 시 확정) / 토글은 `details`.
 - 인라인 색상 → `style="color:...; background-color:..."`.
 - 블록 색상/정렬 → 블록 wrapper의 `style`/`data-*` 속성(표 셀과 같은 방식).

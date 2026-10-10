@@ -9,4 +9,3 @@
 - 결과 문서(블록 구조와 글자)는 바뀌지 않는다. 경고만 는다.
 - `codeBlock`이 되는 `pre`는 Tab을 남기고 경고도 없다. 래퍼 없는 `pre`, `font`·`mark` 래퍼 `pre`, `div` 안 `pre`, 본문 뒤 children의 `pre`가 같다.
 - CR·C0 경고 개수와 표 셀 안 `pre`의 경고는 이전과 같다.
-- 한계: 제목 안 인용, 토글 `summary`, children wrapper, 생산 편집기 목록 `div` 안에서 평탄화되는 `pre`는 이전처럼 Tab 삭제를 경고하지 않는다.
