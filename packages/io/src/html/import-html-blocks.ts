@@ -391,7 +391,7 @@ const blocksFromSegments = (
       // 속성 계약(dataGeulBlockId·language·wrap)을 갖는다 — figure는 아무
       // data-geul-*도 갖지 않는 순수 wrapper다. block-segmenter.ts의
       // isCodeBlockFigureNode predicate(import-html-segment-policy.ts)가
-      // 이미 pre 자식 존재를 보장하므로 `?? segment.node` fallback은 실제로는
+      // 이미 pre 정확히 1개를 보장하므로(Issue #355) `?? segment.node` fallback은 실제로는
       // 도달하지 않는다 — non-null assertion 대신 타입만 좁히는 안전한 형태로
       // 둔다.
       const isFigure = segment.node.tagName === "figure";

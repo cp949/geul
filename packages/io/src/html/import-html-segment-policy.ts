@@ -36,14 +36,29 @@ export const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
 // 코드블록 caption(RD-002-DELTA-03)의 <figure><pre>…</pre>
 // <figcaption>…</figcaption></figure> 래핑 판별. isMediaNode(import-html-
 // media.ts)와 마찬가지로 figure가 media caption과 codeBlock caption 두 의미를
-// 겸하는 태그라 태그명만으로는 판정할 수 없다 — 자식에 <pre>가 있을 때만
-// codeBlock figure로 승격한다. media figure(자식이 img/video/audio/a)는
-// pre 자식을 갖지 않으므로 두 predicate가 동시에 true가 되는 입력은 없다.
-const isCodeBlockFigureNode = (node: HtmlElementNode): boolean =>
-  node.tagName === "figure" &&
-  node.children.some(
-    (child) => isElementNode(child) && child.tagName === "pre",
-  );
+// 겸하는 태그라 태그명만으로는 판정할 수 없다.
+// 정규형만 codeBlock figure로 승격한다(Issue #355).
+// - 요소 자식이 pre 정확히 1개 + figcaption 0–1개다. 순서는 무관하다.
+// - 그 밖의 요소 자식은 없다.
+// - 공백만 있는 텍스트 노드는 무시한다. 공백이 아닌 텍스트가 있으면 비정규다.
+// 변환기는 pre와 figcaption만 읽는다. 정규형이 아니면 읽지 않는 자식이
+// 경고 없이 사라진다. 승격하지 않으면 figure는 div처럼 문단 경계가 되어
+// 자식 글자가 문서 순서대로 형제 블록에 남는다.
+const isCodeBlockFigureNode = (node: HtmlElementNode): boolean => {
+  if (node.tagName !== "figure") return false;
+  let preCount = 0;
+  let figcaptionCount = 0;
+  for (const child of node.children) {
+    if (isElementNode(child)) {
+      if (child.tagName === "pre") preCount += 1;
+      else if (child.tagName === "figcaption") figcaptionCount += 1;
+      else return false;
+    } else if (child.type === "text" && child.value.trim() !== "") {
+      return false;
+    }
+  }
+  return preCount === 1 && figcaptionCount <= 1;
+};
 
 // callout(Issue #209 RD-003 DELTA-01) — div가 own-content 블록(quote의
 // blockquote와 동형)을 겸하는 첫 사례라 isMediaNode/isCodeBlockFigureNode와

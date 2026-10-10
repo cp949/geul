@@ -49,6 +49,11 @@ const mediaTypeFromNode = (
     : undefined;
 };
 
+const hasPreChild = (node: HtmlElementNode): boolean =>
+  node.children.some(
+    (child) => isElementNode(child) && child.tagName === "pre",
+  );
+
 // block-segmenter.ts에 넘기는 노드-레벨 predicate(RD-001.md "결정" —
 // isTableNode류 시그니처를 재사용한다, isDividerTag류 태그명-only로는
 // own-format <a>/<div>와 일반 <a>/<div>를 구분할 수 없다). a/div/figure는
@@ -67,6 +72,10 @@ export const isMediaNode = (node: HtmlElementNode): boolean => {
     node.tagName === "div" ||
     node.tagName === "figure"
   ) {
+    // pre 자식이 있는 figure는 media가 아니다. 마커가 있어도 media로 읽으면
+    // media 변환이 읽지 않는 pre 글자가 경고 없이 사라진다(Issue #355).
+    // 정규형이면 codeBlock이 되고, 아니면 div처럼 자식이 재귀된다.
+    if (node.tagName === "figure" && hasPreChild(node)) return false;
     return mediaTypeFromNode(node) !== undefined;
   }
   return false;
