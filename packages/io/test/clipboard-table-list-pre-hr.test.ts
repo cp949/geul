@@ -291,6 +291,13 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
 
       expect(clipboardShapes(html)).toEqual([item("t", [code("c")])]);
     });
+
+    it("무효 data-language와 유효 class가 함께면 class 값을 쓰고 importHtml과 같다(Issue #353)", () => {
+      const html = `<ul><li>t<pre data-language="a&#1;b" class="language-py">c</pre></li></ul>${TABLE}`;
+
+      expect(clipboardShapes(html)).toEqual([item("t", [code("c", "python")])]);
+      expect(clipboardShapes(html)).toEqual(importedShapes(html));
+    });
   });
 
   describe("클립보드가 읽지 않는 pre 속성", () => {

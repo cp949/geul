@@ -762,15 +762,29 @@ describe("CodeBlock HTML 가져오기", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
-  it("우선 선택된 language의 금지 문자를 fallback·보정 없이 거절한다", () => {
-    expect(
-      importHtml(
-        '<pre data-language="valid"><code data-language="bad&#x7f;">source</code></pre>',
-      ),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "HTML_DOCUMENT_INVALID" },
-    });
+  it("우선 선택된 language의 금지 문자는 그 후보를 빼고 다음 후보를 쓰며 UNSAFE_ATTRIBUTE_REMOVED를 반환한다(Issue #353)", () => {
+    const result = importHtml(
+      '<pre data-language="valid"><code data-language="bad&#x7f;">source</code></pre>',
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.document.blocks).toEqual([
+      {
+        id: "html-1",
+        type: "codeBlock",
+        language: "valid",
+        content: [{ text: "source" }],
+      },
+    ]);
+    expect(result.value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "code",
+        attribute: "dataLanguage",
+        message: "Unsupported dataLanguage attribute was removed from code",
+      },
+    ]);
   });
 
   it("source의 금지 문자는 거절하지 않고 지운 뒤 UNSAFE_CODE_POINT_REMOVED를 반환한다(Issue #352)", () => {

@@ -127,7 +127,7 @@ describe("CodeBlock importer와 production core 왕복", () => {
   });
 
   it("HTML/GFM invalid import는 structured Result 실패로 끝나 core를 호출하지 않는다", () => {
-    const invalidHtml = importHtml('<pre data-language="bad&#x7f;">one</pre>');
+    const invalidHtml = importHtml("<img src='javascript:x'>");
     const invalidMarkdown = importMarkdown("```\n\ud800\n```\n");
 
     expect(invalidHtml).toMatchObject({

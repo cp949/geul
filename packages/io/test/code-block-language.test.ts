@@ -8,7 +8,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { htmlElement } from "../src/html/inline-content.js";
+import {
+  htmlElement,
+  type HtmlElementNode,
+} from "../src/html/inline-content.js";
 import { selectCodeBlockLanguage } from "../src/html/import-html-helpers.js";
 
 /** 직계 자식으로 code를 가진 pre 노드를 만든다. code가 없으면 텍스트만 든다. */
@@ -131,6 +134,108 @@ describe("selectCodeBlockLanguage", () => {
     expect(selectCodeBlockLanguage(pre)).toEqual({
       language: undefined,
       metadataConflict: false,
+    });
+  });
+
+  describe("무효 후보(Issue #353)", () => {
+    it("무효 data-language는 선택에서 빠지고 다음 후보를 쓴다", () => {
+      const pre = preWith({
+        dataLanguage: "a\u0001b",
+        className: ["language-js"],
+      });
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBe("js");
+      expect(result.metadataConflict).toBe(false);
+      expect(result.rejected).toEqual([
+        { node: pre, attribute: "dataLanguage" },
+      ]);
+    });
+
+    it("무효 후보는 exact 후보에도 들지 않아 충돌이 아니다", () => {
+      const pre = preWith(
+        { dataLanguage: "ts" },
+        { dataLanguage: "bad\u007f" },
+      );
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBe("ts");
+      expect(result.metadataConflict).toBe(false);
+    });
+
+    it("무효 후보가 있어도 유효 후보끼리 어긋나면 충돌이다", () => {
+      const pre = preWith(
+        { dataLanguage: "ts", className: ["language-js"] },
+        { dataLanguage: "bad\u0001" },
+      );
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBe("ts");
+      expect(result.metadataConflict).toBe(true);
+    });
+
+    it("짝 없는 surrogate도 무효다", () => {
+      const pre = preWith({ dataLanguage: "a\ud800b" });
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBeUndefined();
+      expect(result.rejected).toEqual([
+        { node: pre, attribute: "dataLanguage" },
+      ]);
+    });
+
+    it("직계 code의 무효 후보는 code 노드를 돌려준다", () => {
+      const pre = preWith({}, { dataLanguage: "a\u0001b" });
+      const code = pre.children[0] as HtmlElementNode;
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBeUndefined();
+      expect(result.rejected).toEqual([
+        { node: code, attribute: "dataLanguage" },
+      ]);
+    });
+
+    it("한 class의 무효 토큰이 둘이어도 (노드, className) 한 건이다", () => {
+      const pre = preWith({
+        className: ["language-a\u0001", "language-b\u0002"],
+      });
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBeUndefined();
+      expect(result.rejected).toEqual([{ node: pre, attribute: "className" }]);
+    });
+
+    it("무효 class 토큰 뒤의 유효 토큰을 그 위치의 후보로 쓴다", () => {
+      const pre = preWith({ className: ["language-a\u0001", "language-js"] });
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBe("js");
+      expect(result.metadataConflict).toBe(false);
+      expect(result.rejected).toEqual([{ node: pre, attribute: "className" }]);
+    });
+
+    it("후보 순서대로 빠진 후보를 돌려준다", () => {
+      const pre = preWith(
+        { dataLanguage: "p\u0001", className: ["language-c\u0001"] },
+        { dataLanguage: "d\u0001", className: ["language-e\u0001"] },
+      );
+      const code = pre.children[0] as HtmlElementNode;
+      const result = selectCodeBlockLanguage(pre);
+
+      expect(result.language).toBeUndefined();
+      expect(result.rejected).toEqual([
+        { node: code, attribute: "dataLanguage" },
+        { node: pre, attribute: "dataLanguage" },
+        { node: code, attribute: "className" },
+        { node: pre, attribute: "className" },
+      ]);
+    });
+
+    it("빈 data-language는 미지정이라 빠진 후보가 아니다", () => {
+      const result = selectCodeBlockLanguage(preWith({ dataLanguage: "" }));
+
+      expect(result.language).toBeUndefined();
+      expect(result.rejected ?? []).toEqual([]);
     });
   });
 });

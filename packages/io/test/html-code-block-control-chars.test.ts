@@ -149,10 +149,23 @@ describe("importHtml pre 안 무효 문자(Issue #352)", () => {
     ]);
   });
 
-  it("data-language의 무효 문자는 여전히 문서를 거절한다", () => {
-    expect(
-      importHtml('<pre data-language="bad&#x7f;">source</pre>'),
-    ).toMatchObject({ ok: false, error: { code: "HTML_DOCUMENT_INVALID" } });
+  it("data-language의 무효 문자는 거절하지 않고 language 없이 가져오며 속성 제거를 경고한다(Issue #353)", () => {
+    const value = imported('<pre data-language="bad&#x7f;">source</pre>');
+
+    expect(value.document.blocks).toEqual([
+      expect.objectContaining({
+        type: "codeBlock",
+        content: [{ text: "source" }],
+      }),
+    ]);
+    expect(value.document.blocks[0]).not.toHaveProperty("language");
+    expect(value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "pre",
+        attribute: "dataLanguage",
+      }),
+    ]);
   });
 });
 
