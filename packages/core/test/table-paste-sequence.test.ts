@@ -10,24 +10,24 @@ import type { InlineContentItem } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { buildOutOfTableSequence } from "../src/table-paste-sequence.js";
+import {
+  clipBullet,
+  clipCodeBlock,
+  clipDivider,
+  clipHeading,
+  clipNumbered,
+  clipParagraph,
+} from "./clipboard-block-test-support.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import { buildTestSchema } from "./table-test-support.js";
 
 const schema = buildTestSchema();
 
-const paragraphBlock = (text: string): ClipboardContentBlock => ({
-  type: "paragraph",
-  content: [{ text }],
-});
+const paragraphBlock = (text: string): ClipboardContentBlock =>
+  clipParagraph([{ text }]);
 
-const headingBlock = (
-  text: string,
-  level: 1 | 2 | 3,
-): ClipboardContentBlock => ({
-  type: "heading",
-  level,
-  content: [{ text }],
-});
+const headingBlock = (text: string, level: 1 | 2 | 3): ClipboardContentBlock =>
+  clipHeading(level, [{ text }]);
 
 const tableBlock = (text: string): ClipboardContentBlock => ({
   type: "table",
@@ -46,21 +46,19 @@ const tableBlock = (text: string): ClipboardContentBlock => ({
 const bulletItemBlock = (
   text: string,
   children?: ClipboardContentBlock[],
-): ClipboardContentBlock => ({
-  type: "bulletListItem",
-  content: [{ text }],
-  ...(children !== undefined ? { children } : {}),
-});
+): ClipboardContentBlock =>
+  clipBullet([{ text }], children !== undefined ? { children } : {});
 
 const numberedItemBlock = (
   text: string,
   opts: { startNumber?: number; children?: ClipboardContentBlock[] } = {},
-): ClipboardContentBlock => ({
-  type: "numberedListItem",
-  content: [{ text }],
-  ...(opts.startNumber !== undefined ? { startNumber: opts.startNumber } : {}),
-  ...(opts.children !== undefined ? { children: opts.children } : {}),
-});
+): ClipboardContentBlock =>
+  clipNumbered([{ text }], {
+    ...(opts.startNumber !== undefined
+      ? { startNumber: opts.startNumber }
+      : {}),
+    ...(opts.children !== undefined ? { children: opts.children } : {}),
+  });
 
 describe("buildOutOfTableSequence", () => {
   it("표가 없는 시퀀스는 노드만 만들고 firstTable은 null이다", () => {
@@ -314,13 +312,8 @@ describe("buildOutOfTableSequence", () => {
     const result = buildOutOfTableSequence(
       schema,
       [
-        { type: "paragraph", content: [{ text: "p" }], textColor: "#0000FF" },
-        {
-          type: "heading",
-          level: 2,
-          content: [{ text: "h" }],
-          backgroundColor: "#FFFF00",
-        },
+        clipParagraph([{ text: "p" }], { textColor: "#0000FF" }),
+        clipHeading(2, [{ text: "h" }], { backgroundColor: "#FFFF00" }),
       ],
       sequentialIds("id"),
     );
@@ -341,30 +334,17 @@ describe("buildOutOfTableSequence", () => {
     const result = buildOutOfTableSequence(
       schema,
       [
-        {
-          type: "bulletListItem",
-          content: [{ text: "item" }],
+        clipBullet([{ text: "item" }], {
           textColor: "#FF0000",
           children: [
-            {
-              type: "paragraph",
-              content: [{ text: "p" }],
-              backgroundColor: "#00FF00",
-            },
-            {
-              type: "heading",
-              level: 3,
-              content: [{ text: "h" }],
-              textColor: "#0000FF",
-            },
-            {
-              type: "numberedListItem",
-              content: [{ text: "n" }],
+            clipParagraph([{ text: "p" }], { backgroundColor: "#00FF00" }),
+            clipHeading(3, [{ text: "h" }], { textColor: "#0000FF" }),
+            clipNumbered([{ text: "n" }], {
               textColor: "#123456",
               backgroundColor: "#ABCDEF",
-            },
+            }),
           ],
-        },
+        }),
       ],
       sequentialIds("id"),
     );
@@ -429,7 +409,7 @@ describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #35
       schema,
       [
         bulletItemBlock("item", [
-          { type: "codeBlock", text: "a\n  b", language: "typescript" },
+          clipCodeBlock("a\n  b", { language: "typescript" }),
         ]),
       ],
       sequentialIds("id"),
@@ -451,7 +431,7 @@ describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #35
   it("language가 없는 codeBlock은 language attr이 null이다", () => {
     const result = buildOutOfTableSequence(
       schema,
-      [bulletItemBlock("item", [{ type: "codeBlock", text: "x" }])],
+      [bulletItemBlock("item", [clipCodeBlock("x")])],
       sequentialIds("id"),
     );
 
@@ -464,7 +444,7 @@ describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #35
   it("목록 항목 자식 divider는 컨테이너 없이 blockId를 가진 divider 노드가 된다", () => {
     const result = buildOutOfTableSequence(
       schema,
-      [bulletItemBlock("item", [{ type: "divider" }])],
+      [bulletItemBlock("item", [clipDivider()])],
       sequentialIds("id"),
     );
 
@@ -480,8 +460,8 @@ describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #35
       schema,
       [
         bulletItemBlock("item", [
-          { type: "codeBlock", text: "c" },
-          { type: "divider" },
+          clipCodeBlock("c"),
+          clipDivider(),
           paragraphBlock("p"),
         ]),
       ],
@@ -498,8 +478,8 @@ describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #35
   });
 
   it.each([
-    ["codeBlock", { type: "codeBlock", text: "x" } as ClipboardContentBlock],
-    ["divider", { type: "divider" } as ClipboardContentBlock],
+    ["codeBlock", clipCodeBlock("x")],
+    ["divider", clipDivider()],
   ])("최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절한다", (_name, block) => {
     const result = buildOutOfTableSequence(
       schema,

@@ -33,7 +33,10 @@ import {
 import { pasteInto as pasteGridInto } from "./table-grid-paste.js";
 import {
   buildOutOfTableSequence,
+  clipboardCodeBlockSource,
+  codeBlockContentMessage,
   topLevelBlockMessage,
+  unsupportedBlockMessage,
 } from "./table-paste-sequence.js";
 
 // $pos가 표 노드 안에 있는지 — 조상 depth를 거슬러 올라가며 검사한다.
@@ -274,8 +277,10 @@ const blockColorViolation = (
 // CLIPBOARD_CONTENT_INVALID로 거절한다. 문단/heading/목록 항목의 블록 색도
 // 검사한다(Issue #343, blockColorViolation). codeBlock·divider는 목록 항목
 // children에서만 받는다(Issue #351). 최상위(depth 1)는 거절하고, codeBlock은
-// 글자와 language를 model의 codeBlock 계약(isValidCodeBlockSource,
-// isValidCodeBlockLanguage)으로 검사한다. divider는 검사할 필드가 없다.
+// content 런을 이어 붙인 글자와 language를 model의 codeBlock 계약
+// (isValidCodeBlockSource, isValidCodeBlockLanguage)으로 검사한다. content에
+// 커스텀 inline 원소가 있으면 거절한다. divider는 검사할 필드가 없다. 이 6종과
+// table 밖의 type(quote, callout 등)은 어느 깊이에서든 거절한다.
 //
 // depth는 model/schema.ts의 findNestingDepthViolation과 같은 정의(top-level
 // 1, blocks 배열 자체가 그 depth)다 — pasteOutOfTable의 삽입은 항상
@@ -365,7 +370,17 @@ const validateOutOfTableContent = (
         };
       }
       if (block.type === "codeBlock") {
-        if (!isValidCodeBlockSource(block.text)) {
+        const source = clipboardCodeBlockSource(block.content);
+        if (source === null) {
+          return {
+            ok: false,
+            error: {
+              code: "CLIPBOARD_CONTENT_INVALID",
+              message: codeBlockContentMessage,
+            },
+          };
+        }
+        if (!isValidCodeBlockSource(source)) {
           return {
             ok: false,
             error: {
@@ -389,6 +404,15 @@ const validateOutOfTableContent = (
         }
       }
       continue;
+    }
+    if (block.type !== "table") {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: unsupportedBlockMessage(block.type),
+        },
+      };
     }
     const validated = validateTabularDataForPaste(block.data);
     if (!validated.ok) return validated;
@@ -459,11 +483,23 @@ const cellLinesOf = (
   blocks.flatMap((block): InlineContent[] => {
     if (block.type === "table" || block.type === "divider") return [];
     if (block.type === "codeBlock") {
-      return block.text
+      // 커스텀 inline 원소가 든 codeBlock은 validateOutOfTableContent가 먼저
+      // 거절한다. 도달하면 줄이 없는 것으로 본다.
+      return (clipboardCodeBlockSource(block.content) ?? "")
         .split("\n")
         .map((line) => line.replace(/\t/g, ""))
         .filter((line) => line.trim().length > 0)
         .map((line) => [{ text: line }]);
+    }
+    // 미지원 type(quote, callout 등)은 validateOutOfTableContent가 먼저
+    // 거절한다. 도달하면 줄이 없는 것으로 본다.
+    if (
+      block.type !== "paragraph" &&
+      block.type !== "heading" &&
+      block.type !== "bulletListItem" &&
+      block.type !== "numberedListItem"
+    ) {
+      return [];
     }
     const line = withBlockColorMarks(block.content, block);
     if (block.type === "paragraph" || block.type === "heading") return [line];

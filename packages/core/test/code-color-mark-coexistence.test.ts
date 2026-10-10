@@ -27,6 +27,7 @@ import { getTableBlock } from "../src/table-commands.js";
 import { pasteClipboardContent } from "../src/table-paste-commands.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { contentTextStart } from "./block-test-support.js";
+import { clipParagraph } from "./clipboard-block-test-support.js";
 import {
   contentOfB1,
   expectDocValid,
@@ -96,11 +97,9 @@ describe("표 셀 안 clipboard 붙여넣기의 code와 색 마크 공존", () =
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [{ text: "x", marks: [{ type: "code" }] }],
+        clipParagraph([{ text: "x", marks: [{ type: "code" }] }], {
           textColor: BLUE,
-        },
+        }),
         tableBlockWith([{ text: "y" }]),
       ],
       sequentialIds("paste"),
@@ -176,19 +175,16 @@ describe("표 밖 붙여넣기와 초기 문서 로드의 code와 색 마크 공
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [
-            {
-              text: "x",
-              marks: [
-                { type: "code" },
-                { type: "textColor", color: RED },
-                { type: "backgroundColor", color: YELLOW },
-              ],
-            },
-          ],
-        },
+        clipParagraph([
+          {
+            text: "x",
+            marks: [
+              { type: "code" },
+              { type: "textColor", color: RED },
+              { type: "backgroundColor", color: YELLOW },
+            ],
+          },
+        ]),
         tableBlockWith([{ text: "y" }]),
       ],
       sequentialIds("paste"),
@@ -256,11 +252,9 @@ describe("tiptapToModel이 code와 색 마크를 잃지 않는다", () => {
     pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [{ text: "x", marks: [{ type: "code" }] }],
+        clipParagraph([{ text: "x", marks: [{ type: "code" }] }], {
           backgroundColor: YELLOW,
-        },
+        }),
         tableBlockWith([{ text: "y" }]),
       ],
       sequentialIds("paste"),

@@ -23,6 +23,14 @@ import {
   pasteTabularData,
 } from "../src/table-paste-commands.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
+import {
+  clipBullet,
+  clipCodeBlock,
+  clipDivider,
+  clipHeading,
+  clipNumbered,
+  clipParagraph,
+} from "./clipboard-block-test-support.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   cellJson,
@@ -416,37 +424,27 @@ const tableBlock = (text: string): ClipboardContentBlock => ({
 });
 
 describe("클립보드 시퀀스를 붙여넣는다", () => {
-  const paragraphBlock = (text: string): ClipboardContentBlock => ({
-    type: "paragraph",
-    content: [{ text }],
-  });
+  const paragraphBlock = (text: string): ClipboardContentBlock =>
+    clipParagraph([{ text }]);
   const headingBlock = (
     text: string,
     level: 1 | 2 | 3,
-  ): ClipboardContentBlock => ({
-    type: "heading",
-    level,
-    content: [{ text }],
-  });
+  ): ClipboardContentBlock => clipHeading(level, [{ text }]);
   const bulletItemBlock = (
     text: string,
     children?: ClipboardContentBlock[],
-  ): ClipboardContentBlock => ({
-    type: "bulletListItem",
-    content: [{ text }],
-    ...(children !== undefined ? { children } : {}),
-  });
+  ): ClipboardContentBlock =>
+    clipBullet([{ text }], children !== undefined ? { children } : {});
   const numberedItemBlock = (
     text: string,
     opts: { startNumber?: number; children?: ClipboardContentBlock[] } = {},
-  ): ClipboardContentBlock => ({
-    type: "numberedListItem",
-    content: [{ text }],
-    ...(opts.startNumber !== undefined
-      ? { startNumber: opts.startNumber }
-      : {}),
-    ...(opts.children !== undefined ? { children: opts.children } : {}),
-  });
+  ): ClipboardContentBlock =>
+    clipNumbered([{ text }], {
+      ...(opts.startNumber !== undefined
+        ? { startNumber: opts.startNumber }
+        : {}),
+      ...(opts.children !== undefined ? { children: opts.children } : {}),
+    });
   // depth단짜리 bulletListItem 체인 ClipboardContentBlock — 이 블록을
   // 표 밖 시퀀스 최상위(depth 1)에 두면 리프가 절대 깊이 depth에 있다
   // (clipboard-paste-list.test.ts의 buildListDepthChain과 같은 패턴).
@@ -595,10 +593,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [{ text: "bold", marks: [{ type: "bold" }] }],
-        },
+        clipParagraph([{ text: "bold", marks: [{ type: "bold" }] }]),
         tableBlock("x"),
       ],
       sequentialIds("paste"),
@@ -636,7 +631,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 
     const result = pasteClipboardContent(
       editor,
-      [{ type: "paragraph", content: [{ text: "x" }] }],
+      [clipParagraph([{ text: "x" }])],
       sequentialIds("paste"),
     );
 
@@ -677,7 +672,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 
     const result = pasteClipboardContent(
       editor,
-      [{ type: "paragraph", content: [{ text: "" }] }, tableBlock("A")],
+      [clipParagraph([{ text: "" }]), tableBlock("A")],
       sequentialIds("paste"),
     );
 
@@ -704,10 +699,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [{ type: "custom", customType: "myWidget" }],
-        },
+        clipParagraph([{ type: "custom", customType: "myWidget" }]),
         tableBlock("A"),
       ],
       sequentialIds("paste"),
@@ -811,7 +803,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 
     const result = pasteClipboardContent(
       editor,
-      [{ type: "heading", level: 1, content: [{ text: "" }] }, tableBlock("A")],
+      [clipHeading(1, [{ text: "" }]), tableBlock("A")],
       sequentialIds("paste"),
     );
 
@@ -867,7 +859,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 
     const result = pasteClipboardContent(
       editor,
-      [{ type: "bulletListItem", content: [{ text: "" }] }, tableBlock("A")],
+      [clipBullet([{ text: "" }]), tableBlock("A")],
       sequentialIds("paste"),
     );
 
@@ -890,11 +882,9 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "bulletListItem",
-          content: [{ text: "a" }],
-          children: [{ type: "paragraph", content: [{ text: "" }] }],
-        },
+        clipBullet([{ text: "a" }], {
+          children: [clipParagraph([{ text: "" }])],
+        }),
         tableBlock("A"),
       ],
       sequentialIds("paste"),
@@ -992,13 +982,8 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
 // Issue #351: 클립보드 파서는 li 안 pre·hr를 목록 항목의 자식 codeBlock·divider로
 // 만든다. 최상위에는 이 두 타입이 오지 않아 core가 거절한다.
 describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351)", () => {
-  const itemWith = (
-    children: ClipboardContentBlock[],
-  ): ClipboardContentBlock => ({
-    type: "bulletListItem",
-    content: [{ text: "item" }],
-    children,
-  });
+  const itemWith = (children: ClipboardContentBlock[]): ClipboardContentBlock =>
+    clipBullet([{ text: "item" }], { children });
 
   it("표 밖 캐럿에서 자식 codeBlock·divider가 blockGroup 안 노드로 들어가고 문서 읽기가 성공한다", () => {
     const editor = createTableFixtureEditor(docWithParagraph);
@@ -1008,8 +993,8 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
       editor,
       [
         itemWith([
-          { type: "codeBlock", text: "a\n\tb", language: "typescript" },
-          { type: "divider" },
+          clipCodeBlock("a\n\tb", { language: "typescript" }),
+          clipDivider(),
         ]),
         tableBlock("A"),
       ],
@@ -1048,10 +1033,7 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
 
     const result = pasteClipboardContent(
       editor,
-      [
-        itemWith([{ type: "codeBlock", text: "x" }, { type: "divider" }]),
-        tableBlock("A"),
-      ],
+      [itemWith([clipCodeBlock("x"), clipDivider()]), tableBlock("A")],
       sequentialIds("paste"),
     );
 
@@ -1059,8 +1041,8 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
   });
 
   it.each([
-    ["codeBlock", { type: "codeBlock", text: "x" } as ClipboardContentBlock],
-    ["divider", { type: "divider" } as ClipboardContentBlock],
+    ["codeBlock", clipCodeBlock("x")],
+    ["divider", clipDivider()],
   ])(
     "표 밖에서 최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
     (_name, block) => {
@@ -1086,8 +1068,8 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
   );
 
   it.each([
-    ["codeBlock", { type: "codeBlock", text: "x" } as ClipboardContentBlock],
-    ["divider", { type: "divider" } as ClipboardContentBlock],
+    ["codeBlock", clipCodeBlock("x")],
+    ["divider", clipDivider()],
   ])(
     "표 안에서도 최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
     (_name, block) => {
@@ -1125,7 +1107,7 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
 
       const result = pasteClipboardContent(
         editor,
-        [itemWith([{ type: "codeBlock", text }]), tableBlock("A")],
+        [itemWith([clipCodeBlock(text)]), tableBlock("A")],
         sequentialIds("paste"),
       );
 
@@ -1148,7 +1130,7 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
     const result = pasteClipboardContent(
       editor,
       [
-        itemWith([{ type: "codeBlock", text: "x", language: "a\u0001" }]),
+        itemWith([clipCodeBlock("x", { language: "a\u0001" })]),
         tableBlock("A"),
       ],
       sequentialIds("paste"),
@@ -1168,9 +1150,7 @@ describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351
     const editor = createTableFixtureEditor(docWithParagraph);
     editor.commands.setTextSelection(1);
     const before = editor.getJSON() as TiptapJsonNode;
-    let innermost: ClipboardContentBlock = itemWith([
-      { type: "codeBlock", text: "leaf" },
-    ]);
+    let innermost: ClipboardContentBlock = itemWith([clipCodeBlock("leaf")]);
     for (let level = 1; level < MAX_NESTING_DEPTH; level += 1) {
       innermost = itemWith([innermost]);
     }

@@ -1,5 +1,11 @@
 import type { ClipboardContent, ClipboardContentBlock } from "@cp949/geul-io";
-import type { IdFactory, Result, TableBlock } from "@cp949/geul-model";
+import {
+  type IdFactory,
+  type InlineContent,
+  isTextRunItem,
+  type Result,
+  type TableBlock,
+} from "@cp949/geul-model";
 import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
 import {
   blockToTiptapJson,
@@ -52,6 +58,31 @@ const buildFilledTableBlock = (
   return pasteGridInto(emptyTable, { row: 0, column: 0 }, block.data, createId);
 };
 
+// core가 붙이는 클립보드 블록 type이다. 새 ClipboardContentBlock 타입은 model의
+// 모든 비표 블록을 담지만 파서는 이 6종과 table만 낸다. 그 밖의 type은 거절한다
+// (RD-005가 표 옆 블록을 importHtml 변환기에 위임하면 이 범위를 넓힌다).
+// 검증(validateOutOfTableContent)이 먼저 같은 거절을 하고 조립은 방어선이다.
+export const unsupportedBlockMessage = (type: string): string =>
+  `Unsupported clipboard block type: ${type}`;
+
+// codeBlock.content가 마크 없는 평문 런이라는 파서 계약을 core가 읽는 방식이다.
+// 런의 text를 이어 붙인 소스를 돌려준다. 커스텀 inline 원소가 있으면 null이다.
+// 런의 마크는 codeBlock에 실을 수 없어 무시한다(model-to-tiptap의
+// inlineContentToTiptapPlain과 같다).
+export const clipboardCodeBlockSource = (
+  content: InlineContent,
+): string | null => {
+  let source = "";
+  for (const item of content) {
+    if (!isTextRunItem(item)) return null;
+    source += item.text;
+  }
+  return source;
+};
+
+export const codeBlockContentMessage =
+  "CodeBlock content must be plain text runs";
+
 // 클립보드 블록의 자기 style 색(Issue #343)을 blockContainer attrs로 옮긴다.
 // model-to-tiptap.ts blockToTiptapJson과 같은 이름·값 규칙이다(값 없으면
 // null = 필드 부재). canonical 판정은 호출자(validateOutOfTableContent)가
@@ -74,6 +105,8 @@ const blockColorAttrs = (
 // divider와 codeBlock은 li 안 hr·pre에서 온다(Issue #351). 모델 블록으로
 // 바꿔 blockToTiptapJson에 맡겨 PM 인코딩(divider는 container 없이
 // blockId만, codeBlock은 blockContainer 안 codeBlock 노드)을 공유한다.
+// 미지원 type(quote, callout 등)은 거절한다. 검증이 먼저 같은 거절을 하는
+// 방어선이다.
 // paragraph/heading은 항상 blockContainer로 감싼다 — blockGroup의 스키마
 // content("block+")가 bare nestableBlockContent를 허용하지 않는다.
 // blockId는 listItemToTiptapJson과 같은 관례로 바로 배정한다. 최상위
@@ -101,14 +134,34 @@ const listChildToTiptapJson = (
   }
 
   if (block.type === "codeBlock") {
+    const source = clipboardCodeBlockSource(block.content);
+    if (source === null) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: codeBlockContentMessage,
+        },
+      };
+    }
     return {
       ok: true,
       value: blockToTiptapJson({
         id: createId(),
         type: "codeBlock",
-        content: block.text.length === 0 ? [] : [{ text: block.text }],
+        content: source.length === 0 ? [] : [{ text: source }],
         ...(block.language === undefined ? {} : { language: block.language }),
       }),
+    };
+  }
+
+  if (block.type !== "paragraph" && block.type !== "heading") {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: unsupportedBlockMessage(block.type),
+      },
     };
   }
 
@@ -135,9 +188,10 @@ const listChildToTiptapJson = (
 // bare + appendTransaction 사후 배정 경로도 이론적으로 가능하지만
 // buildPasteTableSkeleton과 같은 이 파일 기존 관례를 따라 명시 조립을
 // 유지한다). model-to-tiptap.ts의 blockToTiptapJson/blockContentToTiptapJson과
-// 같은 JSON shape이지만 id-less ClipboardContentBlock 입력이라 코드는
-// 공유하지 않는다 — attrs 이름·shape(특히 numberedListItem의
-// startNumber: block.startNumber ?? null)만 반드시 일치시킨다.
+// 같은 JSON shape이다. 다만 입력의 id는 파서의 임시값이라 쓰지 않고 createId로
+// 재발급하며, children의 표는 TabularData variant라 코드는 공유하지 않는다 —
+// attrs 이름·shape(특히 numberedListItem의 startNumber: block.startNumber ?? null)만
+// 반드시 일치시킨다.
 const listItemToTiptapJson = (
   block: Extract<
     ClipboardContentBlock,
@@ -188,7 +242,9 @@ export const topLevelBlockMessage = (type: "codeBlock" | "divider"): string =>
 // - 목록 항목(bulletListItem/numberedListItem): listItemToTiptapJson으로
 //   blockContainer/blockGroup 트리를 완전히 조립한다(DELTA-02, Issue #143 (b)).
 // codeBlock/divider는 목록 항목 children에서만 온다(Issue #351). 최상위에서는
-// 거절한다. validateOutOfTableContent가 먼저 같은 거절을 하므로 방어선이다.
+// 거절한다. 그 밖의 미지원 type(quote, callout 등)도 거절한다
+// (unsupportedBlockMessage). validateOutOfTableContent가 먼저 같은 거절을
+// 하므로 둘 다 방어선이다.
 // table은 firstTable로 앞서 반환한다. 목록 항목 children 안에 중첩된 표는
 // 이 추적 대상이 아니다(최상위 시퀀스의 첫 표만 추적하는 기존 범위,
 // DELTA-02 범위 밖).
@@ -238,6 +294,16 @@ const buildSequenceNode = (
       error: {
         code: "CLIPBOARD_CONTENT_INVALID",
         message: topLevelBlockMessage(block.type),
+      },
+    };
+  }
+
+  if (block.type !== "table") {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: unsupportedBlockMessage(block.type),
       },
     };
   }

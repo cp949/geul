@@ -16,6 +16,14 @@ import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { getTableBlock } from "../src/table-commands.js";
 import { pasteClipboardContent } from "../src/table-paste-commands.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
+import {
+  clipBullet,
+  clipCodeBlock,
+  clipDivider,
+  clipHeading,
+  clipNumbered,
+  clipParagraph,
+} from "./clipboard-block-test-support.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   createTableFixtureEditor,
@@ -45,14 +53,8 @@ const table2x2: ClipboardContentBlock = {
 
 const bullet = (
   text: string,
-  extra: Partial<
-    Extract<ClipboardContentBlock, { type: "bulletListItem" }>
-  > = {},
-): ClipboardContentBlock => ({
-  type: "bulletListItem",
-  content: text === "" ? [] : [{ text }],
-  ...extra,
-});
+  extra: Parameters<typeof clipBullet>[1] = {},
+): ClipboardContentBlock => clipBullet(text === "" ? [] : [{ text }], extra);
 
 /** 표 안 캐럿 붙여넣기 뒤 table-1의 네 셀 content를 읽는다. */
 const cellContents = (editor: Editor): Array<InlineContent | undefined> => {
@@ -75,7 +77,7 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
   it("표 앞 목록 항목은 좌상단 셀 앞에 줄로 붙는다", () => {
     const { editor, result } = pasteInCell([
       bullet("L1"),
-      { type: "numberedListItem", content: [{ text: "L2" }] },
+      clipNumbered([{ text: "L2" }]),
       table2x2,
     ]);
 
@@ -92,7 +94,7 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
     const { editor, result } = pasteInCell([
       table2x2,
       bullet("T1"),
-      { type: "numberedListItem", content: [{ text: "T2" }] },
+      clipNumbered([{ text: "T2" }]),
     ]);
 
     expect(result.ok).toBe(true);
@@ -106,11 +108,11 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
 
   it("앞뒤에 문단과 목록 항목이 섞이면 읽기 순서를 지킨다", () => {
     const { editor, result } = pasteInCell([
-      { type: "paragraph", content: [{ text: "intro" }] },
+      clipParagraph([{ text: "intro" }]),
       bullet("L1"),
       table2x2,
       bullet("T1"),
-      { type: "paragraph", content: [{ text: "outro" }] },
+      clipParagraph([{ text: "outro" }]),
     ]);
 
     expect(result.ok).toBe(true);
@@ -127,9 +129,9 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
       bullet("A", {
         children: [
           bullet("B", {
-            children: [{ type: "paragraph", content: [{ text: "C" }] }],
+            children: [clipParagraph([{ text: "C" }])],
           }),
-          { type: "heading", level: 2, content: [{ text: "D" }] },
+          clipHeading(2, [{ text: "D" }]),
           bullet("E"),
         ],
       }),
@@ -144,23 +146,20 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
   it("목록 항목의 블록 색은 줄 텍스트의 색 마크가 되고 안쪽 같은 종류 마크가 이긴다", () => {
     const { editor, result } = pasteInCell([
       bullet("L1", { textColor: "#0000FF", backgroundColor: "#FFFF00" }),
-      {
-        type: "numberedListItem",
-        content: [
+      clipNumbered(
+        [
           {
             text: "L2",
             marks: [{ type: "textColor", color: "#FF0000" }],
           },
         ],
-        textColor: "#0000FF",
-        children: [
-          {
-            type: "paragraph",
-            content: [{ text: "child" }],
-            backgroundColor: "#00FF00",
-          },
-        ],
-      },
+        {
+          textColor: "#0000FF",
+          children: [
+            clipParagraph([{ text: "child" }], { backgroundColor: "#00FF00" }),
+          ],
+        },
+      ),
       table2x2,
     ]);
 
@@ -189,7 +188,7 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
       bullet(""),
       bullet("x"),
       bullet("", {
-        children: [{ type: "paragraph", content: [{ text: "y" }] }],
+        children: [clipParagraph([{ text: "y" }])],
       }),
       table2x2,
       bullet(""),
@@ -206,9 +205,9 @@ describe("표 안 캐럿에 목록 항목이 든 클립보드를 붙인다", () 
 
   it("문단만 섞인 표 안 붙여넣기 결과는 이전과 같다", () => {
     const { editor, result } = pasteInCell([
-      { type: "paragraph", content: [{ text: "intro" }] },
+      clipParagraph([{ text: "intro" }]),
       table2x2,
-      { type: "paragraph", content: [{ text: "outro" }] },
+      clipParagraph([{ text: "outro" }]),
     ]);
 
     expect(result.ok).toBe(true);
@@ -321,7 +320,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
   it("codeBlock 글자는 줄마다 셀 줄이 되고 들여쓰기를 지킨다", () => {
     const { editor, result } = pasteInCell([
       bullet("L", {
-        children: [{ type: "codeBlock", text: "if (x) {\n  y();\n}" }],
+        children: [clipCodeBlock("if (x) {\n  y();\n}")],
       }),
       table2x2,
     ]);
@@ -335,7 +334,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
   it("codeBlock 글자의 Tab은 지워 셀 텍스트 검증에 걸리지 않는다", () => {
     const { editor, result } = pasteInCell([
       bullet("L", {
-        children: [{ type: "codeBlock", text: "x\n\ty\n\t\nz" }],
+        children: [clipCodeBlock("x\n\ty\n\t\nz")],
       }),
       table2x2,
     ]);
@@ -347,10 +346,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
   it("divider는 줄을 내지 않는다", () => {
     const { editor, result } = pasteInCell([
       bullet("L", {
-        children: [
-          { type: "divider" },
-          { type: "paragraph", content: [{ text: "after" }] },
-        ],
+        children: [clipDivider(), clipParagraph([{ text: "after" }])],
       }),
       table2x2,
     ]);
@@ -363,7 +359,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
     const { editor, result } = pasteInCell([
       table2x2,
       bullet("T", {
-        children: [{ type: "codeBlock", text: "a\n\nb" }, { type: "divider" }],
+        children: [clipCodeBlock("a\n\nb"), clipDivider()],
       }),
     ]);
 
@@ -375,7 +371,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
     const { editor, result } = pasteInCell([
       table2x2,
       bullet("T", {
-        children: [{ type: "codeBlock", text: "a\n   \n\t\n  b" }],
+        children: [clipCodeBlock("a\n   \n\t\n  b")],
       }),
     ]);
 
@@ -386,7 +382,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
   it("children 안에 codeBlock·divider만 있어도 표 개수를 셀 때 예외를 내지 않는다", () => {
     const { result } = pasteInCell([
       bullet("L", {
-        children: [{ type: "codeBlock", text: "x" }, { type: "divider" }],
+        children: [clipCodeBlock("x"), clipDivider()],
       }),
       table2x2,
     ]);
@@ -401,10 +397,7 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
 
     const result = pasteClipboardContent(
       editor,
-      [
-        bullet("L", { children: [{ type: "codeBlock", text: "x" }, table2x2] }),
-        table2x2,
-      ],
+      [bullet("L", { children: [clipCodeBlock("x"), table2x2] }), table2x2],
       sequentialIds("paste"),
     );
 

@@ -14,6 +14,11 @@ import type { TiptapJsonNode } from "../src/model-to-tiptap.js";
 import { getTableBlock } from "../src/table-commands.js";
 import { pasteClipboardContent } from "../src/table-paste-commands.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
+import {
+  clipBullet,
+  clipHeading,
+  clipParagraph,
+} from "./clipboard-block-test-support.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   createTableFixtureEditor,
@@ -52,26 +57,15 @@ describe("클립보드 블록 색을 붙여넣는다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        { type: "paragraph", content: [{ text: "p" }], textColor: "#0000FF" },
-        {
-          type: "heading",
-          level: 2,
-          content: [{ text: "h" }],
-          backgroundColor: "#FFFF00",
-        },
+        clipParagraph([{ text: "p" }], { textColor: "#0000FF" }),
+        clipHeading(2, [{ text: "h" }], { backgroundColor: "#FFFF00" }),
         tableBlock("A"),
-        {
-          type: "bulletListItem",
-          content: [{ text: "item" }],
+        clipBullet([{ text: "item" }], {
           textColor: "#FF0000",
           children: [
-            {
-              type: "paragraph",
-              content: [{ text: "child" }],
-              backgroundColor: "#00FF00",
-            },
+            clipParagraph([{ text: "child" }], { backgroundColor: "#00FF00" }),
           ],
-        },
+        }),
       ],
       sequentialIds("paste"),
     );
@@ -109,18 +103,9 @@ describe("클립보드 블록 색을 붙여넣는다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [{ text: "intro" }],
-          textColor: "#0000FF",
-        },
+        clipParagraph([{ text: "intro" }], { textColor: "#0000FF" }),
         tableBlock("x"),
-        {
-          type: "heading",
-          level: 1,
-          content: [{ text: "outro" }],
-          backgroundColor: "#FFFF00",
-        },
+        clipHeading(1, [{ text: "outro" }], { backgroundColor: "#FFFF00" }),
       ],
       sequentialIds("paste"),
     );
@@ -142,9 +127,8 @@ describe("클립보드 블록 색을 붙여넣는다", () => {
     const result = pasteClipboardContent(
       editor,
       [
-        {
-          type: "paragraph",
-          content: [
+        clipParagraph(
+          [
             {
               text: "a",
               marks: [
@@ -154,9 +138,8 @@ describe("클립보드 블록 색을 붙여넣는다", () => {
             },
             { text: "b" },
           ],
-          textColor: "#0000FF",
-          backgroundColor: "#FFFF00",
-        },
+          { textColor: "#0000FF", backgroundColor: "#FFFF00" },
+        ),
         tableBlock("x"),
       ],
       sequentialIds("paste"),
@@ -186,30 +169,19 @@ describe("클립보드 블록 색을 붙여넣는다", () => {
   it.each<[string, ClipboardContentBlock]>([
     [
       "문단 textColor가 색 이름이면",
-      { type: "paragraph", content: [{ text: "p" }], textColor: "blue" },
+      clipParagraph([{ text: "p" }], { textColor: "blue" }),
     ],
     [
       "heading backgroundColor가 3자리 hex면",
-      {
-        type: "heading",
-        level: 2,
-        content: [{ text: "h" }],
-        backgroundColor: "#00f",
-      },
+      clipHeading(2, [{ text: "h" }], { backgroundColor: "#00f" }),
     ],
     [
       "목록 항목 중첩 child 문단 textColor가 소문자 hex면",
-      {
-        type: "bulletListItem",
-        content: [{ text: "item" }],
+      clipBullet([{ text: "item" }], {
         children: [
-          {
-            type: "paragraph",
-            content: [{ text: "child" }],
-            textColor: "#0000ff",
-          },
+          clipParagraph([{ text: "child" }], { textColor: "#0000ff" }),
         ],
-      },
+      }),
     ],
   ])(
     "표 밖에서 %s CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
@@ -245,10 +217,7 @@ describe("클립보드 블록 색을 붙여넣는다", () => {
 
     const result = pasteClipboardContent(
       editor,
-      [
-        { type: "paragraph", content: [{ text: "p" }], textColor: "blue" },
-        tableBlock("x"),
-      ],
+      [clipParagraph([{ text: "p" }], { textColor: "blue" }), tableBlock("x")],
       sequentialIds("paste"),
     );
 
