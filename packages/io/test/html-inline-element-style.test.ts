@@ -382,8 +382,17 @@ describe.each(formatTags)("%s의 style 서식", (tag, own) => {
 
   it("font 줄임의 굵기와 기울임을 읽는다", () => {
     read("font:italic bold 12px Arial", { bold: true, italic: true });
-    read("font:bold 12px Arial", { bold: true });
-    read("font:700 12px/1.5 Arial", { bold: true });
+    // 줄임에 기울임이 없으면 normal이라 em·i의 UA 기울임도 끈다.
+    const withoutItalic: Facts = { ...own };
+    delete withoutItalic.italic;
+    expectEveryPath(`<${tag} style="font:bold 12px Arial">x</${tag}>`, {
+      ...withoutItalic,
+      bold: true,
+    });
+    expectEveryPath(`<${tag} style="font:700 12px/1.5 Arial">x</${tag}>`, {
+      ...withoutItalic,
+      bold: true,
+    });
   });
 
   it("굵기 없는 font 줄임은 normal이라 b·strong의 UA 굵기도 끈다", () => {
@@ -561,12 +570,8 @@ describe("span의 font-weight 판정", () => {
  * 기대값은 이 구현이 읽는 값을 고정한다.
  */
 describe("Chromium과 다르게 읽는 의도한 차이", () => {
-  it("em·i·u·s는 자기 태그 마크를 끄는 style 값을 읽지 않는다", () => {
-    // Chromium은 font-style:normal이 em의 기울임을 끈다. 태그 마크는 그대로다.
-    expectEveryPath('<em style="font-style:normal">x</em>', { italic: true });
-    expectEveryPath('<i style="font:normal 12px Arial">x</i>', {
-      italic: true,
-    });
+  it("u·s는 자기 태그 마크를 끄는 text-decoration 값을 읽지 않는다", () => {
+    // Chromium은 text-decoration:none이 u의 밑줄을 끈다. 태그 마크는 그대로다.
     expectEveryPath('<u style="text-decoration:none">x</u>', {
       underline: true,
     });

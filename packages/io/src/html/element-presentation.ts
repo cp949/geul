@@ -24,8 +24,9 @@ import {
 import { propertyString } from "./hast-properties.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
-// 굵기·기울임의 상태다. 켬/끔이고, 정하지 않았으면 필드가 없다. 지금은 켬만
-// 만든다.
+// 굵기·기울임의 상태다. 켬/끔이고, 정하지 않았으면 필드가 없다. 굵기와 기울임은
+// 상속 속성이라 안쪽 값이 바깥 값을 덮는다. 끄는 값(`font-weight:400`,
+// `font-style:normal`)도 덮는다.
 export type Toggle = "on" | "off";
 
 // 글자 서식이다. 밑줄·취소선은 전파라 켬만 있다.
@@ -90,12 +91,35 @@ const resolveColor = (
   return fallback;
 };
 
-const formatFromStyle = (parsed: InlineStyleMarks): TextFormat => ({
-  ...(parsed.fontWeight === "bold" ? { bold: "on" as const } : {}),
-  ...(parsed.italic ? { italic: "on" as const } : {}),
-  ...(parsed.underline ? { underline: true as const } : {}),
-  ...(parsed.strike ? { strike: true as const } : {}),
-});
+// font-weight 분류가 정하는 굵기 상태다. bold는 켬, normal·light는 끔이다.
+// inherit(부모를 따른다)와 other(굵기를 정하지 않는다)는 정하지 않는다.
+const boldOfWeight = (
+  weight: InlineStyleMarks["fontWeight"],
+): Toggle | undefined => {
+  if (weight === "bold") return "on";
+  if (weight === "normal" || weight === "light") return "off";
+  return undefined;
+};
+
+const italicOfStyle = (
+  fontStyle: InlineStyleMarks["fontStyle"],
+): Toggle | undefined => {
+  if (fontStyle === "italic") return "on";
+  if (fontStyle === "normal") return "off";
+  return undefined;
+};
+
+// 밑줄·취소선은 전파라 안쪽에서 끄지 못한다. 켬만 읽는다.
+const formatFromStyle = (parsed: InlineStyleMarks): TextFormat => {
+  const bold = boldOfWeight(parsed.fontWeight);
+  const italic = italicOfStyle(parsed.fontStyle);
+  return {
+    ...(bold === undefined ? {} : { bold }),
+    ...(italic === undefined ? {} : { italic }),
+    ...(parsed.underline ? { underline: true as const } : {}),
+    ...(parsed.strike ? { strike: true as const } : {}),
+  };
+};
 
 // style 속성 하나에서 색·서식을 읽는다. bold는 font-weight가 bold일 때만 낸다.
 // 굵기를 끄는 쪽(b·strong의 normal·light)은 호출부가 fontWeight로 판정한다.
@@ -107,7 +131,7 @@ const presentationFromStyle = (
   } = {},
 ): {
   presentation: ElementPresentation;
-  fontWeight: InlineStyleMarks["fontWeight"];
+  parsed: InlineStyleMarks | undefined;
 } => {
   const text = typeof style === "string" ? style : undefined;
   const states = text === undefined ? undefined : colorStatesOf(text);
@@ -121,28 +145,29 @@ const presentationFromStyle = (
   if (backgroundColor !== undefined) {
     presentation.backgroundColor = backgroundColor;
   }
-  if (text === undefined) return { presentation, fontWeight: undefined };
+  if (text === undefined) return { presentation, parsed: undefined };
   const parsed = parseInlineStyleMarks(text);
   return {
     presentation: { ...presentation, ...formatFromStyle(parsed) },
-    fontWeight: parsed.fontWeight,
+    parsed,
   };
 };
 
-// 태그 자신의 서식 뒤에 style에서 읽은 값을 잇는다. 같은 필드가 겹쳐도
-// (`<em style="font-style:italic">`) 결과가 같다. 안에서 자기 태그 서식을 끄는
-// 값(`<em style="font-style:normal">`)은 읽지 않는다. 태그 서식은 그대로다.
+// 태그 자신의 서식은 UA 기본값이라 style이 정한 값이 이긴다.
+// `<em style="font-style:normal">`은 기울임이 아니다. style이 정하지 않았거나
+// 부모를 따르는 값(inherit·unset)이면 UA 기본값이 남는다. 밑줄·취소선은
+// 전파라 `text-decoration:none`이 태그의 서식을 끄지 못한다.
 const withTag = (
   node: HtmlElementNode,
   tagFormat: TextFormat,
   marks: readonly TextMark[] = [],
-): InlinePresentation => ({
-  presentation: {
-    ...presentationFromStyle(node.properties.style).presentation,
-    ...tagFormat,
-  },
-  marks,
-});
+): InlinePresentation => {
+  const { presentation } = presentationFromStyle(node.properties.style);
+  return {
+    presentation: { ...tagFormat, ...presentation },
+    marks,
+  };
+};
 
 const styleOnly = (
   node: HtmlElementNode,
@@ -152,6 +177,16 @@ const styleOnly = (
     .presentation,
   marks: [],
 });
+
+// em·i의 UA 기본값은 기울임이다. style의 font-style이 normal이면 끄고,
+// inherit·unset이면 부모를 따른다.
+const withEmphasis = (node: HtmlElementNode): InlinePresentation => {
+  const { presentation, parsed } = presentationFromStyle(node.properties.style);
+  if (parsed?.fontStyle === "inherit") {
+    return { presentation, marks: [] };
+  }
+  return { presentation: { italic: "on", ...presentation }, marks: [] };
+};
 
 // 인라인 요소 하나가 정하는 값이다. style을 읽는 요소는 선언 하나에 여러 값
 // (color·background-color·font-weight 등)이 동시에 있을 수 있다.
@@ -169,24 +204,22 @@ export const inlineElementPresentation = (
     case "b": {
       // Google Docs 복사 래퍼 `<b style="font-weight:normal">`는 굵지 않다
       // (Issue #316). 유효하지만 굵지 않은 값(normal·400·lighter·100–599·
-      // inherit·initial·unset)은 UA 굵기를 덮어 굵게가 아니다(Issue #334).
+      // initial)은 UA 굵기를 덮고, 바깥 굵게도 끈다(Issue #334, #342).
       // 무효한 값은 선언이 무시돼 UA 굵기(bold)가 남고, revert도 UA 굵기다.
       // font 줄임에 굵기가 없으면 normal이다. 색·배경·기울임·밑줄·취소선은
       // 더해 읽는다(Issue #320, #334).
-      const { presentation, fontWeight } = presentationFromStyle(
+      const { presentation, parsed } = presentationFromStyle(
         node.properties.style,
       );
-      return {
-        presentation:
-          fontWeight === "normal" || fontWeight === "light"
-            ? presentation
-            : { ...presentation, bold: "on" },
-        marks: [],
-      };
+      // inherit·unset은 UA 굵기를 덮고 부모를 따른다. 끄지도 켜지도 않는다.
+      if (parsed?.fontWeight === "inherit") {
+        return { presentation, marks: [] };
+      }
+      return { presentation: { bold: "on", ...presentation }, marks: [] };
     }
     case "em":
     case "i":
-      return withTag(node, { italic: "on" });
+      return withEmphasis(node);
     case "u":
       return withTag(node, { underline: true });
     // del·strike는 s와 같은 취소선이다. ins는 읽지 않는다.

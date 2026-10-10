@@ -103,7 +103,7 @@ type BundleName = keyof typeof BUNDLES;
 
 type Path = "importHtml" | "클립보드";
 
-type Owner = "RD-002" | "RD-003" | "RD-004";
+type Owner = "RD-003" | "RD-004";
 
 /** 경로·표면 목록·묶음 목록의 곱을 소유 RD에 묶는다. */
 const defects = (
@@ -119,7 +119,7 @@ const defects = (
   );
 
 const ALL_BUNDLES = Object.keys(BUNDLES) as BundleName[];
-/** 끄는 값을 뺀 묶음이다. 안쪽 요소가 끄는 값은 RD-002가 소유한다. */
+/** 끄는 값을 뺀 묶음이다. 끄는 값은 이미 모든 표면에서 읽는다. */
 const READ_BUNDLES = ALL_BUNDLES.filter((bundle) => bundle !== "끄는값");
 /** 셀 색은 이미 읽는다. 셀 서식만 빠져 있다. */
 const FORMAT_BUNDLES: readonly BundleName[] = [
@@ -135,9 +135,6 @@ const FORMAT_BUNDLES: readonly BundleName[] = [
  * 칸을 고친 RD가 이 목록에서 지운다.
  */
 const KNOWN_DEFECTS: Record<string, Owner> = {
-  // 안쪽 요소가 끄는 값이 바깥 굵게·기울임을 끄지 않는다.
-  ...defects("importHtml", ["span", "p", "li", "cell>p"], ["끄는값"], "RD-002"),
-  ...defects("클립보드", ["cell>p"], ["끄는값"], "RD-002"),
   // 표 셀 td·tr·table의 서식을 읽지 않는다.
   ...defects("importHtml", ["td", "tr", "table"], FORMAT_BUNDLES, "RD-003"),
   ...defects("클립보드", ["td", "tr", "table"], FORMAT_BUNDLES, "RD-003"),

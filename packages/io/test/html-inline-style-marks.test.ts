@@ -5,8 +5,11 @@
  * - `span`·`b`·`strong`의 `font-weight`·`font-style`·`text-decoration(-line)`
  *   값을 bold·italic·underline·strike로 읽는다. 마지막 선언이 이기고
  *   `!important`·대소문자·공백은 무시한다.
- * - 꺼 주는 값(`font-weight:normal`, `text-decoration:none`)은 바깥 요소가
- *   만든 마크를 지우지 않는다. 마크는 누적만 한다.
+ * - 굵기·기울임을 끄는 값(`font-weight:normal`, `font-style:normal`)은 바깥
+ *   요소의 굵게·기울임을 끈다. 두 속성은 상속 속성이라 안쪽 값이 이긴다.
+ *   `inherit`·`unset`은 끄지 않고 부모를 따른다.
+ * - 밑줄·취소선은 전파라 `text-decoration:none`이 바깥 요소의 마크를 지우지
+ *   못한다.
  * - `p`·`div` 같은 블록 태그의 style은 sanitize가 지워서 읽지 않는다. `i` 등
  *   인라인 태그의 style은 Issue #334부터 읽는다(`html-inline-element-style`).
  * - 파서 단위 계약(`parseInlineStyleMarks`)과 `UNSAFE_ATTRIBUTE_REMOVED`
@@ -126,10 +129,45 @@ describe("span의 text-decoration 스타일", () => {
   });
 });
 
-describe("꺼 주는 값은 바깥 마크를 지우지 않는다", () => {
-  it("bold 안의 font-weight:normal span은 bold를 유지한다", () => {
+describe("끄는 값은 굵기·기울임만 바깥 값을 끈다", () => {
+  it("bold 안의 font-weight:normal span은 bold를 끈다", () => {
     expect(
       paragraphContent('<b><span style="font-weight:normal">x</span></b>'),
+    ).toEqual([{ text: "x" }]);
+  });
+
+  it.each(["400", "300", "lighter", "initial"])(
+    "bold 안의 font-weight:%s span은 bold를 끈다",
+    (value) => {
+      expect(
+        paragraphContent(`<b><span style="font-weight:${value}">x</span></b>`),
+      ).toEqual([{ text: "x" }]);
+    },
+  );
+
+  it.each(["inherit", "unset"])(
+    "bold 안의 font-weight:%s span은 부모를 따라 bold를 유지한다",
+    (value) => {
+      expect(
+        paragraphContent(`<b><span style="font-weight:${value}">x</span></b>`),
+      ).toEqual(markedText([{ type: "bold" }]));
+    },
+  );
+
+  it("b의 font-weight:inherit는 UA 굵기를 덮고 부모를 따른다", () => {
+    expect(paragraphContent('<b style="font-weight:inherit">x</b>')).toEqual([
+      { text: "x" },
+    ]);
+    expect(
+      paragraphContent('<strong><b style="font-weight:inherit">x</b></strong>'),
+    ).toEqual(markedText([{ type: "bold" }]));
+  });
+
+  it("끈 뒤 안쪽 b·strong은 다시 굵게다", () => {
+    expect(
+      paragraphContent(
+        '<b><span style="font-weight:normal"><strong>x</strong></span></b>',
+      ),
     ).toEqual(markedText([{ type: "bold" }]));
   });
 
@@ -146,9 +184,29 @@ describe("꺼 주는 값은 바깥 마크를 지우지 않는다", () => {
     );
   });
 
-  it("em 안의 font-style:normal span은 italic을 유지한다", () => {
+  it("em 안의 font-style:normal span은 italic을 끈다", () => {
     expect(
       paragraphContent('<em><span style="font-style:normal">x</span></em>'),
+    ).toEqual([{ text: "x" }]);
+  });
+
+  it("em의 font-style:normal은 UA 기울임을 끈다", () => {
+    expect(paragraphContent('<em style="font-style:normal">x</em>')).toEqual([
+      { text: "x" },
+    ]);
+    expect(
+      paragraphContent('<em><em style="font-style:normal">x</em></em>'),
+    ).toEqual([{ text: "x" }]);
+  });
+
+  it("em의 font-style:inherit는 UA 기울임을 덮고 부모를 따른다", () => {
+    expect(paragraphContent('<em style="font-style:inherit">x</em>')).toEqual([
+      { text: "x" },
+    ]);
+    expect(
+      paragraphContent(
+        '<span style="font-style:italic"><em style="font-style:inherit">x</em></span>',
+      ),
     ).toEqual(markedText([{ type: "italic" }]));
   });
 });
@@ -397,13 +455,13 @@ describe("parseInlineStyleMarks", () => {
   it("선언이 없으면 모두 꺼진 상태다", () => {
     expect(parseInlineStyleMarks("")).toEqual({
       fontWeight: undefined,
-      italic: false,
+      fontStyle: undefined,
       underline: false,
       strike: false,
     });
     expect(parseInlineStyleMarks("color:red;;:;font-family:Arial")).toEqual({
       fontWeight: undefined,
-      italic: false,
+      fontStyle: undefined,
       underline: false,
       strike: false,
     });
@@ -415,6 +473,52 @@ describe("parseInlineStyleMarks", () => {
     expect(parseInlineStyleMarks("font-weight:500").fontWeight).toBe("light");
     expect(parseInlineStyleMarks("font-weight:foo").fontWeight).toBe("other");
     expect(parseInlineStyleMarks("font-weight:1200").fontWeight).toBe("other");
+  });
+
+  it("font-weight inherit·unset은 부모를 따르는 값으로 분류한다", () => {
+    expect(parseInlineStyleMarks("font-weight:inherit").fontWeight).toBe(
+      "inherit",
+    );
+    expect(parseInlineStyleMarks("font-weight:unset").fontWeight).toBe(
+      "inherit",
+    );
+    expect(parseInlineStyleMarks("font-weight:initial").fontWeight).toBe(
+      "light",
+    );
+  });
+
+  it.each([
+    ["italic", "italic"],
+    ["oblique", "italic"],
+    ["oblique 10deg", "italic"],
+    ["normal", "normal"],
+    ["initial", "normal"],
+    ["inherit", "inherit"],
+    ["unset", "inherit"],
+    ["ITALIC !important", "italic"],
+  ] as const)("font-style:%s는 %s다", (value, expected) => {
+    expect(parseInlineStyleMarks(`font-style:${value}`).fontStyle).toBe(
+      expected,
+    );
+  });
+
+  it("font-style revert·revert-layer는 앞의 선언을 지우고 정하지 않는다", () => {
+    expect(
+      parseInlineStyleMarks("font-style:italic;font-style:revert").fontStyle,
+    ).toBeUndefined();
+    expect(
+      parseInlineStyleMarks("font-style:italic;font-style:revert-layer")
+        .fontStyle,
+    ).toBeUndefined();
+  });
+
+  it("무효한 font-style 선언은 앞의 값을 지우지 않는다", () => {
+    expect(
+      parseInlineStyleMarks("font-style:italic;font-style:foo").fontStyle,
+    ).toBe("italic");
+    expect(
+      parseInlineStyleMarks("font-style:normal;font-style:").fontStyle,
+    ).toBe("normal");
   });
 
   it("마지막 text-decoration 계열 선언이 이긴다", () => {

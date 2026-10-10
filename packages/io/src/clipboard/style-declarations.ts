@@ -341,11 +341,21 @@ export const hasComputedStyleDump = (style: string): boolean => {
 // font-weight 선언 하나의 분류다.
 // - bold: bold·bolder·600 이상이다.
 // - normal: normal·400이다.
-// - light: 유효하지만 굵지 않은 값이다. 1–599(400 제외)·lighter·inherit·initial·
-//   unset이다. 안쪽 요소가 UA 굵기를 덮어 굵게를 끈다.
+// - light: 유효하지만 굵지 않은 값이다. 1–599(400 제외)·lighter·initial이다.
+//   안쪽 요소가 UA 굵기를 덮어 굵게를 끈다.
+// - inherit: 부모 굵기를 따른다. inherit·unset이다(font-weight는 상속 속성이다).
+//   끄지도 켜지도 않는다.
 // - other: 굵기를 정하지 않는다. 무효한 값(`foo`·`0`·`1001`·`calc()`)과
 //   revert·revert-layer(UA 굵기로 돌아간다)다.
-export type InlineFontWeight = "bold" | "normal" | "light" | "other";
+export type InlineFontWeight =
+  "bold" | "normal" | "light" | "inherit" | "other";
+
+// font-style 선언 하나의 분류다. 선언이 없거나 UA 값으로 돌아가는
+// revert·revert-layer면 undefined다.
+// - italic: italic·oblique다.
+// - normal: normal·initial이다. 안쪽 요소가 바깥 기울임을 끈다.
+// - inherit: inherit·unset이다. 부모 기울임을 따른다.
+export type InlineFontStyle = "italic" | "normal" | "inherit";
 
 export type InlineStyleMarks = {
   // 마지막 유효한 font-weight 선언(font 줄임 포함)의 분류. 선언이 없으면
@@ -353,7 +363,7 @@ export type InlineStyleMarks = {
   // 읽는 요소는 bold일 때만 굵게 읽고, b·strong은 normal·light가 아니면 굵게
   // 읽는다.
   fontWeight: InlineFontWeight | undefined;
-  italic: boolean;
+  fontStyle: InlineFontStyle | undefined;
   underline: boolean;
   strike: boolean;
 };
@@ -366,9 +376,7 @@ const WHITESPACE_RUN = /\s+/;
 
 const LIGHT_WEIGHT_KEYWORDS: ReadonlySet<string> = new Set([
   "lighter",
-  "inherit",
   "initial",
-  "unset",
 ]);
 
 // 숫자 굵기(1–1000)를 분류한다.
@@ -383,6 +391,7 @@ const classifyFontWeight = (value: string): InlineFontWeight | undefined => {
   if (value === "bold" || value === "bolder") return "bold";
   if (value === "normal") return "normal";
   if (LIGHT_WEIGHT_KEYWORDS.has(value)) return "light";
+  if (value === "inherit" || value === "unset") return "inherit";
   if (value === "revert" || value === "revert-layer") return "other";
   const numeric = readNumeric(value);
   if (numeric === undefined || numeric.unit !== "") return undefined;
@@ -403,7 +412,10 @@ const normalizeDeclarationValue = (rawValue: string): string => {
 };
 
 // font 줄임 속성의 선언 하나가 정하는 굵기와 기울임이다.
-type FontShorthand = { weight: InlineFontWeight; italic: boolean };
+type FontShorthand = {
+  weight: InlineFontWeight;
+  fontStyle: InlineFontStyle | undefined;
+};
 
 const FONT_SYSTEM_KEYWORDS: ReadonlySet<string> = new Set([
   "caption",
@@ -647,21 +659,22 @@ const isFamilyList = (value: string, from: number): boolean => {
 // - 앞 슬롯은 최대 네 토큰이고, `normal`은 어느 슬롯이든 채운다. style·
 //   variant·weight·stretch는 각각 한 번만 쓴다.
 // - 크기가 없거나 글꼴 목록이 문법에 맞지 않으면 선언 전체가 무효라 undefined다.
-// - 시스템 글꼴 키워드 하나(`caption` 등)는 normal·비기울임이다. 전역
-//   키워드 하나는 굵기를 정하지 않거나(revert) 굵지 않은 값으로 읽는다.
-// - 굵기 토큰이 없으면 normal이고 기울임 토큰이 없으면 비기울임이다.
+// - 시스템 글꼴 키워드 하나(`caption` 등)는 normal·normal이다. 전역 키워드
+//   하나는 부모를 따르거나(inherit·unset) 정하지 않거나(revert) normal로
+//   돌아간다(initial).
+// - 굵기 토큰이 없으면 normal이고 기울임 토큰이 없으면 normal이다.
 // 값을 앞에서 한 번 훑고 토큰마다 일정한 일만 한다. 정규식을 쓰지 않는다.
 const parseFontShorthand = (value: string): FontShorthand | undefined => {
   if (value === "") return undefined;
   if (value === "inherit" || value === "unset") {
-    return { weight: "light", italic: false };
+    return { weight: "inherit", fontStyle: "inherit" };
   }
-  if (value === "initial") return { weight: "normal", italic: false };
+  if (value === "initial") return { weight: "normal", fontStyle: "normal" };
   if (value === "revert" || value === "revert-layer") {
-    return { weight: "other", italic: false };
+    return { weight: "other", fontStyle: undefined };
   }
   if (FONT_SYSTEM_KEYWORDS.has(value)) {
-    return { weight: "normal", italic: false };
+    return { weight: "normal", fontStyle: "normal" };
   }
 
   let weight: InlineFontWeight = "normal";
@@ -726,7 +739,7 @@ const parseFontShorthand = (value: string): FontShorthand | undefined => {
     index = lineEnd;
   }
   if (!isFamilyList(value, index)) return undefined;
-  return { weight, italic };
+  return { weight, fontStyle: italic ? "italic" : "normal" };
 };
 
 // font 줄임 앞 슬롯의 굵기 토큰이다. bold·bolder·lighter와 1–1000 숫자다.
@@ -753,11 +766,11 @@ const readFontWeightToken = (token: string): InlineFontWeight | undefined => {
 // 과 text-decoration-line은 합쳐서 마지막), `!important`·대소문자·공백은
 // 무시한다. 읽지 않는 선언과 `:`가 없는 조각은 버린다. 값이 꺼짐(normal,
 // none)이어도 이 함수는 그 선언만 반영한다 — 바깥 요소가 만든 마크를 지우는
-// 일은 없고, 마크는 누적만 한다(호출부 계약).
+// 일은 없다. 끄는 값은 normal로 돌려주고 겹치기는 호출부가 정한다.
 export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
   const result: InlineStyleMarks = {
     fontWeight: undefined,
-    italic: false,
+    fontStyle: undefined,
     underline: false,
     strike: false,
   };
@@ -782,13 +795,22 @@ export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
       );
       if (shorthand !== undefined) {
         result.fontWeight = shorthand.weight;
-        result.italic = shorthand.italic;
+        result.fontStyle = shorthand.fontStyle;
       }
     } else if (property === "font-style") {
       const keyword = normalizeDeclarationValue(
         declaration.slice(colon + 1),
       ).split(WHITESPACE_RUN, 1)[0];
-      result.italic = keyword === "italic" || keyword === "oblique";
+      // 무효한 키워드는 선언을 버린다. 앞의 값을 지우지 않는다.
+      if (keyword === "italic" || keyword === "oblique") {
+        result.fontStyle = "italic";
+      } else if (keyword === "normal" || keyword === "initial") {
+        result.fontStyle = "normal";
+      } else if (keyword === "inherit" || keyword === "unset") {
+        result.fontStyle = "inherit";
+      } else if (keyword === "revert" || keyword === "revert-layer") {
+        result.fontStyle = undefined;
+      }
     } else if (
       property === "text-decoration" ||
       property === "text-decoration-line"
