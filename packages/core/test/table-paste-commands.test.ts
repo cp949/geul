@@ -513,7 +513,7 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
   // 표 셀은 블록 자식을 가질 수 없으므로(model TableCell.content:
   // InlineContent) 문단을 별도 블록으로 끼울 자리가 없다. 그렇다고 버리면
   // 조용한 텍스트 손실이므로 읽기 순서 그대로 셀 인라인 콘텐츠에 합친다 —
-  // 표 앞 문단은 좌상단 셀 앞에, 표 뒤 문단은 마지막 셀 뒤에 LF로 구분해
+  // 표 앞 문단은 좌상단 셀 앞에, 표 뒤 문단은 우하단 셀 뒤에 LF로 구분해
   // 붙인다.
   it("표 안에서 문단이 섞인 시퀀스는 문단 텍스트를 셀에 합쳐 보존한다", () => {
     const editor = createTableFixtureEditor(docWithTwoRowTable);
