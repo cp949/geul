@@ -14,9 +14,14 @@
   - `UNSAFE_CODE_POINT_REMOVED`는 변환기가 글자를 정제할 때 낸다. 판정 값은 공백 접기 뒤 값이다.
   - warning `element`는 텍스트 노드의 sanitized 부모 태그다. 최상위 loose 텍스트는 `"text"`다.
   - 속성 보존 warning은 변환기가 쓴 속성을 노드에 표시하고, 변환 뒤 sanitized 트리를 한 번 돌며 표시되지 않은 감사 대상 속성만 낸다.
-  - 한 속성의 warning은 수집기와 감사 중 한 곳에서만 난다. 수집기는 감사 대상 속성을 건너뛴다. 예외는 블록을 품어 벗겨지는 `font`·`mark`다. 이 노드는 감사 트리에 없어 수집기가 계속 판정한다.
-  - 남은 예측: 루트 인라인과 블록을 품은 `font`·`mark`의 블록 강등, 벗겨지는 `font`·`mark`의 속성, `pre` 밖 `code`와 표 셀 안 `pre`의 메타 속성. 수집기가 아직 raw 트리로 판정한다. 새 예측을 더하지 않는다.
-- warning 순서는 수집기 warning, 변환기 warning, 속성 감사 warning이다. 깊이 절단 warning(`DEEP_TREE_FLATTENED`)은 수집기 warning 맨 앞이다.
+  - 한 속성의 warning은 수집기와 감사 중 한 곳에서만 난다. 수집기는 감사 대상 속성을 건너뛴다.
+  - `pre`·`code`의 codeBlock 메타(`data-geul-block-id`·`data-language`·`class`·`data-geul-code-wrap`)도 감사 대상이다. codeBlock 분기가 읽은 속성만 표시한다.
+  - 블록을 품어 벗겨지는 `font`·`mark`의 `color`·`style`은 벗기는 쪽이 벗기는 순간 낸다. 읽지 못하는 `font` `color`는 수집기만 낸다.
+- 블록 강등(`SAFE_BLOCK_DOWNGRADED`)은 수집기가 raw 위치로 판정한다. 루트 인라인과 블록을 품은 `font`·`mark`가 대상이다.
+  - sanitize가 벗긴 요소의 자식은 sanitized 트리에서 구분되지 않는다. `<section><b>x</b></section>`와 `<b>x</b>`는 sanitize 뒤 같다. 경고는 각각 `section`, `b`다.
+  - 판정 근거는 변환기와 공유한다. 인라인 태그 목록은 `INLINE_PRESENTATION_TAG_NAMES`, 벗길 `font`·`mark`는 `findBlockBearingColorTags`다.
+  - 이 밖의 변환 예측을 수집기에 더하지 않는다.
+- warning 순서는 수집기 warning, 변환기 warning, 속성 감사 warning이다. 벗기기 warning은 변환 전 단계라 변환기 warning 맨 앞이다. 깊이 절단 warning(`DEEP_TREE_FLATTENED`)은 수집기 warning 맨 앞이다.
 - raw HAST의 순서나 내용을 변환기로 넘기지 않는다.
 - raw HAST의 text, URL과 attribute를 결과 문서 생성에 사용하지 않는다.
 - 미지원 문법도 보이는 text와 block 경계를 보존한다.

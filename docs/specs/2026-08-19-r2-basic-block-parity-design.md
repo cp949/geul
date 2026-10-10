@@ -250,10 +250,16 @@ CodeBlock의 Enter는 source에 LF를 삽입하는 일반 code editing만 담당
 - `importHtml` 속성 보존 경고는 변환기가 쓴 속성을 노드에 표시하고, 변환 뒤 sanitized 트리를 감사해 표시되지 않은 감사 대상 속성만 `UNSAFE_ATTRIBUTE_REMOVED`로 낸다(정정 2026-10-11, Issue #356).
   - 감사 대상은 import용 sanitize schema가 남기고 공용 경고 기준에 없는 속성이다. `style`·`bgColor`는 제외한다. 이 둘은 읽어도 제거를 보고하는 정책이라 수집기가 판정한다.
   - 표시는 노드 단위다. 한 노드의 표시가 같은 태그·속성을 가진 다른 노드의 경고를 지우지 않는다.
-  - 알려진 한계: sanitize가 요소째 지우는 `svg`·`object`·`math` 안 감사 대상 속성은 경고하지 않는다. 그 요소가 `UNSAFE_ELEMENT_REMOVED`로 보고된다.
+  - codeBlock 메타도 감사 대상이다. `<pre>`의 `data-geul-block-id`·`data-language`·`class`·`data-geul-code-wrap`과 `<code>`의 `data-language`·`class`다(정정 2026-10-11, Issue #356 RD-006).
+    - codeBlock이 되는 `<pre>`와 그 첫 직속 `<code>`의 메타만 보존으로 표시한다.
+    - 그 밖의 메타는 경고한다. 표 셀 안 `<pre>`, `<pre>` 밖 `<code>`, codeBlock `<pre>` 안의 `<pre>`, 두 번째 직속 `<code>`, `<pre><span><code>`의 `<code>`가 그렇다.
+    - 이전에는 codeBlock `<pre>` 안의 메타를 모두 경고하지 않았다.
+  - 블록을 품어 벗겨지는 `font`·`mark`의 `color`·`style`은 벗기는 순간 `UNSAFE_ATTRIBUTE_REMOVED`로 낸다(정정 2026-10-11, Issue #356 RD-006). 읽지 못하는 `font` `color`는 수집기가 한 번만 낸다.
+  - 알려진 한계: sanitize가 요소째 지우는 `svg`·`object`·`math` 안 감사 대상 속성은 경고하지 않는다. 그 요소가 `UNSAFE_ELEMENT_REMOVED`로 보고된다. 그 안의 codeBlock 메타와 벗겨질 `font`·`mark`의 `color`·`style`도 같다.
 - `importHtml` warning 순서는 수집기 warning, 변환기 warning, 속성 감사 warning이다(정정 2026-10-11, Issue #356).
   - 수집기 warning은 raw 순서다. `DEEP_TREE_FLATTENED`는 맨 앞이다.
   - 변환기 warning은 변환 순서다. `UNSAFE_CODE_POINT_REMOVED`, `NESTED_CHILDREN_FLATTENED`, `CODE_BLOCK_LANGUAGE_METADATA_IGNORED`가 여기에 속한다.
+  - 벗겨지는 `font`·`mark`의 속성 warning은 변환 전 벗기기 단계라 변환기 warning 맨 앞이다. 같은 `font`의 `face`·`size`(sanitize 손실)는 수집기 warning이라 그 앞에 온다.
   - 속성 감사 warning은 맨 뒤다.
   - raw 순서를 sanitized 노드에 찍어 정렬하지 않는다. 그러면 raw 정보가 변환기로 흐른다(ADR-0003).
 - 목록 4종 → `ul`/`ol`(`start` 속성 매핑)/체크박스는 `input[type=checkbox][disabled]` 또는 `data-checked` 속성(정확한 형태는 슬라이스 착수 시 확정) / 토글은 `details`.

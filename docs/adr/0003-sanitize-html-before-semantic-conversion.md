@@ -19,6 +19,7 @@ raw HAST에서 warning fact를 모으는 이유는 그대로다. sanitize가 지
 변환 손실은 sanitize가 만들지 않는다. 변환기가 sanitized 트리를 읽다가 일으킨다. 그래서 변환기가 sanitized 트리만 보고 직접 알린다.
 
 - 수집기는 raw 트리에서 sanitize가 지운 것과 블록 강등을 모은다. style·bgColor를 읽어도 보고하는 정책은 예외로 수집기에 남는다.
+- 블록 강등은 raw 위치 사실이다. sanitize가 벗긴 요소의 자식은 sanitized 트리에서 구분되지 않는다. 그래서 변환기로 옮기지 않는다(Issue #356 RD-006).
 - 변환기는 글자 정제, 중첩 평탄화, language metadata 충돌, 쓰지 않은 속성을 알린다.
 - 수집기가 변환기의 결과를 예측하지 않는다. 예측이 어긋나면 거짓 경고와 누락이 생긴다. 아직 남은 예측은 G-CNV-002가 적는다.
 - raw 순서나 내용은 변환기로 넘기지 않는다. 변환기 warning은 sanitized 트리의 태그와 속성 이름만 쓴다.
