@@ -467,24 +467,67 @@ describe("표 판정 주입 — 나머지 children 재귀 경로", () => {
     ]);
   });
 
+  // children 컨테이너를 비워 둔다. 컨테이너에 블록이 있으면 own-content 인용의
+  // children을 덮어써서 주입 처리기 결과가 출력에서 빠진다(이 seam과 무관한 기존 동작).
   it("children wrapper의 own-content 안 노드도 주입 판정으로 본문과 children이 갈린다", () => {
     const { seam, calls } = recordingSeam(isUnderline);
 
     const { blocks } = convert(
-      '<div data-geul-block-id="a"><blockquote>인용<u>x</u></blockquote><div data-geul-children="1"><u>y</u></div></div>',
+      '<div data-geul-block-id="a"><blockquote>인용<u>x</u></blockquote><div data-geul-children="1"></div></div>',
       seam,
     );
 
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
     expect(blocks).toEqual([
       {
         id: "a",
         type: "quote",
         content: [{ text: "인용" }],
         children: [
-          { id: "id-3", type: "paragraph", content: [{ text: "표:2" }] },
+          { id: "id-2", type: "paragraph", content: [{ text: "표:1" }] },
         ],
       },
     ]);
+  });
+});
+
+/**
+ * 같은 여는·닫는 태그를 `count`번 겹쳐 `inner`를 감싼다.
+ */
+const nest = (open: string, close: string, count: number, inner: string) =>
+  `${open.repeat(count)}${inner}${close.repeat(count)}`;
+
+describe("표 판정 주입 — 깊이 상한 평탄화 경로", () => {
+  // 가장 안쪽 블록이 depth MAX_NESTING_DEPTH에 놓여 children 자리를 형제로 평탄화한다.
+  it.each([
+    {
+      name: "인용",
+      html: nest(
+        "<blockquote>",
+        "</blockquote>",
+        MAX_NESTING_DEPTH - 1,
+        "<blockquote>인용<u>x</u></blockquote>",
+      ),
+    },
+    {
+      name: "callout",
+      html: nest(
+        '<div data-geul-callout="true">',
+        "</div>",
+        MAX_NESTING_DEPTH - 1,
+        '<div data-geul-callout="true">본문<u>x</u></div>',
+      ),
+    },
+    {
+      name: "목록 항목",
+      html: `<ul>${nest("<li><ul>", "</ul></li>", MAX_NESTING_DEPTH - 1, "<li>항목<u>x</u></li>")}</ul>`,
+    },
+  ])("$name 평탄화 경로에서도 주입 처리기가 불린다", ({ html }) => {
+    const { seam, calls } = recordingSeam(isUnderline);
+
+    const { warnings } = convert(html, seam);
+
+    expect(calls).toHaveLength(1);
+    expect(warnings).toMatchObject([{ kind: "NESTED_CHILDREN_FLATTENED" }]);
   });
 });
